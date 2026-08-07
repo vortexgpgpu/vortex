@@ -202,8 +202,8 @@ them), a socket engine for mode 7 (4 of them, all active), the cluster engine fo
 | 2 TCU+DXA | 4 cores | 23,939 | 10.95 | 2.74 | 101,977 | 20.56 | 5.14 | 446,129 | 37.61 | 9.40 |
 | 3 TCU wg + DXA | 4 cores | 25,386 | 10.33 | 2.58 | 103,400 § | 20.28 | 5.07 | 454,165 | 36.94 | 9.23 |
 | 4 TCU wg, SW copy | 4 cores | 32,583 | 8.04 | 2.01 | 152,677 | 13.73 | 3.43 | ‡ | ‡ | ‡ |
-| 7 DTCU_socket | 4 engines | 11,912 | 22.01 | 5.50 | 49,064 | 42.74 | 10.69 | 303,884 | 55.21 | 13.80 |
-| 8 DTCU_cluster | 1 engine | 49,472 | 5.30 | 5.30 | 160,448 | 13.07 | 13.07 | 1,112,370 | 15.08 | 15.08 |
+| 7 DTCU_socket | 4 engines | 11,728 | 22.35 | 5.59 | 49,152 | 42.66 | 10.67 | 303,303 | 55.31 | 13.83 |
+| 8 DTCU_cluster | 1 engine | 49,472 | 5.30 | 5.30 | 160,420 | 13.07 | 13.07 | 1,111,970 | 15.09 | 15.09 |
 
 Post-merge with upstream (`00ea949a1`). **Every number in this table replaced a
 pre-merge one** — upstream rebuilt the memory path underneath us and the ordering moved
@@ -283,52 +283,81 @@ was a statement about those kernels, not about DXA.
 were measured when `D = C + A·B` still split into four M·N accesses; what follows replaces
 them.
 
-### The DTCU's compute timing is anchored to a TCU that no longer exists
+### The DTCU's pipeline depth now follows the TCU's, and the cluster array is 2×
 
-Checked because the engine looked too fast. It is not the compute array that is
-mis-modelled, and the direction of the error is the opposite of the suspicion — but the
-anchor really is stale, in two separate ways.
+Two defects, found by asking why the engine looked too fast. Neither answer was the
+expected one.
 
-**The merge moved the TCU's MMA latency and left the DTCU behind.** Upstream replaced a
-hardcoded `delay = 4` in `tcu_unit.cpp` with `delay = kMmaLatency = 1 + kFedpLatency`,
-derived from the configured PE type: 5 for `TFR` (this build), but 16 for `BHF`, ~35 for
-`FPNEW` and 54 for `DSP`. `DTCU_COMPUTE_LATENCY` is still a hardcoded **6**, written
-2026-08-04/05 against the pre-merge TCU, and `git diff 00ea949a1 HEAD -- sim/simx/dtcu/`
-is empty. So the two units' pipeline depths now track each other only by coincidence, and
-they stop agreeing entirely under any `VX_CFG_TCU_TYPE` but the default.
+**1. The DTCU did not share the TCU's arithmetic — or its timing.** `dtcu.cpp` carries its
+own ten `FMA<It, Ot>` specialisations (lines 362–470), a second copy of the ten in
+`tcu_unit.cpp` (lines 69–149). The timing was separate too: upstream replaced the TCU's
+hardcoded `delay = 4` with `kMmaLatency = 1 + kFedpLatency`, derived from
+`VX_CFG_TCU_TYPE`, and `DTCU_COMPUTE_LATENCY` stayed a hand-picked **6**
+(`git diff 00ea949a1 HEAD -- sim/simx/dtcu/` was empty).
 
-**`DTCU_MACS_PER_CYCLE` is anchored to a configuration this harness does not run.** Its
-comment says 16 "== one in-core TCU's raw throughput (NT=4), so the DTCU's modeled
-advantage comes only from removing SIMT pipeline overhead and NOT from also assuming a
-wider array (no double counting)." This harness runs **NT=32**. At NT=32,
-`wmma_config_t` gives `tcM=8, tcN=4, tcK=4` and `m_steps × n_steps × k_steps = 2 × 4 × 4
-= 32` uops per 16×16×16 WMMA — so **128 MACs per uop**, one uop per cycle per block,
-`NUM_TCU_BLOCKS=4` blocks: **512 MACs/cycle per core**. The parity the parameter claims is
-off by 8× per warp and 32× per core, and it is off in the direction that makes the engine
-look *worse*, not better.
+`VX_CFG_TCU_TYPE` ∈ `DPI | DSP | BHF | TFR | FPNEW`, `TFR` by default, selects **which
+FEDP hardware the PE is built from**. It is a hardware choice, not a numerical one — every
+type computes the same product and they differ in pipeline depth:
 
-So the two units are being compared at wildly different modelled peaks:
-
-| | modelled peak | achieved at 512×256×128 | utilisation |
+| type | `kFedpLatency` | `kMmaLatency` | DTCU's old hardcoded 6 was off by |
 |---|--:|--:|--:|
-| in-core TCU, 4 cores | 2,048 MAC/cyc | 43.4 | **2.1 %** |
-| DTCU_socket, 4 engines | 64 MAC/cyc | 55.2 | **86 %** |
+| **TFR** (this build) | 4 | **5** | +1 |
+| BHF | 16 | 17 | −11 |
+| FPNEW | 35 | 36 | −30 |
+| DSP | 53 | 54 | **−48** |
 
-**That is the real finding, and it cuts both ways.** The engine is not winning because it
-was given a fat array — it was given one 32× *thinner* than the core's. It wins because
-nothing ever stalls it, which is the paper's claim, and the measured counters agree
-(`loads=116`, every stall category zero). But an 86 % vs 2.1 % utilisation gap is a very
-large thing to rest on one hand-set constant, and `DTCU_MACS_PER_CYCLE=16` mostly does not
-even bind: at the socket tile (32×16) the accumulator term
-`2·32·16/DTCU_ACC_BANKS + 1 = 513` and the MAC term `32·16·16/16 = 512` are within one
-cycle of each other, so `max()` picks them almost interchangeably. The engine is modelled
-as accumulator-bandwidth-bound.
+The formula now lives in `sim/simx/tcu/tcu_latency.h` and **both units include it**. Mode 1
+is byte-identical after the move (23,513), so the TCU's behaviour did not change.
 
-**Not changed here, because it is a machine-configuration decision.** The two edits that
-would follow are (a) derive `DTCU_COMPUTE_LATENCY` from the same `kFedpLatency` the TCU
-now uses instead of hardcoding 6, and (b) re-anchor `DTCU_MACS_PER_CYCLE` to the in-core
-TCU's throughput **at the configured NT** rather than at NT=4. Both move every DTCU number
-in this file.
+**Direction, since this is easy to get backwards:** deriving the latency makes the DTCU
+*slower*, not faster, at every PE type but the default. At `TFR` it is 6 → 5, one cycle
+per tile in the DTCU's favour and worth ~0.2 %. At `DSP` it would be 6 → 54.
+
+**2. `DTCU_MACS_PER_CYCLE` was one global, and its justification was backwards.** The old
+comment said 16 was chosen to equal "one in-core TCU's raw throughput (NT=4)" so the model
+would not "double count" a wider array. That reasoning gives away the thing a
+disaggregated unit is *for* — sizing the array independently of a core's issue width — and
+it was not parity anyway: at the configured **NT=32** the in-core TCU is
+`tcM·tcN·tcK = 8·4·4 = 128` MACs per uop and `NUM_TCU_BLOCKS = 4` uops per cycle, i.e.
+**512 MACs/cycle/core**, so 16 was 1/32 of a core, not its equal. The engine's measured
+win came *in spite of* that, not because of it.
+
+The rate is now per-engine — the cluster engine serves a whole cluster from one instance
+with a 64×32 native tile against the socket engine's 32×16 — and the cluster array is
+**twice** the socket's.
+
+**3. Doubling the cluster array did essentially nothing, and that is the real finding.**
+
+| | before | after (derived latency + 2× cluster array) | Δ |
+|---|--:|--:|--:|
+| 7 DTCU_socket 128×64×32 | 11,912 | 11,728 | −1.5 % |
+| 7 DTCU_socket 256×128×64 | 49,064 | 49,152 | +0.2 % |
+| 7 DTCU_socket 512×256×128 | 303,884 | 303,303 | −0.2 % |
+| **8 DTCU_cluster 128×64×32** | 49,472 | **49,472** | **0.00 %** |
+| **8 DTCU_cluster 256×128×64** | 160,448 | **160,420** | −0.02 % |
+| **8 DTCU_cluster 512×256×128** | 1,112,370 | **1,111,970** | −0.04 % |
+
+All `PASSED`, errors = 0. The socket rows move only by second-order memory interaction —
+finishing a tile one cycle earlier reshuffles when its requests reach the cache, which is
+why one row goes slightly the wrong way. The cluster rows are the point: **its MAC array
+doubled and the smallest shape did not move by a single cycle.**
+
+`estimate_execute_cycles_()` takes a `max()` of three stages, and the accumulator SRAM
+wins it at both native tiles by about one cycle:
+
+| | MAC term | accumulator term | operand read |
+|---|--:|--:|--:|
+| socket 32×16×16 | `32·16·16/16` = 512 | `2·32·16/2 + 1` = **513** | ≈257 |
+| cluster 64×32×16, array 2× | `64·32·16/32` = 1,024 | `2·64·32/2 + 1` = **2,049** | ≈513 |
+
+So the array can be widened as far as you like and `DTCU_ACC_BANKS = 2` will hold the
+engine at one accumulator element per cycle. **The next knob is `DTCU_ACC_BANKS`, not
+`MACS_PER_CYCLE`** — left alone here because it is a machine-configuration decision.
+
+Sanity check that the model is doing what the formula says: at 512×256×128 each socket
+engine takes `(128/32)·(256/16)·(128/16) = 512` tiles at 518 cycles = 265,216, against a
+measured 303,303 — the compute phase accounts for 87 % of the engine's wall clock and TMA
+overhead for the rest.
 
 ### The epilogue was four M·N accesses, and that is what stopped 3/4 at 512×256×128
 
