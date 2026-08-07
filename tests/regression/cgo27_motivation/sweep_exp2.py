@@ -20,7 +20,7 @@ BUILD_DIR = os.environ.get(
 # Must match main.cpp's kShortNames[] EXACTLY; run_case() cross-checks and exits on a
 # mismatch. Keep in sync with sweep_exp1.py.
 MODES = {0:"SIMT",1:"TCU",2:"TCU+DXA",
-         5:"TCU+DXA-pipe2",6:"TCU+DXA-pipe3",
+         3:"TCU_wg+DXA",4:"TCU_wg",
          7:"DTCU_socket",8:"DTCU_cluster",
          9:"TCU+DTCU_socket",10:"TCU+DTCU_cluster",11:"TCU+DTCU_both"}
 # 3 and 4 are reserved holes in the numbering, not modes: the harness rejects

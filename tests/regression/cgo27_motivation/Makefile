@@ -79,7 +79,7 @@ include ../common.mk
 # the warning active for the all-in-one kernel.cpp and the host.
 MOTI_VX_CFLAGS := $(VX_CFLAGS) -I$(SRC_DIR) -I$(SRC_DIR)/kernel_modes -Wno-unused-function
 
-MOTI_MODES  := 0 1 2 3 4 5 6 7 8 12 13
+MOTI_MODES  := 0 1 2 3 4 7 8
 MOTI_VXBINS := $(foreach m,$(MOTI_MODES),kernel_m$(m).vxbin)
 
 all: $(MOTI_VXBINS)

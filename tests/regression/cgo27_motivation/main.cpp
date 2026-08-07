@@ -152,23 +152,19 @@ int main(int argc, char** argv) {
     }
 
   const char* names[NUM_MODES] = {
-      "in-core SIMT",
-      "in-core TCU",
-      "in-core TCU + DXA",
-      "TCU pipelined LSU (2-stage)",
-      "TCU pipelined LSU (3-stage)",
-      "TCU+DXA pipelined (2-stage)",
-      "TCU+DXA pipelined (3-stage)",
-      "DTCU_socket (D->L1)",
-      "DTCU_cluster (D->L2)",
+      "SIMT (no tensor unit)",
+      "TCU (in-core WMMA)",
+      "TCU + DXA-staged operands",
+      "TCU workgroup + DXA (warp-specialised)",
+      "TCU workgroup, cooperative SW load",
+      "<reserved>",
+      "<reserved>",
+      "DTCU_socket (engine per socket)",
+      "DTCU_cluster (engine per cluster)",
       "hetero: TCU + DTCU_socket",
       "hetero: TCU + DTCU_cluster",
       "hetero: TCU + both engines",
-      // 12/13: the first modes whose CTA is wide enough for operand staging to have
-      // something to amortise over.
-      "TCU workgroup + DXA (warp-specialised)",
-      "TCU workgroup, cooperative SW load",
-};
+  };
   std::vector<otype_t> out[NUM_MODES];
   Stats stats[NUM_MODES];
   int mode_errors[NUM_MODES] = {0};

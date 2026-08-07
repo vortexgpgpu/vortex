@@ -49,21 +49,26 @@ Grouped by **what executes**, so the numbering is deliberately sparse:
 | 0 | in-core SIMT | scalar MAC, software fp16→fp32 (no HW fp16 in SIMT) |
 | 1 | in-core TCU (WMMA) | naive: load frag → mma per K |
 | 2 | in-core TCU + DXA | naive: single-buffer, sync per K |
-| 3 | in-core TCU — pipelined, **LSU-staged** | **2-stage** smem pipeline, block copies its own tiles. Control for mode 5 |
-| 4 | in-core TCU — pipelined, **LSU-staged** | **3-stage** smem pipeline, block copies its own tiles. Control for mode 6 |
-| 5 | in-core TCU + DXA — pipelined | **2-stage** smem pipeline: DXA runs 1 tile ahead (ref: sgemm2_dxa) |
-| 6 | in-core TCU + DXA — pipelined | **3-stage** smem pipeline: DXA runs 2 tiles ahead |
+| 3 | workgroup WGMMA + DXA | multi-warp CTA shares one staged tile; warp 0 produces; `wgmma` reads smem directly |
+| 4 | workgroup WGMMA, SW copy | same geometry, the CTA copies its own tiles — the DXA control for 3 |
+| 5, 6 | *reserved holes* | retired; see below |
 | 7 | DTCU_socket | one engine per socket, D → that socket's L1, native tile 32×16 |
 | 8 | DTCU_cluster | one engine per cluster, D → L2, native tile 64×32 |
 | 9 | hetero: TCU + DTCU_socket | **not built** — reports `skipped=1` |
 | 10 | hetero: TCU + DTCU_cluster | **not built** |
 | 11 | hetero: TCU + both engines | **not built** |
-| 12 | workgroup WGMMA + DXA | multi-warp CTA shares one staged tile; warp 0 produces; `wgmma` reads smem directly |
-| 13 | workgroup WGMMA, SW copy | same geometry, the CTA copies its own tiles — the DXA control for 12 |
 
-⚠️ **This numbering changed on 2026-08-05.** Previously 3=DTCU_cluster, 4=DTCU_socket,
-5=3-stage, 6=2-stage. Both pairs moved *and* swapped order, and 3/4 were then reused for
-the LSU-staged pipelines, so a mode number from an older log means something different.
+⚠️ **This numbering changed again on 2026-08-07, and a log from before that means
+something different.** 3 and 4 now hold the workgroup pair that was 12 and 13. The four
+single-warp staging modes that held 3–6 are **retired**: a block there was one warp, so it
+staged a tile, issued one `mma_sync` against it and threw it away, with nothing to
+amortise the copy over. All four landed within 7 % of mode 1, which stages nothing at all,
+and none completed at 512×256×128 — they measured the absence of a geometry rather than
+the presence of an engine. 5 and 6 are now reserved holes. (Before *that*, 3=DTCU_cluster
+and 4=DTCU_socket, which moved to 7/8.)
+
+Their last numbers, for the record: 3 (2-stage LSU) 104,196 / 382,111 / —, 4 (3-stage LSU)
+231,610 / — / —, 5 (2-stage DXA) 90,132 / — / —, 6 (3-stage DXA) 132,452 / — / —.
 The `[MOTI]` line carries `name=`, and the sweep scripts hard-error on a mismatch rather
 than mislabelling a column.
 
@@ -195,20 +200,16 @@ them), a socket engine for mode 7 (4 of them, all active), the cluster engine fo
 | 0 SIMT | 4 cores | 142,952 | 1.83 | 0.46 | — | — | — | — | — | — |
 | 1 TCU | 4 cores | 23,513 | 11.15 | 2.79 | 96,244 | 21.79 | 5.45 | 386,994 | 43.35 | 10.84 |
 | 2 TCU+DXA | 4 cores | 23,939 | 10.95 | 2.74 | 101,977 | 20.56 | 5.14 | 446,129 | 37.61 | 9.40 |
-| 3 TCU 2-stage LSU | 4 cores | 104,196 | 2.52 | 0.63 | 382,111 | 5.49 | 1.37 | — | — | — |
-| 4 TCU 3-stage LSU | 4 cores | 231,610 | 1.13 | 0.28 | — | — | — | — | — | — |
-| 5 TCU+DXA 2-stage | 4 cores | 90,132 | 2.91 | 0.73 | — | — | — | — | — | — |
-| 6 TCU+DXA 3-stage | 4 cores | 132,452 | 1.98 | 0.49 | — | — | — | — | — | — |
+| 3 TCU wg + DXA | 4 cores | 25,386 | 10.33 | 2.58 | 103,400 § | 20.28 | 5.07 | 454,165 | 36.94 | 9.23 |
+| 4 TCU wg, SW copy | 4 cores | 32,583 | 8.04 | 2.01 | 152,677 | 13.73 | 3.43 | ‡ | ‡ | ‡ |
 | 7 DTCU_socket | 4 engines | 11,912 | 22.01 | 5.50 | 49,064 | 42.74 | 10.69 | 303,884 | 55.21 | 13.80 |
 | 8 DTCU_cluster | 1 engine | 49,472 | 5.30 | 5.30 | 160,448 | 13.07 | 13.07 | 1,112,370 | 15.08 | 15.08 |
-| 12 TCU wg + DXA | 4 cores | 25,386 | 10.33 | 2.58 | 103,400 § | 20.28 | 5.07 | 454,165 | 36.94 | 9.23 |
-| 13 TCU wg, SW copy | 4 cores | 32,583 | 8.04 | 2.01 | 152,677 | 13.73 | 3.43 | ‡ | ‡ | ‡ |
 
 Post-merge with upstream (`00ea949a1`). **Every number in this table replaced a
 pre-merge one** — upstream rebuilt the memory path underneath us and the ordering moved
 with it; see below.
 
-**— means the run does not complete**, not that it was skipped. Modes 3/4/5/6 and 12/13
+**— means the run does not complete**, not that it was skipped. Modes 3/4/5/6 and 3/4
 hit a wall between 256×128×32 and 384×192×32: mode 4 scales linearly to that point
 (231,610 → 345,311 → 581,372 cycles at 7/12/21 s of simulation) and then 384×192×32 does
 not finish in an hour. K depth is not the cause — at 128×64 the same mode takes 231,610 /
@@ -265,14 +266,14 @@ to hold first:
    makes each load cheaper (95.5 → 65.8 cycles) and pays for it on the SFU
    (`stall_sfu` 13,360 → 27,741).
 
-**Modes 12/13 have all three** — an `ISSUE_WIDTH`-warp CTA sharing one staged tile, warp 0
+**Modes 3/4 have all three** — an `ISSUE_WIDTH`-warp CTA sharing one staged tile, warp 0
 as producer, `wgmma_sync` taking B as a shared-memory descriptor — and differ only in
 whether the copy is a DXA descriptor or the CTA's own loads:
 
 | | 128×64×32 | 256×128×64 | 512×256×128 |
 |---|--:|--:|--:|
-| 12 DXA, C pass removed | 14,093 | 71,583 | 335,171 |
-| 13 SW copy, C pass removed | 16,634 | 91,418 | 494,464 |
+| 3 DXA, C pass removed | 14,093 | 71,583 | 335,171 |
+| 4 SW copy, C pass removed | 16,634 | 91,418 | 494,464 |
 | **what DXA is worth** | **1.18×** | **1.28×** | **1.48×** |
 
 The engine pays, and by more as the shape grows. The 0.98–1.0× from the single-warp pairs
@@ -282,7 +283,54 @@ was a statement about those kernels, not about DXA.
 were measured when `D = C + A·B` still split into four M·N accesses; what follows replaces
 them.
 
-### The epilogue was four M·N accesses, and that is what stopped 12/13 at 512×256×128
+### The DTCU's compute timing is anchored to a TCU that no longer exists
+
+Checked because the engine looked too fast. It is not the compute array that is
+mis-modelled, and the direction of the error is the opposite of the suspicion — but the
+anchor really is stale, in two separate ways.
+
+**The merge moved the TCU's MMA latency and left the DTCU behind.** Upstream replaced a
+hardcoded `delay = 4` in `tcu_unit.cpp` with `delay = kMmaLatency = 1 + kFedpLatency`,
+derived from the configured PE type: 5 for `TFR` (this build), but 16 for `BHF`, ~35 for
+`FPNEW` and 54 for `DSP`. `DTCU_COMPUTE_LATENCY` is still a hardcoded **6**, written
+2026-08-04/05 against the pre-merge TCU, and `git diff 00ea949a1 HEAD -- sim/simx/dtcu/`
+is empty. So the two units' pipeline depths now track each other only by coincidence, and
+they stop agreeing entirely under any `VX_CFG_TCU_TYPE` but the default.
+
+**`DTCU_MACS_PER_CYCLE` is anchored to a configuration this harness does not run.** Its
+comment says 16 "== one in-core TCU's raw throughput (NT=4), so the DTCU's modeled
+advantage comes only from removing SIMT pipeline overhead and NOT from also assuming a
+wider array (no double counting)." This harness runs **NT=32**. At NT=32,
+`wmma_config_t` gives `tcM=8, tcN=4, tcK=4` and `m_steps × n_steps × k_steps = 2 × 4 × 4
+= 32` uops per 16×16×16 WMMA — so **128 MACs per uop**, one uop per cycle per block,
+`NUM_TCU_BLOCKS=4` blocks: **512 MACs/cycle per core**. The parity the parameter claims is
+off by 8× per warp and 32× per core, and it is off in the direction that makes the engine
+look *worse*, not better.
+
+So the two units are being compared at wildly different modelled peaks:
+
+| | modelled peak | achieved at 512×256×128 | utilisation |
+|---|--:|--:|--:|
+| in-core TCU, 4 cores | 2,048 MAC/cyc | 43.4 | **2.1 %** |
+| DTCU_socket, 4 engines | 64 MAC/cyc | 55.2 | **86 %** |
+
+**That is the real finding, and it cuts both ways.** The engine is not winning because it
+was given a fat array — it was given one 32× *thinner* than the core's. It wins because
+nothing ever stalls it, which is the paper's claim, and the measured counters agree
+(`loads=116`, every stall category zero). But an 86 % vs 2.1 % utilisation gap is a very
+large thing to rest on one hand-set constant, and `DTCU_MACS_PER_CYCLE=16` mostly does not
+even bind: at the socket tile (32×16) the accumulator term
+`2·32·16/DTCU_ACC_BANKS + 1 = 513` and the MAC term `32·16·16/16 = 512` are within one
+cycle of each other, so `max()` picks them almost interchangeably. The engine is modelled
+as accumulator-bandwidth-bound.
+
+**Not changed here, because it is a machine-configuration decision.** The two edits that
+would follow are (a) derive `DTCU_COMPUTE_LATENCY` from the same `kFedpLatency` the TCU
+now uses instead of hardcoding 6, and (b) re-anchor `DTCU_MACS_PER_CYCLE` to the in-core
+TCU's throughput **at the configured NT** rather than at NT=4. Both move every DTCU number
+in this file.
+
+### The epilogue was four M·N accesses, and that is what stopped 3/4 at 512×256×128
 
 A wgmma context refuses to load an accumulator from memory (`vx_tensor.h:789`) — the
 warpgroup accumulator is distributed differently from a per-warp WMMA fragment even at the
@@ -306,12 +354,12 @@ it correct where reading it at *WMMA* addresses was not.
 
 | | 128×64×32 | 256×128×64 | 512×256×128 |
 |---|--:|--:|--:|
-| 12, store D + read back (4 accesses) | 84,045 | 314,428 | **did not finish** |
-| 12, store to LMEM + coop pass (2) | 95,325 | 326,171 | did not finish |
-| **12, fused in registers (2)** | **25,386** | **103,400** § | **454,165** |
-| 13, store D + read back (4 accesses) | 63,339 | 261,673 | **did not finish** |
-| 13, store to LMEM + coop pass (2) | 77,386 | 281,189 | did not finish |
-| **13, fused in registers (2)** | **32,583** | **152,677** | ‡ |
+| 3, store D + read back (4 accesses) | 84,045 | 314,428 | **did not finish** |
+| 3, store to LMEM + coop pass (2) | 95,325 | 326,171 | did not finish |
+| **3, fused in registers (2)** | **25,386** | **103,400** § | **454,165** |
+| 4, store D + read back (4 accesses) | 63,339 | 261,673 | **did not finish** |
+| 4, store to LMEM + coop pass (2) | 77,386 | 281,189 | did not finish |
+| **4, fused in registers (2)** | **32,583** | **152,677** | ‡ |
 | speed-up over the 4-access original | 3.31× / 1.94× | 3.04× / 1.71× | ∞ / — |
 
 Every fused-epilogue run above verified `PASSED!`, errors = 0.
@@ -354,8 +402,8 @@ one warp instruction across eight cache lines. That scattering is real — the m
 
 | `-DMOTI_WG_NO_C` control (D wrong on purpose) | 128×64×32 | 256×128×64 | 512×256×128 |
 |---|--:|--:|--:|
-| 12 | 22,979 | 98,637 | 423,127 |
-| 13 | 25,795 | 104,133 | 497,215 |
+| 3 | 22,979 | 98,637 | 423,127 |
+| 4 | 25,795 | 104,133 | 497,215 |
 
 That switch is narrower than it used to be: it once removed a whole second pass over D and
 now removes only the C read, so the old NO_C numbers are not comparable to these.
@@ -365,8 +413,8 @@ one:
 
 | | 128×64×32 | 256×128×64 | 512×256×128 |
 |---|---|---|---|
-| 12 | ✅ a1, a2, a6 | ✅ a2, a3, a6 | ✅ a1 |
-| 13 | ✅ a1, a2, a6 | ✅ a1, a2 | **✗ never verified** |
+| 3 | ✅ a1, a2, a6 | ✅ a2, a3, a6 | ✅ a1 |
+| 4 | ✅ a1, a2, a6 | ✅ a1, a2 | **✗ never verified** |
 
 **Deepening the staged tile makes it worse.** Two K-steps per stage instead of one costs
 1.40×/1.82× at 128×64×32 and 1.39×/1.83× at 256×128×64 — every shape, both modes. Local
@@ -378,7 +426,7 @@ cost a single resident CTA until S = 8 (20,480 B, 3 slots). Whatever S=2 and S=4
 is not resident CTAs, and it is still unexplained. **Reuse has to grow along
 N**, one staged tile feeding several output tiles, not along K.
 
-**The epilogue costs 12/13 nothing.** app 2 and app 6 land within 0.3 % of app 1 (257,844
+**The epilogue costs 3/4 nothing.** app 2 and app 6 land within 0.3 % of app 1 (257,844
 and 258,601 against 258,543): the C pass they are already forced to make absorbs it. Modes
 7/8 pay a second launch for the same thing — mode 7 goes 14,389 → 73,973 at app 2.
 

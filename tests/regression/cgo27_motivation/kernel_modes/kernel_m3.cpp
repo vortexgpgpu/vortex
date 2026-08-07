@@ -1,69 +1,101 @@
-// GPU-side program for mode 3 -- WMMA, 2-stage smem pipeline, LSU-staged.
+// GPU-side program for mode 3 -- workgroup WGMMA + DXA, warp-specialised.
 //
-// This is the DEVICE program: RISC-V clang compiles it to kernel_m3.vxbin, which runs on
-// the GPU. It has no main(); its entry point is the __kernel below. The host program that
-// opens the device, uploads A/B/C, launches this and reads D back is main.cpp, built for
-// x86 -- that is where main() lives.
+// This is the mode where operand staging is actually set up to pay. Those modes have a
+// DXA copy but none of the three things that make one worth its cost, and they land
+// within 7 % of mode 1, which stages nothing at all. This one has all three:
 //
-// It contains this mode's kernel and NOTHING else, which is the point. In the old
-// all-in-one kernel.vxbin every mode occupied address space even though only one ran, and
-// address decides icache set: adding modes 3/4 moved mode 2 from 15,468 to 24,106 cycles
-// with a byte-identical kernel body. Here every mode's code starts at 0x180000034
-// whatever else is in the tree.
+//   1. REUSE. The CTA is `warps` warps wide and stages ONE A tile of cta_M = warps *
+//      xtileM rows plus ONE B tile that every warp reads. In the retired single-warp staging modes a block is a
+//      single warp: it stages a tile, issues one mma_sync against it, and throws it away,
+//      so there is nothing to amortise the copy over. Sixteen resident warps there are
+//      sixteen unrelated CTAs each copying its own private tile.
+//
+//   2. WARP SPECIALISATION. Warp 0 issues the DXA and the others compute. Those modes
+//      already contain `is_dxa = (get_sub_group_id() == 0)`, but they launch 32 threads
+//      per block -- one warp -- so producer and consumer are the same warp and the async
+//      copy has nothing to overlap with.
+//
+//   3. THE CONSUMER READS SHARED MEMORY DIRECTLY. wgmma_sync takes B as a shared-memory
+//      DESCRIPTOR, so the B fragment is never loaded into registers. With
+//      load_matrix_sync (the retired single-warp staging modes) every fragment is still an LSU load and the load
+//      COUNT does not drop -- measured 49,632 -> 47,520, 4 % -- DXA only makes each load
+//      cheaper (95.5 -> 65.8 cycles) while paying issue and barrier traffic on the SFU.
+//      This is the same property Hopper's wgmma has and the DTCU's MAC array has.
+//
+// WGMMA_RS: A still comes from registers (the RS form), B from smem. That is the variant
+// sgemm_tcu_wg_dxa uses at NRC <= 16 and is what this is modelled on.
 
-#include "wmma_common.h"
-#include "k_smem_stage.h"
+#include "k_wg_common.h"
 #include <vx_spawn2.h>
 #include <vx_barrier.h>
+#include <vx_dxa.h>
 
-// ---- mode 3: WMMA, 2-stage smem pipeline, LSU-staged (control for mode 5) ----
-//
-// Structure mirrors moti_tcu_dxa_pipe exactly, including the by-2 unroll that keeps
-// every stage and barrier selection a compile-time constant.
-//
-// One thing genuinely differs and it is the finding, not a flaw: a DXA fill is ASYNC,
-// so mode 5 issues the fill for tile k+1 and computes tile k while it runs. An LSU
-// fill is the block's own instruction stream, so nothing overlaps inside a CTA — the
-// prefetch distance only buys overlap ACROSS resident CTAs. Whether two stages are
-// worth their lmem and barriers without an engine behind them is the question.
-__kernel void moti_tcu_pipe2(kernel_arg_t* __UNIFORM__ arg) {
+
+__kernel void moti_tcu_wg_dxa(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t N = arg->N, K = arg->K, app = arg->app;
-  auto pA = reinterpret_cast<const ctx::input_t*>(arg->A_addr);
-  auto pB = reinterpret_cast<const ctx::input_t*>(arg->B_addr);
-  auto pC = reinterpret_cast<ctx::output_t*>(arg->C_addr);
-  auto pD = reinterpret_cast<ctx::output_t*>(arg->D_addr);
+  auto pC = reinterpret_cast<wgctx::output_t*>(arg->C_addr);
+  auto pD = reinterpret_cast<wgctx::output_t*>(arg->D_addr);
 
-  const uint32_t tile_row = blockIdx.y * ctx::tileM;
-  const uint32_t tile_col = blockIdx.x * ctx::tileN;
+  const uint32_t tid       = threadIdx.x;
+  const uint32_t warp_rank = tid / VX_CFG_NUM_THREADS;
+  const uint32_t num_warps = blockDim.x / VX_CFG_NUM_THREADS;
 
-  constexpr uint32_t elemsA = ctx::tileM * ctx::tileK;
-  constexpr uint32_t elemsB = ctx::tileN * ctx::tileK;
-  constexpr uint32_t stage  = elemsA + elemsB;
-  auto smem = reinterpret_cast<ctx::input_t*>(__local_mem());
-  ctx::input_t* A_smem0 = smem;                  // stage 0
-  ctx::input_t* B_smem0 = smem + elemsA;
-  ctx::input_t* A_smem1 = smem + stage;          // stage 1
-  ctx::input_t* B_smem1 = smem + stage + elemsA;
+  // The CTA owns cta_M rows; each warp owns xtileM of them. One staged A tile covers all
+  // of them and one staged B tile is read by every warp -- that is the reuse.
+  const uint32_t cta_M    = num_warps * wgctx::xtileM;
+  const uint32_t tile_row = blockIdx.y * cta_M;
+  const uint32_t tile_col = blockIdx.x * wgctx::xtileN;
 
-  ctx::fragment_acc fragD;
-  wmma_seed_C(fragD, pC, tile_row, tile_col, N);
+  // smem: A [cta_M x tileK] row-major, then B [xtileN x tileK] K-major -- the layouts the
+  // host's DXA descriptors produce, and the ones the smem descriptor below assumes.
+  auto smem   = reinterpret_cast<wgctx::input_t*>(__local_mem());
+  auto A_smem = smem;
+  auto B_smem = smem + cta_M * kStK;
 
-  const uint32_t numK = K / ctx::tileK;
-  const uint32_t tK   = ctx::tileK;
+  // The accumulator starts at ZERO, not at C. A wgmma context refuses to load an
+  // accumulator from memory (vx_tensor.h:789) and that refusal is not arbitrary: the
+  // warpgroup's accumulator is distributed across the group differently from a per-warp
+  // WMMA fragment, so seeding it through the WMMA layout puts C in the wrong lanes and
+  // the product lands on top of it. That is exactly what it did -- 24,173 of 32,768
+  // elements wrong, one warp in four correct, identically for modes 12 and 13.
+  //
+  // So C is added afterwards, in a cooperative pass over the CTA's own output tile. That
+  // pass used to be an extra cost this pair paid and modes 1/2/5/6 did not, because the
+  // accumulator went to global D and the pass then read it back -- four M*N accesses
+  // against their two. It stores to LMEM now, so the pass makes the same two, and the
+  // two groups are directly comparable. See k_wg_common.h.
+  wgctx::fragment_acc fragC;
+  wgctx::fill_fragment(fragC, 0);
 
-  smem_stage_fill(A_smem0, B_smem0, pA, pB, 0, tile_row, tile_col, K);
-  for (uint32_t kk = 0; kk < numK; kk += 2) {
-    // even step: stage 1 takes tile kk+1 while stage 0 is consumed
-    if (kk + 1 < numK)
-      smem_stage_fill(A_smem1, B_smem1, pA, pB, (kk + 1) * tK, tile_row, tile_col, K);
-    smem_stage_consume(fragD, 0, A_smem0, B_smem0);
-    // odd step: stage 0 takes tile kk+2 while stage 1 is consumed
-    if (kk + 1 < numK) {
-      if (kk + 2 < numK)
-        smem_stage_fill(A_smem0, B_smem0, pA, pB, (kk + 2) * tK, tile_row, tile_col, K);
-      smem_stage_consume(fragD, 1, A_smem1, B_smem1);
+  vortex::barrier bar(0);
+  const bool is_dxa_warp = (get_sub_group_id() == 0);
+
+  for (uint32_t k = 0; k < K; k += kStK) {
+    if (is_dxa_warp) {
+      bar.expect_tx(2);                                   // A and B in flight
+      vx_dxa_issue_2d_wg(DESC_A, bar.id(), A_smem, k, tile_row);
+      vx_dxa_issue_2d_wg(DESC_B, bar.id(), B_smem, k, tile_col);
     }
+    bar.arrive_and_wait();                                // stage filled
+
+    // S MMAs against one staged tile. Sub-tile s sits at column offset s * tileK inside
+    // the stage; the row stride stays kStK, which is what both the fragment load and the
+    // smem descriptor are told.
+    for (uint32_t s = 0; s < kS; ++s) {
+      auto A_warp = A_smem + warp_rank * wgctx::xtileM * kStK + s * wgctx::tileK;
+      auto desc_b = vt::vx_make_smem_desc(B_smem + s * wgctx::tileK,
+                                          kStK * sizeof(wgctx::input_t));
+      wgctx::fragment_a fragA;
+      wgctx::load_matrix_sync(fragA, A_warp, kStK);
+      wgctx::wgmma_sync(fragC, fragA, desc_b, fragC);     // B straight from smem
+    }
+
+    bar.arrive_and_wait();                                // stage free to refill
   }
-  wmma_fuse_epilogue(fragD, app);
-  wmma_store_D(pD, fragD, tile_row, tile_col, N);
+
+  // D = epi(C + A*B), fused while the accumulator is still in registers: two M*N global
+  // accesses, the same as modes 1/2/5/6, against the four this used to make. Warp-private
+  // -- no second pass, no scratch, no barrier. See k_wg_common.h.
+  const uint32_t out_row = tile_row + warp_rank * wgctx::xtileM;
+  wg_store_epilogue(fragC, pC, pD, out_row, tile_col, N, app);
 }

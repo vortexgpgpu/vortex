@@ -112,8 +112,6 @@ static bool check_shape(uint32_t M, uint32_t N, uint32_t K,
 
   // modes 1, 2, 5, 6: one warp per output tile, K stepped by the WMMA tile.
   if (run_this(MODE_TCU) || run_this(MODE_TCU_DXA) ||
-      run_this(MODE_TCU_DXA_PIPE3) || run_this(MODE_TCU_DXA_PIPE2) ||
-      run_this(MODE_TCU_PIPE3) || run_this(MODE_TCU_PIPE2) ||
       run_this(MODE_HET_TCU_DSOCK) || run_this(MODE_HET_TCU_DCLUS) ||
       run_this(MODE_HET_ALL)) {
     need(M, tcu_tileM, "M", &need_M, "in-core TCU tileM");

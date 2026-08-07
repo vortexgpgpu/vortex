@@ -26,14 +26,14 @@ APPS  = {1:"baseline",2:"relu",3:"gelu",4:"residual",5:"scale",
          6:"softmax",7:"dq+bias+gelu",8:"dq+softmax"}
 # Must match main.cpp's kShortNames[] EXACTLY -- run_case() cross-checks and exits on a
 # mismatch. The numbering is grouped by what executes and is intentionally sparse:
-# 0-2 in-core, 5-6 in-core pipelined by depth, 7-8 engine only by placement,
+# 0-2 in-core, 3-4 in-core workgroup staging, 7-8 engine only by placement,
 # 9-11 hetero.
 MODES = {0:"SIMT",1:"TCU",2:"TCU+DXA",
-         5:"TCU+DXA-pipe2",6:"TCU+DXA-pipe3",
+         3:"TCU_wg+DXA",4:"TCU_wg",
          7:"DTCU_socket",8:"DTCU_cluster",
          9:"TCU+DTCU_socket",10:"TCU+DTCU_cluster",11:"TCU+DTCU_both"}
-# 3 and 4 are reserved holes in the numbering, not modes: the harness rejects
-# -m 3/-m 4 and never emits a [MOTI] line for them. 9-11 are planned but not
+# 5 and 6 are reserved holes in the numbering, not modes: the harness rejects
+# -m 5/-m 6 and never emits a [MOTI] line for them. 9-11 are planned but not
 # built, so they report skipped=1 and run_case() drops them.
 
 # The size ladder lives here now, not in the harness. `-s` used to mean "N x the DTCU

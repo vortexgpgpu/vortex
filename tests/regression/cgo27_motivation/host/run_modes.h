@@ -50,25 +50,6 @@ static inline ModeSpec run_mode_2() {   // WMMA on DXA-staged smem, single buffe
   return ModeSpec{ "moti_tcu_dxa", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA, 1, true };
 }
 
-// 3/5 and 4/6 are matched pairs: same stage count, same lmem, same barrier count, so the
-// only variable between them is who copies A and B into Local Memory. Giving the
-// LSU-staged pair the same lmem_stages is what keeps occupancy out of the comparison.
-static inline ModeSpec run_mode_3() {   // 2-stage pipeline, LSU-staged  (control for 5)
-  return ModeSpec{ "moti_tcu_pipe2", 0, ModeSpec::GEOM_WMMA, 2, false };
-}
-
-static inline ModeSpec run_mode_4() {   // 3-stage pipeline, LSU-staged  (control for 6)
-  return ModeSpec{ "moti_tcu_pipe3", 0, ModeSpec::GEOM_WMMA, 3, false };
-}
-
-static inline ModeSpec run_mode_5() {   // 2-stage pipeline, DXA-staged
-  return ModeSpec{ "moti_tcu_dxa_pipe", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA, 2, true };
-}
-
-static inline ModeSpec run_mode_6() {   // 3-stage pipeline, DXA-staged
-  return ModeSpec{ "moti_tcu_dxa_pipe3", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA, 3, true };
-}
-
 // ---- descriptor engine ----
 //
 // GEOM_PER_CORE for BOTH, and that is load-bearing rather than incidental. The kernel
@@ -93,14 +74,18 @@ static inline ModeSpec run_mode_8() {   // DTCU_cluster: one engine per cluster,
 //
 // A CTA of `warps` warps stages one A tile spanning all of them plus one B tile they all
 // read, warp 0 issues the copy, and wgmma_sync reads B out of shared memory instead of
-// loading it into registers. 12 and 13 differ ONLY in whether that copy is a DXA
+// loading it into registers. 3 and 4 differ ONLY in whether that copy is a DXA
 // descriptor or the CTA's own loads, so the pair is what the engine is worth.
+//
+// These held mode ids 12 and 13 while the single-warp staging modes occupied 3-6. Those
+// were retired (see host_modes.h) and the pair took their place, so a number quoted as
+// "mode 12" or "mode 13" anywhere older means mode 3 or mode 4 here.
 
-static inline ModeSpec run_mode_12() {  // workgroup WGMMA + DXA, warp-specialised
+static inline ModeSpec run_mode_3() {   // workgroup WGMMA + DXA, warp-specialised
   return ModeSpec{ "moti_tcu_wg_dxa", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA_WG, 1, true };
 }
 
-static inline ModeSpec run_mode_13() {  // workgroup WGMMA, cooperative SW load
+static inline ModeSpec run_mode_4() {   // workgroup WGMMA, cooperative SW load
   return ModeSpec{ "moti_tcu_wg", 0, ModeSpec::GEOM_WMMA_WG, 1, false };
 }
 
@@ -112,14 +97,10 @@ static inline ModeSpec moti_mode_spec(uint32_t mode) {
   case MODE_SIMT:          return run_mode_0();
   case MODE_TCU:           return run_mode_1();
   case MODE_TCU_DXA:       return run_mode_2();
-  case MODE_TCU_PIPE2:     return run_mode_3();
-  case MODE_TCU_PIPE3:     return run_mode_4();
-  case MODE_TCU_DXA_PIPE2: return run_mode_5();
-  case MODE_TCU_DXA_PIPE3: return run_mode_6();
+  case MODE_TCU_WG_DXA:    return run_mode_3();
+  case MODE_TCU_WG:        return run_mode_4();
   case MODE_DTCU_SOCKET:   return run_mode_7();
   case MODE_DTCU_CLUSTER:  return run_mode_8();
-  case MODE_TCU_WG_DXA:    return run_mode_12();
-  case MODE_TCU_WG:        return run_mode_13();
   default:                 return ModeSpec{ nullptr, 0, ModeSpec::GEOM_SIMT, 0, false };
   }
 }

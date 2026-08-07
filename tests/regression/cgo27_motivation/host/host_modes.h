@@ -15,43 +15,43 @@
 //
 // The numbering is grouped by WHAT EXECUTES, and is deliberately not dense:
 //   0-2   in-core, increasing operand-staging sophistication
-//   3-4   in-core, pipelined by DEPTH, operands staged by the LSU
-//   5-6   in-core, pipelined by DEPTH, operands staged by DXA
+//   3-4   in-core, WORKGROUP staging: a multi-warp CTA shares one staged tile
 //   7-8   descriptor engine alone, by PLACEMENT
 //   9-11  hetero: cores and engine(s) on the same GEMM at once
 //
-// 3/5 and 4/6 are MATCHED PAIRS: identical tile geometry, stage count, barrier count and
-// lmem footprint, differing only in who copies A and B into Local Memory. That is what
-// isolates the copy engine's contribution at each pipeline depth -- neither pair could
-// do it alone. (3 and 4 previously held the retired DTCU no-TMA / TMA pair, which moved
-// to 7/8; DTENSOR_FLAG_NO_TMA itself stays in the ISA.)
+// 3 and 4 are a MATCHED PAIR: identical geometry, stage count, barrier count and lmem
+// footprint, differing only in whether the copy into Local Memory is a DXA descriptor or
+// the CTA's own loads. That difference alone is what the copy engine is worth.
+//
+// 5 and 6 are RESERVED HOLES. They, and the previous 3/4, held four single-warp
+// LSU/DXA-staged pipeline modes (2- and 3-stage, with and without DXA). They were
+// retired: a block there was ONE warp, so it staged a tile, issued one mma_sync against
+// it and threw it away, with nothing to amortise the copy over. All four landed within
+// 7 % of mode 1, which stages nothing at all, and none of them completed at 512x256x128.
+// The workgroup pair now at 3/4 is the same experiment with the geometry that can
+// actually make staging pay -- see README. (3 and 4 before that held the retired DTCU
+// no-TMA / TMA pair, which moved to 7/8; DTENSOR_FLAG_NO_TMA itself stays in the ISA.)
 //
 // Everything downstream keys off these names rather than literals, so changing a value
-// here moves the mode. Note 5/6 and 7/8 are each ordered differently than they were.
+// here moves the mode.
 enum : uint32_t {
   MODE_SIMT           = 0,
   MODE_TCU            = 1,
   MODE_TCU_DXA        = 2,
-  MODE_TCU_PIPE2      = 3,  // 2-stage LMEM pipeline, LSU-staged  (control for 5)
-  MODE_TCU_PIPE3      = 4,  // 3-stage LMEM pipeline, LSU-staged  (control for 6)
-  MODE_TCU_DXA_PIPE2  = 5,  // 2-stage LMEM pipeline, DXA-staged
-  MODE_TCU_DXA_PIPE3  = 6,  // 3-stage LMEM pipeline, DXA-staged
+  MODE_TCU_WG_DXA     = 3,  // workgroup WGMMA + DXA, warp-specialised
+  MODE_TCU_WG         = 4,  // workgroup WGMMA, cooperative SW load (control for 3)
+  // 5, 6: reserved holes -- see the note above.
   MODE_DTCU_SOCKET    = 7,  // engine at socket scope,  D -> that socket's L1
   MODE_DTCU_CLUSTER   = 8,  // engine at cluster scope, D -> L2
   MODE_HET_TCU_DSOCK  = 9,  // hetero: in-core TCU + DTCU_socket
   MODE_HET_TCU_DCLUS  = 10, // hetero: in-core TCU + DTCU_cluster
   MODE_HET_ALL        = 11, // hetero: in-core TCU + both engines
-  // 12/13: the first modes whose geometry can actually make operand staging pay -- a
-  // multi-warp CTA sharing one staged tile, a producer warp, and wgmma reading smem
-  // directly. 12 vs 13 is the DXA engine with everything else held fixed.
-  MODE_TCU_WG_DXA     = 12, // workgroup WGMMA + DXA, warp-specialised
-  MODE_TCU_WG         = 13, // workgroup WGMMA, cooperative SW load (control for 12)
 };
-static const uint32_t NUM_MODES = 14;
+static const uint32_t NUM_MODES = 12;
 static const uint32_t MODE_ALL  = 0xFFFFFFFFu;
 static uint32_t g_mode = MODE_ALL;
-// Warps per CTA for the workgroup modes (12/13); 0 = use every warp slot the device has.
-// This is the knob the earlier staging modes were missing entirely.
+// Warps per CTA for the workgroup modes (3/4); 0 = use every warp slot the device has.
+// This is the knob the retired single-warp staging modes were missing entirely.
 static uint32_t g_wg_warps = 0;
 static inline bool run_this(uint32_t m) { return g_mode == MODE_ALL || g_mode == m; }
 
@@ -65,10 +65,8 @@ enum class ModeState {
 static ModeState mode_state(uint32_t m) {
   switch (m) {
   case MODE_SIMT: case MODE_TCU: case MODE_TCU_DXA:
-  case MODE_TCU_PIPE2: case MODE_TCU_PIPE3:
-  case MODE_TCU_DXA_PIPE2: case MODE_TCU_DXA_PIPE3:
-  case MODE_DTCU_SOCKET: case MODE_DTCU_CLUSTER:
   case MODE_TCU_WG_DXA: case MODE_TCU_WG:
+  case MODE_DTCU_SOCKET: case MODE_DTCU_CLUSTER:
     return ModeState::Implemented;
   // Numbered but NOT built. A first attempt was backed out: the claim and the start
   // instruction both executed -- a readback showed claimed[]=1 and the descriptor
@@ -76,13 +74,6 @@ static ModeState mode_state(uint32_t m) {
   // four extra kernel_arg_t fields, and growing that struct moves every mode's cycle
   // count (see 260824_DTCU_update_RFC.md 2.6), so it could not stay in the tree
   // disabled. Planned keeps the suite green and the number out of the results.
-  // 12/13 build and run but do not verify yet: at ISSUE_WIDTH=4 warps exactly one of
-  // the four warps' rows come out right (24,173 of 32,768 wrong), and replacing the
-  // NRC=8 wgmma/accumulator contexts with the default wmma ctx makes the same kernel
-  // pass at one warp. So the remaining fault is the WGMMA_NRC=8 accumulator layout,
-  // not the staging, not the B smem layout, and not the DXA descriptors -- all three
-  // were bisected clean. Planned until that is settled; a wrong number is worse than
-  // no number.
   case MODE_HET_TCU_DSOCK: case MODE_HET_TCU_DCLUS: case MODE_HET_ALL:
     return ModeState::Planned;   // numbered, not built
   default:
@@ -110,11 +101,11 @@ static inline bool wants_cluster(uint32_t m) {
 // their own table against these, so a renumbering hard-errors there instead of
 // silently mislabelling a CSV column.
 static const char* const kShortNames[NUM_MODES] = {
-  "SIMT", "TCU", "TCU+DXA", "TCU-pipe2", "TCU-pipe3",
-  "TCU+DXA-pipe2", "TCU+DXA-pipe3",
+  "SIMT", "TCU", "TCU+DXA",
+  "TCU_wg+DXA", "TCU_wg",
+  "<reserved5>", "<reserved6>",
   "DTCU_socket", "DTCU_cluster",
-  "TCU+DTCU_socket", "TCU+DTCU_cluster", "TCU+DTCU_both",
-  "TCU_wg+DXA", "TCU_wg"
+  "TCU+DTCU_socket", "TCU+DTCU_cluster", "TCU+DTCU_both"
 };
 
 #endif // _CGO27_HOST_MODES_H_

@@ -693,14 +693,14 @@
             <td class="num gsep">1,112,370</td><td class="num">15.08</td><td class="num best">15.08</td>
           </tr>
           <tr>
-            <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">12</span> TCU wg + DXA</td>
+            <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> TCU wg + DXA</td>
             <td class="unit-tag">4 cores</td>
             <td class="num gsep">25,386</td><td class="num">10.33</td><td class="num">2.58</td>
             <td class="num gsep">103,400 &sect;</td><td class="num">20.28</td><td class="num">5.07</td>
             <td class="num gsep">454,165</td><td class="num">36.94</td><td class="num">9.23</td>
           </tr>
           <tr>
-            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">13</span> TCU wg, SW copy</td>
+            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> TCU wg, SW copy</td>
             <td class="unit-tag">4 cores</td>
             <td class="num gsep">32,583</td><td class="num">8.04</td><td class="num">2.01</td>
             <td class="num gsep">152,677</td><td class="num">13.73</td><td class="num">3.43</td>
@@ -710,7 +710,7 @@
       </table>
 
       <figcaption>
-        <strong>Modes 12 and 13 were listed as "does not complete" at the largest shape.
+        <strong>Modes 3 and 4 (renumbered from 12 and 13) were listed as "does not complete" at the largest shape.
         That was not a simulator limit — it was four memory passes where two were
         needed.</strong> A wgmma context refuses to load an accumulator from memory
         (<code>vx_tensor.h:789</code>): the warpgroup accumulator is distributed
@@ -736,7 +736,7 @@
         <strong>A middle option was built and is worth keeping as a negative.</strong>
         Staging the accumulator in Local Memory and adding C cooperatively is <em>also</em>
         two M·N accesses, and it is <em>slower than the original</em> at both shapes that
-        fit in L2 (mode 13: 63,339 → 77,386 and 261,673 → 281,189). It pays an LMEM round
+        fit in L2 (mode 4: 63,339 → 77,386 and 261,673 → 281,189). It pays an LMEM round
         trip and a barrier per element, and the store's lane map hits 8 of 32 LMEM banks
         four times each. Two passes is necessary, not sufficient — <em>where</em> the
         accumulator lands decides the rest.
@@ -746,11 +746,11 @@
         identity: <code>epi_apply</code> returns <code>v</code> for each after the same two
         failed compares, and the operands come from fixed formulas that never read the app.
         The two runs execute <strong>byte-identical instructions on byte-identical
-        data</strong>. Mode 12 at 256 &times; 128 &times; 64 nevertheless finishes at
+        data</strong>. Mode 3 at 256 &times; 128 &times; 64 nevertheless finishes at
         <code>-a 6</code> in <strong>103,400 cycles</strong> and does not finish at
         <code>-a 1</code> in six attempts. &sect; marks that number; it is the identity
         epilogue, so it is the right value for the cell, and the <code>-a 1</code>
-        behaviour is unexplained and lives below the kernel. &#8225; is mode 13 at the
+        behaviour is unexplained and lives below the kernel. &#8225; is mode 4 at the
         largest shape, which finishes at no app tested and is the one cell with no
         correctness check. An earlier version of this page blamed the accumulator lane
         map's coalescing &mdash; withdrawn: <code>-a 6</code> makes the same accesses.

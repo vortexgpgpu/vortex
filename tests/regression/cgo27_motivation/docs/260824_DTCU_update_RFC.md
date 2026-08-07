@@ -660,13 +660,13 @@ TCU as LSU loads, so it pays the new latency on the fill and again on the smem r
 is the same property 2.8 identifies as the reason the single-warp DXA modes never showed a
 gain.
 
-**A measurement limit, recorded rather than solved.** Modes 3/4/5/6 do not complete at
+**A measurement limit, recorded rather than solved.** The retired single-warp staging modes did not complete at
 512x256x128. Mode 4 scales linearly to 256x128x32 (231,610 -> 345,311 -> 581,372 cycles,
 7/12/21 s of simulation) and then 384x192x32 does not finish in an hour; K depth is not
 the cause (231,610 / 225,279 / 302,906 at K = 32/64/128). Their 512 column is empty for
 that reason, not because it was skipped.
 
-### 2.7c Modes 12/13 were not a measurement limit -- they were an epilogue bug
+### 2.7c Modes 3/4 were not a measurement limit -- they were an epilogue bug
 
 The pair was in that list until the reason was looked for, and it turned out to be
 something the design owns rather than something the simulator imposes.
@@ -687,23 +687,23 @@ the epilogue loop. Live set 704 KB fits; 1,216 KB does not.
 **Folding C in while the accumulator is still in registers fixes it.** store_matrix_sync
 (vx_tensor.h:944) computes the accumulator's lane->address map in the open, so reading C
 at THOSE addresses -- rather than at WMMA addresses -- is both correct and free of any
-second pass, scratch or barrier. Mode 12 at 128x64x32 goes 84,045 -> 25,386 with DRAM
+second pass, scratch or barrier. Mode 3 at 128x64x32 goes 84,045 -> 25,386 with DRAM
 traffic landing on mode 1's (mem_reads 2,264 against 2,255, mem_writes 1,536 against
 1,536), and 512x256x128 completes at 454,165.
 
-Five of the six points are now measured and verified. Mode 12 at 256x128x64 needs a
-footnote and mode 13 at 512x256x128 is still down.
+Five of the six points are now measured and verified. Mode 3 at 256x128x64 needs a
+footnote and mode 4 at 512x256x128 is still down.
 
 The footnote is a live bug, and it is not in the epilogue. -a 1 and -a 6 are both the
 identity -- epi_apply returns v for each, after the same two failed compares -- and the
 operands do not read the app, so the two runs execute byte-identical instructions on
-byte-identical data. Mode 12 at 256x128x64 nevertheless finishes at -a 6 in 103,400 cycles
+byte-identical data. Mode 3 at 256x128x64 nevertheless finishes at -a 6 in 103,400 cycles
 and does not finish at -a 1 in six attempts; -a 2 and -a 3 also finish. The reported number
 is the -a 6 one, which is the identity epilogue and therefore the right value for that
 cell. The -a 1 behaviour is unexplained and lives below the kernel. An earlier draft blamed
 the accumulator lane map's coalescing; withdrawn, since -a 6 makes the same accesses.
 
-Mode 13 at 512x256x128 does not complete at any app tested and is not app-sensitive, so it
+Mode 4 at 512x256x128 does not complete at any app tested and is not app-sensitive, so it
 is probably a separate problem. It is also the only one of the six cells with no
 correctness check; every other (mode, shape) pair has a verified PASSED run. See README.
 
@@ -718,7 +718,7 @@ wrong cost this pair a factor of 3.3x and an entire column of the results table.
 
 ---
 
-## 2.8 What a copy engine is worth, isolated (modes 12/13)
+## 2.8 What a copy engine is worth, isolated (modes 3/4)
 
 §4.2 reported the DXA modes landing within 7 % of mode 1, which stages nothing at all,
 and that reading was real but it was a statement about the KERNELS, not about DXA. Modes
@@ -774,7 +774,7 @@ the stage halves the CTAs resident on a core, and halving the number of copies d
 pay for halving the latency hiding. Reuse has to grow along **N** — one staged tile
 feeding several output tiles, leaving the stage size alone — not along K.
 
-**The epilogue is free here and expensive for the engines.** Modes 12/13 at app 2 and app
+**The epilogue is free here and expensive for the engines.** Modes 3/4 at app 2 and app
 6 land within 0.3 % of app 1 (257,844 and 258,601 against 258,543), because the C pass
 they are already forced to make absorbs it. Modes 7/8 pay a second kernel launch for the
 same thing: mode 7 goes 14,389 → 73,973 at app 2, 5.1×.
@@ -991,3 +991,41 @@ GEMM at the same time — which is §3.2.
 - **Backpressure from consumer to engine.** If the epilogue lags, D evicts and the
   locality benefit silently disappears. Measure it (dcache miss rate on the epilogue
   read) rather than build flow control; the crossover point is itself a result.
+
+
+---
+
+## 2.9 The DTCU's compute timing is anchored to a TCU that no longer exists
+
+Checked because the engine looked too fast. The compute array is not what is
+mis-modelled, and the error runs the other way -- but the anchor is stale twice over.
+
+The merge replaced a hardcoded `delay = 4` in tcu_unit.cpp with
+`delay = kMmaLatency = 1 + kFedpLatency`, derived from the configured PE type: 5 for TFR
+(this build), 16 for BHF, ~35 for FPNEW, 54 for DSP. DTCU_COMPUTE_LATENCY is still a
+hardcoded 6, written 2026-08-04/05 against the pre-merge TCU, and
+`git diff 00ea949a1 HEAD -- sim/simx/dtcu/` is empty. The two pipeline depths now agree
+only by coincidence, and diverge outright under any VX_CFG_TCU_TYPE but the default.
+
+DTCU_MACS_PER_CYCLE = 16 is documented as "one in-core TCU's raw throughput (NT=4) ... so
+the DTCU's modeled advantage comes only from removing SIMT pipeline overhead and NOT from
+also assuming a wider array". This harness runs NT=32, where wmma_config_t gives tcM=8,
+tcN=4, tcK=4 and 2*4*4 = 32 uops per 16x16x16 WMMA -- 128 MACs per uop, one uop per cycle
+per block, 4 blocks, so 512 MACs/cycle per core. The claimed parity is off by 32x per core
+and off in the direction that makes the engine look worse.
+
+                        modelled peak   achieved @512x256x128   utilisation
+  in-core TCU, 4 cores    2,048 MAC/cyc            43.4              2.1 %
+  DTCU_socket, 4 engines     64 MAC/cyc            55.2               86 %
+
+The engine is not winning on array width -- it was given one 32x thinner than the core's.
+It wins because nothing stalls it, which is 1.1's claim, and the counters agree
+(loads=116, every stall category zero). But resting an 86%-vs-2.1% utilisation gap on one
+hand-set constant is a lot, and DTCU_MACS_PER_CYCLE mostly does not even bind: at the
+socket tile the accumulator term (2*32*16/2 + 1 = 513) and the MAC term (32*16*16/16 =
+512) sit within one cycle, so the engine is modelled as accumulator-bandwidth-bound.
+
+Not changed here: it is a machine-configuration decision. The two edits that follow are
+to derive DTCU_COMPUTE_LATENCY from the same kFedpLatency the TCU now uses, and to
+re-anchor DTCU_MACS_PER_CYCLE to the in-core TCU's throughput at the CONFIGURED NT. Both
+move every DTCU number in the results.
