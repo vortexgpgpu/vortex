@@ -306,8 +306,26 @@ inline int run_case(uint32_t mode,
   // asymmetry the app sweep measures, and it is deliberately inside the timed
   // region so the reported cycles include it.
   const bool dtcu_needs_epi = uses_engine(mode) && epi_is_elementwise(g_app);
-  vx_kernel_h epi_kernel = nullptr;
-  vx_launch_info_t epi_li = {};
+  // App 6 is a row-wise reduction, which nothing can fuse -- see epilogue.h. EVERY mode
+  // pays this pass, and the DTCU modes pay it on top of their elementwise pass.
+  const bool needs_row_pass = epi_needs_row_pass(g_app);
+  vx_kernel_h epi_kernel = nullptr, row_kernel = nullptr;
+  vx_launch_info_t epi_li = {}, row_li = {};
+  if (needs_row_pass) {
+    if (0 != vx_module_get_kernel(module_, "moti_softmax", &row_kernel)) {
+      std::cerr << "cgo27_motivation: app " << g_app << " needs the row-reduction pass, "
+                   "which is a build option. Rebuild with CONFIGS=\"-DMOTI_WITH_ROW_PASS\" "
+                   "-- it is off by default because carrying the extra kernels moves every "
+                   "in-core mode's cycle count (mode 4 by +44.6 %)." << std::endl;
+      return -1;
+    }
+    row_li.struct_size = sizeof(row_li);
+    row_li.kernel = row_kernel; row_li.args_host = &karg; row_li.args_size = sizeof(karg);
+    row_li.ndim = 1;
+    row_li.grid_dim[0]  = M;              // one block per row
+    row_li.block_dim[0] = NUM_THREADS;    // one warp, so the reduction needs no barrier
+    row_li.lmem_size    = NUM_THREADS * sizeof(otype_t);
+  }
   if (dtcu_needs_epi) {
     RT_CHECK(vx_module_get_kernel(module_, "moti_epilogue", &epi_kernel));
     epi_li.struct_size = sizeof(epi_li);
@@ -334,15 +352,29 @@ inline int run_case(uint32_t mode,
   // asymmetry is what the app sweep exists to measure -- it just has to be added rather
   // than substituted.
   uint64_t gemm_cycles = 0, gemm_instrs = 0;
+  vx_event_h prev_ev = launch_ev;
+  // Drain whatever is in flight, bank its counters, and carry on. MCYCLE is per-launch,
+  // so a multi-pass mode has to be summed here rather than read once at the end.
+  auto accumulate_here = [&]() -> int {
+    uint64_t c = 0, i = 0;
+    RT_CHECK(vx_event_wait_value(prev_ev, 1, VX_TIMEOUT_INFINITE));
+    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE,   0, &c));
+    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &i));
+    gemm_cycles += c; gemm_instrs += i;
+    return 0;
+  };
   if (dtcu_needs_epi) {
-    RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
-    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE,   0, &gemm_cycles));
-    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &gemm_instrs));
-    RT_CHECK(vx_enqueue_launch(queue, &epi_li, 1, &launch_ev, &epi_ev));
-    RT_CHECK(vx_enqueue_read(queue, out.data(), D_buf, 0, out.size() * sizeof(otype_t), 1, &epi_ev, &read_ev));
-  } else {
-    RT_CHECK(vx_enqueue_read(queue, out.data(), D_buf, 0, out.size() * sizeof(otype_t), 1, &launch_ev, &read_ev));
+    RT_CHECK(accumulate_here());
+    RT_CHECK(vx_enqueue_launch(queue, &epi_li, 1, &prev_ev, &epi_ev));
+    prev_ev = epi_ev;
   }
+  if (needs_row_pass) {
+    RT_CHECK(accumulate_here());
+    vx_event_h row_ev = nullptr;
+    RT_CHECK(vx_enqueue_launch(queue, &row_li, 1, &prev_ev, &row_ev));
+    prev_ev = row_ev;
+  }
+  RT_CHECK(vx_enqueue_read(queue, out.data(), D_buf, 0, out.size() * sizeof(otype_t), 1, &prev_ev, &read_ev));
   RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
   auto t1 = std::chrono::high_resolution_clock::now();
   stats.host_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();

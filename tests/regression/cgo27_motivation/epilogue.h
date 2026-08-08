@@ -36,6 +36,16 @@ static inline bool epi_is_elementwise(uint32_t app) {
   return app == 2 || app == 3;
 }
 
+// True when app needs a ROW-WISE reduction, which no mode can fuse. A tile holds only
+// tileN of a row's N columns, so the row max and the row sum are not available until every
+// tile of that row is written -- the in-core modes lose their fusion advantage here just
+// as completely as the engine does, and that is precisely why this app is in the sweep.
+// Costs every mode one extra full pass over D; costs the DTCU modes a THIRD, since their
+// elementwise pass is already a second launch.
+static inline bool epi_needs_row_pass(uint32_t app) {
+  return app == 6;
+}
+
 static inline float epi_apply(uint32_t app, float v) {
   if (app == 2) return epi_relu(v);
   if (app == 3) return epi_gelu(v);

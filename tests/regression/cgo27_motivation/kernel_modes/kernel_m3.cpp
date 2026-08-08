@@ -29,6 +29,15 @@
 #include <vx_spawn2.h>
 #include <vx_barrier.h>
 #include <vx_dxa.h>
+#ifdef MOTI_WITH_ROW_PASS
+// App 6 (row-wise softmax) is a reduction across a whole row, so it cannot be fused and
+// runs as a separate pass that EVERY mode needs in its own module. Carrying it
+// unconditionally is not free: adding these two kernels to a binary moved mode 4 by
+// +44.6 % (32,583 -> 47,118) and every other in-core mode by 0.1-1.2 %, because a mode's
+// cycle count depends on where its code lands in the icache. So it is a build option, and
+// an app-6 measurement takes its OWN app-1 baseline from the same binary.
+#include "k_epilogue.h"
+#endif
 
 
 __kernel void moti_tcu_wg_dxa(kernel_arg_t* __UNIFORM__ arg) {

@@ -165,6 +165,21 @@ int main(int argc, char** argv) {
       "hetero: TCU + DTCU_cluster",
       "hetero: TCU + both engines",
   };
+
+  // App 6 is a row-wise softmax, which is not a float->float map and so cannot go through
+  // epi_apply(). The device runs it as a separate pass over D for every mode; the
+  // reference makes the same pass here, using the same helpers out of epilogue/softmax.h
+  // so the two agree bit-for-bit.
+  if (epi_needs_row_pass(g_app)) {
+    for (uint32_t i = 0; i < M; ++i) {
+      float* r = &hRef[i * N];
+      float m = -3.4028235e38f;
+      for (uint32_t j = 0; j < N; ++j) m = epi_softmax_max(m, r[j]);
+      float sum = 0.0f;
+      for (uint32_t j = 0; j < N; ++j) sum = epi_softmax_addexp(sum, r[j], m);
+      for (uint32_t j = 0; j < N; ++j) r[j] = epi_softmax_norm(r[j], m, sum);
+    }
+  }
   std::vector<otype_t> out[NUM_MODES];
   Stats stats[NUM_MODES];
   int mode_errors[NUM_MODES] = {0};

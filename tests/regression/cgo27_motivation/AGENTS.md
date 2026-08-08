@@ -179,6 +179,20 @@ than passing it per-invocation, so `blackbox.sh` and a bare `make` agree.
   Adding a mode: a `kernel_modes/kernel_m<N>.cpp` holding the kernel, a `run_mode_N()` in
   `host/run_modes.h`, an id in `host/host_modes.h`. Then re-run `-m all` and check the other modes
   did not move — if they did, something is still shared that should not be.
+- **Adding a kernel to a mode's binary moves that mode's cycle count.** Per-mode programs
+  make each mode's address independent of the OTHER modes, not of its own contents. Putting
+  `k_epilogue.h` (two standalone passes, both unused by the mode itself) into modes 0-5
+  moved **mode 4 by +44.6 %** — 32,583 → 47,118 — and every other in-core mode by
+  0.1–1.2 %; modes 7 and 8, which already carried it, did not move at all. A mode's count
+  depends on where its code lands in the 16 KB icache, and an unused kernel is enough to
+  relocate it.
+
+  So anything that has to live in every module is a **build option**, off by default:
+  `MOTI_WITH_ROW_PASS` gates the app-6 row-reduction pass, and an app-6 measurement takes
+  its own app-1 baseline from the same binary rather than comparing across builds. After
+  adding one, re-run `-m all` at 128×64×32 and check every mode against the recorded
+  values before trusting anything.
+
 - **Stopping a background sweep does not stop its simulators.** `TaskStop` kills the
   script; the `cgo27_motivation` processes it launched keep running, keep holding cores,
   and their results go nowhere. Twelve of them from two cancelled sweeps were still
