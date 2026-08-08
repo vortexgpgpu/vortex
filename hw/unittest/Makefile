@@ -9,6 +9,7 @@ all:
 	$(MAKE) -C tcu_fedp
 	$(MAKE) -C cta_dispatcher
 	$(MAKE) -C kmu
+	$(MAKE) -C kmu_arb
 	$(MAKE) -C dxa_core
 	$(MAKE) -C tcu_unit
 	$(MAKE) -C cp_arbiter
@@ -37,6 +38,7 @@ run:
 	$(MAKE) -C tcu_fedp run
 	$(MAKE) -C cta_dispatcher run
 	$(MAKE) -C kmu run
+	$(MAKE) -C kmu_arb run
 	$(MAKE) -C dxa_core run
 	$(MAKE) -C tcu_unit run
 	$(MAKE) -C cp_arbiter run
@@ -127,6 +129,7 @@ clean:
 	$(MAKE) -C tcu_fedp clean
 	$(MAKE) -C cta_dispatcher clean
 	$(MAKE) -C kmu clean
+	$(MAKE) -C kmu_arb clean
 	$(MAKE) -C dxa_core clean
 	$(MAKE) -C tcu_unit clean
 	$(MAKE) -C cp_arbiter clean

@@ -94,6 +94,7 @@ module VX_cluster import VX_gpu_pkg::*;
 `endif
 
     VX_kmu_bus_if per_socket_kmu_bus_if[NUM_SOCKETS]();
+    wire kmu_fanout_pending;
 
     VX_kmu_arb #(
         .NUM_INPUTS (1),
@@ -103,7 +104,8 @@ module VX_cluster import VX_gpu_pkg::*;
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_if),
-        .bus_out_if (per_socket_kmu_bus_if)
+        .bus_out_if (per_socket_kmu_bus_if),
+        .pending    (kmu_fanout_pending)
     );
 
     VX_gbar_bus_if per_socket_gbar_bus_if[NUM_SOCKETS]();
@@ -521,10 +523,10 @@ module VX_cluster import VX_gpu_pkg::*;
 
     wire busy_r;
 `ifdef EXT_GFX_ANY_ENABLE
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | kmu_fanout_pending | (|per_socket_busy) | gfx_busy, 1'b1, 1, (NUM_SOCKETS > 1));
 `else
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy), 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | kmu_fanout_pending | (|per_socket_busy), 1'b1, 1, (NUM_SOCKETS > 1));
 `endif
-    assign busy = busy_r | dcr_bus_if.req_valid;
+    assign busy = busy_r | dcr_bus_if.req_valid | kmu_fanout_pending;
 
 endmodule

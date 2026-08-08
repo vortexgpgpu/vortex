@@ -27,7 +27,12 @@ module VX_kmu_arb import VX_gpu_pkg::*; #(
     VX_kmu_bus_if.slave  bus_in_if [NUM_INPUTS],
 
     // output requests
-    VX_kmu_bus_if.master bus_out_if [NUM_OUTPUTS]
+    VX_kmu_bus_if.master bus_out_if [NUM_OUTPUTS],
+
+    // A launch request is still in flight through this fan-out/arbiter.
+    // Parents include this in their busy chain so a buffered final CTA cannot
+    // create a false-idle window before the destination core accepts it.
+    output wire pending
 );
     localparam DATAW = NUM_LANES * $bits(kmu_req_t);
 
@@ -68,5 +73,7 @@ module VX_kmu_arb import VX_gpu_pkg::*; #(
         assign bus_out_if[i].data  = data_out[i];
         assign ready_out[i] = bus_out_if[i].ready;
     end
+
+    assign pending = (| valid_in) || (| valid_out);
 
 endmodule

@@ -486,9 +486,10 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // the accept->DISPATCH transition is registered, so gating on state alone
     // leaves the accept cycle un-busy. With SOCKET_SIZE>1 the socket busy
     // aggregation is registered, so on the final CTA kmu_busy drops before the
-    // buffered per-core busy rises, opening a 1-cycle device-busy gap the host's
-    // edge-sensitive idle-wait latches as premature completion (cores>1 launch
-    // failure). Covering the accept cycle closes the gap.
+    // buffered per-core busy rises, opening a 1-cycle device-busy gap that the
+    // host idle wait treats as premature completion (cores>1 launch failure).
+    // Covering the accept cycle closes the dispatcher-local gap;
+    // registered upstream KMU fanouts keep their own pending state in busy.
     assign busy = (state == DISPATCH) || kmu_bus_if_fire;
 
     // -------------------------------------------------------------------------

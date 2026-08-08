@@ -211,6 +211,7 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_kmu_bus_if raster_frag_kmu_if();   // distributor → arb
     VX_kmu_bus_if kmu_arb_in_if[2]();
     VX_kmu_bus_if sched_kmu_arr_if[1]();   // arb → scheduler
+    wire frag_kmu_merge_pending;
 
     // input 0 = device-KMU stream (the core's incoming kmu bus)
     assign kmu_arb_in_if[0].valid = kmu_bus_if.valid;
@@ -230,7 +231,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_arb_in_if),
-        .bus_out_if (sched_kmu_arr_if)
+        .bus_out_if (sched_kmu_arr_if),
+        .pending    (frag_kmu_merge_pending)
     );
 
     VX_gfx_win_wr_if #(.NUM_LANES (`VX_CFG_NUM_SFU_LANES)) rast_win_if();
@@ -574,7 +576,7 @@ module VX_core import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || raster_dispatch_busy || raster_packer_busy;
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || raster_dispatch_busy || raster_packer_busy || frag_kmu_merge_pending;
 `else
     assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
 `endif

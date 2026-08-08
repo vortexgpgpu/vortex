@@ -80,6 +80,7 @@ module VX_socket import VX_gpu_pkg::*;
 `endif
 
     VX_kmu_bus_if per_core_kmu_bus_if[`VX_CFG_SOCKET_SIZE]();
+    wire kmu_fanout_pending;
 
     VX_kmu_arb #(
         .NUM_INPUTS (1),
@@ -89,7 +90,8 @@ module VX_socket import VX_gpu_pkg::*;
         .clk        (clk),
         .reset      (reset),
         .bus_in_if  (kmu_bus_if),
-        .bus_out_if (per_core_kmu_bus_if)
+        .bus_out_if (per_core_kmu_bus_if),
+        .pending    (kmu_fanout_pending)
     );
 
     VX_gbar_bus_if per_core_gbar_bus_if[`VX_CFG_SOCKET_SIZE]();
@@ -513,7 +515,7 @@ module VX_socket import VX_gpu_pkg::*;
     end
 
     wire busy_r;
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy), 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
-    assign busy = busy_r | dcr_bus_if.req_valid;
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | kmu_fanout_pending | (|per_core_busy), 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
+    assign busy = busy_r | dcr_bus_if.req_valid | kmu_fanout_pending;
 
 endmodule
