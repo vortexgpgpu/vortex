@@ -26,20 +26,11 @@ using wgctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false,
 // store_matrix_sync's own formula (wgctx::m_steps, tcM, tcN, fragment_acc::NR), so it
 // follows NRC without needing either alias.
 
-// K-steps held in ONE staged tile. S copies amortise into a single issue and a single
-// barrier pair, which is the reuse axis along K: at S=1 a staged tile feeds one MMA, at
-// S=4 it feeds four. lmem and the DXA descriptor scale with it, and the host sizes both
-// from the same macro -- changing it here alone would silently mis-tile.
-//
-// Reuse along N is the other axis, and it is the one that pays: it comes from WGMMA_NRC,
-// which sets xtileN = (NRC * NT) / xtileM. At NRC=8 a warp's output tile is 16x16 and one
-// fragment-A load feeds one wgmma; at NRC=16 it is 16x32 and the same load feeds twice the
-// math, halving every per-tile cost -- the staging copy, the barrier pair, the address
-// arithmetic -- per MAC. Nothing in this file has to change for that; the geometry follows
-// the macro.
-#ifndef MOTI_WG_KSTEPS
-#define MOTI_WG_KSTEPS 1
-#endif
+// MOTI_WG_KSTEPS comes from common.h, which wmma_common.h pulls in: ONE definition shared
+// with the host, because the host sizes lmem and the DXA descriptor from it while the
+// kernel indexes sub-tiles with it, and a disagreement mis-tiles silently. It is reuse
+// along K -- at S=1 a staged tile feeds one MMA, at S=4 it feeds four -- and it measured
+// worse at every S > 1. Reuse along N is what pays, and mode 5 is where it lives.
 static constexpr uint32_t kS   = MOTI_WG_KSTEPS;
 static constexpr uint32_t kStK = kS * wgctx::tileK;   // columns per staged tile
 

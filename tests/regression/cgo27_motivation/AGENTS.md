@@ -72,12 +72,27 @@ kernel_modes/  one GPU program per mode (kernel_m<N>.cpp) + the helpers 2+ modes
 
 ## Do not modify without being asked
 
-- `common.h` — and in particular **do not add fields to `kernel_arg_t`**. Every kernel
-  reads that struct, so changing its *size* reshuffles codegen in paths you did not
+- `common.h` — **the restriction is on `kernel_arg_t`'s size, not on the file.** Every
+  kernel reads that struct, so changing its size reshuffles codegen in paths you did not
   touch: appending four fields (64 → 80 B) moved mode 2 by +15.8 % and mode 5 by −32.9 %.
   Anything derivable from a build constant (`VX_CFG_SOCKET_SIZE`, `VX_CFG_NUM_CORES`) or
   from an address the kernel already has must be derived, not passed. If a field is
   genuinely unavoidable, ask first, then re-measure **every** mode.
+
+  **`#define`s are a different matter and belong here.** They add no bytes to the struct —
+  verified: adding `MOTI_WG_KSTEPS`, `MOTI_WG_NCOLS` and `MOTI_AUX_ELEM_OFFSET` left all
+  eight modes at exactly their previous cycle counts. This file is the right home for any
+  constant the **host and the kernel must agree on**, because a second `#ifndef` default in
+  one of them is silent: the kernel tiles one way, the host sizes the grid, the Local
+  Memory and the DXA descriptors the other way, and D comes out wrong with no error.
+  `MOTI_WG_KSTEPS` and `MOTI_WG_NCOLS` each carried a default in *two* files until
+  2026-08-08 and agreed only because nobody had edited one of them.
+
+  **Auxiliary epilogue operands do not need a field either.** Apps 4/5/7/8 want a residual
+  matrix, a scale vector or a bias; the host appends them to the C buffer and still passes
+  that buffer's base as `C_addr`, and the kernel derives the address from `C_addr`, `M` and
+  `N` via `MOTI_AUX_ELEM_OFFSET`. App 6 (row-wise softmax) needs no operand at all, and
+  apps 7/8's int8 inputs are a build variant of `ITYPE` rather than a runtime app id.
 - `kernel.cpp` — the include list only.
 - `../../../sim/common/dram_sim.cpp`.
 

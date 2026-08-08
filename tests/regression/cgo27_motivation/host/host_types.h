@@ -24,14 +24,7 @@ using cfg     = vt::wmma_config_t<NUM_THREADS>;
 #define WGMMA_NRC 8
 #endif
 using wgcfg   = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>;
-// Must equal the kernels' MOTI_WG_KSTEPS; both read this macro, so -D sets both.
-#ifndef MOTI_WG_KSTEPS
-#define MOTI_WG_KSTEPS 1
-#endif
-// Must equal the kernel's MOTI_WG_NCOLS; both read this macro, so -D sets both.
-#ifndef MOTI_WG_NCOLS
-#define MOTI_WG_NCOLS 4
-#endif
+// MOTI_WG_KSTEPS and MOTI_WG_NCOLS come from common.h -- one definition for both sides.
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 

@@ -38,11 +38,9 @@
 #include <vx_barrier.h>
 #include <vx_dxa.h>
 
-// Column tiles swept by one CTA against one resident A. The host derives the grid and the
-// lmem size from the same macro, so changing it here alone would mis-tile silently.
-#ifndef MOTI_WG_NCOLS
-#define MOTI_WG_NCOLS 4
-#endif
+// Column tiles swept by one CTA against one resident A. MOTI_WG_NCOLS is defined in
+// common.h and shared with the host, which derives the grid width and the lmem size from
+// the same macro -- one definition, so the two cannot disagree.
 static constexpr uint32_t kNCols = MOTI_WG_NCOLS;
 
 __kernel void moti_tcu_wg_acol(kernel_arg_t* __UNIFORM__ arg) {

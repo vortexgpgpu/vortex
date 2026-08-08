@@ -65,4 +65,52 @@ typedef struct {
 #define DESC_A 0
 #define DESC_B 1
 
+// ---------------------------------------------------------------------------------
+// Tiling knobs the HOST and the KERNEL must agree on, defined ONCE here.
+//
+// Both of these used to carry an #ifndef default in two files at the same time -- the
+// host's host_types.h and the kernel that reads them. They agreed only because nobody had
+// edited one of the two, and a disagreement is silent: the kernel tiles one way, the host
+// sizes the grid, the Local Memory and the DXA descriptors the other way, and D comes out
+// wrong with no error. That is the same failure NUM_THREADS is defined here to prevent,
+// and the reason this file exists.
+//
+// -D on the command line still overrides, and now overrides both sides at once.
+
+// K-steps held in ONE staged tile (modes 3/4/5). Reuse along K: at S=1 a staged tile
+// feeds one MMA, at S=4 it feeds four. Both the kernel's sub-tile indexing and the host's
+// lmem/descriptor sizing scale with it. Measured to lose at S=2 and S=4; the reason is
+// still unexplained, but it is NOT occupancy -- see README.
+#ifndef MOTI_WG_KSTEPS
+#define MOTI_WG_KSTEPS 1
+#endif
+
+// Column tiles one CTA sweeps against a resident A (mode 5). Reuse along N, and the one
+// that pays: it divides global A traffic by this factor. The host derives the grid width
+// and the lmem size from it, the kernel loops over it.
+#ifndef MOTI_WG_NCOLS
+#define MOTI_WG_NCOLS 4
+#endif
+
+// Where the auxiliary epilogue operands live, for the apps that need one.
+//
+// Apps 4, 5, 7 and 8 need an operand the GEMM does not have -- a residual matrix, a
+// per-channel scale, a bias. NONE of them gets a kernel_arg_t field: growing that struct
+// reshuffles codegen in paths nobody touched (64 -> 80 B moved mode 2 by +15.8 % and mode
+// 5 by -32.9 %), which is why the note above says to leave it alone.
+//
+// Instead the host allocates the auxiliary array immediately after C in the SAME buffer
+// and still passes that buffer's base as C_addr. The kernel derives the address from
+// C_addr, M and N, all of which it already has:
+//
+//     aux = (otype*)C_addr + MOTI_AUX_ELEM_OFFSET(M, N)
+//
+//   app 4  R    [M x N]   residual, added elementwise
+//   app 5  s    [N]       per-channel scale, broadcast down the column
+//   app 7  bias [N]       added before the activation
+//
+// App 6 (row-wise softmax) needs no operand at all, only a reduction across D's rows, and
+// apps 7/8's int8 inputs are a build variant of ITYPE above rather than a runtime app id.
+#define MOTI_AUX_ELEM_OFFSET(M, N) ((M) * (N))
+
 #endif
