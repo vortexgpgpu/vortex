@@ -18,7 +18,19 @@ inline void parse_args(int argc, char** argv) {
   int c;
   while ((c = getopt(argc, argv, "a:m:w:M:N:K:h")) != -1) {
     switch (c) {
-    case 'a': g_app = parse_u32(optarg, "-a"); break;
+    case 'a': {
+      // The epilogue is compiled in, not selected at runtime -- one per binary, so an
+      // unused epilogue kernel cannot relocate a mode's code. -a therefore only asserts
+      // that the caller expected the app this binary actually contains.
+      const uint32_t want = parse_u32(optarg, "-a");
+      if (want != MOTI_APP) {
+        std::cerr << "cgo27_motivation: this binary was built for app " << MOTI_APP
+                  << ", not " << want << ". Rebuild with CONFIGS=\"-DMOTI_APP=" << want
+                  << "\"." << std::endl;
+        exit(-1);   // same treatment as an invalid -m
+      }
+      break;
+    }
     case 'w': g_wg_warps = parse_u32(optarg, "-w"); break;
     case 'M': g_M = parse_u32(optarg, "-M"); break;
     case 'N': g_N = parse_u32(optarg, "-N"); break;

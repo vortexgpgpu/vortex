@@ -312,13 +312,7 @@ inline int run_case(uint32_t mode,
   vx_kernel_h epi_kernel = nullptr, row_kernel = nullptr;
   vx_launch_info_t epi_li = {}, row_li = {};
   if (needs_row_pass) {
-    if (0 != vx_module_get_kernel(module_, "moti_softmax", &row_kernel)) {
-      std::cerr << "cgo27_motivation: app " << g_app << " needs the row-reduction pass, "
-                   "which is a build option. Rebuild with CONFIGS=\"-DMOTI_WITH_ROW_PASS\" "
-                   "-- it is off by default because carrying the extra kernels moves every "
-                   "in-core mode's cycle count (mode 4 by +44.6 %)." << std::endl;
-      return -1;
-    }
+    RT_CHECK(vx_module_get_kernel(module_, "moti_softmax", &row_kernel));
     row_li.struct_size = sizeof(row_li);
     row_li.kernel = row_kernel; row_li.args_host = &karg; row_li.args_size = sizeof(karg);
     row_li.ndim = 1;

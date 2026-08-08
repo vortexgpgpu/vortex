@@ -19,6 +19,11 @@ CONFIGS := $(if $(findstring -DVX_CFG_EXT_A_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONF
 # shared-memory descriptor instead of load_matrix_sync-ing them into registers. That is
 # the third of the three things staging needs to pay (see README), and without it the DXA
 # modes keep a full LSU load per fragment no matter how the copy arrives.
+# Which epilogue this build contains. ONE per binary, chosen by the preprocessor, so an
+# app the run does not use cannot relocate a mode's code in the icache. Override with
+# `MOTI_APP=6 make ...` or CONFIGS="-DMOTI_APP=6".
+MOTI_APP ?= 1
+CONFIGS += -DMOTI_APP=$(MOTI_APP)
 CONFIGS += -DVX_CFG_TCU_WGMMA_ENABLE -DWGMMA_RS -DWGMMA_NRC=8
 
 CONFIGS += -DVX_CFG_NUM_CLUSTERS=1

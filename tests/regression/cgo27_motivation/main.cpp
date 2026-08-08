@@ -171,13 +171,37 @@ int main(int argc, char** argv) {
   // reference makes the same pass here, using the same helpers out of epilogue/softmax.h
   // so the two agree bit-for-bit.
   if (epi_needs_row_pass(g_app)) {
+    // MIRROR THE KERNEL'S REDUCTION ORDER, not just its arithmetic. The max is
+    // order-independent, but the sum of exponentials is not: the kernel has NUM_THREADS
+    // lanes each stride-summing its own slice and then a log2 tree over the lanes, while a
+    // plain left-to-right loop here rounds differently. At N = 64 the gap stayed inside
+    // the harness's ULP <= 6; at N = 384 it did not, and modes 1, 7 and 8 all reported
+    // exactly 3,770 mismatches -- the same count from three different modes, which is what
+    // pointed at the shared reference rather than at any one of them.
+    const uint32_t NT = NUM_THREADS;
+    std::vector<float> red(NT);
     for (uint32_t i = 0; i < M; ++i) {
       float* r = &hRef[i * N];
-      float m = -3.4028235e38f;
-      for (uint32_t j = 0; j < N; ++j) m = epi_softmax_max(m, r[j]);
-      float sum = 0.0f;
-      for (uint32_t j = 0; j < N; ++j) sum = epi_softmax_addexp(sum, r[j], m);
-      for (uint32_t j = 0; j < N; ++j) r[j] = epi_softmax_norm(r[j], m, sum);
+
+      for (uint32_t t = 0; t < NT; ++t) {
+        float m = -3.4028235e38f;
+        for (uint32_t j = t; j < N; j += NT) m = epi_softmax_max(m, r[j]);
+        red[t] = m;
+      }
+      for (uint32_t s = NT >> 1; s > 0; s >>= 1)
+        for (uint32_t t = 0; t < s; ++t) red[t] = epi_softmax_max(red[t], red[t + s]);
+      const float row_max = red[0];
+
+      for (uint32_t t = 0; t < NT; ++t) {
+        float acc = 0.0f;
+        for (uint32_t j = t; j < N; j += NT) acc = epi_softmax_addexp(acc, r[j], row_max);
+        red[t] = acc;
+      }
+      for (uint32_t s = NT >> 1; s > 0; s >>= 1)
+        for (uint32_t t = 0; t < s; ++t) red[t] += red[t + s];
+      const float row_sum = red[0];
+
+      for (uint32_t j = 0; j < N; ++j) r[j] = epi_softmax_norm(r[j], row_max, row_sum);
     }
   }
   std::vector<otype_t> out[NUM_MODES];

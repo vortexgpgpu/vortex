@@ -105,7 +105,7 @@ inline int ulp_diff(float a, float b) {
 // Selected app (prologue/epilogue), 1..8 — see epilogue.h. Declared here because
 // run_case() stamps it into the kernel arg and the CPU reference applies the same
 // map; -a sets it in parse_args().
-static uint32_t g_app = 1;
+static uint32_t g_app = MOTI_APP;   // the build decides; -a only checks
 
 // Run one GEMM path on a fresh device. Fills out[] with D and records stats.
 

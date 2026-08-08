@@ -92,6 +92,32 @@ typedef struct {
 #define MOTI_WG_NCOLS 4
 #endif
 
+// WHICH EPILOGUE THIS BINARY CONTAINS. Compile-time, deliberately.
+//
+// The apps used to be selected at RUNTIME from kernel_arg_t::app, which meant every app's
+// code had to be present in every binary. That is not free here: adding two standalone
+// epilogue kernels that a mode never calls moved mode 4 by +44.6 % (32,583 -> 47,118),
+// because a mode's cycle count depends on where its code lands in a 16 KB icache and an
+// unused kernel is enough to relocate it.
+//
+// So the selection is a preprocessor one. Exactly ONE epilogue is compiled -- epi_apply()
+// collapses to a single expression and the standalone passes exist only for the app that
+// needs them -- and comparing app N against app 1 means comparing two builds that each
+// contain one epilogue rather than one build carrying all of them.
+//
+// The host reads this too, so `-a` is checked against it instead of selecting anything.
+//   1 baseline (no epilogue)   2 ReLU   3 GELU   6 row-wise softmax
+//   4, 5, 7, 8: need operands the kernel has no pointer for -- see MOTI_AUX_ELEM_OFFSET.
+#ifndef MOTI_APP
+#define MOTI_APP 1
+#endif
+
+// True when the app is a pure float->float map that fuses into the accumulator.
+#define MOTI_APP_IS_ELEMENTWISE (MOTI_APP == 2 || MOTI_APP == 3)
+// True when the app needs a row-wise reduction, which nothing can fuse: a tile holds only
+// part of a row, so the row max and row sum are not known until every tile is written.
+#define MOTI_APP_NEEDS_ROW_PASS (MOTI_APP == 6)
+
 // Where the auxiliary epilogue operands live, for the apps that need one.
 //
 // Apps 4, 5, 7 and 8 need an operand the GEMM does not have -- a residual matrix, a

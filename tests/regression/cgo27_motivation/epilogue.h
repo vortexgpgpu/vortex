@@ -29,27 +29,23 @@
 #include "epilogue/softmax.h"
 #include "epilogue/dequant.h"
 
-// True when app's epilogue is a pure elementwise map that epi_apply() handles.
-// Apps outside this set fall through epi_apply() unchanged (baseline behavior)
-// until their extra passes land in Phase B.
-static inline bool epi_is_elementwise(uint32_t app) {
-  return app == 2 || app == 3;
-}
+// The predicates and the map are all decided by MOTI_APP at compile time -- see common.h
+// for why. They keep their old signatures so nothing downstream had to change shape, but
+// the argument is now only ever checked against the build, never used to select.
 
-// True when app needs a ROW-WISE reduction, which no mode can fuse. A tile holds only
-// tileN of a row's N columns, so the row max and the row sum are not available until every
-// tile of that row is written -- the in-core modes lose their fusion advantage here just
-// as completely as the engine does, and that is precisely why this app is in the sweep.
-// Costs every mode one extra full pass over D; costs the DTCU modes a THIRD, since their
-// elementwise pass is already a second launch.
-static inline bool epi_needs_row_pass(uint32_t app) {
-  return app == 6;
-}
+static inline bool epi_is_elementwise(uint32_t) { return MOTI_APP_IS_ELEMENTWISE; }
+static inline bool epi_needs_row_pass(uint32_t) { return MOTI_APP_NEEDS_ROW_PASS; }
 
-static inline float epi_apply(uint32_t app, float v) {
-  if (app == 2) return epi_relu(v);
-  if (app == 3) return epi_gelu(v);
-  return v;   // app 1 baseline, and apps 4-8 until Phase B wires their passes
+// ONE epilogue per binary. At MOTI_APP=1 and 6 this is the identity and the compiler
+// deletes it outright: app 6's work is not elementwise and lives in moti_softmax instead.
+static inline float epi_apply(uint32_t, float v) {
+#if   MOTI_APP == 2
+  return epi_relu(v);
+#elif MOTI_APP == 3
+  return epi_gelu(v);
+#else
+  return v;      // 1 baseline; 6 does its work in the row pass; 4/5/7/8 not built
+#endif
 }
 
 #endif // _CGO27_EPILOGUE_H_

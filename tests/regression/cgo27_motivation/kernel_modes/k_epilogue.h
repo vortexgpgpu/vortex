@@ -18,6 +18,7 @@
 // DTCU pays memory traffic proportional to M*N for it.
 //
 // Launched with the same geometry as moti_simt: one thread per output element.
+#if MOTI_APP_IS_ELEMENTWISE
 __kernel void moti_epilogue(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t N = arg->N, app = arg->app;
   auto pD = reinterpret_cast<float*>(arg->D_addr);
@@ -27,6 +28,7 @@ __kernel void moti_epilogue(kernel_arg_t* __UNIFORM__ arg) {
 
   pD[row * N + col] = epi_apply(app, pD[row * N + col]);
 }
+#endif // MOTI_APP_IS_ELEMENTWISE
 
 // Row-wise softmax over D (app 6), as a standalone pass.
 //
@@ -39,6 +41,7 @@ __kernel void moti_epilogue(kernel_arg_t* __UNIFORM__ arg) {
 // spans more output tiles than any one warp owns, so the reduction cannot be folded into
 // the accumulator the way ReLU and GELU are, and the in-core modes have to make the same
 // extra pass the DTCU does.
+#if MOTI_APP_NEEDS_ROW_PASS
 __kernel void moti_softmax(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t N = arg->N;
   auto pD = reinterpret_cast<float*>(arg->D_addr);
@@ -70,5 +73,6 @@ __kernel void moti_softmax(kernel_arg_t* __UNIFORM__ arg) {
   // 3. normalise in place
   for (uint32_t j = t; j < N; j += nt) r[j] = epi_softmax_norm(r[j], row_max, row_sum);
 }
+#endif // MOTI_APP_NEEDS_ROW_PASS
 
 #endif // _CGO27_K_EPILOGUE_H_
