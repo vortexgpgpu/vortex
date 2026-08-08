@@ -1,10 +1,10 @@
 #ifndef _CGO27_K_WG_COMMON_H_
 #define _CGO27_K_WG_COMMON_H_
 
-// Geometry and epilogue shared by the workgroup pair, modes 12 and 13.
+// Geometry and epilogue shared by the workgroup pair, modes 3 and 4.
 //
-// Those two are a matched difference measurement: 12 stages its operands with a DXA
-// descriptor, 13 with the CTA's own loads, and NOTHING else is allowed to differ, because
+// Those two are a matched difference measurement: 3 stages its operands with a DXA
+// descriptor, 4 with the CTA's own loads, and NOTHING else is allowed to differ, because
 // the ratio between them is reported as what the copy engine is worth. An epilogue
 // duplicated in both files is a place for that comparison to quietly stop being one, so
 // the parts that must stay identical live here and each .cpp keeps only its own body.
@@ -17,24 +17,31 @@
 // in-core mode uses) because the fragment and tile shapes differ.
 using wgctx = vt::wgmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
 
-// The accumulator half of that context, spelled out because wgmma_context keeps its own
-// alias private. Same template arguments, so wgctx::fragment_acc IS accctx::fragment_acc.
-using accctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE, false, WGMMA_NRC>;
+// NOTE on a check that used to live here. There were two static_asserts pinning
+// accctx::tileM/tileN (a wmma_context at the same NR) to wgctx::xtileM/xtileN, left over
+// from the abandoned attempt to preload C through the WMMA layout. They were not an
+// invariant -- they only hold at NRC=8, where both tiles happen to be 16x16. At NRC=16
+// the wgmma tile is 16x32 while the wmma tile for NR=16 is 32x16, and the assert fired on
+// a build that was otherwise correct. The epilogue derives its addressing from
+// store_matrix_sync's own formula (wgctx::m_steps, tcM, tcN, fragment_acc::NR), so it
+// follows NRC without needing either alias.
 
 // K-steps held in ONE staged tile. S copies amortise into a single issue and a single
-// barrier pair, which is the reuse axis: at S=1 a staged tile feeds one MMA, at S=4 it
-// feeds four. lmem and the DXA descriptor scale with it, and the host sizes both from the
-// same macro -- changing it here alone would silently mis-tile.
+// barrier pair, which is the reuse axis along K: at S=1 a staged tile feeds one MMA, at
+// S=4 it feeds four. lmem and the DXA descriptor scale with it, and the host sizes both
+// from the same macro -- changing it here alone would silently mis-tile.
+//
+// Reuse along N is the other axis, and it is the one that pays: it comes from WGMMA_NRC,
+// which sets xtileN = (NRC * NT) / xtileM. At NRC=8 a warp's output tile is 16x16 and one
+// fragment-A load feeds one wgmma; at NRC=16 it is 16x32 and the same load feeds twice the
+// math, halving every per-tile cost -- the staging copy, the barrier pair, the address
+// arithmetic -- per MAC. Nothing in this file has to change for that; the geometry follows
+// the macro.
 #ifndef MOTI_WG_KSTEPS
 #define MOTI_WG_KSTEPS 1
 #endif
 static constexpr uint32_t kS   = MOTI_WG_KSTEPS;
 static constexpr uint32_t kStK = kS * wgctx::tileK;   // columns per staged tile
-
-// The accumulator tile must be the WGMMA output tile, or D is stored to the wrong
-// rectangle -- which is silent, not a crash.
-static_assert(accctx::tileM == wgctx::xtileM, "acc tileM != wgmma xtileM");
-static_assert(accctx::tileN == wgctx::xtileN, "acc tileN != wgmma xtileN");
 
 // ---------------------------------------------------------------------------------
 // D = epi(app, C + A*B) for one CTA's cta_M x xtileN output tile.
@@ -73,7 +80,7 @@ static_assert(accctx::tileN == wgctx::xtileN, "acc tileN != wgmma xtileN");
 //                          lane->address map (lane/tcN rows, lane%tcN cols, 64 B apart)
 //                          touches 8 of the 32 LMEM banks four times each. Correct, and
 //                          slower than the original at both shapes that fit in L2:
-//                          mode 13 63,339 -> 77,386 at 128x64x32 and 261,673 -> 281,189
+//                          mode 4 63,339 -> 77,386 at 128x64x32 and 261,673 -> 281,189
 //                          at 256x128x64.
 //
 // always_inline for the reason wmma_common.h documents: an out-of-line helper leaks the
