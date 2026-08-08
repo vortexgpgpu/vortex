@@ -485,7 +485,8 @@
                 <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">2</span> <span class="mode-name">TCU + DXA</span><span class="sub">DXA stages A/B into LMEM — 1 buffer</span></td><td>dcache</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> <span class="mode-name">TCU workgroup + DXA</span><span class="sub">multi-warp CTA shares one staged tile; warp 0 is the producer; wgmma reads smem</span></td><td>dcache</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> <span class="mode-name">TCU workgroup, SW copy</span><span class="sub">same geometry, the CTA copies its own tiles — the DXA control for 3</span></td><td>dcache</td></tr>
-                <tr class="skipped"><td><span class="mode-id">5 · 6</span> <span class="mode-name">reserved</span><span class="sub">held four single-warp staging modes, retired — one warp per block left the copy nothing to amortise over</span></td><td>—</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> <span class="mode-name">TCU workgroup + DXA, A resident</span><span class="sub">CTA sweeps 4 column tiles against A staged once for the whole K &mdash; N-axis reuse</span></td><td>dcache</td></tr>
+                <tr class="skipped"><td><span class="mode-id">6</span> <span class="mode-name">reserved</span><span class="sub">held four single-warp staging modes, retired &mdash; one warp per block left the copy nothing to amortise over</span></td><td>&mdash;</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> <span class="mode-name">DTCU_socket</span><span class="sub">4 engines, tile 32×16, one descriptor per socket</span></td><td>socket L1</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-clu)"></span><span class="mode-id">8</span> <span class="mode-name">DTCU_cluster</span><span class="sub">1 engine, tile 64×32, one descriptor per core</span></td><td>L2</td></tr>
                 <tr class="skipped"><td><span class="mode-id">9 · 10 · 11</span> <span class="mode-name">hetero</span><span class="sub">cores + engine(s) on one GEMM — numbered, not built</span></td><td>—</td></tr>
@@ -662,6 +663,13 @@
             <td class="num gsep">152,677</td><td class="num">13.73</td><td class="num">3.43</td>
             <td class="num gsep">&#8225;</td><td class="num">&#8225;</td><td class="num">&#8225;</td>
           </tr>
+          <tr>
+            <td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> TCU wg + DXA, A resident</td>
+            <td class="unit-tag">4 cores</td>
+            <td class="num gsep">22,820</td><td class="num">11.49</td><td class="num">2.87</td>
+            <td class="num gsep">66,521</td><td class="num">31.53</td><td class="num">7.88</td>
+            <td class="num gsep">305,878</td><td class="num">54.85</td><td class="num">13.71</td>
+          </tr>
           <tr class="engine">
             <td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> DTCU_socket</td>
             <td class="unit-tag">4 engines</td>
@@ -680,6 +688,15 @@
       </table>
 
       <figcaption>
+        <strong>No mode wins everywhere, and that is the result.</strong> Three regimes
+        came out of scaling this harness, each with a different fastest path: the
+        descriptor engine takes the small shapes by 2.00&times;, an in-core mode that stages
+        A once and reuses it across four column tiles takes wide-N shapes by 1.38&times;,
+        and plain in-core WMMA takes the largest cube by 1.31&times; over the engine. The
+        two figures below the main table are the measurements; the short version is that a
+        fixed narrow engine saturates where a latency-bound core is still finding
+        parallelism.
+        <br /><br />
         <strong>The engine looked too fast, so its model was audited against the core's.
         It was not the compute array — the anchor was stale in the opposite direction, and
         two of the three things that define a PE were not shared at all.</strong>
@@ -821,7 +838,116 @@
 
     <figure>
       <table class="res">
-        <caption>What operand staging needs before a copy engine pays — modes 3 / 4. Two runs per cell; the third row is their difference</caption>
+        <caption>Regime 1 &mdash; widen N only (M = 256, K = 128 fixed). The axis staging had left untapped</caption>
+        <thead>
+          <tr><th>mode</th><th>units</th>
+            <th class="num gsep">N = 64</th><th class="num">128</th><th class="num">256</th>
+            <th class="num gsep">512</th><th class="num">1024</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">1</span> TCU</td><td class="unit-tag">4 cores</td>
+            <td class="num gsep">58,688</td><td class="num">106,458</td><td class="num">198,345</td><td class="num gsep">386,903</td><td class="num">820,453</td></tr>
+          <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> TCU wg + DXA</td><td class="unit-tag">4 cores</td>
+            <td class="num gsep">68,190</td><td class="num">&mdash;</td><td class="num">230,029</td><td class="num gsep">&mdash;</td><td class="num">&mdash;</td></tr>
+          <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> TCU wg, SW copy</td><td class="unit-tag">4 cores</td>
+            <td class="num gsep">100,973</td><td class="num">171,195</td><td class="num">&mdash;</td><td class="num gsep">585,599</td><td class="num">&mdash;</td></tr>
+          <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> TCU wg + DXA, <strong>A resident</strong></td><td class="unit-tag">4 cores</td>
+            <td class="num gsep">57,278</td><td class="num">90,812</td><td class="num">167,362</td><td class="num gsep">281,099</td><td class="num peak">592,372</td></tr>
+          <tr class="engine"><td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> DTCU_socket</td><td class="unit-tag">4 engines</td>
+            <td class="num gsep peak">46,358</td><td class="num peak">82,448</td><td class="num peak">153,987</td><td class="num gsep">&mdash;</td><td class="num">632,978</td></tr>
+          <tr class="engine"><td><strong>5 vs 1</strong> <span class="unit-tag">staging finally pays</span></td><td class="unit-tag"></td>
+            <td class="num gsep">1.02&times;</td><td class="num">1.17&times;</td><td class="num">1.19&times;</td><td class="num gsep">1.38&times;</td><td class="num peak">1.38&times;</td></tr>
+        </tbody>
+      </table>
+      <figcaption>
+        <strong>Mode 5 is mode 3 with one thing changed, and it is the first in-core staged
+        mode ever to beat plain WMMA here.</strong> The CTA owns four column tiles instead
+        of one and stages its A rows for the <em>whole</em> K range once, so A is fetched
+        from global a quarter as often:
+        <code>A traffic = M&middot;N&middot;K / xtileN</code> becomes
+        <code>&hellip; / (4&middot;xtileN)</code>. Nothing else differs &mdash; same DXA, same
+        fused epilogue, same single accumulator.
+        <br /><br />
+        <strong>Its margin grows with N, which is the test of the mechanism.</strong>
+        1.02&times; at N = 64, where there is nothing to amortise over, rising monotonically
+        to <strong>1.38&times;</strong> at N = 512 and 1024. At N = 1024 it also passes the
+        engine &mdash; 592,372 against 632,978 &mdash; the only shape measured where an
+        in-core mode is the fastest thing on the machine.
+        <br /><br />
+        <strong>Registers could not buy this.</strong> The obvious N-axis knob is a wider
+        accumulator, <code>WGMMA_NRC</code> 8&nbsp;&rarr;&nbsp;16. Measured: stack references
+        7&nbsp;&rarr;&nbsp;37 and loads equal to stores at 6,016 &mdash; the accumulator
+        spills every iteration. 128&nbsp;&times;&nbsp;64&nbsp;&times;&nbsp;32 went
+        25,386&nbsp;&rarr;&nbsp;136,677 and 256&nbsp;&times;&nbsp;128&nbsp;&times;&nbsp;64
+        went 103,400&nbsp;&rarr;&nbsp;932,115 with the grid at a full 16 CTAs, so it is not
+        occupancy. Local Memory was the only place the reuse could live &mdash; mode 3 was
+        using 2,560 B of 65,536.
+        <br /><br />
+        Blank cells are runs still in flight, not failures. Every number shown verified
+        <code>PASSED</code>, errors&nbsp;=&nbsp;0.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <table class="res">
+        <caption>Regime 2 &mdash; scale all three dimensions. Where the engine stops winning</caption>
+        <thead>
+          <tr><th>shape</th>
+            <th class="num gsep">1 TCU</th><th class="num">5 A-resident</th><th class="num">7 DTCU_socket</th>
+            <th class="num gsep">7 vs 1</th><th class="num">1 MAC/cyc</th><th class="num">7 MAC/cyc</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>128 &times; 64 &times; 32</td>
+            <td class="num gsep">23,513</td><td class="num">22,820</td><td class="num peak">11,728</td>
+            <td class="num gsep peak">2.00&times;</td><td class="num">11.2</td><td class="num">22.4</td></tr>
+          <tr><td>256 &times; 128 &times; 64</td>
+            <td class="num gsep">96,244</td><td class="num">66,521</td><td class="num peak">49,152</td>
+            <td class="num gsep peak">1.96&times;</td><td class="num">21.8</td><td class="num">42.7</td></tr>
+          <tr><td>512 &times; 256 &times; 128</td>
+            <td class="num gsep">386,994</td><td class="num">305,878</td><td class="num peak">303,303</td>
+            <td class="num gsep">1.28&times;</td><td class="num">43.4</td><td class="num">55.3</td></tr>
+          <tr class="engine"><td>768 &times; 384 &times; 192</td>
+            <td class="num gsep peak">918,488</td><td class="num">&mdash;</td><td class="num">1,002,507</td>
+            <td class="num gsep">0.92&times;</td><td class="num">61.7</td><td class="num">56.5</td></tr>
+          <tr class="engine"><td>1024 &times; 512 &times; 256</td>
+            <td class="num gsep peak">1,739,671</td><td class="num">2,287,740</td><td class="num">2,286,325</td>
+            <td class="num gsep">0.76&times;</td><td class="num peak">77.2</td><td class="num">58.7</td></tr>
+        </tbody>
+      </table>
+      <figcaption>
+        <strong>The engine's lead is not a constant &mdash; it is a regime, and it ends
+        between 512&nbsp;&times;&nbsp;256&nbsp;&times;&nbsp;128 and
+        768&nbsp;&times;&nbsp;384&nbsp;&times;&nbsp;192.</strong> 2.00&times; &rarr;
+        1.96&times; &rarr; 1.28&times; &rarr; 0.92&times; &rarr; <strong>0.76&times;</strong>.
+        At the largest shape the plain in-core TCU is 1.31&times; faster than the engine.
+        <br /><br />
+        <strong>The two MAC/cyc columns are the whole mechanism.</strong> The core climbs
+        11.2 &rarr; 21.8 &rarr; 43.4 &rarr; 61.7 &rarr; <strong>77.2</strong> and is still
+        climbing: a bigger GEMM gives it more resident warps, more overlapping misses, and
+        its cost is <em>latency</em>, which parallelism hides. The engine goes 22.4 &rarr;
+        42.7 &rarr; 55.3 &rarr; 56.5 &rarr; <strong>58.7</strong> and flattens against a
+        64&nbsp;MAC/cyc ceiling &mdash; <strong>92&nbsp;% of its modelled peak</strong>. It has
+        no latency left to hide and no array left to use.
+        <br /><br />
+        <strong>Mode 5 collapses at the last rung for a reason it predicts about itself.</strong>
+        2,287,740, level with the engine and losing to mode 1. Its A block is
+        <code>cta_M &times; K</code>, which at K = 256 is <strong>32 KB per CTA</strong>, so
+        <code>usable_slots()</code> gives 2 resident CTAs where the warp ceiling allows 4.
+        Half the occupancy, bought with a quarter of the A traffic &mdash; a trade that wins
+        while A fits and loses once it does not. <strong>Large N is its regime; large K is
+        not.</strong>
+        <br /><br />
+        <strong>Read against the machine, not against a datacentre.</strong> This is 4 cores
+        and a 64&nbsp;MAC/cyc engine &mdash; roughly a quarter of one H100 SM &mdash; so the
+        absolute shapes are small by design. What transfers is the <em>shape</em> of the
+        curves: a fixed narrow engine saturates while a wide latency-bound core keeps
+        scaling, and the crossover sits wherever the two meet on a given machine.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <table class="res">
+        <caption>What operand staging needs before a copy engine pays — modes 3 / 4, re-measured on the fused epilogue. Two runs per cell; the third row is their difference</caption>
         <thead>
           <tr>
             <th rowspan="2">measurement</th>
@@ -830,41 +956,29 @@
             <th class="grp gsep" colspan="2">512 × 256 × 128</th>
           </tr>
           <tr>
-            <th class="sub-h gsep">12 DXA</th><th class="sub-h">13 SW</th>
-            <th class="sub-h gsep">12 DXA</th><th class="sub-h">13 SW</th>
-            <th class="sub-h gsep">12 DXA</th><th class="sub-h">13 SW</th>
+            <th class="sub-h gsep">3 DXA</th><th class="sub-h">4 SW</th>
+            <th class="sub-h gsep">3 DXA</th><th class="sub-h">4 SW</th>
+            <th class="sub-h gsep">3 DXA</th><th class="sub-h">4 SW</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td><strong>measured</strong> — the whole kernel <span class="unit-tag">D = epi(C + A·B), verifies</span></td>
-            <td class="num gsep">66,908</td><td class="num">55,867</td>
-            <td class="num gsep">258,543</td><td class="num">219,648</td>
-            <td class="num gsep">994,415</td><td class="num">—</td>
+            <td class="num gsep">25,386</td><td class="num">32,583</td><td class="num gsep">103,400 &sect;</td><td class="num">152,677</td><td class="num gsep">454,165</td><td class="num">&#8225;</td>
           </tr>
           <tr class="engine">
-            <td><strong>measured</strong> — C pass compiled out <span class="unit-tag">-DMOTI_WG_NO_C: D is A·B, wrong on purpose</span></td>
-            <td class="num gsep peak">14,093</td><td class="num">16,634</td>
-            <td class="num gsep peak">71,583</td><td class="num">91,418</td>
-            <td class="num gsep peak">335,171</td><td class="num">494,464</td>
+            <td><strong>measured</strong> — C read compiled out <span class="unit-tag">-DMOTI_WG_NO_C: D omits C, wrong on purpose</span></td>
+            <td class="num gsep">22,979</td><td class="num">25,795</td><td class="num gsep">98,637</td><td class="num">104,133</td><td class="num gsep">423,127</td><td class="num">497,215</td>
           </tr>
           <tr>
-            <td><em>derived</em> — the C pass alone <span class="unit-tag">= the two rows above, subtracted</span></td>
-            <td class="num gsep">52,815</td><td class="num">39,233</td>
-            <td class="num gsep">186,960</td><td class="num">128,230</td>
-            <td class="num gsep">659,244</td><td class="num">—</td>
+            <td><em>derived</em> — reading C alone <span class="unit-tag">= the two rows above, subtracted</span></td>
+            <td class="num gsep">2,407</td><td class="num">6,788</td><td class="num gsep">4,763</td><td class="num">48,544</td><td class="num gsep">31,038</td><td class="num">—</td>
           </tr>
           <tr class="engine">
-            <td><strong>what DXA is worth</strong> <span class="unit-tag">13 ÷ 12</span></td>
-            <td class="num gsep peak" colspan="2">1.18×</td>
+            <td><strong>what DXA is worth</strong> <span class="unit-tag">4 ÷ 3, from the full kernel</span></td>
             <td class="num gsep peak" colspan="2">1.28×</td>
             <td class="num gsep peak" colspan="2">1.48×</td>
-          </tr>
-          <tr>
-            <td>K-steps per staged tile = 2 <span class="unit-tag">(deeper reuse)</span></td>
-            <td class="num gsep">93,459</td><td class="num">101,657</td>
-            <td class="num gsep">359,342</td><td class="num">402,740</td>
-            <td class="num gsep">—</td><td class="num">—</td>
+            <td class="num gsep" colspan="2">—</td>
           </tr>
         </tbody>
       </table>
@@ -897,17 +1011,30 @@
         accesses instead of four — which is what CUTLASS does in its epilogue, and which
         needs the accumulator's thread-to-element mapping that wgmma does not expose.
         <br /><br />
-        <strong>Deepening the staged tile makes it worse, at every shape and both modes.</strong>
-        Holding two K-steps per stage instead of one costs 1.40× / 1.82× at 128 × 64 × 32
-        and 1.39× / 1.83× at 256 × 128 × 64. Local Memory is a <em>per-CTA</em> resource, so
-        doubling the stage halves the CTAs resident on a core; halving the copies does not
-        pay for halving the latency hiding. Reuse has to grow along <em>N</em> — one staged
-        tile feeding several output tiles, leaving the stage size alone — not along K.
+        <strong>Deepening the staged tile made it worse at every shape and both modes</strong>
+        — two K-steps per stage instead of one cost 1.40× / 1.82× at 128 × 64 × 32 and
+        1.39× / 1.83× at 256 × 128 × 64. An earlier version of this page explained that as
+        occupancy: Local Memory being per-CTA, doubling the stage halves the resident CTAs.
+        <strong>That explanation was wrong.</strong> At S=1 a CTA's stage is 2,560 B and at
+        S=2 it is 5,120 B, so <code>usable_slots()</code> goes 16 → 12 in a 64 KB Local
+        Memory — both far above the ceiling <code>NUM_WARPS</code> already imposes, which is
+        16 warps ÷ 4 warps-per-CTA = <strong>4 CTAs</strong>. Local Memory does not cost a
+        single resident CTA until S = 8. Whatever S=2 costs, it is not occupancy, and it is
+        still unexplained. (Those ratios also predate the fused epilogue and have not been
+        re-measured.)
         <br /><br />
-        The epilogue costs these modes nothing extra: app 2 and app 6 land within 0.3 % of
-        app 1 (257,844 and 258,601 against 258,543), because the C pass they are already
-        forced to make absorbs it. Modes 7 and 8 pay a second launch for the same thing —
-        mode 7 goes 14,389 → 73,973 at app 2.
+        <strong>A cheap epilogue now rides along free; an expensive one does not.</strong>
+        At 128 × 64 × 32, ReLU costs mode 3 <strong>0.7 %</strong> over the identity
+        (25,562 against 25,386) and mode 4 <strong>0.2 %</strong> (32,644 against 32,583).
+        GELU is a different matter — 123,353 against 103,400 at 256 × 128 × 64, or
+        <strong>+19 %</strong>, because its <code>tanh</code> is real work per element and
+        not a rounding of one. The reason either is affordable is the fused epilogue: the
+        activation is applied to the accumulator in registers on the way out, so it costs
+        arithmetic and no extra memory traffic. It used to ride on a second full pass over
+        D that the modes were forced to make anyway, which is a much worse bargain and is
+        what this paragraph used to describe. Modes 7 and 8 still pay a <em>second launch</em>
+        for the same thing — the engine has no epilogue hardware — and mode 7 goes
+        14,389 → 73,973 at app 2.
       </figcaption>
     </figure>
 

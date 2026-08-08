@@ -25,6 +25,8 @@ struct ModeSpec {
     GEOM_WMMA,     // one block (one warp) per output tile
     GEOM_PER_CORE, // one block per core; the kernel picks its slice from vx_core_id()
     GEOM_WMMA_WG,  // one MULTI-WARP block per CTA tile; warps share the staged tile
+    GEOM_WMMA_WG_ACOL, // as above, but the CTA sweeps NCOLS column tiles against a
+                       // resident A staged once for the whole K range
   };
 
   const char* kentry;      // entry name in kernel_m<N>.vxbin; nullptr = not runnable
@@ -89,6 +91,12 @@ static inline ModeSpec run_mode_4() {   // workgroup WGMMA, cooperative SW load
   return ModeSpec{ "moti_tcu_wg", 0, ModeSpec::GEOM_WMMA_WG, 1, false };
 }
 
+// 3 and 5 are the N-axis-reuse pair: same kernel body, same epilogue, same DXA, and 5
+// sweeps MOTI_WG_NCOLS column tiles against an A block staged once for the whole K.
+static inline ModeSpec run_mode_5() {   // workgroup WGMMA + DXA, A resident in LMEM
+  return ModeSpec{ "moti_tcu_wg_acol", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA_WG_ACOL, 1, true };
+}
+
 // Dispatch. A mode with no entry here is not runnable, and that is reported rather than
 // defaulted: with reserved holes and not-yet-built modes in the map, a silent fallthrough
 // would run the wrong kernel under the right label.
@@ -99,6 +107,7 @@ static inline ModeSpec moti_mode_spec(uint32_t mode) {
   case MODE_TCU_DXA:       return run_mode_2();
   case MODE_TCU_WG_DXA:    return run_mode_3();
   case MODE_TCU_WG:        return run_mode_4();
+  case MODE_TCU_WG_ACOL:   return run_mode_5();
   case MODE_DTCU_SOCKET:   return run_mode_7();
   case MODE_DTCU_CLUSTER:  return run_mode_8();
   default:                 return ModeSpec{ nullptr, 0, ModeSpec::GEOM_SIMT, 0, false };

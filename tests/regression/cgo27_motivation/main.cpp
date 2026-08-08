@@ -157,7 +157,7 @@ int main(int argc, char** argv) {
       "TCU + DXA-staged operands",
       "TCU workgroup + DXA (warp-specialised)",
       "TCU workgroup, cooperative SW load",
-      "<reserved>",
+      "TCU workgroup + DXA, A resident in LMEM",
       "<reserved>",
       "DTCU_socket (engine per socket)",
       "DTCU_cluster (engine per cluster)",

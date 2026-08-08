@@ -28,6 +28,10 @@ using wgcfg   = vt::wgmma_config_t<NUM_THREADS, vt::ITYPE, vt::OTYPE, WGMMA_NRC>
 #ifndef MOTI_WG_KSTEPS
 #define MOTI_WG_KSTEPS 1
 #endif
+// Must equal the kernel's MOTI_WG_NCOLS; both read this macro, so -D sets both.
+#ifndef MOTI_WG_NCOLS
+#define MOTI_WG_NCOLS 4
+#endif
 using itype_t = typename vt::ITYPE::dtype;
 using otype_t = typename vt::OTYPE::dtype;
 

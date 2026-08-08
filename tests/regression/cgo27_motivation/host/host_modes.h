@@ -23,7 +23,12 @@
 // footprint, differing only in whether the copy into Local Memory is a DXA descriptor or
 // the CTA's own loads. That difference alone is what the copy engine is worth.
 //
-// 5 and 6 are RESERVED HOLES. They, and the previous 3/4, held four single-warp
+// 5 is 3 with N-axis reuse: the CTA sweeps MOTI_WG_NCOLS column tiles against A staged
+// once for the whole K range, which divides global A traffic by NCOLS and costs Local
+// Memory (16 KB per CTA at K=128, so 3 resident CTAs instead of 4). 3 and 5 are the
+// matched pair for that trade.
+//
+// 6 is a RESERVED HOLE. It, and the previous 3/4/5, held four single-warp
 // LSU/DXA-staged pipeline modes (2- and 3-stage, with and without DXA). They were
 // retired: a block there was ONE warp, so it staged a tile, issued one mma_sync against
 // it and threw it away, with nothing to amortise the copy over. All four landed within
@@ -40,7 +45,8 @@ enum : uint32_t {
   MODE_TCU_DXA        = 2,
   MODE_TCU_WG_DXA     = 3,  // workgroup WGMMA + DXA, warp-specialised
   MODE_TCU_WG         = 4,  // workgroup WGMMA, cooperative SW load (control for 3)
-  // 5, 6: reserved holes -- see the note above.
+  MODE_TCU_WG_ACOL    = 5,  // workgroup WGMMA + DXA, A resident in LMEM, N-axis reuse
+  // 6: reserved hole -- see the note above.
   MODE_DTCU_SOCKET    = 7,  // engine at socket scope,  D -> that socket's L1
   MODE_DTCU_CLUSTER   = 8,  // engine at cluster scope, D -> L2
   MODE_HET_TCU_DSOCK  = 9,  // hetero: in-core TCU + DTCU_socket
@@ -65,7 +71,7 @@ enum class ModeState {
 static ModeState mode_state(uint32_t m) {
   switch (m) {
   case MODE_SIMT: case MODE_TCU: case MODE_TCU_DXA:
-  case MODE_TCU_WG_DXA: case MODE_TCU_WG:
+  case MODE_TCU_WG_DXA: case MODE_TCU_WG: case MODE_TCU_WG_ACOL:
   case MODE_DTCU_SOCKET: case MODE_DTCU_CLUSTER:
     return ModeState::Implemented;
   // Numbered but NOT built. A first attempt was backed out: the claim and the start
@@ -102,8 +108,8 @@ static inline bool wants_cluster(uint32_t m) {
 // silently mislabelling a CSV column.
 static const char* const kShortNames[NUM_MODES] = {
   "SIMT", "TCU", "TCU+DXA",
-  "TCU_wg+DXA", "TCU_wg",
-  "<reserved5>", "<reserved6>",
+  "TCU_wg+DXA", "TCU_wg", "TCU_wg+Acol",
+  "<reserved6>",
   "DTCU_socket", "DTCU_cluster",
   "TCU+DTCU_socket", "TCU+DTCU_cluster", "TCU+DTCU_both"
 };

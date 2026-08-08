@@ -59,7 +59,7 @@ inline void parse_args(int argc, char** argv) {
                    "                          8=DTCU_cluster (D->L2, tile 64x32)\n"
                    "           hetero         9=TCU+DTCU_socket  10=TCU+DTCU_cluster\n"
                    "                          11=TCU+both        (9-11 not built yet)\n"
-                   "           3 and 4 are reserved holes, not paths.\n";
+                   "           6 is a reserved hole, not a path.\n";
       exit(0);
     default: exit(-1);
     }

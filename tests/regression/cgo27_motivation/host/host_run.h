@@ -51,7 +51,9 @@ inline int run_case(uint32_t mode,
   // warps are sixteen unrelated CTAs each copying its own private tile. Capped at what
   // the device reports and at the rows available.
   uint32_t wg_warps = 1;
-  if (spec.geom == ModeSpec::GEOM_WMMA_WG) {
+  const bool wg_any = (spec.geom == ModeSpec::GEOM_WMMA_WG)
+                  || (spec.geom == ModeSpec::GEOM_WMMA_WG_ACOL);
+  if (wg_any) {
     // NOT tunable. A WGMMA group is exactly ISSUE_WIDTH warps -- the block issues that
     // many warps in parallel per uop, so a CTA with any other count computes garbage
     // silently (measured: every other warp count fails the verify, and only this one
@@ -75,10 +77,18 @@ inline int run_case(uint32_t mode,
   // clamps out-of-bounds in hardware -- so mode 12 passed while mode 13's cooperative
   // copy produced 8,192 wrong elements at 128x64x32 with S=4 (stK=64 > K=32). Reject the
   // configuration instead of letting one of the pair mask it.
-  if (spec.geom == ModeSpec::GEOM_WMMA_WG && (K % wg_stK) != 0) {
+  if (wg_any && (K % wg_stK) != 0) {
     std::cerr << "cgo27_motivation: MOTI_WG_KSTEPS=" << MOTI_WG_KSTEPS
               << " gives a staged tile of " << wg_stK << " columns, which does not divide K="
               << K << std::endl;
+    return -1;
+  }
+  // Mode 5 gives one CTA NCOLS column tiles, so N must divide by all of them at once.
+  const uint32_t acol_N = MOTI_WG_NCOLS * wgcfg::xtileN;
+  if (spec.geom == ModeSpec::GEOM_WMMA_WG_ACOL && (N % acol_N) != 0) {
+    std::cerr << "cgo27_motivation: MOTI_WG_NCOLS=" << MOTI_WG_NCOLS
+              << " gives a CTA " << acol_N << " columns wide, which does not divide N="
+              << N << std::endl;
     return -1;
   }
   if (spec.kentry == nullptr) {
@@ -192,13 +202,17 @@ inline int run_case(uint32_t mode,
   if (spec.dxa_desc) {
     // The A tile is as tall as the CTA: one copy feeds every warp in it. For the
     // single-warp modes cta_M == tcu_tileM, so this is the old descriptor unchanged.
-    const bool wg = (spec.geom == ModeSpec::GEOM_WMMA_WG);
+    const bool wg   = wg_any;
+    const bool acol = (spec.geom == ModeSpec::GEOM_WMMA_WG_ACOL);
     const uint32_t dK = wg ? wg_stK        : tcu_tileK;
     const uint32_t dM = wg ? cta_M         : tcu_tileM;
     const uint32_t dN = wg ? wgcfg::xtileN : tcu_tileN;
+    // A and B no longer share a K tile: mode 5 stages A for the WHOLE K range in one
+    // issue and keeps it, while B is still restaged per K step. That asymmetry IS the
+    // mode -- it is what turns A into a reused operand instead of a streamed one.
     RT_CHECK(vortex::dxa::program_2d(device, DESC_A, karg.A_addr,
       /*size0=*/K, /*size1=*/M, /*stride0_bytes=*/K * sizeof(itype_t),
-      /*tile0=*/dK, /*tile1=*/dM, /*elem_bytes=*/sizeof(itype_t)));
+      /*tile0=*/(acol ? K : dK), /*tile1=*/dM, /*elem_bytes=*/sizeof(itype_t)));
     RT_CHECK(vortex::dxa::program_2d(device, DESC_B, karg.B_addr,
       /*size0=*/K, /*size1=*/N, /*stride0_bytes=*/K * sizeof(itype_t),
       /*tile0=*/dK, /*tile1=*/dN, /*elem_bytes=*/sizeof(itype_t)));
@@ -259,6 +273,19 @@ inline int run_case(uint32_t mode,
     // the two (4,096 B against 2,560 B); it was correct and slower. See
     // kernel_modes/k_wg_common.h.
     li.lmem_size = (cta_M + wgcfg::xtileN) * wg_stK * sizeof(itype_t);
+    break;
+  }
+  case ModeSpec::GEOM_WMMA_WG_ACOL: {
+    // One CTA per (cta_M rows) x (NCOLS column tiles). Fewer, fatter CTAs than mode 3:
+    // the grid is NCOLS times narrower along N, which is exactly how the A fetch gets
+    // amortised. Local Memory holds the whole A block plus one B tile, so it is sized
+    // from the runtime K -- 16 KB at cta_M=64, K=128, against mode 3's 2,560 B, which is
+    // what drops the resident CTAs from 4 to 3.
+    li.ndim = 2;
+    li.grid_dim[0]  = N / (MOTI_WG_NCOLS * wgcfg::xtileN);
+    li.grid_dim[1]  = M / cta_M;
+    li.block_dim[0] = wg_warps * NUM_THREADS; li.block_dim[1] = 1;
+    li.lmem_size = (cta_M * K + wgcfg::xtileN * wg_stK) * sizeof(itype_t);
     break;
   }
   case ModeSpec::GEOM_PER_CORE: {
