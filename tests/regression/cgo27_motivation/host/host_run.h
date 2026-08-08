@@ -320,7 +320,24 @@ inline int run_case(uint32_t mode,
   auto t0 = std::chrono::high_resolution_clock::now();
   vx_event_h launch_ev = nullptr, read_ev = nullptr, epi_ev = nullptr;
   RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+
+  // MCYCLE IS PER-LAUNCH, NOT CUMULATIVE. A single query after the last launch reports
+  // only that launch, so the DTCU modes -- the only ones that launch twice -- were having
+  // their entire GEMM dropped from the number the moment an epilogue was attached. It
+  // showed up as mode 7 getting FASTER with an app (11,728 -> 3,920 at 128x64x32) and as
+  // modes 7 and 8 reporting the SAME cycles, because what was actually being timed was the
+  // shared epilogue launch and nothing else. Both runs verified PASSED, so the output was
+  // right and only the measurement was wrong -- which is why it survived a while.
+  //
+  // So the GEMM launch is drained and read here, before the epilogue is enqueued, and the
+  // two are summed. The epilogue's cost is meant to be inside the reported cycles -- that
+  // asymmetry is what the app sweep exists to measure -- it just has to be added rather
+  // than substituted.
+  uint64_t gemm_cycles = 0, gemm_instrs = 0;
   if (dtcu_needs_epi) {
+    RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
+    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE,   0, &gemm_cycles));
+    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &gemm_instrs));
     RT_CHECK(vx_enqueue_launch(queue, &epi_li, 1, &launch_ev, &epi_ev));
     RT_CHECK(vx_enqueue_read(queue, out.data(), D_buf, 0, out.size() * sizeof(otype_t), 1, &epi_ev, &read_ev));
   } else {
@@ -332,6 +349,9 @@ inline int run_case(uint32_t mode,
 
   RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE, 0, &stats.cycles));
   RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &stats.instrs));
+  // Second launch: add the GEMM back on. Zero for every single-launch mode.
+  stats.cycles += gemm_cycles;
+  stats.instrs += gemm_instrs;
   {
     const uint32_t cls = VX_DCR_MPM_CLASS_CORE;
     RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_INSTR_ALU,  0, &stats.instr_alu));

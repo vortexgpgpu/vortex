@@ -243,18 +243,40 @@ not**, and it says so about itself.
 
 The in-core modes fold an elementwise activation into the accumulator while it is still in
 registers, so it costs arithmetic and no extra memory traffic. **The DTCU has no epilogue
-hardware**, so the same app is a second full launch over D. Measured at 128 × 64 × 32:
+hardware**, so the same app runs as a second full launch over D.
+
+⚠️ **The numbers this section used to carry were produced by a broken measurement, and are
+withdrawn.** `run_case()` read `MCYCLE` once, after the last launch — and `MCYCLE` is
+**per-launch, not cumulative**. The DTCU modes are the only ones that launch twice, so
+attaching an epilogue silently dropped their entire GEMM from the reported cycles. The
+signature was unmistakable once looked at: mode 7 got *faster* with an app
+(11,728 → 3,920 at 128 × 64 × 32) and modes 7 and 8 reported the *same* cycle count,
+because what was being timed was the shared epilogue launch and nothing else. Both runs
+verified `PASSED` with errors = 0 — the output was right, only the measurement was wrong,
+which is why it survived.
+
+`host_run.h` now drains the GEMM launch, reads the counters, then enqueues the epilogue and
+adds the two. The corrected first point, at 128 × 64 × 32:
 
 | | app 1 (none) | app 2 (ReLU) | cost |
 |---|--:|--:|--:|
-| 3 TCU wg + DXA | 25,386 | 25,562 | **+0.7 %** |
-| 4 TCU wg, SW copy | 32,583 | 32,644 | **+0.2 %** |
-| 7 DTCU_socket | 11,728 | 73,973 | **+531 %** |
+| 1 TCU | 23,513 | 23,750 | +1.0 % |
+| 5 A-resident | 22,820 | 23,836 | +4.5 % |
+| 7 DTCU_socket | 11,728 | **15,648** | **+33.4 %** |
 
-**An epilogue inverts the ordering at this shape**: the engine goes from 2.2× faster than
-mode 3 to 2.9× slower. GELU (app 3) is dearer still even in-core — 123,353 against 103,400
-at 256 × 128 × 64, +19 % — because its `tanh` is real work per element rather than a
-rounding of one, so "fused is free" holds for cheap activations and not for all of them.
+So the asymmetry is real — the engine pays an order of magnitude more than the in-core
+modes for the same activation, because it pays in memory traffic where they pay in
+arithmetic — but it is **+33 %, not the +531 % this file claimed**. At this shape the engine
+still wins with the epilogue attached (15,648 against 23,750); whether it survives at a
+shape where its margin is thinner is being re-measured across both requested shapes.
+
+⚠️ **Only apps 1, 2 and 3 exist.** `epi_apply()` implements ReLU and GELU and returns its
+argument unchanged for 4–8, so `-a 4` … `-a 8` reproduce app 1 under a different label. The
+moti RFC plans all eight; what each still needs is an extra operand the kernel has no
+pointer for — 4 an R matrix, 5 a scale vector, 7/8 int8 inputs and a bias — except **6
+(row-wise softmax), which needs no new operand** and is the one buildable next. 6 is also
+the most interesting for this argument: a cross-row reduction is something the engine
+cannot express at all, so it would cost the DTCU a *third* pass.
 
 ### The summary the harness exists to produce
 
@@ -263,7 +285,7 @@ rounding of one, so "fused is free" holds for cheap activations and not for all 
 | memory-bound shape (attention, K small and fixed) | **7 DTCU_socket** | nothing stalls the engine; the core is latency-bound |
 | compute-bound shape (cube, K grows) | **1 in-core TCU** | 64× the array, and parallelism finally hides its latency |
 | wide N with K moderate | **5 A-resident** | one A fetch amortised over four column tiles |
-| anything with an elementwise epilogue | **in-core (1/3/5)** | fused for free; the engine pays a second pass over D |
+| an elementwise epilogue | **narrows the engine's lead** | in-core folds it into the accumulator (+1–4.5 %); the engine pays a second pass over D (+33 %) |
 
 
 ## Measured results — 2026-08-05
