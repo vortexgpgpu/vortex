@@ -37,7 +37,8 @@ There are three places a number can live and they must never disagree:
 
 | file | what it holds |
 | --- | --- |
-| [`docs/dtcu_figures.html`](docs/dtcu_figures.html) | the figures and the results table, published as an Artifact |
+| [`docs/260808_moti.md`](docs/260808_moti.md) | **the current result**: axis 1 (shape) × axis 2 (epilogue), published at `aa74611a-85cd-470e-8c71-e092e7b2a139`. Reuses the diagrams from `260807_dtcu_figures.html`; only the experiments are new |
+| [`docs/dtcu_figures.html`](docs/dtcu_figures.html) | the older figure set, kept for the diagrams and the superseded tables |
 | [`docs/260824_DTCU_update_RFC.md`](docs/260824_DTCU_update_RFC.md) | the design argument the numbers support |
 | [`README.md`](README.md) | the full result table and the how-to-reproduce |
 
