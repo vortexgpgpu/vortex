@@ -1,5 +1,36 @@
 # Rules for this directory
 
+## What this harness is for
+
+**It exists to show that no single placement wins — that which mode is fastest depends on
+the GEMM's shape and on whether an epilogue is attached.** The deliverable is a set of
+regimes, each with a different winner, not a ranking with the DTCU on top.
+
+That has been written down late, after several rounds of analysis drifted into "the engine
+wins, here is by how much" and had to be pulled back. Two axes carry the diversity:
+
+| axis | what changes | why it flips the winner |
+| --- | --- | --- |
+| **shape** | K relative to M and N | K sets arithmetic intensity. Small fixed K (attention: `M = N = seqlen`, `K = head_dim`) is memory-bound and the engine wins because nothing stalls it. K growing with M and N (a cubic ladder) becomes compute-bound and the in-core TCU wins because its array is 64× wider. |
+| **epilogue** | `-a 1` vs an elementwise app | The in-core modes fuse the activation into the accumulator on the way out, for ~0.7 %. The DTCU has no epilogue hardware, so the same app costs it a **second full launch over D**. |
+
+**When you report a number, report which regime it belongs to.** A ratio quoted without its
+shape family is the failure mode this file exists to prevent — "mode 7 is 2× faster" was
+true on one ladder and false on the next rung of another.
+
+Corollaries:
+
+- A mode that loses everywhere is not necessarily a failed mode; it may be a **control**.
+  Modes 2 and 4 exist to isolate what DXA and the workgroup geometry are worth, and 3 is 5
+  without A-residency. Do not delete a control because it is slow, and do not put controls
+  in the headline table — the current main table shows 0/1/5/7/8 only.
+- Mode 0 (SIMT) is quoted at the smallest shape only. It has no tensor unit, no staging and
+  no tuning knob, so re-running it at scale measures nothing.
+- **A cubic ladder is not a workload.** `M : N : K = 4 : 2 : 1` held constant matches no
+  real layer; it is a machine-scaling probe and must be labelled as one. Attention-shaped
+  (`K` fixed at a head dimension) and FFN-shaped (`K = N = hidden`) are the families worth
+  claiming representativeness for.
+
 ## Every experiment result goes into BOTH documents, in the same change
 
 There are three places a number can live and they must never disagree:

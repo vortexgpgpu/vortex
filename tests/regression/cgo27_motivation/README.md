@@ -177,6 +177,95 @@ asymmetry is what the epilogue sweep is designed to expose.
   `DTCU_SMEM_BANKS`, `DTCU_MAX_OUTSTANDING`; each is a `-D` rebuild) + hetero split
   ratio. Coarse first, fine if variance is high.
 
+
+## What wins, and when
+
+**No mode wins everywhere. That is the result, not a caveat.** Earlier revisions of this
+file read as a ranking with the descriptor engine on top; that was an artefact of only ever
+measuring one family of shapes. Two axes decide the winner.
+
+### Axis 1 — shape, through arithmetic intensity
+
+Arithmetic intensity for a GEMM is bounded by K:
+
+```
+AI = M·N·K / (M·K + N·K + M·N)   →   ~K   as M, N grow
+```
+
+So K decides whether a shape is memory-bound or compute-bound, and that decides the winner.
+
+**Attention-shaped — `K = head_dim = 64` fixed, `M = N = seqlen` swept.** Arithmetic
+intensity saturates at ~64: memory-bound, and it stays that way however large the matrices
+get.
+
+| M = N | 1 TCU | 5 A-resident | **7 DTCU_socket** | 8 DTCU_cluster | 7 vs 1 |
+|---|--:|--:|--:|--:|--:|
+| 128 | 50,875 | 41,666 | **25,826** | 148,094 | **1.97×** |
+| 256 | 187,473 | 123,228 | **87,782** | 300,810 | **2.14×** |
+| 512 | 762,659 | — | **344,451** | 1,194,150 | **2.21×** |
+| 1024 | — | — | **1,523,464** | 4,863,334 | — |
+
+**The engine's lead grows with size here** — 1.97× → 2.14× → 2.21×. At S = 512 the in-core
+TCU runs at 22.0 MAC/cyc against 43.4 on a cube of the same MAC count: half, because an
+attention shape gives its cache far less to reuse. The engine is at 48.7, still 76 % of its
+modelled peak.
+
+**Cube-shaped — `M : N : K = 4 : 2 : 1`, all three scaled.** Arithmetic intensity keeps
+climbing, so the shape becomes compute-bound.
+
+| shape | 1 TCU | 5 A-resident | 7 DTCU_socket | 7 vs 1 | 1 MAC/cyc | 7 MAC/cyc |
+|---|--:|--:|--:|--:|--:|--:|
+| 128 × 64 × 32 | 23,513 | 22,820 | **11,728** | **2.00×** | 11.2 | 22.4 |
+| 256 × 128 × 64 | 96,244 | 66,521 | **49,152** | **1.96×** | 21.8 | 42.7 |
+| 512 × 256 × 128 | 386,994 | 305,878 | **303,303** | 1.28× | 43.4 | 55.3 |
+| 768 × 384 × 192 | **918,488** | — | 1,002,507 | 0.92× | 61.7 | 56.5 |
+| 1024 × 512 × 256 | **1,739,671** | 2,287,740 | 2,286,325 | **0.76×** | **77.2** | 58.7 |
+
+**Here the engine's lead ends** — it crosses between 512 × 256 × 128 and 768 × 384 × 192,
+and at the top rung the plain in-core TCU is 1.31× faster. The MAC/cyc columns are the
+mechanism: the core climbs 11.2 → 77.2 and is still climbing, because a bigger GEMM gives
+it more resident warps and its cost is latency, which parallelism hides. The engine
+flattens at 58.7 against a 64 MAC/cyc ceiling — 92 % of its modelled peak, with no latency
+left to hide and no array left to use.
+
+⚠️ **A cubic ladder is a machine-scaling probe, not a workload.** `4 : 2 : 1` held constant
+matches no real layer. It answers "does this machine keep scaling", and the answer differs
+per unit. Attention-shaped and FFN-shaped are the families to claim representativeness for.
+
+**Mode 5 sits between them.** It stages A once for the whole K range and sweeps four column
+tiles against it, so its A block is `cta_M × K`: 8 KB at K = 64 (all 4 resident CTAs kept),
+16 KB at K = 128 (3 CTAs), 32 KB at K = 256 (2 CTAs). It beats mode 1 by 1.22× and 1.52× on
+attention shapes and by up to 1.38× on a wide-N sweep, and collapses to parity at
+1024 × 512 × 256 where K = 256 halves its occupancy. **Large N is its regime; large K is
+not**, and it says so about itself.
+
+### Axis 2 — the epilogue
+
+The in-core modes fold an elementwise activation into the accumulator while it is still in
+registers, so it costs arithmetic and no extra memory traffic. **The DTCU has no epilogue
+hardware**, so the same app is a second full launch over D. Measured at 128 × 64 × 32:
+
+| | app 1 (none) | app 2 (ReLU) | cost |
+|---|--:|--:|--:|
+| 3 TCU wg + DXA | 25,386 | 25,562 | **+0.7 %** |
+| 4 TCU wg, SW copy | 32,583 | 32,644 | **+0.2 %** |
+| 7 DTCU_socket | 11,728 | 73,973 | **+531 %** |
+
+**An epilogue inverts the ordering at this shape**: the engine goes from 2.2× faster than
+mode 3 to 2.9× slower. GELU (app 3) is dearer still even in-core — 123,353 against 103,400
+at 256 × 128 × 64, +19 % — because its `tanh` is real work per element rather than a
+rounding of one, so "fused is free" holds for cheap activations and not for all of them.
+
+### The summary the harness exists to produce
+
+| regime | fastest | why |
+|---|---|---|
+| memory-bound shape (attention, K small and fixed) | **7 DTCU_socket** | nothing stalls the engine; the core is latency-bound |
+| compute-bound shape (cube, K grows) | **1 in-core TCU** | 64× the array, and parallelism finally hides its latency |
+| wide N with K moderate | **5 A-resident** | one A fetch amortised over four column tiles |
+| anything with an elementwise epilogue | **in-core (1/3/5)** | fused for free; the engine pays a second pass over D |
+
+
 ## Measured results — 2026-08-05
 
 Three shapes on the stock `Makefile` config (1 cluster, 4 cores, `SOCKET_SIZE=1` → 4

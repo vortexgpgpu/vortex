@@ -632,8 +632,7 @@
             <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">0</span> SIMT</td>
             <td class="unit-tag">4 cores</td>
             <td class="num gsep">142,952</td><td class="num">1.83</td><td class="num">0.46</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
-            <td class="num gsep">—</td><td class="num">—</td><td class="num">—</td>
+            <td class="num gsep" colspan="6" style="text-align:center;opacity:.55">skipped above the smallest shape &mdash; no engine, no staging, no knob</td>
           </tr>
           <tr>
             <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">1</span> TCU</td>
@@ -641,27 +640,6 @@
             <td class="num gsep">23,513</td><td class="num">11.15</td><td class="num">2.79</td>
             <td class="num gsep">96,244</td><td class="num">21.79</td><td class="num">5.45</td>
             <td class="num gsep">386,994</td><td class="num">43.35</td><td class="num">10.84</td>
-          </tr>
-          <tr>
-            <td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">2</span> TCU+DXA</td>
-            <td class="unit-tag">4 cores</td>
-            <td class="num gsep">23,939</td><td class="num">10.95</td><td class="num">2.74</td>
-            <td class="num gsep">101,977</td><td class="num">20.56</td><td class="num">5.14</td>
-            <td class="num gsep">446,129</td><td class="num">37.61</td><td class="num">9.40</td>
-          </tr>
-          <tr>
-            <td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> TCU wg + DXA</td>
-            <td class="unit-tag">4 cores</td>
-            <td class="num gsep">25,386</td><td class="num">10.33</td><td class="num">2.58</td>
-            <td class="num gsep">103,400 &sect;</td><td class="num">20.28</td><td class="num">5.07</td>
-            <td class="num gsep">454,165</td><td class="num">36.94</td><td class="num">9.23</td>
-          </tr>
-          <tr>
-            <td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> TCU wg, SW copy</td>
-            <td class="unit-tag">4 cores</td>
-            <td class="num gsep">32,583</td><td class="num">8.04</td><td class="num">2.01</td>
-            <td class="num gsep">152,677</td><td class="num">13.73</td><td class="num">3.43</td>
-            <td class="num gsep">&#8225;</td><td class="num">&#8225;</td><td class="num">&#8225;</td>
           </tr>
           <tr>
             <td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> TCU wg + DXA, A resident</td>
@@ -688,6 +666,15 @@
       </table>
 
       <figcaption>
+        <strong>The table shows the five paths under active comparison.</strong> Modes 2,
+        3 and 4 are built, verified and measured, and are left out of it deliberately: 2 and
+        4 are controls that exist to isolate what DXA and the workgroup geometry are worth,
+        and 3 is mode 5 without the A-residency, so all three are arguments rather than
+        candidates. Their numbers are in the figures below and in README. Mode 0 is quoted
+        at the smallest shape only &mdash; it has no tensor unit, no staging and no tuning
+        knob, so re-running it at scale measures nothing new; the recorded values are
+        1,145,460 and 9,581,708.
+        <br /><br />
         <strong>No mode wins everywhere, and that is the result.</strong> Three regimes
         came out of scaling this harness, each with a different fastest path: the
         descriptor engine takes the small shapes by 2.00&times;, an in-core mode that stages
@@ -838,53 +825,57 @@
 
     <figure>
       <table class="res">
-        <caption>Regime 1 &mdash; widen N only (M = 256, K = 128 fixed). The axis staging had left untapped</caption>
+        <caption>Regime 1 &mdash; attention-shaped: K = head_dim = 64 fixed, M = N = seqlen swept. Memory-bound at every size</caption>
         <thead>
           <tr><th>mode</th><th>units</th>
-            <th class="num gsep">N = 64</th><th class="num">128</th><th class="num">256</th>
-            <th class="num gsep">512</th><th class="num">1024</th></tr>
+            <th class="num gsep">M=N=128</th><th class="num">256</th><th class="num">512</th><th class="num">1024</th></tr>
         </thead>
         <tbody>
+          <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">0</span> SIMT</td><td class="unit-tag">4 cores</td>
+            <td class="num gsep">560,994</td><td class="num" colspan="3" style="text-align:center;opacity:.55">skipped &mdash; no tensor unit, no knob</td></tr>
           <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">1</span> TCU</td><td class="unit-tag">4 cores</td>
-            <td class="num gsep">58,688</td><td class="num">106,458</td><td class="num">198,345</td><td class="num gsep">386,903</td><td class="num">820,453</td></tr>
-          <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> TCU wg + DXA</td><td class="unit-tag">4 cores</td>
-            <td class="num gsep">68,190</td><td class="num">&mdash;</td><td class="num">230,029</td><td class="num gsep">&mdash;</td><td class="num">&mdash;</td></tr>
-          <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> TCU wg, SW copy</td><td class="unit-tag">4 cores</td>
-            <td class="num gsep">100,973</td><td class="num">171,195</td><td class="num">&mdash;</td><td class="num gsep">585,599</td><td class="num">&mdash;</td></tr>
-          <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> TCU wg + DXA, <strong>A resident</strong></td><td class="unit-tag">4 cores</td>
-            <td class="num gsep">57,278</td><td class="num">90,812</td><td class="num">167,362</td><td class="num gsep">281,099</td><td class="num peak">592,372</td></tr>
+            <td class="num gsep">50,875</td><td class="num">187,473</td><td class="num">762,659</td><td class="num">&mdash;</td></tr>
+          <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> TCU wg + DXA, A resident</td><td class="unit-tag">4 cores</td>
+            <td class="num gsep">41,666</td><td class="num">123,228</td><td class="num">&mdash;</td><td class="num">&mdash;</td></tr>
           <tr class="engine"><td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> DTCU_socket</td><td class="unit-tag">4 engines</td>
-            <td class="num gsep peak">46,358</td><td class="num peak">82,448</td><td class="num peak">153,987</td><td class="num gsep">&mdash;</td><td class="num">632,978</td></tr>
-          <tr class="engine"><td><strong>5 vs 1</strong> <span class="unit-tag">staging finally pays</span></td><td class="unit-tag"></td>
-            <td class="num gsep">1.02&times;</td><td class="num">1.17&times;</td><td class="num">1.19&times;</td><td class="num gsep">1.38&times;</td><td class="num peak">1.38&times;</td></tr>
+            <td class="num gsep peak">25,826</td><td class="num peak">87,782</td><td class="num peak">344,451</td><td class="num peak">1,523,464</td></tr>
+          <tr class="engine"><td><span class="swatch" style="background:var(--r-clu)"></span><span class="mode-id">8</span> DTCU_cluster</td><td class="unit-tag">1 engine</td>
+            <td class="num gsep">148,094</td><td class="num">300,810</td><td class="num">1,194,150</td><td class="num">4,863,334</td></tr>
+          <tr class="engine"><td><strong>7 vs 1</strong> <span class="unit-tag">the engine's lead GROWS</span></td><td class="unit-tag"></td>
+            <td class="num gsep">1.97&times;</td><td class="num">2.14&times;</td><td class="num peak">2.21&times;</td><td class="num">&mdash;</td></tr>
         </tbody>
       </table>
       <figcaption>
-        <strong>Mode 5 is mode 3 with one thing changed, and it is the first in-core staged
-        mode ever to beat plain WMMA here.</strong> The CTA owns four column tiles instead
-        of one and stages its A rows for the <em>whole</em> K range once, so A is fetched
-        from global a quarter as often:
-        <code>A traffic = M&middot;N&middot;K / xtileN</code> becomes
-        <code>&hellip; / (4&middot;xtileN)</code>. Nothing else differs &mdash; same DXA, same
-        fused epilogue, same single accumulator.
+        <strong>This is the shape family the engine is for, and it does not run out of
+        room.</strong> Attention's <code>QK&#8868;</code> is
+        <code>M = N = seqlen</code> against <code>K = head_dim</code>, and head_dim does not
+        grow when the sequence does. Arithmetic intensity is bounded by K &mdash;
+        <code>M&middot;N&middot;K / (M&middot;K + N&middot;K + M&middot;N) &rarr; K</code>
+        &mdash; so the shape stays <strong>memory-bound</strong> at every size, and the
+        engine's lead <em>widens</em>: 1.97&times; &rarr; 2.14&times; &rarr;
+        <strong>2.21&times;</strong>.
         <br /><br />
-        <strong>Its margin grows with N, which is the test of the mechanism.</strong>
-        1.02&times; at N = 64, where there is nothing to amortise over, rising monotonically
-        to <strong>1.38&times;</strong> at N = 512 and 1024. At N = 1024 it also passes the
-        engine &mdash; 592,372 against 632,978 &mdash; the only shape measured where an
-        in-core mode is the fastest thing on the machine.
+        <strong>Compare the same MAC count on a cube.</strong> At M = N = 512, K = 64 the
+        in-core TCU manages <strong>22.0 MAC/cyc</strong>; on
+        512&nbsp;&times;&nbsp;256&nbsp;&times;&nbsp;128, the same 16.8&nbsp;M MACs, it
+        manages <strong>43.4</strong>. Half &mdash; an attention shape gives its cache far
+        less to reuse. The engine is at 48.7, still 76&nbsp;% of its modelled peak, because
+        it was never relying on the cache.
         <br /><br />
-        <strong>Registers could not buy this.</strong> The obvious N-axis knob is a wider
-        accumulator, <code>WGMMA_NRC</code> 8&nbsp;&rarr;&nbsp;16. Measured: stack references
-        7&nbsp;&rarr;&nbsp;37 and loads equal to stores at 6,016 &mdash; the accumulator
-        spills every iteration. 128&nbsp;&times;&nbsp;64&nbsp;&times;&nbsp;32 went
-        25,386&nbsp;&rarr;&nbsp;136,677 and 256&nbsp;&times;&nbsp;128&nbsp;&times;&nbsp;64
-        went 103,400&nbsp;&rarr;&nbsp;932,115 with the grid at a full 16 CTAs, so it is not
-        occupancy. Local Memory was the only place the reuse could live &mdash; mode 3 was
-        using 2,560 B of 65,536.
+        <strong>Mode 5 keeps all four resident CTAs here</strong>, which it cannot do on the
+        cube. Its A block is <code>cta_M &times; K</code>: 8&nbsp;KB at K = 64 against
+        65,536 available, so <code>usable_slots()</code> is 8 and the warp ceiling of 4
+        binds instead. It is 1.22&times; and 1.52&times; over mode 1 and climbing. On the
+        cubic ladder the same block is 32&nbsp;KB at K = 256 and occupancy halves &mdash;
+        the mode carries its own regime boundary in one expression.
         <br /><br />
-        Blank cells are runs still in flight, not failures. Every number shown verified
-        <code>PASSED</code>, errors&nbsp;=&nbsp;0.
+        <strong>Mode 8 is the wrong shape for this.</strong> One cluster engine against four
+        socket engines is 4&times; fewer submitters and a 64&nbsp;&times;&nbsp;32 native tile
+        that a 64-column K = 64 problem cannot keep fed; it loses to plain in-core WMMA at
+        every size here.
+        <br /><br />
+        &mdash; is a run that did not complete, not a skip; see the note under the next
+        figure. Every number shown verified <code>PASSED</code>, errors&nbsp;=&nbsp;0.
       </figcaption>
     </figure>
 
