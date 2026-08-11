@@ -13,13 +13,11 @@
  *   - exchange is not, so each invocation reports the old value it received
  *     and the host checks a multiset invariant over the whole set instead.
  *
- * Two atomic families are deliberately absent because the hardware does not
- * implement them:
- *   - shared-memory atomics. VX_lmem_switch asserts "AMO on Shared (LMEM) is
- *     unsupported" outright, so the address space has no atomic path at all.
- *     SimX executes them regardless, so the two models disagree here.
- *   - compare-and-swap, which lowers to an LR/SC pair.
- * Adding either op back to this kernel reproduces the failure directly.
+ * The same op set on `shared` variables is covered by tests/vulkan/atomic_shared,
+ * a separate test because the device implements only one of the two address
+ * spaces today. Compare-and-swap is absent from both: it lowers to an LR/SC pair
+ * whose forward progress is a separate open defect, and adding it back to either
+ * kernel reproduces that directly.
  *
  * tests/vulkan/ssbo already covers the single atomicAdd-on-SSBO case as a
  * side-check of its store lowering; this kernel is what covers the op set. */
@@ -44,6 +42,11 @@ void main()
    uint v   = gid + 1u;                 /* 1..N, never 0 */
    int  sv  = int(gid) - 32;            /* spans negative, so imin/imax differ
                                          * from umin/umax on the same data */
+   /* Half the invocations contend the unsigned min/max slots with a value above
+    * 0x7fffffff. Without one, every operand is a small positive number, signed
+    * and unsigned compares agree, and the umin/umax checks cannot tell an
+    * AMOMINU executed as AMOMIN from a correct one. */
+   uint mv  = ((gid & 1u) != 0u) ? (0x80000000u + v) : v;
 
    /* --- unsigned ------------------------------------------------------- */
    atomicAdd(g[G_ADD], v);
@@ -52,8 +55,8 @@ void main()
    atomicAnd(g[G_AND], ~(1u << (gid & 31u)));
    atomicOr (g[G_OR],   (1u << (gid & 31u)));
    atomicXor(g[G_XOR], v);
-   atomicMin(g[G_UMIN], v);
-   atomicMax(g[G_UMAX], v);
+   atomicMin(g[G_UMIN], mv);
+   atomicMax(g[G_UMAX], mv);
 
    /* --- signed --------------------------------------------------------- */
    atomicMin(gi[0], sv);

@@ -12,7 +12,7 @@ TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw 
          ssbo instanced mrt ubo_multiset rtquery_anyhit \
          tex_fetch tex_gather tex_shadow tex_lod tex_array tex_cube tex_3d tex_1d tex_border \
          stencil logicop blend dsclear firstvertex \
-         alu fp16 subgroup atomic
+         alu fp16 subgroup atomic atomic_shared
 
 # --- common exclude list ---------------------------------------------
 # Unsupported on the vortexpipe/simx path:
@@ -26,8 +26,12 @@ TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw 
 EXCLUDE := rtquery_anyhit
 
 # --- per-backend exclude lists ---------------------------------------
+# atomic_shared: VX_lmem_switch has no AMO path -- it strips the AMO bits and
+# asserts, so the run aborts under rtlsim. SimX's LMEM banks do implement the
+# op, which is why the test runs there. The entry goes away with the RTL LMEM
+# AMO path, and the test is what proves it.
 EXCLUDE_simx   :=
-EXCLUDE_rtlsim :=
+EXCLUDE_rtlsim := atomic_shared
 EXCLUDE_opae   :=
 EXCLUDE_xrt    :=
 

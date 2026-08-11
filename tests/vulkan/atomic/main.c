@@ -6,7 +6,7 @@
  *
  * Dispatches atomic.comp, which contends the integer atomics the device
  * implements -- add, and, or, xor, signed and unsigned min/max, and exchange
- * -- on an SSBO from every invocation at once.
+ * -- on an SSBO from every invocation at once, so each AMO goes to the dcache.
  *
  * Every expectation here is independent of the order the device schedules its
  * warps, because a test that depended on that order would be flaky rather than
@@ -27,8 +27,10 @@
  * -- but the test asserts that the device does not advertise them, so the
  * disclaim cannot silently rot into a false claim.
  *
- * compare-and-swap and shared-memory atomics are also absent: the hardware
- * asserts on both, for the reasons atomic.comp records.
+ * The same op set on `shared` variables is covered by tests/vulkan/atomic_shared,
+ * which is a separate test because the device implements only one of the two
+ * address spaces today. compare-and-swap is absent from both: it lowers to an
+ * LR/SC pair whose forward progress is a separate open defect.
  */
 
 #include <vulkan/vulkan.h>
@@ -442,16 +444,17 @@ main(int argc, char **argv)
    want_u[G_UMIN] = 0xFFFFFFFFu;
    want_u[G_UMAX] = 0u;
    for (uint32_t i = 0; i < INVOCS; i++) {
-      uint32_t v = i + 1u;
+      uint32_t v  = i + 1u;
+      uint32_t mv = ((i & 1u) != 0u) ? (0x80000000u + v) : v;
       want_u[G_ADD] += v;
       want_u[G_AND] &= ~(1u << (i & 31u));
       want_u[G_OR]  |=  (1u << (i & 31u));
       want_u[G_XOR] ^= v;
-      if (v < want_u[G_UMIN]) {
-         want_u[G_UMIN] = v;
+      if (mv < want_u[G_UMIN]) {
+         want_u[G_UMIN] = mv;
       }
-      if (v > want_u[G_UMAX]) {
-         want_u[G_UMAX] = v;
+      if (mv > want_u[G_UMAX]) {
+         want_u[G_UMAX] = mv;
       }
    }
    want_u[G_XCHG] = 0u;                 /* checked by multiset, not by value */

@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: MIT
 #
 # Atomic coverage test for the vortexpipe driver. atomic.comp contends every
-# integer atomic the translator maps, on both the SSBO and the shared address
-# spaces, and the host checks order-independent invariants over the results.
+# integer atomic the translator maps on an SSBO, and the host checks
+# order-independent invariants over the results. The shared address space is
+# covered separately by tests/vulkan/atomic_shared.
 #
 #   make            -- build the host binary + SPIR-V
 #   make run-simx   -- run on Vortex via vortexpipe
