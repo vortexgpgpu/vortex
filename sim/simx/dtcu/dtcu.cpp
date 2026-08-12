@@ -359,8 +359,13 @@ uint32_t Dtcu::estimate_execute_cycles_() {
   const uint64_t tile_macs    = uint64_t(tile_m_) * tile_n_ * tile_k_;
   const uint64_t mac_cycles   = (tile_macs + macs_per_cycle - 1) / macs_per_cycle;
   const uint32_t read_cycles  = operand_read_cycles_() + DTCU_BUF_LATENCY;
+  // Accumulator SRAM width is per-engine too: the cluster engine's tile has four times
+  // the output area, so two banks for both left it accumulator-bound while the socket
+  // engine was balanced. See dtcu_params.h.
+  const uint32_t acc_banks    = (engine_ == DTCU_ENGINE_CLUSTER)
+                              ? uint32_t(DTCU_CLUSTER_ACC_BANKS) : uint32_t(DTCU_SOCKET_ACC_BANKS);
   const uint64_t accum_words  = 2ull * tile_m_ * tile_n_; // read partial + write updated
-  const uint64_t accum_cycles = (accum_words + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS + DTCU_ACC_LATENCY;
+  const uint64_t accum_cycles = (accum_words + acc_banks - 1) / acc_banks + DTCU_ACC_LATENCY;
   dtcu_smem_read_model_cycles_ += read_cycles; // report (swizzle on/off comparison)
   // Fill/drain depth follows the in-core TCU's, derived from VX_CFG_TCU_TYPE -- same
   // arithmetic, same pipeline, different place. See tcu/tcu_latency.h.

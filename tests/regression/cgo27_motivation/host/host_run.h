@@ -309,8 +309,20 @@ inline int run_case(uint32_t mode,
   // App 6 is a row-wise reduction, which nothing can fuse -- see epilogue.h. EVERY mode
   // pays this pass, and the DTCU modes pay it on top of their elementwise pass.
   const bool needs_row_pass = epi_needs_row_pass(g_app);
+  const bool needs_col_pass = epi_needs_col_pass(g_app);
   vx_kernel_h epi_kernel = nullptr, row_kernel = nullptr;
   vx_launch_info_t epi_li = {}, row_li = {};
+  if (needs_col_pass) {
+    // One block per COLUMN. Same shape of pass as the row one, transposed -- see
+    // k_epilogue.h for why the direction is the experiment.
+    RT_CHECK(vx_module_get_kernel(module_, "moti_colcenter", &row_kernel));
+    row_li.struct_size = sizeof(row_li);
+    row_li.kernel = row_kernel; row_li.args_host = &karg; row_li.args_size = sizeof(karg);
+    row_li.ndim = 1;
+    row_li.grid_dim[0]  = N;
+    row_li.block_dim[0] = NUM_THREADS;
+    row_li.lmem_size    = NUM_THREADS * sizeof(otype_t);
+  }
   if (needs_row_pass) {
     RT_CHECK(vx_module_get_kernel(module_, "moti_softmax", &row_kernel));
     row_li.struct_size = sizeof(row_li);
@@ -362,7 +374,7 @@ inline int run_case(uint32_t mode,
     RT_CHECK(vx_enqueue_launch(queue, &epi_li, 1, &prev_ev, &epi_ev));
     prev_ev = epi_ev;
   }
-  if (needs_row_pass) {
+  if (needs_row_pass || needs_col_pass) {
     RT_CHECK(accumulate_here());
     vx_event_h row_ev = nullptr;
     RT_CHECK(vx_enqueue_launch(queue, &row_li, 1, &prev_ev, &row_ev));

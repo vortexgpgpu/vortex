@@ -75,4 +75,43 @@ __kernel void moti_softmax(kernel_arg_t* __UNIFORM__ arg) {
 }
 #endif // MOTI_APP_NEEDS_ROW_PASS
 
+#if MOTI_APP_NEEDS_COL_PASS
+// Per-channel bias broadcast (app 9): D[i][j] += mean over i of D[:][j].
+//
+// A COLUMN reduction, and that is the whole reason it exists. Row-wise ops (app 6) read a
+// row, and a row lives in one socket because the engines slice M four ways -- so app 6
+// never tested the placement. A column touches every row, so for DTCU_socket every read
+// crosses into another socket's L1, while DTCU_cluster left D in L2 where all four cores
+// reach it the same way. It is also a real access pattern: the bias gradient of a linear
+// layer is exactly a sum down the columns of the output.
+//
+// One block per column, one warp per block, so the tree reduction needs no barrier. Each
+// thread strides down the column at stride N -- deliberately the uncoalesced direction.
+__kernel void moti_colcenter(kernel_arg_t* __UNIFORM__ arg) {
+  const uint32_t M = arg->M, N = arg->N;
+  auto pD = reinterpret_cast<float*>(arg->D_addr);
+
+  const uint32_t col = blockIdx.x;
+  const uint32_t t   = threadIdx.x;
+  const uint32_t nt  = blockDim.x;
+  auto red = reinterpret_cast<float*>(__local_mem());
+
+  float acc = 0.0f;
+  for (uint32_t i = t; i < M; i += nt) acc += pD[i * N + col];
+  red[t] = acc;
+  for (uint32_t s = nt >> 1; s > 0; s >>= 1) {
+    if (t < s) red[t] += red[t + s];
+  }
+  const float mean = red[0] / (float)M;
+
+  // ADD, not subtract. Subtracting a column's own mean is catastrophic cancellation:
+  // the TCU's D and the CPU reference already differ within ULP, and taking the
+  // difference of two nearly equal numbers turns that into a large relative error --
+  // measured, 2,304 mismatches at 768x384x192 while 128x64x32 passed. The experiment is
+  // about the ACCESS PATTERN, not the arithmetic, and a broadcast add is both numerically
+  // safe and closer to the real op (a bias reduced down the columns and added back).
+  for (uint32_t i = t; i < M; i += nt) pD[i * N + col] += mean;
+}
+#endif // MOTI_APP_NEEDS_COL_PASS
+
 #endif // _CGO27_K_EPILOGUE_H_

@@ -107,6 +107,8 @@ typedef struct {
 //
 // The host reads this too, so `-a` is checked against it instead of selecting anything.
 //   1 baseline (no epilogue)   2 ReLU   3 GELU   6 row-wise softmax
+//   9 per-channel bias broadcast: D[i][j] += mean over i. A column reduction -- the
+//     bias gradient's access pattern, and the one that crosses socket boundaries.
 //   4, 5, 7, 8: need operands the kernel has no pointer for -- see MOTI_AUX_ELEM_OFFSET.
 #ifndef MOTI_APP
 #define MOTI_APP 1
@@ -117,6 +119,12 @@ typedef struct {
 // True when the app needs a row-wise reduction, which nothing can fuse: a tile holds only
 // part of a row, so the row max and row sum are not known until every tile is written.
 #define MOTI_APP_NEEDS_ROW_PASS (MOTI_APP == 6)
+// True when the app reduces down a COLUMN. Same "cannot be fused" property as the row
+// pass, but the opposite access pattern, and that is the point: the socket engines write D
+// into the producing socket's L1 and slice M four ways, so a column touches all four
+// sockets while a row touches one. This is the shape that should punish DTCU_socket's
+// placement and leave DTCU_cluster's (D in L2) alone.
+#define MOTI_APP_NEEDS_COL_PASS (MOTI_APP == 9)
 
 // Where the auxiliary epilogue operands live, for the apps that need one.
 //

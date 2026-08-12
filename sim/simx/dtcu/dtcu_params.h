@@ -76,8 +76,38 @@
 // swizzle. DTCU_ACC_BANKS = fp32 words/cycle (conflict-free, so banks == delivered BW).
 // Lab decision: fixed 2-bank physical SRAM (matches the DTCU_SMEM_BANKS=2 scratchpad),
 // not array-width-scaled. Override -DDTCU_ACC_BANKS=... to model a wider accumulator.
-#ifndef DTCU_ACC_BANKS
-#define DTCU_ACC_BANKS 2
+// PER ENGINE, and scaled with the tile the engine actually has. This was one global 2
+// while the cluster engine's native tile is 64x32 = 2,048 output elements against the
+// socket engine's 32x16 = 512 -- four times the area through the same two words per
+// cycle. estimate_execute_cycles_() takes a max() of three stages, and at that ratio the
+// accumulator wins it outright for the cluster engine: 2,049 cycles against the MAC
+// array's 1,024 and the operand read's 513. The array could be made arbitrarily wide and
+// nothing would move (measured: doubling NUM_PE changed the cluster by 0.00 %).
+//
+// Same accidental under-provisioning MACS_PER_CYCLE had before it was split per engine.
+// Scaling banks with tile area keeps the accumulator off the critical path for both:
+// socket 2*512/2 = 513, cluster 2*2048/8 = 513.
+#ifndef DTCU_SOCKET_ACC_BANKS
+#define DTCU_SOCKET_ACC_BANKS 2
+#endif
+// 2x the socket engine's, not 4x. The requirement is only that the accumulator stop
+// binding: at the cluster's PE count the MAC term is 1,024 cycles, so 4 banks put accum at
+// 1,025 and it stops being the max. Going to 8 buys 0.1 % more (1.99x -> 2.00x) and would
+// be sizing the SRAM for a wider array than this engine has -- a different decision from
+// removing a bottleneck, and not one to smuggle in with a fix.
+//
+// Note this is still the LESS generous side of the comparison per unit of tile: the socket
+// engine holds 512 output elements across 2 banks, 256 per bank; the cluster holds 2,048
+// across 4, or 512 per bank. Parity would be 8.
+#ifndef DTCU_CLUSTER_ACC_BANKS
+#define DTCU_CLUSTER_ACC_BANKS (2 * DTCU_SOCKET_ACC_BANKS)
+#endif
+// Kept so -DDTCU_ACC_BANKS=N still overrides both at once, as the width sweep does.
+#ifdef DTCU_ACC_BANKS
+#undef DTCU_SOCKET_ACC_BANKS
+#undef DTCU_CLUSTER_ACC_BANKS
+#define DTCU_SOCKET_ACC_BANKS  DTCU_ACC_BANKS
+#define DTCU_CLUSTER_ACC_BANKS DTCU_ACC_BANKS
 #endif
 #ifndef DTCU_ACC_LATENCY
 #define DTCU_ACC_LATENCY DTCU_BUF_LATENCY

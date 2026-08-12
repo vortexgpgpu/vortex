@@ -35,6 +35,7 @@
 
 static inline bool epi_is_elementwise(uint32_t) { return MOTI_APP_IS_ELEMENTWISE; }
 static inline bool epi_needs_row_pass(uint32_t) { return MOTI_APP_NEEDS_ROW_PASS; }
+static inline bool epi_needs_col_pass(uint32_t) { return MOTI_APP_NEEDS_COL_PASS; }
 
 // ONE epilogue per binary. At MOTI_APP=1 and 6 this is the identity and the compiler
 // deletes it outright: app 6's work is not elementwise and lives in moti_softmax instead.

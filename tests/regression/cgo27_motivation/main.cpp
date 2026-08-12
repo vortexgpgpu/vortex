@@ -204,6 +204,24 @@ int main(int argc, char** argv) {
       for (uint32_t j = 0; j < N; ++j) r[j] = epi_softmax_norm(r[j], row_max, row_sum);
     }
   }
+  // App 9: per-channel centering, a COLUMN reduction. Mirrors the kernel's lane striding
+  // and tree order for the same reason app 6 does -- a left-to-right sum rounds elsewhere.
+  if (epi_needs_col_pass(g_app)) {
+    const uint32_t NT = NUM_THREADS;
+    std::vector<float> red(NT);
+    for (uint32_t j = 0; j < N; ++j) {
+      for (uint32_t t = 0; t < NT; ++t) {
+        float acc = 0.0f;
+        for (uint32_t i = t; i < M; i += NT) acc += hRef[i * N + j];
+        red[t] = acc;
+      }
+      for (uint32_t s = NT >> 1; s > 0; s >>= 1)
+        for (uint32_t t = 0; t < s; ++t) red[t] += red[t + s];
+      const float mean = red[0] / (float)M;
+      for (uint32_t i = 0; i < M; ++i) hRef[i * N + j] += mean;
+    }
+  }
+
   std::vector<otype_t> out[NUM_MODES];
   Stats stats[NUM_MODES];
   int mode_errors[NUM_MODES] = {0};
