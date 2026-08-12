@@ -248,6 +248,13 @@ int main(int argc, char** argv) {
     // slot here would read past an empty vector.
     if (!run_this(m) || stats[m].skipped) continue;
     if (mode_state(m) != ModeState::Implemented) continue;
+    // A fixed ULP budget, deliberately: the reduction apps do NOT need a looser one.
+    // They looked like they did -- app 9 at 768x384x192 reported 2,304 mismatches, exactly
+    // three columns of 768, and widening the budget to FLOAT_ULP + M was the obvious
+    // reading. It was the wrong reading. The offsets were 0.035 to 0.059 on values of
+    // order 45, roughly 240,000 ULP, far beyond anything summation order can produce, and
+    // the real cause was a missing fence between steps of the reduction tree in
+    // k_epilogue.h. With that fixed the same runs report errors=0 at ULP <= 6.
     for (uint32_t idx = 0; idx < M * N; ++idx) {
       float got = Convert<vt::OTYPE>::to_float(out[m][idx]);
       if (ulp_diff(got, hRef[idx]) > FLOAT_ULP) {

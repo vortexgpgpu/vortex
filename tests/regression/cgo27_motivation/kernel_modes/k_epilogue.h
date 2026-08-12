@@ -56,8 +56,10 @@ __kernel void moti_softmax(kernel_arg_t* __UNIFORM__ arg) {
   float m = -3.4028235e38f;
   for (uint32_t j = t; j < N; j += nt) m = epi_softmax_max(m, r[j]);
   red[t] = m;
+  vx_fence();   // see the note on the sum tree below
   for (uint32_t s = nt >> 1; s > 0; s >>= 1) {
     if (t < s) red[t] = epi_softmax_max(red[t], red[t + s]);
+    vx_fence();
   }
   const float row_max = red[0];
 
@@ -65,8 +67,18 @@ __kernel void moti_softmax(kernel_arg_t* __UNIFORM__ arg) {
   float acc = 0.0f;
   for (uint32_t j = t; j < N; j += nt) acc = epi_softmax_addexp(acc, r[j], row_max);
   red[t] = acc;
+  // FENCE EVERY STEP. Each step stores to Local Memory and the next step loads what a
+  // *different lane* just wrote. A warp issues in lockstep, but that orders the
+  // instructions, not the LMEM store's completion against the following load -- and
+  // without the fence the tree read stale values. It surfaced as a handful of whole
+  // columns being wrong while the rest were exact: app 9 at 768x384x192 reported 2,304
+  // mismatches, precisely 3 columns of 768, with a constant per-column offset of 0.035 to
+  // 0.059 -- around 240,000 ULP, far too large to be accumulation rounding and too
+  // scattered to be a systematic indexing error.
+  vx_fence();
   for (uint32_t s = nt >> 1; s > 0; s >>= 1) {
     if (t < s) red[t] += red[t + s];
+    vx_fence();
   }
   const float row_sum = red[0];
 
@@ -99,8 +111,10 @@ __kernel void moti_colcenter(kernel_arg_t* __UNIFORM__ arg) {
   float acc = 0.0f;
   for (uint32_t i = t; i < M; i += nt) acc += pD[i * N + col];
   red[t] = acc;
+  vx_fence();   // ordering the lane-to-lane handoff -- see the row pass above
   for (uint32_t s = nt >> 1; s > 0; s >>= 1) {
     if (t < s) red[t] += red[t + s];
+    vx_fence();
   }
   const float mean = red[0] / (float)M;
 
