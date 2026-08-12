@@ -38,6 +38,9 @@ __kernel void moti_tcu(kernel_arg_t* __UNIFORM__ arg) {
     ctx::load_matrix_sync<vt::col_major>(fragB, pB + tile_col * K + i, K);  // B col-major
     ctx::mma_sync(fragD, fragA, fragB, fragD);
   }
-  wmma_fuse_epilogue(fragD, app);
+  // aux (apps 4/5) sits behind C in the same buffer -- see common.h. The indexed form is
+  // what lets a residual or a per-channel scale reach the right element.
+  wmma_fuse_epilogue_at(fragD, MOTI_AUX_PTR(arg->C_addr, arg->M, N), tile_row, tile_col, N);
+  (void)app;
   wmma_store_D(pD, fragD, tile_row, tile_col, N);
 }

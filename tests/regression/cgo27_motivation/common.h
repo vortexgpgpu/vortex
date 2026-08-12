@@ -106,7 +106,8 @@ typedef struct {
 // contain one epilogue rather than one build carrying all of them.
 //
 // The host reads this too, so `-a` is checked against it instead of selecting anything.
-//   1 baseline (no epilogue)   2 ReLU   3 GELU   6 row-wise softmax
+//   1 baseline (no epilogue)   2 ReLU   3 GELU   4 residual   5 per-channel scale
+//   6 row-wise softmax
 //   9 per-channel bias broadcast: D[i][j] += mean over i. A column reduction -- the
 //     bias gradient's access pattern, and the one that crosses socket boundaries.
 //   4, 5, 7, 8: need operands the kernel has no pointer for -- see MOTI_AUX_ELEM_OFFSET.
@@ -125,6 +126,10 @@ typedef struct {
 // sockets while a row touches one. This is the shape that should punish DTCU_socket's
 // placement and leave DTCU_cluster's (D in L2) alone.
 #define MOTI_APP_NEEDS_COL_PASS (MOTI_APP == 9)
+// True when the app reads an auxiliary operand alongside the GEMM: a residual matrix (4)
+// or a per-channel scale (5). Both live behind C in the same buffer -- see
+// MOTI_AUX_ELEM_OFFSET below -- so neither needs a kernel_arg_t field.
+#define MOTI_APP_NEEDS_AUX (MOTI_APP == 4 || MOTI_APP == 5)
 
 // Where the auxiliary epilogue operands live, for the apps that need one.
 //
@@ -146,5 +151,17 @@ typedef struct {
 // App 6 (row-wise softmax) needs no operand at all, only a reduction across D's rows, and
 // apps 7/8's int8 inputs are a build variant of ITYPE above rather than a runtime app id.
 #define MOTI_AUX_ELEM_OFFSET(M, N) ((M) * (N))
+
+// The pointer itself, nullptr when this build's app reads no auxiliary operand. Written as
+// a macro so the address arithmetic -- an arg->M load and a multiply -- is not emitted at
+// all for the apps that never use it. Computing it unconditionally cost modes 1 and 2
+// +0.37 % and +0.28 %, which is small but is exactly the kind of drift the per-mode
+// binaries exist to keep out.
+#if MOTI_APP_NEEDS_AUX
+#define MOTI_AUX_PTR(C_addr, M, N) \
+  (reinterpret_cast<const float*>(C_addr) + MOTI_AUX_ELEM_OFFSET(M, N))
+#else
+#define MOTI_AUX_PTR(C_addr, M, N) (nullptr)
+#endif
 
 #endif

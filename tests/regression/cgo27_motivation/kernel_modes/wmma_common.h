@@ -92,14 +92,42 @@ static __attribute__((always_inline)) void wmma_map_frag_of(typename CTX::fragme
 // no epilogue HW and must run a separate pass (k_epilogue.h::moti_epilogue).
 // Coordinate-dependent epilogues (residual/scale) cannot use this path — see the
 // notes in epilogue/residual.h.
+
+// Apply the epilogue to the accumulator, WITH each element's (row, col).
+//
+// wmma_map_frag_of() maps values and knows no positions, which is fine for ReLU and GELU
+// and useless for a residual or a per-channel scale. This mirrors store_matrix_sync's own
+// indexing (vx_tensor.h:477) so register r of lane `lane` is placed exactly where the
+// store will put it -- the same technique the wgmma epilogue in k_wg_common.h uses, and
+// correct for the same reason: the accumulator's layout is not a secret, the store spells
+// it out.
+//
+// The app is decided by the preprocessor now (see common.h), so this is one expression at
+// any given MOTI_APP and the switch that used to live here -- a SECOND place the app id
+// was decoded, contradicting epilogue.h's claim to be the only one -- is gone.
+// wmma_context keeps its wmma_config_t private, so reconstruct the same one here with the
+// same template arguments it uses (vx_tensor.h:162). Only tileM/tileN/tileK are public on
+// the context, and the micro-tile geometry is what the store's indexing is built from.
+using moti_wcfg = vt::wmma_config_t<VX_CFG_NUM_THREADS, vt::fp32, vt::fp32>;
+
 template <typename CTX>
-static __attribute__((always_inline)) void wmma_fuse_epilogue_of(typename CTX::fragment_acc& fragD,
-                                                                 uint32_t app) {
-  switch (app) {
-  case 2: wmma_map_frag_of<CTX>(fragD, [](float v) { return epi_relu(v); }); break;
-  case 3: wmma_map_frag_of<CTX>(fragD, [](float v) { return epi_gelu(v); }); break;
-  default: break;   // app 1 baseline; apps 4-8 use separate passes (Phase B)
-  }
+static __attribute__((always_inline)) void wmma_fuse_epilogue_at_of(
+    typename CTX::fragment_acc& fragD, const float* aux,
+    uint32_t tile_row, uint32_t tile_col, uint32_t N) {
+  const uint32_t lane      = vx_thread_id();
+  const uint32_t block_row = lane / moti_wcfg::tcN;
+  const uint32_t block_col = lane % moti_wcfg::tcN;
+  vt::detail::unroll_for<CTX::fragment_acc::NR>([&](auto r) {
+    const uint32_t row = tile_row + (r / moti_wcfg::n_steps) * moti_wcfg::tcM + block_row;
+    const uint32_t col = tile_col + (r % moti_wcfg::n_steps) * moti_wcfg::tcN + block_col;
+    fragD.data[r] = epi_apply_at(fragD.data[r], aux, row, col, N);
+  });
+}
+
+static __attribute__((always_inline)) void wmma_fuse_epilogue_at(
+    ctx::fragment_acc& fragD, const float* aux,
+    uint32_t tile_row, uint32_t tile_col, uint32_t N) {
+  wmma_fuse_epilogue_at_of<ctx>(fragD, aux, tile_row, tile_col, N);
 }
 
 // Convenience wrappers for the default (NR=8) geometry used by modes 1/2/6.
@@ -113,8 +141,6 @@ static __attribute__((always_inline)) void wmma_store_D(ctx::output_t* pD, ctx::
                                                         uint32_t N) {
   wmma_store_D_of<ctx>(pD, fragD, tile_row, tile_col, N);
 }
-static __attribute__((always_inline)) void wmma_fuse_epilogue(ctx::fragment_acc& fragD, uint32_t app) {
-  wmma_fuse_epilogue_of<ctx>(fragD, app);
-}
+
 
 #endif // _CGO27_WMMA_COMMON_H_

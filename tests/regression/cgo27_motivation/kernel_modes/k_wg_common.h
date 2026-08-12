@@ -87,7 +87,11 @@ static constexpr uint32_t kStK = kS * wgctx::tileK;   // columns per staged tile
 static __attribute__((always_inline)) void wg_store_epilogue(
     const wgctx::fragment_acc& acc,
     const wgctx::output_t* pC, wgctx::output_t* pD,
-    uint32_t out_row, uint32_t tile_col, uint32_t N, uint32_t app) {
+    uint32_t out_row, uint32_t tile_col, uint32_t N, uint32_t app,
+    uint32_t M = 0) {
+  // aux (apps 4/5) lives behind C in the same buffer; M is only read for that.
+  const float* aux = MOTI_AUX_PTR(pC, M, N);
+  (void)M;   // read only by the apps that take an auxiliary operand
   // store_matrix_sync's own base: lane covers row lane/tcN, column lane%tcN of the
   // micro-tile, and register r covers the (r % m_steps, r / m_steps) block of them.
   const uint32_t lane = vx_thread_id();
@@ -97,11 +101,14 @@ static __attribute__((always_inline)) void wg_store_epilogue(
     const uint32_t o = o0 + (r % wgctx::m_steps) * wgctx::tcM * N
                           + (r / wgctx::m_steps) * wgctx::tcN;
 #ifndef MOTI_WG_NO_C
-    pD[o] = epi_apply(app, pC[o] + acc.data[r]);
+    const uint32_t rr = out_row + (r % wgctx::m_steps) * wgctx::tcM + lane / wgctx::tcN;
+    const uint32_t cc = tile_col + (r / wgctx::m_steps) * wgctx::tcN + lane % wgctx::tcN;
+    pD[o] = epi_apply_at(pC[o] + acc.data[r], aux, rr, cc, N);
 #else
-    pD[o] = epi_apply(app, acc.data[r]);
+    pD[o] = acc.data[r];
 #endif
   }
+  (void)app;
 #ifdef MOTI_WG_NO_C
   (void)pC;
 #endif

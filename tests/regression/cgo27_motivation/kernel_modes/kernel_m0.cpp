@@ -33,5 +33,8 @@ __kernel void moti_simt(kernel_arg_t* __UNIFORM__ arg) {
     sum += h2f(pA[row * K + k]) * h2f(pB[col * K + k]); // B col-major
   }
   // Fused epilogue: the value is still in a register, so no extra memory pass.
-  pD[row * N + col] = epi_apply(app, sum);
+  // aux (apps 4/5) sits behind C in the same buffer -- see common.h.
+  auto aux = MOTI_AUX_PTR(arg->C_addr, arg->M, N);
+  pD[row * N + col] = epi_apply_at(sum, aux, row, col, N);
+  (void)app;
 }

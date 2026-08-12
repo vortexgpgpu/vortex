@@ -26,7 +26,9 @@ __kernel void moti_epilogue(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t col = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t row = blockIdx.y;
 
-  pD[row * N + col] = epi_apply(app, pD[row * N + col]);
+  auto aux = MOTI_AUX_PTR(arg->C_addr, arg->M, N);
+  pD[row * N + col] = epi_apply_at(pD[row * N + col], aux, row, col, N);
+  (void)app;
 }
 #endif // MOTI_APP_IS_ELEMENTWISE
 

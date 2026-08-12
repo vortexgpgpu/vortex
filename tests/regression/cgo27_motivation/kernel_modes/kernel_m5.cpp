@@ -105,6 +105,6 @@ __kernel void moti_tcu_wg_acol(kernel_arg_t* __UNIFORM__ arg) {
 
     // Same fused epilogue as mode 3: C folded in while the accumulator is in registers.
     wg_store_epilogue(fragC, pC, pD, tile_row + warp_rank * wgctx::xtileM,
-                      tile_col, N, app);
+                      tile_col, N, app, arg->M);
   }
 }

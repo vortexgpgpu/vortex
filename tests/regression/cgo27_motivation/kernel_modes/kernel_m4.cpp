@@ -105,5 +105,5 @@ __kernel void moti_tcu_wg(kernel_arg_t* __UNIFORM__ arg) {
   // accesses, the same as modes 1/2/5/6, against the four this used to make. Warp-private
   // -- no second pass, no scratch, no barrier. See k_wg_common.h.
   const uint32_t out_row = tile_row + warp_rank * wgctx::xtileM;
-  wg_store_epilogue(fragC, pC, pD, out_row, tile_col, N, app);
+  wg_store_epilogue(fragC, pC, pD, out_row, tile_col, N, app, arg->M);
 }

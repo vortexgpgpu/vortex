@@ -123,6 +123,10 @@ inline int run_case(uint32_t mode,
   RT_CHECK(vx_buffer_address(A_buf, &karg.A_addr));
   RT_CHECK(vx_buffer_create(device, hB.size() * sizeof(itype_t), VX_MEM_READ, &B_buf));
   RT_CHECK(vx_buffer_address(B_buf, &karg.B_addr));
+  // C and the auxiliary operand share ONE buffer, C first. The kernel derives the aux
+  // address from C_addr, M and N (MOTI_AUX_ELEM_OFFSET), which is how apps 4 and 5 reach
+  // an operand without a kernel_arg_t field -- growing that struct moves every mode's
+  // cycle count. hC already carries the aux values appended by main.cpp.
   RT_CHECK(vx_buffer_create(device, hC.size() * sizeof(otype_t), VX_MEM_READ, &C_buf));
   RT_CHECK(vx_buffer_address(C_buf, &karg.C_addr));
   RT_CHECK(vx_buffer_create(device, out.size() * sizeof(otype_t), VX_MEM_READ_WRITE, &D_buf));

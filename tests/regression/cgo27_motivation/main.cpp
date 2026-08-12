@@ -121,7 +121,11 @@ int main(int argc, char** argv) {
     return -1;
 
   std::vector<itype_t> hA(M * K), hB(K * N);
-  std::vector<otype_t> hC(M * N);
+  // C, then the auxiliary operand for the apps that read one (4 residual, 5 scale). One
+  // allocation, C first, so the kernel finds the aux at MOTI_AUX_ELEM_OFFSET(M, N) from
+  // C_addr and no kernel_arg_t field is needed. Zero extra elements for every other app.
+  const uint32_t aux_n = epi_aux_elems(g_app, M, N);
+  std::vector<otype_t> hC(M * N + aux_n);
   std::vector<float>   hRef(M * N);
 
   for (uint32_t i = 0; i < M; ++i)
@@ -139,6 +143,13 @@ int main(int argc, char** argv) {
       float v = float((i * 9 + j * 11) % 13) - 6.0f;
       hC[i * N + j] = (otype_t)Convert<vt::OTYPE>::from_float(v);
     }
+  // Aux values, from a fixed formula like A/B/C so a run is reproducible. Scales are kept
+  // near 1 so app 5 does not simply rescale everything into a different exponent range.
+  for (uint32_t t = 0; t < aux_n; ++t) {
+    float v = (g_app == 5) ? (1.0f + float(t % 5) * 0.25f)
+                           : (float(t % 7) - 3.0f);
+    hC[M * N + t] = (otype_t)Convert<vt::OTYPE>::from_float(v);
+  }
 
   // CPU reference: D = C + A*B
   for (uint32_t i = 0; i < M; ++i)
@@ -148,7 +159,9 @@ int main(int argc, char** argv) {
         acc += Convert<vt::ITYPE>::to_float(hA[i * K + k]) * Convert<vt::ITYPE>::to_float(hB[j * K + k]);
       // Same epilogue the kernel applies (shared epilogue.h) so the comparison is
       // against identical arithmetic, not a second implementation.
-      hRef[i * N + j] = epi_apply(g_app, acc);
+      // Same entry point the kernels use, so a residual or a scale is indexed identically.
+      const float* aux_ref = reinterpret_cast<const float*>(hC.data()) + M * N;
+      hRef[i * N + j] = epi_apply_at(acc, aux_ref, i, j, N);
     }
 
   const char* names[NUM_MODES] = {
