@@ -48,8 +48,18 @@
 #ifndef DTCU_SOCKET_NUM_PE
 #define DTCU_SOCKET_NUM_PE 2
 #endif
+// FOUR times the socket engine's, because one cluster engine stands in for the four
+// socket engines a cluster would otherwise have. That is what makes the 7-vs-8 comparison
+// a comparison of PLACEMENT: same total array, same total accumulator bandwidth, different
+// position and different native tile.
+//
+// It was 2x, and at 2x the measurement was not about placement at all. Four socket engines
+// sustain 4 x 15.81 = 63.26 MAC/cyc; one cluster engine at 2x sustained 31.81, and mode 8
+// came in 1.99x-2.05x behind mode 7 at every shape measured -- the array ratio exactly,
+// with nothing left over. Halving the silicon and then reporting the placement lost is not
+// a result about placement.
 #ifndef DTCU_CLUSTER_NUM_PE
-#define DTCU_CLUSTER_NUM_PE (2 * DTCU_SOCKET_NUM_PE)
+#define DTCU_CLUSTER_NUM_PE (4 * DTCU_SOCKET_NUM_PE)
 #endif
 
 // DTCU_COMPUTE_LATENCY: pipeline fill latency per native tile (cycles).
@@ -100,7 +110,7 @@
 // engine holds 512 output elements across 2 banks, 256 per bank; the cluster holds 2,048
 // across 4, or 512 per bank. Parity would be 8.
 #ifndef DTCU_CLUSTER_ACC_BANKS
-#define DTCU_CLUSTER_ACC_BANKS (2 * DTCU_SOCKET_ACC_BANKS)
+#define DTCU_CLUSTER_ACC_BANKS (4 * DTCU_SOCKET_ACC_BANKS)
 #endif
 // Kept so -DDTCU_ACC_BANKS=N still overrides both at once, as the width sweep does.
 #ifdef DTCU_ACC_BANKS
