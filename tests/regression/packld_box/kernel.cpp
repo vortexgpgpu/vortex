@@ -10,11 +10,17 @@
 // silently recreate) the upper half -- exactly the bits under test. The
 // instruction encoding is identical to vx_intrinsics.h's vx_packlb_f /
 // vx_packlh_f: custom0, funct7=4, funct3=1/2.
+
+//The inline functions are needed to prevent register spilling. 
+// Register spilling silently erases the bug by doing proper NaN-boxing. 
+// Uncomment the two lines to see all the tests pass.
 __attribute__((always_inline))
 inline uint64_t packlb_bits(const void* base, uint32_t stride) {
     uint64_t bits;
     __asm__ volatile (
         ".insn r %1, 1, 4, ft0, %2, %3\n\t"
+        //"fsw  ft0, 12(sp)\n\t" /
+        //"flw  ft0, 12(sp)\n\t"
         "fmv.x.d %0, ft0"
         : "=r"(bits) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "ft0", "memory"
     );
@@ -26,6 +32,8 @@ inline uint64_t packlh_bits(const void* base, uint32_t stride) {
     uint64_t bits;
     __asm__ volatile (
         ".insn r %1, 2, 4, ft0, %2, %3\n\t"
+        //"fsw  ft0, 12(sp)\n\t"
+        //"flw  ft0, 12(sp)\n\t"
         "fmv.x.d %0, ft0"
         : "=r"(bits) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "ft0", "memory"
     );
