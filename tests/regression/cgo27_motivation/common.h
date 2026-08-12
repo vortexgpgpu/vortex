@@ -115,8 +115,17 @@ typedef struct {
 #define MOTI_APP 1
 #endif
 
-// True when the app is a pure float->float map that fuses into the accumulator.
-#define MOTI_APP_IS_ELEMENTWISE (MOTI_APP == 2 || MOTI_APP == 3)
+// True when the app is an elementwise map -- one output element depends on one input
+// element and nothing else. The in-core modes fuse it into the accumulator; the DTCU has
+// no epilogue hardware and runs it as a second pass over D.
+//
+// Apps 4 and 5 belong here even though they read an auxiliary operand: a residual is
+// indexed per element and a scale per column, so both are still elementwise. Leaving them
+// out meant the DTCU modes never ran their epilogue at all -- D came back as bare
+// C + A*B and mode 7 reported 7,022 mismatches at 128x64x32 while mode 1, which fuses,
+// passed. A classification, not a capability, and it silently skipped work.
+#define MOTI_APP_IS_ELEMENTWISE \
+  (MOTI_APP == 2 || MOTI_APP == 3 || MOTI_APP == 4 || MOTI_APP == 5)
 // True when the app needs a row-wise reduction, which nothing can fuse: a tile holds only
 // part of a row, so the row max and row sum are not known until every tile is written.
 #define MOTI_APP_NEEDS_ROW_PASS (MOTI_APP == 6)
