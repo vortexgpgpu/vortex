@@ -681,8 +681,12 @@ uint32_t DtcuTma::buffer_fill_cycles_(uint32_t k_idx) const {
 uint32_t DtcuTma::fill_acc_cycles_(uint32_t k_idx) const {
   if (k_idx != 0)
     return 0;
+  // Same per-engine width the compute path uses -- the cluster engine's accumulator SRAM
+  // is wider because its tile is four times the area. See dtcu_params.h.
+  const uint32_t acc_banks = (dtcu_.engine() == DTCU_ENGINE_CLUSTER)
+                           ? uint32_t(DTCU_CLUSTER_ACC_BANKS) : uint32_t(DTCU_SOCKET_ACC_BANKS);
   const uint32_t acc_words = dtcu_.tile_m_ * dtcu_.tile_n_;
-  return (acc_words + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS;
+  return (acc_words + acc_banks - 1) / acc_banks;
 }
 
 // Advance the engine by one cycle. Each PHYSICAL port issues at most one request per
@@ -793,6 +797,10 @@ void DtcuTma::start_store(uint32_t accum_idx, uint32_t m_idx, uint32_t n_idx) {
   // Reading the tile out of the accumulator SRAM to feed the store: tile_m*tile_n fp32
   // words at DTCU_ACC_BANKS words/cycle. A separate resource from the L2 store port, so
   // it streams alongside the memory writes -- store completes at max(acc read, mem write).
-  tma_store_accread_left_ = (dtcu_.tile_m_ * dtcu_.tile_n_ + DTCU_ACC_BANKS - 1) / DTCU_ACC_BANKS;
+  {
+    const uint32_t acc_banks = (dtcu_.engine() == DTCU_ENGINE_CLUSTER)
+                             ? uint32_t(DTCU_CLUSTER_ACC_BANKS) : uint32_t(DTCU_SOCKET_ACC_BANKS);
+    tma_store_accread_left_ = (dtcu_.tile_m_ * dtcu_.tile_n_ + acc_banks - 1) / acc_banks;
+  }
   tma_store_active_ = true;
 }
