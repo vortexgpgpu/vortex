@@ -37,6 +37,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Must not exceed LSIZE_MAX in atomic_shared.comp, which sizes the per-lane
+ * shared array. The kernel indexes that array by local invocation id, so a
+ * larger workgroup would run off the end of it silently. */
 #define LOCAL_SIZE_MAX 64u
 #define SENTINEL       0xDEADBEEFu
 
@@ -60,6 +63,9 @@
 /* Seed for the exchange slot: distinct from every value the shader writes, so
  * it can be told apart in the multiset check. */
 #define XCHG_SEED 0xA5A5A5A5u
+
+/* Base of the per-invocation seeds; must match LANE_SEED in the kernel. */
+#define LANE_SEED 0x5A5A0000u
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -250,6 +256,12 @@ main(int argc, char **argv)
    if (local_size == 0) {
       local_size = 1;
    }
+   if (local_size > LOCAL_SIZE_MAX) {
+      fprintf(stderr,
+              "FAILED: workgroup size %u exceeds the kernel's per-lane shared "
+              "array (%u)\n", local_size, LOCAL_SIZE_MAX);
+      return 1;
+   }
    const uint32_t invocs = GROUPS * local_size;
    printf("local_size_x=%u (device max=%u), %u workgroups\n",
           local_size, dev_max_x, GROUPS);
@@ -257,7 +269,9 @@ main(int argc, char **argv)
    /* --- two storage buffers: one result row per group, one old value per
     *     invocation ------------------------------------------------------ */
    const VkDeviceSize o_bytes  = (VkDeviceSize)GROUPS * S_SLOTS * sizeof(uint32_t);
-   const VkDeviceSize xr_bytes = (VkDeviceSize)invocs * sizeof(uint32_t);
+   /* Two rows: the contended-exchange old values, then the old value each
+    * invocation got from its own shared slot. */
+   const VkDeviceSize xr_bytes = (VkDeviceSize)2u * invocs * sizeof(uint32_t);
 
    VkBuffer o_buf, xr_buf;
    VkDeviceMemory o_mem, xr_mem;
@@ -277,7 +291,7 @@ main(int argc, char **argv)
 
    uint32_t *xrp;
    CHECK(vkMapMemory(dev, xr_mem, 0, xr_bytes, 0, (void **)&xrp));
-   for (uint32_t i = 0; i < invocs; i++) {
+   for (uint32_t i = 0; i < 2u * invocs; i++) {
       xrp[i] = SENTINEL;
    }
    vkUnmapMemory(dev, xr_mem);
@@ -317,12 +331,16 @@ main(int argc, char **argv)
    VkPipelineLayout pl;
    CHECK(vkCreatePipelineLayout(dev, &plci, NULL, &pl));
 
-   VkSpecializationMapEntry sme = {
-      .constantID = 0, .offset = 0, .size = sizeof(uint32_t),
+   /* The kernel indexes its second results row at the invocation count, so
+    * that has to reach it as well as the workgroup size. */
+   const uint32_t spec_data[2] = { local_size, invocs };
+   VkSpecializationMapEntry sme[2] = {
+      { .constantID = 0, .offset = 0,                .size = sizeof(uint32_t) },
+      { .constantID = 1, .offset = sizeof(uint32_t), .size = sizeof(uint32_t) },
    };
    VkSpecializationInfo spec_info = {
-      .mapEntryCount = 1, .pMapEntries = &sme,
-      .dataSize = sizeof(uint32_t), .pData = &local_size,
+      .mapEntryCount = 2, .pMapEntries = sme,
+      .dataSize = sizeof(spec_data), .pData = spec_data,
    };
    VkComputePipelineCreateInfo cpci = {
       .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -408,7 +426,7 @@ main(int argc, char **argv)
    CHECK(vkMapMemory(dev, xr_mem, 0, xr_bytes, 0, (void **)&xrp));
 
    unsigned sentinels = 0;
-   for (uint32_t i = 0; i < invocs; i++) {
+   for (uint32_t i = 0; i < 2u * invocs; i++) {
       if (xrp[i] == SENTINEL) {
          sentinels++;
       }
@@ -418,7 +436,32 @@ main(int argc, char **argv)
               "  %u/%u result slots still hold the sentinel -- the dispatch did "
               "not write them. Under STRICT this means atomic_shared.comp bailed "
               "to llvmpipe: a shared atomic has no lowering in the translator.\n",
-              sentinels, invocs);
+              sentinels, 2u * invocs);
+      fails++;
+   }
+
+   /* Per-lane response routing. The multiset check below is satisfied by any
+    * permutation of the returned values across lanes, so it cannot show that
+    * each invocation was answered. Every invocation owns a distinct shared
+    * slot with a distinct seed, which makes the expected value per-lane.
+    *
+    * Scope: this covers routing, not per-lane hart identity -- the LMEM path
+    * can drop its per-lane tids and still pass here, because hart_id decides
+    * LR/SC reservations rather than response delivery. */
+   unsigned routing_bad = 0;
+   for (uint32_t i = 0; i < invocs; i++) {
+      if (xrp[invocs + i] != LANE_SEED + i) {
+         if (routing_bad < 4) {
+            fprintf(stderr,
+                    "  lane %u got old value 0x%08x from its own shared slot, "
+                    "want 0x%08x -- a shared AMO response reached the wrong "
+                    "lane\n", i, xrp[invocs + i], LANE_SEED + i);
+         }
+         routing_bad++;
+      }
+   }
+   if (routing_bad) {
+      fprintf(stderr, "  %u misrouted shared AMO response(s)\n", routing_bad);
       fails++;
    }
 
@@ -507,6 +550,7 @@ main(int argc, char **argv)
       return 1;
    }
    printf("PASSED (%u invocations in %u workgroups, %u unsigned + 2 signed "
-          "shared-memory atomic ops)\n", invocs, GROUPS, S_USLOTS);
+          "shared-memory atomic ops, per-lane response routing verified)\n",
+          invocs, GROUPS, S_USLOTS);
    return 0;
 }

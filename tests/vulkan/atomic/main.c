@@ -60,6 +60,11 @@
  * (1..INVOCS), so it can be told apart in the multiset check. */
 #define XCHG_SEED 0xA5A5A5A5u
 
+/* Seed for invocation i's own AMO target. Distinct per lane and disjoint from
+ * the values the shader writes (1..INVOCS), so a value landing on the wrong
+ * lane is always visible. */
+#define LANE_SEED(i) (0x5A5A0000u + (i))
+
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
    if (_r != VK_SUCCESS) {                                         \
@@ -266,7 +271,9 @@ main(int argc, char **argv)
    /* --- three storage buffers: unsigned targets, signed targets, results --- */
    const VkDeviceSize gu_bytes = (VkDeviceSize)G_SLOTS * sizeof(uint32_t);
    const VkDeviceSize gi_bytes = (VkDeviceSize)GI_SLOTS * sizeof(int32_t);
-   const uint32_t     n_res    = INVOCS;
+   /* Three rows: contended-exchange old values, per-lane AMO targets, and the
+    * old values those returned. */
+   const uint32_t     n_res    = 3u * INVOCS;
    const VkDeviceSize r_bytes  = (VkDeviceSize)n_res * sizeof(uint32_t);
 
    VkBuffer gu_buf, gi_buf, r_buf;
@@ -300,6 +307,9 @@ main(int argc, char **argv)
    CHECK(vkMapMemory(dev, r_mem, 0, r_bytes, 0, (void **)&rp));
    for (uint32_t i = 0; i < n_res; i++) {
       rp[i] = SENTINEL;
+   }
+   for (uint32_t i = 0; i < INVOCS; i++) {
+      rp[INVOCS + i] = LANE_SEED(i);
    }
    vkUnmapMemory(dev, r_mem);
 
@@ -348,12 +358,16 @@ main(int argc, char **argv)
    }
    printf("local_size_x=%u (device max=%u)\n", local_size, dev_max_x);
 
-   VkSpecializationMapEntry sme = {
-      .constantID = 0, .offset = 0, .size = sizeof(uint32_t),
+   /* The kernel indexes its own results row at INVOCS, so the invocation count
+    * has to reach it as well as the workgroup size. */
+   const uint32_t spec_data[2] = { local_size, INVOCS };
+   VkSpecializationMapEntry sme[2] = {
+      { .constantID = 0, .offset = 0,                .size = sizeof(uint32_t) },
+      { .constantID = 1, .offset = sizeof(uint32_t), .size = sizeof(uint32_t) },
    };
    VkSpecializationInfo spec_info = {
-      .mapEntryCount = 1, .pMapEntries = &sme,
-      .dataSize = sizeof(uint32_t), .pData = &local_size,
+      .mapEntryCount = 2, .pMapEntries = sme,
+      .dataSize = sizeof(spec_data), .pData = spec_data,
    };
    VkComputePipelineCreateInfo cpci = {
       .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
@@ -495,9 +509,14 @@ main(int argc, char **argv)
    vkUnmapMemory(dev, gi_mem);
 
    CHECK(vkMapMemory(dev, r_mem, 0, r_bytes, 0, (void **)&rp));
+   /* Only the two result rows are sentinel-seeded; the middle row holds the
+    * per-lane AMO targets and is checked by value below. */
    unsigned sentinels = 0;
-   for (uint32_t i = 0; i < n_res; i++) {
+   for (uint32_t i = 0; i < INVOCS; i++) {
       if (rp[i] == SENTINEL) {
+         sentinels++;
+      }
+      if (rp[2u * INVOCS + i] == SENTINEL) {
          sentinels++;
       }
    }
@@ -506,7 +525,38 @@ main(int argc, char **argv)
               "  %u/%u result slots still hold the sentinel -- the dispatch did "
               "not write them. Under STRICT this means atomic.comp bailed to "
               "llvmpipe: an atomic op has no lowering in the translator.\n",
-              sentinels, n_res);
+              sentinels, 2u * INVOCS);
+      fails++;
+   }
+
+   /* Per-lane response routing. The multiset check below proves nothing was
+    * dropped or duplicated; it is satisfied by ANY permutation of the returned
+    * values across lanes. These two checks are what pin each result to the
+    * invocation that asked for it. */
+   unsigned routing_bad = 0, target_bad = 0;
+   for (uint32_t i = 0; i < INVOCS; i++) {
+      if (rp[2u * INVOCS + i] != LANE_SEED(i)) {
+         if (routing_bad < 4) {
+            fprintf(stderr,
+                    "  lane %u got old value 0x%08x from its own target, want "
+                    "0x%08x -- an AMO response reached the wrong lane\n",
+                    i, rp[2u * INVOCS + i], LANE_SEED(i));
+         }
+         routing_bad++;
+      }
+      if (rp[INVOCS + i] != i + 1u) {
+         if (target_bad < 4) {
+            fprintf(stderr,
+                    "  lane %u's target holds 0x%08x, want 0x%08x -- an AMO was "
+                    "applied to the wrong address\n",
+                    i, rp[INVOCS + i], i + 1u);
+         }
+         target_bad++;
+      }
+   }
+   if (routing_bad || target_bad) {
+      fprintf(stderr, "  %u misrouted response(s), %u misapplied address(es)\n",
+              routing_bad, target_bad);
       fails++;
    }
 
@@ -557,7 +607,7 @@ main(int argc, char **argv)
       printf("FAILED (%u mismatches)\n", fails);
       return 1;
    }
-   printf("PASSED (%u invocations, %u unsigned + 2 signed SSBO atomic ops)\n",
-          INVOCS, G_SLOTS);
+   printf("PASSED (%u invocations, %u unsigned + 2 signed SSBO atomic ops, "
+          "per-lane response routing verified)\n", INVOCS, G_SLOTS);
    return 0;
 }

@@ -36,11 +36,24 @@ layout(local_size_x_id = 0) in;
 
 #define XCHG_SEED 0xA5A5A5A5u
 
+/* Base of the per-invocation seeds. Disjoint from the values the shader writes
+ * (1..N), so a result landing on the wrong lane is always visible. */
+#define LANE_SEED 0x5A5A0000u
+
+/* Upper bound on the workgroup size, so the per-lane shared array has a
+ * compile-time extent; spec constant 0 is already taken by local_size_x_id. */
+#define LSIZE_MAX 64u
+
+layout(constant_id = 1) const uint NVOC = 64u;
+
 layout(std430, binding = 0) buffer Out { uint o[]; };   /* S_SLOTS per workgroup */
-layout(std430, binding = 1) buffer Xr  { uint xr[]; };  /* one per invocation */
+/* xr[0 .. N-1] : old value from the contended exchange
+ * xr[N .. 2N-1]: old value from each invocation's own shared slot */
+layout(std430, binding = 1) buffer Xr  { uint xr[]; };
 
 shared uint su[S_USLOTS];
 shared int  si[2];
+shared uint sown[LSIZE_MAX];
 
 void main()
 {
@@ -91,6 +104,22 @@ void main()
 
    /* --- exchange: report the old value for the host's multiset check ---- */
    xr[gid] = atomicExchange(su[S_XCHG], v);
+
+   /* --- per-lane response routing --------------------------------------
+    * The multiset check is satisfied by any permutation of the returned values
+    * across lanes, so it cannot tell whether each invocation received its own.
+    * Here every invocation owns a distinct shared slot holding a distinct
+    * seed, which makes the expected result per-lane and a permutation visible.
+    *
+    * This covers response routing only, not per-lane hart identity: the LMEM
+    * path can drop its per-lane tids and still pass here, because hart_id
+    * decides LR/SC reservations rather than which lane an AMO response
+    * reaches. Covering hart identity needs compare-and-swap.
+    *
+    * No barrier is needed around the seeding: an invocation only ever touches
+    * its own slot, so program order is enough. */
+   sown[lid] = LANE_SEED + gid;
+   xr[NVOC + gid] = atomicExchange(sown[lid], v);
 
    barrier();
 

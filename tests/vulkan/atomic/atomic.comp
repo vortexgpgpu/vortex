@@ -34,7 +34,12 @@ layout(local_size_x_id = 0) in;
 
 layout(std430, binding = 0) buffer Gu  { uint g[]; };
 layout(std430, binding = 1) buffer Gi  { int  gi[]; };
+/* r[0 .. N-1]  : old value each invocation got from the contended exchange
+ * r[N .. 2N-1] : one uncontended AMO target per invocation, host-seeded
+ * r[2N .. 3N-1]: old value each invocation got from its own target */
 layout(std430, binding = 2) buffer Res { uint r[]; };
+
+layout(constant_id = 1) const uint INVOCS = 64u;
 
 void main()
 {
@@ -64,4 +69,12 @@ void main()
 
    /* --- exchange: report the old value for the host's multiset check ---- */
    r[gid] = atomicExchange(g[G_XCHG], v);
+
+   /* --- per-lane response routing --------------------------------------
+    * The multiset check above proves no exchange was dropped or duplicated,
+    * but it cannot tell whether each invocation received ITS OWN result: any
+    * permutation of the returned values across lanes satisfies it. Here every
+    * invocation owns a distinct address holding a distinct seed, so the value
+    * it gets back is predictable per lane and a permutation cannot pass. */
+   r[2u * INVOCS + gid] = atomicExchange(r[INVOCS + gid], v);
 }
