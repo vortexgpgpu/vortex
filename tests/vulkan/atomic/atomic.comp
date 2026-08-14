@@ -20,7 +20,14 @@
  * kernel reproduces that directly.
  *
  * tests/vulkan/ssbo already covers the single atomicAdd-on-SSBO case as a
- * side-check of its store lowering; this kernel is what covers the op set. */
+ * side-check of its store lowering; this kernel is what covers the op set.
+ *
+ * Binding 3 is a storage image whose ONLY access is an atomic. That is its own
+ * case in the driver: descriptors are discovered by scanning the shader's
+ * accesses, and an image reached solely through imageAtomic* has to be found by
+ * that scan or its descriptor is never relocated and the atomic lands on a host
+ * address. Every invocation targets the same texel, so the result is the
+ * invocation count regardless of scheduling order. */
 
 layout(local_size_x_id = 0) in;
 
@@ -41,10 +48,15 @@ layout(std430, binding = 2) buffer Res { uint r[]; };
 
 layout(constant_id = 1) const uint INVOCS = 64u;
 
+layout(binding = 3, r32ui) uniform uimage2D img;
+
 void main()
 {
    uint gid = gl_GlobalInvocationID.x;
    uint v   = gid + 1u;                 /* 1..N, never 0 */
+   /* The image's only access in this kernel. All invocations hit texel (0,0),
+    * so the final value is the invocation count. */
+   imageAtomicAdd(img, ivec2(0, 0), 1u);
    int  sv  = int(gid) - 32;            /* spans negative, so imin/imax differ
                                          * from umin/umax on the same data */
    /* Half the invocations contend the unsigned min/max slots with a value above

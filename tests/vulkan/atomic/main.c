@@ -38,6 +38,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define IMG_DIM   4u
+#define IMG_SEED  0xA5A5A5A5u
 #define INVOCS         64u
 #define LOCAL_SIZE_MAX 64u
 #define SENTINEL       0xDEADBEEFu
@@ -284,6 +286,66 @@ main(int argc, char **argv)
       return 1;
    }
 
+   /* --- storage image, the kernel's atomic-only descriptor ------------ */
+   /* Linear tiling on host-visible memory so the result can be read by mapping
+    * it, with no staging copy to get wrong. IMG_DIM > 1 keeps the row stride
+    * off the degenerate single-texel case even though only (0,0) is written. */
+   VkImageCreateInfo img_ci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D, .format = VK_FORMAT_R32_UINT,
+      .extent = { IMG_DIM, IMG_DIM, 1 }, .mipLevels = 1, .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_LINEAR,
+      .usage = VK_IMAGE_USAGE_STORAGE_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+   };
+   VkImage img;
+   CHECK(vkCreateImage(dev, &img_ci, NULL, &img));
+   VkMemoryRequirements imr;
+   vkGetImageMemoryRequirements(dev, img, &imr);
+   VkPhysicalDeviceMemoryProperties imp;
+   vkGetPhysicalDeviceMemoryProperties(pd, &imp);
+   uint32_t imt = UINT32_MAX;
+   const VkMemoryPropertyFlags iwant =
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+   for (uint32_t i = 0; i < imp.memoryTypeCount; i++)
+      if ((imr.memoryTypeBits & (1u << i)) &&
+          (imp.memoryTypes[i].propertyFlags & iwant) == iwant) { imt = i; break; }
+   if (imt == UINT32_MAX) {
+      fprintf(stderr, "no host-visible memory type for the storage image\n");
+      return 1;
+   }
+   VkMemoryAllocateInfo imai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = imr.size, .memoryTypeIndex = imt,
+   };
+   VkDeviceMemory img_mem;
+   CHECK(vkAllocateMemory(dev, &imai, NULL, &img_mem));
+   CHECK(vkBindImageMemory(dev, img, img_mem, 0));
+
+   /* Seed every texel non-zero: an unexecuted dispatch must not look like a
+    * pass, and (0,0) must end at exactly the invocation count, not seed+count. */
+   VkImageSubresource isr = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT };
+   VkSubresourceLayout ilay;
+   vkGetImageSubresourceLayout(dev, img, &isr, &ilay);
+   uint8_t *ibase;
+   CHECK(vkMapMemory(dev, img_mem, 0, VK_WHOLE_SIZE, 0, (void **)&ibase));
+   for (uint32_t y = 0; y < IMG_DIM; y++)
+      for (uint32_t x = 0; x < IMG_DIM; x++)
+         *(uint32_t *)(ibase + ilay.offset + y * ilay.rowPitch
+                       + x * sizeof(uint32_t)) = IMG_SEED;
+   *(uint32_t *)(ibase + ilay.offset) = 0u;   /* (0,0) accumulates from zero */
+   vkUnmapMemory(dev, img_mem);
+
+   VkImageViewCreateInfo ivci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = img, .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = VK_FORMAT_R32_UINT,
+      .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
+   };
+   VkImageView img_view;
+   CHECK(vkCreateImageView(dev, &ivci, NULL, &img_view));
+
    /* Seeds: each is the identity for its op, and none equals its expected
     * result, so an unexecuted dispatch cannot look like a pass. */
    uint32_t *gu;
@@ -327,16 +389,20 @@ main(int argc, char **argv)
    CHECK(vkCreateShaderModule(dev, &smci, NULL, &sm));
    free(spv);
 
-   VkDescriptorSetLayoutBinding dslb[3];
+   VkDescriptorSetLayoutBinding dslb[4];
    for (uint32_t i = 0; i < 3; i++) {
       dslb[i] = (VkDescriptorSetLayoutBinding){
          .binding = i, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
          .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
       };
    }
+   dslb[3] = (VkDescriptorSetLayoutBinding){
+      .binding = 3, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+      .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+   };
    VkDescriptorSetLayoutCreateInfo dslci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 3, .pBindings = dslb,
+      .bindingCount = 4, .pBindings = dslb,
    };
    VkDescriptorSetLayout dsl;
    CHECK(vkCreateDescriptorSetLayout(dev, &dslci, NULL, &dsl));
@@ -381,12 +447,13 @@ main(int argc, char **argv)
    VkPipeline pipe;
    CHECK(vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &cpci, NULL, &pipe));
 
-   VkDescriptorPoolSize dps = {
-      .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 3,
+   VkDescriptorPoolSize dps[2] = {
+      { .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 3 },
+      { .type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,  .descriptorCount = 1 },
    };
    VkDescriptorPoolCreateInfo dpci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &dps,
+      .maxSets = 1, .poolSizeCount = 2, .pPoolSizes = dps,
    };
    VkDescriptorPool dp;
    CHECK(vkCreateDescriptorPool(dev, &dpci, NULL, &dp));
@@ -403,7 +470,7 @@ main(int argc, char **argv)
       { .buffer = gi_buf, .offset = 0, .range = gi_bytes },
       { .buffer = r_buf,  .offset = 0, .range = r_bytes  },
    };
-   VkWriteDescriptorSet wds[3];
+   VkWriteDescriptorSet wds[4];
    for (uint32_t i = 0; i < 3; i++) {
       wds[i] = (VkWriteDescriptorSet){
          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -412,7 +479,16 @@ main(int argc, char **argv)
          .pBufferInfo = &dbi[i],
       };
    }
-   vkUpdateDescriptorSets(dev, 3, wds, 0, NULL);
+   VkDescriptorImageInfo dii = {
+      .imageView = img_view, .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+   };
+   wds[3] = (VkWriteDescriptorSet){
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = ds, .dstBinding = 3, .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+      .pImageInfo = &dii,
+   };
+   vkUpdateDescriptorSets(dev, 4, wds, 0, NULL);
 
    VkCommandPoolCreateInfo cmpci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -434,6 +510,19 @@ main(int argc, char **argv)
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
    };
    CHECK(vkBeginCommandBuffer(cb, &cbbi));
+   /* A storage image must be in GENERAL to be written by a shader. */
+   VkImageMemoryBarrier ibar = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_GENERAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = img, .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+      .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
+   };
+   vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                        0, NULL, 0, NULL, 1, &ibar);
    vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pipe);
    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl,
                            0, 1, &ds, 0, NULL);
@@ -449,6 +538,32 @@ main(int argc, char **argv)
 
    /* --- verify ------------------------------------------------------- */
    unsigned fails = 0;
+
+   /* The storage image: (0,0) took one atomic add per invocation, and no other
+    * texel was touched. A descriptor the scan failed to find would leave the
+    * device writing a host address, and (0,0) would still read 0. */
+   uint8_t *ires;
+   CHECK(vkMapMemory(dev, img_mem, 0, VK_WHOLE_SIZE, 0, (void **)&ires));
+   uint32_t img_got = *(uint32_t *)(ires + ilay.offset);
+   unsigned img_spill = 0;
+   for (uint32_t y = 0; y < IMG_DIM; y++)
+      for (uint32_t x = 0; x < IMG_DIM; x++) {
+         if (x == 0 && y == 0)
+            continue;
+         if (*(uint32_t *)(ires + ilay.offset + y * ilay.rowPitch
+                           + x * sizeof(uint32_t)) != IMG_SEED)
+            img_spill++;
+      }
+   vkUnmapMemory(dev, img_mem);
+   if (img_got != INVOCS) {
+      fprintf(stderr, "  image atomic: (0,0) = %u, want %u\n", img_got, INVOCS);
+      fails++;
+   }
+   if (img_spill) {
+      fprintf(stderr, "  image atomic: %u texels outside (0,0) modified\n",
+              img_spill);
+      fails++;
+   }
 
    uint32_t want_u[G_SLOTS];
    want_u[G_ADD]  = 0u;
@@ -608,6 +723,7 @@ main(int argc, char **argv)
       return 1;
    }
    printf("PASSED (%u invocations, %u unsigned + 2 signed SSBO atomic ops, "
-          "per-lane response routing verified)\n", INVOCS, G_SLOTS);
+          "per-lane response routing verified, image atomic = %u)\n",
+          INVOCS, G_SLOTS, img_got);
    return 0;
 }
