@@ -1198,7 +1198,15 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] misses;
     } coalescer_perf_t;
 
-`ifdef VX_CFG_VM_ENABLE
+// Declared unconditionally, because its references do not agree on a guard:
+// the ports of VX_mmu and VX_tlb_l1 and the signals in VX_socket are gated on
+// PERF_ENABLE, while the field in pipeline_perf_t is gated on VM. Gating the
+// declaration on either one alone breaks the other combination -- VM without
+// PERF, or PERF without VM. The latter is what failed here: Vivado elaborates
+// every file in the source list whether or not the module is ever instantiated,
+// so VX_mmu.sv was compiled in a VM-disabled build and found no such type.
+// The Verilator flow hides the mismatch, because its library search compiles
+// only what is reachable. A typedef with no instances costs no hardware.
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] tlb_reads;
         logic [PERF_CTR_BITS-1:0] tlb_hits;
@@ -1207,7 +1215,6 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] ptw_walks;
         logic [PERF_CTR_BITS-1:0] ptw_latency;
     } mmu_perf_t;
-`endif
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
     typedef struct packed {
