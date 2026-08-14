@@ -8,7 +8,9 @@
  * add1 compute kernel (data[i] += 1.0), and checks the result.
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe — it
  * exercises vkCreateComputePipelines (→ vortexpipe
- * create_compute_state → vp_nir_to_llvm) and vkCmdDispatch
+ * create_compute_state → vp_nir_to_llvm) and vkCmdDispatch. Dispatched twice
+ * so the second run reuses the device-resident kernel and consumes the first
+ * run's output.
  * (→ vortexpipe launch_grid).
  */
 
@@ -258,6 +260,19 @@ main(int argc, char **argv)
    vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, pl,
                            0, 1, &ds, 0, NULL);
    vkCmdDispatch(cb, N / local_size, 1, 1);
+   /* Dispatch the same pipeline a second time. The kernel is a read-modify-
+    * write, so two dispatches must leave i+2 -- a second run that reuses the
+    * kernel already resident on the device, and that must see the first run's
+    * output as its input. One dispatch cannot distinguish either. */
+   VkMemoryBarrier mb = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+   };
+   vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
+                        1, &mb, 0, NULL, 0, NULL);
+   vkCmdDispatch(cb, N / local_size, 1, 1);
    CHECK(vkEndCommandBuffer(cb));
 
    VkSubmitInfo si = {
@@ -271,7 +286,7 @@ main(int argc, char **argv)
    CHECK(vkMapMemory(dev, mem, 0, bytes, 0, (void **)&p));
    unsigned fails = 0;
    for (uint32_t i = 0; i < N; i++) {
-      float want = (float)i + 1.0f;
+      float want = (float)i + 2.0f;   /* two dispatches of data[i] += 1 */
       if (p[i] != want) {
          if (fails < 5)
             fprintf(stderr, "  data[%u] = %f, want %f\n", i, p[i], want);
@@ -296,6 +311,6 @@ main(int argc, char **argv)
       printf("FAILED (%u/%u mismatches)\n", fails, N);
       return 1;
    }
-   printf("PASSED (%u elements, data[i] = i + 1)\n", N);
+   printf("PASSED (%u elements, two dispatches: data[i] = i + 2)\n", N);
    return 0;
 }
