@@ -9,6 +9,13 @@
  *                         overwrites each with i*3+1  (store_ssbo).
  *   binding 1 "counter" — one uint, seeded 0; every invocation does
  *                         atomicAdd(counter, i)       (ssbo_atomic iadd).
+ *   binding 2 "src"     — N uints, seeded src[i] = i; the shader only reads
+ *                         it                          (load_ssbo).
+ *
+ * src makes the dispatch bind a descriptor that is never written. Those are
+ * uploaded and relocated like any other but need no copy back, so this also
+ * covers the read-only descriptor path. Its seed is chosen so the expected
+ * results below are unchanged.
  *
  * After the dispatch the host verifies BOTH:
  *   data[i]  == i*3 + 1        (a broken store_ssbo fails this)
@@ -138,13 +145,14 @@ main(int argc, char **argv)
    VkQueue queue;
    vkGetDeviceQueue(dev, qf, 0, &queue);
 
-   /* --- buffers: data[N] + counter[1] ----------------------------- */
+   /* --- buffers: data[N] + counter[1] + src[N] --------------------- */
    const VkDeviceSize data_bytes = (VkDeviceSize)N * sizeof(uint32_t);
    const VkDeviceSize ctr_bytes  = sizeof(uint32_t);
-   VkBuffer data_buf, ctr_buf;
-   VkDeviceMemory data_mem, ctr_mem;
+   VkBuffer data_buf, ctr_buf, src_buf;
+   VkDeviceMemory data_mem, ctr_mem, src_mem;
    if (make_buffer(dev, pd, data_bytes, &data_buf, &data_mem)) return 1;
    if (make_buffer(dev, pd, ctr_bytes,  &ctr_buf,  &ctr_mem))  return 1;
+   if (make_buffer(dev, pd, data_bytes, &src_buf,  &src_mem))  return 1;
 
    /* seed: data[i] = POISON (so a correct run must overwrite it), counter = 0 */
    uint32_t *p;
@@ -155,6 +163,11 @@ main(int argc, char **argv)
    CHECK(vkMapMemory(dev, ctr_mem, 0, ctr_bytes, 0, (void **)&c));
    *c = 0u;
    vkUnmapMemory(dev, ctr_mem);
+   /* src[i] = i, so data[i] still works out to i*3+1 */
+   uint32_t *sp;
+   CHECK(vkMapMemory(dev, src_mem, 0, data_bytes, 0, (void **)&sp));
+   for (uint32_t i = 0; i < N; i++) sp[i] = i;
+   vkUnmapMemory(dev, src_mem);
 
    /* --- shader module --------------------------------------------- */
    size_t spv_size = 0;
@@ -168,16 +181,18 @@ main(int argc, char **argv)
    CHECK(vkCreateShaderModule(dev, &smci, NULL, &sm));
    free(spv);
 
-   /* --- descriptor + pipeline layout: two storage-buffer bindings -- */
-   VkDescriptorSetLayoutBinding dslb[2] = {
+   /* --- descriptor + pipeline layout: three storage-buffer bindings - */
+   VkDescriptorSetLayoutBinding dslb[3] = {
       { .binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
         .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT },
       { .binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
         .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT },
+      { .binding = 2, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT },
    };
    VkDescriptorSetLayoutCreateInfo dslci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = 2, .pBindings = dslb,
+      .bindingCount = 3, .pBindings = dslb,
    };
    VkDescriptorSetLayout dsl;
    CHECK(vkCreateDescriptorSetLayout(dev, &dslci, NULL, &dsl));
@@ -218,9 +233,9 @@ main(int argc, char **argv)
    VkPipeline pipe;
    CHECK(vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &cpci, NULL, &pipe));
 
-   /* --- descriptor set (2 buffers) -------------------------------- */
+   /* --- descriptor set (3 buffers) -------------------------------- */
    VkDescriptorPoolSize dps = {
-      .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 2,
+      .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 3,
    };
    VkDescriptorPoolCreateInfo dpci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -236,11 +251,12 @@ main(int argc, char **argv)
    VkDescriptorSet ds;
    CHECK(vkAllocateDescriptorSets(dev, &dsai, &ds));
 
-   VkDescriptorBufferInfo dbi[2] = {
+   VkDescriptorBufferInfo dbi[3] = {
       { .buffer = data_buf, .offset = 0, .range = data_bytes },
       { .buffer = ctr_buf,  .offset = 0, .range = ctr_bytes  },
+      { .buffer = src_buf,  .offset = 0, .range = data_bytes },
    };
-   VkWriteDescriptorSet wds[2] = {
+   VkWriteDescriptorSet wds[3] = {
       { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
         .dstSet = ds, .dstBinding = 0, .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -249,8 +265,12 @@ main(int argc, char **argv)
         .dstSet = ds, .dstBinding = 1, .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
         .pBufferInfo = &dbi[1] },
+      { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = ds, .dstBinding = 2, .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+        .pBufferInfo = &dbi[2] },
    };
-   vkUpdateDescriptorSets(dev, 2, wds, 0, NULL);
+   vkUpdateDescriptorSets(dev, 3, wds, 0, NULL);
 
    /* --- command buffer: bind + dispatch --------------------------- */
    VkCommandPoolCreateInfo cmpci = {
@@ -309,6 +329,21 @@ main(int argc, char **argv)
    if (!ctr_ok)
       fprintf(stderr, "  atomic counter = %u, want %u\n", got_ctr, want_ctr);
 
+   /* src is read-only to the shader, so it must come back bit-identical. The
+    * driver skips copying it back at all; this catches a skip that got the
+    * bookkeeping wrong and wrote somewhere it should not have. */
+   unsigned src_fails = 0;
+   CHECK(vkMapMemory(dev, src_mem, 0, data_bytes, 0, (void **)&sp));
+   for (uint32_t i = 0; i < N; i++) {
+      if (sp[i] != i) {
+         if (src_fails < 5)
+            fprintf(stderr, "  src[%u] = %u (0x%x), want %u\n",
+                    i, sp[i], sp[i], i);
+         src_fails++;
+      }
+   }
+   vkUnmapMemory(dev, src_mem);
+
    /* cleanup (best-effort) */
    vkDestroyCommandPool(dev, cp, NULL);
    vkDestroyDescriptorPool(dev, dp, NULL);
@@ -318,17 +353,20 @@ main(int argc, char **argv)
    vkDestroyShaderModule(dev, sm, NULL);
    vkFreeMemory(dev, data_mem, NULL);
    vkFreeMemory(dev, ctr_mem, NULL);
+   vkFreeMemory(dev, src_mem, NULL);
    vkDestroyBuffer(dev, data_buf, NULL);
    vkDestroyBuffer(dev, ctr_buf, NULL);
+   vkDestroyBuffer(dev, src_buf, NULL);
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 
-   if (fails || !ctr_ok) {
-      printf("FAILED (array %u/%u mismatches, counter %s)\n",
-             fails, N, ctr_ok ? "ok" : "WRONG");
+   if (fails || !ctr_ok || src_fails) {
+      printf("FAILED (array %u/%u mismatches, counter %s, read-only src %u/%u"
+             " mismatches)\n",
+             fails, N, ctr_ok ? "ok" : "WRONG", src_fails, N);
       return 1;
    }
-   printf("PASSED (%u elements data[i]=i*3+1, atomic counter=%u)\n",
-          N, got_ctr);
+   printf("PASSED (%u elements data[i]=src[i]*3+1, atomic counter=%u,"
+          " read-only src intact)\n", N, got_ctr);
    return 0;
 }
