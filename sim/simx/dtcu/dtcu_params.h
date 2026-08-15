@@ -100,15 +100,17 @@
 #ifndef DTCU_SOCKET_ACC_BANKS
 #define DTCU_SOCKET_ACC_BANKS 2
 #endif
-// 2x the socket engine's, not 4x. The requirement is only that the accumulator stop
-// binding: at the cluster's PE count the MAC term is 1,024 cycles, so 4 banks put accum at
-// 1,025 and it stops being the max. Going to 8 buys 0.1 % more (1.99x -> 2.00x) and would
-// be sizing the SRAM for a wider array than this engine has -- a different decision from
-// removing a bottleneck, and not one to smuggle in with a fix.
+// 4x the socket engine's, matching DTCU_CLUSTER_NUM_PE, so the cluster engine carries the
+// array of the four socket engines it stands in for and the pair isolates PLACEMENT rather
+// than silicon. Per unit of tile that is parity, not generosity: the socket engine holds
+// 512 output elements across 2 banks, 256 per bank; the cluster holds 2,048 across 8, also
+// 256 per bank. Both then sustain 63.26 MAC/cyc.
 //
-// Note this is still the LESS generous side of the comparison per unit of tile: the socket
-// engine holds 512 output elements across 2 banks, 256 per bank; the cluster holds 2,048
-// across 4, or 512 per bank. Parity would be 8.
+// This was 4 for a while, on the argument that the accumulator only has to stop binding
+// (at 4 banks accum is 1,025 against a 1,024-cycle MAC term, so it is no longer the max).
+// That argument is right about the bottleneck and wrong about the experiment: it left the
+// cluster's MAC array at half, and the measured 8-vs-7 ratio came out 1.99-2.05x across
+// five shapes -- the array ratio to three digits, with no placement signal in it at all.
 #ifndef DTCU_CLUSTER_ACC_BANKS
 #define DTCU_CLUSTER_ACC_BANKS (4 * DTCU_SOCKET_ACC_BANKS)
 #endif
