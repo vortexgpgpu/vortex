@@ -2,6 +2,11 @@
 #include <vx_intrinsics.h>
 #include "common.h"
 
+// Retry bound for the local-memory LR/SC loop. High enough that genuine
+// contention between the harts of a group always resolves, low enough that a
+// store-conditional which never succeeds fails the case instead of hanging it.
+static const uint32_t LRSC_MAX_RETRIES = 4096;
+
 // All harts contend on a single shared word. Each test exercises a
 // different RVA primitive; the host validates the closed-form expected
 // final value against the post-run shared word, plus per-hart "observed
@@ -285,6 +290,48 @@ void kernel_amoadd_lmem(kernel_arg_t* __UNIFORM__ arg) {
   }
 }
 
+// 14) LMEM LR/SC counter.
+//   The lock-free retry of test 7, moved onto local memory so the reservation
+//   is resolved by the LMEM banks. Each group's leader publishes its group's
+//   final count, so the published values sum to num_harts * iters whatever the
+//   launch geometry -- the same closed form test 13 uses.
+//
+//   The retry is bounded. A store-conditional that never reports success would
+//   otherwise spin forever, and a test that hangs reports nothing; with the
+//   bound, the published total comes up short and the case fails.
+void kernel_lrsc_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto lmem     = (int32_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+
+  if (threadIdx.x == 0) {
+    *lmem = 0;
+  }
+  __syncthreads();
+
+  for (uint32_t i = 0; i < arg->iters; ++i) {
+    int32_t old, sc_fail;
+    uint32_t guard = 0;
+    do {
+      asm volatile ("lr.w %0, (%1)"
+                    : "=r"(old)
+                    : "r"(lmem)
+                    : "memory");
+      int32_t newv = old + 1;
+      asm volatile ("sc.w %0, %2, (%1)"
+                    : "=r"(sc_fail)
+                    : "r"(lmem), "r"(newv)
+                    : "memory");
+      ++guard;
+    } while (sc_fail && guard < LRSC_MAX_RETRIES);
+  }
+  __syncthreads();
+
+  if (threadIdx.x == 0) {
+    per_hart[hid] = (uint32_t)*lmem;
+  }
+}
+
 static const PFN_Kernel sc_tests[] = {
   kernel_amoadd,             // 0
   kernel_amoor,              // 1
@@ -300,6 +347,7 @@ static const PFN_Kernel sc_tests[] = {
   kernel_atomic_critical,    // 11  CUDA-style critical section
   kernel_self_consistency,   // 12  issuer self-consistency (load->AMO->load)
   kernel_amoadd_lmem,        // 13  AMOADD on local memory (LMEM banks)
+  kernel_lrsc_lmem,          // 14  LR/SC on local memory (LMEM banks)
 };
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {

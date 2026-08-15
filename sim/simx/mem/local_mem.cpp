@@ -47,6 +47,10 @@ protected:
 	// back-to-back atomics on one word cost four cycles and not three.
 	std::vector<uint64_t> amo_rdw_addr_;
 	std::vector<bool>     amo_rdw_valid_;
+	// Whether the atomic now occupying the bank ends in a write at all. A
+	// load-reserved never writes and a failed store-conditional must not, so
+	// neither leaves a shadow behind.
+	std::vector<bool>     amo_rdw_pending_;
 #endif
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
@@ -74,6 +78,7 @@ public:
 		, amo_busy_(1 << config.B, 0)
 		, amo_rdw_addr_(1 << config.B, 0)
 		, amo_rdw_valid_(1 << config.B, false)
+		, amo_rdw_pending_(1 << config.B, false)
 #endif
 	{
 		char sname[100];
@@ -99,6 +104,7 @@ public:
 		amo_unit_.reset();
 		std::fill(amo_busy_.begin(), amo_busy_.end(), 0);
 		std::fill(amo_rdw_valid_.begin(), amo_rdw_valid_.end(), false);
+		std::fill(amo_rdw_pending_.begin(), amo_rdw_pending_.end(), false);
 #endif
 	}
 
@@ -110,7 +116,7 @@ public:
 			// Cycles an in-flight atomic owns; the bank serves nothing else.
 			if (amo_busy_[i] != 0) {
 				if (0 == --amo_busy_[i]) {
-					amo_rdw_valid_[i] = true; // write-back just issued
+					amo_rdw_valid_[i] = amo_rdw_pending_[i]; // write-back just issued
 				}
 				continue;
 			}
@@ -176,18 +182,26 @@ public:
 				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))
 					continue; // stall; no state mutated yet
 
+				// An SC gives up its own reservation whether it succeeds or
+				// fails; an LR claims one. Everything else is a plain RMW,
+				// whose commit breaks the other harts' reservations below.
 				if (is_lr)      amo_unit_.reserve(bank_req.hart_id, la);
 				else if (is_sc) amo_unit_.clear(bank_req.hart_id, la);
-				else            amo_unit_.invalidate(la, bank_req.hart_id);
 				if (do_store) {
 					uint8_t sbuf[8];
 					amo_store_word(sbuf, 0, width, rmw.new_word);
 					ram_.write(sbuf, la, wbytes);
+					// Any committed store breaks every other hart's reservation
+					// on the word. Without this a second hart's stale
+					// reservation survives the first hart's successful SC, so
+					// both report success and one update is lost.
+					amo_unit_.invalidate(la, bank_req.hart_id);
 				}
 				perf_stats_.reads  += !do_store;
 				perf_stats_.writes += do_store;
 				DT(4, simobject_->name() << "-bank" << i << " amo : " << bank_req);
-				amo_rdw_addr_[i] = this->bank_word(bank_req.addr);
+				amo_rdw_addr_[i]    = this->bank_word(bank_req.addr);
+				amo_rdw_pending_[i] = do_store;
 				xbar_req_out.pop();
 				amo_busy_[i] = AMO_BANK_STALL_CYCLES;   // capture, then write back
 				continue;
@@ -203,6 +217,13 @@ public:
 						ram_.write(&value, line_addr + b, 1);
 					}
 				}
+#if VX_CFG_EXT_A_ENABLED
+				// A plain store breaks a reservation on the word it writes, the
+				// same as an atomic's commit does; otherwise a store between a
+				// hart's load-reserved and its store-conditional would go
+				// unnoticed and the conditional would wrongly succeed.
+				amo_unit_.invalidate(to_local_addr(bank_req.addr), bank_req.hart_id);
+#endif
 			}
 
 			// Loads always respond. Stores respond when configured globally OR

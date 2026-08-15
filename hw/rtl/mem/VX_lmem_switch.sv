@@ -18,11 +18,8 @@
 // independently with masked-out lanes; lsu_in_if.req_ready waits for
 // whichever subset(s) are non-empty.
 //
-// The local path carries the read-modify-write AMOs through to the LMEM
-// banks, which perform them in place. LR/SC are stripped instead: they need a
-// reservation table the banks do not have, and passing them through would make
-// every store-conditional succeed unconditionally. Stripping leaves them
-// behaving exactly as they did before the banks gained an AMO path.
+// The local path carries the AMOs through to the LMEM banks, which perform the
+// read-modify-write in place and hold the LR/SC reservations.
 
 module VX_lmem_switch import VX_gpu_pkg::*; #(
     parameter GLOBAL_OUT_BUF = 0,
@@ -83,15 +80,7 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
 
     wire [`VX_CFG_NUM_LSU_LANES-1:0][MEM_ATTR_WIDTH-1:0] local_user;
     for (genvar i = 0; i < `VX_CFG_NUM_LSU_LANES; ++i) begin : g_local_user
-        mem_bus_attr_t lane_attr;
-        always_comb begin
-            lane_attr = mem_bus_attr_t'(lsu_in_if.req_data.user[i]);
-            if (lane_attr.amo.amo_valid
-             && lane_attr.amo.amo_op inside {AMO_OP_LR, AMO_OP_SC}) begin
-                lane_attr.amo = '0;
-            end
-        end
-        assign local_user[i] = MEM_ATTR_WIDTH'(lane_attr);
+        assign local_user[i] = lsu_in_if.req_data.user[i];
     end
 
     VX_elastic_buffer #(

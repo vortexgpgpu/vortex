@@ -372,6 +372,37 @@ public:
   }
 };
 
+// 14) LMEM LR/SC counter: the lock-free retry of test 7 on local memory, so
+//     the LMEM banks resolve the reservation. Published per-group counts sum
+//     to n * iters, independent of how the launch was shaped into groups.
+class Test_LRSC_LMEM : public ITestCase {
+public:
+  Test_LRSC_LMEM(TestSuite* s) : ITestCase(s, "lrsc_lmem") {}
+  void setup(uint32_t n, uint32_t* /*shared*/, uint32_t* per_hart) override {
+    for (uint32_t h = 0; h < n; ++h) per_hart[h] = 0;
+  }
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* /*shared*/, const uint32_t* per_hart) override {
+    uint64_t total = 0;
+    uint32_t groups = 0;
+    for (uint32_t h = 0; h < n; ++h) {
+      if (per_hart[h] != 0) { total += per_hart[h]; ++groups; }
+    }
+    uint64_t expected = (uint64_t)n * iters;
+    if (groups == 0) {
+      std::cout << "  no group published a count -- no store-conditional succeeded"
+                << std::endl;
+      return 1;
+    }
+    if (total != expected) {
+      std::cout << "  published total=" << total << " expected=" << expected
+                << " across " << groups << " group(s)" << std::endl;
+      return 1;
+    }
+    return 0;
+  }
+};
+
 inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   // Test_ATOMIC_CRITICAL needs to know VX_CFG_NUM_THREADS to compute the
   // expected count; query it from the device caps.
@@ -392,6 +423,7 @@ inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   add_test(new Test_ATOMIC_CRITICAL(this, (uint32_t)num_threads));
   add_test(new Test_SELF_CONSISTENCY(this));
   add_test(new Test_AMOADD_LMEM(this));
+  add_test(new Test_LRSC_LMEM(this));
 }
 
 inline TestSuite::~TestSuite() {
