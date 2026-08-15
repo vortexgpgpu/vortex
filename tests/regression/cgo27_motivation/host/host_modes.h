@@ -52,8 +52,12 @@ enum : uint32_t {
   MODE_HET_TCU_DSOCK  = 9,  // hetero: in-core TCU + DTCU_socket
   MODE_HET_TCU_DCLUS  = 10, // hetero: in-core TCU + DTCU_cluster
   MODE_HET_ALL        = 11, // hetero: in-core TCU + both engines
+  // 12, 13: reserved holes. They were the workgroup pair before it moved to 3/4, and a
+  // number that has already meant two things must not be given a third.
+  MODE_DTCU_SOCKET_PIPE  = 14, // pipelined: MOTI_PIPE_TILES slices, epilogue overlaps GEMM
+  MODE_DTCU_CLUSTER_PIPE = 15, // as above, core 0 the sole producer and the rest consumers
 };
-static const uint32_t NUM_MODES = 12;
+static const uint32_t NUM_MODES = 16;
 static const uint32_t MODE_ALL  = 0xFFFFFFFFu;
 static uint32_t g_mode = MODE_ALL;
 // Warps per CTA for the workgroup modes (3/4); 0 = use every warp slot the device has.
@@ -73,6 +77,7 @@ static ModeState mode_state(uint32_t m) {
   case MODE_SIMT: case MODE_TCU: case MODE_TCU_DXA:
   case MODE_TCU_WG_DXA: case MODE_TCU_WG: case MODE_TCU_WG_ACOL:
   case MODE_DTCU_SOCKET: case MODE_DTCU_CLUSTER:
+  case MODE_DTCU_SOCKET_PIPE: case MODE_DTCU_CLUSTER_PIPE:
     return ModeState::Implemented;
   // Numbered but NOT built. A first attempt was backed out: the claim and the start
   // instruction both executed -- a readback showed claimed[]=1 and the descriptor
@@ -87,18 +92,28 @@ static ModeState mode_state(uint32_t m) {
   }
 }
 
+// The PIPELINED engine modes. Still engine-only for the GEMM, but the cores are no longer
+// idle while it runs: the row range is cut into MOTI_PIPE_TILES descriptors and the
+// epilogue for a finished slice overlaps the engine's work on the next one. That is the
+// only concurrency this runtime offers -- cp_submit_launch() polls a launch to retirement,
+// so two LAUNCHES can never overlap, only work inside one.
+static inline bool is_pipe_mode(uint32_t m) {
+  return m == MODE_DTCU_SOCKET_PIPE || m == MODE_DTCU_CLUSTER_PIPE;
+}
 // Engine-only modes: the whole GEMM goes to the descriptor engine and no core computes.
 static inline bool is_dtcu_mode(uint32_t m) {
-  return m == MODE_DTCU_CLUSTER || m == MODE_DTCU_SOCKET;
+  return m == MODE_DTCU_CLUSTER || m == MODE_DTCU_SOCKET || is_pipe_mode(m);
 }
 // Every mode that builds descriptors. Modes 9-11 will join this once they work.
 static inline bool uses_engine(uint32_t m) { return is_dtcu_mode(m); }
 // Whether a mode feeds the socket engines, the cluster engine, or both.
 static inline bool wants_socket(uint32_t m) {
-  return m == MODE_DTCU_SOCKET || m == MODE_HET_TCU_DSOCK || m == MODE_HET_ALL;
+  return m == MODE_DTCU_SOCKET || m == MODE_DTCU_SOCKET_PIPE
+      || m == MODE_HET_TCU_DSOCK || m == MODE_HET_ALL;
 }
 static inline bool wants_cluster(uint32_t m) {
-  return m == MODE_DTCU_CLUSTER || m == MODE_HET_TCU_DCLUS || m == MODE_HET_ALL;
+  return m == MODE_DTCU_CLUSTER || m == MODE_DTCU_CLUSTER_PIPE
+      || m == MODE_HET_TCU_DCLUS || m == MODE_HET_ALL;
 }
 
 
@@ -111,7 +126,9 @@ static const char* const kShortNames[NUM_MODES] = {
   "TCU_wg+DXA", "TCU_wg", "TCU_wg+Acol",
   "<reserved6>",
   "DTCU_socket", "DTCU_cluster",
-  "TCU+DTCU_socket", "TCU+DTCU_cluster", "TCU+DTCU_both"
+  "TCU+DTCU_socket", "TCU+DTCU_cluster", "TCU+DTCU_both",
+  "<reserved12>", "<reserved13>",
+  "DTCU_socket_pipe", "DTCU_cluster_pipe"
 };
 
 #endif // _CGO27_HOST_MODES_H_

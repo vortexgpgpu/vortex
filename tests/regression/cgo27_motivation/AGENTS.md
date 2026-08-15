@@ -13,6 +13,7 @@ wins, here is by how much" and had to be pulled back. Two axes carry the diversi
 | --- | --- | --- |
 | **shape** | K relative to M and N | K sets arithmetic intensity. Small fixed K (attention: `M = N = seqlen`, `K = head_dim`) is memory-bound and the engine wins because nothing stalls it. K growing with M and N (a cubic ladder) becomes compute-bound and the in-core TCU wins because its array is 64× wider. |
 | **epilogue** | `-a 1` vs an elementwise app | The in-core modes fuse the activation into the accumulator on the way out, for ~0.7 %. The DTCU has no epilogue hardware, so the same app costs it a **second full launch over D**. |
+| **concurrency** | modes 7/8 vs 14/15 | Whether the cores run the epilogue *while* the engine computes, or after it. This is the only axis on which the cluster placement can win, for the reason in the next section. |
 
 **When you report a number, report which regime it belongs to.** A ratio quoted without its
 shape family is the failure mode this file exists to prevent — "mode 7 is 2× faster" was
@@ -30,6 +31,60 @@ Corollaries:
   real layer; it is a machine-scaling probe and must be labelled as one. Attention-shaped
   (`K` fixed at a head dimension) and FFN-shaped (`K = N = hidden`) are the families worth
   claiming representativeness for.
+
+## What separates DTCU_socket from DTCU_cluster, and what does not
+
+Four things in the simulator depend on which engine it is, and no others: the descriptor
+queue depth (`dtcu.cpp:149`), the PE count (`:355`), the accumulator bank count (`:365`,
+`dtcu_tma.cpp:686`/`:801`), and a debug string. Plus one in the plumbing:
+`socket.cpp:188-190` binds the socket engine a dedicated `d_req_out` port into its socket's
+dcache, and `dtcu_tma.h:117` routes `Dest::Out` down it. The cluster engine never gets that
+call, so `has_d_port_` stays false and its D leaves on the same L2 port as its operands.
+
+So **placement is modelled as PORT TOPOLOGY** -- mode 7 has 4 engines × (L2 port + D port)
+against mode 8's single shared port -- and not as any difference in where the data ends up
+being readable from. Two consequences that were each learned the expensive way:
+
+- **No epilogue can distinguish the two placements.** Measured: the absolute cost of an
+  epilogue (app N minus app 1) is identical to the cycle for modes 7 and 8 -- +232,561 each
+  for softmax and +48,329 each for the column reduction at 128×64×32, +1,276,598 each for
+  softmax at 256×256×64. A standalone epilogue launch cannot see where D was produced.
+  An earlier version of the docs claimed app 9 "confirmed the placement mechanism, +107 %
+  for mode 7 against +40 % for mode 8" -- those are the same absolute number over different
+  denominators, and the claim was withdrawn. **Do not report an epilogue percentage as
+  placement evidence.**
+- **The port asymmetry favours the socket.** Matching the cluster engine's array to the
+  four socket engines it stands in for (`DTCU_CLUSTER_NUM_PE`, `DTCU_CLUSTER_ACC_BANKS` at
+  4×) removes the silicon difference; the ports are what is left, and they are 8 against 1.
+
+## Concurrency: what the runtime does and does not allow
+
+`cp_submit_launch()` posts CMD_LAUNCH and **polls Q_SEQNUM until the kernel retires**
+(`sw/runtime/common/queue.cpp:431`). Two launches therefore never overlap, whatever queues
+or events the host sets up. Overlap has to happen *inside* one launch, which is what modes
+14/15 are: the row range is cut into `MOTI_PIPE_TILES` descriptors so it has that many
+completion points, and the epilogue for slice t-1 runs while the engine produces slice t.
+`dtensor_check()` is a plain AMO, not an engine instruction, so a core that never issued a
+descriptor can wait on it -- that is the whole cross-core protocol.
+
+Three things that must stay right in any pipelined mode, each measured:
+
+1. **Slice on ENGINE TILES, never on rows.** The engine computes a padded tile whatever the
+   descriptor's M says. Cutting M into `MOTI_PIPE_TILES` equal row slices gave mode 14
+   eight-row slices against a 32-row tile: `instr_tcu` 131,072 against mode 15's 65,536 for
+   the identical GEMM, and 546,099 cycles against mode 7's 20,359. Correct output, four
+   times the arithmetic. `moti_pipe_slices()` / `moti_pipe_slice_of()` own this.
+2. **One thread per core polls; the rest join on `vx_barrier`.** An AMO bypasses the core's
+   L1 by design and resolves at the LLC, so a whole block spinning on one descriptor word
+   aims that traffic at the port the engine fetches operands through.
+3. **The backoff between polls must be register-only.** The first one used a
+   `volatile uint32_t` counter, which lives on the stack, so every iteration was a load and
+   a store -- a backoff built out of the traffic it existed to remove. `MOTI_PIPE_BACKOFF`
+   is sensitive in both directions: at 128×64×32, 32 gave 45,645 cycles and 4,096 gave
+   808,638.
+
+The consumer unit is a **warp**, not a core and not a block: 16 warps × 32 lanes striped by
+`threadIdx.x` puts all 512 threads of a core on one row at a time.
 
 ## Every experiment result goes into BOTH documents, in the same change
 

@@ -51,12 +51,16 @@ Grouped by **what executes**, so the numbering is deliberately sparse:
 | 2 | in-core TCU + DXA | naive: single-buffer, sync per K |
 | 3 | workgroup WGMMA + DXA | multi-warp CTA shares one staged tile; warp 0 produces; `wgmma` reads smem directly |
 | 4 | workgroup WGMMA, SW copy | same geometry, the CTA copies its own tiles — the DXA control for 3 |
-| 5, 6 | *reserved holes* | retired; see below |
+| 5 | workgroup WGMMA + DXA, A resident | as 3, but the CTA sweeps `MOTI_WG_NCOLS` column tiles against an A block staged once for the whole K — reuse along **N**, the axis that pays |
+| 6 | *reserved hole* | retired; see below |
 | 7 | DTCU_socket | one engine per socket, D → that socket's L1, native tile 32×16 |
 | 8 | DTCU_cluster | one engine per cluster, D → L2, native tile 64×32 |
 | 9 | hetero: TCU + DTCU_socket | **not built** — reports `skipped=1` |
 | 10 | hetero: TCU + DTCU_cluster | **not built** |
 | 11 | hetero: TCU + both engines | **not built** |
+| 12, 13 | *reserved holes* | the workgroup pair before it moved to 3/4; a number that has already meant two things does not get a third |
+| 14 | DTCU_socket, **pipelined** | the band is cut into `MOTI_PIPE_TILES` descriptors and each core runs the epilogue for slice *t−1* while its engine produces *t* |
+| 15 | DTCU_cluster, **pipelined** | one engine needs one producer: core 0 submits every slice, and every warp on the machine consumes |
 
 ⚠️ **This numbering changed again on 2026-08-07, and a log from before that means
 something different.** 3 and 4 now hold the workgroup pair that was 12 and 13. The four
@@ -286,6 +290,19 @@ cannot express at all, so it would cost the DTCU a *third* pass.
 | compute-bound shape (cube, K grows) | **1 in-core TCU** | 64× the array, and parallelism finally hides its latency |
 | wide N with K moderate | **5 A-resident** | one A fetch amortised over four column tiles |
 | an elementwise epilogue | **narrows the engine's lead** | in-core folds it into the accumulator (+1–4.5 %); the engine pays a second pass over D (+33 %) |
+| an epilogue with a second operand (4 residual, 5 scale) | **1 in-core TCU** outright at the large shapes | the fold is free in registers; the engine has to stream the extra array in a pass of its own |
+| a reduction epilogue (6 softmax, 9 bias) | **nobody, by much** | it cannot be fused by anything, so an identical extra pass is added to every mode and the spread collapses — 4.2× down to 1.08× at 128×64×32 |
+
+Two things that are **not** on this list, because they were measured and are not true:
+
+- *"A heavy epilogue favours the cluster placement."* The epilogue's absolute cost is
+  identical to the cycle for modes 7 and 8 (+232,561 each for softmax at 128×64×32). A
+  standalone launch over *D* cannot see which engine produced it. What looks like the gap
+  narrowing is a large constant being added to both sides.
+- *"The cluster engine is the one that leaves L2 alone."* The opposite: the socket engine
+  has a dedicated port for *D* into its socket's L1 (`socket.cpp:188-190`), and the cluster
+  engine sends operands **and** *D* down one shared L2 port. Placement is modelled as port
+  topology, 8 ports against 1.
 
 
 ## Measured results — 2026-08-05

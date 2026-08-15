@@ -157,6 +157,13 @@ inline int run_case(uint32_t mode,
     // submitter count) are simply never written or submitted.
     const int engine = wants_socket(mode) ? DTCU_ENGINE_SOCKET : DTCU_ENGINE_CLUSTER;
     n_desc = wants_socket(mode) ? num_sockets : (uint32_t)num_cores;
+    // Pipelined modes need one slot per SLICE, not per submitter, because the point is that
+    // a band has MOTI_PIPE_TILES separate `done` transitions for a consumer to wait on.
+    // Mode 14 keeps the per-socket split on top of that (a core reaches only its own
+    // engine), so it wants num_sockets * T; mode 15 has one engine and one producer, so T is
+    // the whole array. The kernel indexes with the same arithmetic -- see kernel_m14.cpp.
+    if (is_pipe_mode(mode))
+      n_desc = wants_socket(mode) ? (num_sockets * MOTI_PIPE_TILES) : MOTI_PIPE_TILES;
 
     // Must match MOTI_{CLUSTER,SOCKET}_TILE_N in k_dtcu_desc.h -- the kernel picks the value,
     // this is the guard, and a mismatch here is a silently wrong descriptor.
@@ -302,6 +309,23 @@ inline int run_case(uint32_t mode,
     li.grid_dim[0] = (uint32_t)num_cores; li.block_dim[0] = 1;
     break;
   }
+  case ModeSpec::GEOM_PER_CORE_PIPE: {
+    // One block per core again -- the slice mapping still comes from vx_core_id() -- but a
+    // MULTI-WARP block, because these modes' cores have real work: the epilogue for the
+    // slices the engine has already finished. GEOM_PER_CORE's single thread is enough to
+    // fill a descriptor and spin on it, and nothing else.
+    //
+    // Every warp slot the device has, for the same reason the workgroup modes take them:
+    // the consumers are memory-bound over D and more warps is more outstanding traffic. The
+    // producer thread is one lane of one warp and does not care.
+    uint64_t num_cores = 0, num_warps = 0;
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES, &num_cores));
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS, &num_warps));
+    li.ndim = 1;
+    li.grid_dim[0]  = (uint32_t)num_cores;
+    li.block_dim[0] = (uint32_t)num_warps * NUM_THREADS;
+    break;
+  }
   }
 
   // DTCU epilogue pass (modes 7/8). The engine is GEMM-only, so an elementwise
@@ -309,7 +333,12 @@ inline int run_case(uint32_t mode,
   // as a SECOND launch over the whole matrix. That extra M*N round-trip is the cost
   // asymmetry the app sweep measures, and it is deliberately inside the timed
   // region so the reported cycles include it.
-  const bool dtcu_needs_epi = uses_engine(mode) && epi_is_elementwise(g_app);
+  // The pipelined modes are excluded because they already ran it: their consumers apply the
+  // elementwise map to each slice as the engine finishes it, inside the GEMM launch. Adding
+  // the standalone pass on top would apply the epilogue TWICE -- ReLU would survive that,
+  // GELU would not, and the residual add would silently double.
+  const bool dtcu_needs_epi = uses_engine(mode) && !is_pipe_mode(mode)
+                           && epi_is_elementwise(g_app);
   // App 6 is a row-wise reduction, which nothing can fuse -- see epilogue.h. EVERY mode
   // pays this pass, and the DTCU modes pay it on top of their elementwise pass.
   const bool needs_row_pass = epi_needs_row_pass(g_app);

@@ -27,6 +27,8 @@ struct ModeSpec {
     GEOM_WMMA_WG,  // one MULTI-WARP block per CTA tile; warps share the staged tile
     GEOM_WMMA_WG_ACOL, // as above, but the CTA sweeps NCOLS column tiles against a
                        // resident A staged once for the whole K range
+    GEOM_PER_CORE_PIPE, // one MULTI-WARP block per core: the block's warps are the
+                        // epilogue consumers, so unlike GEOM_PER_CORE it cannot be 1 thread
   };
 
   const char* kentry;      // entry name in kernel_m<N>.vxbin; nullptr = not runnable
@@ -72,6 +74,44 @@ static inline ModeSpec run_mode_8() {   // DTCU_cluster: one engine per cluster,
                    ModeSpec::GEOM_PER_CORE, 0, false };
 }
 
+// ---- descriptor engine, PIPELINED ----
+//
+// 7 and 8 issue one descriptor per submitter covering that submitter's whole row band and
+// then spin on its single `done`. So the cores do nothing for the entire GEMM, and an
+// epilogue can only run afterwards, as a second launch. Measured, that second launch costs
+// modes 7 and 8 the SAME number of cycles to the cycle (+232,561 each for softmax at
+// 128x64x32) -- which is the proof that it cannot see where D landed, and therefore that no
+// epilogue will ever separate the two placements.
+//
+// 14 and 15 cut the band into MOTI_PIPE_TILES descriptors so it has T completion points,
+// and run the epilogue for slice t-1 while the engine produces slice t. That is the only
+// concurrency available: cp_submit_launch() polls a launch to retirement, so overlap has to
+// happen INSIDE one launch.
+//
+// The pair is not symmetric, and that asymmetry is the experiment:
+//
+//   14 socket   four engines, and a core can only reach the engine in its own socket. So
+//               every core is a producer and every core consumes its own slices. Nobody is
+//               free. Its engine writes D into that socket's L1 through a dedicated port,
+//               which at SOCKET_SIZE=1 is the very L1 the consuming core is using.
+//   15 cluster  one engine, so ONE producer suffices: core 0 submits every slice and cores
+//               1..N-1 do nothing but consume. Three quarters of the machine is free for
+//               the epilogue, and D goes to L2 rather than into any core's L1.
+//
+// GEOM_PER_CORE_PIPE rather than GEOM_PER_CORE because a consumer needs threads: the
+// non-pipelined modes launch one thread per block, which is enough to fill a descriptor and
+// spin and nothing else.
+
+static inline ModeSpec run_mode_14() {  // DTCU_socket, pipelined; every core produces
+  return ModeSpec{ "moti_dtcu_socket_pipe", VX_ISA_EXT_DTCU_SOCKET,
+                   ModeSpec::GEOM_PER_CORE_PIPE, 0, false };
+}
+
+static inline ModeSpec run_mode_15() {  // DTCU_cluster, pipelined; core 0 alone produces
+  return ModeSpec{ "moti_dtcu_cluster_pipe", VX_ISA_EXT_DTCU_CLUSTER,
+                   ModeSpec::GEOM_PER_CORE_PIPE, 0, false };
+}
+
 // ---- workgroup staging: the geometry that lets a copy engine pay ----
 //
 // A CTA of `warps` warps stages one A tile spanning all of them plus one B tile they all
@@ -110,6 +150,8 @@ static inline ModeSpec moti_mode_spec(uint32_t mode) {
   case MODE_TCU_WG_ACOL:   return run_mode_5();
   case MODE_DTCU_SOCKET:   return run_mode_7();
   case MODE_DTCU_CLUSTER:  return run_mode_8();
+  case MODE_DTCU_SOCKET_PIPE:  return run_mode_14();
+  case MODE_DTCU_CLUSTER_PIPE: return run_mode_15();
   default:                 return ModeSpec{ nullptr, 0, ModeSpec::GEOM_SIMT, 0, false };
   }
 }

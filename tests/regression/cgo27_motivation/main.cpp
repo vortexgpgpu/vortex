@@ -177,6 +177,10 @@ int main(int argc, char** argv) {
       "hetero: TCU + DTCU_socket",
       "hetero: TCU + DTCU_cluster",
       "hetero: TCU + both engines",
+      "<reserved>",
+      "<reserved>",
+      "DTCU_socket pipelined (epilogue overlaps GEMM)",
+      "DTCU_cluster pipelined (core 0 produces, the rest consume)",
   };
 
   // App 6 is a row-wise softmax, which is not a float->float map and so cannot go through

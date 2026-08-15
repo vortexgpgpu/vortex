@@ -21,9 +21,25 @@ CONFIGS := $(if $(findstring -DVX_CFG_EXT_A_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONF
 # modes keep a full LSU load per fragment no matter how the copy arrives.
 # Which epilogue this build contains. ONE per binary, chosen by the preprocessor, so an
 # app the run does not use cannot relocate a mode's code in the icache. Override with
-# `MOTI_APP=6 make ...` or CONFIGS="-DMOTI_APP=6".
+# `MOTI_APP=6 make ...`.
+#
+# DO NOT set CONFIGS= on the command line to pass one of these. A command-line variable
+# cannot be appended to by the makefile, so every `CONFIGS +=` below -- the entire machine
+# configuration, cores, warps, cache sizes, the lot -- is silently dropped, and the build
+# comes out with the defaults. It does not fail; it hangs at run time. Each knob that needs
+# overriding gets its own `?=` variable here instead.
 MOTI_APP ?= 1
 CONFIGS += -DMOTI_APP=$(MOTI_APP)
+# Pipeline depth and poll backoff for the pipelined engine modes (14/15). See common.h.
+MOTI_PIPE_TILES   ?= 4
+MOTI_PIPE_BACKOFF ?= 32
+MOTI_PIPE_C0_CONSUMES ?= 0
+MOTI_PIPE_CONSUMER_WARPS ?= 16
+MOTI_PIPE_VERIFY ?= 1
+MOTI_PIPE_STRIPE_WARP ?= 0
+CONFIGS += -DMOTI_PIPE_TILES=$(MOTI_PIPE_TILES) -DMOTI_PIPE_BACKOFF=$(MOTI_PIPE_BACKOFF)
+CONFIGS += -DMOTI_PIPE_C0_CONSUMES=$(MOTI_PIPE_C0_CONSUMES)
+CONFIGS += -DMOTI_PIPE_CONSUMER_WARPS=$(MOTI_PIPE_CONSUMER_WARPS) -DMOTI_PIPE_VERIFY=$(MOTI_PIPE_VERIFY) -DMOTI_PIPE_STRIPE_WARP=$(MOTI_PIPE_STRIPE_WARP)
 CONFIGS += -DVX_CFG_TCU_WGMMA_ENABLE -DWGMMA_RS -DWGMMA_NRC=8
 
 CONFIGS += -DVX_CFG_NUM_CLUSTERS=1
@@ -84,7 +100,7 @@ include ../common.mk
 # the warning active for the all-in-one kernel.cpp and the host.
 MOTI_VX_CFLAGS := $(VX_CFLAGS) -I$(SRC_DIR) -I$(SRC_DIR)/kernel_modes -Wno-unused-function
 
-MOTI_MODES  := 0 1 2 3 4 5 7 8
+MOTI_MODES  := 0 1 2 3 4 5 7 8 14 15
 MOTI_VXBINS := $(foreach m,$(MOTI_MODES),kernel_m$(m).vxbin)
 
 all: $(MOTI_VXBINS)

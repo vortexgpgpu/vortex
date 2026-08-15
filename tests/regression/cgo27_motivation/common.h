@@ -92,6 +92,85 @@ typedef struct {
 #define MOTI_WG_NCOLS 4
 #endif
 
+// Descriptors one submitter splits its row range into, for the PIPELINED engine modes
+// (14/15). At T=1 those modes degenerate to modes 7/8 with a bigger block.
+//
+// The non-pipelined modes issue ONE descriptor covering a whole row band and then spin on
+// its single `done` transition, so there is nothing for a consumer to observe until the
+// entire band is finished -- which is why the cores sit idle for the whole GEMM and why an
+// epilogue can only ever run as a separate launch afterwards. T descriptors give the band
+// T completion points, and the epilogue for slice t-1 can run while the engine is still
+// producing slice t.
+//
+// The host sizes the descriptor array from this and the kernel indexes it, so it is ONE
+// definition shared by both -- a disagreement would hand the engine a descriptor slot the
+// host never zeroed, and a stale `done` reads as a completed GEMM.
+//
+// Bounded by the engine's descriptor queue on the socket side: DTCU_SOCKET_QUEUE_DEPTH is
+// SOCKET_SIZE*2, which is 2 here, so a socket submitter cannot have more than two slices in
+// flight and issues them one ahead. The cluster queue is NUM_CORES*2 = 8 and takes all of
+// them at once.
+#ifndef MOTI_PIPE_TILES
+#define MOTI_PIPE_TILES 4
+#endif
+
+// Consumer row/column layout for the pipelined modes. 0 = rows striped by CORE, one row at
+// a time, its columns split across that core's threads (the default, and the only one that
+// does not livelock). 1 = rows striped by WARP, which puts 16 rows' worth of cache lines in
+// flight per core and starves the engine on the strict-priority L2 arbiter. Kept as a knob
+// because the failure is a measurement, not a bug to hide -- see k_epi_rows.h.
+#ifndef MOTI_PIPE_STRIPE_WARP
+#define MOTI_PIPE_STRIPE_WARP 0
+#endif
+
+// Bisect switch: 0 makes moti_publish_desc_verified() fall back to the plain fence+AMO
+// publish modes 7/8 use. Only for isolating whether the read-back loop is at fault.
+#ifndef MOTI_PIPE_VERIFY
+#define MOTI_PIPE_VERIFY 1
+#endif
+
+// Consumer warps per core for the pipelined modes (14/15). Clamped to the warps a block
+// actually has, so 16 or anything larger means "all of them".
+//
+// This is a real tuning axis rather than a debug switch, because overlap here is not free
+// parallelism -- the consumers and the engine are reading and writing through the SAME L2.
+// The cluster engine has exactly one port for operands and D together, so every consumer
+// warp added takes bandwidth from the GEMM it is waiting on. There is an optimum, and it
+// is not 16; see the sweep in docs/260808_moti.md.
+// WIDTH of the consumer, in warps: the first `cw` warps of a core work, and together they
+// split ONE row's columns. It is not a row count -- see k_epi_rows.h for why giving each
+// warp its own rows livelocks against the strict-priority L2 arbiter.
+//
+// 16 (the whole block on one row at a time) is both the fastest measured and the safe end:
+// the sweep in docs/260808_moti.md is over the row-striped variant, where the same number
+// is unusable. Traffic per core is one row either way here, so widening only adds lanes to
+// a row that was already being fetched.
+#ifndef MOTI_PIPE_CONSUMER_WARPS
+#define MOTI_PIPE_CONSUMER_WARPS 16
+#endif
+
+// Does the producing core also consume (mode 15)? Core 0 submits every slice up front and
+// is then free, so on paper it should join the epilogue rather than idle -- but consumers
+// and the single-ported cluster engine contend for the same L2, and more consumers is not
+// automatically faster. This exists to measure that rather than assume it.
+// 0. Adding the producing core's warps to the consumer pool is more L2 traffic aimed at the
+// same arbiter row, and at 256x256x64 with one consumer warp it is the difference between
+// finishing in 355,424 cycles and not finishing at all.
+#ifndef MOTI_PIPE_C0_CONSUMES
+#define MOTI_PIPE_C0_CONSUMES 0
+#endif
+
+// Register-only spin between two polls of a descriptor's done flag (modes 14/15).
+//
+// A consumer waiting on a slice has nothing else to do, but the poll itself is not free:
+// dtensor_check() is an AMO that resolves at the last-level cache by design, so an
+// unthrottled spin puts a continuous stream of LLC transactions on the port the engine is
+// fetching its operands through. See moti_wait_desc() in k_dtcu_desc.h for what that
+// measured. Kernel-only; the host never reads it.
+#ifndef MOTI_PIPE_BACKOFF
+#define MOTI_PIPE_BACKOFF 32
+#endif
+
 // WHICH EPILOGUE THIS BINARY CONTAINS. Compile-time, deliberately.
 //
 // The apps used to be selected at RUNTIME from kernel_arg_t::app, which meant every app's
