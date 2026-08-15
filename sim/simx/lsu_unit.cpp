@@ -117,6 +117,9 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	auto& tmask = trace->tmask;
 	auto& rs1_data = trace->src_data[0];
 	auto& rs2_data = trace->src_data[1];
+	// Compare-and-swap alone reads a third operand: the comparand, which the
+	// instruction takes from rd. Decode adds rd to the source set for it.
+	const bool is_cas = is_amo && (*amo_tag == AmoType::AMOCAS);
 	uint32_t num_threads = VX_CFG_NUM_THREADS;
 	uint32_t data_bytes;
 	bool is_write;
@@ -150,6 +153,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 		e.size = 0;
 		e.tid  = t;
 		e.data = 0;
+		e.amo_cmp = 0;
 		if (tmask.test(t)) {
 			// AGU result is VX_CFG_XLEN-bit wide.
 			// Cast through Word so 32-bit VX_CFG_XLEN doesn't carry sign-extended
@@ -171,6 +175,9 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 				// Stores carry rs2 as data; AMOs carry rs2 as the RMW operand
 				// (LR encodes rs2 = x0, so the captured value is 0).
 				e.data = rs2_data[t].u64;
+			}
+			if (is_cas) {
+				e.amo_cmp = trace->src_data[2][t].u64;
 			}
 		}
 		state.addr_list.push_back(e);
@@ -478,6 +485,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 				lsu_req.data.at(i) = block;
 				lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
 			}
+			lsu_req.amo_cmp.at(i) = entry.amo_cmp;
 			// The lane's original thread index rides along so the adapter can
 			// recover hart_id = make_hart_id(cid, wid, tids[i]).
 			lsu_req.tids.at(i) = entry.tid;

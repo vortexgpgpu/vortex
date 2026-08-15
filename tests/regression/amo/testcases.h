@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vortex.h>
+#include "common.h"
 
 void cleanup();
 
@@ -403,6 +404,40 @@ public:
   }
 };
 
+// 15) Native compare-and-swap ladder: every hart races for each slot, so each
+//     slot has exactly one winner. Summing the per-hart win counts checks the
+//     per-lane return value, which a compare-and-swap that returned the wrong
+//     old word would get wrong even while leaving the ladder itself plausible.
+class Test_CAS_LADDER : public ITestCase {
+public:
+  Test_CAS_LADDER(TestSuite* s) : ITestCase(s, "cas_ladder") {}
+  void setup(uint32_t n, uint32_t* shared, uint32_t* per_hart) override {
+    for (uint32_t i = 0; i < n; ++i) per_hart[i] = 0;
+    // The ladder lives in the shared region; iters slots, all unclaimed.
+    for (uint32_t i = 0; i < CAS_LADDER_SLOTS; ++i) shared[i] = 0;
+  }
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* shared, const uint32_t* per_hart) override {
+    const uint32_t slots = (iters < CAS_LADDER_SLOTS) ? iters : CAS_LADDER_SLOTS;
+    uint64_t wins = 0;
+    for (uint32_t h = 0; h < n; ++h) wins += per_hart[h];
+    if (wins != slots) {
+      std::cout << "  wins=" << wins << " expected=" << slots
+                << " (each slot must have exactly one winner)" << std::endl;
+      return 1;
+    }
+    // Every slot must hold some hart's claim, and no slot may still be empty.
+    for (uint32_t i = 0; i < slots; ++i) {
+      if (shared[i] == 0 || shared[i] > n) {
+        std::cout << "  slot " << i << " holds " << shared[i]
+                  << ", expected a claim in 1.." << n << std::endl;
+        return 1;
+      }
+    }
+    return 0;
+  }
+};
+
 inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   // Test_ATOMIC_CRITICAL needs to know VX_CFG_NUM_THREADS to compute the
   // expected count; query it from the device caps.
@@ -424,6 +459,12 @@ inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   add_test(new Test_SELF_CONSISTENCY(this));
   add_test(new Test_AMOADD_LMEM(this));
   add_test(new Test_LRSC_LMEM(this));
+#if VX_CFG_EXT_ZACAS_ENABLED
+  // Native compare-and-swap only exists when Zacas is built in. Without it a
+  // compare-exchange lowers to an LR/SC retry loop, which is the construct
+  // this instruction exists to replace and which does not survive contention.
+  add_test(new Test_CAS_LADDER(this));
+#endif
 }
 
 inline TestSuite::~TestSuite() {

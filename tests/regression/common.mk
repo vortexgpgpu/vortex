@@ -19,11 +19,20 @@ else
 	C_EXT :=
 endif
 
+# Zacas rides after the single-letter extensions, which is where the ISA
+# string wants multi-letter names. It extends the A set rather than replacing
+# it, so it is only meaningful alongside it.
+ifneq (,$(filter -DVX_CFG_EXT_ZACAS_ENABLE, $(XCONFIGS)))
+	ZACAS_EXT := _zacas
+else
+	ZACAS_EXT :=
+endif
+
 ifeq ($(XLEN),64)
-	VX_CFLAGS += -march=rv64imafd$(C_EXT) -mabi=lp64d
+	VX_CFLAGS += -march=rv64imafd$(C_EXT)$(ZACAS_EXT) -mabi=lp64d
 	STARTUP_ADDR ?= 0x180000000
 else
-	VX_CFLAGS += -march=rv32imaf$(C_EXT) -mabi=ilp32f
+	VX_CFLAGS += -march=rv32imaf$(C_EXT)$(ZACAS_EXT) -mabi=ilp32f
 	STARTUP_ADDR ?= 0x80000000
 endif
 

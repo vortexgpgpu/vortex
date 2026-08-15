@@ -325,6 +325,7 @@ static op_string_t op_string(const Instr &instr) {
         case AmoType::AMOMAX:  return {"AMOMAX.W", ""};
         case AmoType::AMOMINU: return {"AMOMINU.W", ""};
         case AmoType::AMOMAXU: return {"AMOMAXU.W", ""};
+        case AmoType::AMOCAS:  return {"AMOCAS.W", ""};
         default:
           std::abort();
         }
@@ -342,6 +343,7 @@ static op_string_t op_string(const Instr &instr) {
         case AmoType::AMOMAX:  return {"AMOMAX.D", ""};
         case AmoType::AMOMINU: return {"AMOMINU.D", ""};
         case AmoType::AMOMAXU: return {"AMOMAXU.D", ""};
+        case AmoType::AMOCAS:  return {"AMOCAS.D", ""};
         default:
           std::abort();
         }
@@ -647,6 +649,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     case 0x14: instr->set_op_type(AmoType::AMOMAX); break;
     case 0x18: instr->set_op_type(AmoType::AMOMINU); break;
     case 0x1c: instr->set_op_type(AmoType::AMOMAXU); break;
+    case 0x05: instr->set_op_type(AmoType::AMOCAS); break;
     default:
       std::abort();
     }
@@ -654,6 +657,13 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_dest_reg(rd, RegType::Integer);
     instr->set_src_reg(0, rs1, RegType::Integer);
     instr->set_src_reg(1, rs2, RegType::Integer);
+    if (funct5 == 0x05) {
+      // Compare-and-swap reads rd as well as writing it: rd carries the
+      // comparand in, the loaded word out. It has to join the source set or
+      // the operand collector supplies a stale comparand and the swap decides
+      // on the wrong value.
+      instr->set_src_reg(2, rd, RegType::Integer);
+    }
   } break;
   case Opcode::SYS: {
     if (funct3 != 0) { // CSRRW/CSRRS/CSRRC — dispatched to the SFU's CSR sub-unit

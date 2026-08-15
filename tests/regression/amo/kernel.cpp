@@ -332,6 +332,38 @@ void kernel_lrsc_lmem(kernel_arg_t* __UNIFORM__ arg) {
   }
 }
 
+#if VX_CFG_EXT_ZACAS_ENABLED
+// 15) Native compare-and-swap contention.
+//   Every hart races to claim each slot of a ladder with its own id, so for
+//   slot i exactly one hart sees the empty value and swaps, and the others see
+//   that winner's id. Each hart records how many slots it won.
+//
+//   The point is the per-hart return value, not just the final memory: a
+//   compare-and-swap that returned the wrong old word would still leave the
+//   ladder looking plausible while every loser believed it had won. The host
+//   checks that the wins across harts sum to exactly the number of slots.
+void kernel_cas_ladder(kernel_arg_t* __UNIFORM__ arg) {
+  auto shared   = (uint32_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  const uint32_t claim = hid + 1;   // 0 is the unclaimed marker
+  uint32_t wins = 0;
+
+  const uint32_t slots = (arg->iters < CAS_LADDER_SLOTS)
+                       ? arg->iters : CAS_LADDER_SLOTS;
+  for (uint32_t i = 0; i < slots; ++i) {
+    uint32_t expected = 0;
+    // Returns true only for the hart whose swap actually landed; `expected`
+    // is updated with the observed word either way.
+    if (__atomic_compare_exchange_n(&shared[i], &expected, claim, 0,
+                                    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+      ++wins;
+    }
+  }
+  per_hart[hid] = wins;
+}
+#endif
+
 static const PFN_Kernel sc_tests[] = {
   kernel_amoadd,             // 0
   kernel_amoor,              // 1
@@ -348,6 +380,9 @@ static const PFN_Kernel sc_tests[] = {
   kernel_self_consistency,   // 12  issuer self-consistency (load->AMO->load)
   kernel_amoadd_lmem,        // 13  AMOADD on local memory (LMEM banks)
   kernel_lrsc_lmem,          // 14  LR/SC on local memory (LMEM banks)
+#if VX_CFG_EXT_ZACAS_ENABLED
+  kernel_cas_ladder,         // 15  native compare-and-swap (Zacas amocas)
+#endif
 };
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {

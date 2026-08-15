@@ -169,7 +169,8 @@ public:
 				const uint64_t rhs = bank_req.data
 					? amo_load_word(bank_req.data->data(), byte_off, width) : 0;
 				auto rmw = amo_compute(op, width, old_word, rhs,
-				                       bank_req.flags.amo_unsigned);
+				                       bank_req.flags.amo_unsigned,
+				                       bank_req.amo_cmp);
 
 				// Build the response before mutating any state so a full RspIn
 				// can stall-retry cleanly.

@@ -42,6 +42,7 @@ LsuMemAdapter::LsuMemAdapter(
       // Carry warp-uniform attributes (amo_unsigned, …) and tag the
       // address class once so consumers don't re-derive it.
       mr.flags = req.flags;
+      mr.amo_cmp = req.amo_cmp.at(0);
       auto t = get_addr_type(mr.addr);
       mr.flags.io    = (t == AddrType::IO);
       mr.flags.local = (t == AddrType::Shared);
@@ -133,6 +134,7 @@ void LsuMemAdapter::on_tick() {
       out_req.uuid    = in_req.uuid;
       out_req.data    = in_req.data.at(i);
       out_req.byteen  = in_req.byteen.at(i);
+      out_req.amo_cmp = in_req.amo_cmp.at(i);
       out_req.op      = in_req.op;
       out_req.flags   = in_req.flags;
       {
