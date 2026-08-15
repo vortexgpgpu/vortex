@@ -63,7 +63,11 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     localparam BANK_ADDR_WIDTH = `CLOG2(WORDS_PER_BANK);
     localparam BANK_SEL_BITS   = `CLOG2(NUM_BANKS);
     localparam BANK_SEL_WIDTH  = `UP(BANK_SEL_BITS);
-    localparam REQ_DATAW       = 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH;
+    // AMO sideband carried to the banks: valid + op + unsigned. The operand
+    // width comes from the request's byteen, and hart_id is only needed for
+    // LR/SC reservations, which the banks do not implement.
+    localparam AMO_SB_WIDTH    = 1 + $bits(amo_op_e) + 1;
+    localparam REQ_DATAW       = 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + AMO_SB_WIDTH;
     localparam RSP_DATAW       = WORD_WIDTH + TAG_WIDTH;
 
     `STATIC_ASSERT(ADDR_WIDTH == (BANK_ADDR_WIDTH + `CLOG2(NUM_BANKS)), ("invalid parameter"))
@@ -84,7 +88,19 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][BANK_ADDR_WIDTH-1:0] req_bank_addr;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_bank_addr
         assign req_bank_addr[i] = lsu_bus_if[i].req_data.addr[BANK_SEL_BITS +: BANK_ADDR_WIDTH];
-        `UNUSED_VAR (lsu_bus_if[i].req_data.attr)
+    end
+
+    // AMO sideband per request, from the shared mem-bus attr.
+    wire [NUM_REQS-1:0]                  req_amo_valid;
+    wire [NUM_REQS-1:0][$bits(amo_op_e)-1:0] req_amo_op;
+    wire [NUM_REQS-1:0]                  req_amo_unsigned;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_amo
+        mem_bus_attr_t lane_attr;
+        assign lane_attr = mem_bus_attr_t'(lsu_bus_if[i].req_data.attr);
+        assign req_amo_valid[i]    = lane_attr.amo.amo_valid;
+        assign req_amo_op[i]       = lane_attr.amo.amo_op;
+        assign req_amo_unsigned[i] = lane_attr.amo.amo_unsigned;
+        `UNUSED_VAR (lane_attr)
     end
 
     // bank requests dispatch
@@ -95,6 +111,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][WORD_SIZE-1:0]     per_bank_req_byteen;
     wire [NUM_BANKS-1:0][WORD_WIDTH-1:0]    per_bank_req_data;
     wire [NUM_BANKS-1:0][TAG_WIDTH-1:0]     per_bank_req_tag;
+    wire [NUM_BANKS-1:0]                    per_bank_req_amo_valid;
+    wire [NUM_BANKS-1:0][$bits(amo_op_e)-1:0] per_bank_req_amo_op;
+    wire [NUM_BANKS-1:0]                    per_bank_req_amo_unsigned;
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_req_idx;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready;
 
@@ -111,6 +130,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_data_in
         assign req_valid_in[i] = lsu_bus_if[i].req_valid;
         assign req_data_in[i] = {
+            req_amo_valid[i],
+            req_amo_op[i],
+            req_amo_unsigned[i],
             lsu_bus_if[i].req_data.rw,
             req_bank_addr[i],
             lsu_bus_if[i].req_data.data,
@@ -147,6 +169,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_req_data_soa
         assign {
+            per_bank_req_amo_valid[i],
+            per_bank_req_amo_op[i],
+            per_bank_req_amo_unsigned[i],
             per_bank_req_rw[i],
             per_bank_req_addr[i],
             per_bank_req_data[i],
@@ -246,20 +271,85 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
         wire dma_active = dma_wr_b | dma_rd_b;
 
-        // SRAM address / write-data / write-enable mux (DMA has priority)
+        wire lsu_active = per_bank_req_valid[i] && per_bank_req_ready[i];
 
+        // Atomics. The LSU sends an AMO with rw=0, so the read returning the old
+        // value is the ordinary read path and needs no change. What the bank owes
+        // is the write of the computed value.
+        //
+        // The old word is registered before the ALU sees it. Feeding the ALU
+        // straight from the SRAM output puts the BRAM clock-to-out, the adder and
+        // the BRAM setup in a single period; the register splits that into
+        // BRAM-out-to-flop and flop-through-adder-to-BRAM-in, which is what keeps
+        // the atomic adder off the critical path.
+        //
+        // The port is single-ported, so an atomic owns its bank for three cycles:
+        // read, capture, write back.
+        reg                       amo_rd_valid_r;
+        reg                       amo_wb_valid_r;
+        reg [WORD_WIDTH-1:0]      amo_old_r;
+        reg [BANK_ADDR_WIDTH-1:0] amo_wb_addr_r;
+        reg [WORD_SIZE-1:0]       amo_wb_byteen_r;
+        reg [$bits(amo_op_e)-1:0] amo_wb_op_r;
+        reg                       amo_wb_unsigned_r;
+        reg [WORD_WIDTH-1:0]      amo_wb_rhs_r;
+
+        wire amo_accept = lsu_active && per_bank_req_amo_valid[i];
+
+        always @(posedge clk) begin
+            if (reset) begin
+                amo_rd_valid_r <= 1'b0;
+                amo_wb_valid_r <= 1'b0;
+            end else begin
+                amo_rd_valid_r <= amo_accept;
+                amo_wb_valid_r <= amo_rd_valid_r;
+            end
+            if (amo_rd_valid_r) begin
+                amo_old_r <= per_bank_rsp_data[i];
+            end
+            if (amo_accept) begin
+                amo_wb_addr_r     <= per_bank_req_addr[i];
+                amo_wb_byteen_r   <= per_bank_req_byteen[i];
+                amo_wb_op_r       <= per_bank_req_amo_op[i];
+                amo_wb_unsigned_r <= per_bank_req_amo_unsigned[i];
+                amo_wb_rhs_r      <= per_bank_req_data[i];
+            end
+        end
+
+        // old_word is this cycle's SRAM output -- the same value the response
+        // carries back, which is why ret_word is not used here.
+        wire [63:0] amo_new_word, amo_ret_word;
+        VX_amo_alu #(
+            .DATA_WIDTH (WORD_WIDTH)
+        ) amo_alu (
+            .op          (amo_op_e'(amo_wb_op_r)),
+            .is_unsigned (amo_wb_unsigned_r),
+            .width       (2'd2),
+            .old_word    (64'(amo_old_r)),
+            .rhs         (64'(amo_wb_rhs_r)),
+            .new_word    (amo_new_word),
+            .ret_word    (amo_ret_word)
+        );
+        `UNUSED_VAR (amo_ret_word)
+        if (WORD_WIDTH < 64) begin : g_amo_hi_unused
+            `UNUSED_VAR (amo_new_word[63:WORD_WIDTH])
+        end
+
+        // SRAM address / write-data / write-enable mux: DMA first, then an owed
+        // atomic write-back, then the incoming request
         wire [BANK_ADDR_WIDTH-1:0] bank_sram_addr;
         wire [WORD_WIDTH-1:0]      bank_sram_wdata;
         wire [WORD_SIZE-1:0]       bank_sram_wren;
 
-        assign bank_sram_addr  = dma_active ? BANK_ADDR_WIDTH'(dma_bus_if.req_data.addr)
-                                            : per_bank_req_addr[i];
-        assign bank_sram_wdata = dma_wr_b   ? dma_bus_if.req_data.data[i*WORD_WIDTH +: WORD_WIDTH]
-                                            : per_bank_req_data[i];
-        assign bank_sram_wren  = dma_wr_b   ? dma_bus_if.req_data.byteen[i*WORD_SIZE +: WORD_SIZE]
-                                            : per_bank_req_byteen[i];
-
-        wire lsu_active = per_bank_req_valid[i] && per_bank_req_ready[i];
+        assign bank_sram_addr  = dma_active   ? BANK_ADDR_WIDTH'(dma_bus_if.req_data.addr)
+                               : amo_wb_valid_r ? amo_wb_addr_r
+                                              : per_bank_req_addr[i];
+        assign bank_sram_wdata = dma_wr_b     ? dma_bus_if.req_data.data[i*WORD_WIDTH +: WORD_WIDTH]
+                               : amo_wb_valid_r ? amo_new_word[WORD_WIDTH-1:0]
+                                              : per_bank_req_data[i];
+        assign bank_sram_wren  = dma_wr_b     ? dma_bus_if.req_data.byteen[i*WORD_SIZE +: WORD_SIZE]
+                               : amo_wb_valid_r ? amo_wb_byteen_r
+                                              : per_bank_req_byteen[i];
 
         VX_sp_ram #(
             .DATAW (WORD_WIDTH),
@@ -271,7 +361,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .clk   (clk),
             .reset (reset),
             .read  (dma_rd_b || (lsu_active && ~per_bank_req_rw[i])),
-            .write (dma_wr_b || (lsu_active &&  per_bank_req_rw[i])),
+            .write (dma_wr_b || amo_wb_valid_r || (lsu_active && per_bank_req_rw[i])),
             .wren  (bank_sram_wren),
             .addr  (bank_sram_addr),
             .wdata (bank_sram_wdata),
@@ -288,7 +378,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             if (reset) begin
                 last_wr_valid <= 0;
             end else begin
-                last_wr_valid <= dma_wr_b || (lsu_active && per_bank_req_rw[i]);
+                last_wr_valid <= dma_wr_b || amo_wb_valid_r || (lsu_active && per_bank_req_rw[i]);
             end
             last_wr_addr <= bank_sram_addr;
         end
@@ -298,10 +388,14 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
         assign bank_rsp_valid = per_bank_req_valid[i]
                              && ~dma_active
+                             && ~amo_rd_valid_r
+                             && ~amo_wb_valid_r
                              && ~per_bank_req_rw[i]
                              && ~is_rdw_hazard;
 
         assign per_bank_req_ready[i] = ~dma_active
+                                    && ~amo_rd_valid_r
+                                    && ~amo_wb_valid_r
                                     && (bank_rsp_ready || per_bank_req_rw[i])
                                     && ~is_rdw_hazard;
 

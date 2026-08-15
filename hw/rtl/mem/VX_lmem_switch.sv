@@ -18,10 +18,11 @@
 // independently with masked-out lanes; lsu_in_if.req_ready waits for
 // whichever subset(s) are non-empty.
 //
-// AMO on the local path is unsupported; the assertion below fires if
-// any active lane reaches this switch with both amo_valid and
-// is_addr_local set. The local-path attr also has its AMO bits
-// stripped so downstream LMEM banks never see amo_valid.
+// The local path carries the read-modify-write AMOs through to the LMEM
+// banks, which perform them in place. LR/SC are stripped instead: they need a
+// reservation table the banks do not have, and passing them through would make
+// every store-conditional succeed unconditionally. Stripping leaves them
+// behaving exactly as they did before the banks gained an AMO path.
 
 module VX_lmem_switch import VX_gpu_pkg::*; #(
     parameter GLOBAL_OUT_BUF = 0,
@@ -80,16 +81,17 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .ready_out (global_out_if.req_ready)
     );
 
-    // Strip per-lane AMO bits on the local path so the LMEM banks never
-    // observe amo.amo_valid. Other attr fields pass through unchanged.
     wire [`VX_CFG_NUM_LSU_LANES-1:0][MEM_ATTR_WIDTH-1:0] local_user;
     for (genvar i = 0; i < `VX_CFG_NUM_LSU_LANES; ++i) begin : g_local_user
-        mem_bus_attr_t lane_clean;
+        mem_bus_attr_t lane_attr;
         always_comb begin
-            lane_clean      = mem_bus_attr_t'(lsu_in_if.req_data.user[i]);
-            lane_clean.amo  = '0;
+            lane_attr = mem_bus_attr_t'(lsu_in_if.req_data.user[i]);
+            if (lane_attr.amo.amo_valid
+             && lane_attr.amo.amo_op inside {AMO_OP_LR, AMO_OP_SC}) begin
+                lane_attr.amo = '0;
+            end
         end
-        assign local_user[i] = MEM_ATTR_WIDTH'(lane_clean);
+        assign local_user[i] = MEM_ATTR_WIDTH'(lane_attr);
     end
 
     VX_elastic_buffer #(
@@ -114,19 +116,6 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .data_out  (local_out_if.req_data),
         .ready_out (local_out_if.req_ready)
     );
-
-    // Synth-time check: AMO on shared/local memory is unsupported.
-    for (genvar lane = 0; lane < `VX_CFG_NUM_LSU_LANES; ++lane) begin : g_amo_lmem_assert
-        wire amo_local_lane = lsu_in_if.req_valid
-                           && lsu_in_if.req_data.mask[lane]
-                           && lsu_in_if.req_data.user[lane][MEM_ATTR_AMO_OFFS]    // amo_valid
-                           && lsu_in_if.req_data.user[lane][MEM_ATTR_LOCAL_OFFS]; // is_addr_local
-        always_comb begin
-            if (amo_local_lane) begin
-                `ASSERT(0, ("AMO on Shared (LMEM) is unsupported"));
-            end
-        end
-    end
 
     VX_stream_arb #(
         .NUM_INPUTS (2),

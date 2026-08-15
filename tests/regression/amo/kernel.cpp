@@ -257,6 +257,34 @@ void kernel_self_consistency(kernel_arg_t* __UNIFORM__ arg) {
   per_hart[hid] = *p;  // plain load after the AMO: must observe the +1
 }
 
+// 13) LMEM AMOADD hammer.
+//   The same contention as test 0, moved onto local memory so the
+//   read-modify-write is resolved by the LMEM banks instead of the dcache.
+//   Local memory is per-workgroup and the host cannot read it, so each group's
+//   leader publishes its group's final count into its own slot of the per-hart
+//   buffer. Every hart contributes `iters` increments to exactly one group, so
+//   the published values sum to num_harts * iters however the groups are
+//   shaped -- a closed form that does not depend on the launch geometry.
+void kernel_amoadd_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto lmem     = (int32_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+
+  if (threadIdx.x == 0) {
+    *lmem = 0;
+  }
+  __syncthreads();
+
+  for (uint32_t i = 0; i < arg->iters; ++i) {
+    __atomic_fetch_add(lmem, 1, __ATOMIC_SEQ_CST);
+  }
+  __syncthreads();
+
+  if (threadIdx.x == 0) {
+    per_hart[hid] = (uint32_t)*lmem;
+  }
+}
+
 static const PFN_Kernel sc_tests[] = {
   kernel_amoadd,             // 0
   kernel_amoor,              // 1
@@ -271,6 +299,7 @@ static const PFN_Kernel sc_tests[] = {
   kernel_atomic_reduction,   // 10  CUDA-style reduction
   kernel_atomic_critical,    // 11  CUDA-style critical section
   kernel_self_consistency,   // 12  issuer self-consistency (load->AMO->load)
+  kernel_amoadd_lmem,        // 13  AMOADD on local memory (LMEM banks)
 };
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {

@@ -26,12 +26,8 @@ TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw 
 EXCLUDE := rtquery_anyhit
 
 # --- per-backend exclude lists ---------------------------------------
-# atomic_shared: VX_lmem_switch has no AMO path -- it strips the AMO bits and
-# asserts, so the run aborts under rtlsim. SimX's LMEM banks do implement the
-# op, which is why the test runs there. The entry goes away with the RTL LMEM
-# AMO path, and the test is what proves it.
 EXCLUDE_simx   :=
-EXCLUDE_rtlsim := atomic_shared
+EXCLUDE_rtlsim :=
 EXCLUDE_opae   :=
 EXCLUDE_xrt    :=
 
