@@ -146,19 +146,47 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     // SC outcome: this hart's reservation on this line is still live.
     assign res_check = own_match;
 
+    // A live reservation on a line is not handed to another hart on demand.
+    // A station is indexed by line, so every hart contending one word maps to
+    // the same station; letting each LR overwrite it means no SC ever finds
+    // its own reservation and a contended retry loop makes no progress. The
+    // holder keeps the station until its own SC resolves it, so one hart wins
+    // per round. A refused LR simply does not reserve, and its SC fails --
+    // architecturally legal, since SC may fail for any reason.
+    //
+    // The hold is bounded: a holder that never issues its SC (a retry loop is
+    // free to abandon an attempt) would otherwise own the station forever.
+    // Each refused LR spends one credit, so the holder gets a bounded number
+    // of chances before the station may be taken.
+    localparam HOLD_CREDIT_BITS = 6;
+    localparam [HOLD_CREDIT_BITS-1:0] HOLD_CREDITS = HOLD_CREDIT_BITS'(63);
+
+    reg [RS_DEPTH-1:0][HOLD_CREDIT_BITS-1:0] rs_hold_r;
+    wire hold_lapsed = (rs_hold_r[rs_idx] == '0);
+
+    // Refuse only a foreign hart on the same line. Re-reserving by the holder
+    // refreshes it, and a station holding a different line is displaced as
+    // before -- that is ordinary capacity behaviour, not the livelock.
+    wire res_held = res_reserve && en && line_match && ~own_match && ~hold_lapsed;
+
     // LR installs the payload; a matching SC/store clears the valid bit.
-    assign rs_we = res_reserve && en;
+    assign rs_we = res_reserve && en && ~res_held;
     wire   rs_clr = en && ((res_invalidate && line_match)      // any write breaks the reserver
                         || (res_clear && own_match));          // SC clears its own
 
     always @(posedge clk) begin
         if (reset) begin
             rs_valid <= '0;
+            rs_hold_r <= '0;
         end else begin
             if (rs_we) begin
                 rs_valid[rs_idx] <= 1'b1;
+                rs_hold_r[rs_idx] <= HOLD_CREDITS;
             end else if (rs_clr) begin
                 rs_valid[rs_idx] <= 1'b0;
+                rs_hold_r[rs_idx] <= '0;
+            end else if (res_held) begin
+                rs_hold_r[rs_idx] <= rs_hold_r[rs_idx] - HOLD_CREDIT_BITS'(1);
             end
         end
     end
