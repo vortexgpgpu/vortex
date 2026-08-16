@@ -19,6 +19,13 @@ tests:
   - id: base
     app: amo
     drivers: [simx, rtlsim]
+  # Native compare-and-swap. The cas_ladder case is compiled out when the
+  # extension is off, which is the default, so without this spec nothing
+  # exercises the compare-and-swap datapath at all.
+  - id: zacas
+    app: amo
+    drivers: [simx, rtlsim]
+    configs+: "-DVX_CFG_EXT_ZACAS_ENABLE"
   # Write-back D-cache variants (rtlsim only in the legacy suite).
   - id: wb-dirtybytes0
     app: amo
