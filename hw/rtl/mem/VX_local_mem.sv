@@ -67,7 +67,14 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // operand width comes from the request's byteen; hart_id identifies the
     // reserver so a store-conditional can tell its own reservation from
     // another hart's.
-    localparam AMO_SB_WIDTH    = 1 + $bits(amo_op_e) + 1 + HART_ID_WIDTH;
+    // Compare-and-swap adds a comparand: the request's data word already
+    // carries the swap value, so the third operand needs its own room.
+`ifdef VX_CFG_EXT_ZACAS_ENABLE
+    localparam AMO_CMP_WIDTH   = `VX_CFG_XLEN;
+`else
+    localparam AMO_CMP_WIDTH   = 0;
+`endif
+    localparam AMO_SB_WIDTH    = 1 + $bits(amo_op_e) + 1 + HART_ID_WIDTH + AMO_CMP_WIDTH;
     localparam REQ_DATAW       = 1 + BANK_ADDR_WIDTH + WORD_SIZE + WORD_WIDTH + TAG_WIDTH + AMO_SB_WIDTH;
     localparam RSP_DATAW       = WORD_WIDTH + TAG_WIDTH;
 
@@ -96,6 +103,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0][$bits(amo_op_e)-1:0] req_amo_op;
     wire [NUM_REQS-1:0]                  req_amo_unsigned;
     wire [NUM_REQS-1:0][HART_ID_WIDTH-1:0] req_amo_hart_id;
+`ifdef VX_CFG_EXT_ZACAS_ENABLE
+    wire [NUM_REQS-1:0][AMO_CMP_WIDTH-1:0] req_amo_cmp;
+`endif
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_req_amo
         mem_bus_attr_t lane_attr;
         assign lane_attr = mem_bus_attr_t'(lsu_bus_if[i].req_data.attr);
@@ -103,6 +113,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         assign req_amo_op[i]       = lane_attr.amo.amo_op;
         assign req_amo_unsigned[i] = lane_attr.amo.amo_unsigned;
         assign req_amo_hart_id[i]  = lane_attr.amo.hart_id;
+    `ifdef VX_CFG_EXT_ZACAS_ENABLE
+        assign req_amo_cmp[i]      = lane_attr.amo.amo_cmp;
+    `endif
         `UNUSED_VAR (lane_attr)
     end
 
@@ -118,6 +131,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0][$bits(amo_op_e)-1:0] per_bank_req_amo_op;
     wire [NUM_BANKS-1:0]                    per_bank_req_amo_unsigned;
     wire [NUM_BANKS-1:0][HART_ID_WIDTH-1:0] per_bank_req_amo_hart_id;
+`ifdef VX_CFG_EXT_ZACAS_ENABLE
+    wire [NUM_BANKS-1:0][AMO_CMP_WIDTH-1:0] per_bank_req_amo_cmp;
+`endif
     wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0] per_bank_req_idx;
     wire [NUM_BANKS-1:0]                    per_bank_req_ready;
 
@@ -138,6 +154,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             req_amo_op[i],
             req_amo_unsigned[i],
             req_amo_hart_id[i],
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            req_amo_cmp[i],
+        `endif
             lsu_bus_if[i].req_data.rw,
             req_bank_addr[i],
             lsu_bus_if[i].req_data.data,
@@ -178,6 +197,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             per_bank_req_amo_op[i],
             per_bank_req_amo_unsigned[i],
             per_bank_req_amo_hart_id[i],
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            per_bank_req_amo_cmp[i],
+        `endif
             per_bank_req_rw[i],
             per_bank_req_addr[i],
             per_bank_req_data[i],
@@ -299,6 +321,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         reg [$bits(amo_op_e)-1:0] amo_wb_op_r;
         reg                       amo_wb_unsigned_r;
         reg [WORD_WIDTH-1:0]      amo_wb_rhs_r;
+    `ifdef VX_CFG_EXT_ZACAS_ENABLE
+        reg [AMO_CMP_WIDTH-1:0]   amo_wb_cmp_r;
+    `endif
 
         wire amo_accept = lsu_active && per_bank_req_amo_valid[i];
 
@@ -379,6 +404,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
                 amo_wb_op_r       <= per_bank_req_amo_op[i];
                 amo_wb_unsigned_r <= per_bank_req_amo_unsigned[i];
                 amo_wb_rhs_r      <= per_bank_req_data[i];
+            `ifdef VX_CFG_EXT_ZACAS_ENABLE
+                amo_wb_cmp_r      <= per_bank_req_amo_cmp[i];
+            `endif
             end
         end
 
@@ -398,6 +426,11 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .compute_width    (2'd2),
             .compute_old      (64'(amo_old_r)),
             .compute_rhs      (64'(amo_wb_rhs_r)),
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            .compute_cmp      (64'(amo_wb_cmp_r)),
+        `else
+            .compute_cmp      (64'b0),
+        `endif
             .compute_new_word (amo_new_word),
             .compute_ret_word (amo_ret_word),
             // A load-reserved claims the word; a store-conditional gives up its

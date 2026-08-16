@@ -339,7 +339,13 @@ void LsuUnit::process_request_step(uint32_t b) {
 				if (!lsu_req.mask.test(i)) {
 					continue;
 				}
-				lane_entries.at(i) = { lsu_req.addrs.at(i), 4, 0, lsu_req.tids.at(i) };
+				mem_addr_size_t e;
+				e.addr    = lsu_req.addrs.at(i);
+				e.size    = 4;
+				e.data    = 0;
+				e.amo_cmp = 0;
+				e.tid     = lsu_req.tids.at(i);
+				lane_entries.at(i) = e;
 			}
 			IntrLsuArgs meta_args{};
 			meta_args.width = 2; // 32-bit metadata words

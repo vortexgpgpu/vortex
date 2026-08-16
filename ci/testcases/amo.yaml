@@ -7,7 +7,7 @@ defaults:
   configs: "-DVX_CFG_EXT_A_ENABLE"
   xlen: [32, 64]
   tier: smoke
-  touches: [hw/rtl/cache, sim/simx/amo, sim/simx/mem]
+  touches: [hw/rtl/cache, hw/rtl/mem, hw/rtl/core/VX_decode.sv, hw/rtl/core/VX_lsu_slice.sv, sim/simx/amo, sim/simx/mem]
 tests:
   # RISC-V 'A' ISA conformance (rv{XLEN}ua-p-{amo*,lrsc}); shares the A-built sim.
   - id: isa-conformance

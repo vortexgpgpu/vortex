@@ -48,6 +48,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     input  wire [1:0]                    compute_width,
     input  wire [63:0]                   compute_old,
     input  wire [63:0]                   compute_rhs,
+    input  wire [63:0]                   compute_cmp,
     output wire [63:0]                   compute_new_word,
     output wire [63:0]                   compute_ret_word,
 
@@ -70,6 +71,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
         .width    (compute_width),
         .old_word (compute_old),
         .rhs      (compute_rhs),
+        .cmp      (compute_cmp),
         .new_word (compute_new_word),
         .ret_word (compute_ret_word)
     );

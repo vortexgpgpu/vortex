@@ -22,8 +22,15 @@ endif
 # Zacas rides after the single-letter extensions, which is where the ISA
 # string wants multi-letter names. It extends the A set rather than replacing
 # it, so it is only meaningful alongside it.
+# The pinned GNU assembler does not know the extension, so a test that builds
+# its kernel through that toolchain declares GNU_KERNEL and keeps the base
+# string. Such a kernel gets the compare-exchange retry loop instead.
 ifneq (,$(filter -DVX_CFG_EXT_ZACAS_ENABLE, $(XCONFIGS)))
+ifeq ($(GNU_KERNEL),)
 	ZACAS_EXT := _zacas
+else
+	ZACAS_EXT :=
+endif
 else
 	ZACAS_EXT :=
 endif

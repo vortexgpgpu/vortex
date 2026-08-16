@@ -180,15 +180,23 @@ package VX_gpu_pkg;
         AMO_OP_OR    = 4'h5,
         AMO_OP_AND   = 4'h6,
         AMO_OP_MIN   = 4'h7,
-        AMO_OP_MAX   = 4'h8
+        AMO_OP_MAX   = 4'h8,
         // MINU/MAXU collapse into MIN/MAX + amo_unsigned bit.
+        AMO_OP_CAS   = 4'h9
     } amo_op_e;
 
     // Slim AMO sideband. width derives from byteen popcount at the cache
     // bank; rhs is read from the request's data field. Includes scalar
     // hart_id for the LLC reservation table.
+    // Compare-and-swap needs a third operand, and the request's single data
+    // word already carries the swap value, so the comparand travels here. It
+    // must reach wherever the read-modify-write commits, which is the local
+    // bank for shared memory and the last-level bank for global memory.
     typedef struct packed {
         logic [HART_ID_WIDTH-1:0]   hart_id;
+    `ifdef VX_CFG_EXT_ZACAS_ENABLE
+        logic [`VX_CFG_XLEN-1:0]     amo_cmp;
+    `endif
         logic                        amo_unsigned;
         amo_op_e                     amo_op;
         logic                        amo_valid;
