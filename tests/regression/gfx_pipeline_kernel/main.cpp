@@ -22,7 +22,8 @@
 #include "common.h"
 
 using vortex::graphics::rast_prim_t;
-using vortex::graphics::rast_tile_header_t;
+using vortex::graphics::rast_bin_header_t;   // host Binning() oracle  (12 B, absolute offset)
+using vortex::graphics::rast_tile_header_t;  // device kernel gfx-v1   ( 8 B, relative offset)
 
 #define CHECK(expr)                                                      \
   do {                                                                   \
@@ -112,25 +113,43 @@ int main(int argc, char** argv) {
   for (uint32_t t = 0; t < n; ++t) prims.push_back({3 * t + 0, 3 * t + 1, 3 * t + 2});
 
   std::vector<uint8_t> tilebuf, primbuf;
+  // Bin at the granularity the device kernel bins at, not at a separately
+  // hard-coded log: the two must agree by construction, not by coincidence.
   uint32_t ntiles = graphics::Binning(tilebuf, primbuf, vmap, prims, SETUP_W, SETUP_H,
-                                      SETUP_NEAR, SETUP_FAR, SETUP_BIN_LOG);
+                                      SETUP_NEAR, SETUP_FAR, PIPE_BIN_LOG);
   const uint32_t P_ref = (uint32_t)(primbuf.size() / sizeof(rast_prim_t));
 
   TileMap gold;
   uint32_t Pbin_ref = 0;
   {
-    auto* hdr = reinterpret_cast<const rast_tile_header_t*>(tilebuf.data());
-    const uint8_t* pp = tilebuf.data() + (size_t)ntiles * sizeof(rast_tile_header_t);
+    // Binning() emits the coarse-bin layout: a rast_bin_header_t block followed
+    // by the sorted-pid array, with each bin's pids_offset an ABSOLUTE index
+    // into that array. The device kernel below emits the narrower gfx-v1
+    // rast_tile_header_t instead, whose pids_offset is relative to the end of
+    // its own header, so the two buffers are decoded by separate walks and only
+    // the resulting (tile -> pids) maps are compared.
+    auto* hdr  = reinterpret_cast<const rast_bin_header_t*>(tilebuf.data());
+    auto* pids = reinterpret_cast<const uint32_t*>(
+        tilebuf.data() + (size_t)ntiles * sizeof(rast_bin_header_t));
     for (uint32_t i = 0; i < ntiles; ++i) {
       uint32_t cnt = hdr[i].pids_count;
-      std::vector<uint32_t> v(cnt);
-      std::memcpy(v.data(), pp, cnt * sizeof(uint32_t));
-      pp += cnt * sizeof(uint32_t);
-      gold[{hdr[i].tile_x, hdr[i].tile_y}] = std::move(v);
+      gold[{hdr[i].bin_x, hdr[i].bin_y}] =
+          std::vector<uint32_t>(pids + hdr[i].pids_offset,
+                                pids + hdr[i].pids_offset + cnt);
       Pbin_ref += cnt;
     }
   }
   std::printf("gfx_pipeline_kernel: n=%u  P=%u  tiles=%u  keys=%u\n", n, P_ref, ntiles, Pbin_ref);
+
+  // Every non-empty bin holds at least one pid, so a correct walk always yields
+  // keys >= tiles. The walk has to match the layout Binning() emits: one that
+  // does not both breaks this identity and under-counts Kcap below, which sizes
+  // the device tilebuf that PIPE_STAGE_BSCATTER writes into.
+  if (Pbin_ref < ntiles) {
+    std::printf("*** oracle walk: keys=%u < tiles=%u — tilebuf layout mismatch\n",
+                Pbin_ref, ntiles);
+    return 1;
+  }
 
   vx_device_h dev = nullptr;
   CHECK(vx_device_open(0, &dev));
