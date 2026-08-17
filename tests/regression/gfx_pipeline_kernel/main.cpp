@@ -54,7 +54,10 @@ static float frand(float lo, float hi) {
 
 // Vertex in front of the near plane (ndc_z in [-0.8,0.8] -> z+w > 0).
 static setup_vertex_t make_vertex(float ndc_x, float ndc_y, float w) {
-  setup_vertex_t v;
+  setup_vertex_t v{};   // varying2 feeds the w0..w5 planes; leaving it
+                        // indeterminate uploads stack bytes to the device, and a
+                        // pattern decoding as a NaN or an out-of-range magnitude
+                        // reaches the rasterizer as an attribute plane.
   float ndc_z = frand(-0.8f, 0.8f);
   v.pos[0] = ndc_x * w; v.pos[1] = ndc_y * w; v.pos[2] = ndc_z * w; v.pos[3] = w;
   v.color[0] = frand(0, 1); v.color[1] = frand(0, 1);

@@ -63,7 +63,9 @@ cgl_to_gfx_vertices(const std::unordered_map<uint32_t, CGLTrace::vertex_t>& cgl)
   out.reserve(cgl.size());
   for (auto& kv : cgl) {
     const auto& v = kv.second;
-    graphics::vertex_t vx;
+    graphics::vertex_t vx{};   // varying2 feeds the w0..w5 planes; an
+                               // indeterminate one reaches setup as an
+                               // attribute plane.
     vx.pos[0] = v.pos.x;       vx.pos[1] = v.pos.y;
     vx.pos[2] = v.pos.z;       vx.pos[3] = v.pos.w;
     vx.color[0] = v.color.r;   vx.color[1] = v.color.g;
