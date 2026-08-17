@@ -22,6 +22,8 @@
 #include "common.h"
 
 using vortex::graphics::rast_prim_t;
+using vortex::graphics::rast_attrib_t;
+using vortex::graphics::rast_attribs_t;
 using vortex::graphics::rast_bin_header_t;   // host Binning() oracle  (12 B, absolute offset)
 using vortex::graphics::rast_tile_header_t;  // device kernel gfx-v1   ( 8 B, relative offset)
 
@@ -257,12 +259,58 @@ int main(int argc, char** argv) {
   if (h_meta[1] != Pbin_ref) { std::printf("*** keys mismatch: dev=%u ref=%u\n", h_meta[1], Pbin_ref); ++errors; }
   if (h_meta[2] != ntiles)   { std::printf("*** tile count mismatch: dev=%u ref=%u\n", h_meta[2], ntiles); ++errors; }
 
-  // (1) primbuf bit-for-bit vs Binning() (same dense input order).
+  // (1) primbuf bit-for-bit vs Binning() (same dense input order). A whole-struct
+  // compare identifies nothing on its own: one plane left unset marks every
+  // primitive and reads the same as a divergence in the setup math, so name the
+  // part that differs.
+  static const char* const PLANE[] = { "z", "r", "g", "b", "a", "u", "v",
+                                       "rhw", "w0", "w1", "w2", "w3", "w4", "w5" };
+  // The planes are walked as an array, which holds only while rast_attribs_t
+  // stays a flat run of rast_attrib_t with one name here per member. A plane
+  // added there and not here would otherwise be reported under its neighbour's
+  // name, or read past the end.
+  static_assert(sizeof(rast_attribs_t)
+                    == (sizeof(PLANE) / sizeof(PLANE[0])) * sizeof(rast_attrib_t),
+                "PLANE[] must name every rast_attribs_t plane, in order");
+
   auto* bprim = reinterpret_cast<const rast_prim_t*>(primbuf.data());
-  for (uint32_t i = 0; i < P_ref && errors < 16; ++i)
-    if (std::memcmp(&h_prim[i], &bprim[i], sizeof(rast_prim_t)) != 0) {
-      std::printf("*** primbuf[%u] device != Binning()\n", i); ++errors;
+  for (uint32_t i = 0; i < P_ref && errors < 16; ++i) {
+    const rast_prim_t& d = h_prim[i];
+    const rast_prim_t& r = bprim[i];
+    if (std::memcmp(&d, &r, sizeof(rast_prim_t)) == 0) {
+      continue;
     }
+    ++errors;
+    if (std::memcmp(d.edges, r.edges, sizeof(d.edges)) != 0) {
+      std::printf("*** primbuf[%u] edges differ\n", i);
+    }
+    if (d.facing != r.facing) {
+      std::printf("*** primbuf[%u] facing dev=%u ref=%u\n", i, d.facing, r.facing);
+    }
+    if (std::memcmp(&d.rhw_scale, &r.rhw_scale, sizeof(d.rhw_scale)) != 0) {
+      std::printf("*** primbuf[%u] rhw_scale dev=%g ref=%g\n", i,
+                  (double)d.rhw_scale, (double)r.rhw_scale);
+    }
+    auto* da = reinterpret_cast<const rast_attrib_t*>(&d.attribs);
+    auto* ra = reinterpret_cast<const rast_attrib_t*>(&r.attribs);
+    for (size_t p = 0; p < sizeof(PLANE) / sizeof(PLANE[0]); ++p) {
+      if (std::memcmp(&da[p], &ra[p], sizeof(rast_attrib_t)) == 0) {
+        continue;
+      }
+      // Raw Q-format bits and the signed distance between them: the planes are
+      // fixed point, so a one-count gap is a rounding disagreement while a large
+      // one means the two sides computed different geometry. The distance is
+      // taken in 64 bits because the interesting case is two saturated values at
+      // opposite ends of the range, whose difference does not fit in an int32.
+      std::printf("*** primbuf[%u] plane %-3s dev=(%d,%d,%d) ref=(%d,%d,%d)"
+                  " delta=(%lld,%lld,%lld)\n", i, PLANE[p],
+                  da[p].x.bits, da[p].y.bits, da[p].z.bits,
+                  ra[p].x.bits, ra[p].y.bits, ra[p].z.bits,
+                  (long long)da[p].x.bits - (long long)ra[p].x.bits,
+                  (long long)da[p].y.bits - (long long)ra[p].y.bits,
+                  (long long)da[p].z.bits - (long long)ra[p].z.bits);
+    }
+  }
 
   // (2) Parse the device tilebuf exactly as RASTER does (pid block at
   // header_addr + 8 + pids_offset*4) into a (tile -> pids) map, vs the oracle.
