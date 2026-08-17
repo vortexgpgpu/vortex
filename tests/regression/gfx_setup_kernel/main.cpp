@@ -54,11 +54,17 @@ static float frand(float lo, float hi) {
 // Vertex from NDC-ish coords scaled by w (>0). near_dist = z+w = w*(ndc_z+1),
 // so ndc_z < -1 places the vertex behind the near plane (gets clipped).
 static setup_vertex_t make_vertex(float ndc_x, float ndc_y, float ndc_z, float w) {
-  setup_vertex_t v;
+  setup_vertex_t v{};   // varying2 is part of the vertex; leaving it
+                        // indeterminate feeds the w0..w5 planes whatever is on
+                        // the stack, and a pattern that happens to decode as a
+                        // NaN or a denormal need not compare equal between the
+                        // host and the device -- which made this test fail on a
+                        // fixed set of primitives, but only sometimes.
   v.pos[0] = ndc_x * w; v.pos[1] = ndc_y * w; v.pos[2] = ndc_z * w; v.pos[3] = w;
   v.color[0] = frand(0, 1); v.color[1] = frand(0, 1);
   v.color[2] = frand(0, 1); v.color[3] = frand(0, 1);
   v.texcoord[0] = frand(0, 1); v.texcoord[1] = frand(0, 1);
+  for (int i = 0; i < 6; ++i) v.varying2[i] = frand(0, 1);
   return v;
 }
 
@@ -151,6 +157,28 @@ static Golden host_setup(const std::vector<setup_vertex_t>& verts, uint32_t n,
   return g;
 }
 
+// Report which fields of a primitive differ, and return 1 if any did. A
+// whole-struct compare identifies nothing on its own: one field either side
+// leaves unset marks every primitive, and reads exactly like a divergence in the
+// setup math. Naming the field separates a layout problem from a numerical one.
+static int report_prim_diff(const char* what, size_t i,
+                            const rast_prim_t& a, const rast_prim_t& b,
+                            const char* na, const char* nb) {
+  if (std::memcmp(&a, &b, sizeof(rast_prim_t)) == 0)
+    return 0;
+  if (std::memcmp(a.edges, b.edges, sizeof(a.edges)) != 0)
+    std::printf("*** %s: prim[%zu] edges differ\n", what, i);
+  if (std::memcmp(&a.attribs, &b.attribs, sizeof(a.attribs)) != 0)
+    std::printf("*** %s: prim[%zu] attribs differ\n", what, i);
+  if (a.facing != b.facing)
+    std::printf("*** %s: prim[%zu] facing %s=%u %s=%u\n",
+                what, i, na, a.facing, nb, b.facing);
+  if (std::memcmp(&a.rhw_scale, &b.rhw_scale, sizeof(a.rhw_scale)) != 0)
+    std::printf("*** %s: prim[%zu] rhw_scale %s=%g %s=%g\n",
+                what, i, na, (double)a.rhw_scale, nb, (double)b.rhw_scale);
+  return 1;
+}
+
 // Anchor the shared math against the real Binning() oracle on the NON-CROSSING
 // subset (where clip is a passthrough, so setup must reproduce Binning()
 // bit-for-bit). Returns mismatch count.
@@ -185,26 +213,9 @@ static int anchor_against_binning(const Scene& sc, uint32_t n) {
     ++errors;
   }
   size_t m = bp < ref.prim.size() ? bp : ref.prim.size();
-  for (size_t i = 0; i < m && errors < 16; ++i) {
-    const rast_prim_t& a = ref.prim[i];   // shared math
-    const rast_prim_t& b = bprim[i];      // Binning() oracle
-    if (std::memcmp(&a, &b, sizeof(rast_prim_t)) == 0)
-      continue;
-    // Name the field that differs. A whole-struct compare reports every
-    // primitive whenever either producer leaves any one field unset -- which
-    // says nothing about the geometry and reads exactly like a math divergence.
-    if (std::memcmp(a.edges, b.edges, sizeof(a.edges)) != 0)
-      std::printf("*** anchor: prim[%zu] edges differ\n", i);
-    if (std::memcmp(&a.attribs, &b.attribs, sizeof(a.attribs)) != 0)
-      std::printf("*** anchor: prim[%zu] attribs differ\n", i);
-    if (a.facing != b.facing)
-      std::printf("*** anchor: prim[%zu] facing shared=%u Binning=%u\n",
-                  i, a.facing, b.facing);
-    if (std::memcmp(&a.rhw_scale, &b.rhw_scale, sizeof(a.rhw_scale)) != 0)
-      std::printf("*** anchor: prim[%zu] rhw_scale shared=%g Binning=%g\n",
-                  i, (double)a.rhw_scale, (double)b.rhw_scale);
-    ++errors;
-  }
+  for (size_t i = 0; i < m && errors < 16; ++i)
+    errors += report_prim_diff("anchor", i, ref.prim[i], bprim[i],
+                               "shared", "Binning");
   return errors;
 }
 
@@ -401,9 +412,8 @@ int main(int argc, char** argv) {
 
   // (1) device == shared host math, bit-for-bit.
   for (uint32_t i = 0; i < P && errors < 16; ++i) {
-    if (std::memcmp(&h_prim[i], &ref.prim[i], sizeof(rast_prim_t)) != 0) {
-      std::printf("*** prim[%u] device != reference\n", i); ++errors;
-    }
+    errors += report_prim_diff("prim", i, h_prim[i], ref.prim[i],
+                               "device", "reference");
     if (std::memcmp(&h_vtx[i], &ref.vtx[i], sizeof(clip_tri_t)) != 0) {
       std::printf("*** vtx[%u] device != reference\n", i); ++errors;
     }
