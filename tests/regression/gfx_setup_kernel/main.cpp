@@ -185,11 +185,26 @@ static int anchor_against_binning(const Scene& sc, uint32_t n) {
     ++errors;
   }
   size_t m = bp < ref.prim.size() ? bp : ref.prim.size();
-  for (size_t i = 0; i < m && errors < 16; ++i)
-    if (std::memcmp(&bprim[i], &ref.prim[i], sizeof(rast_prim_t)) != 0) {
-      std::printf("*** anchor: prim[%zu] shared-math != Binning()\n", i);
-      ++errors;
-    }
+  for (size_t i = 0; i < m && errors < 16; ++i) {
+    const rast_prim_t& a = ref.prim[i];   // shared math
+    const rast_prim_t& b = bprim[i];      // Binning() oracle
+    if (std::memcmp(&a, &b, sizeof(rast_prim_t)) == 0)
+      continue;
+    // Name the field that differs. A whole-struct compare reports every
+    // primitive whenever either producer leaves any one field unset -- which
+    // says nothing about the geometry and reads exactly like a math divergence.
+    if (std::memcmp(a.edges, b.edges, sizeof(a.edges)) != 0)
+      std::printf("*** anchor: prim[%zu] edges differ\n", i);
+    if (std::memcmp(&a.attribs, &b.attribs, sizeof(a.attribs)) != 0)
+      std::printf("*** anchor: prim[%zu] attribs differ\n", i);
+    if (a.facing != b.facing)
+      std::printf("*** anchor: prim[%zu] facing shared=%u Binning=%u\n",
+                  i, a.facing, b.facing);
+    if (std::memcmp(&a.rhw_scale, &b.rhw_scale, sizeof(a.rhw_scale)) != 0)
+      std::printf("*** anchor: prim[%zu] rhw_scale shared=%g Binning=%g\n",
+                  i, (double)a.rhw_scale, (double)b.rhw_scale);
+    ++errors;
+  }
   return errors;
 }
 
