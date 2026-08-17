@@ -19,6 +19,15 @@ CXXFLAGS  += -I$(VORTEX_HOME)/sw/gfx -I$(VORTEX_HOME)/sw/common -I$(VORTEX_HOME)
 VX_CFLAGS += -ffp-contract=off
 CXXFLAGS  += -ffp-contract=off
 
+# The device kernel and the host reference are built from the same shared
+# headers, and the test compares their outputs byte for byte. Both directories
+# are globbed rather than naming the headers actually included: an edit to any
+# of them changes the primitive layout the two sides must agree on, and missing
+# one leaves a silently stale build whose mismatch describes the previous layout.
+SHARED_HDRS := $(wildcard $(VORTEX_HOME)/sw/gfx/*.h) $(wildcard $(VORTEX_HOME)/sw/common/*.h)
+VX_HDRS := $(SHARED_HDRS)
+HDRS    := $(SHARED_HDRS)
+
 OPTS ?= -n200
 
 KERNEL_LIB := vortex2

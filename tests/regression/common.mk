@@ -178,22 +178,31 @@ RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),P
 $(VORTEX_RT_LIB)/libvortex.so:
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub DESTDIR=$(VORTEX_RT_LIB)
 
+# Headers the device kernel and the host binary are built from. Neither target
+# lists any by default, so editing a shared header under sw/common or sw/gfx
+# rebuilds nothing and both sides go on running against the previous layout --
+# silently, and reporting a pass or a mismatch that describes the old build. A
+# test that includes such headers declares them here. They are filtered out of
+# the compiler's inputs below, being prerequisites only.
+VX_HDRS ?=
+HDRS ?=
+
 ifneq ($(filter %.S,$(VX_SRCS)),)
-kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
-	$(VX_CXX) $(VX_CFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(VX_LDFLAGS) -o $@
+kernel.elf: $(VX_SRCS) $(VX_HDRS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+	$(VX_CXX) $(VX_CFLAGS) $(filter-out $(CONFIG_STAMP) $(VX_HDRS),$^) $(VX_LDFLAGS) -o $@
 else
-vx_start.o: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+vx_start.o: $(VX_SRCS) $(VX_HDRS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
 	$(VX_CXX) $(VX_CFLAGS) -c $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) -DNEED_GP -DNEED_TLS -DNEED_INITFINI $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@
 	$(VX_CXX) $(VX_CFLAGS) $@ $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@.elf
 	$(VX_CXX) $(VX_CFLAGS) $$($(KERNEL_STARTUP) $(VX_DP) $@.elf) $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@ && rm -f $@.elf
 
-kernel.elf: vx_start.o $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+kernel.elf: vx_start.o $(VX_SRCS) $(VX_HDRS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
 	$(VX_CXX) $(VX_CFLAGS) vx_start.o $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@
 endif
 
-$(APP): $(SRCS) $(RT_LIB_DIR)/libvortex.so $(CONFIG_STAMP)
-	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(LDFLAGS) -o $@
+$(APP): $(SRCS) $(HDRS) $(RT_LIB_DIR)/libvortex.so $(CONFIG_STAMP)
+	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP) $(HDRS),$^) $(LDFLAGS) -o $@
 
 # Cross-compiled stub for non-native HOST_ARCH.
 ifneq ($(HOST_ARCH),x86_64)
