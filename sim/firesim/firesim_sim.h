@@ -60,8 +60,27 @@ public:
 
 private:
 
+  // Reports requested cycles against target cycles actually elapsed, then the
+  // core's own counters. The two together separate a design that is idle from a
+  // simulation that has stopped advancing it -- from outside, both look like a
+  // quiet bus.
+  void report_progress(const char *why);
+
+  // Dumps Vortex's own performance counters, which say where inside the core a
+  // stall is. Needs RTL built with PERF_ENABLE; see the definition.
+  void report_core_counters();
+
   class Impl;
   Impl* impl_;
+
+  // Target cycles the next is_busy() poll advances. Small while idle so a
+  // launch cannot be missed, growing once the target is known to be running.
+  uint32_t step_batch_;
+
+  // Target cycles spent continuously busy, and whether this stall has already
+  // been reported. Both reset when the target goes idle.
+  uint64_t busy_cycles_;
+  bool stall_reported_;
 };
 
 }
