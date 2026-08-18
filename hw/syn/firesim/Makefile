@@ -79,7 +79,46 @@ RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs 
 # those computations with the generator's report values -- which sets the memory
 # port counts to zero and yields a design with no memory interface at all.
 TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(CONFIGS))
-GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(RTL_INCLUDE)
+
+# This wrapper exposes a single AXI memory port, so give Vortex a single
+# platform memory bank to match. Left at the default of 2, Vortex builds two
+# internal memory ports and VX_mem_to_axi arbitrates them down onto the one
+# bank, recovering the originating port from the *returned* AXI id
+# (rsp_xbar_sel_in = m_axi_rid[0 +: NUM_PORTS_IN_BITS]). That makes correctness
+# depend on the memory model echoing rid bit-exact -- an assumption real AXI
+# satisfies but a timing model need not. One port removes the dependency
+# entirely and matches what the wrapper actually presents.
+PLATFORM_DEFINES := -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1
+
+# Paired with idBits in VortexConfig (VortexTarget.scala) -- change neither alone.
+# That one shapes the IO the blackbox is instantiated with, this one shapes the
+# module's own ports, and Verilog pads or truncates a disagreement between them
+# without a diagnostic.
+#
+# The XRT default is 32, which is a width rather than a count: on XRT it only has
+# to be wide enough. FASED reads it as a count. It sizes the read-response egress
+# with `1 << idBits` in Scala Int arithmetic, where 32 wraps to 1, leaving one
+# response queue shared by every AXI id -- responses then leave carrying the
+# requesting transaction's id and another transaction's data. Vortex drives 4-bit
+# ids here (VX_mem_to_axi's tag buffer is engaged, since UUID_WIDTH puts the
+# upstream tag past any AXI id width), so 8 is ample and stays clear of the
+# overflow.
+PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=8
+
+# Vortex's performance counters are the only view inside the core that does not
+# require re-elaborating the design: at a stall they say whether warps are still
+# resident, whether they are waiting at a barrier, and which pipeline is holding
+# them. The AXI boundary cannot show any of that -- a core waiting on a response
+# it never retired looks exactly like a core with nothing left to do. They are
+# read over the DCR response path, which both the harness and the driver already
+# drive, but VX_csr_data.sv gates them behind PERF_ENABLE. Off by default because
+# they cost area; build with PERF_DEFINES=-DPERF_ENABLE to read them, and note
+# that without it every counter reads zero, which is indistinguishable from an
+# idle core rather than an absent instrument.
+PERF_DEFINES ?=
+PLATFORM_DEFINES += $(PERF_DEFINES)
+
+GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(RTL_INCLUDE)
 
 # Only the packages and the wrapper are named; every other Vortex module is
 # resolved by library search over RTL_INCLUDE. Handing the whole tree over as a
@@ -117,8 +156,16 @@ incdirs:
 # modules go.
 XRT_AFU_MODULES := vortex_afu.v VX_afu_ctrl.sv VX_afu_wrap.sv
 
+# Every input the flattener reads. Without these the rule below has no
+# prerequisites at all, so make runs it exactly once and then reports "nothing to
+# be done" forever: an edit under hw/rtl never reaches the flattened tree and the
+# build silently consumes the previous elaboration. The generated headers are
+# listed too because GEN_CFLAGS resolves widths out of them.
+RTL_SRCS := $(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh') \
+            $(wildcard $(ROOT_DIR)/hw/VX_config.vh) $(wildcard $(ROOT_DIR)/hw/VX_types.vh)
+
 vivado-sources: $(VIVADO_SRCS_LIST)
-$(VIVADO_SRCS_LIST):
+$(VIVADO_SRCS_LIST): $(RTL_SRCS)
 	@mkdir -p $(BUILD_DIR)
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) \
 		-TVX_firesim_wrap -Cvivado_srcs -Ovivado_srcs.f

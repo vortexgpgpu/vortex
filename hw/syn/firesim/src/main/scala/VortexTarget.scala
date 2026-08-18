@@ -200,13 +200,24 @@ class VortexDUT(nastiParams: NastiParameters)(implicit val p: Parameters) extend
 
 /** Memory-port shape for a 32-bit Vortex build.
   *
-  * These mirror the generated VX_config.vh rather than being chosen here: address width follows XLEN (32 for a
-  * 32-bit build, 48 for 64-bit), data width is VX_CFG_PLATFORM_MEMORY_DATA_SIZE bytes, and the ID width is the
-  * platform default. They must be regenerated alongside the RTL config, not edited independently.
+  * Address width follows XLEN (32 for a 32-bit build, 48 for 64-bit) and data width is
+  * VX_CFG_PLATFORM_MEMORY_DATA_SIZE bytes, both mirroring the generated VX_config.vh and regenerated alongside
+  * the RTL config rather than edited independently.
+  *
+  * idBits deliberately does not mirror the RTL platform default of 32. FASED sizes its read-response egress with
+  * `1 << idBits` evaluated in Scala Int arithmetic, which wraps to 1 at 32: the per-id reorder path is then not
+  * elaborated at all and every AXI id shares one response queue, so responses leave carrying the requesting
+  * transaction's id and another transaction's data. Elaboration succeeds and nothing warns. Vortex drives 4-bit
+  * ids here -- VX_mem_to_axi engages its tag buffer, since UUID_WIDTH puts the upstream tag past any AXI id
+  * width -- so 8 is ample and stays clear of the overflow.
+  *
+  * Paired with PLATFORM_MEMORY_ID_WIDTH in hw/syn/firesim/Makefile: this shapes the IO the blackbox is
+  * instantiated with, that shapes the module's own ports, and a disagreement between them is padded or
+  * truncated with no diagnostic. Change neither alone.
   */
 class VortexConfig
     extends Config((_, _, _) => { case NastiKey =>
-      NastiParameters(dataBits = 512, addrBits = 32, idBits = 32)
+      NastiParameters(dataBits = 512, addrBits = 32, idBits = 8)
     })
 
 class VortexTarget(implicit val p: Parameters) extends RawModule {
