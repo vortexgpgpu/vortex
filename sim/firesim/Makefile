@@ -6,9 +6,7 @@ SRC_DIR := $(VORTEX_HOME)/sim/firesim
 
 PROJECT := firesim
 
-# One FireSim checkout is shared by every build tree.
-FIRESIM_DIR ?= $(VORTEX_HOME)/build_firesim/firesim
-SIMIF_DIR := $(FIRESIM_DIR)/sim/midas/src/main/cc
+SIMIF_DIR := $(FIRESIM_PATH)/sim/midas/src/main/cc
 
 PLATFORM ?= vitis
 DESIGN ?= VortexTarget
@@ -17,7 +15,7 @@ PLATFORM_CONFIG ?= Default$(shell echo $(PLATFORM) | sed 's/^./\U&/')Config
 
 # Golden Gate writes the generated header here; the driver objects are built
 # alongside it so a rebuild of the target invalidates them.
-GEN_DIR := $(FIRESIM_DIR)/sim/output/$(PLATFORM)/$(PLATFORM)-midasexamples-$(DESIGN)-$(TARGET_CONFIG)-$(PLATFORM_CONFIG)/build
+GEN_DIR := $(FIRESIM_PATH)/sim/output/$(PLATFORM)/$(PLATFORM)-midasexamples-$(DESIGN)-$(TARGET_CONFIG)-$(PLATFORM_CONFIG)/build
 
 # The driver is built as a shared library rather than FireSim's usual
 # executable, because the Vortex runtime loads it. Upstream's driver.mk only

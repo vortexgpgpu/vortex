@@ -53,8 +53,16 @@ public:
 
   int init() {
     // The bitstream is selected by the environment so that the same runtime
-    // serves a metasimulation and an FPGA without a rebuild.
-    const char* bitstream = getenv("VORTEX_FIRESIM_XCLBIN");
+    // serves a metasimulation and an FPGA without a rebuild. XCLBIN_PATH is
+    // the same variable the xrt driver reads: both consume a Vitis image, and
+    // a caller switching between them should not have to switch variable names
+    // as well.
+    //
+    // Unset falls through as empty rather than to a default filename, unlike
+    // the xrt driver. An empty path tells the simulator to omit +binary_file,
+    // which is what metasimulation needs -- it has no image to load, and naming
+    // one it cannot open would turn a working configuration into a failure.
+    const char* bitstream = getenv("XCLBIN_PATH");
     return sim_.init(bitstream != nullptr ? bitstream : "");
   }
 

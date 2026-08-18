@@ -11,23 +11,18 @@ include $(ROOT_DIR)/config.mk
 # configure copies this Makefile into the build tree, so ROOT_DIR resolves there
 # while sources are read from VORTEX_HOME.
 
-# The FireSim checkout to build in. One checkout is shared by every build tree,
-# so this hangs off VORTEX_HOME rather than ROOT_DIR. Overridable so a scratch
-# clone can be used without disturbing an existing one.
-FIRESIM_DIR ?= $(VORTEX_HOME)/build_firesim/firesim
-
 SRC_DIR := $(VORTEX_HOME)/hw/syn/firesim
 PATCH_DIR := $(SRC_DIR)/patches
 
 # Targets are compiled as part of FireSim's midasexamples project, which is where
 # its harness and bridge helpers are resolvable from.
-TARGET_DEST := $(FIRESIM_DIR)/sim/src/main/scala/midasexamples
+TARGET_DEST := $(FIRESIM_PATH)/sim/src/main/scala/midasexamples
 
 SCALA_SRCS := $(wildcard $(SRC_DIR)/src/main/scala/*.scala)
 CC_SRCS := $(wildcard $(SRC_DIR)/src/main/cc/*.cc)
 
 # Test harnesses compile alongside FireSim's own midasexamples drivers.
-CC_DEST := $(FIRESIM_DIR)/sim/src/main/cc/midasexamples
+CC_DEST := $(FIRESIM_PATH)/sim/src/main/cc/midasexamples
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
@@ -60,7 +55,7 @@ stage: check-firesim
 # both build on 0001. Re-running against an already-patched checkout will report
 # reversed hunks; that is the intended signal, not a failure to hide.
 patch: check-firesim
-	@cd $(FIRESIM_DIR) && for p in $(sort $(wildcard $(PATCH_DIR)/[0-9]*.patch)); do \
+	@cd $(FIRESIM_PATH) && for p in $(sort $(wildcard $(PATCH_DIR)/[0-9]*.patch)); do \
 		echo "applying $$(basename $$p)"; \
 		patch -p2 --no-backup-if-mismatch < "$$p" || exit 1; \
 	done
@@ -203,9 +198,9 @@ $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 	@echo "wrote $(VIVADO_SRCS_LIST) ($$(grep -cv '^+' $(VIVADO_SRCS_LIST)) files)"
 
 check-firesim:
-	@test -d $(FIRESIM_DIR)/sim || { \
-		echo "FireSim checkout not found at $(FIRESIM_DIR)"; \
-		echo "set FIRESIM_DIR to a FireSim 1.21.0 checkout"; \
+	@test -d $(FIRESIM_PATH)/sim || { \
+		echo "FireSim checkout not found at $(FIRESIM_PATH)"; \
+		echo "set FIRESIM_PATH to a FireSim 1.21.0 checkout"; \
 		exit 1; }
 
 clean-staged:
