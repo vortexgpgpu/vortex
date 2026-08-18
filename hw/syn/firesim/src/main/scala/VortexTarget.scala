@@ -204,12 +204,18 @@ class VortexDUT(nastiParams: NastiParameters)(implicit val p: Parameters) extend
   * VX_CFG_PLATFORM_MEMORY_DATA_SIZE bytes, both mirroring the generated VX_config.vh and regenerated alongside
   * the RTL config rather than edited independently.
   *
-  * idBits deliberately does not mirror the RTL platform default of 32. FASED sizes its read-response egress with
-  * `1 << idBits` evaluated in Scala Int arithmetic, which wraps to 1 at 32: the per-id reorder path is then not
-  * elaborated at all and every AXI id shares one response queue, so responses leave carrying the requesting
-  * transaction's id and another transaction's data. Elaboration succeeds and nothing warns. Vortex drives 4-bit
-  * ids here -- VX_mem_to_axi engages its tag buffer, since UUID_WIDTH puts the upstream tag past any AXI id
-  * width -- so 8 is ample and stays clear of the overflow.
+  * idBits does NOT mirror the RTL default, and must not. FASED sizes its read-response egress with
+  * `1 << idBits`, evaluated in Scala Int arithmetic: at 32 that shift wraps to 1, which both selects the
+  * untranslated egress branch and gives it a single queue for every AXI id. Responses then leave carrying
+  * the requesting transaction's id and another transaction's data, silently. Elaboration succeeds and the
+  * generated design is simply smaller and wrong -- no reorder buffer, a one-bit queue selector.
+  *
+  * It is bounded from above as well. The response deinterleaver and the id-yank queues carry per-id state, so
+  * the model's area scales with the id space: at 8 that came to 750955 LUTs as memory against the 600960 a
+  * U55C has. 4 is what Vortex actually drives -- VX_mem_to_axi engages its tag buffer, since UUID_WIDTH puts
+  * the upstream tag past any plausible AXI id width, so reads carry CLOG2(TAG_BUFFER_SIZE) = 4 bits -- and it
+  * matches the model's maxReads of 16. Raising it needs the utilization re-checked, not merely the overflow
+  * avoided.
   *
   * Paired with PLATFORM_MEMORY_ID_WIDTH in hw/syn/firesim/Makefile: this shapes the IO the blackbox is
   * instantiated with, that shapes the module's own ports, and a disagreement between them is padded or
@@ -217,7 +223,7 @@ class VortexDUT(nastiParams: NastiParameters)(implicit val p: Parameters) extend
   */
 class VortexConfig
     extends Config((_, _, _) => { case NastiKey =>
-      NastiParameters(dataBits = 512, addrBits = 32, idBits = 8)
+      NastiParameters(dataBits = 512, addrBits = 32, idBits = 4)
     })
 
 class VortexTarget(implicit val p: Parameters) extends RawModule {
