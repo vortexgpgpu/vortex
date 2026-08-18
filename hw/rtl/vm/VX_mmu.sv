@@ -302,9 +302,13 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         wire                pipe_valid_in = replay_to_lane[l] || forward_new;
         wire [FIELDS_W-1:0] pipe_data_in  = replay_to_lane[l] ? replay_out_fields : new_fields;
 
-        VX_pipe_buffer #(
-            .DATAW (FIELDS_W),
-            .DEPTH (1)
+        // SIZE=2/OUT_REG=1 registers this stage's outgoing request onto
+        // mem_bus_if and presents a registered ready_in (pipe_ready), keeping the
+        // accept cone shallow; a DEPTH=1 pipe would leave ready_in combinational.
+        VX_elastic_buffer #(
+            .DATAW   (FIELDS_W),
+            .SIZE    (2),
+            .OUT_REG (1)
         ) out_pipe (
             .clk       (clk),
             .reset     (reset),
@@ -375,9 +379,14 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     // Drain status
     // ---------------------------------------------------------------------
+    // The MMU is drained only when no request is anywhere in its front pipeline
+    // (incoming or output stage) and the TLB miss station is idle. Omitting the
+    // incoming stage would let `empty` assert a cycle early while a request is
+    // still in flight, releasing the socket drain gate prematurely.
     wire [NUM_REQS-1:0] pipe_busy;
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_busy
-        assign pipe_busy[l] = mem_bus_if[l].req_valid;
+        assign pipe_busy[l] = core_bus_if[l].req_valid   // incoming (client held)
+                           || mem_bus_if[l].req_valid;    // output stage
     end
     assign empty = ~(| pipe_busy) && tlb_empty;
 
