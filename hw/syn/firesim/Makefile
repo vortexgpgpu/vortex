@@ -80,6 +80,14 @@ RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs 
 # port counts to zero and yields a design with no memory interface at all.
 TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(CONFIGS))
 
+# The same defines every other synthesis flow passes (hw/syn/xilinx, hw/syn/altera).
+# VX_dp_ram and VX_sp_ram gate all block-RAM inference behind SYNTHESIS, and
+# gen_sources.sh preprocesses the tree, so without it the BRAM branch is not
+# merely inactive -- it is deleted before Vivado sees it, and every memory in the
+# design lands in distributed RAM. A U55C has 600960 LUTs usable as memory and
+# this design asks for 753744 of them without it.
+SYNTH_DEFINES := -DSYNTHESIS -DVIVADO -DNDEBUG
+
 # This wrapper exposes a single AXI memory port, so give Vortex a single
 # platform memory bank to match. Left at the default of 2, Vortex builds two
 # internal memory ports and VX_mem_to_axi arbitrates them down onto the one
@@ -96,14 +104,23 @@ PLATFORM_DEFINES := -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1
 # without a diagnostic.
 #
 # The XRT default is 32, which is a width rather than a count: on XRT it only has
-# to be wide enough. FASED reads it as a count. It sizes the read-response egress
-# with `1 << idBits` in Scala Int arithmetic, where 32 wraps to 1, leaving one
-# response queue shared by every AXI id -- responses then leave carrying the
-# requesting transaction's id and another transaction's data. Vortex drives 4-bit
-# ids here (VX_mem_to_axi's tag buffer is engaged, since UUID_WIDTH puts the
-# upstream tag past any AXI id width), so 8 is ample and stays clear of the
-# overflow.
-PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=8
+# to be wide enough. FASED reads it as a count, and is bounded from both sides.
+#
+# Too wide and `1 << idBits` overflows Scala's Int: at 32 it wraps to 1, leaving
+# one response queue shared by every AXI id, so responses come back carrying the
+# requesting transaction's id and another transaction's data.
+#
+# Too wide and it also does not fit. The response deinterleaver and the id-yank
+# queues carry per-id state -- at 8 that is 77 deinterleaver instances of 2Kx64
+# distributed RAM plus 512 yank queues, 750955 LUTs as memory against the 600960
+# a U55C has.
+#
+# 4 is what Vortex actually drives: VX_mem_to_axi's tag buffer is engaged here,
+# since UUID_WIDTH puts the upstream tag past any AXI id width, so reads carry
+# CLOG2(TAG_BUFFER_SIZE) = 4 bits and writes never have their id consumed. It
+# also matches the model's maxReads of 16. Raising it needs the utilization
+# checked, not just the overflow avoided.
+PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=4
 
 # Vortex's performance counters are the only view inside the core that does not
 # require re-elaborating the design: at a stall they say whether warps are still
@@ -118,7 +135,7 @@ PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=8
 PERF_DEFINES ?=
 PLATFORM_DEFINES += $(PERF_DEFINES)
 
-GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(RTL_INCLUDE)
+GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(SYNTH_DEFINES) $(RTL_INCLUDE)
 
 # Only the packages and the wrapper are named; every other Vortex module is
 # resolved by library search over RTL_INCLUDE. Handing the whole tree over as a
@@ -162,7 +179,8 @@ XRT_AFU_MODULES := vortex_afu.v VX_afu_ctrl.sv VX_afu_wrap.sv
 # build silently consumes the previous elaboration. The generated headers are
 # listed too because GEN_CFLAGS resolves widths out of them.
 RTL_SRCS := $(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh') \
-            $(wildcard $(ROOT_DIR)/hw/VX_config.vh) $(wildcard $(ROOT_DIR)/hw/VX_types.vh)
+            $(wildcard $(ROOT_DIR)/hw/VX_config.vh) $(wildcard $(ROOT_DIR)/hw/VX_types.vh) \
+            $(firstword $(MAKEFILE_LIST))
 
 vivado-sources: $(VIVADO_SRCS_LIST)
 $(VIVADO_SRCS_LIST): $(RTL_SRCS)
