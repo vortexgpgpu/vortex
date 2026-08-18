@@ -467,6 +467,16 @@ module VX_mem_scheduler #(
             end
         end
 
+        // rsp_rem_mask and rsp_sop_r below both write the incoming request's
+        // slot before writing the retiring one's, so if a slot is acquired in
+        // the same cycle a response for it is consumed, the retiring packet's
+        // update lands last and the new occupant inherits its remainder. A zero
+        // remainder marks the new load complete on its first beat, releasing the
+        // slot while lanes are still outstanding; those later lanes then answer
+        // against a reallocated slot and carry another instruction's rd.
+        `RUNTIME_ASSERT(~(ibuf_push && mem_rsp_fire_s && (ibuf_waddr == ibuf_raddr)),
+            ("%t: *** slot %0d acquired while a response for it is consumed", $time, ibuf_waddr))
+
         wire rsp_complete = ~(| rsp_rem_mask_n) || (CORE_REQS == 1);
 
         if (RSP_PARTIAL != 0) begin : g_rsp_partial

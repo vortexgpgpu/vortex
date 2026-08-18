@@ -274,6 +274,14 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     `RUNTIME_ASSERT(~(fill_valid && ~valid_table[fill_id]), ("*** %s invalid fill: addr=0x%0h, id=%0d", INSTANCE_ID,
         `CS_BANK_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), fill_id))
 
+    // A walk confined to its own live chain never lands on an entry that is
+    // already invalid. next_table and next_index are cleared only at allocate,
+    // so an entry that is dequeued or released keeps its successor link; a walk
+    // that reaches it follows that stale link back into entries already
+    // replayed and re-emits their payloads.
+    `RUNTIME_ASSERT(~(dequeue_fire && ~valid_table[dequeue_id]), ("*** %s dequeue on invalid entry: id=%0d, next=%0b", INSTANCE_ID,
+        dequeue_id, next_table[dequeue_id]))
+
 `ifdef SIMULATION
     // Every entry the dequeue pointer lands on must belong to the line whose
     // fill opened the chain, whichever way the pointer got there (fill,

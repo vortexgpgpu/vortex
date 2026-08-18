@@ -333,6 +333,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
         `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("allocator full!"))
         `RUNTIME_ASSERT(~(mem_req_rd_sop_fire && pkt_ctr[pkt_waddr] != 0), ("oops! broken sop request!"))
+        // pkt_ctr is guarded against a same-cycle same-slot request/response by
+        // rw_collision; pkt_eop and pkt_sop are not, so the release wins and the
+        // incoming packet loses the flag that would ever complete it.
+        `RUNTIME_ASSERT(~(mem_req_rd_eop_fire && mem_rsp_eop_pkt_fire && (pkt_waddr == pkt_raddr)),
+            ("%t: *** pkt_eop collision on slot %0d: incoming packet loses its eop flag", $time, pkt_waddr))
         `UNUSED_VAR (mem_rsp_sop)
     end else begin : g_no_pid
         assign pkt_waddr = 0;
