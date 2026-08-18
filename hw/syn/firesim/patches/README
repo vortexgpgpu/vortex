@@ -12,6 +12,8 @@ of a FireSim checkout therefore strips two components, not one:
     patch -p2 < 0004-vitis-host-mem-base-address.patch
     patch -p2 < 0005-inflight-target-cycle.patch
     patch -p2 < 0006-package-design-sources.patch
+    patch -p2 < 0007-vitis-target-dram-aperture.patch
+    patch -p2 < 0008-driver-teardown-before-exit.patch
 
 Apply in order: 0003 and 0005 both touch simulation.{h,cc} and assume 0001 is
 already in. Applying the series in order to a pristine 1.21.0 checkout
@@ -67,6 +69,34 @@ reproduces this tree's clone byte-for-byte.
     simulation loses its submodules under Vivado, which has no equivalent.
     VORTEX_VIVADO_SRCS names a flattened source list to add to the packaged
     kernel; absent it the flow is unchanged.
+
+0007-vitis-target-dram-aperture.patch
+    Correctness fix. host_mem_0 was bound to a single HBM pseudo-channel and
+    backed by a 512 MB allocation, while a 32-bit target spans 4 GB -- its
+    program image sits at 0x80000000 and its stack just under 4 GB. Uploading a
+    kernel therefore wrote outside the served window and the target fetched
+    memory that was never written, with no error anywhere to say so. Widened to
+    HBM[0:7] plus a matching 4 GiB window; the two are a pair and each carries a
+    comment saying widening one alone truncates silently. The buffer is now
+    allocated from whichever memory region can hold the window rather than from
+    bank 0 -- a range binding appears as a memory *group* (MBG[0:7], index 39 on
+    this platform) whose index cannot be derived from the port name, and
+    xrt::ip exposes no group_id(). +memcheck gains probes at 0x20000000,
+    0x80000000 and 0xFFFF0000; it passed throughout this defect because it only
+    probed below 1 MB, which is how the bug reached the card. No Chisel change:
+    HostMemChannelKey.size is already 16 GiB, so the shim's address path was
+    never the constraint. See docs/proposals/firesim_target_memory_aperture.md.
+
+0008-driver-teardown-before-exit.patch
+    Correctness fix. `simulator` is a global std::unique_ptr, so the platform
+    interface was destroyed during static destruction -- and on Vitis that runs
+    xrt::device::~device() after XRT's own statics are gone, segfaulting in the
+    device registry's deleter. Upstream's comment says the global "must exist
+    for dpi.cc calls in emulation, must be global to avoid deletion", but a
+    global unique_ptr *is* deleted at exit; nothing references it once entry()
+    returns, on either platform. Now torn down explicitly at the end of entry().
+    Never observed before because no run had ever reached normal process exit --
+    every earlier one timed out.
 
 All are candidates for upstreaming: only the HOST_MEM_SP default is
 U55C-specific, and it is parameterized rather than hardcoded. 0005 changes a
