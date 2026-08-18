@@ -93,3 +93,8 @@ tests:
 - id: reopen-3
   via: script
   run: "OPAESIM_WARM_OPEN=1 ./ci/blackbox.sh --driver=opae --app=reopen"
+- id: module_reload-1
+  via: blackbox
+  drivers:
+  - simx
+  app: module_reload
