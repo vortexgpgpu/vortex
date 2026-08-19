@@ -61,6 +61,30 @@
 // OM ingress decodes the same address.
 #define GFX_FS_ARG_APERTURE 11u
 
+// FS kernel arg-block slot carrying the per-primitive flat-varying array: the
+// provoking vertex's varying words, copied verbatim, GFX_FS_FLAT_WORDS of them
+// per primitive and indexed by the same primitive id the wrapper uses to reach
+// the primitive record.
+//
+// A flat varying cannot travel through the interpolation planes at all. Setup
+// premultiplies every plane by 1/w and quantises it to Q7.24, which is defined
+// on numbers; a flat varying's bit pattern is not necessarily a number -- every
+// integer varying is flat, and a small integer read as a float is a denormal
+// that quantises to zero. So the words ride beside the planes rather than
+// through them, and the wrapper reads them without arithmetic.
+//
+// A side array rather than a field in the primitive record: the record is a
+// fixed-function layout that RASTER also fetches, and widening it would move
+// every draw's stride for a feature most draws do not use.
+#define GFX_FS_ARG_FLAT     12u
+
+// Scalar words carried per primitive -- the same twelve the interpolation
+// planes hold, in the same order [u,v,r,g,b,a,w0..w5], so a varying's flat word
+// is at the lane index it would have interpolated at. Copying all twelve keeps
+// the device kernel free of any per-shader mask: which lanes are flat is a
+// fact the fragment kernel is compiled with, not one setup has to be told.
+#define GFX_FS_FLAT_WORDS   12u
+
 // The sample count deliberately has NO arg slot. It is a fragment-shader variant
 // key, so the value is fixed when the kernel is translated and the emitter bakes
 // it in as a constant; a slot would be a second source of truth for a fact the

@@ -169,4 +169,10 @@ typedef struct {
   uint64_t binbase_addr;   // uint32[num_bins]                (scratch)
   uint64_t tilebuf_addr;   // rast_tile_header_t[num_bins] then uint32 pids[keys]  (out, pinned)
   uint64_t meta_addr;      // uint32[3] = { P, keys, nb }     (out)
+  // Flat varyings: the provoking vertex's varying words per emitted primitive,
+  // GFX_FS_FLAT_WORDS of them, copied verbatim with no interpolation applied.
+  // Zero when no bound shader declares a flat input, and the EMIT stage then
+  // skips the copy entirely. See gfx_fs_desc_abi.h for why these travel beside
+  // the interpolation planes rather than through them.
+  uint64_t flat_addr;      // uint32[GFX_FS_FLAT_WORDS * P]   (out)
 } pipe_arg_t;

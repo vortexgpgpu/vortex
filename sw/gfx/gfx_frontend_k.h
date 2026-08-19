@@ -9,7 +9,19 @@
 
 #include <vx_spawn2.h>
 #include <gfx_frontend_abi.h>   // pipe_arg_t, PIPE_STAGE_*, PIPE_PRIM_*, setup types
+#include <gfx_fs_desc_abi.h>   // GFX_FS_FLAT_WORDS
 #include <gfx_setup.h>          // gfx_setup::{clip_near, setup_triangle}
+
+// The flat-varying copy in setup_k reads setup_vertex_t as words at fixed
+// indices. Pin the layout it assumes: a reordered field would otherwise carry
+// the wrong varying silently, which is the exact failure class flat varyings
+// were losing to before they were carried at all.
+static_assert(offsetof(setup_vertex_t, color)    ==  4 * sizeof(uint32_t),
+              "flat copy assumes color at word 4");
+static_assert(offsetof(setup_vertex_t, texcoord) ==  8 * sizeof(uint32_t),
+              "flat copy assumes texcoord at word 8");
+static_assert(offsetof(setup_vertex_t, varying2) == 10 * sizeof(uint32_t),
+              "flat copy assumes varying2 at word 10");
 
 // Coarse bin granularity the front end bins at (= VX_CFG_RASTER_BIN_LOG_SIZE,
 // supplied as a -D in the kernel build; fallback for standalone include).
@@ -112,6 +124,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   auto prim      = reinterpret_cast<rast_prim_t*>(arg->prim_addr);
   auto bbox      = reinterpret_cast<setup_bbox_t*>(arg->bbox_addr);
   auto meta      = reinterpret_cast<uint32_t*>(arg->meta_addr);
+  auto flat      = reinterpret_cast<uint32_t*>(arg->flat_addr);
 
   const uint32_t ntri = arg->num_tris;
   const int      W = (int)arg->width;
@@ -174,10 +187,37 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
       uint32_t kept = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, vpp, pr, bb);
+      // The provoking vertex is the source triangle's first, sampled HERE rather
+      // than inside setup: clipping reorders and synthesises vertices, so after
+      // it the original first vertex is no longer identifiable. Same reason
+      // `facing` is recorded before the edges are flipped.
+      //
+      // Every subtriangle of a clipped triangle takes the same words. That is
+      // exact, not an approximation -- a flat attribute is constant over the
+      // primitive by definition, so there is no interpolation for clipping to
+      // invalidate.
+      uint32_t fw[GFX_FS_FLAT_WORDS];
+      if (flat) {
+        // Read the vertex as words, not as floats. The whole point of a flat
+        // varying is that its bit pattern need not be a number, so it must never
+        // be loaded into a float register on the way past.
+        //
+        // setup_vertex_t is pos[4], color[4], texcoord[2], varying2[6]; the
+        // interpolation planes are ordered [u,v,r,g,b,a,w0..w5], so a varying's
+        // flat word sits at the index it would have interpolated at.
+        const uint32_t* pv = reinterpret_cast<const uint32_t*>(&verts[3 * t]);
+        fw[0] = pv[8]; fw[1] = pv[9];
+        for (uint32_t c = 0; c < 4; ++c) { fw[2 + c] = pv[4 + c]; }
+        for (uint32_t c = 0; c < 6; ++c) { fw[6 + c] = pv[10 + c]; }
+      }
       uint32_t w = offset[t];
       for (uint32_t s = 0; s < kept; ++s) {
         prim[w] = pr[s];
         bbox[w] = bb[s];
+        if (flat) {
+          uint32_t* dst = flat + (size_t)w * GFX_FS_FLAT_WORDS;
+          for (uint32_t c = 0; c < GFX_FS_FLAT_WORDS; ++c) { dst[c] = fw[c]; }
+        }
         ++w;
       }
     }
