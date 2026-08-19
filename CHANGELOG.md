@@ -9,8 +9,10 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ### Fixed
 
-- **SimX cache flush walk raced a same-tick replay.** `processFlush()` gated on `TFifo::empty()`, which hides entries inside the pipe's latency window; the end-of-kernel walk could sweep a set before a store replayed from the MSHR that tick dirtied its line, and the write was lost. The guard now uses `size()`.
-- **SimX arbiter input grouping.** `TxArbiter`/`TxRxArbiter` grouped inputs by `log2ceil(inputs / outputs)` where `VX_stream_arb` uses CDIV, so a request count that is not a multiple of the output count left the trailing inputs unserved.
+- **VM RTL build under `PERF_ENABLE`.** A stray `.` in the `VX_mmu_tlb` instantiation ([hw/rtl/mem/VX_mmu.sv](hw/rtl/mem/VX_mmu.sv)) broke every `-DVX_CFG_VM_ENABLE` RTL build with profiling on.
+- **VM RTL `satp` width.** `VX_mmu` / `VX_mmu_ptw` took a 32-bit `satp` and gated translation on bit 31, silently truncating the CSR and misreading the Sv39 mode field on XLEN=64; the port is now `VX_CFG_XLEN` wide and the mode check follows the Sv32 / Sv39 encodings.
+- **`VX_CFG_TLB_SIZE` honoured.** `VX_mmu_tlb` hardcoded 5 index bits, so any size other than 32 mis-indexed the CAM; the index width is now derived from the config (power of two enforced).
+- **Dead BARE-mode VM test cases.** `ci/testcases/vm.yaml` `isa-6..10` and `tests/regression/basic/start.S` referenced the retired `VX_CFG_VM_ADDR_MODE` (and `VX_CFG_PAGE_TABLE_BASE_ADDR`, `VX_CFG_MEM_PAGE_LOG2_SIZE`) names. `VX_VM_ADDR_MODE` is a resolved `VX_types` contract fixed at configure time and cannot be overridden per case via `CONFIGS`, so the BARE cases only re-ran the default mode; they are removed and `start.S` uses the live `VX_VM_*` / `VX_MEM_*` names. *Why:* a catalog entry that claims coverage it does not provide is worse than none.
 
 ## [3.0] — 2026-06-08
 

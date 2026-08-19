@@ -1,4 +1,6 @@
 # Test cases for `vm`, drafted from regression.sh.in (review/collapse).
+# VX_VM_ADDR_MODE is a resolved VX_types contract fixed at configure time, so
+# BARE cannot be selected per case via CONFIGS; only the default mode is tested.
 category: vm
 defaults:
   xlen:
@@ -37,38 +39,3 @@ tests:
   - simx
   dir: tests/graphics/gfx_draw3d
   target: run-{driver}
-- id: isa-6
-  via: make-run
-  drivers:
-  - simx
-  dir: tests/regression/sgemm
-  target: run-{driver}
-  configs+: -DVX_CFG_VM_ADDR_MODE=BARE
-- id: isa-7
-  via: make-run
-  drivers:
-  - simx
-  dir: tests/regression/diverge
-  target: run-{driver}
-  configs+: -DVX_CFG_VM_ADDR_MODE=BARE
-- id: isa-8
-  via: make-run
-  drivers:
-  - simx
-  dir: tests/regression/dogfood
-  target: run-{driver}
-  configs+: -DVX_CFG_VM_ADDR_MODE=BARE
-- id: isa-9
-  via: make-run
-  drivers:
-  - simx
-  dir: tests/regression/raycast
-  target: run-{driver}
-  configs+: -DVX_CFG_VM_ADDR_MODE=BARE
-- id: isa-10
-  via: make-run
-  drivers:
-  - simx
-  dir: tests/graphics/gfx_draw3d
-  target: run-{driver}
-  configs+: -DVX_CFG_VM_ADDR_MODE=BARE

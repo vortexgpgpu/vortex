@@ -18,7 +18,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     output mmu_perf_t    mmu_perf,
 `endif
 
-    input wire [31:0]    satp,
+    input wire [`VX_CFG_XLEN-1:0] satp,
 
     VX_mem_bus_if.slave  lsu_mem_if [NUM_REQS],
     VX_mem_bus_if.master dcache_mem_if [NUM_REQS]
@@ -35,12 +35,19 @@ module VX_mmu import VX_gpu_pkg::*; #(
     // issued in BARE mode (SATP MSB cleared), which covers the few
     // instruction fetches between reset and the kernel's csrw satp.
 
+    // Only the SATP mode field gates translation: Sv32 keeps it in bit 31,
+    // Sv39/Sv48/Sv57 in bits 63:60 (mode 0 is BARE in both encodings).
+`ifdef VX_CFG_XLEN_64
+    wire satp_translate = (satp[`VX_CFG_XLEN-1:`VX_CFG_XLEN-4] != 4'd0);
+`else
+    wire satp_translate = satp[`VX_CFG_XLEN-1];
+`endif
+
     function automatic logic needs_translation(input logic [31:0] full_addr);
-        // full_addr currently not consumed — only satp[31] gates translation.
+        // full_addr currently not consumed — only the SATP mode gates translation.
         // Kept as a port to anticipate range-based bypass policies.
         `UNUSED_VAR (full_addr)
-        if (!satp[31]) return 1'b0;  // BARE mode
-        return 1'b1;
+        return satp_translate;
     endfunction
 
     // =========================================================================
@@ -201,7 +208,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .clk           (clk),
         .reset         (reset),
     `ifdef PERF_ENABLE
-        .mmu_perf      (mmu_perf_tlb).
+        .mmu_perf      (mmu_perf_tlb),
     `endif
         .tlb_in_if     (buffered_if),
         .tlb_out_if    (tlb_out_if),

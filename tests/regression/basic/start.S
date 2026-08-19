@@ -27,17 +27,17 @@
 _start:
 #ifdef VX_CFG_VM_ENABLE
   # Each core programs SATP from the runtime-installed page table at
-  # VX_CFG_PAGE_TABLE_BASE_ADDR. Must run before any user-VA load/store.
-#if VX_CFG_VM_ADDR_MODE == SV39
-  li    t0, VX_CFG_PAGE_TABLE_BASE_ADDR
-  srli  t0, t0, VX_CFG_MEM_PAGE_LOG2_SIZE
+  # VX_MEM_PAGE_TABLE_BASE_ADDR. Must run before any user-VA load/store.
+#if VX_VM_ADDR_MODE == SV39
+  li    t0, VX_MEM_PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, VX_VM_PAGE_LOG2_SIZE
   li    t1, 1
   slli  t1, t1, 63
   or    t0, t0, t1
   csrw  satp, t0
-#elif VX_CFG_VM_ADDR_MODE == SV32
-  li    t0, VX_CFG_PAGE_TABLE_BASE_ADDR
-  srli  t0, t0, VX_CFG_MEM_PAGE_LOG2_SIZE
+#elif VX_VM_ADDR_MODE == SV32
+  li    t0, VX_MEM_PAGE_TABLE_BASE_ADDR
+  srli  t0, t0, VX_VM_PAGE_LOG2_SIZE
   li    t1, 1
   slli  t1, t1, 31
   or    t0, t0, t1

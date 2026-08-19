@@ -12,7 +12,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    input wire [31:0]    satp,
+    input wire [`VX_CFG_XLEN-1:0] satp,
 
     input  wire          miss_valid,
     output wire          miss_ready,
@@ -39,9 +39,9 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
     `UNUSED_PARAM (TAG_WIDTH)
     `UNUSED_PARAM (ATTR_WIDTH)
 
-    // SV32: PPN occupies satp[21:0] (Sv32 caps PPN at 22 bits); top bits
-    // 31:20 carry ASID + MODE — not consumed by the walker.
-    `UNUSED_VAR (satp[31:20])
+    // Only the low PPN_WIDTH bits of the root PPN are consumed; the remaining
+    // PPN bits, ASID and MODE are not used by this Sv32 walker.
+    `UNUSED_VAR (satp[`VX_CFG_XLEN-1:20])
 
     localparam DATA_WIDTH = DATA_SIZE * 8;
 
