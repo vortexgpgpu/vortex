@@ -25,6 +25,12 @@ TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw 
 # trusting its entry.
 EXCLUDE :=
 
+# --- driver-defect coverage ------------------------------------------
+# Each of these pins a specific defect in the vortexpipe driver and fails when
+# it regresses; they are a separate assignment only so the master list above
+# stays one block to edit.
+TESTS += redraw realloc fallback_mix subgroup_vs bigwg manyvary image bgra bgra_om
+
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=
 EXCLUDE_rtlsim :=
