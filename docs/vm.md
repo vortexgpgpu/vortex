@@ -1,128 +1,97 @@
 # Virtual Memory
 
-Vortex supports per-core virtual-to-physical address translation using the
-RISC-V SV32 (XLEN=32) and SV39 (XLEN=64) page-table formats. VM is enabled
-by the TOML setting `VM_ENABLE = true` in [VX_config.toml](../VX_config.toml).
-
-This document covers the runtime model, the environment-variable knobs
-exposed for testing, and the perf counters surfaced through the
-`vx_dump_perf` reporting.
+Vortex supports virtual-to-physical address translation using the RISC-V
+Sv32 (XLEN=32) and Sv39 (XLEN=64) page-table formats. VM is enabled per
+build with `CONFIGS="-DVX_CFG_VM_ENABLE"`; the default in
+[VX_config.toml](../VX_config.toml) is off. The authoritative architecture
+description is
+[docs/designs/virtual_memory_subsystem.md](designs/virtual_memory_subsystem.md);
+this page covers usage, configuration knobs, and perf reporting.
 
 ## Components
 
 | Layer | Where | Role |
 |---|---|---|
-| Page table | RAM at `PAGE_TABLE_BASE_ADDR` (0xF0000000 on 32‑bit, 0x0F0000000 on 64‑bit) | Multi-level table installed by the runtime; consumed by every PTW |
-| Runtime `VMManager` | [sw/runtime/common/vm.{h,cpp}](../sw/runtime/common/vm.cpp) | Allocates the page table, mints VAs on `vx_mem_alloc`, walks the table on `mem_free` / `vx_copy_to_dev` / `vx_copy_from_dev` |
+| Page table | RAM at `VX_MEM_PAGE_TABLE_BASE_ADDR` (0xF0000000) | Multi-level table installed by the runtime; consumed by every walker |
+| Runtime `VMManager` | [sw/runtime/common/vm.{h,cpp}](../sw/runtime/common/vm.cpp) | Builds the page table (host-shadow + batched flush), mints VAs on `vx_buffer_create`, identity-maps system regions and `VX_MEM_PHYS` buffers |
 | Kernel SATP write | [sw/kernel/src/vx_start.S](../sw/kernel/src/vx_start.S) | Each core writes the SATP CSR with the PT base and addressing mode at boot |
-| Per-core MMU (RTL) | [hw/rtl/core/VX_mmu.sv](../hw/rtl/core/VX_mmu.sv) + [VX_mmu_tlb.sv](../hw/rtl/core/VX_mmu_tlb.sv) + [VX_mmu_ptw.sv](../hw/rtl/core/VX_mmu_ptw.sv) | Two instances per core: dcache MMU and icache MMU. Each owns a 32-entry CAM TLB and an SV32/SV39 page-table walker that fetches PTEs through its own bus-level shim sitting between [VX_mem_unit](../hw/rtl/core/VX_mem_unit.sv) and the cache cluster |
-| Per-core MMU (SimX) | [sim/simx/core.cpp](../sim/simx/core.cpp), uses `MemoryUnit` from [sim/common/mem.h](../sim/common/mem.h) | Functional translator. `LsuUnit::process_request_step` calls `core_->translate(va, type)` for each lane before stuffing the PA into `LsuReq.addrs`; the icache fetch path does the same for `trace->PC` |
+| Per-core MMU (RTL) | [hw/rtl/mem/VX_mmu.sv](../hw/rtl/mem/VX_mmu.sv) + [VX_mmu_tlb.sv](../hw/rtl/mem/VX_mmu_tlb.sv) + [VX_mmu_tlb_bank.sv](../hw/rtl/mem/VX_mmu_tlb_bank.sv) | Two instances per core (dcache and icache side): a banked CAM TLB translating inline on hits, superpage-aware |
+| Shared walker (RTL) | [hw/rtl/mem/VX_mmu_ptw.sv](../hw/rtl/mem/VX_mmu_ptw.sv) + [VX_mmu_pwc.sv](../hw/rtl/mem/VX_mmu_pwc.sv) | One per device: generic Sv32/Sv39 walker, `VX_CFG_PTW_NUM_WALKERS` concurrent walks, page-walk caches, PTE fetches on a dedicated L3 port |
+| SimX model | [sim/simx/mem/mmu.{h,cpp}](../sim/simx/mem/mmu.cpp) + [ptw.{h,cpp}](../sim/simx/mem/ptw.cpp) | Timing twin of the RTL: banked per-core TLBs, one shared `Ptw` SimObject on the L3 port |
+| CP DMA translation | [sim/common/cmd_processor.cpp](../sim/common/cmd_processor.cpp) | The command processor walks the table for every `CMD_MEM_*` operand, so the host API is VA-only |
 
-## Address layout (XLEN=32, SV32)
+Translation is gated only by the SATP mode (BARE bypasses); there is no
+address-range bypass. The runtime identity-maps the IO region, kernel
+image, page-table region, and `VX_MEM_PHYS` allocations (using superpage
+leaves where alignment allows), so PA-addressed traffic still resolves
+correctly through the table.
 
-```
-0x00000000 ─┬── IO region (no translation)        bypass
-            │
-0x00010000 ─┴── USER_BASE_ADDR
-            │
-            │   Translated user VA range
-            │
-0x80000000 ─┬── STARTUP_ADDR                       bypass
-            │   (kernel code at boot)             (40000 bytes)
-0x80040000 ─┴──
-            │
-            │   Translated user VA range (cont'd)
-            │
-0xF0000000 ─┬── PAGE_TABLE_BASE_ADDR              bypass
-            │   (page tables themselves)
-            │
-0xFFFF0000 ─┴── STACK / LMEM (above PT base)      bypass
-```
+## Configuration
 
-Anything in the bypass ranges flows through the MMU's bypass path with
-zero translation overhead. Only addresses in the translated ranges incur
-TLB lookups and (on miss) PTW walks.
+| Knob | Default | Meaning |
+|---|---|---|
+| `VX_CFG_VM_ENABLE` | off | Enables the MMU/walker hardware and VM runtime |
+| `VX_CFG_TLB_SIZE` | 32 | TLB entries per MMU (power of two) |
+| `VX_CFG_TLB_NUM_BANKS` | 4 | dTLB lookup banks (power of two dividing `TLB_SIZE`); the iTLB is always single-banked |
+| `VX_CFG_PTW_NUM_WALKERS` | 8 | Concurrent walk slots in the shared walker |
+| `VX_CFG_PTW_WALK_CACHE_SIZE` | 64 | Entries per page-walk cache (direct-mapped, power of two) |
+| `VX_CFG_VM_PINNED_REGION_SIZE` | 256 MB | Identity-mapped slab for `VX_MEM_PHYS` allocations |
 
 ## Environment variables
 
 `VORTEX_RANDOMIZE_VA` and `VORTEX_VA_SEED` are read by `VMManager`'s
 constructor — see [vm.cpp](../sw/runtime/common/vm.cpp).
 
-- `VORTEX_RANDOMIZE_VA=0` (default) — identity mapping. `vx_mem_alloc`
-  returns a VA equal to the underlying PA. Useful as the baseline; verifies
-  the translation pipeline does not corrupt addresses.
-- `VORTEX_RANDOMIZE_VA=1` — for each `vx_mem_alloc`, mint a random
-  page-aligned base VA in `[ALLOC_BASE_ADDR, PAGE_TABLE_BASE_ADDR)` (32-bit
-  bounded), reserve the contiguous range, and install per-page PTEs. The
-  user receives the random VA; PA stays in `global_mem_`.
-- `VORTEX_VA_SEED=N` — seed for the `std::mt19937_64` RNG. Default
-  `0x12345678`. Same seed → same VA stream across runs.
-
-### Randomization algorithm
-
-The runtime allocates an entire contiguous VA range upfront, then maps each
-page sequentially so multi-page buffers stay contiguous in VA space:
-
-```cpp
-// 1. Find a random contiguous VA range
-uint64_t candidate_va = random_address_in_range();
-if (virtual_mem_->reserve(candidate_va, size) == 0) {
-  base_vpn = candidate_va >> MEM_PAGE_LOG2_SIZE;
-}
-// 2. Map each PPN to a sequential VPN
-for (uint64_t i = 0; i < num_pages; i++) {
-  update_page_table(base_ppn + i, base_vpn + i, flags);
-}
-```
-
-After 1000 failed reservation attempts (heavily fragmented VA space), it
-falls back to sequential allocation so progress is guaranteed.
+- `VORTEX_RANDOMIZE_VA=0` (default) — sequential VA allocation.
+- `VORTEX_RANDOMIZE_VA=1` — for each allocation, mint a random
+  page-aligned contiguous VA range. The user receives the random VA; the
+  PA stays wherever `global_mem_` placed it.
+- `VORTEX_VA_SEED=N` — RNG seed (default `0x12345678`). Same seed → same
+  VA stream across runs.
 
 ## Perf counters
 
-Six MMU-related counters live in the memory-subsystem MPM class
-(`VX_DCR_MPM_CLASS_MEM`, alongside off-chip memory, lmem, and the
-coalescer). The hardware sums the icache and dcache MMU counters into one
-bank exposed via `pipeline_perf.mmu` in
-[VX_gpu_pkg.sv](../hw/rtl/VX_gpu_pkg.sv).
+The MMU counters live in the memory-subsystem MPM class
+(`VX_DCR_MPM_CLASS_MEM`). The TLB counters are per core (icache + dcache
+MMU summed); the walker and walk-cache counters belong to the shared
+device-level walker and read the same value on every core.
 
 | CSR | Meaning |
 |---|---|
 | `VX_CSR_MPM_TLB_READS` | Total TLB lookups (icache + dcache MMU) |
 | `VX_CSR_MPM_TLB_HITS` | TLB hits |
-| `VX_CSR_MPM_TLB_MISSES` | TLB misses (each triggers a PTW) |
+| `VX_CSR_MPM_TLB_MISSES` | TLB misses (each triggers a walk) |
 | `VX_CSR_MPM_TLB_EVICTS` | TLB evictions on fill |
-| `VX_CSR_MPM_PTW_WALKS` | Completed PTW walks |
-| `VX_CSR_MPM_PTW_LATENCY` | Total PTW latency in cycles (avg = LATENCY / WALKS) |
+| `VX_CSR_MPM_PTW_WALKS` | Walks started |
+| `VX_CSR_MPM_PTW_LATENCY` | Sum of per-walk latencies (avg = LATENCY / WALKS) |
+| `VX_CSR_MPM_PWC1_HITS` / `_MISSES` | Walks that skipped the top level via the walk cache |
+| `VX_CSR_MPM_PWC2_HITS` / `_MISSES` | Sv39 only: walks that also skipped the middle level |
 
-[common/legacy_perf.cpp](../sw/runtime/common/legacy_perf.cpp) reads these
-(from the `VX_DCR_MPM_CLASS_MEM` class) and prints a per-core `vm:` line in
-the memory report when `--perf=7` (MEM class) is passed to `blackbox.sh`.
-Example:
+[sw/runtime/common/perf.cpp](../sw/runtime/common/perf.cpp) prints these
+with `--perf=7` (MEM class):
 
 ```
-PERF: vm: tlb_reads=96, hit=96%, evicts=0, ptw_walks=4, ptw_avg_lat=84.75
+PERF: core0: tlb: reads=2086, hit=75%, misses=522, evicts=487
+PERF: ptw: walks=522, avg_lat=27.15 cyc, pwc1_hit=99%, pwc2_hit=0%
 ```
 
 ## Testing
 
-The project ships a regression script at the repo root:
+The CI catalog is [ci/testcases/vm.yaml](../ci/testcases/vm.yaml): compute
+regressions on simx **and rtlsim** at both XLENs, the
+[tests/regression/vm_stress](../tests/regression/vm_stress) TLB-pressure
+test (strided page touches + a `VX_MEM_PHYS` buffer), and full-tier
+configuration variants (single-banked TLB, multi-cluster with L2/L3).
 
 ```bash
-./run_vm_regression.sh --driver=simx              # identity mapping
-./run_vm_regression.sh --driver=rtlsim --perf
-./run_vm_regression.sh --driver=simx --randomize  # randomized VAs
-./run_vm_regression.sh --driver=simx --randomize --seed=1   # reproducible
+./ci/regression.sh --test vm
+# or a single case:
+CONFIGS="-DVX_CFG_VM_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=vm_stress --perf=7
 ```
-
-The script runs a 24-test common subset on the chosen driver. With
-`--randomize` and a fixed `--seed`, two runs produce identical VA
-sequences across all tests — useful for triaging VM bugs.
 
 ## Disabling VM
 
-Set `VM_ENABLE = false` in [VX_config.toml](../VX_config.toml) and
-re-`./configure`. With VM disabled the per-core MMU paths in
-[VX_core.sv](../hw/rtl/core/VX_core.sv) compile out (the dcache and
-icache buses connect straight through), the SimX `Core::translate` path
-becomes a no-op, and the runtime `VMManager` is never constructed.
+Leave `VX_CFG_VM_ENABLE` unset (the default). The per-core MMU paths in
+[VX_core.sv](../hw/rtl/core/VX_core.sv) compile out (the dcache and icache
+buses connect straight through), the shared walker and its L3 port are not
+instantiated, and the runtime `VMManager` is never constructed.

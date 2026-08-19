@@ -1,4 +1,4 @@
-# Test cases for `vm`, drafted from regression.sh.in (review/collapse).
+# Test cases for `vm`.
 # VX_VM_ADDR_MODE is a resolved VX_types contract fixed at configure time, so
 # BARE cannot be selected per case via CONFIGS; only the default mode is tested.
 category: vm
@@ -13,24 +13,28 @@ tests:
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/sgemm
   target: run-{driver}
 - id: isa-2
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/diverge
   target: run-{driver}
 - id: isa-3
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/dogfood
   target: run-{driver}
 - id: isa-4
   via: make-run
   drivers:
   - simx
+  - rtlsim
   dir: tests/regression/raycast
   target: run-{driver}
 - id: isa-5
@@ -39,3 +43,29 @@ tests:
   - simx
   dir: tests/graphics/gfx_draw3d
   target: run-{driver}
+- id: stress
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/regression/vm_stress
+  target: run-{driver}
+- id: xrt-cp
+  drivers:
+  - xrt
+  app: sgemm
+  tier: full
+- id: tlb-banks1
+  via: make-run
+  drivers:
+  - rtlsim
+  dir: tests/regression/sgemm
+  target: run-{driver}
+  configs+: -DVX_CFG_TLB_NUM_BANKS=1
+  tier: full
+- id: multi
+  drivers:
+  - rtlsim
+  app: sgemm
+  shape: {cores: 2, clusters: 2, l2cache: true, l3cache: true}
+  tier: full

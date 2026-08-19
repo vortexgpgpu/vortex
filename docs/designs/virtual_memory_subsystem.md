@@ -83,24 +83,47 @@ VM is real — consistent with the project's 32-bit-only RTL policy.
 ## 3. RTL components
 
 - [`VX_mmu.sv`](../../hw/rtl/mem/VX_mmu.sv) (top) — merges an
-  elastic-buffered TLB path, a bypass path, and the PTW through
-  `VX_mem_arb`. Takes `satp[31:0]`; `needs_translation()` bypasses only on
-  `satp[31]` (BARE) — there is no address-range bypass
-  ([`:38-44`](../../hw/rtl/mem/VX_mmu.sv#L38)).
-- [`VX_mmu_tlb.sv`](../../hw/rtl/mem/VX_mmu_tlb.sv) — fully-associative CAM
-  TLB, MRU victim select, 4-state FSM (`IDLE/READY/PTW_WAIT/REPLAY`). It
-  can *match* superpages via `page_level`/`vpn_mask`, but fills always set
-  `page_level=0` ([`:282`](../../hw/rtl/mem/VX_mmu_tlb.sv#L282)) so
-  megapages are stored as 4 KB entries.
-- [`VX_mmu_ptw.sv`](../../hw/rtl/mem/VX_mmu_ptw.sv) — **Sv32-only,
-  hardcoded 2-level** walker (`L1_REQ/RESP → L0_REQ/RESP → FILL`); 4-byte
-  PTE; one walk in flight; does **not** yet act on V/R/W/X/U flags (page
-  faults un-delivered, [`:113-120`](../../hw/rtl/mem/VX_mmu_ptw.sv#L113)).
+  elastic-buffered TLB path and a bypass path through `VX_mem_bus_arb`.
+  Takes `satp[XLEN-1:0]`; `needs_translation()` bypasses only on the SATP
+  mode field (BARE) — there is no address-range bypass. TLB misses leave
+  the core on a `VX_ptw_bus_if` toward the shared walker.
+- [`VX_mmu_tlb.sv`](../../hw/rtl/mem/VX_mmu_tlb.sv) — banked TLB wrapper:
+  `VX_CFG_TLB_SIZE` entries split over `VX_CFG_TLB_NUM_BANKS` banks
+  selected by the low VPN bits (the iTLB is always single-banked). Lanes
+  are distributed and gathered by `VX_stream_xbar`s so up to a bank-count
+  of translations proceed per cycle; each bank owns one outstanding walk,
+  identified on the walker bus by its bank index.
+- [`VX_mmu_tlb_bank.sv`](../../hw/rtl/mem/VX_mmu_tlb_bank.sv) —
+  fully-associative CAM bank, MRU victim select, 3-state FSM
+  (`READY/PTW_WAIT/REPLAY`). Entries carry their page level: superpage
+  leaves (Sv32 megapages; Sv39 mega/gigapages) match on the VPN bits above
+  their level and translate with the matching offset width. A faulted walk
+  replays the access untranslated (identity), mirroring the CP walker's
+  defensive pass-through.
+- [`VX_ptw_bus_if.sv`](../../hw/rtl/mem/VX_ptw_bus_if.sv) /
+  [`VX_ptw_arb.sv`](../../hw/rtl/mem/VX_ptw_arb.sv) — the walk
+  request/fill bus (`{vpn, root_ppn, tag}` / `{ppn, level, flags, fault,
+  tag}`) and its N→1 arbiter; one arb per level folds the source index
+  into the tag: banks → core (i/d) → socket → cluster → device.
+- [`VX_mmu_ptw.sv`](../../hw/rtl/mem/VX_mmu_ptw.sv) — **one instance per
+  device**: a generic Sv32/Sv39 walker with `VX_CFG_PTW_NUM_WALKERS`
+  concurrent walk slots, fetching PTEs on a **dedicated L3 requestor
+  port** (`L3_PTW_IDX`). Leaf/validity checks per the privileged spec
+  (V, R/W combos, superpage alignment, no-leaf-at-level-0) report `fault`
+  on the fill; under simulation a fault also raises an error. Two
+  direct-mapped page-walk caches (`VX_mmu_pwc.sv`,
+  `VX_CFG_PTW_WALK_CACHE_SIZE` entries) cache the non-leaf entries of the
+  two upper levels so a warm walk starts one (Sv32) or two (Sv39) levels
+  below the root.
 
-Instantiated per core in [`VX_core.sv:440`](../../hw/rtl/core/VX_core.sv#L440)
-(dcache MMU, `DCACHE_NUM_REQS` ports) and `:461` (icache MMU, 1 port),
-both under `#ifdef VX_CFG_VM_ENABLE`. The MMU sits **after** the
-coalescer / LSU adapter (a single per-core MMU, not per-LSU-slice).
+The per-core MMUs are instantiated in
+[`VX_core.sv`](../../hw/rtl/core/VX_core.sv) (dcache MMU with
+`DCACHE_NUM_REQS` ports and `VX_CFG_TLB_NUM_BANKS` banks; icache MMU with
+1 port), both under `#ifdef VX_CFG_VM_ENABLE`, **after** the coalescer /
+LSU adapter. The TLBs are invalidated by a one-cycle pulse at the start of
+the DCR cache flush (the flush request itself is translated, so the
+invalidate cannot be held at the level of the pending flush), and the
+device walker drops its walk caches on the same DCR event.
 
 ---
 
@@ -181,8 +204,9 @@ are not mistaken for bugs:
 - **No A/D-bit writeback.** The runtime pre-sets `A=D=1`; the TLBs are
   read-only.
 - **Page-fault delivery is partial.** SimX aborts on a fault; the RTL PTW
-  does not check `V/R/W/X/U` yet, and no fault is routed to the LSU as an
-  exception.
+  checks `V/R/W/X` and superpage alignment and reports `fault` on the TLB
+  fill (the access then replays untranslated), but no fault is routed to
+  the LSU as an exception yet.
 - **No PMP / page protection enforcement.**
 - **SV48/SV57** enum values exist but are unimplemented.
 
@@ -200,19 +224,21 @@ are not mistaken for bugs:
    invalidation, and a `VX_dma` block split out of the CP with its own TLB
    into the shared hierarchy. It is the forward roadmap (`feature_vm_v2`);
    the current MMU is a single flat 32-entry FA TLB per cache port.
-2. **RTL PTW Sv39 + superpage fills** — the RTL walker is Sv32-only and
-   stores megapages as 4 KB entries. Generalizing it (as SimX already is)
-   is required for RV64 VM on FPGA.
-3. **RTL page-fault delivery** — check PTE `V/R/W/X/U` and route a fault to
-   the LSU as an exception (`VX_mmu_ptw.sv:113` stub).
-4. **RTL CP shared device-side MMU** — Phase 2 of `vm_sw_stack_redesign`,
+2. **RTL page-fault delivery to the LSU** — faults are detected and
+   reported on the TLB fill, but not yet routed to the LSU as an
+   exception (`U` and PMP checks also remain open).
+3. **RTL CP shared device-side MMU** — Phase 2 of `vm_sw_stack_redesign`,
    deferred past v3: add the SATP regfile decode + a hardware walker so the
    CP DMA honors VM in RTL, matching the SimX/CP-software path (see
    `command_processor.md` §10 item 2).
-5. **`configure --vm` first-class flag** — VM is still forced per build via
+4. **`configure --vm` first-class flag** — VM is still forced per build via
    `CONFIGS=-DVX_CFG_VM_ENABLE`.
-6. **RTL VM in CI** — the `vm()` regression runs SimX-only; the rtlsim/xrt
-   lines are commented out pending RTL PTW completion.
+
+Delivered since the v3 baseline (previously items on this list): a
+generic Sv32/Sv39 RTL walker with superpage fills, shared per device with
+concurrent walk slots and page-walk caches on a dedicated L3 port; banked
+per-core TLBs honoring `VX_CFG_TLB_SIZE`; rtlsim VM in CI on both XLENs
+(`ci/testcases/vm.yaml`), including the `vm_stress` TLB-pressure test.
 
 **Superseded directions** (recorded to avoid revival): the per-LSU-slice
 MMU placement of `vm_migration` (replaced by a single per-core MMU after
