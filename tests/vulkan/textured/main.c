@@ -82,8 +82,9 @@ struct advcase {
 /* The device's real capability, by usage:
  *   sampled  -- the fixed-function set, everything the host decodes to
  *               A8R8G8B8, and the native float formats
- *   color    -- 32-bit-per-texel only: the output merger packs A8R8G8B8
- *               and the pass-end transfer moves four bytes per texel
+ *   color    -- what the output merger can store: the 32-bit orders it
+ *               writes through, plus the narrow and sRGB formats it encodes
+ *               in software
  *   depth    -- the formats the OM tests and writes
  *   storage  -- the formats the fragment translator emits image_load /
  *               image_store for
@@ -97,9 +98,9 @@ static const struct advcase adv[] = {
    { VK_FORMAT_B8G8R8A8_UNORM,      "B8G8R8A8_UNORM",
                                              ADV_YES, ADV_YES, ADV_NO,  ADV_NO  },
    { VK_FORMAT_R8_UNORM,            "R8_UNORM",
-                                             ADV_YES, ADV_NO,  ADV_NO,  ADV_NO  },
+                                             ADV_YES, ADV_YES, ADV_NO,  ADV_NO  },
    { VK_FORMAT_R8G8_UNORM,          "R8G8_UNORM",
-                                             ADV_YES, ADV_NO,  ADV_NO,  ADV_NO  },
+                                             ADV_YES, ADV_YES, ADV_NO,  ADV_NO  },
    { VK_FORMAT_R8G8B8A8_UINT,       "R8G8B8A8_UINT",
                                              ADV_YES, ADV_NO,  ADV_NO,  ADV_NO  },
    { VK_FORMAT_R8G8B8A8_SINT,       "R8G8B8A8_SINT",
@@ -126,11 +127,15 @@ static const struct advcase adv[] = {
                                              ADV_YES, ADV_NO,  ADV_YES, ADV_NO  },
    { VK_FORMAT_D24_UNORM_S8_UINT,   "D24_UNORM_S8_UINT",
                                              ADV_YES, ADV_NO,  ADV_YES, ADV_NO  },
-   /* refused, and must stay refused */
+   /* sRGB renders but does not sample: the merger applies the transfer
+    * function on device, in the direction Vulkan specifies on each side of a
+    * blend, whereas the host texture decode would convert to linear at 8-bit
+    * output precision ahead of filtering. */
    { VK_FORMAT_R8G8B8A8_SRGB,       "R8G8B8A8_SRGB",
-                                             ADV_NO,  ADV_NO,  ADV_NO,  ADV_NO  },
+                                             ADV_NO,  ADV_YES, ADV_NO,  ADV_NO  },
    { VK_FORMAT_B8G8R8A8_SRGB,       "B8G8R8A8_SRGB",
-                                             ADV_NO,  ADV_NO,  ADV_NO,  ADV_NO  },
+                                             ADV_NO,  ADV_YES, ADV_NO,  ADV_NO  },
+   /* refused, and must stay refused */
    { VK_FORMAT_D32_SFLOAT_S8_UINT,  "D32_SFLOAT_S8_UINT",
                                              ADV_NO,  ADV_NO,  ADV_NO,  ADV_NO  },
    { VK_FORMAT_S8_UINT,             "S8_UINT",
