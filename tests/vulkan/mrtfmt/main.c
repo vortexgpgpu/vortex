@@ -17,9 +17,10 @@
  *              here, so a driver that measured RT1 in RT0's texel width writes
  *              it at the wrong stride -- visible as a smear in the footprint,
  *              not just as wrong bytes at the centre.
- *
- * The channel order is deliberately NOT mixed: one fragment kernel packs one
- * order, so a set that needs two is refused at bind and never reaches here.
+ *   rgba_r8    two channel orders, which is the G-buffer case. The merger reads
+ *              an R8 texel's channel from a different lane than an RGBA8 one,
+ *              so the fragment kernel has to pack the two targets differently
+ *              in the same shader.
  *
  * The fragment shader writes the same three values to both targets in opposite
  * orders, so an attachment left at the clear and an attachment written with its
@@ -71,6 +72,11 @@ static const struct phase PHASES[] = {
        { VK_FORMAT_R8G8_UNORM,     2, 2, {  63, 127,   0 } } },
      "RT1 is wrong at the centre or covers the wrong area, so the merger "
      "measured it in RT0's texel width" },
+   { "rgba_r8",
+     { { VK_FORMAT_R8G8B8A8_UNORM, 4, 3, { 255, 127,  63 } },
+       { VK_FORMAT_R8_UNORM,       1, 1, {  63,   0,   0 } } },
+     "RT1 holds the fragment's blue, so the shader packed it in RT0's "
+     "channel order" },
 };
 #define NUM_PHASES (sizeof(PHASES) / sizeof(PHASES[0]))
 
