@@ -1,0 +1,4 @@
+app,app_name,shape,M,N,K,mode,mode_name,cycles,errors,status
+1,baseline,s256,256,256,64,1,TCU,187251,0,ok
+3,gelu,s256,256,256,64,1,TCU,194567,0,ok
+9,mean_broadcast_col,s256,256,256,64,1,TCU,257764,0,ok

@@ -16,7 +16,7 @@
 
 inline void parse_args(int argc, char** argv) {
   int c;
-  while ((c = getopt(argc, argv, "a:m:w:M:N:K:h")) != -1) {
+  while ((c = getopt(argc, argv, "a:m:M:N:K:h")) != -1) {
     switch (c) {
     case 'a': {
       // The epilogue is compiled in, not selected at runtime -- one per binary, so an
@@ -31,7 +31,6 @@ inline void parse_args(int argc, char** argv) {
       }
       break;
     }
-    case 'w': g_wg_warps = parse_u32(optarg, "-w"); break;
     case 'M': g_M = parse_u32(optarg, "-M"); break;
     case 'N': g_N = parse_u32(optarg, "-N"); break;
     case 'K': g_K = parse_u32(optarg, "-K"); break;
@@ -63,15 +62,18 @@ inline void parse_args(int argc, char** argv) {
                    "         edges in hardware. The in-core modes do not: for those, each\n"
                    "         dimension must be a multiple of their tile (the harness prints\n"
                    "         the requirement).\n"
-                   "  -a N   app id 1..8 (epilogue; default 1)\n"
+                   "  -a N   app id 1..6 or 9 (build-selected epilogue)\n"
                    "  -m X   which HW path to run: 'all' (default) or one mode:\n"
                    "           in-core        0=SIMT  1=TCU  2=TCU+DXA\n"
-                   "           in-core, piped 5=TCU+DXA 2-stage  6=TCU+DXA 3-stage\n"
+                   "           workgroup     3=TCU+DXA double-buffered  4=SW-copy control\n"
+                   "                         5=TCU+DXA, A-resident + B double-buffered\n"
+                   "                         6=TCU+DXA, A-resident + B single-buffered\n"
                    "           engine only    7=DTCU_socket (D->socket L1, tile 32x16)\n"
                    "                          8=DTCU_cluster (D->L2, tile 64x32)\n"
                    "           hetero         9=TCU+DTCU_socket  10=TCU+DTCU_cluster\n"
                    "                          11=TCU+both        (9-11 not built yet)\n"
-                   "           6 is a reserved hole, not a path.\n";
+                   "           pipelined      14=DTCU_socket  15=DTCU_cluster\n"
+                   "           12,13 are reserved holes.\n";
       exit(0);
     default: exit(-1);
     }
@@ -87,7 +89,7 @@ inline void parse_args(int argc, char** argv) {
 //     TMA clamps the trailing tile: operands past the matrix are never fetched (the
 //     scratchpad is zero-filled instead) and the D store leaves those bytes disabled.
 //     Only the descriptor's uint16_t M/N/K field width binds.
-//   * modes 1/2/5/6 -- `for (i = 0; i < K; i += tileK)` overruns K on the last step,
+//   * modes 1/2 -- `for (i = 0; i < K; i += tileK)` overruns K on the last step,
 //     and the grid `(N / tileN, M / tileM)` truncates, leaving output tiles never
 //     written.
 //   * mode 0 -- the grid `(N / NUM_THREADS, M)` truncates the same way.
@@ -122,7 +124,7 @@ static bool check_shape(uint32_t M, uint32_t N, uint32_t K,
   if (simt_geom)
     need(N, NUM_THREADS, "N", &need_N, "SIMT grid width NUM_THREADS -- mode 0 / DTCU epilogue pass");
 
-  // modes 1, 2, 5, 6: one warp per output tile, K stepped by the WMMA tile.
+  // modes 1/2: one warp per output tile, K stepped by the WMMA tile.
   if (run_this(MODE_TCU) || run_this(MODE_TCU_DXA) ||
       run_this(MODE_HET_TCU_DSOCK) || run_this(MODE_HET_TCU_DCLUS) ||
       run_this(MODE_HET_ALL)) {
@@ -136,13 +138,14 @@ static bool check_shape(uint32_t M, uint32_t N, uint32_t K,
   // zero-fills, and the D store masks the bytes outside D (sim/simx/dtcu/dtcu_tma.cpp).
   // So M/N/K need no relation to either native tile; only the descriptor's field width
   // binds. This is also why check_shape() no longer takes a DTCU tile at all.
-  if (run_this(MODE_DTCU_CLUSTER) || run_this(MODE_DTCU_SOCKET)
-      || run_this(MODE_HET_TCU_DSOCK) || run_this(MODE_HET_TCU_DCLUS)
-      || run_this(MODE_HET_ALL)) {
+  bool engine_selected = false;
+  for (uint32_t m = 0; m < NUM_MODES; ++m)
+    engine_selected = engine_selected || (run_this(m) && uses_engine(m));
+  if (engine_selected) {
     // dtensor_desc_t holds M/N/K as uint16_t (dtcu_cfg.h), so a larger GEMM would
     // wrap silently and the engine would compute a different shape than we verify.
     if (M > 0xFFFFu || N > 0xFFFFu || K > 0xFFFFu) {
-      std::cerr << "cgo27_motivation: M/N/K must each be <= 65535 for modes 7/8"
+      std::cerr << "cgo27_motivation: M/N/K must each be <= 65535 for DTCU modes"
                    " (dtensor_desc_t stores them as uint16_t)" << std::endl;
       ok = false;
     }

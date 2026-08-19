@@ -7,6 +7,7 @@
 // added to that struct.
 
 #include "wmma_common.h"
+#include <stddef.h>
 #include <vx_dtensor.h>
 #include <vx_intrinsics.h>
 
@@ -70,8 +71,8 @@ static inline void moti_wait_desc(uint64_t desc_addr) {
 
 // How many slices `rows` can actually support. Never zero, so a caller always has one
 // descriptor to submit; when it comes back 1 the range is a single tile and the mode
-// degenerates to its unpipelined twin, which is a real answer rather than a failure --
-// mode 14's band at M=128 is exactly one 32-row tile.
+// has one completion point rather than an overlap opportunity -- mode 14's band at M=128
+// is exactly one 32-row tile. The producer/consumer launch overhead still remains.
 static inline uint32_t moti_pipe_slices(uint32_t rows, uint32_t tile_m) {
   const uint32_t tiles = (rows + tile_m - 1) / tile_m;
   uint32_t s = MOTI_PIPE_TILES;
@@ -137,10 +138,9 @@ static inline void moti_publish_desc(uint64_t desc_addr) {
 // Publish a descriptor and DO NOT RETURN UNTIL THE ENGINE COULD READ IT.
 //
 // moti_publish_desc() does a fence and one AMO, on the argument that the AMO drains the
-// core's write-through stores to the LLC the engine reads from. That is enough for modes
-// 7 and 8, where each submitter fills exactly one descriptor at the very start of the
-// kernel. It is NOT enough for the pipelined modes, and the failure is spectacular rather
-// than subtle: the engine reads a descriptor that is partly or entirely still zero.
+// core's write-through stores to the LLC the engine reads from. That is not a sufficient
+// publication contract: the engine can still observe a descriptor partly or entirely
+// zero. The failure was first exposed by pipelined modes because they publish repeatedly.
 //
 //   [DTCU] Error: empty GEMM. M=32, N=0, K=0      (mode 14, 256x256x64, T=2)
 //   [DTCU] Error: empty GEMM. M=64, N=0, K=0      (mode 14, 512x256x128, T=2 forced)
@@ -157,13 +157,11 @@ static inline void moti_publish_desc(uint64_t desc_addr) {
 // are there. An AMO is the only read that can do this -- a plain load returns this core's
 // own cached copy, which of course looks correct.
 //
-// Cost is a handful of AMOs per descriptor, once, against a GEMM of hundreds of thousands
-// of cycles. Deliberately NOT folded into moti_publish_desc(): modes 7 and 8 are already
-// measured and correct, and changing their submit path would move every number in the
-// grid for no benefit. If they are relying on luck, that is worth knowing separately.
+// Cost is a handful of AMOs per descriptor, once. Every mode uses this path: correctness
+// must not depend on how much accidental delay exists between filling and starting a
+// descriptor.
 static inline void moti_publish_desc_verified(uint64_t desc_addr, const dtensor_desc_t* d) {
   moti_publish_desc(desc_addr);
-#if MOTI_PIPE_VERIFY
   // The three words that carry the shape and the format selectors. Reading them with
   // fetch_or(0) is a read-only RMW: it returns the value and changes nothing.
   const uint32_t want_mn = (uint32_t)d->M | ((uint32_t)d->N << 16);
@@ -174,13 +172,10 @@ static inline void moti_publish_desc_verified(uint64_t desc_addr, const dtensor_
   auto amo = [](uint64_t a) {
     return __atomic_fetch_or((uint32_t*)(uintptr_t)a, 0u, __ATOMIC_ACQUIRE);
   };
-  while (amo(desc_addr + 48) != want_mn
-      || amo(desc_addr + 52) != want_kf
-      || amo(desc_addr + 56) != want_fs)
+  while (amo(desc_addr + offsetof(dtensor_desc_t, M)) != want_mn
+      || amo(desc_addr + offsetof(dtensor_desc_t, K)) != want_kf
+      || amo(desc_addr + offsetof(dtensor_desc_t, flags)) != want_fs)
     ;
-#else
-  (void)d;
-#endif
 }
 
 #endif // _CGO27_K_DTCU_DESC_H_

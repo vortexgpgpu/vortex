@@ -16,9 +16,7 @@
 // The standalone epilogue passes. k_epilogue.h compiles ONLY the one this build's
 // MOTI_APP needs -- nothing at all at MOTI_APP=1 -- so no unused kernel lands in the
 // binary and no mode's address moves. See common.h.
-#include "k_epilogue.h"
-
-__kernel void moti_tcu(kernel_arg_t* __UNIFORM__ arg) {
+__kernel __attribute__((aligned(256))) void moti_tcu(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t N = arg->N, K = arg->K, app = arg->app;
   auto pA = reinterpret_cast<ctx::input_t*>(arg->A_addr);
   auto pB = reinterpret_cast<ctx::input_t*>(arg->B_addr);
@@ -44,3 +42,5 @@ __kernel void moti_tcu(kernel_arg_t* __UNIFORM__ arg) {
   (void)app;
   wmma_store_D(pD, fragD, tile_row, tile_col, N);
 }
+
+#include "k_epilogue.h"

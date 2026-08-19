@@ -1,0 +1,64 @@
+[reuse] snapshots=/tmp/cgo27-exp1-7yy4bh5i
+[run] 49/49 simulations with jobs=8
+[batch] shape=s64 flat cross-mode simulations=49
+  app=1 shape=s64 mode=7  cycles=13898 status=ok
+  app=1 shape=s64 mode=1  cycles=12713 status=ok
+  app=2 shape=s64 mode=1  cycles=12764 status=ok
+  app=1 shape=s64 mode=2  cycles=14086 status=ok
+  app=1 shape=s64 mode=6  cycles=19473 status=ok
+  app=1 shape=s64 mode=8  cycles=28578 status=ok
+  app=2 shape=s64 mode=2  cycles=14314 status=ok
+  app=2 shape=s64 mode=7  cycles=16192 status=ok
+  app=2 shape=s64 mode=6  cycles=20061 status=ok
+  app=2 shape=s64 mode=8  cycles=30872 status=ok
+  app=3 shape=s64 mode=1  cycles=16979 status=ok
+  app=1 shape=s64 mode=15 cycles=41380 status=ok
+  app=3 shape=s64 mode=2  cycles=18353 status=ok
+  app=1 shape=s64 mode=14 cycles=50739 status=ok
+  app=3 shape=s64 mode=7  cycles=19643 status=ok
+  app=3 shape=s64 mode=6  cycles=39351 status=ok
+  app=4 shape=s64 mode=1  cycles=13593 status=ok
+  app=3 shape=s64 mode=8  cycles=34323 status=ok
+  app=4 shape=s64 mode=2  cycles=15453 status=ok
+  app=4 shape=s64 mode=7  cycles=17942 status=ok
+  app=4 shape=s64 mode=6  cycles=22416 status=ok
+  app=5 shape=s64 mode=1  cycles=12812 status=ok
+  app=4 shape=s64 mode=8  cycles=32618 status=ok
+  app=5 shape=s64 mode=2  cycles=14548 status=ok
+  app=5 shape=s64 mode=6  cycles=24002 status=ok
+  app=5 shape=s64 mode=7  cycles=16645 status=ok
+  app=5 shape=s64 mode=8  cycles=30537 status=ok
+  app=2 shape=s64 mode=14 cycles=150965 status=ok
+  app=2 shape=s64 mode=15 cycles=147552 status=ok
+  app=3 shape=s64 mode=14 cycles=223879 status=ok
+  app=6 shape=s64 mode=2  cycles=119446 status=ok
+  app=6 shape=s64 mode=1  cycles=118000 status=ok
+  app=5 shape=s64 mode=14 cycles=181778 status=ok
+  app=3 shape=s64 mode=15 cycles=276154 status=ok
+  app=6 shape=s64 mode=6  cycles=124740 status=ok
+  app=4 shape=s64 mode=14 cycles=329659 status=ok
+  app=5 shape=s64 mode=15 cycles=270841 status=ok
+  app=9 shape=s64 mode=1  cycles=29394 status=ok
+  app=6 shape=s64 mode=7  cycles=119280 status=ok
+  app=9 shape=s64 mode=2  cycles=30798 status=ok
+  app=4 shape=s64 mode=15 cycles=365691 status=ok
+  app=9 shape=s64 mode=7  cycles=30602 status=ok
+  app=9 shape=s64 mode=6  cycles=36170 status=ok
+  app=6 shape=s64 mode=8  cycles=133960 status=ok
+  app=9 shape=s64 mode=8  cycles=45282 status=ok
+  app=6 shape=s64 mode=15 cycles=146687 status=ok
+  app=6 shape=s64 mode=14 cycles=156160 status=ok
+  app=9 shape=s64 mode=14 cycles=67452 status=ok
+  app=9 shape=s64 mode=15 cycles=58084 status=ok
+
+===== WINNERS =====
+app=1  s64    TCU                  12713 cycles
+app=2  s64    TCU                  12764 cycles
+app=3  s64    TCU                  16979 cycles
+app=4  s64    TCU                  13593 cycles
+app=5  s64    TCU                  12812 cycles
+app=6  s64    TCU                  118000 cycles
+app=9  s64    TCU                  29394 cycles
+
+CSV -> tests/regression/cgo27_motivation/exp1_attention_s64_20260818.csv
+reused snapshots -> /tmp/cgo27-exp1-7yy4bh5i

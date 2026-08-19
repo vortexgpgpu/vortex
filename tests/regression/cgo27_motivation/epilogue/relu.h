@@ -11,11 +11,8 @@
 // fuse it on the accumulator fragment before the store; the DTCU modes run it as a
 // separate SIMT pass over D (the engine has no epilogue HW).
 //
-// CAVEAT on the "divergence" axis: the RFC lists this app as the branch/divergence
-// stressor, but at -O3 the compiler flattens this ternary into a branchless
-// select/fmax, so it does NOT actually produce warp divergence. If divergence is
-// what we want to measure, the app needs a formulation the compiler cannot
-// flatten (e.g. a data-dependent side effect); flagged in the RFC.
+// This is the light elementwise endpoint, not a divergence benchmark: at -O3 the
+// compiler can flatten the ternary to a select/fmax.
 
 static inline __attribute__((always_inline)) float epi_relu(float x) {
   return x > 0.0f ? x : 0.0f;

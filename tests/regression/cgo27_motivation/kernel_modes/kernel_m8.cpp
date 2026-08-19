@@ -25,7 +25,7 @@
 // array -- so what it measures is whether the engine can absorb a queue of small
 // descriptors as cheaply as one large one, i.e. the per-descriptor cost of DESC_REQ /
 // DESC_WAIT and pipeline refill. Queue depth is 2 x NUM_CORES, so all of them fit.
-__kernel void moti_dtcu_cluster(kernel_arg_t* __UNIFORM__ arg) {
+__kernel __attribute__((aligned(256))) void moti_dtcu_cluster(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t core = (uint32_t)vx_core_id();
   const moti_slice sl = moti_slice_of(arg->M, VX_CFG_NUM_CORES, core);
   if (sl.nrow == 0)
@@ -34,7 +34,7 @@ __kernel void moti_dtcu_cluster(kernel_arg_t* __UNIFORM__ arg) {
   auto d = reinterpret_cast<dtensor_desc_t*>(arg->desc_addr) + core;
   const uint64_t da = arg->desc_addr + (uint64_t)core * sizeof(dtensor_desc_t);
   moti_fill_desc(d, arg, sl, MOTI_CLUSTER_TILE_N);
-  moti_publish_desc(da);
+  moti_publish_desc_verified(da, d);
   while (0 == dtensor_cluster_start(da))      // 0 = queue full, nothing was queued
     ;
   while (0 == dtensor_check(da))

@@ -16,9 +16,7 @@
 // The standalone epilogue passes. k_epilogue.h compiles ONLY the one this build's
 // MOTI_APP needs -- nothing at all at MOTI_APP=1 -- so no unused kernel lands in the
 // binary and no mode's address moves. See common.h.
-#include "k_epilogue.h"
-
-__kernel void moti_simt(kernel_arg_t* __UNIFORM__ arg) {
+__kernel __attribute__((aligned(256))) void moti_simt(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t N = arg->N, K = arg->K, app = arg->app;   // read up front, see kernel_m1.cpp
   auto pA = reinterpret_cast<const uint16_t*>(arg->A_addr); // fp16 storage
   auto pB = reinterpret_cast<const uint16_t*>(arg->B_addr);
@@ -38,3 +36,5 @@ __kernel void moti_simt(kernel_arg_t* __UNIFORM__ arg) {
   pD[row * N + col] = epi_apply_at(sum, aux, row, col, N);
   (void)app;
 }
+
+#include "k_epilogue.h"

@@ -1,0 +1,33 @@
+[reuse] snapshots=/tmp/cgo27-exp1-rdpsaeby
+[resume] verified rows=13 from tests/regression/cgo27_motivation/exp1_results_20260818_regular_complete.partial
+[run] 17/30 simulations with jobs=6
+[batch] shape=r8 app=6 cross-mode simulations=5
+  app=6 shape=r8 mode=7  cycles=2432193 status=ok
+  app=6 shape=r8 mode=8  cycles=2556343 status=ok
+  app=6 shape=r8 mode=14 cycles=2544742 status=ok
+  app=6 shape=r8 mode=15 cycles=2629337 status=ok
+  app=6 shape=r8 mode=2  cycles=2567134 status=ok
+[batch] shape=r12 app=6 cross-mode simulations=6
+  app=6 shape=r12 mode=7  cycles=5606551 status=ok
+  app=6 shape=r12 mode=14 cycles=5581649 status=ok
+  app=6 shape=r12 mode=8  cycles=5839033 status=ok
+  app=6 shape=r12 mode=15 cycles=5872130 status=ok
+  app=6 shape=r12 mode=1  cycles=5483888 status=ok
+  app=6 shape=r12 mode=2  cycles=5804484 status=ok
+[batch] shape=r16 app=6 cross-mode simulations=6
+  app=6 shape=r16 mode=14 cycles=10561136 status=ok
+  app=6 shape=r16 mode=7  cycles=10568297 status=ok
+  app=6 shape=r16 mode=15 cycles=10980788 status=ok
+  app=6 shape=r16 mode=8  cycles=10992995 status=ok
+  app=6 shape=r16 mode=1  cycles=9881379 status=ok
+  app=6 shape=r16 mode=2  cycles=10666021 status=ok
+
+===== WINNERS =====
+app=6  r2     DTCU_socket          240654 cycles
+app=6  r4     DTCU_socket          712012 cycles
+app=6  r8     DTCU_socket          2432193 cycles
+app=6  r12    TCU                  5483888 cycles
+app=6  r16    TCU                  9881379 cycles
+
+CSV -> tests/regression/cgo27_motivation/exp1_app6_20260818.csv
+reused snapshots -> /tmp/cgo27-exp1-rdpsaeby

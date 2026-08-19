@@ -12,10 +12,8 @@
 //   - in-core: fuse at store; each lane already knows its column.
 //   - DTCU: separate SIMT pass over D.
 //
-// App 7 also uses the bias variant below (dequantized FFN: dequant -> bias -> GELU).
-//
-// WIRING STATUS: math is here; the s/bias buffers (host allocation + upload + CPU
-// reference) are Phase B.
+// The host allocates s directly behind C; all in-core paths fuse it and DTCU 7/8 use
+// their standalone pass (14/15 use their consumer warps).
 
 static inline float epi_scale(float v, float s) {
   return v * s;

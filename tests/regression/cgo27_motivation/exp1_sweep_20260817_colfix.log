@@ -1,0 +1,56 @@
+[build] app=1 (baseline)
+[build] app=2 (relu)
+[build] app=5 (scale)
+[build] app=4 (residual)
+[build] app=3 (gelu)
+[build] app=6 (softmax_row)
+[build] app=9 (mean_broadcast_col)
+[resume] verified rows=72 from tests/regression/cgo27_motivation/exp1_results_20260817_pre_colfix.partial
+[run] 173/245 simulations with jobs=8
+[batch] shape=r2 mode=1 simulations=1
+  app=9 shape=r2 mode=1  cycles=56234
+[batch] shape=r2 mode=2 simulations=1
+  app=9 shape=r2 mode=2  cycles=57059
+[batch] shape=r2 mode=5 simulations=1
+  app=9 shape=r2 mode=5  cycles=74862
+[batch] shape=r2 mode=7 simulations=1
+  app=9 shape=r2 mode=7  cycles=45220
+[batch] shape=r2 mode=8 simulations=1
+  app=9 shape=r2 mode=8  cycles=55124
+[batch] shape=r2 mode=14 simulations=1
+  app=9 shape=r2 mode=14 cycles=80971
+[batch] shape=r2 mode=15 simulations=1
+  app=9 shape=r2 mode=15 cycles=78723
+[batch] shape=r4 mode=1 simulations=1
+  app=9 shape=r4 mode=1  cycles=167619
+[batch] shape=r4 mode=2 simulations=1
+  app=9 shape=r4 mode=2  cycles=171994
+[batch] shape=r4 mode=5 simulations=1
+  app=9 shape=r4 mode=5  cycles=280096
+[batch] shape=r4 mode=7 simulations=1
+  app=9 shape=r4 mode=7  cycles=119160
+[batch] shape=r4 mode=8 simulations=1
+  app=9 shape=r4 mode=8  cycles=137180
+[batch] shape=r4 mode=14 simulations=7
+  app=1 shape=r4 mode=14 cycles=86864
+  app=9 shape=r4 mode=14 cycles=156257
+  app=2 shape=r4 mode=14 cycles=187672
+  app=5 shape=r4 mode=14 cycles=222195
+  app=3 shape=r4 mode=14 cycles=269964
+  app=4 shape=r4 mode=14 cycles=412676
+  app=6 shape=r4 mode=14 cycles=764164
+[batch] shape=r4 mode=15 simulations=7
+  app=1 shape=r4 mode=15 cycles=97902
+  app=9 shape=r4 mode=15 cycles=167282
+  app=2 shape=r4 mode=15 cycles=192591
+  app=5 shape=r4 mode=15 cycles=396804
+  app=3 shape=r4 mode=15 cycles=416643
+  app=4 shape=r4 mode=15 cycles=616492
+  app=6 shape=r4 mode=15 cycles=778081
+[batch] shape=r8 mode=1 simulations=7
+  app=1 shape=r8 mode=1  cycles=389284
+  app=2 shape=r8 mode=1  cycles=390159
+  app=5 shape=r8 mode=1  cycles=391927
+  app=3 shape=r8 mode=1  cycles=408068
+  app=4 shape=r8 mode=1  cycles=429368
+  app=9 shape=r8 mode=1  cycles=529441

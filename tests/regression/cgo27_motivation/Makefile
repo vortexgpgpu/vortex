@@ -1,8 +1,8 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-# cgo27_motivation exercises all 5 GEMM paths in one build:
-#   in-core SIMT, in-core TCU, in-core TCU + DXA, DTCU, DTCU + DTCU_TMA.
+# cgo27_motivation builds the in-core, workgroup, socket-DTCU and cluster-DTCU paths,
+# including the DXA and producer/consumer pipeline variants.
 # Needs the in-core TCU, the DTCU, and the DXA engine all enabled.
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TCU_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_DTCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_DTCU_ENABLE)
@@ -13,8 +13,8 @@ CONFIGS := $(if $(findstring -DVX_CFG_EXT_DXA_ENABLE,$(CONFIGS)),$(CONFIGS),$(CO
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_A_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_A_ENABLE)
 
 # --- Experiment HW config (Hopper-proportional; ~1/4 H100 SM per core). ---
-# See README.md for the scaling rationale. Override on the make/blackbox line
-# to sweep (e.g. CONFIGS="-DVX_CFG_NUM_CORES=8").
+# See README.md for the scaling rationale. Simulator experiment defines belong in
+# MOTI_EXTRA_CONFIGS; never override CONFIGS wholesale.
 # Workgroup MMA: lets a warpgroup read its operands straight out of Local Memory via a
 # shared-memory descriptor instead of load_matrix_sync-ing them into registers. That is
 # the third of the three things staging needs to pay (see README), and without it the DXA
@@ -33,13 +33,10 @@ CONFIGS += -DMOTI_APP=$(MOTI_APP)
 # Pipeline depth and poll backoff for the pipelined engine modes (14/15). See common.h.
 MOTI_PIPE_TILES   ?= 4
 MOTI_PIPE_BACKOFF ?= 32
-MOTI_PIPE_C0_CONSUMES ?= 0
-MOTI_PIPE_CONSUMER_WARPS ?= 16
-MOTI_PIPE_VERIFY ?= 1
+MOTI_PIPE_CONSUMER_WARPS ?= 15
 MOTI_PIPE_STRIPE_WARP ?= 0
 CONFIGS += -DMOTI_PIPE_TILES=$(MOTI_PIPE_TILES) -DMOTI_PIPE_BACKOFF=$(MOTI_PIPE_BACKOFF)
-CONFIGS += -DMOTI_PIPE_C0_CONSUMES=$(MOTI_PIPE_C0_CONSUMES)
-CONFIGS += -DMOTI_PIPE_CONSUMER_WARPS=$(MOTI_PIPE_CONSUMER_WARPS) -DMOTI_PIPE_VERIFY=$(MOTI_PIPE_VERIFY) -DMOTI_PIPE_STRIPE_WARP=$(MOTI_PIPE_STRIPE_WARP)
+CONFIGS += -DMOTI_PIPE_CONSUMER_WARPS=$(MOTI_PIPE_CONSUMER_WARPS) -DMOTI_PIPE_STRIPE_WARP=$(MOTI_PIPE_STRIPE_WARP)
 CONFIGS += -DVX_CFG_TCU_WGMMA_ENABLE -DWGMMA_RS -DWGMMA_NRC=8
 
 CONFIGS += -DVX_CFG_NUM_CLUSTERS=1
@@ -53,6 +50,11 @@ CONFIGS += -DVX_CFG_DCACHE_SIZE=32768        # 32 KB L1
 CONFIGS += -DVX_CFG_LMEM_LOG_SIZE=16         # 64 KB shared memory (2^16)
 CONFIGS += -DVX_CFG_L2_ENABLE                # enable L2
 CONFIGS += -DVX_CFG_L2_CACHE_SIZE=1048576    # 1 MB L2
+# Extra simulator-only experiment knobs. Use this instead of exporting CONFIGS: blackbox
+# passes CONFIGS on make's command line, which prevents every CONFIGS += above from taking
+# effect and silently builds a different machine.
+MOTI_EXTRA_CONFIGS ?=
+CONFIGS += $(MOTI_EXTRA_CONFIGS)
 
 PROJECT := cgo27_motivation
 
@@ -100,7 +102,7 @@ include ../common.mk
 # the warning active for the all-in-one kernel.cpp and the host.
 MOTI_VX_CFLAGS := $(VX_CFLAGS) -I$(SRC_DIR) -I$(SRC_DIR)/kernel_modes -Wno-unused-function
 
-MOTI_MODES  := 0 1 2 3 4 5 7 8 14 15
+MOTI_MODES  := 0 1 2 3 4 5 6 7 8 14 15
 MOTI_VXBINS := $(foreach m,$(MOTI_MODES),kernel_m$(m).vxbin)
 
 all: $(MOTI_VXBINS)

@@ -5,6 +5,57 @@ A row-major / B col-major, fp16→fp32) through many HW execution paths on the
 **same input**, per-path cycles + MPM counters, each verified vs a CPU reference.
 The point: find the workload/size where the **optimal HW path changes**.
 
+> **Implementation audit (2026-08-15).** Modes 3/4/5 and 14/15 were rewritten, all
+> DTCU descriptors now use verified publication, and MPM counters are accumulated across
+> every GEMM/epilogue launch. Before this audit, a second epilogue launch overwrote the
+> GEMM's detailed counters; consequently the historical result/analysis sections below
+> are retained as investigation notes but are **not publishable measurements**. The
+> authoritative post-audit measurements are the current cube sweep below.
+
+## Current cube sweep (2026-08-18)
+
+The post-audit cube sweep is in `exp1_results_20260818_stable.csv`. It covers 7 apps,
+5 shapes (`r2,r4,r8,r12,r16`) and the six stable modes
+`1,2,7,8,14,15`: **203/210 cells completed with `errors=0`**. The CSV also contains
+the seven incomplete cells with an explicit status instead of a fabricated cycle count:
+
+- `hang_reproduced`: app 2 / r16 / mode 1, and app 4 / r8 / modes 14 and 15.
+- `not_run_after_r8_hang`: app 4 / r12 and r16 / modes 14 and 15. These larger
+  variants were not launched after the same pipeline path hung twice at r8.
+
+Modes 3 and 5 are not in this stable matrix. Mode 3 already hangs at r4 baseline, and
+mode 5's two-buffer implementation completed r2/r4 but its r8 batch made no result after
+90 minutes. A three-buffer/two-tile-ahead experiment was slower at r2 and also failed to
+finish an isolated r8 run in one hour, so it was reverted rather than reported as an
+optimization.
+
+Winner summary among completed cells:
+
+Across the 35 app×shape comparisons, mode 7 wins 19, mode 1 wins 15, and mode 2 is
+fastest once only because mode 1 is the reproduced-hang cell described above.
+
+| Shape | Winners by epilogue |
+|---|---|
+| r2, 128×64×32 | mode 7 DTCU socket for all 7 apps |
+| r4, 256×128×64 | mode 7 DTCU socket for all 7 apps |
+| r8, 512×256×128 | mode 1 TCU for GELU/residual; mode 7 for the other 5 apps |
+| r12, 768×384×192 | mode 1 TCU for all 7 apps |
+| r16, 1024×512×256 | mode 1 TCU for 6 apps; mode 2 is fastest among completed ReLU modes because mode 1 hung |
+
+This establishes the intended **TCU ↔ DTCU-socket crossover**, including an
+epilogue-dependent boundary at r8. For example, r8 baseline is mode 7 = 303,912 cycles
+against mode 1 = 389,284, while r8 GELU flips to mode 1 = 408,068 against mode 7 =
+427,812. Softmax crosses by size: r8 mode 7 = 2,432,193 versus mode 1 = 2,508,195,
+then r12 mode 1 = 5,483,888 versus mode 7 = 5,606,551.
+
+The sweep does **not** support all four desired winner claims yet. Mode 8/15 (cluster)
+never wins a cell. Mode 2's only first place is the incomplete r16 ReLU comparison, so it
+is not clean evidence of a TCU+DXA win. The socket software pipeline does overlap useful
+work for the heaviest softmax (`r12`: mode 14 = 5,581,649 versus mode 7 = 5,606,551;
+`r16`: 10,561,136 versus 10,568,297), but plain TCU remains faster overall. These are
+hardware/model or kernel-design findings to address with new shapes/configuration, not
+rankings to relabel.
+
 ## HW config (set in `Makefile`; overrides `VX_config.toml` defaults)
 
 Chosen to look like a **~1/4 H100 SM per core** (occupancy), scaled to a small
@@ -49,44 +100,37 @@ Grouped by **what executes**, so the numbering is deliberately sparse:
 | 0 | in-core SIMT | scalar MAC, software fp16→fp32 (no HW fp16 in SIMT) |
 | 1 | in-core TCU (WMMA) | naive: load frag → mma per K |
 | 2 | in-core TCU + DXA | naive: single-buffer, sync per K |
-| 3 | workgroup WGMMA + DXA | multi-warp CTA shares one staged tile; warp 0 produces; `wgmma` reads smem directly |
-| 4 | workgroup WGMMA, SW copy | same geometry, the CTA copies its own tiles — the DXA control for 3 |
+| 3 | workgroup WGMMA + DXA | double-buffered A/B; warp 0 issues async copies, all warps consume; `wgmma` reads B from LMEM |
+| 4 | workgroup WGMMA, SW copy | same geometry/footprint, but CTA warps synchronously copy — the control for 3 |
 | 5 | workgroup WGMMA + DXA, A resident | as 3, but the CTA sweeps `MOTI_WG_NCOLS` column tiles against an A block staged once for the whole K — reuse along **N**, the axis that pays |
-| 6 | *reserved hole* | retired; see below |
+| 6 | workgroup WGMMA + DXA, A resident, **single B buffer** | the committed form of mode 5 before double buffering: same A reuse/CTA geometry, but issue → wait → WGMMA → wait at every K step |
 | 7 | DTCU_socket | one engine per socket, D → that socket's L1, native tile 32×16 |
 | 8 | DTCU_cluster | one engine per cluster, D → L2, native tile 64×32 |
 | 9 | hetero: TCU + DTCU_socket | **not built** — reports `skipped=1` |
 | 10 | hetero: TCU + DTCU_cluster | **not built** |
 | 11 | hetero: TCU + both engines | **not built** |
 | 12, 13 | *reserved holes* | the workgroup pair before it moved to 3/4; a number that has already meant two things does not get a third |
-| 14 | DTCU_socket, **pipelined** | the band is cut into `MOTI_PIPE_TILES` descriptors and each core runs the epilogue for slice *t−1* while its engine produces *t* |
-| 15 | DTCU_cluster, **pipelined** | one engine needs one producer: core 0 submits every slice, and every warp on the machine consumes |
+| 14 | DTCU_socket, **pipelined** | warp 0 of every core is producer-only; N disjoint consumer warps process that core's completed slices |
+| 15 | DTCU_cluster, **pipelined** | core 0 warp 0 is the sole producer; N consumer warps on every core divide each completed slice |
 
-⚠️ **This numbering changed again on 2026-08-07, and a log from before that means
-something different.** 3 and 4 now hold the workgroup pair that was 12 and 13. The four
-single-warp staging modes that held 3–6 are **retired**: a block there was one warp, so it
-staged a tile, issued one `mma_sync` against it and threw it away, with nothing to
-amortise the copy over. All four landed within 7 % of mode 1, which stages nothing at all,
-and none completed at 512×256×128 — they measured the absence of a geometry rather than
-the presence of an engine. 5 and 6 are now reserved holes. (Before *that*, 3=DTCU_cluster
-and 4=DTCU_socket, which moved to 7/8.)
+⚠️ **The numbering changed on 2026-08-07.** Modes 3/4 are the former 12/13 workgroup
+pair; mode 5 is the A-resident/N-reuse double-buffer variant. On 2026-08-18 the vacant
+mode 6 id was assigned to mode 5's committed single-buffer form. Before that,
+3=DTCU_cluster and 4=DTCU_socket, which are now 7/8. Trust the `[MOTI] name=` field;
+the sweep hard-errors if its mode map disagrees.
 
 Their last numbers, for the record: 3 (2-stage LSU) 104,196 / 382,111 / —, 4 (3-stage LSU)
 231,610 / — / —, 5 (2-stage DXA) 90,132 / — / —, 6 (3-stage DXA) 132,452 / — / —.
 The `[MOTI]` line carries `name=`, and the sweep scripts hard-error on a mismatch rather
 than mislabelling a column.
 
-**3/5 and 4/6 are matched pairs.** Identical tile geometry, stage count, barrier count and
-lmem footprint — the only difference is who copies A and B into Local Memory: the block's
-own threads (`kernel_modes/k_smem_stage.h`) or the DXA engine. That is what makes the copy
-engine's contribution measurable at each pipeline depth; neither pair could show it alone.
-Keeping the barrier *count* equal matters as much as the stage count, since barriers are a
-per-CTA resource and a version needing fewer would win on occupancy instead.
-
-One thing genuinely differs, and it is the finding rather than a flaw: a DXA fill is
-**async**, so mode 5/6 issue the fill for tile k+1 and compute tile k while it runs. An LSU
-fill is the block's own instruction stream, so nothing overlaps *inside* a CTA — the
-prefetch distance only buys overlap across resident CTAs.
+**Modes 3 and 4 are the matched copy-engine pair.** They use the same WGMMA geometry,
+two LMEM stages and two barriers. Mode 3 issues tile k+1 to DXA before computing tile k,
+so transfer and WGMMA overlap. Mode 4 synchronously copies k+1 with the CTA and therefore
+cannot overlap inside that CTA. Mode 5 tests a different optimization: A stays resident
+while B is double-buffered and the CTA sweeps multiple N tiles. Mode 6 is its controlled
+single-buffer comparison: A residency, N sweep, launch geometry, and epilogue stay fixed;
+only the B schedule changes.
 
 **Both engine modes tile by rows and build their own descriptors.** The kernel fills a
 `dtensor_desc_t` from the addresses already in `kernel_arg_t`; the host only allocates the
@@ -104,16 +148,17 @@ const uint32_t core = (uint32_t)vx_core_id();
 if ((core % VX_CFG_SOCKET_SIZE) != 0) return;    // one submitter per socket
 const uint32_t sock = core / VX_CFG_SOCKET_SIZE;
 const uint64_t d = arg->desc_addr + (uint64_t)sock * sizeof(dtensor_desc_t);
-moti_fill_desc(...); moti_publish_desc(d);       // fence + AMO, see below
+moti_fill_desc(...); moti_publish_desc_verified(d, desc); // read-back publication
 while (0 == dtensor_socket_start(d)) ;
 ```
 
 ⚠️ **A fence alone does not publish the descriptor.** Core stores are write-through and
 fire-and-forget — nothing acknowledges them — so `fence` has no completion to wait on and
 the engine's descriptor read can pass the fill. `moti_publish_desc` follows the fence with
-`dtensor_check()`'s AMO, which takes the cache's AmoProbe path and resolves at the LLC,
-forcing the fill out. Without it, mode 8's four slices produced 6,144 errors: the three
-descriptors the engine read as still-zero each retired instantly and set `done`.
+`dtensor_check()`'s AMO, then reads back the shape/format words through the same AMO path
+until they match. Without the read-back loop, pipelined descriptors were observed partly
+written (for example M valid while N/K were zero). Modes 7/8/14/15 all use the same safe
+publication contract.
 
 ⚠️ **Nothing about the split is passed in `kernel_arg_t`.** Socket size and count are
 `VX_CFG_SOCKET_SIZE` / `VX_CFG_NUM_CORES`, which the kernel is already compiled with; the
@@ -136,7 +181,7 @@ measurement that forced this.
 | `epilogue.h` | app id → epilogue, shared host/device |
 | **`host/`** | |
 | `host_modes.h` | the mode registry: ids, names, `ModeState` (Implemented / Reserved / Planned) |
-| `run_modes.h` | `run_mode_0()` … `run_mode_8()`, one per mode, each returning its `ModeSpec`: kernel entry, ISA requirement, launch geometry, lmem stages, whether the host programs DXA |
+| `run_modes.h` | one `run_mode_N()` per implemented mode, each returning its `ModeSpec`: kernel entry, ISA requirement, launch geometry, lmem stages, whether the host programs DXA |
 | `host_run.h` | `run_case()` — the one piece of scaffolding every mode shares. Contains no mode branches |
 | `host_args.h` | argument parsing and the shape checks that run before any device work |
 | `host_types.h` | element conversions, the counter record, the ULP comparison |
@@ -147,7 +192,7 @@ measurement that forced this.
 | `k_dtcu_desc.h` | descriptor construction — modes 7, 8 |
 | `k_epilogue.h` | the standalone epilogue pass — modes 7, 8 |
 | `kernel.cpp` | placeholder. `common.mk` needs `VX_SRCS` to name a file; this one defines no entries |
-| **`docs/`** | the RFCs and `dtcu_figures.html`, the source of the published Artifact |
+| **`docs/`** | the RFCs and `260807_dtcu_figures.html`, the source of the published Artifact |
 
 A header in `kernel_modes/` exists only when more than one mode needs it. Everything else
 sits in the one `.cpp` that uses it.
@@ -157,7 +202,7 @@ an id in `host/host_modes.h`. Then `-m all` and confirm no other mode moved.
 
 `make sizes` prints each program's `.text` against the 16 KB icache.
 
-## Apps (`arg->prologue` / `arg->epilogue`) — 8 total
+## Apps — 7 supported variants, light to heavy
 
 1. baseline `D = C + A·B`
 2. + ReLU
@@ -165,24 +210,32 @@ an id in `host/host_modes.h`. Then `-m all` and confirm no other mode moved.
 4. + Residual (`+ R`)
 5. + Scale (per-channel)
 6. + Softmax (row-wise; cross-tile reduction)
-7. dequant(int8→fp16) + bias + GELU
-8. dequant(int8→fp16) + softmax
+9. column mean broadcast (column reduction; deliberately cross-socket access)
 
-In-core modes fuse pro/epilogue into the operand load / output store. DTCU modes
+Apps 7/8 are deliberately rejected at compile time. They require quantized A with fp16
+B, but `dtensor_desc_t` has one `fmt_s` shared by both operands; accepting them would
+silently compare different GEMMs. In-core modes fuse elementwise epilogues into the
+output store. DTCU modes
 have no epilogue HW (only ZERO_ACC / NO_TMA flags + a bank-swizzle build knob), so
-they run pro/epilogue as **separate SIMT passes** (extra memory round-trips) — this
-asymmetry is what the epilogue sweep is designed to expose.
+7/8 run them as **separate SIMT passes**, while 14/15 apply them in consumer warps.
+Apps 6/9 are whole-row/column reductions and require a separate pass for every mode.
 
 ## Experiments
 
-- **Exp 1** — sweep size (≥5) × 8 apps × HW {0,1,2,5,6,7,8}; find sizes where best-HW flips
-  per app. SIMT skipped at large sizes (O(MNK) scalar in SimX is too slow).
+- **Exp 1** — sweep shape family × apps {1,2,5,4,3,6,9} × modes
+  {1,2,3,5,6,7,8,14,15}; build each app once, snapshot it, then run simulations in
+  parallel. `--shape TAG:M:N:K` (repeatable) adds controlled points that do not fit a
+  built-in family; it is mutually exclusive with `--sizes`.
 - **Exp 2** — at large sizes, sweep sim knobs (`DTCU_SWIZZLE`, `DTCU_MACS_PER_CYCLE`,
   `DTCU_SMEM_BANKS`, `DTCU_MAX_OUTSTANDING`; each is a `-D` rebuild) + hetero split
   ratio. Coarse first, fine if variance is high.
 
 
 ## What wins, and when
+
+> **Superseded pending the post-audit sweep.** The reasoning below records earlier
+> investigations, but its winner claims and epilogue counters predate the 2026-08-15
+> producer/consumer, double-buffering, descriptor-publication and multi-launch MPM fixes.
 
 **No mode wins everywhere. That is the result, not a caveat.** Earlier revisions of this
 file read as a ranking with the descriptor engine on top; that was an artefact of only ever
@@ -306,6 +359,8 @@ Two things that are **not** on this list, because they were measured and are not
 
 
 ## Measured results — 2026-08-05
+
+> **Historical only; do not cite.** Re-run `sweep_exp1.py` for current results.
 
 Three shapes on the stock `Makefile` config (1 cluster, 4 cores, `SOCKET_SIZE=1` → 4
 sockets, 16 warps × 32 threads per core, 32 regs/thread, issue width 4; LMEM 64 KB per
@@ -775,8 +830,13 @@ needs `build/tests/regression/cgo27_motivation/` with this Makefile copied in.
 
 ```
 cd vortex/build
-./ci/blackbox.sh --driver=simx --app=cgo27_motivation --perf=1 --args="-M 1024 -N 512 -K 64 -m <mode>"
+MOTI_APP=1 ./ci/blackbox.sh --driver=simx --app=cgo27_motivation --perf=1 \
+  --args="-a 1 -M 1024 -N 512 -K 64 -m <mode>"
 ```
+
+Do not launch two builds in this directory concurrently. `sweep_exp1.py` holds
+`.moti-build.lock`, builds each app once, snapshots the executable/kernels/runtime, and
+then runs simulation points in parallel (`--jobs`, default up to 8).
 
 ### Choosing the GEMM shape
 
@@ -789,8 +849,10 @@ single native tile left for a multiplier to multiply, and the harness's whole pr
 that every mode runs the *same* GEMM. The size ladder now lives in `sweep_exp1.py` /
 `sweep_exp2.py`, which expand each rung to explicit `-M/-N/-K`; their rungs reproduce
 the old `-s N` expansion (M=64·N, N=32·N, K=16·N) so earlier sweep data stays comparable.
+For an arbitrary controlled point, pass a repeatable `--shape TAG:M:N:K` to
+`sweep_exp1.py`.
 
-**Modes 3/4 take any shape; the in-core modes do not.** The DTCU rounds its tile
+**DTCU modes take ragged GEMM shapes; the in-core modes do not.** The DTCU rounds its tile
 counts up and clamps the ragged trailing tile in hardware — operands past the matrix
 are never fetched (the scratchpad is zero-filled, like the DXA copy engine's `cfill`)
 and the D store leaves those bytes disabled, so nothing outside D is written. Only the
@@ -799,38 +861,37 @@ descriptor's `uint16_t` M/N/K field width binds (≤ 65535).
 The in-core paths still need exact multiples, and the harness checks that up front
 against the modes `-m` selected. At `NUM_THREADS=32`, fp16→fp32:
 
-| dim | mode 0 | modes 1/2/5/6 | modes 3/4 | all modes |
-|---|---|---|---|---|
-| M | — | 16 (`tcu tileM`) | any | **16** |
-| N | 32 (`NUM_THREADS`) | 16 (`tcu tileN`) | any | **32** |
-| K | — | 32 (`tcu tileK`) | any | **32** |
+| dim | mode 0 | modes 1/2 | modes 3/4 | modes 5/6 | DTCU 7/8/14/15 | all modes |
+|---|---|---|---|---|---|---|
+| M | — | 16 | 64 | 64 | ragged | **64** |
+| N | 32 | 16 | 16 | 64 | ragged¹ | **64** |
+| K | — | 32 | 32 | 32 | ragged | **32** |
 
-So `-m 4 -M 100 -N 48 -K 20` is legal (all three axes ragged), while the same shape
-on `-m 1` is rejected.
+¹ Modes 7/8 with apps 2–5 run a standalone SIMT epilogue and therefore require N%32=0;
+pipeline modes 14/15 apply it inside the launch and keep ragged N support.
 
-Modes 3/4 additionally cap each dimension at 65535 (`dtensor_desc_t` stores M/N/K as
-`uint16_t`), and with an elementwise app (`-a 2`/`-a 3`) they also need `N % 32 == 0`
-because the epilogue pass reuses the mode-0 grid.
+DTCU modes cap each dimension at 65535 (`dtensor_desc_t` stores M/N/K as `uint16_t`).
 
-Consequences worth knowing: `-K 16` can never run modes 1/2/5/6 (16 < `tcu tileK`=32),
-and the default `-K 32` is **exactly one** K tile — so modes 5/6 have nothing to
-prefetch and degenerate to mode 2. Use `-K 64` or higher to exercise the pipelining.
+Consequences worth knowing: `-K 16` cannot run TCU modes. The default K=32 is one staged
+K step, so modes 3/5 cannot demonstrate steady-state prefetch overlap; use K≥64. Mode 6
+is intentionally synchronous and does not claim K-step overlap.
 
 ### Selecting the path and the app
 
 `-m <mode>`: which HW path to run — `all` (default) or a single mode by index:
-`0`=in-core SIMT, `1`=in-core TCU, `2`=in-core TCU+DXA, `3`=DTCU_cluster,
-`4`=DTCU_socket, `5`=TCU+DXA pipelined (3-stage smem), `6`=TCU+DXA pipelined (2-stage
-smem). Running a single mode skips the others entirely (verify, stats and the shape
+`0`=SIMT, `1`=TCU, `2`=single-buffer TCU+DXA, `3`=workgroup TCU+DXA,
+`4`=workgroup SW-copy control, `5`=double-buffered A-resident TCU+DXA,
+`6`=its committed single-buffer form, `7/8`=socket/cluster DTCU,
+`14/15`=their producer-consumer pipelines. Running a single mode skips the others entirely (verify, stats and the shape
 check only apply to the modes that ran), so e.g. `-m 1` runs just the WMMA path without
-the slow SIMT mode 0. `-a <app>`: epilogue/app id 1..8.
+the slow SIMT mode 0. `-a <app>` asserts the compile-selected app: 1..6 or 9.
 
 Examples:
 ```
---args="-M 1024 -N 512 -K 64"        # all 7 modes on a 1024x512x64 GEMM
---args="-M 1024 -N 512 -K 64 -m 5"   # only the 3-stage pipelined path
---args="-M 1024 -N 16  -K 64 -m 1"   # legal: N=16 is fine for the WMMA path alone
---args="-M 512 -N 256 -K 128 -m 4"   # only the socket-placed DTCU
+--args="-a 1 -M 1024 -N 512 -K 64"        # all implemented modes
+--args="-a 1 -M 1024 -N 512 -K 64 -m 5"   # A-resident DXA path
+--args="-a 1 -M 1024 -N 16  -K 64 -m 1"   # legal: N=16 is fine for WMMA alone
+--args="-a 1 -M 512 -N 256 -K 128 -m 7"   # socket-placed DTCU
 ```
 
 All flags reject non-integers rather than silently truncating: `-K 1.7` errors out

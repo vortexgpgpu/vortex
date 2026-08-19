@@ -1,0 +1,12 @@
+[build] app=1 (baseline)
+[build] app=2 (relu)
+[build] app=3 (gelu)
+[build] app=4 (residual)
+[build] app=5 (scale)
+[build] app=6 (softmax_row)
+[build] app=9 (mean_broadcast_col)
+[run] 98/98 simulations with jobs=8
+[batch] shape=s256 mode=1 simulations=4
+  app=1 shape=s256 mode=1  cycles=187251 status=ok
+  app=3 shape=s256 mode=1  cycles=194567 status=ok
+  app=9 shape=s256 mode=1  cycles=257764 status=ok

@@ -1,0 +1,3 @@
+[reuse] snapshots=/tmp/cgo27-exp1-7yy4bh5i
+[run] 28/28 simulations with jobs=8
+[batch] shape=s256 flat cross-mode simulations=14

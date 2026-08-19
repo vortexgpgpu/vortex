@@ -486,10 +486,12 @@
                 <tr><td><span class="swatch" style="background:var(--r-tcu)"></span><span class="mode-id">3</span> <span class="mode-name">TCU workgroup + DXA</span><span class="sub">multi-warp CTA shares one staged tile; warp 0 is the producer; wgmma reads smem</span></td><td>dcache</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-simt)"></span><span class="mode-id">4</span> <span class="mode-name">TCU workgroup, SW copy</span><span class="sub">same geometry, the CTA copies its own tiles — the DXA control for 3</span></td><td>dcache</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">5</span> <span class="mode-name">TCU workgroup + DXA, A resident</span><span class="sub">CTA sweeps 4 column tiles against A staged once for the whole K &mdash; N-axis reuse</span></td><td>dcache</td></tr>
-                <tr class="skipped"><td><span class="mode-id">6</span> <span class="mode-name">reserved</span><span class="sub">held four single-warp staging modes, retired &mdash; one warp per block left the copy nothing to amortise over</span></td><td>&mdash;</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-dxa)"></span><span class="mode-id">6</span> <span class="mode-name">TCU workgroup + DXA, A resident, single B buffer</span><span class="sub">same A reuse and CTA geometry as 5; synchronous issue/wait/consume/wait schedule isolates buffering</span></td><td>dcache</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">7</span> <span class="mode-name">DTCU_socket</span><span class="sub">4 engines, tile 32×16, one descriptor per socket</span></td><td>socket L1</td></tr>
                 <tr><td><span class="swatch" style="background:var(--r-clu)"></span><span class="mode-id">8</span> <span class="mode-name">DTCU_cluster</span><span class="sub">1 engine, tile 64×32, one descriptor per core</span></td><td>L2</td></tr>
                 <tr class="skipped"><td><span class="mode-id">9 · 10 · 11</span> <span class="mode-name">hetero</span><span class="sub">cores + engine(s) on one GEMM — numbered, not built</span></td><td>—</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-sock)"></span><span class="mode-id">14</span> <span class="mode-name">DTCU_socket pipeline</span><span class="sub">one producer warp and N consumer warps per core</span></td><td>socket L1</td></tr>
+                <tr><td><span class="swatch" style="background:var(--r-clu)"></span><span class="mode-id">15</span> <span class="mode-name">DTCU_cluster pipeline</span><span class="sub">core 0 warp 0 is the sole producer; N consumer warps on every core</span></td><td>L2</td></tr>
               </tbody>
             </table>
           </div>
@@ -814,8 +816,11 @@
         none completed at 512 × 256 × 128. Last values, for the record — 2-stage LSU
         104,196 / 382,111, 3-stage LSU 231,610, 2-stage DXA 90,132, 3-stage DXA 132,452.
         The workgroup pair now at 3 and 4 is the same question asked with a geometry that
-        can answer it. <strong>5 and 6 are reserved holes</strong>, so a mode number from a
-        log older than 2026-08-07 means something else.
+        can answer it. Mode 5 is the A-resident double-buffer path; on 2026-08-18 the
+        vacant mode 6 id was assigned to its committed single-buffer form so buffering
+        can be measured without changing A reuse or CTA geometry. A mode number from a
+        log older than these renumberings may therefore mean something else; trust the
+        emitted mode name.
         <br /><br />
         <strong>— on mode 0 is skipped by policy, not a failure.</strong> It is the
         no-tensor-unit baseline, 25× mode 1 at the largest shape, and nothing it depends on

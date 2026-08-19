@@ -1,0 +1,29 @@
+[reuse] snapshots=/tmp/cgo27-exp1-rdpsaeby
+[resume] verified rows=153 from tests/regression/cgo27_motivation/exp1_results_20260817_pre_relu_longtail.partial
+[run] 57/210 simulations with jobs=8
+[batch] shape=r16 mode=2 simulations=4
+  app=1 shape=r16 mode=2  cycles=2434093 status=ok
+  app=3 shape=r16 mode=2  cycles=2434264 status=ok
+  app=5 shape=r16 mode=2  cycles=2436227 status=ok
+  app=9 shape=r16 mode=2  cycles=2835121 status=ok
+[batch] shape=r16 mode=7 simulations=4
+  app=1 shape=r16 mode=7  cycles=2288437 status=ok
+  app=9 shape=r16 mode=7  cycles=2688316 status=ok
+  app=5 shape=r16 mode=7  cycles=2569548 status=ok
+  app=3 shape=r16 mode=7  cycles=2811604 status=ok
+[batch] shape=r16 mode=8 simulations=4
+  app=1 shape=r16 mode=8  cycles=2713135 status=ok
+  app=9 shape=r16 mode=8  cycles=3113014 status=ok
+  app=5 shape=r16 mode=8  cycles=2998751 status=ok
+  app=3 shape=r16 mode=8  cycles=3236302 status=ok
+[batch] shape=r16 mode=14 simulations=4
+  app=1 shape=r16 mode=14 cycles=2322020 status=ok
+  app=5 shape=r16 mode=14 cycles=2475996 status=ok
+  app=9 shape=r16 mode=14 cycles=2720087 status=ok
+  app=3 shape=r16 mode=14 cycles=2608344 status=ok
+[batch] shape=r16 mode=15 simulations=4
+  app=1 shape=r16 mode=15 cycles=2741963 status=ok
+  app=9 shape=r16 mode=15 cycles=3139851 status=ok
+  app=5 shape=r16 mode=15 cycles=3041199 status=ok
+  app=3 shape=r16 mode=15 cycles=3143149 status=ok
+[batch] shape=r8 app=4 cross-mode simulations=2

@@ -1,0 +1,9 @@
+[reuse] snapshots=/tmp/cgo27-exp1-rdpsaeby
+[resume] verified rows=24 from tests/regression/cgo27_motivation/exp1_results_20260818_regular_complete.partial
+[run] 6/30 simulations with jobs=6
+[batch] shape=r16 app=2 cross-mode simulations=6
+  app=2 shape=r16 mode=14 cycles=2450215 status=ok
+  app=2 shape=r16 mode=7  cycles=2568478 status=ok
+  app=2 shape=r16 mode=15 cycles=2935581 status=ok
+  app=2 shape=r16 mode=8  cycles=2993176 status=ok
+  app=2 shape=r16 mode=2  cycles=2430029 status=ok

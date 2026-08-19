@@ -1,4 +1,4 @@
-// GPU-side program for mode 4 -- workgroup WGMMA, cooperative SW load (the DXA control for mode 12).
+// GPU-side program for mode 4 -- workgroup WGMMA, cooperative SW-load control for mode 3.
 //
 // This is the mode where operand staging is actually set up to pay. Those modes have a
 // DXA copy but none of the three things that make one worth its cost, and they land
@@ -29,10 +29,7 @@
 // The standalone epilogue passes. k_epilogue.h compiles ONLY the one this build's
 // MOTI_APP needs -- nothing at all at MOTI_APP=1 -- so no unused kernel lands in the
 // binary and no mode's address moves. See common.h.
-#include "k_epilogue.h"
-
-
-__kernel void moti_tcu_wg(kernel_arg_t* __UNIFORM__ arg) {
+__kernel __attribute__((aligned(256))) void moti_tcu_wg(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t N = arg->N, K = arg->K, app = arg->app;
   auto pA = reinterpret_cast<const wgctx::input_t*>(arg->A_addr);
   auto pB = reinterpret_cast<const wgctx::input_t*>(arg->B_addr);
@@ -49,11 +46,16 @@ __kernel void moti_tcu_wg(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t tile_row = blockIdx.y * cta_M;
   const uint32_t tile_col = blockIdx.x * wgctx::xtileN;
 
-  // smem: A [cta_M x tileK] row-major, then B [xtileN x tileK] K-major -- the layouts the
-  // host's DXA descriptors produce, and the ones the smem descriptor below assumes.
+  // Same two-stage footprint and barrier schedule as mode 3. These copies execute on the
+  // CTA, so copying k+1 consumes the same warps that would compute k and cannot overlap
+  // inside the CTA. That is the deliberate control for the asynchronous DXA path.
   auto smem   = reinterpret_cast<wgctx::input_t*>(__local_mem());
-  auto A_smem = smem;
-  auto B_smem = smem + cta_M * kStK;
+  const uint32_t a_elems = cta_M * kStK;
+  const uint32_t stage_elems = a_elems + wgctx::xtileN * kStK;
+  auto A0 = smem;
+  auto B0 = A0 + a_elems;
+  auto A1 = smem + stage_elems;
+  auto B1 = A1 + a_elems;
 
   // The accumulator starts at ZERO, not at C. A wgmma context refuses to load an
   // accumulator from memory (vx_tensor.h:789) and that refusal is not arbitrary: the
@@ -70,35 +72,51 @@ __kernel void moti_tcu_wg(kernel_arg_t* __UNIFORM__ arg) {
   wgctx::fragment_acc fragC;
   wgctx::fill_fragment(fragC, 0);
 
-  vortex::barrier bar(0);
+  vortex::barrier ready0(0), ready1(1);
+
+  auto copy_stage = [&](uint32_t k, wgctx::input_t* A_stage, wgctx::input_t* B_stage) {
+    for (uint32_t i = tid; i < cta_M * kStK; i += blockDim.x) {
+      const uint32_t r = i / kStK, c = i % kStK;
+      A_stage[i] = pA[(tile_row + r) * K + (k + c)];
+    }
+    for (uint32_t i = tid; i < wgctx::xtileN * kStK; i += blockDim.x) {
+      const uint32_t r = i / kStK, c = i % kStK;
+      B_stage[i] = pB[(tile_col + r) * K + (k + c)];
+    }
+  };
+
+  copy_stage(0, A0, B0);
+  uint32_t cur = 0;
 
   for (uint32_t k = 0; k < K; k += kStK) {
     // The whole CTA copies, cooperatively, into the SAME layouts DXA would have
     // produced. This is mode 3 with exactly one thing removed, so the pair measures
     // what the copy engine is worth once the geometry can actually use it.
-    for (uint32_t i = tid; i < cta_M * kStK; i += blockDim.x) {
-      const uint32_t r = i / kStK, c = i % kStK;
-      A_smem[i] = pA[(tile_row + r) * K + (k + c)];       // A row-major [M x K]
-    }
-    for (uint32_t i = tid; i < wgctx::xtileN * kStK; i += blockDim.x) {
-      const uint32_t r = i / kStK, c = i % kStK;
-      B_smem[i] = pB[(tile_col + r) * K + (k + c)];       // B col-major, stored [N x K]
-    }
-    bar.arrive_and_wait();                                // stage filled
+    const uint32_t next_k = k + kStK;
+    const uint32_t nxt = cur ^ 1u;
+    if (cur == 0) ready0.arrive_and_wait();
+    else          ready1.arrive_and_wait();
+    if (next_k < K)
+      copy_stage(next_k, nxt ? A1 : A0, nxt ? B1 : B0);
+
+    auto A_cur = cur ? A1 : A0;
+    auto B_cur = cur ? B1 : B0;
 
     // S MMAs against one staged tile. Sub-tile s sits at column offset s * tileK inside
     // the stage; the row stride stays kStK, which is what both the fragment load and the
     // smem descriptor are told.
     for (uint32_t s = 0; s < kS; ++s) {
-      auto A_warp = A_smem + warp_rank * wgctx::xtileM * kStK + s * wgctx::tileK;
-      auto desc_b = vt::vx_make_smem_desc(B_smem + s * wgctx::tileK,
+      auto A_warp = A_cur + warp_rank * wgctx::xtileM * kStK + s * wgctx::tileK;
+      auto desc_b = vt::vx_make_smem_desc(B_cur + s * wgctx::tileK,
                                           kStK * sizeof(wgctx::input_t));
       wgctx::fragment_a fragA;
       wgctx::load_matrix_sync(fragA, A_warp, kStK);
       wgctx::wgmma_sync(fragC, fragA, desc_b, fragC);     // B straight from smem
     }
 
-    bar.arrive_and_wait();                                // stage free to refill
+    // The next iteration's stage-ready barrier is also the CTA rendezvous that makes the
+    // previous stage reusable; a second barrier here is redundant.
+    cur = nxt;
   }
 
   // D = epi(C + A*B), fused while the accumulator is still in registers: two M*N global
@@ -107,3 +125,5 @@ __kernel void moti_tcu_wg(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t out_row = tile_row + warp_rank * wgctx::xtileM;
   wg_store_epilogue(fragC, pC, pD, out_row, tile_col, N, app, arg->M);
 }
+
+#include "k_epilogue.h"

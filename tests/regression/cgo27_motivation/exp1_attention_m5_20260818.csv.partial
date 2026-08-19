@@ -1,0 +1,6 @@
+app,app_name,shape,M,N,K,mode,mode_name,cycles,errors,status
+1,baseline,s256,256,256,64,5,TCU_wg+Acol,415957,0,ok
+2,relu,s256,256,256,64,5,TCU_wg+Acol,417923,0,ok
+9,mean_broadcast_col,s256,256,256,64,5,TCU_wg+Acol,486470,0,ok
+4,residual,s256,256,256,64,5,TCU_wg+Acol,609064,0,ok
+6,softmax_row,s256,256,256,64,5,TCU_wg+Acol,1689401,0,ok

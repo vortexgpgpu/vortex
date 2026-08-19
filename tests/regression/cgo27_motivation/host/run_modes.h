@@ -90,24 +90,22 @@ static inline ModeSpec run_mode_8() {   // DTCU_cluster: one engine per cluster,
 //
 // The pair is not symmetric, and that asymmetry is the experiment:
 //
-//   14 socket   four engines, and a core can only reach the engine in its own socket. So
-//               every core is a producer and every core consumes its own slices. Nobody is
-//               free. Its engine writes D into that socket's L1 through a dedicated port,
-//               which at SOCKET_SIZE=1 is the very L1 the consuming core is using.
-//   15 cluster  one engine, so ONE producer suffices: core 0 submits every slice and cores
-//               1..N-1 do nothing but consume. Three quarters of the machine is free for
-//               the epilogue, and D goes to L2 rather than into any core's L1.
+//   14 socket   one producer warp per core feeds the reachable socket engine; N disjoint
+//               consumer warps on that core process its row band. Its engine writes D into
+//               that socket's L1 through a dedicated port.
+//   15 cluster  one producer warp (core 0, warp 0) feeds the single cluster engine; N
+//               consumer warps on every core divide each completed slice. D goes to L2.
 //
 // GEOM_PER_CORE_PIPE rather than GEOM_PER_CORE because a consumer needs threads: the
 // non-pipelined modes launch one thread per block, which is enough to fill a descriptor and
 // spin and nothing else.
 
-static inline ModeSpec run_mode_14() {  // DTCU_socket, pipelined; every core produces
+static inline ModeSpec run_mode_14() {  // DTCU_socket: producer warp + N consumer warps/core
   return ModeSpec{ "moti_dtcu_socket_pipe", VX_ISA_EXT_DTCU_SOCKET,
                    ModeSpec::GEOM_PER_CORE_PIPE, 0, false };
 }
 
-static inline ModeSpec run_mode_15() {  // DTCU_cluster, pipelined; core 0 alone produces
+static inline ModeSpec run_mode_15() {  // DTCU_cluster: one producer warp, N consumers/core
   return ModeSpec{ "moti_dtcu_cluster_pipe", VX_ISA_EXT_DTCU_CLUSTER,
                    ModeSpec::GEOM_PER_CORE_PIPE, 0, false };
 }
@@ -123,18 +121,23 @@ static inline ModeSpec run_mode_15() {  // DTCU_cluster, pipelined; core 0 alone
 // were retired (see host_modes.h) and the pair took their place, so a number quoted as
 // "mode 12" or "mode 13" anywhere older means mode 3 or mode 4 here.
 
-static inline ModeSpec run_mode_3() {   // workgroup WGMMA + DXA, warp-specialised
-  return ModeSpec{ "moti_tcu_wg_dxa", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA_WG, 1, true };
+static inline ModeSpec run_mode_3() {   // workgroup WGMMA + DXA, async issuer warp
+  return ModeSpec{ "moti_tcu_wg_dxa", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA_WG, 2, true };
 }
 
 static inline ModeSpec run_mode_4() {   // workgroup WGMMA, cooperative SW load
-  return ModeSpec{ "moti_tcu_wg", 0, ModeSpec::GEOM_WMMA_WG, 1, false };
+  return ModeSpec{ "moti_tcu_wg", 0, ModeSpec::GEOM_WMMA_WG, 2, false };
 }
 
 // 3 and 5 are the N-axis-reuse pair: same kernel body, same epilogue, same DXA, and 5
 // sweeps MOTI_WG_NCOLS column tiles against an A block staged once for the whole K.
 static inline ModeSpec run_mode_5() {   // workgroup WGMMA + DXA, A resident in LMEM
-  return ModeSpec{ "moti_tcu_wg_acol", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA_WG_ACOL, 1, true };
+  return ModeSpec{ "moti_tcu_wg_acol", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA_WG_ACOL, 2, true };
+}
+
+static inline ModeSpec run_mode_6() {   // committed A-resident path, one B buffer
+  return ModeSpec{ "moti_tcu_wg_acol_single", VX_ISA_EXT_DXA,
+                   ModeSpec::GEOM_WMMA_WG_ACOL, 1, true };
 }
 
 // Dispatch. A mode with no entry here is not runnable, and that is reported rather than
@@ -148,6 +151,7 @@ static inline ModeSpec moti_mode_spec(uint32_t mode) {
   case MODE_TCU_WG_DXA:    return run_mode_3();
   case MODE_TCU_WG:        return run_mode_4();
   case MODE_TCU_WG_ACOL:   return run_mode_5();
+  case MODE_TCU_WG_ACOL_SB:return run_mode_6();
   case MODE_DTCU_SOCKET:   return run_mode_7();
   case MODE_DTCU_CLUSTER:  return run_mode_8();
   case MODE_DTCU_SOCKET_PIPE:  return run_mode_14();

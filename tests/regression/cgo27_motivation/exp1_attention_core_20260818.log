@@ -1,0 +1,40 @@
+[reuse] snapshots=/tmp/cgo27-exp1-7yy4bh5i
+[resume] verified rows=22 from tests/regression/cgo27_motivation/exp1_attention_core_20260818.csv.partial
+[run] 48/70 simulations with jobs=8
+[batch] shape=s256 flat cross-mode simulations=14
+  app=2 shape=s256 mode=7  cycles=113438 status=ok
+  app=2 shape=s256 mode=6  cycles=98745 status=ok
+  app=2 shape=s256 mode=8  cycles=148594 status=ok
+  app=2 shape=s256 mode=2  cycles=196152 status=ok
+  app=2 shape=s256 mode=14 cycles=222835 status=ok
+  app=2 shape=s256 mode=1  cycles=188084 status=ok
+  app=2 shape=s256 mode=15 cycles=245185 status=ok
+  app=6 shape=s256 mode=7  cycles=1366948 status=ok
+  app=6 shape=s256 mode=1  cycles=1450744 status=ok
+  app=6 shape=s256 mode=6  cycles=1351132 status=ok
+  app=6 shape=s256 mode=8  cycles=1402104 status=ok
+  app=6 shape=s256 mode=2  cycles=1467417 status=ok
+  app=6 shape=s256 mode=14 cycles=1408699 status=ok
+  app=6 shape=s256 mode=15 cycles=1441885 status=ok
+[batch] shape=s1024 flat cross-mode simulations=34
+  app=1 shape=s1024 mode=14 cycles=1531786 status=ok
+  app=1 shape=s1024 mode=8  cycles=2165246 status=ok
+  app=1 shape=s1024 mode=15 cycles=2194715 status=ok
+  app=2 shape=s1024 mode=1  cycles=3165141 status=ok
+  app=2 shape=s1024 mode=2  cycles=3335280 status=ok
+  app=2 shape=s1024 mode=8  cycles=2812117 status=ok
+  app=1 shape=s1024 mode=2  cycles=- status=timeout
+  app=1 shape=s1024 mode=7  cycles=- status=timeout
+  app=1 shape=s1024 mode=6  cycles=- status=timeout
+  app=1 shape=s1024 mode=1  cycles=- status=timeout
+  app=2 shape=s1024 mode=6  cycles=- status=timeout
+  app=2 shape=s1024 mode=7  cycles=- status=timeout
+  app=3 shape=s1024 mode=8  cycles=3162518 status=ok
+  app=3 shape=s1024 mode=2  cycles=3400757 status=ok
+  app=3 shape=s1024 mode=15 cycles=3041509 status=ok
+  app=2 shape=s1024 mode=14 cycles=- status=timeout
+  app=2 shape=s1024 mode=15 cycles=- status=timeout
+  app=6 shape=s1024 mode=8  cycles=19253794 status=ok
+  app=3 shape=s1024 mode=7  cycles=- status=timeout
+  app=3 shape=s1024 mode=6  cycles=- status=timeout
+  app=3 shape=s1024 mode=14 cycles=- status=timeout

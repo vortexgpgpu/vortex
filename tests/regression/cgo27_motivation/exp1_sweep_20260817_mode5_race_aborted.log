@@ -1,0 +1,37 @@
+[build] app=1 (baseline)
+[build] app=2 (relu)
+[build] app=5 (scale)
+[build] app=4 (residual)
+[build] app=3 (gelu)
+[build] app=6 (softmax_row)
+[build] app=9 (mean_broadcast_col)
+[run] 280 simulations with jobs=8
+[batch] shape=r2 mode=1 simulations=7
+  app=1 shape=r2 mode=1  cycles=23557
+  app=2 shape=r2 mode=1  cycles=23591
+  app=5 shape=r2 mode=1  cycles=23970
+  app=4 shape=r2 mode=1  cycles=25866
+  app=3 shape=r2 mode=1  cycles=28070
+  app=9 shape=r2 mode=1  cycles=71554
+  app=6 shape=r2 mode=1  cycles=255963
+[batch] shape=r2 mode=2 simulations=7
+  app=1 shape=r2 mode=2  cycles=24331
+  app=2 shape=r2 mode=2  cycles=24317
+  app=5 shape=r2 mode=2  cycles=24567
+  app=4 shape=r2 mode=2  cycles=26497
+  app=3 shape=r2 mode=2  cycles=28988
+  app=9 shape=r2 mode=2  cycles=72228
+  app=6 shape=r2 mode=2  cycles=254589
+[batch] shape=r2 mode=3 simulations=7
+  app=5 shape=r2 mode=3  cycles=93438
+  app=1 shape=r2 mode=3  cycles=95546
+  app=2 shape=r2 mode=3  cycles=95670
+  app=4 shape=r2 mode=3  cycles=97390
+  app=3 shape=r2 mode=3  cycles=98366
+  app=9 shape=r2 mode=3  cycles=143493
+  app=6 shape=r2 mode=3  cycles=326895
+[batch] shape=r2 mode=5 simulations=7
+  app=2 shape=r2 mode=5  cycles=39252
+  app=5 shape=r2 mode=5  cycles=54091
+  app=4 shape=r2 mode=5  cycles=54479
+  app=3 shape=r2 mode=5  cycles=60063

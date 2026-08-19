@@ -12,6 +12,13 @@ changed what the numbers support (§4.2).
 **Date:** 2026-08-24
 **Supersedes parts of:** [260718_moti_RFC.md](260718_moti_RFC.md) §4 (HW modes), §8 (implementation status)
 
+> **Harness audit note (2026-08-15):** the architectural changes in this RFC remain
+> valid, but its harness cycle/counter observations are historical. The harness now uses
+> producer-only warp 0 for mode 14 on each core, producer-only core 0/warp 0 for mode 15,
+> verified descriptor read-back in every DTCU mode, and per-launch MPM accumulation. Any
+> epilogue run measured before that accumulation fix retained only the last launch's
+> detailed counters. Use the current README and regenerate the sweep before citing data.
+
 Splits the DTCU into two placement variants whose only architectural difference is
 **where the GEMM output lands**, and replaces the engine-state completion bit with a
 per-descriptor completion field so several cores can consume results asynchronously.
@@ -466,6 +473,12 @@ Pinned with a `static_assert` instead.
 
 ## 2.4 Mode renumbering
 
+> **Current-id note (2026-08-18):** this RFC originally described an intermediate id
+> layout. The table below is the current harness layout. References to modes 5/6 in the
+> historical measurements of §2.6 still mean the retired two-/three-stage single-warp
+> kernels that occupied those ids at the time; current logs must be identified by both
+> `mode=` and `name=`.
+
 Mode ids were assigned as paths were added, so the DTCU modes had landed at 3/4 —
 *before* the two in-core pipeline modes they are meant to be read against. The list now
 runs in-core → in-core+DXA → engine, with a hole where the old DTCU ids were:
@@ -475,17 +488,21 @@ runs in-core → in-core+DXA → engine, with a hole where the old DTCU ids were
 | 0 | SIMT | cores, scalar MAC loop |
 | 1 | TCU | cores, WMMA |
 | 2 | TCU + DXA | cores, WMMA on DXA-staged smem |
-| 3, 4 | *(reserved hole)* | — |
-| 5 | TCU + DXA, 2-stage | cores, smem pipeline |
-| 6 | TCU + DXA, 3-stage | cores, smem pipeline |
+| 3 | TCU workgroup + DXA | cores, double-buffered A/B, async issuer warp |
+| 4 | TCU workgroup, SW copy | cores, matched synchronous-copy control for 3 |
+| 5 | TCU workgroup + DXA, A resident | cores, N-axis reuse, double-buffered B |
+| 6 | TCU workgroup + DXA, A resident, single B buffer | cores, committed single-buffer control for 5 |
 | 7 | DTCU_socket | 4 socket engines, D → the submitting core's L1 |
 | 8 | DTCU_cluster | 1 cluster engine, D → L2 |
 | 9, 10, 11 | *(planned)* | in-core TCU + engines on one GEMM |
+| 12, 13 | *(reserved hole)* | — |
+| 14 | DTCU_socket pipeline | one producer warp + N consumer warps per core |
+| 15 | DTCU_cluster pipeline | core 0 warp 0 produces; N consumer warps on every core |
 
-3 and 4 are left empty rather than reused: they appear in every result table recorded
-before this change, and silently rebinding them would make old and new logs collide
-without any diff to show for it. `mode_state()` reports them `Reserved` and the runner
-skips them, so a stale `-m 3` fails loudly instead of measuring mode 3's replacement.
+The workgroup pair subsequently moved from 12/13 to 3/4; 12/13 remain empty. Mode 6 was
+vacant after the retired staging kernels were removed and now holds the explicitly named
+single-buffer control for mode 5. The emitted `name=` field is therefore authoritative
+when comparing logs across these transitions.
 
 9-11 are **numbered but not built**. A first attempt is described in §3.2.
 

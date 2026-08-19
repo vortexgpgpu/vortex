@@ -13,8 +13,9 @@
 // BOTH ends (prologue pass + epilogue pass), which is the strongest case for the
 // in-core path in the sweep.
 //
-// WIRING STATUS: math is here; the int8 A buffer + scale (host allocation, upload,
-// CPU reference) and the in-core fused-load variant are Phase B.
+// WIRING STATUS: intentionally unsupported by this harness. dtensor_desc_t has one fmt_s
+// shared by A and B, so quantized A plus fp16 B cannot be represented for the DTCU paths.
+// common.h rejects MOTI_APP=7/8 instead of silently running an identity epilogue.
 
 // Symmetric per-tensor dequantization: x = q * scale.
 static inline float epi_dequant_i8(int8_t q, float scale) {

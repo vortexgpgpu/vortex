@@ -41,12 +41,12 @@
 //   D : row-major  [M x N]   (D[i*N + j])
 //
 // mode selects the execution path; the GEMM and input are identical across all
-// five so the ONLY difference is which compute/memory unit runs it:
+// modes so the ONLY difference is which compute/memory unit runs it:
 //   0 = in-core SIMT      (plain scalar MAC loop, no tensor unit)
 //   1 = in-core TCU       (WMMA fragments, register path)
 //   2 = in-core TCU + DXA (WMMA fed by DXA-staged smem tiles)
-//   3 = DTCU (no TMA)     (descriptor engine, DTENSOR_FLAG_NO_TMA: blocking)
-//   4 = DTCU + DTCU_TMA   (descriptor engine with TMA overlap; see main.cpp)
+//   3 = workgroup TCU + DXA, 4 = its cooperative-copy control, 5 = A-resident DXA
+//   7/8 = socket/cluster DTCU, 14/15 = their producer-consumer pipelines
 typedef struct {
   uint32_t mode;
   uint32_t M, N, K;
@@ -54,14 +54,14 @@ typedef struct {
   uint64_t B_addr;
   uint64_t C_addr;
   uint64_t D_addr;
-  uint64_t desc_addr;   // DTCU descriptor (modes 3,4)
+  uint64_t desc_addr;   // DTCU descriptor array (modes 7,8,14,15)
   // NOTE: append new fields HERE, at the end. Inserting a field in the middle
   // shifts every following offset and measurably perturbs codegen/layout — see
   // the mode-2 investigation in 260718_moti_RFC.md.
-  uint32_t app;         // 1..8, selects the prologue/epilogue (see epilogue.h)
+  uint32_t app;         // build-selected app id; see MOTI_APP below
 } kernel_arg_t;
 
-// DXA descriptor slots programmed host-side (mode 2).
+// DXA descriptor slots programmed host-side (modes 2,3,5).
 #define DESC_A 0
 #define DESC_B 1
 
@@ -77,7 +77,7 @@ typedef struct {
 //
 // -D on the command line still overrides, and now overrides both sides at once.
 
-// K-steps held in ONE staged tile (modes 3/4/5). Reuse along K: at S=1 a staged tile
+// K-steps held in ONE staged tile (modes 3/4/5/6). Reuse along K: at S=1 a staged tile
 // feeds one MMA, at S=4 it feeds four. Both the kernel's sub-tile indexing and the host's
 // lmem/descriptor sizing scale with it. Measured to lose at S=2 and S=4; the reason is
 // still unexplained, but it is NOT occupancy -- see README.
@@ -123,41 +123,23 @@ typedef struct {
 #define MOTI_PIPE_STRIPE_WARP 0
 #endif
 
-// Bisect switch: 0 makes moti_publish_desc_verified() fall back to the plain fence+AMO
-// publish modes 7/8 use. Only for isolating whether the read-back loop is at fault.
-#ifndef MOTI_PIPE_VERIFY
-#define MOTI_PIPE_VERIFY 1
-#endif
-
-// Consumer warps per core for the pipelined modes (14/15). Clamped to the warps a block
-// actually has, so 16 or anything larger means "all of them".
+// Consumer warps per core for the pipelined modes (14/15). Warp 0 is the producer, so
+// this is clamped to `warps_per_core - 1`.
 //
 // This is a real tuning axis rather than a debug switch, because overlap here is not free
 // parallelism -- the consumers and the engine are reading and writing through the SAME L2.
 // The cluster engine has exactly one port for operands and D together, so every consumer
 // warp added takes bandwidth from the GEMM it is waiting on. There is an optimum, and it
 // is not 16; see the sweep in docs/260808_moti.md.
-// WIDTH of the consumer, in warps: the first `cw` warps of a core work, and together they
-// split ONE row's columns. It is not a row count -- see k_epi_rows.h for why giving each
-// warp its own rows livelocks against the strict-priority L2 arbiter.
+// WIDTH of the consumer, in warps: the `cw` warps after the producer split one row's
+// columns. It is not a row count -- see k_epi_rows.h for why giving each warp its own rows
+// livelocks against the strict-priority L2 arbiter.
 //
-// 16 (the whole block on one row at a time) is both the fastest measured and the safe end:
-// the sweep in docs/260808_moti.md is over the row-striped variant, where the same number
-// is unusable. Traffic per core is one row either way here, so widening only adds lanes to
-// a row that was already being fetched.
+// Fifteen is the maximum in the configured 16-warp core: one producer plus fifteen
+// consumers. Keeping the roles disjoint is what makes this a producer/consumer pipeline;
+// allowing warp 0 to consume serialized its next submission behind epilogue work.
 #ifndef MOTI_PIPE_CONSUMER_WARPS
-#define MOTI_PIPE_CONSUMER_WARPS 16
-#endif
-
-// Does the producing core also consume (mode 15)? Core 0 submits every slice up front and
-// is then free, so on paper it should join the epilogue rather than idle -- but consumers
-// and the single-ported cluster engine contend for the same L2, and more consumers is not
-// automatically faster. This exists to measure that rather than assume it.
-// 0. Adding the producing core's warps to the consumer pool is more L2 traffic aimed at the
-// same arbiter row, and at 256x256x64 with one consumer warp it is the difference between
-// finishing in 355,424 cycles and not finishing at all.
-#ifndef MOTI_PIPE_C0_CONSUMES
-#define MOTI_PIPE_C0_CONSUMES 0
+#define MOTI_PIPE_CONSUMER_WARPS 15
 #endif
 
 // Register-only spin between two polls of a descriptor's done flag (modes 14/15).
@@ -187,11 +169,18 @@ typedef struct {
 // The host reads this too, so `-a` is checked against it instead of selecting anything.
 //   1 baseline (no epilogue)   2 ReLU   3 GELU   4 residual   5 per-channel scale
 //   6 row-wise softmax
-//   9 per-channel bias broadcast: D[i][j] += mean over i. A column reduction -- the
+//   9 bias-gradient-style broadcast: D[i][j] += mean over i. A column reduction -- the
 //     bias gradient's access pattern, and the one that crosses socket boundaries.
-//   4, 5, 7, 8: need operands the kernel has no pointer for -- see MOTI_AUX_ELEM_OFFSET.
+//   4 and 5 use an auxiliary operand behind C -- see MOTI_AUX_ELEM_OFFSET.
 #ifndef MOTI_APP
 #define MOTI_APP 1
+#endif
+
+// Apps 7/8 require mixed source formats (quantized A and fp16 B), but dtensor_desc_t has
+// one fmt_s shared by A and B. Reject them instead of silently measuring the identity app
+// under a dequant label. App 9 is the implemented column-reduction stressor.
+#if MOTI_APP < 1 || (MOTI_APP > 6 && MOTI_APP != 9)
+#error "cgo27_motivation supports MOTI_APP=1..6 or 9; apps 7/8 need mixed A/B formats"
 #endif
 
 // True when the app is an elementwise map -- one output element depends on one input
@@ -221,8 +210,8 @@ typedef struct {
 
 // Where the auxiliary epilogue operands live, for the apps that need one.
 //
-// Apps 4, 5, 7 and 8 need an operand the GEMM does not have -- a residual matrix, a
-// per-channel scale, a bias. NONE of them gets a kernel_arg_t field: growing that struct
+// Apps 4 and 5 need an operand the GEMM does not have -- a residual matrix or a
+// per-channel scale. Neither gets a kernel_arg_t field: growing that struct
 // reshuffles codegen in paths nobody touched (64 -> 80 B moved mode 2 by +15.8 % and mode
 // 5 by -32.9 %), which is why the note above says to leave it alone.
 //
@@ -234,10 +223,8 @@ typedef struct {
 //
 //   app 4  R    [M x N]   residual, added elementwise
 //   app 5  s    [N]       per-channel scale, broadcast down the column
-//   app 7  bias [N]       added before the activation
 //
-// App 6 (row-wise softmax) needs no operand at all, only a reduction across D's rows, and
-// apps 7/8's int8 inputs are a build variant of ITYPE above rather than a runtime app id.
+// Apps 6 and 9 need no auxiliary operand; they reduce D in a standalone pass.
 #define MOTI_AUX_ELEM_OFFSET(M, N) ((M) * (N))
 
 // The pointer itself, nullptr when this build's app reads no auxiliary operand. Written as

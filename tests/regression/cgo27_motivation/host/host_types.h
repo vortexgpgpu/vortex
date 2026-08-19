@@ -68,16 +68,15 @@ struct Stats {
   // case produced no output, so it must be excluded from verification and reporting
   // instead of being compared against the CPU reference as a zero matrix.
   bool     skipped = false;
-  // DTCU engine counters (modes 7/8 only), MPM class 9 for the cluster engine and 10
+  // DTCU engine counters (modes 7/8/14/15), MPM class 9 for the cluster engine and 10
   // for the socket engines. Labels match the CSRs; the dtcu_* FSM family sums to busy,
   // the tma_* engine family overlaps compute.
   //
   // d_engines is how many engines EXIST at this scope and were summed over;
   // d_engines_active is how many actually did any work. They differ, and the difference
-  // is the point: the harness submits ONE descriptor from ONE thread, so a socket-scope
-  // run provisions NUM_SOCKETS engines and drives exactly one of them. Per-unit
-  // throughput has to divide by the active count, or the engine looks four times worse
-  // than it is; provisioning efficiency has to divide by the existing count.
+  // is the point: a short row split can leave an engine with no nonempty descriptor.
+  // Per-unit throughput has to divide by the active count; provisioning efficiency has
+  // to divide by the existing count.
   // With more than
   // one, the CYCLE counters are engine-cycles and are NOT comparable to MCYCLE --
   // d_busy_max (the busiest single engine) is the one that is. Counts (op_reqs,
@@ -102,7 +101,7 @@ inline int ulp_diff(float a, float b) {
   return std::abs(ia - ib);
 }
 
-// Selected app (prologue/epilogue), 1..8 — see epilogue.h. Declared here because
+// Selected app (1..6 or 9) — see epilogue.h. Declared here because
 // run_case() stamps it into the kernel arg and the CPU reference applies the same
 // map; -a sets it in parse_args().
 static uint32_t g_app = MOTI_APP;   // the build decides; -a only checks

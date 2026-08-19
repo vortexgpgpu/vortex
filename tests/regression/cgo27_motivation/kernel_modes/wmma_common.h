@@ -90,8 +90,8 @@ static __attribute__((always_inline)) void wmma_map_frag_of(typename CTX::fragme
 // accumulator is still in registers, so the tile is never round-tripped through
 // memory. This is the in-core path's structural advantage over the DTCU, which has
 // no epilogue HW and must run a separate pass (k_epilogue.h::moti_epilogue).
-// Coordinate-dependent epilogues (residual/scale) cannot use this path — see the
-// notes in epilogue/residual.h.
+// The helper below reconstructs the fragment's row/column mapping, so residual and
+// per-channel scale fuse here too.
 
 // Apply the epilogue to the accumulator, WITH each element's (row, col).
 //

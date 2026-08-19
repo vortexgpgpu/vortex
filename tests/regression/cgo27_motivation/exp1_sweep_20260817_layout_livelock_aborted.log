@@ -1,0 +1,24 @@
+[reuse] snapshots=/tmp/cgo27-exp1-_uohnfzq
+[run] 280 simulations with jobs=8
+[batch] shape=r2 mode=1 simulations=7
+  app=1 shape=r2 mode=1  cycles=23600
+  app=2 shape=r2 mode=1  cycles=23728
+  app=5 shape=r2 mode=1  cycles=23790
+  app=4 shape=r2 mode=1  cycles=25855
+  app=3 shape=r2 mode=1  cycles=28391
+  app=9 shape=r2 mode=1  cycles=71294
+  app=6 shape=r2 mode=1  cycles=253483
+[batch] shape=r2 mode=2 simulations=7
+  app=2 shape=r2 mode=2  cycles=23987
+  app=1 shape=r2 mode=2  cycles=24007
+  app=5 shape=r2 mode=2  cycles=24903
+  app=4 shape=r2 mode=2  cycles=25569
+  app=3 shape=r2 mode=2  cycles=29159
+  app=9 shape=r2 mode=2  cycles=71625
+  app=6 shape=r2 mode=2  cycles=254825
+[batch] shape=r2 mode=3 simulations=7
+  app=5 shape=r2 mode=3  cycles=96115
+  app=4 shape=r2 mode=3  cycles=97621
+  app=3 shape=r2 mode=3  cycles=98486
+  app=9 shape=r2 mode=3  cycles=141947
+  app=6 shape=r2 mode=3  cycles=325114

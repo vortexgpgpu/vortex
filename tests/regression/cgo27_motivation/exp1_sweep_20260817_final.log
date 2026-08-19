@@ -1,0 +1,4 @@
+[reuse] snapshots=/tmp/cgo27-exp1-rdpsaeby
+[resume] verified rows=111 from tests/regression/cgo27_motivation/exp1_results_20260817_pre_crossmode.partial
+[run] 134/245 simulations with jobs=8
+[batch] shape=r8 mode=5 simulations=6

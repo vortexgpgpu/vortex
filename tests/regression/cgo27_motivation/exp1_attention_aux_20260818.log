@@ -1,0 +1,13 @@
+[reuse] snapshots=/tmp/cgo27-exp1-7yy4bh5i
+[run] 28/28 simulations with jobs=8
+[batch] shape=s256 flat cross-mode simulations=14
+  app=4 shape=s256 mode=6  cycles=162176 status=ok
+  app=4 shape=s256 mode=7  cycles=185278 status=ok
+  app=4 shape=s256 mode=8  cycles=220434 status=ok
+  app=4 shape=s256 mode=2  cycles=209693 status=ok
+  app=4 shape=s256 mode=1  cycles=202215 status=ok
+  app=5 shape=s256 mode=7  cycles=113431 status=ok
+  app=5 shape=s256 mode=8  cycles=149323 status=ok
+  app=5 shape=s256 mode=2  cycles=196610 status=ok
+  app=5 shape=s256 mode=14 cycles=254741 status=ok
+  app=5 shape=s256 mode=15 cycles=418875 status=ok

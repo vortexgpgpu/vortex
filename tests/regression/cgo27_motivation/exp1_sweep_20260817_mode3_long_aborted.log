@@ -1,0 +1,91 @@
+[build] app=1 (baseline)
+[build] app=2 (relu)
+[build] app=5 (scale)
+[build] app=4 (residual)
+[build] app=3 (gelu)
+[build] app=6 (softmax_row)
+[build] app=9 (mean_broadcast_col)
+[run] 280 simulations with jobs=8
+[batch] shape=r2 mode=1 simulations=7
+  app=2 shape=r2 mode=1  cycles=23591
+  app=1 shape=r2 mode=1  cycles=23557
+  app=5 shape=r2 mode=1  cycles=23970
+  app=4 shape=r2 mode=1  cycles=25866
+  app=3 shape=r2 mode=1  cycles=28070
+  app=9 shape=r2 mode=1  cycles=71554
+  app=6 shape=r2 mode=1  cycles=255963
+[batch] shape=r2 mode=2 simulations=7
+  app=1 shape=r2 mode=2  cycles=24331
+  app=2 shape=r2 mode=2  cycles=24317
+  app=5 shape=r2 mode=2  cycles=24567
+  app=4 shape=r2 mode=2  cycles=26497
+  app=3 shape=r2 mode=2  cycles=28988
+  app=9 shape=r2 mode=2  cycles=72228
+  app=6 shape=r2 mode=2  cycles=254589
+[batch] shape=r2 mode=3 simulations=7
+  app=5 shape=r2 mode=3  cycles=93438
+  app=1 shape=r2 mode=3  cycles=95546
+  app=2 shape=r2 mode=3  cycles=95670
+  app=4 shape=r2 mode=3  cycles=97390
+  app=3 shape=r2 mode=3  cycles=98366
+  app=9 shape=r2 mode=3  cycles=143493
+  app=6 shape=r2 mode=3  cycles=326895
+[batch] shape=r2 mode=5 simulations=7
+  app=1 shape=r2 mode=5  cycles=42142
+  app=2 shape=r2 mode=5  cycles=42534
+  app=3 shape=r2 mode=5  cycles=56918
+  app=4 shape=r2 mode=5  cycles=60275
+  app=5 shape=r2 mode=5  cycles=64047
+  app=9 shape=r2 mode=5  cycles=90338
+  app=6 shape=r2 mode=5  cycles=269715
+[batch] shape=r2 mode=7 simulations=7
+  app=1 shape=r2 mode=7  cycles=12500
+  app=2 shape=r2 mode=7  cycles=16284
+  app=5 shape=r2 mode=7  cycles=16724
+  app=4 shape=r2 mode=7  cycles=19054
+  app=3 shape=r2 mode=7  cycles=21206
+  app=9 shape=r2 mode=7  cycles=60163
+  app=6 shape=r2 mode=7  cycles=240654
+[batch] shape=r2 mode=8 simulations=7
+  app=1 shape=r2 mode=8  cycles=22404
+  app=2 shape=r2 mode=8  cycles=26188
+  app=5 shape=r2 mode=8  cycles=27100
+  app=4 shape=r2 mode=8  cycles=29326
+  app=3 shape=r2 mode=8  cycles=31110
+  app=9 shape=r2 mode=8  cycles=70067
+  app=6 shape=r2 mode=8  cycles=250558
+[batch] shape=r2 mode=14 simulations=7
+  app=1 shape=r2 mode=14 cycles=48258
+  app=9 shape=r2 mode=14 cycles=96211
+  app=2 shape=r2 mode=14 cycles=155322
+  app=5 shape=r2 mode=14 cycles=180875
+  app=3 shape=r2 mode=14 cycles=236869
+  app=6 shape=r2 mode=14 cycles=280119
+  app=4 shape=r2 mode=14 cycles=343495
+[batch] shape=r2 mode=15 simulations=7
+  app=1 shape=r2 mode=15 cycles=46019
+  app=9 shape=r2 mode=15 cycles=93910
+  app=2 shape=r2 mode=15 cycles=157077
+  app=6 shape=r2 mode=15 cycles=275785
+  app=5 shape=r2 mode=15 cycles=313889
+  app=3 shape=r2 mode=15 cycles=325088
+  app=4 shape=r2 mode=15 cycles=445098
+[batch] shape=r4 mode=1 simulations=7
+  app=1 shape=r4 mode=1  cycles=98242
+  app=5 shape=r4 mode=1  cycles=98551
+  app=2 shape=r4 mode=1  cycles=97568
+  app=3 shape=r4 mode=1  cycles=108109
+  app=4 shape=r4 mode=1  cycles=104918
+  app=9 shape=r4 mode=1  cycles=209323
+  app=6 shape=r4 mode=1  cycles=769891
+[batch] shape=r4 mode=2 simulations=7
+  app=1 shape=r4 mode=2  cycles=102598
+  app=2 shape=r4 mode=2  cycles=103852
+  app=5 shape=r4 mode=2  cycles=103422
+  app=4 shape=r4 mode=2  cycles=109381
+  app=3 shape=r4 mode=2  cycles=125630
+  app=9 shape=r4 mode=2  cycles=215569
+  app=6 shape=r4 mode=2  cycles=788281
+[batch] shape=r4 mode=3 simulations=7
+  app=3 shape=r4 mode=3  cycles=373263
+  app=4 shape=r4 mode=3  cycles=383973

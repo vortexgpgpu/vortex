@@ -1,0 +1,23 @@
+[reuse] snapshots=/tmp/cgo27-exp1-rdpsaeby
+[resume] verified rows=12 from tests/regression/cgo27_motivation/exp1_results_20260818_regular_complete.partial
+[run] 8/20 simulations with jobs=4
+[batch] shape=r12 app=4 cross-mode simulations=4
+  app=4 shape=r12 mode=1  cycles=1007189 status=ok
+  app=4 shape=r12 mode=2  cycles=1253544 status=ok
+  app=4 shape=r12 mode=7  cycles=1502828 status=ok
+  app=4 shape=r12 mode=8  cycles=1690524 status=ok
+[batch] shape=r16 app=4 cross-mode simulations=4
+  app=4 shape=r16 mode=1  cycles=1904185 status=ok
+  app=4 shape=r16 mode=2  cycles=2573871 status=ok
+  app=4 shape=r16 mode=7  cycles=3211373 status=ok
+  app=4 shape=r16 mode=8  cycles=3636071 status=ok
+
+===== WINNERS =====
+app=4  r2     DTCU_socket          19054 cycles
+app=4  r4     DTCU_socket          98894 cycles
+app=4  r8     TCU                  429368 cycles
+app=4  r12    TCU                  1007189 cycles
+app=4  r16    TCU                  1904185 cycles
+
+CSV -> tests/regression/cgo27_motivation/exp1_app4_core_20260818.csv
+reused snapshots -> /tmp/cgo27-exp1-rdpsaeby

@@ -27,7 +27,7 @@
 // The submitter is chosen by WHERE THE BLOCK LANDED, not by thread id: a core cannot
 // address another socket's engine, so the mapping has to come from vx_core_id(). Socket
 // size and count are build-time constants the kernel already carries.
-__kernel void moti_dtcu_socket(kernel_arg_t* __UNIFORM__ arg) {
+__kernel __attribute__((aligned(256))) void moti_dtcu_socket(kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t core = (uint32_t)vx_core_id();
   if ((core % VX_CFG_SOCKET_SIZE) != 0)
     return;                                   // not this socket's submitter
@@ -41,7 +41,7 @@ __kernel void moti_dtcu_socket(kernel_arg_t* __UNIFORM__ arg) {
   auto d = reinterpret_cast<dtensor_desc_t*>(arg->desc_addr) + sock;
   const uint64_t da = arg->desc_addr + (uint64_t)sock * sizeof(dtensor_desc_t);
   moti_fill_desc(d, arg, sl, MOTI_SOCKET_TILE_N);
-  moti_publish_desc(da);
+  moti_publish_desc_verified(da, d);
   while (0 == dtensor_socket_start(da))
     ;
   while (0 == dtensor_check(da))

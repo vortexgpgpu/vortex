@@ -5,18 +5,18 @@
 //
 //   mode 0     in-core SIMT              scalar MAC loop
 //   mode 1     in-core TCU               WMMA
-//   mode 2     in-core TCU + DXA         WMMA fed by DXA-staged smem, single buffer
-//   mode 3     in-core TCU               2-stage smem pipeline, LSU-staged
-//   mode 4     in-core TCU               3-stage smem pipeline, LSU-staged
-//   mode 5     in-core TCU + DXA         2-stage smem pipeline, DXA-staged
-//   mode 6     in-core TCU + DXA         3-stage smem pipeline, DXA-staged
+//   mode 2     in-core TCU + DXA         single-warp, single-buffer staging
+//   mode 3     in-core TCU + DXA         workgroup, double-buffered A/B
+//   mode 4     in-core TCU               workgroup, double-buffered SW copy control
+//   mode 5     in-core TCU + DXA         resident A, double-buffered B, N reuse
+//   mode 6     in-core TCU + DXA         resident A, single-buffered B, N reuse
 //   mode 7     DTCU_socket               descriptor engine, D -> that socket's L1
 //   mode 8     DTCU_cluster              descriptor engine, D -> L2
-//   mode 9,10,11  hetero                 cores + engine(s) on one GEMM (not built)
+//   mode 14    DTCU_socket               producer/consumer wave pipeline
+//   mode 15    DTCU_cluster              producer/consumer wave pipeline
 //
 // The map is grouped by what executes rather than packed, so a path can be added next
-// to its relatives without renumbering the rest. 3/5 and 4/6 differ ONLY in who stages
-// the operands, which is what makes the DXA engine's contribution measurable.
+// to its relatives without renumbering the rest.
 //
 // Snippet provenance:
 //   - run harness / MPM queries / CPU ref / compare : dtcu_compare/main.cpp
@@ -168,10 +168,10 @@ int main(int argc, char** argv) {
       "SIMT (no tensor unit)",
       "TCU (in-core WMMA)",
       "TCU + DXA-staged operands",
-      "TCU workgroup + DXA (warp-specialised)",
+      "TCU workgroup + DXA (async issuer warp)",
       "TCU workgroup, cooperative SW load",
       "TCU workgroup + DXA, A resident in LMEM",
-      "<reserved>",
+      "TCU workgroup + DXA, A resident, single-buffer B",
       "DTCU_socket (engine per socket)",
       "DTCU_cluster (engine per cluster)",
       "hetero: TCU + DTCU_socket",
@@ -180,7 +180,7 @@ int main(int argc, char** argv) {
       "<reserved>",
       "<reserved>",
       "DTCU_socket pipelined (epilogue overlaps GEMM)",
-      "DTCU_cluster pipelined (core 0 produces, the rest consume)",
+      "DTCU_cluster pipelined (one producer warp, all cores consume)",
   };
 
   // App 6 is a row-wise softmax, which is not a float->float map and so cannot go through

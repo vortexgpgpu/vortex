@@ -25,6 +25,116 @@
 #include <vortex.h>
 #include <dxa.h>
 
+inline int capture_launch_stats(vx_device_h device, uint32_t mode, Stats& s) {
+  auto query = [&](uint32_t cls, uint32_t csr, uint64_t* dst,
+                   uint32_t core = 0) -> int {
+    return vx_mpm_query(device, cls, csr, core, dst);
+  };
+
+  RT_CHECK(query(0, VX_CSR_MCYCLE,   &s.cycles));
+  RT_CHECK(query(0, VX_CSR_MINSTRET, &s.instrs));
+  const uint32_t core_cls = VX_DCR_MPM_CLASS_CORE;
+  RT_CHECK(query(core_cls, VX_CSR_MPM_INSTR_ALU,   &s.instr_alu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_INSTR_FPU,   &s.instr_fpu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_INSTR_LSU,   &s.instr_lsu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_INSTR_SFU,   &s.instr_sfu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_INSTR_TCU,   &s.instr_tcu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_STALL_ALU,   &s.stall_alu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_STALL_FPU,   &s.stall_fpu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_STALL_LSU,   &s.stall_lsu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_STALL_SFU,   &s.stall_sfu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_STALL_TCU,   &s.stall_tcu));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_BRANCHES,    &s.branches));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_DIVERGENCE,  &s.divergence));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_IFETCHES,    &s.ifetches));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_IFETCH_LT,   &s.ifetch_lt));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_LOADS,       &s.loads));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_LOAD_LT,     &s.load_lt));
+  RT_CHECK(query(core_cls, VX_CSR_MPM_STORES,      &s.stores));
+
+  const uint32_t mem_cls = VX_DCR_MPM_CLASS_MEM;
+  RT_CHECK(query(mem_cls, VX_CSR_MPM_L2CACHE_READS,  &s.l2_reads));
+  RT_CHECK(query(mem_cls, VX_CSR_MPM_L2CACHE_WRITES, &s.l2_writes));
+  RT_CHECK(query(mem_cls, VX_CSR_MPM_MEM_READS,      &s.mem_reads));
+  RT_CHECK(query(mem_cls, VX_CSR_MPM_MEM_WRITES,     &s.mem_writes));
+
+  if (!uses_engine(mode))
+    return 0;
+
+  const bool socket_scope = wants_socket(mode);
+  const uint32_t dtcu_cls = socket_scope ? VX_DCR_MPM_CLASS_DTCU_SOCKET
+                                         : VX_DCR_MPM_CLASS_DTCU_CLUSTER;
+  std::vector<uint32_t> reps;
+  if (socket_scope) {
+    uint64_t num_cores = 0, socket_size = 0;
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES,   &num_cores));
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_SOCKET_SIZE, &socket_size));
+    if (socket_size == 0) socket_size = 1;
+    for (uint64_t core = 0; core < num_cores; core += socket_size)
+      reps.push_back((uint32_t)core);
+  } else {
+    reps.push_back(0);
+  }
+  s.d_engines = (uint32_t)reps.size();
+
+  auto sum = [&](uint32_t csr, uint64_t* dst) -> int {
+    uint64_t total = 0;
+    for (uint32_t rep : reps) {
+      uint64_t value = 0;
+      int rc = query(dtcu_cls, csr, &value, rep);
+      if (rc != 0) return rc;
+      total += value;
+      if (csr == VX_CSR_MPM_DTCU_BUSY) {
+        if (value > s.d_busy_max) s.d_busy_max = value;
+        if (value > 0) ++s.d_engines_active;
+      }
+    }
+    *dst = total;
+    return 0;
+  };
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_OP_REQS,               &s.d_op_reqs));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_OUT_REQS,              &s.d_out_reqs));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_COMPUTE,               &s.d_compute));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_NEXT_K_LOAD_STALL,     &s.d_next_k_load_stall));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_MEM_WAIT,          &s.d_tma_mem_wait));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_BUF_STARVE,        &s.d_tma_buf_starve));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_OP_FILL,           &s.d_tma_op_fill));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_ADDRGEN,           &s.d_tma_addrgen));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_STORE_ISSUE_STALL, &s.d_tma_store_issue_stall));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_STORE_DRAIN,           &s.d_store_drain));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_SMEM_READ_MODEL,       &s.d_smem_read_model));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,  &s.d_next_tile_load_stall));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL, &s.d_prev_tile_store_stall));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_DESC_WAIT,             &s.d_desc_wait));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_BUSY,                  &s.d_busy));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_ACC_INIT,          &s.d_tma_acc_init));
+  RT_CHECK(sum(VX_CSR_MPM_DTCU_INSTR_TCU,             &s.d_instr_tcu));
+  return 0;
+}
+
+inline void add_launch_stats(Stats& total, const Stats& one) {
+#define MOTI_ADD(field) total.field += one.field
+  MOTI_ADD(cycles); MOTI_ADD(instrs);
+  MOTI_ADD(instr_alu); MOTI_ADD(instr_fpu); MOTI_ADD(instr_lsu);
+  MOTI_ADD(instr_sfu); MOTI_ADD(instr_tcu);
+  MOTI_ADD(stall_alu); MOTI_ADD(stall_fpu); MOTI_ADD(stall_lsu);
+  MOTI_ADD(stall_sfu); MOTI_ADD(stall_tcu);
+  MOTI_ADD(branches); MOTI_ADD(divergence); MOTI_ADD(ifetches); MOTI_ADD(ifetch_lt);
+  MOTI_ADD(loads); MOTI_ADD(load_lt); MOTI_ADD(stores);
+  MOTI_ADD(l2_reads); MOTI_ADD(l2_writes); MOTI_ADD(mem_reads); MOTI_ADD(mem_writes);
+  MOTI_ADD(d_op_reqs); MOTI_ADD(d_out_reqs); MOTI_ADD(d_compute);
+  MOTI_ADD(d_next_k_load_stall); MOTI_ADD(d_tma_mem_wait); MOTI_ADD(d_tma_buf_starve);
+  MOTI_ADD(d_tma_op_fill); MOTI_ADD(d_tma_addrgen); MOTI_ADD(d_tma_store_issue_stall);
+  MOTI_ADD(d_store_drain); MOTI_ADD(d_smem_read_model); MOTI_ADD(d_next_tile_load_stall);
+  MOTI_ADD(d_prev_tile_store_stall); MOTI_ADD(d_desc_wait); MOTI_ADD(d_busy);
+  MOTI_ADD(d_tma_acc_init); MOTI_ADD(d_instr_tcu);
+#undef MOTI_ADD
+  if (one.d_busy_max > total.d_busy_max) total.d_busy_max = one.d_busy_max;
+  if (one.d_engines > total.d_engines) total.d_engines = one.d_engines;
+  if (one.d_engines_active > total.d_engines_active)
+    total.d_engines_active = one.d_engines_active;
+}
+
 inline int run_case(uint32_t mode,
                     uint32_t M, uint32_t N, uint32_t K,
                     uint32_t tcu_tileM, uint32_t tcu_tileN, uint32_t tcu_tileK,
@@ -39,17 +149,14 @@ inline int run_case(uint32_t mode,
   vx_queue_h queue = nullptr;
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
-  // Each path needs its engine present. Modes 2/5/6 stage operands through DXA;
-  // modes 7/8 hand the whole GEMM to the DTCU. Marking the case skipped (rather
+  // Each path needs its engine present. Modes 2/3/5/6 stage operands through DXA;
+  // modes 7/8/14/15 hand the GEMM to the DTCU. Marking the case skipped (rather
   // than just returning) keeps its all-zero output out of the verify pass, which
   // would otherwise report M*N mismatches and fail a run that never executed.
   // Everything mode-specific about this run comes from here; see run_modes.h.
   const ModeSpec spec = moti_mode_spec(mode);
 
-  // Workgroup staging (modes 12/13): how many warps share one staged tile. This is the
-  // knob modes 2/5/6 never had -- they launch one warp per block, so sixteen resident
-  // warps are sixteen unrelated CTAs each copying its own private tile. Capped at what
-  // the device reports and at the rows available.
+  // Workgroup staging (modes 3/4/5/6): ISSUE_WIDTH warps share one staged tile.
   uint32_t wg_warps = 1;
   const bool wg_any = (spec.geom == ModeSpec::GEOM_WMMA_WG)
                   || (spec.geom == ModeSpec::GEOM_WMMA_WG_ACOL);
@@ -83,7 +190,12 @@ inline int run_case(uint32_t mode,
               << K << std::endl;
     return -1;
   }
-  // Mode 5 gives one CTA NCOLS column tiles, so N must divide by all of them at once.
+  if (wg_any && ((M % cta_M) != 0 || (N % wgcfg::xtileN) != 0)) {
+    std::cerr << "cgo27_motivation: workgroup mode requires M multiple of " << cta_M
+              << " and N multiple of " << wgcfg::xtileN << std::endl;
+    return -1;
+  }
+  // Modes 5/6 give one CTA NCOLS column tiles, so N must divide by all of them at once.
   const uint32_t acol_N = MOTI_WG_NCOLS * wgcfg::xtileN;
   if (spec.geom == ModeSpec::GEOM_WMMA_WG_ACOL && (N % acol_N) != 0) {
     std::cerr << "cgo27_motivation: MOTI_WG_NCOLS=" << MOTI_WG_NCOLS
@@ -159,11 +271,12 @@ inline int run_case(uint32_t mode,
     n_desc = wants_socket(mode) ? num_sockets : (uint32_t)num_cores;
     // Pipelined modes need one slot per SLICE, not per submitter, because the point is that
     // a band has MOTI_PIPE_TILES separate `done` transitions for a consumer to wait on.
-    // Mode 14 keeps the per-socket split on top of that (a core reaches only its own
-    // engine), so it wants num_sockets * T; mode 15 has one engine and one producer, so T is
-    // the whole array. The kernel indexes with the same arithmetic -- see kernel_m14.cpp.
+    // Mode 14 has one producer warp per core. Cores in the same socket share an engine but
+    // own distinct descriptor slots, so it needs num_cores * T. Mode 15 has one producer
+    // warp for the cluster and needs only T slots.
     if (is_pipe_mode(mode))
-      n_desc = wants_socket(mode) ? (num_sockets * MOTI_PIPE_TILES) : MOTI_PIPE_TILES;
+      n_desc = wants_socket(mode) ? ((uint32_t)num_cores * MOTI_PIPE_TILES)
+                                  : MOTI_PIPE_TILES;
 
     // Must match MOTI_{CLUSTER,SOCKET}_TILE_N in k_dtcu_desc.h -- the kernel picks the value,
     // this is the guard, and a mismatch here is a silently wrong descriptor.
@@ -218,7 +331,7 @@ inline int run_case(uint32_t mode,
     const uint32_t dK = wg ? wg_stK        : tcu_tileK;
     const uint32_t dM = wg ? cta_M         : tcu_tileM;
     const uint32_t dN = wg ? wgcfg::xtileN : tcu_tileN;
-    // A and B no longer share a K tile: mode 5 stages A for the WHOLE K range in one
+    // A and B no longer share a K tile: modes 5/6 stage A for the WHOLE K range in one
     // issue and keeps it, while B is still restaged per K step. That asymmetry IS the
     // mode -- it is what turns A into a reused operand instead of a streamed one.
     RT_CHECK(vortex::dxa::program_2d(device, DESC_A, karg.A_addr,
@@ -272,9 +385,10 @@ inline int run_case(uint32_t mode,
   case ModeSpec::GEOM_WMMA_WG: {
     // One MULTI-WARP block per CTA tile. block_dim is warps x NUM_THREADS, which is what
     // finally makes get_sub_group_id() mean something: warp 0 becomes the producer and
-    // the rest consume. lmem holds ONE A tile of cta_M rows plus ONE B tile, shared by
-    // the whole CTA -- against modes 2/5/6 where every warp is its own CTA with its own
-    // private stage.
+    // all warps consume. lmem holds ONE A tile of cta_M rows plus ONE B tile, shared by
+    // the whole CTA -- against mode 2 where every warp is its own CTA with its own private
+    // stage. In the DXA path warp 0 is the designated issuer, not a
+    // producer-only warp; the asynchronous copy engine provides the overlap.
     li.ndim = 2;
     li.grid_dim[0]  = N / wgcfg::xtileN;      li.grid_dim[1]  = M / cta_M;
     li.block_dim[0] = wg_warps * NUM_THREADS; li.block_dim[1] = 1;
@@ -283,20 +397,22 @@ inline int run_case(uint32_t mode,
     // version staged the fp32 output tile here too and had to be sized for the larger of
     // the two (4,096 B against 2,560 B); it was correct and slower. See
     // kernel_modes/k_wg_common.h.
-    li.lmem_size = (cta_M + wgcfg::xtileN) * wg_stK * sizeof(itype_t);
+    li.lmem_size = spec.lmem_stages * (cta_M + wgcfg::xtileN)
+                 * wg_stK * sizeof(itype_t);
     break;
   }
   case ModeSpec::GEOM_WMMA_WG_ACOL: {
     // One CTA per (cta_M rows) x (NCOLS column tiles). Fewer, fatter CTAs than mode 3:
     // the grid is NCOLS times narrower along N, which is exactly how the A fetch gets
-    // amortised. Local Memory holds the whole A block plus one B tile, so it is sized
-    // from the runtime K -- 16 KB at cta_M=64, K=128, against mode 3's 2,560 B, which is
-    // what drops the resident CTAs from 4 to 3.
+    // amortised. Local Memory holds the whole A block plus `lmem_stages` B tiles, so it is
+    // sized from runtime K and the mode's buffer count. A is 16 KB at cta_M=64, K=128,
+    // against mode 3's 2,560 B total footprint, which can reduce resident CTAs.
     li.ndim = 2;
     li.grid_dim[0]  = N / (MOTI_WG_NCOLS * wgcfg::xtileN);
     li.grid_dim[1]  = M / cta_M;
     li.block_dim[0] = wg_warps * NUM_THREADS; li.block_dim[1] = 1;
-    li.lmem_size = (cta_M * K + wgcfg::xtileN * wg_stK) * sizeof(itype_t);
+    li.lmem_size = (cta_M * K + spec.lmem_stages * wgcfg::xtileN * wg_stK)
+                 * sizeof(itype_t);
     break;
   }
   case ModeSpec::GEOM_PER_CORE: {
@@ -346,15 +462,15 @@ inline int run_case(uint32_t mode,
   vx_kernel_h epi_kernel = nullptr, row_kernel = nullptr;
   vx_launch_info_t epi_li = {}, row_li = {};
   if (needs_col_pass) {
-    // One block per COLUMN. Same shape of pass as the row one, transposed -- see
-    // k_epilogue.h for why the direction is the experiment.
+    // One warp per NUM_THREADS adjacent columns. Each lane reduces one column, so every
+    // iteration across rows is coalesced and no lane-to-lane Local Memory tree is needed.
     RT_CHECK(vx_module_get_kernel(module_, "moti_colcenter", &row_kernel));
     row_li.struct_size = sizeof(row_li);
     row_li.kernel = row_kernel; row_li.args_host = &karg; row_li.args_size = sizeof(karg);
     row_li.ndim = 1;
-    row_li.grid_dim[0]  = N;
+    row_li.grid_dim[0]  = (N + NUM_THREADS - 1) / NUM_THREADS;
     row_li.block_dim[0] = NUM_THREADS;
-    row_li.lmem_size    = NUM_THREADS * sizeof(otype_t);
+    row_li.lmem_size    = 0;
   }
   if (needs_row_pass) {
     RT_CHECK(vx_module_get_kernel(module_, "moti_softmax", &row_kernel));
@@ -375,7 +491,7 @@ inline int run_case(uint32_t mode,
   }
 
   auto t0 = std::chrono::high_resolution_clock::now();
-  vx_event_h launch_ev = nullptr, read_ev = nullptr, epi_ev = nullptr;
+  vx_event_h launch_ev = nullptr, read_ev = nullptr, epi_ev = nullptr, row_ev = nullptr;
   RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
 
   // MCYCLE IS PER-LAUNCH, NOT CUMULATIVE. A single query after the last launch reports
@@ -390,16 +506,15 @@ inline int run_case(uint32_t mode,
   // two are summed. The epilogue's cost is meant to be inside the reported cycles -- that
   // asymmetry is what the app sweep exists to measure -- it just has to be added rather
   // than substituted.
-  uint64_t gemm_cycles = 0, gemm_instrs = 0;
+  Stats accumulated{};
   vx_event_h prev_ev = launch_ev;
   // Drain whatever is in flight, bank its counters, and carry on. MCYCLE is per-launch,
   // so a multi-pass mode has to be summed here rather than read once at the end.
   auto accumulate_here = [&]() -> int {
-    uint64_t c = 0, i = 0;
     RT_CHECK(vx_event_wait_value(prev_ev, 1, VX_TIMEOUT_INFINITE));
-    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE,   0, &c));
-    RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &i));
-    gemm_cycles += c; gemm_instrs += i;
+    Stats launch{};
+    RT_CHECK(capture_launch_stats(device, mode, launch));
+    add_launch_stats(accumulated, launch);
     return 0;
   };
   if (dtcu_needs_epi) {
@@ -409,110 +524,21 @@ inline int run_case(uint32_t mode,
   }
   if (needs_row_pass || needs_col_pass) {
     RT_CHECK(accumulate_here());
-    vx_event_h row_ev = nullptr;
     RT_CHECK(vx_enqueue_launch(queue, &row_li, 1, &prev_ev, &row_ev));
     prev_ev = row_ev;
   }
   RT_CHECK(vx_enqueue_read(queue, out.data(), D_buf, 0, out.size() * sizeof(otype_t), 1, &prev_ev, &read_ev));
   RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
   auto t1 = std::chrono::high_resolution_clock::now();
-  stats.host_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-
-  RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MCYCLE, 0, &stats.cycles));
-  RT_CHECK(vx_mpm_query(device, 0, VX_CSR_MINSTRET, 0, &stats.instrs));
-  // Second launch: add the GEMM back on. Zero for every single-launch mode.
-  stats.cycles += gemm_cycles;
-  stats.instrs += gemm_instrs;
-  {
-    const uint32_t cls = VX_DCR_MPM_CLASS_CORE;
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_INSTR_ALU,  0, &stats.instr_alu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_INSTR_FPU,  0, &stats.instr_fpu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_INSTR_LSU,  0, &stats.instr_lsu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_INSTR_SFU,  0, &stats.instr_sfu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_INSTR_TCU,  0, &stats.instr_tcu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_STALL_ALU,  0, &stats.stall_alu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_STALL_FPU,  0, &stats.stall_fpu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_STALL_LSU,  0, &stats.stall_lsu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_STALL_SFU,  0, &stats.stall_sfu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_STALL_TCU,  0, &stats.stall_tcu));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_BRANCHES,   0, &stats.branches));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_DIVERGENCE, 0, &stats.divergence));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_IFETCHES,   0, &stats.ifetches));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_IFETCH_LT,  0, &stats.ifetch_lt));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_LOADS,      0, &stats.loads));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_LOAD_LT,    0, &stats.load_lt));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_STORES,     0, &stats.stores));
-  }
-  {
-    const uint32_t cls = VX_DCR_MPM_CLASS_MEM;
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_L2CACHE_READS,  0, &stats.l2_reads));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_L2CACHE_WRITES, 0, &stats.l2_writes));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_MEM_READS,      0, &stats.mem_reads));
-    RT_CHECK(vx_mpm_query(device, cls, VX_CSR_MPM_MEM_WRITES,     0, &stats.mem_writes));
-  }
-  // DTCU engine counters. The CLASS selects the scope; core_id selects the instance
-  // within it. There is one cluster engine, so class 9 with any core in the cluster
-  // reads it -- but there are NUM_SOCKETS socket engines, and class 10 with core_id 0
-  // would report one of them and silently under-count by the socket count. Sum over one
-  // representative core per socket instead. (core_id 0xffffffff would over-count by
-  // SOCKET_SIZE, since every core in a socket reports the same engine.)
-  if (uses_engine(mode)) {
-    const bool socket_scope = wants_socket(mode);
-    const uint32_t cls = socket_scope ? VX_DCR_MPM_CLASS_DTCU_SOCKET
-                                      : VX_DCR_MPM_CLASS_DTCU_CLUSTER;
-
-    std::vector<uint32_t> reps;
-    if (socket_scope) {
-      uint64_t num_cores = 0, socket_size = 0;
-      RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_CORES,   &num_cores));
-      RT_CHECK(vx_dev_caps(device, VX_CAPS_SOCKET_SIZE, &socket_size));
-      if (socket_size == 0) socket_size = 1;
-      for (uint64_t c = 0; c < num_cores; c += socket_size)
-        reps.push_back((uint32_t)c);
-    } else {
-      reps.push_back(0); // one cluster here; core 0 is inside it
-    }
-    stats.d_engines = (uint32_t)reps.size();
-
-    // Sum a counter across the representative cores. Counts (op_reqs, instr_tcu) sum
-    // correctly. Cycle counters sum to ENGINE-cycles, which is not comparable to
-    // MCYCLE when several engines ran concurrently -- d_busy_max is what is.
-    auto sum = [&](uint32_t csr, uint64_t* dst) -> int {
-      uint64_t total = 0;
-      for (uint32_t rep : reps) {
-        uint64_t v = 0;
-        int rc = vx_mpm_query(device, cls, csr, rep, &v);
-        if (rc != 0) return rc;
-        total += v;
-        if (csr == VX_CSR_MPM_DTCU_BUSY) {
-          if (v > stats.d_busy_max) stats.d_busy_max = v;
-          if (v > 0) ++stats.d_engines_active; // an engine that never went busy did nothing
-        }
-      }
-      *dst = total;
-      return 0;
-    };
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_OP_REQS,                &stats.d_op_reqs));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_OUT_REQS,               &stats.d_out_reqs));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_COMPUTE,                &stats.d_compute));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_NEXT_K_LOAD_STALL,      &stats.d_next_k_load_stall));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_MEM_WAIT,           &stats.d_tma_mem_wait));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_BUF_STARVE,         &stats.d_tma_buf_starve));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_OP_FILL,            &stats.d_tma_op_fill));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_ADDRGEN,            &stats.d_tma_addrgen));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_STORE_ISSUE_STALL,  &stats.d_tma_store_issue_stall));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_STORE_DRAIN,            &stats.d_store_drain));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_SMEM_READ_MODEL,        &stats.d_smem_read_model));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,   &stats.d_next_tile_load_stall));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL,  &stats.d_prev_tile_store_stall));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_DESC_WAIT,              &stats.d_desc_wait));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_BUSY,                   &stats.d_busy));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_TMA_ACC_INIT,           &stats.d_tma_acc_init));
-    RT_CHECK(sum(VX_CSR_MPM_DTCU_INSTR_TCU,              &stats.d_instr_tcu));
-  }
+  Stats final_launch{};
+  RT_CHECK(capture_launch_stats(device, mode, final_launch));
+  add_launch_stats(accumulated, final_launch);
+  accumulated.host_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+  stats = accumulated;
 
   vx_event_release(read_ev); vx_event_release(launch_ev);
   if (epi_ev) vx_event_release(epi_ev);
+  if (row_ev) vx_event_release(row_ev);
   vx_buffer_release(A_buf); vx_buffer_release(B_buf); vx_buffer_release(C_buf); vx_buffer_release(D_buf);
   if (desc_buf) vx_buffer_release(desc_buf);
   vx_kernel_release(kernel); vx_module_release(module_);

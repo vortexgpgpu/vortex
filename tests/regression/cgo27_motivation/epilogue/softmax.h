@@ -1,7 +1,7 @@
 #ifndef _CGO27_EPI_SOFTMAX_H_
 #define _CGO27_EPI_SOFTMAX_H_
 
-// Apps 6 and 8 epilogue: row-wise softmax over D.
+// App 6 epilogue: row-wise softmax over D.
 //
 // This is the hardest app in the sweep and the reason it is in it: softmax needs a
 // reduction across the WHOLE row, so it CANNOT be fused into a single output tile
@@ -20,8 +20,8 @@
 // reference and the kernel, so identical arithmetic makes verification exact.
 // Accuracy is adequate for a cycle-measuring harness, not for real softmax.
 //
-// WIRING STATUS: math is here; the cross-tile reduction (an extra pass, plus
-// row-max/row-sum scratch buffers) is Phase B — see 260718_moti_RFC.md §8.
+// It is wired as one standalone kernel launch for every mode. One warp owns a row and
+// uses Local Memory for its max/sum reduction scratch.
 
 // exp(x) via 2^(x*log2(e)) using exact ldexp-style scaling for the integer part and
 // a degree-3 minimax-ish polynomial on the [0,1) fraction. Uses only basic float

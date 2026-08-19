@@ -28,14 +28,10 @@
 // Memory (16 KB per CTA at K=128, so 3 resident CTAs instead of 4). 3 and 5 are the
 // matched pair for that trade.
 //
-// 6 is a RESERVED HOLE. It, and the previous 3/4/5, held four single-warp
-// LSU/DXA-staged pipeline modes (2- and 3-stage, with and without DXA). They were
-// retired: a block there was ONE warp, so it staged a tile, issued one mma_sync against
-// it and threw it away, with nothing to amortise the copy over. All four landed within
-// 7 % of mode 1, which stages nothing at all, and none of them completed at 512x256x128.
-// The workgroup pair now at 3/4 is the same experiment with the geometry that can
-// actually make staging pay -- see README. (3 and 4 before that held the retired DTCU
-// no-TMA / TMA pair, which moved to 7/8; DTENSOR_FLAG_NO_TMA itself stays in the ISA.)
+// 6 restores the committed single-buffer form of 5 as an explicit architecture target.
+// It keeps A resident and sweeps the same N tiles, but uses one B buffer and synchronously
+// waits at every K step. 5/6 therefore isolate whether B double buffering helps this
+// machine without changing A reuse, CTA geometry, or the epilogue.
 //
 // Everything downstream keys off these names rather than literals, so changing a value
 // here moves the mode.
@@ -43,10 +39,10 @@ enum : uint32_t {
   MODE_SIMT           = 0,
   MODE_TCU            = 1,
   MODE_TCU_DXA        = 2,
-  MODE_TCU_WG_DXA     = 3,  // workgroup WGMMA + DXA, warp-specialised
+  MODE_TCU_WG_DXA     = 3,  // workgroup WGMMA + DXA, async issuer warp
   MODE_TCU_WG         = 4,  // workgroup WGMMA, cooperative SW load (control for 3)
   MODE_TCU_WG_ACOL    = 5,  // workgroup WGMMA + DXA, A resident in LMEM, N-axis reuse
-  // 6: reserved hole -- see the note above.
+  MODE_TCU_WG_ACOL_SB = 6,  // mode 5 geometry, committed single-buffer B schedule
   MODE_DTCU_SOCKET    = 7,  // engine at socket scope,  D -> that socket's L1
   MODE_DTCU_CLUSTER   = 8,  // engine at cluster scope, D -> L2
   MODE_HET_TCU_DSOCK  = 9,  // hetero: in-core TCU + DTCU_socket
@@ -60,9 +56,6 @@ enum : uint32_t {
 static const uint32_t NUM_MODES = 16;
 static const uint32_t MODE_ALL  = 0xFFFFFFFFu;
 static uint32_t g_mode = MODE_ALL;
-// Warps per CTA for the workgroup modes (3/4); 0 = use every warp slot the device has.
-// This is the knob the retired single-warp staging modes were missing entirely.
-static uint32_t g_wg_warps = 0;
 static inline bool run_this(uint32_t m) { return g_mode == MODE_ALL || g_mode == m; }
 
 // Three states, because "not runnable" has two different meanings and conflating them
@@ -76,6 +69,7 @@ static ModeState mode_state(uint32_t m) {
   switch (m) {
   case MODE_SIMT: case MODE_TCU: case MODE_TCU_DXA:
   case MODE_TCU_WG_DXA: case MODE_TCU_WG: case MODE_TCU_WG_ACOL:
+  case MODE_TCU_WG_ACOL_SB:
   case MODE_DTCU_SOCKET: case MODE_DTCU_CLUSTER:
   case MODE_DTCU_SOCKET_PIPE: case MODE_DTCU_CLUSTER_PIPE:
     return ModeState::Implemented;
@@ -124,7 +118,7 @@ static inline bool wants_cluster(uint32_t m) {
 static const char* const kShortNames[NUM_MODES] = {
   "SIMT", "TCU", "TCU+DXA",
   "TCU_wg+DXA", "TCU_wg", "TCU_wg+Acol",
-  "<reserved6>",
+  "TCU_wg+Acol_SB",
   "DTCU_socket", "DTCU_cluster",
   "TCU+DTCU_socket", "TCU+DTCU_cluster", "TCU+DTCU_both",
   "<reserved12>", "<reserved13>",
