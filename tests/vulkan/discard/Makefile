@@ -25,6 +25,7 @@ SHADERS := $(SRC_DIR)/discard.vert \
            $(SRC_DIR)/discard_kill.frag \
            $(SRC_DIR)/discard_demote.frag \
            $(SRC_DIR)/discard_sink.frag \
-           $(SRC_DIR)/discard_vswrite.vert
+           $(SRC_DIR)/discard_vswrite.vert \
+           $(SRC_DIR)/discard_atomic.frag
 
 include ../common.mk

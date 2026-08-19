@@ -11,16 +11,17 @@
  * into. Neither had any coverage in this suite, so the whole mechanism was
  * carried by the fact that nothing exercised it.
  *
- * Three phases, each isolating one claim the implementation makes:
+ * Five phases, each isolating one claim the implementation makes:
  *
  *   kill    the discarded fragment does not reach the attachment
  *   demote  the demoted lane keeps executing, so a live neighbour in its quad
  *           can still shuffle from it
  *   sink    the demoted lane's buffer store does not commit
  *   vswrite a vertex shader's buffer store reaches the host at all
+ *   atomic  the demoted lane's atomic does not commit either
  *
  * Odd columns are suppressed in every phase, which leaves each pixel quad half
- * alive. That is what makes the middle claim testable at all: with a coarser
+ * alive. That is what makes the demote claim testable at all: with a coarser
  * pattern the quads would be wholly on one side of the split and a demote
  * implemented as an early exit would look identical to a correct one.
  *
@@ -575,6 +576,28 @@ judge_vswrite(const struct phase_result *r)
    return false;
 }
 
+/* Report the contended-counter phase. Returns true when it holds. */
+static bool
+judge_atomic(const struct phase_result *r)
+{
+   /* One word touched, holding one increment per lane that was allowed to run.
+    * The word count matters as much as the value: an atomic that escaped
+    * suppression and also missed its address would light a second word. */
+   if (r->head[0] == (uint32_t)EXPECT_PX && r->stores == 1) {
+      printf("PASSED (discard atomic: counter reached %u, one increment per "
+             "kept lane and none from a suppressed one)\n", r->head[0]);
+      return true;
+   }
+   printf("FAILED (discard atomic: counter reached %u, expected %ld, over %ld "
+          "words touched", r->head[0], EXPECT_PX, r->stores);
+   if (r->head[0] == (uint32_t)(2 * EXPECT_PX)) {
+      printf(" -- every lane incremented it, so a demoted lane's atomic reached "
+             "memory while its plain stores did not");
+   }
+   printf(")\n");
+   return false;
+}
+
 int
 main(int argc, char **argv)
 {
@@ -583,6 +606,7 @@ main(int argc, char **argv)
    const char *demote_path = (argc > 3) ? argv[3] : "discard_demote.frag.spv";
    const char *sink_path   = (argc > 4) ? argv[4] : "discard_sink.frag.spv";
    const char *vsw_path    = (argc > 5) ? argv[5] : "discard_vswrite.vert.spv";
+   const char *atom_path   = (argc > 6) ? argv[6] : "discard_atomic.frag.spv";
 
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -670,7 +694,8 @@ main(int argc, char **argv)
    VkShaderModule dem  = load_module(dev, demote_path);
    VkShaderModule sink = load_module(dev, sink_path);
    VkShaderModule vsw  = load_module(dev, vsw_path);
-   if (!vs || !kill || !dem || !sink || !vsw) {
+   VkShaderModule atom = load_module(dev, atom_path);
+   if (!vs || !kill || !dem || !sink || !vsw || !atom) {
       return 1;
    }
 
@@ -695,6 +720,11 @@ main(int argc, char **argv)
    if (render(dev, queue, qf, &mp, vsw, kill, true, &r) < 0) { return 1; }
    ok &= judge_vswrite(&r);
 
+   memset(&r, 0, sizeof r);
+   if (render(dev, queue, qf, &mp, vs, atom, true, &r) < 0) { return 1; }
+   ok &= judge_atomic(&r);
+
+   vkDestroyShaderModule(dev, atom, NULL);
    vkDestroyShaderModule(dev, vsw, NULL);
    vkDestroyShaderModule(dev, sink, NULL);
    vkDestroyShaderModule(dev, dem, NULL);
