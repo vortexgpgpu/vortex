@@ -34,9 +34,9 @@ void main()
    /* Non-opaque geometry: the candidate triangle is presented to the
     * proceed loop, which runs an inline "alpha test" — confirm the hit
     * only where candidate barycentric u > 0.5, otherwise reject and keep
-    * traversing. rq_confirm_intersection makes vortexpipe route this
-    * shader to lavapipe's software ray-query path (the RTU services only
-    * the opaque path); this validates that fallback. */
+    * traversing. The RTU yields each candidate and the loop hands back a
+    * verdict, so the whole query runs on the device; the point of the test
+    * is that the shader's decision, not the geometry, picks the hits. */
    rayQueryEXT rq;
    rayQueryInitializeEXT(rq, tlas, gl_RayFlagsNoneEXT, 0xFFu,
                          origin, 0.0, dir, 2.0);

@@ -16,14 +16,14 @@ TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw 
 
 # --- common exclude list ---------------------------------------------
 # Unsupported on the vortexpipe/simx path:
-#   rtquery_anyhit : any-hit does not cull non-opaque candidates
+#   (none)
 #
 # An entry here is a claim about today's driver, not a property of the test, so
 # it has to be re-checked rather than inherited. instanced, mrt and ubo_multiset
 # sat here for a month under "render hang" after the hang had been fixed, which
 # cost three features their only coverage. Re-run an excluded test before
 # trusting its entry.
-EXCLUDE := rtquery_anyhit
+EXCLUDE :=
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=
