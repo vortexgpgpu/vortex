@@ -7,7 +7,15 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ## [Unreleased]
 
+### Added
+
+- **Shared multi-walker page-table walker with page-walk caches; banked TLBs; RTL Sv39.** The per-MMU blocking Sv32 walker is replaced by one device-level generic Sv32/Sv39 walker (`hw/rtl/mem/VX_mmu_ptw.sv`) with `VX_CFG_PTW_NUM_WALKERS` concurrent walk slots, fetching PTEs on a dedicated L3 requestor port and skipping warm upper levels through two direct-mapped page-walk caches (`VX_CFG_PTW_WALK_CACHE_SIZE`). Per-core TLBs are banked (`VX_CFG_TLB_NUM_BANKS`) so a miss parked in one bank no longer blocks hits in the others, and superpage leaves are installed at their real level. Walk faults (invalid PTE, misaligned superpage, no leaf) are detected and reported on the fill. TLB misses travel on a new `VX_ptw_bus_if`/`VX_ptw_arb` hierarchy; SATP stays a per-core CSR, with the root PPN riding along on each walk request. The SimX timing model mirrors the same topology (`sim/simx/mem/ptw.{h,cpp}`) and surfaces the TLB/walker counters — including the new `VX_CSR_MPM_PWC*` ids — under the MEM MPM class. *Why:* closes the "RTL Sv39 + superpage fills" and "centralized multi-walker PTW with walk cache" roadmap items and makes rtlsim VM real: the old walker descended into the runtime's megapage identity leaves and returned garbage, which is why rtlsim was absent from the vm catalog.
+- **RTL command-processor VM (FPGA path).** The RTL CP now matches the software CP model: `DEV_CAPS` publishes `VM_ENABLED` (bit 24), `CP_SATP_LO/HI` (0x028/0x02C) hold the page-table root, and the DMA engine translates its device-side operand once per chunk through a new `VX_cp_mmu` walker reading PTEs over the DMA's device AXI channel (`F_MEM_PHYSICAL` skips translation; faults pass the address through untranslated). *Why:* VM previously worked on simx/rtlsim/gem5 and silently no-oped on xrt/opae because the runtime never discovered VM support from the RTL regfile.
+- **`tests/regression/vm_stress`** — TLB-pressure regression (strided page touches per task + a `VX_MEM_PHYS` identity-mapped buffer); wired into `ci/testcases/vm.yaml`, which now runs simx **and rtlsim** at both XLENs plus full-tier single-bank and multi-cluster L2/L3 variants.
+
 ### Fixed
+
+- **`VX_MEM_PHYS` after ordinary VM allocations.** The VA allocator handed out addresses from the same base the pinned identity-mapped slab occupies, so a `VX_MEM_PHYS` buffer created after any ordinary allocation collided in the page table; the slab's range is now reserved out of the VA space at VM bring-up.
 
 - **VM RTL build under `PERF_ENABLE`.** A stray `.` in the `VX_mmu_tlb` instantiation ([hw/rtl/mem/VX_mmu.sv](hw/rtl/mem/VX_mmu.sv)) broke every `-DVX_CFG_VM_ENABLE` RTL build with profiling on.
 - **VM RTL `satp` width.** `VX_mmu` / `VX_mmu_ptw` took a 32-bit `satp` and gated translation on bit 31, silently truncating the CSR and misreading the Sv39 mode field on XLEN=64; the port is now `VX_CFG_XLEN` wide and the mode check follows the Sv32 / Sv39 encodings.

@@ -132,6 +132,8 @@ module VX_cp_core
 
   wire [`VX_DCR_DATA_BITS-1:0] dcr_last_rsp_data;
 
+  wire [63:0] cp_satp;
+
   VX_cp_axil_regfile #(
     .NUM_QUEUES (NUM_QUEUES),
     .ADDR_W     (AXIL_AW)
@@ -146,7 +148,8 @@ module VX_cp_core
     .q_error        (q_error_to_reg),
     .last_dcr_rsp   (dcr_last_rsp_data),
     .q_state        (q_state),
-    .q_reset_pulse  (q_reset_pulse)
+    .q_reset_pulse  (q_reset_pulse),
+    .satp           (cp_satp)
   );
 
   // ----- Per-CPE wires -----
@@ -348,6 +351,7 @@ module VX_cp_core
   VX_cp_dma u_dma (
     .clk      (clk),
     .reset    (reset),
+    .satp     (cp_satp),
     .grant    (any_dma_grant),
     .cmd      (granted_dma_cmd),
     .done     (dma_done),

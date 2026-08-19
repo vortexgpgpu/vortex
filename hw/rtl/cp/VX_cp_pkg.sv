@@ -78,8 +78,10 @@ package VX_cp_pkg;
   // Header flag bits.
   // ------------------------------------------------------------------------
 
-  localparam int F_PROFILE   = 0;
-  localparam int F_FENCE_PRE = 1;
+  localparam int F_PROFILE      = 0;
+  localparam int F_FENCE_PRE    = 1;
+  // CMD_MEM_* device-side operand is a physical address (skip translation).
+  localparam int F_MEM_PHYSICAL = 2;
 
   typedef struct packed {
     logic [15:0] reserved;

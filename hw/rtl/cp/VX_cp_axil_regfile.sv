@@ -76,12 +76,16 @@ module VX_cp_axil_regfile
   output cpe_state_t                q_state   [NUM_QUEUES],
 
   // One-cycle reset pulse per queue when the host writes Q_CONTROL.reset.
-  output logic                      q_reset_pulse [NUM_QUEUES]
+  output logic                      q_reset_pulse [NUM_QUEUES],
+
+  // CP_SATP — page-table root for the CP DMA's walker.
+  output logic [63:0]               satp
 );
 
   localparam int QID_W = (NUM_QUEUES > 1) ? $clog2(NUM_QUEUES) : 1;
 
   // ---- Per-queue programmable state ----
+  logic [63:0] r_satp;
   logic [63:0] r_ring_base       [NUM_QUEUES];
   logic [63:0] r_head_addr       [NUM_QUEUES];
   logic [63:0] r_cmpl_addr       [NUM_QUEUES];
@@ -174,7 +178,10 @@ module VX_cp_axil_regfile
     logic [5:0]       off;
     if (is_global(addr, 8'h00)) return r_cp_ctrl;
     if (is_global(addr, 8'h04)) return {30'd0, cp_error, cp_busy};
-    if (is_global(addr, 8'h08)) return {8'd0,
+    // DEV_CAPS bit 24 = VM_ENABLED: the runtime discovers VM support here
+    // and only then builds page tables and programs CP_SATP.
+    if (is_global(addr, 8'h08)) return {7'd0,
+                                        1'(`VX_CFG_VM_ENABLED),
                                         8'(AXI_TID_W),
                                         8'(RING_SIZE_LOG2_MAX),
                                         8'(NUM_QUEUES)};
@@ -184,6 +191,8 @@ module VX_cp_axil_regfile
     if (is_global(addr, 8'h1C)) return gpu_dev_caps[63:32];
     if (is_global(addr, 8'h20)) return gpu_isa_caps[31:0];
     if (is_global(addr, 8'h24)) return gpu_isa_caps[63:32];
+    if (is_global(addr, 8'h28)) return r_satp[31:0];
+    if (is_global(addr, 8'h2C)) return r_satp[63:32];
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00: return r_ring_base[qid][31:0];
@@ -218,6 +227,8 @@ module VX_cp_axil_regfile
     if (is_global(addr, 8'h1C)) return 1'b1;
     if (is_global(addr, 8'h20)) return 1'b1;
     if (is_global(addr, 8'h24)) return 1'b1;
+    if (is_global(addr, 8'h28)) return 1'b1;
+    if (is_global(addr, 8'h2C)) return 1'b1;
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00, 6'h04, 6'h08, 6'h0C, 6'h10, 6'h14,
@@ -290,6 +301,7 @@ module VX_cp_axil_regfile
     automatic logic [5:0]       off;
     if (reset) begin
       r_cp_ctrl <= '0;
+      r_satp    <= '0;
       for (int i = 0; i < NUM_QUEUES; ++i) begin
         r_ring_base[i]       <= '0;
         r_head_addr[i]       <= '0;
@@ -306,7 +318,11 @@ module VX_cp_axil_regfile
       for (int i = 0; i < NUM_QUEUES; ++i) q_reset_pulse[i] <= 1'b0;
 
       if (wr_commit && is_decoded(wr_addr_buf)) begin
-        if (is_global(wr_addr_buf, 8'h00)) begin
+        if (is_global(wr_addr_buf, 8'h28)) begin
+          r_satp[31:0] <= wr_data_buf;
+        end else if (is_global(wr_addr_buf, 8'h2C)) begin
+          r_satp[63:32] <= wr_data_buf;
+        end else if (is_global(wr_addr_buf, 8'h00)) begin
           r_cp_ctrl <= wr_data_buf;
           if (wr_data_buf[1]) begin
             for (int i = 0; i < NUM_QUEUES; ++i) q_reset_pulse[i] <= 1'b1;
@@ -401,5 +417,7 @@ module VX_cp_axil_regfile
       `UNUSED_VAR (q_error[gi])
     end
   endgenerate
+
+  assign satp = r_satp;
 
 endmodule : VX_cp_axil_regfile

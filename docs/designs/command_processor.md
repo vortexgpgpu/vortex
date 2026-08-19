@@ -194,11 +194,10 @@ The doorbell commits atomically on the `Q_TAIL_HI` write
 ([`:333-336`](../../hw/rtl/cp/VX_cp_axil_regfile.sv#L333)); undecoded
 addresses return DECERR.
 
-> **FPGA/sim divergence:** the RTL regfile has **no** `CP_SATP_LO/HI`
-> registers. The Emulation CP *does* (`0x028/0x02C`,
-> [`cmd_processor.cpp:75-76`](../../sim/common/cmd_processor.cpp#L75)) and
-> the runtime always writes them
-> ([`device.cpp:303-304`](../../sw/runtime/common/device.cpp#L303)). See §8.
+The RTL regfile carries `CP_SATP_LO/HI` at `0x028/0x02C` and publishes
+`VM_ENABLED` in `DEV_CAPS` bit 24, matching the Emulation CP
+(`cmd_processor.cpp`); the runtime writes SATP on both paths
+([`device.cpp`](../../sw/runtime/common/device.cpp)).
 
 ---
 
@@ -380,11 +379,11 @@ the intent is not lost.
    ([`cmd_processor.cpp:452-462`](../../sim/common/cmd_processor.cpp#L452)).
    Non-cache-line-aligned transfers can over-write on FPGA. Needs tail
    `wstrb` on the last beat (review item C-2/P-W4).
-2. **VM in RTL.** Add `CP_SATP_LO/HI` regfile decode + a hardware
-   page-table walker + TLB in `VX_cp_dma`, and route `F_MEM_PHYSICAL`, so
-   FPGA matches the simulator's MMU-aware DMA (cp_pure_v2 VM Phase 2;
-   review items P-W1/P-W3 and the SATP gap). Today VM works on
-   simx/rtlsim/gem5 and silently no-ops on FPGA.
+2. **VM in RTL — done.** `CP_SATP_LO/HI` decode, the `DEV_CAPS`
+   `VM_ENABLED` bit, `F_MEM_PHYSICAL` routing, and a per-chunk
+   `VX_cp_mmu` walker in `VX_cp_dma` bring the FPGA path up to the
+   simulator's MMU-aware DMA (remaining: a per-transfer TLB beyond the
+   walker's 2-entry translation cache).
 3. **Real `CMD_FENCE` semantics.** The engine retires FENCE as a NOP
    ([`VX_cp_engine.sv:109-112`](../../hw/rtl/cp/VX_cp_engine.sv#L109));
    it should honor `FENCE_DMA_BIT` / `FENCE_GPU_BIT` ordering (C-7).
