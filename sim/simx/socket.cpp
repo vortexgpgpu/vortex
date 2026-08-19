@@ -179,6 +179,11 @@ public:
       Core* core = cores_.at(c).get();
       auto& ch = dxa_core_->lmem_req_out.at(c);
       ch.bind(&core->local_mem()->Inputs.at(port_dxa));
+      // The callback fires when LocalMem receives the request, a few ticks
+      // before the bank applies the write. SimX does not model the RTL's
+      // AMO-vs-DMA bank interlock, so acceptance cannot stall here; aligning
+      // the release with the actual bank write is tracked with the SimX AMO
+      // timing-model work.
       ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
         if (req.is_write() && req.flags.dxa_notify_done) {
           uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, VX_CFG_NUM_BARRIERS);
