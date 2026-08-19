@@ -256,9 +256,13 @@ VX_CFG_TCU_WGMMA_ENABLE = false
 VX_CFG_TCU_FEDP2K = false
 
 [dxa]
-# Cluster-level DXA engine count, decoupled from cores/socket size.
-VX_CFG_NUM_DXA_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
-VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_CORES, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
+# Socket-local DXA engine worker count.  One DXA engine is instantiated per
+# socket; this knob controls the number of workers inside each engine and is
+# intentionally independent of the number of SM cores and sockets.
+VX_CFG_NUM_DXA_CORES = 1
+# Number of L2-facing request ports per socket-local engine.  The cluster
+# aggregate is derived in VX_gpu_pkg as NUM_SOCKETS times this value.
+VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_CORES, $VX_CFG_L1_MEM_PORTS)"
 VX_CFG_DXA_QUEUE_SIZE = 16
 VX_CFG_DXA_MAX_INFLIGHT = 8
 

@@ -25,3 +25,6 @@ RTL_INCLUDE += -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/mem -I$(RTL_DIR)/dxa -I$(SRC
 TOP := VX_dxa_core_top
 
 include ../common.mk
+
+# The OOB-fill lifetime cases intentionally leave the read-response side idle.
+VL_FLAGS += -Wno-UNUSEDSIGNAL

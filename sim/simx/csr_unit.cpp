@@ -235,13 +235,13 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
     #endif
     #ifdef VX_CFG_EXT_DXA_ENABLE
       case VX_DCR_MPM_CLASS_DXA: {
-        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        auto socket_perf = core_->socket()->perf_stats();
         switch (addr) {
-        CSR_READ_64(VX_CSR_MPM_DXA_TRANSFERS,  cluster_perf.dxa.transfers);
-        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_READS, cluster_perf.dxa.gmem_reads);
-        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_DEDUP, cluster_perf.dxa.gmem_dedup);
-        CSR_READ_64(VX_CSR_MPM_DXA_LMEM_WRITES,cluster_perf.dxa.lmem_writes);
-        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_LT,    cluster_perf.dxa.total_latency);
+        CSR_READ_64(VX_CSR_MPM_DXA_TRANSFERS,  socket_perf.dxa.transfers);
+        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_READS, socket_perf.dxa.gmem_reads);
+        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_DEDUP, socket_perf.dxa.gmem_dedup);
+        CSR_READ_64(VX_CSR_MPM_DXA_LMEM_WRITES,socket_perf.dxa.lmem_writes);
+        CSR_READ_64(VX_CSR_MPM_DXA_GMEM_LT,    socket_perf.dxa.total_latency);
         }
       } break;
     #endif

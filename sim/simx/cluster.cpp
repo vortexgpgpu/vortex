@@ -97,18 +97,15 @@ public:
       simobject_->mem_rsp_in.at(i).bind(&l2cache_->mem_rsp_in.at(i));
     }
 
-    // ── L2 fan-in: sockets + optional extension caches ─────────────────
+    // ── L2 fan-in: sockets + optional cluster-resident caches ──────────
+    // DXA traffic is already merged into each socket's output ports.
     // Row 0 = sockets (high priority).
-    // Row 1 = DXA GMEM (if enabled).
-    // Row 2 = tcache (if enabled).
-    // Row 3 = ocache (if enabled).
-    // Row 4 = rcache (if enabled).
-    // Row 5 = RTU dcache (if enabled).
+    // Later rows = tcache, ocache, rcache, and RTU dcache when enabled.
     // The priority arbiter lets sockets win over extension traffic on
     // contention, matching the RTL `VX_mem_arb` priority ordering.
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
+#if defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
     constexpr uint32_t kL2Rows = 1
-        + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED + VX_CFG_EXT_RTU_ENABLED;
+        + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED + VX_CFG_EXT_RTU_ENABLED;
     snprintf(sname, 100, "%s-l2arb", name.c_str());
     auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority,
                                     kL2Rows * VX_CFG_L2_NUM_REQS, VX_CFG_L2_NUM_REQS);
@@ -129,53 +126,6 @@ public:
       }
     }
 #endif // any L2-sharing extension
-
-#ifdef VX_CFG_EXT_DXA_ENABLE
-    // Create DxaCore at cluster scope
-    snprintf(sname, 100, "%s-dxa-core", name.c_str());
-    dxa_core_ = DxaCore::Create(sname, simobject_);
-
-    // DXA gmem → row 1 of l2arb.
-    constexpr uint32_t kDxaRow = 1;
-    uint32_t kDxaMemPorts = dxa_core_->gmem_req_out.size();
-    for (uint32_t i = 0; i < kDxaMemPorts; ++i) {
-      dxa_core_->gmem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kDxaRow));
-      l2arb->RspOut.at(kL2Rows * i + kDxaRow).bind(&dxa_core_->gmem_rsp_in.at(i));
-    }
-
-    // Per-core SFU.dxa_req_out (DxaUnit decodes onto it) → DxaCore::dxa_req_in[cid].
-    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
-      for (uint32_t c = 0; c < cores_per_socket_; ++c) {
-        uint32_t cid = s * cores_per_socket_ + c;
-        auto sfu = sockets_.at(s)->core(c)->sfu_unit();
-        sfu->dxa_req_out.bind(&dxa_core_->dxa_req_in.at(cid));
-      }
-    }
-
-    // DxaCore::lmem_req_out[cid] → core's LocalMem.Inputs[port_dxa].
-    // A tx_callback on the channel fires barrier_event_release for each
-    // DXA-write packet carrying notify_done at the cycle LMEM receives it.
-    uint32_t port_dxa = LSU_NUM_REQS;
-  #ifdef VX_CFG_EXT_TCU_ENABLE
-    port_dxa += 1;
-  #endif
-    for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
-      for (uint32_t c = 0; c < cores_per_socket_; ++c) {
-        uint32_t cid = s * cores_per_socket_ + c;
-        Core* core = sockets_.at(s)->core(c).get();
-        auto& ch = dxa_core_->lmem_req_out.at(cid);
-        ch.bind(&core->local_mem()->Inputs.at(port_dxa));
-        ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
-          if (req.is_write() && req.flags.dxa_notify_done) {
-            // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,
-            // bits[30:8] = bar_no. Decode to flat barrier index before release.
-            uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, VX_CFG_NUM_BARRIERS);
-            core->barrier_event_release(decoded);
-          }
-        });
-      }
-    }
-#endif
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
     // ── Cluster-shared TEX engine + tcache ──────────────────────────────
@@ -215,7 +165,7 @@ public:
     }
     // tcache memory side → l2arb. Row index = kL2Rows-1 if no OM, else
     // kL2Rows-2 (OM occupies the last row when both are present).
-    constexpr uint32_t kTexRow = 1 + VX_CFG_EXT_DXA_ENABLED;
+    constexpr uint32_t kTexRow = 1;
     for (uint32_t i = 0; i < kTcacheMemPorts; ++i) {
       tcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kTexRow));
       l2arb->RspOut.at(kL2Rows * i + kTexRow).bind(&tcache->mem_rsp_in.at(i));
@@ -240,7 +190,7 @@ public:
     tex_core_->tex_rsp_out.at(0).bind(&tex_bus->RspIn.at(0));
 #endif
 
-#if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
+#if defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_NUM_REQS; ++i) {
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
@@ -286,8 +236,8 @@ public:
       ocache->core_rsp_out.at(i).bind(&om_core_->ocache_rsp_in.at(i));
     }
 
-    // ocache memory side → l2arb. Row index is sockets + DXA + TEX (if those are present).
-    constexpr uint32_t kOmRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_TEX_ENABLED;
+    // ocache memory side → l2arb after the optional TEX row.
+    constexpr uint32_t kOmRow = 1 + VX_CFG_EXT_TEX_ENABLED;
     for (uint32_t i = 0; i < kOcacheMemPorts; ++i) {
       ocache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kOmRow));
       l2arb->RspOut.at(kL2Rows * i + kOmRow).bind(&ocache->mem_rsp_in.at(i));
@@ -342,8 +292,7 @@ public:
     }
 
     // rcache memory side → l2arb.
-    constexpr uint32_t kRasterRow = 1 + VX_CFG_EXT_DXA_ENABLED
-                                      + VX_CFG_EXT_TEX_ENABLED
+    constexpr uint32_t kRasterRow = 1 + VX_CFG_EXT_TEX_ENABLED
                                       + VX_CFG_EXT_OM_ENABLED;
     for (uint32_t i = 0; i < kRcacheMemPorts; ++i) {
       rcache->mem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kRasterRow));
@@ -416,8 +365,7 @@ public:
     }
 
     // rtcache memory side → l2arb at the RTU row.
-    constexpr uint32_t kRtuRow = 1 + VX_CFG_EXT_DXA_ENABLED
-                                   + VX_CFG_EXT_TEX_ENABLED
+    constexpr uint32_t kRtuRow = 1 + VX_CFG_EXT_TEX_ENABLED
                                    + VX_CFG_EXT_OM_ENABLED
                                    + VX_CFG_EXT_RASTER_ENABLED;
     for (uint32_t i = 0; i < kRtcacheMemPorts; ++i) {
@@ -507,7 +455,9 @@ public:
     Cluster::PerfStats perf_stats;
     perf_stats.l2cache = l2cache_->perf_stats();
 #ifdef VX_CFG_EXT_DXA_ENABLE
-    perf_stats.dxa = dxa_core_->perf_stats();
+    for (const auto& socket : sockets_) {
+      perf_stats.dxa += socket->perf_stats().dxa;
+    }
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
     perf_stats.tex    = tex_core_->perf_stats();
@@ -531,7 +481,12 @@ public:
   int dcr_write(uint32_t addr, uint32_t value) {
 #ifdef VX_CFG_EXT_DXA_ENABLE
     if (addr >= VX_DCR_DXA_STATE_BEGIN && addr < VX_DCR_DXA_STATE_END) {
-      return dxa_core_->dcr_write(addr, value);
+      for (auto& socket : sockets_) {
+        int ret = socket->dcr_write(addr, value);
+        if (ret != 0)
+          return ret;
+      }
+      return 0;
     }
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -656,10 +611,6 @@ public:
     return sockets_.at(s)->core(c).get();
   }
 
-#ifdef VX_CFG_EXT_DXA_ENABLE
-  DxaCore::Ptr& dxa_core() { return dxa_core_; }
-#endif
-
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   RasterCore::Ptr& raster_core() { return raster_core_; }
 #endif
@@ -674,9 +625,6 @@ private:
   std::vector<core_barrier_t> gbarriers_;
   Cache::Ptr                  l2cache_;
   uint32_t                    cores_per_socket_;
-#ifdef VX_CFG_EXT_DXA_ENABLE
-  DxaCore::Ptr                dxa_core_;
-#endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
   TexCore::Ptr                tex_core_;
   Cache::Ptr                  tcache_;
@@ -799,12 +747,6 @@ bool Cluster::l2_flush_done() const {
   return impl_->l2_flush_done();
 }
 
-#ifdef VX_CFG_EXT_DXA_ENABLE
-DxaCore::Ptr& Cluster::dxa_core() {
-  return impl_->dxa_core();
-}
-#endif
-
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 RasterCore::Ptr& Cluster::raster_core() {
   return impl_->raster_core();
@@ -816,4 +758,3 @@ RtuCore::Ptr& Cluster::rtu_core() {
   return impl_->rtu_core();
 }
 #endif
-

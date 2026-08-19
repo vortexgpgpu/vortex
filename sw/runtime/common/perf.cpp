@@ -599,12 +599,12 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
   } break;
 
   case VX_DCR_MPM_CLASS_DXA: {
-    // DXA counters are cluster-level; query representative core per cluster.
-    uint64_t cores_per_cluster = (num_cores + num_clusters - 1) / num_clusters;
+    // One DXA is owned by each socket; query one representative core per socket.
+    const uint64_t num_sockets = (num_cores + socket_size - 1) / socket_size;
     uint64_t tot_transfers = 0, tot_gmem_reads = 0, tot_gmem_dedup = 0;
     uint64_t tot_lmem_writes = 0, tot_gmem_lt = 0;
-    for (uint32_t c = 0; c < num_clusters; ++c) {
-      uint32_t rep_core = (uint32_t)(c * cores_per_cluster);
+    for (uint32_t s = 0; s < num_sockets; ++s) {
+      uint32_t rep_core = s * (uint32_t)socket_size;
       if (rep_core >= num_cores)
         break;
       uint64_t transfers = 0, gmem_reads = 0, gmem_dedup = 0, lmem_writes = 0, gmem_lt = 0;

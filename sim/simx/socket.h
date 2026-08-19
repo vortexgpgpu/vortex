@@ -15,6 +15,9 @@
 
 #include <simobject.h>
 #include "cache.h"
+#ifdef VX_CFG_EXT_DXA_ENABLE
+#include "dxa_core.h"
+#endif
 
 namespace vortex {
 
@@ -26,6 +29,9 @@ public:
   struct PerfStats {
     Cache::PerfStats icache;
     Cache::PerfStats dcache;
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    DxaCore::PerfStats dxa;
+#endif
   };
 
   std::vector<SimChannel<MemReq>> mem_req_out;
@@ -57,6 +63,10 @@ public:
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
   std::shared_ptr<Core>& core(uint32_t idx);
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  DxaCore::Ptr& dxa_core();
+#endif
 
   // Forwarded cache flush (write-back eviction walk). The walk is a no-op
   // on write-through caches (`Cache::flush_begin` early-exits); forwarding

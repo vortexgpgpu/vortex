@@ -46,8 +46,12 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   // Transaction barrier for DXA completion + CTA synchronization.
   vortex::barrier bar(0);
 
-  // Only the first warp in the CTA issues DXA commands.
+  // Only the first warp in the CTA issues DXA commands. With both tiles
+  // loaded cooperatively there is no DXA issue at all, so the predicate
+  // would be unused (-Werror) — declare it only where it is read.
+#if !(defined(SW_LOAD_A) && defined(SW_LOAD_B))
   const bool is_dxa_warp = (get_sub_group_id() == 0);
+#endif
 
   // Loop over K tiles.
   for (uint32_t k = 0; k < K; k += ctx::tileK) {

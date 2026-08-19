@@ -14,13 +14,11 @@
 `include "VX_define.vh"
 
 // Flat-port testbench wrapper around VX_dxa_core.
-// Exposes all interface signals as individual logic ports for Verilator
-// and FPGA/ASIC synthesis.  Configured for a single-socket, single-unit
-// cluster with one global-memory output port.
+// Exposes all interface signals as individual logic ports for Verilator.
 
 module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
-    parameter GMEM_OUT_PORTS  = `VX_CFG_NUM_DXA_CORES,
+    parameter GMEM_OUT_PORTS  = `VX_CFG_DXA_MEM_PORTS,
     parameter ENABLE          = 1,
     // gmem bus geometry (matches VX_mem_bus_if defaults for L1_LINE_SIZE)
     parameter GMEM_LINE_SIZE  = `VX_CFG_L1_LINE_SIZE,
@@ -54,19 +52,29 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // DXA request bus (slave, 1 socket)
     // -----------------------------------------------------------------------
     input  wire                          dxa_req_valid,
-    input  wire [$bits(dxa_req_data_t)-1:0] dxa_req_data,
+    input  wire [NC_WIDTH-1:0]           dxa_req_core_id,
+    input  wire [UUID_WIDTH-1:0]         dxa_req_uuid,
+    input  wire [NW_WIDTH-1:0]           dxa_req_wid,
+    input  wire [DXA_SMEM_ADDR_W-1:0]    dxa_req_smem_addr,
+    input  wire [31:0]                   dxa_req_meta,
+    input  wire [31:0]                   dxa_req_coord0,
+    input  wire [31:0]                   dxa_req_coord1,
+    input  wire [31:0]                   dxa_req_coord2,
+    input  wire [31:0]                   dxa_req_coord3,
+    input  wire [31:0]                   dxa_req_coord4,
+    input  wire [`VX_CFG_NUM_WARPS-1:0] dxa_req_cta_mask,
     output wire                          dxa_req_ready,
 
     // -----------------------------------------------------------------------
-    // LMEM bank-write bus (master, SOCKET_SIZE ports)
+    // LMEM bank-write bus (one engine output, switched by VX_socket in-system)
     // -----------------------------------------------------------------------
-    output wire [`VX_CFG_SOCKET_SIZE-1:0]                       lmem_req_valid,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0]                       lmem_req_rw,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_ADDR_W-1:0]  lmem_req_addr,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_WORD_SIZE*8-1:0] lmem_req_data,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_WORD_SIZE-1:0] lmem_req_byteen,
-    output wire [`VX_CFG_SOCKET_SIZE-1:0][DXA_LMEM_ATTR_W-1:0]  lmem_req_attr,
-    input  wire [`VX_CFG_SOCKET_SIZE-1:0]                       lmem_req_ready,
+    output wire                          lmem_req_valid,
+    output wire                          lmem_req_rw,
+    output wire [DXA_LMEM_ADDR_W-1:0]    lmem_req_addr,
+    output wire [31:0]                   lmem_req_data_lo,
+    output wire [15:0]                   lmem_req_byteen_count,
+    output wire                          lmem_req_last,
+    input  wire                          lmem_req_ready,
 
     // -----------------------------------------------------------------------
     // Global memory bus (master, GMEM_OUT_PORTS ports)
@@ -99,30 +107,48 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dcr_rsp_valid             = dcr_bus_if.rsp_valid;
     assign dcr_rsp_data              = dcr_bus_if.rsp_data.data;
 
-    VX_dxa_req_bus_if req_bus_if[1]();
+    VX_dxa_req_bus_if req_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    dxa_req_data_t dxa_req_data;
+    always_comb begin
+        dxa_req_data = '0;
+        dxa_req_data.core_id   = dxa_req_core_id;
+        dxa_req_data.uuid      = dxa_req_uuid;
+        dxa_req_data.wid       = dxa_req_wid;
+        dxa_req_data.smem_addr = dxa_req_smem_addr;
+        dxa_req_data.meta      = dxa_req_meta;
+        dxa_req_data.coords[0] = dxa_req_coord0;
+        dxa_req_data.coords[1] = dxa_req_coord1;
+        dxa_req_data.coords[2] = dxa_req_coord2;
+        dxa_req_data.coords[3] = dxa_req_coord3;
+        dxa_req_data.coords[4] = dxa_req_coord4;
+        dxa_req_data.cta_mask  = dxa_req_cta_mask;
+    end
 
     assign req_bus_if[0].req_valid = dxa_req_valid;
     assign req_bus_if[0].req_data  = dxa_req_data;
     assign dxa_req_ready           = req_bus_if[0].req_ready;
+    for (genvar i = 1; i < `VX_CFG_SOCKET_SIZE; ++i) begin : g_unused_req
+        assign req_bus_if[i].req_valid = 1'b0;
+        assign req_bus_if[i].req_data  = '0;
+    end
 
     VX_mem_bus_if #(
         .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
-        .TAG_WIDTH   (DXA_LMEM_TAG_W),
+        .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
         .ATTR_WIDTH (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
-    ) lmem_bus_if[`VX_CFG_SOCKET_SIZE]();
+    ) lmem_bus_if[1]();
 
-    for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE; i++) begin
-        assign lmem_req_valid[i]         = lmem_bus_if[i].req_valid;
-        assign lmem_req_rw[i]            = lmem_bus_if[i].req_data.rw;
-        assign lmem_req_addr[i]          = lmem_bus_if[i].req_data.addr;
-        assign lmem_req_data[i]          = lmem_bus_if[i].req_data.data;
-        assign lmem_req_byteen[i]        = lmem_bus_if[i].req_data.byteen;
-        assign lmem_req_attr[i]         = lmem_bus_if[i].req_data.attr;
-        assign lmem_bus_if[i].req_ready  = lmem_req_ready[i];
-        assign lmem_bus_if[i].rsp_valid  = 1'b0;
-        assign lmem_bus_if[i].rsp_data   = '0;
-    end
+    assign lmem_req_valid              = lmem_bus_if[0].req_valid;
+    assign lmem_req_rw                 = lmem_bus_if[0].req_data.rw;
+    assign lmem_req_addr               = lmem_bus_if[0].req_data.addr;
+    assign lmem_req_data_lo            = lmem_bus_if[0].req_data.data[31:0];
+    assign lmem_req_byteen_count       = 16'($countones(lmem_bus_if[0].req_data.byteen));
+    assign lmem_req_last               = lmem_bus_if[0].req_data.attr[DXA_LMEM_ATTR_W-1];
+    assign lmem_bus_if[0].req_ready    = lmem_req_ready;
+    assign lmem_bus_if[0].rsp_valid    = 1'b0;
+    assign lmem_bus_if[0].rsp_data     = '0;
 
     VX_mem_bus_if #(
         .DATA_SIZE (GMEM_LINE_SIZE),
@@ -161,7 +187,7 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     VX_dxa_core #(
         .INSTANCE_ID     (INSTANCE_ID),
-        .NUM_REQS        (1),
+        .NUM_REQS        (`VX_CFG_SOCKET_SIZE),
         .GMEM_OUT_PORTS  (GMEM_OUT_PORTS)
     ) dxa_core (
         .clk               (clk),

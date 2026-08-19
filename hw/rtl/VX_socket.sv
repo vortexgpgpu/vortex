@@ -29,6 +29,9 @@ module VX_socket import VX_gpu_pkg::*;
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t     sysmem_perf,
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    output dxa_perf_t       dxa_perf,
+`endif
 `endif
 
     // DCRs
@@ -36,13 +39,6 @@ module VX_socket import VX_gpu_pkg::*;
 
     // Memory
     VX_mem_bus_if.master    mem_bus_if [L1_MEM_PORTS],
-
-`ifdef VX_CFG_EXT_DXA_ENABLE
-    // DXA control path
-    VX_dxa_req_bus_if.master dxa_req_bus_if,
-    // DXA LMEM write path
-    VX_mem_bus_if.slave     dxa_lmem_bus_if [1],
-`endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_bus_if.master    per_socket_tex_bus_if,
@@ -214,17 +210,26 @@ module VX_socket import VX_gpu_pkg::*;
 
     ///////////////////////////////////////////////////////////////////////////
 
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    // Pair each engine stream with one socket memory port to avoid a second
+    // cluster-level arbitration hop.
+    VX_mem_bus_if #(
+        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+        .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+    ) dxa_gmem_bus_if[DXA_L2_GMEM_PORTS_PER_SOCKET]();
+`endif
+
     for (genvar i = 0; i < L1_MEM_PORTS; ++i) begin : g_mem_bus_if
+        VX_mem_bus_if #(
+            .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+            .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
+        ) l1_mem_arb_bus_if[1]();
+
         if (i == 0) begin : g_i0
             VX_mem_bus_if #(
                 .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
                 .TAG_WIDTH (L1_MEM_TAG_WIDTH)
             ) l1_mem_bus_if[2]();
-
-            VX_mem_bus_if #(
-                .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
-                .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
-            ) l1_mem_arb_bus_if[1]();
 
             `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[0], icache_mem_bus_if[0], L1_MEM_TAG_WIDTH, ICACHE_MEM_TAG_WIDTH, UUID_WIDTH);
             `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_bus_if[1], dcache_mem_bus_if[0], L1_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
@@ -244,17 +249,49 @@ module VX_socket import VX_gpu_pkg::*;
                 .bus_in_if  (l1_mem_bus_if),
                 .bus_out_if (l1_mem_arb_bus_if)
             );
-
-            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[0], l1_mem_arb_bus_if[0]);
         end else begin : g_i
+            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_arb_bus_if[0], dcache_mem_bus_if[i], L1_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
+        end
+
+    `ifdef VX_CFG_EXT_DXA_ENABLE
+        if (i < DXA_L2_GMEM_PORTS_PER_SOCKET) begin : g_dxa
             VX_mem_bus_if #(
                 .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
                 .TAG_WIDTH (L1_MEM_ARB_TAG_WIDTH)
-            ) l1_mem_arb_bus_if();
+            ) socket_arb_in_if[2]();
 
-            `ASSIGN_VX_MEM_BUS_IF_EX (l1_mem_arb_bus_if, dcache_mem_bus_if[i], L1_MEM_ARB_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l1_mem_arb_bus_if);
+            VX_mem_bus_if #(
+                .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
+                .TAG_WIDTH (L2_TAG_WIDTH)
+            ) socket_arb_out_if[1]();
+
+            // Prioritize latency-sensitive L1 traffic over bulk DXA traffic.
+            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[0], l1_mem_arb_bus_if[0]);
+            `ASSIGN_VX_MEM_BUS_IF (socket_arb_in_if[1], dxa_gmem_bus_if[i]);
+
+            VX_mem_bus_arb #(
+                .NUM_INPUTS  (2),
+                .NUM_OUTPUTS (1),
+                .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
+                .TAG_WIDTH   (L1_MEM_ARB_TAG_WIDTH),
+                .TAG_SEL_IDX (0),
+                .ARBITER     ("P"),
+                .REQ_OUT_BUF (3),
+                .RSP_OUT_BUF (3)
+            ) socket_dxa_mem_arb (
+                .clk        (clk),
+                .reset      (reset),
+                .bus_in_if  (socket_arb_in_if),
+                .bus_out_if (socket_arb_out_if)
+            );
+
+            `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], socket_arb_out_if[0]);
+        end else begin : g_no_dxa_port
+            `ASSIGN_VX_MEM_BUS_IF_EX (mem_bus_if[i], l1_mem_arb_bus_if[0], L2_TAG_WIDTH, L1_MEM_ARB_TAG_WIDTH, UUID_WIDTH);
         end
+    `else
+        `ASSIGN_VX_MEM_BUS_IF_EX (mem_bus_if[i], l1_mem_arb_bus_if[0], L2_TAG_WIDTH, L1_MEM_ARB_TAG_WIDTH, UUID_WIDTH);
+    `endif
     end
 
 
@@ -367,24 +404,64 @@ module VX_socket import VX_gpu_pkg::*;
     );
 `endif
 
+    ///////////////////////////////////////////////////////////////////////////
+    // Keep DXA configuration at the same ownership level as the engine.
+    ///////////////////////////////////////////////////////////////////////////
+
+    localparam SOCKET_NUM_DCR_REQS = `VX_CFG_SOCKET_SIZE + `VX_CFG_EXT_DXA_ENABLED;
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    localparam SOCKET_DCR_DXA_IDX = `VX_CFG_SOCKET_SIZE;
+`endif
+
+    VX_dcr_bus_if per_core_dcr_bus_if[SOCKET_NUM_DCR_REQS]();
+    VX_dcr_arb #(
+        .NUM_REQS    (SOCKET_NUM_DCR_REQS),
+        .REQ_OUT_BUF ((SOCKET_NUM_DCR_REQS > 1) ? 1 : 0)
+    ) dcr_core_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (dcr_bus_if),
+        .bus_out_if (per_core_dcr_bus_if)
+    );
+
 `ifdef VX_CFG_EXT_DXA_ENABLE
 
     VX_dxa_req_bus_if per_core_dxa_req_bus_if[`VX_CFG_SOCKET_SIZE]();
-    VX_dxa_req_bus_if dxa_req_arb_out_if[1]();
 
-    VX_dxa_req_arb #(
-        .NUM_INPUTS (`VX_CFG_SOCKET_SIZE),
-        .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
-    ) dxa_req_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (per_core_dxa_req_bus_if),
-        .bus_out_if (dxa_req_arb_out_if)
+    VX_mem_bus_if #(
+        .DATA_SIZE   (DXA_LMEM_WORD_SIZE),
+        .TAG_WIDTH   (DXA_LMEM_OUT_TAG_W),
+        .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
+        .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
+    ) dxa_lmem_bus_if[1]();
+
+    wire dxa_core_busy;
+
+    // A scalar alias avoids binding a constant-indexed interface-array element.
+    VX_dcr_bus_if dxa_dcr_bus_if();
+    assign dxa_dcr_bus_if.req_valid                          = per_core_dcr_bus_if[SOCKET_DCR_DXA_IDX].req_valid;
+    assign dxa_dcr_bus_if.req_data                           = per_core_dcr_bus_if[SOCKET_DCR_DXA_IDX].req_data;
+    assign per_core_dcr_bus_if[SOCKET_DCR_DXA_IDX].rsp_valid = dxa_dcr_bus_if.rsp_valid;
+    assign per_core_dcr_bus_if[SOCKET_DCR_DXA_IDX].rsp_data  = dxa_dcr_bus_if.rsp_data;
+
+    // One engine is physically owned by this socket.  NUM_DXA_CORES is the
+    // worker count inside the engine, not the number of socket/core inputs.
+    VX_dxa_core #(
+        .INSTANCE_ID  (`SFORMATF(("%s-dxa-core", INSTANCE_ID))),
+        .NUM_REQS     (`VX_CFG_SOCKET_SIZE),
+        .GMEM_OUT_PORTS (DXA_L2_GMEM_PORTS_PER_SOCKET)
+    ) dxa_core (
+        .clk          (clk),
+        .reset        (reset),
+    `ifdef PERF_ENABLE
+        .dxa_perf     (dxa_perf),
+    `endif
+        .dcr_bus_if   (dxa_dcr_bus_if),
+        .req_bus_if   (per_core_dxa_req_bus_if),
+        .smem_bus_if  (dxa_lmem_bus_if),
+        .gmem_bus_if  (dxa_gmem_bus_if),
+        .busy         (dxa_core_busy)
     );
-
-    assign dxa_req_bus_if.req_valid = dxa_req_arb_out_if[0].req_valid;
-    assign dxa_req_bus_if.req_data  = dxa_req_arb_out_if[0].req_data;
-    assign dxa_req_arb_out_if[0].req_ready = dxa_req_bus_if.req_ready;
 
     // Route DXA lmem requests to per-core buses using core_local_id from tag.
     // Tag value layout: {core_id[NC_BITS-1:0], engine_value[0]}
@@ -396,6 +473,13 @@ module VX_socket import VX_gpu_pkg::*;
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) per_core_dxa_lmem_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    wire [`VX_CFG_SOCKET_SIZE-1:0] dxa_lmem_req_valid;
+    for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE; ++i) begin : g_dxa_lmem_req_valid
+        assign dxa_lmem_req_valid[i] = per_core_dxa_lmem_bus_if[i].req_valid;
+    end
+
+    wire socket_dxa_busy = dxa_core_busy || (|dxa_lmem_req_valid);
 
     wire [`UP(DXA_LMEM_CORE_LOCAL_BITS)-1:0] dxa_lmem_core_sel;
     if (`VX_CFG_SOCKET_SIZE > 1) begin : g_dxa_lmem_sel
@@ -423,17 +507,6 @@ module VX_socket import VX_gpu_pkg::*;
 `endif
 
     ///////////////////////////////////////////////////////////////////////////
-
-    VX_dcr_bus_if per_core_dcr_bus_if[`VX_CFG_SOCKET_SIZE]();
-    VX_dcr_arb #(
-        .NUM_REQS    (`VX_CFG_SOCKET_SIZE),
-        .REQ_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 1 : 0)
-    ) dcr_core_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (dcr_bus_if),
-        .bus_out_if (per_core_dcr_bus_if)
-    );
 
     wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_busy;
 `ifdef EXT_GFX_ANY_ENABLE
@@ -512,8 +585,13 @@ module VX_socket import VX_gpu_pkg::*;
         );
     end
 
+    wire socket_active = dcr_bus_if.req_valid | (|per_core_busy)
+    `ifdef VX_CFG_EXT_DXA_ENABLE
+                       | socket_dxa_busy
+    `endif
+                       ;
     wire busy_r;
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy), 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
-    assign busy = busy_r | dcr_bus_if.req_valid;
+    `BUFFER_EX(busy_r, socket_active, 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
+    assign busy = busy_r | socket_active;
 
 endmodule

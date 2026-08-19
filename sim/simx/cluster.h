@@ -117,10 +117,6 @@ public:
   void l2_flush_begin();
   bool l2_flush_done() const;
 
-#ifdef VX_CFG_EXT_DXA_ENABLE
-  DxaCore::Ptr& dxa_core();
-#endif
-
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Cluster-shared raster engine (armed by the KMU's delegated draw launch;
   // the per-core SFU wave-pull launches covered-quad waves autonomously).

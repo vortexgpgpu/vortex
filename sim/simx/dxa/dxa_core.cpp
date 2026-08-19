@@ -19,7 +19,6 @@
 #include <deque>
 #include <vector>
 #include "core.h"
-#include "cluster.h"
 #include "socket.h"
 #include "mem_block_pool.h"
 #include "debug.h"
@@ -29,8 +28,11 @@ using namespace vortex;
 
 namespace {
 
-// Number of GMEM ports DxaCore exposes to L2 (one arb output per port).
-constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(VX_CFG_NUM_DXA_CORES, VX_CFG_L2_NUM_REQS);
+// Number of GMEM ports for one socket-local engine. Each output joins the
+// corresponding socket L2-facing port before traffic reaches the cluster.
+constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(
+    VX_CFG_DXA_MEM_PORTS,
+    std::min<uint32_t>(VX_CFG_NUM_DXA_CORES, VX_CFG_L1_MEM_PORTS));
 
 // LMEM "word" granularity for splitting DXA writes. The LocalMem bank
 // model applies byteen relative to a VX_CFG_MEM_BLOCK_SIZE-aligned address,
@@ -42,8 +44,8 @@ constexpr uint32_t kLmemWordSize = VX_CFG_MEM_BLOCK_SIZE;
 constexpr uint32_t kGmemLineSize = VX_CFG_L1_LINE_SIZE;
 constexpr uint64_t kGmemLineMask = ~uint64_t(VX_CFG_L1_LINE_SIZE - 1);
 
-// Cores per cluster.
-constexpr uint32_t kCoresPerCluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+// Cores served by one socket-local engine.
+constexpr uint32_t kCoresPerSocket = VX_CFG_SOCKET_SIZE;
 
 } // namespace
 
@@ -243,6 +245,38 @@ public:
   }
 
   const DxaCore::PerfStats& perf_stats() const { return perf_stats_; }
+
+  bool running() const {
+    if (!queue_.empty())
+      return true;
+
+    // SimChannel::size() includes packets reserved for a future delivery as
+    // well as packets already at the endpoint. Keep the socket alive across
+    // those boundary handoffs, including the final LMEM write after a worker
+    // has retired its last internal entry.
+    for (const auto& ch : simobject_->dxa_req_in) {
+      if (ch.size() != 0)
+        return true;
+    }
+    for (const auto& ch : simobject_->gmem_req_out) {
+      if (ch.size() != 0)
+        return true;
+    }
+    for (const auto& ch : simobject_->gmem_rsp_in) {
+      if (ch.size() != 0)
+        return true;
+    }
+    for (const auto& ch : simobject_->lmem_req_out) {
+      if (ch.size() != 0)
+        return true;
+    }
+
+    for (const auto& w : workers_) {
+      if (w.state != WState::IDLE || !w.issued_order.empty())
+        return true;
+    }
+    return false;
+  }
 
 private:
   // ── Descriptor helpers ───────────────────────────────────────────────
@@ -588,8 +622,8 @@ private:
     if (!s.rsp_arrived) return; // wait
 
     // Determine destination core's LMEM port.
-    uint32_t cluster_local_cid = w.req.core->id() % kCoresPerCluster;
-    auto& lmem_ch = simobject_->lmem_req_out.at(cluster_local_cid);
+    uint32_t socket_local_cid = w.req.core->id() % kCoresPerSocket;
+    auto& lmem_ch = simobject_->lmem_req_out.at(socket_local_cid);
     if (lmem_ch.full()) return; // backpressure
 
     const LineWork& lw = s.work;
@@ -746,14 +780,14 @@ private:
 // DxaCore — wrappers
 // ════════════════════════════════════════════════════════════════════
 
-DxaCore::DxaCore(const SimContext& ctx, const char* name, Cluster* cluster)
+DxaCore::DxaCore(const SimContext& ctx, const char* name, Socket* socket)
   : SimObject<DxaCore>(ctx, name)
-  , dxa_req_in(kCoresPerCluster, this)
+  , dxa_req_in(kCoresPerSocket, this)
   , gmem_req_out(kDxaMemPorts, this)
   , gmem_rsp_in(kDxaMemPorts, this)
-  , lmem_req_out(kCoresPerCluster, this)
+  , lmem_req_out(kCoresPerSocket, this)
 {
-  __unused(cluster);
+  __unused(socket);
 
   // Build the GMEM arbiter (VX_CFG_NUM_DXA_CORES workers → kDxaMemPorts L2-facing).
   // Tag layout used by workers: high bit packs worker_id, low bits the
@@ -779,6 +813,10 @@ void DxaCore::on_tick()  { impl_->tick(); }
 
 int DxaCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+bool DxaCore::running() const {
+  return impl_->running();
 }
 
 const DxaCore::PerfStats& DxaCore::perf_stats() const {

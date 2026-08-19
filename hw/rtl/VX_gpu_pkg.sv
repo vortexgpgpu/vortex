@@ -1240,6 +1240,9 @@ package VX_gpu_pkg;
     localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);
     localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
     localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS;
+    // Worker selection is local to one socket-local DXA engine.  The
+    // cluster-level socket bus adds no worker bits; each socket has its own
+    // engine and the LMEM request is routed by the local core-id bits.
     localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1);
 
     // TCU lmem tag and attr widths for DMA arb.
@@ -1529,22 +1532,21 @@ package VX_gpu_pkg;
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
-  `ifdef VX_CFG_NUM_DXA_CORES
-    localparam L2_DXA_NUM_REQS      = `VX_CFG_NUM_DXA_CORES;
-  `else
-    localparam L2_DXA_NUM_REQS      = 1;
-  `endif
+    // One DXA engine per socket.  NUM_DXA_CORES is the worker count inside
+    // each engine.  The engine exposes at most one GMEM stream per socket
+    // L1/L2-facing port; worker provisioning remains independent of both
+    // socket size and external port count.
+    localparam DXA_L2_GMEM_PORTS_PER_SOCKET =
+        `MIN(`VX_CFG_DXA_MEM_PORTS, `MIN(`VX_CFG_NUM_DXA_CORES, L1_MEM_PORTS));
 `else
-    localparam L2_DXA_NUM_REQS      = 0;
+    localparam DXA_L2_GMEM_PORTS_PER_SOCKET = 0;
 `endif
-    // DXA uses a fixed small number of L2 ports (= NUM_DXA_UNITS) to avoid
-    // a combinational ready-valid loop when output-select distribution fans
-    // out 1 worker across many L2 ports in multi-core configs.
-    localparam DXA_L2_GMEM_PORTS    = `MIN(L2_DXA_NUM_REQS, L2_SOCKET_REQS);
-    localparam DXA_L2_ARB_TAG_BITS  = `VX_CFG_EXT_DXA_ENABLED * `CLOG2(2);
+    // A socket-local per-port arbiter distinguishes ordinary L1 traffic from
+    // DXA traffic before the combined stream reaches the cluster L2.
+    localparam DXA_SOCKET_ARB_TAG_BITS = `VX_CFG_EXT_DXA_ENABLED * `CLOG2(2);
 
-    // Core request tag bits (includes DXA arb overhead when enabled)
-    localparam L2_TAG_WIDTH         = L1_MEM_ARB_TAG_WIDTH + DXA_L2_ARB_TAG_BITS;
+    // Core request tag bits (includes the socket-local DXA arb selector).
+    localparam L2_TAG_WIDTH         = L1_MEM_ARB_TAG_WIDTH + DXA_SOCKET_ARB_TAG_BITS;
 
     // Memory request data bits (mem transacts in sectors)
     localparam L2_MEM_DATA_WIDTH	= (L2_SECTOR_SIZE * 8);

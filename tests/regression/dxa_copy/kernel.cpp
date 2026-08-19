@@ -32,6 +32,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // Allocate shared memory for one tile.
   auto shmem = reinterpret_cast<TYPE*>(__local_mem());
+  const uint32_t tid = threadIdx.x;
 
 #ifdef VX_CFG_EXT_DXA_ENABLE
   // ── DXA path: issue N-D tile copy, barrier wait ──
@@ -59,12 +60,17 @@ __kernel void kernel_main(kernel_arg_t* arg) {
       break;
     }
   }
+#ifdef DXA_LIFETIME_FIRE_FORGET
+  // A directed engine-lifetime mode: the request is registered with the
+  // barrier, but no warp remains to make core activity mask DXA activity.
+  if (arg->fire_and_forget)
+    return;
+#endif
   bar.arrive_and_wait();
 
 #else
   // ── LSU path: each thread loads one element, syncthreads ──
   auto src = reinterpret_cast<const TYPE*>(arg->src_addr);
-  const uint32_t tid = threadIdx.x;
   if (tid < num_elems) {
     // Decompose tid into per-dim local offsets and compute global linear index.
     uint32_t local[DXA_MAX_DIMS] = {};
@@ -84,5 +90,24 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   }
   __syncthreads();
 #endif
-  (void)num_elems;
+
+  // Make the completed tile observable to the host. Every CTA owns a unique
+  // tile, so these stores need no inter-CTA synchronization.
+  auto dst = reinterpret_cast<TYPE*>(arg->dst_addr);
+  if (tid < num_elems) {
+    uint32_t local[DXA_MAX_DIMS] = {};
+    uint32_t rem = tid;
+    for (uint32_t d = 0; d < ndim; ++d) {
+      local[d] = rem % arg->tiles[d];
+      rem /= arg->tiles[d];
+    }
+
+    uint32_t gidx = 0;
+    uint32_t stride = 1;
+    for (uint32_t d = 0; d < ndim; ++d) {
+      gidx += (coords[d] + local[d]) * stride;
+      stride *= arg->sizes[d];
+    }
+    dst[gidx] = shmem[tid];
+  }
 }

@@ -252,9 +252,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     // Phase 1 (ctr_r=2, rank≥3):  mul_off = coord2×stride1  (→ dim2 offset)
     //                             mul_dlt = (tile1-1)×stride0 (→ delta[1])
     // Phase 2 (ctr_r=4, rank≥4):  mul_off = coord3×stride2  (→ dim3 offset)
-    //                             mul_dlt = (tile2-1)×stride1 (→ delta[2])
+    //                             mul_dlt = (tile2-1)×stride1 (part of delta[2])
     // Phase 3 (ctr_r=6, rank≥5):  mul_off = coord4×stride3  (→ dim4 offset)
-    //                             mul_dlt = (tile3-1)×stride2 (→ delta[3])
+    //                             mul_dlt = (tile3-1)×stride2 (part of delta[3])
     //
     // Captures (posedge): ctr_r ∈ {3, 5, 7, 9} (operand reg adds +1 cycle).
 
@@ -531,16 +531,21 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 if (ctr_r == 4'd7 && lat_rank >= 4) begin
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul_off_result);
-                    // delta[2] = stride2 - (tile2-1)*stride1
-                    s_delta[2] <= lat_stride2 - mul_dlt_result;
+                    // A dim-2 step also wraps dims 1 and 0.  delta[1]
+                    // already encodes the full dim-1 wrap, so
+                    // (stride1 - delta[1]) is the cumulative lower-dim span.
+                    s_delta[2] <= lat_stride2 - mul_dlt_result
+                                - (lat_stride1 - s_delta[1]);
                 end
 
                 // ── Phase 3 capture at ctr=9 (rank=5) ──
                 if (ctr_r == 4'd9 && lat_rank >= 5) begin
                     s_initial_gmem_base <= s_initial_gmem_base
                                          + `VX_CFG_MEM_ADDR_WIDTH'(mul_off_result);
-                    // delta[3] = stride3 - (tile3-1)*stride2
-                    s_delta[3] <= lat_stride3 - mul_dlt_result;
+                    // Likewise, a dim-3 step wraps every lower dimension;
+                    // (stride2 - delta[2]) is their cumulative span.
+                    s_delta[3] <= lat_stride3 - mul_dlt_result
+                                - (lat_stride2 - s_delta[2]);
                 end
 
                 // Transition to STAGED at the last capture cycle.

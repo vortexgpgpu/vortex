@@ -26,6 +26,8 @@
 const char* kernel_file = "kernel.vxbin";
 uint32_t ndim = 2;
 bool fire_and_forget = false;
+uint32_t num_ctas = 8;  // persistent CTA count (-g)
+uint32_t block_threads = 0;  // thread block size (-b), 0 = tile elements
 
 // Default sizes/tiles per dimension (overridable via CLI).
 uint32_t sizes[DXA_MAX_DIMS] = {32, 32, 1, 1, 1};
@@ -40,7 +42,7 @@ vx_kernel_h kernel = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
-  std::cout << "Usage: [-k kernel] [-d1|-d2|-d3|-d4|-d5] [-s<d> size] [-t<d> tile] [-f] [-h]\n";
+  std::cout << "Usage: [-k kernel] [-d1|-d2|-d3|-d4|-d5] [-s<d> size] [-t<d> tile] [-g ctas] [-f] [-h]\n";
   std::cout << "  -d1..-d5: set number of dimensions (default: -d2)\n";
   std::cout << "  -s0 N:    set size of dimension 0 (innermost)\n";
   std::cout << "  -t0 N:    set tile size of dimension 0\n";
@@ -81,6 +83,8 @@ static void parse_args(int argc, char** argv) {
     if (strcmp(argv[i], "-k") == 0 && i + 1 < argc) { kernel_file = argv[++i]; continue; }
     if (strcmp(argv[i], "-h") == 0) { show_usage(); exit(0); }
     if (strcmp(argv[i], "-f") == 0) { fire_and_forget = true; continue; }
+    if (strcmp(argv[i], "-g") == 0 && i + 1 < argc) { num_ctas = atoi(argv[++i]); continue; }
+    if (strcmp(argv[i], "-b") == 0 && i + 1 < argc) { block_threads = atoi(argv[++i]); continue; }
     // -s<d> N and -t<d> N
     if (strlen(argv[i]) == 3 && i + 1 < argc) {
       int d = argv[i][2] - '0';
@@ -145,6 +149,7 @@ int main(int argc, char* argv[]) {
   std::cout << "\ntiles:";
   for (uint32_t d = 0; d < ndim; ++d) std::cout << " " << tiles[d];
   std::cout << "\ntotal_elems: " << total_elems << ", groups: " << total_groups << "\n";
+  std::cout << "persistent_ctas: " << num_ctas << "\n";
   std::cout << "lifetime_mode: " << (fire_and_forget ? "fire-and-forget" : "wait-and-verify") << "\n";
 
   const uint32_t buf_size = total_elems * sizeof(TYPE);
@@ -165,7 +170,7 @@ int main(int argc, char* argv[]) {
   }
 #endif
 
-  RT_CHECK(vx_check_occupancy(device, group_size, local_mem));
+  RT_CHECK(vx_check_occupancy(device, (block_threads != 0) ? block_threads : group_size, local_mem));
 
   // Set up kernel args.
   kernel_arg.ndim = ndim;
@@ -238,9 +243,15 @@ int main(int argc, char* argv[]) {
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  // Launch with flattened 1D grid; kernel decomposes flat group ID.
-  uint32_t grid_dim[1] = {total_groups};
-  uint32_t block_dim[1] = {group_size};
+  // Persistent launch: a fixed CTA grid strides over all tiles.  The block
+  // size is decoupled from the tile size (kernel loops block-stride), so
+  // tiles larger than the thread block are legal.
+  uint32_t launch_ctas = (num_ctas < total_groups) ? num_ctas : total_groups;
+  if (launch_ctas == 0) launch_ctas = 1;
+  uint32_t bsize = (block_threads != 0) ? block_threads : group_size;
+  if (bsize > group_size) bsize = group_size;
+  uint32_t grid_dim[1] = {launch_ctas};
+  uint32_t block_dim[1] = {bsize};
 
   std::cout << "start\n";
   vx_event_h launch_ev = nullptr;

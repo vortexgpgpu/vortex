@@ -101,7 +101,8 @@ package VX_dxa_pkg;
         logic [31:0]                row_len_bytes;
         // Rolling-cursor deltas applied at each outer-dim step:
         //   delta[0]: dim-0 step                = stride[0]
-        //   delta[d>0]: dim (d-1)→d wrap event  = stride[d] - (tile[d-1]-1)*stride[d-1]
+        //   delta[d>0]: dim (d-1)→d wrap event  = stride[d] minus the
+        //               cumulative span of every lower dimension being reset
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] delta;
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] dim_tiles;  // per-dim tile limits (tile1..tile4)
         logic [DXA_MAX_OUTER_DIMS-1:0][31:0] oob_limit;

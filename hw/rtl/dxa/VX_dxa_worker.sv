@@ -29,7 +29,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `endif
     VX_dxa_worker_req_if.slave req_if,
     VX_mem_bus_if.master gmem_bus_if,
-    VX_mem_bus_if.master smem_bus_if
+    VX_mem_bus_if.master smem_bus_if,
+    output wire busy
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_SPARAM (WORKER_ID)
@@ -141,6 +142,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .active_cta_mask      (active_cta_mask),
         .active_smem_stride   (active_smem_stride)
     );
+
+    // req_if.ready reports setup-slot capacity, not worker idleness. The setup
+    // slot can be idle while the active transfer is still draining.
+    assign busy = transfer_active || !req_if.ready;
 
     // ════════════════════════════════════════════════════════════════════
     // Stage 2: Address Generator

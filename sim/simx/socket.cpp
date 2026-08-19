@@ -16,6 +16,11 @@
 #include "core.h"
 #include "cluster.h"
 #include "constants.h"
+#include "local_mem.h"
+#ifdef VX_CFG_EXT_DXA_ENABLE
+#include "dxa_core.h"
+#include "sfu_unit.h"
+#endif
 
 using namespace vortex;
 
@@ -71,6 +76,45 @@ public:
       (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
     });
 
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    // Instantiate the socket-owned engine before wiring memory so each DXA
+    // output can join the matching socket L2-facing port locally.
+    snprintf(sname, 100, "%s-dxa-core", name.c_str());
+    dxa_core_ = DxaCore::Create(sname, simobject_);
+#endif
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    // Keep latency-sensitive cache traffic ahead of bulk DXA traffic at each
+    // socket memory port.
+    for (uint32_t i = 0; i < VX_CFG_L1_MEM_PORTS; ++i) {
+      const bool has_icache = i < VX_CFG_ICACHE_MEM_PORTS;
+      const bool has_dxa = i < dxa_core_->gmem_req_out.size();
+      const uint32_t num_inputs = 1u + uint32_t(has_icache) + uint32_t(has_dxa);
+
+      snprintf(sname, 100, "%s-socket-mem-arb%d", name.c_str(), i);
+      auto socket_arb = MemArbiter::Create(
+          sname, ArbiterType::Priority, num_inputs, 1);
+
+      uint32_t input = 0;
+      if (has_icache) {
+        icaches_->mem_req_out.at(i).bind(&socket_arb->ReqIn.at(input));
+        socket_arb->RspOut.at(input).bind(&icaches_->mem_rsp_in.at(i));
+        ++input;
+      }
+
+      dcaches_->mem_req_out.at(i).bind(&socket_arb->ReqIn.at(input));
+      socket_arb->RspOut.at(input).bind(&dcaches_->mem_rsp_in.at(i));
+      ++input;
+
+      if (has_dxa) {
+        dxa_core_->gmem_req_out.at(i).bind(&socket_arb->ReqIn.at(input));
+        socket_arb->RspOut.at(input).bind(&dxa_core_->gmem_rsp_in.at(i));
+      }
+
+      socket_arb->ReqOut.at(0).bind(&simobject->mem_req_out.at(i));
+      simobject->mem_rsp_in.at(i).bind(&socket_arb->RspIn.at(0));
+    }
+#else
     // find overlap
     uint32_t overlap = __MIN(VX_CFG_ICACHE_MEM_PORTS, VX_CFG_L1_MEM_PORTS);
 
@@ -100,6 +144,7 @@ public:
         }
       }
     }
+#endif
 
     // create cores
     for (uint32_t i = 0; i < cores_per_socket; ++i) {
@@ -118,9 +163,37 @@ public:
         dcaches_->core_rsp_out.at(i).at(j).bind(&cores_.at(i)->dcache_rsp_in.at(j));
       }
     }
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    // Bind the socket's core request sources and LMEM destinations to the
+    // already-instantiated engine. GMEM was bound to the socket ports above.
+    for (uint32_t c = 0; c < cores_per_socket; ++c) {
+      auto core = cores_.at(c);
+      core->sfu_unit()->dxa_req_out.bind(&dxa_core_->dxa_req_in.at(c));
+    }
+    uint32_t port_dxa = LSU_NUM_REQS;
+  #ifdef VX_CFG_EXT_TCU_ENABLE
+    port_dxa += 1;
+  #endif
+    for (uint32_t c = 0; c < cores_per_socket; ++c) {
+      Core* core = cores_.at(c).get();
+      auto& ch = dxa_core_->lmem_req_out.at(c);
+      ch.bind(&core->local_mem()->Inputs.at(port_dxa));
+      ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
+        if (req.is_write() && req.flags.dxa_notify_done) {
+          uint32_t decoded = bar_decode_id(req.flags.dxa_notify_bar_id, VX_CFG_NUM_BARRIERS);
+          core->barrier_event_release(decoded);
+        }
+      });
+    }
+#endif
   }
 
   bool running() const {
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    if (dxa_core_->running())
+      return true;
+#endif
     for (auto& core : cores_) {
       if (core->running())
         return true;
@@ -148,10 +221,17 @@ public:
     Socket::PerfStats perf_stats;
     perf_stats.icache = icaches_->perf_stats();
     perf_stats.dcache = dcaches_->perf_stats();
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    perf_stats.dxa = dxa_core_->perf_stats();
+#endif
     return perf_stats;
   }
 
   int dcr_write(uint32_t addr, uint32_t value) {
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    if (addr >= VX_DCR_DXA_STATE_BEGIN && addr < VX_DCR_DXA_STATE_END)
+      return dxa_core_->dcr_write(addr, value);
+#endif
     for (auto& core : cores_) {
       int ret = core->dcr_write(addr, value);
       if (ret != 0)
@@ -177,6 +257,10 @@ public:
     return cores_.at(idx);
   }
 
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  DxaCore::Ptr& dxa_core() { return dxa_core_; }
+#endif
+
   void dcache_flush_begin() { dcaches_->flush_begin(); }
   bool dcache_flush_done() const { return dcaches_->flush_done(); }
   void icache_flush_begin() { icaches_->flush_begin(); }
@@ -187,6 +271,9 @@ private:
   std::vector<Core::Ptr>  cores_;
   CacheCluster::Ptr       icaches_;
   CacheCluster::Ptr       dcaches_;
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  DxaCore::Ptr             dxa_core_;
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -245,6 +332,12 @@ int Socket::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
 Core::Ptr& Socket::core(uint32_t idx) {
   return impl_->core(idx);
 }
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+DxaCore::Ptr& Socket::dxa_core() {
+  return impl_->dxa_core();
+}
+#endif
 
 void Socket::dcache_flush_begin() {
   impl_->dcache_flush_begin();

@@ -25,8 +25,9 @@
 // only at a row wrap, so its adds/compares sit on once-per-row paths.
 //
 // Single rolling-cursor scheme: gmem_cursor_r is updated by per-wrap
-// deltas precomputed in setup (delta[0]=stride[0], delta[d>0]=stride[d]-
-// (tile[d-1]-1)*stride[d-1]).
+// deltas precomputed in setup. delta[0]=stride[0]; each higher delta is that
+// dimension's stride minus the cumulative span of all lower dimensions that
+// reset on the odometer wrap.
 
 `include "VX_define.vh"
 
