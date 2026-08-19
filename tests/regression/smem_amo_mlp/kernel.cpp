@@ -36,12 +36,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     old_sums[arg->num_harts + tid] = amoadd_word(target, 1);
     old_sums[2 * arg->num_harts + tid] = amoadd_word(target, uint32_t(-1));
   } else if (arg->mode == SMEM_AMO_SAME_BANK) {
+    // Record every returned old value so the host can check the exact
+    // permutation 0..N-1 (a sum-only oracle can alias, e.g. {0,0,3,3}).
     for (uint32_t i = 0; i < arg->iters; ++i)
-      old_sum += amoadd_word(&bank_words[0], 1);
+      old_sums[tid * arg->iters + i] = amoadd_word(&bank_words[0], 1);
   } else if (arg->mode == SMEM_AMO_ALL_BANKS) {
     auto target = &bank_words[tid % arg->num_banks];
     for (uint32_t i = 0; i < arg->iters; ++i)
-      old_sum += amoadd_word(target, 1);
+      old_sums[tid * arg->iters + i] = amoadd_word(target, 1);
   } else {
     auto target = &private_words[tid];
     for (uint32_t i = 0; i < arg->iters; ++i) {
@@ -50,7 +52,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
       old_sum += old;
     }
   }
-  if (arg->mode != SMEM_AMO_DIRECTED)
+  if (arg->mode == SMEM_PRIVATE_RMW)
     old_sums[tid] = old_sum;
 
   if (needs_sync)

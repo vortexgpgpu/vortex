@@ -100,7 +100,9 @@ int main(int argc, char** argv) {
 
   RT_CHECK(vx_check_occupancy(device, num_harts, lmem_size));
 
-  std::vector<uint32_t> old_sums(3 * num_harts, 0);
+  const size_t old_count = std::max<size_t>(size_t(3) * num_harts,
+                                            size_t(num_harts) * iters);
+  std::vector<uint32_t> old_sums(old_count, 0);
   std::vector<uint32_t> final_values(final_count, 0);
   RT_CHECK(vx_buffer_create(device, old_sums.size() * sizeof(uint32_t),
                             VX_MEM_WRITE, &old_sums_buffer));
@@ -172,24 +174,41 @@ int main(int argc, char** argv) {
     }
   } else {
     for (uint32_t bank = 0; bank < num_banks; ++bank) {
-      uint64_t observed_sum = 0;
+      // Exact-permutation oracle: across all participating harts, the
+      // returned old values must be precisely {0, 1, ..., ops-1}, each seen
+      // once. This catches duplicated, lost, or mis-routed responses that a
+      // sum-only check can alias (e.g. {0,0,3,3} sums like {0,1,2,3}).
       uint32_t participating_harts = 0;
       for (uint32_t hart = 0; hart < num_harts; ++hart) {
         const uint32_t target_bank = mode == SMEM_AMO_SAME_BANK
                                    ? 0 : hart % num_banks;
-        if (target_bank == bank) {
-          observed_sum += old_sums[hart];
-          ++participating_harts;
-        }
+        participating_harts += (target_bank == bank);
       }
       const uint64_t operations = uint64_t(participating_harts) * iters;
-      const uint64_t expected_sum = triangular(operations);
       const uint32_t expected_final = static_cast<uint32_t>(operations);
-      if (final_values[bank] != expected_final || observed_sum != expected_sum) {
+      std::vector<uint32_t> seen(operations, 0);
+      uint32_t range_errors = 0, dup_errors = 0;
+      for (uint32_t hart = 0; hart < num_harts; ++hart) {
+        const uint32_t target_bank = mode == SMEM_AMO_SAME_BANK
+                                   ? 0 : hart % num_banks;
+        if (target_bank != bank)
+          continue;
+        for (uint32_t i = 0; i < iters; ++i) {
+          const uint32_t v = old_sums[size_t(hart) * iters + i];
+          if (v >= operations) { ++range_errors; continue; }
+          dup_errors += (seen[v]++ != 0);
+        }
+      }
+      uint32_t missing = 0;
+      for (uint64_t v = 0; v < operations; ++v)
+        missing += (seen[v] == 0);
+      if (final_values[bank] != expected_final
+       || range_errors || dup_errors || missing) {
         std::cerr << "bank " << bank << ": final=" << final_values[bank]
-                  << " old_sum=" << observed_sum
                   << " expected_final=" << expected_final
-                  << " expected_old_sum=" << expected_sum << std::endl;
+                  << " out_of_range=" << range_errors
+                  << " duplicates=" << dup_errors
+                  << " missing=" << missing << std::endl;
         ++errors;
       }
     }
