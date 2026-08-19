@@ -890,22 +890,30 @@ Vortex runtime and nothing from `$TOOLDIR/firesim` — the transport links
 against XRT directly. Install this component if you intend to elaborate a
 target or build a bitstream.
 
-The install is a single tree at `$TOOLDIR/firesim`, which `config.mk` exposes
-as `$(FIRESIM_PATH)`:
+The layout follows the same split as POCL, Mesa and LLVM — sources under
+`~/dev`, the consumed tree under `$TOOLDIR`:
 
-- the **sources**, a clone of
+- `~/dev/firesim/` — a clone of
   [`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) branch
-  `vortex_3.x` (based on upstream tag 1.21.0), and
-- **`.conda-env/`**, the conda environment FireSim's `build-setup.sh`
-  produces: a JVM, `sbt` and Scala for Golden Gate elaboration, plus
-  `riscv-tools` and `gmp`.
+  `vortex_3.x` (based on upstream tag 1.21.0). This is where FireSim itself is
+  developed and where `git` work happens.
+- `$TOOLDIR/firesim/` — what the Vortex build consumes, exposed by `config.mk`
+  as `$(FIRESIM_PATH)`. Populated either by
+  `ci/toolchain_install.sh --firesim` or, when working from source, by
+  pointing it at the clone.
+
+Unlike POCL or Mesa there is no separate compile-and-install step: FireSim is
+consumed as a source tree, because the Vortex flow stages its Chisel target
+into the checkout and elaborates there. `$TOOLDIR/firesim` is therefore the
+same shape as `~/dev/firesim` rather than an install prefix.
 
 ```bash
-export FIRESIM_PATH=$TOOLDIR/firesim
-
-git clone --branch vortex_3.x https://github.com/vortexgpgpu/firesim.git $FIRESIM_PATH
-cd $FIRESIM_PATH
+git clone --branch vortex_3.x https://github.com/vortexgpgpu/firesim.git ~/dev/firesim
+cd ~/dev/firesim
 ./build-setup.sh --skip-validate
+
+# point the toolchain slot at it (or install the prebuilt bundle instead)
+ln -s ~/dev/firesim $TOOLDIR/firesim
 ```
 
 `build-setup.sh` resolves the conda environment, which dominates the build

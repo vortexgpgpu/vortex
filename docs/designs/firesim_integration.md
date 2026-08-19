@@ -11,12 +11,13 @@ target on a Xilinx Alveo U55C. It covers three things:
    invariants that make the difference between a design that fits and one
    that silently does not.
 
-FireSim itself is an external dependency, cloned from
+FireSim itself is an external dependency, developed in a clone of
 [`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) (branch
-`vortex_3.x`, based on upstream 1.21.0) into `$(FIRESIM_PATH)`, which
-`config.mk` defaults to `$(TOOLDIR)/firesim`. Vortex's own changes to FireSim
-are small — 8 files, ~324 lines — and are bug fixes and U55C platform
-plumbing rather than divergence; see §6.
+`vortex_3.x`, based on upstream 1.21.0) at `~/dev/firesim`, and consumed by
+the Vortex build through `$(FIRESIM_PATH)`, which `config.mk` defaults to
+`$(TOOLDIR)/firesim` — the same source/tool split POCL, Mesa and LLVM use.
+Vortex's own changes to FireSim are small — 8 files, ~324 lines — and are bug
+fixes and U55C platform plumbing rather than divergence; see §6.
 
 For running kernels on hardware generally, see
 [`fpga_setup.md`](../fpga_setup.md); for the other simulation vehicles, see
