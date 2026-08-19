@@ -2,18 +2,28 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Channel order of a B8G8R8A8_UNORM colour attachment.
+ * Output-merger state expressed in channel order, on a B8G8R8A8_UNORM
+ * attachment.
  *
- * The driver advertises both R8G8B8A8_UNORM and B8G8R8A8_UNORM as render
- * targets, and every other test in the suite uses the first. If the fragment
- * output is packed to a fixed byte order regardless of the attachment's
- * format, the two cannot both be right and the wrong one is wrong silently --
- * a rendered frame with its red and blue exchanged, which no coverage count or
- * "is the centre lit" check would notice.
+ * tests/vulkan/bgra covers the fragment colour reaching memory in the
+ * attachment's own order. Two further pieces of state are carried in the same
+ * order and are invisible to that test, because a plain draw uses the
+ * order-free value of each:
  *
- * The fragment colour is (1.0, 0.5, 0.25), three clearly different values, so
- * any permutation of the channels is unambiguous in the read-back bytes. A
- * white or grey test colour would hide precisely this.
+ *   phase 1  the colour write mask, which selects channels. A full mask masks
+ *            nothing, so only a partial one can be observed to select the
+ *            wrong channel.
+ *   phase 2  the constant blend colour, which is a packed pixel in its own
+ *            right. A blend that does not reference it never reads it.
+ *
+ * Both phases render the same fragment colour (1.0, 0.5, 0.25) over the same
+ * clear (0.0, 0.75, 1.0) -- six values, no two of which coincide -- so a
+ * channel taken from the wrong place is unambiguous in the read-back bytes.
+ *
+ * One device and one shader pair serve both phases: they differ only in the
+ * colour-blend state, which is the state under test, and sharing the device
+ * also means the second phase exercises the driver reusing the fragment
+ * variant the first one compiled.
  *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe.
  */
@@ -27,12 +37,63 @@
 #define WIDTH     64u
 #define HEIGHT    64u
 #define FORMAT    VK_FORMAT_B8G8R8A8_UNORM
-/* bgra.frag's colour, quantised. 1.0 -> 255, 0.5*255 = 127.5 -> 128,
- * 0.25*255 = 63.75 -> 64. On a B8G8R8A8 attachment these land in memory as
- * byte0 = B, byte1 = G, byte2 = R. */
-#define EXPECT_R  255
-#define EXPECT_G  128
-#define EXPECT_B  64
+
+/* The render pass clear, as it lands in a B8G8R8A8 texel: byte 0 is blue. */
+#define CLEAR_B   255
+#define CLEAR_G   191
+#define CLEAR_R   0
+
+/* Each phase's expected texel and the signature of the corresponding defect,
+ * both as memory bytes {B, G, R}. Every value is derived in the comment on the
+ * phase table below. */
+struct phase {
+   const char           *name;
+   const char           *what;
+   VkColorComponentFlags write_mask;
+   bool                  blend;
+   float                 blend_const[4];
+   uint8_t               expect[3];
+   uint8_t               wrong[3];
+   const char           *wrong_why;
+};
+
+static const struct phase PHASES[] = {
+   /* Write only red and alpha. Red comes from the draw (1.0 -> 255) and green
+    * and blue stay at the clear. If the mask is expanded to byte lanes in
+    * red-first order while the fragment packs blue-first, the device keeps
+    * lane 0 -- blue -- instead: blue takes the draw's 0.25 and red keeps the
+    * clear's 0. */
+   { "mask", "colour write mask",
+     VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_A_BIT, false,
+     { 0.0f, 0.0f, 0.0f, 0.0f },
+     { CLEAR_B, CLEAR_G, 255 },
+     { 63, CLEAR_G, CLEAR_R },
+     "blue took the draw's red-channel value and red kept the clear, so the "
+     "write mask selected lanes in the wrong channel order" },
+   /* Blend the fragment against the constant colour alone (src = CONSTANT,
+    * dst = ZERO), with three distinct constant channels:
+    *   R = 1.00 * 0.25 = 0.250 -> 64
+    *   G = 0.50 * 1.00 = 0.500 -> 128
+    *   B = 0.25 * 0.50 = 0.125 -> 32
+    * If the constant is packed red-first while the fragment packs blue-first,
+    * red and blue scale by each other's factor: R = 1.00 * 0.50 -> 128 and
+    * B = 0.25 * 0.25 -> 16. */
+   { "blend", "constant blend colour",
+     VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+     VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT, true,
+     { 0.25f, 1.0f, 0.5f, 1.0f },
+     { 32, 128, 64 },
+     { 16, 128, 128 },
+     "red and blue scaled by each other's factor, so the constant blend "
+     "colour was packed in the wrong channel order" },
+};
+#define NUM_PHASES (sizeof(PHASES) / sizeof(PHASES[0]))
+
+/* Three quantisations separate a phase's ideal value from its bytes: the
+ * fragment shader's float-to-UNORM8, the blend constant's, and the merger's own
+ * 8-bit multiply. Each is worth at most an LSB, and every defect signature above
+ * is at least 16 away, so this cannot absorb one. */
+#define TOL 4
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -53,7 +114,9 @@ read_spirv(const char *path, size_t *out_size)
    uint32_t *buf = malloc((size_t)sz);
    if (buf && fread(buf, 1, (size_t)sz, f) != (size_t)sz) { free(buf); buf = NULL; }
    fclose(f);
-   if (buf) *out_size = (size_t)sz;
+   if (buf) {
+      *out_size = (size_t)sz;
+   }
    return buf;
 }
 
@@ -61,10 +124,12 @@ static uint32_t
 find_mem(const VkPhysicalDeviceMemoryProperties *mp, uint32_t bits,
          VkMemoryPropertyFlags want)
 {
-   for (uint32_t i = 0; i < mp->memoryTypeCount; i++)
+   for (uint32_t i = 0; i < mp->memoryTypeCount; i++) {
       if ((bits & (1u << i)) &&
-          (mp->memoryTypes[i].propertyFlags & want) == want)
+          (mp->memoryTypes[i].propertyFlags & want) == want) {
          return i;
+      }
+   }
    return UINT32_MAX;
 }
 
@@ -73,27 +138,28 @@ load_module(VkDevice dev, const char *path)
 {
    size_t sz = 0;
    uint32_t *spv = read_spirv(path, &sz);
-   if (!spv) return VK_NULL_HANDLE;
+   if (!spv) {
+      return VK_NULL_HANDLE;
+   }
    VkShaderModuleCreateInfo smci = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
       .codeSize = sz, .pCode = spv,
    };
    VkShaderModule sm = VK_NULL_HANDLE;
-   if (vkCreateShaderModule(dev, &smci, NULL, &sm) != VK_SUCCESS)
+   if (vkCreateShaderModule(dev, &smci, NULL, &sm) != VK_SUCCESS) {
       sm = VK_NULL_HANDLE;
+   }
    free(spv);
    return sm;
 }
 
-/* The colour of the triangle's centre pixel, filled by render(). */
-static uint8_t centre[4];
-
-/* Draw the triangle and record its centre pixel and its footprint.
- * Returns 0, or -1 on a Vulkan error. */
+/* Draw the triangle under one phase's colour-blend state and report its centre
+ * texel and its footprint. Returns 0, or -1 on a Vulkan error. */
 static int
 render(VkDevice dev, VkQueue queue, uint32_t qf,
        const VkPhysicalDeviceMemoryProperties *mp,
-       VkShaderModule vs, VkShaderModule fs, long *out_covered)
+       VkShaderModule vs, VkShaderModule fs, const struct phase *ph,
+       uint8_t centre[4], long *out_covered)
 {
    VkImageCreateInfo imci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -199,14 +265,25 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
       .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
    };
+   /* Colour comes from the constant alone (src = CONSTANT, dst = ZERO) so the
+    * result depends on the constant's channel order and on nothing else.
+    * Alpha passes the fragment's own through, which is what keeps the covered
+    * texels opaque under both phases. */
    VkPipelineColorBlendAttachmentState cba = {
-      .blendEnable = VK_FALSE,
-      .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+      .blendEnable = ph->blend ? VK_TRUE : VK_FALSE,
+      .srcColorBlendFactor = VK_BLEND_FACTOR_CONSTANT_COLOR,
+      .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+      .colorBlendOp = VK_BLEND_OP_ADD,
+      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+      .alphaBlendOp = VK_BLEND_OP_ADD,
+      .colorWriteMask = ph->write_mask,
    };
    VkPipelineColorBlendStateCreateInfo cb = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
       .attachmentCount = 1, .pAttachments = &cba,
+      .blendConstants = { ph->blend_const[0], ph->blend_const[1],
+                          ph->blend_const[2], ph->blend_const[3] },
    };
    VkGraphicsPipelineCreateInfo gpci = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
@@ -258,7 +335,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
    };
    CHECK(vkBeginCommandBuffer(cmd, &cbbi));
-   VkClearValue clear = { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } };
+   VkClearValue clear = { .color = { .float32 = { 0.0f, 0.75f, 1.0f, 1.0f } } };
    VkRenderPassBeginInfo rpbi = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .renderPass = rp, .framebuffer = fb,
@@ -287,12 +364,16 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
 
    uint8_t *px;
    CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
+   /* Covered means "the draw changed this texel", not "this texel is lit":
+    * under a partial write mask the untouched channels still hold the clear,
+    * which is not black. */
    *out_covered = 0;
    for (uint32_t y = 0; y < HEIGHT; y++) {
       for (uint32_t x = 0; x < WIDTH; x++) {
          const uint8_t *p = px + ((size_t)y * WIDTH + x) * 4;
-         if (p[0] || p[1] || p[2])
+         if (p[0] != CLEAR_B || p[1] != CLEAR_G || p[2] != CLEAR_R) {
             (*out_covered)++;
+         }
       }
    }
    /* The triangle's lower-left corner is at (-0.9,-0.9) and it spans 1.8 NDC on
@@ -314,15 +395,53 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    return 0;
 }
 
+/* Report one phase. Returns true when it passed. */
+static bool
+check_phase(const struct phase *ph, const uint8_t centre[4], long covered)
+{
+   /* Footprint sanity: the triangle spans 1.8 NDC on both axes, ~1659 px on a
+    * 64px framebuffer. If the draw itself went wrong the colours mean nothing.
+    * The mask phase changes only red, so a texel whose red already matched the
+    * draw would not count -- the clear's red is 0 and the draw's is 255, so
+    * none does. */
+   const long EXPECT_PX = 1659;
+   const bool area_ok = covered >= EXPECT_PX - 200 && covered <= EXPECT_PX + 200;
+   bool color_ok = true;
+   for (unsigned i = 0; i < 3; i++) {
+      const int d = (int)centre[i] - (int)ph->expect[i];
+      if (d < -TOL || d > TOL) {
+         color_ok = false;
+      }
+   }
+   if (area_ok && color_ok) {
+      printf("PASSED (bgra_om %s: %s, memory bytes B,G,R = %u,%u,%u over %ld px)\n",
+             ph->name, ph->what, centre[0], centre[1], centre[2], covered);
+      return true;
+   }
+   bool is_wrong_order = true;
+   for (unsigned i = 0; i < 3; i++) {
+      const int d = (int)centre[i] - (int)ph->wrong[i];
+      if (d < -TOL || d > TOL) {
+         is_wrong_order = false;
+      }
+   }
+   printf("FAILED (bgra_om %s: %s, %ld px covered, memory bytes = %u,%u,%u -- "
+          "expected ~%ld px at B,G,R = %u,%u,%u%s%s)\n",
+          ph->name, ph->what, covered, centre[0], centre[1], centre[2],
+          EXPECT_PX, ph->expect[0], ph->expect[1], ph->expect[2],
+          is_wrong_order ? "; " : "", is_wrong_order ? ph->wrong_why : "");
+   return false;
+}
+
 int
 main(int argc, char **argv)
 {
-   const char *vs_path = (argc > 1) ? argv[1] : "bgra.vert.spv";
-   const char *fs_path = (argc > 2) ? argv[2] : "bgra.frag.spv";
+   const char *vs_path = (argc > 1) ? argv[1] : "bgra_om.vert.spv";
+   const char *fs_path = (argc > 2) ? argv[2] : "bgra_om.frag.spv";
 
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-      .pApplicationName = "vortexpipe-bgra",
+      .pApplicationName = "vortexpipe-bgra-om",
       .apiVersion = VK_API_VERSION_1_1,
    };
    const char *inst_exts[] = {
@@ -334,7 +453,9 @@ main(int argc, char **argv)
       .enabledExtensionCount = 1, .ppEnabledExtensionNames = inst_exts,
    };
    VkInstance inst;
-   if (vkCreateInstance(&ici, NULL, &inst) != VK_SUCCESS) return 1;
+   if (vkCreateInstance(&ici, NULL, &inst) != VK_SUCCESS) {
+      return 1;
+   }
 
    uint32_t npd = 1;
    VkPhysicalDevice pd;
@@ -350,8 +471,9 @@ main(int argc, char **argv)
    VkQueueFamilyProperties *qfp = calloc(nqf, sizeof(*qfp));
    vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, qfp);
    uint32_t qf = UINT32_MAX;
-   for (uint32_t i = 0; i < nqf; i++)
+   for (uint32_t i = 0; i < nqf; i++) {
       if (qfp[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) { qf = i; break; }
+   }
    free(qfp);
    if (qf == UINT32_MAX) { fprintf(stderr, "FAILED: no graphics queue\n"); return 1; }
 
@@ -376,45 +498,26 @@ main(int argc, char **argv)
 
    VkShaderModule vs = load_module(dev, vs_path);
    VkShaderModule fs = load_module(dev, fs_path);
-   if (!vs || !fs) return 1;
-
-   long covered = 0;
-   if (render(dev, queue, qf, &mp, vs, fs, &covered) < 0)
+   if (!vs || !fs) {
       return 1;
+   }
+
+   bool ok = true;
+   for (unsigned i = 0; i < NUM_PHASES; i++) {
+      uint8_t centre[4] = { 0, 0, 0, 0 };
+      long covered = 0;
+      if (render(dev, queue, qf, &mp, vs, fs, &PHASES[i], centre, &covered) < 0) {
+         return 1;
+      }
+      if (!check_phase(&PHASES[i], centre, covered)) {
+         ok = false;
+      }
+   }
 
    vkDestroyShaderModule(dev, vs, NULL);
    vkDestroyShaderModule(dev, fs, NULL);
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 
-   /* Footprint sanity: the triangle spans 1.8 NDC on both axes, ~1659 px on a
-    * 64px framebuffer. If the draw itself went wrong the colour below means
-    * nothing.
-    *
-    * Channel order: the centre texel must read B,G,R = 64,128,255 in memory.
-    * Red and blue exchanged -- 255,128,64 -- is the signature of a fragment
-    * packer that ignores the attachment format, which is the defect this test
-    * exists for; the tolerance covers UNORM8 rounding only. */
-   const long EXPECT_PX = 1659;
-   const bool area_ok = covered >= EXPECT_PX - 200 && covered <= EXPECT_PX + 200;
-   /* Byte 0 of a B8G8R8A8 texel is blue and byte 2 is red -- the reverse of
-    * every other test here, which is the whole point. */
-   const int db = (int)centre[0] - EXPECT_B;
-   const int dg = (int)centre[1] - EXPECT_G;
-   const int dr = (int)centre[2] - EXPECT_R;
-   const bool color_ok = dr >= -2 && dr <= 2 && dg >= -2 && dg <= 2 &&
-                         db >= -2 && db <= 2;
-   if (!area_ok || !color_ok) {
-      const bool swapped = centre[0] == EXPECT_R && centre[2] == EXPECT_B;
-      printf("FAILED (bgra: %ld px covered, memory bytes = %u,%u,%u -- expected "
-             "~%ld px at B,G,R = %d,%d,%d%s)\n",
-             covered, centre[0], centre[1], centre[2],
-             EXPECT_PX, EXPECT_B, EXPECT_G, EXPECT_R,
-             swapped ? "; red and blue are exchanged, so the fragment output "
-                       "was packed for R8G8B8A8 into a B8G8R8A8 attachment" : "");
-      return 1;
-   }
-   printf("PASSED (bgra: B8G8R8A8 attachment, memory bytes B,G,R = %u,%u,%u "
-          "over %ld px)\n", centre[0], centre[1], centre[2], covered);
-   return 0;
+   return ok ? 0 : 1;
 }
