@@ -31,14 +31,6 @@
 #define WIDTH   64u
 #define HEIGHT  64u
 
-/* Sample points, as fractions of the render target. The triangle's screen
- * corners are (0.05,0.05), (0.95,0.05) and (0.05,0.95), so its hypotenuse is
- * x+y = 1.0 and every point below sums to 0.90 or less -- inside, and clear of
- * every edge. One sits near each vertex, which is where an interpolated value
- * differs most from a flat one. */
-/* Three points rather than one: gl_SubgroupSize is uniform across the draw, so
- * a disagreement between samples would mean the value is coming from somewhere
- * per-quad rather than from the shader's baked-in constant. */
 /* Three interior points, well away from the target edge. The derivative is
  * constant across a linear varying, so all three must agree; a disagreement
  * would mean it depends on where in the quad grid the pixel lands. */
@@ -56,13 +48,11 @@ static const struct { const char *where; float fx, fy; } SAMPLES[] = {
 #define EXPECT_G  255
 #define EXPECT_B  0
 
-/* The quarter-step bias in the shader makes the byte encoding exact under both
- * truncation and round-to-nearest, so one count of slack is all that is needed.
- *
- * It must stay this tight. The width this test exists to catch is the host
- * rasterizer's 8 against the device's 4 -- a difference of exactly 4 -- so a
- * tolerance of 4 accepts the defect as a pass. That is not hypothetical: this
- * file had TOL 4 and reported PASSED against a build that shaded at width 8. */
+/* The expected values sit at the ends of the range, so one count of slack
+ * covers the UNORM8 encoding without admitting anything else. It must stay this
+ * tight: every failure this test exists to catch moves a channel by the full
+ * 255, and a tolerance chosen loosely enough to matter would have to be large
+ * enough to accept one of them. */
 #define TOL 1
 
 #define CHECK(x) do {                                              \
@@ -210,9 +200,8 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fs, .pName = "main" },
    };
-   /* No vertex input: the vertex shader builds both its positions and its flat
-    * values from gl_VertexIndex, so nothing but the varying transport is under
-    * test. */
+   /* No vertex input: the vertex shader builds its positions and its varying
+    * from gl_VertexIndex, so nothing but the derivative is under test. */
    VkPipelineVertexInputStateCreateInfo vi = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
    };
@@ -359,7 +348,7 @@ main(int argc, char **argv)
 
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-      .pApplicationName = "vortexpipe-subgroup-fs",
+      .pApplicationName = "vortexpipe-deriv",
       .apiVersion = VK_API_VERSION_1_1,
    };
    const char *inst_exts[] = {

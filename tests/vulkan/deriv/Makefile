@@ -1,13 +1,14 @@
 # Copyright © 2026  Vortex GPGPU
 # SPDX-License-Identifier: MIT
 #
-# Subgroup operations in the FRAGMENT stage: gl_SubgroupSize must be the device
-# warp width, not the width the host rasterizer finalized the shader at.
+# Screen-space derivatives: dFdx/dFdy must come from the neighbouring lane of
+# the pixel quad, on both axes.
 #
 #   make            -- build the host binary + SPIR-V
-#   make run-simx   -- shade, then compare against the advertised subgroup size
+#   make run-simx   -- shade, then compare against the derivative the varying
+#                      was constructed to have
 #
-# STRICT stays at the suite default of 1: llvmpipe reports its own width
+# STRICT stays at the suite default of 1: llvmpipe computes derivatives
 # correctly, so a draw that fell back would pass while testing nothing.
 
 ROOT_DIR := $(realpath ../../..)
