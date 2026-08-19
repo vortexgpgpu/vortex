@@ -225,7 +225,7 @@ tests:
   drivers:
   - simx
   app: sgemm2_dxa
-  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_CORES=2
   shape:
     cores: 2
 - id: sgemm2_dxa-6
@@ -233,7 +233,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm2_dxa
-  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_CORES=2
   shape:
     cores: 2
 - id: sgemm2_dxa-7
@@ -241,7 +241,7 @@ tests:
   drivers:
   - simx
   app: sgemm2_dxa
-  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_CORES=2 -DVX_CFG_SOCKET_SIZE=2
   shape:
     cores: 4
 - id: sgemm2_dxa-8
@@ -249,7 +249,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm2_dxa
-  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4 -DVX_CFG_SOCKET_SIZE=2
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_CORES=2 -DVX_CFG_SOCKET_SIZE=2
   shape:
     cores: 4
 - id: sgemm2_dxa-9
@@ -257,7 +257,7 @@ tests:
   drivers:
   - simx
   app: sgemm2_dxa
-  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_CORES=2
   shape:
     cores: 2
     clusters: 2
@@ -266,7 +266,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm2_dxa
-  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_UNITS=4
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_CORES=2
   shape:
     cores: 2
     clusters: 2
@@ -437,3 +437,30 @@ tests:
   app: sgemm_tcu_wg_dxa_mcast
   args: -m 128 -n 128 -k 64
   configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+# ── Added with the socket-level DXA engine move ────────────────────────────
+# Persistent-kernel lifetime: a resident CTA reissues DXA transfers across
+# grid iterations. -b16 fits the default 4-warp x 4-thread single-core shape.
+- id: dxa_copy_persist-1
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy_persist
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+  args: -b16
+# Double-buffered WGMMA+DXA pipeline.
+- id: sgemm_tcu_wg_dxa_db-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu_wg_dxa_db
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+# Socket-level engine sizing: two workers per engine, two sockets.
+- id: dxa_copy-socket2-workers2
+  via: blackbox
+  drivers:
+  - simx
+  app: dxa_copy
+  args: -d2
+  configs: -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_DXA_CORES=2 -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4

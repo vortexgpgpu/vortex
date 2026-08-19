@@ -54,3 +54,29 @@ tests:
     shape: {cores: 4, l2cache: true, l3cache: true}
     args: "-n8"
     tier: full
+  # Shared-memory (LMEM) AMOADD.W: bank-serialized read-modify-write at the
+  # LMEM banks (tests/regression/smem_amo_mlp; closed-form old-value oracles).
+  - id: smem-contention
+    app: smem_amo_mlp
+    drivers: [simx, rtlsim]
+    args: "-m0 -n64"
+    touches: [hw/rtl/mem, sim/simx/mem]
+  - id: smem-directed
+    app: smem_amo_mlp
+    drivers: [simx, rtlsim]
+    args: "-m3"
+    touches: [hw/rtl/mem, sim/simx/mem]
+  - id: smem-banks
+    app: smem_amo_mlp
+    drivers: [simx]
+    args: "-m1 -n64"
+    touches: [hw/rtl/mem, sim/simx/mem]
+    tier: full
+  # 8 warps: deeper same-bank interleaving across warps.
+  - id: smem-warps8
+    app: smem_amo_mlp
+    drivers: [simx]
+    shape: {warps: 8}
+    args: "-m0 -n32"
+    touches: [hw/rtl/mem, sim/simx/mem]
+    tier: full
