@@ -184,6 +184,16 @@ module VX_cp_axil_regfile
     if (is_global(addr, 8'h1C)) return gpu_dev_caps[63:32];
     if (is_global(addr, 8'h20)) return gpu_isa_caps[31:0];
     if (is_global(addr, 8'h24)) return gpu_isa_caps[63:32];
+    // Block padding -- see the 16-byte block note on is_decoded(). Read as
+    // zero; they exist so their enclosing block is fully populated.
+    // 0x28/0x2C are CP_SATP_LO/HI in the software ABI (sw/runtime/common/
+    // device.cpp), i.e. the CP DMA MMU page-table root. This CP has no MMU --
+    // there is no satp anywhere in hw/rtl/cp -- so it correctly reports
+    // VM_ENABLED=0 in CP_DEV_CAPS and the runtime never writes them. Reading
+    // zero is the honest answer; implement them for real if an MMU is added.
+    if (is_global(addr, 8'h0C)) return 32'd0;
+    if (is_global(addr, 8'h28)) return 32'd0;
+    if (is_global(addr, 8'h2C)) return 32'd0;
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00: return r_ring_base[qid][31:0];
@@ -205,6 +215,27 @@ module VX_cp_axil_regfile
     return 32'hDEAD_BEEF;   // returned with DECERR; sentinel aids debug
   endfunction
 
+  // Every 16-byte block must be FULLY populated, or none of it is reachable.
+  //
+  // Measured on V80 hardware 2026-08-14 (80-address sweep, 80/80 fit): a
+  // 16-byte-aligned block answers reads if and only if all four of its words
+  // are decoded here. A partially-populated block DECERRs on *every* word,
+  // including the words that are implemented. Something in the shell ->
+  // s_axi_control path decodes at 128-bit granularity and rejects a block it
+  // cannot fully resolve; the per-word decode below never gets consulted.
+  //
+  // Observed before the padding was added:
+  //   0x000  3/4 implemented (no 0x0C)        -> whole block DECERR
+  //   0x010  4/4                              -> OK
+  //   0x020  2/4 (0x20,0x24 only)             -> whole block DECERR
+  //   0x100/0x110/0x120  4/4                  -> OK
+  //   0x130  1/4 (0x130 only)                 -> whole block DECERR
+  //
+  // That is why CP_CTRL/CP_STATUS/CP_DEV_CAPS and GPU_ISA_CAPS were
+  // unreadable on hardware while CP_CYCLE/GPU_DEV_CAPS in the neighbouring
+  // block worked -- it was never about the registers, only their blocks.
+  //
+  // Consequence: when adding a register, pad its block out to 4 words.
   function automatic logic is_decoded(input logic [ADDR_W-1:0] addr);
     logic [QID_W-1:0] qid;   // populated by decode_queue but unused here
     logic [5:0]       off;
@@ -212,16 +243,22 @@ module VX_cp_axil_regfile
     if (is_global(addr, 8'h00)) return 1'b1;
     if (is_global(addr, 8'h04)) return 1'b1;
     if (is_global(addr, 8'h08)) return 1'b1;
+    if (is_global(addr, 8'h0C)) return 1'b1;   // pad: completes block 0x00
     if (is_global(addr, 8'h10)) return 1'b1;
     if (is_global(addr, 8'h14)) return 1'b1;
     if (is_global(addr, 8'h18)) return 1'b1;
     if (is_global(addr, 8'h1C)) return 1'b1;
     if (is_global(addr, 8'h20)) return 1'b1;
     if (is_global(addr, 8'h24)) return 1'b1;
+    if (is_global(addr, 8'h28)) return 1'b1;   // pad: completes block 0x20
+    if (is_global(addr, 8'h2C)) return 1'b1;   // pad: completes block 0x20
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00, 6'h04, 6'h08, 6'h0C, 6'h10, 6'h14,
-        6'h18, 6'h1C, 6'h20, 6'h24, 6'h28, 6'h2C, 6'h30: return 1'b1;
+        6'h18, 6'h1C, 6'h20, 6'h24, 6'h28, 6'h2C,
+        6'h30,
+        // pad: completes the queue's 0x30 block so Q_LAST_DCR_RSP is reachable
+        6'h34, 6'h38, 6'h3C: return 1'b1;
         default: return 1'b0;
       endcase
     end
