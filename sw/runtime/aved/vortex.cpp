@@ -342,7 +342,7 @@ public:
   // is exactly the `sim_mode_ == false` path.
   int cp_reg_write(uint32_t off, uint32_t value) {
   #ifdef CPP_API
-    if (sim_mode_) {
+    if (sim_mode_ && !staged_cfg_) {
       sim_note_region_addr(off, value);
       // Seed on the first doorbell rather than at queue enable. The harness
       // only advances the clock once the design has been started, and a
@@ -383,7 +383,7 @@ public:
   int cp_reg_read(uint32_t off, uint32_t *value) {
     CHECK_ERR(this->read_register(CP_BASE + off, value), { return err; });
   #ifdef CPP_API
-    if (sim_mode_ && off == CP_Q_SEQNUM) {
+    if (sim_mode_ && !staged_cfg_ && off == CP_Q_SEQNUM) {
       // Refresh only when the CP actually advanced. This register is read in
       // a spin loop, and a fetch per iteration would dominate the run.
       if (!sim_seqnum_valid_ || *value != sim_last_seqnum_) {
@@ -412,7 +412,7 @@ public:
   int host_mem_alloc(uint64_t size, void **host_ptr, uint64_t *cp_addr) {
     uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
   #ifdef CPP_API
-    if (sim_mode_) {
+    if (sim_mode_ && !staged_cfg_) {
       // There is no slave bridge to allocate from, so the CP reaches this
       // region at an address out of one of the linker's simulated memory
       // windows. Take the DDR window (0x600_0000_0000), not the HBM one: HBM
@@ -492,7 +492,7 @@ public:
 
   int host_mem_free(uint64_t cp_addr) {
   #ifdef CPP_API
-    if (sim_mode_) {
+    if (sim_mode_ && !staged_cfg_) {
       std::lock_guard<std::mutex> g(sim_mu_);
       auto sit = sim_regions_.find(cp_addr);
       if (sit == sim_regions_.end()) {
@@ -608,8 +608,32 @@ private:
   // so staging stays off and nothing else in this file changes behaviour.
   void staged_probe() {
     staged_cfg_.reset();
-    if (sim_mode_) {
+    // VORTEX_AVED_FORCE_STAGE exists because this path is otherwise
+    // hardware-only and therefore untestable without a board.
+    //
+    // sim_mode_ normally routes to the sim_* apparatus, which models CP-visible
+    // memory by copying it into the simulator. That is the right default -- the
+    // two mechanisms must not stack -- but it also means the staged path, which
+    // is the one carrying the publish/refresh ordering and the deferred-free
+    // lifetime rules, never executes anywhere except on silicon. A board run
+    // here costs a device reset and can cost a host reset, so "first execution
+    // is on hardware" is a bad trade for the riskiest code in the file.
+    //
+    // With this set, staging runs against the simulated device memory instead:
+    // vrt::Buffer and sync() carry the same API on the simulation platform (the
+    // addresses are drawn from the linker's simulated windows), so the
+    // ordering, the ring exclusion and the pending-free lifetime all get
+    // exercised. Never set it for a hardware run -- there it is already on by
+    // virtue of the vbin, and forcing it changes nothing but the log line.
+    const char* force = getenv("VORTEX_AVED_FORCE_STAGE");
+    const bool force_stage = (force != nullptr && force[0] != '\0'
+                              && force[0] != '0');
+    if (sim_mode_ && !force_stage) {
       return;  // the sim_* path already models this; do not stack the two.
+    }
+    if (sim_mode_ && force_stage) {
+      fprintf(stderr, "[VXDRV] VORTEX_AVED_FORCE_STAGE set: exercising the "
+                      "staged CP path against the simulator\n");
     }
     try {
       staged_cfg_ = vrtKernel_.portMemoryConfig(HOST_PORT_NAME);
