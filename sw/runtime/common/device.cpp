@@ -15,6 +15,7 @@
 #endif
 
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -169,6 +170,7 @@ namespace {
 // CP regfile offsets (CP-internal; backends translate to physical addrs).
 // Matches VX_cp_axil_regfile.
 constexpr uint32_t CP_REG_CTRL          = 0x000;
+constexpr uint32_t CP_REG_STATUS        = 0x004;  // bit0=busy, bit1=error
 constexpr uint32_t CP_DEV_CAPS          = 0x008;  // {VM_ENABLED@24|TID|RING|NQ}
 constexpr uint32_t CP_Q_RING_BASE_LO    = 0x100;
 constexpr uint32_t CP_Q_RING_BASE_HI    = 0x104;
@@ -181,6 +183,7 @@ constexpr uint32_t CP_Q_CONTROL         = 0x11C;
 constexpr uint32_t CP_Q_TAIL_LO         = 0x120;
 constexpr uint32_t CP_Q_TAIL_HI         = 0x124;
 constexpr uint32_t CP_Q_SEQNUM          = 0x128;
+constexpr uint32_t CP_Q_ERROR           = 0x12C;  // RO per-queue error word
 constexpr uint32_t CP_Q_LAST_DCR_RSP    = 0x130;
 constexpr uint32_t CP_SATP_LO           = 0x028;  // CP DMA MMU page-table root
 constexpr uint32_t CP_SATP_HI           = 0x02C;
@@ -271,6 +274,22 @@ vx_result_t Device::cp_init() {
         uint32_t dev_caps = 0;
         if (p->cp_reg_read(CP_DEV_CAPS, &dev_caps) != VX_SUCCESS)
             return VX_ERR_DEVICE_LOST;
+        // An all-ones read is never a valid capability word: bits [31:24] are
+        // hardwired zero by VX_cp_axil_regfile, so 0xFFFFFFFF means the read
+        // did not reach the register (AXI DECERR / no response substitutes
+        // all-ones on the way back). Decoding it would set every capability
+        // bit -- and a spurious VM_ENABLED sends VMManager off to identity-map
+        // 65,536 PTEs one CP round-trip at a time, which presents as a hang at
+        // 100% CPU rather than as the bus error it actually is.
+        // Treat it as "no optional capabilities", which is also the correct
+        // answer for this CP: it has no SATP register, no OP_DRAW, and no
+        // CMD_LAUNCH_QMD (grep hw/rtl/cp -- all three are absent).
+        if (dev_caps == 0xFFFFFFFFu) {
+            printf("[VXDRV] Warning: CP_DEV_CAPS read returned all-ones; the "
+                   "AXI-Lite read did not reach the register. Assuming no "
+                   "optional capabilities (no VM, no DRAW, no QMD).\n");
+            dev_caps = 0;
+        }
         vm_enabled_ = (dev_caps & (1u << 24)) != 0;
         // SUPPORTS_DRAW (bit 25): the CP decodes CMD_DRAW (OP_DRAW). When clear
         // (e.g. an RTL CP without the OP_DRAW mirror yet), vx_enqueue_draw falls
@@ -370,20 +389,9 @@ vx_result_t Device::cp_batch_end() {
     cp_mu_.unlock();                     // release the batch lock before polling
     if (r != VX_SUCCESS) return r;
 
-    // Poll Q_SEQNUM once for the last command in the batch. Reacquire cp_mu_
-    // around each MMIO read so simx's tick() and concurrent posts don't race.
-    for (;;) {
-        uint32_t seqnum32 = 0;
-        {
-            std::lock_guard<std::mutex> g(cp_mu_);
-            r = p->cp_reg_read(CP_Q_SEQNUM, &seqnum32);
-        }
-        if (r != VX_SUCCESS) return r;
-        if (uint64_t(seqnum32) >= target) break;
-    #ifdef SCOPE
-        (void)vx_scope_drain();
-    #endif
-    }
+    // Poll Q_SEQNUM once for the last command in the batch.
+    r = cp_poll_seqnum_(target);
+    if (r != VX_SUCCESS) return r;
     // The batch's trailing CMD_CACHE_FLUSH(es) have retired, so every kernel's
     // writes are coherent: drain the console rings once for the whole batch
     // (deferred from each in-batch cp_submit_launch).
@@ -427,27 +435,101 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         if (r != VX_SUCCESS) return r;
     }   // release cp_mu_ — another submitter can now post its own command
 
-    // 3) Poll Q_SEQNUM. Reacquire cp_mu_ around each individual MMIO read
-    // so simx's tick() (which mutates simulator state) and concurrent
-    // posts from other queues don't race; this still leaves a window
-    // between iterations for other submitters to come in.
+    // 3) Poll Q_SEQNUM.
+    //
+    // COUT is drained post-launch only (see cp_submit_launch). The CP ring is
+    // serial — a COUT CMD_MEM_READ posted here would queue behind the very
+    // command being waited on; mid-launch draining is not possible on a
+    // single-queue CP. A kernel that overruns its COUT ring within one launch
+    // back-pressures until the launch ends.
+    return cp_poll_seqnum_(target);
+}
+
+// Shared by both submit paths. See the declaration in vortex2_internal.h for
+// why this is one function rather than two copies of the loop.
+vx_result_t Device::cp_poll_seqnum_(uint64_t target) {
+    auto* p = platform();
+    const auto   t_start   = std::chrono::steady_clock::now();
+    const char*  to_env    = getenv("VORTEX_CP_POLL_TIMEOUT_S");
+    const double timeout_s = to_env ? atof(to_env) : 0.0;   // 0 = warn only
+    bool warned = false;
+
     for (;;) {
         uint32_t seqnum32 = 0;
         vx_result_t r;
         {
+            // Reacquire cp_mu_ around each individual MMIO read so simx's
+            // tick() (which mutates simulator state) and concurrent posts from
+            // other queues don't race; this still leaves a window between
+            // iterations for other submitters to come in.
             std::lock_guard<std::mutex> g(cp_mu_);
             r = p->cp_reg_read(CP_Q_SEQNUM, &seqnum32);
         }
         if (r != VX_SUCCESS) return r;
         if (uint64_t(seqnum32) >= target) return VX_SUCCESS;
-        // COUT is drained post-launch only (see cp_submit_launch). The CP
-        // ring is serial — a COUT CMD_MEM_READ posted here would queue
-        // behind the very command being waited on; mid-launch draining is not
-        // possible on a single-queue CP. A kernel that overruns its COUT ring
-        // within one launch back-pressures until the launch ends.
+
+        const double elapsed = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - t_start).count();
+
+        if (!warned && elapsed > 10.0) {
+            warned = true;
+            uint32_t status = 0, qerr = 0, ctrl = 0;
+            // Whole per-queue block as well. Measured on hardware 2026-08-18:
+            // CP_CTRL=1, CP_STATUS=0, Q_ERROR=0, Q_SEQNUM=0 with target=1 --
+            // the CP is enabled, reports no error, and is IDLE while a command
+            // sits unretired. It is not failing a descriptor, it never fetches
+            // one. That splits into exactly two causes, and only the queue
+            // block can tell them apart:
+            //   RING_BASE/HEAD/CMPL all zero -> the setup writes never landed.
+            //   RING_BASE plausible, TAIL==0 -> the doorbell never landed.
+            //   both plausible               -> the CP cannot master to that
+            //                                   address (bus-address problem,
+            //                                   not a register problem).
+            uint32_t rb_lo = 0, rb_hi = 0, hd_lo = 0, hd_hi = 0;
+            uint32_t cm_lo = 0, cm_hi = 0, rsz = 0, qctl = 0;
+            uint32_t tl_lo = 0, tl_hi = 0;
+            {
+                std::lock_guard<std::mutex> g(cp_mu_);
+                (void)p->cp_reg_read(CP_REG_STATUS,       &status);
+                (void)p->cp_reg_read(CP_Q_ERROR,          &qerr);
+                (void)p->cp_reg_read(CP_REG_CTRL,         &ctrl);
+                (void)p->cp_reg_read(CP_Q_RING_BASE_LO,   &rb_lo);
+                (void)p->cp_reg_read(CP_Q_RING_BASE_HI,   &rb_hi);
+                (void)p->cp_reg_read(CP_Q_HEAD_ADDR_LO,   &hd_lo);
+                (void)p->cp_reg_read(CP_Q_HEAD_ADDR_HI,   &hd_hi);
+                (void)p->cp_reg_read(CP_Q_CMPL_ADDR_LO,   &cm_lo);
+                (void)p->cp_reg_read(CP_Q_CMPL_ADDR_HI,   &cm_hi);
+                (void)p->cp_reg_read(CP_Q_RING_SIZE_LOG2, &rsz);
+                (void)p->cp_reg_read(CP_Q_CONTROL,        &qctl);
+                (void)p->cp_reg_read(CP_Q_TAIL_LO,        &tl_lo);
+                (void)p->cp_reg_read(CP_Q_TAIL_HI,        &tl_hi);
+            }
+            printf("[VXDRV] Warning: CP has not retired a command in %.0fs.\n"
+                   "[VXDRV]   Q_SEQNUM=%u target=%llu CP_CTRL=0x%08x "
+                   "CP_STATUS=0x%08x Q_ERROR=0x%08x\n"
+                   "[VXDRV]   RING_BASE=0x%08x%08x HEAD_ADDR=0x%08x%08x "
+                   "CMPL_ADDR=0x%08x%08x\n"
+                   "[VXDRV]   RING_SIZE_LOG2=%u Q_CONTROL=0x%08x "
+                   "Q_TAIL=0x%08x%08x\n"
+                   "[VXDRV]   The ring was accepted but nothing is executing. "
+                   "Set VORTEX_CP_POLL_TIMEOUT_S=<sec> to abort instead of "
+                   "spinning.\n",
+                   elapsed, seqnum32, (unsigned long long)target,
+                   ctrl, status, qerr,
+                   rb_hi, rb_lo, hd_hi, hd_lo, cm_hi, cm_lo,
+                   rsz, qctl, tl_hi, tl_lo);
+            fflush(stdout);
+        }
+        if (timeout_s > 0.0 && elapsed > timeout_s) {
+            printf("[VXDRV] Error: CP poll timed out after %.0fs "
+                   "(Q_SEQNUM=%u target=%llu)\n",
+                   elapsed, seqnum32, (unsigned long long)target);
+            fflush(stdout);
+            return VX_ERR_DEVICE_LOST;
+        }
     #ifdef SCOPE
-        // Same discipline for the SCOPE tap rings: drain continuously so
-        // the on-chip ring pauses capture only briefly. Best-effort.
+        // Drain the SCOPE tap rings continuously so the on-chip ring pauses
+        // capture only briefly. Best-effort.
         (void)vx_scope_drain();
     #endif
         // No host sleep: each MMIO read already ticks sim cycles.

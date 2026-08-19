@@ -344,6 +344,20 @@ private:
     // doorbell + poll are deferred to cp_batch_end.
     vx_result_t cp_submit_cl_(const void* cl);
 
+    // Block until the CP has retired seqnum >= target.
+    //
+    // Both submit paths (cp_submit_cl_ non-batch, and cp_batch_end) poll the
+    // same register for the same reason, so they share this one implementation
+    // -- previously each had its own copy of the loop, and instrumenting only
+    // one of them hid the stall that was actually happening in the other.
+    //
+    // A CP that never retires would otherwise spin here forever at 100% CPU
+    // with no output at all, which says nothing about the cause. This reports
+    // the stall (Q_SEQNUM / target / CP_STATUS / Q_ERROR) after ~10s. Warn-only
+    // by default so slow backends (rtlsim) are never failed spuriously; set
+    // VORTEX_CP_POLL_TIMEOUT_S=<seconds> to abort instead.
+    vx_result_t cp_poll_seqnum_(uint64_t target);
+
     // Append one CL at the current tail and reserve its seqnum (bump
     // cp_tail_ + cp_expected_seqnum_). Caller must hold cp_mu_ (directly in
     // the non-batch path, or via cp_batch_begin). No doorbell, no poll.
