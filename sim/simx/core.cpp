@@ -194,7 +194,7 @@ public:
     // on miss, the embedded PTW FSM emits PTE fetches via ReqOut[0]
     // through the same cache hierarchy as regular loads.
     snprintf(sname, 100, "%s-dcache_mmu", name.c_str());
-    dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS);
+    dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS, VX_CFG_TLB_NUM_BANKS);
 
     // Per-core icache MMU (1 port). Fetch reads/writes its upstream
     // channels (ReqIn[0]/RspOut[0]) directly; the downstream side is
@@ -214,6 +214,12 @@ public:
     // (ReqIn[0]/RspOut[0]) is consumed directly by fetch() in on_tick.
     icache_mmu_->ReqOut.at(0).bind(&simobject_->icache_req_out.at(0));
     simobject_->icache_rsp_in.at(0).bind(&icache_mmu_->RspIn.at(0));
+
+    // both MMUs' walk traffic surfaces on the core for the shared walker
+    dcache_mmu_->PtwReqOut.bind(&simobject_->ptw_req_out.at(0));
+    simobject_->ptw_rsp_in.at(0).bind(&dcache_mmu_->PtwRspIn);
+    icache_mmu_->PtwReqOut.bind(&simobject_->ptw_req_out.at(1));
+    simobject_->ptw_rsp_in.at(1).bind(&icache_mmu_->PtwRspIn);
   #else
     // No-VM: direct passthrough.
     for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
@@ -913,6 +919,16 @@ public:
     dcache_mmu_->set_satp(satp);
     icache_mmu_->set_satp(satp);
   }
+
+  void mmu_flush() {
+    dcache_mmu_->flush();
+    icache_mmu_->flush();
+  }
+
+  uint64_t tlb_reads() const     { return dcache_mmu_->tlb_reads() + icache_mmu_->tlb_reads(); }
+  uint64_t tlb_hits() const      { return dcache_mmu_->tlb_hits() + icache_mmu_->tlb_hits(); }
+  uint64_t tlb_misses() const    { return dcache_mmu_->tlb_misses() + icache_mmu_->tlb_misses(); }
+  uint64_t tlb_evictions() const { return dcache_mmu_->tlb_evictions() + icache_mmu_->tlb_evictions(); }
 #endif
 
   PoolAllocator<instr_trace_t, 64>& trace_pool() { return trace_pool_; }
@@ -983,6 +999,10 @@ Core::Core(const SimContext& ctx,
   , icache_rsp_in(1, this)
   , dcache_req_out(VX_CFG_DCACHE_NUM_REQS, this)
   , dcache_rsp_in(VX_CFG_DCACHE_NUM_REQS, this)
+#ifdef VX_CFG_VM_ENABLE
+  , ptw_req_out(2, this)
+  , ptw_rsp_in(2, this)
+#endif
   , core_id_(core_id)
   , socket_(socket)
   , impl_(new Impl(ctx, this))
@@ -1113,4 +1133,9 @@ Word Core::flush_warp_pipeline(uint32_t wid) {
 
 #ifdef VX_CFG_VM_ENABLE
 void Core::set_satp(uint64_t satp) { impl_->set_satp(satp); }
+void Core::mmu_flush() { impl_->mmu_flush(); }
+uint64_t Core::tlb_reads() const { return impl_->tlb_reads(); }
+uint64_t Core::tlb_hits() const { return impl_->tlb_hits(); }
+uint64_t Core::tlb_misses() const { return impl_->tlb_misses(); }
+uint64_t Core::tlb_evictions() const { return impl_->tlb_evictions(); }
 #endif

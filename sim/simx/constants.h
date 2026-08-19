@@ -66,7 +66,8 @@ inline constexpr uint32_t VX_CFG_DCACHE_NUM_REQS	= (VX_CFG_NUM_LSU_BLOCKS * DCAC
 inline constexpr uint32_t NUM_SOCKETS     = __UP(VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE);
 
 inline constexpr uint32_t VX_CFG_L2_NUM_REQS     = NUM_SOCKETS * VX_CFG_L1_MEM_PORTS;
-inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS;
+// Cluster memory ports plus, under VM, the shared page-table walker's port.
+inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS + VX_CFG_VM_ENABLED;
 
 inline constexpr uint32_t PER_ISSUE_WARPS = VX_CFG_NUM_WARPS / VX_CFG_ISSUE_WIDTH;
 inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);

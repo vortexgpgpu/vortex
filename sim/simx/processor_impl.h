@@ -15,6 +15,9 @@
 
 #include "memory.h"
 #include "cache.h"
+#ifdef VX_CFG_VM_ENABLE
+#include "mem/ptw.h"
+#endif
 #include "constants.h"
 #include "cluster.h"
 #include "kmu.h"
@@ -29,6 +32,9 @@ public:
     uint64_t mem_reads = 0;
     uint64_t mem_writes = 0;
     uint64_t mem_latency = 0;
+#ifdef VX_CFG_VM_ENABLE
+    Ptw::PerfStats ptw;
+#endif
   };
 
   ProcessorImpl();
@@ -82,6 +88,9 @@ private:
   Memory::Ptr memsim_;
   RAM*        ram_ = nullptr;   // functional backing store (set by attach_ram)
   Cache::Ptr l3cache_;
+#ifdef VX_CFG_VM_ENABLE
+  Ptw::Ptr ptw_;
+#endif
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;
   uint64_t perf_mem_latency_;

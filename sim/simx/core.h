@@ -18,6 +18,9 @@
 #include <mempool.h>
 #include "types.h"
 #include "instr_trace.h"
+#ifdef VX_CFG_VM_ENABLE
+#include "mem/ptw.h"
+#endif
 #include "VX_config.h"
 
 namespace vortex {
@@ -75,6 +78,13 @@ public:
 
   std::vector<SimChannel<MemReq>> dcache_req_out;
   std::vector<SimChannel<MemRsp>> dcache_rsp_in;
+
+#ifdef VX_CFG_VM_ENABLE
+  // TLB walk requests of the two per-core MMUs ([0]=dcache, [1]=icache),
+  // routed by the processor to the shared page-table walker.
+  std::vector<SimChannel<PtwReq>> ptw_req_out;
+  std::vector<SimChannel<PtwRsp>> ptw_rsp_in;
+#endif
 
   Core(const SimContext& ctx,
        const char* name,
@@ -142,6 +152,15 @@ public:
   // both per-core MMUs (dcache + icache). Translation itself happens
   // asynchronously inside the Mmu SimObject; LSU/fetch emit VAs.
   void set_satp(uint64_t satp);
+
+  // Invalidate both MMU TLBs (DCR cache-flush path).
+  void mmu_flush();
+
+  // MMU perf counters (TLB, icache + dcache summed).
+  uint64_t tlb_reads() const;
+  uint64_t tlb_hits() const;
+  uint64_t tlb_misses() const;
+  uint64_t tlb_evictions() const;
 #endif
 
 

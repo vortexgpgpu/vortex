@@ -221,6 +221,18 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_LMEM_WRITES, lmem_perf.writes);
         CSR_READ_64(VX_CSR_MPM_LMEM_BANK_ST, lmem_perf.bank_stalls);
         CSR_READ_64(VX_CSR_MPM_COALESCER_MISS, coalescer_misses);
+      #ifdef VX_CFG_VM_ENABLE
+        CSR_READ_64(VX_CSR_MPM_TLB_READS, core_->tlb_reads());
+        CSR_READ_64(VX_CSR_MPM_TLB_HITS, core_->tlb_hits());
+        CSR_READ_64(VX_CSR_MPM_TLB_MISSES, core_->tlb_misses());
+        CSR_READ_64(VX_CSR_MPM_TLB_EVICTS, core_->tlb_evictions());
+        CSR_READ_64(VX_CSR_MPM_PTW_WALKS, proc_perf.ptw.walks);
+        CSR_READ_64(VX_CSR_MPM_PTW_LATENCY, proc_perf.ptw.latency);
+        CSR_READ_64(VX_CSR_MPM_PWC1_HITS, proc_perf.ptw.pwc1_hits);
+        CSR_READ_64(VX_CSR_MPM_PWC1_MISSES, proc_perf.ptw.pwc1_misses);
+        CSR_READ_64(VX_CSR_MPM_PWC2_HITS, proc_perf.ptw.pwc2_hits);
+        CSR_READ_64(VX_CSR_MPM_PWC2_MISSES, proc_perf.ptw.pwc2_misses);
+      #endif
         }
       } break;
     #ifdef VX_CFG_EXT_TCU_ENABLE

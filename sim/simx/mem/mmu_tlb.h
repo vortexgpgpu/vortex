@@ -11,24 +11,36 @@
 
 #ifdef VX_CFG_VM_ENABLE
 
+#include <VX_types.h>
 #include <cstdint>
 #include <vector>
 
 namespace vortex {
 
-// Per-core TLB. Small fully-associative CAM of {vpn → ppn} translations
-// with MRU-style eviction. Tracks MMU perf counters (VX_DCR_MPM_CLASS_MEM).
+// Per-core TLB, split into banks selected by the low VPN bits. Each bank is
+// a small fully-associative CAM of {vpn -> ppn} translations with MRU-style
+// eviction; entries carry their page level so superpage leaves match on the
+// VPN bits above that level. Mirrors hw/rtl/mem/VX_mmu_tlb.sv.
 class Tlb {
 public:
-  explicit Tlb(uint32_t size = VX_CFG_TLB_SIZE);
+  explicit Tlb(uint32_t size = VX_CFG_TLB_SIZE, uint32_t num_banks = 1);
 
-  // Returns {hit, ppn} for the given vpn. Increments `reads_` on every
-  // call and `hits_` on a successful lookup.
-  std::pair<bool, uint64_t> lookup(uint64_t vpn);
+  struct LookupResult {
+    bool     hit = false;
+    uint64_t ppn = 0;      // 4 KB-resolved
+    uint8_t  level = 0;
+  };
 
-  // Install a new translation. Evicts a non-MRU entry when the TLB is
-  // full; updates `evictions_` if the chosen slot was previously valid.
-  void fill(uint64_t vpn, uint64_t ppn, uint8_t flags);
+  uint32_t bank_of(uint64_t vpn) const { return vpn & (num_banks_ - 1); }
+
+  // Returns the translation for the given vpn. Increments `reads_` on
+  // every call and `hits_` on a successful lookup.
+  LookupResult lookup(uint64_t vpn);
+
+  // Install a new translation at the given page level. Evicts a non-MRU
+  // entry of the bank when full; updates `evictions_` if the chosen slot
+  // was previously valid.
+  void fill(uint64_t vpn, uint64_t ppn, uint8_t level, uint8_t flags);
 
   // Invalidate every entry (sfence.vma equivalent).
   void flush();
@@ -42,14 +54,19 @@ private:
   struct Entry {
     bool     valid = false;
     bool     mru   = false;
+    uint8_t  level = 0;
     uint64_t vpn   = 0;
     uint64_t ppn   = 0;
     uint8_t  flags = 0;
   };
 
-  // Linear flat array; small enough (typ. 32 entries) for a per-cycle
-  // linear scan to model CAM lookup behavior.
+  static uint64_t level_mask(uint8_t level);
+
+  // Flat array, bank-major; small enough for a linear scan per bank to
+  // model the CAM lookup.
   std::vector<Entry> entries_;
+  uint32_t num_banks_;
+  uint32_t bank_size_;
 
   uint64_t reads_     = 0;
   uint64_t hits_      = 0;

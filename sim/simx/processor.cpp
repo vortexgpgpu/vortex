@@ -13,6 +13,7 @@
 
 #include "processor.h"
 #include "processor_impl.h"
+#include "core.h"
 #include <VX_types.h>
 
 #include <cstdlib>
@@ -61,6 +62,13 @@ ProcessorImpl::ProcessorImpl()
 
   // create L3 cache; when L3 is enabled it is the LLC, otherwise it is a
   // transparent bypass arbiter and the L2 (or L1) is the LLC.
+  // The bypass arbiter serves inputs in power-of-two groups per memory
+  // port, so a request count that is not such a multiple would leave the
+  // last port (the shared page-table walker's) starved; pad the input
+  // count up — the spare ports stay idle.
+  constexpr uint32_t l3_num_inputs = (VX_CFG_L3_NUM_REQS > VX_CFG_L3_MEM_PORTS)
+    ? (VX_CFG_L3_MEM_PORTS << log2ceil((VX_CFG_L3_NUM_REQS + VX_CFG_L3_MEM_PORTS - 1) / VX_CFG_L3_MEM_PORTS))
+    : VX_CFG_L3_NUM_REQS;
   l3cache_ = Cache::Create("l3cache", Cache::Config{
     !VX_CFG_L3_ENABLED,
     log2ceil(VX_CFG_L3_SIZE),  // C
@@ -70,7 +78,7 @@ ProcessorImpl::ProcessorImpl()
     log2ceil(VX_CFG_L3_NUM_WAYS),    // A
     log2ceil(VX_CFG_L3_NUM_BANKS),   // B
     VX_CFG_XLEN,                     // address bits
-    VX_CFG_L3_NUM_REQS,              // request size
+    (uint8_t)l3_num_inputs,          // request size
     VX_CFG_L3_MEM_PORTS,             // memory ports
     VX_CFG_L3_WRITEBACK,             // write-back
     false,                    // write response
@@ -114,6 +122,25 @@ ProcessorImpl::ProcessorImpl()
     memsim_->mem_rsp_out.at(i).bind(&l3cache_->mem_rsp_in.at(i));
   }
 
+#ifdef VX_CFG_VM_ENABLE
+  // shared page-table walker on its dedicated L3 port (the last L3
+  // requestor slot; see VX_CFG_L3_NUM_REQS)
+  ptw_ = Ptw::Create("ptw", VX_CFG_NUM_CLUSTERS * VX_CFG_NUM_CORES * 2);
+  constexpr uint32_t L3_PTW_IDX = VX_CFG_L3_NUM_REQS - 1;
+  ptw_->MemReqOut.bind(&l3cache_->core_req_in.at(L3_PTW_IDX));
+  l3cache_->core_rsp_out.at(L3_PTW_IDX).bind(&ptw_->MemRspIn);
+  for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
+    for (uint32_t j = 0; j < VX_CFG_NUM_CORES; ++j) {
+      auto core = clusters_.at(i)->get_core(j);
+      uint32_t client = (i * VX_CFG_NUM_CORES + j) * 2;
+      for (uint32_t k = 0; k < 2; ++k) {
+        core->ptw_req_out.at(k).bind(&ptw_->ReqIn.at(client + k));
+        ptw_->RspOut.at(client + k).bind(&core->ptw_rsp_in.at(k));
+      }
+    }
+  }
+#endif
+
   // set up memory profiling
   for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
     memsim_->mem_req_in.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
@@ -154,6 +181,9 @@ void ProcessorImpl::attach_ram(RAM* ram) {
 }
 
 void ProcessorImpl::flush_caches() {
+#ifdef VX_CFG_VM_ENABLE
+  ptw_->flush();
+#endif
   // Cache hierarchy is drained inside-out: issue all L1 flush_begin() calls
   // up-front so icache, dcache, and graphics caches flush in parallel, then
   // tick until all surfaces report flush_done().
@@ -161,6 +191,12 @@ void ProcessorImpl::flush_caches() {
   // L1 surfaces: dcache + icache + graphics caches.
   // Write-through surfaces early-exit in Cache::flush_begin().
   for (auto& cluster : clusters_) {
+#ifdef VX_CFG_VM_ENABLE
+    // page tables may change after this flush; drop the cached translations
+    for (uint32_t c = 0; c < VX_CFG_NUM_CORES; ++c) {
+      cluster->get_core(c)->mmu_flush();
+    }
+#endif
     cluster->dcache_flush_begin();
     cluster->icache_flush_begin();
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -334,6 +370,9 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   perf.mem_latency = perf_mem_latency_;
   perf.l3cache     = l3cache_->perf_stats();
   perf.memsim      = memsim_->perf_stats();
+#ifdef VX_CFG_VM_ENABLE
+  perf.ptw         = ptw_->perf_stats();
+#endif
   return perf;
 }
 

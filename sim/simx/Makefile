@@ -57,7 +57,7 @@ endif
 
 # Add VM sources
 ifneq ($(filter -DVX_CFG_VM_ENABLE, $(XCONFIGS)),)
-	SRCS += $(SRC_DIR)/mem/mmu.cpp
+	SRCS += $(SRC_DIR)/mem/mmu.cpp $(SRC_DIR)/mem/ptw.cpp
 	SRCS += $(SRC_DIR)/mem/mmu_tlb.cpp
 endif
 
