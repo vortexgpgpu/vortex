@@ -68,6 +68,11 @@ module VX_core import VX_gpu_pkg::*; #(
     // Global barrier
     VX_gbar_bus_if.master   gbar_bus_if,
 
+`ifdef VX_CFG_VM_ENABLE
+    // Page-table walker
+    VX_ptw_bus_if.master    ptw_bus_if,
+`endif
+
     // Status
     output wire             busy
 );
@@ -523,24 +528,53 @@ module VX_core import VX_gpu_pkg::*; #(
     assign pipeline_perf.mmu.tlb_hits      = dcache_mmu_perf.tlb_hits      + icache_mmu_perf.tlb_hits;
     assign pipeline_perf.mmu.tlb_misses    = dcache_mmu_perf.tlb_misses    + icache_mmu_perf.tlb_misses;
     assign pipeline_perf.mmu.tlb_evictions = dcache_mmu_perf.tlb_evictions + icache_mmu_perf.tlb_evictions;
-    assign pipeline_perf.mmu.ptw_walks     = dcache_mmu_perf.ptw_walks     + icache_mmu_perf.ptw_walks;
-    assign pipeline_perf.mmu.ptw_latency   = dcache_mmu_perf.ptw_latency   + icache_mmu_perf.ptw_latency;
 `endif
+
+    // Both MMUs share the core's walker port. The TLBs are invalidated once
+    // when the DCR cache flush starts so a new launch never sees the previous
+    // launch's translations; the flush request itself is translated too, so
+    // the invalidate must be an edge, not the level of the pending flush.
+    reg dcr_flush_req_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            dcr_flush_req_r <= 1'b0;
+        end else begin
+            dcr_flush_req_r <= dcr_flush_if.req;
+        end
+    end
+    wire mmu_flush = dcr_flush_if.req && ~dcr_flush_req_r;
+
+    VX_ptw_bus_if #(
+        .TAG_WIDTH (PTW_TLB_TAG_WIDTH)
+    ) mmu_ptw_bus_if[2]();
+
+    VX_ptw_arb #(
+        .NUM_INPUTS (2),
+        .TAG_WIDTH  (PTW_TLB_TAG_WIDTH)
+    ) ptw_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (mmu_ptw_bus_if),
+        .bus_out_if (ptw_bus_if)
+    );
 
     // Per-core dcache MMU.
     VX_mmu #(
         .NUM_REQS  (DCACHE_NUM_REQS),
+        .NUM_BANKS (`VX_CFG_TLB_NUM_BANKS),
         .DATA_SIZE (DCACHE_WORD_SIZE),
         .TAG_WIDTH (DCACHE_TAG_WIDTH_BASE)
     ) dcache_mmu (
         .clk           (clk),
         .reset         (reset),
+        .flush         (mmu_flush),
     `ifdef PERF_ENABLE
         .mmu_perf      (dcache_mmu_perf),
     `endif
         .satp          (sched_csr_if.csr_satp),
         .lsu_mem_if    (mmu_dcache_if),
-        .dcache_mem_if (dcache_bus_if)
+        .dcache_mem_if (dcache_bus_if),
+        .ptw_bus_if    (mmu_ptw_bus_if[0])
     );
 
     // Per-core icache MMU. NUM_REQS=1.
@@ -551,17 +585,20 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_mmu #(
         .NUM_REQS  (1),
+        .NUM_BANKS (1),
         .DATA_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_TAG_WIDTH_BASE)
     ) icache_mmu (
         .clk           (clk),
         .reset         (reset),
+        .flush         (mmu_flush),
     `ifdef PERF_ENABLE
         .mmu_perf      (icache_mmu_perf),
     `endif
         .satp          (sched_csr_if.csr_satp),
         .lsu_mem_if    (mmu_icache_if),
-        .dcache_mem_if (icache_mmu_out_if)
+        .dcache_mem_if (icache_mmu_out_if),
+        .ptw_bus_if    (mmu_ptw_bus_if[1])
     );
 
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, icache_mmu_out_if[0]);

@@ -77,6 +77,17 @@ module VX_core_top import VX_gpu_pkg::*;
 );
 
     VX_gbar_bus_if gbar_bus_if();
+
+`ifdef VX_CFG_VM_ENABLE
+    // Standalone core DUT has no shared walker; sink the port idle. A VM
+    // build of this DUT would stall on the first TLB miss by design.
+    VX_ptw_bus_if #(
+        .TAG_WIDTH (PTW_CORE_TAG_WIDTH)
+    ) ptw_bus_if();
+    assign ptw_bus_if.req_ready = 1'b0;
+    assign ptw_bus_if.rsp_valid = 1'b0;
+    assign ptw_bus_if.rsp_data  = '0;
+`endif
     assign gbar_req_valid           = gbar_bus_if.req_valid;
     assign gbar_req_id              = gbar_bus_if.req_data.id;
     assign gbar_req_size_m1         = gbar_bus_if.req_data.size_m1;
@@ -234,6 +245,10 @@ module VX_core_top import VX_gpu_pkg::*;
         .icache_bus_if  (icache_bus_if),
 
         .gbar_bus_if    (gbar_bus_if),
+
+    `ifdef VX_CFG_VM_ENABLE
+        .ptw_bus_if     (ptw_bus_if),
+    `endif
 
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),

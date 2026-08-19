@@ -734,7 +734,9 @@ VX_CSR_MPM_LMEM_BANK_ST = 0xB09  # bank conflicts
 VX_CSR_MPM_LMEM_BANK_ST_H = 0xB89
 VX_CSR_MPM_COALESCER_MISS = 0xB0A  # coalescer misses
 VX_CSR_MPM_COALESCER_MISS_H = 0xB8A
-# VM/MMU (per-core TLB/PTW). Hardware sums icache + dcache MMU counters.
+# VM/MMU. TLB counters are per core (icache + dcache MMU summed); the PTW and
+# page-walk-cache counters belong to the device-level shared walker and read
+# the same value on every core.
 VX_CSR_MPM_TLB_READS    = 0xB0B # total TLB lookups
 VX_CSR_MPM_TLB_READS_H  = 0xB8B
 VX_CSR_MPM_TLB_HITS     = 0xB0C # TLB hits
@@ -743,10 +745,18 @@ VX_CSR_MPM_TLB_MISSES   = 0xB0D # TLB misses (triggered PTW)
 VX_CSR_MPM_TLB_MISSES_H = 0xB8D
 VX_CSR_MPM_TLB_EVICTS   = 0xB0E # TLB evictions on fill
 VX_CSR_MPM_TLB_EVICTS_H = 0xB8E
-VX_CSR_MPM_PTW_WALKS    = 0xB0F # PTW walks completed
+VX_CSR_MPM_PTW_WALKS    = 0xB0F # PTW walks started
 VX_CSR_MPM_PTW_WALKS_H  = 0xB8F
-VX_CSR_MPM_PTW_LATENCY  = 0xB10 # PTW total latency cycles
+VX_CSR_MPM_PTW_LATENCY  = 0xB10 # sum of per-walk latencies (cycles)
 VX_CSR_MPM_PTW_LATENCY_H = 0xB90
+VX_CSR_MPM_PWC1_HITS    = 0xB11 # walks that skipped the top level via the walk cache
+VX_CSR_MPM_PWC1_HITS_H  = 0xB91
+VX_CSR_MPM_PWC1_MISSES  = 0xB12
+VX_CSR_MPM_PWC1_MISSES_H = 0xB92
+VX_CSR_MPM_PWC2_HITS    = 0xB13 # Sv39 only: walks that also skipped the middle level
+VX_CSR_MPM_PWC2_HITS_H  = 0xB93
+VX_CSR_MPM_PWC2_MISSES  = 0xB14
+VX_CSR_MPM_PWC2_MISSES_H = 0xB94
 
 [csr_mpm_dxa]
 # PERF: DXA copy engine (cluster-level, same value on all cores in cluster)

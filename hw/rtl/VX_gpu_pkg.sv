@@ -1066,14 +1066,23 @@ package VX_gpu_pkg;
     } coalescer_perf_t;
 
 `ifdef VX_CFG_VM_ENABLE
+    // Per-core TLB counters (summed over the i/d MMUs of a core).
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] tlb_reads;
         logic [PERF_CTR_BITS-1:0] tlb_hits;
         logic [PERF_CTR_BITS-1:0] tlb_misses;
         logic [PERF_CTR_BITS-1:0] tlb_evictions;
-        logic [PERF_CTR_BITS-1:0] ptw_walks;
-        logic [PERF_CTR_BITS-1:0] ptw_latency;
     } mmu_perf_t;
+
+    // Device-level page-table walker counters (shared PTW + walk caches).
+    typedef struct packed {
+        logic [PERF_CTR_BITS-1:0] walks;
+        logic [PERF_CTR_BITS-1:0] latency;
+        logic [PERF_CTR_BITS-1:0] pwc1_hits;
+        logic [PERF_CTR_BITS-1:0] pwc1_misses;
+        logic [PERF_CTR_BITS-1:0] pwc2_hits;
+        logic [PERF_CTR_BITS-1:0] pwc2_misses;
+    } ptw_perf_t;
 `endif
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
@@ -1157,6 +1166,9 @@ package VX_gpu_pkg;
         lmem_perf_t  lmem;
         coalescer_perf_t coalescer;
         mem_perf_t   mem;
+    `ifdef VX_CFG_VM_ENABLE
+        ptw_perf_t   ptw;
+    `endif
     `ifdef VX_CFG_EXT_DXA_ENABLE
         dxa_perf_t   dxa;
     `endif
@@ -1286,9 +1298,9 @@ package VX_gpu_pkg;
     localparam ICACHE_TAG_WIDTH_BASE = (ICACHE_FETCH_TAG_WIDTH + 1);
 `ifdef VX_CFG_VM_ENABLE
     localparam ICACHE_TLB_SOURCE_BITS = `UP(`CLOG2(1));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam ICACHE_ARB_BITS        = `CLOG2(`CDIV(2 * 1 + 1, 1));
+    // VX_mmu's internal merge_arb folds the bypass and TLB streams
+    // (2*NUM_REQS inputs) onto NUM_REQS outputs.
+    localparam ICACHE_ARB_BITS        = `ARB_SEL_BITS(2 * 1, 1);
     localparam ICACHE_TAG_WIDTH       = (ICACHE_TAG_WIDTH_BASE + ICACHE_TLB_SOURCE_BITS + ICACHE_ARB_BITS);
 `else
     localparam ICACHE_TAG_WIDTH       = ICACHE_TAG_WIDTH_BASE;
@@ -1339,9 +1351,9 @@ package VX_gpu_pkg;
     localparam DCACHE_TAG_WIDTH_BASE = (DCACHE_CORE_TAG_WIDTH + 1);
 `ifdef VX_CFG_VM_ENABLE
     localparam DCACHE_TLB_SOURCE_BITS = `UP(`CLOG2(DCACHE_NUM_REQS));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam DCACHE_ARB_BITS        = `CLOG2(`CDIV(2 * DCACHE_NUM_REQS + 1, DCACHE_NUM_REQS));
+    // VX_mmu's internal merge_arb folds the bypass and TLB streams
+    // (2*NUM_REQS inputs) onto NUM_REQS outputs.
+    localparam DCACHE_ARB_BITS        = `ARB_SEL_BITS(2 * DCACHE_NUM_REQS, DCACHE_NUM_REQS);
     localparam DCACHE_TAG_WIDTH       = (DCACHE_TAG_WIDTH_BASE + DCACHE_TLB_SOURCE_BITS + DCACHE_ARB_BITS);
 `else
     localparam DCACHE_TAG_WIDTH       = DCACHE_TAG_WIDTH_BASE;
@@ -1567,8 +1579,11 @@ package VX_gpu_pkg;
     // Sector = mem transaction granule (= line when 1 sector/line)
     localparam L3_SECTOR_SIZE       = `VX_CFG_L3_SECTOR_SIZE;
 
-    // Input request size
-    localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
+    // Input request size: cluster memory ports plus, under VM, the shared
+    // page-table walker's dedicated port at index L3_PTW_IDX.
+    localparam L3_CLUSTER_REQS      = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
+    localparam L3_PTW_IDX           = L3_CLUSTER_REQS;
+    localparam L3_NUM_REQS	        = L3_CLUSTER_REQS + `VX_CFG_VM_ENABLED;
 
     // Core request tag bits
     localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;
@@ -1584,6 +1599,43 @@ package VX_gpu_pkg;
 `endif
     // L3 is the LLC whenever it is enabled.
     localparam L3_IS_LLC            = `VX_CFG_L3_ENABLED;
+
+    /////////////////////////////// VM Parameters /////////////////////////////
+
+`ifdef VX_CFG_VM_ENABLE
+    // RISC-V Sv32 / Sv39 page-table geometry, derived from the VX_VM_* contract.
+    localparam VM_PAGE_OFFSET_BITS  = `VX_VM_PAGE_LOG2_SIZE;
+    localparam VM_PT_LEVELS         = `VX_VM_PT_LEVEL;
+    localparam VM_PTE_SIZE          = `VX_VM_PTE_SIZE;
+    localparam VM_VPN_LEVEL_BITS    = `CLOG2(`VX_VM_PT_SIZE / `VX_VM_PTE_SIZE);
+    localparam VM_VPN_WIDTH         = VM_PT_LEVELS * VM_VPN_LEVEL_BITS;
+    localparam VM_PPN_WIDTH         = `VX_CFG_MEM_ADDR_WIDTH - VM_PAGE_OFFSET_BITS;
+    localparam VM_LEVEL_BITS        = `UP(`CLOG2(VM_PT_LEVELS));
+    localparam VM_PTE_FLAGS_WIDTH   = 8;
+    localparam VM_PTE_PPN_LSB       = 10;
+
+    localparam VM_PTE_FLAG_V        = 0;
+    localparam VM_PTE_FLAG_R        = 1;
+    localparam VM_PTE_FLAG_W        = 2;
+    localparam VM_PTE_FLAG_X        = 3;
+
+    // PTW bus tag growth along the request path:
+    // TLB banks -> core (i/d select) -> socket -> cluster -> device PTW.
+    localparam PTW_TLB_TAG_WIDTH     = `UP(`CLOG2(`VX_CFG_TLB_NUM_BANKS));
+    localparam PTW_CORE_TAG_WIDTH    = PTW_TLB_TAG_WIDTH + 1;
+    localparam PTW_SOCKET_TAG_WIDTH  = PTW_CORE_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, 1);
+    localparam PTW_CLUSTER_TAG_WIDTH = PTW_SOCKET_TAG_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, 1);
+    localparam PTW_DEV_TAG_WIDTH     = PTW_CLUSTER_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_NUM_CLUSTERS, 1);
+
+    function automatic logic vm_pte_valid(input logic [VM_PTE_FLAGS_WIDTH-1:0] flags);
+        // V=0, or the reserved W-without-R encoding, is an invalid PTE.
+        return flags[VM_PTE_FLAG_V] && !(flags[VM_PTE_FLAG_W] && !flags[VM_PTE_FLAG_R]);
+    endfunction
+
+    function automatic logic vm_pte_is_leaf(input logic [VM_PTE_FLAGS_WIDTH-1:0] flags);
+        return flags[VM_PTE_FLAG_R] || flags[VM_PTE_FLAG_W] || flags[VM_PTE_FLAG_X];
+    endfunction
+`endif
 
     ///////////////////////////////////////////////////////////////////////////
 

@@ -1,203 +1,401 @@
-// Copyright 2024
-// PTW: SV32 page table walker
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 `include "VX_define.vh"
 
+// Shared page-table walker: one instance per device, fed by every core TLB
+// through the VX_ptw_bus_if hierarchy. Up to NUM_WALKERS walks proceed
+// concurrently, each identified by the bus tag of the requesting TLB bank.
+// Page-table entries are fetched on a dedicated L3 port. Non-leaf entries of
+// the upper levels are cached in page-walk caches so that a walk can start
+// one (Sv32) or two (Sv39) levels below the root.
 module VX_mmu_ptw import VX_gpu_pkg::*; #(
-    parameter DATA_SIZE      = DCACHE_WORD_SIZE,
-    parameter TAG_WIDTH      = DCACHE_TAG_WIDTH + `UP(`CLOG2(DCACHE_NUM_REQS)),
-    parameter ADDR_WIDTH     = DCACHE_ADDR_WIDTH,
-    parameter ATTR_WIDTH     = MEM_ATTR_WIDTH
+    parameter NUM_WALKERS   = `VX_CFG_PTW_NUM_WALKERS,
+    parameter PWC_SIZE      = `VX_CFG_PTW_WALK_CACHE_SIZE,
+    parameter TAG_WIDTH     = PTW_DEV_TAG_WIDTH,
+    parameter MEM_DATA_SIZE = L3_WORD_SIZE,
+    parameter MEM_TAG_WIDTH = L3_TAG_WIDTH
 ) (
     input wire clk,
     input wire reset,
-
-    input wire [`VX_CFG_XLEN-1:0] satp,
-
-    input  wire          miss_valid,
-    output wire          miss_ready,
-    input  wire [31:0]   miss_vaddr,
-
-    output wire          fill_valid,
-    input  wire          fill_ready,
-    output wire [31:0]   fill_vaddr,
-    output wire [31:0]   fill_paddr,
-    output wire [7:0]    fill_flags,
-
-    VX_mem_bus_if.master ptw_mem_if,
+    input wire flush,
 
 `ifdef PERF_ENABLE
-    output wire [PERF_CTR_BITS-1:0] perf_ptw_latency
-`else
-    output wire perf_ptw_latency_placeholder
+    output ptw_perf_t       ptw_perf,
 `endif
+
+    VX_ptw_bus_if.slave     ptw_bus_if,
+    VX_mem_bus_if.master    mem_bus_if
 );
+    `STATIC_ASSERT(`IS_POW2(NUM_WALKERS), ("NUM_WALKERS must be a power of 2"))
+    `STATIC_ASSERT((VM_PT_LEVELS == 2) || (VM_PT_LEVELS == 3), ("only Sv32 and Sv39 page tables are supported"))
+    `STATIC_ASSERT(MEM_DATA_SIZE >= VM_PTE_SIZE, ("memory word must hold a PTE"))
 
-    // TAG_WIDTH/ATTR_WIDTH are part of the VX_mem_bus_if parameter
-    // signature; PTW issues with tag='0 and attr='0 and doesn't observe
-    // either on responses, so neither parameter is read here.
-    `UNUSED_PARAM (TAG_WIDTH)
-    `UNUSED_PARAM (ATTR_WIDTH)
+    localparam SLOT_BITS      = `LOG2UP(NUM_WALKERS);
+    localparam MEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(MEM_DATA_SIZE);
+    localparam PTE_SHIFT      = `CLOG2(VM_PTE_SIZE);
+    localparam PTE_BITS       = VM_PTE_SIZE * 8;
+    localparam PTES_PER_WORD  = MEM_DATA_SIZE / VM_PTE_SIZE;
+    localparam PTE_SEL_BITS   = `LOG2UP(PTES_PER_WORD);
+    localparam PWC_KEY_WIDTH  = VM_PPN_WIDTH + VM_VPN_LEVEL_BITS;
+    localparam TOP_LEVEL      = VM_PT_LEVELS - 1;
 
-    // Only the low PPN_WIDTH bits of the root PPN are consumed; the remaining
-    // PPN bits, ASID and MODE are not used by this Sv32 walker.
-    `UNUSED_VAR (satp[`VX_CFG_XLEN-1:20])
+    `STATIC_ASSERT(SLOT_BITS <= (MEM_TAG_WIDTH - UUID_WIDTH), ("walker id does not fit the L3 tag"))
 
-    localparam DATA_WIDTH = DATA_SIZE * 8;
+    typedef enum logic [1:0] {
+        SLOT_IDLE     = 2'd0,
+        SLOT_MEM_REQ  = 2'd1,
+        SLOT_MEM_RSP  = 2'd2,
+        SLOT_DONE     = 2'd3
+    } slot_state_t;
 
-    // SV32 parameters
-    localparam VPN_WIDTH = 20;
-    localparam PPN_WIDTH = VPN_WIDTH;
-    localparam PAGE_OFFSET_BITS = 12;
-    localparam VPN_LEVEL_BITS = 10;
-    localparam PTE_SIZE_BYTES = 4;
-    localparam PTE_SHIFT = `CLOG2(PTE_SIZE_BYTES);
+    typedef struct packed {
+        logic [VM_VPN_WIDTH-1:0]       vpn;
+        logic [VM_PPN_WIDTH-1:0]       root_ppn;
+        logic [VM_PPN_WIDTH-1:0]       cur_ppn;    // table being walked, then the leaf PPN
+        logic [VM_LEVEL_BITS-1:0]      level;
+        logic [VM_PTE_FLAGS_WIDTH-1:0] flags;
+        logic                          fault;
+        logic [`UP(PTE_SEL_BITS)-1:0]  pte_sel;    // PTE index within the fetched word
+        logic [TAG_WIDTH-1:0]          tag;
+    } slot_t;
 
-    // State machine
-    typedef enum logic [2:0] {
-        PTW_IDLE    = 3'd0,
-        PTW_L1_REQ  = 3'd1,
-        PTW_L1_RESP = 3'd2,
-        PTW_L0_REQ  = 3'd3,
-        PTW_L0_RESP = 3'd4,
-        PTW_FILL    = 3'd5
-    } ptw_state_t;
+    slot_state_t slot_state [NUM_WALKERS];
+    slot_t       slots      [NUM_WALKERS];
 
-    ptw_state_t state, state_next;
-
-    // PTW registers
-    reg [31:0] pending_vaddr;
-    reg [PPN_WIDTH-1:0] l1_ppn;
-    reg [PPN_WIDTH-1:0] final_ppn;
-    reg [7:0]  final_flags;
-    reg [31:0] req_pte_addr_r;
-
-    // VPN extraction: SV32 [31:22]=vpn1, [21:12]=vpn0, [11:0]=offset
-    wire [VPN_LEVEL_BITS-1:0] vpn1 = pending_vaddr[31:22];
-    wire [VPN_LEVEL_BITS-1:0] vpn0 = pending_vaddr[21:12];
-
-    // PTE address: (base_ppn << 12) + (vpn << 2)
-    wire [31:0] l1_pte_addr = {satp[PPN_WIDTH-1:0], {PAGE_OFFSET_BITS{1'b0}}} +
-                              {{(32-VPN_LEVEL_BITS-PTE_SHIFT){1'b0}}, vpn1, {PTE_SHIFT{1'b0}}};
-    wire [31:0] l0_pte_addr = {l1_ppn, {PAGE_OFFSET_BITS{1'b0}}} +
-                              {{(32-VPN_LEVEL_BITS-PTE_SHIFT){1'b0}}, vpn0, {PTE_SHIFT{1'b0}}};
-
-    // PTE parsing: [29:10]=PPN, [7:0]=flags
-    localparam NUM_WORDS  = DATA_SIZE / 4;
-    localparam SEL_BITS   = `CLOG2(NUM_WORDS);
-
-    wire [DATA_WIDTH-1:0] rsp_data_full = ptw_mem_if.rsp_data.data;
-
-    // Extract 32-bit PTE from cache line using registered address
-    wire [31:0] pte_data;
-    if (NUM_WORDS > 1) begin : g_pte_select
-        wire [SEL_BITS-1:0] word_sel = req_pte_addr_r[SEL_BITS+1:2];
-        assign pte_data = rsp_data_full[word_sel * 32 +: 32];
-        // Only the word-selector slice of req_pte_addr_r is consumed; the
-        // low two bits are byte-within-word and the high bits live above
-        // the cache-line size.
-        `UNUSED_VAR (req_pte_addr_r[1:0])
-        `UNUSED_VAR (req_pte_addr_r[31:SEL_BITS+2])
-    end else begin : g_pte_direct
-        assign pte_data = rsp_data_full[31:0];
-        `UNUSED_VAR (req_pte_addr_r)
+    wire [NUM_WALKERS-1:0] slot_idle, slot_mem_req, slot_done;
+    for (genvar s = 0; s < NUM_WALKERS; ++s) begin : g_slot_flags
+        assign slot_idle[s]    = (slot_state[s] == SLOT_IDLE);
+        assign slot_mem_req[s] = (slot_state[s] == SLOT_MEM_REQ);
+        assign slot_done[s]    = (slot_state[s] == SLOT_DONE);
     end
 
-    wire [PPN_WIDTH-1:0] pte_ppn = pte_data[29:10];
-    wire [7:0]  pte_flags = pte_data[7:0];
-    // pte_data[31:30] are SV32 "reserved for SW" + N (not modelled); [9:8]
-    // is RSW (reserved for SW). The walker doesn't act on them.
-    `UNUSED_VAR (pte_data[31:30])
-    `UNUSED_VAR (pte_data[9:8])
+    function automatic logic [VM_VPN_LEVEL_BITS-1:0] vpn_slice(
+        input logic [VM_VPN_WIDTH-1:0]  vpn,
+        input logic [VM_LEVEL_BITS-1:0] level
+    );
+        return vpn[level * VM_VPN_LEVEL_BITS +: VM_VPN_LEVEL_BITS];
+    endfunction
 
-    // PTE flag fields are parsed but not yet acted upon; fault handling is not implemented.
-    wire pte_valid = pte_flags[0];
-    wire pte_invalid_combo = ~pte_flags[1] & pte_flags[2];
-    wire pte_is_leaf = pte_flags[1] | pte_flags[2] | pte_flags[3];
-    `UNUSED_VAR (pte_valid)
-    `UNUSED_VAR (pte_invalid_combo)
-    `UNUSED_VAR (pte_is_leaf)
+    // A superpage leaf must have its low PPN bits clear (the page offset
+    // covers them); anything else is a misaligned superpage and faults.
+    function automatic logic superpage_misaligned(
+        input logic [VM_PPN_WIDTH-1:0]  ppn,
+        input logic [VM_LEVEL_BITS-1:0] level
+    );
+        logic [VM_PPN_WIDTH-1:0] mask;
+        mask = (VM_PPN_WIDTH'(1) << (level * VM_VPN_LEVEL_BITS)) - VM_PPN_WIDTH'(1);
+        return |(ppn & mask);
+    endfunction
 
-    // State machine
-    wire mem_req_fire = ptw_mem_if.req_valid && ptw_mem_if.req_ready;
-    wire mem_rsp_fire = ptw_mem_if.rsp_valid && ptw_mem_if.rsp_ready;
+    // -------------------------------------------------------------------------
+    // Walk cache lookup on the incoming request
+    // -------------------------------------------------------------------------
 
-    always_ff @(posedge clk) begin
-        if (reset) begin
-            state <= PTW_IDLE;
-            pending_vaddr <= 32'b0;
-            l1_ppn <= 20'b0;
-            final_ppn <= 20'b0;
-            final_flags <= 8'b0;
-            req_pte_addr_r <= 32'b0;
-        end else begin
-            state <= state_next;
+    wire [VM_VPN_WIDTH-1:0] req_vpn      = ptw_bus_if.req_data.vpn;
+    wire [VM_PPN_WIDTH-1:0] req_root_ppn = ptw_bus_if.req_data.root_ppn;
 
-            case (state)
-                PTW_IDLE: if (miss_valid && miss_ready) pending_vaddr <= miss_vaddr;
-                PTW_L1_REQ: if (mem_req_fire) req_pte_addr_r <= l1_pte_addr;
-                PTW_L0_REQ: if (mem_req_fire) req_pte_addr_r <= l0_pte_addr;
-                PTW_L1_RESP: if (mem_rsp_fire) l1_ppn <= pte_ppn;
-                PTW_L0_RESP: if (mem_rsp_fire) begin
-                    final_ppn <= pte_ppn;
-                    final_flags <= pte_flags;
-                end
-                default: ;
-            endcase
-        end
+    wire                    pwc1_hit;
+    wire [VM_PPN_WIDTH-1:0] pwc1_data;
+    wire                    pwc1_fill_valid;
+    wire [PWC_KEY_WIDTH-1:0] pwc1_fill_key;
+    wire [VM_PPN_WIDTH-1:0] pwc1_fill_data;
+
+    VX_mmu_pwc #(
+        .KEY_WIDTH   (PWC_KEY_WIDTH),
+        .DATA_WIDTH  (VM_PPN_WIDTH),
+        .NUM_ENTRIES (PWC_SIZE)
+    ) pwc1 (
+        .clk         (clk),
+        .reset       (reset),
+        .flush       (flush),
+        .lookup_key  ({req_root_ppn, vpn_slice(req_vpn, VM_LEVEL_BITS'(TOP_LEVEL))}),
+        .lookup_hit  (pwc1_hit),
+        .lookup_data (pwc1_data),
+        .fill_valid  (pwc1_fill_valid),
+        .fill_key    (pwc1_fill_key),
+        .fill_data   (pwc1_fill_data)
+    );
+
+    wire                    pwc2_hit;
+    wire [VM_PPN_WIDTH-1:0] pwc2_data;
+    wire                    pwc2_fill_valid;
+    wire [PWC_KEY_WIDTH-1:0] pwc2_fill_key;
+    wire [VM_PPN_WIDTH-1:0] pwc2_fill_data;
+
+    if (VM_PT_LEVELS == 3) begin : g_pwc2
+        // Level-1 tables are keyed by the level-2 table the first cache
+        // returned, so a double hit skips both upper fetches.
+        VX_mmu_pwc #(
+            .KEY_WIDTH   (PWC_KEY_WIDTH),
+            .DATA_WIDTH  (VM_PPN_WIDTH),
+            .NUM_ENTRIES (PWC_SIZE)
+        ) pwc2 (
+            .clk         (clk),
+            .reset       (reset),
+            .flush       (flush),
+            .lookup_key  ({pwc1_data, vpn_slice(req_vpn, VM_LEVEL_BITS'(1))}),
+            .lookup_hit  (pwc2_hit),
+            .lookup_data (pwc2_data),
+            .fill_valid  (pwc2_fill_valid),
+            .fill_key    (pwc2_fill_key),
+            .fill_data   (pwc2_fill_data)
+        );
+    end else begin : g_no_pwc2
+        `UNUSED_VAR (pwc2_fill_valid)
+        `UNUSED_VAR (pwc2_fill_key)
+        `UNUSED_VAR (pwc2_fill_data)
+        assign pwc2_hit  = 1'b0;
+        assign pwc2_data = '0;
     end
 
-    always_comb begin
-        state_next = state;
-        case (state)
-            PTW_IDLE:    if (miss_valid && miss_ready) state_next = PTW_L1_REQ;
-            PTW_L1_REQ:  if (mem_req_fire) state_next = PTW_L1_RESP;
-            PTW_L1_RESP: if (mem_rsp_fire) state_next = PTW_L0_REQ;
-            PTW_L0_REQ:  if (mem_req_fire) state_next = PTW_L0_RESP;
-            PTW_L0_RESP: if (mem_rsp_fire) state_next = PTW_FILL;
-            PTW_FILL:    if (fill_valid && fill_ready) state_next = PTW_IDLE;
-            default: state_next = PTW_IDLE;
-        endcase
+    wire start_skip2 = pwc1_hit && pwc2_hit;
+    wire start_skip1 = pwc1_hit && !pwc2_hit;
+
+    wire [VM_LEVEL_BITS-1:0] start_level = start_skip2 ? VM_LEVEL_BITS'(TOP_LEVEL - 2) :
+                                           start_skip1 ? VM_LEVEL_BITS'(TOP_LEVEL - 1) :
+                                                         VM_LEVEL_BITS'(TOP_LEVEL);
+    wire [VM_PPN_WIDTH-1:0] start_ppn = start_skip2 ? pwc2_data :
+                                        start_skip1 ? pwc1_data :
+                                                      req_root_ppn;
+
+    // -------------------------------------------------------------------------
+    // Slot allocation
+    // -------------------------------------------------------------------------
+
+    wire [SLOT_BITS-1:0] free_slot;
+    wire                 free_valid;
+
+    VX_priority_encoder #(
+        .N (NUM_WALKERS)
+    ) free_slot_enc (
+        .data_in   (slot_idle),
+        .index_out (free_slot),
+        .valid_out (free_valid),
+        `UNUSED_PIN (onehot_out)
+    );
+
+    assign ptw_bus_if.req_ready = free_valid;
+    wire req_fire = ptw_bus_if.req_valid && ptw_bus_if.req_ready;
+
+    // -------------------------------------------------------------------------
+    // Memory requests: one outstanding fetch per slot, round-robin issue
+    // -------------------------------------------------------------------------
+
+    wire [SLOT_BITS-1:0] mem_slot;
+    wire                 mem_slot_valid;
+
+    VX_rr_arbiter #(
+        .NUM_REQS (NUM_WALKERS)
+    ) mem_arb (
+        .clk          (clk),
+        .reset        (reset),
+        .requests     (slot_mem_req),
+        .grant_index  (mem_slot),
+        .grant_valid  (mem_slot_valid),
+        .grant_ready  (mem_bus_if.req_ready),
+        `UNUSED_PIN (grant_onehot)
+    );
+
+    wire [VM_VPN_LEVEL_BITS-1:0] mem_vpn_slice = vpn_slice(slots[mem_slot].vpn, slots[mem_slot].level);
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] mem_pte_addr = {slots[mem_slot].cur_ppn, {VM_PAGE_OFFSET_BITS{1'b0}}}
+                                                   | `VX_CFG_MEM_ADDR_WIDTH'({mem_vpn_slice, {PTE_SHIFT{1'b0}}});
+
+    assign mem_bus_if.req_valid       = mem_slot_valid;
+    assign mem_bus_if.req_data.rw     = 1'b0;
+    assign mem_bus_if.req_data.addr   = mem_pte_addr[`VX_CFG_MEM_ADDR_WIDTH-1 -: MEM_ADDR_WIDTH];
+    `UNUSED_VAR (mem_pte_addr)
+    assign mem_bus_if.req_data.data   = '0;
+    assign mem_bus_if.req_data.byteen = {MEM_DATA_SIZE{1'b1}};
+    assign mem_bus_if.req_data.attr   = '0;
+    assign mem_bus_if.req_data.tag    = MEM_TAG_WIDTH'(mem_slot);
+
+    wire mem_req_fire = mem_bus_if.req_valid && mem_bus_if.req_ready;
+
+    // -------------------------------------------------------------------------
+    // Memory responses: decode the PTE addressed by the slot
+    // -------------------------------------------------------------------------
+
+    wire [SLOT_BITS-1:0] rsp_slot = SLOT_BITS'(mem_bus_if.rsp_data.tag);
+    wire mem_rsp_fire = mem_bus_if.rsp_valid && mem_bus_if.rsp_ready;
+    // A slot that issued a fetch is always waiting for it.
+    assign mem_bus_if.rsp_ready = 1'b1;
+
+    wire [PTE_BITS-1:0] rsp_pte;
+    if (PTES_PER_WORD > 1) begin : g_pte_select
+        assign rsp_pte = mem_bus_if.rsp_data.data[slots[rsp_slot].pte_sel * PTE_BITS +: PTE_BITS];
+    end else begin : g_pte_single
+        assign rsp_pte = mem_bus_if.rsp_data.data[PTE_BITS-1:0];
     end
 
-    // TLB interface
-    assign miss_ready = (state == PTW_IDLE);
-    assign fill_valid = (state == PTW_FILL);
-    assign fill_vaddr = pending_vaddr;
-    assign fill_paddr = {final_ppn, pending_vaddr[PAGE_OFFSET_BITS-1:0]};
-    assign fill_flags = final_flags;
+    wire [VM_PTE_FLAGS_WIDTH-1:0] rsp_flags = rsp_pte[VM_PTE_FLAGS_WIDTH-1:0];
+    wire [VM_PPN_WIDTH-1:0]       rsp_ppn   = rsp_pte[VM_PTE_PPN_LSB +: VM_PPN_WIDTH];
+    `UNUSED_VAR (rsp_pte)
 
-    // Memory interface
-    wire [31:0] pte_addr = (state == PTW_L1_REQ) ? l1_pte_addr : l0_pte_addr;
-    localparam ADDR_SHIFT = `CLOG2(DATA_SIZE);
-    wire [ADDR_WIDTH-1:0] pte_word_addr = pte_addr[31:ADDR_SHIFT];
-    `UNUSED_VAR (pte_addr[ADDR_SHIFT-1:0])
+    wire [VM_LEVEL_BITS-1:0] rsp_level  = slots[rsp_slot].level;
+    wire rsp_is_leaf  = vm_pte_is_leaf(rsp_flags);
+    wire rsp_fault    = !vm_pte_valid(rsp_flags)
+                     || (!rsp_is_leaf && (rsp_level == '0))
+                     || (rsp_is_leaf && superpage_misaligned(rsp_ppn, rsp_level));
+    wire rsp_descend  = !rsp_fault && !rsp_is_leaf;
 
-    assign ptw_mem_if.req_valid = (state == PTW_L1_REQ) || (state == PTW_L0_REQ);
-    assign ptw_mem_if.req_data.rw = 1'b0;
-    assign ptw_mem_if.req_data.addr = pte_word_addr;
-    assign ptw_mem_if.req_data.data = '0;
-    assign ptw_mem_if.req_data.byteen = {DATA_SIZE{1'b1}};
-    assign ptw_mem_if.req_data.attr = '0;
-    assign ptw_mem_if.req_data.tag = '0;
-    assign ptw_mem_if.rsp_ready = (state == PTW_L1_RESP) || (state == PTW_L0_RESP);
+    assign pwc1_fill_valid = mem_rsp_fire && rsp_descend && (rsp_level == VM_LEVEL_BITS'(TOP_LEVEL));
+    assign pwc1_fill_key   = {slots[rsp_slot].root_ppn, vpn_slice(slots[rsp_slot].vpn, rsp_level)};
+    assign pwc1_fill_data  = rsp_ppn;
 
-    // Performance counters
-`ifdef PERF_ENABLE
-    reg [PERF_CTR_BITS-1:0] perf_ptw_latency_r;
-    wire ptw_active = (state != PTW_IDLE);
+    assign pwc2_fill_valid = mem_rsp_fire && rsp_descend && (rsp_level == VM_LEVEL_BITS'(1)) && (VM_PT_LEVELS == 3);
+    assign pwc2_fill_key   = {slots[rsp_slot].cur_ppn, vpn_slice(slots[rsp_slot].vpn, rsp_level)};
+    assign pwc2_fill_data  = rsp_ppn;
+
+    // -------------------------------------------------------------------------
+    // Completion: hand finished walks back in round-robin order
+    // -------------------------------------------------------------------------
+
+    wire [SLOT_BITS-1:0] done_slot;
+    wire                 done_valid;
+
+    VX_rr_arbiter #(
+        .NUM_REQS (NUM_WALKERS)
+    ) done_arb (
+        .clk          (clk),
+        .reset        (reset),
+        .requests     (slot_done),
+        .grant_index  (done_slot),
+        .grant_valid  (done_valid),
+        .grant_ready  (ptw_bus_if.rsp_ready),
+        `UNUSED_PIN (grant_onehot)
+    );
+
+    assign ptw_bus_if.rsp_valid      = done_valid;
+    assign ptw_bus_if.rsp_data.ppn   = slots[done_slot].cur_ppn;
+    assign ptw_bus_if.rsp_data.level = slots[done_slot].level;
+    assign ptw_bus_if.rsp_data.flags = slots[done_slot].flags;
+    assign ptw_bus_if.rsp_data.fault = slots[done_slot].fault;
+    assign ptw_bus_if.rsp_data.tag   = slots[done_slot].tag;
+
+    wire rsp_fire = ptw_bus_if.rsp_valid && ptw_bus_if.rsp_ready;
+
+    // -------------------------------------------------------------------------
+    // Slot state
+    // -------------------------------------------------------------------------
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_ptw_latency_r <= '0;
-        end else if (ptw_active) begin
-            perf_ptw_latency_r <= perf_ptw_latency_r + PERF_CTR_BITS'(1);
+            for (integer s = 0; s < NUM_WALKERS; ++s) begin
+                slot_state[s] <= SLOT_IDLE;
+            end
+        end else begin
+            if (req_fire) begin
+                slot_state[free_slot]      <= SLOT_MEM_REQ;
+                slots[free_slot].vpn       <= req_vpn;
+                slots[free_slot].root_ppn  <= req_root_ppn;
+                slots[free_slot].cur_ppn   <= start_ppn;
+                slots[free_slot].level     <= start_level;
+                slots[free_slot].flags     <= '0;
+                slots[free_slot].fault     <= 1'b0;
+                slots[free_slot].tag       <= ptw_bus_if.req_data.tag;
+            end
+            if (mem_req_fire) begin
+                slot_state[mem_slot]       <= SLOT_MEM_RSP;
+                slots[mem_slot].pte_sel    <= mem_pte_addr[PTE_SHIFT +: `UP(PTE_SEL_BITS)];
+            end
+            if (mem_rsp_fire) begin
+                if (rsp_descend) begin
+                    slot_state[rsp_slot]   <= SLOT_MEM_REQ;
+                    slots[rsp_slot].cur_ppn <= rsp_ppn;
+                    slots[rsp_slot].level  <= rsp_level - VM_LEVEL_BITS'(1);
+                end else begin
+                    slot_state[rsp_slot]   <= SLOT_DONE;
+                    slots[rsp_slot].cur_ppn <= rsp_ppn;
+                    slots[rsp_slot].flags  <= rsp_flags;
+                    slots[rsp_slot].fault  <= rsp_fault;
+                end
+            end
+            if (rsp_fire) begin
+                slot_state[done_slot]      <= SLOT_IDLE;
+            end
         end
     end
 
-    assign perf_ptw_latency = perf_ptw_latency_r;
-`else
-    assign perf_ptw_latency_placeholder = 1'b0;
+`ifdef SIMULATION
+    always @(posedge clk) begin
+        if (!reset && mem_rsp_fire && rsp_fault) begin
+            `ERROR(("%t: *** %s page fault: vpn=0x%0h level=%0d pte=0x%0h", $time, "ptw", slots[rsp_slot].vpn, rsp_level, rsp_pte));
+        end
+    end
+`endif
+
+`ifdef DBG_TRACE_MMU
+    always @(posedge clk) begin
+        if (req_fire) begin
+            `TRACE(2, ("%t: ptw-req: slot=%0d, vpn=0x%0h, root=0x%0h, level=%0d, tag=0x%0h\n", $time, free_slot, req_vpn, req_root_ppn, start_level, ptw_bus_if.req_data.tag))
+        end
+        if (mem_req_fire) begin
+            `TRACE(2, ("%t: ptw-mem-req: slot=%0d, addr=0x%0h, level=%0d\n", $time, mem_slot, mem_pte_addr, slots[mem_slot].level))
+        end
+        if (mem_rsp_fire) begin
+            `TRACE(2, ("%t: ptw-mem-rsp: slot=%0d, pte=0x%0h, leaf=%b, fault=%b\n", $time, rsp_slot, rsp_pte, rsp_is_leaf, rsp_fault))
+        end
+        if (rsp_fire) begin
+            `TRACE(2, ("%t: ptw-rsp: slot=%0d, ppn=0x%0h, level=%0d, fault=%b, tag=0x%0h\n", $time, done_slot, slots[done_slot].cur_ppn, slots[done_slot].level, slots[done_slot].fault, slots[done_slot].tag))
+        end
+    end
+`endif
+
+    // -------------------------------------------------------------------------
+    // Performance counters
+    // -------------------------------------------------------------------------
+
+`ifdef PERF_ENABLE
+    wire [NUM_WALKERS-1:0] slot_active = ~slot_idle;
+    wire [`CLOG2(NUM_WALKERS+1)-1:0] active_count;
+    `POP_COUNT(active_count, slot_active);
+
+    reg [PERF_CTR_BITS-1:0] perf_walks_r, perf_latency_r;
+    reg [PERF_CTR_BITS-1:0] perf_pwc1_hits_r, perf_pwc1_misses_r;
+    reg [PERF_CTR_BITS-1:0] perf_pwc2_hits_r, perf_pwc2_misses_r;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_walks_r       <= '0;
+            perf_latency_r     <= '0;
+            perf_pwc1_hits_r   <= '0;
+            perf_pwc1_misses_r <= '0;
+            perf_pwc2_hits_r   <= '0;
+            perf_pwc2_misses_r <= '0;
+        end else begin
+            perf_latency_r <= perf_latency_r + PERF_CTR_BITS'(active_count);
+            if (req_fire) begin
+                perf_walks_r <= perf_walks_r + PERF_CTR_BITS'(1);
+                if (pwc1_hit) begin
+                    perf_pwc1_hits_r <= perf_pwc1_hits_r + PERF_CTR_BITS'(1);
+                    if (VM_PT_LEVELS == 3) begin
+                        if (pwc2_hit) perf_pwc2_hits_r   <= perf_pwc2_hits_r + PERF_CTR_BITS'(1);
+                        else          perf_pwc2_misses_r <= perf_pwc2_misses_r + PERF_CTR_BITS'(1);
+                    end
+                end else begin
+                    perf_pwc1_misses_r <= perf_pwc1_misses_r + PERF_CTR_BITS'(1);
+                end
+            end
+        end
+    end
+
+    assign ptw_perf.walks       = perf_walks_r;
+    assign ptw_perf.latency     = perf_latency_r;
+    assign ptw_perf.pwc1_hits   = perf_pwc1_hits_r;
+    assign ptw_perf.pwc1_misses = perf_pwc1_misses_r;
+    assign ptw_perf.pwc2_hits   = perf_pwc2_hits_r;
+    assign ptw_perf.pwc2_misses = perf_pwc2_misses_r;
 `endif
 
 endmodule

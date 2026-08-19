@@ -45,6 +45,11 @@ module VX_cluster import VX_gpu_pkg::*;
     VX_raster_launch_if.slave   raster_launch_if[1],
 `endif
 
+`ifdef VX_CFG_VM_ENABLE
+    // Page-table walker
+    VX_ptw_bus_if.master        ptw_bus_if,
+`endif
+
     // Status
     output wire                 busy
 );
@@ -127,6 +132,24 @@ module VX_cluster import VX_gpu_pkg::*;
         .reset       (reset),
         .gbar_bus_if (gbar_bus_if)
     );
+
+`ifdef VX_CFG_VM_ENABLE
+    VX_ptw_bus_if #(
+        .TAG_WIDTH (PTW_SOCKET_TAG_WIDTH)
+    ) per_socket_ptw_bus_if[NUM_SOCKETS]();
+
+    VX_ptw_arb #(
+        .NUM_INPUTS  (NUM_SOCKETS),
+        .TAG_WIDTH   (PTW_SOCKET_TAG_WIDTH),
+        .REQ_OUT_BUF ((NUM_SOCKETS > 1) ? 3 : 0),
+        .RSP_OUT_BUF ((NUM_SOCKETS > 1) ? 3 : 0)
+    ) ptw_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_socket_ptw_bus_if),
+        .bus_out_if (ptw_bus_if)
+    );
+`endif
 
     // L2 input buses (post-arb tag width when DXA enabled)
     VX_mem_bus_if #(
@@ -438,6 +461,10 @@ module VX_cluster import VX_gpu_pkg::*;
             .kmu_bus_if     (per_socket_kmu_bus_if[socket_id +: 1]),
 
             .gbar_bus_if    (per_socket_gbar_bus_if[socket_id]),
+
+        `ifdef VX_CFG_VM_ENABLE
+            .ptw_bus_if     (per_socket_ptw_bus_if[socket_id]),
+        `endif
 
             .busy           (per_socket_busy[socket_id])
         );

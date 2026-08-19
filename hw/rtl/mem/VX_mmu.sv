@@ -1,18 +1,21 @@
 // Copyright 2024
-// MMU: TLB + PTW for VA→PA translation
+// MMU: per-core TLB in front of a cache port; misses are walked by the
+// device-level shared page-table walker over the VX_ptw_bus_if hierarchy.
 
 `include "VX_define.vh"
 
 module VX_mmu import VX_gpu_pkg::*; #(
     parameter NUM_REQS       = DCACHE_NUM_REQS,
+    parameter NUM_BANKS      = 1,
     parameter DATA_SIZE      = DCACHE_WORD_SIZE,
     parameter TAG_WIDTH      = DCACHE_TAG_WIDTH_BASE,
     parameter ADDR_WIDTH     = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE),
-    parameter ATTR_WIDTH    = MEM_ATTR_WIDTH,
+    parameter ATTR_WIDTH     = MEM_ATTR_WIDTH,
     parameter EBUF_SIZE      = 2
 ) (
     input wire clk,
     input wire reset,
+    input wire flush,
 
 `ifdef PERF_ENABLE
     output mmu_perf_t    mmu_perf,
@@ -21,7 +24,9 @@ module VX_mmu import VX_gpu_pkg::*; #(
     input wire [`VX_CFG_XLEN-1:0] satp,
 
     VX_mem_bus_if.slave  lsu_mem_if [NUM_REQS],
-    VX_mem_bus_if.master dcache_mem_if [NUM_REQS]
+    VX_mem_bus_if.master dcache_mem_if [NUM_REQS],
+
+    VX_ptw_bus_if.master ptw_bus_if
 );
 
     // =========================================================================
@@ -42,6 +47,10 @@ module VX_mmu import VX_gpu_pkg::*; #(
 `else
     wire satp_translate = satp[`VX_CFG_XLEN-1];
 `endif
+
+    // The root PPN rides along with every walk request; ASID is not used.
+    wire [VM_PPN_WIDTH-1:0] satp_root_ppn = satp[VM_PPN_WIDTH-1:0];
+    `UNUSED_VAR (satp)
 
     function automatic logic needs_translation(input logic [31:0] full_addr);
         // full_addr currently not consumed — only the SATP mode gates translation.
@@ -82,24 +91,12 @@ module VX_mmu import VX_gpu_pkg::*; #(
         .ATTR_WIDTH (ATTR_WIDTH)
     ) bypass_dcache_if[NUM_REQS]();
 
+    // [0..NUM_REQS-1]=bypass, [NUM_REQS..2*NUM_REQS-1]=TLB
     VX_mem_bus_if #(
         .DATA_SIZE   (DATA_SIZE),
         .TAG_WIDTH   (TAG_WIDTH_TLB),
         .ATTR_WIDTH (ATTR_WIDTH)
-    ) ptw_mem_if();
-
-`ifdef PERF_ENABLE
-    mmu_perf_t mmu_perf_tlb;
-    `UNUSED_VAR (mmu_perf_tlb)
-    wire [PERF_CTR_BITS-1:0] ptw_latency_counter;
-`endif
-
-    // [0..NUM_REQS-1]=bypass, [NUM_REQS..2*NUM_REQS-1]=TLB, [2*NUM_REQS]=PTW
-    VX_mem_bus_if #(
-        .DATA_SIZE   (DATA_SIZE),
-        .TAG_WIDTH   (TAG_WIDTH_TLB),
-        .ATTR_WIDTH (ATTR_WIDTH)
-    ) merge_in_if[2 * NUM_REQS + 1]();
+    ) merge_in_if[2 * NUM_REQS]();
 
     // =========================================================================
     // Elastic Buffers (TLB path only)
@@ -180,75 +177,30 @@ module VX_mmu import VX_gpu_pkg::*; #(
     end
 
     // =========================================================================
-    // TLB Miss/Fill Interface
-    // =========================================================================
-
-    wire        tlb_miss_valid;
-    wire        tlb_miss_ready;
-    wire [31:0] tlb_miss_vaddr;
-
-    wire        tlb_fill_valid;
-    wire        tlb_fill_ready;
-    wire [31:0] tlb_fill_vaddr;
-    wire [31:0] tlb_fill_paddr;
-    wire [7:0]  tlb_fill_flags;
-
-    // =========================================================================
     // TLB Module
     // =========================================================================
 
     VX_mmu_tlb #(
         .NUM_REQS      (NUM_REQS),
+        .NUM_BANKS     (NUM_BANKS),
         .DATA_SIZE     (DATA_SIZE),
         .TAG_WIDTH_IN  (TAG_WIDTH),
         .TAG_WIDTH_OUT (TAG_WIDTH_TLB),
         .ADDR_WIDTH    (ADDR_WIDTH),
-        .ATTR_WIDTH   (ATTR_WIDTH)
+        .ATTR_WIDTH    (ATTR_WIDTH)
     ) tlb_unit (
         .clk           (clk),
         .reset         (reset),
+        .flush         (flush),
+        .root_ppn      (satp_root_ppn),
     `ifdef PERF_ENABLE
-        .mmu_perf      (mmu_perf_tlb),
+        .mmu_perf      (mmu_perf),
+    `else
+        `UNUSED_PIN (mmu_perf_placeholder),
     `endif
         .tlb_in_if     (buffered_if),
         .tlb_out_if    (tlb_out_if),
-        .miss_valid    (tlb_miss_valid),
-        .miss_ready    (tlb_miss_ready),
-        .miss_vaddr    (tlb_miss_vaddr),
-        .fill_valid    (tlb_fill_valid),
-        .fill_ready    (tlb_fill_ready),
-        .fill_vaddr    (tlb_fill_vaddr),
-        .fill_paddr    (tlb_fill_paddr),
-        .fill_flags    (tlb_fill_flags)
-    );
-
-    // =========================================================================
-    // PTW Module
-    // =========================================================================
-
-    VX_mmu_ptw #(
-        .DATA_SIZE     (DATA_SIZE),
-        .TAG_WIDTH     (TAG_WIDTH_TLB),
-        .ADDR_WIDTH    (ADDR_WIDTH),
-        .ATTR_WIDTH   (ATTR_WIDTH)
-    ) ptw_unit (
-        .clk           (clk),
-        .reset         (reset),
-        .satp          (satp),
-        .miss_valid    (tlb_miss_valid),
-        .miss_ready    (tlb_miss_ready),
-        .miss_vaddr    (tlb_miss_vaddr),
-        .fill_valid    (tlb_fill_valid),
-        .fill_ready    (tlb_fill_ready),
-        .fill_vaddr    (tlb_fill_vaddr),
-        .fill_paddr    (tlb_fill_paddr),
-        .fill_flags    (tlb_fill_flags),
-        .ptw_mem_if    (ptw_mem_if),
-    `ifdef PERF_ENABLE
-        .perf_ptw_latency (ptw_latency_counter)
-    `else
-        `UNUSED_PIN (perf_ptw_latency_placeholder)
-    `endif
+        .ptw_bus_if    (ptw_bus_if)
     );
 
     // =========================================================================
@@ -298,19 +250,12 @@ module VX_mmu import VX_gpu_pkg::*; #(
         assign merge_in_if[NUM_REQS + i].rsp_ready = tlb_out_if[i].rsp_ready;
     end
 
-    assign merge_in_if[2 * NUM_REQS].req_valid = ptw_mem_if.req_valid;
-    assign merge_in_if[2 * NUM_REQS].req_data  = ptw_mem_if.req_data;
-    assign ptw_mem_if.req_ready            = merge_in_if[2 * NUM_REQS].req_ready;
-    assign ptw_mem_if.rsp_valid            = merge_in_if[2 * NUM_REQS].rsp_valid;
-    assign ptw_mem_if.rsp_data             = merge_in_if[2 * NUM_REQS].rsp_data;
-    assign merge_in_if[2 * NUM_REQS].rsp_ready = ptw_mem_if.rsp_ready;
-
     // =========================================================================
     // Merge Arbiter
     // =========================================================================
 
     VX_mem_bus_arb #(
-        .NUM_INPUTS     (2 * NUM_REQS + 1),
+        .NUM_INPUTS     (2 * NUM_REQS),
         .NUM_OUTPUTS    (NUM_REQS),
         .DATA_SIZE      (DATA_SIZE),
         .TAG_WIDTH      (TAG_WIDTH_TLB),
@@ -382,18 +327,5 @@ module VX_mmu import VX_gpu_pkg::*; #(
         assign lsu_mem_if[i].rsp_data.tag = rsp_arb_data_out[TAG_WIDTH-1:0];
 
     end
-
-    // =========================================================================
-    // Performance Counters
-    // =========================================================================
-
-`ifdef PERF_ENABLE
-    assign mmu_perf.tlb_reads     = mmu_perf_tlb.tlb_reads;
-    assign mmu_perf.tlb_hits      = mmu_perf_tlb.tlb_hits;
-    assign mmu_perf.tlb_misses    = mmu_perf_tlb.tlb_misses;
-    assign mmu_perf.tlb_evictions = mmu_perf_tlb.tlb_evictions;
-    assign mmu_perf.ptw_walks     = mmu_perf_tlb.ptw_walks;
-    assign mmu_perf.ptw_latency   = ptw_latency_counter;
-`endif
 
 endmodule

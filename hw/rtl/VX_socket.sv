@@ -70,6 +70,11 @@ module VX_socket import VX_gpu_pkg::*;
     // Global barrier
     VX_gbar_bus_if.master   gbar_bus_if,
 
+`ifdef VX_CFG_VM_ENABLE
+    // Page-table walker
+    VX_ptw_bus_if.master    ptw_bus_if,
+`endif
+
     // Status
     output wire             busy
 );
@@ -104,6 +109,24 @@ module VX_socket import VX_gpu_pkg::*;
         .bus_in_if  (per_core_gbar_bus_if),
         .bus_out_if (gbar_bus_if)
     );
+
+`ifdef VX_CFG_VM_ENABLE
+    VX_ptw_bus_if #(
+        .TAG_WIDTH (PTW_CORE_TAG_WIDTH)
+    ) per_core_ptw_bus_if[`VX_CFG_SOCKET_SIZE]();
+
+    VX_ptw_arb #(
+        .NUM_INPUTS  (`VX_CFG_SOCKET_SIZE),
+        .TAG_WIDTH   (PTW_CORE_TAG_WIDTH),
+        .REQ_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0),
+        .RSP_OUT_BUF ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
+    ) ptw_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_core_ptw_bus_if),
+        .bus_out_if (ptw_bus_if)
+    );
+`endif
 
     ///////////////////////////////////////////////////////////////////////////
 
@@ -507,6 +530,10 @@ module VX_socket import VX_gpu_pkg::*;
             .kmu_bus_if     (per_core_kmu_bus_if[core_id]),
 
             .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
+
+        `ifdef VX_CFG_VM_ENABLE
+            .ptw_bus_if     (per_core_ptw_bus_if[core_id]),
+        `endif
 
             .busy           (per_core_busy[core_id])
         );

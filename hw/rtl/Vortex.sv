@@ -106,18 +106,25 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
 `ifdef PERF_ENABLE
     cache_perf_t l3_perf;
     mem_perf_t mem_perf;
+`ifdef VX_CFG_VM_ENABLE
+    ptw_perf_t ptw_perf;
+`endif
     sysmem_perf_t sysmem_perf;
     always @(*) begin
         sysmem_perf = '0;
         sysmem_perf.l3cache = l3_perf;
         sysmem_perf.mem = mem_perf;
+    `ifdef VX_CFG_VM_ENABLE
+        sysmem_perf.ptw = ptw_perf;
+    `endif
     end
 `endif
 
+    // L3 requestors: the cluster memory ports, then the shared PTW port.
     VX_mem_bus_if #(
         .DATA_SIZE (L2_SECTOR_SIZE),
         .TAG_WIDTH (L3_TAG_WIDTH)
-    ) per_cluster_mem_bus_if[`VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS]();
+    ) per_cluster_mem_bus_if[L3_NUM_REQS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (L3_SECTOR_SIZE),
@@ -215,6 +222,51 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
         .bus_out_if (per_cluster_dcr_bus_if)
     );
 
+`ifdef VX_CFG_VM_ENABLE
+    VX_ptw_bus_if #(
+        .TAG_WIDTH (PTW_CLUSTER_TAG_WIDTH)
+    ) per_cluster_ptw_bus_if[`VX_CFG_NUM_CLUSTERS]();
+
+    VX_ptw_bus_if #(
+        .TAG_WIDTH (PTW_DEV_TAG_WIDTH)
+    ) ptw_bus_if();
+
+    VX_ptw_arb #(
+        .NUM_INPUTS  (`VX_CFG_NUM_CLUSTERS),
+        .TAG_WIDTH   (PTW_CLUSTER_TAG_WIDTH),
+        .REQ_OUT_BUF ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0),
+        .RSP_OUT_BUF ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0)
+    ) ptw_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_cluster_ptw_bus_if),
+        .bus_out_if (ptw_bus_if)
+    );
+
+    // The walk caches hold page-table contents; drop them whenever the host
+    // flushes the caches, which it does before page tables change.
+    wire ptw_flush = dcr_bus_if.req_valid
+                  && ~dcr_bus_if.req_data.rw
+                  && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH);
+
+    VX_mmu_ptw #(
+        .NUM_WALKERS   (`VX_CFG_PTW_NUM_WALKERS),
+        .PWC_SIZE      (`VX_CFG_PTW_WALK_CACHE_SIZE),
+        .TAG_WIDTH     (PTW_DEV_TAG_WIDTH),
+        .MEM_DATA_SIZE (L2_SECTOR_SIZE),
+        .MEM_TAG_WIDTH (L3_TAG_WIDTH)
+    ) ptw (
+        .clk        (clk),
+        .reset      (reset),
+        .flush      (ptw_flush),
+    `ifdef PERF_ENABLE
+        .ptw_perf   (ptw_perf),
+    `endif
+        .ptw_bus_if (ptw_bus_if),
+        .mem_bus_if (per_cluster_mem_bus_if[L3_PTW_IDX])
+    );
+`endif
+
     // Generate all clusters
     for (genvar cluster_id = 0; cluster_id < `VX_CFG_NUM_CLUSTERS; ++cluster_id) begin : g_clusters
 
@@ -239,6 +291,10 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
 
         `ifdef VX_CFG_EXT_RASTER_ENABLE
             .raster_launch_if   (per_cluster_raster_launch_if[cluster_id +: 1]),
+        `endif
+
+        `ifdef VX_CFG_VM_ENABLE
+            .ptw_bus_if         (per_cluster_ptw_bus_if[cluster_id]),
         `endif
 
             .busy               (per_cluster_busy[cluster_id])
