@@ -418,7 +418,39 @@ Kept deliberately. The failure mode is more instructive than the conclusions.
 Five phases. Phases 0 and 1 are prerequisites; 2 is the actual remaining work
 and takes about an hour.
 
-### Phase 0 — off-board work (no hardware, do this first)
+### Phase 0 — off-board work — **DONE 2026-08-19**
+
+Committed as `6579edce6`, `6a4c6bc48`, `553e78609`, `820996f9e`, `55f30697b`.
+
+| Item | Status |
+|---|---|
+| Commit the tree | done — 5 commits, nothing pushed |
+| Deferred-free fix (use-after-free in batch mode) | done, builds clean, **runtime-unvalidated** |
+| Transport gate | done, validated under `avedsim` |
+| Block-padding lint (`hw/scripts/check_axil_blocks.py`) | done; retrodicts the exact three failing blocks |
+| BIOS PCIe fatal-error severity | **not done — user action** |
+| `slashkit` console-script defect | not done |
+
+Two files deliberately left uncommitted: `README.md` carries an accidental
+regression (drops the SLASH setup-guide link, adds trailing whitespace), and
+`hw/rtl/dxa/VX_dxa_smem_wr.sv` is unrelated RTL work needing separate review.
+
+**A use-after-free was found by reading, not by burning a board cycle.** In
+batch mode `host_free` published the staging region and then destroyed the
+`vrt::Buffer`, returning the HBM block to VRT's allocator while a ring
+descriptor still named it. The non-batch path is safe only by accident —
+`cp_submit_cl_` rings the doorbell and polls to completion before `host_free`
+is reached — which is exactly why `minimal -l` passed and why rung 2, the
+first rung that launches a kernel, would not have. Regions are now held in
+`staged_pending_free_` until `staged_refresh()` observes a `Q_SEQNUM` advance.
+
+Also discovered: **`TARGET=avedsim` did not compile at HEAD** (unguarded
+`sim_mode_`). The `#ifdef CPP_API` guards fix it. It now builds and runs, and
+the transport gate executes and passes there; `minimal -l` still stalls after
+`CONFIGS` under avedsim, which is pre-existing (there is no HEAD baseline to
+regress from) and off the hardware path.
+
+### Phase 0b — original Phase 0 text, retained for reference
 
 **0.1 Commit the tree.** Five files of hard-won fixes are uncommitted and one
 host reset from being lost. A truncated `libvortex-aved.so` has already been
