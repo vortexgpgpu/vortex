@@ -43,8 +43,11 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <algorithm>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <vector>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -81,9 +84,24 @@ using namespace vortex;
 #define CP_Q_TAIL_LO      0x120
 #define CP_Q_SEQNUM       0x128
 
+// Free-running cycle counter, incremented every clock unconditionally by
+// VX_cp_axil_regfile. Used by the transport gate in init(): it is the only
+// register whose value is guaranteed to change, so it can distinguish "reads
+// return real data" from "reads return a bus artifact".
+#define CP_REG_CYCLE_LO   0x010
+
 #define DEFAULT_DEVICE_BDF "0000:11:00"
 #define DEFAULT_VBIN_PATH  "vortex_afu.vbin"
 #define KERNEL_NAME        "vortex_afu_0"
+// AXI master the CP uses for its command ring. config.cfg.tmpl binds it
+// via @HOST_TAG@, so the vbin records whether it lands on the QDMA slave
+// bridge (HOST) or a memory bank; staged_probe() reads that back.
+#define HOST_PORT_NAME     "m_axi_host"
+
+// Smallest allocation VRT's device allocator will serve: its
+// MediumBlockSuperblock is BuddySuperblockBase<12, 21>, so 2^12 bytes.
+// Only relevant when CP memory is staged in device memory.
+#define STAGED_MIN_ALLOC   4096u
 
 #ifdef CPP_API
 typedef vrt::Device vrt_device_t;
@@ -154,13 +172,30 @@ public:
 
   #ifdef CPP_API
 
+    // Each vrt::Device open reprograms the PL, and a design write only
+    // succeeds on a freshly reset device: vrtd runs its reset_with_ami
+    // sequence only when the requested shell differs from the current one, so
+    // once the shell reads "compute" no reset happens and the load fails with
+    // "Input/output error", taking the AMC to NO_AMC and costing a JTAG
+    // recovery. Measured 2026-08-19 (see ~/dev/v80/v80_oneshot.sh).
+    //
+    // That budgets one test per recovery cycle, which makes a regression ladder
+    // impractical. When the design is already loaded, skip the reprogram and
+    // reuse it: set VORTEX_AVED_NO_PROGRAM=1 for every run after the first.
+    const char* noprog = getenv("VORTEX_AVED_NO_PROGRAM");
+    const bool program = (noprog == nullptr || noprog[0] == '\0'
+                          || noprog[0] == '0');
     VRT_TRY()
-      vrtDevice_ = vrt::Device(bdf, vbin_path);
+      vrtDevice_ = vrt::Device(bdf, vbin_path, program);
       // Only the hardware platform has a slave bridge, so anything else needs
       // the explicit host-memory sync in cp_reg_write/cp_reg_read.
       sim_mode_  = (vrtDevice_.getPlatform() != vrt::Platform::HARDWARE);
       vrtKernel_ = vrt::Kernel(vrtDevice_, KERNEL_NAME);
     VRT_CATCH(-1)
+
+    // Must follow vrtKernel_: the connection map comes from the vbin's
+    // system_map.xml, which the kernel handle parses.
+    staged_probe();
 
   #else
 
@@ -178,6 +213,53 @@ public:
 
   #endif
 
+    // Transport gate. This must come BEFORE the reset write, because the
+    // reset handshake below cannot detect a dead bus: it breaks out on
+    // `ctl & CTL_AP_IDLE`, and an AXI DECERR / PCIe completion timeout
+    // substitutes 0xFFFFFFFF on the way back -- which has that bit set. The
+    // poll therefore self-certifies against a bus that is answering nothing,
+    // and the first real symptom appears much later and much further away
+    // (historically: device.cpp decoding all-ones CP_DEV_CAPS as VM_ENABLED
+    // and spinning on 65,536 PTEs, which presents as a hang, not a bus error).
+    //
+    // CP_CYCLE_LO free-runs -- VX_cp_axil_regfile increments it every clock
+    // unconditionally -- so two reads that differ prove three things at once:
+    // reads reach the register file, they return real data rather than a bus
+    // artifact, and the AFU clock is live. All-ones or all-zeros means the
+    // read never got there.
+    {
+      uint32_t c0 = 0, c1 = 0;
+      CHECK_ERR(this->read_register(CP_BASE + CP_REG_CYCLE_LO, &c0), {
+        return err;
+      });
+      CHECK_ERR(this->read_register(CP_BASE + CP_REG_CYCLE_LO, &c1), {
+        return err;
+      });
+      if (c0 == 0xFFFFFFFFu || c1 == 0xFFFFFFFFu) {
+        printf("[VXDRV] Error: AXI-Lite transport is not responding "
+               "(CP_CYCLE_LO reads 0x%08x). The read did not reach the AFU: "
+               "DECERR or PCIe completion timeout. Check that the vbin loaded "
+               "and that the BAR window covers the AFU aperture.\n", c0);
+        return -1;
+      }
+      // All-zeros is a real fault on silicon (clock gated, or reset held
+      // asserted) but is a plausible answer from a model that does not
+      // implement the counter, so only hardware treats it as fatal.
+      bool on_hardware = true;
+    #ifdef CPP_API
+      on_hardware = !sim_mode_;
+    #endif
+      if (c0 == 0 && c1 == 0 && on_hardware) {
+        printf("[VXDRV] Error: AXI-Lite responds but CP_CYCLE_LO is stuck at "
+               "zero -- the AFU clock is gated or reset is held asserted.\n");
+        return -1;
+      }
+      if (c0 == c1 && on_hardware) {
+        printf("[VXDRV] Warning: CP_CYCLE_LO did not advance between two "
+               "reads (0x%08x). The AFU clock may be stopped.\n", c0);
+      }
+    }
+
     CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
       return err;
     });
@@ -190,9 +272,16 @@ public:
         CHECK_ERR(this->read_register(MMIO_CTL_ADDR, &ctl), {
           return err;
         });
-        if (ctl & CTL_AP_IDLE) {
+        // Reject the all-ones no-completion signature before testing any bit;
+        // see the transport gate above for why bit-testing it is unsafe.
+        if (ctl != 0xFFFFFFFFu && (ctl & CTL_AP_IDLE)) {
           break;
         }
+      }
+      if (ctl == 0xFFFFFFFFu) {
+        printf("[VXDRV] Error: control register reads all-ones during reset; "
+               "the AXI-Lite path died after the transport gate passed.\n");
+        return -1;
       }
       if ((ctl & CTL_AP_IDLE) == 0) {
         printf("[VXDRV] Error: device reset timeout!\n");
@@ -244,7 +333,15 @@ public:
   // the CP reads the ring, and Q_SEQNUM is polled after it has written its
   // results back. Syncing on those keeps this confined to the backend, so the
   // common core keeps the coherent-memory contract it documents.
+  //
+  // All of this is CPP_API-only. `sim_mode_` and the whole sim_* apparatus are
+  // declared under `#ifdef CPP_API`, so referencing them unguarded here broke
+  // the TARGET=avedsim build outright ("'sim_mode_' was not declared in this
+  // scope"). Under avedsim there is nothing to sync: the Verilator model runs
+  // in this process and shares our memory directly, so the correct behaviour
+  // is exactly the `sim_mode_ == false` path.
   int cp_reg_write(uint32_t off, uint32_t value) {
+  #ifdef CPP_API
     if (sim_mode_) {
       sim_note_region_addr(off, value);
       // Seed on the first doorbell rather than at queue enable. The harness
@@ -264,11 +361,28 @@ public:
         }
       }
     }
+    // Same two moments, same reason, different transport: when the ring lives
+    // in device memory it is no more coherent with us than the simulator's
+    // model is. Seed on the first doorbell so the head and completion lines
+    // are defined before the CP can read them -- a CP that reads garbage there
+    // computes a bogus pending count and runs away on junk descriptors.
+    if (staged_cfg_) {
+      staged_note_region_addr(off, value);
+    }
+    if (staged_cfg_ && off == CP_Q_TAIL_LO) {
+      const bool seed = !staged_seeded_;
+      staged_seeded_ = true;
+      if (staged_publish(seed) != 0) {
+        return -1;
+      }
+    }
+  #endif
     return this->write_register(CP_BASE + off, value);
   }
 
   int cp_reg_read(uint32_t off, uint32_t *value) {
     CHECK_ERR(this->read_register(CP_BASE + off, value), { return err; });
+  #ifdef CPP_API
     if (sim_mode_ && off == CP_Q_SEQNUM) {
       // Refresh only when the CP actually advanced. This register is read in
       // a spin loop, and a fetch per iteration would dominate the run.
@@ -278,6 +392,16 @@ public:
         return sim_refresh();
       }
     }
+    if (staged_cfg_ && off == CP_Q_SEQNUM) {
+      // Refresh only when the CP actually advanced. This register is read in a
+      // spin loop and a QDMA sync per iteration would dominate the run.
+      if (!staged_seqnum_valid_ || *value != staged_last_seqnum_) {
+        staged_last_seqnum_  = *value;
+        staged_seqnum_valid_ = true;
+        return staged_refresh();
+      }
+    }
+  #endif
     return 0;
   }
 
@@ -314,6 +438,36 @@ public:
       sim_trace("alloc", addr, 0, asize);
       *host_ptr = ptr;
       *cp_addr  = addr;
+      return 0;
+    }
+    if (staged_cfg_) {
+      // m_axi_host reaches a memory bank, so the CP addresses these bytes by
+      // their device address and we hold the host-side shadow. getPhysAddr()
+      // is absolute, which is what the CP needs: VX_afu_wrap.sv deliberately
+      // does NOT apply PLATFORM_MEMORY_OFFSET to the host port ("that offset
+      // is device-memory specific"), so no rebasing belongs here.
+      // VRT's device allocator refuses anything below its smallest buddy
+      // block: MediumBlockSuperblock is BuddySuperblockBase<12, 21>, so 2^12.
+      // The head and completion regions are one cacheline each (CP_CL_BYTES),
+      // which lands two orders of magnitude under that and throws
+      //   "Size too small for MediumBlockSuperblock"
+      // out of vx_device_open. Round up rather than special-case those two:
+      // the CP only ever touches the leading bytes, the rest is slack, and a
+      // DMA staging buffer of any size then allocates by the same rule.
+      const uint64_t dsize = std::max<uint64_t>(asize, STAGED_MIN_ALLOC);
+      VRT_TRY()
+        auto buf = std::make_shared<vrt::Buffer<uint8_t>>(
+            vrtDevice_, dsize, *staged_cfg_);
+        void* hp = buf->get();
+        const uint64_t dev = buf->getPhysAddr();
+        std::memset(hp, 0, asize);
+        {
+          std::lock_guard<std::mutex> g(staged_mu_);
+          staged_regions_.emplace(dev, staged_region_t{buf, asize});
+        }
+        *host_ptr = hp;
+        *cp_addr  = dev;
+      VRT_CATCH(-1)
       return 0;
     }
     VRT_TRY()
@@ -358,6 +512,39 @@ public:
       sim_regions_.erase(sit);
       return rc;
     }
+    if (staged_cfg_) {
+      // Publish before dropping the region, for the same reason the sim path
+      // does: DMA staging is filled, submitted and freed back-to-back, and
+      // inside a batch the submit only appends to the ring -- the doorbell
+      // comes later, from cp_batch_end, when this region is gone. Waiting for
+      // the doorbell would lose the bytes entirely.
+      //
+      // But unlike the sim path, publishing is NOT enough to make the free
+      // safe. There, sim_xfer copies the bytes *into the model*, which keeps
+      // them after the host free(). Here the bytes are pushed into a
+      // vrt::Buffer whose destructor hands the device memory straight back to
+      // VRT's buddy allocator -- while a descriptor in the ring still names
+      // that device address. Inside a batch the CP has not read it yet, so it
+      // then DMAs from a block the allocator has already re-served to the next
+      // same-sized staging buffer. The non-batch path is safe only by
+      // accident: cp_submit_cl_ rings the doorbell and polls to completion
+      // before host_free is reached, which is why `minimal -l` passes and
+      // anything that launches a kernel would not.
+      //
+      // So: publish now, but keep the buffer alive until the CP has provably
+      // moved past the commands that reference it. staged_refresh() runs on a
+      // Q_SEQNUM advance -- i.e. after the CP has retired work -- and releases
+      // the deferred set there.
+      std::lock_guard<std::mutex> g(staged_mu_);
+      auto sit = staged_regions_.find(cp_addr);
+      if (sit == staged_regions_.end()) {
+        return -1;
+      }
+      const int rc = staged_xfer(sit->second, true);
+      staged_pending_free_.push_back(std::move(sit->second));
+      staged_regions_.erase(sit);
+      return rc;
+    }
     std::lock_guard<std::mutex> g(host_bufs_mu_);
     auto it = host_bufs_.find(cp_addr);
     if (it == host_bufs_.end()) {
@@ -377,6 +564,136 @@ public:
 private:
 
 #ifdef CPP_API
+  // ----- Staged CP memory (m_axi_host wired to device memory) -----
+  //
+  // WHY THIS EXISTS
+  // ---------------
+  // The CP's command ring, head/completion cachelines and DMA staging buffers
+  // all live in memory the CP masters into over m_axi_host. When that port is
+  // tagged HOST it reaches host DRAM through the QDMA slave bridge, which is
+  // what allocHostBuffer serves and what the code below is bypassed for.
+  //
+  // That path does not work on this V80 compute shell. Measured 2026-08-19
+  // with a ten-line HLS kernel whose only distinguishing feature is
+  // sp=<kernel>.m_axi_gmem0:HOST (~/dev/v80/hostprobe): its AXI reads never
+  // complete. AP_CTRL sat at 0x1 (ap_start, not idle, not done) for ~15
+  // minutes with the argument registers verified correct (src=0xfea9a000,
+  // size=0x100) -- a 256-iteration II=1 loop that should retire in about a
+  // microsecond. The byte-identical control build with the single line changed
+  // to :HBM0 (~/dev/v80/hostprobe_hbm) completed in under 0.1 s and returned
+  // the right sum, which isolates the fault to the HOST path rather than to
+  // mastering, the AFU, or the build flow.
+  //
+  // Neither simulator can catch this: avedsim shares process memory outright
+  // and sim copies host memory into the model via the sim_* path above, so
+  // both bypass the very thing that fails.
+  //
+  // So the ring is staged in device memory instead. The bytes then need the
+  // same explicit publish/refresh the simulation path needs, for the same
+  // reason -- device memory is not coherent with us -- and at exactly the same
+  // two moments: the doorbell before the CP reads, and a seqnum change after
+  // it has written back.
+  //
+  // Self-configuring rather than a build flag: portMemoryConfig() reads the
+  // connection map out of the vbin's system_map.xml and throws when the port
+  // has no memory target. A vbin built with HOST_TAG=HOST therefore keeps the
+  // slave-bridge path untouched, and one built with HOST_TAG=HBM1 stages,
+  // with no way for the two to disagree.
+  struct staged_region_t {
+    std::shared_ptr<vrt::Buffer<uint8_t>> buf;
+    uint64_t size;
+  };
+
+  // Resolve once, at init. Throwing means target="HOST" -- the slave bridge --
+  // so staging stays off and nothing else in this file changes behaviour.
+  void staged_probe() {
+    staged_cfg_.reset();
+    if (sim_mode_) {
+      return;  // the sim_* path already models this; do not stack the two.
+    }
+    try {
+      staged_cfg_ = vrtKernel_.portMemoryConfig(HOST_PORT_NAME);
+      fprintf(stderr,
+              "[VXDRV] m_axi_host targets device memory; staging CP memory "
+              "there (HBM port %d)\n",
+              staged_cfg_->hbmPort ? int(*staged_cfg_->hbmPort) : -1);
+    } catch (const std::exception&) {
+      // target="HOST": the QDMA slave bridge. Nothing to stage.
+    }
+  }
+
+  // Moves a whole region in one direction. vrt::Buffer::sync has no offset or
+  // length, so unlike sim_xfer this cannot ship just the cachelines appended
+  // since the last doorbell. The ring is CP_RING_SIZE and a sync is a QDMA
+  // descriptor rather than a simulated AXI burst, so paying for the whole
+  // region is cheap enough here; if it ever shows up in a profile, the fix is
+  // a partial-sync API in VRT, not a smarter loop.
+  int staged_xfer(const staged_region_t& r, bool to_device) {
+    VRT_TRY()
+      r.buf->sync(to_device ? vrt::SyncType::HOST_TO_DEVICE
+                            : vrt::SyncType::DEVICE_TO_HOST);
+    VRT_CATCH(-1)
+    return 0;
+  }
+
+  // Publish what the CP is about to read. Once the queue is live the head and
+  // completion cachelines belong to the CP, so pushing them would clobber its
+  // writes; include_cp_owned is set only for the one-shot seeding on the first
+  // doorbell, before the CP can have fetched anything.
+  int staged_publish(bool include_cp_owned) {
+    std::lock_guard<std::mutex> g(staged_mu_);
+    for (const auto& kv : staged_regions_) {
+      const uint32_t lo = uint32_t(kv.first & 0xFFFFFFFFu);
+      if (!include_cp_owned
+          && (lo == staged_head_addr_ || lo == staged_cmpl_addr_)) {
+        continue;
+      }
+      if (staged_xfer(kv.second, true) != 0) {
+        return -1;
+      }
+    }
+    return 0;
+  }
+
+  // Pull back what the CP wrote: MEM_READ staging buffers, and the head and
+  // completion lines it owns.
+  //
+  // The ring is EXCLUDED, and must be. It is ours to write: cp_ring_append_
+  // fills the host shadow and the bytes only reach the device at the next
+  // doorbell. This runs from the Q_SEQNUM poll, which can land between an
+  // append and that doorbell, so pulling the ring back would overwrite
+  // freshly appended descriptors with the stale device copy and silently drop
+  // commands. sim_refresh() skips it for the same reason.
+  int staged_refresh() {
+    std::lock_guard<std::mutex> g(staged_mu_);
+    for (const auto& kv : staged_regions_) {
+      if (uint32_t(kv.first & 0xFFFFFFFFu) == staged_ring_addr_) {
+        continue;
+      }
+      if (staged_xfer(kv.second, false) != 0) {
+        return -1;
+      }
+    }
+    // The CP has retired work (this only runs on a Q_SEQNUM advance), so every
+    // descriptor appended before that advance has been read. Buffers freed by
+    // host_free while a batch was still open can now go back to the allocator.
+    // Holding them one seqnum longer than strictly necessary costs a little
+    // device memory and nothing else; releasing them early costs correctness.
+    staged_pending_free_.clear();
+    return 0;
+  }
+
+  // Mirrors sim_note_region_addr: record which base is which so publish can
+  // tell the CP-owned lines from the ones we write.
+  void staged_note_region_addr(uint32_t off, uint32_t value) {
+    switch (off) {
+    case CP_Q_RING_BASE_LO: staged_ring_addr_ = value; break;
+    case CP_Q_HEAD_ADDR_LO: staged_head_addr_ = value; break;
+    case CP_Q_CMPL_ADDR_LO: staged_cmpl_addr_ = value; break;
+    default: break;
+    }
+  }
+
   // ----- Simulation host-memory sync -----
   struct sim_region_t { void *host_ptr; uint64_t size; };
 
@@ -547,6 +864,25 @@ private:
   bool     sim_seqnum_valid_ = false;
   bool     sim_seeded_       = false;
   uint32_t sim_ring_tail_    = 0;
+
+  // ----- Staged CP memory (m_axi_host wired to device memory) -----
+  // Set when m_axi_host resolves to a memory bank instead of the QDMA slave
+  // bridge. Unset means target="HOST" and allocHostBuffer is correct.
+  std::optional<vrt::MemoryConfig> staged_cfg_;
+
+  std::map<uint64_t, staged_region_t> staged_regions_;
+  // Regions host_free'd while their descriptors may still be unread by the CP.
+  // Released in staged_refresh(), i.e. once Q_SEQNUM has advanced. Guarded by
+  // staged_mu_ like staged_regions_.
+  std::vector<staged_region_t>        staged_pending_free_;
+  std::mutex                          staged_mu_;
+
+  uint32_t staged_ring_addr_    = 0;
+  uint32_t staged_head_addr_    = 0;
+  uint32_t staged_cmpl_addr_    = 0;
+  uint32_t staged_last_seqnum_  = 0;
+  bool     staged_seqnum_valid_ = false;
+  bool     staged_seeded_       = false;
 #endif
 };
 
