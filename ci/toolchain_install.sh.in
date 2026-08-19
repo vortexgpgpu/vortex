@@ -194,6 +194,45 @@ sta()
 # gem5 — slim runtime (build/{X86,ARM}/gem5.opt + configs/), ~50 MB
 # uncompressed. Produced by ci/gem5_install.sh; consumed via $GEM5_HOME
 # by ci/gem5_run_app.py / ci/gem5_run_hostless_app.py.
+# FireSim, as packaged by ci/toolchain_prebuilt.sh --firesim: the
+# vortexgpgpu/firesim sources plus the conda environment that Golden Gate
+# elaboration needs (JVM, sbt, Scala). Only bitstream and metasimulation
+# builds need this; running an existing image needs nothing from here, since
+# the driver links against XRT and the Vortex runtime alone.
+#
+# conda-unpack is not optional. A conda environment records its build-time
+# prefix in every script shebang and in its package metadata, so without this
+# step `conda activate` resolves to the packaging machine's path and the first
+# symptom is an unrelated missing-header error rather than anything naming
+# conda. See the packaging invariant in ci/toolchain_prebuilt.sh.
+firesim()
+{
+    case $OSVERSION in
+    *) parts=$(eval echo {a..z}) ;;
+    esac
+    rm -f firesim.tar.bz2.parta*
+    for x in $parts
+    do
+        wget -q $REPOSITORY/firesim/$OSVERSION/firesim.tar.bz2.parta$x || break
+    done
+    cat firesim.tar.bz2.parta* > firesim.tar.bz2
+    tar -xvf firesim.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/firesim && mv firesim $TOOLDIR
+    rm -rf firesim firesim.tar.bz2*
+    # Unpack the environment in place, then rewrite its prefixes.
+    env_dir="$TOOLDIR/firesim/.conda-env"
+    if [ -f "$env_dir/firesim-conda-env.tar.gz" ]; then
+        tar -C "$env_dir" -xzf "$env_dir/firesim-conda-env.tar.gz"
+        rm -f "$env_dir/firesim-conda-env.tar.gz"
+        if [ -x "$env_dir/bin/conda-unpack" ]; then
+            "$env_dir/bin/conda-unpack"
+        else
+            echo "WARNING: conda-unpack missing; \$TOOLDIR/firesim/.conda-env" >&2
+            echo "         still carries the packaging machine's prefix" >&2
+        fi
+    fi
+}
+
 gem5()
 {
     # The prebuilt gem5.opt is linked against tcmalloc (gem5_install.sh builds
@@ -238,7 +277,7 @@ install_base()
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--firesim] [--all] [-h|--help]"
     echo "  (no arguments: install all components except gem5)"
 }
 
@@ -279,6 +318,8 @@ while [ "$1" != "" ]; do
         --sta ) sta
                 ;;
         --gem5 ) gem5
+                ;;
+        --firesim ) firesim
                 ;;
         --all ) install_base
                 gem5
