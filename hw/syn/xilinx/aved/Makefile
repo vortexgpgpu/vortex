@@ -151,9 +151,20 @@ CFLAGS += $(RTL_INCLUDE)
 # ast dump flags
 XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_DIR) -DSV_DPI
 
-.PHONY: all clean gen-sources gen-ast scope-json package-ip gen-bin
+.PHONY: all clean gen-sources gen-ast scope-json package-ip gen-bin check-axil-blocks
 
-all: $(VBIN_CONTAINER)
+# Fail before synthesis if any 16-byte block in the CP AXI-Lite regfile is only
+# partially decoded. Measured on V80 silicon: such a block DECERRs on EVERY
+# word, including the words that ARE implemented -- the shell -> s_axi_control
+# path resolves at 128-bit granularity and rejects a block it cannot fully
+# resolve, so the per-word decode never gets consulted. No simulator reproduces
+# it; the symptom is a register reading 0xFFFFFFFF on hardware for no reason
+# visible in the RTL. Finding that cost ten days. A synthesis run costs ~37
+# minutes, so this check pays for itself the first time it fires.
+check-axil-blocks:
+	@python3 $(SCRIPT_DIR)/check_axil_blocks.py $(RTL_DIR)/cp/VX_cp_axil_regfile.sv
+
+all: check-axil-blocks $(VBIN_CONTAINER)
 
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
