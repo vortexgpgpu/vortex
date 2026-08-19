@@ -7,8 +7,8 @@
  * coverage, not control flow (tests/vulkan/cflow covers that).
  *
  * Covered: bitfield extract/insert/reverse/find/count, add-carry and
- * sub-borrow, and the pack/unpack family. Each result is reproduced exactly
- * by the host in main.c.
+ * sub-borrow, the pack/unpack family, and the high half of a widening
+ * multiply. Each result is reproduced exactly by the host in main.c.
  *
  * If the translator cannot lower one of these it bails the whole shader to
  * llvmpipe; under MESA_VORTEX_STRICT=1 the dispatch then becomes a no-op and
@@ -17,7 +17,7 @@
 
 layout(local_size_x_id = 0) in;
 
-#define NUM_OPS 12u
+#define NUM_OPS 14u
 
 layout(std430, binding = 0) buffer Buf {
    uint data[];
@@ -59,4 +59,17 @@ void main()
    /* Fixed operands so the fp16 encoding is exact and hand-checkable:
     * 1.5 -> 0x3E00, -2.25 -> 0xC080. */
    data[o + 11u] = packHalf2x16(vec2(1.5, -2.25));
+
+   /* --- widening multiply -----------------------------------------------
+    * Only the high word is recorded: the low word is an ordinary 32-bit
+    * multiply, which every other op here already depends on. Signed and
+    * unsigned are separate opcodes and disagree whenever either operand has
+    * its top bit set, which both of these do. */
+   int  smsb, slsb;
+   imulExtended(int(a), int(b), smsb, slsb);
+   data[o + 12u] = uint(smsb);
+
+   uint umsb, ulsb;
+   umulExtended(a, b, umsb, ulsb);
+   data[o + 13u] = umsb;
 }

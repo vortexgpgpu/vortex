@@ -15,11 +15,12 @@
  */
 
 #include <vulkan/vulkan.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define NUM_OPS     12u
+#define NUM_OPS     14u
 #define INVOCS      64u
 #define N           (INVOCS * NUM_OPS)
 #define SENTINEL    0xDEADBEEFu
@@ -50,6 +51,7 @@ static const char *const op_name[] = {
    "bitfieldReverse",   "findLSB",           "findMSB",
    "bitCount",          "uaddCarry.carry",   "usubBorrow.borrow",
    "packUnorm4x8.rt",   "packUnorm2x16.rt",  "packHalf2x16",
+   "imulExtended.msb",  "umulExtended.msb",
 };
 
 static uint32_t
@@ -139,7 +141,8 @@ popcnt(uint32_t v)
  * Op 9/10 are unorm round-trips, which are the identity: unpackUnorm4x8
  * decodes each byte to k/255 and packUnorm4x8 re-quantises with
  * round(x*255), recovering k exactly (same for 16-bit). Op 11 is a constant:
- * fp16(1.5) = 0x3E00, fp16(-2.25) = 0xC080, packed low-half-first. */
+ * fp16(1.5) = 0x3E00, fp16(-2.25) = 0xC080, packed low-half-first. Ops 12 and
+ * 13 are the high word of a 32x32 multiply, computed here in 64 bits. */
 static void
 alu_expect(uint32_t i, uint32_t *out)
 {
@@ -158,6 +161,8 @@ alu_expect(uint32_t i, uint32_t *out)
    out[9]  = a;                                /* packUnorm4x8 round-trip */
    out[10] = a;                                /* packUnorm2x16 round-trip */
    out[11] = (0xC080u << 16) | 0x3E00u;        /* packHalf2x16(1.5, -2.25) */
+   out[12] = (uint32_t)(((int64_t)(int32_t)a * (int64_t)(int32_t)b) >> 32);
+   out[13] = (uint32_t)(((uint64_t)a * (uint64_t)b) >> 32);
 }
 
 static uint32_t *
