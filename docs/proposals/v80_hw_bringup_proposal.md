@@ -6,9 +6,33 @@ later measured to be false; they are preserved as errata in §7 rather than
 deleted, because the *way* they were wrong is the most useful thing in this
 document.
 
-**Status:** the transport works. `TARGET=hw` executes the full CP command path
-on silicon. Three of five ladder rungs remain unrun, blocked on board recovery
-rather than on any known defect.
+**Status (end of 2026-08-19): code-complete. Blocked on host stability, not on
+the project.**
+
+The transport works — `TARGET=hw` executes the full CP command path on silicon
+(`minimal -l` PASSED 08:19). Every known software defect is fixed and committed,
+including a use-after-free that would have killed the first kernel-launching
+rung and was caught by reading rather than by a board cycle. The remaining work
+is running four ladder rungs.
+
+That is blocked by the host, which is failing independently of this work:
+
+```
+11  fatal hardware errors logged across boots
+ 6  distinct cores:  APIC 0x0, 0x1, 0x2, 0x4, 0x6, 0x1a
+ 1  identical signature every time:  Perr S0:Txxx:B05, cache error, 0x602001f
+ 0  EDAC CE/UE  -> not DRAM ECC
+```
+
+The 17:40 crash is decisive: the box ran 43 minutes and died with **no V80
+drivers loaded and the card not on the PCIe bus**. Nothing from this project was
+running. See [[orcas2-cpu-mce]] — and note that an earlier revision of this
+document blamed a single bad core, which was wrong, and a later retraction
+blamed `slash.ko` rescans, which is also now disproven.
+
+Before any further hardware attempt: install `rasdaemon` for a real SMCA decode,
+and re-test with PBO / Curve Optimizer and any EXPO/DOCP memory profile
+disabled. Those are host actions, not project actions.
 
 | | |
 |---|---|
