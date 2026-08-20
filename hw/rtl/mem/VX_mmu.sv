@@ -52,7 +52,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     wire [VM_PPN_WIDTH-1:0] satp_root_ppn = satp[VM_PPN_WIDTH-1:0];
     `UNUSED_VAR (satp)
 
-    function automatic logic needs_translation(input logic [31:0] full_addr);
+    function automatic logic needs_translation(input logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] full_addr);
         // full_addr currently not consumed — only the SATP mode gates translation.
         // Kept as a port to anticipate range-based bypass policies.
         `UNUSED_VAR (full_addr)
@@ -111,7 +111,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < NUM_REQS; i++) begin : g_elastic_buffers
 
-        wire [31:0] full_addr_ebuf = {lsu_mem_if[i].req_data.addr, {`CLOG2(DATA_SIZE){1'b0}}};
+        wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] full_addr_ebuf = {lsu_mem_if[i].req_data.addr, {`CLOG2(DATA_SIZE){1'b0}}};
         assign lane_needs_trans_ebuf[i] = needs_translation(full_addr_ebuf);
 
         wire [REQ_DATAW-1:0] req_data_in_packed;
@@ -211,7 +211,7 @@ module VX_mmu import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0] lane_bypass;
 
     for (genvar i = 0; i < NUM_REQS; i++) begin : g_bypass_path
-        wire [31:0] full_addr = {lsu_mem_if[i].req_data.addr, {`CLOG2(DATA_SIZE){1'b0}}};
+        wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] full_addr = {lsu_mem_if[i].req_data.addr, {`CLOG2(DATA_SIZE){1'b0}}};
 
         assign lane_needs_trans[i] = needs_translation(full_addr);
         assign lane_bypass[i] = ~lane_needs_trans[i];
