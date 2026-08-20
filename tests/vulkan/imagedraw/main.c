@@ -20,6 +20,11 @@
  * colour attachment is checked too, so a failure says whether the draw ran at
  * all rather than leaving that to be guessed.
  *
+ * Two phases. The first writes every texel from the fragment stage; the second
+ * writes one texel per vertex from the vertex stage, which reaches its
+ * descriptors through a separate relocation loop that can be fixed
+ * independently and so has to be asked separately.
+ *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe.
  */
 
@@ -155,7 +160,8 @@ static int
 render(VkDevice dev, VkQueue queue, uint32_t qf,
        const VkPhysicalDeviceMemoryProperties *mp,
        VkShaderModule vs, VkShaderModule fs,
-       long *stored, long *covered, long *first_bad, uint8_t bad[4])
+       long *stored, long *covered, long *first_bad, uint8_t bad[4],
+       uint8_t head[3][4])
 {
    VkImage      cimg, simg;
    VkDeviceMemory cmem, smem;
@@ -199,7 +205,9 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       .binding = 0,
       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
       .descriptorCount = 1,
-      .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+      /* Both stages: the vertex phase writes the same binding. */
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT |
+                    VK_SHADER_STAGE_FRAGMENT_BIT,
    };
    VkDescriptorSetLayoutCreateInfo dslci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -426,6 +434,9 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
          }
       }
    }
+   for (unsigned v = 0; v < 3; v++) {
+      memcpy(head[v], spx + (size_t)v * 4, 4);
+   }
    vkUnmapMemory(dev, bmem);
 
    vkDestroyCommandPool(dev, cp, NULL);
@@ -451,6 +462,8 @@ main(int argc, char **argv)
 {
    const char *vs_path = (argc > 1) ? argv[1] : "imagedraw.vert.spv";
    const char *fs_path = (argc > 2) ? argv[2] : "imagedraw.frag.spv";
+   const char *vsw_path = (argc > 3) ? argv[3] : "imagedraw_vswrite.vert.spv";
+   const char *pfs_path = (argc > 4) ? argv[4] : "imagedraw_plain.frag.spv";
 
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -491,7 +504,10 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
       .queueFamilyIndex = qf, .queueCount = 1, .pQueuePriorities = &prio,
    };
-   VkPhysicalDeviceFeatures feats = { .fragmentStoresAndAtomics = VK_TRUE };
+   VkPhysicalDeviceFeatures feats = {
+      .fragmentStoresAndAtomics       = VK_TRUE,
+      .vertexPipelineStoresAndAtomics = VK_TRUE,
+   };
    VkDeviceCreateInfo dci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
@@ -507,27 +523,34 @@ main(int argc, char **argv)
    VkPhysicalDeviceMemoryProperties mp;
    vkGetPhysicalDeviceMemoryProperties(pd, &mp);
 
-   VkShaderModule vs = load_module(dev, vs_path);
-   VkShaderModule fs = load_module(dev, fs_path);
-   if (!vs || !fs) {
+   VkShaderModule vs  = load_module(dev, vs_path);
+   VkShaderModule fs  = load_module(dev, fs_path);
+   VkShaderModule vsw = load_module(dev, vsw_path);
+   VkShaderModule pfs = load_module(dev, pfs_path);
+   if (!vs || !fs || !vsw || !pfs) {
       return 1;
    }
 
    long stored = 0, covered = 0, first_bad = -1;
    uint8_t bad[4] = { 0, 0, 0, 0 };
+   uint8_t head[3][4];
+   bool ok = true;
+
+   memset(head, 0, sizeof head);
    if (render(dev, queue, qf, &mp, vs, fs, &stored, &covered,
-              &first_bad, bad) < 0) {
+              &first_bad, bad, head) < 0) {
       return 1;
    }
 
    const bool drew = (covered == EXPECT_PX);
    const bool wrote = (stored == EXPECT_PX);
    if (drew && wrote) {
-      printf("PASSED (imagedraw: %ld texels stored from the fragment stage, "
-             "over a draw covering %ld px)\n", stored, covered);
+      printf("PASSED (imagedraw fragment: %ld texels stored, over a draw "
+             "covering %ld px)\n", stored, covered);
    } else {
-      printf("FAILED (imagedraw: %ld of %ld texels stored, draw covered %ld of "
-             "%ld px", stored, EXPECT_PX, covered, EXPECT_PX);
+      ok = false;
+      printf("FAILED (imagedraw fragment: %ld of %ld texels stored, draw "
+             "covered %ld of %ld px", stored, EXPECT_PX, covered, EXPECT_PX);
       if (!drew) {
          printf("; the draw itself did not cover the target, so the image "
                 "result says nothing");
@@ -543,10 +566,48 @@ main(int argc, char **argv)
       printf(")\n");
    }
 
+   /* The vertex stage, against the same binding. Only the three texels the
+    * three vertices write are checked: the image is never cleared -- clearing
+    * it would hide a shader that wrote nothing -- so the rest of it holds
+    * whatever the allocation did and is not the test's to assert. */
+   memset(head, 0, sizeof head);
+   if (render(dev, queue, qf, &mp, vsw, pfs, &stored, &covered,
+              &first_bad, bad, head) < 0) {
+      return 1;
+   }
+   bool vs_ok = (covered == EXPECT_PX);
+   for (unsigned v = 0; v < 3; v++) {
+      const uint8_t want_v[4] = { (uint8_t)((v + 1u) * 64u), 128, 64, 255 };
+      for (unsigned c = 0; c < 4; c++) {
+         const int d = (int)head[v][c] - (int)want_v[c];
+         if (d < -TOL || d > TOL) { vs_ok = false; }
+      }
+   }
+   if (vs_ok) {
+      printf("PASSED (imagedraw vertex: one texel per vertex stored, "
+             "reds %u %u %u)\n", head[0][0], head[1][0], head[2][0]);
+   } else {
+      ok = false;
+      printf("FAILED (imagedraw vertex: texels are %u,%u,%u,%u / %u,%u,%u,%u / "
+             "%u,%u,%u,%u, expected reds 64 128 192 with 128,64,255 after each, "
+             "over a draw covering %ld of %ld px",
+             head[0][0], head[0][1], head[0][2], head[0][3],
+             head[1][0], head[1][1], head[1][2], head[1][3],
+             head[2][0], head[2][1], head[2][2], head[2][3],
+             covered, EXPECT_PX);
+      if (!head[0][0] && !head[1][0] && !head[2][0]) {
+         printf(" -- nothing arrived, so the vertex stage's image descriptor "
+                "was never pointed at the device copy");
+      }
+      printf(")\n");
+   }
+
+   vkDestroyShaderModule(dev, pfs, NULL);
+   vkDestroyShaderModule(dev, vsw, NULL);
    vkDestroyShaderModule(dev, fs, NULL);
    vkDestroyShaderModule(dev, vs, NULL);
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 
-   return (drew && wrote) ? 0 : 1;
+   return ok ? 0 : 1;
 }

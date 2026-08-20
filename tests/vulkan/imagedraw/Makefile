@@ -22,6 +22,8 @@ SRC_DIR := $(VORTEX_HOME)/tests/vulkan/$(PROJECT)
 SRCS := $(SRC_DIR)/main.c
 
 SHADERS := $(SRC_DIR)/imagedraw.vert \
-           $(SRC_DIR)/imagedraw.frag
+           $(SRC_DIR)/imagedraw.frag \
+           $(SRC_DIR)/imagedraw_vswrite.vert \
+           $(SRC_DIR)/imagedraw_plain.frag
 
 include ../common.mk

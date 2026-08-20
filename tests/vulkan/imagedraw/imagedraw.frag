@@ -24,7 +24,10 @@ void main()
 {
    ivec2 p = ivec2(v_uv * 64.0);
 
-   imageStore(dst, p, vec4(1.0, 0.5, 0.25, 1.0));
+   /* Written as exact 1/255 steps: 0.5 and 0.25 land on 127.5 and 63.75,
+    * which the device truncates and llvmpipe rounds, and a check that
+    * tolerated that difference would tolerate a real one the same size. */
+   imageStore(dst, p, vec4(255.0, 128.0, 64.0, 255.0) / 255.0);
 
    o_color = vec4(0.0, 1.0, 0.0, 1.0);
 }
