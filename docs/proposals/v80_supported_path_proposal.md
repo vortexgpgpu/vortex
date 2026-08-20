@@ -1,8 +1,64 @@
 # Proposal: abandon the JTAG workarounds and complete the supported install
 
-**Revision 1 — 2026-08-20.** This proposal replaces the approach taken in
-`v80_hw_bringup_proposal.md`. That document's *findings* stand; its *method* was
-wrong and this explains why.
+**Revision 2 — 2026-08-20.** Revision 1's thesis survives review. Four of its
+concrete claims did not; see §0. Revision 1 replaced the approach taken in
+`v80_hw_bringup_proposal.md`, whose *findings* stand but whose *method* was
+wrong.
+
+---
+
+## 0. Revision 2 errata — what review of revision 1 found
+
+Revision 1 was written without checking the board state or running the
+commands it prescribed. Four defects, all verified:
+
+**E1. The Phase 2 command cannot work.** §4 prescribed
+`sudo v80-smi write-static-shell --flash -d 01:00`. With no `--pdi`, that
+defaults to `--shell-type all` and resolves the PDI through
+`python3 -m slashkit static-shell-path`. On this install that fails twice
+over: slashkit's resolver accepts only `{service,compute}`, so `all` is an
+argparse error; and `--shell-type service` resolves
+`slashkit.resources.static_shell`, which is an **empty directory** in this
+tree — only `static_shell_compute` is populated. The sole working form pins
+both axes:
+
+```bash
+v80-smi write-static-shell --flash -d <BDF> --shell-type compute --pdi <path>
+```
+
+**E2. Phase 1's control run is statistically worthless.** It asked for a
+30–60 minute idle run to decide whether the host faults on its own. Measured
+baseline MTBF with the card off the bus is ~68 h, so a 45-minute clean run has
+a ~1.3% chance of showing a crash *even if the host is definitively faulty*. It
+would have burned a reboot and an hour to produce an uninterpretable result.
+Dropped.
+
+**E3. "There is no control group" was wrong.** Revision 1 claimed the crash
+data could not distinguish a host fault from our operations. A 33-boot
+retrospective does distinguish them:
+
+| condition | boots | crashes | uptime | MTBF |
+|---|---|---|---|---|
+| V80 **on** the PCIe bus | 21 | 18 | 317 h | **1 per 17.6 h** |
+| V80 **off** the bus | 12 | 2 | 135 h | **1 per 68 h** |
+
+Both effects are real: the host crashes unaided (boot −19 ran 102 h with the
+card off the bus, no drivers, and died), *and* card presence raises the rate
+about fourfold. Neither "the machine is faulty" nor "your operations cause it"
+is the whole story, and revision 1's flat retraction over-corrected exactly as
+the `orcas2-cpu-mce` memory had before it.
+
+**E4. Phase 2 had an unstated prerequisite.** It needs `-d <BDF>`, i.e. the
+card enumerated and known to VRTD. Phase 1 as written guaranteed the opposite.
+The real sequence needs a JTAG bootstrap and a reboot *first* — which is the
+sanctioned use of JTAG under revision 1's own Rule 1, and empirically the
+safest observed state (4/4 clean boots).
+
+One claim was **strengthened** by review: the vbin declares
+`<ShellType>compute</ShellType>`, and `vrtbin-format.rst` confirms VRT passes
+this to vrtd "so the daemon can reset the board to the matching boot
+partition". A board reporting `unknown` therefore mismatches on *every*
+program. That is the SBR, exactly as §2 claims.
 
 **Thesis:** every recurring problem on this board — unreliable enumeration,
 `Shell: unknown`, the forced shell switch, the secondary bus reset, and the
@@ -116,32 +172,42 @@ Standing constraints:
 3. **No PMC resets.**
 4. Programming happens through `v80-smi` / VRT, or not at all.
 
-### The plan
+### The plan (revised — see E1, E2, E4)
 
-**Phase 1 — establish a control (answers the open question, costs one reboot)**
+**Phase 0 — bootstrap the card onto the bus** *(done 2026-08-20 11:45)*
 
-Reboot, then leave the V80 entirely alone: no JTAG, no drivers, no `v80-smi`.
-Run an ordinary CPU load for 30–60 minutes.
+```bash
+bash ~/dev/v80/jtag_load_shell.sh    # no sudo; card is OFF the bus
+```
 
-- Crashes → the host has a fault independent of this work; fix that first.
-- Survives → these operations are implicated, and rules 1–4 above are load-bearing.
+Sanctioned under Rule 1 and empirically the safest observed state. Verified by
+the JTAG target hierarchy: `Cortex-R5 #0 (Running)` = AMC firmware up,
+`MicroBlaze PPU (Sleeping)` = PLM finished. Then one reboot — the root port
+`0000:00:01.1` is created by firmware at POST and no rescan can conjure it.
+Historically 4/4 reliable: every JTAG-load boot was followed by a boot with the
+card enumerated.
 
-Either outcome is worth the reboot: it is the one experiment never run, and
-every subsequent decision depends on it.
+~~Phase 1 — control run~~ **dropped, see E2.**
 
 **Phase 2 — complete the install (the step never done)**
 
 ```bash
-sudo bash ~/dev/v80_load.sh                      # full stack: ami + slash + vrtd
-sudo v80-smi write-static-shell --flash -d 01:00 # THE MISSING STEP
+sudo bash ~/dev/v80/step1_load.sh    # ami + slash + vrtd; reports Shell:
+sudo bash ~/dev/v80/step2_flash.sh   # THE MISSING STEP
 ```
 
-`ami` is required here — the flash write goes through the AMC over GCQ
+`ami` is required — the flash write goes through the AMC over GCQ
 (`GCQ_SUBMIT_CMD_DOWNLOAD_PDI`, 40-minute driver timeout). This is the one
 operation for which PF0 genuinely matters.
 
-Expect it to take tens of minutes. Per the docs it then "resets the board into
-the programmed partition", with no host reboot required.
+`step2_flash.sh` issues the E1-corrected command, derives the BDF from
+`lspci -d 10ee:50b4 -D` rather than by regexing `v80-smi list` (that output is
+free-form; a `hh:mm` clock time matches a BDF pattern), and verifies the FPT
+magic `0x92F7A516` on the PDI so a no-FPT JTAG image can never be handed to
+`--flash`.
+
+Per the docs it then "resets the board into the programmed partition", with no
+host reboot required.
 
 **Phase 3 — verify the omission is closed**
 
@@ -173,15 +239,22 @@ against `instrs=336912`.
 ## 5. Risks
 
 **Flash write failure.** Step B writes OSPI. A failure mid-write can leave the
-card unbootable. Mitigations: the AVED FPT defines two partitions, and the
-JTAG bootstrap (Step A) exists precisely to recover a card that will not
-enumerate — we have exercised it repeatedly and know it works. This is the one
-place where the JTAG tooling built over the last two days is legitimately
-useful.
+card unbootable. Mitigations, in order of strength: the JTAG bootstrap does not
+read flash at all, so it recovers a card that cannot boot from OSPI — exercised
+repeatedly, including today. Additionally, `--shell-type compute` writes boot
+**partition 1 only**, leaving partition 0 intact; the documented default of
+`all` would have overwritten both and destroyed that fallback. E1 forces us off
+the default anyway, which happens to be the safer choice.
 
-**Host instability.** If Phase 1 shows the host faults on its own, Phase 2 is a
-40-minute flash write on an unstable machine — the worst possible time for a
-reset. **Do not start Phase 2 until Phase 1 passes.**
+**Host instability.** Per E3 the host does fault on its own (~1 per 68 h) and
+card presence raises it to ~1 per 17.6 h. A flash write is therefore exposed:
+at that rate a 40-minute window carries roughly a 4% chance of a reset landing
+inside it. That is not negligible, but it is the *tolerable* kind of risk,
+because the failure is recoverable via JTAG rather than terminal. Waiting for
+stability is not an option — there is no fix for the host fault within this
+project's scope, and E2 shows we cannot even measure it in reasonable time.
+Mitigation is to keep the exposed window short and to touch nothing else on the
+machine while it runs.
 
 **`ami` must be loaded for Phase 2.** That contradicts the "slash-only"
 mitigation from yesterday. It is unavoidable: the flash path runs through the
@@ -208,8 +281,9 @@ where the real defect always was.
 
 ## 7. Acceptance criteria
 
-1. Phase 1 control run completes and its result is recorded.
-2. `v80-smi write-static-shell --flash` completes successfully.
+1. ~~Phase 1 control run~~ — replaced by the 33-boot retrospective in E3.
+2. `v80-smi write-static-shell --flash --shell-type compute --pdi …` completes
+   successfully.
 3. `v80-smi list` reports `Shell: compute` **and still does after a reboot**.
 4. The card enumerates after a reboot with **no JTAG intervention**.
 5. A design write completes with no `reset_with_ami` and no SBR in the journal.
