@@ -11,10 +11,16 @@
  * unhandled intrinsic refuses the device path, which is safe, and would hide
  * the case this covers.
  *
- * Both layers must therefore come back with the fragment shader's colour. A
- * driver that renders the draw once leaves every view but the first at the
- * clear colour, with no error and no fallback, so the clear is deliberately a
- * different colour from the draw and each layer is checked separately.
+ * Every view must therefore come back carrying the fragment shader's colour. A
+ * driver that renders the draw once leaves all but the first at the clear,
+ * with no error and no fallback, so the clear is deliberately a different
+ * colour from the draw and each view is counted separately.
+ *
+ * Two masks are run. The contiguous one is the ordinary stereo case; the
+ * non-contiguous 0b101 is what a driver looping over a view *count* instead of
+ * the mask's set bits gets wrong, leaving the highest view empty. Layers
+ * outside the mask are not asserted on: they receive neither the clear nor the
+ * draw, so the spec leaves their contents undefined.
  *
  * Correct behaviour is either to render all the views or to refuse the pass and
  * let llvmpipe render it. This test asserts the pixels, not which of those
@@ -31,7 +37,7 @@
 
 #define WIDTH     64u
 #define HEIGHT    64u
-#define VIEWS     2u
+#define MAXVIEWS  3u
 #define FORMAT    VK_FORMAT_R8G8B8A8_UNORM
 /* multiview.frag's colour, and the clear it has to replace. Both are exact
  * 1/255 steps so neither depends on how the device rounds a UNORM8. */
@@ -90,21 +96,23 @@ load_module(VkDevice dev, const char *path)
    return sm;
 }
 
-/* Each view's centre pixel, filled by render(). */
-static uint8_t centre[VIEWS][4];
+/* Each layer's centre pixel, filled by render(). */
+static uint8_t centre[MAXVIEWS][4];
 
-/* Draw once into a multiview pass and record, per view, its centre pixel and
+/* Draw once into a multiview pass over `layers` array layers, with `view_mask`
+ * selecting which of them are views, and record per layer its centre pixel and
  * how many pixels carry the fragment shader's colour.
  * Returns 0, or -1 on a Vulkan error. */
 static int
 render(VkDevice dev, VkQueue queue, uint32_t qf,
        const VkPhysicalDeviceMemoryProperties *mp,
-       VkShaderModule vs, VkShaderModule fs, long *out_covered)
+       VkShaderModule vs, VkShaderModule fs,
+       uint32_t layers, uint32_t view_mask, long *out_covered)
 {
    VkImageCreateInfo imci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D, .format = FORMAT,
-      .extent = { WIDTH, HEIGHT, 1 }, .mipLevels = 1, .arrayLayers = VIEWS,
+      .extent = { WIDTH, HEIGHT, 1 }, .mipLevels = 1, .arrayLayers = layers,
       .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
       .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -129,7 +137,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       .image = img, .viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY, .format = FORMAT,
       .subresourceRange = {
          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-         .levelCount = 1, .layerCount = VIEWS,
+         .levelCount = 1, .layerCount = layers,
       },
    };
    VkImageView view;
@@ -151,9 +159,8 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
       .colorAttachmentCount = 1, .pColorAttachments = &attref,
    };
-   /* One bit per view. correlationMask only tells the implementation the views
-    * are related enough to render together; it changes no result. */
-   const uint32_t view_mask = (1u << VIEWS) - 1u;
+   /* correlationMask only tells the implementation the views are related
+    * enough to render together; it changes no result. */
    VkRenderPassMultiviewCreateInfo mvci = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO,
       .subpassCount = 1, .pViewMasks = &view_mask,
@@ -234,7 +241,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkPipeline pipe;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
 
-   const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4 * VIEWS;
+   const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4 * layers;
    VkBufferCreateInfo bci = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .size = bytes, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -290,7 +297,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       /* Every layer in one copy: the destination is tightly packed, so view v
        * starts at v * WIDTH * HEIGHT * 4. */
       .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .layerCount = VIEWS },
+                            .layerCount = layers },
       .imageExtent = { WIDTH, HEIGHT, 1 },
    };
    vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -306,7 +313,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
 
    uint8_t *px;
    CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
-   for (uint32_t v = 0; v < VIEWS; v++) {
+   for (uint32_t v = 0; v < layers; v++) {
       const uint8_t *layer = px + (size_t)v * WIDTH * HEIGHT * 4;
       out_covered[v] = 0;
       for (uint32_t y = 0; y < HEIGHT; y++) {
@@ -405,37 +412,65 @@ main(int argc, char **argv)
    VkShaderModule fs = load_module(dev, fs_path);
    if (!vs || !fs) return 1;
 
-   long covered[VIEWS] = { 0 };
-   if (render(dev, queue, qf, &mp, vs, fs, covered) < 0)
-      return 1;
+   /* The contiguous mask is the ordinary stereo case. The non-contiguous one
+    * is what a driver looping over a view *count* rather than over the mask's
+    * set bits gets wrong: layer 1 is not a view, so it has to come back
+    * untouched while layers 0 and 2 are both rendered. */
+   static const struct {
+      uint32_t layers, mask;
+      const char *what;
+   } CASES[] = {
+      { 2u, 0x3u, "0b11" },
+      { 3u, 0x5u, "0b101" },
+   };
+
+   /* The triangle covers the whole target, so every pixel of a view must carry
+    * the fragment shader's colour -- no fill-rule band and no tolerance,
+    * because the colour is an exact 1/255 step and the failures this test
+    * exists to catch are a whole view wide. */
+   const long EXPECT_PX = (long)WIDTH * HEIGHT;
+   unsigned bad = 0;
+
+   for (unsigned c = 0; c < sizeof CASES / sizeof CASES[0]; c++) {
+      long covered[MAXVIEWS] = { 0 };
+      if (render(dev, queue, qf, &mp, vs, fs,
+                 CASES[c].layers, CASES[c].mask, covered) < 0)
+         return 1;
+
+      /* Only the layers the mask names are views, and only they are asserted
+       * on. A layer outside the mask receives neither the loadOp clear nor the
+       * draw, so its contents are undefined and llvmpipe leaves it carrying the
+       * draw colour anyway -- checking it would assert something the spec does
+       * not promise and the reference does not do. Layer 2 of 0b101 is what
+       * makes this case worth running: a driver looping over a view *count*
+       * rather than the mask's set bits renders layers 0 and 1 and leaves it
+       * empty. */
+      for (uint32_t v = 0; v < CASES[c].layers; v++) {
+         if ((CASES[c].mask & (1u << v)) == 0u) {
+            continue;
+         }
+         if (covered[v] != EXPECT_PX) {
+            printf("  mask %s: view %u has %ld/%ld px at the draw colour -- "
+                   "centre RGB = %u,%u,%u\n",
+                   CASES[c].what, v, covered[v], EXPECT_PX,
+                   centre[v][0], centre[v][1], centre[v][2]);
+            bad++;
+         }
+      }
+   }
 
    vkDestroyShaderModule(dev, vs, NULL);
    vkDestroyShaderModule(dev, fs, NULL);
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 
-   /* The triangle covers the whole target, so every pixel of every view must
-    * carry the fragment shader's colour -- no fill-rule band and no tolerance,
-    * because the colour is an exact 1/255 step and the failure this test exists
-    * to catch leaves a whole view at the clear. */
-   const long EXPECT_PX = (long)WIDTH * HEIGHT;
-   unsigned bad = 0;
-   for (uint32_t v = 0; v < VIEWS; v++) {
-      if (covered[v] != EXPECT_PX) {
-         printf("  view %u: %ld/%ld px at the draw colour, centre RGB = "
-                "%u,%u,%u\n", v, covered[v], EXPECT_PX,
-                centre[v][0], centre[v][1], centre[v][2]);
-         bad++;
-      }
-   }
    if (bad) {
-      printf("FAILED (multiview: %u of %u views did not receive the draw; a "
-             "view left at the clear green means the pass was rendered once "
-             "instead of once per view)\n", bad, VIEWS);
+      printf("FAILED (multiview: %u views did not receive the draw; a view "
+             "left at the clear green means the pass was not replayed for "
+             "it)\n", bad);
       return 1;
    }
-   printf("PASSED (multiview: all %u views fully covered by one draw, %ld px "
-          "each at RGB %d,%d,%d)\n", VIEWS, EXPECT_PX,
-          EXPECT_R, EXPECT_G, EXPECT_B);
+   printf("PASSED (multiview: every view of 0b11 and 0b101 fully covered by "
+          "one draw, %ld px each)\n", EXPECT_PX);
    return 0;
 }
