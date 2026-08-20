@@ -87,18 +87,22 @@ void Mmu::on_tick() {
     bank.state = BankMiss::REPLAY;
   }
 
-  // 3) replay parked accesses (translated, or as-is on a fault).
+  // 3) replay parked accesses (translated, or as-is on a fault). The parked
+  // packet stays at the head of its ReqIn port until it leaves here, so the
+  // walk-in-flight access remains visible to SimChannel in-flight accounting
+  // (the processor's idle/flush decision) and later packets on that lane
+  // cannot overtake it — same as the RTL's per-lane elastic buffer.
   for (auto& bank : banks_) {
     if (bank.state != BankMiss::REPLAY)
       continue;
-    if (ReqOut.at(bank.port).full())
-      continue;
-    MemReq translated = bank.req;
+    MemReq translated = ReqIn.at(bank.port).peek();
     if (!bank.rsp.fault) {
       translated.addr = (bank.rsp.ppn << VX_VM_PAGE_LOG2_SIZE)
-                      | (bank.req.addr & ((1ULL << VX_VM_PAGE_LOG2_SIZE) - 1));
+                      | (translated.addr & ((1ULL << VX_VM_PAGE_LOG2_SIZE) - 1));
     }
-    ReqOut.at(bank.port).send(translated, 1);
+    if (!ReqOut.at(bank.port).try_send(translated))
+      continue;
+    ReqIn.at(bank.port).pop();
     bank.state = BankMiss::IDLE;
   }
 
@@ -152,7 +156,6 @@ void Mmu::on_tick() {
       bank.req = req;
       bank.port = p;
       bank.state = BankMiss::WALK_REQ;
-      ReqIn.at(p).pop();
     }
   }
 }
