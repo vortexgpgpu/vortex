@@ -79,17 +79,53 @@ echo "  PF0 at      : $PF0"
 echo "  target board: $BDF"
 
 step "3. WRITING FLASH -- do not interrupt (driver timeout is 40 minutes)"
-echo "  command: $SMI write-static-shell --flash -d $BDF --shell-type compute --pdi <pdi>"
-echo "  started: $(date)"
-echo
-if timeout 3600 "$SMI" write-static-shell --flash -d "$BDF" --shell-type compute --pdi "$PDI"; then
+# WHY --shell-type all, not compute.
+# `compute` writes boot partition 1 ONLY. But `v80-smi reset --shell-type`
+# documents that it "defaults to service", i.e. partition 0 is the default boot
+# target -- so a cold boot would still read partition 0, still find the old
+# image, and Shell: would revert to unknown. That fails the one acceptance
+# criterion that matters (survives a reboot). Writing `all` puts the compute
+# shell in BOTH partitions, so whichever one the PMC boots reports `compute`.
+#
+# `all` is rejected by *slashkit's resolver*, but --pdi bypasses the resolver
+# entirely, so v80-smi should accept it. If it does not, the rejection is an
+# argument error raised in the first seconds, long before any flash access --
+# so a fast failure is safe to retry with `compute`, and a SLOW failure is a
+# real write failure that must NOT be retried blindly.
+run_write() {
+    local st=$1
+    echo "  command: $SMI write-static-shell --flash -d $BDF --shell-type $st --pdi <pdi>"
+    echo "  started: $(date)"
     echo
-    echo "  FLASH WRITE REPORTED SUCCESS  ($(date))"
-else
+    local t0 rc
+    t0=$(date +%s)
+    timeout 3600 "$SMI" write-static-shell --flash -d "$BDF" --shell-type "$st" --pdi "$PDI"
     rc=$?
+    WRITE_ELAPSED=$(( $(date +%s) - t0 ))
+    return $rc
+}
+
+if run_write all; then
+    echo; echo "  FLASH WRITE REPORTED SUCCESS (both partitions)  ($(date))"
+elif [ "$WRITE_ELAPSED" -lt 30 ]; then
     echo
-    echo "  FLASH WRITE FAILED (rc=$rc)  ($(date))"
-    die "see recovery notes at the top of this script"
+    echo "  '--shell-type all' rejected after ${WRITE_ELAPSED}s -- an argument error,"
+    echo "  raised before any flash access. Falling back to partition 1 only."
+    echo
+    if run_write compute; then
+        echo; echo "  FLASH WRITE REPORTED SUCCESS (partition 1 only)  ($(date))"
+        echo "  NOTE: partition 0 still holds the OLD image. If a cold boot"
+        echo "        reports Shell: unknown again, that is why."
+    else
+        echo; echo "  FLASH WRITE FAILED after ${WRITE_ELAPSED}s  ($(date))"
+        die "see recovery notes at the top of this script"
+    fi
+else
+    echo
+    echo "  FLASH WRITE FAILED after ${WRITE_ELAPSED}s  ($(date))"
+    die "This failed too slowly to be an argument error, so flash was probably
+    being written. NOT retrying automatically. See the recovery notes at the
+    top of this script and check 'v80-smi list' before doing anything else."
 fi
 
 step "4. Verify -- Shell: must now read 'compute'"
