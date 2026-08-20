@@ -53,7 +53,10 @@ module VX_cp_axil_regfile_top
 
   // q_state outputs (flattened) + reset pulses
   output wire [NUM_QUEUES*$bits(cpe_state_t)-1:0] q_state_packed,
-  output wire [NUM_QUEUES-1:0]                     q_reset_pulse
+  output wire [NUM_QUEUES-1:0]                     q_reset_pulse,
+
+  // CP_SATP as seen by the DMA walker
+  output wire [63:0]                               satp
 );
 
   VX_cp_axil_s_if #(.ADDR_W(ADDR_W)) s_if ();
@@ -109,7 +112,8 @@ module VX_cp_axil_regfile_top
     .q_error        (q_error_arr),
     .last_dcr_rsp   (32'd0),
     .q_state        (q_state_arr),
-    .q_reset_pulse  (q_reset_arr)
+    .q_reset_pulse  (q_reset_arr),
+    .satp           (satp)
   );
 
 endmodule : VX_cp_axil_regfile_top
