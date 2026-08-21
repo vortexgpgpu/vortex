@@ -53,6 +53,7 @@
 #include <vector>
 #include <string>
 #include <bitmanip.h>
+#include "rvfloats.h"
 #include "softfloat_ext.h"
 
 #ifdef USE_FEDP
@@ -862,9 +863,97 @@ public:
     return true;
   }
 
+#ifdef VX_CFG_TCU_MX_ENABLE
+  bool test_rzr4() {
+    static constexpr uint8_t scales[] = {0x01, 0x38, 0x7e};
+    const int total_elements = NUM_REGS * 8;
+    uint32_t test_id = 0;
+
+    for (uint8_t scale_a : scales) {
+      for (uint8_t scale_b : scales) {
+        for (uint8_t sign_a = 0; sign_a < 2; ++sign_a) {
+          for (uint8_t sign_b = 0; sign_b < 2; ++sign_b) {
+            const uint8_t sf_a = scale_a | (sign_a << 7);
+            const uint8_t sf_b = scale_b | (sign_b << 7);
+            for (uint8_t code_a = 0; code_a < 16; ++code_a) {
+              for (uint8_t code_b = 0; code_b < 16; ++code_b, ++test_id) {
+                std::vector<uint32_t> a_values(total_elements, code_a);
+                std::vector<uint32_t> b_values(total_elements, code_b);
+                uint32_t a_packed[NUM_REGS], b_packed[NUM_REGS];
+                pack_elements(a_values, 4, NUM_REGS, a_packed);
+                pack_elements(b_values, 4, NUM_REGS, b_packed);
+
+                for (int i = 0; i < NUM_REGS; ++i) {
+                  WRITE_WDATA(dut_->a_row, i, a_packed[i]);
+                  WRITE_WDATA(dut_->b_col, i, b_packed[i]);
+                }
+                dut_->c_val = 0;
+                dut_->fmt_s = config_.fmt_s;
+                dut_->sf_a = sf_a;
+                dut_->sf_b = sf_b;
+                dut_->enable = 1;
+              #ifdef VX_CFG_TCU_TYPE_TFR
+                dut_->vld_mask = (1u << total_elements) - 1u;
+              #endif
+
+                for (int i = 0; i < LATENCY; ++i) {
+                  tick();
+                }
+                dut_->enable = 0;
+              #ifdef VX_CFG_TCU_TYPE_TFR
+                dut_->vld_mask = 0;
+              #endif
+                tick();
+
+                uint32_t fflags = 0;
+                uint32_t a = rv_rzr4tof_s(code_a, 0x38 | (sign_a << 7), 0, &fflags);
+                uint32_t b = rv_rzr4tof_s(code_b, 0x38 | (sign_b << 7), 0, &fflags);
+                uint32_t product = rv_fmul_s(a, b, 0, &fflags);
+                uint32_t expected = 0;
+                for (int i = 0; i < total_elements; ++i) {
+                  expected = rv_fadd_s(expected, product, 0, &fflags);
+                }
+                uint32_t scale_product = rv_fmul_s(
+                    rv_e4m3tof_s(scale_a, 0, &fflags),
+                    rv_e4m3tof_s(scale_b, 0, &fflags), 0, &fflags);
+                expected = rv_fmul_s(expected, scale_product, 0, &fflags);
+
+                float expected_f = bit_cast<float>(expected);
+                float actual_f = bit_cast<float>(uint32_t(dut_->d_val));
+                int delta = approximately_equal(actual_f, expected_f);
+                if (std::abs(delta) > config_.ulp) {
+                  std::cout << "RaZeR test #" << test_id << " failed:" << std::endl;
+                  print_format("  code_a=", code_a, true);
+                  print_format("  code_b=", code_b, true);
+                  print_format("  sf_a=", sf_a, true);
+                  print_format("  sf_b=", sf_b, true);
+                  print_float("  expected=", expected_f, true);
+                  print_float("  actual=", actual_f, true);
+                  std::cout << "  delta=" << delta << std::endl;
+                  return false;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    std::cout << test_id << " RaZeR test(s) PASSED!" << std::endl;
+    return true;
+  }
+#endif
+
   bool run_tests() {
     this->reset();
 
+#ifdef VX_CFG_TCU_MX_ENABLE
+    if (config_.fmt_s == 12) {
+      if (!test_rzr4()) {
+        return false;
+      }
+    } else
+#endif
     if (config_.fmt_s >= 16) {
       if (!test_integers()) {
         return false;
@@ -878,7 +967,9 @@ public:
     if (config_.test_id >= 0) {
       std::cout << "Test #" << config_.test_id << " PASSED!" << std::endl;
     } else {
-      std::cout << config_.num_tests << " test(s) PASSED!" << std::endl;
+      if (config_.fmt_s != 12) {
+        std::cout << config_.num_tests << " test(s) PASSED!" << std::endl;
+      }
     }
 
     std::cout << "Simulation completed in " << cycle_count_ << " cycles" << std::endl;
