@@ -194,7 +194,31 @@ idle time. C2 here is entered by reading legacy I/O port `0x814` (the FCH
 sitting in C2, every time.** No `idle=` or `max_cstate` parameter is set on the
 kernel command line, so this is the platform default.
 
-### F8 — Memory ECC is clean
+### F8 — Crashes land on the periodic wake-from-idle boundary ⭐⭐
+
+Two timers alternate to wake this box every 5 minutes:
+
+```
+/etc/cron.d/sysstat      5-55/10 * * * *   debian-sa1 1 1      -> :05 :15 :25 :35 :45 :55
+sysstat-collect.timer    every 10 min                          -> :00 :10 :20 :30 :40 :50
+```
+
+Crash wall-clock times cluster hard on those boundaries — `17:40:00`,
+`05:00:00`, `11:15:01`, `22:55:01`, `00:50:06`, `08:30:24`, `09:40:28`, …
+
+```
+crashes on a 5-minute boundary: 12/21 = 57%
+expected by chance:             4.2/21 = 20%
+P(>= 12 by chance)            = 1.9e-04
+```
+
+**The machine dies at the instant a timer wakes it out of C2.** Combined with
+F3 (always idle) and F7 (idle ≡ C2), this promotes H1 from "best fit" to a
+mechanism with independent statistical support, and it retro-explains F4
+(arbitrary core — whichever one is waking) and F1 (a core that fails to wake
+cannot write an error record).
+
+### F9 — Memory ECC is clean
 
 `EDAC mc0: ce_count=0 ue_count=0` across the whole period, 128 GB. No evidence
 implicating DRAM.
@@ -205,13 +229,23 @@ implicating DRAM.
 
 Ranked by fit to the evidence.
 
-### H1 — Deep C-state (C2 via P_LVL2) instability · **best fit**
+### H1 — Fault on **wake from C2** · **leading, with statistical support**
 
-Explains F3 (all crashes at idle) and F7 (all idle time in C2) directly.
-Consistent with F4 — a C-state transition fault lands on whichever thread was
-entering or leaving idle, which is arbitrary. Consistent with F1: a core that
-fails to wake produces no error record at all.
-**Does not explain** F6 without a further assumption.
+The only hypothesis that accounts for all of F1, F3, F4, F7 and F8 with one
+mechanism:
+
+| observation | explained how |
+|---|---|
+| F3 always idle | the fault is in the idle path |
+| F7 idle ≡ C2 (I/O port 0x814) | C2 is the state it is in |
+| F8 57% on the 5-min timer boundary, p=2e-4 | the fault is at the **wake**, not during residency |
+| F4 nine different cores | whichever thread is waking |
+| F1 6 of 21 with no error record | a core that fails to wake cannot log one |
+| F5 241 h clean then death | per-wake probability, so both are the same process |
+
+**Still not proven** — it is a correlation plus a plausible mechanism, with no
+MCA register evidence behind it (see §1: firmware-first makes that impossible
+to obtain today). **Does not explain** F6.
 
 ### H2 — Curve Optimizer / PBO undervolt · **plausible**
 
