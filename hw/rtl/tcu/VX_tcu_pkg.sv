@@ -35,6 +35,7 @@ package VX_tcu_pkg;
     localparam TCU_MXBF8_ID = 9;
     localparam TCU_MXFP4_ID = 10;
     localparam TCU_NVFP4_ID = 11;
+    localparam TCU_RZR4_ID  = 12;
     // Supported integer-point types (prefer setting unsigned versions to even)
     localparam TCU_I32_ID   = 16;
     localparam TCU_I8_ID    = 17;
@@ -212,9 +213,14 @@ package VX_tcu_pkg;
 `else
     localparam TCU_MX_SF_NVFP4 = 1;
 `endif
+`ifdef VX_CFG_TCU_RZR4_ENABLE
+    localparam TCU_MX_SF_RZR4 = mx_fedp_sf_count(4, 16);
+`else
+    localparam TCU_MX_SF_RZR4 = 1;
+`endif
 
-    localparam TCU_MX_MAX_SF = `MAX(`MAX(TCU_MX_SF_FP8, TCU_MX_SF_MXFP4),
-                                    TCU_MX_SF_NVFP4);
+    localparam TCU_MX_MAX_SF = `MAX(`MAX(`MAX(TCU_MX_SF_FP8, TCU_MX_SF_MXFP4),
+                                    TCU_MX_SF_NVFP4), TCU_MX_SF_RZR4);
 
     `ifdef VX_CFG_TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;
@@ -277,7 +283,7 @@ package VX_tcu_pkg;
         case (fmt)
             TCU_FP16_ID, TCU_BF16_ID:
                 return 16;
-            TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_I4_ID, TCU_U4_ID:
+            TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_RZR4_ID, TCU_I4_ID, TCU_U4_ID:
                 return 4;
             TCU_FP8_ID,
             TCU_BF8_ID,
@@ -309,7 +315,7 @@ package VX_tcu_pkg;
 
     function automatic logic tcu_fmt_is_mx(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
-            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_NVFP4_ID:
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID, TCU_NVFP4_ID, TCU_RZR4_ID:
                 return 1'b1;
             default:
                 return 1'b0;
@@ -319,7 +325,7 @@ package VX_tcu_pkg;
     function automatic int unsigned mx_scale_block_size(input logic [TCU_FMT_WIDTH-1:0] fmt);
         case (fmt)
             TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID: return 32;
-            TCU_NVFP4_ID:                                          return 16;
+            TCU_NVFP4_ID, TCU_RZR4_ID:                             return 16;
             default:                                               return 1;
         endcase
     endfunction
@@ -366,6 +372,7 @@ package VX_tcu_pkg;
             TCU_MXBF8_ID: `TRACE(level, ("mxbf8"))
             TCU_MXFP4_ID: `TRACE(level, ("mxfp4"))
             TCU_NVFP4_ID: `TRACE(level, ("nvfp4"))
+            TCU_RZR4_ID:  `TRACE(level, ("rzr4"))
             TCU_I32_ID:   `TRACE(level, ("i32"))
             TCU_I8_ID:    `TRACE(level, ("i8"))
             TCU_U8_ID:    `TRACE(level, ("u8"))

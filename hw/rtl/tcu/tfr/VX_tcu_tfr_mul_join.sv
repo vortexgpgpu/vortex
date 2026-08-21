@@ -107,6 +107,12 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
                 exc_sel = exc_f4;
             end
         `endif
+        `ifdef VX_CFG_TCU_RZR4_ENABLE
+            TCU_RZR4_ID: begin
+                exp_sel = exp_f4;
+                exc_sel = exc_f4;
+            end
+        `endif
         `endif
         `endif
 

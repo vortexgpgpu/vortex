@@ -135,6 +135,11 @@ static float dequantize_mx_value(const itype_t *data,
       uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
       return bit_cast<float>(rv_nvfp4tof_s(q, sf, 0, nullptr)) * tensor_scale;
     }
+  case vt::rzr4::id:
+    {
+      uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
+      return bit_cast<float>(rv_rzr4tof_s(q, sf, 0, nullptr)) * tensor_scale;
+    }
   default:
     std::abort();
   }
@@ -179,7 +184,7 @@ static bool quantize_inputs(typename FormatT::dtype *A,
                             uint32_t M,
                             uint32_t N,
                             uint32_t K_logical) {
-  if constexpr (std::is_same<FormatT, vt::nvfp4>::value) {
+  if constexpr (vt::detail::mx_format_t<FormatT>::needs_tensor_scale) {
     return vt::quantize_mx_a_rowmajor<FormatT>(
              reinterpret_cast<uint8_t*>(A), scale_a, A_tensor_scale,
              A_dense, M, K_logical)
@@ -357,7 +362,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_alloc(device, h_mx_b.size() * sizeof(uint32_t), VX_MEM_READ, &MX_B_buffer));
   RT_CHECK(vx_mem_address(MX_B_buffer, &kernel_arg.MX_B_addr));
 #ifdef TCU_MX_TLS
-  if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {
+  if constexpr (vt::detail::mx_format_t<vt::ITYPE>::needs_tensor_scale) {
     RT_CHECK(vx_mem_alloc(device, sizeof(float), VX_MEM_READ, &A_tensor_scale_buffer));
     RT_CHECK(vx_mem_address(A_tensor_scale_buffer, &kernel_arg.A_tensor_scale_addr));
     RT_CHECK(vx_mem_alloc(device, sizeof(float), VX_MEM_READ, &B_tensor_scale_buffer));
@@ -370,7 +375,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_copy_to_dev(MX_A_buffer, h_mx_a.data(), 0, h_mx_a.size() * sizeof(uint32_t)));
   RT_CHECK(vx_copy_to_dev(MX_B_buffer, h_mx_b.data(), 0, h_mx_b.size() * sizeof(uint32_t)));
 #ifdef TCU_MX_TLS
-  if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value) {
+  if constexpr (vt::detail::mx_format_t<vt::ITYPE>::needs_tensor_scale) {
     RT_CHECK(vx_copy_to_dev(A_tensor_scale_buffer, &A_tensor_scale, 0, sizeof(float)));
     RT_CHECK(vx_copy_to_dev(B_tensor_scale_buffer, &B_tensor_scale, 0, sizeof(float)));
   }
@@ -408,7 +413,9 @@ int main(int argc, char *argv[]) {
              A_tensor_scale, B_tensor_scale, M, N, K_logical);
 
   int errors = 0;
-  float rel_tol = (std::is_same<vt::ITYPE, vt::nvfp4>::value || std::is_same<vt::ITYPE, vt::mxfp4>::value) ? 0.25f : 0.05f;
+  float rel_tol = (std::is_same<vt::ITYPE, vt::nvfp4>::value
+                || std::is_same<vt::ITYPE, vt::rzr4>::value
+                || std::is_same<vt::ITYPE, vt::mxfp4>::value) ? 0.25f : 0.05f;
   for (uint32_t i = 0; i < h_ref.size(); ++i) {
     float actual = static_cast<float>(h_C[i]);
     float expected = static_cast<float>(h_ref[i]);

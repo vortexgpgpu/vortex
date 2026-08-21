@@ -41,6 +41,8 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
     localparam FMUL_LATENCY = 2;
     localparam FACC_LATENCY = 2;
     localparam TOTAL_LATENCY= FMUL_LATENCY + FACC_LATENCY;
+    localparam [31:0] RZR4_POS_F32 = 32'h40a00000;
+    localparam [31:0] RZR4_NEG_F32 = 32'hc0a00000;
     `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY, ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY));
 
 `ifndef VX_CFG_TCU_MX_ENABLE
@@ -207,6 +209,39 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                 end
             end
         `endif  // VX_CFG_TCU_NVFP4_ENABLE
+        `ifdef VX_CFG_TCU_RZR4_ENABLE
+            TCU_RZR4_ID: begin
+                prod = 64'hffffffff00000000;
+                for (int s = 0; s < SF; ++s) begin
+                    group_prod = 64'hffffffff00000000;
+                    for (int j = 0; j < 8; j++) begin
+                        if ((((i * 8 + j) * SF) / (N * 8)) == s) begin
+                            if (a_row[i][j * 4 +: 4] == 4'h0) begin
+                                a_f = {32'hffffffff, sf_a[s][7] ? RZR4_NEG_F32 : RZR4_POS_F32};
+                            end else if (a_row[i][j * 4 +: 4] == 4'h8) begin
+                                a_f = 64'hffffffff00000000;
+                            end else begin
+                                dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
+                            end
+                            if (b_col[i][j * 4 +: 4] == 4'h0) begin
+                                b_f = {32'hffffffff, sf_b[s][7] ? RZR4_NEG_F32 : RZR4_POS_F32};
+                            end else if (b_col[i][j * 4 +: 4] == 4'h8) begin
+                                b_f = 64'hffffffff00000000;
+                            end else begin
+                                dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, b_col[i][j * 4 +: 4]}, 3'b0, b_f, fflags);
+                            end
+                            dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                            dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
+                        end
+                    end
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, 1'b0, sf_a[s][6:0]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, 1'b0, sf_b[s][6:0]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                    dpi_fmul(enable, int'(0), group_prod, temp, 3'b0, group_prod, fflags);
+                    dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
+                end
+            end
+        `endif  // VX_CFG_TCU_RZR4_ENABLE
         `endif  // VX_CFG_TCU_FP4_ENABLE
         `endif  // VX_CFG_TCU_MX_ENABLE
         `ifdef VX_CFG_TCU_INT8_ENABLE

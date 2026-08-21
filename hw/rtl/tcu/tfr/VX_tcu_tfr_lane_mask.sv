@@ -71,9 +71,12 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
         `ifdef VX_CFG_TCU_FP8_ENABLE
             TCU_FP8_ID,
             TCU_BF8_ID:  lane_mask = mask_8;
+        `endif
         `ifdef VX_CFG_TCU_MX_ENABLE
+        `ifdef VX_CFG_TCU_FP8_ENABLE
             TCU_MXFP8_ID,
             TCU_MXBF8_ID:lane_mask = mask_8;
+        `endif
         `ifdef VX_CFG_TCU_FP4_ENABLE
         `ifdef VX_CFG_TCU_MXFP4_ENABLE
             TCU_MXFP4_ID:lane_mask = mask_4;
@@ -81,6 +84,8 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
         `ifdef VX_CFG_TCU_NVFP4_ENABLE
             TCU_NVFP4_ID:lane_mask = mask_4;
         `endif
+        `ifdef VX_CFG_TCU_RZR4_ENABLE
+            TCU_RZR4_ID: lane_mask = mask_4;
         `endif
         `endif
         `endif

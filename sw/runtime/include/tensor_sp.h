@@ -86,6 +86,25 @@ struct data_accessor_t<mxfp4> : data_accessor_t<uint4> {};
 template <>
 struct data_accessor_t<nvfp4> : data_accessor_t<uint4> {};
 
+template <>
+struct data_accessor_t<rzr4> : data_accessor_t<uint4> {};
+
+template <typename TensorT>
+inline typename TensorT::dtype zero_value() {
+  if constexpr (std::is_same_v<TensorT, rzr4>) {
+    return 0x8;
+  }
+  return 0;
+}
+
+template <typename TensorT>
+inline bool is_zero(typename TensorT::dtype value) {
+  if constexpr (std::is_same_v<TensorT, rzr4>) {
+    return (value & 0xf) == 0x8;
+  }
+  return value == 0;
+}
+
 template <typename TensorT>
 inline uint32_t expanded_cols(uint32_t cols) {
   return (TensorT::bits < 8) ? (cols * (8 / TensorT::bits)) : cols;
@@ -140,6 +159,11 @@ inline float element_magnitude(const typename TensorT::dtype* data, uint32_t off
     return std::abs(static_cast<float>(sval));
   } else if constexpr (std::is_same_v<TensorT, uint4>) {
     return static_cast<float>(val & 0xF);
+  } else if constexpr (std::is_same_v<TensorT, rzr4>) {
+    static constexpr float magnitudes[8] = {
+      5.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f
+    };
+    return (val == 0x8) ? 0.0f : magnitudes[val & 0x7];
   } else if constexpr (std::is_same_v<TensorT, fp16>) {
     return std::abs(bit_cast<float>(rv_htof_s(val, 0, nullptr)));
   } else if constexpr (std::is_same_v<TensorT, bf16>) {
@@ -175,14 +199,16 @@ inline bool prune_2to4_matrix(typename TensorT::dtype* dense, uint32_t rows, uin
           float m0 = sp_detail::element_magnitude<TensorT>(dense, h_base + 0);
           float m1 = sp_detail::element_magnitude<TensorT>(dense, h_base + 1);
           uint32_t zero_idx = (m0 >= m1) ? 1 : 0;
-          sp_detail::data_accessor_t<TensorT>::write(dense, h_base + zero_idx, 0);
+          sp_detail::data_accessor_t<TensorT>::write(
+              dense, h_base + zero_idx, sp_detail::zero_value<TensorT>());
         }
       } else {
         uint32_t keep0, keep1;
         sp_detail::select_top2<TensorT>(dense, base, keep0, keep1);
         for (uint32_t i = 0; i < kBlock; ++i) {
           if (i != keep0 && i != keep1) {
-            sp_detail::data_accessor_t<TensorT>::write(dense, base + i, 0);
+            sp_detail::data_accessor_t<TensorT>::write(
+                dense, base + i, sp_detail::zero_value<TensorT>());
           }
         }
       }
@@ -216,7 +242,7 @@ inline bool compress_2to4_matrix(typename TensorT::dtype* compressed,
       uint32_t idx1 = kBlock;
       for (uint32_t i = 0; i < kBlock; ++i) {
         auto value = sp_detail::data_accessor_t<TensorT>::read(pruned, row * cols_expanded + k_start + i);
-        if (value != 0) {
+        if (!sp_detail::is_zero<TensorT>(value)) {
           if (idx0 == kBlock) {
             idx0 = i;
           } else if (idx1 == kBlock) {
