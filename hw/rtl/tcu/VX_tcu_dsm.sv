@@ -50,11 +50,15 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
 
         wire [7:0] a_i4_nz;
         wire [7:0] b_i4_nz;
+        wire [7:0] a_rzr4_nz;
+        wire [7:0] b_rzr4_nz;
         for (genvar e = 0; e < 8; ++e) begin : g_i4
             assign a_i4_nz[e] = |a_row[k][e * 4 +: 4];
             assign b_i4_nz[e] = |b_col[k][e * 4 +: 4];
+            assign a_rzr4_nz[e] = a_row[k][e * 4 +: 4] != 4'h8;
+            assign b_rzr4_nz[e] = b_col[k][e * 4 +: 4] != 4'h8;
         end
-        `UNUSED_VAR({a_tf32_nz, b_tf32_nz, a_f16_nz, b_f16_nz, a_i8_nz, b_i8_nz, a_i4_nz, b_i4_nz})
+        `UNUSED_VAR({a_tf32_nz, b_tf32_nz, a_f16_nz, b_f16_nz, a_i8_nz, b_i8_nz, a_i4_nz, b_i4_nz, a_rzr4_nz, b_rzr4_nz})
 
         always_comb begin
             vld_mask_per_k[k] = '1;
@@ -78,13 +82,16 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
                         vld_mask_per_k[k][e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
                     end
                 end
+            `endif
             `ifdef VX_CFG_TCU_MX_ENABLE
+            `ifdef VX_CFG_TCU_FP8_ENABLE
                 TCU_MXFP8_ID,
                 TCU_MXBF8_ID: begin
                     for (int e = 0; e < 4; ++e) begin
                         vld_mask_per_k[k][e * 2 +: 2] = {2{a_i8_nz[e] && b_i8_nz[e]}};
                     end
                 end
+            `endif
             `ifdef VX_CFG_TCU_FP4_ENABLE
             `ifdef VX_CFG_TCU_MXFP4_ENABLE
                 TCU_MXFP4_ID: begin
@@ -100,6 +107,12 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
                     end
                 end
             `endif
+            `ifdef VX_CFG_TCU_RZR4_ENABLE
+                TCU_RZR4_ID: begin
+                    for (int e = 0; e < 8; ++e) begin
+                        vld_mask_per_k[k][e] = a_rzr4_nz[e] && b_rzr4_nz[e];
+                    end
+                end
             `endif
             `endif
             `endif

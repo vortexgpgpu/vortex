@@ -101,6 +101,7 @@ define tcu_tfr_suite
 	$(call tcu_case,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_FP8_ENABLE,--fmt=4 --W=25)
 	$(call tcu_case,2,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_FP8_ENABLE,--fmt=5 --W=25)
 	$(call tcu_case,2,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_LATENCY=5,--fmt=2 --W=25)
+	$(call tcu_case,2,-DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_RZR4_ENABLE,--fmt=12 --no-trace)
 	$(call tcu_int_pair,TFR,INT8,17,18)
 	$(call tcu_int_pair,TFR,INT4,19,20)
 endef
@@ -113,6 +114,7 @@ run-tcu:
 	$(call tcu_case,1,-DVX_CFG_TCU_TYPE_DPI,--fmt=3 --no-fused)
 	$(call tcu_case,1,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE,--fmt=4 --no-fused)
 	$(call tcu_case,1,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE,--fmt=5 --no-fused)
+	$(call tcu_case,1,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_RZR4_ENABLE,--fmt=12 --no-trace)
 	# DPI reference — integer
 	$(call tcu_int_pair,DPI,INT8,17,18)
 	$(call tcu_int_pair,DPI,INT4,19,20)

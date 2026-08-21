@@ -264,5 +264,30 @@ tests:
   args: -m 128 -n 128 -k32
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=mxfp8 -DOTYPE=fp32 -DVX_CFG_TCU_TYPE_DPI
 
+- id: sgemm_tcu_mx-simx-rzr4
+  via: blackbox
+  drivers: [simx]
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_RZR4_ENABLE -DITYPE=rzr4 -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-rzr4-dpi
+  via: blackbox
+  drivers: [rtlsim]
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_RZR4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=rzr4 -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-k32"
+- id: sgemm_tcu_mx-rtlsim-rzr4-tfr
+  via: blackbox
+  drivers: [rtlsim]
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_RZR4_ENABLE -DVX_CFG_TCU_TYPE_TFR -DITYPE=rzr4 -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-k32"
+- id: model_parity-rzr4
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_RZR4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=rzr4 -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-k32"
+
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.
