@@ -1,9 +1,9 @@
 /* Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * A single oversized triangle covering the whole target, so the draw's
- * footprint is exact and the sample count it should produce is simply every
- * pixel -- no fill rule to reason about between the draw and the query. */
+ * A single oversized triangle covering the whole target, so a predicate that
+ * was honoured and one that was ignored differ over the entire image rather
+ * than at an edge. */
 #version 460
 
 void main()
