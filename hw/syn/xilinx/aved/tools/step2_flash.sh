@@ -34,6 +34,18 @@
 
 set -u
 
+# Which boot partition to write:
+#   compute  partition 1
+#   service  partition 0   <-- the one POST actually reads by default
+#   both     partition 1 then partition 0 (what --shell-type all would do,
+#            if v80-smi allowed `all` together with --pdi, which it does not)
+# Default `both`, because writing only partition 1 does NOT survive a reboot:
+# verified 2026-08-20, the board came back un-enumerated because POST read the
+# old image still sitting in partition 0.
+WHICH="${1:-both}"
+case "$WHICH" in compute|service|both) ;; *)
+    echo "usage: $0 [compute|service|both]" >&2; exit 2 ;; esac
+
 SMI=/opt/xilinx/slash/bin/v80-smi
 PDI=/home/blaise/dev/SLASH-compute/linker/slashkit/resources/static_shell_compute/amd_v80_gen5x8_25.1.pdi
 LOG=/tmp/v80_step2_flash.log
@@ -105,28 +117,31 @@ run_write() {
     return $rc
 }
 
-if run_write all; then
-    echo; echo "  FLASH WRITE REPORTED SUCCESS (both partitions)  ($(date))"
-elif [ "$WRITE_ELAPSED" -lt 30 ]; then
-    echo
-    echo "  '--shell-type all' rejected after ${WRITE_ELAPSED}s -- an argument error,"
-    echo "  raised before any flash access. Falling back to partition 1 only."
-    echo
-    if run_write compute; then
-        echo; echo "  FLASH WRITE REPORTED SUCCESS (partition 1 only)  ($(date))"
-        echo "  NOTE: partition 0 still holds the OLD image. If a cold boot"
-        echo "        reports Shell: unknown again, that is why."
+case "$WHICH" in
+    compute) PARTS="compute" ;;
+    service) PARTS="service" ;;
+    both)    PARTS="compute service" ;;
+esac
+echo "  writing partition(s): $PARTS"
+echo
+
+for st in $PARTS; do
+    echo "  ===== $st ====="
+    if run_write "$st"; then
+        echo; echo "  $st: WRITE REPORTED SUCCESS (${WRITE_ELAPSED}s)  ($(date))"
     else
-        echo; echo "  FLASH WRITE FAILED after ${WRITE_ELAPSED}s  ($(date))"
-        die "see recovery notes at the top of this script"
+        echo; echo "  $st: WRITE FAILED after ${WRITE_ELAPSED}s  ($(date))"
+        if [ "$WRITE_ELAPSED" -lt 30 ]; then
+            die "Failed in under 30s, so this is an argument/resolution error
+    raised before any flash access -- nothing was written for '$st'. Fix the
+    invocation and re-run."
+        fi
+        die "This failed too slowly to be an argument error, so flash WAS being
+    written. NOT retrying automatically. Check 'v80-smi list' and read the
+    recovery notes at the top of this script before doing anything else."
     fi
-else
     echo
-    echo "  FLASH WRITE FAILED after ${WRITE_ELAPSED}s  ($(date))"
-    die "This failed too slowly to be an argument error, so flash was probably
-    being written. NOT retrying automatically. See the recovery notes at the
-    top of this script and check 'v80-smi list' before doing anything else."
-fi
+done
 
 step "4. Verify -- Shell: must now read 'compute'"
 # The command resets the board into the programmed partition, and a full PDI
