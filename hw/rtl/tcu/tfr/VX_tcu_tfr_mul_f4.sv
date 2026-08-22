@@ -90,7 +90,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         .data_out (fmt_f_r)
     );
 
-    function automatic [3:0] nvfp4_mag_x2(input logic [3:0] raw);
+    function automatic [3:0] e2m1_mag_x2(input logic [3:0] raw);
         case (raw)
             4'h1,
             4'h9:   return 4'd1;
@@ -121,24 +121,33 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     localparam S_SUPER_MXFP4   = 22;
     localparam BIAS_BASE_MXFP4 = F32_BIAS_MXFP4 + 2*(S_FP32_MXFP4 - S_SUPER_MXFP4) - W + WA - 1 + 128;
 
-    localparam SIG_SHIFT_MXFP4 = 11;
-
-    localparam F4_EXP_BIAS_MXFP4   = 1;
     localparam EXP_TERM_W_MXFP4    = 6;
     localparam EXP_TERM_BIAS_MXFP4 = 1 << (EXP_TERM_W_MXFP4 - 1);
-    localparam EXP_COMP_MXFP4      = -(2 * F4_EXP_BIAS_MXFP4 + 10);
-    localparam [EXP_TERM_W_MXFP4-1:0] EXP_ADJ_MXFP4 = EXP_TERM_W_MXFP4'(EXP_TERM_BIAS_MXFP4 + EXP_COMP_MXFP4);
+    localparam EXP_COMP_MXFP4      = -(2 + 10);
+    localparam [EXP_TERM_W_MXFP4-1:0] EXP_ADJ_MXFP4 =
+        EXP_TERM_W_MXFP4'(EXP_TERM_BIAS_MXFP4 + EXP_COMP_MXFP4 + 4);
     localparam [EXP_W-1:0] EXP_BASE_BIASED_MXFP4 = EXP_W'(BIAS_BASE_MXFP4 + EXP_COMP_MXFP4);
+    localparam SIG_SHIFT_MXFP4 = 7;
 
     for (genvar i = 0; i < TCK; ++i) begin : g_lane_mxfp4
         localparam K_WORD = i / 2;
 
-        wire [3:0][23:0] term_mag_shifted;
-        wire [3:0][EXP_TERM_W_MXFP4-1:0] term_exp_biased;
-        wire [3:0] term_valid;
-        wire [3:0] term_sign;
-        wire [3:0][1:0] a_man, b_man;
-        wire [3:0][3:0] f4_man_prod;
+        wire [3:0][3:0] elem_mag_a, elem_mag_b;
+        wire [3:0][7:0] elem_mag_prod;
+        wire [3:0] elem_sign;
+        wire [3:0] elem_valid;
+        wire [3:0] elem_sign_r, elem_valid_r;
+        VX_pipe_register #(
+            .DATAW (8),
+            .DEPTH (PROD_REG)
+        ) pipe_ctrl (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  ({elem_sign, elem_valid}),
+            .data_out ({elem_sign_r, elem_valid_r})
+        );
+        wire [3:0][10:0] elem_signed;
 
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
@@ -147,152 +156,99 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
             wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
 
-            wire a_zero = ~|raw_a[2:0];
-            wire b_zero = ~|raw_b[2:0];
-            assign term_valid[j] = lane_valid && !a_zero && !b_zero;
-            assign term_sign[j]  = raw_a[3] ^ raw_b[3];
+            assign elem_mag_a[j] = e2m1_mag_x2(raw_a);
+            assign elem_mag_b[j] = e2m1_mag_x2(raw_b);
+            assign elem_sign[j] = raw_a[3] ^ raw_b[3];
+            assign elem_valid[j] = lane_valid && (raw_a[2:0] != 3'd0)
+                                         && (raw_b[2:0] != 3'd0);
 
-            assign a_man[j] = ~|raw_a[2:1] ? 2'b01 : {1'b1, raw_a[0]};
-            assign b_man[j] = ~|raw_b[2:1] ? 2'b01 : {1'b1, raw_b[0]};
-
-            wire [1:0] a_exp, b_exp;
-            assign a_exp[0] = raw_a[2] & ~raw_a[1];
-            assign a_exp[1] = raw_a[2] & raw_a[1];
-            assign b_exp[0] = raw_b[2] & ~raw_b[1];
-            assign b_exp[1] = raw_b[2] & raw_b[1];
-
-            wire signed [9:0] sf_exp_a = $signed({1'b0, sf_a}) - 10'sd127;
-            wire signed [9:0] sf_exp_b = $signed({1'b0, sf_b}) - 10'sd127;
-            wire signed [5:0] exp_biased_raw = 6'(10'(EXP_ADJ_MXFP4)
-                                                + sf_exp_a
-                                                + sf_exp_b
-                                                + 10'(a_exp)
-                                                + 10'(b_exp));
-
-            assign term_exp_biased[j] = term_valid[j] ? exp_biased_raw : '0;
-        end
-
-        // Pack the four 2x2 mantissa products into two DSP48s (two per DSP);
-        // PROD_REG lands the products in the DSP48 PREG.
-        VX_tcu_tfr_wmul #(
-            .N       (2),
-            .LANES   (2),
-            .USE_DSP (USE_DSP),
-            .OUT_REG (PROD_REG)
-        ) f4m01 (
-            .clk    (clk),
-            .enable (enable),
-            .a (a_man[1:0]),
-            .b (b_man[1:0]),
-            .p (f4_man_prod[1:0])
-        );
-        VX_tcu_tfr_wmul #(
-            .N       (2),
-            .LANES   (2),
-            .USE_DSP (USE_DSP),
-            .OUT_REG (PROD_REG)
-        ) f4m23 (
-            .clk    (clk),
-            .enable (enable),
-            .a (a_man[3:2]),
-            .b (b_man[3:2]),
-            .p (f4_man_prod[3:2])
-        );
-
-        wire [EXP_TERM_W_MXFP4-1:0] max_exp_01 = (term_exp_biased[0] >= term_exp_biased[1]) ? term_exp_biased[0] : term_exp_biased[1];
-        wire [EXP_TERM_W_MXFP4-1:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];
-        wire [EXP_TERM_W_MXFP4-1:0] max_exp_biased = (max_exp_01 >= max_exp_23) ? max_exp_01 : max_exp_23;
-
-        // Term alignment controls depend only on exponents and signs:
-        // pre-seam compute, post-seam use.
-        wire [3:0] term_valid_r, term_sign_r;
-        wire [3:0][EXP_TERM_W_MXFP4-1:0] shift_amt_r;
-        wire [3:0][EXP_TERM_W_MXFP4-1:0] shift_amt_w;
-        VX_pipe_register #(
-            .DATAW (4 + 4 + 4 * EXP_TERM_W_MXFP4),
-            .DEPTH (PROD_REG)
-        ) pipe_ctrl (
-            .clk      (clk),
-            .reset    (1'b0),
-            .enable   (enable),
-            .data_in  ({term_valid,   term_sign,   shift_amt_w}),
-            .data_out ({term_valid_r, term_sign_r, shift_amt_r})
-        );
-
-        wire [3:0][26:0] term_signed;
-        for (genvar j = 0; j < 4; ++j) begin : g_align
+            wire [10:0] elem_mag_ext = elem_valid_r[j] ? {3'b0, elem_mag_prod[j]} : 11'd0;
+            wire [10:0] elem_neg;
             VX_ks_adder #(
-                .N(EXP_TERM_W_MXFP4),
-                .BYPASS(`FORCE_BUILTIN_ADDER(EXP_TERM_W_MXFP4))
-            ) shift_ksa (
-                .dataa(max_exp_biased),
-                .datab(~term_exp_biased[j]),
+                .N(11),
+                .BYPASS(`FORCE_BUILTIN_ADDER(11))
+            ) elem_neg_ksa (
+                .dataa(~elem_mag_ext),
+                .datab(11'd0),
                 .cin(1'b1),
-                .sum(shift_amt_w[j]),
+                .sum(elem_neg),
                 `UNUSED_PIN(cout)
             );
-
-            assign term_mag_shifted[j] = term_valid_r[j] ? (24'(f4_man_prod[j]) << SIG_SHIFT_MXFP4) : 24'd0;
-            wire [23:0] aligned_mag = (shift_amt_r[j] >= EXP_TERM_W_MXFP4'(24)) ? 24'd0 : (term_mag_shifted[j] >> shift_amt_r[j][4:0]);
-            wire [26:0] aligned_ext = {3'b0, aligned_mag};
-
-            wire [26:0] neg_term;
-            VX_ks_adder #(
-                .N(27),
-                .BYPASS(`FORCE_BUILTIN_ADDER(27))
-            ) term_neg_ksa (
-                .dataa(~aligned_ext),
-                .datab(27'd0),
-                .cin(1'b1),
-                .sum(neg_term),
-                `UNUSED_PIN(cout)
-            );
-
-            assign term_signed[j] = term_sign_r[j] ? neg_term : aligned_ext;
+            assign elem_signed[j] = elem_sign_r[j] ? elem_neg : elem_mag_ext;
         end
 
-        wire [26:0] sum_vec, carry_vec;
+        VX_tcu_tfr_wmul #(
+            .N(4),
+            .LANES(2),
+            .OUT_REG(PROD_REG),
+            .USE_DSP(USE_DSP)
+        ) elem_m01 (
+            .clk    (clk),
+            .enable (enable),
+            .a(elem_mag_a[1:0]),
+            .b(elem_mag_b[1:0]),
+            .p(elem_mag_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N(4),
+            .LANES(2),
+            .OUT_REG(PROD_REG),
+            .USE_DSP(USE_DSP)
+        ) elem_m23 (
+            .clk    (clk),
+            .enable (enable),
+            .a(elem_mag_a[3:2]),
+            .b(elem_mag_b[3:2]),
+            .p(elem_mag_prod[3:2])
+        );
+
+        wire [10:0] dot_sum_vec, dot_carry_vec;
         VX_csa_tree #(
             .N(4),
-            .W(27),
-            .S(27)
-        ) term_csa (
-            .operands (term_signed),
-            .sum      (sum_vec),
-            .carry    (carry_vec)
+            .W(11),
+            .S(11)
+        ) dot_csa (
+            .operands(elem_signed),
+            .sum(dot_sum_vec),
+            .carry(dot_carry_vec)
         );
 
-        wire [26:0] signed_sum;
+        wire [10:0] signed_dot;
         VX_ks_adder #(
-            .N(27),
-            .BYPASS(`FORCE_BUILTIN_ADDER(27))
-        ) sum_ksa (
-            .dataa(sum_vec),
-            .datab(carry_vec),
+            .N(11),
+            .BYPASS(`FORCE_BUILTIN_ADDER(11))
+        ) dot_ksa (
+            .dataa(dot_sum_vec),
+            .datab(dot_carry_vec),
             .cin(1'b0),
-            .sum(signed_sum),
+            .sum(signed_dot),
             `UNUSED_PIN(cout)
         );
 
-        wire sum_sign = signed_sum[26];
-        wire [25:0] neg_sum_raw;
+        wire dot_sign = signed_dot[10];
+        wire [9:0] neg_dot;
         VX_ks_adder #(
-            .N(26),
-            .BYPASS(`FORCE_BUILTIN_ADDER(26))
-        ) sum_neg_ksa (
-            .dataa(~signed_sum[25:0]),
-            .datab(26'd0),
+            .N(10),
+            .BYPASS(`FORCE_BUILTIN_ADDER(10))
+        ) dot_neg_ksa (
+            .dataa(~signed_dot[9:0]),
+            .datab(10'd0),
             .cin(1'b1),
-            .sum(neg_sum_raw),
+            .sum(neg_dot),
             `UNUSED_PIN(cout)
         );
 
-        wire [25:0] abs_sum = sum_sign ? neg_sum_raw : signed_sum[25:0];
-        wire is_zero_out = ~|abs_sum;
+        wire [9:0] abs_dot = dot_sign ? neg_dot : signed_dot[9:0];
+        wire is_zero_out = ~|abs_dot;
+        wire signed [9:0] sf_exp_a = $signed({1'b0, sf_a}) - 10'sd127;
+        wire signed [9:0] sf_exp_b = $signed({1'b0, sf_b}) - 10'sd127;
+        wire signed [EXP_TERM_W_MXFP4-1:0] exp_biased = EXP_TERM_W_MXFP4'(
+            10'(EXP_ADJ_MXFP4) + sf_exp_a + sf_exp_b);
+        wire [23:0] result_mag = 24'(abs_dot) << SIG_SHIFT_MXFP4;
 
-        assign result_sig_mxfp4[i] = {sum_sign & ~is_zero_out, abs_sum[23:0]};
-        assign sig_zero_mxfp4[i]   = is_zero_out;
-        assign result_exp_mxfp4[i] = EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED_MXFP4);
+        assign result_sig_mxfp4[i] = {dot_sign & ~is_zero_out, result_mag};
+        assign sig_zero_mxfp4[i] = is_zero_out;
+        assign result_exp_mxfp4[i] = EXP_W'(exp_biased) + EXP_W'(EXP_BASE_BIASED_MXFP4);
 
         // The sign field is only consumed for infinity lanes downstream.
         assign exceptions_mxfp4[i].is_nan = 1'b0;
@@ -357,8 +313,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
             wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
 
-            assign elem_mag_a[j] = nvfp4_mag_x2(raw_a);
-            assign elem_mag_b[j] = nvfp4_mag_x2(raw_b);
+            assign elem_mag_a[j] = e2m1_mag_x2(raw_a);
+            assign elem_mag_b[j] = e2m1_mag_x2(raw_b);
             assign elem_sign[j] = raw_a[3] ^ raw_b[3];
             assign elem_valid[j] = lane_valid && (raw_a[2:0] != 3'd0)
                                          && (raw_b[2:0] != 3'd0);
