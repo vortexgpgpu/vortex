@@ -162,6 +162,17 @@ public:
   #ifdef SCOPE
     vx_scope_stop(this);
   #endif
+    // Leave the CP quiesced for whoever opens the device next. Without this a
+    // subsequent process asserts ap_reset onto a still-enabled CP whose AXI
+    // master has work in flight, which hangs the interconnect hard enough to
+    // take AXI-Lite with it -- see the long note in init(). init() repeats this
+    // defensively because a crashed or killed process never reaches here, but
+    // doing it on the way out is the tidy half of the fix and keeps the device
+    // usable by tools that do not run our init().
+    //
+    // Best-effort by design: this is a destructor, the device may already be
+    // gone, and there is nothing useful to do with a failure at this point.
+    (void)this->write_register(CP_BASE + CP_Q_CONTROL, 0);
   #ifndef CPP_API
     if (vrtKernel_) {
       vrtKernelClose(vrtKernel_);
@@ -273,6 +284,56 @@ public:
         printf("[VXDRV] Warning: CP_CYCLE_LO did not advance between two "
                "reads (0x%08x). The AFU clock may be stopped.\n", c0);
       }
+    }
+
+    // ----- Quiesce the CP before asserting ap_reset -----
+    //
+    // Measured 2026-08-24 with VORTEX_AVED_MMIO_TRACE. Two consecutive runs,
+    // 190 ms apart, issued the identical `write 0x0000 <- 0x10` (CTL_AP_RESET):
+    //
+    //   run 1 (fresh device)   read 0x0000 -> 0x00000004   ap_idle, fine
+    //   run 2 (after a workload) read 0x0000 -> 0xFFFFFFFF  card never answered again
+    //
+    // Run 1 enabled the CP queue (CP_Q_CONTROL <- 1), pushed four doorbells,
+    // reached seqnum 4, and exited WITHOUT disabling it -- nothing in this
+    // backend ever wrote CP_Q_CONTROL back to 0. So run 2 asserted ap_reset
+    // while the CP's AXI master was still live, dropping a handshake
+    // mid-transaction. The interconnect then waits forever for a response that
+    // can no longer arrive, back-pressure reaches the AXI-Lite slave, and every
+    // subsequent read returns the all-ones no-completion signature.
+    //
+    // That is an AXI protocol violation on our side, not a platform defect: a
+    // master must not be reset while it has outstanding transactions. It is
+    // also why every ladder attempt died on the rung-1 -> rung-2 transition
+    // rather than on the first test.
+    //
+    // Done here rather than only in the destructor because the previous
+    // process may have crashed, been killed by a timeout, or been the victim of
+    // a host reset -- in all of which cases no teardown ran at all.
+    {
+      // Stop the CP fetching new descriptors. Safe on an already-idle device.
+      CHECK_ERR(this->write_register(CP_BASE + CP_Q_CONTROL, 0), {
+        return err;
+      });
+      // Let any already-issued AXI transaction retire. Polling the free-running
+      // cycle counter both spends the drain window and proves the bus is still
+      // answering while we wait, so a device that dies here is caught before
+      // the reset rather than after it.
+      uint32_t prev = 0, cur = 0;
+      CHECK_ERR(this->read_register(CP_BASE + CP_REG_CYCLE_LO, &prev), {
+        return err;
+      });
+      for (int i = 0; i < 64; ++i) {
+        CHECK_ERR(this->read_register(CP_BASE + CP_REG_CYCLE_LO, &cur), {
+          return err;
+        });
+        if (cur == 0xFFFFFFFFu) {
+          printf("[VXDRV] Error: AXI-Lite died while draining the CP before "
+                 "reset. The device was already wedged on entry.\n");
+          return -1;
+        }
+      }
+      (void)prev;
     }
 
     CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
