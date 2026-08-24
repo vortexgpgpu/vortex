@@ -40,7 +40,9 @@
 #include <vrt/buffer.hpp>
 #endif
 
+#include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <cstring>
 #include <exception>
 #include <algorithm>
@@ -131,6 +133,19 @@ typedef vrtKernelHandle vrt_kernel_t;
   } catch (...) {                                                              \
     fprintf(stderr, "[VXDRV] VRT exception (unknown)\n");                      \
     return _ret;                                                               \
+  }
+
+// Like VRT_CATCH but sets a status variable instead of returning, so the
+// caller can still record the failed access in the MMIO trace before it
+// unwinds. On a wedged card the throwing access is precisely the one worth
+// having on disk, and VRT_CATCH's early return would skip the trace call.
+#define VRT_CATCH_RC(_rc) }                                                    \
+  catch (const std::exception& _e) {                                           \
+    fprintf(stderr, "[VXDRV] VRT exception: %s\n", _e.what());                 \
+    (_rc) = -1;                                                                \
+  } catch (...) {                                                              \
+    fprintf(stderr, "[VXDRV] VRT exception (unknown)\n");                      \
+    (_rc) = -1;                                                                \
   }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -836,30 +851,142 @@ private:
   }
 #endif
 
+  // ----- MMIO forensic trace -----
+  //
+  // Set VORTEX_AVED_MMIO_TRACE=<path> to record every hardware register access.
+  // OFF by default and gated on one already-initialised bool, so normal runs
+  // are unaffected.
+  //
+  // Every record is fsync'd. That is deliberate and it is the entire point:
+  // the failure under investigation wedges the card and then hard-resets the
+  // host within about a second (2026-08-24 13:44:23, Global Err Reg = 0xffffffff
+  // one second after a kernel launch). A buffered log is lost in that reset --
+  // the previous run's 8 MB ladder log came back 0 bytes -- and the ONE fact
+  // worth having is the last register access before the card stopped
+  // answering. fsync costs throughput and buys the only evidence that matters.
+  //
+  // Note VORTEX_AVED_TRACE is NOT this: it only traces the simulation
+  // host-memory sync path and emits nothing at all on hardware.
+  static std::FILE *mmio_trace_fp() {
+    static std::FILE *fp = []() -> std::FILE * {
+      const char *path = getenv("VORTEX_AVED_MMIO_TRACE");
+      if (path == nullptr || path[0] == '\0') {
+        return nullptr;
+      }
+      std::FILE *f = std::fopen(path, "a");
+      if (f != nullptr) {
+        std::fprintf(f, "# t_wall\top\taddr\tvalue\trc\tnote\n");
+        std::fflush(f);
+      }
+      return f;
+    }();
+    return fp;
+  }
+
+  // Sticky: once the card stops answering, every later access is suspect and
+  // should be read as fallout rather than as a fresh symptom.
+  static bool &mmio_wedged() {
+    static bool wedged = false;
+    return wedged;
+  }
+
+  // Coalesce spin-loop polling. fsync costs ~5 ms per record on this box
+  // (measured), and CP_Q_SEQNUM is read in a tight wait loop -- tracing every
+  // iteration would dominate the run and perturb the timing of the very fault
+  // being chased. Identical consecutive accesses are counted instead, and
+  // flushed as one "xN" record when anything changes or 50 ms elapse. Worst
+  // case that loses 50 ms of repeats; every *transition* is still recorded
+  // exactly, which is what localises a wedge.
+  static void mmio_emit(std::FILE *f, const struct timespec &ts, const char *op,
+                        uint32_t addr, uint32_t value, int rc, uint64_t reps,
+                        const char *note) {
+    if (reps > 1) {
+      std::fprintf(f, "%lld.%09ld\t%s\t0x%08x\t0x%08x\t%d\tx%llu %s\n",
+                   (long long)ts.tv_sec, ts.tv_nsec, op, addr, value, rc,
+                   (unsigned long long)reps, note);
+    } else {
+      std::fprintf(f, "%lld.%09ld\t%s\t0x%08x\t0x%08x\t%d\t%s\n",
+                   (long long)ts.tv_sec, ts.tv_nsec, op, addr, value, rc, note);
+    }
+    std::fflush(f);
+    fsync(fileno(f));
+  }
+
+  static void mmio_trace(const char *op, uint32_t addr, uint32_t value, int rc) {
+    std::FILE *f = mmio_trace_fp();
+    if (f == nullptr) {
+      return;
+    }
+    // Register access happens from queue worker threads, so the pending-repeat
+    // state below needs a lock of its own.
+    static std::mutex mu;
+    static const char *p_op = nullptr;
+    static uint32_t p_addr = 0, p_val = 0;
+    static int p_rc = 0;
+    static uint64_t reps = 0;
+    static struct timespec p_ts = {0, 0};
+
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+
+    const char *note = "";
+    // 0xFFFFFFFF from a read is the PCIe completion-timeout / DECERR
+    // signature on this platform, never data. Flag the transition once.
+    const bool wedge_now =
+        (rc == 0 && op[0] == 'r' && value == 0xFFFFFFFFu && !mmio_wedged());
+
+    std::lock_guard<std::mutex> lk(mu);
+    const bool same = (p_op != nullptr && p_op[0] == op[0] && p_addr == addr &&
+                       p_val == value && p_rc == rc);
+    const long dt_ms = (ts.tv_sec - p_ts.tv_sec) * 1000 +
+                       (ts.tv_nsec - p_ts.tv_nsec) / 1000000;
+    // A wedge or an error must never sit in the pending counter.
+    if (same && !wedge_now && rc == 0 && dt_ms < 50) {
+      ++reps;
+      return;
+    }
+    if (reps > 0) {
+      mmio_emit(f, p_ts, p_op, p_addr, p_val, p_rc, reps,
+                mmio_wedged() ? "post-wedge" : "");
+    }
+    if (wedge_now) {
+      mmio_wedged() = true;
+      note = "*** FIRST 0xFFFFFFFF -- CARD STOPPED ANSWERING ***";
+    } else if (mmio_wedged()) {
+      note = "post-wedge";
+    }
+    mmio_emit(f, ts, op, addr, value, rc, 1, note);
+    p_op = op; p_addr = addr; p_val = value; p_rc = rc; p_ts = ts; reps = 0;
+  }
+
   int write_register(uint32_t addr, uint32_t value) {
+    int rc = 0;
   #ifdef CPP_API
     VRT_TRY()
       vrtKernel_.write(addr, value);
-    VRT_CATCH(-1)
+    VRT_CATCH_RC(rc)
   #else
-    CHECK_ERR(vrtKernelWriteRegister(vrtKernel_, addr, value), {
-      return err;
-    });
+    rc = vrtKernelWriteRegister(vrtKernel_, addr, value);
   #endif
-    return 0;
+    mmio_trace("write", addr, value, rc);
+    return rc;
   }
 
   int read_register(uint32_t addr, uint32_t *value) {
+    int rc = 0;
+    uint32_t v = 0;
   #ifdef CPP_API
     VRT_TRY()
-      *value = vrtKernel_.read(addr);
-    VRT_CATCH(-1)
+      v = vrtKernel_.read(addr);
+    VRT_CATCH_RC(rc)
   #else
-    CHECK_ERR(vrtKernelReadRegister(vrtKernel_, addr, value), {
-      return err;
-    });
+    rc = vrtKernelReadRegister(vrtKernel_, addr, &v);
   #endif
-    return 0;
+    mmio_trace("read", addr, v, rc);
+    if (rc == 0) {
+      *value = v;
+    }
+    return rc;
   }
 
   vrt_device_t vrtDevice_;

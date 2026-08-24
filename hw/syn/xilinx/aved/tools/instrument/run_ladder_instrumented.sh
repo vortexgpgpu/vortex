@@ -28,7 +28,7 @@ crumb() {
     sync "$LOGDIR/breadcrumb" "$LOGDIR/breadcrumb.log" 2>/dev/null || sync
 }
 
-exec > >(tee -a "$RUNLOG") 2>&1
+exec > >(python3 /home/blaise/dev/v80/instrument/fsync_tee.py "$RUNLOG") 2>&1
 echo "=========== INSTRUMENTED LADDER  ($(date)) ==========="
 echo "run log : $RUNLOG   (persistent)"
 echo "samples : $LOGDIR/sample.tsv"
@@ -62,7 +62,9 @@ for t in $TESTS; do
     if [ "$t" = "minimal" ]; then
         crumb "rung:minimal-loopback"
         echo "  (loopback: exercises the CP command path, launches no kernel)"
-        HW_TIMEOUT=600 VORTEX_CP_POLL_TIMEOUT_S=120 VORTEX_AVED_NO_PROGRAM=1 \
+        MMIO="$LOGDIR/mmio_${t}_loopback.tsv"; : > "$MMIO"
+        stdbuf -oL -eL env HW_TIMEOUT=600 VORTEX_CP_POLL_TIMEOUT_S=120 \
+            VORTEX_AVED_NO_PROGRAM=1 VORTEX_AVED_MMIO_TRACE="$MMIO" \
             bash /home/blaise/dev/v80/run_hw_test.sh "$t" OPTS="-n4 -l"
         RC["$t-l"]=$?
         echo "  == $t -l rc=${RC[$t-l]}"
@@ -71,7 +73,9 @@ for t in $TESTS; do
     fi
 
     crumb "rung:$t"
-    HW_TIMEOUT=1800 VORTEX_CP_POLL_TIMEOUT_S=300 VORTEX_AVED_NO_PROGRAM=1 \
+    MMIO="$LOGDIR/mmio_${t}.tsv"; : > "$MMIO"
+    stdbuf -oL -eL env HW_TIMEOUT=1800 VORTEX_CP_POLL_TIMEOUT_S=300 \
+        VORTEX_AVED_NO_PROGRAM=1 VORTEX_AVED_MMIO_TRACE="$MMIO" \
         bash /home/blaise/dev/v80/run_hw_test.sh "$t"
     RC["$t"]=$?
     echo "  == $t rc=${RC[$t]}"
@@ -89,6 +93,15 @@ echo "  SBRs before=$before_sbr after=$after_sbr"
 [ "$before_sbr" -eq "$after_sbr" ] \
   && echo "  *** ZERO secondary bus resets during the run -- as designed ***" \
   || echo "  !!! AN SBR OCCURRED -- the no-program path did not hold, investigate !!!"
+echo
+echo "  --- MMIO traces (last access before any wedge) ---"
+for m in "$LOGDIR"/mmio_*.tsv; do
+    [ -s "$m" ] || continue
+    n=$(grep -vc '^#' "$m")
+    w=$(grep -c 'CARD STOPPED ANSWERING' "$m")
+    printf "    %-34s %5s records  wedge=%s\n" "$(basename "$m")" "$n" "$([ "$w" -gt 0 ] && echo YES || echo no)"
+    [ "$w" -gt 0 ] && { echo "      last 5 accesses before/at the wedge:"; grep -v '^#' "$m" | tail -5 | sed 's/^/        /'; }
+done
 echo
 echo "  persistent log: $RUNLOG"
 crumb "complete"

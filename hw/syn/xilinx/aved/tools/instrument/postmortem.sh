@@ -18,6 +18,31 @@ echo "=============== V80 / orcas2 POSTMORTEM  ($(date)) ==============="
 echo "logdir: $LOGDIR"
 
 echo
+echo "########## 0. MMIO TRACE -- the last register access before the wedge ##########"
+# Highest-value evidence, so it leads. Every access is fsync'd, and repeated
+# polls are coalesced ("xN") so a spin loop cannot push the interesting records
+# out of reach. A 0xFFFFFFFF read is the PCIe completion-timeout signature.
+found=0
+for m in "$LOGDIR"/mmio_*.tsv; do
+    [ -s "$m" ] || continue
+    found=1
+    n=$(grep -vc '^#' "$m"); w=$(grep -c 'CARD STOPPED ANSWERING' "$m")
+    echo "  === $(basename "$m")  ($n records) ==="
+    if [ "$w" -gt 0 ]; then
+        echo "    *** CARD WEDGED. Context around the transition: ***"
+        grep -n -B8 -A4 'CARD STOPPED ANSWERING' "$m" | sed 's/^/      /'
+        echo
+        echo "    -> the access on the '*** FIRST 0xFFFFFFFF' line is the first that"
+        echo "       did not come back. The lines ABOVE it are what wedged the card."
+    else
+        echo "    no wedge recorded. Final 6 accesses:"
+        grep -v '^#' "$m" | tail -6 | sed 's/^/      /'
+    fi
+    echo
+done
+[ "$found" -eq 0 ] && echo "  (no MMIO trace -- was VORTEX_AVED_MMIO_TRACE set?)"
+
+echo
 echo "########## 1. last state before death (fsync'd 1 Hz sampler) ##########"
 if [ -f "$LOGDIR/sample.tsv" ]; then
     head -1 "$LOGDIR/sample.tsv" | tr '\t' '\n' | nl | sed 's/^/    /'
