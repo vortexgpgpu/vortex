@@ -69,3 +69,21 @@ tests:
   app: sgemm
   shape: {cores: 2, clusters: 2, l2cache: true, l3cache: true}
   tier: full
+
+# SimX<->rtlsim cycle parity with translation on (see model_parity.yaml for
+# the contract; check gates are RV32-pinned like the rest of the parity
+# suite). The SimX MMU charges the banked-TLB lookup pipeline
+# (Mmu::TRANSLATE_LATENCY + one lookup per bank per cycle); these cases hold
+# that model to the RTL. Both are steady-state sized; sgemm's cold TLB misses
+# also cover the walk path (vm_stress itself is too small to gate — all boot
+# skew).
+- id: model_parity-sgemm
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  tier: full
+- id: model_parity-diverge
+  check: model_parity
+  via: blackbox
+  app: diverge
+  tier: full

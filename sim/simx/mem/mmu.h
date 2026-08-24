@@ -70,6 +70,12 @@ protected:
   void on_tick();
 
 private:
+  // Round-trip cost of a translated access through the RTL lookup pipeline:
+  // per-lane elastic buffer -> lane/bank crossbar -> banked CAM lookup ->
+  // gather crossbar, plus the response-side elastic buffer (charged here on
+  // the request instead of the response path). Calibrated against rtlsim.
+  static constexpr uint64_t TRANSLATE_LATENCY = 5;
+
   bool needs_translation(uint64_t addr) const;
 
   // One parked access per TLB bank while its walk is in flight.
@@ -87,6 +93,7 @@ private:
   Tlb                     tlb_;
   std::vector<BankMiss>   banks_;
   uint32_t                miss_rr_ = 0;
+  uint32_t                port_rr_ = 0;
 
   friend class SimObject<Mmu>;
 };

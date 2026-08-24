@@ -100,7 +100,7 @@ void Mmu::on_tick() {
       translated.addr = (bank.rsp.ppn << VX_VM_PAGE_LOG2_SIZE)
                       | (translated.addr & ((1ULL << VX_VM_PAGE_LOG2_SIZE) - 1));
     }
-    if (!ReqOut.at(bank.port).try_send(translated))
+    if (!ReqOut.at(bank.port).try_send(translated, TRANSLATE_LATENCY))
       continue;
     ReqIn.at(bank.port).pop();
     bank.state = BankMiss::IDLE;
@@ -125,8 +125,13 @@ void Mmu::on_tick() {
   }
 
   // 5) forward incoming requests. Bypass for non-translated addresses;
-  // TLB-hit translates inline; TLB-miss parks the access on its bank.
-  for (uint32_t p = 0; p < num_ports_; ++p) {
+  // TLB-hit translates and forwards after the lookup-pipeline latency;
+  // TLB-miss parks the access on its bank. Each bank is a single-ported CAM
+  // fed through a crossbar in the RTL, so it accepts at most one lookup per
+  // cycle; ports contend round-robin (mirrors VX_mmu_tlb's "R" arbiters).
+  uint64_t bank_taken = 0;
+  for (uint32_t i = 0; i < num_ports_; ++i) {
+    uint32_t p = (port_rr_ + i) % num_ports_;
     if (ReqIn.at(p).empty()) continue;
     const MemReq& req = ReqIn.at(p).peek();
 
@@ -138,26 +143,32 @@ void Mmu::on_tick() {
     }
 
     uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
-    auto& bank = banks_.at(tlb_.bank_of(vpn));
+    uint32_t b = tlb_.bank_of(vpn);
+    auto& bank = banks_.at(b);
     if (bank.state != BankMiss::IDLE) {
       // the bank is busy walking; this request waits at the head of ReqIn[p]
       continue;
     }
+    if (bank_taken & (1ULL << b))
+      continue;  // bank's lookup port already used this cycle
+    if (ReqOut.at(p).full())
+      continue;  // don't burn the bank slot (or the perf counters) on a stall
+    bank_taken |= 1ULL << b;
     auto res = tlb_.lookup(vpn);
     if (res.hit) {
       MemReq translated = req;
       translated.addr = (res.ppn << VX_VM_PAGE_LOG2_SIZE)
                       | (req.addr & ((1ULL << VX_VM_PAGE_LOG2_SIZE) - 1));
-      if (ReqOut.at(p).try_send(translated)) {
-        ReqIn.at(p).pop();
-      }
+      ReqOut.at(p).send(translated, TRANSLATE_LATENCY);
+      ReqIn.at(p).pop();
     } else {
-      DT(3, this->name() << " tlb-miss: addr=0x" << std::hex << req.addr << std::dec << ", bank=" << tlb_.bank_of(vpn) << ", port=" << p);
+      DT(3, this->name() << " tlb-miss: addr=0x" << std::hex << req.addr << std::dec << ", bank=" << b << ", port=" << p);
       bank.req = req;
       bank.port = p;
       bank.state = BankMiss::WALK_REQ;
     }
   }
+  ++port_rr_;
 }
 
 } // namespace vortex
