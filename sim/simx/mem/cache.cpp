@@ -1569,9 +1569,12 @@ private:
   void processFlush() {
     // Wait for in-flight requests to drain before walking lines, otherwise an
     // outstanding fill could install a fresh line behind our scan and leave
-    // a dirty victim un-evicted.
+    // a dirty victim un-evicted. pipe_req_ occupancy must come from size():
+    // TFifo::empty() hides entries still inside the pipe's latency window, and
+    // a replayed store pushed this very tick would dirty its line behind the
+    // walk.
     if (pending_fill_reqs_ != 0
-     || !pipe_req_->empty()
+     || pipe_req_->size() != 0
      || !mshr_.empty()) {
       return;
     }
