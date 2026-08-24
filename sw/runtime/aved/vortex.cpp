@@ -293,22 +293,17 @@ public:
       }
     }
 
-    // ----- Quiesce the CP before asserting ap_reset -----
+    // ----- Park the CP before touching the device reset -----
     //
-    // A master must not be reset while it has outstanding transactions.
-    // Asserting ap_reset onto a CP whose AXI master is still live drops a
-    // handshake mid-transaction; the interconnect then waits forever for a
-    // response that can no longer arrive, the back-pressure reaches the
-    // AXI-Lite slave, and every subsequent read returns the all-ones
-    // no-completion signature -- the card is off the bus until it is
-    // power-cycled.
-    //
+    // A master must not be reset while it has outstanding transactions, and a
+    // process that crashed, was killed, or was cut short by a host reset ran no
+    // teardown at all -- so entry has to assume the device was left running.
     // Clearing Q_CONTROL.enable parks the CP's fetch at the next descriptor
     // boundary and lets in-flight commands drain on their own; CP_STATUS.busy
-    // reports when that has finished. The common core does the same on an
-    // orderly close, but a process that crashed, was killed, or was cut short
-    // by a host reset ran no teardown at all, so entry has to assume the
-    // device was left running.
+    // reports when that has finished.
+    //
+    // This is necessary but NOT sufficient on the V80 compute shell, which is
+    // why the reset below is skippable -- see the note there.
     {
       CHECK_ERR(this->write_register(CP_BASE + CP_Q_CONTROL, 0), {
         return err;
@@ -338,9 +333,25 @@ public:
       }
     }
 
-    CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
-      return err;
-    });
+    // ----- Device reset -----
+    //
+    // VORTEX_AVED_NO_RESET=1 skips it. On the V80 compute shell this write is
+    // measurably fatal: with the CP parked and CP_STATUS reading busy=0, the
+    // very next register read returns the all-ones no-completion signature and
+    // the card leaves the PCIe bus until it is JTAG-reloaded and the host
+    // rebooted. Even offset 0x00 -- the AFU control register, not the CP --
+    // stops answering, so the whole AXI-Lite slave goes down with it, and no
+    // secondary bus reset is involved. Skipping it is safe when the design was
+    // just configured (a JTAG PDI load leaves it freshly reset) and the block
+    // above has already parked the CP.
+    const char* noreset = getenv("VORTEX_AVED_NO_RESET");
+    const bool do_reset = (noreset == nullptr || noreset[0] == '\0'
+                           || noreset[0] == '0');
+    if (do_reset) {
+      CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
+        return err;
+      });
+    }
 
     // wait for the reset sequence to complete (ap_idle deasserts while the
     // device reset is in flight)

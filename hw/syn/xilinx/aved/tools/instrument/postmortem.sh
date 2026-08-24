@@ -52,8 +52,8 @@ if [ -f "$LOGDIR/sample.tsv" ]; then
     last=$(tail -1 "$LOGDIR/sample.tsv")
     echo "  DIED WITH breadcrumb = $(echo "$last" | cut -f4)"
     echo "  uptime at last sample = $(echo "$last" | cut -f3) s"
-    echo "  V80 PF0 was           = $(echo "$last" | cut -f11)"
-    echo "  link                  = $(echo "$last" | cut -f8)"
+    echo "  V80 PF0 was           = $(echo "$last" | cut -f12)"
+    echo "  link                  = $(echo "$last" | cut -f9)"
 else
     echo "  (no sample.tsv -- sampler was not running)"
 fi
@@ -111,11 +111,26 @@ echo "########## 6. verdict ##########"
 crumb=$([ -f "$LOGDIR/sample.tsv" ] && tail -1 "$LOGDIR/sample.tsv" | cut -f4 || echo unknown)
 mce=$(journalctl -b 0 --no-pager 2>/dev/null | grep -c '\[Hardware Error\]')
 sbr=$(journalctl -b -1 --no-pager 2>/dev/null | grep -c 'toggle_sbr')
+wedge=0
+for m in "$LOGDIR"/mmio_*.tsv; do
+    [ -s "$m" ] || continue
+    grep -q 'CARD STOPPED ANSWERING' "$m" && wedge=1
+done
 echo "    operation in flight : $crumb"
 echo "    MCE recorded        : $([ "$mce" -gt 0 ] && echo YES || echo no)"
 echo "    SBRs in that boot   : $sbr"
-if [ "$sbr" -eq 0 ] && [ "$mce" -gt 0 ]; then
-    echo "    => population B (host-intrinsic). NOT caused by the V80 work."
+echo "    card wedged (MMIO)  : $([ "$wedge" -gt 0 ] && echo YES || echo no)"
+# Section 0 outranks the SBR counters. A wedge recorded there means a register
+# access took the card off the bus, which is a V80-coupled failure whether or
+# not a bus reset was involved -- reading "no SBR" as "not our doing" once
+# misfiled exactly that case.
+if [ "$wedge" -gt 0 ]; then
+    echo "    => V80-coupled. Section 0 names the access that wedged the card;"
+    echo "       read it BEFORE trusting the SBR/MCE classification below."
+elif [ "$sbr" -eq 0 ] && [ "$mce" -gt 0 ]; then
+    echo "    => no wedge recorded and no SBR: host-intrinsic so far as this"
+    echo "       evidence goes. Absence of a trace is not absence of a wedge --"
+    echo "       confirm VORTEX_AVED_MMIO_TRACE was set for the run."
 elif [ "$sbr" -gt 0 ] && [ "$mce" -gt 0 ]; then
     echo "    => check section 5: if an SBR is within 20 s, population A."
 fi

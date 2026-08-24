@@ -10,6 +10,12 @@
 # never evaluates shell_reset_required() and the SBR branch is unreachable.
 # The AFU is already in the fabric from jtag_load_vortex.sh.
 #
+# VORTEX_AVED_NO_RESET=1 as well: writing CTL_AP_RESET is measurably fatal on
+# this shell. With the CP parked and CP_STATUS reading busy=0, the next register
+# read returns all-ones and the card leaves the bus -- with no SBR anywhere in
+# the boot. The JTAG load leaves the design freshly configured, so the reset
+# buys nothing here.
+#
 # EVERYTHING PERSISTS. Logs go to ~/dev/v80/logs, not /tmp: /tmp lost every
 # previous run's results across the reboots that followed each crash.
 
@@ -64,7 +70,8 @@ for t in $TESTS; do
         echo "  (loopback: exercises the CP command path, launches no kernel)"
         MMIO="$LOGDIR/mmio_${t}_loopback.tsv"; : > "$MMIO"
         stdbuf -oL -eL env HW_TIMEOUT=600 VORTEX_CP_POLL_TIMEOUT_S=120 \
-            VORTEX_AVED_NO_PROGRAM=1 VORTEX_AVED_MMIO_TRACE="$MMIO" \
+            VORTEX_AVED_NO_PROGRAM=1 VORTEX_AVED_NO_RESET=1 \
+        VORTEX_AVED_MMIO_TRACE="$MMIO" \
             bash /home/blaise/dev/v80/run_hw_test.sh "$t" OPTS="-n4 -l"
         RC["$t-l"]=$?
         echo "  == $t -l rc=${RC[$t-l]}"
@@ -75,7 +82,8 @@ for t in $TESTS; do
     crumb "rung:$t"
     MMIO="$LOGDIR/mmio_${t}.tsv"; : > "$MMIO"
     stdbuf -oL -eL env HW_TIMEOUT=1800 VORTEX_CP_POLL_TIMEOUT_S=300 \
-        VORTEX_AVED_NO_PROGRAM=1 VORTEX_AVED_MMIO_TRACE="$MMIO" \
+        VORTEX_AVED_NO_PROGRAM=1 VORTEX_AVED_NO_RESET=1 \
+        VORTEX_AVED_MMIO_TRACE="$MMIO" \
         bash /home/blaise/dev/v80/run_hw_test.sh "$t"
     RC["$t"]=$?
     echo "  == $t rc=${RC[$t]}"
