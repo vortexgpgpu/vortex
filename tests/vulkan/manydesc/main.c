@@ -299,7 +299,7 @@ main(int argc, char **argv)
              bad_bindings, NBUF, first_bad);
       return 1;
    }
-   printf("PASSED (manydesc: all %u storage-buffer bindings reached the "
-          "device, %u elements each)\n", NBUF, N);
+   printf("PASSED (manydesc: all %u storage-buffer bindings carry their own "
+          "value, %u elements each)\n", NBUF, N);
    return 0;
 }

@@ -1,8 +1,8 @@
 # Copyright © 2026  Vortex GPGPU
 # SPDX-License-Identifier: MIT
 #
-# Private-array compute test for the vortexpipe driver:
-# kernel writing and reading a local array at runtime-computed indices.
+# Pipeline-statistics compute test for the vortexpipe driver:
+# kernel dispatched inside a statistics query that counts its invocations.
 #
 #   make            -- build the host binary + SPIR-V
 #   make run-simx   -- run the kernel via vortexpipe
