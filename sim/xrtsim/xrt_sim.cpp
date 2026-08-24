@@ -357,6 +357,11 @@ public:
   // needs, so it fires only for a handshake that is never coming.
   static constexpr uint64_t CTRL_HANDSHAKE_TIMEOUT = 100000;
 
+  // Cycles to run after releasing ap_rst_n, before any transaction is allowed.
+  // Wide margin over the AFU's reset shift register and the relay stages
+  // below it, since the whole cost is paid once at device open.
+  static constexpr int RESET_SETTLE_CYCLES = 16 * VX_CFG_RESET_DELAY + 256;
+
   // Bounded waits for the two AXI-Lite handshake shapes. Both must be
   // bounded: an address the AFU does not decode -- or a control path wedged
   // behind a stalled master -- never raises its handshake, and an unbounded
@@ -485,6 +490,16 @@ private:
       *m_axi_mem_[b].arready = 1;
       *m_axi_mem_[b].awready = 1;
       *m_axi_mem_[b].wready  = 1;
+    }
+
+    // Deasserting ap_rst_n does not release the design: the AFU stretches it
+    // through a reset shift register, and the relays beneath that add further
+    // stages. During that window the AXI-Lite slave already asserts arready,
+    // so a request issued too early is accepted and then swallowed -- no
+    // response ever comes and the model presents as a device that has stopped
+    // answering. Clock it out here, where the cost is a few microseconds once.
+    for (int i = 0; i < RESET_SETTLE_CYCLES; ++i) {
+      this->tick();
     }
   }
 
