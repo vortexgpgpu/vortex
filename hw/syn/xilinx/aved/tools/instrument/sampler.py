@@ -4,8 +4,8 @@
 Every sample is written AND fsync'd, so the last line on disk is the last state
 the machine was in before a hard reset. That is the whole point: journald's
 default SyncIntervalSec is 5 minutes, so up to five minutes of ordinary logging
-is lost when this box resets -- which is exactly why every crash so far has an
-uninformative tail.
+is lost when this box resets, which leaves every crash with an uninformative
+tail.
 
   python3 sampler.py <logdir>
 
@@ -41,9 +41,9 @@ def read(path, default="-"):
 
 
 def cstate(idx, leaf):
-    """After the 2026-08-24 BIOS change (Power Supply Idle Control) this box
+    """With Power Supply Idle Control set to Typical Current Idle this box
     reports cpuidle current_driver=none, i.e. no ACPI C-states at all. Keep the
-    columns so a REGRESSION back to acpi_idle/C2 is visible immediately."""
+    columns so a regression back to acpi_idle/C2 is visible immediately."""
     return read(f"{CPU0_IDLE}/state{idx}/{leaf}", "-")
 
 

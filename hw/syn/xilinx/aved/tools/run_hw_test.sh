@@ -4,6 +4,12 @@
 #
 # Bounded by a hard timeout: a wedged AFU otherwise hangs until the board is
 # JTAG-recovered, and there is no reason to discover that an hour later.
+#
+# SIGKILL runs no destructors, so a timed-out run leaves the CP enabled with no
+# teardown at all. That is safe only because the runtime disables the queue and
+# waits for the drain on the way IN as well as on the way out -- without the
+# entry-side quiesce, the next run's device reset would land on a live AXI
+# master and take the card off the bus.
 set -o pipefail
 
 TEST="${1:?usage: run_hw_test.sh <test> [opts]}"
@@ -20,7 +26,11 @@ export LD_LIBRARY_PATH="/opt/xilinx/slash/lib:$BUILD/sw/runtime:$LD_LIBRARY_PATH
 # shim holds symlinks to just those, so the no-root prefix cannot also shadow
 # the installed vrt/ and vrtd/ trees.
 export CPATH="/home/blaise/dev/v80/inc-shim:$CPATH"
-export VORTEX_AVED_TRACE=1
+
+# Set VORTEX_AVED_MMIO_TRACE=<path> to record every register access; the
+# transition to 0xFFFFFFFF is the last thing the card does before it drops off
+# the bus. VORTEX_AVED_TRACE is a different knob and traces only the simulation
+# host-memory sync, so it emits nothing here.
 
 # Which synthesis output to run. Overridable because the HOST_TAG variants are
 # separate build trees rather than rebuilds of one: build32_aved_hw is the

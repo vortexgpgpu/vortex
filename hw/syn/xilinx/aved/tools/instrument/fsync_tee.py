@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """A tee that fsync()s every line.
 
-Why this exists: the 2026-08-24 13:44 ladder run produced a **0-byte** log.
-`tee` buffers, the host hard-reset a few seconds later, and everything the test
-had printed was lost -- including the output of the rung that was executing.
-The fsync'd breadcrumb survived and the log did not, which is the whole lesson.
+Why this exists: `tee` buffers, and the failure being chased hard-resets the
+host, so an ordinary pipeline loses everything the test printed -- including the
+output of the step that was executing. Only what reached stable storage
+survives.
 
   <command> 2>&1 | python3 fsync_tee.py <logfile>
 

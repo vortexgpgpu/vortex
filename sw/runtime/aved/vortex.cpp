@@ -75,22 +75,41 @@ using namespace vortex;
 // cp_reg_* add this base.
 #define CP_BASE 0x1000
 
-// CP-internal offsets this backend has to recognise for the simulation sync
-// below. They are part of the regfile ABI callers already speak (see
-// hw/rtl/cp/VX_cp_axil_regfile.sv); the backend only observes them, it never
-// originates a transaction of its own.
+// CP-internal offsets this backend has to recognise, for the entry quiesce and
+// the host-memory sync below. They are part of the regfile ABI callers already
+// speak (see hw/rtl/cp/VX_cp_axil_regfile.sv); apart from the quiesce, the
+// backend only observes them, it never originates a transaction of its own.
+#define CP_REG_CTRL       0x000
+#define CP_REG_STATUS     0x004
 #define CP_Q_RING_BASE_LO 0x100
+#define CP_Q_RING_BASE_HI 0x104
 #define CP_Q_HEAD_ADDR_LO 0x108
+#define CP_Q_HEAD_ADDR_HI 0x10C
 #define CP_Q_CMPL_ADDR_LO 0x110
+#define CP_Q_CMPL_ADDR_HI 0x114
 #define CP_Q_CONTROL      0x11C
 #define CP_Q_TAIL_LO      0x120
+#define CP_Q_TAIL_HI      0x124
 #define CP_Q_SEQNUM       0x128
+
+// CP_STATUS bit0: a command is in flight, or a shared engine holds a grant.
+#define CP_STATUS_BUSY    0x1
 
 // Free-running cycle counter, incremented every clock unconditionally by
 // VX_cp_axil_regfile. Used by the transport gate in init(): it is the only
 // register whose value is guaranteed to change, so it can distinguish "reads
 // return real data" from "reads return a bus artifact".
 #define CP_REG_CYCLE_LO   0x010
+
+// Bound on the entry drain poll. Large enough to outlast a kernel launch left
+// running by a process that died mid-flight, since giving up early is the one
+// outcome that costs a power cycle.
+#define CP_DRAIN_POLLS    100000
+
+// Bytes per ring command. The CP retires one seqnum per command, so a
+// committed tail of T bytes retires at seqnum T / CP_CL_BYTES -- which is what
+// turns a doorbell into the watermark the deferred frees below wait on.
+#define CP_CL_BYTES       64u
 
 #define DEFAULT_DEVICE_BDF "0000:11:00"
 #define DEFAULT_VBIN_PATH  "vortex_afu.vbin"
@@ -162,17 +181,6 @@ public:
   #ifdef SCOPE
     vx_scope_stop(this);
   #endif
-    // Leave the CP quiesced for whoever opens the device next. Without this a
-    // subsequent process asserts ap_reset onto a still-enabled CP whose AXI
-    // master has work in flight, which hangs the interconnect hard enough to
-    // take AXI-Lite with it -- see the long note in init(). init() repeats this
-    // defensively because a crashed or killed process never reaches here, but
-    // doing it on the way out is the tidy half of the fix and keeps the device
-    // usable by tools that do not run our init().
-    //
-    // Best-effort by design: this is a destructor, the device may already be
-    // gone, and there is nothing useful to do with a failure at this point.
-    (void)this->write_register(CP_BASE + CP_Q_CONTROL, 0);
   #ifndef CPP_API
     if (vrtKernel_) {
       vrtKernelClose(vrtKernel_);
@@ -199,11 +207,10 @@ public:
   #ifdef CPP_API
 
     // Each vrt::Device open reprograms the PL, and a design write only
-    // succeeds on a freshly reset device: vrtd runs its reset_with_ami
-    // sequence only when the requested shell differs from the current one, so
-    // once the shell reads "compute" no reset happens and the load fails with
-    // "Input/output error", taking the AMC to NO_AMC and costing a JTAG
-    // recovery. Measured 2026-08-19 (see ~/dev/v80/v80_oneshot.sh).
+    // succeeds on a freshly reset device: vrtd runs its reset sequence only
+    // when the requested shell differs from the current one, so once the shell
+    // reads "compute" no reset happens and the load fails with "Input/output
+    // error", taking the AMC to NO_AMC and costing a JTAG recovery.
     //
     // That budgets one test per recovery cycle, which makes a regression ladder
     // impractical. When the design is already loaded, skip the reprogram and
@@ -288,52 +295,47 @@ public:
 
     // ----- Quiesce the CP before asserting ap_reset -----
     //
-    // Measured 2026-08-24 with VORTEX_AVED_MMIO_TRACE. Two consecutive runs,
-    // 190 ms apart, issued the identical `write 0x0000 <- 0x10` (CTL_AP_RESET):
+    // A master must not be reset while it has outstanding transactions.
+    // Asserting ap_reset onto a CP whose AXI master is still live drops a
+    // handshake mid-transaction; the interconnect then waits forever for a
+    // response that can no longer arrive, the back-pressure reaches the
+    // AXI-Lite slave, and every subsequent read returns the all-ones
+    // no-completion signature -- the card is off the bus until it is
+    // power-cycled.
     //
-    //   run 1 (fresh device)   read 0x0000 -> 0x00000004   ap_idle, fine
-    //   run 2 (after a workload) read 0x0000 -> 0xFFFFFFFF  card never answered again
-    //
-    // Run 1 enabled the CP queue (CP_Q_CONTROL <- 1), pushed four doorbells,
-    // reached seqnum 4, and exited WITHOUT disabling it -- nothing in this
-    // backend ever wrote CP_Q_CONTROL back to 0. So run 2 asserted ap_reset
-    // while the CP's AXI master was still live, dropping a handshake
-    // mid-transaction. The interconnect then waits forever for a response that
-    // can no longer arrive, back-pressure reaches the AXI-Lite slave, and every
-    // subsequent read returns the all-ones no-completion signature.
-    //
-    // That is an AXI protocol violation on our side, not a platform defect: a
-    // master must not be reset while it has outstanding transactions. It is
-    // also why every ladder attempt died on the rung-1 -> rung-2 transition
-    // rather than on the first test.
-    //
-    // Done here rather than only in the destructor because the previous
-    // process may have crashed, been killed by a timeout, or been the victim of
-    // a host reset -- in all of which cases no teardown ran at all.
+    // Clearing Q_CONTROL.enable parks the CP's fetch at the next descriptor
+    // boundary and lets in-flight commands drain on their own; CP_STATUS.busy
+    // reports when that has finished. The common core does the same on an
+    // orderly close, but a process that crashed, was killed, or was cut short
+    // by a host reset ran no teardown at all, so entry has to assume the
+    // device was left running.
     {
-      // Stop the CP fetching new descriptors. Safe on an already-idle device.
       CHECK_ERR(this->write_register(CP_BASE + CP_Q_CONTROL, 0), {
         return err;
       });
-      // Let any already-issued AXI transaction retire. Polling the free-running
-      // cycle counter both spends the drain window and proves the bus is still
-      // answering while we wait, so a device that dies here is caught before
-      // the reset rather than after it.
-      uint32_t prev = 0, cur = 0;
-      CHECK_ERR(this->read_register(CP_BASE + CP_REG_CYCLE_LO, &prev), {
+      CHECK_ERR(this->write_register(CP_BASE + CP_REG_CTRL, 0), {
         return err;
       });
-      for (int i = 0; i < 64; ++i) {
-        CHECK_ERR(this->read_register(CP_BASE + CP_REG_CYCLE_LO, &cur), {
+      uint32_t status = 0xFFFFFFFFu;
+      for (int i = 0; i < CP_DRAIN_POLLS; ++i) {
+        CHECK_ERR(this->read_register(CP_BASE + CP_REG_STATUS, &status), {
           return err;
         });
-        if (cur == 0xFFFFFFFFu) {
+        if (status == 0xFFFFFFFFu) {
           printf("[VXDRV] Error: AXI-Lite died while draining the CP before "
                  "reset. The device was already wedged on entry.\n");
           return -1;
         }
+        if ((status & CP_STATUS_BUSY) == 0) {
+          break;
+        }
       }
-      (void)prev;
+      if (status & CP_STATUS_BUSY) {
+        printf("[VXDRV] Error: the CP is still busy after disabling its "
+               "queue; resetting now would drop an in-flight AXI transaction "
+               "and take the card off the bus. Power-cycle the board.\n");
+        return -1;
+      }
     }
 
     CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
@@ -410,12 +412,10 @@ public:
   // results back. Syncing on those keeps this confined to the backend, so the
   // common core keeps the coherent-memory contract it documents.
   //
-  // All of this is CPP_API-only. `sim_mode_` and the whole sim_* apparatus are
-  // declared under `#ifdef CPP_API`, so referencing them unguarded here broke
-  // the TARGET=avedsim build outright ("'sim_mode_' was not declared in this
-  // scope"). Under avedsim there is nothing to sync: the Verilator model runs
-  // in this process and shares our memory directly, so the correct behaviour
-  // is exactly the `sim_mode_ == false` path.
+  // All of this is CPP_API-only: `sim_mode_` and the whole sim_* apparatus are
+  // declared under `#ifdef CPP_API`. Under avedsim there is nothing to sync --
+  // the Verilator model runs in this process and shares our memory directly --
+  // so the correct behaviour there is exactly the `sim_mode_ == false` path.
   int cp_reg_write(uint32_t off, uint32_t value) {
   #ifdef CPP_API
     if (sim_mode_ && !staged_cfg_) {
@@ -444,12 +444,17 @@ public:
     // computes a bogus pending count and runs away on junk descriptors.
     if (staged_cfg_) {
       staged_note_region_addr(off, value);
-    }
-    if (staged_cfg_ && off == CP_Q_TAIL_LO) {
-      const bool seed = !staged_seeded_;
-      staged_seeded_ = true;
-      if (staged_publish(seed) != 0) {
-        return -1;
+      if (off == CP_Q_TAIL_LO) {
+        const bool seed = !staged_seeded_;
+        staged_seeded_ = true;
+        if (staged_publish(seed) != 0) {
+          return -1;
+        }
+      }
+      // Q_TAIL_HI is the atomic commit of both halves, so this is the point at
+      // which the set of commands the CP may fetch stops growing.
+      if (off == CP_Q_TAIL_HI) {
+        staged_commit_tail(value);
       }
     }
   #endif
@@ -474,7 +479,7 @@ public:
       if (!staged_seqnum_valid_ || *value != staged_last_seqnum_) {
         staged_last_seqnum_  = *value;
         staged_seqnum_valid_ = true;
-        return staged_refresh();
+        return staged_refresh(*value);
       }
     }
   #endif
@@ -536,7 +541,10 @@ public:
             vrtDevice_, dsize, *staged_cfg_);
         void* hp = buf->get();
         const uint64_t dev = buf->getPhysAddr();
-        std::memset(hp, 0, asize);
+        // The whole buffer, not just the requested span: staged_xfer syncs the
+        // full allocation, so leaving the rounding slack uninitialised would
+        // push indeterminate bytes to the device on every publish.
+        std::memset(hp, 0, dsize);
         {
           std::lock_guard<std::mutex> g(staged_mu_);
           staged_regions_.emplace(dev, staged_region_t{buf, asize});
@@ -601,23 +609,20 @@ public:
       // vrt::Buffer whose destructor hands the device memory straight back to
       // VRT's buddy allocator -- while a descriptor in the ring still names
       // that device address. Inside a batch the CP has not read it yet, so it
-      // then DMAs from a block the allocator has already re-served to the next
-      // same-sized staging buffer. The non-batch path is safe only by
-      // accident: cp_submit_cl_ rings the doorbell and polls to completion
-      // before host_free is reached, which is why `minimal -l` passes and
-      // anything that launches a kernel would not.
+      // would then DMA from a block the allocator has already re-served to the
+      // next same-sized staging buffer.
       //
       // So: publish now, but keep the buffer alive until the CP has provably
-      // moved past the commands that reference it. staged_refresh() runs on a
-      // Q_SEQNUM advance -- i.e. after the CP has retired work -- and releases
-      // the deferred set there.
+      // retired every command that can name it. Which commands those are is
+      // not known yet -- an open batch may still append more -- so the region
+      // parks unstamped until the next doorbell fixes the tail that covers it.
       std::lock_guard<std::mutex> g(staged_mu_);
       auto sit = staged_regions_.find(cp_addr);
       if (sit == staged_regions_.end()) {
         return -1;
       }
       const int rc = staged_xfer(sit->second, true);
-      staged_pending_free_.push_back(std::move(sit->second));
+      staged_unstamped_.push_back(std::move(sit->second));
       staged_regions_.erase(sit);
       return rc;
     }
@@ -649,15 +654,12 @@ private:
   // tagged HOST it reaches host DRAM through the QDMA slave bridge, which is
   // what allocHostBuffer serves and what the code below is bypassed for.
   //
-  // That path does not work on this V80 compute shell. Measured 2026-08-19
-  // with a ten-line HLS kernel whose only distinguishing feature is
-  // sp=<kernel>.m_axi_gmem0:HOST (~/dev/v80/hostprobe): its AXI reads never
-  // complete. AP_CTRL sat at 0x1 (ap_start, not idle, not done) for ~15
-  // minutes with the argument registers verified correct (src=0xfea9a000,
-  // size=0x100) -- a 256-iteration II=1 loop that should retire in about a
-  // microsecond. The byte-identical control build with the single line changed
-  // to :HBM0 (~/dev/v80/hostprobe_hbm) completed in under 0.1 s and returned
-  // the right sum, which isolates the fault to the HOST path rather than to
+  // That path does not work on this V80 compute shell: an AXI master bound to
+  // :HOST never sees its reads complete. A minimal HLS kernel whose only
+  // distinguishing feature is sp=<kernel>.m_axi_gmem0:HOST sits at ap_start
+  // indefinitely on a loop that should retire in about a microsecond, while
+  // the byte-identical build with that one line changed to :HBM0 completes in
+  // under 0.1 s -- which isolates the fault to the HOST path rather than to
   // mastering, the AFU, or the build flow.
   //
   // Neither simulator can catch this: avedsim shares process memory outright
@@ -678,6 +680,13 @@ private:
   struct staged_region_t {
     std::shared_ptr<vrt::Buffer<uint8_t>> buf;
     uint64_t size;
+  };
+
+  // A freed region plus the retire count at which the last command that can
+  // name its device address has completed.
+  struct staged_pending_t {
+    staged_region_t region;
+    uint64_t        watermark;
   };
 
   // Resolve once, at init. Throwing means target="HOST" -- the slave bridge --
@@ -743,9 +752,8 @@ private:
   int staged_publish(bool include_cp_owned) {
     std::lock_guard<std::mutex> g(staged_mu_);
     for (const auto& kv : staged_regions_) {
-      const uint32_t lo = uint32_t(kv.first & 0xFFFFFFFFu);
       if (!include_cp_owned
-          && (lo == staged_head_addr_ || lo == staged_cmpl_addr_)) {
+          && (kv.first == staged_head_addr_ || kv.first == staged_cmpl_addr_)) {
         continue;
       }
       if (staged_xfer(kv.second, true) != 0) {
@@ -753,6 +761,21 @@ private:
       }
     }
     return 0;
+  }
+
+  // Fix the watermark for regions freed since the last doorbell. Every command
+  // that can name them is now committed, and the tail says how many commands
+  // that is: the CP retires one seqnum per ring command, so a committed tail of
+  // T bytes has been fully consumed once Q_SEQNUM reaches T / CP_CL_BYTES.
+  // Called on the Q_TAIL_HI write, which is the atomic commit of both halves.
+  void staged_commit_tail(uint32_t tail_hi) {
+    std::lock_guard<std::mutex> g(staged_mu_);
+    const uint64_t tail = (uint64_t(tail_hi) << 32) | staged_tail_lo_;
+    const uint64_t watermark = tail / CP_CL_BYTES;
+    for (auto& r : staged_unstamped_) {
+      staged_pending_.push_back(staged_pending_t{std::move(r), watermark});
+    }
+    staged_unstamped_.clear();
   }
 
   // Pull back what the CP wrote: MEM_READ staging buffers, and the head and
@@ -764,32 +787,53 @@ private:
   // append and that doorbell, so pulling the ring back would overwrite
   // freshly appended descriptors with the stale device copy and silently drop
   // commands. sim_refresh() skips it for the same reason.
-  int staged_refresh() {
+  int staged_refresh(uint32_t seqnum) {
     std::lock_guard<std::mutex> g(staged_mu_);
     for (const auto& kv : staged_regions_) {
-      if (uint32_t(kv.first & 0xFFFFFFFFu) == staged_ring_addr_) {
+      if (kv.first == staged_ring_addr_) {
         continue;
       }
       if (staged_xfer(kv.second, false) != 0) {
         return -1;
       }
     }
-    // The CP has retired work (this only runs on a Q_SEQNUM advance), so every
-    // descriptor appended before that advance has been read. Buffers freed by
-    // host_free while a batch was still open can now go back to the allocator.
-    // Holding them one seqnum longer than strictly necessary costs a little
-    // device memory and nothing else; releasing them early costs correctness.
-    staged_pending_free_.clear();
+    // Q_SEQNUM is a 32-bit window on the CP's 64-bit retire counter, so
+    // accumulate the unsigned delta instead of comparing the raw value: the
+    // watermarks are derived from a 64-bit tail and would otherwise become
+    // unreachable after the register wraps.
+    staged_seqnum64_ += uint32_t(seqnum - uint32_t(staged_seqnum64_));
+    // Release only what the CP has provably moved past. Clearing the whole set
+    // on any advance would hand a buffer back to the allocator while a later
+    // command in the same batch still names its device address.
+    staged_pending_.erase(
+        std::remove_if(staged_pending_.begin(), staged_pending_.end(),
+                       [this](const staged_pending_t& p) {
+                         return p.watermark <= staged_seqnum64_;
+                       }),
+        staged_pending_.end());
     return 0;
   }
 
+  static void addr_set_lo(uint64_t& addr, uint32_t v) {
+    addr = (addr & ~uint64_t(0xFFFFFFFFu)) | v;
+  }
+  static void addr_set_hi(uint64_t& addr, uint32_t v) {
+    addr = (addr & uint64_t(0xFFFFFFFFu)) | (uint64_t(v) << 32);
+  }
+
   // Mirrors sim_note_region_addr: record which base is which so publish can
-  // tell the CP-owned lines from the ones we write.
+  // tell the CP-owned lines from the ones we write. Both halves, because a
+  // device-memory region is addressed well above 32 bits and two regions
+  // sharing a low half would otherwise be indistinguishable.
   void staged_note_region_addr(uint32_t off, uint32_t value) {
     switch (off) {
-    case CP_Q_RING_BASE_LO: staged_ring_addr_ = value; break;
-    case CP_Q_HEAD_ADDR_LO: staged_head_addr_ = value; break;
-    case CP_Q_CMPL_ADDR_LO: staged_cmpl_addr_ = value; break;
+    case CP_Q_RING_BASE_LO: addr_set_lo(staged_ring_addr_, value); break;
+    case CP_Q_RING_BASE_HI: addr_set_hi(staged_ring_addr_, value); break;
+    case CP_Q_HEAD_ADDR_LO: addr_set_lo(staged_head_addr_, value); break;
+    case CP_Q_HEAD_ADDR_HI: addr_set_hi(staged_head_addr_, value); break;
+    case CP_Q_CMPL_ADDR_LO: addr_set_lo(staged_cmpl_addr_, value); break;
+    case CP_Q_CMPL_ADDR_HI: addr_set_hi(staged_cmpl_addr_, value); break;
+    case CP_Q_TAIL_LO:      staged_tail_lo_ = value;               break;
     default: break;
     }
   }
@@ -819,12 +863,16 @@ private:
   }
 
   // Records the region bases the common core programs into the CP so the two
-  // directions below can tell who owns each one.
+  // directions below can tell who owns each one. Both halves: the simulated
+  // memory windows sit well above 32 bits, so a low half is not an identity.
   void sim_note_region_addr(uint32_t off, uint32_t value) {
     switch (off) {
-    case CP_Q_RING_BASE_LO: sim_ring_addr_ = value; break;
-    case CP_Q_HEAD_ADDR_LO: sim_head_addr_ = value; break;
-    case CP_Q_CMPL_ADDR_LO: sim_cmpl_addr_ = value; break;
+    case CP_Q_RING_BASE_LO: addr_set_lo(sim_ring_addr_, value); break;
+    case CP_Q_RING_BASE_HI: addr_set_hi(sim_ring_addr_, value); break;
+    case CP_Q_HEAD_ADDR_LO: addr_set_lo(sim_head_addr_, value); break;
+    case CP_Q_HEAD_ADDR_HI: addr_set_hi(sim_head_addr_, value); break;
+    case CP_Q_CMPL_ADDR_LO: addr_set_lo(sim_cmpl_addr_, value); break;
+    case CP_Q_CMPL_ADDR_HI: addr_set_hi(sim_cmpl_addr_, value); break;
     default: break;
     }
   }
@@ -867,8 +915,8 @@ private:
   int sim_publish(bool include_cp_owned, uint32_t new_tail) {
     std::lock_guard<std::mutex> g(sim_mu_);
     for (const auto &kv : sim_regions_) {
-      uint32_t lo = uint32_t(kv.first & 0xFFFFFFFFu);
-      if (!include_cp_owned && (lo == sim_head_addr_ || lo == sim_cmpl_addr_)) {
+      if (!include_cp_owned
+          && (kv.first == sim_head_addr_ || kv.first == sim_cmpl_addr_)) {
         continue;
       }
       uint64_t off = 0;
@@ -878,7 +926,7 @@ private:
       // wrap a cacheline across the end of the ring, so the delta is always
       // one contiguous span. Anything unexpected falls back to the whole
       // region, which is slow but never wrong.
-      if (lo == sim_ring_addr_ && !include_cp_owned) {
+      if (kv.first == sim_ring_addr_ && !include_cp_owned) {
         uint32_t delta = new_tail - sim_ring_tail_;
         uint64_t start = sim_ring_tail_ % kv.second.size;
         if (delta != 0 && delta <= kv.second.size &&
@@ -900,8 +948,7 @@ private:
   int sim_refresh() {
     std::lock_guard<std::mutex> g(sim_mu_);
     for (const auto &kv : sim_regions_) {
-      uint32_t lo = uint32_t(kv.first & 0xFFFFFFFFu);
-      if (lo == sim_ring_addr_) {
+      if (kv.first == sim_ring_addr_) {
         continue;
       }
       if (sim_xfer(kv.first, kv.second.host_ptr, 0, kv.second.size, false) != 0) {
@@ -918,13 +965,11 @@ private:
   // OFF by default and gated on one already-initialised bool, so normal runs
   // are unaffected.
   //
-  // Every record is fsync'd. That is deliberate and it is the entire point:
-  // the failure under investigation wedges the card and then hard-resets the
-  // host within about a second (2026-08-24 13:44:23, Global Err Reg = 0xffffffff
-  // one second after a kernel launch). A buffered log is lost in that reset --
-  // the previous run's 8 MB ladder log came back 0 bytes -- and the ONE fact
-  // worth having is the last register access before the card stopped
-  // answering. fsync costs throughput and buys the only evidence that matters.
+  // Every record is fsync'd, which is the entire point: a fault on this
+  // platform can wedge the card and hard-reset the host within about a second,
+  // and a buffered log does not survive that. The one fact worth having is the
+  // last register access before the card stopped answering, so fsync costs
+  // throughput and buys the only evidence that matters.
   //
   // Note VORTEX_AVED_TRACE is NOT this: it only traces the simulation
   // host-memory sync path and emits nothing at all on hardware.
@@ -951,13 +996,13 @@ private:
     return wedged;
   }
 
-  // Coalesce spin-loop polling. fsync costs ~5 ms per record on this box
-  // (measured), and CP_Q_SEQNUM is read in a tight wait loop -- tracing every
-  // iteration would dominate the run and perturb the timing of the very fault
-  // being chased. Identical consecutive accesses are counted instead, and
-  // flushed as one "xN" record when anything changes or 50 ms elapse. Worst
-  // case that loses 50 ms of repeats; every *transition* is still recorded
-  // exactly, which is what localises a wedge.
+  // Coalesce spin-loop polling. An fsync costs milliseconds and CP_Q_SEQNUM is
+  // read in a tight wait loop, so tracing every iteration would dominate the
+  // run and perturb the timing of the very fault being chased. Identical
+  // consecutive accesses are counted instead and flushed as one "xN" record
+  // when anything changes or 50 ms elapse. Worst case that loses 50 ms of
+  // repeats; every transition is still recorded exactly, which is what
+  // localises a wedge.
   static void mmio_emit(std::FILE *f, const struct timespec &ts, const char *op,
                         uint32_t addr, uint32_t value, int rc, uint64_t reps,
                         const char *note) {
@@ -991,12 +1036,14 @@ private:
     clock_gettime(CLOCK_REALTIME, &ts);
 
     const char *note = "";
+
+    // mmio_wedged() is plain shared state and register access comes from queue
+    // worker threads, so it may only be touched under the lock.
+    std::lock_guard<std::mutex> lk(mu);
     // 0xFFFFFFFF from a read is the PCIe completion-timeout / DECERR
     // signature on this platform, never data. Flag the transition once.
     const bool wedge_now =
         (rc == 0 && op[0] == 'r' && value == 0xFFFFFFFFu && !mmio_wedged());
-
-    std::lock_guard<std::mutex> lk(mu);
     const bool same = (p_op != nullptr && p_op[0] == op[0] && p_addr == addr &&
                        p_val == value && p_rc == rc);
     const long dt_ms = (ts.tv_sec - p_ts.tv_sec) * 1000 +
@@ -1067,11 +1114,11 @@ private:
   std::map<uint64_t, sim_region_t> sim_regions_;
   std::mutex                       sim_mu_;
 
-  // Low halves of the region bases; enough to tell the three CP regions apart
-  // within one allocation window.
-  uint32_t sim_ring_addr_    = 0;
-  uint32_t sim_head_addr_    = 0;
-  uint32_t sim_cmpl_addr_    = 0;
+  // The region bases the common core programmed into the CP; how the two sync
+  // directions tell the three CP regions apart.
+  uint64_t sim_ring_addr_    = 0;
+  uint64_t sim_head_addr_    = 0;
+  uint64_t sim_cmpl_addr_    = 0;
   uint32_t sim_last_seqnum_  = 0;
   bool     sim_seqnum_valid_ = false;
   bool     sim_seeded_       = false;
@@ -1084,14 +1131,18 @@ private:
 
   std::map<uint64_t, staged_region_t> staged_regions_;
   // Regions host_free'd while their descriptors may still be unread by the CP.
-  // Released in staged_refresh(), i.e. once Q_SEQNUM has advanced. Guarded by
-  // staged_mu_ like staged_regions_.
-  std::vector<staged_region_t>        staged_pending_free_;
+  // A region parks in staged_unstamped_ until the next doorbell fixes the
+  // watermark that covers it, then waits in staged_pending_ for Q_SEQNUM to
+  // reach that watermark. Both guarded by staged_mu_, like staged_regions_.
+  std::vector<staged_region_t>        staged_unstamped_;
+  std::vector<staged_pending_t>       staged_pending_;
   std::mutex                          staged_mu_;
 
-  uint32_t staged_ring_addr_    = 0;
-  uint32_t staged_head_addr_    = 0;
-  uint32_t staged_cmpl_addr_    = 0;
+  uint64_t staged_ring_addr_    = 0;
+  uint64_t staged_head_addr_    = 0;
+  uint64_t staged_cmpl_addr_    = 0;
+  uint32_t staged_tail_lo_      = 0;
+  uint64_t staged_seqnum64_     = 0;
   uint32_t staged_last_seqnum_  = 0;
   bool     staged_seqnum_valid_ = false;
   bool     staged_seeded_       = false;

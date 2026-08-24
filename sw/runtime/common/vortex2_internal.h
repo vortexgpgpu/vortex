@@ -338,9 +338,16 @@ private:
     // Called from Device::open() after the platform is ready.
     vx_result_t cp_init();
 
+    // Clear Q_CONTROL.enable + CP_CTRL.enable and wait out the drain, so no
+    // master is left running against memory the caller is about to release.
+    // Idempotent, best-effort, and safe on a device that has stopped
+    // answering. Must run before the ring / head / completion buffers are
+    // freed.
+    void cp_quiesce_();
+
     // Push one pre-built CL into the ring + commit Q_TAIL + wait. Used by
     // cp_submit_dcr_write / cp_submit_launch — they just build the CL.
-    // When a batch is open (cp_in_batch_) it appends only; the single
+    // While this thread has a batch open it appends only; the single
     // doorbell + poll are deferred to cp_batch_end.
     vx_result_t cp_submit_cl_(const void* cl);
 
@@ -428,12 +435,17 @@ private:
     uint64_t                       cp_expected_seqnum_ = 0;
     uint64_t                       cp_num_cores_       = 0; // cached VX_CAPS_NUM_CORES, used for CMD_CACHE_FLUSH
     std::mutex                     cp_mu_;             // serialize ring writes
-    // Batched-submit state. cp_in_batch_ is set between cp_batch_begin and
-    // cp_batch_end (cp_mu_ held throughout); while set, cp_submit_* append
-    // without ringing the doorbell. cp_batch_target_ tracks the seqnum the
-    // last appended command will reach, which cp_batch_end polls for once.
-    bool                           cp_in_batch_        = false;
+    // Seqnum the last command appended to the open batch will reach;
+    // cp_batch_end polls for it once. Touched only by the batch owner, which
+    // holds cp_mu_ from cp_batch_begin to cp_batch_end. Whether a batch is
+    // open is per-thread state in device.cpp, not a member: a shared flag
+    // would tell a non-owning submitter to append with no lock held.
     uint64_t                       cp_batch_target_    = 0;
+
+    // Bound on the teardown drain poll (cp_quiesce_). Generous, because the
+    // in-flight command it waits out may be a whole kernel launch, and cheap,
+    // because it only spins when the device is genuinely still working.
+    static constexpr int           CP_QUIESCE_POLLS    = 100000;
 
     // Virtual memory — the Device owns the VMManager (the page-table
     // builder) iff the device reports an MMU (vm_enabled_, discovered from
