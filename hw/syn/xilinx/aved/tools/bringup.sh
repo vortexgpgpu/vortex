@@ -3,7 +3,7 @@
 #
 #   sudo bash ~/dev/v80/bringup.sh
 #
-# = step1_load.sh  +  `v80-smi reset --shell-type compute`
+# = step1_load.sh, and nothing else. It performs NO device reset: see part 2.
 #
 # Does NOT write flash. Both partitions already hold the SLASH compute static
 # shell (written 2026-08-20 14:02 partition 1, 2026-08-21 04:38 partition 0).
@@ -38,33 +38,29 @@ echo "########## part 1: load the stack ##########"
 bash /home/blaise/dev/v80/step1_load.sh || die "step1_load.sh failed -- see above"
 
 echo
-echo "########## part 2: boot the compute partition ##########"
-PF0=$(lspci -d 10ee:50b4 -D 2>/dev/null | awk '{print $1}')
-[ -n "$PF0" ] || die "PF0 (10ee:50b4) not on the bus"
-[ "$(printf '%s\n' "$PF0" | wc -l)" -eq 1 ] || die "more than one V80 found: $PF0"
-BDF=${PF0%.*}
-
-cur=$("$SMI" list 2>&1)
-echo "  before: $cur"
-if echo "$cur" | grep -qi 'shell.*compute'; then
-    echo "  already on the compute partition -- no reset needed"
-else
-    echo "  resetting into partition 1 (compute)..."
-    timeout 300 "$SMI" reset -d "$BDF" --shell-type compute || die "v80-smi reset failed"
-fi
-
+echo "########## part 2: report shell (NO RESET -- see below) ##########"
+# DO NOT reset into the compute partition any more.
+#
+# Measured 2026-08-24: 6 of 21 host crashes died in the SAME SECOND as an
+# SBR / rescan / hotplug operation, including the one that killed this box at
+# 13:08:28 immediately after bringup.sh's own `v80-smi reset`. The reset is a
+# crash trigger, so we now avoid it entirely.
+#
+# We can avoid it because BOTH flash partitions hold the identical SLASH
+# compute static shell (partition 1 written 2026-08-20, partition 0 written
+# 2026-08-21). vrtd resets only when the vbin's <ShellType> differs from the
+# booted partition's label (reset.c: shell_reset_required). POST boots
+# partition 0, which vrtd labels "service". So we relabel the vbin to
+# "service" instead of forcing the board to partition 1. The bitstream is
+# byte-identical -- verified with cmp -- only the label differs.
+#
+# Use the relabelled vbin:
+#   build/hw/syn/xilinx/aved/hbm1_aved_hw_svc/bin/vortex_afu.vbin
+"$SMI" list 2>&1 | sed 's/^/  /'
 echo
-echo "########## verify ##########"
-for i in 1 2 3 4 5 6; do
-    out=$("$SMI" list 2>&1); echo "  attempt $i ($(date +%T)): $out"
-    if echo "$out" | grep -qi 'shell.*compute'; then
-        echo
-        echo "=========== READY -- Shell: compute ==========="
-        echo "Design writes should now run with no secondary bus reset."
-        exit 0
-    fi
-    [ $i -lt 6 ] && sleep 10
-done
-
-die "board did not come up reporting Shell: compute. Do NOT flash anything;
-    check 'v80-smi list' and the vrtd journal first."
+echo "=========== READY ==========="
+echo "Shell above should read 'service'. That is expected and CORRECT:"
+echo "partition 0 holds the compute static shell; 'service' is just the"
+echo "partition-0 label. Run the ladder against the _svc vbin so vrtd"
+echo "performs NO reset and NO secondary bus reset."
+exit 0
