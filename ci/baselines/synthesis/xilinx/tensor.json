@@ -183,7 +183,7 @@
     "dut": "tensor",
     "result": {
       "bram": 242,
-      "build_time_s": 6756,
+      "build_time_s": 6397,
       "critical_paths": [
         {
           "endpoint": "l2cache/g_cache.cache/g_banks[0].bank/cache_data/g_data_slice[1].data_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg_13/ENARDEN",

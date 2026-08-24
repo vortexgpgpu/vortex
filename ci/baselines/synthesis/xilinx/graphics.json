@@ -6,7 +6,7 @@
     "dut": "gfx",
     "result": {
       "bram": 347,
-      "build_time_s": 4674,
+      "build_time_s": 4715,
       "critical_paths": [
         {
           "endpoint": "l2cache/g_cache.cache/g_mem_rsp_queue[0].mem_rsp_queue/g_ebN.fifo_queue/g_depth_n.g_out_reg.data_out_r_reg[459]/D",

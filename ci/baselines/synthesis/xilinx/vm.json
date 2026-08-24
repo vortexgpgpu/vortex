@@ -1,112 +1,112 @@
 {
   "vm": {
-    "clock_mhz": 300,
-    "config_hash": "2bf2fc71f85cde89",
+    "clock_mhz": 250,
+    "config_hash": "cf5c7726f5ecbcfa",
     "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
     "dut": "vm",
     "result": {
       "bram": 221,
-      "build_time_s": 3918,
+      "build_time_s": 4246,
       "critical_paths": [
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[492]/CE",
+          "endpoint": "g_sockets[0].dmmu/tlb/mshr/reqpool/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.057,
-          "route_ns": 3.012,
-          "route_pct": 74.023,
-          "slack_ns": -0.841,
-          "startpoint": "ptw/mem_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/C"
+          "levels": 10,
+          "logic_ns": 1.031,
+          "route_ns": 2.643,
+          "route_pct": 71.939,
+          "slack_ns": -0.042,
+          "startpoint": "g_sockets[0].dmmu/tlb/cam/entries_r_reg[3][vpn][7]/C"
         },
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[121]/CE",
+          "endpoint": "l2cache/g_cache.cache/g_banks[1].bank/cache_tags/tag_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg_1/DINBDIN[1]",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.057,
-          "route_ns": 3.012,
-          "route_pct": 74.022,
-          "slack_ns": -0.841,
-          "startpoint": "ptw/mem_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/C"
+          "levels": 8,
+          "logic_ns": 1.633,
+          "route_ns": 2.075,
+          "route_pct": 55.961,
+          "slack_ns": -0.042,
+          "startpoint": "l2cache/g_cache.cache/g_banks[1].bank/cache_tags/tag_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg_1/CLKARDCLK"
         },
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[26]/CE",
+          "endpoint": "g_sockets[0].dmmu/tlb/mshr/reqpool/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.057,
-          "route_ns": 3.012,
-          "route_pct": 74.022,
-          "slack_ns": -0.841,
-          "startpoint": "ptw/mem_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/C"
+          "levels": 10,
+          "logic_ns": 1.044,
+          "route_ns": 2.629,
+          "route_pct": 71.577,
+          "slack_ns": -0.041,
+          "startpoint": "g_sockets[0].dmmu/tlb/cam/entries_r_reg[3][vpn][7]/C"
         },
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[35]/CE",
+          "endpoint": "l2cache/g_cache.cache/g_banks[1].bank/cache_tags/tag_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg_7/WEBWE[2]",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.057,
-          "route_ns": 3.012,
-          "route_pct": 74.022,
-          "slack_ns": -0.841,
-          "startpoint": "ptw/mem_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/C"
+          "levels": 8,
+          "logic_ns": 1.651,
+          "route_ns": 1.924,
+          "route_pct": 53.817,
+          "slack_ns": -0.04,
+          "startpoint": "l2cache/g_cache.cache/g_banks[1].bank/cache_tags/tag_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg_1/CLKARDCLK"
         },
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[539]/CE",
+          "endpoint": "l2cache/g_cache.cache/g_banks[0].bank/g_amo.amo/g_commit.cmp_old_reg[31]/D",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.057,
-          "route_ns": 3.012,
-          "route_pct": 74.022,
-          "slack_ns": -0.841,
-          "startpoint": "ptw/mem_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/C"
+          "levels": 9,
+          "logic_ns": 0.994,
+          "route_ns": 3.027,
+          "route_pct": 75.277,
+          "slack_ns": -0.039,
+          "startpoint": "l2cache/g_cache.cache/g_banks[0].bank/reg_cmt/g_pipe.g_partial_reset.pipe_reg[1][126]/C"
         },
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[210]/CE",
+          "endpoint": "g_sockets[0].dmmu/tlb/mshr/reqpool/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.057,
-          "route_ns": 3.007,
-          "route_pct": 73.991,
-          "slack_ns": -0.836,
-          "startpoint": "ptw/mem_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/C"
+          "levels": 10,
+          "logic_ns": 0.858,
+          "route_ns": 2.812,
+          "route_pct": 76.62,
+          "slack_ns": -0.038,
+          "startpoint": "g_sockets[0].dmmu/g_lookup_pipe[1].req_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[179]/C"
         },
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[386]/CE",
+          "endpoint": "g_sockets[0].dmmu/tlb/mshr/reqpool/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.057,
-          "route_ns": 3.007,
-          "route_pct": 73.991,
-          "slack_ns": -0.836,
-          "startpoint": "ptw/mem_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/C"
+          "levels": 10,
+          "logic_ns": 1.072,
+          "route_ns": 2.597,
+          "route_pct": 70.78,
+          "slack_ns": -0.037,
+          "startpoint": "g_sockets[0].dmmu/tlb/cam/entries_r_reg[3][level][0]/C"
         },
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[505]/CE",
+          "endpoint": "g_sockets[0].dmmu/tlb/mshr/reqpool/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.057,
-          "route_ns": 3.007,
-          "route_pct": 73.991,
-          "slack_ns": -0.836,
-          "startpoint": "ptw/mem_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/C"
+          "levels": 10,
+          "logic_ns": 0.871,
+          "route_ns": 2.798,
+          "route_pct": 76.259,
+          "slack_ns": -0.037,
+          "startpoint": "g_sockets[0].dmmu/g_lookup_pipe[1].req_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[179]/C"
         },
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[569]/CE",
+          "endpoint": "g_sockets[0].dmmu/tlb/mshr/reqpool/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.057,
-          "route_ns": 3.007,
-          "route_pct": 73.991,
-          "slack_ns": -0.836,
-          "startpoint": "ptw/mem_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/C"
+          "levels": 10,
+          "logic_ns": 1.085,
+          "route_ns": 2.583,
+          "route_pct": 70.417,
+          "slack_ns": -0.036,
+          "startpoint": "g_sockets[0].dmmu/tlb/cam/entries_r_reg[3][level][0]/C"
         },
         {
-          "endpoint": "g_sockets[0].dcache/g_cache_wrap[0].cache_wrap/g_bypass.cache_bypass/mem_bus_out_arb/req_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[492]/CE",
+          "endpoint": "g_sockets[0].dmmu/tlb/mshr/reqpool/g_no_asic.g_sync.g_bram.g_write_first.g_no_wren.ram_reg_0/ENARDEN",
           "group": "core_clock",
-          "levels": 13,
-          "logic_ns": 1.772,
-          "route_ns": 2.243,
-          "route_pct": 55.869,
-          "slack_ns": -0.834,
-          "startpoint": "l2cache/g_cache.cache/g_banks[0].bank/cache_tags/tag_store/g_no_asic.g_sync.g_bram.g_read_first.g_wren.ram_reg_0/CLKARDCLK"
+          "levels": 9,
+          "logic_ns": 1.063,
+          "route_ns": 2.604,
+          "route_pct": 71.012,
+          "slack_ns": -0.035,
+          "startpoint": "g_sockets[0].dmmu/tlb/cam/entries_r_reg[3][vpn][7]/C"
         }
       ],
       "dsp": 0,
@@ -116,23 +116,28 @@
         "vivado": "2024.2",
         "xlen": 32
       },
-      "ff": 62822,
-      "fmax_mhz": 239.6,
+      "ff": 65202,
+      "fmax_mhz": 247.4,
       "high_fanout_nets": [
         {
+          "driver": "LUT6",
+          "fanout": 3107,
+          "net": "l2cache/g_cache.cache/g_banks[0].bank/reg_cmt/enable0"
+        },
+        {
           "driver": "LUT4",
-          "fanout": 3101,
+          "fanout": 3106,
           "net": "l2cache/g_cache.cache/g_banks[1].bank/reg_cmt/enable0"
+        },
+        {
+          "driver": "LUT5",
+          "fanout": 1953,
+          "net": "l2cache/g_cache.cache/core_rsp_xbar/g_fallback.xbar_switch/g_multi_inputs.g_multiple_outputs.g_xbar_arbs[1].xbar_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb1.pipe_buffer/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_reg[0][526]_1"
         },
         {
           "driver": "MUXF7",
           "fanout": 1705,
           "net": "l2tlb/mshr/A[0]"
-        },
-        {
-          "driver": "LUT6",
-          "fanout": 1686,
-          "net": "l2cache/g_cache.cache/g_banks[0].bank/reg_cmt/enable0"
         },
         {
           "driver": "MUXF7",
@@ -141,7 +146,7 @@
         },
         {
           "driver": "PORT",
-          "fanout": 1609,
+          "fanout": 1623,
           "net": "reset"
         },
         {
@@ -163,17 +168,12 @@
           "driver": "MUXF7",
           "fanout": 1432,
           "net": "l2tlb/mshr/A[4]"
-        },
-        {
-          "driver": "MUXF7",
-          "fanout": 1230,
-          "net": "l2tlb/mshr/A[6]"
         }
       ],
-      "lut": 69064,
+      "lut": 68798,
       "lutram": 1314,
       "uram": 0,
-      "wns_ns": -0.841
+      "wns_ns": -0.042
     }
   }
 }

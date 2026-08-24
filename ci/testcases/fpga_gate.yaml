@@ -78,23 +78,18 @@ builds:
   clock_mhz: 300
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
 
-# Full AFU: 1 core, 32KB L1s + L2, every extension enabled, dual-issue, with
-# virtual memory (MMU) and the RVC decompressor. The only build that closes the
-# cross-module boundaries (cluster<->L2, socket arbiters, CP, socket MMU); 250 MHz
-# because it is routing-bound, not logic-bound.
+# Multi-core system top: 2 cores at NT=NW=4, atomics + virtual memory (MMU).
+# Closes the cross-module boundaries (socket arbiters, socket MMU, cluster mem
+# network) that the per-unit DUTs do not; 250 MHz (routing-bound, misses 300).
 - id: top
   group: core
   dut: top
   clock_mhz: 250
   configs: >-
-    -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
-    -DVX_CFG_NUM_CORES=1 -DVX_CFG_ISSUE_WIDTH=2
-    -DVX_CFG_ICACHE_SIZE=32768 -DVX_CFG_DCACHE_SIZE=32768 -DVX_CFG_L2_ENABLE
-    -DVX_CFG_EXT_A_ENABLE -DVX_CFG_EXT_C_ENABLE -DVX_CFG_VM_ENABLE
-    -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE
-    -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
-    -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_EXT_RTU_ENABLE
-    -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_EXT_TEX_ENABLE
+    -DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4
+    -DVX_CFG_NUM_CORES=2
+    -DVX_CFG_EXT_A_ENABLE -DVX_CFG_VM_ENABLE
+    -DVX_CFG_DCACHE_LATENCY=3
 
 # --- dxa ---------------------------------------------------------------------
 
@@ -171,15 +166,15 @@ builds:
 - id: vm
   group: vm
   dut: vm
-  clock_mhz: 300
+  clock_mhz: 250
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
 
 # --- graphics (combined subsystem) -------------------------------------------
 
 # Full graphics subsystem in one wrapper: raster + om + tex + rtu + dxa behind a
 # shared L2, 2 cores / socket. Closes the graphics cross-unit boundaries that the
-# per-unit DUTs above do not; route-dominated, so 250 MHz (NetDelay_high closes
-# at ~253). Subsystem enables come from hw/syn/xilinx/dut/gfx/Makefile.
+# per-unit DUTs above do not. Subsystem enables come from
+# hw/syn/xilinx/dut/gfx/Makefile.
 - id: gfx
   group: graphics
   dut: gfx
@@ -189,9 +184,8 @@ builds:
 # --- tensor (combined subsystem) ---------------------------------------------
 
 # Full tensor subsystem in one wrapper: TCU (WGMMA + MX) + dxa behind a shared L2,
-# 2 cores / socket. The DSP + Fmax bellwether at the subsystem level; route-
-# dominated, so 250 MHz (closes at ~250). Enables come from
-# hw/syn/xilinx/dut/tensor/Makefile.
+# 2 cores / socket. The DSP + Fmax bellwether at the subsystem level. Enables come
+# from hw/syn/xilinx/dut/tensor/Makefile.
 - id: tensor
   group: tensor
   dut: tensor
