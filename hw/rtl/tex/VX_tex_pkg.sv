@@ -21,12 +21,19 @@
 package VX_tex_pkg;
 
 // TEX_STAGE_BITS is owned by VX_gpu_pkg (it sizes the core op-args stage field);
-// the tex CSR struct below reuses it.
+// the tex CSR struct below reuses it. TEX_NUM_LEVELS is owned there too, since
+// it sizes the unit's memory port count.
 import VX_gpu_pkg::TEX_STAGE_BITS;
+import VX_gpu_pkg::TEX_NUM_LEVELS;
 
 // TEX field widths, derived locally from the VX_types value leaves rather than
 // exported as generated contract macros.
 localparam TEX_LOD_BITS    = `CLOG2(`VX_TEX_LOD_MAX + 1);
+// The lod operand's fixed-point form: an integer level with the blend weight
+// between it and the next in the low bits. Separate from TEX_LOD_BITS, which
+// also sizes the texture dimensions -- widening those would be wrong, not
+// merely wasteful.
+localparam TEX_LODF_BITS   = TEX_LOD_BITS + `VX_TEX_LOD_FRAC_BITS;
 localparam TEX_FILTER_BITS = `CLOG2(`VX_TEX_FILTER_MIP_LINEAR + 1);   // mag/min + mip bit
 localparam TEX_FORMAT_BITS = `CLOG2(`VX_TEX_FORMAT_FF_MAX + 1);       // FF-handled formats only
 localparam TEX_WRAP_BITS   = `CLOG2(`VX_TEX_WRAP_BORDER + 1);

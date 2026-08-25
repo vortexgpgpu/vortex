@@ -74,6 +74,12 @@ const char* reference_file = nullptr;
 int         wrap           = VX_TEX_WRAP_CLAMP;
 int         filter         = VX_TEX_FILTER_POINT;
 float       scale          = 1.0f;
+// Sampled level, as a fixed-point lambda, overriding the one the source/dest
+// ratio implies. A sampler's lod clamp is independent of that ratio, so a level
+// past the end of the mip chain is reachable in a real draw and unreachable
+// from the ratio alone -- there is no destination size that asks a texture for
+// a level it does not have. Negative means "use the ratio".
+float       lod_override   = -1.0f;
 int         format         = VX_TEX_FORMAT_A8R8G8B8;
 ePixelFormat eformat       = FORMAT_A8R8G8B8;
 
@@ -86,12 +92,12 @@ vx_buffer_h src_buffer  = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test (v2 KMU)." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-r reference] [-s scale] [-w wrap] [-f format] [-g filter] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-r reference] [-s scale] [-l lod] [-w wrap] [-f format] [-g filter] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "i:o:k:w:f:g:s:r:h?")) != -1) {
+  while ((c = getopt(argc, argv, "i:o:k:w:f:g:s:l:r:h?")) != -1) {
     switch (c) {
     case 'i': input_file = optarg; break;
     case 'o': output_file = optarg; break;
@@ -110,6 +116,7 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'g': filter = atoi(optarg); break;
     case 's': scale = atof(optarg); break;
+    case 'l': lod_override = atof(optarg); break;
     case 'r': reference_file = optarg; break;
     case 'h': case '?': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
@@ -217,6 +224,11 @@ int main(int argc, char *argv[]) {
   for (uint64_t v = minif_q16; v > (1ull << 16); v >>= 1) ++lod;
   if (lod > VX_TEX_LOD_MAX) lod = VX_TEX_LOD_MAX;
   uint32_t frac_q8 = (uint32_t)((minif_q16 - ((uint64_t)1 << (lod + 16))) >> (lod + 16 - 8));
+  if (lod_override >= 0.0f) {
+    float lam = lod_override > (float)VX_TEX_LOD_MAX ? (float)VX_TEX_LOD_MAX : lod_override;
+    lod = (int)lam;
+    frac_q8 = (uint32_t)((lam - (float)lod) * 256.0f) & 0xff;
+  }
 
   uint32_t deltaX = ((uint32_t)1 << TEX_FXD_FRAC) / dst_width;
   uint32_t deltaY = ((uint32_t)1 << TEX_FXD_FRAC) / dst_height;
@@ -226,22 +238,35 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_LOGDIM, (src_logheight << 16) | src_logwidth, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FORMAT, format, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_WRAP,   (wrap << 16) | wrap, 0, nullptr, nullptr));
-  // filter: 0=POINT, 1=BILINEAR, 2=trilinear composed in the shader (two
-  // samples and a lerp), 3=the same trilinear asked of the texture unit itself.
+  // filter: 0=POINT, 1=BILINEAR, 2=two-level blend composed in the shader (two
+  // samples and a lerp) over point taps, 3=the same asked of the texture unit,
+  // 4=composed in the shader over bilinear taps, 5=the same asked of the unit.
   //
-  // 2 and 3 must produce the identical image: the unit blends the two levels
+  // Each pair must produce the identical image: the unit blends the two levels
   // with the same weights over the same texels, so the only thing that differs
-  // is who does it. That is why 3 has no reference of its own and is checked
-  // against 2's.
-  uint32_t filter_dcr = (filter == VX_TEX_FILTER_BILINEAR) ? VX_TEX_FILTER_BILINEAR
-                      : VX_TEX_FILTER_POINT;
-  if (filter == 3) {
+  // is who does it. That is why 3 and 5 have no reference of their own and are
+  // checked against 2's and 4's.
+  //
+  // 4/5 are the combination a real trilinear sampler uses -- bilinear taps at
+  // each of two levels -- and are the only modes where the per-level tap
+  // addressing has to be right at both levels rather than only the lower one.
+  const bool bilinear_taps = (filter == VX_TEX_FILTER_BILINEAR || filter == 4 || filter == 5);
+  const bool unit_mip      = (filter == 3 || filter == 5);
+  const bool shader_mip    = (filter == 2 || filter == 4);
+  uint32_t filter_dcr = bilinear_taps ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT;
+  if (unit_mip) {
     filter_dcr |= VX_TEX_FILTER_MIP_LINEAR;
   }
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FILTER, filter_dcr, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_ADDR,   src_addr / 64, 0, nullptr, nullptr));
-  for (uint32_t i = 0; i < mip_offsets.size() && i < (uint32_t)VX_TEX_LOD_MAX; ++i) {
-    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_MIPOFF(i), mip_offsets[i], 0, nullptr, nullptr));
+  // Every entry, not only the levels the chain has: a sampler's lod clamp is
+  // independent of the chain length, so the unit can be asked for a level past
+  // the end, and an entry left unwritten sends it at an address nothing owns.
+  // Levels past the last repeat it, which is the offset table the driver builds.
+  const uint32_t last_lod = (uint32_t)mip_offsets.size() - 1;
+  for (uint32_t i = 0; i <= (uint32_t)VX_TEX_LOD_MAX; ++i) {
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_MIPOFF(i),
+                                  mip_offsets[i <= last_lod ? i : last_lod], 0, nullptr, nullptr));
   }
 
   // ---- pack kernel arg + launch ----------------------------------------
@@ -252,13 +277,13 @@ int main(int argc, char *argv[]) {
   kernel_arg.dst_pitch     = dst_pitch;
   kernel_arg.dst_stride    = (uint8_t)dst_bpp;
   kernel_arg.filter           = (uint8_t)filter;
-  kernel_arg.use_trilinear    = (filter == 2) ? 1 : 0;
+  kernel_arg.use_trilinear    = shader_mip ? 1 : 0;
   kernel_arg.deltaX        = deltaX;
   kernel_arg.deltaY        = deltaY;
   // Asking the unit for the blend means handing it the level and the weight in
   // one operand: an integer level with the weight in its low bits. The shader
   // path keeps them apart because it applies the weight itself.
-  kernel_arg.lod           = (filter == 3)
+  kernel_arg.lod           = unit_mip
                            ? (((uint32_t)lod << VX_TEX_LOD_FRAC_BITS) | (frac_q8 & 0xff))
                            : (uint32_t)lod;
   kernel_arg.frac          = frac_q8;

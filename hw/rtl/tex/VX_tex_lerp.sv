@@ -16,7 +16,13 @@
 `include "VX_platform.vh"
 
 module VX_tex_lerp #(
-    parameter LATENCY = 3
+    parameter LATENCY = 3,
+    // Denominator the weight is normalized against. A bilinear tap weight is a
+    // fraction of 255, matching the packed-colour blend the software sampler
+    // uses for the same taps; a mip-level weight is a fraction of 256. The two
+    // round differently by up to one count, so a sample filtered on this unit
+    // only reproduces the software sampler if each weight keeps its own form.
+    parameter FRAC_SCALE = 255
 ) (
     input wire clk,
     input wire reset,
@@ -28,22 +34,42 @@ module VX_tex_lerp #(
 );
     `UNUSED_VAR (reset)
     `STATIC_ASSERT(LATENCY == 3, ("invalid value"))
+    `STATIC_ASSERT(FRAC_SCALE == 255 || FRAC_SCALE == 256, ("invalid value"))
 
-    reg [15:0] p1, p2;
-    reg [15:0] sum;
-    reg [7:0]  res;
+    if (FRAC_SCALE == 256) begin : g_scale_256
+        reg [15:0] p1, p2;
+        reg [15:0] sum;
+        reg [7:0]  res;
 
-    wire [7:0] sub = (8'hff - frac);
+        wire [8:0] sub = (9'h100 - 9'(frac));
 
-    always @(posedge clk) begin
-        if (enable) begin
-            p1  <= in1 * sub;
-            p2  <= in2 * frac;
-            sum <= p1 + p2 + 16'h80;
-            res <= 8'((sum + (sum >> 8)) >> 8);
+        always @(posedge clk) begin
+            if (enable) begin
+                p1  <= 16'(in1 * sub);
+                p2  <= 16'(in2 * frac);
+                sum <= p1 + p2;
+                res <= sum[15:8];
+            end
         end
-    end
 
-    assign out = res;
+        assign out = res;
+    end else begin : g_scale_255
+        reg [15:0] p1, p2;
+        reg [15:0] sum;
+        reg [7:0]  res;
+
+        wire [7:0] sub = (8'hff - frac);
+
+        always @(posedge clk) begin
+            if (enable) begin
+                p1  <= in1 * sub;
+                p2  <= in2 * frac;
+                sum <= p1 + p2 + 16'h80;
+                res <= 8'((sum + (sum >> 8)) >> 8);
+            end
+        end
+
+        assign out = res;
+    end
 
 endmodule

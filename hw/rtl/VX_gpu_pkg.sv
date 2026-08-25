@@ -1513,8 +1513,12 @@ package VX_gpu_pkg;
     localparam TCACHE_LINE_SIZE     = `VX_CFG_L1_LINE_SIZE;
     localparam TCACHE_NUM_REQS      = `VX_CFG_TCACHE_NUM_BANKS;
 
-    // Per-tex-unit memory port count (4 bilinear taps × NUM_SFU_LANES)
-    localparam TEX_MEM_REQS         = (4 * `VX_CFG_NUM_SFU_LANES);
+    // Mip levels a sample reads at once: two, so a mip-linear sample carries
+    // both levels in one request and no stage has to pair two responses.
+    localparam TEX_NUM_LEVELS       = 2;
+
+    // Per-tex-unit memory port count (4 bilinear taps × levels × NUM_SFU_LANES)
+    localparam TEX_MEM_REQS         = (4 * TEX_NUM_LEVELS * `VX_CFG_NUM_SFU_LANES);
 
     localparam TCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
     localparam TCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);

@@ -52,13 +52,13 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 
     // ── coords + lod (all from registers) ─────────────────────────────────
     wire [1:0][NUM_LANES-1:0][31:0]        sfu_exe_coords;
-    wire [NUM_LANES-1:0][TEX_LOD_BITS-1:0] sfu_exe_lod;
+    wire [NUM_LANES-1:0][TEX_LODF_BITS-1:0] sfu_exe_lod;
     wire [TEX_STAGE_BITS-1:0]              sfu_exe_stage;
     assign sfu_exe_stage = execute_if.data.op_args.tex.stage;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sfu_exe_coords
         assign sfu_exe_coords[0][i] = execute_if.data.rs1_data[i][31:0];              // u
         assign sfu_exe_coords[1][i] = execute_if.data.rs2_data[i][31:0];              // v
-        assign sfu_exe_lod[i]       = execute_if.data.rs3_data[i][0 +: TEX_LOD_BITS]; // lod
+        assign sfu_exe_lod[i]       = execute_if.data.rs3_data[i][0 +: TEX_LODF_BITS]; // lod
     end
 
     // ── tag-store echo (round-trips the header past the texel round-trip) ──
@@ -121,7 +121,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [TEX_REQ_TAG_WIDTH-1:0] req_tag = {execute_if.data.header.uuid, mdata_waddr};
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_LANES * (1 + 2 * 32 + TEX_LOD_BITS) + TEX_STAGE_BITS + TEX_REQ_TAG_WIDTH),
+        .DATAW   (NUM_LANES * (1 + 2 * 32 + TEX_LODF_BITS) + TEX_STAGE_BITS + TEX_REQ_TAG_WIDTH),
         .SIZE    (2),
         .OUT_REG (2) // external bus should be registered
     ) req_sbuf (
