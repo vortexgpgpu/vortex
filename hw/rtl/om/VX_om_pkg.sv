@@ -78,15 +78,6 @@ typedef struct packed {
     logic                               aperture_depth_only;    // disambiguates the one-word modes
 } om_dcrs_t;
 
-typedef struct packed {
-    logic [1:0]                 rt_idx;
-    logic [`VX_OM_DIM_BITS-1:0] pos_x;
-    logic [`VX_OM_DIM_BITS-1:0] pos_y;
-    logic [23:0]                depth;
-    logic [2:0]                 sample_idx;
-    logic [7:0]                 sample_mask;
-} om_csrs_t;
-
 endpackage
 
 `endif // VX_OM_PKG_VH

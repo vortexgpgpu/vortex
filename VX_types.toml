@@ -460,13 +460,6 @@ VX_RT_CB_TYPE_PROC          = 2
 VX_TRAP_CAUSE_BREAKPOINT       = 3
 VX_TRAP_CAUSE_ECALL_MMODE      = 11
 
-# Graphics extension CSRs (0x7C0..0x7FF user-defined custom range)
-[csr_gfx]
-VX_CSR_OM_BEGIN         = 0x7CE
-VX_CSR_OM_RT_IDX        = 0x7CE
-VX_CSR_OM_SAMPLE_IDX    = 0x7CF
-VX_CSR_OM_END           = 0x7D0
-
 [csr_base]
 VX_CSR_MVENDORID = 0xF11
 VX_CSR_MARCHID = 0xF12

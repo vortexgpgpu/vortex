@@ -88,13 +88,16 @@ interleave between the colour and depth beats. This lock is what bounds the
 ingress pairing table (§4.3) to **one open record per lane** — the deadlock
 argument depends on it.
 
-### 2.3 Reserved CSRs
+### 2.3 The merger is single-target, single-sample
 
-`VX_CSR_OM_RT_IDX` (0x7CE) and `VX_CSR_OM_SAMPLE_IDX` (0x7CF) are declared
-for future MRT / MSAA support. They currently have no hardware behaviour
-([`VX_om_csr.sv`](../../hw/rtl/om/VX_om_csr.sv) is an uninstantiated stub,
-and the `INST_SFU_OM` / `PE_IDX_OM` SFU slot is tied off) — the OM today is
-single-RT, single-sample.
+The OM writes one render target and one sample per fragment. Multiple targets
+and multisample coverage are served in software, and the `INST_SFU_OM` /
+`PE_IDX_OM` SFU slot is tied off.
+
+The unit carries no CSRs. Two were once declared against a future MRT / MSAA
+merger and removed again: they were decoded nowhere, held no state, and a
+register that accepts a write and discards it misleads the shader author who
+finds it.
 
 ---
 

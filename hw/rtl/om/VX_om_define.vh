@@ -47,13 +47,6 @@
         default:                        `TRACE(level, ("?")) \
     endcase
 
-`define TRACE_OM_CSR(level, addr) \
-    case (addr) \
-        `VX_CSR_OM_RT_IDX:              `TRACE(level, ("RT_IDX")) \
-        `VX_CSR_OM_SAMPLE_IDX:          `TRACE(level, ("SAMPLE_IDX")) \
-        default:                        `TRACE(level, ("?")) \
-    endcase
-
 `define PERF_OM_ADD(dst, src, dcount, scount) \
     `PERF_COUNTER_ADD_EX (dst, src, mem_reads,   `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
     `PERF_COUNTER_ADD_EX (dst, src, mem_writes,  `PERF_CTR_BITS, dcount, scount, (((scount + dcount - 1) / dcount) > 1)) \
