@@ -256,6 +256,34 @@ vx_result_t Device::cp_init() {
     // appends commands straight through the ring's host pointer and the CP
     // fetches them over its m_axi_host master — no per-command DMA.
     auto* p = platform();
+    // Adopt the CP's current position instead of assuming it starts at zero.
+    //
+    // The CP's head and retire counters survive a process exit: nothing clears
+    // them. VX_cp_core discards the regfile's q_reset_pulse (UNUSED_VAR), so
+    // Q_CONTROL.reset and CP_CTRL.reset_all do nothing, and the only thing that
+    // ever cleared them was the AFU-level device reset -- which cannot be used
+    // here because writing it takes the card off the PCIe bus.
+    //
+    // The fetch gate is head < tail, both absolute byte counts. A second
+    // process that restarts its tail at 0 therefore never advances past the
+    // first one's head, and its queue silently never runs: no error, no
+    // timeout from the CP's side, just commands that are never fetched. On an
+    // idle device head == tail == retired * CP_CL_BYTES, so the retire counter
+    // is enough to resume exactly where the previous process stopped.
+    {
+        uint32_t seq0 = 0;
+        auto rs = p->cp_reg_read(CP_Q_SEQNUM, &seq0);
+        if (rs != VX_SUCCESS) return rs;
+        if (seq0 == 0xFFFFFFFFu) return VX_ERR_DEVICE_LOST;
+        cp_expected_seqnum_ = seq0;
+        cp_tail_            = uint64_t(seq0) * CP_CL_BYTES;
+        const char* v = getenv("VORTEX_CP_TRACE");
+        if (v != nullptr && v[0] != '\0' && v[0] != '0') {
+            printf("[VXCP] resuming at Q_SEQNUM=%u (tail=0x%llx)\n", seq0,
+                   (unsigned long long)cp_tail_);
+            fflush(stdout);
+        }
+    }
     auto r = host_alloc(CP_RING_SIZE, &cp_ring_);
     if (r != VX_SUCCESS) return r;
     r = host_alloc(CP_CL_BYTES, &cp_head_);
@@ -376,6 +404,57 @@ vx_result_t Device::cp_init() {
         if (r != VX_SUCCESS) return r;
     }
 
+    // VORTEX_MEM_SELFTEST=1 round-trips a pattern through one address per
+    // memory bank before anything depends on device memory. A platform that
+    // only backs part of its advertised address space still accepts the CP's
+    // writes and still retires them, so the first symptom is otherwise a
+    // kernel that never starts -- the image lands somewhere the core cannot
+    // fetch from and nothing reports an error anywhere.
+    if (const char* v = getenv("VORTEX_MEM_SELFTEST")) {
+        if (v[0] != '\0' && v[0] != '0') {
+            uint64_t banks = 0, bank_size = 0;
+            (void)this->query_caps(VX_CAPS_NUM_MEM_BANKS, &banks);
+            (void)this->query_caps(VX_CAPS_MEM_BANK_SIZE, &bank_size);
+            printf("[VXDRV] memory self-test\n"
+                   "[VXDRV]   device reports : %llu bank(s) x %llu bytes"
+                   " = %llu total\n"
+                   "[VXDRV]   host built for : %llu bytes (GLOBAL_MEM_SIZE),"
+                   " user base 0x%llx\n",
+                   (unsigned long long)banks, (unsigned long long)bank_size,
+                   (unsigned long long)(banks * bank_size),
+                   (unsigned long long)GLOBAL_MEM_SIZE,
+                   (unsigned long long)ALLOC_BASE_ADDR);
+            // Sweep the advertised space by octave rather than by bank. The
+            // question this answers is which addresses are actually backed:
+            // an aperture narrower than the address map still accepts and
+            // retires every CP write, so an unbacked region is silent until a
+            // kernel linked into it fails to start.
+            static const uint64_t probes[] = {
+                0x10000ull, 0x1000000ull, 0x10000000ull, 0x20000000ull,
+                0x40000000ull, 0x80000000ull, 0xC0000000ull,
+            };
+            for (uint64_t addr : probes) {
+                if (addr >= GLOBAL_MEM_SIZE) {
+                    continue;
+                }
+                uint32_t out[16], back[16];
+                for (int i = 0; i < 16; ++i) {
+                    out[i] = uint32_t(addr) ^ uint32_t(0xA5A50000u + i);
+                }
+                std::memset(back, 0, sizeof(back));
+                auto rw = dev_write(addr, out, sizeof(out));
+                auto rr = (rw == VX_SUCCESS)
+                        ? dev_read(back, addr, sizeof(back)) : rw;
+                const bool ok = (rw == VX_SUCCESS) && (rr == VX_SUCCESS)
+                             && (std::memcmp(out, back, sizeof(out)) == 0);
+                printf("[VXDRV]   0x%08llx : %-8s wrote 0x%08x read 0x%08x\n",
+                       (unsigned long long)addr, ok ? "OK" : "MISMATCH",
+                       out[0], back[0]);
+            }
+            fflush(stdout);
+        }
+    }
+
     return VX_SUCCESS;
 }
 
@@ -401,6 +480,25 @@ void Device::cp_quiesce_() {
     }
 }
 
+namespace {
+const char* cp_opcode_name(uint8_t op) {
+    switch (op) {
+    case CP_OPCODE_MEM_WRITE:   return "MEM_WRITE";
+    case CP_OPCODE_MEM_READ:    return "MEM_READ";
+    case CP_OPCODE_MEM_COPY:    return "MEM_COPY";
+    case CP_OPCODE_DCR_WR:      return "DCR_WRITE";
+    case CP_OPCODE_DCR_RD:      return "DCR_READ";
+    case CP_OPCODE_LAUNCH:      return "LAUNCH";
+    case CP_OPCODE_EVT_SIG:     return "EVENT_SIGNAL";
+    case CP_OPCODE_EVT_WAIT:    return "EVENT_WAIT";
+    case CP_OPCODE_CACHE_FLUSH: return "CACHE_FLUSH";
+    case CP_OPCODE_LAUNCH_QMD:  return "LAUNCH_QMD";
+    case CP_OPCODE_DRAW:        return "DRAW";
+    default:                    return "?";
+    }
+}
+} // namespace
+
 vx_result_t Device::cp_ring_append_(const void* cl) {
     // Caller holds cp_mu_. Write one CL into the ring at the current tail —
     // a plain memcpy through the ring's CP-visible host pointer — then bump
@@ -412,6 +510,23 @@ vx_result_t Device::cp_ring_append_(const void* cl) {
                 cl, CP_CL_BYTES);
     cp_tail_           += CP_CL_BYTES;
     cp_expected_seqnum_ += 1;
+    // VORTEX_CP_TRACE=1 names every command as it is appended. Without it a
+    // stall is only ever reported as a seqnum, and mapping that back to an
+    // opcode means counting submissions by hand across three call sites.
+    static const bool trace = []{
+        const char* v = getenv("VORTEX_CP_TRACE");
+        return v != nullptr && v[0] != '\0' && v[0] != '0';
+    }();
+    if (trace) {
+        const uint8_t* b = static_cast<const uint8_t*>(cl);
+        uint64_t a0 = 0, a1 = 0;
+        std::memcpy(&a0, b + 4,  sizeof(a0));
+        std::memcpy(&a1, b + 12, sizeof(a1));
+        printf("[VXCP] seq=%llu %-12s flags=0x%02x arg0=0x%llx arg1=0x%llx\n",
+               (unsigned long long)cp_expected_seqnum_, cp_opcode_name(b[0]),
+               b[1], (unsigned long long)a0, (unsigned long long)a1);
+        fflush(stdout);
+    }
     return VX_SUCCESS;
 }
 
