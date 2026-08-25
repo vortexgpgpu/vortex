@@ -65,6 +65,42 @@ PLATFORM_MERGED_MEMORY_INTERFACE
 therefore **inert** on this platform. It only has meaning when
 `NUM_BANKS_OUT > 1`.
 
+### 2.1.1 What the interleave would do, precisely
+
+`ADDR_WIDTH_IN` is word-addressable where the word is `DATA_WIDTH/8` = 64 B, so
+the bank select is taken from the low bits of the **64-byte block index**:
+
+```systemverilog
+req_bank_sel  = mem_req_addr_dst[BANK_SEL_BITS-1:0]
+req_bank_addr = mem_req_addr_dst[BANK_SEL_BITS +: BANK_ADDR_WIDTH]
+```
+
+That is block-cyclic placement at cache-line granularity: consecutive 64 B
+blocks land in consecutive banks. `g_no_interleave` is the alternative —
+high-order bits select, giving each bank one contiguous region.
+
+The placement is derived in hardware from the address. The host writes a linear
+address range and the adapter scatters it; **no driver or copy-path change is
+needed** to get interleaving.
+
+### 2.1.2 `NUM_BANKS` also throttles the L1 memory interface
+
+This parameter is not only an AXI port count:
+
+```c
+#define VX_CFG_L1_MEM_PORTS __MIN(VX_CFG_DCACHE_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
+```
+
+At `PLATFORM_MEMORY_NUM_BANKS=1` the L1 data cache is clamped to a **single**
+memory port regardless of `DCACHE_NUM_BANKS`. So the current V80 setting
+narrows the cache-to-memory path inside the core, upstream of any AXI concern.
+
+This means the speedups in §4.2 are **not** attributable to AXI masters alone —
+raising `NUM_BANKS` simultaneously widens the L1 memory interface. The two
+effects are coupled by this expression and were not separated by the sweep.
+Separating them (by sweeping `DCACHE_NUM_BANKS` independently) would sharpen
+the estimate and is listed in §8.
+
 ### 2.2 Where the bandwidth actually goes
 
 `MEM_TAG=MEM` routes into the HBM VNOC, which *does* spread traffic across HBM
@@ -329,6 +365,11 @@ kernel clock is already only 200 MHz.
    capability matches the hardware.
 5. **Benefit is workload-shaped.** `vecadd` is pure streaming and close to a
    best case for interleaving. Compute-bound kernels will gain less.
+6. **The §4.2 speedups conflate two effects.** `NUM_BANKS` sets both the AXI
+   master count and (via `L1_MEM_PORTS`) the width of the L1 cache's memory
+   interface. Sweep `DCACHE_NUM_BANKS` and `PLATFORM_MEMORY_NUM_BANKS`
+   independently to attribute the gain. If most of it comes from the L1 port
+   width, a cheaper change than eight AXI masters may capture much of it.
 
 ---
 
