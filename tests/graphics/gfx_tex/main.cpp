@@ -226,10 +226,18 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_LOGDIM, (src_logheight << 16) | src_logwidth, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FORMAT, format, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_WRAP,   (wrap << 16) | wrap, 0, nullptr, nullptr));
-  // filter: 0=POINT, 1=BILINEAR, 2=trilinear (point base; the shader samples
-  // two mip levels and lerps them -- the texture unit has no inter-level blend).
+  // filter: 0=POINT, 1=BILINEAR, 2=trilinear composed in the shader (two
+  // samples and a lerp), 3=the same trilinear asked of the texture unit itself.
+  //
+  // 2 and 3 must produce the identical image: the unit blends the two levels
+  // with the same weights over the same texels, so the only thing that differs
+  // is who does it. That is why 3 has no reference of its own and is checked
+  // against 2's.
   uint32_t filter_dcr = (filter == VX_TEX_FILTER_BILINEAR) ? VX_TEX_FILTER_BILINEAR
                       : VX_TEX_FILTER_POINT;
+  if (filter == 3) {
+    filter_dcr |= VX_TEX_FILTER_MIP_LINEAR;
+  }
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FILTER, filter_dcr, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_ADDR,   src_addr / 64, 0, nullptr, nullptr));
   for (uint32_t i = 0; i < mip_offsets.size() && i < (uint32_t)VX_TEX_LOD_MAX; ++i) {
@@ -247,7 +255,12 @@ int main(int argc, char *argv[]) {
   kernel_arg.use_trilinear    = (filter == 2) ? 1 : 0;
   kernel_arg.deltaX        = deltaX;
   kernel_arg.deltaY        = deltaY;
-  kernel_arg.lod           = (uint32_t)lod;
+  // Asking the unit for the blend means handing it the level and the weight in
+  // one operand: an integer level with the weight in its low bits. The shader
+  // path keeps them apart because it applies the weight itself.
+  kernel_arg.lod           = (filter == 3)
+                           ? (((uint32_t)lod << VX_TEX_LOD_FRAC_BITS) | (frac_q8 & 0xff))
+                           : (uint32_t)lod;
   kernel_arg.frac          = frac_q8;
 
   // 2D launch: gx ranges [0, dst_width), gy ranges [0, dst_height).
