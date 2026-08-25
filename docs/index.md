@@ -64,6 +64,7 @@ Detailed architectural specifications for Vortex subsystems live under
   - [Command Processor](designs/command_processor.md)
   - [Vortex Runtime API](designs/vortex_runtime_api.md)
   - [FPGA AFU Shell](designs/fpga_afu_shell.md)
+  - [`aved` Driver (Alveo V80)](designs/aved_driver_architecture.md)
   - [Build Configuration System](designs/build_configuration_system.md)
 - **Software stacks**
   - [OpenCL Support (PoCL)](designs/opencl_on_vortex.md)
