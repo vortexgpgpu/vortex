@@ -333,20 +333,24 @@ public:
       }
     }
 
-    // ----- Device reset -----
+    // ----- Device reset: OFF by default -----
     //
-    // VORTEX_AVED_NO_RESET=1 skips it. On the V80 compute shell this write is
-    // measurably fatal: with the CP parked and CP_STATUS reading busy=0, the
-    // very next register read returns the all-ones no-completion signature and
-    // the card leaves the PCIe bus until it is JTAG-reloaded and the host
-    // rebooted. Even offset 0x00 -- the AFU control register, not the CP --
-    // stops answering, so the whole AXI-Lite slave goes down with it, and no
-    // secondary bus reset is involved. Skipping it is safe when the design was
-    // just configured (a JTAG PDI load leaves it freshly reset) and the block
-    // above has already parked the CP.
-    const char* noreset = getenv("VORTEX_AVED_NO_RESET");
-    const bool do_reset = (noreset == nullptr || noreset[0] == '\0'
-                           || noreset[0] == '0');
+    // On the V80 compute shell this write is measurably fatal. With the CP
+    // parked and CP_STATUS reading busy=0, the very next register read returns
+    // the all-ones no-completion signature and the card leaves the PCIe bus
+    // until it is JTAG-reloaded and the host rebooted. Offset 0x00 is the AFU
+    // control register rather than the CP, so the whole AXI-Lite slave goes
+    // down with it, and no secondary bus reset is involved anywhere.
+    //
+    // Nothing needs it. The counters it used to clear are adopted at open
+    // instead (see cp_init), the block above parks the CP, and a PDI load
+    // leaves the design freshly configured. Defaulting it on only means an
+    // ordinary run destroys the card.
+    //
+    // VORTEX_AVED_RESET=1 restores the write for a platform that needs it.
+    const char* want_reset = getenv("VORTEX_AVED_RESET");
+    const bool do_reset = (want_reset != nullptr && want_reset[0] != '\0'
+                           && want_reset[0] != '0');
     if (do_reset) {
       CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
         return err;
