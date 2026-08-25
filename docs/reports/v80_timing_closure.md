@@ -129,10 +129,46 @@ that run were not captured.
 
 ---
 
+## The kernel clock: `KERNEL_FREQ` does not change the hardware clock
+
+Measured on silicon, which is the only way this was settled. `sgemm -n1024` on
+the `gfx2c` bitstream (built with `KERNEL_FREQ=150`) reported 1,117,115,605
+cycles in 5,594 ms:
+
+```
+1,117,115,605 / 5.594 s = 199.7 MHz
+```
+
+The device runs at **~200 MHz**, not the 150 MHz requested.
+
+What each layer actually does:
+
+* `KERNEL_FREQ` substitutes correctly into `config.cfg` (`freqhz=150000000`).
+* `slashkit` records it in `system_map.xml` as `<ClockFrequency>150000000<`,
+  and `emit/metadata/timing_freq.py` will cap that value to what WNS allows.
+* **Nothing programs the hardware from it.** The compute shell's block design
+  hardcodes the kernel clock:
+  `set user_clk [create_bd_port -dir I -type clk -freq_hz 200000000 user_clk]`
+  (`slashkit/resources/base/compute/scripts/slash_base.tcl:1149`), driven from
+  `clk_wizard_0_clk_out1`.
+
+So every V80 bitstream built here runs at 200 MHz regardless of the request,
+and `system_map.xml` reports a frequency the device is not using.
+
+Consequence for `gfx2c`: WNS is −0.261 ns against the 5.000 ns synthesis base,
+so the design is operating roughly 5% beyond timing closure. It passes
+`sgemm -n1024`, but that is not margin to rely on — the violated paths are all
+in the TCU (`wgmma/tbuf/bbuf` DSP58 and the TCU core FEDP pipeline).
+
+Two independent things could be fixed: make the shell's `user_clk` frequency
+follow the `[clock] freqhz` request (the fork already modifies
+`slash_base.tcl`), or pipeline the TCU — `VX_CFG_TCU_LATENCY` is the lever.
+
 ## Recommended next steps
 
-1. **Do not spend further effort on `KERNEL_FREQ`.** Measured to have no
-   effect.
+1. **`KERNEL_FREQ` cannot change the operating clock** — the shell hardcodes
+   it at 200 MHz. Fixing that means changing `slash_base.tcl` in the fork, not
+   the Vortex build flow.
 2. **Raise the shell timing violations with AMD** or check whether a newer
    compute shell / HBM soft-controller configuration closes. Ours to report,
    not to fix.
