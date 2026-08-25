@@ -430,8 +430,8 @@ vx_result_t Device::cp_init() {
             // retires every CP write, so an unbacked region is silent until a
             // kernel linked into it fails to start.
             static const uint64_t probes[] = {
-                0x10000ull, 0x1000000ull, 0x10000000ull, 0x20000000ull,
-                0x40000000ull, 0x80000000ull, 0xC0000000ull,
+                0x10000ull, 0x11000ull, 0x12000ull, 0x13000ull, 0x14000ull,
+                0x1000000ull, 0x10000000ull, 0x80000000ull,
             };
             for (uint64_t addr : probes) {
                 if (addr >= GLOBAL_MEM_SIZE) {
