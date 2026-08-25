@@ -85,11 +85,44 @@ Eliminated by measurement, not assumption:
 * **2D indexing** — falsified: `sgemm` and `conv3` are `ndim=2` and use `.y`,
   and both pass.
 
-The one substantive clue: `demo` uses `TYPE=integer`, and for every failing
-element `actual == src0[i]` — the `src1` term contributes nothing, while
-`expected − actual` is a plausible `rand()` value in every case checked. The
-kernel computes `dst = src0 + src1`, so one operand's contribution is being
-lost deterministically.
+### The failure, characterised exactly
+
+`demo` seeds with `std::srand(50)`, so its data is reproducible. Regenerating
+the exact sequence and comparing against the values the hardware produced:
+
+```
+demo actual[0] = 1090072283 = src1[0]
+demo actual[1] =  462713693 = src1[1]
+demo actual[2] =  410880882 = src1[2]
+demo actual[3] = 1176772723 = src1[3]
+demo actual[4] =   81804573 = src1[4]
+```
+
+Five consecutive exact 32-bit matches. The kernel computes
+`dst = src0 + src1` and the hardware produces **`dst == src1`**: the `src0`
+term contributes exactly zero. Indices, `src1_ptr` and `dst_ptr` are all
+correct — the stores land in the right places with the right `src1` values — so
+only the `src0` operand is lost.
+
+Further narrowing:
+
+* **Type-independent.** Rebuilt with `CONFIGS="-DTYPE=float"`: fails
+  identically. So this is not the integer ALU; it is the address/load path.
+* **Shape- and size-independent.** Same failure at `-x16`, `-x8`, `-x4 -y4`
+  and at every `-n`, with the error count always 16·N.
+* `src0` is at device address `0x10000`, and **`vecadd` also places `src0` at
+  `0x10000` and passes** — so the address itself is not the trigger.
+
+The remaining candidates are that `arg->src0_addr` is read as 0 from the kernel
+args block, or that loads from that buffer return 0. Both are consistent with
+everything measured; distinguishing them needs kernel-side instrumentation or
+a waveform, neither of which has been done.
+
+One observed difference not yet ruled in or out: `vecadd`'s two source buffers
+land in the *same* 4 KB page (`0x10000` and `0x10100`) while `demo`'s are in
+different pages (`0x10000` and `0x11000`). `vecadd` at `-n1048576` uses
+multi-page buffers and passes, which argues against it, but its addresses for
+that run were not captured.
 
 `dotproduct` is unrelated and expected: it uses atomics, and
 `VX_CFG_EXT_A_ENABLED=0` in this build.
