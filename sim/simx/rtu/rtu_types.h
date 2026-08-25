@@ -243,12 +243,13 @@ static_assert(VX_CFG_RTU_NUM_CTX >= VX_CFG_NUM_THREADS,
 // state and its result record, from issue to terminal record. Slots partition
 // statically across the cores one RTU serves, so a core with zero slots could
 // never issue a trace at all.
-// The RTU's MSHR file: distinct in-flight node fetches, and the table that
-// merges duplicates onto them. 0 bypasses merging entirely (one request per
-// context per fetch, per-context tags) — today's behaviour, and the control
-// against which the merge stage is measured.
-static_assert(VX_CFG_RTU_MERGE_DEPTH <= VX_CFG_RTU_NUM_CTX,
-              "an MSHR file deeper than the context array cannot be used");
+
+// The MSHR file that would merge duplicate in-flight node fetches onto one
+// entry. It is not implemented: a fetch is one request per context, with
+// per-context tags. Refuse a non-zero depth rather than model a table no
+// configuration can select, which is how the two descriptions drift apart.
+static_assert(VX_CFG_RTU_MERGE_DEPTH == 0,
+              "node-fetch merging is not implemented");
 
 // Cores served by one RTU, and the per-core slot partition.
 constexpr uint32_t kRtuCoresPerRtu = VX_CFG_SOCKET_SIZE / VX_CFG_NUM_RTU_CORES;

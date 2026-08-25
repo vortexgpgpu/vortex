@@ -36,8 +36,8 @@ constexpr uint32_t kTcacheNumReqs = 1;
 constexpr uint32_t kTcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
 constexpr uint64_t kTcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Per-request inflight slot count (upper bound for this config).
-constexpr uint32_t kInflight = 8;
+// Inflight TexReq slot count.
+constexpr uint32_t kInflight = VX_CFG_TEX_MEM_QUEUE_SIZE;
 
 } // namespace
 

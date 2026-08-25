@@ -35,7 +35,11 @@ module VX_tex_wrap import VX_tex_pkg::*; (
 
     always @(*) begin
         case (wrap_i)
-            `VX_TEX_WRAP_CLAMP:   
+            // BORDER carries no border-colour state here, so it cannot be
+            // honoured; it clamps rather than repeats, which would wrap a
+            // coordinate the caller placed outside the texture on purpose.
+            `VX_TEX_WRAP_CLAMP,
+            `VX_TEX_WRAP_BORDER:
                 coord_r = clamp;
             `VX_TEX_WRAP_MIRROR: 
                 coord_r = coord_i[`TEX_FXD_FRAC-1:0] ^ {`TEX_FXD_FRAC{coord_i[`TEX_FXD_FRAC]}};

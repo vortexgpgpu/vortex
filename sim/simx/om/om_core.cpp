@@ -258,6 +258,16 @@ private:
       req.pos_y[t] = uint32_t((rec >> xbits) & ((1ull << ybits) - 1));
       req.face[t]  = uint8_t((rec >> (xbits + ybits)) & 0x1);
     }
+    // A one-word record holds colour or depth, never both. Which one is stated
+    // twice and by two different producers: the host writes it as a DCR, the
+    // shader encodes it in the export. This is the only place that holds both,
+    // and a disagreement writes the wrong buffer with no other symptom.
+    if (shift != 3) {
+      uint32_t depth_only = dcrs_.read(VX_DCR_OM_APERTURE_DEPTH_ONLY);
+      assert((req.export_mask & 0x3) == (depth_only ? 0x2u : 0x1u)
+             && "OM: aperture record shape disagrees with the export mask");
+      __unused(depth_only);
+    }
     req.from_aperture = false;   // decoded; downstream sees an ordinary request
   }
 
