@@ -875,6 +875,103 @@ rm -rf "$SST_CORE_HOME/include" "$SST_ELEMENTS_HOME/include" \
 
 ---
 
+## 12. SLASH / Alveo V80 (the `aved` backend)
+
+**Purpose**: the AMD Alveo V80 platform stack, and the prerequisite for
+the `aved` runtime backend. The V80 is **not** an XDMA shell, so XRT
+does not apply to it — SLASH replaces that whole layer. It provides:
+
+- **VRT** — the C++ device runtime (`vrt::Device`, `vrt::Kernel`,
+  `vrt::Buffer`) the `aved` backend links against.
+- **`vrtd`** — the daemon that owns the board and brokers sessions.
+- **`slashkit`** — the linker that packages the AFU IP into a `.vbin`
+  and connects its AXI ports to shell resources.
+- **`slash.ko`** — the kernel driver (PF1 QDMA + PF2 control).
+
+### We build from a fork, not upstream
+
+The prebuilt bundle carries
+[`vortexgpgpu/slash`](https://github.com/vortexgpgpu/slash), a fork of
+[`Xilinx/SLASH`](https://github.com/Xilinx/SLASH). The fork is not
+cosmetic — Vortex does not run on upstream as shipped:
+
+| Change | Why Vortex needs it |
+|---|---|
+| **Host-buffer allocation** (`SLASH_CTLDEV_IOCTL_ALLOC_HOST_BUF`, `Device::allocHostBuffer`) | The Command Processor's ring, head/completion lines and DMA staging live in host memory the device masters into over `m_axi_host`. Userspace needs both the mapping and the bus address for the same bytes. Upstream has no such call. |
+| **Kernel-compat shims** (`driver/kcompat/`) | Kernels 6.15+ removed `del_timer()`/`from_timer()`, which `libqdma` still spells. Without this the driver does not build on a current kernel. |
+| **`slashkit` simulation-model fixes** | The behavioural memory model needed to be SystemVerilog for the simulation project to elaborate it. |
+| **Vivado version un-pinning** | The compute base scripts hardcoded 2025.1 and refused any other tool version. |
+
+The full stack for the host-buffer feature spans the kernel driver, the
+uapi ioctl, libslash, the `vrtd` wire protocol and authorisation, and
+the VRT C++ API — it is not a patch that can live downstream in Vortex.
+
+### Install the prebuilt userspace
+
+```bash
+./ci/toolchain_install.sh --slash
+export VRT_HOME=$TOOLDIR/slash
+```
+
+`--slash` is **opt-in** and deliberately excluded from the default
+install: the userspace half installs like any other component, but a
+working board also needs kernel modules built against the running
+kernel and Vivado on `PATH` for `slashkit`. Pulling that into the
+default would fail on every machine without a V80.
+
+### Build the kernel driver
+
+The driver must be built against the running kernel, so it is never
+prebuilt:
+
+```bash
+git clone https://github.com/vortexgpgpu/slash.git
+cd slash
+git submodule update --init --recursive
+
+# Kernels 6.15+ need the timer compat shim:
+make -C driver SLASH_HAVE_TIMER_MODERN=y
+
+sudo insmod driver/slash.ko
+```
+
+`slash.ko` binds PF1 (`slash_qdma`) and PF2 (`slash_ctl`); `vrtd`
+discovers boards from `/dev/slash_ctl*`. PF0 is `ami` and carries
+sensors, identity and the PDI design-writer only — the `aved` backend
+does not need it, and running without it removes the AMC heartbeat.
+
+### Build from source (alternative to the prebuilt)
+
+```bash
+cd slash
+cmake -B build -DCMAKE_INSTALL_PREFIX=$TOOLDIR/slash
+cmake --build build -j$(nproc)
+cmake --install build
+export VRT_HOME=$TOOLDIR/slash
+```
+
+`slashkit` additionally needs Vivado on `PATH` and is only used by the
+synthesis flow (`hw/syn/xilinx/aved`), not by running tests.
+
+### Verifying
+
+```bash
+lspci -d 10ee: -nn          # expect 50c1 (PF1) and 50c2 (PF2)
+$VRT_HOME/bin/v80-smi list
+```
+
+Then build and run the backend:
+
+```bash
+make -C sw/runtime/aved TARGET=hw VRT_HOME=$VRT_HOME
+```
+
+See [`designs/aved_driver_architecture.md`](designs/aved_driver_architecture.md)
+for the backend's architecture and
+[`xilinx_slash_setup.md`](xilinx_slash_setup.md) for board bring-up.
+
+---
+
 ## Verifying an installed toolchain
 
 Once components are installed under `$TOOLDIR`, confirm the
@@ -1003,4 +1100,10 @@ directory:
 
 `$TOOLCHAIN_REV` (fixed at `configure` time) selects which release of
 the prebuilt repo to pull; `$OSVERSION` selects the matching per-OS
-bundle.
+bundle. It is pinned in [`VERSION`](../VERSION) at the repository root.
+
+Bumping it is a two-step operation and the order matters: publish the
+new bundles to `vortex-toolchain-prebuilt` under the new tag **first**,
+then bump `TOOLCHAIN_REV`. Bumping first points every component at a
+tag that does not exist yet and breaks the install for everyone, not
+just for the component being added.

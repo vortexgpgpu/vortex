@@ -235,14 +235,41 @@ install_base()
 # SST is built from source by ci/sst_install.sh — see the matching
 # comment in toolchain_prebuilt.sh.in.
 
+slash()
+{
+    # SLASH is the AMD Alveo V80 platform stack (VRT runtime, vrtd, slashkit
+    # linker, kernel driver) and the prerequisite for the `aved` backend. The
+    # V80 is not an XDMA shell, so XRT does not apply to it.
+    #
+    # Deliberately NOT part of install_base: the userspace half installs like
+    # any other component, but a working board also needs the kernel modules
+    # built against the running kernel and Vivado on PATH for slashkit. Pulling
+    # that into the default install would fail on every machine without a V80.
+    #
+    # The prebuilt carries the vortexgpgpu fork, not upstream Xilinx/SLASH --
+    # it adds host-buffer allocation (the CP's command ring lives in host
+    # memory the device masters into), kernel-compat shims for 6.15+, and
+    # slashkit fixes. See docs/building_toolchain.md.
+    wget $REPOSITORY/slash/$OSVERSION/slash.tar.bz2
+    tar -xvf slash.tar.bz2
+    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/slash && mv slash $TOOLDIR
+    rm -rf slash slash.tar.bz2
+    echo "SLASH userspace installed to $TOOLDIR/slash."
+    echo "  export VRT_HOME=$TOOLDIR/slash"
+    echo "The kernel driver must still be built against the running kernel:"
+    echo "  see docs/building_toolchain.md (section: SLASH / Alveo V80)"
+}
+
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
-    echo "  (no arguments: install all components except gem5)"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--slash] [--all] [-h|--help]"
+    echo "  (no arguments: install all components except gem5 and slash)"
 }
 
-# Default with no arguments: install every component except gem5.
+# Default with no arguments: install every component except gem5 and slash.
+# Both are opt-in: gem5 is large, and slash is Alveo V80-specific and needs a
+# kernel-module build plus Vivado that most machines cannot satisfy.
 if [ "$#" -eq 0 ]; then
     install_base
     exit 0
@@ -279,6 +306,8 @@ while [ "$1" != "" ]; do
         --sta ) sta
                 ;;
         --gem5 ) gem5
+                ;;
+        --slash ) slash
                 ;;
         --all ) install_base
                 gem5
