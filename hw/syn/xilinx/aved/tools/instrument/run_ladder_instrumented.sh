@@ -64,8 +64,10 @@ declare -A RC
 # an exit-code-only ladder reports them as passing. That is exactly how demo
 # was recorded PASS here while emitting a full buffer of wrong values.
 verdict_of() {  # $1 = log file, $2 = exit code
-    if grep -q "PASSED!" "$1"; then echo PASS
-    elif grep -qE "Found [0-9]+ errors|FAILED" "$1"; then echo FAIL
+    # Failure signatures FIRST, and accept every spelling of success the
+    # regression apps use ("PASSED!", "PASSED", "Test PASSED").
+    if grep -qE "Found [0-9]+ errors|FAILED" "$1"; then echo FAIL
+    elif grep -qE "\bPASSED\b" "$1"; then echo PASS
     elif [ "$2" -ne 0 ]; then echo FAIL
     else echo "NO_VERDICT"; fi
 }

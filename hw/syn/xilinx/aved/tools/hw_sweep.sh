@@ -42,8 +42,13 @@ for t in $TESTS; do
         timeout 400 bash /home/blaise/dev/v80/run_hw_test.sh "$t" > "$OUT" 2>&1
     rc=$?
     cycles=$(grep -oE "cycles=[0-9]+" "$OUT" | tail -1 | cut -d= -f2)
-    if grep -q "PASSED!" "$OUT"; then verdict=PASS
+    # Failure signatures FIRST: several apps print a summary line containing
+    # "PASSED" even in runs that also report errors, and the spellings vary
+    # ("PASSED!", "PASSED", "Test PASSED"). Matching success first misfiled
+    # three passing tests as failures and would hide a real one just as easily.
+    if grep -qE "Found [0-9]+ errors|FAILED" "$OUT"; then verdict=FAIL
     elif grep -q "CP poll timed out" "$OUT"; then verdict=CP_STALL
+    elif grep -qE "\bPASSED\b" "$OUT"; then verdict=PASS
     elif grep -q "CARD STOPPED ANSWERING" "$MMIO" 2>/dev/null; then verdict=WEDGE
     elif [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then verdict=TIMEOUT
     else verdict=FAIL; fi
