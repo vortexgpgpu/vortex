@@ -29,7 +29,7 @@ EXCLUDE :=
 # Each of these pins a specific defect in the vortexpipe driver and fails when
 # it regresses; they are a separate assignment only so the master list above
 # stays one block to edit.
-TESTS += redraw realloc fallback_mix subgroup_vs bigwg manyvary image bgra bgra_om omfmt mrtfmt srgbblend flatvary subgroup_fs zeroshared deriv discard dispatchq imagedraw rtqdraw localarr multiview occlusion csstats condrender manydesc csmultiset ubo_lastset msaa
+TESTS += redraw realloc fallback_mix subgroup_vs bigwg manyvary image bgra bgra_om omfmt mrtfmt srgbblend flatvary subgroup_fs zeroshared deriv discard dispatchq imagedraw rtqdraw localarr multiview occlusion csstats condrender manydesc csmultiset ubo_lastset msaa texwrap earlyz tex_trilinear msaa2x msaa_read
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=
