@@ -326,9 +326,15 @@ public:
         }
       }
       if (status & CP_STATUS_BUSY) {
-        printf("[VXDRV] Error: the CP is still busy after disabling its "
-               "queue; resetting now would drop an in-flight AXI transaction "
-               "and take the card off the bus. Power-cycle the board.\n");
+        // A command from an earlier run never retired. Opening anyway would
+        // queue every new command behind it and stall at the first poll, so
+        // fail here where the cause is still legible. Reconfiguring the
+        // partition resets the CP; the host does not need rebooting, and the
+        // device reset that used to be the way out of this is precisely what
+        // takes the card off the bus.
+        printf("[VXDRV] Error: the CP is still busy from a previous run and "
+               "will not retire; commands posted now would stall behind it. "
+               "Reload the AFU (jtag_load_vortex.sh) to reset it.\n");
         return -1;
       }
     }

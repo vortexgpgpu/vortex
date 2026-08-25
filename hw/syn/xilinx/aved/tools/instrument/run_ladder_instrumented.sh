@@ -58,6 +58,17 @@ echo "  SBRs so far this boot: $before_sbr  (must not increase)"
 # --- the ladder -----------------------------------------------------------
 TESTS="${TESTS:-minimal demo sgemv sgemm}"
 declare -A RC
+
+# Verdict from the test's own output, NOT from its exit code. Some regression
+# apps (demo among them) print their verification errors and still exit 0, so
+# an exit-code-only ladder reports them as passing. That is exactly how demo
+# was recorded PASS here while emitting a full buffer of wrong values.
+verdict_of() {  # $1 = log file, $2 = exit code
+    if grep -q "PASSED!" "$1"; then echo PASS
+    elif grep -qE "Found [0-9]+ errors|FAILED" "$1"; then echo FAIL
+    elif [ "$2" -ne 0 ]; then echo FAIL
+    else echo "NO_VERDICT"; fi
+}
 for t in $TESTS; do
     echo
     echo "############ rung: $t ############"
@@ -69,11 +80,12 @@ for t in $TESTS; do
         stdbuf -oL -eL env HW_TIMEOUT=600 VORTEX_CP_POLL_TIMEOUT_S=120 \
             VORTEX_AVED_NO_PROGRAM=1  \
         VORTEX_AVED_MMIO_TRACE="$MMIO" \
-            bash /home/blaise/dev/v80/run_hw_test.sh "$t" OPTS="-n4 -l"
-        RC["$t-l"]=$?
-        echo "  == $t -l rc=${RC[$t-l]}"
-        crumb "rung:minimal-loopback:done rc=${RC[$t-l]}"
-        [ "${RC[$t-l]}" -ne 0 ] && { echo "  loopback failed; the core never ran, so later rungs are meaningless"; break; }
+            bash /home/blaise/dev/v80/run_hw_test.sh "$t" OPTS="-n4 -l" 2>&1 | tee "$LOGDIR/rung_${t}_l.out"
+        rc=${PIPESTATUS[0]}
+        RC["$t-l"]=$(verdict_of "$LOGDIR/rung_${t}_l.out" "$rc")
+        echo "  == $t -l ${RC[$t-l]} (rc=$rc)"
+        crumb "rung:minimal-loopback:done ${RC[$t-l]}"
+        [ "${RC[$t-l]}" != "PASS" ] && { echo "  loopback failed; the core never ran, so later rungs are meaningless"; break; }
     fi
 
     crumb "rung:$t"
@@ -81,17 +93,18 @@ for t in $TESTS; do
     stdbuf -oL -eL env HW_TIMEOUT=1800 VORTEX_CP_POLL_TIMEOUT_S=300 \
         VORTEX_AVED_NO_PROGRAM=1  \
         VORTEX_AVED_MMIO_TRACE="$MMIO" \
-        bash /home/blaise/dev/v80/run_hw_test.sh "$t"
-    RC["$t"]=$?
-    echo "  == $t rc=${RC[$t]}"
-    crumb "rung:$t:done rc=${RC[$t]}"
+        bash /home/blaise/dev/v80/run_hw_test.sh "$t" 2>&1 | tee "$LOGDIR/rung_${t}.out"
+    rc=${PIPESTATUS[0]}
+    RC["$t"]=$(verdict_of "$LOGDIR/rung_${t}.out" "$rc")
+    echo "  == $t ${RC[$t]} (rc=$rc)"
+    crumb "rung:$t:done ${RC[$t]}"
 done
 
 # --- verdict --------------------------------------------------------------
 crumb "summary"
 echo
 echo "=========== SUMMARY ==========="
-for k in "${!RC[@]}"; do printf "  %-22s rc=%s  %s\n" "$k" "${RC[$k]}" "$([ "${RC[$k]}" -eq 0 ] && echo PASS || echo FAIL)"; done
+for k in "${!RC[@]}"; do printf "  %-22s %s\n" "$k" "${RC[$k]}"; done
 after_sbr=$(journalctl -b 0 --no-pager 2>/dev/null | grep -c 'toggle_sbr')
 echo
 echo "  SBRs before=$before_sbr after=$after_sbr"

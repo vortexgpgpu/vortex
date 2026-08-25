@@ -10,6 +10,14 @@
 # wedges the card is attributable to itself rather than to whatever ran next.
 # The sweep stops early if the card leaves the bus -- everything after that
 # point would fail for the same reason and the results would be noise.
+#
+# RECOVERY BETWEEN TESTS IS MANDATORY, not a nicety. A test whose kernel never
+# completes leaves a command unretired in the CP, and every later device_open
+# then refuses with "the CP is still busy from a previous run". Without a
+# reload in between, one stalling test turns the whole remaining sweep into
+# identical failures that say nothing about the tests they are attributed to.
+# Reloading the AFU reconfigures the partition, which resets the CP; it costs a
+# few minutes, so it runs only after a verdict that can leave the CP dirty.
 
 set -u
 LOGDIR=/home/blaise/dev/v80/logs/sweep_$(date +%Y%m%d_%H%M%S)
@@ -40,8 +48,22 @@ for t in $TESTS; do
     elif [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then verdict=TIMEOUT
     else verdict=FAIL; fi
     note=$(grep -oE "not supported|unsupported|Unsupported|no such file|error: [^\"]{0,40}" "$OUT" | head -1)
+    if grep -q "CP is still busy from a previous run" "$OUT"; then
+        verdict=POISONED
+        note="previous test left the CP dirty; result not attributable"
+    fi
     printf "%s\t%s\t%s\t%s\t%s\n" "$t" "$rc" "$verdict" "${cycles:--}" "${note:--}" >> "$SUMMARY"
     printf "%-22s %-9s rc=%-4s %s\n" "$t" "$verdict" "$rc" "${cycles:+cycles=$cycles}"
+
+    # Reset the CP before the next test if this one may have left it dirty.
+    case "$verdict" in
+      CP_STALL|TIMEOUT|WEDGE|POISONED)
+        echo "  -> reloading AFU to reset the CP"
+        bash /home/blaise/dev/v80/jtag_load_vortex.sh > "$LOGDIR/reload_$t.log" 2>&1 \
+          && echo "  -> AFU reloaded" \
+          || echo "  -> AFU RELOAD FAILED; later results are unreliable"
+        ;;
+    esac
 done
 
 echo
