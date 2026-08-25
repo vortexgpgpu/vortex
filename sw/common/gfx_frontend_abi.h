@@ -176,3 +176,21 @@ typedef struct {
   // the interpolation planes rather than through them.
   uint64_t flat_addr;      // uint32[GFX_FS_FLAT_WORDS * P]   (out)
 } pipe_arg_t;
+
+// Pass-end multisample colour resolve. A multisample pass renders into a
+// sample-interleaved colour plane (a pixel's S samples are contiguous, so a row
+// is W*S texels); what the application reads is one texel per pixel. The
+// resolve folds the samples with the box filter in gfx_sw.h and writes a dense
+// single-sample plane the host copy can read at its natural size.
+//
+// It writes a SEPARATE destination rather than compacting in place: a thread
+// resolving pixel i writes at i*bpp while a thread resolving pixel j>i is still
+// reading from (j*S)*bpp, and with every pixel in flight at once the two
+// overlap. One thread per pixel, grid-strided.
+typedef struct {
+  uint64_t src_addr;      // sample-interleaved colour plane          (in)
+  uint64_t dst_addr;      // dense single-sample colour plane         (out)
+  uint32_t width, height; // pixels
+  uint32_t samples;       // samples per pixel
+  uint32_t color_format;  // VX_OM_COLOR_FORMAT_*
+} resolve_arg_t;
