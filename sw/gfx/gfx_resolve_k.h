@@ -17,11 +17,10 @@
 // samples would have produced had the merger written the pixel once. One thread
 // per pixel, grid-strided so any launch geometry covers the target.
 //
-// The fold runs on the device rather than in the host's pass-end copy: the
-// graphics stack routes what the fixed-function units cannot represent -- and
-// the multisample resolve is named among those -- to the on-device software
-// path. It also leaves the host copy carrying one texel per pixel rather than
-// `samples` of them, which is where the cost sits on a real device.
+// The fold runs on the device rather than on the host: what the fixed-function
+// units cannot represent is served here, and it leaves the readback carrying one
+// texel per pixel rather than `samples` of them, which is where the cost sits on
+// a real device.
 __kernel void msaa_resolve_k(resolve_arg_t* __UNIFORM__ arg) {
   const uint32_t w = arg->width, h = arg->height, s = arg->samples;
   const uint32_t n = w * h;
