@@ -24,11 +24,20 @@
  * THIS CASE FAILS TODAY, and that is what it is for. The device serves a
  * multisample pass only through the pass-end resolve, and by the time the read
  * is noticed -- at sync-out, after the pass -- there is nowhere left to put the
- * colour. The driver says so and leaves the clear. The fix is to notice earlier:
- * a multisample colour attachment that is also usable as a sampled image cannot
- * be served by the device path at all, so the pass should stand aside up front,
- * the way an unsupported sample count and a narrow attachment already do. This
- * case is what will show that working.
+ * colour. The driver says so and leaves the clear.
+ *
+ * Standing aside up front is NOT available as the fix, though it reads like the
+ * obvious one. It would need the pass to know its attachment is one the
+ * application will sample, and the driver cannot tell: lavapipe gives every
+ * multisample colour attachment PIPE_BIND_SAMPLER_VIEW whether or not the
+ * application asked for VK_IMAGE_USAGE_SAMPLED_BIT, because it needs a sampler
+ * view for its own resolve blits. Refusing on that bind flag refuses every
+ * multisample pass -- it was tried, and it took the msaa case's device path away
+ * with it. The property that separates this case from msaa is the Vulkan usage,
+ * and Gallium has already folded it away by the time the driver sees the
+ * resource. So the fix is either that usage plumbed through to the driver, or
+ * the samples written back to the attachment when a pass ends without a
+ * resolve -- the transfer carrying a sample index that the read path lacks.
  *
  * The uniform scene is what makes the failure precise rather than approximate:
  * every sample of every pixel is covered, so a correct read is one colour over
