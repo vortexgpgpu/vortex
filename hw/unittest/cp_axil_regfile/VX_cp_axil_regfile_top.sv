@@ -53,7 +53,9 @@ module VX_cp_axil_regfile_top
 
   // q_state outputs (flattened) + reset pulses
   output wire [NUM_QUEUES*$bits(cpe_state_t)-1:0] q_state_packed,
-  output wire [NUM_QUEUES-1:0]                     q_reset_pulse
+  output wire [NUM_QUEUES-1:0]                     q_reset_pulse,
+  // One-cycle acknowledge that a CPE actually cleared; zeroes tail + enable.
+  input  wire [NUM_QUEUES-1:0]                     q_clear_ack
 );
 
   VX_cp_axil_s_if #(.ADDR_W(ADDR_W)) s_if ();
@@ -94,9 +96,12 @@ module VX_cp_axil_regfile_top
       assign q_seqnum_arr[i] = q_seqnum_packed[i*64 +: 64];
       assign q_error_arr [i] = q_error_packed [i*32 +: 32];
       assign q_state_packed[i*$bits(cpe_state_t) +: $bits(cpe_state_t)] = q_state_arr[i];
-      assign q_reset_pulse[i] = q_reset_arr[i];
+      assign q_reset_pulse[i]  = q_reset_arr[i];
+      assign q_clear_ack_arr[i] = q_clear_ack[i];
     end
   endgenerate
+
+  wire q_clear_ack_arr [NUM_QUEUES];
 
   VX_cp_axil_regfile #(.NUM_QUEUES(NUM_QUEUES), .ADDR_W(ADDR_W)) u_dut (
     .clk            (clk),
@@ -109,7 +114,8 @@ module VX_cp_axil_regfile_top
     .q_error        (q_error_arr),
     .last_dcr_rsp   (32'd0),
     .q_state        (q_state_arr),
-    .q_reset_pulse  (q_reset_arr)
+    .q_reset_pulse  (q_reset_arr),
+    .q_clear_ack    (q_clear_ack_arr)
   );
 
 endmodule : VX_cp_axil_regfile_top

@@ -245,6 +245,8 @@ static constexpr uint16_t Q_RING_SIZE_LOG2 = 0x18;
 static constexpr uint16_t Q_CONTROL        = 0x1C;
 static constexpr uint16_t Q_TAIL_LO        = 0x20;
 static constexpr uint16_t Q_TAIL_HI        = 0x24;
+static constexpr uint16_t Q_SEQNUM         = 0x28;
+static constexpr uint16_t Q_HEAD_LO        = 0x2C;
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
@@ -321,6 +323,41 @@ int main(int argc, char** argv) {
     uint64_t seq = slave.mem_read64(CMPL_ADDR);
     EXPECT(seq == 0, "completion wrote wrong seqnum");
 
-    std::printf("PASSED — CP end-to-end: NOP retired, seqnum=1 written to cmpl_addr\n");
+    // ----- Q_CONTROL.reset actually clears the queue -----
+    //
+    // The counters used to survive everything: q_reset_pulse was decoded in
+    // the regfile and discarded in VX_cp_core, so Q_CONTROL.reset was a no-op
+    // and a fresh process inherited the previous one's seqnum. The fetch gate
+    // is `head < tail` on absolute byte counts, so an inherited head meant the
+    // new queue silently never ran.
+    {
+        // The command above retired, so the queue has advanced.
+        uint32_t seq_before = axil_read(sim, slave, gpu, tick, Q0_BASE + Q_SEQNUM);
+        EXPECT(seq_before != 0, "queue should have advanced before the reset");
+
+        // Pulse Q_CONTROL.reset (bit 1). The hardware latches it and applies
+        // the clear once the CPE has drained to idle, so give it time.
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_CONTROL, 0x2);
+        for (int i = 0; i < 200; ++i) cycle(sim, slave, gpu, tick);
+
+        uint32_t seq_after  = axil_read(sim, slave, gpu, tick, Q0_BASE + Q_SEQNUM);
+        uint32_t head_after = axil_read(sim, slave, gpu, tick, Q0_BASE + Q_HEAD_LO);
+        uint32_t tail_after = axil_read(sim, slave, gpu, tick, Q0_BASE + Q_TAIL_LO);
+        uint32_t ctrl_after = axil_read(sim, slave, gpu, tick, Q0_BASE + Q_CONTROL);
+
+        std::fprintf(stderr,
+            "[reset] seqnum %u -> %u, head=0x%x tail=0x%x ctrl=0x%x\n",
+            seq_before, seq_after, head_after, tail_after, ctrl_after);
+
+        EXPECT(seq_after == 0, "Q_CONTROL.reset did not clear Q_SEQNUM");
+        EXPECT(head_after == 0, "Q_CONTROL.reset did not clear the head pointer");
+        // Tail and enable must clear with the head, or `head < tail` is
+        // immediately true again and the queue refetches the whole ring.
+        EXPECT(tail_after == 0, "Q_CONTROL.reset did not clear Q_TAIL");
+        EXPECT((ctrl_after & 1) == 0, "Q_CONTROL.reset did not clear enable");
+    }
+
+    std::printf("PASSED — CP end-to-end: NOP retired, seqnum written to "
+                "cmpl_addr, Q_CONTROL.reset clears the queue\n");
     return 0;
 }

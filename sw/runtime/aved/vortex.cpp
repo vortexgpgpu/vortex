@@ -68,6 +68,9 @@ using namespace vortex;
 
 #define CTL_AP_IDLE  (1 << 2)
 #define CTL_AP_RESET (1 << 4)
+// Set when VX_afu_reset_seq refused the last reset because an AXI master
+// would not drain. Sticky until the next reset request.
+#define CTL_RESET_ERROR (1 << 5)
 
 // ----- Command Processor regfile -----
 // Host addresses 0x1000..0x1FFF reach the CP regfile, which sees them as its
@@ -339,38 +342,25 @@ public:
       }
     }
 
-    // ----- Device reset: OFF by default, pending silicon confirmation -----
+    // ----- Device reset -----
     //
-    // This write used to wedge the V80: the next register read returned the
-    // all-ones no-completion signature and the card stopped answering until it
-    // was JTAG-reloaded.
+    // Unconditional, as in the xrt and opae backends. This write used to wedge
+    // the V80, which is why it was once behind an environment variable, but
+    // the cause was never the reset: the AFU's AXI-Lite demux routed the
+    // write-data beat by a register that only updated at the write-address
+    // handshake, so this write -- the only access the runtime makes below
+    // 0x1000, and always the first after the CP-window writes above -- had its
+    // AW delivered to VX_afu_ctrl and its W delivered to the CP regfile.
+    // No BRESP was ever produced and ap_reset never fired. Fixed in
+    // VX_afu_axil_demux.sv.
     //
-    // The cause was NOT the reset. It was a defect in the AFU's AXI-Lite
-    // demux, which routed the write-data beat by a register that only updates
-    // at the write-address handshake. This write is the only access the
-    // runtime makes below 0x1000, and it always follows the CP-window writes
-    // above, so its AW went to VX_afu_ctrl while its W went to the CP regfile.
-    // VX_afu_ctrl then waited forever for data the CP had swallowed, no BRESP
-    // was produced, and every later access died of a PCIe completion timeout.
-    // ap_reset never fired at all. See VX_afu_axil_demux.sv and
-    // docs/proposals/afu_reset_architecture_proposal.md.
-    //
-    // The demux is fixed and covered by hw/unittest/afu_axil_demux, but no
-    // bitstream carrying the fix has been run yet, so this stays opt-in. Turn
-    // it back on by default once `minimal` survives two consecutive runs in
-    // one boot with VORTEX_AVED_RESET=1.
-    //
-    // Note that nothing currently needs it either: the counters it would clear
-    // are adopted at open instead (see cp_init), and the block above parks the
-    // CP.
-    const char* want_reset = getenv("VORTEX_AVED_RESET");
-    const bool do_reset = (want_reset != nullptr && want_reset[0] != '\0'
-                           && want_reset[0] != '0');
-    if (do_reset) {
-      CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
-        return err;
-      });
-    }
+    // The reset itself is now sequenced in hardware (VX_afu_reset_seq): the
+    // AFU stops issuing new AXI requests, waits for every master to drain,
+    // and only then asserts the internal reset. If a master will not drain it
+    // refuses and reports CTL_RESET_ERROR rather than resetting anyway.
+    CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
+      return err;
+    });
 
     // wait for the reset sequence to complete (ap_idle deasserts while the
     // device reset is in flight)
@@ -389,6 +379,16 @@ public:
       if (ctl == 0xFFFFFFFFu) {
         printf("[VXDRV] Error: control register reads all-ones during reset; "
                "the AXI-Lite path died after the transport gate passed.\n");
+        return -1;
+      }
+      if (ctl & CTL_RESET_ERROR) {
+        // The sequencer declined to reset because a master never drained.
+        // That is a stuck AXI transaction somewhere below the AFU, and it is
+        // reported rather than forced precisely so the bus is not left in a
+        // broken state.
+        printf("[VXDRV] Error: the device refused the reset -- an AXI master "
+               "did not drain. The AFU was left running; reload it "
+               "(jtag_load_vortex.sh) to recover.\n");
         return -1;
       }
       if ((ctl & CTL_AP_IDLE) == 0) {

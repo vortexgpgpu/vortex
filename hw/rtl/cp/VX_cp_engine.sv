@@ -74,7 +74,12 @@ module VX_cp_engine
   output logic                    submit_evt,
   output logic                    start_evt,
   output logic                    end_evt,
-  output logic [63:0]             profile_slot
+  output logic [63:0]             profile_slot,
+
+  // Queue reset: `clear` zeroes the retire counter and is only asserted by
+  // VX_cp_core while `idle` holds, so no command is ever dropped in flight.
+  input  wire                     clear,
+  output wire                     idle
 );
 
   typedef enum logic [2:0] {
@@ -90,6 +95,10 @@ module VX_cp_engine
   cp_resource_e cur_res;
   logic         no_resource;        // true for opcodes that bypass arbiters (NOP, FENCE, EVENT_*)
   logic [63:0]  seqnum_r;
+
+  // S_IDLE with no command presented means nothing is in flight and no
+  // resource grant is held, so the retire counter can be cleared safely.
+  assign idle = (fsm == S_IDLE) && !cmd_in_valid;
 
   // -------------------------------------------------------------------------
   // Opcode → resource classification (combinational over cur_cmd).
@@ -127,6 +136,13 @@ module VX_cp_engine
     automatic cp_resource_e res;
     automatic logic         skip_flag;
     if (reset) begin
+      fsm         <= S_IDLE;
+      cur_cmd     <= '0;
+      cur_res     <= RES_KMU;
+      no_resource <= 1'b0;
+      seqnum_r    <= '0;
+    end else if (clear) begin
+      // Only asserted while `idle` holds — see VX_cp_core.
       fsm         <= S_IDLE;
       cur_cmd     <= '0;
       cur_res     <= RES_KMU;

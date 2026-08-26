@@ -1,10 +1,12 @@
 # The AFU reset defect: root cause, fix, and what remains
 
-**Status:** root cause identified and reproduced; RTL fix implemented, not yet
-run on silicon
-**Scope:** `hw/rtl/afu/common/VX_afu_axil_demux.sv` (new),
-`hw/rtl/afu/common/VX_afu_wrap.sv`, `hw/rtl/cp/VX_cp_core.sv`,
-`sw/runtime/aved/vortex.cpp`, `hw/unittest/afu_axil_demux/`
+**Status:** root cause identified and reproduced; both defects fixed and
+covered by unit tests; **not yet run on silicon**
+**Scope:** `hw/rtl/afu/common/` — `VX_afu_axil_demux.sv`, `VX_afu_axi_drain.sv`,
+`VX_afu_reset_seq.sv` (all new), `VX_afu_wrap.sv`, `VX_afu_ctrl.sv`;
+`hw/rtl/cp/` — `VX_cp_core.sv`, `VX_cp_fetch.sv`, `VX_cp_engine.sv`,
+`VX_cp_axil_regfile.sv`; `sw/runtime/aved/vortex.cpp`;
+`hw/unittest/afu_axil_demux/`, `hw/unittest/afu_reset_seq/`
 
 ---
 
@@ -36,9 +38,14 @@ This is now:
 * **fixed** by `VX_afu_axil_demux`, with a regression test that fails when
   the defect is re-injected (§5).
 
-A second, unrelated defect stands: **the CP still has no software reset**
-(§6). That one is real, and the rest of this document's original proposal for
-it survives.
+Two further defects sat behind it, both real and both now fixed (§6): the
+reset had **no drain logic**, so it would have abandoned in-flight AXI
+transactions the moment it became reachable; and **the CP had no software
+reset** at all, because `q_reset_pulse` was decoded in the regfile and
+discarded in `VX_cp_core`.
+
+`VORTEX_AVED_RESET` is gone — the reset is unconditional again, as in `xrt`
+and `opae` (§7).
 
 ---
 
@@ -301,112 +308,190 @@ group 2 fail, which is the property that makes the test worth keeping.
 
 ---
 
-## 6. The CP still has no software reset
+## 6. The reset itself is now sequenced
 
-Independent of the above, and still open.
+The demux fix made `CTL_AP_RESET` reachable again, but reaching
+`VX_afu_ctrl` was never enough on its own: the old path pulsed the reset-delay
+shift register straight from the write, resetting `Vortex_axi`, `VX_cp_core`
+and `bank0_arb` **with no drain logic at all**. A search of `VX_afu_wrap.sv`
+for `outstanding`, `inflight` or `drain` returned zero matches. Any transaction
+in flight when the pulse landed would have been abandoned mid-burst.
 
-`VX_cp_axil_regfile` decodes `Q_CONTROL.reset_pulse` and drives
-`q_reset_pulse[]`. `VX_cp_core.sv:498` throws it away:
+That never got a chance to bite, because the demux deadlocked first. It is
+fixed now rather than left as a latent trap.
 
-```systemverilog
-// To stop a queue, the host clears Q_CONTROL.enable and the fetch parks
-// in IDLE while in-flight commands drain naturally.
-`UNUSED_VAR (q_reset_pulse[q])
+### 6.1 Outstanding-transaction tracking
+
+[`VX_afu_axi_drain`](../../hw/rtl/afu/common/VX_afu_axi_drain.sv) sits on every
+AXI master — each `m_axi_mem_<i>` and `m_axi_host` — and reports `idle` when
+the port owes the interconnect nothing:
+
+```
+idle = (aw_count == w_count) && (aw_count == b_count) && (ar_count == r_count)
 ```
 
-Enable-based quiescing is the right way to *stop* a queue. **But stopping is
-not clearing.** The head and retire counters keep their values, so nothing
-returns the queue to seqnum 0 and a fresh process inherits them. That is the
-bug the runtime works around by resuming from `Q_SEQNUM` at open
-(`205160014`).
+Three pairs of free-running wrapping counters compared for equality, rather
+than up/down counters. Equality is right in both directions, so it stays
+correct when AXI4 allows write data to be presented before its address — which
+would drive an up/down counter negative.
 
-The register map advertises a capability the hardware does not implement, which
-is worse than not offering it.
+### 6.2 The request gate
 
-### 6.1 Proposed
+New `AW`/`AR` are withheld from the shell while a reset is quiescing, so the
+counters reach zero in bounded time even if the core is still running:
 
-1. **Outstanding-transaction counters** per AXI master in `VX_afu_wrap`
-   (`aw_pending`, `ar_pending`, `w_burst_active`), so `master_idle` is
-   observable. A search for `outstanding|inflight|drain` in `VX_afu_wrap.sv`
-   still returns zero matches.
-2. **A reset sequencer** replacing the unconditional shift-register reload:
-   `IDLE → QUIESCE` (stop issuing new AXI requests, wait for idle) `→ ASSERT`
-   (`VX_CFG_RESET_DELAY` cycles) `→ RELEASE`. A timeout in `QUIESCE` sets an
-   error bit and does **not** reset — refusing is better than resetting a
-   master that will not drain.
-3. **Wire `q_reset_pulse`**: on the pulse, after the CPE's own quiesce, clear
-   `head_r`, `seqnum_r` and the completion state for that queue.
+```systemverilog
+assign m_axi_mem_awvalid_a[i] = pre_awvalid_a[i] && !rst_stop_req;
+assign pre_awready_a[i]       = m_axi_mem_awready_a[i] && !rst_stop_req;
+```
 
-With (3), `Q_CONTROL.reset` does what the register map says and a hung kernel
-becomes recoverable without reconfiguring the partition — today that costs
-about three minutes of JTAG and is impossible in a deployed setting.
+`W`, `B` and `R` are never gated: a burst whose address the interconnect has
+already accepted must be allowed to finish. Gating at the AFU boundary rather
+than inside Vortex means no change to the core — it simply stalls, and it is
+about to be reset anyway.
 
-Note that (1) and (2) are now *prudence*, not a fix for an observed failure.
-Resetting a master with transactions in flight is a protocol violation whether
-or not it is what killed this card, and it is worth closing before the first
-kernel actually hangs.
+### 6.3 The sequencer
+
+[`VX_afu_reset_seq`](../../hw/rtl/afu/common/VX_afu_reset_seq.sv):
+
+| State | Action | Exit |
+|---|---|---|
+| `IDLE` | — | `ap_reset` → `QUIESCE` |
+| `QUIESCE` | assert `stop_req` | all masters idle → `ASSERT`; timeout → `ERROR` |
+| `ASSERT` | one cycle: reload the reset-delay shift register | → `RELEASE` |
+| `RELEASE` | hold `stop_req` until the delayed reset has drained | → `IDLE` |
+| `ERROR` | raise a sticky status bit; **no reset is asserted** | → `IDLE` |
+
+The timeout matters more than the happy path. Resetting a master that will not
+drain is what breaks the interconnect, so the sequencer refuses and reports it.
+A device that says "I could not reset" is strictly more useful than one that
+silently corrupts the bus — the software already learned this lesson and
+refuses to proceed when `CP_STATUS.busy` will not clear.
+
+The platform reset keeps its direct path to the shift register. It must always
+work, sequencer or not.
+
+`busy` drives `ap_idle`, so the runtime's existing poll observes the whole
+sequence unchanged; it simply became truthful. The refusal is reported in a new
+`ap_ctrl` read bit 5 (`CTL_RESET_ERROR`).
+
+### 6.4 The CP queue reset now exists
+
+`q_reset_pulse` was decoded in `VX_cp_axil_regfile` and discarded in
+`VX_cp_core` (`UNUSED_VAR`), so `Q_CONTROL.reset` and `CP_CTRL.reset_all` were
+no-ops. The register map advertised a capability the hardware did not
+implement, which is worse than not offering it.
+
+It is wired now, with the same quiesce-then-clear discipline:
+
+* the pulse is latched as a **pending** request, not applied immediately;
+* while pending, `VX_cp_fetch` stops issuing new reads (`stop_req`), so the
+  CPE drains on its own;
+* the clear is applied in the single cycle when both the fetch and the engine
+  report `idle`, so an AXI read is never abandoned in flight;
+* `head_r`, `seqnum_r`, **and the host-programmed tail and enable bit** clear
+  together. That last part is not optional: the fetch gate is `head < tail` on
+  absolute byte counts, so a head cleared against a stale tail would
+  immediately refetch the whole ring.
+
+### 6.5 Tests
+
+`hw/unittest/afu_reset_seq` drives the real `VX_afu_reset_seq` and
+`VX_afu_axi_drain`, plus the same shift register `VX_afu_wrap` uses: reset
+withheld while a read is outstanding, withheld while a write burst still owes
+`WLAST` or `BRESP`, refused with `timeout_error` when a master never drains,
+the sticky error cleared by a later successful request, and the platform reset
+working regardless. Injecting the old "reset without draining" behaviour fails
+six of those assertions.
+
+`hw/unittest/cp_core` gained the queue-reset scenario end to end: run a
+command, confirm `Q_SEQNUM` advanced, pulse `Q_CONTROL.reset`, then confirm
+seqnum, head, tail and enable all read back zero. Re-injecting the discarded
+pulse fails it.
 
 ---
 
 ## 7. Software consequences
 
-* **`VORTEX_AVED_RESET` should go back to defaulting on** once the fix is
-  confirmed on silicon. It is currently off by default
-  (`sw/runtime/aved/vortex.cpp:357`) because the write was destructive; with
-  the demux fixed, the write reaches `VX_afu_ctrl` and pulses `ap_reset` as
-  intended.
-* **Do _not_ reorder the aved `init()` to match xrt.** It is tempting — moving
-  `CTL_AP_RESET` ahead of the CP quiesce block would sidestep the demux issue
-  the way xrt does — but that ordering is the *worse* one. It resets the CP
-  and its AXI masters without first parking them, which is the protocol hazard
-  §6 exists to close. XRT is not doing this right; it is getting away with it
-  because its device is freshly reset by `load_xclbin` and has nothing in
-  flight. The aved order (quiesce, confirm `CP_STATUS.busy == 0`, then reset)
-  is correct and should stay. Fix the demux, not the caller.
+* **`VORTEX_AVED_RESET` is gone.** The aved backend now writes `CTL_AP_RESET`
+  unconditionally in `init()`, as `xrt` and `opae` do. The variable only ever
+  existed to dodge the demux bug; keeping an escape hatch for a fixed defect
+  just preserves a second, less-tested code path.
+* The runtime checks `CTL_RESET_ERROR` after the `ap_idle` poll and fails the
+  open with a specific diagnostic if the device declined to reset.
+* **Do _not_ reorder the aved `init()` to match xrt.** Moving `CTL_AP_RESET`
+  ahead of the CP quiesce block would have sidestepped the demux issue the way
+  xrt does, but that ordering is the *worse* one: it resets the CP and its AXI
+  masters without first parking them. XRT is not doing this right; it is
+  getting away with it because `load_xclbin` leaves it a freshly reset device
+  with nothing in flight. The aved order — quiesce, confirm
+  `CP_STATUS.busy == 0`, then reset — is correct and stays.
 * `cp_quiesce_()` in `device.cpp` stays. Quiescing before teardown is right
-  regardless.
-* The entry-side error message in `sw/runtime/aved/vortex.cpp` that tells the
-  user to JTAG-reload should be revisited once §6 lands, since
-  `Q_CONTROL.reset` will be the answer.
+  regardless, and it is what makes `ASSERT` reachable quickly.
+* The runtime's resume-from-`Q_SEQNUM` workaround (`205160014`) can stay — it
+  is harmless and cheap — or be removed now that `Q_CONTROL.reset` works.
+  Removing it should wait until the reset is confirmed on silicon.
+* Recovery from a hung kernel becomes `Q_CONTROL.reset` instead of
+  `jtag_load_vortex.sh`.
 
 ---
 
-## 8. Validation plan
+## 8. Validation status
 
-1. ~~Reproduce the failure in simulation.~~ **Done** (§3.4).
-2. ~~Fix and prove the fix with a test that fails against the defect.~~
-   **Done** (§5.1).
-3. **Elaborate the wrapper** — `xrtsim` / `avedsim` build with the extracted
-   demux, confirming the refactor did not change integration.
-4. **Run the aved test suite on `avedsim`** with `VORTEX_AVED_RESET=1`, which
-   now exercises the previously fatal path in a model.
-5. **On silicon**: rebuild the bitstream, then run `minimal` twice in a row in
-   the same boot with `VORTEX_AVED_RESET=1`. The second run is the one that
-   used to kill the card. That measurement decides whether this worked;
-   everything before it is evidence.
-6. **Then** §6, whose validation plan is unchanged: force outstanding
-   transactions, pulse `ap_reset`, assert reset is withheld until the counters
-   reach zero; stall a slave and assert the sequencer times out rather than
-   resetting; and confirm `Q_CONTROL.reset` returns `Q_SEQNUM` to 0.
+1. ~~Reproduce the demux failure in simulation.~~ **Done** (§3.4).
+2. ~~Fix it, with a test that fails against the defect.~~ **Done** (§5.1).
+3. ~~Track outstanding transactions and refuse to reset a master that will not
+   drain.~~ **Done** (§6.1–6.3), tested in `hw/unittest/afu_reset_seq`.
+4. ~~Wire `q_reset_pulse`.~~ **Done** (§6.4), tested in `hw/unittest/cp_core`.
+5. ~~Elaborate and run.~~ **Done** — `xrtsim` and `avedsim` build clean and
+   pass `demo` with the reset unconditional.
+6. **On silicon** — not done. Rebuild the bitstream, then run `minimal` twice
+   in the same boot. The second run is the one that used to kill the card.
+   That measurement decides whether this worked; everything above it is
+   evidence.
+7. **Hung-kernel recovery** — not done. Launch a kernel that never completes,
+   recover with `Q_CONTROL.reset`, and run a passing test with no JTAG reload.
+   This is the capability the whole exercise was for, and it can only be
+   demonstrated on hardware.
 
-Step 5 requires a synthesis run and a JTAG reload, so it is the user's call
-when to spend it.
+Steps 6 and 7 need a synthesis run, so they are the user's call on timing.
+
+### 8.1 Risks carried into that build
+
+* **Timing.** A handful of counters, one small FSM, and an AND gate on the
+  `AW`/`AR` handshake. Negligible area against 675 k LUTs, but the design
+  already runs ~5% beyond closure, so the new `!rst_stop_req` term on the
+  request path should be checked in the next timing report rather than
+  assumed free.
+* **The gate is on a hot path.** `m_axi_mem_awvalid` now depends on
+  `rst_stop_req`. It is a single AND, but it is in the memory request path of
+  every bank.
+* **Counter width.** `COUNT_WIDTH = 10` — the comparison is exact only while
+  fewer than 1024 transactions are outstanding on a port. That is far beyond
+  what `PLATFORM_MEMORY_ID_WIDTH` (6 bits ⇒ 64 IDs) implies, but it is an
+  assumption rather than a proof.
 
 ---
 
 ## 9. What this changes about how the stack should be read
 
-Three confident explanations for this failure were wrong before this one:
+Three confident explanations for this failure were wrong before the right one:
 outstanding AXI transactions, the XDMA decoupler, and multiplier timing. Each
 survived because it was plausible and none was tested. What settled it was the
 recorded MMIO trace plus the 1 Hz link sample — both of which existed for days
 before they were read carefully.
 
-Two practical consequences:
+Three practical consequences:
 
 * **`hw/unittest` is where AFU-level integration logic belongs.** The demux was
   twelve lines of glue inside a 770-line wrapper and no test could reach it. It
-  is now a module with a test that fails when it regresses.
-* **"It works on XRT" is not evidence.** The U55C ran this defect for as long
-  as the CP has existed and never showed it, purely because its driver happened
-  to order two register writes the other way round.
+  is now a module with a test that fails when it regresses, and so is the reset
+  sequencer.
+* **"It works on XRT" is not evidence.** The U55C ran the demux defect for as
+  long as the CP has existed and never showed it, purely because its driver
+  happened to order two register writes the other way round.
+* **A test that has never failed has not been validated.** Both new tests were
+  checked by re-injecting the original defect and confirming they go red. The
+  first attempt at that check was itself wrong — the build failed on lint and
+  the stale binary reported a pass — which is the same class of mistake as
+  judging a hardware run by its exit code.

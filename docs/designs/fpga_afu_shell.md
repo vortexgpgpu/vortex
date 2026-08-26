@@ -26,6 +26,8 @@ DMA-command engine have been removed.
 | [`VX_afu_wrap.sv`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv) | The real shell (~696 LOC): AXI-Lite bit-12 demux, `VX_cp_core`, `m_axi_host`, bank-0 `VX_axi_arb2`, the `Vortex_axi` instance. |
 | [`VX_afu_ctrl.sv`](../../hw/rtl/afu/xrt/VX_afu_ctrl.sv) | Slimmed AXI-Lite slave (~322 LOC): `ap_ctrl` stub at 0x00 + a SCOPE serial register pair + SCOPE watchdog. |
 | [`VX_afu_axil_demux.sv`](../../hw/rtl/afu/common/VX_afu_axil_demux.sv) | AXI-Lite demux splitting the control space on `addr[12]`, one outstanding transaction per direction. |
+| [`VX_afu_axi_drain.sv`](../../hw/rtl/afu/common/VX_afu_axi_drain.sv) | Outstanding-transaction tracker per AXI master; reports when a port owes the interconnect nothing. |
+| [`VX_afu_reset_seq.sv`](../../hw/rtl/afu/common/VX_afu_reset_seq.sv) | Quiesce-before-reset sequencer for the soft reset; refuses rather than resetting a master that will not drain. |
 
 - **Control.** Host AXI-Lite `addr[12]` splits the slave: `addr[12]=0` →
   `VX_afu_ctrl` (ap_ctrl + SCOPE); `addr[12]=1` → the CP regfile (seeing
@@ -90,9 +92,13 @@ keeping direct `start`/`busy`/`dcr_*` ports.
 **Key XRT↔OPAE asymmetries:** dedicated host-AXI master (`m_axi_host`) vs.
 a CCI-P host-DMA state machine; an interrupt pin vs. none; `VX_axi_arb2`
 vs. `VX_mem_arb` for bank-0 sharing; AXI-Lite `addr[12]` vs. CCI-P MMIO
-word-address bit 10 for the control demux. Both key the Vortex reset-delay
-shift register on `reset` alone (no host ap_reset), and both expose SCOPE
-over a serial sideband.
+word-address bit 10 for the control demux. Both expose SCOPE over a serial
+sideband.
+
+The XRT shell's reset-delay shift register is reloaded either by the platform
+`reset` or by `VX_afu_reset_seq`, which drains every AXI master first and
+refuses if one will not. The OPAE shell has no host soft reset and keys the
+shift register on `reset` alone.
 
 ---
 

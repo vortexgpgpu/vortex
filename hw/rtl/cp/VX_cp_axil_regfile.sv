@@ -76,7 +76,14 @@ module VX_cp_axil_regfile
   output cpe_state_t                q_state   [NUM_QUEUES],
 
   // One-cycle reset pulse per queue when the host writes Q_CONTROL.reset.
-  output logic                      q_reset_pulse [NUM_QUEUES]
+  output logic                      q_reset_pulse [NUM_QUEUES],
+
+  // One-cycle acknowledge from VX_cp_core, asserted when the CPE has actually
+  // cleared its head and retire counters. The programmed tail and the enable
+  // bit must be zeroed at the same moment: the fetch gate is `head < tail`,
+  // so a head cleared to 0 against a stale tail would immediately refetch the
+  // whole ring from the beginning.
+  input  wire                       q_clear_ack [NUM_QUEUES]
 );
 
   localparam int QID_W = (NUM_QUEUES > 1) ? $clog2(NUM_QUEUES) : 1;
@@ -341,6 +348,16 @@ module VX_cp_axil_regfile
       // Default the pulse low every cycle; the commit path below
       // overrides it for the one cycle when reset is requested.
       for (int i = 0; i < NUM_QUEUES; ++i) q_reset_pulse[i] <= 1'b0;
+
+      // Applied before the host write below so a same-cycle write wins; the
+      // host cannot legitimately be arming a queue it is also resetting.
+      for (int i = 0; i < NUM_QUEUES; ++i) begin
+        if (q_clear_ack[i]) begin
+          r_tail[i]            <= '0;
+          r_tail_lo_staging[i] <= '0;
+          r_control[i][0]      <= 1'b0;   // enable
+        end
+      end
 
       if (wr_commit && is_decoded(wr_addr_buf)) begin
         if (is_global(wr_addr_buf, 8'h00)) begin

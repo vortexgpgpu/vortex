@@ -112,7 +112,7 @@ module VX_afu_axil_demux_top (
         .s_axi_arvalid (lg_arvalid), .s_axi_arready (lg_arready), .s_axi_araddr (lg_araddr[7:0]),
         .s_axi_rvalid (lg_rvalid), .s_axi_rready (lg_rready), .s_axi_rdata (lg_rdata), .s_axi_rresp (lg_rresp),
         .s_axi_bvalid (lg_bvalid), .s_axi_bready (lg_bready), .s_axi_bresp (lg_bresp),
-        .ap_reset (ap_reset_out), .soft_reset_busy (1'b0)
+        .ap_reset (ap_reset_out), .soft_reset_busy (1'b0), .reset_error (1'b0)
     );
 
     // ---- port 1: VX_cp_axil_regfile write-channel equations, verbatim ----

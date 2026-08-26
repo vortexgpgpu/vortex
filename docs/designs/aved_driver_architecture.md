@@ -140,32 +140,34 @@ If the CP is still busy after this, `init()` **fails** rather than proceeding:
 opening anyway would queue every new command behind a stuck one and stall at
 the first poll, far from the cause.
 
-### 3.4 The device reset is off by default (pending silicon confirmation)
+### 3.4 The device reset
 
-Writing `CTL_AP_RESET` used to wedge the V80: the next register read returned
-the all-ones no-completion signature and the card stopped answering until it
-was JTAG-reloaded.
+`init()` writes `CTL_AP_RESET` unconditionally, as `xrt` and `opae` do.
 
-**The reset was not the cause.** The AFU's AXI-Lite demux routed the write-data
-beat by a register that only updates at the write-address handshake, so a
-legacy-window write (`addr[12]=0`) following a CP-window write had its AW
-delivered to `VX_afu_ctrl` and its W delivered to the CP regfile. `VX_afu_ctrl`
-waited forever for data the CP had already swallowed, no `BRESP` was produced,
-and everything after it died of a PCIe completion timeout. `ap_reset` never
-fired. `CTL_AP_RESET` at offset `0x00` is the only access this runtime makes
-below `0x1000` and it always follows the CP quiesce writes, so the one write
-that could trigger the bug was the one write that always did.
+That write used to wedge the V80 — the next register read returned the
+all-ones no-completion signature and the card stopped answering until it was
+JTAG-reloaded — and for a while it sat behind a `VORTEX_AVED_RESET`
+environment variable. **The reset was never the cause.** The AFU's AXI-Lite
+demux routed the write-data beat by a register that only updated at the
+write-address handshake, so this write — the only access the runtime makes
+below `0x1000`, and always the first after the CP quiesce writes — had its AW
+delivered to `VX_afu_ctrl` and its W delivered to the CP regfile. No `BRESP`
+was ever produced and `ap_reset` never fired. Fixed in `VX_afu_axil_demux`,
+and the environment variable is gone with it.
 
-The demux is now `VX_afu_axil_demux`, covered by `hw/unittest/afu_axil_demux`.
-The write stays opt-in behind `VORTEX_AVED_RESET=1` only until a bitstream
-carrying the fix has run `minimal` twice in one boot. See
+The reset is now sequenced in hardware (`VX_afu_reset_seq`): the AFU withholds
+new `AW`/`AR`, waits for every master's outstanding-transaction count to reach
+zero, and only then asserts the internal reset. If a master will not drain it
+**refuses** and raises `ap_ctrl` bit 5, which `init()` checks as
+`CTL_RESET_ERROR` and reports rather than proceeding. See
 [`../proposals/afu_reset_architecture_proposal.md`](../proposals/afu_reset_architecture_proposal.md).
 
-This was the sharpest divergence from `xrt` and `opae`, both of which reset
-unconditionally in `init()`. Those backends never hit the defect because XRT
-issues `CTL_AP_RESET` before any CP-window access and re-asserts `ap_rst_n` on
-every `load_xclbin`; the aved backend opens with `program = false`, so the
-routing latch survives from the previous process.
+None of this has run on silicon yet.
+
+For the record, `xrt` and `opae` never hit the demux defect because XRT issues
+`CTL_AP_RESET` before any CP-window access and re-asserts `ap_rst_n` on every
+`load_xclbin`; the aved backend opens with `program = false`, so the routing
+latch survived from the previous process.
 
 ### 3.5 Resuming the CP's position
 
@@ -173,11 +175,17 @@ The common core adopts the CP's current `Q_SEQNUM` at open rather than assuming
 the device starts at zero
 ([`device.cpp`](../../sw/runtime/common/device.cpp), `cp_init`).
 
-The CP's head and retire counters **survive a process exit** — nothing clears
-them. `VX_cp_core` decodes the regfile's `q_reset_pulse` and discards it
-(`UNUSED_VAR`), so `Q_CONTROL.reset` and `CP_CTRL.reset_all` are both no-ops,
-and the only thing that ever cleared the counters was the AFU device reset,
-which §3.4 kept disabled.
+The CP's head and retire counters used to **survive a process exit** —
+nothing cleared them. `VX_cp_core` decoded the regfile's `q_reset_pulse` and
+discarded it (`UNUSED_VAR`), so `Q_CONTROL.reset` and `CP_CTRL.reset_all` were
+both no-ops, and the only thing that could clear the counters was the AFU
+device reset, which §3.4 kept disabled at the time.
+
+`q_reset_pulse` is wired now: it is latched as a pending request, the fetch
+stops issuing, and head, seqnum, tail and enable clear together once the CPE
+reports idle. The resume-from-`Q_SEQNUM` behaviour below is kept anyway — it
+is cheap and harmless — but it is no longer the only thing standing between a
+second process and a silently dead queue.
 
 The fetch gate is `head < tail`, both absolute byte counts, so a second process
 restarting its tail at 0 never advances past the first one's head and its queue
@@ -320,8 +328,8 @@ Recorded so they are deliberate rather than accidental:
 | Divergence | Why | Status |
 |---|---|---|
 | Staged CP memory (§4.2) breaks the "no explicit sync" contract | the `HOST` slave bridge does not work on this shell | workaround; revisit if a shell fixes `:HOST` |
-| Device reset off by default (§3.4) | the AXI-Lite demux mis-routed the write's data beat | **temporary** — demux fixed; re-enable once confirmed on silicon |
-| Resume from `Q_SEQNUM` (§3.5) | the CP has no working software reset | workaround for an RTL gap |
+| ~~Device reset off by default~~ (§3.4) | the AXI-Lite demux mis-routed the write's data beat | **resolved** — demux fixed, reset unconditional again, `VORTEX_AVED_RESET` removed |
+| Resume from `Q_SEQNUM` (§3.5) | the CP had no working software reset | kept, but no longer load-bearing — `Q_CONTROL.reset` works now |
 | Transport gate + CP park in `init()` (§3.2–3.3) | the reset handshake cannot detect a dead bus | keep |
 | Reaches VRT internals — `vrt::detail::reserveFakePhysAddr`, `getHandle()->getZmqServer()` | no public API for the simulation memory windows | **coupling risk**; would break on a VRT refactor |
 | `sim_*` and `staged_*` are near-duplicate publish/refresh engines | different transports, same protocol moments | candidate for unification |
