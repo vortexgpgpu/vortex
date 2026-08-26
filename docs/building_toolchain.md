@@ -906,12 +906,34 @@ The full stack for the host-buffer feature spans the kernel driver, the
 uapi ioctl, libslash, the `vrtd` wire protocol and authorisation, and
 the VRT C++ API — it is not a patch that can live downstream in Vortex.
 
-### Install the prebuilt userspace
+### Install
+
+SLASH ships Debian and RPM packaging with DKMS, systemd units and udev rules —
+the same shape as XRT on an Alveo. **Prefer the packages.** They install the
+kernel module via DKMS (so it survives kernel upgrades), enable `vrtd` as a
+service, and assign the device nodes to the daemon, after which **no root is
+needed per boot**:
+
+```bash
+cd slash && dpkg-buildpackage -us -uc -b
+sudo apt install ../slash_*.deb ../vrtd_*.deb ../slash-dkms_*.deb \
+                 ../libslash_*.deb ../libvrt_*.deb ../libvrtd_*.deb \
+                 ../slashkit_*.deb ../v80-smi_*.deb
+```
+
+Verify with `v80-smi list` as an unprivileged user.
+
+A tarball path also exists for hosts where packages are impractical:
 
 ```bash
 ./ci/toolchain_install.sh --slash
 export VRT_HOME=$TOOLDIR/slash
 ```
+
+The tarball installs userspace only — the kernel module and `vrtd` service are
+still yours to set up, which is why the packages are preferred. See
+[`proposals/v80_release_setup_proposal.md`](proposals/v80_release_setup_proposal.md)
+for the plan to make the packaged path the only path.
 
 `--slash` is **opt-in** and deliberately excluded from the default
 install: the userspace half installs like any other component, but a
@@ -919,26 +941,29 @@ working board also needs kernel modules built against the running
 kernel and Vivado on `PATH` for `slashkit`. Pulling that into the
 default would fail on every machine without a V80.
 
-### Build the kernel driver
+### The kernel module
 
-The driver must be built against the running kernel, so it is never
-prebuilt:
+With the packages installed, DKMS builds `slash.ko` against the running kernel
+and rebuilds it on upgrade — nothing to do by hand.
+
+Building it manually is a development fallback only:
 
 ```bash
 git clone https://github.com/vortexgpgpu/slash.git
-cd slash
-git submodule update --init --recursive
-
-# Kernels 6.15+ need the timer compat shim:
-make -C driver SLASH_HAVE_TIMER_MODERN=y
-
+cd slash && git submodule update --init --recursive
+make -C driver SLASH_HAVE_TIMER_MODERN=y   # kernels 6.15+ need the timer shim
 sudo insmod driver/slash.ko
 ```
 
-`slash.ko` binds PF1 (`slash_qdma`) and PF2 (`slash_ctl`); `vrtd`
-discovers boards from `/dev/slash_ctl*`. PF0 is `ami` and carries
-sensors, identity and the PDI design-writer only — the `aved` backend
-does not need it, and running without it removes the AMC heartbeat.
+`slash.ko` binds PF1 (`slash_qdma`) and PF2 (`slash_ctl`); `vrtd` discovers
+boards from `/dev/slash_ctl*`. PF0 is `ami` and carries sensors, identity and
+the PDI design-writer only — the `aved` backend does not need it.
+
+**Do not grant users direct access to `/dev/slash_*`.** The nodes belong to the
+`vrtd` daemon by design (`OWNER="vrtd" GROUP="vrtd" MODE="0600"` in
+`vrt/vrtd/udev/99-vrtd.rules`); clients talk to `vrtd` over its socket and it
+brokers access. Widening those permissions to avoid running the daemon is a
+workaround, not a fix.
 
 ### Build from source (alternative to the prebuilt)
 
