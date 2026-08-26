@@ -61,6 +61,14 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     // ---------------------------------------------------------------------
     wire [NUM_REQS-1:0][IDX_W-1:0] hit_index;
 
+    // Selectable fields packed once so each lane picks the winning entry with a
+    // one-hot mux rather than encoding a hit index and re-indexing entries_r.
+    localparam SEL_W = TLB_PPN_WIDTH + TLB_FLAGS_WIDTH + TLB_LEVEL_WIDTH;
+    wire [TLB_SIZE-1:0][SEL_W-1:0] entry_sel;
+    for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_entry_sel
+        assign entry_sel[i] = {entries_r[i].ppn, entries_r[i].flags, entries_r[i].level};
+    end
+
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lookup
         wire [TLB_SIZE-1:0] hit_vec;
         for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_match
@@ -68,27 +76,40 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
             assign hit_vec[i] = valid_r[i]
                 && ((entries_r[i].vpn & mask) == (lookup_vpn[l] & mask));
         end
-        assign lookup_hit[l] = (| hit_vec);
 
-        // Lowest matching index wins (a linear scan over the flat entry array).
-        reg [IDX_W-1:0] idx;
-        always @(*) begin
-            idx = '0;
-            for (int i = TLB_SIZE-1; i >= 0; --i) begin
-                if (hit_vec[i]) begin
-                    idx = IDX_W'(i);
-                end
-            end
-        end
-        assign hit_index[l] = idx;
+        // Lowest matching index wins: the encoder yields the hit flag, the
+        // winning one-hot, and its index (for the MRU bump) without a mux tree.
+        wire [TLB_SIZE-1:0] hit_onehot;
+        VX_priority_encoder #(
+            .N       (TLB_SIZE),
+            .REVERSE (0)
+        ) hit_enc (
+            .data_in    (hit_vec),
+            .onehot_out (hit_onehot),
+            .index_out  (hit_index[l]),
+            .valid_out  (lookup_hit[l])
+        );
 
-        wire [TLB_LEVEL_WIDTH-1:0] hlevel = entries_r[idx].level;
-        wire [TLB_VPN_WIDTH-1:0]   low = lookup_vpn[l] & ~vpn_mask(hlevel);
+        // One-hot AND-OR select of the winning entry's fields, off the idx cone.
+        wire [SEL_W-1:0] sel;
+        VX_onehot_mux #(
+            .DATAW (SEL_W),
+            .N     (TLB_SIZE)
+        ) sel_mux (
+            .data_in  (entry_sel),
+            .sel_in   (hit_onehot),
+            .data_out (sel)
+        );
+        wire [TLB_PPN_WIDTH-1:0]   sel_ppn   = sel[TLB_LEVEL_WIDTH+TLB_FLAGS_WIDTH +: TLB_PPN_WIDTH];
+        wire [TLB_FLAGS_WIDTH-1:0] sel_flags = sel[TLB_LEVEL_WIDTH +: TLB_FLAGS_WIDTH];
+        wire [TLB_LEVEL_WIDTH-1:0] sel_level = sel[0 +: TLB_LEVEL_WIDTH];
+
+        wire [TLB_VPN_WIDTH-1:0]   low = lookup_vpn[l] & ~vpn_mask(sel_level);
         // Splice the superpage's intra-page index from the VPN into the PPN.
-        assign lookup_ppn[l]     = entries_r[idx].ppn | TLB_PPN_WIDTH'(low);
-        assign lookup_flags[l]   = entries_r[idx].flags;
-        assign lookup_ppn_raw[l] = entries_r[idx].ppn;
-        assign lookup_level[l]   = hlevel;
+        assign lookup_ppn[l]     = sel_ppn | TLB_PPN_WIDTH'(low);
+        assign lookup_flags[l]   = sel_flags;
+        assign lookup_ppn_raw[l] = sel_ppn;
+        assign lookup_level[l]   = sel_level;
     end
 
     // ---------------------------------------------------------------------
