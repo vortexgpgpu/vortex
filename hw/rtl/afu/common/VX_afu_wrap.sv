@@ -138,8 +138,9 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     wire [VX_DCR_DATA_WIDTH-1:0] dcr_rsp_data;
 
     // ========================================================================
-    // AXI-Lite demux: 0x00..0xFF → legacy AFU_ctrl, 0x100..0xFFFF → CP regfile.
-    // Routing is latched at AW/AR fire so mixed-range pipelines stay coherent.
+    // AXI-Lite demux: bit 12 picks the slave — addr[12]=0 → legacy AFU_ctrl,
+    // addr[12]=1 → CP regfile (which sees its own 0x000-based window).
+    // See VX_afu_axil_demux for why W routing must fall through from AW.
     // ========================================================================
     wire                                 lg_awvalid, lg_awready;
     wire [7:0]                           lg_awaddr;
@@ -156,66 +157,78 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
     VX_cp_axil_s_if #(.ADDR_W(16)) cp_axil ();
 
-    // Bit 12 picks the slave: host addr[12]=1 → CP regfile; addr[12]=0 → legacy.
-    wire is_cp_aw = s_axi_ctrl_awaddr[12];
-    wire is_cp_ar = s_axi_ctrl_araddr[12];
+    wire [C_S_AXI_CTRL_ADDR_WIDTH-1:0] lg_awaddr_w, lg_araddr_w;
 
-    reg route_cp_w_r, route_cp_w_valid;
-    reg route_cp_r_r, route_cp_r_valid;
-    always @(posedge clk) begin
-        if (reset) begin
-            route_cp_w_r <= 0; route_cp_w_valid <= 0;
-            route_cp_r_r <= 0; route_cp_r_valid <= 0;
-        end else begin
-            if (s_axi_ctrl_awvalid && s_axi_ctrl_awready) begin
-                route_cp_w_r     <= is_cp_aw;
-                route_cp_w_valid <= 1;
-            end else if (s_axi_ctrl_bvalid && s_axi_ctrl_bready) begin
-                route_cp_w_valid <= 0;
-            end
-            if (s_axi_ctrl_arvalid && s_axi_ctrl_arready) begin
-                route_cp_r_r     <= is_cp_ar;
-                route_cp_r_valid <= 1;
-            end else if (s_axi_ctrl_rvalid && s_axi_ctrl_rready) begin
-                route_cp_r_valid <= 0;
-            end
-        end
-    end
+    VX_afu_axil_demux #(
+        .ADDR_WIDTH (C_S_AXI_CTRL_ADDR_WIDTH),
+        .DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH),
+        .SEL_BIT    (12)
+    ) axil_demux (
+        .clk        (clk),
+        .reset      (reset),
 
-    wire route_aw = route_cp_w_valid ? route_cp_w_r : is_cp_aw;
-    wire route_ar = route_cp_r_valid ? route_cp_r_r : is_cp_ar;
+        .s_awvalid  (s_axi_ctrl_awvalid),
+        .s_awready  (s_axi_ctrl_awready),
+        .s_awaddr   (s_axi_ctrl_awaddr),
+        .s_wvalid   (s_axi_ctrl_wvalid),
+        .s_wready   (s_axi_ctrl_wready),
+        .s_wdata    (s_axi_ctrl_wdata),
+        .s_wstrb    (s_axi_ctrl_wstrb),
+        .s_bvalid   (s_axi_ctrl_bvalid),
+        .s_bready   (s_axi_ctrl_bready),
+        .s_bresp    (s_axi_ctrl_bresp),
+        .s_arvalid  (s_axi_ctrl_arvalid),
+        .s_arready  (s_axi_ctrl_arready),
+        .s_araddr   (s_axi_ctrl_araddr),
+        .s_rvalid   (s_axi_ctrl_rvalid),
+        .s_rready   (s_axi_ctrl_rready),
+        .s_rdata    (s_axi_ctrl_rdata),
+        .s_rresp    (s_axi_ctrl_rresp),
 
-    assign lg_awvalid       = s_axi_ctrl_awvalid && !route_aw;
-    assign lg_awaddr        = s_axi_ctrl_awaddr[7:0];
-    assign cp_axil.awvalid  = s_axi_ctrl_awvalid &&  route_aw;
-    // CP sees its own 0x000-based address — drop the bit-12 select.
-    assign cp_axil.awaddr   = {4'd0, s_axi_ctrl_awaddr[11:0]};
-    assign s_axi_ctrl_awready = route_aw ? cp_axil.awready : lg_awready;
+        // port 0 — legacy AFU_ctrl (only the low 8 address bits are decoded)
+        .m0_awvalid (lg_awvalid),
+        .m0_awready (lg_awready),
+        .m0_awaddr  (lg_awaddr_w),
+        .m0_wvalid  (lg_wvalid),
+        .m0_wready  (lg_wready),
+        .m0_wdata   (lg_wdata),
+        .m0_wstrb   (lg_wstrb),
+        .m0_bvalid  (lg_bvalid),
+        .m0_bready  (lg_bready),
+        .m0_bresp   (lg_bresp),
+        .m0_arvalid (lg_arvalid),
+        .m0_arready (lg_arready),
+        .m0_araddr  (lg_araddr_w),
+        .m0_rvalid  (lg_rvalid),
+        .m0_rready  (lg_rready),
+        .m0_rdata   (lg_rdata),
+        .m0_rresp   (lg_rresp),
 
-    assign lg_wvalid        = s_axi_ctrl_wvalid && !route_cp_w_r;
-    assign lg_wdata         = s_axi_ctrl_wdata;
-    assign lg_wstrb         = s_axi_ctrl_wstrb;
-    assign cp_axil.wvalid   = s_axi_ctrl_wvalid &&  route_cp_w_r;
-    assign cp_axil.wdata    = s_axi_ctrl_wdata;
-    assign cp_axil.wstrb    = s_axi_ctrl_wstrb;
-    assign s_axi_ctrl_wready = route_cp_w_r ? cp_axil.wready : lg_wready;
+        // port 1 — CP regfile
+        .m1_awvalid (cp_axil.awvalid),
+        .m1_awready (cp_axil.awready),
+        .m1_awaddr  (cp_axil.awaddr),
+        .m1_wvalid  (cp_axil.wvalid),
+        .m1_wready  (cp_axil.wready),
+        .m1_wdata   (cp_axil.wdata),
+        .m1_wstrb   (cp_axil.wstrb),
+        .m1_bvalid  (cp_axil.bvalid),
+        .m1_bready  (cp_axil.bready),
+        .m1_bresp   (cp_axil.bresp),
+        .m1_arvalid (cp_axil.arvalid),
+        .m1_arready (cp_axil.arready),
+        .m1_araddr  (cp_axil.araddr),
+        .m1_rvalid  (cp_axil.rvalid),
+        .m1_rready  (cp_axil.rready),
+        .m1_rdata   (cp_axil.rdata),
+        .m1_rresp   (cp_axil.rresp)
+    );
 
-    assign s_axi_ctrl_bvalid = route_cp_w_r ? cp_axil.bvalid : lg_bvalid;
-    assign s_axi_ctrl_bresp  = route_cp_w_r ? cp_axil.bresp  : lg_bresp;
-    assign cp_axil.bready    = s_axi_ctrl_bready &&  route_cp_w_r;
-    assign lg_bready         = s_axi_ctrl_bready && !route_cp_w_r;
-
-    assign lg_arvalid       = s_axi_ctrl_arvalid && !route_ar;
-    assign lg_araddr        = s_axi_ctrl_araddr[7:0];
-    assign cp_axil.arvalid  = s_axi_ctrl_arvalid &&  route_ar;
-    assign cp_axil.araddr   = {4'd0, s_axi_ctrl_araddr[11:0]};
-    assign s_axi_ctrl_arready = route_ar ? cp_axil.arready : lg_arready;
-
-    assign s_axi_ctrl_rvalid = route_cp_r_r ? cp_axil.rvalid : lg_rvalid;
-    assign s_axi_ctrl_rdata  = route_cp_r_r ? cp_axil.rdata  : lg_rdata;
-    assign s_axi_ctrl_rresp  = route_cp_r_r ? cp_axil.rresp  : lg_rresp;
-    assign cp_axil.rready    = s_axi_ctrl_rready &&  route_cp_r_r;
-    assign lg_rready         = s_axi_ctrl_rready && !route_cp_r_r;
+    // AFU_ctrl decodes only the low 8 bits of its window.
+    assign lg_awaddr = lg_awaddr_w[7:0];
+    assign lg_araddr = lg_araddr_w[7:0];
+    `UNUSED_VAR (lg_awaddr_w[C_S_AXI_CTRL_ADDR_WIDTH-1:8])
+    `UNUSED_VAR (lg_araddr_w[C_S_AXI_CTRL_ADDR_WIDTH-1:8])
 
 `ifdef SCOPE
     wire scope_bus_in;

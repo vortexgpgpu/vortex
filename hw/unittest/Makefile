@@ -17,6 +17,7 @@ all:
 	$(MAKE) -C cp_dcr_proxy
 	$(MAKE) -C cp_unpack
 	$(MAKE) -C cp_axil_regfile
+	$(MAKE) -C afu_axil_demux
 	$(MAKE) -C cp_axi_path
 	$(MAKE) -C cp_dma
 	$(MAKE) -C cp_core
@@ -45,6 +46,7 @@ run:
 	$(MAKE) -C cp_dcr_proxy run
 	$(MAKE) -C cp_unpack run
 	$(MAKE) -C cp_axil_regfile run
+	$(MAKE) -C afu_axil_demux run
 	$(MAKE) -C cp_axi_path run
 	$(MAKE) -C cp_dma run
 	$(MAKE) -C cp_core run

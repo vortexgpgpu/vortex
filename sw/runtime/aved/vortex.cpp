@@ -339,21 +339,30 @@ public:
       }
     }
 
-    // ----- Device reset: OFF by default -----
+    // ----- Device reset: OFF by default, pending silicon confirmation -----
     //
-    // On the V80 compute shell this write is measurably fatal. With the CP
-    // parked and CP_STATUS reading busy=0, the very next register read returns
-    // the all-ones no-completion signature and the card leaves the PCIe bus
-    // until it is JTAG-reloaded and the host rebooted. Offset 0x00 is the AFU
-    // control register rather than the CP, so the whole AXI-Lite slave goes
-    // down with it, and no secondary bus reset is involved anywhere.
+    // This write used to wedge the V80: the next register read returned the
+    // all-ones no-completion signature and the card stopped answering until it
+    // was JTAG-reloaded.
     //
-    // Nothing needs it. The counters it used to clear are adopted at open
-    // instead (see cp_init), the block above parks the CP, and a PDI load
-    // leaves the design freshly configured. Defaulting it on only means an
-    // ordinary run destroys the card.
+    // The cause was NOT the reset. It was a defect in the AFU's AXI-Lite
+    // demux, which routed the write-data beat by a register that only updates
+    // at the write-address handshake. This write is the only access the
+    // runtime makes below 0x1000, and it always follows the CP-window writes
+    // above, so its AW went to VX_afu_ctrl while its W went to the CP regfile.
+    // VX_afu_ctrl then waited forever for data the CP had swallowed, no BRESP
+    // was produced, and every later access died of a PCIe completion timeout.
+    // ap_reset never fired at all. See VX_afu_axil_demux.sv and
+    // docs/proposals/afu_reset_architecture_proposal.md.
     //
-    // VORTEX_AVED_RESET=1 restores the write for a platform that needs it.
+    // The demux is fixed and covered by hw/unittest/afu_axil_demux, but no
+    // bitstream carrying the fix has been run yet, so this stays opt-in. Turn
+    // it back on by default once `minimal` survives two consecutive runs in
+    // one boot with VORTEX_AVED_RESET=1.
+    //
+    // Note that nothing currently needs it either: the counters it would clear
+    // are adopted at open instead (see cp_init), and the block above parks the
+    // CP.
     const char* want_reset = getenv("VORTEX_AVED_RESET");
     const bool do_reset = (want_reset != nullptr && want_reset[0] != '\0'
                            && want_reset[0] != '0');
