@@ -43,7 +43,9 @@ and does not work on 2025.2.
 source /opt/xilinx/2025.2/Vitis/settings64.sh   # puts vivado, vitis, v++, xsct on PATH
 ```
 
-**Packages.** SLASH's documented list is incomplete. The full set:
+**Packages.** For the package build see [§3.1](#31-build-the-packages) — the
+list below is for the source build in [§3A](#3a-building-from-source-maintainers-only).
+SLASH's documented list is incomplete; the full set:
 
 ```bash
 sudo apt install cmake pkg-config ninja-build \
@@ -65,73 +67,112 @@ git submodule update --init --recursive
 
 ---
 
-## 3. Building the stack
+## 3. Installing
+
+SLASH ships Debian and RPM packaging. Build the packages once, install them
+once, and nothing further is needed on any boot: the kernel module is built
+and reinstalled by DKMS across kernel upgrades, `vrtd` is a socket-activated
+systemd service, and udev assigns the device nodes to the daemon.
+
+### 3.1 Build the packages
+
+```bash
+sudo apt install --no-install-recommends \
+  debhelper dh-dkms cmake libcli11-dev libinih-dev libjsoncpp-dev \
+  libsystemd-dev libxml2-dev libzmq3-dev cppzmq-dev ninja-build \
+  pkg-config python3-jinja2 python3-pip python3-setuptools python3-venv \
+  python3-wheel rsync zlib1g-dev
+
+cd SLASH
+SLASH_PKG_SKIP_ROOT_DESIGN_BUILD=1 bash scripts/package-deb.sh --noninteractive
+```
+
+`SLASH_PKG_SKIP_ROOT_DESIGN_BUILD=1` skips rebuilding the platform design,
+which needs `v++` and the node-locked SMBus IP. The driver, daemon, libraries
+and `slashkit` do not depend on it.
+
+Artifacts land in `deb/`.
+
+### 3.2 Install
+
+```bash
+cd deb
+sudo apt install --no-install-recommends \
+  $(ls -1 *.deb | grep -v '^ami_' | sed 's|^|./|')
+```
+
+`ami` is built but deliberately left out: nothing in the `slash` dependency
+chain needs it, and it is the component that heartbeats the AMC over GCQ.
+
+If a previous **source** install exists, remove its leftovers first or they
+win: files under `/etc/systemd/system/` override the packaged units, and
+`/etc/ld.so.conf.d/slash.conf` puts the old prefix ahead of the system
+libraries.
+
+```bash
+sudo rm -f /etc/systemd/system/vrtd.service /etc/systemd/system/vrtd.socket
+sudo rm -f /etc/ld.so.conf.d/slash.conf
+sudo systemctl daemon-reload && sudo ldconfig
+```
+
+### 3.3 Secure Boot
+
+DKMS signs the module with a locally generated MOK. Under Secure Boot that
+key must be enrolled or the kernel refuses the module:
+
+```
+modprobe: ERROR: could not insert 'slash': Key was rejected by service
+# dmesg: Loading of module with unavailable key is rejected
+```
+
+Enrol it once, then reboot and complete the enrolment in MokManager
+(*Enroll MOK → Continue → Yes →* the password you set):
+
+```bash
+sudo mokutil --import /var/lib/shim-signed/mok/MOK.der
+```
+
+`mokutil --sb-state` reports whether Secure Boot is on; if it is off, this
+step does not apply.
+
+### 3.4 Verify
+
+After the reboot nothing needs starting by hand — the module autoloads from
+its PCI aliases and `vrtd.socket` is socket-activated:
+
+```bash
+lsmod | grep slash
+systemctl is-active vrtd
+v80-smi list
+```
+
+`v80-smi list` reports **PF0 NOT READY** when `ami` is absent. That is a
+readiness *report*, not a requirement: PF1, PF2 and VRTD are what matter.
+
+---
+
+## 3A. Building from source (maintainers only)
+
+The package route above is the supported one. Build in place only when
+developing SLASH itself; the result is not what a deployment should run.
 
 Components must be built in dependency order.
 
 ```bash
 cd SLASH
-
-# Kernel module
 cd driver && make && sudo insmod slash.ko && cd ..
-
-# libslash
 cd driver/libslash && cmake -S . -B build -G Ninja && cmake --build build \
   && sudo cmake --install build && cd ../..
-
-# vrtd daemon + client libraries
 cd vrt/vrtd && cmake -S . -B build -G Ninja && cmake --build build \
   && sudo cmake --install build && cd ../..
-
-# VRT runtime
 cd vrt && cmake -S . -B build -G Ninja && cmake --build build \
   && sudo cmake --install build && cd ..
-
-# v80-smi
 cd smi && cmake -S . -B build -G Ninja && cmake --build build \
   && sudo cmake --install build && cd ..
 ```
 
-Then start the daemon and verify:
-
-```bash
-sudo systemctl enable --now vrtd     # or: sudo vrtd
-v80-smi list
-```
-
-All four readiness checks (PF0 / PF1 / PF2 / VRTD) must pass. See §6 if they
-do not.
-
-### Building without root
-
-If `sudo` is unavailable, the whole stack builds into a user prefix.
-`apt-get download` needs no privileges:
-
-```bash
-PREFIX=$HOME/.slash-local
-mkdir -p $PREFIX/pkgs $PREFIX/root && cd $PREFIX/pkgs
-apt-get download cmake ninja-build libxml2-dev libzmq3-dev libjsoncpp-dev \
-  libsystemd-dev libinih-dev libcli11-dev libcap-dev cppzmq-dev
-for d in *.deb; do dpkg -x "$d" $PREFIX/root; done
-```
-
-Two things then need fixing by hand:
-
-1. **`.pc` files hardcode `prefix=/usr`** — rewrite them to point at the
-   local tree, or `pkg-config` resolves headers that are not there.
-2. **`-dev` packages ship dangling `.so` symlinks.** `libsystemd.so ->
-   libsystemd.so.0` is *relative*, so it dangles inside the prefix when the
-   runtime package is installed system-wide. The linker then silently falls
-   back to the static `.a` and fails on unresolved `cap_*` symbols — an error
-   whose real cause is symlink resolution, not a missing library. Repoint
-   such symlinks at `/usr/lib/x86_64-linux-gnu/`.
-
-Export `PATH`, `CMAKE_PREFIX_PATH`, `PKG_CONFIG_PATH`, `CPATH`,
-`LIBRARY_PATH` and `LD_LIBRARY_PATH` at the prefix before building.
-
-Note that `python3 -m venv` may be unusable if `ensurepip` is absent, so the
-pip route to `cmake`/`ninja` is not always available — hence the `.deb` route
-above.
+An in-place `insmod` of an unsigned module is rejected under Secure Boot;
+see §3.3.
 
 ---
 

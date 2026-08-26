@@ -3,8 +3,9 @@
 #
 #   bash hw_sweep.sh [test ...]
 #
-# NO ROOT. The AFU must already be resident (jtag_load_vortex.sh) and the
-# drivers loaded (slash_only_load.sh).
+# NO ROOT. The AFU must already be resident (jtag_load_vortex.sh). The SLASH
+# driver autoloads from its DKMS package and vrtd is socket-activated, so no
+# driver setup step is needed.
 #
 # Each test gets its own bounded timeout and its own MMIO trace, so a test that
 # wedges the card is attributable to itself rather than to whatever ran next.

@@ -915,13 +915,34 @@ service, and assign the device nodes to the daemon, after which **no root is
 needed per boot**:
 
 ```bash
-cd slash && dpkg-buildpackage -us -uc -b
-sudo apt install ../slash_*.deb ../vrtd_*.deb ../slash-dkms_*.deb \
-                 ../libslash_*.deb ../libvrt_*.deb ../libvrtd_*.deb \
-                 ../slashkit_*.deb ../v80-smi_*.deb
+sudo apt install --no-install-recommends \
+  debhelper dh-dkms cmake libcli11-dev libinih-dev libjsoncpp-dev \
+  libsystemd-dev libxml2-dev libzmq3-dev cppzmq-dev ninja-build pkg-config \
+  python3-jinja2 python3-pip python3-setuptools python3-venv python3-wheel \
+  rsync zlib1g-dev
+
+cd slash
+SLASH_PKG_SKIP_ROOT_DESIGN_BUILD=1 bash scripts/package-deb.sh --noninteractive
+cd deb
+sudo apt install --no-install-recommends \
+  $(ls -1 *.deb | grep -v '^ami_' | sed 's|^|./|')
 ```
 
-Verify with `v80-smi list` as an unprivileged user.
+Use `scripts/package-deb.sh` rather than calling `dpkg-buildpackage`
+directly — it assembles `debian/` from `packaging/debian/`, substitutes the
+version into the DKMS metadata, and places the units and udev rule under the
+debhelper names that `dh_installsystemd`/`dh_installudev` expect.
+
+Under Secure Boot the DKMS-signed module needs its MOK enrolled once
+(`sudo mokutil --import /var/lib/shim-signed/mok/MOK.der`, then complete the
+enrolment at the next boot) or `modprobe` fails with *"Key was rejected by
+service"*.
+
+Verify with `v80-smi list` as an unprivileged user. `PF0 NOT READY` is
+expected when `ami` is not installed.
+
+Full procedure, including removing a previous source install:
+[`xilinx_slash_setup.md §3`](xilinx_slash_setup.md).
 
 A tarball path also exists for hosts where packages are impractical:
 
@@ -933,7 +954,7 @@ export VRT_HOME=$TOOLDIR/slash
 The tarball installs userspace only — the kernel module and `vrtd` service are
 still yours to set up, which is why the packages are preferred. See
 [`proposals/v80_release_setup_proposal.md`](proposals/v80_release_setup_proposal.md)
-for the plan to make the packaged path the only path.
+for what the packaged path replaced and the defects fixed to make it work.
 
 `--slash` is **opt-in** and deliberately excluded from the default
 install: the userspace half installs like any other component, but a
@@ -951,9 +972,15 @@ Building it manually is a development fallback only:
 ```bash
 git clone https://github.com/vortexgpgpu/slash.git
 cd slash && git submodule update --init --recursive
-make -C driver SLASH_HAVE_TIMER_MODERN=y   # kernels 6.15+ need the timer shim
+make -C driver          # kcompat probes the running kernel; no flags needed
 sudo insmod driver/slash.ko
 ```
+
+The `all:` recipe runs `driver/kcompat/probe.sh` against `$(KDIR)` and passes
+the detected feature flags (timer API, `vm_flags_set`, `io_uring` command
+support) into the kbuild recursion, so the module follows the target kernel
+without being told. `insmod` of this unsigned module is rejected under Secure
+Boot; the DKMS package signs it, which is another reason to prefer §Install.
 
 `slash.ko` binds PF1 (`slash_qdma`) and PF2 (`slash_ctl`); `vrtd` discovers
 boards from `/dev/slash_ctl*`. PF0 is `ami` and carries sensors, identity and
@@ -961,8 +988,9 @@ the PDI design-writer only — the `aved` backend does not need it.
 
 **Do not grant users direct access to `/dev/slash_*`.** The nodes belong to the
 `vrtd` daemon by design (`OWNER="vrtd" GROUP="vrtd" MODE="0600"` in
-`vrt/vrtd/udev/99-vrtd.rules`); clients talk to `vrtd` over its socket and it
-brokers access. Widening those permissions to avoid running the daemon is a
+`vrt/vrtd/udev/99-vrtd.rules`, installed by the package as
+`/usr/lib/udev/rules.d/60-vrtd.rules`); clients talk to `vrtd` over its socket
+and it brokers access. Widening those permissions to avoid running the daemon is a
 workaround, not a fix.
 
 ### Build from source (alternative to the prebuilt)
@@ -988,7 +1016,7 @@ $VRT_HOME/bin/v80-smi list
 Then build and run the backend:
 
 ```bash
-make -C sw/runtime/aved TARGET=hw VRT_HOME=$VRT_HOME
+make -C sw/runtime/aved TARGET=hw        # packaged VRT needs no VRT_HOME
 ```
 
 See [`designs/aved_driver_architecture.md`](designs/aved_driver_architecture.md)

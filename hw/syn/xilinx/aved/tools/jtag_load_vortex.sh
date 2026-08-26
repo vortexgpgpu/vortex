@@ -79,8 +79,9 @@ fi
 cat <<'EOF'
 
 =========== next ===========
-The AFU is resident. Load the drivers WITHOUT ami, then run the ladder:
+The AFU is resident. The SLASH driver autoloads and vrtd is a systemd
+service, so there is nothing to load by hand -- just run a test:
 
-    sudo bash ~/dev/v80/slash_only_load.sh
-    bash ~/dev/v80/hw_ladder_noprogram.sh
+    bash hw/syn/xilinx/aved/tools/run_hw_test.sh minimal
+    bash hw/syn/xilinx/aved/tools/hw_sweep.sh          # full regression
 EOF
