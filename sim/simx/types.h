@@ -17,11 +17,13 @@
 #include <algorithm>
 #include <array>
 #include <bitset>
+#include <deque>
 #include <memory>
 #include <queue>
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <functional>
 #include <util.h>
@@ -1471,6 +1473,12 @@ public:
   using Ptr = std::shared_ptr<TxArbiter<Type>>;
   typedef Type ReqType;
 
+  struct CoreBypassStats {
+    uint64_t accepted_core_reqs = 0;
+    uint64_t promotions = 0;
+    uint64_t max_bypassed_core_reqs = 0;
+  };
+
   struct RspType {
     Type     data;
     uint32_t input;
@@ -1532,13 +1540,33 @@ public:
       ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
   {}
 
+  void configure_core_bypass(
+    uint64_t limit,
+    uint64_t eligible_rows,
+    std::function<bool(uint32_t, const Type&)> request_eligible = nullptr
+  );
+
+  const std::vector<CoreBypassStats>& core_bypass_stats() const {
+    return core_bypass_stats_;
+  }
+
 protected:
+  struct AdmissionTicket {
+    uint64_t accepted_core_reqs;
+    bool eligible;
+  };
+
   void on_reset();
   void on_tick();
 
   uint32_t delay_;
   uint32_t lg2_num_reqs_;
   std::vector<Arbiter> arbiters_;
+  uint64_t core_bypass_limit_ = 0;
+  uint64_t core_bypass_eligible_rows_ = 0;
+  std::function<bool(uint32_t, const Type&)> core_bypass_request_eligible_;
+  std::vector<std::deque<AdmissionTicket>> admission_tickets_;
+  std::vector<CoreBypassStats> core_bypass_stats_;
 #ifndef NDEBUG
   // Low-volume, debug-build-only instrumentation for the cluster L2 fan-in.
   // The generic arbiter is used throughout SimX, so key this on the object name
@@ -1557,9 +1585,50 @@ protected:
 };
 
 template <typename Type>
+void TxArbiter<Type>::configure_core_bypass(
+  uint64_t limit,
+  uint64_t eligible_rows,
+  std::function<bool(uint32_t, const Type&)> request_eligible
+) {
+  assert(limit != 0);
+  assert(core_bypass_limit_ == 0);
+  assert(eligible_rows != 0);
+  assert(Inputs.size() != Outputs.size());
+
+  core_bypass_limit_ = limit;
+  core_bypass_eligible_rows_ = eligible_rows;
+  core_bypass_request_eligible_ = std::move(request_eligible);
+  admission_tickets_.resize(Inputs.size());
+  core_bypass_stats_.resize(Outputs.size());
+
+  const uint32_t rows = 1u << lg2_num_reqs_;
+  for (uint32_t i = 0; i < Inputs.size(); ++i) {
+    Inputs.at(i).tx_callback([this, i, rows](const Type& req, uint64_t) {
+      const uint32_t row = i % rows;
+      if ((core_bypass_eligible_rows_ & (uint64_t(1) << row)) == 0) {
+        return;
+      }
+      const uint32_t output = i / rows;
+      const bool eligible = !core_bypass_request_eligible_
+                         || core_bypass_request_eligible_(row, req);
+      admission_tickets_.at(i).push_back({
+        core_bypass_stats_.at(output).accepted_core_reqs,
+        eligible
+      });
+    });
+  }
+}
+
+template <typename Type>
 void TxArbiter<Type>::on_reset() {
   for (auto& arb : arbiters_) {
     arb.reset();
+  }
+  for (auto& tickets : admission_tickets_) {
+    tickets.clear();
+  }
+  for (auto& stats : core_bypass_stats_) {
+    stats = CoreBypassStats{};
   }
 #ifndef NDEBUG
   std::fill(debug_req_cycles_.begin(), debug_req_cycles_.end(), 0);
@@ -1604,10 +1673,54 @@ void TxArbiter<Type>::on_tick() {
     }
     if (requests.any()) {
       uint32_t g = arbiters_.at(o).grant(requests);
+      uint64_t promoted_bypass = 0;
+      bool promoted = false;
+      if (core_bypass_limit_ != 0) {
+        for (uint32_t r = 1; r < R; ++r) {
+          if (!requests.test(r)
+           || (core_bypass_eligible_rows_ & (uint64_t(1) << r)) == 0) {
+            continue;
+          }
+          const uint32_t candidate = o * R + r;
+          const auto& tickets = admission_tickets_.at(candidate);
+          assert(!tickets.empty());
+          const auto& ticket = tickets.front();
+          if (!ticket.eligible) {
+            continue;
+          }
+          const uint64_t bypassed =
+              core_bypass_stats_.at(o).accepted_core_reqs - ticket.accepted_core_reqs;
+          if (bypassed >= core_bypass_limit_
+           && (!promoted || bypassed > promoted_bypass)) {
+            g = r;
+            promoted_bypass = bypassed;
+            promoted = true;
+          }
+        }
+      }
       uint32_t i = o * R + g;
       auto& req_in = Inputs.at(i);
       auto& req = req_in.peek();
       if (Outputs.at(o).try_send(RspType(req, i), delay_)) {
+        if (core_bypass_limit_ != 0) {
+          if ((core_bypass_eligible_rows_ & (uint64_t(1) << g)) != 0) {
+            auto& tickets = admission_tickets_.at(i);
+            assert(!tickets.empty());
+            tickets.pop_front();
+          }
+          auto& stats = core_bypass_stats_.at(o);
+          if (g == 0) {
+            ++stats.accepted_core_reqs;
+          } else if (promoted) {
+            ++stats.promotions;
+            stats.max_bypassed_core_reqs =
+                std::max(stats.max_bypassed_core_reqs, promoted_bypass);
+            DT(2, this->name() << " COREBYPASS output=" << o
+                  << " row=" << g
+                  << " bypassed_core_reqs=" << promoted_bypass
+                  << " limit=" << core_bypass_limit_);
+          }
+        }
 #ifndef NDEBUG
         if (debug_l2arb_) {
           ++debug_accepts_.at(i);
@@ -1628,6 +1741,13 @@ void TxArbiter<Type>::on_tick() {
   const uint64_t cycle = SimPlatform::instance().cycles();
   if (debug_l2arb_ && cycle != 0 && (cycle % 100000) == 0) {
     for (uint32_t o = 0; o < O; ++o) {
+      if (!core_bypass_stats_.empty()) {
+        const auto& stats = core_bypass_stats_.at(o);
+        DT(1, this->name() << " COREBYPASSSTAT output=" << o
+              << " accepted_core_reqs=" << stats.accepted_core_reqs
+              << " promotions=" << stats.promotions
+              << " max_bypassed_core_reqs=" << stats.max_bypassed_core_reqs);
+      }
       for (uint32_t r = 0; r < R; ++r) {
         uint32_t i = o * R + r;
         if (i >= I || (debug_req_cycles_.at(i) == 0 && debug_wait_cycles_.at(i) == 0))
@@ -1835,6 +1955,22 @@ public:
       ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0,
       ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
   {}
+
+  void configure_core_bypass(
+    uint64_t limit,
+    uint64_t eligible_rows,
+    std::function<bool(uint32_t, const Req&)> request_eligible = nullptr
+  ) {
+    assert(arbiter_ != nullptr);
+    arbiter_->configure_core_bypass(
+        limit, eligible_rows, std::move(request_eligible));
+  }
+
+  const std::vector<typename TxArbiter<Req>::CoreBypassStats>&
+  core_bypass_stats() const {
+    assert(arbiter_ != nullptr);
+    return arbiter_->core_bypass_stats();
+  }
 
 protected:
   void on_reset() {

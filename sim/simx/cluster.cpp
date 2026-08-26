@@ -137,6 +137,10 @@ public:
         + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_CLUSTER_ENABLED + VX_CFG_EXT_DTCU_SOCKET_ENABLED
         + VX_CFG_EXT_TEX_ENABLED + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED
         + VX_CFG_EXT_RTU_ENABLED;
+    constexpr uint32_t kDxaRow = 1;
+    constexpr uint32_t kDtcuClusterRow = kDxaRow + VX_CFG_EXT_DXA_ENABLED;
+    constexpr uint32_t kDtcuSocketRow =
+        kDtcuClusterRow + VX_CFG_EXT_DTCU_CLUSTER_ENABLED;
     // TxArbiter groups its inputs in blocks of (1 << log2ceil(num_inputs/num_outputs))
     // and only ever serves input i from output i/R (types.h TxArbiter::on_tick). The
     // `kL2Rows * port + row` indexing used throughout this constructor is therefore
@@ -152,6 +156,17 @@ public:
     snprintf(sname, 100, "%s-l2arb", name.c_str());
     auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority,
                                     kL2Rows * VX_CFG_L2_NUM_REQS, VX_CFG_L2_NUM_REQS);
+#if VX_CFG_L2_ARB_ENGINE_BYPASS_LIMIT != 0
+    constexpr uint64_t kEngineRows =
+        (uint64_t(VX_CFG_EXT_DXA_ENABLED) << kDxaRow)
+      | (uint64_t(VX_CFG_EXT_DTCU_CLUSTER_ENABLED) << kDtcuClusterRow)
+      | (uint64_t(VX_CFG_EXT_DTCU_SOCKET_ENABLED) << kDtcuSocketRow);
+    l2arb->configure_core_bypass(
+        VX_CFG_L2_ARB_ENGINE_BYPASS_LIMIT, kEngineRows,
+        [](uint32_t row, const MemReq& req) {
+          return row != kDtcuSocketRow || !req.is_write();
+        });
+#endif
     // sockets → row 0
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
@@ -176,7 +191,6 @@ public:
     dxa_core_ = DxaCore::Create(sname, simobject_);
 
     // DXA gmem → row 1 of l2arb.
-    constexpr uint32_t kDxaRow = 1;
     uint32_t kDxaMemPorts = dxa_core_->gmem_req_out.size();
     for (uint32_t i = 0; i < kDxaMemPorts; ++i) {
       dxa_core_->gmem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kDxaRow));
@@ -225,7 +239,6 @@ public:
     // per-core SFU dispatch, no LMEM writes; it reads and writes GMEM via TLM.
     snprintf(sname, 100, "%s-dtcu", name.c_str());
     dtcu_ = Dtcu::Create(sname, DTCU_ENGINE_CLUSTER);
-    constexpr uint32_t kDtcuClusterRow = 1 + VX_CFG_EXT_DXA_ENABLED;
     dtcu_->tma()->mem_req_out.bind(&l2arb->ReqIn.at(kL2Rows * 0 + kDtcuClusterRow));
     l2arb->RspOut.at(kL2Rows * 0 + kDtcuClusterRow).bind(&dtcu_->tma()->mem_rsp_in);
 #endif
@@ -248,8 +261,6 @@ public:
       sockets_.at(s)->dtcu_mem_req_out.bind(&dtcu_sock_arb->ReqIn.at(s));
       dtcu_sock_arb->RspOut.at(s).bind(&sockets_.at(s)->dtcu_mem_rsp_in);
     }
-    constexpr uint32_t kDtcuSocketRow = 1 + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_CLUSTER_ENABLED;
-
     // DO NOT PROMOTE THIS ROW ABOVE THE SOCKET ROW. The socket engine's output
     // ordering depends on it, and the dependency is not otherwise expressed anywhere.
     //
@@ -934,4 +945,3 @@ RtuCore::Ptr& Cluster::rtu_core() {
   return impl_->rtu_core();
 }
 #endif
-
