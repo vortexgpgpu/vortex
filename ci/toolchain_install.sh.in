@@ -240,6 +240,16 @@ firesim()
             echo "         still carries the packaging machine's prefix" >&2
         fi
     fi
+
+    # GitHub Actions: propagate to subsequent steps, as chipstar and gem5 do.
+    if [ -n "$GITHUB_ENV" ]; then
+        echo "FIRESIM_PATH=$TOOLDIR/firesim" >> "$GITHUB_ENV"
+    fi
+
+    echo ""
+    echo "firesim installed at $TOOLDIR/firesim"
+    echo "  activate: source $TOOLDIR/firesim/.conda-env/bin/activate"
+    echo "  verify:   make -C hw/syn/firesim check-firesim"
 }
 
 gem5()
@@ -287,7 +297,9 @@ show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
     echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--firesim] [--all] [-h|--help]"
-    echo "  (no arguments: install all components except gem5)"
+    echo "  (no arguments: install all components except gem5 and firesim)"
+    echo "  gem5 and firesim are opt-in: gem5 is a large source build, and"
+    echo "  firesim is a 1.2 GB bundle that only an FPGA flow can use."
 }
 
 # Default with no arguments: install every component except gem5.

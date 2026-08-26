@@ -890,34 +890,50 @@ Vortex runtime and nothing from `$TOOLDIR/firesim` — the transport links
 against XRT directly. Install this component if you intend to elaborate a
 target or build a bitstream.
 
-The layout follows the same split as POCL, Mesa and LLVM — sources under
-`~/dev`, the consumed tree under `$TOOLDIR`:
+### Prebuilt (recommended)
 
-- `~/dev/firesim/` — a clone of
-  [`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) branch
-  `vortex_3.x` (based on upstream tag 1.21.0). This is where FireSim itself is
-  developed and where `git` work happens.
-- `$TOOLDIR/firesim/` — what the Vortex build consumes, exposed by `config.mk`
-  as `$(FIRESIM_PATH)`. Populated either by
-  `ci/toolchain_install.sh --firesim` or, when working from source, by
-  pointing it at the clone.
+Same as every other component — one command, no source build:
 
-Unlike POCL or Mesa there is no separate compile-and-install step: FireSim is
-consumed as a source tree, because the Vortex flow stages its Chisel target
+```bash
+./ci/toolchain_install.sh --firesim
+```
+
+It is **not** in the default set (`./ci/toolchain_install.sh` with no
+arguments) or in `--all`. Like gem5, it is opt-in: the bundle is 1.2 GB and
+only an FPGA flow can use it, so CI runners that never touch a card do not pay
+for it.
+
+### From source
+
+```bash
+./ci/firesim_install.sh
+```
+
+Same shape as [`ci/chipstar_install.sh`](#7-chipstar-hip-host-runtime) and
+`ci/gem5_install.sh`: clones
+[`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) `vortex_3.x`
+(based on upstream tag 1.21.0) into `$TOOLDIR/firesim` and runs
+`build-setup.sh --skip-validate`. Override the source with `FIRESIM_REPO` /
+`FIRESIM_REV`.
+
+Unlike POCL, Mesa or chipStar there is no compile-and-install step: FireSim is
+consumed as a *source tree*, because the Vortex flow stages its Chisel target
 into the checkout and elaborates there. `$TOOLDIR/firesim` is therefore the
-same shape as `~/dev/firesim` rather than an install prefix.
+checkout itself rather than an install prefix, and it is what `config.mk`
+exposes as `$(FIRESIM_PATH)`.
+
+What costs time is the conda environment `build-setup.sh` resolves — a JVM,
+sbt and Scala for Golden Gate. The sources themselves are a plain clone. That
+is the whole reason the prebuilt bundle exists.
+
+If you are developing FireSim itself, clone it wherever you keep sources and
+point the toolchain slot at it:
 
 ```bash
 git clone --branch vortex_3.x https://github.com/vortexgpgpu/firesim.git ~/dev/firesim
-cd ~/dev/firesim
-./build-setup.sh --skip-validate
-
-# point the toolchain slot at it (or install the prebuilt bundle instead)
+cd ~/dev/firesim && ./build-setup.sh --skip-validate
 ln -s ~/dev/firesim $TOOLDIR/firesim
 ```
-
-`build-setup.sh` resolves the conda environment, which dominates the build
-time; the sources themselves are a plain clone.
 
 ### Notes
 
