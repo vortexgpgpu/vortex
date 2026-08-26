@@ -50,6 +50,10 @@ struct TexelRequest {
   uint32_t filter;    // VX_TEX_FILTER_POINT or _BILINEAR
   uint32_t alpha;     // u-fraction (BILINEAR only)
   uint32_t beta;      // v-fraction (BILINEAR only)
+  // CLAMP_TO_BORDER: which taps left the texture and take `border` instead of
+  // what their address points at. Zero unless an axis wraps to a border.
+  uint32_t border_mask;
+  uint32_t border;    // ARGB8888
 };
 
 template <uint32_t F>
@@ -511,66 +515,9 @@ static inline uint32_t TexFilterPoint(int format, uint32_t texel) {
   return Pack8888(cl, ch);
 }
 
-// Free per-sample request: produce the TexelRequest from already-resolved tex
-// state (no DCR object), so the host FF sampler and the device SW path share
-// it. `base_addr` is the mip's base (mip_base + mip_off for this lod); `logdim`
-// is {log_h<<16 | log_w} of mip 0; `u`/`v` are TEX_FXD_FRAC fixed-point.
-// `width0`/`height0` carry the mip-0 integer dims for the NPOT multiply path;
-// pass 0 to derive POT dims from `logdim` (bit-exact FF shift addressing).
-static inline TexelRequest tex_compute_request(uint64_t base_addr,
-                                               uint32_t logdim,
-                                               uint32_t format,
-                                               uint32_t filter,
-                                               uint32_t wrap,
-                                               int32_t  u,
-                                               int32_t  v,
-                                               uint32_t lod,
-                                               uint32_t width0 = 0,
-                                               uint32_t height0 = 0) {
-  uint32_t log_width  = (uint32_t)tex_imax((int32_t)(logdim & 0xffff) - (int32_t)lod, 0);
-  uint32_t log_height = (uint32_t)tex_imax((int32_t)(logdim >> 16) - (int32_t)lod, 0);
-
-  // Per-LOD integer dims. When width0/height0 are given (NPOT-capable path) the
-  // LOD dims are max(dim >> lod, 1); otherwise the POT dims from logdim, which
-  // keeps TexIsNPOT() false and the addressing bit-exact with the FF unit.
-  uint32_t width  = width0  ? (uint32_t)tex_imax((int32_t)(width0  >> lod), 1) : (1u << log_width);
-  uint32_t height = height0 ? (uint32_t)tex_imax((int32_t)(height0 >> lod), 1) : (1u << log_height);
-
-  uint32_t wrapu = wrap & 0xffff;
-  uint32_t wrapv = wrap >> 16;
-
-  uint32_t stride = FormatStride(format);
-
-  auto xu = TFixed<TEX_FXD_FRAC>::make(u);
-  auto xv = TFixed<TEX_FXD_FRAC>::make(v);
-
-  TexelRequest req{};
-  req.stride = stride;
-  req.format = format;
-  req.filter = filter;
-
-  if (filter == VX_TEX_FILTER_BILINEAR) {
-    uint32_t offset00, offset01, offset10, offset11;
-    uint32_t alpha, beta;
-    TexAddressLinear(xu, xv, width, height, log_width, log_height, wrapu, wrapv,
-      &offset00, &offset01, &offset10, &offset11, &alpha, &beta);
-    req.addr[0] = base_addr + offset00 * stride;
-    req.addr[1] = base_addr + offset01 * stride;
-    req.addr[2] = base_addr + offset10 * stride;
-    req.addr[3] = base_addr + offset11 * stride;
-    req.alpha   = alpha;
-    req.beta    = beta;
-  } else { // VX_TEX_FILTER_POINT
-    uint32_t offset;
-    TexAddressPoint(xu, xv, width, height, log_width, log_height, wrapu, wrapv, &offset);
-    req.addr[0] = base_addr + offset * stride;
-  }
-  return req;
-}
-
-// CLAMP_TO_BORDER: compute the per-tap border mask for the extended SW
-// sampler. A tap is the border colour when its pre-wrap coordinate leaves [0,1)
-// on an axis whose wrap is VX_TEX_WRAP_BORDER. Tap order matches TexAddressLinear
+// CLAMP_TO_BORDER: which taps take the border colour. A tap does when its
+// pre-wrap coordinate leaves [0,1) on an axis whose wrap is
+// VX_TEX_WRAP_BORDER. Tap order matches TexAddressLinear
 // (00,01,10,11 = (u-,v-),(u+,v-),(u-,v+),(u+,v+)); POINT uses tap 0 only. The
 // half-texel deltas match tex_compute_request's addressing so the border edge
 // lands on the same taps the real fetch would.
@@ -600,8 +547,88 @@ static inline uint32_t TexBorderMask(int32_t u, int32_t v, uint32_t width, uint3
   return mask;
 }
 
+// Free per-sample request: produce the TexelRequest from already-resolved tex
+// state (no DCR object), so the host FF sampler and the device SW path share
+// it. `base_addr` is the mip's base (mip_base + mip_off for this lod); `logdim`
+// is {log_h<<16 | log_w} of mip 0; `u`/`v` are TEX_FXD_FRAC fixed-point.
+// `width0`/`height0` carry the mip-0 integer dims for the NPOT multiply path;
+// pass 0 to derive POT dims from `logdim` (bit-exact FF shift addressing).
+static inline TexelRequest tex_compute_request(uint64_t base_addr,
+                                               uint32_t logdim,
+                                               uint32_t format,
+                                               uint32_t filter,
+                                               uint32_t wrap,
+                                               int32_t  u,
+                                               int32_t  v,
+                                               uint32_t lod,
+                                               uint32_t width0 = 0,
+                                               uint32_t height0 = 0,
+                                               uint32_t border = 0) {
+  uint32_t log_width  = (uint32_t)tex_imax((int32_t)(logdim & 0xffff) - (int32_t)lod, 0);
+  uint32_t log_height = (uint32_t)tex_imax((int32_t)(logdim >> 16) - (int32_t)lod, 0);
+
+  // Per-LOD integer dims. When width0/height0 are given (NPOT-capable path) the
+  // LOD dims are max(dim >> lod, 1); otherwise the POT dims from logdim, which
+  // keeps TexIsNPOT() false and the addressing bit-exact with the FF unit.
+  uint32_t width  = width0  ? (uint32_t)tex_imax((int32_t)(width0  >> lod), 1) : (1u << log_width);
+  uint32_t height = height0 ? (uint32_t)tex_imax((int32_t)(height0 >> lod), 1) : (1u << log_height);
+
+  uint32_t wrapu = wrap & 0xffff;
+  uint32_t wrapv = wrap >> 16;
+
+  uint32_t stride = FormatStride(format);
+
+  auto xu = TFixed<TEX_FXD_FRAC>::make(u);
+  auto xv = TFixed<TEX_FXD_FRAC>::make(v);
+
+  TexelRequest req{};
+  req.stride = stride;
+  req.format = format;
+  req.filter = filter;
+  req.border = border;
+  req.border_mask = TexBorderMask(u, v, width, height, log_width, log_height,
+                                  wrapu, wrapv, filter);
+
+  if (filter == VX_TEX_FILTER_BILINEAR) {
+    uint32_t offset00, offset01, offset10, offset11;
+    uint32_t alpha, beta;
+    TexAddressLinear(xu, xv, width, height, log_width, log_height, wrapu, wrapv,
+      &offset00, &offset01, &offset10, &offset11, &alpha, &beta);
+    req.addr[0] = base_addr + offset00 * stride;
+    req.addr[1] = base_addr + offset01 * stride;
+    req.addr[2] = base_addr + offset10 * stride;
+    req.addr[3] = base_addr + offset11 * stride;
+    req.alpha   = alpha;
+    req.beta    = beta;
+  } else { // VX_TEX_FILTER_POINT
+    uint32_t offset;
+    TexAddressPoint(xu, xv, width, height, log_width, log_height, wrapu, wrapv, &offset);
+    req.addr[0] = base_addr + offset * stride;
+  }
+  return req;
+}
+
 // Free filter: format-decode + bilinear/point combine of fetched texels.
 static inline uint32_t tex_apply_filter(const TexelRequest& req, const uint32_t texels[4]) {
+  if (req.border_mask != 0) {
+    // A border tap has no texel to decode, so the decode has to happen first and
+    // the filter then runs over already-decoded ARGB. That is a different shape
+    // from the path below, which unpacks inside the filter — hence the split
+    // rather than one path with a mux: samples that never asked for a border
+    // keep the exact code they had.
+    if (req.filter == VX_TEX_FILTER_BILINEAR) {
+      uint32_t argb[4];
+      for (uint32_t i = 0; i < 4; ++i) {
+        argb[i] = ((req.border_mask >> i) & 0x1) ? req.border
+                                                 : TexFilterPoint(req.format, texels[i]);
+      }
+      return TexFilterLinear(VX_TEX_FORMAT_A8R8G8B8, argb[0], argb[1], argb[2], argb[3],
+                             req.alpha, req.beta);
+    }
+    if (req.border_mask & 0x1) {
+      return req.border;
+    }
+  }
   if (req.filter == VX_TEX_FILTER_BILINEAR)
     return TexFilterLinear(req.format, texels[0], texels[1], texels[2], texels[3],
                            req.alpha, req.beta);

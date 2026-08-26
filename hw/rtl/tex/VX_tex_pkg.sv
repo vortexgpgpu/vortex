@@ -45,6 +45,8 @@ typedef struct packed {
     logic [`TEX_ADDR_BITS-1:0]     baseaddr;
     logic [TEX_FORMAT_BITS-1:0]    format;
     logic [TEX_FILTER_BITS-1:0]    filter;
+    // Colour a tap outside [0,1) returns on an axis that wraps to a border.
+    logic [31:0]                   border;
 } tex_dcrs_t;
 
 typedef struct packed {

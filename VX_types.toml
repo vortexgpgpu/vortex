@@ -147,8 +147,13 @@ VX_DCR_TEX_LOGDIM      = 0x042
 VX_DCR_TEX_FORMAT      = 0x043
 VX_DCR_TEX_FILTER      = 0x044
 VX_DCR_TEX_WRAP        = 0x045
-# VX_DCR_TEX_MIPOFF(lod) = VX_DCR_TEX_MIPOFF_BASE + lod, lod < VX_TEX_LOD_MAX
+# VX_DCR_TEX_MIPOFF(lod) = VX_DCR_TEX_MIPOFF_BASE + lod, lod <= VX_TEX_LOD_MAX.
+# The table has VX_TEX_LOD_MAX + 1 entries and ends at 0x055: a sampler's lod
+# clamp is independent of how long the mip chain is, so the top level is a
+# reachable request and needs an entry like every other level.
 VX_DCR_TEX_MIPOFF_BASE = 0x046
+# Colour a CLAMP_TO_BORDER tap returns, ARGB8888. Above the mip-offset table.
+VX_DCR_TEX_BORDER      = 0x056
 VX_DCR_TEX_STATE_END   = 0x060
 
 [tex_const]
@@ -173,9 +178,9 @@ VX_TEX_LOD_FRAC_BITS     = 8
 VX_TEX_WRAP_CLAMP  = 0
 VX_TEX_WRAP_REPEAT = 1
 VX_TEX_WRAP_MIRROR = 2
-# W5: CLAMP_TO_BORDER — out-of-[0,1) taps return the sampler border colour.
-# Not representable by the FF TEX unit, so a BORDER wrap routes the draw to the
-# on-device software sampler (gfx_tex_sample_sw).
+# CLAMP_TO_BORDER — a tap whose coordinate leaves [0,1) returns
+# VX_DCR_TEX_BORDER instead of a texel. The address still clamps: the tap is
+# fetched and then discarded, so it only has to be one the texture owns.
 VX_TEX_WRAP_BORDER = 3
 
 VX_TEX_FORMAT_A8R8G8B8 = 0

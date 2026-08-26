@@ -43,3 +43,20 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     auto dst_row = reinterpret_cast<uint32_t*>(arg->dst_addr + gy * arg->dst_pitch);
     dst_row[gx] = color;
 }
+
+// A span wider than the texture, so the outer margin of the destination leaves
+// [0,1) on both axes. A separate entry rather than a flag: the shader above is
+// what the perf baseline pins, down to the instruction.
+__kernel void kernel_main_border(kernel_arg_t* __UNIFORM__ arg) {
+    uint32_t gx = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t gy = blockIdx.y * blockDim.y + threadIdx.y;
+    if (gx >= arg->dst_width || gy >= arg->dst_height) return;
+
+    uint32_t fu = (uint32_t)(arg->uv_bias + arg->uv_delta * (int32_t)gx);
+    uint32_t fv = (uint32_t)(arg->uv_bias + arg->uv_delta * (int32_t)gy);
+
+    uint32_t color = tex_sample(fu, fv, arg->lod);
+
+    auto dst_row = reinterpret_cast<uint32_t*>(arg->dst_addr + gy * arg->dst_pitch);
+    dst_row[gx] = color;
+}

@@ -40,6 +40,9 @@ module VX_tex_lerp #(
         reg [15:0] p1, p2;
         reg [15:0] sum;
         reg [7:0]  res;
+        // The blend is a fraction of 256, so the result is the high byte and the
+        // low one is the remainder this form truncates rather than rounds.
+        `UNUSED_VAR (sum[7:0])
 
         wire [8:0] sub = (9'h100 - 9'(frac));
 

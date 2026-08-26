@@ -49,6 +49,7 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     output wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] rsp_baseaddr,
     output wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] rsp_addr,
     output wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] rsp_blends,
+    output wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] rsp_border,
     output wire [NUM_LANES-1:0][`VX_TEX_LOD_FRAC_BITS-1:0] rsp_lodfrac,
     output wire [REQ_TAGW-1:0]          rsp_tag,
     input wire                          rsp_ready
@@ -57,7 +58,6 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 
     localparam SHIFT_BITS = `CLOG2(`TEX_FXD_FRAC+1);
     localparam PITCH_BITS = `MAX(TEX_LOD_BITS, `TEX_LGSTRIDE_BITS) + 1;
-    localparam SCALED_DIM = `TEX_FXD_FRAC + `VX_TEX_DIM_BITS;
     localparam SCALED_X_W = `VX_TEX_DIM_BITS + `TEX_BLEND_FRAC;
     localparam OFFSET_U_W = `VX_TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
     localparam OFFSET_V_W = `VX_TEX_DIM_BITS + `VX_TEX_DIM_BITS + `TEX_LGSTRIDE_MAX;
@@ -71,11 +71,13 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [REQ_TAGW-1:0] req_tag_s0;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_FXD_FRAC-1:0] clamped_lo, clamped_lo_s0;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_FXD_FRAC-1:0] clamped_hi, clamped_hi_s0;
+    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0] border_lo, border_hi;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][SHIFT_BITS-1:0] dim_shift, dim_shift_s0;
     wire [`TEX_LGSTRIDE_BITS-1:0] log_stride, log_stride_s0;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] mip_addr, mip_addr_s0;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][PITCH_BITS-1:0] log_pitch, log_pitch_s0;
     wire [NUM_LANES-1:0][`VX_TEX_LOD_FRAC_BITS-1:0] lodfrac_s0;
+    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] border_mask, border_mask_s0;
 
     wire stall_out;
 
@@ -100,22 +102,44 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_clamp
         for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
             for (genvar j = 0; j < 2; ++j) begin  : g_j
-                wire [`TEX_FXD_FRAC-1:0] delta = `TEX_FXD_FRAC'((SCALED_DIM'(`TEX_FXD_HALF) << req_miplevel[i][k]) >> req_logdims[j]);
+                // Half a texel of this level. The shift is floored rather than
+                // allowed to go negative: past the end of the mip chain the
+                // level is 1x1 and its half-texel is half the whole coordinate
+                // range, which is what the software sampler uses. Shifting left
+                // first and letting the result truncate would collapse it to
+                // zero instead, and the two taps would then agree on whether
+                // they left the texture when they should not.
+                wire [SHIFT_BITS-1:0] delta_shift = (req_logdims[j] >= req_miplevel[i][k])
+                                                  ? SHIFT_BITS'(req_logdims[j] - req_miplevel[i][k])
+                                                  : SHIFT_BITS'(0);
+                wire [`TEX_FXD_FRAC-1:0] delta = `TEX_FXD_FRAC'(`TEX_FXD_HALF) >> delta_shift;
                 wire [`VX_TEX_FXD_BITS-1:0] coord_lo = req_filter[0] ? (req_coords[j][i] - `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
                 wire [`VX_TEX_FXD_BITS-1:0] coord_hi = req_filter[0] ? (req_coords[j][i] + `VX_TEX_FXD_BITS'(delta)) : req_coords[j][i];
 
                 VX_tex_wrap tex_wrap_lo (
-                    .wrap_i  (req_wraps[j]),
-                    .coord_i (coord_lo),
-                    .coord_o (clamped_lo[i][k][j])
+                    .wrap_i   (req_wraps[j]),
+                    .coord_i  (coord_lo),
+                    .coord_o  (clamped_lo[i][k][j]),
+                    .border_o (border_lo[i][k][j])
                 );
 
                 VX_tex_wrap tex_wrap_hi (
-                    .wrap_i  (req_wraps[j]),
-                    .coord_i (coord_hi),
-                    .coord_o (clamped_hi[i][k][j])
+                    .wrap_i   (req_wraps[j]),
+                    .coord_i  (coord_hi),
+                    .coord_o  (clamped_hi[i][k][j]),
+                    .border_o (border_hi[i][k][j])
                 );
             end
+
+            // Tap order is the one the addresses below are built in:
+            // 0=(u_lo,v_lo) 1=(u_hi,v_lo) 2=(u_lo,v_hi) 3=(u_hi,v_hi). A tap is
+            // the border colour if either of its coordinates left the texture.
+            // Under POINT the low and high coordinates are equal and only tap 0
+            // is consumed, so the other three are ignored rather than special-cased.
+            assign border_mask[i][k][0] = border_lo[i][k][0] || border_lo[i][k][1];
+            assign border_mask[i][k][1] = border_hi[i][k][0] || border_lo[i][k][1];
+            assign border_mask[i][k][2] = border_lo[i][k][0] || border_hi[i][k][1];
+            assign border_mask[i][k][3] = border_hi[i][k][0] || border_hi[i][k][1];
         end
     end
 
@@ -140,14 +164,14 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (`VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (PITCH_BITS + 2 * SHIFT_BITS + W_ADDR_BITS + 2 * 2 * `TEX_FXD_FRAC))),
+        .DATAW  (1 + NUM_LANES + TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (`VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (4 + PITCH_BITS + 2 * SHIFT_BITS + W_ADDR_BITS + 2 * 2 * `TEX_FXD_FRAC))),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid, req_mask, req_filter, log_stride,    req_tag,    log_pitch,    dim_shift,    mip_addr,    clamped_lo,    clamped_hi,    req_lodfrac}),
-        .data_out ({valid_s0,  mask_s0,  filter_s0,  log_stride_s0, req_tag_s0, log_pitch_s0, dim_shift_s0, mip_addr_s0, clamped_lo_s0, clamped_hi_s0, lodfrac_s0})
+        .data_in  ({req_valid, req_mask, req_filter, log_stride,    req_tag,    log_pitch,    dim_shift,    mip_addr,    clamped_lo,    clamped_hi,    border_mask,    req_lodfrac}),
+        .data_out ({valid_s0,  mask_s0,  filter_s0,  log_stride_s0, req_tag_s0, log_pitch_s0, dim_shift_s0, mip_addr_s0, clamped_lo_s0, clamped_hi_s0, border_mask_s0, lodfrac_s0})
     );
 
     // addresses generation
@@ -192,14 +216,14 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     assign stall_out = rsp_valid && ~rsp_ready;
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (`VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (W_ADDR_BITS + 4 * 32 + 2 * `TEX_BLEND_FRAC))),
+        .DATAW  (1 + NUM_LANES + TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (`VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (4 + W_ADDR_BITS + 4 * 32 + 2 * `TEX_BLEND_FRAC))),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_s0,  mask_s0,  filter_s0,  log_stride_s0, mip_addr_s0,  addr,     blends,     lodfrac_s0,  req_tag_s0}),
-        .data_out ({rsp_valid, rsp_mask, rsp_filter, rsp_lgstride,  rsp_baseaddr, rsp_addr, rsp_blends, rsp_lodfrac, rsp_tag})
+        .data_in  ({valid_s0,  mask_s0,  filter_s0,  log_stride_s0, mip_addr_s0,  addr,     blends,     border_mask_s0, lodfrac_s0,  req_tag_s0}),
+        .data_out ({rsp_valid, rsp_mask, rsp_filter, rsp_lgstride,  rsp_baseaddr, rsp_addr, rsp_blends, rsp_border,     rsp_lodfrac, rsp_tag})
     );
 
     assign req_ready = ~stall_out;

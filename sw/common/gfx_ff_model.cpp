@@ -57,10 +57,11 @@ TexelRequest TextureSampler::compute_request(uint32_t stage, int32_t u, int32_t 
   // it and is handled by the caller, so mask it off for per-LOD tap selection.
   auto filter   = dcrs_.read(stage, VX_DCR_TEX_FILTER) & TEX_FILTER_MAGMIN_MASK;
   auto wrap     = dcrs_.read(stage, VX_DCR_TEX_WRAP);
+  auto border   = dcrs_.read(stage, VX_DCR_TEX_BORDER);
 
   // The sampling math is shared with the on-device SW fallback (gfx_frag_tex.h).
   return gfx_tex::tex_compute_request(mip_base + mip_off, logdim, format,
-                                      filter, wrap, u, v, lod);
+                                      filter, wrap, u, v, lod, 0, 0, border);
 }
 
 uint32_t TextureSampler::apply_filter(const TexelRequest& req, const uint32_t texels[4]) {

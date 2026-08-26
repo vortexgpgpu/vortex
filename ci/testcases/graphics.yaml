@@ -596,6 +596,22 @@ tests:
    vars: {NO_TEX: 1, NO_OM: 1, NO_RASTER: 1, OPTS: "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"},
    tier: full}
 
+# CLAMP_TO_BORDER, sampled over a span twice the width of the texture so the
+# outer margin lands where a border and a clamp disagree. Checked in-test
+# against a colour no texel of the source carries.
+- id: gfx_tex-border-point
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i palette64.png -B -g 0 -o null
+- id: gfx_tex-border-bilinear
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i palette64.png -B -g 1 -o null
+
 # Two colour attachments from one draw. Attachment 0 still matches the
 # single-attachment golden; attachment 1 is checked in-test against the colour
 # the kernel computes, so a shared buffer or a shared writemask fails.

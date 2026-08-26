@@ -18,7 +18,10 @@
 module VX_tex_wrap import VX_tex_pkg::*; (
     input wire [TEX_WRAP_BITS-1:0]    wrap_i,
     input wire [`VX_TEX_FXD_BITS-1:0]  coord_i,
-    output wire [`TEX_FXD_FRAC-1:0] coord_o
+    output wire [`TEX_FXD_FRAC-1:0] coord_o,
+    // High when this coordinate left the texture on an axis that wraps to a
+    // border, so the tap it addresses returns the border colour instead.
+    output wire                     border_o
 );
     
     reg [`TEX_FXD_FRAC-1:0] coord_r;
@@ -35,9 +38,9 @@ module VX_tex_wrap import VX_tex_pkg::*; (
 
     always @(*) begin
         case (wrap_i)
-            // BORDER carries no border-colour state here, so it cannot be
-            // honoured; it clamps rather than repeats, which would wrap a
-            // coordinate the caller placed outside the texture on purpose.
+            // BORDER still clamps the address: the tap is fetched and then
+            // discarded for the border colour, so the address only has to be
+            // one the texture owns.
             `VX_TEX_WRAP_CLAMP,
             `VX_TEX_WRAP_BORDER:
                 coord_r = clamp;
@@ -49,5 +52,11 @@ module VX_tex_wrap import VX_tex_pkg::*; (
     end
 
     assign coord_o = coord_r;
+
+    // A coordinate is outside [0,1) exactly when anything above its fractional
+    // field is set -- an integer part, or the sign bits of a negative value. So
+    // the test is an OR-reduce and needs no comparator.
+    assign border_o = (wrap_i == `VX_TEX_WRAP_BORDER)
+                   && (| coord_i[`VX_TEX_FXD_BITS-1:`TEX_FXD_FRAC]);
 
 endmodule

@@ -27,6 +27,8 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     input wire                          req_valid,
     input wire [TEX_FORMAT_BITS-1:0]   req_format,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] req_blends,
+    input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] req_border,
+    input wire [31:0]                   req_bordercolor,
     input wire [NUM_LANES-1:0][`VX_TEX_LOD_FRAC_BITS-1:0] req_lodfrac,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] req_data,
     input wire [REQ_TAGW-1:0]           req_tag,
@@ -48,7 +50,7 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] req_blends_s0;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][`TEX_BLEND_FRAC-1:0] blend_v_s0, blend_v_s1;
     wire [NUM_LANES-1:0][LODFRAC_W-1:0] lodfrac_s0, lodfrac_s1, lodfrac_s2;
-    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] fmt_texels, fmt_texels_s0;
+    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] fmt_texels, sel_texels, fmt_texels_s0;
 
     wire stall_out;
 
@@ -60,6 +62,13 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                     .texel_in  (req_data[i][k][j]),
                     .texel_out (fmt_texels[i][k][j])
                 );
+
+                // A tap that left the texture takes the border colour instead of
+                // what its address returned. It happens after the decode because
+                // the border colour is already in the sampler's working format
+                // while a fetched texel is still in the texture's.
+                assign sel_texels[i][k][j] = req_border[i][k][j] ? req_bordercolor
+                                                                 : fmt_texels[i][k][j];
             end
         end
     end
@@ -71,7 +80,7 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid, req_tag,    req_blends,    req_lodfrac, fmt_texels}),
+        .data_in  ({req_valid, req_tag,    req_blends,    req_lodfrac, sel_texels}),
         .data_out ({valid_s0,  req_tag_s0, req_blends_s0, lodfrac_s0,  fmt_texels_s0})
     );
 
