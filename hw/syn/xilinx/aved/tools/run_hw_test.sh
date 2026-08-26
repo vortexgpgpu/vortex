@@ -21,11 +21,15 @@ source /home/blaise/dev/xilinx_setup_aved.sh >/dev/null || exit 1
 VORTEX_HOME=/home/blaise/dev/vortex_gfxw_v2
 BUILD=$VORTEX_HOME/build
 
-export LD_LIBRARY_PATH="/opt/xilinx/slash/lib:$BUILD/sw/runtime:$LD_LIBRARY_PATH"
-# VRT's public headers pull in zmq/CLI/inih/jsoncpp/libxml2 transitively; the
-# shim holds symlinks to just those, so the no-root prefix cannot also shadow
-# the installed vrt/ and vrtd/ trees.
-export CPATH="/home/blaise/dev/v80/inc-shim:$CPATH"
+# SLASH is installed from its Debian packages, so libvrt/libslash live on the
+# default library path and the runtime resolves them with no help. Only the
+# in-tree driver .so needs locating.
+#
+# There used to be a /opt/xilinx/slash prefix here plus a CPATH include-shim
+# (~/dev/v80/inc-shim) holding symlinks for the jsoncpp/libxml2 headers VRT's
+# public headers pull in transitively. The aved Makefile now asks pkg-config
+# for those include paths, so both are gone.
+export LD_LIBRARY_PATH="$BUILD/sw/runtime:${LD_LIBRARY_PATH:-}"
 
 # Set VORTEX_AVED_MMIO_TRACE=<path> to record every register access; the
 # transition to 0xFFFFFFFF is the last thing the card does before it drops off
@@ -49,5 +53,5 @@ echo "run_hw_test.sh: using $VBIN_DIR/vortex_afu.vbin" >&2
 
 cd "$BUILD/tests/regression/$TEST" || exit 1
 exec timeout --signal=KILL "$TIMEOUT" \
-  make run-aved TARGET=hw VRT_HOME=/opt/xilinx/slash VRT_DEVICE_BDF=01:00 \
+  make run-aved TARGET=hw VRT_DEVICE_BDF=01:00 \
     FPGA_BIN_DIR="$VBIN_DIR" "$@"

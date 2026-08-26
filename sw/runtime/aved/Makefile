@@ -30,8 +30,15 @@ ifeq ($(TARGET), avedsim)
 	CXXFLAGS += -DAVEDSIM -I$(SIM_DIR)/avedsim
 	LDFLAGS += -L$(DESTDIR) -lavedsim
 else
+# Packaged VRT (libvrt-dev) installs to the default include and library paths;
+# VRT_HOME only matters for a hand-built VRT in a custom prefix.
 	CXXFLAGS += -I$(VRT_HOME)/include
 	LDFLAGS += -L$(VRT_HOME)/lib -lvrt
+# VRT's public headers include <json/json.h> and <libxml/parser.h>
+# transitively, and distributions put those under versioned subdirectories.
+# Ask pkg-config rather than hardcoding a path -- this is what the CPATH
+# include-shim under ~/dev/v80/inc-shim used to paper over.
+	CXXFLAGS += $(shell pkg-config --cflags jsoncpp libxml-2.0 2>/dev/null)
 endif
 
 PROJECT := libvortex-aved.so
