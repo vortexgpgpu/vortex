@@ -14,10 +14,12 @@
 #pragma once
 
 #include <stdint.h>
+#include <algorithm>
 #include <array>
 #include <bitset>
 #include <memory>
 #include <queue>
+#include <string>
 #include <vector>
 #include <unordered_map>
 #include <variant>
@@ -1499,6 +1501,14 @@ public:
     , delay_(delay)
     , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
     , arbiters_(num_outputs, {type, 1u << lg2_num_reqs_})
+#ifndef NDEBUG
+    , debug_l2arb_(std::string(name).find("-l2arb") != std::string::npos)
+    , debug_req_cycles_(num_inputs, 0)
+    , debug_accepts_(num_inputs, 0)
+    , debug_output_blocked_(num_inputs, 0)
+    , debug_wait_cycles_(num_inputs, 0)
+    , debug_max_wait_cycles_(num_inputs, 0)
+#endif
   {
     assert(num_inputs <= 64);
     assert(num_outputs <= 64);
@@ -1529,6 +1539,19 @@ protected:
   uint32_t delay_;
   uint32_t lg2_num_reqs_;
   std::vector<Arbiter> arbiters_;
+#ifndef NDEBUG
+  // Low-volume, debug-build-only instrumentation for the cluster L2 fan-in.
+  // The generic arbiter is used throughout SimX, so key this on the object name
+  // rather than making every instance pay the per-tick accounting cost.  A
+  // "grant" is counted only when the downstream channel accepts the request;
+  // selections made while the output is full are reported separately.
+  bool debug_l2arb_;
+  std::vector<uint64_t> debug_req_cycles_;
+  std::vector<uint64_t> debug_accepts_;
+  std::vector<uint64_t> debug_output_blocked_;
+  std::vector<uint64_t> debug_wait_cycles_;
+  std::vector<uint64_t> debug_max_wait_cycles_;
+#endif
 
   friend class SimObject<TxArbiter<Type>>;
 };
@@ -1538,6 +1561,13 @@ void TxArbiter<Type>::on_reset() {
   for (auto& arb : arbiters_) {
     arb.reset();
   }
+#ifndef NDEBUG
+  std::fill(debug_req_cycles_.begin(), debug_req_cycles_.end(), 0);
+  std::fill(debug_accepts_.begin(), debug_accepts_.end(), 0);
+  std::fill(debug_output_blocked_.begin(), debug_output_blocked_.end(), 0);
+  std::fill(debug_wait_cycles_.begin(), debug_wait_cycles_.end(), 0);
+  std::fill(debug_max_wait_cycles_.begin(), debug_max_wait_cycles_.end(), 0);
+#endif
 }
 
 template <typename Type>
@@ -1557,7 +1587,20 @@ void TxArbiter<Type>::on_tick() {
       uint32_t i = o * R + r;
       if (i >= I)
         continue;
-      requests.set(r, !Inputs.at(i).empty());
+      bool requesting = !Inputs.at(i).empty();
+      requests.set(r, requesting);
+#ifndef NDEBUG
+      if (debug_l2arb_) {
+        if (requesting) {
+          ++debug_req_cycles_.at(i);
+          ++debug_wait_cycles_.at(i);
+          debug_max_wait_cycles_.at(i) =
+              std::max(debug_max_wait_cycles_.at(i), debug_wait_cycles_.at(i));
+        } else {
+          debug_wait_cycles_.at(i) = 0;
+        }
+      }
+#endif
     }
     if (requests.any()) {
       uint32_t g = arbiters_.at(o).grant(requests);
@@ -1565,11 +1608,40 @@ void TxArbiter<Type>::on_tick() {
       auto& req_in = Inputs.at(i);
       auto& req = req_in.peek();
       if (Outputs.at(o).try_send(RspType(req, i), delay_)) {
+#ifndef NDEBUG
+        if (debug_l2arb_) {
+          ++debug_accepts_.at(i);
+          debug_wait_cycles_.at(i) = 0;
+        }
+#endif
         DT(4, this->name() << " req" << i << "_" << o << ": " << req);
         req_in.pop();
+#ifndef NDEBUG
+      } else if (debug_l2arb_) {
+        ++debug_output_blocked_.at(i);
+#endif
       }
     }
   }
+
+#ifndef NDEBUG
+  const uint64_t cycle = SimPlatform::instance().cycles();
+  if (debug_l2arb_ && cycle != 0 && (cycle % 100000) == 0) {
+    for (uint32_t o = 0; o < O; ++o) {
+      for (uint32_t r = 0; r < R; ++r) {
+        uint32_t i = o * R + r;
+        if (i >= I || (debug_req_cycles_.at(i) == 0 && debug_wait_cycles_.at(i) == 0))
+          continue;
+        DT(1, this->name() << " ARBSTAT output=" << o << " row=" << r
+              << " req_cycles=" << debug_req_cycles_.at(i)
+              << " accepts=" << debug_accepts_.at(i)
+              << " output_blocked=" << debug_output_blocked_.at(i)
+              << " wait=" << debug_wait_cycles_.at(i)
+              << " max_wait=" << debug_max_wait_cycles_.at(i));
+      }
+    }
+  }
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////

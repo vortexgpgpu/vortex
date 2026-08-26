@@ -21,6 +21,7 @@
 #include <cstring>
 #include <list>
 #include <queue>
+#include <sstream>
 #include <unordered_map>
 #include <util.h>
 #include <vector>
@@ -714,6 +715,56 @@ protected:
     if (flushing_) {
       this->processFlush();
     }
+
+#ifndef NDEBUG
+    // Keep DEBUG=1 useful for long-latency deadlock diagnosis without the
+    // multi-gigabyte per-request trace produced by DEBUG=3.  This is scoped
+    // to L1 data/L2 banks and sampled sparsely; release builds compile it out.
+    const uint64_t cycle = SimPlatform::instance().cycles();
+    const bool debug_cache_bank =
+        this->name().find("-l2cache-bank") != std::string::npos
+     || this->name().find("-dcache") != std::string::npos;
+    const bool debug_active = this->core_req_in.size() != 0
+                           || this->core_rsp_out.size() != 0
+                           || this->mem_req_out.size() != 0
+                           || this->mem_rsp_in.size() != 0
+                           || !pipe_req_->empty()
+                           || !mshr_.empty()
+                           || pending_mshr_size_ != 0
+                           || pending_amo_probes_ != 0;
+    if (debug_cache_bank && debug_active
+     && cycle != 0 && (cycle % 100000) == 0) {
+      uint32_t amo_passthru_used = 0;
+#if VX_CFG_EXT_A_ENABLED
+      for (const auto &entry : amo_passthru_) {
+        if (entry.valid)
+          ++amo_passthru_used;
+      }
+#endif
+      std::ostringstream stat;
+      stat << this->name() << " BANKSTAT"
+           << " core_req=" << this->core_req_in.size()
+           << " core_rsp=" << this->core_rsp_out.size()
+           << " mem_req=" << this->mem_req_out.size()
+           << " mem_rsp=" << this->mem_rsp_in.size()
+           << " pipe=" << pipe_req_->size()
+           << " pipe_full=" << pipe_req_->full()
+           << " mshr=" << mshr_.size() << "/" << mshr_.capacity()
+           << " ready=" << mshr_.has_ready_reqs()
+           << " pending_mshr=" << pending_mshr_size_
+           << " pending_amo=" << pending_amo_probes_
+           << " amo_slots=" << amo_passthru_used
+           << " pending_fill=" << pending_fill_reqs_
+           << " fwd=" << fwd_active_;
+      if (!pipe_req_->empty())
+        stat << " head={" << pipe_req_->peek() << "}";
+      if (!this->core_req_in.empty())
+        stat << " core_req_head={" << this->core_req_in.peek() << "}";
+      if (!this->mem_rsp_in.empty())
+        stat << " mem_rsp_head={" << this->mem_rsp_in.peek() << "}";
+      DT(1, stat.str());
+    }
+#endif
 
     // calculate memory latency
     perf_stats_.mem_latency += pending_fill_reqs_;
