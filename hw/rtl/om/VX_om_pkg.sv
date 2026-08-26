@@ -32,16 +32,37 @@ localparam OM_DEPTH_MASK      = (1 << `VX_OM_DEPTH_BITS) - 1;
 // Width of an aperture shift amount (xbits/ybits hold a log2 dimension).
 localparam OM_APERTURE_BITS_W = `CLOG2(`VX_OM_DIM_BITS + 1);
 localparam OM_STENCIL_MASK    = (1 << `VX_OM_STENCIL_BITS) - 1;
+// Index of the colour attachment a fragment targets.
+localparam OM_RT_IDX_BITS     = `CLOG2(`VX_OM_MAX_RT);
 
 typedef struct packed {
     logic [31:0] argb;
 } om_color_t;
 
+// Per-attachment state. A pass has several colour attachments and one
+// depth/stencil attachment, so only these fields multiply; everything in
+// om_dcrs_t below is shared and stays single.
 typedef struct packed {
     logic [`OM_ADDR_BITS-1:0]           cbuf_addr;
     logic [OM_PITCH_BITS-1:0]           cbuf_pitch;
     logic [3:0]                         cbuf_writemask;
 
+    logic                               blend_enable;
+    logic [OM_BLEND_MODE_BITS-1:0]      blend_mode_rgb;
+    logic [OM_BLEND_MODE_BITS-1:0]      blend_mode_a;
+    logic [OM_BLEND_FUNC_BITS-1:0]      blend_src_rgb;
+    logic [OM_BLEND_FUNC_BITS-1:0]      blend_src_a;
+    logic [OM_BLEND_FUNC_BITS-1:0]      blend_dst_rgb;
+    logic [OM_BLEND_FUNC_BITS-1:0]      blend_dst_a;
+    om_color_t                          blend_const;
+
+    logic [OM_LOGIC_OP_BITS-1:0]        logic_op;
+} om_rt_dcrs_t;
+
+// Shared state. This struct is broadcast from the OM core to every ingress in
+// the cluster, so it carries only what an ingress or the depth/stencil stage
+// needs -- the per-attachment block above travels separately.
+typedef struct packed {
     logic [`OM_ADDR_BITS-1:0]           zbuf_addr;
     logic [OM_PITCH_BITS-1:0]           zbuf_pitch;
 
@@ -57,17 +78,6 @@ typedef struct packed {
     logic [1:0][`VX_OM_STENCIL_BITS-1:0] stencil_ref;
     logic [1:0][`VX_OM_STENCIL_BITS-1:0] stencil_mask;
     logic [1:0][`VX_OM_STENCIL_BITS-1:0] stencil_writemask;
-
-    logic                               blend_enable;
-    logic [OM_BLEND_MODE_BITS-1:0]      blend_mode_rgb;
-    logic [OM_BLEND_MODE_BITS-1:0]      blend_mode_a;
-    logic [OM_BLEND_FUNC_BITS-1:0]      blend_src_rgb;
-    logic [OM_BLEND_FUNC_BITS-1:0]      blend_src_a;
-    logic [OM_BLEND_FUNC_BITS-1:0]      blend_dst_rgb;
-    logic [OM_BLEND_FUNC_BITS-1:0]      blend_dst_a;
-    om_color_t                          blend_const;
-
-    logic [OM_LOGIC_OP_BITS-1:0]        logic_op;
 
     // Fragment-export aperture (see VX_types.toml [dcr_om]). Shift-only encoding,
     // so the ingress decodes an offset into (face, y, x) by bit-slicing rather

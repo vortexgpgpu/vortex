@@ -24,22 +24,25 @@
   <text x="20" y="80" class="mono">addr = VX_MEM_OM_BASE_ADDR +</text>
 
   <!-- bit field diagram -->
-  <rect x="120" y="100" width="90" height="44" class="f4"/>
-  <text x="140" y="127" class="monoB">face</text>
-  <rect x="210" y="100" width="230" height="44" class="f2"/>
-  <text x="300" y="127" class="monoB">y</text>
-  <rect x="440" y="100" width="230" height="44" class="f1"/>
-  <text x="540" y="127" class="monoB">x</text>
+  <rect x="120" y="100" width="70" height="44" class="f4"/>
+  <text x="140" y="127" class="monoB">rt</text>
+  <rect x="190" y="100" width="80" height="44" class="f4"/>
+  <text x="205" y="127" class="monoB">face</text>
+  <rect x="270" y="100" width="200" height="44" class="f2"/>
+  <text x="355" y="127" class="monoB">y</text>
+  <rect x="470" y="100" width="200" height="44" class="f1"/>
+  <text x="560" y="127" class="monoB">x</text>
   <rect x="670" y="100" width="150" height="44" class="f3"/>
   <text x="690" y="127" class="monoB">0…0 (rec)</text>
 
-  <text x="120" y="94" class="ts">1 bit</text>
-  <text x="210" y="94" class="ts">YBITS = ceil(log2(height))</text>
-  <text x="440" y="94" class="ts">XBITS = ceil(log2(width))</text>
+  <text x="120" y="94" class="ts">log2(MAX_RT)</text>
+  <text x="190" y="94" class="ts">1 bit</text>
+  <text x="270" y="94" class="ts">YBITS = ceil(log2(height))</text>
+  <text x="470" y="94" class="ts">XBITS = ceil(log2(width))</text>
   <text x="670" y="94" class="ts">RECORD_SHIFT (2 or 3)</text>
 
-  <text x="120" y="162" class="tt">two-sided stencil face</text>
-  <text x="440" y="162" class="tt">pitch padded to a power of two ⇒ the ingress decodes by bit-slicing (no divider)</text>
+  <text x="120" y="162" class="tt">colour attachment · two-sided stencil face</text>
+  <text x="470" y="162" class="tt">pitch padded to a power of two ⇒ the ingress decodes by bit-slicing (no divider)</text>
 
   <!-- record shapes -->
   <text x="20" y="210" class="t">Record shapes (per draw, from the APERTURE_* DCRs)</text>

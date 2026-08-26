@@ -596,6 +596,22 @@ tests:
    vars: {NO_TEX: 1, NO_OM: 1, NO_RASTER: 1, OPTS: "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"},
    tier: full}
 
+# Two colour attachments from one draw. Attachment 0 still matches the
+# single-attachment golden; attachment 1 is checked in-test against the colour
+# the kernel computes, so a shared buffer or a shared writemask fails.
+- id: gfx_om-mrt
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -m -r whitebox_128.png
+- id: gfx_om-mrt-blend
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -m -b -r whitebox_b_128.png
+
 # Per-unit software emitters, against the same goldens as their FF cases.
 - id: gfx_om-sw
   via: blackbox

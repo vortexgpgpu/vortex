@@ -83,25 +83,62 @@ public:
   }
 
   void clear() {
-    for (auto& state : states_) {
-      state = 0;
+    for (auto& rt : states_) {
+      for (auto& state : rt) {
+        state = 0;
+      }
     }
+    rt_ = 0;
+  }
+
+  uint32_t read(uint32_t rt, uint32_t addr) const {
+    assert(rt < VX_OM_MAX_RT);
+    uint32_t state = VX_DCR_OM_STATE(addr);
+    assert(state < VX_DCR_OM_STATE_COUNT);
+    return states_[rt][state];
   }
 
   uint32_t read(uint32_t addr) const {
-    uint32_t state = VX_DCR_OM_STATE(addr);
-    assert(state < VX_DCR_OM_STATE_COUNT);
-    return states_[state];
+    return this->read(0, addr);
   }
 
   void write(uint32_t addr, uint32_t value) {
+    if (addr == VX_DCR_OM_RT_SELECT) {
+      assert(value < VX_OM_MAX_RT);
+      rt_ = value;
+      return;
+    }
     uint32_t state = VX_DCR_OM_STATE(addr);
     assert(state < VX_DCR_OM_STATE_COUNT);
-    states_[state] = value;
+    // A shared register is stored in every attachment's copy so that reading it
+    // back never depends on which attachment happened to be selected last.
+    if (is_per_rt(addr)) {
+      states_[rt_][state] = value;
+    } else {
+      for (auto& rt : states_) {
+        rt[state] = value;
+      }
+    }
   }
 
 private:
-  uint32_t states_[VX_DCR_OM_STATE_COUNT];
+  static bool is_per_rt(uint32_t addr) {
+    switch (addr) {
+    case VX_DCR_OM_CBUF_ADDR:
+    case VX_DCR_OM_CBUF_PITCH:
+    case VX_DCR_OM_CBUF_WRITEMASK:
+    case VX_DCR_OM_BLEND_MODE:
+    case VX_DCR_OM_BLEND_FUNC:
+    case VX_DCR_OM_BLEND_CONST:
+    case VX_DCR_OM_LOGIC_OP:
+      return true;
+    default:
+      return false;
+    }
+  }
+
+  uint32_t states_[VX_OM_MAX_RT][VX_DCR_OM_STATE_COUNT];
+  uint32_t rt_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -239,7 +276,7 @@ public:
   Blender();
   ~Blender();
 
-  void configure(const OMDCRS& dcrs);
+  void configure(const OMDCRS& dcrs, uint32_t rt);
 
   uint32_t blend(uint32_t srcColor, uint32_t dstColor) const;
 

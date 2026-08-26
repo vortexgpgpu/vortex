@@ -213,6 +213,9 @@ VX_RASTER_PID_BITS    = 16
 VX_OM_DIM_BITS    = 15
 VX_OM_DEPTH_BITS  = 24
 VX_OM_STENCIL_BITS = 8
+# Colour attachments the merger keeps state for. Vulkan requires
+# maxColorAttachments >= 4. The depth/stencil attachment is shared, not counted.
+VX_OM_MAX_RT      = 4
 
 VX_OM_DEPTH_FUNC_ALWAYS   = 0
 VX_OM_DEPTH_FUNC_NEVER    = 1
@@ -337,11 +340,18 @@ VX_DCR_OM_EARLYZ_SAFE       = 0x092
 # offset back.
 #
 # The encoding is SHIFT-ONLY:
-#     offset = ((face << (XBITS+YBITS)) | (y << XBITS) | x) << RECORD_SHIFT
+#     offset = ((((rt << 1) | face) << YBITS | y) << XBITS | x) << RECORD_SHIFT
 # The framebuffer pitch is padded to a power of two (XBITS = ceil(log2(width)),
 # YBITS = ceil(log2(height))) so the ingress decodes by bit-slicing. A packed
 # y*width + x would force a DIVIDER into the ingress. The aperture is virtual --
 # nothing is stored there -- so the address space the padding wastes is free.
+# The attachment index sits above face, so a single-attachment export is the
+# same address it was before there were several.
+#
+# The window is bounded by VX_MEM_OM_END_ADDR and cannot grow -- the page table
+# starts immediately above it -- so the encoding must satisfy
+#     XBITS + YBITS + 1 + CLOG2(VX_OM_MAX_RT) + RECORD_SHIFT <= log2(window)
+# The runtime checks this when it programs the aperture.
 VX_DCR_OM_APERTURE_XBITS    = 0x093
 VX_DCR_OM_APERTURE_YBITS    = 0x094
 # Record shape. A shader emits colour only (2 -- early-Z owns the depth test AND
@@ -349,7 +359,12 @@ VX_DCR_OM_APERTURE_YBITS    = 0x094
 # both (3 -- gl_FragDepth). DEPTH_ONLY disambiguates the two one-word modes.
 VX_DCR_OM_APERTURE_RECORD_SHIFT = 0x095
 VX_DCR_OM_APERTURE_DEPTH_ONLY   = 0x096
-VX_DCR_OM_STATE_END         = 0x097
+# Colour attachment the CBUF_*, BLEND_* and LOGIC_OP registers above apply to.
+# Everything else in this block -- depth, stencil, the z-buffer and the aperture
+# geometry -- is shared by every attachment, so a pass programs it once. Resets
+# to 0, so a single-attachment driver never has to write it.
+VX_DCR_OM_RT_SELECT         = 0x097
+VX_DCR_OM_STATE_END         = 0x098
 
 [dcr_rtu]
 # Ray-Tracing Unit DCRs.

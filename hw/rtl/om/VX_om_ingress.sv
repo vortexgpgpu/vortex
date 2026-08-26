@@ -153,6 +153,9 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     wire [`VX_OM_DIM_BITS-1:0] px   = rec_ext[0 +: `VX_OM_DIM_BITS] & x_mask;
     wire [`VX_OM_DIM_BITS-1:0] py   = rec_ext[xb +: `VX_OM_DIM_BITS] & y_mask;
     wire                       face = rec_ext[xb + yb];
+    // The attachment index sits above face, so a single-attachment export
+    // decodes to attachment zero without the producer knowing the field exists.
+    wire [OM_RT_IDX_BITS-1:0]  rt   = rec_ext[(xb + yb + 1) +: OM_RT_IDX_BITS];
 
     wire [31:0] wsel_ext = 32'(wsel);
     wire [31:0] beat_word = mem_bus_if.req_data.data[wsel_ext * 32 +: 32];
@@ -214,7 +217,7 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     assign frag_mask = NUM_LANES'(1);
 
     VX_elastic_buffer #(
-        .DATAW   (UUID_WIDTH + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BITS + 1)),
+        .DATAW   (UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BITS + 1)),
         .SIZE    (`TO_OUT_BUF_SIZE(OUT_BUF)),
         .OUT_REG (`TO_OUT_BUF_REG(OUT_BUF))
     ) req_buf (
@@ -228,11 +231,12 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
                      {NUM_LANES{py}},
                      {NUM_LANES{frag_colour}},
                      {NUM_LANES{frag_depth[`VX_OM_DEPTH_BITS-1:0]}},
-                     {NUM_LANES{face}}}),
+                     {NUM_LANES{face}},
+                     rt}),
         .data_out  ({om_bus_if.req_data.uuid, om_bus_if.req_data.mask,
                      om_bus_if.req_data.pos_x, om_bus_if.req_data.pos_y,
                      om_bus_if.req_data.color, om_bus_if.req_data.depth,
-                     om_bus_if.req_data.face}),
+                     om_bus_if.req_data.face, om_bus_if.req_data.rt}),
         .valid_out (om_bus_if.req_valid),
         .ready_out (om_bus_if.req_ready)
     );

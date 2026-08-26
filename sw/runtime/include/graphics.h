@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -302,6 +303,22 @@ struct tex_state_t {
 // Immediate emit (one vx_enqueue_dcr_write per register). Returns the first
 // non-VX_SUCCESS status, or VX_SUCCESS.
 vx_result_t program_raster(vx_queue_h q, const raster_state_t& s);
+
+// Bits the fragment-export aperture window spans, and the bits the colour
+// attachment index takes out of it.
+constexpr uint32_t om_aperture_bits() {
+  uint64_t span = uint64_t(VX_MEM_OM_END_ADDR) - uint64_t(VX_MEM_OM_BASE_ADDR);
+  uint32_t b = 0;
+  while ((uint64_t(1) << b) < span) { ++b; }
+  return b;
+}
+
+constexpr uint32_t om_rt_index_bits() {
+  uint32_t b = 0;
+  while ((1u << b) < VX_OM_MAX_RT) { ++b; }
+  return b;
+}
+
 // Derive the aperture encoding from the framebuffer and the shader's output
 // signature. `has_colour`/`has_depth` must match the funct7 mask the shader
 // passes to vx_om_export, or the ingress will misread the record.
@@ -316,6 +333,13 @@ inline void set_aperture(om_state_t& s, uint32_t width, uint32_t height,
   s.aperture_ybits = ceil_log2(height);
   s.aperture_record_shift = (has_colour && has_depth) ? 3 : 2;
   s.aperture_depth_only   = (!has_colour && has_depth) ? 1 : 0;
+  // The aperture is a fixed window and the encoding pads each field to a power
+  // of two, so a large enough framebuffer runs the record index off the top and
+  // wraps two pixels onto one. Nothing downstream can detect that, so it is
+  // caught here where the width and height are still in hand.
+  assert(s.aperture_xbits + s.aperture_ybits + 1
+       + om_rt_index_bits() + s.aperture_record_shift <= om_aperture_bits()
+       && "framebuffer too large for the fragment-export aperture");
 }
 
 vx_result_t program_om    (vx_queue_h q, const om_state_t& s);

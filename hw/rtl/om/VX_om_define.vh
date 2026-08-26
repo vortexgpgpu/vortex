@@ -26,6 +26,7 @@
 
 `define TRACE_OM_DCR(level, state) \
     case (state) \
+        `VX_DCR_OM_RT_SELECT:           `TRACE(level, ("RT_SELECT")) \
         `VX_DCR_OM_CBUF_ADDR:           `TRACE(level, ("CBUF_ADDR")) \
         `VX_DCR_OM_CBUF_PITCH:          `TRACE(level, ("CBUF_PITCH")) \
         `VX_DCR_OM_CBUF_WRITEMASK:      `TRACE(level, ("CBUF_WRITEMASK")) \

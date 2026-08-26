@@ -184,15 +184,15 @@ bool DepthTencil::test(uint32_t is_backface,
 Blender::Blender() {}
 Blender::~Blender() {}
 
-void Blender::configure(const OMDCRS& dcrs) {
-  blend_mode_rgb_ = dcrs.read(VX_DCR_OM_BLEND_MODE) & 0xffff;
-  blend_mode_a_   = dcrs.read(VX_DCR_OM_BLEND_MODE) >> 16;
-  blend_src_rgb_  = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >>  0) & 0xff;
-  blend_src_a_    = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >>  8) & 0xff;
-  blend_dst_rgb_  = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >> 16) & 0xff;
-  blend_dst_a_    = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >> 24) & 0xff;
-  blend_const_    = dcrs.read(VX_DCR_OM_BLEND_CONST);
-  logic_op_       = dcrs.read(VX_DCR_OM_LOGIC_OP);  
+void Blender::configure(const OMDCRS& dcrs, uint32_t rt) {
+  blend_mode_rgb_ = dcrs.read(rt, VX_DCR_OM_BLEND_MODE) & 0xffff;
+  blend_mode_a_   = dcrs.read(rt, VX_DCR_OM_BLEND_MODE) >> 16;
+  blend_src_rgb_  = (dcrs.read(rt, VX_DCR_OM_BLEND_FUNC) >>  0) & 0xff;
+  blend_src_a_    = (dcrs.read(rt, VX_DCR_OM_BLEND_FUNC) >>  8) & 0xff;
+  blend_dst_rgb_  = (dcrs.read(rt, VX_DCR_OM_BLEND_FUNC) >> 16) & 0xff;
+  blend_dst_a_    = (dcrs.read(rt, VX_DCR_OM_BLEND_FUNC) >> 24) & 0xff;
+  blend_const_    = dcrs.read(rt, VX_DCR_OM_BLEND_CONST);
+  logic_op_       = dcrs.read(rt, VX_DCR_OM_LOGIC_OP);  
 
   enabled_        = !((blend_mode_rgb_ == VX_OM_BLEND_MODE_ADD)
                    && (blend_mode_a_   == VX_OM_BLEND_MODE_ADD) 
