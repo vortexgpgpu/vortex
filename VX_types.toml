@@ -160,13 +160,12 @@ VX_TEX_FXD_BITS    = 32
 
 VX_TEX_FILTER_POINT    = 0
 VX_TEX_FILTER_BILINEAR = 1
-# Mip filter occupies the bit above the mag/min filter. MIP_LINEAR (sample two
-# levels and lerp them) is a SOFTWARE sampler capability only: the texture unit
-# has a single tap set and no inter-level blend, so it samples one level and the
-# `vx_tex` lod operand is an integer level. A shader wanting mip-linear issues
-# two vx_tex and lerps the results; the unit rejects the MIP_LINEAR bit.
-# The fixed-point form (integer level, blend weight in the low
-# VX_TEX_LOD_FRAC_BITS) is how the software LOD math carries a fractional level.
+# Mip filter occupies the bit above the mag/min filter. MIP_LINEAR samples two
+# levels and lerps them, which changes how the `vx_tex` lod operand reads: it is
+# an integer level normally, and fixed-point under MIP_LINEAR -- the level in the
+# high bits, the weight between it and the next above in the low
+# VX_TEX_LOD_FRAC_BITS. A caller that never asks for a blend therefore never has
+# to know about the fractional form.
 VX_TEX_FILTER_MIP_NONE   = 0
 VX_TEX_FILTER_MIP_LINEAR = 2
 VX_TEX_LOD_FRAC_BITS     = 8
