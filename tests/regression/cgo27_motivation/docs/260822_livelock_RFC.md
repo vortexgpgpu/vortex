@@ -1,11 +1,12 @@
 # RFC: L2 hang diagnosis — response credits, arbitration, and DTCU completion delivery
 
-> **Status (2026-08-24): root-cause claim superseded by instrumented reproduction.**
-> The `AgedPriority` proposal below was based on timeout signatures, not an arbiter trace.
+> **Status (2026-08-26): root-cause claim superseded; arbitration follow-up redesigned.**
+> The original tick-aged `AgedPriority` proposal was based on timeout signatures, not an arbiter trace.
 > A DEBUG=1/3 trace of the deterministic `a4/r8/m14` specimen disproves strict-priority
 > starvation as its proximate cause.  Keep the completion-delivery proposal as a performance
-> design option, but do not use aging as the correctness fix for this failure.  The validated
-> cache backpressure fix and evidence are recorded in the addendum immediately below.
+> design option, but do not use arbitration aging as the correctness fix for this failure.  The
+> validated cache backpressure fix is recorded in the addendum, and §4 now specifies a separate
+> accepted-core-request bypass bound for QoS/starvation protection.
 
 2026-08-22. Companion data: [`exp1_392_final_annotated_20260822.csv`](../exp1_392_final_annotated_20260822.csv)
 (392-point grid; 53 cells annotated as non-terminating). Mechanism write-up first reported in the
@@ -168,66 +169,121 @@ specialization → Blackwell `tcgen05` + TMEM) rests on three decisions:
 The DXA implements (1)+(2) for itself. Nothing implements (3), and the DTCU implements none.
 Proposal §4 supplies (3); proposal §5 gives the DTCU (1)+(2) by copying the DXA's own plumbing.
 
-## 4. Proposal 1 — `AgedPriority` arbiter: bounded waiting at the L2 fan-in
+## 4. Proposal 1 — accepted-core-request bypass bound at the L2 fan-in
 
-### Design
+> **Decision (2026-08-26):** replace the original per-tick age counters with an admission ticket
+> derived from successfully accepted **core** requests.  This remains a QoS/starvation-protection
+> feature, not the correctness repair for the cache deadlock in the validation addendum.
 
-A new arbiter type beside `Priority`/`RoundRobin` in [`types.h`](../../../../sim/simx/types.h):
+### Counter and ticket semantics
+
+The L2 fan-in has multiple independent outputs.  Each output `o` owns one monotonically increasing
+counter:
 
 ```cpp
-class AgedPriorityArbiter : public IArbiterImpl {
-public:
-  AgedPriorityArbiter(uint32_t size, uint32_t max_age)
-    : size_(size), max_age_(max_age), age_(size, 0) {}
-
-  uint32_t grant(const BitVector<>& requests) override {
-    // 1) starvation override: oldest input at/over the age bound wins
-    uint32_t victim = -1u, victim_age = 0;
-    for (uint32_t i = 0; i < size_; ++i) {
-      if (requests.test(i) && age_[i] >= max_age_ && age_[i] >= victim_age) {
-        victim = i; victim_age = age_[i];
-      }
-    }
-    uint32_t g = (victim != -1u) ? victim : lowest_index(requests);   // 2) else RTL priority
-    for (uint32_t i = 0; i < size_; ++i)                              // 3) age the losers
-      age_[i] = (requests.test(i) && i != g) ? age_[i] + 1 : 0;
-    return g;
-  }
-  ...
-};
+uint64_t accepted_core_reqs[o];
 ```
 
-- `grant()` is invoked once per arbitration tick, so `age_[i]` counts **ticks spent requesting
-  without a grant** — precisely the bounded-waiting quantity. Worst-case wait becomes
-  `max_age + (rows-1)` ticks instead of ∞.
-- Under light contention the behaviour is bit-identical to today's `PriorityArbiter` (ages never
-  reach the bound), so the RTL-priority modelling argument in the cluster.cpp comment is preserved
-  where it was ever valid.
-- Wiring: `MemArbiter::Create(sname, ArbiterType::AgedPriority, ...)` at the **L2 fan-in only**
-  ([`cluster.cpp:153`](../../../../sim/simx/cluster.cpp)) to start; `max_age` from a new config
-  `-DVX_CFG_L2_ARB_MAX_AGE=<W>` (default 256, see below). A follow-up audit should list every other
-  `ArbiterType::Priority` instance sitting on a path where an engine's progress gates core progress
-  (the socket dcache fan-in that carries the socket engine's D port,
-  [`socket.cpp:188`](../../../../sim/simx/socket.cpp), is the first candidate).
+It increments only when row 0 wins that output and its request is actually accepted downstream:
 
-### Choosing W — and why it is a compiler-shaped number
+```cpp
+if (selected_row == kSocketRow && Outputs[o].try_send(req, delay))
+  ++accepted_core_reqs[o];
+```
 
-W trades engine wait (want small) against perturbing the RTL priority model (want large). The
-useful bound is the consumers' *slack*: a granted engine line only delays a core request by one
-tick, and the consumers' per-slice epilogue is thousands of cycles long, so W anywhere in
-64–1024 is invisible to consumer throughput while capping engine wait. This is statically
-computable — per-slice consumer work = `rows/slice × N/thread × streams` — which is exactly why
-§6 argues the *policy* (W per kernel, via a DCR at launch) belongs to the compiler even though the
-*mechanism* is hardware. Validation sweep: W ∈ {64, 256, 1024} × {a2,a4} × {m6,m14} at r8.
+Selection without acceptance does not increment it.  New arrivals, cache-bank processing,
+responses, and grants on other L2 outputs do not increment it either.  This definition measures
+exactly how many same-output core requests were allowed to pass an engine request; a single global
+counter would incorrectly age output 0 because of unrelated progress on output 1.
 
-### What it buys (predictions, falsifiable)
+When an eligible DXA/DTCU request enters an L2-arbiter input queue, a sidecar ticket FIFO stores the
+current counter for that request:
 
-- All 22 class-A/B cells terminate. The winner map de-contaminates: r8's row should largely flip
-  to wgSB (its base ≈283 K is the fastest at r8 and it forfeited 5/7 apps), and s1024's m7 column
-  gets real numbers.
-- Cells that already finish move ≲1 % (the bound almost never engages for them).
-- a4×pipe becomes *finite but still slow* — aging bounds waiting, it does not reduce the consumer
-  traffic. That is proposal 2's job.
+```cpp
+ticket[input].push(accepted_core_reqs[o]);
+```
+
+The request at the head of each row has:
+
+```cpp
+bypassed_core_reqs = accepted_core_reqs[o] - ticket[input].front();
+```
+
+The ticket is popped only when the corresponding request is accepted.  Keeping tickets in a
+sidecar FIFO, with the same depth and push/pop points as the `MemReq` input FIFO, avoids adding
+L2-specific metadata to every `MemReq` in the simulator.  Queueing behind an older request in the
+same row counts toward latency from admission, by design; a younger request never inherits the
+older request's ticket.
+
+### Grant policy
+
+The configuration knob is:
+
+```text
+VX_CFG_L2_ARB_ENGINE_BYPASS_LIMIT
+```
+
+- `0`: disabled; bit-for-bit current strict-priority behavior.
+- `N > 0`: an eligible engine head that has been bypassed by at least `N` accepted row-0 requests
+  on the same output temporarily outranks row 0 for that request.
+- If multiple eligible engine heads exceed the bound, choose the largest bypass count; break an
+  exact tie with the existing row order (DXA, then DTCU cluster, then DTCU socket).
+- After one request is accepted its ticket is removed.  The next queued request is evaluated from
+  its own admission ticket, so promotion is request-specific rather than a permanent row boost.
+- When no engine head exceeds the bound, retain the existing strict row priority exactly.
+
+The experiment Makefile exposes the knob without overriding `CONFIGS`:
+
+```make
+MOTI_L2_ARB_ENGINE_BYPASS_LIMIT ?= 0
+CONFIGS += -DVX_CFG_L2_ARB_ENGINE_BYPASS_LIMIT=$(MOTI_L2_ARB_ENGINE_BYPASS_LIMIT)
+```
+
+For example, a value of 1000 means: after 1000 same-output core requests have been accepted ahead
+of an admitted engine request, that engine request receives the next available grant ahead of the
+core row.  The unit is requests, not cycles.
+
+### Eligible rows and DTCU-socket ordering
+
+| L2 row | Traffic | Promotion |
+| --- | --- | --- |
+| 0 | sockets / in-core | never; this is the counted baseline |
+| 1 | DXA GMEM | eligible |
+| 2 | DTCU cluster | eligible; operand, D, and done traffic share one ordered FIFO |
+| 3 | DTCU socket operand/descriptor reads | eligible |
+| 3 | DTCU socket completion store | **not eligible** |
+| later rows | graphics/other extensions | initially not eligible |
+
+The socket DTCU's D stores use the socket dcache and row 0, while its completion flag uses row 3.
+The current `strsp` response confirms acceptance by the first cache, not visibility at the L2
+coherence point.  Promoting the row-3 completion store could therefore let `done=1` overtake D data
+still queued on row 0.  The first implementation promotes only non-write requests on the socket
+DTCU row.  A later implementation may mark completion explicitly, but may promote it only after
+adding a point-of-coherence store acknowledgement, a fence, or a same-path completion store.
+
+### Performance-counter reuse and implementation boundary
+
+`accepted_core_reqs[o]` is the authoritative arbitration state and should also feed the L2-arbiter
+performance report; policy and telemetry then share one counter.  Existing aggregate L2
+read/write counters must not drive the policy: they increment at cache processing rather than at
+fan-in acceptance and are not separated per output.
+
+The update must occur at the `TxArbiter` transfer-commit point, after `try_send()` succeeds.  The
+current generic `Arbiter::grant()` cannot implement the policy correctly by itself because it does
+not know whether the selected request was accepted.  Keep the request-class knowledge scoped to
+the L2 memory fan-in rather than changing the behavior of unrelated priority arbiters.
+
+### Validation plan
+
+1. `BYPASS_LIMIT=0`: all existing anchors and winner-map cells remain bit-for-bit stable.
+2. Unit contention: a continuously queued engine request is promoted after exactly `N` accepted
+   core requests on its own output; blocked outputs and traffic on other outputs do not advance it.
+3. Queue semantics: two queued requests retain distinct tickets, and each ticket is popped with
+   exactly its matching accepted request.
+4. Ordering: under heavy row-0 traffic, a socket-DTCU completion store never bypasses pending D
+   stores; output verification remains `errors=0` immediately after observing done.
+5. QoS sweep: `N ∈ {64, 256, 1000}` across DXA, DTCU cluster, and DTCU socket read-heavy modes,
+   reporting promotions, maximum bypass count, cycles, and winner-map changes.
 
 ## 5. Proposal 2 — DTCU completion delivered like the DXA's: `expect_tx` / barrier release
 
