@@ -205,27 +205,36 @@ sta()
 # step `conda activate` resolves to the packaging machine's path and the first
 # symptom is an unrelated missing-header error rather than anything naming
 # conda. See the packaging invariant in ci/toolchain_prebuilt.sh.
+#
+# This component is far larger than the others -- 25 parts at the time of
+# writing, one shy of the 26 a single-letter sweep can address -- so it walks
+# the full two-letter suffix space `split -a 2` produces and stops at the first
+# part that is not there. A {a..z} sweep would silently truncate the download at
+# part 'az' the moment the bundle grows, and fail later in tar, naming the wrong
+# thing.
 firesim()
 {
-    case $OSVERSION in
-    *) parts=$(eval echo {a..z}) ;;
-    esac
-    rm -f firesim.tar.bz2.parta*
+    parts=$(eval echo {a..z}{a..z})
+    rm -f firesim.tar.bz2.part*
     for x in $parts
     do
-        wget -q $REPOSITORY/firesim/$OSVERSION/firesim.tar.bz2.parta$x || break
+        wget -q $REPOSITORY/firesim/$OSVERSION/firesim.tar.bz2.part$x || break
     done
-    cat firesim.tar.bz2.parta* > firesim.tar.bz2
+    cat firesim.tar.bz2.part* > firesim.tar.bz2
     tar -xvf firesim.tar.bz2
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/firesim && mv firesim $TOOLDIR
     rm -rf firesim firesim.tar.bz2*
     # Unpack the environment in place, then rewrite its prefixes.
     env_dir="$TOOLDIR/firesim/.conda-env"
-    if [ -f "$env_dir/firesim-conda-env.tar.gz" ]; then
-        tar -C "$env_dir" -xzf "$env_dir/firesim-conda-env.tar.gz"
-        rm -f "$env_dir/firesim-conda-env.tar.gz"
+    if [ -f "$env_dir/firesim-conda-env.tar" ]; then
+        tar -C "$env_dir" -xf "$env_dir/firesim-conda-env.tar"
+        rm -f "$env_dir/firesim-conda-env.tar"
+        # conda-pack gives conda-unpack a `#!/usr/bin/env python` shebang so it
+        # can run from any prefix, but a stock Ubuntu has python3 and no
+        # python, so calling it directly dies with a bare ENOENT. Drive it with
+        # the interpreter that ships in the environment.
         if [ -x "$env_dir/bin/conda-unpack" ]; then
-            "$env_dir/bin/conda-unpack"
+            "$env_dir/bin/python" "$env_dir/bin/conda-unpack"
         else
             echo "WARNING: conda-unpack missing; \$TOOLDIR/firesim/.conda-env" >&2
             echo "         still carries the packaging machine's prefix" >&2

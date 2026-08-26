@@ -927,6 +927,18 @@ time; the sources themselves are a plain clone.
   with an error naming the *old* path. The prebuilt bundle handles this with
   `conda-pack` / `conda-unpack`; a hand-built tree should stay where it was
   created, or be re-packed.
+- **Activate with `bin/activate`, not `conda activate`.**
+
+  ```bash
+  source $TOOLDIR/firesim/.conda-env/bin/activate
+  ```
+
+  `conda-pack` rewrites script shebangs to `#!/usr/bin/env python`, including
+  the one on `bin/conda` itself. A stock Ubuntu ships `python3` and no
+  `python`, so on an installed bundle `conda activate` fails with a bare
+  `/usr/bin/env: 'python': No such file or directory` that names neither conda
+  nor the environment. `bin/activate` only manipulates `PATH`, so it works on
+  a hand-built tree and an installed bundle alike.
 - **Elaboration needs the environment; the driver build needs only `gmp`.**
   `sim/firesim/Makefile` picks up `gmp.h` from `$CONDA_PREFIX/include`. On a
   host with `libgmp-dev` installed, building the transport works without
