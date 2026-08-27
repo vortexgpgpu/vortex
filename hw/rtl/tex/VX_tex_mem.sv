@@ -139,8 +139,12 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (0),
         .RW_ENABLE   (0),
+        .LUTRAM      (1),
+        .REQQ_LUTRAM (1),
         .MEM_OUT_BUF (3), // fully register cache-request output (SLR-crossing skid)
-        .CORE_OUT_BUF(3)
+        // A second skid entry on the 128-word response bus costs more logic
+        // than the whole address path, and the bus does not leave the unit.
+        .CORE_OUT_BUF(1)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),

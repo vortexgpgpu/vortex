@@ -36,6 +36,13 @@ module VX_mem_scheduler #(
     parameter CORE_OUT_BUF  = 0,
     parameter MEM_OUT_BUF   = 0,
     parameter LUTRAM        = 0,
+    // Distributed RAM for the staging queue, kept separate from LUTRAM above
+    // because the two differ by orders of magnitude in width. A staging entry
+    // is CORE_REQS requests wide; once that is large, block RAM holds a few
+    // entries across dozens of tiles at a percent of their capacity, scattered,
+    // all feeding the one output register -- which then cannot be placed near
+    // its own data. Distributed RAM lands in the slices that hold that register.
+    parameter REQQ_LUTRAM   = 0,
 
     parameter WORD_WIDTH    = WORD_SIZE * 8,
     parameter LINE_WIDTH    = LINE_SIZE * 8,
@@ -180,7 +187,8 @@ module VX_mem_scheduler #(
         VX_elastic_buffer #(
             .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(USER_WIDTH) + WORD_WIDTH) + REQQ_TAG_WIDTH),
             .SIZE    (CORE_QUEUE_SIZE),
-            .OUT_REG (1)
+            .OUT_REG (1),
+            .LUTRAM  (REQQ_LUTRAM)
         ) req_queue (
             .clk      (clk),
             .reset    (reset),
@@ -199,7 +207,8 @@ module VX_mem_scheduler #(
         VX_elastic_buffer #(
             .DATAW   (CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(USER_WIDTH)) + REQQ_TAG_WIDTH),
             .SIZE    (CORE_QUEUE_SIZE),
-            .OUT_REG (1)
+            .OUT_REG (1),
+            .LUTRAM  (REQQ_LUTRAM)
         ) req_queue (
             .clk      (clk),
             .reset    (reset),
