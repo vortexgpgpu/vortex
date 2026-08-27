@@ -166,10 +166,114 @@ gem5()
 # source by ci/sst_install.sh, which now also runs an aggressive
 # strip+prune pass that drops the install from ~2.9 GB to ~36 MB.
 
+# FireSim: the checkout from vortexgpgpu/firesim plus the conda environment
+# its build-setup produces. Only the environment is expensive -- it carries a
+# JVM, sbt and Scala for Golden Gate elaboration and takes far longer to
+# resolve than to download -- but it is shipped together with the sources so
+# $TOOLDIR/firesim is self-contained, matching how pocl and mesa install.
+#
+# Relocatability invariant: a conda environment records its own prefix in
+# every script shebang and in its package metadata, so a plain tar does NOT
+# relocate. Packaging therefore goes through conda-pack, and the install side
+# must run conda-unpack to rewrite those prefixes. Skipping either step
+# produces an environment whose `conda activate` silently resolves to the
+# packaging machine's path, and the first symptom is an unrelated compile
+# error about a missing header.
+#
+# Excluded, and why: platforms/vitis/cl_vitis-* and sim/output are per-design
+# build outputs -- note the narrower glob, since the sibling cl_firesim is the
+# template the flow copies from and dropping it fails elaboration at the very
+# last step -- sim/generated-src is rewritten on every elaboration, tags is a
+# regenerable ctags index, .conda-lock-env is bootstrap scaffolding used only
+# by build-setup.sh, and the f1/f2/vcu118/nitefury submodules are other FPGA
+# platforms the Vitis flow never reads (1.4 GB between them).
+#
+# The environment is packed uncompressed (.tar) because the outer archive
+# compresses it; nesting gzip inside bzip2 costs time and gains nothing.
+firesim()
+{
+    echo "prebuilt firesim..."
+
+    # conda-pack need not live inside the environment being packed -- and it
+    # should not, since installing it there makes conda re-solve the whole
+    # environment. Take it from $CONDA_PACK or $PATH.
+    # `|| true` is load-bearing: under set -e a failing command substitution
+    # in an assignment aborts the script, so without it the diagnostic below
+    # never prints and the failure is silent.
+    CONDA_PACK=${CONDA_PACK:-$(command -v conda-pack || true)}
+    if [ ! -x "$CONDA_PACK" ]; then
+        echo "error: conda-pack not found on \$PATH and \$CONDA_PACK unset." >&2
+        echo "       Without it the environment cannot be relocated and the" >&2
+        echo "       tarball is only valid on this machine. Install it into a" >&2
+        echo "       throwaway prefix (NOT into .conda-env):" >&2
+        echo "         pip install --target /some/dir conda-pack" >&2
+        exit 1
+    fi
+
+    # A conda environment is identified by the prefix baked into its own
+    # metadata, not by where it currently sits. Pass conda-pack any other
+    # path and the prefix strings silently fail to match, producing a tarball
+    # that unpacks to a broken environment. Recover the real prefix and refuse
+    # to continue unless it resolves to the same place as $TOOLDIR/firesim.
+    env_dir="$TOOLDIR/firesim/.conda-env"
+    env_prefix=$(sed -n 's/^# cmd: .*--prefix \([^ ]*\).*/\1/p' \
+                 "$env_dir/conda-meta/history" | head -1)
+    if [ -z "$env_prefix" ]; then
+        echo "error: cannot read the build prefix from $env_dir/conda-meta/history" >&2
+        exit 1
+    fi
+    if [ "$(readlink -f "$env_prefix")" != "$(readlink -f "$env_dir")" ]; then
+        echo "error: $env_dir was built as $env_prefix and does not resolve" >&2
+        echo "       back to it, so packing it here would produce a tarball" >&2
+        echo "       whose prefixes never get rewritten. Rebuild the" >&2
+        echo "       environment in place with build-setup.sh. (Repacking an" >&2
+        echo "       environment that came from a prebuilt and was relocated" >&2
+        echo "       by conda-unpack lands here too -- pack from the machine" >&2
+        echo "       that built it.)" >&2
+        exit 1
+    fi
+
+    # conda-pack stages ~4 GB through a temp file; keep it off a small /tmp.
+    # --ignore-missing-files is required because FireSim's build-setup.sh
+    # pip-installs over conda-managed packages, leaving their dist-info
+    # records clobbered; the libraries themselves are intact.
+    mkdir -p ./firesim-tmp
+    TMPDIR=$PWD/firesim-tmp "$CONDA_PACK" -p "$env_prefix" \
+        -o firesim-conda-env.tar --format tar --ignore-missing-files --force
+    rm -rf ./firesim-tmp
+
+    rm -rf ./firesim-staging && mkdir -p ./firesim-staging/firesim
+    tar -C "$TOOLDIR/firesim" -cf - \
+        --exclude=.git \
+        --exclude=.conda-env \
+        --exclude=.conda-lock-env \
+        --exclude=tags \
+        --exclude='platforms/vitis/cl_vitis-*' \
+        --exclude=platforms/f1 \
+        --exclude=platforms/f2 \
+        --exclude=platforms/xilinx_vcu118 \
+        --exclude=platforms/rhsresearch_nitefury_ii \
+        --exclude=sim/output \
+        --exclude=sim/generated-src \
+        . | tar -C ./firesim-staging/firesim -xf -
+    mkdir -p ./firesim-staging/firesim/.conda-env
+    mv firesim-conda-env.tar ./firesim-staging/firesim/.conda-env/
+    tar -C ./firesim-staging -cjf firesim.tar.bz2 firesim
+    split -b 50M firesim.tar.bz2 "firesim.tar.bz2.part"
+    mkdir -p ./firesim/$OSVERSION
+    # Clear the destination first. Re-packaging smaller content leaves the
+    # tail parts of the previous run behind, and since the install side
+    # concatenates every part it finds, those stale bytes corrupt the archive
+    # after the point where the two runs diverge.
+    rm -f ./firesim/$OSVERSION/firesim.tar.bz2.part*
+    mv firesim.tar.bz2.part* ./firesim/$OSVERSION
+    rm -rf firesim.tar.bz2 ./firesim-staging
+}
+
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--firesim] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -203,6 +307,8 @@ while [ "$1" != "" ]; do
         --sta ) sta
                 ;;
         --gem5 ) gem5
+                ;;
+        --firesim ) firesim
                 ;;
         --all ) pocl
                 chipstar

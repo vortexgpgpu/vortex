@@ -698,13 +698,34 @@ package VX_gpu_pkg;
     // UP() guards the degenerate NT < FRAG_QUAD_LANES case (FRAG_QUADS == 0), where
     // CLOG2(1) is 0 and the count field would be a zero-width [-1:0] range.
     localparam KMU_FRAG_COUNT_BITS = `UP(`CLOG2(FRAG_QUADS + 1));
+    localparam KMU_FRAG_PAYLOAD_BITS = KMU_FRAG_BITS + KMU_FRAG_COUNT_BITS;
 `else
     localparam KMU_FRAG_BITS = 0;
+    localparam KMU_FRAG_PAYLOAD_BITS = 0;
 `endif
+
+    // Width of the compute variant's fields, computed arithmetically because the union
+    // envelope has to be sized before the type exists. The assertion under the typedef
+    // pins the two together: add or resize a field without updating this sum and
+    // elaboration fails, rather than the envelope silently mis-sizing.
+    localparam KMU_COMPUTE_BITS = 3*32                    // grid_dim
+                                + 3*32                    // block_idx
+                                + 3*(CTA_TID_WIDTH+1)     // block_dim
+                                + (CTA_TID_WIDTH+1)       // block_size
+                                + 3*CTA_TID_WIDTH         // warp_step
+                                + (NW_WIDTH+1)            // cluster_size
+                                + 1;                      // is_first_of_cluster
+
+    // The envelope takes whichever variant is wider. Compute dominates up to NT=16;
+    // the fragment's per-thread stamps grow with NT and overtake it by NT=32. The
+    // trailing +1 keeps both paddings non-zero: a zero-width packed field is illegal,
+    // and without it whichever variant is the wider one would have exactly zero.
+    localparam KMU_ARGS_BITS = `MAX(KMU_COMPUTE_BITS, KMU_FRAG_PAYLOAD_BITS) + 1;
 
     // Compute arguments: the full CTA grid descriptor (a GPGPU kernel or a graphics
     // geometry stage).
     typedef struct packed {
+        logic [KMU_ARGS_BITS-KMU_COMPUTE_BITS-1:0] __padding;
         logic [2:0][31:0]              grid_dim;
         logic [2:0][31:0]              block_idx;
         logic [2:0][CTA_TID_WIDTH:0]   block_dim;
@@ -713,20 +734,13 @@ package VX_gpu_pkg;
         logic [NW_WIDTH:0]             cluster_size;
         logic                          is_first_of_cluster;
     } kmu_compute_args_t;
-
-    // The args union pins to the compute side: compute is the wider variant at every
-    // supported NT (<=16), so a fragment always leaves headroom and there is no zero-width
-    // padding edge. NT=32 fragment (stamps > compute) would overflow -- caught below.
-    localparam KMU_ARGS_BITS = $bits(kmu_compute_args_t);
+    `PACKAGE_ASSERT($bits(kmu_compute_args_t) == KMU_ARGS_BITS)
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    localparam KMU_FRAG_PAYLOAD_BITS = KMU_FRAG_BITS + KMU_FRAG_COUNT_BITS;
-    // fragment args must fit the compute-pinned envelope (NT>16 graphics is unsupported).
-    `PACKAGE_ASSERT(KMU_FRAG_PAYLOAD_BITS <= KMU_ARGS_BITS)
     // Fragment arguments: the wave's stamps and its active-lane count. Self-describing --
     // a fragment does not borrow a CTA's block_size.
     typedef struct packed {
-        logic [KMU_ARGS_BITS-KMU_FRAG_PAYLOAD_BITS-1:0]     __padding; // >0 at every NT<=16
+        logic [KMU_ARGS_BITS-KMU_FRAG_PAYLOAD_BITS-1:0]     __padding;
         logic [`VX_CFG_NUM_THREADS-1:0][FRAG_LANE_BITS-1:0] stamps;
         logic [KMU_FRAG_COUNT_BITS-1:0]                     count;     // valid quads
     } kmu_fragment_args_t;
@@ -1198,7 +1212,15 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] misses;
     } coalescer_perf_t;
 
-`ifdef VX_CFG_VM_ENABLE
+// Declared unconditionally, because its references do not agree on a guard:
+// the ports of VX_mmu and VX_tlb_l1 and the signals in VX_socket are gated on
+// PERF_ENABLE, while the field in pipeline_perf_t is gated on VM. Gating the
+// declaration on either one alone breaks the other combination -- VM without
+// PERF, or PERF without VM. The latter is what failed here: Vivado elaborates
+// every file in the source list whether or not the module is ever instantiated,
+// so VX_mmu.sv was compiled in a VM-disabled build and found no such type.
+// The Verilator flow hides the mismatch, because its library search compiles
+// only what is reachable. A typedef with no instances costs no hardware.
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] tlb_reads;
         logic [PERF_CTR_BITS-1:0] tlb_hits;
@@ -1207,7 +1229,6 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] ptw_walks;
         logic [PERF_CTR_BITS-1:0] ptw_latency;
     } mmu_perf_t;
-`endif
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
     typedef struct packed {

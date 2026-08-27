@@ -23,6 +23,7 @@ The components covered here are:
 9. [Mesa for Vortex](#9-mesa-for-vortex-vulkan) — Vulkan software stack (lavapipe) the Vortex Vulkan driver builds on (optional)
 10. [gem5](#10-gem5) — cycle-level CPU simulator hosting the Vortex SimObject (X86 + ARM); consumed by `ci/regression.sh --gem5`
 11. [SST](#11-sst) — Structural Simulation Toolkit (sst-core + sst-elements + OpenMPI); consumed by the SST-driven regression configurations
+12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C; needed only to elaborate a target or build a bitstream (optional)
 
 ---
 
@@ -872,6 +873,95 @@ rm -rf "$SST_CORE_HOME/include" "$SST_ELEMENTS_HOME/include" \
   `libvortex.so` and drops it into the empty
   `sst-elements-library/` landing zone. This is why pruning the
   prebuilt sst-elements `.so` files is safe.
+
+---
+
+## 12. FireSim
+
+**Purpose**: FPGA-accelerated, host-decoupled simulation of Vortex on a
+Xilinx Alveo U55C. Consumed by the `firesim` driver
+(`./ci/blackbox.sh --driver=firesim`) and by the bitstream build under
+`hw/syn/firesim`. See
+[`designs/firesim_integration.md`](designs/firesim_integration.md) for the
+architecture.
+
+**Only needed to build.** Running an existing `.xclbin` requires XRT and the
+Vortex runtime and nothing from `$TOOLDIR/firesim` — the transport links
+against XRT directly. Install this component if you intend to elaborate a
+target or build a bitstream.
+
+### Prebuilt (recommended)
+
+Same as every other component — one command, no source build:
+
+```bash
+./ci/toolchain_install.sh --firesim
+```
+
+It is **not** in the default set (`./ci/toolchain_install.sh` with no
+arguments) or in `--all`. Like gem5, it is opt-in: the bundle is 1.2 GB and
+only an FPGA flow can use it, so CI runners that never touch a card do not pay
+for it.
+
+### From source
+
+```bash
+./ci/firesim_install.sh
+```
+
+Same shape as [`ci/chipstar_install.sh`](#7-chipstar-hip-host-runtime) and
+`ci/gem5_install.sh`: clones
+[`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) `vortex_3.x`
+(based on upstream tag 1.21.0) into `$TOOLDIR/firesim` and runs
+`build-setup.sh --skip-validate`. Override the source with `FIRESIM_REPO` /
+`FIRESIM_REV`.
+
+Unlike POCL, Mesa or chipStar there is no compile-and-install step: FireSim is
+consumed as a *source tree*, because the Vortex flow stages its Chisel target
+into the checkout and elaborates there. `$TOOLDIR/firesim` is therefore the
+checkout itself rather than an install prefix, and it is what `config.mk`
+exposes as `$(FIRESIM_PATH)`.
+
+What costs time is the conda environment `build-setup.sh` resolves — a JVM,
+sbt and Scala for Golden Gate. The sources themselves are a plain clone. That
+is the whole reason the prebuilt bundle exists.
+
+If you are developing FireSim itself, clone it wherever you keep sources and
+point the toolchain slot at it:
+
+```bash
+git clone --branch vortex_3.x https://github.com/vortexgpgpu/firesim.git ~/dev/firesim
+cd ~/dev/firesim && ./build-setup.sh --skip-validate
+ln -s ~/dev/firesim $TOOLDIR/firesim
+```
+
+### Notes
+
+- **The environment is not relocatable as built.** A conda environment
+  records its own prefix in every script shebang and in its package
+  metadata, so moving `$TOOLDIR/firesim` afterwards breaks `conda activate`
+  with an error naming the *old* path. The prebuilt bundle handles this with
+  `conda-pack` / `conda-unpack`; a hand-built tree should stay where it was
+  created, or be re-packed.
+- **Activate with `bin/activate`, not `conda activate`.**
+
+  ```bash
+  source $TOOLDIR/firesim/.conda-env/bin/activate
+  ```
+
+  `conda-pack` rewrites script shebangs to `#!/usr/bin/env python`, including
+  the one on `bin/conda` itself. A stock Ubuntu ships `python3` and no
+  `python`, so on an installed bundle `conda activate` fails with a bare
+  `/usr/bin/env: 'python': No such file or directory` that names neither conda
+  nor the environment. `bin/activate` only manipulates `PATH`, so it works on
+  a hand-built tree and an installed bundle alike.
+- **Elaboration needs the environment; the driver build needs only `gmp`.**
+  `sim/firesim/Makefile` picks up `gmp.h` from `$CONDA_PREFIX/include`. On a
+  host with `libgmp-dev` installed, building the transport works without
+  activating conda at all.
+- **Vortex's changes to FireSim live on the branch, not as patches.**
+  `git diff 1.21.0..vortex_3.x` is the authoritative delta — 8 files, mostly
+  Vitis platform fixes and cycle-counter accounting, all upstreamable.
 
 ---
 

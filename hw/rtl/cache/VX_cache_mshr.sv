@@ -108,7 +108,13 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire                          finalize_is_release,
     input wire                          finalize_is_pending,
     input wire [MSHR_ADDR_WIDTH-1:0]    finalize_previd,
-    input wire [MSHR_ADDR_WIDTH-1:0]    finalize_id
+    input wire [MSHR_ADDR_WIDTH-1:0]    finalize_id,
+
+    // Authoritative occupancy. The bank also tracks outstanding requests with a
+    // VX_pending_size counter, but that counter is a proxy fed by separate
+    // increment and decrement events and can drift from the entries actually
+    // held. A flush gated on the proxy alone hangs forever when it drifts high.
+    output wire                         empty
 );
     `UNUSED_PARAM (BANK_ID)
 
@@ -268,6 +274,35 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     `RUNTIME_ASSERT(~(fill_valid && ~valid_table[fill_id]), ("*** %s invalid fill: addr=0x%0h, id=%0d", INSTANCE_ID,
         `CS_BANK_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), fill_id))
 
+    // A walk confined to its own live chain never lands on an entry that is
+    // already invalid. next_table and next_index are cleared only at allocate,
+    // so an entry that is dequeued or released keeps its successor link; a walk
+    // that reaches it follows that stale link back into entries already
+    // replayed and re-emits their payloads.
+    `RUNTIME_ASSERT(~(dequeue_fire && ~valid_table[dequeue_id]), ("*** %s dequeue on invalid entry: id=%0d, next=%0b", INSTANCE_ID,
+        dequeue_id, next_table[dequeue_id]))
+
+`ifdef SIMULATION
+    // Every entry the dequeue pointer lands on must belong to the line whose
+    // fill opened the chain, whichever way the pointer got there (fill,
+    // next_index walk, or same-cycle late-joiner splice). Checked here rather
+    // than at the bank's forward port because only the MSHR can see all three.
+    reg [`CS_LINE_ADDR_WIDTH-1:0] chain_addr_r;
+    always @(posedge clk) begin
+        if (fill_valid) begin
+            chain_addr_r <= addr_table[fill_id];
+        end
+    end
+    `RUNTIME_ASSERT(~(dequeue_val && ~fill_valid && (addr_table[dequeue_id] != chain_addr_r)), ("*** %s chain entry on foreign line: dequeue_id=%0d, entry=0x%0h, chain=0x%0h", INSTANCE_ID,
+        dequeue_id, `CS_BANK_TO_FULL_ADDR(addr_table[dequeue_id], BANK_ID), `CS_BANK_TO_FULL_ADDR(chain_addr_r, BANK_ID)))
+
+    // The slot the dequeue pointer names must not be handed to another line
+    // while the pointer still rests on it: `dequeue_addr` is combinational on
+    // `addr_table[dequeue_id_r]`, so the rewrite retargets an in-flight replay.
+    `RUNTIME_ASSERT(~(allocate_fire && dequeue_val && (allocate_id == dequeue_id)), ("*** %s allocate over live dequeue pointer: id=%0d, addr=0x%0h", INSTANCE_ID,
+        allocate_id, `CS_BANK_TO_FULL_ADDR(allocate_addr, BANK_ID)))
+`endif
+
     VX_dp_ram #(
         .DATAW (DATA_WIDTH),
         .SIZE  (MSHR_SIZE),
@@ -367,8 +402,32 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     end
 
     assign dequeue_valid = dequeue_val;
-    assign dequeue_addr  = addr_table[dequeue_id_r];
-    assign dequeue_rw    = write_table[dequeue_id_r];
+    // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather
+    // than read live at dequeue_id_r a cycle later. The entry's slot can be
+    // freed and reallocated while the pointer still names it -- the free set
+    // offers a slot released by a dequeue or a finalize in the same cycle -- and
+    // a live read then retargets an in-flight replay onto the new occupant's
+    // line. The bank's fill-forward path answers that replay from the staged
+    // sector of the line it was actually issued for, so the requester silently
+    // receives another line's data; the guard for it is a RUNTIME_ASSERT, which
+    // synthesis compiles out.
+    //
+    // Taking the address from the same snapshot as the payload also removes an
+    // inconsistency that was there regardless: the payload was a snapshot and
+    // the address was not, so the two could describe different entries.
+    //
+    // Withholding the slot from the free set instead deadlocks: the pointer can
+    // park on a blocked replay, and if that slot is the last free one the core
+    // stalls and the replay never drains.
+    reg [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr_r;
+    reg dequeue_rw_r;
+    always @(posedge clk) begin
+        dequeue_addr_r <= addr_table[dequeue_id_n];
+        dequeue_rw_r   <= write_table[dequeue_id_n];
+    end
+
+    assign dequeue_addr  = dequeue_addr_r;
+    assign dequeue_rw    = dequeue_rw_r;
     assign dequeue_id    = dequeue_id_r;
 
 `ifdef DBG_TRACE_CACHE
@@ -416,5 +475,11 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         end
     end
 `endif
+
+    // No entry held. Reported straight off the valid mask so a consumer that
+    // needs the truth -- the flush sweep, which must not start while an entry is
+    // outstanding and must not be blocked forever when none is -- does not have
+    // to trust a separately-maintained count.
+    assign empty = ~(| valid_table);
 
 endmodule

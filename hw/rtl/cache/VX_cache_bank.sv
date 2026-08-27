@@ -157,7 +157,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // ------------------------------------------------------------------------
     // Shared signals
     // ------------------------------------------------------------------------
-    wire crsp_queue_stall, mshr_alm_full, mshr_empty;
+    wire crsp_queue_stall, mshr_alm_full;
+    // Authoritative "no entry held", straight off the MSHR's valid mask. The
+    // pending-size counter below is a proxy: it is fed by separate increment and
+    // decrement events and, as the finalize_is_pending comment above records,
+    // can underflow on a double free. A flush gated on the proxy alone hangs
+    // forever once it drifts high, so the gate consults both.
+    wire mshr_valid_empty;
     wire mshr_probe_pending_ld, mshr_probe_pending_amo;
     wire mreq_queue_empty, mreq_queue_alm_full;
     wire [`CS_LINE_ADDR_WIDTH-1:0] mem_rsp_addr;
@@ -289,7 +295,15 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .flush_line  (flush_sel),
         .flush_way   (flush_way),
         .flush_ready (flush_ready),
-        .mshr_empty  (mshr_empty),
+        // Gated on the MSHR's own valid mask, not on the pending-size counter.
+        // The counter is a proxy fed by separate increment and decrement events
+        // and can underflow on a double free (see the finalize_is_pending comment
+        // below); once it drifts high the flush waits forever on a condition that
+        // is already true. The mask is authoritative for entries actually held,
+        // and the accept-to-allocate window is covered by bank_empty: a request
+        // accepted at the input is still in the pipeline, so pipe_inflight holds
+        // bank_empty low until allocation completes at st0.
+        .mshr_empty  (mshr_valid_empty),
         .bank_empty  (no_pending_req)
     );
 
@@ -751,7 +765,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .reset (reset),
         .incr  (core_req_fire),
         .decr  (mshr_dequeue),
-        .empty (mshr_empty),
+        `UNUSED_PIN (empty),
         `UNUSED_PIN (alm_empty),
         .full  (mshr_alm_full),
         `UNUSED_PIN (alm_full),
@@ -810,7 +824,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         // with sectoring, where a hot line accumulates a long same-line chain.
         .finalize_is_pending (st1.lk.mshr_pending && ~mshr_release_st1),
         .finalize_id         (st1.req.mshr_id),
-        .finalize_previd     (st1.lk.mshr_previd)
+        .finalize_previd     (st1.lk.mshr_previd),
+        .empty               (mshr_valid_empty)
     );
 
     // ========================================================================

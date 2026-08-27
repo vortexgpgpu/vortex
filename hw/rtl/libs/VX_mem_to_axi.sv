@@ -330,14 +330,35 @@ module VX_mem_to_axi #(
     wire [NUM_BANKS_OUT-1:0] rsp_xbar_ready_in;
 
     for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_rsp_xbar_data_in
-        assign rsp_xbar_valid_in[i] = m_axi_rvalid[i];
+        // A read response spans one beat per requested transfer and ends at
+        // rlast, and this master only ever issues single-beat bursts (arlen is
+        // tied to zero above). So the response to a read at address A is its
+        // *first* beat: in an INCR burst beat 0 holds the data at the start
+        // address. Forwarding every beat instead makes the upstream response
+        // count depend on the slave sending no more than it was asked for, and
+        // a slave that sends more turns each extra beat into another memory
+        // response carrying a tag the requester has already retired.
+        //
+        // Later beats are accepted and dropped rather than back-pressured: a
+        // slave that sends them would otherwise stall the channel forever. The
+        // assertion below still holds the slave to the protocol, but it is
+        // compiled out for synthesis, so the behaviour has to be safe on its own.
+        reg in_burst_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                in_burst_r <= 1'b0;
+            end else if (m_axi_rvalid[i] && m_axi_rready[i]) begin
+                in_burst_r <= ~m_axi_rlast[i];
+            end
+        end
+        assign rsp_xbar_valid_in[i] = m_axi_rvalid[i] && ~in_burst_r;
         assign rsp_xbar_data_in[i] = {m_axi_rdata[i], m_axi_rid[i][NUM_PORTS_IN_BITS +: READ_TAG_WIDTH]};
         if (NUM_PORTS_IN > 1) begin : g_input_sel
             assign rsp_xbar_sel_in[i] = m_axi_rid[i][0 +: NUM_PORTS_IN_BITS];
         end else begin : g_no_input_sel
             assign rsp_xbar_sel_in[i] = 0;
         end
-        assign m_axi_rready[i] = rsp_xbar_ready_in[i];
+        assign m_axi_rready[i] = in_burst_r ? 1'b1 : rsp_xbar_ready_in[i];
         `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rlast[i] == 0), ("*** AXI response error"))
         `RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rresp[i] != 0), ("*** AXI response error"))
     end

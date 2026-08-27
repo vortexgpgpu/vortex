@@ -90,7 +90,7 @@ parse_args() {
 set_driver_path() {
     case $DRIVER in
         gpu) DRIVER_PATH="" ;;
-        simx|rtlsim|opae|xrt) DRIVER_PATH="$ROOT_DIR/sw/runtime/$DRIVER" ;;
+        simx|rtlsim|opae|xrt|firesim) DRIVER_PATH="$ROOT_DIR/sw/runtime/$DRIVER" ;;
         *) echo "Invalid driver: $DRIVER"; exit 1 ;;
     esac
 }
