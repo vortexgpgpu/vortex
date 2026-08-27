@@ -42,10 +42,17 @@ module VX_rtu_fmac3 #(
     wire [8:0] pe01   = (pe[0] > pe[1]) ? pe[0] : pe[1];
     wire [8:0] max_pe = (pe01 > pe[2]) ? pe01 : pe[2];
 
+    // An unused term is identified by pe=0 alone: a term whose operands are both
+    // normal has pe >= 2, so pe=0 is unambiguous. Discarding its product here
+    // means the callers do not have to force their mantissas to zero, which
+    // would put a select in front of the multiplier inputs. The mask sits on the
+    // product rather than on the shift amount, which controls a full-width
+    // barrel shifter and is far more sensitive to an extra level.
     wire [FW-1:0] field [3];
     for (genvar i = 0; i < 3; ++i) begin : g_shift
         wire [8:0] sh = max_pe - pe[i];
-        assign field[i] = ({{(FW-PW){1'b0}}, prod[i]} << GW) >> sh;
+        wire [PW-1:0] prod_z = (pe[i] != 9'd0) ? prod[i] : '0;
+        assign field[i] = ({{(FW-PW){1'b0}}, prod_z} << GW) >> sh;
     end
 
     wire [FW-1:0] s1_f0, s1_f1, s1_f2;
