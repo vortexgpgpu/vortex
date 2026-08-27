@@ -34,6 +34,31 @@ echo "=========== JTAG load of the Vortex AFU ($(date)) -- log: $LOG ===========
 
 [ -f "$VBIN" ] || { echo "missing vbin: $VBIN"; exit 1; }
 
+# Refuse to reconfigure a region that is still transacting.
+#
+# Partial reconfiguration of an RP whose masters have AXI transactions in
+# flight stalls the PLM ("PLM stalled during programming"), which leaves the
+# region half-configured and costs a static-shell reprogram plus a reboot --
+# the shell reload invalidates the BAR mapping firmware set up at POST.
+#
+# A regression binary still holding the device is the usual cause: it is
+# killed, its teardown never runs, and the CP is left with an outstanding
+# read. Wait for it rather than reconfiguring underneath it.
+for _ in $(seq 1 20); do
+    holders=$(ps -eo pid,comm,args --no-headers 2>/dev/null \
+        | awk '$3 ~ /VORTEX_DRIVER=aved|\/run-aved/ || $2 ~ /^(minimal|demo|sgemm|sgemv|vecadd)$/ {print $1}')
+    [ -z "$holders" ] && break
+    echo "  waiting for the AFU to be released by: $holders"
+    sleep 1
+done
+if [ -n "${holders:-}" ]; then
+    echo
+    echo "REFUSING to reconfigure: a process still holds the AFU ($holders)."
+    echo "Let it finish, or kill it and wait for the device node to be released."
+    echo "Reconfiguring an active region stalls the PLM and costs a reboot."
+    exit 1
+fi
+
 WORK=$(mktemp -d /tmp/vortex_pdi.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
 tar xzf "$VBIN" -C "$WORK" || { echo "could not extract $VBIN"; exit 1; }
