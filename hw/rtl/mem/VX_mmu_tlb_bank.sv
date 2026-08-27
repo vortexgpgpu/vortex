@@ -214,14 +214,23 @@ module VX_mmu_tlb_bank import VX_gpu_pkg::*; #(
     assign miss_vpn   = miss_buffer[ADDR_LSB_IN + PAGE_OFFSET_BITS +: VM_VPN_WIDTH];
     assign fill_ready = (state == TLB_PTW_WAIT) && miss_sent;
 
-    wire install = fill_fire && !fill_fault && !flush;
+    // A walk issued before a flush resolved against the old page table: its
+    // fill is dropped and the replay re-walks (the entry is simply absent).
+    reg flush_pending;
+    wire install = fill_fire && !fill_fault && !flush && !flush_pending;
 
     always @(posedge clk) begin
         if (reset) begin
             state           <= TLB_READY;
             miss_sent       <= 1'b0;
             replay_identity <= 1'b0;
+            flush_pending   <= 1'b0;
         end else begin
+            if (fill_fire) begin
+                flush_pending <= 1'b0;
+            end else if (flush && (state == TLB_PTW_WAIT) && miss_sent) begin
+                flush_pending <= 1'b1;
+            end
             case (state)
             TLB_READY: begin
                 if (req_fire && !tlb_hit) begin
@@ -238,7 +247,7 @@ module VX_mmu_tlb_bank import VX_gpu_pkg::*; #(
                     miss_sent <= 1'b1;
                 end
                 if (fill_fire) begin
-                    replay_identity <= fill_fault;
+                    replay_identity <= fill_fault && !flush_pending && !flush;
                     state           <= TLB_REPLAY;
                 end
             end

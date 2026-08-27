@@ -38,12 +38,19 @@ Ptw::~Ptw() = default;
 
 void Ptw::on_reset() {
   for (auto& s : slots_) s = Slot{};
+  perf_ = PerfStats();
   this->flush();
 }
 
 void Ptw::flush() {
   for (auto& e : pwc1_) e.valid = false;
   for (auto& e : pwc2_) e.valid = false;
+  // A walk already in flight read PTEs that may predate the page-table
+  // update this flush publishes; its upper-level results must not land in
+  // the caches just emptied (the requesting TLB bank discards its result).
+  for (auto& s : slots_) {
+    if (s.state != Slot::IDLE) s.stale = true;
+  }
 }
 
 uint64_t Ptw::vpn_slice(uint64_t vpn, uint32_t level) const {
@@ -103,7 +110,9 @@ void Ptw::on_tick() {
       slot.fault = false;
       slot.state = Slot::DONE;
     } else {
-      if (slot.level == TOP_LEVEL) {
+      if (slot.stale) {
+        // no PWC fill
+      } else if (slot.level == TOP_LEVEL) {
         this->pwc_fill(pwc1_, (slot.root_ppn << VPN_BITS_PER_LEVEL)
                             | this->vpn_slice(slot.vpn, TOP_LEVEL), pte.ppn);
       } else if (VX_VM_PT_LEVEL == 3 && slot.level == 1) {
@@ -169,6 +178,7 @@ void Ptw::on_tick() {
       slot = Slot{};
       slot.vpn = req.vpn;
       slot.root_ppn = req.root_ppn;
+      slot.stale = false;
       slot.client = c;
       slot.tag = req.tag;
       slot.start_cycle = SimPlatform::instance().cycles();

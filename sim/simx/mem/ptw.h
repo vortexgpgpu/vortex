@@ -87,6 +87,7 @@ private:
     uint32_t client = 0;
     uint32_t tag = 0;
     uint64_t start_cycle = 0;
+    bool     stale = false;  // started before the last flush; must not seed the PWCs
   };
 
   struct PwcEntry {

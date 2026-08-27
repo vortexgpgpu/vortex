@@ -68,6 +68,7 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
         logic                          fault;
         logic [`UP(PTE_SEL_BITS)-1:0]  pte_sel;    // PTE index within the fetched word
         logic [TAG_WIDTH-1:0]          tag;
+        logic                          stale;      // started before the last flush: no PWC fills
     } slot_t;
 
     slot_state_t slot_state [NUM_WALKERS];
@@ -249,11 +250,12 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
                      || (rsp_is_leaf && superpage_misaligned(rsp_ppn, rsp_level));
     wire rsp_descend  = !rsp_fault && !rsp_is_leaf;
 
-    assign pwc1_fill_valid = mem_rsp_fire && rsp_descend && (rsp_level == VM_LEVEL_BITS'(TOP_LEVEL));
+    wire rsp_cacheable = !slots[rsp_slot].stale;
+    assign pwc1_fill_valid = mem_rsp_fire && rsp_cacheable && rsp_descend && (rsp_level == VM_LEVEL_BITS'(TOP_LEVEL));
     assign pwc1_fill_key   = {slots[rsp_slot].root_ppn, vpn_slice(slots[rsp_slot].vpn, rsp_level)};
     assign pwc1_fill_data  = rsp_ppn;
 
-    assign pwc2_fill_valid = mem_rsp_fire && rsp_descend && (rsp_level == VM_LEVEL_BITS'(1)) && (VM_PT_LEVELS == 3);
+    assign pwc2_fill_valid = mem_rsp_fire && rsp_cacheable && rsp_descend && (rsp_level == VM_LEVEL_BITS'(1)) && (VM_PT_LEVELS == 3);
     assign pwc2_fill_key   = {slots[rsp_slot].cur_ppn, vpn_slice(slots[rsp_slot].vpn, rsp_level)};
     assign pwc2_fill_data  = rsp_ppn;
 
@@ -304,6 +306,17 @@ module VX_mmu_ptw import VX_gpu_pkg::*; #(
                 slots[free_slot].flags     <= '0;
                 slots[free_slot].fault     <= 1'b0;
                 slots[free_slot].tag       <= ptw_bus_if.req_data.tag;
+                slots[free_slot].stale     <= 1'b0;
+            end
+            if (flush) begin
+                // PTEs fetched by walks already in flight may predate the
+                // page-table update this flush publishes; keep them out of
+                // the caches just emptied (the TLB bank drops the result).
+                for (integer s = 0; s < NUM_WALKERS; ++s) begin
+                    if (slot_state[s] != SLOT_IDLE) begin
+                        slots[s].stale <= 1'b1;
+                    end
+                end
             end
             if (mem_req_fire) begin
                 slot_state[mem_slot]       <= SLOT_MEM_RSP;

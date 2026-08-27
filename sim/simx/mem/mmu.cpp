@@ -38,18 +38,29 @@ Mmu::Mmu(const SimContext& ctx,
 Mmu::~Mmu() = default;
 
 void Mmu::on_reset() {
-  for (auto& b : banks_) b.state = BankMiss::IDLE;
+  for (auto& b : banks_) {
+    b.state = BankMiss::IDLE;
+    b.stale = false;
+  }
+  tlb_.reset_perf();
 }
 
 void Mmu::set_satp(uint64_t satp) {
   if (satp_ && satp_->get_satp() == satp)
     return;
   satp_ = std::make_unique<SATP_t>(satp);
-  tlb_.flush();  // sfence.vma
+  this->flush();  // sfence.vma
 }
 
 void Mmu::flush() {
   tlb_.flush();
+  // A walk already in flight resolved (or is resolving) against the old
+  // page table; its fill must not be installed. The bank re-walks when it
+  // comes back. A not-yet-issued walk (WALK_REQ) starts after the flush.
+  for (auto& b : banks_) {
+    if (b.state == BankMiss::WALK_WAIT)
+      b.stale = true;
+  }
 }
 
 bool Mmu::needs_translation(uint64_t addr) const {
@@ -79,12 +90,18 @@ void Mmu::on_tick() {
     PtwRspIn.pop();
     auto& bank = banks_.at(rsp.tag);
     __assert(bank.state == BankMiss::WALK_WAIT, "unexpected walker fill");
-    if (!rsp.fault) {
-      tlb_.fill(bank.req.addr >> VX_VM_PAGE_LOG2_SIZE, rsp.ppn, rsp.level, rsp.flags);
+    if (bank.stale) {
+      DT(3, this->name() << " tlb-fill-stale: bank=" << rsp.tag << " (re-walk)");
+      bank.stale = false;
+      bank.state = BankMiss::WALK_REQ;
+    } else {
+      if (!rsp.fault) {
+        tlb_.fill(bank.req.addr >> VX_VM_PAGE_LOG2_SIZE, rsp.ppn, rsp.level, rsp.flags);
+      }
+      DT(3, this->name() << " tlb-fill: ppn=0x" << std::hex << rsp.ppn << std::dec << ", level=" << (int)rsp.level << ", fault=" << rsp.fault << ", bank=" << rsp.tag);
+      bank.rsp = rsp;
+      bank.state = BankMiss::REPLAY;
     }
-    DT(3, this->name() << " tlb-fill: ppn=0x" << std::hex << rsp.ppn << std::dec << ", level=" << (int)rsp.level << ", fault=" << rsp.fault << ", bank=" << rsp.tag);
-    bank.rsp = rsp;
-    bank.state = BankMiss::REPLAY;
   }
 
   // 3) replay parked accesses (translated, or as-is on a fault). The parked

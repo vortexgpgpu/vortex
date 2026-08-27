@@ -85,6 +85,7 @@ private:
     MemReq   req;
     uint32_t port = 0;
     PtwRsp   rsp;
+    bool     stale = false;  // walk issued before the last flush; discard its fill and re-walk
   };
 
   uint32_t                num_ports_;
