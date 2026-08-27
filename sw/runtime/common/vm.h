@@ -80,6 +80,11 @@ public:
   uint64_t map_p2v(uint64_t ppn, uint32_t flags);
   int virtual_mem_reserve(uint64_t dev_addr, uint64_t size, int flags);
 
+  // Reserve the identity-mapped pinned slab out of the VA space once; the
+  // on-demand identity maps installed inside it later must not reserve
+  // again (the allocator reports the overlap as an error).
+  int reserve_pinned_region(uint64_t base, uint64_t size);
+
   // Install an identity (VA == PA) mapping covering [addr, addr + size).
   // Uses megapage PTEs where alignment + size permit, leaf PTEs otherwise.
   int install_identity_map(uint64_t addr, uint64_t size);
@@ -95,6 +100,13 @@ public:
   uint64_t satp() const { return satp_ ? satp_->get_satp() : 0; }
 
 private:
+  bool in_pinned_region(uint64_t addr, uint64_t size) const {
+    return pinned_size_ != 0 && addr >= pinned_base_ && (addr + size) <= (pinned_base_ + pinned_size_);
+  }
+
+  uint64_t pinned_base_ = 0;
+  uint64_t pinned_size_ = 0;
+
   uint8_t alloc_page_table(uint64_t* pt_addr);
   int16_t update_page_table(uint64_t ppn, uint64_t vpn, uint32_t flag, uint8_t leaf_level = 0);
 

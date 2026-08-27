@@ -23,6 +23,12 @@ namespace vortex {
 // VPN bits above that level. Mirrors hw/rtl/mem/VX_mmu_tlb.sv.
 class Tlb {
 public:
+  // Same constraints VX_mmu_tlb.sv STATIC_ASSERTs: power-of-two bank count
+  // that divides the (power-of-two) entry count.
+  static_assert((VX_CFG_TLB_SIZE & (VX_CFG_TLB_SIZE - 1)) == 0, "VX_CFG_TLB_SIZE must be a power of two");
+  static_assert((VX_CFG_TLB_NUM_BANKS & (VX_CFG_TLB_NUM_BANKS - 1)) == 0, "VX_CFG_TLB_NUM_BANKS must be a power of two");
+  static_assert(VX_CFG_TLB_NUM_BANKS <= VX_CFG_TLB_SIZE, "VX_CFG_TLB_NUM_BANKS must not exceed VX_CFG_TLB_SIZE");
+
   explicit Tlb(uint32_t size = VX_CFG_TLB_SIZE, uint32_t num_banks = 1);
 
   struct LookupResult {
@@ -42,8 +48,12 @@ public:
   // was previously valid.
   void fill(uint64_t vpn, uint64_t ppn, uint8_t level, uint8_t flags);
 
-  // Invalidate every entry (sfence.vma equivalent).
+  // Invalidate every entry (sfence.vma equivalent). Counters are kept: a
+  // flush is part of normal operation, not a reset.
   void flush();
+
+  // Zero the perf counters (kernel-launch reset, like the caches).
+  void reset_perf();
 
   uint64_t reads()     const { return reads_; }
   uint64_t hits()      const { return hits_; }

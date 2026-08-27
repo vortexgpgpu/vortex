@@ -69,6 +69,13 @@ void Tlb::fill(uint64_t vpn, uint64_t ppn, uint8_t level, uint8_t flags) {
   entries_[victim] = Entry{true, true, level, vpn, ppn, flags};
 }
 
+void Tlb::reset_perf() {
+  reads_ = 0;
+  hits_ = 0;
+  misses_ = 0;
+  evictions_ = 0;
+}
+
 void Tlb::flush() {
   for (auto& e : entries_) {
     e.valid = false;

@@ -62,13 +62,7 @@ ProcessorImpl::ProcessorImpl()
 
   // create L3 cache; when L3 is enabled it is the LLC, otherwise it is a
   // transparent bypass arbiter and the L2 (or L1) is the LLC.
-  // The bypass arbiter serves inputs in power-of-two groups per memory
-  // port, so a request count that is not such a multiple would leave the
-  // last port (the shared page-table walker's) starved; pad the input
-  // count up — the spare ports stay idle.
-  constexpr uint32_t l3_num_inputs = (VX_CFG_L3_NUM_REQS > VX_CFG_L3_MEM_PORTS)
-    ? (VX_CFG_L3_MEM_PORTS << log2ceil((VX_CFG_L3_NUM_REQS + VX_CFG_L3_MEM_PORTS - 1) / VX_CFG_L3_MEM_PORTS))
-    : VX_CFG_L3_NUM_REQS;
+  constexpr uint32_t l3_num_inputs = VX_CFG_L3_NUM_REQS;
   l3cache_ = Cache::Create("l3cache", Cache::Config{
     !VX_CFG_L3_ENABLED,
     log2ceil(VX_CFG_L3_SIZE),  // C
@@ -125,14 +119,16 @@ ProcessorImpl::ProcessorImpl()
 #ifdef VX_CFG_VM_ENABLE
   // shared page-table walker on its dedicated L3 port (the last L3
   // requestor slot; see VX_CFG_L3_NUM_REQS)
-  ptw_ = Ptw::Create("ptw", VX_CFG_NUM_CLUSTERS * VX_CFG_NUM_CORES * 2);
+  // a cluster instantiates NUM_SOCKETS * SOCKET_SIZE cores (rounded up)
+  constexpr uint32_t CORES_PER_CLUSTER = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+  ptw_ = Ptw::Create("ptw", VX_CFG_NUM_CLUSTERS * CORES_PER_CLUSTER * 2);
   constexpr uint32_t L3_PTW_IDX = VX_CFG_L3_NUM_REQS - 1;
   ptw_->MemReqOut.bind(&l3cache_->core_req_in.at(L3_PTW_IDX));
   l3cache_->core_rsp_out.at(L3_PTW_IDX).bind(&ptw_->MemRspIn);
   for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
-    for (uint32_t j = 0; j < VX_CFG_NUM_CORES; ++j) {
+    for (uint32_t j = 0; j < CORES_PER_CLUSTER; ++j) {
       auto core = clusters_.at(i)->get_core(j);
-      uint32_t client = (i * VX_CFG_NUM_CORES + j) * 2;
+      uint32_t client = (i * CORES_PER_CLUSTER + j) * 2;
       for (uint32_t k = 0; k < 2; ++k) {
         core->ptw_req_out.at(k).bind(&ptw_->ReqIn.at(client + k));
         ptw_->RspOut.at(client + k).bind(&core->ptw_rsp_in.at(k));
@@ -193,7 +189,7 @@ void ProcessorImpl::flush_caches() {
   for (auto& cluster : clusters_) {
 #ifdef VX_CFG_VM_ENABLE
     // page tables may change after this flush; drop the cached translations
-    for (uint32_t c = 0; c < VX_CFG_NUM_CORES; ++c) {
+    for (uint32_t c = 0; c < NUM_SOCKETS * VX_CFG_SOCKET_SIZE; ++c) {
       cluster->get_core(c)->mmu_flush();
     }
 #endif

@@ -64,6 +64,15 @@ VMManager::~VMManager() {
   delete page_table_mem_;
 }
 
+int VMManager::reserve_pinned_region(uint64_t base, uint64_t size) {
+  int err = this->virtual_mem_reserve(base, size, 0);
+  if (err != 0)
+    return err;
+  pinned_base_ = base;
+  pinned_size_ = size;
+  return 0;
+}
+
 int VMManager::virtual_mem_reserve(uint64_t dev_addr, uint64_t size, int /*flags*/) {
   CHECK_ERR(virtual_mem_->reserve(dev_addr, size), {
     return err;
@@ -329,7 +338,9 @@ int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
   // (set via mem_access) is the actual permission boundary.
   constexpr uint32_t IDENTITY_PTE_FLAGS = PTE_V | PTE_R | PTE_W | PTE_X;
 
-  (void)virtual_mem_->reserve(addr, size);
+  if (!this->in_pinned_region(addr, size)) {
+    (void)virtual_mem_->reserve(addr, size);
+  }
 
   uint64_t cur = addr;
   uint64_t end = addr + size;

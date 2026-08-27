@@ -306,7 +306,7 @@ vx_result_t Device::cp_init() {
         // could mint a VA inside it and a later VX_MEM_PHYS identity map
         // would collide with that mapping.
         if (pinned_size_ > 0) {
-            if (vm_mgr_->virtual_mem_reserve(pinned_base_, pinned_size_, 0) != 0)
+            if (vm_mgr_->reserve_pinned_region(pinned_base_, pinned_size_) != 0)
                 return VX_ERR_DEVICE_LOST;
         }
         const uint64_t satp = vm_mgr_->satp();
