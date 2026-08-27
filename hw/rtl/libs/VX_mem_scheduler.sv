@@ -572,7 +572,12 @@ module VX_mem_scheduler #(
                 assign crsp_data[r] = rsp_store_n[j][i];
             end
 
-            assign mem_rsp_ready_s = crsp_ready || ~rsp_complete;
+            // The completion test reduces over every lane of the request, and
+            // this is where that reduction entered the response store's own
+            // write enable, once per lane. Gating only on room in the output
+            // buffer costs throughput while the caller is already stalling,
+            // which is the one time there is nothing to gain by accepting.
+            assign mem_rsp_ready_s = crsp_ready;
         end
 
         assign crsp_eop = rsp_complete;
