@@ -247,41 +247,4 @@ module VX_kmu_bus_arb import VX_gpu_pkg::*; #(
         assign bus_out_if[o].data = buf_data[KMU_DATAW-1:0];
     end
 
-    // ── in-flight accounting ───────────────────────────────────────────────
-    // Every beat that enters leaves exactly once, so a single up/down counter
-    // covers all internal storage (input skid, output skid, and the beat the
-    // message lock is mid-way through).
-    localparam CNT_W = `CLOG2(NUM_INPUTS * `TO_OUT_BUF_SIZE(IN_BUF)
-                            + NUM_OUTPUTS * `TO_OUT_BUF_SIZE(OUT_BUF)
-                            + NUM_INPUTS + NUM_OUTPUTS + 1) + 1;
-
-    wire [NUM_INPUTS-1:0]  in_fire;
-    wire [NUM_OUTPUTS-1:0] out_fire;
-    for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_in_fire
-        assign in_fire[i] = bus_in_if[i].valid && bus_in_if[i].ready;
-    end
-    for (genvar o = 0; o < NUM_OUTPUTS; ++o) begin : g_out_fire
-        assign out_fire[o] = bus_out_if[o].valid && bus_out_if[o].ready;
-    end
-
-    reg [CNT_W-1:0] inflight_r;
-    always @(posedge clk) begin
-        if (reset) begin
-            inflight_r <= '0;
-        end else begin
-            inflight_r <= inflight_r + CNT_W'($countones(in_fire))
-                                     - CNT_W'($countones(out_fire));
-        end
-    end
-
-    // `inflight_r` is registered, so it does not yet count a beat presented this
-    // cycle. Report busy from the cycle a beat is seen: on the final CTA of a
-    // launch the KMU's own busy drops the cycle after the beat fires, and where
-    // the aggregation above is registered (NUM_SOCKETS > 1) nothing else covers
-    // that cycle -- opening a one-cycle device-idle gap the host's edge-sensitive
-    // idle-wait latches as premature completion. `bus_valid` is used rather than
-    // in_fire because the input `ready` is the arbiter grant, and routing it here
-    // would pull the downstream back-pressure chain into the busy tree.
-    assign busy = (inflight_r != '0) || (| bus_valid);
-
 endmodule
