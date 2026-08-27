@@ -18,6 +18,9 @@ CONFIGS += -DVX_CFG_NUM_WARPS=16
 CONFIGS += -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1
 CONFIGS += -DVX_CFG_L2_ENABLE
 CONFIGS += -DVX_CFG_L2_SIZE=262144
+# L1 hit latency 3 (PIPE_EX=1): registers the way-select so the tag->data
+# write path is broken. Matches the multicore integration DUT (top).
+CONFIGS += -DVX_CFG_DCACHE_LATENCY=3
 
 include ../../common.mk
 
