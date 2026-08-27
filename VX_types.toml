@@ -163,8 +163,13 @@ VX_DCR_TEX_LOGDIM      = 0x042
 VX_DCR_TEX_FORMAT      = 0x043
 VX_DCR_TEX_FILTER      = 0x044
 VX_DCR_TEX_WRAP        = 0x045
-# VX_DCR_TEX_MIPOFF(lod) = VX_DCR_TEX_MIPOFF_BASE + lod, lod < VX_TEX_LOD_MAX
+# VX_DCR_TEX_MIPOFF(lod) = VX_DCR_TEX_MIPOFF_BASE + lod, lod <= VX_TEX_LOD_MAX.
+# The table has VX_TEX_LOD_MAX + 1 entries and ends at 0x055: a sampler's lod
+# clamp is independent of how long the mip chain is, so the top level is a
+# reachable request and needs an entry like every other level.
 VX_DCR_TEX_MIPOFF_BASE = 0x046
+# Colour a CLAMP_TO_BORDER tap returns, ARGB8888. Above the mip-offset table.
+VX_DCR_TEX_BORDER      = 0x056
 VX_DCR_TEX_STATE_END   = 0x060
 
 [tex_const]
@@ -176,13 +181,12 @@ VX_TEX_FXD_BITS    = 32
 
 VX_TEX_FILTER_POINT    = 0
 VX_TEX_FILTER_BILINEAR = 1
-# Mip filter occupies the bit above the mag/min filter. MIP_LINEAR (sample two
-# levels and lerp them) is a SOFTWARE sampler capability only: the texture unit
-# has a single tap set and no inter-level blend, so it samples one level and the
-# `vx_tex` lod operand is an integer level. A shader wanting mip-linear issues
-# two vx_tex and lerps the results; the unit rejects the MIP_LINEAR bit.
-# The fixed-point form (integer level, blend weight in the low
-# VX_TEX_LOD_FRAC_BITS) is how the software LOD math carries a fractional level.
+# Mip filter occupies the bit above the mag/min filter. MIP_LINEAR samples two
+# levels and lerps them, which changes how the `vx_tex` lod operand reads: it is
+# an integer level normally, and fixed-point under MIP_LINEAR -- the level in the
+# high bits, the weight between it and the next above in the low
+# VX_TEX_LOD_FRAC_BITS. A caller that never asks for a blend therefore never has
+# to know about the fractional form.
 VX_TEX_FILTER_MIP_NONE   = 0
 VX_TEX_FILTER_MIP_LINEAR = 2
 VX_TEX_LOD_FRAC_BITS     = 8
@@ -190,9 +194,9 @@ VX_TEX_LOD_FRAC_BITS     = 8
 VX_TEX_WRAP_CLAMP  = 0
 VX_TEX_WRAP_REPEAT = 1
 VX_TEX_WRAP_MIRROR = 2
-# W5: CLAMP_TO_BORDER — out-of-[0,1) taps return the sampler border colour.
-# Not representable by the FF TEX unit, so a BORDER wrap routes the draw to the
-# on-device software sampler (gfx_tex_sample_sw).
+# CLAMP_TO_BORDER — a tap whose coordinate leaves [0,1) returns
+# VX_DCR_TEX_BORDER instead of a texel. The address still clamps: the tap is
+# fetched and then discarded, so it only has to be one the texture owns.
 VX_TEX_WRAP_BORDER = 3
 
 VX_TEX_FORMAT_A8R8G8B8 = 0
@@ -204,8 +208,9 @@ VX_TEX_FORMAT_L8       = 5
 VX_TEX_FORMAT_A8       = 6
 # W5 extended sampled formats — SOFTWARE sampler only. FF vx_tex4 handles only
 # formats 0..VX_TEX_FORMAT_FF_MAX; anything above routes to gfx_tex_sample_sw
-# (routing law). All decode into the sampler's 8-bit ARGB working colour (sRGB
-# is linearised on sample, float is clamped to [0,1], depth reads as luminance).
+# (routing law). sRGB is linearised on sample and depth reads as luminance, both
+# into the sampler's 8-bit ARGB working colour; the float formats hold values
+# outside [0,1] and are decoded and filtered in float instead.
 VX_TEX_FORMAT_FF_MAX   = 6
 VX_TEX_FORMAT_SRGB8     = 7    # R8G8B8(X8) sRGB, alpha forced 1.0
 VX_TEX_FORMAT_SRGB8A8   = 8    # R8G8B8A8 sRGB (RGB gamma-decoded, alpha linear)
@@ -229,6 +234,9 @@ VX_RASTER_PID_BITS    = 16
 VX_OM_DIM_BITS    = 15
 VX_OM_DEPTH_BITS  = 24
 VX_OM_STENCIL_BITS = 8
+# Colour attachments the merger keeps state for. Vulkan requires
+# maxColorAttachments >= 4. The depth/stencil attachment is shared, not counted.
+VX_OM_MAX_RT      = 4
 
 VX_OM_DEPTH_FUNC_ALWAYS   = 0
 VX_OM_DEPTH_FUNC_NEVER    = 1
@@ -353,11 +361,18 @@ VX_DCR_OM_EARLYZ_SAFE       = 0x092
 # offset back.
 #
 # The encoding is SHIFT-ONLY:
-#     offset = ((face << (XBITS+YBITS)) | (y << XBITS) | x) << RECORD_SHIFT
+#     offset = ((((rt << 1) | face) << YBITS | y) << XBITS | x) << RECORD_SHIFT
 # The framebuffer pitch is padded to a power of two (XBITS = ceil(log2(width)),
 # YBITS = ceil(log2(height))) so the ingress decodes by bit-slicing. A packed
 # y*width + x would force a DIVIDER into the ingress. The aperture is virtual --
 # nothing is stored there -- so the address space the padding wastes is free.
+# The attachment index sits above face, so a single-attachment export is the
+# same address it was before there were several.
+#
+# The window is bounded by VX_MEM_OM_END_ADDR and cannot grow -- the page table
+# starts immediately above it -- so the encoding must satisfy
+#     XBITS + YBITS + 1 + CLOG2(VX_OM_MAX_RT) + RECORD_SHIFT <= log2(window)
+# The runtime checks this when it programs the aperture.
 VX_DCR_OM_APERTURE_XBITS    = 0x093
 VX_DCR_OM_APERTURE_YBITS    = 0x094
 # Record shape. A shader emits colour only (2 -- early-Z owns the depth test AND
@@ -365,7 +380,12 @@ VX_DCR_OM_APERTURE_YBITS    = 0x094
 # both (3 -- gl_FragDepth). DEPTH_ONLY disambiguates the two one-word modes.
 VX_DCR_OM_APERTURE_RECORD_SHIFT = 0x095
 VX_DCR_OM_APERTURE_DEPTH_ONLY   = 0x096
-VX_DCR_OM_STATE_END         = 0x097
+# Colour attachment the CBUF_*, BLEND_* and LOGIC_OP registers above apply to.
+# Everything else in this block -- depth, stencil, the z-buffer and the aperture
+# geometry -- is shared by every attachment, so a pass programs it once. Resets
+# to 0, so a single-attachment driver never has to write it.
+VX_DCR_OM_RT_SELECT         = 0x097
+VX_DCR_OM_STATE_END         = 0x098
 
 [dcr_rtu]
 # Ray-Tracing Unit DCRs.
@@ -474,13 +494,6 @@ VX_RT_CB_TYPE_PROC          = 2
 # RISC-V M-mode synchronous trap causes. 0..15 are standard.
 VX_TRAP_CAUSE_BREAKPOINT       = 3
 VX_TRAP_CAUSE_ECALL_MMODE      = 11
-
-# Graphics extension CSRs (0x7C0..0x7FF user-defined custom range)
-[csr_gfx]
-VX_CSR_OM_BEGIN         = 0x7CE
-VX_CSR_OM_RT_IDX        = 0x7CE
-VX_CSR_OM_SAMPLE_IDX    = 0x7CF
-VX_CSR_OM_END           = 0x7D0
 
 [csr_base]
 VX_CSR_MVENDORID = 0xF11

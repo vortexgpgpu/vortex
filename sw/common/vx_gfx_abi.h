@@ -168,18 +168,24 @@ struct rast_attrib_t {
 
 // Attribute planes carried per primitive (Q7.24 barycentric deltas {a0-a2,
 // a1-a2, a2}). Depth `z` is a screen-space affine plane (correct as-is). The
-// colour/texcoord planes r,g,b,a,u,v carry the *perspective-premultiplied*
+// generic varying planes r,g,b,a,u,v,w0..w5 carry the *perspective-premultiplied*
 // attribute a·(1/w); `rhw` carries the (max-normalized) 1/w plane. The FS
-// interpolates all planes affinely in screen space, then divides the colour/uv
+// interpolates all planes affinely in screen space, then divides the varying
 // planes by the interpolated 1/w to recover the perspective-correct attribute.
 // The 1/w values are normalized by their per-triangle max in setup so the
 // stored fixed-point stays in range (the scale cancels in the FS divide); when
 // w is constant this reduces exactly to plain affine interpolation. Setup also
 // folds an extra common power-of-2 downscale into 1/w when a premultiplied
-// texcoord would exceed FloatA's Q7.24 range (large tiling/wrap UV), which
+// varying would exceed FloatA's Q7.24 range (large tiling/wrap UV), which
 // likewise cancels in the FS divide — so tiled UV well beyond 1.0 stays exact.
+//
+// The front end packs a draw's user varyings into these planes in declaration
+// order [u,v,r,g,b,a,w0..w5] (gfx_frontend_k.h expand_k); the FS reads them back
+// the same way. Twelve scalar planes let a fragment carry up to three vec4
+// varyings (e.g. samplerCube textureGrad's coord + dPdx + dPdy), past the six a
+// single colour+texcoord allowed. `z`/`rhw` stay fixed-function.
 struct rast_attribs_t {
-  rast_attrib_t z, r, g, b, a, u, v, rhw;
+  rast_attrib_t z, r, g, b, a, u, v, rhw, w0, w1, w2, w3, w4, w5;
 };
 
 struct rast_prim_t {

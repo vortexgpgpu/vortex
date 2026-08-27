@@ -58,6 +58,15 @@ ifneq ($(NO_OM),1)
 CONFIGS += -DVX_CFG_EXT_OM_ENABLE
 endif
 
+# The RISC-V A extension, which VX_config.toml leaves off by default. vortexpipe
+# compiles every kernel for -march=rv32imaf (the 'a' is implied by the toolchain
+# target) and advertises Vulkan's integer atomics, so a shader that uses one
+# emits an AMO the hardware must be configured to execute. Without this the
+# decoder produces an AMO the LSU was compiled not to accept and the run aborts
+# with "build mismatch" — which is what a build honestly reports, but only after
+# the test has already been written. Any Vulkan test touching atomics needs it.
+CONFIGS += -DVX_CFG_EXT_A_ENABLE
+
 GLSLC ?= glslc
 CC    ?= cc
 
@@ -134,7 +143,10 @@ $(PROJECT): $(SRCS)
 	$(GLSLC) $< -o $@
 
 # libvortex.so: the vortex2.h API layer Mesa's libgallium links.
-$(VORTEX_RT_LIB)/libvortex.so:
+# FORCE, not a bare rule: a rule with no prerequisites runs only when its target
+# is missing, so once this library exists make never re-enters the sub-make that
+# owns it and every test goes on linking whichever build happened to land first.
+$(VORTEX_RT_LIB)/libvortex.so: FORCE
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub DESTDIR=$(VORTEX_RT_LIB)
 
 # `run` defaults to the SimX backend; explicit recipes select simx / rtlsim
@@ -171,3 +183,5 @@ endif
 
 clean:
 	rm -rf $(PROJECT) $(SPVS) ramulator.stats.log trace *.dump *.log
+
+FORCE:

@@ -28,6 +28,10 @@ VX_CFG_EXT_M_ENABLE = true
 VX_CFG_EXT_F_ENABLE = true
 VX_CFG_EXT_C_ENABLE = false
 VX_CFG_EXT_A_ENABLE = false
+# Zacas: native compare-and-swap (amocas). Requires the A extension -- it adds
+# an atomic, it does not replace the set. Off by default because it widens the
+# memory request with a comparand operand.
+VX_CFG_EXT_ZACAS_ENABLE = false
 
 VX_CFG_EXT_ZICOND_ENABLE = true
 VX_CFG_EXT_TCU_ENABLE = false

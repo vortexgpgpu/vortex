@@ -625,6 +625,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire        box_valid_out, box_hit;
     wire [31:0] box_t_near;
     wire [COLL_IDW+32-1:0] box_tag_out;
+    wire [COLL_IDW+32-1:0] box_tag_pre;
     wire [COLL_IDW-1:0]    box_coll     = box_tag_out[COLL_IDW+32-1 : 32];
     wire [31:0]            box_childoff = box_tag_out[31:0];
     wire [IDXW-1:0]        feed_ci      = word_q.feed_idx[IDXW-1:0];
@@ -652,6 +653,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .t_max     (word_q.best_t),
             .valid_out (box_valid_out),
             .tag_out   (box_tag_out),
+            .tag_out_pre (box_tag_pre),
             .hit       (box_hit),
             .t_near    (box_t_near)
         );
@@ -660,18 +662,49 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         assign box_hit       = 1'b0;
         assign box_t_near    = '0;
         assign box_tag_out   = '0;
+        assign box_tag_pre   = '0;
         `UNUSED_VAR ({box_feed, box_feed_raw, feed_ci, walk_inv_d})
         `UNUSED_VAR ({leaf_v0, leaf_v1, leaf_geom, leaf_prim, leaf_flags, leaf_count})
         `UNUSED_VAR ({node, node_kind, node_lines, leaf_lines, stacktop_q})
     end
+
+    // Row select for the insertion read. It depends only on the tag, which the
+    // box PE delivers a cycle ahead of its result, so the decode is registered
+    // here rather than repeated on the result cycle -- where it fans out across
+    // every row and lands on the path that ends at the ordering registers.
+    wire [COLL_IDW-1:0] box_coll_pre = box_tag_pre[COLL_IDW+32-1 : 32];
+    reg [COLL_SIZE-1:0] box_coll_hot;
+    always @(posedge clk) begin
+        if (reset) begin
+            box_coll_hot <= '0;
+        end else begin
+            box_coll_hot <= COLL_SIZE'(1) << box_coll_pre;
+        end
+    end
+
+    wire [COLL_SIZE-1:0][NODE_W*32+RTU_CHILD_BITS-1:0] coll_row_in;
+    for (genvar c = 0; c < COLL_SIZE; ++c) begin : g_coll_row_in
+        assign coll_row_in[c] = {coll_ordt[c], coll_ordcnt[c]};
+    end
+
+    wire [NODE_W-1:0][31:0]   coll_ordt_sel;
+    wire [RTU_CHILD_BITS-1:0] coll_ordcnt_sel;
+    VX_onehot_mux #(
+        .DATAW (NODE_W * 32 + RTU_CHILD_BITS),
+        .N     (COLL_SIZE)
+    ) coll_row_mux (
+        .data_in  (coll_row_in),
+        .sel_in   (box_coll_hot),
+        .data_out ({coll_ordt_sel, coll_ordcnt_sel})
+    );
 
     // insertion index: collected entries with t <= the incoming child's
     reg [RTU_CHILD_BITS-1:0] ins_pos;
     always @(*) begin
         ins_pos = RTU_CHILD_BITS'(0);
         for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
-            if ((RTU_CHILD_BITS'(oc) < coll_ordcnt[box_coll])
-             && (coll_ordt[box_coll][oc[IDXW-1:0]] <= box_t_near)) begin
+            if ((RTU_CHILD_BITS'(oc) < coll_ordcnt_sel)
+             && (coll_ordt_sel[oc[IDXW-1:0]] <= box_t_near)) begin
                 ins_pos = ins_pos + RTU_CHILD_BITS'(1);
             end
         end

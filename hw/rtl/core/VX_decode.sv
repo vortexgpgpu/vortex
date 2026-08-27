@@ -175,6 +175,9 @@ module VX_decode import
             5'h14: amo_type = AMO_OP_MAX;
             5'h18: begin amo_type = AMO_OP_MIN; amo_unsigned = 1'b1; end
             5'h1c: begin amo_type = AMO_OP_MAX; amo_unsigned = 1'b1; end
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            5'h05: amo_type = AMO_OP_CAS;
+        `endif
             default: amo_type = AMO_OP_LR;
         endcase
     end
@@ -375,6 +378,16 @@ module VX_decode import
                 if (amo_type != AMO_OP_LR) begin
                     `USED_IREG (rs2);
                 end
+            `ifdef VX_CFG_EXT_ZACAS_ENABLE
+                // Compare-and-swap reads rd as well as writing it: rd holds
+                // the comparand. The third operand slot carries any register
+                // the decoder puts in it, so rd goes there directly -- the
+                // rs3 wire is the funct5 field for an AMO and is not used.
+                if (amo_type == AMO_OP_CAS) begin
+                    reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, RV_REGS_BITS'(rd));
+                    use_regs[RV_RS3] = 1'b1;
+                end
+            `endif
             end
         `endif
             INST_SYS : begin

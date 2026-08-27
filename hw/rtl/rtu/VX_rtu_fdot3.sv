@@ -39,11 +39,14 @@ module VX_rtu_fdot3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     for (genvar i = 0; i < 3; ++i) begin : g_mul
         wire [7:0]  ea = a[i][30:23], eb = b[i][30:23];
         wire        az = (ea == 8'd0), bz = (eb == 8'd0);
-        wire [23:0] ma = az ? 24'd0 : {1'b1, a[i][22:0]};
-        wire [23:0] mb = bz ? 24'd0 : {1'b1, b[i][22:0]};
+        wire [23:0] ma = {1'b1, a[i][22:0]};
+        wire [23:0] mb = {1'b1, b[i][22:0]};
         assign m_sign[i] = a[i][31] ^ b[i][31];
         assign m_pe[i]   = (az | bz) ? 9'd0 : ({1'b0, ea} + {1'b0, eb});
-        // 24x24 mantissa product pipelined into the DSP48 (LATENCY_IMUL deep)
+        // 24x24 mantissa product pipelined into the DSP48 (LATENCY_IMUL deep).
+        // The operands are the raw mantissas: a flushed term is discarded
+        // downstream by its pe=0, so nothing selects in front of the multiplier
+        // inputs and the DSP is driven straight from the source flops.
         VX_multiplier #(
             .A_WIDTH (24),
             .B_WIDTH (24),

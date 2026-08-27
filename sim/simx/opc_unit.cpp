@@ -24,15 +24,6 @@ inline static constexpr uint32_t wid_to_opc_slot(uint32_t wid) {
   return (wid / VX_CFG_ISSUE_WIDTH) / VX_CFG_NUM_OPCS;
 }
 
-void OpcUnit::warp_regs_t::reset() {
-  for (auto& bank : ireg_file) {
-    for (auto& v : bank) v = 0;
-  }
-  for (auto& bank : freg_file) {
-    for (auto& v : bank) v = 0;
-  }
-}
-
 OpcUnit::OpcUnit(const SimContext &ctx, const char* name,
                  uint32_t num_warp_slots, uint32_t num_threads)
   : SimObject<OpcUnit>(ctx, name)
@@ -52,9 +43,10 @@ void OpcUnit::on_reset() {
   total_stalls_ = 0;
   cur_trace_ = nullptr;
   release_cycle_ = 0;
-  for (auto& w : regs_) {
-    w.reset();
-  }
+  // The register files are excluded: they are storage, not pipeline state, and
+  // a launch is not a device reset. A slot that skips its startup relies on the
+  // stack pointer that startup left behind, so clearing them here would strand
+  // it at zero. They are zero-initialized at construction.
 }
 
 static uint32_t compute_bank_conflicts(const instr_trace_t* trace) {

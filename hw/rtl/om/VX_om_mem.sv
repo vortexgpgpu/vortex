@@ -21,8 +21,10 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    // Device configuration
-    input om_dcrs_t dcrs,
+    // Device configuration. rt_dcrs is the attachment state already selected for
+    // the request in flight, so the address pipeline never sees the index.
+    input om_dcrs_t    dcrs,
+    input om_rt_dcrs_t rt_dcrs,
 
     // Memory interface
     VX_mem_bus_if.master                            cache_bus_if [OCACHE_NUM_REQS],
@@ -82,8 +84,9 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire                        mrsp_ready;
 
     `UNUSED_VAR (dcrs)
+    `UNUSED_VAR (rt_dcrs)
 
-    wire [3:0] color_byteen = dcrs.cbuf_writemask;
+    wire [3:0] color_byteen = rt_dcrs.cbuf_writemask;
     wire [2:0] depth_byteen = {3{dcrs.depth_writemask}};
     wire [NUM_LANES-1:0] stencil_byteen;
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_stencil_byteen
@@ -149,12 +152,12 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             .clk    (clk),
             .enable (1'b1),
             .dataa  (req_pos_y[i - NUM_LANES]),
-            .datab  (dcrs.cbuf_pitch),
+            .datab  (rt_dcrs.cbuf_pitch),
             .result (m_y_pitch)
         );
 
         wire [W_ADDR_BITS-1:0] baddr, baddr_s;
-        assign baddr = {dcrs.cbuf_addr, 4'b0} + W_ADDR_BITS'(req_pos_x[i - NUM_LANES]);
+        assign baddr = {rt_dcrs.cbuf_addr, 4'b0} + W_ADDR_BITS'(req_pos_x[i - NUM_LANES]);
 
         wire [3:0]  byteen = req_rw ? color_byteen : 4'b1111;
         wire [31:0] data = req_color[i - NUM_LANES];

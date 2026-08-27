@@ -62,6 +62,14 @@ public:
   // Notify that a warp has exited; frees its lmem slot when all warps of the CTA are done.
   void warp_done(uint32_t wid);
 
+  // Startup-stub bookkeeping for launches that do not come through step().
+  // A fragment warp lands in the same slots as a compute CTA and owes the same
+  // per-lane startup, so it has to read and update this state rather than keep
+  // its own: a slot the compute path has already initialized must not run the
+  // stub again, and vice versa.
+  bool slot_needs_init(uint32_t wid, const ThreadMask& tmask) const;
+  void mark_slot_inited(uint32_t wid, const ThreadMask& tmask);
+
   // True while a CTA is being dispatched or waits in the launch lane.
   bool running() const {
     return has_cta_ || (bus_in.size() != 0);

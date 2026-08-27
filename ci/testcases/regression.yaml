@@ -106,3 +106,8 @@ tests:
   drivers:
   - rtlsim
   app: single_cta
+- id: module_reload-1
+  via: blackbox
+  drivers:
+  - simx
+  app: module_reload

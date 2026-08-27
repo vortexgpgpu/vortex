@@ -129,7 +129,10 @@ RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),P
 $(VORTEX_KN_PATH)/libvortex2.a:
 	$(MAKE) -C $(VORTEX_KN_PATH)
 
-$(VORTEX_RT_LIB)/libvortex.so:
+# FORCE, not a bare rule: a rule with no prerequisites runs only when its target
+# is missing, so once this library exists make never re-enters the sub-make that
+# owns it and every test goes on linking whichever build happened to land first.
+$(VORTEX_RT_LIB)/libvortex.so: FORCE
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub DESTDIR=$(VORTEX_RT_LIB)
 
 # chipStar's hipcc handles host+device in one invocation, producing a
@@ -165,3 +168,5 @@ clean:
 	rm -f $(PROJECT) *.o *.vxbin *.dump *.ll *.log *.spv common.h
 
 .PHONY: all run-simx run-rtlsim run-opae run-xrt clean
+
+FORCE:

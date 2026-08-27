@@ -43,7 +43,10 @@ warp_t::warp_t(uint32_t num_threads)
 
 void warp_t::reset() {
   this->tmask.reset();
-  this->PC   = 0;
+  // PC is excluded: a slot that has already run the startup resumes at its
+  // dispatch window, which is derived from where the previous CTA left this
+  // register, and a launch is not a device reset. It is zero-initialized at
+  // construction, and every activation path assigns the PC before it is read.
   this->uuid = 0;
   this->fcsr = 0;
   this->mstatus = 0;
@@ -386,12 +389,14 @@ void Scheduler::fwd_disarm() {
 }
 
 void Scheduler::fwd_try_inject() {
-  // The warp begins at the program image base (where __vx_cta_entry is linked),
-  // exactly as a KMU-launched CTA does; the per-CTA dispatch window reads
-  // VX_CSR_CTA_ENTRY (= rec.entry, the FS function) and VX_CSR_MSCRATCH
+  // A fresh warp slot begins at the program image base (where __vx_cta_entry is
+  // linked), exactly as a KMU-launched CTA does; the per-CTA dispatch window
+  // reads VX_CSR_CTA_ENTRY (= rec.entry, the FS function) and VX_CSR_MSCRATCH
   // (= rec.mscratch, the FS args) and calls into the shader. The image base
   // is the KMU's startup PC (set by the grid-less draw kick, persists across
   // SimPlatform reset); the FS entry/arg come from the RASTER_FRAG_* descriptor.
+  // A slot that already ran the startup for these lanes rewinds into the
+  // dispatch window instead -- see activate_warp.
   const Word startup_pc =
     Word(core_->socket()->cluster()->processor()->kmu().startup_pc());
 
@@ -406,7 +411,11 @@ void Scheduler::fwd_try_inject() {
     const FwdWave& wave = fwd_waves_.front();
 
     cta_warp_record_t rec;  // ThreadMask member needs sizing; assigned below
-    rec.do_init  = true;
+    // A slot that has already run the startup for these lanes rewinds into the
+    // dispatch window instead of re-entering at the image base, exactly as a
+    // compute CTA does. The state is the dispatcher's because a slot is shared
+    // between the two launch paths.
+    rec.do_init  = cta_dispatcher_->slot_needs_init(uint32_t(wid), wave.tmask);
     rec.PC       = startup_pc;                                         // image base (__vx_cta_entry)
     rec.entry    = fwd_frag_entry_;                                    // FS function entry (CTA_ENTRY)
     rec.mscratch = fwd_frag_param_;                                    // FS args pointer
@@ -427,6 +436,7 @@ void Scheduler::fwd_try_inject() {
     rec.tmask         = wave.tmask;
 
     activate_warp(uint32_t(wid), rec);
+    cta_dispatcher_->mark_slot_inited(uint32_t(wid), wave.tmask);
 
     // The stamp arrives with the launch: land it in this warp's launch registers
     // (read back as the FRAG_* CSRs). No window tenancy, no slot, no window op.

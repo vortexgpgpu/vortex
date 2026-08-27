@@ -7,7 +7,7 @@ defaults:
   configs: "-DVX_CFG_EXT_A_ENABLE"
   xlen: [32, 64]
   tier: smoke
-  touches: [hw/rtl/cache, sim/simx/amo, sim/simx/mem]
+  touches: [hw/rtl/cache, hw/rtl/mem, hw/rtl/core/VX_decode.sv, hw/rtl/core/VX_lsu_slice.sv, sim/simx/amo, sim/simx/mem]
 tests:
   # RISC-V 'A' ISA conformance (rv{XLEN}ua-p-{amo*,lrsc}); shares the A-built sim.
   - id: isa-conformance
@@ -19,6 +19,13 @@ tests:
   - id: base
     app: amo
     drivers: [simx, rtlsim]
+  # Native compare-and-swap. The cas_ladder case is compiled out when the
+  # extension is off, which is the default, so without this spec nothing
+  # exercises the compare-and-swap datapath at all.
+  - id: zacas
+    app: amo
+    drivers: [simx, rtlsim]
+    configs+: "-DVX_CFG_EXT_ZACAS_ENABLE"
   # Write-back D-cache variants (rtlsim only in the legacy suite).
   - id: wb-dirtybytes0
     app: amo

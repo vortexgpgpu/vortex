@@ -17,6 +17,7 @@
 #include <bitmanip.h>
 #include <vector>
 #include <cstring>
+#include <algorithm>
 #include "types.h"
 #if VX_CFG_EXT_A_ENABLED
 #include "amo_ops.h"
@@ -33,6 +34,23 @@ protected:
 	uint32_t 	addr_bits_;
 #if VX_CFG_EXT_A_ENABLED
 	AmoUnit   amo_unit_;
+	// Per-bank atomic occupancy. A bank has a single port and the value read out
+	// is registered before the update is computed, so an atomic owns its bank
+	// for three cycles -- read, capture, write back -- and it accepts nothing
+	// else meanwhile.
+	static constexpr uint32_t AMO_BANK_STALL_CYCLES = 2;
+	std::vector<uint32_t> amo_busy_;
+	// A read issued the cycle after a write to the same word returns the word's
+	// pre-update value, so the bank holds such a read off for one cycle. The
+	// write-back is the third cycle of the occupancy, so this shadow covers the
+	// fourth -- the cycle the next contending atomic arrives, which is why
+	// back-to-back atomics on one word cost four cycles and not three.
+	std::vector<uint64_t> amo_rdw_addr_;
+	std::vector<bool>     amo_rdw_valid_;
+	// Whether the atomic now occupying the bank ends in a write at all. A
+	// load-reserved never writes and a failed store-conditional must not, so
+	// neither leaves a shadow behind.
+	std::vector<bool>     amo_rdw_pending_;
 #endif
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
@@ -40,6 +58,14 @@ protected:
 	uint64_t to_local_addr(uint64_t addr) {
 		return bit_getw(addr, 0, addr_bits_-1);
 	}
+
+#if VX_CFG_EXT_A_ENABLED
+	// The word a bank is addressed by. Two byte addresses falling in one word
+	// are the same access as far as the bank is concerned.
+	uint64_t bank_word(uint64_t addr) {
+		return to_local_addr(addr) >> log2ceil(config_.line_size);
+	}
+#endif
 
 public:
 	Impl(LocalMem* simobject, const Config& config)
@@ -49,6 +75,10 @@ public:
 		, addr_bits_(log2ceil(config.capacity))
 #if VX_CFG_EXT_A_ENABLED
 		, amo_unit_(VX_CFG_AMO_RS_SIZE < 2 ? 2u : (uint32_t)VX_CFG_AMO_RS_SIZE)
+		, amo_busy_(1 << config.B, 0)
+		, amo_rdw_addr_(1 << config.B, 0)
+		, amo_rdw_valid_(1 << config.B, false)
+		, amo_rdw_pending_(1 << config.B, false)
 #endif
 	{
 		char sname[100];
@@ -72,6 +102,9 @@ public:
 		perf_stats_ = PerfStats();
 #if VX_CFG_EXT_A_ENABLED
 		amo_unit_.reset();
+		std::fill(amo_busy_.begin(), amo_busy_.end(), 0);
+		std::fill(amo_rdw_valid_.begin(), amo_rdw_valid_.end(), false);
+		std::fill(amo_rdw_pending_.begin(), amo_rdw_pending_.end(), false);
 #endif
 	}
 
@@ -79,6 +112,20 @@ public:
 		// process bank requets from xbar
 		uint32_t num_banks = (1 << config_.B);
 		for (uint32_t i = 0; i < num_banks; ++i) {
+#if VX_CFG_EXT_A_ENABLED
+			// Cycles an in-flight atomic owns; the bank serves nothing else.
+			if (amo_busy_[i] != 0) {
+				if (0 == --amo_busy_[i]) {
+					amo_rdw_valid_[i] = amo_rdw_pending_[i]; // write-back just issued
+				}
+				continue;
+			}
+			// The shadow is one cycle wide: consume it here whether or not
+			// anything is waiting on the bank.
+			const bool     rdw_shadow = amo_rdw_valid_[i];
+			const uint64_t rdw_addr   = amo_rdw_addr_[i];
+			amo_rdw_valid_[i] = false;
+#endif
 			auto& xbar_req_out = mem_xbar_->ReqOut.at(i);
 			if (xbar_req_out.empty())
 				continue;
@@ -86,6 +133,17 @@ public:
 			auto& bank_req = xbar_req_out.peek();
 
 #if VX_CFG_EXT_A_ENABLED
+			// A read of the word the write-back just stored waits a cycle. An
+			// atomic reads the bank for its old value, so it counts as a reader
+			// here even though the request carries a write flag; that is what
+			// makes contending atomics on one word cost four cycles.
+			const bool reads_bank = !bank_req.is_write() || memop_is_atomic(bank_req.op);
+			if (rdw_shadow
+			 && reads_bank
+			 && this->bank_word(bank_req.addr) == rdw_addr) {
+				continue;
+			}
+
 			// Shared-memory atomics: read-modify-write in place and ALWAYS
 			// return the old word. An AMO has a destination register, so the
 			// LSU reserved a response slot; a missing response hangs the warp
@@ -111,7 +169,8 @@ public:
 				const uint64_t rhs = bank_req.data
 					? amo_load_word(bank_req.data->data(), byte_off, width) : 0;
 				auto rmw = amo_compute(op, width, old_word, rhs,
-				                       bank_req.flags.amo_unsigned);
+				                       bank_req.flags.amo_unsigned,
+				                       bank_req.amo_cmp);
 
 				// Build the response before mutating any state so a full RspIn
 				// can stall-retry cleanly.
@@ -124,18 +183,28 @@ public:
 				if (!mem_xbar_->RspIn.at(i).try_send(bank_rsp))
 					continue; // stall; no state mutated yet
 
+				// An SC gives up its own reservation whether it succeeds or
+				// fails; an LR claims one. Everything else is a plain RMW,
+				// whose commit breaks the other harts' reservations below.
 				if (is_lr)      amo_unit_.reserve(bank_req.hart_id, la);
 				else if (is_sc) amo_unit_.clear(bank_req.hart_id, la);
-				else            amo_unit_.invalidate(la, bank_req.hart_id);
 				if (do_store) {
 					uint8_t sbuf[8];
 					amo_store_word(sbuf, 0, width, rmw.new_word);
 					ram_.write(sbuf, la, wbytes);
+					// Any committed store breaks every other hart's reservation
+					// on the word. Without this a second hart's stale
+					// reservation survives the first hart's successful SC, so
+					// both report success and one update is lost.
+					amo_unit_.invalidate(la, bank_req.hart_id);
 				}
 				perf_stats_.reads  += !do_store;
 				perf_stats_.writes += do_store;
 				DT(4, simobject_->name() << "-bank" << i << " amo : " << bank_req);
+				amo_rdw_addr_[i]    = this->bank_word(bank_req.addr);
+				amo_rdw_pending_[i] = do_store;
 				xbar_req_out.pop();
+				amo_busy_[i] = AMO_BANK_STALL_CYCLES;   // capture, then write back
 				continue;
 			}
 #endif
@@ -149,6 +218,13 @@ public:
 						ram_.write(&value, line_addr + b, 1);
 					}
 				}
+#if VX_CFG_EXT_A_ENABLED
+				// A plain store breaks a reservation on the word it writes, the
+				// same as an atomic's commit does; otherwise a store between a
+				// hart's load-reserved and its store-conditional would go
+				// unnoticed and the conditional would wrongly succeed.
+				amo_unit_.invalidate(to_local_addr(bank_req.addr), bank_req.hart_id);
+#endif
 			}
 
 			// Loads always respond. Stores respond when configured globally OR

@@ -1,0 +1,21 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * imageLoad + imageStore against the same storage image: read the texel, write
+ * a value derived from it back to the same coordinate. Reading before writing
+ * is what makes the round trip meaningful -- a store-only shader would pass
+ * against an image whose contents never reached the device.
+ */
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+layout(binding = 0, r32ui) uniform uimage2D img;
+
+void main()
+{
+   ivec2 c = ivec2(gl_GlobalInvocationID.xy);
+   uint v = imageLoad(img, c).x;
+   imageStore(img, c, uvec4(v * 2u + 1u, 0u, 0u, 0u));
+}

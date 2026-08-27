@@ -55,10 +55,14 @@ void CtaDispatcher::on_reset() {
   for (uint32_t i = 0; i < num_warps_; ++i) {
     slot_rem_warps_[i] = 0;
     wid_to_slot_[i]    = num_warps_;  // invalid
-    warp_init_lanes_[i].reset();
   }
   cur_kernel_pc_ = 0;
-  cur_ctx_id_    = 0;
+  // warp_init_lanes_ and cur_ctx_id_ are excluded: which lanes of a slot have
+  // already run the startup is keyed on the context, and a launch is not a
+  // device reset. Clearing them here would make the context check dead and
+  // re-run the startup on every launch, including one that dispatches no CTAs
+  // of its own. A context change in step() remains the only invalidator, and
+  // both are zero-initialized at construction.
 }
 
 uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
@@ -191,6 +195,23 @@ void CtaDispatcher::warp_done(uint32_t wid) {
   // When the last warp of a CTA exits, its slot (and the LMEM region at
   // slot × stride) frees immediately for reuse — no in-order reclaim.
   --slot_rem_warps_[slot];
+}
+
+bool CtaDispatcher::slot_needs_init(uint32_t wid, const ThreadMask& tmask) const {
+  const auto& inited = warp_init_lanes_[wid];
+  for (uint32_t t = 0; t < num_threads_; ++t) {
+    if (tmask.test(t) && !inited.test(t))
+      return true;
+  }
+  return false;
+}
+
+void CtaDispatcher::mark_slot_inited(uint32_t wid, const ThreadMask& tmask) {
+  auto& inited = warp_init_lanes_[wid];
+  for (uint32_t t = 0; t < num_threads_; ++t) {
+    if (tmask.test(t))
+      inited.set(t);
+  }
 }
 
 bool CtaDispatcher::next_warp(bool do_init, cta_warp_record_t* out) {

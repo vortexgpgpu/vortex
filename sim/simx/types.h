@@ -418,13 +418,17 @@ enum class MemOp : uint8_t {
   // `flags.amo_unsigned` for AMOMINU/AMOMAXU and the AMO ALU branches on it.
   AMO_MIN   = 10,
   AMO_MAX   = 11,
+  // Compare-and-swap. Kept last so the range checks below stay contiguous;
+  // it is the only atomic that reads a third operand (the comparand, which
+  // the instruction takes from rd).
+  AMO_CAS   = 12,
 };
 
 inline bool memop_is_atomic(MemOp op) {
-  return op >= MemOp::AMO_LR && op <= MemOp::AMO_MAX;
+  return op >= MemOp::AMO_LR && op <= MemOp::AMO_CAS;
 }
 inline bool memop_is_amo_rmw(MemOp op) {
-  return op >= MemOp::AMO_SWAP && op <= MemOp::AMO_MAX;
+  return op >= MemOp::AMO_SWAP && op <= MemOp::AMO_CAS;
 }
 inline bool memop_is_write(MemOp op) {
   return op == MemOp::ST || op == MemOp::AMO_SC || memop_is_amo_rmw(op);
@@ -485,6 +489,7 @@ inline std::ostream &operator<<(std::ostream &os, const MemOp& op) {
   case MemOp::AMO_XOR:   os << "AMO_XOR"; break;
   case MemOp::AMO_MIN:   os << "AMO_MIN"; break;
   case MemOp::AMO_MAX:   os << "AMO_MAX"; break;
+  case MemOp::AMO_CAS:   os << "AMO_CAS"; break;
   default:               os << "?MemOp" << (int)op; break;
   }
   return os;
@@ -501,7 +506,8 @@ enum class AmoType {
   AMOMIN,
   AMOMAX,
   AMOMINU,
-  AMOMAXU
+  AMOMAXU,
+  AMOCAS
 };
 
 struct IntrAmoArgs {
@@ -1122,6 +1128,9 @@ struct LsuReq {
   std::vector<uint64_t> addrs;
   std::vector<std::shared_ptr<mem_block_t>> data;
   std::vector<uint64_t> byteen;
+  // Comparand per lane. Only compare-and-swap reads it; it is a separate
+  // field because the data operand is already carrying the swap value.
+  std::vector<uint64_t> amo_cmp;
   BitVector<> mask;
   std::vector<uint32_t> tids;
   uint32_t tag;
@@ -1135,6 +1144,7 @@ struct LsuReq {
     , addrs(size, 0)
     , data(size)
     , byteen(size, 0)
+    , amo_cmp(size, 0)
     , mask(size)
     , tids(size, 0)
     , tag(0)
@@ -1208,6 +1218,7 @@ inline MemOp amo_to_memop(AmoType t) {
   case AmoType::AMOMINU: return MemOp::AMO_MIN;
   case AmoType::AMOMAX:
   case AmoType::AMOMAXU: return MemOp::AMO_MAX;
+  case AmoType::AMOCAS:  return MemOp::AMO_CAS;
   }
   std::abort();
 }
@@ -1233,6 +1244,9 @@ struct MemReq {
   uint64_t addr;
   std::shared_ptr<mem_block_t> data;
   uint64_t byteen = 0;
+  // Comparand, read only by compare-and-swap. The data block carries the
+  // swap value, so the comparand needs a field of its own.
+  uint64_t amo_cmp = 0;
   uint32_t tag;
   uint32_t hart_id;
   uint64_t uuid;

@@ -17,16 +17,11 @@
 // engine turns that into cache traffic:
 //
 //   SELECT — pick one context (round-robin, so no context starves).
-//   MERGE  — every other REQ context asking for the SAME line joins it. Near the
-//            BVH root that is most of them: a coherent warp descending a shared
-//            tree would otherwise re-request each node once per ray.
-//   MSHR   — CAM the line against the in-flight table. A hit folds the group
-//            onto the entry already outstanding (a context that has drifted a
-//            cycle behind still costs no second fetch); a miss allocates an
-//            entry and issues exactly one load.
+//   MSHR   — allocate an entry for the line and issue exactly one load.
 //
-// RTU_MERGE_DEPTH sizes the table. 0 bypasses the whole stage: one context, one
-// tag, one fetch — the behaviour to measure the merge against.
+// Duplicate fetches are not coalesced: one context, one tag, one fetch. A
+// coherent warp descending a shared tree therefore re-requests each node once
+// per ray, and the caches absorb it.
 //
 // The response side fans one line out to every context waiting on its entry.
 
@@ -55,7 +50,7 @@ public:
 
   void reset();
 
-  // SELECT -> MERGE -> MSHR -> issue. At most one distinct line leaves the RTU
+  // SELECT -> MSHR -> issue. At most one distinct line leaves the RTU
   // per port per tick.
   void issue_memory();
 
@@ -63,7 +58,8 @@ public:
   void drain_mem_rsp();
 
 private:
-  // One in-flight line fetch and the contexts riding on it.
+  // One in-flight line fetch and the contexts riding on it — without
+  // coalescing, always the single context that requested it.
   struct Mshr {
     bool     valid = false;
     uint64_t addr  = 0;

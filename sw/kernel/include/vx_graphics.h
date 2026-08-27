@@ -64,14 +64,18 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
 //
 // The aperture address is SHIFT-ONLY (the pitch is padded to a power of two), so
 // the ingress decodes it by bit-slicing instead of dividing:
-//     offset = ((face << (XBITS+YBITS)) | (y << XBITS) | x) << RECORD_SHIFT
+//     offset = ((((rt << 1) | face) << YBITS | y) << XBITS | x) << RECORD_SHIFT
 // XBITS/YBITS/RECORD_SHIFT come from the OM DCRs; the runtime programs them and
 // passes them to the kernel, so the shader just shifts and adds.
-#define VX_OM_APERTURE_ADDR(xbits, ybits, record_shift, x, y, face) \
-  ((VX_MEM_OM_BASE_ADDR) +                                          \
-   ((((uint32_t)(face) << ((xbits) + (ybits)))                      \
-     | ((uint32_t)(y) << (xbits))                                   \
+#define VX_OM_APERTURE_ADDR_RT(xbits, ybits, record_shift, x, y, face, rt)     \
+  ((VX_MEM_OM_BASE_ADDR) +                                                     \
+   (((((uint32_t)(rt) << 1 | (uint32_t)(face)) << ((xbits) + (ybits)))         \
+     | ((uint32_t)(y) << (xbits))                                              \
      | (uint32_t)(x)) << (record_shift)))
+
+// A shader with one colour attachment names none.
+#define VX_OM_APERTURE_ADDR(xbits, ybits, record_shift, x, y, face) \
+  VX_OM_APERTURE_ADDR_RT(xbits, ybits, record_shift, x, y, face, 0)
 
 // vx_om_export — one fragment. CUSTOM1 funct3=3, R4-type, rd=x0 (posted).
 // funct7[1:0] = {has_depth, has_colour}: a shader may emit colour only (the

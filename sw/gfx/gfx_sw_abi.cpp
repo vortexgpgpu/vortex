@@ -36,8 +36,129 @@ static_assert(std::is_trivially_copyable<gfx_sw::TexState>::value &&
               "SW state structs must be POD for the C ABI");
 
 extern "C" uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
-                                      int32_t u, int32_t v, uint32_t lod) {
-  return gfx_sw::tex_sample_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, lod);
+                                      int32_t u, int32_t v, uint32_t lod,
+                                      uint32_t filter) {
+  return gfx_sw::tex_sample_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, lod, filter);
+}
+
+extern "C" void gfx_tex_sample_f32(const gfx_sw_texstate_t* st,
+                                   int32_t u, int32_t v, uint32_t lod,
+                                   uint32_t filter, float* out) {
+  gfx_sw::tex_sample_f32_layer(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, lod,
+                               0, filter, out);
+}
+
+extern "C" void gfx_tex_sample_array_f32(const gfx_sw_texstate_t* st,
+                                         int32_t u, int32_t v, uint32_t layer,
+                                         uint32_t lod, float* out) {
+  gfx_sw::tex_sample_f32_array(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v,
+                               layer, lod, out);
+}
+
+extern "C" void gfx_tex_sample_cube_f32(const gfx_sw_texstate_t* st,
+                                        float sc, float tc, float rc, uint32_t lod,
+                                        float* out) {
+  gfx_sw::tex_sample_f32_cube(*reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc,
+                              lod, out);
+}
+
+extern "C" void gfx_tex_sample_cube_array_f32(const gfx_sw_texstate_t* st,
+                                              float sc, float tc, float rc,
+                                              uint32_t array_index, uint32_t lod,
+                                              float* out) {
+  gfx_sw::tex_sample_f32_cube_array(*reinterpret_cast<const gfx_sw::TexState*>(st),
+                                    sc, tc, rc, array_index, lod, out);
+}
+
+extern "C" void gfx_tex_sample_3d_f32(const gfx_sw_texstate_t* st,
+                                      int32_t u, int32_t v, int32_t w, uint32_t lod,
+                                      uint32_t filter, float* out) {
+  gfx_sw::tex_sample_f32_3d(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, w, lod,
+                            filter, out);
+}
+
+extern "C" void gfx_tex_fetch_f32(const gfx_sw_texstate_t* st,
+                                  int32_t x, int32_t y, uint32_t lod, float* out) {
+  gfx_sw::tex_fetch_f32(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, lod, out);
+}
+
+extern "C" void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,
+                                        int32_t x, int32_t y, uint32_t layer,
+                                        uint32_t lod, float* out) {
+  gfx_sw::tex_fetch_array_f32(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y,
+                              layer, lod, out);
+}
+
+extern "C" void gfx_tex_fetch_i32(const gfx_sw_texstate_t* st,
+                                  int32_t x, int32_t y, uint32_t lod,
+                                  uint32_t layer, int32_t* out) {
+  gfx_sw::tex_fetch_i32(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, lod,
+                        layer, out);
+}
+
+extern "C" uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
+                                      int32_t x, int32_t y, uint32_t comp) {
+  return gfx_sw::tex_gather_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, comp);
+}
+
+extern "C" uint32_t gfx_tex_gather_array_sw(const gfx_sw_texstate_t* st,
+                                            int32_t x, int32_t y, uint32_t comp,
+                                            uint32_t layer) {
+  return gfx_sw::tex_gather_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y,
+                               comp, layer);
+}
+
+extern "C" uint32_t gfx_tex_shadow_sw(const gfx_sw_texstate_t* st,
+                                      int32_t x, int32_t y, uint32_t ref_bits,
+                                      uint32_t filter, uint32_t lod) {
+  return gfx_sw::tex_shadow_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y,
+                               ref_bits, filter, 0u, lod);
+}
+
+extern "C" uint32_t gfx_tex_shadow_array_sw(const gfx_sw_texstate_t* st,
+                                            int32_t x, int32_t y, uint32_t layer,
+                                            uint32_t ref_bits, uint32_t filter,
+                                            uint32_t lod) {
+  return gfx_sw::tex_shadow_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y,
+                               ref_bits, filter, layer, lod);
+}
+
+extern "C" uint32_t gfx_tex_shadow_cube_sw(const gfx_sw_texstate_t* st,
+                                           float sc, float tc, float rc,
+                                           uint32_t ref_bits, uint32_t filter,
+                                           uint32_t lod) {
+  return gfx_sw::tex_shadow_cube_sw(*reinterpret_cast<const gfx_sw::TexState*>(st),
+                                    sc, tc, rc, ref_bits, filter, lod);
+}
+
+extern "C" uint32_t gfx_tex_gather_cmp_sw(const gfx_sw_texstate_t* st,
+                                          int32_t x, int32_t y, uint32_t ref_bits) {
+  return gfx_sw::tex_gather_cmp_sw(*reinterpret_cast<const gfx_sw::TexState*>(st),
+                                   x, y, ref_bits);
+}
+
+extern "C" uint32_t gfx_tex_gather_cmp_array_sw(const gfx_sw_texstate_t* st,
+                                                int32_t x, int32_t y, uint32_t ref_bits,
+                                                uint32_t layer) {
+  return gfx_sw::tex_gather_cmp_sw(*reinterpret_cast<const gfx_sw::TexState*>(st),
+                                   x, y, ref_bits, layer);
+}
+
+extern "C" uint32_t gfx_tex_sample_cube_array_sw(const gfx_sw_texstate_t* st,
+                                                 float sc, float tc, float rc,
+                                                 uint32_t array_index, uint32_t lod) {
+  return gfx_sw::tex_sample_cube_array_sw(
+      *reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc, array_index, lod);
+}
+
+extern "C" uint32_t gfx_tex_shadow_cube_array_sw(const gfx_sw_texstate_t* st,
+                                                 float sc, float tc, float rc,
+                                                 uint32_t array_index,
+                                                 uint32_t ref_bits, uint32_t filter,
+                                                 uint32_t lod) {
+  return gfx_sw::tex_shadow_cube_array_sw(
+      *reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc, array_index,
+      ref_bits, filter, lod);
 }
 
 extern "C" uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
@@ -50,6 +171,11 @@ extern "C" uint32_t gfx_tex_sample_cube_sw(const gfx_sw_texstate_t* st,
   return gfx_sw::tex_sample_sw_cube(*reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc, lod);
 }
 
+extern "C" uint32_t gfx_tex_sample_3d_sw(const gfx_sw_texstate_t* st,
+                                         int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
+  return gfx_sw::tex_sample_sw_3d(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, w, lod, filter);
+}
+
 extern "C" void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
                                    uint32_t x, uint32_t y, uint32_t face,
                                    uint32_t color, uint32_t depth) {
@@ -57,6 +183,16 @@ extern "C" void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
     return;
   }
   gfx_sw::om_fragment(*reinterpret_cast<const gfx_sw::om_state_t*>(st), x, y, face, color, depth);
+}
+
+extern "C" void gfx_om_fragment_msaa_sw(const gfx_sw_omstate_t* st, uint32_t samples,
+                                        uint32_t sample_mask, uint32_t x, uint32_t y,
+                                        uint32_t face, uint32_t color, uint32_t depth) {
+  if (!sample_mask) {
+    return;
+  }
+  gfx_sw::om_fragment_msaa(*reinterpret_cast<const gfx_sw::om_state_t*>(st),
+                           samples, x, y, face, sample_mask, color, depth);
 }
 
 extern "C" void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st,
@@ -70,6 +206,52 @@ extern "C" void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st,
   gfx_sw::om_fragment_mrt(*reinterpret_cast<const gfx_sw::om_state_t*>(st),
                           reinterpret_cast<const gfx_sw::om_color_t*>(rt), num_color,
                           x, y, face, colors, depth);
+}
+
+extern "C" uint32_t gfx_rast_walk_tile_msaa_sw(const void* prim, uint32_t pid,
+                                               uint32_t tx, uint32_t ty,
+                                               uint32_t tile_logsize,
+                                               uint32_t scissor_w, uint32_t scissor_h,
+                                               gfx_rast_msaa_quad_t* out, uint32_t max) {
+  using namespace gfx_rast;
+  const auto* p = reinterpret_cast<const vortex::graphics::rast_prim_t*>(prim);
+  RastConfig cfg{ tile_logsize, 0, 0, scissor_w, scissor_h };
+  uint32_t count = 0;
+  auto emit = [&](uint32_t pos_mask, const vec3e_t* bc, const uint32_t* smask, uint32_t) {
+    if (count >= max) {
+      return;
+    }
+    gfx_rast_msaa_quad_t& q = out[count++];
+    q.pos_mask = pos_mask;
+    for (uint32_t c = 0; c < 4; ++c) {
+      q.sample_masks[c] = smask[c];
+      // Pack as the FF frag payload: bcoords[axis*4 + corner].
+      q.bcoords[0 * 4 + c] = bc[c].x.data();
+      q.bcoords[1 * 4 + c] = bc[c].y.data();
+      q.bcoords[2 * 4 + c] = bc[c].z.data();
+    }
+  };
+  // Same iterative leaf walk as the single-sample entry point above, and for the
+  // same reason: the SSOT Morton-DFS recursion diverges per lane and the SIMT
+  // reconvergence then drops fragments on a partially-active warp.
+  delta_t delta{
+    { p->edges[0].x, p->edges[1].x, p->edges[2].x },
+    { p->edges[0].y, p->edges[1].y, p->edges[2].y },
+    { CalcEdgeExtents(p->edges[0]), CalcEdgeExtents(p->edges[1]), CalcEdgeExtents(p->edges[2]) }
+  };
+  const uint32_t leaves = 1u << (tile_logsize - 1);
+  for (uint32_t ly = 0; ly < leaves; ++ly) {
+    for (uint32_t lx = 0; lx < leaves; ++lx) {
+      const uint32_t qx = tx + (lx << 1), qy = ty + (ly << 1);
+      vec3e_t value{
+        EvalEdgeFunction(p->edges[0], (int)qx, (int)qy),
+        EvalEdgeFunction(p->edges[1], (int)qx, (int)qy),
+        EvalEdgeFunction(p->edges[2], (int)qx, (int)qy)
+      };
+      rast_emit_quad_msaa(cfg, qx, qy, pid, value, delta, emit);
+    }
+  }
+  return count;
 }
 
 extern "C" uint32_t gfx_rast_walk_tile_sw(const void* prim, uint32_t pid,

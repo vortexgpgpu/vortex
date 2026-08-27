@@ -9,7 +9,19 @@
 
 #include <vx_spawn2.h>
 #include <gfx_frontend_abi.h>   // pipe_arg_t, PIPE_STAGE_*, PIPE_PRIM_*, setup types
+#include <gfx_fs_desc_abi.h>   // GFX_FS_FLAT_WORDS
 #include <gfx_setup.h>          // gfx_setup::{clip_near, setup_triangle}
+
+// The flat-varying copy in setup_k reads setup_vertex_t as words at fixed
+// indices. Pin the layout it assumes: a reordered field would otherwise carry
+// the wrong varying silently, which is the exact failure class flat varyings
+// were losing to before they were carried at all.
+static_assert(offsetof(setup_vertex_t, color)    ==  4 * sizeof(uint32_t),
+              "flat copy assumes color at word 4");
+static_assert(offsetof(setup_vertex_t, texcoord) ==  8 * sizeof(uint32_t),
+              "flat copy assumes texcoord at word 8");
+static_assert(offsetof(setup_vertex_t, varying2) == 10 * sizeof(uint32_t),
+              "flat copy assumes varying2 at word 10");
 
 // Coarse bin granularity the front end bins at (= VX_CFG_RASTER_BIN_LOG_SIZE,
 // supplied as a -D in the kernel build; fallback for standalone include).
@@ -41,7 +53,9 @@ pipe_clip_and_setup(const setup_vertex_t* v, int W, int H, uint32_t cull_mode,
                     const setup_viewport_t* vp,
                     rast_prim_t* prim_out, setup_bbox_t* bbox_out) {
   clip_tri_t sub[SETUP_MAX_SUB];
-  int ns = clip_near(v[0], v[1], v[2], sub);
+  // The near plane the clip uses and the depth range setup maps onto have to
+  // come from the same convention, so both read it off the bound viewport.
+  int ns = clip_near(v[0], v[1], v[2], sub, vp && vp->halfz);
   uint32_t kept = 0;
   for (int s = 0; s < ns; ++s) {
     rast_prim_t prim{};
@@ -76,26 +90,26 @@ __kernel void expand_k(expand_arg_t* __UNIFORM__ arg) {
     const float*   pos = reinterpret_cast<const float*>(rec);
     setup_vertex_t v;
     v.pos[0] = pos[0]; v.pos[1] = pos[1]; v.pos[2] = pos[2]; v.pos[3] = pos[3];
-    // Pack varyings into the 6 scalar interpolation planes [u,v,r,g,b,a] in
-    // declaration order: each varying claims the next nc lanes. The FS varying
+    // Pack varyings into the 12 scalar interpolation planes [u,v,r,g,b,a,w0..w5]
+    // in declaration order: each varying claims the next nc lanes. The FS varying
     // fill (emit_fs_fill_varyings) reads the same lanes in the same order, so a
-    // draw may carry any mix of varyings without them colliding. The old
-    // nc==2->texcoord / nc>=3->color heuristic aliased every >=3-component
-    // varying (position-like normals, a second colour) onto r,g,b,a, so multiple
-    // such varyings overwrote one another. Unwritten lanes keep the gfx-v1
-    // defaults: texcoord 0, colour 1 (an FS with no colour varying interpolates
-    // white).
-    float lane[6] = { 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f };
+    // draw may carry any mix of varyings (e.g. texcoord + a scalar lod, or a
+    // samplerCube textureGrad's coord + dPdx + dPdy = 9 scalars) without them
+    // colliding. Unwritten lanes keep the gfx-v1 defaults: texcoord/varying2 0,
+    // colour 1 (an FS with no colour varying still interpolates white).
+    float lane[12] = { 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+                       0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
     uint32_t li = 0;
     for (uint32_t vi = 0; vi < nv; ++vi) {
       const float* a = reinterpret_cast<const float*>(rec + 16u * (1u + vi));
       uint32_t nc = arg->varying_comps[vi];
-      for (uint32_t c = 0; c < nc && li < 6u; ++c)
+      for (uint32_t c = 0; c < nc && li < 12u; ++c)
         lane[li++] = a[c];
     }
     v.texcoord[0] = lane[0]; v.texcoord[1] = lane[1];
     v.color[0] = lane[2]; v.color[1] = lane[3];
     v.color[2] = lane[4]; v.color[3] = lane[5];
+    for (int c = 0; c < 6; ++c) v.varying2[c] = lane[6 + c];
     out[i] = v;
   }
 }
@@ -110,6 +124,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   auto prim      = reinterpret_cast<rast_prim_t*>(arg->prim_addr);
   auto bbox      = reinterpret_cast<setup_bbox_t*>(arg->bbox_addr);
   auto meta      = reinterpret_cast<uint32_t*>(arg->meta_addr);
+  auto flat      = reinterpret_cast<uint32_t*>(arg->flat_addr);
 
   const uint32_t ntri = arg->num_tris;
   const int      W = (int)arg->width;
@@ -122,9 +137,12 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
   // arg block, feed). Passing &vp / nullptr selects the branch inside setup.
   setup_viewport_t vp;
   const bool have_vp = (arg->vp_sx != 0.0f) || (arg->vp_tx != 0.0f)
-                    || (arg->vp_sy != 0.0f) || (arg->vp_ty != 0.0f);
+                    || (arg->vp_sy != 0.0f) || (arg->vp_ty != 0.0f)
+                    || (arg->vp_halfz != 0u);
   vp.sx = arg->vp_sx; vp.tx = arg->vp_tx;
   vp.sy = arg->vp_sy; vp.ty = arg->vp_ty;
+  vp.minz  = arg->vp_minz; vp.maxz = arg->vp_maxz;
+  vp.halfz = arg->vp_halfz;
   const setup_viewport_t* vpp = have_vp ? &vp : nullptr;
 
   switch (arg->stage) {
@@ -169,10 +187,37 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
       uint32_t kept = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, vpp, pr, bb);
+      // The provoking vertex is the source triangle's first, sampled HERE rather
+      // than inside setup: clipping reorders and synthesises vertices, so after
+      // it the original first vertex is no longer identifiable. Same reason
+      // `facing` is recorded before the edges are flipped.
+      //
+      // Every subtriangle of a clipped triangle takes the same words. That is
+      // exact, not an approximation -- a flat attribute is constant over the
+      // primitive by definition, so there is no interpolation for clipping to
+      // invalidate.
+      uint32_t fw[GFX_FS_FLAT_WORDS];
+      if (flat) {
+        // Read the vertex as words, not as floats. The whole point of a flat
+        // varying is that its bit pattern need not be a number, so it must never
+        // be loaded into a float register on the way past.
+        //
+        // setup_vertex_t is pos[4], color[4], texcoord[2], varying2[6]; the
+        // interpolation planes are ordered [u,v,r,g,b,a,w0..w5], so a varying's
+        // flat word sits at the index it would have interpolated at.
+        const uint32_t* pv = reinterpret_cast<const uint32_t*>(&verts[3 * t]);
+        fw[0] = pv[8]; fw[1] = pv[9];
+        for (uint32_t c = 0; c < 4; ++c) { fw[2 + c] = pv[4 + c]; }
+        for (uint32_t c = 0; c < 6; ++c) { fw[6 + c] = pv[10 + c]; }
+      }
       uint32_t w = offset[t];
       for (uint32_t s = 0; s < kept; ++s) {
         prim[w] = pr[s];
         bbox[w] = bb[s];
+        if (flat) {
+          uint32_t* dst = flat + (size_t)w * GFX_FS_FLAT_WORDS;
+          for (uint32_t c = 0; c < GFX_FS_FLAT_WORDS; ++c) { dst[c] = fw[c]; }
+        }
         ++w;
       }
     }

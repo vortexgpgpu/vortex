@@ -55,6 +55,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     input  wire [1:0]                    compute_width,
     input  wire [63:0]                   compute_old,
     input  wire [63:0]                   compute_rhs,
+    input  wire [63:0]                   compute_cmp,
     output wire [63:0]                   compute_new_word,
     output wire [63:0]                   compute_ret_word,
 
@@ -77,6 +78,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
         .width    (compute_width),
         .old_word (compute_old),
         .rhs      (compute_rhs),
+        .cmp      (compute_cmp),
         .new_word (compute_new_word),
         .ret_word (compute_ret_word)
     );
@@ -151,52 +153,50 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     // SC outcome: this hart's reservation on this line is still live.
     assign res_check = own_match;
 
-    // A live reservation held by a different hart for this same line is protected
-    // from an LR overwrite until it ages out. When the L1 is non-LLC, a hart's
-    // LR->SC spans a full round-trip to this bank; without protection a
-    // co-contending hart's LR overwrites the slot before the SC returns, so no SC
-    // ever wins (livelock). Protection lets the reserver's own SC land first; the
-    // bounded age still frees a slot whose reserver never returns. An empty slot,
-    // a same-hart refresh, or a different line (index conflict) always claims.
-    localparam AGEW = 10;   // protection window, in cycles, >= the LR->SC round-trip
-    reg [AGEW-1:0] rs_age [RS_DEPTH];
-    wire aged_out      = (rs_age[rs_idx] == {AGEW{1'b1}});
-    wire res_protected = line_match && (e_hart != res_hart_id) && ~aged_out;
+    // A live reservation on a line is not handed to another hart on demand.
+    // A station is indexed by line, so every hart contending one word maps to
+    // the same station; letting each LR overwrite it means no SC ever finds
+    // its own reservation and a contended retry loop makes no progress. The
+    // holder keeps the station until its own SC resolves it, so one hart wins
+    // per round. A refused LR simply does not reserve, and its SC fails --
+    // architecturally legal, since SC may fail for any reason.
+    //
+    // The hold is bounded: a holder that never issues its SC (a retry loop is
+    // free to abandon an attempt) would otherwise own the station forever.
+    // Each refused LR spends one credit, so the holder gets a bounded number
+    // of chances before the station may be taken.
+    localparam HOLD_CREDIT_BITS = 6;
+    localparam [HOLD_CREDIT_BITS-1:0] HOLD_CREDITS = HOLD_CREDIT_BITS'(63);
 
-    // LR installs the payload when the slot is claimable; a matching SC/store
-    // clears the valid bit.
-    assign rs_we = res_reserve && en && ~res_protected;
+    reg [RS_DEPTH-1:0][HOLD_CREDIT_BITS-1:0] rs_hold_r;
+    wire hold_lapsed = (rs_hold_r[rs_idx] == '0);
+
+    // Refuse only a foreign hart on the same line. Re-reserving by the holder
+    // refreshes it, and a station holding a different line is displaced as
+    // before -- that is ordinary capacity behaviour, not the livelock.
+    wire res_held = res_reserve && en && line_match && ~own_match && ~hold_lapsed;
+
+    // LR installs the payload; a matching SC/store clears the valid bit.
+    assign rs_we = res_reserve && en && ~res_held;
     wire   rs_clr = en && ((res_invalidate && line_match)      // any write breaks the reserver
                         || (res_clear && own_match));          // SC clears its own
 
     always @(posedge clk) begin
         if (reset) begin
             rs_valid <= '0;
+            rs_hold_r <= '0;
         end else begin
             if (rs_we) begin
                 rs_valid[rs_idx] <= 1'b1;
+                rs_hold_r[rs_idx] <= HOLD_CREDITS;
             end else if (rs_clr) begin
                 rs_valid[rs_idx] <= 1'b0;
+                rs_hold_r[rs_idx] <= '0;
+            end else if (res_held) begin
+                rs_hold_r[rs_idx] <= rs_hold_r[rs_idx] - HOLD_CREDIT_BITS'(1);
             end
         end
     end
 
-    // Per-slot age: cleared on a fresh claim/refresh, saturating-increment while
-    // the slot stays valid; at the cap the reservation loses eviction protection.
-    always @(posedge clk) begin
-        if (reset) begin
-            for (int i = 0; i < RS_DEPTH; ++i) begin
-                rs_age[i] <= '0;
-            end
-        end else if (en) begin
-            for (int i = 0; i < RS_DEPTH; ++i) begin
-                if (rs_we && (RS_ADDRW'(i) == rs_idx)) begin
-                    rs_age[i] <= '0;
-                end else if (rs_valid[i] && (rs_age[i] != {AGEW{1'b1}})) begin
-                    rs_age[i] <= rs_age[i] + AGEW'(1);
-                end
-            end
-        end
-    end
 
 endmodule

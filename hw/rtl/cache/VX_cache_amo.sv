@@ -180,6 +180,9 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // bytes has not yet reached the array (see line_word_st1).
         reg                          cmp_valid;
         reg [63:0]                   cmp_old, cmp_rhs;
+    `ifdef VX_CFG_EXT_ZACAS_ENABLE
+        reg [63:0]                   cmp_cmp;
+    `endif
         amo_op_e                     cmp_op;
         reg [1:0]                    cmp_width;
         reg                          cmp_unsigned;
@@ -356,6 +359,11 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             .compute_width (cmp_width),
             .compute_old   (cmp_old),
             .compute_rhs   (cmp_rhs),
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            .compute_cmp   (cmp_cmp),
+        `else
+            .compute_cmp   (64'b0),
+        `endif
             .compute_new_word (new_word),
             .compute_ret_word (ret_word_unused),
             .res_reserve   (res_reserve),
@@ -426,6 +434,9 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     cmp_valid    <= 1'b1;
                     cmp_old      <= old_st1;
                     cmp_rhs      <= rhs_st1;
+                `ifdef VX_CFG_EXT_ZACAS_ENABLE
+                    cmp_cmp      <= 64'(amo_st1.amo_cmp);
+                `endif
                     cmp_op       <= amo_st1.amo_op;
                     cmp_width    <= width_st1;
                     cmp_unsigned <= amo_st1.amo_unsigned;

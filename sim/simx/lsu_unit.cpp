@@ -117,6 +117,9 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 	auto& tmask = trace->tmask;
 	auto& rs1_data = trace->src_data[0];
 	auto& rs2_data = trace->src_data[1];
+	// Compare-and-swap alone reads a third operand: the comparand, which the
+	// instruction takes from rd. Decode adds rd to the source set for it.
+	const bool is_cas = is_amo && (*amo_tag == AmoType::AMOCAS);
 	uint32_t num_threads = VX_CFG_NUM_THREADS;
 	uint32_t data_bytes;
 	bool is_write;
@@ -150,16 +153,31 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 		e.size = 0;
 		e.tid  = t;
 		e.data = 0;
+		e.amo_cmp = 0;
 		if (tmask.test(t)) {
 			// AGU result is VX_CFG_XLEN-bit wide.
 			// Cast through Word so 32-bit VX_CFG_XLEN doesn't carry sign-extended
 			// upper bits into the 64-bit address field.
 			e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
 			e.size = data_bytes;
+			// The datapath has no misalignment support: only a naturally aligned
+			// access is guaranteed to sit inside one memory block, which is what
+			// lets a lane's payload pack into a single block downstream.
+			// VX_lsu_slice.sv enforces the same contract in hardware, so modelling
+			// anything looser here would let a shader pass in simulation and fail
+			// on the device.
+			if ((e.addr % e.size) != 0) {
+				std::cout << "Error: misaligned memory access: addr=0x" << std::hex
+				          << e.addr << std::dec << ", size=" << e.size << std::endl;
+				std::abort();
+			}
 			if (is_write || is_amo) {
 				// Stores carry rs2 as data; AMOs carry rs2 as the RMW operand
 				// (LR encodes rs2 = x0, so the captured value is 0).
 				e.data = rs2_data[t].u64;
+			}
+			if (is_cas) {
+				e.amo_cmp = trace->src_data[2][t].u64;
 			}
 		}
 		state.addr_list.push_back(e);
@@ -321,7 +339,13 @@ void LsuUnit::process_request_step(uint32_t b) {
 				if (!lsu_req.mask.test(i)) {
 					continue;
 				}
-				lane_entries.at(i) = { lsu_req.addrs.at(i), 4, 0, lsu_req.tids.at(i) };
+				mem_addr_size_t e;
+				e.addr    = lsu_req.addrs.at(i);
+				e.size    = 4;
+				e.data    = 0;
+				e.amo_cmp = 0;
+				e.tid     = lsu_req.tids.at(i);
+				lane_entries.at(i) = e;
 			}
 			IntrLsuArgs meta_args{};
 			meta_args.width = 2; // 32-bit metadata words
@@ -467,6 +491,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 				lsu_req.data.at(i) = block;
 				lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
 			}
+			lsu_req.amo_cmp.at(i) = entry.amo_cmp;
 			// The lane's original thread index rides along so the adapter can
 			// recover hart_id = make_hart_id(cid, wid, tids[i]).
 			lsu_req.tids.at(i) = entry.tid;

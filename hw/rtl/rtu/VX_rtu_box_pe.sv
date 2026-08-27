@@ -61,6 +61,9 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     output wire        valid_out,
     output wire [TAG_WIDTH-1:0] tag_out,
+    // the same tag one cycle ahead of the result, so a consumer can pre-decode
+    // it instead of doing so on the cycle the result lands
+    output wire [TAG_WIDTH-1:0] tag_out_pre,
     output wire        hit,
     output wire [31:0] t_near
 );
@@ -472,20 +475,34 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // carry the caller's tag alongside the datapath so streamed results can be
     // routed back to their originating context.
+    // Split one stage off the end so the tag is also available a cycle early;
+    // the two together are the same LATENCY stages under the same enable.
+    wire [TAG_WIDTH-1:0] tag_out_pre_w;
     wire [TAG_WIDTH-1:0] tag_out_w;
     VX_shift_register #(
         .DATAW (TAG_WIDTH),
-        .DEPTH (LATENCY)
+        .DEPTH (LATENCY - 1)
     ) sr_tag (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
         .data_in  (tag_in),
+        .data_out (tag_out_pre_w)
+    );
+    VX_shift_register #(
+        .DATAW (TAG_WIDTH),
+        .DEPTH (1)
+    ) sr_tag_last (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (tag_out_pre_w),
         .data_out (tag_out_w)
     );
 
-    assign valid_out = valid_pipe_r[LATENCY-1];
-    assign tag_out   = tag_out_w;
+    assign valid_out   = valid_pipe_r[LATENCY-1];
+    assign tag_out     = tag_out_w;
+    assign tag_out_pre = tag_out_pre_w;
     assign hit       = cmp_res[0];
     assign t_near    = t_near_cmp;
 

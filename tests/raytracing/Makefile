@@ -32,17 +32,15 @@ EXCLUDE :=
 # wait on it (a single trace in flight per warp): they serialise through the
 # single-trace RTU core but each completes, so they are green on rtlsim (full
 # framebuffer + 36-node BVH both validated) and run there now.
-# rtlsim-deferred = features/limits not yet in the RTL core. These all require
-# MULTIPLE traces in flight concurrently — the async ray pool the RTL core
-# does not yet implement (it services one trace-warp at a time):
+# rtlsim-deferred = features/limits not yet in the RTL core. Both require
+# MULTIPLE traces in flight per warp, which the RTL does not implement:
 #   - rt_smoke_recursive  : nested-trace re-entrancy needs a per-warp window
 #                            context stack (single-context window on RTL)
-#   - rt_smoke_reform_mw  : multi-warp reformation (concurrent traces)
-#   - rt_smoke_reform_sbt : divergent-SBT multi-group reformation dispatch
 #   - rt_smoke_async_batch: async ray pool — 4 vx_rt_wtrace issued
 #                            back-to-back before any wait (4 traces in flight)
-# These remain simx-only until the RTU core grows the bounded N-slot in-flight
-# trace pool (SimX semantics).
+# Reformation (rt_smoke_reform / rt_smoke_reform_sbt / rt_smoke_reform_mw —
+# single-group, divergent-SBT multi-group, and multi-warp) is implemented and
+# green on rtlsim.
 EXCLUDE_simx   :=
 # Both remaining entries need SEVERAL TRACES IN FLIGHT PER WARP, which the RTL does
 # not implement: staging holds one trace per warp, and recursion additionally needs a

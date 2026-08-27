@@ -1,6 +1,11 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
+// Slots in the compare-and-swap ladder. The shared buffer is sized from the
+// hart count, and one hart still gives 64 bytes, so 16 words always fit
+// whatever the launch shape or the iteration count.
+#define CAS_LADDER_SLOTS 16
+
 // Args shared between host (main.cpp) and the GPU kernel (kernel.cpp).
 // Layout matches dogfood's, with `iters` added for the contention loops.
 typedef struct {

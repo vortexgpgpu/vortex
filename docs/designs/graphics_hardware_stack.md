@@ -246,8 +246,8 @@ primitives (`graphics::Rasterizer`, `graphics::DepthStencil`,
 holds the producer FSM + TE/BE walker + early-Z (`early_z_cull`); the
 per-core raster consumer is header-only (`raster_unit.h`) since the pull
 consumer retired. SimX is the **SimX-first** development + evaluation engine
-and the correctness oracle; the RTL FF datapaths are built out (§7), with SimX
-still ahead only on the few unbuilt RTL features (TEX trilinear, OM MRT).
+and the correctness oracle; the RTL FF datapaths are built out (§7), and the
+features SimX was once alone in modelling are now built on both sides.
 
 ---
 
@@ -257,17 +257,19 @@ still ahead only on the few unbuilt RTL features (TEX trilinear, OM MRT).
   RTL and exercised on rtlsim; the old pull consumer is deleted.
 - **OM / TEX** — the **fixed-point datapaths are built out in RTL** and run on
   rtlsim (`VX_om_core`: mem-RMW → depth/stencil → blend + folded logic-op;
-  `VX_tex_core`: addr → mem → format-decode (7 formats) → bilinear; integer
-  mip LOD supplied per lane via `vx_tex_auto_lod`). They are **not stubs**. The remaining RTL deficits
-  are specific advanced features — **TEX trilinear** (integer-mip + bilinear only
-  today) and **OM MRT** (single color/depth target) — plus **proving SimX↔RTL
-  byte-exact parity** on the `graphics_parity` matrix. SimX stays the fuller model
-  where those features are unbuilt (it does trilinear), so it remains the oracle
-  for them.
+  `VX_tex_core`: addr → mem → format-decode (7 formats) → bilinear; mip LOD
+  supplied per lane via `vx_tex_auto_lod`). They are **not stubs**. The features
+  that were once RTL deficits are built: **TEX trilinear** (both bracketing
+  levels in one request, §4), **TEX clamp-to-border**, and **OM MRT**
+  (`VX_OM_MAX_RT` colour attachments over one shared depth attachment). What
+  remains is **reach**, not datapath: the driver still routes mipmapped, border
+  and multi-attachment draws to the software path, so none of the three is
+  exercised by a Vulkan test yet, and none has been signed off at 300 MHz on the
+  U55C.
 - **Conformance** — no Vulkan CTS harness on hardware yet.
 
-So the critical path to FF acceleration on the U55C is **parity-proof +
-trilinear/MRT**, not building the datapaths.
+So the critical path to FF acceleration on the U55C is now **driver routing +
+timing sign-off**, not building the datapaths.
 
 The FF invariant holds: **no floating-point datapath inside any FF unit**
 (fixed-point, mobile-class). Anything the FF units cannot represent (exotic
