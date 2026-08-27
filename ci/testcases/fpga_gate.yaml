@@ -122,24 +122,14 @@ builds:
 
 # Ray-tracing unit: CW-BVH4 walker, box/triangle PEs, short stack.
 #
-# Does not build: at NUM_THREADS=16 the walker is too congested for the router to
-# legalize on the U55C. Place-and-route ran 5.5h and gave up with 2663 node
-# overlaps at 88% peak congestion; the overlap count was still falling
-# (15265 -> 6715 -> 2978) when it exhausted its rip-up iterations, so it is
-# congestion, not a tool crash. It has no golden and cannot get one until the RTU
-# is made routable at this width, which is RTL work, not a synthesis knob.
-#
-# Tracked here rather than dropped: the build definition is what a fix has to turn
-# green, and hiding it would lose the only record that the shipping RTU does not
-# fit. An earlier 201 MHz / 94k LUT figure for this DUT is NOT a usable baseline —
-# it was measured before the wrapper forwarded the cache parameters, so it
+# An earlier 201 MHz / 94k LUT figure for this DUT is NOT a usable baseline — it
+# was measured before the wrapper forwarded the cache parameters, so it
 # synthesized an RTU whose RTCache tag path was 1 bit wide.
 - id: rtu
   group: graphics
   dut: rtu
   clock_mhz: 300
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
-  known_issue: "does not route on the U55C: 2663 node overlaps at 88% congestion after 5.5h of place-and-route"
 
 # Rasterizer: bin/block/quad walker, edge evaluators, rcache port.
 - id: raster
