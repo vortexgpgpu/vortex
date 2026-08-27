@@ -138,6 +138,7 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .CORE_QUEUE_SIZE(`VX_CFG_TEX_MEM_QUEUE_SIZE),
         .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (0),
+        .RW_ENABLE   (0),
         .MEM_OUT_BUF (3), // fully register cache-request output (SLR-crossing skid)
         .CORE_OUT_BUF(3)
     ) mem_scheduler (

@@ -30,6 +30,9 @@ module VX_mem_scheduler #(
     // staging depth so clients can provision extra memory-level parallelism.
     parameter PENDING_SIZE  = CORE_QUEUE_SIZE,
     parameter RSP_PARTIAL   = 0,
+    // 0 for a client that only ever reads: the staging queue then drops the
+    // write-data field, which is the bulk of an entry once CORE_REQS is large.
+    parameter RW_ENABLE     = 1,
     parameter CORE_OUT_BUF  = 0,
     parameter MEM_OUT_BUF   = 0,
     parameter LUTRAM        = 0,
@@ -173,20 +176,41 @@ module VX_mem_scheduler #(
         assign reqq_tag_u = ibuf_waddr;
     end
 
-    VX_elastic_buffer #(
-        .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(USER_WIDTH) + WORD_WIDTH) + REQQ_TAG_WIDTH),
-        .SIZE    (CORE_QUEUE_SIZE),
-        .OUT_REG (1)
-    ) req_queue (
-        .clk      (clk),
-        .reset    (reset),
-        .valid_in (reqq_valid_in),
-        .ready_in (reqq_ready_in),
-        .data_in  ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_user, core_req_data, reqq_tag_u}),
-        .data_out ({reqq_rw,     reqq_mask,     reqq_byteen,     reqq_addr,     reqq_user,     reqq_data,     reqq_tag}),
-        .valid_out(reqq_valid),
-        .ready_out(reqq_ready)
-    );
+    if (RW_ENABLE != 0) begin : g_req_queue_rw
+        VX_elastic_buffer #(
+            .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(USER_WIDTH) + WORD_WIDTH) + REQQ_TAG_WIDTH),
+            .SIZE    (CORE_QUEUE_SIZE),
+            .OUT_REG (1)
+        ) req_queue (
+            .clk      (clk),
+            .reset    (reset),
+            .valid_in (reqq_valid_in),
+            .ready_in (reqq_ready_in),
+            .data_in  ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_user, core_req_data, reqq_tag_u}),
+            .data_out ({reqq_rw,     reqq_mask,     reqq_byteen,     reqq_addr,     reqq_user,     reqq_data,     reqq_tag}),
+            .valid_out(reqq_valid),
+            .ready_out(reqq_ready)
+        );
+    end else begin : g_req_queue_ro
+        `UNUSED_VAR (core_req_rw)
+        `UNUSED_VAR (core_req_data)
+        assign reqq_rw   = 1'b0;
+        assign reqq_data = '0;
+        VX_elastic_buffer #(
+            .DATAW   (CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(USER_WIDTH)) + REQQ_TAG_WIDTH),
+            .SIZE    (CORE_QUEUE_SIZE),
+            .OUT_REG (1)
+        ) req_queue (
+            .clk      (clk),
+            .reset    (reset),
+            .valid_in (reqq_valid_in),
+            .ready_in (reqq_ready_in),
+            .data_in  ({core_req_mask, core_req_byteen, core_req_addr, core_req_user, reqq_tag_u}),
+            .data_out ({reqq_mask,     reqq_byteen,     reqq_addr,     reqq_user,     reqq_tag}),
+            .valid_out(reqq_valid),
+            .ready_out(reqq_ready)
+        );
+    end
 
     // can accept another request?
     assign core_req_ready = reqq_ready_in && ibuf_ready;
