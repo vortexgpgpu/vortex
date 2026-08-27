@@ -250,3 +250,17 @@ tests:
     l2cache: true
     l3cache: true
   args: -n1
+
+# Non-power-of-two cache sharing: 3 cores over 2 shared icaches exercises the
+# SimX arbiter's ceiling-division input grouping. A floor-grouped arbiter
+# (inputs/outputs) never polls the trailing core's fetch port and the run
+# hangs at boot; VX_stream_arb sizes its groups by ceiling division, so the
+# SimX model must match.
+- id: demo-shared-icache-odd
+  via: blackbox
+  drivers:
+  - simx
+  app: demo
+  configs: -DVX_CFG_SOCKET_SIZE=3 -DVX_CFG_NUM_ICACHES=2
+  shape:
+    cores: 3

@@ -1473,7 +1473,7 @@ public:
     , Inputs(num_inputs, this)
     , Outputs(num_outputs, this)
     , delay_(delay)
-    , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
+    , lg2_num_reqs_(log2ceil((num_inputs + num_outputs - 1) / num_outputs))
     , arbiters_(num_outputs, {type, 1u << lg2_num_reqs_})
   {
     assert(num_inputs <= 64);
@@ -1725,7 +1725,7 @@ public:
     , RspIn(num_outputs, this)
     , arbiter_(nullptr)
     , rsp_delay_(rsp_delay)
-    , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
+    , lg2_num_reqs_(log2ceil((num_inputs + num_outputs - 1) / num_outputs))
   {
     if (num_inputs != num_outputs) {
       arbiter_ = ReqArb::Create(name, type, num_inputs, num_outputs, req_delay);
