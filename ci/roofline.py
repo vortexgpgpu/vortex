@@ -19,18 +19,18 @@
 # Examples — sgemm (N=128, FLOPs = 2·N³ = 4194304):
 #
 #   # Single run with roofline plot:
-#   python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \
+#   python3 ci/roofline.py --driver=simx --app=sgemm --args="-n128" \
 #     --flops=4194304 --plot --output=sgemm128.png
 #
 #   # Search best config (coordinate descent) with plot of the winner:
-#   python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \
+#   python3 ci/roofline.py --driver=simx --app=sgemm --args="-n128" \
 #     --flops=4194304 --plot --output=sgemm128_best.png \
 #     --config=fast \
 #     --threads=4,8,16 --warps=4,8,16 --issue-width=1,2,4 \
 #     --fpu-blocks=1,2,4 --dcache-mshr=8,16,32 --l2-enable=0,1
 #
 #   # Random sampling (50 trials) across a wide space:
-#   python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \
+#   python3 ci/roofline.py --driver=simx --app=sgemm --args="-n128" \
 #     --flops=4194304 --config=random --max-trials=50 \
 #     --threads=4,8,16 --warps=4,8,16,32 --fpu-blocks=1,2,4 \
 #     --dcache-size=16384,32768,65536 --dcache-ways=2,4,8
@@ -57,37 +57,31 @@ VORTEX_HOME = os.path.normpath(os.path.join(SCRIPT_DIR, ".."))
 # Order below is also the priority order used by the 'fast' search.
 # ────────────────────────────────────────────────────────────────────────────
 KNOBS = [
-    ("threads",          "NUM_THREADS",                "--threads",          True,  False),
-    ("warps",            "NUM_WARPS",                  "--warps",            True,  False),
-    ("issue_width",      "ISSUE_WIDTH",                "--issue-width",      True,  False),
-    ("fpu_blocks",       "NUM_FPU_BLOCKS",             "--fpu-blocks",       False, False),
-    ("alu_blocks",       "NUM_ALU_BLOCKS",             "--alu-blocks",       False, False),
-    ("lsu_blocks",       "NUM_LSU_BLOCKS",             "--lsu-blocks",       False, False),
-    ("cores",            "NUM_CORES",                  "--cores",            True,  False),
-    ("ibuf_size",        "IBUF_SIZE",                  "--ibuf-size",        True,  False),
-    ("lsu_inq_size",     "LSUQ_IN_SIZE",               "--lsu-inq-size",     False, False),
-    ("lsu_outq_size",    "LSUQ_OUT_SIZE",              "--lsu-outq-size",    False, False),
-    ("dcache_mshr",      "DCACHE_MSHR_SIZE",           "--dcache-mshr",      False, False),
-    ("dcache_size",      "DCACHE_SIZE",                "--dcache-size",      True,  False),
-    ("dcache_ways",      "DCACHE_NUM_WAYS",            "--dcache-ways",      True,  False),
-    ("dcache_banks",     "DCACHE_NUM_BANKS",           "--dcache-banks",     True,  False),
-    ("dcache_repl",      "DCACHE_REPL_POLICY",         "--dcache-repl",      False, False),
-    ("dcache_writeback", "DCACHE_WRITEBACK",           "--dcache-writeback", False, False),
-    ("icache_size",      "ICACHE_SIZE",                "--icache-size",      True,  False),
-    ("icache_ways",      "ICACHE_NUM_WAYS",            "--icache-ways",      True,  False),
-    ("icache_banks",     "ICACHE_NUM_BANKS",           "--icache-banks",     True,  False),
-    ("icache_mshr",      "ICACHE_MSHR_SIZE",           "--icache-mshr",      False, False),
-    ("icache_repl",      "ICACHE_REPL_POLICY",         "--icache-repl",      False, False),
-    ("icache_writeback", "ICACHE_WRITEBACK",           "--icache-writeback", False, False),
-    ("l2_enable",        "L2_ENABLE",                  "--l2-enable",        False, True),
-    ("l2_size",          "L2_CACHE_SIZE",              "--l2-size",          True,  False),
-    ("l2_ways",          "L2_NUM_WAYS",                "--l2-ways",          True,  False),
-    ("l2_banks",         "L2_NUM_BANKS",               "--l2-banks",         True,  False),
-    ("l2_mshr",          "L2_MSHR_SIZE",               "--l2-mshr",          False, False),
-    ("l2_repl",          "L2_REPL_POLICY",             "--l2-repl",          False, False),
-    ("l2_writeback",     "L2_WRITEBACK",               "--l2-writeback",     False, False),
-    ("mem_banks",        "PLATFORM_MEMORY_NUM_BANKS",  "--mem-banks",        True,  False),
-    ("mem_data_size",    "PLATFORM_MEMORY_DATA_SIZE",  "--mem-data-size",    True,  False),
+    ("threads",          "VX_CFG_NUM_THREADS",                "--threads",          True,  False),
+    ("warps",            "VX_CFG_NUM_WARPS",                  "--warps",            True,  False),
+    ("issue_width",      "VX_CFG_ISSUE_WIDTH",                "--issue-width",      True,  False),
+    ("fpu_blocks",       "VX_CFG_NUM_FPU_BLOCKS",             "--fpu-blocks",       False, False),
+    ("alu_blocks",       "VX_CFG_NUM_ALU_BLOCKS",             "--alu-blocks",       False, False),
+    ("lsu_blocks",       "VX_CFG_NUM_LSU_BLOCKS",             "--lsu-blocks",       False, False),
+    ("cores",            "VX_CFG_NUM_CORES",                  "--cores",            True,  False),
+    ("ibuf_size",        "VX_CFG_IBUF_SIZE",                  "--ibuf-size",        True,  False),
+    ("lsu_pending",      "VX_CFG_LSU_PENDING_SIZE",           "--lsu-pending",      False, False),
+    ("dcache_mshr",      "VX_CFG_DCACHE_MSHR_SIZE",           "--dcache-mshr",      False, False),
+    ("dcache_size",      "VX_CFG_DCACHE_SIZE",                "--dcache-size",      True,  False),
+    ("dcache_ways",      "VX_CFG_DCACHE_NUM_WAYS",            "--dcache-ways",      True,  False),
+    ("dcache_banks",     "VX_CFG_DCACHE_NUM_BANKS",           "--dcache-banks",     True,  False),
+    ("dcache_writeback", "VX_CFG_DCACHE_WRITEBACK",           "--dcache-writeback", False, False),
+    ("icache_size",      "VX_CFG_ICACHE_SIZE",                "--icache-size",      True,  False),
+    ("icache_ways",      "VX_CFG_ICACHE_NUM_WAYS",            "--icache-ways",      True,  False),
+    ("icache_mshr",      "VX_CFG_ICACHE_MSHR_SIZE",           "--icache-mshr",      False, False),
+    ("l2_enable",        "VX_CFG_L2_ENABLE",                  "--l2-enable",        False, True),
+    ("l2_size",          "VX_CFG_L2_SIZE",                    "--l2-size",          True,  False),
+    ("l2_ways",          "VX_CFG_L2_NUM_WAYS",                "--l2-ways",          True,  False),
+    ("l2_banks",         "VX_CFG_L2_NUM_BANKS",               "--l2-banks",         True,  False),
+    ("l2_mshr",          "VX_CFG_L2_MSHR_SIZE",               "--l2-mshr",          False, False),
+    ("l2_writeback",     "VX_CFG_L2_WRITEBACK",               "--l2-writeback",     False, False),
+    ("mem_banks",        "VX_CFG_PLATFORM_MEMORY_NUM_BANKS",  "--mem-banks",        True,  False),
+    ("mem_data_size",    "VX_CFG_PLATFORM_MEMORY_DATA_SIZE",  "--mem-data-size",    True,  False),
 ]
 
 KNOB_BY_NAME = {k[0]: k for k in KNOBS}
@@ -110,18 +104,18 @@ EXAMPLES = """\
 Examples — sgemm (N=128, FLOPs = 2·N³ = 4194304):
 
   # Single run with roofline plot:
-  python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \\
+  python3 ci/roofline.py --driver=simx --app=sgemm --args="-n128" \\
     --flops=4194304 --plot --output=sgemm128.png
 
   # Search best config (coordinate descent) with plot of the winner:
-  python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \\
+  python3 ci/roofline.py --driver=simx --app=sgemm --args="-n128" \\
     --flops=4194304 --plot --output=sgemm128_best.png \\
     --config=fast \\
     --threads=4,8,16 --warps=4,8,16 --issue-width=1,2,4 \\
     --fpu-blocks=1,2,4 --dcache-mshr=8,16,32 --l2-enable=0,1
 
   # Random sampling (50 trials) across a wide space:
-  python3 perf/roofline.py --driver=simx --app=sgemm --args="-n128" \\
+  python3 ci/roofline.py --driver=simx --app=sgemm --args="-n128" \\
     --flops=4194304 --config=random --max-trials=50 \\
     --threads=4,8,16 --warps=4,8,16,32 --fpu-blocks=1,2,4 \\
     --dcache-size=16384,32768,65536 --dcache-ways=2,4,8
@@ -141,7 +135,9 @@ def parse_args():
                    help="Benchmark application")
     p.add_argument("--args", dest="app_args", default="", metavar="str",
                    help="App arguments (passed to blackbox.sh --args)")
-    p.add_argument("--perf", type=int, default=1, choices=[0, 1, 2], metavar="n")
+    p.add_argument("--perf", type=int, default=7, choices=range(0, 17), metavar="n",
+                   help="MPM profiling class (7=mem prints the byte counters "
+                        "needed for arithmetic intensity)")
     p.add_argument("--configs", default="", metavar="str",
                    help="Extra CONFIGS macros")
     p.add_argument("--build-dir", default=None, metavar="dir")
@@ -162,9 +158,13 @@ def parse_args():
     p.add_argument("--freq", type=float, default=0, metavar="f",
                    help="Clock frequency in MHz (0 = cycle-domain plot)")
     p.add_argument("--bw", type=float, default=None, metavar="f",
-                   help="Peak memory bandwidth in GB/s (default derived)")
+                   help="Peak memory bandwidth in GB/s "
+                        "(default: platform peak for --freq plots)")
+    p.add_argument("--peak-flops", type=float, default=None, metavar="f",
+                   help="Peak compute in FLOP/cycle (required for TCU kernels; "
+                        "default 2*cores*threads*fpu_blocks models the scalar FPU)")
     p.add_argument("--output", default="roofline.png", metavar="file")
-    p.add_argument("--cache", default="smoke.cache", metavar="file",
+    p.add_argument("--cache", default="roofline.cache", metavar="file",
                    help="Persistent trial cache (JSONL, append-only). "
                         "Delete the file to start over.")
     p.add_argument("--jobs", type=int, default=1, metavar="n",
@@ -220,7 +220,8 @@ def validate(cfg):
             if b is not None and b > iw:
                 return False, f"{blk}({b}) > issue_width({iw})"
 
-    for pref, line in [("icache", 64), ("dcache", 64), ("l2", 64)]:
+    l2_line = 128 if cfg.get("l2_enable") else 64
+    for pref, line in [("icache", 64), ("dcache", 64), ("l2", l2_line)]:
         sz = cfg.get(f"{pref}_size")
         wy = cfg.get(f"{pref}_ways")
         if sz and wy:
@@ -315,8 +316,13 @@ def run_trial(args, cfg, blackbox, cwd, use_nohup):
         return None, None, None, None, output + "\nERROR: no PERF summary line"
     instrs, cycles, ipc = int(m[-1][0]), int(m[-1][1]), float(m[-1][2])
 
-    mem = re.search(r"PERF:\s+memory:.*?read_bytes=(\d+).*?write_bytes=(\d+)", proc.stdout)
-    total_bytes = int(mem.group(1)) + int(mem.group(2)) if mem else None
+    # Off-chip traffic: each memory request moves one MEM_BLOCK_SIZE block.
+    mem = re.search(r"PERF:\s+memory:\s+reqs=\d+\s+\(r=(\d+),\s*w=(\d+)\)", proc.stdout)
+    if mem:
+        block_size = cfg.get("mem_data_size") or 64
+        total_bytes = (int(mem.group(1)) + int(mem.group(2))) * block_size
+    else:
+        total_bytes = None
 
     output += f">>> IPC = {ipc:.4f}  (instrs={instrs}, cycles={cycles})\n"
     return ipc, instrs, cycles, total_bytes, output
@@ -338,6 +344,7 @@ class Runner:
         self.lock = threading.Lock()
         self.pool = ThreadPoolExecutor(max_workers=self.jobs) if self.jobs > 1 else None
         self.stop_requested = False
+        self.observed = {}  # cache_key -> (instrs, cycles), for the no-op-sweep guard
 
     def _one(self, cfg):
         """Runs a single trial OR returns cached. Thread-safe. Returns (ipc, instrs, cycles, bytes, None)."""
@@ -345,6 +352,7 @@ class Runner:
         with self.lock:
             if k in self.cache:
                 ipc, rest = self.cache[k]
+                self.observed[k] = (rest[0], rest[1])
                 print(f"── cache hit ─ IPC={ipc:.4f}  cfg="
                       f"{ {kk:vv for kk,vv in cfg.items() if vv is not None} }")
                 sys.stdout.flush()
@@ -380,6 +388,7 @@ class Runner:
                     "\n" + "═" * 64)
             rest = [instrs, cycles, total_bytes, None]
             self.cache[k] = (ipc, rest)
+            self.observed[k] = (instrs, cycles)
             append_cache(self.cache_path, cfg, ipc, instrs, cycles, total_bytes)
         return (ipc, instrs, cycles, total_bytes, None)
 
@@ -580,8 +589,12 @@ def plot_roofline(args, cfg, ipc, instrs, cycles, total_bytes, outfile):
     mem_bytes  = cfg.get("mem_data_size", 64) or 64
     mem_banks  = cfg.get("mem_banks", 2)    or 2
 
-    peak_flops_per_cycle = 2.0 * cores * threads * fpu_blocks
-    peak_bw_GBs = args.bw if args.bw is not None else mem_bytes * mem_banks * freq_hz / 1e9
+    # VX_CFG_PLATFORM_MEMORY_PEAK_BW (VX_config.toml), in GB/s
+    PLATFORM_PEAK_BW_GBS = 460.0
+
+    peak_flops_per_cycle = (args.peak_flops if args.peak_flops is not None
+                            else 2.0 * cores * threads * fpu_blocks)
+    peak_bw_GBs = args.bw if args.bw is not None else PLATFORM_PEAK_BW_GBS
     peak_bw_per_cycle = peak_bw_GBs * 1e9 / freq_hz if args.freq > 0 else mem_bytes * mem_banks
 
     flops_total = args.flops
@@ -695,6 +708,13 @@ def main():
     finally:
         runner.shutdown()
 
+    if len(runner.observed) >= 2 and len(set(runner.observed.values())) == 1:
+        print("\n" + "!" * 64 +
+              "\nWARNING: every config produced identical instrs/cycles."
+              "\nThe swept knobs appear to have NO effect — check that their"
+              "\nmacro names still match VX_config.toml (VX_CFG_* keys)."
+              "\n" + "!" * 64)
+
     _print_winner_and_plot(args, cfg, ipc, rest)
 
 
@@ -714,7 +734,7 @@ def _print_winner_and_plot(args, cfg, ipc, rest):
     repro = [f"{KNOB_BY_NAME[k][2]}={1 if v is True else (0 if v is False else v)}"
              for k, v in cfg.items() if v is not None]
     print(f"\n  Reproduce:")
-    print(f"    python3 perf/roofline.py --driver={args.driver} --app={args.app} "
+    print(f"    python3 ci/roofline.py --driver={args.driver} --app={args.app} "
           f"--args='{args.app_args}' --config=single " + " ".join(repro))
     print(sep)
 

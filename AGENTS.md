@@ -120,10 +120,11 @@ CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -D
 
 ### Roofline Analysis
 
-Use `--perf=1` for detailed performance counters such as scheduler utilization, pipeline stalls, instruction mix, and memory latency.
+`ci/roofline.py` runs a kernel via `blackbox.sh`, optionally sweeps microarchitecture knobs to maximize IPC (`--config=fast|random|best`, comma-lists as search spaces), and plots a FLOP/cycle roofline. Run it from a configured build directory. `--perf=7` (the default) is required for the memory-traffic counters that place the measured point; pass the kernel's total FLOPs via `--flops`. The default compute roof models the scalar FPU — for TCU kernels pass `--peak-flops` explicitly.
 
 ```bash
-/usr/bin/python3 ../perf/roofline.py --app=sgemm_tcu --driver=simx --cores=1 --warps=4 --threads=8 --issue-width=2 --perf=1 --by-cycle --output=sgemm_tcu_roofline.png
+python3 ci/roofline.py --app=sgemm --driver=simx --args="-n128" --flops=4194304 \
+  --cores=1 --warps=4 --threads=8 --issue-width=2 --plot --output=sgemm_roofline.png
 ```
 
 ---
