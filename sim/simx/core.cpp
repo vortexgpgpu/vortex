@@ -288,7 +288,11 @@ public:
 
     std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
 
-    perf_stats_ = PerfStats();
+    // perf_stats_ deliberately survives: these are the MPM counters, which are
+    // free-running from device reset. A kernel launch re-enters reset() here but
+    // does not reset the hardware, so clearing them would make each dump report
+    // only the last launch -- an app that dumps between launches would then see
+    // per-launch counts where the device reports a running total.
   }
 
   void tick() {

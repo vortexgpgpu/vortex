@@ -539,23 +539,12 @@ tests:
 # both drivers, cycles must agree within tolerance (see core.yaml).
 - id: model_parity-tex
   check: model_parity
-  # Execution passes and retired instructions match exactly; only the cycle
-  # counts diverge (~12%). The memory-backed gfx window reads TEX operands
-  # synchronously (one-cycle RAM latency) where the SimX TEX model still assumes
-  # a combinational read, so rtlsim runs fewer cycles than the model. Pending a
-  # SimX TEX-latency update; parity divergence only, not a functional error.
-  known_issue: "cycle-parity gap ~12%: synchronous window read not yet modeled in SimX TEX (instrs match, image correct)"
   via: blackbox
   app: gfx_tex
   configs: -DVX_CFG_EXT_TEX_ENABLE
   args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
 - id: model_parity-raster
   check: model_parity
-  # Pre-existing: both drivers render the correct image, but the SimX raster
-  # model retires a different instruction count than RTL (simx 12422 vs rtlsim
-  # 11894 — rtlsim matches the recorded perf baseline). Predates the gfx-window
-  # redesign; needs the SimX raster fragment model aligned to RTL.
-  known_issue: "pre-existing SimX-vs-RTL raster instruction-count divergence (execution passes, images match)"
   via: blackbox
   app: gfx_raster
   configs: -DVX_CFG_EXT_RASTER_ENABLE
@@ -689,12 +678,6 @@ tests:
     threads: [4, 16]
 - id: model_parity-draw3d
   check: model_parity
-  # Pre-existing: both drivers render box.cgltrace correctly (rtlsim retires
-  # 143143 instrs, matching the recorded perf baseline), but the SimX graphics
-  # model retires far fewer (~71753) than RTL. The instruction-count divergence
-  # predates the gfx-window redesign and is a SimX graphics-model fidelity gap,
-  # not a functional error; needs the SimX raster/OM fragment model aligned.
-  known_issue: "pre-existing SimX-vs-RTL graphics instruction-count divergence (execution passes, image matches baseline)"
   via: blackbox
   app: gfx_draw3d
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png

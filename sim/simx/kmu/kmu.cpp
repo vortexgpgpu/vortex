@@ -46,10 +46,13 @@ void Kmu::on_reset() {
   // param, dims, block_size, lmem_size, warp_step, cluster_dim) is set
   // by dcr_write() before run() and must persist across
   // SimPlatform::on_reset().
+  // ctx_id_ is excluded: it is what distinguishes one launch from the next, so
+  // re-zeroing it here would pin it to the same value on every launch and
+  // destroy the distinction. It is free-running from device reset, and
+  // zero-initialized at construction.
   running_         = false;
   cta_id_          = 0;
   rr_ptr_          = 0;
-  ctx_id_          = 0;
   cluster_locked_  = false;
   cluster_core_    = 0;
   group_origin_[0] = group_origin_[1] = group_origin_[2] = 0;
