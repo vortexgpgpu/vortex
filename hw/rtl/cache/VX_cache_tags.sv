@@ -16,9 +16,16 @@
 // Single-array tag store with per-way write-enable.
 //
 // All NUM_WAYS tags for a set live in one block-RAM word (read in parallel for
-// the hit compare); a per-way write-enable updates a single way on a
-// fill/write/invalidate without a read-modify-write. This replaces the
-// previous NUM_WAYS separate tag arrays with one BRAM.
+// the hit compare); a per-way write-enable updates a single way on a fill. This
+// replaces the previous NUM_WAYS separate tag arrays with one BRAM.
+//
+// The tag BRAM holds the TAG ONLY. The per-sector valid vector is decoupled into
+// a side LUTRAM (like the dirty vector): a sector refill ORs the fetched sector
+// into the resident line's valid vector -- a read-modify-write. Done in the tag
+// BRAM that RMW puts a tag-read -> compare -> valid-OR -> BRAM-write arc on the
+// write-data path; in a per-bit-write LUTRAM the refill is a local per-bit set,
+// so the tag BRAM write is just the registered line_tag and never depends on the
+// read.
 
 module VX_cache_tags import VX_gpu_pkg::*; #(
     parameter CACHE_SIZE    = 1024,           // Size of cache in bytes
@@ -61,9 +68,8 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     output wire [`CS_SECTORS_PER_LINE-1:0] evict_dirty_mask,
     output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
 );
-    //          tag store: valid[SEC], tag   (dirty decoupled into a side LUTRAM)
-    localparam SEC        = `CS_SECTORS_PER_LINE;
-    localparam TAG_ENTRYW = SEC + `CS_TAG_SEL_BITS;
+    //          tag store: tag only   (valid + dirty decoupled into side LUTRAMs)
+    localparam SEC = `CS_SECTORS_PER_LINE;
     `UNUSED_VAR (read)
 
     // one-hot of the requested sector (SEC=1 => constant 1)
@@ -84,13 +90,20 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         assign evict_tag = '0;
     end
 
-    // Per-way decoded write strobes and write payloads. At most one operation
-    // type fires per cycle (input arbitration in the bank). The tag store holds
-    // valid[SEC]+tag only; per-sector dirty lives in a decoupled LUTRAM so the
-    // tag-store write-enable does not depend on the write-hit tag compare.
+    // Per-way decoded write strobes and payloads. At most one operation type
+    // fires per cycle (input arbitration in the bank). The tag store holds the
+    // tag only and is written (with the registered line_tag) only on a fill, so
+    // its write never depends on the tag compare.
     wire [NUM_WAYS-1:0] line_write;
-    wire [NUM_WAYS-1:0][TAG_ENTRYW-1:0] line_wdata;
-    wire [NUM_WAYS-1:0][TAG_ENTRYW-1:0] tag_rdata;
+    wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] line_wdata;
+    wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] tag_rdata;
+
+    // Decoupled per-sector valid store: NUM_WAYS*SEC bits/set in LUTRAM, per-bit
+    // write-enable. A sector refill sets its bit locally instead of ORing through
+    // the tag BRAM. Placed next to the compare so its route collapses.
+    wire [NUM_WAYS-1:0][SEC-1:0] valid_wren;
+    wire [NUM_WAYS-1:0][SEC-1:0] valid_wdata;
+    wire [NUM_WAYS-1:0][SEC-1:0] valid_rdata;
 
     // Decoupled per-sector dirty store (writeback only): NUM_WAYS*SEC bits/set
     // in LUTRAM, per-bit write-enable. Placed locally next to the compare so its
@@ -113,26 +126,29 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // AMO passthrough invalidate: clear the requested sector's valid.
         wire do_inval = (AMO_ENABLE != 0) && invalidate && raw_hit;
 
-        // A write hit changes neither the tag nor the valid vector, so it does
-        // NOT write the tag store (only the dirty LUTRAM). The tag wren therefore
-        // depends only on init/fill/flush + the AMO-only invalidate.
-        assign line_write[i] = do_init || do_fill || do_flush || do_inval;
+        // Tag store: the tag changes only on a fill (a refill rewrites the
+        // identical tag, harmless), so its write-enable does not depend on the
+        // compare and its write-data is the registered line_tag. init/flush/
+        // invalidate only touch the valid vector (below), never the tag.
+        assign line_write[i] = do_fill;
+        assign line_wdata[i] = line_tag;
 
-        // A fill into a way that already holds this line (a sector refill) ORs
-        // the fetched sector into the existing valid vector; a fill into a fresh
-        // victim way installs only the fetched sector. With 1 sector/line a fill
-        // is always to a fresh way, so only the install path applies.
+        // A fill into a way that already holds this line (a sector refill) sets
+        // the fetched sector in the existing valid vector; a fill into a fresh
+        // victim way installs only the fetched sector (others cleared). With
+        // 1 sector/line a fill is always to a fresh way.
         wire fill_refill = do_fill && (line_tag == read_tag[i]) && (| read_valid[i]);
 
-        // Per-sector valid merge. read_valid is the current line's vector
-        // (includes a same-cycle-prior fill via rdw_fill below), so fill/inval
-        // preserve other sectors.
-        wire [SEC-1:0] valid_wr =
-              (do_init || do_flush) ? {SEC{1'b0}}
-            :  do_inval             ? (read_valid[i] & ~sec_oh)
-            :  do_fill              ? (fill_refill ? (read_valid[i] | sec_oh) : sec_oh)
-            :                          read_valid[i];
-        assign line_wdata[i] = {valid_wr, line_tag};
+        // Per-sector valid update as per-bit set/clear for the LUTRAM (no
+        // read-modify-write): set the filled sector; clear the whole line on
+        // init/flush, the other sectors on a fresh victim install, the requested
+        // sector on invalidate.
+        wire [SEC-1:0] vset_oh = do_fill ? sec_oh : {SEC{1'b0}};
+        wire [SEC-1:0] vclr_oh = ((do_init || do_flush)     ? {SEC{1'b1}} : {SEC{1'b0}})
+                               | ((do_fill && ~fill_refill) ? ~sec_oh     : {SEC{1'b0}})
+                               | (do_inval                  ? sec_oh      : {SEC{1'b0}});
+        assign valid_wren[i]  = vset_oh | vclr_oh;
+        assign valid_wdata[i] = vset_oh;
 
         // Read-First BRAM: a fill committed on the previous cycle isn't yet in
         // the readout. The bypass is keyed on the SET and the FILLED WAY: that
@@ -157,11 +173,12 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // do_fill is way-gated, so rdw_fill_raw identifies the filled way.
         wire way_filled = rdw_fill_raw && (line_idx == rdw_set);
 
-        wire [TAG_ENTRYW-1:0] rdata_i = tag_rdata[i];
-        wire [SEC-1:0] rdata_valid = rdata_i[`CS_TAG_SEL_BITS +: SEC];
-        // A fresh fill REPLACED this way's entry (tag + only its sector); a
-        // refill ORed its sector into the resident line's vector.
-        assign read_tag[i]   = way_filled ? rdw_tag : rdata_i[0 +: `CS_TAG_SEL_BITS];
+        // Tag from the tag BRAM, valid from the decoupled LUTRAM. Both share the
+        // same look-ahead read / read-first access pattern, so the way_filled
+        // bypass corrects the just-filled line for both. A fresh fill REPLACED
+        // this way's entry; a refill set its sector in the resident line's vector.
+        wire [SEC-1:0] rdata_valid = valid_rdata[i];
+        assign read_tag[i]   = way_filled ? rdw_tag : tag_rdata[i];
         assign read_valid[i] = way_filled ? (rdw_refill ? (rdata_valid | rdw_sec_oh) : rdw_sec_oh)
                                           : rdata_valid;
 
@@ -200,11 +217,11 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         assign line_present[i] = (line_tag == read_tag[i]) && (| read_valid[i]);
     end
 
-    // Single tag array: one BRAM word holds all ways' {valid[SEC], tag}; per-way
-    // write-enable updates a single way. Read at line_idx_n (one cycle ahead),
+    // Single tag array: one BRAM word holds all ways' tags; per-way write-enable
+    // updates a single way on a fill. Read at line_idx_n (one cycle ahead),
     // written at line_idx, read-first to match the fill/replay ordering.
     VX_dp_ram #(
-        .DATAW (NUM_WAYS * TAG_ENTRYW),
+        .DATAW (NUM_WAYS * `CS_TAG_SEL_BITS),
         .WRENW (NUM_WAYS),
         .SIZE  (`CS_LINES_PER_BANK),
         .OUT_REG (1),
@@ -219,6 +236,28 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         .raddr (line_idx_n),
         .wdata (line_wdata),
         .rdata (tag_rdata)
+    );
+
+    // Decoupled per-sector valid store: mirrors the tag BRAM's access pattern
+    // (look-ahead read, read-first) so pipeline alignment is identical, with
+    // per-bit write-enable so a sector refill sets its bit without reading back.
+    VX_dp_ram #(
+        .DATAW    (NUM_WAYS * SEC),
+        .WRENW    (NUM_WAYS * SEC),
+        .SIZE     (`CS_LINES_PER_BANK),
+        .OUT_REG  (1),
+        .LUTRAM   (1),
+        .RDW_MODE ("R")
+    ) valid_store (
+        .clk   (clk),
+        .reset (reset),
+        .read  (~stall),
+        .write (| valid_wren),
+        .wren  (valid_wren),
+        .waddr (line_idx),
+        .raddr (line_idx_n),
+        .wdata (valid_wdata),
+        .rdata (valid_rdata)
     );
 
     // Decoupled per-sector dirty store (writeback only). Mirrors the tag store's
