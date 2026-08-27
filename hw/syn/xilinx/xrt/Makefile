@@ -1,5 +1,7 @@
 ROOT_DIR := $(realpath ../../../..)
 include $(ROOT_DIR)/config.mk
+# tool binaries (VERILATOR for gen_sources.sh) resolved from TOOLDIR, no sourced env needed
+include $(VORTEX_HOME)/hw/syn/common.mk
 
 ifneq ($(findstring Makefile, $(MAKEFILE_LIST)), Makefile)
 help:
