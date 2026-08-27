@@ -47,6 +47,8 @@ module VX_cp_dma
   input  wire                       reset,
 
   input  wire [63:0]                satp,
+  // page tables may have changed (CACHE_FLUSH DCR): drop cached translations
+  input  wire                       xlat_flush,
 
   input  wire                       grant,
   input  cmd_t                      cmd,
@@ -124,6 +126,7 @@ module VX_cp_dma
     .clk         (clk),
     .reset       (reset),
     .satp        (satp),
+    .flush       (xlat_flush),
     .req_valid   (xlat_req_valid && !xlat_rsp_valid),
     .req_ready   (xlat_req_ready),
     .req_vaddr   (xlat_req_vaddr),
@@ -147,6 +150,7 @@ module VX_cp_dma
   wire [63:0] mmu_araddr     = '0;
   wire        mmu_rready     = 1'b0;
   `UNUSED_VAR (satp)
+  `UNUSED_VAR (xlat_flush)
   `UNUSED_VAR (phys_r)
 `endif
 

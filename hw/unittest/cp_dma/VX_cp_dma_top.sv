@@ -27,6 +27,7 @@ module VX_cp_dma_top
   input  wire                       grant,
   input  wire [$bits(cmd_t)-1:0]    cmd_packed,
   input  wire [63:0]                satp,
+  input  wire                       xlat_flush,
   output wire                       done,
 
   // ---- Host-memory AXI master (flat) ----
@@ -182,6 +183,7 @@ module VX_cp_dma_top
     .grant    (grant),
     .cmd      (cmd_typed),
     .satp     (satp),
+    .xlat_flush (xlat_flush),
     .done     (done),
     .axi_host (axi_host),
     .axi_dev  (axi_dev)

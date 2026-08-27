@@ -342,6 +342,11 @@ module VX_cp_core
   );
   `UNUSED_VAR (gpu_if_int.dcr_req_ready)
 
+  // CMD_CACHE_FLUSH sweeps a CACHE_FLUSH DCR read across the cores; the
+  // same event invalidates the DMA walker's translation cache.
+  wire cp_xlat_flush = gpu_if_int.dcr_req_valid && !gpu_if_int.dcr_req_rw
+                    && (gpu_if_int.dcr_req_addr == `VX_DCR_ADDR_BITS'(`VX_DCR_BASE_CACHE_FLUSH));
+
   // ----- DMA (straddles host + dev xbars) -----
   VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) dma_host_axi ();
   VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) dma_dev_axi  ();
@@ -352,6 +357,7 @@ module VX_cp_core
     .clk      (clk),
     .reset    (reset),
     .satp     (cp_satp),
+    .xlat_flush (cp_xlat_flush),
     .grant    (any_dma_grant),
     .cmd      (granted_dma_cmd),
     .done     (dma_done),
