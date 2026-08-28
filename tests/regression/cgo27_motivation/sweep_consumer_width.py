@@ -18,7 +18,7 @@ SUPPORTED_WIDTHS = (1, 2, 3, 4, 6, 8, 10, 12, 14, 16)
 DEFAULT_WIDTHS = (1, 2, 3, 4, 8)
 APPS = (2, 3, 4, 5)
 MODES = (14, 15)
-SHAPES = (
+SUPPORTED_SHAPES = (
     ("r2", 128, 64, 32),
     ("r4", 256, 128, 64),
     ("r8", 512, 256, 128),
@@ -27,6 +27,27 @@ SHAPES = (
     ("s256", 256, 256, 64),
     ("s512", 512, 512, 64),
     ("s1024", 1024, 1024, 64),
+    ("s2048", 2048, 2048, 64),
+    # K-boundary probes used to test whether the cluster placement can overtake the
+    # socket placement when the GEMM/epilogue balance changes at fixed output size.
+    ("s2048k32", 2048, 2048, 32),
+    ("s2048k128", 2048, 2048, 128),
+    # Thin-M/asymmetric probes for the cluster-vs-socket placement boundary.
+    ("m64n2048k32", 64, 2048, 32),
+    ("m64n2048k64", 64, 2048, 64),
+    ("m64n2048k128", 64, 2048, 128),
+    ("m128n2048k32", 128, 2048, 32),
+    ("m128n2048k64", 128, 2048, 64),
+    ("m128n2048k128", 128, 2048, 128),
+    ("m192n2048k64", 192, 2048, 64),
+    ("m256n2048k32", 256, 2048, 32),
+    ("m256n2048k64", 256, 2048, 64),
+    ("m256n2048k128", 256, 2048, 128),
+    ("m512n2048k32", 512, 2048, 32),
+    ("m512n2048k128", 512, 2048, 128),
+)
+DEFAULT_SHAPE_TAGS = (
+    "r2", "r4", "r8", "r12", "r16", "s256", "s512", "s1024", "s2048",
 )
 FIELDS = (
     "consumer_warps", "app", "app_name", "shape", "M", "N", "K",
@@ -44,12 +65,12 @@ def parse_ints(text, allowed, name):
     return values
 
 
-def read_completed(path, widths, apps):
+def read_completed(path, widths, apps, shapes):
     rows = []
     completed = set()
     if not path.exists():
         return rows, completed
-    wanted_shapes = {tag: (M, N, K) for tag, M, N, K in SHAPES}
+    wanted_shapes = {tag: (M, N, K) for tag, M, N, K in shapes}
     with path.open(newline="") as stream:
         for old in csv.DictReader(stream):
             width = int(old["consumer_warps"])
@@ -127,6 +148,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--widths", default=",".join(map(str, DEFAULT_WIDTHS)))
     parser.add_argument("--apps", default=",".join(map(str, APPS)))
+    parser.add_argument("--shape-tags", default=",".join(DEFAULT_SHAPE_TAGS),
+                        help="comma-separated tags from the built-in shape catalog")
     parser.add_argument("--jobs", type=int, default=min(48, max(1, (os.cpu_count() or 2) // 2)))
     parser.add_argument("--timeout", type=int, default=43200,
                         help="per-simulation and per-build timeout in seconds")
@@ -140,12 +163,21 @@ def main():
 
     widths = parse_ints(args.widths, SUPPORTED_WIDTHS, "consumer widths")
     apps = parse_ints(args.apps, APPS, "apps")
+    shape_catalog = {shape[0]: shape for shape in SUPPORTED_SHAPES}
+    shape_tags = tuple(tag for tag in args.shape_tags.split(",") if tag)
+    invalid_shapes = [tag for tag in shape_tags if tag not in shape_catalog]
+    if invalid_shapes:
+        raise SystemExit(
+            f"unsupported shape tags: {invalid_shapes}; choose from {tuple(shape_catalog)}")
+    if len(set(shape_tags)) != len(shape_tags):
+        raise SystemExit(f"duplicate shape tags: {shape_tags}")
+    shapes = tuple(shape_catalog[tag] for tag in shape_tags)
     if args.jobs < 1:
         raise SystemExit("--jobs must be positive")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     partial = Path(str(args.out) + ".partial")
     resume = args.resume_from or partial
-    rows, completed = read_completed(resume, widths, apps)
+    rows, completed = read_completed(resume, widths, apps, shapes)
     if completed:
         print(f"[resume] verified rows={len(completed)} from {resume}", flush=True)
 
@@ -175,17 +207,19 @@ def main():
             writer.writeheader()
             writer.writerows(rows)
 
-        # Sort by GEMM work so all 40 configurations of the same heavy shape enter first.
-        shapes = sorted(SHAPES, key=lambda item: item[1] * item[2] * item[3], reverse=True)
+        # Sort by GEMM work so all selected configurations of a heavy shape enter first.
+        run_shapes = sorted(
+            shapes, key=lambda item: item[1] * item[2] * item[3], reverse=True)
         tasks = [
             (width, app, shape, mode)
-            for shape in shapes
+            for shape in run_shapes
             for width in widths
             for app in apps
             for mode in MODES
             if (width, app, shape[0], mode) not in completed
         ]
-        print(f"[run] {len(tasks)}/{len(widths) * len(apps) * len(SHAPES) * len(MODES)} "
+        total = len(widths) * len(apps) * len(shapes) * len(MODES)
+        print(f"[run] {len(tasks)}/{total} "
               f"simulations jobs={args.jobs} timeout={args.timeout}s", flush=True)
         failures = 0
         with concurrent.futures.ThreadPoolExecutor(
@@ -227,14 +261,14 @@ def main():
 
         rows.sort(key=lambda row: (
             int(row["consumer_warps"]), int(row["app"]),
-            next(index for index, shape in enumerate(SHAPES) if shape[0] == row["shape"]),
+            next(index for index, shape in enumerate(shapes) if shape[0] == row["shape"]),
             int(row["mode"])))
         with args.out.open("w", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=FIELDS, lineterminator="\n")
             writer.writeheader()
             writer.writerows(rows)
         print(f"[done] rows={len(rows)} failures={failures} CSV={args.out}", flush=True)
-        success = failures == 0 and len(rows) == len(widths) * len(apps) * len(SHAPES) * len(MODES)
+        success = failures == 0 and len(rows) == total
     finally:
         if owns_snapshots and success and not args.keep_snapshots:
             shutil.rmtree(snapshot_root, ignore_errors=True)

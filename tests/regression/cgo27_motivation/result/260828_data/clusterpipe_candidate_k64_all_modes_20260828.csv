@@ -1,0 +1,10 @@
+app,app_name,shape,M,N,K,mode,mode_name,cycles,errors,status
+4,residual,m64n2048k64,64,2048,64,1,TCU,487751,0,ok
+4,residual,m64n2048k64,64,2048,64,2,TCU+DXA,525753,0,ok
+4,residual,m64n2048k64,64,2048,64,3,TCU_wg+DXA,1855072,0,ok
+4,residual,m64n2048k64,64,2048,64,5,TCU_wg+Acol,1716124,0,ok
+4,residual,m64n2048k64,64,2048,64,6,TCU_wg+Acol_SB,956781,0,ok
+4,residual,m64n2048k64,64,2048,64,7,DTCU_socket,514184,0,ok
+4,residual,m64n2048k64,64,2048,64,8,DTCU_cluster,943158,0,ok
+4,residual,m64n2048k64,64,2048,64,14,DTCU_socket_pipe,593581,0,ok
+4,residual,m64n2048k64,64,2048,64,15,DTCU_cluster_pipe,493158,0,ok

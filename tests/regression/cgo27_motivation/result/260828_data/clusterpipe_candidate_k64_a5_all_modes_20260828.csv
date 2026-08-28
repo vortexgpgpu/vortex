@@ -1,0 +1,10 @@
+app,app_name,shape,M,N,K,mode,mode_name,cycles,errors,status
+5,scale,m64n2048k64,64,2048,64,1,TCU,411341,0,ok
+5,scale,m64n2048k64,64,2048,64,2,TCU+DXA,437565,0,ok
+5,scale,m64n2048k64,64,2048,64,3,TCU_wg+DXA,1316772,0,ok
+5,scale,m64n2048k64,64,2048,64,5,TCU_wg+Acol,1367658,0,ok
+5,scale,m64n2048k64,64,2048,64,6,TCU_wg+Acol_SB,675075,0,ok
+5,scale,m64n2048k64,64,2048,64,7,DTCU_socket,372085,0,ok
+5,scale,m64n2048k64,64,2048,64,8,DTCU_cluster,800618,0,ok
+5,scale,m64n2048k64,64,2048,64,14,DTCU_socket_pipe,469452,0,ok
+5,scale,m64n2048k64,64,2048,64,15,DTCU_cluster_pipe,449264,0,ok

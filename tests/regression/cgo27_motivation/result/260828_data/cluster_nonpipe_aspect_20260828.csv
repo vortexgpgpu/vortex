@@ -1,0 +1,17 @@
+app,app_name,shape,M,N,K,mode,mode_name,cycles,errors,status
+1,baseline,m64n2048k32,64,2048,32,7,DTCU_socket,189917,0,ok
+1,baseline,m64n2048k32,64,2048,32,8,DTCU_cluster,471226,0,ok
+1,baseline,m64n2048k128,64,2048,128,7,DTCU_socket,587699,0,ok
+1,baseline,m64n2048k128,64,2048,128,8,DTCU_cluster,1343154,0,ok
+1,baseline,m128n2048k32,128,2048,32,7,DTCU_socket,366056,0,ok
+1,baseline,m128n2048k32,128,2048,32,8,DTCU_cluster,688154,0,ok
+1,baseline,m128n2048k128,128,2048,128,7,DTCU_socket,748145,0,ok
+1,baseline,m128n2048k128,128,2048,128,8,DTCU_cluster,1533377,0,ok
+1,baseline,m256n2048k32,256,2048,32,7,DTCU_socket,780410,0,ok
+1,baseline,m256n2048k32,256,2048,32,8,DTCU_cluster,1121990,0,ok
+1,baseline,m256n2048k128,256,2048,128,7,DTCU_socket,1555642,0,ok
+1,baseline,m256n2048k128,256,2048,128,8,DTCU_cluster,2037451,0,ok
+1,baseline,m512n2048k32,512,2048,32,7,DTCU_socket,1632223,0,ok
+1,baseline,m512n2048k32,512,2048,32,8,DTCU_cluster,2309022,0,ok
+1,baseline,m512n2048k128,512,2048,128,7,DTCU_socket,3159381,0,ok
+1,baseline,m512n2048k128,512,2048,128,8,DTCU_cluster,4137023,0,ok

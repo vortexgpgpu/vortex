@@ -1,0 +1,13 @@
+app,app_name,shape,M,N,K,mode,mode_name,cycles,errors,status
+1,baseline,s512k32,512,512,32,7,DTCU_socket,235088,0,ok
+1,baseline,s512k32,512,512,32,8,DTCU_cluster,366942,0,ok
+1,baseline,s512k128,512,512,128,7,DTCU_socket,620058,0,ok
+1,baseline,s512k128,512,512,128,8,DTCU_cluster,788166,0,ok
+1,baseline,s1024k32,1024,1024,32,7,DTCU_socket,1049764,0,ok
+1,baseline,s1024k32,1024,1024,32,8,DTCU_cluster,1583454,0,ok
+1,baseline,s1024k128,1024,1024,128,7,DTCU_socket,2595091,0,ok
+1,baseline,s1024k128,1024,1024,128,8,DTCU_cluster,3293753,0,ok
+1,baseline,s2048k32,2048,2048,32,7,DTCU_socket,6670554,0,ok
+1,baseline,s2048k32,2048,2048,32,8,DTCU_cluster,9459158,0,ok
+1,baseline,s2048k128,2048,2048,128,7,DTCU_socket,12800768,0,ok
+1,baseline,s2048k128,2048,2048,128,8,DTCU_cluster,16734943,0,ok
