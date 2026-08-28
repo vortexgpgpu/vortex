@@ -42,6 +42,11 @@
 // table's O(NUM_HARTS) storage and CAM.
 module VX_amo_unit import VX_gpu_pkg::*; #(
     parameter NUM_RES_ENTRIES = 4,   // reservation stations per bank (NUM_RS)
+    // Holder-refusal budget, in refused-LR events, before a held station may
+    // be displaced. Sized for the holder's LR->SC round trip: the LLC sees an
+    // L1-miss round trip (default 6 bits = 63 refusals); a local-memory bank's
+    // round trip is single-digit cycles and needs far less.
+    parameter HOLD_CREDIT_BITS = 6,
     parameter LINE_ADDR_BITS  = 32,
     parameter DATA_WIDTH      = 64   // ALU operand width (cache word, capped at 64)
 ) (
@@ -165,8 +170,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     // free to abandon an attempt) would otherwise own the station forever.
     // Each refused LR spends one credit, so the holder gets a bounded number
     // of chances before the station may be taken.
-    localparam HOLD_CREDIT_BITS = 6;
-    localparam [HOLD_CREDIT_BITS-1:0] HOLD_CREDITS = HOLD_CREDIT_BITS'(63);
+    localparam [HOLD_CREDIT_BITS-1:0] HOLD_CREDITS = {HOLD_CREDIT_BITS{1'b1}};
 
     reg [RS_DEPTH-1:0][HOLD_CREDIT_BITS-1:0] rs_hold_r;
     wire hold_lapsed = (rs_hold_r[rs_idx] == '0);

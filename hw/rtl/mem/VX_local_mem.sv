@@ -413,10 +413,18 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         // old_word is this cycle's SRAM output -- the same value the response
         // carries back, which is why ret_word is not used here.
         wire [63:0] amo_new_word, amo_ret_word;
+        // VX_CFG_AMO_RS_SIZE sizes ONE shared LLC bank's contention; deployed
+        // per lmem bank it multiplies by NUM_LMEM_BANKS x NUM_CORES. After the
+        // holder-credit protocol a hot word maps to exactly one station, so
+        // depth only reduces false eviction between distinct reserved words
+        // aliasing in one bank -- and a spurious SC failure is architecturally
+        // legal. Clamp the depth and shorten the credit budget to the local
+        // round trip instead of inheriting the L1-miss sizing.
         VX_amo_unit #(
-            .NUM_RES_ENTRIES (`VX_CFG_AMO_RS_SIZE),
-            .LINE_ADDR_BITS  (BANK_ADDR_WIDTH),
-            .DATA_WIDTH      (WORD_WIDTH)
+            .NUM_RES_ENTRIES  (`MIN(`VX_CFG_AMO_RS_SIZE, 4)),
+            .HOLD_CREDIT_BITS (3),
+            .LINE_ADDR_BITS   (BANK_ADDR_WIDTH),
+            .DATA_WIDTH       (WORD_WIDTH)
         ) amo_unit (
             .clk              (clk),
             .reset            (reset),
