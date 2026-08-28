@@ -356,7 +356,7 @@ public:
 
       uint32_t wid = trace->wid;
       uint64_t wid_bit = (uint64_t(1) << wid);
-      int32_t new_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+      int32_t new_cta = (int32_t)trace->cta_id;
       auto& instr = *trace->instr_ptr;
       auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
 
@@ -458,7 +458,7 @@ public:
           !(wgmma_planned_warps_.at(b) & (uint64_t(1) << trace->wid)))
         continue;
       if (tcu_is_wgmma(tcu_type) && !tpuArgs.is_setup_uop) {
-        int32_t this_cta = (int32_t)core_->scheduler().warp(trace->wid).cta_csrs.cta_id;
+        int32_t this_cta = (int32_t)trace->cta_id;
         bool block_other_cta_inflight = false;
         for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
           if (k == b) continue;
@@ -500,7 +500,7 @@ public:
           // CTA lockstep invariant: no block may execute a WGMMA uop for a
           // different cta_id while another block is mid-WGMMA.
           if (!tpuArgs.is_setup_uop) {
-            int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+            int32_t this_cta = (int32_t)trace->cta_id;
             for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
               if (k == b) continue;
               if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {

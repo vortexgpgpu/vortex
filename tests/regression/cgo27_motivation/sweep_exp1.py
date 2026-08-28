@@ -100,6 +100,10 @@ def run_checked(cmd, *, cwd, env, timeout):
 
 def build_and_snapshot(app, work_root, timeout, bootstrap_runtime):
     env = dict(os.environ)
+    # DEBUG is a make variable (an integer trace level), not a release/debug label.
+    # IDE shells sometimes export DEBUG=release; forwarding that would compile the
+    # simulator with the invalid token VX_DBG_DEBUG_LEVEL=release.
+    env.pop("DEBUG", None)
     env["MOTI_APP"] = str(app)
 
     # The build tree owns a configure-time Makefile copy. Refresh only that file;
@@ -203,6 +207,8 @@ def main():
     parser.add_argument("--cross-mode-flat", action="store_true",
                         help="queue all cross-mode apps together per shape so one long mode "
                              "does not block later apps")
+    parser.add_argument("--flat", action="store_true",
+                        help="queue every pending shape/app/mode point in one worker pool")
     args = parser.parse_args()
 
     defaults = {"cube": "2,4,8,12,16", "attention": "128,256,512,1024",
@@ -297,17 +303,17 @@ def main():
                     max_workers=min(args.jobs, len(tasks))) as pool:
                 future_to_task = {
                     pool.submit(run_point, snap, app, one_shape, one_mode,
-                                args.timeout): (app, one_shape[0], one_mode)
+                                args.timeout): (app, one_shape, one_mode)
                     for snap, app, one_shape, one_mode in tasks
                 }
                 for future in concurrent.futures.as_completed(future_to_task):
-                    app, shape_tag, one_mode = future_to_task[future]
+                    app, task_shape, one_mode = future_to_task[future]
+                    shape_tag, M, N, K = task_shape
                     try:
                         row = future.result()
                     except subprocess.TimeoutExpired:
-                        tag, M, N, K = shape
                         row = {
-                            "app": app, "app_name": APPS[app], "shape": tag,
+                            "app": app, "app_name": APPS[app], "shape": shape_tag,
                             "M": M, "N": N, "K": K, "mode": one_mode,
                             "mode_name": MODES[one_mode], "cycles": "", "errors": "",
                             "status": "timeout",
@@ -330,33 +336,41 @@ def main():
         # size working set. Apps 2/4/6 are the exception: at large shapes their long tails
         # dominate, so running their modes concurrently avoids making the same app the
         # serial straggler of successive batches.
-        for shape in shapes:
-            for mode in modes:
-                tasks = [(snapshots[a], a, shape, mode) for a in apps
-                         if a not in cross_mode_apps
-                         and (a, shape[0], mode) not in completed]
-                run_batch(tasks, f"shape={shape[0]} mode={mode}")
-        # Only after every regular cell is checkpointed do we admit the long-tail apps.
-        # A six-hour timeout in one of them must not prevent useful later shapes from ever
-        # entering the queue.
-        for shape in shapes:
-            if args.cross_mode_flat:
-                # Mode-major ordering keeps one pathological epilogue from occupying
-                # every worker. The executor still mixes modes, but its first wave has
-                # at most one task per app for a given mode before proceeding through
-                # the remaining mode/app grid.
-                tasks = [(snapshots[app], app, shape, mode)
-                         for mode in modes
-                         for app in apps if app in cross_mode_apps
-                         and (app, shape[0], mode) not in completed]
-                run_batch(tasks, f"shape={shape[0]} flat cross-mode")
-            else:
-                for app in apps:
-                    if app not in cross_mode_apps:
-                        continue
-                    tasks = [(snapshots[app], app, shape, mode) for mode in modes
-                             if (app, shape[0], mode) not in completed]
-                    run_batch(tasks, f"shape={shape[0]} app={app} cross-mode")
+        if args.flat:
+            tasks = [(snapshots[app], app, shape, mode)
+                     for shape in reversed(shapes)
+                     for mode in modes
+                     for app in apps
+                     if (app, shape[0], mode) not in completed]
+            run_batch(tasks, "flat heavy-first")
+        else:
+            for shape in shapes:
+                for mode in modes:
+                    tasks = [(snapshots[a], a, shape, mode) for a in apps
+                             if a not in cross_mode_apps
+                             and (a, shape[0], mode) not in completed]
+                    run_batch(tasks, f"shape={shape[0]} mode={mode}")
+            # Only after every regular cell is checkpointed do we admit the long-tail apps.
+            # A six-hour timeout in one of them must not prevent useful later shapes from ever
+            # entering the queue.
+            for shape in shapes:
+                if args.cross_mode_flat:
+                    # Mode-major ordering keeps one pathological epilogue from occupying
+                    # every worker. The executor still mixes modes, but its first wave has
+                    # at most one task per app for a given mode before proceeding through
+                    # the remaining mode/app grid.
+                    tasks = [(snapshots[app], app, shape, mode)
+                             for mode in modes
+                             for app in apps if app in cross_mode_apps
+                             and (app, shape[0], mode) not in completed]
+                    run_batch(tasks, f"shape={shape[0]} flat cross-mode")
+                else:
+                    for app in apps:
+                        if app not in cross_mode_apps:
+                            continue
+                        tasks = [(snapshots[app], app, shape, mode) for mode in modes
+                                 if (app, shape[0], mode) not in completed]
+                        run_batch(tasks, f"shape={shape[0]} app={app} cross-mode")
 
         rows.sort(key=lambda r: (r["app"], r["M"], r["N"], r["K"], r["mode"]))
         with open(args.out, "w", newline="") as stream:

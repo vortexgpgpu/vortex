@@ -158,6 +158,7 @@ inline int run_case(uint32_t mode,
 
   // Workgroup staging (modes 3/4/5/6): ISSUE_WIDTH warps share one staged tile.
   uint32_t wg_warps = 1;
+  uint64_t wg_lmem_bytes = 0;
   const bool wg_any = (spec.geom == ModeSpec::GEOM_WMMA_WG)
                   || (spec.geom == ModeSpec::GEOM_WMMA_WG_ACOL);
   if (wg_any) {
@@ -168,6 +169,7 @@ inline int run_case(uint32_t mode,
     uint64_t issue_width = 1, dev_warps = 1;
     RT_CHECK(vx_dev_caps(device, VX_CAPS_ISSUE_WIDTH, &issue_width));
     RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_WARPS,   &dev_warps));
+    RT_CHECK(vx_dev_caps(device, VX_CAPS_LOCAL_MEM_SIZE, &wg_lmem_bytes));
     wg_warps = (uint32_t)issue_width;
     if (wg_warps > dev_warps) {
       std::cerr << "cgo27_motivation: WGMMA group (" << wg_warps
@@ -202,6 +204,25 @@ inline int run_case(uint32_t mode,
               << " gives a CTA " << acol_N << " columns wide, which does not divide N="
               << N << std::endl;
     return -1;
+  }
+  uint32_t acol_k_chunk = K;
+  if (spec.geom == ModeSpec::GEOM_WMMA_WG_ACOL) {
+    const uint32_t max_chunk = moti_wg_acol_kchunk(
+        wg_lmem_bytes, sizeof(itype_t), cta_M, wgcfg::xtileN, wg_stK,
+        spec.lmem_stages);
+    if (max_chunk < wg_stK) {
+      std::cerr << "cgo27_motivation: LMEM=" << wg_lmem_bytes
+                << " cannot hold one A K-step plus the workgroup B buffers" << std::endl;
+      return -1;
+    }
+    if (acol_k_chunk > max_chunk)
+      acol_k_chunk = max_chunk;
+    assert((acol_k_chunk % wg_stK) == 0);
+    if (acol_k_chunk < K && spec.chunked_kentry == nullptr) {
+      std::cerr << "cgo27_motivation: oversized A requires a K-chunked kernel entry"
+                << std::endl;
+      return -1;
+    }
   }
   if (spec.kentry == nullptr) {
     std::cerr << "cgo27_motivation: no kernel entry for mode " << mode << std::endl;
@@ -336,7 +357,8 @@ inline int run_case(uint32_t mode,
     // mode -- it is what turns A into a reused operand instead of a streamed one.
     RT_CHECK(vortex::dxa::program_2d(device, DESC_A, karg.A_addr,
       /*size0=*/K, /*size1=*/M, /*stride0_bytes=*/K * sizeof(itype_t),
-      /*tile0=*/(acol ? K : dK), /*tile1=*/dM, /*elem_bytes=*/sizeof(itype_t)));
+      /*tile0=*/(acol ? acol_k_chunk : dK), /*tile1=*/dM,
+      /*elem_bytes=*/sizeof(itype_t)));
     RT_CHECK(vortex::dxa::program_2d(device, DESC_B, karg.B_addr,
       /*size0=*/K, /*size1=*/N, /*stride0_bytes=*/K * sizeof(itype_t),
       /*tile0=*/dK, /*tile1=*/dN, /*elem_bytes=*/sizeof(itype_t)));
@@ -358,7 +380,9 @@ inline int run_case(uint32_t mode,
   // DTCU modes get two entries rather than one entry branching on arg->mode, so which
   // start instruction executes is fixed at link time -- the engine choice is an opcode,
   // and an opcode cannot be selected by a runtime value.
-  RT_CHECK(vx_module_get_kernel(module_, spec.kentry, &kernel));
+  const char* kernel_entry = (acol_k_chunk < K && spec.chunked_kentry != nullptr)
+                           ? spec.chunked_kentry : spec.kentry;
+  RT_CHECK(vx_module_get_kernel(module_, kernel_entry, &kernel));
 
   vx_launch_info_t li = {};
   li.struct_size = sizeof(li);
@@ -404,14 +428,15 @@ inline int run_case(uint32_t mode,
   case ModeSpec::GEOM_WMMA_WG_ACOL: {
     // One CTA per (cta_M rows) x (NCOLS column tiles). Fewer, fatter CTAs than mode 3:
     // the grid is NCOLS times narrower along N, which is exactly how the A fetch gets
-    // amortised. Local Memory holds the whole A block plus `lmem_stages` B tiles, so it is
-    // sized from runtime K and the mode's buffer count. A is 16 KB at cta_M=64, K=128,
-    // against mode 3's 2,560 B total footprint, which can reduce resident CTAs.
+    // amortised. Local Memory holds either the whole A block or its largest fitting K
+    // chunk plus `lmem_stages` B tiles. A is 16 KB at cta_M=64, K=128, against mode 3's
+    // 2,560 B total footprint, which can reduce resident CTAs.
     li.ndim = 2;
     li.grid_dim[0]  = N / (MOTI_WG_NCOLS * wgcfg::xtileN);
     li.grid_dim[1]  = M / cta_M;
     li.block_dim[0] = wg_warps * NUM_THREADS; li.block_dim[1] = 1;
-    li.lmem_size = (cta_M * K + spec.lmem_stages * wgcfg::xtileN * wg_stK)
+    li.lmem_size = (cta_M * acol_k_chunk
+                 + spec.lmem_stages * wgcfg::xtileN * wg_stK)
                  * sizeof(itype_t);
     break;
   }
@@ -442,6 +467,15 @@ inline int run_case(uint32_t mode,
     li.block_dim[0] = (uint32_t)num_warps * NUM_THREADS;
     break;
   }
+  }
+
+  if (wg_any) {
+    assert(li.lmem_size <= wg_lmem_bytes);
+    if (li.lmem_size > wg_lmem_bytes) {
+      std::cerr << "cgo27_motivation: workgroup LMEM footprint " << li.lmem_size
+                << " exceeds device capacity " << wg_lmem_bytes << std::endl;
+      return -1;
+    }
   }
 
   // DTCU epilogue pass (modes 7/8). The engine is GEMM-only, so an elementwise

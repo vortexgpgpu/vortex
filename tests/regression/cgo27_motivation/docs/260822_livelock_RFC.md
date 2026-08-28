@@ -15,6 +15,23 @@ compiler-side options they enable.  Those proposals are retained below as design
 validation addendum records the subsequently implemented response-credit fix and supersedes the
 original root-cause claim.
 
+## 2026-08-27 WGMMA timeout addendum
+
+The remaining mode-3/mode-5 failures were a separate TCU tile-buffer bookkeeping bug, not
+cache livelock. The request tag packs the TBUF source id above a 16-bit per-source subtag,
+but `LineBuf::inflight_` used the full monotonically increasing `next_tag_` as its key.
+At request 65,536 the returned subtag wrapped to zero while the map waited on key 65,536;
+the response was discarded and `ready_b()` could never become true.
+
+The TBUF now allocates circular subtags and skips any value still inflight. Response routing
+asserts that both the source and subtag exist, and WGMMA micro-ops copy the parent trace's CTA
+id so a later warp-state change cannot alter ownership. The formerly failing baseline points
+now finish (`m3/r16` 4,922,450 cycles; `m5/s1024` 6,116,052 cycles), and the complete
+m3/m5 grid is **112/112 `ok`, errors=0** in
+[`exp1_m3_m5_final_20260827.csv`](../result/260827_data/exp1_m3_m5_final_20260827.csv).
+This does not change the accepted-core-request arbitration bound below; that knob remains a
+QoS/starvation policy rather than the correctness fix for either diagnosed hang.
+
 ## 2026-08-24 validation addendum
 
 ### Reproduction and direct observations

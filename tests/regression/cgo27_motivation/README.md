@@ -56,6 +56,37 @@ work for the heaviest softmax (`r12`: mode 14 = 5,581,649 versus mode 7 = 5,606,
 hardware/model or kernel-design findings to address with new shapes/configuration, not
 rankings to relabel.
 
+## Mode 3/5 control sweep after TBUF rollover repair (2026-08-27)
+
+The complete control sweep is
+[`result/260827_data/exp1_m3_m5_final_20260827.csv`](result/260827_data/exp1_m3_m5_final_20260827.csv):
+8 shapes × 7 epilogues × modes 3/5, **112/112 `ok`, 112/112 `errors=0`**. The old
+mode-3/mode-5 timeouts were not L2-arbiter livelock. `MemReq::tag` carried a 16-bit TCU
+tile-buffer subtag, while the inflight map kept an unbounded counter; response tag 0 after
+65,536 requests could no longer find inflight key 65,536. Tags now wrap only onto a free
+subtag, and WGMMA micro-ops retain their originating CTA id.
+
+Modes 5/6 also query the actual LMEM capacity. If resident `A[cta_M×K]` does not fit,
+the host selects a separate K-chunked kernel entry; inputs that fit still execute the
+byte-identical original primary entry. This matters for measurement: putting the chunk loop
+in the common path moved r8 mode 5 from 771,276 to 2,581,282 cycles despite correct output,
+so that intermediate sweep was discarded. The separate-entry form restores 771,276 exactly
+and passes an overflow probe at 128×256×1024 (m5 1,356,571; m6 814,662; both errors=0).
+
+Each cell below is **mode 3 / mode 5 cycles**. Mode 3 is the no-A-residency control for
+candidate mode 5, so this pairwise table does not replace the candidate-mode winner table above.
+
+| shape | a1 baseline | a2 ReLU | a3 GELU | a4 residual | a5 scale | a6 softmax | a9 column mean |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| r2 | 95,578 / 42,142 | 95,599 / 42,554 | 98,362 / 57,362 | 97,814 / 60,275 | 92,262 / 65,419 | 326,927 / 271,511 | 128,294 / 74,862 |
+| r4 | 355,369 / 210,700 | 357,635 / 209,044 | 373,656 / 259,674 | 378,485 / 310,116 | 365,241 / 348,548 | 1,049,173 / 876,404 | 424,761 / 280,096 |
+| r8 | 1,271,236 / 771,276 | 1,238,750 / 769,276 | 1,206,215 / 934,264 | 1,336,083 / 1,129,924 | 1,260,062 / 1,242,544 | 3,380,091 / 2,894,187 | 1,411,349 / 911,445 |
+| r12 | 2,747,486 / 1,735,110 | 2,709,101 / 1,717,485 | 2,641,315 / 2,002,907 | 2,858,145 / 2,448,398 | 2,804,537 / 2,733,420 | 7,315,995 / 6,419,366 | 2,998,772 / 1,986,273 |
+| r16 | 4,922,450 / 3,167,132 | 4,853,136 / 3,195,148 | 4,553,521 / 3,901,604 | 5,144,583 / 4,274,982 | 4,841,817 / 4,566,828 | 13,152,718 / 11,389,887 | 5,320,533 / 3,565,268 |
+| s256 | 669,466 / 422,363 | 661,232 / 416,733 | 627,081 / 528,061 | 682,287 / 604,371 | 661,443 / 690,951 | 1,943,037 / 1,674,336 | 739,935 / 492,876 |
+| s512 | 2,494,749 / 1,528,918 | 2,470,936 / 1,533,038 | 2,245,912 / 1,801,763 | 2,580,936 / 2,230,973 | 2,515,988 / 2,496,954 | 7,064,770 / 6,082,171 | 2,645,889 / 1,680,520 |
+| s1024 | 9,845,019 / 6,116,052 | 10,007,057 / 6,106,246 | 8,814,271 / 7,202,122 | 10,302,642 / 8,851,791 | 9,908,945 / 9,793,635 | 27,077,567 / 23,321,603 | 10,615,767 / 6,883,131 |
+
 ## HW config (set in `Makefile`; overrides `VX_config.toml` defaults)
 
 Chosen to look like a **~1/4 H100 SM per core** (occupancy), scaled to a small

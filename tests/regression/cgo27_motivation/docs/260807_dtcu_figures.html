@@ -1096,4 +1096,34 @@
     </figure>
   </section>
 
+  <section>
+    <h2>2026-08-27 · WGMMA control paths now complete</h2>
+    <p>
+      The mode-3/mode-5 grid now finishes all 112 shape × epilogue × mode points with
+      <strong>errors=0</strong>. The old timeouts were a TCU tile-buffer tag rollover,
+      not DTCU/L2 arbitration: responses retain only a 16-bit subtag while the old inflight
+      key continued beyond 65,535. Free circular subtags and captured CTA provenance remove
+      that loss. Mode 5 keeps its original entry when resident A fits LMEM and selects a
+      separate K-chunked entry only for oversized A, so the r8 baseline remains exactly
+      771,276 cycles.
+    </p>
+    <table class="res">
+      <caption>Mode 3 / mode 5 cycles after rollover repair (selected controls)</caption>
+      <thead>
+        <tr><th>shape</th><th>baseline</th><th>GELU</th><th>softmax</th><th>column mean</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>r8</td><td class="num">1,271,236 / 771,276</td><td class="num">1,206,215 / 934,264</td><td class="num">3,380,091 / 2,894,187</td><td class="num">1,411,349 / 911,445</td></tr>
+        <tr><td>r16</td><td class="num">4,922,450 / 3,167,132</td><td class="num">4,553,521 / 3,901,604</td><td class="num">13,152,718 / 11,389,887</td><td class="num">5,320,533 / 3,565,268</td></tr>
+        <tr><td>s256</td><td class="num">669,466 / 422,363</td><td class="num">627,081 / 528,061</td><td class="num">1,943,037 / 1,674,336</td><td class="num">739,935 / 492,876</td></tr>
+        <tr><td>s1024</td><td class="num">9,845,019 / 6,116,052</td><td class="num">8,814,271 / 7,202,122</td><td class="num">27,077,567 / 23,321,603</td><td class="num">10,615,767 / 6,883,131</td></tr>
+      </tbody>
+    </table>
+    <p class="notes">
+      Full data: <code>result/260827_data/exp1_m3_m5_final_20260827.csv</code>.
+      Mode 3 is the no-A-residency control for candidate mode 5; this table does not
+      redefine the placement winner set.
+    </p>
+  </section>
+
 </div>

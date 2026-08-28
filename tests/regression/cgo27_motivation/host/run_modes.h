@@ -36,6 +36,7 @@ struct ModeSpec {
   Geom        geom;
   uint8_t     lmem_stages; // Local Memory tile stages, 0 = none
   bool        dxa_desc;    // host programs the DXA 2D descriptors before launch
+  const char* chunked_kentry = nullptr; // alternate entry when resident A exceeds LMEM
 };
 
 // ---- in-core, no operand staging ----
@@ -132,12 +133,14 @@ static inline ModeSpec run_mode_4() {   // workgroup WGMMA, cooperative SW load
 // 3 and 5 are the N-axis-reuse pair: same kernel body, same epilogue, same DXA, and 5
 // sweeps MOTI_WG_NCOLS column tiles against an A block staged once for the whole K.
 static inline ModeSpec run_mode_5() {   // workgroup WGMMA + DXA, A resident in LMEM
-  return ModeSpec{ "moti_tcu_wg_acol", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA_WG_ACOL, 2, true };
+  return ModeSpec{ "moti_tcu_wg_acol", VX_ISA_EXT_DXA, ModeSpec::GEOM_WMMA_WG_ACOL,
+                   2, true, "moti_tcu_wg_acol_chunked" };
 }
 
 static inline ModeSpec run_mode_6() {   // committed A-resident path, one B buffer
   return ModeSpec{ "moti_tcu_wg_acol_single", VX_ISA_EXT_DXA,
-                   ModeSpec::GEOM_WMMA_WG_ACOL, 1, true };
+                   ModeSpec::GEOM_WMMA_WG_ACOL, 1, true,
+                   "moti_tcu_wg_acol_single_chunked" };
 }
 
 // Dispatch. A mode with no entry here is not runnable, and that is reported rather than

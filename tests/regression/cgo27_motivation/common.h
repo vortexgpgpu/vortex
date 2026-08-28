@@ -92,6 +92,23 @@ typedef struct {
 #define MOTI_WG_NCOLS 4
 #endif
 
+// Modes 5/6 keep one A chunk and up to two streamed B tiles in LMEM. Return the
+// largest kStK-aligned A chunk that fits; zero means even the fixed B footprint
+// cannot be represented by this machine configuration.
+static inline uint32_t moti_wg_acol_kchunk(uint64_t lmem_bytes,
+                                           uint32_t elem_bytes,
+                                           uint32_t cta_m,
+                                           uint32_t xtile_n,
+                                           uint32_t st_k,
+                                           uint32_t b_stages) {
+  const uint64_t lmem_elems = lmem_bytes / elem_bytes;
+  const uint64_t b_elems = (uint64_t)b_stages * xtile_n * st_k;
+  if (lmem_elems <= b_elems || cta_m == 0 || st_k == 0)
+    return 0;
+  const uint64_t raw_k = (lmem_elems - b_elems) / cta_m;
+  return (uint32_t)(raw_k / st_k) * st_k;
+}
+
 // Descriptors one submitter splits its row range into, for the PIPELINED engine modes
 // (14/15). At T=1 those modes degenerate to modes 7/8 with a bigger block.
 //

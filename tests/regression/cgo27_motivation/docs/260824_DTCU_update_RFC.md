@@ -19,6 +19,15 @@ changed what the numbers support (§4.2).
 > epilogue run measured before that accumulation fix retained only the last launch's
 > detailed counters. Use the current README and regenerate the sweep before citing data.
 
+> **Control-path validation (2026-08-27):** the m3/m5 nontermination was independent of
+> DTCU/L2 placement. TCU tile-buffer responses expose a 16-bit subtag, but the inflight map
+> previously stored an unbounded request counter; the first rollover lost the response lookup.
+> Circular free-tag allocation plus CTA provenance on generated WGMMA micro-ops makes the
+> complete 8-shape × 7-epilogue × 2-mode sweep finish **112/112 `ok`, errors=0**. Modes 5/6
+> now select separate K-chunked entries only when resident A exceeds LMEM, leaving the common
+> mode-5 entry's r8 anchor exactly 771,276 cycles. Full controls:
+> [`exp1_m3_m5_final_20260827.csv`](../result/260827_data/exp1_m3_m5_final_20260827.csv).
+
 Splits the DTCU into two placement variants whose only architectural difference is
 **where the GEMM output lands**, and replaces the engine-state completion bit with a
 per-descriptor completion field so several cores can consume results asynchronously.

@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <deque>
 #include <array>
+#include <cassert>
 
 using namespace vortex;
 
@@ -32,6 +33,13 @@ constexpr uint32_t kNumSources = VX_CFG_NUM_TCU_BLOCKS + 1;
 constexpr uint32_t kAOffset    = 0;
 constexpr uint32_t kBOffset    = VX_CFG_NUM_TCU_BLOCKS;
 
+// MemReq::tag packs the source above a per-source circular sub-tag.
+constexpr uint32_t kSrcShift   = 16;
+constexpr uint32_t kSubTagMask = (1u << kSrcShift) - 1;
+constexpr uint32_t kSubTagCount = kSubTagMask + 1;
+static_assert(kNumSources <= (1u << (32 - kSrcShift)),
+              "TCU tile-buffer source id does not fit in MemReq::tag");
+
 // Per-source line cache. Resident, in-flight and pending state are tracked
 // independently per source; the wrapper arbitrates the shared LMEM port.
 struct LineBuf {
@@ -40,6 +48,22 @@ struct LineBuf {
   std::unordered_map<uint64_t, std::shared_ptr<mem_block_t>> resident_;
   uint32_t next_tag_ = 0;
   uint64_t reads_ = 0;
+
+  bool allocate_tag(uint32_t* tag) {
+    assert(inflight_.size() <= kSubTagCount);
+    if (inflight_.size() == kSubTagCount)
+      return false;
+    for (uint32_t i = 0; i < kSubTagCount; ++i) {
+      uint32_t candidate = next_tag_;
+      next_tag_ = (next_tag_ + 1) & kSubTagMask;
+      if (inflight_.count(candidate) == 0) {
+        *tag = candidate;
+        return true;
+      }
+    }
+    assert(false && "free TCU tile-buffer tag not found");
+    return false;
+  }
 
   void plan(const std::vector<uint64_t>& line_addrs) {
     std::unordered_set<uint64_t> inflight_set;
@@ -76,12 +100,10 @@ struct LineBuf {
   }
 };
 
-// Pack/unpack the source ID alongside the per-source tag in MemReq::tag.
-constexpr uint32_t kSrcShift = 16;
-constexpr uint32_t kSubTagMask = (1u << kSrcShift) - 1;
-
 inline uint32_t pack_tag(uint32_t source, uint32_t sub_tag) {
-  return (source << kSrcShift) | (sub_tag & kSubTagMask);
+  assert(source < kNumSources);
+  assert(sub_tag < kSubTagCount);
+  return (source << kSrcShift) | sub_tag;
 }
 inline uint32_t unpack_source(uint32_t tag)  { return tag >> kSrcShift; }
 inline uint32_t unpack_sub_tag(uint32_t tag) { return tag & kSubTagMask; }
@@ -126,14 +148,12 @@ public:
       auto& r = rsp.peek();
       uint32_t source = unpack_source(r.tag);
       uint32_t sub_tag = unpack_sub_tag(r.tag);
-      if (source < kNumSources) {
-        auto& buf = bufs_.at(source);
-        auto it = buf.inflight_.find(sub_tag);
-        if (it != buf.inflight_.end()) {
-          if (r.data) buf.resident_[it->second] = r.data;
-          buf.inflight_.erase(it);
-        }
-      }
+      assert(source < kNumSources);
+      auto& buf = bufs_.at(source);
+      auto it = buf.inflight_.find(sub_tag);
+      assert(it != buf.inflight_.end());
+      if (r.data) buf.resident_[it->second] = r.data;
+      buf.inflight_.erase(it);
       rsp.pop();
     }
 
@@ -144,13 +164,16 @@ public:
       uint32_t s = (rr_next_ + i) % kNumSources;
       auto& buf = bufs_.at(s);
       if (buf.pending_q_.empty()) continue;
+      uint32_t sub_tag;
+      if (!buf.allocate_tag(&sub_tag)) continue;
       uint64_t addr = buf.pending_q_.front();
-      uint32_t sub_tag = buf.next_tag_++;
       uint32_t tag = pack_tag(s, sub_tag);
       MemReq m(MemOp::LD, addr, /*data*/nullptr, /*byteen*/0, tag, /*hart_id*/0, /*uuid*/0);
       m.flags.local = 1;   // TCU TBUF reads from LMEM
       req.send(m, 1);
-      buf.inflight_[sub_tag] = addr;
+      auto inserted = buf.inflight_.emplace(sub_tag, addr).second;
+      (void)inserted;
+      assert(inserted);
       buf.pending_q_.pop_front();
       ++buf.reads_;
       rr_next_ = (s + 1) % kNumSources;
