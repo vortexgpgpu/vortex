@@ -26,7 +26,8 @@
 //     until space frees — propagating back-pressure all the way to fetch
 //     instead of silently dropping a seqnum on the floor.
 //
-// AXI drain FSM is unchanged: S_IDLE → S_REQ_AW → S_REQ_W → S_WAIT_B.
+// AXI drain FSM: S_IDLE → S_REQ_AW → S_REQ_W → S_WAIT_B → S_FLUSH_AR →
+// S_FLUSH_R (read-back of the written line; see the note at the FSM).
 // FIFO_DEPTH defaults to 2 * NUM_QUEUES, sized to keep at least one
 // completion in flight per queue under typical AXI latency.
 // ============================================================================
@@ -112,8 +113,16 @@ module VX_cp_completion
     end
   end
 
-  // FSM driving the AXI write.
-  typedef enum logic [1:0] { S_IDLE, S_REQ_AW, S_REQ_W, S_WAIT_B } state_e;
+  // FSM driving the AXI write, then a read-back of the same line. The flush
+  // read matters on hardware: on the V80's HBM host path a BRESP does not
+  // make the write visible to the host's QDMA reads -- the newest write sits
+  // in a store buffer until later traffic pushes it through, measured as the
+  // completion line trailing Q_SEQNUM by one retire indefinitely. A read on
+  // the same port to the same address cannot complete without committing the
+  // write, so after S_FLUSH_R the host is guaranteed to see this seqnum.
+  typedef enum logic [2:0] {
+    S_IDLE, S_REQ_AW, S_REQ_W, S_WAIT_B, S_FLUSH_AR, S_FLUSH_R
+  } state_e;
   state_e state;
 
   cmpl_ent_t cur_ent;
@@ -168,7 +177,13 @@ module VX_cp_completion
           if (axi_m.wvalid && axi_m.wready) state <= S_WAIT_B;
         end
         S_WAIT_B: begin
-          if (axi_m.bvalid && axi_m.bready) state <= S_IDLE;
+          if (axi_m.bvalid && axi_m.bready) state <= S_FLUSH_AR;
+        end
+        S_FLUSH_AR: begin
+          if (axi_m.arvalid && axi_m.arready) state <= S_FLUSH_R;
+        end
+        S_FLUSH_R: begin
+          if (axi_m.rvalid && axi_m.rready) state <= S_IDLE;
         end
         default: state <= S_IDLE;
       endcase
@@ -177,14 +192,14 @@ module VX_cp_completion
 
   // ---- Output drivers ----
   always_comb begin
-    // AR/R unused.
-    axi_m.arvalid = 1'b0;
-    axi_m.araddr  = '0;
-    axi_m.arid    = '0;
-    axi_m.arlen   = '0;
-    axi_m.arsize  = '0;
+    // AR/R: the flush read-back of the line just written (data discarded).
+    axi_m.arvalid = (state == S_FLUSH_AR);
+    axi_m.araddr  = cur_ent.addr;
+    axi_m.arid    = TID_PREFIX;
+    axi_m.arlen   = 8'd0;
+    axi_m.arsize  = 3'd6;
     axi_m.arburst = 2'b01;
-    axi_m.rready  = 1'b1;
+    axi_m.rready  = (state == S_FLUSH_R);
 
     // AW. A full cacheline, not an 8-byte narrow write. The line is a
     // dedicated CP-owned allocation, so the padding clobbers nothing -- and

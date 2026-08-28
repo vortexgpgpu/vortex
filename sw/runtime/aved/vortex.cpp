@@ -579,6 +579,10 @@ public:
           std::lock_guard<std::mutex> g(staged_mu_);
           staged_regions_.emplace(dev, staged_region_t{buf, asize});
         }
+        if (getenv("VORTEX_AVED_FENCE_DEBUG")) {
+          fprintf(stderr, "[VXDRV] staged alloc: cp_addr=0x%lx size=%lu\n",
+                  dev, asize);
+        }
         *host_ptr = hp;
         *cp_addr  = dev;
       VRT_CATCH(-1)
@@ -860,11 +864,26 @@ private:
         if (int32_t(uint32_t(cmpl64) - seqnum) >= 0) {
           break;
         }
-        if (std::chrono::steady_clock::now() - t0 > std::chrono::seconds(1)) {
+        // 50 ms cap: with the CP's flush read-backs the line is visible
+        // within microseconds of Q_SEQNUM, so a miss here means an old
+        // bitstream without the flush -- degrade with a warning, don't hang.
+        if (std::chrono::steady_clock::now() - t0
+            > std::chrono::milliseconds(50)) {
           fprintf(stderr,
                   "[VXDRV] warning: completion line (%u) never caught up to "
                   "Q_SEQNUM (%u); staged data may be stale\n",
                   uint32_t(cmpl64), seqnum);
+          if (getenv("VORTEX_AVED_FENCE_DEBUG")) {
+            // Ground truth at failure time: after a fresh D2H sync of every
+            // region, print its first words as they exist in HBM right now.
+            for (const auto& kv : staged_regions_) {
+              (void)staged_xfer(kv.second, false);
+              uint32_t w[4] = {0,0,0,0};
+              std::memcpy(w, kv.second.buf->get(), sizeof(w));
+              fprintf(stderr, "  [dump] 0x%lx (%lu B): %08x %08x %08x %08x\n",
+                      kv.first, kv.second.size, w[0], w[1], w[2], w[3]);
+            }
+          }
           break;
         }
       }
