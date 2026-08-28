@@ -260,6 +260,15 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         end
     end
 
+    // Host-port drain counters, declared before their first use in afu_ctrl
+    // below. An implicit-net footgun lives here: connecting these in a port
+    // map before the declaration makes Vivado mint 1-bit implicit wires at
+    // the use site and keep BOTH nets -- afu_ctrl then reads floating 1-bit
+    // stubs while host_drain drives the real vectors, and the debug registers
+    // read zero forever. That is not hypothetical; it cost a bitstream.
+    wire [9:0] dbg_host_aw_count, dbg_host_w_count, dbg_host_b_count;
+    wire [9:0] dbg_host_ar_count, dbg_host_r_count;
+
     VX_afu_reset_seq reset_seq (
         .clk             (clk),
         .reset           (reset),
@@ -589,9 +598,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     end
 
     wire host_idle;
-
-    wire [9:0] dbg_host_aw_count, dbg_host_w_count, dbg_host_b_count;
-    wire [9:0] dbg_host_ar_count, dbg_host_r_count;
 
     VX_afu_axi_drain host_drain (
         .clk          (clk),
