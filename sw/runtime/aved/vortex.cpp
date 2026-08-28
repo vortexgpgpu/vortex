@@ -233,21 +233,11 @@ public:
     // system_map.xml, which the kernel handle parses.
     staged_probe();
 
-    // Read-eviction buffer, allocated up front so staged_refresh never has
-    // to allocate under its own lock. 128 KB of HBM whose only job is to be
-    // read first -- see staged_refresh for why that is load-bearing.
-    if (staged_cfg_) {
-      void*    bhp = nullptr;
-      uint64_t bca = 0;
-      if (host_mem_alloc(128 * 1024, &bhp, &bca) == 0) {
-        std::lock_guard<std::mutex> g(staged_mu_);
-        auto it = staged_regions_.find(bca);
-        if (it != staged_regions_.end()) {
-          staged_buster_      = it->second;
-          staged_buster_addr_ = bca;
-        }
-      }
-    }
+    // (A 128 KB "read-eviction buffer" once lived here, synced D2H at the top
+    // of every refresh under a read-cache theory. The observations behind it
+    // were artifacts of the retire_seqnum off-by-one and of the refresh
+    // clobbering shadows across threads; both are fixed, there is no read
+    // cache, and the eviction read was pure overhead.)
 
   #else
 
@@ -593,6 +583,28 @@ public:
         std::memset(hp, 0, dsize);
         {
           std::lock_guard<std::mutex> g(staged_mu_);
+          // Overlap audit: a fresh allocation must not intersect any region
+          // still alive (live, unstamped, or parked pending retire) -- if it
+          // does, VRT's buddy allocator double-served a block whose previous
+          // owner we are deliberately keeping alive.
+          auto overlaps = [&](uint64_t base, uint64_t sz, const char* kind) {
+            const uint64_t osz = std::max<uint64_t>(sz, STAGED_MIN_ALLOC);
+            if (dev < base + osz && base < dev + dsize) {
+              fprintf(stderr,
+                      "[VXDRV] error: staged alloc 0x%lx(+%lu) overlaps %s "
+                      "region 0x%lx(+%lu) still alive\n",
+                      dev, dsize, kind, base, osz);
+            }
+          };
+          for (const auto& kv : staged_regions_) {
+            overlaps(kv.first, kv.second.size, "live");
+          }
+          for (const auto& r : staged_unstamped_) {
+            overlaps(r.buf->getPhysAddr(), r.size, "unstamped");
+          }
+          for (const auto& p : staged_pending_) {
+            overlaps(p.region.buf->getPhysAddr(), p.region.size, "pending");
+          }
           staged_regions_.emplace(dev, staged_region_t{buf, asize});
         }
         if (getenv("VORTEX_AVED_FENCE_DEBUG")) {
@@ -671,10 +683,17 @@ public:
       if (sit == staged_regions_.end()) {
         return -1;
       }
-      const int rc = staged_xfer(sit->second, true);
+      if (getenv("VORTEX_AVED_FENCE_DEBUG")) {
+        fprintf(stderr, "[VXDRV] staged park: 0x%lx size=%lu seq64=%lu\n",
+                cp_addr, sit->second.size, staged_seqnum64_);
+      }
+      // No push here: the core pushed the region's final content itself
+      // (host_mem_push) before submitting the command that names it, and
+      // nothing may write the shadow after that. The free only parks the
+      // allocation until the CP has provably retired its reader.
       staged_unstamped_.push_back(std::move(sit->second));
       staged_regions_.erase(sit);
-      return rc;
+      return 0;
     }
     std::lock_guard<std::mutex> g(host_bufs_mu_);
     auto it = host_bufs_.find(cp_addr);
@@ -690,6 +709,86 @@ public:
     free(reinterpret_cast<void *>(cp_addr));
   #endif
     return 0;
+  }
+
+  // Pull ONE region's device bytes into its host shadow: the core calls this
+  // right before reading a MEM_READ staging buffer. This is the only place a
+  // download staging region is pulled — staged_refresh deliberately does not
+  // touch generic regions (see the comment there).
+  //
+  // Read-until-stable: the completion fence proves the CP retired the
+  // command, but the CP's data writes and its completion write leave on
+  // different AXI IDs, so the last data beats can still be landing in HBM
+  // when the fence passes (observed on rstmin8 as a rare single stale word
+  // in large downloads). Two consecutive identical reads mean the region
+  // has stopped changing; a write still in flight settles within
+  // microseconds, so this converges immediately in the common case. The
+  // exact ordering fix (the CP DMA validating its flush read-back) is an
+  // RTL change and rides the next bitstream.
+  int host_mem_pull(uint64_t cp_addr) {
+    (void)cp_addr;
+  #ifdef CPP_API
+    if (staged_cfg_) {
+      std::lock_guard<std::mutex> g(staged_mu_);
+      auto sit = staged_regions_.find(cp_addr);
+      if (sit == staged_regions_.end()) {
+        return -1;
+      }
+      const staged_region_t& r = sit->second;
+      const uint64_t nbytes = std::max<uint64_t>(r.size, STAGED_MIN_ALLOC);
+      std::vector<uint8_t> prev;
+      for (int attempt = 0; attempt < 100; ++attempt) {
+        if (staged_xfer(r, false) != 0) {
+          return -1;
+        }
+        const uint8_t* shadow = r.buf->get();
+        if (!prev.empty() && std::memcmp(prev.data(), shadow, nbytes) == 0) {
+          if (attempt > 1 && getenv("VORTEX_AVED_FENCE_DEBUG")) {
+            fprintf(stderr, "[VXDRV] pull: region 0x%lx settled after %d "
+                    "reads\n", cp_addr, attempt + 1);
+          }
+          return 0;
+        }
+        prev.assign(shadow, shadow + nbytes);
+        if (attempt > 0) {
+          usleep(50);
+        }
+      }
+      fprintf(stderr, "[VXDRV] error: pull: region 0x%lx never stabilized\n",
+              cp_addr);
+      return -1;
+    }
+    if (sim_mode_) {
+      // The sim path refreshes every region on each Q_SEQNUM read; nothing
+      // extra to do here.
+      return 0;
+    }
+  #endif
+    return 0;   // true host memory: coherent
+  }
+
+  // Push ONE region's host writes to the device: the core calls this after
+  // filling a staging buffer, before submitting the command that reads it.
+  // The push happens on the OWNING thread with the fill complete, which is
+  // what makes it safe — see the staged_publish comment for why no other
+  // code may push generic regions.
+  int host_mem_push(uint64_t cp_addr) {
+    (void)cp_addr;
+  #ifdef CPP_API
+    if (staged_cfg_) {
+      std::lock_guard<std::mutex> g(staged_mu_);
+      auto sit = staged_regions_.find(cp_addr);
+      if (sit == staged_regions_.end()) {
+        return -1;
+      }
+      return staged_xfer(sit->second, true);
+    }
+    if (sim_mode_) {
+      // The sim path publishes every region at each doorbell; nothing extra.
+      return 0;
+    }
+  #endif
+    return 0;   // true host memory: coherent
   }
 
 private:
@@ -795,21 +894,42 @@ private:
     return 0;
   }
 
-  // Publish what the CP is about to read. Once the queue is live the head and
-  // completion cachelines belong to the CP, so pushing them would clobber its
-  // writes; include_cp_owned is set only for the one-shot seeding on the first
-  // doorbell, before the CP can have fetched anything.
+  // NOTE on a rejected "publish verify" design: a readback-and-compare after
+  // each push (D2H into the shadow, memcmp, restore + repush on mismatch)
+  // was tried while chasing the lost-upload bug. It never once observed a
+  // mismatch caused by the hardware -- the H2C-write-vs-doorbell race it
+  // guarded against does not exist (publish completes synchronously before
+  // the tail MMIO) -- but its D2H-into-the-shadow DID reintroduce the
+  // cross-thread shadow clobber at word granularity. No code other than the
+  // owning thread (host_mem_pull) and the CP-owned-line refresh may EVER
+  // D2H into a region's host shadow.
+
+  // Publish what the backend itself owns, and ONLY that: the command ring on
+  // every doorbell (its writer, cp_ring_append_, runs under cp_mu_ — the same
+  // lock every doorbell holds — so the shadow is never mid-write here), plus
+  // the one-shot seed of the head and completion lines on the first doorbell,
+  // before the CP can have fetched anything.
+  //
+  // Generic regions are deliberately NOT pushed. They are pushed exactly once
+  // each, by host_mem_push() on the thread that filled them. The old blanket
+  // publish pushed every live region at every doorbell, which could push a
+  // half-filled upload staging shadow, or push a download staging region's
+  // stale shadow OVER results the CP had already written — the other half of
+  // the cross-thread clobber family whose refresh-side member caused the
+  // lost-upload bug.
   int staged_publish(bool include_cp_owned) {
     std::lock_guard<std::mutex> g(staged_mu_);
-    for (const auto& kv : staged_regions_) {
-      if (kv.first == staged_buster_addr_) {
-        continue;   // eviction buffer: read-only scratch, nothing to publish
-      }
-      if (!include_cp_owned
-          && (kv.first == staged_head_addr_ || kv.first == staged_cmpl_addr_)) {
+    const uint64_t addrs[3] = {
+      staged_ring_addr_,
+      include_cp_owned ? staged_head_addr_ : 0,
+      include_cp_owned ? staged_cmpl_addr_ : 0,
+    };
+    for (uint64_t a : addrs) {
+      if (a == 0) {
         continue;
       }
-      if (staged_xfer(kv.second, true) != 0) {
+      auto it = staged_regions_.find(a);
+      if (it != staged_regions_.end() && staged_xfer(it->second, true) != 0) {
         return -1;
       }
     }
@@ -826,13 +946,18 @@ private:
     const uint64_t tail = (uint64_t(tail_hi) << 32) | staged_tail_lo_;
     const uint64_t watermark = tail / CP_CL_BYTES;
     for (auto& r : staged_unstamped_) {
+      if (getenv("VORTEX_AVED_FENCE_DEBUG")) {
+        fprintf(stderr, "[VXDRV] staged stamp: 0x%lx watermark=%lu\n",
+                r.buf->getPhysAddr(), watermark);
+      }
       staged_pending_.push_back(staged_pending_t{std::move(r), watermark});
     }
     staged_unstamped_.clear();
   }
 
-  // Pull back what the CP wrote: MEM_READ staging buffers, and the head and
-  // completion lines it owns.
+  // Pull back the CP-owned lines: the head and completion cachelines. Those
+  // are the ONLY regions this may touch -- see the comment at the head-line
+  // pull below for the thread-safety rule, learned the hard way.
   //
   // The ring is EXCLUDED, and must be. It is ours to write: cp_ring_append_
   // fills the host shadow and the bytes only reach the device at the next
@@ -842,31 +967,16 @@ private:
   // commands. sim_refresh() skips it for the same reason.
   int staged_refresh(uint32_t seqnum) {
     std::lock_guard<std::mutex> g(staged_mu_);
-    // ----- Evict before reading. Somewhere in the device-to-host read path
-    // (per QDMA connection -- a fresh process reads fresh) sits a read cache
-    // with no coherence against the CP's writes: re-reading an address the
-    // host has read before returns the OLD bytes until reads of OTHER
-    // addresses push the entry out by capacity. Measured on silicon: a
-    // completion line spun on for 50 ms stayed stale, then read fresh
-    // immediately after an unrelated 64 KB region was synced; a 1 KB download
-    // read stale forever while sgemm's megabyte sweeps never missed. So the
-    // first read of every refresh is a 128 KB region whose only job is to be
-    // read -- flushing the cache so the reads that matter hit HBM.
-    if (staged_buster_.buf) {
-      if (staged_xfer(staged_buster_, false) != 0) {
-        return -1;
-      }
-    }
     // ----- Order the completion line BEFORE the data regions, and fence on
     // it. Q_SEQNUM is a register: it reads back retired the cycle the engine
     // retires, over the fast MMIO path. The command's payload -- a MEM_READ's
     // staging buffer -- went out the CP's AXI master into the NoC toward HBM,
     // and nothing orders "register visible over MMIO" against "writes visible
-    // to a QDMA read of HBM". Refreshing on the MMIO value alone therefore
-    // reads staging that the interconnect has not delivered yet, and the
-    // window is microseconds wide -- wide enough that demo's 64 KB download
-    // failed roughly every other run, and narrow enough that ANY tracing made
-    // it pass (the original wrong-results Heisenbug on this backend).
+    // to a QDMA read of HBM". Refreshing on the MMIO value alone could
+    // therefore read staging the interconnect has not delivered yet. (The
+    // historical demo Heisenbug once blamed on this window was actually the
+    // cross-thread shadow clobber -- see the head-line pull below -- but the
+    // ordering gap itself is real, and this fence is what closes it.)
     //
     // VX_cp_completion writes the retired seqnum INTO the staged completion
     // line, from the same AXI master, after the payload writes have collected
@@ -932,13 +1042,19 @@ private:
         }
       }
     }
-    for (const auto& kv : staged_regions_) {
-      if (kv.first == staged_ring_addr_
-          || kv.first == staged_buster_addr_
-          || (cmpl_it != staged_regions_.end() && kv.first == cmpl_it->first)) {
-        continue;
-      }
-      if (staged_xfer(kv.second, false) != 0) {
+    // Pull ONLY the CP-owned head line. Refreshing every region from here was
+    // THE root cause of the lost-upload bug (found on rstmin8 silicon): this
+    // runs on whichever thread polls Q_SEQNUM, and a blanket D2H of all
+    // regions overwrites the host shadow of an upload staging buffer that
+    // another thread has filled but not yet submitted — the next publish then
+    // faithfully pushes the clobbered (zeroed) shadow, and the CP uploads
+    // zeros. Post-mortem probe: src buffer all-zeros in HBM while its staging
+    // publish had verified clean. Download staging is pulled exactly once,
+    // from host_mem_pull(), on the thread that owns the read.
+    if (staged_head_addr_ != 0) {
+      auto hit = staged_regions_.find(staged_head_addr_);
+      if (hit != staged_regions_.end()
+          && staged_xfer(hit->second, false) != 0) {
         return -1;
       }
     }
@@ -950,12 +1066,22 @@ private:
     // Release only what the CP has provably moved past. Clearing the whole set
     // on any advance would hand a buffer back to the allocator while a later
     // command in the same batch still names its device address.
-    staged_pending_.erase(
-        std::remove_if(staged_pending_.begin(), staged_pending_.end(),
-                       [this](const staged_pending_t& p) {
-                         return p.watermark <= staged_seqnum64_;
-                       }),
-        staged_pending_.end());
+    if (!getenv("VORTEX_AVED_NO_STAGED_REUSE")) {
+      staged_pending_.erase(
+          std::remove_if(staged_pending_.begin(), staged_pending_.end(),
+                         [this](const staged_pending_t& p) {
+                           const bool rel = p.watermark <= staged_seqnum64_;
+                           if (rel && getenv("VORTEX_AVED_FENCE_DEBUG")) {
+                             fprintf(stderr,
+                                     "[VXDRV] staged release: 0x%lx "
+                                     "watermark=%lu seq64=%lu\n",
+                                     p.region.buf->getPhysAddr(), p.watermark,
+                                     staged_seqnum64_);
+                           }
+                           return rel;
+                         }),
+          staged_pending_.end());
+    }
     return 0;
   }
 
@@ -1284,8 +1410,6 @@ private:
   std::mutex                          staged_mu_;
 
   // Read-eviction buffer for staged_refresh -- see the note there.
-  staged_region_t staged_buster_ {nullptr, 0};
-  uint64_t staged_buster_addr_  = 0;
   uint64_t staged_ring_addr_    = 0;
   uint64_t staged_head_addr_    = 0;
   uint64_t staged_cmpl_addr_    = 0;
