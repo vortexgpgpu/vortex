@@ -62,14 +62,7 @@ module VX_afu_ctrl #(
     input  wire                         soft_reset_busy,
     // sticky: the last soft reset could not be honoured because a master
     // would not drain, so no reset was asserted (ap_ctrl bit 5)
-    input  wire                         reset_error,
-
-    // Host-port drain counters from VX_afu_wrap's host_drain instance.
-    input  wire [9:0]                   dbg_host_aw_count,
-    input  wire [9:0]                   dbg_host_w_count,
-    input  wire [9:0]                   dbg_host_b_count,
-    input  wire [9:0]                   dbg_host_ar_count,
-    input  wire [9:0]                   dbg_host_r_count
+    input  wire                         reset_error
 
 `ifdef SCOPE
   , input  wire                         scope_bus_in,
@@ -87,14 +80,11 @@ module VX_afu_ctrl #(
         ADDR_SCP_0      = 8'h28,
         ADDR_SCP_1      = 8'h2C,
     `endif
-        // Host-port drain counters, read-only. One full 16-byte block --
-        // AXI-Lite here resolves decode in 16-byte blocks, so a partially
-        // populated block DECERRs entirely (see the aved DECERR note).
-        ADDR_DBG_HOST_W = 8'h40,   // {b_count[9:0], w_count[9:0], aw_count[9:0]}
-        ADDR_DBG_HOST_R = 8'h44,   // {r_count[9:0], ar_count[9:0]}
-        ADDR_DBG_PAD_0  = 8'h48,
-        ADDR_DBG_PAD_1  = 8'h4C,
         ADDR_BITS       = 8;
+    // (The host-port drain counters briefly lived here at 0x40/0x44. This
+    // legacy window read back zeros/garbage on silicon while the identical
+    // counters read byte-exact through the CP regfile window at CP 0x30/0x34
+    // -- that copy is the live one; this one is gone rather than debugged.)
 
     localparam
         WSTATE_ADDR     = 2'd0,
@@ -335,15 +325,6 @@ module VX_afu_ctrl #(
                 rdata <= scope_bus_rdata[63:32];
             end
         `endif
-            ADDR_DBG_HOST_W: begin
-                rdata <= {2'b0, dbg_host_b_count, dbg_host_w_count,
-                          dbg_host_aw_count};
-            end
-            ADDR_DBG_HOST_R: begin
-                rdata <= {12'b0, dbg_host_r_count, dbg_host_ar_count};
-            end
-            ADDR_DBG_PAD_0: rdata <= 32'h0;
-            ADDR_DBG_PAD_1: rdata <= 32'h0;
             default:;
         endcase
     end

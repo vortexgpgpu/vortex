@@ -318,13 +318,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
         .ap_reset        (ap_reset),
         .soft_reset_busy (rst_busy),
-        .reset_error     (rst_timeout_error),
-
-        .dbg_host_aw_count (dbg_host_aw_count),
-        .dbg_host_w_count  (dbg_host_w_count),
-        .dbg_host_b_count  (dbg_host_b_count),
-        .dbg_host_ar_count (dbg_host_ar_count),
-        .dbg_host_r_count  (dbg_host_r_count)
+        .reset_error     (rst_timeout_error)
 
     `ifdef SCOPE
       , .scope_bus_in   (scope_bus_out),

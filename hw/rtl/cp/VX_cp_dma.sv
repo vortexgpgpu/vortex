@@ -33,23 +33,29 @@
 //   S_READ   : capture rdata beats into buf_r; last beat      -> S_REQ_AW
 //   S_REQ_AW : drive AW on the write port; awready            -> S_WRITE
 //   S_WRITE  : drive W beats from buf_r; last beat            -> S_WAIT_B
-//   S_WAIT_B : bvalid -> advance chunk                        -> S_SETUP
-//   S_FLUSH_AR/S_FLUSH_R : host-direction only -- read back the last line
-//              written, discarding the data                   -> S_DONE
+//   S_WAIT_B : bvalid -> host-direction: validate the chunk   -> S_FLUSH_AR
+//              device-direction: advance chunk                -> S_SETUP
+//   S_FLUSH_AR/S_FLUSH_R : host-direction only -- read back the last line of
+//              the chunk just written and COMPARE it against the copy still
+//              held in buf_r; mismatch re-issues the read     -> S_SETUP
 //   S_DONE   : pulse `done` for one cycle                     -> S_IDLE
 //
-// WHY THE FLUSH READ EXISTS. On the V80's HBM host path, a write's BRESP does
-// not mean the data is visible to another master: writes sit in a store
-// buffer that only drains as later writes push through it, and whatever the
-// CP writes last stays invisible to the host's QDMA reads indefinitely --
-// measured over a second, until unrelated traffic happens to flush it. So a
-// download's tail (or all of a small download) read back stale on the host
-// even though every BRESP was collected before the command retired. A read
-// on the same port to the last written address cannot be answered without
-// committing that write, so when the R beat returns the whole chunk sequence
-// is host-visible -- and only then does `done` (and therefore the retire the
-// host polls) fire. Device-direction writes don't need this: nothing reads
-// them through a foreign port on the strength of Q_SEQNUM alone.
+// WHY THE VALIDATING FLUSH EXISTS. On the V80's HBM host path, a write's
+// BRESP does not mean the data is visible to another master: the response
+// can be issued upstream of the memory controller while the beats are still
+// in flight, and the host's QDMA reads (a different master, and the CP's
+// completion writer a different AXI ID) have no ordering against them. The
+// only proof of commitment is a read of the written address RETURNING THE
+// WRITTEN DATA: HBM serializes per address, so a matching read-back means
+// the write reached the controller, and every earlier write on this ID to
+// the same destination is ordered before it. Each chunk lives inside one
+// 4 KB page (see beats_to_4k), so its beats share one destination and the
+// chunk's last line vouches for the whole chunk. A stale read-back simply
+// retries -- the write is in flight and lands within microseconds. Only
+// after every chunk has validated does `done` (and therefore the retire the
+// host polls, and the completion line that follows it) fire.
+// Device-direction writes don't need this: nothing reads them through a
+// foreign port on the strength of Q_SEQNUM alone.
 // ============================================================================
 
 module VX_cp_dma
@@ -81,7 +87,6 @@ module VX_cp_dma
   } state_e;
 
   state_e               state;
-  logic                 wrote_any;        // at least one chunk B-acked
   logic [7:0]           op_r;             // latched opcode (host/dev routing)
   logic [63:0]          dst_r, src_r;
   logic [63:0]          rem_beats;        // 64 B beats still to move
@@ -119,7 +124,6 @@ module VX_cp_dma
   always_ff @(posedge clk) begin
     if (reset) begin
       state       <= S_IDLE;
-      wrote_any   <= 1'b0;
       op_r        <= '0;
       dst_r       <= '0;
       src_r       <= '0;
@@ -130,7 +134,6 @@ module VX_cp_dma
       case (state)
         S_IDLE: begin
           if (grant) begin
-            wrote_any <= 1'b0;
             op_r      <= cmd.hdr.opcode;
             dst_r     <= cmd.arg0;
             src_r     <= cmd.arg1;
@@ -141,11 +144,9 @@ module VX_cp_dma
         end
         S_SETUP: begin
           if (rem_beats == 64'd0) begin
-            // Host-direction writes must be committed before `done` -- see
-            // the flush note in the header. dst_r has advanced past the end,
-            // so the last written line is dst_r - 64. Guarded by wrote_any so
-            // a zero-length command never reads below its buffer.
-            state <= (wr_to_host && wrote_any) ? S_FLUSH_AR : S_DONE;
+            // Every host-direction chunk validated inline (S_WAIT_B ->
+            // S_FLUSH_*), so nothing is left to prove here.
+            state <= S_DONE;
           end else begin
             chunk_beats <= next_chunk;
             beat_idx    <= '0;
@@ -186,11 +187,13 @@ module VX_cp_dma
         end
         S_WAIT_B: begin
           if (wr_bvalid && wr_bready) begin
-            wrote_any <= 1'b1;
             src_r     <= src_r + (64'({1'b0, chunk_beats}) << 6);
             dst_r     <= dst_r + (64'({1'b0, chunk_beats}) << 6);
             rem_beats <= rem_beats - 64'({1'b0, chunk_beats});
-            state     <= S_SETUP;
+            // Host-direction: prove this chunk committed before moving on.
+            // (dst_r advances this cycle, so the flush address computed in
+            // S_FLUSH_AR, dst_r - 64, is this chunk's last line.)
+            state     <= wr_to_host ? S_FLUSH_AR : S_SETUP;
           end
         end
         S_FLUSH_AR: begin
@@ -200,7 +203,11 @@ module VX_cp_dma
         end
         S_FLUSH_R: begin
           if (axi_host.rvalid && axi_host.rready) begin
-            state <= S_DONE;
+            // Validate: the read-back must equal the line still held in
+            // buf_r. Stale data means the write has not reached the memory
+            // controller yet -- re-issue the read until it has.
+            state <= (axi_host.rdata == buf_r[BIDX_W'(chunk_beats - BCNT_W'(1))])
+                       ? S_SETUP : S_FLUSH_AR;
           end
         end
         S_DONE: begin

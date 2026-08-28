@@ -61,14 +61,20 @@ module VX_afu_reset_seq_top #(
     );
 
     VX_afu_axi_drain drain (
-        .clk         (clk),
-        .reset       (reset),
-        .aw_fire     (aw_fire),
-        .w_fire_last (w_fire_last),
-        .b_fire      (b_fire),
-        .ar_fire     (ar_fire),
-        .r_fire_last (r_fire_last),
-        .idle        (masters_idle)
+        .clk          (clk),
+        .reset        (reset),
+        .aw_fire      (aw_fire),
+        .w_fire_last  (w_fire_last),
+        .b_fire       (b_fire),
+        .ar_fire      (ar_fire),
+        .r_fire_last  (r_fire_last),
+        .idle         (masters_idle),
+        // debug counters unused by this test
+        `UNUSED_PIN (dbg_aw_count),
+        `UNUSED_PIN (dbg_w_count),
+        `UNUSED_PIN (dbg_b_count),
+        `UNUSED_PIN (dbg_ar_count),
+        `UNUSED_PIN (dbg_r_count)
     );
 
     // Mirrors VX_afu_wrap: the platform reset reloads the shift register
