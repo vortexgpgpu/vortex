@@ -511,6 +511,15 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`CS_WAY_SEL_WIDTH-1:0] fill_way_st0 = line_present_any_st0 ? present_way_st0 : victim_way;
     wire [`CS_WAY_SEL_WIDTH-1:0] evict_way_st0 = st0.req.is_fill ? fill_way_st0 : st0.req.way_idx;
 
+    // Fill way as one-hot, straight from the per-way presence vector: routing
+    // it through the binary encode -> evict_way -> per-way compare round trip
+    // put the tag-read cone on the tag store's own write-enable pins. The
+    // victim decode is early (replacement state is registered), and
+    // line_present_st0 is one-hot by the tag-array invariant, so this selects
+    // the exact way the binary path did.
+    wire [NUM_WAYS-1:0] victim_way_oh = NUM_WAYS'(1'b1) << victim_way;
+    wire [NUM_WAYS-1:0] fill_way_oh_st0 = line_present_any_st0 ? line_present_st0 : victim_way_oh;
+
     VX_cache_repl #(
         .CACHE_SIZE  (CACHE_SIZE),
         .LINE_SIZE   (LINE_SIZE),
@@ -558,6 +567,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .line_tag    (line_tag_st0),
         .sector_idx  (sector_idx_st0),
         .evict_way   (evict_way_st0),
+        .fill_way_oh (fill_way_oh_st0),
         .tag_matches (tag_matches_st0),
         .line_present (line_present_st0),
         .evict_dirty (evict_dirty_st0),

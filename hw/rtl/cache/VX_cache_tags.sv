@@ -53,6 +53,10 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
     input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_idx, // requested sector within the line
     input wire [`CS_WAY_SEL_WIDTH-1:0]  evict_way,
+    // fill target way as one-hot, taken from line_present/victim directly:
+    // the binary evict_way round trip (encode, mux, per-way compare) put the
+    // tag-read cone on this array's own write-enable pins.
+    input wire [NUM_WAYS-1:0]           fill_way_oh,
 
     // outputs
     output wire [NUM_WAYS-1:0]          tag_matches,
@@ -120,7 +124,10 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
 
         wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
         wire do_init  = init; // init all ways
-        wire do_fill  = fill && way_en;
+        // The fill way select comes in one-hot (line_present or the registered
+        // victim decode); the binary way_en compare stays only for flush, whose
+        // way is the registered st0 way_idx and never this cycle's tag read.
+        wire do_fill  = fill && ((NUM_WAYS == 1) || fill_way_oh[i]);
         wire do_flush = flush && (!WRITEBACK || way_en); // flush all ways in writethrough mode
         wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
         // AMO passthrough invalidate: clear the requested sector's valid.
@@ -230,7 +237,11 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (~stall),
-        .write (| line_write),
+        // fill alone: only fills write the tag store, and the fill way select
+        // (one-hot) always names exactly one way, so |line_write == fill --
+        // an identity synthesis cannot prove, leaving the way-select cone on
+        // the array's global enable.
+        .write (fill),
         .wren  (line_write),
         .waddr (line_idx),
         .raddr (line_idx_n),
