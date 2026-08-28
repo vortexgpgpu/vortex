@@ -4,8 +4,9 @@
 with no JTAG reload, both resets honoured, on the minimal and the full
 configuration; the sequencer's refusal path is also confirmed against a
 genuinely stuck master (§8.2's mis-built bitstream provided the test case).
-Reloading an AFU over a used one now needs no reboot. Remaining: hung-kernel
-recovery via `Q_CONTROL.reset` (§8 item 8).
+Reloading an AFU over a used one now needs no reboot, and a SIGKILLed
+kernel is recovered by the next open's device reset (§8 item 8) — the
+JTAG-reload-per-failure era is over.
 **Scope:** `hw/rtl/afu/common/` — `VX_afu_axil_demux.sv`, `VX_afu_axi_drain.sv`,
 `VX_afu_reset_seq.sv`, `VX_afu_req_gate.sv` (all new), `VX_afu_wrap.sv`,
 `VX_afu_ctrl.sv`; `hw/rtl/cp/` — `VX_cp_core.sv`, `VX_cp_fetch.sv`,
@@ -506,10 +507,18 @@ pulse fails it.
    must have been issued, honoured (`ap_idle` set, `CTL_RESET_ERROR` clear),
    and the card must never return `0xFFFFFFFF`. A refused reset fails the test
    even when the binary passes.
-8. **Hung-kernel recovery** — not done. Launch a kernel that never completes,
-   recover with `Q_CONTROL.reset`, and run a passing test with no JTAG reload.
-   This is the capability the whole exercise was for, and it can only be
-   demonstrated on hardware.
+8. **Killed-kernel recovery** — **DONE** (2026-08-27, same boot). `sgemm` was
+   SIGKILLed immediately after its doorbell — kernel submitted, zero teardown,
+   the exact scenario `hw_sweep.sh` used to score POISONED and cure with a
+   JTAG reload. The next `minimal` opened, wrote `CTL_AP_RESET`, read back
+   `ap_ctrl=0x00000004` (drained, honoured, no error), and PASSED; a full
+   `sgemm` then passed after it. No JTAG reload, no reboot. This is the
+   capability the whole exercise was for.
+
+   Not yet shown: recovery from a kernel that *never* completes (livelocked
+   rather than killed) — that path goes through the same entry-side quiesce
+   but with the GPU still fetching; the drain relies on the request gate
+   holding new AW/AR while in-flight responses land.
 
 ### 8.1 Risks carried into that build
 
