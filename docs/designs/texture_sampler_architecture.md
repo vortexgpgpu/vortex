@@ -84,16 +84,21 @@ are the coordinates, the integer mip level, and the stage index.
 
 ### 2.3 LOD is software, derivatives are the quad's
 
-There is no hardware LOD calculation and no inter-mip blend: the lod operand
-is an **integer mip level**. A fragment shader derives it with
+There is no hardware LOD calculation: the lod operand names the level. A
+fragment shader derives it with
 `vx_tex_auto_lod()` ([`sw/common/vx_tex_lod.h`](../../sw/common/vx_tex_lod.h)):
 cross-lane `vx_quad_ddx/ddy` shuffles produce the four gradients, and
 `floor(log2(max_gradient))` selects the level — bit-identical to the
 host/SimX `vx_tex_quad_lod()` form by construction. This is why helper lanes
 run in the fragment model: every lane of the quad must be active or the
-derivative collapses. Software wanting mip-linear (trilinear) filtering
-samples two levels and lerps — the DCR's mip-linear filter bit is
-runtime-asserted unimplemented in RTL.
+derivative collapses.
+
+The mip-linear filter bit changes how the lod operand reads. Without it the
+operand is an integer level and one level is sampled. With it the unit samples
+**both** bracketing levels in a single request — one tap set per level, so no
+stage has to pair two responses — and lerps them by a weight the operand carries
+in its low `VX_TEX_LOD_FRAC_BITS`. A caller that never asks for a blend
+therefore never has to know about the fractional form.
 
 The earlier `vx_tex4` windowed quad form (one thread holding a whole 2×2
 quad, hardware LOD tree, four serialized samples per op) is **retired**;
@@ -110,9 +115,21 @@ quad, hardware LOD tree, four serialized samples per op) is **retired**;
 fractional bits — i.e. **Q9.23 normalized** (1.0 = `1 << 23`). The integer
 bits carry wrap repetitions; the 8 sub-texel bits (`TEX_BLEND_FRAC`) become
 the bilinear blend weights. Addressing modes per axis: `CLAMP`, `REPEAT`
-(default), `MIRROR` — the `BORDER` enum value exists in
-[`VX_types.toml`](../../VX_types.toml) but is not implemented (decodes as
-REPEAT).
+(default), `MIRROR` and `BORDER`.
+
+Under `BORDER` a tap whose coordinate leaves `[0, 1)` returns `TEX_BORDER`
+instead of a texel. The out-of-range test costs no comparator — a coordinate is
+outside exactly when anything above its fractional field is set, an integer part
+or the sign bits of a negative one, so `VX_tex_wrap` OR-reduces those bits on the
+coordinate it receives *before* wrapping. The address itself still clamps: the
+tap is fetched and then discarded, so it only has to be one the texture owns.
+`VX_tex_addr` already forms the low and high coordinate of each axis per mip
+level, so the four per-tap flags fall out of those — per level too, since the
+half-texel offset scales with the level and a trilinear sample can be inside the
+texture at one level and outside at the next. The substitution happens in
+`VX_tex_sampler` after the format decode and before the blend, because the
+border colour is already in the sampler's working format while a fetched texel
+is still in the texture's.
 
 ### 3.2 Texel formats
 
@@ -147,9 +164,10 @@ unit keeps `VX_TEX_STAGE_COUNT = 2` independent register banks
 | 0x041 | `TEX_ADDR` | texture base, 64-byte-block address |
 | 0x042 | `TEX_LOGDIM` | `{log2(h)[16+], log2(w)[0+]}` |
 | 0x043 | `TEX_FORMAT` | one of the 7 formats (§3.2) |
-| 0x044 | `TEX_FILTER` | point / bilinear (bit 0); mip-linear bit asserts unimplemented |
+| 0x044 | `TEX_FILTER` | point / bilinear (bit 0); mip-linear above it (§2) |
 | 0x045 | `TEX_WRAP` | `{v_wrap[16+], u_wrap[0+]}` |
-| 0x046+lod | `TEX_MIPOFF(lod)` | byte offset of mip level *lod* from base |
+| 0x046+lod | `TEX_MIPOFF(lod)` | byte offset of mip level *lod* from base, `lod <= VX_TEX_LOD_MAX` — the table is `VX_TEX_LOD_MAX + 1` entries and ends at 0x055, because a sampler's lod clamp is independent of the chain length and the top level is a reachable request |
+| 0x056 | `TEX_BORDER` | colour a `BORDER` tap returns, ARGB8888 (§3.1) |
 
 At request time the **instruction's** `stage` field muxes the bank
 combinationally — programming-time and sample-time stage selection are

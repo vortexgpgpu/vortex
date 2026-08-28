@@ -30,6 +30,10 @@
 #ifdef VX_CFG_EXT_RTU_ENABLE
 #include "rtu_core.h"
 #endif
+#ifdef VX_CFG_VM_ENABLE
+#include "mem/tlb_l2.h"
+#include "mem/ptw.h"
+#endif
 
 namespace vortex {
 
@@ -60,6 +64,10 @@ public:
     RtuCore::PerfStats rtu;
     Cache::PerfStats   rtcache;
 #endif
+#ifdef VX_CFG_VM_ENABLE
+    L2Tlb::PerfStats l2tlb;
+    Ptw::PerfStats   ptw;
+#endif
   };
 
   std::vector<SimChannel<MemReq>> mem_req_out;
@@ -88,6 +96,15 @@ public:
   PerfStats perf_stats() const;
 
   int dcr_write(uint32_t addr, uint32_t value);
+
+#ifdef VX_CFG_VM_ENABLE
+  // Host-side VM control: device SATP for the walker complex, the
+  // device-idle TLB flush broadcast, and first-fault readback.
+  void set_mmu_satp(uint64_t value);
+  void mmu_clear_fault();
+  uint64_t mmu_fault_va() const;
+  uint32_t mmu_fault_info() const;
+#endif
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 

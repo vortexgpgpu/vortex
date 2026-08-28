@@ -1,0 +1,58 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic            : require
+#extension GL_KHR_shader_subgroup_shuffle          : require
+#extension GL_KHR_shader_subgroup_shuffle_relative : require
+#extension GL_KHR_shader_subgroup_clustered        : require
+
+/* Relative-shuffle and clustered-reduce coverage, kept in a module of its own.
+ *
+ * These two families reach the vortexpipe translator by a different route than
+ * everything in subgroup.comp: lavapipe's nir_lower_subgroups leaves
+ * lower_relative_shuffle and lower_reduce unset, so shuffle_up/down/xor and a
+ * cluster-sized reduce arrive as themselves rather than expanded onto the
+ * plain shuffle the driver handles.
+ *
+ * They are a separate module because a bail takes down the whole shader it
+ * occurs in. Folded into subgroup.comp, one unlowered intrinsic here would
+ * erase the evidence for all sixteen ops there; split, each module's result
+ * stands on its own.
+ *
+ * VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT and _CLUSTERED_BIT are advertised
+ * by the device, so both are required to work: the host does not treat a
+ * failure here as a permitted gap. */
+
+layout(local_size_x_id = 0) in;
+
+#define NUM_EXT_OPS 6u
+
+layout(std430, binding = 0) buffer Buf {
+   uint data[];
+};
+
+void main()
+{
+   uint gid  = gl_GlobalInvocationID.x;
+   uint o    = gid * NUM_EXT_OPS;
+   uint lane = gl_SubgroupInvocationID;
+   uint v    = gid + 1u;
+
+   data[o + 0u] = gl_SubgroupID;
+   data[o + 1u] = lane;
+
+   /* shuffleUp/Down read lane-delta / lane+delta. Out-of-range reads are
+    * undefined by the spec, so the host checks only the lanes where the source
+    * is in range and ignores the edge lanes entirely. */
+   data[o + 2u] = subgroupShuffleUp(v, 1u);
+   data[o + 3u] = subgroupShuffleDown(v, 1u);
+   /* lane^1 is always in range for a subgroup of 2 or more lanes.
+    * shuffleXor belongs to the plain SHUFFLE feature, not SHUFFLE_RELATIVE,
+    * but nir_lower_subgroups gates it on lower_relative_shuffle along with
+    * shuffleUp/Down -- so it takes the same route to the translator and
+    * belongs in this module rather than with the ops in subgroup.comp. */
+   data[o + 4u] = subgroupShuffleXor(v, 1u);
+
+   /* Cluster of 2: lanes {0,1} and {2,3} reduce independently. A driver that
+    * ignores the cluster size returns the full-warp sum here instead, which is
+    * a wrong value rather than a bail -- the reason this op is worth a slot. */
+   data[o + 5u] = subgroupClusteredAdd(v, 2u);
+}

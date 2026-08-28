@@ -226,6 +226,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // ── hot per-context flip-flops ────────────────────────────────────
     reg [NUM_CTX-1:0]                       rdy_set;   // wake bits (event-driven)
+    wire [NUM_CTX-1:0]                      rdy_next;  // next-cycle wake vector (see SELECT)
     reg [NUM_CTX-1:0]                       fresh_set; // first pass runs the launch init
     reg [NUM_CTX-1:0]                       done_q;
     reg [NUM_CTX-1:0]                       mask_q;
@@ -247,19 +248,28 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_SLOTS-1:0][ADDRW-1:0] slot_scene;
 
     // ═══════════════════════ SELECT ═══════════════════════════════════
-    wire [CTX_TAG_W-1:0] grant_idx;
-    wire                 grant_valid;
+    // One-cycle-ahead selection: the arbiter runs on the next-cycle wake
+    // vector and its grant is registered. rdy_next is exactly the vector
+    // rdy_set holds one cycle later, so round-robin order and pipeline
+    // latency are preserved with the BRAM address pins driven off registers.
+    wire [CTX_TAG_W-1:0] grant_n_idx;
+    wire [NUM_CTX-1:0]   grant_n_onehot;
+    wire                 grant_n_valid;
     VX_rr_arbiter #(
         .NUM_REQS (NUM_CTX)
     ) ctx_arbiter (
         .clk          (clk),
         .reset        (reset),
-        .requests     (rdy_set),
-        .grant_index  (grant_idx),
-        `UNUSED_PIN (grant_onehot),
-        .grant_valid  (grant_valid),
+        .requests     (rdy_next),
+        .grant_index  (grant_n_idx),
+        .grant_onehot (grant_n_onehot),
+        .grant_valid  (grant_n_valid),
         .grant_ready  (1'b1)
     );
+
+    reg                 g1_valid;
+    reg [CTX_TAG_W-1:0] g1_idx;
+    reg [NUM_CTX-1:0]   g1_onehot;
 
     reg                 s1_valid;
     reg [CTX_TAG_W-1:0] s1_sel;
@@ -305,12 +315,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     ) ctx_store (
         .clk   (clk),
         .reset (reset),
-        .read  (grant_valid),
+        .read  (g1_valid),
         .write (cs_wr),
         .wren  (1'b1),
         .waddr (sel_q),
         .wdata (CTXW'(cs_wdata)),
-        .raddr (grant_idx),
+        .raddr (g1_idx),
         .rdata (cs_rdata)
     );
     ctx_state_t cs_word;
@@ -326,12 +336,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     ) ray_store (
         .clk   (clk),
         .reset (reset),
-        .read  (grant_valid),
+        .read  (g1_valid),
         .write (ray_wr_valid),
         .wren  (1'b1),
         .waddr (ray_wr_ctx),
         .wdata (ray_wr_data),
-        .raddr (grant_idx),
+        .raddr (g1_idx),
         .rdata (ray_rdata)
     );
 
@@ -347,12 +357,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         ) fbuf_ram (
             .clk   (clk),
             .reset (reset),
-            .read  (grant_valid),
+            .read  (g1_valid),
             .write (mem_rsp_valid && (f_slot_q[mem_rsp_tag] == LB'(s))),
             .wren  (1'b1),
             .waddr (mem_rsp_tag),
             .wdata (mem_rsp_data),
-            .raddr (grant_idx),
+            .raddr (g1_idx),
             .rdata (line_rd)
         );
         assign fbuf[s*LINE_BITS +: LINE_BITS] = line_rd;
@@ -372,12 +382,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     ) trires_ram (
         .clk   (clk),
         .reset (reset),
-        .read  (grant_valid),
+        .read  (g1_valid),
         .write (tri_valid_out),
         .wren  (1'b1),
         .waddr (tri_tag_out),
         .wdata ({tri_hit, tri_back, tri_t, tri_u, tri_v}),
-        .raddr (grant_idx),
+        .raddr (g1_idx),
         .rdata (trires_rdata)
     );
 
@@ -393,12 +403,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     ) xfres_ram (
         .clk   (clk),
         .reset (reset),
-        .read  (grant_valid),
+        .read  (g1_valid),
         .write (xform_valid_out),
         .wren  (1'b1),
         .waddr (xform_tag_out),
         .wdata ({xform_obj_o, xform_obj_d}),
-        .raddr (grant_idx),
+        .raddr (g1_idx),
         .rdata (xfres_rdata)
     );
 
@@ -424,12 +434,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         ) node_stack_ram (
             .clk   (clk),
             .reset (reset),
-            .read  (grant_valid),
+            .read  (g1_valid),
             .write (stk_wr),
             .wren  (1'b1),
             .waddr ({sel_q, sp_q[STK_IDXW-1:0]}),
             .wdata (stk_wdata),
-            .raddr ({grant_idx, STK_IDXW'(sp_q_arr[grant_idx] - RTU_STACK_BITS'(1))}),
+            .raddr ({g1_idx, STK_IDXW'(sp_q_arr[g1_idx] - RTU_STACK_BITS'(1))}),
             .rdata (stk_rdata)
         );
     end else begin : g_no_stack
@@ -440,13 +450,18 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ═══════════════════════ stage advance ════════════════════════════
     always_ff @(posedge clk) begin
         if (reset) begin
-            s1_valid <= 1'b0;
-            x_valid  <= 1'b0;
+            g1_valid  <= 1'b0;
+            g1_onehot <= '0;
+            s1_valid  <= 1'b0;
+            x_valid   <= 1'b0;
         end else begin
-            s1_valid <= grant_valid;
-            s1_sel   <= grant_idx;
-            s1_fresh <= grant_valid && fresh_set[grant_idx];
-            x_valid  <= s1_valid;
+            g1_valid  <= grant_n_valid;
+            g1_idx    <= grant_n_idx;
+            g1_onehot <= grant_n_valid ? grant_n_onehot : '0;
+            s1_valid  <= g1_valid;
+            s1_sel    <= g1_idx;
+            s1_fresh  <= g1_valid && fresh_set[g1_idx];
+            x_valid   <= s1_valid;
             if (s1_valid) begin
                 sel_q        <= s1_sel;
                 fresh_q      <= s1_fresh;
@@ -610,6 +625,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire        box_valid_out, box_hit;
     wire [31:0] box_t_near;
     wire [COLL_IDW+32-1:0] box_tag_out;
+    wire [COLL_IDW+32-1:0] box_tag_pre;
     wire [COLL_IDW-1:0]    box_coll     = box_tag_out[COLL_IDW+32-1 : 32];
     wire [31:0]            box_childoff = box_tag_out[31:0];
     wire [IDXW-1:0]        feed_ci      = word_q.feed_idx[IDXW-1:0];
@@ -637,6 +653,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .t_max     (word_q.best_t),
             .valid_out (box_valid_out),
             .tag_out   (box_tag_out),
+            .tag_out_pre (box_tag_pre),
             .hit       (box_hit),
             .t_near    (box_t_near)
         );
@@ -645,18 +662,49 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         assign box_hit       = 1'b0;
         assign box_t_near    = '0;
         assign box_tag_out   = '0;
+        assign box_tag_pre   = '0;
         `UNUSED_VAR ({box_feed, box_feed_raw, feed_ci, walk_inv_d})
         `UNUSED_VAR ({leaf_v0, leaf_v1, leaf_geom, leaf_prim, leaf_flags, leaf_count})
         `UNUSED_VAR ({node, node_kind, node_lines, leaf_lines, stacktop_q})
     end
+
+    // Row select for the insertion read. It depends only on the tag, which the
+    // box PE delivers a cycle ahead of its result, so the decode is registered
+    // here rather than repeated on the result cycle -- where it fans out across
+    // every row and lands on the path that ends at the ordering registers.
+    wire [COLL_IDW-1:0] box_coll_pre = box_tag_pre[COLL_IDW+32-1 : 32];
+    reg [COLL_SIZE-1:0] box_coll_hot;
+    always @(posedge clk) begin
+        if (reset) begin
+            box_coll_hot <= '0;
+        end else begin
+            box_coll_hot <= COLL_SIZE'(1) << box_coll_pre;
+        end
+    end
+
+    wire [COLL_SIZE-1:0][NODE_W*32+RTU_CHILD_BITS-1:0] coll_row_in;
+    for (genvar c = 0; c < COLL_SIZE; ++c) begin : g_coll_row_in
+        assign coll_row_in[c] = {coll_ordt[c], coll_ordcnt[c]};
+    end
+
+    wire [NODE_W-1:0][31:0]   coll_ordt_sel;
+    wire [RTU_CHILD_BITS-1:0] coll_ordcnt_sel;
+    VX_onehot_mux #(
+        .DATAW (NODE_W * 32 + RTU_CHILD_BITS),
+        .N     (COLL_SIZE)
+    ) coll_row_mux (
+        .data_in  (coll_row_in),
+        .sel_in   (box_coll_hot),
+        .data_out ({coll_ordt_sel, coll_ordcnt_sel})
+    );
 
     // insertion index: collected entries with t <= the incoming child's
     reg [RTU_CHILD_BITS-1:0] ins_pos;
     always @(*) begin
         ins_pos = RTU_CHILD_BITS'(0);
         for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
-            if ((RTU_CHILD_BITS'(oc) < coll_ordcnt[box_coll])
-             && (coll_ordt[box_coll][oc[IDXW-1:0]] <= box_t_near)) begin
+            if ((RTU_CHILD_BITS'(oc) < coll_ordcnt_sel)
+             && (coll_ordt_sel[oc[IDXW-1:0]] <= box_t_near)) begin
                 ins_pos = ins_pos + RTU_CHILD_BITS'(1);
             end
         end
@@ -743,12 +791,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         ) recipres_ram (
             .clk   (clk),
             .reset (reset),
-            .read  (grant_valid),
+            .read  (g1_valid),
             .write (recip_valid_out),
             .wren  (3'(1) << recip_axis_out),
             .waddr (recip_tag_out),
             .wdata ({3{recip_result}}),
-            .raddr (grant_idx),
+            .raddr (g1_idx),
             .rdata (recip_rdata)
         );
     end else begin : g_no_recip_pe
@@ -1656,6 +1704,38 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     assign mem_req_tag   = sel_q;
 
     // ═══════════════════════ hot-state update ═════════════════════════
+    // The wake vector's next state, fed to the SELECT arbiter. Wake events
+    // take priority over the in-flight grant's clear. The two deep sources
+    // (EXEC self-wake, box-collection wake) are registered before joining
+    // the vector; the long-latency event wakes enter combinationally.
+    reg                 wake_self_r;
+    reg [CTX_TAG_W-1:0] wake_self_ctx_r;
+    reg                 box_wake_r;
+    reg [CTX_TAG_W-1:0] box_wake_ctx_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            wake_self_r <= 1'b0;
+            box_wake_r  <= 1'b0;
+        end else begin
+            wake_self_r     <= x_valid && wake_self;
+            wake_self_ctx_r <= sel_q;
+            box_wake_r      <= box_valid_out
+                            && (coll_proc[box_coll] || (coll_cnt[box_coll] == coll_last[box_coll]));
+            box_wake_ctx_r  <= coll_ctx[box_coll];
+        end
+    end
+
+    wire [NUM_CTX-1:0] rdy_wake_mask =
+        (ray_wr_valid                       ? NUM_CTX'(1) << ray_wr_ctx     : NUM_CTX'(0))
+      | (mem_rsp_valid                      ? NUM_CTX'(1) << mem_rsp_tag    : NUM_CTX'(0))
+      | (tri_valid_out                      ? NUM_CTX'(1) << tri_tag_out    : NUM_CTX'(0))
+      | (xform_valid_out                    ? NUM_CTX'(1) << xform_tag_out  : NUM_CTX'(0))
+      | ((recip_valid_out && recip_last_out) ? NUM_CTX'(1) << recip_tag_out : NUM_CTX'(0))
+      | (box_wake_r                         ? NUM_CTX'(1) << box_wake_ctx_r : NUM_CTX'(0))
+      | (wake_self_r                        ? NUM_CTX'(1) << wake_self_ctx_r : NUM_CTX'(0));
+
+    assign rdy_next = (rdy_set & ~g1_onehot) | rdy_wake_mask;
+
     integer k;
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -1673,10 +1753,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end else begin
             done_r <= '0;
 
-            // SELECT consumes the wake bit
-            if (grant_valid) begin
-                rdy_set[grant_idx] <= 1'b0;
-            end
+            // SELECT's clear and the event wakes are folded into rdy_next
+            rdy_set <= rdy_next;
 
             // slot launch: arm the slot before its rays land
             if (slot_start_valid) begin
@@ -1694,37 +1772,14 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
 
-            // a lane's ray landed: that context launches now
+            // a lane's ray landed: that context launches fresh
             if (ray_wr_valid) begin
-                rdy_set[ray_wr_ctx]   <= 1'b1;
                 fresh_set[ray_wr_ctx] <= 1'b1;
-            end
-
-            // event wake-ups (each targets a parked context)
-            if (mem_rsp_valid) begin
-                rdy_set[mem_rsp_tag] <= 1'b1;
-            end
-            if (tri_valid_out) begin
-                rdy_set[tri_tag_out] <= 1'b1;
-            end
-            if (xform_valid_out) begin
-                rdy_set[xform_tag_out] <= 1'b1;
-            end
-            if (recip_valid_out && recip_last_out) begin
-                rdy_set[recip_tag_out] <= 1'b1;
-            end
-            // a box collection completing wakes its context
-            if (box_valid_out
-             && (coll_proc[box_coll] || (coll_cnt[box_coll] == coll_last[box_coll]))) begin
-                rdy_set[coll_ctx[box_coll]] <= 1'b1;
             end
 
             // EXEC outcomes
             if (x_valid) begin
                 fresh_set[sel_q] <= 1'b0;
-                if (wake_self) begin
-                    rdy_set[sel_q] <= 1'b1;
-                end
                 if (exec_done) begin
                     done_q[sel_q] <= 1'b1;
                 end

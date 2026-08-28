@@ -258,9 +258,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     // 3D thread-index carry-propagation (combinational on registered state)
     wire [CTA_TID_WIDTH:0] next_x = {1'b0, thread_idx_r[0]} + {1'b0, warp_step_r[0]};
-    wire                   wrap_x = (next_x >= {1'b0, block_dim_r[0][CTA_TID_WIDTH-1:0]});
+    wire                   wrap_x = (next_x >= block_dim_r[0]);
     wire [CTA_TID_WIDTH:0] next_y = ({1'b0, thread_idx_r[1]} + {1'b0, warp_step_r[1]}) + (CTA_TID_WIDTH+1)'(wrap_x);
-    wire                   wrap_y = (next_y >= {1'b0, block_dim_r[1][CTA_TID_WIDTH-1:0]});
+    wire                   wrap_y = (next_y >= block_dim_r[1]);
 
     // -------------------------------------------------------------------------
     // Retirement decode — pipeline:
@@ -514,8 +514,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                         block_size_r <= block_size_next;
 
                         warp_init_lanes_r[warp_id_r] <= warp_init_lanes_r[warp_id_r] | warp_tmask_r;
-                        thread_idx_r[0] <= wrap_x ? CTA_TID_WIDTH'(next_x - {1'b0, block_dim_r[0][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_x);
-                        thread_idx_r[1] <= wrap_y ? CTA_TID_WIDTH'(next_y - {1'b0, block_dim_r[1][CTA_TID_WIDTH-1:0]}) : CTA_TID_WIDTH'(next_y);
+                        thread_idx_r[0] <= wrap_x ? CTA_TID_WIDTH'(next_x - block_dim_r[0]) : CTA_TID_WIDTH'(next_x);
+                        thread_idx_r[1] <= wrap_y ? CTA_TID_WIDTH'(next_y - block_dim_r[1]) : CTA_TID_WIDTH'(next_y);
                         thread_idx_r[2] <= thread_idx_r[2] + warp_step_r[2] + CTA_TID_WIDTH'(wrap_y);
 
                         if (is_last_warp) begin
@@ -642,17 +642,17 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     function automatic logic [2:0][CTA_TID_WIDTH-1:0] tid_next (
         input logic [2:0][CTA_TID_WIDTH-1:0] prev,
-        input logic [CTA_TID_WIDTH-1:0]      bd_x,
-        input logic [CTA_TID_WIDTH-1:0]      bd_y
+        input logic [CTA_TID_WIDTH:0]        bd_x,
+        input logic [CTA_TID_WIDTH:0]        bd_y
     );
         logic [CTA_TID_WIDTH:0] nx, ny;
         logic wx, wy;
         nx = {1'b0, prev[0]} + (CTA_TID_WIDTH+1)'(1);
-        wx = (nx >= {1'b0, bd_x});
+        wx = (nx >= bd_x);
         ny = {1'b0, prev[1]} + (CTA_TID_WIDTH+1)'(wx);
-        wy = wx && (ny >= {1'b0, bd_y});
-        tid_next[0] = wx ? CTA_TID_WIDTH'(nx - {1'b0, bd_x}) : CTA_TID_WIDTH'(nx);
-        tid_next[1] = wy ? CTA_TID_WIDTH'(ny - {1'b0, bd_y}) : CTA_TID_WIDTH'(ny);
+        wy = wx && (ny >= bd_y);
+        tid_next[0] = wx ? CTA_TID_WIDTH'(nx - bd_x) : CTA_TID_WIDTH'(nx);
+        tid_next[1] = wy ? CTA_TID_WIDTH'(ny - bd_y) : CTA_TID_WIDTH'(ny);
         tid_next[2] = prev[2] + CTA_TID_WIDTH'(wy);
     endfunction
 
@@ -662,8 +662,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [TID_STAGES:0]                    tidp_valid;
     wire [TID_STAGES:0][NW_WIDTH-1:0]      tidp_wid;
     wire [TID_STAGES:0][NW_WIDTH-1:0]      tidp_rank;
-    wire [TID_STAGES:0][CTA_TID_WIDTH-1:0] tidp_bdx;
-    wire [TID_STAGES:0][CTA_TID_WIDTH-1:0] tidp_bdy;
+    // block_dim spans 1..NUM_WARPS*NUM_THREADS inclusive, one bit more than a
+    // thread index -- truncating it to CTA_TID_WIDTH turns a full-width dimension
+    // into 0 and makes every lane wrap.
+    wire [TID_STAGES:0][CTA_TID_WIDTH:0] tidp_bdx;
+    wire [TID_STAGES:0][CTA_TID_WIDTH:0] tidp_bdy;
 
     // stage 0: combinational inputs; seed lane 0 with the warp base.
     cta_tid_arr_t tidp_tid0;
@@ -675,8 +678,8 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign tidp_valid[0] = cta_fire;
     assign tidp_wid[0]   = cta_wid;
     assign tidp_rank[0]  = cta_csrs.cta_rank;
-    assign tidp_bdx[0]   = cta_csrs.block_dim[0][CTA_TID_WIDTH-1:0];
-    assign tidp_bdy[0]   = cta_csrs.block_dim[1][CTA_TID_WIDTH-1:0];
+    assign tidp_bdx[0]   = cta_csrs.block_dim[0];
+    assign tidp_bdy[0]   = cta_csrs.block_dim[1];
 
     for (genvar s = 1; s <= TID_STAGES; ++s) begin : g_tid_pipe
         cta_tid_arr_t nxt;
@@ -690,7 +693,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         end
         reg                    v_r;
         reg [NW_WIDTH-1:0]     wid_r, rank_r;
-        reg [CTA_TID_WIDTH-1:0] bdx_r, bdy_r;
+        reg [CTA_TID_WIDTH:0]  bdx_r, bdy_r;
         cta_tid_arr_t          tid_r;
         always @(posedge clk) begin
             if (reset) begin

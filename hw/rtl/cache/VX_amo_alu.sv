@@ -14,7 +14,8 @@
 `include "VX_define.vh"
 
 // Pure combinational RVA RMW kernel. Given the cache line's current word
-// at the AMO byte offset and the rs2 operand, derives:
+// at the AMO byte offset, the rs2 operand, and (for compare-and-swap) the
+// comparand, derives:
 //   - new_word: the value to write back for store-bearing AMOs (all except LR).
 //   - ret_word: the original loaded value, sign-extended into rd.
 //               For SC the bank overrides this with 0/1 outside this module.
@@ -30,6 +31,7 @@ module VX_amo_alu import VX_gpu_pkg::*; #(
     input  wire [1:0]   width,        // 2 = .W, 3 = .D
     input  wire [63:0]  old_word,
     input  wire [63:0]  rhs,
+    input  wire [63:0]  cmp,         // compare-and-swap comparand
     output wire [63:0]  new_word,
     output wire [63:0]  ret_word
 );
@@ -48,10 +50,21 @@ module VX_amo_alu import VX_gpu_pkg::*; #(
 
     wire [AW-1:0] a = old_word[AW-1:0];
     wire [AW-1:0] b = rhs[AW-1:0];
+`ifdef VX_CFG_EXT_ZACAS_ENABLE
+    wire [AW-1:0] c = cmp[AW-1:0];
+    if (AW < 64) begin : g_cmp_hi_unused
+        `UNUSED_VAR (cmp[63:AW])
+    end
+`else
+    `UNUSED_VAR (cmp)
+`endif
 
     // Mask to width-sized values; sign-extend at the 32-bit boundary for MIN/MAX.
     wire [AW-1:0] a_u = is_w ? {{(AW-32){1'b0}},  a[31:0]} : a;
     wire [AW-1:0] b_u = is_w ? {{(AW-32){1'b0}},  b[31:0]} : b;
+`ifdef VX_CFG_EXT_ZACAS_ENABLE
+    wire [AW-1:0] c_u = is_w ? {{(AW-32){1'b0}},  c[31:0]} : c;
+`endif
     wire signed [AW-1:0] a_s = is_w ? {{(AW-32){a[31]}}, a[31:0]} : a;
     wire signed [AW-1:0] b_s = is_w ? {{(AW-32){b[31]}}, b[31:0]} : b;
 
@@ -69,6 +82,13 @@ module VX_amo_alu import VX_gpu_pkg::*; #(
                                             : ((a_s < b_s) ? a_s : b_s);
             AMO_OP_MAX:   res = is_unsigned ? ((a_u > b_u) ? a_u : b_u)
                                             : ((a_s > b_s) ? a_s : b_s);
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            // On a mismatch the old value is written back unchanged rather
+            // than the store being suppressed; the commit still breaks other
+            // harts' reservations on the word, which is the required
+            // behaviour and the reason it is not treated as a no-op.
+            AMO_OP_CAS:   res = (a_u == c_u) ? b_u : a_u;
+        `endif
             default:      res = a_u;
         endcase
         if (is_w) res = {{(AW-32){1'b0}}, res[31:0]};

@@ -88,13 +88,28 @@ interleave between the colour and depth beats. This lock is what bounds the
 ingress pairing table (§4.3) to **one open record per lane** — the deadlock
 argument depends on it.
 
-### 2.3 Reserved CSRs
+### 2.3 Several colour attachments, one sample
 
-`VX_CSR_OM_RT_IDX` (0x7CE) and `VX_CSR_OM_SAMPLE_IDX` (0x7CF) are declared
-for future MRT / MSAA support. They currently have no hardware behaviour
-([`VX_om_csr.sv`](../../hw/rtl/om/VX_om_csr.sv) is an uninstantiated stub,
-and the `INST_SFU_OM` / `PE_IDX_OM` SFU slot is tied off) — the OM today is
-single-RT, single-sample.
+The OM keeps colour state for `VX_OM_MAX_RT` attachments and one shared
+depth/stencil attachment. A fragment covering several attachments exports once
+per attachment; the aperture address names which one (§3.2), so the index is
+per-export state that cannot go stale the way a CSR written on the wrong side of
+a branch can. One blend datapath serves them all, time-multiplexed — exports are
+already serialized per fragment, so only the state multiplies.
+
+Because the attachments share one depth attachment, the N exports of one fragment
+each run the depth/stencil stage. They agree with one another only if that stage
+writes nothing back, so **an export to an attachment other than 0 requires the
+depth and stencil writemasks to be clear** (`VX_om_core` runtime-asserts it, as
+does the SimX model). The two shapes that matter both satisfy it: an opaque draw
+arms early-Z, which owns the depth test and the depth write and leaves the OM's
+own depth off; a blended draw normally tests depth without writing it. A draw
+that writes depth late, or writes stencil, keeps merging in software.
+
+Multisample coverage is served in software. The unit carries no CSRs: two were
+once declared against a future MRT / MSAA merger and removed again, because they
+were decoded nowhere, held no state, and a register that accepts a write and
+discards it misleads the shader author who finds it.
 
 ---
 
@@ -112,16 +127,24 @@ it with a runtime assert).
 
 ![Aperture address encoding](../assets/img/om_aperture_encoding.svg)
 
-`addr = VX_MEM_OM_BASE_ADDR + (((face << (XBITS+YBITS)) | (y << XBITS) | x) << RECORD_SHIFT)`,
+`addr = VX_MEM_OM_BASE_ADDR + (((((rt << 1) | face) << YBITS | y) << XBITS | x) << RECORD_SHIFT)`,
 with `XBITS = ⌈log2(width)⌉`, `YBITS = ⌈log2(height)⌉`, and
 `RECORD_SHIFT` = 2 (one-word record) or 3 (colour+depth pair). The virtual
 pitch is padded to a power of two **deliberately**: the ingress recovers
-`(face, y, x)` by pure bit-slicing — a packed `y·width + x` encoding would
+`(rt, face, y, x)` by pure bit-slicing — a packed `y·width + x` encoding would
 force a divider into the ingress. The padding wastes only virtual address
 space, which is free. `face` (front/back facing, for two-sided stencil) rides
-the address's top field.
+above the position, and `rt` (the colour attachment, §2.3) above that — so a
+single-attachment export is the same address it was before there were several.
 
-The shader computes this with the `VX_OM_APERTURE_ADDR(...)` macro; the
+The window is bounded by `VX_MEM_OM_END_ADDR` and cannot grow: the page table
+starts immediately above it. The encoding must therefore satisfy
+`XBITS + YBITS + 1 + ⌈log2(VX_OM_MAX_RT)⌉ + RECORD_SHIFT ≤ log2(window)`,
+which `set_aperture()` checks — a framebuffer past that bound would silently
+wrap two pixels onto one record, and nothing downstream can detect it.
+
+The shader computes this with the `VX_OM_APERTURE_ADDR_RT(...)` macro
+(`VX_OM_APERTURE_ADDR(...)` is the `rt = 0` case); the
 runtime derives and programs the same three parameters via
 `om_state_t::set_aperture()` ([`graphics.h`](../../sw/runtime/include/graphics.h))
 and passes them to the kernel, so both sides agree by construction.
@@ -253,7 +276,11 @@ writemask on byte 3).
 `ALPHA_SAT`) feeding a 3-cycle datapath — `VX_om_blend_multadd`
 (ADD/SUB/REV_SUB), `VX_om_blend_minmax` (MIN/MAX), and `VX_om_logic_op`
 (the 16 GL logic ops) — with **separate mode/func selects for RGB and
-alpha**. Modes: ADD, SUB, REV_SUB, MIN, MAX, LOGICOP
+alpha**. The blend state is per colour attachment, and consecutive fragments
+need not share an attachment, so the attachment index travels the pipeline
+alongside the data and selects the state again at each stage that consumes it —
+the factor select at the input, the mode at the multiply-add, and the mode again
+at the output mux. Modes: ADD, SUB, REV_SUB, MIN, MAX, LOGICOP
 ([`VX_types.toml`](../../VX_types.toml) `VX_OM_BLEND_*`). All fixed-point
 8-bit-per-channel — no floating-point datapath, per the FF invariant.
 
@@ -355,23 +382,28 @@ core 0). Not reset — a draw must program what it uses.
 
 | addr | name | semantics |
 |---|---|---|
-| 0x080 | `CBUF_ADDR` | colour-buffer base (64-byte-block address) |
-| 0x081 | `CBUF_PITCH` | colour row pitch, bytes |
-| 0x082 | `CBUF_WRITEMASK` | per-byte colour write mask (RGBA channels) |
+| 0x080 | `CBUF_ADDR` | colour-buffer base (64-byte-block address) — per attachment |
+| 0x081 | `CBUF_PITCH` | colour row pitch, bytes — per attachment |
+| 0x082 | `CBUF_WRITEMASK` | per-byte colour write mask (RGBA channels) — per attachment |
 | 0x083 | `ZBUF_ADDR` | depth/stencil base (64-byte-block address) |
 | 0x084 | `ZBUF_PITCH` | depth row pitch, bytes |
 | 0x085 | `DEPTH_FUNC` | 8 compare funcs; also **enables** depth (≠ ALWAYS or writemask) |
 | 0x086 | `DEPTH_WRITEMASK` | 1-bit depth write enable |
 | 0x087–0x08D | `STENCIL_*` | two-sided: `{back, front}` packed per register — func, zpass/zfail/fail ops, ref, mask, writemask |
-| 0x08E | `BLEND_MODE` | `{a_mode, rgb_mode}` (ADD/SUB/REV_SUB/MIN/MAX/LOGICOP) |
-| 0x08F | `BLEND_FUNC` | `{dst_a, src_a, dst_rgb, src_rgb}` factor selects |
-| 0x090 | `BLEND_CONST` | constant blend colour |
-| 0x091 | `LOGIC_OP` | 16 GL logic ops |
+| 0x08E | `BLEND_MODE` | `{a_mode, rgb_mode}` (ADD/SUB/REV_SUB/MIN/MAX/LOGICOP) — per attachment |
+| 0x08F | `BLEND_FUNC` | `{dst_a, src_a, dst_rgb, src_rgb}` factor selects — per attachment |
+| 0x090 | `BLEND_CONST` | constant blend colour — per attachment |
+| 0x091 | `LOGIC_OP` | 16 GL logic ops — per attachment |
 | 0x092 | `EARLYZ_SAFE` | per-draw gate arming RASTER early-Z (snooped by the raster DCR unit) |
 | 0x093 | `APERTURE_XBITS` | `⌈log2(fb width)⌉` — aperture x field width |
 | 0x094 | `APERTURE_YBITS` | `⌈log2(fb height)⌉` — aperture y field width |
 | 0x095 | `APERTURE_RECORD_SHIFT` | 2 = one-word record, 3 = colour+depth pair |
 | 0x096 | `APERTURE_DEPTH_ONLY` | disambiguates the two one-word modes |
+| 0x097 | `RT_SELECT` | colour attachment the per-attachment registers above write; resets to 0 |
+
+Registers marked *per attachment* land in the copy `RT_SELECT` names; every
+other register in the block is shared by all attachments. A driver that never
+writes `RT_SELECT` programs attachment 0 throughout.
 
 The enable derivations in `VX_om_core`: depth/stencil participate when their
 func/enables are non-trivial; `write_bypass` (no DS, no blend) skips the read

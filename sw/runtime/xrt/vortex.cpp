@@ -152,7 +152,7 @@ public:
       device_index = atoi(device_index_s);
     }
 
-    const char *xlbin_path_s = getenv("XRT_XCLBIN_PATH");
+    const char *xlbin_path_s = getenv("XCLBIN_PATH");
     if (xlbin_path_s == nullptr) {
       xlbin_path_s = DEFAULT_XCLBIN_PATH;
     }

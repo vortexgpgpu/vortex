@@ -53,7 +53,15 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         .data_t (lsu_result_t)
     ) result_no_rsp_if();
 
+    // The third operand slot is read only by compare-and-swap, which needs
+    // the atomic extension to exist at all.
+`ifdef VX_CFG_EXT_A_ENABLE
+`ifndef VX_CFG_EXT_ZACAS_ENABLE
     `UNUSED_VAR (execute_if.data.rs3_data)
+`endif
+`else
+    `UNUSED_VAR (execute_if.data.rs3_data)
+`endif
 
     // full address calculation — per-lane AGU (all address forms live in
     // VX_lsu_agu; this slice contains no address arithmetic).
@@ -118,6 +126,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         // amo_unsigned distinguishes signed/unsigned AMOMIN/MAX variants
         // (decoder collapses MINU/MAXU into MIN/MAX + this bit).
         assign lane_amo.amo_unsigned = execute_if.data.op_args.lsu.amo_unsigned;
+    `ifdef VX_CFG_EXT_ZACAS_ENABLE
+        // Compare-and-swap comparand. The decoder routes rd into the third
+        // operand slot for it; every other atomic leaves the slot unread.
+        assign lane_amo.amo_cmp      = execute_if.data.rs3_data[i];
+    `endif
         // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
         assign lane_amo.hart_id      = HART_ID_WIDTH'(
             (HART_ID_WIDTH'(CORE_ID) << (NW_BITS + NT_BITS))
@@ -127,8 +140,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         assign mem_req_attr_struct[i].amo = lane_amo;
     `else
         // EXT_A disabled: tie the AMO sideband to zero so the bits don't
-        // propagate as 'x under --x-assign unique (otherwise downstream
-        // checks like VX_lmem_switch's amo-on-LMEM guard fire spuriously).
+        // propagate as 'x under --x-assign unique.
         assign mem_req_attr_struct[i].amo = '0;
     `endif
         assign mem_req_attr[i] = mem_req_attr_struct[i];
@@ -333,6 +345,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         assign mem_rsp_eop_pkt = mem_rsp_eop && pkt_eop[pkt_raddr] && (pkt_ctr[pkt_raddr] == 1);
         `RUNTIME_ASSERT(~(mem_req_rd_fire && full), ("allocator full!"))
         `RUNTIME_ASSERT(~(mem_req_rd_sop_fire && pkt_ctr[pkt_waddr] != 0), ("oops! broken sop request!"))
+        // pkt_ctr is guarded against a same-cycle same-slot request/response by
+        // rw_collision; pkt_eop and pkt_sop are not, so the release wins and the
+        // incoming packet loses the flag that would ever complete it.
+        `RUNTIME_ASSERT(~(mem_req_rd_eop_fire && mem_rsp_eop_pkt_fire && (pkt_waddr == pkt_raddr)),
+            ("%t: *** pkt_eop collision on slot %0d: incoming packet loses its eop flag", $time, pkt_waddr))
         `UNUSED_VAR (mem_rsp_sop)
     end else begin : g_no_pid
         assign pkt_waddr = 0;

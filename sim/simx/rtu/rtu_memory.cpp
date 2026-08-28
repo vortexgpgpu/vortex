@@ -21,13 +21,10 @@
 namespace vortex { namespace rtu {
 
 namespace {
-// With merging off every fetch still takes an entry — it just never gains a
-// second waiter — so one table serves both modes. Sized to the context array in
-// that case, since each context has at most one fetch outstanding, it can never
-// fill and so can never cap memory-level parallelism.
-constexpr uint32_t kMshrEntries =
-    VX_CFG_RTU_MERGE_DEPTH ? VX_CFG_RTU_MERGE_DEPTH : VX_CFG_RTU_NUM_CTX;
-constexpr bool kMergeEnabled = (VX_CFG_RTU_MERGE_DEPTH != 0);
+// Every fetch takes an entry and never gains a second waiter. Sized to the
+// context array: each context has at most one fetch outstanding, so the table
+// can never fill and so can never cap memory-level parallelism.
+constexpr uint32_t kMshrEntries = VX_CFG_RTU_NUM_CTX;
 }  // namespace
 
 void MemoryEngine::reset() {
@@ -56,32 +53,9 @@ void MemoryEngine::issue_memory() {
     const uint64_t addr = contexts_[leader].req_addr;
     rr_ctx_ = (leader + 1) % nctx;
 
-    // MERGE — every other context asking for this same line rides along. Only
-    // contexts that actually want a fetch are eligible: a context in any other
-    // state still holds a stale req_addr, and letting address equality alone
-    // form the group would hand it a line it never asked for.
+    // The selected context is the whole group: concurrent requests for the same
+    // line are not coalesced, so a fetch never gains a second waiter.
     std::vector<uint32_t> group{leader};
-    if (kMergeEnabled) {
-      for (uint32_t i = 0; i < nctx; ++i) {
-        if (i == leader) continue;
-        if (contexts_[i].state != CtxState::REQ) continue;
-        if (contexts_[i].req_addr != addr) continue;
-        group.push_back(i);
-      }
-      // MSHR CAM — the line may already be in flight from an earlier cycle.
-      bool folded = false;
-      for (auto& e : mshr_) {
-        if (!e.valid || e.addr != addr) continue;
-        for (uint32_t c : group) {
-          e.waiters.push_back(c);
-          contexts_[c].state = CtxState::WAIT;
-        }
-        perf_.fetches_merged += group.size();
-        folded = true;
-        break;
-      }
-      if (folded) continue;   // no load leaves the RTU
-    }
 
     // Allocate an entry and issue exactly one load for the whole group.
     uint32_t eidx = kMshrEntries;
@@ -113,7 +87,6 @@ void MemoryEngine::issue_memory() {
     port.send(m);
 
     for (uint32_t c : group) contexts_[c].state = CtxState::WAIT;
-    perf_.fetches_merged += group.size() - 1;
     ++perf_.mem_reads;
     issued_this_tick = true;
   }
@@ -138,8 +111,8 @@ void MemoryEngine::drain_mem_rsp() {
     for (uint32_t c : e.waiters) {
       Context& cx = contexts_.at(c);
       // A retired context waiting on a line means the group was formed from
-      // something other than a live request — the failure the req-qualified
-      // MERGE above exists to make impossible.
+      // something other than a live request, which selecting only a context in
+      // REQ is meant to make impossible.
       assert(cx.state != CtxState::DONE && "RTU: retired context in a fill group");
       if (!cx.valid || cx.state != CtxState::WAIT) continue;
       if (rsp.data) {

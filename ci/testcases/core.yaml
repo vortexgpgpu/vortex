@@ -150,7 +150,7 @@ tests:
   # diverge (~14%, RTL slower). SimX does not model the decoupled LSU pending
   # pool, so it under-counts the streaming-load latency this kernel is bound
   # by. Parity divergence only; pending SimX LSU timing alignment.
-  known_issue: "cycle-parity gap ~14%: SimX does not model the decoupled LSU pending pool (instrs match)"
+  tolerance: 0.10   # SimX does not model the decoupled LSU pending pool (instrs match; cycles ~14%)
   via: blackbox
   app: sgemv
   args: -m512 -n512
@@ -162,7 +162,7 @@ tests:
   # shared-L2 path compounds two unmodelled RTL effects: the decoupled LSU
   # pending pool and the reworked cache bank pipeline. Parity divergence only;
   # pending SimX LSU/cache timing alignment.
-  known_issue: "cycle-parity gap ~28%: SimX models neither the decoupled LSU pending pool nor the reworked cache banks (instrs match)"
+  tolerance: 0.10   # SimX models neither the decoupled LSU pending pool nor the reworked cache banks (instrs match; cycles ~28%)
   via: blackbox
   app: sgemm
   args: -n128
@@ -172,7 +172,7 @@ tests:
 - id: parity-sgemmx
   check: model_parity
   # Same cause as sgemv/sgemm-mc: instrs match, cycles diverge (~7%).
-  known_issue: "cycle-parity gap ~7%: SimX does not model the decoupled LSU pending pool (instrs match)"
+  tolerance: 0.10   # SimX does not model the decoupled LSU pending pool (instrs match; cycles ~7%)
   via: blackbox
   app: sgemmx
   args: -n128

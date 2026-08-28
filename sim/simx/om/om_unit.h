@@ -34,6 +34,9 @@ struct OmReq {
   std::array<uint8_t,  VX_CFG_NUM_THREADS>          face       = {};    // 1-bit back-face flag
   std::array<uint32_t, VX_CFG_NUM_THREADS>          color      = {};    // ARGB8888 source
   std::array<uint32_t, VX_CFG_NUM_THREADS>          depth      = {};    // VX_OM_DEPTH_BITS source
+  // Colour attachment the export targets. One per request: a record names one
+  // attachment however many lanes it covers.
+  uint32_t                                         rt         = 0;
 
   // vx_om_export: the fragment arrives as an APERTURE ADDRESS rather than a
   // decoded position. The decode needs the OM DCRs (xbits/ybits/record_shift),

@@ -99,6 +99,10 @@ class Spec:
         self.target = entry.get("target", "")
         self.run = entry.get("run", "")
         self.vars = dict(entry.get("vars", {}))
+        # Extra environment for the run step (e.g. runtime test knobs like
+        # VORTEX_RANDOMIZE_VA). Merged over the CONFIGS env; values are
+        # strings passed through verbatim.
+        self.env = {k: str(v) for k, v in dict(entry.get("env", {})).items()}
         # Stable, unique id: <category>:<authored-id>:<marker-driver>
         self.id = "{}:{}:{}".format(category, entry["id"], self.marker_driver)
 
@@ -145,6 +149,7 @@ class Spec:
         overrides the case's own driver (the cycle-parity runner uses it to
         drive both legs of one case)."""
         env = {"CONFIGS": _subst(self.configs, xlen)} if self.configs else {}
+        env.update(self.env)
         if self.via == "blackbox":
             argv = ["./ci/blackbox.sh", "--driver=" + (driver or self.driver),
                     "--app=" + self.app]

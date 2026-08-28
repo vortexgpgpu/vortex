@@ -68,7 +68,6 @@ private:
       : ireg_file(MAX_NUM_REGS, std::vector<Word>(num_threads, 0))
       , freg_file(MAX_NUM_REGS, std::vector<uint64_t>(num_threads, 0))
     {}
-    void reset();
   };
 
   std::vector<warp_regs_t> regs_;     // indexed by warp_slot

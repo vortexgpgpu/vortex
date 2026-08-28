@@ -180,15 +180,23 @@ package VX_gpu_pkg;
         AMO_OP_OR    = 4'h5,
         AMO_OP_AND   = 4'h6,
         AMO_OP_MIN   = 4'h7,
-        AMO_OP_MAX   = 4'h8
+        AMO_OP_MAX   = 4'h8,
         // MINU/MAXU collapse into MIN/MAX + amo_unsigned bit.
+        AMO_OP_CAS   = 4'h9
     } amo_op_e;
 
     // Slim AMO sideband. width derives from byteen popcount at the cache
     // bank; rhs is read from the request's data field. Includes scalar
     // hart_id for the LLC reservation table.
+    // Compare-and-swap needs a third operand, and the request's single data
+    // word already carries the swap value, so the comparand travels here. It
+    // must reach wherever the read-modify-write commits, which is the local
+    // bank for shared memory and the last-level bank for global memory.
     typedef struct packed {
         logic [HART_ID_WIDTH-1:0]   hart_id;
+    `ifdef VX_CFG_EXT_ZACAS_ENABLE
+        logic [`VX_CFG_XLEN-1:0]     amo_cmp;
+    `endif
         logic                        amo_unsigned;
         amo_op_e                     amo_op;
         logic                        amo_valid;
@@ -698,13 +706,34 @@ package VX_gpu_pkg;
     // UP() guards the degenerate NT < FRAG_QUAD_LANES case (FRAG_QUADS == 0), where
     // CLOG2(1) is 0 and the count field would be a zero-width [-1:0] range.
     localparam KMU_FRAG_COUNT_BITS = `UP(`CLOG2(FRAG_QUADS + 1));
+    localparam KMU_FRAG_PAYLOAD_BITS = KMU_FRAG_BITS + KMU_FRAG_COUNT_BITS;
 `else
     localparam KMU_FRAG_BITS = 0;
+    localparam KMU_FRAG_PAYLOAD_BITS = 0;
 `endif
+
+    // Width of the compute variant's fields, computed arithmetically because the union
+    // envelope has to be sized before the type exists. The assertion under the typedef
+    // pins the two together: add or resize a field without updating this sum and
+    // elaboration fails, rather than the envelope silently mis-sizing.
+    localparam KMU_COMPUTE_BITS = 3*32                    // grid_dim
+                                + 3*32                    // block_idx
+                                + 3*(CTA_TID_WIDTH+1)     // block_dim
+                                + (CTA_TID_WIDTH+1)       // block_size
+                                + 3*CTA_TID_WIDTH         // warp_step
+                                + (NW_WIDTH+1)            // cluster_size
+                                + 1;                      // is_first_of_cluster
+
+    // The envelope takes whichever variant is wider. Compute dominates up to NT=16;
+    // the fragment's per-thread stamps grow with NT and overtake it by NT=32. The
+    // trailing +1 keeps both paddings non-zero: a zero-width packed field is illegal,
+    // and without it whichever variant is the wider one would have exactly zero.
+    localparam KMU_ARGS_BITS = `MAX(KMU_COMPUTE_BITS, KMU_FRAG_PAYLOAD_BITS) + 1;
 
     // Compute arguments: the full CTA grid descriptor (a GPGPU kernel or a graphics
     // geometry stage).
     typedef struct packed {
+        logic [KMU_ARGS_BITS-KMU_COMPUTE_BITS-1:0] __padding;
         logic [2:0][31:0]              grid_dim;
         logic [2:0][31:0]              block_idx;
         logic [2:0][CTA_TID_WIDTH:0]   block_dim;
@@ -713,20 +742,13 @@ package VX_gpu_pkg;
         logic [NW_WIDTH:0]             cluster_size;
         logic                          is_first_of_cluster;
     } kmu_compute_args_t;
-
-    // The args union pins to the compute side: compute is the wider variant at every
-    // supported NT (<=16), so a fragment always leaves headroom and there is no zero-width
-    // padding edge. NT=32 fragment (stamps > compute) would overflow -- caught below.
-    localparam KMU_ARGS_BITS = $bits(kmu_compute_args_t);
+    `PACKAGE_ASSERT($bits(kmu_compute_args_t) == KMU_ARGS_BITS)
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
-    localparam KMU_FRAG_PAYLOAD_BITS = KMU_FRAG_BITS + KMU_FRAG_COUNT_BITS;
-    // fragment args must fit the compute-pinned envelope (NT>16 graphics is unsupported).
-    `PACKAGE_ASSERT(KMU_FRAG_PAYLOAD_BITS <= KMU_ARGS_BITS)
     // Fragment arguments: the wave's stamps and its active-lane count. Self-describing --
     // a fragment does not borrow a CTA's block_size.
     typedef struct packed {
-        logic [KMU_ARGS_BITS-KMU_FRAG_PAYLOAD_BITS-1:0]     __padding; // >0 at every NT<=16
+        logic [KMU_ARGS_BITS-KMU_FRAG_PAYLOAD_BITS-1:0]     __padding;
         logic [`VX_CFG_NUM_THREADS-1:0][FRAG_LANE_BITS-1:0] stamps;
         logic [KMU_FRAG_COUNT_BITS-1:0]                     count;     // valid quads
     } kmu_fragment_args_t;
@@ -1198,7 +1220,15 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] misses;
     } coalescer_perf_t;
 
-`ifdef VX_CFG_VM_ENABLE
+// Declared unconditionally, because its references do not agree on a guard:
+// the ports of VX_mmu and VX_tlb_l1 and the signals in VX_socket are gated on
+// PERF_ENABLE, while the field in pipeline_perf_t is gated on VM. Gating the
+// declaration on either one alone breaks the other combination -- VM without
+// PERF, or PERF without VM. The latter is what failed here: Vivado elaborates
+// every file in the source list whether or not the module is ever instantiated,
+// so VX_mmu.sv was compiled in a VM-disabled build and found no such type.
+// The Verilator flow hides the mismatch, because its library search compiles
+// only what is reachable. A typedef with no instances costs no hardware.
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] tlb_reads;
         logic [PERF_CTR_BITS-1:0] tlb_hits;
@@ -1207,7 +1237,6 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] ptw_walks;
         logic [PERF_CTR_BITS-1:0] ptw_latency;
     } mmu_perf_t;
-`endif
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
     typedef struct packed {
@@ -1417,15 +1446,10 @@ package VX_gpu_pkg;
     // icache_bus_if (ICACHE_TAG_WIDTH below) carries that wider tag.
     // The +1 is the VX_dcr_flush arb-sel bit injected on the icache side.
     localparam ICACHE_TAG_WIDTH_BASE = (ICACHE_FETCH_TAG_WIDTH + 1);
-`ifdef VX_CFG_VM_ENABLE
-    localparam ICACHE_TLB_SOURCE_BITS = `UP(`CLOG2(1));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam ICACHE_ARB_BITS        = `CLOG2(`CDIV(2 * 1 + 1, 1));
-    localparam ICACHE_TAG_WIDTH       = (ICACHE_TAG_WIDTH_BASE + ICACHE_TLB_SOURCE_BITS + ICACHE_ARB_BITS);
-`else
+    // The iMMU forwards the translated tag unchanged: ITLB misses are walked
+    // by the shared per-core walker, whose PTE fetches ride the dcache port,
+    // so the icache stream carries no extra MMU arbitration bit.
     localparam ICACHE_TAG_WIDTH       = ICACHE_TAG_WIDTH_BASE;
-`endif
 
     // Memory request data bits
     localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
@@ -1470,15 +1494,10 @@ package VX_gpu_pkg;
     // for its internal bypass/TLB/PTW arbiter, so the cache cluster sees
     // the wider DCACHE_TAG_WIDTH below.
     localparam DCACHE_TAG_WIDTH_BASE = (DCACHE_CORE_TAG_WIDTH + 1);
-`ifdef VX_CFG_VM_ENABLE
-    localparam DCACHE_TLB_SOURCE_BITS = `UP(`CLOG2(DCACHE_NUM_REQS));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam DCACHE_ARB_BITS        = `CLOG2(`CDIV(2 * DCACHE_NUM_REQS + 1, DCACHE_NUM_REQS));
-    localparam DCACHE_TAG_WIDTH       = (DCACHE_TAG_WIDTH_BASE + DCACHE_TLB_SOURCE_BITS + DCACHE_ARB_BITS);
-`else
+    // The dMMU translates each lane in place (no serialize/deserialize). The
+    // shared walker lives at the cluster and fetches PTEs through the L2 cache,
+    // so the dcache tag is the base width in every mode.
     localparam DCACHE_TAG_WIDTH       = DCACHE_TAG_WIDTH_BASE;
-`endif
 
     // Memory request data bits (mem transacts in sectors)
     localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_SECTOR_SIZE * 8);
@@ -1507,8 +1526,12 @@ package VX_gpu_pkg;
     localparam TCACHE_LINE_SIZE     = `VX_CFG_L1_LINE_SIZE;
     localparam TCACHE_NUM_REQS      = `VX_CFG_TCACHE_NUM_BANKS;
 
-    // Per-tex-unit memory port count (4 bilinear taps × NUM_SFU_LANES)
-    localparam TEX_MEM_REQS         = (4 * `VX_CFG_NUM_SFU_LANES);
+    // Mip levels a sample reads at once: two, so a mip-linear sample carries
+    // both levels in one request and no stage has to pair two responses.
+    localparam TEX_NUM_LEVELS       = 2;
+
+    // Per-tex-unit memory port count (4 bilinear taps × levels × NUM_SFU_LANES)
+    localparam TEX_MEM_REQS         = (4 * TEX_NUM_LEVELS * `VX_CFG_NUM_SFU_LANES);
 
     localparam TCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
     localparam TCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
@@ -1679,10 +1702,24 @@ package VX_gpu_pkg;
     localparam L2_GFX_RASTER_IDX    = L2_SOCKET_REQS;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
 
-    localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
+    // The shared page-table walker attaches one PTE-fetch port under VM, right
+    // after the socket and graphics ports (like ocache/rcache).
+    localparam L2_PTW_REQS          = `VX_CFG_VM_ENABLED;
+    localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
+
+    localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
 
     // Core request tag bits (socket arb output width)
     localparam L2_TAG_WIDTH         = SOCKET_MEM_ARB_TAG_WIDTH;
+
+    // TLB miss/fill fabric id widths. The id starts as the L1 miss-station slot
+    // and each arb level prepends its grant index so fills route back exactly.
+    localparam L1_TLB_ID_WIDTH       = `CLOG2(`VX_CFG_L1_TLB_MSHR_SIZE);
+    // A socket exposes two L1 MMUs (dtlb + itlb), regardless of SOCKET_SIZE, each
+    // driving one bus into the socket TLB arbiter.
+    localparam TLB_SOCKET_ID_WIDTH   = L1_TLB_ID_WIDTH + `ARB_SEL_BITS(2, 1);
+    localparam TLB_CLUSTER_ID_WIDTH  = TLB_SOCKET_ID_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, 1);
+    localparam L2_TLB_SLOT_WIDTH     = `CLOG2(`VX_CFG_L2_TLB_MSHR_SIZE);
 
     // Memory request data bits (mem transacts in sectors)
     localparam L2_MEM_DATA_WIDTH	= (L2_SECTOR_SIZE * 8);

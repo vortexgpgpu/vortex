@@ -23,11 +23,14 @@ module VX_om_blend import VX_om_pkg::*; #(
     input wire  clk,
     input wire  reset,
 
-    // DCRs
-    input om_dcrs_t dcrs,
+    // DCRs. The attachment index selects the state at each stage rather than
+    // resolving it once: a fragment can be several stages deep while the one
+    // behind it targets a different attachment.
+    input om_rt_dcrs_t rt_dcrs [`VX_OM_MAX_RT],
 
     // Handshake
     input wire                  valid_in,
+    input wire [OM_RT_IDX_BITS-1:0] rt_in,
     input wire [TAG_WIDTH-1:0]  tag_in,
     output wire                 ready_in,
 
@@ -46,33 +49,39 @@ module VX_om_blend import VX_om_pkg::*; #(
 
     localparam LATENCY = 3;
 
-    `UNUSED_VAR (dcrs)
-
     wire stall = ~ready_out && valid_out;
 
     assign ready_in = ~stall;
+
+    wire [OM_RT_IDX_BITS-1:0] rt_s1, rt_s2;
+
+    om_rt_dcrs_t dcrs_in, dcrs_s1, dcrs_s2;
+    assign dcrs_in = rt_dcrs[rt_in];
+    assign dcrs_s1 = rt_dcrs[rt_s1];
+    assign dcrs_s2 = rt_dcrs[rt_s2];
+    `UNUSED_VAR ({dcrs_in, dcrs_s1, dcrs_s2})
 
     om_color_t [NUM_LANES-1:0]  src_factor;
     om_color_t [NUM_LANES-1:0]  dst_factor;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_blend_func_src
         VX_om_blend_func blend_func_src (
-            .func_rgb   (dcrs.blend_src_rgb),
-            .func_a     (dcrs.blend_src_a),
+            .func_rgb   (dcrs_in.blend_src_rgb),
+            .func_a     (dcrs_in.blend_src_a),
             .src_color  (src_color[i]),
             .dst_color  (dst_color[i]),
-            .cst_color  (dcrs.blend_const),
+            .cst_color  (dcrs_in.blend_const),
             .factor_out (src_factor[i])
         );
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_blend_func_dst
         VX_om_blend_func blend_func_dst (
-            .func_rgb   (dcrs.blend_dst_rgb),
-            .func_a     (dcrs.blend_dst_a),
+            .func_rgb   (dcrs_in.blend_dst_rgb),
+            .func_a     (dcrs_in.blend_dst_a),
             .src_color  (src_color[i]),
             .dst_color  (dst_color[i]),
-            .cst_color  (dcrs.blend_const),
+            .cst_color  (dcrs_in.blend_const),
             .factor_out (dst_factor[i])
         );
     end
@@ -86,15 +95,15 @@ module VX_om_blend import VX_om_pkg::*; #(
     om_color_t [NUM_LANES-1:0] dst_factor_s1;
 
     VX_pipe_register #(
-        .DATAW  (1 + TAG_WIDTH + 32 * 4 * NUM_LANES),
+        .DATAW  (1 + TAG_WIDTH + OM_RT_IDX_BITS + 32 * 4 * NUM_LANES),
         .DEPTH  (2),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in, tag_in, src_color,    dst_color,    src_factor,    dst_factor}),
-        .data_out ({valid_s1, tag_s1, src_color_s1, dst_color_s1, src_factor_s1, dst_factor_s1})
+        .data_in  ({valid_in, tag_in, rt_in, src_color,    dst_color,    src_factor,    dst_factor}),
+        .data_out ({valid_s1, tag_s1, rt_s1, src_color_s1, dst_color_s1, src_factor_s1, dst_factor_s1})
     );
 
     om_color_t [NUM_LANES-1:0] mult_add_color_s2;
@@ -109,8 +118,8 @@ module VX_om_blend import VX_om_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .enable     (~stall),
-            .mode_rgb   (dcrs.blend_mode_rgb),
-            .mode_a     (dcrs.blend_mode_a),
+            .mode_rgb   (dcrs_s1.blend_mode_rgb),
+            .mode_a     (dcrs_s1.blend_mode_a),
             .src_color  (src_color_s1[i]),
             .dst_color  (dst_color_s1[i]),
             .src_factor (src_factor_s1[i]),
@@ -140,7 +149,7 @@ module VX_om_blend import VX_om_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .enable     (~stall),
-            .op         (dcrs.logic_op),
+            .op         (dcrs_s1.logic_op),
             .src_color  (src_color_s1[i]),
             .dst_color  (dst_color_s1[i]),
             .color_out  (logic_op_color_s2[i])
@@ -148,14 +157,14 @@ module VX_om_blend import VX_om_pkg::*; #(
     end
 
     VX_shift_register #(
-        .DATAW  (1 + TAG_WIDTH),
+        .DATAW  (1 + TAG_WIDTH + OM_RT_IDX_BITS),
         .DEPTH  (LATENCY)
     ) shift_reg2 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_s1, tag_s1}),
-        .data_out ({valid_s2, tag_s2})
+        .data_in  ({valid_s1, tag_s1, rt_s1}),
+        .data_out ({valid_s2, tag_s2, rt_s2})
     );
 
     om_color_t [NUM_LANES-1:0] color_out_s2;
@@ -163,7 +172,7 @@ module VX_om_blend import VX_om_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_blending
         always @(*) begin
             // RGB Component
-            case (dcrs.blend_mode_rgb)
+            case (dcrs_s2.blend_mode_rgb)
                 `VX_OM_BLEND_MODE_ADD,
                 `VX_OM_BLEND_MODE_SUB,
                 `VX_OM_BLEND_MODE_REV_SUB: begin
@@ -193,7 +202,7 @@ module VX_om_blend import VX_om_pkg::*; #(
                     end
             endcase
             // Alpha Component
-            case (dcrs.blend_mode_a)
+            case (dcrs_s2.blend_mode_a)
                 `VX_OM_BLEND_MODE_ADD,
                 `VX_OM_BLEND_MODE_SUB,
                 `VX_OM_BLEND_MODE_REV_SUB: begin

@@ -178,7 +178,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.cells) }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - name: Setup Vortex

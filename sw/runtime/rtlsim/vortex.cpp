@@ -170,6 +170,10 @@ private:
       if (!future_.valid()) return false;
       return future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
     };
+#ifdef VX_CFG_VM_ENABLE
+    // The device MMU control surface answers the fault-report DCRs.
+    h.mmu_fault_report = true;
+#endif
     return h;
   }
 

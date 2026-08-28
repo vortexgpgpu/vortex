@@ -59,6 +59,8 @@ endif
 ifneq ($(filter -DVX_CFG_VM_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/mem/mmu.cpp
 	SRCS += $(SRC_DIR)/mem/mmu_tlb.cpp
+	SRCS += $(SRC_DIR)/mem/tlb_l2.cpp
+	SRCS += $(SRC_DIR)/mem/ptw.cpp
 endif
 
 # Add DXA extension sources

@@ -78,13 +78,19 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
     // reference stays bit-exact with the device for front-facing, within-near-
     // plane geometry. Two-sided (SETUP_CULL_NONE) and no near-plane sub-triangle
     // clip: Binning is a coverage oracle, not the device's culled/clipped path.
-    // setup_vertex_t is byte-identical to vertex_t (gfx_frontend_abi.h).
+    // setup_vertex_t is byte-identical to vertex_t (gfx_frontend_abi.h), so the
+    // conversion is a whole-object copy rather than a field list. The field list
+    // it replaces named pos, color and texcoord, and was not extended when the
+    // vertex gained varying2[6]: those six scalars were left indeterminate and
+    // carried straight into the w0..w5 setup planes, so every attribute plane
+    // this oracle produced disagreed with the same setup_triangle called on a
+    // fully populated vertex. A copy cannot fall behind the struct that way, and
+    // the assertion fails the build if the two ever stop matching.
+    static_assert(sizeof(setup_vertex_t) == sizeof(vertex_t),
+                  "setup_vertex_t and vertex_t must remain byte-identical");
     auto to_sv = [](const vertex_t& v) {
       setup_vertex_t s;
-      s.pos[0] = v.pos[0]; s.pos[1] = v.pos[1]; s.pos[2] = v.pos[2]; s.pos[3] = v.pos[3];
-      s.color[0] = v.color[0]; s.color[1] = v.color[1];
-      s.color[2] = v.color[2]; s.color[3] = v.color[3];
-      s.texcoord[0] = v.texcoord[0]; s.texcoord[1] = v.texcoord[1];
+      std::memcpy(&s, &v, sizeof(s));
       return s;
     };
 
@@ -308,8 +314,8 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
 
   vx_result_t r;
   // No slot_prim/slot_bbox scratch: setup_k counts survivors and EMIT recomputes
-  // clip+setup straight into the dense primbuf, so the 120-byte rast_prim_t is
-  // never staged to a per-triangle slot (slot_*_addr stay 0 in pipe_arg_t).
+  // clip+setup straight into the dense primbuf, so a rast_prim_t is never staged
+  // to a per-triangle slot (slot_*_addr stay 0 in pipe_arg_t).
 
   // Two-heap residency split: the device-only shader scratch regions live
   // in ONE pooled slab (collapsing 12 separate allocations into a single resident

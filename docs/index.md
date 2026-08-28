@@ -73,4 +73,5 @@ Detailed architectural specifications for Vortex subsystems live under
 - **Simulation and CI**
   - [SimX Simulator Architecture](designs/simx_simulator_architecture.md)
   - [gem5 Integration](designs/vortex_gem5_integration.md)
+  - [FireSim Integration](designs/firesim_integration.md)
   - [Continuous Integration Design](designs/continuous_integration.md)

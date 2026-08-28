@@ -62,9 +62,21 @@ PROJECT := libvortex.so
 
 all: $(OUT_DIR)/$(PROJECT)
 
-$(OUT_DIR)/$(PROJECT): $(SRCS)
+# The graphics oracle this library exports (Binning) inlines the shared setup
+# math from sw/common, and the tests compare their device output against it. With
+# sources as the only prerequisites, editing one of those headers rebuilds nothing
+# here: the oracle keeps the setup math it was last compiled with while the tests
+# pick up the new one, and the disagreement surfaces as a device-vs-reference
+# numerical divergence rather than as a build error. Globbed rather than listing
+# the headers actually included, since missing one restores exactly that silent
+# staleness. Prerequisites only, so they are filtered out of the compiler inputs.
+RT_HDRS := $(wildcard $(SW_COMMON_DIR)/*.h) \
+           $(wildcard $(RT_COMMON_DIR)/*.h) \
+           $(wildcard $(INC_DIR)/*.h)
+
+$(OUT_DIR)/$(PROJECT): $(SRCS) $(RT_HDRS)
 	@mkdir -p $(OUT_DIR)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(filter-out $(RT_HDRS),$^) $(LDFLAGS) -o $@
 
 clean:
 	rm -f $(DESTDIR)/$(PROJECT) $(DESTDIR)/aarch64/$(PROJECT) $(DESTDIR)/armhf/$(PROJECT)

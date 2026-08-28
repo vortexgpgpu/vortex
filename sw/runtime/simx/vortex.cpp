@@ -176,6 +176,8 @@ private:
       if (!future_.valid()) return false;
       return future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
     };
+    // ProcessorImpl decodes the MMU fault-report DCRs.
+    h.mmu_fault_report = true;
     return h;
   }
 

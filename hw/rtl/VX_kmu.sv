@@ -339,6 +339,7 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
     // on the source side and adds no latency.
     // Compute kernel arguments: the full CTA grid descriptor.
     kmu_compute_args_t kmu_comp;
+    assign kmu_comp.__padding  = '0;
     assign kmu_comp.grid_dim   = dcr_grid_dim;
     assign kmu_comp.block_idx  = block_idx_r;
     assign kmu_comp.block_dim  = dcr_block_dim;

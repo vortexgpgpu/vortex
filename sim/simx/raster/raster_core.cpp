@@ -55,6 +55,8 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
        | ((pos_y & ((1u << kPosBits) - 1u)) << (4 + kPosBits));
 }
 
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+
 // Early-Z: evaluate the screen-space depth plane at pixel center (X,Y) and
 // quantize to the 24-bit zbuf value. Bit-identical to the FS late-Z path (kernel
 // PLANE_Z Q7.24 plane MAC written SATURATED to [0, OM_DEPTH_MASK]), so early-Z
@@ -93,6 +95,8 @@ inline bool earlyz_occluded(uint32_t func, uint32_t cand, uint32_t stored) {
   default:                       return false;            // never early-cull
   }
 }
+
+#endif
 
 } // namespace
 
@@ -196,6 +200,7 @@ public:
   // can test against committed depth. Called by Cluster::dcr_write for OM-range
   // writes; does NOT re-arm the producer (unlike a raster DCR write).
   void om_dcr_snoop(uint32_t addr, uint32_t value) {
+  #if VX_CFG_RASTER_EARLYZ_ENABLED
     switch (addr) {
     case VX_DCR_OM_ZBUF_ADDR:    zbuf_base_  = uint64_t(value) << 6; break;
     case VX_DCR_OM_ZBUF_PITCH:   zbuf_pitch_ = value; break;
@@ -203,6 +208,9 @@ public:
     case VX_DCR_OM_EARLYZ_SAFE:  earlyz_safe_ = value; break;
     default: break;
     }
+  #else
+    __unused(addr, value);
+  #endif
   }
 
   const RasterCore::PerfStats& perf_stats() const { return perf_stats_; }
@@ -895,6 +903,8 @@ private:
     have_drained_signal_ = true;
   }
 
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+
   // ── Early-Z: narrow a served quad's coverage against committed depth ──
   // Tests each covered pixel's plane depth against the depth buffer and clears
   // its coverage bit only when the fragment is STRICTLY behind (earlyz_occluded).
@@ -939,6 +949,8 @@ private:
     s.pos_mask = (s.pos_mask & ~0xfu) | new_cov;
   }
 
+#endif
+
   // ── Serve per-core pops from the requester's owned queue ────────────
   void serve_consumers() {
     auto& req_ch = simobject_->raster_req_in.at(0);
@@ -960,8 +972,11 @@ private:
         if (q.empty()) continue;
         rsp.stamps[t] = q.front();
         q.pop();
-        if (earlyz_safe_)
+      #if VX_CFG_RASTER_EARLYZ_ENABLED
+        if (earlyz_safe_) {
           early_z_cull(rsp.stamps[t]);
+        }
+      #endif
       }
       rsp_ch.send(rsp);
       req_ch.pop();
@@ -973,13 +988,17 @@ private:
   Cluster*                   cluster_;
   RasterDCRS       dcrs_;
 
+#if VX_CFG_RASTER_EARLYZ_ENABLED
   // Early-Z config snooped from the OM depth DCRs (the depth buffer is
   // shared with the ROP). Gated by VX_DCR_OM_EARLYZ_SAFE, which the driver sets
   // only when the FS has no depth-export and the func is monotonic (LESS/LEQUAL).
+  // The whole stage follows the same knob the datapath does, so a configuration
+  // without it does not model a cull it would never perform.
   uint32_t                   earlyz_safe_ = 0;
   uint64_t                   zbuf_base_   = 0;   // byte address (ZBUF_ADDR << 6)
   uint32_t                   zbuf_pitch_  = 0;
   uint32_t                   depth_func_  = VX_OM_DEPTH_FUNC_ALWAYS;
+#endif
 
   // Fragment-shader dispatch descriptor (RASTER_FRAG_* DCRs). Persists across
   // the per-launch reset (re-supplied by each draw's DCR sequence); used to arm

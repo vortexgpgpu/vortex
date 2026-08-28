@@ -42,6 +42,8 @@
 #include <list>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 #include <util.h>
 #include <mem_alloc.h>
 #include <mp_macros.h>
@@ -156,6 +158,11 @@ public:
     stop_ = true;
     if (future_.valid()) {
       future_.wait();
+    }
+    if (rsp_reorder_seed() != 0) {
+      fprintf(stderr, "[xrtsim] response reordering: seed=%u, %lu responses "
+                      "returned ahead of an older ready one\n",
+              rsp_reorder_seed(), (unsigned long)rsp_reordered_);
     }
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       delete mem_alloc_[b];
@@ -726,11 +733,16 @@ private:
       if (*m_axi_mem_[b].rvalid && m_axi_states_[b].read_rsp_ready) {
         *m_axi_mem_[b].rvalid = 0;
       }
-      if (!*m_axi_mem_[b].rvalid) {
-        if (!pending_mem_reqs_[b].empty()
-        && (*pending_mem_reqs_[b].begin())->ready
-        && !(*pending_mem_reqs_[b].begin())->write) {
-          auto mem_rsp_it = pending_mem_reqs_[b].begin();
+      if (!*m_axi_mem_[b].rvalid && !rsp_stall()) {
+        auto mem_rsp_it = pending_mem_reqs_[b].end();
+        if (rsp_reorder_seed() != 0) {
+          mem_rsp_it = pick_response(pending_mem_reqs_[b], false);
+        } else if (!pending_mem_reqs_[b].empty()
+                && (*pending_mem_reqs_[b].begin())->ready
+                && !(*pending_mem_reqs_[b].begin())->write) {
+          mem_rsp_it = pending_mem_reqs_[b].begin();
+        }
+        if (mem_rsp_it != pending_mem_reqs_[b].end()) {
           auto mem_rsp = *mem_rsp_it;
           *m_axi_mem_[b].rvalid = 1;
           *m_axi_mem_[b].rid    = mem_rsp->tag;
@@ -747,10 +759,15 @@ private:
         *m_axi_mem_[b].bvalid = 0;
       }
       if (!*m_axi_mem_[b].bvalid) {
-        if (!pending_mem_reqs_[b].empty()
-        && (*pending_mem_reqs_[b].begin())->ready
-        && (*pending_mem_reqs_[b].begin())->write) {
-          auto mem_rsp_it = pending_mem_reqs_[b].begin();
+        auto mem_rsp_it = pending_mem_reqs_[b].end();
+        if (rsp_reorder_seed() != 0) {
+          mem_rsp_it = pick_response(pending_mem_reqs_[b], true);
+        } else if (!pending_mem_reqs_[b].empty()
+                && (*pending_mem_reqs_[b].begin())->ready
+                && (*pending_mem_reqs_[b].begin())->write) {
+          mem_rsp_it = pending_mem_reqs_[b].begin();
+        }
+        if (mem_rsp_it != pending_mem_reqs_[b].end()) {
           auto mem_rsp = *mem_rsp_it;
           *m_axi_mem_[b].bvalid = 1;
           *m_axi_mem_[b].bid    = mem_rsp->tag;
@@ -837,6 +854,79 @@ private:
     bool last;     // last beat of its burst — drives rlast
   } mem_req_t;
 
+  // Whether read/write responses may complete out of request order, and the
+  // seed that makes a reordering run reproducible.
+  //
+  // AXI4 orders responses only within an ID; across IDs a slave may return them
+  // in any order, and real memory systems do. This model returned them strictly
+  // in request order, so no simulation here has ever exercised out-of-order
+  // completion -- a device-side path that assumes it passes every test and
+  // fails only on hardware. Off by default so existing runs are unchanged.
+  static uint32_t rsp_reorder_seed() {
+    static const uint32_t value = [] {
+      const char *env = getenv("VX_MEM_RSP_REORDER");
+      return env != nullptr ? uint32_t(strtoul(env, nullptr, 0)) : 0u;
+    }();
+    return value;
+  }
+
+  uint32_t next_rand() {
+    rsp_rng_ = rsp_rng_ * 1103515245u + 12345u;
+    return rsp_rng_ >> 16;
+  }
+
+  // Reordering needs responses to accumulate before there is anything to
+  // reorder. Draining one the cycle it becomes ready leaves a choice of one,
+  // which is how the first version of this knob reordered exactly nothing.
+  // Randomly withholding the response channel builds up a pool and jitters
+  // latency the way a real controller does.
+  // Fraction of cycles the response channel is withheld, in eighths. Deeper
+  // pools mean more candidates to choose between and so more reordering;
+  // VX_MEM_RSP_STALL tunes it because how much depth is needed to expose a
+  // given race is not knowable in advance.
+  static uint32_t rsp_stall_eighths() {
+    static const uint32_t value = [] {
+      const char *env = getenv("VX_MEM_RSP_STALL");
+      return env != nullptr ? uint32_t(strtoul(env, nullptr, 0)) : 4u;
+    }();
+    return value > 7 ? 7u : value;
+  }
+
+  bool rsp_stall() {
+    return (rsp_reorder_seed() != 0) && ((next_rand() & 7) < rsp_stall_eighths());
+  }
+
+  // The oldest still-pending response of each ID, in the requested direction.
+  // Only these may complete: anything behind an entry of the same ID would
+  // violate the per-ID ordering AXI does require, and returning it would make
+  // the model illegal rather than merely adversarial.
+  std::list<mem_req_t*>::iterator pick_response(std::list<mem_req_t*>& reqs, bool write) {
+    std::unordered_set<uint32_t> seen;
+    std::vector<std::list<mem_req_t*>::iterator> eligible;
+    for (auto it = reqs.begin(); it != reqs.end(); ++it) {
+      if ((*it)->write != write) {
+        continue;
+      }
+      if (!seen.insert((*it)->tag).second) {
+        continue; // an older response with this ID has not gone out yet
+      }
+      if ((*it)->ready) {
+        eligible.push_back(it);
+      }
+    }
+    if (eligible.empty()) {
+      return reqs.end();
+    }
+    const size_t pick = next_rand() % eligible.size();
+    // A run that passes proves nothing unless the model actually reordered
+    // anything. Count the responses returned ahead of an older ready one so a
+    // green result can be told apart from a knob that silently did nothing.
+    if (pick != 0) {
+      ++rsp_reordered_;
+    }
+    return eligible[pick];
+  }
+
   typedef struct {
     CData* awvalid;
     CData* awready;
@@ -896,6 +986,8 @@ private:
   };
 
   std::list<mem_req_t*> pending_mem_reqs_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
+  uint32_t rsp_rng_ = rsp_reorder_seed();
+  uint64_t rsp_reordered_ = 0;
 
   m_axi_mem_t m_axi_mem_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
 

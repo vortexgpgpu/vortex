@@ -1,0 +1,35 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * A private array written and read at indices the compiler cannot resolve.
+ *
+ * Indexing a *constant* array by gl_VertexIndex folds into a load from a
+ * constant buffer, which is a different path. Writing the array at a rotating
+ * offset first makes it mutable and gives both the store and the load a runtime
+ * index -- the shape that survives as a real indirect access into a stack slot
+ * rather than a select chain over SSA values. */
+#version 450
+
+/* Matched to the host's specialization constant, as in cflow.comp: the default
+ * Vortex config is 4 threads x 4 warps, so no workgroup size may be baked in. */
+layout(local_size_x_id = 0) in;
+
+layout(set = 0, binding = 0, std430) buffer B { uint data[]; };
+
+#define SLOTS 64u
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+
+   /* Rotating the destination by the invocation index makes the store index
+    * runtime-dependent even after the loop is fully unrolled. */
+   uint tbl[SLOTS];
+   for (uint k = 0u; k < SLOTS; k++) {
+      tbl[(k + i) % SLOTS] = k;
+   }
+
+   /* Reading one slot rather than reducing over all of them keeps the answer
+    * sensitive to the index: a rotation applied wrongly still sums the same. */
+   data[i] = tbl[(i * 7u) % SLOTS];
+}

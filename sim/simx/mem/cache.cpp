@@ -362,6 +362,10 @@ struct bank_req_t {
   std::shared_ptr<mem_block_t> data;
   uint64_t byteen;
 
+  // Comparand, read only by compare-and-swap: data already carries the swap
+  // value, so the comparand cannot share it.
+  uint64_t amo_cmp;
+
   // `flags.amo_unsigned` distinguishes signed vs unsigned MIN/MAX.
   // Other bits ride along for future use.
   MemFlags flags;
@@ -393,6 +397,7 @@ struct bank_req_t {
     skip_core_rsp = false;
     data.reset();
     byteen = 0;
+    amo_cmp = 0;
     flags = MemFlags{};
     adm_seq = 0;
   }
@@ -930,6 +935,7 @@ private:
             coalesced.op      = core_req.op;
             coalesced.data    = core_req.data;
             coalesced.byteen  = core_req.byteen;
+            coalesced.amo_cmp = core_req.amo_cmp;
             coalesced.flags   = core_req.flags;
             assert(!mshr_.full());
             int id = mshr_.enqueue(coalesced, adm_set_id, adm_addr_tag, adm_sector);
@@ -971,6 +977,7 @@ private:
       bank_req.op      = core_req.op;
       bank_req.data    = core_req.data;
       bank_req.byteen  = core_req.byteen;
+      bank_req.amo_cmp = core_req.amo_cmp;
       bank_req.flags   = core_req.flags;
       pipe_req_->push(bank_req);
       DT(3, this->name() << " core-req: " << core_req);
@@ -1162,7 +1169,8 @@ private:
     if (hit_sec.data) {
       old_word = amo_load_word(hit_sec.data->data(), byte_off, width);
     }
-    auto rmw = amo_unit_.compute(op, width, old_word, rhs, unsigned_minmax);
+    auto rmw = amo_unit_.compute(op, width, old_word, rhs, unsigned_minmax,
+                                 bank_req.amo_cmp);
 
     // Build response payload: a fresh block with the relevant word at byte_off.
     // For LR/AMO* the word carries old_word (LSU sext at width gives rd).
@@ -1343,6 +1351,7 @@ private:
       amo_fwd.uuid    = bank_req.uuid;
       amo_fwd.op      = bank_req.op;
       amo_fwd.byteen  = bank_req.byteen;  // carries width info (popcount-derived at LLC)
+      amo_fwd.amo_cmp = bank_req.amo_cmp;
       amo_fwd.data    = bank_req.data;    // carries rhs (extracted at LLC)
       amo_fwd.flags   = bank_req.flags;   // carry amo_unsigned (signed vs unsigned MIN/MAX)
       this->mem_req_out.send(amo_fwd, MEM_REQ_DELAY);

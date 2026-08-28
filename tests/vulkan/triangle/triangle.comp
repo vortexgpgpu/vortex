@@ -1,0 +1,25 @@
+#version 450
+
+/* Compute half of the mixed compute+graphics test in tests/vulkan/triangle.
+ *
+ * The point is not the arithmetic, it is that a compute pipeline and a graphics
+ * pipeline coexist in one context. The driver links compute kernels and
+ * fragment shaders at the same fixed device address, so only one of them can be
+ * resident and whichever holds it has to give it up when the other is used.
+ * Nothing else in the suite binds both pipeline types, so nothing else can
+ * catch a missing eviction.
+ *
+ * data[i] += 1 twice, once either side of the draw, so the final value also
+ * shows the second dispatch survived a fragment shader taking the address in
+ * between. */
+
+layout(local_size_x_id = 0) in;
+
+layout(std430, binding = 0) buffer Buf {
+   uint data[];
+};
+
+void main()
+{
+   data[gl_GlobalInvocationID.x] += 1u;
+}

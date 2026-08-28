@@ -69,6 +69,9 @@ module VX_tex_dcr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                     dcrs_n.logdims[0] = write_data[0  +: TEX_LOD_BITS];
                     dcrs_n.logdims[1] = write_data[16 +: TEX_LOD_BITS];
                 end
+                `VX_DCR_TEX_BORDER: begin
+                    dcrs_n.border = write_data;
+                end
                 default: begin
                     for (integer j = 0; j <= `VX_TEX_LOD_MAX; ++j) begin
                         if (write_addr == `VX_DCR_TEX_MIPOFF(VX_DCR_ADDR_WIDTH'(j))) begin

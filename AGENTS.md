@@ -55,6 +55,7 @@ See [docs/install_vortex.md](docs/install_vortex.md) for the full recipe. The no
 - **Re-`../configure` from `build/`** whenever you `git pull`, edit source Makefiles, edit `VX_config.toml` / any `*.toml`, or add/remove a build-participating directory. Symptom of forgetting this: stale binaries, missing targets, or "I edited this Makefile and nothing happened."
 - **Always ensure the build is current before running any test or app** — re-run `../configure` from `build/` first. `configure` regenerates `<build>/sw/VX_config.h` and `<build>/hw/*.vh` from `VX_config.toml`, but only when the toml is newer (it guards on mtime). The simx/RTL **cores `#include` this generated header**, so a stale header makes a core compile against old config values and silently diverge from the toml — and from the runtime/RTL, which re-expand the config every build. This is a real footgun: a stale `VX_config.h` once made SimX run a write-back D-cache while the toml/RTL were write-through, producing SimX-only wrong results. **Never** work around such a divergence by injecting `-DVX_CFG_*` overrides into a Makefile — that masks the stale artifact and fights the config system. The toml is the single source of truth; fix it by re-`configure`-ing.
 - **`ccache` can serve stale objects on `fmt`-version mismatches** (typical symptom: `fmt::v8` undefined-reference link errors in sim builds). Before deep-diving, retry with `CCACHE_DISABLE=1`.
+- **Toolchain changes must ship through `vortex-toolchain-prebuilt`.** Vortex never builds its toolchain components from source: `ci/toolchain_install.sh` (used by CI and by every fresh `TOOLDIR`) downloads prebuilt binary tarballs from the `vortex-toolchain-prebuilt` repository at the tag pinned in `VERSION` (`TOOLCHAIN_REV`), resolved at run time. So any change to a component packaged there (mesa, pocl, LLVM, RISC-V GNU, libc/libcrt, Verilator, ...) is invisible to Vortex until the corresponding tarball is repackaged, committed to `vortex-toolchain-prebuilt`, and the pinned tag is moved — pushing the component's source repo alone does nothing for CI. Landing order for a coupled change: component source repos first, then the prebuilt refresh (tarballs + tag push), then the Vortex push **last, immediately after**, so the CI run the Vortex push triggers already downloads matching binaries.
 
 ---
 
@@ -120,10 +121,11 @@ CONFIGS="-DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -D
 
 ### Roofline Analysis
 
-Use `--perf=1` for detailed performance counters such as scheduler utilization, pipeline stalls, instruction mix, and memory latency.
+`ci/roofline.py` runs a kernel via `blackbox.sh`, optionally sweeps microarchitecture knobs to maximize IPC (`--config=fast|random|best`, comma-lists as search spaces), and plots a FLOP/cycle roofline. Run it from a configured build directory. `--perf=7` (the default) is required for the memory-traffic counters that place the measured point; pass the kernel's total FLOPs via `--flops`. The default compute roof models the scalar FPU — for TCU kernels pass `--peak-flops` explicitly.
 
 ```bash
-/usr/bin/python3 ../perf/roofline.py --app=sgemm_tcu --driver=simx --cores=1 --warps=4 --threads=8 --issue-width=2 --perf=1 --by-cycle --output=sgemm_tcu_roofline.png
+python3 ci/roofline.py --app=sgemm --driver=simx --args="-n128" --flops=4194304 \
+  --cores=1 --warps=4 --threads=8 --issue-width=2 --plot --output=sgemm_roofline.png
 ```
 
 ---

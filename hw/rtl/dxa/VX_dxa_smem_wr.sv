@@ -74,7 +74,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // Multicast (always available; active when is_multicast is set).
     input  wire                        is_multicast,
-    input  wire [`VX_CFG_NUM_WARPS-1:0] cta_mask,
+    input  wire [`VX_CFG_NUM_WARPS-1:0]       cta_mask,
     input  wire [31:0]                 smem_stride,
 
     // K-major scatter mode (stable per transfer):
@@ -107,12 +107,9 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam SEQ_W        = `CLOG2(MAX_OUTSTANDING + 1);
     localparam FILL_CAP     = CL_SIZE + SMEM_WORD_SIZE;
     localparam FILL_W       = `CLOG2(FILL_CAP + 1);
-    // The positioning is split into a fine (intra-SMEM-word) shift applied at
-    // capture and a coarse (whole-SMEM-word) shift applied at fb-load. The fine
-    // shift spans at most one SMEM word, so the deep byte-granular barrel no
-    // longer covers the full FILL_CAP in a single cycle; the coarse shift is a
-    // shallow word-granular select on the (off-steady-state) fb-load stage.
-    localparam SMEM_DATAW_LOG = SMEM_OFF_W + 3;                          // log2(SMEM_DATAW)
+    // Positioning is split fine (intra-word, at capture) + coarse (whole-word, at
+    // fb-load) so no single-cycle barrel spans the full FILL_CAP.
+    localparam SMEM_DATAW_LOG = SMEM_OFF_W + 3;
     localparam SMEM_WORDS_CAP = (FILL_CAP + SMEM_WORD_SIZE - 1) / SMEM_WORD_SIZE;
     localparam COARSE_W       = `CLOG2(SMEM_WORDS_CAP + 1);
 
@@ -211,13 +208,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [15:0]                pend_n_in_r;
     reg                       pend_calc_r;
     reg                       pend_addr_rdy_r;
-    // Payload held FINE-positioned — the capture-stage shift applies only the
-    // intra-SMEM-word (fine) component of the positioning: it drops the CL
-    // leading byte_offset modulo one SMEM word. The whole-SMEM-word (coarse)
-    // component is applied by a shallow word-granular shift at fb-load, so the
-    // deep byte barrel at capture spans one SMEM word, not the full FILL_CAP.
-    // pend_coarse_r carries that coarse word count. Width is FILL_CAP (CL + one
-    // SMEM word of in-word-offset headroom).
+    // Fine-positioned payload; pend_coarse_r is the whole-word residual applied at
+    // fb-load. Width FILL_CAP (CL + one SMEM word of in-word-offset headroom).
     reg [FILL_CAP*8-1:0]      pend_data_r;
     reg [COARSE_W-1:0]        pend_coarse_r;
 
@@ -353,12 +345,9 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire sw_accept     = sw_valid && sw_ready;
     wire sw_defer_path = sw_accept && sw_is_last_defer;
-    // Every non-deferred CL is captured into pend (no combinational sw→fb
-    // bypass): the fb_data_r load source is then always a fine-positioned
-    // register, so the only shift on the load path is the shallow coarse
-    // whole-word select — the deep byte barrel stays at capture. The extra
-    // cycle only occurs at fill-empty boundaries, off the throughput-bound
-    // steady state.
+    // Every non-deferred CL is captured into pend (no combinational sw→fb bypass),
+    // so the fb-load source is always a register; only the shallow coarse shift is
+    // on the load path. The extra cycle is at fill-empty boundaries only.
     wire sw_pend_path  = sw_accept && ~sw_is_last_defer;
 
     // Deferred-CL promotion to fb: fires when fb is emptying and we are
@@ -384,10 +373,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire use_defer_for_fb = promote_defer && ~use_pend_for_fb;
     wire fb_load_now      = use_pend_for_fb || use_defer_for_fb;
 
-    // pend/defer hold the FINE-positioned payload; fb-load applies the remaining
-    // coarse (whole-SMEM-word) shift — a shallow word-granular select — to land
-    // the payload at its final position. The fine+coarse pair reproduces the full
-    // byte-granular positioning with no full-FILL_CAP barrel in either stage.
+    // Apply the coarse whole-word shift the capture stage deferred; with the fine
+    // shift already in pend/defer this fully positions the payload.
     wire [FILL_CAP*8-1:0]      fb_load_fine            = use_pend_for_fb ? pend_data_r : defer_data_r;
     wire [COARSE_W-1:0]        fb_load_coarse          = use_pend_for_fb ? pend_coarse_r : defer_coarse_r;
     wire [FILL_CAP*8-1:0]      fb_load_data            = fb_load_fine >> {fb_load_coarse, {SMEM_DATAW_LOG{1'b0}}};
@@ -406,16 +393,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         scatter ? FILL_W'(fb_load_valid_length)
                 : (FILL_W'(new_smem_byte_off) + FILL_W'(fb_load_valid_length));
 
-    // ── Positioning shift, split fine (capture) + coarse (fb-load) ──
-    // The full positioning drops the CL leading byte_offset AND places the bytes
-    // at their destination position (row-major: at the in-word offset smem_off;
-    // K-major: at byte 0). A constant pre-shift by POS_BIAS bytes keeps the
-    // combined amount non-negative for both modes. That total byte amount
-    // (sw_pos_amt) is split here into a fine part (< SMEM_WORD_SIZE, applied to
-    // the payload at capture) and a coarse part (whole SMEM words, applied at
-    // fb-load). Because fine ∘ coarse == the original single byte-granular shift,
-    // the result is bit-identical while neither stage carries a full-FILL_CAP
-    // barrel; the fb_data_r drain datapath still sees no variable shift.
+    // Positioning drops the CL byte_offset and lands bytes at their destination;
+    // POS_BIAS keeps the amount non-negative. sw_pos_amt splits into fine
+    // (capture) + coarse (fb-load), bit-identical to the one byte-shift but with
+    // neither stage barreling the full FILL_CAP.
     localparam POS_BIAS = SMEM_WORD_SIZE - 1;
     // Positioning amount = POS_BIAS (≤ SMEM_WORD_SIZE-1) + byte_offset (≤ CL_SIZE-1),
     // less the SMEM in-word offset. With wide SMEM words (XLEN=64 → SMEM_WORD_SIZE
@@ -425,8 +406,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [FILL_W-1:0] sw_pos_amt = scatter
         ? (FILL_W'(POS_BIAS) + FILL_W'(sw_byte_offset))
         : ((FILL_W'(POS_BIAS) + FILL_W'(sw_byte_offset)) - FILL_W'(sw_smem_off));
-    // Fine = intra-SMEM-word bytes (drives the capture barrel, ≤ SMEM_WORD_SIZE);
-    // coarse = whole SMEM words (registered per slot, applied at fb-load).
+    // Fine = intra-word bytes (capture barrel); coarse = whole words (at fb-load).
     wire [SMEM_OFF_W-1:0] sw_fine_amt   = sw_pos_amt[SMEM_OFF_W-1:0];
     wire [COARSE_W-1:0]   sw_coarse_amt = COARSE_W'(sw_pos_amt >> SMEM_OFF_W);
     // Per-CL element-0 tiled destination — the only place the full permute
@@ -470,8 +450,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire [GMEM_DATAW-1:0] sw_payload      = sw_oob ? cfill_replicated : sw_data;
     wire [FILL_CAP*8-1:0] sw_padded       = (FILL_CAP*8)'(sw_payload) << (POS_BIAS*8);
-    // Capture applies the fine (≤ SMEM_WORD_SIZE) shift only; the coarse whole-word
-    // shift is applied at fb-load from the registered sw_coarse_amt.
+    // Capture applies the fine shift only; coarse follows at fb-load.
     wire [FILL_CAP*8-1:0] sw_fine_shifted = (sw_valid_length != 0)
         ? (sw_padded >> {sw_fine_amt, 3'b000}) : '0;
 
@@ -523,10 +502,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             end
 
             // ── Load fill buffer with the next CL ──
-            //   pend/defer hold the fine-positioned payload; fb_load_data has the
-            //   coarse whole-word shift already applied (a shallow word-granular
-            //   select), so the resulting fb_data_r is fully positioned — the
-            //   fb_data_r drain datapath still carries no variable barrel shift.
+            //   fb_load_data is already fully positioned (fine from pend/defer +
+            //   coarse applied above), so this is a plain register load.
             if (fb_load_now) begin
                 fb_data_r        <= fb_load_data;
                 fb_level_r       <= new_fill_level;

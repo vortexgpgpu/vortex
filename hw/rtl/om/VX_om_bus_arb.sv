@@ -30,7 +30,7 @@ module VX_om_bus_arb import VX_gpu_pkg::*, VX_om_pkg::*; #(
     VX_om_bus_if.master    bus_out_if [NUM_OUTPUTS]
 );
 
-    localparam REQ_DATAW  = UUID_WIDTH + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BITS + 1);
+    localparam REQ_DATAW  = UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BITS + 1);
 
     wire [NUM_INPUTS-1:0]                 req_valid_in;
     wire [NUM_INPUTS-1:0][REQ_DATAW-1:0]  req_data_in;
