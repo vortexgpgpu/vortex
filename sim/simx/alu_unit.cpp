@@ -78,7 +78,9 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 		case MdvType::DIVU:
 		case MdvType::REM:
 		case MdvType::REMU:
-			return VX_CFG_XLEN+2;
+			// Simulation divides are fully pipelined at the multiplier's
+			// depth, not iterative.
+			return 2;
 		default:
 			std::abort();
 		}

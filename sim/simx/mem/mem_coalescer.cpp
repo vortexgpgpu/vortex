@@ -26,7 +26,9 @@ MemCoalescer::MemCoalescer(
   uint32_t queue_size,
   uint32_t delay
 ) : SimObject<MemCoalescer>(ctx, name)
-  , ReqIn(this)
+  // Single-entry ingress: one request in build/drain flight at a time; a
+  // second request waits upstream rather than in local queue slack.
+  , ReqIn(this, 1)
   , RspOut(this)
   , ReqOut(output_size, this)
   , RspIn(output_size, this)

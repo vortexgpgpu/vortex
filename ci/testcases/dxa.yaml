@@ -513,10 +513,12 @@ tests:
 - id: model_parity-wgmma-sp-dxa
   check: model_parity
   # Execution passes and retired instructions match exactly; cycles diverge
-  # (~22%, RTL slower). The sparse-WGMMA + DXA mix compounds two timing-model
-  # gaps: the decoupled LSU pending pool and DXA multicast issue. Parity
-  # divergence only; pending SimX timing alignment.
-  tolerance: 0.10   # SimX timing model lags the LSU pending pool + DXA issue (instrs match; cycles ~22%)
+  # (~17%, RTL slower). Same contended issue-path serialization family as
+  # core:parity-sgemm-mc, compounded here by the 32-thread warp-group shape
+  # driving many load fragments per warp. Tracked as follow-up SimX timing
+  # alignment.
+  known_issue: "SimX under-models contended issue-path serialization for 32-thread warp groups (instrs match; cycles ~17%)"
+  tolerance: 0.10
   via: blackbox
   app: sgemm_tcu_wg_sp_dxa
   args: -m 128 -n 128 -k 128

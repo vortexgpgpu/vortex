@@ -20,7 +20,10 @@ LocalMemSwitch::LocalMemSwitch(
   const char* name,
   uint32_t delay
 ) : SimObject<LocalMemSwitch>(ctx, name)
-  , ReqIn(this)
+  // Single-entry ingress: the switch accepts a new request only as its
+  // current one drains, so upstream issue feels downstream cadence
+  // immediately instead of running ahead into queue slack.
+  , ReqIn(this, 1)
   , RspOut(this)
   , ReqOutLmem(this)
   , RspInLmem(this)

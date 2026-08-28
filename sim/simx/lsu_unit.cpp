@@ -280,7 +280,9 @@ void LsuUnit::process_response_step(uint32_t b) {
 	if (entry.count == 0) {
 		state.pending_reqs.release(lsu_rsp.tag);
 		if (entry.eop) {
-			output.send(trace, 1);
+			// Load writeback crosses one more registered stage than the
+			// direct-commit path before reaching the commit arbiter.
+			output.send(trace, 2);
 		}
 	}
 	pending_loads_ -= lsu_rsp.mask.count();
