@@ -88,6 +88,7 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
     new (uop_trace) instr_trace_t(uop_instr->get_uuid());
     uop_trace->cid       = trace->cid;
     uop_trace->wid       = trace->wid;
+    uop_trace->cta_id    = trace->cta_id;
     uop_trace->PC        = trace->PC;
     uop_trace->tmask     = uop_instr->get_tmask().any() ? uop_instr->get_tmask() : trace->tmask;
     uop_trace->instr_ptr = uop_instr;
