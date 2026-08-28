@@ -1,8 +1,18 @@
 # V80 Stabilization: Full Issue Inventory, Fix Proposal, and Execution Plan
 
-Date: 2026-08-28. Status: EXECUTED — see §3 for the outcome. Phases 0–4 are
-complete and green on rstmin8 silicon; phase 5 (the rel1 full-configuration
-build) was started with every fix included.
+Date: 2026-08-28. Status: EXECUTED AND COMPLETE — all five phases green.
+
+**Final scoreboard, rel1 (full configuration: 2 cores, 16 warps × 8 threads,
+every fix included).** The build closed timing for the first time on a
+full config (WNS +0.059 ns, 0 failing endpoints of 515k) and finished in
+~1 h. Loaded by partial reconfiguration, no reboot. On silicon: fence
+health PASSED with 0 warnings, demo 12/12, sweep 5/5 (minimal, vecadd,
+demo, sgemv, sgemm — sgemv/sgemm 4–16× faster than the minimal config, as
+expected), three-stage reset acceptance ACCEPTED (including livelocked-
+kernel recovery), large sgemm PASSED. On the minimal config the same
+software had already soaked demo 30/30. One noted non-blocker: sweep's
+demo cycle count on rel1 (1.5M) is an outlier against its other tests'
+speedups — results are correct; left as a perf question, not a defect.
 
 ## 3. Outcome (written after execution — read this first)
 
