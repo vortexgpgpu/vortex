@@ -157,7 +157,7 @@ builds:
   group: vm
   dut: vm
   clock_mhz: 250
-  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_CORES=2
 
 # --- graphics (combined subsystem) -------------------------------------------
 
