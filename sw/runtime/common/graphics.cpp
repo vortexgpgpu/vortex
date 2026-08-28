@@ -314,8 +314,8 @@ vx_result_t FrontEndPool::init(vx_device_h dev, vx_kernel_h setup_k,
 
   vx_result_t r;
   // No slot_prim/slot_bbox scratch: setup_k counts survivors and EMIT recomputes
-  // clip+setup straight into the dense primbuf, so the 120-byte rast_prim_t is
-  // never staged to a per-triangle slot (slot_*_addr stay 0 in pipe_arg_t).
+  // clip+setup straight into the dense primbuf, so a rast_prim_t is never staged
+  // to a per-triangle slot (slot_*_addr stay 0 in pipe_arg_t).
 
   // Two-heap residency split: the device-only shader scratch regions live
   // in ONE pooled slab (collapsing 12 separate allocations into a single resident

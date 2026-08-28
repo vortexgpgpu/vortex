@@ -100,6 +100,10 @@ typedef struct {
   uint32_t depth_enabled, stencil_enabled[2], blend_enabled;
   uint32_t cbuf_writemask;
   uint32_t color_read, color_write;
+  // Depth bounds test. min/max are pre-encoded host-side into the bound depth
+  // format's value range (inclusive), so the device compares integers.
+  uint32_t depth_bounds_enable;
+  uint32_t depth_bounds_min, depth_bounds_max;
 } gfx_sw_omstate_t;
 
 // Per-attachment colour descriptor for MRT (mirror of gfx_sw::om_color_t). The
@@ -305,16 +309,24 @@ typedef struct {
 // emitted when any sample of any of its four pixels is covered.
 uint32_t gfx_rast_walk_tile_msaa_sw(const void* prim, uint32_t pid,
                                     uint32_t tx, uint32_t ty, uint32_t tile_logsize,
-                                    uint32_t scissor_w, uint32_t scissor_h,
+                                    uint32_t scissor_left, uint32_t scissor_top,
+                                    uint32_t scissor_right, uint32_t scissor_bottom,
                                     gfx_rast_msaa_quad_t* out, uint32_t max);
 
 // Walk one primitive over one screen tile (origin tx,ty, side 1<<tile_logsize),
 // appending every covered quad to out[0..max). Returns the count (capped at max).
 // `prim` points at the resident rast_prim_t for `pid`. Used by the SW-raster FS
 // wrapper variant (one thread per tile iterates all prims in draw order).
+//
+// The scissor is the full rect the coverage walk is confined to, not just a
+// width/height: it carries the app's VkScissor intersected with the viewport
+// rect, which has a non-zero origin whenever the app scissors a sub-rectangle.
+// Passing only an extent would silently pin the rect's corner to (0,0) and clip
+// the wrong side.
 uint32_t gfx_rast_walk_tile_sw(const void* prim, uint32_t pid,
                                uint32_t tx, uint32_t ty, uint32_t tile_logsize,
-                               uint32_t scissor_w, uint32_t scissor_h,
+                               uint32_t scissor_left, uint32_t scissor_top,
+                               uint32_t scissor_right, uint32_t scissor_bottom,
                                gfx_rast_quad_t* out, uint32_t max);
 
 #ifdef __cplusplus

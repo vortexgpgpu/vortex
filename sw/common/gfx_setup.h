@@ -116,9 +116,15 @@ static inline vec4f ClipToScreen(const vec4f& in, float left, float right,
 // positive. Returns false for the degenerate (det==0) triangle, and — under a
 // face-cull mode (SETUP_CULL_*) — for the culled winding (BACK = negative
 // area, FRONT = positive). cull_mode defaults to two-sided (no cull).
+//
+// out_back receives the winding the flip is about to erase (true = back-facing),
+// which is the only place gl_FrontFacing can come from: after the flip both
+// windings look identical to every downstream consumer. Optional — pass nullptr
+// when the caller only wants coverage.
 static inline bool EdgeEquation(vec3f edges[3], const vec4f& v0,
                                 const vec4f& v1, const vec4f& v2,
-                                uint32_t cull_mode = SETUP_CULL_NONE) {
+                                uint32_t cull_mode = SETUP_CULL_NONE,
+                                bool* out_back = nullptr) {
   float a0 = (v1.y * v2.w) - (v2.y * v1.w);
   float a1 = (v2.y * v0.w) - (v0.y * v2.w);
   float a2 = (v0.y * v1.w) - (v1.y * v0.w);
@@ -138,6 +144,9 @@ static inline bool EdgeEquation(vec3f edges[3], const vec4f& v0,
   if ((cull_mode == SETUP_CULL_BACK  &&  back) ||
       (cull_mode == SETUP_CULL_FRONT && !back))
     return false;                          // face-culled
+  if (out_back != nullptr) {
+    *out_back = back;
+  }
   if (back) {
     for (int i = 0; i < 3; ++i) {
       edges[i].x *= -1.0f; edges[i].y *= -1.0f; edges[i].z *= -1.0f;
@@ -200,13 +209,15 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
 
   // Edge equations in HDC.
   vec3f edges[3];
+  bool back = false;
   {
     vec4f ph0 = ClipToHDC(p0, L, R, T, B, zn, zf, halfz);
     vec4f ph1 = ClipToHDC(p1, L, R, T, B, zn, zf, halfz);
     vec4f ph2 = ClipToHDC(p2, L, R, T, B, zn, zf, halfz);
-    if (!EdgeEquation(edges, ph0, ph1, ph2, cull_mode))
+    if (!EdgeEquation(edges, ph0, ph1, ph2, cull_mode, &back))
       return false;  // degenerate or face-culled
   }
+  out_prim.facing = back ? 1u : 0u;
 
   // Screen-space bbox (clamped to render target).
   vec4f ps0 = ClipToScreen(p0, L, R, T, B, zn, zf, halfz);
@@ -306,8 +317,13 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     // half of FloatA's +-128 range — headroom for rounding and the direct a2 plane.
     for (int g = 0; g < 24 && attr_max > 32.0f; ++g) {
       rhw0 *= 0.5f; rhw1 *= 0.5f; rhw2 *= 0.5f; attr_max *= 0.5f;
+      rhw_scale *= 0.5f;   // the fold is part of the scale gl_FragCoord.w undoes
     }
   }
+  // Record the total premultiplier so a consumer that reads the rhw plane on its
+  // own can recover 1/w. Every varying divides it out implicitly and never needs
+  // this; gl_FragCoord.w is the one reader that does.
+  out_prim.rhw_scale = rhw_scale;
   delta(out_prim.attribs.r,   v0.color[0]    * rhw0, v1.color[0]    * rhw1, v2.color[0]    * rhw2);
   delta(out_prim.attribs.g,   v0.color[1]    * rhw0, v1.color[1]    * rhw1, v2.color[1]    * rhw2);
   delta(out_prim.attribs.b,   v0.color[2]    * rhw0, v1.color[2]    * rhw1, v2.color[2]    * rhw2);

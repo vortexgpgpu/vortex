@@ -188,9 +188,26 @@ struct rast_attribs_t {
   rast_attrib_t z, r, g, b, a, u, v, rhw, w0, w1, w2, w3, w4, w5;
 };
 
+// Per-primitive scalars the fragment shader needs but the raster hardware does
+// not. They sit AFTER the attribute planes on purpose: RASTER fetches only words
+// 0..11 (the three edges plus the depth plane) and finds primitive N through the
+// VX_DCR_RASTER_PBUF_STRIDE DCR, so trailing fields cost stride and nothing else.
+//
+//   facing    1 = the source triangle wound backwards, 0 = forwards. EdgeEquation
+//             flips the edges so the interior is positive either way, which
+//             destroys the winding; gl_FrontFacing is this bit, recorded before
+//             the flip.
+//   rhw_scale the combined factor the `rhw` plane is premultiplied by (the
+//             per-triangle max normalization times the power-of-2 range fold).
+//             It cancels in the FS's interp(a*rhw)/interp(rhw) divide, so a
+//             varying never needs it -- but gl_FragCoord.w reads the rhw plane
+//             ALONE and must undo it: 1/w = interp(rhw) / rhw_scale. Zero when
+//             every vertex w was zero.
 struct rast_prim_t {
   vec3e_t        edges[3];
   rast_attribs_t attribs;
+  uint32_t       facing;
+  float          rhw_scale;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

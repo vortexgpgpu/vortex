@@ -211,11 +211,12 @@ extern "C" void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st,
 extern "C" uint32_t gfx_rast_walk_tile_msaa_sw(const void* prim, uint32_t pid,
                                                uint32_t tx, uint32_t ty,
                                                uint32_t tile_logsize,
-                                               uint32_t scissor_w, uint32_t scissor_h,
+                                               uint32_t scissor_left, uint32_t scissor_top,
+                                               uint32_t scissor_right, uint32_t scissor_bottom,
                                                gfx_rast_msaa_quad_t* out, uint32_t max) {
   using namespace gfx_rast;
   const auto* p = reinterpret_cast<const vortex::graphics::rast_prim_t*>(prim);
-  RastConfig cfg{ tile_logsize, 0, 0, scissor_w, scissor_h };
+  RastConfig cfg{ tile_logsize, scissor_left, scissor_top, scissor_right, scissor_bottom };
   uint32_t count = 0;
   auto emit = [&](uint32_t pos_mask, const vec3e_t* bc, const uint32_t* smask, uint32_t) {
     if (count >= max) {
@@ -256,11 +257,12 @@ extern "C" uint32_t gfx_rast_walk_tile_msaa_sw(const void* prim, uint32_t pid,
 
 extern "C" uint32_t gfx_rast_walk_tile_sw(const void* prim, uint32_t pid,
                                           uint32_t tx, uint32_t ty, uint32_t tile_logsize,
-                                          uint32_t scissor_w, uint32_t scissor_h,
+                                          uint32_t scissor_left, uint32_t scissor_top,
+                                          uint32_t scissor_right, uint32_t scissor_bottom,
                                           gfx_rast_quad_t* out, uint32_t max) {
   using namespace gfx_rast;
   const auto* p = reinterpret_cast<const vortex::graphics::rast_prim_t*>(prim);
-  RastConfig cfg{ tile_logsize, 0, 0, scissor_w, scissor_h };
+  RastConfig cfg{ tile_logsize, scissor_left, scissor_top, scissor_right, scissor_bottom };
   uint32_t count = 0;
   auto emit = [&](uint32_t pos_mask, const vec3e_t* bc, uint32_t) {
     if (count >= max) return;

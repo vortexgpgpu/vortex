@@ -171,6 +171,10 @@ struct om_state_t {
   uint32_t depth_enabled, stencil_enabled[2], blend_enabled;
   uint32_t cbuf_writemask;             // expanded 32-bit byte mask
   uint32_t color_read, color_write;
+  // depth bounds test; min/max are encoded in the bound depth format's
+  // value range (inclusive) so the compare stays integer on the device
+  uint32_t depth_bounds_enable;
+  uint32_t depth_bounds_min, depth_bounds_max;
 };
 
 // Derive the enable flags + expanded color mask exactly as the FF unit does.
@@ -306,6 +310,16 @@ static inline __attribute__((always_inline)) bool ds_test(const om_state_t& s, u
   uint32_t depth_val   = ds_val & dd.dmask;
   uint32_t stencil_val = dd.has_stencil ? ((ds_val >> dd.sshift) & 0xff) : 0;
   uint32_t depth_ref   = depth & dd.dmask;
+
+  /* Depth bounds test. Vulkan orders it before the stencil test, and a fragment
+   * it rejects is discarded outright -- no stencil op runs and the packed word
+   * is left as it was found. The comparison is against the depth ALREADY in the
+   * buffer, not the incoming fragment's, and the bounds are inclusive. */
+  if (s.depth_bounds_enable && dd.has_depth &&
+      (depth_val < s.depth_bounds_min || depth_val > s.depth_bounds_max)) {
+    *ds_result = ds_val;
+    return false;
+  }
 
   uint32_t sref = s.stencil_ref[f], smask = s.stencil_mask[f];
   uint32_t sref_m = sref & smask, sval_m = stencil_val & smask;
