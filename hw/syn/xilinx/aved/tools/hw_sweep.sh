@@ -21,17 +21,31 @@
 # few minutes, so it runs only after a verdict that can leave the CP dirty.
 
 set -u
-LOGDIR=/home/blaise/dev/v80/logs/sweep_$(date +%Y%m%d_%H%M%S)
+
+# Resolve the sibling tools and the tree from this script's own location. These
+# used to be absolute paths into ~/dev/v80, which meant the sweep ran a stale
+# private copy of run_hw_test.sh rather than the one in the tree next to it --
+# so fixes to the harness silently did not apply to the sweep that uses it.
+TOOLS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VORTEX_HOME="$(cd "$TOOLS_DIR/../../../../.." && pwd)"   # tools/aved/xilinx/syn/hw -> root
+
+LOGDIR="${HW_SWEEP_LOGDIR:-$HOME/dev/v80/logs}/sweep_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$LOGDIR"
 SUMMARY="$LOGDIR/summary.tsv"
 printf "test\trc\tverdict\tcycles\tnote\n" > "$SUMMARY"
 
-TESTS="${*:-$(ls /home/blaise/dev/vortex_gfxw_v2/tests/regression | grep -vE '^(common.mk|Makefile|run_parallel.sh.in)$')}"
+TESTS="${*:-$(ls "$VORTEX_HOME/tests/regression" | grep -vE '^(common.mk|Makefile|run_parallel.sh.in)$')}"
+
+# Whatever jtag_load_vortex.sh last loaded. Reloads during the sweep must put
+# the SAME design back: reloading the harness default instead would swap the
+# resident bitstream halfway through and attribute the remaining results to a
+# design that was never under test.
+RESIDENT="$(cat /tmp/v80_resident_afu.path 2>/dev/null || true)"
 
 card_present() { [ "$(lspci -d 10ee:50c1 -nn 2>/dev/null | wc -l)" -gt 0 ]; }
 
 for t in $TESTS; do
-    [ -d "/home/blaise/dev/vortex_gfxw_v2/build/tests/regression/$t" ] || continue
+    [ -d "$VORTEX_HOME/build/tests/regression/$t" ] || continue
     if ! card_present; then
         printf "%s\t-\tSKIPPED\t-\tcard left the bus; sweep aborted\n" "$t" >> "$SUMMARY"
         continue
@@ -40,7 +54,7 @@ for t in $TESTS; do
     OUT="$LOGDIR/$t.log"
     stdbuf -oL -eL env HW_TIMEOUT=300 VORTEX_CP_POLL_TIMEOUT_S=90 \
         VORTEX_AVED_NO_PROGRAM=1 VORTEX_AVED_MMIO_TRACE="$MMIO" \
-        timeout 400 bash /home/blaise/dev/v80/run_hw_test.sh "$t" > "$OUT" 2>&1
+        timeout 400 bash "$TOOLS_DIR/run_hw_test.sh" "$t" > "$OUT" 2>&1
     rc=$?
     cycles=$(grep -oE "cycles=[0-9]+" "$OUT" | tail -1 | cut -d= -f2)
     # Failure signatures FIRST: several apps print a summary line containing
@@ -65,7 +79,9 @@ for t in $TESTS; do
     case "$verdict" in
       CP_STALL|TIMEOUT|WEDGE|POISONED)
         echo "  -> reloading AFU to reset the CP"
-        bash /home/blaise/dev/v80/jtag_load_vortex.sh > "$LOGDIR/reload_$t.log" 2>&1 \
+        # $RESIDENT, not the harness default: put back the design under test.
+        bash "$TOOLS_DIR/jtag_load_vortex.sh" ${RESIDENT:+"$RESIDENT"} \
+          > "$LOGDIR/reload_$t.log" 2>&1 \
           && echo "  -> AFU reloaded" \
           || echo "  -> AFU RELOAD FAILED; later results are unreliable"
         ;;

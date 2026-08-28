@@ -26,7 +26,20 @@
 source /home/blaise/dev/xilinx_setup_aved.sh >/dev/null 2>&1
 set -u
 
-VBIN="${1:-/home/blaise/dev/vortex_gfxw_v2/build/hw/syn/xilinx/aved/hbm1_aved_hw/bin/vortex_afu.vbin}"
+# No default. This used to fall back to a fixed build directory, which meant
+# "reload the AFU" quietly meant "load whichever build that path happens to
+# hold" -- and after a rebuild under a new PREFIX, that is not the design you
+# were testing. Loading the wrong bitstream is a reconfiguration plus, in the
+# bad cases, a reboot; it is not worth saving one argument.
+if [ $# -lt 1 ]; then
+    echo "usage: jtag_load_vortex.sh <path/to/vortex_afu.vbin>" >&2
+    echo >&2
+    echo "available builds, newest first:" >&2
+    find "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)/build/hw/syn/xilinx/aved" \
+         -name vortex_afu.vbin -printf '  %TY-%Tm-%Td %TH:%TM  %p\n' 2>/dev/null | sort -r >&2
+    exit 1
+fi
+VBIN="$1"
 LOG=/tmp/v80_jtag_vortex.log
 : > "$LOG"
 exec > >(tee -a "$LOG") 2>&1
