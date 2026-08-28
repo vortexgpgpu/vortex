@@ -115,6 +115,8 @@ module VX_cp_axil_regfile_top
     .last_dcr_rsp   (32'd0),
     .q_state        (q_state_arr),
     .q_reset_pulse  (q_reset_arr),
+    .dbg_host_w_counts (32'd0),
+    .dbg_host_r_counts (32'd0),
     .q_clear_ack    (q_clear_ack_arr)
   );
 

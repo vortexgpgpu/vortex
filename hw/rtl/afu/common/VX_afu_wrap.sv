@@ -351,6 +351,9 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         .axil_s     (cp_axil),
         .axi_host   (cp_axi_host),
         .axi_dev    (cp_axi_dev),
+        .dbg_host_w_counts ({2'b0, dbg_host_b_count, dbg_host_w_count,
+                             dbg_host_aw_count}),
+        .dbg_host_r_counts ({12'b0, dbg_host_r_count, dbg_host_ar_count}),
         .gpu_if     (cp_gpu_if),
         .irq        (cp_interrupt)
     );
@@ -757,6 +760,10 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
     // ---- Split the arbiter's packed slave-side outputs to the two masters ----
     // index 0 = Vortex bank-0, index 1 = CP device master.
+    // Declared before their first assignment below (the implicit-net footgun:
+    // a pre-declaration use makes Vivado mint 1-bit nets and keep both).
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_dev_bid_full;
+    wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_dev_rid_full;
     assign vx_awready_a[0]     = b0_awready[0];
     assign cp_axi_dev.awready  = b0_awready[1];
     assign vx_wready_a[0]      = b0_wready[0];
@@ -781,8 +788,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     assign cp_axi_dev.rresp    = b0_rresp[1];
 
     // Truncate the arbiter's wider ID back to CP's narrower native ID width.
-    wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_dev_bid_full;
-    wire [C_M_AXI_MEM_ID_WIDTH-1:0] cp_axi_dev_rid_full;
     assign cp_axi_dev.bid = cp_axi_dev_bid_full[`VX_CP_AXI_TID_WIDTH-1:0];
     assign cp_axi_dev.rid = cp_axi_dev_rid_full[`VX_CP_AXI_TID_WIDTH-1:0];
     `UNUSED_VAR (cp_axi_dev_bid_full)

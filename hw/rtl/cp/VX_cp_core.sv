@@ -97,6 +97,10 @@ module VX_cp_core
   // and event-counter traffic.
   VX_mem_axi_if.master             axi_dev,
 
+  // AFU host-port drain counters, packed by VX_afu_wrap; regfile debug regs.
+  input  wire [31:0]               dbg_host_w_counts,
+  input  wire [31:0]               dbg_host_r_counts,
+
   // GPU-facing handshake (Vortex DCR + start/busy).
   VX_cp_gpu_if.master               gpu_if,
 
@@ -132,6 +136,17 @@ module VX_cp_core
 
   wire [`VX_DCR_DATA_BITS-1:0] dcr_last_rsp_data;
 
+  // Queue-reset plumbing (used by the regfile port map directly below and by
+  // the g_queue_reset block; declared BEFORE first use -- Vivado mints 1-bit
+  // implicit nets at a pre-declaration use and keeps both, which silently
+  // severed q_clear_ack from the real q_clear in synthesis while Verilator
+  // accepted the ordering. Same footgun as the drain-counter wires in
+  // VX_afu_wrap.)
+  logic       q_reset_pending [NUM_QUEUES];
+  logic       q_clear         [NUM_QUEUES];
+  logic       fetch_idle      [NUM_QUEUES];
+  logic       engine_idle     [NUM_QUEUES];
+
   VX_cp_axil_regfile #(
     .NUM_QUEUES (NUM_QUEUES),
     .ADDR_W     (AXIL_AW)
@@ -147,7 +162,9 @@ module VX_cp_core
     .last_dcr_rsp   (dcr_last_rsp_data),
     .q_state        (q_state),
     .q_reset_pulse  (q_reset_pulse),
-    .q_clear_ack    (q_clear)
+    .q_clear_ack    (q_clear),
+    .dbg_host_w_counts (dbg_host_w_counts),
+    .dbg_host_r_counts (dbg_host_r_counts)
   );
 
   // ----- Per-CPE wires -----
@@ -168,12 +185,6 @@ module VX_cp_core
   logic        start_evt     [NUM_QUEUES];
   logic        end_evt       [NUM_QUEUES];
   logic [63:0] profile_slot  [NUM_QUEUES];
-
-  // Queue-reset plumbing (see the g_queue_reset block below).
-  logic       q_reset_pending [NUM_QUEUES];
-  logic       q_clear         [NUM_QUEUES];
-  logic       fetch_idle      [NUM_QUEUES];
-  logic       engine_idle     [NUM_QUEUES];
 
   // Per-CPE fetch → engine streaming command port.
   logic       cpe_cmd_valid [NUM_QUEUES];

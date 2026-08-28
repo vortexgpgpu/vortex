@@ -78,6 +78,13 @@ module VX_cp_axil_regfile
   // One-cycle reset pulse per queue when the host writes Q_CONTROL.reset.
   output logic                      q_reset_pulse [NUM_QUEUES],
 
+  // AFU host-port drain counters, read-only at global 0x30/0x34 (block 0x30
+  // fully padded). Debug visibility for the staged-readback investigation:
+  // the question "did the CP's write ever leave the AFU" is answerable from
+  // the host only through these.
+  input  wire [31:0]                dbg_host_w_counts,   // {2'b0,b,w,aw} 10b each
+  input  wire [31:0]                dbg_host_r_counts,   // {12'b0,r,ar}  10b each
+
   // One-cycle acknowledge from VX_cp_core, asserted when the CPE has actually
   // cleared its head and retire counters. The programmed tail and the enable
   // bit must be zeroed at the same moment: the fetch gate is `head < tail`,
@@ -201,6 +208,11 @@ module VX_cp_axil_regfile
     if (is_global(addr, 8'h0C)) return 32'd0;
     if (is_global(addr, 8'h28)) return 32'd0;
     if (is_global(addr, 8'h2C)) return 32'd0;
+    // AFU host-port drain counters (debug, read-only).
+    if (is_global(addr, 8'h30)) return dbg_host_w_counts;
+    if (is_global(addr, 8'h34)) return dbg_host_r_counts;
+    if (is_global(addr, 8'h38)) return 32'd0;   // pad: completes block 0x30
+    if (is_global(addr, 8'h3C)) return 32'd0;   // pad: completes block 0x30
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00: return r_ring_base[qid][31:0];
@@ -259,6 +271,10 @@ module VX_cp_axil_regfile
     if (is_global(addr, 8'h24)) return 1'b1;
     if (is_global(addr, 8'h28)) return 1'b1;   // pad: completes block 0x20
     if (is_global(addr, 8'h2C)) return 1'b1;   // pad: completes block 0x20
+    if (is_global(addr, 8'h30)) return 1'b1;   // drain counters (debug)
+    if (is_global(addr, 8'h34)) return 1'b1;
+    if (is_global(addr, 8'h38)) return 1'b1;   // pad: completes block 0x30
+    if (is_global(addr, 8'h3C)) return 1'b1;   // pad: completes block 0x30
     if (decode_queue(addr, qid, off)) begin
       case (off)
         6'h00, 6'h04, 6'h08, 6'h0C, 6'h10, 6'h14,
