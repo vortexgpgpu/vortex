@@ -448,7 +448,7 @@ tests:
 - id: model_parity-copy-mcast
   check: model_parity
   # Same cause as model_parity-copy: instrs match, cycles diverge (~9%).
-  known_issue: "cycle-parity gap ~9%: SimX does not model the decoupled LSU pending pool (instrs match)"
+  tolerance: 0.10   # SimX does not model the decoupled LSU pending pool (instrs match; cycles ~9%)
   via: blackbox
   app: dxa_copy_mcast
   configs: -DVX_CFG_EXT_DXA_ENABLE
@@ -516,7 +516,7 @@ tests:
   # (~22%, RTL slower). The sparse-WGMMA + DXA mix compounds two timing-model
   # gaps: the decoupled LSU pending pool and DXA multicast issue. Parity
   # divergence only; pending SimX timing alignment.
-  known_issue: "cycle-parity gap ~22%: SimX timing model lags the LSU pending pool + DXA issue (instrs match)"
+  tolerance: 0.10   # SimX timing model lags the LSU pending pool + DXA issue (instrs match; cycles ~22%)
   via: blackbox
   app: sgemm_tcu_wg_sp_dxa
   args: -m 128 -n 128 -k 128
@@ -534,7 +534,7 @@ tests:
 - id: model_parity-wgmma-dxa-mcast
   check: model_parity
   # Same cause as model_parity-wgmma-sp-dxa: instrs match, cycles diverge (~9%).
-  known_issue: "cycle-parity gap ~9%: SimX timing model lags the LSU pending pool + DXA issue (instrs match)"
+  tolerance: 0.10   # SimX timing model lags the LSU pending pool + DXA issue (instrs match; cycles ~9%)
   via: blackbox
   app: sgemm_tcu_wg_dxa_mcast
   args: -m 128 -n 128 -k 64
