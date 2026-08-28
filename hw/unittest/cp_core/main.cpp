@@ -312,7 +312,8 @@ int main(int argc, char** argv) {
 
     // ----- Wait for completion writeback at CMPL_ADDR -----
     // First retired seqnum is 0 (engine pre-increments at posedge, so the
-    // retire_seqnum payload is the pre-increment value). We pre-seeded
+    // retire_seqnum payload is the post-retire count, matching Q_SEQNUM). We
+    // pre-seeded
     // CMPL_ADDR with 0xFF...FF so any new write changes it.
     bool got = false;
     for (int g = 0; g < 500 && !got; ++g) {
@@ -321,7 +322,9 @@ int main(int argc, char** argv) {
     }
     EXPECT(got, "completion never wrote seqnum to cmpl_addr within 500 cycles");
     uint64_t seq = slave.mem_read64(CMPL_ADDR);
-    EXPECT(seq == 0, "completion wrote wrong seqnum");
+    // One command retired => the line reads 1, exactly what Q_SEQNUM reads.
+    // The old expectation here was 0 -- this test verified the off-by-one.
+    EXPECT(seq == 1, "completion wrote wrong seqnum");
 
     // ----- Q_CONTROL.reset actually clears the queue -----
     //

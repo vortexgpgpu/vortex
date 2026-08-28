@@ -423,7 +423,18 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     assign cp_gpu_if.dcr_req_ready = 1'b1;          // Vortex DCR always accepts
     assign cp_gpu_if.dcr_rsp_valid = dcr_rsp_valid;
     assign cp_gpu_if.dcr_rsp_data  = dcr_rsp_data;
-    assign cp_gpu_if.busy          = vx_busy;
+    // Declared here, well before this first use (the implicit-net footgun);
+    // computed next to the drain instances below.
+    reg mem_idle_all;
+
+    // Busy must cover the memory system, not just the pipelines: Vortex
+    // deasserts busy when its warps retire, while stores can still be
+    // draining through the cache hierarchy toward HBM. The CP retires the
+    // launch on this signal, and a chained download DMA then reads device
+    // memory -- reading it before the stores land is the intermittent
+    // stale-readback failure. The drain counters already know when the
+    // memory ports owe nothing; include them.
+    assign cp_gpu_if.busy          = vx_busy || !mem_idle_all;
 
     // The CP is the sole launch source.
     assign vx_start = cp_gpu_if.start;
@@ -619,7 +630,6 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     );
 
     // masters_idle gates the reset assertion, so it must cover every master.
-    reg mem_idle_all;
     always @(*) begin
         mem_idle_all = 1'b1;
         for (int b = 0; b < C_M_AXI_MEM_NUM_BANKS; ++b) begin

@@ -225,7 +225,12 @@ module VX_cp_engine
     bid_event.cmd       = cur_cmd;
 
     retire_evt    = (fsm == S_RETIRE);
-    retire_seqnum = seqnum_r;
+    // The POST-retire count, matching what Q_SEQNUM will read once this
+    // handshake fires. This was `seqnum_r` (the pre-increment value), which
+    // made the completion line lag the MMIO register by exactly one retire,
+    // forever, by construction -- a lag that was chased across seven
+    // interconnect theories before anyone compared the two definitions.
+    retire_seqnum = seqnum_r + 64'd1;
 
     submit_evt   = (fsm == S_DECODE) && cur_cmd.hdr.flags[F_PROFILE];
     // end_evt aligns with the retire handshake fire (one pulse per command)
