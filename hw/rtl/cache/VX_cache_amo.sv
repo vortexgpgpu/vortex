@@ -67,6 +67,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     input  wire [LINE_ADDR_BITS-1:0]     addr_st0,
     input  wire [LINE_ADDR_BITS-1:0]     addr_st1,
     input  wire [LINE_ADDR_BITS-1:0]     res_addr_n,   // line entering the commit stage next cycle
+    input  wire [WORD_SIZE-1:0]          byteen_n,     // byteen entering the commit stage next cycle
     input  wire [TAG_WIDTH-1:0]          tag_st1,
     input  wire [REQ_SEL_WIDTH-1:0]      req_idx_st1,
     input  wire [ATTR_WIDTH-1:0]         attr_st1,
@@ -195,17 +196,27 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         reg [ATTR_WIDTH-1:0]         cmp_attr;
 
         // Byte-offset alignment: shift the target down to bit 0 for compute,
-        // and shift results back for response/writeback.
-        wire [`UP(`CLOG2(WORD_SIZE))-1:0] byte_off_st1;
+        // and shift results back for response/writeback. byteen rides the pipe
+        // unchanged, so the offset is encoded from the look-ahead value and
+        // registered with the pipe enable -- at stC the funnel-shift selects
+        // come off a flop instead of a WORD_SIZE-input priority encoder, which
+        // sat on the cmp_old capture critical path. A bubble's garbage encode
+        // is masked exactly where a garbage res_addr_n read already is.
+        wire [`UP(`CLOG2(WORD_SIZE))-1:0] byte_off_n;
         VX_priority_encoder #(
             .N (WORD_SIZE)
         ) byte_off_enc (
-            .data_in    (byteen_st1),
-            .index_out  (byte_off_st1),
+            .data_in    (byteen_n),
+            .index_out  (byte_off_n),
             `UNUSED_PIN (valid_out),
             `UNUSED_PIN (onehot_out)
         );
-        wire [BIT_OFF_BITS-1:0] bit_off_st1 = BIT_OFF_BITS'({byte_off_st1, 3'b0});
+        reg [BIT_OFF_BITS-1:0] bit_off_st1;
+        always @(posedge clk) begin
+            if (~pipe_stall) begin
+                bit_off_st1 <= BIT_OFF_BITS'({byte_off_n, 3'b0});
+            end
+        end
 
         // Per-word WBQ match for {addr_st1, word_idx_st1}. The coalescer keeps at
         // most one entry per {line, word} (see wb_coalesce), so this vector is
@@ -545,7 +556,20 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // Pace any same-line request sitting behind an in-flight compute by one
         // cycle, so the result lands in wb_data_r and forwards cleanly. Gated on
         // cmp_valid (an AMO is computing), so it never fires for baseline traffic.
-        assign chain_stall = cmp_valid && valid_st1 && is_creq_st1 && (cmp_addr == addr_st1);
+        // The address match is registered from the look-ahead operands: both only
+        // move on ~pipe_stall, so a held match stays valid across a stall. The
+        // compare feeds pipe_stall's bank-wide enable fanout, and computing it at
+        // stC put the comparator's logic levels in front of that entire net.
+        reg chain_match_r;
+        wire [LINE_ADDR_BITS-1:0] cmp_addr_n = do_store_st1 ? addr_st1 : cmp_addr;
+        always @(posedge clk) begin
+            if (reset) begin
+                chain_match_r <= 1'b0;
+            end else if (~pipe_stall) begin
+                chain_match_r <= (cmp_addr_n == res_addr_n);
+            end
+        end
+        assign chain_stall = cmp_valid && valid_st1 && is_creq_st1 && chain_match_r;
 
         // Invariants: a store-bearing AMO is only ever accepted into a free
         // compute stage (the queue absorbs different-line writebacks behind it),
@@ -668,6 +692,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         `UNUSED_VAR (word_idx_st1)
         `UNUSED_VAR (addr_st1)
         `UNUSED_VAR (res_addr_n)
+        `UNUSED_VAR (byteen_n)
         `UNUSED_VAR (tag_st1)
         `UNUSED_VAR (req_idx_st1)
         `UNUSED_VAR (attr_st1)
