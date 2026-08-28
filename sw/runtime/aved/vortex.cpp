@@ -53,6 +53,8 @@
 #include <vector>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <fstream>
 #include <stdio.h>
 #include <string>
 #include <util.h>
@@ -194,12 +196,53 @@ public:
   #endif
   }
 
+  // Auto-discover the card the way XRT enumerates by index: scan sysfs for
+  // the SLASH control function (10ee:50c1) and derive its BDF. Makes
+  // VRT_DEVICE_BDF optional -- the hardcoded default below is only the last
+  // resort when no card is on the bus (e.g. a sim run with no env set).
+  static std::string discover_bdf() {
+    DIR* d = opendir("/sys/bus/pci/devices");
+    if (d == nullptr) {
+      return "";
+    }
+    std::string found;
+    while (struct dirent* e = readdir(d)) {
+      const std::string name = e->d_name;              // "0000:01:00.1"
+      if (name.size() < 12 || name[0] == '.') {
+        continue;
+      }
+      auto read_hex = [&](const char* leaf) -> unsigned {
+        std::ifstream f("/sys/bus/pci/devices/" + name + "/" + leaf);
+        unsigned v = 0;
+        f >> std::hex >> v;
+        return v;
+      };
+      if (read_hex("vendor") == 0x10ee && read_hex("device") == 0x50c1) {
+        found = name.substr(0, name.rfind('.'));       // drop the function
+        if (found.rfind("0000:", 0) == 0) {
+          found = found.substr(5);                     // "01:00" form
+        }
+        break;
+      }
+    }
+    closedir(d);
+    return found;
+  }
+
   int init() {
     // An empty value is treated as unset: the test harness exports these
     // unconditionally, so they arrive empty rather than absent.
     const char* bdf = getenv("VRT_DEVICE_BDF");
+    std::string bdf_storage;
     if (bdf == nullptr || bdf[0] == '\0') {
-      bdf = DEFAULT_DEVICE_BDF;
+      bdf_storage = discover_bdf();
+      if (!bdf_storage.empty()) {
+        fprintf(stderr, "[VXDRV] auto-discovered V80 at %s (set "
+                "VRT_DEVICE_BDF to override)\n", bdf_storage.c_str());
+        bdf = bdf_storage.c_str();
+      } else {
+        bdf = DEFAULT_DEVICE_BDF;
+      }
     }
 
     const char* vbin_path = getenv("VRT_VBIN_PATH");
@@ -209,15 +252,34 @@ public:
 
   #ifdef CPP_API
 
+    // When no usable vbin was named, fall back to the one that is actually
+    // resident on the card: jtag_load_vortex.sh records its absolute path in
+    // /tmp/v80_resident_afu.path (cleared by reboot, exactly when the AFU is
+    // lost too). This is also the SAFEST choice -- the vbin here supplies
+    // metadata (system_map.xml), and metadata must describe the image the
+    // silicon is really running.
+    std::string vbin_storage;
+    if (access(vbin_path, R_OK) != 0) {
+      std::ifstream stamp("/tmp/v80_resident_afu.path");
+      std::string line;
+      if (std::getline(stamp, line) && !line.empty()
+          && access(line.c_str(), R_OK) == 0) {
+        vbin_storage = line;
+        fprintf(stderr, "[VXDRV] using resident vbin %s (set VRT_VBIN_PATH "
+                "to override)\n", vbin_storage.c_str());
+        vbin_path = vbin_storage.c_str();
+      }
+    }
+
     // Each vrt::Device open reprograms the PL, and a design write only
     // succeeds on a freshly reset device: vrtd runs its reset sequence only
     // when the requested shell differs from the current one, so once the shell
     // reads "compute" no reset happens and the load fails with "Input/output
-    // error", taking the AMC to NO_AMC and costing a JTAG recovery.
-    //
-    // That budgets one test per recovery cycle, which makes a regression ladder
-    // impractical. When the design is already loaded, skip the reprogram and
-    // reuse it: set VORTEX_AVED_NO_PROGRAM=1 for every run after the first.
+    // error", taking the AMC to NO_AMC and costing a recovery -- observed
+    // 2026-08-28: a programming attempt on the live card knocked the ami
+    // kernel module out entirely. The test harness therefore defaults
+    // hardware runs to VORTEX_AVED_NO_PROGRAM=1 (tests/regression/common.mk);
+    // set VORTEX_AVED_NO_PROGRAM=0 explicitly to program.
     const char* noprog = getenv("VORTEX_AVED_NO_PROGRAM");
     const bool program = (noprog == nullptr || noprog[0] == '\0'
                           || noprog[0] == '0');
