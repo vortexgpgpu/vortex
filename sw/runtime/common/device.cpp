@@ -288,13 +288,19 @@ vx_result_t Device::cp_init() {
     if (r != VX_SUCCESS) return r;
     r = host_alloc(CP_CL_BYTES, &cp_head_);
     if (r != VX_SUCCESS) return r;
-    r = host_alloc(CP_CL_BYTES, &cp_cmpl_);
+    // Two cachelines, not one: VX_cp_completion writes the retired seqnum to
+    // cmpl_addr and then a SHOVE copy to cmpl_addr + 64, whose only job is to
+    // push the first write through write-buffering interconnects (the V80's
+    // HBM host path holds the newest write until later write traffic arrives;
+    // see VX_cp_completion). The second line must be owned memory on every
+    // backend, staged or not.
+    r = host_alloc(2 * CP_CL_BYTES, &cp_cmpl_);
     if (r != VX_SUCCESS) return r;
 
     // Zero them so the CP doesn't read stale data on first fetch.
     std::memset(cp_ring_.host_ptr, 0, CP_RING_SIZE);
     std::memset(cp_head_.host_ptr, 0, CP_CL_BYTES);
-    std::memset(cp_cmpl_.host_ptr, 0, CP_CL_BYTES);
+    std::memset(cp_cmpl_.host_ptr, 0, 2 * CP_CL_BYTES);
 
     // Program CP queue 0. Any failure here is fatal — the CP regfile is
     // the sole control path, so a botched setup means cp_enabled_=true
