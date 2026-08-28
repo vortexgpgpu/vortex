@@ -257,6 +257,19 @@ data-corruption bug:
    completion regions are one cacheline each and throw
    `Size too small for MediumBlockSuperblock` out of `vx_device_open` otherwise.
 
+**2026-08-28 revision — the two exclusions above were necessary but not
+sufficient.** The blanket publish/refresh of every *other* region was itself
+the silent data-corruption bug the list warns about: the refresh runs on
+whichever thread polls Q_SEQNUM, and with async uploads (`vx_enqueue_write`)
+a second thread fills staging concurrently — the blanket D2H overwrote a
+filled-but-unsubmitted upload shadow with the device's zeros, and the CP then
+uploaded a zero source buffer (the intermittent demo failure, confirmed by
+post-mortem probe of HBM). Region sync is now owned, not blanket: the HAL's
+`host_mem_push` (after fill, owning thread) and `host_mem_pull` (before read,
+owning thread) are the ONLY sync of generic regions; `staged_publish` pushes
+only the ring + the one-shot head/cmpl seed, and `staged_refresh` pulls only
+the CP-owned lines. See `docs/proposals/v80_stabilization_plan.md` §3.
+
 ---
 
 ## 5. Driver and software architecture — corrected

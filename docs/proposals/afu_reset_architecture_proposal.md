@@ -515,10 +515,15 @@ pulse fails it.
    `sgemm` then passed after it. No JTAG reload, no reboot. This is the
    capability the whole exercise was for.
 
-   Not yet shown: recovery from a kernel that *never* completes (livelocked
-   rather than killed) — that path goes through the same entry-side quiesce
-   but with the GPU still fetching; the drain relies on the request gate
-   holding new AW/AR while in-flight responses land.
+9. **Livelocked-kernel recovery** — **DONE** (2026-08-28, rstmin8, same
+   boot). `tests/regression/spin` launches a kernel whose every thread loops
+   forever; the queue wedged for real (Q_SEQNUM held below tail, the
+   runtime's stall diagnostics firing) and the host was SIGKILLed while the
+   GPU was actively fetching and executing — the hostile case the previous
+   item could not show. The next open's `CTL_AP_RESET` recovered the device
+   and `demo` passed 3/3. No JTAG reload, no reboot. This scenario is now
+   stage 3 of `reset_acceptance.sh`, which reports ACCEPTED across all
+   three stages.
 
 ### 8.1 Risks carried into that build
 

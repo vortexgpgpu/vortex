@@ -1,7 +1,54 @@
 # V80 Stabilization: Full Issue Inventory, Fix Proposal, and Execution Plan
 
-Date: 2026-08-28. Status: proposal (investigation complete; execution gated on
-the rstmin8 build already in flight).
+Date: 2026-08-28. Status: EXECUTED — see §3 for the outcome. Phases 0–4 are
+complete and green on rstmin8 silicon; phase 5 (the rel1 full-configuration
+build) was started with every fix included.
+
+## 3. Outcome (written after execution — read this first)
+
+The plan below was executed the same day. The headline: the intermittent demo
+failure was **not** any of the hardware transport theories in §1 — it was a
+**threading bug in the AVED runtime's staged-memory layer**, unmasked the
+moment the completion-line off-by-one (§A) was fixed and the fence became
+fast.
+
+**The true root cause (proven by post-mortem probe of device memory):**
+`staged_refresh`, running on whichever thread polls Q_SEQNUM, D2H-pulled
+EVERY staged region — including upload staging that another thread (demo
+uploads via async `vx_enqueue_write`) had filled but not yet submitted. The
+device's zero image overwrote the freshly written source in the host shadow;
+the next publish faithfully pushed the zeros; the CP uploaded a zero source
+buffer. The probe read HBM after a failing run: src1 all-zeros, dst = src0+0
+exactly. Every prior mystery folds into this: the pass/fail nondeterminism
+(thread timing), the old 50 ms fence timeouts "fixing" it (they serialized
+the threads), the H2D kick halving failures (it perturbed refresh timing),
+and simulation never reproducing it (no real thread races against silicon).
+
+**The fix — explicit, thread-owned sync (commits f47bcb1fc, d3ec769d6):**
+the HAL gained a `host_mem_push`/`host_mem_pull` pair; the core pushes a
+staging region after filling it and pulls a download region before reading
+it, each on the owning thread. The backend's publish now touches only what
+it owns (ring + one-shot head/cmpl seed); its refresh only the CP-owned
+lines. Nothing else may ever sync a generic region — both directions of the
+blanket sync were clobber bugs (the interim "publish verify" readback
+re-introduced one at word granularity and was removed).
+
+**Secondary hardware gap, real but small:** the CP's data writes and its
+completion write leave on different AXI IDs, so the fence could pass with
+the last data beats still in flight (rare single stale word in large
+downloads). Closed in software by a read-until-stable pull, and in RTL
+(commit 1d90dfe-class: `cp: validate every host-direction chunk's flush
+read-back`) by a per-chunk validating flush that rides the rel1 build.
+
+**Scoreboard on rstmin8 silicon:** fence warnings 0 (off-by-one confirmed),
+demo 12/12, demo -n1024 10/10 (from ~50% failing), -n4096 clean, sweep 5/5,
+three-stage reset acceptance ACCEPTED — including the new stage 3:
+livelocked-kernel recovery (spin kernel wedged the GPU, host SIGKILLed,
+next open's reset recovered it, no JTAG/reboot). Sims: simx/rtlsim/avedsim
+green; all touched unit tests pass. Dead-theory hardening stripped: H2D
+kick, 128 KB eviction buster, publish-verify; the shove write and 2-line
+cmpl allocation remain as documented hardening. DXA shifter split validated
+and committed (§F); legacy debug window removed (§E).
 
 ## 0. Why progress stalled — an honest accounting
 
