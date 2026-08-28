@@ -113,10 +113,22 @@ Further narrowing:
 * `src0` is at device address `0x10000`, and **`vecadd` also places `src0` at
   `0x10000` and passes** — so the address itself is not the trigger.
 
-The remaining candidates are that `arg->src0_addr` is read as 0 from the kernel
-args block, or that loads from that buffer return 0. Both are consistent with
-everything measured; distinguishing them needs kernel-side instrumentation or
-a waveform, neither of which has been done.
+~~The remaining candidates are that `arg->src0_addr` is read as 0 from the
+kernel args block, or that loads from that buffer return 0.~~
+
+**RESOLVED 2026-08-27 — the kernel was innocent all along.** A post-mortem
+probe re-allocated demo's buffers after a failing run and read the device
+memory back directly: `src0` and `src1` uploads intact, and the `dst` region
+holds **all 16384 correct sums**. The failure is in the *readback*: the staged
+device→host path returned the staging area's previous contents. The old
+`dst == src1` signature above is the download reusing `src1`'s freed staging
+slot — the "matches" were the stale slot, not the kernel's stores. Two ordering
+defects compound: `Q_SEQNUM` is MMIO-visible before the payload writes are
+readable in HBM, and the completion line that should fence that was the CP's
+only partial-line AXI write, which parks between the AFU port and HBM for
+over a second. Fixed in `VX_cp_completion` (full-line write) plus a
+completion-fenced `staged_refresh` in the aved runtime; see the commit
+`cp: write completions as full cachelines` for the full derivation.
 
 One observed difference not yet ruled in or out: `vecadd`'s two source buffers
 land in the *same* 4 KB page (`0x10000` and `0x10100`) while `demo`'s are in
