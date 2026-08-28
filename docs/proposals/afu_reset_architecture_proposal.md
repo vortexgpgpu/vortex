@@ -1,11 +1,11 @@
 # The AFU reset defect: root cause, fix, and what remains
 
-**Status:** root cause identified and reproduced; all defects fixed and covered
-by unit tests. **Confirmed on silicon** (2026-08-27): the reset completes, the
-card survives, the sequencer refuses correctly when a master will not drain,
-and the CP queue reset clears. The remaining acceptance test — `minimal` twice
-in one boot — is blocked on a rebuild, for a build-configuration defect
-unrelated to the reset (§8.2).
+**Status: ACCEPTED ON SILICON** (2026-08-27). `minimal` runs twice in one boot
+with no JTAG reload, both resets honoured, on the minimal and the full
+configuration; the sequencer's refusal path is also confirmed against a
+genuinely stuck master (§8.2's mis-built bitstream provided the test case).
+Reloading an AFU over a used one now needs no reboot. Remaining: hung-kernel
+recovery via `Q_CONTROL.reset` (§8 item 8).
 **Scope:** `hw/rtl/afu/common/` — `VX_afu_axil_demux.sv`, `VX_afu_axi_drain.sv`,
 `VX_afu_reset_seq.sv`, `VX_afu_req_gate.sv` (all new), `VX_afu_wrap.sv`,
 `VX_afu_ctrl.sv`; `hw/rtl/cp/` — `VX_cp_core.sv`, `VX_cp_fetch.sv`,
@@ -493,8 +493,14 @@ pulse fails it.
    queue reset all work on silicon. What that bitstream could **not**
    demonstrate is `minimal` twice in one boot, because it carried an unrelated
    build-configuration defect (§8.2) that hung the CP before the second run.
-7. **`minimal` twice in one boot** — not done. Blocked only on §8.2, fixed and
-   rebuilding. Scripted as
+7. **`minimal` twice in one boot** — **DONE, ACCEPTED** (2026-08-27, boot of
+   22:24). Both runs passed with the reset honoured (`ap_ctrl=0x00000004`,
+   `CTL_RESET_ERROR` clear) and zero all-ones reads, on the minimal config
+   (`rstmin`, 1 core) **and** on the full graphics config (`rst3`), which then
+   passed vecadd/sgemv/sgemm; `demo` still shows its pre-existing wrong-results
+   failure, which is tracked separately and does not involve the reset.
+   Loading `rst3` over a *used* `rstmin` needed no reboot and no recovery —
+   the region drains now. Scripted as
    [`hw/syn/xilinx/aved/tools/reset_acceptance.sh`](../../hw/syn/xilinx/aved/tools/reset_acceptance.sh),
    which runs the test twice and reads each run's register trace: the reset
    must have been issued, honoured (`ap_idle` set, `CTL_RESET_ERROR` clear),
