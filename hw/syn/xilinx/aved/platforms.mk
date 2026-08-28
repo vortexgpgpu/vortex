@@ -45,6 +45,23 @@ override CONFIGS += -DPLATFORM_MEMORY_OFFSET=40\'h4000000000
 # Set before the Makefile's `MEM_TAG ?= HBM0`, which is why plain `=` suffices.
 MEM_TAG = MEM
 
+# Host-memory connectivity for the CP's command-ring master. NOT HOST: that tag
+# routes m_axi_host to the QDMA slave bridge, and on this compute shell a read
+# through that bridge never returns a response at all. The CP's very first ring
+# fetch then hangs with no error to show for it -- the queue reads back armed
+# and correct (Q_CONTROL=0x1, Q_TAIL=0x40, Q_ERROR=0) while head stays at 0
+# forever, and the next process's reset is refused because that read is still
+# genuinely outstanding.
+#
+# HBM1 routes the port to a second HBM aperture instead, and the runtime stages
+# the ring there and publishes it on the doorbell. That path works.
+#
+# This default was carried on the command line for one build and lost on the
+# next, which cost a bitstream and several hours of hardware debugging. It
+# belongs here next to MEM_TAG, for the same reason and by the same mechanism:
+# stated before the Makefile's `HOST_TAG ?= HOST`, so plain `=` suffices.
+HOST_TAG = HBM1
+
 # Kernel clock target (MHz). The linker also accepts a frequency request;
 # the runtime can retune within the platform's supported range.
 KERNEL_FREQ ?= 200

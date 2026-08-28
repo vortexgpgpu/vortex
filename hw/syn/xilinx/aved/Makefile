@@ -122,6 +122,15 @@ include $(SRC_DIR)/platforms.mk
 MEM_TAG ?= HBM0
 HOST_TAG ?= HOST
 
+# HOST routes m_axi_host to the QDMA slave bridge, whose reads never complete
+# on the compute shell: the CP hangs on its first ring fetch and reports
+# nothing -- the queue reads back armed and correct while head stays at 0. That
+# is a full synthesis run to discover, and it has already cost one, so refuse
+# the tag at parse time rather than emitting the config. See platforms.mk.
+ifeq ($(HOST_TAG),HOST)
+$(error HOST_TAG=HOST routes m_axi_host to the QDMA slave bridge, whose reads never complete on the compute shell; the CP would hang on its first ring fetch. Use HOST_TAG=HBM1 (the platforms.mk default))
+endif
+
 # platforms.mk states the kernel clock in MHz; the linker config wants Hz.
 KERNEL_FREQ_HZ := $(shell echo $$(( $(KERNEL_FREQ) * 1000000 )))
 
