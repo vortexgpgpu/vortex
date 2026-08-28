@@ -1,4 +1,181 @@
 {
+  "gfx": {
+    "clock_mhz": 250,
+    "config_hash": "103693ba2bb97438",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
+    "dut": "gfx",
+    "result": {
+      "bram": 312,
+      "build_time_s": 5285,
+      "critical_paths": [
+        {
+          "endpoint": "g_rtu_core[0].rtu_core/scheduler/coll_ordt_reg[3][0][14]/CE",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 0.964,
+          "route_ns": 2.93,
+          "route_pct": 75.241,
+          "slack_ns": 0.002,
+          "startpoint": "g_rtu_core[0].rtu_core/scheduler/box_coll_hot_reg[1]/C"
+        },
+        {
+          "endpoint": "g_rtu_core[0].rtu_core/scheduler/coll_ordt_reg[3][0][14]/CE",
+          "group": "core_clock",
+          "levels": 9,
+          "logic_ns": 1.063,
+          "route_ns": 2.82,
+          "route_pct": 72.623,
+          "slack_ns": 0.012,
+          "startpoint": "g_rtu_core[0].rtu_core/scheduler/box_coll_hot_reg[4]/C"
+        },
+        {
+          "endpoint": "g_tex_core[0].tex_core/tex_mem/mem_scheduler/g_rsp_N.g_rsp_full.g_rsp_store[0].g_j[54].rsp_store_reg_0_7_16_16/SP/I",
+          "group": "core_clock",
+          "levels": 0,
+          "logic_ns": 0.081,
+          "route_ns": 3.827,
+          "route_pct": 97.927,
+          "slack_ns": 0.015,
+          "startpoint": "tcache/g_cache_wrap[0].cache_wrap/g_cache.cache/core_rsp_xbar/g_fallback.xbar_switch/g_passthru.out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[28]/C"
+        },
+        {
+          "endpoint": "g_rtu_core[0].rtu_core/scheduler/coll_ordt_reg[3][0][14]/CE",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 0.943,
+          "route_ns": 2.936,
+          "route_pct": 75.689,
+          "slack_ns": 0.016,
+          "startpoint": "g_rtu_core[0].rtu_core/scheduler/box_coll_hot_reg[10]/C"
+        },
+        {
+          "endpoint": "g_tex_core[0].tex_core/tex_mem/mem_scheduler/g_rsp_N.g_rsp_full.g_rsp_store[0].g_j[47].rsp_store_reg_0_7_29_29/SP/I",
+          "group": "core_clock",
+          "levels": 0,
+          "logic_ns": 0.08,
+          "route_ns": 3.827,
+          "route_pct": 97.952,
+          "slack_ns": 0.016,
+          "startpoint": "tcache/g_cache_wrap[0].cache_wrap/g_cache.cache/core_rsp_xbar/g_fallback.xbar_switch/g_passthru.out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[41]/C"
+        },
+        {
+          "endpoint": "g_tex_core[0].tex_core/tex_mem/mem_scheduler/rsp_buf/g_eb1.pipe_buffer/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_reg[0][1842]/D",
+          "group": "core_clock",
+          "levels": 1,
+          "logic_ns": 0.17,
+          "route_ns": 3.794,
+          "route_pct": 95.712,
+          "slack_ns": 0.018,
+          "startpoint": "tcache/g_cache_wrap[0].cache_wrap/g_cache.cache/core_rsp_xbar/g_fallback.xbar_switch/g_passthru.out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[42]/C"
+        },
+        {
+          "endpoint": "g_rtu_core[0].rtu_core/scheduler/coll_ordoff_reg[9][2][19]/D",
+          "group": "core_clock",
+          "levels": 9,
+          "logic_ns": 0.895,
+          "route_ns": 3.067,
+          "route_pct": 77.41,
+          "slack_ns": 0.019,
+          "startpoint": "g_rtu_core[0].rtu_core/scheduler/box_coll_hot_reg[10]/C"
+        },
+        {
+          "endpoint": "g_rtu_core[0].rtu_core/scheduler/coll_ordt_reg[3][0][14]/CE",
+          "group": "core_clock",
+          "levels": 9,
+          "logic_ns": 1.006,
+          "route_ns": 2.864,
+          "route_pct": 74.006,
+          "slack_ns": 0.026,
+          "startpoint": "g_rtu_core[0].rtu_core/scheduler/box_coll_hot_reg[6]/C"
+        },
+        {
+          "endpoint": "g_rtu_core[0].rtu_core/scheduler/coll_ordt_reg[15][3][6]/D",
+          "group": "core_clock",
+          "levels": 9,
+          "logic_ns": 0.832,
+          "route_ns": 3.123,
+          "route_pct": 78.962,
+          "slack_ns": 0.026,
+          "startpoint": "g_rtu_core[0].rtu_core/scheduler/box_coll_hot_reg[10]/C"
+        },
+        {
+          "endpoint": "g_rtu_core[0].rtu_core/scheduler/coll_ordt_reg[3][0][14]/CE",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 1.038,
+          "route_ns": 2.828,
+          "route_pct": 73.148,
+          "slack_ns": 0.029,
+          "startpoint": "g_rtu_core[0].rtu_core/scheduler/box_coll_hot_reg[4]/C"
+        }
+      ],
+      "dsp": 758,
+      "env": {
+        "device": "xcu55c-fsvh2892-2L-e",
+        "opt_level": 3,
+        "vivado": "2024.2",
+        "xlen": 32
+      },
+      "ff": 214971,
+      "fmax_mhz": 250.1,
+      "high_fanout_nets": [
+        {
+          "driver": "LUT2",
+          "fanout": 7655,
+          "net": "g_tex_core[0].tex_core/tex_mem/mem_scheduler/req_ibuf/allocator/req_ready_bufg_place"
+        },
+        {
+          "driver": "BUFGCE",
+          "fanout": 6025,
+          "net": "g_tex_core[0].tex_core/rsp_buf/g_eb2.stream_buffer/mem_rsp_ready_15"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 3972,
+          "net": "g_tex_core[0].tex_core/tex_mem/mem_scheduler/g_req_queue_ro.req_queue/g_ebN.fifo_queue/pending_size/g_size_gt1.g_single_step.alm_empty_r_reg_0[0]"
+        },
+        {
+          "driver": "BUFGCE",
+          "fanout": 3609,
+          "net": "g_tex_core[0].tex_core/rsp_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
+        },
+        {
+          "driver": "BUFGCE",
+          "fanout": 3568,
+          "net": "g_tex_core[0].tex_core/rsp_buf/g_eb2.stream_buffer/mem_bus_if\\\\.rsp_ready"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 2901,
+          "net": "g_tex_core[0].tex_core/tex_mem/mem_scheduler/g_req_queue_ro.req_queue/g_ebN.fifo_queue/g_depth_n.wr_ptr_r[0]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 2897,
+          "net": "g_tex_core[0].tex_core/tex_mem/mem_scheduler/g_req_queue_ro.req_queue/g_ebN.fifo_queue/g_depth_n.wr_ptr_r[1]"
+        },
+        {
+          "driver": "BUFGCE",
+          "fanout": 2756,
+          "net": "g_rtu_core[0].rtu_core/scheduler/word_q"
+        },
+        {
+          "driver": "PORT",
+          "fanout": 2706,
+          "net": "reset"
+        },
+        {
+          "driver": "LUT5",
+          "fanout": 2392,
+          "net": "l2cache/g_cache.cache/g_banks[0].bank/reg_cmt/enable0"
+        }
+      ],
+      "lut": 202801,
+      "lutram": 10287,
+      "uram": 0,
+      "wns_ns": 0.002
+    }
+  },
   "om": {
     "clock_mhz": 300,
     "config_hash": "b73b3abc3508e067",
