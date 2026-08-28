@@ -37,6 +37,7 @@ void tick() {
 void clear_fires() {
   dut->aw_fire = 0; dut->w_fire_last = 0; dut->b_fire = 0;
   dut->ar_fire = 0; dut->r_fire_last = 0;
+  dut->gate_in_valid = 0; dut->gate_out_ready = 0;
 }
 
 void do_reset() {
@@ -152,6 +153,55 @@ int main(int argc, char** argv) {
   run(8);
   check(!dut->busy, "sequencer idle after a platform reset");
   check(dut->masters_idle, "drain counters cleared by the platform reset");
+
+  // ------------------------------------------------------------------
+  // AXI4 §A3.2.1: a master that has asserted VALID must hold it until the
+  // edge where VALID and READY are both high. Quiescing must therefore take
+  // effect between transactions, never inside one. A gate written as the
+  // obvious `out_valid = in_valid && !stop_req` fails this: it withdraws an
+  // offer the shell has already latched, and the port never recovers.
+  printf("7. quiescing never withdraws an offer already made\n");
+  do_reset();
+  // An earlier read keeps the drain busy, so QUIESCE lasts long enough to
+  // observe the gate rather than completing in two cycles.
+  dut->ar_fire = 1; tick(); dut->ar_fire = 0;
+
+  dut->gate_in_valid = 1;      // the AFU offers a request...
+  dut->gate_out_ready = 0;     // ...and the shell is not ready for it yet
+  tick();
+  check(dut->gate_out_valid, "offer reaches the shell before quiescing");
+
+  pulse_request();             // stop_req rises mid-offer
+  bool held = true;
+  for (int i = 0; i < 16; ++i) {
+    tick();
+    if (!dut->gate_out_valid) held = false;
+  }
+  check(dut->stop_req, "sequencer is quiescing");
+  check(held, "VALID held asserted across stop_req (AXI4 A3.2.1)");
+  check(!saw_assert, "reset withheld: the reads are still outstanding");
+
+  // The shell finally accepts. Only now may the gate close, and the next
+  // request must be held off.
+  dut->gate_out_ready = 1;
+  dut->ar_fire = 1;            // the accepted AR is now outstanding too
+  tick();
+  dut->ar_fire = 0;
+  dut->gate_out_ready = 0;
+  tick();
+  check(!dut->gate_out_valid, "the next request is withheld once the gate closes");
+  check(!dut->gate_in_ready, "and the AFU is not told it was accepted");
+
+  // Both reads return; only then may the reset proceed.
+  dut->r_fire_last = 1; tick();
+  check(!dut->masters_idle, "one read still outstanding");
+  tick(); dut->r_fire_last = 0;
+  run(16);
+  check(dut->masters_idle, "both reads returned");
+  check(saw_assert, "reset proceeds once the masters drained");
+  dut->gate_in_valid = 0;
+  run(8);
+  check(!dut->stop_req, "gate reopens after the sequence");
 
   printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
          failures, failures == 1 ? "" : "s");

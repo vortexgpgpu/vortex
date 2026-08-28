@@ -35,6 +35,14 @@ module VX_afu_reset_seq_top #(
     input  wire ar_fire,
     input  wire r_fire_last,
 
+    // A real request gate driven by the sequencer's stop_req, with the
+    // testbench playing the AFU-internal master (gate_in_*) and the shell
+    // (gate_out_*). This is how VX_afu_wrap wires every AW/AR channel.
+    input  wire gate_in_valid,
+    input  wire gate_out_ready,
+    output wire gate_in_ready,
+    output wire gate_out_valid,
+
     output wire stop_req,
     output wire rst_assert,
     output wire busy,
@@ -42,6 +50,16 @@ module VX_afu_reset_seq_top #(
     output wire masters_idle,
     output wire vx_reset
 );
+    VX_afu_req_gate gate (
+        .clk       (clk),
+        .reset     (reset),
+        .stop_req  (stop_req),
+        .in_valid  (gate_in_valid),
+        .in_ready  (gate_in_ready),
+        .out_valid (gate_out_valid),
+        .out_ready (gate_out_ready)
+    );
+
     VX_afu_axi_drain drain (
         .clk         (clk),
         .reset       (reset),

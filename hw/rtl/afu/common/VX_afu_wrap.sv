@@ -344,12 +344,21 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     // XRT pins m_axi_host to HOST[0]; host addresses pass straight through
     // (no PLATFORM_MEMORY_OFFSET — that offset is device-memory specific).
     // Gated like the bank ports: no new host-side request leaves the AFU while
-    // the reset sequencer is draining.
-    assign m_axi_host_awvalid = cp_axi_host.awvalid && !rst_stop_req;
+    // the reset sequencer is draining. The gate is a VX_afu_req_gate rather
+    // than a plain AND so an offer already made to the shell is never
+    // withdrawn -- see the header of that module.
+    VX_afu_req_gate host_aw_gate (
+        .clk       (clk),
+        .reset     (reset),
+        .stop_req  (rst_stop_req),
+        .in_valid  (cp_axi_host.awvalid),
+        .in_ready  (cp_axi_host.awready),
+        .out_valid (m_axi_host_awvalid),
+        .out_ready (m_axi_host_awready)
+    );
     assign m_axi_host_awaddr  = cp_axi_host.awaddr;
     assign m_axi_host_awid    = {{(C_M_AXI_MEM_ID_WIDTH-`VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_host.awid};
     assign m_axi_host_awlen   = cp_axi_host.awlen;
-    assign cp_axi_host.awready = m_axi_host_awready && !rst_stop_req;
     assign m_axi_host_wvalid  = cp_axi_host.wvalid;
     assign m_axi_host_wdata   = cp_axi_host.wdata;
     assign m_axi_host_wstrb   = cp_axi_host.wstrb;
@@ -359,11 +368,18 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     assign cp_axi_host.bid    = m_axi_host_bid[`VX_CP_AXI_TID_WIDTH-1:0];
     assign cp_axi_host.bresp  = m_axi_host_bresp;
     assign m_axi_host_bready  = cp_axi_host.bready;
-    assign m_axi_host_arvalid = cp_axi_host.arvalid && !rst_stop_req;
+    VX_afu_req_gate host_ar_gate (
+        .clk       (clk),
+        .reset     (reset),
+        .stop_req  (rst_stop_req),
+        .in_valid  (cp_axi_host.arvalid),
+        .in_ready  (cp_axi_host.arready),
+        .out_valid (m_axi_host_arvalid),
+        .out_ready (m_axi_host_arready)
+    );
     assign m_axi_host_araddr  = cp_axi_host.araddr;
     assign m_axi_host_arid    = {{(C_M_AXI_MEM_ID_WIDTH-`VX_CP_AXI_TID_WIDTH){1'b0}}, cp_axi_host.arid};
     assign m_axi_host_arlen   = cp_axi_host.arlen;
-    assign cp_axi_host.arready = m_axi_host_arready && !rst_stop_req;
     assign cp_axi_host.rvalid = m_axi_host_rvalid;
     assign cp_axi_host.rdata  = m_axi_host_rdata;
     assign cp_axi_host.rid    = m_axi_host_rid[`VX_CP_AXI_TID_WIDTH-1:0];
@@ -527,10 +543,25 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
     wire mem_idle_a [C_M_AXI_MEM_NUM_BANKS];
 
     for (genvar i = 0; i < C_M_AXI_MEM_NUM_BANKS; ++i) begin : g_axi_gate
-        assign m_axi_mem_awvalid_a[i] = pre_awvalid_a[i] && !rst_stop_req;
-        assign pre_awready_a[i]       = m_axi_mem_awready_a[i] && !rst_stop_req;
-        assign m_axi_mem_arvalid_a[i] = pre_arvalid_a[i] && !rst_stop_req;
-        assign pre_arready_a[i]       = m_axi_mem_arready_a[i] && !rst_stop_req;
+        VX_afu_req_gate mem_aw_gate (
+            .clk       (clk),
+            .reset     (reset),
+            .stop_req  (rst_stop_req),
+            .in_valid  (pre_awvalid_a[i]),
+            .in_ready  (pre_awready_a[i]),
+            .out_valid (m_axi_mem_awvalid_a[i]),
+            .out_ready (m_axi_mem_awready_a[i])
+        );
+
+        VX_afu_req_gate mem_ar_gate (
+            .clk       (clk),
+            .reset     (reset),
+            .stop_req  (rst_stop_req),
+            .in_valid  (pre_arvalid_a[i]),
+            .in_ready  (pre_arready_a[i]),
+            .out_valid (m_axi_mem_arvalid_a[i]),
+            .out_ready (m_axi_mem_arready_a[i])
+        );
 
         VX_afu_axi_drain mem_drain (
             .clk         (clk),
