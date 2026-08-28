@@ -186,21 +186,30 @@ module VX_cp_completion
     axi_m.arburst = 2'b01;
     axi_m.rready  = 1'b1;
 
-    // AW
+    // AW. A full cacheline, not an 8-byte narrow write. The line is a
+    // dedicated CP-owned allocation, so the padding clobbers nothing -- and
+    // the full-width beat is load-bearing on hardware: this used to be
+    // awsize=3 with wstrb[7:0], the ONLY partial-line write any CP master
+    // issues, and on the V80 that write parked between the AFU port and HBM
+    // (a partial write costs the memory system a read-modify-write) and
+    // stayed invisible to host reads of the line long after its BRESP --
+    // measured: still absent ONE SECOND later, landing only around the next
+    // retire's write. Every full-line write from the very same port lands
+    // promptly. A completion signal that trails its BRESP by a second is not
+    // a completion signal.
     axi_m.awvalid = (state == S_REQ_AW);
     axi_m.awaddr  = cur_ent.addr;
     axi_m.awid    = TID_PREFIX;
-    axi_m.awlen   = 8'd0;        // single 8 B beat per write
-    axi_m.awsize  = 3'd3;        // 2^3 = 8 bytes
+    axi_m.awlen   = 8'd0;        // single full-width beat
+    axi_m.awsize  = 3'd6;        // 2^6 = 64 bytes
     axi_m.awburst = 2'b01;
 
-    // W: 64-bit seqnum at the low 8 bytes of the data bus; wstrb selects
-    // those bytes as a byte enable for the partial write.
+    // W: 64-bit seqnum in the low 8 bytes, the rest of the line written as
+    // zero. All strobes set -- see the AW note.
     axi_m.wvalid = (state == S_REQ_W);
     axi_m.wdata  = '0;
     axi_m.wdata[63:0] = cur_ent.seqnum;
-    axi_m.wstrb  = '0;
-    axi_m.wstrb[7:0]  = 8'hFF;
+    axi_m.wstrb  = '1;
     axi_m.wlast  = 1'b1;
 
     // B

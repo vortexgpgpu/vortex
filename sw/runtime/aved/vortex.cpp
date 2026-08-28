@@ -819,8 +819,59 @@ private:
   // commands. sim_refresh() skips it for the same reason.
   int staged_refresh(uint32_t seqnum) {
     std::lock_guard<std::mutex> g(staged_mu_);
+    // ----- Order the completion line BEFORE the data regions, and fence on
+    // it. Q_SEQNUM is a register: it reads back retired the cycle the engine
+    // retires, over the fast MMIO path. The command's payload -- a MEM_READ's
+    // staging buffer -- went out the CP's AXI master into the NoC toward HBM,
+    // and nothing orders "register visible over MMIO" against "writes visible
+    // to a QDMA read of HBM". Refreshing on the MMIO value alone therefore
+    // reads staging that the interconnect has not delivered yet, and the
+    // window is microseconds wide -- wide enough that demo's 64 KB download
+    // failed roughly every other run, and narrow enough that ANY tracing made
+    // it pass (the original wrong-results Heisenbug on this backend).
+    //
+    // VX_cp_completion writes the retired seqnum INTO the staged completion
+    // line, from the same AXI master, after the payload writes have collected
+    // their BRESPs. So the line doubles as an in-band fence: once the HBM copy
+    // of the cmpl line shows the seqnum the MMIO register reported, the
+    // payload writes that preceded it are readable too. Spin on that before
+    // touching the data regions; reading data first would re-open the race
+    // this exists to close.
+    const auto cmpl_it = (staged_cmpl_addr_ != 0)
+        ? staged_regions_.find(staged_cmpl_addr_) : staged_regions_.end();
+    if (getenv("VORTEX_AVED_FENCE_DEBUG")) {
+      uint64_t c64 = 0;
+      if (cmpl_it != staged_regions_.end())
+        std::memcpy(&c64, cmpl_it->second.buf->get(), sizeof(c64));
+      fprintf(stderr, "[VXDRV] fence: seq=%u cmpl_addr=0x%lx region=%s "
+              "shadow_cmpl=%lu\n", seqnum, staged_cmpl_addr_,
+              cmpl_it != staged_regions_.end() ? "found" : "MISSING", c64);
+    }
+    if (cmpl_it != staged_regions_.end()) {
+      const auto t0 = std::chrono::steady_clock::now();
+      for (;;) {
+        if (staged_xfer(cmpl_it->second, false) != 0) {
+          return -1;
+        }
+        uint64_t cmpl64 = 0;
+        std::memcpy(&cmpl64, cmpl_it->second.buf->get(), sizeof(cmpl64));
+        // Modular compare on the 32-bit window: the CP may have retired
+        // further commands since the MMIO read, so "caught up or past".
+        if (int32_t(uint32_t(cmpl64) - seqnum) >= 0) {
+          break;
+        }
+        if (std::chrono::steady_clock::now() - t0 > std::chrono::seconds(1)) {
+          fprintf(stderr,
+                  "[VXDRV] warning: completion line (%u) never caught up to "
+                  "Q_SEQNUM (%u); staged data may be stale\n",
+                  uint32_t(cmpl64), seqnum);
+          break;
+        }
+      }
+    }
     for (const auto& kv : staged_regions_) {
-      if (kv.first == staged_ring_addr_) {
+      if (kv.first == staged_ring_addr_
+          || (cmpl_it != staged_regions_.end() && kv.first == cmpl_it->first)) {
         continue;
       }
       if (staged_xfer(kv.second, false) != 0) {
