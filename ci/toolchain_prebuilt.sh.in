@@ -166,10 +166,24 @@ gem5()
 # source by ci/sst_install.sh, which now also runs an aggressive
 # strip+prune pass that drops the install from ~2.9 GB to ~36 MB.
 
+# SLASH userspace (VRT runtime + vrtd + v80-smi + slashkit) for the AMD
+# Alveo V80 — the counterpart of toolchain_install.sh --slash. Packages the
+# relocatable prefix at $TOOLDIR/slash (bin/ lib/ include/ share/), which is
+# what a SLASH `scripts/pinstall.sh <destdir>` run installs under <destdir>/usr.
+# ~20 MB compressed, so no split needed. The kernel driver is NOT part of
+# this tarball — it ships as .deb packages built from the SLASH fork.
+slash()
+{
+    echo "prebuilt slash..."
+    tar -C $TOOLDIR -cvjf slash.tar.bz2 slash
+    mkdir -p ./slash/$OSVERSION
+    mv slash.tar.bz2 ./slash/$OSVERSION
+}
+
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--slash] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -203,6 +217,8 @@ while [ "$1" != "" ]; do
         --sta ) sta
                 ;;
         --gem5 ) gem5
+                ;;
+        --slash ) slash
                 ;;
         --all ) pocl
                 chipstar
