@@ -152,10 +152,48 @@ for run in 1 2; do
     echo
 done
 
+# --- Stage 3: livelocked-kernel recovery -------------------------------------
+# Launch a kernel that spins forever (tests/regression/spin), SIGKILL the
+# host process while the GPU is actively looping, and prove the next open's
+# reset recovers the device -- no JTAG reload, no reboot. This is the
+# hostile case: the reset fires while warps are executing, not after a
+# clean retire.
+echo "--- run 3: livelocked-kernel recovery ---"
+SPIN_OUT="$LOGDIR/spin.log"
+bash "$TOOLS_DIR/run_hw_test.sh" spin > "$SPIN_OUT" 2>&1 &
+spin_job=$!
+spin_pid=""
+for _ in $(seq 1 60); do
+    spin_pid=$(pgrep -x spin | head -1)
+    # Wait until the app has actually launched the kernel (the GPU is
+    # spinning once the runtime reports the ring accepted / poll ongoing).
+    if [ -n "$spin_pid" ] && grep -q "livelocked kernel" "$SPIN_OUT"; then
+        sleep 5   # let the launch reach the GPU and wedge for real
+        break
+    fi
+    sleep 2
+done
+if [ -z "$spin_pid" ]; then
+    echo "    spin   : NEVER STARTED -- see $SPIN_OUT"; overall=1
+else
+    kill -9 "$spin_pid" 2>/dev/null
+    wait "$spin_job" 2>/dev/null
+    echo "    spin   : launched, GPU livelocked, host SIGKILLed (pid $spin_pid)"
+    REC_OUT="$LOGDIR/recovery.log"
+    if bash "$TOOLS_DIR/run_hw_test.sh" "$TEST" > "$REC_OUT" 2>&1 \
+        && grep -qE "\bPASSED\b" "$REC_OUT"; then
+        echo "    recover: passed -- reset recovered a livelocked GPU"
+    else
+        echo "    recover: FAILED -- see $REC_OUT"; overall=1
+    fi
+fi
+echo
+
 echo "======================================================="
 if [ "$overall" -eq 0 ]; then
     echo "ACCEPTED: $TEST ran twice in one boot, both resets honoured,"
-    echo "          card healthy throughout. No JTAG reload in between."
+    echo "          card healthy throughout, and a livelocked kernel was"
+    echo "          recovered by reset alone. No JTAG reload in between."
 else
     echo "NOT ACCEPTED -- see $LOGDIR"
 fi
