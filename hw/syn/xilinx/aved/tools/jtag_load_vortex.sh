@@ -119,7 +119,7 @@ if PDI_PATH="$PDI" timeout 1800 xsdb "$WORK/load.tcl" 2>&1 | tee /dev/stderr | g
     #
     # /tmp is the correct lifetime: a reboot clears the stamp, and a reboot is
     # also exactly when the card reloads from OSPI and loses the AFU.
-    echo "$VBIN" > /tmp/v80_resident_afu.path
+    realpath "$VBIN" > /tmp/v80_resident_afu.path
     echo "  recorded resident vbin: $VBIN"
 else
     rm -f /tmp/v80_resident_afu.path
