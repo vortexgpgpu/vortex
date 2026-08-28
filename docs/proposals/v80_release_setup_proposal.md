@@ -1,8 +1,8 @@
 # V80 setup: from scripts to packages
 
-**Status:** implemented — SLASH installs from its own Debian packages; the
-per-boot scripts and the include shim are gone. Three packaging defects had to
-be fixed to get there. **Not yet exercised across a reboot.**
+**Status:** implemented and **verified across reboots** (three, 2026-08-26/27).
+SLASH installs from its own Debian packages; the per-boot scripts and the
+include shim are gone. Four packaging defects had to be fixed to get there.
 **Scope:** SLASH packaging (fork), `sw/runtime/aved/Makefile`,
 `hw/syn/xilinx/aved/tools/`, docs
 
@@ -57,7 +57,7 @@ the file list.
 
 ---
 
-## 3. The three defects that actually blocked packaging
+## 3. The three defects in the build itself
 
 Each produced a failure well away from its cause.
 
@@ -119,26 +119,45 @@ it until the packaging was tried.
 
 ---
 
-## 4. Secure Boot
+## 4. Secure Boot — the fourth defect
 
-DKMS signs the module with a locally generated MOK. Under Secure Boot
-(`sig_enforce=Y`) that key must be enrolled:
+DKMS signs out-of-tree modules with a machine-local MOK, and it will *create*
+that key on demand: it calls `update-secureboot-policy --new-key`. Nothing in
+the `dkms` or `shim-signed` maintainer scripts ever calls `--enroll-key`. The
+result under `sig_enforce=Y` is a module that builds, installs, and is signed —
+and that the kernel then refuses to load:
 
 ```
 modprobe: ERROR: could not insert 'slash': Key was rejected by service
 # dmesg: Loading of module with unavailable key is rejected
 ```
 
-`sudo mokutil --import /var/lib/shim-signed/mok/MOK.der`, then complete the
-enrolment in MokManager at the next boot. Once, ever.
+with nothing in the install output hinting at why. That is not a working
+package. `apt install` has to be the whole procedure.
 
-**An open question.** The old `slash_only_load.sh` did `insmod` on a module
-with *no signature at all*, which under `sig_enforce=Y` should also have been
-rejected — yet those loads reportedly succeeded. Either Secure Boot was
-enabled after them, or they ran under a different boot state. This is
-unresolved and recorded rather than guessed at. It does not change the
-conclusion: enrolling the MOK is correct regardless, and it is strictly better
-than depending on unsigned module loading that Secure Boot exists to prevent.
+`slash-dkms.postinst` now enrols the key itself, after the `#DEBHELPER#` token
+so it runs once DKMS has built and signed. It gates on Secure Boot actually
+being enabled (reading the `SecureBoot` EFI variable), calls `--new-key`
+followed by `--enroll-key`, and never fails the install over the outcome — the
+module is built and installed either way, and a machine whose owner declines
+enrolment should still end up with a configured package. `--enroll-key` is
+idempotent (it checks `mokutil --test-key`) and also sets `mokutil --timeout -1`
+so MokManager waits for the user instead of discarding the request after ten
+seconds. The debconf prompt asks for a one-time password; the enrolment
+completes at the next boot. Once, ever.
+
+**This is better than XRT, not merely equal to it.** XRT's `install.sh` gives
+up at this point and tells the user to disable Secure Boot. The bar for this
+work was "as simple as installing XRT"; on this particular step the packaged
+SLASH install clears it.
+
+**An open question, unresolved.** The old `slash_only_load.sh` did `insmod` on
+a module with *no signature at all*, which under `sig_enforce=Y` should also
+have been rejected — yet those loads reportedly succeeded. Either Secure Boot
+was enabled afterwards, or they ran under a different boot state. Recorded
+rather than guessed at. It does not change the conclusion: enrolling the MOK is
+correct regardless, and strictly better than depending on unsigned module
+loading that Secure Boot exists to prevent.
 
 ---
 
@@ -231,16 +250,18 @@ simply was not running as a service. It was deleted rather than kept.
 
 ## 7. What remains
 
-* **Not yet exercised across a reboot.** The autoload and socket-activation
-  claims above follow from the installed modalias table and enabled units, not
-  from having watched a boot. The MOK enrolment completes at the same reboot.
+* ~~Not yet exercised across a reboot.~~ **Done.** Verified across three
+  reboots: the module autoloads from its PCI modalias, `vrtd.socket` is
+  socket-activated, the udev rule assigns the nodes to `vrtd`, and `v80-smi
+  list` plus a hardware test both run with no per-boot command and no root.
 * **`/opt/xilinx/slash` is still on disk** (7.7 MB) and no longer on the
   linker path. It can go once a hardware run has passed against the packaged
   libraries.
 * **`~/dev/v80/`** still holds ~68 untracked machine-local items. Anything
   worth keeping moves in-tree or into `docs/`; the rest is deletable. No
   workflow should depend on a path in one person's home directory.
-* **Upstream the fixes.** All three defects in §3, plus the `vrt.pc` gap in
+* **Upstream the fixes.** All three defects in §3, the Secure Boot
+  enrolment in §4, plus the `vrt.pc` gap in
   §5, belong upstream rather than in a fork.
 * **`ci/toolchain_install.sh --slash`** still unpacks a userspace-only
   tarball. It should install the packages instead.
