@@ -494,7 +494,12 @@ pulse fails it.
    demonstrate is `minimal` twice in one boot, because it carried an unrelated
    build-configuration defect (§8.2) that hung the CP before the second run.
 7. **`minimal` twice in one boot** — not done. Blocked only on §8.2, fixed and
-   rebuilding.
+   rebuilding. Scripted as
+   [`hw/syn/xilinx/aved/tools/reset_acceptance.sh`](../../hw/syn/xilinx/aved/tools/reset_acceptance.sh),
+   which runs the test twice and reads each run's register trace: the reset
+   must have been issued, honoured (`ap_idle` set, `CTL_RESET_ERROR` clear),
+   and the card must never return `0xFFFFFFFF`. A refused reset fails the test
+   even when the binary passes.
 8. **Hung-kernel recovery** — not done. Launch a kernel that never completes,
    recover with `Q_CONTROL.reset`, and run a passing test with no JTAG reload.
    This is the capability the whole exercise was for, and it can only be
