@@ -50,6 +50,9 @@ tests:
 #   dut         hw/syn/xilinx/dut/<dut> target to synthesize
 #   clock_mhz   target clock, baked into the constraint via CLK_FREQ_MHZ
 #   group       which golden file the results land in
+#   impl_strategy  Vivado implementation strategy for this build (IMPL_STRATEGY
+#               env into project.tcl); absent = the OPT_LEVEL default. Part of
+#               the config fingerprint when set.
 #   thresholds  per-metric gate tolerance, overriding --metric-threshold and
 #               --threshold (e.g. {lut: 0.10} to allow 10% area growth)
 #   known_issue tracked expected failure: still builds and reports, does not fail
@@ -181,3 +184,7 @@ builds:
   dut: tensor
   clock_mhz: 250
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+  # Route-dominated at this size: identical-area netlists swung 207-242 MHz
+  # under the default strategy (placement variance), which no 5% gate
+  # tolerance survives. Same closure pick as vm (vm_dse).
+  impl_strategy: Performance_NetDelay_high

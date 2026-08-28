@@ -226,6 +226,10 @@ def config_hash(build, env):
     """Fingerprint the synthesis inputs; a change invalidates the stored metrics."""
     key = "|".join([build["dut"], str(build["clock_mhz"]), build["configs"],
                     env["device"], str(env["opt_level"]), str(env["xlen"])])
+    # Appended only when set, so builds without a strategy override keep the
+    # hash their baselines were recorded under.
+    if build.get("impl_strategy"):
+        key += "|" + build["impl_strategy"]
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
@@ -258,6 +262,8 @@ def save_baselines(root, tool, results, env):
                 "config_hash": config_hash(b, env),
                 "result": dict(r["metrics"], env=dict(env)),
             }
+            if b.get("impl_strategy"):
+                entries[b["id"]]["impl_strategy"] = b["impl_strategy"]
         with open(path, "w") as fh:
             json.dump(entries, fh, indent=2, sort_keys=True)
             fh.write("\n")
@@ -487,6 +493,8 @@ def run_build(build, build_dir, env, args):
                 CLK_FREQ_MHZ=str(build["clock_mhz"]),
                 OPT_LEVEL=str(env["opt_level"]),
                 MAX_JOBS=str(args.vivado_jobs))
+    if build.get("impl_strategy"):
+        benv["IMPL_STRATEGY"] = build["impl_strategy"]
     if resume:
         benv["RESUME"] = "1"   # make clean is a no-op; keeps project_1 + *.dcp
 
