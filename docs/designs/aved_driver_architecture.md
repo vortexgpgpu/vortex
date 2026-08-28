@@ -162,7 +162,17 @@ zero, and only then asserts the internal reset. If a master will not drain it
 `CTL_RESET_ERROR` and reports rather than proceeding. See
 [`../proposals/afu_reset_architecture_proposal.md`](../proposals/afu_reset_architecture_proposal.md).
 
-None of this has run on silicon yet.
+**Confirmed on silicon**, 2026-08-27: `CTL_AP_RESET` completes and the card
+survives it; `ap_ctrl` reads back afterwards; the reset succeeds with
+`reset_error` clear on a drained device; and against a CP genuinely blocked on
+an outstanding read the sequencer **refused**, set `CTL_RESET_ERROR`, and
+`init()` reported it — the refusal path is not theoretical.
+
+A `CTL_RESET_ERROR` therefore means what it says: some master is stuck, and the
+device is telling you so rather than corrupting the bus to hide it. On the
+first occasion it fired, the stuck master was the CP, blocked on a ring fetch
+through a mis-tagged `m_axi_host` (§4.1) — the reset logic was right and the
+build was wrong.
 
 For the record, `xrt` and `opae` never hit the demux defect because XRT issues
 `CTL_AP_RESET` before any CP-window access and re-asserts `ap_rst_n` on every
@@ -220,6 +230,27 @@ loop that should retire in about a microsecond, while the byte-identical build
 with that one line changed to `:HBM0` completes in under 0.1 s. That isolates
 the fault to the HOST path rather than to mastering, the AFU, or the build flow.
 
+**What it looks like when you build one by mistake**, which is the expensive
+part, because nothing reports an error:
+
+```
+Q_CONTROL=0x1  Q_TAIL=0x40  Q_ERROR=0  CP_STATUS=0  RING_BASE=0xfffe0000
+head = 0   (forever)
+```
+
+The queue is armed, the doorbell was written, the ring base is right, and no
+error bit is set anywhere — the CP is simply blocked on a read that will never
+be answered. The *next* process to open the device then has its `CTL_AP_RESET`
+refused with `CTL_RESET_ERROR`, correctly, because that read really is still
+outstanding; it reads like a reset bug and is not one.
+
+This happened on 2026-08-27 and cost a bitstream and three reboots. The cause
+was `platforms.mk` pinning `MEM_TAG` but not `HOST_TAG`, leaving the Makefile's
+`HOST_TAG ?= HOST` to win. Both are pinned now, and `HOST_TAG=HOST` is refused
+at Makefile parse time rather than after two and a half hours of Vivado. Before
+blaming a hardware symptom on RTL, diff the build's generated `config.cfg`
+against the last known-good one.
+
 ### 4.2 Path B — staged in device memory (the hardware path)
 
 The ring, head/completion cachelines and DMA staging buffers are instead placed
@@ -258,6 +289,11 @@ Self-configuring, not a build flag: `portMemoryConfig()` reads the connection
 map out of the vbin's `system_map.xml` and throws when the port has no memory
 target. A vbin built with `HOST_TAG=HOST` therefore keeps Path A untouched and
 one built with `HOST_TAG=HBM1` stages, with no way for the two to disagree.
+
+That auto-detection is what makes a `HOST` build so quiet: the runtime happily
+selects the contract-native path and then waits forever on a bridge that never
+answers. The runtime cannot tell the difference — which is why the refusal now
+lives in the build (§4.1) rather than here.
 
 ### 4.3 Path C — the simulation model
 

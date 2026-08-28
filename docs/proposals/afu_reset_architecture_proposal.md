@@ -1,11 +1,16 @@
 # The AFU reset defect: root cause, fix, and what remains
 
-**Status:** root cause identified and reproduced; both defects fixed and
-covered by unit tests; **not yet run on silicon**
+**Status:** root cause identified and reproduced; all defects fixed and covered
+by unit tests. **Confirmed on silicon** (2026-08-27): the reset completes, the
+card survives, the sequencer refuses correctly when a master will not drain,
+and the CP queue reset clears. The remaining acceptance test — `minimal` twice
+in one boot — is blocked on a rebuild, for a build-configuration defect
+unrelated to the reset (§8.2).
 **Scope:** `hw/rtl/afu/common/` — `VX_afu_axil_demux.sv`, `VX_afu_axi_drain.sv`,
-`VX_afu_reset_seq.sv` (all new), `VX_afu_wrap.sv`, `VX_afu_ctrl.sv`;
-`hw/rtl/cp/` — `VX_cp_core.sv`, `VX_cp_fetch.sv`, `VX_cp_engine.sv`,
-`VX_cp_axil_regfile.sv`; `sw/runtime/aved/vortex.cpp`;
+`VX_afu_reset_seq.sv`, `VX_afu_req_gate.sv` (all new), `VX_afu_wrap.sv`,
+`VX_afu_ctrl.sv`; `hw/rtl/cp/` — `VX_cp_core.sv`, `VX_cp_fetch.sv`,
+`VX_cp_engine.sv`, `VX_cp_axil_regfile.sv`; `sw/runtime/aved/vortex.cpp`;
+`hw/syn/xilinx/aved/platforms.mk`, `hw/syn/xilinx/aved/Makefile`;
 `hw/unittest/afu_axil_demux/`, `hw/unittest/afu_reset_seq/`
 
 ---
@@ -338,12 +343,41 @@ would drive an up/down counter negative.
 ### 6.2 The request gate
 
 New `AW`/`AR` are withheld from the shell while a reset is quiescing, so the
-counters reach zero in bounded time even if the core is still running:
+counters reach zero in bounded time even if the core is still running.
+
+The first version of this gate was written the obvious way, and it was wrong:
 
 ```systemverilog
-assign m_axi_mem_awvalid_a[i] = pre_awvalid_a[i] && !rst_stop_req;
-assign pre_awready_a[i]       = m_axi_mem_awready_a[i] && !rst_stop_req;
+assign m_axi_mem_awvalid_a[i] = pre_awvalid_a[i] && !rst_stop_req;   // WRONG
 ```
+
+AXI4 §A3.2.1 requires that once `VALID` is asserted it stays asserted until the
+edge where `VALID` and `READY` are both high. A master may not withdraw an
+offer because it changed its mind. That expression does exactly that whenever
+`stop_req` rises while a request is already being presented, and an
+interconnect is entitled to have latched it — the Versal NoC does. The port is
+then permanently out of step with the slave: the transaction is neither
+accepted nor retractable, later transfers on the same port never complete, and
+the drain counters, which only observe the handshake, report that master busy
+forever. A reset sequencer built to avoid corrupting the bus would have been
+corrupting it itself.
+
+[`VX_afu_req_gate`](../../hw/rtl/afu/common/VX_afu_req_gate.sv) registers the
+block decision, and the register may only change while no offer is outstanding:
+
+```systemverilog
+always @(posedge clk) begin
+    if (reset) blocked <= 1'b0;
+    else if (!(out_valid && !out_ready)) blocked <= stop_req;
+end
+assign out_valid = in_valid && !blocked;
+assign in_ready  = out_ready && !blocked;
+```
+
+A request already presented stays presented until it is accepted; the next one
+is held off. Quiescing therefore takes effect *within one transaction* rather
+than instantly — bounded by the slave's own acceptance latency, and exactly
+what quiescing ought to mean.
 
 `W`, `B` and `R` are never gated: a burst whose address the interconnect has
 already accepted must be allowed to finish. Gating at the AFU boundary rather
@@ -445,31 +479,72 @@ pulse fails it.
 4. ~~Wire `q_reset_pulse`.~~ **Done** (§6.4), tested in `hw/unittest/cp_core`.
 5. ~~Elaborate and run.~~ **Done** — `xrtsim` and `avedsim` build clean and
    pass `demo` with the reset unconditional.
-6. **On silicon** — not done. Rebuild the bitstream, then run `minimal` twice
-   in the same boot. The second run is the one that used to kill the card.
-   That measurement decides whether this worked; everything above it is
-   evidence.
-7. **Hung-kernel recovery** — not done. Launch a kernel that never completes,
+6. **On silicon — partly done** (`rst2c`, 2026-08-27). Confirmed on the board:
+
+   | Behaviour | Observed |
+   |---|---|
+   | `CTL_AP_RESET` completes instead of wedging the card | ✅ |
+   | `ap_ctrl` reads back afterwards (no completion timeout) | ✅ |
+   | Reset succeeds on a drained device, `reset_error` clear | ✅ |
+   | Reset **refused** on an undrained master, `CTL_RESET_ERROR` set | ✅ |
+   | `Q_SEQNUM` cleared by the queue reset | ✅ |
+
+   The demux fix, the sequencer's success path, its refusal path, and the CP
+   queue reset all work on silicon. What that bitstream could **not**
+   demonstrate is `minimal` twice in one boot, because it carried an unrelated
+   build-configuration defect (§8.2) that hung the CP before the second run.
+7. **`minimal` twice in one boot** — not done. Blocked only on §8.2, fixed and
+   rebuilding.
+8. **Hung-kernel recovery** — not done. Launch a kernel that never completes,
    recover with `Q_CONTROL.reset`, and run a passing test with no JTAG reload.
    This is the capability the whole exercise was for, and it can only be
    demonstrated on hardware.
 
-Steps 6 and 7 need a synthesis run, so they are the user's call on timing.
-
 ### 8.1 Risks carried into that build
 
-* **Timing.** A handful of counters, one small FSM, and an AND gate on the
-  `AW`/`AR` handshake. Negligible area against 675 k LUTs, but the design
-  already runs ~5% beyond closure, so the new `!rst_stop_req` term on the
-  request path should be checked in the next timing report rather than
-  assumed free.
-* **The gate is on a hot path.** `m_axi_mem_awvalid` now depends on
-  `rst_stop_req`. It is a single AND, but it is in the memory request path of
-  every bank.
+* **Timing.** Measured on `rst2c`: WNS −0.312 ns, TNS −1570 ns,
+  15,349 / 1,214,122 failing endpoints, against gfx2c's −0.261 ns. All ten
+  worst paths are in the TCU (`wgmma`/`tbuf`/`bbuf`, the `fedp` pipeline).
+  **None involves `rst_stop_req` or the request gate**, so the reset logic did
+  not cost closure. Utilisation is essentially unchanged: 648,356 LUTs
+  (25.19%), 1,089 RAMB36, 657 DSP.
+* **The gate is on a hot path.** `m_axi_mem_awvalid` now passes through
+  `VX_afu_req_gate`. It is one AND from a register, but it is in the memory
+  request path of every bank. See the timing note above.
 * **Counter width.** `COUNT_WIDTH = 10` — the comparison is exact only while
   fewer than 1024 transactions are outstanding on a port. That is far beyond
   what `PLATFORM_MEMORY_ID_WIDTH` (6 bits ⇒ 64 IDs) implies, but it is an
   assumption rather than a proof.
+
+### 8.2 The defect that cost the `rst2c` hardware run
+
+`rst2c` was built with `sp=vortex_afu_0.m_axi_host:HOST`, which routes the CP's
+command-ring master to the QDMA slave bridge. Reads through that bridge never
+return a response on this compute shell. The CP therefore hung on its very
+first ring fetch, and — this is the part worth internalising — **reported
+nothing wrong**:
+
+```
+Q_CONTROL=0x1  Q_TAIL=0x40  Q_ERROR=0  CP_STATUS=0  head=0 (forever)
+```
+
+Every register read back armed and correct. The following run's reset was then
+refused with `CTL_RESET_ERROR`, *correctly*, because that read really was still
+outstanding. The sequencer was reporting the truth and it was read as a fault
+in the sequencer.
+
+The cause was not RTL at all. `platforms.mk` pinned `MEM_TAG` but never
+`HOST_TAG`, so the Makefile's `HOST_TAG ?= HOST` won and the working value
+survived only on the command line of whoever last built a bitstream — one
+build. Fixed by pinning `HOST_TAG = HBM1` beside `MEM_TAG` and adding a
+parse-time guard that refuses `HOST_TAG=HOST` outright, so the mistake costs a
+second rather than a synthesis run.
+
+The A/B that settled it was two `config.cfg` files already sitting on disk. It
+was diagnosed instead by hardware experiments costing three reboots. **Diff the
+generated link configuration against the last known-good build before
+attributing a hardware symptom to RTL** — it is free, and here it was the whole
+answer.
 
 ---
 
@@ -481,7 +556,13 @@ survived because it was plausible and none was tested. What settled it was the
 recorded MMIO trace plus the 1 Hz link sample — both of which existed for days
 before they were read carefully.
 
-Three practical consequences:
+The same pattern then repeated on the follow-up build (§8.2): a hardware
+symptom was attributed to new RTL and chased across three reboots, when the
+answer was a one-word difference between two `config.cfg` files already on
+disk. The lesson did not transfer the first time it was learned, which is
+itself the argument for writing it down here.
+
+Four practical consequences:
 
 * **`hw/unittest` is where AFU-level integration logic belongs.** The demux was
   twelve lines of glue inside a 770-line wrapper and no test could reach it. It
@@ -490,8 +571,17 @@ Three practical consequences:
 * **"It works on XRT" is not evidence.** The U55C ran the demux defect for as
   long as the CP has existed and never showed it, purely because its driver
   happened to order two register writes the other way round.
-* **A test that has never failed has not been validated.** Both new tests were
-  checked by re-injecting the original defect and confirming they go red. The
-  first attempt at that check was itself wrong — the build failed on lint and
-  the stale binary reported a pass — which is the same class of mistake as
+* **A test that has never failed has not been validated.** All three new tests
+  were checked by re-injecting the original defect and confirming they go red.
+  The first attempt at that check was itself wrong — the build failed on lint
+  and the stale binary reported a pass — which is the same class of mistake as
   judging a hardware run by its exit code.
+* **A test harness that does not instantiate the thing it is testing proves
+  nothing.** `afu_reset_seq` drove the drain counters' handshake inputs
+  directly and never contained a request gate, so the AXI4 violation in §6.2
+  sat outside the DUT entirely and all 33 checks passed over it. The gate is
+  inside the harness now. When a module is extracted specifically so it can be
+  tested, the extraction is only half the work.
+* **Cheap evidence first.** Diffing two generated build configurations costs
+  seconds; a hardware bisect costs reboots and a bitstream. §8.2 was the
+  second, and should have been the first.
