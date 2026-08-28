@@ -44,7 +44,16 @@ module VX_afu_axi_drain #(
     input  wire ar_fire,      // arvalid && arready
     input  wire r_fire_last,  // rvalid && rready && rlast
 
-    output wire idle
+    output wire idle,
+
+    // Raw counters, for the debug block in VX_afu_ctrl. Comparing these from
+    // the host is how "did the write ever leave the AFU" gets answered
+    // without a JTAG ILA.
+    output wire [COUNT_WIDTH-1:0] dbg_aw_count,
+    output wire [COUNT_WIDTH-1:0] dbg_w_count,
+    output wire [COUNT_WIDTH-1:0] dbg_b_count,
+    output wire [COUNT_WIDTH-1:0] dbg_ar_count,
+    output wire [COUNT_WIDTH-1:0] dbg_r_count
 );
     reg [COUNT_WIDTH-1:0] aw_count;
     reg [COUNT_WIDTH-1:0] w_count;
@@ -79,6 +88,12 @@ module VX_afu_axi_drain #(
     end
 
     // Every burst launched has been fully written, answered, and read back.
+    assign dbg_aw_count = aw_count;
+    assign dbg_w_count  = w_count;
+    assign dbg_b_count  = b_count;
+    assign dbg_ar_count = ar_count;
+    assign dbg_r_count  = r_count;
+
     assign idle = (aw_count == w_count)
                && (aw_count == b_count)
                && (ar_count == r_count);

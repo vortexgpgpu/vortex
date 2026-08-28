@@ -309,7 +309,13 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
         .ap_reset        (ap_reset),
         .soft_reset_busy (rst_busy),
-        .reset_error     (rst_timeout_error)
+        .reset_error     (rst_timeout_error),
+
+        .dbg_host_aw_count (dbg_host_aw_count),
+        .dbg_host_w_count  (dbg_host_w_count),
+        .dbg_host_b_count  (dbg_host_b_count),
+        .dbg_host_ar_count (dbg_host_ar_count),
+        .dbg_host_r_count  (dbg_host_r_count)
 
     `ifdef SCOPE
       , .scope_bus_in   (scope_bus_out),
@@ -564,30 +570,43 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         );
 
         VX_afu_axi_drain mem_drain (
-            .clk         (clk),
-            .reset       (reset),
-            .aw_fire     (m_axi_mem_awvalid_a[i] && m_axi_mem_awready_a[i]),
-            .w_fire_last (m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i]
-                                                && m_axi_mem_wlast_a[i]),
-            .b_fire      (m_axi_mem_bvalid_a[i] && m_axi_mem_bready_a[i]),
-            .ar_fire     (m_axi_mem_arvalid_a[i] && m_axi_mem_arready_a[i]),
-            .r_fire_last (m_axi_mem_rvalid_a[i] && m_axi_mem_rready_a[i]
-                                                && m_axi_mem_rlast_a[i]),
-            .idle        (mem_idle_a[i])
+            .clk          (clk),
+            .reset        (reset),
+            .aw_fire      (m_axi_mem_awvalid_a[i] && m_axi_mem_awready_a[i]),
+            .w_fire_last  (m_axi_mem_wvalid_a[i] && m_axi_mem_wready_a[i]
+                                                 && m_axi_mem_wlast_a[i]),
+            .b_fire       (m_axi_mem_bvalid_a[i] && m_axi_mem_bready_a[i]),
+            .ar_fire      (m_axi_mem_arvalid_a[i] && m_axi_mem_arready_a[i]),
+            .r_fire_last  (m_axi_mem_rvalid_a[i] && m_axi_mem_rready_a[i]
+                                                 && m_axi_mem_rlast_a[i]),
+            .idle         (mem_idle_a[i]),
+            `UNUSED_PIN (dbg_aw_count),
+            `UNUSED_PIN (dbg_w_count),
+            `UNUSED_PIN (dbg_b_count),
+            `UNUSED_PIN (dbg_ar_count),
+            `UNUSED_PIN (dbg_r_count)
         );
     end
 
     wire host_idle;
 
+    wire [9:0] dbg_host_aw_count, dbg_host_w_count, dbg_host_b_count;
+    wire [9:0] dbg_host_ar_count, dbg_host_r_count;
+
     VX_afu_axi_drain host_drain (
-        .clk         (clk),
-        .reset       (reset),
-        .aw_fire     (m_axi_host_awvalid && m_axi_host_awready),
-        .w_fire_last (m_axi_host_wvalid && m_axi_host_wready && m_axi_host_wlast),
-        .b_fire      (m_axi_host_bvalid && m_axi_host_bready),
-        .ar_fire     (m_axi_host_arvalid && m_axi_host_arready),
-        .r_fire_last (m_axi_host_rvalid && m_axi_host_rready && m_axi_host_rlast),
-        .idle        (host_idle)
+        .clk          (clk),
+        .reset        (reset),
+        .aw_fire      (m_axi_host_awvalid && m_axi_host_awready),
+        .w_fire_last  (m_axi_host_wvalid && m_axi_host_wready && m_axi_host_wlast),
+        .b_fire       (m_axi_host_bvalid && m_axi_host_bready),
+        .ar_fire      (m_axi_host_arvalid && m_axi_host_arready),
+        .r_fire_last  (m_axi_host_rvalid && m_axi_host_rready && m_axi_host_rlast),
+        .idle         (host_idle),
+        .dbg_aw_count (dbg_host_aw_count),
+        .dbg_w_count  (dbg_host_w_count),
+        .dbg_b_count  (dbg_host_b_count),
+        .dbg_ar_count (dbg_host_ar_count),
+        .dbg_r_count  (dbg_host_r_count)
     );
 
     // masters_idle gates the reset assertion, so it must cover every master.

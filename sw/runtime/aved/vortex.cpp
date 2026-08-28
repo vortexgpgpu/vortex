@@ -233,6 +233,22 @@ public:
     // system_map.xml, which the kernel handle parses.
     staged_probe();
 
+    // Read-eviction buffer, allocated up front so staged_refresh never has
+    // to allocate under its own lock. 128 KB of HBM whose only job is to be
+    // read first -- see staged_refresh for why that is load-bearing.
+    if (staged_cfg_) {
+      void*    bhp = nullptr;
+      uint64_t bca = 0;
+      if (host_mem_alloc(128 * 1024, &bhp, &bca) == 0) {
+        std::lock_guard<std::mutex> g(staged_mu_);
+        auto it = staged_regions_.find(bca);
+        if (it != staged_regions_.end()) {
+          staged_buster_      = it->second;
+          staged_buster_addr_ = bca;
+        }
+      }
+    }
+
   #else
 
     CHECK_HANDLE(vrtDevice, vrtDeviceOpen(bdf, vbin_path), {
@@ -786,6 +802,9 @@ private:
   int staged_publish(bool include_cp_owned) {
     std::lock_guard<std::mutex> g(staged_mu_);
     for (const auto& kv : staged_regions_) {
+      if (kv.first == staged_buster_addr_) {
+        continue;   // eviction buffer: read-only scratch, nothing to publish
+      }
       if (!include_cp_owned
           && (kv.first == staged_head_addr_ || kv.first == staged_cmpl_addr_)) {
         continue;
@@ -823,6 +842,21 @@ private:
   // commands. sim_refresh() skips it for the same reason.
   int staged_refresh(uint32_t seqnum) {
     std::lock_guard<std::mutex> g(staged_mu_);
+    // ----- Evict before reading. Somewhere in the device-to-host read path
+    // (per QDMA connection -- a fresh process reads fresh) sits a read cache
+    // with no coherence against the CP's writes: re-reading an address the
+    // host has read before returns the OLD bytes until reads of OTHER
+    // addresses push the entry out by capacity. Measured on silicon: a
+    // completion line spun on for 50 ms stayed stale, then read fresh
+    // immediately after an unrelated 64 KB region was synced; a 1 KB download
+    // read stale forever while sgemm's megabyte sweeps never missed. So the
+    // first read of every refresh is a 128 KB region whose only job is to be
+    // read -- flushing the cache so the reads that matter hit HBM.
+    if (staged_buster_.buf) {
+      if (staged_xfer(staged_buster_, false) != 0) {
+        return -1;
+      }
+    }
     // ----- Order the completion line BEFORE the data regions, and fence on
     // it. Q_SEQNUM is a register: it reads back retired the cycle the engine
     // retires, over the fast MMIO path. The command's payload -- a MEM_READ's
@@ -853,7 +887,17 @@ private:
     }
     if (cmpl_it != staged_regions_.end()) {
       const auto t0 = std::chrono::steady_clock::now();
-      for (;;) {
+      for (bool first = true;; first = false) {
+        // Back off between polls instead of hammering. A read and a queued
+        // write to the same line contend in the memory path, and measured on
+        // silicon the reads win: a line polled in a tight loop stayed stale
+        // for over a second while the same line, left alone between sparse
+        // refreshes, updated within one command interval. Continuous polling
+        // is what STARVES the write this loop is waiting for; a half-
+        // millisecond gap is a window the write actually lands in.
+        if (!first) {
+          usleep(500);
+        }
         if (staged_xfer(cmpl_it->second, false) != 0) {
           return -1;
         }
@@ -890,6 +934,7 @@ private:
     }
     for (const auto& kv : staged_regions_) {
       if (kv.first == staged_ring_addr_
+          || kv.first == staged_buster_addr_
           || (cmpl_it != staged_regions_.end() && kv.first == cmpl_it->first)) {
         continue;
       }
@@ -1238,6 +1283,9 @@ private:
   std::vector<staged_pending_t>       staged_pending_;
   std::mutex                          staged_mu_;
 
+  // Read-eviction buffer for staged_refresh -- see the note there.
+  staged_region_t staged_buster_ {nullptr, 0};
+  uint64_t staged_buster_addr_  = 0;
   uint64_t staged_ring_addr_    = 0;
   uint64_t staged_head_addr_    = 0;
   uint64_t staged_cmpl_addr_    = 0;
