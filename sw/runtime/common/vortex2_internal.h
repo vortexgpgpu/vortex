@@ -135,6 +135,12 @@ public:
     virtual vx_result_t host_mem_alloc(uint64_t size, void** out_host_ptr,
                                        uint64_t* out_cp_addr) = 0;
     virtual vx_result_t host_mem_free (uint64_t cp_addr) = 0;
+    // Refresh the host view of one region after the CP wrote it (see
+    // callbacks.h). Called before reading a MEM_READ staging buffer.
+    virtual vx_result_t host_mem_pull (uint64_t cp_addr) = 0;
+    // Make one region's host writes visible to the CP (see callbacks.h).
+    // Called after filling a staging buffer, before submitting its command.
+    virtual vx_result_t host_mem_push (uint64_t cp_addr) = 0;
 };
 
 // ============================================================================
@@ -175,6 +181,14 @@ public:
     }
     vx_result_t host_mem_free(uint64_t cp_addr) override {
         return r(cb_.host_mem_free(dev_ctx_, cp_addr));
+    }
+    vx_result_t host_mem_pull(uint64_t cp_addr) override {
+        if (!cb_.host_mem_pull) return VX_SUCCESS;  // older backend: coherent
+        return r(cb_.host_mem_pull(dev_ctx_, cp_addr));
+    }
+    vx_result_t host_mem_push(uint64_t cp_addr) override {
+        if (!cb_.host_mem_push) return VX_SUCCESS;  // older backend: coherent
+        return r(cb_.host_mem_push(dev_ctx_, cp_addr));
     }
 
 private:

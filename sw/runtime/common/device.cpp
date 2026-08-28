@@ -892,6 +892,16 @@ vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
     auto r = host_alloc(size, &staging);
     if (r != VX_SUCCESS) return r;
     std::memcpy(staging.host_ptr, host_src, size);
+    // Make the fill visible to the CP before the command that reads it can
+    // be fetched. On shadowing backends this is the ONLY push of this
+    // region: the backend's doorbell publish deliberately does not touch
+    // generic regions (a blanket publish can push a half-filled or stale
+    // shadow over device bytes another agent owns).
+    r = platform()->host_mem_push(staging.cp_addr);
+    if (r != VX_SUCCESS) {
+        host_free(staging.cp_addr);
+        return r;
+    }
     r = cp_submit_mem_(CP_OPCODE_MEM_WRITE, dev_dst, staging.cp_addr, size,
                        physical);
     host_free(staging.cp_addr);
@@ -909,6 +919,13 @@ vx_result_t Device::cp_submit_mem_read(void* host_dst, uint64_t dev_src,
     if (r != VX_SUCCESS) return r;
     r = cp_submit_mem_(CP_OPCODE_MEM_READ, staging.cp_addr, dev_src, size,
                        physical);
+    if (r == VX_SUCCESS) {
+        // The CP wrote the staging region; on a backend that shadows CP
+        // memory the host copy is stale until pulled. The submit's Q_SEQNUM
+        // poll has already fenced on the completion line, so the pull reads
+        // settled bytes.
+        r = platform()->host_mem_pull(staging.cp_addr);
+    }
     if (r == VX_SUCCESS)
         std::memcpy(host_dst, staging.host_ptr, size);
     host_free(staging.cp_addr);

@@ -320,6 +320,15 @@ public:
     return 0;
   }
 
+  // Host BOs are host-resident and coherent with the AFU's view.
+  int host_mem_pull(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
+  int host_mem_push(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
 private:
 
   int write_register(uint32_t addr, uint32_t value) {
