@@ -94,7 +94,22 @@ echo "=== program the partial PDI (minutes; do not interrupt) ==="
 if PDI_PATH="$PDI" timeout 1800 xsdb "$WORK/load.tcl" 2>&1 | tee /dev/stderr | grep -q PARTIAL_PDI_OK; then
     echo
     echo "  VORTEX AFU LOADED"
+    # Record what is actually resident, so run_hw_test.sh stops guessing.
+    #
+    # With VORTEX_AVED_NO_PROGRAM=1 the vbin handed to the runtime is never
+    # written to the card, but it is still read: portMemoryConfig() takes the
+    # connection map out of its system_map.xml and that decides whether the CP
+    # memory is staged in HBM or reached through the QDMA slave bridge. Hand it
+    # a vbin from a different build tree and the runtime configures itself for
+    # hardware that is not in the fabric -- silently, and with symptoms that
+    # look like anything but a mismatched file.
+    #
+    # /tmp is the correct lifetime: a reboot clears the stamp, and a reboot is
+    # also exactly when the card reloads from OSPI and loses the AFU.
+    echo "$VBIN" > /tmp/v80_resident_afu.path
+    echo "  recorded resident vbin: $VBIN"
 else
+    rm -f /tmp/v80_resident_afu.path
     echo
     echo "  LOAD FAILED -- the RP may be partially configured."
     echo "  Recover with: bash ~/dev/v80/jtag_load_shell.sh   (then reboot)"

@@ -43,20 +43,53 @@ export LD_LIBRARY_PATH="$BUILD/sw/runtime:${LD_LIBRARY_PATH:-}"
 # the bus. VORTEX_AVED_TRACE is a different knob and traces only the simulation
 # host-memory sync, so it emits nothing here.
 
-# Which synthesis output to run. Overridable because the HOST_TAG variants are
-# separate build trees rather than rebuilds of one: build32_aved_hw is the
-# original (m_axi_host -> HOST, the QDMA slave bridge, which does not work on
-# this shell) and hbm1_aved_hw is the one that routes the CP's command ring to
-# HBM1 instead. Keeping both on disk means the two can be compared without a
-# 37-minute resynthesis, and the runtime picks its behaviour from whichever
-# vbin it is handed -- staged_probe() reads the target back out of
-# system_map.xml -- so this one variable selects the whole configuration.
-VBIN_DIR="${VBIN_DIR:-$BUILD/hw/syn/xilinx/aved/hbm1_aved_hw/bin}"
+# Which synthesis output to run -- and it must be the one actually resident in
+# the fabric.
+#
+# With VORTEX_AVED_NO_PROGRAM=1 this vbin is never written to the card, so it
+# is tempting to treat it as a formality. It is not: portMemoryConfig() reads
+# its system_map.xml to decide whether the CP's memory is staged in HBM or
+# reached through the QDMA slave bridge. Hand over a vbin from a different
+# build tree and the runtime configures itself for hardware that is not there.
+# This script used to default to a fixed build directory, which meant it
+# quietly did that whenever a newer AFU had been loaded.
+#
+# jtag_load_vortex.sh records what it loaded, so use that. VBIN_DIR still
+# overrides, for comparing two builds against one resident design on purpose.
+STAMP=/tmp/v80_resident_afu.path
+if [ -z "${VBIN_DIR:-}" ] && [ -r "$STAMP" ]; then
+    VBIN_DIR="$(dirname "$(cat "$STAMP")")"
+fi
+if [ -z "${VBIN_DIR:-}" ]; then
+    echo "run_hw_test.sh: don't know which AFU is resident." >&2
+    echo "  $STAMP is missing -- the card has not been loaded this boot, or it" >&2
+    echo "  was loaded by something other than jtag_load_vortex.sh." >&2
+    echo "  Load it:  bash hw/syn/xilinx/aved/tools/jtag_load_vortex.sh <vbin>" >&2
+    echo "  Or state it explicitly:  VBIN_DIR=<path>/bin $0 $TEST" >&2
+    exit 1
+fi
 [ -f "$VBIN_DIR/vortex_afu.vbin" ] || {
     echo "run_hw_test.sh: no vbin at $VBIN_DIR/vortex_afu.vbin" >&2
     exit 1
 }
 echo "run_hw_test.sh: using $VBIN_DIR/vortex_afu.vbin" >&2
+
+# Say out loud where m_axi_host points. A vbin tagged HOST routes the CP's
+# command ring to the QDMA slave bridge, whose reads never complete on this
+# shell: the CP then hangs on its first fetch with every register reading back
+# armed and correct and no error bit set anywhere. The build refuses to produce
+# one now, but old vbins are still on disk and this costs a few milliseconds.
+HOSTMAP=$(tar xzOf "$VBIN_DIR/vortex_afu.vbin" --wildcards '*system_map.xml' 2>/dev/null \
+          | grep -oE 'm_axi_host[^>]*' | head -1)
+case "$HOSTMAP" in
+  *HBM*) echo "run_hw_test.sh: m_axi_host -> HBM (staged CP memory)" >&2 ;;
+  "")    echo "run_hw_test.sh: could not read m_axi_host mapping from the vbin" >&2 ;;
+  *)     echo >&2
+         echo "run_hw_test.sh: WARNING -- m_axi_host is not on HBM: $HOSTMAP" >&2
+         echo "  If this is the QDMA slave bridge (HOST), the CP will hang on its" >&2
+         echo "  first ring fetch and report nothing. Rebuild with HOST_TAG=HBM1." >&2
+         echo >&2 ;;
+esac
 
 cd "$BUILD/tests/regression/$TEST" || exit 1
 exec timeout --signal=KILL "$TIMEOUT" \
