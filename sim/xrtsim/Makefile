@@ -5,6 +5,7 @@ DESTDIR ?= $(CURDIR)
 CONFIG_FILE := $(DESTDIR)/xrtsim_config.stamp
 SRC_DIR := $(VORTEX_HOME)/sim/xrtsim
 AFU_DIR := $(RTL_DIR)/afu/xrt
+AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
@@ -68,7 +69,7 @@ ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	FPU_INCLUDE += -y $(THIRD_PARTY_DIR)/cvfpu/src/stubs
 endif
 RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache $(FPU_INCLUDE)
-RTL_INCLUDE += -I$(AFU_DIR)
+RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_COMMON_DIR)
 RTL_INCLUDE += -I$(RTL_DIR)/cp
 
 # Add TCU extension sources

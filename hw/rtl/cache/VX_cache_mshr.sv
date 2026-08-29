@@ -107,6 +107,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire [DATA_WIDTH-1:0]         allocate_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_id,
     output wire                         allocate_pending,
+    output wire                         allocate_pending_wr,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_previd,
     output wire                         allocate_ready,
 
@@ -413,6 +414,12 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         // exclude write requests if writethrough
         assign allocate_pending = |(addr_matches & ~write_table);
     end
+
+    // The probed line's chain holds a WRITE that has not reached the data array
+    // yet. A same-line hit completing ahead of it would read pre-store data (or
+    // a write-hit would be overwritten by the older store's replay), inverting
+    // arrival order — the bank demotes such a hit to a chained miss.
+    assign allocate_pending_wr = |(addr_matches & write_table);
 
     assign dequeue_valid = dequeue_val;
     // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather

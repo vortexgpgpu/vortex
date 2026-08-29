@@ -1,5 +1,9 @@
 ROOT_DIR := $(realpath ../../../../../..)
 include $(ROOT_DIR)/config.mk
+# Exports VERILATOR/VERILATOR_PATH as absolute paths. gen_sources.sh resolves
+# verilator from the environment, so without this the flow silently depends on
+# verilator being on PATH and fails with "verilator: command not found".
+include $(VORTEX_HOME)/hw/syn/common.mk
 
 DEVICE ?= xcu55c-fsvh2892-2L-e
 
@@ -19,6 +23,7 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/dut
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
+AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 UNITTEST_DIR := $(VORTEX_HOME)/hw/unittest
 

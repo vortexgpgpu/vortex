@@ -72,7 +72,10 @@ Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 }
 
 LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core)
+	// Commit-side elasticity of 6 beats: the writeback path buffers a whole
+	// coalesced fragment burst, so a denied commit grant queues beats there
+	// instead of throttling the memory response stream.
+	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 6)
 #ifdef TCU_META_ENABLE
 	, TcuReqIn(this)
 	, TcuRspOut(this)
@@ -224,11 +227,10 @@ void LsuUnit::process_response_step(uint32_t b) {
 
 	auto trace = entry.trace;
 	auto& output = Outputs.at(b);
-	// Only stall if THIS response would terminate the request and the
-	// output is full (we'd lose the trace forwarding). Non-terminal
-	// responses can still update entry state without touching output.
-	bool is_terminal = (entry.count == lsu_rsp.mask.count()) && entry.eop;
-	if (is_terminal && output.full())
+	// Every response fragment retires through its own writeback slot, one
+	// per cycle, so a full output backpressures the whole response stream,
+	// not just the final fragment.
+	if (output.full())
 		return; // stall
 	DT(3, this->name() << " mem-rsp: " << lsu_rsp);
 	assert(entry.count != 0);
@@ -277,11 +279,24 @@ void LsuUnit::process_response_step(uint32_t b) {
 		}
 	}
 	entry.count -= lsu_rsp.mask.count(); // track remaining
-	if (entry.count == 0) {
+	bool is_final = (entry.count == 0);
+	if (is_final) {
 		state.pending_reqs.release(lsu_rsp.tag);
-		if (entry.eop) {
-			output.send(trace, 1);
-		}
+	}
+	if (is_final && entry.eop) {
+		// Load writeback crosses one more registered stage than the
+		// direct-commit path before reaching the commit arbiter.
+		output.send(trace, 2);
+	} else {
+		// A non-final fragment still spends a commit-port slot: it drains
+		// as a writeback-less beat that carries no retirement, so a
+		// multi-fragment load holds the commit port for one cycle per
+		// fragment instead of retiring in a single beat.
+		auto beat_alloc = core_->trace_pool().allocate(1);
+		auto beat = new (beat_alloc) instr_trace_t(*trace);
+		beat->wb = false;
+		beat->eop = false;
+		output.send(beat, 2);
 	}
 	pending_loads_ -= lsu_rsp.mask.count();
 	lsu_rsp_in.pop();

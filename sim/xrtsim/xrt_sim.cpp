@@ -26,6 +26,7 @@
 #error "VCD_OUTPUT and SAIF_OUTPUT cannot both be defined"
 #endif
 
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
@@ -358,14 +359,64 @@ public:
     return 0;
   }
 
+  // Cycles to wait for one AXI-Lite handshake phase before declaring the
+  // slave unresponsive. Orders of magnitude above what the control path
+  // needs, so it fires only for a handshake that is never coming.
+  static constexpr uint64_t CTRL_HANDSHAKE_TIMEOUT = 100000;
+
+  // Cycles to run after releasing ap_rst_n, before any transaction is allowed.
+  // Wide margin over the AFU's reset shift register and the relay stages
+  // below it, since the whole cost is paid once at device open.
+  static constexpr int RESET_SETTLE_CYCLES = 16 * VX_CFG_RESET_DELAY + 256;
+
+  // Bounded waits for the two AXI-Lite handshake shapes. Both must be
+  // bounded: an address the AFU does not decode -- or a control path wedged
+  // behind a stalled master -- never raises its handshake, and an unbounded
+  // spin turns that into a silent 100%-CPU hang with no diagnostic anywhere.
+  // Returning an error surfaces it through the driver's ordinary failure path.
+  bool handshake_timeout(const char* phase, uint32_t offset) {
+    fprintf(stderr,
+            "[XRTSIM] Error: AXI-Lite %s never completed for offset 0x%x "
+            "after %lu cycles; the AFU is not answering that address.\n",
+            phase, offset, (unsigned long)CTRL_HANDSHAKE_TIMEOUT);
+    return false;
+  }
+
+  // Sample first, then advance: the signal may already be high, in which case
+  // the phase costs no cycles at all.
+  template <typename T>
+  bool tick_while_low(const T& ready, const char* phase, uint32_t offset) {
+    for (uint64_t i = 0; i < CTRL_HANDSHAKE_TIMEOUT; ++i) {
+      if (ready) {
+        return true;
+      }
+      this->tick();
+    }
+    return handshake_timeout(phase, offset);
+  }
+
+  // Advance first, then sample: a response cannot be valid in the same cycle
+  // its request was accepted.
+  template <typename T>
+  bool tick_until_high(const T& valid, const char* phase, uint32_t offset) {
+    for (uint64_t i = 0; i < CTRL_HANDSHAKE_TIMEOUT; ++i) {
+      this->tick();
+      if (valid) {
+        return true;
+      }
+    }
+    return handshake_timeout(phase, offset);
+  }
+
   int register_write(uint32_t offset, uint32_t value) {
     HostLock guard(*this);
 
     // write address
     device_->s_axi_ctrl_awvalid = 1;
     device_->s_axi_ctrl_awaddr = offset;
-    while (!device_->s_axi_ctrl_awready) {
-      this->tick();
+    if (!tick_while_low(device_->s_axi_ctrl_awready, "awready", offset)) {
+      device_->s_axi_ctrl_awvalid = 0;
+      return -1;
     }
     this->tick();
     device_->s_axi_ctrl_awvalid = 0;
@@ -374,16 +425,17 @@ public:
     device_->s_axi_ctrl_wvalid = 1;
     device_->s_axi_ctrl_wdata = value;
     device_->s_axi_ctrl_wstrb = 0xf;
-    while (!device_->s_axi_ctrl_wready) {
-      this->tick();
+    if (!tick_while_low(device_->s_axi_ctrl_wready, "wready", offset)) {
+      device_->s_axi_ctrl_wvalid = 0;
+      return -1;
     }
     this->tick();
     device_->s_axi_ctrl_wvalid = 0;
 
     // write response
-    do {
-      this->tick();
-    } while (!device_->s_axi_ctrl_bvalid);
+    if (!tick_until_high(device_->s_axi_ctrl_bvalid, "bvalid", offset)) {
+      return -1;
+    }
     device_->s_axi_ctrl_bready = 1;
     this->tick();
     device_->s_axi_ctrl_bready = 0;
@@ -395,16 +447,17 @@ public:
     // read address
     device_->s_axi_ctrl_arvalid = 1;
     device_->s_axi_ctrl_araddr = offset;
-    while (!device_->s_axi_ctrl_arready) {
-      this->tick();
+    if (!tick_while_low(device_->s_axi_ctrl_arready, "arready", offset)) {
+      device_->s_axi_ctrl_arvalid = 0;
+      return -1;
     }
     this->tick();
     device_->s_axi_ctrl_arvalid = 0;
 
     // read response
-    do {
-      this->tick();
-    } while (!device_->s_axi_ctrl_rvalid);
+    if (!tick_until_high(device_->s_axi_ctrl_rvalid, "rvalid", offset)) {
+      return -1;
+    }
     *value = device_->s_axi_ctrl_rdata;
     device_->s_axi_ctrl_rready = 1;
     this->tick();
@@ -444,6 +497,16 @@ private:
       *m_axi_mem_[b].arready = 1;
       *m_axi_mem_[b].awready = 1;
       *m_axi_mem_[b].wready  = 1;
+    }
+
+    // Deasserting ap_rst_n does not release the design: the AFU stretches it
+    // through a reset shift register, and the relays beneath that add further
+    // stages. During that window the AXI-Lite slave already asserts arready,
+    // so a request issued too early is accepted and then swallowed -- no
+    // response ever comes and the model presents as a device that has stopped
+    // answering. Clock it out here, where the cost is a few microseconds once.
+    for (int i = 0; i < RESET_SETTLE_CYCLES; ++i) {
+      this->tick();
     }
   }
 

@@ -69,7 +69,10 @@ module VX_cp_engine_top
   output wire                          submit_evt,
   output wire                          start_evt,
   output wire                          end_evt,
-  output wire [63:0]                   profile_slot
+  output wire [63:0]                   profile_slot,
+  // Queue reset: clear zeroes the retire counter; idle says when that is safe.
+  input  wire                          clear,
+  output wire                          idle
 );
 
   // ---- Wrap cmd_in_packed back into cmd_t for the engine ----------------
@@ -134,7 +137,9 @@ module VX_cp_engine_top
     .submit_evt    (submit_evt),
     .start_evt     (start_evt),
     .end_evt       (end_evt),
-    .profile_slot  (profile_slot)
+    .profile_slot  (profile_slot),
+    .clear         (clear),
+    .idle          (idle)
   );
 
 endmodule : VX_cp_engine_top

@@ -89,5 +89,17 @@ extern "C" int vx_dev_init(callbacks_t* callbacks) {
     return reinterpret_cast<vx_device*>(dev_ctx)->host_mem_free(cp_addr);
   };
 
+  callbacks->host_mem_pull = [](void* dev_ctx, uint64_t cp_addr) -> int {
+    if (nullptr == dev_ctx)
+      return -1;
+    return reinterpret_cast<vx_device*>(dev_ctx)->host_mem_pull(cp_addr);
+  };
+
+  callbacks->host_mem_push = [](void* dev_ctx, uint64_t cp_addr) -> int {
+    if (nullptr == dev_ctx)
+      return -1;
+    return reinterpret_cast<vx_device*>(dev_ctx)->host_mem_push(cp_addr);
+  };
+
   return 0;
 }

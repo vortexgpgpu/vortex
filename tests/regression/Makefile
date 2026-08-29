@@ -3,6 +3,7 @@ include $(ROOT_DIR)/config.mk
 
 # --- master list ------------------------------------------------------
 TESTS := \
+    minimal                                                           \
     basic demo dogfood dropout dotproduct dotproduct2 mstress io_addr \
     arith printf diverge sort fence                                   \
     vecadd vecadd_v1 sgemm sgemmx sgemm_v1 conv3 relu sgemv           \

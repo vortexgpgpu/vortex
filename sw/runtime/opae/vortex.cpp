@@ -239,6 +239,15 @@ public:
     return 0;
   }
 
+  // CCI-P shared buffers are coherent with the AFU's view.
+  int host_mem_pull(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
+  int host_mem_push(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
 private:
 
   // CCI-P-shared host buffers (CP-visible host memory), keyed by IO address.

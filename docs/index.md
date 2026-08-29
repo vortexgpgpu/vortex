@@ -6,6 +6,7 @@
 - [Installing Vortex](install_vortex.md): building and installing the Vortex stack
 - [Building the Toolchain from Source](building_toolchain.md): maintainer-facing build recipes for Verilator, RISC-V GNU, LLVM (with X86 + lld + SPIR-V), compiler-rt, musl, POCL, Mesa, chipStar, and gem5
 - [FPGA Setup](fpga_setup.md): running Vortex on Altera and Xilinx FPGA cards
+- [SLASH / Alveo V80 Setup](xilinx_slash_setup.md): building the SLASH platform stack, the prerequisite for the `aved` backend
 
 ## Architecture
 
@@ -63,6 +64,7 @@ Detailed architectural specifications for Vortex subsystems live under
   - [Command Processor](designs/command_processor.md)
   - [Vortex Runtime API](designs/vortex_runtime_api.md)
   - [FPGA AFU Shell](designs/fpga_afu_shell.md)
+  - [`aved` Driver (Alveo V80)](designs/aved_driver_architecture.md)
   - [Build Configuration System](designs/build_configuration_system.md)
 - **Software stacks**
   - [OpenCL Support (PoCL)](designs/opencl_on_vortex.md)

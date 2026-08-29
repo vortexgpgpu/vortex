@@ -111,8 +111,8 @@
   },
   "dxa:perf_gate-wgmma-sp-dxa:rtlsim": {
     "32": {
-      "cycles": 113226,
-      "instrs": 9344
+      "cycles": 74866,
+      "instrs": 9328
     },
     "app": "sgemm_tcu_wg_sp_dxa",
     "args": "-m 128 -n 128 -k 128",

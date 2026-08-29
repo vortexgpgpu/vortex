@@ -43,10 +43,10 @@ public:
 	std::array<SimChannel<instr_trace_t*>, NUM_BLOCKS> Inputs;
 	std::array<SimChannel<instr_trace_t*>, NUM_BLOCKS> Outputs;
 
-	FuncUnit(const SimContext& ctx, const char* name, Core* core)
+	FuncUnit(const SimContext& ctx, const char* name, Core* core, uint32_t out_capacity = 2)
 		: SimObject<FuncUnit<NUM_BLOCKS>>(ctx, name)
 		, Inputs(make_sim_channels<instr_trace_t*, NUM_BLOCKS>(this))
-		, Outputs(make_sim_channels<instr_trace_t*, NUM_BLOCKS>(this))
+		, Outputs(make_sim_channels<instr_trace_t*, NUM_BLOCKS>(this, out_capacity))
 		, core_(core)
 	{}
 

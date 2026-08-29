@@ -15,6 +15,7 @@
 #endif
 
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -48,6 +49,70 @@ static uint64_t resolve_pinned_size() {
     return 0;
 #endif
 }
+
+namespace {
+// CP regfile offsets (CP-internal; backends translate to physical addrs).
+// Matches VX_cp_axil_regfile.
+constexpr uint32_t CP_REG_CTRL          = 0x000;
+constexpr uint32_t CP_REG_STATUS        = 0x004;  // bit0=busy, bit1=error
+constexpr uint32_t CP_DEV_CAPS          = 0x008;  // {VM_ENABLED@24|TID|RING|NQ}
+constexpr uint32_t CP_Q_RING_BASE_LO    = 0x100;
+constexpr uint32_t CP_Q_RING_BASE_HI    = 0x104;
+constexpr uint32_t CP_Q_HEAD_ADDR_LO    = 0x108;
+constexpr uint32_t CP_Q_HEAD_ADDR_HI    = 0x10C;
+constexpr uint32_t CP_Q_CMPL_ADDR_LO    = 0x110;
+constexpr uint32_t CP_Q_CMPL_ADDR_HI    = 0x114;
+constexpr uint32_t CP_Q_RING_SIZE_LOG2  = 0x118;
+constexpr uint32_t CP_Q_CONTROL         = 0x11C;
+constexpr uint32_t CP_Q_TAIL_LO         = 0x120;
+constexpr uint32_t CP_Q_TAIL_HI         = 0x124;
+constexpr uint32_t CP_Q_SEQNUM          = 0x128;
+constexpr uint32_t CP_Q_ERROR           = 0x12C;  // RO per-queue error word
+constexpr uint32_t CP_Q_LAST_DCR_RSP    = 0x130;
+constexpr uint32_t CP_SATP_LO           = 0x028;  // CP DMA MMU page-table root
+constexpr uint32_t CP_SATP_HI           = 0x02C;
+
+// CP_REG_STATUS bit0: any queue has a command in flight, or a shared engine
+// (KMU / DMA / DCR / event) holds a grant.
+constexpr uint32_t CP_STATUS_BUSY       = 0x1;
+
+// CMD_MEM_* header flag (cmd_t.flags bit2 = F_MEM_PHYSICAL): device operand
+// is physical — the MMU-aware CP DMA skips translation.
+constexpr uint8_t  CP_MEM_FLAG_PHYSICAL = 0x04;
+
+constexpr uint32_t CP_RING_SIZE_LOG2 = 16;       // 64 KiB
+constexpr uint32_t CP_RING_SIZE      = 1u << CP_RING_SIZE_LOG2;
+constexpr uint8_t  CP_OPCODE_MEM_WRITE  = 0x01;
+constexpr uint8_t  CP_OPCODE_MEM_READ   = 0x02;
+constexpr uint8_t  CP_OPCODE_MEM_COPY   = 0x03;
+constexpr uint8_t  CP_OPCODE_DCR_WR     = 0x04;
+constexpr uint8_t  CP_OPCODE_DCR_RD     = 0x05;
+constexpr uint8_t  CP_OPCODE_LAUNCH     = 0x06;
+constexpr uint8_t  CP_OPCODE_EVT_SIG    = 0x08;
+constexpr uint8_t  CP_OPCODE_EVT_WAIT   = 0x09;
+constexpr uint8_t  CP_OPCODE_CACHE_FLUSH= 0x0A;
+constexpr uint8_t  CP_OPCODE_LAUNCH_QMD = 0x0B;
+constexpr uint8_t  CP_OPCODE_DRAW       = 0x0C;
+constexpr std::size_t CP_CL_BYTES    = 64;
+
+// CMD_EVENT_WAIT comparison operations (encoded in arg2[1:0]).
+// Mirrors hw/rtl/cp/VX_cp_pkg.sv:wait_op_e.
+constexpr uint8_t  CP_WAIT_OP_EQ = 0;
+constexpr uint8_t  CP_WAIT_OP_GE = 1;
+constexpr uint8_t  CP_WAIT_OP_GT = 2;
+constexpr uint8_t  CP_WAIT_OP_NE = 3;
+
+// The Device on which this thread has an open CP batch, if any.
+//
+// cp_batch_begin holds cp_mu_ for the batch's whole duration, so a submitter
+// on another thread must take the ordinary locked path and block. A shared
+// cp_in_batch_ flag cannot express that: the second thread would read it as
+// true and then append to the ring and bump cp_tail_ with no lock held, while
+// the batch owner does the same. Per-thread state makes the append-only mode
+// visible only to the thread that actually owns the lock.
+thread_local const Device* tls_batch_owner = nullptr;
+
+} // namespace
 
 Device::Device(std::unique_ptr<Platform> plat)
     : platform_(std::move(plat)), cycle_freq_hz_(0),
@@ -89,6 +154,11 @@ Device::~Device() {
             this->mem_free(addr);
         args_pool_free_.clear();
     }
+    // Park the CP before releasing the buffers it masters into. Ordering is
+    // load-bearing: the fetch is still enabled and still pointed at the ring,
+    // and on a backend that stages CP memory in device memory the free below
+    // hands those bytes straight back to the allocator.
+    cp_quiesce_();
     // Release the CP ring / head / completion host buffers.
     if (cp_ring_.cp_addr) host_free(cp_ring_.cp_addr);
     if (cp_head_.cp_addr) host_free(cp_head_.cp_addr);
@@ -165,54 +235,6 @@ vx_result_t Device::open(uint32_t index, Device** out) {
 // CP fetches and executes them.
 // ============================================================================
 
-namespace {
-// CP regfile offsets (CP-internal; backends translate to physical addrs).
-// Matches VX_cp_axil_regfile.
-constexpr uint32_t CP_REG_CTRL          = 0x000;
-constexpr uint32_t CP_DEV_CAPS          = 0x008;  // {VM_ENABLED@24|TID|RING|NQ}
-constexpr uint32_t CP_Q_RING_BASE_LO    = 0x100;
-constexpr uint32_t CP_Q_RING_BASE_HI    = 0x104;
-constexpr uint32_t CP_Q_HEAD_ADDR_LO    = 0x108;
-constexpr uint32_t CP_Q_HEAD_ADDR_HI    = 0x10C;
-constexpr uint32_t CP_Q_CMPL_ADDR_LO    = 0x110;
-constexpr uint32_t CP_Q_CMPL_ADDR_HI    = 0x114;
-constexpr uint32_t CP_Q_RING_SIZE_LOG2  = 0x118;
-constexpr uint32_t CP_Q_CONTROL         = 0x11C;
-constexpr uint32_t CP_Q_TAIL_LO         = 0x120;
-constexpr uint32_t CP_Q_TAIL_HI         = 0x124;
-constexpr uint32_t CP_Q_SEQNUM          = 0x128;
-constexpr uint32_t CP_Q_LAST_DCR_RSP    = 0x130;
-constexpr uint32_t CP_SATP_LO           = 0x028;  // CP DMA MMU page-table root
-constexpr uint32_t CP_SATP_HI           = 0x02C;
-
-// CMD_MEM_* header flag (cmd_t.flags bit2 = F_MEM_PHYSICAL): device operand
-// is physical — the MMU-aware CP DMA skips translation.
-constexpr uint8_t  CP_MEM_FLAG_PHYSICAL = 0x04;
-
-constexpr uint32_t CP_RING_SIZE_LOG2 = 16;       // 64 KiB
-constexpr uint32_t CP_RING_SIZE      = 1u << CP_RING_SIZE_LOG2;
-constexpr uint8_t  CP_OPCODE_MEM_WRITE  = 0x01;
-constexpr uint8_t  CP_OPCODE_MEM_READ   = 0x02;
-constexpr uint8_t  CP_OPCODE_MEM_COPY   = 0x03;
-constexpr uint8_t  CP_OPCODE_DCR_WR     = 0x04;
-constexpr uint8_t  CP_OPCODE_DCR_RD     = 0x05;
-constexpr uint8_t  CP_OPCODE_LAUNCH     = 0x06;
-constexpr uint8_t  CP_OPCODE_EVT_SIG    = 0x08;
-constexpr uint8_t  CP_OPCODE_EVT_WAIT   = 0x09;
-constexpr uint8_t  CP_OPCODE_CACHE_FLUSH= 0x0A;
-constexpr uint8_t  CP_OPCODE_LAUNCH_QMD = 0x0B;
-constexpr uint8_t  CP_OPCODE_DRAW       = 0x0C;
-constexpr std::size_t CP_CL_BYTES    = 64;
-
-// CMD_EVENT_WAIT comparison operations (encoded in arg2[1:0]).
-// Mirrors hw/rtl/cp/VX_cp_pkg.sv:wait_op_e.
-constexpr uint8_t  CP_WAIT_OP_EQ = 0;
-constexpr uint8_t  CP_WAIT_OP_GE = 1;
-constexpr uint8_t  CP_WAIT_OP_GT = 2;
-constexpr uint8_t  CP_WAIT_OP_NE = 3;
-
-} // namespace
-
 // VMManager's device-memory port: PA-direct page-table I/O through the CP
 // DMA. The `physical` flag bypasses the CP DMA's VA translation, so the
 // page-table region itself is written/read at its true physical address.
@@ -234,17 +256,51 @@ vx_result_t Device::cp_init() {
     // appends commands straight through the ring's host pointer and the CP
     // fetches them over its m_axi_host master — no per-command DMA.
     auto* p = platform();
+    // Adopt the CP's current position instead of assuming it starts at zero.
+    //
+    // The CP's head and retire counters survive a process exit: nothing clears
+    // them. VX_cp_core discards the regfile's q_reset_pulse (UNUSED_VAR), so
+    // Q_CONTROL.reset and CP_CTRL.reset_all do nothing, and the only thing that
+    // ever cleared them was the AFU-level device reset -- which cannot be used
+    // here because writing it takes the card off the PCIe bus.
+    //
+    // The fetch gate is head < tail, both absolute byte counts. A second
+    // process that restarts its tail at 0 therefore never advances past the
+    // first one's head, and its queue silently never runs: no error, no
+    // timeout from the CP's side, just commands that are never fetched. On an
+    // idle device head == tail == retired * CP_CL_BYTES, so the retire counter
+    // is enough to resume exactly where the previous process stopped.
+    {
+        uint32_t seq0 = 0;
+        auto rs = p->cp_reg_read(CP_Q_SEQNUM, &seq0);
+        if (rs != VX_SUCCESS) return rs;
+        if (seq0 == 0xFFFFFFFFu) return VX_ERR_DEVICE_LOST;
+        cp_expected_seqnum_ = seq0;
+        cp_tail_            = uint64_t(seq0) * CP_CL_BYTES;
+        const char* v = getenv("VORTEX_CP_TRACE");
+        if (v != nullptr && v[0] != '\0' && v[0] != '0') {
+            printf("[VXCP] resuming at Q_SEQNUM=%u (tail=0x%llx)\n", seq0,
+                   (unsigned long long)cp_tail_);
+            fflush(stdout);
+        }
+    }
     auto r = host_alloc(CP_RING_SIZE, &cp_ring_);
     if (r != VX_SUCCESS) return r;
     r = host_alloc(CP_CL_BYTES, &cp_head_);
     if (r != VX_SUCCESS) return r;
-    r = host_alloc(CP_CL_BYTES, &cp_cmpl_);
+    // Two cachelines, not one: VX_cp_completion writes the retired seqnum to
+    // cmpl_addr and then a SHOVE copy to cmpl_addr + 64, whose only job is to
+    // push the first write through write-buffering interconnects (the V80's
+    // HBM host path holds the newest write until later write traffic arrives;
+    // see VX_cp_completion). The second line must be owned memory on every
+    // backend, staged or not.
+    r = host_alloc(2 * CP_CL_BYTES, &cp_cmpl_);
     if (r != VX_SUCCESS) return r;
 
     // Zero them so the CP doesn't read stale data on first fetch.
     std::memset(cp_ring_.host_ptr, 0, CP_RING_SIZE);
     std::memset(cp_head_.host_ptr, 0, CP_CL_BYTES);
-    std::memset(cp_cmpl_.host_ptr, 0, CP_CL_BYTES);
+    std::memset(cp_cmpl_.host_ptr, 0, 2 * CP_CL_BYTES);
 
     // Program CP queue 0. Any failure here is fatal — the CP regfile is
     // the sole control path, so a botched setup means cp_enabled_=true
@@ -271,6 +327,22 @@ vx_result_t Device::cp_init() {
         uint32_t dev_caps = 0;
         if (p->cp_reg_read(CP_DEV_CAPS, &dev_caps) != VX_SUCCESS)
             return VX_ERR_DEVICE_LOST;
+        // An all-ones read is never a valid capability word: bits [31:24] are
+        // hardwired zero by VX_cp_axil_regfile, so 0xFFFFFFFF means the read
+        // did not reach the register (AXI DECERR / no response substitutes
+        // all-ones on the way back). Decoding it would set every capability
+        // bit -- and a spurious VM_ENABLED sends VMManager off to identity-map
+        // 65,536 PTEs one CP round-trip at a time, which presents as a hang at
+        // 100% CPU rather than as the bus error it actually is.
+        // Treat it as "no optional capabilities", which is also the correct
+        // answer for this CP: it has no SATP register, no OP_DRAW, and no
+        // CMD_LAUNCH_QMD (grep hw/rtl/cp -- all three are absent).
+        if (dev_caps == 0xFFFFFFFFu) {
+            printf("[VXDRV] Warning: CP_DEV_CAPS read returned all-ones; the "
+                   "AXI-Lite read did not reach the register. Assuming no "
+                   "optional capabilities (no VM, no DRAW, no QMD).\n");
+            dev_caps = 0;
+        }
         vm_enabled_ = (dev_caps & (1u << 24)) != 0;
         // SUPPORTS_DRAW (bit 25): the CP decodes CMD_DRAW (OP_DRAW). When clear
         // (e.g. an RTL CP without the OP_DRAW mirror yet), vx_enqueue_draw falls
@@ -284,6 +356,14 @@ vx_result_t Device::cp_init() {
         // Reading them on a target that does not decode them stalls the DCR
         // bus waiting for a response that never arrives.
         mmu_fault_report_ = (dev_caps & (1u << 27)) != 0;
+    }
+
+    // Resolve the core count now, while nothing holds cp_mu_. Deferring it to
+    // the first cp_submit_cache_flush would reach query_caps from inside an
+    // open batch, which already owns cp_mu_ -- and it is not recursive.
+    {
+        auto rc = this->query_caps(VX_CAPS_NUM_CORES, &cp_num_cores_);
+        if (rc != VX_SUCCESS) return rc;
     }
 
     if (vm_enabled_) {
@@ -334,8 +414,100 @@ vx_result_t Device::cp_init() {
         if (r != VX_SUCCESS) return r;
     }
 
+    // VORTEX_MEM_SELFTEST=1 round-trips a pattern through one address per
+    // memory bank before anything depends on device memory. A platform that
+    // only backs part of its advertised address space still accepts the CP's
+    // writes and still retires them, so the first symptom is otherwise a
+    // kernel that never starts -- the image lands somewhere the core cannot
+    // fetch from and nothing reports an error anywhere.
+    if (const char* v = getenv("VORTEX_MEM_SELFTEST")) {
+        if (v[0] != '\0' && v[0] != '0') {
+            uint64_t banks = 0, bank_size = 0;
+            (void)this->query_caps(VX_CAPS_NUM_MEM_BANKS, &banks);
+            (void)this->query_caps(VX_CAPS_MEM_BANK_SIZE, &bank_size);
+            printf("[VXDRV] memory self-test\n"
+                   "[VXDRV]   device reports : %llu bank(s) x %llu bytes"
+                   " = %llu total\n"
+                   "[VXDRV]   host built for : %llu bytes (GLOBAL_MEM_SIZE),"
+                   " user base 0x%llx\n",
+                   (unsigned long long)banks, (unsigned long long)bank_size,
+                   (unsigned long long)(banks * bank_size),
+                   (unsigned long long)GLOBAL_MEM_SIZE,
+                   (unsigned long long)ALLOC_BASE_ADDR);
+            // Sweep the advertised space by octave rather than by bank. The
+            // question this answers is which addresses are actually backed:
+            // an aperture narrower than the address map still accepts and
+            // retires every CP write, so an unbacked region is silent until a
+            // kernel linked into it fails to start.
+            static const uint64_t probes[] = {
+                0x10000ull, 0x11000ull, 0x12000ull, 0x13000ull, 0x14000ull,
+                0x1000000ull, 0x10000000ull, 0x80000000ull,
+            };
+            for (uint64_t addr : probes) {
+                if (addr >= GLOBAL_MEM_SIZE) {
+                    continue;
+                }
+                uint32_t out[16], back[16];
+                for (int i = 0; i < 16; ++i) {
+                    out[i] = uint32_t(addr) ^ uint32_t(0xA5A50000u + i);
+                }
+                std::memset(back, 0, sizeof(back));
+                auto rw = dev_write(addr, out, sizeof(out));
+                auto rr = (rw == VX_SUCCESS)
+                        ? dev_read(back, addr, sizeof(back)) : rw;
+                const bool ok = (rw == VX_SUCCESS) && (rr == VX_SUCCESS)
+                             && (std::memcmp(out, back, sizeof(out)) == 0);
+                printf("[VXDRV]   0x%08llx : %-8s wrote 0x%08x read 0x%08x\n",
+                       (unsigned long long)addr, ok ? "OK" : "MISMATCH",
+                       out[0], back[0]);
+            }
+            fflush(stdout);
+        }
+    }
+
     return VX_SUCCESS;
 }
+
+void Device::cp_quiesce_() {
+    if (!cp_enabled_) return;
+    cp_enabled_ = false;
+    auto* p = platform();
+    std::lock_guard<std::mutex> g(cp_mu_);
+    // Clearing Q_CONTROL.enable parks the fetch at the next descriptor
+    // boundary; commands already issued drain on their own. There is no abort,
+    // and there must not be one -- tearing down a master with transactions in
+    // flight hangs the interconnect.
+    if (p->cp_reg_write(CP_Q_CONTROL, 0) != VX_SUCCESS) return;
+    if (p->cp_reg_write(CP_REG_CTRL, 0)  != VX_SUCCESS) return;
+    // Wait out the drain. Bounded because this runs on the teardown path,
+    // where a device that has stopped answering must not turn into a hang; a
+    // read that returns all-ones is the no-completion signature, not a status.
+    for (int i = 0; i < CP_QUIESCE_POLLS; ++i) {
+        uint32_t status = 0;
+        if (p->cp_reg_read(CP_REG_STATUS, &status) != VX_SUCCESS) return;
+        if (status == 0xFFFFFFFFu) return;
+        if ((status & CP_STATUS_BUSY) == 0) return;
+    }
+}
+
+namespace {
+const char* cp_opcode_name(uint8_t op) {
+    switch (op) {
+    case CP_OPCODE_MEM_WRITE:   return "MEM_WRITE";
+    case CP_OPCODE_MEM_READ:    return "MEM_READ";
+    case CP_OPCODE_MEM_COPY:    return "MEM_COPY";
+    case CP_OPCODE_DCR_WR:      return "DCR_WRITE";
+    case CP_OPCODE_DCR_RD:      return "DCR_READ";
+    case CP_OPCODE_LAUNCH:      return "LAUNCH";
+    case CP_OPCODE_EVT_SIG:     return "EVENT_SIGNAL";
+    case CP_OPCODE_EVT_WAIT:    return "EVENT_WAIT";
+    case CP_OPCODE_CACHE_FLUSH: return "CACHE_FLUSH";
+    case CP_OPCODE_LAUNCH_QMD:  return "LAUNCH_QMD";
+    case CP_OPCODE_DRAW:        return "DRAW";
+    default:                    return "?";
+    }
+}
+} // namespace
 
 vx_result_t Device::cp_ring_append_(const void* cl) {
     // Caller holds cp_mu_. Write one CL into the ring at the current tail —
@@ -348,12 +520,29 @@ vx_result_t Device::cp_ring_append_(const void* cl) {
                 cl, CP_CL_BYTES);
     cp_tail_           += CP_CL_BYTES;
     cp_expected_seqnum_ += 1;
+    // VORTEX_CP_TRACE=1 names every command as it is appended. Without it a
+    // stall is only ever reported as a seqnum, and mapping that back to an
+    // opcode means counting submissions by hand across three call sites.
+    static const bool trace = []{
+        const char* v = getenv("VORTEX_CP_TRACE");
+        return v != nullptr && v[0] != '\0' && v[0] != '0';
+    }();
+    if (trace) {
+        const uint8_t* b = static_cast<const uint8_t*>(cl);
+        uint64_t a0 = 0, a1 = 0;
+        std::memcpy(&a0, b + 4,  sizeof(a0));
+        std::memcpy(&a1, b + 12, sizeof(a1));
+        printf("[VXCP] seq=%llu %-12s flags=0x%02x arg0=0x%llx arg1=0x%llx\n",
+               (unsigned long long)cp_expected_seqnum_, cp_opcode_name(b[0]),
+               b[1], (unsigned long long)a0, (unsigned long long)a1);
+        fflush(stdout);
+    }
     return VX_SUCCESS;
 }
 
 void Device::cp_batch_begin() {
     cp_mu_.lock();                       // held until cp_batch_end
-    cp_in_batch_     = true;
+    tls_batch_owner  = this;
     // Baseline target: an empty batch polls for an already-retired seqnum
     // and returns immediately.
     cp_batch_target_ = cp_expected_seqnum_;
@@ -362,7 +551,7 @@ void Device::cp_batch_begin() {
 vx_result_t Device::cp_batch_end() {
     auto* p = platform();
     const uint64_t target = cp_batch_target_;
-    cp_in_batch_ = false;
+    tls_batch_owner = nullptr;
 
     // Commit the staged tail once (the single doorbell for the whole batch),
     // while still holding cp_mu_ from cp_batch_begin. Release fence first so
@@ -374,20 +563,9 @@ vx_result_t Device::cp_batch_end() {
     cp_mu_.unlock();                     // release the batch lock before polling
     if (r != VX_SUCCESS) return r;
 
-    // Poll Q_SEQNUM once for the last command in the batch. Reacquire cp_mu_
-    // around each MMIO read so simx's tick() and concurrent posts don't race.
-    for (;;) {
-        uint32_t seqnum32 = 0;
-        {
-            std::lock_guard<std::mutex> g(cp_mu_);
-            r = p->cp_reg_read(CP_Q_SEQNUM, &seqnum32);
-        }
-        if (r != VX_SUCCESS) return r;
-        if (uint64_t(seqnum32) >= target) break;
-    #ifdef SCOPE
-        (void)vx_scope_drain();
-    #endif
-    }
+    // Poll Q_SEQNUM once for the last command in the batch.
+    r = cp_poll_seqnum_(target);
+    if (r != VX_SUCCESS) return r;
     // Report a page fault raised by any launch in the batch before treating
     // its results as valid (deferred from each in-batch cp_submit_launch).
     r = check_mmu_fault();
@@ -404,8 +582,9 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
     auto* p = platform();
 
     // Batch mode: append only — cp_mu_ is already held for the batch, and
-    // the single doorbell + poll happen in cp_batch_end.
-    if (cp_in_batch_) {
+    // the single doorbell + poll happen in cp_batch_end. Only the thread that
+    // owns the batch may take this path; anyone else must block on cp_mu_.
+    if (tls_batch_owner == this) {
         auto r = cp_ring_append_(cl);
         if (r == VX_SUCCESS) cp_batch_target_ = cp_expected_seqnum_;
         return r;
@@ -437,27 +616,105 @@ vx_result_t Device::cp_submit_cl_(const void* cl) {
         if (r != VX_SUCCESS) return r;
     }   // release cp_mu_ — another submitter can now post its own command
 
-    // 3) Poll Q_SEQNUM. Reacquire cp_mu_ around each individual MMIO read
-    // so simx's tick() (which mutates simulator state) and concurrent
-    // posts from other queues don't race; this still leaves a window
-    // between iterations for other submitters to come in.
+    // 3) Poll Q_SEQNUM.
+    //
+    // COUT is drained post-launch only (see cp_submit_launch). The CP ring is
+    // serial — a COUT CMD_MEM_READ posted here would queue behind the very
+    // command being waited on; mid-launch draining is not possible on a
+    // single-queue CP. A kernel that overruns its COUT ring within one launch
+    // back-pressures until the launch ends.
+    return cp_poll_seqnum_(target);
+}
+
+// Shared by both submit paths. See the declaration in vortex2_internal.h for
+// why this is one function rather than two copies of the loop.
+vx_result_t Device::cp_poll_seqnum_(uint64_t target) {
+    auto* p = platform();
+    const auto   t_start   = std::chrono::steady_clock::now();
+    const char*  to_env    = getenv("VORTEX_CP_POLL_TIMEOUT_S");
+    const double timeout_s = to_env ? atof(to_env) : 0.0;   // 0 = warn only
+    bool warned = false;
+
     for (;;) {
         uint32_t seqnum32 = 0;
         vx_result_t r;
         {
+            // Reacquire cp_mu_ around each individual MMIO read so simx's
+            // tick() (which mutates simulator state) and concurrent posts from
+            // other queues don't race; this still leaves a window between
+            // iterations for other submitters to come in.
             std::lock_guard<std::mutex> g(cp_mu_);
             r = p->cp_reg_read(CP_Q_SEQNUM, &seqnum32);
         }
         if (r != VX_SUCCESS) return r;
-        if (uint64_t(seqnum32) >= target) return VX_SUCCESS;
-        // COUT is drained post-launch only (see cp_submit_launch). The CP
-        // ring is serial — a COUT CMD_MEM_READ posted here would queue
-        // behind the very command being waited on; mid-launch draining is not
-        // possible on a single-queue CP. A kernel that overruns its COUT ring
-        // within one launch back-pressures until the launch ends.
+        // Q_SEQNUM is a 32-bit window on the CP's 64-bit retire counter (the
+        // regfile publishes no high half), so the comparison has to be modulo
+        // 2^32. Widening the register instead makes every target past 4 G
+        // commands permanently unreachable, which presents as a hang.
+        if (int32_t(seqnum32 - uint32_t(target)) >= 0) return VX_SUCCESS;
+
+        const double elapsed = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - t_start).count();
+
+        if (!warned && elapsed > 10.0) {
+            warned = true;
+            uint32_t status = 0, qerr = 0, ctrl = 0;
+            // Whole per-queue block as well. The interesting stall reports
+            // CP_CTRL=1, CP_STATUS=0, Q_ERROR=0, Q_SEQNUM=0 with a non-zero
+            // target -- the CP is enabled, reports no error, and is IDLE while
+            // a command sits unretired. It is not failing a descriptor, it
+            // never fetches one. That splits into exactly two causes, and only
+            // the queue block can tell them apart:
+            //   RING_BASE/HEAD/CMPL all zero -> the setup writes never landed.
+            //   RING_BASE plausible, TAIL==0 -> the doorbell never landed.
+            //   both plausible               -> the CP cannot master to that
+            //                                   address (bus-address problem,
+            //                                   not a register problem).
+            uint32_t rb_lo = 0, rb_hi = 0, hd_lo = 0, hd_hi = 0;
+            uint32_t cm_lo = 0, cm_hi = 0, rsz = 0, qctl = 0;
+            uint32_t tl_lo = 0, tl_hi = 0;
+            {
+                std::lock_guard<std::mutex> g(cp_mu_);
+                (void)p->cp_reg_read(CP_REG_STATUS,       &status);
+                (void)p->cp_reg_read(CP_Q_ERROR,          &qerr);
+                (void)p->cp_reg_read(CP_REG_CTRL,         &ctrl);
+                (void)p->cp_reg_read(CP_Q_RING_BASE_LO,   &rb_lo);
+                (void)p->cp_reg_read(CP_Q_RING_BASE_HI,   &rb_hi);
+                (void)p->cp_reg_read(CP_Q_HEAD_ADDR_LO,   &hd_lo);
+                (void)p->cp_reg_read(CP_Q_HEAD_ADDR_HI,   &hd_hi);
+                (void)p->cp_reg_read(CP_Q_CMPL_ADDR_LO,   &cm_lo);
+                (void)p->cp_reg_read(CP_Q_CMPL_ADDR_HI,   &cm_hi);
+                (void)p->cp_reg_read(CP_Q_RING_SIZE_LOG2, &rsz);
+                (void)p->cp_reg_read(CP_Q_CONTROL,        &qctl);
+                (void)p->cp_reg_read(CP_Q_TAIL_LO,        &tl_lo);
+                (void)p->cp_reg_read(CP_Q_TAIL_HI,        &tl_hi);
+            }
+            printf("[VXDRV] Warning: CP has not retired a command in %.0fs.\n"
+                   "[VXDRV]   Q_SEQNUM=%u target=%llu CP_CTRL=0x%08x "
+                   "CP_STATUS=0x%08x Q_ERROR=0x%08x\n"
+                   "[VXDRV]   RING_BASE=0x%08x%08x HEAD_ADDR=0x%08x%08x "
+                   "CMPL_ADDR=0x%08x%08x\n"
+                   "[VXDRV]   RING_SIZE_LOG2=%u Q_CONTROL=0x%08x "
+                   "Q_TAIL=0x%08x%08x\n"
+                   "[VXDRV]   The ring was accepted but nothing is executing. "
+                   "Set VORTEX_CP_POLL_TIMEOUT_S=<sec> to abort instead of "
+                   "spinning.\n",
+                   elapsed, seqnum32, (unsigned long long)target,
+                   ctrl, status, qerr,
+                   rb_hi, rb_lo, hd_hi, hd_lo, cm_hi, cm_lo,
+                   rsz, qctl, tl_hi, tl_lo);
+            fflush(stdout);
+        }
+        if (timeout_s > 0.0 && elapsed > timeout_s) {
+            printf("[VXDRV] Error: CP poll timed out after %.0fs "
+                   "(Q_SEQNUM=%u target=%llu)\n",
+                   elapsed, seqnum32, (unsigned long long)target);
+            fflush(stdout);
+            return VX_ERR_DEVICE_LOST;
+        }
     #ifdef SCOPE
-        // Same discipline for the SCOPE tap rings: drain continuously so
-        // the on-chip ring pauses capture only briefly. Best-effort.
+        // Drain the SCOPE tap rings continuously so the on-chip ring pauses
+        // capture only briefly. Best-effort.
         (void)vx_scope_drain();
     #endif
         // No host sleep: each MMIO read already ticks sim cycles.
@@ -556,7 +813,7 @@ vx_result_t Device::cp_submit_launch() {
     if (r != VX_SUCCESS) return r;
     // In a batch the flush has only been appended, not retired — defer the
     // COUT drain to cp_batch_end (one drain for the whole sequence).
-    if (cp_in_batch_) return VX_SUCCESS;
+    if (tls_batch_owner == this) return VX_SUCCESS;
     // Final COUT drain: the flush has made the kernel's writes coherent, so
     // the tail-end console output left in the rings is now safe to read.
     return drain_cout();
@@ -564,8 +821,10 @@ vx_result_t Device::cp_submit_launch() {
 
 vx_result_t Device::check_mmu_fault() {
     // In a batch nothing has retired yet — the check runs once at
-    // cp_batch_end, where the DCR read observes the whole batch.
-    if (!vm_enabled_ || !mmu_fault_report_ || cp_in_batch_) {
+    // cp_batch_end, where the DCR read observes the whole batch. Only the
+    // batch-owning thread defers (the flag this test replaced could not
+    // distinguish owner from bystander).
+    if (!vm_enabled_ || !mmu_fault_report_ || tls_batch_owner == this) {
         return VX_SUCCESS;
     }
     uint32_t info = 0;
@@ -613,7 +872,7 @@ vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
     }
     r = cp_submit_cache_flush();
     if (r != VX_SUCCESS) return r;
-    if (cp_in_batch_) return VX_SUCCESS;
+    if (tls_batch_owner == this) return VX_SUCCESS;
     return drain_cout();
 }
 
@@ -638,7 +897,7 @@ vx_result_t Device::cp_submit_draw(uint64_t desc_addr) {
     if (r != VX_SUCCESS) {
         return r;
     }
-    if (cp_in_batch_) return VX_SUCCESS;
+    if (tls_batch_owner == this) return VX_SUCCESS;
     return drain_cout();
 }
 
@@ -649,10 +908,6 @@ vx_result_t Device::cp_submit_cache_flush() {
     // The CP sweeps a per-core flush DCR-read across [0, num_cores) and
     // retires the command only when the last core's flush completes.
     // No-op on write-through cache configs (the Vortex default).
-    if (cp_num_cores_ == 0) {
-        auto r = this->query_caps(VX_CAPS_NUM_CORES, &cp_num_cores_);
-        if (r != VX_SUCCESS) return r;
-    }
     uint8_t cl[CP_CL_BYTES] = {0};
     cl[0] = CP_OPCODE_CACHE_FLUSH;
     std::memcpy(cl + 4, &cp_num_cores_, sizeof(cp_num_cores_));
@@ -726,6 +981,16 @@ vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
     auto r = host_alloc(size, &staging);
     if (r != VX_SUCCESS) return r;
     std::memcpy(staging.host_ptr, host_src, size);
+    // Make the fill visible to the CP before the command that reads it can
+    // be fetched. On shadowing backends this is the ONLY push of this
+    // region: the backend's doorbell publish deliberately does not touch
+    // generic regions (a blanket publish can push a half-filled or stale
+    // shadow over device bytes another agent owns).
+    r = platform()->host_mem_push(staging.cp_addr);
+    if (r != VX_SUCCESS) {
+        host_free(staging.cp_addr);
+        return r;
+    }
     r = cp_submit_mem_(CP_OPCODE_MEM_WRITE, dev_dst, staging.cp_addr, size,
                        physical);
     host_free(staging.cp_addr);
@@ -743,6 +1008,13 @@ vx_result_t Device::cp_submit_mem_read(void* host_dst, uint64_t dev_src,
     if (r != VX_SUCCESS) return r;
     r = cp_submit_mem_(CP_OPCODE_MEM_READ, staging.cp_addr, dev_src, size,
                        physical);
+    if (r == VX_SUCCESS) {
+        // The CP wrote the staging region; on a backend that shadows CP
+        // memory the host copy is stale until pulled. The submit's Q_SEQNUM
+        // poll has already fenced on the completion line, so the pull reads
+        // settled bytes.
+        r = platform()->host_mem_pull(staging.cp_addr);
+    }
     if (r == VX_SUCCESS)
         std::memcpy(host_dst, staging.host_ptr, size);
     host_free(staging.cp_addr);

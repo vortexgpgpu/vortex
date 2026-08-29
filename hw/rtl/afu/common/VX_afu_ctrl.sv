@@ -21,7 +21,9 @@
 //   * 0x00 — the `ap_ctrl` register. The kernel is CP-driven, so start/done
 //            handshake bits are unused; writing bit 4 requests a device
 //            soft reset (pulsed on `ap_reset`), and reads report bit 2
-//            (ap_idle), deasserted while the reset sequence is in flight.
+//            (ap_idle), deasserted while the reset sequence is in flight,
+//            plus bit 5 (reset_error) when the last request was refused
+//            because a master would not drain.
 //   * 0x28/0x2C — the SCOPE bit-serial debug register pair (`ifdef SCOPE`).
 // ============================================================================
 
@@ -57,7 +59,10 @@ module VX_afu_ctrl #(
 
     // host soft-reset request (ap_ctrl bit 4) and completion status
     output wire                         ap_reset,
-    input  wire                         soft_reset_busy
+    input  wire                         soft_reset_busy,
+    // sticky: the last soft reset could not be honoured because a master
+    // would not drain, so no reset was asserted (ap_ctrl bit 5)
+    input  wire                         reset_error
 
 `ifdef SCOPE
   , input  wire                         scope_bus_in,
@@ -66,7 +71,8 @@ module VX_afu_ctrl #(
 );
 
     // Address map
-    // 0x00       : ap_ctrl (read: bit 2 = ap_idle; write: bit 4 = soft reset)
+    // 0x00       : ap_ctrl (read: bit 2 = ap_idle, bit 5 = reset_error;
+    //                          write: bit 4 = soft reset)
     // 0x28/0x2C  : SCOPE bit-serial register pair (`ifdef SCOPE`)
     localparam
         ADDR_AP_CTRL    = 8'h00,
@@ -75,6 +81,10 @@ module VX_afu_ctrl #(
         ADDR_SCP_1      = 8'h2C,
     `endif
         ADDR_BITS       = 8;
+    // (The host-port drain counters briefly lived here at 0x40/0x44. This
+    // legacy window read back zeros/garbage on silicon while the identical
+    // counters read byte-exact through the CP regfile window at CP 0x30/0x34
+    // -- that copy is the live one; this one is gone rather than debugged.)
 
     localparam
         WSTATE_ADDR     = 2'd0,
@@ -305,6 +315,7 @@ module VX_afu_ctrl #(
         case (raddr)
             ADDR_AP_CTRL: begin
                 rdata[2] <= ~(soft_reset_busy || ap_reset_r);   // ap_idle
+                rdata[5] <= reset_error;                       // reset refused
             end
         `ifdef SCOPE
             ADDR_SCP_0: begin

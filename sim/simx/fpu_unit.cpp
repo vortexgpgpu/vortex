@@ -40,7 +40,9 @@ inline int64_t check_boxing(int64_t a) {
 }
 
 FpuUnit::FpuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core)
+	// Output capacity covers the tag-bounded operations in the datapath
+	// plus one result-skid entry ahead of commit.
+	: FuncUnit<VX_CFG_NUM_FPU_BLOCKS>(ctx, name, core, VX_CFG_FPU_QUEUE_SIZE + 1)
 {}
 
 uint32_t FpuUnit::latency_of(const instr_trace_t* trace) const {
@@ -374,15 +376,28 @@ void FpuUnit::execute(instr_trace_t* trace) {
 
 void FpuUnit::on_tick() {
   bool idle = true;
+  auto cur_cycle = SimPlatform::instance().cycles();
   for (uint32_t b = 0; b < VX_CFG_NUM_FPU_BLOCKS; ++b) {
+    auto& inflight = inflight_.at(b);
+    for (uint32_t i = 0; i < inflight.size();) {
+      if (inflight.at(i) <= cur_cycle) {
+        inflight.at(i) = inflight.back();
+        inflight.pop_back();
+      } else {
+        ++i;
+      }
+    }
     auto& input = Inputs.at(b);
     if (!input.empty()) {
       auto& output = Outputs.at(b);
-      if (!output.full()) {
+      // A full tag queue stalls admission even though the arithmetic
+      // pipelines are deeper.
+      if (!output.full() && inflight.size() < VX_CFG_FPU_QUEUE_SIZE) {
         auto trace = input.peek();
         this->execute(trace);
         uint32_t delay = this->latency_of(trace);
         output.send(trace, delay);
+        inflight.push_back(cur_cycle + delay);
         input.pop();
       }
     }

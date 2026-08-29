@@ -24,6 +24,7 @@ The components covered here are:
 10. [gem5](#10-gem5) — cycle-level CPU simulator hosting the Vortex SimObject (X86 + ARM); consumed by `ci/regression.sh --gem5`
 11. [SST](#11-sst) — Structural Simulation Toolkit (sst-core + sst-elements + OpenMPI); consumed by the SST-driven regression configurations
 12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C; needed only to elaborate a target or build a bitstream (optional)
+13. [SLASH / Alveo V80](#13-slash--alveo-v80-the-aved-backend) — AMD Alveo V80 platform stack for the `aved` backend (optional)
 
 ---
 
@@ -963,6 +964,155 @@ ln -s ~/dev/firesim $TOOLDIR/firesim
   `git diff 1.21.0..vortex_3.x` is the authoritative delta — 8 files, mostly
   Vitis platform fixes and cycle-counter accounting, all upstreamable.
 
+## 13. SLASH / Alveo V80 (the `aved` backend)
+
+**Purpose**: the AMD Alveo V80 platform stack, and the prerequisite for
+the `aved` runtime backend. The V80 is **not** an XDMA shell, so XRT
+does not apply to it — SLASH replaces that whole layer. It provides:
+
+- **VRT** — the C++ device runtime (`vrt::Device`, `vrt::Kernel`,
+  `vrt::Buffer`) the `aved` backend links against.
+- **`vrtd`** — the daemon that owns the board and brokers sessions.
+- **`slashkit`** — the linker that packages the AFU IP into a `.vbin`
+  and connects its AXI ports to shell resources.
+- **`slash.ko`** — the kernel driver (PF1 QDMA + PF2 control).
+
+### We build from a fork, not upstream
+
+The prebuilt bundle carries
+[`vortexgpgpu/slash`](https://github.com/vortexgpgpu/slash), a fork of
+[`Xilinx/SLASH`](https://github.com/Xilinx/SLASH). The fork is not
+cosmetic — Vortex does not run on upstream as shipped:
+
+| Change | Why Vortex needs it |
+|---|---|
+| **Host-buffer allocation** (`SLASH_CTLDEV_IOCTL_ALLOC_HOST_BUF`, `Device::allocHostBuffer`) | The Command Processor's ring, head/completion lines and DMA staging live in host memory the device masters into over `m_axi_host`. Userspace needs both the mapping and the bus address for the same bytes. Upstream has no such call. |
+| **Kernel-compat shims** (`driver/kcompat/`) | Kernels 6.15+ removed `del_timer()`/`from_timer()`, which `libqdma` still spells. Without this the driver does not build on a current kernel. |
+| **`slashkit` simulation-model fixes** | The behavioural memory model needed to be SystemVerilog for the simulation project to elaborate it. |
+| **Vivado version un-pinning** | The compute base scripts hardcoded 2025.1 and refused any other tool version. |
+
+The full stack for the host-buffer feature spans the kernel driver, the
+uapi ioctl, libslash, the `vrtd` wire protocol and authorisation, and
+the VRT C++ API — it is not a patch that can live downstream in Vortex.
+
+### Install
+
+SLASH ships Debian and RPM packaging with DKMS, systemd units and udev rules —
+the same shape as XRT on an Alveo. **Prefer the packages.** They install the
+kernel module via DKMS (so it survives kernel upgrades), enable `vrtd` as a
+service, and assign the device nodes to the daemon, after which **no root is
+needed per boot**:
+
+```bash
+sudo apt install --no-install-recommends \
+  debhelper dh-dkms cmake libcli11-dev libinih-dev libjsoncpp-dev \
+  libsystemd-dev libxml2-dev libzmq3-dev cppzmq-dev ninja-build pkg-config \
+  python3-jinja2 python3-pip python3-setuptools python3-venv python3-wheel \
+  rsync zlib1g-dev
+
+cd slash
+SLASH_PKG_SKIP_ROOT_DESIGN_BUILD=1 bash scripts/package-deb.sh --noninteractive
+cd deb
+sudo apt install --no-install-recommends \
+  $(ls -1 *.deb | grep -v '^ami_' | sed 's|^|./|')
+```
+
+Use `scripts/package-deb.sh` rather than calling `dpkg-buildpackage`
+directly — it assembles `debian/` from `packaging/debian/`, substitutes the
+version into the DKMS metadata, and places the units and udev rule under the
+debhelper names that `dh_installsystemd`/`dh_installudev` expect.
+
+Under Secure Boot the DKMS-signed module needs its MOK enrolled once
+(`sudo mokutil --import /var/lib/shim-signed/mok/MOK.der`, then complete the
+enrolment at the next boot) or `modprobe` fails with *"Key was rejected by
+service"*.
+
+Verify with `v80-smi list` as an unprivileged user. `PF0 NOT READY` is
+expected when `ami` is not installed.
+
+Full procedure, including removing a previous source install:
+[`xilinx_slash_setup.md §3`](xilinx_slash_setup.md).
+
+A tarball path also exists for hosts where packages are impractical:
+
+```bash
+./ci/toolchain_install.sh --slash
+export VRT_HOME=$TOOLDIR/slash
+```
+
+The tarball installs userspace only — the kernel module and `vrtd` service are
+still yours to set up, which is why the packages are preferred. See
+[`proposals/v80_release_setup_proposal.md`](proposals/v80_release_setup_proposal.md)
+for what the packaged path replaced and the defects fixed to make it work.
+
+`--slash` is **opt-in** and deliberately excluded from the default
+install: the userspace half installs like any other component, but a
+working board also needs kernel modules built against the running
+kernel and Vivado on `PATH` for `slashkit`. Pulling that into the
+default would fail on every machine without a V80.
+
+### The kernel module
+
+With the packages installed, DKMS builds `slash.ko` against the running kernel
+and rebuilds it on upgrade — nothing to do by hand.
+
+Building it manually is a development fallback only:
+
+```bash
+git clone https://github.com/vortexgpgpu/slash.git
+cd slash && git submodule update --init --recursive
+make -C driver          # kcompat probes the running kernel; no flags needed
+sudo insmod driver/slash.ko
+```
+
+The `all:` recipe runs `driver/kcompat/probe.sh` against `$(KDIR)` and passes
+the detected feature flags (timer API, `vm_flags_set`, `io_uring` command
+support) into the kbuild recursion, so the module follows the target kernel
+without being told. `insmod` of this unsigned module is rejected under Secure
+Boot; the DKMS package signs it, which is another reason to prefer §Install.
+
+`slash.ko` binds PF1 (`slash_qdma`) and PF2 (`slash_ctl`); `vrtd` discovers
+boards from `/dev/slash_ctl*`. PF0 is `ami` and carries sensors, identity and
+the PDI design-writer only — the `aved` backend does not need it.
+
+**Do not grant users direct access to `/dev/slash_*`.** The nodes belong to the
+`vrtd` daemon by design (`OWNER="vrtd" GROUP="vrtd" MODE="0600"` in
+`vrt/vrtd/udev/99-vrtd.rules`, installed by the package as
+`/usr/lib/udev/rules.d/60-vrtd.rules`); clients talk to `vrtd` over its socket
+and it brokers access. Widening those permissions to avoid running the daemon is a
+workaround, not a fix.
+
+### Build from source (alternative to the prebuilt)
+
+```bash
+cd slash
+cmake -B build -DCMAKE_INSTALL_PREFIX=$TOOLDIR/slash
+cmake --build build -j$(nproc)
+cmake --install build
+export VRT_HOME=$TOOLDIR/slash
+```
+
+`slashkit` additionally needs Vivado on `PATH` and is only used by the
+synthesis flow (`hw/syn/xilinx/aved`), not by running tests.
+
+### Verifying
+
+```bash
+lspci -d 10ee: -nn          # expect 50c1 (PF1) and 50c2 (PF2)
+$VRT_HOME/bin/v80-smi list
+```
+
+Then build and run the backend:
+
+```bash
+make -C sw/runtime/aved TARGET=hw        # packaged VRT needs no VRT_HOME
+```
+
+See [`designs/aved_driver_architecture.md`](designs/aved_driver_architecture.md)
+for the backend's architecture and
+[`xilinx_slash_setup.md`](xilinx_slash_setup.md) for board bring-up.
+
+
 ---
 
 ## Verifying an installed toolchain
@@ -1093,4 +1243,10 @@ directory:
 
 `$TOOLCHAIN_REV` (fixed at `configure` time) selects which release of
 the prebuilt repo to pull; `$OSVERSION` selects the matching per-OS
-bundle.
+bundle. It is pinned in [`VERSION`](../VERSION) at the repository root.
+
+Bumping it is a two-step operation and the order matters: publish the
+new bundles to `vortex-toolchain-prebuilt` under the new tag **first**,
+then bump `TOOLCHAIN_REV`. Bumping first points every component at a
+tag that does not exist yet and breaks the install for everyone, not
+just for the component being added.
