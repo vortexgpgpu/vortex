@@ -29,6 +29,27 @@ end
       assign valid = 1'b1;
   end
   ```
+- **`begin`/`end` are mandatory** on **every** `if`, `else if`, `else`,
+  `for`, `while`, `repeat`, and `forever` body — even when the body is a
+  single statement. The single-statement shortcut is forbidden because:
+    - Adding a second statement to the branch silently re-scopes the first
+      to be unconditional (the next statement falls outside the implicit
+      one-line body). This is a perennial source of bugs.
+    - Diff hygiene: changing a one-liner into a multi-statement block
+      produces a noisy multi-line diff that obscures the actual change.
+
+  ```verilog
+  // BANNED — single-statement shortcut
+  if (intra_x_wrap) intra_offset[0] <= 0;
+  else              intra_offset[0] <= intra_x_n;
+
+  // REQUIRED — always begin/end
+  if (intra_x_wrap) begin
+      intra_offset[0] <= 0;
+  end else begin
+      intra_offset[0] <= intra_x_n;
+  end
+  ```
 - **switch statement** with spacing before parenthesis and begin/end
   ```verilog
   case (op_type)
@@ -87,8 +108,27 @@ end
   endinterface
   ```
 
+- **Interface ownership.** A module *owns* the signals it drives on an interface — a master port's `valid`/`data`, a slave port's `ready` — **if and only if** it contains the combinational logic that produces them. Combinationally routing a sub-module's port onward — an `ASSIGN_*` re-label, a rename, a passthrough wire — does **not** transfer ownership: the sub-module that implements the logic stays the owner. A module that only receives or re-wires an interface owns nothing on it.
+
+- **The owner registers its own interface; no other module may register it.** The owner **must** export every signal it drives *fully registered at its own output boundary* — via its own `*_OUT_BUF` knob at a registered depth, a `VX_elastic_buffer`, or a `VX_*_bus_slice` on its own output. Conversely, **it is illegal for any module to register (slice or buffer) an interface it does not own.** This forbids, equally: a `.slave` consumer re-registering its incoming bus, and a parent inserting a slice on a sub-module's port it merely routes. Registering another module's driven signals desynchronizes that endpoint from every other endpoint of a shared broadcast/fork (breaking the delivery contract) and hides the retiming from the module that owns the route. When a path off an interface fails timing, the register belongs in the **owning** module's output — raise that module's `*_OUT_BUF` or add the slice *inside* it, never latch the interface in a downstream consumer or a routing parent.
+
 ## 5. Handling Warnings
-Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. There are some code structures that Verilator's static analyzer doesn't know know to handle properly (e.g. cyclic loops in arrays) and will throw a warning, for those types of error use the corresponding warning handling macros defined in **VX_platform.vh**.
+Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. For unused signals/pins/params use the warning handling macros defined in **VX_platform.vh** (below). Some code structures the static analyzer cannot schedule (e.g. apparent cyclic loops in arrays) are resolved structurally — see Circular Combinational Logic below.
+
+- **Blanket `/* verilator lint_off … */` / `/* verilator lint_on … */` pragmas are forbidden in Vortex RTL.** They suppress warnings over wide spans, hide future regressions, and bypass the per-signal review the macros below enforce. Use `` `UNUSED_VAR `` / `` `UNUSED_PARAM `` / `` `UNUSED_PIN `` / `` `UNUSED_SPARAM `` to tag the *specific* signal/pin/param being silenced. Warnings inside third-party code go in **Verilator.vlt**, not pragmas embedded in `.sv` files.
+
+  ```verilog
+  // BANNED — blanket scope silencer
+  /* verilator lint_off UNUSED */
+  wire [31:0] dbg_lo;
+  wire [31:0] dbg_hi;
+  /* verilator lint_on  UNUSED */
+
+  // REQUIRED — per-signal tag
+  wire [31:0] dbg_lo;
+  wire [31:0] dbg_hi;
+  `UNUSED_VAR ({dbg_lo, dbg_hi})
+  ```
 
 - **Unused variables**
   ```verilog
@@ -110,13 +150,19 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
       `UNUSED_PIN (valid_out)
   );
   ```
-- **Other warnings**
+- **Circular Combinational Logic (`UNOPTFLAT`) false positives.** Multi-level prefix/tree
+  arrays where element `i` reads element `i-1` are acyclic per element but can look
+  self-referential to Verilator. Resolve by declaring the array **fully packed** — Verilator
+  auto-splits packed variables and schedules each element independently. Do **not** reach for
+  the `/* verilator split_var */` pragma, and avoid multi-dimensional *unpacked* arrays for
+  these patterns (those are what still trip `UNOPTFLAT`).
+
   ```verilog
-  // Silencing Circular Combinational Logic warning.
-  `IGNORE_UNOPTFLAT_BEGIN
-  logic [N-1:0] G [LEVELS+1];
-  logic [N-1:0] P [LEVELS+1];
-  `IGNORE_UNOPTFLAT_END
+  // AVOID — 2D unpacked array trips UNOPTFLAT
+  wire [WN-1:0] tree_sig [DEPTH+1][TOP_N];
+
+  // PREFERRED — fully packed, auto-split by Verilator; same indexing tree_sig[lvl][i]
+  wire [DEPTH:0][TOP_N-1:0][WN-1:0] tree_sig;
   ```
 
 ## 6. Assertions
@@ -130,15 +176,131 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
   ```
 
 ## 7. Using `ifdef
-- Preserve indent of nested code and shift pre-processor left
+- `VX_CFG_*` macros are assigned in `VX_config.toml` ONLY — never `define` or
+  default them in RTL headers or sources. The generated `VX_config.vh` is their
+  single source of truth; a stray `ifndef/define` fallback silently forks the
+  configuration. The one exception is a test Makefile passing `-DVX_CFG_*` to
+  configure that test's default settings.
+- Preserve indent of nested code and shift pre-processor left by one level
+
+Base version (before):
   ```verilog
-  function automatic logic [N-1:0] to_regno(input reg_t reg);
-  `ifdef EXT_V_ENABLE
-      return {reg.rtype, reg.id};
-  `elsif EXT_F_ENABLE
-      return {reg.rtype, reg.id};
-  `else
-      return reg.id;
-  `endif
-  endfunction
+  always_comb begin
+      decode_valid = issue_valid;
+      if (is_mtype) begin
+          if (is_dp) begin
+              decode_unit = UNIT_MULDIV_DP;
+          end else begin
+              decode_unit = UNIT_MULDIV;
+          end
+      end else if (is_fp) begin
+          decode_unit = UNIT_FPU;
+      end else begin
+          decode_unit = UNIT_ALU;
+      end
+  end
+  ```
+
+Adding ifdef (after):
+  ```verilog
+  always_comb begin
+      decode_valid = issue_valid;
+      if (is_mtype) begin
+      `ifdef EXT_M_ENABLE
+          if (is_dp) begin
+              decode_unit = UNIT_MULDIV_DP;
+          end else begin
+              decode_unit = UNIT_MULDIV;
+          end
+      `else
+          decode_unit = UNIT_MULDIV;
+          `UNUSED_VAR (is_dp)
+      `endif
+      end else if (is_fp) begin
+          decode_unit = UNIT_FPU;
+      end else begin
+          decode_unit = UNIT_ALU;
+      end
+  end
+  ```
+
+## 8. Trace Macros
+- **Arguments inside the `` `TRACE `` must be comma-separated**.
+
+Correct:
+  ```verilog
+  `TRACE(2, ("%t: %s req: wid=%0d, pc=0x%0h\n", $time, INSTANCE_ID, wid, pc))
+  ```
+
+Incorrect (space-separated entries):
+  ```verilog
+  `TRACE(2, ("%t: %s req: wid=%0d pc=0x%0h\n", $time, INSTANCE_ID, wid, pc))
+  ```
+
+## 9. Comment Content & Intent
+
+Comments describe what the adjacent code does and why, not the process that produced it. Prefer self-documenting code — good abstractions and consistent naming — and drop comments on code whose intent is already obvious; keep the rest brief, one or two lines per block as the norm (longer only where genuinely warranted, at the author's discretion), since over-detailed comments obscure the code and drift out of sync with later changes. Never embed development metadata or history (phase/step/version/part/feature/bug numbers, "proposal", "spec"), debugging or change narration ("fixing bug…", "was broken because…" — that is what commit messages are for), or references to design documents. Comments and names must not reference the other implementation layer's internals: host-side models (SimX, runtime, drivers) must not name RTL signals or parameters, and RTL must not name host-side/SimX details. The layers evolve independently, so any such reference silently goes stale. These rules apply to every source file and script.
+
+## 10. Combinational Logic Depth & Timing Closure
+
+Strive for moderate combinatorial logic depths that balance latency with synthesis portability. Our baseline for timing closure is the U55C prototyping board running at 300 MHz, so paths should be kept short enough to meet this frequency. When a cross-module path fails timing, add the register in the module that *owns* the interface (raise its `OUT_BUF` or slice inside it) — never by latching the interface in a downstream consumer or a routing parent (see §4, Interface ownership).
+
+## 11. Reuse the Hardware IP Library
+
+Before writing new RTL, consult the hardware IP library in [hw/rtl/libs/](../hw/rtl/libs/) — the [hardware_library.md](hardware_library.md) reference catalogs the reusable, parameterized modules it provides: elastic buffers and flow control, arbiters, mux/demux, stream fork/join/pack/dispatch, crossbars and interconnect, encoders/decoders, arithmetic (multipliers, dividers, adders, CSA trees), RAM/FIFO primitives, memory adapters, and bit-manipulation utilities. Prefer instantiating an existing library module over hand-rolling equivalent logic: the library modules carry consistent valid/ready handshake semantics, inherit the FPGA/ASIC synthesis support, and are already verified, so reuse avoids duplicating tested logic and the subtle handshake/timing bugs that re-implementation invites. If a needed primitive is genuinely missing, add it to the library rather than embedding a one-off in a block.
+## 12. Module & Interface Declarations & Instantiations
+
+Declare and instantiate modules **and parameterized interfaces** with one
+parameter/port per line, vertically aligned so the diff stays clean when
+entries are added or renamed.
+
+- **Module header** — one `parameter` and one port per line. Align the `=` of
+  the parameter defaults into a column, and align the port names after the
+  direction/type so the names form a column.
+
+  ```verilog
+  module VX_example #(
+      parameter N        = 4,
+      parameter LANES    = 1,
+      parameter USE_DSP  = 0
+  ) (
+      input  wire [LANES-1:0][N-1:0] a,
+      input  wire [LANES-1:0][N-1:0] b,
+      output wire [LANES-1:0][2*N-1:0] p
+  );
+  ```
+
+- **Instantiation** — one `.param`/`.port` connection per line; do not pack
+  several onto one line. Pad the names so the opening `(` of every connection
+  lines up in a column.
+
+  ```verilog
+  // REQUIRED
+  VX_example #(
+      .N       (4),
+      .LANES   (2),
+      .USE_DSP (USE_DSP)
+  ) u_example (
+      .a (a_in),
+      .b (b_in),
+      .p (p_out)
+  );
+
+  // BANNED — multiple connections per line
+  VX_example #(.N(4), .LANES(2), .USE_DSP(USE_DSP)) u_example (
+      .a(a_in), .b(b_in), .p(p_out));
+  ```
+
+- **Parameterized interface instances** follow the same rule — never pack the
+  params onto the declaration line.
+
+  ```verilog
+  // REQUIRED
+  VX_axi_if #(
+      .ADDR_W (ADDR_W),
+      .DATA_W (DATA_W)
+  ) axi_bus ();
+
+  // BANNED — packed params on the declaration line
+  VX_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W)) axi_bus ();
   ```

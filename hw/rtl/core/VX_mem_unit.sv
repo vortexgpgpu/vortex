@@ -24,29 +24,55 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     output coalescer_perf_t coalescer_perf,
 `endif
 
-    VX_lsu_mem_if.slave     lsu_mem_if [`NUM_LSU_BLOCKS],
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    VX_mem_bus_if.slave     dxa_lmem_bus_if,
+    VX_txbar_bus_if.master  dxa_txbar_bus_if,
+`endif
+
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    // TCU LMEM read port
+    VX_mem_bus_if.slave     tcu_lmem_if,
+`endif
+
+    output wire             empty,
+
+    VX_lsu_mem_if.slave     lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
+    VX_dcr_flush_if.slave   dcr_flush_if,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
+    // Per-block empty: high when the global-store path holds no in-flight
+    // write. Folded into core `busy` so the end-of-kernel cache flush is
+    // ordered strictly behind the last store. Two terms: the coalescer/passthru
+    // producer, and the dcache adapter's request buffer (which carries state
+    // when REQ_OUT_BUF > 0 and would otherwise hide a still-settling store).
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_path_empty;
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_adapter_empty;
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_empty;
+    assign per_block_empty = per_block_path_empty & per_block_adapter_empty;
     VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_dcache_if[`NUM_LSU_BLOCKS]();
+    ) lsu_dcache_if[`VX_CFG_NUM_LSU_BLOCKS]();
 
-`ifdef LMEM_ENABLE
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    `STATIC_ASSERT(`VX_CFG_LMEM_ENABLED, ("TCU_WGMMA_ENABLE requires LMEM_ENABLE"))
+`endif
 
-    `STATIC_ASSERT(`IS_DIVISBLE((1 << `LMEM_LOG_SIZE), `MEM_BLOCK_SIZE), ("invalid parameter"))
-    `STATIC_ASSERT(0 == (`LMEM_BASE_ADDR % (1 << `LMEM_LOG_SIZE)), ("invalid parameter"))
+`ifdef VX_CFG_LMEM_ENABLE
 
-    localparam LMEM_ADDR_WIDTH = `LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
+    `STATIC_ASSERT(`IS_DIVISBLE((1 << `VX_CFG_LMEM_LOG_SIZE), `VX_CFG_MEM_BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT(0 == (`VX_MEM_LMEM_BASE_ADDR % (1 << `VX_CFG_LMEM_LOG_SIZE)), ("invalid parameter"))
+
+    localparam LMEM_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
 
     VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_lmem_if[`NUM_LSU_BLOCKS]();
+    ) lsu_lmem_if[`VX_CFG_NUM_LSU_BLOCKS]();
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lmem_switches
+    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_lmem_switches
         VX_lmem_switch #(
             .GLOBAL_OUT_BUF(1),
             .LOCAL_OUT_BUF(1),
@@ -61,91 +87,186 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         );
     end
 
-    VX_lsu_mem_if #(
-        .NUM_LANES (`NUM_LSU_LANES),
-        .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LMEM_TAG_WIDTH)
-    ) lmem_arb_if[1]();
-
-    VX_lsu_mem_arb #(
-        .NUM_INPUTS (`NUM_LSU_BLOCKS),
-        .NUM_OUTPUTS(1),
-        .NUM_LANES  (`NUM_LSU_LANES),
-        .DATA_SIZE  (LSU_WORD_SIZE),
-        .TAG_WIDTH  (LSU_TAG_WIDTH),
-        .TAG_SEL_IDX(0),
-        .ARBITER    ("R"),
-        .REQ_OUT_BUF(0),
-        .RSP_OUT_BUF(2)
-    ) lmem_arb (
-        .clk        (clk),
-        .reset      (reset),
-        .bus_in_if  (lsu_lmem_if),
-        .bus_out_if (lmem_arb_if)
-    );
+    // Per-block local memory adapters to avoid deadlock when NUM_LSU_BLOCKS > 1.
+    // Each block gets dedicated ports into local memory, eliminating the circular
+    // dependency that arises from sharing a single adapter's unpack/pack buffers.
 
     VX_mem_bus_if #(
         .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LMEM_TAG_WIDTH)
-    ) lmem_adapt_if[`NUM_LSU_LANES]();
+        .TAG_WIDTH (LSU_TAG_WIDTH)
+    ) lmem_adapt_if[LSU_NUM_REQS]();
 
-    VX_lsu_adapter #(
-        .NUM_LANES    (`NUM_LSU_LANES),
-        .DATA_SIZE    (LSU_WORD_SIZE),
-        .TAG_WIDTH    (LMEM_TAG_WIDTH),
-        .TAG_SEL_BITS (LMEM_TAG_WIDTH - UUID_WIDTH),
-        .ARBITER      ("P"),
-        .REQ_OUT_BUF  (3),
-        .RSP_OUT_BUF  (0)
-    ) lmem_adapter (
-        .clk        (clk),
-        .reset      (reset),
-        .lsu_mem_if (lmem_arb_if[0]),
-        .mem_bus_if (lmem_adapt_if)
-    );
+    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_lmem_adapters
+
+        VX_mem_bus_if #(
+            .DATA_SIZE (LSU_WORD_SIZE),
+            .TAG_WIDTH (LSU_TAG_WIDTH)
+        ) lmem_block_if[`VX_CFG_NUM_LSU_LANES]();
+
+        VX_lsu_adapter #(
+            .NUM_LANES    (`VX_CFG_NUM_LSU_LANES),
+            .DATA_SIZE    (LSU_WORD_SIZE),
+            .TAG_WIDTH    (LSU_TAG_WIDTH),
+            .TAG_SEL_BITS (LSU_TAG_WIDTH - UUID_WIDTH),
+            .ARBITER      ("P"),
+            .REQ_OUT_BUF  (3),
+            .RSP_OUT_BUF  (0)
+        ) lmem_adapter (
+            .clk        (clk),
+            .reset      (reset),
+            .lsu_mem_if (lsu_lmem_if[i]),
+            .mem_bus_if (lmem_block_if)
+        );
+
+        for (genvar j = 0; j < `VX_CFG_NUM_LSU_LANES; ++j) begin : g_lmem_adapt_if
+            `ASSIGN_VX_MEM_BUS_IF (lmem_adapt_if[i * `VX_CFG_NUM_LSU_LANES + j], lmem_block_if[j]);
+        end
+    end
+
+    // DMA arbiter: merge DXA writes and/or TCU reads onto single DMA port.
+
+    VX_mem_bus_if #(
+        .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+        .TAG_WIDTH   (LMEM_DMA_TAG_WIDTH),
+        .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
+        .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
+    ) lmem_dma_if();
+
+    localparam LMEM_DMA_IN_TAG_W = LMEM_DMA_IN_TAG_MAX;
+
+    if (LMEM_DMA_INPUTS > 0) begin : g_lmem_dma
+
+        VX_mem_bus_if #(
+            .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+            .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
+            .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
+            .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
+        ) dma_arb_in_if[LMEM_DMA_INPUTS]();
+
+        VX_mem_bus_if #(
+            .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+            .TAG_WIDTH   (LMEM_DMA_TAG_WIDTH),
+            .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
+            .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
+        ) dma_arb_out_if[1]();
+
+        // Wire DXA and/or TCU into the arbiter input array.
+    `ifdef VX_CFG_EXT_DXA_ENABLE
+        // DXA issues LMEM-relative word addresses directly (issuer_lmem_base + intra,
+        // with multicast replay adding r×smem_stride per beat), so no per-slot
+        // address translation is needed here.
+        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_DXA_IDX], dxa_lmem_bus_if, LMEM_DMA_IN_TAG_W, DXA_LMEM_OUT_TAG_W, UUID_WIDTH);
+    `endif
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
+    `endif
+
+        VX_mem_bus_arb #(
+            .NUM_INPUTS  (LMEM_DMA_INPUTS),
+            .NUM_OUTPUTS (1),
+            .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
+            .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
+            .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
+            .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH),
+            .ARBITER     ("P")
+        ) lmem_dma_arb (
+            .clk         (clk),
+            .reset       (reset),
+            .bus_in_if   (dma_arb_in_if),
+            .bus_out_if  (dma_arb_out_if)
+        );
+
+        `ASSIGN_VX_MEM_BUS_IF (lmem_dma_if, dma_arb_out_if[0]);
+
+    `ifdef VX_CFG_EXT_DXA_ENABLE
+        wire [`VX_CFG_LMEM_NUM_BANKS-1:0] dxa_bank_wr_fire;
+        for (genvar i = 0; i < `VX_CFG_LMEM_NUM_BANKS; ++i) begin : g_dxa_bank_wr_fire
+            assign dxa_bank_wr_fire[i] = lmem_dma_if.req_valid
+                                      && lmem_dma_if.req_data.rw
+                                      && (|lmem_dma_if.req_data.byteen[i*LSU_WORD_SIZE +: LSU_WORD_SIZE]);
+        end
+
+        VX_dxa_completion #(
+            .INSTANCE_ID (`SFORMATF(("%s-lmem-dma-compl_det", INSTANCE_ID))),
+            .NUM_BANKS   (`VX_CFG_LMEM_NUM_BANKS),
+            .ATTR_WIDTH  (DXA_LMEM_ATTR_W)
+        ) dxa_completion_detect (
+            .clk           (clk),
+            .reset         (reset),
+            .bank_wr_fire  (dxa_bank_wr_fire),
+            .bank_wr_attr  (DXA_LMEM_ATTR_W'(lmem_dma_if.req_data.attr)),
+            .txbar_bus_if  (dxa_txbar_bus_if)
+        );
+
+        `ifdef DBG_TRACE_DXA
+        always @(posedge clk) begin
+            if (dxa_txbar_bus_if.valid && !reset) begin
+                `TRACE(2, ("%t: %s-lmem-dma: dxa_txbar valid=1, bar_addr=0x%0h, ready=%b\n",
+                    $time, INSTANCE_ID, dxa_txbar_bus_if.data.addr, dxa_txbar_bus_if.ready))
+            end
+        end
+        `endif
+
+    `endif
+
+    end else begin : g_no_lmem_dma
+
+        assign lmem_dma_if.req_valid = 1'b0;
+        assign lmem_dma_if.req_data  = '0;
+        `UNUSED_VAR (lmem_dma_if.req_ready)
+
+        `UNUSED_VAR (lmem_dma_if.rsp_valid)
+        `UNUSED_VAR (lmem_dma_if.rsp_data)
+        assign lmem_dma_if.rsp_ready = 1'b0;
+
+    end
 
     VX_local_mem #(
-        .INSTANCE_ID(`SFORMATF(("%s-lmem", INSTANCE_ID))),
-        .SIZE       (1 << `LMEM_LOG_SIZE),
-        .NUM_REQS   (`NUM_LSU_LANES),
-        .NUM_BANKS  (`LMEM_NUM_BANKS),
-        .WORD_SIZE  (LSU_WORD_SIZE),
-        .ADDR_WIDTH (LMEM_ADDR_WIDTH),
-        .TAG_WIDTH  (LMEM_TAG_WIDTH),
-        .OUT_BUF    (3)
+        .INSTANCE_ID (`SFORMATF(("%s-lmem", INSTANCE_ID))),
+        .SIZE        (1 << `VX_CFG_LMEM_LOG_SIZE),
+        .NUM_REQS    (LSU_NUM_REQS),
+        .NUM_BANKS   (`VX_CFG_LMEM_NUM_BANKS),
+        .WORD_SIZE   (LSU_WORD_SIZE),
+        .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
+        .TAG_WIDTH   (LSU_TAG_WIDTH),
+        .DMA_ENABLE  (LMEM_DMA_EN),
+        .DMA_TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
+        .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED),
+        .OUT_BUF     (3)
     ) local_mem (
-        .clk        (clk),
-        .reset      (reset),
+        .clk         (clk),
+        .reset       (reset),
     `ifdef PERF_ENABLE
-        .lmem_perf  (lmem_perf),
+        .lmem_perf   (lmem_perf),
     `endif
-        .mem_bus_if (lmem_adapt_if)
+        .dma_bus_if  (lmem_dma_if),
+        .lsu_bus_if  (lmem_adapt_if)
     );
 
 `else
 
+    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_lsu_dcache_if
+        `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if[i], lsu_mem_if[i]);
+    end
+
 `ifdef PERF_ENABLE
     assign lmem_perf = '0;
 `endif
-
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_lsu_dcache_if
-        `ASSIGN_VX_MEM_BUS_IF (lsu_dcache_if[i], lsu_mem_if[i]);
-    end
 
 `endif
 
     VX_lsu_mem_if #(
         .NUM_LANES (DCACHE_CHANNELS),
         .DATA_SIZE (DCACHE_WORD_SIZE),
-        .TAG_WIDTH (DCACHE_TAG_WIDTH)
-    ) dcache_coalesced_if[`NUM_LSU_BLOCKS]();
+        .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
+    ) dcache_coalesced_if[`VX_CFG_NUM_LSU_BLOCKS]();
 
 `ifdef PERF_ENABLE
-    wire [`NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] per_block_coalescer_misses;
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] per_block_coalescer_misses;
     wire [PERF_CTR_BITS-1:0] coalescer_misses;
     VX_reduce_tree #(
         .IN_W (PERF_CTR_BITS),
-        .N    (`NUM_LSU_BLOCKS),
+        .N    (`VX_CFG_NUM_LSU_BLOCKS),
         .OP   ("+")
     ) coalescer_reduce (
         .data_in  (per_block_coalescer_misses),
@@ -154,19 +275,20 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `BUFFER(coalescer_perf.misses, coalescer_misses);
 `endif
 
-    if ((`NUM_LSU_LANES > 1) && (LSU_WORD_SIZE != DCACHE_WORD_SIZE)) begin : g_enabled
+    if ((`VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) begin : g_coalescing
 
-        for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_coalescers
+        for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_coalescers
+
             VX_mem_coalescer #(
                 .INSTANCE_ID    (`SFORMATF(("%s-coalescer%0d", INSTANCE_ID, i))),
-                .NUM_REQS       (`NUM_LSU_LANES),
+                .NUM_REQS       (`VX_CFG_NUM_LSU_LANES),
                 .DATA_IN_SIZE   (LSU_WORD_SIZE),
                 .DATA_OUT_SIZE  (DCACHE_WORD_SIZE),
                 .ADDR_WIDTH     (LSU_ADDR_WIDTH),
-                .FLAGS_WIDTH    (MEM_FLAGS_WIDTH),
+                .USER_WIDTH     (MEM_ATTR_WIDTH),
                 .TAG_WIDTH      (LSU_TAG_WIDTH),
                 .UUID_WIDTH     (UUID_WIDTH),
-                .QUEUE_SIZE     (`LSUQ_OUT_SIZE),
+                .QUEUE_SIZE     (LSU_QUEUE_OUT_SIZE),
                 .PERF_CTR_BITS  (PERF_CTR_BITS)
             ) mem_coalescer (
                 .clk            (clk),
@@ -178,13 +300,16 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 `UNUSED_PIN (misses),
             `endif
 
+                .empty          (per_block_path_empty[i]),
+
                 // Input request
                 .in_req_valid   (lsu_dcache_if[i].req_valid),
                 .in_req_mask    (lsu_dcache_if[i].req_data.mask),
                 .in_req_rw      (lsu_dcache_if[i].req_data.rw),
                 .in_req_byteen  (lsu_dcache_if[i].req_data.byteen),
                 .in_req_addr    (lsu_dcache_if[i].req_data.addr),
-                .in_req_flags   (lsu_dcache_if[i].req_data.flags),
+                .in_req_user    (lsu_dcache_if[i].req_data.user),
+                .in_req_no_merge(lsu_dcache_if[i].req_data.user[0][MEM_ATTR_AMO_OFFS]),
                 .in_req_data    (lsu_dcache_if[i].req_data.data),
                 .in_req_tag     (lsu_dcache_if[i].req_data.tag),
                 .in_req_ready   (lsu_dcache_if[i].req_ready),
@@ -202,7 +327,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 .out_req_rw     (dcache_coalesced_if[i].req_data.rw),
                 .out_req_byteen (dcache_coalesced_if[i].req_data.byteen),
                 .out_req_addr   (dcache_coalesced_if[i].req_data.addr),
-                .out_req_flags  (dcache_coalesced_if[i].req_data.flags),
+                .out_req_user   (dcache_coalesced_if[i].req_data.user),
                 .out_req_data   (dcache_coalesced_if[i].req_data.data),
                 .out_req_tag    (dcache_coalesced_if[i].req_data.tag),
                 .out_req_ready  (dcache_coalesced_if[i].req_ready),
@@ -216,31 +341,40 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             );
         end
 
-    end else begin : g_passthru
+    end else begin : g_no_coalescing
 
-        for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_dcache_coalesced_if
+        // The passthrough narrows the tag from LSU_TAG_WIDTH to
+        // DCACHE_CORE_TAG_WIDTH: the dcache tag-id space must cover the
+        // mem-scheduler slot id or responses alias.
+        `STATIC_ASSERT (DCACHE_CORE_TAG_WIDTH >= LSU_TAG_WIDTH, ("dcache tag-id space cannot hold the LSU outstanding slot id"))
+
+        for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_dcache_coalesced_if
             `ASSIGN_VX_MEM_BUS_IF (dcache_coalesced_if[i], lsu_dcache_if[i]);
         `ifdef PERF_ENABLE
             assign per_block_coalescer_misses[i] = '0;
         `endif
+            // No coalescer: a store still in flight upstream of the adapter is
+            // one being presented to the adapter input. The adapter's own buffer
+            // is accounted for separately by per_block_adapter_empty.
+            assign per_block_path_empty[i] = ~dcache_coalesced_if[i].req_valid;
         end
 
     end
 
-    for (genvar i = 0; i < `NUM_LSU_BLOCKS; ++i) begin : g_dcache_adapters
+    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_dcache_adapters
 
         VX_mem_bus_if #(
             .DATA_SIZE (DCACHE_WORD_SIZE),
-            .TAG_WIDTH (DCACHE_TAG_WIDTH)
+            .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH)
         ) dcache_bus_tmp_if[DCACHE_CHANNELS]();
 
         VX_lsu_adapter #(
             .NUM_LANES    (DCACHE_CHANNELS),
             .DATA_SIZE    (DCACHE_WORD_SIZE),
-            .TAG_WIDTH    (DCACHE_TAG_WIDTH),
-            .TAG_SEL_BITS (DCACHE_TAG_WIDTH - UUID_WIDTH),
+            .TAG_WIDTH    (DCACHE_CORE_TAG_WIDTH),
+            .TAG_SEL_BITS (DCACHE_CORE_TAG_WIDTH - UUID_WIDTH),
             .ARBITER      ("P"),
-            .REQ_OUT_BUF  (0),
+            .REQ_OUT_BUF  (3), // register dcache-request master boundary on all channels (passthru ports 1+)
             .RSP_OUT_BUF  (0)
         ) dcache_adapter (
             .clk        (clk),
@@ -249,10 +383,39 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .mem_bus_if (dcache_bus_tmp_if)
         );
 
+        // A store buffered in the adapter's REQ_OUT_BUF has left dcache_coalesced_if
+        // but not yet reached the flush-injection point; keep the block non-empty
+        // until every channel's request has drained past the adapter output.
+        wire [DCACHE_CHANNELS-1:0] adapter_req_valid;
+        for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_adapter_req_valid
+            assign adapter_req_valid[j] = dcache_bus_tmp_if[j].req_valid;
+        end
+        assign per_block_adapter_empty[i] = ~(| adapter_req_valid);
+
         for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_dcache_bus_if
-            `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j]);
+            if (i == 0 && j == 0) begin : g_flush_port
+                // Port 0: route through VX_dcr_flush to inject flush requests
+                VX_dcr_flush #(
+                    .WORD_SIZE (DCACHE_WORD_SIZE),
+                    .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH),
+                    .REQ_OUT_BUF (3) // register core dcache-request boundary; rsp already registered by L1 CORE_OUT_BUF
+                ) dcr_flush (
+                    .clk          (clk),
+                    .reset        (reset),
+                    .dcr_flush_if (dcr_flush_if),
+                    .core_bus_if  (dcache_bus_tmp_if[0]),
+                    .cache_bus_if (dcache_bus_if[0])
+                );
+            end else begin : g_passthru_port
+                // Ports 1+: pass through; tag is zero-extended from
+                // DCACHE_CORE_TAG_WIDTH to DCACHE_TAG_WIDTH on request,
+                // and MSB-stripped on response.
+                `ASSIGN_VX_MEM_BUS_IF_EX (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j], DCACHE_TAG_WIDTH_BASE, DCACHE_CORE_TAG_WIDTH, 0);
+            end
         end
 
     end
+
+    assign empty = (& per_block_empty);
 
 endmodule

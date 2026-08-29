@@ -19,13 +19,15 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
     parameter NUM_LANES      = 1,
     parameter DATA_SIZE      = 1,
     parameter TAG_WIDTH      = 1,
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    parameter OUT_TAG_WIDTH  = TAG_WIDTH + `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS),
+`endif
     parameter TAG_SEL_IDX    = 0,
     parameter REQ_OUT_BUF    = 0,
     parameter RSP_OUT_BUF    = 0,
     parameter `STRING ARBITER = "R",
-    parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
-    parameter ADDR_WIDTH     = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
-    parameter FLAGS_WIDTH    = MEM_FLAGS_WIDTH
+    parameter ADDR_WIDTH     = (`VX_CFG_MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE)),
+    parameter USER_WIDTH     = MEM_ATTR_WIDTH
 ) (
     input wire              clk,
     input wire              reset,
@@ -35,7 +37,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
 );
     localparam DATA_WIDTH   = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
-    localparam REQ_DATAW    = 1 + NUM_LANES * (1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + FLAGS_WIDTH) + TAG_WIDTH;
+    localparam REQ_DATAW    = 1 + NUM_LANES * (1 + ADDR_WIDTH + DATA_WIDTH + DATA_SIZE + `UP(USER_WIDTH)) + TAG_WIDTH;
     localparam RSP_DATAW    = NUM_LANES * (1 + DATA_WIDTH) + TAG_WIDTH;
 
     //`STATIC_ASSERT ((NUM_INPUTS >= NUM_OUTPUTS), ("invalid parameter: NUM_INPUTS=%0d, NUM_OUTPUTS=%0d", NUM_INPUTS, NUM_OUTPUTS));
@@ -82,11 +84,29 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
             bus_out_if[i].req_data.addr,
             bus_out_if[i].req_data.data,
             bus_out_if[i].req_data.byteen,
-            bus_out_if[i].req_data.flags,
+            bus_out_if[i].req_data.user,
             req_tag_out
         } = req_data_out[i];
         assign req_ready_out[i] = bus_out_if[i].req_ready;
 
+    `ifdef VX_CFG_EXT_DXA_ENABLE
+        if (NUM_INPUTS > NUM_OUTPUTS) begin : g_req_tag_sel_out
+            wire [TAG_WIDTH + LOG_NUM_REQS - 1:0] req_tag_sel_out;
+            VX_bits_insert #(
+                .N   (TAG_WIDTH),
+                .S   (LOG_NUM_REQS),
+                .POS (TAG_SEL_IDX)
+            ) bits_insert (
+                .data_in  (req_tag_out),
+                .ins_in   (req_sel_out[i]),
+                .data_out (req_tag_sel_out)
+            );
+            assign bus_out_if[i].req_data.tag = OUT_TAG_WIDTH'(req_tag_sel_out);
+        end else begin : g_req_tag_out
+            `UNUSED_VAR (req_sel_out)
+            assign bus_out_if[i].req_data.tag = OUT_TAG_WIDTH'(req_tag_out);
+        end
+    `else
         if (NUM_INPUTS > NUM_OUTPUTS) begin : g_req_tag_sel_out
             VX_bits_insert #(
                 .N   (TAG_WIDTH),
@@ -101,6 +121,7 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
             `UNUSED_VAR (req_sel_out)
             assign bus_out_if[i].req_data.tag = req_tag_out;
         end
+    `endif
     end
 
     ///////////////////////////////////////////////////////////////////////////
@@ -118,13 +139,20 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
         wire [NUM_OUTPUTS-1:0][LOG_NUM_REQS-1:0] rsp_sel_in;
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
+        `ifdef VX_CFG_EXT_DXA_ENABLE
+            wire [TAG_WIDTH + LOG_NUM_REQS - 1:0] rsp_tag_in = (TAG_WIDTH + LOG_NUM_REQS)'(bus_out_if[i].rsp_data.tag);
+        `endif
             wire [TAG_WIDTH-1:0] rsp_tag_out;
             VX_bits_remove #(
                 .N   (TAG_WIDTH + LOG_NUM_REQS),
                 .S   (LOG_NUM_REQS),
                 .POS (TAG_SEL_IDX)
             ) bits_remove (
+        `ifdef VX_CFG_EXT_DXA_ENABLE
+                .data_in  (rsp_tag_in),
+        `else
                 .data_in  (bus_out_if[i].rsp_data.tag),
+        `endif
                 .sel_out  (rsp_sel_in[i]),
                 .data_out (rsp_tag_out)
             );
@@ -158,7 +186,15 @@ module VX_lsu_mem_arb import VX_gpu_pkg::*; #(
 
         for (genvar i = 0; i < NUM_OUTPUTS; ++i) begin : g_rsp_data_in
             assign rsp_valid_in[i] = bus_out_if[i].rsp_valid;
+        `ifdef VX_CFG_EXT_DXA_ENABLE
+            assign rsp_data_in[i]  = {
+                bus_out_if[i].rsp_data.mask,
+                bus_out_if[i].rsp_data.data,
+                TAG_WIDTH'(bus_out_if[i].rsp_data.tag)
+            };
+        `else
             assign rsp_data_in[i]  = bus_out_if[i].rsp_data;
+        `endif
             assign bus_out_if[i].rsp_ready = rsp_ready_in[i];
         end
 

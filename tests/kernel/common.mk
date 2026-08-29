@@ -7,26 +7,35 @@ CFLAGS += -march=rv32imaf -mabi=ilp32f
 endif
 STARTUP_ADDR ?= 0x80000000
 
-VORTEX_KN_PATH ?= $(ROOT_DIR)/kernel
+VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
 
+LLVM_CFLAGS += --target=riscv$(XLEN)-unknown-elf
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
-LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
+LLVM_CFLAGS += -Xclang -target-feature -Xclang +xvortex
 
-CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
-CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
-AR  = $(LLVM_VORTEX)/bin/llvm-ar
-DP  = $(LLVM_VORTEX)/bin/llvm-objdump
-CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
+CC  = $(LLVM_PATH)/bin/clang $(LLVM_CFLAGS)
+CXX = $(LLVM_PATH)/bin/clang++ $(LLVM_CFLAGS)
+AR  = $(LLVM_PATH)/bin/llvm-ar
+DP  = $(LLVM_PATH)/bin/llvm-objdump
+CP  = $(LLVM_PATH)/bin/llvm-objcopy
 
+CFLAGS += -Wall -Wextra -Wfatal-errors -Werror -Wno-unused-command-line-argument
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
-CFLAGS += -I$(VORTEX_HOME)/kernel/include -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
-CFLAGS += -DXLEN_$(XLEN) -DNDEBUG $(CONFIGS)
+CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
+CFLAGS += -DNDEBUG $(CONFIGS) -D__VORTEX__
+# Expand VX_config.toml + CONFIGS overrides into -DVX_CFG_* flags.
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+CFLAGS += $(XCONFIGS)
 
-LIBC_LIB += -L$(LIBC_VORTEX)/lib -lm -lc
-LIBC_LIB += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
+LIBC_LIB += -L$(LIBC_PATH)/lib -lm -lc
+LIBC_LIB += $(LIBCRT_PATH)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 
-LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex.a $(LIBC_LIB)
+LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/sw/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex.a $(LIBC_LIB)
+
+VX_STARTUP_SRC := $(VORTEX_HOME)/sw/kernel/src/vx_start.S
+APP_OBJS = $(addsuffix .o, $(basename $(notdir $(SRCS))))
+KERNEL_STARTUP := $(VORTEX_HOME)/sw/kernel/scripts/kernel_startup.sh
 
 all: $(PROJECT).elf $(PROJECT).vxbin $(PROJECT).dump
 
@@ -34,19 +43,39 @@ $(PROJECT).dump: $(PROJECT).elf
 	$(DP) -D $< > $@
 
 $(PROJECT).vxbin: $(PROJECT).elf
-	OBJCOPY=$(CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
+	OBJCOPY=$(CP) $(VORTEX_HOME)/sw/kernel/scripts/vxbin.py $< $@
 
-$(PROJECT).elf: $(SRCS)
-	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+$(VORTEX_KN_PATH)/libvortex.a:
+	$(MAKE) -C $(VORTEX_KN_PATH)
 
-run-rtlsim: $(PROJECT).vxbin
-	$(ROOT_DIR)/sim/rtlsim/rtlsim $(PROJECT).vxbin
+vx_start.o: $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
+	$(CC) $(CFLAGS) -c $(SRCS)
+	$(CC) $(CFLAGS) -DNEED_GP -DNEED_TLS -DNEED_INITFINI -c $(VX_STARTUP_SRC) -o $@
+	$(CC) $(CFLAGS) $@ $(APP_OBJS) $(LDFLAGS) -o $@.elf
+	$(CC) $(CFLAGS) $$($(KERNEL_STARTUP) $(DP) $@.elf) -c $(VX_STARTUP_SRC) -o $@ && rm -f $@.elf
 
-run-simx: $(PROJECT).vxbin
-	$(ROOT_DIR)/sim/simx/simx $(PROJECT).vxbin
+$(PROJECT).elf: vx_start.o $(SRCS) $(VORTEX_KN_PATH)/libvortex.a
+	$(CC) $(CFLAGS) vx_start.o $(APP_OBJS) $(LDFLAGS) -o $@
+
+SIMX_BIN   := $(ROOT_DIR)/sim/simx/simx
+RTLSIM_BIN := $(ROOT_DIR)/sim/rtlsim/rtlsim
+
+# Auto-build the simulator binary on demand so callers don't need
+# to pre-build `sim/{simx,rtlsim}` before invoking these targets.
+$(SIMX_BIN):
+	$(MAKE) -C $(ROOT_DIR)/sim/simx
+
+$(RTLSIM_BIN):
+	$(MAKE) -C $(ROOT_DIR)/sim/rtlsim
+
+run-rtlsim: $(PROJECT).vxbin $(RTLSIM_BIN)
+	$(RTLSIM_BIN) $(PROJECT).vxbin
+
+run-simx: $(PROJECT).vxbin $(SIMX_BIN)
+	$(SIMX_BIN) $(PROJECT).vxbin
 
 .depend: $(SRCS)
 	$(CC) $(CFLAGS) -MM $^ > .depend;
 
 clean:
-	rm -rf *.elf *.bin *.vxbin *.dump *.log .depend
+	rm -rf *.elf *.bin *.dump *.o *.log .depend

@@ -4,24 +4,36 @@ SRC_FILE = $(PROJECT).sv
 
 include ../../common.mk
 
-#CONFIGS += -DNUM_WARPS=32
-#CONFIGS += -DNUM_THREADS=32
+#CONFIGS += -DVX_CFG_NUM_WARPS=32
+#CONFIGS += -DVX_CFG_NUM_THREADS=32
 
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(findstring -DFPU_FPNEW, $(CONFIGS)))
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(IP_CACHE_DIR) $(FPU_INCLUDE)
-
-# Add V extension sources
-ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
-	RTL_INCLUDE += -I$(RTL_DIR)/vpu
-endif
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(IP_CACHE_DIR) $(FPU_INCLUDE)
 
 # Add TCU extension sources
-ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
+ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE, $(XCONFIGS)))
+	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
 	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
-	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
-	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_DPI, $(XCONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dpi
+	endif
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_DSP, $(XCONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/dsp
+	endif
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_BHF, $(XCONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
+		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
+		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
+	endif
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_FPNEW, $(XCONFIGS)))
+		RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/fpnew
+		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src
+	endif
+	ifneq (,$(filter -DVX_CFG_TCU_TYPE_TFR, $(XCONFIGS)))
+		RTL_INCLUDE += -I$(RTL_DIR)/tcu/tfr
+	endif
 endif

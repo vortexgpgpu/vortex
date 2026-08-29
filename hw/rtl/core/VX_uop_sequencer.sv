@@ -14,66 +14,218 @@
 `include "VX_define.vh"
 
 module VX_uop_sequencer import
-`ifdef EXT_TCU_ENABLE
+`ifdef VX_CFG_EXT_TCU_ENABLE
     VX_tcu_pkg::*,
 `endif
-    VX_gpu_pkg::*; (
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_pkg::*,
+`endif
+    VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter WARP_ID = 0
+) (
     input clk,
     input reset,
 
     VX_ibuffer_if.slave  input_if,
     VX_ibuffer_if.master output_if
 );
-    ibuffer_t uop_data;
+    `UNUSED_PARAM (WARP_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
 
+    localparam UOP_SEL_W = `LOG2UP(UOP_MAX);
+
+    // UOP-expanders signals.
+    wire [UOP_MAX-1:0]   uop_in_valid;
+    ibuffer_t            uop_out_data [UOP_MAX];
+    wire [UOP_CTR_W-1:0] uop_out_count [UOP_MAX];
+
+    reg [UOP_CTR_W-1:0] uop_ctr;    // current uop index within active burst
+    reg                 uop_active; // high while emitting a uop burst
+    reg                 uop_done;   // high when current uop is the last in the burst
+
+    reg [UOP_SEL_W-1:0] sel_idx_r;
+    reg [UOP_CTR_W-1:0] last_ctr_r;
+    ibuffer_t           uop_data;
+
+    logic [UOP_SEL_W-1:0] sel_idx_n;
     wire is_uop_input;
-    wire uop_start = input_if.valid && is_uop_input;
-    wire uop_next = output_if.ready;
-    wire uop_done;
-
-`ifdef EXT_TCU_ENABLE
-
-    assign is_uop_input = (input_if.data.ex_type == EX_TCU && input_if.data.op_type == INST_TCU_WMMA);
-
-    VX_tcu_uops tcu_uops (
-        .clk     (clk),
-        .reset   (reset),
-        .ibuf_in (input_if.data),
-        .ibuf_out(uop_data),
-        .start   (uop_start),
-        .next    (uop_next),
-        .done    (uop_done)
+    VX_priority_encoder #(
+        .N (UOP_MAX),
+        .REVERSE (1)
+    ) priority_enc (
+        .data_in    (uop_in_valid),
+        `UNUSED_PIN (onehot_out),
+        .index_out  (sel_idx_n),
+        .valid_out  (is_uop_input)
     );
 
-`else
+    // prepare the input data for the uop expanders
+    ibuffer_t uop_in_data;
+    always_comb begin
+        uop_in_data = input_if.data;
+        uop_in_data.uuid = get_uop_uuid(input_if.data.uuid, uop_ctr);
+    end
 
-    assign is_uop_input = 0;
-    assign uop_done = 0;
-    assign uop_data = '0;
+    // uop_start fires for exactly one cycle at the beginning of a new burst.
+    wire uop_start = input_if.valid && is_uop_input && ~uop_active;
 
-`endif
+    // downstream accepted a uop this cycle.
+    wire uop_next = uop_active && output_if.ready;
 
-    reg uop_active;
-
+    // Sequential state machine: track the active burst and uop index.
     always_ff @(posedge clk) begin
         if (reset) begin
-            uop_active <= 0;
+            uop_ctr    <= '0;
+            sel_idx_r  <= '0;
+            last_ctr_r <= '0;
+            uop_active <= 1'b0;
+            uop_done   <= 1'b0;
         end else begin
-            if (uop_active) begin
-                if (uop_next && uop_done) begin
-                    uop_active <= 0;
-                end
-            end
-            else if (uop_start) begin
-                uop_active <= 1;
+            if (uop_start) begin
+                uop_active <= 1'b1;
+                uop_ctr    <= UOP_CTR_W'(1);
+                sel_idx_r  <= sel_idx_n;
+                last_ctr_r <= uop_out_count[sel_idx_n] - UOP_CTR_W'(1);
+                uop_data   <= uop_out_data[sel_idx_n];
+                uop_done   <= (uop_out_count[sel_idx_n] == UOP_CTR_W'(1));
+            end else if (uop_next) begin
+                uop_active <= ~uop_done;
+                uop_ctr    <= uop_done ? '0 : uop_ctr + UOP_CTR_W'(1);
+                uop_data   <= uop_out_data[sel_idx_r];
+                uop_done   <= (uop_ctr == last_ctr_r);
             end
         end
     end
 
-    // output assignments
-    wire uop_hold = ~uop_active && is_uop_input; // hold transition cycles to uop_active
-    assign output_if.valid = uop_active ? 1'b1 : (input_if.valid && ~uop_hold);
-    assign output_if.data  = uop_active ? uop_data : input_if.data;
-    assign input_if.ready  = uop_active ? (output_if.ready && uop_done) : (output_if.ready && ~uop_hold);
+    wire [UOP_MAX-1:0] uop_in_start;
+    for (genvar i = 0; i < UOP_MAX; ++i) begin : g_start
+        assign uop_in_start[i] = uop_start && uop_in_valid[i];
+    end
+
+    wire [UOP_MAX-1:0] uop_in_next;
+    for (genvar i = 0; i < UOP_MAX; ++i) begin : g_next
+        assign uop_in_next[i] = uop_next && uop_in_valid[i];
+    end
+
+    // ------------------------------------------------------------------
+    // Pack Load/Store uop expander
+    // ------------------------------------------------------------------
+    assign uop_in_valid[UOP_PACKLD] = (uop_in_data.ex_type == EX_LSU)
+                                   && (uop_in_data.op_args.lsu.pack != 0);
+    VX_uop_packld uop_packld (
+        .clk       (clk),
+        .reset     (reset),
+        .ibuf_in   (uop_in_data),
+        .start     (uop_in_start[UOP_PACKLD]),
+        .advance   (uop_in_next[UOP_PACKLD]),
+        .uop_idx   (uop_ctr),
+        .ibuf_out  (uop_out_data[UOP_PACKLD]),
+        .uop_count (uop_out_count[UOP_PACKLD])
+    );
+
+`ifdef VX_CFG_EXT_TCU_ENABLE
+    // ------------------------------------------------------------------
+    // TCU uop expander
+    // ------------------------------------------------------------------
+    assign uop_in_valid[UOP_TCU] = (uop_in_data.ex_type == EX_TCU)
+        && (uop_in_data.op_type == INST_TCU_WMMA
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        || uop_in_data.op_type == INST_TCU_WGMMA
+    `endif
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        || uop_in_data.op_type == INST_TCU_WMMA_SP
+      `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        || uop_in_data.op_type == INST_TCU_WGMMA_SP
+      `endif
+    `endif
+        );
+    VX_tcu_uops tcu_uops (
+        .clk       (clk),
+        .reset     (reset),
+        .ibuf_in   (uop_in_data),
+        .start     (uop_in_start[UOP_TCU]),
+        .advance   (uop_in_next[UOP_TCU]),
+        .uop_idx   (uop_ctr),
+        .ibuf_out  (uop_out_data[UOP_TCU]),
+        .uop_count (uop_out_count[UOP_TCU])
+    );
+`endif
+
+`ifdef EXT_GFX_ANY_ENABLE
+    // ------------------------------------------------------------------
+    // Graphics uop expander: the window macro-ops (GETWF/GETW, RTU TRACE)
+    // and the OM fragment export (vx_om_export -> colour store + depth store).
+    //
+    // They share ONE slot. A slot is a full ibuffer_t input on the output mux
+    // below plus a bit of its priority encoder, and the two selects are mutually
+    // exclusive -- an export is an LSU op, a window op is an SFU op -- so a second
+    // expander would buy nothing but area and mux depth.
+    // ------------------------------------------------------------------
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    wire is_gfxw_op = (uop_in_data.ex_type == EX_SFU)
+        && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_RTUW))
+        && (uop_in_data.op_args.rtuw.op == RTUW_OP_BITS'(RTUW_OP_TRACE)
+         || uop_in_data.op_args.rtuw.op == RTUW_OP_BITS'(RTUW_OP_GETWF)
+         || uop_in_data.op_args.rtuw.op == RTUW_OP_BITS'(RTUW_OP_GETW));
+`else
+    wire is_gfxw_op = 1'b0;
+`endif
+
+`ifdef VX_CFG_EXT_OM_ENABLE
+    wire is_om_export = (uop_in_data.ex_type == EX_LSU)
+                     && (uop_in_data.op_args.lsu.export_mask != 2'b00);
+`else
+    wire is_om_export = 1'b0;
+`endif
+
+    assign uop_in_valid[UOP_GFX] = is_gfxw_op || is_om_export;
+
+    VX_gfx_uops gfx_uops (
+        .clk       (clk),
+        .reset     (reset),
+        .ibuf_in   (uop_in_data),
+        .start     (uop_in_start[UOP_GFX]),
+        .advance   (uop_in_next[UOP_GFX]),
+        .uop_idx   (uop_ctr),
+        .ibuf_out  (uop_out_data[UOP_GFX]),
+        .uop_count (uop_out_count[UOP_GFX])
+    );
+`endif
+
+    wire uop_hold = is_uop_input && ~uop_active;
+
+    assign output_if.valid = uop_active || (input_if.valid && ~uop_hold);
+    always_comb begin
+        if (uop_active) begin
+            output_if.data     = uop_data;
+            // fu_lock is set by the uop expander (e.g. VX_tcu_uops)
+        end else begin
+            output_if.data = input_if.data;
+        end
+    end
+    assign input_if.ready  = output_if.ready && (uop_active ? uop_done : ~uop_hold);
+
+`ifdef DBG_TRACE_PIPELINE
+    always @(posedge clk) begin
+        if (output_if.valid && output_if.ready && uop_active) begin
+            `TRACE(1, ("%t: %s decode: wid=%0d, cta_id=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, WARP_ID, output_if.data.cta_id, to_fullPC(output_if.data.PC)))
+            VX_trace_pkg::trace_ex_type(1, output_if.data.ex_type);
+            `TRACE(1, (", op="))
+            VX_trace_pkg::trace_ex_op(1, output_if.data.ex_type, output_if.data.op_type, output_if.data.op_args);
+            `TRACE(1, (", tmask=%b, wb=%b, rd_xregs=%b, wr_xregs=%b, used_rs=%b, rd=", output_if.data.tmask, output_if.data.wb, output_if.data.rd_xregs, output_if.data.wr_xregs, output_if.data.used_rs))
+            VX_trace_pkg::trace_reg_idx(1, output_if.data.rd);
+            `TRACE(1, (", rs1="))
+            VX_trace_pkg::trace_reg_idx(1, output_if.data.rs1);
+            `TRACE(1, (", rs2="))
+            VX_trace_pkg::trace_reg_idx(1, output_if.data.rs2);
+            `TRACE(1, (", rs3="))
+            VX_trace_pkg::trace_reg_idx(1, output_if.data.rs3);
+            VX_trace_pkg::trace_op_args(1, output_if.data.ex_type, output_if.data.op_type, output_if.data.op_args);
+            `TRACE(1, (", parent=#%0d", input_if.data.uuid))
+            `TRACE(1, (" (#%0d)\n", output_if.data.uuid))
+        end
+    end
+`endif
 
 endmodule

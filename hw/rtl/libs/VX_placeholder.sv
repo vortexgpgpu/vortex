@@ -21,7 +21,6 @@
     input wire [`UP(I)-1:0] in,
     output wire [`UP(O)-1:0] out
 );
-    // empty module
 
 endmodule
 `TRACING_ON

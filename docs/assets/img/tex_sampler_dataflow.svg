@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 420" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .tex  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .op   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .out  { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tt   { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono { font-family:'SF Mono',Consolas,monospace; font-size:12.5px; fill:#1b2733; }
+    .flow { stroke:#444; stroke-width:1.6; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="1320" height="420" fill="#ffffff"/>
+  <text x="20" y="30" class="t" font-size="17">Sampling dataflow — one lane, per cycle-slice</text>
+
+  <!-- per-level group -->
+  <rect x="12" y="46" width="1000" height="264" rx="6" class="grp"/>
+  <text x="24" y="304" class="tt">per mip level — ×2 under mip-linear (taps level-major; level 1 fetched only on a mip blend)</text>
+
+  <!-- taps -->
+  <rect x="24" y="80" width="150" height="40" rx="6" class="tex"/>
+  <text x="36" y="105" class="mono">tap0 (u_lo, v_lo)</text>
+  <rect x="24" y="130" width="150" height="40" rx="6" class="tex"/>
+  <text x="36" y="155" class="mono">tap1 (u_hi, v_lo)</text>
+  <rect x="24" y="190" width="150" height="40" rx="6" class="tex"/>
+  <text x="36" y="215" class="mono">tap2 (u_lo, v_hi)</text>
+  <rect x="24" y="240" width="150" height="40" rx="6" class="tex"/>
+  <text x="36" y="265" class="mono">tap3 (u_hi, v_hi)</text>
+  <text x="24" y="72" class="ts">4 texels from tcache</text>
+
+  <!-- format -->
+  <rect x="220" y="140" width="130" height="90" rx="6" class="op"/>
+  <text x="232" y="164" class="t">format</text>
+  <text x="232" y="184" class="ts">7 formats →</text>
+  <text x="232" y="200" class="ts">A8R8G8B8</text>
+  <text x="232" y="218" class="tt">bit replication</text>
+  <path d="M 174 100 L 197 100 L 197 165 L 220 165"  class="flow"/>
+  <path d="M 174 150 L 197 150 L 197 180 L 220 180" class="flow"/>
+  <path d="M 174 210 L 197 210 L 197 195 L 220 195" class="flow"/>
+  <path d="M 174 260 L 197 260 L 197 210 L 220 210" class="flow"/>
+
+  <!-- border select -->
+  <rect x="386" y="140" width="150" height="90" rx="6" class="op"/>
+  <text x="398" y="164" class="t">border select</text>
+  <text x="398" y="184" class="ts">tap flagged out of</text>
+  <text x="398" y="200" class="ts">[0,1) → TEX_BORDER</text>
+  <text x="398" y="218" class="tt">per tap, per level</text>
+  <path d="M 350 185 L 386 185" class="flow"/>
+
+  <!-- u lerps -->
+  <rect x="580" y="80" width="180" height="70" rx="6" class="op"/>
+  <text x="592" y="104" class="t">U lerp — low pair</text>
+  <text x="592" y="124" class="ts">lerp(tap0, tap1, frac_u)</text>
+  <text x="592" y="140" class="tt">3 cycles, ×4 channels</text>
+  <rect x="580" y="220" width="180" height="70" rx="6" class="op"/>
+  <text x="592" y="244" class="t">U lerp — high pair</text>
+  <text x="592" y="264" class="ts">lerp(tap2, tap3, frac_u)</text>
+  <text x="592" y="280" class="tt">3 cycles, ×4 channels</text>
+  <path d="M 536 185 L 556 185 L 556 115 L 580 115" class="flow"/>
+  <path d="M 556 185 L 556 255 L 580 255" class="flow"/>
+
+  <!-- v lerp -->
+  <rect x="810" y="150" width="170" height="70" rx="6" class="op"/>
+  <text x="822" y="174" class="t">V lerp</text>
+  <text x="822" y="194" class="ts">lerp(low, high, frac_v)</text>
+  <text x="822" y="210" class="tt">3 cycles, ×4 channels</text>
+  <path d="M 760 115 L 785 115 L 785 170 L 810 170" class="flow"/>
+  <path d="M 760 255 L 785 255 L 785 200 L 810 200" class="flow"/>
+
+  <!-- level lerp -->
+  <rect x="1060" y="140" width="180" height="90" rx="6" class="op"/>
+  <text x="1072" y="164" class="t">level lerp</text>
+  <text x="1072" y="184" class="ts">lerp(level0, level1,</text>
+  <text x="1072" y="200" class="ts">lod_frac) — ÷256</text>
+  <text x="1072" y="218" class="tt">3 cycles, ×4 channels</text>
+  <path d="M 980 175 L 1020 175 L 1020 165 L 1060 165" class="flow"/>
+  <path d="M 1012 310 L 1030 310 L 1030 205 L 1060 205" class="flow"/>
+  <text x="1024" y="242" class="ts" transform="rotate(-90 1034 242)">level 1</text>
+
+  <!-- out -->
+  <rect x="1256" y="155" width="52" height="60" rx="6" class="out"/>
+  <text x="1264" y="180" class="t">texel</text>
+  <text x="1264" y="198" class="ts">→ rd</text>
+  <path d="M 1240 185 L 1256 185" class="flow"/>
+
+  <!-- notes -->
+  <text x="20" y="352" class="ts">frac_u / frac_v = low 8 sub-texel bits of the scaled coordinate (TEX_BLEND_FRAC), per level; lod_frac = low 8 bits of the lod operand under mip-linear, else 0.</text>
+  <text x="20" y="372" class="ts">tap lerp(a, b, f) = (s + (s ≫ 8)) ≫ 8 with s = a·(255−f) + b·f + 0x80 (exact ÷255 rounding), per 8-bit channel; the level lerp weighs by f/256, truncating —</text>
+  <text x="20" y="390" class="ts">the form the software sampler blends levels in. Point sampling rides the same path with f = 0; a single-level sample passes level 0 through the level lerp.</text>
+</svg>

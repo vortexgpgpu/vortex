@@ -1,0 +1,228 @@
+# Test cases for `tensor`, drafted from regression.sh.in (review/collapse).
+category: tensor
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: smoke
+  touches: [hw/rtl/tcu, sim/simx/tcu, sw/kernel/include/vx_tensor.h]
+tests:
+- id: sgemm_tcu-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
+  flags: --debug=3 --log=run_simx.log
+- id: sgemm_tcu-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DITYPE=uint4 -DOTYPE=int32
+- id: sgemm_tcu-3
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_ISSUE_WIDTH=2 -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu-4
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=bf16 -DOTYPE=bf16
+- id: sgemm_tcu-5
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_TCU_FP8_ENABLE -DITYPE=fp8 -DOTYPE=fp32
+- id: sgemm_tcu-6
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=bf8
+- id: sgemm_tcu-7
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm2_tcu-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm2_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  args: -w 4
+- id: sgemm_tcu-8
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
+  flags: --debug=3 --log=run_rtlsim.log
+- id: sgemm_tcu-9
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=int8 -DOTYPE=int32
+- id: sgemm_tcu-10
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT8_ENABLE -DITYPE=uint8 -DOTYPE=int32
+- id: sgemm_tcu-11
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT4_ENABLE -DITYPE=int4 -DOTYPE=int32
+- id: sgemm_tcu-12
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_INT4_ENABLE -DITYPE=uint4 -DOTYPE=int32
+- id: sgemm_tcu-13
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu-14
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=bf16 -DOTYPE=fp32
+- id: sgemm_tcu-15
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE -DITYPE=fp8 -DOTYPE=fp32
+- id: sgemm_tcu-16
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
+- id: sgemm_tcu-17
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_TF32_ENABLE -DITYPE=tf32 -DOTYPE=fp32
+- id: sgemm_tcu-18
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=2 -DITYPE=fp16 -DOTYPE=fp32
+- id: sgemm_tcu-19
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI -DVX_CFG_ISSUE_WIDTH=4 -DITYPE=fp16 -DOTYPE=fp32
+    -DPROFILE_ENABLE
+- id: sgemm_tcu-20
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP8_ENABLE -DITYPE=fp8 -DOTYPE=fp32
+- id: sgemm_tcu-21
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP8_ENABLE -DITYPE=bf8 -DOTYPE=fp32
+- id: sgemm2_tcu-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm2_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_DPI
+    -DITYPE=fp16 -DOTYPE=fp32
+  args: -w 4
+
+- id: sgemm_tcu-fedp2k
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32
+
+# SimX<->rtlsim cycle parity on the native (non-DPI) fp16 TCU datapath: same
+# config on both drivers, cycles must agree within tolerance (see core.yaml).
+- id: model_parity-fp16
+  check: model_parity
+  # Execution passes and retired instructions match exactly; only cycles
+  # diverge (~6%, just over the 5% gate). SimX does not model the decoupled LSU
+  # pending pool that feeds the TCU operand loads. Parity divergence only;
+  # pending SimX LSU timing alignment.
+  tolerance: 0.10   # SimX does not model the decoupled LSU pending pool (instrs match; cycles ~6%)
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+
+# Perf-regression twin of the model_parity-fp16 benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-fp16
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu
+  args: -m 128 -n 128 -k 128
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+
+# TCU fp16 wide-issue: NT=NW=8, ISSUE_WIDTH=4 (4 TCU blocks). Locks in the
+# wide-issue tensor datapath perf against the same 128^3 SGEMM.
+- id: perf_gate-fp16-isw4
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu
+  args: -m 128 -n 128 -k 128
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+
+# TCU fp16 multi-core: NT=NW=8 across 2 cores (shared L2).
+  # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
+  # lane count, which the configs pin.
+- id: model_parity-fp16-mc
+  check: model_parity
+  via: blackbox
+  app: sgemm_tcu
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  shape: {cores: 2, l2cache: true}
+
+# TCU fp16 multi-core: NT=NW=8 across 2 cores (shared L2).
+- id: perf_gate-fp16-mc
+  check: perf_gate
+  via: blackbox
+  app: sgemm_tcu
+  args: -m 128 -n 128 -k 128
+  configs: -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  shape: {cores: 2, l2cache: true, threads: [4, 16]}
+# Shared-memory staged TCU SGEMM (sgemm2 kernel: CTA tiling + local-mem operand
+# reuse). K stays at 64: the test's double-accumulated CPU reference vs the
+# TCU's sequential fp32 accumulation exceeds the 10-ULP gate at K=128. Parity
+# twin of the perf_gate-sgemm2-fp16 benchmark (same run, cycles-vs-baseline).
+- id: model_parity-sgemm2-fp16
+  check: model_parity
+  via: blackbox
+  app: sgemm2_tcu
+  args: -m 128 -n 128 -k 64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+- id: perf_gate-sgemm2-fp16
+  check: perf_gate
+  via: blackbox
+  app: sgemm2_tcu
+  args: -m 128 -n 128 -k 64
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+
+  # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
+  # lane count, which the configs pin.

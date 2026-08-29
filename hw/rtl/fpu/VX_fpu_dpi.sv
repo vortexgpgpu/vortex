@@ -13,7 +13,9 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_DPI
+`ifdef VX_CFG_FPU_TYPE_DPI
+
+`include "dpi_float.vh"
 
 module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     parameter NUM_LANES = 1,
@@ -34,10 +36,10 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input wire [INST_FMT_BITS-1:0] fmt,
     input wire [INST_FRM_BITS-1:0] frm,
 
-    input wire [NUM_LANES-1:0][`XLEN-1:0]  dataa,
-    input wire [NUM_LANES-1:0][`XLEN-1:0]  datab,
-    input wire [NUM_LANES-1:0][`XLEN-1:0]  datac,
-    output wire [NUM_LANES-1:0][`XLEN-1:0] result,
+    input wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  dataa,
+    input wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  datab,
+    input wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  datac,
+    output wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] result,
 
     output wire has_fflags,
     output wire [`FP_FLAGS_BITS-1:0] fflags,
@@ -54,10 +56,10 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     localparam NUM_FPC     = 4;
     localparam FPC_BITS    = `LOG2UP(NUM_FPC);
 
-    localparam RSP_DATAW = (NUM_LANES * `XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
+    localparam RSP_DATAW = (NUM_LANES * `VX_CFG_XLEN) + 1 + $bits(fflags_t) + TAG_WIDTH;
 
     wire [NUM_FPC-1:0] per_core_ready_in;
-    wire [NUM_FPC-1:0][NUM_LANES-1:0][`XLEN-1:0] per_core_result;
+    wire [NUM_FPC-1:0][NUM_LANES-1:0][`VX_CFG_XLEN-1:0] per_core_result;
     wire [NUM_FPC-1:0][TAG_WIDTH-1:0] per_core_tag_out;
     reg  [NUM_FPC-1:0] per_core_ready_out;
     wire [NUM_FPC-1:0] per_core_valid_out;
@@ -65,7 +67,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     fflags_t [NUM_FPC-1:0] per_core_fflags;
 
     wire div_ready_in, sqrt_ready_in;
-    wire [NUM_LANES-1:0][`XLEN-1:0] div_result, sqrt_result;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] div_result, sqrt_result;
     wire [TAG_WIDTH-1:0] div_tag_out, sqrt_tag_out;
     wire div_ready_out, sqrt_ready_out;
     wire div_valid_out, sqrt_valid_out;
@@ -123,10 +125,9 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         endcase
     end
 
-    generate
-    begin : g_fma
+    if (1) begin : g_fma
 
-        reg [NUM_LANES-1:0][`XLEN-1:0] result_fma;
+        reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] result_fma;
         reg [NUM_LANES-1:0][63:0] result_fadd;
         reg [NUM_LANES-1:0][63:0] result_fsub;
         reg [NUM_LANES-1:0][63:0] result_fmul;
@@ -158,13 +159,13 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 dpi_fnmadd (fma_fire, int'(f_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fnmadd[i], fflags_fnmadd[i]);
                 dpi_fnmsub (fma_fire, int'(f_fmt), operands[0][i], operands[1][i], operands[2][i], frm, result_fnmsub[i], fflags_fnmsub[i]);
 
-                result_fma[i] = is_fadd   ? result_fadd[i][`XLEN-1:0] :
-                                is_fsub   ? result_fsub[i][`XLEN-1:0] :
-                                is_fmul   ? result_fmul[i][`XLEN-1:0] :
-                                is_fmadd  ? result_fmadd[i][`XLEN-1:0] :
-                                is_fmsub  ? result_fmsub[i][`XLEN-1:0] :
-                                is_fnmadd ? result_fnmadd[i][`XLEN-1:0] :
-                                is_fnmsub ? result_fnmsub[i][`XLEN-1:0] :
+                result_fma[i] = is_fadd   ? result_fadd[i][`VX_CFG_XLEN-1:0] :
+                                is_fsub   ? result_fsub[i][`VX_CFG_XLEN-1:0] :
+                                is_fmul   ? result_fmul[i][`VX_CFG_XLEN-1:0] :
+                                is_fmadd  ? result_fmadd[i][`VX_CFG_XLEN-1:0] :
+                                is_fmsub  ? result_fmsub[i][`VX_CFG_XLEN-1:0] :
+                                is_fnmadd ? result_fnmadd[i][`VX_CFG_XLEN-1:0] :
+                                is_fnmsub ? result_fnmsub[i][`VX_CFG_XLEN-1:0] :
                                             '0;
 
                 fflags_fma[i] = is_fadd   ? fflags_fadd[i] :
@@ -182,8 +183,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         `FPU_MERGE_FFLAGS(fflags_merged, fflags_fma, mask_in, NUM_LANES);
 
         VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `XLEN + $bits(fflags_t)),
-            .DEPTH  (`LATENCY_FMA),
+            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
+            .DEPTH  (`VX_CFG_FMA_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -197,12 +198,10 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_ready_in[FPU_FMA] = fma_ready;
 
     end
-    endgenerate
 
-    generate
-    begin : g_fdiv
+    if (1) begin : g_fdiv
 
-        reg [NUM_LANES-1:0][`XLEN-1:0] result_fdiv_r;
+        reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] result_fdiv_r;
         reg [NUM_LANES-1:0][63:0] result_fdiv;
         fflags_t [NUM_LANES-1:0] fflags_fdiv;
 
@@ -213,7 +212,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
                 dpi_fdiv (fdiv_fire, int'(f_fmt), operands[0][i], operands[1][i], frm, result_fdiv[i], fflags_fdiv[i]);
-                result_fdiv_r[i] = result_fdiv[i][`XLEN-1:0];
+                result_fdiv_r[i] = result_fdiv[i][`VX_CFG_XLEN-1:0];
             end
         end
 
@@ -221,8 +220,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         `FPU_MERGE_FFLAGS(fflags_merged, fflags_fdiv, mask_in, NUM_LANES);
 
         VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `XLEN + $bits(fflags_t)),
-            .DEPTH  (`LATENCY_FDIV),
+            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
+            .DEPTH  (`VX_CFG_FDIV_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -236,12 +235,10 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign div_ready_in = fdiv_ready;
 
     end
-    endgenerate
 
-    generate
-    begin : g_fsqrt
+    if (1) begin : g_fsqrt
 
-        reg [NUM_LANES-1:0][`XLEN-1:0] result_fsqrt_r;
+        reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] result_fsqrt_r;
         reg [NUM_LANES-1:0][63:0] result_fsqrt;
         fflags_t [NUM_LANES-1:0] fflags_fsqrt;
 
@@ -252,7 +249,7 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         always @(*) begin
             for (integer i = 0; i < NUM_LANES; ++i) begin
                 dpi_fsqrt (fsqrt_fire, int'(f_fmt), operands[0][i], frm, result_fsqrt[i], fflags_fsqrt[i]);
-                result_fsqrt_r[i] = result_fsqrt[i][`XLEN-1:0];
+                result_fsqrt_r[i] = result_fsqrt[i][`VX_CFG_XLEN-1:0];
             end
         end
 
@@ -260,8 +257,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         `FPU_MERGE_FFLAGS(fflags_merged, fflags_fsqrt, mask_in, NUM_LANES);
 
         VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `XLEN + $bits(fflags_t)),
-            .DEPTH  (`LATENCY_FSQRT),
+            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
+            .DEPTH  (`VX_CFG_FSQRT_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -275,12 +272,10 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign sqrt_ready_in = fsqrt_ready;
 
     end
-    endgenerate
 
-    generate
-    begin : g_fcvt
+    if (1) begin : g_fcvt
 
-        reg [NUM_LANES-1:0][`XLEN-1:0] result_fcvt;
+        reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] result_fcvt;
         reg [NUM_LANES-1:0][63:0] result_itof;
         reg [NUM_LANES-1:0][63:0] result_utof;
         reg [NUM_LANES-1:0][63:0] result_ftoi;
@@ -292,8 +287,9 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         fflags_t [NUM_LANES-1:0] fflags_utof;
         fflags_t [NUM_LANES-1:0] fflags_ftoi;
         fflags_t [NUM_LANES-1:0] fflags_ftou;
+        fflags_t [NUM_LANES-1:0] fflags_f2f;
 
-        wire fcvt_valid = (valid_in && core_select == FPU_CVT);
+        wire fcvt_valid = valid_in && (core_select == FPU_CVT);
         wire fcvt_ready = per_core_ready_out[FPU_CVT] || ~per_core_valid_out[FPU_CVT];
         wire fcvt_fire  = fcvt_valid && fcvt_ready;
 
@@ -303,20 +299,21 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 dpi_utof (fcvt_fire, int'(f_fmt), int'(i_fmt), operands[0][i], frm, result_utof[i], fflags_utof[i]);
                 dpi_ftoi (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftoi[i], fflags_ftoi[i]);
                 dpi_ftou (fcvt_fire, int'(i_fmt), int'(f_fmt), operands[0][i], frm, result_ftou[i], fflags_ftou[i]);
-                dpi_f2f  (fcvt_fire, int'(f_fmt?1:0), int'(f_fmt?0:1), operands[0][i], result_f2f[i]);
+                dpi_f2f  (fcvt_fire, int'(f_fmt), int'($bits(f_fmt)'(~f_fmt)), operands[0][i], frm, result_f2f[i], fflags_f2f[i]);
 
-                result_fcvt[i] = is_itof ? result_itof[i][`XLEN-1:0] :
-                                is_utof ? result_utof[i][`XLEN-1:0] :
-                                is_ftoi ? result_ftoi[i][`XLEN-1:0] :
-                                is_ftou ? result_ftou[i][`XLEN-1:0] :
-                                is_f2f  ? result_f2f[i][`XLEN-1:0] :
+                result_fcvt[i] = is_itof ? result_itof[i][`VX_CFG_XLEN-1:0] :
+                                 is_utof ? result_utof[i][`VX_CFG_XLEN-1:0] :
+                                 is_ftoi ? result_ftoi[i][`VX_CFG_XLEN-1:0] :
+                                 is_ftou ? result_ftou[i][`VX_CFG_XLEN-1:0] :
+                                 is_f2f  ? result_f2f[i][`VX_CFG_XLEN-1:0] :
                                         '0;
 
                 fflags_fcvt[i] = is_itof ? fflags_itof[i] :
-                                is_utof ? fflags_utof[i] :
-                                is_ftoi ? fflags_ftoi[i] :
-                                is_ftou ? fflags_ftou[i] :
-                                       '0;
+                                 is_utof ? fflags_utof[i] :
+                                 is_ftoi ? fflags_ftoi[i] :
+                                 is_ftou ? fflags_ftou[i] :
+                                 is_f2f  ? fflags_f2f[i] :
+                                        '0;
             end
         end
 
@@ -324,8 +321,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         `FPU_MERGE_FFLAGS(fflags_merged, fflags_fcvt, mask_in, NUM_LANES);
 
         VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `XLEN + $bits(fflags_t)),
-            .DEPTH  (`LATENCY_FCVT),
+            .DATAW  (1 + TAG_WIDTH + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
+            .DEPTH  (`VX_CFG_FCVT_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -339,12 +336,10 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_ready_in[FPU_CVT] = fcvt_ready;
 
     end
-    endgenerate
 
-    generate
-    begin : g_fncp
+    if (1) begin : g_fncp
 
-        reg [NUM_LANES-1:0][`XLEN-1:0]  result_fncp;
+        reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0]  result_fncp;
         reg [NUM_LANES-1:0][63:0] result_fclss;
         reg [NUM_LANES-1:0][63:0] result_flt;
         reg [NUM_LANES-1:0][63:0] result_fle;
@@ -389,14 +384,14 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
             fflags_fncp = 'x;
             for (integer i = 0; i < NUM_LANES; ++i) begin
                 case (frm)
-                0:  begin result_fncp[i] = is_fcmp ? result_fle[i][`XLEN-1:0] : result_fsgnj[i][`XLEN-1:0];  fflags_fncp[i] = fflags_fle[i]; end
-                1:  begin result_fncp[i] = is_fcmp ? result_flt[i][`XLEN-1:0] : result_fsgnjn[i][`XLEN-1:0]; fflags_fncp[i] = fflags_flt[i]; end
-                2:  begin result_fncp[i] = is_fcmp ? result_feq[i][`XLEN-1:0] : result_fsgnjx[i][`XLEN-1:0]; fflags_fncp[i] = fflags_feq[i]; end
-                3:  begin result_fncp[i] = result_fclss[i][`XLEN-1:0]; end
-                4:  begin result_fncp[i] = result_fmvx[i][`XLEN-1:0]; end
-                5:  begin result_fncp[i] = result_fmvf[i][`XLEN-1:0]; end
-                6:  begin result_fncp[i] = result_fmin[i][`XLEN-1:0]; fflags_fncp[i] = fflags_fmin[i]; end
-                7:  begin result_fncp[i] = result_fmax[i][`XLEN-1:0]; fflags_fncp[i] = fflags_fmax[i]; end
+                0:  begin result_fncp[i] = is_fcmp ? result_fle[i][`VX_CFG_XLEN-1:0] : result_fsgnj[i][`VX_CFG_XLEN-1:0];  fflags_fncp[i] = fflags_fle[i]; end
+                1:  begin result_fncp[i] = is_fcmp ? result_flt[i][`VX_CFG_XLEN-1:0] : result_fsgnjn[i][`VX_CFG_XLEN-1:0]; fflags_fncp[i] = fflags_flt[i]; end
+                2:  begin result_fncp[i] = is_fcmp ? result_feq[i][`VX_CFG_XLEN-1:0] : result_fsgnjx[i][`VX_CFG_XLEN-1:0]; fflags_fncp[i] = fflags_feq[i]; end
+                3:  begin result_fncp[i] = result_fclss[i][`VX_CFG_XLEN-1:0]; end
+                4:  begin result_fncp[i] = result_fmvx[i][`VX_CFG_XLEN-1:0]; end
+                5:  begin result_fncp[i] = result_fmvf[i][`VX_CFG_XLEN-1:0]; end
+                6:  begin result_fncp[i] = result_fmin[i][`VX_CFG_XLEN-1:0]; fflags_fncp[i] = fflags_fmin[i]; end
+                7:  begin result_fncp[i] = result_fmax[i][`VX_CFG_XLEN-1:0]; fflags_fncp[i] = fflags_fmax[i]; end
                 endcase
             end
         end
@@ -407,8 +402,8 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         wire has_fflags_fncp = (frm >= 6) || is_fcmp;
 
         VX_shift_register #(
-            .DATAW  (1 + TAG_WIDTH + 1 + NUM_LANES * `XLEN + $bits(fflags_t)),
-            .DEPTH  (`LATENCY_FNCP),
+            .DATAW  (1 + TAG_WIDTH + 1 + NUM_LANES * `VX_CFG_XLEN + $bits(fflags_t)),
+            .DEPTH  (`VX_CFG_FNCP_LATENCY),
             .RESETW (1)
         ) shift_reg (
             .clk      (clk),
@@ -421,7 +416,6 @@ module VX_fpu_dpi import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         assign per_core_ready_in[FPU_NCP] = fncp_ready;
 
     end
-    endgenerate
 
     ///////////////////////////////////////////////////////////////////////////
 

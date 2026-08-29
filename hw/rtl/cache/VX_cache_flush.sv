@@ -15,16 +15,11 @@
 
 module VX_cache_flush import VX_gpu_pkg::*; #(
     parameter BANK_ID    = 0,
-    // Size of cache in bytes
-    parameter CACHE_SIZE = 1024,
-    // Size of line inside a bank in bytes
-    parameter LINE_SIZE  = 64,
-    // Number of banks
-    parameter NUM_BANKS  = 1,
-    // Number of associative ways
-    parameter NUM_WAYS   = 1,
-    // Enable cache writeback
-    parameter WRITEBACK  = 0
+    parameter CACHE_SIZE = 1024,              // Size of cache in bytes
+    parameter LINE_SIZE  = 64,                // Size of line inside a bank in bytes
+    parameter NUM_BANKS  = 1,                 // Number of banks
+    parameter NUM_WAYS   = 1,                 // Number of associative ways
+    parameter WRITEBACK  = 0                  // Enable cache writeback
 ) (
     input  wire clk,
     input  wire reset,
@@ -38,7 +33,7 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
     input  wire mshr_empty,
     input  wire bank_empty
 );
-    // ways interation is only needed when eviction is enabled
+    // way iteration is only needed when eviction is enabled
     localparam CTR_WIDTH = `CS_LINE_SEL_BITS + (WRITEBACK ? `CS_WAY_SEL_BITS : 0);
 
     localparam STATE_IDLE  = 0;
@@ -52,8 +47,12 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
 
     reg [CTR_WIDTH-1:0] counter;
 
+    // latch flush_begin that arrives while init is in progress
+    reg flush_pending_r, flush_pending_n;
+
     always @(*) begin
         state_n = state;
+        flush_pending_n = flush_pending_r;
         case (state)
             // STATE_IDLE:
             default : begin
@@ -62,13 +61,20 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
                 end
             end
             STATE_INIT: begin
+                if (flush_begin) begin
+                    flush_pending_n = 1'b1;
+                end
                 if (counter == ((2 ** `CS_LINE_SEL_BITS)-1)) begin
-                    state_n = STATE_IDLE;
+                    // STATE_INIT already invalidated all lines, so if a flush
+                    // was requested during init, generate flush_end now.
+                    state_n = flush_pending_n ? STATE_DONE : STATE_IDLE;
+                    flush_pending_n = 1'b0;
                 end
             end
             STATE_WAIT1: begin
-                // wait for pending requests to complete
-                if (mshr_empty) begin
+                // Wait for the bank to fully quiesce before evicting:
+                // both MSHR must drain, and the bank pipeline as well to ensure no inflight misses.
+                if (mshr_empty && bank_empty) begin
                     state_n = STATE_FLUSH;
                 end
             end
@@ -94,10 +100,12 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
 
     always @(posedge clk) begin
         if (reset) begin
-            state   <= STATE_INIT;
-            counter <= '0;
+            state          <= STATE_INIT;
+            counter        <= '0;
+            flush_pending_r <= 1'b0;
         end else begin
-            state <= state_n;
+            state          <= state_n;
+            flush_pending_r <= flush_pending_n;
             if (state != STATE_IDLE) begin
                 if ((state == STATE_INIT)
                 || ((state == STATE_FLUSH) && flush_ready)) begin

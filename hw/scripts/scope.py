@@ -15,230 +15,294 @@
 
 import sys
 import argparse
-import xml.etree.ElementTree as ET
-import re
 import json
+import re
 
 vl_int_re = re.compile(r"\d+'s*h([\da-fA-F]+)")
 
 def parse_vl_int(text):
-    str_hex = re.sub(vl_int_re, r'\1', text)
-    return int(str_hex, 16)
+    m = vl_int_re.search(text)
+    if m:
+        return int(m.group(1), 16)
+    return int(text, 0)
 
-def source_loc(xml_doc, xml_loc):
-    loc = xml_loc.split(",")
-    file_id = loc[0]
-    start_line = loc[1]
-    start_col = loc[2]
-    end_line = loc[3]
-    end_col = loc[4]
-    file = xml_doc.find(".//file/[@id='" + file_id + "']").get("filename")
-    return f"{file} ({start_line}:{start_col}-{end_line}:{end_col})"
+def build_addr_lookups(json_doc):
+    """Build addr→module and addr→type lookups."""
+    addr_to_mod = {mod['addr']: mod for mod in json_doc.get('modulesp', [])}
+    addr_to_type = {}
+    for item in json_doc.get('miscsp', []):
+        if item.get('type') == 'TYPETABLE':
+            for t in item.get('typesp', []):
+                addr_to_type[t['addr']] = t
+    return addr_to_mod, addr_to_type
 
-def parse_dtype_width(xml_doc, dtype_id):
-    xml_type = xml_doc.find(".//typetable/*[@id='" + dtype_id + "']")
-    if xml_type.tag in ["packarraydtype", "unpackarraydtype"]:
-        sub_dtype_id = xml_type.get("sub_dtype_id")
-        base_width = parse_dtype_width(xml_doc, sub_dtype_id)
-        const_iter = xml_type.iter("const")
-        first_const = next(const_iter)
-        second_const = next(const_iter)
-        left  = parse_vl_int(first_const.get("name"))
-        right = parse_vl_int(second_const.get("name"))
-        return base_width * (left - right + 1)
-    elif xml_type.tag == "structdtype":
-        width = 0
-        for member in xml_type.iter("memberdtype"):
-            sub_dtype_id = member.get("sub_dtype_id")
-            width = width + parse_dtype_width(xml_doc, sub_dtype_id)
-        return width
-    elif xml_type.tag == "uniondtype":
-        width = 0
-        for member in xml_type.iter("memberdtype"):
-            sub_dtype_id = member.get("sub_dtype_id")
-            width = max(width, parse_dtype_width(xml_doc, sub_dtype_id))
-        return width
+def parse_dtype_width(addr_to_type, dtype_addr):
+    """Return bit width of a type identified by its addr."""
+    t = addr_to_type.get(dtype_addr)
+    if not t:
+        return 1
+    ttype = t.get('type', '')
+    if ttype == 'BASICDTYPE':
+        rng = t.get('range')
+        if rng:
+            left, right = (int(x) for x in rng.split(':'))
+            return abs(left - right) + 1
+        return 1
+    elif ttype in ('PACKARRAYDTYPE', 'UNPACKARRAYDTYPE'):
+        sub_addr = t.get('refDTypep')
+        base_width = parse_dtype_width(addr_to_type, sub_addr) if sub_addr else 1
+        rangep = t.get('rangep', [])
+        if rangep:
+            rng = rangep[0]
+            left_val  = parse_vl_int(rng.get('leftp',  [{'name': '0'}])[0].get('name', '0'))
+            right_val = parse_vl_int(rng.get('rightp', [{'name': '0'}])[0].get('name', '0'))
+            return base_width * (abs(left_val - right_val) + 1)
+        return base_width
+    elif ttype == 'STRUCTDTYPE':
+        return sum(parse_dtype_width(addr_to_type, m.get('refDTypep'))
+                   for m in t.get('membersp', []))
+    elif ttype == 'UNIONDTYPE':
+        return max((parse_dtype_width(addr_to_type, m.get('refDTypep'))
+                    for m in t.get('membersp', [])), default=1)
     else:
-        sub_dtype_id = xml_type.get("sub_dtype_id")
-        if sub_dtype_id != None:
-            return parse_dtype_width(xml_doc, sub_dtype_id)
-        left = xml_type.get("left")
-        right = xml_type.get("right")
-        if left != None and right != None:
-            return int(left) - int(right) + 1
+        sub_addr = t.get('refDTypep')
+        if sub_addr:
+            return parse_dtype_width(addr_to_type, sub_addr)
         return 1
 
-def parse_var_name(xml_doc, xml_node):
-    if xml_node.tag == "varref":
-        return xml_node.get("name")
-    elif xml_node.tag == "varxref":
-        name = xml_node.get("name")
-        dotted = xml_node.get("dotted")
-        return f"{dotted}.{name}"
-    elif xml_node.tag == "arraysel":
-        return parse_arraysel_name(xml_doc, xml_node)
-    else:
-        raise ET.ParseError("invalid probe entry: tag=" + xml_node.tag + ", " + source_loc(xml_doc, xml_node.get("loc")))
-    return name
-
-def parse_sel_field(xml_doc, dtype_id, offset, width):
-    xml_type = xml_doc.find(".//typetable/*[@id='" + dtype_id + "']")
-    name = xml_type.get("name")
-    if xml_type.tag == "structdtype":
+def parse_sel_field(addr_to_type, dtype_addr, offset, width):
+    """Map (offset, width) within a type to a field suffix string."""
+    t = addr_to_type.get(dtype_addr)
+    if not t:
+        return ''
+    ttype = t.get('type', '')
+    if ttype == 'STRUCTDTYPE':
         bit_offset = 0
-        members = list(xml_type.findall("memberdtype"))
+        members = list(t.get('membersp', []))
         members.reverse()
         for member in members:
-            sub_dtype_id = member.get("sub_dtype_id")
-            member_name = member.get("name")
-            member_width = parse_dtype_width(xml_doc, sub_dtype_id)
+            sub_addr = member.get('refDTypep')
+            member_name = member.get('name', '')
+            member_width = parse_dtype_width(addr_to_type, sub_addr)
             if bit_offset <= offset < bit_offset + member_width:
-                if width != member_width and sub_dtype_id:
-                    sub_field = parse_sel_field(xml_doc, sub_dtype_id, offset - bit_offset, width)
+                if width != member_width and sub_addr:
+                    sub_field = parse_sel_field(addr_to_type, sub_addr, offset - bit_offset, width)
                     return f".{member_name}{sub_field}"
-                else:
-                    return f".{member_name}"
+                return f".{member_name}"
             bit_offset += member_width
-        raise ET.ParseError("invalid probe entry: " + source_loc(xml_doc, xml_type.get("loc")))
-    elif xml_type.tag in ["packarraydtype", "unpackarraydtype"]:
-        sub_dtype_id = xml_type.get("sub_dtype_id")
-        base_width = parse_dtype_width(xml_doc, sub_dtype_id)
+        raise ValueError(f"invalid probe entry: offset={offset}, width={width} not in struct")
+    elif ttype in ('PACKARRAYDTYPE', 'UNPACKARRAYDTYPE'):
+        sub_addr = t.get('refDTypep')
+        base_width = parse_dtype_width(addr_to_type, sub_addr)
         if width > base_width:
-            return ""
+            return ''
         array_index = offset // base_width
-        sub_offset = offset % base_width
-        array_sel_name = f"_{array_index}" # array indexing is not supported in VCD
-        sub_field = parse_sel_field(xml_doc, sub_dtype_id, sub_offset, width)
-        return f"{array_sel_name}{sub_field}"
-    elif xml_type.tag == "basicdtype":
+        sub_offset  = offset % base_width
+        sub_field = parse_sel_field(addr_to_type, sub_addr, sub_offset, width)
+        return f"_{array_index}{sub_field}"
+    elif ttype == 'BASICDTYPE':
         if width == 1:
-            return F"[{offset}]"
-        end = width - 1 + offset
-        return F"[{end}:{offset}]"
+            return f"[{offset}]"
+        return f"[{offset + width - 1}:{offset}]"
     else:
-        raise ET.ParseError("invalid probe entry: tag=" + xml_type.tag + ", " + source_loc(xml_doc, xml_type.get("loc")))
-    return None
+        sub_addr = t.get('refDTypep')
+        if sub_addr:
+            return parse_sel_field(addr_to_type, sub_addr, offset, width)
+        raise ValueError(f"invalid probe entry: type={ttype}")
 
-def parse_sel_name(xml_doc, xml_node):
-    first_child = xml_node.find("*")
-    name = parse_var_name(xml_doc, first_child)
-    dtype_id = first_child.get("dtype_id")
-    const_iter = xml_node.iter("const")
-    first_const = next(const_iter)
-    second_const = next(const_iter)
-    offset = parse_vl_int(first_const.get("name"))
-    width = parse_vl_int(second_const.get("name"))
-    return name + parse_sel_field(xml_doc, dtype_id, offset, width)
-
-def parse_arraysel_name(xml_doc, xml_node):
-    if xml_node.tag == "arraysel":
-        first_child = xml_node.find("*")
-        name = parse_arraysel_name(xml_doc, first_child)
-        const_iter = xml_node.iter("const")
-        first_const = next(const_iter)
-        offset = parse_vl_int(first_const.get("name"))
-        name = f"{name}_{offset}" # array indexing is not supported in VCD
+def parse_var_name(node):
+    """Extract signal name from a VARREF / VARXREF / ARRAYSEL node."""
+    ntype = node.get('type', '')
+    if ntype == 'VARREF':
+        return node.get('name', '')
+    elif ntype == 'VARXREF':
+        name   = node.get('name', '')
+        dotted = node.get('dotted', '')
+        return f"{dotted}.{name}" if dotted else name
+    elif ntype == 'ARRAYSEL':
+        return parse_arraysel_name(node)
     else:
-        name = parse_var_name(xml_doc, xml_node)
-    return name
+        raise ValueError(f"invalid probe entry: type={ntype}")
 
-def parse_vl_port(xml_doc, xml_node, signals):
+def parse_arraysel_name(node):
+    """Flatten an ARRAYSEL chain into a name with _N suffixes."""
+    if node.get('type') == 'ARRAYSEL':
+        fromp = node.get('fromp', [{}])
+        child = fromp[0] if fromp else {}
+        name = (parse_arraysel_name(child)
+                if child.get('type') == 'ARRAYSEL'
+                else parse_var_name(child))
+        indexp = node.get('bitp', node.get('rhsp', [{'name': '0'}]))
+        offset = parse_vl_int((indexp[0] if indexp else {}).get('name', '0'))
+        return f"{name}_{offset}"
+    return parse_var_name(node)
+
+def parse_sel_name(addr_to_type, node):
+    """Get field-selected signal name from a SEL node."""
+    fromp = node.get('fromp', [{}])
+    first_child = fromp[0] if fromp else {}
+    name = parse_var_name(first_child) if first_child else ''
+    dtype_addr = first_child.get('dtypep', '')
+    lsbp   = node.get('lsbp', [{'name': '0'}])
+    offset = parse_vl_int((lsbp[0] if lsbp else {}).get('name', '0'))
+    width  = node.get('widthConst', parse_dtype_width(addr_to_type, node.get('dtypep', '')))
+    return name + parse_sel_field(addr_to_type, dtype_addr, offset, width)
+
+def parse_vl_port(addr_to_type, node, signals):
+    """Recursively extract (signal_name, width) pairs from a port expression."""
+    if node is None:
+        return 0
+    ntype = node.get('type', '')
     total_width = 0
-    if xml_node.tag == "concat":
-        child_nodes = xml_node.findall("*")
-        for xml_child in child_nodes:
-            total_width = total_width + parse_vl_port(xml_doc, xml_child, signals)
-    elif xml_node.tag in ["varref", "varxref"]:
-        name = parse_var_name(xml_doc, xml_node)
-        dtype_id = xml_node.get("dtype_id")
-        signal_width = parse_dtype_width(xml_doc, dtype_id)
+    if ntype == 'CONCAT':
+        for child_list in (node.get('lhsp', []), node.get('rhsp', [])):
+            if child_list:
+                total_width += parse_vl_port(addr_to_type, child_list[0], signals)
+    elif ntype in ('VARREF', 'VARXREF'):
+        name = parse_var_name(node)
+        signal_width = parse_dtype_width(addr_to_type, node.get('dtypep', ''))
         signals.append([name, signal_width])
-        total_width = total_width + signal_width
-    elif xml_node.tag == "sel":
-        name = parse_sel_name(xml_doc, xml_node)
-        dtype_id = xml_node.get("dtype_id")
-        signal_width = parse_dtype_width(xml_doc, dtype_id)
+        total_width += signal_width
+    elif ntype == 'SEL':
+        name = parse_sel_name(addr_to_type, node)
+        signal_width = parse_dtype_width(addr_to_type, node.get('dtypep', ''))
         signals.append([name, signal_width])
-        total_width = total_width + signal_width
-    elif xml_node.tag == "arraysel":
-        name = parse_arraysel_name(xml_doc, xml_node)
-        dtype_id = xml_node.get("dtype_id")
-        signal_width = parse_dtype_width(xml_doc, dtype_id)
+        total_width += signal_width
+    elif ntype == 'ARRAYSEL':
+        name = parse_arraysel_name(node)
+        signal_width = parse_dtype_width(addr_to_type, node.get('dtypep', ''))
         signals.append([name, signal_width])
-        total_width = total_width + signal_width
+        total_width += signal_width
     else:
-        raise ET.ParseError("invalid probe entry: tag=" + xml_node.tag + ", " + source_loc(xml_doc, xml_node.get("loc")))
-    # Check for duplicate signal names
-    signal_names = [signal[0] for signal in signals]
-    duplicates = set([name for name in signal_names if signal_names.count(name) > 1])
-    if len(duplicates) > 0:
-        raise ET.ParseError("duplicate signal names: " + ", ".join(duplicates))
+        raise ValueError(f"invalid probe entry: type={ntype}")
+    signal_names = [s[0] for s in signals]
+    duplicates = {n for n in signal_names if signal_names.count(n) > 1}
+    if duplicates:
+        raise ValueError("duplicate signal names: " + ", ".join(duplicates))
     return total_width
 
-def parse_xml(filename, max_taps):
-    xml_doc = ET.parse(filename)
-    modules = {}
-    xml_modules = xml_doc.findall(".//module/[@origName='VX_scope_tap']")
-    for xml_module in xml_modules:
-        scope_id = parse_vl_int(xml_module.find(".//var/[@name='SCOPE_ID']/const").get("name"))
-        xtriggerw = parse_vl_int(xml_module.find(".//var/[@name='XTRIGGERW']/const").get("name"))
-        htriggerw = parse_vl_int(xml_module.find(".//var/[@name='HTRIGGERW']/const").get("name"))
-        probew = parse_vl_int(xml_module.find(".//var/[@name='PROBEW']/const").get("name"))
-        module_name = xml_module.get("name")
-        modules[module_name] = [scope_id, xtriggerw, htriggerw, probew]
+def get_module_param(mod, param_name):
+    """Return integer value of a parameter from a module's stmtsp."""
+    for stmt in mod.get('stmtsp', []):
+        if stmt.get('type') == 'VAR' and stmt.get('name') == param_name:
+            valuep = stmt.get('valuep', [])
+            if valuep:
+                return parse_vl_int(valuep[0].get('name', '0'))
+    return 0
+
+def iter_stmts(stmtsp):
+    """Yield all statements, recursing into generate blocks."""
+    for stmt in stmtsp:
+        yield stmt
+        if stmt.get('type') in ('GENBLOCK', 'GENFOR', 'GENIF', 'BEGINBLOCK'):
+            yield from iter_stmts(stmt.get('stmtsp', []))
+
+def find_scope_tap_instances(mod, addr_to_mod, scope_tap_addrs, current_path, results, visited):
+    """DFS through module hierarchy to locate VX_scope_tap instances."""
+    if mod['addr'] in visited:
+        return
+    visited = visited | {mod['addr']}
+    for stmt in iter_stmts(mod.get('stmtsp', [])):
+        if stmt.get('type') != 'CELL':
+            continue
+        inst_name  = stmt.get('name', '')
+        modp_addr  = stmt.get('modp')
+        child_mod  = addr_to_mod.get(modp_addr)
+        if not child_mod:
+            continue
+        full_path = f"{current_path}.{inst_name}" if current_path else inst_name
+        if modp_addr in scope_tap_addrs:
+            results.append((stmt, child_mod, full_path))
+        else:
+            find_scope_tap_instances(child_mod, addr_to_mod, scope_tap_addrs,
+                                     full_path, results, visited)
+
+def find_top_module(json_doc, addr_to_mod):
+    """Identify the top module as the one never used as a CELL's modp."""
+    all_modp = {stmt.get('modp')
+                for mod in json_doc.get('modulesp', [])
+                for stmt in iter_stmts(mod.get('stmtsp', []))
+                if stmt.get('type') == 'CELL'}
+    for mod in json_doc.get('modulesp', []):
+        if mod['addr'] not in all_modp:
+            return mod
+    mods = json_doc.get('modulesp', [])
+    return mods[0] if mods else None
+
+def parse_json(filename, max_taps):
+    with open(filename) as f:
+        json_doc = json.load(f)
+
+    addr_to_mod, addr_to_type = build_addr_lookups(json_doc)
+
+    scope_tap_addrs = {mod['addr']
+                       for mod in json_doc.get('modulesp', [])
+                       if mod.get('origName') == 'VX_scope_tap'}
+    if not scope_tap_addrs:
+        return {"version": "0.1.0", "taps": []}
+
+    top_mod = find_top_module(json_doc, addr_to_mod)
+    if not top_mod:
+        return {"version": "0.1.0", "taps": []}
+
+    instances = []
+    find_scope_tap_instances(top_mod, addr_to_mod, scope_tap_addrs, '', instances, set())
 
     taps = []
-    xml_instances = xml_doc.iter("instance")
-    for xml_instance in xml_instances:
-        if (max_taps != -1 and len(taps) >= max_taps):
+    for cell, scope_mod, hier_path in instances:
+        if max_taps != -1 and len(taps) >= max_taps:
             break
-        defName = xml_instance.get("defName")
-        module = modules.get(defName)
-        if module is None:
-            continue
+        scope_id  = get_module_param(scope_mod, 'SCOPE_ID')
+        xtriggerw = get_module_param(scope_mod, 'XTRIGGERW')
+        htriggerw = get_module_param(scope_mod, 'HTRIGGERW')
+        probew    = get_module_param(scope_mod, 'PROBEW')
 
-        xtriggers = []
-        htriggers = []
-        probes = []
+        pin_by_name = {pin.get('name'): pin for pin in cell.get('pinsp', [])}
 
-        if module[1] > 0:
-            w = parse_vl_port(xml_doc, xml_instance.find(".//port/[@name='xtriggers']/*"), xtriggers)
-            if w != module[1]:
-                raise ET.ParseError("invalid xtriggers width: actual=" + str(w) + ", expected=" + str(module[1]))
+        xtriggers, htriggers, probes = [], [], []
 
-        if module[2] > 0:
-            w = parse_vl_port(xml_doc, xml_instance.find(".//port/[@name='htriggers']/*"), htriggers)
-            if w != module[2]:
-                raise ET.ParseError("invalid htriggers width: actual=" + str(w) + ", expected=" + str(module[2]))
+        if xtriggerw > 0:
+            pin = pin_by_name.get('xtriggers', {})
+            exprp = pin.get('exprp', [])
+            if exprp:
+                w = parse_vl_port(addr_to_type, exprp[0], xtriggers)
+                if w != xtriggerw:
+                    raise ValueError(f"invalid xtriggers width: actual={w}, expected={xtriggerw}")
 
-        w = parse_vl_port(xml_doc, xml_instance.find(".//port/[@name='probes']/*"), probes)
-        if w != module[3]:
-            raise ET.ParseError("invalid probes width: actual=" + str(w) + ", expected=" + str(module[3]))
+        if htriggerw > 0:
+            pin = pin_by_name.get('htriggers', {})
+            exprp = pin.get('exprp', [])
+            if exprp:
+                w = parse_vl_port(addr_to_type, exprp[0], htriggers)
+                if w != htriggerw:
+                    raise ValueError(f"invalid htriggers width: actual={w}, expected={htriggerw}")
 
-        signals = probes
-        for xtrigger in xtriggers:
-            signals.append(xtrigger)
-        for htrigger in htriggers:
-            signals.append(htrigger)
+        pin = pin_by_name.get('probes', {})
+        exprp = pin.get('exprp', [])
+        if exprp:
+            w = parse_vl_port(addr_to_type, exprp[0], probes)
+            if w != probew:
+                raise ValueError(f"invalid probes width: actual={w}, expected={probew}")
 
-        loc = xml_instance.get("loc")
-        hier = xml_doc.find(".//cell/[@loc='" + loc + "']").get("hier")
-        path = hier.rsplit(".", 1)[0]
-        taps.append({"id":module[0],
-                     "width":module[1] + module[2] + module[3],
-                     "signals":signals,
-                     "path":path})
+        signals = probes + xtriggers + htriggers
+        path = hier_path.rsplit('.', 1)[0] if '.' in hier_path else hier_path
 
-    return {"version":"0.1.0", "taps":taps}
+        taps.append({"id":     scope_id,
+                     "width":  xtriggerw + htriggerw + probew,
+                     "signals": signals,
+                     "path":   path})
+
+    return {"version": "0.1.0", "taps": taps}
 
 def main():
     parser = argparse.ArgumentParser(description='Scope headers generator.')
-    parser.add_argument('-o', nargs='?', default='scope.json', metavar='o', help='Output JSON manifest')
-    parser.add_argument('-n', nargs='?', default=-1, metavar='n', type=int, help='Maximum number of taps to read')
-    parser.add_argument('xml', help='Design XML descriptor file')
+    parser.add_argument('-o', nargs='?', default='scope.json', metavar='o',
+                        help='Output JSON manifest')
+    parser.add_argument('-n', nargs='?', default=-1, metavar='n', type=int,
+                        help='Maximum number of taps to read')
+    parser.add_argument('json', help='Design JSON descriptor file')
     args = parser.parse_args()
-    #print("args=", args)
-    scope_taps = parse_xml(args.xml, args.n)
+    scope_taps = parse_json(args.json, args.n)
     with open(args.o, "w") as f:
         json.dump(scope_taps, f, ensure_ascii=False, indent=4)
 

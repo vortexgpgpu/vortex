@@ -23,27 +23,27 @@ class Core;
 
 class Dispatcher : public SimObject<Dispatcher> {
 public:
-	std::vector<SimPort<instr_trace_t*>> Outputs;
-	std::vector<SimPort<instr_trace_t*>> Inputs;
+	std::vector<SimChannel<instr_trace_t*>> Inputs;
+	std::vector<SimChannel<instr_trace_t*>> Outputs;
 
-	Dispatcher(const SimContext& ctx, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes);
+	Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes);
 
 	virtual ~Dispatcher();
 
-	virtual void reset();
-
-	virtual void tick();
+protected:
+	virtual void on_reset();
+	virtual void on_tick();
 
 private:
-	const Arch& arch_;
 	Core*    core_;
-	uint32_t buf_size_;
 	uint32_t block_size_;
 	uint32_t num_lanes_;
 	uint32_t num_blocks_;
 	uint32_t num_packets_;
 	uint32_t batch_idx_;
 	std::vector<int> block_pids_;
+
+	friend class SimObject<Dispatcher>;
 };
 
 }

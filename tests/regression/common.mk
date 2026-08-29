@@ -5,30 +5,51 @@ TARGET ?= opaesim
 XRT_SYN_DIR ?= $(VORTEX_HOME)/hw/syn/xilinx/xrt
 XRT_DEVICE_INDEX ?= 0
 
-VORTEX_RT_PATH ?= $(ROOT_DIR)/runtime
-VORTEX_KN_PATH ?= $(ROOT_DIR)/kernel
+VORTEX_RT_SRC ?= $(ROOT_DIR)/sw/runtime
+VORTEX_RT_LIB ?= $(VORTEX_RT_SRC)
+VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
+
+KERNEL_LIB ?= vortex
+
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+
+ifneq (,$(filter -DVX_CFG_EXT_C_ENABLE, $(XCONFIGS)))
+	C_EXT := c
+else
+	C_EXT :=
+endif
+
+# Zacas rides after the single-letter extensions, which is where the ISA
+# string wants multi-letter names. It extends the A set rather than replacing
+# it, so it is only meaningful alongside it.
+# The pinned GNU assembler does not know the extension, so a test that builds
+# its kernel through that toolchain declares GNU_KERNEL and keeps the base
+# string. Such a kernel gets the compare-exchange retry loop instead.
+ifneq (,$(filter -DVX_CFG_EXT_ZACAS_ENABLE, $(XCONFIGS)))
+ifeq ($(GNU_KERNEL),)
+	ZACAS_EXT := _zacas
+else
+	ZACAS_EXT :=
+endif
+else
+	ZACAS_EXT :=
+endif
 
 ifeq ($(XLEN),64)
-	ifeq ($(EXT_V_ENABLE),1)
-		VX_CFLAGS += -march=rv64imafdv_zve64d -mabi=lp64d # vector extension
-	else
-		VX_CFLAGS += -march=rv64imafd -mabi=lp64d
-	endif
+	VX_CFLAGS += -march=rv64imafd$(C_EXT)$(ZACAS_EXT) -mabi=lp64d
 	STARTUP_ADDR ?= 0x180000000
 else
-	ifeq ($(EXT_V_ENABLE),1)
-		VX_CFLAGS += -march=rv32imafv_zve32f -mabi=ilp32f # vector extension
-	else
-		VX_CFLAGS += -march=rv32imaf -mabi=ilp32f
-	endif
+	VX_CFLAGS += -march=rv32imaf$(C_EXT)$(ZACAS_EXT) -mabi=ilp32f
 	STARTUP_ADDR ?= 0x80000000
 endif
 
+LLVM_CFLAGS += --target=riscv$(XLEN)-unknown-elf
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
-LLVM_CFLAGS += -Xclang -target-feature -Xclang +vortex
+LLVM_CFLAGS += -Xclang -target-feature -Xclang +xvortex
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +zicond
 LLVM_CFLAGS += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
+LLVM_CFLAGS += -Wno-unused-command-line-argument
 #LLVM_CFLAGS += -mllvm -vortex-branch-divergence=0
 #LLVM_CFLAGS += -mllvm -debug -mllvm -print-after-all
 #LLVM_CFLAGS += -I$(RISCV_SYSROOT)/include/c++/9.2.0/$(RISCV_PREFIX)
@@ -36,40 +57,72 @@ LLVM_CFLAGS += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 #LLVM_CFLAGS += -Wl,-L$(RISCV_TOOLCHAIN_PATH)/lib/gcc/$(RISCV_PREFIX)/9.2.0
 #LLVM_CFLAGS += --rtlib=libgcc
 
-VX_CC  = $(LLVM_VORTEX)/bin/clang $(LLVM_CFLAGS)
-VX_CXX = $(LLVM_VORTEX)/bin/clang++ $(LLVM_CFLAGS)
-VX_DP  = $(LLVM_VORTEX)/bin/llvm-objdump
-VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
+VX_CC  = $(LLVM_PATH)/bin/clang $(LLVM_CFLAGS)
+VX_CXX = $(LLVM_PATH)/bin/clang++ $(LLVM_CFLAGS)
+VX_DP  = $(LLVM_PATH)/bin/llvm-objdump
+VX_CP  = $(LLVM_PATH)/bin/llvm-objcopy
 
 #VX_CC  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
 #VX_CXX = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-g++
 #VX_DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 #VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
+VX_CFLAGS += -Wall -Wextra -Wfatal-errors -Werror -Wno-unused-command-line-argument
 VX_CFLAGS += -O3 -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
-VX_CFLAGS += -I$(VORTEX_HOME)/kernel/include -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
-VX_CFLAGS += -DXLEN_$(XLEN)
-VX_CFLAGS += -DNDEBUG
+VX_CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
+VX_CFLAGS += -DNDEBUG -D__VORTEX__
 VX_CFLAGS += $(CONFIGS)
+# Project the resolved hardware config to -DVX_CFG_* flags so kernel/test code
+# need not #include <VX_config.h>.
+VX_CFLAGS += $(XCONFIGS)
 
-VX_LIBS += -L$(LIBC_VORTEX)/lib -lm -lc
+VX_LIBS += -L$(LIBC_PATH)/lib -lm -lc
 
-VX_LIBS += $(LIBCRT_VORTEX)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
+VX_LIBS += $(LIBCRT_PATH)/lib/baremetal/libclang_rt.builtins-riscv$(XLEN).a
 #VX_LIBS += -lgcc
 
-VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortex.a $(VX_LIBS)
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_HOME)/sw/kernel/scripts/link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(VX_LIBS)
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I$(VORTEX_HOME)/runtime/include -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
+VX_STARTUP_SRC := $(VORTEX_HOME)/sw/kernel/src/vx_start.S
+VX_KMU_FLAG := $(if $(filter vortex2,$(KERNEL_LIB)),-DKMU_ENABLE)
+VX_APP_OBJS = $(addsuffix .o, $(basename $(notdir $(VX_SRCS))))
+KERNEL_STARTUP := $(VORTEX_HOME)/sw/kernel/scripts/kernel_startup.sh
+
+CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors -Werror
+# Skip the deprecated MPI C++ bindings (MPI::*). The MPI tests use the C API
+# only; pulling in <mpicxx.h> drags in an internal function-pointer cast that
+# trips -Werror=cast-function-type under GCC. Harmless no-op for non-MPI tests.
+CXXFLAGS += -DOMPI_SKIP_MPICXX -DMPICH_SKIP_MPICXX
+CXXFLAGS += -I$(VORTEX_HOME)/sw/runtime/include -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CXXFLAGS += $(CONFIGS)
+# Project the resolved hardware config to -DVX_CFG_* flags (host side).
+CXXFLAGS += $(XCONFIGS)
 
-LDFLAGS += -L$(VORTEX_RT_PATH) -lvortex
-
-ifeq ($(MPI),1)
-	MPIRUN = mpirun  --allow-run-as-root --oversubscribe -np $(NP)
+# HOST_ARCH selects the host compiler for the test binary
+# (the .vxbin always builds with the RISC-V toolchain regardless).
+# When non-native, the binary is suffixed (e.g. vecadd-aarch64) and
+# linked against the cross-compiled stub in $(VORTEX_RT_LIB)/$(HOST_ARCH)/.
+#
+# Cross-compiled ELFs use the default PT_INTERP for their target arch;
+# gem5's setInterpDir() prepends a sysroot prefix to resolve the
+# dynamic linker when DRIVER=gem5-aarch64.
+HOST_ARCH ?= x86_64
+ifeq ($(HOST_ARCH),x86_64)
+    PROJECT_SUFFIX :=
+    RT_LIB_DIR := $(VORTEX_RT_LIB)
+else ifeq ($(HOST_ARCH),aarch64)
+    CXX := aarch64-linux-gnu-g++
+    PROJECT_SUFFIX := -aarch64
+    RT_LIB_DIR := $(VORTEX_RT_LIB)/aarch64
+else ifeq ($(HOST_ARCH),armhf)
+    CXX := arm-linux-gnueabihf-g++
+    PROJECT_SUFFIX := -armhf
+    RT_LIB_DIR := $(VORTEX_RT_LIB)/armhf
 else
-	MPIRUN =
+    $(error HOST_ARCH must be one of: x86_64, aarch64, armhf (got $(HOST_ARCH)))
 endif
+
+LDFLAGS += -L$(RT_LIB_DIR) -lvortex
 
 # Debugging
 ifdef DEBUG
@@ -90,36 +143,112 @@ endif
 endif
 endif
 
-all: $(PROJECT) kernel.vxbin kernel.dump
+CONFIG_STAMP = config.stamp
+
+# HOST_ARCH-suffixed binary name (vecadd, vecadd-aarch64, …) so
+# x86 and cross-compiled variants coexist in the same dir.
+APP := $(PROJECT)$(PROJECT_SUFFIX)
+
+all: $(APP) kernel.vxbin kernel.dump
+
+# Force rebuild when CONFIGS (defines) change between runs.
+# PID-suffixed tmp + tolerate concurrent invocations across test
+# Makefiles + blackbox.sh-driven runtime builds (mv -f).
+$(CONFIG_STAMP): FORCE
+	@TMP=$@.tmp.$$$$ ; \
+	 printf '%s\n' '$(VX_CFLAGS)' '$(CXXFLAGS)' '$(LDFLAGS)' > $$TMP ; \
+	 if ! cmp -s $$TMP $@ 2>/dev/null; then \
+	   mv -f $$TMP $@ ; \
+	 else \
+	   rm -f $$TMP ; \
+	 fi
+FORCE:
 
 kernel.dump: kernel.elf
 	$(VX_DP) -D $< > $@
 
 kernel.vxbin: kernel.elf
-	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/kernel/scripts/vxbin.py $< $@
+	OBJCOPY=$(VX_CP) $(VORTEX_HOME)/sw/kernel/scripts/vxbin.py $< $@
 
-kernel.elf: $(VX_SRCS)
-	$(VX_CXX) $(VX_CFLAGS) $^ $(VX_LDFLAGS) -o kernel.elf
+$(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a:
+	$(MAKE) -C $(VORTEX_KN_PATH)
 
-$(PROJECT): $(SRCS)
-	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF)) $(if $(SCOPE),SCOPE=$(SCOPE)) $(if $(SAIF),SAIF=$(SAIF))
+
+# FORCE, not a bare rule: a rule with no prerequisites runs only when its target
+# is missing, so once this library exists make never re-enters the sub-make that
+# owns it and every test goes on linking whichever build happened to land first.
+$(VORTEX_RT_LIB)/libvortex.so: FORCE
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub DESTDIR=$(VORTEX_RT_LIB)
+
+# Headers the device kernel and the host binary are built from. Neither target
+# lists any by default, so editing a shared header under sw/common or sw/gfx
+# rebuilds nothing and both sides go on running against the previous layout --
+# silently, and reporting a pass or a mismatch that describes the old build. A
+# test that includes such headers declares them here. They are filtered out of
+# the compiler's inputs below, being prerequisites only.
+VX_HDRS ?=
+HDRS ?=
+
+ifneq ($(filter %.S,$(VX_SRCS)),)
+kernel.elf: $(VX_SRCS) $(VX_HDRS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+	$(VX_CXX) $(VX_CFLAGS) $(filter-out $(CONFIG_STAMP) $(VX_HDRS),$^) $(VX_LDFLAGS) -o $@
+else
+vx_start.o: $(VX_SRCS) $(VX_HDRS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+	$(VX_CXX) $(VX_CFLAGS) -c $(VX_SRCS)
+	$(VX_CXX) $(VX_CFLAGS) -DNEED_GP -DNEED_TLS -DNEED_INITFINI $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@
+	$(VX_CXX) $(VX_CFLAGS) $@ $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@.elf
+	$(VX_CXX) $(VX_CFLAGS) $$($(KERNEL_STARTUP) $(VX_DP) $@.elf) $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@ && rm -f $@.elf
+
+kernel.elf: vx_start.o $(VX_SRCS) $(VX_HDRS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+	$(VX_CXX) $(VX_CFLAGS) vx_start.o $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@
+endif
+
+$(APP): $(SRCS) $(HDRS) $(RT_LIB_DIR)/libvortex.so $(CONFIG_STAMP)
+	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP) $(HDRS),$^) $(LDFLAGS) -o $@
+
+# Cross-compiled stub for non-native HOST_ARCH.
+ifneq ($(HOST_ARCH),x86_64)
+$(RT_LIB_DIR)/libvortex.so:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub HOST_ARCH=$(HOST_ARCH) DESTDIR=$(VORTEX_RT_LIB)
+endif
 
 run-simx: $(PROJECT) kernel.vxbin
-	LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx  $(MPIRUN) ./$(PROJECT) $(OPTS)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)
+	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)
 
 run-rtlsim: $(PROJECT) kernel.vxbin
-	LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/rtlsim DESTDIR=$(VORTEX_RT_LIB)
+	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
+
+run-firesim: $(PROJECT) kernel.vxbin
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/firesim DESTDIR=$(VORTEX_RT_LIB)
+ifeq ($(TARGET), hw)
+	XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else
+	XCL_EMULATION_MODE=$(TARGET) EMCONFIG_PATH=$(FPGA_BIN_DIR) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+endif
 
 run-opae: $(PROJECT) kernel.vxbin
-	SCOPE_JSON_PATH=$(VORTEX_RT_PATH)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/opae DESTDIR=$(VORTEX_RT_LIB)
+	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
 
 run-xrt: $(PROJECT) kernel.vxbin
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/xrt DESTDIR=$(VORTEX_RT_LIB)
 ifeq ($(TARGET), hw)
-	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_PATH)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else ifeq ($(TARGET), hw_emu)
-	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_PATH)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else
-	SCOPE_JSON_PATH=$(VORTEX_RT_PATH)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_PATH):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+endif
+
+run-aved: $(PROJECT) kernel.vxbin
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/aved DESTDIR=$(VORTEX_RT_LIB)
+ifeq ($(filter hw sim, $(TARGET)),)
+	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=aved ./$(PROJECT) $(OPTS)
+else
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.vbin $(if $(filter hw,$(TARGET)),VORTEX_AVED_NO_PROGRAM=$(or $(VORTEX_AVED_NO_PROGRAM),1)) LD_LIBRARY_PATH=$(VRT_HOME)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=aved ./$(PROJECT) $(OPTS)
 endif
 
 .depend: $(SRCS)
@@ -132,6 +261,7 @@ clean-host:
 	rm -rf $(PROJECT) *.o *.log .depend
 
 clean: clean-kernel clean-host
+	rm -f $(CONFIG_STAMP) $(CONFIG_STAMP).tmp
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

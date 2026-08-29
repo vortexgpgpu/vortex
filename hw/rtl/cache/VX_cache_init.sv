@@ -14,14 +14,10 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_init import VX_gpu_pkg::*; #(
-    // Number of Word requests per cycle
-    parameter NUM_REQS  = 4,
-    // Number of banks
-    parameter NUM_BANKS = 1,
-    // core request tag size
-    parameter TAG_WIDTH = UUID_WIDTH + 1,
-    // Bank select latency
-    parameter BANK_SEL_LATENCY = 1
+    parameter NUM_REQS  = 4,                  // Number of Word requests per cycle
+    parameter NUM_BANKS = 1,                  // Number of banks
+    parameter TAG_WIDTH = UUID_WIDTH + 1,     // core request tag size
+    parameter BANK_SEL_LATENCY = 1            // Bank select latency
 ) (
     input wire              clk,
     input wire              reset,
@@ -88,7 +84,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
 
     wire [NUM_REQS-1:0] flush_req_mask;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_flush_req_mask
-        assign flush_req_mask[i] = core_bus_in_if[i].req_valid && core_bus_in_if[i].req_data.flags[MEM_REQ_FLAG_FLUSH];
+        assign flush_req_mask[i] = core_bus_in_if[i].req_valid && core_bus_in_if[i].req_data.attr[MEM_ATTR_FLUSH_OFFS];
     end
     wire flush_req_enable = (| flush_req_mask);
 
@@ -96,7 +92,10 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     reg [`UP(UUID_WIDTH)-1:0] flush_uuid_r, flush_uuid_n;
 
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_out_req
+        // block core requests if a flush is active,
+        // unless the lock for this specific request has been released
         wire input_enable = ~flush_req_enable || lock_released[i];
+
         assign core_bus_out_if[i].req_valid = core_bus_in_if[i].req_valid && input_enable;
         assign core_bus_out_if[i].req_data  = core_bus_in_if[i].req_data;
         assign core_bus_in_if[i].req_ready  = core_bus_out_if[i].req_ready && input_enable;

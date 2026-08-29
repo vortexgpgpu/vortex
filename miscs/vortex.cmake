@@ -20,14 +20,14 @@ set(CMAKE_C_COMPILER "${TOOLDIR}/llvm-vortex/bin/clang")
 set(CMAKE_CXX_COMPILER "${TOOLDIR}/llvm-vortex/bin/clang++")
 
 # Compiler flags for C and C++
-set(CMAKE_C_FLAGS "-v --gcc-toolchain=${TOOLDIR}/riscv-gnu-toolchain -march=rv32imaf -mabi=ilp32f -Xclang -target-feature -Xclang +vortex -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections")
-set(CMAKE_CXX_FLAGS "-v --gcc-toolchain=${TOOLDIR}/riscv-gnu-toolchain -march=rv32imaf -mabi=ilp32f -Xclang -target-feature -Xclang +vortex -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections")
+set(CMAKE_C_FLAGS "-v --gcc-toolchain=${TOOLDIR}/riscv-gnu-toolchain -march=rv32imaf -mabi=ilp32f -Xclang -target-feature -Xclang +vortex -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections -D__VORTEX__")
+set(CMAKE_CXX_FLAGS "-v --gcc-toolchain=${TOOLDIR}/riscv-gnu-toolchain -march=rv32imaf -mabi=ilp32f -Xclang -target-feature -Xclang +vortex -mcmodel=medany -fno-rtti -fno-exceptions -fdata-sections -ffunction-sections -D__VORTEX__")
 
 # Set the sysroot
 set(CMAKE_SYSROOT "${TOOLDIR}/riscv32-gnu-toolchain/riscv32-unknown-elf")
 
 # Linker flags
-set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld -nostartfiles -Wl,-Bstatic,--gc-sections,-T,${VORTEX_HOME}/kernel/scripts/link32.ld ${VORTEX_BUILD}/kernel/libvortex.a")
+set(CMAKE_EXE_LINKER_FLAGS "-fuse-ld=lld -nostartfiles -Wl,-Bstatic,--gc-sections,-T,${VORTEX_HOME}/sw/kernel/scripts/link32.ld ${VORTEX_BUILD}/sw/kernel/libvortex.a")
 
 # Don't run the linker on compiler check
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)

@@ -15,15 +15,14 @@
 
 interface VX_mem_bus_if import VX_gpu_pkg::*; #(
     parameter DATA_SIZE  = 1,
-    parameter FLAGS_WIDTH = MEM_FLAGS_WIDTH,
-    parameter TAG_WIDTH  = 1,
-    parameter MEM_ADDR_WIDTH = `MEM_ADDR_WIDTH,
-    parameter ADDR_WIDTH = MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
+    parameter ATTR_WIDTH = MEM_ATTR_WIDTH,
+    parameter TAG_WIDTH  = UUID_WIDTH + 1,
+    parameter ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(DATA_SIZE)
 ) ();
 
     typedef struct packed {
-        logic [`UP(UUID_WIDTH)-1:0]           uuid;
-        logic [TAG_WIDTH-`UP(UUID_WIDTH)-1:0] value;
+        logic [UUID_WIDTH-1:0]           uuid;
+        logic [TAG_WIDTH-UUID_WIDTH-1:0] value;
     } tag_t;
 
     typedef struct packed {
@@ -31,7 +30,7 @@ interface VX_mem_bus_if import VX_gpu_pkg::*; #(
         logic [ADDR_WIDTH-1:0]  addr;
         logic [DATA_SIZE*8-1:0] data;
         logic [DATA_SIZE-1:0]   byteen;
-        logic [FLAGS_WIDTH-1:0] flags;
+        logic [`UP(ATTR_WIDTH)-1:0] attr;
         tag_t                   tag;
     } req_data_t;
 

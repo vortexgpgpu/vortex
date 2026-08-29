@@ -11,4 +11,6 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 OPTS ?= -n32-b2 # 32x32x32 matrix and block size of 2x2x2
 
+KERNEL_LIB := vortex2
+
 include ../common.mk

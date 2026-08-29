@@ -22,19 +22,21 @@
 #include <util.h>
 #include "debug.h"
 #include "types.h"
-#include "emulator.h"
-#include "arch.h"
+#include "decode.h"
+#include "decompressor.h"
 #include "instr.h"
+#include "gfx_doctrine.h"
 
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
 #include "tensor_cfg.h"
+#include "tcu_unit.h"
 #endif
 
 using namespace vortex;
 
 static op_string_t op_string(const Instr &instr) {
-  auto op_type = instr.getOpType();
-  auto instrArgs = instr.getArgs();
+  auto op_type = instr.get_op_type();
+  auto instrArgs = instr.get_args();
   return visit_var(op_type,
     [&](AluType alu_type)-> op_string_t {
       auto aluArgs = std::get<IntrAluArgs>(instrArgs);
@@ -135,6 +137,9 @@ static op_string_t op_string(const Instr &instr) {
       default:
         std::abort();
       }
+    },
+    [&](WgatherType)-> op_string_t {
+      return {"WGATHER", ""};
     },
     [&](BrType br_type)-> op_string_t {
       auto brArgs = std::get<IntrBrArgs>(instrArgs);
@@ -252,7 +257,11 @@ static op_string_t op_string(const Instr &instr) {
       switch (lsu_type) {
       case LsuType::LOAD: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
-        if (lsuArgs.is_float) {
+        bool dst_float = (instr.get_dest_reg().type == RegType::Float);
+        // packLD detection: Float dest with sub-word width (LB or LH).
+        if (dst_float && lsuArgs.width == 0) return {"PACKLB.F", ""};
+        if (dst_float && lsuArgs.width == 1) return {"PACKLH.F", ""};
+        if (dst_float) {
           switch (lsuArgs.width) {
           case 2: return {"FLW", to_hex_str(lsuArgs.offset)};
           case 3: return {"FLD", to_hex_str(lsuArgs.offset)};
@@ -275,7 +284,9 @@ static op_string_t op_string(const Instr &instr) {
       }
       case LsuType::STORE: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
-        if (lsuArgs.is_float) {
+        // For stores, the data source (rs2) carries the type info.
+        bool src_float = (instr.get_src_reg(1).type == RegType::Float);
+        if (src_float) {
           switch (lsuArgs.width) {
           case 2: return {"FSW", to_hex_str(lsuArgs.offset)};
           case 3: return {"FSD", to_hex_str(lsuArgs.offset)};
@@ -314,6 +325,7 @@ static op_string_t op_string(const Instr &instr) {
         case AmoType::AMOMAX:  return {"AMOMAX.W", ""};
         case AmoType::AMOMINU: return {"AMOMINU.W", ""};
         case AmoType::AMOMAXU: return {"AMOMAXU.W", ""};
+        case AmoType::AMOCAS:  return {"AMOCAS.W", ""};
         default:
           std::abort();
         }
@@ -331,6 +343,7 @@ static op_string_t op_string(const Instr &instr) {
         case AmoType::AMOMAX:  return {"AMOMAX.D", ""};
         case AmoType::AMOMINU: return {"AMOMINU.D", ""};
         case AmoType::AMOMAXU: return {"AMOMAXU.D", ""};
+        case AmoType::AMOCAS:  return {"AMOCAS.D", ""};
         default:
           std::abort();
         }
@@ -364,115 +377,55 @@ static op_string_t op_string(const Instr &instr) {
       switch (wctl_type) {
       case WctlType::TMC:    return {"TMC", ""};
       case WctlType::WSPAWN: return {"WSPAWN", ""};
-      case WctlType::SPLIT:  return {wctlArgs.is_neg ? "SPLIT.N":"SPLIT", ""};
+      case WctlType::SPLIT:  return {wctlArgs.is_cond_neg ? "SPLIT.N":"SPLIT", ""};
       case WctlType::JOIN:   return {"JOIN", ""};
-      case WctlType::BAR:    return {"BAR", ""};
-      case WctlType::PRED:   return {wctlArgs.is_neg ? "PRED.N":"PRED", ""};
+      case WctlType::BAR: {
+        if (wctlArgs.is_sync_bar) {
+          return {"BAR", ""};
+        } else {
+          if (wctlArgs.is_bar_arrive) return {"BAR.ARRIVE", ""};
+          else return {"BAR.WAIT", ""};
+        }
+      }
+      case WctlType::PRED:   return {wctlArgs.is_cond_neg ? "PRED.N":"PRED", ""};
+      case WctlType::WSYNC:  return {"WSYNC", ""};
       default:
         std::abort();
       }
     }
-  #ifdef EXT_V_ENABLE
-    ,[&](VsetType vset_type)-> op_string_t {
-      auto vsetArgs = std::get<IntrVsetArgs>(instrArgs);
-      switch (vset_type) {
-      case VsetType::VSETVLI:  return {"VSETVLI", vsetArgs.to_string(vset_type)};
-      case VsetType::VSETIVLI: return {"VSETIVLI", vsetArgs.to_string(vset_type)};
-      case VsetType::VSETVL:   return {"VSETVL", vsetArgs.to_string(vset_type)};
-      default:
-        std::abort();
-      }
-    },
-    [&](VlsType vls_type)-> op_string_t {
-      auto vlsArgs = std::get<IntrVlsArgs>(instrArgs);
-      switch (vls_type) {
-      case VlsType::VL: {
-        switch (vlsArgs.width) {
-        case 0: return {"VL8",  vlsArgs.to_string(vls_type)};
-        case 1: return {"VL16", vlsArgs.to_string(vls_type)};
-        case 2: return {"VL32", vlsArgs.to_string(vls_type)};
-        case 3: return {"VL64", vlsArgs.to_string(vls_type)};
-        default:
-          std::abort();
-        }
-      }
-      case VlsType::VLS: {
-        switch (vlsArgs.width) {
-        case 0: return {"VLS8",  vlsArgs.to_string(vls_type)};
-        case 1: return {"VLS16", vlsArgs.to_string(vls_type)};
-        case 2: return {"VLS32", vlsArgs.to_string(vls_type)};
-        case 3: return {"VLS64", vlsArgs.to_string(vls_type)};
-        default:
-          std::abort();
-        }
-      }
-      case VlsType::VLX: {
-        switch (vlsArgs.width) {
-        case 0: return {"VLX8",  vlsArgs.to_string(vls_type)};
-        case 1: return {"VLX16", vlsArgs.to_string(vls_type)};
-        case 2: return {"VLX32", vlsArgs.to_string(vls_type)};
-        case 3: return {"VLX64", vlsArgs.to_string(vls_type)};
-        default:
-          std::abort();
-        }
-      }
-      case VlsType::VS: {
-        switch (vlsArgs.width) {
-        case 0: return {"VS8",  vlsArgs.to_string(vls_type)};
-        case 1: return {"VS16", vlsArgs.to_string(vls_type)};
-        case 2: return {"VS32", vlsArgs.to_string(vls_type)};
-        case 3: return {"VS64", vlsArgs.to_string(vls_type)};
-        default:
-          std::abort();
-        }
-      }
-
-      case VlsType::VSS: {
-        switch (vlsArgs.width) {
-        case 0: return {"VSS8",  vlsArgs.to_string(vls_type)};
-        case 1: return {"VSS16", vlsArgs.to_string(vls_type)};
-        case 2: return {"VSS32", vlsArgs.to_string(vls_type)};
-        case 3: return {"VSS64", vlsArgs.to_string(vls_type)};
-        default:
-          std::abort();
-        }
-      }
-
-      case VlsType::VSX: {
-        switch (vlsArgs.width) {
-        case 0: return {"VSX8",  vlsArgs.to_string(vls_type)};
-        case 1: return {"VSX16", vlsArgs.to_string(vls_type)};
-        case 2: return {"VSX32", vlsArgs.to_string(vls_type)};
-        case 3: return {"VSX64", vlsArgs.to_string(vls_type)};
-        default:
-          std::abort();
-        }
-      }
-      default:
-        std::abort();
-      }
-    },
-    [&](VopType vop_type)-> op_string_t {
-      auto vopArgs = std::get<IntrVopArgs>(instrArgs);
-      switch (vop_type) {
-      case VopType::OPIVV: return {"OPIVV", vopArgs.to_string(vop_type)};
-      case VopType::OPFVV: return {"OPFVV", vopArgs.to_string(vop_type)};
-      case VopType::OPMVV: return {"OPMVV", vopArgs.to_string(vop_type)};
-      case VopType::OPIVI: return {"OPIVI", vopArgs.to_string(vop_type)};
-      case VopType::OPIVX: return {"OPIVX", vopArgs.to_string(vop_type)};
-      case VopType::OPFVF: return {"OPFVF", vopArgs.to_string(vop_type)};
-      case VopType::OPMVX: return {"OPMVX", vopArgs.to_string(vop_type)};
-      default:
-        std::abort();
-      }
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    ,[&](DxaType /*dxa_type*/)-> op_string_t {
+      return {"DXA.ISSUE", ""};
     }
-  #endif // EXT_V_ENABLE
-  #ifdef EXT_TCU_ENABLE
+#endif
+  #ifdef VX_CFG_EXT_TCU_ENABLE
     ,[&](TcuType tcu_type)-> op_string_t {
       auto tpuArgs = std::get<IntrTcuArgs>(instrArgs);
-      return op_string(tcu_type, tpuArgs);
+      return TcuUnit::op_string(tcu_type, tpuArgs);
     }
-  #endif // EXT_TCU_ENABLE
+  #endif // VX_CFG_EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_TEX_ENABLE
+    ,[&](TexType /*tex_type*/)-> op_string_t {
+      return {"TEX", ""};
+    }
+  #endif
+  #ifdef VX_CFG_EXT_OM_ENABLE
+    ,[&](OmType /*om_type*/)-> op_string_t {
+      return {"OM", ""};
+    }
+  #endif
+  #ifdef VX_CFG_EXT_RTU_ENABLE
+    ,[&](GfxwType rtu_type)-> op_string_t {
+      switch (rtu_type) {
+      case GfxwType::CB_RET: return {"GFXW.CB_RET", ""};
+      case GfxwType::TRACE: return {"GFXW.TRACE", ""};
+      case GfxwType::WAIT:  return {"GFXW.WAIT",  ""};
+      case GfxwType::GETWF:  return {"GFXW.GETWF",  ""};
+      case GfxwType::GETW:   return {"GFXW.GETW",   ""};
+      }
+      return {"GFXW.?", ""};
+    }
+  #endif
  );
  return {"", ""};
 }
@@ -482,13 +435,13 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
   auto sintr = ::op_string(instr);
   int sep = 0;
   os << sintr.op;
-  auto rd = instr.getDestReg();
+  auto rd = instr.get_dest_reg();
   if (rd.type != RegType::None) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << rd;
   }
   for (uint32_t i = 0; i < Instr::MAX_REG_SOURCES; ++i) {
-    auto rs = instr.getSrcReg(i);
+    auto rs = instr.get_src_reg(i);
     if (rs.type != RegType::None) {
       if (sep++ != 0) { os << ", "; } else { os << " "; }
       os << rs;
@@ -498,14 +451,32 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
     if (sep++ != 0) { os << ", "; } else { os << " "; }
     os << sintr.arg;
   }
+  if (instr.fu_lock_) {
+    os << " [fu_lock";
+    if (instr.fu_unlock_) {
+      os << ",fu_unlock";
+    }
+    os << "]";
+  }
   return os;
 }
 }
 
-void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
-  // get instruction buffer
-  auto& ibuffer = warps_.at(wid).ibuffer;
+Decoder::Decoder(const SimContext& ctx, const char* name, PoolAllocator<Instr, 64>& instr_pool)
+  : SimObject<Decoder>(ctx, name)
+  , instr_pool_(instr_pool)
+{}
 
+Decoder::~Decoder() {}
+
+Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
+  // Detect RVC from the raw bits and expand to a 32-bit instruction.
+  const bool is_rvc = (code & 0x3u) != 0x3u;
+  if (is_rvc) {
+    auto r = rvc_decompress(code & 0xFFFFu);
+    assert(!r.illegal && "illegal RVC encoding");
+    code = r.instr32;
+  }
   auto op = Opcode((code >> shift_opcode) & mask_opcode);
   auto funct2 = (code >> shift_funct2) & mask_funct2;
   auto funct3 = (code >> shift_funct3) & mask_funct3;
@@ -519,24 +490,22 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
   auto rs2 = (code >> shift_rs2) & mask_reg;
   auto rs3 = (code >> shift_rs3) & mask_reg;
 
+  auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
+
   switch (op) {
   case Opcode::LUI:
   case Opcode::AUIPC: { // RV32I: LUI / AUIPC
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     auto imm20 = (code >> shift_funct3) << shift_funct3;
-    instr->setOpType((op == Opcode::LUI) ? AluType::LUI : AluType::AUIPC);
-    instr->setArgs(IntrAluArgs{1, 0, imm20});
-    instr->setDestReg(rd, RegType::Integer);
-    ibuffer.push_back(instr);
-    break;
-  }
-#ifdef XLEN_64
+    instr->set_op_type((op == Opcode::LUI) ? AluType::LUI : AluType::AUIPC);
+    instr->set_args(IntrAluArgs{1, 0, imm20});
+    instr->set_dest_reg(rd, RegType::Integer);
+  } break;
+#ifdef VX_CFG_XLEN_64
   case Opcode::R_W:
   case Opcode::I_W:
 #endif
   case Opcode::R:
   case Opcode::I: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     bool is_w = (op == Opcode::R_W) || (op == Opcode::I_W);
     bool is_imm = (op == Opcode::I) || (op == Opcode::I_W);
     if (op == Opcode::R && funct7 == 0x7) {
@@ -549,53 +518,29 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       } else {
         std::abort();
       }
-      instr->setOpType(AluType::CZERO);
-      instr->setArgs(IntrAluArgs{0, 0, imm});
+      instr->set_op_type(AluType::CZERO);
+      instr->set_args(IntrAluArgs{0, 0, imm});
     } else
     if ((op == Opcode::R || op == Opcode::R_W) && (funct7 == 0x1)) {
       switch (funct3) {
-      case 0: { // RV32M: MUL
-        instr->setOpType(MdvType::MUL);
-        break;
-      }
-      case 1: { // RV32M: MULH
-        instr->setOpType(MdvType::MULH);
-        break;
-      }
-      case 2: { // RV32M: MULHSU
-        instr->setOpType(MdvType::MULHSU);
-        break;
-      }
-      case 3: { // RV32M: MULHU
-        instr->setOpType(MdvType::MULHU);
-        break;
-      }
-      case 4: { // RV32M: DIV
-        instr->setOpType(MdvType::DIV);
-        break;
-      }
-      case 5: { // RV32M: DIVU
-        instr->setOpType(MdvType::DIVU);
-        break;
-      }
-      case 6: { // RV32M: REM
-        instr->setOpType(MdvType::REM);
-        break;
-      }
-      case 7: { // RV32M: REMU
-        instr->setOpType(MdvType::REMU);
-        break;
-      }
+      case 0: instr->set_op_type(MdvType::MUL); break;
+      case 1: instr->set_op_type(MdvType::MULH); break;
+      case 2: instr->set_op_type(MdvType::MULHSU); break;
+      case 3: instr->set_op_type(MdvType::MULHU); break;
+      case 4: instr->set_op_type(MdvType::DIV); break;
+      case 5: instr->set_op_type(MdvType::DIVU); break;
+      case 6: instr->set_op_type(MdvType::REM); break;
+      case 7: instr->set_op_type(MdvType::REMU); break;
       default:
         std::abort();
       }
-      instr->setArgs(IntrMdvArgs{is_w});
+      instr->set_args(IntrMdvArgs{is_w});
     } else {
       uint32_t imm = 0;
       if (funct3 == 0x1 || funct3 == 0x5) {
         // Shift instructions
         imm = rs2; // uint5
-      #ifdef XLEN_64
+      #ifdef VX_CFG_XLEN_64
         imm |= ((funct7 & 0x1) << 5);
       #endif
       } else {
@@ -603,66 +548,43 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         imm = sext(imm12, width_i_imm);
       }
       switch (funct3) {
-      case 0: { // RV32I: SUB/ADD
-        instr->setOpType((!is_imm && funct7 == 0x20) ? AluType::SUB : AluType::ADD);
-        break;
-      }
-      case 1: { // RV32I: SLL
-        instr->setOpType(AluType::SLL);
-        break;
-      }
-      case 2: { // RV32I: SLT
-        instr->setOpType(AluType::SLT);
-        break;
-      }
-      case 3: { // RV32I: SLTU
-        instr->setOpType(AluType::SLTU);
-        break;
-      }
-      case 4: { // RV32I: XOR
-        instr->setOpType(AluType::XOR);
-        break;
-      }
-      case 5: { // RV32I: SRA/SRL
-        instr->setOpType((funct7 & 0x20) ? AluType::SRA : AluType::SRL);
-        break;
-      }
-      case 6: { // RV32I: OR
-        instr->setOpType(AluType::OR);
-        break;
-      }
-      case 7: { // RV32I: AND
-        instr->setOpType(AluType::AND);
-        break;
-      }
+      case 0: instr->set_op_type((!is_imm && funct7 == 0x20) ? AluType::SUB : AluType::ADD); break;
+      case 1: instr->set_op_type(AluType::SLL); break;
+      case 2: instr->set_op_type(AluType::SLT); break;
+      case 3: instr->set_op_type(AluType::SLTU); break;
+      case 4: instr->set_op_type(AluType::XOR); break;
+      // For RV64I SRAI/SRLI with shamt[5]=1, the upper-imm field is funct6
+      // (bits[31:26]), and bit 25 carries shamt[5] — which makes funct7 read
+      // back as 0x21 instead of 0x20. Match on funct6 (top 6 bits of funct7)
+      // so SRAI with shamt >= 32 isn't mis-decoded as SRLI.
+      case 5: instr->set_op_type((((funct7 >> 1) == 0x10)) ? AluType::SRA : AluType::SRL); break;
+      case 6: instr->set_op_type(AluType::OR); break;
+      case 7: instr->set_op_type(AluType::AND); break;
       default:
         std::abort();
       }
-      instr->setArgs(IntrAluArgs{is_imm, is_w, imm});
+      instr->set_args(IntrAluArgs{is_imm, is_w, imm});
     }
-    instr->setDestReg(rd, RegType::Integer);
-    instr->setSrcReg(0, rs1, RegType::Integer);
+    instr->set_dest_reg(rd, RegType::Integer);
+    instr->set_src_reg(0, rs1, RegType::Integer);
     if (!is_imm) {
-      instr->setSrcReg(1, rs2, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
     }
-    ibuffer.push_back(instr);
   } break;
   case Opcode::B: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     auto bit_11   = rd & 0x1;
     auto bits_4_1 = rd >> 1;
     auto bit_10_5 = funct7 & 0x3f;
     auto bit_12   = funct7 >> 6;
     auto imm12 = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
     auto addr = sext(imm12, width_i_imm+1);
-    instr->setOpType(BrType::BR);
-    instr->setArgs(IntrBrArgs{funct3, addr});
-    instr->setSrcReg(0, rs1, RegType::Integer);
-    instr->setSrcReg(1, rs2, RegType::Integer);
-    ibuffer.push_back(instr);
+    instr->set_op_type(BrType::BR);
+    instr->set_args(IntrBrArgs{funct3, is_rvc, addr});
+    instr->set_src_reg(0, rs1, RegType::Integer);
+    instr->set_src_reg(1, rs2, RegType::Integer);
+    instr->set_wstall(true);
   } break;
   case Opcode::JAL: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     auto unordered  = code >> shift_funct3;
     auto bits_19_12 = unordered & 0xff;
     auto bit_11     = (unordered >> 8) & 0x1;
@@ -670,459 +592,540 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     auto bit_20     = (unordered >> 19) & 0x1;
     auto imm20 = (bits_10_1 << 1) | (bit_11 << 11) | (bits_19_12 << 12) | (bit_20 << 20);
     auto addr = sext(imm20, width_j_imm+1);
-    instr->setOpType(BrType::JAL);
-    instr->setArgs(IntrBrArgs{0, addr});
-    instr->setDestReg(rd, RegType::Integer);
-    ibuffer.push_back(instr);
+    instr->set_op_type(BrType::JAL);
+    instr->set_args(IntrBrArgs{0, is_rvc, addr});
+    instr->set_dest_reg(rd, RegType::Integer);
+    instr->set_wstall(true);
   } break;
   case Opcode::JALR: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
     auto imm12 = code >> shift_rs2;
     auto addr = sext(imm12, width_i_imm);
-    instr->setOpType(BrType::JALR);
-    instr->setArgs(IntrBrArgs{0, addr});
-    instr->setDestReg(rd, RegType::Integer);
-    instr->setSrcReg(0, rs1, RegType::Integer);
-    ibuffer.push_back(instr);
+    instr->set_op_type(BrType::JALR);
+    instr->set_args(IntrBrArgs{0, is_rvc, addr});
+    instr->set_dest_reg(rd, RegType::Integer);
+    instr->set_src_reg(0, rs1, RegType::Integer);
+    instr->set_wstall(true);
   } break;
   case Opcode::L:
   case Opcode::FL:
   case Opcode::S:
   case Opcode::FS: {
+    instr->set_fu_type(FUType::LSU);
     bool is_float = (op == Opcode::FL || op == Opcode::FS);
     bool is_load = (op == Opcode::L || op == Opcode::FL);
-  #ifdef EXT_V_ENABLE
-    if (is_float && funct3 != 0x2 && funct3 != 0x3) {
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
-      IntrVlsArgs instArgs{};
-      instArgs.mew = (code >> shift_vmew) & mask_vmew;
-      instArgs.vm = (code >> shift_vm) & mask_vm;
-      instArgs.nf = (code >> shift_vnf) & mask_vnf;
-      switch (funct3) {
-      case 0: instArgs.width = 0; break;
-      case 5: instArgs.width = 1; break;
-      case 6: instArgs.width = 2; break;
-      case 7: instArgs.width = 3; break;
-      default:
-        std::abort();
-      }
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      auto mop = (code >> shift_vmop) & mask_vmop;
-      switch (mop) {
-      case 0b00:
-        instr->setOpType(is_load ? VlsType::VL : VlsType::VS);
-        instArgs.umop = rs2;
-        break;
-      case 0b10:
-        instr->setOpType(is_load ? VlsType::VLS : VlsType::VSS);
-        instr->setSrcReg(1, rs2, RegType::Integer);
-        break;
-      case 0b01:
-      case 0b11:
-        instr->setOpType(is_load ? VlsType::VLX : VlsType::VSX);
-        instr->setSrcReg(1, rs2, RegType::Vector);
-        break;
-      }
-      if (is_load) {
-        instr->setDestReg(rd, RegType::Vector);
-      } else {
-        instr->setSrcReg(2, rd, RegType::Vector);
-      }
-      instr->setArgs(instArgs);
-      ibuffer.push_back(instr);
-    } else
-  #endif // EXT_V_ENABLE
     {
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
-      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
       uint32_t imm12 = 0;
       if (is_load) {
         imm12 = code >> shift_rs2;
-        instr->setDestReg(rd, is_float ? RegType::Float : RegType::Integer);
+        instr->set_dest_reg(rd, is_float ? RegType::Float : RegType::Integer);
       } else {
         imm12 = (funct7 << width_reg) | rd;
-        instr->setSrcReg(1, rs2, is_float ? RegType::Float : RegType::Integer);
+        instr->set_src_reg(1, rs2, is_float ? RegType::Float : RegType::Integer);
       }
       auto offset = sext(imm12, width_i_imm);
-      instr->setOpType(is_load ? LsuType::LOAD : LsuType::STORE);
-      instr->setArgs(IntrLsuArgs{funct3, is_float, offset});
-      ibuffer.push_back(instr);
+      instr->set_op_type(is_load ? LsuType::LOAD : LsuType::STORE);
+      instr->set_args(IntrLsuArgs{funct3, /*stride*/ 0, (int32_t)offset});
     }
   } break;
   case Opcode::FENCE: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
-    instr->setOpType(LsuType::FENCE);
-    instr->setArgs(IntrLsuArgs{0, 0, 0});
-    ibuffer.push_back(instr);
+    instr->set_fu_type(FUType::LSU);
+    instr->set_op_type(LsuType::FENCE);
+    instr->set_args(IntrLsuArgs{0, 0, 0});
   } break;
   case Opcode::AMO: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::LSU);
+    instr->set_fu_type(FUType::LSU);
     uint32_t aq = (code >> shift_aq) & mask_aq;
     uint32_t rl = (code >> shift_rl) & mask_rl;
     switch (funct5) {
-    case 0x00: instr->setOpType(AmoType::AMOADD); break;
-    case 0x01: instr->setOpType(AmoType::AMOSWAP); break;
-    case 0x02: instr->setOpType(AmoType::LR); break;
-    case 0x03: instr->setOpType(AmoType::SC); break;
-    case 0x04: instr->setOpType(AmoType::AMOXOR); break;
-    case 0x08: instr->setOpType(AmoType::AMOOR); break;
-    case 0x0c: instr->setOpType(AmoType::AMOAND); break;
-    case 0x10: instr->setOpType(AmoType::AMOMIN); break;
-    case 0x14: instr->setOpType(AmoType::AMOMAX); break;
-    case 0x18: instr->setOpType(AmoType::AMOMINU); break;
-    case 0x1c: instr->setOpType(AmoType::AMOMAXU); break;
+    case 0x00: instr->set_op_type(AmoType::AMOADD); break;
+    case 0x01: instr->set_op_type(AmoType::AMOSWAP); break;
+    case 0x02: instr->set_op_type(AmoType::LR); break;
+    case 0x03: instr->set_op_type(AmoType::SC); break;
+    case 0x04: instr->set_op_type(AmoType::AMOXOR); break;
+    case 0x08: instr->set_op_type(AmoType::AMOOR); break;
+    case 0x0c: instr->set_op_type(AmoType::AMOAND); break;
+    case 0x10: instr->set_op_type(AmoType::AMOMIN); break;
+    case 0x14: instr->set_op_type(AmoType::AMOMAX); break;
+    case 0x18: instr->set_op_type(AmoType::AMOMINU); break;
+    case 0x1c: instr->set_op_type(AmoType::AMOMAXU); break;
+    case 0x05: instr->set_op_type(AmoType::AMOCAS); break;
     default:
       std::abort();
     }
-    instr->setArgs(IntrAmoArgs{funct3, aq, rl});
-    instr->setDestReg(rd, RegType::Integer);
-    instr->setSrcReg(0, rs1, RegType::Integer);
-    instr->setSrcReg(1, rs2, RegType::Integer);
-    ibuffer.push_back(instr);
+    instr->set_args(IntrAmoArgs{funct3, aq, rl});
+    instr->set_dest_reg(rd, RegType::Integer);
+    instr->set_src_reg(0, rs1, RegType::Integer);
+    instr->set_src_reg(1, rs2, RegType::Integer);
+    if (funct5 == 0x05) {
+      // Compare-and-swap reads rd as well as writing it: rd carries the
+      // comparand in, the loaded word out. It has to join the source set or
+      // the operand collector supplies a stale comparand and the swap decides
+      // on the wrong value.
+      instr->set_src_reg(2, rd, RegType::Integer);
+    }
   } break;
   case Opcode::SYS: {
-    if (funct3 != 0) { // CSRRW/CSRRS/CSRRC
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
-      instr->setDestReg(rd, RegType::Integer);
+    if (funct3 != 0) { // CSRRW/CSRRS/CSRRC — dispatched to the SFU's CSR sub-unit
+      instr->set_fu_type(FUType::SFU);
+      instr->set_dest_reg(rd, RegType::Integer);
       switch (funct3) {
-      case 1: case 5: instr->setOpType(CsrType::CSRRW); break;
-      case 2: case 6: instr->setOpType(CsrType::CSRRS); break;
-      case 3: case 7: instr->setOpType(CsrType::CSRRC); break;
+      case 1: case 5: instr->set_op_type(CsrType::CSRRW); break;
+      case 2: case 6: instr->set_op_type(CsrType::CSRRS); break;
+      case 3: case 7: instr->set_op_type(CsrType::CSRRC); break;
       default:
         std::abort();
       }
       auto imm12 = code >> shift_rs2;
       if (funct3 < 5) {
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setArgs(IntrCsrArgs{0, 0, imm12});
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_args(IntrCsrArgs{0, 0, imm12});
       } else { // zimm
-        instr->setArgs(IntrCsrArgs{1, rs1, imm12});
+        instr->set_args(IntrCsrArgs{1, rs1, imm12});
       }
-      ibuffer.push_back(instr);
     } else { // ECALL/EBREACK/URET/SRET/MRET
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
       auto imm12 = code >> shift_rs2;
-      instr->setOpType(BrType::SYS);
-      instr->setArgs(IntrBrArgs{0, imm12});
-      ibuffer.push_back(instr);
+      instr->set_op_type(BrType::SYS);
+      instr->set_args(IntrBrArgs{0, 0, imm12});
+      instr->set_wstall(true);
     }
   } break;
   case Opcode::FCI: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::FPU);
-    instr->setArgs(IntrFpuArgs{funct3, rs2, (funct7 & 0x1)});
+    instr->set_fu_type(FUType::FPU);
+    instr->set_args(IntrFpuArgs{funct3, rs2, (funct7 & 0x1)});
     switch (funct7) {
     case 0x00: // RV32F: FADD.S
     case 0x01: // RV32D: FADD.D
-      instr->setOpType(FpuType::FADD);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FADD);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x04: // RV32F: FSUB.S
     case 0x05: // RV32D: FSUB.D
-      instr->setOpType(FpuType::FSUB);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FSUB);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x08: // RV32F: FMUL.S
     case 0x09: // RV32D: FMUL.D
-      instr->setOpType(FpuType::FMUL);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FMUL);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x10: // RV32F: FSGNJ.S, FSGNJN.S, FSGNJX.S
     case 0x11: // RV32D: FSGNJ.D, FSGNJN.D, FSGNJX.D
-      instr->setOpType(FpuType::FSGNJ);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FSGNJ);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x14: // RV32F: FMIN.S, FMAX.S
     case 0x15: // RV32D: FMIN.D, FMAX.D
-      instr->setOpType(FpuType::FMINMAX);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FMINMAX);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x0c: // RV32F: FDIV.S
     case 0x0d: // RV32D: FDIV.D
-      instr->setOpType(FpuType::FDIV);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FDIV);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x20: // FCVT.S.D
     case 0x21: // FCVT.D.S
-      instr->setOpType(FpuType::F2F);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
+      instr->set_op_type(FpuType::F2F);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
       break;
     case 0x2c: // FSQRT.S
     case 0x2d: // FSQRT.D
-      instr->setOpType(FpuType::FSQRT);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Float);
+      instr->set_op_type(FpuType::FSQRT);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
       break;
     case 0x50: // FLE.S, FLT.S, FEQ.S
     case 0x51: // FLE.D, FLT.D, FEQ.D
-      instr->setOpType(FpuType::FCMP);
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Float);
+      instr->set_op_type(FpuType::FCMP);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::Float);
       break;
     case 0x60: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
     case 0x61: // FCVT.W.S, FCVT.WU.S, FCVT.L.S, FCVT.LU.S
-      instr->setOpType(FpuType::F2I);
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::None);
+      instr->set_op_type(FpuType::F2I);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_src_reg(1, rs2, RegType::None);
       break;
     case 0x68: // FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
     case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
-      instr->setOpType(FpuType::I2F);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::None);
+      instr->set_op_type(FpuType::I2F);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::None);
       break;
     case 0x70: // FCLASS.S, FMV.X.S
     case 0x71: // FCLASS.D, FMV.X.D
-      instr->setOpType((funct3 != 0) ? FpuType::FCLASS : FpuType::FMVXW);
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Float);
+      instr->set_op_type((funct3 != 0) ? FpuType::FCLASS : FpuType::FMVXW);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Float);
       break;
     case 0x78: // FMV.S.X
     case 0x79: // FMV.D.X
-      instr->setOpType(FpuType::FMVWX);
-      instr->setDestReg(rd, RegType::Float);
-      instr->setSrcReg(0, rs1, RegType::Integer);
+      instr->set_op_type(FpuType::FMVWX);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Integer);
       break;
     default:
       std::abort();
     }
-    ibuffer.push_back(instr);
   } break;
   case Opcode::FMADD:
   case Opcode::FMSUB:
   case Opcode::FNMADD:
   case Opcode::FNMSUB: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::FPU);
-    instr->setOpType((op == Opcode::FMADD) ? FpuType::FMADD :
+    instr->set_fu_type(FUType::FPU);
+    instr->set_op_type((op == Opcode::FMADD) ? FpuType::FMADD :
                      (op == Opcode::FMSUB) ? FpuType::FMSUB :
                      (op == Opcode::FNMADD) ? FpuType::FNMADD : FpuType::FNMSUB);
-    instr->setArgs(IntrFpuArgs{funct3, funct2, (funct7 & 0x1)});
-    instr->setDestReg(rd, RegType::Float);
-    instr->setSrcReg(0, rs1, RegType::Float);
-    instr->setSrcReg(1, rs2, RegType::Float);
-    instr->setSrcReg(2, rs3, RegType::Float);
-    ibuffer.push_back(instr);
+    instr->set_args(IntrFpuArgs{funct3, funct2, (funct7 & 0x1)});
+    instr->set_dest_reg(rd, RegType::Float);
+    instr->set_src_reg(0, rs1, RegType::Float);
+    instr->set_src_reg(1, rs2, RegType::Float);
+    instr->set_src_reg(2, rs3, RegType::Float);
   } break;
-#ifdef EXT_V_ENABLE
-  case Opcode::VSET: {
-    auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::VPU);
-    uint32_t vm = (code >> shift_vm) & mask_vm;
-    switch (funct3) {
-    case 0: { // OPIVV
-      instr->setOpType(VopType::OPIVV);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Vector);
-      instr->setSrcReg(1, rs2, RegType::Vector);
-    } break;
-    case 1: { // OPFVV
-      instr->setOpType(VopType::OPFVV);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, (funct6 == 16) ? RegType::Float : RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Vector);
-      instr->setSrcReg(1, rs2, RegType::Vector);
-    } break;
-    case 2: { // OPMVV
-      instr->setOpType(VopType::OPMVV);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, (funct6 == 16) ? RegType::Integer : RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Vector);
-      instr->setSrcReg(1, rs2, RegType::Vector);
-    } break;
-    case 3: { // OPIVI
-      instr->setOpType(VopType::OPIVI);
-      instr->setArgs(IntrVopArgs{vm, funct6, rs1});
-      instr->setDestReg(rd, RegType::Vector);
-      instr->setSrcReg(1, rs2, RegType::Vector);
-    } break;
-    case 4: { // OPIVX
-      instr->setOpType(VopType::OPIVX);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::Vector);
-    } break;
-    case 5: { // OPFVF
-      instr->setOpType(VopType::OPFVF);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Float);
-      instr->setSrcReg(1, rs2, RegType::Vector);
-    } break;
-    case 6: { // OPMVX
-      instr->setOpType(VopType::OPMVX);
-      instr->setArgs(IntrVopArgs{vm, funct6, 0});
-      instr->setDestReg(rd, (funct6 == 16) ? RegType::Integer : RegType::Vector);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      instr->setSrcReg(1, rs2, RegType::Vector);
-    } break;
-    case 7: {
-      instr->setDestReg(rd, RegType::Integer);
-      if ((code >> 30) == 0b10) { // vsetvl
-        instr->setOpType(VsetType::VSETVL);
-        instr->setArgs(IntrVsetArgs{0, 0});
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
-      } else {
-        auto zimm = (code >> shift_vzimm) & mask_vzimm;
-        if ((code >> 30) == 0b11) { // vsetivli
-          instr->setOpType(VsetType::VSETIVLI);
-          instr->setArgs(IntrVsetArgs{zimm, rs1});
-        } else { // vsetvli
-          instr->setOpType(VsetType::VSETVLI);
-          instr->setArgs(IntrVsetArgs{zimm, 0});
-          instr->setSrcReg(0, rs1, RegType::Integer);
-        }
+  case Opcode::EXT1: {
+    switch (funct7) {
+    case 0: {
+      instr->set_fu_type(FUType::SFU);
+      IntrWctlArgs wctlArgs{};
+      switch (funct3) {
+      case 0: // TMC
+        instr->set_op_type(WctlType::TMC);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_wstall(true);
+        break;
+      case 1: // WSPAWN
+        instr->set_op_type(WctlType::WSPAWN);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        instr->set_wstall(true);
+        break;
+      case 2: // SPLIT
+        instr->set_op_type(WctlType::SPLIT);
+        instr->set_dest_reg(rd, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        wctlArgs.is_cond_neg = (rs2 != 0);
+        instr->set_wstall(true);
+        break;
+      case 3: // JOIN
+        instr->set_op_type(WctlType::JOIN);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_wstall(true);
+        break;
+      case 4: // BAR (sync)
+        instr->set_op_type(WctlType::BAR);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        wctlArgs.is_sync_bar = 1;
+        wctlArgs.is_bar_arrive = 0;
+        instr->set_wstall(true);
+        break;
+      case 5: // PRED
+        instr->set_op_type(WctlType::PRED);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        wctlArgs.is_cond_neg = (rd != 0);
+        instr->set_wstall(true);
+        break;
+      case 6: // BAR ARRIVE / WAIT
+        instr->set_op_type(WctlType::BAR);
+        instr->set_dest_reg(rd, RegType::Integer);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        wctlArgs.is_sync_bar = 0;
+        wctlArgs.is_bar_arrive = (rd != 0);
+        instr->set_wstall(rd == 0); // stall on wait, not on arrive
+        break;
+      case 7: // WSYNC
+        instr->set_op_type(WctlType::WSYNC);
+        instr->set_wstall(true);
+        break;
+      default:
+        std::abort();
       }
+      instr->set_args(wctlArgs);
+    } break;
+    case 1: { // VOTE
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      switch (funct3) {
+      case 0: instr->set_op_type(VoteType::ALL); break;
+      case 1: instr->set_op_type(VoteType::ANY); break;
+      case 2: instr->set_op_type(VoteType::UNI); break;
+      case 3: instr->set_op_type(VoteType::BAL); break;
+      case 4:
+        instr->set_op_type(ShflType::UP);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      case 5:
+        instr->set_op_type(ShflType::DOWN);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      case 6:
+        instr->set_op_type(ShflType::BFLY);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      case 7:
+        instr->set_op_type(ShflType::IDX);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+      default:
+        std::abort();
+      }
+    } break;
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    case 3: { // DXA issue
+      instr->set_fu_type(FUType::SFU);
+      IntrDxaArgs dxaArgs{};
+      instr->set_args(dxaArgs);
+      instr->set_op_type(DxaType::ISSUE);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
+    } break;
+#endif
+  #ifdef VX_CFG_EXT_TCU_ENABLE
+    case 2: {
+      instr->set_fu_type(FUType::TCU);
+      switch (funct3) {
+      case 0: { // WMMA_SYNC / WMMA_SP_SYNC — single macro Instr, sequencer expands to micro-ops
+        uint32_t fmt_d = rd, fmt_s = rs1;
+        bool is_sparse = (rs2 & 1) != 0;
+        instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_macro_op();
+        instr->set_wstall(true);
+      } break;
+    #ifdef VX_CFG_TCU_WGMMA_ENABLE
+      case 1: { // WGMMA_SYNC — single macro Instr, sequencer expands to micro-ops
+        uint32_t fmt_d = rd, fmt_s = rs1;
+        bool is_sparse = (rs2 & 1) != 0;
+        uint32_t cd_nregs = (rs2 >> 1) & 0x3;
+        bool is_a_smem = (rs2 >> 3) & 1;
+        instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
+        instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
+        instr->set_macro_op();
+        instr->set_wstall(true);
+      } break;
+    #endif // VX_CFG_TCU_WGMMA_ENABLE
+    #ifdef TCU_META_ENABLE
+      case 2: { // TCU_LD — rd[4] selects sparse/MX metadata namespace.
+        uint32_t fmt_s = rs2;
+        uint32_t slot  = rd;
+        instr->set_op_type(TcuType::TCU_LD);
+        instr->set_args(IntrTcuArgs{0, 0, fmt_s, slot, 0, 0, 0, 0, 0, 0});
+        // rs1 holds the warp-broadcast base address (real I-reg read).
+        instr->set_src_reg(0, rs1, RegType::Integer);
+      } break;
+    #endif // TCU_META_ENABLE
+      default:
+        std::abort();
+      }
+    } break;
+  #endif
+    case 4: { // Load/Store Packing extensions — macro-ops, sequencer expands to N single-elem uops
+      instr->set_fu_type(FUType::LSU);
+      instr->set_op_type(LsuType::LOAD);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
+      switch (funct3) {
+      case 1: { // vx_packlb_f: 4 strided bytes (LB-width) → packed FP
+        instr->set_args(IntrLsuArgs{/*width=LB*/ 0, /*stride*/ 0, /*offset*/ 0});
+      } break;
+      case 2: { // vx_packlh_f: 2 strided halfwords (LH-width) → packed FP
+        instr->set_args(IntrLsuArgs{/*width=LH*/ 1, /*stride*/ 0, /*offset*/ 0});
+      } break;
+      default:
+        std::abort();
+      }
+      instr->set_macro_op();
+      instr->set_wstall(true);   // pause fetch while sequencer expands the N uops
     } break;
     default:
       std::abort();
     }
-    ibuffer.push_back(instr);
   } break;
-#endif // EXT_V_ENABLE
-  case Opcode::EXT1: {
-    switch (funct7) {
-    case 0: {
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::SFU);
-      IntrWctlArgs wctlArgs{};
-      switch (funct3) {
-      case 0: // TMC
-        instr->setOpType(WctlType::TMC);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        break;
-      case 1: // WSPAWN
-        instr->setOpType(WctlType::WSPAWN);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
-        break;
-      case 2: // SPLIT
-        instr->setOpType(WctlType::SPLIT);
-        instr->setDestReg(rd, RegType::Integer);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        wctlArgs.is_neg = (rs2 != 0);
-        break;
-      case 3: // JOIN
-        instr->setOpType(WctlType::JOIN);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        break;
-      case 4: // BAR
-        instr->setOpType(WctlType::BAR);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
-        break;
-      case 5: // PRED
-        instr->setOpType(WctlType::PRED);
-        instr->setSrcReg(0, rs1, RegType::Integer);
-        instr->setSrcReg(1, rs2, RegType::Integer);
-        wctlArgs.is_neg = (rd != 0);
-        break;
-      default:
-        std::abort();
-      }
-      instr->setArgs(wctlArgs);
-      ibuffer.push_back(instr);
+  case Opcode::EXT2: {
+    switch (funct3) {
+    case 0: { // WGATHER
+      instr->set_op_type(WgatherType::WGATHER);
+      instr->set_dest_reg(rd, RegType::Integer);
+      instr->set_src_reg(0, rs1, RegType::Integer);
+      instr->set_src_reg(1, rs2, RegType::Integer);
+      instr->set_src_reg(2, rs3, RegType::Integer);
+      IntrWgatherArgs wgArgs{};
+      wgArgs.src_lane = funct2;
+      instr->set_args(wgArgs);
     } break;
-    case 1: { // VOTE
-      auto instr = std::allocate_shared<Instr>(instr_pool_, uuid, FUType::ALU);
-      instr->setDestReg(rd, RegType::Integer);
-      instr->setSrcReg(0, rs1, RegType::Integer);
-      switch (funct3) {
-      case 0:
-        instr->setOpType(VoteType::ALL);
-        break;
-      case 1:
-        instr->setOpType(VoteType::ANY);
-        break;
-      case 2:
-        instr->setOpType(VoteType::UNI);
-        break;
-      case 3:
-        instr->setOpType(VoteType::BAL);
-        break;
-      case 4:
-        instr->setOpType(ShflType::UP);
-        instr->setSrcReg(1, rs2, RegType::Integer);
-        break;
-      case 5:
-        instr->setOpType(ShflType::DOWN);
-        instr->setSrcReg(1, rs2, RegType::Integer);
-        break;
-      case 6:
-        instr->setOpType(ShflType::BFLY);
-        instr->setSrcReg(1, rs2, RegType::Integer);
-        break;
-      case 7:
-        instr->setOpType(ShflType::IDX);
-        instr->setSrcReg(1, rs2, RegType::Integer);
-        break;
-      default:
-        std::abort();
-      }
-      ibuffer.push_back(instr);
+#ifdef VX_CFG_EXT_TEX_ENABLE
+    case 5: { // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(TexType::SAMPLE);
+      instr->set_dest_reg(rd, RegType::Integer);    // texel
+      instr->set_src_reg(0, rs1, RegType::Integer); // u
+      instr->set_src_reg(1, rs2, RegType::Integer); // v
+      instr->set_src_reg(2, rs3, RegType::Integer); // lod
+      IntrTexArgs texArgs{};
+      texArgs.stage = funct2 & 0x1;
+      instr->set_args(texArgs);
     } break;
-  #ifdef EXT_TCU_ENABLE
-    case 2: {
-      switch (funct3) {
-      case 0: { // WMMA
-        namespace vt = vortex::tensor;
-        using cfg = vt::wmma_config_t<NUM_THREADS>;
-        uint32_t ra_base = 0;
-        uint32_t rb_base = (cfg::NRB == 4) ? 28 : 10;
-        uint32_t rc_base = (cfg::NRB == 4) ? 10 : 24;
-        uint32_t fmt_d = rd;
-        uint32_t fmt_s = rs1;
-        uint32_t steps = 0;
-        uint32_t steps_count = cfg::m_steps * cfg::n_steps * cfg::k_steps;
-        uint32_t steps_shift = 32 - log2ceil(steps_count);
-        uint32_t uuid_hi = (uuid >> 32) & 0xffffffff;
-        uint32_t uuid_lo = uuid & 0xffffffff;
-        for (uint32_t k = 0; k < cfg::k_steps; ++k) {
-          for (uint32_t m = 0; m < cfg::m_steps; ++m) {
-            for (uint32_t n = 0; n < cfg::n_steps; ++n) {
-              uint32_t rs1 = ra_base + (m / cfg::a_sub_blocks) * cfg::k_steps + k;
-              uint32_t rs2 = rb_base + (k * cfg::n_steps + n) / cfg::b_sub_blocks;
-              uint32_t rs3 = rc_base + m * cfg::n_steps + n;
-              uint32_t uuid_lo_x = (steps << steps_shift) | uuid_lo;
-              uint64_t uuid_x = (static_cast<uint64_t>(uuid_hi) << 32) | uuid_lo_x;
-              ++steps;
-              auto instr = std::allocate_shared<Instr>(instr_pool_, uuid_x, FUType::TCU);
-              instr->setOpType(TcuType::WMMA);
-              instr->setArgs(IntrTcuArgs{fmt_s, fmt_d, m, n});
-              instr->setDestReg(rs3, RegType::Float);
-              instr->setSrcReg(0, rs1, RegType::Float);
-              instr->setSrcReg(1, rs2, RegType::Float);
-              instr->setSrcReg(2, rs3, RegType::Float);
-              ibuffer.push_back(instr);
-            }
-          }
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+    case 3: { // vx_om_export: R4-type, rd=x0. rs1=aperture address, rs2=colour,
+              // rs3=depth; funct7[1:0] = {has_depth, has_colour}.
+              //
+              // In hardware this expands into one or two ordinary stores that the
+              // cluster's OM steer peels off the L1->L2 trunk. SimX is
+              // transaction-level and does not model memory beats, so it submits
+              // the fragment directly -- functionally identical, and it keeps the
+              // model from carrying a beat protocol that exists only to fit a
+              // 4-byte bus.
+      instr->set_fu_type(FUType::SFU);
+      instr->set_op_type(OmType::EXPORT);
+      instr->set_src_reg(0, rs1, RegType::Integer);  // aperture address
+      instr->set_src_reg(1, rs2, RegType::Integer);  // colour
+      instr->set_src_reg(2, rs3, RegType::Integer);  // depth
+      IntrOmArgs omArgs{};
+      omArgs.export_mask = funct7 & 0x3;
+      instr->set_args(omArgs);
+      // A colour+depth record needs two 4-byte beats, and hardware retires one
+      // store uop per beat. Expand so the retired count tracks it; the OM still
+      // sees a single fragment, submitted on the last beat.
+      if ((omArgs.export_mask & 0x3) == 0x3) {
+        instr->set_macro_op();
+        instr->set_wstall(true);
+      }
+    } break;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    case 6: { // RTU callback / hit-window ops. funct2 selects:
+              //   sub_op=0  CB_RET  R4-type, rs1=action, rs2=t, rs3=attr, no rd
+              //   sub_op=2  GETWF   FP windowed read; sub_op=3 GETW (GP twin)
+              // The window is written by the RTU and read by the shader; a
+              // candidate's verdict carries its own t/attr, so there is no
+              // shader-side window write.
+      instr->set_fu_type(FUType::SFU);
+      uint32_t sub_op = funct2;
+      switch (sub_op) {
+#ifdef VX_CFG_EXT_RTU_ENABLE
+      case 0: { // CB_RET — releases this lane's parked context in RtuCore,
+                // handing back the shader's hit distance and attribute.
+                // Dispatcher follows up with `mret` to resume the post-wait PC.
+        instr->set_op_type(GfxwType::CB_RET);
+        instr->set_src_reg(0, rs1, RegType::Integer); // action
+        instr->set_src_reg(1, rs2, RegType::Float);   // hit distance t
+        instr->set_src_reg(2, rs3, RegType::Integer); // hit attribute
+        IntrGfxwArgs args{};
+        instr->set_args(args);
+      } break;
+#endif
+      // GETWF / GETW are window reads shared by RTU (vx_rt_get / vx_rt_wait hit
+      // window) AND the gfx FF path (FWD-5 vx_frag_payload), so they are gated on
+      // the window, not the RTU. A multi-slot read (count > 1, only RTU's windowed
+      // vx_rt_wait) is a macro-op expanded by RtuUopGen; a single-slot read
+      // (count <= 1, the gfx frag payload + vx_rt_get) is a plain op handled
+      // directly by the SFU window dispatch — so it needs no RTU uop sequencer and
+      // works in a pure-gfx (no-RTU) build.
+      case 2: { // GETWF — FP windowed regfile read into rd..rd+count-1.
+        instr->set_op_type(GfxwType::GETWF);
+        instr->set_dest_reg(rd, RegType::Float);   // window base register
+        instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
+        IntrGfxwArgs args{};
+        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window start slot (funct7[6:2])
+        args.count = rs2 & 0xF;                     // slot count (rs2 = imm)
+        instr->set_args(args);
+        if (args.count > 1) {                      // windowed (RTU) -> macro-op
+          instr->set_macro_op();
+          instr->set_wstall(true);
+        }
+      } break;
+      case 3: { // GETW — GP twin of GETWF: read `count` contiguous integer slots.
+        instr->set_op_type(GfxwType::GETW);
+        instr->set_dest_reg(rd, RegType::Integer);  // window base register
+        instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
+        IntrGfxwArgs args{};
+        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window slot (funct7[6:2])
+        args.count = rs2 & 0xF;
+        instr->set_args(args);
+        if (args.count > 1) {                      // windowed (RTU) -> macro-op
+          instr->set_macro_op();
+          instr->set_wstall(true);
         }
       } break;
       default:
         std::abort();
       }
     } break;
-  #endif
+#endif // VX_CFG_EXT_RTU_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    case 7: { // RTU — single-issue trace / register-window wait.
+              // Both are macro-ops: the per-warp sequencer (RtuUopGen)
+              // expands them into the micro-ops that stream the f0..f7 ray
+              // window into the pool slot (TRACE) or retire the hit window
+              // (WAIT). funct2 selects:
+              //   sub_op=0  TRACE  rd=handle, rs1=lane-packed config
+              //   sub_op=1  WAIT   rd=status, rs1=handle
+              // The f0..f7 ray window / f0..f2 + t3..t5 hit window are read
+              // and written by HW convention (see RtuUopGen), so the
+              // architectural encoding names only rd/rs1.
+      instr->set_fu_type(FUType::SFU);
+      uint32_t sub_op = funct2;
+      switch (sub_op) {
+      case 0: { // TRACE — warp-uniform scene (lane-packed config in rs1)
+        instr->set_op_type(GfxwType::TRACE);
+        instr->set_dest_reg(rd, RegType::Integer);   // handle
+        instr->set_src_reg(0, rs1, RegType::Integer); // lane-packed config
+        instr->set_args(IntrGfxwArgs{});
+        instr->set_macro_op();
+        instr->set_wstall(true);
+      } break;
+      case 1: { // WAIT — single-op block: park until terminal, return status.
+                // NOT a macro-op; reuses the v1 park/revive path so it survives
+                // an async callback trap. The hit window is delivered by a
+                // separate WAIT_WB the vx_rt_wait intrinsic emits next.
+        instr->set_op_type(GfxwType::WAIT);
+        instr->set_dest_reg(rd, RegType::Integer);   // status
+        instr->set_src_reg(0, rs1, RegType::Integer); // handle
+        instr->set_args(IntrGfxwArgs{});
+        // WAIT owns the block: it suspends its warp until a record lands and it
+        // retires with the status. That is what keeps the warp from fetching past
+        // a WAIT whose response has not arrived, so TRACE does not have to hold
+        // the warp until the traversal answers — it is released at burst end like
+        // any other macro-op.
+        instr->set_wstall(true);
+      } break;
+      default:
+        std::abort();
+      }
+    } break;
+#endif
     default:
       std::abort();
     }
+    // FF<->SIMT interface-law structural assertion: every FF
+    // op routed to the SFU must declare a scoreboarded / side-effect-free /
+    // known-violation handoff class, checked against its decoded destination.
+    gfx_doctrine::check(*instr);
   } break;
   default:
     std::abort();
   }
+
+  return instr;
 }

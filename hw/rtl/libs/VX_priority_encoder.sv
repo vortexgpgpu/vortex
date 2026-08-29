@@ -41,15 +41,10 @@ module VX_priority_encoder #(
 
         end else if (MODEL != 0) begin : g_model1
 
-        `IGNORE_UNOPTFLAT_BEGIN
-            wire [N-1:0] higher_pri_regs;
-        `IGNORE_UNOPTFLAT_END
-
-            assign higher_pri_regs[N-1] = 1'b0;
-            for (genvar i = N-2; i >= 0; --i) begin : g_higher_pri_regs
-                assign higher_pri_regs[i] = higher_pri_regs[i+1] | data_in[i+1];
-            end
-            assign onehot_out = data_in & ~higher_pri_regs;
+            // isolate the highest set bit: reverse, isolate lowest set bit, reverse back
+            wire [N-1:0] rev_in  = {<<{data_in}};
+            wire [N-1:0] rev_low = rev_in & -rev_in;
+            assign onehot_out = {<<{rev_low}};
 
             wire [N-1:0][LN-1:0] indices;
             for (genvar i = 0; i < N; ++i) begin : g_indices
@@ -105,15 +100,8 @@ module VX_priority_encoder #(
 
         end else if (MODEL == 1) begin : g_model1
 
-        `IGNORE_UNOPTFLAT_BEGIN
-            wire [N-1:0] higher_pri_regs;
-        `IGNORE_UNOPTFLAT_END
-
-            assign higher_pri_regs[0] = 1'b0;
-            for (genvar i = 1; i < N; ++i) begin : g_higher_pri_regs
-                assign higher_pri_regs[i] = higher_pri_regs[i-1] | data_in[i-1];
-            end
-            assign onehot_out[N-1:0] = data_in[N-1:0] & ~higher_pri_regs[N-1:0];
+            // isolate the lowest set bit
+            assign onehot_out = data_in & -data_in;
 
             VX_lzc #(
                 .N       (N),

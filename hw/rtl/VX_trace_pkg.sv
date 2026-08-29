@@ -22,10 +22,6 @@ package VX_trace_pkg;
 
     import VX_gpu_pkg::*;
 
-`ifdef SV_DPI
-    import "DPI-C" function void dpi_trace(input int level, input string format /*verilator sformat*/);
-`endif
-
     task trace_reg_idx(input int level, input logic [NUM_REGS_BITS-1:0] reg_id);
         `TRACE(level, ("%0d", reg_id));
     endtask
@@ -35,10 +31,10 @@ package VX_trace_pkg;
             EX_ALU: `TRACE(level, ("ALU"))
             EX_LSU: `TRACE(level, ("LSU"))
             EX_SFU: `TRACE(level, ("SFU"))
-        `ifdef EXT_F_ENABLE
+        `ifdef VX_CFG_EXT_F_ENABLE
             EX_FPU: `TRACE(level, ("FPU"))
         `endif
-        `ifdef EXT_TCU_ENABLE
+        `ifdef VX_CFG_EXT_TCU_ENABLE
             EX_TCU: `TRACE(level, ("TCU"))
         `endif
             default: `TRACE(level, ("?"))
@@ -109,7 +105,9 @@ package VX_trace_pkg;
                     end
                 end
                 ALU_TYPE_OTHER: begin
-                    if (op_type[2]) begin
+                    if (op_type[3]) begin
+                        `TRACE(level, ("WGATHER"))
+                    end else if (op_type[2]) begin
                         case (INST_SHFL_BITS'(op_type))
                             INST_SHFL_UP:  `TRACE(level, ("SHFL.UP"))
                             INST_SHFL_DOWN:`TRACE(level, ("SHFL.DOWN"))
@@ -173,7 +171,16 @@ package VX_trace_pkg;
             endcase
         end
         EX_LSU: begin
-            if (op_args.lsu.is_float) begin
+            if (op_args.lsu.pack != 0) begin
+                case (op_args.lsu.pack)
+                    2'd1: begin
+                        `TRACE(level, ("PACKLB.F"))
+                    end
+                    default: begin
+                        `TRACE(level, ("PACKLH.F"))
+                    end
+                endcase
+            end else if (op_args.lsu.is_float) begin
                 case (INST_LSU_BITS'(op_type))
                     INST_LSU_LW: `TRACE(level, ("FLW"))
                     INST_LSU_LD: `TRACE(level, ("FLD"))
@@ -204,19 +211,29 @@ package VX_trace_pkg;
                 INST_SFU_TMC:   `TRACE(level, ("TMC"))
                 INST_SFU_WSPAWN:`TRACE(level, ("WSPAWN"))
                 INST_SFU_SPLIT: begin
-                    if (op_args.wctl.is_neg) begin
+                    if (op_args.wctl.is_cond_neg) begin
                         `TRACE(level, ("SPLIT.N"))
                     end else begin
                         `TRACE(level, ("SPLIT"))
                     end
                 end
                 INST_SFU_JOIN:  `TRACE(level, ("JOIN"))
-                INST_SFU_BAR:   `TRACE(level, ("BAR"))
                 INST_SFU_PRED:  begin
-                    if (op_args.wctl.is_neg) begin
+                    if (op_args.wctl.is_cond_neg) begin
                         `TRACE(level, ("PRED.N"))
                     end else begin
                         `TRACE(level, ("PRED"))
+                    end
+                end
+                INST_SFU_BAR: begin
+                    if (op_args.wctl.is_sync_bar) begin
+                        `TRACE(level, ("BAR"))
+                    end else begin
+                        if (op_args.wctl.is_bar_arrive) begin
+                            `TRACE(level, ("BAR.ARRIVE"))
+                        end else begin
+                            `TRACE(level, ("BAR.WAIT"))
+                        end
                     end
                 end
                 INST_SFU_CSRRW: begin
@@ -240,10 +257,23 @@ package VX_trace_pkg;
                         `TRACE(level, ("CSRRC"))
                     end
                 end
+            `ifdef VX_CFG_EXT_DXA_ENABLE
+                INST_SFU_DXA: VX_dxa_pkg::trace_ex_op(level, op_type, op_args);
+            `endif
+                INST_SFU_WSYNC: `TRACE(level, ("WSYNC"))
+            `ifdef VX_CFG_EXT_TEX_ENABLE
+                INST_SFU_TEX: `TRACE(level, ("TEX"))
+            `endif
+            `ifdef VX_CFG_EXT_OM_ENABLE
+                INST_SFU_OM: `TRACE(level, ("OM"))
+            `endif
+            `ifdef VX_CFG_EXT_RASTER_ENABLE
+                INST_SFU_RASTER: `TRACE(level, ("RAST.FETCH"))
+            `endif
                 default: `TRACE(level, ("?"))
             endcase
         end
-    `ifdef EXT_F_ENABLE
+    `ifdef VX_CFG_EXT_F_ENABLE
         EX_FPU: begin
             case (INST_FPU_BITS'(op_type))
                 INST_FPU_ADD: begin
@@ -397,7 +427,7 @@ package VX_trace_pkg;
             endcase
         end
     `endif
-    `ifdef EXT_TCU_ENABLE
+    `ifdef VX_CFG_EXT_TCU_ENABLE
         EX_TCU: begin
             VX_tcu_pkg::trace_ex_op(level, op_type, op_args);
         end
@@ -413,19 +443,19 @@ package VX_trace_pkg;
     );
         case (ex_type)
         EX_ALU: begin
-            `TRACE(level, ("use_PC=%b, use_imm=%b, imm=0x%0h", op_args.alu.use_PC, op_args.alu.use_imm, op_args.alu.imm))
+            `TRACE(level, (", use_PC=%b, use_imm=%b, imm=0x%0h", op_args.alu.use_PC, op_args.alu.use_imm, op_args.alu.imm20))
         end
         EX_LSU: begin
-            `TRACE(level, ("offset=0x%0h", op_args.lsu.offset))
+            `TRACE(level, (", offset=0x%0h", op_args.lsu.offset))
         end
         EX_SFU: begin
             if (inst_sfu_is_csr(op_type)) begin
-                `TRACE(level, ("addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm))
+                `TRACE(level, (", addr=0x%0h, use_imm=%b, imm=0x%0h", op_args.csr.addr, op_args.csr.use_imm, op_args.csr.imm5))
             end
         end
-    `ifdef EXT_F_ENABLE
+    `ifdef VX_CFG_EXT_F_ENABLE
         EX_FPU: begin
-            `TRACE(level, ("fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm))
+            `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm))
         end
     `endif
         default:;
@@ -434,12 +464,34 @@ package VX_trace_pkg;
 
     task trace_base_dcr(input int level, input [VX_DCR_ADDR_WIDTH-1:0] addr);
         case (addr)
-            `VX_DCR_BASE_STARTUP_ADDR0: `TRACE(level, ("STARTUP_ADDR0"))
-            `VX_DCR_BASE_STARTUP_ADDR1: `TRACE(level, ("STARTUP_ADDR1"))
-            `VX_DCR_BASE_STARTUP_ARG0:  `TRACE(level, ("STARTUP_ARG0"))
-            `VX_DCR_BASE_STARTUP_ARG1:  `TRACE(level, ("STARTUP_ARG1"))
-            `VX_DCR_BASE_MPM_CLASS:     `TRACE(level, ("MPM_CLASS"))
+            `VX_DCR_BASE_CACHE_FLUSH:   `TRACE(level, ("CACHE_FLUSH"))
+            `VX_DCR_BASE_MPM_VALUE:     `TRACE(level, ("MPM_VALUE"))
             default:                    `TRACE(level, ("?"))
+        endcase
+    endtask
+
+    task trace_kmu_dcr(input int level, input [VX_DCR_ADDR_WIDTH-1:0] addr);
+        case (addr)
+            `VX_DCR_KMU_STARTUP_ADDR0: `TRACE(level, ("STARTUP_ADDR0"))
+        `ifdef VX_CFG_XLEN_64
+            `VX_DCR_KMU_STARTUP_ADDR1: `TRACE(level, ("STARTUP_ADDR1"))
+        `endif
+            `VX_DCR_KMU_STARTUP_ARG0:  `TRACE(level, ("STARTUP_ARG0"))
+        `ifdef VX_CFG_XLEN_64
+            `VX_DCR_KMU_STARTUP_ARG1:  `TRACE(level, ("STARTUP_ARG1"))
+        `endif
+            `VX_DCR_KMU_GRID_DIM_X:    `TRACE(level, ("GRID_DIM_X"))
+            `VX_DCR_KMU_GRID_DIM_Y:    `TRACE(level, ("GRID_DIM_Y"))
+            `VX_DCR_KMU_GRID_DIM_Z:    `TRACE(level, ("GRID_DIM_Z"))
+            `VX_DCR_KMU_BLOCK_DIM_X:   `TRACE(level, ("BLOCK_DIM_X"))
+            `VX_DCR_KMU_BLOCK_DIM_Y:   `TRACE(level, ("BLOCK_DIM_Y"))
+            `VX_DCR_KMU_BLOCK_DIM_Z:   `TRACE(level, ("BLOCK_DIM_Z"))
+            `VX_DCR_KMU_LMEM_SIZE:     `TRACE(level, ("LMEM_SIZE"))
+            `VX_DCR_KMU_BLOCK_SIZE:    `TRACE(level, ("BLOCK_SIZE"))
+            `VX_DCR_KMU_WARP_STEP_X:   `TRACE(level, ("WARP_STEP_X"))
+            `VX_DCR_KMU_WARP_STEP_Y:   `TRACE(level, ("WARP_STEP_Y"))
+            `VX_DCR_KMU_WARP_STEP_Z:   `TRACE(level, ("WARP_STEP_Z"))
+            default:                   `TRACE(level, ("?"))
         endcase
     endtask
 

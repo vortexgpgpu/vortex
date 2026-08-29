@@ -1,16 +1,16 @@
 #include "common.h"
-#include <vx_spawn.h>
+#include <vx_spawn2.h>
 #include <vx_tensor.h>
+#include <vx_intrinsics.h>
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 
-void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pA = reinterpret_cast<ctx::input_t *>(arg->A_addr);
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
 
-  uint32_t M = arg->M;
   uint32_t N = arg->N;
   uint32_t K = arg->K;
 
@@ -25,32 +25,34 @@ void kernel_body(kernel_arg_t *__UNIFORM__ arg) {
   // Initialize accumulator tile to zero
   ctx::fill_fragment(fragC, 0);
 
-  for (int i = 0; i < K; i += ctx::tileK) {
+#ifdef PROFILE_ENABLE
+  uint32_t cycles = 0;
+#endif
+
+  for (uint32_t i = 0; i < K; i += ctx::tileK) {
     auto pTileA = pA + tile_row * K + i;
+    auto pTileB = pB + tile_col * K + i;
 
-    // Load A tile
+#ifdef PROFILE_ENABLE
+    __rdcycle_time t0 = vx_rdcycle_sync_begin();
+#endif
     ctx::load_matrix_sync(fragA, pTileA, K);
-
-    // Load B tile
-    if constexpr (vt::ITYPE::bits < 8) {
-      // For sub-byte matrix B must be in col-major format
-      auto pTileB = pB + tile_col * K + i;
-      ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
-    } else {
-      auto pTileB = pB + i * N + tile_col;
-      ctx::load_matrix_sync(fragB, pTileB, N);
-    }
-
-    // Matrix multiply-accumulate: c += a * b
+    ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
     ctx::mma_sync(fragC, fragA, fragB, fragC);
+#ifdef PROFILE_ENABLE
+    __rdcycle_time t1 = vx_rdcycle_sync_end();
+    cycles += vx_rdcycle_sync_diff(t0, t1);
+#endif
   }
 
   // Store the computed C tile
   auto pTileC = pC + tile_row * N + tile_col;
   ctx::store_matrix_sync(pTileC, fragC, N);
-}
 
-int main() {
-  auto arg = (kernel_arg_t *)csr_read(VX_CSR_MSCRATCH);
-  return vx_spawn_threads(2, arg->grid_dim, arg->block_dim, (vx_kernel_func_cb)kernel_body, arg);
+#ifdef PROFILE_ENABLE
+  // Write per-block cycle count
+  auto pCycles = reinterpret_cast<uint32_t*>(arg->cycles_addr);
+  uint32_t block_id = blockIdx.y * gridDim.x + blockIdx.x;
+  pCycles[block_id] = cycles;
+#endif
 }

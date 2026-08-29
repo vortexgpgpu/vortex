@@ -30,31 +30,33 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 );
 
     `UNUSED_SPARAM (INSTANCE_ID)
+
     localparam LANE_BITS      = `CLOG2(NUM_LANES);
     localparam LANE_WIDTH     = `UP(LANE_BITS);
-    localparam PID_BITS       = `CLOG2(`NUM_THREADS / NUM_LANES);
-    localparam PID_WIDTH      = `UP(PID_BITS);
-    localparam SHIFT_IMM_BITS = `CLOG2(`XLEN);
+    localparam SHIFT_IMM_BITS = `CLOG2(`VX_CFG_XLEN);
 
-    `UNUSED_VAR (execute_if.data.rs3_data)
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_result;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN:0]   sub_result; // +1 bit for branch compare
+    reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shr_zic_result;
+    reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] msc_result;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] add_result;
-    wire [NUM_LANES-1:0][`XLEN:0]   sub_result; // +1 bit for branch compare
-    reg  [NUM_LANES-1:0][`XLEN-1:0] shr_zic_result;
-    reg  [NUM_LANES-1:0][`XLEN-1:0] msc_result;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_result_w;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] sub_result_w;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shr_result_w;
+    reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] msc_result_w;
+    reg  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] vote_result;
+    wire  [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] shfl_result;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] add_result_w;
-    wire [NUM_LANES-1:0][`XLEN-1:0] sub_result_w;
-    wire [NUM_LANES-1:0][`XLEN-1:0] shr_result_w;
-    reg  [NUM_LANES-1:0][`XLEN-1:0] msc_result_w;
-    reg  [NUM_LANES-1:0][`XLEN-1:0] vote_result;
-    wire  [NUM_LANES-1:0][`XLEN-1:0] shfl_result;
+    reg [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_result;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_result_r;
 
-    reg [NUM_LANES-1:0][`XLEN-1:0] alu_result;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_result_r;
-
-`ifdef XLEN_64
-    wire is_alu_w = execute_if.data.op_args.alu.is_w;
+`ifdef VX_CFG_XLEN_64
+    // is_w shares its bit with br_args.is_rvc in the packed op_args encoding, so
+    // it is only a valid W-op flag for ALU (non-branch) ops. Masking with the
+    // branch-op check keeps a compressed branch (is_rvc=1) from being executed
+    // as a 32-bit W operation, which would truncate its comparison/target.
+    wire is_alu_w = execute_if.data.op_args.alu.is_w
+                  & (execute_if.data.op_args.alu.xtype != ALU_TYPE_BRANCH);
 `else
     wire is_alu_w = 0;
 `endif
@@ -62,46 +64,61 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire [INST_ALU_BITS-1:0] alu_op = INST_ALU_BITS'(execute_if.data.op_type);
     wire [INST_BR_BITS-1:0]   br_op = INST_BR_BITS'(execute_if.data.op_type);
     wire                   is_br_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_BRANCH);
+    wire                  is_alu_op = (execute_if.data.op_args.alu.xtype == ALU_TYPE_ARITH);
     wire                  is_sub_op = inst_alu_is_sub(alu_op);
     wire                  is_signed = inst_alu_signed(alu_op);
     wire [1:0]             op_class = is_br_op ? inst_br_class(alu_op) : inst_alu_class(alu_op);
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in1 = execute_if.data.rs1_data;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in2 = execute_if.data.rs2_data;
 
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.PC)}} : alu_in1;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
-    wire [NUM_LANES-1:0][`XLEN-1:0] alu_in2_br  = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{`SEXT(`XLEN, execute_if.data.op_args.alu.imm)}} : alu_in2;
+    wire [1:0] wg_src_offset = execute_if.data.op_args.alu.imm20[1:0]; // group-relative source index
+
+    wire is_br_jal_op = is_br_op && (br_op <= INST_BR_JAL);
+    wire is_lui_op = is_alu_op && (alu_op == INST_ALU_LUI || alu_op == INST_ALU_AUIPC);
+
+    wire [31:0] lui_imm32 = {execute_if.data.op_args.alu.imm20, 12'd0};
+    wire [20:0] br_imm21 = {execute_if.data.op_args.alu.imm20, 1'b0};
+
+    wire [`VX_CFG_XLEN-1:0] alu_imm = `SEXT(`VX_CFG_XLEN, execute_if.data.op_args.alu.imm20);
+    wire [`VX_CFG_XLEN-1:0] lui_imm = `SEXT(`VX_CFG_XLEN, lui_imm32);
+    wire [`VX_CFG_XLEN-1:0] br_imm  = `SEXT(`VX_CFG_XLEN, br_imm21);
+    wire [`VX_CFG_XLEN-1:0] add_imm = is_lui_op ? lui_imm : (is_br_jal_op ? br_imm : alu_imm);
+
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_in1_PC  = execute_if.data.op_args.alu.use_PC ? {NUM_LANES{to_fullPC(execute_if.data.header.PC)}} : alu_in1;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] add_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{add_imm}} : alu_in2;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] sub_in2_imm = (execute_if.data.op_args.alu.use_imm && ~is_br_op) ? {NUM_LANES{alu_imm}} : alu_in2;
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in2_imm = execute_if.data.op_args.alu.use_imm ? {NUM_LANES{alu_imm}} : alu_in2;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_add_result
-        assign add_result[i] = alu_in1_PC[i] + alu_in2_imm[i];
-        assign add_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0]));
+        assign add_result[i] = add_in1_PC[i] + add_in2_imm[i];
+        assign add_result_w[i] = `VX_CFG_XLEN'($signed(alu_in1[i][31:0] + alu_in2_imm[i][31:0]));
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sub_result
-        wire [`XLEN:0] sub_in1 = {is_signed & alu_in1[i][`XLEN-1], alu_in1[i]};
-        wire [`XLEN:0] sub_in2 = {is_signed & alu_in2_br[i][`XLEN-1], alu_in2_br[i]};
+        wire [`VX_CFG_XLEN:0] sub_in1 = {is_signed & alu_in1[i][`VX_CFG_XLEN-1], alu_in1[i]};
+        wire [`VX_CFG_XLEN:0] sub_in2 = {is_signed & sub_in2_imm[i][`VX_CFG_XLEN-1], sub_in2_imm[i]};
         assign sub_result[i]   = sub_in1 - sub_in2;
-        assign sub_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
+        assign sub_result_w[i] = `VX_CFG_XLEN'($signed(alu_in1[i][31:0] - alu_in2_imm[i][31:0]));
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_shr_result
-        wire [`XLEN:0] shr_in1 = {is_signed && alu_in1[i][`XLEN-1], alu_in1[i]};
+        wire [`VX_CFG_XLEN:0] shr_in1 = {is_signed && alu_in1[i][`VX_CFG_XLEN-1], alu_in1[i]};
         always @(*) begin
             case (alu_op[1:0])
-            `ifdef EXT_ZICOND_ENABLE
+            `ifdef VX_CFG_EXT_ZICOND_ENABLE
                 2'b10, 2'b11: begin // CZERO
-                    shr_zic_result[i] = alu_in1[i] & {`XLEN{alu_op[0] ^ (| alu_in2[i])}};
+                    shr_zic_result[i] = alu_in1[i] & {`VX_CFG_XLEN{alu_op[0] ^ (| alu_in2[i])}};
                 end
             `endif
                 default: begin // SRL, SRA, SRLI, SRAI
-                    shr_zic_result[i] = `XLEN'($signed(shr_in1) >>> alu_in2_imm[i][SHIFT_IMM_BITS-1:0]);
+                    shr_zic_result[i] = `VX_CFG_XLEN'($signed(shr_in1) >>> alu_in2_imm[i][SHIFT_IMM_BITS-1:0]);
                 end
             endcase
         end
         wire [32:0] shr_in1_w = {is_signed && alu_in1[i][31], alu_in1[i][31:0]};
         wire [31:0] shr_res_w = 32'($signed(shr_in1_w) >>> alu_in2_imm[i][4:0]);
-        assign shr_result_w[i] = `XLEN'($signed(shr_res_w));
+        assign shr_result_w[i] = `VX_CFG_XLEN'($signed(shr_res_w));
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_msc_result
@@ -113,15 +130,15 @@ module VX_alu_int import VX_gpu_pkg::*; #(
                 2'b11: msc_result[i] = alu_in1[i] << alu_in2_imm[i][SHIFT_IMM_BITS-1:0]; // SLL
             endcase
         end
-        assign msc_result_w[i] = `XLEN'($signed(alu_in1[i][31:0] << alu_in2_imm[i][4:0])); // SLLW
+        assign msc_result_w[i] = `VX_CFG_XLEN'($signed(alu_in1[i][31:0] << alu_in2_imm[i][4:0])); // SLLW
     end
 
     // VOTE
     wire [NUM_LANES-1:0] vote_true, vote_false;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_vote_calc
         wire pred = alu_in1[i][0];
-        assign vote_true[i]  = execute_if.data.tmask[i] && pred;
-        assign vote_false[i] = execute_if.data.tmask[i] && ~pred;
+        assign vote_true[i]  = execute_if.data.header.tmask[i] && pred;
+        assign vote_false[i] = execute_if.data.header.tmask[i] && ~pred;
     end
     wire has_vote_true  = (| vote_true);
     wire has_vote_false = (| vote_false);
@@ -132,15 +149,36 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_vote_result
         always @(*) begin
             case (alu_op[1:0])
-                INST_VOTE_ALL: vote_result[i] = `XLEN'(vote_all);
-                INST_VOTE_ANY: vote_result[i] = `XLEN'(vote_any);
-                INST_VOTE_UNI: vote_result[i] = `XLEN'(vote_uni);
-                INST_VOTE_BAL: vote_result[i] = `XLEN'(vote_true);
+                INST_VOTE_ALL: vote_result[i] = `VX_CFG_XLEN'(vote_all);
+                INST_VOTE_ANY: vote_result[i] = `VX_CFG_XLEN'(vote_any);
+                INST_VOTE_UNI: vote_result[i] = `VX_CFG_XLEN'(vote_uni);
+                INST_VOTE_BAL: vote_result[i] = `VX_CFG_XLEN'(vote_true);
             endcase
         end
     end
 
-    // SHFL
+    // WGATHER — each group of 4 lanes operates independently. Source lane =
+    // nominal (group_base | wg_src_offset), falling back to the last active lane
+    // (branch's last_tid) when the nominal lane is masked — partial-warp safe.
+    wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] wgather_result;
+    if (NUM_LANES > 1) begin : g_wgather
+        wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] alu_in3 = execute_if.data.rs3_data;
+        for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
+            wire [LANE_BITS-1:0] nominal  = (LANE_BITS'(i) & ~LANE_BITS'(3)) | LANE_BITS'(wg_src_offset);
+            wire [LANE_BITS-1:0] src_lane = execute_if.data.header.tmask[nominal] ? nominal : last_tid;
+            wire [1:0]           offset   = 2'(i) - wg_src_offset; // (i - src) mod 4
+            assign wgather_result[i] = (offset == 2'd1) ? alu_in1[src_lane]
+                                     : (offset == 2'd2) ? alu_in2[src_lane]
+                                     : (offset == 2'd3) ? alu_in3[src_lane]
+                                     : `VX_CFG_XLEN'(0); // offset 0 = source lane (write-suppressed)
+        end
+    end else begin : g_wgather_0
+        assign wgather_result[0] = alu_in1[0];
+    end
+
+    // SHFL. The lane-select operands are packed into rs2 at fixed 6-bit strides,
+    // so a lane index wider than 6 bits would make the fields overlap.
+    `STATIC_ASSERT(LANE_BITS <= 6, ("invalid parameter: NUM_LANES=%0d exceeds the 6-bit SHFL operand stride", NUM_LANES))
     if (NUM_LANES > 1) begin : g_shfl
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
             wire [LANE_BITS-1:0] bval = alu_in2[i][0 +: LANE_BITS];
@@ -180,21 +218,22 @@ module VX_alu_int import VX_gpu_pkg::*; #(
                     end
                 endcase
             end
-            assign shfl_result[i] = execute_if.data.tmask[lane] ? alu_in1[lane] : alu_in1[i];
+            assign shfl_result[i] = execute_if.data.header.tmask[lane] ? alu_in1[lane] : alu_in1[i];
         end
     end else begin : g_shfl_0
         assign shfl_result[0] = alu_in1[0];
     end
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_alu_result
-        wire [`XLEN-1:0] slt_br_result = `XLEN'({is_br_op && ~(| sub_result[i][`XLEN-1:0]), sub_result[i][`XLEN]});
-        wire [`XLEN-1:0] sub_slt_br_result = (is_sub_op && ~is_br_op) ? sub_result[i][`XLEN-1:0] : slt_br_result;
+        wire [`VX_CFG_XLEN-1:0] slt_br_result = `VX_CFG_XLEN'({is_br_op && ~(| sub_result[i][`VX_CFG_XLEN-1:0]), sub_result[i][`VX_CFG_XLEN]});
+        wire [`VX_CFG_XLEN-1:0] sub_slt_br_result = (is_sub_op && ~is_br_op) ? sub_result[i][`VX_CFG_XLEN-1:0] : slt_br_result;
         always @(*) begin
             if (execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) begin
-                case (alu_op[2])
-                    1'b0: alu_result[i] = vote_result[i];
-                    1'b1: alu_result[i] = shfl_result[i];
-                    default:;
+                case (alu_op[3:2])
+                    2'b00: alu_result[i] = vote_result[i];
+                    2'b01: alu_result[i] = shfl_result[i];
+                    2'b10: alu_result[i] = wgather_result[i];
+                    default: alu_result[i] = vote_result[i];
                 endcase
             end else begin
                 case ({is_alu_w, op_class})
@@ -213,7 +252,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     // branch
 
-    wire [PC_BITS-1:0] PC_r;
     wire [INST_BR_BITS-1:0] br_op_r;
     wire [PC_BITS-1:0] cbr_dest, cbr_dest_r;
     wire [LANE_WIDTH-1:0] last_tid, last_tid_r;
@@ -226,7 +264,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
             .N (NUM_LANES),
             .REVERSE (1)
         ) last_tid_sel (
-            .data_in (execute_if.data.tmask),
+            .data_in (execute_if.data.header.tmask),
             .index_out (last_tid),
             `UNUSED_PIN (onehot_out),
             `UNUSED_PIN (valid_out)
@@ -235,15 +273,43 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         assign last_tid = 0;
     end
 
+    // For WGATHER, suppress write-back for every source lane (one per group of 4).
+    // Lane k is a source if its lower 2 bits equal wg_src_offset.
+    wire [NUM_LANES-1:0] wg_src_mask;
+    for (genvar k = 0; k < NUM_LANES; ++k) begin : g_wg_src_mask
+        assign wg_src_mask[k] = (2'(k) == wg_src_offset);
+    end
+
+    alu_header_t alu_hdr_in;
+    always @(*) begin
+        alu_hdr_in = execute_if.data.header;
+        if ((execute_if.data.op_args.alu.xtype == ALU_TYPE_OTHER) && alu_op[3]) begin
+            // WGATHER writes the FULL nibble (every non-source lane), regardless
+            // of the active mask, so the gathered value is materialised even in
+            // masked lanes — the consumer can then read any nibble lane under a
+            // partial warp. Source lanes stay suppressed (keep their self value).
+            // Full warps are unchanged (header.tmask is all-ones there).
+            alu_hdr_in.tmask = ~wg_src_mask;
+        end
+    end
+
+`ifdef VX_CFG_EXT_C_ENABLE
+    // Capture is_rvc from br_args (which aliases alu_args bit positions).
+    wire is_rvc_in = execute_if.data.op_args.br.is_rvc;
+    wire is_rvc_r;
+`endif
+
     VX_elastic_buffer #(
-        .DATAW (UUID_WIDTH + NW_WIDTH + NUM_LANES + NUM_REGS_BITS + 1 + PID_WIDTH + 1 + 1 + (NUM_LANES * `XLEN) + PC_BITS + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH)
+        .DATAW ($bits(alu_header_t) + (NUM_LANES * `VX_CFG_XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH + `VX_CFG_EXT_C_ENABLED)
     ) rsp_buf (
         .clk      (clk),
         .reset    (reset),
         .valid_in (execute_if.valid),
         .ready_in (execute_if.ready),
-        .data_in  ({execute_if.data.uuid, execute_if.data.wid, execute_if.data.tmask, execute_if.data.rd, execute_if.data.wb, execute_if.data.pid, execute_if.data.sop, execute_if.data.eop, alu_result,   execute_if.data.PC, cbr_dest,   is_br_op,   br_op,   last_tid}),
-        .data_out ({result_if.data.uuid,  result_if.data.wid,  result_if.data.tmask,  result_if.data.rd,  result_if.data.wb,  result_if.data.pid,  result_if.data.sop,  result_if.data.eop,  alu_result_r, PC_r,               cbr_dest_r, is_br_op_r, br_op_r, last_tid_r}),
+        .data_in  ({alu_hdr_in,           alu_result,   cbr_dest,   is_br_op,   br_op,   last_tid
+            `ifdef VX_CFG_EXT_C_ENABLE , is_rvc_in `endif }),
+        .data_out ({result_if.data.header, alu_result_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r
+            `ifdef VX_CFG_EXT_C_ENABLE , is_rvc_r `endif }),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
@@ -253,40 +319,56 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_br_less = inst_br_is_less(br_op_r);
     wire is_br_static = inst_br_is_static(br_op_r);
 
-    wire [`XLEN-1:0] br_result = alu_result_r[last_tid_r];
+    // Synchronous trap ops: ECALL/EBREAK enter a trap (redirect to mtvec),
+    // MRET/SRET/URET return (restore PC from mepc). The scheduler acts on
+    // these via branch_ctl_if.{is_trap,is_mret,trap_cause}.
+    wire is_trap_entry = is_br_op_r && (br_op_r == INST_BR_ECALL || br_op_r == INST_BR_EBREAK);
+    wire is_mret_op    = is_br_op_r && (br_op_r == INST_BR_MRET || br_op_r == INST_BR_SRET || br_op_r == INST_BR_URET);
+    wire [3:0] br_trap_cause = (br_op_r == INST_BR_EBREAK) ? 4'd3 : 4'd11; // EBREAK / ECALL_M
+
+    wire [`VX_CFG_XLEN-1:0] br_result = alu_result_r[last_tid_r];
     wire is_less  = br_result[0];
     wire is_equal = br_result[1];
 
     wire result_fire = result_if.valid && result_if.ready;
-    wire br_enable = result_fire && is_br_op_r && result_if.data.eop;
+    wire br_enable = result_fire && is_br_op_r && result_if.data.header.eop;
     wire br_taken = ((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static;
-    wire [PC_BITS-1:0] br_dest = is_br_static ? from_fullPC(br_result) : cbr_dest_r;
+    // For a trap entry, `dest` carries the faulting PC (saved into mepc).
+    wire [PC_BITS-1:0] br_dest = is_trap_entry ? result_if.data.header.PC
+                               : is_br_static  ? from_fullPC(br_result)
+                               : cbr_dest_r;
     wire [NW_WIDTH-1:0] br_wid;
-    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.wid, BLOCK_IDX, `NUM_ALU_BLOCKS)
+    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.header.wid, BLOCK_IDX, `VX_CFG_NUM_ALU_BLOCKS)
 
     VX_pipe_register #(
-        .DATAW  (1 + NW_WIDTH + 1 + PC_BITS),
+        .DATAW  (1 + NW_WIDTH + 1 + PC_BITS + 1 + 1 + 4),
         .RESETW (1)
     ) branch_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({br_enable,           br_wid,            br_taken,            br_dest}),
-        .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest})
+        .data_in  ({br_enable,           br_wid,            br_taken,            br_dest,            is_trap_entry,         is_mret_op,            br_trap_cause}),
+        .data_out ({branch_ctl_if.valid, branch_ctl_if.wid, branch_ctl_if.taken, branch_ctl_if.dest, branch_ctl_if.is_trap, branch_ctl_if.is_mret, branch_ctl_if.trap_cause})
     );
 
+    `IGNORE_UNOPTFLAT_BEGIN
+    wire [PC_BITS-1:0] current_pc = result_if.data.header.PC;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_result
-        wire [`XLEN-1:0] PC_next = to_fullPC(PC_r) + `XLEN'(4);
+    `ifdef VX_CFG_EXT_C_ENABLE
+        // c.jal/c.jalr return to PC+2 (instruction is 2 bytes).
+        wire [`VX_CFG_XLEN-1:0] PC_next = to_fullPC(current_pc) + (is_rvc_r ? `VX_CFG_XLEN'(2) : `VX_CFG_XLEN'(4));
+    `else
+        wire [`VX_CFG_XLEN-1:0] PC_next = to_fullPC(current_pc) + `VX_CFG_XLEN'(4);
+    `endif
         assign result_if.data.data[i] = (is_br_op_r && is_br_static) ? PC_next : alu_result_r[i];
     end
-
-    assign result_if.data.PC = PC_r;
+    `IGNORE_UNOPTFLAT_END
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (br_enable) begin
-            `TRACE(2, ("%t: %s branch: wid=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
-                $time, INSTANCE_ID, br_wid, to_fullPC(result_if.data.PC), br_taken, to_fullPC(br_dest), result_if.data.uuid))
+            `TRACE(2, ("%t: %s branch: wid=%0d, cta_id=%0d, PC=0x%0h, taken=%b, dest=0x%0h (#%0d)\n",
+                $time, INSTANCE_ID, br_wid, result_if.data.header.cta_id, to_fullPC(result_if.data.header.PC), br_taken, to_fullPC(br_dest), result_if.data.header.uuid))
         end
     end
 `endif

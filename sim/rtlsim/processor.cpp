@@ -11,6 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <VX_types.h>
 #include "processor.h"
 
 #include "Vrtlsim_shim.h"
@@ -19,10 +20,22 @@
 #include <verilated_vcd_c.h>
 #endif
 
+#ifdef SAIF_OUTPUT
+#include <verilated_saif_c.h>
+#endif
+
+#if defined(VCD_OUTPUT) && defined(SAIF_OUTPUT)
+#error "VCD_OUTPUT and SAIF_OUTPUT cannot both be defined"
+#endif
+
+
+#include <cstdlib>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
 #include <mem.h>
+#include <host_monitor.h>
+#include <cout_drainer.h>
 
 #include <VX_config.h>
 #include <ostream>
@@ -51,12 +64,12 @@
 #define VERILATOR_RESET_VALUE 2
 #endif
 
-#if (XLEN == 32)
+#if (VX_CFG_XLEN == 32)
 typedef uint32_t Word;
-#elif (XLEN == 64)
+#elif (VX_CFG_XLEN == 64)
 typedef uint64_t Word;
 #else
-#error unsupported XLEN
+#error unsupported VX_CFG_XLEN
 #endif
 
 #define VL_WDATA_GETW(lwp, i, n, w) \
@@ -64,7 +77,7 @@ typedef uint64_t Word;
 
 using namespace vortex;
 
-static uint32_t g_mem_bank_addr_width = (PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(PLATFORM_MEMORY_NUM_BANKS));
+static uint32_t g_mem_bank_addr_width = (VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(VX_CFG_PLATFORM_MEMORY_NUM_BANKS));
 
 static uint64_t timestamp = 0;
 
@@ -74,7 +87,6 @@ double sc_time_stamp() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static bool trace_enabled = false;
 static uint64_t trace_start_time = TRACE_START_TIME;
 static uint64_t trace_stop_time  = TRACE_STOP_TIME;
 
@@ -82,33 +94,51 @@ bool sim_trace_enabled() {
   if (timestamp >= trace_start_time
    && timestamp < trace_stop_time)
     return true;
-  return trace_enabled;
-}
-
-void sim_trace_enable(bool enable) {
-  trace_enabled = enable;
+  return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 class Processor::Impl {
 public:
-  Impl() : dram_sim_(PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO) {
+  Impl() : dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO) {
+    // restart sim time so a re-created model registers at time zero
+    timestamp = 0;
+
+    // A context of our own rather than the process-wide default. A model
+    // registers a trace callback on its context at construction, and
+    // VerilatedContext::addModel has no counterpart -- the registration lives as
+    // long as the context does. On the shared default context those entries
+    // accumulate across device opens and keep naming models that have since been
+    // deleted, so tracing a second open walks the list and dereferences freed
+    // memory. Per-context, the list dies with the models it names. Reset values,
+    // the seed and the assertion window are per-context settings and move with it.
+    context_ = new VerilatedContext();
+
     // force random values for uninitialized signals
-    Verilated::randReset(VERILATOR_RESET_VALUE);
-    Verilated::randSeed(50);
+    context_->randReset(VERILATOR_RESET_VALUE);
+    context_->randSeed(50);
 
     // turn off assertion before reset
-    Verilated::assertOn(false);
+    context_->assertOn(false);
 
-    // create RTL module instance
-    device_ = new Vrtlsim_shim();
+    // create device instance
+    device_ = new Vrtlsim_shim(context_);
 
   #ifdef VCD_OUTPUT
-    Verilated::traceEverOn(true);
+    context_->traceEverOn(true);
     tfp_ = new VerilatedVcdC();
     device_->trace(tfp_, 99);
-    tfp_->open("trace.vcd");
+    const char* vcd_file = std::getenv("VCD_FILE");
+    tfp_->open(vcd_file ? vcd_file : "trace.vcd");
+  #endif
+
+  #ifdef SAIF_OUTPUT
+    context_->traceEverOn(true);
+    sfp_ = new VerilatedSaifC();
+    device_->trace(sfp_, 99);
+    const char* saif_file = std::getenv("SAIF_FILE");
+    sfp_->open(saif_file ? saif_file : "trace.saif");
   #endif
 
     ram_ = nullptr;
@@ -117,7 +147,7 @@ public:
     this->reset();
 
     // Turn on assertion after reset
-    Verilated::assertOn(true);
+    context_->assertOn(true);
   }
 
   ~Impl() {
@@ -127,8 +157,16 @@ public:
     tfp_->close();
     delete tfp_;
   #endif
+  #ifdef SAIF_OUTPUT
+    sfp_->close();
+    delete sfp_;
+  #endif
 
+    // Model before context: the model holds a reference to the context it was
+    // built with, so releasing the context first would leave that reference
+    // dangling through the model's own destruction.
     delete device_;
+    delete context_;
   }
 
   void cout_flush() {
@@ -144,43 +182,71 @@ public:
     ram_ = ram;
   }
 
-  void run() {
+  void run(HostMonitor* monitor, CoutDrainer* cout_drainer) {
   #ifndef NDEBUG
     std::cout << std::dec << timestamp << ": [sim] run()" << std::endl;
   #endif
+    // pulse start for one cycle
+    device_->start = 1;
+    this->tick();
+    device_->start = 0;
 
-    // reset device
-    this->reset();
+    // Upper bound on the post-start wait for busy (see below); a no-work frame
+    // never asserts busy, so the wait must not be unbounded.
+    constexpr uint32_t NO_WORK_TIMEOUT = 100000;
 
-    // start
-    device_->reset = 0;
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
-      device_->mem_req_ready[b] = 1;
-    }
-
-    // wait on device to go busy
-    while (!device_->busy) {
+    // wait for device to go busy. A frame may legitimately have no work — e.g. a
+    // fully-culled graphics draw whose rasterizer emits zero fragment waves — and
+    // then busy never re-asserts after the start pulse. Bound the wait so such a
+    // frame drains immediately instead of spinning forever. Real work asserts
+    // busy within a few cycles of start, far below this window.
+    for (uint32_t i = 0; !device_->busy && i < NO_WORK_TIMEOUT; ++i) {
       this->tick();
     }
 
-    // wait on device to go idle
+    // wait for device to go idle, or for the HTIF tohost write.
+    //
+    // Standalone rtlsim has no host runtime, so a kernel that uses
+    // vx_printf would back-pressure on a full COUT ring forever unless
+    // it's drained here (cf. Device::drain_cout). Drainer is only wired
+    // by sim/rtlsim/main.cpp — the runtime path leaves it null so the
+    // runtime's own drainer is the sole COUT consumer.
     while (device_->busy) {
       this->tick();
+      if (cout_drainer) cout_drainer->tick();
+      if (monitor && monitor->enabled() && monitor->tick(*ram_))
+        break;
     }
-
-    // stop
-    device_->reset = 1;
+    if (cout_drainer) cout_drainer->tick(); // final flush
 
     this->cout_flush();
   }
 
-  void dcr_write(uint32_t addr, uint32_t value) {
-    device_->dcr_wr_valid = 1;
-    device_->dcr_wr_addr  = addr;
-    device_->dcr_wr_data  = value;
+  int dcr_write(uint32_t addr, uint32_t value) {
+    device_->dcr_req_valid = 1;
+    device_->dcr_req_rw    = 1;
+    device_->dcr_req_addr  = addr;
+    device_->dcr_req_data  = value;
     this->tick();
-    device_->dcr_wr_valid = 0;
+    device_->dcr_req_valid = 0;
     this->tick();
+    return 0;
+  }
+
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+    device_->dcr_req_valid = 1;
+    device_->dcr_req_rw    = 0;
+    device_->dcr_req_addr  = addr;
+    device_->dcr_req_data  = tag;
+    this->tick();
+    device_->dcr_req_valid = 0;
+    this->tick();
+    // READ response is returned when dcr_rsp_valid is high
+    while (!device_->dcr_rsp_valid) {
+      this->tick();
+    }
+    *value = device_->dcr_rsp_data;
+    return 0;
   }
 
 private:
@@ -195,23 +261,38 @@ private:
       reqs.clear();
     }
 
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       std::queue<mem_req_t*> empty;
       std::swap(dram_queue_[b], empty);
     }
 
+    device_->start = 0;
     device_->reset = 1;
 
-    for (int i = 0; i < RESET_DELAY; ++i) {
+    // Hold reset high until all internal pipeline state are initialized.
+    for (int i = 0; i < VX_CFG_RESET_DELAY; ++i) {
       device_->clk = 0;
       this->eval();
       device_->clk = 1;
       this->eval();
     }
+
+    device_->reset = 0;
+
+    // Pump clocks after reset drops to allow internal pipeline states to settle.
+    for (int i = 0; i < VX_CFG_RESET_DELAY; ++i) {
+      device_->clk = 0;
+      this->eval();
+      device_->clk = 1;
+      this->eval();
+    }
+
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      device_->mem_req_ready[b] = 1;
+    }
   }
 
   void tick() {
-
     device_->clk = 0;
     this->eval();
 
@@ -224,13 +305,14 @@ private:
 
     dram_sim_.tick();
 
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       if (!dram_queue_[b].empty()) {
         auto mem_req = dram_queue_[b].front();
-        dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg) {
+        dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg)->bool {
           // mark completed request as ready
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
           orig_req->ready = true;
+          return true;
         }, mem_req);
         dram_queue_[b].pop();
       }
@@ -248,11 +330,16 @@ private:
       tfp_->dump(timestamp);
     }
   #endif
+  #ifdef SAIF_OUTPUT
+    if (sim_trace_enabled()) {
+      sfp_->dump(timestamp);
+    }
+  #endif
     ++timestamp;
   }
 
   void mem_bus_reset() {
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       device_->mem_req_ready[b] = 0;
       device_->mem_rsp_valid[b] = 0;
     }
@@ -260,13 +347,13 @@ private:
 
   void mem_bus_eval(bool clk) {
     if (!clk) {
-      for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
         mem_rd_rsp_ready_[b] = device_->mem_rsp_ready[b];
       }
       return;
     }
 
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       // process memory responses
       if (device_->mem_rsp_valid[b] && mem_rd_rsp_ready_[b]) {
         device_->mem_rsp_valid[b] = 0;
@@ -279,7 +366,7 @@ private:
             if (!mem_rsp->write) {
               // return read responses
               device_->mem_rsp_valid[b] = 1;
-              memcpy(VDataCast<void*, PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_rsp_data[b]), mem_rsp->data.data(), PLATFORM_MEMORY_DATA_SIZE);
+              memcpy(VDataCast<void*, VX_CFG_PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_rsp_data[b]), mem_rsp->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
               device_->mem_rsp_tag[b] = mem_rsp->tag;
             }
             // delete the request
@@ -291,43 +378,20 @@ private:
 
       // process memory requests
       if (device_->mem_req_valid[b] && device_->mem_req_ready[b]) {
-      #if PLATFORM_MEMORY_INTERLEAVE == 1
-        uint64_t byte_addr = (uint64_t(device_->mem_req_addr[b]) * PLATFORM_MEMORY_NUM_BANKS + b) * PLATFORM_MEMORY_DATA_SIZE;
+      #if VX_CFG_PLATFORM_MEMORY_INTERLEAVE == 1
+        uint64_t byte_addr = (uint64_t(device_->mem_req_addr[b]) * VX_CFG_PLATFORM_MEMORY_NUM_BANKS + b) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
       #else
-        uint64_t byte_addr = (uint64_t(device_->mem_req_addr[b]) + (b << g_mem_bank_addr_width)) * PLATFORM_MEMORY_DATA_SIZE;
+        uint64_t byte_addr = (uint64_t(device_->mem_req_addr[b]) + (b << g_mem_bank_addr_width)) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
       #endif
         // check read/write
         if (device_->mem_req_rw[b]) {
           auto byteen = device_->mem_req_byteen[b];
-          auto data = VDataCast<uint8_t*, PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_req_data[b]);
-          // check if console output address
-          if (byte_addr >= uint64_t(IO_COUT_ADDR)
-           && byte_addr < (uint64_t(IO_COUT_ADDR) + IO_COUT_SIZE)) {
-            // process console output
-            for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
-              if ((byteen >> i) & 0x1) {
-                auto& ss_buf = print_bufs_[i];
-                char c = data[i];
-                ss_buf << c;
-                if (c == '\n') {
-                  std::cout << std::dec << "#" << i << ": " << ss_buf.str() << std::flush;
-                  ss_buf.str("");
-                }
-              }
-            }
-          } else {
+          auto data = VDataCast<uint8_t*, VX_CFG_PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_req_data[b]);
+          // Console output (VX_MEM_IO_COUT range) is now ordinary device
+          // memory — Option C: the host runtime drains it. No tap here.
+          {
             // process memory writes
-            /*printf("%0ld: [sim] MEM Wr Req[%d]: addr=0x%0lx, tag=0x%0lx, byteen=0x", timestamp, b, byte_addr, device_->mem_req_tag[b]);
-            for (int i = (PLATFORM_MEMORY_DATA_SIZE/4)-1; i >= 0; --i) {
-              printf("%x", (int)((byteen >> (4 * i)) & 0xf));
-            }
-            printf(", data=0x");
-            for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-              printf("%02x", data[i]);
-            }
-            printf("\n");*/
-
-            for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
+            for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; i++) {
               if ((byteen >> i) & 0x1) {
                 (*ram_)[byte_addr + i] = data[i];
               }
@@ -352,13 +416,7 @@ private:
           mem_req->addr  = byte_addr;
           mem_req->write = false;
           mem_req->ready = false;
-          ram_->read(mem_req->data.data(), byte_addr, PLATFORM_MEMORY_DATA_SIZE);
-
-          /*printf("%0ld: [sim] MEM Rd Req[%d]: addr=0x%0lx, tag=0x%0lx, data=0x", timestamp, b, byte_addr, device_->mem_req_tag[b]);
-          for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-            printf("%02x", mem_req->data[i]);
-          }
-          printf("\n");*/
+          ram_->read(mem_req->data.data(), byte_addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
 
           // enqueue dram request
           dram_queue_[b].push(mem_req);
@@ -371,7 +429,8 @@ private:
   }
 
   void dcr_bus_reset() {
-    device_->dcr_wr_valid = 0;
+    device_->dcr_req_valid = 0;
+    device_->dcr_req_rw    = 0;
   }
 
   void wait(uint32_t cycles) {
@@ -384,7 +443,7 @@ private:
 
   typedef struct {
     Vrtlsim_shim* device;
-    std::array<uint8_t, PLATFORM_MEMORY_DATA_SIZE> data;
+    std::array<uint8_t, VX_CFG_PLATFORM_MEMORY_DATA_SIZE> data;
     uint64_t addr;
     uint64_t tag;
     bool write;
@@ -393,20 +452,24 @@ private:
 
   std::unordered_map<int, std::stringstream> print_bufs_;
 
-  std::list<mem_req_t*> pending_mem_reqs_[PLATFORM_MEMORY_NUM_BANKS];
+  std::list<mem_req_t*> pending_mem_reqs_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
 
-  std::queue<mem_req_t*> dram_queue_[PLATFORM_MEMORY_NUM_BANKS];
+  std::queue<mem_req_t*> dram_queue_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
 
-  std::array<bool, PLATFORM_MEMORY_NUM_BANKS> mem_rd_rsp_ready_;
+  std::array<bool, VX_CFG_PLATFORM_MEMORY_NUM_BANKS> mem_rd_rsp_ready_;
 
   DramSim dram_sim_;
 
+  VerilatedContext* context_;
   Vrtlsim_shim* device_;
 
   RAM* ram_;
 
 #ifdef VCD_OUTPUT
   VerilatedVcdC *tfp_;
+#endif
+#ifdef SAIF_OUTPUT
+  VerilatedSaifC *sfp_;
 #endif
 };
 
@@ -424,10 +487,14 @@ void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
 }
 
-void Processor::run() {
-  impl_->run();
+void Processor::run(HostMonitor* monitor, CoutDrainer* cout_drainer) {
+  impl_->run(monitor, cout_drainer);
 }
 
-void Processor::dcr_write(uint32_t addr, uint32_t value) {
+int Processor::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+int Processor::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  return impl_->dcr_read(addr, tag, value);
 }

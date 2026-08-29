@@ -13,6 +13,14 @@
 
 `include "VX_define.vh"
 
+// Splits an LSU request into a global-memory part and a local-memory
+// part using each lane's is_addr_local user bit. Both subsets fire
+// independently with masked-out lanes; lsu_in_if.req_ready waits for
+// whichever subset(s) are non-empty.
+//
+// The local path carries the AMOs through to the LMEM banks, which perform the
+// read-modify-write in place and hold the LR/SC reservations.
+
 module VX_lmem_switch import VX_gpu_pkg::*; #(
     parameter GLOBAL_OUT_BUF = 0,
     parameter LOCAL_OUT_BUF = 0,
@@ -25,22 +33,27 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
     VX_lsu_mem_if.master    global_out_if,
     VX_lsu_mem_if.master    local_out_if
 );
-    localparam REQ_DATAW = `NUM_LSU_LANES + 1 + `NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + MEM_FLAGS_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
-    localparam RSP_DATAW = `NUM_LSU_LANES + `NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
+    localparam REQ_DATAW = `VX_CFG_NUM_LSU_LANES + 1 + `VX_CFG_NUM_LSU_LANES * (LSU_WORD_SIZE + LSU_ADDR_WIDTH + MEM_ATTR_WIDTH + LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
+    localparam RSP_DATAW = `VX_CFG_NUM_LSU_LANES + `VX_CFG_NUM_LSU_LANES * (LSU_WORD_SIZE * 8) + LSU_TAG_WIDTH;
 
-    wire [`NUM_LSU_LANES-1:0] is_addr_local_mask;
+    // Per-lane is_addr_local from the user bits at the fixed offset.
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] is_addr_local_mask;
+    for (genvar i = 0; i < `VX_CFG_NUM_LSU_LANES; ++i) begin : g_is_addr_local_mask
+        assign is_addr_local_mask[i] = lsu_in_if.req_data.user[i][MEM_ATTR_LOCAL_OFFS];
+    end
+
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] global_mask = lsu_in_if.req_data.mask & ~is_addr_local_mask;
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] local_mask  = lsu_in_if.req_data.mask &  is_addr_local_mask;
+
+    wire is_addr_global = |global_mask;
+    wire is_addr_local  = |local_mask;
+
     wire req_global_ready;
     wire req_local_ready;
 
-    for (genvar i = 0; i < `NUM_LSU_LANES; ++i) begin : g_is_addr_local_mask
-        assign is_addr_local_mask[i] = lsu_in_if.req_data.flags[i][MEM_REQ_FLAG_LOCAL];
-    end
-
-    wire is_addr_global = | (lsu_in_if.req_data.mask & ~is_addr_local_mask);
-    wire is_addr_local  = | (lsu_in_if.req_data.mask & is_addr_local_mask);
-
-    assign lsu_in_if.req_ready = (req_global_ready && is_addr_global)
-                              || (req_local_ready && is_addr_local);
+    // Both subsets must be accepted before we release the LSU input.
+    assign lsu_in_if.req_ready = (!is_addr_global || req_global_ready)
+                              && (!is_addr_local  || req_local_ready);
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
@@ -51,12 +64,12 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (lsu_in_if.req_valid && is_addr_global),
         .data_in   ({
-            lsu_in_if.req_data.mask & ~is_addr_local_mask,
+            global_mask,
             lsu_in_if.req_data.rw,
             lsu_in_if.req_data.addr,
             lsu_in_if.req_data.data,
             lsu_in_if.req_data.byteen,
-            lsu_in_if.req_data.flags,
+            lsu_in_if.req_data.user,
             lsu_in_if.req_data.tag
         }),
         .ready_in  (req_global_ready),
@@ -64,6 +77,11 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .data_out  (global_out_if.req_data),
         .ready_out (global_out_if.req_ready)
     );
+
+    wire [`VX_CFG_NUM_LSU_LANES-1:0][MEM_ATTR_WIDTH-1:0] local_user;
+    for (genvar i = 0; i < `VX_CFG_NUM_LSU_LANES; ++i) begin : g_local_user
+        assign local_user[i] = lsu_in_if.req_data.user[i];
+    end
 
     VX_elastic_buffer #(
         .DATAW   (REQ_DATAW),
@@ -74,12 +92,12 @@ module VX_lmem_switch import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (lsu_in_if.req_valid && is_addr_local),
         .data_in   ({
-            lsu_in_if.req_data.mask & is_addr_local_mask,
+            local_mask,
             lsu_in_if.req_data.rw,
             lsu_in_if.req_data.addr,
             lsu_in_if.req_data.data,
             lsu_in_if.req_data.byteen,
-            lsu_in_if.req_data.flags,
+            local_user,
             lsu_in_if.req_data.tag
         }),
         .ready_in  (req_local_ready),

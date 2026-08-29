@@ -1,0 +1,62 @@
+include ../common.mk
+
+DESTDIR ?= $(CURDIR)/..
+
+CONFIG_FILE := $(DESTDIR)/simx_rt_config.stamp
+SRC_DIR := $(VORTEX_HOME)/sw/runtime/simx
+
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
+CXXFLAGS += -fPIC -Wno-maybe-uninitialized
+CXXFLAGS += -I$(INC_DIR) -I../common -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_DIR)/simx -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
+CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
+CXXFLAGS += $(CONFIGS)
+
+LDFLAGS += -shared -pthread
+# Find libsimx.so siblings at runtime in the same dir libvortex-simx.so lives in.
+LDFLAGS += -Wl,-rpath,'$$ORIGIN'
+LDFLAGS += -L$(DESTDIR) -lsimx
+
+SRCS := $(SRC_DIR)/vortex.cpp $(RT_COMMON_DIR)/utils.cpp \
+        $(SIM_COMMON_DIR)/cmd_processor.cpp
+
+# Debugging
+ifdef DEBUG
+	CXXFLAGS += -g -O0
+else
+	CXXFLAGS += -O2 -DNDEBUG
+endif
+
+PROJECT := libvortex-simx.so
+
+.PHONY: all force driver clean-driver clean-runtime clean
+
+all: $(DESTDIR)/$(PROJECT)
+
+driver: $(DESTDIR)/libsimx.so
+
+$(DESTDIR)/libsimx.so: force
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx $(DESTDIR)/libsimx.so
+
+$(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libsimx.so $(CONFIG_FILE)
+	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
+
+# updates the timestamp when flags changed.
+# Use a PID-suffixed tmp file and tolerate concurrent invocations
+# (blackbox.sh + tests/regression/*/Makefile both invoke `make -C` here).
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@TMP=$@.tmp.$$$$ ; \
+	 printf '%s\n' "$(CXXFLAGS)" > $$TMP ; \
+	 if ! cmp -s $$TMP $@ 2>/dev/null; then \
+	   mv -f $$TMP $@ ; \
+	 else \
+	   rm -f $$TMP ; \
+	 fi
+
+clean-driver:
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/simx clean-lib
+
+clean-runtime:
+	rm -f $(DESTDIR)/$(PROJECT)
+
+clean: clean-driver clean-runtime

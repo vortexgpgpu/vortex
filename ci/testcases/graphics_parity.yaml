@@ -1,0 +1,102 @@
+# FF<->SIMT interface-law parity matrix (gfx_v2 master plan §1.3 / §7, P0).
+#
+# The recurring graphics bug class (the §8 OM determinism bug, the RASTER
+# multi-core / multi-drawcall dropped-draw-call bug) hid because every test ran
+# single-core / single-cluster, where the un-ordered FF<->SIMT handoff has no
+# second consumer to race. This category is the missing dimension: it sweeps
+# multi-core x multi-cluster x multi-drawcall and runs EVERY cell on both SimX
+# and rtlsim against the same golden image. Because both drivers must byte-match
+# one reference (CompareImages, tolerance 0), agreement with the golden is also
+# SimX<->RTL parity — no separate diff harness needed.
+#
+# The scene is box.cgltrace, a 2-drawcall trace (two device launches into one
+# color attachment), so every case here is multi-drawcall by construction.
+#
+# P0 exit gate: this matrix RUNS (red cells allowed — they are the §3 defects
+# that P1 RASTER-dispatch-v2 / OM-window work turns green). P1/P2 gate: green.
+category: graphics_parity
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: smoke
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  # Re-run this matrix on any change to an FF unit, its interface, the dispatch
+  # path, or the binding ABI.
+  touches:
+  - sim/simx/sfu_unit
+  - sim/simx/gfx_doctrine.h
+  - sim/simx/om/
+  - sim/simx/tex/
+  - sim/simx/raster/
+  - sim/simx/decode.cpp
+  - hw/rtl/raster/
+  - hw/rtl/om/
+  - hw/rtl/tex/
+  - sw/common/vx_gfx_abi.h
+  - sw/common/gfx_frontend_abi.h
+  - sw/kernel/include/vx_graphics.h
+
+tests:
+# --- core sweep, single cluster --------------------------------------------- #
+- id: box-1core
+  app: gfx_draw3d
+  drivers: [simx, rtlsim]
+  shape:
+    cores: 1
+    warps: 1
+    threads: 4
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: box-2core
+  app: gfx_draw3d
+  drivers: [simx, rtlsim]
+  shape:
+    cores: 2
+    warps: 1
+    threads: 4
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: box-4core
+  app: gfx_draw3d
+  drivers: [simx, rtlsim]
+  shape:
+    cores: 4
+    warps: 1
+    threads: 4
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+
+# --- cross-core RASTER arbitration (multiple raster cores share one front end) #
+- id: box-4core-2raster
+  app: gfx_draw3d
+  drivers: [simx, rtlsim]
+  configs+: -DVX_CFG_NUM_RASTER_CORES=2
+  shape:
+    cores: 4
+    warps: 1
+    threads: 4
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+
+# --- multi-cluster (static tile ownership must hold across clusters) --------- #
+- id: box-2clu-2core
+  app: gfx_draw3d
+  drivers: [simx, rtlsim]
+  shape:
+    clusters: 2
+    cores: 2
+    warps: 1
+    threads: 4
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+
+# --- second scene under multi-core (triangle: distinct setup/coverage path) --- #
+# NOTE: evilskull is intentionally NOT used here. Its committed goldens are a
+# ±1-LSB-off reference that SimX and rtlsim agree on but neither matches byte-
+# exactly (a texture/interpolation precision delta, not an FF↔SIMT handoff bug —
+# tracked separately). A parity-matrix cell must use a byte-exact golden so a red
+# cell means a real cross-config divergence, not stale reference data.
+- id: triangle-2core
+  app: gfx_draw3d
+  drivers: [simx, rtlsim]
+  shape:
+    cores: 2
+    warps: 1
+    threads: 4
+  args: -w 64 -h 64 -t triangle.cgltrace -r triangle_ref_64.png

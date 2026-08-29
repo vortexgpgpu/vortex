@@ -18,104 +18,108 @@
 #include <iostream>
 #include <util.h>
 #include "types.h"
-#include "arch.h"
 #include "debug.h"
+#include "instr.h"
 
 namespace vortex {
 
-class ITraceData {
-public:
-    using Ptr = std::shared_ptr<ITraceData>;
-    ITraceData() {}
-    virtual ~ITraceData() {}
-};
-
-struct LsuTraceData : public ITraceData {
-  using Ptr = std::shared_ptr<LsuTraceData>;
-  std::vector<mem_addr_size_t> mem_addrs;
-  LsuTraceData(uint32_t num_threads = 0) : mem_addrs(num_threads) {}
-};
-
-struct SfuTraceData : public ITraceData {
-  using Ptr = std::shared_ptr<SfuTraceData>;
-  Word arg1;
-  Word arg2;
-  SfuTraceData(Word arg1, Word arg2) : arg1(arg1), arg2(arg2) {}
-};
-
 struct instr_trace_t {
 public:
-  //--
   const uint64_t uuid;
-  const Arch& arch;
 
-  //--
   uint32_t    cid;
   uint32_t    wid;
+  uint32_t    cta_id;
   ThreadMask  tmask;
   Word        PC;
+  uint32_t    code;
   bool        wb;
 
-  //--
   RegOpd      dst_reg;
 
-  //--
   std::vector<RegOpd> src_regs;
 
-  //-
   FUType     fu_type;
 
-  //--
   OpType     op_type;
 
-  ITraceData::Ptr data;
+  // Operands data
+  std::vector<std::vector<reg_data_t>> src_data;
+
+  // Destination data
+  std::vector<reg_data_t> dst_data;
+
+  // Byte write enable
+  uint8_t dst_bytesel;
+
+  std::shared_ptr<Instr> instr_ptr;
 
   int  pid;
   bool sop;
   bool eop;
 
+  // Total SIMD-split packets for this warp instruction. Commit defers
+  // scoreboard release until all packets' writebacks have applied, preventing
+  // out-of-order cache responses from releasing the destination prematurely.
+  uint32_t num_pkts;
+
   bool fetch_stall;
+
+  // Set by a func-unit when a fetch_stall instruction has resolved; the warp
+  // is released when the trace drains from the FU output (commit fan-in).
+  bool resume_warp;
 
   uint64_t issue_time ;
 
-  instr_trace_t(uint64_t uuid, const Arch& arch)
+  instr_trace_t(uint64_t uuid)
     : uuid(uuid)
-    , arch(arch)
     , cid(0)
     , wid(0)
+    , cta_id(0)
     , tmask(0)
     , PC(0)
+    , code(0)
     , wb(false)
     , dst_reg({RegType::None, 0})
     , src_regs(NUM_SRC_REGS, {RegType::None, 0})
     , fu_type(FUType::ALU)
     , op_type({})
-    , data(nullptr)
+     , src_data(NUM_SRC_REGS, std::vector<reg_data_t>(VX_CFG_NUM_THREADS))
+    , dst_data(VX_CFG_NUM_THREADS)
+    , dst_bytesel(0xFF)
     , pid(-1)
     , sop(true)
     , eop(true)
+    , num_pkts(1)
     , fetch_stall(false)
+    , resume_warp(false)
     , issue_time(SimPlatform::instance().cycles())
     , log_once_(false)
   {}
 
   instr_trace_t(const instr_trace_t& rhs)
     : uuid(rhs.uuid)
-    , arch(rhs.arch)
     , cid(rhs.cid)
     , wid(rhs.wid)
+    , cta_id(rhs.cta_id)
     , tmask(rhs.tmask)
     , PC(rhs.PC)
+    , code(rhs.code)
     , wb(rhs.wb)
     , dst_reg(rhs.dst_reg)
     , src_regs(rhs.src_regs)
     , fu_type(rhs.fu_type)
     , op_type(rhs.op_type)
-    , data(rhs.data)
+    , src_data(rhs.src_data)
+    , dst_data(rhs.dst_data)
+    , dst_bytesel(rhs.dst_bytesel)
+    , instr_ptr(rhs.instr_ptr)
     , pid(rhs.pid)
     , sop(rhs.sop)
     , eop(rhs.eop)
+    , num_pkts(rhs.num_pkts)
     , fetch_stall(rhs.fetch_stall)
+    , resume_warp(rhs.resume_warp)
     , issue_time(rhs.issue_time)
     , log_once_(false)
   {}
@@ -131,8 +135,9 @@ public:
   friend std::ostream &operator<<(std::ostream &os, const instr_trace_t& trace) {
     os << "cid=" << trace.cid;
     os << ", wid=" << trace.wid;
+    os << ", cta_id=" << trace.cta_id;
     os << ", tmask=";
-    for (uint32_t i = 0, n = trace.arch.num_threads(); i < n; ++i) {
+    for (uint32_t i = 0, n = VX_CFG_NUM_THREADS; i < n; ++i) {
       os << trace.tmask.test(i);
     }
     os << ", PC=0x" << std::hex << trace.PC << std::dec;

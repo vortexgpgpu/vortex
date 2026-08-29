@@ -35,11 +35,34 @@ typedef struct {
   xrt_sim* sim;
   uint32_t bank;
   uint64_t addr;
+  bool     is_host;   // XRT_BO_FLAGS_HOST_ONLY — backed by host memory
 } buffer_t;
+
+// XRTSIM_WARM_OPEN=1 keeps the simulated device alive across close/open,
+// modeling the shell's same-xclbin warm open: ap_rst_n is not pulsed and
+// all device state survives into the next session.
+static xrt_sim* warm_sim = nullptr;
+
+static bool warm_open_enabled() {
+  const char* s = getenv("XRTSIM_WARM_OPEN");
+  return (s != nullptr && s[0] != '\0' && s[0] != '0');
+}
+
+static void warm_sim_cleanup() {
+  if (warm_sim != nullptr) {
+    delete warm_sim;
+    warm_sim = nullptr;
+  }
+}
 
 extern xrtDeviceHandle xrtDeviceOpen(unsigned int index) {
   if (index != 0)
     return nullptr;
+  if (warm_sim != nullptr) {
+    auto sim = warm_sim;
+    warm_sim = nullptr;
+    return sim;
+  }
   auto sim = new xrt_sim();
   int ret = sim->init();
   if (ret != 0) {
@@ -66,6 +89,15 @@ extern int xrtDeviceClose(xrtDeviceHandle dhdl) {
   if (dhdl == nullptr)
     return -1;
   auto sim = reinterpret_cast<xrt_sim*>(dhdl);
+  if (warm_open_enabled() && warm_sim == nullptr) {
+    warm_sim = sim;
+    static bool cleanup_registered = false;
+    if (!cleanup_registered) {
+      atexit(warm_sim_cleanup);
+      cleanup_registered = true;
+    }
+    return 0;
+  }
   delete sim;
   return 0;
 }
@@ -77,14 +109,17 @@ extern int xrtKernelClose(xrtKernelHandle /*kernelHandle*/) {
 extern xrtBufferHandle xrtBOAlloc(xrtDeviceHandle dhdl, size_t size, xrtBufferFlags flags, xrtMemoryGroup grp) {
   auto sim = reinterpret_cast<xrt_sim*>(dhdl);
   uint64_t addr;
-  int err = sim->mem_alloc(size, grp, &addr);
+  bool is_host = (flags & XRT_BO_FLAGS_HOST_ONLY) != 0;
+  int err = is_host ? sim->host_mem_alloc(size, &addr)
+                    : sim->mem_alloc(size, grp, &addr);
   if (err != 0)
     return nullptr;
-  auto buffer   = new buffer_t();
-  buffer->size  = size;
-  buffer->bank  = grp;
-  buffer->sim   = sim;
-  buffer->addr  = addr;
+  auto buffer    = new buffer_t();
+  buffer->size   = size;
+  buffer->bank   = grp;
+  buffer->sim    = sim;
+  buffer->addr   = addr;
+  buffer->is_host = is_host;
   return buffer;
 }
 
@@ -92,6 +127,8 @@ extern int xrtBOFree(xrtBufferHandle bhdl) {
   if (bhdl == nullptr)
     return -1;
   auto buffer = reinterpret_cast<buffer_t*>(bhdl);
+  if (buffer->is_host)
+    return buffer->sim->host_mem_free(buffer->addr);
   return buffer->sim->mem_free(buffer->bank, buffer->addr);
 }
 
@@ -99,6 +136,8 @@ extern int xrtBOWrite(xrtBufferHandle bhdl, const void* src, size_t size, size_t
   if (bhdl == nullptr)
     return -1;
   auto buffer = reinterpret_cast<buffer_t*>(bhdl);
+  if (buffer->is_host)
+    return buffer->sim->host_mem_write(buffer->addr + offset, size, src);
   return buffer->sim->mem_write(buffer->bank, buffer->addr + offset, size, src);
 }
 
@@ -106,7 +145,15 @@ extern int xrtBORead(xrtBufferHandle bhdl, void* dst, size_t size, size_t offset
   if (bhdl == nullptr)
     return -1;
   auto buffer = reinterpret_cast<buffer_t*>(bhdl);
+  if (buffer->is_host)
+    return buffer->sim->host_mem_read(buffer->addr + offset, size, dst);
   return buffer->sim->mem_read(buffer->bank, buffer->addr + offset, size, dst);
+}
+
+extern uint64_t xrtBOAddress(xrtBufferHandle bhdl) {
+  if (bhdl == nullptr)
+    return 0;
+  return reinterpret_cast<buffer_t*>(bhdl)->addr;
 }
 
 extern int xrtBOCopy(xrtBufferHandle dst, xrtBufferHandle src, size_t size, size_t src_offset, size_t dst_offset) {

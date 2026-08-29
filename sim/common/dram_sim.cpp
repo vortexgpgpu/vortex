@@ -36,6 +36,11 @@ private:
 		void* arg;
 	};
 
+	struct mem_rsp_t {
+		ResponseCallback callback;
+		void* arg;
+	};
+
 	Ramulator::IFrontEnd* ramulator_frontend_;
 	Ramulator::IMemorySystem* ramulator_memorysystem_;
 	uint32_t cpu_channel_size_;
@@ -44,6 +49,16 @@ private:
 	static const uint32_t tick_cycles_ = 1000;
 	static const uint32_t dram_channel_size_ = 16; // 128 bits
 	std::queue<mem_req_t> pending_reqs_;
+	std::queue<mem_rsp_t> pending_rsps_;
+
+	void handle_pending_responses() {
+		if (pending_rsps_.empty())
+			return;
+		auto& rsp = pending_rsps_.front();
+		if (rsp.callback(rsp.arg)) {
+			pending_rsps_.pop();
+		}
+	}
 
 	void handle_pending_requests() {
 		if (pending_reqs_.empty())
@@ -52,16 +67,14 @@ private:
 		auto req_type = req.is_write ? Ramulator::Request::Type::Write : Ramulator::Request::Type::Read;
 		std::function<void(Ramulator::Request&)> callback = nullptr;
 		if (req.callback) {
-			callback = [req_callback = std::move(req.callback), req_arg = std::move(req.arg)](Ramulator::Request& /*dram_req*/) {
-				req_callback(req_arg);
+			callback = [this, req_callback = std::move(req.callback), req_arg = std::move(req.arg)](Ramulator::Request& /*dram_req*/) {
+				this->pending_rsps_.push({req_callback, req_arg});
 			};
 		}
 		if (ramulator_frontend_->receive_external_requests(req_type, req.addr, 0, callback)) {
-			if (req.is_write) {
-				// Ramulator does not handle write responses, so we fire the callback ourselves.
-				if (req.callback) {
-					req.callback(req.arg);
-				}
+			// Ramulator does not handle write responses, so we handle the callback ourselves.
+			if (req.is_write && req.callback) {
+				pending_rsps_.push({req.callback, req.arg});
 			}
 			pending_reqs_.pop();
 		}
@@ -82,10 +95,14 @@ public:
 		dram_config["MemorySystem"]["Controller"]["Scheduler"]["impl"] = "FRFCFS";
 		dram_config["MemorySystem"]["Controller"]["RefreshManager"]["impl"] = "AllBank";
 		dram_config["MemorySystem"]["Controller"]["RowPolicy"]["impl"] = "OpenRowPolicy";
-		{
+		// Per-command DRAM trace recording is a debugging aid only: it writes an
+		// entry for every DRAM command and dominates simulation time (100s of MB
+		// of I/O for even tiny workloads). Keep it opt-in via the DRAM_TRACE env
+		// var so default simx/rtlsim runs stay fast.
+		if (const char* trace_path = getenv("DRAM_TRACE")) {
 			YAML::Node draw_plugin;
 			draw_plugin["ControllerPlugin"]["impl"] = "TraceRecorder";
-			draw_plugin["ControllerPlugin"]["path"] = "./trace/ramulator.log";
+			draw_plugin["ControllerPlugin"]["path"] = trace_path[0] ? trace_path : "./trace/ramulator.log";
 			dram_config["MemorySystem"]["Controller"]["plugins"].push_back(draw_plugin);
 		}
 		dram_config["MemorySystem"]["AddrMapper"]["impl"] = "RoBaRaCoCh";
@@ -111,10 +128,13 @@ public:
 
 	void reset() {
 		cpu_cycles_ = 0;
+		pending_reqs_ = std::queue<mem_req_t>();
+		pending_rsps_ = std::queue<mem_rsp_t>();
 	}
 
 	void tick() {
 		cpu_cycles_ += tick_cycles_;
+		this->handle_pending_responses();
 		while (cpu_cycles_ >= scaled_dram_cycles_) {
 			this->handle_pending_requests();
 			ramulator_memorysystem_->tick();
@@ -123,7 +143,6 @@ public:
 	}
 
 	void send_request(uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg) {
-		// enqueue the request
 		if (cpu_channel_size_ > dram_channel_size_) {
 			uint32_t n = cpu_channel_size_ / dram_channel_size_;
 			for (uint32_t i = 0; i < n; ++i) {

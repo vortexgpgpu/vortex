@@ -65,7 +65,7 @@ extern fpga_result fpgaDestroyToken(fpga_token *token) {
 extern fpga_result fpgaPropertiesGetLocalMemorySize(const fpga_properties *filters, uint64_t* lms) {
   __unused (filters);
   if (lms) {
-  #if (XLEN == 64)
+  #if (VX_CFG_XLEN == 64)
     *lms = 0x200000000; // 8 GB
   #else
     *lms = 0x100000000; // 4 GB
@@ -74,10 +74,33 @@ extern fpga_result fpgaPropertiesGetLocalMemorySize(const fpga_properties *filte
   return FPGA_OK;
 }
 
+// OPAESIM_WARM_OPEN=1 keeps the simulated device alive across close/open,
+// modeling a warm open of an already-programmed FPGA: no reset is applied
+// and all device state survives into the next session.
+static opae_sim* warm_sim = nullptr;
+
+static bool warm_open_enabled() {
+  const char* s = getenv("OPAESIM_WARM_OPEN");
+  return (s != nullptr && s[0] != '\0' && s[0] != '0');
+}
+
+static void warm_sim_cleanup() {
+  if (warm_sim != nullptr) {
+    warm_sim->shutdown();
+    delete warm_sim;
+    warm_sim = nullptr;
+  }
+}
+
 extern fpga_result fpgaOpen(fpga_token token, fpga_handle *handle, int flags) {
   __unused (token);
   if (NULL == handle || flags != 0)
     return FPGA_INVALID_PARAM;
+  if (warm_sim != nullptr) {
+    *handle = reinterpret_cast<fpga_handle>(warm_sim);
+    warm_sim = nullptr;
+    return FPGA_OK;
+  }
   auto sim = new opae_sim();
   int ret = sim->init();
   if (ret != 0) {
@@ -93,6 +116,15 @@ extern fpga_result fpgaClose(fpga_handle handle) {
     return FPGA_INVALID_PARAM;
 
   auto sim = reinterpret_cast<opae_sim*>(handle);
+  if (warm_open_enabled() && warm_sim == nullptr) {
+    warm_sim = sim;
+    static bool cleanup_registered = false;
+    if (!cleanup_registered) {
+      atexit(warm_sim_cleanup);
+      cleanup_registered = true;
+    }
+    return FPGA_OK;
+  }
   sim->shutdown();
 
   delete sim;
@@ -149,6 +181,13 @@ extern fpga_result fpgaReadMMIO64(fpga_handle handle, uint32_t mmio_num, uint64_
   auto sim = reinterpret_cast<opae_sim*>(handle);
   sim->read_mmio64(mmio_num, offset, value);
 
+  return FPGA_OK;
+}
+
+extern fpga_result fpgaGetUserClock(fpga_handle handle, uint64_t *high_clk, uint64_t *low_clk, int flags) {
+  __unused (handle, flags);
+  if (high_clk) *high_clk = 0;
+  if (low_clk)  *low_clk  = 0;
   return FPGA_OK;
 }
 

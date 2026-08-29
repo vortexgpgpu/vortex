@@ -9,7 +9,8 @@
 #include "types.h"
 
 namespace vortex {
-    class Emulator;
+    class Core;
+    class RAM;
 }
 
 
@@ -111,15 +112,15 @@ struct abstractcs_t {
     unsigned cmderr;
 
     // datacount: number of data registers (1 for RV32, 2 for RV64)
-    // OpenOCD uses this to determine XLEN
-    abstractcs_t() : datacount((XLEN == 64) ? 2 : 1), progbufsize(0), busy(false), cmderr(0) {}
+    // OpenOCD uses this to determine VX_CFG_XLEN
+    abstractcs_t() : datacount((VX_CFG_XLEN == 64) ? 2 : 1), progbufsize(0), busy(false), cmderr(0) {}
 };
 
 class DebugModule {
 public:
     // Constructor: Initializes the RISC-V Debug Module with a simulated memory space.
     // Use case: Creates a debug module instance that implements the RISC-V Debug Specification 0.13.
-    DebugModule(vortex::Emulator* emulator = nullptr, size_t mem_size = 4096);
+    DebugModule(vortex::Core* core = nullptr, vortex::RAM* ram = nullptr, size_t mem_size = 4096);
 
     // Reads a value from a DMI (Debug Module Interface) register by address.
     // Use case: Called by JTAG DTM to read debug module registers (dmcontrol, dmstatus, abstractcs, etc.).
@@ -178,8 +179,9 @@ private:
     dmstatus_t dmstatus;
     abstractcs_t abstractcs;
 
-    vortex::Emulator* emulator_;
-    
+    vortex::Core* core_;
+    vortex::RAM*  ram_;
+
     // Debug state flags
     bool halt_requested_;
     bool single_step_active_;
@@ -248,8 +250,8 @@ private:
     std::map<uint32_t, uint32_t> software_breakpoints_;
 
     // datacount: number of data registers (1 for RV32, 2 for RV64)
-    // OpenOCD uses this to determine XLEN
-    static constexpr unsigned datacount = (XLEN == 64) ? 2 : 1;
+    // OpenOCD uses this to determine VX_CFG_XLEN
+    static constexpr unsigned datacount = (VX_CFG_XLEN == 64) ? 2 : 1;
     uint32_t dmdata[datacount];
     uint32_t data1;  // DATA1 register (address 0x5)
     uint32_t data2;  // DATA2 register (address 0x6)

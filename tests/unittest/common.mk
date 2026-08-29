@@ -2,7 +2,7 @@
 ROOT_DIR := $(realpath ../../..)
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I$(SW_COMMON_DIR)
+CXXFLAGS += -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CXXFLAGS += $(CONFIGS)
 
 # Debugging
@@ -17,7 +17,7 @@ all: $(PROJECT)
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-run:
+run: $(PROJECT)
 	./$(PROJECT)
 
 clean:

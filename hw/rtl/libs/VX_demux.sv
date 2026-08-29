@@ -13,7 +13,7 @@
 
 `include "VX_platform.vh"
 
-// Fast encoder using parallel prefix computation
+// Demultiplexer using parallel prefix computation.
 // Adapted from BaseJump STL: http://bjump.org/data_out.html
 
 `TRACING_OFF

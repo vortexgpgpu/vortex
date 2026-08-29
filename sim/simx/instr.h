@@ -42,8 +42,6 @@ enum class Opcode : uint8_t {
   // RV64 Standard Extension
   R_W       = 0b0111011,
   I_W       = 0b0011011,
-  // Vector Extension
-  VSET      = 0b1010111,
   // Custom Extensions
   EXT1      = 0b0001011,
   EXT2      = 0b0101011,
@@ -138,49 +136,115 @@ public:
 
   Instr(uint64_t uuid, FUType fu_type = FUType::ALU)
     : uuid_(uuid)
+    , parent_uuid_(uuid)
     , fu_type_(fu_type)
+    , dst_bytesel_(0xFF)
+    , is_uop_(false)
+    , is_macro_op_(false)
+    , is_wstall_(false)
+    , has_tmask_(false)
+    , fu_lock_(true)
+    , fu_unlock_(true)
   {}
 
-  void setFUType(FUType fu_type) {
+  void set_fu_type(FUType fu_type) {
     fu_type_ = fu_type;
   }
 
-  template <typename T> void setOpType(T op_type) {
+  template <typename T> void set_op_type(T op_type) {
     op_type_ = static_cast<T>(op_type);
   }
 
-  template <typename T> void setArgs(T args) {
+  template <typename T> void set_args(T args) {
     args_ = static_cast<T>(args);
   }
 
-  void setDestReg(uint32_t destReg, RegType type) {
+  void set_tmask(const ThreadMask& tmask) {
+    tmask_ = tmask;
+    has_tmask_ = true;
+  }
+
+  void set_dest_reg(uint32_t destReg, RegType type) {
     rdest_ = {type, destReg };
   }
 
-  void setSrcReg(uint32_t index, uint32_t srcReg, RegType type) {
+  void set_src_reg(uint32_t index, uint32_t srcReg, RegType type) {
     rsrc_[index] = { type, srcReg};
   }
 
-  FUType getFUType() const { return fu_type_; }
+  void set_parent_uuid(uint64_t parent_uuid) {
+    parent_uuid_ = parent_uuid;
+    is_uop_ = true;
+  }
 
-  OpType getOpType() const { return op_type_; }
+  FUType get_fu_type() const { return fu_type_; }
 
-  const IntrArgs& getArgs() const { return args_; }
+  OpType get_op_type() const { return op_type_; }
 
-  RegOpd getSrcReg(uint32_t i) const { return rsrc_[i]; }
+  const IntrArgs& get_args() const { return args_; }
 
-  RegOpd getDestReg() const { return rdest_; }
+  RegOpd get_src_reg(uint32_t i) const { return rsrc_[i]; }
 
-  uint64_t getUUID() const { return uuid_; }
+  RegOpd get_dest_reg() const { return rdest_; }
+
+  uint64_t get_uuid() const { return uuid_; }
+
+  uint64_t get_parent_uuid() const { return parent_uuid_; }
+
+  bool is_uop() const {
+    return is_uop_;
+  }
+
+  void set_macro_op() {
+    is_macro_op_ = true;
+  }
+
+  bool is_macro_op() const {
+    return is_macro_op_;
+  }
+
+  void set_wstall(bool value) {
+    is_wstall_ = value;
+  }
+
+  bool is_wstall() const {
+    return is_wstall_;
+  }
+
+  bool has_tmask() const {
+    return has_tmask_;
+  }
+
+  const ThreadMask& get_tmask() const {
+    return tmask_;
+  }
+
+  void set_fu_lock(bool value) { fu_lock_ = value; }
+  bool get_fu_lock() const { return fu_lock_; }
+
+  void set_fu_unlock(bool value) { fu_unlock_ = value; }
+  bool get_fu_unlock() const { return fu_unlock_; }
+
+  void set_dst_bytesel(uint8_t value) { dst_bytesel_ = value; }
+  uint8_t get_dst_bytesel() const { return dst_bytesel_; }
 
 private:
 
   uint64_t uuid_;
+  uint64_t parent_uuid_;
   FUType   fu_type_;
   OpType   op_type_;
   IntrArgs args_;
   RegOpd   rsrc_[MAX_REG_SOURCES];
   RegOpd   rdest_;
+  uint8_t  dst_bytesel_;
+  bool     is_uop_;
+  bool     is_macro_op_;
+  bool     is_wstall_;
+  ThreadMask tmask_;
+  bool     has_tmask_;
+  bool     fu_lock_;
+  bool     fu_unlock_;
 
   friend std::ostream &operator<<(std::ostream &, const Instr &);
 };

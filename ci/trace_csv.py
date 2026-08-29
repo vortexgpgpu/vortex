@@ -54,13 +54,6 @@ class PerfCounter:
             avg = 0
         print("{} latency: avg={}, min={} (#{}), max={} (#{})".format(self.name, avg, self.min, self.min_uuid, self.max, self.max_uuid))
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='CPU trace log to CSV format converter.')
-    parser.add_argument('-t', '--type', default='simx', help='log type (rtlsim or simx)')
-    parser.add_argument('-o', '--csv', default='trace.csv', help='Output CSV file')
-    parser.add_argument('log', help='Input log file')
-    return parser.parse_args()
-
 def load_config(filename):
     config_pattern = r"CONFIGS: num_threads=(\d+), num_warps=(\d+), num_cores=(\d+), num_clusters=(\d+), socket_size=(\d+), local_mem_base=0x([0-9a-fA-F]+), num_barriers=(\d+)"
     with open(filename, 'r') as file:
@@ -81,66 +74,197 @@ def load_config(filename):
     sys.exit(1)
 
 def parse_simx(log_lines):
-    pipeline_pattern = r"TRACE\s+(\d+): pipeline-(schedule|ibuffer|dispatch|commit):.*#(\d+)"
-    opcode_pattern = r"Instr: ([0-9a-zA-Z_\.]+)"
-    pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
-    core_id_pattern = r"cid=(\d+)"
-    warp_id_pattern = r"wid=(\d+)"
-    tmask_pattern = r"tmask=(\d+)"
-    operands_pattern = r"Src\d+ Reg: (.+)"
-    destination_pattern = r"Dest Reg: (.+)"
+    # Regex for standard TRACE lines
+    line_pattern = r"^TRACE\s+(\d+):\s+([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_-]+):\s+(.*)$"
+
+    # Regex for DEBUG lines (contain the data values).
+    # Some instructions have no operands and are logged as "DEBUG Instr: FENCE, ...",
+    # so allow an optional trailing comma after the opcode.
+    debug_instr_pattern = r"DEBUG Instr:\s+([a-zA-Z0-9_\.]+),?\s+.*#(\d+)"
+    # SimX emits Src/Dest at opc/writeback time which interleaves across uops;
+    # each line carries its own (#uuid) suffix so we attribute by uuid, not by
+    # the most recently seen Instr line.
+    debug_src_pattern = r"DEBUG Src\d+ Reg:\s+(.+?)\s*\(#(\d+)\)\s*$"
+    debug_dest_pattern = r"DEBUG Dest Reg:\s+(.+?)\s*\(#(\d+)\)\s*$"
+    # Fallback for older logs that don't tag Src/Dest with a uuid.
+    debug_src_legacy_pattern = r"DEBUG Src\d+ Reg:\s+(.+)"
+    debug_dest_legacy_pattern = r"DEBUG Dest Reg:\s+(.+)"
+
+    # Arg patterns for TRACE lines
     uuid_pattern = r"#(\d+)"
+    cid_pattern = r"cid=(\d+)"
+    wid_pattern = r"wid=(\d+)"
+    tmask_pattern = r"tmask=([01]+)"
+    pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
+    op_pattern = r"op=([a-zA-Z0-9_\.]+)"
+    rd_pattern = r"rd=([a-zA-Z0-9]+)"
+    rs_pattern = r"rs\d+=([a-zA-Z0-9]+)"
+
     entries = []
-    instr_data = None
-    schd_ticks = {}
-    ibuf_ticks = {}
-    disp_ticks = {}
+    instr_data = {}
+
     perf_sched = PerfCounter("Schedule")
     perf_issue = PerfCounter("Issue")
     perf_exec  = PerfCounter("Execute")
+
+    schd_ticks = {}
+    op_ticks = {}
+
+    current_debug_uuid = None
+
     for lineno, line in enumerate(log_lines, start=1):
         try:
-            if line.startswith("DEBUG Instr:"):
-                if instr_data:
-                    entries.append(instr_data)
-                instr_data = {}
-                instr_data["lineno"] = lineno
-                instr_data["opcode"] = re.search(opcode_pattern, line).group(1)
-                instr_data["PC"] = re.search(pc_pattern, line).group(1)
-                instr_data["core_id"] = int(re.search(core_id_pattern, line).group(1))
-                instr_data["warp_id"] = int(re.search(warp_id_pattern, line).group(1))
-                instr_data["tmask"] = re.search(tmask_pattern, line).group(1)
-                instr_data["uuid"] = int(re.search(uuid_pattern, line).group(1))
-            elif line.startswith("DEBUG Src"):
-                src_reg = re.search(operands_pattern, line).group(1)
-                instr_data["operands"] = (instr_data["operands"] + ', ' + src_reg) if 'operands' in instr_data else src_reg
-            elif line.startswith("DEBUG Dest"):
-                instr_data["destination"] = re.search(destination_pattern, line).group(1)
-            elif line.startswith("TRACE"):
-                line_match = re.search(pipeline_pattern, line)
-                if line_match:
-                    timestamp = int(line_match.group(1))
-                    stage = line_match.group(2)
-                    uuid = int(line_match.group(3))
-                    if stage == "schedule":
-                        schd_ticks[uuid] = timestamp
-                    elif stage == "ibuffer":
-                        ibuf_ticks[uuid] = timestamp
-                        cycles = timestamp - schd_ticks[uuid]
-                        perf_sched.update(uuid, cycles)
-                    elif stage == "dispatch":
-                        disp_ticks[uuid] = timestamp
-                        cycles = timestamp - ibuf_ticks[uuid]
-                        perf_issue.update(uuid, cycles)
-                    elif stage == "commit":
-                        cycles = timestamp - disp_ticks[uuid]
-                        perf_exec.update(uuid, cycles)
+            # --- DEBUG Line Parsing (Captures Data Values) ---
+            if line.startswith("DEBUG"):
+                # 1. Identify Instruction & Opcode
+                instr_match = re.search(debug_instr_pattern, line)
+                if instr_match:
+                    opcode = instr_match.group(1)
+                    uuid = int(instr_match.group(2))
+                    current_debug_uuid = uuid
+
+                    if uuid not in instr_data:
+                        instr_data[uuid] = {"uuid": uuid}
+
+                    instr_data[uuid]["opcode"] = opcode
+                    instr_data[uuid]["lineno"] = lineno
+                    continue
+
+                # 2. Capture Source/Dest Registers (with values).
+                # Prefer the explicit per-line (#uuid) tag — Src/Dest emits
+                # interleave across uops in the new pipelined SimX, so falling
+                # back to current_debug_uuid would attribute to the wrong uop.
+                # If commit already finalized (instr_data entry deleted), look
+                # back in entries for the most recent matching uuid and patch.
+                src_match = re.search(debug_src_pattern, line)
+                if src_match:
+                    operand_str = src_match.group(1)
+                    src_uuid = int(src_match.group(2))
+                    if src_uuid in instr_data:
+                        target = instr_data[src_uuid]
+                        if "operands_list" not in target:
+                            target["operands_list"] = []
+                        target["operands_list"].append(operand_str)
+                    else:
+                        for prev in reversed(entries):
+                            if prev.get("uuid") == src_uuid:
+                                prev["operands"] = (prev["operands"] + ", " + operand_str) if prev.get("operands") else operand_str
+                                break
+                    continue
+
+                dest_match = re.search(debug_dest_pattern, line)
+                if dest_match:
+                    dest_str = dest_match.group(1)
+                    dest_uuid = int(dest_match.group(2))
+                    if dest_uuid in instr_data:
+                        instr_data[dest_uuid]["destination"] = dest_str
+                    else:
+                        for prev in reversed(entries):
+                            if prev.get("uuid") == dest_uuid:
+                                prev["destination"] = dest_str
+                                break
+                    continue
+
+                # Log lines without a (#uuid) suffix — attribute to the most
+                # recently seen Instr.
+                if current_debug_uuid is not None:
+                    legacy_src = re.search(debug_src_legacy_pattern, line)
+                    if legacy_src:
+                        operand_str = legacy_src.group(1)
+                        if "operands_list" not in instr_data[current_debug_uuid]:
+                            instr_data[current_debug_uuid]["operands_list"] = []
+                        instr_data[current_debug_uuid]["operands_list"].append(operand_str)
+                        continue
+
+                    legacy_dest = re.search(debug_dest_legacy_pattern, line)
+                    if legacy_dest:
+                        instr_data[current_debug_uuid]["destination"] = legacy_dest.group(1)
+                        continue
+
+            # --- TRACE Line Parsing (Captures Pipeline Timing) ---
+            line_match = re.search(line_pattern, line)
+            if not line_match:
+                continue
+
+            timestamp = int(line_match.group(1))
+            module = line_match.group(2)
+            action = line_match.group(3)
+            args_str = line_match.group(4)
+
+            uuid_match = re.search(uuid_pattern, args_str)
+            if not uuid_match:
+                continue
+            uuid = int(uuid_match.group(1))
+
+            # --- Stage Identification ---
+
+            # 1. Schedule: Create/Update entry
+            if action == "schedule":
+                if uuid not in instr_data:
+                    instr_data[uuid] = {}
+                trace = instr_data[uuid]
+
+                # Update basic info
+                trace["lineno"] = lineno
+                trace["uuid"] = uuid
+
+                pc_m = re.search(pc_pattern, args_str)
+                cid_m = re.search(cid_pattern, args_str)
+                wid_m = re.search(wid_pattern, args_str)
+                tmask_m = re.search(tmask_pattern, args_str)
+
+                trace["PC"] = pc_m.group(1) if pc_m else "0x0"
+                trace["core_id"] = int(cid_m.group(1)) if cid_m else 0
+                trace["warp_id"] = int(wid_m.group(1)) if wid_m else 0
+                trace["tmask"] = tmask_m.group(1) if tmask_m else "0000"
+
+                schd_ticks[uuid] = timestamp
+
+            # 2. Operands: Issue timing
+            elif action == "operands":
+                op_ticks[uuid] = timestamp
+                if uuid in schd_ticks:
+                    cycles = timestamp - schd_ticks[uuid]
+                    perf_sched.update(uuid, cycles)
+
+            # 3. Execute: Update Opcode (optional)
+            elif action == "execute":
+                # TRACE opcode is sometimes more accurate for execution units, but DEBUG is usually fine.
+                pass
+
+            # 4. Commit: Finalize
+            elif action == "commit":
+                if uuid in instr_data:
+                    trace = instr_data[uuid]
+
+                    start_exec_tick = op_ticks.get(uuid, schd_ticks.get(uuid, timestamp))
+                    cycles = timestamp - start_exec_tick
+                    perf_exec.update(uuid, cycles)
+
+                    # Finalize operands list into string
+                    if "operands_list" in trace:
+                        trace["operands"] = ", ".join(trace["operands_list"])
+                        del trace["operands_list"]
+
+                    # Ensure required fields exist
+                    if "destination" not in trace: trace["destination"] = ""
+                    if "operands" not in trace: trace["operands"] = ""
+
+                    # Only append entries that went through the schedule stage
+                    # (have PC set). TCU sub-operations only have DEBUG lines
+                    # and lack pipeline fields — skip them.
+                    if "PC" in trace:
+                        entries.append(trace)
+
+                    # Cleanup
+                    del instr_data[uuid]
+                    if uuid in schd_ticks: del schd_ticks[uuid]
+                    if uuid in op_ticks: del op_ticks[uuid]
 
         except Exception as e:
-            print("Error: {}; {}".format(e, line))
-            instr_data = None
-    if instr_data:
-        entries.append(instr_data)
+            # print("Error parsing line {}: {} | {}".format(lineno, e, line.strip()))
+            pass
+
     perf_sched.dump()
     perf_issue.dump()
     perf_exec.dump()
@@ -200,36 +324,40 @@ def simd_data(sub_array, index, count, default=0):
     return new_array
 
 def merge_data(trace, key, new_data, mask):
-    if key in trace:
-        merged_data = trace[key]
-        for i in range(len(mask)):
-            if mask[i] == 1:
-                merged_data[i] = new_data[i]
-        trace[key] = merged_data
-    else:
-        trace[key] = new_data
+    if key not in trace:
+        trace[key] = ['-'] * len(mask)
+    merged_data = trace[key]
+    for i in range(len(mask)):
+        if mask[i] == 1:
+            merged_data[i] = new_data[i]
+    trace[key] = merged_data
 
 def parse_rtlsim(log_lines):
     global configs
-    line_pattern = r"(\d+):\s+cluster(\d+)-socket(\d+)-core(\d+)-(schedule|issue\d+-ibuffer|issue\d+-dispatch|commit):"
+    # Regex to capture timestamp, topology, module, and action
+    line_pattern = r"(\d+):\s+cluster(\d+)-socket(\d+)-core(\d+)-([a-zA-Z0-9_-]+)\s+([a-zA-Z0-9_-]+):"
+
     pc_pattern = r"PC=(0x[0-9a-fA-F]+)"
-    ex_pattern = r"ex=([a-zA-Z]+)"
     op_pattern = r"op=([\?0-9a-zA-Z_\.]+)"
     warp_id_pattern = r"wid=(\d+)"
     tmask_pattern = r"tmask=(\d+)"
     wb_pattern = r"wb=(\d)"
-    used_rs_pattern = r"used_rs=(\d+)"
+
+    # Updated patterns for new format
+    used_rs_pattern = r"used_rs=([01]+)"
     sid_pattern = r"sid=(\d+)"
-    rd_pattern = r"rd=(\d+)"
-    rs1_pattern = r"rs1=(\d+)"
-    rs2_pattern = r"rs2=(\d+)"
-    rs3_pattern = r"rs3=(\d+)"
+    rd_pattern = r"rd=([xz\d]+)"
+    rs1_pattern = r"rs1=([xz\d]+)"
+    rs2_pattern = r"rs2=([xz\d]+)"
+    rs3_pattern = r"rs3=([xz\d]+)"
     rs1_data_pattern = r"rs1_data=\{(.+?)\}"
     rs2_data_pattern = r"rs2_data=\{(.+?)\}"
     rs3_data_pattern = r"rs3_data=\{(.+?)\}"
     rd_data_pattern = r"data=\{(.+?)\}"
     eop_pattern = r"eop=(\d)"
-    uuid_pattern = r"#(\d+)"
+    uuid_pattern = r"\(#(\d+)\)"
+    parent_pattern = r"parent=#(\d+)"
+
     entries = []
     instr_data = {}
     num_cores = configs['num_cores']
@@ -240,45 +368,94 @@ def parse_rtlsim(log_lines):
     perf_sched = PerfCounter("Schedule")
     perf_issue = PerfCounter("Issue")
     perf_exec  = PerfCounter("Execute")
+
     for lineno, line in enumerate(log_lines, start=1):
         try:
             line_match = re.search(line_pattern, line)
             if line_match:
-                PC = re.search(pc_pattern, line).group(1)
-                warp_id = int(re.search(warp_id_pattern, line).group(1))
-                tmask = re.search(tmask_pattern, line).group(1)
-                uuid = int(re.search(uuid_pattern, line).group(1))
                 timestamp = int(line_match.group(1))
                 cluster_id = int(line_match.group(2))
                 socket_id = int(line_match.group(3))
                 core_id = int(line_match.group(4))
-                stage = line_match.group(5)
-                if re.match(r"schedule", stage):
+                module = line_match.group(5)
+                action = line_match.group(6)
+
+                uuid_match = re.search(uuid_pattern, line)
+                if not uuid_match:
+                    continue
+                uuid = int(uuid_match.group(1))
+
+                # Pipeline Stage Identification
+                is_schedule = "scheduler" in module and action == "dispatch"
+                is_decode   = ("decode" in module or "ibuffer-uop" in module) and action == "decode"
+                is_dispatch = "dispatcher" in module and action == "dispatch"
+                is_commit   = "commit" in module and action == "commit"
+
+                if is_schedule:
                     schd_ticks[uuid] = timestamp
-                elif re.match(r"issue\d+-ibuffer", stage):
+
+                elif is_decode:
+                    # Skip uop expansion lines (ibuffer-uop) whose uuid differs
+                    # from the parent — they're internal micro-ops.
+                    parent_match = re.search(parent_pattern, line)
+                    if parent_match and int(parent_match.group(1)) != uuid:
+                        continue
+
+                    # If uuid already populated by the parent decode line, only
+                    # let the ibuffer-uop line update the concrete register names
+                    # (rd/rs1/rs2/rs3); preserve the originating warp's wid.
+                    if parent_match and uuid in instr_data:
+                        trace = instr_data[uuid]
+                        rd_match = re.search(rd_pattern, line)
+                        if rd_match: trace["rd"] = rd_match.group(1)
+                        rs1_match = re.search(rs1_pattern, line)
+                        if rs1_match: trace["rs1"] = rs1_match.group(1)
+                        rs2_match = re.search(rs2_pattern, line)
+                        if rs2_match: trace["rs2"] = rs2_match.group(1)
+                        rs3_match = re.search(rs3_pattern, line)
+                        if rs3_match: trace["rs3"] = rs3_match.group(1)
+                        continue
+
                     trace = {}
                     trace["uuid"] = uuid
-                    trace["PC"] = PC
+                    trace["PC"] = re.search(pc_pattern, line).group(1)
                     trace["core_id"] = ((((cluster_id * num_sockets) + socket_id) * socket_size) + core_id)
-                    trace["warp_id"] = warp_id
-                    trace["tmask"] = reverse_binary(tmask)
+                    trace["warp_id"] = int(re.search(warp_id_pattern, line).group(1))
+                    trace["tmask"] = reverse_binary(re.search(tmask_pattern, line).group(1))
                     trace["opcode"] = re.search(op_pattern, line).group(1)
-                    trace["used_rs"] = bin_to_array(reverse_binary(re.search(used_rs_pattern, line).group(1)))
-                    trace["rd"] = re.search(rd_pattern, line).group(1)
-                    trace["rs1"] = re.search(rs1_pattern, line).group(1)
-                    trace["rs2"] = re.search(rs2_pattern, line).group(1)
-                    trace["rs3"] = re.search(rs3_pattern, line).group(1)
+
+                    # Parse used_rs (binary string)
+                    used_rs_str = re.search(used_rs_pattern, line).group(1)
+                    trace["used_rs"] = bin_to_array(reverse_binary(used_rs_str))
+
+                    # Safely extract registers (some instrs might omit unused registers)
+                    rd_match = re.search(rd_pattern, line)
+                    trace["rd"] = rd_match.group(1) if rd_match else "0"
+
+                    rs1_match = re.search(rs1_pattern, line)
+                    trace["rs1"] = rs1_match.group(1) if rs1_match else "0"
+
+                    rs2_match = re.search(rs2_pattern, line)
+                    trace["rs2"] = rs2_match.group(1) if rs2_match else "0"
+
+                    rs3_match = re.search(rs3_pattern, line)
+                    trace["rs3"] = rs3_match.group(1) if rs3_match else "0"
+
                     trace["ibuf_ticks"] = timestamp
                     instr_data[uuid] = trace
+
                     if uuid in schd_ticks:
                         ticks = schd_ticks[uuid]
                         cycles = (timestamp - ticks + 1) // 2
                         perf_sched.update(uuid, cycles)
-                elif re.match(r"issue\d+-dispatch", stage):
+
+                elif is_dispatch:
                     if uuid in instr_data:
                         trace = instr_data[uuid]
                         sid = int(re.search(sid_pattern, line).group(1))
-                        src_tmask_arr = simd_data(bin_to_array(tmask)[::-1], sid, num_threads, 0)
+                        curr_tmask = re.search(tmask_pattern, line).group(1)
+                        src_tmask_arr = simd_data(bin_to_array(curr_tmask)[::-1], sid, num_threads, 0)
+
                         trace["lineno"] = lineno
                         used_rs = trace["used_rs"]
                         if used_rs[0]:
@@ -287,56 +464,61 @@ def parse_rtlsim(log_lines):
                             merge_data(trace, 'rs2_data', simd_data(re.search(rs2_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
                         if used_rs[2]:
                             merge_data(trace, 'rs3_data', simd_data(re.search(rs3_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), src_tmask_arr)
+
                         trace["issued"] = True
                         trace["issue_ticks"] = timestamp
                         instr_data[uuid] = trace
                         cycles = (timestamp - trace["ibuf_ticks"] + 1) // 2
                         perf_issue.update(uuid, cycles)
-                elif re.match(r"commit", stage):
+
+                elif is_commit:
                     if uuid in instr_data:
                         trace = instr_data[uuid]
                         if "issued" in trace:
                             sid = int(re.search(sid_pattern, line).group(1))
                             used_rs = trace["used_rs"]
-                            dst_tmask_arr = simd_data(bin_to_array(tmask)[::-1], sid, num_threads, 0)
+                            curr_tmask = re.search(tmask_pattern, line).group(1)
+                            dst_tmask_arr = simd_data(bin_to_array(curr_tmask)[::-1], sid, num_threads, 0)
+
                             wb = re.search(wb_pattern, line).group(1) == "1"
                             if wb:
                                 merge_data(trace, 'rd_data', simd_data(re.search(rd_data_pattern, line).group(1).split(', ')[::-1], sid, num_threads, '0x0'), dst_tmask_arr)
+
                             instr_data[uuid] = trace
                             eop = re.search(eop_pattern, line).group(1) == "1"
                             if eop:
                                 tmask_arr = bin_to_array(trace["tmask"])
                                 destination = ''
-                                if wb:
+                                if wb and 'rd_data' in trace:
                                     destination, sep = append_value(destination, trace["rd"], trace['rd_data'], tmask_arr, False)
                                     del trace['rd_data']
                                 trace["destination"] = destination
+
                                 operands = ''
                                 sep = False
-                                if used_rs[0]:
+                                if used_rs[0] and "rs1_data" in trace:
                                     operands, sep = append_value(operands, trace["rs1"], trace["rs1_data"], tmask_arr, sep)
                                     del trace["rs1_data"]
-                                if used_rs[1]:
+                                if used_rs[1] and "rs2_data" in trace:
                                     operands, sep = append_value(operands, trace["rs2"], trace["rs2_data"], tmask_arr, sep)
                                     del trace["rs2_data"]
-                                if used_rs[2]:
+                                if used_rs[2] and "rs3_data" in trace:
                                     operands, sep = append_value(operands, trace["rs3"], trace["rs3_data"], tmask_arr, sep)
                                     del trace["rs3_data"]
                                 trace["operands"] = operands
+
                                 cycles = (timestamp - trace["issue_ticks"] + 1) // 2
                                 perf_exec.update(uuid, cycles)
-                                del trace["ibuf_ticks"]
-                                del trace["issue_ticks"]
-                                del trace["used_rs"]
-                                del trace["rd"]
-                                del trace["rs1"]
-                                del trace["rs2"]
-                                del trace["rs3"]
-                                del trace["issued"]
+
+                                # Clean up
+                                for k in ["ibuf_ticks", "issue_ticks", "used_rs", "rd", "rs1", "rs2", "rs3", "issued"]:
+                                    if k in trace: del trace[k]
+
                                 del instr_data[uuid]
                                 entries.append(trace)
         except Exception as e:
-            print("Error: {}; {}".format(e, line))
+            print("Error: {0} ({1}); {2}".format(e, lineno, line))
+
     perf_sched.dump()
     perf_issue.dump()
     perf_exec.dump()
@@ -389,6 +571,13 @@ def split_log_file(log_filename):
         sublogs.append(log_lines)
 
     return sublogs
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='CPU trace log to CSV format converter.')
+    parser.add_argument('-t', '--type', default='simx', help='log type (rtlsim or simx)')
+    parser.add_argument('-o', '--csv', default='trace.csv', help='Output CSV file')
+    parser.add_argument('log', help='Input log file')
+    return parser.parse_args()
 
 def main():
     global configs

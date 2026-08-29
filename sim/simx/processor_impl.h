@@ -13,59 +13,89 @@
 
 #pragma once
 
-#include "mem_sim.h"
-#include "cache_sim.h"
+#include "memory.h"
+#include "cache.h"
 #include "constants.h"
-#include "dcrs.h"
 #include "cluster.h"
+#include "kmu.h"
 
 namespace vortex {
-
-class Emulator;
 
 class ProcessorImpl {
 public:
   struct PerfStats {
-    CacheSim::PerfStats l3cache;
-    MemSim::PerfStats memsim;
-    uint64_t mem_reads;
-    uint64_t mem_writes;
-    uint64_t mem_latency;
+    Cache::PerfStats l3cache;
+    Memory::PerfStats memsim;
+    uint64_t mem_reads = 0;
+    uint64_t mem_writes = 0;
+    uint64_t mem_latency = 0;
   };
 
-  ProcessorImpl(const Arch& arch);
+  ProcessorImpl();
   ~ProcessorImpl();
 
   void attach_ram(RAM* mem);
 
+  void reset();
+
   int run();
 
+  // Single-cycle step; see Processor::cycle() doc. Lazily initializes
+  // (resets + starts KMU) on the first call after construction or
+  // after reset() has been invoked.
   bool cycle();
 
-  void dcr_write(uint32_t addr, uint32_t value);
+  int dcr_write(uint32_t addr, uint32_t value);
 
-#ifdef VM_ENABLE
-  void set_satp(uint64_t satp);
-#endif
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
   PerfStats perf_stats() const;
 
-  Emulator* get_first_emulator() const;
+  Kmu& kmu()       { return *kmu_; }
+
+  void set_mem_telemetry_hook(Memory::PreSendHook hook) {
+    memsim_->set_pre_send_hook(std::move(hook));
+  }
+
+  // Functional backing store (device physical memory). Exposed so the raster
+  // early-Z stage can read the committed depth buffer synchronously during its
+  // walk (a peek, not a substitute for the cycle-modeled ocache path).
+  RAM* ram() const { return ram_; }
+
+  bool any_running() const;
+
+  class Core* get_first_core() const;
+
+  // Drain dirty data from caches (write-back path) all the way to DRAM.
+  // Walks L1 dcaches → L2 → L3, ticking the simulator between phases so
+  // each level's evictions reach the next before that level itself flushes.
+  void flush_caches();
 
 private:
 
-  void reset();
+  // A grid-less launch is a delegated draw launch: the KMU walks no CTAs and
+  // the frame kick is forwarded to every cluster's raster engine instead.
+  void forward_delegated_launch();
 
-  bool is_cycle_initialized_ = false;
-  const Arch& arch_;
-  std::vector<std::shared_ptr<Cluster>> clusters_;
-  DCRS dcrs_;
-  MemSim::Ptr memsim_;
-  CacheSim::Ptr l3cache_;
+  // True once any cluster's walker complex has latched a page fault.
+  bool mmu_fault_pending() const;
+
+  Kmu::Ptr    kmu_;
+  std::vector<Cluster::Ptr> clusters_;
+  Memory::Ptr memsim_;
+#ifdef VX_CFG_VM_ENABLE
+  uint64_t    mmu_satp_ = 0;    // assembled from the two DCR halves
+#endif
+  RAM*        ram_ = nullptr;   // functional backing store (set by attach_ram)
+  Cache::Ptr l3cache_;
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;
   uint64_t perf_mem_latency_;
   uint64_t perf_mem_pending_reads_;
+  // Tracks whether cycle() has done its first-call init (reset +
+  // kmu_->start()). reset() clears it so a back-to-back kernel launch
+  // via cycle() re-dispatches the KMU.
+  bool is_cycle_initialized_;
 };
 
 }

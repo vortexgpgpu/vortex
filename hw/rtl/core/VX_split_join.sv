@@ -19,7 +19,8 @@ module VX_split_join import VX_gpu_pkg::*; #(
 ) (
     input  wire                     clk,
     input  wire                     reset,
-    input  wire                     valid,
+    input  wire                     split_valid,
+    input  wire                     sjoin_valid,
     input  wire [NW_WIDTH-1:0]      wid,
     input  split_t                  split,
     input  join_t                   sjoin,
@@ -28,71 +29,59 @@ module VX_split_join import VX_gpu_pkg::*; #(
     output wire                     join_is_dvg,
     output wire                     join_is_else,
     output wire [NW_WIDTH-1:0]      join_wid,
-    output wire [`NUM_THREADS-1:0]  join_tmask,
+    output wire [`VX_CFG_NUM_THREADS-1:0]  join_tmask,
     output wire [PC_BITS-1:0]       join_pc,
     output wire [DV_STACK_SIZEW-1:0] stack_ptr
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    wire split_valid = valid && split.valid;
-    wire sjoin_valid = valid && sjoin.valid;
-
     if (NT_BITS != 0) begin : g_enable
-        wire [`NUM_WARPS-1:0][DV_STACK_SIZEW-1:0] ipdom_wr_ptr;
-        wire [`NUM_THREADS-1:0] ipdom_tmask;
-        wire [PC_BITS-1:0] ipdom_pc;
+        wire [`VX_CFG_NUM_WARPS-1:0][DV_STACK_SIZEW-1:0] ipdom_wr_ptr;
+        wire [`VX_CFG_NUM_THREADS-1:0] orig_tmask;
+        wire [PC_BITS-1:0] next_pc;
         wire ipdom_idx;
 
-        wire [(`NUM_THREADS + PC_BITS)-1:0] ipdom_d0 = {split.then_tmask | split.else_tmask, PC_BITS'(0)};
-        wire [(`NUM_THREADS + PC_BITS)-1:0] ipdom_d1 = {split.else_tmask, split.next_pc};
+        wire [(`VX_CFG_NUM_THREADS + PC_BITS)-1:0] ipdom_val = {split.then_tmask | split.else_tmask, split.next_pc};
 
         wire sjoin_is_dvg = (sjoin.stack_ptr != ipdom_wr_ptr[wid]);
 
-        wire ipdom_push = split_valid && split.is_dvg;
-        wire ipdom_pop  = sjoin_valid && sjoin_is_dvg;
-
         VX_ipdom_stack #(
-            .WIDTH (`NUM_THREADS + PC_BITS),
+            .WIDTH (`VX_CFG_NUM_THREADS + PC_BITS),
             .DEPTH (DV_STACK_SIZE)
         ) ipdom_stack (
             .clk   (clk),
             .reset (reset),
             .wid   (wid),
-            .d0    (ipdom_d0),
-            .d1    (ipdom_d1),
-            .push  (ipdom_push),
-            .pop   (ipdom_pop),
+            .d_val (ipdom_val),
+            .push  (split_valid && split.is_dvg),
+            .pop   (sjoin_valid && sjoin_is_dvg),
             .rd_ptr(sjoin.stack_ptr),
-            .q_val ({ipdom_tmask, ipdom_pc}),
+            .q_val ({orig_tmask, next_pc}),
             .q_idx (ipdom_idx),
             .wr_ptr(ipdom_wr_ptr),
             `UNUSED_PIN (empty),
             `UNUSED_PIN (full)
         );
 
+        wire [`VX_CFG_NUM_THREADS-1:0] join_tmask_n = ipdom_idx ? orig_tmask : (~sjoin.tmask & orig_tmask);
+
         VX_pipe_register #(
-            .DATAW  (1 + NW_WIDTH + 1 +  1 + `NUM_THREADS + PC_BITS),
+            .DATAW  (1 + NW_WIDTH + 1 +  1 + `VX_CFG_NUM_THREADS + PC_BITS),
             .RESETW (1),
             .DEPTH  (OUT_REG)
         ) pipe_reg (
             .clk      (clk),
             .reset    (reset),
             .enable   (1'b1),
-            .data_in  ({sjoin_valid, wid,      sjoin_is_dvg, ~ipdom_idx,   ipdom_tmask, ipdom_pc}),
-            .data_out ({join_valid,  join_wid, join_is_dvg,  join_is_else, join_tmask,  join_pc})
+            .data_in  ({sjoin_valid, wid,      sjoin_is_dvg, ~ipdom_idx,   join_tmask_n, next_pc}),
+            .data_out ({join_valid,  join_wid, join_is_dvg,  join_is_else, join_tmask,   join_pc})
         );
 
         assign stack_ptr = ipdom_wr_ptr[stack_wid];
 
     end else begin : g_disable
 
-        `UNUSED_VAR (clk)
-        `UNUSED_VAR (reset)
-        `UNUSED_VAR (split)
-        `UNUSED_VAR (sjoin)
-        `UNUSED_VAR (wid)
-        `UNUSED_VAR (stack_wid)
-        `UNUSED_VAR (split_valid)
+        `UNUSED_VAR ({clk, reset, split, sjoin, stack_wid, split_valid})
         assign join_valid = sjoin_valid;
         assign join_wid = wid;
         assign join_is_dvg = 0;
@@ -100,7 +89,7 @@ module VX_split_join import VX_gpu_pkg::*; #(
         assign join_tmask = 1'b1;
         assign join_pc = '0;
         assign stack_ptr = '0;
-        
+
     end
 
 endmodule

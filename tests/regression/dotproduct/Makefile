@@ -9,6 +9,8 @@ SRCS := $(SRC_DIR)/main.cpp
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
-OPTS ?= -n32
+OPTS ?= -n128
+
+KERNEL_LIB := vortex2
 
 include ../common.mk

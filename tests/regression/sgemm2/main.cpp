@@ -12,8 +12,8 @@
      int _ret = _expr;                                          \
      if (0 == _ret)                                             \
        break;                                                   \
-     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
-	 cleanup();			                                              \
+     printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);  \
+	 cleanup();			                                          \
      exit(-1);                                                  \
    } while (false)
 
@@ -85,31 +85,37 @@ static void matmul_cpu(TYPE* out, const TYPE* A, const TYPE* B, uint32_t width, 
 }
 
 const char* kernel_file = "kernel.vxbin";
-uint32_t size = 16;
+uint32_t size = 64;
 uint32_t tile_size = 4;
+uint32_t chunk_k = 0;
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
-vx_buffer_h krnl_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel = nullptr;
 kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
    std::cout << "Vortex Test." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-n matrix_size] [-t:tile_size] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k kernel] [-n matrix_size] [-t tile_size] [-c chunk_k] [-h help]" << std::endl;
+   std::cout << "  chunk_k=0 means chunk_k=tile_size (original behavior)" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "n:t:k:h")) != -1) {
+  while ((c = getopt(argc, argv, "n:t:c:k:h")) != -1) {
     switch (c) {
     case 'n':
       size = atoi(optarg);
       break;
     case 't':
       tile_size = atoi(optarg);
+      break;
+    case 'c':
+      chunk_k = atoi(optarg);
       break;
     case 'k':
       kernel_file = optarg;
@@ -127,12 +133,14 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(A_buffer);
-    vx_mem_free(B_buffer);
-    vx_mem_free(C_buffer);
-    vx_mem_free(krnl_buffer);
-    vx_mem_free(args_buffer);
-    vx_dev_close(device);
+    if (A_buffer) vx_buffer_release(A_buffer);
+    if (B_buffer) vx_buffer_release(B_buffer);
+    if (C_buffer) vx_buffer_release(C_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
+    vx_device_dump_perf(device, stdout);
+    vx_device_release(device);
   }
 }
 
@@ -145,43 +153,46 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  // Default chunk_k to tile_size.
+  if (chunk_k == 0)
+    chunk_k = tile_size;
+  if ((size % chunk_k) != 0) {
+    printf("Error: matrix size %d must be a multiple of chunk_k %d\n", size, chunk_k);
+    return -1;
+  }
+
   std::srand(50);
 
   // open device connection
   std::cout << "open device connection" << std::endl;
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   uint32_t size_sq = size * size;
   uint32_t buf_size = size_sq * sizeof(TYPE);
   uint32_t group_size = tile_size * tile_size;
-  uint32_t local_mem = 2 * group_size * sizeof(TYPE);
+  uint32_t tile_elems_a = tile_size * chunk_k;
+  uint32_t tile_elems_b = chunk_k * tile_size;
+  uint32_t local_mem = (tile_elems_a + tile_elems_b) * sizeof(TYPE);
 
   std::cout << "data type: " << Comparator<TYPE>::type_str() << std::endl;
   std::cout << "matrix size: " << size << "x" << size << std::endl;
-  std::cout << "tile size: " << tile_size << "x" << tile_size << std::endl;
+  std::cout << "tile size: " << tile_size << ", chunk_k: " << chunk_k << std::endl;
   std::cout << "local memory: " << local_mem << " bytes" << std::endl;
 
-  kernel_arg.grid_dim[0] = size / tile_size;
-  kernel_arg.grid_dim[1] = size / tile_size;
-  kernel_arg.block_dim[0] = tile_size;
-  kernel_arg.block_dim[1] = tile_size;
-  kernel_arg.size = size;
-  kernel_arg.tile_size = tile_size;
-
   // check work group occupancy
-  uint32_t max_localmem;
-  RT_CHECK(vx_check_occupancy(device, group_size, &max_localmem));
-  std::cout << "occupancy: max_localmem=" << max_localmem << " bytes" << std::endl;
-  RT_CHECK(max_localmem < local_mem);
+  RT_CHECK(vx_check_occupancy(device, group_size, local_mem));
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &A_buffer));
-  RT_CHECK(vx_mem_address(A_buffer, &kernel_arg.A_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_READ, &B_buffer));
-  RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_WRITE, &C_buffer));
-  RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_READ, &A_buffer));
+  RT_CHECK(vx_buffer_address(A_buffer, &kernel_arg.A_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_READ, &B_buffer));
+  RT_CHECK(vx_buffer_address(B_buffer, &kernel_arg.B_addr));
+  RT_CHECK(vx_buffer_create(device, buf_size, VX_MEM_WRITE, &C_buffer));
+  RT_CHECK(vx_buffer_address(C_buffer, &kernel_arg.C_addr));
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
@@ -201,31 +212,52 @@ int main(int argc, char *argv[]) {
 
   // upload source buffer0
   std::cout << "upload source buffer0" << std::endl;
-  RT_CHECK(vx_copy_to_dev(A_buffer, h_A.data(), 0, buf_size));
+  RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A.data(), buf_size, 0, nullptr, nullptr));
 
   // upload source buffer1
   std::cout << "upload source buffer1" << std::endl;
-  RT_CHECK(vx_copy_to_dev(B_buffer, h_B.data(), 0, buf_size));
+  RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, h_B.data(), buf_size, 0, nullptr, nullptr));
 
-  // Upload kernel binary
-  std::cout << "Upload kernel binary" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+  // load kernel module
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  kernel_arg.size      = size;
+  kernel_arg.tile_size = tile_size;
+  kernel_arg.chunk_k   = chunk_k;
 
-  // start device
-  std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start(device, krnl_buffer, args_buffer));
+  uint32_t grid_dim[2]  = {size / tile_size, size / tile_size};
+  uint32_t block_dim[2] = {tile_size, tile_size};
+
+  // launch kernel — args passed as a host blob (UVA), no args device buffer
+  std::cout << "launch kernel" << std::endl;
+  vx_event_h launch_ev = nullptr;
+  {
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 2;
+    li.grid_dim[0]  = grid_dim[0];
+    li.grid_dim[1]  = grid_dim[1];
+    li.block_dim[0] = block_dim[0];
+    li.block_dim[1] = block_dim[1];
+    li.lmem_size    = local_mem;
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+  }
+
+  // download destination buffer — chained after the launch
+  std::cout << "download destination buffer" << std::endl;
+  vx_event_h read_ev = nullptr;
+  RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0, buf_size, 1, &launch_ev, &read_ev));
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
-
-  // download destination buffer
-  std::cout << "download destination buffer" << std::endl;
-  RT_CHECK(vx_copy_from_dev(h_C.data(), C_buffer, 0, buf_size));
+  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(read_ev);
+  vx_event_release(launch_ev);
 
   // verify result
   std::cout << "verify result" << std::endl;

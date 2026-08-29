@@ -1,11 +1,19 @@
 ROOT_DIR := $(realpath ../../../../../..)
 include $(ROOT_DIR)/config.mk
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile, 3 -- default. NOT supported on this backend.
+OPT_LEVEL ?= 3
+ifneq ($(OPT_LEVEL),3)
+$(error OPT_LEVEL=$(OPT_LEVEL) requested but not supported on the altera/dut backend)
+endif
+
 SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/dut
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 AFU_DIR := $(RTL_DIR)/afu/opae
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+UNITTEST_DIR := $(VORTEX_HOME)/hw/unittest
 
 IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 
@@ -18,9 +26,15 @@ ifeq ($(DEVICE_FAMILY), arria10)
 	DEVICE = 10AX115N3F40E2SG
 endif
 
-CONFIGS += -DNDEBUG
-CONFIGS += -DQUARTUS
-CONFIGS += -DSYNTHESIS
+CONFIGS += -DSYNTHESIS -DQUARTUS -DNDEBUG
+
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
+# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
+# resolved type selectors so an enum override selects its RTL implementation.
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
+CFLAGS += $(RTL_INCLUDE)
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf
 
@@ -37,7 +51,7 @@ all: gen-sources $(PROJECT).sta.rpt $(PROJECT).pow.rpt
 gen-sources: src
 src:
 	mkdir -p src
-	$(SCRIPT_DIR)/gen_sources.sh $(CONFIGS) $(RTL_INCLUDE) -T$(TOP_LEVEL_ENTITY) -P -Csrc
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -T$(TOP_LEVEL_ENTITY) -P -Csrc $(RTL_PKGS)
 
 syn: $(PROJECT).syn.rpt
 

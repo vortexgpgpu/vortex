@@ -1,0 +1,126 @@
+diff --git a/benchmarks/common/crt.S b/benchmarks/common/crt.S
+index 33e45ec..dd1efe4 100644
+--- a/benchmarks/common/crt.S
++++ b/benchmarks/common/crt.S
+@@ -1,6 +1,9 @@
+ # See LICENSE for license details.
+ 
+ #include "encoding.h"
++// Vortex MMIO addresses (VX_MEM_IO_EXIT_CODE) — relies on -I<build>/sw
++// being passed by the riscv-tests build wrapper.
++#include "VX_types.h"
+ 
+ #if __riscv_xlen == 64
+ # define LREG ld
+@@ -60,8 +63,12 @@ _start:
+   bltz t0, 1f
+ #endif
+ 2:
++  # XLEN mismatch (unreachable in a matched Vortex build): report a
++  # failure through Vortex's IO_EXIT_CODE MMIO instead of HTIF tohost.
+   li a0, 1
+-  sw a0, tohost, t0
++  li t0, VX_MEM_IO_EXIT_CODE
++  sw a0, 0(t0)
++  fence
+   j 2b
+ 1:
+ 
+diff --git a/benchmarks/common/syscalls.c b/benchmarks/common/syscalls.c
+index 2a2a8f3..e967138 100644
+--- a/benchmarks/common/syscalls.c
++++ b/benchmarks/common/syscalls.c
+@@ -7,33 +7,18 @@
+ #include <limits.h>
+ #include <sys/signal.h>
+ #include "util.h"
+-
+-#define SYS_write 64
+-#define HTIF_DEV_CONSOLE 1
+-#define HTIF_CONSOLE_CMD_PUTC 1
++// Vortex MMIO addresses (VX_MEM_IO_COUT_* / VX_MEM_IO_EXIT_CODE) — relies
++// on -I<build>/sw being passed by the riscv-tests build wrapper.
++#include "VX_types.h"
+ 
+ #undef strcmp
+ 
+-volatile uint64_t tohost __attribute__ ((section (".tohost")));
+-volatile uint64_t fromhost __attribute__ ((section (".tohost")));
+-
+-static uintptr_t syscall(uintptr_t which, uint64_t arg0, uint64_t arg1, uint64_t arg2)
+-{
+-  volatile uint64_t magic_mem[8] __attribute__((aligned(64)));
+-  magic_mem[0] = which;
+-  magic_mem[1] = arg0;
+-  magic_mem[2] = arg1;
+-  magic_mem[3] = arg2;
+-  __sync_synchronize();
+-
+-  tohost = (uintptr_t)magic_mem;
+-  while (fromhost == 0)
+-    ;
+-  fromhost = 0;
+-
+-  __sync_synchronize();
+-  return magic_mem[0];
+-}
++// Vortex runs these benchmarks bare-metal. Console output and the exit
++// code go to Vortex's MMIO registers (VX_MEM_IO_COUT_* / VX_MEM_IO_EXIT_CODE)
++// instead of through the HTIF tohost/fromhost protocol, whose blocking
++// host<->guest handshake needs memory coherence Vortex's caches do not
++// provide. The per-hart console-byte slots are the first
++// VX_MEM_IO_COUT_SLOTS bytes of the COUT region, indexed by mhartid.
+ 
+ #define NUM_COUNTERS 2
+ static uintptr_t counters[NUM_COUNTERS];
+@@ -55,20 +40,17 @@ void setStats(int enable)
+ #undef READ_CTR
+ }
+ 
+-void __attribute__((noreturn)) tohost_exit(uintptr_t code)
++void __attribute__((noreturn)) exit(int code)
+ {
+-  tohost = (code << 1) | 1;
++  *(volatile int*)VX_MEM_IO_EXIT_CODE = code;
++  __asm__ volatile ("fence");
++  __asm__ volatile (".insn r 0x0B, 0, 0, x0, x0, x0"); // tmc x0: stop warp
+   while (1);
+ }
+ 
+ uintptr_t __attribute__((weak)) handle_trap(uintptr_t cause, uintptr_t epc, uintptr_t regs[32])
+ {
+-  tohost_exit(1337);
+-}
+-
+-void exit(int code)
+-{
+-  tohost_exit(code);
++  exit(1337);
+ }
+ 
+ void abort()
+@@ -78,9 +60,8 @@ void abort()
+ 
+ void printstr(const char* s)
+ {
+-  while (*s) {
+-    syscall(SYS_write, HTIF_DEV_CONSOLE, (uintptr_t)s++, HTIF_CONSOLE_CMD_PUTC);
+-  }
++  while (*s)
++    putchar(*s++);
+ }
+ 
+ void __attribute__((weak)) thread_entry(int cid, int nc)
+@@ -129,10 +110,8 @@ void _init(int cid, int nc)
+ #undef putchar
+ int putchar(int ch)
+ {
+-  char c = ch;
+-
+-  syscall(SYS_write, HTIF_DEV_CONSOLE, (uintptr_t)&c, HTIF_CONSOLE_CMD_PUTC);
+-
++  unsigned tid = read_csr(mhartid) & (VX_MEM_IO_COUT_SLOTS - 1);
++  *(volatile char*)(VX_MEM_IO_COUT_ADDR + tid) = (char)ch;
+   return 0;
+ }
+ 

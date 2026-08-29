@@ -1,45 +1,78 @@
 # Installing and Setting Up the Vortex Environment
 
-## Ubuntu 18.04, 20.04
+## Ubuntu 22.04
 
 1. Install the following dependencies:
 
    ```
-   sudo apt-get install build-essential zlib1g-dev libtinfo-dev libncurses5 uuid-dev libboost-serialization-dev libpng-dev libhwloc-dev
+   sudo apt-get update
+   sudo apt-get install build-essential cmake ccache zlib1g-dev libtinfo-dev libncurses-dev uuid-dev libboost-serialization-dev libpng-dev libhwloc-dev
    ```
 
-2. Upgrade GCC to 11:
+   (Optional) for roofline/perf plotting:
 
    ```
-   sudo apt-get install gcc-11 g++-11
+   sudo apt-get install python3-numpy python3-matplotlib
    ```
 
-   Multiple gcc versions on Ubuntu can be managed with update-alternatives, e.g.:
-
-   ```
-   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-9 9
-   sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-9 9
-   sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 11
-   sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-11 11
-   ```
-
-3. Download the Vortex codebase:
+2. Download the Vortex codebase:
 
    ```
    git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
    ```
-4. Build Vortex
+
+3. Build and install Vortex:
 
    ```
    $ cd vortex
    $ mkdir -p build
    $ cd build
    $ ../configure --xlen=32 --tooldir=$HOME/tools
-   $ ./ci/toolchain_install.sh --all
-   $ source ./ci/toolchain_env.sh
+   $ ./ci/toolchain_install.sh
    $ make -s
+   $ make install
+   $ export VORTEX_PATH=$(pwd)/install
+   $ export PKG_CONFIG_PATH=$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH
    ```
 
+   `../configure` writes the full toolchain layout (paths, XCONFIGS,
+   tool binaries) into the build dir's Makefiles, so no shell env
+   sourcing is required and multiple Vortex trees can coexist on one
+   machine without a global `~/.bashrc` clobber.
+
+   Useful configure options: `--xlen={32,64}` selects the ISA width and
+   `--prefix=<path>` the install location. Two SimX build knobs are plain
+   config defines, passed like any `VX_CFG_*` option through `CONFIGS`:
+   `-DSIMX_MT=<T>` runs the simulator on `T` host threads (default serial;
+   cycle results are bit-identical for every thread count), and
+   `-DSIMX_FUNCTIONAL` builds the **functional** simulation kernel (timing
+   disabled, for full-speed architectural runs such as conformance suites —
+   functional cycle counts are non-physical and must never be used for
+   performance comparisons):
+
+   ```
+   $ CONFIGS="-DSIMX_MT=4" ./ci/blackbox.sh --driver=simx --app=sgemm --cores=4 --l2cache
+   $ CONFIGS="-DSIMX_FUNCTIONAL" ./ci/blackbox.sh --driver=simx --app=sgemm
+   ```
+
+   `make install` lays out the Vortex SDK under `$VORTEX_PATH` (default
+   `<build>/install`, override with `../configure --prefix=...`):
+
+   ```
+   $VORTEX_PATH/
+   ├── kernel/include/        public device-side headers (vx_*.h)
+   ├── kernel/lib<XLEN>/      libvortex2.a + libvortex.a
+   ├── runtime/include/       public host-side headers (graphics.h,
+   │                           vortex2.h, vortex.h, tensor.h, dxa.h)
+   ├── runtime/lib/           libvortex.so + libvortex-{simx,xrt,
+   │                           rtlsim,opae}.so
+   └── lib/pkgconfig/         vortex-runtime.pc + vortex-kernel.pc
+   ```
+
+   Downstream tools (mesa, pocl, chipstar) consume Vortex through
+   `$VORTEX_PATH` and `pkg-config` — same shape as the CUDA, ROCm
+   and oneAPI SDKs. Source-tree paths (`$VORTEX_HOME`) and build-tree
+   paths (`$VORTEX_BUILD_DIR`) are not exposed to those consumers.
 
 ## RHEL 8
 Note: depending on the system, some of the toolchain may need to be recompiled for non-Ubuntu Linux. The source for the tools can be found [here](https://github.com/vortexgpgpu/).
@@ -48,6 +81,12 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
 
    ```
    sudo yum install libpng-devel boost boost-devel boost-serialization libuuid-devel opencl-headers hwloc hwloc-devel gmp-devel compat-hwloc1
+   ```
+
+   (Optional) for roofline/perf plotting:
+
+   ```
+   sudo yum install python3-numpy python3-matplotlib
    ```
 
 2. Upgrade GCC to 11:
@@ -68,14 +107,18 @@ Note: depending on the system, some of the toolchain may need to be recompiled f
    git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
    ```
 
-5. Build Vortex
+5. Build and install Vortex
 
    ```
    $ cd vortex
    $ mkdir -p build
    $ cd build
    $ ../configure --xlen=32 --tooldir=$HOME/tools
-   $ ./ci/toolchain_install.sh --all
-   $ source ./ci/toolchain_env.sh
+   $ ./ci/toolchain_install.sh
    $ make -s
+   $ make install
+   $ export VORTEX_PATH=$(pwd)/install
+   $ export PKG_CONFIG_PATH=$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH
    ```
+
+   See the Ubuntu section above for the install-tree layout.

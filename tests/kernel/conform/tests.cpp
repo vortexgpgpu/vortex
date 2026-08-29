@@ -1,7 +1,7 @@
+#include <VX_types.h>
 #include "tests.h"
 #include <stdio.h>
 #include <algorithm>
-#include <VX_config.h>
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <vx_spawn.h>
@@ -12,7 +12,6 @@ int __attribute__((noinline)) check_error(const int* __UNIFORM__  buffer, int __
 		int value = buffer[i];
 		int ref_value = 65 + i;
 		if (value == ref_value)	{
-			//PRINTF("[%d] %c\n", i, value);
 		} else {
 			PRINTF("*** error: [%d] 0x%x, expected 0x%x\n", i, value, ref_value);
 			++errors;
@@ -46,7 +45,7 @@ int test_global_memory() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-volatile int* lmem_addr = (int*)LMEM_BASE_ADDR;
+volatile int* lmem_addr = (int*)VX_MEM_LMEM_BASE_ADDR;
 
 int lmem_buffer[8];
 
@@ -265,7 +264,7 @@ volatile int barrier_stall;
 
 void barrier_kernel() {
 	unsigned wid = vx_warp_id();
-	for (int i = 0; i <= (wid * 256); ++i) {
+	for (unsigned i = 0; i <= (wid * 256); ++i) {
 		++barrier_stall;
 	}
 	barrier_buffer[wid] = 65 + wid;
@@ -361,7 +360,6 @@ int shfl_buffer[SHFL_GROUP_SZ];
 
 void __attribute__((noinline)) do_shfl() {
 	int num_threads = std::min(vx_num_threads(), VOTE_GROUP_SZ);
-	int tmask = make_full_tmask(num_threads);
 	int tid = vx_thread_id();
 	int value = 65 + tid;
 
@@ -380,8 +378,6 @@ void __attribute__((noinline)) do_shfl() {
 	int v_down = vx_shfl_down(value, 1, subgroup_clamp, subgroup_mask);
 	int v_bfly = vx_shfl_bfly(value, 1, subgroup_clamp, subgroup_mask);
 	int v_idx  = vx_shfl_idx(value,  1, subgroup_clamp, subgroup_mask);
-	//PRINTF("v_up=%d, v_down=%d, v_bfly=%d, v_idx=%d\n", v_up, v_down, v_bfly, v_idx);
-  //PRINTF("exp_up=%d, exp_down=%d, exp_bfly=%d, exp_idx=%d\n", exp_up, exp_down, exp_bfly, exp_idx);
 
   // pass only if *all* four match their expected result:
   int passed = (v_up == exp_up)
@@ -401,4 +397,55 @@ int test_shfl() {
 	do_shfl();
   vx_tmc_one(); // back to thread0
 	return check_error(shfl_buffer, 0, num_threads);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+#define QSHFL_GROUP_SZ 4
+int qshfl_buffer[QSHFL_GROUP_SZ];
+
+// Every lane's XOR-1 partner is inactive here, so the segment-scoped shuffle
+// must fall back to the reader's own value rather than read a masked lane's
+// stale register.
+void __attribute__((noinline)) do_qshfl_masked() {
+	int tid = vx_thread_id();
+	int value = 65 + tid;
+	int v_bfly = vx_shfl_bfly(value, 1, VX_QUAD_CVAL, VX_QUAD_MASK);
+	qshfl_buffer[tid] = (v_bfly == value) ? (65 + tid) : 0;
+}
+
+// With the whole quad active, the same shuffle reads the neighbour.
+void __attribute__((noinline)) do_qshfl_full() {
+	int tid = vx_thread_id();
+	int value = 65 + tid;
+	int v_bfly = vx_shfl_bfly(value, 1, VX_QUAD_CVAL, VX_QUAD_MASK);
+	int v_bfly2 = vx_shfl_bfly(value, 2, VX_QUAD_CVAL, VX_QUAD_MASK);
+	int passed = (v_bfly == (65 + (tid ^ 1))) && (v_bfly2 == (65 + (tid ^ 2)));
+	qshfl_buffer[tid] = passed ? (65 + tid) : 0;
+}
+
+int test_qshfl() {
+	PRINTF("Quad Shuffle Test\n");
+	if (vx_num_threads() < QSHFL_GROUP_SZ) {
+		return 0; // a quad does not fit in this warp
+	}
+
+	// masked-source-lane rule: activate lanes 0 and 2 only, so each active
+	// lane's partner is masked. The inactive lanes' slots are pre-seeded so the
+	// shared checker only sees what the active lanes wrote.
+	for (int i = 0; i < QSHFL_GROUP_SZ; ++i) {
+		qshfl_buffer[i] = 65 + i;
+	}
+	vx_tmc(0x5);
+	do_qshfl_masked();
+	vx_tmc_one();
+	int errors = check_error(qshfl_buffer, 0, QSHFL_GROUP_SZ);
+
+	// whole quad active: the shuffle reads its neighbours
+	vx_tmc(make_full_tmask(QSHFL_GROUP_SZ));
+	do_qshfl_full();
+	vx_tmc_one();
+	errors += check_error(qshfl_buffer, 0, QSHFL_GROUP_SZ);
+
+	return errors;
 }

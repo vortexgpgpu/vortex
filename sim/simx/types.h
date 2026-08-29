@@ -14,43 +14,85 @@
 #pragma once
 
 #include <stdint.h>
+#include <array>
 #include <bitset>
+#include <memory>
 #include <queue>
 #include <vector>
 #include <unordered_map>
 #include <variant>
+#include <functional>
 #include <util.h>
 #include <stringutil.h>
 #include <VX_config.h>
 #include <VX_types.h>
+
+// Simulation-kernel selection for the SimX build. The component-facing API
+// (SimObject, SimChannel, SimEventLink, SimPlatform) is identical in both
+// kernels; -DSIMX_FUNCTIONAL (set via build CONFIGS, uniform across every
+// object in a build) selects the functional kernel, which disables timing
+// simulation (unit latency, no back-pressure) for full-speed architectural
+// runs. Each kernel's symbols differ at link time, so mixing objects built
+// against different kernels fails loudly instead of violating ODR.
+#ifdef SIMX_FUNCTIONAL
+#include <simobject_functional.h>
+#else
 #include <simobject.h>
+#endif
+
+#include <regslice.h>
 #include <bitvector.h>
 #include <iostream>
 #include "debug.h"
+
+// Worker-thread count for the lockstep executor, set by the build system
+// (e.g. CONFIGS="-DSIMX_MT=4"); 0 or 1 selects serial execution. Resolved
+// here into a typed constant and handed to the kernel at platform setup —
+// the kernel headers themselves are knob-free.
+#ifndef SIMX_MT
+#define SIMX_MT 0
+#endif
 #include "constants.h"
 
 namespace vortex {
 
+constexpr uint32_t SIMX_NUM_WORKERS = (SIMX_MT > 1) ? SIMX_MT : 1;
+
+// One memory block (a cache line / DRAM transfer unit). Carried by
+// MemReq/MemRsp in TLM data-path mode. Use `shared_ptr<mem_block_t>` so
+// MSHR-coalesced replays share a single fill buffer without copying.
+using mem_block_t = std::array<uint8_t, VX_CFG_MEM_BLOCK_SIZE>;
+
 typedef uint8_t Byte;
 
-#if (XLEN == 32)
+#if (VX_CFG_XLEN == 32)
 typedef uint32_t Word;
 typedef int32_t  WordI;
 typedef uint64_t DWord;
 typedef int64_t  DWordI;
-#elif (XLEN == 64)
+#elif (VX_CFG_XLEN == 64)
 typedef uint64_t Word;
 typedef int64_t  WordI;
 typedef __uint128_t DWord;
 typedef __int128_t DWordI;
 #else
-#error unsupported XLEN
+#error unsupported VX_CFG_XLEN
 #endif
 
 typedef std::bitset<MAX_NUM_CORES>   CoreMask;
 typedef std::bitset<MAX_NUM_REGS>    RegMask;
 typedef BitVector<Word>              ThreadMask;
 typedef std::bitset<MAX_NUM_WARPS>   WarpMask;
+
+///////////////////////////////////////////////////////////////////////////////
+
+// Decode a packed kernel bar_id (local_group_id | (bar_no << 8)) to a flat barrier index.
+// Preserves the global barrier flag (bit 31).
+inline uint32_t bar_decode_id(uint32_t bar_id_raw, uint32_t num_barriers) {
+  uint32_t cta_no = bar_id_raw & 0xffu;
+  uint32_t bar_no = (bar_id_raw >> 8) & 0x7fffffu;
+  return (cta_no * num_barriers + bar_no) | (bar_id_raw & 0x80000000u);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -69,6 +111,32 @@ union reg_data_t {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+struct warp_barrier_t {
+  WarpMask wait_mask    = 0;  // warps actually suspended on this barrier
+  WarpMask arrival_mask = 0;  // global-barrier per-core arrival tracker
+  uint32_t count  = 0;
+  uint32_t events = 0;
+  uint32_t phase  = 0;
+
+  void reset() {
+    wait_mask.reset();
+    arrival_mask.reset();
+    count  = 0;
+    events = 0;
+    phase  = 0;
+  }
+};
+
+struct core_barrier_t {
+  CoreMask mask = 0;
+
+  void reset() {
+    mask = 0;
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 struct op_string_t {
   std::string op;
   std::string arg;
@@ -80,9 +148,6 @@ enum class RegType {
   None,
   Integer,
   Float,
-#ifdef EXT_V_ENABLE
-  Vector,
-#endif
   Count
 };
 
@@ -91,9 +156,6 @@ inline std::ostream &operator<<(std::ostream &os, const RegType& type) {
   case RegType::None: break;
   case RegType::Integer: os << "x"; break;
   case RegType::Float:   os << "f"; break;
-#ifdef EXT_V_ENABLE
-  case RegType::Vector:  os << "v"; break;
-#endif
   default: assert(false);
   }
   return os;
@@ -127,10 +189,7 @@ enum class FUType {
   LSU,
   FPU,
   SFU,
-#ifdef EXT_V_ENABLE
-  VPU,
-#endif
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
   TCU,
 #endif
   Count
@@ -142,10 +201,7 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::LSU: os << "LSU"; break;
   case FUType::FPU: os << "FPU"; break;
   case FUType::SFU: os << "SFU"; break;
-#ifdef EXT_V_ENABLE
-  case FUType::VPU: os << "VPU"; break;
-#endif
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
   case FUType::TCU: os << "TCU"; break;
 #endif
   default:
@@ -210,6 +266,7 @@ enum class BrType {
 
 struct IntrBrArgs {
   uint32_t cmp : 3;
+  uint32_t is_rvc : 1;
   uint32_t offset;
 };
 
@@ -269,6 +326,21 @@ inline std::ostream &operator<<(std::ostream &os, const ShflType& shfl) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+enum class WgatherType {
+  WGATHER
+};
+
+struct IntrWgatherArgs {
+  uint32_t src_lane : 2;
+};
+
+inline std::ostream &operator<<(std::ostream &os, const WgatherType& /*type*/) {
+  os << "WGATHER";
+  return os;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class MdvType {
   MUL,
   MULHU,
@@ -310,8 +382,8 @@ enum class LsuType {
 
 struct IntrLsuArgs {
   uint32_t width : 3;
-  uint32_t is_float : 1;
-  uint32_t offset;
+  uint32_t stride : 4;  // per-uop multiplier: 0 = regular LD/ST; 0..N-1 = packLD uop_idx
+  int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
 };
 
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
@@ -327,6 +399,102 @@ inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Memory-op tag. Always-present ops (LD/ST/FLUSH) at the low values,
+// VX_CFG_EXT_A_ENABLE atomic family contiguous at 3..13.
+enum class MemOp : uint8_t {
+  // Always-present (independent of VX_CFG_EXT_A_ENABLE)
+  LD        = 0,
+  ST        = 1,
+  FLUSH     = 2,
+  // Atomic family (only meaningful when VX_CFG_EXT_A_ENABLE)
+  AMO_LR    = 3,
+  AMO_SC    = 4,
+  AMO_SWAP  = 5,
+  AMO_ADD   = 6,
+  AMO_AND   = 7,
+  AMO_OR    = 8,
+  AMO_XOR   = 9,
+  // MIN/MAX collapse signed/unsigned variants; the LSU sets
+  // `flags.amo_unsigned` for AMOMINU/AMOMAXU and the AMO ALU branches on it.
+  AMO_MIN   = 10,
+  AMO_MAX   = 11,
+  // Compare-and-swap. Kept last so the range checks below stay contiguous;
+  // it is the only atomic that reads a third operand (the comparand, which
+  // the instruction takes from rd).
+  AMO_CAS   = 12,
+};
+
+inline bool memop_is_atomic(MemOp op) {
+  return op >= MemOp::AMO_LR && op <= MemOp::AMO_CAS;
+}
+inline bool memop_is_amo_rmw(MemOp op) {
+  return op >= MemOp::AMO_SWAP && op <= MemOp::AMO_CAS;
+}
+inline bool memop_is_write(MemOp op) {
+  return op == MemOp::ST || op == MemOp::AMO_SC || memop_is_amo_rmw(op);
+}
+inline bool memop_is_amo(MemOp op) { return memop_is_atomic(op); }
+
+// Memory-request flags.
+struct MemFlags {
+  union {
+    uint32_t raw;
+    struct {
+      uint32_t strsp        : 1;  // bit 0: store-response enabled (opt-in)
+      uint32_t io           : 1;  // bit 1: uncacheable I/O
+      uint32_t local        : 1;  // bit 2: LMEM port
+      uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
+    #ifdef VX_CFG_EXT_DXA_ENABLE
+      // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
+      // notify_bar_id carries the RAW (kernel-encoded) bar handle:
+      //   bits[7:0]   = cta_local_id (= get_local_group_id())
+      //   bits[N+7:8] = user bar_no (N = CLOG2(NUM_BARRIERS))
+      // Multicast adds cta_warp_idx into the low byte, so the field must
+      // be wide enough to hold (bar_no << 8) | (MAX_CTAS_per_core - 1).
+      // For NUM_BARRIERS = 8 and NUM_WARPS ≤ 16, that's at most 11 bits;
+      // 16 bits leaves headroom for larger configs.
+      uint32_t dxa_notify_done   : 1;   // bit 4
+      uint32_t dxa_notify_bar_id : 16;  // bits 5..20
+    #endif
+    };
+  };
+
+  MemFlags() : raw(0) {}
+  MemFlags(uint32_t r) : raw(r) {}
+
+  bool any()  const { return raw != 0; }
+  bool none() const { return raw == 0; }
+
+  bool operator==(const MemFlags& o) const { return raw == o.raw; }
+  bool operator!=(const MemFlags& o) const { return raw != o.raw; }
+
+  friend std::ostream& operator<<(std::ostream& os, const MemFlags& f) {
+    os << "0x" << std::hex << f.raw << std::dec;
+    return os;
+  }
+};
+static_assert(sizeof(MemFlags) == sizeof(uint32_t), "MemFlags must be 32-bit");
+
+inline std::ostream &operator<<(std::ostream &os, const MemOp& op) {
+  switch (op) {
+  case MemOp::LD:        os << "LD"; break;
+  case MemOp::ST:        os << "ST"; break;
+  case MemOp::FLUSH:     os << "FLUSH"; break;
+  case MemOp::AMO_LR:    os << "AMO_LR"; break;
+  case MemOp::AMO_SC:    os << "AMO_SC"; break;
+  case MemOp::AMO_SWAP:  os << "AMO_SWAP"; break;
+  case MemOp::AMO_ADD:   os << "AMO_ADD"; break;
+  case MemOp::AMO_AND:   os << "AMO_AND"; break;
+  case MemOp::AMO_OR:    os << "AMO_OR"; break;
+  case MemOp::AMO_XOR:   os << "AMO_XOR"; break;
+  case MemOp::AMO_MIN:   os << "AMO_MIN"; break;
+  case MemOp::AMO_MAX:   os << "AMO_MAX"; break;
+  case MemOp::AMO_CAS:   os << "AMO_CAS"; break;
+  default:               os << "?MemOp" << (int)op; break;
+  }
+  return os;
+}
+
 enum class AmoType {
   LR,
   SC,
@@ -338,7 +506,8 @@ enum class AmoType {
   AMOMIN,
   AMOMAX,
   AMOMINU,
-  AMOMAXU
+  AMOMAXU,
+  AMOCAS
 };
 
 struct IntrAmoArgs {
@@ -429,11 +598,14 @@ enum class WctlType {
   SPLIT,
   JOIN,
   BAR,
-  PRED
+  PRED,
+  WSYNC
 };
 
 struct IntrWctlArgs {
-  uint32_t is_neg : 1;
+  uint32_t is_cond_neg : 1;
+  uint32_t is_sync_bar : 1;
+  uint32_t is_bar_arrive : 1;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
@@ -444,11 +616,114 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
   case WctlType::JOIN:   os << "JOIN"; break;
   case WctlType::BAR:    os << "BAR"; break;
   case WctlType::PRED:   os << "PRED"; break;
+  case WctlType::WSYNC:  os << "WSYNC"; break;
   default:
     assert(false);
   }
   return os;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+
+enum class DxaType {
+  ISSUE
+};
+
+struct IntrDxaArgs {};
+
+inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
+  switch (type) {
+  case DxaType::ISSUE: os << "DXA.ISSUE"; break;
+  default: os << "?"; break;
+  }
+  return os;
+}
+
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+#ifdef VX_CFG_EXT_TEX_ENABLE
+
+enum class TexType { SAMPLE };
+
+struct IntrTexArgs {
+  uint32_t stage : 2;     // texture stage (funct2)
+};
+
+inline std::ostream &operator<<(std::ostream &os, const TexType& type) {
+  switch (type) {
+  case TexType::SAMPLE: os << "TEX"; break;
+  default: os << "?"; break;
+  }
+  return os;
+}
+
+#endif
+
+#ifdef VX_CFG_EXT_OM_ENABLE
+
+enum class OmType { EXPORT };
+
+struct IntrOmArgs {
+  // vx_om_export only: bit 0 = colour, bit 1 = depth. A shader emits colour only
+  // (early-Z owns depth), depth only (z-prepass), or both (gl_FragDepth).
+  uint32_t export_mask = 0;
+};
+
+inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
+  switch (type) {
+  case OmType::EXPORT: os << "OM_EXPORT"; break;
+  default: os << "?"; break;
+  }
+  return os;
+}
+
+#endif
+
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+
+// RTU (Ray-Tracing Unit) — PRISM ops.
+// All share CUSTOM1 / funct3=5; sub-op (funct2) selects.
+//   sub-op=0 SET    write one RTU reg (R-type, slot in funct7[6:2])
+//   sub-op=1 GET    read one RTU reg
+//   sub-op=2 TRACE  async ray issue; returns handle
+//   sub-op=3 WAIT   block on handle; returns terminal status
+//   sub-op=4 CB_RET release a yielded ray with an action code
+//                   (ACCEPT / IGNORE / TERMINATE). rs1 = action.
+enum class GfxwType {
+  CB_RET,     // funct3=6 sub0: release a parked callback context
+  TRACE,    // single-issue trace macro-op (expands to CFG/ORIGIN/DIR/ARM uops)
+  WAIT,     // single-op block — parks until terminal, returns status
+            // (parks/revives so it survives an async callback trap)
+  GETWF,    // FP windowed regfile read (collapses N contiguous
+            // float-slot vx_rt_get into one macro-op; callback read path)
+  GETW,     // GP twin of GETWF (integer slots, no NaN-box). vx_rt_wait
+            // reads t/u/v via GETWF and the IDs via GETW after the WAIT block.
+};
+
+struct IntrGfxwArgs {
+  uint32_t slot  : 6;  // hit-window slot ID; GETWF: window start slot
+  uint32_t uop   : 4;  // macro-op micro-op index (TRACE/WAIT/GETWF)
+  uint32_t count : 4;  // GETWF: number of contiguous slots in the window (1..8)
+};
+
+inline std::ostream &operator<<(std::ostream &os, const GfxwType& type) {
+  switch (type) {
+  case GfxwType::CB_RET: os << "GFXW.CB_RET"; break;
+  case GfxwType::TRACE: os << "GFXW.TRACE"; break;
+  case GfxwType::WAIT:  os << "GFXW.WAIT";  break;
+  case GfxwType::GETWF:  os << "GFXW.GETWF";  break;
+  case GfxwType::GETW:   os << "GFXW.GETW";   break;
+  default: os << "?"; break;
+  }
+  return os;
+}
+
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -477,182 +752,49 @@ inline std::ostream &operator<<(std::ostream &os, const CsrType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-enum class VsetType {
-  VSETVLI,
-  VSETIVLI,
-  VSETVL
-};
-
-struct IntrVsetArgs {
-  uint32_t zimm: 11;
-  uint32_t uimm: 5;
-
-  std::string to_string(VsetType type) const {
-    std::string str;
-    if (type != VsetType::VSETVL) {
-      str = "zimm=" + to_hex_str(zimm);
-      if (type == VsetType::VSETIVLI) {
-        str += ", uimm=" + to_hex_str(uimm);
-      }
-    }
-    return str;
-  }
-};
-
-inline std::ostream &operator<<(std::ostream &os, const VsetType& type) {
-  switch (type) {
-  case VsetType::VSETVLI:  os << "VSETVLI"; break;
-  case VsetType::VSETIVLI: os << "VSETIVLI"; break;
-  case VsetType::VSETVL:   os << "VSETVL"; break;
-  default:
-    assert(false);
-  }
-  return os;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-enum class VlsType {
-  VL,
-  VLS,
-  VLX,
-  VS,
-  VSS,
-  VSX
-};
-
-struct IntrVlsArgs {
-  uint32_t width:2;
-  uint32_t umop: 5;
-  uint32_t vm: 1;
-  uint32_t mew: 1;
-  uint32_t nf: 3;
-
-  std::string to_string(VlsType type) const {
-    std::string str = "width=" + std::to_string(width);
-    if (type == VlsType::VL) {
-      str +=  ", umop=" + std::to_string(umop);
-    }
-    str += ", vm=" + std::to_string(vm) +
-           ", mew=" + std::to_string(mew) +
-           ", nf=" + std::to_string(nf);
-    return str;
-  }
-};
-
-inline std::ostream &operator<<(std::ostream &os, const VlsType& type) {
-  switch (type) {
-  case VlsType::VL:  os << "VL"; break;
-  case VlsType::VLS: os << "VLS"; break;
-  case VlsType::VLX: os << "VLX"; break;
-  case VlsType::VS:  os << "VS"; break;
-  case VlsType::VSS: os << "VSS"; break;
-  case VlsType::VSX: os << "VSX"; break;
-  default:
-    assert(false);
-  }
-  return os;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-enum class VopType {
-  OPIVV,
-  OPFVV,
-  OPMVV,
-  OPIVI,
-  OPIVX,
-  OPFVF,
-  OPMVX
-};
-
-struct IntrVopArgs {
-  uint32_t vm: 1;
-  uint32_t funct6: 6;
-  uint32_t imm: 5;
-
-  std::string to_string(VopType type) const {
-    std::string str = "vm=" + std::to_string(vm) +
-                      ", funct6=" + std::to_string(funct6);
-    if (type == VopType::OPIVI || type == VopType::OPIVX) {
-      str += ", imm=" + to_hex_str(imm);
-    }
-    return str;
-  }
-};
-
-inline std::ostream &operator<<(std::ostream &os, const VopType& type) {
-  switch (type) {
-  case VopType::OPIVV:    os << "OPIVV"; break;
-  case VopType::OPFVV:    os << "OPFVV"; break;
-  case VopType::OPMVV:    os << "OPMVV"; break;
-  case VopType::OPIVI:    os << "OPIVI"; break;
-  case VopType::OPIVX:    os << "OPIVX"; break;
-  case VopType::OPFVF:    os << "OPFVF"; break;
-  case VopType::OPMVX:    os << "OPMVX"; break;
-  default:
-    assert(false);
-  }
-  return os;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
-enum class VpuOpType {
-  VSET    = 0,
-
-  ARITH   = 1,
-  IMUL    = 2,
-  IDIV    = 3,
-
-  FMA     = 4,
-  FDIV    = 5,
-  FSQRT   = 6,
-  FCVT    = 7,
-  FNCP    = 8,
-
-  // reduction
-  ARITH_R = 9,
-  FMA_R   = 10,
-  FNCP_R  = 11
-};
-
-inline std::ostream &operator<<(std::ostream &os, const VpuOpType& type) {
-  switch (type) {
-  case VpuOpType::VSET:    os << "VSET"; break;
-  case VpuOpType::ARITH:   os << "ARITH"; break;
-  case VpuOpType::IMUL:    os << "IMUL"; break;
-  case VpuOpType::IDIV:    os << "IDIV"; break;
-  case VpuOpType::FMA:     os << "FMA"; break;
-  case VpuOpType::FDIV:    os << "FDIV"; break;
-  case VpuOpType::FSQRT:   os << "FSQRT"; break;
-  case VpuOpType::FCVT:    os << "FCVT"; break;
-  case VpuOpType::FNCP:    os << "FNCP"; break;
-  case VpuOpType::ARITH_R: os << "ARITH_R"; break;
-  case VpuOpType::FMA_R:   os << "FMA_R"; break;
-  case VpuOpType::FNCP_R:  os << "FNCP_R"; break;
-  default:
-    assert(false);
-  }
-  return os;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 enum class TcuType {
   WMMA,
+  WGMMA,
+  WMMA_SP,    // Sparse variants live in distinct op_types so IntrTcuArgs
+  WGMMA_SP,   // doesn't carry a per-uop is_sparse bit.
+  TCU_LD,     // Warp-level metadata load. rd[4] selects sparse/MX namespace.
 };
 
 struct IntrTcuArgs {
-  uint32_t fmt_s  : 4;
-  uint32_t fmt_d  : 4;
-  uint32_t step_m : 4;
-  uint32_t step_n : 4;
+  uint32_t is_a_smem    : 1; // 0=register, 1=shared memory (B is always smem)
+  uint32_t cd_nregs     : 2; // 0=8, 1=16, 2=32 C/D registers
+  uint32_t fmt_s        : 5;
+  uint32_t fmt_d        : 5;
+  uint32_t step_m       : 4;
+  uint32_t step_n       : 4;
+  uint32_t step_k       : 4;
+  uint32_t is_first_uop : 1; // set per-uop by tcu_uops expansion (C4)
+  uint32_t is_last_uop  : 1;
+  uint32_t is_setup_uop : 1; // WGMMA descriptor setup uop, no FEDP compute
 };
+
+// Helper: is_sparse derived from op_type (no per-uop bit).
+inline bool tcu_is_sparse(TcuType t) {
+  return t == TcuType::WMMA_SP || t == TcuType::WGMMA_SP;
+}
+
+// Helper: WGMMA family (covers dense + sparse).
+inline bool tcu_is_wgmma(TcuType t) {
+  return t == TcuType::WGMMA || t == TcuType::WGMMA_SP;
+}
+
+// Helper: WMMA family (covers dense + sparse).
+inline bool tcu_is_wmma(TcuType t) {
+  return t == TcuType::WMMA || t == TcuType::WMMA_SP;
+}
 
 inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   switch (type) {
-  case TcuType::WMMA: os << "WMMA"; break;
+  case TcuType::WMMA:       os << "WMMA"; break;
+  case TcuType::WGMMA:      os << "WGMMA"; break;
+  case TcuType::WMMA_SP:    os << "WMMA.SP"; break;
+  case TcuType::WGMMA_SP:   os << "WGMMA.SP"; break;
+  case TcuType::TCU_LD:     os << "TCU_LD"; break;
   default:
     assert(false);
   }
@@ -671,14 +813,22 @@ using OpType = std::variant<
 , CsrType
 , VoteType
 , ShflType
+, WgatherType
 , WctlType
-#ifdef EXT_V_ENABLE
-, VsetType
-, VlsType
-, VopType
+#ifdef VX_CFG_EXT_DXA_ENABLE
+, DxaType
 #endif
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
 , TcuType
+#endif
+#ifdef VX_CFG_EXT_TEX_ENABLE
+, TexType
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+, OmType
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+, GfxwType
 #endif
 >;
 
@@ -690,14 +840,22 @@ using IntrArgs = std::variant<
 , IntrAmoArgs
 , IntrFpuArgs
 , IntrCsrArgs
+, IntrWgatherArgs
 , IntrWctlArgs
-#ifdef EXT_V_ENABLE
-, IntrVsetArgs
-, IntrVlsArgs
-, IntrVopArgs
+#ifdef VX_CFG_EXT_DXA_ENABLE
+, IntrDxaArgs
 #endif
-#ifdef EXT_TCU_ENABLE
+#ifdef VX_CFG_EXT_TCU_ENABLE
 , IntrTcuArgs
+#endif
+#ifdef VX_CFG_EXT_TEX_ENABLE
+, IntrTexArgs
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+, IntrOmArgs
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+, IntrGfxwArgs
 #endif
 >;
 
@@ -710,11 +868,11 @@ enum class AddrType {
 };
 
 inline AddrType get_addr_type(uint64_t addr) {
-  if (addr >= IO_BASE_ADDR && addr < IO_END_ADDR) {
+  if (addr >= VX_MEM_IO_BASE_ADDR && addr < VX_MEM_IO_END_ADDR) {
      return AddrType::IO;
   }
-  if (LMEM_ENABLED) {
-    if (addr >= LMEM_BASE_ADDR && (addr-LMEM_BASE_ADDR) < (1 << LMEM_LOG_SIZE)) {
+  if (VX_CFG_LMEM_ENABLED) {
+    if (addr >= VX_MEM_LMEM_BASE_ADDR && (addr-VX_MEM_LMEM_BASE_ADDR) < (1 << VX_CFG_LMEM_LOG_SIZE)) {
         return AddrType::Shared;
     }
   }
@@ -733,17 +891,11 @@ inline std::ostream &operator<<(std::ostream &os, const AddrType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-struct mem_addr_size_t {
-  uint64_t addr;
-  uint32_t size;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
 enum class ArbiterType {
   Priority,
   RoundRobin,
-  Matrix
+  Matrix,
+  GTO
 };
 
 inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
@@ -751,6 +903,7 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   case ArbiterType::Priority:   os << "Priority"; break;
   case ArbiterType::RoundRobin: os << "RoundRobin"; break;
   case ArbiterType::Matrix:     os << "Matrix"; break;
+  case ArbiterType::GTO:        os << "GTO"; break;
   default: assert(false);
   }
   return os;
@@ -761,6 +914,11 @@ public:
   IArbiterImpl() {}
   virtual ~IArbiterImpl() {}
   virtual uint32_t grant(const BitVector<>& requests) = 0;
+  virtual uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) {
+    // Default: ignore suppress mask, subclasses may override.
+    __unused (suppress);
+    return this->grant(requests);
+  }
   virtual void reset() = 0;
 };
 
@@ -831,21 +989,19 @@ public:
         bool highest_priority = true;
         for (uint32_t j = 0; j < size_; ++j) {
           if (requests[j] && priority_matrix_[i][j]) {
-            // If there is any active request with higher priority, this is not the highest
             highest_priority = false;
             break;
           }
         }
 
         if (highest_priority) {
-          // Update the priority matrix: clear the row and set the column
           for (uint32_t j = 0; j < size_; ++j) {
             if (i != j) {
               priority_matrix_[i][j] = false;
               priority_matrix_[j][i] = true;
             }
           }
-          return i; // Return the granted request index
+          return i;
         }
       }
     }
@@ -853,10 +1009,8 @@ public:
   }
 
   void reset() override {
-    // Initialize the priority matrix
     for (uint32_t i = 0; i < size_; ++i) {
       priority_matrix_[i].resize(size_);
-      // Initialize only the upper triangle to true
       for (uint32_t j = i + 1; j < size_; ++j) {
         priority_matrix_[i][j] = true;
       }
@@ -866,6 +1020,65 @@ public:
 private:
   uint32_t size_;
   std::vector<std::vector<bool>> priority_matrix_;
+};
+
+class GTOArbiter : public IArbiterImpl {
+public:
+  GTOArbiter(uint32_t size)
+    : size_(size)
+    , age_(size, 0)
+    , last_grant_(-1u) {
+    this->reset();
+  }
+
+  uint32_t grant(const BitVector<>& requests) override {
+    BitVector<> no_suppress(size_);
+    return this->grant(requests, no_suppress);
+  }
+
+  uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) override {
+    assert(requests.size() == size_);
+    assert(suppress.size() == size_);
+    // greedy: keep granting same requester if still active and unsuppressed
+    if (last_grant_ < size_ && requests.test(last_grant_) && !suppress.test(last_grant_)) {
+      this->update_ages(requests, last_grant_);
+      return last_grant_;
+    }
+    // Then-Oldest: find the unsuppressed requester with the highest age
+    uint32_t best = -1u;
+    uint32_t best_age = 0;
+    for (uint32_t i = 0; i < size_; ++i) {
+      if (requests.test(i) && !suppress.test(i) && (best == -1u || age_[i] > best_age)) {
+        best = i;
+        best_age = age_[i];
+      }
+    }
+    if (best != -1u) {
+      last_grant_ = best;
+      this->update_ages(requests, best);
+    }
+    return best;
+  }
+
+  void reset() override {
+    std::fill(age_.begin(), age_.end(), 0);
+    last_grant_ = -1u;
+  }
+
+private:
+  void update_ages(const BitVector<>& requests, uint32_t granted) {
+    for (uint32_t i = 0; i < size_; ++i) {
+      if (i == granted || !requests.test(i)) {
+        age_[i] = 0;
+      } else {
+        ++age_[i];
+      }
+    }
+  }
+
+  uint32_t size_;
+  std::vector<uint32_t> age_;
+  uint32_t last_grant_;
 };
 
 class Arbiter {
@@ -881,8 +1094,11 @@ public:
     case ArbiterType::Matrix:
       impl_ = std::make_shared<MatrixArbiter>(size);
       break;
+    case ArbiterType::GTO:
+      impl_ = std::make_shared<GTOArbiter>(size);
+      break;
     default:
-      assert(false); // Should never reach here
+      assert(false);
     }
   }
 
@@ -890,6 +1106,10 @@ public:
 
   uint32_t grant(const BitVector<>& requests) {
     return impl_->grant(requests);
+  }
+
+  uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) {
+    return impl_->grant(requests, suppress);
   }
 
   void reset() {
@@ -903,24 +1123,41 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 
 struct LsuReq {
-  BitVector<> mask;
+  MemOp op;
+  MemFlags flags;
   std::vector<uint64_t> addrs;
-  bool     write;
+  std::vector<std::shared_ptr<mem_block_t>> data;
+  std::vector<uint64_t> byteen;
+  // Comparand per lane. Only compare-and-swap reads it; it is a separate
+  // field because the data operand is already carrying the swap value.
+  std::vector<uint64_t> amo_cmp;
+  BitVector<> mask;
+  std::vector<uint32_t> tids;
   uint32_t tag;
   uint32_t cid;
+  uint32_t wid;
   uint64_t uuid;
 
   LsuReq(uint32_t size)
-    : mask(size)
+    : op(MemOp::LD)
+    , flags()
     , addrs(size, 0)
-    , write(false)
+    , data(size)
+    , byteen(size, 0)
+    , amo_cmp(size, 0)
+    , mask(size)
+    , tids(size, 0)
     , tag(0)
     , cid(0)
+    , wid(0)
     , uuid(0)
   {}
 
+  bool is_write() const { return memop_is_write(op); }
+  bool is_amo() const { return memop_is_atomic(op); }
+
   friend std::ostream &operator<<(std::ostream &os, const LsuReq& req) {
-    os << "rw=" << req.write << ", mask=" << req.mask << ", addr={";
+    os << "op=" << req.op << ", mask=" << req.mask << ", addr={";
     bool first_addr = true;
     for (size_t i = 0; i < req.mask.size(); ++i) {
       if (!first_addr) os << ", ";
@@ -945,11 +1182,15 @@ struct LsuRsp {
   uint32_t cid;
   uint64_t uuid;
 
+  // TLM data: per-lane block populated for loads/AMO returns.
+  std::vector<std::shared_ptr<mem_block_t>> data;
+
  LsuRsp(uint32_t size)
     : mask(size)
     , tag (0)
     , cid(0)
     , uuid(0)
+    , data(size)
   {}
 
   friend std::ostream &operator<<(std::ostream &os, const LsuRsp& rsp) {
@@ -961,33 +1202,83 @@ struct LsuRsp {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-struct MemReq {
-  uint64_t addr;
-  bool     write;
-  AddrType type;
-  uint32_t tag;
-  uint32_t cid;
-  uint64_t uuid;
+// Maps RVA AmoType → MemOp. Signed/unsigned MIN/MAX variants collapse onto
+// MemOp::AMO_MIN/MAX; the unsigned distinction rides on flags.amo_unsigned
+// (set per-AMO by the LSU via amo_is_unsigned() below).
+inline MemOp amo_to_memop(AmoType t) {
+  switch (t) {
+  case AmoType::LR:      return MemOp::AMO_LR;
+  case AmoType::SC:      return MemOp::AMO_SC;
+  case AmoType::AMOADD:  return MemOp::AMO_ADD;
+  case AmoType::AMOSWAP: return MemOp::AMO_SWAP;
+  case AmoType::AMOXOR:  return MemOp::AMO_XOR;
+  case AmoType::AMOOR:   return MemOp::AMO_OR;
+  case AmoType::AMOAND:  return MemOp::AMO_AND;
+  case AmoType::AMOMIN:
+  case AmoType::AMOMINU: return MemOp::AMO_MIN;
+  case AmoType::AMOMAX:
+  case AmoType::AMOMAXU: return MemOp::AMO_MAX;
+  case AmoType::AMOCAS:  return MemOp::AMO_CAS;
+  }
+  std::abort();
+}
 
-  MemReq(uint64_t _addr = 0,
-          bool _write = false,
-          AddrType _type = AddrType::Global,
-          uint64_t _tag = 0,
-          uint32_t _cid = 0,
-          uint64_t _uuid = 0
-  ) : addr(_addr)
-    , write(_write)
-    , type(_type)
+// True for RVA MIN/MAX unsigned variants; carried as flags.amo_unsigned.
+inline bool amo_is_unsigned(AmoType t) {
+  return t == AmoType::AMOMINU || t == AmoType::AMOMAXU;
+}
+
+// Globally-unique per-hart id. Lower bits carry the most entropy
+// (thread, then warp, then core) so the small per-bank reservation
+// table sees fewer hash collisions.
+inline uint32_t make_hart_id(uint32_t cid, uint32_t wid, uint32_t tid) {
+  constexpr uint32_t LOG_WARPS   = log2ceil(VX_CFG_NUM_WARPS);
+  constexpr uint32_t LOG_THREADS = log2ceil(VX_CFG_NUM_THREADS);
+  return (cid << (LOG_WARPS + LOG_THREADS))
+       | (wid << LOG_THREADS)
+       | tid;
+}
+
+struct MemReq {
+  MemOp    op;
+  uint64_t addr;
+  std::shared_ptr<mem_block_t> data;
+  uint64_t byteen = 0;
+  // Comparand, read only by compare-and-swap. The data block carries the
+  // swap value, so the comparand needs a field of its own.
+  uint64_t amo_cmp = 0;
+  uint32_t tag;
+  uint32_t hart_id;
+  uint64_t uuid;
+  MemFlags flags;
+
+  MemReq(MemOp _op = MemOp::LD,
+         uint64_t _addr = 0,
+         const std::shared_ptr<mem_block_t>& _data = nullptr,
+         uint64_t _byteen = 0,
+         uint64_t _tag = 0,
+         uint32_t _hart_id = 0,
+         uint64_t _uuid = 0
+  ) : op(_op)
+    , addr(_addr)
+    , data(_data)
+    , byteen(_byteen)
     , tag(_tag)
-    , cid(_cid)
+    , hart_id(_hart_id)
     , uuid(_uuid)
   {}
 
+  bool is_write() const { return memop_is_write(op); }
+  AddrType addr_type() const { return get_addr_type(addr); }
+
   friend std::ostream &operator<<(std::ostream &os, const MemReq& req) {
-    os << "rw=" << req.write << ", ";
-    os << "addr=0x" << std::hex << req.addr << std::dec << ", type=" << req.type;
-    os << ", tag=0x" << std::hex << req.tag << std::dec << ", cid=" << req.cid;
-    os << " (#" << req.uuid << ")";
+    os << "op=" << req.op
+       << ", addr=0x" << std::hex << req.addr << std::dec
+       << ", type=" << req.addr_type()
+       << ", tag=0x" << std::hex << req.tag << std::dec
+       << ", hart_id=" << req.hart_id
+       << ", flags=" << req.flags
+       << " (#" << req.uuid << ")";
     return os;
   }
 };
@@ -996,17 +1287,22 @@ struct MemReq {
 
 struct MemRsp {
   uint64_t tag;
-  uint32_t cid;
+  uint32_t hart_id;
   uint64_t uuid;
+  std::shared_ptr<mem_block_t> data;
 
-  MemRsp(uint64_t _tag = 0, uint32_t _cid = 0, uint64_t _uuid = 0)
-    : tag (_tag)
-    , cid(_cid)
+  MemRsp(uint64_t _tag = 0,
+         uint32_t _hart_id = 0,
+         uint64_t _uuid = 0,
+         const std::shared_ptr<mem_block_t>& _data = nullptr
+  ) : tag(_tag)
+    , hart_id(_hart_id)
     , uuid(_uuid)
+    , data(_data)
   {}
 
   friend std::ostream &operator<<(std::ostream &os, const MemRsp& rsp) {
-    os << "tag=0x" << std::hex << rsp.tag << std::dec << ", cid=" << rsp.cid;
+    os << "tag=0x" << std::hex << rsp.tag << std::dec << ", hart_id=" << rsp.hart_id;
     os << " (#" << rsp.uuid << ")";
     return os;
   }
@@ -1091,71 +1387,62 @@ private:
 template <typename T>
 class TFifo : public SimObject<TFifo<T>> {
 public:
+  using Ptr = std::shared_ptr<TFifo<T>>;
   using Type = T;
 
-  TFifo(const SimContext& ctx, const char* name, uint32_t delay, uint32_t capacity = 0)
+  TFifo(const SimContext& ctx, const char* name, uint32_t delay, uint32_t capacity = 2)
     : SimObject<TFifo<T>>(ctx, name)
-    , bus_(this, capacity)
+    , channel_(this, capacity)
     , delay_(delay) {
   }
 
-  void reset() {
-    //--
-  }
-
-  void tick() {
-    //--
-  }
-
   bool empty() const {
-    return bus_.empty();
+    return channel_.empty();
   }
 
   bool full() const {
-    return bus_.full();
+    return channel_.full();
   }
 
   uint32_t size() const {
-    return bus_.size();
+    return channel_.size();
+  }
+
+  bool try_push(const Type& value) {
+    return channel_.try_send(value, delay_);
   }
 
   void push(const Type& value) {
-    if (bus_.full()) {
-      throw std::runtime_error("FIFO is full");
-    }
-    bus_.push(value, delay_);
+    channel_.send(value, delay_);
   }
 
-  Type& front() {
-    if (bus_.empty()) {
+  const Type& peek() const {
+    if (channel_.empty()) {
       throw std::runtime_error("FIFO is empty");
     }
-    return bus_.front();
-  }
-
-  const Type& front() const {
-    if (bus_.empty()) {
-      throw std::runtime_error("FIFO is empty");
-    }
-    return bus_.front();
+    return channel_.peek();
   }
 
   void pop() {
-    if (bus_.empty()) {
+    if (channel_.empty()) {
       throw std::runtime_error("FIFO is empty");
     }
-    bus_.pop();
+    channel_.pop();
   }
 
 private:
-  SimPort<Type> bus_;
+  SimChannel<Type> channel_;
   uint32_t delay_;
+
+  friend class SimObject<TFifo<T>>;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
+
 template <typename Type>
 class TxArbiter : public SimObject<TxArbiter<Type>> {
 public:
+  using Ptr = std::shared_ptr<TxArbiter<Type>>;
   typedef Type ReqType;
 
   struct RspType {
@@ -1172,16 +1459,16 @@ public:
     }
   };
 
-  std::vector<SimPort<ReqType>> Inputs;
-  std::vector<SimPort<RspType>> Outputs;
+  std::vector<SimChannel<ReqType>> Inputs;
+  std::vector<SimChannel<RspType>> Outputs;
 
   TxArbiter(
     const SimContext& ctx,
     const char* name,
     ArbiterType type,
     uint32_t num_inputs,
-    uint32_t num_outputs = 1,
-    uint32_t delay = 1
+    uint32_t num_outputs,
+    uint32_t delay
   ) : SimObject<TxArbiter<Type>>(ctx, name)
     , Inputs(num_inputs, this)
     , Outputs(num_outputs, this)
@@ -1189,7 +1476,6 @@ public:
     , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
     , arbiters_(num_outputs, {type, 1u << lg2_num_reqs_})
   {
-    assert(delay != 0);
     assert(num_inputs <= 64);
     assert(num_outputs <= 64);
     assert(num_inputs >= num_outputs);
@@ -1202,54 +1488,85 @@ public:
     }
   }
 
-  void reset() {
-    for (auto& arb : arbiters_) {
-      arb.reset();
-    }
+  TxArbiter(
+    const SimContext& ctx,
+    const char* name,
+    ArbiterType type,
+    uint32_t num_inputs,
+    uint32_t num_outputs
+  ) : TxArbiter<Type>(ctx, name, type, num_inputs, num_outputs,
+      ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
+  {}
+
+protected:
+  void on_reset();
+  void on_tick();
+
+  uint32_t delay_;
+  uint32_t lg2_num_reqs_;
+  std::vector<Arbiter> arbiters_;
+
+  friend class SimObject<TxArbiter<Type>>;
+};
+
+template <typename Type>
+void TxArbiter<Type>::on_reset() {
+  for (auto& arb : arbiters_) {
+    arb.reset();
+  }
+}
+
+template <typename Type>
+void TxArbiter<Type>::on_tick() {
+  uint32_t I = Inputs.size();
+  uint32_t O = Outputs.size();
+  uint32_t R = 1 << lg2_num_reqs_;
+
+  // bypass mode: inputs are forwarded to outputs at bind time; this object
+  // never has per-cycle work.
+  if (I == O) {
+    this->tick_sleep();
+    return;
   }
 
-  void tick() {
-    uint32_t I = Inputs.size();
-    uint32_t O = Outputs.size();
-    uint32_t R = 1 << lg2_num_reqs_;
-
-    // skip bypass mode
-    if (I == O)
-      return;
-
-    // process inputs
-    for (uint32_t o = 0; o < O; ++o) {
-      BitVector<> requests(R);
-      for (uint32_t r = 0; r < R; ++r) {
-        uint32_t i = o * R + r;
-        if (i >= I)
-          continue;
-        requests.set(r, !Inputs.at(i).empty());
-      }
-      if (requests.any()) {
-        uint32_t g = arbiters_.at(o).grant(requests);
-        uint32_t i = o * R + g;
-        auto& req_in = Inputs.at(i);
-        auto& req = req_in.front();
-        DT(4, this->name() << "-req" << i << "_" << o << ": " << req);
-        Outputs.at(o).push(RspType(req, i), delay_);
+  // process inputs
+  for (uint32_t o = 0; o < O; ++o) {
+    BitVector<> requests(R);
+    for (uint32_t r = 0; r < R; ++r) {
+      uint32_t i = o * R + r;
+      if (i >= I)
+        continue;
+      requests.set(r, !Inputs.at(i).empty());
+    }
+    if (requests.any()) {
+      uint32_t g = arbiters_.at(o).grant(requests);
+      uint32_t i = o * R + g;
+      auto& req_in = Inputs.at(i);
+      auto& req = req_in.peek();
+      if (Outputs.at(o).try_send(RspType(req, i), delay_)) {
+        DT(4, this->name() << " req" << i << "_" << o << ": " << req);
         req_in.pop();
       }
     }
   }
 
-protected:
-
-  uint32_t delay_;
-  uint32_t lg2_num_reqs_;
-  std::vector<Arbiter> arbiters_;
-};
+  // sleep when no input holds a queued or in-flight request; any reserve()
+  // toward an input channel re-arms the tick.
+  bool idle = true;
+  for (uint32_t i = 0; i < I; ++i) {
+    idle &= (Inputs.at(i).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Type>
 class TxCrossBar : public SimObject<TxCrossBar<Type>> {
 public:
+  using Ptr = std::shared_ptr<TxCrossBar<Type>>;
   typedef Type ReqType;
 
   struct RspType {
@@ -1266,8 +1583,8 @@ public:
     }
   };
 
-  std::vector<SimPort<ReqType>> Inputs;
-  std::vector<SimPort<RspType>> Outputs;
+  std::vector<SimChannel<ReqType>> Inputs;
+  std::vector<SimChannel<RspType>> Outputs;
 
   TxCrossBar(
     const SimContext& ctx,
@@ -1275,7 +1592,7 @@ public:
     uint32_t num_inputs,
     uint32_t num_outputs,
     std::function<uint32_t(const Type& req)> output_sel,
-    uint32_t delay = 1
+    uint32_t delay
   )
     : SimObject<TxCrossBar<Type>>(ctx, name)
     , Inputs(num_inputs, this)
@@ -1285,7 +1602,6 @@ public:
     , lg2_outputs_(log2ceil(num_outputs))
     , output_sel_(output_sel)
     , collisions_(0) {
-    assert(delay != 0);
     assert(num_inputs <= 64);
     assert(num_outputs <= 64);
     assert(ispow2(num_outputs));
@@ -1297,99 +1613,122 @@ public:
     }
   }
 
-  void reset() {
-    //--
-  }
-
-  void tick() {
-    uint32_t I = Inputs.size();
-    uint32_t O = Outputs.size();
-    if (I == 1 && O == 1)
-      return;
-
-    // process incoming requests
-    for (uint32_t o = 0; o < O; ++o) {
-      int32_t input_idx = -1;
-      bool has_collision = false;
-      for (uint32_t i = 0; i < I; ++i) {
-        auto& req_in = Inputs.at(i);
-        if (req_in.empty())
-          continue;
-        auto& req = req_in.front();
-        uint32_t output_idx = 0;
-        if (lg2_outputs_ != 0) {
-          // select output index
-          output_idx = output_sel_(req);
-          // skip if input is not going to current output
-          if (output_idx != o)
-            continue;
-        }
-        if (input_idx != -1) {
-          has_collision = true;
-          break;
-        }
-        input_idx = i;
-      }
-      if (input_idx != -1) {
-        auto& req_in = Inputs.at(input_idx);
-        auto& req = req_in.front();
-        DT(4, this->name() << "-req" << input_idx << "_" << o << ": " << req);
-        Outputs.at(o).push(RspType(req, input_idx), delay_);
-        req_in.pop();
-        collisions_ += has_collision;
-      }
-    }
-  }
+  TxCrossBar(
+    const SimContext& ctx,
+    const char* name,
+    uint32_t num_inputs,
+    uint32_t num_outputs,
+    std::function<uint32_t(const Type& req)> output_sel
+  ) : TxCrossBar<Type>(ctx, name, num_inputs, num_outputs,
+      output_sel, ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
+  {}
 
   uint64_t collisions() const {
     return collisions_;
   }
 
 protected:
+  void on_reset() {
+    //--
+  }
+  void on_tick();
 
   uint32_t delay_;
   uint32_t lg2_inputs_;
   uint32_t lg2_outputs_;
   std::function<uint32_t(const Type& req)> output_sel_;
   uint64_t collisions_;
+
+  friend class SimObject<TxCrossBar<Type>>;
 };
+
+template <typename Type>
+void TxCrossBar<Type>::on_tick() {
+  uint32_t I = Inputs.size();
+  uint32_t O = Outputs.size();
+  if (I == 1 && O == 1) {
+    this->tick_sleep();
+    return;
+  }
+
+  // process incoming requests
+  for (uint32_t o = 0; o < O; ++o) {
+    int32_t input_idx = -1;
+    bool has_collision = false;
+    for (uint32_t i = 0; i < I; ++i) {
+      auto& req_in = Inputs.at(i);
+      if (req_in.empty())
+        continue;
+      auto& req = req_in.peek();
+      uint32_t output_idx = 0;
+      if (lg2_outputs_ != 0) {
+        // select output index
+        output_idx = output_sel_(req);
+        // skip if input is not going to current output
+        if (output_idx != o)
+          continue;
+      }
+      if (input_idx != -1) {
+        has_collision = true;
+        break;
+      }
+      input_idx = i;
+    }
+    if (input_idx != -1) {
+      auto& req_in = Inputs.at(input_idx);
+      auto& req = req_in.peek();
+      if (Outputs.at(o).try_send(RspType(req, input_idx), delay_)) {
+        DT(4, this->name() << " req" << input_idx << "_" << o << ": " << req);
+        req_in.pop();
+      }
+      collisions_ += has_collision;
+    }
+  }
+
+  bool idle = true;
+  for (uint32_t i = 0; i < I; ++i) {
+    idle &= (Inputs.at(i).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Req, typename Rsp>
 class TxRxArbiter : public SimObject<TxRxArbiter<Req, Rsp>> {
 public:
+  using Ptr = std::shared_ptr<TxRxArbiter<Req, Rsp>>;
   typedef Req ReqType;
   typedef Rsp RspType;
 
-  std::vector<SimPort<Req>>  ReqIn;
-  std::vector<SimPort<Rsp>>  RspIn;
+  std::vector<SimChannel<Req>>  ReqIn;
+  std::vector<SimChannel<Rsp>>  RspOut;
 
-  std::vector<SimPort<Req>>  ReqOut;
-  std::vector<SimPort<Rsp>>  RspOut;
+  std::vector<SimChannel<Req>>  ReqOut;
+  std::vector<SimChannel<Rsp>>  RspIn;
 
   TxRxArbiter(
     const SimContext& ctx,
     const char* name,
     ArbiterType type,
     uint32_t num_inputs,
-    uint32_t num_outputs = 1,
-    uint32_t req_delay = 1,
-    uint32_t rsp_delay = 1
+    uint32_t num_outputs,
+    uint32_t req_delay,
+    uint32_t rsp_delay
   )
     : SimObject<TxRxArbiter<Req, Rsp>>(ctx, name)
     , ReqIn(num_inputs, this)
-    , RspIn(num_inputs, this)
+    , RspOut(num_inputs, this)
     , ReqOut(num_outputs, this)
-    , RspOut(num_outputs, this)
+    , RspIn(num_outputs, this)
     , arbiter_(nullptr)
     , rsp_delay_(rsp_delay)
     , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
   {
     if (num_inputs != num_outputs) {
-      // allocate arbiter
       arbiter_ = ReqArb::Create(name, type, num_inputs, num_outputs, req_delay);
-      // bind arbiter inputs and outputs
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&arbiter_->Inputs.at(i));
       }
@@ -1408,62 +1747,87 @@ public:
       // bypass mode
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&ReqOut.at(i));
-        RspOut.at(i).bind(&RspIn.at(i));
+        RspIn.at(i).bind(&RspOut.at(i));
       }
     }
   }
 
-  void reset() {
-    //--
-  }
-
-  void tick() {
-    if (!arbiter_)
-      return;
-
-    uint32_t O = ReqOut.size();
-    uint32_t R = 1 << lg2_num_reqs_;
-
-    // process outgoing responses
-    for (uint32_t o = 0; o < O; ++o) {
-      auto& rsp_out = RspOut.at(o);
-      if (!rsp_out.empty()) {
-        auto& rsp = rsp_out.front();
-        uint32_t r = 0;
-        Rsp in_rsp(rsp);
-        if (lg2_num_reqs_ != 0) {
-          r = rsp.tag & (R-1);
-          in_rsp.tag = rsp.tag >> lg2_num_reqs_;
-        }
-        uint32_t i = o * R + r;
-        DT(4, this->name() << "-rsp" << o << "_" << i << ": " << in_rsp);
-        RspIn.at(i).push(in_rsp, rsp_delay_);
-        rsp_out.pop();
-      }
-    }
-  }
+  TxRxArbiter(
+    const SimContext& ctx,
+    const char* name,
+    ArbiterType type,
+    uint32_t num_inputs,
+    uint32_t num_outputs
+  ) : TxRxArbiter<Req, Rsp>(ctx, name, type, num_inputs, num_outputs,
+      ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0,
+      ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
+  {}
 
 protected:
+  void on_reset() {
+    //--
+  }
+  void on_tick();
+
   typedef TxArbiter<Req> ReqArb;
 
   typename ReqArb::Ptr arbiter_;
   uint32_t rsp_delay_;
   uint32_t lg2_num_reqs_;
+
+  friend class SimObject<TxRxArbiter<Req, Rsp>>;
 };
+
+template <typename Req, typename Rsp>
+void TxRxArbiter<Req, Rsp>::on_tick() {
+  // bypass mode: all channels are forwarded at bind time.
+  if (!arbiter_) {
+    this->tick_sleep();
+    return;
+  }
+
+  uint32_t O = ReqOut.size();
+  uint32_t R = 1 << lg2_num_reqs_;
+
+  // process outgoing responses
+  bool idle = true;
+  for (uint32_t o = 0; o < O; ++o) {
+    auto& rsp_in = RspIn.at(o);
+    if (!rsp_in.empty()) {
+      auto& rsp = rsp_in.peek();
+      uint32_t r = 0;
+      Rsp out_rsp(rsp);
+      if (lg2_num_reqs_ != 0) {
+        r = rsp.tag & (R-1);
+        out_rsp.tag = rsp.tag >> lg2_num_reqs_;
+      }
+      uint32_t i = o * R + r;
+      if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
+        DT(4, this->name() << " rsp" << o << "_" << i << ": " << out_rsp);
+        rsp_in.pop();
+      }
+    }
+    idle &= (rsp_in.size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
 template <typename Req, typename Rsp>
 class TxRxCrossBar : public SimObject<TxRxCrossBar<Req, Rsp>> {
 public:
+  using Ptr = std::shared_ptr<TxRxCrossBar<Req, Rsp>>;
   typedef Req ReqType;
   typedef Rsp RspType;
 
-  std::vector<SimPort<Req>> ReqIn;
-  std::vector<SimPort<Rsp>> RspIn;
+  std::vector<SimChannel<Req>> ReqIn;
+  std::vector<SimChannel<Rsp>> RspOut;
 
-  std::vector<SimPort<Req>> ReqOut;
-  std::vector<SimPort<Rsp>> RspOut;
+  std::vector<SimChannel<Req>> ReqOut;
+  std::vector<SimChannel<Rsp>> RspIn;
 
   TxRxCrossBar(
     const SimContext& ctx,
@@ -1472,23 +1836,21 @@ public:
     uint32_t num_inputs,
     uint32_t num_outputs,
     std::function<uint32_t(const Req& req)> output_sel,
-    uint32_t req_delay = 1,
-    uint32_t rsp_delay = 1
+    uint32_t req_delay,
+    uint32_t rsp_delay
   )
     : SimObject<TxRxCrossBar<Req, Rsp>>(ctx, name)
     , ReqIn(num_inputs, this)
-    , RspIn(num_inputs, this)
+    , RspOut(num_inputs, this)
     , ReqOut(num_outputs, this)
-    , RspOut(num_outputs, this)
+    , RspIn(num_outputs, this)
     , crossbar_(nullptr)
     , arbiter_(type, num_outputs)
     , rsp_delay_(rsp_delay)
     , lg2_inputs_(log2ceil(num_inputs)) {
 
     if (num_inputs != 1 || num_outputs != 1) {
-      // allocate crossbar
       crossbar_ = ReqXbar::Create(name, num_inputs, num_outputs, output_sel, req_delay);
-      // bind crossbar inputs and outputs
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&crossbar_->Inputs.at(i));
       }
@@ -1505,52 +1867,21 @@ public:
     } else {
       // bypass mode
       ReqIn.at(0).bind(&ReqOut.at(0));
-      RspOut.at(0).bind(&RspIn.at(0));
+      RspIn.at(0).bind(&RspOut.at(0));
     }
   }
 
-  void reset() {
-    arbiter_.reset();
-  }
-
-  void tick() {
-    if (!crossbar_)
-      return;
-
-    uint32_t I = ReqIn.size();
-    uint32_t O = ReqOut.size();
-    uint32_t R = 1 << lg2_inputs_;
-
-    // process outgoing responses
-    for (uint32_t i = 0; i < I; ++i) {
-      BitVector<> requests(O);
-      for (uint32_t o = 0; o < O; ++o) {
-        auto& rsp_out = RspOut.at(o);
-        if (rsp_out.empty())
-          continue;
-        auto& rsp = rsp_out.front();
-        // skip if response is not going to current input
-        if (lg2_inputs_ != 0) {
-          uint32_t input_idx = rsp.tag & (R-1);
-          if (input_idx != i)
-            continue;
-        }
-        requests.set(o);
-      }
-      if (requests.any()) {
-        uint32_t g = arbiter_.grant(requests);
-        auto& rsp_out = RspOut.at(g);
-        auto& rsp = rsp_out.front();
-        Rsp in_rsp(rsp);
-        if (lg2_inputs_ != 0) {
-          in_rsp.tag = rsp.tag >> lg2_inputs_;
-        }
-        DT(4, this->name() << "-rsp" << g << "_" << i << ": " << in_rsp);
-        RspIn.at(i).push(in_rsp, rsp_delay_);
-        rsp_out.pop();
-      }
-    }
-  }
+  TxRxCrossBar(
+    const SimContext& ctx,
+    const char* name,
+    ArbiterType type,
+    uint32_t num_inputs,
+    uint32_t num_outputs,
+    std::function<uint32_t(const Req& req)> output_sel
+  ) : TxRxCrossBar<Req, Rsp>(ctx, name, type, num_inputs, num_outputs, output_sel,
+      ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0,
+      ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
+  {}
 
   uint64_t collisions() const {
     if (crossbar_) {
@@ -1560,68 +1891,103 @@ public:
   }
 
 protected:
+  void on_reset() {
+    arbiter_.reset();
+  }
+  void on_tick();
+
   typedef TxCrossBar<Req> ReqXbar;
 
   typename ReqXbar::Ptr crossbar_;
   Arbiter arbiter_;
   uint32_t rsp_delay_;
   uint32_t lg2_inputs_;
+
+  friend class SimObject<TxRxCrossBar<Req, Rsp>>;
 };
+
+template <typename Req, typename Rsp>
+void TxRxCrossBar<Req, Rsp>::on_tick() {
+  // bypass mode: all channels are forwarded at bind time.
+  if (!crossbar_) {
+    this->tick_sleep();
+    return;
+  }
+
+  uint32_t I = ReqIn.size();
+  uint32_t O = ReqOut.size();
+  uint32_t R = 1 << lg2_inputs_;
+
+  // process outgoing responses
+  for (uint32_t i = 0; i < I; ++i) {
+    BitVector<> requests(O);
+    for (uint32_t o = 0; o < O; ++o) {
+      auto& rsp_in = RspIn.at(o);
+      if (rsp_in.empty())
+        continue;
+      auto& rsp = rsp_in.peek();
+      // skip if response is not going to current input
+      if (lg2_inputs_ != 0) {
+        uint32_t input_idx = rsp.tag & (R-1);
+        if (input_idx != i)
+          continue;
+      }
+      requests.set(o);
+    }
+    if (requests.any()) {
+      uint32_t g = arbiter_.grant(requests);
+      auto& rsp_in = RspIn.at(g);
+      auto& rsp = rsp_in.peek();
+      Rsp out_rsp(rsp);
+      if (lg2_inputs_ != 0) {
+        out_rsp.tag = rsp.tag >> lg2_inputs_;
+      }
+      if (RspOut.at(i).try_send(out_rsp, rsp_delay_)) {
+        DT(4, this->name() << " rsp" << g << "_" << i << ": " << out_rsp);
+        rsp_in.pop();
+      }
+    }
+  }
+
+  bool idle = true;
+  for (uint32_t o = 0; o < O; ++o) {
+    idle &= (RspIn.at(o).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
+  }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 
-class LocalMemSwitch : public SimObject<LocalMemSwitch> {
-public:
-  SimPort<LsuReq> ReqIn;
-  SimPort<LsuRsp> RspIn;
+// Global-barrier control messages, carried on core <-> cluster event links.
+struct GbarArrive {
+  uint32_t bar_id;
+  uint32_t count;
+  uint32_t core_id;
+};
 
-  SimPort<LsuReq> ReqLmem;
-  SimPort<LsuRsp> RspLmem;
+struct GbarResume {
+  uint32_t bar_id;
+};
 
-  SimPort<LsuReq> ReqDC;
-  SimPort<LsuRsp> RspDC;
+// Fragment-work-distributor control messages, carried on raster-core <-> core
+// event links.
+struct FwdArm {
+  Word frag_entry;
+  Word frag_param;
+};
 
-  LocalMemSwitch(
-    const SimContext& ctx,
-    const char* name,
-    uint32_t delay
-  );
-
-  void reset();
-
-  void tick();
-
-private:
-  uint32_t delay_;
+struct FwdDone {
+  uint32_t core_id;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-
-class LsuMemAdapter : public SimObject<LsuMemAdapter> {
-public:
-  SimPort<LsuReq> ReqIn;
-  SimPort<LsuRsp> RspIn;
-
-  std::vector<SimPort<MemReq>> ReqOut;
-  std::vector<SimPort<MemRsp>> RspOut;
-
-  LsuMemAdapter(
-    const SimContext& ctx,
-    const char* name,
-    uint32_t num_inputs,
-    uint32_t delay
-  );
-
-  void reset();
-
-  void tick();
-
-private:
-  uint32_t delay_;
-};
 
 using LsuArbiter  = TxRxArbiter<LsuReq, LsuRsp>;
 using MemArbiter  = TxRxArbiter<MemReq, MemRsp>;
 using MemCrossBar = TxRxCrossBar<MemReq, MemRsp>;
+using MemReqSlice = RegSlice<MemReq>;
+using MemRspSlice = RegSlice<MemRsp>;
 
 }

@@ -1,0 +1,42 @@
+#version 450
+
+/* SSBO write + atomic smoke kernel for the vortexpipe driver (W7).
+ *
+ * Exercises three distinct SSBO lowerings in vp_nir_to_llvm:
+ *   - load_ssbo   : src[i], a buffer this shader never writes
+ *   - store_ssbo  : data[i] = src[i]*3 + 1 (computed write, host reads it back)
+ *   - ssbo_atomic : atomicAdd(counter, i)  (RISC-V amoadd.w at the SSBO addr)
+ *
+ * A broken store gives a wrong array; a broken atomic gives a wrong sum
+ * (dropped/duplicated increments), so the two failure modes are separable.
+ *
+ * src is seeded with src[i] == i, so the expected results are the same as if
+ * the shader had used gl_GlobalInvocationID directly. What it adds is a
+ * descriptor the shader only ever loads: those are relocated into device
+ * memory and uploaded like any other, but the driver has no reason to copy
+ * them back afterwards. Reading a wrong or unrelocated src poisons data[] and
+ * fails the existing check.
+ *
+ * local_size_x is Vulkan specialization constant ID 0 (see compute/add1.comp);
+ * the host picks it from the device's maxComputeWorkGroupSize. */
+
+layout(local_size_x_id = 0) in;
+
+layout(std430, binding = 0) buffer OutBuf {
+   uint data[];
+};
+
+layout(std430, binding = 1) buffer CtrBuf {
+   uint counter;
+};
+
+layout(std430, binding = 2) buffer SrcBuf {
+   uint src[];
+};
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   data[i] = src[i] * 3u + 1u;
+   atomicAdd(counter, i);
+}

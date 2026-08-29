@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module Vortex import VX_gpu_pkg::*; (
+module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     `SCOPE_IO_DECL
 
     // Clock
@@ -36,17 +36,71 @@ module Vortex import VX_gpu_pkg::*; (
     output wire                             mem_rsp_ready [VX_MEM_PORTS],
 
     // DCR write request
-    input  wire                             dcr_wr_valid,
-    input  wire [VX_DCR_ADDR_WIDTH-1:0]     dcr_wr_addr,
-    input  wire [VX_DCR_DATA_WIDTH-1:0]     dcr_wr_data,
+    input  wire                             dcr_req_valid,
+    input  wire                             dcr_req_rw,
+    input  wire [VX_DCR_ADDR_WIDTH-1:0]     dcr_req_addr,
+    input  wire [VX_DCR_DATA_WIDTH-1:0]     dcr_req_data,
 
-    // Status
+    // DCR read response
+    output wire                             dcr_rsp_valid,
+    output wire [VX_DCR_DATA_WIDTH-1:0]     dcr_rsp_data,
+
+    // ctrl/status
+    input  wire                             start,
     output wire                             busy
 );
+    // Check clustering configuration
+    `STATIC_ASSERT(`IS_POW2(`VX_CFG_NUM_CLUSTERS), ("NUM_CLUSTERS must be a power of 2"));
+    `STATIC_ASSERT(`IS_POW2(`VX_CFG_NUM_CORES), ("NUM_CORES must be a power of 2"));
+    `STATIC_ASSERT(`IS_POW2(`VX_CFG_SOCKET_SIZE), ("SOCKET_SIZE must be a power of 2"));
+
+    // Every cache strictly above the LLC must be write-through.
+    // A WB intermediate could absorb a hart-B store without the LLC
+    // seeing it; a later SC from hart-A on the same line would
+    // spuriously succeed. RVA permits spurious failure, not spurious success.
+`ifdef VX_CFG_EXT_A_ENABLE
+  `ifdef VX_CFG_L3_ENABLE
+    `STATIC_ASSERT(`VX_CFG_DCACHE_WRITEBACK == 0, ("AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L3 is the LLC"));
+    `STATIC_ASSERT(`VX_CFG_L2_WRITEBACK == 0,     ("AMO requires write-through L2 (L2_WRITEBACK=0) when L3 is the LLC"));
+  `elsif VX_CFG_L2_ENABLE
+    `STATIC_ASSERT(`VX_CFG_DCACHE_WRITEBACK == 0, ("AMO requires write-through L1 (DCACHE_WRITEBACK=0) when L2 is the LLC"));
+  `endif
+`endif
+
+    VX_dcr_bus_if dcr_bus_if();
+    assign dcr_bus_if.req_valid = dcr_req_valid;
+    assign dcr_bus_if.req_data.rw = dcr_req_rw;
+    assign dcr_bus_if.req_data.addr = dcr_req_addr;
+    assign dcr_bus_if.req_data.data = dcr_req_data;
+    assign dcr_rsp_valid = dcr_bus_if.rsp_valid;
+    assign dcr_rsp_data = dcr_bus_if.rsp_data;
+
+    // Kernel Management Unit
+    VX_kmu_bus_if kmu_bus_in[1]();
+    wire kmu_busy;
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_launch_if raster_launch_if();
+`endif
+    VX_kmu #(
+        .INSTANCE_ID ("kmu")
+    ) kmu (
+        .clk        (clk),
+        .reset      (reset),
+        .start      (start),
+        .busy       (kmu_busy),
+        .dcr_req_valid (dcr_req_valid),
+        .dcr_req_rw (dcr_req_rw),
+        .dcr_req_addr(dcr_req_addr),
+        .dcr_req_data(dcr_req_data),
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        .raster_launch_if (raster_launch_if),
+    `endif
+        .kmu_bus_if (kmu_bus_in[0])
+    );
 
 `ifdef SCOPE
     localparam scope_cluster = 0;
-    `SCOPE_IO_SWITCH (`NUM_CLUSTERS);
+    `SCOPE_IO_SWITCH (`VX_CFG_NUM_CLUSTERS);
 `endif
 
 `ifdef PERF_ENABLE
@@ -61,42 +115,44 @@ module Vortex import VX_gpu_pkg::*; (
 `endif
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`L2_LINE_SIZE),
-        .TAG_WIDTH (L2_MEM_TAG_WIDTH)
-    ) per_cluster_mem_bus_if[`NUM_CLUSTERS * `L2_MEM_PORTS]();
+        .DATA_SIZE (L2_SECTOR_SIZE),
+        .TAG_WIDTH (L3_TAG_WIDTH)
+    ) per_cluster_mem_bus_if[`VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS]();
 
     VX_mem_bus_if #(
-        .DATA_SIZE (`L3_LINE_SIZE),
+        .DATA_SIZE (L3_SECTOR_SIZE),
         .TAG_WIDTH (L3_MEM_TAG_WIDTH)
-    ) mem_bus_if[`L3_MEM_PORTS]();
-
-    `RESET_RELAY (l3_reset, reset);
+    ) mem_bus_if[L3_MEM_PORTS]();
 
     VX_cache_wrap #(
         .INSTANCE_ID    ("l3cache"),
-        .CACHE_SIZE     (`L3_CACHE_SIZE),
-        .LINE_SIZE      (`L3_LINE_SIZE),
-        .NUM_BANKS      (`L3_NUM_BANKS),
-        .NUM_WAYS       (`L3_NUM_WAYS),
+        .CACHE_SIZE     (`VX_CFG_L3_SIZE),
+        .LINE_SIZE      (`VX_CFG_L3_LINE_SIZE),
+        .SECTOR_SIZE    (L3_SECTOR_SIZE),
+        .NUM_BANKS      (L3_NUM_BANKS),
+        .NUM_WAYS       (`VX_CFG_L3_NUM_WAYS),
         .WORD_SIZE      (L3_WORD_SIZE),
         .NUM_REQS       (L3_NUM_REQS),
-        .MEM_PORTS      (`L3_MEM_PORTS),
-        .CRSQ_SIZE      (`L3_CRSQ_SIZE),
-        .MSHR_SIZE      (`L3_MSHR_SIZE),
-        .MRSQ_SIZE      (`L3_MRSQ_SIZE),
-        .MREQ_SIZE      (`L3_WRITEBACK ? `L3_MSHR_SIZE : `L3_MREQ_SIZE),
-        .TAG_WIDTH      (L2_MEM_TAG_WIDTH),
+        .MEM_PORTS      (L3_MEM_PORTS),
+        .CRSQ_SIZE      (`VX_CFG_L3_CRSQ_SIZE),
+        .MSHR_SIZE      (`VX_CFG_L3_MSHR_SIZE),
+        .MRSQ_SIZE      (`VX_CFG_L3_MRSQ_SIZE),
+        .MREQ_SIZE      (`VX_CFG_L3_MREQ_SIZE),
+        .LATENCY        (`VX_CFG_L3_LATENCY),
+        .TAG_WIDTH      (L3_TAG_WIDTH),
         .WRITE_ENABLE   (1),
-        .WRITEBACK      (`L3_WRITEBACK),
-        .DIRTY_BYTES    (`L3_DIRTYBYTES),
-        .REPL_POLICY    (`L3_REPL_POLICY),
+        .WRITEBACK      (`VX_CFG_L3_WRITEBACK),
+        .DIRTY_BYTES    (`VX_CFG_L3_DIRTYBYTES),
+        .REPL_POLICY    (`VX_CFG_L3_REPL_POLICY),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
-        .PASSTHRU       (!`L3_ENABLED)
+        .PASSTHRU       (!`VX_CFG_L3_ENABLED),
+        .IS_LLC         (L3_IS_LLC),
+        .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
     ) l3cache (
         .clk            (clk),
-        .reset          (l3_reset),
+        .reset          (reset),
 
     `ifdef PERF_ENABLE
         .cache_perf     (l3_perf),
@@ -106,14 +162,14 @@ module Vortex import VX_gpu_pkg::*; (
         .mem_bus_if     (mem_bus_if)
     );
 
-    for (genvar i = 0; i < `L3_MEM_PORTS; ++i) begin : g_mem_bus_if
+    for (genvar i = 0; i < L3_MEM_PORTS; ++i) begin : g_mem_bus_if
         assign mem_req_valid[i]  = mem_bus_if[i].req_valid;
         assign mem_req_rw[i]     = mem_bus_if[i].req_data.rw;
         assign mem_req_byteen[i] = mem_bus_if[i].req_data.byteen;
         assign mem_req_addr[i]   = mem_bus_if[i].req_data.addr;
         assign mem_req_data[i]   = mem_bus_if[i].req_data.data;
         assign mem_req_tag[i]    = mem_bus_if[i].req_data.tag;
-        `UNUSED_VAR (mem_bus_if[i].req_data.flags)
+        `UNUSED_VAR (mem_bus_if[i].req_data.attr)
         assign mem_bus_if[i].req_ready = mem_req_ready[i];
 
         assign mem_bus_if[i].rsp_valid     = mem_rsp_valid[i];
@@ -122,20 +178,80 @@ module Vortex import VX_gpu_pkg::*; (
         assign mem_rsp_ready[i] = mem_bus_if[i].rsp_ready;
     end
 
-    VX_dcr_bus_if dcr_bus_if();
-    assign dcr_bus_if.write_valid = dcr_wr_valid;
-    assign dcr_bus_if.write_addr  = dcr_wr_addr;
-    assign dcr_bus_if.write_data  = dcr_wr_data;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0] per_cluster_busy;
 
-    wire [`NUM_CLUSTERS-1:0] per_cluster_busy;
+    VX_kmu_bus_if per_cluster_kmu_bus_if[`VX_CFG_NUM_CLUSTERS]();
+
+    VX_kmu_bus_arb #(
+        .NUM_INPUTS (1),
+        .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS),
+        .DEST_LSB   (KMU_DEST_LSB_DEVICE),
+        .OUT_BUF    ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0)  // register per-cluster kmu fan-out (SLR-crossing skid)
+    ) kmu_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (kmu_bus_in),
+        .bus_out_if (per_cluster_kmu_bus_if)
+    );
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_launch_if per_cluster_raster_launch_if[`VX_CFG_NUM_CLUSTERS]();
+    VX_raster_launch_fork #(
+        .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS)
+    ) raster_launch_fork (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (raster_launch_if),
+        .bus_out_if (per_cluster_raster_launch_if)
+    );
+`endif
+
+    // The device MMU surface filters the DCR stream: it assembles the
+    // page-table root, pulses the TLB flush, and answers fault reads before
+    // the rest of the DCR traffic fans to the clusters.
+    VX_dcr_bus_if dcr_cluster_src_if();
+`ifdef VX_CFG_VM_ENABLE
+    wire [`VX_CFG_XLEN-1:0] mmu_satp;
+    wire                    mmu_flush_req;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_flush_done;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_fault_valid;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0][`VX_CFG_XLEN-1:0] cl_mmu_fault_va;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0][1:0]              cl_mmu_fault_access;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_fault_amo;
+
+    VX_mmu_dcr mmu_dcr (
+        .clk                  (clk),
+        .reset                (reset),
+        .dcr_bus_if           (dcr_bus_if),
+        .dcr_bus_out_if       (dcr_cluster_src_if),
+        .satp                 (mmu_satp),
+        .flush_req            (mmu_flush_req),
+        .cluster_flush_done   (cl_mmu_flush_done),
+        .cluster_fault_valid  (cl_mmu_fault_valid),
+        .cluster_fault_va     (cl_mmu_fault_va),
+        .cluster_fault_access (cl_mmu_fault_access),
+        .cluster_fault_amo    (cl_mmu_fault_amo)
+    );
+`else
+    assign dcr_cluster_src_if.req_valid = dcr_bus_if.req_valid;
+    assign dcr_cluster_src_if.req_data  = dcr_bus_if.req_data;
+    assign dcr_bus_if.rsp_valid = dcr_cluster_src_if.rsp_valid;
+    assign dcr_bus_if.rsp_data  = dcr_cluster_src_if.rsp_data;
+`endif
+
+    VX_dcr_bus_if per_cluster_dcr_bus_if[`VX_CFG_NUM_CLUSTERS]();
+    VX_dcr_arb #(
+        .NUM_REQS    (`VX_CFG_NUM_CLUSTERS),
+        .REQ_OUT_BUF ((`VX_CFG_NUM_CLUSTERS > 1) ? 1 : 0)
+    ) dcr_cluster_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (dcr_cluster_src_if),
+        .bus_out_if (per_cluster_dcr_bus_if)
+    );
 
     // Generate all clusters
-    for (genvar cluster_id = 0; cluster_id < `NUM_CLUSTERS; ++cluster_id) begin : g_clusters
-
-        `RESET_RELAY (cluster_reset, reset);
-
-        VX_dcr_bus_if cluster_dcr_bus_if();
-        `BUFFER_DCR_BUS_IF (cluster_dcr_bus_if, dcr_bus_if, 1'b1, (`NUM_CLUSTERS > 1))
+    for (genvar cluster_id = 0; cluster_id < `VX_CFG_NUM_CLUSTERS; ++cluster_id) begin : g_clusters
 
         VX_cluster #(
             .CLUSTER_ID (cluster_id),
@@ -144,21 +260,46 @@ module Vortex import VX_gpu_pkg::*; (
             `SCOPE_IO_BIND (scope_cluster + cluster_id)
 
             .clk                (clk),
-            .reset              (cluster_reset),
+            .reset              (reset),
 
         `ifdef PERF_ENABLE
             .sysmem_perf        (sysmem_perf),
         `endif
 
-            .dcr_bus_if         (cluster_dcr_bus_if),
+            .dcr_bus_if         (per_cluster_dcr_bus_if[cluster_id]),
 
-            .mem_bus_if         (per_cluster_mem_bus_if[cluster_id * `L2_MEM_PORTS +: `L2_MEM_PORTS]),
+            .mem_bus_if         (per_cluster_mem_bus_if[cluster_id * L2_MEM_PORTS +: L2_MEM_PORTS]),
+
+            .kmu_bus_if         (per_cluster_kmu_bus_if[cluster_id +: 1]),
+
+        `ifdef VX_CFG_EXT_RASTER_ENABLE
+            .raster_launch_if   (per_cluster_raster_launch_if[cluster_id +: 1]),
+        `endif
+
+        `ifdef VX_CFG_VM_ENABLE
+            .mmu_satp           (mmu_satp),
+            .mmu_flush_req      (mmu_flush_req),
+            .mmu_flush_done     (cl_mmu_flush_done[cluster_id]),
+            .mmu_fault_valid    (cl_mmu_fault_valid[cluster_id]),
+            .mmu_fault_va       (cl_mmu_fault_va[cluster_id]),
+            .mmu_fault_access   (cl_mmu_fault_access[cluster_id]),
+            .mmu_fault_amo      (cl_mmu_fault_amo[cluster_id]),
+        `endif
 
             .busy               (per_cluster_busy[cluster_id])
         );
     end
-
-    `BUFFER_EX(busy, (| per_cluster_busy), 1'b1, 1, (`NUM_CLUSTERS > 1));
+    // Launch liveness: a beat resident in a per-cluster output skid is folded into
+    // busy combinationally. The device input
+    // (kmu_bus_in) needs no separate term -- kmu_busy (combinational) covers the
+    // presented cycle and the registered per_cluster_busy covers the cycles after.
+    wire [`VX_CFG_NUM_CLUSTERS-1:0] per_cluster_kmu_valid;
+    for (genvar c = 0; c < `VX_CFG_NUM_CLUSTERS; ++c) begin : g_kmu_link_valid
+        assign per_cluster_kmu_valid[c] = per_cluster_kmu_bus_if[c].valid;
+    end
+    wire busy_r;
+    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy), 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
+    assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid | (|per_cluster_kmu_valid);
 
 `ifdef PERF_ENABLE
 
@@ -208,7 +349,7 @@ module Vortex import VX_gpu_pkg::*; (
     // dump device configuration
     initial begin
         `TRACE(0, ("CONFIGS: num_threads=%0d, num_warps=%0d, num_cores=%0d, num_clusters=%0d, socket_size=%0d, local_mem_base=0x%0h, num_barriers=%0d\n",
-                    `NUM_THREADS, `NUM_WARPS, `NUM_CORES, `NUM_CLUSTERS, `SOCKET_SIZE, `LMEM_BASE_ADDR, `NUM_BARRIERS))
+                    `VX_CFG_NUM_THREADS, `VX_CFG_NUM_WARPS, `VX_CFG_NUM_CORES, `VX_CFG_NUM_CLUSTERS, `VX_CFG_SOCKET_SIZE, `VX_MEM_LMEM_BASE_ADDR, `VX_CFG_NUM_BARRIERS))
     end
 
 `ifdef DBG_TRACE_MEM
@@ -216,7 +357,7 @@ module Vortex import VX_gpu_pkg::*; (
         always @(posedge clk) begin
             if (mem_bus_if[i].req_valid && mem_bus_if[i].req_ready) begin
                 if (mem_bus_if[i].req_data.rw) begin
-                    `TRACE(2, ("%t: MEM Wr Req[%0d]: addr=0x%0h, byteen=0x%h data=0x%h, tag=0x%0h (#%0d)\n", $time, i, `TO_FULL_ADDR(mem_bus_if[i].req_data.addr), mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
+                    `TRACE(2, ("%t: MEM Wr Req[%0d]: addr=0x%0h, byteen=0x%h, data=0x%h, tag=0x%0h (#%0d)\n", $time, i, `TO_FULL_ADDR(mem_bus_if[i].req_data.addr), mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.data, mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
                 end else begin
                     `TRACE(2, ("%t: MEM Rd Req[%0d]: addr=0x%0h, byteen=0x%h, tag=0x%0h (#%0d)\n", $time, i, `TO_FULL_ADDR(mem_bus_if[i].req_data.addr), mem_bus_if[i].req_data.byteen, mem_bus_if[i].req_data.tag.value, mem_bus_if[i].req_data.tag.uuid))
                 end

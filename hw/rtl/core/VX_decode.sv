@@ -13,17 +13,11 @@
 
 `include "VX_define.vh"
 
-`define USED_REG(t, x) \
-    x``_v = make_reg_num(t, ``x); \
-    use_``x = 1
-
-`define USED_IREG(x) \
-    `USED_REG(REG_TYPE_I, ``x)
-
-`define USED_FREG(x) \
-    `USED_REG(REG_TYPE_F, ``x)
-
-module VX_decode import VX_gpu_pkg::*; #(
+module VX_decode import
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_pkg::*,
+`endif
+    VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
@@ -46,8 +40,11 @@ module VX_decode import VX_gpu_pkg::*; #(
     reg [EX_BITS-1:0] ex_type;
     reg [INST_OP_BITS-1:0] op_type;
     op_args_t op_args;
-    reg [NUM_REGS_BITS-1:0] rd_v, rs1_v, rs2_v, rs3_v;
-    reg use_rd, use_rs1, use_rs2, use_rs3;
+    reg [NUM_SRC_OPDS:0][NUM_REGS_BITS-1:0] reg_ids;
+    reg [NUM_SRC_OPDS:0] use_regs;
+    reg [NUM_XREGS-1:0] rd_xregs;
+    reg [NUM_XREGS-1:0] wr_xregs;
+    reg [BYTESEL_BITS-1:0] bytesel;
     reg is_wstall;
 
     wire [31:0] instr = fetch_if.data.instr;
@@ -64,26 +61,45 @@ module VX_decode import VX_gpu_pkg::*; #(
     wire [4:0] rs3 = instr[31:27];
 
     `UNUSED_VAR (funct2)
+`ifndef VX_CFG_EXT_A_ENABLE
     `UNUSED_VAR (funct5)
-    `UNUSED_VAR (rs3)
-    `UNUSED_VAR (use_rd)
-    `UNUSED_VAR (use_rs1)
-    `UNUSED_VAR (use_rs2)
-    `UNUSED_VAR (use_rs3)
+`endif
+    `UNUSED_VAR (frm_is_dyn)
 
-    wire is_itype_sh = funct3[0] && ~funct3[1];
-    wire is_fpu_csr = (u_12 <= `VX_CSR_FCSR);
+    wire is_itype_sh   = funct3[0] && ~funct3[1];
+    wire is_csr_fflags = (u_12 == `VX_CSR_FFLAGS);
+    wire is_csr_frm    = (u_12 == `VX_CSR_FRM);
+    wire is_csr_fcsr   = (u_12 == `VX_CSR_FCSR);
+    wire frm_is_dyn    = (funct3 == 3'b111);
+    wire is_rd_zero    = (rd == 0);
+
+    reg csr_write;
+    always @(*) begin
+        csr_write = 1'b0;
+        unique case (funct3)
+            3'b001, // CSRRW
+            3'b101: // CSRRWI
+                csr_write = 1'b1;
+            3'b010, // CSRRS
+            3'b011: // CSRRC
+                csr_write = (rs1 != 0);
+            3'b110, // CSRRSI
+            3'b111: // CSRRCI
+                csr_write = (rs1 != 0);
+            default: csr_write = 1'b0;
+        endcase
+    end
 
     wire [19:0] ui_imm  = instr[31:12];
-`ifdef XLEN_64
+`ifdef VX_CFG_XLEN_64
     wire [11:0] i_imm   = is_itype_sh ? {6'b0, instr[25:20]} : u_12;
     wire [11:0] iw_imm  = is_itype_sh ? {7'b0, instr[24:20]} : u_12;
 `else
     wire [11:0] i_imm   = is_itype_sh ? {7'b0, instr[24:20]} : u_12;
 `endif
     wire [11:0] s_imm   = {funct7, rd};
-    wire [12:0] b_imm   = {instr[31], instr[7], instr[30:25], instr[11:8], 1'b0};
-    wire [20:0] jal_imm = {instr[31], instr[19:12], instr[20], instr[30:21], 1'b0};
+    wire [11:0] b_imm   = {instr[31], instr[7], instr[30:25], instr[11:8]};
+    wire [19:0] jal_imm = {instr[31], instr[19:12], instr[20], instr[30:21]};
 
     reg [INST_ALU_BITS-1:0] r_type;
     always @(*) begin
@@ -124,7 +140,7 @@ module VX_decode import VX_gpu_pkg::*; #(
         endcase
     end
 
-`ifdef EXT_M_ENABLE
+`ifdef VX_CFG_EXT_M_ENABLE
     reg [INST_M_BITS-1:0] m_type;
     always @(*) begin
         case (funct3)
@@ -140,20 +156,63 @@ module VX_decode import VX_gpu_pkg::*; #(
     end
 `endif
 
+`ifdef VX_CFG_EXT_A_ENABLE
+    // Map RVA funct5 (instr[31:27]) to amo_op_e + amo_unsigned bit.
+    // MINU/MAXU collapse into MIN/MAX + amo_unsigned=1.
+    amo_op_e amo_type;
+    reg      amo_unsigned;
+    always @(*) begin
+        amo_unsigned = 1'b0;
+        case (funct5)
+            5'h00: amo_type = AMO_OP_ADD;
+            5'h01: amo_type = AMO_OP_SWAP;
+            5'h02: amo_type = AMO_OP_LR;
+            5'h03: amo_type = AMO_OP_SC;
+            5'h04: amo_type = AMO_OP_XOR;
+            5'h08: amo_type = AMO_OP_OR;
+            5'h0c: amo_type = AMO_OP_AND;
+            5'h10: amo_type = AMO_OP_MIN;
+            5'h14: amo_type = AMO_OP_MAX;
+            5'h18: begin amo_type = AMO_OP_MIN; amo_unsigned = 1'b1; end
+            5'h1c: begin amo_type = AMO_OP_MAX; amo_unsigned = 1'b1; end
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            5'h05: amo_type = AMO_OP_CAS;
+        `endif
+            default: amo_type = AMO_OP_LR;
+        endcase
+    end
+`endif
+
+`ifdef VX_CFG_EXT_C_ENABLE
+    wire decode_is_rvc = fetch_if.data.is_rvc;
+`else
+    wire decode_is_rvc = 1'b0;
+`endif
+
     always @(*) begin
 
         ex_type   = 'x;
         op_type   = 'x;
         op_args   = 'x;
-        rd_v      = 'x;
-        rs1_v     = 'x;
-        rs2_v     = 'x;
-        rs3_v     = 'x;
-        use_rd    = 0;
-        use_rs1   = 0;
-        use_rs2   = 0;
-        use_rs3   = 0;
+        reg_ids   = 'x;
+        use_regs  = '0;
+        rd_xregs  = '0;
+        wr_xregs  = '0;
+        bytesel   = BYTESEL_DEFAULT;
         is_wstall = 0;
+
+    `ifdef VX_CFG_EXT_A_ENABLE
+        // Default the LSU amo sideband to "not an AMO" so plain
+        // loads/stores/fences/packed-loads don't propagate 'x through
+        op_args.lsu.amo_valid = 1'b0;
+    `endif
+    `ifdef VX_CFG_EXT_OM_ENABLE
+        // Same reason: op_args defaults to 'x, and a stale export_mask makes
+        // VX_gfx_uops expand an ORDINARY store into an aperture record --
+        // rewriting its offset and renaming rs2:=rs3, i.e. corrupting the
+        // address of every store in the program.
+        op_args.lsu.export_mask = 2'b00;
+    `endif
 
         case (opcode)
             INST_I: begin
@@ -163,7 +222,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, i_imm);
+                op_args.alu.imm20 = `SEXT(20, i_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -176,14 +235,14 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
                 case (funct7)
-                `ifdef EXT_M_ENABLE
+                `ifdef VX_CFG_EXT_M_ENABLE
                     INST_R_F7_MUL: begin
                         // MUL, MULH, MULHSU, MULHU
                         op_type = INST_OP_BITS'(m_type);
                         op_args.alu.xtype = ALU_TYPE_MULDIV;
                     end
                 `endif
-                `ifdef EXT_ZICOND_ENABLE
+                `ifdef VX_CFG_EXT_ZICOND_ENABLE
                     INST_R_F7_ZICOND: begin
                         // CZERO-EQZ, CZERO-NEZ
                         op_type = funct3[1] ? INST_OP_BITS'(INST_ALU_CZNE) : INST_OP_BITS'(INST_ALU_CZEQ);
@@ -196,7 +255,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     end
                 endcase
             end
-        `ifdef XLEN_64
+        `ifdef VX_CFG_XLEN_64
             INST_I_W: begin
                 // ADDIW, SLLIW, SRLIW, SRAIW
                 ex_type = EX_ALU;
@@ -205,7 +264,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 1;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, iw_imm);
+                op_args.alu.imm20 = `SEXT(20, iw_imm);
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
             end
@@ -218,7 +277,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
                 case (funct7)
-                `ifdef EXT_M_ENABLE
+                `ifdef VX_CFG_EXT_M_ENABLE
                     INST_R_F7_MUL: begin
                         // MULW, DIVW, DIVUW, REMW, REMUW
                         op_type = INST_OP_BITS'(m_type);
@@ -240,7 +299,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 0;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = {{`XLEN-31{ui_imm[19]}}, ui_imm[18:0], 12'(0)};
+                op_args.alu.imm20 = ui_imm;
                 `USED_IREG (rd);
             end
             INST_AUIPC: begin
@@ -250,28 +309,28 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.alu.is_w = 0;
                 op_args.alu.use_PC = 1;
                 op_args.alu.use_imm = 1;
-                op_args.alu.imm = {{`XLEN-31{ui_imm[19]}}, ui_imm[18:0], 12'(0)};
+                op_args.alu.imm20 = ui_imm;
                 `USED_IREG (rd);
             end
             INST_JAL: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(INST_BR_JAL);
-                op_args.alu.xtype = ALU_TYPE_BRANCH;
-                op_args.alu.is_w = 0;
-                op_args.alu.use_PC = 1;
-                op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, jal_imm);
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 1;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = jal_imm;
+                op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
                 `USED_IREG (rd);
             end
             INST_JALR: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(INST_BR_JALR);
-                op_args.alu.xtype = ALU_TYPE_BRANCH;
-                op_args.alu.is_w = 0;
-                op_args.alu.use_PC = 0;
-                op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, u_12);
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 0;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = `SEXT(20, u_12);
+                op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -279,11 +338,11 @@ module VX_decode import VX_gpu_pkg::*; #(
             INST_B: begin
                 ex_type = EX_ALU;
                 op_type = INST_OP_BITS'(b_type);
-                op_args.alu.xtype = ALU_TYPE_BRANCH;
-                op_args.alu.is_w = 0;
-                op_args.alu.use_PC = 1;
-                op_args.alu.use_imm = 1;
-                op_args.alu.imm = `SEXT(`XLEN, b_imm);
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 1;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = `SEXT(20, b_imm);
+                op_args.br.is_rvc = decode_is_rvc;
                 is_wstall = 1;
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
@@ -293,34 +352,70 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_type = INST_LSU_FENCE;
                 op_args.lsu.is_store = 0;
                 op_args.lsu.is_float = 0;
-                op_args.lsu.offset = 0;
+                op_args.lsu.pack     = 0;
+                op_args.lsu.offset   = 0;
             end
+        `ifdef VX_CFG_EXT_A_ENABLE
+            INST_AMO: begin
+                // RVA: funct3 = 010 (.W) or 011 (.D); we route AMO down
+                // the LSU's load path (every AMO returns to rd). The
+                // bank does the RMW commit; LSU just packs the AMO
+                // sideband on the dcache request.
+                ex_type = EX_LSU;
+                op_type = INST_OP_BITS'({1'b0, funct3}); // load-style width
+                op_args.lsu.is_store = 0;
+                op_args.lsu.is_float = 0;
+                op_args.lsu.pack     = 0;
+                op_args.lsu.offset   = 0;     // AMO has no immediate offset
+                op_args.lsu.amo_valid= 1'b1;
+                op_args.lsu.amo_op   = amo_type;
+                op_args.lsu.amo_unsigned = amo_unsigned;
+                op_args.lsu.amo_aq   = instr[26];
+                op_args.lsu.amo_rl   = instr[25];
+                `USED_IREG (rd);
+                `USED_IREG (rs1);
+                // LR has rs2=x0; the LSU just sees rs2_data=0 as rhs.
+                if (amo_type != AMO_OP_LR) begin
+                    `USED_IREG (rs2);
+                end
+            `ifdef VX_CFG_EXT_ZACAS_ENABLE
+                // Compare-and-swap reads rd as well as writing it: rd holds
+                // the comparand. The third operand slot carries any register
+                // the decoder puts in it, so rd goes there directly -- the
+                // rs3 wire is the funct5 field for an AMO and is not used.
+                if (amo_type == AMO_OP_CAS) begin
+                    reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, RV_REGS_BITS'(rd));
+                    use_regs[RV_RS3] = 1'b1;
+                end
+            `endif
+            end
+        `endif
             INST_SYS : begin
                 if (funct3[1:0] != 0) begin
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(inst_sfu_csr(funct3));
                     op_args.csr.addr = u_12;
                     op_args.csr.use_imm = funct3[2];
-                    is_wstall = is_fpu_csr; // only stall for FPU CSRs
+                    op_args.csr.imm5 = rs1;
+                    rd_xregs[XREG_0] = is_csr_fcsr || is_csr_fflags;
+                    rd_xregs[XREG_1]    = is_csr_fcsr || is_csr_frm;
+                    wr_xregs[XREG_0] = csr_write && (is_csr_fcsr || is_csr_fflags);
+                    wr_xregs[XREG_1]    = csr_write && (is_csr_fcsr || is_csr_frm);
                     `USED_IREG (rd);
-                    if (funct3[2]) begin
-                        op_args.csr.imm = rs1;
-                    end else begin
-                        `USED_IREG (rs1);
-                    end
+                    `USED_REG (REG_TYPE_I, rs1, ~funct3[2]);
                 end else begin
                     ex_type = EX_ALU;
                     op_type = INST_OP_BITS'(s_type);
-                    op_args.alu.xtype = ALU_TYPE_BRANCH;
-                    op_args.alu.is_w = 0;
-                    op_args.alu.use_imm = 1;
-                    op_args.alu.use_PC  = 1;
-                    op_args.alu.imm = `XLEN'd4;
+                    op_args.br.xtype  = ALU_TYPE_BRANCH;
+                    op_args.br.use_imm= 1;
+                    op_args.br.use_PC = 1;
+                    op_args.br.imm20  = 20'd4;
+                    op_args.br.is_rvc = decode_is_rvc;
                     is_wstall = 1;
                     `USED_IREG (rd);
                 end
             end
-        `ifdef EXT_F_ENABLE
+        `ifdef VX_CFG_EXT_F_ENABLE
             INST_FL,
         `endif
             INST_L: begin
@@ -328,15 +423,16 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_type = INST_OP_BITS'({1'b0, funct3});
                 op_args.lsu.is_store = 0;
                 op_args.lsu.is_float = opcode[2];
-                op_args.lsu.offset = u_12;
+                op_args.lsu.pack     = 0;
+                op_args.lsu.offset   = u_12;
                 `USED_IREG (rs1);
-            `ifdef EXT_F_ENABLE
-                `USED_REG (opcode[2], rd);
+            `ifdef VX_CFG_EXT_F_ENABLE
+                `USED_REG (opcode[2], rd, 1'b1);
             `else
                 `USED_IREG (rd);
             `endif
             end
-        `ifdef EXT_F_ENABLE
+        `ifdef VX_CFG_EXT_F_ENABLE
             INST_FS,
         `endif
             INST_S: begin
@@ -344,15 +440,16 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_type = INST_OP_BITS'({1'b1, funct3});
                 op_args.lsu.is_store = 1;
                 op_args.lsu.is_float = opcode[2];
-                op_args.lsu.offset = s_imm;
+                op_args.lsu.pack    = 0;
+                op_args.lsu.offset   = s_imm;
                 `USED_IREG (rs1);
-            `ifdef EXT_F_ENABLE
-                `USED_REG (opcode[2], rs2);
+            `ifdef VX_CFG_EXT_F_ENABLE
+                `USED_REG (opcode[2], rs2, 1'b1);
             `else
                 `USED_IREG (rs2);
             `endif
             end
-        `ifdef EXT_F_ENABLE
+        `ifdef VX_CFG_EXT_F_ENABLE
             INST_FMADD,  // 7'b1000011
             INST_FMSUB,  // 7'b1000111
             INST_FNMSUB, // 7'b1001011
@@ -363,6 +460,11 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.fpu.frm = funct3;
                 op_args.fpu.fmt[0] = funct2[0]; // float/double
                 op_args.fpu.fmt[1] = opcode[3] ^ opcode[2]; // SUB
+
+                // track FCSR dependencies
+                rd_xregs[XREG_1] = frm_is_dyn;
+                wr_xregs[XREG_0] = 1'b1;
+
                 `USED_FREG (rd);
                 `USED_FREG (rs1);
                 `USED_FREG (rs2);
@@ -373,7 +475,8 @@ module VX_decode import VX_gpu_pkg::*; #(
                 op_args.fpu.frm = funct3;
                 op_args.fpu.fmt[0] = funct2[0]; // float/double
                 op_args.fpu.fmt[1] = rs2[1]; // CVT W/L
-
+                // Most FP operations may set exception flags
+                wr_xregs[XREG_0] = 1'b1;
                 case (funct5)
                     5'b00000, // FADD
                     5'b00001, // FSUB
@@ -381,6 +484,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     begin
                         op_type = INST_OP_BITS'({2'b00, 1'b0, funct5[1]});
                         op_args.fpu.fmt[1] = funct5[0]; // SUB
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -389,6 +493,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         // NCP: FSGNJ=0, FSGNJN=1, FSGNJX=2
                         op_type = INST_OP_BITS'(INST_FPU_MISC);
                         op_args.fpu.frm = INST_FRM_BITS'(funct3[1:0]);
+                        wr_xregs[XREG_0] = 1'b0;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -401,10 +506,11 @@ module VX_decode import VX_gpu_pkg::*; #(
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
                     end
-                `ifdef FLEN_64
+                `ifdef VX_CFG_FLEN_64
                     5'b01000: begin
                         // FCVT.S.D, FCVT.D.S
                         op_type = INST_OP_BITS'(INST_FPU_F2F);
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                     end
@@ -412,6 +518,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b00011: begin
                         // FDIV
                         op_type = INST_OP_BITS'(INST_FPU_DIV);
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                         `USED_FREG (rs2);
@@ -419,6 +526,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b01011: begin
                         // FSQRT
                         op_type = INST_OP_BITS'(INST_FPU_SQRT);
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_FREG (rs1);
                     end
@@ -432,12 +540,14 @@ module VX_decode import VX_gpu_pkg::*; #(
                     5'b11000: begin
                         // FCVT.W.X, FCVT.WU.X
                         op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_F2U) : INST_OP_BITS'(INST_FPU_F2I);
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_IREG (rd);
                         `USED_FREG (rs1);
                     end
                     5'b11010: begin
                         // FCVT.X.W, FCVT.X.WU
                         op_type = (rs2[0]) ? INST_OP_BITS'(INST_FPU_U2F) : INST_OP_BITS'(INST_FPU_I2F);
+                        rd_xregs[XREG_1] = frm_is_dyn;
                         `USED_FREG (rd);
                         `USED_IREG (rs1);
                     end
@@ -451,6 +561,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                             op_type = INST_OP_BITS'(INST_FPU_MISC);
                             op_args.fpu.frm = INST_FRM_BITS'(4);
                         end
+                        wr_xregs[XREG_0] = 1'b0;
                         `USED_IREG (rd);
                         `USED_FREG (rs1);
                     end
@@ -458,6 +569,7 @@ module VX_decode import VX_gpu_pkg::*; #(
                         // NCP: FMV.W.X=5
                         op_type = INST_OP_BITS'(INST_FPU_MISC);
                         op_args.fpu.frm = INST_FRM_BITS'(5);
+                        wr_xregs[XREG_0] = 1'b0;
                         `USED_FREG (rd);
                         `USED_IREG (rs1);
                     end
@@ -479,10 +591,11 @@ module VX_decode import VX_gpu_pkg::*; #(
                                 op_type = INST_OP_BITS'(INST_SFU_WSPAWN);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
+                                is_wstall = 1; // should wait for current warp's states to be copied to other warps
                             end
                             3'h2: begin // SPLIT
                                 op_type = INST_OP_BITS'(INST_SFU_SPLIT);
-                                op_args.wctl.is_neg = rs2[0];
+                                op_args.wctl.is_cond_neg = rs2[0];
                                 `USED_IREG (rs1);
                                 `USED_IREG (rd);
                             end
@@ -492,22 +605,35 @@ module VX_decode import VX_gpu_pkg::*; #(
                             end
                             3'h4: begin // BAR
                                 op_type = INST_OP_BITS'(INST_SFU_BAR);
+                                op_args.wctl.is_sync_bar = 1;
+                                op_args.wctl.is_bar_arrive = 0;
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
                             3'h5: begin // PRED
                                 op_type = INST_OP_BITS'(INST_SFU_PRED);
-                                op_args.wctl.is_neg = rd[0];
+                                op_args.wctl.is_cond_neg = rd[0];
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
                             end
-                            default:;
+                            3'h6: begin // Asynchronous arrive/wait barrier
+                                op_type = INST_OP_BITS'(INST_SFU_BAR);
+                                op_args.wctl.is_sync_bar = 0;
+                                op_args.wctl.is_bar_arrive = ~is_rd_zero;
+                                is_wstall = is_rd_zero; // do not wati on arrival
+                                `USED_IREG (rd);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                            3'h7: begin // WSYNC
+                                op_type = INST_OP_BITS'(INST_SFU_WSYNC);
+                            end
                         endcase
                     end
                     7'h01: begin // VOTE, SHFL
                         ex_type = EX_ALU;
                         op_args.alu.xtype = ALU_TYPE_OTHER;
-                        use_rd  = 1;
+                        op_args.alu.is_w = 0;
                         `USED_IREG (rd);
                         `USED_IREG (rs1);
                         if (funct3[2]) begin
@@ -515,36 +641,248 @@ module VX_decode import VX_gpu_pkg::*; #(
                         end
                         op_type = INST_OP_BITS'(funct3);
                     end
-                `ifdef EXT_TCU_ENABLE
+                `ifdef VX_CFG_EXT_TCU_ENABLE
                     7'h02: begin
-                        case (funct3)
-                            3'h0: begin // WMMA
-                                ex_type = EX_TCU;
+                        ex_type = EX_TCU;
+                    `ifdef TCU_META_ENABLE
+                        if (funct3 == 3'h2) begin
+                            // TCU_LD — warp-level metadata load.
+                            // rs1: I-reg holding the base address (warp-broadcast).
+                            // rs2[4:0]: fmt_s (format), encoded via the rs2
+                            //          instruction field (immediate-style; no
+                            //          actual register read).
+                            // rd[4]: metadata namespace (0=sparse, 1=MX).
+                            // rd[3:0]: namespace-local slot selector.
+                            op_type = INST_OP_BITS'(INST_TCU_LD);
+                            op_args.tcu.cd_nregs    = '0;
+                            op_args.tcu.a_from_smem = 1'b0;
+                            op_args.tcu.fmt_s       = rs2[4:0];
+                            op_args.tcu.fmt_d       = rd[4:0]; // meta slot selector
+                            op_args.tcu.step_m      = '0;
+                            op_args.tcu.step_n      = '0;
+                            op_args.tcu.step_k      = '0;
+                            op_args.tcu.is_first_uop = 1'b0;
+                            op_args.tcu.is_last_uop  = 1'b0;
+                            // scoreboard bits for metadata: XREG_0 = SP, XREG_1 = MX
+                            wr_xregs[rd[4] ? XREG_1 : XREG_0] = 1'b1;
+                            // No GPR writeback (wb stays default 0).
+                            `USED_IREG (rs1);
+                        end else
+                    `endif
+                        begin
+                            // WMMA / WGMMA (dense or sparse).
+                    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                            // Sparse variants live in a separate op_type so
+                            // tcu_args_t doesn't carry a per-uop is_sparse bit.
+                            if (rs2[0]) begin
+                        `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                                op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA_SP)
+                                                    : INST_OP_BITS'(INST_TCU_WMMA_SP);
+                        `else
+                                op_type = INST_OP_BITS'(INST_TCU_WMMA_SP);
+                        `endif
+                                // Sparse MMA consumes metadata loaded by a preceding
+                                // TCU_LD; stall until that writeback releases the slot.
+                                rd_xregs[XREG_0] = 1'b1;
+                            end else
+                    `endif
+                            begin
+                        `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                                op_type = funct3[0] ? INST_OP_BITS'(INST_TCU_WGMMA)
+                                                    : INST_OP_BITS'(INST_TCU_WMMA);
+                        `else
                                 op_type = INST_OP_BITS'(INST_TCU_WMMA);
-                                op_args.tcu.fmt_s  = rs1[3:0];
-                                op_args.tcu.fmt_d  = rd[3:0];
-                                op_args.tcu.step_m = '0;
-                                op_args.tcu.step_n = '0;
-                                `USED_IREG (rd);
+                        `endif
+                            end
+                            op_args.tcu.cd_nregs    = rs2[2:1];
+                            op_args.tcu.a_from_smem = rs2[3];
+                            op_args.tcu.fmt_s  = rs1[4:0];
+                            op_args.tcu.fmt_d  = rd[4:0];
+                            op_args.tcu.step_m = '0;
+                            op_args.tcu.step_n = '0;
+                            op_args.tcu.step_k = '0;
+                            op_args.tcu.is_first_uop = 1'b0;
+                            op_args.tcu.is_last_uop  = 1'b0;
+                        `ifdef VX_CFG_TCU_MX_ENABLE
+                            // MX formats are encoded with 2nd MSB of fmt_s set 
+                            if (rs1[3]) begin
+                                rd_xregs[XREG_1] = 1'b1;
+                            end
+                        `endif
+                            `USED_FREG (rd);
+                            `USED_FREG (rs1);
+                            `USED_FREG (rs2);
+                            `USED_FREG (rs3);
+                        end
+                    end
+                `endif
+                `ifdef VX_CFG_EXT_DXA_ENABLE
+                    7'h03: begin // DXA issue
+                        // Multicast is determined by cta_mask (>1 bit set).
+                        // Expanded into micro-ops by VX_dxa_uops.
+                        ex_type = EX_SFU;
+                        op_type = INST_OP_BITS'(INST_SFU_DXA);
+                        `USED_IREG (rs1);
+                        `USED_IREG (rs2);
+                    end
+                `endif
+                    7'h04: begin // Load packing: vx_packlb_f / vx_packlh_f
+                        case (funct3)
+                            3'h1: begin // vx_packlb_f — pack 4 strided bytes into float
+                                ex_type              = EX_LSU;
+                                op_type              = INST_OP_BITS'(INST_LSU_LBU);
+                                op_args.lsu.is_store = 0;
+                                op_args.lsu.is_float = 1;
+                                op_args.lsu.pack     = 2'b01;
+                                op_args.lsu.offset   = '0;
+                                `USED_FREG (rd);
                                 `USED_IREG (rs1);
                                 `USED_IREG (rs2);
-                                `USED_IREG (rs3);
+                            end
+                            3'h2: begin // vx_packlh_f — pack 2 strided halfwords into float
+                                ex_type              = EX_LSU;
+                                op_type              = INST_OP_BITS'(INST_LSU_LHU);
+                                op_args.lsu.is_store = 0;
+                                op_args.lsu.is_float = 1;
+                                op_args.lsu.pack     = 2'b10;
+                                op_args.lsu.offset   = '0;
+                                `USED_FREG (rd);
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
                             end
                             default:;
                         endcase
                     end
-                `endif
                     default:;
+                endcase
+            end
+            INST_EXT2: begin
+                case (funct3)
+                3'h0: begin // WGATHER: R4-type, funct2=src_lane
+                    ex_type = EX_ALU;
+                    op_args.alu.xtype = ALU_TYPE_OTHER;
+                    op_args.alu.imm20 = {{18{1'b0}}, funct2}; // src_lane in imm20[1:0]
+                    op_args.alu.is_w  = 0;
+                    `USED_IREG (rd);
+                    `USED_IREG (rs1);
+                    `USED_IREG (rs2);
+                    `USED_IREG (rs3);
+                    op_type = INST_OP_BITS'(INST_WGATHER);
+                end
+            `ifdef VX_CFG_EXT_TEX_ENABLE
+                3'h5: begin // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
+                            // TEX takes its operands in registers.
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_TEX);
+                    op_args.tex.stage = funct2[0 +: TEX_STAGE_BITS];
+                    `USED_IREG (rd);    // texel
+                    `USED_IREG (rs1);   // u
+                    `USED_IREG (rs2);   // v
+                    `USED_IREG (rs3);   // explicit LOD
+                end
+            `endif
+            `ifdef VX_CFG_EXT_OM_ENABLE
+                3'h3: begin // vx_om_export: R4-type, rd=x0 (posted). The fragment export.
+                    // funct7[1:0] = {has_depth, has_colour}: a shader may emit colour
+                    // only (early-Z owns depth), depth only (z-prepass), or both
+                    // (gl_FragDepth). VX_gfx_uops expands this into one store uop per
+                    // set bit, locking the issue stage across the pair so no warp can
+                    // split it -- which is what bounds the OM ingress to one hold
+                    // register per source port.
+                    ex_type = EX_LSU;
+                    op_type = INST_OP_BITS'(INST_LSU_SW);   // word beats, full byteen
+                    // op_args is a union defaulting to 'x, so set EVERY field of the
+                    // variant: a field left stray resolves per-instance under
+                    // --x-assign unique, so the bug only shows up at cores > 1.
+                    op_args.lsu.is_store = 1'b1;
+                    op_args.lsu.is_float = 1'b0;            // integer colour/depth words
+                    op_args.lsu.export_mask = funct7[1:0];
+                    op_args.lsu.pack = 2'b00;               // plain addressing: the AGU
+                                                            // must add the depth uop's
+                                                            // offset, not a pack stride
+                    op_args.lsu.offset = '0;                // address is rs1, verbatim
+                    `USED_IREG (rs1);   // aperture record address
+                    `USED_IREG (rs2);   // colour  -> record + 0
+                    `USED_IREG (rs3);   // depth   -> record + 4
+                end
+            `endif
+            `ifdef VX_CFG_EXT_RTU_ENABLE
+                3'h6: begin // hit-window reads / callback return. funct2: 0=CB_RET, 2=GETWF, 3=GETW.
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_RTUW);
+                    op_args.rtuw.slot      = funct7[6:2];
+                    op_args.rtuw.count     = rs2[3:0];
+                    op_args.rtuw.uop       = '0;
+                    if (funct2 != 2'd0) begin
+                        // GETWF/GETW windowed read: start slot rides funct7[6:2],
+                        // count rides the rs2 instruction field (e.g. x3 -> 3).
+                        if (funct2 == 2'd2) begin
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_GETWF);
+                            `USED_FREG (rd);   // FP window base register
+                        end else begin
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_GETW);
+                            `USED_IREG (rd);   // GP window base register
+                        end
+                        `USED_IREG (rs1);      // status word (scoreboard chain)
+                    end else begin
+                        // CB_RET / CONTINUE: the lane's action (rs1) with the hit
+                        // distance (rs2) and attribute (rs3) it decided. No writeback.
+                        op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_CB_RET);
+                        // The shared decode above latches count from rs2, which for
+                        // a verdict is a real FP register, not x0. op_args is a
+                        // union: leave no field of a variant holding a stray value.
+                        op_args.rtuw.count = '0;
+                        `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
+                        `USED_FREG (rs2);  // hit distance t
+                        `USED_IREG (rs3);  // hit attribute
+                    end
+                end
+            `endif
+            `ifdef VX_CFG_EXT_RTU_ENABLE
+                3'h7: begin // vx_rt_* trace/wait. funct2: 0=TRACE, 1=WAIT.
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_RTUW);
+                    // Both suspend the warp, and the RTU releases each through
+                    // sched_unlock_if:
+                    //   TRACE — a locked 4-uop burst; released once the last uop
+                    //           has handed the RTU its ray.
+                    //   WAIT  — the block itself; released when a record lands and
+                    //           the WAIT retires with its status. A returned
+                    //           candidate is serviced inline by the warp's CONTINUE
+                    //           loop (no trap), which re-enters WAIT and re-stalls.
+                    // WAIT owning its own stall is what keeps it from fetching ahead
+                    // of a response, so TRACE does not have to hold the warp until
+                    // the traversal answers.
+                    is_wstall = 1;
+                    op_args.rtuw.slot      = '0;
+                    op_args.rtuw.count     = '0;
+                    op_args.rtuw.uop       = '0;
+                    case (funct2)
+                        2'd1: begin // WAIT — single-op terminal block
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_WAIT);
+                            `USED_IREG (rd);   // status
+                            `USED_IREG (rs1);  // handle
+                        end
+                        default: begin // TRACE — warp-uniform (funct2=0)
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_TRACE);
+                            `USED_IREG (rd);   // handle
+                            `USED_IREG (rs1);  // lane-packed config
+                        end
+                    endcase
+                    // The f0..f7 ray window is read by HW convention (the
+                    // VX_gfx_uops expander names f0..f7 per uop); it is not in
+                    // the architectural encoding, so it is not marked here.
+                end
+            `endif
+                default:;
                 endcase
             end
             default:;
         endcase
     end
 
-    // disable write to integer register r0
-    wire wb = use_rd && (rd_v != 0);
-
-    wire [2:0] used_rs = {use_rs3, use_rs2, use_rs1};
+    // disable writes to x0
+    wire wb = use_regs[RV_RD] && (reg_ids[RV_RD] != 0);
 
     VX_elastic_buffer #(
         .DATAW (OUT_DATAW),
@@ -554,8 +892,8 @@ module VX_decode import VX_gpu_pkg::*; #(
         .reset     (reset),
         .valid_in  (fetch_if.valid),
         .ready_in  (fetch_if.ready),
-        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                used_rs,                rd_v,              rs1_v,              rs2_v,              rs3_v}),
-        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
+        .data_in   ({fetch_if.data.uuid,  fetch_if.data.wid,  fetch_if.data.cta_id,  fetch_if.data.tmask,  fetch_if.data.PC,  ex_type,                op_type,                op_args,                wb,                rd_xregs,                wr_xregs,                use_regs[3:1],          reg_ids[RV_RD],    bytesel,                  reg_ids[RV_RS1],    reg_ids[RV_RS2],    reg_ids[RV_RS3]}),
+        .data_out  ({decode_if.data.uuid, decode_if.data.wid, decode_if.data.cta_id, decode_if.data.tmask, decode_if.data.PC, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs, decode_if.data.rd, decode_if.data.bytesel,   decode_if.data.rs1, decode_if.data.rs2, decode_if.data.rs3}),
         .valid_out (decode_if.valid),
         .ready_out (decode_if.ready)
     );
@@ -564,12 +902,55 @@ module VX_decode import VX_gpu_pkg::*; #(
 
     wire fetch_fire = fetch_if.valid && fetch_if.ready;
 
-    assign decode_sched_if.valid  = fetch_fire;
-    assign decode_sched_if.wid    = fetch_if.data.wid;
-    assign decode_sched_if.unlock = ~is_wstall;
+    // Register decode_sched_if to break the long combinational path.
+    reg                  decode_sched_valid_r;
+    reg                  decode_sched_unlock_r;
+    reg [NW_WIDTH-1:0]   decode_sched_wid_r;
+`ifdef VX_CFG_EXT_C_ENABLE
+    reg                  decode_sched_is_rvc_r;
+`endif
 
-`ifndef L1_ENABLE
+    always @(posedge clk) begin
+        if (reset) begin
+            decode_sched_valid_r <= 1'b0;
+        end else begin
+            decode_sched_valid_r  <= fetch_fire;
+            decode_sched_unlock_r <= ~is_wstall;
+            decode_sched_wid_r    <= fetch_if.data.wid;
+        `ifdef VX_CFG_EXT_C_ENABLE
+            decode_sched_is_rvc_r <= fetch_if.data.is_rvc;
+        `endif
+        end
+    end
+
+    assign decode_sched_if.valid  = decode_sched_valid_r;
+    assign decode_sched_if.wid    = decode_sched_wid_r;
+    assign decode_sched_if.unlock = decode_sched_unlock_r;
+`ifdef VX_CFG_EXT_C_ENABLE
+    assign decode_sched_if.is_rvc = decode_sched_is_rvc_r;
+`endif
+
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
+
+`ifdef DBG_TRACE_PIPELINE
+    always @(posedge clk) begin
+        if (decode_if.valid && decode_if.ready) begin
+            `TRACE(1, ("%t: %s decode: wid=%0d, cta_id=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, decode_if.data.wid, decode_if.data.cta_id, to_fullPC(decode_if.data.PC)))
+            VX_trace_pkg::trace_ex_type(1, decode_if.data.ex_type);
+            `TRACE(1, (", op="))
+            VX_trace_pkg::trace_ex_op(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
+            `TRACE(1, (", tmask=%b, wb=%b, rd_xregs=%b, wr_xregs=%b, used_rs=%b, rd=", decode_if.data.tmask, decode_if.data.wb, decode_if.data.rd_xregs, decode_if.data.wr_xregs, decode_if.data.used_rs))
+            VX_trace_pkg::trace_reg_idx(1, decode_if.data.rd);
+            `TRACE(1, (", rs1="))
+            VX_trace_pkg::trace_reg_idx(1, decode_if.data.rs1);
+            `TRACE(1, (", rs2="))
+            VX_trace_pkg::trace_reg_idx(1, decode_if.data.rs2);
+            `TRACE(1, (", rs3="))
+            VX_trace_pkg::trace_reg_idx(1, decode_if.data.rs3);
+            VX_trace_pkg::trace_op_args(1, decode_if.data.ex_type, decode_if.data.op_type, decode_if.data.op_args);
+            `TRACE(1, (" (#%0d)\n", decode_if.data.uuid))
+        end
+    end
 `endif
 
 endmodule

@@ -13,74 +13,102 @@
 
 #pragma once
 
-#include <simobject.h>
-#include "dcrs.h"
-#include "arch.h"
-#include "cache_cluster.h"
-#include "local_mem.h"
-#include "core.h"
-#include "constants.h"
+#include "types.h"
+#include "cache.h"
+#ifdef VX_CFG_EXT_DXA_ENABLE
+#include "dxa_core.h"
+#endif
+#ifdef VX_CFG_EXT_TEX_ENABLE
+#include "tex_core.h"
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#include "rtu_core.h"
+#endif
 
 namespace vortex {
 
 class Cluster;
+class Core;
 
 class Socket : public SimObject<Socket> {
 public:
   struct PerfStats {
-    CacheSim::PerfStats icache;
-    CacheSim::PerfStats dcache;
+    Cache::PerfStats icache;
+    Cache::PerfStats dcache;
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    DxaCore::PerfStats dxa;
+#endif
+#ifdef VX_CFG_EXT_TEX_ENABLE
+    TexCore::PerfStats tex;
+    Cache::PerfStats   tcache;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    RtuCore::PerfStats rtu;
+    Cache::PerfStats   rtcache;
+#endif
   };
 
-  std::vector<SimPort<MemReq>> mem_req_ports;
-  std::vector<SimPort<MemRsp>> mem_rsp_ports;
+  std::vector<SimChannel<MemReq>> mem_req_out;
+  std::vector<SimChannel<MemRsp>> mem_rsp_in;
 
   Socket(const SimContext& ctx,
+         const char* name,
          uint32_t socket_id,
-         Cluster* cluster,
-         const Arch &arch,
-         const DCRS &dcrs);
+         Cluster* cluster);
 
   ~Socket();
 
-  uint32_t id() const {
-    return socket_id_;
-  }
+  uint32_t id() const { return socket_id_; }
 
-  Cluster* cluster() const {
-    return cluster_;
-  }
-
-  void reset();
-
-  void tick();
-
-  void attach_ram(RAM* ram);
-
-#ifdef VM_ENABLE
-  void set_satp(uint64_t satp);
-#endif
+  Cluster* cluster() const { return cluster_; }
 
   bool running() const;
 
   int get_exitcode() const;
 
-  void barrier(uint32_t bar_id, uint32_t count, uint32_t core_id);
-
-  void resume(uint32_t core_id);
-
   PerfStats perf_stats() const;
 
-  const std::vector<Core::Ptr>& cores() const {
-    return cores_;
-  }
+  int dcr_write(uint32_t addr, uint32_t value);
+
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
+
+  std::shared_ptr<Core>& core(uint32_t idx);
+
+  // Forwarded cache flush (write-back eviction walk). The walk is a no-op
+  // on write-through caches (`Cache::flush_begin` early-exits); forwarding
+  // ensures a future write-back config exercises the same code path.
+  void dcache_flush_begin();
+  bool dcache_flush_done() const;
+  void icache_flush_begin();
+  bool icache_flush_done() const;
+#ifdef VX_CFG_EXT_TEX_ENABLE
+  void tcache_flush_begin();
+  bool tcache_flush_done() const;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  void rtcache_flush_begin();
+  bool rtcache_flush_done() const;
+#endif
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  DxaCore::Ptr& dxa_core();
+#endif
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  RtuCore::Ptr& rtu_core();
+#endif
+
+protected:
+  void on_reset();
 
 private:
-  uint32_t                socket_id_;
-  Cluster*                cluster_;
-  std::vector<Core::Ptr>  cores_;
-  CacheCluster::Ptr       icaches_;
-  CacheCluster::Ptr       dcaches_;
+  uint32_t socket_id_;
+  Cluster* cluster_;
+
+  class Impl;
+  Impl* impl_;
+
+  friend class SimObject<Socket>;
 };
 
 } // namespace vortex

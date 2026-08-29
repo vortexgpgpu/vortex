@@ -15,6 +15,35 @@ SimX is a C++ cycle-level in-house simulator developed for Vortex. The relevant 
 
 The guide to build the fpga with specific configurations is located [here.](fpga_setup.md) You can find instructions for both Xilinx and Altera based FPGAs.
 
+### FPGA-Accelerated Simulation (FireSim)
+
+[FireSim](https://fires.im/) runs the Vortex RTL on an FPGA as a
+*host-decoupled* simulation: the design is transformed so that every target
+clock edge is scheduled by the host driver, and target DRAM is served by a
+timing model (FASED) rather than by the raw FPGA memory. That decoupling is
+what separates it from the plain FPGA flow — the results are cycle-accurate
+against the RTL rather than dependent on the board's real memory timing, while
+running orders of magnitude faster than Verilator.
+
+For scale, `sgemm -n32` takes ~1228 ms on rtlsim and ~8 ms on an Alveo U55C,
+and `sgemm -n1024` — over a billion instructions — completes in ~85 s.
+
+```bash
+export TARGET=hw
+export FPGA_BIN_DIR=<directory containing firesim.xclbin>
+./ci/blackbox.sh --driver=firesim --app=sgemm --args="-n1024"
+```
+
+The architecture, build flow and design invariants are documented in
+[designs/firesim_integration.md](designs/firesim_integration.md); the
+toolchain component is [section 12 of the toolchain
+guide](building_toolchain.md#12-firesim).
+
+One caveat worth knowing when reading its output: FireSim's
+`Target Cycles Emulated` counts cycles the *driver stepped*, not cycles the
+kernel took, and is quantized by the driver's polling schedule. Use Vortex's
+own `PERF: cycles=` line, which is exact.
+
 ### How to Test (using `blackbox.sh`)
 
 Running tests under specific drivers (rtlsim,simx,fpga) is done using the script named `blackbox.sh` located in the `ci` folder. Running command `./ci/blackbox.sh --help` from the Vortex root directory will display the following command line arguments for `blackbox.sh`:
@@ -25,7 +54,7 @@ Running tests under specific drivers (rtlsim,simx,fpga) is done using the script
 - *Threads* - used to specify the number of threads (smallest unit of computation) within a configuration.
 - *L2cache* - used to enable the shared l2cache among the Vortex cores.
 - *L3cache* - used to enable the shared l3cache among the Vortex clusters.
-- *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, opae, xrt, simx).
+- *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, opae, xrt, simx, firesim).
 - *Debug* - used to enable debug mode for the Vortex simulation.
 - *Perf* - used to enable the detailed performance counters within the Vortex simulation.
 - *App* - used to specify which test/benchmark to run in the Vortex simulation. The main choices are vecadd, sgemm, basic, demo, and dogfood. Other tests/benchmarks are located in the `/benchmarks/opencl` folder though not all of them work wit the current version of Vortex.
@@ -38,17 +67,17 @@ You can override these values at build time using the `CONFIGS` environment vari
 
 | Cache Level |  Parameter | Default size | CONFIGS flag |
 |-------------|-----------|---------|----------------|
-| L1 Data     | `DCACHE_SIZE` | 16384 | `-DDCACHE_SIZE=16384` |
-| L1 Instruction | `ICACHE_SIZE` | 16384 | `-DICACHE_SIZE=16384` |
-| L2 Cache    | `L2_CACHE_SIZE` | 1048576 | `-DL2_CACHE_SIZE=1048576` |
-| L3 Cache    | `L3_CACHE_SIZE` | 2097152 | `-DL3_CACHE_SIZE=2097152` |
+| L1 Data     | `VX_CFG_DCACHE_SIZE` | 16384 | `-DVX_CFG_DCACHE_SIZE=16384` |
+| L1 Instruction | `VX_CFG_ICACHE_SIZE` | 16384 | `-DVX_CFG_ICACHE_SIZE=16384` |
+| L2 Cache    | `VX_CFG_L2_CACHE_SIZE` | 1048576 | `-DVX_CFG_L2_CACHE_SIZE=1048576` |
+| L3 Cache    | `VX_CFG_L3_CACHE_SIZE` | 2097152 | `-DVX_CFG_L3_CACHE_SIZE=2097152` |
 
-**Note:** All sizes must be specified in **bytes** 
+**Note:** All sizes must be specified in **bytes**.
 
-**Example:** Running BFS with custom cache sizes
+**Example:** Running with custom cache sizes
 
 ```bash
-$ CONFIGS="-DDCACHE_SIZE=16384 -DL2_CACHE_SIZE=1048576 -DL3_CACHE_SIZE=2097152" \
+$ CONFIGS="-DVX_CFG_DCACHE_SIZE=16384 -DVX_CFG_L2_CACHE_SIZE=1048576 -DVX_CFG_L3_CACHE_SIZE=2097152" \
 ./ci/blackbox.sh --driver=simx --clusters=1 --cores=4 --warps=4 --threads=4 --args="path-to-test-file"
 ```
 Output from terminal:
@@ -98,6 +127,16 @@ PERF: core2: instrs=90849, cycles=53107, IPC=1.710678
 PERF: core3: instrs=90836, cycles=50347, IPC=1.804199
 PERF: instrs=363180, cycles=53108, IPC=6.838518
 ```
+
+> **Note on the `PERF:` numbers.** The instruction counts, cycle counts, and
+> IPC shown above are **illustrative only** — your run will differ. They depend
+> on the Vortex configuration (clusters/cores/warps/threads, cache sizes, etc.),
+> the benchmark input size, and the simulator/microarchitecture revision, so the
+> exact values are expected to change over time. Recent revisions also print a
+> single aggregate line, e.g. `PERF: instrs=<N>, cycles=<M>, IPC=<X>`, rather
+> than the per-core breakdown shown in these older examples. Use these figures
+> to compare configurations relative to one another, not as fixed targets to
+> reproduce.
 
 ## Additional Quick Start Scenarios
 

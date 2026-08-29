@@ -21,6 +21,10 @@ module VX_fetch import VX_gpu_pkg::*; #(
     input  wire             clk,
     input  wire             reset,
 
+`ifdef PERF_ENABLE
+    output fetch_perf_t     fetch_perf,
+`endif
+
     // Icache interface
     VX_mem_bus_if.master    icache_bus_if,
 
@@ -34,12 +38,21 @@ module VX_fetch import VX_gpu_pkg::*; #(
     `UNUSED_VAR (reset)
 
     wire icache_req_valid;
-    wire [ICACHE_ADDR_WIDTH-1:0] icache_req_addr;
-    wire [ICACHE_TAG_WIDTH-1:0] icache_req_tag;
     wire icache_req_ready;
+    wire [ICACHE_ADDR_WIDTH-1:0] icache_req_addr;
+    // Width matches the elastic_buffer payload below — the per-port
+    // tag bits VX_mem_bus_arb adds downstream live in ICACHE_TAG_WIDTH but
+    // are not driven by this stage.
+    wire [ICACHE_FETCH_TAG_WIDTH-1:0] icache_req_tag;
+    wire [NW_WIDTH-1:0]          icache_req_wid;
+    wire [UUID_WIDTH-1:0]        icache_req_uuid;
 
-    wire [UUID_WIDTH-1:0] rsp_uuid;
-    wire [NW_WIDTH-1:0] req_tag, rsp_tag;
+    wire [UUID_WIDTH-1:0]   rsp_uuid;
+    wire [PC_BITS-1:0]      rsp_PC;
+    wire [`VX_CFG_NUM_THREADS-1:0] rsp_tmask;
+    wire [NW_WIDTH-1:0]     req_tag;
+    wire [NW_WIDTH-1:0]     rsp_tag;
+    wire [NCTA_WIDTH-1:0]   rsp_cta_id;
 
     wire icache_req_fire = icache_req_valid && icache_req_ready;
 
@@ -47,12 +60,9 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     assign {rsp_uuid, rsp_tag} = icache_bus_if.rsp_data.tag;
 
-    wire [PC_BITS-1:0] rsp_PC;
-    wire [`NUM_THREADS-1:0] rsp_tmask;
-
     VX_dp_ram #(
-        .DATAW (PC_BITS + `NUM_THREADS),
-        .SIZE  (`NUM_WARPS),
+        .DATAW (PC_BITS + `VX_CFG_NUM_THREADS + NCTA_WIDTH),
+        .SIZE  (`VX_CFG_NUM_WARPS),
         .RDW_MODE ("R"),
         .LUTRAM (1)
     ) tag_store (
@@ -62,48 +72,147 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .write (icache_req_fire),
         .wren  (1'b1),
         .waddr (req_tag),
-        .wdata ({schedule_if.data.PC, schedule_if.data.tmask}),
+        .wdata ({schedule_if.data.PC, schedule_if.data.tmask, schedule_if.data.cta_id}),
         .raddr (rsp_tag),
-        .rdata ({rsp_PC, rsp_tmask})
+        .rdata ({rsp_PC, rsp_tmask, rsp_cta_id})
     );
 
-`ifndef L1_ENABLE
-    // Ensure that the ibuffer doesn't fill up.
-    // This resolves potential deadlock if ibuffer fills and the LSU stalls the execute stage due to pending dcache requests.
-    // This issue is particularly prevalent when the icache and dcache are disabled and both requests share the same bus.
-    wire [`NUM_WARPS-1:0] pending_ibuf_full;
-    for (genvar i = 0; i < `NUM_WARPS; ++i) begin : g_pending_reads
-        VX_pending_size #(
-            .SIZE (`IBUF_SIZE)
-        ) pending_reads (
-            .clk   (clk),
-            .reset (reset),
-            .incr  (icache_req_fire && schedule_if.data.wid == i),
-            .decr  (fetch_if.ibuf_pop[i]),
-            `UNUSED_PIN (empty),
-            `UNUSED_PIN (alm_empty),
-            .full  (pending_ibuf_full[i]),
-            `UNUSED_PIN (alm_full),
-            `UNUSED_PIN (size)
-        );
+    `RUNTIME_ASSERT((!schedule_if.valid || schedule_if.data.PC != 0),
+        ("invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", to_fullPC(schedule_if.data.PC), schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.uuid))
+
+`ifdef VX_CFG_EXT_C_ENABLE
+    // ------------------------------------------------------------------------
+    // RVC path: VX_decompressor + follow-up request mux
+    // ------------------------------------------------------------------------
+
+    wire [PC_BITS-1:0]      icache_req_PC;
+    wire [`VX_CFG_NUM_THREADS-1:0] icache_req_tmask;
+    wire [NW_WIDTH-1:0]     rsp_wid;
+
+    wire                    follow_req_valid;
+    wire [PC_BITS-1:0]      follow_req_PC;
+    wire [`VX_CFG_NUM_THREADS-1:0] follow_req_tmask;
+    wire [NW_WIDTH-1:0]     follow_req_wid;
+    wire [UUID_WIDTH-1:0]   follow_req_uuid;
+
+    wire sched_buffered_match;
+    wire sched_buffered;
+    assign rsp_wid = rsp_tag;
+
+    // One-outstanding-per-warp (Invariant B): a warp with an icache request in
+    // flight must not issue another, else its two responses alias the single
+    // tag_store slot. Set on request fire, cleared on response fire.
+    reg [`VX_CFG_NUM_WARPS-1:0] inflight;
+    wire icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
+    always @(posedge clk) begin
+        if (reset) begin
+            inflight <= '0;
+        end else begin
+            for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
+                if (icache_req_fire && (icache_req_wid == w[NW_WIDTH-1:0]))
+                    inflight[w] <= 1'b1;
+                else if (icache_rsp_fire && (rsp_wid == w[NW_WIDTH-1:0]))
+                    inflight[w] <= 1'b0;
+            end
+        end
     end
-    wire ibuf_ready = ~pending_ibuf_full[schedule_if.data.wid];
-`else
-    wire ibuf_ready = 1'b1;
+    `UNUSED_VAR (icache_req_tmask)
+
+    // ibuffer occupancy is already gated by VX_scheduler (schedule_warps
+    // masks out warps with full ibufs), so schedule_if.valid implies space.
+    // Suppress with the UNGATED sched_buffered (not the st0-gated match): a
+    // word already in the decompressor buffer must never be re-fetched, even
+    // while stage 0 is stalled, else the icache returns a duplicate word.
+    // NOTE: do NOT gate on inflight/BUF_32HI here — the scheduler stalls a warp
+    // from schedule until decode, so it never re-presents an in-flight or
+    // mid-straddle warp on its own; de-asserting ready for such a warp would
+    // instead wedge the (non-rotating) scheduler on it. One-outstanding is thus
+    // enforced by the scheduler's stall, not by this suppression.
+    wire sched_req_valid = schedule_if.valid && ~sched_buffered;
+
+    // Follow-up has priority; scheduler PC otherwise. Address is 4-byte
+    // aligned (the decompressor uses PC[1] to select halfword).
+    assign icache_req_valid = follow_req_valid || sched_req_valid;
+    assign icache_req_PC    = follow_req_valid ? follow_req_PC    : schedule_if.data.PC;
+    assign icache_req_tmask = follow_req_valid ? follow_req_tmask : schedule_if.data.tmask;
+    assign icache_req_wid   = follow_req_valid ? follow_req_wid   : schedule_if.data.wid;
+    assign icache_req_uuid  = follow_req_valid ? follow_req_uuid  : schedule_if.data.uuid;
+    // NOTE: bind the full PC to a net before part-selecting — Vivado synthesis
+    // rejects a bit-select applied directly to a function-call result.
+    wire [`VX_CFG_XLEN-1:0] icache_req_full_pc = to_fullPC(icache_req_PC);
+    assign icache_req_addr  = icache_req_full_pc[ICACHE_ADDR_WIDTH+1 : 2];
+    assign icache_req_tag   = {icache_req_uuid, icache_req_wid};
+    // The icache is word-addressed: PC[1:0] (sub-word) is intentionally
+    // dropped from icache_req_addr.
+    `UNUSED_VAR (icache_req_full_pc)
+
+    // Scheduler is "ready" when icache accepts the request OR when the
+    // decompressor already has the data buffered.
+    assign schedule_if.ibuf_pop = fetch_if.ibuf_pop;
+    // Ack only when the scheduler request actually fires (not merely when the
+    // icache is ready) — with the added inflight/BUF_32HI suppression a bare
+    // icache_req_ready would falsely retire a suppressed request.
+    assign schedule_if.ready = (sched_req_valid && ~follow_req_valid && icache_req_ready)
+                             || sched_buffered_match;
+
+    VX_decompressor #(
+        .INSTANCE_ID (INSTANCE_ID)
+    ) decompressor (
+        .clk                  (clk),
+        .reset                (reset),
+        .sched_valid          (schedule_if.valid),
+        .sched_PC             (schedule_if.data.PC),
+        .sched_tmask          (schedule_if.data.tmask),
+        .sched_cta_id         (schedule_if.data.cta_id),
+        .sched_wid            (schedule_if.data.wid),
+        .sched_buffered_match (sched_buffered_match),
+        .sched_buffered       (sched_buffered),
+        .inflight             (inflight),
+        .rsp_valid            (icache_bus_if.rsp_valid),
+        .rsp_word             (icache_bus_if.rsp_data.data),
+        .rsp_PC               (rsp_PC),
+        .rsp_tmask            (rsp_tmask),
+        .rsp_cta_id           (rsp_cta_id),
+        .rsp_wid              (rsp_wid),
+        .rsp_uuid             (rsp_uuid),
+        .rsp_ready            (icache_bus_if.rsp_ready),
+        .follow_req_valid     (follow_req_valid),
+        .follow_req_PC        (follow_req_PC),
+        .follow_req_tmask     (follow_req_tmask),
+        .follow_req_wid       (follow_req_wid),
+        .follow_req_uuid      (follow_req_uuid),
+        .fetch_if             (fetch_if)
+    );
+
+`else // !VX_CFG_EXT_C_ENABLE
+    // ------------------------------------------------------------------------
+    // Direct path (no RVC): scheduler PC → icache request → fetch_if.
+    // ------------------------------------------------------------------------
+
+    assign icache_req_valid = schedule_if.valid;
+    assign icache_req_addr  = schedule_if.data.PC[2-(`VX_CFG_XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH];
+    assign icache_req_wid   = schedule_if.data.wid;
+    assign icache_req_uuid  = schedule_if.data.uuid;
+    assign icache_req_tag   = {icache_req_uuid, icache_req_wid};
+    assign schedule_if.ibuf_pop = fetch_if.ibuf_pop;
+    assign schedule_if.ready = icache_req_ready;
+
+    assign fetch_if.valid       = icache_bus_if.rsp_valid;
+    assign fetch_if.data.tmask  = rsp_tmask;
+    assign fetch_if.data.wid    = rsp_tag;
+    assign fetch_if.data.cta_id = rsp_cta_id;
+    assign fetch_if.data.PC     = rsp_PC;
+    assign fetch_if.data.instr  = icache_bus_if.rsp_data.data;
+    assign fetch_if.data.uuid   = rsp_uuid;
+    assign icache_bus_if.rsp_ready = fetch_if.ready;
 `endif
 
-    `RUNTIME_ASSERT((!schedule_if.valid || schedule_if.data.PC != 0),
-        ("%t: *** %s invalid PC=0x%0h, wid=%0d, tmask=%b (#%0d)", $time, INSTANCE_ID, to_fullPC(schedule_if.data.PC), schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.uuid))
-
-    // Icache Request
-
-    assign icache_req_valid = schedule_if.valid && ibuf_ready;
-    assign icache_req_addr  = schedule_if.data.PC[2-(`XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH]; // 4-byte aligned addresses
-    assign icache_req_tag   = {schedule_if.data.uuid, req_tag};
-    assign schedule_if.ready = icache_req_ready && ibuf_ready;
+    // ------------------------------------------------------------------------
+    // Shared icache request elastic buffer + drives
+    // ------------------------------------------------------------------------
 
     VX_elastic_buffer #(
-        .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_TAG_WIDTH),
+        .DATAW   (ICACHE_ADDR_WIDTH + ICACHE_FETCH_TAG_WIDTH),
         .SIZE    (2),
         .OUT_REG (1) // external bus should be registered
     ) req_buf (
@@ -117,20 +226,26 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .ready_out (icache_bus_if.req_ready)
     );
 
-    assign icache_bus_if.req_data.flags  = '0;
-    assign icache_bus_if.req_data.rw     = 0;
+    assign icache_bus_if.req_data.attr   = '0;
+    assign icache_bus_if.req_data.rw     = 1'b0;
     assign icache_bus_if.req_data.byteen = '1;
     assign icache_bus_if.req_data.data   = '0;
 
-    // Icache Response
+`ifdef PERF_ENABLE
+    reg [PERF_CTR_BITS-1:0] perf_fetch_stalls;
 
-    assign fetch_if.valid = icache_bus_if.rsp_valid;
-    assign fetch_if.data.tmask = rsp_tmask;
-    assign fetch_if.data.wid   = rsp_tag;
-    assign fetch_if.data.PC    = rsp_PC;
-    assign fetch_if.data.instr = icache_bus_if.rsp_data.data;
-    assign fetch_if.data.uuid  = rsp_uuid;
-    assign icache_bus_if.rsp_ready = fetch_if.ready;
+    wire icache_req_stall = icache_req_valid && ~icache_req_ready;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_fetch_stalls <= '0;
+        end else begin
+            perf_fetch_stalls <= perf_fetch_stalls + PERF_CTR_BITS'(icache_req_stall);
+        end
+    end
+
+    assign fetch_perf.stalls = perf_fetch_stalls;
+`endif
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_FETCH
@@ -141,7 +256,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 1, 6, 3, (
-            UUID_WIDTH + NW_WIDTH + `NUM_THREADS + PC_BITS +
+            UUID_WIDTH + NW_WIDTH + `VX_CFG_NUM_THREADS + PC_BITS +
             UUID_WIDTH + ICACHE_WORD_SIZE + ICACHE_ADDR_WIDTH +
             UUID_WIDTH + (ICACHE_WORD_SIZE * 8)
         ), {
@@ -155,7 +270,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
             schedule_fire,
             icache_bus_req_fire,
             icache_bus_rsp_fire
-        },{
+        }, {
             schedule_if.data.uuid, schedule_if.data.wid, schedule_if.data.tmask, schedule_if.data.PC,
             icache_bus_if.req_data.tag.uuid, icache_bus_if.req_data.byteen, icache_bus_if.req_data.addr,
             icache_bus_if.rsp_data.tag.uuid, icache_bus_if.rsp_data.data
@@ -178,13 +293,14 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `endif
 `endif
 
+
 `ifdef DBG_TRACE_MEM
     always @(posedge clk) begin
         if (schedule_if.valid && schedule_if.ready) begin
-            `TRACE(1, ("%t: %s req: wid=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if.data.wid, to_fullPC(schedule_if.data.PC), schedule_if.data.tmask, schedule_if.data.uuid))
+            `TRACE(1, ("%t: %s req: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b (#%0d)\n", $time, INSTANCE_ID, schedule_if.data.wid, schedule_if.data.cta_id, to_fullPC(schedule_if.data.PC), schedule_if.data.tmask, schedule_if.data.uuid))
         end
         if (fetch_if.valid && fetch_if.ready) begin
-            `TRACE(1, ("%t: %s rsp: wid=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if.data.wid, to_fullPC(fetch_if.data.PC), fetch_if.data.tmask, fetch_if.data.instr, fetch_if.data.uuid))
+            `TRACE(1, ("%t: %s rsp: wid=%0d, cta_id=%0d, PC=0x%0h, tmask=%b, instr=0x%0h (#%0d)\n", $time, INSTANCE_ID, fetch_if.data.wid, fetch_if.data.cta_id, to_fullPC(fetch_if.data.PC), fetch_if.data.tmask, fetch_if.data.instr, fetch_if.data.uuid))
         end
     end
 `endif

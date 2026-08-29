@@ -18,12 +18,106 @@
 `include "VX_config.vh"
 `include "VX_types.vh"
 
-`ifdef ICACHE_ENABLE
+`ifdef SV_DPI
+`include "dpi_util.vh"
+`endif
+
+// ----------------------------------------------------------------------
+// Command Processor compile-time parameters.
+//
+// Kept in this globally-included header (rather than VX_cp_pkg.sv) so
+// every CP module and AFU wrapper resolves them during preprocessing.
+// The `ifndef guards allow any value to be overridden via -D flags.
+// ----------------------------------------------------------------------
+`ifndef VX_CP_NUM_QUEUES
+`define VX_CP_NUM_QUEUES 1
+`endif
+`ifndef VX_CP_RING_SIZE_LOG2
+`define VX_CP_RING_SIZE_LOG2 16   // 64 KiB per queue ring
+`endif
+`ifndef VX_CP_MAX_CMDS_PER_CL
+`define VX_CP_MAX_CMDS_PER_CL 5
+`endif
+`ifndef VX_CP_AXI_TID_WIDTH
+`define VX_CP_AXI_TID_WIDTH 6
+`endif
+
+`ifdef VX_CFG_ICACHE_ENABLE
     `define L1_ENABLE
 `endif
 
-`ifdef DCACHE_ENABLE
+`ifdef VX_CFG_DCACHE_ENABLE
     `define L1_ENABLE
+`endif
+
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    // Per-LOD mip-offset DCR slot: 6 base entries + lod (lod < VX_TEX_LOD_MAX)
+    `define VX_DCR_TEX_MIPOFF(lod) (`VX_DCR_TEX_MIPOFF_BASE + (lod))
+`endif
+
+// Convenience flag: any graphics extension is enabled. Gates the shared
+// per-core RTU unit (VX_rtu_unit: hit-window slot RF + GETW/GETWF), used by
+// TEX/OM and consumed by the RTU traversal engine.
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    `define EXT_GFX_ANY_ENABLE
+`elsif VX_CFG_EXT_RASTER_ENABLE
+    `define EXT_GFX_ANY_ENABLE
+`elsif VX_CFG_EXT_OM_ENABLE
+    `define EXT_GFX_ANY_ENABLE
+`elsif VX_CFG_EXT_RTU_ENABLE
+    `define EXT_GFX_ANY_ENABLE
+`endif
+
+// Numeric twin (0/1) for PE-count / uop-slot arithmetic.
+`ifdef EXT_GFX_ANY_ENABLE
+    `define EXT_GFX_ANY_ENABLED 1
+`else
+    `define EXT_GFX_ANY_ENABLED 0
+`endif
+
+// Cluster-resident graphics units: RASTER and OM (and their caches) live at
+// cluster level; TEX, RTU and DXA are socket-resident.
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    `define EXT_GFX_CLUSTER_ENABLE
+`elsif VX_CFG_EXT_OM_ENABLE
+    `define EXT_GFX_CLUSTER_ENABLE
+`endif
+
+// Early-Z occlusion cull requires BOTH the rasterizer (produces the covered-quad
+// waves + depth plane) and the OM (owns the ocache the depth read is coherent
+// with). It is illegal without them — reading committed depth needs the ocache.
+`ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+    `ifndef VX_CFG_EXT_RASTER_ENABLE
+        `error "VX_CFG_RASTER_EARLYZ_ENABLE requires VX_CFG_EXT_RASTER_ENABLE"
+    `endif
+    `ifndef VX_CFG_EXT_OM_ENABLE
+        `error "VX_CFG_RASTER_EARLYZ_ENABLE requires VX_CFG_EXT_OM_ENABLE"
+    `endif
+`endif
+
+// Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
+// mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
+`ifdef VX_CFG_TCU_MX_ENABLE
+    `define TCU_META_ENABLE
+`elsif VX_CFG_TCU_SPARSE_ENABLE
+    `define TCU_META_ENABLE
+`endif
+
+// Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.
+// Internal derived macros — not VX_CFG_* knobs.
+`ifndef SYNTHESIS
+`ifdef SV_DPI
+    `define IMUL_DPI
+    `define IDIV_DPI
+`endif
+`endif
+
+// Convenience flag: the TCU TFR integer datapath is present when any integer
+// format (int8 or int4) is enabled. Internal derived macro — not a VX_CFG_* knob.
+`ifdef VX_CFG_TCU_INT8_ENABLE
+    `define TCU_TFR_INT_ENABLE
+`elsif VX_CFG_TCU_INT4_ENABLE
+    `define TCU_TFR_INT_ENABLE
 `endif
 
 `ifndef NDEBUG
@@ -33,6 +127,23 @@
 `define UUID_ENABLE
 `endif
 `endif
+
+///////////////////////////////////////////////////////////////////////////////
+
+`define __used_reg_rv_rd  RV_RD
+`define __used_reg_rv_rs1 RV_RS1
+`define __used_reg_rv_rs2 RV_RS2
+`define __used_reg_rv_rs3 RV_RS3
+
+`define USED_REG(t, x, v) \
+    reg_ids[`__used_reg_rv_``x]  = make_reg_num(REG_TYPE_BITS'(t), RV_REGS_BITS'(``x)); \
+    use_regs[`__used_reg_rv_``x] = v
+
+`define USED_IREG(x) \
+    `USED_REG(REG_TYPE_I, ``x, 1'b1)
+
+`define USED_FREG(x) \
+    `USED_REG(REG_TYPE_F, ``x, 1'b1)
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -139,14 +250,14 @@
 `define AOS_TO_ITF_RSP(prefix, itf, count, dataw) \
     wire [(count)-1:0] prefix``_valid; \
     wire [(count)-1:0][(dataw)-1:0] prefix``_data; \
-    wire [(count)-1:0] prefix``_vready; \
+    wire [(count)-1:0] prefix``_ready; \
     /* verilator lint_off GENUNNAMED */ \
     for (genvar i = 0; i < (count); ++i) begin \
         assign itf[i].rsp_valid = prefix``_valid[i]; \
         assign itf[i].rsp_data = prefix``_data[i]; \
         assign prefix``_ready[i] = itf[i].rsp_ready; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define ITF_TO_AOS_RSP_V(prefix, itf, count, dataw) \
     wire [(count)-1:0] prefix``_valid; \
@@ -156,7 +267,7 @@
         assign prefix``_valid[i] = itf[i].rsp_valid; \
         assign prefix``_data[i] = itf[i].rsp_data; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define AOS_TO_ITF_RSP_V(prefix, itf, count, dataw) \
     wire [(count)-1:0] prefix``_valid; \
@@ -166,7 +277,7 @@
         assign itf[i].rsp_valid = prefix``_valid[i]; \
         assign itf[i].rsp_data = prefix``_data[i]; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define REDUCE(__op, __out, __in, __n, __outw) \
     /* verilator lint_off GENUNNAMED */ \
@@ -182,7 +293,7 @@
     end else begin \
         assign __out = (__outw)'(__in[0]); \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define REDUCE_TREE(__op, __out, __in, __n, __outw, __inw) \
     VX_reduce_tree #( \
@@ -215,7 +326,7 @@
     end else if ((L) != 0 && (R) != 0) begin \
         assign out = {left_in, right_in}; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define BUFFER_EX(dst, src, ena, resetw, latency) \
     VX_pipe_register #( \
@@ -275,7 +386,7 @@
 `define CACHE_CLUSTER_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, tag_width, num_inputs, num_caches, uuid_width) \
         `CACHE_CLUSTER_MEM_ARB_TAG(`CACHE_NC_MEM_TAG_WIDTH(mshr_size, num_banks, num_reqs, mem_ports, line_size, word_size, `CACHE_CLUSTER_CORE_ARB_TAG(tag_width, num_inputs, num_caches), uuid_width), num_caches)
 
-`define TO_FULL_ADDR(x) {x, (`MEM_ADDR_WIDTH-$bits(x))'(0)}
+`define TO_FULL_ADDR(x) {x, (`VX_CFG_MEM_ADDR_WIDTH-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -297,13 +408,27 @@
     assign dst.req_data.rw = 0; \
     assign dst.req_data.addr = src.req_data.addr; \
     assign dst.req_data.data = '0; \
-    assign dst.req_data.byteen = '1; \
-    assign dst.req_data.flags = src.req_data.flags; \
+    assign dst.req_data.byteen = '0; \
+    assign dst.req_data.attr = src.req_data.attr; \
     assign dst.req_data.tag = src.req_data.tag; \
     assign src.req_ready = dst.req_ready; \
     assign src.rsp_valid = dst.rsp_valid; \
     assign src.rsp_data.data = dst.rsp_data.data; \
     assign src.rsp_data.tag = dst.rsp_data.tag; \
+    assign dst.rsp_ready = src.rsp_ready
+
+`define ASSIGN_VX_MEM_BUS_WR_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data.rw = 1; \
+    assign dst.req_data.addr = src.req_data.addr; \
+    assign dst.req_data.data = src.req_data.data; \
+    assign dst.req_data.byteen = src.req_data.byteen; \
+    assign dst.req_data.attr = src.req_data.attr; \
+    assign dst.req_data.tag = src.req_data.tag; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_data.data = '0; \
+    assign src.rsp_data.tag = '0; \
     assign dst.rsp_ready = src.rsp_ready
 
 `define ASSIGN_VX_MEM_BUS_IF_EX(dst, src, TD, TS, UUID) \
@@ -313,7 +438,7 @@
     assign dst.req_data.addr = src.req_data.addr; \
     assign dst.req_data.data = src.req_data.data; \
     assign dst.req_data.byteen = src.req_data.byteen; \
-    assign dst.req_data.flags = src.req_data.flags; \
+    assign dst.req_data.attr = src.req_data.attr; \
     if (TD != TS) begin \
         if (UUID != 0) begin \
             if (TD > TS) begin \
@@ -352,7 +477,7 @@
         assign src.rsp_data.tag = dst.rsp_data.tag; \
     end \
     assign dst.rsp_ready = src.rsp_ready \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define INIT_VX_MEM_BUS_IF(itf) \
     assign itf.req_valid = 0; \
@@ -370,23 +495,33 @@
     assign itf.rsp_data  = '0; \
     `UNUSED_VAR (itf.rsp_ready)
 
-`define BUFFER_DCR_BUS_IF(dst, src, ena, latency) \
-    /* verilator lint_off GENUNNAMED */ \
-    if (latency != 0) begin \
-        VX_pipe_register #( \
-            .DATAW (1 + VX_DCR_ADDR_WIDTH + VX_DCR_DATA_WIDTH), \
-            .DEPTH (latency) \
-        ) pipe_reg ( \
-            .clk      (clk), \
-            .reset    (1'b0), \
-            .enable   (1'b1), \
-            .data_in  ({src.write_valid && ena, src.write_addr, src.write_data}), \
-            .data_out ({dst.write_valid, dst.write_addr, dst.write_data}) \
-        ); \
-    end else begin \
-        assign {dst.write_valid, dst.write_addr, dst.write_data} = {src.write_valid && ena, src.write_addr, src.write_data}; \
-    end \
-    /* verilator lint_off GENUNNAMED */
+// Graphics extension bus_if forwarders (request-only for RASTER/OM,
+// request+response for TEX).
+`define ASSIGN_VX_RASTER_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready
+
+`define ASSIGN_VX_OM_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready
+
+`define ASSIGN_VX_TEX_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_data  = dst.rsp_data; \
+    assign dst.rsp_ready = src.rsp_ready
+
+`define ASSIGN_VX_RTU_BUS_IF(dst, src) \
+    assign dst.req_valid = src.req_valid; \
+    assign dst.req_data  = src.req_data; \
+    assign src.req_ready = dst.req_ready; \
+    assign src.rsp_valid = dst.rsp_valid; \
+    assign src.rsp_data  = dst.rsp_data; \
+    assign dst.rsp_ready = src.rsp_ready
 
 `define PERF_COUNTER_ADD(dst, src, field, width, count, reg_enable) \
     /* verilator lint_off GENUNNAMED */ \
@@ -420,12 +555,12 @@
     end else begin \
         assign dst.``field = src[0].``field; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define ASSIGN_BLOCKED_WID(dst, src, block_idx, block_size) \
     /* verilator lint_off GENUNNAMED */ \
     if (block_size != 1) begin \
-        if (block_size != `NUM_WARPS) begin \
+        if (block_size != `VX_CFG_NUM_WARPS) begin \
             assign dst = {src[NW_WIDTH-1:`CLOG2(block_size)], `CLOG2(block_size)'(block_idx)}; \
         end else begin \
             assign dst = NW_WIDTH'(block_idx); \
@@ -433,38 +568,34 @@
     end else begin \
         assign dst = src; \
     end \
-    /* verilator lint_off GENUNNAMED */
+    /* verilator lint_on GENUNNAMED */
 
 `define DECL_EXECUTE_T(__name__, __lanes__) \
     typedef struct packed { \
-        logic [UUID_WIDTH-1:0]          uuid; \
-        logic [NW_WIDTH-1:0]            wid; \
-        logic [__lanes__-1:0]           tmask; \
-        logic [PC_BITS-1:0]             PC; \
-        logic [INST_ALU_BITS-1:0]       op_type; \
-        op_args_t                       op_args; \
-        logic                           wb; \
-        logic [NUM_REGS_BITS-1:0]       rd; \
-        logic [__lanes__-1:0][`XLEN-1:0] rs1_data; \
-        logic [__lanes__-1:0][`XLEN-1:0] rs2_data; \
-        logic [__lanes__-1:0][`XLEN-1:0] rs3_data; \
-        logic [`LOG2UP(`NUM_THREADS / __lanes__)-1:0] pid; \
-        logic                           sop; \
-        logic                           eop; \
-    } __name__
-
-`define DECL_RESULT_T(__name__, __lanes__) \
+        logic [UUID_WIDTH-1:0]           uuid; \
+        logic [NW_WIDTH-1:0]             wid; \
+        logic [NCTA_WIDTH-1:0]           cta_id; \
+        logic [__lanes__-1:0]            tmask; \
+        logic [`LOG2UP(`VX_CFG_NUM_THREADS / __lanes__)-1:0] pid; \
+        logic                            sop; \
+        logic                            eop; \
+        logic [PC_BITS-1:0]              PC; \
+        logic                            wb; \
+        logic [NUM_XREGS-1:0]            wr_xregs; \
+        logic [NUM_REGS_BITS-1:0]        rd; \
+        logic [BYTESEL_BITS-1:0]         bytesel; \
+    } __name__``_header_t; \
     typedef struct packed { \
-        logic [UUID_WIDTH-1:0]      uuid; \
-        logic [NW_WIDTH-1:0]        wid; \
-        logic [__lanes__-1:0]       tmask; \
-        logic [PC_BITS-1:0]         PC; \
-        logic                       wb; \
-        logic [NUM_REGS_BITS-1:0]   rd; \
-        logic [__lanes__-1:0][`XLEN-1:0] data; \
-        logic [`LOG2UP(`NUM_THREADS / __lanes__)-1:0] pid; \
-        logic                       sop; \
-        logic                       eop; \
-    } __name__
+        __name__``_header_t              header; \
+        logic [INST_OP_BITS-1:0]         op_type; \
+        op_args_t                        op_args; \
+        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] rs1_data; \
+        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] rs2_data; \
+        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] rs3_data; \
+    } __name__``_execute_t; \
+    typedef struct packed { \
+        __name__``_header_t              header; \
+        logic [__lanes__-1:0][`VX_CFG_XLEN-1:0] data; \
+    } __name__``_result_t
 
 `endif // VX_DEFINE_VH

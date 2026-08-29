@@ -16,31 +16,93 @@
 interface VX_sched_csr_if import VX_gpu_pkg::*; ();
 
     wire [PERF_CTR_BITS-1:0]        cycles;
-    wire [`NUM_WARPS-1:0]           active_warps;
-    wire [`NUM_WARPS-1:0][`NUM_THREADS-1:0] thread_masks;
-    wire                            alm_empty;
-    wire [NW_WIDTH-1:0]             alm_empty_wid;
-    wire                            unlock_warp;
-    wire [NW_WIDTH-1:0]             unlock_wid;
+    wire [PERF_CTR_BITS-1:0]        instret;
+    wire [`VX_CFG_NUM_WARPS-1:0]    active_warps;
+    wire [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] thread_masks;
+
+    // Read port: slave sends wid + cta_id, master returns selected mscratch
+    // and cta_csrs. csr_rd_cta_id must carry the executing instruction's
+    // cta_id so the scheduler can index its per-CTA table directly.
+    logic [NW_WIDTH-1:0]            csr_rd_wid;
+    logic [NCTA_WIDTH-1:0]          csr_rd_cta_id;
+    logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;
+    cta_csrs_t                      cta_csrs;
+    // Per-lane launch record; the CSR unit reads the view (thread index or fragment
+    // stamp) the accessed CSR needs.
+    cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_lane;
+
+`ifdef VX_CFG_VM_ENABLE
+    logic [`VX_CFG_XLEN-1:0]        csr_satp;
+`endif
+
+    // Write port: slave notifies scheduler of MSCRATCH CSR writes
+    logic                           csr_wr_valid;
+    logic [NW_WIDTH-1:0]            csr_wr_wid;
+    logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]     csr_wr_data;
+
+    // Per-warp machine-mode trap CSRs live in the scheduler (alongside
+    // mscratch) because the scheduler owns warp PC redirection. Reads are
+    // returned already selected by csr_rd_wid; csrw writes are forwarded
+    // here carrying the CSR address. csr_wr_wid is shared with mscratch.
+    logic [`VX_CFG_XLEN-1:0]               csr_mstatus;
+    logic [`VX_CFG_XLEN-1:0]               csr_mtvec;
+    logic [`VX_CFG_XLEN-1:0]               csr_mepc;
+    logic [`VX_CFG_XLEN-1:0]               csr_mcause;
+    logic [`VX_CFG_XLEN-1:0]               csr_mtval;
+    logic                           trap_csr_wr_valid;
+    logic [`VX_CSR_ADDR_BITS-1:0]   trap_csr_wr_addr;
+    logic [`VX_CFG_XLEN-1:0]               trap_csr_wr_data;
 
     modport master (
         output cycles,
+        output instret,
         output active_warps,
         output thread_masks,
-        input  alm_empty_wid,
-        output alm_empty,
-        input  unlock_wid,
-        input  unlock_warp
+        output mscratch,
+        output cta_csrs,
+        output cta_lane,
+        output csr_mstatus,
+        output csr_mtvec,
+        output csr_mepc,
+        output csr_mcause,
+        output csr_mtval,
+    `ifdef VX_CFG_VM_ENABLE
+        input csr_satp,
+    `endif
+        input  csr_rd_wid,
+        input  csr_rd_cta_id,
+        input  csr_wr_valid,
+        input  csr_wr_wid,
+        input  csr_wr_data,
+        input  trap_csr_wr_valid,
+        input  trap_csr_wr_addr,
+        input  trap_csr_wr_data
     );
 
     modport slave (
         input  cycles,
+        input  instret,
         input  active_warps,
         input  thread_masks,
-        output alm_empty_wid,
-        input  alm_empty,
-        output unlock_wid,
-        output unlock_warp
+        input  mscratch,
+        input  cta_csrs,
+        input  cta_lane,
+        input  csr_mstatus,
+        input  csr_mtvec,
+        input  csr_mepc,
+        input  csr_mcause,
+        input  csr_mtval,
+    `ifdef VX_CFG_VM_ENABLE
+        output csr_satp,
+    `endif
+        output csr_rd_wid,
+        output csr_rd_cta_id,
+        output csr_wr_valid,
+        output csr_wr_wid,
+        output csr_wr_data,
+        output trap_csr_wr_valid,
+        output trap_csr_wr_addr,
+        output trap_csr_wr_data
     );
 
 endinterface

@@ -1,11 +1,13 @@
 ROOT_DIR := $(realpath ../..)
 include $(ROOT_DIR)/config.mk
 
+PROJECTS := vx_malloc dxa_ooo gfx_binsort gfx_tex_sw gfx_rast_sw gfx_msaa gfx_om_mrt
+
 all:
-	$(MAKE) -C vx_malloc
+	$(foreach p,$(PROJECTS),$(MAKE) -C $(p) &&) true
 
 run:
-	$(MAKE) -C vx_malloc run
+	$(foreach p,$(PROJECTS),$(MAKE) -C $(p) run &&) true
 
 clean:
-	$(MAKE) -C vx_malloc clean
+	$(foreach p,$(PROJECTS),$(MAKE) -C $(p) clean &&) true

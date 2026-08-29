@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,9 +16,9 @@
 
 `include "VX_define.vh"
 
-`ifdef SV_DPI
-`include "float_dpi.vh"
-`endif
+// VX_CFG_FPU_USE_DSP (mantissa multipliers -> FPGA DSP48 vs ASIC/LUT) is defined
+// solely in VX_config.toml (mirrors VX_CFG_TCU_USE_DSP) and passed to RTL as a
+// +define; the VX_fma_unit datapath takes it as a plain parameter.
 
 `define FPU_MERGE_FFLAGS(out, in, mask, lanes) \
     fflags_t __``out; \
@@ -35,7 +35,7 @@
         end \
     end \
     assign out = __``out
-    
+
 `define FP_CLASS_BITS   $bits(VX_fpu_pkg::fclass_t)
 `define FP_FLAGS_BITS   $bits(VX_fpu_pkg::fflags_t)
 

@@ -6,6 +6,13 @@ DEVICE_FAMILY ?= arria10
 PREFIX ?= build$(XLEN)
 TARGET ?= fpga
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile, 3 -- default. NOT supported on this backend.
+OPT_LEVEL ?= 3
+ifneq ($(OPT_LEVEL),3)
+$(error OPT_LEVEL=$(OPT_LEVEL) requested but not supported on the altera/opae backend)
+endif
+
 SRC_DIR := $(VORTEX_HOME)/hw/syn/altera/opae
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
@@ -18,7 +25,7 @@ IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 BUILD_DIR := $(PREFIX)_$(DEVICE_FAMILY)_$(TARGET)_$(NUM_CORES)c
 
 ifeq ($(shell which qsub-synth),)
-	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh > build.log 2>&1 &
+	RUN_SYNTH=$(OPAE_PLATFORM_ROOT)/bin/run.sh
 else
 	RUN_SYNTH=qsub-synth
 endif
@@ -46,56 +53,55 @@ endif
 
 ifdef NUM_CORES
 # cluster configuration
-CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
-CONFIGS_2c  := -DNUM_CLUSTERS=1 -DNUM_CORES=2
-CONFIGS_4c  := -DNUM_CLUSTERS=1 -DNUM_CORES=4
-CONFIGS_8c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=8
-CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16
-CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16
-CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16
+CONFIGS_1c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=1
+CONFIGS_2c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=2
+CONFIGS_4c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4
+CONFIGS_8c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=8
+CONFIGS_16c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16
+CONFIGS_32c := -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16
+CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 endif
+
+CONFIGS += -DSYNTHESIS -DQUARTUS
+
+ifneq ($(TARGET), fpga)
+	CONFIGS += -DSIMULATION
+endif
+
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 # include sources
 RTL_PKGS = $(AFU_DIR)/local_mem_cfg_pkg.sv $(AFU_DIR)/ccip/ccip_if_pkg.sv
 RTL_PKGS += $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(findstring -DFPU_FPNEW, $(CONFIGS)))
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(IP_CACHE_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE)
 
-# Add V extension sources
-ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/vpu
-endif
+# Command Processor sources. RTL_PKGS holds packages only; the CP
+# interface files are auto-discovered via the -I path below.
+RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
+RTL_INCLUDE += -I$(RTL_DIR)/cp
 
-# Add TCU extension sources
-ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
-	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
-	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
-endif
+# Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
+# single source of truth, appended based on the resolved XCONFIGS.
+include $(VORTEX_HOME)/hw/syn/extensions.mk
 
 # compilation flags
-CFLAGS += -DSYNTHESIS -DQUARTUS
-CFLAGS += -DXLEN_$(XLEN)
-CFLAGS += $(CONFIGS)
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
+# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
+# resolved type selectors so an enum override selects its RTL implementation.
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 CFLAGS += $(RTL_INCLUDE)
-
-ifneq ($(TARGET), fpga)
-	CFLAGS += -DSIMULATION
-endif
 
 # Debugging
 ifdef DEBUG
 	ifneq ($(TARGET), fpga)
-		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
+		CFLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	else
 		CFLAGS += -DNDEBUG
 	endif
@@ -115,7 +121,7 @@ ifdef PERF
 endif
 
 # ast dump flags
-XML_CFLAGS = $(filter-out -DSYNTHESIS -DQUARTUS, $(CFLAGS)) $(RTL_PKGS) -I$(AFU_DIR)/ccip -I$(DPI_DIR) -DPLATFORM_PROVIDES_LOCAL_MEMORY -DPLATFORM_MEMORY_NUM_BANKS=1 -DNOPAE -DSV_DPI
+XML_CFLAGS = $(filter-out -DSYNTHESIS -DQUARTUS, $(CFLAGS)) $(RTL_PKGS) -I$(AFU_DIR)/ccip -I$(DPI_DIR) -DPLATFORM_PROVIDES_LOCAL_MEMORY -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 -DNOPAE -DSV_DPI
 
 all: swconfig ip-gen setup build
 
@@ -123,8 +129,8 @@ ip-gen: $(IP_CACHE_DIR)/ip-gen.log
 $(IP_CACHE_DIR)/ip-gen.log:
 	$(SCRIPT_DIR)/altera_ip_gen.sh $(IP_CACHE_DIR)
 
-swconfig: vortex_afu.h
-vortex_afu.h: $(SRC_DIR)/vortex_afu.json
+swconfig: vortex_opae.h
+vortex_opae.h: $(SRC_DIR)/vortex_afu.json
 	afu_json_mgr json-info --afu-json=$^ --c-hdr=$@
 
 $(BUILD_DIR)/setup.cfg:
@@ -150,18 +156,18 @@ endif
 
 build: ip-gen setup $(SCOPE_JSON)
 ifeq ($(TARGET), asesim)
-	make -C $(BUILD_DIR)/synth > $(BUILD_DIR)/synth/build.log 2>&1 &
+	make -C $(BUILD_DIR)/synth
 else
 	cd $(BUILD_DIR)/synth && $(RUN_SYNTH)
 endif
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml: setup
-	verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.sv --xml-output $(BUILD_DIR)/vortex.xml
+	$(VERILATOR_PATH)/bin/verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.sv --xml-output $(BUILD_DIR)/vortex.xml
 
 scope-json: $(BUILD_DIR)/scope.json
 $(BUILD_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	$(SCRIPT_DIR)/scope.py $(BUILD_DIR)/vortex.xml -o $(BUILD_DIR)/scope.json
 
 clean:
-	rm -rf vortex_afu.h $(BUILD_DIR)
+	rm -rf vortex_opae.h $(BUILD_DIR)

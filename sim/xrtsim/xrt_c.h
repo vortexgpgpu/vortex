@@ -102,6 +102,10 @@ int xrtBOCopy(xrtBufferHandle dst, xrtBufferHandle src, size_t size, size_t src_
 
 int xrtBOSync(xrtBufferHandle bhdl, enum xclBOSyncDirection dir, size_t size, size_t offset);
 
+// Kernel-visible address of a buffer object. For an XRT_BO_FLAGS_HOST_ONLY
+// BO this is the slave-bridge aperture address the kernel uses to reach it.
+uint64_t xrtBOAddress(xrtBufferHandle bhdl);
+
 int xrtKernelWriteRegister(xrtKernelHandle kernelHandle, uint32_t offset, uint32_t data);
 
 int xrtKernelReadRegister(xrtKernelHandle kernelHandle, uint32_t offset, uint32_t* data);

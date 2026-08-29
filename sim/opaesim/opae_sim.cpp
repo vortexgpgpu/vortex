@@ -18,7 +18,15 @@
 #ifdef VCD_OUTPUT
 #include <verilated_vcd_c.h>
 #endif
+#ifdef SAIF_OUTPUT
+#include <verilated_saif_c.h>
+#endif
 
+#if defined(VCD_OUTPUT) && defined(SAIF_OUTPUT)
+#error "VCD_OUTPUT and SAIF_OUTPUT cannot both be defined"
+#endif
+
+#include <cstdlib>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
@@ -27,9 +35,11 @@
 #include <dram_sim.h>
 
 #include <VX_config.h>
-#include <vortex_afu.h>
+#include <vortex_opae.h>
 
 #include <future>
+#include <thread>
+#include <atomic>
 #include <list>
 #include <queue>
 #include <unordered_map>
@@ -64,7 +74,7 @@
 
 using namespace vortex;
 
-static uint32_t g_mem_bank_addr_width = (PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(PLATFORM_MEMORY_NUM_BANKS));
+static uint32_t g_mem_bank_addr_width = (VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(VX_CFG_PLATFORM_MEMORY_NUM_BANKS));
 
 static uint64_t timestamp = 0;
 
@@ -72,7 +82,6 @@ double sc_time_stamp() {
   return timestamp;
 }
 
-static bool trace_enabled = false;
 static uint64_t trace_start_time = TRACE_START_TIME;
 static uint64_t trace_stop_time = TRACE_STOP_TIME;
 
@@ -81,11 +90,7 @@ bool sim_trace_enabled() {
    && timestamp < trace_stop_time) {
     return true;
    }
-  return trace_enabled;
-}
-
-void sim_trace_enable(bool enable) {
-  trace_enabled = enable;
+  return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -95,11 +100,14 @@ public:
   Impl()
   : device_(nullptr)
   , ram_(nullptr)
-  , dram_sim_(PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO)
+  , dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO)
   , stop_(false)
   , host_buffer_ids_(0)
 #ifdef VCD_OUTPUT
   , tfp_(nullptr)
+#endif
+#ifdef SAIF_OUTPUT
+  , sfp_(nullptr)
 #endif
   {}
 
@@ -120,12 +128,21 @@ public:
       delete tfp_;
     }
   #endif
+  #ifdef SAIF_OUTPUT
+    if (sfp_) {
+      sfp_->close();
+      delete sfp_;
+    }
+  #endif
     if (device_) {
       delete device_;
     }
   }
 
   int init() {
+    // restart sim time so a re-created model registers at time zero
+    timestamp = 0;
+
     // force random values for uninitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);
@@ -133,14 +150,21 @@ public:
     // turn off assertion before reset
     Verilated::assertOn(false);
 
-    // create RTL module instance
     device_ = new Vvortex_afu_shim();
 
   #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
     tfp_ = new VerilatedVcdC();
     device_->trace(tfp_, 99);
-    tfp_->open("trace.vcd");
+    const char* vcd_file = std::getenv("VCD_FILE");
+    tfp_->open(vcd_file ? vcd_file : "trace.vcd");
+  #endif
+  #ifdef SAIF_OUTPUT
+    Verilated::traceEverOn(true);
+    sfp_ = new VerilatedSaifC();
+    device_->trace(sfp_, 99);
+    const char* saif_file = std::getenv("SAIF_FILE");
+    sfp_->open(saif_file ? saif_file : "trace.saif");
   #endif
 
     // allocate RAM
@@ -155,8 +179,18 @@ public:
     // launch execution thread
     future_ = std::async(std::launch::async, [&]{
       while (!stop_) {
-        std::lock_guard<std::mutex> guard(mutex_);
-        this->tick();
+        // Give host-side MMIO/mem calls priority: while any host op is pending,
+        // back off without contending for mutex_. Otherwise this free-running
+        // ticker monopolises the lock in a tight loop and starves the host.
+        if (host_waiters_.load(std::memory_order_acquire) != 0) {
+          std::this_thread::yield();
+          continue;
+        }
+        {
+          std::lock_guard<std::mutex> guard(mutex_);
+          this->tick();
+        }
+        std::this_thread::yield();
       }
     });
 
@@ -202,7 +236,7 @@ public:
   }
 
   void read_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t *value) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
 
     // simulate CPU-GPU latency
     for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) {
@@ -216,12 +250,20 @@ public:
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_tid = 0;
     this->tick();
     device_->vcp2af_sRxPort_c0_mmioRdValid = 0;
+    // The CP regfile is registered and takes ~2-3 cycles to respond.
+    // Spin up to 1000 cycles; assert on timeout so a runaway request
+    // fails loudly instead of hanging.
+    int spin = 0;
+    while (!device_->af2cp_sTxPort_c2_mmioRdValid && spin < 1000) {
+      this->tick();
+      ++spin;
+    }
     assert(device_->af2cp_sTxPort_c2_mmioRdValid);
     *value = device_->af2cp_sTxPort_c2_data;
   }
 
   void write_mmio64(uint32_t mmio_num, uint64_t offset, uint64_t value) {
-    std::lock_guard<std::mutex> guard(mutex_);
+    HostLock guard(*this);
 
     // simulate CPU-GPU latency
     for (uint32_t i = 0; i < CPU_GPU_LATENCY; ++i) {
@@ -239,8 +281,8 @@ public:
   }
 
   void copy(uint64_t dest, uint64_t src, uint64_t size) {
-    
-    std::lock_guard<std::mutex> guard(mutex_);
+
+    HostLock guard(*this);
 
     ram_->copy(dest, src, size);
   }
@@ -262,7 +304,7 @@ private:
 
     device_->reset = 1;
 
-    for (int i = 0; i < RESET_DELAY; ++i) {
+    for (int i = 0; i < VX_CFG_RESET_DELAY; ++i) {
       device_->clk = 0;
       this->eval();
       device_->clk = 1;
@@ -278,13 +320,14 @@ private:
 
     if (!dram_queue_.empty()) {
       auto mem_req = dram_queue_.front();
-      dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg) {
+      dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg)->bool {
         auto orig_req = reinterpret_cast<mem_req_t*>(arg);
         if (orig_req->ready) {
           delete orig_req;
         } else {
           orig_req->ready = true;
         }
+        return true;
       }, mem_req);
       dram_queue_.pop();
     }
@@ -306,6 +349,11 @@ private:
   #ifdef VCD_OUTPUT
     if (sim_trace_enabled()) {
       tfp_->dump(timestamp);
+    }
+  #endif
+  #ifdef SAIF_OUTPUT
+    if (sim_trace_enabled()) {
+      sfp_->dump(timestamp);
     }
   #endif
     ++timestamp;
@@ -371,10 +419,6 @@ private:
       device_->vcp2af_sRxPort_c0_hdr_resp_type = 0;
       memcpy(device_->vcp2af_sRxPort_c0_data, cci_rd_it->data.data(), CACHE_BLOCK_SIZE);
       device_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;
-      /*printf("%0ld: [sim] CCI Rd Rsp: addr=0x%lx, mdata=0x%x, data=0x", timestamp, cci_rd_it->addr, cci_rd_it->mdata);
-      for (int i = 0; i < CACHE_BLOCK_SIZE; ++i)
-        printf("%02x", cci_rd_it->data[CACHE_BLOCK_SIZE-1-i]);
-      printf("\n");*/
       cci_reads_.erase(cci_rd_it);
     }
   }
@@ -389,7 +433,6 @@ private:
       cci_req.mdata = device_->af2cp_sTxPort_c0_hdr_mdata;
       auto host_ptr = (uint64_t*)(device_->af2cp_sTxPort_c0_hdr_address * CACHE_BLOCK_SIZE);
       memcpy(cci_req.data.data(), host_ptr, CACHE_BLOCK_SIZE);
-      //printf("%0ld: [sim] CCI Rd Req: addr=0x%lx, mdata=0x%x\n", timestamp, device_->af2cp_sTxPort_c0_hdr_address, cci_req.mdata);
       cci_reads_.emplace_back(cci_req);
     }
 
@@ -410,14 +453,14 @@ private:
   }
 
   void avs_bus_reset() {
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       device_->avs_readdatavalid[b] = 0;
       device_->avs_waitrequest[b] = 0;
     }
   }
 
   void avs_bus_eval() {
-    for (int b = 0; b < PLATFORM_MEMORY_NUM_BANKS; ++b) {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       // process memory responses
       device_->avs_readdatavalid[b] = 0;
       if (!pending_mem_reqs_[b].empty()
@@ -425,7 +468,7 @@ private:
         auto mem_rd_it = pending_mem_reqs_[b].begin();
         auto mem_req = *mem_rd_it;
         device_->avs_readdatavalid[b] = 1;
-        memcpy(device_->avs_readdata[b], mem_req->data.data(), PLATFORM_MEMORY_DATA_SIZE);
+        memcpy(device_->avs_readdata[b], mem_req->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
         uint32_t addr = mem_req->addr;
         pending_mem_reqs_[b].erase(mem_rd_it);
         delete mem_req;
@@ -433,27 +476,21 @@ private:
 
       // process memory requests
       assert(!device_->avs_read[b] || !device_->avs_write[b]);
-    #if PLATFORM_MEMORY_INTERLEAVE == 1
-      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) * PLATFORM_MEMORY_NUM_BANKS + b) * PLATFORM_MEMORY_DATA_SIZE;
+    #if VX_CFG_PLATFORM_MEMORY_INTERLEAVE == 1
+      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) * VX_CFG_PLATFORM_MEMORY_NUM_BANKS + b) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
     #else
-      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) + (b << g_mem_bank_addr_width)) * PLATFORM_MEMORY_DATA_SIZE;
+      uint64_t byte_addr = (uint64_t(device_->avs_address[b]) + (b << g_mem_bank_addr_width)) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
     #endif
 
       if (device_->avs_write[b]) {
         // process write request
         uint64_t byteen = device_->avs_byteenable[b];
         uint8_t* data = (uint8_t*)(device_->avs_writedata[b].data());
-        for (int i = 0; i < PLATFORM_MEMORY_DATA_SIZE; i++) {
+        for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; i++) {
           if ((byteen >> i) & 0x1) {
             (*ram_)[byte_addr + i] = data[i];
           }
         }
-
-        /*printf("%0ld: [sim] MEM Wr Req[%d]: addr=0x%lx, byteen=0x%lx, data=0x", timestamp, b, byte_addr, byteen);
-        for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", data[i]);
-        }
-        printf("\n");*/
 
         // send dram request
         auto mem_req = new mem_req_t();
@@ -469,16 +506,10 @@ private:
         auto mem_req = new mem_req_t();
         mem_req->addr = device_->avs_address[b];
         mem_req->bank_id = b;
-        ram_->read(mem_req->data.data(), byte_addr, PLATFORM_MEMORY_DATA_SIZE);
+        ram_->read(mem_req->data.data(), byte_addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
         mem_req->write = false;
         mem_req->ready = false;
         pending_mem_reqs_[b].emplace_back(mem_req);
-
-        /*printf("%0ld: [sim] MEM Rd Req[%d]: addr=0x%lx, pending={", timestamp, b, byte_addr);
-        for (int i = PLATFORM_MEMORY_DATA_SIZE-1; i >= 0; --i) {
-          printf("%02x", mem_req->data[i]);
-        }
-        printf("\n");*/
 
         // send dram request
         dram_queue_.push(mem_req);
@@ -489,7 +520,7 @@ private:
   }
 
   typedef struct {
-    std::array<uint8_t, PLATFORM_MEMORY_DATA_SIZE> data;
+    std::array<uint8_t, VX_CFG_PLATFORM_MEMORY_DATA_SIZE> data;
     uint32_t addr;
     uint32_t bank_id;
     bool write;
@@ -524,17 +555,38 @@ private:
   std::unordered_map<int64_t, host_buffer_t> host_buffers_;
   uint64_t host_buffer_ids_;
 
-  std::list<mem_req_t*> pending_mem_reqs_[PLATFORM_MEMORY_NUM_BANKS];
+  std::list<mem_req_t*> pending_mem_reqs_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
 
   std::list<cci_rd_req_t> cci_reads_;
   std::list<cci_wr_req_t> cci_writes_;
 
   std::mutex mutex_;
+  // Count of host threads waiting on / holding mutex_. The free-running sim
+  // ticker backs off whenever this is non-zero so host MMIO/mem ops are never
+  // starved by the background ticker.
+  std::atomic<int> host_waiters_{0};
+
+  // RAII guard for every host-side entry point: registers intent (so the
+  // ticker yields) before acquiring mutex_, and clears it after releasing.
+  struct HostLock {
+    opae_sim::Impl& impl_;
+    explicit HostLock(opae_sim::Impl& impl) : impl_(impl) {
+      impl_.host_waiters_.fetch_add(1, std::memory_order_acquire);
+      impl_.mutex_.lock();
+    }
+    ~HostLock() {
+      impl_.mutex_.unlock();
+      impl_.host_waiters_.fetch_sub(1, std::memory_order_release);
+    }
+  };
 
   std::queue<mem_req_t*> dram_queue_;
 
 #ifdef VCD_OUTPUT
   VerilatedVcdC *tfp_;
+#endif
+#ifdef SAIF_OUTPUT
+  VerilatedSaifC *sfp_;
 #endif
 };
 

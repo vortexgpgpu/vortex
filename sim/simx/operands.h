@@ -20,26 +20,42 @@ namespace vortex {
 
 class Core;
 
+// Operand collection stage. One instance per issue lane.
 class Operands : public SimObject<Operands> {
 public:
-  SimPort<instr_trace_t*> Input;
-  SimPort<instr_trace_t*> Output;
+  SimChannel<instr_trace_t*> Input;
+  SimChannel<instr_trace_t*> Output;
 
-  Operands(const SimContext &ctx, Core* core);
+  Operands(const SimContext &ctx, const char* name, Core* core);
 
   virtual ~Operands();
 
-  virtual void reset();
+  // Capture register operands at issue time into trace->src_data.
+  void fetch_operands(instr_trace_t* trace);
 
-  virtual void tick();
-
+  // Apply trace->dst_data to the regfile at unit-tick time.
   void writeback(instr_trace_t* trace);
+
+  // Returns the program exit code (as written by RISC-V tests).
+  int get_exit_code() const;
 
   uint32_t total_stalls() const;
 
+  // DTM debug-only accessor: returns a mutable ref to the integer register
+  // file entry for warp `wid`, register `reg` (lane 0).
+  // Used exclusively by sim/simx/dtm/debug_module.cpp.
+  Word& dtm_ireg(uint32_t wid, uint32_t reg);
+
+protected:
+  virtual void on_reset();
+  virtual void on_tick();
+
 private:
+  Core* core_;
   std::vector<OpcUnit::Ptr> opc_units_;
   TraceArbiter::Ptr rsp_arb_;
+
+  friend class SimObject<Operands>;
 };
 
 } // namespace vortex

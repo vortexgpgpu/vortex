@@ -1,5 +1,4 @@
 /build*
-/.vscode
-*.cache
-*.code-workspace
-miscs/apptainer/vortex.sif
+/.*
+# Archived/superseded docs — kept on disk, never tracked
+docs/archives/

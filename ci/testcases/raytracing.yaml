@@ -1,0 +1,95 @@
+# Test cases for `raytracing` (RTU), ported from regression.sh.in raytracing().
+#
+# simx is the only backend that validates the RTU end-to-end today; rtlsim /
+# opae / xrt RTU coverage lands when the RTL side comes online. xlen is pinned to
+# 32 (the RTU SimX-parity reference build); 64-bit RTU coverage is a follow-on.
+category: raytracing
+defaults:
+  xlen:
+  - 32
+  tier: smoke
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+  # Re-run on any change to the RTU model, its RTL, the ray tests, or the host
+  # raytrace library.
+  touches:
+  - sim/simx/rtu/
+  - hw/rtl/rtu/
+  - tests/raytracing/
+  - sw/runtime/common
+tests:
+# Full RTU smoke/conformance suite (drives every tests/raytracing app). The
+# subdir Makefile's run-rtlsim target auto-excludes RTLSIM_DEFERRED (the
+# multi-trace-in-flight tests the RTL core does not implement yet), so rtlsim
+# runs the single-trace set and simx runs everything.
+- id: rt_suite
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/raytracing
+  target: run-{driver}
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+
+# Multi-core RTU coverage: same canary kernel (rt_smoke) under two 4-core
+# topologies so a topology-only break is a single failure. -n64 = full device
+# capacity (cores x warps x threads); 64 rays in flight through the cluster's
+# RtuCore via the RtuBus arbiter.
+#
+# Config A — 4 cores, 1 cluster, 2 cores/socket: stresses the RtuBus arbiter
+# (all 4 cores contend for the cluster's single RtuCore).
+- id: rt_smoke_mc_a
+  via: blackbox
+  drivers:
+  - simx
+  app: rt_smoke
+  configs: -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    clusters: 1
+    cores: 4
+  args: -n64
+
+# Config B — 4 cores, 2 clusters, 1 core/socket: stresses the multi-cluster
+# path (each cluster has its own RtuCore + RTCache).
+- id: rt_smoke_mc_b
+  via: blackbox
+  drivers:
+  - simx
+  app: rt_smoke
+  configs: -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    clusters: 2
+    cores: 4
+  args: -n64
+
+# SimX<->rtlsim cycle parity on the RTU (rt_raycast: full CW-BVH4 build +
+# per-pixel closest-hit traversal, single-trace so rtlsim-eligible): same config
+# on both drivers, cycles must agree within tolerance (see core.yaml).
+- id: model_parity-rt_raycast
+  check: model_parity
+  # Retired instructions match exactly, the image is bit-exact, and the cycle gap
+  # is now within tolerance (~3.5%): the SimX RTU traversal-memory + beat-serial
+  # bus timing closed the former ~2.8x gap.
+  via: blackbox
+  app: rt_raycast
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+
+# Perf-regression twin of the model_parity-rt_raycast benchmark (same run, cycles-vs-baseline).
+- id: perf_gate-rt_raycast
+  check: perf_gate
+  via: blackbox
+  app: rt_raycast
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+  shape:
+    threads: [4, 16]
+
+# Core scaling. The same NT=4 workload across 2 cores over a shared L2 (a
+# multi-core config needs one). One RTU serves both cores, so this is the gate's
+# only view of the RTU bus arbitrating between two senders, and of both cores
+# contending for the shared RTCache: a change that serializes either is
+# invisible at cores=1.
+- id: perf_gate-rt_raycast-mc
+  check: perf_gate
+  via: blackbox
+  app: rt_raycast
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+  shape: {cores: 2, l2cache: true, threads: 4}

@@ -27,14 +27,33 @@
 `define CS_LINES_PER_BANK       (`CS_BANK_SIZE / (LINE_SIZE * NUM_WAYS))
 `define CS_WORDS_PER_LINE       (LINE_SIZE / WORD_SIZE)
 
-`define CS_WORD_ADDR_WIDTH      (`MEM_ADDR_WIDTH-`CLOG2(WORD_SIZE))
-`define CS_MEM_ADDR_WIDTH       (`MEM_ADDR_WIDTH-`CLOG2(LINE_SIZE))
+`define CS_WORD_ADDR_WIDTH      (`VX_CFG_MEM_ADDR_WIDTH-`CLOG2(WORD_SIZE))
+`define CS_MEM_ADDR_WIDTH       (`VX_CFG_MEM_ADDR_WIDTH-`CLOG2(LINE_SIZE))
 `define CS_LINE_ADDR_WIDTH      (`CS_MEM_ADDR_WIDTH-`CLOG2(NUM_BANKS))
+
+// Sectoring: a line splits into CS_SECTORS_PER_LINE sectors of SECTOR_SIZE bytes,
+// each with its own valid/dirty bit; the sector is the fill / eviction / mem-request
+// granule. SECTOR_SIZE defaults to LINE_SIZE (=> 1 sector => unsectored cache). The
+// sector index is the high part of the in-line word offset.
+`define CS_SECTORS_PER_LINE     (LINE_SIZE / SECTOR_SIZE)
+`define CS_WORDS_PER_SECTOR     (SECTOR_SIZE / WORD_SIZE)
+`define CS_SECTOR_SEL_BITS      `CLOG2(`CS_SECTORS_PER_LINE)
+`define CS_SECTOR_WIDTH         (8 * SECTOR_SIZE)
+
+// Memory-side (sector-granular) address widths. The cache tracks lines, but the
+// memory interface transacts in sectors, so the mem address carries an extra
+// CS_SECTOR_SEL_BITS below the line address. SECTOR_SIZE==LINE_SIZE (1 sector)
+// collapses these to the line-granular widths.
+`define CS_MEM_SECTOR_ADDR_WIDTH  (`VX_CFG_MEM_ADDR_WIDTH-`CLOG2(SECTOR_SIZE))
+`define CS_LINE_SECTOR_ADDR_WIDTH (`CS_MEM_SECTOR_ADDR_WIDTH-`CLOG2(NUM_BANKS))
 
 // Word select
 `define CS_WORD_SEL_BITS        `CLOG2(`CS_WORDS_PER_LINE)
 `define CS_WORD_SEL_ADDR_START  0
 `define CS_WORD_SEL_ADDR_END    (`CS_WORD_SEL_ADDR_START+`CS_WORD_SEL_BITS-1)
+// Sector index = top CS_SECTOR_SEL_BITS of the in-line word offset.
+`define CS_SECTOR_SEL_ADDR_END  (`CS_WORD_SEL_ADDR_END)
+`define CS_SECTOR_SEL_ADDR_START (`CS_WORD_SEL_ADDR_END-`CS_SECTOR_SEL_BITS+1)
 
 // Bank select
 `define CS_BANK_SEL_BITS        `CLOG2(NUM_BANKS)
@@ -55,8 +74,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CS_BANK_TO_FULL_ADDR(x, b) {x, (`XLEN-$bits(x))'(b << (`XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
-`define CS_MEM_TO_FULL_ADDR(x)     {x, (`XLEN-$bits(x))'(0)}
+`define CS_BANK_TO_FULL_ADDR(x, b) {x, (`VX_CFG_XLEN-$bits(x))'(b << (`VX_CFG_XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
+`define CS_MEM_TO_FULL_ADDR(x)     {x, (`VX_CFG_XLEN-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -65,6 +84,7 @@
     `PERF_COUNTER_ADD (dst, src, writes, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, read_misses, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, write_misses, PERF_CTR_BITS, count, (count > 1)) \
+    `PERF_COUNTER_ADD (dst, src, evictions, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, bank_stalls, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, mshr_stalls, PERF_CTR_BITS, count, (count > 1)) \
     `PERF_COUNTER_ADD (dst, src, mem_stalls, PERF_CTR_BITS, count, (count > 1)) \

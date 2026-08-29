@@ -1,0 +1,847 @@
+[globals]
+VX_CSR_ADDR_BITS = 12
+VX_DCR_ADDR_BITS = 12
+VX_DCR_DATA_BITS = 32
+VX_CSR_MPM_BASE = 0xB00
+VX_CSR_MPM_BASE_H = 0xB80
+VX_CSR_MPM_USER = 0xB03
+VX_CSR_MPM_USER_H = 0xB83
+
+# Device-identity constants: read-only mvendorid/marchid/mimpid CSR contents.
+[isa]
+VX_ISA_VENDOR_ID = 0
+VX_ISA_ARCH_ID   = 0
+VX_ISA_IMPL_ID   = 0
+
+# Device memory map — a HW<->SW contract: the hardware decodes these address
+# regions, the linker places code/stack within them, and the runtime addresses
+# into them.
+[memmap]
+VX_MEM_USER_BASE_ADDR       = "expr: 0x0000000000010000 if ($XLEN == 64) else 0x00010000"
+VX_MEM_STACK_LOG2_SIZE      = 13
+VX_MEM_STACK_BASE_ADDR      = "expr: 0x00000001FFFF0000 if ($XLEN == 64) else 0xFFFF0000"
+VX_MEM_LMEM_BASE_ADDR       = "expr: $VX_MEM_STACK_BASE_ADDR"
+VX_MEM_IO_BASE_ADDR         = "expr: 0x0000000000000040 if ($XLEN == 64) else 0x00000040"
+VX_MEM_PAGE_TABLE_BASE_ADDR = "expr: 0x00000000F0000000 if ($XLEN == 64) else 0xF0000000"
+VX_MEM_IO_COUT_ADDR         = "expr: $VX_MEM_IO_BASE_ADDR"
+# Console buffer — lossy per-hart stream rings.
+# Layout: wr[SLOTS] u32, rd[SLOTS] u32, data[SLOTS][RING], lost[SLOTS] u32.
+# Producer (vx_putchar) drops the byte on a full ring and atomically
+# increments lost[slot]; host drain reports "#N: lost K bytes" alongside
+# the drained stream. One slot per hart (hartid folded mod SLOTS). Matches
+# CUDA's cudaLimitPrintfFifoSize / HIP printf shape: bounded, non-blocking,
+# with an overflow indicator, so a printf-heavy launch can never deadlock
+# on a full ring.
+VX_MEM_IO_COUT_SLOTS        = 64
+VX_MEM_IO_COUT_RING         = 512
+VX_MEM_IO_COUT_RING_LOG2    = 9
+# total = SLOTS*4 (wr) + SLOTS*4 (rd) + SLOTS*RING (data) + SLOTS*4 (lost)
+#       = 64*12 + 64*512 = 33536
+VX_MEM_IO_COUT_SIZE         = 33536
+VX_MEM_IO_EXIT_CODE         = "expr: ($VX_MEM_IO_COUT_ADDR + $VX_MEM_IO_COUT_SIZE + 8)"
+VX_MEM_IO_END_ADDR          = "expr: $VX_MEM_USER_BASE_ADDR"
+# OM fragment-export aperture. A VIRTUAL range: no
+# memory backs it. A store here is a fragment export -- the cluster's OM steer
+# peels it off the L1->L2 trunk and the OM ingress turns the offset back into
+# (x, y, face) and the data into colour[/depth]. Sits directly below the page
+# table, carved off the top of the user/DRAM range.
+#
+# It is NOT a sub-range of VX_MEM_IO_*: only ~31 KB is free inside the 64 KB IO
+# window and an aperture needs megabytes (1920x1080 x 2 faces x 8 B = 33 MB).
+#
+# MUST stay 64 B aligned. The LSU classifies at MEM_BLOCK_SIZE (64 B) block
+# granularity, and the coalescer merges lanes at a finer granularity than that,
+# so a merged request's attr is only coherent if the aperture edge falls on a
+# block boundary (cf. the VX_MEM_IO_BASE_ADDR assert in VX_cache_bypass).
+VX_MEM_OM_BASE_ADDR         = "expr: 0x00000000E0000000 if ($XLEN == 64) else 0xE0000000"
+VX_MEM_OM_END_ADDR          = "expr: $VX_MEM_PAGE_TABLE_BASE_ADDR"
+
+# VM page-table format — RISC-V architectural constants fixed by the SATP mode
+# (SV32 vs SV39, selected by XLEN). Relocated from VX_config.toml.
+[vm]
+VX_VM_PAGE_LOG2_SIZE = 12
+VX_VM_PAGE_SIZE      = "expr: 1 << $VX_VM_PAGE_LOG2_SIZE"
+VX_VM_ADDR_MODE      = "expr: 'SV39' if ($XLEN == 64) else 'SV32'"
+VX_VM_PT_LEVEL       = "expr: 3 if ($XLEN == 64) else 2"
+VX_VM_PTE_SIZE       = "expr: 8 if ($XLEN == 64) else 4"
+VX_VM_PT_SIZE        = "expr: $VX_VM_PAGE_SIZE"
+VX_VM_PT_SIZE_LIMIT  = "expr: (1 << 25) if ($XLEN == 64) else (1 << 23)"
+
+[dcr_base]
+VX_DCR_BASE_STATE_BEGIN = 0x000
+VX_DCR_BASE_CACHE_FLUSH = 0x000
+VX_DCR_BASE_MPM_VALUE   = 0x001
+VX_DCR_BASE_STATE_END   = 0x002
+
+[dcr_mmu]
+VX_DCR_MMU_STATE_BEGIN  = 0x004
+VX_DCR_MMU_SATP_LO      = 0x004
+VX_DCR_MMU_SATP_HI      = 0x005
+VX_DCR_MMU_FAULT_VA     = 0x006  # read-only: first-fault virtual address, low word
+VX_DCR_MMU_FAULT_VA_HI  = 0x007  # read-only: first-fault virtual address, high word
+VX_DCR_MMU_FAULT_INFO   = 0x008  # read: {amo[3], access[2:1], valid[0]}; write: clear
+VX_DCR_MMU_STATE_END    = 0x009
+
+[mmu_fault]
+# VX_DCR_MMU_FAULT_INFO fields; access encodes TlbAccess (0=read, 1=write, 2=exec).
+VX_MMU_FAULT_VALID      = 0x1
+VX_MMU_FAULT_ACCESS     = 0x6
+VX_MMU_FAULT_ACCESS_SH  = 0x1
+VX_MMU_FAULT_AMO        = 0x8
+
+[dcr_kmu]
+VX_DCR_KMU_STATE_BEGIN  = 0x010
+VX_DCR_KMU_STARTUP_ADDR0= 0x010
+VX_DCR_KMU_STARTUP_ADDR1= 0x011
+VX_DCR_KMU_KERNEL_ENTRY0= 0x012
+VX_DCR_KMU_KERNEL_ENTRY1= 0x013
+VX_DCR_KMU_STARTUP_ARG0 = 0x014
+VX_DCR_KMU_STARTUP_ARG1 = 0x015
+VX_DCR_KMU_BLOCK_DIM_X  = 0x016
+VX_DCR_KMU_BLOCK_DIM_Y  = 0x017
+VX_DCR_KMU_BLOCK_DIM_Z  = 0x018
+VX_DCR_KMU_GRID_DIM_X   = 0x019
+VX_DCR_KMU_GRID_DIM_Y   = 0x01A
+VX_DCR_KMU_GRID_DIM_Z   = 0x01B
+VX_DCR_KMU_LMEM_SIZE    = 0x01C
+VX_DCR_KMU_BLOCK_SIZE   = 0x01D
+VX_DCR_KMU_WARP_STEP_X  = 0x01E
+VX_DCR_KMU_WARP_STEP_Y  = 0x01F
+VX_DCR_KMU_WARP_STEP_Z  = 0x020
+VX_DCR_KMU_CLUSTER_DIM_X= 0x021
+VX_DCR_KMU_CLUSTER_DIM_Y= 0x022
+VX_DCR_KMU_CLUSTER_DIM_Z= 0x023
+VX_DCR_KMU_STATE_END    = 0x024
+
+# DXA descriptor DCR mapping
+# access pattern:
+#   VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE + field_off
+[dcr_dxa]
+VX_DCR_DXA_STATE_BEGIN = 0x100
+VX_DCR_DXA_DESC_BASE = 0x100
+VX_DCR_DXA_DESC_STRIDE = 24
+
+VX_DCR_DXA_DESC_BASE_LO_OFF = 0
+VX_DCR_DXA_DESC_BASE_HI_OFF = 1
+
+VX_DCR_DXA_DESC_SIZE0_OFF = 2
+VX_DCR_DXA_DESC_SIZE1_OFF = 3
+VX_DCR_DXA_DESC_SIZE2_OFF = 4
+VX_DCR_DXA_DESC_SIZE3_OFF = 5
+VX_DCR_DXA_DESC_SIZE4_OFF = 6
+
+VX_DCR_DXA_DESC_STRIDE0_OFF = 7
+VX_DCR_DXA_DESC_STRIDE1_OFF = 8
+VX_DCR_DXA_DESC_STRIDE2_OFF = 9
+VX_DCR_DXA_DESC_STRIDE3_OFF = 10
+
+VX_DCR_DXA_DESC_META_OFF = 11
+
+VX_DCR_DXA_DESC_ESTRIDE0_OFF = 12
+VX_DCR_DXA_DESC_ESTRIDE1_OFF = 13
+VX_DCR_DXA_DESC_ESTRIDE2_OFF = 14
+VX_DCR_DXA_DESC_ESTRIDE3_OFF = 15
+VX_DCR_DXA_DESC_ESTRIDE4_OFF = 16
+
+VX_DCR_DXA_DESC_TILESIZE01_OFF = 17
+VX_DCR_DXA_DESC_TILESIZE23_OFF = 18
+VX_DCR_DXA_DESC_TILESIZE4_OFF = 19
+
+VX_DCR_DXA_DESC_CFILL_OFF = 20
+
+VX_DCR_DXA_DESC_SMEM_STRIDE_OFF = 21
+
+VX_DCR_DXA_DESC_COUNT = 16
+VX_DCR_DXA_STATE_END = 0x280
+
+# Texture unit DCR (32-entry block: 6 base + up to VX_TEX_LOD_MAX mip offsets)
+[dcr_tex]
+VX_DCR_TEX_STATE_BEGIN = 0x040
+VX_DCR_TEX_STAGE       = 0x040
+VX_DCR_TEX_ADDR        = 0x041
+VX_DCR_TEX_LOGDIM      = 0x042
+VX_DCR_TEX_FORMAT      = 0x043
+VX_DCR_TEX_FILTER      = 0x044
+VX_DCR_TEX_WRAP        = 0x045
+# VX_DCR_TEX_MIPOFF(lod) = VX_DCR_TEX_MIPOFF_BASE + lod, lod <= VX_TEX_LOD_MAX.
+# The table has VX_TEX_LOD_MAX + 1 entries and ends at 0x055: a sampler's lod
+# clamp is independent of how long the mip chain is, so the top level is a
+# reachable request and needs an entry like every other level.
+VX_DCR_TEX_MIPOFF_BASE = 0x046
+# Colour a CLAMP_TO_BORDER tap returns, ARGB8888. Above the mip-offset table.
+VX_DCR_TEX_BORDER      = 0x056
+VX_DCR_TEX_STATE_END   = 0x060
+
+[tex_const]
+VX_TEX_STAGE_COUNT = 2
+VX_TEX_DIM_BITS    = 15
+VX_TEX_LOD_MAX     = 15
+VX_TEX_SUBPIXEL_BITS = 8
+VX_TEX_FXD_BITS    = 32
+
+VX_TEX_FILTER_POINT    = 0
+VX_TEX_FILTER_BILINEAR = 1
+# Mip filter occupies the bit above the mag/min filter. MIP_LINEAR samples two
+# levels and lerps them, which changes how the `vx_tex` lod operand reads: it is
+# an integer level normally, and fixed-point under MIP_LINEAR -- the level in the
+# high bits, the weight between it and the next above in the low
+# VX_TEX_LOD_FRAC_BITS. A caller that never asks for a blend therefore never has
+# to know about the fractional form.
+VX_TEX_FILTER_MIP_NONE   = 0
+VX_TEX_FILTER_MIP_LINEAR = 2
+VX_TEX_LOD_FRAC_BITS     = 8
+
+VX_TEX_WRAP_CLAMP  = 0
+VX_TEX_WRAP_REPEAT = 1
+VX_TEX_WRAP_MIRROR = 2
+# CLAMP_TO_BORDER — a tap whose coordinate leaves [0,1) returns
+# VX_DCR_TEX_BORDER instead of a texel. The address still clamps: the tap is
+# fetched and then discarded, so it only has to be one the texture owns.
+VX_TEX_WRAP_BORDER = 3
+
+VX_TEX_FORMAT_A8R8G8B8 = 0
+VX_TEX_FORMAT_R5G6B5   = 1
+VX_TEX_FORMAT_A1R5G5B5 = 2
+VX_TEX_FORMAT_A4R4G4B4 = 3
+VX_TEX_FORMAT_A8L8     = 4
+VX_TEX_FORMAT_L8       = 5
+VX_TEX_FORMAT_A8       = 6
+# W5 extended sampled formats — SOFTWARE sampler only. FF vx_tex4 handles only
+# formats 0..VX_TEX_FORMAT_FF_MAX; anything above routes to gfx_tex_sample_sw
+# (routing law). sRGB is linearised on sample and depth reads as luminance, both
+# into the sampler's 8-bit ARGB working colour; the float formats hold values
+# outside [0,1] and are decoded and filtered in float instead.
+VX_TEX_FORMAT_FF_MAX   = 6
+VX_TEX_FORMAT_SRGB8     = 7    # R8G8B8(X8) sRGB, alpha forced 1.0
+VX_TEX_FORMAT_SRGB8A8   = 8    # R8G8B8A8 sRGB (RGB gamma-decoded, alpha linear)
+VX_TEX_FORMAT_R8        = 9    # single-channel  -> (r,0,0,1)
+VX_TEX_FORMAT_RG8       = 10   # two-channel     -> (r,g,0,1)
+VX_TEX_FORMAT_R16F      = 11   # half float      -> (r,0,0,1)
+VX_TEX_FORMAT_RG16F     = 12   # 2x half float   -> (r,g,0,1)
+VX_TEX_FORMAT_RGBA16F   = 13   # 4x half float
+VX_TEX_FORMAT_R32F      = 14   # float           -> (r,0,0,1)
+VX_TEX_FORMAT_RG32F     = 15   # 2x float        -> (r,g,0,1)
+VX_TEX_FORMAT_RGBA32F   = 16   # 4x float
+VX_TEX_FORMAT_D16       = 17   # depth-as-texture, 16-bit unorm -> luminance
+VX_TEX_FORMAT_D32F      = 18   # depth-as-texture, float        -> luminance
+
+[raster_const]
+VX_RASTER_DIM_BITS    = 15
+VX_RASTER_STRIDE_BITS = 16
+VX_RASTER_PID_BITS    = 16
+
+[om_const]
+VX_OM_DIM_BITS    = 15
+VX_OM_DEPTH_BITS  = 24
+VX_OM_STENCIL_BITS = 8
+# Colour attachments the merger keeps state for. Vulkan requires
+# maxColorAttachments >= 4. The depth/stencil attachment is shared, not counted.
+VX_OM_MAX_RT      = 4
+
+VX_OM_DEPTH_FUNC_ALWAYS   = 0
+VX_OM_DEPTH_FUNC_NEVER    = 1
+VX_OM_DEPTH_FUNC_LESS     = 2
+VX_OM_DEPTH_FUNC_LEQUAL   = 3
+VX_OM_DEPTH_FUNC_EQUAL    = 4
+VX_OM_DEPTH_FUNC_GEQUAL   = 5
+VX_OM_DEPTH_FUNC_GREATER  = 6
+VX_OM_DEPTH_FUNC_NOTEQUAL = 7
+
+VX_OM_STENCIL_OP_KEEP      = 0
+VX_OM_STENCIL_OP_ZERO      = 1
+VX_OM_STENCIL_OP_REPLACE   = 2
+VX_OM_STENCIL_OP_INCR      = 3
+VX_OM_STENCIL_OP_DECR      = 4
+VX_OM_STENCIL_OP_INVERT    = 5
+VX_OM_STENCIL_OP_INCR_WRAP = 6
+VX_OM_STENCIL_OP_DECR_WRAP = 7
+
+# W6 output-merger attachment formats. FF vx_om4 handles only single-RT
+# A8R8G8B8 colour + D24S8 depth; any other colour/depth format routes the OM to
+# the on-device software output-merger (gfx_om_fragment_sw).
+VX_OM_COLOR_FORMAT_A8R8G8B8 = 0    # packed ARGB8888 (FF default)
+VX_OM_COLOR_FORMAT_SRGB8A8  = 1    # linear->sRGB encode on write
+VX_OM_COLOR_FORMAT_R8       = 2    # red channel only
+VX_OM_COLOR_FORMAT_RG8      = 3    # red+green only
+VX_OM_DEPTH_FORMAT_D24S8 = 0       # packed 24-bit depth + 8-bit stencil (FF default)
+VX_OM_DEPTH_FORMAT_D16   = 1       # 16-bit unorm depth, no stencil
+VX_OM_DEPTH_FORMAT_D32F  = 2       # 32-bit float depth, no stencil
+VX_OM_DEPTH_FORMAT_S8    = 3       # 8-bit stencil only, no depth
+
+VX_OM_BLEND_MODE_ADD     = 0
+VX_OM_BLEND_MODE_SUB     = 1
+VX_OM_BLEND_MODE_REV_SUB = 2
+VX_OM_BLEND_MODE_MIN     = 3
+VX_OM_BLEND_MODE_MAX     = 4
+VX_OM_BLEND_MODE_LOGICOP = 5
+
+VX_OM_BLEND_FUNC_ZERO                = 0
+VX_OM_BLEND_FUNC_ONE                 = 1
+VX_OM_BLEND_FUNC_SRC_RGB             = 2
+VX_OM_BLEND_FUNC_ONE_MINUS_SRC_RGB   = 3
+VX_OM_BLEND_FUNC_DST_RGB             = 4
+VX_OM_BLEND_FUNC_ONE_MINUS_DST_RGB   = 5
+VX_OM_BLEND_FUNC_SRC_A               = 6
+VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A     = 7
+VX_OM_BLEND_FUNC_DST_A               = 8
+VX_OM_BLEND_FUNC_ONE_MINUS_DST_A     = 9
+VX_OM_BLEND_FUNC_CONST_RGB           = 10
+VX_OM_BLEND_FUNC_ONE_MINUS_CONST_RGB = 11
+VX_OM_BLEND_FUNC_CONST_A             = 12
+VX_OM_BLEND_FUNC_ONE_MINUS_CONST_A   = 13
+VX_OM_BLEND_FUNC_ALPHA_SAT           = 14
+
+VX_OM_LOGIC_OP_CLEAR        = 0
+VX_OM_LOGIC_OP_AND          = 1
+VX_OM_LOGIC_OP_AND_REVERSE  = 2
+VX_OM_LOGIC_OP_COPY         = 3
+VX_OM_LOGIC_OP_AND_INVERTED = 4
+VX_OM_LOGIC_OP_NOOP         = 5
+VX_OM_LOGIC_OP_XOR          = 6
+VX_OM_LOGIC_OP_OR           = 7
+VX_OM_LOGIC_OP_NOR          = 8
+VX_OM_LOGIC_OP_EQUIV        = 9
+VX_OM_LOGIC_OP_INVERT       = 10
+VX_OM_LOGIC_OP_OR_REVERSE   = 11
+VX_OM_LOGIC_OP_COPY_INVERTED= 12
+VX_OM_LOGIC_OP_OR_INVERTED  = 13
+VX_OM_LOGIC_OP_NAND         = 14
+VX_OM_LOGIC_OP_SET          = 15
+
+
+[dcr_raster]
+VX_DCR_RASTER_STATE_BEGIN   = 0x060
+VX_DCR_RASTER_TBUF_ADDR     = 0x060
+VX_DCR_RASTER_TILE_COUNT    = 0x061
+VX_DCR_RASTER_PBUF_ADDR     = 0x062
+VX_DCR_RASTER_PBUF_STRIDE   = 0x063
+VX_DCR_RASTER_SCISSOR_X     = 0x064
+VX_DCR_RASTER_SCISSOR_Y     = 0x065
+# Fragment-shader dispatch descriptor: the raster work distributor launches the FS
+# on-device (true-GPU pixel dispatch). FRAG_ENTRY names the FS function and
+# FRAG_PARAM its argument; the injected warp's program image base (__vx_cta_entry
+# bootstrap PC) is the shared KMU startup PC (VX_DCR_KMU_STARTUP_ADDR0/1) the launch
+# already publishes — one source of truth for both the raster dispatch and the KMU.
+# The frame kick is the delegated draw launch: a kernel launch with an empty grid
+# (GRID_DIM=0) makes the KMU kick the raster engines after all DCRs are delivered.
+VX_DCR_RASTER_FRAG_ENTRY_LO = 0x066
+VX_DCR_RASTER_FRAG_ENTRY_HI = 0x067
+VX_DCR_RASTER_FRAG_PARAM_LO = 0x068
+VX_DCR_RASTER_FRAG_PARAM_HI = 0x069
+VX_DCR_RASTER_STATE_END     = 0x06A
+
+[dcr_om]
+VX_DCR_OM_STATE_BEGIN       = 0x080
+VX_DCR_OM_CBUF_ADDR         = 0x080
+VX_DCR_OM_CBUF_PITCH        = 0x081
+VX_DCR_OM_CBUF_WRITEMASK    = 0x082
+VX_DCR_OM_ZBUF_ADDR         = 0x083
+VX_DCR_OM_ZBUF_PITCH        = 0x084
+VX_DCR_OM_DEPTH_FUNC        = 0x085
+VX_DCR_OM_DEPTH_WRITEMASK   = 0x086
+VX_DCR_OM_STENCIL_FUNC      = 0x087
+VX_DCR_OM_STENCIL_ZPASS     = 0x088
+VX_DCR_OM_STENCIL_ZFAIL     = 0x089
+VX_DCR_OM_STENCIL_FAIL      = 0x08A
+VX_DCR_OM_STENCIL_REF       = 0x08B
+VX_DCR_OM_STENCIL_MASK      = 0x08C
+VX_DCR_OM_STENCIL_WRITEMASK = 0x08D
+VX_DCR_OM_BLEND_MODE        = 0x08E
+VX_DCR_OM_BLEND_FUNC        = 0x08F
+VX_DCR_OM_BLEND_CONST       = 0x090
+VX_DCR_OM_LOGIC_OP          = 0x091
+# Early-Z safety gate: driver sets 1 when the FS has no depth-export and the
+# depth func is monotonic (LESS/LEQUAL), permitting the raster unit to cull
+# occluded fragments against committed depth before shading. 0 = full late-Z only.
+VX_DCR_OM_EARLYZ_SAFE       = 0x092
+# Fragment-export aperture. The shader exports a
+# fragment by STORING to VX_MEM_OM_BASE_ADDR + offset; the cluster's OM steer
+# peels the write off the L1->L2 trunk and the ingress turns it back into a
+# {pos, colour, depth, face} request. These DCRs tell the ingress how to read an
+# offset back.
+#
+# The encoding is SHIFT-ONLY:
+#     offset = ((((rt << 1) | face) << YBITS | y) << XBITS | x) << RECORD_SHIFT
+# The framebuffer pitch is padded to a power of two (XBITS = ceil(log2(width)),
+# YBITS = ceil(log2(height))) so the ingress decodes by bit-slicing. A packed
+# y*width + x would force a DIVIDER into the ingress. The aperture is virtual --
+# nothing is stored there -- so the address space the padding wastes is free.
+# The attachment index sits above face, so a single-attachment export is the
+# same address it was before there were several.
+#
+# The window is bounded by VX_MEM_OM_END_ADDR and cannot grow -- the page table
+# starts immediately above it -- so the encoding must satisfy
+#     XBITS + YBITS + 1 + CLOG2(VX_OM_MAX_RT) + RECORD_SHIFT <= log2(window)
+# The runtime checks this when it programs the aperture.
+VX_DCR_OM_APERTURE_XBITS    = 0x093
+VX_DCR_OM_APERTURE_YBITS    = 0x094
+# Record shape. A shader emits colour only (2 -- early-Z owns the depth test AND
+# the depth write; the common case), depth only (2 -- z-prepass / shadow map), or
+# both (3 -- gl_FragDepth). DEPTH_ONLY disambiguates the two one-word modes.
+VX_DCR_OM_APERTURE_RECORD_SHIFT = 0x095
+VX_DCR_OM_APERTURE_DEPTH_ONLY   = 0x096
+# Colour attachment the CBUF_*, BLEND_* and LOGIC_OP registers above apply to.
+# Everything else in this block -- depth, stencil, the z-buffer and the aperture
+# geometry -- is shared by every attachment, so a pass programs it once. Resets
+# to 0, so a single-attachment driver never has to write it.
+VX_DCR_OM_RT_SELECT         = 0x097
+VX_DCR_OM_STATE_END         = 0x098
+
+[dcr_rtu]
+# Ray-Tracing Unit DCRs.
+VX_DCR_RTU_STATE_BEGIN      = 0x0A0
+VX_DCR_RTU_CONFIG           = 0x0A0
+VX_DCR_RTU_TLAS_ROOT_LO     = 0x0A1
+VX_DCR_RTU_TLAS_ROOT_HI     = 0x0A2
+VX_DCR_RTU_CB_ENTRY_LO      = 0x0A3
+VX_DCR_RTU_CB_ENTRY_HI      = 0x0A4
+VX_DCR_RTU_REFORM_THRESH    = 0x0A5
+VX_DCR_RTU_STATS_RESET      = 0x0A6
+VX_DCR_RTU_STATE_END        = 0x0A7
+
+[rtu_slots]
+# RTU register file slot IDs — per-(warp,lane) named 32-bit slots in the RTU's hit
+# window. The layout is CONTIGUITY-ORDERED: the RTU moves ray state as
+# two bursts over a slot_base+count span, so the members of each span must abut.
+#
+#   ray input   [0..9]   one burst-read  (the RTU pulls its operands at arm)
+#   result      [10..26] one burst-write (the RTU pushes traversal results)
+#
+# STATUS is deliberately the LAST slot of the result span: a parked WAIT
+# completes on the address-match write to STATUS, so every other result word
+# must already be in the window when it lands. Moving STATUS earlier would race
+# the warp against its own candidate metadata.
+
+# ── ray input span [0..9] — kernel writes before the trace, RTU burst-reads ──
+VX_RT_RAY_ORIGIN            = 0       # origin.{x,y,z}    (0..2)
+VX_RT_RAY_DIRECTION         = 3       # direction.{x,y,z} (3..5)
+VX_RT_T_MIN                 = 6
+VX_RT_T_MAX                 = 7
+VX_RT_RAY_FLAGS             = 8
+VX_RT_CULL_MASK             = 9
+# The ray is NOT window storage: these name the fields of the ray the TRACE burst
+# streams straight into the RTU (see VX_rtu_pkg RTU_RAY_BEATS). scene_base, flags,
+# cull_mask and the payload pointer are warp-uniform and ride the arm doorbell.
+
+# ── result span [10..26] — RTU burst-writes; STATUS last ──
+VX_RT_HIT_T                 = 10
+VX_RT_HIT_BARY_U            = 11
+VX_RT_HIT_BARY_V            = 12
+VX_RT_HIT_PRIMITIVE_ID      = 13
+VX_RT_HIT_INSTANCE_ID       = 14
+VX_RT_HIT_GEOMETRY_INDEX    = 15
+VX_RT_HIT_INSTANCE_CUSTOM   = 16
+VX_RT_OBJECT_RAY_ORIGIN     = 17      # object_ray.origin.{x,y,z}    (17..19)
+VX_RT_OBJECT_RAY_DIRECTION  = 20      # object_ray.direction.{x,y,z} (20..22)
+VX_RT_CB_TYPE               = 23      # candidate kind: ANYHIT(1) | PROC(2) | CHS(3) | MISS(4)
+VX_RT_HIT_SBT_IDX           = 24      # candidate's shader-binding-table index
+VX_RT_CB_HANDLE             = 25      # candidate's originating slot handle (per lane)
+VX_RT_STATUS                = 26      # per-lane VX_RT_STS_*; WAIT completes on this write
+
+# ── RTU-written, outside the record spans ──
+# Every slot is written by the RTU and read by the shader; nothing else writes the
+# window. The payload pointer rides the arm doorbell (warp-uniform) and the
+# hitAttribute rides the CONTINUE, so both reach the RTU without a window write.
+VX_RT_PAYLOAD_PTR_LO        = 27      # the tracing shader's payload; the callbacks read it
+VX_RT_HIT_ATTR_0            = 29      # user hitAttributeEXT (an IS shader returns it)
+
+VX_RT_SLOT_COUNT            = 32
+
+[rtu_status]
+# Per-lane vx_rt_wait / vx_rt_continue return status. Terminal codes 0..1 end
+# the lane's traversal loop; codes 2..4 keep it proceeding (rayQueryProceedEXT
+# semantics). YIELD_* means this lane has a candidate to service; PENDING means
+# it is still traversing and has nothing to service this iteration (its action
+# is ignored) — a candidate batch that covers only some lanes (e.g. divergent-SBT
+# reformation) leaves the rest PENDING so they neither exit the loop early nor
+# act on stale candidate data. Error codes >=128.
+VX_RT_STS_DONE_HIT          = 0
+VX_RT_STS_DONE_MISS         = 1
+VX_RT_STS_YIELD_ANYHIT      = 2
+VX_RT_STS_YIELD_PROC        = 3
+VX_RT_STS_PENDING           = 4
+VX_RT_STS_ERROR             = 128
+
+[rtu_flags]
+# Ray flags (matches SpvRayFlags* semantics).
+VX_RT_FLAG_OPAQUE                  = 0x01
+VX_RT_FLAG_NO_OPAQUE               = 0x02
+VX_RT_FLAG_TERMINATE_ON_FIRST_HIT  = 0x04
+VX_RT_FLAG_SKIP_CLOSEST_HIT        = 0x08
+VX_RT_FLAG_CULL_BACK_FACING        = 0x10
+VX_RT_FLAG_CULL_FRONT_FACING       = 0x20
+VX_RT_FLAG_CULL_OPAQUE             = 0x40
+VX_RT_FLAG_CULL_NO_OPAQUE          = 0x80
+VX_RT_FLAG_SKIP_TRIANGLES          = 0x100
+VX_RT_FLAG_SKIP_AABBS              = 0x200
+VX_RT_FLAG_ENABLE_CHS              = 0x400
+VX_RT_FLAG_ENABLE_MISS             = 0x800
+
+[rtu_cb_actions]
+# vx_rt_cb_ret action codes
+VX_RT_CB_ACCEPT             = 1
+VX_RT_CB_IGNORE             = 0
+VX_RT_CB_TERMINATE          = 2
+VX_RT_CB_DONE               = 3
+
+[rtu_cb_types]
+VX_RT_CB_TYPE_ANYHIT        = 1
+VX_RT_CB_TYPE_CHS           = 3
+VX_RT_CB_TYPE_MISS          = 4
+VX_RT_CB_TYPE_PROC          = 2
+
+[traps]
+# RISC-V M-mode synchronous trap causes. 0..15 are standard.
+VX_TRAP_CAUSE_BREAKPOINT       = 3
+VX_TRAP_CAUSE_ECALL_MMODE      = 11
+
+[csr_base]
+VX_CSR_MVENDORID = 0xF11
+VX_CSR_MARCHID = 0xF12
+VX_CSR_MIMPID = 0xF13
+VX_CSR_MHARTID = 0xF14
+VX_CSR_SATP = 0x180
+VX_CSR_PMPCFG0 = 0x3A0
+VX_CSR_PMPADDR0 = 0x3B0
+VX_CSR_MSTATUS = 0x300
+VX_CSR_MISA = 0x301
+VX_CSR_MEDELEG = 0x302
+VX_CSR_MIDELEG = 0x303
+VX_CSR_MIE = 0x304
+VX_CSR_MTVEC = 0x305
+VX_CSR_MSCRATCH = 0x340
+VX_CSR_MEPC = 0x341
+VX_CSR_MCAUSE = 0x342
+VX_CSR_MTVAL = 0x343
+VX_CSR_MNSTATUS = 0x744
+
+[csr_fpu]
+VX_CSR_FFLAGS = 0x001
+VX_CSR_FRM = 0x002
+VX_CSR_FCSR = 0x003
+
+[csr_gpgpu]
+VX_CSR_THREAD_ID = 0xCC0
+VX_CSR_WARP_ID = 0xCC1
+VX_CSR_CORE_ID = 0xCC2
+VX_CSR_ACTIVE_WARPS = 0xCC3
+VX_CSR_ACTIVE_THREADS = 0xCC4  # warning! this value is also used in LLVM
+VX_CSR_NUM_THREADS = 0xFC0
+VX_CSR_NUM_WARPS = 0xFC1
+VX_CSR_NUM_CORES = 0xFC2
+VX_CSR_LOCAL_MEM_BASE = 0xFC3
+VX_CSR_NUM_BARRIERS = 0xFC4
+
+[csr_cta]
+VX_CSR_CTA_ID   = 0xCD0  # local CTA index
+VX_CSR_CTA_RANK = 0xCD1  # warp index in CTA
+VX_CSR_CTA_SIZE = 0xCD2  # warp count in CTA
+
+VX_CSR_CTA_THREAD_ID_X = 0xCD3
+VX_CSR_CTA_THREAD_ID_Y = 0xCD4
+VX_CSR_CTA_THREAD_ID_Z = 0xCD5
+
+VX_CSR_CTA_BLOCK_ID_X =  0xCD6
+VX_CSR_CTA_BLOCK_ID_Y =  0xCD7
+VX_CSR_CTA_BLOCK_ID_Z =  0xCD8
+
+VX_CSR_CTA_BLOCK_DIM_X = 0xCD9
+VX_CSR_CTA_BLOCK_DIM_Y = 0xCDA
+VX_CSR_CTA_BLOCK_DIM_Z = 0xCDB
+
+VX_CSR_CTA_GRID_DIM_X = 0xCDC
+VX_CSR_CTA_GRID_DIM_Y = 0xCDD
+VX_CSR_CTA_GRID_DIM_Z = 0xCDE
+
+VX_CSR_CTA_LMEM_ADDR  = 0xCDF
+
+VX_CSR_CTA_CLUSTER_SIZE = 0xCE0
+
+VX_CSR_CTA_ENTRY = 0xCE1  # kernel entry PC, supplied per-CTA by the KMU
+
+# Fragment stamp, delivered per-lane in the launch itself (the raster core packs
+# it into the launch message; VX_cta_dispatch lands it in the per-warp launch RAM
+# before the warp is activated). The fragment shader reads its own pixel here.
+VX_CSR_FRAG_POS     = 0xCE2  # {covered[31], y[30:16], x[15:0]} of this lane's pixel
+VX_CSR_FRAG_PID     = 0xCE3  # primitive index of this lane's quad
+
+[dcr_mpm_class]
+VX_DCR_MPM_CLASS_BASE    = 0
+VX_DCR_MPM_CLASS_CORE    = 1
+VX_DCR_MPM_CLASS_RESERVED1= 2
+VX_DCR_MPM_CLASS_ICACHE  = 3
+VX_DCR_MPM_CLASS_DCACHE  = 4
+VX_DCR_MPM_CLASS_L2CACHE = 5
+VX_DCR_MPM_CLASS_L3CACHE = 6
+VX_DCR_MPM_CLASS_MEM     = 7
+VX_DCR_MPM_CLASS_RESERVED2= 8
+VX_DCR_MPM_CLASS_RESERVED3= 9
+VX_DCR_MPM_CLASS_RESERVED4= 10
+VX_DCR_MPM_CLASS_TCU     = 11
+VX_DCR_MPM_CLASS_RASTER  = 12
+VX_DCR_MPM_CLASS_TEX     = 13
+VX_DCR_MPM_CLASS_OM      = 14
+VX_DCR_MPM_CLASS_RTU     = 15
+VX_DCR_MPM_CLASS_DXA     = 16
+
+[csr_mpm_base]
+VX_CSR_MCYCLE = 0xB00
+VX_CSR_MCYCLE_H = 0xB80
+VX_CSR_MPM_RESERVED = 0xB01
+VX_CSR_MPM_RESERVED_H = 0xB81
+VX_CSR_MINSTRET = 0xB02
+VX_CSR_MINSTRET_H = 0xB82
+
+[csr_mpm_core]
+
+# PERF: scheduler
+VX_CSR_MPM_SCHED_IDLE = 0xB03 # cycles where scheduler is idle
+VX_CSR_MPM_SCHED_IDLE_H = 0xB83
+VX_CSR_MPM_ACTIVE_WARPS = 0xB04 # active warps per cycle sum
+VX_CSR_MPM_ACTIVE_WARPS_H = 0xB84
+VX_CSR_MPM_STALLED_WARPS = 0xB05  # total warps stalled at barrier
+VX_CSR_MPM_STALLED_WARPS_H = 0xB85
+VX_CSR_MPM_ISSUED_WARPS = 0xB06 # issued warps per cycle sum
+VX_CSR_MPM_ISSUED_WARPS_H = 0xB86
+VX_CSR_MPM_ISSUED_THREADS = 0xB07 # issued threads per cyclce sum
+VX_CSR_MPM_ISSUED_THREADS_H = 0xB87
+
+# PERF: pipeline stalls
+VX_CSR_MPM_STALL_FETCH = 0xB08
+VX_CSR_MPM_STALL_FETCH_H = 0xB88
+VX_CSR_MPM_STALL_IBUF = 0xB09 # instruction buffer stalled because full
+VX_CSR_MPM_STALL_IBUF_H = 0xB89
+VX_CSR_MPM_STALL_SCRB = 0xB0A # scoreboard stalled due to data dependency
+VX_CSR_MPM_STALL_SCRB_H = 0xB8A
+VX_CSR_MPM_STALL_OPDS = 0xB0B # operands fetch stage stalled due to bank conflict in
+VX_CSR_MPM_STALL_OPDS_H = 0xB8B
+VX_CSR_MPM_STALL_ALU = 0xB0C  # dispatch stage stalled due to ALU pipeline full
+VX_CSR_MPM_STALL_ALU_H = 0xB8C
+VX_CSR_MPM_STALL_FPU = 0xB0D  # dispatch stage stalled due to FPU pipeline full
+VX_CSR_MPM_STALL_FPU_H = 0xB8D
+VX_CSR_MPM_STALL_LSU = 0xB0E  # dispatch stage stalled due to LSU pipeline full
+VX_CSR_MPM_STALL_LSU_H = 0xB8E
+VX_CSR_MPM_STALL_SFU = 0xB0F  # dispatch stage stalled due to SFU pipeline full
+VX_CSR_MPM_STALL_SFU_H = 0xB8F
+VX_CSR_MPM_STALL_TCU = 0xB10  # dispatch stage stalled due to TCU pipeline full
+VX_CSR_MPM_STALL_TCU_H = 0xB90
+
+# PERF: branches
+VX_CSR_MPM_BRANCHES     = 0xB11  # total conditional branches
+VX_CSR_MPM_BRANCHES_H   = 0xB91
+VX_CSR_MPM_DIVERGENCE   = 0xB12  # total divergent branches
+VX_CSR_MPM_DIVERGENCE_H = 0xB92
+
+# PERF: workload mix
+VX_CSR_MPM_INSTR_ALU = 0xB13  # total ALU instructions
+VX_CSR_MPM_INSTR_ALU_H = 0xB93
+VX_CSR_MPM_INSTR_FPU = 0xB14  # total FPU instructions
+VX_CSR_MPM_INSTR_FPU_H = 0xB94
+VX_CSR_MPM_INSTR_LSU = 0xB15  # total LSU instructions
+VX_CSR_MPM_INSTR_LSU_H = 0xB95
+VX_CSR_MPM_INSTR_SFU = 0xB16  # total SFU instructions
+VX_CSR_MPM_INSTR_SFU_H = 0xB96
+VX_CSR_MPM_INSTR_TCU = 0xB17  # total TCU instructions
+VX_CSR_MPM_INSTR_TCU_H = 0xB97
+
+# PERF: memory
+# reserved: VX_CSR_MPM_MEM_READS = 0xB18  # total reads
+# reserved: VX_CSR_MPM_MEM_READS_H = 0xB98
+# reserved: VX_CSR_MPM_MEM_WRITES = 0xB19  # total writes
+# reserved: VX_CSR_MPM_MEM_WRITES_H = 0xB99
+VX_CSR_MPM_IFETCHES     = 0xB1A # total instruction fetch requests
+VX_CSR_MPM_IFETCHES_H   = 0xB9A
+VX_CSR_MPM_IFETCH_LT    = 0xB1B # total instruction fetch latency
+VX_CSR_MPM_IFETCH_LT_H  = 0xB9B
+VX_CSR_MPM_LOADS        = 0xB1C # total LSU load requests
+VX_CSR_MPM_LOADS_H      = 0xB9C
+VX_CSR_MPM_LOAD_LT      = 0xB1D # total LSU load latency
+VX_CSR_MPM_LOAD_LT_H    = 0xB9D
+VX_CSR_MPM_STORES       = 0xB1E # total LSU store requests
+VX_CSR_MPM_STORES_H     = 0xB9E
+
+# VM/MMU counters are part of the MEM class (see [csr_mpm_mem] below).
+
+# Each cache level is its own MPM class (re-based at 0xB03), so every level
+# gets the full standard hpmcounter window with room for evictions.
+[csr_mpm_icache]
+VX_CSR_MPM_ICACHE_READS = 0xB03  # total reads
+VX_CSR_MPM_ICACHE_READS_H = 0xB83
+VX_CSR_MPM_ICACHE_MISS_R = 0xB04  # read misses
+VX_CSR_MPM_ICACHE_MISS_R_H = 0xB84
+VX_CSR_MPM_ICACHE_MSHR_ST = 0xB05  # MSHR stalls
+VX_CSR_MPM_ICACHE_MSHR_ST_H = 0xB85
+
+[csr_mpm_dcache]
+VX_CSR_MPM_DCACHE_READS = 0xB03  # total reads
+VX_CSR_MPM_DCACHE_READS_H = 0xB83
+VX_CSR_MPM_DCACHE_WRITES = 0xB04  # total writes
+VX_CSR_MPM_DCACHE_WRITES_H = 0xB84
+VX_CSR_MPM_DCACHE_MISS_R = 0xB05  # read misses
+VX_CSR_MPM_DCACHE_MISS_R_H = 0xB85
+VX_CSR_MPM_DCACHE_MISS_W = 0xB06  # write misses
+VX_CSR_MPM_DCACHE_MISS_W_H = 0xB86
+VX_CSR_MPM_DCACHE_EVICTS = 0xB07  # dirty-line evictions
+VX_CSR_MPM_DCACHE_EVICTS_H = 0xB87
+VX_CSR_MPM_DCACHE_BANK_ST = 0xB08  # bank conflicts
+VX_CSR_MPM_DCACHE_BANK_ST_H = 0xB88
+VX_CSR_MPM_DCACHE_MSHR_ST = 0xB09  # MSHR stalls
+VX_CSR_MPM_DCACHE_MSHR_ST_H = 0xB89
+
+[csr_mpm_l2cache]
+VX_CSR_MPM_L2CACHE_READS = 0xB03  # total reads
+VX_CSR_MPM_L2CACHE_READS_H = 0xB83
+VX_CSR_MPM_L2CACHE_WRITES = 0xB04  # total writes
+VX_CSR_MPM_L2CACHE_WRITES_H = 0xB84
+VX_CSR_MPM_L2CACHE_MISS_R = 0xB05  # read misses
+VX_CSR_MPM_L2CACHE_MISS_R_H = 0xB85
+VX_CSR_MPM_L2CACHE_MISS_W = 0xB06  # write misses
+VX_CSR_MPM_L2CACHE_MISS_W_H = 0xB86
+VX_CSR_MPM_L2CACHE_EVICTS = 0xB07  # dirty-line evictions
+VX_CSR_MPM_L2CACHE_EVICTS_H = 0xB87
+VX_CSR_MPM_L2CACHE_BANK_ST = 0xB08  # bank conflicts
+VX_CSR_MPM_L2CACHE_BANK_ST_H = 0xB88
+VX_CSR_MPM_L2CACHE_MSHR_ST = 0xB09  # MSHR stalls
+VX_CSR_MPM_L2CACHE_MSHR_ST_H = 0xB89
+
+[csr_mpm_l3cache]
+VX_CSR_MPM_L3CACHE_READS = 0xB03  # total reads
+VX_CSR_MPM_L3CACHE_READS_H = 0xB83
+VX_CSR_MPM_L3CACHE_WRITES = 0xB04  # total writes
+VX_CSR_MPM_L3CACHE_WRITES_H = 0xB84
+VX_CSR_MPM_L3CACHE_MISS_R = 0xB05  # read misses
+VX_CSR_MPM_L3CACHE_MISS_R_H = 0xB85
+VX_CSR_MPM_L3CACHE_MISS_W = 0xB06  # write misses
+VX_CSR_MPM_L3CACHE_MISS_W_H = 0xB86
+VX_CSR_MPM_L3CACHE_EVICTS = 0xB07  # dirty-line evictions
+VX_CSR_MPM_L3CACHE_EVICTS_H = 0xB87
+VX_CSR_MPM_L3CACHE_BANK_ST = 0xB08  # bank conflicts
+VX_CSR_MPM_L3CACHE_BANK_ST_H = 0xB88
+VX_CSR_MPM_L3CACHE_MSHR_ST = 0xB09  # MSHR stalls
+VX_CSR_MPM_L3CACHE_MSHR_ST_H = 0xB89
+
+# Off-chip memory + local memory + coalescer + VM/MMU (one memory-subsystem class).
+[csr_mpm_mem]
+VX_CSR_MPM_MEM_READS = 0xB03  # total reads
+VX_CSR_MPM_MEM_READS_H = 0xB83
+VX_CSR_MPM_MEM_WRITES = 0xB04  # total writes
+VX_CSR_MPM_MEM_WRITES_H = 0xB84
+VX_CSR_MPM_MEM_LT = 0xB05  # memory latency
+VX_CSR_MPM_MEM_LT_H = 0xB85
+VX_CSR_MPM_MEM_BANK_ST = 0xB06  # bank conflicts
+VX_CSR_MPM_MEM_BANK_ST_H = 0xB86
+VX_CSR_MPM_LMEM_READS = 0xB07  # local memory reads
+VX_CSR_MPM_LMEM_READS_H = 0xB87
+VX_CSR_MPM_LMEM_WRITES = 0xB08  # local memory writes
+VX_CSR_MPM_LMEM_WRITES_H = 0xB88
+VX_CSR_MPM_LMEM_BANK_ST = 0xB09  # bank conflicts
+VX_CSR_MPM_LMEM_BANK_ST_H = 0xB89
+VX_CSR_MPM_COALESCER_MISS = 0xB0A  # coalescer misses
+VX_CSR_MPM_COALESCER_MISS_H = 0xB8A
+# VM/MMU (per-core TLB/PTW). Hardware sums icache + dcache MMU counters.
+VX_CSR_MPM_TLB_READS    = 0xB0B # total TLB lookups
+VX_CSR_MPM_TLB_READS_H  = 0xB8B
+VX_CSR_MPM_TLB_HITS     = 0xB0C # TLB hits
+VX_CSR_MPM_TLB_HITS_H   = 0xB8C
+VX_CSR_MPM_TLB_MISSES   = 0xB0D # TLB misses (triggered PTW)
+VX_CSR_MPM_TLB_MISSES_H = 0xB8D
+VX_CSR_MPM_TLB_EVICTS   = 0xB0E # TLB evictions on fill
+VX_CSR_MPM_TLB_EVICTS_H = 0xB8E
+VX_CSR_MPM_PTW_WALKS    = 0xB0F # PTW walks completed
+VX_CSR_MPM_PTW_WALKS_H  = 0xB8F
+VX_CSR_MPM_PTW_LATENCY  = 0xB10 # PTW total latency cycles
+VX_CSR_MPM_PTW_LATENCY_H = 0xB90
+
+[csr_mpm_dxa]
+# PERF: DXA copy engine (cluster-level, same value on all cores in cluster)
+VX_CSR_MPM_DXA_TRANSFERS  = 0xB03  # completed DXA tile transfers
+VX_CSR_MPM_DXA_TRANSFERS_H  = 0xB83
+VX_CSR_MPM_DXA_GMEM_READS  = 0xB04  # GMEM cache-line requests issued (after dedup)
+VX_CSR_MPM_DXA_GMEM_READS_H  = 0xB84
+VX_CSR_MPM_DXA_GMEM_DEDUP  = 0xB05  # GMEM cache-line requests saved by intra-row dedup
+VX_CSR_MPM_DXA_GMEM_DEDUP_H  = 0xB85
+VX_CSR_MPM_DXA_LMEM_WRITES  = 0xB06  # SMEM word writes issued
+VX_CSR_MPM_DXA_LMEM_WRITES_H  = 0xB86
+VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
+VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
+
+[csr_mpm_tcu]
+# PERF: WGMMA tile-buffer (per-core; summed across blocks)
+VX_CSR_MPM_TCU_TBUF_STALLS    = 0xB03  # cycles: WGMMA valid but stalled (uop cannot enter TCU core because tbuf data not ready)
+VX_CSR_MPM_TCU_TBUF_STALLS_H  = 0xB83
+VX_CSR_MPM_TCU_TBUF_CACHE_HITS= 0xB04  # B tile reuse hits from tile buffer cache
+VX_CSR_MPM_TCU_TBUF_CACHE_HITS_H = 0xB84
+VX_CSR_MPM_TCU_LMEM_READS     = 0xB05  # tile buffer local memory reads
+VX_CSR_MPM_TCU_LMEM_READS_H   = 0xB85
+
+[csr_mpm_tex]
+# PERF: texture unit (per-core; summed across blocks)
+VX_CSR_MPM_TEX_READS          = 0xB03  # texture accesses
+VX_CSR_MPM_TEX_READS_H        = 0xB83
+VX_CSR_MPM_TEX_LAT            = 0xB04  # texture total latency cycles
+VX_CSR_MPM_TEX_LAT_H          = 0xB84
+VX_CSR_MPM_TEX_ST             = 0xB05  # texture stall cycles (queue back-pressure)
+VX_CSR_MPM_TEX_ST_H           = 0xB85
+# PERF: texture cache
+VX_CSR_MPM_TCACHE_READS       = 0xB06  # total reads
+VX_CSR_MPM_TCACHE_READS_H     = 0xB86
+VX_CSR_MPM_TCACHE_MISS_R      = 0xB07  # read misses
+VX_CSR_MPM_TCACHE_MISS_R_H    = 0xB87
+VX_CSR_MPM_TCACHE_BANK_ST     = 0xB08  # bank conflicts
+VX_CSR_MPM_TCACHE_BANK_ST_H   = 0xB88
+VX_CSR_MPM_TCACHE_MSHR_ST     = 0xB09  # MSHR stalls
+VX_CSR_MPM_TCACHE_MSHR_ST_H   = 0xB89
+
+[csr_mpm_raster]
+# PERF: raster unit (per-core; summed across blocks)
+VX_CSR_MPM_RASTER_READS       = 0xB03  # raster accesses
+VX_CSR_MPM_RASTER_READS_H     = 0xB83
+VX_CSR_MPM_RASTER_LAT         = 0xB04  # raster total latency cycles
+VX_CSR_MPM_RASTER_LAT_H       = 0xB84
+VX_CSR_MPM_RASTER_ST          = 0xB05  # raster stall cycles
+VX_CSR_MPM_RASTER_ST_H        = 0xB85
+# PERF: raster cache
+VX_CSR_MPM_RCACHE_READS       = 0xB06  # total reads
+VX_CSR_MPM_RCACHE_READS_H     = 0xB86
+VX_CSR_MPM_RCACHE_MISS_R      = 0xB07  # read misses
+VX_CSR_MPM_RCACHE_MISS_R_H    = 0xB87
+VX_CSR_MPM_RCACHE_BANK_ST     = 0xB08  # bank conflicts
+VX_CSR_MPM_RCACHE_BANK_ST_H   = 0xB88
+VX_CSR_MPM_RCACHE_MSHR_ST     = 0xB09  # MSHR stalls
+VX_CSR_MPM_RCACHE_MSHR_ST_H   = 0xB89
+
+[csr_mpm_om]
+# PERF: output-merger unit (per-core; summed across blocks)
+VX_CSR_MPM_OM_READS           = 0xB03  # OM memory reads
+VX_CSR_MPM_OM_READS_H         = 0xB83
+VX_CSR_MPM_OM_WRITES          = 0xB04  # OM memory writes
+VX_CSR_MPM_OM_WRITES_H        = 0xB84
+VX_CSR_MPM_OM_LAT             = 0xB05  # OM memory total latency cycles
+VX_CSR_MPM_OM_LAT_H           = 0xB85
+VX_CSR_MPM_OM_ST              = 0xB06  # OM stall cycles
+VX_CSR_MPM_OM_ST_H            = 0xB86
+# PERF: OM cache
+VX_CSR_MPM_OCACHE_READS       = 0xB07  # total reads
+VX_CSR_MPM_OCACHE_READS_H     = 0xB87
+VX_CSR_MPM_OCACHE_WRITES      = 0xB08  # total writes
+VX_CSR_MPM_OCACHE_WRITES_H    = 0xB88
+VX_CSR_MPM_OCACHE_MISS_R      = 0xB09  # read misses
+VX_CSR_MPM_OCACHE_MISS_R_H    = 0xB89
+VX_CSR_MPM_OCACHE_MISS_W      = 0xB0A  # write misses
+VX_CSR_MPM_OCACHE_MISS_W_H    = 0xB8A
+VX_CSR_MPM_OCACHE_BANK_ST     = 0xB0B  # bank conflicts
+VX_CSR_MPM_OCACHE_BANK_ST_H   = 0xB8B
+VX_CSR_MPM_OCACHE_MSHR_ST     = 0xB0C  # MSHR stalls
+VX_CSR_MPM_OCACHE_MSHR_ST_H   = 0xB8C
+
+# XLEN is an environment-supplied build axis (configure exports it); the
+# [memmap]/[vm] exprs above reference it. Declared as a [[builtin]] so the
+# dependency is explicit and typed; defaults to 0 (→ 32-bit) when unset.
+# This is the SAME axis as VX_config.toml's VX_CFG_XLEN enum — the two files are
+# generated by separate passes with different variable scopes, so this file sees
+# the bare `XLEN` while VX_config sees `VX_CFG_XLEN`. Keep the two in lockstep.
+[[builtin]]
+XLEN = "int"
+
+[[enum]]
+VX_VM_ADDR_MODE = ["BARE", "SV32", "SV39", "SV48", "SV57"]

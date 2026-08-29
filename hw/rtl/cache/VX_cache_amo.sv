@@ -1,0 +1,793 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_cache_define.vh"
+
+// Per-bank AMO engine, instantiated by the bank only when atomics are
+// enabled. A bank plays exactly one of two roles:
+//
+//   IS_LLC=1 (commit): perform the read-modify-write on the line word
+//     resident at S1, maintain the per-hart reservation table (via
+//     VX_amo_unit), and inject the result back through the bank pipeline
+//     as a single-outstanding synthetic writeback.
+//
+//   IS_LLC=0 (passthrough): forward the AMO downstream (the LLC does the
+//     RMW), latch the returned result word, and replay it back to the
+//     requester. Also enforces same-hart program order at the bank input.
+//
+// The two roles are mutually exclusive, so each ties off the other's
+// outputs and the synthesizer keeps only the selected datapath.
+module VX_cache_amo import VX_gpu_pkg::*; #(
+    parameter IS_LLC          = 0,
+    parameter NUM_RES_ENTRIES = 4,
+    parameter LINE_ADDR_BITS  = 32,
+    parameter WORD_WIDTH      = 32,
+    parameter WORD_SIZE       = 4,
+    parameter WORD_SEL_WIDTH  = 1,
+    parameter TAG_WIDTH       = 1,
+    parameter REQ_SEL_WIDTH   = 1,
+    parameter ATTR_WIDTH      = 1,
+    parameter MSHR_SIZE       = 1,
+    parameter MSHR_ADDR_WIDTH = 1,
+    parameter WORDS_PER_LINE  = 1,
+    parameter WORDS_PER_SECTOR = WORDS_PER_LINE, // words per fill/eviction sector (= WORDS_PER_LINE when 1 sector/line)
+    parameter PIPE_EX         = 0             // deferred-commit depth: _st1 ports lag the S0 lookup by PIPE_EX+1 cycles (0 = classic 2-stage)
+) (
+    input  wire                          clk,
+    input  wire                          reset,
+    input  wire                          pipe_stall,
+
+    // pipeline view
+    input  amo_req_t                     amo_st0,
+    input  wire                          valid_st0,
+    input  wire                          is_creq_st0,
+    input  wire                          is_hit_st0,
+    input  wire                          is_replay_st0,
+    input  amo_req_t                     amo_st1,
+    input  wire                          valid_st1,
+    input  wire                          is_creq_st1,
+    input  wire                          is_hit_st1,
+    input  wire                          is_replay_st1,
+    input  wire                          do_write_st1,
+    input  wire [WORD_WIDTH-1:0]         read_word_st1,
+    input  wire [WORD_SIZE-1:0]          byteen_st1,
+    input  wire [WORD_WIDTH-1:0]         write_word_st1,
+    input  wire [WORD_SEL_WIDTH-1:0]     word_idx_st0,
+    input  wire [WORD_SEL_WIDTH-1:0]     word_idx_st1,
+    input  wire [LINE_ADDR_BITS-1:0]     addr_st1,
+    input  wire [LINE_ADDR_BITS-1:0]     res_addr_n,   // line entering the commit stage next cycle
+    input  wire [WORD_SIZE-1:0]          byteen_n,     // byteen entering the commit stage next cycle
+    input  wire [TAG_WIDTH-1:0]          tag_st1,
+    input  wire [REQ_SEL_WIDTH-1:0]      req_idx_st1,
+    input  wire [ATTR_WIDTH-1:0]         attr_st1,
+
+    // commit handshake: the bank grants the synthetic writeback this cycle
+    input  wire                          wb_fire,
+
+    // mshr / memory fill (passthrough)
+    input  wire                          mshr_allocate_st0,
+    input  wire [MSHR_ADDR_WIDTH-1:0]    mshr_alloc_id_st0,
+    input  wire [MSHR_ADDR_WIDTH-1:0]    mshr_id_st1,
+    input  wire                          mem_rsp_fire,
+    input  wire [MSHR_ADDR_WIDTH-1:0]    mem_rsp_id,
+    input  wire [WORDS_PER_SECTOR*WORD_WIDTH-1:0] mem_rsp_data,
+    input  wire                          is_fill_sel,
+
+    // input arbitration (same-line age-ordering)
+    input  wire                          core_req_valid,
+    input  wire                          core_req_is_amo,
+    input  wire                          core_req_rw,
+    input  wire                          core_req_fire,
+    input  wire                          rw_st0,
+    input  wire                          mshr_probe_pending_ld,
+    input  wire                          mshr_probe_pending_amo,
+    input  wire                          mshr_any_ld,
+    input  wire                          mshr_any_amo,
+    input  wire                          mshr_persist_ld,
+    input  wire                          mshr_persist_amo,
+
+    // commit outputs (tied off when IS_LLC=0)
+    output wire                          amo_hit_st1,    // AMO commits locally at S1
+    output wire                          commit_busy,    // commit in flight
+    output wire                          chain_stall,    // pace same-line chained AMO
+    output wire                          wb_pending,     // writeback request live
+    output wire [WORD_WIDTH-1:0]         rsp_data,       // response word on amo_hit_st1
+    // Read forward: a request reading the AMO'd word while the result is still
+    // queued/settling must observe those bytes (replays are admitted during
+    // the writeback window). The bank byte-merges these over the array word.
+    output wire [WORD_SIZE-1:0]          rd_fwd_mask,
+    output wire [WORD_WIDTH-1:0]         rd_fwd_data,
+    output wire [LINE_ADDR_BITS-1:0]     wb_addr,
+    output wire [WORD_SEL_WIDTH-1:0]     wb_word_idx,
+    output wire [WORD_SIZE-1:0]          wb_byteen,
+    output wire [WORD_WIDTH-1:0]         wb_data,
+    output wire [TAG_WIDTH-1:0]          wb_tag,
+    output wire [REQ_SEL_WIDTH-1:0]      wb_idx,
+    output wire [ATTR_WIDTH-1:0]         wb_attr,
+
+    // passthrough outputs (tied off when IS_LLC=1)
+    output wire                          is_amo_fwd_st0,    // AMO first pass (S0)
+    output wire                          is_amo_fwd_st1,    // AMO first pass (S1)
+    output wire                          is_amo_replay_st1, // result replay
+    output wire                          is_passthru_fill_sel,
+    output wire [WORD_WIDTH-1:0]         amo_ptw_word_st1,
+    output wire                          req_input_defer
+);
+    // Registered same-line probe: the MSHR CAM evaluates the held input
+    // payload (stable while the request waits) into flops, so the live defer
+    // equations consume only registered state and req_input_defer stays off
+    // the payload->CAM->ready cone. fresh_r marks a request the registered
+    // result does not yet describe; the persist pulses bridge the one
+    // transition a result captured last cycle cannot have seen. The defers
+    // are a per-cycle superset of the combinational originals -- deferral
+    // only ever gets stronger, by at most one cycle, and only while the
+    // hazard class has a pending entry.
+    reg fresh_r, probe_ld_hit_r, probe_amo_hit_r, persist_ld_r, persist_amo_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            fresh_r         <= 1'b1;
+            probe_ld_hit_r  <= 1'b0;
+            probe_amo_hit_r <= 1'b0;
+            persist_ld_r    <= 1'b0;
+            persist_amo_r   <= 1'b0;
+        end else begin
+            fresh_r         <= ~(core_req_valid && ~core_req_fire);
+            probe_ld_hit_r  <= mshr_probe_pending_ld;
+            probe_amo_hit_r <= mshr_probe_pending_amo;
+            persist_ld_r    <= mshr_persist_ld;
+            persist_amo_r   <= mshr_persist_amo;
+        end
+    end
+    wire st0_ld_alloc_any  = mshr_allocate_st0 && ~pipe_stall && ~amo_st0.amo_valid && ~rw_st0;
+    wire st0_amo_alloc_any = mshr_allocate_st0 && ~pipe_stall &&  amo_st0.amo_valid;
+
+    if (IS_LLC != 0) begin : g_commit
+        // ----------------------------------------------------------------
+        // LLC commit: RMW on the resident line + synthetic writeback
+        // ----------------------------------------------------------------
+        // The engine's datapath runs on the AMO's LANE: the <= 8 naturally-
+        // aligned bytes an atomic can touch (32-bit RVA ops, 64-bit Zacas
+        // pair). A wide-word LLC (WORD = the L1 line) otherwise pays for
+        // full-word funnels, queues, forwards and byteen compares that only
+        // ever carry one lane; every full-width output below is rebuilt by
+        // replicating the lane and relying on the byteen masks that already
+        // guard it.
+        localparam LANE_SIZE     = (WORD_SIZE < 8) ? WORD_SIZE : 8;
+        localparam LANE_WIDTH    = LANE_SIZE * 8;
+        localparam NUM_LANES     = WORD_SIZE / LANE_SIZE;
+        localparam LANE_IDXW     = `UP(`CLOG2(NUM_LANES));
+        localparam BIT_OFF_BITS  = `CLOG2(WORD_WIDTH);
+        localparam LANE_OFF_BITS = `CLOG2(LANE_WIDTH);
+        localparam AMO_OLD_BITS  = (LANE_WIDTH < 64) ? LANE_WIDTH : 64;
+
+        // Writeback queue: a completed AMO pushes its result here instead of
+        // overwriting a still-draining writeback. The head (slot 0) drains
+        // through the bank's synthetic-write path; pushes never clobber a pending
+        // entry, so writebacks pipeline without stalling any replay (coalescer-
+        // safe) or the pipe (deadlock-free). Entries are keyed per {word, lane}:
+        // a same-line AMO burst leaves one writeback per distinct target in
+        // flight. commit_busy serializes AMO instructions (the next instruction
+        // waits for wb_pending to clear), so the occupancy never exceeds the
+        // distinct targets one instruction's requests touch in this bank --
+        // bounded by the core-port fan-in (<= 4 for this cache family), not the
+        // full line. Sizing to that bound (min 2, cap 4) halves the coalesce/
+        // forward/enqueue fanout vs a full-line queue; the cap is a constant
+        // here because the engine has no NUM_REQS parameter, and the overflow
+        // assertion guards it if a wider core-port config ever exceeds 4.
+        localparam WBQ_TARGETS = WORDS_PER_LINE * NUM_LANES;
+        localparam WBQ_SIZE = (WBQ_TARGETS < 4) ? ((WBQ_TARGETS < 2) ? 2 : WBQ_TARGETS) : 4;
+        localparam WBQ_CNTW = `CLOG2(WBQ_SIZE+1);
+        localparam WBQ_IDXW = `CLOG2(WBQ_SIZE);
+        reg [WBQ_CNTW-1:0]           wbq_count;
+        reg [LINE_ADDR_BITS-1:0]     wbq_addr   [WBQ_SIZE];
+        reg [WORD_SEL_WIDTH-1:0]     wbq_wsel   [WBQ_SIZE];
+        reg [LANE_IDXW-1:0]          wbq_lane   [WBQ_SIZE];
+        reg [LANE_SIZE-1:0]          wbq_byteen [WBQ_SIZE];
+        reg [LANE_WIDTH-1:0]         wbq_data   [WBQ_SIZE];
+        reg [TAG_WIDTH-1:0]          wbq_tag    [WBQ_SIZE];
+        reg [REQ_SEL_WIDTH-1:0]      wbq_idx    [WBQ_SIZE];
+        reg [ATTR_WIDTH-1:0]         wbq_attr   [WBQ_SIZE];
+
+        // Head aliases (slot 0 = oldest = the entry currently draining). The
+        // full-width writeback is the lane replicated across the word under a
+        // lane-positioned byteen: the array write consumes only enabled bytes.
+        wire                         wb_pending_r  = (wbq_count != '0);
+        wire [LINE_ADDR_BITS-1:0]    wb_addr_r     = wbq_addr[0];
+        wire [WORD_SEL_WIDTH-1:0]    wb_word_idx_r = wbq_wsel[0];
+        wire [WORD_SIZE-1:0]         wb_byteen_r;
+        for (genvar l = 0; l < NUM_LANES; ++l) begin : g_wb_byteen_x
+            assign wb_byteen_r[l*LANE_SIZE +: LANE_SIZE] =
+                (wbq_lane[0] == LANE_IDXW'(l)) ? wbq_byteen[0] : {LANE_SIZE{1'b0}};
+        end
+        wire [WORD_WIDTH-1:0]        wb_data_r     = {NUM_LANES{wbq_data[0]}};
+        wire [TAG_WIDTH-1:0]         wb_tag_r      = wbq_tag[0];
+        wire [REQ_SEL_WIDTH-1:0]     wb_idx_r      = wbq_idx[0];
+        wire [ATTR_WIDTH-1:0]        wb_attr_r     = wbq_attr[0];
+
+        // BRAM-settle window: a fired writeback takes a couple cycles to land
+        // in cache_data; commit_busy stays high across it so the next AMO reads
+        // the committed line. post_wb_{addr,data} hold the just-drained entry.
+        reg [1:0]                    post_wb_age;
+        reg [LINE_ADDR_BITS-1:0]     post_wb_addr;
+        reg [WORD_SEL_WIDTH-1:0]     post_wb_wsel;
+        reg [LANE_IDXW-1:0]          post_wb_lane;
+        reg [LANE_SIZE-1:0]          post_wb_byteen;
+        reg [LANE_WIDTH-1:0]         post_wb_data;
+        wire                         post_wb_valid = (post_wb_age != 2'd0);
+
+        // Compute stage: S1 latches the aligned operands, the RMW ALU + the
+        // re-align shift run the next cycle, off the S1 critical path. AMO
+        // commits are serialized by commit_busy (the bank holds off core
+        // requests), so the stage holds at most one operation; the old operand
+        // is byte-forwarded from the writeback queue when a prior AMO to the same
+        // bytes has not yet reached the array (see line_lane_st1).
+        reg                          cmp_valid;
+        reg [63:0]                   cmp_old, cmp_rhs;
+    `ifdef VX_CFG_EXT_ZACAS_ENABLE
+        reg [63:0]                   cmp_cmp;
+    `endif
+        amo_op_e                     cmp_op;
+        reg [1:0]                    cmp_width;
+        reg                          cmp_unsigned;
+        reg [LANE_OFF_BITS-1:0]      cmp_bit_off;
+        reg [LANE_IDXW-1:0]          cmp_lane;
+        reg [LINE_ADDR_BITS-1:0]     cmp_addr;
+        reg [LANE_SIZE-1:0]          cmp_byteen;
+        reg [WORD_SEL_WIDTH-1:0]     cmp_wsel;
+        reg [TAG_WIDTH-1:0]          cmp_tag;
+        reg [REQ_SEL_WIDTH-1:0]      cmp_idx;
+        reg [ATTR_WIDTH-1:0]         cmp_attr;
+
+        // Byte-offset alignment: shift the target down to bit 0 for compute,
+        // and shift results back for response/writeback. byteen rides the pipe
+        // unchanged, so the offset is encoded from the look-ahead value and
+        // registered with the pipe enable -- at stC the funnel-shift selects
+        // come off a flop instead of a WORD_SIZE-input priority encoder, which
+        // sat on the cmp_old capture critical path. A bubble's garbage encode
+        // is masked exactly where a garbage res_addr_n read already is.
+        wire [`UP(`CLOG2(WORD_SIZE))-1:0] byte_off_n;
+        VX_priority_encoder #(
+            .N (WORD_SIZE)
+        ) byte_off_enc (
+            .data_in    (byteen_n),
+            .index_out  (byte_off_n),
+            `UNUSED_PIN (valid_out),
+            `UNUSED_PIN (onehot_out)
+        );
+        // Lane select and intra-lane bit offset, split from the encoded byte
+        // offset. The AMO's byteen always sits inside one lane (natural
+        // alignment), so the lane of its lowest set byte is the lane of all of
+        // them (asserted below).
+        reg [LANE_IDXW-1:0]     lane_st1;
+        reg [LANE_OFF_BITS-1:0] bit_off_st1;
+        always @(posedge clk) begin
+            if (~pipe_stall) begin
+                lane_st1    <= (NUM_LANES > 1) ? LANE_IDXW'(byte_off_n >> `CLOG2(LANE_SIZE)) : '0;
+                bit_off_st1 <= LANE_OFF_BITS'({byte_off_n[`UP(`CLOG2(LANE_SIZE))-1:0], 3'b0});
+            end
+        end
+        // This AMO's byteen slice within its lane.
+        wire [LANE_SIZE-1:0] lane_byteen_st1 = LANE_SIZE'(byteen_st1 >> (lane_st1 * LANE_SIZE));
+
+        // Per-word WBQ match for {addr_st1, word_idx_st1}. The coalescer keeps
+        // at most one entry per {line, word, lane} (see wb_coalesce), so the
+        // matching entries cover disjoint lanes and each BYTE has at most one
+        // queued writer; the forwards below reduce with a balanced OR-tree
+        // instead of a newest-wins priority scan, off the response/old-operand
+        // path.
+        reg [WBQ_SIZE-1:0] wbq_word_hit;
+        always @(*) begin
+            for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                wbq_word_hit[i] = (WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == addr_st1)
+                               && (wbq_wsel[i] == word_idx_st1);
+            end
+        end
+        wire post_wb_word_hit = post_wb_valid && (post_wb_addr == addr_st1)
+                             && (post_wb_wsel == word_idx_st1);
+
+        // Read-forward network: the queued writer of each byte of
+        // {addr_st1, word_idx_st1} wins over the settling entry, which wins over
+        // the array (mask bit stays 0). One-hot over the WBQ per byte.
+        // A byte of {addr_st1, word_idx_st1} is covered by entry i iff the
+        // word matches, the byte's lane is the entry's lane, and the entry's
+        // lane byteen has it. Data is the entry's lane byte -- wiring, since
+        // an entry stores exactly one lane.
+        reg [WORD_SIZE-1:0]  wbq_byte_hit;
+        reg [WORD_WIDTH-1:0] wbq_byte_data;
+        always @(*) begin
+            wbq_byte_hit  = '0;
+            wbq_byte_data = '0;
+            for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                for (integer b = 0; b < WORD_SIZE; ++b) begin
+                    if (wbq_word_hit[i] && (wbq_lane[i] == LANE_IDXW'(b / LANE_SIZE))
+                     && wbq_byteen[i][b % LANE_SIZE]) begin
+                        wbq_byte_hit[b]         = 1'b1;
+                        wbq_byte_data[b*8 +: 8] = wbq_byte_data[b*8 +: 8]
+                                                | wbq_data[i][(b % LANE_SIZE)*8 +: 8];
+                    end
+                end
+            end
+        end
+        reg [WORD_SIZE-1:0]  rd_fwd_mask_w;
+        reg [WORD_WIDTH-1:0] rd_fwd_data_w;
+        always @(*) begin
+            for (integer b = 0; b < WORD_SIZE; ++b) begin
+                if (wbq_byte_hit[b]) begin
+                    rd_fwd_mask_w[b]        = 1'b1;
+                    rd_fwd_data_w[b*8 +: 8] = wbq_byte_data[b*8 +: 8];
+                end else if (post_wb_word_hit && (post_wb_lane == LANE_IDXW'(b / LANE_SIZE))
+                          && post_wb_byteen[b % LANE_SIZE]) begin
+                    rd_fwd_mask_w[b]        = 1'b1;
+                    rd_fwd_data_w[b*8 +: 8] = post_wb_data[(b % LANE_SIZE)*8 +: 8];
+                end else begin
+                    rd_fwd_mask_w[b]        = 1'b0;
+                    rd_fwd_data_w[b*8 +: 8] = 8'b0;
+                end
+            end
+        end
+        assign rd_fwd_mask = rd_fwd_mask_w;
+        assign rd_fwd_data = rd_fwd_data_w;
+
+        // Old-operand forward: the AMO reads only its own byteen bytes, all
+        // inside its lane, and for each byte the read-forward network already
+        // yields the newest value -- queued writer over settling entry over
+        // array. Selecting the lane first keeps the cmp_old capture off any
+        // full-word funnel, and the per-byte merge stays correct when a
+        // matching entry only partially covers this AMO's bytes (reachable
+        // through MSHR replay chains, which do not wait out commit_busy).
+        wire [LANE_WIDTH-1:0] read_lane_st1     = LANE_WIDTH'(read_word_st1 >> (lane_st1 * LANE_WIDTH));
+        wire [LANE_SIZE-1:0]  lane_fwd_mask_st1 = LANE_SIZE'(rd_fwd_mask_w >> (lane_st1 * LANE_SIZE));
+        wire [LANE_WIDTH-1:0] lane_fwd_data_st1 = LANE_WIDTH'(rd_fwd_data_w >> (lane_st1 * LANE_WIDTH));
+        wire [LANE_WIDTH-1:0] line_lane_st1;
+        for (genvar b = 0; b < LANE_SIZE; ++b) begin : g_line_lane_fwd
+            assign line_lane_st1[b*8 +: 8] = lane_fwd_mask_st1[b] ? lane_fwd_data_st1[b*8 +: 8]
+                                                                  : read_lane_st1[b*8 +: 8];
+        end
+
+        // A younger plain store to queued/settling bytes supersedes them (its
+        // array write is later in pipeline order): clear those byte lanes so
+        // neither the writeback nor the read forward resurrects them. The
+        // engine's own synthetic writeback commit is excluded -- it IS the
+        // settling entry, not a younger writer -- identified by its fixed
+        // fire->commit pipeline distance.
+        wire wb_self_stc;
+        VX_pipe_register #(
+            .DATAW  (1),
+            .RESETW (1),
+            .DEPTH  (2 + PIPE_EX)
+        ) reg_wb_self (
+            .clk      (clk),
+            .reset    (reset),
+            .enable   (~pipe_stall),
+            .data_in  (wb_fire),
+            .data_out (wb_self_stc)
+        );
+        wire store_supersede = do_write_st1 && ~wb_self_stc && ~pipe_stall;
+        reg [WBQ_SIZE-1:0] wbq_clr_hit;
+        always @(*) begin
+            for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                wbq_clr_hit[i] = store_supersede && (WBQ_CNTW'(i) < wbq_count)
+                              && (wbq_addr[i] == addr_st1) && (wbq_wsel[i] == word_idx_st1);
+            end
+        end
+        wire post_wb_clr = store_supersede && post_wb_valid
+                        && (post_wb_addr == addr_st1) && (post_wb_wsel == word_idx_st1);
+
+        // A superseding store's byteen, sliced at each queued entry's lane.
+        wire [LANE_SIZE-1:0] clr_byteen [WBQ_SIZE];
+        for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_clr_byteen
+            assign clr_byteen[i] = LANE_SIZE'(byteen_st1 >> (wbq_lane[i] * LANE_SIZE));
+        end
+        wire [LANE_SIZE-1:0] post_wb_clr_byteen = LANE_SIZE'(byteen_st1 >> (post_wb_lane * LANE_SIZE));
+
+        wire [LANE_WIDTH-1:0] line_lane_shifted_st1 = line_lane_st1 >> bit_off_st1;
+        wire [LANE_WIDTH-1:0] rhs_lane_st1 = LANE_WIDTH'(write_word_st1 >> (lane_st1 * LANE_WIDTH));
+        wire [LANE_WIDTH-1:0] rhs_lane_shifted_st1  = rhs_lane_st1 >> bit_off_st1;
+
+        // width from byteen popcount (.W -> 4 bytes, .D -> 8); operands top at .D.
+        wire [1:0] width_st1 = ($countones(lane_byteen_st1) == 8) ? 2'd3 : 2'd2;
+        wire [63:0] rhs_st1 = (width_st1 == 2'd2)
+                            ? 64'({32'h0, rhs_lane_shifted_st1[31:0]})
+                            : 64'(rhs_lane_shifted_st1[AMO_OLD_BITS-1:0]);
+        wire [63:0] old_st1 = (width_st1 == 2'd2)
+                            ? 64'({32'h0, line_lane_shifted_st1[31:0]})
+                            : 64'(line_lane_shifted_st1[AMO_OLD_BITS-1:0]);
+
+        wire        res_check;
+
+        // commit conditions (from the original AMO at S1; amo_st1.hart_id is
+        // valid there, not on the compute/writeback cycle).
+        wire amo_hit_w = amo_st1.amo_valid && is_hit_st1 && valid_st1 && is_creq_st1;
+        wire sc_fail_st1 = (amo_st1.amo_op == AMO_OP_SC) && ~res_check;
+        wire do_store_st1 = amo_hit_w && (amo_st1.amo_op != AMO_OP_LR) && ~sc_fail_st1;
+        wire do_store_st0 = amo_st0.amo_valid && valid_st0 && is_creq_st0 && is_hit_st0
+                         && (amo_st0.amo_op != AMO_OP_LR);
+
+        wire res_reserve    = amo_hit_w && (amo_st1.amo_op == AMO_OP_LR);
+        wire res_clear      = amo_hit_w && (amo_st1.amo_op == AMO_OP_SC);
+        // any committed write to the line breaks other harts' reservations;
+        // AMOs ride the load path (rw=0) so do_write_st1 is plain stores only.
+        wire res_invalidate = do_store_st1 || do_write_st1;
+
+        // RMW ALU runs on the registered compute-stage operands (off the S1
+        // path); the reservation table is driven from S1 so the SC outcome is
+        // ready for the response. ret_word is unused — the response old value
+        // comes straight from S1 (no ALU).
+        wire [63:0] new_word;
+        wire [63:0] ret_word_unused;
+        VX_amo_unit #(
+            .NUM_RES_ENTRIES (NUM_RES_ENTRIES),
+            .LINE_ADDR_BITS  (LINE_ADDR_BITS),
+            .DATA_WIDTH      (AMO_OLD_BITS),  // 32-bit word cache -> 32-bit RMW datapath
+            .ARITH_WIDTH     (`MIN(`VX_CFG_XLEN, AMO_OLD_BITS)) // only the Zacas pair is wider than a register
+        ) amo_unit (
+            .clk           (clk),
+            .reset         (reset),
+            .pipe_stall    (pipe_stall),
+            .compute_op    (cmp_op),
+            .compute_unsigned (cmp_unsigned),
+            .compute_width (cmp_width),
+            .compute_old   (cmp_old),
+            .compute_rhs   (cmp_rhs),
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            .compute_cmp   (cmp_cmp),
+        `else
+            .compute_cmp   (64'b0),
+        `endif
+            .compute_new_word (new_word),
+            .compute_ret_word (ret_word_unused),
+            .res_reserve   (res_reserve),
+            .res_clear     (res_clear),
+            .res_invalidate(res_invalidate),
+            .res_hart_id   (amo_st1.hart_id),
+            .res_line_addr (addr_st1),
+            .res_line_addr_n (res_addr_n),  // look-ahead for the sync-BRAM read (lands at stC)
+            .res_check     (res_check)
+        );
+        `UNUSED_VAR (ret_word_unused)
+
+        // place the computed value at its byte offset within the lane
+        wire [LANE_WIDTH-1:0] wb_data_w = LANE_WIDTH'(new_word) << cmp_bit_off;
+
+        // Compute finished this cycle (result ready to enqueue): the compute
+        // stage is occupied and not being reloaded by a fresh latch.
+        wire wb_push = cmp_valid && ~(do_store_st1 && ~pipe_stall);
+        // A same-WORD result coalesces into that word's existing entry, byte-
+        // merging its bytes (see the enqueue) so repeated or adjacent sub-word
+        // AMOs to one word collapse to a single writeback. Different words of the
+        // same line stay in separate entries (each is an independent write). The
+        // head cannot be coalesced the cycle it drains.
+        reg                 wb_coalesce;
+        reg [WBQ_IDXW-1:0]  wb_coal_idx;    // pre-shift index of the coalesce target
+        always @(*) begin
+            wb_coalesce = 1'b0;
+            wb_coal_idx = '0;
+            for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                if ((WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == cmp_addr)
+                 && (wbq_wsel[i] == cmp_wsel) && (wbq_lane[i] == cmp_lane)
+                 && ~(wb_fire && (i == 0))) begin
+                    wb_coalesce = 1'b1;
+                    wb_coal_idx = WBQ_IDXW'(i);
+                end
+            end
+        end
+        // Merge source: the pre-shift coalesce-target entry (old value).
+        wire [LANE_WIDTH-1:0] coal_src_data   = wbq_data[wb_coal_idx];
+        wire [LANE_SIZE-1:0]  coal_src_byteen = wbq_byteen[wb_coal_idx];
+        // New entry lands at the post-pop tail; a coalesce slot shifts down on a pop.
+        wire [WBQ_IDXW-1:0] wb_new_idx  = WBQ_IDXW'(wb_fire ? (wbq_count - WBQ_CNTW'(1)) : wbq_count);
+        wire [WBQ_IDXW-1:0] wb_slot     = wb_coalesce ? WBQ_IDXW'(wb_fire ? (wb_coal_idx - WBQ_IDXW'(1)) : wb_coal_idx)
+                                                      : wb_new_idx;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                cmp_valid   <= 1'b0;
+                wbq_count   <= '0;
+                post_wb_age <= 2'd0;
+            end else begin
+                if (wb_fire) begin
+                    post_wb_age    <= 2'd2;
+                    post_wb_addr   <= wbq_addr[0];
+                    post_wb_wsel   <= wbq_wsel[0];
+                    post_wb_lane   <= wbq_lane[0];
+                    post_wb_byteen <= wbq_byteen[0] & ~(wbq_clr_hit[0] ? clr_byteen[0] : {LANE_SIZE{1'b0}});
+                    post_wb_data   <= wbq_data[0];
+                end else begin
+                    if (post_wb_valid) begin
+                        post_wb_age <= post_wb_age - 2'd1;
+                    end
+                    if (post_wb_clr) begin
+                        post_wb_byteen <= post_wb_byteen & ~post_wb_clr_byteen;
+                    end
+                end
+
+                // Compute stage (single): latch a new AMO, else retire the result.
+                if (do_store_st1 && ~pipe_stall) begin
+                    cmp_valid    <= 1'b1;
+                    cmp_old      <= old_st1;
+                    cmp_rhs      <= rhs_st1;
+                `ifdef VX_CFG_EXT_ZACAS_ENABLE
+                    cmp_cmp      <= 64'(amo_st1.amo_cmp);
+                `endif
+                    cmp_op       <= amo_st1.amo_op;
+                    cmp_width    <= width_st1;
+                    cmp_unsigned <= amo_st1.amo_unsigned;
+                    cmp_bit_off  <= bit_off_st1;
+                    cmp_lane     <= lane_st1;
+                    cmp_addr     <= addr_st1;
+                    cmp_byteen   <= lane_byteen_st1;
+                    cmp_wsel     <= word_idx_st1;
+                    cmp_tag      <= tag_st1;
+                    cmp_idx      <= req_idx_st1;
+                    cmp_attr     <= attr_st1;
+                end else if (cmp_valid) begin
+                    cmp_valid <= 1'b0;
+                end
+
+                // Writeback queue: a drain (wb_fire) shifts every entry toward
+                // the head; a completed compute (wb_push) enqueues at the tail or
+                // byte-merges into its word's entry. The push is written after
+                // the shift so it wins when both target the same slot.
+                if (wb_fire) begin
+                    for (integer i = 0; i < WBQ_SIZE-1; ++i) begin
+                        wbq_addr[i]   <= wbq_addr[i+1];
+                        wbq_wsel[i]   <= wbq_wsel[i+1];
+                        wbq_lane[i]   <= wbq_lane[i+1];
+                        wbq_byteen[i] <= wbq_byteen[i+1] & ~(wbq_clr_hit[i+1] ? clr_byteen[i+1] : {LANE_SIZE{1'b0}});
+                        wbq_data[i]   <= wbq_data[i+1];
+                        wbq_tag[i]    <= wbq_tag[i+1];
+                        wbq_idx[i]    <= wbq_idx[i+1];
+                        wbq_attr[i]   <= wbq_attr[i+1];
+                    end
+                end else begin
+                    for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                        if (wbq_clr_hit[i]) begin
+                            wbq_byteen[i] <= wbq_byteen[i] & ~clr_byteen[i];
+                        end
+                    end
+                end
+                if (wb_push) begin
+                    wbq_addr[wb_slot] <= cmp_addr;
+                    wbq_wsel[wb_slot] <= cmp_wsel;
+                    wbq_lane[wb_slot] <= cmp_lane;
+                    wbq_tag[wb_slot]  <= cmp_tag;
+                    wbq_idx[wb_slot]  <= cmp_idx;
+                    wbq_attr[wb_slot] <= cmp_attr;
+                    // byte-merge: this AMO's bytes take the new result; a coalesce
+                    // keeps the target entry's other bytes; a fresh entry zero-fills.
+                    wbq_byteen[wb_slot] <= cmp_byteen | (wb_coalesce ? coal_src_byteen : {LANE_SIZE{1'b0}});
+                    for (integer b = 0; b < LANE_SIZE; ++b) begin
+                        if (cmp_byteen[b])
+                            wbq_data[wb_slot][b*8 +: 8] <= wb_data_w[b*8 +: 8];
+                        else if (wb_coalesce)
+                            wbq_data[wb_slot][b*8 +: 8] <= coal_src_data[b*8 +: 8];
+                    end
+                end
+                // Count grows only on a new (non-coalescing) enqueue; a coalesce
+                // updates in place. Pop removes the head.
+                if (wb_push && ~wb_coalesce && ~wb_fire)
+                    wbq_count <= wbq_count + WBQ_CNTW'(1);
+                else if (~(wb_push && ~wb_coalesce) && wb_fire)
+                    wbq_count <= wbq_count - WBQ_CNTW'(1);
+            end
+        end
+
+        // Response (fired at S1; in-place, no ALU): the requester extracts its
+        // target word by byte offset, so the old value can stay where it sits in
+        // the line with the other bytes masked off -- this avoids a full-width
+        // barrel shift on the hot read->response path (read_word -> rsp_data was
+        // the critical path: a >>bit_off then <<bit_off round-trip just to mask).
+        // The byte mask comes straight from byteen (one line bit per set byte);
+        // masking is bit-identical to (old_st1 << bit_off) for the consumed bytes.
+        // SC returns 0/1 placed at the offset (rare path, 1-bit shift input).
+        wire [WORD_WIDTH-1:0] rsp_byte_mask;
+        for (genvar b = 0; b < WORD_SIZE; ++b) begin : g_rsp_mask
+            assign rsp_byte_mask[b*8 +: 8] = {8{byteen_st1[b]}};
+        end
+        // The mask zeroes every byte outside the AMO's byteen, and those all
+        // sit in its lane, so replicating the lane across the word is
+        // bit-identical to the full-word in-place value.
+        wire [BIT_OFF_BITS-1:0] full_bit_off_st1 = (NUM_LANES > 1)
+                                                 ? BIT_OFF_BITS'({lane_st1, bit_off_st1})
+                                                 : BIT_OFF_BITS'(bit_off_st1);
+        wire [WORD_WIDTH-1:0] amo_old_inplace = {NUM_LANES{line_lane_st1}} & rsp_byte_mask;
+        wire [WORD_WIDTH-1:0] sc_rsp_inplace  = WORD_WIDTH'(sc_fail_st1) << full_bit_off_st1;
+
+        assign amo_hit_st1 = amo_hit_w;
+        assign rsp_data    = (amo_st1.amo_op == AMO_OP_SC) ? sc_rsp_inplace : amo_old_inplace;
+        // Bridge the S0 prediction across the deferred lookup->commit window:
+        // with PIPE_EX>0 the AMO sits in the commit bubble for PIPE_EX cycles
+        // between do_store_st0 (S0) and do_store_st1 (stC), so commit_busy would
+        // gap and let a same-line request race the writeback. A PIPE_EX-deep
+        // shift of do_store_st0 fills the gap (continuous S0..stC hold).
+        wire amo_inflight;
+        if (PIPE_EX == 0) begin : g_no_bridge
+            assign amo_inflight = 1'b0;
+        end else begin : g_bridge
+            reg [PIPE_EX-1:0] store_inflight;
+            always @(posedge clk) begin
+                if (reset) begin
+                    store_inflight <= '0;
+                end else if (~pipe_stall) begin
+                    store_inflight[0] <= do_store_st0;
+                    for (int i = 1; i < PIPE_EX; ++i) begin
+                        store_inflight[i] <= store_inflight[i-1];
+                    end
+                end
+            end
+            assign amo_inflight = (| store_inflight);
+        end
+
+        // Commit in flight: holds off new core-request admission from the S0
+        // prediction through the deferred bubble, the compute stage and the
+        // writeback. Replays are NOT blocked (the MSHR streams coalesced same-
+        // line AMOs back to back); those are paced instead by chain_stall.
+        assign commit_busy = do_store_st0 || amo_inflight || do_store_st1 || cmp_valid || wb_pending_r;
+        // Pace any same-line request sitting behind an in-flight compute by one
+        // cycle, so the result lands in wb_data_r and forwards cleanly. Gated on
+        // cmp_valid (an AMO is computing), so it never fires for baseline traffic.
+        // The address match is registered from the look-ahead operands: both only
+        // move on ~pipe_stall, so a held match stays valid across a stall. The
+        // compare feeds pipe_stall's bank-wide enable fanout, and computing it at
+        // stC put the comparator's logic levels in front of that entire net.
+        reg chain_match_r;
+        wire [LINE_ADDR_BITS-1:0] cmp_addr_n = do_store_st1 ? addr_st1 : cmp_addr;
+        always @(posedge clk) begin
+            if (reset) begin
+                chain_match_r <= 1'b0;
+            end else if (~pipe_stall) begin
+                chain_match_r <= (cmp_addr_n == res_addr_n);
+            end
+        end
+        assign chain_stall = cmp_valid && valid_st1 && is_creq_st1 && chain_match_r;
+
+        // Invariants: a store-bearing AMO is only ever accepted into a free
+        // compute stage (the queue absorbs different-line writebacks behind it),
+        // and the writeback queue must never overflow.
+        `RUNTIME_ASSERT (~(do_store_st1 && ~pipe_stall && cmp_valid),
+            ("%t: AMO compute-stage overwrite (addr=0x%0h)", $time, addr_st1))
+        `RUNTIME_ASSERT (~(wb_push && ~wb_coalesce && ~wb_fire && (wbq_count == WBQ_CNTW'(WBQ_SIZE))),
+            ("%t: AMO writeback queue overflow (addr=0x%0h)", $time, cmp_addr))
+        // The lane datapath rests on natural alignment: an AMO's byteen may
+        // not cross its 8-byte lane.
+        `RUNTIME_ASSERT (~(amo_st1.amo_valid && valid_st1 && is_creq_st1)
+            || ((byteen_st1 & ~(WORD_SIZE'({LANE_SIZE{1'b1}}) << (lane_st1 * LANE_SIZE))) == '0),
+            ("%t: AMO byteen crosses its lane (addr=0x%0h)", $time, addr_st1))
+        // The narrowed arithmetic width rests on the ISA: on a 32-bit hart
+        // only the Zacas pair carries a 64-bit operand.
+        if (`MIN(`VX_CFG_XLEN, AMO_OLD_BITS) < AMO_OLD_BITS) begin : g_arith_width_guard
+            `RUNTIME_ASSERT (~(do_store_st1 && (width_st1 == 2'd3) && (amo_st1.amo_op != AMO_OP_CAS)),
+                ("%t: non-CAS 64-bit AMO on a 32-bit hart (addr=0x%0h)", $time, addr_st1))
+        end
+        assign wb_pending  = wb_pending_r;
+        assign wb_addr     = wb_addr_r;
+        assign wb_word_idx = wb_word_idx_r;
+        assign wb_byteen   = wb_byteen_r;
+        assign wb_data     = wb_data_r;
+        assign wb_tag      = wb_tag_r;
+        assign wb_idx      = wb_idx_r;
+        assign wb_attr     = wb_attr_r;
+
+        // passthrough outputs unused in this role
+        assign is_amo_fwd_st0       = 1'b0;
+        assign is_amo_fwd_st1       = 1'b0;
+        assign is_amo_replay_st1    = 1'b0;
+        assign is_passthru_fill_sel = 1'b0;
+        assign amo_ptw_word_st1     = '0;
+
+        // Same-line ordering guard: a request must not enter the pipe while
+        // an AMO to its line waits in the MSHR (or is allocating at S0) — it
+        // would read or write the line before the replayed AMO commits. The
+        // MSHR probe covers the AMO through its dequeue cycle; commit_busy
+        // covers it from S0 onward. Consumes only the registered probe (see
+        // the header block) so the CAM stays out of core_req_ready.
+        assign req_input_defer = core_req_valid
+                              && (st0_amo_alloc_any || persist_amo_r
+                               || (fresh_r ? mshr_any_amo : probe_amo_hit_r));
+
+        `UNUSED_VAR (amo_st0) // only amo_valid/amo_op are consumed at S0
+        `UNUSED_VAR (is_replay_st0)
+        `UNUSED_VAR (is_replay_st1)
+        `UNUSED_VAR (word_idx_st0)
+        `UNUSED_VAR (mshr_alloc_id_st0)
+        `UNUSED_VAR (mshr_id_st1)
+        `UNUSED_VAR (mem_rsp_fire)
+        `UNUSED_VAR (mem_rsp_id)
+        `UNUSED_VAR (mem_rsp_data)
+        `UNUSED_VAR (is_fill_sel)
+        `UNUSED_VAR (core_req_is_amo)
+        `UNUSED_VAR (core_req_rw)
+        `UNUSED_VAR ({st0_ld_alloc_any, persist_ld_r, probe_ld_hit_r, mshr_any_ld})
+    end else begin : g_passthru
+        // ----------------------------------------------------------------
+        // Non-LLC passthrough: forward downstream, replay the result word
+        // ----------------------------------------------------------------
+        assign is_amo_fwd_st0    = amo_st0.amo_valid && valid_st0 && is_creq_st0 && ~is_replay_st0;
+        assign is_amo_fwd_st1    = amo_st1.amo_valid && valid_st1 && is_creq_st1 && ~is_replay_st1;
+        assign is_amo_replay_st1 = amo_st1.amo_valid && valid_st1 && is_creq_st1 && is_replay_st1;
+
+        reg [MSHR_SIZE-1:0]      ptw_flag;   // entry awaits a passthru fill
+        reg [WORD_SEL_WIDTH-1:0] ptw_wsel [MSHR_SIZE];
+        reg [WORD_WIDTH-1:0]     ptw_word [MSHR_SIZE];
+
+        wire [WORDS_PER_SECTOR-1:0][WORD_WIDTH-1:0] mem_rsp_words = mem_rsp_data;
+
+        assign is_passthru_fill_sel = is_fill_sel && ptw_flag[mem_rsp_id];
+        assign amo_ptw_word_st1     = ptw_word[mshr_id_st1];
+
+        always @(posedge clk) begin
+            if (reset) begin
+                ptw_flag <= '0;
+            end else begin
+                // mark the AMO's MSHR entry on allocation
+                if (is_amo_fwd_st0 && mshr_allocate_st0 && ~pipe_stall) begin
+                    ptw_flag[mshr_alloc_id_st0] <= 1'b1;
+                    ptw_wsel[mshr_alloc_id_st0] <= word_idx_st0;
+                end
+                // latch the result word on the passthru fill, clear the flag
+                if (mem_rsp_fire && ptw_flag[mem_rsp_id]) begin
+                    ptw_word[mem_rsp_id] <= mem_rsp_words[ptw_wsel[mem_rsp_id]];
+                    ptw_flag[mem_rsp_id] <= 1'b0;
+                end
+            end
+        end
+
+        // Age-ordering guards, off the registered probe (see the header
+        // block): an incoming AMO holds behind pending line-filling requests,
+        // an incoming load holds behind pending AMO passthroughs. The S0
+        // alloc pulses catch the window between admit and allocate.
+        wire amo_input_defer  = core_req_valid && core_req_is_amo
+                             && (st0_ld_alloc_any || persist_ld_r
+                              || (fresh_r ? mshr_any_ld : probe_ld_hit_r));
+        wire load_input_defer = core_req_valid && ~core_req_is_amo && ~core_req_rw
+                             && (st0_amo_alloc_any || persist_amo_r
+                              || (fresh_r ? mshr_any_amo : probe_amo_hit_r));
+        assign req_input_defer = amo_input_defer || load_input_defer;
+
+        // commit outputs unused in this role
+        assign amo_hit_st1 = 1'b0;
+        assign commit_busy = 1'b0;
+        assign chain_stall = 1'b0;
+        assign wb_pending  = 1'b0;
+        assign rsp_data    = '0;
+        // no local commit window: loads are held at the input while a
+        // forwarded AMO is pending on the line, so no read forward exists.
+        assign rd_fwd_mask = '0;
+        assign rd_fwd_data = '0;
+        assign wb_addr     = '0;
+        assign wb_word_idx = '0;
+        assign wb_byteen   = '0;
+        assign wb_data     = '0;
+        assign wb_tag      = '0;
+        assign wb_idx      = '0;
+        assign wb_attr     = '0;
+
+        `UNUSED_VAR (amo_st0) // only amo_valid gates the passthru path
+        `UNUSED_VAR (amo_st1)
+        `UNUSED_VAR (is_hit_st0)
+        `UNUSED_VAR (is_hit_st1)
+        `UNUSED_VAR (do_write_st1)
+        `UNUSED_VAR (read_word_st1)
+        `UNUSED_VAR (byteen_st1)
+        `UNUSED_VAR (write_word_st1)
+        `UNUSED_VAR (word_idx_st1)
+        `UNUSED_VAR (addr_st1)
+        `UNUSED_VAR (res_addr_n)
+        `UNUSED_VAR (byteen_n)
+        `UNUSED_VAR (tag_st1)
+        `UNUSED_VAR (req_idx_st1)
+        `UNUSED_VAR (attr_st1)
+        `UNUSED_VAR (wb_fire)
+    end
+
+endmodule

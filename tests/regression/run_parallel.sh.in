@@ -1,0 +1,533 @@
+#!/usr/bin/env bash
+
+set -uo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+MAKE_BIN=${MAKE:-make}
+CONFIGURED_BUILD_ROOT="@BUILDDIR@"
+
+BACKEND=
+DRIVER=
+TARGET=
+JOBS=
+BUILD_ROOT=
+REGRESSION_DIR=
+LOG_DIR=
+SUITE=all
+RUN_MODE=direct
+LIST_ONLY=0
+FAIL_FAST=0
+PREBUILD=1
+MAKE_ARGS=()
+
+usage() {
+    cat <<'EOF'
+Usage:
+  run_parallel.sh <simx|rtl|rtlsim> [options] [MAKE_VAR=VALUE ...]
+
+Options:
+  -j, --jobs N          Number of tests to run in parallel (default: nproc).
+  --build-dir DIR       Configured Vortex build root. Defaults to this tree.
+  --logs DIR            Directory for per-test logs.
+  --suite all           Run every first-level regression subdir with Makefile.
+  --suite makefile      Run the tests selected by tests/regression/Makefile.
+  --make-run            Use each test's make run-<backend> target.
+  --no-prebuild         Skip the serial runtime/kernel prebuild step.
+  --fail-fast           Stop launching/waiting after the first failed job.
+  --list                Print selected tests and exit.
+  -h, --help            Show this help.
+
+Examples:
+  ./run_parallel.sh simx -j 8
+  ./run_parallel.sh rtl -j 2 CONFIGS="-DVX_CFG_NUM_CORES=2"
+  ./run_parallel.sh rtlsim --suite makefile --logs /tmp/vortex-rtl-logs
+EOF
+}
+
+die() {
+    echo "error: $*" >&2
+    exit 1
+}
+
+abs_path() {
+    local path=$1
+    case "$path" in
+        /*)
+            echo "$path"
+            return
+            ;;
+    esac
+    if [ -d "$path" ]; then
+        (cd "$path" && pwd)
+    else
+        printf '%s/%s\n' "$(pwd)" "$path"
+    fi
+}
+
+cpu_count() {
+    if command -v nproc >/dev/null 2>&1; then
+        nproc
+    elif command -v getconf >/dev/null 2>&1; then
+        getconf _NPROCESSORS_ONLN
+    else
+        echo 4
+    fi
+}
+
+normalize_backend() {
+    case "$1" in
+        simx)
+            DRIVER=simx
+            TARGET=run-simx
+            ;;
+        rtl|rtlsim)
+            DRIVER=rtlsim
+            TARGET=run-rtlsim
+            ;;
+        *)
+            die "unsupported backend '$1' (expected simx, rtl, or rtlsim)"
+            ;;
+    esac
+}
+
+parse_args() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            simx|rtl|rtlsim)
+                [ -z "$BACKEND" ] || die "backend already set to '$BACKEND'"
+                BACKEND=$1
+                ;;
+            -j|--jobs)
+                [ "$#" -ge 2 ] || die "$1 requires a value"
+                JOBS=$2
+                shift
+                ;;
+            --jobs=*)
+                JOBS=${1#*=}
+                ;;
+            --build-dir)
+                [ "$#" -ge 2 ] || die "$1 requires a value"
+                BUILD_ROOT=$(abs_path "$2")
+                shift
+                ;;
+            --build-dir=*)
+                BUILD_ROOT=$(abs_path "${1#*=}")
+                ;;
+            --logs)
+                [ "$#" -ge 2 ] || die "$1 requires a value"
+                LOG_DIR=$(abs_path "$2")
+                shift
+                ;;
+            --logs=*)
+                LOG_DIR=$(abs_path "${1#*=}")
+                ;;
+            --suite)
+                [ "$#" -ge 2 ] || die "$1 requires a value"
+                SUITE=$2
+                shift
+                ;;
+            --suite=*)
+                SUITE=${1#*=}
+                ;;
+            --make-run)
+                RUN_MODE=make
+                ;;
+            --no-prebuild)
+                PREBUILD=0
+                ;;
+            --fail-fast)
+                FAIL_FAST=1
+                ;;
+            --list)
+                LIST_ONLY=1
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            --)
+                shift
+                while [ "$#" -gt 0 ]; do
+                    MAKE_ARGS+=("$1")
+                    shift
+                done
+                break
+                ;;
+            *=*)
+                MAKE_ARGS+=("$1")
+                ;;
+            *)
+                die "unknown argument '$1'"
+                ;;
+        esac
+        shift
+    done
+
+    [ -n "$BACKEND" ] || die "missing backend (simx, rtl, or rtlsim)"
+    normalize_backend "$BACKEND"
+
+    if [ -z "$JOBS" ]; then
+        JOBS=$(cpu_count)
+    fi
+    [[ "$JOBS" =~ ^[0-9]+$ ]] || die "--jobs must be a positive integer"
+    [ "$JOBS" -ge 1 ] || die "--jobs must be >= 1"
+
+    case "$SUITE" in
+        all|makefile) ;;
+        *) die "--suite must be 'all' or 'makefile'" ;;
+    esac
+}
+
+find_default_build_root() {
+    if [ -n "$CONFIGURED_BUILD_ROOT" ] &&
+       [ "$CONFIGURED_BUILD_ROOT" != "@""BUILDDIR""@" ] &&
+       [ -f "$CONFIGURED_BUILD_ROOT/config.mk" ]; then
+        echo "$CONFIGURED_BUILD_ROOT"
+        return
+    fi
+
+    local script_root
+    script_root=$(abs_path "$SCRIPT_DIR/../..")
+
+    if [ -f "$script_root/config.mk" ]; then
+        echo "$script_root"
+        return
+    fi
+
+    local dir
+    dir=$(pwd)
+    while [ "$dir" != "/" ]; do
+        if [ -f "$dir/config.mk" ] && [ -d "$dir/tests/regression" ]; then
+            echo "$dir"
+            return
+        fi
+        dir=$(dirname "$dir")
+    done
+
+    echo "$script_root"
+}
+
+setup_paths() {
+    if [ -z "$BUILD_ROOT" ]; then
+        BUILD_ROOT=$(find_default_build_root)
+    fi
+    BUILD_ROOT=$(abs_path "$BUILD_ROOT")
+    REGRESSION_DIR="$BUILD_ROOT/tests/regression"
+
+    if [ ! -d "$REGRESSION_DIR" ]; then
+        die "regression directory not found: $REGRESSION_DIR"
+    fi
+
+    if [ -z "$LOG_DIR" ]; then
+        LOG_DIR="$REGRESSION_DIR/logs/${DRIVER}-$(date +%Y%m%d-%H%M%S)"
+    fi
+    mkdir -p "$LOG_DIR"
+}
+
+require_configured_tree() {
+    [ -f "$BUILD_ROOT/config.mk" ] || die \
+        "missing $BUILD_ROOT/config.mk; run ./configure in the build tree or pass --build-dir"
+}
+
+make_print_vars() {
+    local dir=$1
+    shift
+    local tmp
+    tmp=$(mktemp)
+    {
+        echo 'include Makefile'
+        echo 'print-vars:'
+        local var
+        for var in "$@"; do
+            printf '\t@printf '\''%%s\\n'\'' '\''%s=$(%s)'\''\n' "$var" "$var"
+        done
+    } > "$tmp"
+
+    "$MAKE_BIN" "${MAKE_ARGS[@]}" -C "$dir" --no-print-directory -f "$tmp" print-vars
+    local rc=$?
+    rm -f "$tmp"
+    return "$rc"
+}
+
+extract_var() {
+    local name=$1
+    sed -n "s/^${name}=//p"
+}
+
+discover_all_tests() {
+    find "$REGRESSION_DIR" -mindepth 1 -maxdepth 1 -type d \
+        -exec sh -c 'for d; do [ -f "$d/Makefile" ] && basename "$d"; done' sh {} + \
+        | sort
+}
+
+discover_makefile_tests_from_recipe() {
+    awk -v target="$TARGET" '
+        $0 ~ "^[[:space:]]*" target ":" { in_target = 1; next }
+        in_target && /^[^[:space:]]/ { exit }
+        in_target {
+            for (i = 1; i <= NF; ++i) {
+                if ($i == "-C" && (i + 1) <= NF) {
+                    test = $(i + 1)
+                    gsub(/"/, "", test)
+                    print test
+                }
+            }
+        }
+    ' "$REGRESSION_DIR/Makefile"
+}
+
+discover_makefile_tests() {
+    local tmp out
+    tmp=$(mktemp)
+    {
+        echo 'include Makefile'
+        echo 'print-tests:'
+        printf '\t@printf '\''%%s\\n'\'' '\''$(call backend_tests,%s)'\''\n' "$DRIVER"
+    } > "$tmp"
+
+    out=$("$MAKE_BIN" "${MAKE_ARGS[@]}" -C "$REGRESSION_DIR" --no-print-directory -f "$tmp" print-tests 2>/dev/null \
+        | tr ' ' '\n' \
+        | sed '/^$/d') || true
+    rm -f "$tmp"
+    if [ -n "$out" ]; then
+        printf '%s\n' "$out"
+        return 0
+    fi
+
+    discover_makefile_tests_from_recipe
+}
+
+load_tests() {
+    TESTS=()
+    local test
+    if [ "$SUITE" = "all" ]; then
+        while IFS= read -r test; do
+            TESTS+=("$test")
+        done < <(discover_all_tests)
+    else
+        require_configured_tree
+        while IFS= read -r test; do
+            TESTS+=("$test")
+        done < <(discover_makefile_tests)
+    fi
+
+    [ "${#TESTS[@]}" -gt 0 ] || die "no regression tests selected"
+}
+
+prebuild_shared_outputs() {
+    [ "$PREBUILD" -eq 1 ] || return 0
+
+    local probe_dir="$REGRESSION_DIR/basic"
+    [ -d "$probe_dir" ] || probe_dir="$REGRESSION_DIR/${TESTS[0]}"
+
+    local vars rt_src rt_lib kn_path log
+    vars=$(make_print_vars "$probe_dir" VORTEX_RT_SRC VORTEX_RT_LIB VORTEX_KN_PATH) || return 1
+    rt_src=$(printf '%s\n' "$vars" | extract_var VORTEX_RT_SRC)
+    rt_lib=$(printf '%s\n' "$vars" | extract_var VORTEX_RT_LIB)
+    kn_path=$(printf '%s\n' "$vars" | extract_var VORTEX_KN_PATH)
+    log="$LOG_DIR/00-prebuild.log"
+
+    (
+        set -e
+        echo "backend=$DRIVER"
+        echo "build_root=$BUILD_ROOT"
+        echo "runtime_src=$rt_src"
+        echo "runtime_lib=$rt_lib"
+        echo "kernel_path=$kn_path"
+        echo
+        echo "== build kernel library =="
+        "$MAKE_BIN" "${MAKE_ARGS[@]}" -C "$kn_path"
+        echo
+        echo "== build runtime stub =="
+        "$MAKE_BIN" "${MAKE_ARGS[@]}" -C "$rt_src/stub" DESTDIR="$rt_lib"
+        echo
+        echo "== build runtime backend =="
+        "$MAKE_BIN" "${MAKE_ARGS[@]}" -C "$rt_src/$DRIVER" DESTDIR="$rt_lib"
+    ) > "$log" 2>&1
+}
+
+run_one_make() {
+    local test=$1
+    "$MAKE_BIN" "${MAKE_ARGS[@]}" -C "$REGRESSION_DIR/$test" "$TARGET"
+}
+
+run_one_direct() {
+    local test=$1
+    local dir="$REGRESSION_DIR/$test"
+    local vars app opts rt_lib
+
+    echo "== build $test =="
+    "$MAKE_BIN" "${MAKE_ARGS[@]}" -C "$dir" all || return
+
+    vars=$(make_print_vars "$dir" APP OPTS VORTEX_RT_LIB) || return 1
+    app=$(printf '%s\n' "$vars" | extract_var APP)
+    opts=$(printf '%s\n' "$vars" | extract_var OPTS)
+    rt_lib=$(printf '%s\n' "$vars" | extract_var VORTEX_RT_LIB)
+
+    [ -n "$app" ] || {
+        echo "APP is empty for $test" >&2
+        return 1
+    }
+    [ -x "$dir/$app" ] || {
+        echo "test binary not found or not executable: $dir/$app" >&2
+        return 1
+    }
+
+    echo
+    echo "== run $test on $DRIVER =="
+    (
+        cd "$dir" || exit 1
+        export LD_LIBRARY_PATH="$rt_lib:${LD_LIBRARY_PATH:-}"
+        export VORTEX_DRIVER="$DRIVER"
+        if [ -n "$opts" ]; then
+            eval "\"./$app\" $opts"
+        else
+            "./$app"
+        fi
+    )
+}
+
+run_one() {
+    if [ "$RUN_MODE" = "make" ]; then
+        run_one_make "$1"
+    else
+        run_one_direct "$1"
+    fi
+}
+
+start_job() {
+    local test=$1
+    local log="$LOG_DIR/$test.log"
+    local status="$LOG_DIR/$test.status"
+
+    rm -f "$status"
+    echo "[START] $test -> $log"
+    (
+        run_one "$test" > "$log" 2>&1
+        local rc=$?
+        printf '%s\n' "$rc" > "$status"
+        if [ "$rc" -eq 0 ]; then
+            echo "[PASS]  $test"
+        else
+            echo "[FAIL]  $test (log: $log)"
+        fi
+        exit "$rc"
+    ) &
+    PIDS+=("$!")
+    RUNNING=$((RUNNING + 1))
+}
+
+terminate_running_jobs() {
+    local pid
+    for pid in "${PIDS[@]}"; do
+        kill "$pid" >/dev/null 2>&1 || true
+    done
+}
+
+run_parallel() {
+    PIDS=()
+    RUNNING=0
+
+    local test rc
+    for test in "${TESTS[@]}"; do
+        while [ "$RUNNING" -ge "$JOBS" ]; do
+            wait -n
+            rc=$?
+            RUNNING=$((RUNNING - 1))
+            if [ "$FAIL_FAST" -eq 1 ] && [ "$rc" -ne 0 ]; then
+                terminate_running_jobs
+                wait >/dev/null 2>&1 || true
+                return "$rc"
+            fi
+        done
+        start_job "$test"
+    done
+
+    while [ "$RUNNING" -gt 0 ]; do
+        wait -n
+        rc=$?
+        RUNNING=$((RUNNING - 1))
+        if [ "$FAIL_FAST" -eq 1 ] && [ "$rc" -ne 0 ]; then
+            terminate_running_jobs
+            wait >/dev/null 2>&1 || true
+            return "$rc"
+        fi
+    done
+}
+
+write_summary() {
+    local summary="$LOG_DIR/summary.txt"
+    local pass=0
+    local fail=0
+    local missing=0
+    local test status rc
+    local failed_tests=()
+
+    {
+        echo "backend=$DRIVER"
+        echo "target=$TARGET"
+        echo "mode=$RUN_MODE"
+        echo "suite=$SUITE"
+        echo "jobs=$JOBS"
+        echo "build_root=$BUILD_ROOT"
+        echo "logs=$LOG_DIR"
+        echo "total=${#TESTS[@]}"
+        echo
+
+        for test in "${TESTS[@]}"; do
+            status="$LOG_DIR/$test.status"
+            if [ ! -f "$status" ]; then
+                echo "MISSING $test"
+                missing=$((missing + 1))
+                failed_tests+=("$test")
+                continue
+            fi
+            rc=$(cat "$status")
+            if [ "$rc" -eq 0 ]; then
+                echo "PASS    $test"
+                pass=$((pass + 1))
+            else
+                echo "FAIL    $test rc=$rc log=$LOG_DIR/$test.log"
+                fail=$((fail + 1))
+                failed_tests+=("$test")
+            fi
+        done
+
+        echo
+        echo "passed=$pass failed=$fail missing=$missing"
+        if [ "${#failed_tests[@]}" -gt 0 ]; then
+            echo "failed_tests=${failed_tests[*]}"
+        fi
+    } > "$summary"
+
+    cat "$summary"
+    [ "$fail" -eq 0 ] && [ "$missing" -eq 0 ]
+}
+
+main() {
+    parse_args "$@"
+    setup_paths
+    load_tests
+
+    if [ "$LIST_ONLY" -eq 1 ]; then
+        printf '%s\n' "${TESTS[@]}"
+        exit 0
+    fi
+
+    require_configured_tree
+
+    echo "backend=$DRIVER target=$TARGET mode=$RUN_MODE jobs=$JOBS suite=$SUITE"
+    echo "build_root=$BUILD_ROOT"
+    echo "logs=$LOG_DIR"
+    echo "tests=${#TESTS[@]}"
+
+    if ! prebuild_shared_outputs; then
+        echo "prebuild failed (log: $LOG_DIR/00-prebuild.log)" >&2
+        exit 1
+    fi
+
+    run_parallel || true
+    write_summary
+}
+
+main "$@"

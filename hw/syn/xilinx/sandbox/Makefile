@@ -5,6 +5,13 @@ DEVICE ?= xcu55c-fsvh2892-2L-e
 
 MAX_JOBS ?= 8
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0    -- fastest compile, minimal optimization (Flow_RuntimeOptimized)
+#   1, 2 -- Vivado defaults (current sandbox behaviour)
+#   3    -- default
+# project.tcl reads this through the OPT_LEVEL env var.
+OPT_LEVEL ?= 3
+
 VIVADO := $(XILINX_VIVADO)/bin/vivado
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/sandbox
@@ -12,53 +19,51 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/sandbox
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
+AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
+
+OBJCOPY := $(LLVM_PATH)/bin/llvm-objcopy
 
 KERNEL ?= vecadd
 
 NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
 JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
+CONFIGS += -DSYNTHESIS -DVIVADO -DVX_CFG_EXT_F_DISABLE
+
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+
 # include paths
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(findstring -DFPU_FPNEW, $(CONFIGS)))
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache
 RTL_INCLUDE += $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(SRC_DIR)
 
-# Add V extension sources
-ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
-	RTL_INCLUDE += -I$(RTL_DIR)/vpu
-endif
-
-# Add TCU extension sources
-ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
-	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
-	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
-endif
-
 # compilation flags
-CFLAGS += -DNDEBUG -DSYNTHESIS -DVIVADO
-CFLAGS += $(CONFIGS)
+CFLAGS += -DNDEBUG
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
+# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
+# resolved type selectors so an enum override selects its RTL implementation.
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 CFLAGS += $(RTL_INCLUDE)
-CFLAGS += -DEXT_F_DISABLE
 
 # update memory layout for 2MB RAM
 CFLAGS += -DSTARTUP_ADDR=32\'h80000
-CFLAGS += -DSTACK_BASE_ADDR=32\'hFF000
+CFLAGS += -DVX_CFG_STACK_BASE_ADDR=32\'hFF000
 
 all: build
 
 $(KERNEL).bin:
-	$(MAKE) -C $(ROOT_DIR)/kernel clean
-	STACK_BASE_ADDR=0xFF000 $(MAKE) -C $(ROOT_DIR)/kernel
+	$(MAKE) -C $(ROOT_DIR)/sw/kernel clean
+	STACK_BASE_ADDR=0xFF000 $(MAKE) -C $(ROOT_DIR)/sw/kernel
 	$(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL) clean
-	STARTUP_ADDR=0x8000 $(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL)
-	cp $(ROOT_DIR)/tests/kernel/$(KERNEL)/$(KERNEL).bin $(KERNEL).bin
+	STARTUP_ADDR=0x80000 $(MAKE) -C $(ROOT_DIR)/tests/kernel/$(KERNEL)
+	# The kernel build emits a wrapped .vxbin (header + symbol footer); the COE
+	# needs the flat program image, so derive it from the ELF directly.
+	$(OBJCOPY) -O binary $(ROOT_DIR)/tests/kernel/$(KERNEL)/$(KERNEL).elf $(KERNEL).bin
 
 kernel.bin.coe: $(KERNEL).bin
 	$(SCRIPT_DIR)/bin2coe.py --out=$@ --binfile=8192:$(KERNEL).bin --depth=16384 --wordsize=64 --little_endian
@@ -76,11 +81,11 @@ project_1/sources.txt:
 
 build: done.dcp
 done.dcp: project_1/sources.txt kernel.bin.coe project.tcl pre_opt_hook.tcl
-	MAX_JOBS=$(JOBS) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source project.tcl -tclargs $(DEVICE) project_1/sources.txt
+	MAX_JOBS=$(JOBS) OPT_LEVEL=$(OPT_LEVEL) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source project.tcl -tclargs $(DEVICE) project_1/sources.txt
 	echo done > done.dcp
 
 run: simulate.tcl done.dcp
-	MAX_JOBS=$(JOBS) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source simulate.tcl -tclargs project_1/project_1.xpr 50000ns
+	MAX_JOBS=$(JOBS) OPT_LEVEL=$(OPT_LEVEL) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source simulate.tcl -tclargs project_1/project_1.xpr 50000ns
 
 open: done.dcp
 	TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) project_1/project_1.xpr &

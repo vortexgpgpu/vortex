@@ -15,7 +15,7 @@
 
 module Vortex_axi import VX_gpu_pkg::*; #(
     parameter AXI_DATA_WIDTH = VX_MEM_DATA_WIDTH,
-    parameter AXI_ADDR_WIDTH = `MEM_ADDR_WIDTH,
+    parameter AXI_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH,
     parameter AXI_TID_WIDTH  = VX_MEM_TAG_WIDTH,
     parameter AXI_NUM_BANKS  = 1
 )(
@@ -75,11 +75,17 @@ module Vortex_axi import VX_gpu_pkg::*; #(
     input wire [1:0]                    m_axi_rresp [AXI_NUM_BANKS],
 
     // DCR write request
-    input  wire                         dcr_wr_valid,
-    input  wire [VX_DCR_ADDR_WIDTH-1:0] dcr_wr_addr,
-    input  wire [VX_DCR_DATA_WIDTH-1:0] dcr_wr_data,
+    input  wire                         dcr_req_valid,
+    input  wire                         dcr_req_rw,
+    input  wire [VX_DCR_ADDR_WIDTH-1:0] dcr_req_addr,
+    input  wire [VX_DCR_DATA_WIDTH-1:0] dcr_req_data,
 
-    // Status
+    // DCR read response
+    output wire                         dcr_rsp_valid,
+    output wire [VX_DCR_DATA_WIDTH-1:0] dcr_rsp_data,
+
+    // ctrl/status
+    input  wire                         start,
     output wire                         busy
 );
     localparam DST_LDATAW = `CLOG2(AXI_DATA_WIDTH);
@@ -122,10 +128,15 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .mem_rsp_tag    (mem_rsp_tag),
         .mem_rsp_ready  (mem_rsp_ready),
 
-        .dcr_wr_valid   (dcr_wr_valid),
-        .dcr_wr_addr    (dcr_wr_addr),
-        .dcr_wr_data    (dcr_wr_data),
+        .dcr_req_valid  (dcr_req_valid),
+        .dcr_req_rw     (dcr_req_rw),
+        .dcr_req_addr   (dcr_req_addr),
+        .dcr_req_data   (dcr_req_data),
 
+        .dcr_rsp_valid  (dcr_rsp_valid),
+        .dcr_rsp_data   (dcr_rsp_data),
+
+        .start          (start),
         .busy           (busy)
     );
 
@@ -185,7 +196,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         );
     end
 
-    VX_axi_adapter #(
+    VX_mem_to_axi #(
         .DATA_WIDTH     (AXI_DATA_WIDTH),
         .ADDR_WIDTH_IN  (VX_MEM_ADDR_A_WIDTH),
         .ADDR_WIDTH_OUT (AXI_ADDR_WIDTH),
@@ -193,7 +204,7 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .TAG_WIDTH_OUT  (AXI_TID_WIDTH),
         .NUM_PORTS_IN   (VX_MEM_PORTS),
         .NUM_BANKS_OUT  (AXI_NUM_BANKS),
-        .INTERLEAVE     (`PLATFORM_MEMORY_INTERLEAVE),
+        .INTERLEAVE     (`VX_CFG_PLATFORM_MEMORY_INTERLEAVE),
         .REQ_OUT_BUF    ((VX_MEM_PORTS > 1) ? 2 : 0),
         .RSP_OUT_BUF    ((VX_MEM_PORTS > 1 || AXI_NUM_BANKS > 1) ? 2 : 0)
     ) axi_adapter (

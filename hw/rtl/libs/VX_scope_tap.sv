@@ -85,12 +85,26 @@ module VX_scope_tap #(
     reg cmd_start, cmd_stop;
     reg dflush;
 
-    reg [SIZEW-1:0] waddr, waddr_end;
+    reg [SIZEW-1:0] waddr;
     wire [DATAW-1:0] data_in;
 
     wire [DATAW-1:0] data_value;
     wire [IDLE_CTRW-1:0] delta_value;
-    reg [ADDRW-1:0] raddr;
+    reg [SIZEW-1:0] raddr;
+    reg [SIZEW-1:0] count_q;
+
+    //
+    // ring-buffer occupancy
+    //
+    // `waddr`/`raddr` are free-running pointers carrying one wrap bit
+    // above `ADDRW`; the BRAM is addressed by the low `ADDRW` bits.
+    // Capture advances `waddr`, the host drain advances `raddr`. When the
+    // ring is full the write is suppressed — capture pauses (never
+    // overflows) until the host drains; the gap is recovered as a delta.
+    //
+    wire [SIZEW-1:0] occupancy = waddr - raddr;
+    wire ring_full  = (occupancy == SIZEW'(DEPTH));
+    wire ring_empty = (waddr == raddr);
 
     //
     // trace capture
@@ -98,7 +112,7 @@ module VX_scope_tap #(
 
     wire do_capture;
 
-    wire write_en = (tap_state == TAP_STATE_RUN) && do_capture;
+    wire write_en = (tap_state == TAP_STATE_RUN) && do_capture && !ring_full;
 
     if (HAS_TRIGGERS) begin : g_delta_store
         if (XTRIGGERW != 0 && HTRIGGERW != 0) begin : g_data_in_pxh
@@ -122,7 +136,7 @@ module VX_scope_tap #(
             .write (write_en),
             .waddr (waddr[ADDRW-1:0]),
             .wdata (delta),
-            .raddr (raddr),
+            .raddr (raddr[ADDRW-1:0]),
             .rdata (delta_value)
         );
     end else begin : g_no_delta_store
@@ -144,7 +158,7 @@ module VX_scope_tap #(
         .write (write_en),
         .waddr (waddr[ADDRW-1:0]),
         .wdata (data_in),
-        .raddr (raddr),
+        .raddr (raddr[ADDRW-1:0]),
         .rdata (data_value)
     );
 
@@ -178,24 +192,33 @@ module VX_scope_tap #(
             end
             TAP_STATE_RUN: begin
                 dflush <= 0;
-                if (!(stop || cmd_stop) && (waddr < waddr_end)) begin
-                    if (do_capture) begin
+                if (!(stop || cmd_stop)) begin
+                    if (do_capture && !ring_full) begin
+                        // capture: a sample lands in the ring
                         waddr <= waddr + SIZEW'(1);
-                    end
-                    if (HAS_TRIGGERS) begin
-                        if (do_capture) begin
-                            delta  <= '0;
-                        end else begin
-                            delta  <= delta + IDLE_CTRW'(1);
-                            dflush <= (delta == IDLE_CTRW'(MAX_IDLE_CTR-1));
+                        if (HAS_TRIGGERS) begin
+                            delta      <= '0;
+                            prev_xtrig <= xtriggers;
+                            prev_htrig <= htriggers;
                         end
-                        prev_xtrig <= xtriggers;
-                        prev_htrig <= htriggers;
+                    end else if (HAS_TRIGGERS) begin
+                        // idle, or stalled on a full ring: time passes with
+                        // no sample. Count the gap (saturating) so it is
+                        // recovered as a delta; while stalled keep prev_*
+                        // frozen so the pending event is not lost.
+                        if (delta != IDLE_CTRW'(MAX_IDLE_CTR)) begin
+                            delta <= delta + IDLE_CTRW'(1);
+                        end
+                        dflush <= (delta == IDLE_CTRW'(MAX_IDLE_CTR-1)) && !ring_full;
+                        if (!do_capture) begin
+                            prev_xtrig <= xtriggers;
+                            prev_htrig <= htriggers;
+                        end
                     end
                 end else begin
                     tap_state <= TAP_STATE_DONE;
                 `ifdef DBG_TRACE_SCOPE
-                    `TRACE(2, ("%t: scope_tap%0d: recording stop - waddr=(%0d, %0d)\n", $time, SCOPE_ID, waddr, waddr_end))
+                    `TRACE(2, ("%t: scope_tap%0d: recording stop - occupancy=%0d waddr=%0d\n", $time, SCOPE_ID, occupancy, waddr))
                 `endif
                 end
             end
@@ -258,13 +281,13 @@ module VX_scope_tap #(
         if (reset) begin
             ctrl_state  <= CTRL_STATE_IDLE;
             send_type   <= SEND_TYPE_BITS'(SEND_TYPE_WIDTH);
-            waddr_end   <= SIZEW'(DEPTH);
             cmd_start   <= 0;
             cmd_stop    <= 0;
             start_delay <= '0;
             stop_delay  <= '0;
             bus_out_r   <= 0;
             raddr       <= '0;
+            count_q     <= '0;
             is_read_data<= 0;
             ser_tx_ctr  <= '0;
             is_get_data <= 0;
@@ -309,9 +332,7 @@ module VX_scope_tap #(
                     stop_delay <= CTR_WIDTH'(cmd_data);
                     cmd_stop   <= (cmd_data == 0);
                 end
-                CMD_SET_DEPTH: begin
-                    waddr_end <= SIZEW'(cmd_data);
-                end
+                CMD_SET_DEPTH:; // ring depth is fixed at the DEPTH parameter
                 CMD_GET_WIDTH,
                 CMD_GET_START,
                 CMD_GET_COUNT,
@@ -320,6 +341,9 @@ module VX_scope_tap #(
                     ser_tx_ctr <= SER_CTR_WIDTH'(TX_DATAW-1);
                     ctrl_state <= CTRL_STATE_SEND;
                     bus_out_r  <= 1;
+                    // latch a consistent occupancy snapshot: capture may
+                    // advance `waddr` during the multi-cycle COUNT send.
+                    count_q    <= occupancy;
                 end
                 default:;
                 endcase
@@ -338,10 +362,10 @@ module VX_scope_tap #(
                 `endif
                 end
                 SEND_TYPE_COUNT: begin
-                    bus_out_r <= 1'(waddr >> ser_tx_ctr);
+                    bus_out_r <= 1'(count_q >> ser_tx_ctr);
                 `ifdef DBG_TRACE_SCOPE
                     if (ser_tx_ctr == 0) begin
-                        `TRACE(2, ("%t: scope_tap%0d: SEND count=%0d\n", $time, SCOPE_ID, waddr))
+                        `TRACE(2, ("%t: scope_tap%0d: SEND count=%0d\n", $time, SCOPE_ID, count_q))
                     end
                 `endif
                 end
@@ -358,7 +382,12 @@ module VX_scope_tap #(
                     if (ser_tx_ctr == 0) begin
                         if (is_read_data) begin
                             if (data_block_idx == BLOCK_IDX_WIDTH'(DATA_BLOCKS-1)) begin
-                                raddr <= raddr + ADDRW'(1);
+                                // sample fully drained: advance the read
+                                // pointer (guarded so an over-read on an
+                                // empty ring cannot corrupt occupancy).
+                                if (!ring_empty) begin
+                                    raddr <= raddr + SIZEW'(1);
+                                end
                                 is_read_data <= 0; // switch to delta mode
                             end
                         end else begin

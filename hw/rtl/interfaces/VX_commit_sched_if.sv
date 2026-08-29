@@ -13,9 +13,9 @@
 
 `include "VX_define.vh"
 
-interface VX_commit_sched_if ();
+interface VX_commit_sched_if import VX_gpu_pkg::*; ();
 
-    wire [`NUM_WARPS-1:0] committed_warps;
+    wire [`VX_CFG_NUM_WARPS-1:0] committed_warps;
 
     modport master (
         output committed_warps

@@ -1,6 +1,7 @@
 // vortex_gpgpu.h
 #pragma once
 #include <sst/core/component.h>
+#include <sst/core/interfaces/stdMem.h>
 #include <memory>
 #include <string>
 #include "vortex_simulator.h"  // wrapper around SimX
@@ -14,6 +15,7 @@ public:
     VortexGPGPU(SST::ComponentId_t id, SST::Params& params);
     ~VortexGPGPU() override;
 
+    void init(unsigned int phase) override;
     void setup() override;
     void finish() override;
 
@@ -41,7 +43,13 @@ private:
 
     bool clockTick(SST::Cycle_t cycle);
 
+    // Optional SST memHierarchy interface. If a SubComponent is connected to
+    // the "memIface" slot, MemReqs are mirrored as StandardMem events; responses
+    // are acknowledged but the local data path remains authoritative.
+    void handleMemRsp(SST::Interfaces::StandardMem::Request* req);
+
     std::unique_ptr<vortex::VortexSimulator> sim_;
+    SST::Interfaces::StandardMem* memIface_ = nullptr;
 };
 
 } // namespace Vortex

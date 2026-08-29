@@ -15,8 +15,8 @@
 
 interface VX_issue_sched_if import VX_gpu_pkg::*; ();
 
-    wire [ISSUE_WIS_W-1:0] wis;
-    wire valid;
+    wire                    valid;
+    wire [ISSUE_WIS_W-1:0]  wis;
 
     modport master (
         output valid,

@@ -1,0 +1,382 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_define.vh"
+
+module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = "",
+    parameter LANE_MASK = 0,
+    parameter LATENCY = 0,
+    parameter N = TCU_TC_K,
+    parameter SF = 1,
+    parameter W = 25,
+    parameter USE_DSP = 0   // map mantissa multipliers onto DSP48 slices (same latency)
+) (
+    input  wire clk,
+    input  wire reset,
+    input  wire enable,
+    input  wire [TCU_MAX_INPUTS-1:0] vld_mask,
+    input  wire [4:0] fmt_s,
+    input  wire [4:0] fmt_d,
+    input  wire [N-1:0][31:0] a_row,
+    input  wire [N-1:0][31:0] b_col,
+`ifdef VX_CFG_TCU_MX_ENABLE
+    input  wire [SF-1:0][7:0] sf_a,
+    input  wire [SF-1:0][7:0] sf_b,
+`endif
+    input  wire [31:0]        c_val,
+    output wire [31:0]        d_val
+);
+    `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_VAR (fmt_d)
+
+`ifndef VX_CFG_TCU_MX_ENABLE
+    `UNUSED_PARAM (SF)
+`endif
+
+    localparam TCK     = 2 * N;
+    localparam EXP_W   = TCU_EXP_BITS;
+    localparam EXC_W   = $bits(fedp_excep_t);
+    localparam C_HI_W  = 7;
+    localparam HR = $clog2(TCK+1);
+
+    // The align stage emits W+1 bit magnitudes, so the reduction of the TCK+1
+    // operands needs (W+1)+HR bits plus a sign bit to stay in range.
+    localparam ACC_SIG_W = W + 2 + HR;
+
+    // The norm stage encodes its exponent correction as {1'b1, 2'b00, lz_count},
+    // which only yields the +128 that the multiply-stage exponent bias assumes
+    // while $clog2(ACC_SIG_W) is 5, and its mantissa window needs 27 bits.
+    `STATIC_ASSERT (ACC_SIG_W >= 27 && ACC_SIG_W <= 32,
+        ("unsupported accumulator width! expected 27..32, actual=%0d (N=%0d, W=%0d)", ACC_SIG_W, N, W))
+
+    // Latency Configuration
+    // The multiply-stage depth derives from the configured total latency.
+    // USE_DSP swaps the mantissa Wallace tree for an inferred DSP48 multiply at
+    // the SAME latency. At MUL_LATENCY=2 the format banks register their raw
+    // products (DSP48 PREG with USE_DSP), splitting the classify/multiply and
+    // reduce/join cones across two cycles; pipe_mul stays DEPTH 1 — the
+    // lane-masked pipe register only aligns correctly at DEPTH 1.
+    localparam ALN_LATENCY = 1;
+    localparam ACC_LATENCY = 1;
+    localparam NRM_LATENCY = 1;
+    localparam MUL_LATENCY = `VX_CFG_TCU_LATENCY - (ALN_LATENCY + ACC_LATENCY + NRM_LATENCY);
+    localparam PROD_REG    = MUL_LATENCY - 1;
+    localparam TOTAL_LATENCY = MUL_LATENCY + ALN_LATENCY + ACC_LATENCY + NRM_LATENCY;
+
+    `STATIC_ASSERT (MUL_LATENCY == 1 || MUL_LATENCY == 2,
+        ("invalid VX_CFG_TCU_LATENCY! expected 4 or 5, actual=%0d", `VX_CFG_TCU_LATENCY))
+    `STATIC_ASSERT (LATENCY == 0 || LATENCY == TOTAL_LATENCY,
+        ("invalid latency! expected=%0d, actual=%0d", TOTAL_LATENCY, LATENCY))
+
+    localparam S0_IDX = 0;
+    localparam S1_IDX = S0_IDX + MUL_LATENCY;
+    localparam S2_IDX = S1_IDX + ALN_LATENCY;
+    localparam S3_IDX = S2_IDX + ACC_LATENCY;
+    localparam S4_IDX = S3_IDX + NRM_LATENCY;
+    `UNUSED_PARAM(S4_IDX)
+
+    reg [TOTAL_LATENCY-1:0] vld_pipe_r;
+    reg [TOTAL_LATENCY-1:0][31:0] req_pipe_r;
+    reg [31:0] req_id;
+
+    wire vld_any = (|vld_mask) && (LANE_MASK != 0);
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            vld_pipe_r <= '0;
+            req_pipe_r <= '0;
+            req_id     <= 0;
+        end else if (enable) begin
+            vld_pipe_r <= {vld_pipe_r[TOTAL_LATENCY-2:0], vld_any};
+            req_pipe_r <= {req_pipe_r[TOTAL_LATENCY-2:0], req_id};
+            req_id     <= req_id + 32'(vld_any);
+        end
+    end
+
+    wire [TOTAL_LATENCY:0] vld_pipe = {vld_pipe_r, (~reset && enable && vld_any)};
+    wire [TOTAL_LATENCY:0][31:0] req_pipe = {req_pipe_r, req_id};
+
+    // ======================================================================
+    // Stage 1: Multiply (classify/multiply, then reduce/join past the seam)
+    // ======================================================================
+
+    wire [TCK:0][EXP_W-1:0]   exponents;
+    wire [TCK:0]              exp_sel;
+    wire [TCK:0][W-1:0]       raw_sigs;
+    fedp_excep_t              exceptions;
+    wire [TCK-1:0]            lane_mask;
+
+    wire is_int = tcu_fmt_is_int(fmt_s);
+
+    wire [7:0] cval_top = c_val[31:24];
+    wire [6:0] cval_hi = cval_top[7:1] + 7'(cval_top[0]);
+
+    VX_tcu_tfr_shared_mul #(
+        .N (N),
+        .W (W),
+        .WA (ACC_SIG_W),
+        .EXP_W (EXP_W),
+        .SF (SF),
+        .USE_DSP (USE_DSP),
+        .PROD_REG (PROD_REG)
+    ) shared_mul (
+        .clk(clk),
+        .enable(enable),
+        .valid_in(vld_pipe[S0_IDX]),
+        .req_id(req_pipe[S0_IDX]),
+        .vld_mask(vld_mask | TCU_MAX_INPUTS'(LANE_MASK == 0)),
+        .fmt_s(fmt_s),
+        .a_row(a_row),
+        .b_col(b_col),
+        .c_val(c_val),
+    `ifdef VX_CFG_TCU_MX_ENABLE
+        .sf_a(sf_a),
+        .sf_b(sf_b),
+    `endif
+        .exponents(exponents),
+        .exp_sel(exp_sel),
+        .raw_sigs(raw_sigs),
+        .exceptions(exceptions),
+        .lane_mask(lane_mask)
+    );
+
+    // Scalar controls consumed past the multiply stage ride their own seam.
+    wire       is_int_r;
+    wire [C_HI_W-1:0] cval_hi_r;
+    VX_pipe_register #(
+        .DATAW (1 + C_HI_W),
+        .DEPTH (PROD_REG)
+    ) pipe_ctrl (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  ({is_int,   cval_hi}),
+        .data_out ({is_int_r, cval_hi_r})
+    );
+
+    wire [TCK:0][EXP_W-1:0]   s1_exponents;
+    wire [TCK:0]              s1_exp_sel;
+    fedp_excep_t              s1_exceptions;
+    wire [TCK-1:0]            s1_lane_mask;
+    wire [TCK:0][W-1:0]       s1_raw_sig;
+    wire                      s1_is_int;
+    wire [C_HI_W-1:0]         s1_cval_hi;
+
+    wire [TCK-1:0][W-1:0] pipe_mul_lane_din, pipe_mul_lane_dout;
+    `MAP_AOS_SOA(i, TCK, pipe_mul_lane_din[i], raw_sigs[i])
+    `MAP_AOS_SOA(i, TCK, s1_raw_sig[i], pipe_mul_lane_dout[i])
+
+    VX_tcu_tfr_pipe_register #(
+        .NUM_LANES  (TCK),
+        .SHARED_DATAW(((TCK+1)*EXP_W) + (TCK+1) + EXC_W + TCK + W + C_HI_W + 1),
+        .LANE_DATAW (W),
+        .DEPTH      (1),
+        .LANE_MASK  (LANE_MASK)
+    ) pipe_mul (
+        .clk(clk),
+        .reset(reset),
+        .enable(enable),
+        .lane_mask (lane_mask),
+        .shared_data_in ({exponents,    exp_sel,    exceptions,    lane_mask,    raw_sigs[TCK],   cval_hi_r,  is_int_r}),
+        .shared_data_out({s1_exponents, s1_exp_sel, s1_exceptions, s1_lane_mask, s1_raw_sig[TCK], s1_cval_hi, s1_is_int}),
+        .lane_data_in (pipe_mul_lane_din),
+        .lane_data_out(pipe_mul_lane_dout)
+    );
+
+    // ======================================================================
+    // Stage 2: Max Exp & Alignment
+    // ======================================================================
+
+    wire [TCK:0][ACC_SIG_W-1:0] s1_aln_sigs;
+    wire [TCK:0]                s1_aln_sticky;
+    wire [TCK:0]                s1_fp_negs;
+    wire [EXP_W-1:0]            s1_max_exp;
+
+    VX_tcu_tfr_align #(
+        .N (TCK+1),
+        .WI(W),
+        .WO(ACC_SIG_W)
+    ) align (
+        .clk(clk),
+        .valid_in(vld_pipe[S1_IDX]),
+        .req_id(req_pipe[S1_IDX]),
+        .exponents(s1_exponents),
+        .sel_exp(s1_exp_sel),
+        .lane_mask(s1_lane_mask),
+        .sigs_in(s1_raw_sig),
+        .is_int(s1_is_int),
+        .max_exp(s1_max_exp),
+        .sigs_out(s1_aln_sigs),
+        .sticky_bits(s1_aln_sticky),
+        .fp_negs(s1_fp_negs)
+    );
+
+    wire [EXP_W-1:0]            s2_max_exp;
+    fedp_excep_t                s2_exceptions;
+    wire [TCK:0][ACC_SIG_W-1:0] s2_aln_sigs;
+    wire [TCK:0]                s2_aln_sticky;
+    wire [TCK:0]                s2_fp_negs;
+    wire                        s2_is_int;
+    wire [C_HI_W-1:0]           s2_cval_hi;
+
+    wire [TCK-1:0][(ACC_SIG_W + 2)-1:0] pipe_aln_lane_din, pipe_aln_lane_dout;
+    `MAP_AOS_SOA(i, TCK, pipe_aln_lane_din[i], {s1_aln_sigs[i], s1_aln_sticky[i], s1_fp_negs[i]})
+    `MAP_AOS_SOA(i, TCK, {s2_aln_sigs[i], s2_aln_sticky[i], s2_fp_negs[i]}, pipe_aln_lane_dout[i])
+
+    VX_tcu_tfr_pipe_register #(
+        .NUM_LANES  (TCK),
+        .SHARED_DATAW(EXP_W + EXC_W + ACC_SIG_W + 1 + 1 + C_HI_W + 1),
+        .LANE_DATAW (ACC_SIG_W + 2),
+        .DEPTH      (ALN_LATENCY),
+        .LANE_MASK  (LANE_MASK)
+    ) pipe_aln (
+        .clk(clk),
+        .reset(reset),
+        .enable(enable),
+        .lane_mask (s1_lane_mask),
+        .shared_data_in ({s1_max_exp, s1_exceptions, s1_aln_sigs[TCK], s1_aln_sticky[TCK], s1_fp_negs[TCK], s1_cval_hi, s1_is_int}),
+        .shared_data_out({s2_max_exp, s2_exceptions, s2_aln_sigs[TCK], s2_aln_sticky[TCK], s2_fp_negs[TCK], s2_cval_hi, s2_is_int}),
+        .lane_data_in (pipe_aln_lane_din),
+        .lane_data_out(pipe_aln_lane_dout)
+    );
+
+    // ======================================================================
+    // Stage 3: Accumulation
+    // ======================================================================
+
+    wire [ACC_SIG_W-1:0] s2_acc_mag;
+    wire                 s2_acc_sign;
+    wire                 s2_acc_sticky;
+
+    VX_tcu_tfr_acc #(
+        .N (TCK+1),
+        .WO(ACC_SIG_W)
+    ) acc (
+        .clk(clk),
+        .valid_in(vld_pipe[S2_IDX]),
+        .req_id(req_pipe[S2_IDX]),
+        .sigs_in(s2_aln_sigs),
+        .sticky_in(s2_aln_sticky),
+        .fp_negs(s2_fp_negs),
+        .sig_out(s2_acc_mag),
+        .sign_out(s2_acc_sign),
+        .sticky_out(s2_acc_sticky)
+    );
+
+    wire [EXP_W-1:0]      s3_max_exp;
+    wire [ACC_SIG_W-1:0]  s3_acc_mag;
+    wire                  s3_acc_sign;
+    fedp_excep_t          s3_exceptions;
+    wire                  s3_acc_sticky;
+    wire                  s3_is_int;
+    wire [C_HI_W-1:0]     s3_cval_hi;
+
+    VX_pipe_register #(
+        .DATAW (EXP_W + ACC_SIG_W + 1 + EXC_W + 1 + C_HI_W + 1),
+        .DEPTH (ACC_LATENCY)
+    ) pipe_acc (
+        .clk(clk),
+        .reset(reset),
+        .enable(enable),
+        .data_in ({s2_max_exp, s2_acc_mag, s2_acc_sign, s2_exceptions, s2_acc_sticky, s2_cval_hi, s2_is_int}),
+        .data_out({s3_max_exp, s3_acc_mag, s3_acc_sign, s3_exceptions, s3_acc_sticky, s3_cval_hi, s3_is_int})
+    );
+
+    // ======================================================================
+    // Stage 4: Normalization & rounding
+    // ======================================================================
+
+    wire [31:0] final_result;
+
+    VX_tcu_tfr_norm_round #(
+        .EXP_W (EXP_W),
+        .C_HI_W(C_HI_W),
+        .WA (ACC_SIG_W)
+    ) norm_round (
+        .clk(clk),
+        .valid_in(vld_pipe[S3_IDX]),
+        .req_id(req_pipe[S3_IDX]),
+        .max_exp(s3_max_exp),
+        .acc_sig(s3_acc_mag),
+        .acc_sign(s3_acc_sign),
+        .sticky_in(s3_acc_sticky),
+        .exceptions(s3_exceptions),
+        .cval_hi(s3_cval_hi),
+        .is_int(s3_is_int),
+        .result(final_result)
+    );
+
+    VX_pipe_register #(
+        .DATAW (32),
+        .DEPTH (NRM_LATENCY)
+    ) pipe_norm_round (
+        .clk(clk),
+        .reset(reset),
+        .enable(enable),
+        .data_in (final_result),
+        .data_out(d_val)
+    );
+
+`ifdef DBG_TRACE_TCU
+    // Stage 0: Setup
+    always_ff @(posedge clk) begin
+        if (vld_pipe[S0_IDX]) begin
+            `TRACE(4, ("%t: %s FEDP-S0(%0d): fmt_s=%0d, a_row=", $time, INSTANCE_ID, req_pipe[S0_IDX], fmt_s));
+            `TRACE_ARRAY1D(4, "0x%0h", a_row, N)
+            `TRACE(4, (", b_col="))
+            `TRACE_ARRAY1D(4, "0x%0h", b_col, N)
+            `TRACE(4, (", c_val=0x%0h, vld_mask=%b\n", c_val, vld_mask))
+        end
+    end
+
+    // Stage 1: Mul/Exp
+    always_ff @(posedge clk) begin
+        if (vld_pipe[S1_IDX]) begin
+            `TRACE(4, ("%t: %s FEDP-S1(%0d): is_int=%b, cval_hi=0x%0h, exponents=", $time, INSTANCE_ID, req_pipe[S1_IDX], s1_is_int, s1_cval_hi));
+            `TRACE_ARRAY1D(4, "0x%0h", s1_exponents, (TCK+1))
+            `TRACE(4, (", raw_sig="))
+            `TRACE_ARRAY1D(4, "0x%0h", s1_raw_sig, (TCK+1))
+            `TRACE(4, (", exceptions=%0b, lane_mask=%b\n", s1_exceptions, s1_lane_mask))
+        end
+    end
+
+    // Stage 2: Alignment
+    always_ff @(posedge clk) begin
+        if (vld_pipe[S2_IDX]) begin
+            `TRACE(4, ("%t: %s FEDP-S2(%0d): is_int=%b, cval_hi=0x%0h, max_exp=0x%0h, aln_sig=",
+                $time, INSTANCE_ID, req_pipe[S2_IDX], s2_is_int, s2_cval_hi, s2_max_exp));
+            `TRACE_ARRAY1D(4, "0x%0h", s2_aln_sigs, (TCK+1))
+            `TRACE(4, (", sticky_bits="))
+            `TRACE_ARRAY1D(4, "0b%b", s2_aln_sticky, (TCK+1))
+            `TRACE(4, (", exceptions=%0b\n", s2_exceptions))
+        end
+    end
+
+    // Stage 3: Accumulation
+    always_ff @(posedge clk) begin
+        if (vld_pipe[S3_IDX]) begin
+            `TRACE(4, ("%t: %s FEDP-S3(%0d): is_int=%b, cval_hi=0x%0h, acc_mag=0x%0h, acc_sign=%b, max_exp=0x%0h, sticky=%b, exceptions=%0b\n",
+                $time, INSTANCE_ID, req_pipe[S3_IDX], s3_is_int, s3_cval_hi, s3_acc_mag, s3_acc_sign, s3_max_exp, s3_acc_sticky, s3_exceptions));
+        end
+    end
+
+    // Stage 4: Norm/Round
+    always_ff @(posedge clk) begin
+        if (vld_pipe[S4_IDX]) begin
+            `TRACE(4, ("%t: %s FEDP-S4(%0d): result=0x%0h\n", $time, INSTANCE_ID, req_pipe[S4_IDX], d_val));
+        end
+    end
+`endif // DBG_TRACE_TCU
+
+endmodule

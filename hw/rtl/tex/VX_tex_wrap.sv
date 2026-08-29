@@ -1,0 +1,62 @@
+//!/bin/bash
+
+// Copyright © 2019-2023
+// 
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+// 
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+`include "VX_tex_define.vh"
+
+module VX_tex_wrap import VX_tex_pkg::*; (
+    input wire [TEX_WRAP_BITS-1:0]    wrap_i,
+    input wire [`VX_TEX_FXD_BITS-1:0]  coord_i,
+    output wire [`TEX_FXD_FRAC-1:0] coord_o,
+    // High when this coordinate left the texture on an axis that wraps to a
+    // border, so the tap it addresses returns the border colour instead.
+    output wire                     border_o
+);
+    
+    reg [`TEX_FXD_FRAC-1:0] coord_r;
+
+    wire [`TEX_FXD_FRAC-1:0] clamp;
+
+    VX_tex_sat #(
+        .IN_W  (`VX_TEX_FXD_BITS),
+        .OUT_W (`TEX_FXD_FRAC)
+    ) sat_fx (
+        .data_in  (coord_i),
+        .data_out (clamp)
+    );
+
+    always @(*) begin
+        case (wrap_i)
+            // BORDER still clamps the address: the tap is fetched and then
+            // discarded for the border colour, so the address only has to be
+            // one the texture owns.
+            `VX_TEX_WRAP_CLAMP,
+            `VX_TEX_WRAP_BORDER:
+                coord_r = clamp;
+            `VX_TEX_WRAP_MIRROR: 
+                coord_r = coord_i[`TEX_FXD_FRAC-1:0] ^ {`TEX_FXD_FRAC{coord_i[`TEX_FXD_FRAC]}};
+            default: //`VX_TEX_WRAP_REPEAT
+                coord_r = coord_i[`TEX_FXD_FRAC-1:0];
+        endcase
+    end
+
+    assign coord_o = coord_r;
+
+    // A coordinate is outside [0,1) exactly when anything above its fractional
+    // field is set -- an integer part, or the sign bits of a negative value. So
+    // the test is an OR-reduce and needs no comparator.
+    assign border_o = (wrap_i == `VX_TEX_WRAP_BORDER)
+                   && (| coord_i[`VX_TEX_FXD_BITS-1:`TEX_FXD_FRAC]);
+
+endmodule

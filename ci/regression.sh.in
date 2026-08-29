@@ -13,6 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# ---------------------------------------------------------------------------
+# CI v2 local test runner. The whole suite lives in the pytest catalog
+# (ci/testcases/*.yaml); this script is the single local entry point into it:
+#
+#   --all              run the ENTIRE catalog for this build tree's XLEN.
+#   --test <selector>  run a slice — <selector> is a pytest marker expression:
+#                      a category (tensor), a driver (rtlsim), or a combo
+#                      ("tensor and simx"). Host flows are categories too, so
+#                      `--test dtm` works like any other.
+#
+# Both are thin wrappers over `pytest [-m <selector>] ci`, so a local run uses
+# the exact catalog GitHub CI fans out across matrix cells — no drift.
+#
+# The genuinely multi-step host flows that don't fit the common shape (dtm, sst,
+# gem5, cupbop) stay here as shell functions. The catalog's `via: script` cases
+# reach them through the INTERNAL `--run <flow>` backend (not a user flag);
+# users run them via `--test <flow>`, which routes through pytest to `--run`.
+# ---------------------------------------------------------------------------
+
 # exit when any command fails
 set -e
 
@@ -27,61 +46,27 @@ XSIZE=$((XLEN / 8))
 
 echo "Vortex Regression Test: XLEN=$XLEN"
 
-unittest()
-{
-    make -C tests/unittest run
-    make -C hw/unittest > /dev/null
-}
+# Enforce the HW/SW config layering boundary: VX_config.h is HW/sim-private
+# and must not leak into software or tests.
+"@VORTEX_HOME@/ci/check_config_boundary.sh"
 
-isa()
-{
-    echo "begin isa tests..."
+# Enforce the sw/ ↔ sim/+hw/ bidirectional isolation boundary.
+# See AGENTS.md §6 and docs/coding_guidelines_cpp.md §8.
+"@VORTEX_HOME@/ci/check_sw_sim_boundary.sh"
 
-    make -C sim/simx
-    make -C sim/rtlsim
+# Enforce the SimX threading boundary: model code carries no threading
+# vocabulary; components communicate only through framework primitives.
+"@VORTEX_HOME@/ci/check_simx_mt_boundary.sh"
 
-    make -C tests/riscv/isa run-simx
-    make -C tests/riscv/isa run-rtlsim
-
-    CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
-
-    CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
-
-    CONFIGS="-DFPU_DSP" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32f
-
-    if [ "$XLEN" == "64" ]
-    then
-        CONFIGS="-DFPU_FPNEW" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
-
-        CONFIGS="-DFPU_DPI" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64d
-
-        CONFIGS="-DFPU_DPI -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
-
-        CONFIGS="-DFPU_FPNEW -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64f
-
-        CONFIGS="-DFPU_DSP -DEXT_D_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-64fx
-    fi
-
-    echo "isa tests done!"
-}
-
-kernel()
-{
-    echo "begin kernel tests..."
-
-    make -C sim/simx
-    make -C sim/rtlsim
-
-    make -C tests/kernel run-simx
-    make -C tests/kernel run-rtlsim
-
-    echo "kernel tests done!"
-}
 
 dtm()
 {
     echo "begin dtm tests..."
 
+    # dtm_test.py spawns sim/simx/simx directly (not via a test
+    # makefile's run-* target), so the simx binary needs an explicit
+    # pre-build. `make -C tests/kernel` builds the fibonacci.vxbin
+    # the script loads — auto-pulls sw/kernel via libvortex.a.
     make -C sim/simx
     make -C tests/kernel
 
@@ -99,406 +84,138 @@ sst()
 
     cp sim/simx/libvortex.so $SST_ELEMENTS_HOME/lib/sst-elements-library/   # alternatively - $ sst --add-lib-path `pwd` myConfig.py
 
-    sst ci/sst_test_vortex_hello.py
-    sst ci/sst_test_vortex_fibonacci.py
-    sst ci/sst_test_vortex_vecadd.py
-    sst ci/sst_test_vortex_conform.py
+    BUILD_DIR=$(pwd)
+
+    # Hostless SST runner (ci/sst_run_hostless_app.py) parameterized
+    # by VORTEX_TEST_DIR + VORTEX_TEST_KERNEL — same shape as
+    # ci/gem5_run_hostless_app.py. SST is hostless-only today (no
+    # CPU component wired to Vortex); the ci/sst_run_app.py name
+    # slot is reserved for a future host-CPU SST integration.
+    # `sst` is also the name of this shell function — without `command`
+    # bash would resolve the call below back to ourselves and loop until
+    # the timeout. `command sst` forces external-binary lookup.
+    #
+    # Only standalone `int main()` kernels (no spawn_threads, no args
+    # struct) work in hostless SST today — the hostless runner only
+    # primes the KMU PC and ticks; there is no host CPU to stage an
+    # args buffer. vecadd / conform need a future ci/sst_run_app.py
+    # (CPU-component variant) to drive them.
+    for spec in "hello:hello.vxbin" "fibonacci:fibonacci.vxbin"; do
+        kern="${spec%%:*}"
+        vxbin="${spec#*:}"
+        echo "=== sst: $kern ==="
+        VORTEX_TEST_DIR=$BUILD_DIR/tests/kernel/$kern \
+        VORTEX_TEST_KERNEL=$vxbin \
+            command sst ci/sst_run_hostless_app.py
+    done
 
     echo "sst tests done!"
 }
 
-mpi()
+# gem5 integration tests — see docs/designs/vortex_gem5_integration.md
+gem5()
 {
-    echo "begin mpi tests..."
+    echo "begin gem5 tests..."
 
-    make -C runtime/simx
-
-    make -C tests/regression run-simx-mpi NP=4
-
-    echo "mpi tests done!"
-}
-
-regression()
-{
-    echo "begin regression tests..."
-
-    make -C runtime/simx
-    make -C runtime/rtlsim
-
-    make -C tests/regression run-simx
-    make -C tests/regression run-rtlsim
-
-    # test kernel CTA
-    ./ci/blackbox.sh --driver=simx --app=cta --args="-x33 -y55 -z1 -a1 -b1 -c1"
-    ./ci/blackbox.sh --driver=simx --threads=32 --app=cta --args="-x1 -y1 -z1 -a3 -b5 -c7"
-    ./ci/blackbox.sh --driver=simx --threads=32 --app=cta --args="-x1 -y5 -z3 -a3 -b5 -c7"
-
-    # test global barrier
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tgbar" --cores=2
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tgbar" --cores=2
-    CONFIGS="-DGBAR_ENABLE" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tgbar" --cores=2
-
-    # test local barrier
-    ./ci/blackbox.sh --driver=simx --app=dogfood --args="-n1 -tbar"
-    ./ci/blackbox.sh --driver=opae --app=dogfood --args="-n1 -tbar"
-    ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-n1 -tbar"
-
-    # test temp driver mode for
-    ./ci/blackbox.sh --driver=simx --app=vecadd --nohup
-
-    echo "regression tests done!"
-}
-
-opencl()
-{
-    echo "begin opencl tests..."
-
-    make -C runtime/simx
-    make -C runtime/rtlsim
-
-    make -C tests/opencl run-simx
-    make -C tests/opencl run-rtlsim
-
-    ./ci/blackbox.sh --driver=simx --app=lbm --warps=8
-    ./ci/blackbox.sh --driver=rtlsim --app=lbm --warps=8
-
-    echo "opencl tests done!"
-}
-
-vm(){
-    echo "begin vm tests..."
-
-    make -C runtime/simx clean && CONFIGS="-DVM_ENABLE" make -C runtime/simx
-    make -C tests/opencl run-simx
-    make -C tests/regression run-simx
-
-    make -C runtime/simx clean && CONFIGS="-DVM_ENABLE -DVM_ADDR_MODE=BARE" make -C runtime/simx
-    make -C tests/opencl run-simx
-    make -C tests/regression run-simx
-
-    echo "vm tests done!"
-}
-
-cache()
-{
-    echo "begin cache tests..."
-
-    # disable local memory
-    CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo --perf=1
-    CONFIGS="-DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=demo --perf=1
-
-    # disable L1 cache
-    CONFIGS="-DL1_DISABLE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DL1_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DDCACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DICACHE_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-
-    # reduce l1 line size
-    CONFIGS="-DL1_LINE_SIZE=$XSIZE" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
-    CONFIGS="-DL1_LINE_SIZE=$XSIZE -DDISABLE_L1" ./ci/blackbox.sh --driver=rtlsim --app=io_addr
-    CONFIGS="-DL1_LINE_SIZE=$XSIZE" ./ci/blackbox.sh --driver=simx --app=io_addr
-    CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DL1_LINE_SIZE=$XSIZE -DLMEM_DISABLE" ./ci/blackbox.sh --driver=simx --app=sgemm
-
-    # test cache ways
-    CONFIGS="-DICACHE_NUM_WAYS=1 -DDCACHE_NUM_WAYS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DICACHE_NUM_WAYS=4 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DICACHE_NUM_WAYS=4 -DDCACHE_NUM_WAYS=8" ./ci/blackbox.sh --driver=simx --app=sgemm
-
-    # test cache banking
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DLMEM_NUM_BANKS=4 -DDCACHE_NUM_BANKS=1" ./ci/blackbox.sh --driver=simx --app=sgemm
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=4" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --threads=8
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DLMEM_NUM_BANKS=2 -DDCACHE_NUM_BANKS=4" ./ci/blackbox.sh --driver=simx --app=sgemm --threads=8
-
-    # replacement policy
-    CONFIGS="-DDCACHE_REPL_POLICY=0" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DDCACHE_REPL_POLICY=1" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-    CONFIGS="-DDCACHE_REPL_POLICY=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm
-
-    # test writeback
-    CONFIGS="-DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=0 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=mstress
-    CONFIGS="-DDCACHE_WRITEBACK=1 -DDCACHE_DIRTYBYTES=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=rtlsim --app=mstress
-    CONFIGS="-DDCACHE_WRITEBACK=1 -DDCACHE_NUM_WAYS=4" ./ci/blackbox.sh --driver=simx --app=mstress
-    CONFIGS="-DSOCKET_SIZE=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=mstress
-    CONFIGS="-DSOCKET_SIZE=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=mstress
-
-    # cache clustering
-    CONFIGS="-DSOCKET_SIZE=4 -DNUM_DCACHES=4 -DNUM_ICACHES=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm --cores=4 --warps=1 --threads=2
-
-    # L2/L3
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=rtlsim --cores=4 --l2cache --app=diverge --args="-n1"
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=simx --cores=4 --l2cache --app=diverge --args="-n1"
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --l2cache --l3cache --app=diverge --args="-n1"
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --l3cache --app=diverge --args="-n1"
-
-    echo "begin cache tests..."
-}
-
-config1()
-{
-    echo "begin configuration-1 tests..."
-
-    # warp/threads
-    ./ci/blackbox.sh --driver=rtlsim --warps=1 --threads=1 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=1 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --warps=1 --threads=2 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=2 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=8 --app=diverge
-    ./ci/blackbox.sh --driver=rtlsim --warps=8 --threads=2 --app=diverge
-    ./ci/blackbox.sh --driver=simx --warps=1 --threads=1 --app=diverge
-    ./ci/blackbox.sh --driver=simx --warps=2 --threads=16 --app=diverge
-
-    # cores clustering
-    ./ci/blackbox.sh --driver=rtlsim --cores=4 --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=simx --cores=4 --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --app=diverge --args="-n1"
-    ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --app=diverge --args="-n1"
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=rtlsim --cores=2 --clusters=2 --app=diverge --args="-n1"
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --app=diverge --args="-n1"
-
-    # issue width
-    CONFIGS="-DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=diverge
-    CONFIGS="-DISSUE_WIDTH=4" ./ci/blackbox.sh --driver=rtlsim --app=diverge
-    CONFIGS="-DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=diverge
-    CONFIGS="-DISSUE_WIDTH=4" ./ci/blackbox.sh --driver=simx --app=diverge
-
-    # simd width
-    CONFIGS="-DSIMD_WIDTH=1" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-ttrig"
-    CONFIGS="-DSIMD_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-ttrig"
-    ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=32 --app=sgemm
-    CONFIGS="-DSIMD_WIDTH=32" ./ci/blackbox.sh --driver=rtlsim --warps=2 --threads=32 --app=sgemm
-    CONFIGS="-DSIMD_WIDTH=1" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-ttrig"
-    CONFIGS="-DSIMD_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=dogfood --args="-ttrig"
-
-    # ALU scaling
-    CONFIGS="-DISSUE_WIDTH=1 -DNUM_ALU_BLOCK=1 -DNUM_ALU_LANES=1" ./ci/blackbox.sh --driver=rtlsim --app=diverge
-    CONFIGS="-DISSUE_WIDTH=4 -DNUM_ALU_BLOCK=2 -DNUM_ALU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=diverge
-    CONFIGS="-DISSUE_WIDTH=4 -DNUM_ALU_BLOCK=4 -DNUM_ALU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=diverge
-    CONFIGS="-DISSUE_WIDTH=1 -DNUM_ALU_BLOCK=1 -DNUM_ALU_LANES=1" ./ci/blackbox.sh --driver=simx --app=diverge
-    CONFIGS="-DISSUE_WIDTH=4 -DNUM_ALU_BLOCK=2 -DNUM_ALU_LANES=2" ./ci/blackbox.sh --driver=simx --app=diverge
-    CONFIGS="-DISSUE_WIDTH=4 -DNUM_ALU_BLOCK=4 -DNUM_ALU_LANES=4" ./ci/blackbox.sh --driver=simx --app=diverge
-
-    # FPU scaling
-    CONFIGS="-DISSUE_WIDTH=2 -DNUM_FPU_BLOCK=1 -DNUM_FPU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=regression/vecadd
-    CONFIGS="-DISSUE_WIDTH=4 -DNUM_FPU_BLOCK=4 -DNUM_FPU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=regression/vecadd
-    CONFIGS="-DISSUE_WIDTH=2 -DNUM_FPU_BLOCK=1 -DNUM_FPU_LANES=2" ./ci/blackbox.sh --driver=simx --app=regression/vecadd
-    CONFIGS="-DISSUE_WIDTH=4 -DNUM_FPU_BLOCK=4 -DNUM_FPU_LANES=4" ./ci/blackbox.sh --driver=simx --app=regression/vecadd
-
-    # FPU's PE scaling
-    CONFIGS="-DFMA_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tfmadd"
-    CONFIGS="-DFCVT_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tftoi"
-    CONFIGS="-DFDIV_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tfdiv"
-    CONFIGS="-DFSQRT_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tfsqrt"
-    CONFIGS="-DFNCP_PE_RATIO=2" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-tfclamp"
-
-    # LSU scaling
-    CONFIGS="-DISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DNUM_LSU_LANES=2" ./ci/blackbox.sh --driver=rtlsim --app=regression/vecadd
-    CONFIGS="-DISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DNUM_LSU_LANES=4" ./ci/blackbox.sh --driver=rtlsim --app=regression/vecadd
-    CONFIGS="-DISSUE_WIDTH=2 -DNUM_LSU_BLOCK=1 -DNUM_LSU_LANES=2" ./ci/blackbox.sh --driver=simx --app=regression/vecadd
-    CONFIGS="-DISSUE_WIDTH=4 -DNUM_LSU_BLOCK=4 -DNUM_LSU_LANES=4" ./ci/blackbox.sh --driver=simx --app=regression/vecadd
-
-    echo "configuration-1 tests done!"
-}
-
-config2()
-{
-    echo "begin configuration-2 tests..."
-
-    # test opaesim
-    ./ci/blackbox.sh --driver=opae --app=printf
-    ./ci/blackbox.sh --driver=opae --app=diverge
-    ./ci/blackbox.sh --driver=xrt --app=diverge
-
-    # disable DPI
-    if [ "$XLEN" == "64" ]; then
-        # need to disable trig on 64-bit due to a bug inside fpnew's sqrt core.
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood --args="-xtrig -xbar -xgbar"
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood --args="-xtrig -xbar -xgbar"
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood --args="-xtrig -xbar -xgbar"
-    else
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=opae --app=dogfood
-        CONFIGS="-DDPI_DISABLE -DFPU_FPNEW" ./ci/blackbox.sh --driver=xrt --app=dogfood
+    if [ -z "$GEM5_HOME" ]; then
+        GEM5_HOME=$HOME/tools/gem5
+    fi
+    if [ ! -x "$GEM5_HOME/build/X86/gem5.opt" ]; then
+        echo "error: $GEM5_HOME/build/X86/gem5.opt not found — run ci/gem5_install.sh first"
+        exit 1
     fi
 
-    # custom program startup address
-    make -C tests/regression/dogfood clean-kernel
-    STARTUP_ADDR=0x80000000 make -C tests/regression/dogfood
-    ./ci/blackbox.sh --driver=simx --app=dogfood
-    ./ci/blackbox.sh --driver=rtlsim --app=dogfood
-    make -C tests/regression/dogfood clean-kernel
+    # Build prerequisites. The gem5 device library + host runtime are
+    # config/cross-arch-specific so they don't get auto-built by the
+    # tests' default `all` target. sw/kernel + sw/runtime/stub are
+    # pulled in automatically by tests/{kernel,regression}/* — no
+    # plain pre-build needed.
+    make -C sim/simx USE_GEM5=1
+    make -C sw/runtime/gem5 HOST_ARCH=x86_64
+    make -C tests/kernel/hello
+    make -C tests/regression/vecadd
+    make -C tests/regression/sgemm
 
-    # disabling M & F extensions
-    CONFIGS="-DEXT_M_DISABLE -DEXT_F_DISABLE" make -C sim/rtlsim > /dev/null && make -C tests/riscv/isa run-rtlsim-32i
+    BUILD_DIR=$(pwd)
+    LIB_GEM5_DEV=$BUILD_DIR/sim/simx/libvortex-gem5.so
+    HOST_RT_DIR=$BUILD_DIR/sw/runtime
 
-    # disabling ZICOND extension
-    CONFIGS="-DEXT_ZICOND_DISABLE" ./ci/blackbox.sh --driver=rtlsim --app=demo
+    # Hostless smoke — no host CPU, kernel preloaded via SimObject param.
+    # env-vars MUST precede the binary (gem5.opt would otherwise treat
+    # them as positional args).
+    echo "=== gem5 hostless: hello ==="
+    VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+    VORTEX_TEST_DIR=$BUILD_DIR/tests/kernel/hello \
+    VORTEX_TEST_KERNEL=hello.vxbin \
+        timeout 120 $GEM5_HOME/build/X86/gem5.opt \
+        ci/gem5_run_hostless_app.py
 
-    # test 128-bit memory block
-    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=opae --app=mstress
-    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=xrt --app=mstress
+    # E2E — CP-driven path through the host runtime. Generic runner
+    # (ci/gem5_run_app.py) parameterized by VORTEX_TEST_BIN +
+    # VORTEX_TEST_ARGS. Sizes fit the 120s per-test budget
+    # (feedback_test_timeout_120s):
+    #   - vecadd -n16   small vector add
+    #   - sgemm  -n4    4x4 matrix multiply
+    # Larger sizes overrun because the simulated host CPU's CP poll
+    # loop burns gem5 wall time proportional to kernel runtime.
+    # Run on local dev box for larger sizes by overriding VORTEX_TEST_ARGS.
+    for spec in "vecadd:-n16" "sgemm:-n4"; do
+        app="${spec%%:*}"
+        args="${spec#*:}"
+        echo "=== gem5 e2e: $app $args ==="
+        VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+        VORTEX_GEM5_HOST_RT_DIR=$HOST_RT_DIR \
+        VORTEX_TEST_DIR=$BUILD_DIR/tests/regression/$app \
+        VORTEX_TEST_BIN=$app \
+        VORTEX_TEST_ARGS=$args \
+            timeout 120 $GEM5_HOME/build/X86/gem5.opt \
+            ci/gem5_run_app.py
+    done
 
-    # test XLEN-bit memory block
-    CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=opae --app=mstress
-    CONFIGS="-DMEM_BLOCK_SIZE=$XSIZE" ./ci/blackbox.sh --driver=simx --app=mstress
+    # ARM matrix (opt-in). The device library (libvortex-gem5.so) is
+    # always x86 — gem5.opt is an x86 binary regardless of which
+    # simulated ISA it models. Only the simulated host's ISA changes.
+    if [ -n "$VORTEX_GEM5_ARM" ]; then
+        if [ ! -x "$GEM5_HOME/build/ARM/gem5.opt" ]; then
+            echo "error: $GEM5_HOME/build/ARM/gem5.opt not found"
+            exit 1
+        fi
 
-    # test memory coalescing
-    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
-    CONFIGS="-DMEM_BLOCK_SIZE=16" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
+        # Cross-compile the host runtime, stub, and test binaries for
+        # aarch64. All outputs land in $arch/ subdirs alongside the
+        # native x86 builds so they coexist cleanly.
+        make -C sw/runtime/stub HOST_ARCH=aarch64
+        make -C sw/runtime/gem5 HOST_ARCH=aarch64
+        make -C tests/regression/vecadd HOST_ARCH=aarch64
+        make -C tests/regression/sgemm  HOST_ARCH=aarch64
 
-    # test single-bank memory
-    if [ "$XLEN" == "64" ]; then
-        CONFIGS="-DPLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DPLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=xrt --app=mstress
-    else
-        CONFIGS="-DPLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DPLATFORM_MEMORY_NUM_BANKS=1" ./ci/blackbox.sh --driver=xrt --app=mstress
+        ARM_HOST_RT_DIR=$BUILD_DIR/sw/runtime/aarch64
+
+        echo "=== gem5 ARM hostless: hello ==="
+        VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+        VORTEX_TEST_DIR=$BUILD_DIR/tests/kernel/hello \
+        VORTEX_TEST_KERNEL=hello.vxbin \
+            timeout 120 $GEM5_HOME/build/ARM/gem5.opt \
+            ci/gem5_run_hostless_app.py
+
+        for spec in "vecadd:-n16" "sgemm:-n4"; do
+            app="${spec%%:*}"
+            args="${spec#*:}"
+            echo "=== gem5 ARM e2e: $app $args ==="
+            VORTEX_GEM5_DEV_LIB=$LIB_GEM5_DEV \
+            VORTEX_GEM5_HOST_RT_DIR=$ARM_HOST_RT_DIR \
+            VORTEX_TEST_DIR=$BUILD_DIR/tests/regression/$app \
+            VORTEX_TEST_BIN=$app-aarch64 \
+            VORTEX_TEST_ARGS=$args \
+            VORTEX_DRIVER=gem5-aarch64 \
+                timeout 120 $GEM5_HOME/build/ARM/gem5.opt \
+                ci/gem5_run_app.py
+        done
     fi
 
-    # test larger memory address
-    if [ "$XLEN" == "64" ]; then
-        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=49" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=49" ./ci/blackbox.sh --driver=xrt --app=mstress
-    else
-        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=opae --app=mstress
-        CONFIGS="-DPLATFORM_MEMORY_ADDR_WIDTH=33" ./ci/blackbox.sh --driver=xrt --app=mstress
-    fi
-
-    # test memory banks interleaving
-    CONFIGS="-DPLATFORM_MEMORY_INTERLEAVE=1" ./ci/blackbox.sh --driver=opae --app=mstress
-    CONFIGS="-DPLATFORM_MEMORY_INTERLEAVE=0" ./ci/blackbox.sh --driver=opae --app=mstress
-
-    # test memory ports
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=mstress
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=simx --app=mstress --threads=8
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=mstress
-    CONFIGS="-DMEM_BLOCK_SIZE=8 -DPLATFORM_MEMORY_NUM_BANKS=2" ./ci/blackbox.sh --driver=rtlsim --app=mstress --threads=8
-    CONFIGS="-DMEM_BLOCK_SIZE=8" ./ci/blackbox.sh --driver=opae --app=mstress --threads=8
-    CONFIGS="-DMEM_BLOCK_SIZE=8" ./ci/blackbox.sh --driver=xrt --app=mstress --threads=8
-
-    echo "configuration-2 tests done!"
+    echo "gem5 tests done!"
 }
 
-test_csv_trace32()
-{
-    # test CSV trace generation
-    DEBUG=3 make -C sim/simx > /dev/null
-    DEBUG=3 CONFIGS="-DGPR_RESET" make -C sim/rtlsim > /dev/null
-    make -C tests/riscv/isa run-simx-32imf > run_simx.log
-    make -C tests/riscv/isa run-rtlsim-32imf > run_rtlsim.log
-    ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
-    ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
-    diff trace_rtlsim.csv trace_simx.csv
-}
-
-test_csv_trace64()
-{
-    # test CSV trace generation
-    DEBUG=3 make -C sim/simx > /dev/null
-    DEBUG=3 CONFIGS="-DGPR_RESET" make -C sim/rtlsim > /dev/null
-    make -C tests/riscv/isa run-simx-64imf > run_simx.log
-    make -C tests/riscv/isa run-rtlsim-64imf > run_rtlsim.log
-    ./ci/trace_csv.py -tsimx run_simx.log -otrace_simx.csv
-    ./ci/trace_csv.py -trtlsim run_rtlsim.log -otrace_rtlsim.csv
-    diff trace_rtlsim.csv trace_simx.csv
-}
-
-debug()
-{
-    echo "begin debugging tests..."
-
-    test_csv_trace32
-
-    if [ "$XLEN" == "64" ]
-    then
-        test_csv_trace64
-    fi
-
-    CONFIGS="-O0" ./ci/blackbox.sh --driver=opae --app=demo --args="-n1"
-    CONFIGS="-O0" ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1"
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=xrt --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
-    CONFIGS="-DSOCKET_SIZE=1" ./ci/blackbox.sh --driver=simx --cores=2 --clusters=2 --l2cache --debug=1 --perf=1 --app=demo --args="-n1"
-
-    echo "debugging tests done!"
-}
-
-scope()
-{
-    echo "begin scope tests..."
-
-    SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=opae --app=demo --args="-n1" --scope
-    SCOPE_DEPTH=128 ./ci/blackbox.sh --driver=xrt --app=demo --args="-n1" --scope
-
-    echo "debugging scope done!"
-}
-
-stress()
-{
-    echo "begin stress tests..."
-
-    # test verilator reset values
-    CONFIGS="-DVERILATOR_RESET_VALUE=1 -DSOCKET_SIZE=1 -DDCACHE_WRITEBACK=1 -DL2_WRITEBACK=1 -DL3_WRITEBACK=1" ./ci/blackbox.sh --driver=opae --cores=2 --clusters=2 --l2cache --l3cache --app=dogfood
-    CONFIGS="-DVERILATOR_RESET_VALUE=1" ./ci/blackbox.sh --driver=xrt --app=sgemm --args="-n128" --l2cache
-
-    echo "stress tests done!"
-}
-
-synthesis()
-{
-    echo "begin synthesis tests..."
-
-    PREFIX=build_base make -C hw/syn/yosys clean
-    PREFIX=build_base CONFIGS="-DDPI_DISABLE -DEXT_F_DISABLE -DNUM_WARPS=2 -DNUM_THREADS=2" make -C hw/syn/yosys synthesis
-
-    echo "synthesis tests done!"
-}
-
-vector()
-{
-    echo "begin vector tests..."
-
-    CONFIGS="-DVLEN=256 -DEXT_V_ENABLE" make -C sim/simx
-    VLEN=256 ./tests/riscv/riscv-vector-tests/run-test.sh
-
-    echo "vector tests done!"
-}
-
-tensor()
-{
-    echo "begin tensor tests..."
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=2 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu --debug=3 --log=run_simx.log
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=bf16 -DOTYPE=bf16" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=2 -DITYPE=int8 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=2 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu --debug=3 --log=run_rtlsim.log
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=4 -DITYPE=uint4 -DOTYPE=int32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=4 -DEXT_TCU_ENABLE" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=8 -DITYPE=fp16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_DPI -DISSUE_WIDTH=2" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_BHF" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-    CONFIGS="-DNUM_THREADS=8 -DEXT_TCU_ENABLE -DTCU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-
-    make -C tests/regression/sgemm_tcu clean && CONFIGS="-DNUM_THREADS=16 -DITYPE=bf16 -DOTYPE=fp32" make -C tests/regression/sgemm_tcu
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DPI" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_BHF" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-    CONFIGS="-DNUM_THREADS=16 -DEXT_TCU_ENABLE -DTCU_DSP" ./ci/blackbox.sh --driver=rtlsim --app=sgemm_tcu
-
-    echo "tensor tests done!"
-}
 
 cupbop() {
 
@@ -518,10 +235,10 @@ cupbop() {
     rm cupbop.zip
 
     echo "building simx runtime..."
-    make -C runtime/simx
+    make -C sw/runtime/simx
 
     PERF_CLASS=2
-    VORTEX_RUNTIME_DIR="runtime"
+    VORTEX_RUNTIME_DIR="sw/runtime"
     CUPBOP_RUNTIME_DIR="tests/cupbop/runtime"
 
     tests=("bfs" "nn")
@@ -542,97 +259,48 @@ cupbop() {
     echo "cupbop tests done!"
 }
 
+
 show_usage()
 {
-    echo "Vortex Regression Test"
-    echo "Usage: $0 [--clean] [--unittest] [--isa] [--kernel] [--regression] [--mpi] [--opencl] [--cache] [--config1] [--config2] [--debug] [--scope] [--stress] [--synthesis] [--vector] [--tensor] [--cupbop] [--sst] [--dtm] [--all] [--h|--help]"
+    echo "Vortex CI v2 local test runner (XLEN=$XLEN)"
+    echo "Usage: $0 [--clean] [--all] [--test <selector>] [-h|--help]"
+    echo
+    echo "  --all              run the ENTIRE catalog (every category) for this build"
+    echo "  --test <selector>  run a catalog slice; <selector> is a pytest marker"
+    echo "                     expression: a category (tensor), a driver (rtlsim), or a"
+    echo "                     combo (\"tensor and simx\", \"graphics and not rtlsim\")."
+    echo "                     Host flows are categories: --test dtm|sst|gem5|cupbop."
+    echo "  --clean            make clean && make before running"
+    # --run <flow> (dtm|sst|gem5|cupbop) is the internal backend the catalog's
+    # via:script host-flow cases call; it is not part of the user surface.
 }
 
-declare -a tests=()
 clean=0
+run_catalog=0      # --all / --test: drive the pytest catalog
+pytest_expr=""     # marker expression ("" = whole catalog)
+run_flow=""        # --run <flow>: internal host-flow backend
 
 while [ "$1" != "" ]; do
     case $1 in
         --clean )
                 clean=1
                 ;;
-        --unittest )
-                tests+=("unittest")
-                ;;
-        --isa )
-                tests+=("isa")
-                ;;
-        --kernel )
-                tests+=("kernel")
-                ;;
-        --regression )
-                tests+=("regression")
-                ;;
-        --mpi )
-                tests+=("mpi")
-                ;;
-        --opencl )
-                tests+=("opencl")
-                ;;
-        --cache )
-                tests+=("cache")
-                ;;
-        --vm )
-                tests+=("vm")
-                ;;
-        --config1 )
-                tests+=("config1")
-                ;;
-        --config2 )
-                tests+=("config2")
-                ;;
-        --debug )
-                tests+=("debug")
-                ;;
-        --scope )
-                tests+=("scope")
-                ;;
-        --stress )
-                tests+=("stress")
-                ;;
-        --synthesis )
-                tests+=("synthesis")
-                ;;
-        --vector )
-                tests+=("vector")
-                ;;
-        --tensor )
-                tests+=("tensor")
-                ;;
-        --cupbop )
-                tests+=("cupbop")
-                ;;
-        --sst )
-                tests+=("sst")
-                ;;
-        --dtm )
-                tests+=("dtm")
-                ;;
         --all )
-                tests=()
-                tests+=("unittest")
-                tests+=("isa")
-                tests+=("kernel")
-                tests+=("regression")
-                tests+=("mpi")
-                tests+=("opencl")
-                tests+=("cache")
-                tests+=("vm")
-                tests+=("config1")
-                tests+=("config2")
-                tests+=("debug")
-                tests+=("scope")
-                tests+=("stress")
-                tests+=("synthesis")
-                tests+=("vector")
-                tests+=("tensor")
-                tests+=("cupbop")
-                tests+=("dtm")
+                run_catalog=1
+                pytest_expr=""
+                ;;
+        --test )
+                shift
+                if [ -z "$1" ]; then
+                    echo "error: --test needs a selector (e.g. --test tensor)" >&2
+                    exit 1
+                fi
+                run_catalog=1
+                pytest_expr="$1"
+                ;;
+        --run )
+                shift
+                run_flow="$1"
                 ;;
         -h | --help )
                 show_usage
@@ -652,12 +320,41 @@ then
 fi
 
 start=$SECONDS
+rc=0
 
-for test in "${tests[@]}"; do
-    $test
-done
+if [ -n "$run_flow" ]; then
+    # Internal backend: run one multi-step host flow. The catalog's via:script
+    # dtm/sst/gem5/cupbop cases call `--run <flow>`; users reach them through
+    # `--test <flow>` (pytest -> the case -> here).
+    case "$run_flow" in
+        dtm | sst | gem5 | cupbop )
+                "$run_flow"
+                ;;
+        * )
+                echo "error: unknown --run flow: '$run_flow'" >&2
+                exit 1
+                ;;
+    esac
+elif [ $run_catalog -eq 1 ]; then
+    # Drive the pytest catalog under this build tree. No -m = everything (--all);
+    # a marker expression = a slice (--test). Don't let `set -e` abort on a red
+    # test — capture the status and report it below.
+    set +e
+    if [ -n "$pytest_expr" ]; then
+        VX_XLEN=$XLEN python3 -m pytest ci -m "$pytest_expr" --strict-markers
+    else
+        VX_XLEN=$XLEN python3 -m pytest ci --strict-markers
+    fi
+    rc=$?
+    set -e
+else
+    show_usage
+    exit 1
+fi
 
 echo "Regression completed!"
 
 duration=$(( SECONDS - start ))
 awk -v t=$duration 'BEGIN{t=int(t*1000); printf "Elapsed Time: %d:%02d:%02d\n", t/3600000, t/60000%60, t/1000%60}'
+
+exit $rc

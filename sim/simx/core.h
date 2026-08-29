@@ -13,229 +13,210 @@
 
 #pragma once
 
-#include <vector>
-#include <simobject.h>
+#include <memory>
 #include "types.h"
-#include "emulator.h"
-#include "pipeline.h"
-#include "cache_sim.h"
-#include "local_mem.h"
-#include "ibuffer.h"
-#include "scoreboard.h"
-
-#ifdef EXT_V_ENABLE
-#include "vpu/voperands.h"
-#include "vpu/vec_unit.h"
-#else
-#include "operands.h"
-#endif
-
-#include "dispatcher.h"
-#include "func_unit.h"
-#include "mem_coalescer.h"
+#include <mempool.h>
+#include "instr_trace.h"
 #include "VX_config.h"
+#ifdef VX_CFG_VM_ENABLE
+#include "mem/tlb_types.h"
+#endif
 
 namespace vortex {
 
 class Socket;
-class Arch;
-class DCRS;
+class ProcessorImpl;
+class Scheduler;
+class Scoreboard;
+class CsrUnit;
+class TcuUnit;
+class SfuUnit;
+class LocalMem;
+class LocalMemSwitch;
+class MemCoalescer;
 
 class Core : public SimObject<Core> {
 public:
   struct PerfStats {
-    uint64_t cycles;
-    uint64_t instrs;
-    uint64_t sched_idle;
-    uint64_t sched_stalls;
-    uint64_t ibuf_stalls;
-    uint64_t scrb_stalls;
-    uint64_t opds_stalls;
-    uint64_t scrb_alu;
-    uint64_t scrb_fpu;
-    uint64_t scrb_lsu;
-    uint64_t scrb_sfu;
-    uint64_t scrb_csrs;
-    uint64_t scrb_wctl;
-  #ifdef EXT_V_ENABLE
-    uint64_t vinstrs;
-    uint64_t scrb_vpu;
+    uint64_t cycles = 0;
+    uint64_t instrs = 0;
+    uint64_t sched_idle = 0;
+    uint64_t active_warps = 0;
+    uint64_t stalled_warps = 0;
+    uint64_t issued_warps = 0;
+    uint64_t issued_threads = 0;
+    uint64_t fetch_stalls = 0;
+    uint64_t ibuf_stalls = 0;
+    uint64_t scrb_stalls = 0;
+    uint64_t opds_stalls = 0;
+    uint64_t alu_stalls = 0;
+    uint64_t fpu_stalls = 0;
+    uint64_t lsu_stalls = 0;
+    uint64_t sfu_stalls = 0;
+  #ifdef VX_CFG_EXT_TCU_ENABLE
+    uint64_t tcu_stalls = 0;
   #endif
-  #ifdef EXT_TCU_ENABLE
-    uint64_t scrb_tcu;
+    uint64_t branches   = 0;
+    uint64_t divergence = 0;
+    uint64_t alu_instrs = 0;
+    uint64_t fpu_instrs = 0;
+    uint64_t lsu_instrs = 0;
+    uint64_t sfu_instrs = 0;
+  #ifdef VX_CFG_EXT_TCU_ENABLE
+    uint64_t tcu_instrs = 0;
   #endif
-    uint64_t ifetches;
-    uint64_t loads;
-    uint64_t stores;
-    uint64_t ifetch_latency;
-    uint64_t load_latency;
-
-    PerfStats()
-      : cycles(0)
-      , instrs(0)
-      , sched_idle(0)
-      , sched_stalls(0)
-      , ibuf_stalls(0)
-      , scrb_stalls(0)
-      , opds_stalls(0)
-      , scrb_alu(0)
-      , scrb_fpu(0)
-      , scrb_lsu(0)
-      , scrb_sfu(0)
-      , scrb_csrs(0)
-      , scrb_wctl(0)
-    #ifdef EXT_V_ENABLE
-      , vinstrs(0)
-      , scrb_vpu(0)
-    #endif
-    #ifdef EXT_TCU_ENABLE
-      , scrb_tcu(0)
-    #endif
-      , ifetches(0)
-      , loads(0)
-      , stores(0)
-      , ifetch_latency(0)
-      , load_latency(0)
-    {}
+    uint64_t ifetches = 0;
+    uint64_t loads = 0;
+    uint64_t stores = 0;
+    uint64_t ifetch_latency = 0;
+    uint64_t load_latency = 0;
   };
 
-  std::vector<SimPort<MemReq>> icache_req_ports;
-  std::vector<SimPort<MemRsp>> icache_rsp_ports;
+  std::vector<SimChannel<MemReq>> icache_req_out;
+  std::vector<SimChannel<MemRsp>> icache_rsp_in;
 
-  std::vector<SimPort<MemReq>> dcache_req_ports;
-  std::vector<SimPort<MemRsp>> dcache_rsp_ports;
+  std::vector<SimChannel<MemReq>> dcache_req_out;
+  std::vector<SimChannel<MemRsp>> dcache_rsp_in;
+
+  // Global-barrier event links, wired core <-> cluster at elaboration.
+  SimEventLink<GbarArrive> gbar_arrive_out;
+  SimEventLink<GbarResume> gbar_resume_in;
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  // Fragment-work-distributor event links, wired core <-> raster core.
+  SimEventLink<FwdArm>  fwd_arm_in;
+  SimEventLink<FwdDone> fwd_done_out;
+#endif
 
   Core(const SimContext& ctx,
+       const char* name,
        uint32_t core_id,
-       Socket* socket,
-       const Arch &arch,
-       const DCRS &dcrs
+       Socket* socket
   );
 
   ~Core();
-
-  void reset();
-
-  void tick();
-
-  void attach_ram(RAM* ram);
-#ifdef VM_ENABLE
-  void set_satp(uint64_t satp);
-#endif
 
   bool running() const;
 
   void resume(uint32_t wid);
 
-  bool barrier(uint32_t bar_id, uint32_t count, uint32_t wid);
+  bool has_pending_instrs(uint32_t wid) const;
+  bool lsu_drained() const;
+
+  void barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar);
+
+  bool barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid);
+
+  void global_barrier_resume(uint32_t bar_id);
+
+  void barrier_event_attach(uint32_t bar_id, uint32_t count = 1);
+
+  void barrier_event_release(uint32_t bar_id);
 
   bool wspawn(uint32_t num_warps, Word nextPC);
 
+  bool setTmask(uint32_t wid, const ThreadMask& tmask);
+
   uint32_t id() const {
     return core_id_;
-  }
-
-  const Arch& arch() const {
-    return arch_;
   }
 
   Socket* socket() const {
     return socket_;
   }
 
-  const LocalMem::Ptr& local_mem() const {
-    return local_mem_;
-  }
+  const std::shared_ptr<LocalMem>& local_mem() const;
 
-  const MemCoalescer::Ptr& mem_coalescer(uint32_t idx) const {
-    return mem_coalescers_.at(idx);
-  }
+  const std::shared_ptr<MemCoalescer>& mem_coalescer(uint32_t idx) const;
 
-  void dcache_read(void* data, uint64_t addr, uint32_t size) {
-    return emulator_.dcache_read(data, addr, size);
-  }
+#ifdef VX_CFG_VM_ENABLE
+  struct MmuPerfStats {
+    uint64_t tlb_reads = 0;
+    uint64_t tlb_hits = 0;
+    uint64_t tlb_misses = 0;
+    uint64_t tlb_evictions = 0;
+  };
 
-  void dcache_write(const void* data, uint64_t addr, uint32_t size) {
-    return emulator_.dcache_write(data, addr, size);
-  }
+  // Combined icache + dcache MMU counters (one bank per core).
+  MmuPerfStats mmu_perf_stats() const;
 
-  Emulator& emulator() {
-    return emulator_;
-  }
+  // Miss/fill channel access for cluster-level TLB binding:
+  // which 0 = dcache-side, 1 = icache-side.
+  SimChannel<TlbReq>& tlb_miss_out(uint32_t which);
+  SimChannel<TlbRsp>& tlb_fill_in(uint32_t which);
 
-#ifdef EXT_TCU_ENABLE
-  TensorUnit::Ptr& tensor_unit() {
-    return tensor_unit_;
-  }
+  // Device-idle TLB invalidation (host-driven flush broadcast).
 #endif
 
-#ifdef EXT_V_ENABLE
-  VecUnit::Ptr& vec_unit() {
-    return vec_unit_;
-  }
+  // Used by LsuUnit to drive the per-block load/store switch.
+  const std::shared_ptr<LocalMemSwitch>& lmem_switch(uint32_t idx) const;
+
+  ProcessorImpl* processor() const;
+
+  Scheduler&  scheduler();
+  Scoreboard& scoreboard();
+  CsrUnit&    csr_unit();
+  uint32_t    mpm_class() const;
+
+  // DTM debug-only accessors (sim/simx/dtm/debug_module.cpp).
+  Word dtm_get_pc(uint32_t wid) const;
+  void dtm_set_pc(uint32_t wid, Word pc);
+  Word dtm_get_ireg(uint32_t wid, uint32_t reg);
+  void dtm_set_ireg(uint32_t wid, uint32_t reg, Word val);
+
+  int dcr_write(uint32_t addr, uint32_t value);
+
+  int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
+
+#ifdef VX_CFG_VM_ENABLE
+  // Device satp — invoked from Cluster::set_mmu_satp on the MMU DCR write.
+  // Fans out to both per-core MMUs (dcache + icache). Translation itself
+  // happens asynchronously inside the Mmu SimObject; LSU/fetch emit VAs.
+  void set_satp(uint64_t satp);
 #endif
 
-  auto& trace_pool() {
-    return trace_pool_;
-  }
+
+#ifdef VX_CFG_EXT_TCU_ENABLE
+  std::shared_ptr<TcuUnit>& tcu_unit();
+#endif
+
+  std::shared_ptr<SfuUnit> sfu_unit();
+
+  PoolAllocator<instr_trace_t, 64>& trace_pool();
+
+  // Pipeline flush for the given warp on async-trap entry. Drains the
+  // warp's ibuffer (returning traces to the pool), resets the matching
+  // ibuf-inflight slot count, and clears the sequencer's cached uop so
+  // the next decode starts fresh. The post-trap fetches at mtvec then
+  // populate an empty pipeline. Mirrors a real RISC-V core's trap-entry
+  // flush; called from Scheduler::raise_async_trap. Returns the PC of
+  // the FIRST flushed instruction (the oldest unissued one) so the trap
+  // can set mepc to where the warp must resume; if the ibuffer was
+  // empty, returns the current fetch PC (warp.PC) unchanged.
+  Word flush_warp_pipeline(uint32_t wid);
 
   const PerfStats& perf_stats() const;
+  PerfStats& perf_stats();
 
   int get_exitcode() const;
 
-private:
+protected:
+  void on_reset();
+  void on_tick();
 
-  void schedule();
-  void fetch();
-  void decode();
-  void issue();
-  void execute();
-  void commit();
+private:
+  void on_gbar_resume(const GbarResume& msg);
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  void on_fwd_arm(const FwdArm& msg);
+#endif
 
   uint32_t core_id_;
-  Socket* socket_;
-  const Arch& arch_;
+  Socket*  socket_;
 
-#ifdef EXT_TCU_ENABLE
-  TensorUnit::Ptr tensor_unit_;
-#endif
+  class Impl;
+  Impl* impl_;
 
-#ifdef EXT_V_ENABLE
-  VecUnit::Ptr vec_unit_;
-#endif
-
-  Emulator emulator_;
-
-  std::vector<IBuffer> ibuffers_;
-  Scoreboard scoreboard_;
-  std::vector<Operands::Ptr> operands_;
-  std::vector<Dispatcher::Ptr> dispatchers_;
-  std::vector<FuncUnit::Ptr> func_units_;
-  LocalMem::Ptr local_mem_;
-  std::vector<LocalMemSwitch::Ptr> lmem_switch_;
-  std::vector<MemCoalescer::Ptr> mem_coalescers_;
-
-  PipelineLatch fetch_latch_;
-  PipelineLatch decode_latch_;
-
-  HashTable<instr_trace_t*> pending_icache_;
-  std::list<instr_trace_t*, PoolAllocator<instr_trace_t*, 64>> pending_instrs_;
-
-  uint64_t pending_ifetches_;
-
-  mutable PerfStats perf_stats_;
-
-  std::vector<TraceArbiter::Ptr> commit_arbs_;
-
-  uint32_t commit_exe_;
-  std::vector<Arbiter> ibuffer_arbs_;
-
-  PoolAllocator<instr_trace_t, 64> trace_pool_;
-
-  friend class LsuUnit;
-  friend class AluUnit;
-  friend class FpuUnit;
-  friend class SfuUnit;
+  friend class SimObject<Core>;
 };
 
 } // namespace vortex

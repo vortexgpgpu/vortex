@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1460 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="g_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+  </defs>
+  <style>
+    .t   { fill:#1b2733; font-size:20px; font-weight:bold; }
+    .st  { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .th  { fill:#1b2733; font-size:13px; font-weight:bold; }
+    .ts  { fill:#44525f; font-size:10.5px; }
+    .tt  { fill:#5a6772; font-size:10px; font-style:italic; }
+    .cm  { font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#1b2733; }
+    .box { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.3; }
+    .hdr { fill:#eef1f4; stroke:#5a7184; stroke-width:1.2; }
+    .tag { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .lin { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .bnk { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .sec { fill:#fdf6e3; stroke:#b58900; stroke-width:1.4; }
+    .wrd { fill:#e9eef2; stroke:#5a7184; stroke-width:1.4; }
+    .sec2{ fill:#fdf6e3; stroke:#b58900; stroke-width:1.2; }
+    .w   { stroke:#2e5e82; stroke-width:1.5; fill:none; marker-end:url(#g_a); }
+    .lb  { fill:#2e5e82; font-size:10px; }
+    .dim { stroke:#5a7184; stroke-width:1; fill:none; }
+  </style>
+
+  <rect x="0" y="0" width="1460" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Line, sector, word — three independent granules</text>
+  <text x="24" y="56" class="st">Decoupling them lets tag cost, memory-transaction size, and bank count be tuned separately. The address decode below is the whole story.</text>
+
+  <!-- ===== granule anatomy ===== -->
+  <rect x="30" y="80" width="700" height="300" rx="8" class="box"/>
+  <rect x="30" y="80" width="220" height="24" rx="4" class="hdr"/>
+  <text x="42" y="97" class="th">Anatomy of one line</text>
+
+  <text x="46" y="128" class="ts">One tag covers a whole LINE. The line splits into SECTORS, each with its own</text>
+  <text x="46" y="144" class="ts">valid + dirty state. Each sector splits into WORDS — the access granule.</text>
+
+  <!-- the line bar -->
+  <text x="46" y="180" class="cm">LINE_SIZE (one tag)</text>
+  <rect x="46" y="188" width="656" height="34" rx="3" class="lin"/>
+  <text x="330" y="210" class="cm">one tag · one replacement victim</text>
+
+  <!-- sectors -->
+  <text x="46" y="248" class="cm">SECTOR_SIZE (fill / eviction / mem-request granule)</text>
+  <rect x="46" y="256" width="324" height="34" rx="3" class="sec"/>
+  <text x="118" y="278" class="cm">sector 0 — valid, dirty</text>
+  <rect x="378" y="256" width="324" height="34" rx="3" class="sec"/>
+  <text x="450" y="278" class="cm">sector 1 — valid, dirty</text>
+
+  <!-- words -->
+  <text x="46" y="316" class="cm">WORD_SIZE (coalescer output / per-request access granule)</text>
+  <rect x="46"  y="324" width="78" height="34" rx="3" class="wrd"/>
+  <rect x="128" y="324" width="78" height="34" rx="3" class="wrd"/>
+  <rect x="210" y="324" width="78" height="34" rx="3" class="wrd"/>
+  <rect x="292" y="324" width="78" height="34" rx="3" class="wrd"/>
+  <rect x="378" y="324" width="78" height="34" rx="3" class="wrd"/>
+  <rect x="460" y="324" width="78" height="34" rx="3" class="wrd"/>
+  <rect x="542" y="324" width="78" height="34" rx="3" class="wrd"/>
+  <rect x="624" y="324" width="78" height="34" rx="3" class="wrd"/>
+  <text x="70" y="346" class="cm">w0</text>
+  <text x="152" y="346" class="cm">w1</text>
+  <text x="234" y="346" class="cm">w2</text>
+  <text x="316" y="346" class="cm">w3</text>
+  <text x="402" y="346" class="cm">w4</text>
+  <text x="484" y="346" class="cm">w5</text>
+  <text x="566" y="346" class="cm">w6</text>
+  <text x="648" y="346" class="cm">w7</text>
+
+  <text x="46" y="374" class="tt">SECTOR_SIZE == LINE_SIZE means one sector per line — an unsectored cache. That is the icache and dcache default.</text>
+
+  <!-- ===== who is sectored ===== -->
+  <rect x="756" y="80" width="676" height="300" rx="8" class="box"/>
+  <rect x="756" y="80" width="240" height="24" rx="4" class="hdr"/>
+  <text x="768" y="97" class="th">Which levels are sectored</text>
+
+  <text x="772" y="128" class="ts">L2 and L3 double the line to halve the tag count, while the sector stays at the</text>
+  <text x="772" y="144" class="ts">memory-bus transaction size. The L1s keep LINE = SECTOR = MEM_BLOCK.</text>
+
+  <rect x="772" y="162" width="644" height="26" rx="3" class="hdr"/>
+  <text x="784"  y="180" class="cm">level</text>
+  <text x="880"  y="180" class="cm">LINE</text>
+  <text x="1050" y="180" class="cm">SECTOR</text>
+  <text x="1188" y="180" class="cm">sectors/line</text>
+  <rect x="772" y="188" width="644" height="24" rx="0" class="tag"/>
+  <text x="784"  y="205" class="cm">icache</text>
+  <text x="880"  y="205" class="cm">L1_LINE_SIZE</text>
+  <text x="1050" y="205" class="cm">= LINE</text>
+  <text x="1188" y="205" class="cm">1  (unsectored)</text>
+  <rect x="772" y="212" width="644" height="24" rx="0" class="tag"/>
+  <text x="784"  y="229" class="cm">dcache</text>
+  <text x="880"  y="229" class="cm">L1_LINE_SIZE</text>
+  <text x="1050" y="229" class="cm">= LINE</text>
+  <text x="1188" y="229" class="cm">1  (unsectored)</text>
+  <rect x="772" y="236" width="644" height="24" rx="0" class="sec2"/>
+  <text x="784"  y="253" class="cm">L2</text>
+  <text x="880"  y="253" class="cm">2 x MEM_BLOCK</text>
+  <text x="1050" y="253" class="cm">MEM_BLOCK</text>
+  <text x="1188" y="253" class="cm">2  (sectored)</text>
+  <rect x="772" y="260" width="644" height="24" rx="0" class="sec2"/>
+  <text x="784"  y="277" class="cm">L3</text>
+  <text x="880"  y="277" class="cm">2 x MEM_BLOCK</text>
+  <text x="1050" y="277" class="cm">MEM_BLOCK</text>
+  <text x="1188" y="277" class="cm">2  (sectored)</text>
+
+  <text x="772" y="306" class="tt">The 2x line only applies when the level is ENABLED. A disabled L2/L3 is a passthrough,</text>
+  <text x="772" y="320" class="tt">so its LINE/SECTOR expressions collapse to the upstream granule (both 64 B at stock</text>
+  <text x="772" y="334" class="tt">defaults, where L2 and L3 are off).</text>
+
+  <text x="772" y="360" class="ts">A sectored miss fetches only the missing sector; the line's other sectors fill</text>
+  <text x="772" y="374" class="ts">on demand — half the fill bandwidth for strided access.</text>
+
+  <!-- ===== address decode ===== -->
+  <rect x="30" y="408" width="1402" height="266" rx="8" class="box"/>
+  <rect x="30" y="408" width="300" height="24" rx="4" class="hdr"/>
+  <text x="42" y="425" class="th">Address decode — VX_cache_define.vh</text>
+
+  <text x="46" y="456" class="ts">The bus carries a WORD-granular address (ADDR_WIDTH = MEM_ADDR_WIDTH − clog2(DATA_SIZE)), so the byte offset is already gone. What remains splits like this:</text>
+
+  <!-- field bar -->
+  <rect x="46"  y="476" width="430" height="46" rx="3" class="tag"/>
+  <text x="186" y="505" class="cm">CS_TAG_SEL_BITS</text>
+  <rect x="480" y="476" width="330" height="46" rx="3" class="lin"/>
+  <text x="574" y="505" class="cm">CS_LINE_SEL_BITS</text>
+  <rect x="814" y="476" width="230" height="46" rx="3" class="bnk"/>
+  <text x="864" y="505" class="cm">CS_BANK_SEL_BITS</text>
+  <rect x="1048" y="476" width="180" height="46" rx="3" class="sec"/>
+  <text x="1062" y="505" class="cm">SECTOR_SEL</text>
+  <rect x="1232" y="476" width="184" height="46" rx="3" class="wrd"/>
+  <text x="1244" y="505" class="cm">word-in-sector</text>
+
+  <text x="46" y="470" class="cm">MSB</text>
+  <text x="1392" y="470" class="cm">LSB</text>
+
+  <!-- brace for word_sel -->
+  <path d="M 1048 530 L 1048 540 L 1416 540 L 1416 530" class="dim"/>
+  <text x="1148" y="556" class="cm">CS_WORD_SEL_BITS = clog2(LINE_SIZE / WORD_SIZE)</text>
+  <text x="1058" y="572" class="tt">the sector index is simply the TOP bits of the in-line word offset</text>
+
+  <text x="46" y="596" class="ts">Two consequences worth internalizing:</text>
+  <text x="46" y="618" class="ts">1.  The bank field sits directly ABOVE the in-line word offset, so BANKS INTERLEAVE AT THE LINE — a whole line lives in exactly one bank. A single warp's</text>
+  <text x="70" y="634" class="ts">coalesced footprint therefore touches only footprint/LINE banks; the remaining banks exist to serve OTHER warps (cross-warp MLP), not to widen one warp.</text>
+  <text x="46" y="656" class="ts">2.  The sector index is not a separate field — it is carved out of the word offset. That is why a fill can ride the pipeline carrying only word_idx.</text>
+
+  <!-- ===== derived quantities ===== -->
+  <rect x="30" y="700" width="686" height="176" rx="8" class="box"/>
+  <rect x="30" y="700" width="216" height="24" rx="4" class="hdr"/>
+  <text x="42" y="717" class="th">Derived geometry</text>
+  <text x="46" y="746" class="cm">CS_BANK_SIZE      = CACHE_SIZE / NUM_BANKS</text>
+  <text x="46" y="766" class="cm">CS_LINES_PER_BANK = CS_BANK_SIZE / (LINE_SIZE * NUM_WAYS)</text>
+  <text x="46" y="786" class="cm">CS_WORDS_PER_LINE = LINE_SIZE / WORD_SIZE</text>
+  <text x="46" y="806" class="cm">CS_SECTORS_PER_LINE = LINE_SIZE / SECTOR_SIZE</text>
+  <text x="46" y="826" class="cm">CS_WORDS_PER_SECTOR = SECTOR_SIZE / WORD_SIZE</text>
+  <text x="46" y="852" class="tt">CS_LINES_PER_BANK is the depth of the tag array and the flush walk counter;</text>
+  <text x="46" y="866" class="tt">NUM_BANKS must be a power of two (static assert in VX_cache.sv).</text>
+
+  <!-- ===== memory-side widths ===== -->
+  <rect x="746" y="700" width="686" height="176" rx="8" class="box"/>
+  <rect x="746" y="700" width="290" height="24" rx="4" class="hdr"/>
+  <text x="758" y="717" class="th">The memory side transacts in SECTORS</text>
+  <text x="762" y="746" class="ts">The cache tracks lines, but its memory interface is sector-granular, so the</text>
+  <text x="762" y="762" class="ts">mem address carries CS_SECTOR_SEL_BITS below the line address:</text>
+  <text x="762" y="788" class="cm">CS_MEM_SECTOR_ADDR_WIDTH  = MEM_ADDR_WIDTH - clog2(SECTOR_SIZE)</text>
+  <text x="762" y="808" class="cm">CS_LINE_SECTOR_ADDR_WIDTH = CS_MEM_SECTOR_ADDR_WIDTH - clog2(NUM_BANKS)</text>
+  <text x="762" y="836" class="tt">With one sector per line these collapse back to the line-granular widths, which is</text>
+  <text x="762" y="850" class="tt">why the unsectored L1 path costs nothing. VX_cache re-inserts the bank id above</text>
+  <text x="762" y="864" class="tt">the sector when it drives the memory bus.</text>
+</svg>

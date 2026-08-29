@@ -1,0 +1,39 @@
+ROOT_DIR := $(realpath ../../..)
+include $(ROOT_DIR)/config.mk
+
+# TEX takes u/v/lod in registers (vx_tex, R4-type), so this needs nothing but TEX.
+# The host harness + assets are reused from gfx_tex and the output is diffed
+# against the gfx_tex point-sample golden, so PASS proves the two agree per pixel.
+CONFIGS := $(if $(findstring -DVX_CFG_EXT_TEX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TEX_ENABLE)
+
+PROJECT := gfx_tex4
+
+SRC_DIR := $(VORTEX_HOME)/tests/graphics/$(PROJECT)
+TEX_DIR := $(VORTEX_HOME)/tests/graphics/gfx_tex
+
+SRCS := $(SRC_DIR)/main.cpp
+
+VX_SRCS := $(SRC_DIR)/kernel.cpp
+
+VX_CFLAGS += -I$(VORTEX_HOME)/sw/common -I$(THIRD_PARTY_DIR)
+
+# The kernel includes gfx_sw.h for the -S software-sampler path; its OM
+# build contract requires the divergence-bbs flag + GFX_SW_DIVERGENCE_OK.
+include $(VORTEX_HOME)/sw/gfx/libgfx_sw.mk
+VX_CFLAGS += $(LIBGFX_SW_VX_CFLAGS)
+
+CXXFLAGS += -I$(VORTEX_HOME)/sw/common -I$(THIRD_PARTY_DIR) -DASSETS_PATHS='"$(TEX_DIR)"'
+
+LDFLAGS += $(THIRD_PARTY_DIR)/cocogfx/libcocogfx.a -lpng -lz
+
+KERNEL_LIB := vortex2
+
+# Sample via vx_tex4 (point filter) and validate against the gfx_tex g0 golden.
+# Add -S for the software-sampler path (gfx_sw::tex_sample_sw over the
+# LSU instead of the TEX unit) — bit-exact vs the same golden. NOTE: validate the
+# -S path on rtlsim (run-rtlsim ... -S => PASS); on simx it shows an 8px artifact
+# from a dcache/mem-model bug under heavy texture-read + dst-writeback thrash (RTL
+# is correct). See memory project_simx_dcache_lsu_thrash_bug.
+OPTS ?= -i palette64.png -r palette64_ref_g0.png -g 0
+
+include ../common.mk

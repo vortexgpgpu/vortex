@@ -15,10 +15,18 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include "verilated.h"
 
 #ifdef VCD_OUTPUT
-#include <verilated_vcd_c.h>	// Trace file format header
+#include <verilated_vcd_c.h>
+#endif
+#ifdef SAIF_OUTPUT
+#include <verilated_saif_c.h>
+#endif
+
+#if defined(VCD_OUTPUT) && defined(SAIF_OUTPUT)
+#error "VCD_OUTPUT and SAIF_OUTPUT cannot both be defined"
 #endif
 
 template <typename T>
@@ -29,6 +37,9 @@ private:
 #ifdef VCD_OUTPUT
   VerilatedVcdC tfp_;
 #endif
+#ifdef SAIF_OUTPUT
+  VerilatedSaifC sfp_;
+#endif
 
 public:
 
@@ -38,13 +49,23 @@ public:
   #ifdef VCD_OUTPUT
     Verilated::traceEverOn(true);
     top_.trace(&tfp_, 99);
-    tfp_.open("trace.vcd");
+    const char* vcd_file = std::getenv("VCD_FILE");
+    tfp_.open(vcd_file ? vcd_file : "trace.vcd");
+  #endif
+  #ifdef SAIF_OUTPUT
+    Verilated::traceEverOn(true);
+    top_.trace(&sfp_, 99);
+    const char* saif_file = std::getenv("SAIF_FILE");
+    sfp_.open(saif_file ? saif_file : "trace.saif");
   #endif
   }
 
   ~vl_simulator() {
   #ifdef VCD_OUTPUT
     tfp_.close();
+  #endif
+  #ifdef SAIF_OUTPUT
+    sfp_.close();
   #endif
     top_.final();
   }
@@ -61,6 +82,9 @@ public:
       top_.eval();
     #ifdef VCD_OUTPUT
       tfp_.dump(ticks);
+    #endif
+    #ifdef SAIF_OUTPUT
+      sfp_.dump(ticks);
     #endif
       top_.clk = !top_.clk;
       ++ticks;

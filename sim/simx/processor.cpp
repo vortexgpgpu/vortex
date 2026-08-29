@@ -13,73 +13,142 @@
 
 #include "processor.h"
 #include "processor_impl.h"
-#include "emulator.h"
 #include "core.h"
+#include "scheduler.h"
+#include <VX_types.h>
+
+#include <cstdlib>
+#include <execinfo.h>
 
 using namespace vortex;
 
-ProcessorImpl::ProcessorImpl(const Arch& arch)
-  : arch_(arch)
-  , clusters_(arch.num_clusters())
+static void simx_print_backtrace() {
+  void* addrs[64];
+  int count = ::backtrace(addrs, int(std::size(addrs)));
+  char** symbols = ::backtrace_symbols(addrs, count);
+  if (symbols == nullptr)
+    return;
+  std::cerr << "Backtrace (" << count << " frames):" << std::endl;
+  for (int i = 0; i < count; ++i) {
+    std::cerr << "  " << symbols[i] << std::endl;
+  }
+  std::free(symbols);
+}
+
+ProcessorImpl::ProcessorImpl()
+  : clusters_(VX_CFG_NUM_CLUSTERS)
 {
   SimPlatform::instance().initialize();
+  SimPlatform::instance().set_num_workers(SIMX_NUM_WORKERS);
 
-	assert(PLATFORM_MEMORY_DATA_SIZE == MEM_BLOCK_SIZE);
+	assert(VX_CFG_PLATFORM_MEMORY_DATA_SIZE == VX_CFG_MEM_BLOCK_SIZE);
+
+  // create kernel management unit (SimObject)
+  constexpr uint32_t total_cores = VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+  kmu_ = Kmu::Create("kmu", total_cores);
 
   // create memory simulator
-  memsim_ = MemSim::Create("dram", MemSim::Config{
-    PLATFORM_MEMORY_NUM_BANKS,
-    L3_MEM_PORTS,
-    MEM_BLOCK_SIZE,
+  memsim_ = Memory::Create("dram", Memory::Config{
+    VX_CFG_PLATFORM_MEMORY_NUM_BANKS,
+    VX_CFG_L3_MEM_PORTS,
+    VX_CFG_MEM_BLOCK_SIZE,
     MEM_CLOCK_RATIO
   });
 
+  char sname[100];
+
   // create clusters
-  for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
-    clusters_.at(i) = Cluster::Create(i, this, arch, dcrs_);
+  for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
+    snprintf(sname, 100, "cluster%d", i);
+    clusters_.at(i) = Cluster::Create(sname, i, this);
   }
 
-  // create L3 cache
-  l3cache_ = CacheSim::Create("l3cache", CacheSim::Config{
-    !L3_ENABLED,
-    log2ceil(L3_CACHE_SIZE),  // C
-    log2ceil(MEM_BLOCK_SIZE), // L
-    log2ceil(L2_LINE_SIZE),   // W
-    log2ceil(L3_NUM_WAYS),    // A
-    log2ceil(L3_NUM_BANKS),   // B
-    XLEN,                     // address bits
-    L3_NUM_REQS,              // request size
-    L3_MEM_PORTS,             // memory ports
-    L3_WRITEBACK,             // write-back
+  // Launch bus: a registered, credit-gated lane from the KMU to each core's
+  // dispatcher; CTAs cross into the core's domain through the slice, and
+  // admission credits return to the KMU through a slice of their own.
+  constexpr uint32_t cores_per_cluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+  for (uint32_t i = 0; i < total_cores; ++i) {
+    snprintf(sname, 100, "kmu-lane%d", i);
+    auto slice = RegSlice<kmu_req_t>::Create(sname, 1);
+    auto* core = clusters_.at(i / cores_per_cluster)->get_core(i % cores_per_cluster);
+    kmu_->bus_out.at(i).bind(&slice->In);
+    slice->Out.bind(&core->scheduler().cta_dispatcher()->bus_in);
+    snprintf(sname, 100, "kmu-credit%d", i);
+    RegSlice<uint8_t>::Ptr cslice;
+    {
+      // The return slice is owned by the sending core's partition so its
+      // output is the registered crossing back into the uncore domain.
+      SimPlatform::DomainScope core_scope(core);
+      cslice = RegSlice<uint8_t>::Create(sname, 1);
+    }
+    core->scheduler().cta_dispatcher()->credit_out.bind(&cslice->In);
+    cslice->Out.bind(&kmu_->credit_in.at(i));
+  }
+
+  // create L3 cache; when L3 is enabled it is the LLC, otherwise it is a
+  // transparent bypass arbiter and the L2 (or L1) is the LLC.
+  l3cache_ = Cache::Create("l3cache", Cache::Config{
+    !VX_CFG_L3_ENABLED,
+    log2ceil(VX_CFG_L3_SIZE),  // C
+    log2ceil(VX_CFG_L3_LINE_SIZE),   // L
+    log2ceil(VX_CFG_L3_SECTOR_SIZE), // S
+    log2ceil(VX_CFG_L2_SECTOR_SIZE), // W
+    log2ceil(VX_CFG_L3_NUM_WAYS),    // A
+    log2ceil(VX_CFG_L3_NUM_BANKS),   // B
+    VX_CFG_XLEN,                     // address bits
+    VX_CFG_L3_NUM_REQS,              // request size
+    VX_CFG_L3_MEM_PORTS,             // memory ports
+    VX_CFG_L3_WRITEBACK,             // write-back
     false,                    // write response
-    L3_MSHR_SIZE,             // mshr size
-    2,                        // pipeline latency
+    VX_CFG_L3_MSHR_SIZE,             // mshr size
+    VX_CFG_L3_LATENCY,               // pipeline latency
+    VX_CFG_L3_REPL_POLICY,           // replacement policy
+    VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
     }
   );
 
+#if VX_CFG_EXT_A_ENABLED
+  // Build-time invariant: every cache above the LLC must be write-through.
+  // A write-back intermediate could absorb a store without the LLC seeing it;
+  // a later SC on the same line would spuriously succeed (RVA permits
+  // spurious failure, not spurious success).
+#if VX_CFG_L3_ENABLED
+  static_assert(!VX_CFG_DCACHE_WRITEBACK, "AMO requires write-through L1 (VX_CFG_DCACHE_WRITEBACK=0) when L3 is the LLC");
+  static_assert(!VX_CFG_L2_WRITEBACK,     "AMO requires write-through L2 (VX_CFG_L2_WRITEBACK=0) when L3 is the LLC");
+#elif VX_CFG_L2_ENABLED
+  static_assert(!VX_CFG_DCACHE_WRITEBACK, "AMO requires write-through L1 (VX_CFG_DCACHE_WRITEBACK=0) when L2 is the LLC");
+  // L1 is unconstrained when L1 itself is the LLC.
+#endif
+
+  // Non-LLC AMO passthrough: AmoProbe entries probe-and-invalidate the local
+  // line then forward via mem_req_out tagged with AMO_PASSTHRU_TAG_FLAG so
+  // the response routes back to core_rsp_out without installing a fill.
+  // L1-only builds keep the dcache as the LLC and never enter this path.
+#endif
+
   // connect L3 core interfaces
-  for (uint32_t i = 0; i < arch.num_clusters(); ++i) {
-    for (uint32_t j = 0; j < L2_MEM_PORTS; ++j) {
-      clusters_.at(i)->mem_req_ports.at(j).bind(&l3cache_->CoreReqPorts.at(i * L2_MEM_PORTS + j));
-      l3cache_->CoreRspPorts.at(i * L2_MEM_PORTS + j).bind(&clusters_.at(i)->mem_rsp_ports.at(j));
+  for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
+    for (uint32_t j = 0; j < VX_CFG_L2_MEM_PORTS; ++j) {
+      clusters_.at(i)->mem_req_out.at(j).bind(&l3cache_->core_req_in.at(i * VX_CFG_L2_MEM_PORTS + j));
+      l3cache_->core_rsp_out.at(i * VX_CFG_L2_MEM_PORTS + j).bind(&clusters_.at(i)->mem_rsp_in.at(j));
     }
   }
 
   // connect L3 memory interfaces
-  for (uint32_t i = 0; i < L3_MEM_PORTS; ++i) {
-    l3cache_->MemReqPorts.at(i).bind(&memsim_->MemReqPorts.at(i));
-    memsim_->MemRspPorts.at(i).bind(&l3cache_->MemRspPorts.at(i));
+  for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
+    l3cache_->mem_req_out.at(i).bind(&memsim_->mem_req_in.at(i));
+    memsim_->mem_rsp_out.at(i).bind(&l3cache_->mem_rsp_in.at(i));
   }
 
   // set up memory profiling
-  for (uint32_t i = 0; i < L3_MEM_PORTS; ++i) {
-    memsim_->MemReqPorts.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
+  for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
+    memsim_->mem_req_in.at(i).tx_callback([&](const MemReq& req, uint64_t cycle){
       __unused (cycle);
-      perf_mem_reads_  += !req.write;
-      perf_mem_writes_ += req.write;
-      perf_mem_pending_reads_ += !req.write;
+      perf_mem_reads_  += !req.is_write();
+      perf_mem_writes_ += req.is_write();
+      perf_mem_pending_reads_ += !req.is_write();
     });
-    memsim_->MemRspPorts.at(i).tx_callback([&](const MemRsp&, uint64_t cycle){
+    memsim_->mem_rsp_out.at(i).tx_callback([&](const MemRsp&, uint64_t cycle){
       __unused (cycle);
       --perf_mem_pending_reads_;
     });
@@ -88,13 +157,13 @@ ProcessorImpl::ProcessorImpl(const Arch& arch)
 #ifndef NDEBUG
   // dump device configuration
   std::cout << "CONFIGS:"
-            << " num_threads=" << arch.num_threads()
-            << ", num_warps=" << arch.num_warps()
-            << ", num_cores=" << arch.num_cores()
-            << ", num_clusters=" << arch.num_clusters()
-            << ", socket_size=" << arch.socket_size()
-            << ", local_mem_base=0x" << std::hex << arch.local_mem_base() << std::dec
-            << ", num_barriers=" << arch.num_barriers()
+            << " num_threads=" << VX_CFG_NUM_THREADS
+            << ", num_warps=" << VX_CFG_NUM_WARPS
+            << ", num_cores=" << VX_CFG_NUM_CORES
+            << ", num_clusters=" << VX_CFG_NUM_CLUSTERS
+            << ", socket_size=" << VX_CFG_SOCKET_SIZE
+            << ", local_mem_base=0x" << std::hex << VX_MEM_LMEM_BASE_ADDR << std::dec
+            << ", num_barriers=" << VX_CFG_NUM_BARRIERS
             << std::endl;
 #endif
   // reset the device
@@ -106,49 +175,246 @@ ProcessorImpl::~ProcessorImpl() {
 }
 
 void ProcessorImpl::attach_ram(RAM* ram) {
-  for (auto cluster : clusters_) {
-    cluster->attach_ram(ram);
-  }
+  ram_ = ram;
+  memsim_->attach_ram(ram);
 }
-#ifdef VM_ENABLE
-void ProcessorImpl::set_satp(uint64_t satp) {
-  for (auto cluster : clusters_) {
-    cluster->set_satp(satp);
-  }
-}
+
+void ProcessorImpl::flush_caches() {
+  // Cache hierarchy is drained inside-out: issue all L1 flush_begin() calls
+  // up-front so icache, dcache, and graphics caches flush in parallel, then
+  // tick until all surfaces report flush_done().
+
+  // L1 surfaces: dcache + icache + graphics caches.
+  // Write-through surfaces early-exit in Cache::flush_begin().
+  for (auto& cluster : clusters_) {
+    cluster->dcache_flush_begin();
+    cluster->icache_flush_begin();
+#ifdef VX_CFG_EXT_TEX_ENABLE
+    cluster->tcache_flush_begin();
 #endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+    cluster->rcache_flush_begin();
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+    cluster->ocache_flush_begin();
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    cluster->rtcache_flush_begin();
+#endif
+  }
+  while (true) {
+    bool all_done = true;
+    for (auto& cluster : clusters_) {
+      if (!cluster->dcache_flush_done()) { all_done = false; break; }
+      if (!cluster->icache_flush_done()) { all_done = false; break; }
+#ifdef VX_CFG_EXT_TEX_ENABLE
+      if (!cluster->tcache_flush_done()) { all_done = false; break; }
+#endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+      if (!cluster->rcache_flush_done()) { all_done = false; break; }
+#endif
+#ifdef VX_CFG_EXT_OM_ENABLE
+      if (!cluster->ocache_flush_done()) { all_done = false; break; }
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+      if (!cluster->rtcache_flush_done()) { all_done = false; break; }
+#endif
+    }
+    if (all_done && SimPlatform::instance().idle())
+      break;
+    SimPlatform::instance().tick();
+  }
+
+  // L2 caches.
+  for (auto& cluster : clusters_) {
+    cluster->l2_flush_begin();
+  }
+  while (true) {
+    bool all_done = true;
+    for (auto& cluster : clusters_) {
+      if (!cluster->l2_flush_done()) { all_done = false; break; }
+    }
+    if (all_done && SimPlatform::instance().idle())
+      break;
+    SimPlatform::instance().tick();
+  }
+
+  // L3 cache (single instance at processor level).
+  l3cache_->flush_begin();
+  while (!l3cache_->flush_done() || !SimPlatform::instance().idle()) {
+    SimPlatform::instance().tick();
+  }
+}
 
 int ProcessorImpl::run() {
-  SimPlatform::instance().reset();
   this->reset();
+  kmu_->start();
+  this->forward_delegated_launch();
 
   bool done;
   int exitcode = 0;
   do {
     SimPlatform::instance().tick();
-    done = true;
+    bool any_running = false;
     for (auto cluster : clusters_) {
       if (cluster->running()) {
-        done = false;
-        continue;
+        any_running = true;
+      } else {
+        exitcode |= cluster->get_exitcode();
       }
-      exitcode |= cluster->get_exitcode();
     }
+    // A page fault kills its accesses. Most warps drain on the kill
+    // responses, but one on a path that owes no response (an instruction
+    // fetch) would stall forever: end the launch as soon as a fault is
+    // latched and the fabric is quiet, and let the host read the report.
+    bool faulted = this->mmu_fault_pending();
+    // Stop only when cores are idle AND the platform holds no undelivered
+    // work: cache pipelines wrap a SimChannel inside TFifo, so cache-pipe
+    // state (and any in-flight cache→memory writethrough) shows up in
+    // idle(), as do launch-lane CTAs and barrier hops between domains.
+    done = (!any_running || faulted) && SimPlatform::instance().idle();
     perf_mem_latency_ += perf_mem_pending_reads_;
   } while (!done);
 
   return exitcode;
 }
 
+bool ProcessorImpl::mmu_fault_pending() const {
+#ifdef VX_CFG_VM_ENABLE
+  for (auto& cluster : clusters_) {
+    if (cluster->mmu_fault_info() & VX_MMU_FAULT_VALID) {
+      return true;
+    }
+  }
+#endif
+  return false;
+}
+
+void ProcessorImpl::forward_delegated_launch() {
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  if (kmu_->launch_delegated()) {
+    for (auto& cluster : clusters_) {
+      cluster->raster_core()->frame_kick();
+    }
+  }
+#endif
+}
+
 void ProcessorImpl::reset() {
+  SimPlatform::instance().reset();
   perf_mem_reads_ = 0;
   perf_mem_writes_ = 0;
   perf_mem_latency_ = 0;
   perf_mem_pending_reads_ = 0;
+  is_cycle_initialized_ = false;
 }
 
-void ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
-  dcrs_.write(addr, value);
+bool ProcessorImpl::cycle() {
+  // Lazy first-call init mirrors run()'s top-of-loop sequence so the
+  // external driver doesn't need to choreograph reset + kmu start
+  // separately. reset() clears is_cycle_initialized_ so a back-to-back
+  // kernel launch re-dispatches.
+  if (!is_cycle_initialized_) {
+    this->reset();
+    kmu_->start();
+    this->forward_delegated_launch();
+    is_cycle_initialized_ = true;
+  }
+  SimPlatform::instance().tick();
+  perf_mem_latency_ += perf_mem_pending_reads_;
+  return this->any_running();
+}
+
+int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
+  // KMU DCRs route to the KMU and are not broadcast to cores.
+  bool is_kmu_dcr = (addr >= VX_DCR_KMU_STATE_BEGIN && addr < VX_DCR_KMU_STATE_END);
+  if (is_kmu_dcr) {
+    kmu_->dcr_write(addr, value);
+    return 0;
+  }
+#ifdef VX_CFG_VM_ENABLE
+  // Device SATP for the shared walker complex, assembled from two
+  // 32-bit halves and fanned out to every cluster on the high write.
+  if (addr == VX_DCR_MMU_SATP_LO) {
+    mmu_satp_ = (mmu_satp_ & ~uint64_t(0xFFFFFFFF)) | value;
+    return 0;
+  }
+  if (addr == VX_DCR_MMU_FAULT_INFO) {
+    // Write-to-clear: the host drops the report once it has read it, so a
+    // fault raised by one launch stays readable across the next one's reset.
+    for (auto& cluster : clusters_) {
+      cluster->mmu_clear_fault();
+    }
+    return 0;
+  }
+  if (addr == VX_DCR_MMU_SATP_HI) {
+    mmu_satp_ = (mmu_satp_ & 0xFFFFFFFF) | ((uint64_t)value << 32);
+    for (auto& cluster : clusters_) {
+      cluster->set_mmu_satp(mmu_satp_);
+    }
+    return 0;
+  }
+#endif
+  for (auto& cluster : clusters_) {
+    int ret = cluster->dcr_write(addr, value);
+    if (ret != 0)
+      return ret;
+  }
+  return 0;
+}
+
+int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  if (addr == VX_DCR_BASE_CACHE_FLUSH) {
+    // Drain dirty cache lines to DRAM before the host reads back results.
+    // After flush_caches() returns every dirty line has reached memsim_'s
+    // backing RAM.
+    this->flush_caches();
+    *value = 0;
+    return 0;
+  }
+#ifdef VX_CFG_VM_ENABLE
+  if (addr == VX_DCR_MMU_FAULT_VA
+   || addr == VX_DCR_MMU_FAULT_VA_HI
+   || addr == VX_DCR_MMU_FAULT_INFO) {
+    // Report the first cluster holding a latched fault; the latches clear
+    // on reset, so each launch starts with a clean report.
+    *value = 0;
+    for (auto& cluster : clusters_) {
+      uint32_t info = cluster->mmu_fault_info();
+      if (0 == (info & VX_MMU_FAULT_VALID)) {
+        continue;
+      }
+      uint64_t va = cluster->mmu_fault_va();
+      if (addr == VX_DCR_MMU_FAULT_INFO) {
+        *value = info;
+      } else if (addr == VX_DCR_MMU_FAULT_VA) {
+        *value = (uint32_t)va;
+      } else {
+        *value = (uint32_t)(va >> 32);
+      }
+      break;
+    }
+    return 0;
+  }
+#endif
+  for (auto& cluster : clusters_) {
+    int ret = cluster->dcr_read(addr, tag, value);
+    if (ret != 0)
+      return ret;
+  }
+  return 0;
+}
+
+Core* ProcessorImpl::get_first_core() const {
+  if (clusters_.empty()) return nullptr;
+  return clusters_.at(0)->get_core(0);
+}
+
+bool ProcessorImpl::any_running() const {
+  for (auto& cluster : clusters_) {
+    if (cluster->running()) return true;
+  }
+  return !SimPlatform::instance().idle();
 }
 
 ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
@@ -161,66 +427,34 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   return perf;
 }
 
-// Advance the simulation by one cycle for SST - code adapted from run() method
-bool ProcessorImpl::cycle() {
-  if (!is_cycle_initialized_) {
-    std::cout << "ProcessorImpl: Initializing cycle()\n";
-    SimPlatform::instance().reset();
-    this->reset();
-    is_cycle_initialized_ = true;
-  }
-
-  SimPlatform::instance().tick();
-  bool anyRunning = false;
-  for (auto cluster : clusters_) {
-    if (cluster->running()) {
-      anyRunning = true;
-      break;
-    }
-  }
-  perf_mem_latency_ += perf_mem_pending_reads_;
-  return anyRunning;
-}
-
-Emulator* ProcessorImpl::get_first_emulator() const {
-  if (clusters_.empty()) {
-    return nullptr;
-  }
-  auto& cluster = clusters_.at(0);
-  if (!cluster || cluster->sockets().empty()) {
-    return nullptr;
-  }
-  auto& socket = cluster->sockets().at(0);
-  if (!socket || socket->cores().empty()) {
-    return nullptr;
-  }
-  auto& core = socket->cores().at(0);
-  if (!core) {
-    return nullptr;
-  }
-  return &core->emulator();
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 
-Processor::Processor(const Arch& arch)
-  : impl_(new ProcessorImpl(arch))
-{
-#ifdef VM_ENABLE
-  satp_ = NULL;
-#endif
-}
+Processor::Processor()
+  : impl_(new ProcessorImpl())
+{}
 
 Processor::~Processor() {
   delete impl_;
-#ifdef VM_ENABLE
-  if (satp_ != NULL)
-    delete satp_;
-#endif
 }
 
 void Processor::attach_ram(RAM* mem) {
   impl_->attach_ram(mem);
+}
+
+void Processor::reset() {
+  impl_->reset();
+}
+
+void Processor::start_kmu() {
+  impl_->kmu().start();
+}
+
+bool Processor::any_running() const {
+  return impl_->any_running();
+}
+
+Core* Processor::get_first_core() const {
+  return impl_->get_first_core();
 }
 
 int Processor::run() {
@@ -228,51 +462,30 @@ int Processor::run() {
     return impl_->run();
   } catch (const std::exception& e) {
     std::cerr << "Error: exception: " << e.what() << std::endl;
+    if (std::getenv("SIMX_BACKTRACE") != nullptr) {
+      simx_print_backtrace();
+    }
   } catch (...) {
     std::cerr << "Error: unknown exception." << std::endl;
+    if (std::getenv("SIMX_BACKTRACE") != nullptr) {
+      simx_print_backtrace();
+    }
   }
   return -1;
 }
 
-void Processor::dcr_write(uint32_t addr, uint32_t value) {
+bool Processor::cycle() {
+  return impl_->cycle();
+}
+
+void Processor::set_mem_telemetry_hook(std::function<void(const MemReq&)> hook) {
+  impl_->set_mem_telemetry_hook(std::move(hook));
+}
+
+int Processor::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
 }
 
-// advance the simulation by one cycle for SST
-bool Processor::cycle() {
-  try {
-    return impl_->cycle();
-  } catch (const std::exception& e) {
-    std::cerr << "Error: exception: " << e.what() << std::endl;
-  } catch (...) {
-    std::cerr << "Error: unknown exception." << std::endl;
-  }
-  return false;
+int Processor::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+  return impl_->dcr_read(addr, tag, value);
 }
-
-Emulator* Processor::get_first_emulator() const {
-  return impl_->get_first_emulator();
-}
-
-#ifdef VM_ENABLE
-int16_t Processor::set_satp_by_addr(uint64_t base_addr) {
-  uint16_t asid = 0;
-  satp_ = new SATP_t (base_addr,asid);
-  if (satp_ == NULL)
-    return 1;
-  uint64_t satp = satp_->get_satp();
-  impl_->set_satp(satp);
-  return 0;
-}
-bool Processor::is_satp_unset() {
-  return (satp_== NULL);
-}
-uint8_t Processor::get_satp_mode() {
-  assert (satp_!=NULL);
-  return satp_->get_mode();
-}
-uint64_t Processor::get_base_ppn() {
-  assert (satp_!=NULL);
-  return satp_->get_base_ppn();
-}
-#endif

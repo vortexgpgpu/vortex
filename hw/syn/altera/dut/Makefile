@@ -3,13 +3,21 @@ include $(ROOT_DIR)/config.mk
 
 PREFIX ?= build
 
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile, 3 -- default. NOT supported on this backend.
+OPT_LEVEL ?= 3
+ifneq ($(OPT_LEVEL),3)
+$(error OPT_LEVEL=$(OPT_LEVEL) requested but not supported on the altera/dut backend)
+endif
+export OPT_LEVEL
+
 BUILD_DIR := $(PREFIX)_$(DEVICE_FAMILY)
 
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 IP_CACHE_DIR := $(ROOT_DIR)/hw/syn/altera/ip_cache/$(DEVICE_FAMILY)
 
-.PHONY: unittest scope mem_unit lmem cache fpu core issue vortex top
+.PHONY: unittest scope mem_unit lmem cache fpu tcu dxa core issue vortex top
 
 ip-gen: $(IP_CACHE_DIR)/ip_gen.log
 $(IP_CACHE_DIR)/ip_gen.log:

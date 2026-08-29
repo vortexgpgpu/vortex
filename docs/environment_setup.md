@@ -44,7 +44,7 @@ Docker allows for isolated pre-built environments to be created, shared and used
 2. Download the dockerfile from [here](https://github.gatech.edu/gist/usubramanya3/f1bf3e953faa38a6372e1292ffd0b65c) and place it in the root of the repo.
 3. Build the Dockerfile into an image: `docker build --platform=linux/amd64 -t vortex -f dockerfile .`
 4. Run a container based on the image: `docker run --rm -v ./:/root/vortex/ -it --name vtx-dev --privileged=true --platform=linux/amd64 vortex`
-5. Install the toolchain `./ci/toolchain_install.sh --all` (once per container)
+5. Install the toolchain `./ci/toolchain_install.sh` (once per container)
 6. `make -s` in `vortex` root directory
 7. Run a test program: `./ci/blackbox.sh --cores=2 --app=dogfood`
 

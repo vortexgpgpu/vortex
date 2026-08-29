@@ -2,7 +2,8 @@
 #include <cstdarg>
 #include <atomic>
 #include <cstring>
-#include "emulator.h"
+#include "core.h"
+#include <mem.h>
 #include <VX_config.h>
 #include <bitmanip.h>
 
@@ -34,18 +35,19 @@ bool DebugModule::verbose_logging() {
 
 // Constructor: Initializes the RISC-V Debug Module with a simulated memory space.
 // Use case: Creates a debug module instance that implements the RISC-V Debug Specification 0.13.
-DebugModule::DebugModule(vortex::Emulator* emulator, size_t mem_size)
-    : emulator_(emulator),
-      command(0),
-      resumereq_prev(false),
+DebugModule::DebugModule(vortex::Core* core, vortex::RAM* ram, size_t mem_size)
+    : core_(core),
+      ram_(ram),
+      halt_requested_(false),
+      single_step_active_(false),
+      debug_mode_enabled_(false),
       data1(0),
       data2(0),
       data3(0),
+      command(0),
+      resumereq_prev(false),
       memory(mem_size, 0),
-      access_mem_addr(0),
-      halt_requested_(false),
-      single_step_active_(false),
-      debug_mode_enabled_(false)
+      access_mem_addr(0)
 {
     for (unsigned i = 0; i < datacount; i++) {
         dmdata[i] = 0;
@@ -73,10 +75,10 @@ void DebugModule::reset()
     dmstatus.authenticated = true;
     dmstatus.authbusy = false;
     dmstatus.version = 2;
-    // Set XLEN support bits: sr32, sr64, sr128 (bits 20, 21, 22)
-    // OpenOCD checks these FIRST to determine XLEN
-    dmstatus.sr32 = (XLEN == 32);
-    dmstatus.sr64 = (XLEN == 64);
+    // Set VX_CFG_XLEN support bits: sr32, sr64, sr128 (bits 20, 21, 22)
+    // OpenOCD checks these FIRST to determine VX_CFG_XLEN
+    dmstatus.sr32 = (VX_CFG_XLEN == 32);
+    dmstatus.sr64 = (VX_CFG_XLEN == 64);
     dmstatus.sr128 = false; // No 128-bit support
 
     dmstatus.allnonexistent = false;
@@ -530,8 +532,8 @@ void DebugModule::execute_command(uint32_t value)
             if (write) {
                 // For 64-bit systems, combine data0 (low) and data1 (high) if available
                 vortex::Word val;
-                if (XLEN == 64 && abstractcs.datacount >= 2) {
-                    val = static_cast<vortex::Word>(data0()) | (static_cast<vortex::Word>(data1) << 32);
+                if (VX_CFG_XLEN == 64 && abstractcs.datacount >= 2) {
+                    val = static_cast<vortex::Word>(data0()) | (static_cast<vortex::Word>(data1) << (VX_CFG_XLEN-32));
                 } else {
                     val = static_cast<vortex::Word>(data0());
                 }
@@ -539,9 +541,9 @@ void DebugModule::execute_command(uint32_t value)
             } else {
                 vortex::Word val = read_register(regaddr);
                 // For 64-bit systems, split into data0 (low) and data1 (high) if available
-                if (XLEN == 64 && abstractcs.datacount >= 2) {
+                if (VX_CFG_XLEN == 64 && abstractcs.datacount >= 2) {
                     data0() = static_cast<uint32_t>(val);
-                    data1 = static_cast<uint32_t>(val >> 32);
+                    data1 = static_cast<uint32_t>(val >> (VX_CFG_XLEN-32));
                 } else {
                     data0() = static_cast<uint32_t>(val);
                 }
@@ -551,9 +553,8 @@ void DebugModule::execute_command(uint32_t value)
         if (postexec) {
             // Get PC from emulator
             vortex::Word pc = 0;
-            if (emulator_ != nullptr) {
-                auto& warp0 = emulator_->get_warp(0);
-                pc = warp0.PC;
+            if (core_ != nullptr) {
+                pc = core_->dtm_get_pc(0);
             }
             
             // Check for software breakpoint: if instruction at PC is EBREAK, halt
@@ -561,7 +562,7 @@ void DebugModule::execute_command(uint32_t value)
             if ((instruction & 0xFFFFFFFF) == 0x00100073) {
                 // EBREAK instruction - software breakpoint
                 dm_log("[DM] Software breakpoint hit at 0x%0*llx (EBREAK), halting hart\n", 
-                       (XLEN == 64) ? 16 : 8, (unsigned long long)pc);
+                       (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)pc);
                 halt_hart(1);  // Cause 1 = ebreak instruction
                 return;  // Don't execute the instruction
             }
@@ -611,8 +612,8 @@ void DebugModule::execute_command(uint32_t value)
             addr_src = ADDR_PREV;
         } else if (data3 != 0 || data2 != 0) {
             // For 64-bit addresses, combine DATA3 (high) and DATA2 (low)
-            if (XLEN == 64 && data3 != 0) {
-                mem_addr = (static_cast<vortex::Word>(data3) << 32) | static_cast<vortex::Word>(data2);
+            if (VX_CFG_XLEN == 64 && data3 != 0) {
+                mem_addr = (static_cast<vortex::Word>(data3) << (VX_CFG_XLEN-32)) | static_cast<vortex::Word>(data2);
                 addr_src = ADDR_DATA2;
                 dm_log("[DM] Access Memory: Combining DATA3 (0x%08x) and DATA2 (0x%08x) -> addr=0x%016llx\n",
                        data3, data2, (unsigned long long)mem_addr);
@@ -622,8 +623,8 @@ void DebugModule::execute_command(uint32_t value)
             }
         } else if (data1 != 0 || data0() != 0) {
             // For 64-bit addresses, combine DATA1 (high) and DATA0 (low)
-            if (XLEN == 64 && data1 != 0) {
-                mem_addr = (static_cast<vortex::Word>(data1) << 32) | static_cast<vortex::Word>(data0());
+            if (VX_CFG_XLEN == 64 && data1 != 0) {
+                mem_addr = (static_cast<vortex::Word>(data1) << (VX_CFG_XLEN-32)) | static_cast<vortex::Word>(data0());
                 addr_src = ADDR_DATA0;
                 dm_log("[DM] Access Memory: Combining DATA1 (0x%08x) and DATA0 (0x%08x) -> addr=0x%016llx\n",
                        data1, data0(), (unsigned long long)mem_addr);
@@ -644,15 +645,15 @@ void DebugModule::execute_command(uint32_t value)
         }
         
         dm_log("[DM] EXECUTE COMMAND: Access Memory, addr=0x%0*llx, write=%d, aamsize=%u, postinc=%d\n",
-               (XLEN == 64) ? 16 : 8, (unsigned long long)mem_addr, 
+               (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)mem_addr, 
                write ? 1 : 0, aamsize, aampostincrement ? 1 : 0);
 
         // Always perform one memory access per command.
             if (write) {
                 // Write memory: For 64-bit, combine data0 (low) and data1 (high) if available
                 vortex::Word write_data;
-                if (access_size == 8 && XLEN == 64 && abstractcs.datacount >= 2) {
-                    write_data = static_cast<vortex::Word>(data0()) | (static_cast<vortex::Word>(data1) << 32);
+                if (access_size == 8 && VX_CFG_XLEN == 64 && abstractcs.datacount >= 2) {
+                    write_data = static_cast<vortex::Word>(data0()) | (static_cast<vortex::Word>(data1) << (VX_CFG_XLEN-32));
                 } else {
                     write_data = static_cast<vortex::Word>(data0());
                 }
@@ -696,9 +697,9 @@ void DebugModule::execute_command(uint32_t value)
                     data0() = static_cast<uint32_t>(read_val);
                 } else if (access_size == 8) {
                     // 64-bit read: split into data0 (low) and data1 (high) if available
-                    if (XLEN == 64 && abstractcs.datacount >= 2) {
+                    if (VX_CFG_XLEN == 64 && abstractcs.datacount >= 2) {
                         data0() = static_cast<uint32_t>(read_val);
-                        data1 = static_cast<uint32_t>(read_val >> 32);
+                        data1 = static_cast<uint32_t>(read_val >> (VX_CFG_XLEN-32));
                     } else {
                         // Fallback: only return low 32 bits
                         data0() = static_cast<uint32_t>(read_val);
@@ -716,8 +717,8 @@ void DebugModule::execute_command(uint32_t value)
             switch (addr_src) {
                 case ADDR_DATA2:
                     // If address came from DATA3+DATA2 (64-bit), write back both parts
-                    if (XLEN == 64 && data3 != 0) {
-                        data3 = static_cast<uint32_t>(new_addr >> 32);
+                    if (VX_CFG_XLEN == 64 && data3 != 0) {
+                        data3 = static_cast<uint32_t>(new_addr >> (VX_CFG_XLEN-32));
                         data2 = static_cast<uint32_t>(new_addr);
                     } else {
                         data2 = static_cast<uint32_t>(new_addr);
@@ -728,8 +729,8 @@ void DebugModule::execute_command(uint32_t value)
                     break;
                 case ADDR_DATA0:
                     // If address came from DATA1+DATA0 (64-bit), write back both parts
-                    if (XLEN == 64 && data1 != 0) {
-                        data1 = static_cast<uint32_t>(new_addr >> 32);
+                    if (VX_CFG_XLEN == 64 && data1 != 0) {
+                        data1 = static_cast<uint32_t>(new_addr >> (VX_CFG_XLEN-32));
                         data0() = static_cast<uint32_t>(new_addr);
                     } else {
                         data0() = static_cast<uint32_t>(new_addr);
@@ -741,8 +742,8 @@ void DebugModule::execute_command(uint32_t value)
                     // This prevents overwriting data registers that OpenOCD might use for other purposes.
                     // The incremented address is stored in access_mem_addr for the next postincrement operation.
                     dm_log("[DM] Access Memory postincrement: address from access_mem_addr, NOT writing back to data registers (prev=0x%0*llx, new=0x%0*llx)\n",
-                           (XLEN == 64) ? 16 : 8, (unsigned long long)mem_addr,
-                           (XLEN == 64) ? 16 : 8, (unsigned long long)new_addr);
+                           (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)mem_addr,
+                           (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)new_addr);
                     break;
                 case ADDR_NONE:
                 default:
@@ -769,30 +770,28 @@ vortex::Word DebugModule::read_register(uint16_t regaddr)
     if (regaddr >= 0x1000 && regaddr <= 0x101F) {
         int gpr_index = regaddr - 0x1000;
         vortex::Word value;
-        if (emulator_ != nullptr) {
+        if (core_ != nullptr) {
             // Use emulator's warp 0, thread 0 register
-            auto& warp0 = emulator_->get_warp(0);
-            value = warp0.ireg_file.at(gpr_index).at(0);  // Direct assignment, no cast needed
+            value = core_->dtm_get_ireg(0, gpr_index);  // Direct assignment, no cast needed
         } else {
             // No emulator available
             value = 0;
         }
         dm_log("[DM] READ REG  x%d (0x%04x) -> 0x%0*llx\n", gpr_index, regaddr, 
-               (XLEN == 64) ? 16 : 8, (unsigned long long)value);
+               (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)value);
         return value;
     }
 
     if (regaddr == 0x1020) {
         vortex::Word value;
-        if (emulator_ != nullptr) {
+        if (core_ != nullptr) {
             // Use emulator's warp 0 PC
-            auto& warp0 = emulator_->get_warp(0);
-            value = warp0.PC;  // PC is already Word type
+            value = core_->dtm_get_pc(0);  // PC is already Word type
         } else {
             // No emulator available
             value = 0;
         }
-        dm_log("[DM] READ REG  pc (0x1020) -> 0x%0*llx\n", (XLEN == 64) ? 16 : 8, (unsigned long long)value);
+        dm_log("[DM] READ REG  pc (0x1020) -> 0x%0*llx\n", (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)value);
         return value;
     }
 
@@ -804,7 +803,7 @@ vortex::Word DebugModule::read_register(uint16_t regaddr)
 
     if (regaddr == 0x07b1 || regaddr == 0x7B1) {
         vortex::Word value = dpc_;
-        dm_log("[DM] READ REG  dpc (0x7B1) -> 0x%0*llx\n", (XLEN == 64) ? 16 : 8, (unsigned long long)value);
+        dm_log("[DM] READ REG  dpc (0x7B1) -> 0x%0*llx\n", (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)value);
         return value;
     }
 
@@ -814,10 +813,10 @@ vortex::Word DebugModule::read_register(uint16_t regaddr)
         if (csr_num == 0x0301) {
             // Calculate MISA based on configured extensions
             // MXL field (bits 31:30): 1=RV32, 2=RV64, 3=RV128
-            uint32_t mxl = (vortex::log2floor(XLEN) - 4);
-            uint32_t value = (mxl << 30) | MISA_STD;
-            dm_log("[DM] READ REG  misa (0x%03x via 0x%04x) -> 0x%08x (RV%d, MXL=%d, MISA_STD=0x%08x)\n", 
-                   csr_num, regaddr, value, XLEN, mxl, MISA_STD);
+            uint32_t mxl = (vortex::log2floor(VX_CFG_XLEN) - 4);
+            uint32_t value = (mxl << 30) | VX_CFG_MISA_STD;
+            dm_log("[DM] READ REG  misa (0x%03x via 0x%04x) -> 0x%08x (RV%d, MXL=%d, VX_CFG_MISA_STD=0x%08x)\n", 
+                   csr_num, regaddr, value, VX_CFG_XLEN, mxl, VX_CFG_MISA_STD);
             return value;
         }
 
@@ -833,7 +832,7 @@ vortex::Word DebugModule::read_register(uint16_t regaddr)
     };
 
     // Direct CSR access: 0x0000-0x0FFF (CSR number = regaddr)
-    if (regaddr >= 0x0000 && regaddr <= 0x0FFF) {
+    if (regaddr <= 0x0FFF) {
         return read_csr(static_cast<uint16_t>(regaddr), regaddr);
     }
 
@@ -847,25 +846,23 @@ void DebugModule::write_register(uint16_t regaddr, vortex::Word val)
         int gpr_index = regaddr - 0x1000;
         if (gpr_index == 0) {
             dm_log("[DM] WRITE REG x0 (0x%04x) <- 0x%0*llx (ignored, x0 is read-only)\n", 
-                   regaddr, (XLEN == 64) ? 16 : 8, (unsigned long long)val);
+                   regaddr, (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)val);
             return;
         }
-        if (emulator_ != nullptr) {
-            auto& warp0 = emulator_->get_warp(0);
-            warp0.ireg_file.at(gpr_index).at(0) = val;  // Direct assignment
+        if (core_ != nullptr) {
+            core_->dtm_set_ireg(0, gpr_index, val);  // Direct assignment
         }
         dm_log("[DM] WRITE REG x%d (0x%04x) <- 0x%0*llx\n", 
-               gpr_index, regaddr, (XLEN == 64) ? 16 : 8, (unsigned long long)val);
+               gpr_index, regaddr, (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)val);
         return;
     }
 
     if (regaddr == 0x1020) {
-        if (emulator_ != nullptr) {
-            auto& warp0 = emulator_->get_warp(0);
-            warp0.PC = val;  // Direct assignment, PC is Word type
+        if (core_ != nullptr) {
+            core_->dtm_set_pc(0, val);  // Direct assignment, PC is Word type
         }
         dm_log("[DM] WRITE REG pc (0x1020) <- 0x%0*llx\n", 
-               (XLEN == 64) ? 16 : 8, (unsigned long long)val);
+               (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)val);
         return;
     }
 
@@ -878,26 +875,26 @@ void DebugModule::write_register(uint16_t regaddr, vortex::Word val)
     if (regaddr == 0x07b1 || regaddr == 0x7B1) {
         dpc_ = val;
         dm_log("[DM] WRITE REG dpc (0x7B1) <- 0x%0*llx\n", 
-               (XLEN == 64) ? 16 : 8, (unsigned long long)val);
+               (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)val);
         return;
     }
 
-    if (regaddr >= 0xC000 && regaddr <= 0xFFFF) {
+    if (regaddr >= 0xC000) {  // upper bound 0xFFFF redundant for uint16_t
         dm_log("[DM] WRITE REG csr[0x%04x] (0x%04x) <- 0x%0*llx (ignored)\n", 
-               regaddr - 0xC000, regaddr, (XLEN == 64) ? 16 : 8, (unsigned long long)val);
+               regaddr - 0xC000, regaddr, (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)val);
         return;
     }
 
     dm_log("[DM] WRITE REG unknown regaddr=0x%04x <- 0x%0*llx (ignored)\n", 
-           regaddr, (XLEN == 64) ? 16 : 8, (unsigned long long)val);
+           regaddr, (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)val);
 }
 
 vortex::Word DebugModule::read_mem(vortex::Word addr, size_t size)
 {
     vortex::Word val = read_program_memory(addr, size);
     dm_log("[DM] READ MEM  addr=0x%0*llx -> 0x%0*llx (size=%zu)\n", 
-           (XLEN == 64) ? 16 : 8, (unsigned long long)addr,
-           (XLEN == 64) ? 16 : 8, (unsigned long long)val, size);
+           (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)addr,
+           (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)val, size);
     return val;
 }
 
@@ -905,18 +902,18 @@ void DebugModule::write_mem(vortex::Word addr, vortex::Word val, size_t size)
 {
     write_program_memory(addr, val, size);
     dm_log("[DM] WRITE MEM addr=0x%0*llx <- 0x%0*llx (size=%zu)\n", 
-           (XLEN == 64) ? 16 : 8, (unsigned long long)addr,
-           (XLEN == 64) ? 16 : 8, (unsigned long long)val, size);
+           (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)addr,
+           (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)val, size);
 }
 
 vortex::Word DebugModule::read_program_memory(vortex::Word addr, size_t size) const
 {
-    if (!emulator_) {
+    if (!core_) {
         return 0;
     }
     // Read the specified number of bytes
     uint8_t buffer[8] = {0};  // Max 8 bytes for 64-bit access
-    emulator_->dcache_read(buffer, static_cast<uint64_t>(addr), size);
+    ram_->read(buffer, static_cast<uint64_t>(addr), size);
     
     // Convert to Word based on size
     vortex::Word value = 0;
@@ -928,7 +925,7 @@ vortex::Word DebugModule::read_program_memory(vortex::Word addr, size_t size) co
 
 void DebugModule::write_program_memory(vortex::Word addr, vortex::Word value, size_t size)
 {
-    if (!emulator_) {
+    if (!core_) {
         return;
     }
     
@@ -937,7 +934,7 @@ void DebugModule::write_program_memory(vortex::Word addr, vortex::Word value, si
     for (size_t i = 0; i < size && i < sizeof(vortex::Word); ++i) {
         buffer[i] = static_cast<uint8_t>((value >> (i * 8)) & 0xFF);
     }
-    emulator_->dcache_write(buffer, static_cast<uint64_t>(addr), size);
+    ram_->write(buffer, static_cast<uint64_t>(addr), size);
 }
 
 vortex::Word DebugModule::direct_read_register(uint16_t regaddr)
@@ -996,13 +993,12 @@ void DebugModule::resume_hart(bool single_step)
     is_halted_ = false;
 
     // Log current program state before resuming
-    if (emulator_ != nullptr) {
-        auto& warp0 = emulator_->get_warp(0);
-        vortex::Word current_pc = warp0.PC;
+    if (core_ != nullptr) {
+        vortex::Word current_pc = core_->dtm_get_pc(0);
         vortex::Word dpc = dpc_;
         dm_log("[DM] Resume state: PC=0x%0*llx, DPC=0x%0*llx, halt_requested=%d\n", 
-               (XLEN == 64) ? 16 : 8, (unsigned long long)current_pc,
-               (XLEN == 64) ? 16 : 8, (unsigned long long)dpc,
+               (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)current_pc,
+               (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)dpc,
                halt_requested_ ? 1 : 0);
     }
 
@@ -1093,7 +1089,7 @@ void DebugModule::notify_program_completed(vortex::Word final_pc)
     // Only process if we weren't already explicitly halted
     if (!is_halted_ && !halt_requested_) {
         dm_log("[DM] Program completed naturally at PC=0x%0*llx, halting hart\n", 
-               (XLEN == 64) ? 16 : 8, (unsigned long long)final_pc);
+               (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)final_pc);
         
         // Update DPC to final PC
         direct_write_register(0x7B1, final_pc);
@@ -1110,11 +1106,10 @@ void DebugModule::run_test_idle()
 {
     static uint64_t log_counter = 0;
     if (!is_halted_ && !halt_requested_) {
-        if ((log_counter++ % 1000) == 0 && emulator_ != nullptr) {
-            auto& warp0 = emulator_->get_warp(0);
-            vortex::Word pc = warp0.PC;
+        if ((log_counter++ % 1000) == 0 && core_ != nullptr) {
+            vortex::Word pc = core_->dtm_get_pc(0);
             dm_log("[DM] run_test_idle: hart running, PC=0x%0*llx\n", 
-                   (XLEN == 64) ? 16 : 8, (unsigned long long)pc);
+                   (VX_CFG_XLEN == 64) ? 16 : 8, (unsigned long long)pc);
         }
     } else {
         // Only log occasionally when halted too

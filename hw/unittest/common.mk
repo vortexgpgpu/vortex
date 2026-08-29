@@ -5,19 +5,22 @@ PARAMS +=
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
+CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS +=
 RTL_PKGS +=
 RTL_INCLUDE +=
 
-DBG_FLAGS += -DDEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
+DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
 
-VL_FLAGS = --exe
-VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
+VL_FLAGS += --exe
+VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
 VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-GENUNNAMED
 VL_FLAGS += --x-initial unique --x-assign unique
-VL_FLAGS += -DSIMULATION -DSV_DPI
+VL_FLAGS += ../verilator.vlt
+VL_FLAGS += -DSIMULATION
+VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 VL_FLAGS += $(CONFIGS)
 VL_FLAGS += $(PARAMS)
 VL_FLAGS += $(RTL_INCLUDE)
@@ -50,13 +53,19 @@ ifdef PERF
 	CXXFLAGS += -DPERF_ENABLE
 endif
 
+# Enable SAIF tracing
+ifdef SAIF
+	VL_FLAGS += --trace-saif
+	CXXFLAGS += -DSAIF_OUTPUT
+endif
+
 all: $(DESTDIR)/$(PROJECT)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(RTL_SRCS)
-	verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' --MMD -o ../$@
+	$(VERILATOR_PATH)/bin/verilator --build $(VL_FLAGS) $(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' -MMD -o ../$@
 
 run: $(DESTDIR)/$(PROJECT)
-	$(DESTDIR)/$(PROJECT)
+	$(DESTDIR)/$(PROJECT) $(OPTS)
 
 waves: trace.vcd
 	gtkwave -o trace.vcd

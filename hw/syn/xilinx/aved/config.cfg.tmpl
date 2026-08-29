@@ -1,0 +1,15 @@
+[connectivity]
+# Bind to the compute-only static shell. This is slashkit's current default,
+# but it selects which abstract shell the AFU links against, so state it
+# rather than inherit it. The service shell adds the DCMAC ethernet stack the
+# AFU has no use for.
+shell=compute
+nk=vortex_afu:1:vortex_afu_0
+sp=vortex_afu_0.m_axi_mem_0:@MEM_TAG@
+sp=vortex_afu_0.m_axi_host:@HOST_TAG@
+
+# Kernel clock. Stated in Hz here rather than via the linker's --clock-hz
+# flag, whose name and help text disagree on the unit.
+[clock]
+krnl=vortex_afu_0
+freqhz=@KERNEL_FREQ_HZ@

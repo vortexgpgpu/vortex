@@ -1,0 +1,1111 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "raster_core.h"
+#include <array>
+#include <cstring>
+#include <deque>
+#include <queue>
+#include <unordered_map>
+#include <vector>
+#include "gfx_ff_model.h"
+#include "cluster.h"
+#include "processor_impl.h"   // ProcessorImpl::ram() — early-Z committed-depth peek
+#include "core.h"
+#include "scheduler.h"
+#include "constants.h"
+#include "debug.h"
+
+using namespace vortex;
+
+namespace {
+
+// rcache config
+constexpr uint32_t kRcacheNumReqs  = VX_CFG_RCACHE_NUM_BANKS;
+constexpr uint32_t kRcacheMemPorts = 1;
+constexpr uint32_t kRcacheLineSize = VX_CFG_MEM_BLOCK_SIZE;
+constexpr uint64_t kRcacheLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+
+// Single producer lane per cluster.
+constexpr uint32_t kNumRasterLanes = 1;
+
+// Coarse-bin header in RAM: { uint16 bin_x, uint16 bin_y,
+// uint32 pids_offset, uint32 pids_count } = 12 bytes. pids_offset is an
+// absolute index into the sorted_pids array following the dense header block.
+constexpr uint32_t kTileHeaderBytes = sizeof(graphics::rast_bin_header_t);
+
+// Stamp encoding for the staged frag_payload pos_mask word (window slot 0):
+//   bits[ 3:0]  = mask
+//   bits[17:4]  = pos_x  (VX_RASTER_DIM_BITS-1 = 14 bits)
+//   bits[31:18] = pos_y  (VX_RASTER_DIM_BITS-1 = 14 bits)
+constexpr uint32_t kPosBits = VX_RASTER_DIM_BITS - 1;
+inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
+  return (mask & 0xfu)
+       | ((pos_x & ((1u << kPosBits) - 1u)) << 4)
+       | ((pos_y & ((1u << kPosBits) - 1u)) << (4 + kPosBits));
+}
+
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+
+// Early-Z: evaluate the screen-space depth plane at pixel center (X,Y) and
+// quantize to the 24-bit zbuf value. Bit-identical to the FS late-Z path (kernel
+// PLANE_Z Q7.24 plane MAC written SATURATED to [0, OM_DEPTH_MASK]), so early-Z
+// culls exactly the fragments late-Z would reject.
+inline uint32_t earlyz_plane_depth(const graphics::rast_attrib_t& zp, int X, int Y) {
+  int32_t zbits = (int32_t)( (int64_t)zp.x.data() * X
+                           + (int64_t)zp.y.data() * Y
+                           + (int64_t)zp.z.data() );
+  if (zbits < 0) return 0;
+  uint32_t d = (uint32_t)zbits;
+  return d > OM_DEPTH_MASK ? (uint32_t)OM_DEPTH_MASK : d;
+}
+
+// Early-Z cull decision on 24-bit depth (cand = incoming candidate, stored =
+// committed depth read from the buffer). Returns true iff the fragment is
+// PROVABLY occluded and safe to drop.
+//
+// Read-only early-Z never writes depth; the ROP remains the authoritative late-Z.
+// The committed depth we read is not causally pinned to this fragment: it may
+// already contain this fragment's own eventual write, a co-planar (equal-depth)
+// fragment's write, or a causally-later nearer write (fragment processing is not
+// globally in submission order). So early-Z must use the REFLEXIVE RELAXATION of
+// the depth func — it may cull only a fragment that is STRICTLY behind stored.
+// A visible fragment has cand == final-buffer depth <= stored (the buffer only
+// moves toward the winner), so a strict-behind test can never cull it: image
+// identity holds regardless of read freshness or pipeline ordering. Culling on
+// equality (the exact func) is what wrongly drops own/co-planar/final writes.
+// Non-monotonic funcs (EQUAL/NOTEQUAL/NEVER/ALWAYS) are never early-culled; the
+// driver only arms earlyz_safe for the monotone LESS/LEQUAL/GREATER/GEQUAL case.
+inline bool earlyz_occluded(uint32_t func, uint32_t cand, uint32_t stored) {
+  switch (func) {
+  case VX_OM_DEPTH_FUNC_LESS:
+  case VX_OM_DEPTH_FUNC_LEQUAL:  return cand >  stored;   // keep on cand <= stored
+  case VX_OM_DEPTH_FUNC_GREATER:
+  case VX_OM_DEPTH_FUNC_GEQUAL:  return cand <  stored;   // keep on cand >= stored
+  default:                       return false;            // never early-cull
+  }
+}
+
+#endif
+
+} // namespace
+
+// ════════════════════════════════════════════════════════════════════
+// RasterCore::Impl
+// ════════════════════════════════════════════════════════════════════
+//
+// Producer FSM: LOAD_TILES → LOAD_PIDS → LOAD_PRIMS → RASTERIZE → READY.
+// Memory traffic flows as MemReq/MemRsp through the rcache.
+// Once READY, RasterReqs from raster_req_in[0] are served from the requesting
+// core's statically-owned quad queue (VX_CFG_NUM_THREADS stamps per response).
+// When that queue drains, responses carry stamps=0 (the "done" sentinel the
+// kernel polls for).
+
+class RasterCore::Impl {
+public:
+  enum class State : uint8_t {
+    IDLE,         // pre-DCR / tile_count==0
+    LOAD_TILES,
+    LOAD_PIDS,
+    LOAD_PRIMS,
+    RASTERIZE,
+    RASTER_DRAIN, // modeling the TE/BE walker's quad-emission latency
+    READY,        // serving pops from per-core quad queues
+  };
+
+  // One pending cache-line read with metadata to deposit bytes on response.
+  struct PendingRead {
+    uint8_t* dst_ptr;       // destination buffer pointer
+    uint32_t cl_offset;     // start byte within the cache line
+    uint32_t length;        // bytes to copy
+  };
+
+  // Pre-built (cache-line, dst, span) tuple. Streamed through
+  // issue_pending_loads() to drive MemReq emission.
+  struct LineFetch {
+    uint64_t cl_addr;
+    uint8_t* dst_ptr;
+    uint32_t cl_offset;
+    uint32_t length;
+  };
+
+  Impl(RasterCore* simobject, Cluster* cluster)
+    : simobject_(simobject)
+    , cluster_(cluster)
+    , state_(State::IDLE)
+    , cores_per_cluster_(NUM_SOCKETS * VX_CFG_SOCKET_SIZE)
+    , base_core_(cluster->id() * (NUM_SOCKETS * VX_CFG_SOCKET_SIZE))
+    , total_cores_(VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * VX_CFG_SOCKET_SIZE)
+    , quad_queues_(NUM_SOCKETS * VX_CFG_SOCKET_SIZE)
+    , cycle_(0)
+  {}
+
+  void reset() {
+    cycle_ = 0;
+    perf_stats_ = RasterCore::PerfStats();
+    reset_load_state();
+    state_ = State::IDLE;
+    // The per-launch reset precedes the delegated launch's frame kick, so both
+    // arm states start clean; the frag descriptor persists (DCR state, re-
+    // supplied by each draw's config sequence).
+    frag_armed_  = false;
+    arm_pending_ = false;
+    fwd_live_    = 0;
+  }
+
+  void set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {
+    frag_entry_ = frag_entry;
+    frag_param_ = frag_param;
+  }
+
+  void frame_kick() {
+    // Delegated draw launch from the device KMU: the launch follows the draw's
+    // whole DCR sequence, so the producer config and FS descriptor are
+    // complete. Prime the one-shot arm request; tick() arms the owned
+    // distributors exactly once per kick (see tick step 0). Kicks come only
+    // from the draw's own grid-less launch, so a stale request can never
+    // re-arm a later draw's compute front end.
+    arm_pending_ = true;
+  }
+
+  void on_fwd_done(const FwdDone& msg) {
+    __unused(msg);
+    assert(fwd_live_ > 0);
+    if (--fwd_live_ == 0) {
+      frag_armed_ = false;
+    }
+  }
+
+  int dcr_write(uint32_t addr, uint32_t value) {
+    dcrs_.write(addr, value);
+    // DCR reconfigure invalidates the cached queue + load state and re-arms the
+    // producer for the new frame (returns to IDLE); the FSM kicks off the
+    // tile/prim load when the first wave request of the frame arrives.
+    reset_load_state();
+    state_ = State::IDLE;
+    return 0;
+  }
+
+  // Snoop the OM depth DCRs (shared depth-buffer config) so the early-Z stage
+  // can test against committed depth. Called by Cluster::dcr_write for OM-range
+  // writes; does NOT re-arm the producer (unlike a raster DCR write).
+  void om_dcr_snoop(uint32_t addr, uint32_t value) {
+  #if VX_CFG_RASTER_EARLYZ_ENABLED
+    switch (addr) {
+    case VX_DCR_OM_ZBUF_ADDR:    zbuf_base_  = uint64_t(value) << 6; break;
+    case VX_DCR_OM_ZBUF_PITCH:   zbuf_pitch_ = value; break;
+    case VX_DCR_OM_DEPTH_FUNC:   depth_func_ = value; break;
+    case VX_DCR_OM_EARLYZ_SAFE:  earlyz_safe_ = value; break;
+    default: break;
+    }
+  #else
+    __unused(addr, value);
+  #endif
+  }
+
+  const RasterCore::PerfStats& perf_stats() const { return perf_stats_; }
+
+  void tick() {
+    ++cycle_;
+
+    // 0) Arm the owned cores' fragment work distributors once per draw, on the
+    //    delegated launch's frame kick (arm_pending_, primed in frame_kick).
+    //    Decoupled from the TILE_COUNT poll: a zero-tile / fully-culled draw
+    //    arms too and drains to zero quads (the producer serves the drained
+    //    sentinel), so the request cannot persist and re-arm the next draw's
+    //    compute front end. frag_entry_ == 0 (no FS bound) consumes the kick
+    //    without arming.
+    if (arm_pending_ && !frag_armed_) {
+      arm_pending_ = false;
+      if (frag_entry_ != 0) {
+        frag_armed_ = true;
+        fwd_live_ = cores_per_cluster_;
+        for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
+          simobject_->fwd_arm_out.at(c).send({Word(frag_entry_), Word(frag_param_)});
+        }
+      }
+    }
+
+    // 1) Drain rcache responses → deposit bytes per pending_reads_ map.
+    drain_mem_rsp();
+
+    // 2) Advance producer FSM.
+    advance_producer();
+
+    // 3) Serve consumers when ready.
+    if (state_ == State::READY) {
+      serve_consumers();
+    }
+
+    // The draw's fragment phase closes in on_fwd_done: each distributor
+    // reports its drain on the done link, and the last report clears
+    // frag_armed_, letting the NEXT draw's FS-descriptor edge (arm_pending_)
+    // re-arm without any re-arm during the next draw's front end.
+
+    // perf
+    if (state_ == State::LOAD_TILES || state_ == State::LOAD_PIDS ||
+        state_ == State::LOAD_PRIMS) {
+      ++perf_stats_.stall_cycles;
+    }
+    perf_stats_.mem_latency += pending_reads_.size();
+  }
+
+private:
+  // ── Reset producer-side state (preserves DCRS) ─────────────────────
+  void reset_load_state() {
+    tile_headers_.clear();
+    pid_table_buf_.clear();
+    pid_table_offset_.clear();
+    prim_data_.clear();
+    primary_pids_.clear();
+    pending_reads_.clear();
+    next_mem_tag_ = 0;
+    issue_idx_ = 0;
+    issue_total_ = 0;
+    line_fetches_.clear();
+    for (auto& q : quad_queues_) {
+      std::queue<RasterStamp> empty;
+      std::swap(q, empty);
+    }
+    have_drained_signal_ = false;
+    walk_cycles_  = 0;
+    rast_latency_ = 0;
+  }
+
+  // ── Generic helper: enqueue cache-line fetches to fill `length` bytes
+  //    starting at byte_addr into dst_ptr. Coalesces within a line if
+  //    the destination is contiguous.
+  void enqueue_byte_range(uint64_t byte_addr, uint32_t length, uint8_t* dst_ptr) {
+    while (length > 0) {
+      uint64_t cl_addr  = byte_addr & kRcacheLineMask;
+      uint32_t cl_off   = uint32_t(byte_addr - cl_addr);
+      uint32_t cl_room  = kRcacheLineSize - cl_off;
+      uint32_t span     = std::min(cl_room, length);
+      LineFetch lf;
+      lf.cl_addr   = cl_addr;
+      lf.dst_ptr   = dst_ptr;
+      lf.cl_offset = cl_off;
+      lf.length    = span;
+      line_fetches_.push_back(lf);
+      byte_addr += span;
+      dst_ptr   += span;
+      length    -= span;
+    }
+  }
+
+  // ── Issue MemReqs from line_fetches_ until budget exhausted or backpressure
+  //    Returns true when issue is complete (issue_idx_ == issue_total_).
+  bool issue_pending_loads() {
+    // One request per port per cycle: issue at most one rcache load, then
+    // return. A while-loop here issues N loads to a single port in one cycle.
+    if (issue_idx_ >= issue_total_)
+      return true;
+
+    auto& req_ch = simobject_->rcache_req_out.at(0);
+    if (req_ch.full()) return false;
+
+    const LineFetch& lf = line_fetches_[issue_idx_];
+
+    MemReq mreq;
+    mreq.addr  = lf.cl_addr;
+    mreq.op    = MemOp::LD;
+    mreq.tag   = next_mem_tag_++;
+    mreq.hart_id   = 0;
+    mreq.uuid  = 0;
+
+    PendingRead pr;
+    pr.dst_ptr   = lf.dst_ptr;
+    pr.cl_offset = lf.cl_offset;
+    pr.length    = lf.length;
+    pending_reads_[mreq.tag] = pr;
+
+    req_ch.send(mreq);
+    ++perf_stats_.mem_reads;
+    ++issue_idx_;
+    return (issue_idx_ >= issue_total_);
+  }
+
+  // ── Drain rcache responses ─────────────────────────────────────────
+  void drain_mem_rsp() {
+    // One response per port per cycle (each channel in rcache_rsp_in is a port).
+    for (auto& ch : simobject_->rcache_rsp_in) {
+      if (ch.empty()) continue;
+      auto& rsp = ch.peek();
+      auto it = pending_reads_.find(uint32_t(rsp.tag));
+      if (it == pending_reads_.end()) {
+        ch.pop();
+        continue;
+      }
+      const PendingRead pr = it->second;
+      pending_reads_.erase(it);
+
+      if (rsp.data) {
+        std::memcpy(pr.dst_ptr, rsp.data->data() + pr.cl_offset, pr.length);
+      }
+      ch.pop();
+    }
+  }
+
+  // ── Producer FSM advancement ───────────────────────────────────────
+  void advance_producer() {
+    switch (state_) {
+    case State::IDLE: {
+      // The first queued RasterReq (posted autonomously by an armed core's
+      // fragment work distributor, only after the host wrote the RASTER config +
+      // kicked the draw) kicks off the tile/prim load. No separate begin op. The
+      // FSM leaves IDLE for the rest of the frame; a DCR reconfigure re-arms it.
+      if (!simobject_->raster_req_in.at(0).empty()) {
+        kick_off_load();
+      }
+      break;
+    }
+    case State::LOAD_TILES: {
+      if (!issue_pending_loads()) return;
+      if (pending_reads_.empty()) start_load_pids();
+      break;
+    }
+    case State::LOAD_PIDS: {
+      if (!issue_pending_loads()) return;
+      if (pending_reads_.empty()) start_load_prims();
+      break;
+    }
+    case State::LOAD_PRIMS: {
+      if (!issue_pending_loads()) return;
+      if (pending_reads_.empty()) start_rasterize();
+      break;
+    }
+    case State::RASTERIZE: {
+      // Run the TE/BE walker to completion (quad order/content unchanged) and
+      // capture its pipeline-cycle count. The walker emits ~one block's quads
+      // per cycle (2-stage FIFO pipeline, te_walk_tile), so it has a real
+      // quad-emission rate the producer must pay before the kernel sees the
+      // first quad. Because serve_consumers() runs only in READY, charging
+      // that latency as a drain countdown here is observationally identical to
+      // stepping the walker one stage per tick, without restructuring the walk.
+      run_rasterizer();
+      rast_latency_ = walk_cycles_;
+      state_ = (walk_cycles_ == 0) ? State::READY : State::RASTER_DRAIN;
+      DT(3, simobject_->name() << " rasterize done: walker_cycles="
+         << walk_cycles_);
+      break;
+    }
+    case State::RASTER_DRAIN: {
+      if (rast_latency_ == 0) {
+        state_ = State::READY;
+      } else {
+        --rast_latency_;
+        ++perf_stats_.raster_cycles;
+      }
+      break;
+    }
+    case State::READY:
+      break;
+    }
+  }
+
+  // ── Kick off LOAD_TILES (lazy, on first RasterReq) ─────────────────
+  void kick_off_load() {
+    uint32_t tile_count = dcrs_.read(VX_DCR_RASTER_TILE_COUNT);
+    if (tile_count == 0) {
+      // No work — go straight to READY (drained). Pops will get stamps=0.
+      state_ = State::READY;
+      have_drained_signal_ = true;
+      return;
+    }
+    tile_headers_.resize(tile_count);
+
+    uint64_t tbuf_addr = uint64_t(dcrs_.read(VX_DCR_RASTER_TBUF_ADDR)) << 6;
+    line_fetches_.clear();
+    for (uint32_t i = 0; i < tile_count; ++i) {
+      enqueue_byte_range(tbuf_addr + uint64_t(i) * kTileHeaderBytes,
+                         kTileHeaderBytes,
+                         reinterpret_cast<uint8_t*>(&tile_headers_[i]));
+    }
+    issue_idx_   = 0;
+    issue_total_ = uint32_t(line_fetches_.size());
+    state_       = State::LOAD_TILES;
+  }
+
+  // ── After tile headers loaded → load all pid tables ────────────────
+  void start_load_pids() {
+    uint64_t tbuf_addr = uint64_t(dcrs_.read(VX_DCR_RASTER_TBUF_ADDR)) << 6;
+    line_fetches_.clear();
+
+    // PIDs are stored as uint32_t (4 bytes); VX_RASTER_PID_BITS=16 is the
+    // consumer-side width.
+    constexpr uint32_t kPidStride = sizeof(uint32_t);
+
+    // Total PID bytes = sum across tiles of pids_count * kPidStride.
+    uint32_t total_bytes = 0;
+    pid_table_offset_.assign(tile_headers_.size(), 0);
+    for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
+      pid_table_offset_[i] = total_bytes;
+      total_bytes += uint32_t(tile_headers_[i].pids_count) * kPidStride;
+    }
+    pid_table_buf_.assign(total_bytes, 0);
+
+    if (total_bytes == 0) {
+      // No PIDs anywhere — skip to RASTERIZE (will produce no quads).
+      issue_idx_   = 0;
+      issue_total_ = 0;
+      state_       = State::RASTERIZE;
+      return;
+    }
+
+    // sorted_pids follows the dense bin-header block; pids_offset is an
+    // absolute index into it, so every bin's pid run is one base + off.
+    uint64_t pids_base = tbuf_addr
+                       + uint64_t(tile_headers_.size()) * sizeof(graphics::rast_bin_header_t);
+    for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
+      const auto& hdr = tile_headers_[i];
+      if (hdr.pids_count == 0) continue;
+      uint64_t pid_table_addr = pids_base + uint64_t(hdr.pids_offset) * kPidStride;
+      enqueue_byte_range(pid_table_addr,
+                         uint32_t(hdr.pids_count) * kPidStride,
+                         &pid_table_buf_[pid_table_offset_[i]]);
+    }
+    issue_idx_   = 0;
+    issue_total_ = uint32_t(line_fetches_.size());
+    state_       = State::LOAD_PIDS;
+  }
+
+  // ── After PIDs loaded → load prim data for each unique pid ─────────
+  void start_load_prims() {
+    uint64_t pbuf_addr   = uint64_t(dcrs_.read(VX_DCR_RASTER_PBUF_ADDR)) << 6;
+    uint32_t pbuf_stride = dcrs_.read(VX_DCR_RASTER_PBUF_STRIDE);
+    if (pbuf_stride == 0) pbuf_stride = sizeof(graphics::rast_prim_t);
+
+    // Collect unique pids referenced by any tile; truncate 32-bit storage
+    // to the 16-bit PID width.
+    constexpr uint32_t kPidStride = sizeof(uint32_t);
+    primary_pids_.clear();
+    {
+      std::unordered_map<uint16_t, bool> seen;
+      for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
+        const auto& hdr = tile_headers_[i];
+        for (uint32_t j = 0; j < hdr.pids_count; ++j) {
+          uint32_t pid_word;
+          std::memcpy(&pid_word, &pid_table_buf_[pid_table_offset_[i] + j * kPidStride], kPidStride);
+          uint16_t pid = uint16_t(pid_word);
+          if (!seen[pid]) {
+            seen[pid] = true;
+            primary_pids_.push_back(pid);
+          }
+        }
+      }
+    }
+
+    line_fetches_.clear();
+    if (primary_pids_.empty()) {
+      issue_idx_   = 0;
+      issue_total_ = 0;
+      state_       = State::RASTERIZE;
+      return;
+    }
+
+    // Allocate one rast_prim_t per unique pid; enqueue line fetches to fill.
+    prim_data_.clear();
+    prim_data_.reserve(primary_pids_.size());
+    for (uint16_t pid : primary_pids_) {
+      auto [it, _ins] = prim_data_.emplace(pid, graphics::rast_prim_t{});
+      uint64_t prim_addr = pbuf_addr + uint64_t(pid) * pbuf_stride;
+      enqueue_byte_range(prim_addr,
+                         sizeof(graphics::rast_prim_t),
+                         reinterpret_cast<uint8_t*>(&it->second));
+    }
+    issue_idx_   = 0;
+    issue_total_ = uint32_t(line_fetches_.size());
+    state_       = State::LOAD_PRIMS;
+  }
+
+  // ── Run the rasterizer synchronously over loaded buffers. ──────────
+  void start_rasterize() {
+    state_ = State::RASTERIZE;
+  }
+
+  // TE/BE walker — produces quads in the same order as the TE/BE pipeline.
+  // The recursive Morton-DFS walker in Rasterizer produces a different order
+  // and is not used here.
+  //
+  // TE: per (tile,prim), 4 priority FIFOs (one per subtile index 2*i+j with
+  // i=X-bit, j=Y-bit → TL, BL, TR, BR column-major), priority 0>1>2>3, plus a
+  // "bypass" path that lets TL of the current subdivision be processed next
+  // when all FIFOs are empty (is_fifo_bypass).
+  //
+  // BE: per emitted block, 4 quads in row-major order
+  // (i=jj*NUM_QUADS_DIM+ii, ii=X-bit, jj=Y-bit → TL, TR, BL, BR), grouped
+  // into OUTPUT_QUADS-wide batches arbitrated by priority (batch 0 > 1...).
+  // For BLOCK_LOGSIZE=2 and OUTPUT_QUADS=2, batch 0 = {TL,TR}, batch 1 =
+  // {BL,BR}; a batch fires only if any quad overlaps, emitting all stamps
+  // (non-overlapping ones carry mask=0 but valid pos_x/pos_y).
+
+  // Per-primitive walk context: tiles of different primitives coexist in
+  // the traversal pipeline, so each tile carries its owner's context.
+  struct PrimCtx {
+    uint16_t          pid;
+    graphics::vec3e_t edges[3];
+    graphics::vec3e_t extents;
+    std::queue<RasterStamp>* queue;
+  };
+
+  struct TileWork {
+    uint32_t x;
+    uint32_t y;
+    uint32_t level;
+    graphics::vec3e_t edge_eval;  // (e0, e1, e2) values at (x, y)
+    const PrimCtx*    prim = nullptr;
+  };
+
+  // Edge-equation extents per edge, used for early-reject overlap checks at
+  // each subdivision level.
+  static graphics::vec3e_t compute_extents(const graphics::vec3e_t edges[3]) {
+    auto extent = [](const graphics::vec3e_t& e) -> graphics::FloatE {
+      graphics::FloatE z(0);
+      graphics::FloatE x_part = (e.x >= z) ? e.x : z;
+      graphics::FloatE y_part = (e.y >= z) ? e.y : z;
+      return x_part + y_part;
+    };
+    return graphics::vec3e_t{ extent(edges[0]), extent(edges[1]), extent(edges[2]) };
+  }
+
+  // Overlap test: tile of size 2^(tile_logsize+1) at (x,y) with edge values
+  // `edge_eval` at corner. Non-overlapping iff any edge's max value
+  // (corner + extents·tile_size) is negative.
+  static bool tile_overlaps(const graphics::vec3e_t& edge_eval,
+                            const graphics::vec3e_t& extents,
+                            uint32_t tile_logsize) {
+    graphics::FloatE z(0);
+    uint32_t shift = tile_logsize + 1;  // tile size in log2 pixels
+    return  (edge_eval.x + (extents.x << shift)) >= z
+         && (edge_eval.y + (extents.y << shift)) >= z
+         && (edge_eval.z + (extents.z << shift)) >= z;
+  }
+
+  // Per-pixel coverage + scissor test for a quad.
+  void compute_quad(uint32_t qx, uint32_t qy,
+                    const graphics::vec3e_t& edge_eval_corner,
+                    const graphics::vec3e_t edges[3],
+                    uint32_t& out_mask) {
+    graphics::FloatE z(0);
+    out_mask = 0;
+    // Vulkan top-left fill rule: a sample exactly on an edge (value == 0) is
+    // covered only if that edge is a top or left edge (gradient a > 0, or
+    // a == 0 && b > 0); otherwise the boundary sample belongs to the abutting
+    // triangle. Gradients (a, b) = (edges[k].x, edges[k].y) are constant across
+    // the quad, so classify once. Keeps shared edges covered exactly once.
+    bool tl0 = (edges[0].x > z) || (edges[0].x == z && edges[0].y > z);
+    bool tl1 = (edges[1].x > z) || (edges[1].x == z && edges[1].y > z);
+    bool tl2 = (edges[2].x > z) || (edges[2].x == z && edges[2].y > z);
+    for (uint32_t pj = 0; pj < 2; ++pj) {
+      for (uint32_t pi = 0; pi < 2; ++pi) {
+        auto ee0 = edge_eval_corner.x + edges[0].x * int(pi) + edges[0].y * int(pj);
+        auto ee1 = edge_eval_corner.y + edges[1].x * int(pi) + edges[1].y * int(pj);
+        auto ee2 = edge_eval_corner.z + edges[2].x * int(pi) + edges[2].y * int(pj);
+        uint32_t px = qx + pi;
+        uint32_t py = qy + pj;
+        bool in0 = tl0 ? (ee0 >= z) : (ee0 > z);
+        bool in1 = tl1 ? (ee1 >= z) : (ee1 > z);
+        bool in2 = tl2 ? (ee2 >= z) : (ee2 > z);
+        bool covered = in0 && in1 && in2
+                    && (px >= scissor_left_)  && (px <  scissor_right_)
+                    && (py >= scissor_top_)   && (py <  scissor_bottom_);
+        uint32_t p = pj * 2 + pi;
+        if (covered) {
+          out_mask |= (1u << p);
+        }
+      }
+    }
+  }
+
+  // Emit covered quads for a single block in row-major / OUTPUT_QUADS-batched order.
+  void emit_block_quads(const TileWork& block) {
+    uint16_t pid = block.prim->pid;
+    const graphics::vec3e_t* edges = block.prim->edges;
+    constexpr uint32_t kNumQuadsDim   = 1u << (VX_CFG_RASTER_BLOCK_LOG_SIZE - 1);
+    constexpr uint32_t kPerBlockQuads = kNumQuadsDim * kNumQuadsDim;
+    constexpr uint32_t kOutputQuads   = VX_CFG_NUM_THREADS;
+    constexpr uint32_t kOutputBatches =
+        (kPerBlockQuads + kOutputQuads - 1) / kOutputQuads;
+
+    // Per-quad evaluation in row-major: i=0:(0,0)=TL, 1:(1,0)=TR,
+    // 2:(0,1)=BL, 3:(1,1)=BR. pos_x/pos_y in the stamp are pixel/2.
+    struct QuadResult {
+      uint32_t qx_pix;
+      uint32_t qy_pix;
+      uint32_t mask;
+    };
+    QuadResult quads[kPerBlockQuads];
+    for (uint32_t i = 0; i < kPerBlockQuads; ++i) {
+      uint32_t ii = i % kNumQuadsDim;
+      uint32_t jj = i / kNumQuadsDim;
+      QuadResult& q = quads[i];
+      q.qx_pix = block.x + 2 * ii;
+      q.qy_pix = block.y + 2 * jj;
+      // Edge values at quad corner = block_corner + 2*ii*ex + 2*jj*ey
+      graphics::vec3e_t quad_corner_eval;
+      quad_corner_eval.x = block.edge_eval.x
+                         + edges[0].x * int(2 * ii) + edges[0].y * int(2 * jj);
+      quad_corner_eval.y = block.edge_eval.y
+                         + edges[1].x * int(2 * ii) + edges[1].y * int(2 * jj);
+      quad_corner_eval.z = block.edge_eval.z
+                         + edges[2].x * int(2 * ii) + edges[2].y * int(2 * jj);
+      compute_quad(q.qx_pix, q.qy_pix, quad_corner_eval, edges, q.mask);
+    }
+
+    // Walk batches in priority order. A batch fires iff any quad has
+    // mask != 0; when fired, all OUTPUT_QUADS stamps are emitted,
+    // including those with mask=0.
+    for (uint32_t b = 0; b < kOutputBatches; ++b) {
+      uint32_t base = b * kOutputQuads;
+      bool any_overlap = false;
+      for (uint32_t q = 0; q < kOutputQuads; ++q) {
+        uint32_t idx = base + q;
+        if (idx < kPerBlockQuads && quads[idx].mask != 0) {
+          any_overlap = true;
+          break;
+        }
+      }
+      if (!any_overlap) continue;
+      for (uint32_t q = 0; q < kOutputQuads; ++q) {
+        uint32_t idx = base + q;
+        if (idx >= kPerBlockQuads) break;
+        const QuadResult& qr = quads[idx];
+        RasterStamp stamp;
+        stamp.pos_mask = encode_pos_mask(qr.qx_pix >> 1, qr.qy_pix >> 1, qr.mask);
+        stamp.pid      = pid;
+        block.prim->queue->push(stamp);
+      }
+    }
+  }
+
+  // PipeEntry: stage-2 contents (tile + precomputed stage-1 outputs).
+  struct PipeEntry {
+    TileWork tile;
+    TileWork subs[4];
+    bool     is_block;
+    bool     overlap;
+  };
+
+  static PipeEntry make_pipe_entry(const TileWork& tile) {
+    constexpr uint32_t kTopLog   = VX_CFG_RASTER_BIN_LOG_SIZE - 1;
+    constexpr uint32_t kBlockLog = VX_CFG_RASTER_BLOCK_LOG_SIZE;
+    const graphics::vec3e_t* edges = tile.prim->edges;
+    PipeEntry pe;
+    pe.tile = tile;
+    uint32_t tile_logsize = kTopLog - tile.level;
+    pe.is_block = (tile_logsize < kBlockLog);
+    pe.overlap  = tile_overlaps(tile.edge_eval, tile.prim->extents, tile_logsize);
+    if (pe.overlap && !pe.is_block) {
+      uint32_t sub_size = 1u << tile_logsize;
+      for (uint32_t i = 0; i < 2; ++i) {
+        for (uint32_t j = 0; j < 2; ++j) {
+          TileWork& s = pe.subs[2*i + j];
+          s.x = tile.x + i * sub_size;
+          s.y = tile.y + j * sub_size;
+          s.level = tile.level + 1;
+          s.prim = tile.prim;
+          s.edge_eval.x = tile.edge_eval.x
+                        + (edges[0].x << tile_logsize) * int(i)
+                        + (edges[0].y << tile_logsize) * int(j);
+          s.edge_eval.y = tile.edge_eval.y
+                        + (edges[1].x << tile_logsize) * int(i)
+                        + (edges[1].y << tile_logsize) * int(j);
+          s.edge_eval.z = tile.edge_eval.z
+                        + (edges[2].x << tile_logsize) * int(i)
+                        + (edges[2].y << tile_logsize) * int(j);
+        }
+      }
+    }
+    return pe;
+  }
+
+  // 2-stage tile-traversal pipeline with 4 priority FIFOs (one per subtile
+  // position 2*i+j, i=X-bit, j=Y-bit → column-major TL,BL,TR,BR) and a
+  // bypass path.
+  //
+  // Per cycle: stage2 emits (if block) or pushes its subs to FIFOs (skipping
+  // F[0] on bypass); arb sees FIFO state BEFORE push and picks the next
+  // stage1 (priority 0 > 1 > 2 > 3); pipeline advances (s2 <= s1, s1 <= arb
+  // pick / bypass). The one-cycle delay between subdivision and FIFO push is
+  // load-bearing — it lets older non-TL subtiles get selected before TL-side
+  // descendants push their own F[0] entries.
+  // Returns the number of pipeline cycles the walker spent (one per loop
+  // iteration → one block emit or one subdivision push), used to model the
+  // RASTER producer's quad-emission latency.
+  // Tile FIFO with a registered head: a push becomes grantable two cycles
+  // later (registered occupancy flag + output stage), while sustained pops
+  // stream one per cycle. The arb only sees `out`.
+  struct TeFifo {
+    std::queue<std::pair<TileWork, uint32_t>> ram; // (tile, push_cycle)
+    bool     out_valid = false;
+    TileWork out{};
+
+    bool empty() const { return !out_valid && ram.empty(); }
+    void push(const TileWork& t, uint32_t cycle) { ram.push({t, cycle}); }
+    void refill(uint32_t cycle) {
+      if (!out_valid && !ram.empty() && cycle > ram.front().second) {
+        out = ram.front().first;
+        ram.pop();
+        out_valid = true;
+      }
+    }
+  };
+
+  // One continuous pipeline run over every (bin, primitive) top tile: a new
+  // input enters only on a cycle where stage 1 is empty and neither the arb
+  // nor the bypass supplies it, so consecutive primitives' tiles interleave
+  // through the traversal exactly as they drain.
+  uint32_t te_walk_all(std::queue<TileWork>& inputs) {
+    std::array<TeFifo, 4> fifos;
+    auto fifos_all_empty = [&]() {
+      for (const auto& f : fifos) if (!f.empty()) return false;
+      return true;
+    };
+
+    bool      s1_has = false;
+    TileWork  s1{};
+    bool      s2_has = false;
+    PipeEntry s2{};
+
+    uint32_t cycles = 0;
+    while (s1_has || s2_has || !fifos_all_empty() || !inputs.empty()) {
+      ++cycles;
+      // ── Stage 2 work: emit block, or note that subs are pending push ───
+      bool emit_active = s2_has && s2.overlap && s2.is_block;
+      bool push_active = s2_has && s2.overlap && !s2.is_block;
+
+      if (emit_active) {
+        emit_block_quads(s2.tile);
+      }
+
+      // ── Arb decision (sees registered FIFO heads only) ──────────────────
+      int arb_idx = -1;
+      for (uint32_t i = 0; i < 4; ++i) {
+        if (fifos[i].out_valid) { arb_idx = i; break; }
+      }
+      bool arb_valid = (arb_idx >= 0);
+      // is_fifo_bypass: stage2 has subs to push AND no FIFO has anything to grant.
+      bool bypass = push_active && !arb_valid;
+
+      // ── Pick next stage 1 ──────────────────────────────────────────────
+      bool     next_s1_has = false;
+      TileWork next_s1{};
+      if (arb_valid) {
+        next_s1 = fifos[arb_idx].out;
+        fifos[arb_idx].out_valid = false;
+        next_s1_has = true;
+      } else if (bypass) {
+        next_s1 = s2.subs[0];  // TL bypasses F[0]
+        next_s1_has = true;
+      } else if (!s1_has && !inputs.empty()) {
+        next_s1 = inputs.front();
+        inputs.pop();
+        next_s1_has = true;
+      }
+
+      // ── Push stage 2's subs (F[0] skipped on bypass) ───────────────────
+      if (push_active) {
+        for (uint32_t i = (bypass ? 1u : 0u); i < 4; ++i) {
+          fifos[i].push(s2.subs[i], cycles);
+        }
+      }
+
+      // ── FIFO head refill (grantable from the next cycle on) ────────────
+      for (auto& f : fifos) {
+        f.refill(cycles);
+      }
+
+      // ── Pipeline advance ───────────────────────────────────────────────
+      if (s1_has) {
+        s2 = make_pipe_entry(s1);
+        s2_has = true;
+      } else {
+        s2_has = false;
+      }
+      s1 = next_s1;
+      s1_has = next_s1_has;
+    }
+    return cycles;
+  }
+
+  // Cached scissor config (refreshed in run_rasterizer from dcrs_).
+  uint32_t scissor_left_   = 0;
+  uint32_t scissor_top_    = 0;
+  uint32_t scissor_right_  = 0;
+  uint32_t scissor_bottom_ = 0;
+
+  void run_rasterizer() {
+    walk_cycles_ = 0;
+    if (tile_headers_.empty() || primary_pids_.empty()) {
+      have_drained_signal_ = true;
+      return;
+    }
+
+    // Refresh scissor config from DCRs (matches Rasterizer::configure).
+    scissor_left_   = dcrs_.read(VX_DCR_RASTER_SCISSOR_X) & 0xffff;
+    scissor_right_  = dcrs_.read(VX_DCR_RASTER_SCISSOR_X) >> 16;
+    scissor_top_    = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) & 0xffff;
+    scissor_bottom_ = dcrs_.read(VX_DCR_RASTER_SCISSOR_Y) >> 16;
+
+    uint32_t bin_size = 1u << VX_CFG_RASTER_BIN_LOG_SIZE;
+    std::deque<PrimCtx>  prim_ctxs;
+    std::queue<TileWork> inputs;
+    for (uint32_t t = 0; t < tile_headers_.size(); ++t) {
+      const auto& hdr = tile_headers_[t];
+      // Static tile→core ownership. tile_headers_ is the identical global bin
+      // list on every cluster (same DCR config), so `t` is a device-consistent
+      // bin index → deterministic, disjoint ownership across clusters.
+      uint32_t owner = t % total_cores_;
+      if (owner < base_core_ || owner >= base_core_ + cores_per_cluster_)
+        continue;  // owned by another cluster — skip (no duplicate emission)
+      uint32_t tile_x = uint32_t(hdr.bin_x) * bin_size;
+      uint32_t tile_y = uint32_t(hdr.bin_y) * bin_size;
+      for (uint32_t j = 0; j < hdr.pids_count; ++j) {
+        uint32_t pid_word;
+        std::memcpy(&pid_word,
+                    &pid_table_buf_[pid_table_offset_[t] + j * sizeof(uint32_t)],
+                    sizeof(uint32_t));
+        uint16_t pid = uint16_t(pid_word);
+        auto pit = prim_data_.find(pid);
+        if (pit == prim_data_.end()) continue;
+        const auto& prim = pit->second;
+        PrimCtx ctx;
+        ctx.pid = pid;
+        for (uint32_t k = 0; k < 3; ++k) {
+          ctx.edges[k] = prim.edges[k];
+        }
+        ctx.extents = compute_extents(ctx.edges);
+        ctx.queue   = &quad_queues_[owner - base_core_];
+        prim_ctxs.push_back(ctx);
+
+        TileWork init;
+        init.x = tile_x;
+        init.y = tile_y;
+        init.level = 0;
+        init.edge_eval.x = ctx.edges[0].x * int(tile_x) + ctx.edges[0].y * int(tile_y) + ctx.edges[0].z;
+        init.edge_eval.y = ctx.edges[1].x * int(tile_x) + ctx.edges[1].y * int(tile_y) + ctx.edges[1].z;
+        init.edge_eval.z = ctx.edges[2].x * int(tile_x) + ctx.edges[2].y * int(tile_y) + ctx.edges[2].z;
+        init.prim = &prim_ctxs.back();
+        inputs.push(init);
+      }
+    }
+    walk_cycles_ = te_walk_all(inputs);
+    have_drained_signal_ = true;
+  }
+
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+
+  // ── Early-Z: narrow a served quad's coverage against committed depth ──
+  // Tests each covered pixel's plane depth against the depth buffer and clears
+  // its coverage bit only when the fragment is STRICTLY behind (earlyz_occluded).
+  // The plane depth is bit-identical to the FS late-Z, and the strict-behind
+  // (reflexive-relaxed) test can never drop a visible fragment, so enabling
+  // early-Z is image-identical to the ROP-only path.
+  //
+  // SimX model note: the committed depth is peeked from the functional RAM, which
+  // is written by the OM as warps execute — not causally pinned to this
+  // fragment's submission slot (it may already hold this fragment's own, a
+  // co-planar, or a causally-later nearer write). The strict-behind rule makes
+  // the cull correct regardless: it is an ordering-independent condition that
+  // holds whatever the read freshness or pipeline ordering.
+  void early_z_cull(RasterStamp& s) {
+    uint32_t cov = s.pos_mask & 0xfu;
+    if (cov == 0)
+      return;
+    auto pit = prim_data_.find((uint16_t)s.pid);
+    if (pit == prim_data_.end())
+      return;
+    const auto& zp = pit->second.attribs.z;
+    RAM* ram = cluster_->processor()->ram();
+    uint32_t qx = (s.pos_mask >> 4) & ((1u << kPosBits) - 1u);
+    uint32_t qy = (s.pos_mask >> (4 + kPosBits)) & ((1u << kPosBits) - 1u);
+    uint32_t new_cov = cov;
+    for (uint32_t i = 0; i < 4; ++i) {
+      if (!((cov >> i) & 1u))
+        continue;
+      int X = int(qx) * 2 + int(i & 1u);
+      int Y = int(qy) * 2 + int(i >> 1);
+      uint32_t cand = earlyz_plane_depth(zp, X, Y);
+      uint64_t addr = zbuf_base_ + uint64_t(Y) * zbuf_pitch_ + uint64_t(X) * 4;
+      uint32_t stored = 0;
+      ram->read(&stored, addr, 4);
+      stored &= OM_DEPTH_MASK;
+      ++perf_stats_.earlyz_tested;
+      if (earlyz_occluded(depth_func_, cand, stored)) {
+        new_cov &= ~(1u << i);
+        ++perf_stats_.earlyz_culled;
+      }
+    }
+    s.pos_mask = (s.pos_mask & ~0xfu) | new_cov;
+  }
+
+#endif
+
+  // ── Serve per-core pops from the requester's owned queue ────────────
+  void serve_consumers() {
+    auto& req_ch = simobject_->raster_req_in.at(0);
+    auto& rsp_ch = simobject_->raster_rsp_out.at(0);
+    // One consumer transaction per cycle: serve at most one request → response.
+    if (req_ch.empty() || rsp_ch.full())
+      return;
+    {
+      const auto& req = req_ch.peek();
+      RasterRsp rsp(req);
+
+      // Serve only the requesting core's statically-owned queue. A core whose
+      // queue is drained gets the default pos_mask=0 sentinel and exits its
+      // raster loop; total coverage across all cores == the full scene, once.
+      uint32_t local = req.core_id - base_core_;
+      auto& q = quad_queues_[local];
+      for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+        if (!(req.tmask_bits & (1u << t))) continue;
+        if (q.empty()) continue;
+        rsp.stamps[t] = q.front();
+        q.pop();
+      #if VX_CFG_RASTER_EARLYZ_ENABLED
+        if (earlyz_safe_) {
+          early_z_cull(rsp.stamps[t]);
+        }
+      #endif
+      }
+      rsp_ch.send(rsp);
+      req_ch.pop();
+    }
+  }
+
+  // ── Members ─────────────────────────────────────────────────────────
+  RasterCore*                simobject_;
+  Cluster*                   cluster_;
+  RasterDCRS       dcrs_;
+
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+  // Early-Z config snooped from the OM depth DCRs (the depth buffer is
+  // shared with the ROP). Gated by VX_DCR_OM_EARLYZ_SAFE, which the driver sets
+  // only when the FS has no depth-export and the func is monotonic (LESS/LEQUAL).
+  // The whole stage follows the same knob the datapath does, so a configuration
+  // without it does not model a cull it would never perform.
+  uint32_t                   earlyz_safe_ = 0;
+  uint64_t                   zbuf_base_   = 0;   // byte address (ZBUF_ADDR << 6)
+  uint32_t                   zbuf_pitch_  = 0;
+  uint32_t                   depth_func_  = VX_OM_DEPTH_FUNC_ALWAYS;
+#endif
+
+  // Fragment-shader dispatch descriptor (RASTER_FRAG_* DCRs). Persists across
+  // the per-launch reset (re-supplied by each draw's DCR sequence); used to arm
+  // each owned core's scheduler for the draw.
+  uint64_t                   frag_entry_ = 0;
+  uint64_t                   frag_param_ = 0;
+  // Per-draw fragment-phase arm, triggered by the KMU's delegated launch:
+  //   arm_pending_ : one-shot request set by frame_kick (the draw's grid-less
+  //                  launch, delivered after the per-launch reset and the whole
+  //                  DCR sequence); consumed on the next tick.
+  //   frag_armed_  : the owned distributors are armed for this draw; cleared by
+  //                  the last done-link report, releasing the next draw's kick.
+  // Triggered by the real per-draw launch — NOT level-triggered on persistent
+  // DCR state and NOT gated on the TILE_COUNT poll — so a fully-culled draw arms,
+  // drains to zero quads, and cannot leave a stale arm that re-fires during a
+  // later draw's compute front end (which would rasterize the reused pool's stale
+  // tiles). The arm cannot fire during the next draw's binning launches either,
+  // because those launches carry non-empty grids and produce no kick.
+  bool                       arm_pending_ = false;
+  bool                       frag_armed_  = false;
+  // Distributors still armed this draw (counted down by done-link reports).
+  uint32_t                   fwd_live_    = 0;
+
+  State                      state_;
+
+  // Static screen-space tile→core ownership (FWD). Each global bin index is owned
+  // by exactly one core (bin % total_cores_); this cluster's RasterCore walks
+  // only bins whose owner lies in [base_core_, base_core_ + cores_per_cluster_),
+  // emitting their quads into that owner's per-core queue. This makes every
+  // covered pixel rasterized once across the whole device, with no multi-cluster
+  // double-blend and no within-cluster shared-queue work-stealing.
+  uint32_t                   cores_per_cluster_;
+  uint32_t                   base_core_;
+  uint32_t                   total_cores_;
+
+  // Loaded buffers. tile_headers_ holds the coarse-bin headers.
+  std::vector<graphics::rast_bin_header_t>              tile_headers_;
+  std::vector<uint8_t>                                  pid_table_buf_;
+  std::vector<uint32_t>                                 pid_table_offset_;  // per-bin offset into pid_table_buf_
+  std::unordered_map<uint16_t, graphics::rast_prim_t>   prim_data_;
+  std::vector<uint16_t>                                 primary_pids_;
+
+  // Active-phase load issuance.
+  std::vector<LineFetch>                                line_fetches_;
+  uint32_t                                              issue_idx_   = 0;
+  uint32_t                                              issue_total_ = 0;
+  std::unordered_map<uint32_t, PendingRead>             pending_reads_;
+  uint32_t                                              next_mem_tag_ = 0;
+
+  // Per-owner-core quad queues (consumer-facing), indexed by local core id
+  // (global core id - base_core_). run_rasterizer() routes each bin's quads to
+  // its owner; serve_consumers() pops only the requesting core's queue.
+  std::vector<std::queue<RasterStamp>>                  quad_queues_;
+  bool                                                  have_drained_signal_ = false;
+
+  // TE/BE walker latency model: walk_cycles_ is the pipeline-cycle count of the
+  // last run_rasterizer(); rast_latency_ counts it down in RASTER_DRAIN before
+  // the producer reaches READY (see advance_producer).
+  uint32_t                                              walk_cycles_  = 0;
+  uint32_t                                              rast_latency_ = 0;
+
+
+  uint64_t                                              cycle_;
+  RasterCore::PerfStats                                 perf_stats_;
+};
+
+// ════════════════════════════════════════════════════════════════════
+// RasterCore — wrappers
+// ════════════════════════════════════════════════════════════════════
+
+RasterCore::RasterCore(const SimContext& ctx, const char* name, Cluster* cluster)
+  : SimObject<RasterCore>(ctx, name)
+  , raster_req_in(kNumRasterLanes, this)
+  , raster_rsp_out(kNumRasterLanes, this)
+  , rcache_req_out(kRcacheNumReqs, this)
+  , rcache_rsp_in(kRcacheNumReqs, this)
+  , fwd_arm_out(NUM_SOCKETS * VX_CFG_SOCKET_SIZE, this)
+  , fwd_done_in(this)
+{
+  impl_ = new Impl(this, cluster);
+  fwd_done_in.bind(this, &RasterCore::on_fwd_done);
+}
+
+RasterCore::~RasterCore() {
+  delete impl_;
+}
+
+void RasterCore::on_reset() { impl_->reset(); }
+void RasterCore::on_tick()  { impl_->tick(); }
+void RasterCore::on_fwd_done(const FwdDone& msg) { impl_->on_fwd_done(msg); }
+
+int RasterCore::dcr_write(uint32_t addr, uint32_t value) {
+  return impl_->dcr_write(addr, value);
+}
+
+void RasterCore::om_dcr_snoop(uint32_t addr, uint32_t value) {
+  impl_->om_dcr_snoop(addr, value);
+}
+
+void RasterCore::set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {
+  impl_->set_frag_descriptor(frag_entry, frag_param);
+}
+
+void RasterCore::frame_kick() {
+  impl_->frame_kick();
+}
+
+const RasterCore::PerfStats& RasterCore::perf_stats() const {
+  return impl_->perf_stats();
+}

@@ -1,0 +1,780 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// DXA SMEM Writer — OOO direct drain.
+//
+// Receives CLs directly from gmem_req on the `sw_*` channel, no rsp_buf
+// in the middle. The pend slot is filled asynchronously by whatever rsp
+// (real or OOB-synthetic) gmem_req presents. The CL marked `last` is
+// special — it must drain LAST because its bus packet carries
+// notify_smem_done; we hold it in `defer_*_r` until all other CLs have
+// released, then promote it to pend.
+//
+// Drain: pend → barrel-shift → fb_data_r → SMEM_WORD beats.
+// 1 SMEM-word/cycle steady state.
+
+`include "VX_define.vh"
+
+module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
+    parameter MAX_OUTSTANDING = 8,
+    parameter CL_SIZE         = `VX_CFG_L1_LINE_SIZE,
+    parameter SMEM_WORD_SIZE  = DXA_LMEM_WORD_SIZE,
+    parameter SMEM_ADDR_WIDTH = DXA_LMEM_ADDR_W,
+    parameter GMEM_DATAW      = CL_SIZE * 8
+) (
+    input  wire                        clk,
+    input  wire                        reset,
+    input  wire                        transfer_active,
+    input  wire                        transfer_start,
+
+    // cfill (stable during transfer).
+    input  wire [31:0]                 cfill,
+
+    // Metadata for SMEM bus tag + completion attr.
+    input  wire [NC_WIDTH-1:0]         active_core_id,
+    input  wire [UUID_WIDTH-1:0]       active_uuid,
+    input  wire [BAR_ADDR_W-1:0]       active_bar_addr,
+    input  wire                        active_notify_smem_done,
+
+    // Direct drain channel (from gmem_req).
+    input  wire                        sw_valid,
+    output wire                        sw_ready,
+    input  wire [TAG_W-1:0]            sw_tag,
+    input  wire [GMEM_DATAW-1:0]       sw_data,
+    input  wire [DXA_SMEM_ADDR_W-1:0]  sw_smem_byte_addr,
+    input  wire [CL_OFF_BITS-1:0]      sw_byte_offset,
+    input  wire [CL_OFF_BITS:0]        sw_valid_length,
+    input  wire                        sw_oob,
+    input  wire                        sw_last,
+    input  wire [15:0]                 sw_k_row,    // tiled scatter
+    input  wire [15:0]                 sw_n_base,   // tiled scatter
+    input  wire [SEQ_W-1:0]            sw_outstanding,
+
+    // Resource release to gmem_req (per-tag, OOO).
+    output wire                        release_en,
+    output wire [TAG_W-1:0]            release_tag,
+
+    // SMEM bus interface (writes only).
+    VX_mem_bus_if.master               smem_bus_if,
+
+    // Completion.
+    output wire                        transfer_done,
+    output wire [31:0]                 wr_done_count,
+    output wire                        smem_req_fire,
+
+    // Multicast (always available; active when is_multicast is set).
+    input  wire                        is_multicast,
+    input  wire [`VX_CFG_NUM_WARPS-1:0]       cta_mask,
+    input  wire [31:0]                 smem_stride,
+
+    // K-major scatter mode (stable per transfer):
+    //   dest_kmajor=1 → drain one element (elem_bytes wide) per SMEM beat,
+    //   with per-beat addr += per_lane_stride_bytes. byteen masks all bytes
+    //   except the `elem_bytes`-wide window at the current in-word offset.
+    input  wire                        dest_kmajor,
+    input  wire [15:0]                 per_lane_stride_bytes,
+    input  wire [3:0]                  elem_bytes,
+
+    // Tiled (Flat/BlockMajor) scatter geometry (stable per transfer). When
+    // dest_mode is Flat/BlockMajor the per-element SMEM byte address is the
+    // bbuf-native index dxa_tiled_dest_byte(k_row, n), drained 1 element/beat
+    // like K-major but with a permuted (non-uniform) destination.
+    input  wire [1:0]                  dest_mode,
+    input  wire [3:0]                  lg_ratio,
+    input  wire [3:0]                  lg_tcN,
+    input  wire [3:0]                  lg_nsteps,
+    input  wire [DXA_SMEM_ADDR_W-1:0]  smem_base    // tile SMEM byte base
+
+`ifdef PERF_ENABLE
+    ,
+    output wire [31:0]                 perf_lmem_writes
+`endif
+);
+    localparam CL_OFF_BITS  = `CLOG2(CL_SIZE);
+    localparam SMEM_OFF_W   = `CLOG2(SMEM_WORD_SIZE);
+    localparam SMEM_DATAW   = SMEM_WORD_SIZE * 8;
+    localparam TAG_W        = `CLOG2(MAX_OUTSTANDING);
+    localparam SEQ_W        = `CLOG2(MAX_OUTSTANDING + 1);
+    localparam FILL_CAP     = CL_SIZE + SMEM_WORD_SIZE;
+    localparam FILL_W       = `CLOG2(FILL_CAP + 1);
+    // Positioning is split fine (intra-word, at capture) + coarse (whole-word, at
+    // fb-load) so no single-cycle barrel spans the full FILL_CAP.
+    localparam SMEM_DATAW_LOG = SMEM_OFF_W + 3;
+    localparam SMEM_WORDS_CAP = (FILL_CAP + SMEM_WORD_SIZE - 1) / SMEM_WORD_SIZE;
+    localparam COARSE_W       = `CLOG2(SMEM_WORDS_CAP + 1);
+
+    localparam ENGINE_VALUE_W = DXA_LMEM_ENGINE_TAG_W - UUID_WIDTH;
+    localparam SMEM_TAG_VALUE_W = DXA_LMEM_TAG_W - UUID_WIDTH;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Per-transfer descriptor snapshot. These fields are constant from
+    // transfer_start until completion, and the first CL arrives only after
+    // the GMEM round-trip; registering them locally keeps every beat-rate
+    // cone sourced at local registers instead of routing from the
+    // setup/addr-gen configuration registers on every beat.
+    // ════════════════════════════════════════════════════════════════════
+    reg [1:0]                 dest_mode_q;
+    reg                       dest_kmajor_q;
+    reg [3:0]                 elem_bytes_q;
+    reg [3:0]                 lg_ratio_q, lg_tcN_q, lg_nsteps_q;
+    reg [DXA_SMEM_ADDR_W-1:0] smem_base_q;
+    reg [DXA_SMEM_ADDR_W-1:0] per_lane_stride_q;
+    always @(posedge clk) begin
+        dest_mode_q       <= dest_mode;
+        dest_kmajor_q     <= dest_kmajor;
+        elem_bytes_q      <= elem_bytes;
+        lg_ratio_q        <= lg_ratio;
+        lg_tcN_q          <= lg_tcN;
+        lg_nsteps_q       <= lg_nsteps;
+        smem_base_q       <= smem_base;
+        per_lane_stride_q <= DXA_SMEM_ADDR_W'(per_lane_stride_bytes);
+    end
+
+    // ════════════════════════════════════════════════════════════════════
+    // Scatter mode: K-major (uniform stride) OR tiled Flat/BlockMajor
+    // (permuted dest). Both drain 1 element/beat (vs row-major streaming).
+    // ════════════════════════════════════════════════════════════════════
+    wire dest_tiled = (dest_mode_q == DXA_DEST_FLAT) || (dest_mode_q == DXA_DEST_BLOCKMAJOR);
+    wire scatter    = dest_kmajor_q || dest_tiled;
+    // esize = log2(elem_bytes), for the tiled destination formula.
+    wire [3:0] esize = (elem_bytes_q == 4'd8) ? 4'd3
+                     : (elem_bytes_q == 4'd4) ? 4'd2
+                     : (elem_bytes_q == 4'd2) ? 4'd1 : 4'd0;
+
+    // Incremental tiled addressing: within a transfer, n advances by one per
+    // drain beat and dxa_tiled_dest_byte is affine in n inside an n-block, so
+    // the per-beat byte delta is one of two per-transfer constants (in-block
+    // step, block-wrap step). Deriving them once here removes the per-beat
+    // permute from the drain path entirely; the full permute runs only once
+    // per CL at capture (sw_dest_addr below).
+    //   FLAT:        step = 1 << (lg_ratio+esize)
+    //                wrap = ((1 << (2*lg_tcN+1)) - (tcN-1)) << (lg_ratio+esize)
+    //   BlockMajor:  step = 1 << (lg_tcN+lg_ratio+esize)
+    //                wrap = ((1 << lg_tcN) - (tcN-1)) << (lg_tcN+lg_ratio+esize)
+    reg [15:0]                tcn_mask_q;
+    reg [DXA_SMEM_ADDR_W-1:0] tiled_step_q;
+    reg [DXA_SMEM_ADDR_W-1:0] tiled_wrap_q;
+    reg [4:0]                 calc_sh2_q;
+    wire is_flat_w = (dest_mode_q == DXA_DEST_FLAT);
+    wire [15:0] tcn_mask_w = (16'd1 << lg_tcN_q) - 16'd1;
+    wire [4:0] step_sh_w = is_flat_w ? (5'(lg_ratio_q) + 5'(esize))
+                                     : (5'(lg_tcN_q) + 5'(lg_ratio_q) + 5'(esize));
+    wire [DXA_SMEM_ADDR_W-1:0] wrap_elems_w = is_flat_w
+        ? ((DXA_SMEM_ADDR_W'(1) << (5'(lg_tcN_q) + 5'(lg_tcN_q) + 5'd1)) - DXA_SMEM_ADDR_W'(tcn_mask_w))
+        : ((DXA_SMEM_ADDR_W'(1) << lg_tcN_q) - DXA_SMEM_ADDR_W'(tcn_mask_w));
+    always @(posedge clk) begin
+        tcn_mask_q   <= tcn_mask_w;
+        tiled_step_q <= DXA_SMEM_ADDR_W'(1) << step_sh_w;
+        tiled_wrap_q <= wrap_elems_w << step_sh_w;
+        // block-index shift of the per-CL dest calc (stage 2 below):
+        //   FLAT: 2*lg_tcN+1+lg_ratio+esize   BM: 2*lg_tcN+lg_ratio+esize
+        calc_sh2_q   <= 5'(lg_tcN_q) + 5'(lg_tcN_q) + (is_flat_w ? 5'd1 : 5'd0)
+                      + 5'(lg_ratio_q) + 5'(esize);
+    end
+
+    // ════════════════════════════════════════════════════════════════════
+    // Cfill replication (for OOB CLs)
+    // ════════════════════════════════════════════════════════════════════
+    wire [GMEM_DATAW-1:0] cfill_replicated;
+    for (genvar i = 0; i < CL_SIZE / 4; ++i) begin : g_cfill
+        assign cfill_replicated[i*32 +: 32] = cfill;
+    end
+
+    // ════════════════════════════════════════════════════════════════════
+    // Pending slot (1-deep skid from sw channel).
+    // ════════════════════════════════════════════════════════════════════
+    reg                       pend_valid_r;
+    reg [TAG_W-1:0]           pend_tag_r;
+    reg [DXA_SMEM_ADDR_W-1:0] pend_smem_byte_addr_r;
+    reg [CL_OFF_BITS:0]       pend_valid_length_r;
+    reg                       pend_last_r;
+    // Tiled scatter: the CL's raw (k, n) captured from the sw channel, its n
+    // phase within an n-block, and the element-0 destination computed by the
+    // shared permute one cycle after capture (pend_calc_r marks it pending;
+    // fb-load waits on it — a CL drains over many beats, so the extra cycle
+    // is off the steady state).
+    reg [15:0]                pend_k_r, pend_n_r;
+    reg [DXA_SMEM_ADDR_W-1:0] pend_dest_addr_r;
+    reg [15:0]                pend_n_in_r;
+    reg                       pend_calc_r;
+    reg                       pend_addr_rdy_r;
+    // Fine-positioned payload; pend_coarse_r is the whole-word residual applied at
+    // fb-load. Width FILL_CAP (CL + one SMEM word of in-word-offset headroom).
+    reg [FILL_CAP*8-1:0]      pend_data_r;
+    reg [COARSE_W-1:0]        pend_coarse_r;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Deferred-last slot — holds the CL marked `last` while other CLs
+    // drain ahead of it. Promoted to pend when only this CL remains.
+    // ════════════════════════════════════════════════════════════════════
+    reg                       defer_valid_r;
+    reg [TAG_W-1:0]           defer_tag_r;
+    reg [DXA_SMEM_ADDR_W-1:0] defer_smem_byte_addr_r;
+    reg [CL_OFF_BITS:0]       defer_valid_length_r;
+    reg [FILL_CAP*8-1:0]      defer_data_r;   // fine-positioned (see pend_data_r)
+    reg [COARSE_W-1:0]        defer_coarse_r; // coarse word count (see pend_coarse_r)
+    reg [15:0]                defer_k_r, defer_n_r;
+    reg [DXA_SMEM_ADDR_W-1:0] defer_dest_addr_r;
+    reg [15:0]                defer_n_in_r;
+    reg                       defer_calc_r;
+    reg                       defer_addr_rdy_r;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Drain fill buffer
+    // ════════════════════════════════════════════════════════════════════
+    reg                        fb_active_r;
+    reg [TAG_W-1:0]            fb_tag_r;
+    reg                        fb_last_r;
+    reg [FILL_CAP*8-1:0]       fb_data_r;
+    reg [FILL_W-1:0]           fb_level_r;
+    reg [SMEM_ADDR_WIDTH-1:0]  fb_word_addr_r;
+    reg [SMEM_OFF_W-1:0]       fb_byte_offset_r;
+    reg [SMEM_ADDR_WIDTH-1:0]  fb_start_word_r;
+    // K-major scatter state: per-beat target byte address (this CL's
+    // element-0 destination plus N*per_lane_stride per beat).
+    reg [DXA_SMEM_ADDR_W-1:0] fb_byte_addr_r;
+    // K-major read offset (bytes into fb_data_r), advances by elem_bytes per
+    // beat. A read pointer instead of a per-beat shift of fb_data_r keeps a
+    // variable barrel shift out of the fb_data_r path.
+    reg [CL_OFF_BITS-1:0]     km_rd_off_r;
+    // Tiled scatter (Flat/BlockMajor): the per-element SMEM destination is the
+    // bbuf-native permuted index, not a uniform stride. fb_byte_addr_r holds
+    // it directly (loaded with the CL's precomputed element-0 dest, advanced
+    // by the step/wrap constants per beat); the in-block phase counter and
+    // its registered wrap flag pick which constant applies.
+    reg [15:0]                fb_n_in_r;
+    reg                       fb_n_wrap_r;
+
+    // K-major/tiled drain quantum (in bytes) = 1 element per beat in scatter
+    // mode, SMEM_WORD_SIZE bytes per beat in row-major streaming mode.
+    wire [FILL_W-1:0] drain_q_bytes = scatter ? FILL_W'(elem_bytes_q) : FILL_W'(SMEM_WORD_SIZE);
+    // Effective per-element SMEM byte address: both scatter sub-modes read
+    // the fb_byte_addr_r accumulator.
+    wire [SMEM_OFF_W-1:0] km_in_word_off = fb_byte_addr_r[SMEM_OFF_W-1:0];
+    wire [SMEM_ADDR_WIDTH-1:0] km_word_addr = SMEM_ADDR_WIDTH'(fb_byte_addr_r >> SMEM_OFF_W);
+
+    // ════════════════════════════════════════════════════════════════════
+    // Drain-side combinational
+    // ════════════════════════════════════════════════════════════════════
+    // Mode-aware drain accounting.
+    //   Row-major:  word at a time, possibly with a trailing partial word.
+    //   K-major:    one element at a time, no partials (valid_length is a
+    //               multiple of elem_bytes by descriptor invariant).
+    wire has_full_word    = (fb_level_r >= drain_q_bytes);
+    wire has_last_partial = !scatter && !has_full_word && (fb_level_r > 0);
+    wire drain_valid      = fb_active_r && (has_full_word || has_last_partial);
+    wire drain_will_empty = (fb_level_r <= drain_q_bytes);
+
+    wire smem_wr_ready_internal;
+    wire drain_fire = drain_valid && smem_wr_ready_internal;
+    wire drain_emptying_now = drain_fire && drain_will_empty;
+    wire fb_will_be_empty   = drain_emptying_now || ~fb_active_r;
+
+    // SMEM word data and byteen from fill buffer.
+    //
+    // Row-major (default): fb_data_r is pre-shifted at load to start at the
+    //   destination in-word offset; per beat we emit SMEM_WORD bytes with a
+    //   leading/trailing mask. is_first_word covers the leading mask;
+    //   trailing-tail bytes are masked by `byte_has_data` running out.
+    //
+    // K-major scatter: fb_data_r holds source bytes starting at element 0;
+    //   per beat we emit one element worth of bytes shifted to km_in_word_off
+    //   and a byteen of `elem_bytes` contiguous ones at that offset.
+    wire is_first_word = (fb_word_addr_r == fb_start_word_r);
+
+    // Per-beat element bytes: the 64-bit window at km_rd_off_r (a moving read
+    // pointer, not a shifted register), then scattered to km_in_word_off below.
+    // elem_bytes ≤ 8, so a 64-bit window covers the live element.
+    wire [$clog2(FILL_CAP*8)-1:0] km_rd_bit = ($clog2(FILL_CAP*8))'({km_rd_off_r, 3'b000});
+    wire [63:0] km_elem_bytes_slice = fb_data_r[km_rd_bit +: 64];
+    wire [SMEM_DATAW-1:0] km_elem_data_shifted =
+        SMEM_DATAW'(km_elem_bytes_slice) << ({3'b000, km_in_word_off} << 3);
+
+    wire [SMEM_DATAW-1:0] fb_word_data = scatter ? km_elem_data_shifted
+                                                 : fb_data_r[SMEM_DATAW-1:0];
+
+    // K-major byteen: `elem_bytes` contiguous bytes at km_in_word_off.
+    wire [SMEM_WORD_SIZE-1:0] km_elem_mask_raw =
+        SMEM_WORD_SIZE'((SMEM_WORD_SIZE'(1) << elem_bytes_q) - SMEM_WORD_SIZE'(1));
+    wire [SMEM_WORD_SIZE-1:0] km_byteen = km_elem_mask_raw << km_in_word_off;
+
+    wire [SMEM_WORD_SIZE-1:0] rm_byteen;
+    for (genvar i = 0; i < SMEM_WORD_SIZE; ++i) begin : g_byteen
+        wire byte_has_data = (FILL_W'(i) < fb_level_r);
+        if (i < SMEM_WORD_SIZE - 1) begin : g_with_offset
+            wire byte_is_offset = is_first_word && (SMEM_OFF_W'(i) < fb_byte_offset_r);
+            assign rm_byteen[i] = byte_has_data && !byte_is_offset;
+        end else begin : g_no_offset
+            assign rm_byteen[i] = byte_has_data;
+        end
+    end
+    wire [SMEM_WORD_SIZE-1:0] fb_word_byteen = scatter ? km_byteen : rm_byteen;
+
+    // ════════════════════════════════════════════════════════════════════
+    // sw-channel accept + load scheduling
+    // ════════════════════════════════════════════════════════════════════
+    //
+    // The arriving sw CL takes one of two paths:
+    //   (a) Capture into pend (the 1-deep skid; loaded into fb on the next
+    //       fill-empty boundary). All non-deferred CLs use this path.
+    //   (b) Capture into defer_*_r (it's the `last` CL and we still have
+    //       other CLs outstanding to drain first).
+    //
+    // Promotion from defer_*_r to fb fires when the last drain leaves only the
+    // deferred CL outstanding.
+
+    wire sw_is_last_defer = sw_valid && sw_last && (sw_outstanding > SEQ_W'(1));
+    wire can_defer        = sw_is_last_defer && ~defer_valid_r;
+
+    wire can_capture_pend = ~pend_valid_r;
+
+    // sw_ready conditions:
+    //   - If sw is the last-to-defer: defer is empty → accept.
+    //   - Else: pend can capture → accept.
+    assign sw_ready = sw_is_last_defer ? can_defer : can_capture_pend;
+
+    wire sw_accept     = sw_valid && sw_ready;
+    wire sw_defer_path = sw_accept && sw_is_last_defer;
+    // Every non-deferred CL is captured into pend (no combinational sw→fb bypass),
+    // so the fb-load source is always a register; only the shallow coarse shift is
+    // on the load path. The extra cycle is at fill-empty boundaries only.
+    wire sw_pend_path  = sw_accept && ~sw_is_last_defer;
+
+    // Deferred-CL promotion to fb: fires when fb is emptying and we are
+    // about to be down to 1 outstanding (= just the deferred).
+    // Equivalent: sw_outstanding == 2 && drain_emptying_now, or
+    // sw_outstanding == 1 with fb idle (no other CL in flight).
+    // Tiled loads additionally wait for the slot's dest-addr calc pipeline
+    // (2 cycles after capture) to complete.
+    wire pend_addr_ok  = pend_addr_rdy_r;
+    wire defer_addr_ok = defer_addr_rdy_r;
+
+    wire promote_defer = defer_valid_r && defer_addr_ok && fb_will_be_empty && ~pend_valid_r
+                      && ((sw_outstanding == SEQ_W'(1))
+                          || (sw_outstanding == SEQ_W'(2) && drain_emptying_now));
+
+    // pend → fb load (existing pend has data ready, fb emptying).
+    wire load_pend_to_fb = pend_valid_r && pend_addr_ok && fb_will_be_empty;
+
+    // ════════════════════════════════════════════════════════════════════
+    // fb-load source select (pend preferred over a promoted defer) + metadata.
+    // ════════════════════════════════════════════════════════════════════
+    wire use_pend_for_fb  = load_pend_to_fb;
+    wire use_defer_for_fb = promote_defer && ~use_pend_for_fb;
+    wire fb_load_now      = use_pend_for_fb || use_defer_for_fb;
+
+    // Apply the coarse whole-word shift the capture stage deferred; with the fine
+    // shift already in pend/defer this fully positions the payload.
+    wire [FILL_CAP*8-1:0]      fb_load_fine            = use_pend_for_fb ? pend_data_r : defer_data_r;
+    wire [COARSE_W-1:0]        fb_load_coarse          = use_pend_for_fb ? pend_coarse_r : defer_coarse_r;
+    wire [FILL_CAP*8-1:0]      fb_load_data            = fb_load_fine >> {fb_load_coarse, {SMEM_DATAW_LOG{1'b0}}};
+    wire [DXA_SMEM_ADDR_W-1:0] fb_load_smem_byte_addr  = use_pend_for_fb ? pend_smem_byte_addr_r : defer_smem_byte_addr_r;
+    wire [CL_OFF_BITS:0]       fb_load_valid_length    = use_pend_for_fb ? pend_valid_length_r : defer_valid_length_r;
+    wire [TAG_W-1:0]           fb_load_tag             = use_pend_for_fb ? pend_tag_r : defer_tag_r;
+    wire                       fb_load_last            = use_pend_for_fb ? pend_last_r : 1'b1; // promoted defer is the last
+    wire [DXA_SMEM_ADDR_W-1:0] fb_load_dest_addr       = use_pend_for_fb ? pend_dest_addr_r : defer_dest_addr_r;
+    wire [15:0]                fb_load_n_in            = use_pend_for_fb ? pend_n_in_r : defer_n_in_r;
+
+    wire [SMEM_OFF_W-1:0]      new_smem_byte_off = fb_load_smem_byte_addr[SMEM_OFF_W-1:0];
+    wire [SMEM_ADDR_WIDTH-1:0] new_start_word    = SMEM_ADDR_WIDTH'(fb_load_smem_byte_addr >> SMEM_OFF_W);
+    //   Row-major fill level = leading-offset padding + valid bytes.
+    //   K-major fill level   = exactly valid_length (each elem drained alone).
+    wire [FILL_W-1:0]          new_fill_level    =
+        scatter ? FILL_W'(fb_load_valid_length)
+                : (FILL_W'(new_smem_byte_off) + FILL_W'(fb_load_valid_length));
+
+    // Positioning drops the CL byte_offset and lands bytes at their destination;
+    // POS_BIAS keeps the amount non-negative. sw_pos_amt splits into fine
+    // (capture) + coarse (fb-load), bit-identical to the one byte-shift but with
+    // neither stage barreling the full FILL_CAP.
+    localparam POS_BIAS = SMEM_WORD_SIZE - 1;
+    // Positioning amount = POS_BIAS (≤ SMEM_WORD_SIZE-1) + byte_offset (≤ CL_SIZE-1),
+    // less the SMEM in-word offset. With wide SMEM words (XLEN=64 → SMEM_WORD_SIZE
+    // up to 256B) POS_BIAS+byte_offset exceeds 8 bits, so size to FILL_W to avoid
+    // wrap (which would mis-shift word-aligned rows and drop their data).
+    wire [SMEM_OFF_W-1:0] sw_smem_off = sw_smem_byte_addr[SMEM_OFF_W-1:0];
+    wire [FILL_W-1:0] sw_pos_amt = scatter
+        ? (FILL_W'(POS_BIAS) + FILL_W'(sw_byte_offset))
+        : ((FILL_W'(POS_BIAS) + FILL_W'(sw_byte_offset)) - FILL_W'(sw_smem_off));
+    // Fine = intra-word bytes (capture barrel); coarse = whole words (at fb-load).
+    wire [SMEM_OFF_W-1:0] sw_fine_amt   = sw_pos_amt[SMEM_OFF_W-1:0];
+    wire [COARSE_W-1:0]   sw_coarse_amt = COARSE_W'(sw_pos_amt >> SMEM_OFF_W);
+    // Per-CL element-0 tiled destination — the only place the full permute
+    // runs; drain beats advance fb_byte_addr_r by the precomputed step/wrap
+    // constants. The permute is deeper than one cycle (two nested shift-add
+    // trees), so it is pipelined over two: stage 1 decomposes the (k, n)
+    // captured the cycle before and folds every element-granular term into
+    // an esize-scaled intra term; stage 2 shifts the block index by the
+    // registered constant and sums with the base. Per-CL rate makes the
+    // latency free (a CL drains over many beats); captures are at least a
+    // cycle apart, so one shared pipeline serves both slots, pend first.
+    wire calc_pend  = pend_calc_r;
+    wire calc_defer = defer_calc_r && ~pend_calc_r;
+    wire [15:0] calc_k = calc_pend ? pend_k_r : defer_k_r;
+    wire [15:0] calc_n = calc_pend ? pend_n_r : defer_n_r;
+
+    wire [15:0] ratio_mask_w = (16'd1 << lg_ratio_q) - 16'd1;
+    wire [15:0] ktck_mask_w  = (16'd2 << lg_tcN_q) - 16'd1;
+    wire [15:0] kw_mask_w    = (16'd1 << (lg_tcN_q + lg_ratio_q)) - 16'd1;
+    wire [15:0] calc_n_blk   = calc_n >> lg_tcN_q;
+    wire [15:0] calc_n_in    = calc_n & tcn_mask_q;
+    wire [15:0] f_k_word     = calc_k >> lg_ratio_q;
+    wire [15:0] f_elem       = calc_k & ratio_mask_w;
+    wire [15:0] f_k_blk      = f_k_word >> (lg_tcN_q + 4'd1);
+    wire [15:0] f_kw_in      = f_k_word & ktck_mask_w;
+    wire [15:0] b_k_blk      = calc_k >> (lg_tcN_q + lg_ratio_q);
+    wire [15:0] b_r_in       = calc_k & kw_mask_w;
+
+    wire [15:0] calc_k_blk = is_flat_w ? f_k_blk : b_k_blk;
+    wire [31:0] calc_blk_w   = (32'(calc_k_blk) << lg_nsteps_q) + 32'(calc_n_blk);
+    wire [31:0] calc_intra_w = is_flat_w
+        ? (((((32'(f_kw_in) << lg_tcN_q) + 32'(calc_n_in)) << lg_ratio_q) + 32'(f_elem)) << esize)
+        : (((32'(calc_n_in) << (lg_tcN_q + lg_ratio_q)) + 32'(b_r_in)) << esize);
+
+    reg [31:0] calc_blk_r, calc_intra_r;
+    reg        calc2_valid_r, calc2_pend_r;
+    wire [DXA_SMEM_ADDR_W-1:0] calc_dest_addr = smem_base_q
+        + DXA_SMEM_ADDR_W'((calc_blk_r << calc_sh2_q) + calc_intra_r);
+
+    wire [15:0] sw_n_in = sw_n_base & tcn_mask_q;
+
+    wire [GMEM_DATAW-1:0] sw_payload      = sw_oob ? cfill_replicated : sw_data;
+    wire [FILL_CAP*8-1:0] sw_padded       = (FILL_CAP*8)'(sw_payload) << (POS_BIAS*8);
+    // Capture applies the fine shift only; coarse follows at fb-load.
+    wire [FILL_CAP*8-1:0] sw_fine_shifted = (sw_valid_length != 0)
+        ? (sw_padded >> {sw_fine_amt, 3'b000}) : '0;
+
+    // ════════════════════════════════════════════════════════════════════
+    // Sequential update
+    // ════════════════════════════════════════════════════════════════════
+    always @(posedge clk) begin
+        if (reset || transfer_start) begin
+            pend_valid_r     <= 1'b0;
+            defer_valid_r    <= 1'b0;
+            pend_calc_r      <= 1'b0;
+            defer_calc_r     <= 1'b0;
+            pend_addr_rdy_r  <= 1'b0;
+            defer_addr_rdy_r <= 1'b0;
+            calc2_valid_r    <= 1'b0;
+            fb_active_r      <= 1'b0;
+            fb_data_r        <= '0;
+            fb_level_r       <= '0;
+            fb_word_addr_r   <= '0;
+            fb_byte_offset_r <= '0;
+            fb_start_word_r  <= '0;
+            fb_byte_addr_r   <= '0;
+            km_rd_off_r      <= '0;
+            fb_n_in_r        <= '0;
+            fb_n_wrap_r      <= 1'b0;
+            fb_tag_r         <= '0;
+            fb_last_r        <= 1'b0;
+        end else begin
+            // ── Drain advance (mid-CL beat) ──
+            if (drain_fire && ~drain_will_empty) begin
+                if (scatter) begin
+                    // Read pointer advances; fb_data_r is NOT shifted. K-major
+                    // strides the dest uniformly; tiled advances it by the
+                    // in-block/wrap constant selected by the registered flag.
+                    km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(elem_bytes_q);
+                    fb_level_r     <= fb_level_r - drain_q_bytes;
+                    fb_byte_addr_r <= fb_byte_addr_r
+                        + (dest_tiled ? (fb_n_wrap_r ? tiled_wrap_q : tiled_step_q)
+                                      : per_lane_stride_q);
+                    fb_n_in_r      <= fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1);
+                    fb_n_wrap_r    <= ((fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1)) == tcn_mask_q);
+                end else begin
+                    // Row-major: fixed whole-word shift (free), per-beat slice
+                    // is the low SMEM_DATAW bits.
+                    fb_data_r      <= fb_data_r >> SMEM_DATAW;
+                    fb_level_r     <= fb_level_r - FILL_W'(SMEM_WORD_SIZE);
+                    fb_word_addr_r <= fb_word_addr_r + SMEM_ADDR_WIDTH'(1);
+                end
+            end
+
+            // ── Load fill buffer with the next CL ──
+            //   fb_load_data is already fully positioned (fine from pend/defer +
+            //   coarse applied above), so this is a plain register load.
+            if (fb_load_now) begin
+                fb_data_r        <= fb_load_data;
+                fb_level_r       <= new_fill_level;
+                fb_word_addr_r   <= new_start_word;
+                fb_byte_offset_r <= new_smem_byte_off;
+                fb_start_word_r  <= new_start_word;
+                fb_byte_addr_r   <= dest_tiled ? fb_load_dest_addr : fb_load_smem_byte_addr;
+                km_rd_off_r      <= '0;
+                fb_n_in_r        <= fb_load_n_in;
+                fb_n_wrap_r      <= (fb_load_n_in == tcn_mask_q);
+                fb_tag_r         <= fb_load_tag;
+                fb_last_r        <= fb_load_last;
+                fb_active_r      <= 1'b1;
+            end else if (drain_emptying_now) begin
+                fb_data_r   <= '0;
+                fb_level_r  <= '0;
+                fb_active_r <= 1'b0;
+            end
+
+            // ── Per-CL dest-addr calc pipeline: stage-1 issue, stage-2 land ──
+            calc2_valid_r <= calc_pend || calc_defer;
+            calc2_pend_r  <= calc_pend;
+            if (calc_pend || calc_defer) begin
+                calc_blk_r   <= calc_blk_w;
+                calc_intra_r <= calc_intra_w;
+            end
+            if (calc_pend) begin
+                pend_calc_r <= 1'b0;
+            end else if (calc_defer) begin
+                defer_calc_r <= 1'b0;
+            end
+            if (calc2_valid_r) begin
+                if (calc2_pend_r) begin
+                    pend_dest_addr_r <= calc_dest_addr;
+                    pend_addr_rdy_r  <= 1'b1;
+                end else begin
+                    defer_dest_addr_r <= calc_dest_addr;
+                    defer_addr_rdy_r  <= 1'b1;
+                end
+            end
+
+            // ── pend slot management ──
+            if (sw_pend_path) begin
+                pend_tag_r            <= sw_tag;
+                pend_smem_byte_addr_r <= sw_smem_byte_addr;
+                pend_valid_length_r   <= sw_valid_length;
+                pend_last_r           <= sw_last;
+                pend_data_r           <= sw_fine_shifted;
+                pend_coarse_r         <= sw_coarse_amt;
+                pend_k_r              <= sw_k_row;
+                pend_n_r              <= sw_n_base;
+                pend_n_in_r           <= sw_n_in;
+                pend_calc_r           <= dest_tiled;
+                pend_addr_rdy_r       <= ~dest_tiled;
+                pend_valid_r          <= 1'b1;
+            end else if (use_pend_for_fb) begin
+                pend_valid_r <= 1'b0;
+            end
+
+            // ── defer slot management ──
+            if (sw_defer_path) begin
+                defer_tag_r            <= sw_tag;
+                defer_smem_byte_addr_r <= sw_smem_byte_addr;
+                defer_valid_length_r   <= sw_valid_length;
+                defer_data_r           <= sw_fine_shifted;
+                defer_coarse_r         <= sw_coarse_amt;
+                defer_k_r              <= sw_k_row;
+                defer_n_r              <= sw_n_base;
+                defer_n_in_r           <= sw_n_in;
+                defer_calc_r           <= dest_tiled;
+                defer_addr_rdy_r       <= ~dest_tiled;
+                defer_valid_r          <= 1'b1;
+            end else if (use_defer_for_fb) begin
+                defer_valid_r <= 1'b0;
+            end
+        end
+    end
+
+    // ════════════════════════════════════════════════════════════════════
+    // Resource release (per-tag, OOO)
+    // ════════════════════════════════════════════════════════════════════
+    wire drain_complete = drain_fire && drain_will_empty;
+
+    assign release_en  = drain_complete;
+    assign release_tag = fb_tag_r;
+
+    // ════════════════════════════════════════════════════════════════════
+    // SMEM write output (with optional multicast replay)
+    // ════════════════════════════════════════════════════════════════════
+    wire                       smem_wr_valid;
+    wire [SMEM_ADDR_WIDTH-1:0] smem_wr_addr;
+    wire                       smem_wr_last_pkt;
+
+    // LOG2UP (not CLOG2): NUM_WARPS=1 would make CLOG2 0 and the index vector
+    // [-1:0]. VX_priority_encoder.index_out is `LOG2UP(N)` wide — match it.
+    localparam MC_NW_BITS = `LOG2UP(`VX_CFG_NUM_WARPS);
+
+    // ════════════════════════════════════════════════════════════════════
+    // Pipelined multicast replay control
+    // ════════════════════════════════════════════════════════════════════
+    // cta_mask/smem_stride are stable per transfer, so the replay walk is a
+    // deterministic iteration over the set bits of a fixed mask. The
+    // NUM_WARPS-wide priority encoder + popcount are kept in the
+    // register-input path; only registered control reaches the drain-ready
+    // feedback, so smem_wr_ready_internal does not traverse the PE.
+    reg  [`VX_CFG_NUM_WARPS-1:0] replay_vec_r;       // active remaining mask
+    reg  [MC_NW_BITS-1:0]        replay_next_idx_r;  // PE index of replay_vec_r
+    reg  [`VX_CFG_NUM_WARPS-1:0] replay_onehot_r;    // PE onehot of replay_vec_r
+    reg                          replay_has_rem_r;   // PE valid of replay_vec_r
+    reg                          replay_is_last_r;   // replay_vec_r is one bit
+    // Per-receiver SMEM word offset = stride_words × (receivers serviced so far
+    // in this word). Maintained as a running accumulator instead of a multiply:
+    // +stride_words per serviced receiver, reset at each word boundary. Removes
+    // both the popcount and the address-path multiply.
+    reg  [SMEM_ADDR_WIDTH-1:0]   beat_offset_r;
+
+    wire [MC_NW_BITS-1:0]  replay_next_idx      = replay_next_idx_r;
+    wire                   replay_has_remaining = replay_has_rem_r;
+    wire                   replay_is_last       = replay_is_last_r;
+
+    wire mc_write_valid = transfer_active && drain_valid
+                       && (!is_multicast || replay_has_remaining);
+    wire mc_write_fire = mc_write_valid && smem_bus_if.req_ready;
+    assign smem_wr_ready_internal = is_multicast
+        ? (smem_bus_if.req_ready && (!replay_has_remaining || replay_is_last))
+        : smem_bus_if.req_ready;
+
+    // Next-cycle replay mask: clear the bit that fires this beat, reload
+    // cta_mask at word boundaries (after the last receiver) and whenever the
+    // engine is idle, so the first beat of any word starts from the full mask
+    // without a reload bubble (reproduces the old combinational reload_now).
+    wire replay_beat_fire = mc_write_fire && replay_has_remaining;
+    wire [`VX_CFG_NUM_WARPS-1:0] replay_vec_next =
+          ~drain_valid      ? cta_mask                          // idle: keep primed
+        : ~replay_beat_fire ? replay_vec_r                      // stalled mid-word
+        : replay_is_last    ? cta_mask                          // word done: reload
+        :                     (replay_vec_r & ~replay_onehot_r); // advance in word
+
+    // stride_words: smem_stride is byte units on the bus; convert to word units
+    // (SMEM_OFF_W = log2(SMEM_WORD_SIZE)). The accumulator mirrors the
+    // replay_vec_next state machine: 0 when idle/word-boundary, hold on stall,
+    // +stride_words per serviced receiver.
+    wire [SMEM_ADDR_WIDTH-1:0] stride_words = SMEM_ADDR_WIDTH'(smem_stride >> SMEM_OFF_W);
+    wire [SMEM_ADDR_WIDTH-1:0] beat_offset_next =
+          ~drain_valid      ? '0                              // idle: prime to 0
+        : ~replay_beat_fire ? beat_offset_r                   // stalled mid-word
+        : replay_is_last    ? '0                              // word done: reset
+        :                     (beat_offset_r + stride_words); // advance one receiver
+
+    // Pre-decode the next mask for the registered control.
+    wire [MC_NW_BITS-1:0]        replay_idx_next;
+    wire [`VX_CFG_NUM_WARPS-1:0] replay_onehot_next;
+    wire                         replay_hasrem_next;
+    VX_priority_encoder #(
+        .N (`VX_CFG_NUM_WARPS)
+    ) replay_pe (
+        .data_in    (replay_vec_next),
+        .onehot_out (replay_onehot_next),
+        .index_out  (replay_idx_next),
+        .valid_out  (replay_hasrem_next)
+    );
+    wire replay_islast_next = replay_hasrem_next
+                           && (replay_vec_next == replay_onehot_next);
+
+    always @(posedge clk) begin
+        if (reset || transfer_start) begin
+            replay_vec_r      <= cta_mask;
+            replay_next_idx_r <= '0;
+            replay_onehot_r   <= '0;
+            replay_has_rem_r  <= 1'b0;
+            replay_is_last_r  <= 1'b0;
+            beat_offset_r     <= '0;
+        end else if (transfer_active && is_multicast) begin
+            replay_vec_r      <= replay_vec_next;
+            replay_next_idx_r <= replay_idx_next;
+            replay_onehot_r   <= replay_onehot_next;
+            replay_has_rem_r  <= replay_hasrem_next;
+            replay_is_last_r  <= replay_islast_next;
+            beat_offset_r     <= beat_offset_next;
+        end
+    end
+
+    // Base word addr per beat: km_word_addr in K-major (per-elem scatter),
+    // fb_word_addr_r in row-major (streamed). Replay adds the per-receiver
+    // offset accumulated in beat_offset_r (the dispatcher guarantees smem_stride
+    // is word-aligned — a multiple of MEM_BLOCK_SIZE ≥ SMEM_WORD_SIZE — so the
+    // byte→word shift in stride_words is lossless).
+    wire [SMEM_ADDR_WIDTH-1:0] base_word_addr = scatter ? km_word_addr : fb_word_addr_r;
+    wire [SMEM_ADDR_WIDTH-1:0] replay_addr  = base_word_addr + beat_offset_r;
+    // Only the low SMEM_ADDR_WIDTH+SMEM_OFF_W bits of smem_stride are used.
+    `UNUSED_VAR (smem_stride)
+    // per_lane_stride_bytes is LMEM-bounded; only the low DXA_SMEM_ADDR_W bits feed fb_byte_addr_r.
+    `UNUSED_VAR (per_lane_stride_bytes[15:DXA_SMEM_ADDR_W])
+
+    assign smem_wr_valid   = mc_write_valid;
+    assign smem_wr_addr    = is_multicast ? replay_addr : base_word_addr;
+    assign smem_req_fire   = mc_write_fire;
+
+    wire is_last_drain = fb_last_r && drain_will_empty;
+    assign smem_wr_last_pkt = is_last_drain && (!is_multicast || replay_is_last);
+
+    // Completion attr: bar_stride hardcoded to 1.
+    // Use mc_write_valid (not mc_write_fire) to break a UNOPTFLAT loop:
+    // mc_write_fire = mc_write_valid && smem_bus_if.req_ready, and using
+    // it on the request side closes a comb cycle through the downstream
+    // LMEM arbiter. Attr is sampled by the receiver only when req_valid
+    // && req_ready, so qualifying with req_ready here is redundant.
+    wire smem_wr_attr_last = active_notify_smem_done && (
+        is_multicast ? (mc_write_valid && is_last_drain) : smem_wr_last_pkt);
+    wire [BAR_ADDR_W-1:0] smem_wr_attr_bar = is_multicast
+        ? BAR_ADDR_W'(active_bar_addr + (BAR_ADDR_W'(replay_next_idx) << NB_BITS))
+        : active_bar_addr;
+
+    // ════════════════════════════════════════════════════════════════════
+    // SMEM bus wiring
+    // ════════════════════════════════════════════════════════════════════
+    assign smem_bus_if.req_valid       = smem_wr_valid;
+    assign smem_bus_if.req_data.rw     = 1'b1;
+    assign smem_bus_if.req_data.addr   = smem_wr_addr;
+    assign smem_bus_if.req_data.data   = fb_word_data;
+    assign smem_bus_if.req_data.byteen = fb_word_byteen;
+    assign smem_bus_if.req_data.attr   = {smem_wr_attr_last, smem_wr_attr_bar};
+    assign smem_bus_if.req_data.tag.uuid  = active_uuid;   // tag DXA write with its issuing uuid
+    assign smem_bus_if.req_data.tag.value = SMEM_TAG_VALUE_W'(active_core_id) << ENGINE_VALUE_W;
+    assign smem_bus_if.rsp_ready       = 1'b0;
+
+    `UNUSED_VAR (smem_bus_if.rsp_valid)
+    `UNUSED_VAR (smem_bus_if.rsp_data)
+
+    // ════════════════════════════════════════════════════════════════════
+    // Completion tracking
+    // ════════════════════════════════════════════════════════════════════
+    reg [31:0] wr_count_r;
+
+    always @(posedge clk) begin
+        if (reset || transfer_start) begin
+            wr_count_r <= '0;
+        end else if (smem_req_fire) begin
+            wr_count_r <= wr_count_r + 32'd1;
+        end
+    end
+
+    assign wr_done_count = wr_count_r;
+    assign transfer_done = transfer_active && smem_req_fire && smem_wr_last_pkt;
+
+`ifdef PERF_ENABLE
+    reg [31:0] wrp_total_lmem_writes_r;
+    always @(posedge clk) begin
+        if (reset || transfer_start) begin
+            wrp_total_lmem_writes_r <= '0;
+        end else if (smem_req_fire) begin
+            wrp_total_lmem_writes_r <= wrp_total_lmem_writes_r + 32'd1;
+        end
+    end
+    assign perf_lmem_writes = wrp_total_lmem_writes_r + 32'(smem_req_fire);
+`endif
+
+`ifdef DBG_TRACE_DXA
+    always @(posedge clk) begin
+        if (~reset) begin
+            if (sw_accept) begin
+                $write("DXA_PIPE,%0d,SW_RX,tag=%0d,oob=%0d,last=%0d,path=%s\n",
+                    $time, sw_tag, sw_oob, sw_last,
+                    sw_defer_path ? "defer" : "pend");
+            end
+            if (smem_req_fire) begin
+                $write("DXA_PIPE,%0d,SMEM_WR,addr=0x%0h,byteen=0x%0h,last=%0d\n",
+                    $time, smem_wr_addr, fb_word_byteen, smem_wr_last_pkt);
+            end
+        end
+    end
+`endif
+
+endmodule

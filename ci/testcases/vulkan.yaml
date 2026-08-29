@@ -1,0 +1,58 @@
+# Test cases for `vulkan`, drafted from regression.sh.in (review/collapse).
+category: vulkan
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: smoke
+tests:
+- id: isa-1
+  via: make-run
+  drivers:
+  - simx
+  dir: tests/vulkan
+  target: run-{driver}
+- id: isa-4
+  via: make-run
+  drivers:
+  - xrt
+  dir: tests/vulkan
+  target: run-{driver}
+
+# ── Explicit scenario coverage ───────────────────────────────────────────────
+# isa-* above run the whole tests/vulkan suite per driver; the cases below track
+# specific scenarios individually and add FF/SW-mix combos the suite does not
+# build. vortexpipe routes any disabled fixed-function unit (NO_TEX / NO_RASTER /
+# NO_OM) to SIMT software via the gfx_*_sw ABI, so any FF/SW mix runs against the
+# same golden as the all-hardware path.
+
+# Ray-tracing benchmark — VK_KHR_ray_query shaded render on the PRISM RTU.
+- {id: rt-raytrace, via: make-run, drivers: [simx, rtlsim], dir: tests/vulkan/raytrace, target: "run-{driver}",
+   touches: [hw/rtl/rtu/, sim/simx/rtu/, tests/vulkan/raytrace]}
+- {id: rt-rtquery, via: make-run, drivers: [simx], dir: tests/vulkan/rtquery, target: "run-{driver}",
+   touches: [hw/rtl/rtu/, sim/simx/rtu/]}
+
+# Rasterized 3D with multiple draw calls into one attachment.
+- {id: gfx-multidraw, via: make-run, drivers: [simx, rtlsim], dir: tests/vulkan/multidraw, target: "run-{driver}",
+   touches: [hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/]}
+
+# Hybrid gfx + RT — a rasterized fragment shader issuing inline ray queries
+# (RASTER/OM raster pipeline + RTU traversal in the same frame).
+- {id: gfx-rt-rtquery-id, via: make-run, drivers: [simx], dir: tests/vulkan/rtquery_id, target: "run-{driver}",
+   touches: [hw/rtl/rtu/, hw/rtl/raster/, hw/rtl/om/]}
+
+# FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
+# selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER
+# routing depend on vortexpipe wiring those stages (the gfx_*_sw ABI already
+# exists). Kept on simx to bound the mesa build cost.
+- {id: ff-raster-tex-om, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}"}
+- {id: ff-raster-tex, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_OM: 1}}
+- {id: ff-raster-om, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1}}
+- {id: ff-tex-om, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_RASTER: 1}}
+- {id: ff-tex-only, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_RASTER: 1, NO_OM: 1}}
+- {id: ff-raster-only, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1, NO_OM: 1}}
+- {id: ff-om-only, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1, NO_RASTER: 1}}
+
+# All fixed-function disabled — the whole 3D pipeline emulated in SIMT software.
+- {id: ff-all-sw, via: make-run, drivers: [simx], dir: tests/vulkan/draw3d, target: "run-{driver}", vars: {NO_TEX: 1, NO_RASTER: 1, NO_OM: 1},
+   tier: full}

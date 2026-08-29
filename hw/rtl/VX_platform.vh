@@ -14,10 +14,6 @@
 `ifndef VX_PLATFORM_VH
 `define VX_PLATFORM_VH
 
-`ifdef SV_DPI
-`include "util_dpi.vh"
-`endif
-
 `include "VX_scope.vh"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -110,7 +106,7 @@
 `define UNUSED_VAR(x)   /* verilator lint_off GENUNNAMED */ \
                         if (1) begin \
                             /* verilator lint_off UNUSED */ \
-                            wire [$bits(x)-1:0] __unused = x; \
+                            logic [$bits(x)-1:0] __unused = x; \
                             /* verilator lint_on UNUSED */ \
                         end \
                         /* verilator lint_on GENUNNAMED */
@@ -128,7 +124,7 @@
     dpi_trace(level, $sformatf args);
 `else
 `define TRACE(level, args) \
-    if (level <= `DEBUG_LEVEL) begin \
+    if (level <= `VX_DBG_DEBUG_LEVEL) begin \
         $write args; \
     end
 `endif
@@ -145,7 +141,7 @@
 
 `define DEBUG_BLOCK(x)
 `define TRACE(level, args) \
-    if (level <= `DEBUG_LEVEL) begin \
+    if (level <= `VX_DBG_DEBUG_LEVEL) begin \
     end
 `define SFORMATF(x) ""
 
@@ -164,14 +160,15 @@
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
 
-`endif
+`endif // SIMULATION
 
 ///////////////////////////////////////////////////////////////////////////////
 
 `ifdef QUARTUS
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
-`define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
+`define FORCE_BRAM(d,w) (((d) * (w)) >= 1024)
+`define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ramstyle = "block" *)
 `define USE_FAST_BRAM   (* ramstyle = "MLAB, no_rw_check" *)
 `define NO_RW_RAM_CHECK (* altera_attribute = "-name add_pass_through_logic_to_inferred_rams off" *)
@@ -183,7 +180,8 @@
 `elsif VIVADO
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
-`define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
+`define FORCE_BRAM(d,w) (((d) * (w)) >= 1024)
+`define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM  (* ram_style = "block" *)
 `define USE_FAST_BRAM   (* ram_style = "distributed" *)
 `define NO_RW_RAM_CHECK (* rw_addr_collision = "no" *)
@@ -195,10 +193,24 @@
 `ifndef SIMULATION
     `define ASYNC_BRAM_PATCH
 `endif
+`elsif ASIC
+`define MAX_FANOUT      8
+`define LATENCY_IMUL    3
+`define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
+`define FORCE_BUILTIN_ADDER(w)  0
+`define USE_BLOCK_BRAM
+`define USE_FAST_BRAM
+`define NO_RW_RAM_CHECK
+`define RW_RAM_CHECK
+`define DISABLE_BRAM
+`define PRESERVE_NET    (* syn_keep = "true" *)
+`define BLACKBOX_CELL   (* syn_black_box *)
+`define STRING
 `else
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
-`define FORCE_BRAM(d,w) (((d) >= 64 || (w) >= 16 || ((d) * (w)) >= 512) && ((d) * (w)) >= 64)
+`define FORCE_BRAM(d,w) (((d) >= 64) && (((d) * (w)) >= 2048))
+`define FORCE_BUILTIN_ADDER(w)  ((w) <= 27)
 `define USE_BLOCK_BRAM
 `define USE_FAST_BRAM
 `define NO_RW_RAM_CHECK
@@ -212,6 +224,11 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define STRINGIFY(x) `"x`"
+
+`define MAP_AOS_SOA(__i, __size, __lhs, __rhs) \
+    for (genvar __i = 0; __i < (__size); __i++) begin : g_map_aos_soa_`__LINE__ \
+        assign __lhs = __rhs; \
+    end
 
 `define CLOG2(x)    $clog2(x)
 `define FLOG2(x)    ($clog2(x) - (((1 << $clog2(x)) > (x)) ? 1 : 0))
@@ -277,6 +294,18 @@
 `define RESET_RELAY(dst, src) \
     `RESET_RELAY_EX (dst, src, 1, 0)
 
+// Combinational fanout buffer: replicate a control net into preserved copies
+// (<= `fanout` loads each). Latency-free, for same-cycle controls. The caller
+// declares `dst`; the copy count is inferred from its width via $bits.
+`define FANOUT_BUFFER_EX(dst, src, fanout)  \
+    VX_fanout_buffer #(.N($bits(dst)), .MAX_FANOUT(fanout)) __``dst ( \
+        .data_in  (src),                    \
+        .data_out (dst)                     \
+    )
+
+`define FANOUT_BUFFER(dst, src) \
+    `FANOUT_BUFFER_EX (dst, src, `MAX_FANOUT)
+
 // size(x): 0 -> 0, 1 -> 1, 2 -> 2, 3 -> 2, 4-> 2, 5 -> 2
 `define TO_OUT_BUF_SIZE(s)    `MIN(s & 7, 2)
 
@@ -286,42 +315,43 @@
 // lut(x): (x & 8) != 0
 `define TO_OUT_BUF_LUTRAM(s)  ((s & 8) != 0)
 
-`define REPEAT(n,f,s)   `_REPEAT_``n(f,s)
-`define _REPEAT_0(f,s)
-`define _REPEAT_1(f,s)  `f(0)
-`define _REPEAT_2(f,s)  `f(1)  `s `_REPEAT_1(f,s)
-`define _REPEAT_3(f,s)  `f(2)  `s `_REPEAT_2(f,s)
-`define _REPEAT_4(f,s)  `f(3)  `s `_REPEAT_3(f,s)
-`define _REPEAT_5(f,s)  `f(4)  `s `_REPEAT_4(f,s)
-`define _REPEAT_6(f,s)  `f(5)  `s `_REPEAT_5(f,s)
-`define _REPEAT_7(f,s)  `f(6)  `s `_REPEAT_6(f,s)
-`define _REPEAT_8(f,s)  `f(7)  `s `_REPEAT_7(f,s)
-`define _REPEAT_9(f,s)  `f(8)  `s `_REPEAT_8(f,s)
-`define _REPEAT_10(f,s) `f(9)  `s `_REPEAT_9(f,s)
-`define _REPEAT_11(f,s) `f(10) `s `_REPEAT_10(f,s)
-`define _REPEAT_12(f,s) `f(11) `s `_REPEAT_11(f,s)
-`define _REPEAT_13(f,s) `f(12) `s `_REPEAT_12(f,s)
-`define _REPEAT_14(f,s) `f(13) `s `_REPEAT_13(f,s)
-`define _REPEAT_15(f,s) `f(14) `s `_REPEAT_14(f,s)
-`define _REPEAT_16(f,s) `f(15) `s `_REPEAT_15(f,s)
-`define _REPEAT_17(f,s) `f(16) `s `_REPEAT_16(f,s)
-`define _REPEAT_18(f,s) `f(17) `s `_REPEAT_17(f,s)
-`define _REPEAT_19(f,s) `f(18) `s `_REPEAT_18(f,s)
-`define _REPEAT_20(f,s) `f(19) `s `_REPEAT_19(f,s)
-`define _REPEAT_21(f,s) `f(20) `s `_REPEAT_20(f,s)
-`define _REPEAT_22(f,s) `f(21) `s `_REPEAT_21(f,s)
-`define _REPEAT_23(f,s) `f(22) `s `_REPEAT_22(f,s)
-`define _REPEAT_24(f,s) `f(23) `s `_REPEAT_23(f,s)
-`define _REPEAT_25(f,s) `f(24) `s `_REPEAT_24(f,s)
-`define _REPEAT_26(f,s) `f(25) `s `_REPEAT_25(f,s)
-`define _REPEAT_27(f,s) `f(26) `s `_REPEAT_26(f,s)
-`define _REPEAT_28(f,s) `f(27) `s `_REPEAT_27(f,s)
-`define _REPEAT_29(f,s) `f(28) `s `_REPEAT_28(f,s)
-`define _REPEAT_30(f,s) `f(29) `s `_REPEAT_29(f,s)
-`define _REPEAT_31(f,s) `f(30) `s `_REPEAT_30(f,s)
-`define _REPEAT_32(f,s) `f(31) `s `_REPEAT_31(f,s)
+`define MP_REPEAT(n,f,s)   `_MP_REPEAT_``n(f,s)
+`define _MP_REPEAT_0(f,s)
+`define _MP_REPEAT_1(f,s)  `f(0)
+`define _MP_REPEAT_2(f,s)  `f(1)  `s `_MP_REPEAT_1(f,s)
+`define _MP_REPEAT_3(f,s)  `f(2)  `s `_MP_REPEAT_2(f,s)
+`define _MP_REPEAT_4(f,s)  `f(3)  `s `_MP_REPEAT_3(f,s)
+`define _MP_REPEAT_5(f,s)  `f(4)  `s `_MP_REPEAT_4(f,s)
+`define _MP_REPEAT_6(f,s)  `f(5)  `s `_MP_REPEAT_5(f,s)
+`define _MP_REPEAT_7(f,s)  `f(6)  `s `_MP_REPEAT_6(f,s)
+`define _MP_REPEAT_8(f,s)  `f(7)  `s `_MP_REPEAT_7(f,s)
+`define _MP_REPEAT_9(f,s)  `f(8)  `s `_MP_REPEAT_8(f,s)
+`define _MP_REPEAT_10(f,s) `f(9)  `s `_MP_REPEAT_9(f,s)
+`define _MP_REPEAT_11(f,s) `f(10) `s `_MP_REPEAT_10(f,s)
+`define _MP_REPEAT_12(f,s) `f(11) `s `_MP_REPEAT_11(f,s)
+`define _MP_REPEAT_13(f,s) `f(12) `s `_MP_REPEAT_12(f,s)
+`define _MP_REPEAT_14(f,s) `f(13) `s `_MP_REPEAT_13(f,s)
+`define _MP_REPEAT_15(f,s) `f(14) `s `_MP_REPEAT_14(f,s)
+`define _MP_REPEAT_16(f,s) `f(15) `s `_MP_REPEAT_15(f,s)
+`define _MP_REPEAT_17(f,s) `f(16) `s `_MP_REPEAT_16(f,s)
+`define _MP_REPEAT_18(f,s) `f(17) `s `_MP_REPEAT_17(f,s)
+`define _MP_REPEAT_19(f,s) `f(18) `s `_MP_REPEAT_18(f,s)
+`define _MP_REPEAT_20(f,s) `f(19) `s `_MP_REPEAT_19(f,s)
+`define _MP_REPEAT_21(f,s) `f(20) `s `_MP_REPEAT_20(f,s)
+`define _MP_REPEAT_22(f,s) `f(21) `s `_MP_REPEAT_21(f,s)
+`define _MP_REPEAT_23(f,s) `f(22) `s `_MP_REPEAT_22(f,s)
+`define _MP_REPEAT_24(f,s) `f(23) `s `_MP_REPEAT_23(f,s)
+`define _MP_REPEAT_25(f,s) `f(24) `s `_MP_REPEAT_24(f,s)
+`define _MP_REPEAT_26(f,s) `f(25) `s `_MP_REPEAT_25(f,s)
+`define _MP_REPEAT_27(f,s) `f(26) `s `_MP_REPEAT_26(f,s)
+`define _MP_REPEAT_28(f,s) `f(27) `s `_MP_REPEAT_27(f,s)
+`define _MP_REPEAT_29(f,s) `f(28) `s `_MP_REPEAT_28(f,s)
+`define _MP_REPEAT_30(f,s) `f(29) `s `_MP_REPEAT_29(f,s)
+`define _MP_REPEAT_31(f,s) `f(30) `s `_MP_REPEAT_30(f,s)
+`define _MP_REPEAT_32(f,s) `f(31) `s `_MP_REPEAT_31(f,s)
 
-`define REPEAT_COMMA ,
-`define REPEAT_SEMICOLON ;
+`define MP_COMMA ,
+`define MP_SEMI  ;
+`define MP_ADD   +
 
 `endif // VX_PLATFORM_VH

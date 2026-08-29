@@ -1,0 +1,572 @@
+// Copyright © 2019-2023
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "lsu_unit.h"
+#include <iostream>
+#include <iomanip>
+#include <string.h>
+#include <assert.h>
+#include <util.h>
+#include "debug.h"
+#include "core.h"
+#include "local_mem_switch.h"
+#include "constants.h"
+#include "mem_block_pool.h"
+#include "VX_types.h"
+#include "VX_config.h"
+
+using namespace vortex;
+
+uint32_t LsuUopGen::uop_count(const Instr& instr) {
+  // PACKLB.F: width=0 (LB), 4 byte-elements
+  // PACKLH.F: width=1 (LH), 2 halfword-elements
+  auto args = std::get<IntrLsuArgs>(instr.get_args());
+  return (args.width == 0) ? 4 : 2;
+}
+
+Instr::Ptr LsuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
+  uint64_t parent_uuid = macro_instr.get_uuid();
+  uint32_t total = uop_count(macro_instr);
+
+  // Embed uop_index in the upper bits of the low half of the UUID so that
+  // each uop has a distinct UUID for trace logging.
+  uint32_t uuid_hi = (parent_uuid >> 32) & 0xffffffff;
+  uint32_t uuid_lo = parent_uuid & 0xffffffff;
+  uint32_t steps_shift = (total > 1) ? (32 - log2ceil(total)) : 0;
+  uint64_t uop_uuid = (static_cast<uint64_t>(uuid_hi) << 32) | ((uop_index << steps_shift) | uuid_lo);
+
+  auto args = std::get<IntrLsuArgs>(macro_instr.get_args());
+  // Macro encodes elem-size as width: 0=byte (PACKLB), 1=halfword (PACKLH).
+  // The uop is a regular unsigned load (LBU/LHU = width + 4) so the LSU
+  // doesn't sign-extend the loaded byte/halfword before the bytesel write.
+  uint32_t elem_bytes = 1u << args.width;
+  uint32_t uop_width  = args.width + 4;          // LBU=4, LHU=5
+  uint32_t byte_off   = uop_index * elem_bytes;  // byte offset in dst register
+  // Bytesel: data bytes for this uop's elem + NaN-box bytes (4..7) for Float
+  // dest. The LSU is generic — it reads bytesel and shifts the loaded data
+  // into place; OpcUnit::writeback OR-merges by mask.
+  uint8_t  data_mask  = uint8_t(((1u << elem_bytes) - 1u) << byte_off);
+  bool     dst_float  = (macro_instr.get_dest_reg().type == RegType::Float);
+  uint8_t  bytesel    = data_mask | (dst_float ? 0xF0 : 0);
+
+  auto uop_instr = std::allocate_shared<Instr>(pool_, uop_uuid, FUType::LSU);
+  uop_instr->set_parent_uuid(parent_uuid);
+  uop_instr->set_op_type(LsuType::LOAD);
+  uop_instr->set_dest_reg(macro_instr.get_dest_reg().idx, macro_instr.get_dest_reg().type);
+  uop_instr->set_src_reg(0, macro_instr.get_src_reg(0).idx, RegType::Integer);
+  uop_instr->set_src_reg(1, macro_instr.get_src_reg(1).idx, RegType::Integer);
+  // Per-uop AGU input: stride = uop_index → addr = rs1 + uop_index*rs2 + 0.
+  uop_instr->set_args(IntrLsuArgs{uop_width, /*stride*/ uop_index, /*offset*/ 0});
+  uop_instr->set_dst_bytesel(bytesel);
+  return uop_instr;
+}
+
+LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
+	// Commit-side elasticity of 6 beats: the writeback path buffers a whole
+	// coalesced fragment burst, so a denied commit grant queues beats there
+	// instead of throttling the memory response stream.
+	: FuncUnit<VX_CFG_NUM_LSU_BLOCKS>(ctx, name, core, 6)
+#ifdef TCU_META_ENABLE
+	, TcuReqIn(this)
+	, TcuRspOut(this)
+#endif
+	, pending_loads_(0)
+{}
+
+LsuUnit::~LsuUnit()
+{}
+
+// Returns true when all blocks' input queues are empty and no reads are outstanding.
+bool LsuUnit::drained() const {
+#ifdef TCU_META_ENABLE
+	// TcuRspOut forwards to the TCU's endpoint, so query via size() (empty()
+	// asserts on forwarding channels).
+	if (!TcuReqIn.empty() || TcuRspOut.size() != 0) {
+		return false;
+	}
+#endif
+	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+		if (!Inputs.at(b).empty()) return false;
+		if (!states_.at(b).req_queue.empty()) return false;
+		if (!states_.at(b).pending_reqs.empty()) return false;
+	}
+	return true;
+}
+
+void LsuUnit::on_reset() {
+	for (auto& state : states_) {
+		state.reset();
+	}
+	pending_loads_ = 0;
+}
+
+void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
+	// AGU formula: addr[t] = rs1[t] + stride * rs2[t] + offset
+	auto& state = states_.at(b);
+	state.addr_list.clear();
+	auto* lsu_tag = std::get_if<LsuType>(&trace->op_type);
+	auto* amo_tag = std::get_if<AmoType>(&trace->op_type);
+	const bool is_amo = (amo_tag != nullptr);
+	auto& tmask = trace->tmask;
+	auto& rs1_data = trace->src_data[0];
+	auto& rs2_data = trace->src_data[1];
+	// Compare-and-swap alone reads a third operand: the comparand, which the
+	// instruction takes from rd. Decode adds rd to the source set for it.
+	const bool is_cas = is_amo && (*amo_tag == AmoType::AMOCAS);
+	uint32_t num_threads = VX_CFG_NUM_THREADS;
+	uint32_t data_bytes;
+	bool is_write;
+	int64_t  offset;
+	uint32_t stride;
+	if (is_amo) {
+		auto amo_args = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
+		data_bytes = 1u << (amo_args.width & 0x3);
+		is_write   = false;        // AMO never writes via the regular store path
+		offset     = 0;            // AMO has no immediate offset
+		stride     = 0;            // single-word access — addr = rs1[t]
+	} else {
+		auto lsu_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
+		data_bytes = 1u << (lsu_args.width & 0x3);
+		is_write   = (lsu_tag && *lsu_tag == LsuType::STORE);
+		offset     = lsu_args.offset;
+		stride     = lsu_args.stride;
+		if (is_write && lsu_args.width > 3)
+			std::abort();
+	}
+	// The per-thread slot is tid-stable: entry index == tid, inactive threads
+	// hold a size-0 hole. Lane position downstream is tid % NUM_LSU_LANES, the
+	// same fixed thread-to-port binding the hardware LSU uses. Compacting
+	// active threads into low lanes would let the same thread's consecutive
+	// accesses ride different per-lane channels when the thread mask changes
+	// between them, and the per-bank arbiter could then reorder same-address
+	// requests.
+	for (uint32_t t = 0; t < num_threads; ++t) {
+		mem_addr_size_t e;
+		e.addr = 0;
+		e.size = 0;
+		e.tid  = t;
+		e.data = 0;
+		e.amo_cmp = 0;
+		if (tmask.test(t)) {
+			// AGU result is VX_CFG_XLEN-bit wide.
+			// Cast through Word so 32-bit VX_CFG_XLEN doesn't carry sign-extended
+			// upper bits into the 64-bit address field.
+			e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
+			e.size = data_bytes;
+			// The datapath has no misalignment support: only a naturally aligned
+			// access is guaranteed to sit inside one memory block, which is what
+			// lets a lane's payload pack into a single block downstream.
+			// VX_lsu_slice.sv enforces the same contract in hardware, so modelling
+			// anything looser here would let a shader pass in simulation and fail
+			// on the device.
+			if ((e.addr % e.size) != 0) {
+				std::cout << "Error: misaligned memory access: addr=0x" << std::hex
+				          << e.addr << std::dec << ", size=" << e.size << std::endl;
+				std::abort();
+			}
+			if (is_write || is_amo) {
+				// Stores carry rs2 as data; AMOs carry rs2 as the RMW operand
+				// (LR encodes rs2 = x0, so the captured value is 0).
+				e.data = rs2_data[t].u64;
+			}
+			if (is_cas) {
+				e.amo_cmp = trace->src_data[2][t].u64;
+			}
+		}
+		state.addr_list.push_back(e);
+	}
+	// Trailing holes never issue anything; trim them so the last beat that
+	// carries a request is also the one that marks end-of-packet.
+	while (!state.addr_list.empty() && state.addr_list.back().size == 0) {
+		state.addr_list.pop_back();
+	}
+	state.remain_addrs = state.addr_list.size();
+}
+
+// Per-cycle response handler. Consumes at most one response packet
+// from lmem_switch and forwards through to writeback when the
+// originating request retires. Includes the per-lane response
+// formatter (sign-extend, NaN-box) and the response demux that
+// matches each fragment back to its in-flight request entry.
+void LsuUnit::process_response_step(uint32_t b) {
+	auto& lsu_rsp_in = core_->lmem_switch(b)->RspOut;
+	if (lsu_rsp_in.empty())
+		return;
+	auto& state = states_.at(b);
+	auto& lsu_rsp = lsu_rsp_in.peek();
+	auto& entry = state.pending_reqs.at(lsu_rsp.tag);
+
+#ifdef TCU_META_ENABLE
+	// TCU metadata response: forward the fragment with the client's tag
+	// restored; no register writeback, no trace retirement.
+	if (entry.is_tcu) {
+		if (TcuRspOut.full())
+			return; // stall
+		LsuRsp fwd = lsu_rsp;
+		fwd.tag = entry.client_tag;
+		TcuRspOut.send(fwd);
+		DT(3, this->name() << " tcu-meta-rsp: " << fwd);
+		entry.count -= lsu_rsp.mask.count();
+		if (entry.count == 0) {
+			state.pending_reqs.release(lsu_rsp.tag);
+		}
+		lsu_rsp_in.pop();
+		return;
+	}
+#endif
+
+	auto trace = entry.trace;
+	auto& output = Outputs.at(b);
+	// Every response fragment retires through its own writeback slot, one
+	// per cycle, so a full output backpressures the whole response stream,
+	// not just the final fragment.
+	if (output.full())
+		return; // stall
+	DT(3, this->name() << " mem-rsp: " << lsu_rsp);
+	assert(entry.count != 0);
+
+	if (entry.is_load) {
+		bool dst_float = (trace->dst_reg.type == RegType::Float);
+		uint32_t data_bytes = 1u << (entry.lsu_args.width & 0x3);
+		uint32_t data_width = 8 * data_bytes;
+		uint8_t  data_bs    = trace->dst_bytesel & 0x0F;
+		uint32_t byte_off   = (data_bs == 0 || data_bs == 0x0F) ? 0
+		                    : (uint32_t)__builtin_ctz(data_bs);
+		bool nan_box = dst_float && (data_bytes < 8);
+
+		for (uint32_t lane = 0; lane < lsu_rsp.mask.size(); ++lane) {
+			if (!lsu_rsp.mask.test(lane))
+				continue;
+			const auto& lane_info = entry.lanes.at(lane);
+			assert(lsu_rsp.data.at(lane) && "LOAD response must carry line payload");
+			uint32_t off = lane_info.addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
+			uint64_t read_data = 0;
+			std::memcpy(&read_data, lsu_rsp.data.at(lane)->data() + off, data_bytes);
+			// Format the loaded value at low bits per RISC-V load semantics.
+			uint64_t formatted = 0;
+			switch (entry.lsu_args.width) {
+			case 0: // LB
+			case 1: // LH
+				formatted = (uint64_t)(int64_t)sext((Word)read_data, data_width);
+				break;
+			case 2: // LW (sign-ext for Integer dest; raw bits for Float dest, NaN-boxed below)
+				formatted = dst_float ? read_data
+				                       : (uint64_t)(int64_t)sext((Word)read_data, data_width);
+				break;
+			case 3: // LD
+			case 4: // LBU
+			case 5: // LHU
+			case 6: // LWU
+				formatted = read_data;
+				break;
+			default:
+				std::abort();
+			}
+			// Place at bytesel-specified position; OR-in NaN-box for Float dest.
+			auto& dst = entry.trace->dst_data.at(lane_info.tid);
+			dst.u64 = (formatted << (8 * byte_off))
+			        | (nan_box ? 0xFFFFFFFF00000000ull : 0);
+		}
+	}
+	entry.count -= lsu_rsp.mask.count(); // track remaining
+	bool is_final = (entry.count == 0);
+	if (is_final) {
+		state.pending_reqs.release(lsu_rsp.tag);
+	}
+	if (is_final && entry.eop) {
+		// Load writeback crosses one more registered stage than the
+		// direct-commit path before reaching the commit arbiter.
+		output.send(trace, 2);
+	} else {
+		// A non-final fragment still spends a commit-port slot: it drains
+		// as a writeback-less beat that carries no retirement, so a
+		// multi-fragment load holds the commit port for one cycle per
+		// fragment instead of retiring in a single beat.
+		auto beat_alloc = core_->trace_pool().allocate(1);
+		auto beat = new (beat_alloc) instr_trace_t(*trace);
+		beat->wb = false;
+		beat->eop = false;
+		output.send(beat, 2);
+	}
+	pending_loads_ -= lsu_rsp.mask.count();
+	lsu_rsp_in.pop();
+}
+
+// Move ONE trace from Inputs[b] into the dispatch-side req_queue per cycle.
+// At most one transaction/cycle: the trace is not dispatchable until the next
+// cycle, so req_queue adds a real cycle of latency. A while-loop here would
+// fabricate write bandwidth and collapse that latency to zero.
+void LsuUnit::ingest_inputs(uint32_t b) {
+	auto& state = states_.at(b);
+	auto& input = Inputs.at(b);
+	if (input.empty() || state.req_queue.full())
+		return;
+	auto trace = input.peek();
+	// Hold a fence at the input head until req_queue is empty so the
+	// fence becomes the next dispatched item — preserves total
+	// barrier semantics on a per-block basis.
+	auto lsu_type_tag = std::get_if<LsuType>(&trace->op_type);
+	if (lsu_type_tag && *lsu_type_tag == LsuType::FENCE && !state.req_queue.empty())
+		return;
+	state.req_queue.push(trace);
+	input.pop();
+}
+
+// Per-cycle request handler. Dispatches at most one batch (one
+// memory-side mem_req) per call. The head trace stays at the queue
+// front until all its batches are issued (req_sent_all-driven).
+void LsuUnit::process_request_step(uint32_t b) {
+	auto& state = states_.at(b);
+
+	// Attempt fence release first so a steady stream of TCU client forwards
+	// (which consume the dispatch slot and return) cannot starve it.
+	const bool fence_locked = state.fence.locked();
+	if (fence_locked) {
+		bool released = state.fence.try_release(Outputs.at(b), state.pending_reqs.empty());
+		if (released) {
+			DT(3, this->name() << " fence-unlock: " << state.fence.trace());
+		}
+	}
+
+#ifdef TCU_META_ENABLE
+	// TCU metadata client (block 0 only): forward one pending request per
+	// cycle into lmem_switch, ahead of the block's own dispatch. The wire tag
+	// is re-allocated from pending_reqs so it stays unique on the switch; the
+	// client's own tag is restored on the response. An independent client, so
+	// not gated by the fence lock — its entries still hold fence release via
+	// pending_reqs.empty().
+	if (b == 0 && !TcuReqIn.empty()) {
+		if (!state.pending_reqs.full() && !core_->lmem_switch(0)->ReqIn.full()) {
+			LsuReq lsu_req = TcuReqIn.peek();
+			uint32_t count = lsu_req.mask.count();
+			std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
+			for (uint32_t i = 0; i < VX_CFG_NUM_LSU_LANES; ++i) {
+				if (!lsu_req.mask.test(i)) {
+					continue;
+				}
+				mem_addr_size_t e;
+				e.addr    = lsu_req.addrs.at(i);
+				e.size    = 4;
+				e.data    = 0;
+				e.amo_cmp = 0;
+				e.tid     = lsu_req.tids.at(i);
+				lane_entries.at(i) = e;
+			}
+			IntrLsuArgs meta_args{};
+			meta_args.width = 2; // 32-bit metadata words
+			pending_req_t entry{nullptr, count, true, std::move(lane_entries), meta_args, true};
+			entry.is_tcu     = true;
+			entry.client_tag = lsu_req.tag;
+			uint32_t tag = state.pending_reqs.allocate(std::move(entry));
+			lsu_req.tag = tag;
+			core_->lmem_switch(0)->ReqIn.send(lsu_req);
+			DT(3, this->name() << " tcu-meta-req: " << lsu_req);
+			TcuReqIn.pop();
+			return; // one request per cycle into the switch
+		}
+	}
+#endif
+
+	// No dispatch while a fence is engaged (per-block total barrier); the
+	// release attempt already ran above.
+	if (fence_locked) {
+		return;
+	}
+
+	if (state.req_queue.empty())
+		return;
+
+	auto trace = state.req_queue.front();
+	auto* lsu_tag = std::get_if<LsuType>(&trace->op_type);
+	auto* amo_tag = std::get_if<AmoType>(&trace->op_type);
+	if (!lsu_tag && !amo_tag) {
+		// Trace landed on the LSU with neither LsuType nor AmoType. This
+		// would only happen on a build mismatch (VX_CFG_EXT_A_ENABLE off but
+		// decode emitted AmoType, or unrelated op_type alias).
+		std::abort();
+	}
+#if !VX_CFG_EXT_A_ENABLED
+	if (amo_tag) {
+		// AMO ops are unsupported in this build.
+		std::abort();
+	}
+#endif
+	const bool is_amo   = (amo_tag != nullptr);
+	const bool is_fence = (lsu_tag && *lsu_tag == LsuType::FENCE);
+	const bool is_write = (lsu_tag && *lsu_tag == LsuType::STORE);
+
+	if (is_fence) {
+		// Engage fence lock; the next call will try to release it once
+		// the pending-reqs table drains.
+		state.fence.engage(trace);
+		DT(3, this->name() << " fence-lock: " << *trace);
+		state.req_queue.pop();
+		return;
+	}
+
+	// check pending queue capacity. AMO always needs a return → reserve
+	// like a load, even though it carries write-bearing semantics.
+	if ((!is_write || is_amo) && state.pending_reqs.full()) {
+		if (!trace->log_once(true)) {
+			DT(4, this->name() << " queue-full: " << *trace);
+		}
+		return;
+	} else {
+		trace->log_once(false);
+	}
+
+	// First time we see this trace: derive the per-lane addr/size/data
+	// list via compute_addrs(). Persists across multi-batch dispatch via
+	// state.remain_addrs; rebuilt only when the previous trace is fully
+	// drained.
+	if (state.remain_addrs == 0) {
+		this->compute_addrs(b, trace);
+	}
+
+	// AMO always returns to rd, so it is not direct-commit even though it
+	// carries a side-effect write.
+	bool direct_commit = (is_write || 0 == state.addr_list.size()) && !is_amo;
+
+	// Skip beats whose tid group is entirely inactive — nothing to issue.
+	while (state.remain_addrs != 0) {
+		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
+		uint32_t n  = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
+		bool any = false;
+		for (uint32_t i = 0; i < n; ++i) {
+			if (state.addr_list.at(t0 + i).size != 0) {
+				any = true;
+				break;
+			}
+		}
+		if (any)
+			break;
+		state.remain_addrs -= n;
+	}
+
+	// Check output backpressure AFTER skipping inactive beats: only the last
+	// active beat commits the trace to Outputs, and leading inactive beats can
+	// make this call that last beat even when the entry remain_addrs exceeded a
+	// single beat. Testing full() against the post-skip remainder ensures the
+	// direct-commit send below never overflows.
+	if (direct_commit && state.remain_addrs <= VX_CFG_NUM_LSU_LANES) {
+		if (Outputs.at(b).full())
+			return; // stall
+	}
+
+	if (state.remain_addrs != 0) {
+		// check lmem switch backpressure
+		if (core_->lmem_switch(b)->ReqIn.full())
+			return; // stall
+
+		// setup memory request
+		LsuReq lsu_req(VX_CFG_NUM_LSU_LANES);
+		// LsuReq.write is derived from op via is_write(); no separate field.
+		lsu_req.wid = trace->wid;
+		// Typed op (warp-uniform). For AMO, amo_to_memop() picks the family
+		// member; for plain stores/loads, it's ST/LD. AMO MIN/MAX collapse
+		// signed/unsigned into one op + flag.
+		lsu_req.op = is_amo ? amo_to_memop(*amo_tag)
+		            : (is_write ? MemOp::ST : MemOp::LD);
+		if (is_amo) {
+			lsu_req.flags.amo_unsigned = amo_is_unsigned(*amo_tag);
+		}
+		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
+		uint32_t beat_n = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
+		std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
+		for (uint32_t i = 0; i < beat_n; ++i) {
+			auto& entry = state.addr_list.at(t0 + i);
+			if (entry.size == 0)
+				continue; // inactive tid: keep the lane hole (tid-stable mapping)
+			// Address goes downstream as VA. The per-core dcache MMU
+			// (under VX_CFG_VM_ENABLE) substitutes PA before the request reaches
+			// the cache; with VM off, the address is already the PA.
+			lsu_req.mask.set(i);
+			lsu_req.addrs.at(i) = entry.addr;
+			lane_entries.at(i) = entry;
+			if (is_write || is_amo) {
+				// Package the lane's value into a per-lane block + byteen.
+				// Stores: store data. AMOs: rhs (rs2). The cache extracts
+				// rhs at byte_off using the same path.
+				auto block = make_mem_block();
+				std::memset(block->data(), 0, block->size());
+				uint32_t off = entry.addr & (VX_CFG_MEM_BLOCK_SIZE - 1);
+				for (uint32_t bo = 0; bo < entry.size; ++bo) {
+					(*block)[off + bo] = uint8_t((entry.data >> (8 * bo)) & 0xff);
+				}
+				lsu_req.data.at(i) = block;
+				lsu_req.byteen.at(i) = ((1ull << entry.size) - 1) << off;
+			}
+			lsu_req.amo_cmp.at(i) = entry.amo_cmp;
+			// The lane's original thread index rides along so the adapter can
+			// recover hart_id = make_hart_id(cid, wid, tids[i]).
+			lsu_req.tids.at(i) = entry.tid;
+		}
+		state.remain_addrs -= beat_n;
+
+		uint32_t count = lsu_req.mask.count();
+		bool is_eop = (state.remain_addrs == 0);
+
+		uint32_t tag = 0;
+		if (!is_write || is_amo) {
+			// pending_reqs allocation: AMOs need a return, so they're tracked
+			// the same way as loads. Encode AMO width in lsu_args so the
+			// existing response formatter sign-extends correctly.
+			IntrLsuArgs entry_args{};
+			if (is_amo) {
+				auto amoArgs = std::get<IntrAmoArgs>(trace->instr_ptr->get_args());
+				entry_args.width  = amoArgs.width & 0x3;
+				entry_args.stride = 0;
+				entry_args.offset = 0;
+			} else {
+				entry_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
+			}
+			tag = state.pending_reqs.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
+		}
+		lsu_req.tag  = tag;
+		lsu_req.cid  = trace->cid;
+		lsu_req.uuid = trace->uuid;
+
+		// send memory request
+		core_->lmem_switch(b)->ReqIn.send(lsu_req);
+		DT(3, this->name() << " mem-req: " << lsu_req);
+
+		// update stats
+		if (is_write) {
+			core_->perf_stats().stores += count;
+		} else {
+			core_->perf_stats().loads += count;
+			pending_loads_ += count;
+		}
+	}
+
+	if (state.remain_addrs == 0) {
+		if (direct_commit) {
+			Outputs.at(b).send(trace);
+		}
+		state.req_queue.pop();
+	}
+}
+
+void LsuUnit::on_tick() {
+	core_->perf_stats().load_latency += pending_loads_;
+
+	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
+		// Drain-before-fill ordering: consume responses, dispatch from req_queue
+		// as it stood at the start of this cycle, THEN ingest one new trace for
+		// next cycle. Dispatching before ingest makes req_queue a 1-cycle stage
+		// rather than a same-tick passthrough.
+		this->process_response_step(b);
+		this->process_request_step(b);
+		this->ingest_inputs(b);
+	}
+}

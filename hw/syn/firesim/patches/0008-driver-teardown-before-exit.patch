@@ -1,0 +1,18 @@
+--- build_firesim/firesim/sim/midas/src/main/cc/entry.cc.orig
++++ build_firesim/firesim/sim/midas/src/main/cc/entry.cc
+@@ -73,5 +73,14 @@
+   simulation = create_simulation(simif, *widget_registry_ptr, args);
+ 
+   // Run the simulation with the given implementation.
+-  return simif.run(*simulation);
++  const int rc = simif.run(*simulation);
++
++  // Tear these down here rather than leaving them to static destruction. The
++  // platform layer holds handles into libraries with statics of their own --
++  // XRT's device registry among them -- and by the time exit handlers run those
++  // may already be gone, so destroying the interface then walks freed state.
++  // Order mirrors construction. Nothing below may use `simif`.
++  simulation.reset();
++  simulator.reset();
++  return rc;
+ }

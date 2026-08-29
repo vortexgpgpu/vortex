@@ -161,81 +161,39 @@ foreach up [ipx::get_user_parameters] {
 
 ipx::associate_bus_interfaces -busif s_axi_ctrl -clock ap_clk $core
 
-for {set i 0} {$i < $num_banks} {incr i} {
-    ipx::associate_bus_interfaces -busif m_axi_mem_$i -clock ap_clk $core
+# Associate ap_clk with every AXI master interface the RTL actually
+# produced — discovered from the packaged core so the list tracks the
+# real port set (memory banks + the Command Processor's m_axi_host)
+# regardless of which config defines reached RTL elaboration.
+set axi_masters {}
+foreach bif [ipx::get_bus_interfaces -of $core] {
+    set bname [get_property NAME $bif]
+    if { [string match "m_axi*" $bname] } {
+        lappend axi_masters $bname
+    }
+}
+set axi_masters [lsort $axi_masters]
+foreach m $axi_masters {
+    ipx::associate_bus_interfaces -busif $m -clock ap_clk $core
 }
 
 set mem_map [::ipx::add_memory_map -quiet "s_axi_ctrl" $core]
 set addr_block [::ipx::add_address_block -quiet "reg0" $mem_map]
 
-set reg [::ipx::add_register "CTRL" $addr_block]
-set_property description    "Control signals"    $reg
-set_property address_offset 0x000 $reg
-set_property size           32    $reg
+# VX_afu_wrap routes s_axi_ctrl by address bit 12: [0x0000,0x1000) is the
+# legacy register block, [0x1000,0x2000) is the Command Processor's
+# AXI-Lite register window. Declare a 64 KB address block so the packaged
+# interface resolves C_S_AXI_CTRL_ADDR_WIDTH to 16 (>= 13). Without this,
+# Vivado infers the width from the enumerated registers alone (~0x40) and
+# the bit-12 / [11:0] CP part-selects in VX_afu_wrap.sv go out of range.
+set_property range 65536 $addr_block
 
-set field [ipx::add_field AP_START $reg]
-set_property ACCESS {read-write} $field
-set_property BIT_OFFSET {0} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_start'.} $field
-set_property MODIFIED_WRITE_VALUE {modify} $field
-
-set field [ipx::add_field AP_DONE $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {1} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_done'.} $field
-set_property READ_ACTION {modify} $field
-
-set field [ipx::add_field AP_IDLE $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {2} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_idle'.} $field
-set_property READ_ACTION {modify} $field
-
-set field [ipx::add_field AP_READY $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {3} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'ap_ready'.} $field
-set_property READ_ACTION {modify} $field
-
-set field [ipx::add_field RESERVED_1 $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {4} $field
-set_property BIT_WIDTH {3} $field
-set_property DESCRIPTION {Reserved.  0s on read.} $field
-set_property READ_ACTION {modify} $field
-
-set field [ipx::add_field AUTO_RESTART $reg]
-set_property ACCESS {read-write} $field
-set_property BIT_OFFSET {7} $field
-set_property BIT_WIDTH {1} $field
-set_property DESCRIPTION {Control signal Register for 'auto_restart'.} $field
-set_property MODIFIED_WRITE_VALUE {modify} $field
-
-set field [ipx::add_field RESERVED_2 $reg]
-set_property ACCESS {read-only} $field
-set_property BIT_OFFSET {8} $field
-set_property BIT_WIDTH {24} $field
-set_property DESCRIPTION {Reserved.  0s on read.} $field
-set_property READ_ACTION {modify} $field
-
-set reg [::ipx::add_register "GIER" $addr_block]
-set_property description    "Global Interrupt Enable Register"    $reg
-set_property address_offset 0x004 $reg
-set_property size           32    $reg
-
-set reg [::ipx::add_register "IP_IER" $addr_block]
-set_property description    "IP Interrupt Enable Register"    $reg
-set_property address_offset 0x008 $reg
-set_property size           32    $reg
-
-set reg [::ipx::add_register "IP_ISR" $addr_block]
-set_property description    "IP Interrupt Status Register"    $reg
-set_property address_offset 0x00C $reg
-set_property size           32    $reg
+# User-managed kernel (ap_ctrl_none): the AFU is a CP-driven, always-on
+# command processor — the host submits to the CP's host-memory ring and
+# rings the doorbell via the CP AXI-Lite regfile (0x1000+), and the CP
+# drives Vortex. XRT/ERT must NOT manage an ap_start/ap_done lifecycle, so
+# the kernel is packaged user_managed (see -ctrl_protocol in gen_xo.tcl)
+# and carries NO ap_ctrl_hs control block (CTRL/GIER/IP_IER/IP_ISR).
 
 set reg [::ipx::add_register -quiet "DEV" $addr_block]
 set_property address_offset 0x010 $reg
@@ -253,14 +211,18 @@ set reg [::ipx::add_register -quiet "SCP" $addr_block]
 set_property address_offset 0x028 $reg
 set_property size           [expr {8*8}]   $reg
 
-for {set i 0} {$i < $num_banks} {incr i} {
-# Add register for each memory bank
-set reg [::ipx::add_register -quiet "MEM_$i" $addr_block]
-set_property address_offset [expr {0x30 + $i * 8}] $reg
+# One control register per AXI master interface — the XRT RTL-kernel
+# flow requires every m_axi interface to carry an ASSOCIATED_BUSIF
+# register. Iterates the discovered master list (memory banks + the
+# CP's m_axi_host) so it stays correct for any port count.
+set reg_off 0x30
+foreach m $axi_masters {
+set reg [::ipx::add_register -quiet $m $addr_block]
+set_property address_offset $reg_off $reg
 set_property size           [expr {8*8}]   $reg
-# Associate the bus interface
 set regparam [::ipx::add_register_parameter ASSOCIATED_BUSIF $reg]
-set_property value m_axi_mem_$i $regparam
+set_property value $m $regparam
+set reg_off [expr {$reg_off + 8}]
 }
 
 set_property slave_memory_map_ref "s_axi_ctrl" [::ipx::get_bus_interfaces -of $core "s_axi_ctrl"]

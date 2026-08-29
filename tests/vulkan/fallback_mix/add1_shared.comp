@@ -1,0 +1,30 @@
+#version 450
+
+/* data[i] += 1, staged through shared memory so the workgroup is NOT
+ * shape-invariant.
+ *
+ * The shared array and the barrier are the whole point. vortexpipe re-tiles an
+ * oversized workgroup into device-sized CTAs only when its invocations are
+ * independent; a workgroup that communicates through shared memory cannot be
+ * split, so the driver refuses and hands the dispatch to llvmpipe. That refusal
+ * is what this test needs -- with a plain kernel the dispatch is re-tiled onto
+ * the device and the CPU fallback never runs.
+ *
+ * local_size_x is fixed rather than specialized: it has to exceed the device
+ * CTA cap for the refusal to trigger, and the shared array must be sized to
+ * match at compile time. */
+layout(local_size_x = 128) in;
+
+layout(std430, binding = 0) buffer Buf {
+   float data[];
+};
+
+shared float scratch[128];
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   scratch[gl_LocalInvocationID.x] = data[i];
+   barrier();
+   data[i] = scratch[gl_LocalInvocationID.x] + 1.0;
+}

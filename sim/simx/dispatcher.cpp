@@ -16,31 +16,31 @@
 
 using namespace vortex;
 
-Dispatcher::Dispatcher(const SimContext& ctx, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes)
-  : SimObject<Dispatcher>(ctx, "dispatcher")
-  , Outputs(ISSUE_WIDTH, this)
-  , Inputs(ISSUE_WIDTH, this)
-  , arch_(core->arch())
+Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes)
+  : SimObject<Dispatcher>(ctx, name)
+  , Inputs(VX_CFG_ISSUE_WIDTH, this)
+  // physical block count, matches downstream FU; each output is the per-FU
+  // dispatch queue, depth = VX_CFG_DISPATCH_QUEUE_SIZE.
+  , Outputs(block_size, SimChannel<instr_trace_t*>(this, buf_size))
   , core_(core)
-  , buf_size_(buf_size)
   , block_size_(block_size)
   , num_lanes_(num_lanes)
-  , num_blocks_(ISSUE_WIDTH / block_size)
-  , num_packets_(core->arch().num_threads() / num_lanes)
+  , num_blocks_(VX_CFG_ISSUE_WIDTH / block_size)
+  , num_packets_(VX_CFG_NUM_THREADS / num_lanes)
   , batch_idx_(0)
   , block_pids_(block_size, 0)
 {}
 
 Dispatcher::~Dispatcher() {}
 
-void Dispatcher::reset() {
+void Dispatcher::on_reset() {
   batch_idx_ = 0;
   for (auto& bp : block_pids_) {
     bp = 0;
   }
 }
 
-void Dispatcher::tick() {
+void Dispatcher::on_tick() {
   // process inputs
   uint32_t block_sent = 0;
   for (uint32_t b = 0; b < block_size_; ++b) {
@@ -50,8 +50,14 @@ void Dispatcher::tick() {
       ++block_sent;
       continue;
     }
-    auto& output = Outputs.at(i);
-    auto trace = input.front();
+
+    // check output buffer capacity — outputs are sized NUM_BLOCKS;
+    // input[batch_idx*block_size + b] aggregates onto output[b].
+    auto& output = Outputs.at(b);
+    if (output.full())
+      continue;
+
+    auto trace = input.peek();
 
     // check if trace should be split
     auto new_trace = trace;
@@ -62,9 +68,26 @@ void Dispatcher::tick() {
         ++block_sent;
         continue;
       }
+      // Compute the total number of packets we'll emit on the first call
+      // for this trace (block_pid==0). Each SIMD group with any active
+      // lane gets one packet; sparse divergent tmasks emit fewer than
+      // num_packets_. Commit uses num_pkts to defer the scoreboard
+      // release until every packet's writeback has applied — without it,
+      // an eop packet that completes ahead of its peers (cache responses
+      // arrive out of order) would release the destination while some
+      // lanes are still stale.
+      if (block_pid == 0) {
+        uint32_t n_pkts = 0;
+        for (uint32_t j = 0; j < VX_CFG_NUM_THREADS; j += num_lanes_) {
+          for (uint32_t k = 0; k < num_lanes_; ++k) {
+            if (trace->tmask.test(j + k)) { ++n_pkts; break; }
+          }
+        }
+        trace->num_pkts = n_pkts == 0 ? 1 : n_pkts;
+      }
       // calculate current packet start and end
       int start(-1), end(-1);
-      for (uint32_t j = block_pid * num_lanes_, n = arch_.num_threads(); j < n; ++j) {
+      for (uint32_t j = block_pid * num_lanes_, n = VX_CFG_NUM_THREADS; j < n; ++j) {
         if (!trace->tmask.test(j))
           continue;
         if (start == -1)
@@ -84,7 +107,7 @@ void Dispatcher::tick() {
         input.pop();
         ++block_sent;
       }
-      ThreadMask tmask(arch_.num_threads());
+      ThreadMask tmask(VX_CFG_NUM_THREADS);
       for (int j = start * num_lanes_, n = j + num_lanes_; j < n; ++j) {
         tmask[j] = trace->tmask[j];
       }
@@ -97,11 +120,11 @@ void Dispatcher::tick() {
       input.pop();
       ++block_sent;
     }
-    DT(3, "pipeline-dispatch: " << *new_trace);
-    output.push(new_trace, 1);
+    DT(3, this->name() << "-pipeline dispatch: " << *new_trace);
+    output.send(new_trace, 1);
   }
 
-  // we move to the next batch only when all blocks in current batch have been processed
+  // advance to next batch once all blocks in the current batch have been processed
   if (block_sent == block_size_) {
     // round-robin batch selection
     batch_idx_ = (batch_idx_ + 1) % num_blocks_;

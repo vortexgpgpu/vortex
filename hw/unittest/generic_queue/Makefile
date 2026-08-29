@@ -10,7 +10,6 @@ SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 
 CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
 
-SRCS := $(DPI_DIR)/util_dpi.cpp
 SRCS += $(SRC_DIR)/main.cpp
 
 DBG_TRACE_FLAGS :=
@@ -21,6 +20,6 @@ RTL_INCLUDE := -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
 
 TOP := VX_fifo_queue
 
-PARAMS := -GDATAW=32 -GDEPTH=8
+PARAMS := -GDATAW=32 -GDEPTH=2
 
 include ../common.mk

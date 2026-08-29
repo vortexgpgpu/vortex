@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include <simobject.h>
+#include "types.h"
 #include <array>
 #include "instr_trace.h"
 
@@ -21,117 +21,52 @@ namespace vortex {
 
 class Core;
 
-class FuncUnit : public SimObject<FuncUnit> {
+// Type-erased base used by Core to keep heterogeneous FuncUnit<N_BLOCKS>
+// instances in a single container and to bind/probe their I/O channels.
+class FuncUnitBase {
 public:
-	std::vector<SimPort<instr_trace_t*>> Inputs;
-	std::vector<SimPort<instr_trace_t*>> Outputs;
+	virtual ~FuncUnitBase() = default;
+	virtual SimChannel<instr_trace_t*>& input(uint32_t b) = 0;
+	virtual SimChannel<instr_trace_t*>& output(uint32_t b) = 0;
+	virtual uint32_t num_blocks() const = 0;
+};
 
-	FuncUnit(const SimContext& ctx, Core* core, const char* name)
-		: SimObject<FuncUnit>(ctx, name)
-		, Inputs(ISSUE_WIDTH, this)
-		, Outputs(ISSUE_WIDTH, this)
+// FuncUnit pipelines have NUM_BLOCKS physical lanes, not VX_CFG_ISSUE_WIDTH. The
+// dispatcher upstream aggregates VX_CFG_ISSUE_WIDTH issue ports onto NUM_BLOCKS
+// execution ports; commit downstream fans them back out to per-iw arbiters
+// using trace->wid.
+template <uint32_t NUM_BLOCKS>
+class FuncUnit : public FuncUnitBase, public SimObject<FuncUnit<NUM_BLOCKS>> {
+public:
+	static constexpr uint32_t kNumBlocks = NUM_BLOCKS;
+
+	std::array<SimChannel<instr_trace_t*>, NUM_BLOCKS> Inputs;
+	std::array<SimChannel<instr_trace_t*>, NUM_BLOCKS> Outputs;
+
+	FuncUnit(const SimContext& ctx, const char* name, Core* core, uint32_t out_capacity = 2)
+		: SimObject<FuncUnit<NUM_BLOCKS>>(ctx, name)
+		, Inputs(make_sim_channels<instr_trace_t*, NUM_BLOCKS>(this))
+		, Outputs(make_sim_channels<instr_trace_t*, NUM_BLOCKS>(this, out_capacity))
 		, core_(core)
 	{}
 
 	virtual ~FuncUnit() {}
 
-	virtual void reset() {}
-
-	virtual void tick() = 0;
+	// FuncUnitBase polymorphic accessors for the type-erased Core wiring.
+	SimChannel<instr_trace_t*>& input(uint32_t b) override { return Inputs[b]; }
+	SimChannel<instr_trace_t*>& output(uint32_t b) override { return Outputs[b]; }
+	uint32_t num_blocks() const override { return NUM_BLOCKS; }
 
 protected:
+	// SimObject<FuncUnit<N>>::on_tick is a non-virtual no-op — these
+	// declarations introduce a new virtual that the CRTP do_tick()
+	// resolves through, so derived FUs can override.
+	virtual void on_reset() {}
+	virtual void on_tick() = 0;
+
+	friend class SimObject<FuncUnit<NUM_BLOCKS>>;
+
 	Core* core_;
 };
-
-///////////////////////////////////////////////////////////////////////////////
-
-class AluUnit : public FuncUnit {
-public:
-  AluUnit(const SimContext& ctx, Core*);
-
-  void tick() override;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class FpuUnit : public FuncUnit {
-public:
-  FpuUnit(const SimContext& ctx, Core*);
-
-  void tick() override;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class LsuUnit : public FuncUnit {
-public:
-	LsuUnit(const SimContext& ctx, Core*);
-	~LsuUnit();
-
-	void reset() override;
-	void tick() override;
-
-private:
-
- 	struct pending_req_t {
-		instr_trace_t* trace;
-		uint32_t count;
-		bool eop;
-	};
-
-	struct lsu_state_t {
-		HashTable<pending_req_t> pending_rd_reqs;
-		instr_trace_t* fence_trace;
-		bool fence_lock;
-
-		lsu_state_t() : pending_rd_reqs(LSUQ_IN_SIZE) {}
-
-		void reset() {
-			this->pending_rd_reqs.clear();
-			this->fence_trace = nullptr;
-			this->fence_lock = false;
-		}
-	};
-
-	std::array<lsu_state_t, NUM_LSU_BLOCKS> states_;
-	uint64_t pending_loads_;
-	std::vector<mem_addr_size_t> pending_addrs_;
-	uint32_t remain_addrs_;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-class SfuUnit : public FuncUnit {
-public:
-	SfuUnit(const SimContext& ctx, Core*);
-
-	void tick() override;
-};
-
-///////////////////////////////////////////////////////////////////////////////
-
-#ifdef EXT_TCU_ENABLE
-
-class TcuUnit : public FuncUnit {
-public:
-	TcuUnit(const SimContext& ctx, Core*);
-
-	void tick() override;
-};
-
-#endif
-
-///////////////////////////////////////////////////////////////////////////////
-
-#ifdef EXT_V_ENABLE
-
-class VpuUnit : public FuncUnit {
-public:
-	VpuUnit(const SimContext& ctx, Core*);
-
-	void tick() override;
-};
-
-#endif
 
 }

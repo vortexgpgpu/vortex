@@ -28,37 +28,44 @@ Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
 
 ## Specifications
 
-- Support RISC-V RV32IMAF and RV64IMAFD
+- Support RISC-V RV32IMAFC and RV64IMAFDC
 
 - Microarchitecture:
     - configurable number of cores, warps, and threads.
     - configurable number of ALU, FPU, LSU, and SFU units per core.
+    - graphics fixed-function pipeline (rasterizer, texture units, output mergers).
+    - hardware ray-tracing unit (BVH traversal, ray-box and ray-triangle intersection).
+    - tensor cores with WGMMA and 2:4 structured sparsity support.
+    - hardware-accelerated command processor and kernel management unit.
     - configurable pipeline issue width.
     - optional local memory, L1, L2, and L3 caches.
 - Software:
-    - OpenCL 1.2 Support.
+    - OpenCL 1.2
+    - Vulkan
+    - HIP
 - Supported FPGAs:
     - Altera Arria 10
     - Altera Stratix 10
-    - Xilinx Alveo U50, U250, U280
+    - Xilinx Alveo U50, U55C, U250, U280
+    - Xilinx Alveo V80 (Versal, via the SLASH platform — see [setup guide](docs/xilinx_slash_setup.md))
     - Xilinx Versal VCK5000
 
 ## Directory structure
 
 - `doc`: [Documentation](docs/index.md).
 - `hw`: Hardware sources.
-- `driver`: Host drivers repository.
-- `runtime`: Kernel Runtime software.
+- `sw`: Software sources (kernel, runtime, and drivers).
 - `sim`: Simulators repository.
 - `tests`: Tests repository.
 - `ci`: Continuous integration scripts.
 - `miscs`: Miscellaneous resources.
+- `VX_config.toml` / `VX_types.toml`: Hardware configuration system.
 
 ## Quick Start
 If you are interested in a stable release of Vortex, you can download the latest release [here](https://github.com/vortexgpgpu/vortex/releases/latest). Otherwise, you can pull the most recent, but (potentially) unstable version as shown below. The following steps demonstrate how to build and run Vortex with the default driver: SimX. If you are interested in a different backend, look [here](docs/simulation.md).
 
 ### Supported OS Platforms
-- Ubuntu 22.04, 24.04
+- Ubuntu 22.04
 - Centos 7
 ### Toolchain Dependencies
 The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
@@ -71,6 +78,8 @@ The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
 - [Ramulator](https://github.com/CMU-SAFARI/ramulator.git)
 - [Yosys](https://github.com/YosysHQ/yosys)
 - [Sv2v](https://github.com/zachjs/sv2v)
+- [Mesa](https://www.mesa3d.org/)
+- [chipStar](https://github.com/CHIP-Star/chipStar)
 ### Install Vortex codebase
 ```sh
 	git clone --depth=1 --recursive https://github.com/vortexgpgpu/vortex.git
@@ -92,43 +101,60 @@ sudo ./ci/install_dependencies.sh
 ```
 ### Install prebuilt toolchain
 ```sh
-   ./ci/toolchain_install.sh --all
+   ./ci/toolchain_install.sh
 ```
-### set environment variables
-```sh
-    # should always run before using the toolchain!
-    source ./ci/toolchain_env.sh
-```
-### Building Vortex
+
+### Building and installing Vortex
 ```sh
 make -s
+make install
+export VORTEX_PATH=$(pwd)/install
+export PKG_CONFIG_PATH=$VORTEX_PATH/lib/pkgconfig:$PKG_CONFIG_PATH
 ```
+`make install` lays out a sysroot under `$VORTEX_PATH` containing the
+public headers, libraries, and `vortex-runtime.pc` / `vortex-kernel.pc`
+pkg-config files. Downstream tools (mesa-vortex, pocl-vortex,
+chipstar) integrate with Vortex exclusively through `$VORTEX_PATH` and
+pkg-config — the same shape as the CUDA, ROCm and oneAPI SDKs. The
+source tree (`$VORTEX_HOME`) and build tree (`$VORTEX_BUILD_DIR`) are
+internal to Vortex and not exposed to consumers. Override the install
+root with `../configure --prefix=<path>` or `--installdir=<path>` (default `<build>/install`).
+
 ### Quick demo running vecadd OpenCL kernel on 2 cores
 ```sh
 ./ci/blackbox.sh --cores=2 --app=vecadd
 ```
 
+### Compiler Toolchain (VOLT)
+
+Vortex's compiler toolchain is **[VOLT](https://github.com/vortexgpgpu/Volt)** (Vortex-Optimized Lightweight Toolchain), an LLVM-based SIMT compiler for the Vortex GPU. To build the toolchain locally instead of using the prebuilt one, follow the instructions in the [VOLT repo](https://github.com/vortexgpgpu/Volt). Its design is described in the [VOLT paper (CC '26)](https://dl.acm.org/doi/10.1145/3771775.3786275).
+
 ### Common Developer Tips
-- Installing Vortex kernel and runtime libraries to use with external tools requires passing --prefix=<install-path> to the configure script.
-```sh
-../configure --xlen=32 --tooldir=$HOME/tools --prefix=<install-path>
-make -s
-make install
-```
 - Building Vortex 64-bit requires setting --xlen=64 configure option.
 ```sh
 ../configure --xlen=64 --tooldir=$HOME/tools
 ```
-- Sourcing "./ci/toolchain_env.sh" is required everytime you start a new terminal. we recommend adding "source <build-path>/ci/toolchain_env.sh" to your ~/.bashrc file to automate the process at login.
-```sh
-echo "source <build-path>/ci/toolchain_env.sh" >> ~/.bashrc
-```
-- Making changes to Makefiles in your source tree or adding new folders will require executing the "configure" script again without any options to get changes propagated to your build folder.
+- No shell environment setup is required. `../configure` bakes the full
+  toolchain layout (paths, XCONFIGS, every tool binary) into the build
+  dir's `config.mk` and domain `common.mk` files. Make recipes invoke
+  tools by absolute path (`$(VERILATOR_PATH)/bin/verilator` etc.), so
+  multiple Vortex trees on the same machine can coexist without any
+  `~/.bashrc` sourcing.
+- Making changes to Makefiles in your source tree, editing `VX_config.toml` (or any `*.toml`), or adding new folders will require executing the "configure" script again without any options to get changes propagated to your build folder.
 ```sh
 ../configure
 ```
+- Always make sure your build is up to date before running any test or app: re-run `../configure` from your build folder first. `configure` regenerates `<build>/sw/VX_config.h` and `<build>/hw/*.vh` from `VX_config.toml` (only when the toml is newer). The simulator and RTL `#include` this generated header, so a stale header makes them compile against old config values and silently diverge from the toml. `VX_config.toml` is the single source of truth — never paper over a divergence by hardcoding `-DVX_CFG_*` flags in a Makefile; re-`configure` instead.
 - To debug the GPU, the simulation can generate a runtime trace for analysis. See /docs/debugging.md for more information.
 ```sh
 ./ci/blackbox.sh --app=demo --debug=3
 ```
+- Running the CI suite locally: the test catalog lives in `ci/testcases/` and runs
+  through pytest via the `regression.sh` wrapper (from your build folder). See
+  [docs/continuous_integration.md](docs/continuous_integration.md) for details.
+```sh
+./ci/regression.sh --all               # full catalog
+./ci/regression.sh --test regression   # one category
+```
 - For additional information, check out the [documentation](docs/index.md)
+

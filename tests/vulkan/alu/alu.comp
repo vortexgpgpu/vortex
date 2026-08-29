@@ -1,0 +1,75 @@
+#version 450
+
+/* ALU coverage kernel for the vortexpipe driver.
+ *
+ * Every invocation runs the same straight-line sequence over inputs derived
+ * from its own id, so the shader is divergence-free — the point is op
+ * coverage, not control flow (tests/vulkan/cflow covers that).
+ *
+ * Covered: bitfield extract/insert/reverse/find/count, add-carry and
+ * sub-borrow, the pack/unpack family, and the high half of a widening
+ * multiply. Each result is reproduced exactly by the host in main.c.
+ *
+ * If the translator cannot lower one of these it bails the whole shader to
+ * llvmpipe; under MESA_VORTEX_STRICT=1 the dispatch then becomes a no-op and
+ * the output keeps its sentinel, which is what makes this test evidence that
+ * the device executed the ops rather than the CPU. */
+
+layout(local_size_x_id = 0) in;
+
+#define NUM_OPS 14u
+
+layout(std430, binding = 0) buffer Buf {
+   uint data[];
+};
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+
+   uint a = 0x12345678u ^ (i * 0x9E3779B9u);
+   uint b = 0x0F0F0F0Fu + i;
+   uint o = i * NUM_OPS;
+
+   /* --- bitfield ------------------------------------------------------- */
+   data[o + 0u] = bitfieldExtract(a, 4, 8);                  /* unsigned */
+   data[o + 1u] = uint(bitfieldExtract(int(a), 4, 8));       /* signed, sign-extends */
+   data[o + 2u] = bitfieldInsert(a, b, 8, 8);
+   data[o + 3u] = bitfieldReverse(a);
+   data[o + 4u] = uint(findLSB(a));
+   data[o + 5u] = uint(findMSB(a));
+   data[o + 6u] = uint(bitCount(a));
+
+   /* --- carry / borrow -------------------------------------------------- */
+   uint carry;
+   uint sum = uaddCarry(a, b, carry);
+   data[o + 7u] = carry;
+
+   uint borrow;
+   uint diff = usubBorrow(a, b, borrow);
+   data[o + 8u] = borrow;
+
+   /* --- pack / unpack ---------------------------------------------------
+    * unorm round-trips are bit-exact by construction (8- and 16-bit unorm
+    * quantisation is the identity on the value it decoded from), so these
+    * assert both halves of each pair without needing a float tolerance. */
+   data[o + 9u]  = packUnorm4x8(unpackUnorm4x8(a));
+   data[o + 10u] = packUnorm2x16(unpackUnorm2x16(a));
+
+   /* Fixed operands so the fp16 encoding is exact and hand-checkable:
+    * 1.5 -> 0x3E00, -2.25 -> 0xC080. */
+   data[o + 11u] = packHalf2x16(vec2(1.5, -2.25));
+
+   /* --- widening multiply -----------------------------------------------
+    * Only the high word is recorded: the low word is an ordinary 32-bit
+    * multiply, which every other op here already depends on. Signed and
+    * unsigned are separate opcodes and disagree whenever either operand has
+    * its top bit set, which both of these do. */
+   int  smsb, slsb;
+   imulExtended(int(a), int(b), smsb, slsb);
+   data[o + 12u] = uint(smsb);
+
+   uint umsb, ulsb;
+   umulExtended(a, b, umsb, ulsb);
+   data[o + 13u] = umsb;
+}

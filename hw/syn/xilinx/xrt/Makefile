@@ -1,5 +1,9 @@
 ROOT_DIR := $(realpath ../../../..)
 include $(ROOT_DIR)/config.mk
+# Exports VERILATOR/VERILATOR_PATH as absolute paths. gen_sources.sh resolves
+# verilator from the environment, so without this the flow silently depends on
+# verilator being on PATH and fails with "verilator: command not found".
+include $(VORTEX_HOME)/hw/syn/common.mk
 
 ifneq ($(findstring Makefile, $(MAKEFILE_LIST)), Makefile)
 help:
@@ -16,13 +20,23 @@ TARGET ?= hw
 PLATFORM ?=
 
 PREFIX ?= build$(XLEN)
+
+SAIF_FILE ?=
+SAIF_INST ?=
 MAX_JOBS ?= 8
+
+# Synthesis optimization level (standardized across hw/syn):
+#   0 -- fastest compile, no optimization (Vitis --optimize 0)
+#   3 -- default
+# Flows through to v++ via --optimize. DEBUG builds force level 0.
+OPT_LEVEL ?= 3
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
 
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
+AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 VIVADO := $(XILINX_VIVADO)/bin/vivado
@@ -66,45 +80,64 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
 
 ifdef NUM_CORES
 # cluster configuration
-CONFIGS_1c  := -DNUM_CLUSTERS=1 -DNUM_CORES=1
-CONFIGS_2c  := -DNUM_CLUSTERS=1 -DNUM_CORES=2
-CONFIGS_4c  := -DNUM_CLUSTERS=1 -DNUM_CORES=4
-CONFIGS_8c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=8
-CONFIGS_16c	:= -DNUM_CLUSTERS=1 -DNUM_CORES=16
-CONFIGS_32c := -DNUM_CLUSTERS=2 -DNUM_CORES=16
-CONFIGS_64c := -DNUM_CLUSTERS=4 -DNUM_CORES=16
+CONFIGS_1c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=1
+CONFIGS_2c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=2
+CONFIGS_4c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4
+CONFIGS_8c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=8
+CONFIGS_16c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16
+CONFIGS_32c := -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16
+CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16
 CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 endif
+
+CONFIGS += -DSYNTHESIS -DVIVADO
+
+ifeq ($(TARGET), hw_emu)
+	CONFIGS += -DSIMULATION
+endif
+
+XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 # include sources
 RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
 FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(findstring -DFPU_FPNEW, $(CONFIGS)))
+ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR)
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(AFU_COMMON_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE)
 
-# Add V extension sources
-ifneq (,$(findstring -DEXT_V_ENABLE, $(CONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/vpu/VX_vpu_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/vpu
-endif
+# Command Processor sources. RTL_PKGS holds packages only; the CP
+# interface files are auto-discovered via the -I path below.
+RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
+RTL_INCLUDE += -I$(RTL_DIR)/cp
 
-# Add TCU extension sources
-ifneq (,$(findstring -DEXT_TCU_ENABLE, $(CONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/tcu/VX_tcu_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu
-	RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
-	RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
-	RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
-endif
+# Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
+# single source of truth, appended based on the resolved XCONFIGS.
+include $(VORTEX_HOME)/hw/syn/extensions.mk
 
+# Kernel clock target frequency (MHz). Defaults to the U55C platform native
+# 300 MHz. Override on the command line (e.g. KERNEL_FREQ=250) for extra
+# timing-closure margin.
+KERNEL_FREQ ?= 300
 
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
+VPP_FLAGS += --kernel_frequency $(KERNEL_FREQ)
+
+# Auto-frequency-scaling control.
+# The Alveo flow drives the kernel clock from a runtime-programmable (scalable)
+# MMCM, so a design that misses --kernel_frequency does NOT fail: the compiler
+# silently reprograms the clock down to whatever met timing and still exits 0
+# (the drop shows up only as "Achieved Freq" in xclbin.info). Disabling scaling
+# forces a normal post-route timing check that FAILS the build on a miss.
+# Set ALLOW_FREQ_SCALING=1 to restore stock behavior (emit a downscaled bitstream).
+ALLOW_FREQ_SCALING ?= 0
+ifeq ($(ALLOW_FREQ_SCALING),0)
+VPP_FLAGS += --advanced.param compiler.enableAutoFrequencyScaling=false
+endif
 
 # register compilation hooks
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE=${SRC_DIR}/pre_opt_hook.tcl"
@@ -126,10 +159,6 @@ ifdef PROFILE
 	VPP_FLAGS += --profile_kernel stall:all:all:all
 endif
 
-ifeq ($(TARGET), hw_emu)
-	CFLAGS += -DSIMULATION
-endif
-
 # Debugging
 ifdef DEBUG
 	VPP_FLAGS += -g --optimize 0 --debug.protocol all
@@ -138,10 +167,10 @@ ifdef DEBUG
 		CFLAGS += -DNDEBUG -DCHIPSCOPE $(DBG_SCOPE_FLAGS)
 	else
 		VPP_FLAGS += --vivado.prop fileset.sim_1.xsim.elaborate.debug_level=all
-		CFLAGS += -DDEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
+		CFLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 	endif
 else
-	VPP_FLAGS += --optimize 3
+	VPP_FLAGS += --optimize $(OPT_LEVEL)
 	CFLAGS += -DNDEBUG
 endif
 
@@ -152,9 +181,10 @@ ifdef SCOPE
 endif
 
 # compilation flags
-CFLAGS += -DSYNTHESIS -DVIVADO
-CFLAGS += -DXLEN_$(XLEN)
-CFLAGS += $(CONFIGS)
+CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
+# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
+# resolved type selectors so an enum override selects its RTL implementation.
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 CFLAGS += $(RTL_INCLUDE)
 
 # ast dump flags
@@ -165,7 +195,7 @@ ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
 endif
 
-.PHONY: all clean gen-sources gen-ast emconfig check-devices
+.PHONY: all clean gen-sources gen-ast emconfig check-devices power
 
 all: check-devices emconfig $(XCLBIN_CONTAINER) report
 
@@ -175,7 +205,7 @@ $(BUILD_DIR)/sources.txt:
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(VERILATOR_PATH)/bin/verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
 
 scope-json: $(BIN_DIR)/scope.json
 $(BIN_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
@@ -201,10 +231,28 @@ ifeq ($(TARGET), hw)
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_utilization_placed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/hier_utilization.rpt $(BUILD_DIR)/bin
+ifeq ($(ALLOW_FREQ_SCALING),0)
+	@if grep -q 'AUTO-FREQ-SCALING-04' $(BUILD_DIR)/bin/vivado.log; then \
+		echo "ERROR: kernel clock failed to meet --kernel_frequency=$(KERNEL_FREQ) MHz; Vitis auto-scaled it down:"; \
+		grep 'AUTO-FREQ-SCALING-04' $(BUILD_DIR)/bin/vivado.log; \
+		echo "Build FAILED (set ALLOW_FREQ_SCALING=1 to accept a downscaled bitstream)."; \
+		exit 1; \
+	fi
+endif
 endif
 
 chipscope:
 	debug_hw --vivado --host localhost --ltx_file $(BUILD_DIR)/bin/vortex_afu.ltx &
+
+# Re-run power analysis on an existing build without rebuilding the design.
+# The Vitis flow writes the routed checkpoint under _x/link/vivado/vpl/prj/prj.runs/impl_1/.
+# Usage: make power SAIF_FILE=<saif-path> [SAIF_INST=<instance-path>] [BUILD_DIR=<path>]
+power:
+	@if [ -z "$(SAIF_FILE)" ]; then \
+	  echo "ERROR: SAIF_FILE not specified. Usage: make power SAIF_FILE=<path/to/trace.saif>"; exit 1; \
+	fi
+	TOOL_DIR=$(SCRIPT_DIR) SAIF_FILE=$(SAIF_FILE) SAIF_INST=$(SAIF_INST) \
+	  BUILD_DIR=$(BUILD_DIR) $(VIVADO) -mode batch -source $(SCRIPT_DIR)/xilinx_power_analysis.tcl
 
 clean:
 	$(RMDIR) $(BUILD_DIR)

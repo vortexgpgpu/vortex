@@ -29,13 +29,14 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     VX_decode_if.slave      decode_if,
     VX_writeback_if.slave   writeback_if,
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS],
-    VX_issue_sched_if.master issue_sched_if
+    output wire             warp_issued,
+    output wire [ISSUE_WIS_W-1:0] warp_issued_wis
 );
-    `UNUSED_PARAM (ISSUE_ID)
-
     VX_ibuffer_if ibuffer_if [PER_ISSUE_WARPS]();
     VX_scoreboard_if scoreboard_if();
     VX_operands_if operands_if();
+
+    wire [NUM_EX_UNITS-1:0] fu_release;
 
     VX_ibuffer #(
         .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID))),
@@ -58,9 +59,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .reset          (reset),
     `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.scb_stalls),
-        .perf_units_uses(issue_perf.units_uses),
-        .perf_sfu_uses  (issue_perf.sfu_uses),
     `endif
+        .fu_release     (fu_release),
         .writeback_if   (writeback_if),
         .ibuffer_if     (ibuffer_if),
         .scoreboard_if  (scoreboard_if)
@@ -80,22 +80,25 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .operands_if    (operands_if)
     );
 
-    VX_dispatch #(
-        .INSTANCE_ID (`SFORMATF(("%s-dispatch", INSTANCE_ID))),
+    VX_dispatcher #(
+        .INSTANCE_ID (`SFORMATF(("%s-dispatcher", INSTANCE_ID))),
         .ISSUE_ID (ISSUE_ID)
-    ) dispatch (
+    ) dispatcher (
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE
-        `UNUSED_PIN     (perf_stalls),
+        .perf_stalls    (issue_perf.dispatch_stalls),
+        .perf_instrs    (issue_perf.dispatch_instrs),
     `endif
         .operands_if    (operands_if),
+        .fu_release     (fu_release),
         .dispatch_if    (dispatch_if)
     );
 
     // notify scheduler
-    assign issue_sched_if.valid = operands_if.valid && operands_if.ready && operands_if.data.sop;
-    assign issue_sched_if.wis = operands_if.data.wis;
+    wire scoreboard_fire = scoreboard_if.valid && scoreboard_if.ready;
+    assign warp_issued     = scoreboard_fire;
+    assign warp_issued_wis = scoreboard_if.data.wis;
 
 `ifdef SCOPE
 `ifdef DBG_SCOPE_ISSUE
@@ -105,9 +108,9 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 2, 4, 3, (
-            UUID_WIDTH + NW_WIDTH + `NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS * 4 +
-            UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS + (3 * `XLEN) +
-            UUID_WIDTH + ISSUE_WIS_W + `SIMD_WIDTH + NUM_REGS_BITS + (`SIMD_WIDTH * `XLEN) + 1
+            UUID_WIDTH + NW_WIDTH + `VX_CFG_NUM_THREADS + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS * 4 +
+            UUID_WIDTH + ISSUE_WIS_W + `VX_CFG_SIMD_WIDTH + PC_BITS + EX_BITS + INST_OP_BITS + 1 + NUM_REGS_BITS + (3 * `VX_CFG_XLEN) +
+            UUID_WIDTH + ISSUE_WIS_W + `VX_CFG_SIMD_WIDTH + NUM_REGS_BITS + (`VX_CFG_SIMD_WIDTH * `VX_CFG_XLEN) + 1
         ), {
             decode_if.valid,
             decode_if.ready,
@@ -164,49 +167,6 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
         .probe3 ({writeback_if.valid, writeback_if.data})
     );
 `endif
-`endif
-
-`ifdef DBG_TRACE_PIPELINE
-    for (genvar i = 0; i < PER_ISSUE_WARPS; ++i) begin : g_ibuffer_trace
-        localparam wid = wis_to_wid(ISSUE_WIS_W'(i), ISSUE_ID);
-        always @(posedge clk) begin
-            if (ibuffer_if[i].valid && ibuffer_if[i].ready) begin
-                `TRACE(1, ("%t: %s-ibuffer: wid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wid, to_fullPC(ibuffer_if[i].data.PC)))
-                VX_trace_pkg::trace_ex_type(1, ibuffer_if[i].data.ex_type);
-                `TRACE(1, (", op="))
-                VX_trace_pkg::trace_ex_op(1, ibuffer_if[i].data.ex_type, ibuffer_if[i].data.op_type, ibuffer_if[i].data.op_args);
-                `TRACE(1, (", tmask=%b, wb=%b, used_rs=%b, rd=", ibuffer_if[i].data.tmask, ibuffer_if[i].data.wb, ibuffer_if[i].data.used_rs))
-                VX_trace_pkg::trace_reg_idx(1, ibuffer_if[i].data.rd);
-                `TRACE(1, (", rs1="))
-                VX_trace_pkg::trace_reg_idx(1, ibuffer_if[i].data.rs1);
-                `TRACE(1, (", rs2="))
-                VX_trace_pkg::trace_reg_idx(1, ibuffer_if[i].data.rs2);
-                `TRACE(1, (", rs3="))
-                VX_trace_pkg::trace_reg_idx(1, ibuffer_if[i].data.rs3);
-                `TRACE(1, (", "))
-                VX_trace_pkg::trace_op_args(1, ibuffer_if[i].data.ex_type, ibuffer_if[i].data.op_type, ibuffer_if[i].data.op_args);
-                `TRACE(1, (" (#%0d)\n", ibuffer_if[i].data.uuid))
-            end
-        end
-    end
-
-    always @(posedge clk) begin
-        if (operands_if.valid && operands_if.ready) begin
-            `TRACE(1, ("%t: %s-dispatch: wid=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, wis_to_wid(operands_if.data.wis, ISSUE_ID), operands_if.data.sid, to_fullPC(operands_if.data.PC)))
-            VX_trace_pkg::trace_ex_type(1, operands_if.data.ex_type);
-            `TRACE(1, (", op="))
-            VX_trace_pkg::trace_ex_op(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
-            `TRACE(1, (", tmask=%b, wb=%b, rd=%0d, rs1_data=", operands_if.data.tmask, operands_if.data.wb, operands_if.data.rd))
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs1_data, `SIMD_WIDTH)
-            `TRACE(1, (", rs2_data="))
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs2_data, `SIMD_WIDTH)
-            `TRACE(1, (", rs3_data="))
-            `TRACE_ARRAY1D(1, "0x%0h", operands_if.data.rs3_data, `SIMD_WIDTH)
-            `TRACE(1, (", "))
-           VX_trace_pkg::trace_op_args(1, operands_if.data.ex_type, operands_if.data.op_type, operands_if.data.op_args);
-            `TRACE(1, (", sop=%b, eop=%b (#%0d)\n", operands_if.data.sop, operands_if.data.eop, operands_if.data.uuid))
-        end
-    end
 `endif
 
 endmodule

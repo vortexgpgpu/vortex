@@ -79,19 +79,14 @@ The Xilinx synthesis process requires verilator to generate the bitstream. Event
 mkdir build && cd build && ../configure --tooldir=$HOME/tools
 
 # Install the whole prebuilt toolchain
-./ci/toolchain_install.sh --all
-
-# Add environment variables to bashrc
-echo "source <full-path-to-vortex-root>/vortex/build/ci/toolchain_env.sh" >> ~/.bashrc
+./ci/toolchain_install.sh
 ```
 
-### Activate Vortex Toolchain
+### Verify Toolchain Install
 ```
-# From any directory
-source ~/.bashrc
-
-# Check environment setup
-verilator --version
+# Tools are invoked by absolute path from the Vortex Makefiles -- no
+# shell env sourcing required. Confirm the install with:
+$TOOLDIR/verilator/bin/verilator --version
 ```
 
 ### Build the FPGA Bitstream
@@ -104,6 +99,8 @@ The root directory contains the path `hw/syn/xilinx/xrt` which has the makefile
 Will run the synthesis under new build directory: BUILD_DIR := "\<PREFIX>\_\<PLATFORM>\_\<TARGET>"
 The generated bitstream will be located under <BUILD_DIR>/bin/vortex_afu.xclbin
 
+`NUM_CORES=N` here is a Makefile shorthand that selects a pre-defined cluster/core/L2 combination (see `hw/syn/xilinx/xrt/Makefile`); it expands to `-DVX_CFG_NUM_CLUSTERS=… -DVX_CFG_NUM_CORES=…` under the hood.
+
 For long-running jobs, invocation of this makefile can be made of the following form:
 
 `[CONFIGS=<vortex macros>] [PREFIX=<prefix directory name>] [NUM_CORES=<#>] TARGET=hw|hw_emu PLATFORM=<platform baseName> nohup make > <log filename> 2>&1 &`
@@ -111,10 +108,41 @@ For long-running jobs, invocation of this makefile can be made of the following 
 For example:
 
 ```bash
-CONFIGS="-DL2_ENABLE -DDCACHE_SIZE=8192" PREFIX=build_4c_u280 NUM_CORES=4 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202310_1 nohup make > build_u250_hw_4c.log 2>&1 &
+CONFIGS="-DVX_CFG_L2_ENABLE -DVX_CFG_DCACHE_SIZE=8192" PREFIX=build_4c_u280 NUM_CORES=4 TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202310_1 nohup make > build_u250_hw_4c.log 2>&1 &
 ```
 
 The build is complete when the bitstream file `vortex_afu.xclbin` exists in `<prefix directory name><platform baseName>hw|hw_emu/bin`.
+
+### Enable Host Memory Access (required on hardware)
+
+The Vortex AFU is driven by an on-chip **Command Processor (CP)** that fetches its
+command ring and other control buffers directly from **host memory** over the
+platform's host-memory bridge (CPU RAM exposed to the card, a.k.a. the "host bank"
+or slave-bridge). The XRT runtime therefore allocates these buffers in host memory
+at device open.
+
+This bank is **disabled by default** and must be enabled once per card (it persists
+until disabled or reboot). If it is not enabled, `vx_device_open` fails with:
+
+```
+[XRT] ERROR: Failed to allocate host memory buffer (Operation not permitted),
+             make sure host bank is enabled (xrt-smi configure --host-mem)
+```
+
+Enable it (requires root). `sudo` resets `PATH`, so source the XRT environment
+inside the elevated shell and pass the card's BDF (from `xrt-smi examine`):
+
+```bash
+sudo bash -c 'source /opt/xilinx/xrt/setup.sh && \
+  xrt-smi configure --host-mem -d <BDF> --size 1G enable'
+# e.g. -d 0000:3d:00.1
+```
+
+- `--size` must be a power of two and is bounded by available host CMA/huge-page
+  memory. **256M** is sufficient for the CP ring and typical test buffers; **1G**
+  is a safe default with headroom.
+- This applies to the **`hw`** flow only. **`hw_emu`** models host memory in the
+  emulator and needs no card configuration.
 
 ### Running a Program on Xilinx FPGA
 
@@ -126,8 +154,27 @@ For example:
 
 ```FPGA_BIN_DIR=<realpath> hw/syn/xilinx/xrt/build_4c_u280_xilinx_u280_gen3x16_xdma_1_202211_1_hw/bin TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo```
 
+Run sgemm on a U55C `hw` bitstream (host memory enabled per the section above), `-n` sets the matrix size:
+
+```bash
+FPGA_BIN_DIR=$(realpath hw/syn/xilinx/xrt/<build dir>/bin) TARGET=hw \
+  ./ci/blackbox.sh --driver=xrt --app=sgemm --args="-n128"
+```
+
+The same command with `TARGET=hw_emu` against a `hw_emu` build runs it in emulation
+(use a small `-n`, e.g. `-n16`, since emulation is slow).
+
 Synthesis for Intel (Altera) Boards
 ----------------------
+
+> **⚠️ Deprecated / unmaintained.** The Intel (Altera) OPAE flow is legacy and
+> is no longer actively maintained or CI-tested. It targets discontinued Intel
+> PAC cards (Arria 10 / Stratix 10) and depends on Intel-supplied platform files
+> (e.g. `platform_if.vh` provided by the OPAE PIM at Quartus build time), so the
+> steps below may be out of date and the build is not guaranteed to work on
+> current toolchains. **The supported FPGA path is the Xilinx Alveo / XRT flow
+> above.** The notes here are retained for reference only; please use Xilinx XRT
+> for new work.
 
 ### OPAE Environment Setup
 
@@ -156,14 +203,14 @@ Setting TARGET=ase will build the project for simulation using Intel ASE.
 
 ### OPAE Build Configuration
 
-The hardware configuration file `/hw/rtl/VX_config.vh` defines all the hardware parameters that can be modified when build the processor.For example, have the following parameters that can be configured:
-- `NUM_WARPS`:   Number of warps per cores
-- `NUM_THREADS`: Number of threads per warps
+Hardware parameters live in `VX_config.toml` and `VX_types.toml` at the repo root (auto-generated headers like `VX_config.vh` are produced under `build/` by `configure`). All build-time overrides use the `VX_CFG_*` namespace. For example:
+- `VX_CFG_NUM_WARPS`:   Number of warps per core
+- `VX_CFG_NUM_THREADS`: Number of threads per warp
 - `PERF_ENABLE`: enable the use of all profile counters
 
-You configure the syntesis build from the command line:
+You configure the synthesis build from the command line:
 
-    $ CONFIGS="-DPERF_ENABLE -DNUM_THREADS=8" make
+    $ CONFIGS="-DPERF_ENABLE -DVX_CFG_NUM_THREADS=8" make
 
 ### OPAE Build Progress
 

@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-#ifndef NUM_THREADS
-#define NUM_THREADS 4
+#ifndef VX_CFG_NUM_THREADS
+#define VX_CFG_NUM_THREADS 4
 #endif
 
 #ifndef ITYPE
@@ -16,12 +16,11 @@
 #endif
 
 typedef struct {
-  uint32_t grid_dim[2];
-  uint32_t block_dim[2];
   uint32_t M, N, K;
   uint64_t A_addr;
   uint64_t B_addr;
   uint64_t C_addr;
+  uint64_t cycles_addr;
 } kernel_arg_t;
 
 #endif
