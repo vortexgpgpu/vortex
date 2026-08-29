@@ -33,6 +33,8 @@ int main() {
 
 	errors += test_feq_x0_scoreboard();
 
+	errors += test_reserved_funct7();
+
 	if (0 == errors) {
 		PRINTF("Passed!\n");
 	} else {

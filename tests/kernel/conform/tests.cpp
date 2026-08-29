@@ -527,3 +527,23 @@ int test_feq_x0_scoreboard() {
 	vx_tmc_one();
 	return 0;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+int test_reserved_funct7() {
+	PRINTF("Reserved funct7 Test\n");
+	vx_tmc_one();
+	// funct7=0x3 is a reserved OP encoding. The RTL decoder's exact funct7
+	// case-match falls through to the base-ALU default (ADD for funct3=0);
+	// SimX must decode it identically instead of treating any odd funct7 as
+	// an M-extension op (which executed this word as MUL).
+	uint32_t a = 7, b = 9, r = 0;
+	asm volatile(".insn r 0x33, 0x0, 0x3, %0, %1, %2"
+	             : "=r"(r)
+	             : "r"(a), "r"(b));
+	if (r != a + b) {
+		PRINTF("*** error: reserved funct7 decode: r=%d, expected=%d\n", r, a + b);
+		return 1;
+	}
+	return 0;
+}
