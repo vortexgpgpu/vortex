@@ -1612,7 +1612,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
-	: FuncUnit(ctx, name, core)
+	: FuncUnit(ctx, name, core, 1u << log2ceil(VX_CFG_TCU_LATENCY + 1)) // landing-queue depth bounds results awaiting the consumer
 #ifdef TCU_META_ENABLE
 	, agu_req_out(this)
 	, agu_rsp_in(this)

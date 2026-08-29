@@ -68,7 +68,6 @@ public:
     , fetch_latch_(ctx, "fetch_latch", 2, 2)
     , decode_latch_(ctx, "decode_latch", 1, 2)
     , pending_icache_(VX_CFG_NUM_WARPS)
-    , commit_arbs_(VX_CFG_ISSUE_WIDTH)
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
     , fu_locked_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
@@ -267,13 +266,16 @@ public:
   #endif
   #endif
 
-    // commit arbiters — per-iw inputs are filled at runtime in commit() by
-    // routing per-block FU outputs to commit_arbs_[trace->wid % VX_CFG_ISSUE_WIDTH]
-    // (no static binding because the iw is not knowable at setup time when
-    // NUM_*_BLOCKS < VX_CFG_ISSUE_WIDTH).
+    // commit queues — per-iw, per-FU staging fed at runtime in commit() by
+    // routing per-block FU outputs on trace->wid (no static binding because
+    // the iw is not knowable at setup time when NUM_*_BLOCKS <
+    // VX_CFG_ISSUE_WIDTH). Selection happens inside commit() itself so a
+    // granted beat retires one registered stage after the FU presents it.
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
-      snprintf(sname, 100, "%s-commit-arb%d", name.c_str(), iw);
-      commit_arbs_.at(iw) = TraceArbiter::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
+      auto& queues = commit_queues_.emplace_back();
+      for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
+        queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, 2));
+      }
     }
 
     this->reset();
@@ -693,10 +695,10 @@ public:
   }
 
   void commit() {
-    // Fan-in: route per-block FU outputs to per-iw commit arbs by trace->wid.
+    // Fan-in: route per-block FU outputs to per-iw commit queues by trace->wid.
     // Each FU has NUM_*_BLOCKS outputs; the original iw was lost during
     // dispatcher aggregation, so we recover it from the warp id and try_send
-    // into the matching commit_arb input slot.
+    // into the matching commit queue.
     for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
       auto& func_unit = func_units_.at(fu);
       uint32_t nb = func_unit->num_blocks();
@@ -706,7 +708,7 @@ public:
           continue;
         auto trace = fu_out.peek();
         uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
-        auto& arb_in = commit_arbs_.at(iw)->Inputs.at(fu);
+        auto& arb_in = *commit_queues_.at(iw).at(fu);
         if (arb_in.try_send(trace)) {
           // Release the warp as soon as its stalling instruction's result leaves
           // the functional unit — the branch target / fence / warp-control is
@@ -720,12 +722,27 @@ public:
       }
     }
 
-    // process completed instructions
+    // process completed instructions: one beat per issue slice per cycle,
+    // granted fixed-priority in EX-unit order (ALU highest, then LSU, SFU,
+    // FPU, TCU) — a busy higher class starves lower ones' writebacks.
+    static constexpr FUType kCommitPrio[] = {
+      FUType::ALU, FUType::LSU, FUType::SFU, FUType::FPU,
+    #ifdef VX_CFG_EXT_TCU_ENABLE
+      FUType::TCU,
+    #endif
+    };
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
-      auto& commit_arb = commit_arbs_.at(iw);
-      if (commit_arb->Outputs.at(0).empty())
+      SimChannel<instr_trace_t*>* granted = nullptr;
+      for (auto fu : kCommitPrio) {
+        auto& queue = *commit_queues_.at(iw).at((uint32_t)fu);
+        if (!queue.empty()) {
+          granted = &queue;
+          break;
+        }
+      }
+      if (!granted)
         continue;
-      auto trace = commit_arb->Outputs.at(0).peek().data;
+      auto trace = granted->peek();
 
       // advance to commit stage
       DT(3, simobject_->name() << "-pipeline commit: " << *trace);
@@ -769,7 +786,7 @@ public:
       trace->~instr_trace_t();
       trace_pool_.deallocate(trace, 1);
 
-      commit_arb->Outputs.at(0).pop();
+      granted->pop();
     }
   }
 
@@ -986,7 +1003,9 @@ private:
 
   mutable PerfStats perf_stats_;
 
-  std::vector<TraceArbiter::Ptr> commit_arbs_;
+  // [iw][fu] commit staging: FU outputs land here one registered stage
+  // before retirement; commit() grants among them fixed-priority.
+  std::vector<std::vector<std::unique_ptr<SimChannel<instr_trace_t*>>>> commit_queues_;
 
   std::vector<Arbiter> ibuffer_arbs_;
 

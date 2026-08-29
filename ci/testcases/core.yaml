@@ -156,16 +156,10 @@ tests:
 # SGEMM multi-core: NT=NW=8 across 2 cores (shared L2 — multi-core needs it).
 - id: parity-sgemm-mc
   check: model_parity
-  # Execution passes and retired instructions match exactly; only cycles
-  # diverge (~27%, RTL slower). Per-instruction latencies and isolated memory
-  # round-trips match between the models; the divergence is contended
-  # issue-path serialization at full 8-warp occupancy (registered ready/queue
-  # gating, per-fragment load writeback beats on the shared commit port, and
-  # the warp convoying they produce), which SimX under-models. Partial models
-  # closed the gap to ~14% but destabilized other parity cases, so the full
-  # alignment is tracked as follow-up work.
-  known_issue: "SimX under-models contended issue-path serialization at 8 warps (instrs match; cycles ~27%)"
-  tolerance: 0.10
+  # Tracks to ~3% since SimX models the contended issue-path serializers
+  # (per-fragment load writeback beats, fixed-priority commit arbitration,
+  # and the execution units' bounded in-flight windows).
+  tolerance: 0.05
   via: blackbox
   app: sgemm
   args: -n128
@@ -174,8 +168,10 @@ tests:
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity
-  # Same residual family as parity-sgemv: instrs match, cycles diverge (~7%).
-  tolerance: 0.10   # residual streaming-regime divergence (instrs match; cycles ~7%)
+  # Instrs match exactly; cycles diverge ~10% (RTL slower): the local-memory
+  # store/writeback serialization keeps a residual the execution-window
+  # models do not fully close.
+  tolerance: 0.10
   via: blackbox
   app: sgemmx
   args: -n128

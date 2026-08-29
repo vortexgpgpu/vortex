@@ -31,7 +31,7 @@
 using namespace vortex;
 
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core)
+	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core, 6)
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	, dxa_req_out(this)
 #endif
