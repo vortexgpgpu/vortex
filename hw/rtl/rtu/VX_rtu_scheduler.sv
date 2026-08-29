@@ -698,16 +698,24 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .data_out ({coll_ordt_sel, coll_ordcnt_sel})
     );
 
-    // insertion index: collected entries with t <= the incoming child's
-    reg [RTU_CHILD_BITS-1:0] ins_pos;
-    always @(*) begin
-        ins_pos = RTU_CHILD_BITS'(0);
-        for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
-            if ((RTU_CHILD_BITS'(oc) < coll_ordcnt_sel)
-             && (coll_ordt_sel[oc[IDXW-1:0]] <= box_t_near)) begin
-                ins_pos = ins_pos + RTU_CHILD_BITS'(1);
-            end
+    // Insertion decisions off the admit thermometer: the collected list is
+    // sorted ascending and the count mask is a prefix, so the admit bits are a
+    // prefix of ones and the insertion slot is the first zero. Neighbouring-bit
+    // decode -- no popcount and no index compare on the ordering-write path.
+    wire [NODE_W-1:0] ins_le, ins_here, ins_shift;
+    if (RTU_BVH_WIDTH != 0) begin : g_ins_slots
+        for (genvar oc = 0; oc < RTU_BVH_WIDTH; ++oc) begin : g_le
+            assign ins_le[oc] = (RTU_CHILD_BITS'(oc) < coll_ordcnt_sel)
+                             && (coll_ordt_sel[oc] <= box_t_near);
         end
+        assign ins_here[0]  = ~ins_le[0];
+        assign ins_shift[0] = 1'b0;
+        for (genvar oc = 1; oc < RTU_BVH_WIDTH; ++oc) begin : g_slot
+            assign ins_here[oc]  = ~ins_le[oc] && ins_le[oc-1];
+            assign ins_shift[oc] = ~ins_le[oc-1];
+        end
+    end else begin : g_no_ins_slots
+        assign {ins_le, ins_here, ins_shift} = '0;
     end
     wire coll_pushable = box_hit && (box_childoff != 32'd0);
 
@@ -1891,10 +1899,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     coll_cnt[box_coll] <= coll_cnt[box_coll] + RTU_CHILD_BITS'(1);
                     if (coll_pushable) begin
                         for (integer oc = 0; oc < RTU_BVH_WIDTH; oc = oc + 1) begin
-                            if (RTU_CHILD_BITS'(oc) == ins_pos) begin
+                            if (ins_here[oc]) begin
                                 coll_ordoff[box_coll][oc[IDXW-1:0]] <= box_childoff;
                                 coll_ordt[box_coll][oc[IDXW-1:0]]   <= box_t_near;
-                            end else if (RTU_CHILD_BITS'(oc) > ins_pos) begin
+                            end else if (ins_shift[oc]) begin
                                 coll_ordoff[box_coll][oc[IDXW-1:0]] <= coll_ordoff[box_coll][oc[IDXW-1:0]-1];
                                 coll_ordt[box_coll][oc[IDXW-1:0]]   <= coll_ordt[box_coll][oc[IDXW-1:0]-1];
                             end
@@ -2015,7 +2023,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     assign cb_types = cbtype_q;
     assign attr_vld = attr_q;
 
-    `UNUSED_VAR ({f_aligned, s1_fresh, ray_q, ins_pos})
+    `UNUSED_VAR ({f_aligned, s1_fresh, ray_q, ins_le, ins_here, ins_shift})
 
 `ifdef DBG_TRACE_RTU
     always_ff @(posedge clk) begin
