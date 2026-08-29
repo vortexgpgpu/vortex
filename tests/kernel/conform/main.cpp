@@ -31,6 +31,8 @@ int main() {
 
 	errors += test_jalr();
 
+	errors += test_feq_x0_scoreboard();
+
 	if (0 == errors) {
 		PRINTF("Passed!\n");
 	} else {

@@ -30,4 +30,6 @@ int test_qshfl();
 
 int test_jalr();
 
+int test_feq_x0_scoreboard();
+
 #endif
