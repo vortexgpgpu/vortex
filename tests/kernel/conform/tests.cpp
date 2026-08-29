@@ -505,3 +505,25 @@ int test_jalr() {
 	}
 	return 0;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+void __attribute__((noinline)) do_feq_x0_scoreboard() {
+	asm volatile(
+		"fsgnj.s f24, f0, f0\n"
+		"fsgnj.s f1, f0, f0\n"
+		"feq.s x0, f24, f1\n"
+		:
+		:
+		: "memory");
+}
+
+int test_feq_x0_scoreboard() {
+	PRINTF("FEQ x0 Scoreboard Test\n");
+	int num_threads = std::min(vx_num_threads(), 4);
+	int tmask = make_full_tmask(num_threads);
+	vx_tmc(tmask);
+	do_feq_x0_scoreboard();
+	vx_tmc_one();
+	return 0;
+}
