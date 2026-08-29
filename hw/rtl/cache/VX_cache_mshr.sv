@@ -82,6 +82,13 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire [`CS_LINE_ADDR_WIDTH-1:0] probe_addr,
     output wire                         probe_pending_ld,
     output wire                         probe_pending_amo,
+    // payload-free companions for a registered consumer of the probes: any
+    // persisted entry of the class, and the cycle an entry becomes persisted
+    // (the transition a result registered last cycle cannot have seen).
+    output wire                         probe_any_ld,
+    output wire                         probe_any_amo,
+    output wire                         persist_ld,
+    output wire                         persist_amo,
 
     // dequeue
     output wire                         dequeue_valid,
@@ -382,10 +389,16 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
             .data_in  (probe_amo),
             .data_out (probe_pending_amo)
         );
+
+        assign probe_any_ld  = |(valid_table & persisted_table & ~amo_table);
+        assign probe_any_amo = |(valid_table & persisted_table &  amo_table);
+        assign persist_ld  = finalize_valid && ~finalize_is_release && ~amo_table[finalize_id];
+        assign persist_amo = finalize_valid && ~finalize_is_release &&  amo_table[finalize_id];
     end else begin : g_no_amo
         assign amo_mask = '0;
         assign probe_pending_ld  = 1'b0;
         assign probe_pending_amo = 1'b0;
+        assign {probe_any_ld, probe_any_amo, persist_ld, persist_amo} = '0;
         `UNUSED_PARAM (AMO_PASSTHRU)
         `UNUSED_VAR ({allocate_is_amo, probe_addr})
     end

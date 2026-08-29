@@ -64,7 +64,6 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     input  wire [WORD_WIDTH-1:0]         write_word_st1,
     input  wire [WORD_SEL_WIDTH-1:0]     word_idx_st0,
     input  wire [WORD_SEL_WIDTH-1:0]     word_idx_st1,
-    input  wire [LINE_ADDR_BITS-1:0]     addr_st0,
     input  wire [LINE_ADDR_BITS-1:0]     addr_st1,
     input  wire [LINE_ADDR_BITS-1:0]     res_addr_n,   // line entering the commit stage next cycle
     input  wire [WORD_SIZE-1:0]          byteen_n,     // byteen entering the commit stage next cycle
@@ -84,14 +83,18 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     input  wire [WORDS_PER_SECTOR*WORD_WIDTH-1:0] mem_rsp_data,
     input  wire                          is_fill_sel,
 
-    // input arbitration (passthrough age-ordering)
+    // input arbitration (same-line age-ordering)
     input  wire                          core_req_valid,
     input  wire                          core_req_is_amo,
     input  wire                          core_req_rw,
-    input  wire [LINE_ADDR_BITS-1:0]     core_req_addr,
+    input  wire                          core_req_fire,
     input  wire                          rw_st0,
     input  wire                          mshr_probe_pending_ld,
     input  wire                          mshr_probe_pending_amo,
+    input  wire                          mshr_any_ld,
+    input  wire                          mshr_any_amo,
+    input  wire                          mshr_persist_ld,
+    input  wire                          mshr_persist_amo,
 
     // commit outputs (tied off when IS_LLC=0)
     output wire                          amo_hit_st1,    // AMO commits locally at S1
@@ -120,6 +123,34 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     output wire [WORD_WIDTH-1:0]         amo_ptw_word_st1,
     output wire                          req_input_defer
 );
+    // Registered same-line probe: the MSHR CAM evaluates the held input
+    // payload (stable while the request waits) into flops, so the live defer
+    // equations consume only registered state and req_input_defer stays off
+    // the payload->CAM->ready cone. fresh_r marks a request the registered
+    // result does not yet describe; the persist pulses bridge the one
+    // transition a result captured last cycle cannot have seen. The defers
+    // are a per-cycle superset of the combinational originals -- deferral
+    // only ever gets stronger, by at most one cycle, and only while the
+    // hazard class has a pending entry.
+    reg fresh_r, probe_ld_hit_r, probe_amo_hit_r, persist_ld_r, persist_amo_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            fresh_r         <= 1'b1;
+            probe_ld_hit_r  <= 1'b0;
+            probe_amo_hit_r <= 1'b0;
+            persist_ld_r    <= 1'b0;
+            persist_amo_r   <= 1'b0;
+        end else begin
+            fresh_r         <= ~(core_req_valid && ~core_req_fire);
+            probe_ld_hit_r  <= mshr_probe_pending_ld;
+            probe_amo_hit_r <= mshr_probe_pending_amo;
+            persist_ld_r    <= mshr_persist_ld;
+            persist_amo_r   <= mshr_persist_amo;
+        end
+    end
+    wire st0_ld_alloc_any  = mshr_allocate_st0 && ~pipe_stall && ~amo_st0.amo_valid && ~rw_st0;
+    wire st0_amo_alloc_any = mshr_allocate_st0 && ~pipe_stall &&  amo_st0.amo_valid;
+
     if (IS_LLC != 0) begin : g_commit
         // ----------------------------------------------------------------
         // LLC commit: RMW on the resident line + synthetic writeback
@@ -650,11 +681,12 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // Same-line ordering guard: a request must not enter the pipe while
         // an AMO to its line waits in the MSHR (or is allocating at S0) — it
         // would read or write the line before the replayed AMO commits. The
-        // registered probe covers the AMO through its dequeue cycle;
-        // commit_busy covers it from S0 onward.
-        wire alloc_same_line = mshr_allocate_st0 && ~pipe_stall && (addr_st0 == core_req_addr);
-        wire st0_amo_alloc   = alloc_same_line && amo_st0.amo_valid;
-        assign req_input_defer = core_req_valid && (mshr_probe_pending_amo || st0_amo_alloc);
+        // MSHR probe covers the AMO through its dequeue cycle; commit_busy
+        // covers it from S0 onward. Consumes only the registered probe (see
+        // the header block) so the CAM stays out of core_req_ready.
+        assign req_input_defer = core_req_valid
+                              && (st0_amo_alloc_any || persist_amo_r
+                               || (fresh_r ? mshr_any_amo : probe_amo_hit_r));
 
         `UNUSED_VAR (amo_st0) // only amo_valid/amo_op are consumed at S0
         `UNUSED_VAR (is_replay_st0)
@@ -668,8 +700,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         `UNUSED_VAR (is_fill_sel)
         `UNUSED_VAR (core_req_is_amo)
         `UNUSED_VAR (core_req_rw)
-        `UNUSED_VAR (rw_st0)
-        `UNUSED_VAR (mshr_probe_pending_ld)
+        `UNUSED_VAR ({st0_ld_alloc_any, persist_ld_r, probe_ld_hit_r, mshr_any_ld})
     end else begin : g_passthru
         // ----------------------------------------------------------------
         // Non-LLC passthrough: forward downstream, replay the result word
@@ -704,16 +735,16 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             end
         end
 
-        // catch a same-line request mid-allocation at S0 (not yet visible to
-        // the MSHR probe in the window between admit and allocate).
-        wire alloc_same_line = mshr_allocate_st0 && ~pipe_stall && (addr_st0 == core_req_addr);
-        wire st0_ld_alloc    = alloc_same_line && ~amo_st0.amo_valid && ~rw_st0;
-        wire st0_amo_alloc   = alloc_same_line &&  amo_st0.amo_valid;
-
+        // Age-ordering guards, off the registered probe (see the header
+        // block): an incoming AMO holds behind pending line-filling requests,
+        // an incoming load holds behind pending AMO passthroughs. The S0
+        // alloc pulses catch the window between admit and allocate.
         wire amo_input_defer  = core_req_valid && core_req_is_amo
-                             && (mshr_probe_pending_ld || st0_ld_alloc);
+                             && (st0_ld_alloc_any || persist_ld_r
+                              || (fresh_r ? mshr_any_ld : probe_ld_hit_r));
         wire load_input_defer = core_req_valid && ~core_req_is_amo && ~core_req_rw
-                             && (mshr_probe_pending_amo || st0_amo_alloc);
+                             && (st0_amo_alloc_any || persist_amo_r
+                              || (fresh_r ? mshr_any_amo : probe_amo_hit_r));
         assign req_input_defer = amo_input_defer || load_input_defer;
 
         // commit outputs unused in this role

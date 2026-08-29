@@ -165,6 +165,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // forever once it drifts high, so the gate consults both.
     wire mshr_valid_empty;
     wire mshr_probe_pending_ld, mshr_probe_pending_amo;
+    wire mshr_any_ld, mshr_any_amo, mshr_persist_ld, mshr_persist_amo;
     wire mreq_queue_empty, mreq_queue_alm_full;
     wire [`CS_LINE_ADDR_WIDTH-1:0] mem_rsp_addr;
     wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mem_rsp_sector; // sector this fill installs
@@ -806,6 +807,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .probe_addr          (core_req_addr),
         .probe_pending_ld    (mshr_probe_pending_ld),
         .probe_pending_amo   (mshr_probe_pending_amo),
+        .probe_any_ld        (mshr_any_ld),
+        .probe_any_amo       (mshr_any_amo),
+        .persist_ld          (mshr_persist_ld),
+        .persist_amo         (mshr_persist_amo),
         .dequeue_valid       (replay_valid),
         .dequeue_addr        (replay_addr),
         .dequeue_rw          (replay_rw),
@@ -907,7 +912,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .write_word_st1         (word_stc),
             .word_idx_st0           (st0.req.word_idx),
             .word_idx_st1           (stC.req.word_idx),
-            .addr_st0               (st0.req.addr),
             .addr_st1               (addr_stc),
             .res_addr_n             (amo_res_addr_n),
             .byteen_n               (amo_byteen_n),
@@ -925,10 +929,14 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .core_req_valid         (core_req_valid),
             .core_req_is_amo        (core_req_amo.amo_valid),
             .core_req_rw            (core_req_rw),
-            .core_req_addr          (core_req_addr),
+            .core_req_fire          (core_req_fire),
             .rw_st0                 (st0.req.rw),
             .mshr_probe_pending_ld  (mshr_probe_pending_ld),
             .mshr_probe_pending_amo (mshr_probe_pending_amo),
+            .mshr_any_ld            (mshr_any_ld),
+            .mshr_any_amo           (mshr_any_amo),
+            .mshr_persist_ld        (mshr_persist_ld),
+            .mshr_persist_amo       (mshr_persist_amo),
             .amo_hit_st1            (amo_hit_st1),
             .commit_busy            (amo_commit_busy),
             .chain_stall            (amo_chain_stall),
@@ -959,6 +967,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign {is_passthru_fill_sel, amo_ptw_word_st1, req_input_defer} = '0;
         // S1-only signals consumed solely by the AMO engine.
         `UNUSED_VAR ({amo_wb_fire, mshr_probe_pending_ld, mshr_probe_pending_amo, st1.req.amo, st1.req.attr, st1.req.req_idx, st1.req.word_idx, st1.req.byteen})
+        `UNUSED_VAR ({mshr_any_ld, mshr_any_amo, mshr_persist_ld, mshr_persist_amo})
     end
 
     // ========================================================================
