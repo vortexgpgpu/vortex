@@ -359,21 +359,23 @@ Reports are generated in the synthesis build directory by the Quartus report scr
 
 ## Yosys (Open-Source)
 
-Located in `hw/syn/yosys/`. Uses Yosys for synthesis, optional ABC for technology mapping, and OpenSTA for static timing analysis.
+Located in `hw/syn/yosys/`. Uses Yosys/ABC for technology mapping and OpenSTA for pre-layout timing and power analysis. ASAP7 7.5-track v28 is the default PDK; NanGate45 remains available as a legacy option.
 
 ### Running Synthesis
 
 ```bash
-cd hw/syn/yosys
-
+# First use installs the selected, pinned ASAP7 Liberty files automatically.
 # Synthesis only (generic gates)
-PREFIX=test NUM_CORES=1 make synthesis
+make -C build/hw/syn/yosys PREFIX=test NUM_CORES=1 synthesis
+
+# Explicit legacy library selection
+make -C build/hw/syn/yosys PREFIX=test NUM_CORES=1 PDK=nangate45 timing
 
 # Synthesis + technology mapping
-PREFIX=test NUM_CORES=1 make techmap
+make -C build/hw/syn/yosys PREFIX=test NUM_CORES=1 techmap
 
 # Full flow: synthesis + mapping + STA + power
-PREFIX=test NUM_CORES=1 SAIF_FILE=/path/to/trace.saif SAIF_INST=<inst> make timing
+make -C build/hw/syn/yosys PREFIX=test NUM_CORES=1 SAIF_FILE=/path/to/trace.saif SAIF_INST=<inst> timing
 ```
 
 Key variables:
@@ -387,13 +389,64 @@ Key variables:
 | `CLOCK_FREQ` | 800 | Target clock frequency in MHz |
 | `DELAY_UNC` | 0.02 | Clock uncertainty (fraction of period) |
 | `DELAY_IO` | 0.05 | I/O delay (fraction of period) |
-| `LIB_TGT` | NanGate 15nm OCL | Liberty file for technology mapping |
+| `ABC_DRIVER_CELL` | ASAP7 RVT: `BUFx4_ASAP7_75t_R` | Input driver cell used by ABC for buffering and sizing |
+| `ABC_LOAD` | ASAP7: `5.0` | ABC primary-output load in fF |
+| `YOSYS_FLATTEN` | 1 | Flatten hierarchy before technology mapping for better cross-module optimization |
+| `YOSYS_SHARE` | 1 | Enable Yosys resource sharing before mapping; set to 0 to disable |
+| `PDK` | `asap7` | `asap7` or the legacy `nangate45` library |
+| `ASAP7_VT` | `rvt` | ASAP7 threshold-voltage library: `rvt` or `lvt` |
+| `CORNER` | `tt` | ASAP7 `tt`, `ss`, or `ff` NLDM corner |
+| `LIB_TGT` | selected by `PDK` | Explicit custom Liberty override |
 | `SAIF_FILE` | - | SAIF file for power annotation |
-| `SAIF_INST` | - | Instance path prefix to strip |
+| `SAIF_INST` | top module | OpenSTA SAIF scope override |
+| `DUT_FILELIST` | - | VCS-style filelist for an arbitrary DUT |
+| `SDC_FILE` | `project.sdc` | Clock, reset, and I/O constraints |
+
+Example synthesizing a TFR FEDP unit with FP8 and MX enabled with ASAP7 RVT at the default 800 MHz:
+```bash
+make -C build/hw/syn/yosys timing TOP_LEVEL_ENTITY=VX_tcu_fedp_tfr PREFIX=tfr_fedp CORNER=tt EXTRA_CONFIGS='-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_NUM_THREADS=32 -DVX_CFG_TCU_FEDP_FP8_ENABLE -DVX_CFG_TCU_MX_ENABLE'
+```
+Output reports are written to `build/hw/syn/yosys/tfr_fedp_VX_tcu_fedp_tfr/reports/`
 
 Build directory: `<PREFIX>_<TOP_LEVEL_ENTITY>/` (e.g., `test_Vortex/`).
 
 The flow uses `sv2v` to convert SystemVerilog sources to Verilog before feeding them to Yosys.
+
+The first ASAP7 invocation runs the generated `build/ci/asap7_install.sh` installer. It downloads and SHA-256 verifies only the selected VT's five logical groups (`INVBUF`, `SIMPLE`, `AO`, `OA`, and `SEQ`) at TT, SS, and FF, then writes the merged Liberty files to `build/hw/syn/libs/asap7/lib/`. Gate-level simulation additionally installs the selected functional Verilog models in `build/hw/syn/libs/asap7/verilog/`. Later invocations verify the installed files and skip the download and preparation. The pin manifest, installer, preparation script, and upstream license are versioned in `ci/`; no ASAP7 collateral is kept under `third_party/`, and the flow requires no OpenROAD executable or physical collateral.
+
+### Threshold-Voltage Selection
+
+RVT is the default because it is the appropriate general-purpose implementation library. Use LVT to establish a timing-focused bound or when a design does not meet its target with RVT:
+
+```bash
+make -C build/hw/syn/yosys timing ASAP7_VT=lvt CLOCK_FREQ=1000
+```
+
+### Arbitrary DUT and Gate-Level SAIF
+
+An arbitrary Verilog DUT can bypass Vortex source generation with its own top, filelist, and SDC. Filelists may contain RTL files, `-f`, `+incdir+`, and `+define+` entries.
+
+```bash
+make -C build/hw/syn/yosys timing TOP_LEVEL_ENTITY=my_dut \
+  DUT_FILELIST=/absolute/path/to/dut.f \
+  SDC_FILE=/absolute/path/to/dut.sdc PREFIX=my_dut
+```
+
+For gate-level simulation, provide a Verilator-compatible testbench filelist. The testbench must instantiate the mapped DUT (the default instance name is `dut`) and call `$dumpfile("gate_raw.saif")` plus `$dumpvars`. `SIM_ARGS`, `GATE_SIM_FLAGS`, `TB_TOP`, and `GATE_DUT_INSTANCE` are available for testbench-specific needs.
+
+```bash
+make -C build/hw/syn/yosys gate-saif TOP_LEVEL_ENTITY=my_dut \
+  DUT_FILELIST=/absolute/path/to/dut.f \
+  SDC_FILE=/absolute/path/to/dut.sdc \
+  TB_FILELIST=/absolute/path/to/tb.f SIM_ARGS="+seed=1"
+
+make -C build/hw/syn/yosys timing TOP_LEVEL_ENTITY=my_dut \
+  DUT_FILELIST=/absolute/path/to/dut.f \
+  SDC_FILE=/absolute/path/to/dut.sdc \
+  SAIF_FILE=$PWD/build_my_dut/gate.saif
+```
+
+The gate simulation traces Yosys-generated underscore nets and retains the complete mapped-cell hierarchy before re-rooting the DUT SAIF scope. OpenSTA writes annotated and unannotated pin reports and treats a requested SAIF with zero coverage as an error.
 
 ### SRAM Area Estimation
 
@@ -415,8 +468,11 @@ All reports are under `<BUILD_DIR>/reports/`:
 | `stat_lib.rpt` | Cell count and area (post-mapping, by liberty cell type) |
 | `sram_area.rpt` | Estimated SRAM area breakdown |
 | `sta.log` | OpenSTA timing log |
+| `setup.rpt` / `hold.rpt` | Detailed setup and hold paths |
+| `wns.rpt` / `tns.rpt` | Worst and total negative slack |
 | `power.rpt` | Power estimate (vectorless or SAIF-annotated) |
 | `power_hier.rpt` | Hierarchical power breakdown |
+| `saif_annotated.rpt` | Pins covered by SAIF |
 | `saif_unannotated.rpt` | Signals not covered by SAIF |
 
 Netlists are written to `<BUILD_DIR>/out/`:
