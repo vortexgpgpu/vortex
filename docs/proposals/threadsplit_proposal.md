@@ -2,7 +2,7 @@
 
 **Scope:** [hw/rtl/core/VX_ipdom_stack.sv](../../hw/rtl/core/VX_ipdom_stack.sv), [VX_split_join.sv](../../hw/rtl/core/VX_split_join.sv), [VX_schedule.sv](../../hw/rtl/core/VX_schedule.sv), [hw/rtl/VX_gpu_pkg.sv](../../hw/rtl/VX_gpu_pkg.sv), [sim/simx/wctl_unit.cpp](../../sim/simx/wctl_unit.cpp), [sim/simx/scheduler.h](../../sim/simx/scheduler.h), [sim/simx/decode.cpp](../../sim/simx/decode.cpp), LLVM-Vortex divergence pass (`~/dev/llvm_vortex`)
 **Reference:** ElTantawy & Aamodt, *MIMD Synchronization on SIMT Architectures*, MICRO 2016 (multi-path execution); Diamos et al., *Execution of Divergent Threads Using a Convergence Barrier*, US 2016/0019066A1 (ITS, the rejected baseline)
-**Branch:** `feature_scs` (off the `diverge` baseline)
+**Branch:** `threadsplit` (vortex + llvm-vortex; see §12 for the toolchain setup)
 **Status:** Proposal — for review
 **Tests:** [tests/opencl/lockht](../../tests/opencl/lockht), [tests/opencl/lclist](../../tests/opencl/lclist)
 
@@ -402,3 +402,49 @@ Phase 1 passes, then register them as must-pass.
 | 2 | LLVM-Vortex yield/structuring pass | PASS from source |
 | 3 | RTL SCS + spill | PASS via xrt; split table is BRAM-backed (§3.1 rule) |
 | 4 | U55C timing/area | 300 MHz, area ≈ IPDOM; **+0 BRAM beyond the §6.3 estimate, no FF/LUTRAM blow-up** |
+
+---
+
+## 12. Manual LLVM toolchain setup
+
+The yield-insertion pass (§3.4) lives in the llvm-vortex fork, branch
+`threadsplit` (`llvm/lib/Target/RISCV/VortexBranchDivergence.cpp`,
+`VortexBranchDivergence1::processLoops`). It is not yet in the prebuilt
+toolchain tarballs, so running the SCS lock tests from source requires a
+manually built LLVM in an isolated tooldir (do not overwrite the shared
+`$HOME/tools` install):
+
+```bash
+# 1. Fetch the compiler branch
+git clone -b threadsplit https://github.com/vortexgpgpu/llvm.git llvm-vortex-src
+
+# 2. Build and install into an isolated tooldir
+cmake -S llvm-vortex-src/llvm -B llvm-vortex-src/build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_SHARED_LIBS=ON \
+  -DLLVM_ENABLE_PROJECTS="clang;lld" \
+  -DLLVM_TARGETS_TO_BUILD="RISCV;X86" \
+  -DCMAKE_INSTALL_PREFIX=$HOME/scs_tools/llvm-vortex
+cmake --build llvm-vortex-src/build --target install
+
+# 3. Populate the rest of the tooldir: copy libc32/libcrt32 (they must be
+#    rebuilt if compiler IR/intrinsics change); the remaining components
+#    (riscv32-gnu-toolchain, pocl, verilator, ...) can be symlinks to an
+#    existing $HOME/tools install.
+
+# 4. Point the vortex build at it
+cd build32 && ../configure --xlen=32 --tooldir=$HOME/scs_tools
+```
+
+Two operational gotchas:
+
+- **POCL caches compiled kernels by source hash** (`~/.cache/pocl`). After
+  any toolchain change, clear the cache or stale binaries without yields
+  will be served silently.
+- With `BUILD_SHARED_LIBS=ON`, POCL resolves `libLLVMRISCVCodeGen.so` at
+  runtime — the tooldir's `llvm-vortex/lib` must be on `LD_LIBRARY_PATH`
+  (the generated build scripts handle this; standalone invocations must
+  set it themselves).
+
+The lock tests additionally require the A extension:
+`CONFIGS=-DVX_CFG_EXT_A_ENABLE` (amoswap misdecodes without it).
