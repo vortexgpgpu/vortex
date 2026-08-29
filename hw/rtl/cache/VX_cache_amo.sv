@@ -428,7 +428,8 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         VX_amo_unit #(
             .NUM_RES_ENTRIES (NUM_RES_ENTRIES),
             .LINE_ADDR_BITS  (LINE_ADDR_BITS),
-            .DATA_WIDTH      (AMO_OLD_BITS)  // 32-bit word cache -> 32-bit RMW datapath
+            .DATA_WIDTH      (AMO_OLD_BITS),  // 32-bit word cache -> 32-bit RMW datapath
+            .ARITH_WIDTH     (`MIN(`VX_CFG_XLEN, AMO_OLD_BITS)) // only the Zacas pair is wider than a register
         ) amo_unit (
             .clk           (clk),
             .reset         (reset),
@@ -662,6 +663,12 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         `RUNTIME_ASSERT (~(amo_st1.amo_valid && valid_st1 && is_creq_st1)
             || ((byteen_st1 & ~(WORD_SIZE'({LANE_SIZE{1'b1}}) << (lane_st1 * LANE_SIZE))) == '0),
             ("%t: AMO byteen crosses its lane (addr=0x%0h)", $time, addr_st1))
+        // The narrowed arithmetic width rests on the ISA: on a 32-bit hart
+        // only the Zacas pair carries a 64-bit operand.
+        if (`MIN(`VX_CFG_XLEN, AMO_OLD_BITS) < AMO_OLD_BITS) begin : g_arith_width_guard
+            `RUNTIME_ASSERT (~(do_store_st1 && (width_st1 == 2'd3) && (amo_st1.amo_op != AMO_OP_CAS)),
+                ("%t: non-CAS 64-bit AMO on a 32-bit hart (addr=0x%0h)", $time, addr_st1))
+        end
         assign wb_pending  = wb_pending_r;
         assign wb_addr     = wb_addr_r;
         assign wb_word_idx = wb_word_idx_r;

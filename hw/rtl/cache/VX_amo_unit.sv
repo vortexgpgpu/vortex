@@ -48,7 +48,8 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     // round trip is single-digit cycles and needs far less.
     parameter HOLD_CREDIT_BITS = 6,
     parameter LINE_ADDR_BITS  = 32,
-    parameter DATA_WIDTH      = 64   // ALU operand width (cache word, capped at 64)
+    parameter DATA_WIDTH      = 64,  // ALU operand width (cache word, capped at 64)
+    parameter ARITH_WIDTH     = DATA_WIDTH // non-CAS op width (see VX_amo_alu)
 ) (
     input  wire                          clk,
     input  wire                          reset,
@@ -76,7 +77,8 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
 
     // Pure ALU (no state, no clock).
     VX_amo_alu #(
-        .DATA_WIDTH (DATA_WIDTH)
+        .DATA_WIDTH  (DATA_WIDTH),
+        .ARITH_WIDTH (ARITH_WIDTH)
     ) alu (
         .op       (compute_op),
         .is_unsigned (compute_unsigned),
