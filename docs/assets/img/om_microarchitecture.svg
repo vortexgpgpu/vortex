@@ -38,7 +38,7 @@
   <rect x="40" y="96" width="298" height="102" rx="6" class="core"/>
   <text x="52" y="118" class="t">vx_om_export (custom1 f3=3, posted)</text>
   <text x="52" y="138" class="ts">rs1 = aperture record addr (shift-only:</text>
-  <text x="52" y="154" class="ts">base + ((face≪xb+yb)|(y≪xb)|x)≪rec)</text>
+  <text x="52" y="154" class="ts">base + ((((rt≪1)|face)≪yb|y)≪xb|x)≪rec)</text>
   <text x="52" y="170" class="ts">rs2 = colour → rec+0 · rs3 = depth → rec+4</text>
   <text x="52" y="188" class="ts">funct7[1:0] = {has_depth, has_colour}</text>
 
@@ -70,12 +70,12 @@
 
   <rect x="40" y="594" width="298" height="150" rx="6" class="unit"/>
   <text x="52" y="616" class="t">VX_om_ingress — store → fragment</text>
-  <text x="52" y="636" class="ts">bit-slice addr → {x, y, face}</text>
+  <text x="52" y="636" class="ts">bit-slice addr → {rt, x, y, face}</text>
   <text x="52" y="652" class="ts">drain multi-word beats low→high</text>
   <text x="52" y="668" class="ts">pair colour+depth via hold table</text>
   <text x="52" y="684" class="ts">(MAX_OPEN = SOCKET_SIZE × NT,</text>
   <text x="52" y="700" class="ts"> alloc never refused ⇒ deadlock-free)</text>
-  <text x="52" y="722" class="tt">out: 1 fragment {pos, colour, depth, face}</text>
+  <text x="52" y="722" class="tt">out: 1 fragment {pos, colour, depth, face, rt}</text>
 
   <rect x="40" y="760" width="298" height="100" rx="6" class="unit"/>
   <text x="52" y="782" class="t">VX_om_bus_arb (RR, static map)</text>
@@ -95,9 +95,9 @@
   <text x="452" y="80" class="tb">VX_om_core ×NUM_OM_CORES (NUM_SFU_LANES wide)</text>
 
   <rect x="456" y="96" width="528" height="90" rx="6" class="box"/>
-  <text x="468" y="118" class="t">draw-mode decode (DCRs)</text>
+  <text x="468" y="118" class="t">draw-mode decode (DCRs, per attachment)</text>
   <text x="468" y="138" class="ts">write bypass: no DS, no blend ⇒ straight FB write, no read</text>
-  <text x="468" y="154" class="ts">RMW: DS and/or blend ⇒ read → merge → write</text>
+  <text x="468" y="154" class="ts">RMW: DS and/or blend ⇒ read → merge → write · rt≠0 needs z/s writemasks clear</text>
   <text x="468" y="172" class="tt">degenerate (all-zero masks) requests dropped</text>
 
   <rect x="456" y="240" width="250" height="110" rx="6" class="box"/>
@@ -130,9 +130,10 @@
   <text x="738" y="434" class="ts">modes: ADD SUB REV_SUB</text>
   <text x="738" y="450" class="ts">MIN MAX LOGICOP (16 ops)</text>
   <text x="738" y="466" class="ts">separate RGB / alpha selects</text>
-  <text x="738" y="490" class="ts">A8R8G8B8 fixed-point only</text>
-  <text x="738" y="510" class="tt">runs parallel to DS off the</text>
-  <text x="738" y="526" class="tt">same read; joins at writeback</text>
+  <text x="738" y="482" class="ts">state per attachment — rt rides</text>
+  <text x="738" y="498" class="ts">the pipe, reselecting each stage</text>
+  <text x="738" y="514" class="ts">A8R8G8B8 fixed-point only</text>
+  <text x="738" y="534" class="tt">parallel to DS off the same read</text>
 
   <rect x="456" y="582" width="528" height="88" rx="6" class="box"/>
   <text x="468" y="604" class="t">writeback join</text>
@@ -144,7 +145,7 @@
   <text x="468" y="738" class="ts">2 × NUM_SFU_LANES word accesses / request (z word + colour word per lane)</text>
   <text x="468" y="754" class="ts">per-lane y×pitch multipliers (IMUL pipe) + base+x</text>
   <text x="468" y="770" class="ts">VX_mem_scheduler (queue 4, full gather) → VX_lsu_adapter → ocache banks</text>
-  <text x="468" y="790" class="ts">writes: cbuf_writemask / depth writemask / face stencil writemask (byteen)</text>
+  <text x="468" y="790" class="ts">writes: rt's cbuf_writemask / depth writemask / face stencil writemask (byteen)</text>
   <text x="468" y="812" class="tt">cbuf word = A8R8G8B8 · zbuf word = {stencil[31:24], depth[23:0]} (D24S8)</text>
 
   <path d="M 720 186 L 720 210 L 581 210 L 581 240" class="flow"/>
@@ -160,10 +161,10 @@
   <text x="1028" y="80" class="tb">Memory side</text>
 
   <rect x="1032" y="96" width="288" height="130" rx="6" class="box"/>
-  <text x="1044" y="118" class="t">DCRs 0x080–0x096 (broadcast)</text>
-  <text x="1044" y="138" class="ts">cbuf/zbuf addr+pitch · writemasks</text>
-  <text x="1044" y="154" class="ts">depth func · stencil ×2 faces</text>
-  <text x="1044" y="170" class="ts">blend mode/func/const · logic op</text>
+  <text x="1044" y="118" class="t">DCRs 0x080–0x097 (broadcast)</text>
+  <text x="1044" y="138" class="ts">per attachment (×MAX_RT, RT_SELECT):</text>
+  <text x="1044" y="154" class="ts">cbuf addr/pitch/writemask · blend · logic op</text>
+  <text x="1044" y="170" class="ts">shared: zbuf · depth func · stencil ×2 faces</text>
   <text x="1044" y="186" class="ts">EARLYZ_SAFE · aperture xbits/ybits/</text>
   <text x="1044" y="202" class="ts">record_shift/depth_only</text>
 

@@ -35,10 +35,12 @@ register-to-register operation:
 2. The per-core unit tags the request and forwards it over the socket's
    texture bus; a round-robin arbiter funnels the socket's cores onto the
    sampler cores.
-3. The sampler selects the stage's DCR bank, generates the 2×2 tap addresses,
-   fetches texels through the tcache, expands the format, and bilinearly
-   blends — all fixed-point, fully pipelined, out-of-order-completion-safe
-   via tags.
+3. The sampler selects the stage's DCR bank, generates the 2×2 tap addresses
+   per mip level (a mip-linear sample carries two tap sets in one request),
+   fetches texels through the tcache, expands the format, substitutes the
+   border colour on taps that left the texture, and blends — bilinear within
+   a level, linear between levels — all fixed-point, fully pipelined,
+   out-of-order-completion-safe via tags.
 
 Everything per-texture (base address, dimensions, format, filter, wrap, mip
 offsets) is **DCR state**, programmed per draw; the only per-request operands
@@ -57,7 +59,7 @@ are the coordinates, the integer mip level, and the stage index.
 |---|---|
 | `rs1` | `u` coordinate (Q9.23 fixed-point, normalized) |
 | `rs2` | `v` coordinate |
-| `rs3` | integer mip level (explicit — see §2.3) |
+| `rs3` | mip level — integer, or fixed-point `level.weight` under mip-linear (§2.3) |
 | `funct2` | `stage` — which of the `VX_TEX_STAGE_COUNT` (2) texture stages to sample |
 | `rd` | texel, A8R8G8B8, via scoreboarded writeback |
 
@@ -184,36 +186,61 @@ every stage valid/ready-elastic and able to accept one request per cycle:
 ### 4.1 Stage select + setup
 
 The request's `stage` selects the DCR bank; the per-lane mip level indexes
-`mipoff[]`. A registered elastic buffer decouples the socket bus.
+`mipoff[]`. Under mip-linear the lod operand's high bits name the lower
+level of the pair and the upper is the next entry, except at
+`VX_TEX_LOD_MAX`, where the pair repeats the same level (the weight then
+blends a value with itself rather than wrapping to entry zero); the
+operand's low `VX_TEX_LOD_FRAC_BITS` become the level weight (0 otherwise).
+A registered elastic buffer decouples the socket bus.
 
 ### 4.2 Address generation — `VX_tex_addr` (2 pipeline stages)
 
-[`VX_tex_addr.sv`](../../hw/rtl/tex/VX_tex_addr.sv), shift/add only:
+[`VX_tex_addr.sv`](../../hw/rtl/tex/VX_tex_addr.sv), shift/add only. Every
+quantity that depends on the mip level is computed once per level
+(`TEX_NUM_LEVELS = 2`), so one request carries both levels' tap sets — the
+levels differ only in that dependence (same coordinates, same wrap, same
+format):
 
-- **Stage 0**: for bilinear, offset the coordinate by ±half-texel
-  (`half << miplevel >> logdim` — the half-texel in normalized space);
+- **Stage 0**: for bilinear, offset the coordinate by ±half-texel of the
+  level (`half >> (logdim − miplevel)` in normalized space, floored so a
+  level past the end of the chain keeps the 1×1 level's half-texel);
   apply the wrap mode per axis (`VX_tex_wrap`: clamp-saturate / mirror-XOR /
-  repeat-truncate); derive the per-format `log2(stride)`
+  repeat-truncate; `BORDER` clamps like `CLAMP` and additionally flags the
+  coordinate — §3.1); derive the per-format `log2(stride)`
   (`VX_tex_stride`), the mip-adjusted row pitch, and the mip base
-  `(baseaddr ≪ 6) + mipoff[lod]`.
+  `(baseaddr ≪ 6) + mipoff[lod]`. The four per-tap border flags per level
+  fall out of the per-axis low/high coordinate flags.
 - **Stage 1**: scale the wrapped coordinates to texel space
   (`coord >> (FRAC − BLEND − (logdim − lod))`), split integer/fraction —
-  the low 8 fraction bits become the **blend weights** — and form the four
-  tap byte-offsets `{v_lo, v_hi} × {u_lo, u_hi}` with shifts and adds.
-  Point sampling emits one tap and zero blends.
+  the low 8 fraction bits become the **blend weights** — and form each
+  level's four tap byte-offsets `{v_lo, v_hi} × {u_lo, u_hi}` with shifts
+  and adds. Point sampling emits one tap and zero blends.
 
 ### 4.3 Texel fetch — `VX_tex_mem`
 
 [`VX_tex_mem.sv`](../../hw/rtl/tex/VX_tex_mem.sv) issues
-`TEX_MEM_REQS = 4 × NUM_SFU_LANES` word reads per request through a
-`VX_mem_scheduler` (`CORE_QUEUE_SIZE = VX_CFG_TEX_MEM_QUEUE_SIZE`, full
-gather, registered SLR-skid output) into the tcache banks. Two demand
-reducers:
+`TEX_MEM_REQS = 4 × TEX_NUM_LEVELS × NUM_SFU_LANES` word reads per request
+through a `VX_mem_scheduler` (`CORE_QUEUE_SIZE = VX_CFG_TEX_MEM_QUEUE_SIZE`,
+full gather, registered SLR-skid request output) into the tcache banks. Taps
+run **level-major** — tap `k·4 + j` is bilinear corner `j` of level `k` — so
+a mip-linear request carries its own second tap set. Three demand reducers:
 
 - **Point-sample masking**: only tap 0 is fetched when filtering is off.
+- **Level masking**: the second level's taps are fetched only when the
+  filter asks for a mip blend.
 - **Duplicate elimination**: per tap, if every active lane addresses the
   same texel (common under magnification or flat-shaded UV), one lane
-  fetches and the response broadcasts.
+  fetches and the response broadcasts. The level base is compared alongside
+  the offset — lanes carry their own lod, so two lanes reading the same
+  corner of different levels can share an offset without sharing a texel.
+
+The staging is sized by its width, not its depth: one scheduler entry holds a
+whole core request, drains one memory word per cycle, and never writes. The
+queue therefore lives in **distributed RAM** in the slices that consume it
+rather than spread across block-RAM tiles (`LUTRAM` + `REQQ_LUTRAM`), carries
+**no write payload** (`RW_ENABLE = 0` — the read side regenerates the write
+fields as constants), and the response bus, which never leaves the unit, gets
+one registered stage rather than a skid buffer (`CORE_OUT_BUF = 1`).
 
 Sub-word formats are handled on the response: the word is byte-rotated by
 the address alignment and truncated by the format stride, so the cache side
@@ -223,20 +250,28 @@ stays a plain 4-byte-word interface.
 
 [`VX_tex_sampler.sv`](../../hw/rtl/tex/VX_tex_sampler.sv):
 
-1. **Format expand** (combinational + register): the four taps × lanes
-   through `VX_tex_format` to A8R8G8B8.
-2. **U lerps**: per lane, 8 `VX_tex_lerp` instances (4 channels × {low, high}
-   texel pairs), each a 3-cycle fixed-point datapath computing
+1. **Format expand + border select** (combinational + register): the taps ×
+   levels × lanes through `VX_tex_format` to A8R8G8B8; a tap the address
+   stage flagged as having left the texture takes the request's border
+   colour here instead (§3.1).
+2. **U lerps**: per lane and level, 8 `VX_tex_lerp` instances (4 channels ×
+   {low, high} texel pairs), each a 3-cycle fixed-point datapath computing
    `(s + (s >> 8)) >> 8` with `s = a·(255−f) + b·f + 0x80` — the exact
    divide-by-255 rounding, not a plain shift.
-3. **V lerp**: 4 more lerps blend the two U results, another 3 cycles.
+3. **V lerp**: 4 more lerps per level blend the two U results, another 3
+   cycles.
+4. **Level lerp**: 4 final lerps blend the two levels' texels by the
+   request's lod fraction — a fraction of **256** that truncates, the form
+   the software sampler blends levels in, where a tap weight is a fraction
+   of 255 (§2.3). A single-level sample carries weight 0 and passes level 0
+   through.
 
-The whole sampler is ~8 cycles fixed latency, one request per cycle
+The whole sampler is ~10 cycles fixed latency, one request per cycle
 throughput, per-channel 8-bit arithmetic — no floating-point anywhere (the
 FF invariant). Point samples ride the same path with zero blend weights (the
 lerps collapse to pass-through).
 
-![Bilinear sampling dataflow](../assets/img/tex_sampler_dataflow.svg)
+![Texture sampling dataflow](../assets/img/tex_sampler_dataflow.svg)
 
 ---
 
@@ -252,11 +287,12 @@ port 0 arbiter alongside icache/dcache/rtcache/DXA traffic — TEX has no
 dedicated path to L2, which is fine because the tcache's job is precisely to
 keep tap traffic on-socket.
 
-Demand arithmetic: a bilinear sample is 4 word taps and a bank serves one
-word per cycle, so one bank sustains **0.25 bilinear samples per cycle**
-(independent of lane width — an N-lane request just occupies the bank for
-4N cycles). Duplicate elimination and point sampling raise it; bank count
-is the structural lever (same shape as the OM's ocache argument).
+Demand arithmetic: a bilinear sample is 4 word taps (a mip-linear one 8) and
+a bank serves one word per cycle, so one bank sustains **0.25 bilinear
+samples per cycle** (independent of lane width — an N-lane request just
+occupies the bank for 4N cycles). Duplicate elimination and point sampling
+raise it, a mip blend halves it; bank count is the structural lever (same
+shape as the OM's ocache argument).
 
 ---
 
@@ -287,11 +323,11 @@ which is the standard mobile-class FF trade.
 
 [`sim/simx/tex/`](../../sim/simx/tex/): `TexUnit` mirrors the per-core PE
 (operand decode, stage select, tag round-trip) and `TexCore` the socket
-sampler — same address math, same dup-elimination, same lerp arithmetic
-(shared fixed-point helpers with the host reference), driving real
+sampler — same address math, same dup-elimination, same lerp arithmetic,
+including the two-level mip blend and the border-colour substitution (shared
+fixed-point helpers with the host reference), driving real
 `MemReq`/`MemRsp` tcache traffic for cycle parity on the `graphics_parity`
-matrix. SimX additionally models trilinear filtering, which the RTL does not
-implement — SimX remains the oracle for it.
+matrix.
 
 Perf: MPM class `TEX` (13) — memory reads, accumulated outstanding-read
 latency, and request stall cycles per sampler core, summed per socket.

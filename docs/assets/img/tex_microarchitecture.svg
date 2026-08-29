@@ -35,7 +35,7 @@
 
   <rect x="40" y="96" width="298" height="104" rx="6" class="core"/>
   <text x="52" y="118" class="t">vx_tex (custom1 f3=5, R4)</text>
-  <text x="52" y="138" class="ts">rs1=u, rs2=v (Q9.23) · rs3=mip level</text>
+  <text x="52" y="138" class="ts">rs1=u, rs2=v (Q9.23) · rs3=lod (level[.frac])</text>
   <text x="52" y="154" class="ts">funct2 = stage · texel → rd (scoreboarded)</text>
   <text x="52" y="174" class="tt">LOD in SW: vx_tex_auto_lod() from</text>
   <text x="52" y="190" class="tt">quad ddx/ddy shuffles (helper lanes run)</text>
@@ -88,32 +88,33 @@
   <text x="660" y="158" class="t">stage select</text>
   <text x="660" y="178" class="ts">funct2 muxes the DCR</text>
   <text x="660" y="194" class="ts">bank (×2 stages);</text>
-  <text x="660" y="210" class="ts">mipoff[lod] per lane</text>
-  <text x="660" y="230" class="tt">mip-linear filter:</text>
-  <text x="660" y="244" class="tt">asserted unimplemented</text>
+  <text x="660" y="210" class="ts">mipoff per lane, per level</text>
+  <text x="660" y="230" class="tt">mip-linear: pair = {level,</text>
+  <text x="660" y="244" class="tt">level+1} + weight (lod.frac)</text>
 
   <rect x="872" y="136" width="212" height="110" rx="6" class="box"/>
   <text x="884" y="158" class="t">VX_tex_addr (2 stages)</text>
-  <text x="884" y="178" class="ts">±half-texel taps · wrap</text>
-  <text x="884" y="194" class="ts">(clamp / repeat / mirror);</text>
+  <text x="884" y="178" class="ts">±half-texel per level · wrap</text>
+  <text x="884" y="194" class="ts">(clamp/repeat/mirror/border);</text>
   <text x="884" y="210" class="ts">scale ≫ (frac−blend−logdim+lod)</text>
-  <text x="884" y="226" class="ts">→ 4 tap offsets + 8-bit blends</text>
-  <text x="884" y="242" class="tt">shift/add only — no multipliers</text>
+  <text x="884" y="226" class="ts">→ 4 tap offsets + blends / level;</text>
+  <text x="884" y="242" class="tt">border taps flagged · shift/add only</text>
 
   <rect x="1108" y="136" width="200" height="110" rx="6" class="box"/>
   <text x="1120" y="158" class="t">VX_tex_mem</text>
-  <text x="1120" y="178" class="ts">4×lanes word taps (mem</text>
-  <text x="1120" y="194" class="ts">scheduler, full gather);</text>
-  <text x="1120" y="210" class="ts">point-mask (1 tap) · dup-</text>
-  <text x="1120" y="226" class="ts">elim ⇒ 1 fetch, broadcast</text>
+  <text x="1120" y="178" class="ts">4 taps × 2 levels × lanes</text>
+  <text x="1120" y="194" class="ts">(level-major; level 1 only on</text>
+  <text x="1120" y="210" class="ts">mip blend); point-mask · dup-</text>
+  <text x="1120" y="226" class="ts">elim; LUTRAM staging queue</text>
   <text x="1120" y="242" class="tt">rsp: align-rotate + stride cut</text>
 
   <rect x="872" y="296" width="436" height="130" rx="6" class="box"/>
-  <text x="884" y="318" class="t">VX_tex_sampler (~8 cycles, pipelined)</text>
-  <text x="884" y="338" class="ts">format expand: 7 formats → A8R8G8B8 (bit replication);</text>
-  <text x="884" y="354" class="ts">8 U-lerps (3 cyc) → 4 V-lerps (3 cyc) per lane</text>
-  <text x="884" y="370" class="ts">lerp = (s + (s ≫ 8)) ≫ 8, s = a·(255−f) + b·f + 0x80 (exact ÷255)</text>
-  <text x="884" y="392" class="tt">point sampling: zero blend weights, same path</text>
+  <text x="884" y="318" class="t">VX_tex_sampler (~10 cycles, pipelined)</text>
+  <text x="884" y="338" class="ts">format expand: 7 formats → A8R8G8B8; border taps take TEX_BORDER;</text>
+  <text x="884" y="354" class="ts">8 U-lerps (3 cyc) → 4 V-lerps (3 cyc) per lane and level, then</text>
+  <text x="884" y="370" class="ts">4 level-lerps (3 cyc, ÷256) blend the two mips (weight 0 ⇒ level 0)</text>
+  <text x="884" y="386" class="ts">lerp = (s + (s ≫ 8)) ≫ 8, s = a·(255−f) + b·f + 0x80 (exact ÷255)</text>
+  <text x="884" y="408" class="tt">point sampling: zero blend weights, same path</text>
 
   <rect x="648" y="296" width="200" height="130" rx="6" class="box"/>
   <text x="660" y="318" class="t">response</text>
@@ -139,7 +140,7 @@
   <text x="912" y="644" class="ts">8 KB · 1 bank · 2 ways · 16 MSHRs · no writes (immutable in-draw)</text>
   <text x="912" y="660" class="ts">NUM_TCACHES = max(1, ceil(NUM_TEX_CORES / 4))</text>
   <text x="912" y="676" class="ts">DCR flush on port 0 (texture uploads)</text>
-  <text x="912" y="696" class="ts">4 word taps per bilinear sample ⇒ 0.25 samples/cyc per bank;</text>
+  <text x="912" y="696" class="ts">4 word taps per bilinear sample (8 mip-linear) ⇒ 0.25/cyc per bank;</text>
   <text x="912" y="712" class="ts">banks are the tap-rate lever</text>
   <text x="912" y="736" class="tt">misses merge into socket mem port 0 (icache/dcache/rtcache) → L2</text>
 
@@ -149,7 +150,7 @@
   <text x="428" y="644" class="ts">0x040 STAGE (programming bank select)</text>
   <text x="428" y="660" class="ts">0x041 ADDR (64 B-block base) · 0x042 LOGDIM</text>
   <text x="428" y="676" class="ts">0x043 FORMAT · 0x044 FILTER · 0x045 WRAP</text>
-  <text x="428" y="692" class="ts">0x046+lod MIPOFF (≤15 mip byte offsets)</text>
+  <text x="428" y="692" class="ts">0x046+lod MIPOFF (≤15) · 0x056 BORDER</text>
   <text x="428" y="716" class="tt">all texture state is DCR-resident;</text>
   <text x="428" y="732" class="tt">the request carries only {u, v, lod, stage}</text>
 

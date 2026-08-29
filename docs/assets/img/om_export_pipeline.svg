@@ -25,8 +25,8 @@
 
   <rect x="20" y="60" width="170" height="76" rx="6" class="core"/>
   <text x="32" y="84" class="t">FS warp</text>
-  <text x="32" y="104" class="ts">vx_om_export:</text>
-  <text x="32" y="120" class="ts">1–2 posted stores</text>
+  <text x="32" y="104" class="ts">vx_om_export: 1–2</text>
+  <text x="32" y="120" class="ts">posted stores per rt</text>
 
   <rect x="226" y="60" width="150" height="76" rx="6" class="core"/>
   <text x="238" y="84" class="t">L1</text>
@@ -40,7 +40,7 @@
 
   <rect x="608" y="60" width="180" height="76" rx="6" class="unit"/>
   <text x="620" y="84" class="t">VX_om_ingress</text>
-  <text x="620" y="104" class="ts">addr → {x, y, face};</text>
+  <text x="620" y="104" class="ts">addr → {rt, x, y, face};</text>
   <text x="620" y="120" class="ts">pair colour + depth</text>
 
   <rect x="824" y="60" width="140" height="76" rx="6" class="unit"/>

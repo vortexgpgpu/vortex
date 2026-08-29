@@ -106,10 +106,10 @@ arms early-Z, which owns the depth test and the depth write and leaves the OM's
 own depth off; a blended draw normally tests depth without writing it. A draw
 that writes depth late, or writes stencil, keeps merging in software.
 
-Multisample coverage is served in software. The unit carries no CSRs: two were
-once declared against a future MRT / MSAA merger and removed again, because they
-were decoded nowhere, held no state, and a register that accepts a write and
-discards it misleads the shader author who finds it.
+Multisample coverage is served in software. The unit carries no CSRs: all
+per-draw state is DCR-resident (§8), and everything per-export — the
+attachment index, the face — rides the aperture address, so there is no
+register a shader could write on the wrong side of a branch and leave stale.
 
 ---
 
