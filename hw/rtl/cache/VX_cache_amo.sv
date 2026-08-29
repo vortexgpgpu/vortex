@@ -124,41 +124,61 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // ----------------------------------------------------------------
         // LLC commit: RMW on the resident line + synthetic writeback
         // ----------------------------------------------------------------
-        localparam BIT_OFF_BITS = `CLOG2(WORD_WIDTH);
-        localparam AMO_OLD_BITS = (WORD_WIDTH < 64) ? WORD_WIDTH : 64;
+        // The engine's datapath runs on the AMO's LANE: the <= 8 naturally-
+        // aligned bytes an atomic can touch (32-bit RVA ops, 64-bit Zacas
+        // pair). A wide-word LLC (WORD = the L1 line) otherwise pays for
+        // full-word funnels, queues, forwards and byteen compares that only
+        // ever carry one lane; every full-width output below is rebuilt by
+        // replicating the lane and relying on the byteen masks that already
+        // guard it.
+        localparam LANE_SIZE     = (WORD_SIZE < 8) ? WORD_SIZE : 8;
+        localparam LANE_WIDTH    = LANE_SIZE * 8;
+        localparam NUM_LANES     = WORD_SIZE / LANE_SIZE;
+        localparam LANE_IDXW     = `UP(`CLOG2(NUM_LANES));
+        localparam BIT_OFF_BITS  = `CLOG2(WORD_WIDTH);
+        localparam LANE_OFF_BITS = `CLOG2(LANE_WIDTH);
+        localparam AMO_OLD_BITS  = (LANE_WIDTH < 64) ? LANE_WIDTH : 64;
 
         // Writeback queue: a completed AMO pushes its result here instead of
         // overwriting a still-draining writeback. The head (slot 0) drains
         // through the bank's synthetic-write path; pushes never clobber a pending
         // entry, so writebacks pipeline without stalling any replay (coalescer-
-        // safe) or the pipe (deadlock-free). Entries are keyed per WORD: a
-        // same-line AMO burst leaves one writeback per distinct word in flight.
-        // commit_busy serializes AMO instructions (the next instruction waits for
-        // wb_pending to clear), so the occupancy never exceeds the distinct words
-        // one instruction's lanes touch in this bank -- bounded by the core-port
-        // fan-in (<= 4 for this cache family), not the full line. Sizing to that
-        // bound (min 2, cap 4) halves the coalesce/forward/enqueue fanout vs a
-        // full-line queue; the cap is a constant here because the engine has no
-        // NUM_REQS parameter, and the overflow assertion guards it if a wider
-        // core-port config ever exceeds 4.
-        localparam WBQ_SIZE = (WORDS_PER_LINE < 4) ? ((WORDS_PER_LINE < 2) ? 2 : WORDS_PER_LINE) : 4;
+        // safe) or the pipe (deadlock-free). Entries are keyed per {word, lane}:
+        // a same-line AMO burst leaves one writeback per distinct target in
+        // flight. commit_busy serializes AMO instructions (the next instruction
+        // waits for wb_pending to clear), so the occupancy never exceeds the
+        // distinct targets one instruction's requests touch in this bank --
+        // bounded by the core-port fan-in (<= 4 for this cache family), not the
+        // full line. Sizing to that bound (min 2, cap 4) halves the coalesce/
+        // forward/enqueue fanout vs a full-line queue; the cap is a constant
+        // here because the engine has no NUM_REQS parameter, and the overflow
+        // assertion guards it if a wider core-port config ever exceeds 4.
+        localparam WBQ_TARGETS = WORDS_PER_LINE * NUM_LANES;
+        localparam WBQ_SIZE = (WBQ_TARGETS < 4) ? ((WBQ_TARGETS < 2) ? 2 : WBQ_TARGETS) : 4;
         localparam WBQ_CNTW = `CLOG2(WBQ_SIZE+1);
         localparam WBQ_IDXW = `CLOG2(WBQ_SIZE);
         reg [WBQ_CNTW-1:0]           wbq_count;
         reg [LINE_ADDR_BITS-1:0]     wbq_addr   [WBQ_SIZE];
         reg [WORD_SEL_WIDTH-1:0]     wbq_wsel   [WBQ_SIZE];
-        reg [WORD_SIZE-1:0]          wbq_byteen [WBQ_SIZE];
-        reg [WORD_WIDTH-1:0]         wbq_data   [WBQ_SIZE];
+        reg [LANE_IDXW-1:0]          wbq_lane   [WBQ_SIZE];
+        reg [LANE_SIZE-1:0]          wbq_byteen [WBQ_SIZE];
+        reg [LANE_WIDTH-1:0]         wbq_data   [WBQ_SIZE];
         reg [TAG_WIDTH-1:0]          wbq_tag    [WBQ_SIZE];
         reg [REQ_SEL_WIDTH-1:0]      wbq_idx    [WBQ_SIZE];
         reg [ATTR_WIDTH-1:0]         wbq_attr   [WBQ_SIZE];
 
-        // Head aliases (slot 0 = oldest = the entry currently draining).
+        // Head aliases (slot 0 = oldest = the entry currently draining). The
+        // full-width writeback is the lane replicated across the word under a
+        // lane-positioned byteen: the array write consumes only enabled bytes.
         wire                         wb_pending_r  = (wbq_count != '0);
         wire [LINE_ADDR_BITS-1:0]    wb_addr_r     = wbq_addr[0];
         wire [WORD_SEL_WIDTH-1:0]    wb_word_idx_r = wbq_wsel[0];
-        wire [WORD_SIZE-1:0]         wb_byteen_r   = wbq_byteen[0];
-        wire [WORD_WIDTH-1:0]        wb_data_r     = wbq_data[0];
+        wire [WORD_SIZE-1:0]         wb_byteen_r;
+        for (genvar l = 0; l < NUM_LANES; ++l) begin : g_wb_byteen_x
+            assign wb_byteen_r[l*LANE_SIZE +: LANE_SIZE] =
+                (wbq_lane[0] == LANE_IDXW'(l)) ? wbq_byteen[0] : {LANE_SIZE{1'b0}};
+        end
+        wire [WORD_WIDTH-1:0]        wb_data_r     = {NUM_LANES{wbq_data[0]}};
         wire [TAG_WIDTH-1:0]         wb_tag_r      = wbq_tag[0];
         wire [REQ_SEL_WIDTH-1:0]     wb_idx_r      = wbq_idx[0];
         wire [ATTR_WIDTH-1:0]        wb_attr_r     = wbq_attr[0];
@@ -169,8 +189,9 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         reg [1:0]                    post_wb_age;
         reg [LINE_ADDR_BITS-1:0]     post_wb_addr;
         reg [WORD_SEL_WIDTH-1:0]     post_wb_wsel;
-        reg [WORD_SIZE-1:0]          post_wb_byteen;
-        reg [WORD_WIDTH-1:0]         post_wb_data;
+        reg [LANE_IDXW-1:0]          post_wb_lane;
+        reg [LANE_SIZE-1:0]          post_wb_byteen;
+        reg [LANE_WIDTH-1:0]         post_wb_data;
         wire                         post_wb_valid = (post_wb_age != 2'd0);
 
         // Compute stage: S1 latches the aligned operands, the RMW ALU + the
@@ -178,7 +199,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // commits are serialized by commit_busy (the bank holds off core
         // requests), so the stage holds at most one operation; the old operand
         // is byte-forwarded from the writeback queue when a prior AMO to the same
-        // bytes has not yet reached the array (see line_word_st1).
+        // bytes has not yet reached the array (see line_lane_st1).
         reg                          cmp_valid;
         reg [63:0]                   cmp_old, cmp_rhs;
     `ifdef VX_CFG_EXT_ZACAS_ENABLE
@@ -187,9 +208,10 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         amo_op_e                     cmp_op;
         reg [1:0]                    cmp_width;
         reg                          cmp_unsigned;
-        reg [BIT_OFF_BITS-1:0]       cmp_bit_off;
+        reg [LANE_OFF_BITS-1:0]      cmp_bit_off;
+        reg [LANE_IDXW-1:0]          cmp_lane;
         reg [LINE_ADDR_BITS-1:0]     cmp_addr;
-        reg [WORD_SIZE-1:0]          cmp_byteen;
+        reg [LANE_SIZE-1:0]          cmp_byteen;
         reg [WORD_SEL_WIDTH-1:0]     cmp_wsel;
         reg [TAG_WIDTH-1:0]          cmp_tag;
         reg [REQ_SEL_WIDTH-1:0]      cmp_idx;
@@ -211,17 +233,27 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             `UNUSED_PIN (valid_out),
             `UNUSED_PIN (onehot_out)
         );
-        reg [BIT_OFF_BITS-1:0] bit_off_st1;
+        // Lane select and intra-lane bit offset, split from the encoded byte
+        // offset. The AMO's byteen always sits inside one lane (natural
+        // alignment), so the lane of its lowest set byte is the lane of all of
+        // them (asserted below).
+        reg [LANE_IDXW-1:0]     lane_st1;
+        reg [LANE_OFF_BITS-1:0] bit_off_st1;
         always @(posedge clk) begin
             if (~pipe_stall) begin
-                bit_off_st1 <= BIT_OFF_BITS'({byte_off_n, 3'b0});
+                lane_st1    <= (NUM_LANES > 1) ? LANE_IDXW'(byte_off_n >> `CLOG2(LANE_SIZE)) : '0;
+                bit_off_st1 <= LANE_OFF_BITS'({byte_off_n[`UP(`CLOG2(LANE_SIZE))-1:0], 3'b0});
             end
         end
+        // This AMO's byteen slice within its lane.
+        wire [LANE_SIZE-1:0] lane_byteen_st1 = LANE_SIZE'(byteen_st1 >> (lane_st1 * LANE_SIZE));
 
-        // Per-word WBQ match for {addr_st1, word_idx_st1}. The coalescer keeps at
-        // most one entry per {line, word} (see wb_coalesce), so this vector is
-        // one-hot; the forwards below reduce it with a balanced OR-tree instead
-        // of a newest-wins priority scan, off the response/old-operand path.
+        // Per-word WBQ match for {addr_st1, word_idx_st1}. The coalescer keeps
+        // at most one entry per {line, word, lane} (see wb_coalesce), so the
+        // matching entries cover disjoint lanes and each BYTE has at most one
+        // queued writer; the forwards below reduce with a balanced OR-tree
+        // instead of a newest-wins priority scan, off the response/old-operand
+        // path.
         reg [WBQ_SIZE-1:0] wbq_word_hit;
         always @(*) begin
             for (integer i = 0; i < WBQ_SIZE; ++i) begin
@@ -235,6 +267,10 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // Read-forward network: the queued writer of each byte of
         // {addr_st1, word_idx_st1} wins over the settling entry, which wins over
         // the array (mask bit stays 0). One-hot over the WBQ per byte.
+        // A byte of {addr_st1, word_idx_st1} is covered by entry i iff the
+        // word matches, the byte's lane is the entry's lane, and the entry's
+        // lane byteen has it. Data is the entry's lane byte -- wiring, since
+        // an entry stores exactly one lane.
         reg [WORD_SIZE-1:0]  wbq_byte_hit;
         reg [WORD_WIDTH-1:0] wbq_byte_data;
         always @(*) begin
@@ -242,9 +278,11 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             wbq_byte_data = '0;
             for (integer i = 0; i < WBQ_SIZE; ++i) begin
                 for (integer b = 0; b < WORD_SIZE; ++b) begin
-                    if (wbq_word_hit[i] && wbq_byteen[i][b]) begin
+                    if (wbq_word_hit[i] && (wbq_lane[i] == LANE_IDXW'(b / LANE_SIZE))
+                     && wbq_byteen[i][b % LANE_SIZE]) begin
                         wbq_byte_hit[b]         = 1'b1;
-                        wbq_byte_data[b*8 +: 8] = wbq_byte_data[b*8 +: 8] | wbq_data[i][b*8 +: 8];
+                        wbq_byte_data[b*8 +: 8] = wbq_byte_data[b*8 +: 8]
+                                                | wbq_data[i][(b % LANE_SIZE)*8 +: 8];
                     end
                 end
             end
@@ -256,9 +294,10 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                 if (wbq_byte_hit[b]) begin
                     rd_fwd_mask_w[b]        = 1'b1;
                     rd_fwd_data_w[b*8 +: 8] = wbq_byte_data[b*8 +: 8];
-                end else if (post_wb_word_hit && post_wb_byteen[b]) begin
+                end else if (post_wb_word_hit && (post_wb_lane == LANE_IDXW'(b / LANE_SIZE))
+                          && post_wb_byteen[b % LANE_SIZE]) begin
                     rd_fwd_mask_w[b]        = 1'b1;
-                    rd_fwd_data_w[b*8 +: 8] = post_wb_data[b*8 +: 8];
+                    rd_fwd_data_w[b*8 +: 8] = post_wb_data[(b % LANE_SIZE)*8 +: 8];
                 end else begin
                     rd_fwd_mask_w[b]        = 1'b0;
                     rd_fwd_data_w[b*8 +: 8] = 8'b0;
@@ -268,18 +307,20 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         assign rd_fwd_mask = rd_fwd_mask_w;
         assign rd_fwd_data = rd_fwd_data_w;
 
-        // Old-operand forward: the AMO reads only its own byteen bytes (the
-        // shift + width truncation below select exactly those), and for each
-        // byte the read-forward network already yields the newest value --
-        // queued writer over settling entry over array. Reusing it here keeps
-        // the cmp_old capture off the wide byteen-cover compare a word-granular
-        // mux needs, and stays correct when a matching entry only partially
-        // covers this AMO's bytes (reachable through MSHR replay chains, which
-        // do not wait out commit_busy).
-        wire [WORD_WIDTH-1:0] line_word_st1;
-        for (genvar b = 0; b < WORD_SIZE; ++b) begin : g_line_word_fwd
-            assign line_word_st1[b*8 +: 8] = rd_fwd_mask_w[b] ? rd_fwd_data_w[b*8 +: 8]
-                                                              : read_word_st1[b*8 +: 8];
+        // Old-operand forward: the AMO reads only its own byteen bytes, all
+        // inside its lane, and for each byte the read-forward network already
+        // yields the newest value -- queued writer over settling entry over
+        // array. Selecting the lane first keeps the cmp_old capture off any
+        // full-word funnel, and the per-byte merge stays correct when a
+        // matching entry only partially covers this AMO's bytes (reachable
+        // through MSHR replay chains, which do not wait out commit_busy).
+        wire [LANE_WIDTH-1:0] read_lane_st1     = LANE_WIDTH'(read_word_st1 >> (lane_st1 * LANE_WIDTH));
+        wire [LANE_SIZE-1:0]  lane_fwd_mask_st1 = LANE_SIZE'(rd_fwd_mask_w >> (lane_st1 * LANE_SIZE));
+        wire [LANE_WIDTH-1:0] lane_fwd_data_st1 = LANE_WIDTH'(rd_fwd_data_w >> (lane_st1 * LANE_WIDTH));
+        wire [LANE_WIDTH-1:0] line_lane_st1;
+        for (genvar b = 0; b < LANE_SIZE; ++b) begin : g_line_lane_fwd
+            assign line_lane_st1[b*8 +: 8] = lane_fwd_mask_st1[b] ? lane_fwd_data_st1[b*8 +: 8]
+                                                                  : read_lane_st1[b*8 +: 8];
         end
 
         // A younger plain store to queued/settling bytes supersedes them (its
@@ -311,21 +352,25 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         wire post_wb_clr = store_supersede && post_wb_valid
                         && (post_wb_addr == addr_st1) && (post_wb_wsel == word_idx_st1);
 
-        wire [WORD_WIDTH-1:0] line_word_shifted_st1 = line_word_st1 >> bit_off_st1;
-        wire [WORD_WIDTH-1:0] rhs_word_shifted_st1  = write_word_st1 >> bit_off_st1;
+        // A superseding store's byteen, sliced at each queued entry's lane.
+        wire [LANE_SIZE-1:0] clr_byteen [WBQ_SIZE];
+        for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_clr_byteen
+            assign clr_byteen[i] = LANE_SIZE'(byteen_st1 >> (wbq_lane[i] * LANE_SIZE));
+        end
+        wire [LANE_SIZE-1:0] post_wb_clr_byteen = LANE_SIZE'(byteen_st1 >> (post_wb_lane * LANE_SIZE));
+
+        wire [LANE_WIDTH-1:0] line_lane_shifted_st1 = line_lane_st1 >> bit_off_st1;
+        wire [LANE_WIDTH-1:0] rhs_lane_st1 = LANE_WIDTH'(write_word_st1 >> (lane_st1 * LANE_WIDTH));
+        wire [LANE_WIDTH-1:0] rhs_lane_shifted_st1  = rhs_lane_st1 >> bit_off_st1;
 
         // width from byteen popcount (.W -> 4 bytes, .D -> 8); operands top at .D.
-        wire [1:0] width_st1 = ($countones(byteen_st1) == 8) ? 2'd3 : 2'd2;
+        wire [1:0] width_st1 = ($countones(lane_byteen_st1) == 8) ? 2'd3 : 2'd2;
         wire [63:0] rhs_st1 = (width_st1 == 2'd2)
-                            ? 64'({32'h0, rhs_word_shifted_st1[31:0]})
-                            : 64'(rhs_word_shifted_st1[AMO_OLD_BITS-1:0]);
+                            ? 64'({32'h0, rhs_lane_shifted_st1[31:0]})
+                            : 64'(rhs_lane_shifted_st1[AMO_OLD_BITS-1:0]);
         wire [63:0] old_st1 = (width_st1 == 2'd2)
-                            ? 64'({32'h0, line_word_shifted_st1[31:0]})
-                            : 64'(line_word_shifted_st1[AMO_OLD_BITS-1:0]);
-        if (WORD_WIDTH > 64) begin : g_upper_unused
-            `UNUSED_VAR (line_word_shifted_st1[WORD_WIDTH-1:64])
-            `UNUSED_VAR (rhs_word_shifted_st1[WORD_WIDTH-1:64])
-        end
+                            ? 64'({32'h0, line_lane_shifted_st1[31:0]})
+                            : 64'(line_lane_shifted_st1[AMO_OLD_BITS-1:0]);
 
         wire        res_check;
 
@@ -379,8 +424,8 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         );
         `UNUSED_VAR (ret_word_unused)
 
-        // place the computed word at its byte offset within the cache word
-        wire [WORD_WIDTH-1:0] wb_data_w = WORD_WIDTH'(new_word) << cmp_bit_off;
+        // place the computed value at its byte offset within the lane
+        wire [LANE_WIDTH-1:0] wb_data_w = LANE_WIDTH'(new_word) << cmp_bit_off;
 
         // Compute finished this cycle (result ready to enqueue): the compute
         // stage is occupied and not being reloaded by a fresh latch.
@@ -397,15 +442,16 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             wb_coal_idx = '0;
             for (integer i = 0; i < WBQ_SIZE; ++i) begin
                 if ((WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == cmp_addr)
-                 && (wbq_wsel[i] == cmp_wsel) && ~(wb_fire && (i == 0))) begin
+                 && (wbq_wsel[i] == cmp_wsel) && (wbq_lane[i] == cmp_lane)
+                 && ~(wb_fire && (i == 0))) begin
                     wb_coalesce = 1'b1;
                     wb_coal_idx = WBQ_IDXW'(i);
                 end
             end
         end
         // Merge source: the pre-shift coalesce-target entry (old value).
-        wire [WORD_WIDTH-1:0] coal_src_data   = wbq_data[wb_coal_idx];
-        wire [WORD_SIZE-1:0]  coal_src_byteen = wbq_byteen[wb_coal_idx];
+        wire [LANE_WIDTH-1:0] coal_src_data   = wbq_data[wb_coal_idx];
+        wire [LANE_SIZE-1:0]  coal_src_byteen = wbq_byteen[wb_coal_idx];
         // New entry lands at the post-pop tail; a coalesce slot shifts down on a pop.
         wire [WBQ_IDXW-1:0] wb_new_idx  = WBQ_IDXW'(wb_fire ? (wbq_count - WBQ_CNTW'(1)) : wbq_count);
         wire [WBQ_IDXW-1:0] wb_slot     = wb_coalesce ? WBQ_IDXW'(wb_fire ? (wb_coal_idx - WBQ_IDXW'(1)) : wb_coal_idx)
@@ -421,14 +467,15 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     post_wb_age    <= 2'd2;
                     post_wb_addr   <= wbq_addr[0];
                     post_wb_wsel   <= wbq_wsel[0];
-                    post_wb_byteen <= wbq_byteen[0] & ~(wbq_clr_hit[0] ? byteen_st1 : {WORD_SIZE{1'b0}});
+                    post_wb_lane   <= wbq_lane[0];
+                    post_wb_byteen <= wbq_byteen[0] & ~(wbq_clr_hit[0] ? clr_byteen[0] : {LANE_SIZE{1'b0}});
                     post_wb_data   <= wbq_data[0];
                 end else begin
                     if (post_wb_valid) begin
                         post_wb_age <= post_wb_age - 2'd1;
                     end
                     if (post_wb_clr) begin
-                        post_wb_byteen <= post_wb_byteen & ~byteen_st1;
+                        post_wb_byteen <= post_wb_byteen & ~post_wb_clr_byteen;
                     end
                 end
 
@@ -444,8 +491,9 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     cmp_width    <= width_st1;
                     cmp_unsigned <= amo_st1.amo_unsigned;
                     cmp_bit_off  <= bit_off_st1;
+                    cmp_lane     <= lane_st1;
                     cmp_addr     <= addr_st1;
-                    cmp_byteen   <= byteen_st1;
+                    cmp_byteen   <= lane_byteen_st1;
                     cmp_wsel     <= word_idx_st1;
                     cmp_tag      <= tag_st1;
                     cmp_idx      <= req_idx_st1;
@@ -462,7 +510,8 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     for (integer i = 0; i < WBQ_SIZE-1; ++i) begin
                         wbq_addr[i]   <= wbq_addr[i+1];
                         wbq_wsel[i]   <= wbq_wsel[i+1];
-                        wbq_byteen[i] <= wbq_byteen[i+1] & ~(wbq_clr_hit[i+1] ? byteen_st1 : {WORD_SIZE{1'b0}});
+                        wbq_lane[i]   <= wbq_lane[i+1];
+                        wbq_byteen[i] <= wbq_byteen[i+1] & ~(wbq_clr_hit[i+1] ? clr_byteen[i+1] : {LANE_SIZE{1'b0}});
                         wbq_data[i]   <= wbq_data[i+1];
                         wbq_tag[i]    <= wbq_tag[i+1];
                         wbq_idx[i]    <= wbq_idx[i+1];
@@ -471,20 +520,21 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                 end else begin
                     for (integer i = 0; i < WBQ_SIZE; ++i) begin
                         if (wbq_clr_hit[i]) begin
-                            wbq_byteen[i] <= wbq_byteen[i] & ~byteen_st1;
+                            wbq_byteen[i] <= wbq_byteen[i] & ~clr_byteen[i];
                         end
                     end
                 end
                 if (wb_push) begin
                     wbq_addr[wb_slot] <= cmp_addr;
                     wbq_wsel[wb_slot] <= cmp_wsel;
+                    wbq_lane[wb_slot] <= cmp_lane;
                     wbq_tag[wb_slot]  <= cmp_tag;
                     wbq_idx[wb_slot]  <= cmp_idx;
                     wbq_attr[wb_slot] <= cmp_attr;
                     // byte-merge: this AMO's bytes take the new result; a coalesce
                     // keeps the target entry's other bytes; a fresh entry zero-fills.
-                    wbq_byteen[wb_slot] <= cmp_byteen | (wb_coalesce ? coal_src_byteen : {WORD_SIZE{1'b0}});
-                    for (integer b = 0; b < WORD_SIZE; ++b) begin
+                    wbq_byteen[wb_slot] <= cmp_byteen | (wb_coalesce ? coal_src_byteen : {LANE_SIZE{1'b0}});
+                    for (integer b = 0; b < LANE_SIZE; ++b) begin
                         if (cmp_byteen[b])
                             wbq_data[wb_slot][b*8 +: 8] <= wb_data_w[b*8 +: 8];
                         else if (wb_coalesce)
@@ -512,8 +562,14 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         for (genvar b = 0; b < WORD_SIZE; ++b) begin : g_rsp_mask
             assign rsp_byte_mask[b*8 +: 8] = {8{byteen_st1[b]}};
         end
-        wire [WORD_WIDTH-1:0] amo_old_inplace = line_word_st1 & rsp_byte_mask;
-        wire [WORD_WIDTH-1:0] sc_rsp_inplace  = WORD_WIDTH'(sc_fail_st1) << bit_off_st1;
+        // The mask zeroes every byte outside the AMO's byteen, and those all
+        // sit in its lane, so replicating the lane across the word is
+        // bit-identical to the full-word in-place value.
+        wire [BIT_OFF_BITS-1:0] full_bit_off_st1 = (NUM_LANES > 1)
+                                                 ? BIT_OFF_BITS'({lane_st1, bit_off_st1})
+                                                 : BIT_OFF_BITS'(bit_off_st1);
+        wire [WORD_WIDTH-1:0] amo_old_inplace = {NUM_LANES{line_lane_st1}} & rsp_byte_mask;
+        wire [WORD_WIDTH-1:0] sc_rsp_inplace  = WORD_WIDTH'(sc_fail_st1) << full_bit_off_st1;
 
         assign amo_hit_st1 = amo_hit_w;
         assign rsp_data    = (amo_st1.amo_op == AMO_OP_SC) ? sc_rsp_inplace : amo_old_inplace;
@@ -570,6 +626,11 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
             ("%t: AMO compute-stage overwrite (addr=0x%0h)", $time, addr_st1))
         `RUNTIME_ASSERT (~(wb_push && ~wb_coalesce && ~wb_fire && (wbq_count == WBQ_CNTW'(WBQ_SIZE))),
             ("%t: AMO writeback queue overflow (addr=0x%0h)", $time, cmp_addr))
+        // The lane datapath rests on natural alignment: an AMO's byteen may
+        // not cross its 8-byte lane.
+        `RUNTIME_ASSERT (~(amo_st1.amo_valid && valid_st1 && is_creq_st1)
+            || ((byteen_st1 & ~(WORD_SIZE'({LANE_SIZE{1'b1}}) << (lane_st1 * LANE_SIZE))) == '0),
+            ("%t: AMO byteen crosses its lane (addr=0x%0h)", $time, addr_st1))
         assign wb_pending  = wb_pending_r;
         assign wb_addr     = wb_addr_r;
         assign wb_word_idx = wb_word_idx_r;
