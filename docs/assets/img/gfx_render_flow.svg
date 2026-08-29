@@ -49,6 +49,7 @@
   <path d="M 270 157 L 278 157" class="flow"/>
   <path d="M 386 157 L 394 157" class="flow"/>
   <path d="M 510 155 L 542 155" class="flow"/>
+  <text x="526" y="145" class="lbl" text-anchor="middle">kick</text>
 
   <!-- RASTER -->
   <rect x="542" y="120" width="120" height="70" rx="6" class="ff"/>
@@ -69,14 +70,14 @@
   <rect x="854" y="120" width="104" height="70" rx="6" class="ff"/>
   <text x="906" y="142" class="th" text-anchor="middle">TEX</text>
   <text x="906" y="160" class="ts" text-anchor="middle">vx_tex</text>
-  <text x="906" y="174" class="ts" text-anchor="middle">sample</text>
+  <text x="906" y="174" class="ts" text-anchor="middle">2 mips / req</text>
   <path d="M 958 155 L 990 155" class="flow"/>
 
   <!-- OM -->
   <rect x="990" y="120" width="96" height="70" rx="6" class="ff"/>
   <text x="1038" y="142" class="th" text-anchor="middle">OM</text>
   <text x="1038" y="160" class="ts" text-anchor="middle">depth/blend</text>
-  <text x="1038" y="176" class="ts" text-anchor="middle">→ ROP</text>
+  <text x="1038" y="176" class="ts" text-anchor="middle">per-RT · ROP</text>
   <path d="M 1086 155 L 1114 155" class="flow"/>
 
   <!-- framebuffer -->
@@ -90,6 +91,7 @@
   <rect x="542" y="96" width="544" height="118" rx="6" class="band"/>
   <text x="556" y="114" class="th" fill="#2e5e82">FF units (sim/simx or hw/rtl) · FS is SIMT</text>
 
-  <text x="150" y="312" class="tt">Any FF-unrepresentable state (exotic formats, blend/logic-op, MSAA resolve) → on-device SIMT software fallback (sw/gfx/libgfx_sw). Never a host round-trip.</text>
+  <text x="150" y="292" class="tt">A draw submits as DCR writes + a grid-less KMU launch (the delegated draw kick); each fragment wave is a bare 1-warp CTA — one lane = one pixel, exported once per RT.</text>
+  <text x="150" y="312" class="tt">Any FF-unrepresentable state (exotic attachment formats, unrepresentable blend factors, MSAA coverage + resolve) → on-device SIMT software fallback (sw/gfx/libgfx_sw). Never a host round-trip.</text>
   <text x="150" y="332" class="tt">The host graphics::Binning / reference renderer is retained only as an offline oracle, not the runtime path.</text>
 </svg>

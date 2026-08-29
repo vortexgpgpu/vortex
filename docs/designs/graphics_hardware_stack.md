@@ -72,8 +72,10 @@ been **retired** in favor of this push/launch path (§4).
   [`VX_decode.sv`](../../hw/rtl/core/VX_decode.sv):
   - `vx_om_export` — funct3=3, R4-type: fragment export to the OM aperture.
   - `vx_tex` — funct3=5, R4-type: texture sample; u/v/lod in registers, texel in rd.
-  - `SETW`/`GETW` — funct3=6: graphics register-window write/read (funct2
-    1=SETW, 3=GETW), the operand-staging primitive shared by TEX/OM/RASTER.
+  - funct3=6 and funct3=7 belong to the **RTU** (the hit-window reads
+    `CB_RET`/`GETWF`/`GETW`, and `vx_rt_wtrace`/`vx_rt_wait`) — the graphics
+    `SETW`/`GETW` window ops are retired; see
+    [`ray_tracing_architecture.md`](ray_tracing_architecture.md).
   - RASTER has **no kernel op** in v2 — the raster engine launches the
     fragment shader (push); there is no shader-issued raster instruction.
 - **Kernel intrinsics**
@@ -83,17 +85,23 @@ been **retired** in favor of this push/launch path (§4).
   straight out of the warp's launch registers via the `FRAG_POS`/`FRAG_PID`
   CSRs; no window op and no memory traffic.
 - **DCR state** ([`VX_types.toml`](../../VX_types.toml)):
-  - **TEX** `0x040–0x05F`: per-stage addr / logdim / format / filter / wrap
-    + mip offsets.
+  - **TEX** `0x040–0x056`: per-stage addr / logdim / format / filter / wrap,
+    the per-level `MIPOFF` byte-offset table, and the `BORDER` colour a
+    `CLAMP_TO_BORDER` tap returns.
   - **RASTER** `0x060–0x069`: tbuf/pbuf addrs+stride, tile_count, scissor,
     and the fragment-shader launch descriptor `FRAG_ENTRY_LO/HI`
     (0x066/0x067), `FRAG_PARAM_LO/HI` (0x068/0x069) — the CP/runtime writes
     these so the raster engine can launch the FS with no host round-trip
     (full register reference in
     [`rasterizer_architecture.md`](rasterizer_architecture.md) §4).
-  - **OM** `0x080–0x092`: color/depth buffer addrs + pitches, depth
-    func/writemask, full stencil state, blend mode/func/const, logic-op, and
-    `EARLYZ_SAFE` (0x092) — the per-draw gate that arms early-Z.
+  - **OM** `0x080–0x097`: color/depth buffer addrs + pitches, depth
+    func/writemask, full stencil state, blend mode/func/const, logic-op,
+    `EARLYZ_SAFE` (0x092) — the per-draw gate that arms early-Z — the
+    aperture geometry (`APERTURE_{XBITS, YBITS, RECORD_SHIFT, DEPTH_ONLY}`),
+    and `RT_SELECT` (0x097), which names the colour attachment the
+    per-attachment registers program (`VX_OM_MAX_RT` banks — MRT). The OM
+    carries **no CSRs**: per-export state (the attachment index, the face)
+    rides the aperture address.
   DCRs are broadcast to all cluster instances; each raster instance
   self-selects its tile stripe by `INSTANCE_IDX`.
 - **Perf** MPM classes RASTER=12, TEX=13, OM=14.
@@ -139,9 +147,13 @@ derivation, and the parallelism model are in
 **Socket-resident**: a per-core SFU PE (`VX_tex_unit`, outstanding-op tag
 store) fans into the socket sampler (`VX_tex_core`) over `VX_tex_bus_arb`,
 backed by a socket-private read-only tcache. The core pipeline is
-address-gen → 4-texel fetch → pixel-format decode (7 fixed formats) →
-bilinear filter, with CLAMP/REPEAT/MIRROR wrap. `vx_tex` takes an explicit
-integer mip level; a lane derives it from its 2×2 quad neighbours via
+address-gen → texel fetch → pixel-format decode (7 fixed formats) →
+bilinear filter, with CLAMP/REPEAT/MIRROR/BORDER wrap — a `BORDER` tap
+returns the `TEX_BORDER` DCR colour instead of a texel. A mip-linear sample
+carries **both bracketing levels in one request** (one tap set per level)
+and lerps them by the weight in the lod operand's fraction bits — real
+trilinear in a single op. `vx_tex` otherwise takes an integer mip level; a
+lane derives it from its 2×2 quad neighbours via
 `vx_tex_auto_lod()` (helper lanes keep the derivative shuffle fed). Full
 ISA/ABI/pipeline/tcache spec in
 [`texture_sampler_architecture.md`](texture_sampler_architecture.md).
@@ -151,11 +163,14 @@ ISA/ABI/pipeline/tcache spec in
 The fragment export is a **posted store to a virtual aperture**
 (`vx_om_export` → 1–2 ordinary word stores tagged `is_addr_om`/`is_addr_io`
 by the LSU). The transport peels the write off the socket→L2 trunk
-(`VX_om_steer`), reconstructs `{x, y, face}` and pairs colour+depth
+(`VX_om_steer`), reconstructs `{rt, x, y, face}` and pairs colour+depth
 (`VX_om_ingress`), and arbitrates into `VX_om_core`, which runs
 depth/stencil (`VX_om_ds`) then blend (`VX_om_blend`) or logic-op
 (`VX_om_logic_op`) and read-modify-writes color+depth through the ocache
-(`VX_om_mem`). A **same-pixel R-M-W interlock** stalls a later same-address
+(`VX_om_mem`). Colour state is **per attachment** (`VX_OM_MAX_RT` banks
+latched under `RT_SELECT`); a fragment exports once per attachment, the
+`rt` field of its aperture address selecting the bank. A **same-pixel
+R-M-W interlock** stalls a later same-address
 fragment's read until the earlier write leaves; the OM is the
 **authoritative late-Z** even when early-Z is active. Full
 export/transport/pipeline/ordering spec in
@@ -189,10 +204,15 @@ defining properties:
 - **In-launch delivery.** The wave's stamps ride inside the launch message
   and `VX_cta_dispatch` lands them in the warp's launch-register RAM before
   activation; the FS reads them back as the `FRAG_POS`/`FRAG_PID` CSRs — no
-  shared side-band outlives the launch (C4).
+  shared side-band outlives the launch (C4). A wave is sized off
+  `NUM_THREADS`: `NUM_THREADS/4` quads of four adjacent lanes, one lane =
+  one pixel (helper lanes included, so derivatives always have neighbours).
 - **DCR-launched.** The FS entry/argument descriptor rides the RASTER DCRs
   (`FRAG_ENTRY_LO/HI`, `FRAG_PARAM_LO/HI`); a draw is a **grid-less KMU
-  launch** the raster engine self-services with no host round-trip.
+  launch** — the KMU's **delegated draw launch**: it walks no CTAs and
+  forwards the frame kick to every raster engine, which self-services the
+  draw with no host round-trip
+  ([`cta_dispatch_architecture.md`](cta_dispatch_architecture.md) §3.2).
 - **Device-busy.** Each engine holds `busy` from the frame kick until fully
   drained; the cluster ORs the engines and launch-arb occupancy into
   `gfx_busy`, so the device never reports idle mid-frame.
@@ -241,8 +261,8 @@ func) is the bug that would drop own/co-planar/final writes. The SimX model
 SimX ([`sim/simx/{raster,tex,om}/`](../../sim/simx/)) mirrors each unit as a
 `*Core` (and, for TEX/OM, a `*Unit` SFU-PE) driving real `MemReq`/`MemRsp`
 traffic against the rcache/tcache/ocache, applying the shared host-reference
-primitives (`graphics::Rasterizer`, `graphics::DepthStencil`,
-`graphics::Blender`) from [`sw/common/`](../../sw/common/). `raster_core.cpp`
+primitives (`Rasterizer`, `DepthTencil`, `Blender`, `TextureSampler` from
+[`sw/common/gfx_ff_model.h`](../../sw/common/gfx_ff_model.h)). `raster_core.cpp`
 holds the producer FSM + TE/BE walker + early-Z (`early_z_cull`); the
 per-core raster consumer is header-only (`raster_unit.h`) since the pull
 consumer retired. SimX is the **SimX-first** development + evaluation engine
@@ -259,23 +279,23 @@ features SimX was once alone in modelling are now built on both sides.
   rtlsim (`VX_om_core`: mem-RMW → depth/stencil → blend + folded logic-op;
   `VX_tex_core`: addr → mem → format-decode (7 formats) → bilinear; mip LOD
   supplied per lane via `vx_tex_auto_lod`). They are **not stubs**. The features
-  that were once RTL deficits are built: **TEX trilinear** (both bracketing
-  levels in one request, §4), **TEX clamp-to-border**, and **OM MRT**
-  (`VX_OM_MAX_RT` colour attachments over one shared depth attachment). What
-  remains is **reach**, not datapath: the driver still routes mipmapped, border
-  and multi-attachment draws to the software path, so none of the three is
-  exercised by a Vulkan test yet, and none has been signed off at 300 MHz on the
-  U55C.
+  that were once RTL deficits are built **and driven**: **TEX trilinear** (both
+  bracketing levels in one request), **TEX clamp-to-border** (the `BORDER` DCR
+  colour), and **OM MRT** (`VX_OM_MAX_RT` colour attachments over one shared
+  depth attachment, banked under `RT_SELECT`). The vortexpipe driver programs
+  all three — the `MIPOFF` table, the border colour, the per-attachment banks —
+  so mipmapped, bordered and multi-attachment draws run on the FF units.
 - **Conformance** — no Vulkan CTS harness on hardware yet.
 
-So the critical path to FF acceleration on the U55C is now **driver routing +
-timing sign-off**, not building the datapaths.
+So the critical path to FF acceleration on the U55C is now **timing
+sign-off at 300 MHz**, not building or reaching the datapaths.
 
 The FF invariant holds: **no floating-point datapath inside any FF unit**
 (fixed-point, mobile-class). Anything the FF units cannot represent (exotic
-formats, blend/logic-op modes, MSAA resolve) is served by the on-device
-SIMT software fallback (`sw/gfx/libgfx_sw.mk`, `gfx_sw_abi.cpp`), never by
-the host.
+attachment formats, unrepresentable blend factors, per-sample MSAA coverage
+and its resolve) is served by the on-device SIMT software fallback
+(`sw/gfx/libgfx_sw.mk`, `gfx_sw_abi.cpp`, the `msaa_resolve_k` device
+kernel), never by the host.
 
 ---
 
@@ -314,6 +334,6 @@ side (vortexpipe driver, on-device front end, CP orchestration) in
 **Superseded / rejected directions** (recorded to avoid revival): the
 `vx_rast` pull + `pos_mask==0` sentinel + per-`(warp,pid,lane)` CSR latch
 dispatch protocol (replaced by push/launch, §4); the cocogfx dependency
-(eliminated in favor of `sw/common/gfx_render.cpp`); inlining
+(eliminated in favor of `sw/common/gfx_ff_model.cpp`); inlining
 `VX_graphics.sv` into `VX_cluster.sv` (the wrapper was kept); and
 reset-clean DCRs (rejected for the BRAM cost).

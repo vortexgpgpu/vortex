@@ -31,7 +31,7 @@
 
   <!-- mesa_vortex -->
   <rect x="60" y="122" width="960" height="180" rx="6" class="grp"/>
-  <text x="76" y="145" class="t" fill="#8e4a7e">mesa_vortex (branch prism) — the Vulkan / Gallium driver</text>
+  <text x="76" y="145" class="t" fill="#8e4a7e">mesa_vortex (branch vortex_3.x) — the Vulkan / Gallium driver</text>
 
   <rect x="76" y="156" width="270" height="128" rx="6" class="mesa"/>
   <text x="88" y="178" class="th">lavapipe</text>
@@ -42,10 +42,10 @@
   <rect x="366" y="156" width="638" height="128" rx="6" class="mesa"/>
   <text x="378" y="178" class="th">vortexpipe — Gallium driver (src/gallium/drivers/vortexpipe)</text>
   <text x="378" y="200" class="ts">vp_screen · vp_context — caps + state + draw orchestration</text>
-  <text x="378" y="218" class="ts">vp_nir_to_llvm → vp_compile — VS/FS/compute NIR → .vxbin</text>
+  <text x="378" y="218" class="ts">vp_nir_to_llvm → vp_compile — VS/FS/compute NIR → .vxbin (FS per variant)</text>
   <text x="378" y="236" class="ts">vp_nir_lower_ray_tracing_to_rtu — RT intrinsics → RTU ops</text>
-  <text x="378" y="254" class="ts">vp_raster — draw batch → front end + RASTER/FS/OM</text>
-  <text x="378" y="272" class="ts">kernels/gfx_frontend/ — build recipe (sources from the SDK)</text>
+  <text x="378" y="254" class="ts">vp_raster — draw batch → front end + FF DCRs + delegated RASTER kick</text>
+  <text x="378" y="272" class="ts">kernels/gfx_frontend/ — build recipe (sources from the SDK; blob embedded)</text>
 
   <path d="M 346 220 L 366 220" class="flow"/>
 
@@ -56,14 +56,14 @@
 
   <!-- prism_v3 -->
   <rect x="60" y="344" width="960" height="320" rx="6" class="grp"/>
-  <text x="76" y="367" class="t" fill="#2e5e82">prism_v3 (branch prism) — the Vortex platform (SDK + SimX + RTL), single source of truth</text>
+  <text x="76" y="367" class="t" fill="#2e5e82">this tree — the Vortex platform (SDK + SimX + RTL), single source of truth</text>
 
   <!-- sw layer -->
   <rect x="76" y="380" width="928" height="120" rx="6" class="sw"/>
   <text x="88" y="402" class="th" fill="#3a7d44">sw/ — VORTEX SDK (software)</text>
   <text x="88" y="422" class="ts">sw/runtime — libvortex.so: vortex2 API · FrontEndPool · program_raster/om/tex emitters</text>
-  <text x="88" y="440" class="ts">sw/gfx — device kernels: expand_k + setup_k + binning_k, and libgfx_sw (SIMT software fallback)</text>
-  <text x="88" y="458" class="ts">sw/common — ABI contracts (vx_gfx_abi, gfx_frontend_abi, gfx_sw_abi) + gfx_render reference oracle</text>
+  <text x="88" y="440" class="ts">sw/gfx — device kernels: expand_k + setup_k + binning_k + msaa_resolve_k, and libgfx_sw (SIMT software fallback)</text>
+  <text x="88" y="458" class="ts">sw/common — ABI contracts (vx_gfx_abi, gfx_frontend_abi, gfx_fs_desc_abi, gfx_sw_abi) + gfx_ff_model reference oracle</text>
   <text x="88" y="476" class="ts">sw/kernel/include — vx_graphics.h (FF intrinsics: vx_om_export, vx_tex, vx_frag_*)</text>
   <text x="88" y="494" class="tt">the SimX tests and vortexpipe compile the same sw/gfx sources — no copies, no drift</text>
 
@@ -93,5 +93,5 @@
   <text x="736" y="588" class="ts">on-card execution</text>
   <text x="736" y="626" class="tt">same SDK + kernels as above</text>
 
-  <text x="76" y="690" class="tt">All three backends run the identical SDK + kernels and are validated against the gfx_render oracle and the tests/graphics PNGs.</text>
+  <text x="76" y="690" class="tt">All three backends run the identical SDK + kernels and are validated against the gfx_ff_model oracle and the tests/graphics PNGs.</text>
 </svg>

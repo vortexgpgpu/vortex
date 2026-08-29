@@ -57,10 +57,11 @@
   <!-- device: FF -->
   <rect x="470" y="266" width="300" height="58" rx="5" class="dev"/>
   <text x="482" y="286" class="th">RASTER push → FS → TEX / OM</text>
-  <text x="482" y="304" class="ts">cover · early-Z · packer · dispatch</text>
-  <text x="482" y="320" class="tt">FS shades; OM merges depth/blend</text>
+  <text x="482" y="304" class="ts">cover · early-Z · packer · launch (1-warp waves)</text>
+  <text x="482" y="320" class="tt">FS shades (1 lane = 1 pixel); OM merges per-RT</text>
 
   <path d="M 620 254 L 620 266" class="msg"/>
+  <text x="782" y="264" class="lblb">delegated draw kick</text>
 
   <!-- SW fallback note -->
   <rect x="470" y="336" width="300" height="46" rx="5" class="sw"/>

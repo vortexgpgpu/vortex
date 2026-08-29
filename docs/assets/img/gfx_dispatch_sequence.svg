@@ -68,5 +68,5 @@
   <rect x="120" y="440" width="220" height="26" rx="5" class="host"/>
   <text x="132" y="458" class="ts">read results back to the app</text>
 
-  <text x="120" y="500" class="tt">RT rides the compute path (there is no OP_TRACE yet); current gaps — AS rebuilt per dispatch, no module residency — are tracked in vortexpipe_architecture.md §6.3.</text>
+  <text x="120" y="500" class="tt">RT rides the compute path (there is no OP_TRACE yet); the AS is still relocated per dispatch (modules themselves stay resident) — tracked in vortexpipe_architecture.md §6.3.</text>
 </svg>
