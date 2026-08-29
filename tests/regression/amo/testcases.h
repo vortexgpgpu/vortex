@@ -438,6 +438,42 @@ public:
   }
 };
 
+// 16) LMEM compare-and-swap ladder: the cas_ladder race on local memory, so
+//     the LMEM banks resolve the swap and the returned old word. Each group
+//     has its own ladder with exactly one winner per slot; the leaders' publish
+//     marker carries the group count, so the win counts must sum to
+//     groups * slots whatever the launch geometry.
+class Test_CAS_LMEM : public ITestCase {
+public:
+  Test_CAS_LMEM(TestSuite* s) : ITestCase(s, "cas_lmem") {}
+  void setup(uint32_t n, uint32_t* /*shared*/, uint32_t* per_hart) override {
+    for (uint32_t h = 0; h < n; ++h) per_hart[h] = 0;
+  }
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* /*shared*/, const uint32_t* per_hart) override {
+    const uint32_t slots = (iters < CAS_LMEM_SLOTS) ? iters : CAS_LMEM_SLOTS;
+    uint64_t wins = 0;
+    uint32_t groups = 0;
+    for (uint32_t h = 0; h < n; ++h) {
+      uint32_t v = per_hart[h];
+      if (v >= CAS_LMEM_GROUP_MARK) { ++groups; v -= CAS_LMEM_GROUP_MARK; }
+      wins += v;
+    }
+    if (groups == 0) {
+      std::cout << "  no group published -- the kernel did not run" << std::endl;
+      return 1;
+    }
+    uint64_t expected = (uint64_t)groups * slots;
+    if (wins != expected) {
+      std::cout << "  wins=" << wins << " expected=" << expected
+                << " across " << groups << " group(s)"
+                << " (each slot must have exactly one winner)" << std::endl;
+      return 1;
+    }
+    return 0;
+  }
+};
+
 inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   // Test_ATOMIC_CRITICAL needs to know VX_CFG_NUM_THREADS to compute the
   // expected count; query it from the device caps.
@@ -464,6 +500,7 @@ inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   // compare-exchange lowers to an LR/SC retry loop, which is the construct
   // this instruction exists to replace and which does not survive contention.
   add_test(new Test_CAS_LADDER(this));
+  add_test(new Test_CAS_LMEM(this));
 #endif
 }
 

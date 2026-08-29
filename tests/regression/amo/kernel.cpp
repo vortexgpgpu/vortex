@@ -362,6 +362,39 @@ void kernel_cas_ladder(kernel_arg_t* __UNIFORM__ arg) {
   }
   per_hart[hid] = wins;
 }
+
+// 16) LMEM compare-and-swap ladder.
+//   The cas_ladder race moved onto local memory, so the swap and the old word
+//   it returns come from the LMEM banks. Each group races for its own ladder
+//   and exactly one of its harts wins each slot, so the win counts sum to
+//   groups * slots. The host cannot read local memory or the launch shape, so
+//   the group count rides with each leader's publish as a marker well above
+//   any possible win count -- the same closed-form idea as tests 13/14.
+void kernel_cas_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto lmem     = (uint32_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  const uint32_t claim = hid + 1;   // 0 is the unclaimed marker
+
+  const uint32_t slots = (arg->iters < CAS_LMEM_SLOTS)
+                       ? arg->iters : CAS_LMEM_SLOTS;
+  if (threadIdx.x == 0) {
+    for (uint32_t i = 0; i < slots; ++i) {
+      lmem[i] = 0;
+    }
+  }
+  __syncthreads();
+
+  uint32_t wins = 0;
+  for (uint32_t i = 0; i < slots; ++i) {
+    uint32_t expected = 0;
+    if (__atomic_compare_exchange_n(&lmem[i], &expected, claim, 0,
+                                    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+      ++wins;
+    }
+  }
+  per_hart[hid] = wins + ((threadIdx.x == 0) ? CAS_LMEM_GROUP_MARK : 0);
+}
 #endif
 
 static const PFN_Kernel sc_tests[] = {
@@ -382,6 +415,7 @@ static const PFN_Kernel sc_tests[] = {
   kernel_lrsc_lmem,          // 14  LR/SC on local memory (LMEM banks)
 #if VX_CFG_EXT_ZACAS_ENABLED
   kernel_cas_ladder,         // 15  native compare-and-swap (Zacas amocas)
+  kernel_cas_lmem,           // 16  compare-and-swap on local memory (LMEM banks)
 #endif
 };
 
