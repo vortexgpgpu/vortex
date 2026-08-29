@@ -81,9 +81,10 @@
   <path d="M 364 320 L 616 320" class="mp"/>
   <text x="380" y="312" class="lbp">CTA 0 — kmu_req_t, kind = COMPUTE, eop = 1</text>
 
-  <rect x="500" y="334" width="240" height="42" rx="5" class="act"/>
-  <text x="510" y="352" class="ts">round-robin: any ready core</text>
-  <text x="510" y="368" class="tt">no placement hint on a CTA</text>
+  <rect x="500" y="334" width="300" height="56" rx="5" class="act"/>
+  <text x="510" y="352" class="ts">round-robin: any ready core — no placement hint</text>
+  <text x="510" y="368" class="tt">the routers are stateless; a beat resident in an</text>
+  <text x="510" y="382" class="tt">output skid folds its link `valid` into busy</text>
 
   <path d="M 624 400 L 886 400" class="m"/>
   <text x="640" y="392" class="lb">accept — ready = IDLE &amp;&amp; admit_ok</text>
@@ -93,6 +94,12 @@
   <text x="770" y="450" class="cm">slot_valid_r[base_slot] &lt;= 1</text>
   <text x="770" y="466" class="cm">cur_lmem_base_r &lt;= base_slot * stride</text>
   <text x="770" y="484" class="tt">state &lt;= DISPATCH — this is where cta_id is born</text>
+
+  <rect x="1100" y="414" width="390" height="76" rx="5" class="note"/>
+  <text x="1112" y="432" class="th">Pacing is admission-driven</text>
+  <text x="1112" y="450" class="ts">Upstream of this handshake there is only back-pressure</text>
+  <text x="1112" y="466" class="ts">through registered skids. SimX makes the same bound</text>
+  <text x="1112" y="482" class="ts">explicit: LAUNCH_CREDITS = 4 per core, returned on admit.</text>
 
   <!-- warp loop -->
   <rect x="700" y="510" width="800" height="150" rx="6" class="loop"/>
