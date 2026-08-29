@@ -19,7 +19,7 @@
 #include <deque>
 #include <vector>
 #include "core.h"
-#include "cluster.h"
+#include "socket.h"
 #include "socket.h"
 #include "mem_block_pool.h"
 #include "debug.h"
@@ -29,8 +29,8 @@ using namespace vortex;
 
 namespace {
 
-// Number of GMEM ports DxaCore exposes to L2 (one arb output per port).
-constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(VX_CFG_NUM_DXA_CORES, VX_CFG_L2_NUM_REQS);
+// One GMEM port: the DXA joins its socket's L2-facing arb as a single peer.
+constexpr uint32_t kDxaMemPorts = 1;
 
 // LMEM "word" granularity for splitting DXA writes. The LocalMem bank
 // model applies byteen relative to a VX_CFG_MEM_BLOCK_SIZE-aligned address,
@@ -42,8 +42,8 @@ constexpr uint32_t kLmemWordSize = VX_CFG_MEM_BLOCK_SIZE;
 constexpr uint32_t kGmemLineSize = VX_CFG_L1_LINE_SIZE;
 constexpr uint64_t kGmemLineMask = ~uint64_t(VX_CFG_L1_LINE_SIZE - 1);
 
-// Cores per cluster.
-constexpr uint32_t kCoresPerCluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+// Cores served by one (socket-resident) DXA engine.
+constexpr uint32_t kCoresPerSocket = VX_CFG_SOCKET_SIZE;
 
 } // namespace
 
@@ -70,8 +70,8 @@ public:
   // single contiguous LMEM word write; a K-major transposing load fans it out
   // to `km_num_elems` strided per-element destinations, which smem_wr coalesces
   // back into full byte-masked block writes (one read → bank-parallel scatter,
-  // never re-reading a line per element — TMA-style, matching the RTL addr_gen
-  // which reads per cache line).
+  // never re-reading a line per element — TMA-style, matching the hardware
+  // address generator, which reads per cache line).
   struct LineWork {
     uint64_t gmem_cl_addr;     // CL-aligned global address
     uint64_t smem_word_addr;   // word-aligned SMEM byte address (element 0)
@@ -478,7 +478,8 @@ private:
         // covers as many as fit. K-major then SCATTERS those elements to
         // strided SMEM destinations (one read → km_num_elems writes); row-major
         // writes them contiguously (bounded by the SMEM word). This mirrors the
-        // RTL addr_gen, which reads per cache line and never re-reads per element.
+        // hardware address generator, which reads per cache line and never
+        // re-reads per element.
         uint32_t gspan = scatter
             ? std::min({cl_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)})
             : std::min({cl_room, sw_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)});
@@ -588,8 +589,8 @@ private:
     if (!s.rsp_arrived) return; // wait
 
     // Determine destination core's LMEM port.
-    uint32_t cluster_local_cid = w.req.core->id() % kCoresPerCluster;
-    auto& lmem_ch = simobject_->lmem_req_out.at(cluster_local_cid);
+    uint32_t socket_local_cid = w.req.core->id() % kCoresPerSocket;
+    auto& lmem_ch = simobject_->lmem_req_out.at(socket_local_cid);
     if (lmem_ch.full()) return; // backpressure
 
     const LineWork& lw = s.work;
@@ -746,14 +747,14 @@ private:
 // DxaCore — wrappers
 // ════════════════════════════════════════════════════════════════════
 
-DxaCore::DxaCore(const SimContext& ctx, const char* name, Cluster* cluster)
+DxaCore::DxaCore(const SimContext& ctx, const char* name, Socket* socket)
   : SimObject<DxaCore>(ctx, name)
-  , dxa_req_in(kCoresPerCluster, this)
+  , dxa_req_in(kCoresPerSocket, this)
   , gmem_req_out(kDxaMemPorts, this)
   , gmem_rsp_in(kDxaMemPorts, this)
-  , lmem_req_out(kCoresPerCluster, this)
+  , lmem_req_out(kCoresPerSocket, this)
 {
-  __unused(cluster);
+  __unused(socket);
 
   // Build the GMEM arbiter (VX_CFG_NUM_DXA_CORES workers → kDxaMemPorts L2-facing).
   // Tag layout used by workers: high bit packs worker_id, low bits the

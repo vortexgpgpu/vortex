@@ -150,7 +150,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // An odometer index reaches its bound by equality, not magnitude: with
     // dim_count in [0, tile-1], (dim_count+1 >= tile) ⟺ (dim_count == tile-1).
     // Equality is ~2 LUT levels vs a CARRY8 chain, which keeps the once-per-row
-    // step_delta / num_lines wrap path short (see docs/proposals/dxa_addr_gen_timing.md).
+    // step_delta / num_lines wrap path short.
     wire dim0_last = (dim_count_r[0] == dim_last_r[0]);
     wire dim1_last = (dim_count_r[1] == dim_last_r[1]);
     wire dim2_last = (dim_count_r[2] == dim_last_r[2]);
@@ -189,8 +189,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     //                registers (first_off, km_tile1_r), both row-stable.
     //   Last CL:     don't-care; the row wrap overrides smem_byte_addr_r below.
     // The per-beat path is therefore a 2:1 mux of these, never the long
-    // valid_length cone in front of the multiply (see
-    // docs/proposals/dxa_addr_gen_timing.md).
+    // valid_length cone in front of the multiply.
     wire [VLEN_W-1:0] cl0_len      = VLEN_W'(GMEM_LINE_SIZE) - {1'b0, first_off};
     wire [31:0] km_step_full  = km_tile1_r << CL_OFF_BITS;
     wire [31:0] km_step_first = 32'(cl0_len) * km_tile1_r;

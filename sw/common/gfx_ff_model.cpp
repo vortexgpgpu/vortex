@@ -12,8 +12,8 @@
 // limitations under the License.
 
 #include "gfx_ff_model.h"
-#include "gfx_sw.h"   // single source of truth for the per-fragment OM ops (§7)
-#include "gfx_frag_rast.h"  // single source of truth for the rasterizer coverage walk (§7)
+#include "gfx_sw.h"   // single source of truth for the per-fragment OM ops
+#include "gfx_frag_rast.h"  // single source of truth for the rasterizer coverage walk
 #include "bitmanip.h"
 #include <assert.h>
 #include <cocogfx/include/color.hpp>
@@ -57,10 +57,11 @@ TexelRequest TextureSampler::compute_request(uint32_t stage, int32_t u, int32_t 
   // it and is handled by the caller, so mask it off for per-LOD tap selection.
   auto filter   = dcrs_.read(stage, VX_DCR_TEX_FILTER) & TEX_FILTER_MAGMIN_MASK;
   auto wrap     = dcrs_.read(stage, VX_DCR_TEX_WRAP);
+  auto border   = dcrs_.read(stage, VX_DCR_TEX_BORDER);
 
   // The sampling math is shared with the on-device SW fallback (gfx_frag_tex.h).
   return gfx_tex::tex_compute_request(mip_base + mip_off, logdim, format,
-                                      filter, wrap, u, v, lod);
+                                      filter, wrap, u, v, lod, 0, 0, border);
 }
 
 uint32_t TextureSampler::apply_filter(const TexelRequest& req, const uint32_t texels[4]) {
@@ -75,7 +76,7 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
     mem_cb_(texels, req.addr, req.stride, count, cb_arg_);
     return apply_filter(req, texels);
   };
-  // gfx_v2 §6.8 trilinear: `lod` is fixed-point — sample the two bracketing
+  // trilinear: `lod` is fixed-point — sample the two bracketing
   // mips and blend by the fractional part (lod1 clamped to VX_TEX_LOD_MAX).
   if (this->mip_linear(stage)) {
     uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
@@ -91,9 +92,9 @@ uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod
 namespace {
 
 // The per-fragment output-merger ops live in <gfx_sw.h> as the single source of
-// truth shared by this host FF model and the on-device SW fallback
-// (gfx_v2_software_fallback.md §7). Thin forwarders keep the existing call
-// sites (DepthTencil::test / Blender::blend) unchanged.
+// truth shared by this host FF model and the on-device SW fallback.
+// Thin forwarders keep the existing call sites
+// (DepthTencil::test / Blender::blend) unchanged.
 inline bool DoCompare(uint32_t func, uint32_t a, uint32_t b) {
   return gfx_sw::DoCompare(func, a, b);
 }
@@ -184,15 +185,15 @@ bool DepthTencil::test(uint32_t is_backface,
 Blender::Blender() {}
 Blender::~Blender() {}
 
-void Blender::configure(const OMDCRS& dcrs) {
-  blend_mode_rgb_ = dcrs.read(VX_DCR_OM_BLEND_MODE) & 0xffff;
-  blend_mode_a_   = dcrs.read(VX_DCR_OM_BLEND_MODE) >> 16;
-  blend_src_rgb_  = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >>  0) & 0xff;
-  blend_src_a_    = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >>  8) & 0xff;
-  blend_dst_rgb_  = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >> 16) & 0xff;
-  blend_dst_a_    = (dcrs.read(VX_DCR_OM_BLEND_FUNC) >> 24) & 0xff;
-  blend_const_    = dcrs.read(VX_DCR_OM_BLEND_CONST);
-  logic_op_       = dcrs.read(VX_DCR_OM_LOGIC_OP);  
+void Blender::configure(const OMDCRS& dcrs, uint32_t rt) {
+  blend_mode_rgb_ = dcrs.read(rt, VX_DCR_OM_BLEND_MODE) & 0xffff;
+  blend_mode_a_   = dcrs.read(rt, VX_DCR_OM_BLEND_MODE) >> 16;
+  blend_src_rgb_  = (dcrs.read(rt, VX_DCR_OM_BLEND_FUNC) >>  0) & 0xff;
+  blend_src_a_    = (dcrs.read(rt, VX_DCR_OM_BLEND_FUNC) >>  8) & 0xff;
+  blend_dst_rgb_  = (dcrs.read(rt, VX_DCR_OM_BLEND_FUNC) >> 16) & 0xff;
+  blend_dst_a_    = (dcrs.read(rt, VX_DCR_OM_BLEND_FUNC) >> 24) & 0xff;
+  blend_const_    = dcrs.read(rt, VX_DCR_OM_BLEND_CONST);
+  logic_op_       = dcrs.read(rt, VX_DCR_OM_LOGIC_OP);  
 
   enabled_        = !((blend_mode_rgb_ == VX_OM_BLEND_MODE_ADD)
                    && (blend_mode_a_   == VX_OM_BLEND_MODE_ADD) 
@@ -243,7 +244,7 @@ void Rasterizer::renderPrimitive(uint32_t x,
                                  uint32_t pid,
                                  vec3e_t edges[3]) const {
   // The coverage walk is the single source of truth shared with the device SW
-  // fallback (gfx_frag_rast.h, §7); forward the FF model's ShaderCB as the emit sink.
+  // fallback (gfx_frag_rast.h); forward the FF model's ShaderCB as the emit sink.
   gfx_rast::RastConfig cfg{
     tile_logsize_,
     scissor_left_, scissor_top_, scissor_right_, scissor_bottom_

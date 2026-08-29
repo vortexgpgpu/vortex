@@ -198,7 +198,7 @@ module VX_csa_tree #(
     localparam MAX_WN = CLUSTER_W + (DEPTH * 2) + 4;
     localparam WN = (S < MAX_WN) ? S : MAX_WN;
 
-    wire [WN-1:0] tree_sig [DEPTH+1][TOP_N] /* verilator split_var */;
+    wire [DEPTH:0][TOP_N-1:0][WN-1:0] tree_sig;
 
     for (genvar i = 0; i < TOP_N; i++) begin : g_init_l0
         assign tree_sig[0][i] = WN'(tree_inputs[i]);

@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .host { fill:#eef2f6; stroke:#5a7184; stroke-width:1.4; }
+    .simt { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .ff   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.9; fill:none; marker-end:url(#arr); }
+    .band { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .lbl  { fill:#33404c; font-size:11.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1200" height="360" fill="#ffffff"/>
+  <text x="24" y="30" class="t" font-size="17">On-device render flow — everything between submit and present is device-resident</text>
+
+  <!-- host -->
+  <rect x="24" y="120" width="96" height="70" rx="6" class="host"/>
+  <text x="72" y="150" class="th" text-anchor="middle">host</text>
+  <text x="72" y="168" class="ts" text-anchor="middle">submit</text>
+  <text x="72" y="182" class="ts" text-anchor="middle">→ CP</text>
+  <path d="M 120 155 L 150 155" class="flow"/>
+
+  <!-- front-end band -->
+  <rect x="150" y="96" width="360" height="118" rx="6" class="band"/>
+  <text x="164" y="114" class="th" fill="#8e4a7e">sw/gfx front end (SIMT compute)</text>
+
+  <rect x="162" y="122" width="108" height="70" rx="5" class="simt"/>
+  <text x="216" y="146" class="th" text-anchor="middle">expand_k</text>
+  <text x="216" y="166" class="ts" text-anchor="middle">VS assembly</text>
+
+  <rect x="278" y="122" width="108" height="70" rx="5" class="simt"/>
+  <text x="332" y="146" class="th" text-anchor="middle">setup_k</text>
+  <text x="332" y="162" class="ts" text-anchor="middle">clip +</text>
+  <text x="332" y="176" class="ts" text-anchor="middle">tri setup</text>
+
+  <rect x="394" y="122" width="104" height="70" rx="5" class="simt"/>
+  <text x="446" y="146" class="th" text-anchor="middle">binning_k</text>
+  <text x="446" y="162" class="ts" text-anchor="middle">count→scan→</text>
+  <text x="446" y="176" class="ts" text-anchor="middle">emit→sort</text>
+
+  <path d="M 270 157 L 278 157" class="flow"/>
+  <path d="M 386 157 L 394 157" class="flow"/>
+  <path d="M 510 155 L 542 155" class="flow"/>
+  <text x="526" y="145" class="lbl" text-anchor="middle">kick</text>
+
+  <!-- RASTER -->
+  <rect x="542" y="120" width="120" height="70" rx="6" class="ff"/>
+  <text x="602" y="142" class="th" text-anchor="middle">RASTER</text>
+  <text x="602" y="160" class="ts" text-anchor="middle">cover · early-Z</text>
+  <text x="602" y="174" class="ts" text-anchor="middle">packer · launch</text>
+  <path d="M 662 155 L 694 155" class="flow"/>
+  <text x="678" y="147" class="lbl" text-anchor="middle">push</text>
+
+  <!-- FS -->
+  <rect x="694" y="120" width="128" height="70" rx="6" class="simt"/>
+  <text x="758" y="142" class="th" text-anchor="middle">fragment shader</text>
+  <text x="758" y="160" class="ts" text-anchor="middle">vx_frag_load,</text>
+  <text x="758" y="174" class="ts" text-anchor="middle">interp, shade</text>
+  <path d="M 822 155 L 854 155" class="flow"/>
+
+  <!-- TEX -->
+  <rect x="854" y="120" width="104" height="70" rx="6" class="ff"/>
+  <text x="906" y="142" class="th" text-anchor="middle">TEX</text>
+  <text x="906" y="160" class="ts" text-anchor="middle">vx_tex</text>
+  <text x="906" y="174" class="ts" text-anchor="middle">2 mips / req</text>
+  <path d="M 958 155 L 990 155" class="flow"/>
+
+  <!-- OM -->
+  <rect x="990" y="120" width="96" height="70" rx="6" class="ff"/>
+  <text x="1038" y="142" class="th" text-anchor="middle">OM</text>
+  <text x="1038" y="160" class="ts" text-anchor="middle">depth/blend</text>
+  <text x="1038" y="176" class="ts" text-anchor="middle">per-RT · ROP</text>
+  <path d="M 1086 155 L 1114 155" class="flow"/>
+
+  <!-- framebuffer -->
+  <rect x="1090" y="216" width="96" height="60" rx="6" class="mem"/>
+  <text x="1138" y="240" class="th" text-anchor="middle">frame-</text>
+  <text x="1138" y="256" class="th" text-anchor="middle">buffer</text>
+  <text x="1138" y="270" class="ts" text-anchor="middle">present only</text>
+  <path d="M 1114 155 L 1138 155 L 1138 216" class="flow"/>
+
+  <!-- FF backend band -->
+  <rect x="542" y="96" width="544" height="118" rx="6" class="band"/>
+  <text x="556" y="114" class="th" fill="#2e5e82">FF units (sim/simx or hw/rtl) · FS is SIMT</text>
+
+  <text x="150" y="292" class="tt">A draw submits as DCR writes + a grid-less KMU launch (the delegated draw kick); each fragment wave is a bare 1-warp CTA — one lane = one pixel, exported once per RT.</text>
+  <text x="150" y="312" class="tt">Any FF-unrepresentable state (exotic attachment formats, unrepresentable blend factors, MSAA coverage + resolve) → on-device SIMT software fallback (sw/gfx/libgfx_sw). Never a host round-trip.</text>
+  <text x="150" y="332" class="tt">The host graphics::Binning / reference renderer is retained only as an offline oracle, not the runtime path.</text>
+</svg>

@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
+module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     `SCOPE_IO_DECL
 
     // Clock
@@ -181,10 +181,12 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     wire [`VX_CFG_NUM_CLUSTERS-1:0] per_cluster_busy;
 
     VX_kmu_bus_if per_cluster_kmu_bus_if[`VX_CFG_NUM_CLUSTERS]();
-    VX_kmu_arb #(
+
+    VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_NUM_CLUSTERS),
-        .OUT_BUF    ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0) // register per-cluster kmu fan-out (SLR-crossing skid)
+        .DEST_LSB   (KMU_DEST_LSB_DEVICE),
+        .OUT_BUF    ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0)  // register per-cluster kmu fan-out (SLR-crossing skid)
     ) kmu_arb (
         .clk        (clk),
         .reset      (reset),
@@ -204,6 +206,39 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     );
 `endif
 
+    // The device MMU surface filters the DCR stream: it assembles the
+    // page-table root, pulses the TLB flush, and answers fault reads before
+    // the rest of the DCR traffic fans to the clusters.
+    VX_dcr_bus_if dcr_cluster_src_if();
+`ifdef VX_CFG_VM_ENABLE
+    wire [`VX_CFG_XLEN-1:0] mmu_satp;
+    wire                    mmu_flush_req;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_flush_done;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_fault_valid;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0][`VX_CFG_XLEN-1:0] cl_mmu_fault_va;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0][1:0]              cl_mmu_fault_access;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_fault_amo;
+
+    VX_mmu_dcr mmu_dcr (
+        .clk                  (clk),
+        .reset                (reset),
+        .dcr_bus_if           (dcr_bus_if),
+        .dcr_bus_out_if       (dcr_cluster_src_if),
+        .satp                 (mmu_satp),
+        .flush_req            (mmu_flush_req),
+        .cluster_flush_done   (cl_mmu_flush_done),
+        .cluster_fault_valid  (cl_mmu_fault_valid),
+        .cluster_fault_va     (cl_mmu_fault_va),
+        .cluster_fault_access (cl_mmu_fault_access),
+        .cluster_fault_amo    (cl_mmu_fault_amo)
+    );
+`else
+    assign dcr_cluster_src_if.req_valid = dcr_bus_if.req_valid;
+    assign dcr_cluster_src_if.req_data  = dcr_bus_if.req_data;
+    assign dcr_bus_if.rsp_valid = dcr_cluster_src_if.rsp_valid;
+    assign dcr_bus_if.rsp_data  = dcr_cluster_src_if.rsp_data;
+`endif
+
     VX_dcr_bus_if per_cluster_dcr_bus_if[`VX_CFG_NUM_CLUSTERS]();
     VX_dcr_arb #(
         .NUM_REQS    (`VX_CFG_NUM_CLUSTERS),
@@ -211,7 +246,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
     ) dcr_cluster_arb (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (dcr_bus_if),
+        .bus_in_if  (dcr_cluster_src_if),
         .bus_out_if (per_cluster_dcr_bus_if)
     );
 
@@ -241,12 +276,30 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*; (
             .raster_launch_if   (per_cluster_raster_launch_if[cluster_id +: 1]),
         `endif
 
+        `ifdef VX_CFG_VM_ENABLE
+            .mmu_satp           (mmu_satp),
+            .mmu_flush_req      (mmu_flush_req),
+            .mmu_flush_done     (cl_mmu_flush_done[cluster_id]),
+            .mmu_fault_valid    (cl_mmu_fault_valid[cluster_id]),
+            .mmu_fault_va       (cl_mmu_fault_va[cluster_id]),
+            .mmu_fault_access   (cl_mmu_fault_access[cluster_id]),
+            .mmu_fault_amo      (cl_mmu_fault_amo[cluster_id]),
+        `endif
+
             .busy               (per_cluster_busy[cluster_id])
         );
     end
+    // Launch liveness: a beat resident in a per-cluster output skid is folded into
+    // busy combinationally. The device input
+    // (kmu_bus_in) needs no separate term -- kmu_busy (combinational) covers the
+    // presented cycle and the registered per_cluster_busy covers the cycles after.
+    wire [`VX_CFG_NUM_CLUSTERS-1:0] per_cluster_kmu_valid;
+    for (genvar c = 0; c < `VX_CFG_NUM_CLUSTERS; ++c) begin : g_kmu_link_valid
+        assign per_cluster_kmu_valid[c] = per_cluster_kmu_bus_if[c].valid;
+    end
     wire busy_r;
     `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy), 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
-    assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid;
+    assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid | (|per_cluster_kmu_valid);
 
 `ifdef PERF_ENABLE
 

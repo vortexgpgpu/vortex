@@ -56,7 +56,7 @@
 `endif
 
 // Convenience flag: any graphics extension is enabled. Gates the shared
-// per-core graphics window (VX_gfx_window: slot RF + SETW/GETW/GETWF), reused by
+// per-core RTU unit (VX_rtu_unit: hit-window slot RF + GETW/GETWF), used by
 // TEX/OM and consumed by the RTU traversal engine.
 `ifdef VX_CFG_EXT_TEX_ENABLE
     `define EXT_GFX_ANY_ENABLE
@@ -73,6 +73,14 @@
     `define EXT_GFX_ANY_ENABLED 1
 `else
     `define EXT_GFX_ANY_ENABLED 0
+`endif
+
+// Cluster-resident graphics units: RASTER and OM (and their caches) live at
+// cluster level; TEX, RTU and DXA are socket-resident.
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    `define EXT_GFX_CLUSTER_ENABLE
+`elsif VX_CFG_EXT_OM_ENABLE
+    `define EXT_GFX_CLUSTER_ENABLE
 `endif
 
 // Early-Z occlusion cull requires BOTH the rasterizer (produces the covered-quad
@@ -93,14 +101,6 @@
     `define TCU_META_ENABLE
 `elsif VX_CFG_TCU_SPARSE_ENABLE
     `define TCU_META_ENABLE
-`endif
-
-// Map the TFR FEDP mantissa multipliers onto FPGA DSP48 slices (inferred
-// multiply + use_dsp hint) instead of LUT-fabric Wallace trees. Sibling of the
-// FPU's VX_CFG_FPU_USE_DSP; the datapath takes it as a plain USE_DSP parameter and
-// stays portable. Opt-in (default off); pass -DVX_CFG_TCU_USE_DSP=1 to enable.
-`ifndef VX_CFG_TCU_USE_DSP
-`define VX_CFG_TCU_USE_DSP 0
 `endif
 
 // Integer mul/div via DPI: simulation only (not synthesis) with DPI enabled.

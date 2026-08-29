@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU multi-triangle smoke — Phase 4 host driver.
+// PRISM RTU multi-triangle smoke — host driver.
 //
 // Builds a scene of N (default 4) coplanar opaque triangles at depths
 // z = 5, 6, 7, ... 5+N-1. The ray at (0.25, 0.25, 0) along +Z hits all

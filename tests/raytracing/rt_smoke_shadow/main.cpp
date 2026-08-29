@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke — §8.8 shadow-ray host driver.
+// PRISM RTU smoke — shadow-ray host driver.
 //
 // Scene: 3 opaque tris at z=5, z=10, z=15. Ray (0.25,0.25,0)→+z.
 // Walker visits tris in scene order (flat-list) and would normally
@@ -23,7 +23,7 @@
 //
 // This test verifies correctness: status==HIT, hit_t==5. The
 // efficiency claim (fewer tris tested) is implicit in the
-// implementation; a Phase 8 perf-counter test would validate it
+// implementation; a perf-counter test would validate it
 // directly.
 
 #include <iostream>

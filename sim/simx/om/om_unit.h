@@ -14,10 +14,9 @@
 #pragma once
 
 #include <array>
-#include <simobject.h>
+#include "types.h"
 #include "instr_trace.h"
 #include "constants.h"
-#include "types.h"
 
 namespace vortex {
 
@@ -35,8 +34,35 @@ struct OmReq {
   std::array<uint8_t,  VX_CFG_NUM_THREADS>          face       = {};    // 1-bit back-face flag
   std::array<uint32_t, VX_CFG_NUM_THREADS>          color      = {};    // ARGB8888 source
   std::array<uint32_t, VX_CFG_NUM_THREADS>          depth      = {};    // VX_OM_DEPTH_BITS source
+  // Colour attachment the export targets. One per request: a record names one
+  // attachment however many lanes it covers.
+  uint32_t                                         rt         = 0;
+
+  // vx_om_export: the fragment arrives as an APERTURE ADDRESS rather than a
+  // decoded position. The decode needs the OM DCRs (xbits/ybits/record_shift),
+  // which are cluster state -- in hardware that decode lives at the OM ingress,
+  // and here it lives in OmCore for the same reason. The core-side unit does not
+  // have, and must not need, the OM's DCRs.
+  bool                                             from_aperture = false;
+  std::array<uint64_t, VX_CFG_NUM_THREADS>          addr       = {};
+  uint32_t                                         export_mask = 0;    // bit0=colour, bit1=depth
 
   OmReq() = default;
+};
+
+// A colour+depth export moves one word per beat and retires a uop per beat, so
+// the record spans two. Only the last beat submits the fragment: a blend reads
+// the destination, so replaying it would fold the pixel into itself.
+class OmUopGen {
+public:
+  OmUopGen(PoolAllocator<Instr, 64>& pool) : pool_(pool) {}
+
+  static uint32_t uop_count(const Instr& instr);
+
+  Instr::Ptr get(const Instr& macro_instr, uint32_t uop_index);
+
+private:
+  PoolAllocator<Instr, 64>& pool_;
 };
 
 // Per-core SFU PE for vx_om. Plain (non-SimObject) helper owned by SfuUnit.
@@ -51,7 +77,7 @@ public:
   // Submit one vx_om4 sub-pixel request. mask_bits selects the lanes that cover
   // this sub-pixel; the caller pre-packs src_data[0..2] = {pos_face, colour,
   // depth}. Returns the trace if accepted, or nullptr on a full output channel.
-  instr_trace_t* process(instr_trace_t* trace, uint32_t mask_bits);
+  instr_trace_t* process_export(instr_trace_t* trace, uint32_t export_mask);
 
 private:
   Core*               core_;

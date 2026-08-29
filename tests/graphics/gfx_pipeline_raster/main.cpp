@@ -90,7 +90,9 @@ static std::vector<setup_vertex_t> expand_vertices(const CGLTrace::drawcall_t& d
     uint32_t idx[3] = { p.i0, p.i1, p.i2 };
     for (int k = 0; k < 3; ++k) {
       const auto& v = dc.vertices.at(idx[k]);
-      setup_vertex_t s;
+      setup_vertex_t s{};   // varying2 feeds the w0..w5 planes; an
+                            // indeterminate one reaches setup as an
+                            // attribute plane.
       s.pos[0] = v.pos.x; s.pos[1] = v.pos.y; s.pos[2] = v.pos.z; s.pos[3] = v.pos.w;
       s.color[0] = v.color.r; s.color[1] = v.color.g; s.color[2] = v.color.b; s.color[3] = v.color.a;
       s.texcoord[0] = v.texcoord.u; s.texcoord[1] = v.texcoord.v;
@@ -113,7 +115,7 @@ static TileMap binning_oracle(const std::vector<setup_vertex_t>& verts, uint32_t
   nb = graphics::Binning(tilebuf, primbuf_out, vmap, prims, dst_width, dst_height,
                          SETUP_NEAR, SETUP_FAR, PIPE_BIN_LOG);
   TileMap m;
-  // Host Binning() now emits the gfx_v2 §6.3 coarse-bin layout (matching the
+  // Host Binning() emits the coarse-bin layout (matching the
   // device front end): a dense rast_bin_header_t block followed by a sorted-pid
   // array, each bin's pids_offset an absolute index into it.
   auto* hdr = reinterpret_cast<const rast_bin_header_t*>(tilebuf.data());

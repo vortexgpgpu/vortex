@@ -487,7 +487,7 @@ main(int argc, char **argv)
 
    /* The any-hit alpha test (confirm only where candidate u > 0.5)
     * accepts a strict subset of the ~512 pixels the opaque triangle
-    * would hit, and a corner is always outside. A correct SW fallback
+    * would hit, and a corner is always outside. A correct candidate loop
     * therefore confirms *some* but not *all* of the triangle. */
    (void)centre;
    bool ok = bad == 0 && corner == MISS_COLOR &&
@@ -497,7 +497,7 @@ main(int argc, char **argv)
              hits, misses, bad, corner);
       return 1;
    }
-   printf("PASSED (non-opaque ray query via SW fallback: %u confirmed hits "
-          "after any-hit alpha test)\n", hits);
+   printf("PASSED (non-opaque ray query: %u confirmed hits after the "
+          "any-hit alpha test)\n", hits);
    return 0;
 }

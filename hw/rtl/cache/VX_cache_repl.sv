@@ -27,7 +27,7 @@ module plru_decoder import VX_gpu_pkg::*; #(
 );
     if (NUM_WAYS > 1) begin : g_dec
         wire [`UP(NUM_WAYS-1)-1:0] data;
-        wire [`UP(NUM_WAYS-1)-1:0] mask /* verilator split_var*/;
+        wire [`UP(NUM_WAYS-1)-1:0] mask;
         for (genvar i = 0; i < NUM_WAYS-1; ++i) begin : g_i
             if (i == 0) begin : g_i_0
                 assign mask[i] = 1'b1;

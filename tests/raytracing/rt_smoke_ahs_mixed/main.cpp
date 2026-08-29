@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU mixed-scene AHS smoke — Phase 11 host driver.
+// PRISM RTU mixed-scene AHS smoke — host driver.
 
 #include <iostream>
 #include <unistd.h>
@@ -85,8 +85,7 @@ int main(int argc, char* argv[]) {
   // Scene: 2 triangles.
   //   tri 0: NON-OPAQUE at z=5  (closer; yields AHS).
   //   tri 1: OPAQUE     at z=10 (farther; only relevant if AHS IGNORE).
-  // The Phase 11 walker considers BOTH so that IGNORE produces HIT@10
-  // (was MISS in the pre-Phase-11 break-on-first-non-opaque code).
+  // The walker considers BOTH so that IGNORE produces HIT@10.
   constexpr uint32_t kNumTris = 2;
   uint32_t scene_bytes_sz = RTU_SCENE_HDR_BYTES + kNumTris * RTU_TRI_STRIDE_BYTES;
   std::vector<uint8_t> scene_bytes(scene_bytes_sz, 0);
@@ -154,7 +153,7 @@ int main(int argc, char* argv[]) {
   vx_event_release(launch_ev);
 
   // ACCEPT -> non-opaque tri 0 wins at t=5.
-  // IGNORE -> opaque tri 1 wins at t=10 (the Phase 11 fix).
+  // IGNORE -> opaque tri 1 wins at t=10 (both candidates are considered).
   bool exp_hit       = true;                             // both scenarios HIT
   uint32_t exp_status = VX_RT_STS_DONE_HIT;
   float exp_t = (cb_decision == RTU_AHS_DECISION_ACCEPT) ? 5.f : 10.f;

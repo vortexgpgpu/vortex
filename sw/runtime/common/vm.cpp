@@ -23,9 +23,11 @@ using namespace vortex;
 
 namespace {
 // Translate the runtime's VX_MEM_{READ,WRITE} access-flag bitmask into PTE
-// permission bits (V|R always; W if WRITE).
+// permission bits. Kernels run U-mode, so U is always set; X is always
+// set because the allocation API carries no exec flag to distinguish
+// code buffers; A/D are pre-set since the device never writes them back.
 uint32_t pte_flags_from_access(uint32_t access_flags) {
-  uint32_t pte = PTE_V | PTE_R;
+  uint32_t pte = PTE_V | PTE_R | PTE_X | PTE_U | PTE_A | PTE_D;
   if (access_flags & VX_MEM_WRITE)
     pte |= PTE_W;
   return pte;
@@ -327,7 +329,8 @@ int VMManager::install_identity_map(uint64_t addr, uint64_t size) {
 
   // Identity-mapped system regions get full R/W/X; the host-side ACL
   // (set via mem_access) is the actual permission boundary.
-  constexpr uint32_t IDENTITY_PTE_FLAGS = PTE_V | PTE_R | PTE_W | PTE_X;
+  constexpr uint32_t IDENTITY_PTE_FLAGS =
+      PTE_V | PTE_R | PTE_W | PTE_X | PTE_U | PTE_A | PTE_D;
 
   (void)virtual_mem_->reserve(addr, size);
 

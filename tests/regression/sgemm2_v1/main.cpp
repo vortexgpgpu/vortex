@@ -153,7 +153,7 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  // Default chunk_k to tile_size (original behavior).
+  // Default chunk_k to tile_size.
   if (chunk_k == 0)
     chunk_k = tile_size;
   if ((size % chunk_k) != 0) {

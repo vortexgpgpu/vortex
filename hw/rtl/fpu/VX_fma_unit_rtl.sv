@@ -663,7 +663,7 @@ module VX_fma_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     // On overflow, IEEE/RISC-V picks the magnitude-largest finite vs infinity per
     // rounding mode and sign: RTZ always -> max-normal; RDN -> max-normal for
     // positive (else -inf); RUP -> max-normal for negative (else +inf); RNE/RMM
-    // -> infinity. (The old code always returned infinity, breaking directed RTL.)
+    // -> infinity.
     wire ovf_to_max = (r5_frm == INST_FRM_RTZ)
                     | (r5_frm == INST_FRM_RDN & ~round_sign)
                     | (r5_frm == INST_FRM_RUP &  round_sign);

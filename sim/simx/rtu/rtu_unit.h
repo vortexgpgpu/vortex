@@ -11,14 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU (Ray-Tracing Unit) — Phase 1.
-// See docs/proposals/rtu_simx_proposal.md.
+// PRISM RTU (Ray-Tracing Unit).
 //
 // Architecture (mirrors TEX shape):
-//   - RtuUnit is a per-core SFU PE owning the per-(warp,lane) RTU register
-//     file (29 named 32-bit slots × NUM_WARPS × NUM_THREADS).
-//   - The v2 window ISA: vx_rt_trace2 streams the f0..f7 ray window into a
-//     pool slot and sends the warp-packed RtuReq to RtuCore; vx_rt_wait2 is
+//   - RtuUnit is a per-core SFU PE driving the shared per-(warp,lane)
+//     hit window (RtuWindow, owned by SfuUnit).
+//   - The window ISA: vx_rt_wtrace streams the f0..f7 ray window into a
+//     pool slot and sends the warp-packed RtuReq to RtuCore; vx_rt_wait is
 //     the sync point that observes the matching RtuRsp. The callback-side
 //     windowed reads/writes (GETWF/GETW/SETW) complete locally in 1 SFU cycle.
 
@@ -27,16 +26,15 @@
 #include <array>
 #include <unordered_map>
 #include <vector>
-#include <simobject.h>
+#include "types.h"
 #include <mempool.h>
 #include "instr.h"
 #include "instr_trace.h"
 #include "constants.h"
-#include "types.h"
-#include "../gfx_window.h"   // GfxWindow (shared SFU-level register window)
-#include "rtu_types.h"   // §step-2 refactor: RtuReq, RtuRsp, RtuReqKind,
-                         // RtuRspKind, RtuBusArbiter now live in rtu_types.h
-                         // under namespace vortex::rtu, with vortex:: aliases.
+#include "rtu_window.h"   // RtuWindow (the RTU hit-window slot file)
+#include "rtu_types.h"   // RtuReq, RtuRsp, RtuReqKind, RtuRspKind,
+                         // RtuBusArbiter (namespace vortex::rtu, with
+                         // vortex:: aliases).
 
 namespace vortex {
 
@@ -45,8 +43,8 @@ class RtuCore;
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// ISA v2 micro-op generator (rtu_isa_v2_proposal.md §5.6). Owned by each
-// per-warp Sequencer; expands the TRACE2 / WAIT2 macro-ops into the uops that
+// Trace micro-op generator. Owned by each
+// per-warp Sequencer; expands the TRACE / WAIT macro-ops into the uops that
 // stream the f0..f7 ray window into the pool slot and retire the hit window.
 // Mirrors TcuUopGen — the architectural encoding names only rd/rs1; the
 // register windows ride HW convention materialized here.
@@ -55,8 +53,8 @@ public:
   RtuUopGen(PoolAllocator<Instr, 64>& pool) : pool_(pool) {}
 
   // Total micro-op count for a macro instruction (>1 means macro-op).
-  //   TRACE2 -> 4  (1 GP config + 3 FP ray)
-  //   WAIT2  -> 7  (1 GP status + 3 FP hit + 3 GP id)
+  //   TRACE -> 4  (1 GP config + 3 FP ray)
+  //   WAIT  -> 7  (1 GP status + 3 FP hit + 3 GP id)
   static uint32_t uop_count(const Instr& instr);
 
   // Generate micro-op Instr at uop_index for the given macro instruction.
@@ -66,14 +64,14 @@ private:
   PoolAllocator<Instr, 64>& pool_;
 };
 
-// Per-core SFU PE for the v2 window ISA (vx_rt_trace2 / vx_rt_wait2 /
+// Per-core SFU PE for the window ISA (vx_rt_wtrace / vx_rt_wait /
 // vx_rt_get[w]f / vx_rt_set1 / vx_rt_cb_ret). Owns the per-(warp,lane) RTU
 // register file. Plain (non-SimObject) helper owned by SfuUnit.
 class RtuUnit {
 public:
-  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, GfxWindow& window);
+  RtuUnit(Core* core, SimChannel<RtuReq>& req_out, RtuWindow& window);
 
-  // §8.6 async ray pool. process_wait either:
+  // Async ray pool. process_wait either:
   //   - returns the trace with the per-lane status word written
   //     into dst_data — fast path, used when TERMINAL already
   //     landed (pending_terminals_) before WAIT issued. Caller does
@@ -87,18 +85,18 @@ public:
   // has no place to deliver.
   instr_trace_t* process_wait(instr_trace_t* trace, uint32_t block_id);
 
-  // §8.6: handle that a WAIT trace will block on. Reads rs1 of the
-  // first active lane (Phase-1 of §8.6 assumes warp-uniform
+  // Handle that a WAIT trace will block on. Reads rs1 of the
+  // first active lane (assumes warp-uniform
   // handles; the divergent case is a follow-up).
   static uint32_t wait_handle(const instr_trace_t* trace);
 
-  // §8.6: would process_wait take the fast (short-circuit) path?
+  // Would process_wait take the fast (short-circuit) path?
   // Used by SfuUnit to gate output.full() before calling
   // process_wait. Returns false (=> park-bound) when the slot's
   // TERMINAL hasn't landed yet.
   bool wait_would_short_circuit(uint32_t wid, uint32_t slot) const;
 
-  // §8.6: called by SfuUnit when an RtuRsp lands. If a matching
+  // Called by SfuUnit when an RtuRsp lands. If a matching
   // wait_parked_ entry exists, returns the parked trace + its
   // block_id and frees the slot; the caller then output.sends the
   // trace. If no wait is parked yet, latches the rsp into
@@ -109,7 +107,7 @@ public:
   };
   PendingWriteback on_terminal_rsp(const RtuRsp& rsp);
 
-  // §8.6: peek whether on_terminal_rsp(rsp) would return a
+  // Peek whether on_terminal_rsp(rsp) would return a
   // writeback (true) or latch the rsp silently (false). If true,
   // also fills *out_block_id with the parked WAIT's output block
   // so SfuUnit can pre-check output.full() before calling
@@ -117,13 +115,19 @@ public:
   // erases the parked entry).
   bool terminal_would_writeback(const RtuRsp& rsp, uint32_t* out_block_id) const;
 
-  // Phase 2: vx_rt_cb_ret releases this warp's parked callback. Reads
-  // per-lane action code from rs1 and emits a CB_ACTION packet through
-  // the bus to RtuCore. Returns nullptr on backpressure (caller retries
-  // next cycle); else the trace, which the SFU forwards to writeback.
+  // Candidate-return counterparts of on_terminal_rsp / terminal_would_writeback.
+  // A non-opaque candidate (AHS / procedural) completes the parked WAIT with a
+  // YIELD status but leaves the slot live (traversal resumes on CONTINUE).
+  PendingWriteback on_candidate_rsp(const RtuRsp& rsp);
+  bool candidate_would_writeback(const RtuRsp& rsp, uint32_t* out_block_id) const;
+
+  // vx_rt_continue emits the per-lane action for the returned candidate. Reads
+  // the action code from rs1 and emits a CB_ACTION packet through the bus to
+  // RtuCore. Returns nullptr on backpressure (caller retries next cycle); else
+  // the trace, which the SFU forwards to writeback.
   instr_trace_t* process_cb_ret(instr_trace_t* trace, uint32_t block_id);
 
-  // ISA v2 (rtu_isa_v2_proposal.md §5.6). One micro-op of a TRACE2 macro:
+  // One micro-op of a TRACE macro:
   //   uop 0 — read lane-packed config (rs1), allocate a pool slot, write the
   //           handle to dst, stage flags/cull/payload/scene.
   //   uop 1..2 — stream origin / direction from the f0..f5 window into the
@@ -131,9 +135,9 @@ public:
   //   uop 3 — stream tmin/tmax (f6/f7), then ARM the slot (build + send the
   //           RtuReq). Returns nullptr on backpressure (pool full at uop 0,
   //           bus full at uop 3); else the trace.
-  instr_trace_t* process_trace2_uop(instr_trace_t* trace, uint32_t block_id, uint32_t uop);
+  instr_trace_t* process_trace_uop(instr_trace_t* trace, uint32_t block_id, uint32_t uop);
 
-  // ISA v2. One micro-op of a WAIT2 macro:
+  // One micro-op of a WAIT macro:
   //   uop 0 — identical to WAIT (park until terminal / short-circuit); the
   //           terminal rsp stages the hit attrs into regfile_ via
   //           apply_response. Returns nullptr when parked (same contract as
@@ -147,12 +151,19 @@ public:
   // attrs, IDs). Called by SfuUnit at rsp drain.
   void apply_response(const RtuRsp& rsp);
 
-  // Apply a CB_YIELD RtuRsp's candidate-hit attrs into the RTU register
-  // file for the yielded lanes. Called by SfuUnit before raising the
-  // async trap into the callback dispatcher.
+  // Apply a candidate (CB_YIELD) RtuRsp's candidate-hit attrs into the RTU
+  // register file for the yielded lanes, so the warp's any-hit / intersection
+  // code reads the right payload before issuing CONTINUE.
   void apply_callback_payload(const RtuRsp& rsp);
 
-  // §8.6 async ray pool: Cluster wires this after RtuCore exists so
+  // Representative slot of a candidate rsp (first active lane's cb_handle).
+  static uint32_t candidate_slot(const RtuRsp& rsp);
+
+  // Per-lane status writeback for a completing WAIT/CONTINUE (see .cpp): a
+  // candidate leaves its non-yielding lanes PENDING (still traversing).
+  static void write_status(instr_trace_t* trace, const RtuRsp& rsp, bool is_candidate);
+
+  // Async ray pool: Cluster wires this after RtuCore exists so
   // RtuUnit can directly call allocate_slot()/free_slot() on the
   // shared cluster-level pool (no SimChannel hop). Both pointers are
   // borrowed — RtuCore outlives RtuUnit (Cluster owns both).
@@ -166,22 +177,22 @@ public:
   bool trace2_reserve_slot(uint32_t wid);
 
 private:
-  // The graphics register window is shared with TEX / OM and owned by SfuUnit
-  // (see gfx_window.h); the RTU borrows it to stream the ray / hit window. The
-  // RTU's trace/wait/terminal paths address it as window_.warp(wid)[lane][slot].
-  GfxWindow&          window_;
+  // The hit window (see rtu/rtu_window.h): traversal RESULTS only. The RTU is its
+  // only writer, the shader its only reader, and the RTU never reads it back. The
+  // response paths address it as window_.warp(wid)[lane][slot].
+  RtuWindow&          window_;
 
   Core*               core_;
   SimChannel<RtuReq>& req_out_;
-  // §8.6 async ray pool. Borrowed from Cluster via set_rtu_core();
-  // null until Cluster has wired it (TRACE/WAIT paths must NEVER
-  // dereference rtu_core_ before that — but in practice Cluster
+  // Async ray pool. Borrowed from the Socket via set_rtu_core();
+  // null until the Socket has wired it (TRACE/WAIT paths must NEVER
+  // dereference rtu_core_ before that — but in practice the Socket
   // calls set_rtu_core() at construction time, before any TRACE
-  // can dispatch). Single shared pool per cluster — alloc/free is
-  // contended across all per-core RtuUnits.
+  // can dispatch). Single shared pool per socket — alloc/free is
+  // contended across that socket's per-core RtuUnits.
   RtuCore*            rtu_core_ = nullptr;
 
-  // §8.6 WAIT-park bookkeeping. Both tables are keyed by slot
+  // WAIT-park bookkeeping. Both tables are keyed by slot
   // handle and indexed by warp_id. wait_parked_ holds WAIT traces
   // whose TERMINAL hasn't landed yet; pending_terminals_ holds
   // TERMINAL rsps that landed before their WAIT issued (rare but
@@ -193,15 +204,39 @@ private:
   std::array<std::unordered_map<uint32_t, RtuRsp>,
              VX_CFG_NUM_WARPS>           pending_terminals_;
 
-  // ISA v2 per-warp cross-uop trace state (rtu_isa_v2_proposal.md §5.6 — the
-  // only state held across the 4-uop TRACE2 expansion: the latched pool-slot
-  // write pointer + the warp-uniform scene pointer staged at uop 0). The ray
-  // geometry itself streams through the existing regfile_ slots (the SimX
-  // realization of "the slot the ray streams into"), so process_trace2_uop's
-  // arm step reuses the Phase-1 process_trace body verbatim.
-  std::array<int32_t, VX_CFG_NUM_WARPS> trace2_slot_;
+  // Lane mask of the candidate most recently returned to each warp. The warp's
+  // CONTINUE applies its actions to exactly these lanes: the SIMT mask at the
+  // CONTINUE also carries lanes that are merely PENDING (still traversing), and
+  // those may have a candidate queued for a later batch, so their garbage action
+  // must not be allowed to resolve it.
+  std::array<uint32_t, VX_CFG_NUM_WARPS>  last_cand_mask_{};
+
+  // Per-warp cross-uop TRACE state. The ray NEVER enters the window: the burst
+  // stages it here and hands it to RtuCore at the arm. The window is result
+  // storage — the RTU writes it, the shader reads it, nothing else touches it.
+  struct TraceRay {
+    std::array<uint32_t, 3> origin{};
+    std::array<uint32_t, 3> dir{};
+    uint32_t t_min = 0;
+    uint32_t t_max = 0;
+  };
+  std::array<int32_t, VX_CFG_NUM_WARPS>  trace_slot_;
+  std::array<std::array<TraceRay, VX_CFG_NUM_THREADS>,
+             VX_CFG_NUM_WARPS>           trace_ray_;
+  // Warp-uniform half of the ray, staged by the config uop: it rides the arm
+  // doorbell in HW, so it is not a window write either.
   std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>,
-             VX_CFG_NUM_WARPS>          trace2_scene_;
+             VX_CFG_NUM_WARPS>           trace_scene_;
+  std::array<uint32_t, VX_CFG_NUM_WARPS> trace_payload_{};
+  std::array<uint32_t, VX_CFG_NUM_WARPS> trace_flags_{};
+  std::array<uint32_t, VX_CFG_NUM_WARPS> trace_cull_{};
+  // The slot handle each lane's outstanding candidate came from, mirrored here
+  // when the candidate is delivered. The CONTINUE routes its action back by this
+  // handle (same-warp reformation can bundle lanes from several slots into one
+  // candidate), and it is read from here, not from the window — the RTU never
+  // reads the window.
+  std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>,
+             VX_CFG_NUM_WARPS>           cb_handle_{};
 };
 
 } // namespace vortex

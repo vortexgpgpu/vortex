@@ -13,8 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# chipStar install for HIP-on-Vortex — see
-# docs/proposals/chipstar_opencl_32bit_proposal.md for the design.
+# chipStar install for HIP-on-Vortex.
 #
 # Builds chipStar (HIP host runtime + hipcc + libCHIP.so) into
 # $TOOLDIR/chipstar, using the Vortex LLVM toolchain

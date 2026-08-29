@@ -33,6 +33,11 @@ module VX_cp_axi_path_top
   output wire [$bits(cmd_t)-1:0]    cmd_out_packed,
   input  wire                       cmd_out_ready,
 
+  // ---- Queue reset controls on the fetch ----
+  input  wire                       fetch_stop_req,
+  input  wire                       fetch_clear,
+  output wire                       fetch_idle,
+
   // ---- Retire pulses to completion ----
   input  wire                       retire_evt,
   input  wire [63:0]                retire_seqnum,
@@ -201,6 +206,9 @@ module VX_cp_axi_path_top
     .cmd_out_valid (cmd_out_valid),
     .cmd_out       (cmd_typed),
     .cmd_out_ready (cmd_out_ready),
+    .stop_req      (fetch_stop_req),
+    .clear         (fetch_clear),
+    .idle          (fetch_idle),
     .axi_m         (fetch_if)
   );
 

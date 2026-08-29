@@ -21,9 +21,11 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     parameter W     = 25,
     parameter WA    = 28,
     parameter EXP_W = 10,
-    parameter USE_DSP = 0   // map mantissa multipliers onto DSP48 slices
+    parameter USE_DSP = 0,  // map mantissa multipliers onto DSP48 slices
+    parameter PROD_REG = 0  // product/flag register stages (multiply-stage seam)
 ) (
     input wire                      clk,
+    input wire                      enable,
     input wire                      valid_in,
     input wire [31:0]               req_id,
 
@@ -37,21 +39,40 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     input wire [7:0]                sf_b,
 `endif
 
+    // result_exp/exceptions are pre-seam (classify cycle); result_sig and
+    // sig_zero are post-seam (PROD_REG cycles later). sig_zero flags exact
+    // cancellation of the term sum: the joined exponent must be zeroed so
+    // the lane is excluded from the max-exponent search.
     output logic [TCK-1:0][24:0]      result_sig,
     output logic [TCK-1:0][EXP_W-1:0] result_exp,
-    output fedp_excep_t [TCK-1:0]     exceptions
+    output fedp_excep_t [TCK-1:0]     exceptions,
+    output logic [TCK-1:0]            sig_zero
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_SPARAM (W)
-    `UNUSED_VAR ({clk, req_id, valid_in, fmt_f})
+    `UNUSED_VAR ({clk, enable, req_id, valid_in, fmt_f})
 
 `ifdef VX_CFG_TCU_MX_ENABLE
 `ifdef VX_CFG_TCU_FP4_ENABLE
+
+    // Post-seam format select for the significand path.
+    wire [3:0] fmt_f_r;
+    VX_pipe_register #(
+        .DATAW (4),
+        .DEPTH (PROD_REG)
+    ) pipe_fmt (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  (fmt_f),
+        .data_out (fmt_f_r)
+    );
 
 `ifdef VX_CFG_TCU_MXFP4_ENABLE
     wire [TCK-1:0][24:0]      result_sig_mxfp4;
     wire [TCK-1:0][EXP_W-1:0] result_exp_mxfp4;
     fedp_excep_t [TCK-1:0]    exceptions_mxfp4;
+    wire [TCK-1:0]            sig_zero_mxfp4;
 
     localparam F32_BIAS_MXFP4  = 127;
     localparam S_FP32_MXFP4    = 23;
@@ -107,15 +128,18 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                                                 + 10'(b_exp));
 
             assign term_exp_biased[j] = term_valid[j] ? exp_biased_raw : '0;
-            assign term_mag_shifted[j] = term_valid[j] ? (24'(f4_man_prod[j]) << SIG_SHIFT_MXFP4) : 24'd0;
         end
 
-        // Pack the four 2x2 mantissa products into two DSP48s (two per DSP).
+        // Pack the four 2x2 mantissa products into two DSP48s (two per DSP);
+        // PROD_REG lands the products in the DSP48 PREG.
         VX_tcu_tfr_wmul #(
             .N       (2),
             .LANES   (2),
-            .USE_DSP (USE_DSP)
+            .USE_DSP (USE_DSP),
+            .OUT_REG (PROD_REG)
         ) f4m01 (
+            .clk    (clk),
+            .enable (enable),
             .a (a_man[1:0]),
             .b (b_man[1:0]),
             .p (f4_man_prod[1:0])
@@ -123,8 +147,11 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         VX_tcu_tfr_wmul #(
             .N       (2),
             .LANES   (2),
-            .USE_DSP (USE_DSP)
+            .USE_DSP (USE_DSP),
+            .OUT_REG (PROD_REG)
         ) f4m23 (
+            .clk    (clk),
+            .enable (enable),
             .a (a_man[3:2]),
             .b (b_man[3:2]),
             .p (f4_man_prod[3:2])
@@ -134,9 +161,24 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [EXP_TERM_W_MXFP4-1:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];
         wire [EXP_TERM_W_MXFP4-1:0] max_exp_biased = (max_exp_01 >= max_exp_23) ? max_exp_01 : max_exp_23;
 
+        // Term alignment controls depend only on exponents and signs:
+        // pre-seam compute, post-seam use.
+        wire [3:0] term_valid_r, term_sign_r;
+        wire [3:0][EXP_TERM_W_MXFP4-1:0] shift_amt_r;
+        wire [3:0][EXP_TERM_W_MXFP4-1:0] shift_amt_w;
+        VX_pipe_register #(
+            .DATAW (4 + 4 + 4 * EXP_TERM_W_MXFP4),
+            .DEPTH (PROD_REG)
+        ) pipe_ctrl (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  ({term_valid,   term_sign,   shift_amt_w}),
+            .data_out ({term_valid_r, term_sign_r, shift_amt_r})
+        );
+
         wire [3:0][26:0] term_signed;
         for (genvar j = 0; j < 4; ++j) begin : g_align
-            wire [EXP_TERM_W_MXFP4-1:0] shift_amt;
             VX_ks_adder #(
                 .N(EXP_TERM_W_MXFP4),
                 .BYPASS(`FORCE_BUILTIN_ADDER(EXP_TERM_W_MXFP4))
@@ -144,11 +186,12 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                 .dataa(max_exp_biased),
                 .datab(~term_exp_biased[j]),
                 .cin(1'b1),
-                .sum(shift_amt),
+                .sum(shift_amt_w[j]),
                 `UNUSED_PIN(cout)
             );
 
-            wire [23:0] aligned_mag = (shift_amt >= EXP_TERM_W_MXFP4'(24)) ? 24'd0 : (term_mag_shifted[j] >> shift_amt[4:0]);
+            assign term_mag_shifted[j] = term_valid_r[j] ? (24'(f4_man_prod[j]) << SIG_SHIFT_MXFP4) : 24'd0;
+            wire [23:0] aligned_mag = (shift_amt_r[j] >= EXP_TERM_W_MXFP4'(24)) ? 24'd0 : (term_mag_shifted[j] >> shift_amt_r[j][4:0]);
             wire [26:0] aligned_ext = {3'b0, aligned_mag};
 
             wire [26:0] neg_term;
@@ -163,7 +206,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                 `UNUSED_PIN(cout)
             );
 
-            assign term_signed[j] = term_sign[j] ? neg_term : aligned_ext;
+            assign term_signed[j] = term_sign_r[j] ? neg_term : aligned_ext;
         end
 
         wire [26:0] sum_vec, carry_vec;
@@ -206,11 +249,13 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire is_zero_out = ~|abs_sum;
 
         assign result_sig_mxfp4[i] = {sum_sign & ~is_zero_out, abs_sum[23:0]};
-        assign result_exp_mxfp4[i] = is_zero_out ? '0 : (EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED_MXFP4));
+        assign sig_zero_mxfp4[i]   = is_zero_out;
+        assign result_exp_mxfp4[i] = EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED_MXFP4);
 
+        // The sign field is only consumed for infinity lanes downstream.
         assign exceptions_mxfp4[i].is_nan = 1'b0;
         assign exceptions_mxfp4[i].is_inf = 1'b0;
-        assign exceptions_mxfp4[i].sign   = sum_sign & ~is_zero_out;
+        assign exceptions_mxfp4[i].sign   = 1'b0;
     end
 `endif  // VX_CFG_TCU_MXFP4_ENABLE
 
@@ -218,6 +263,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     wire [TCK-1:0][24:0]      result_sig_nvfp4;
     wire [TCK-1:0][EXP_W-1:0] result_exp_nvfp4;
     fedp_excep_t [TCK-1:0]    exceptions_nvfp4;
+    wire [TCK-1:0]            sig_zero_nvfp4;
 
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
@@ -251,6 +297,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .N(4),
             .USE_DSP(USE_DSP)
         ) sf_wtmul (
+            .clk    (clk),
+            .enable (enable),
             .a(sf_man_a),
             .b(sf_man_b),
             .p(sf_man_prod)
@@ -309,7 +357,6 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             );
 
             assign term_exp_biased[j] = term_valid[j] ? exp_biased_raw : 6'd0;
-            assign term_mag_shifted[j] = term_valid[j] ? (24'(term_man_prod[j][10:0]) << SIG_SHIFT) : 24'd0;
         end
 
         // Pack the four 2x2 mantissa products into two DSP48s.
@@ -318,6 +365,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .LANES   (2),
             .USE_DSP (USE_DSP)
         ) f4m01 (
+            .clk    (clk),
+            .enable (enable),
             .a (a_man[1:0]),
             .b (b_man[1:0]),
             .p (f4_man_prod[1:0])
@@ -327,6 +376,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .LANES   (2),
             .USE_DSP (USE_DSP)
         ) f4m23 (
+            .clk    (clk),
+            .enable (enable),
             .a (a_man[3:2]),
             .b (b_man[3:2]),
             .p (f4_man_prod[3:2])
@@ -334,13 +385,17 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 
         // Each term scales its 2x2 product by the SHARED per-lane scale-factor
         // mantissa (sf_man_prod) -> shared-operand packing, two terms per DSP48.
+        // PROD_REG lands the scaled products in the DSP48 PREG.
         VX_tcu_tfr_wmul #(
             .N        (4),
             .M        (8),
             .LANES    (2),
             .SHARED_B (1),
-            .USE_DSP  (USE_DSP)
+            .USE_DSP  (USE_DSP),
+            .OUT_REG  (PROD_REG)
         ) tm01 (
+            .clk    (clk),
+            .enable (enable),
             .a (f4_man_prod[1:0]),
             .b ({8'b0, sf_man_prod}),
             .p (term_man_prod[1:0])
@@ -350,8 +405,11 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .M        (8),
             .LANES    (2),
             .SHARED_B (1),
-            .USE_DSP  (USE_DSP)
+            .USE_DSP  (USE_DSP),
+            .OUT_REG  (PROD_REG)
         ) tm23 (
+            .clk    (clk),
+            .enable (enable),
             .a (f4_man_prod[3:2]),
             .b ({8'b0, sf_man_prod}),
             .p (term_man_prod[3:2])
@@ -361,9 +419,24 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [5:0] max_exp_23 = (term_exp_biased[2] >= term_exp_biased[3]) ? term_exp_biased[2] : term_exp_biased[3];
         wire [5:0] max_exp_biased = (max_exp_01 >= max_exp_23) ? max_exp_01 : max_exp_23;
 
+        // Term alignment controls depend only on exponents and signs:
+        // pre-seam compute, post-seam use.
+        wire [3:0] term_valid_r, term_sign_r;
+        wire [3:0][5:0] shift_amt_r;
+        wire [3:0][5:0] shift_amt_w;
+        VX_pipe_register #(
+            .DATAW (4 + 4 + 4 * 6),
+            .DEPTH (PROD_REG)
+        ) pipe_ctrl (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  ({term_valid,   term_sign,   shift_amt_w}),
+            .data_out ({term_valid_r, term_sign_r, shift_amt_r})
+        );
+
         wire [3:0][26:0] term_signed;
         for (genvar j = 0; j < 4; ++j) begin : g_align
-            wire [5:0] shift_amt;
             VX_ks_adder #(
                 .N(6),
                 .BYPASS(`FORCE_BUILTIN_ADDER(6))
@@ -371,11 +444,12 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                 .dataa(max_exp_biased),
                 .datab(~term_exp_biased[j]),
                 .cin(1'b1),
-                .sum(shift_amt),
+                .sum(shift_amt_w[j]),
                 `UNUSED_PIN(cout)
             );
 
-            wire [23:0] aligned_mag = (shift_amt >= 6'd24) ? 24'd0 : (term_mag_shifted[j] >> shift_amt[4:0]);
+            assign term_mag_shifted[j] = term_valid_r[j] ? (24'(term_man_prod[j][10:0]) << SIG_SHIFT) : 24'd0;
+            wire [23:0] aligned_mag = (shift_amt_r[j] >= 6'd24) ? 24'd0 : (term_mag_shifted[j] >> shift_amt_r[j][4:0]);
             wire [26:0] aligned_ext = {3'b0, aligned_mag};
 
             wire [26:0] neg_term;
@@ -390,7 +464,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                 `UNUSED_PIN(cout)
             );
 
-            assign term_signed[j] = term_sign[j] ? neg_term : aligned_ext;
+            assign term_signed[j] = term_sign_r[j] ? neg_term : aligned_ext;
         end
 
         wire [26:0] sum_vec, carry_vec;
@@ -433,37 +507,60 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire is_zero_out = ~|abs_sum;
 
         assign result_sig_nvfp4[i] = {sum_sign & ~is_zero_out, abs_sum[23:0]};
-        assign result_exp_nvfp4[i] = is_zero_out ? '0 : (EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED));
+        assign sig_zero_nvfp4[i]   = is_zero_out;
+        assign result_exp_nvfp4[i] = EXP_W'(max_exp_biased) + EXP_W'(EXP_BASE_BIASED);
 
+        // The sign field is only consumed for infinity lanes downstream.
         assign exceptions_nvfp4[i].is_nan = 1'b0;
         assign exceptions_nvfp4[i].is_inf = 1'b0;
-        assign exceptions_nvfp4[i].sign   = sum_sign & ~is_zero_out;
+        assign exceptions_nvfp4[i].sign   = 1'b0;
     end
 `endif  // VX_CFG_TCU_NVFP4_ENABLE
 
+    // Exponent/exception outputs join at pre-seam timing; significand and
+    // sig_zero outputs join at post-seam timing.
     always_comb begin
-        result_sig = '0;
         result_exp = '0;
         exceptions = '0;
         case (fmt_f)
         `ifdef VX_CFG_TCU_MXFP4_ENABLE
             4'(TCU_MXFP4_ID): begin
-                result_sig = result_sig_mxfp4;
                 result_exp = result_exp_mxfp4;
                 exceptions = exceptions_mxfp4;
             end
         `endif
         `ifdef VX_CFG_TCU_NVFP4_ENABLE
             4'(TCU_NVFP4_ID): begin
-                result_sig = result_sig_nvfp4;
                 result_exp = result_exp_nvfp4;
                 exceptions = exceptions_nvfp4;
             end
         `endif
             default: begin
-                result_sig = '0;
                 result_exp = '0;
                 exceptions = '0;
+            end
+        endcase
+    end
+
+    always_comb begin
+        result_sig = '0;
+        sig_zero   = '0;
+        case (fmt_f_r)
+        `ifdef VX_CFG_TCU_MXFP4_ENABLE
+            4'(TCU_MXFP4_ID): begin
+                result_sig = result_sig_mxfp4;
+                sig_zero   = sig_zero_mxfp4;
+            end
+        `endif
+        `ifdef VX_CFG_TCU_NVFP4_ENABLE
+            4'(TCU_NVFP4_ID): begin
+                result_sig = result_sig_nvfp4;
+                sig_zero   = sig_zero_nvfp4;
+            end
+        `endif
+            default: begin
+                result_sig = '0;
+                sig_zero   = '0;
             end
         endcase
     end

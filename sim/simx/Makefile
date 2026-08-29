@@ -59,6 +59,8 @@ endif
 ifneq ($(filter -DVX_CFG_VM_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/mem/mmu.cpp
 	SRCS += $(SRC_DIR)/mem/mmu_tlb.cpp
+	SRCS += $(SRC_DIR)/mem/tlb_l2.cpp
+	SRCS += $(SRC_DIR)/mem/ptw.cpp
 endif
 
 # Add DXA extension sources
@@ -90,7 +92,7 @@ ifneq ($(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/raster/raster_core.cpp
 endif
 
-# Add RTU extension sources (PRISM Phase 1)
+# Add RTU extension sources
 ifneq ($(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/rtu/rtu_core.cpp
 	SRCS += $(SRC_DIR)/rtu/rtu_unit.cpp

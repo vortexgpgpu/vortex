@@ -17,9 +17,11 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter N   = 2,
     parameter TCK = 2 * N,
-    parameter USE_DSP = 0   // map the int4 multiplies onto DSP48 slices
+    parameter USE_DSP = 0,  // map the int4 multiplies onto DSP48 slices
+    parameter PROD_REG = 0  // product/flag register stages (multiply-stage seam)
 ) (
     input wire                      clk,
+    input wire                      enable,
     input wire                      valid_in,
     input wire [31:0]               req_id,
 
@@ -36,6 +38,19 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
 
     wire is_signed_int = fmt_i[3] || tcu_fmt_is_signed_int(fmt_i);
 
+    // Result-select format, delayed to post-seam timing.
+    wire [3:0] fmt_i_r;
+    VX_pipe_register #(
+        .DATAW (4),
+        .DEPTH (PROD_REG)
+    ) pipe_fmt (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  (fmt_i),
+        .data_out (fmt_i_r)
+    );
+
     // Multiplication and accumulation
     for (genvar i = 0; i < TCK; ++i) begin : g_lane
 
@@ -49,6 +64,19 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
             assign raw_b[j]  = b_col[i/2][(i%2)*16 + j*4 +: 4];
             assign pvalid[j] = vld_mask[i * 4 + j];
         end
+
+        // Invalid lanes are masked post-seam so the DSP input cone stays flat.
+        wire [3:0] pvalid_r;
+        VX_pipe_register #(
+            .DATAW (4),
+            .DEPTH (PROD_REG)
+        ) pipe_valid (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  (pvalid),
+            .data_out (pvalid_r)
+        );
 
         if (USE_DSP != 0) begin : g_dsp
             // a*b == sign(a^b) * (|a|*|b|): pack two unsigned 4x4 magnitude
@@ -67,8 +95,11 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
             VX_tcu_tfr_wmul #(
                 .N       (4),
                 .LANES   (2),
-                .USE_DSP (1)
+                .USE_DSP (1),
+                .OUT_REG (PROD_REG)
             ) m01 (
+                .clk    (clk),
+                .enable (enable),
                 .a (mag_a[1:0]),
                 .b (mag_b[1:0]),
                 .p (magp[1:0])
@@ -76,23 +107,48 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
             VX_tcu_tfr_wmul #(
                 .N       (4),
                 .LANES   (2),
-                .USE_DSP (1)
+                .USE_DSP (1),
+                .OUT_REG (PROD_REG)
             ) m23 (
+                .clk    (clk),
+                .enable (enable),
                 .a (mag_a[3:2]),
                 .b (mag_b[3:2]),
                 .p (magp[3:2])
             );
+            wire [3:0] psign_r;
+            VX_pipe_register #(
+                .DATAW (4),
+                .DEPTH (PROD_REG)
+            ) pipe_sign (
+                .clk      (clk),
+                .reset    (1'b0),
+                .enable   (enable),
+                .data_in  (psign),
+                .data_out (psign_r)
+            );
             for (genvar j = 0; j < 4; ++j) begin : g_sign
-                wire signed [9:0] pf = psign[j] ? -$signed({2'b0, magp[j]})
-                                                :  $signed({2'b0, magp[j]});
-                assign y_prod_i4[j] = pf & {10{pvalid[j]}};
+                wire signed [9:0] pf = psign_r[j] ? -$signed({2'b0, magp[j]})
+                                                  :  $signed({2'b0, magp[j]});
+                assign y_prod_i4[j] = pf & {10{pvalid_r[j]}};
             end
         end else begin : g_lut
             for (genvar j = 0; j < 4; ++j) begin : g_mul
                 wire signed [4:0] s_a = is_signed_int ? $signed({raw_a[j][3], raw_a[j]}) : $signed({1'b0, raw_a[j]});
                 wire signed [4:0] s_b = is_signed_int ? $signed({raw_b[j][3], raw_b[j]}) : $signed({1'b0, raw_b[j]});
                 wire signed [9:0] prod_full = s_a * s_b;
-                assign y_prod_i4[j] = prod_full & {10{pvalid[j]}};
+                wire [9:0] prod_r;
+                VX_pipe_register #(
+                    .DATAW (10),
+                    .DEPTH (PROD_REG)
+                ) pipe_prod (
+                    .clk      (clk),
+                    .reset    (1'b0),
+                    .enable   (enable),
+                    .data_in  (prod_full),
+                    .data_out (prod_r)
+                );
+                assign y_prod_i4[j] = prod_r & {10{pvalid_r[j]}};
             end
         end
 
@@ -121,7 +177,7 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
 
         // Output muxing
         always_comb begin
-            case ({1'b1, fmt_i})
+            case ({1'b1, fmt_i_r})
                 TCU_I4_ID: result[i] = 25'($signed(y_i4_add_res));
                 TCU_U4_ID: result[i] = {15'b0, y_i4_add_res};
                 default:   result[i] = '0;

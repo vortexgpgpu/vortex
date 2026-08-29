@@ -178,7 +178,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.cells) }}
     runs-on: ubuntu-22.04
-    timeout-minutes: 120
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - name: Setup Vortex
@@ -202,14 +202,14 @@ jobs:
           chmod -R +x .
           EXPR="${{ matrix.category }}"
           [ "${{ matrix.driver }}" != "host" ] && EXPR="$EXPR and ${{ matrix.driver }}"
-          # model_parity / perf_gate are cross-cutting check markers with
-          # their own dedicated cells; exclude them from every other category's
-          # cell so a distributed check spec runs once (in its check cell), not
-          # twice (also in its owning category's cell).
-          case "${{ matrix.category }}" in
-            model_parity|perf_gate) ;;
-            *) EXPR="$EXPR and not model_parity and not perf_gate" ;;
-          esac
+          # A cross-cutting check (model_parity, perf_gate) has its own dedicated
+          # cell whose `-m <check>` sweeps every such case catalog-wide; exclude
+          # those cases from every OTHER category's cell so each runs once, not
+          # twice. The check list comes from the planner, never a copy of it.
+          for c in $(python3 ci/testcase.py checks); do
+            [ "${{ matrix.category }}" = "$c" ] && continue
+            EXPR="$EXPR and not $c"
+          done
           VX_XLEN=${{ matrix.xlen }} python3 -m pytest ci -m "$EXPR" --strict-markers \
             -v \
             --junitxml="$GITHUB_WORKSPACE/junit-${{ matrix.category }}-${{ matrix.driver }}-${{ matrix.xlen }}.xml"

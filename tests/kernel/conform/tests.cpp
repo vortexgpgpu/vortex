@@ -398,3 +398,54 @@ int test_shfl() {
   vx_tmc_one(); // back to thread0
 	return check_error(shfl_buffer, 0, num_threads);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+#define QSHFL_GROUP_SZ 4
+int qshfl_buffer[QSHFL_GROUP_SZ];
+
+// Every lane's XOR-1 partner is inactive here, so the segment-scoped shuffle
+// must fall back to the reader's own value rather than read a masked lane's
+// stale register.
+void __attribute__((noinline)) do_qshfl_masked() {
+	int tid = vx_thread_id();
+	int value = 65 + tid;
+	int v_bfly = vx_shfl_bfly(value, 1, VX_QUAD_CVAL, VX_QUAD_MASK);
+	qshfl_buffer[tid] = (v_bfly == value) ? (65 + tid) : 0;
+}
+
+// With the whole quad active, the same shuffle reads the neighbour.
+void __attribute__((noinline)) do_qshfl_full() {
+	int tid = vx_thread_id();
+	int value = 65 + tid;
+	int v_bfly = vx_shfl_bfly(value, 1, VX_QUAD_CVAL, VX_QUAD_MASK);
+	int v_bfly2 = vx_shfl_bfly(value, 2, VX_QUAD_CVAL, VX_QUAD_MASK);
+	int passed = (v_bfly == (65 + (tid ^ 1))) && (v_bfly2 == (65 + (tid ^ 2)));
+	qshfl_buffer[tid] = passed ? (65 + tid) : 0;
+}
+
+int test_qshfl() {
+	PRINTF("Quad Shuffle Test\n");
+	if (vx_num_threads() < QSHFL_GROUP_SZ) {
+		return 0; // a quad does not fit in this warp
+	}
+
+	// masked-source-lane rule: activate lanes 0 and 2 only, so each active
+	// lane's partner is masked. The inactive lanes' slots are pre-seeded so the
+	// shared checker only sees what the active lanes wrote.
+	for (int i = 0; i < QSHFL_GROUP_SZ; ++i) {
+		qshfl_buffer[i] = 65 + i;
+	}
+	vx_tmc(0x5);
+	do_qshfl_masked();
+	vx_tmc_one();
+	int errors = check_error(qshfl_buffer, 0, QSHFL_GROUP_SZ);
+
+	// whole quad active: the shuffle reads its neighbours
+	vx_tmc(make_full_tmask(QSHFL_GROUP_SZ));
+	do_qshfl_full();
+	vx_tmc_one();
+	errors += check_error(qshfl_buffer, 0, QSHFL_GROUP_SZ);
+
+	return errors;
+}

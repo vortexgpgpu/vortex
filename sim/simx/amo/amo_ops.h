@@ -33,9 +33,13 @@ struct AmoComputeResult {
   uint64_t ret_word;
 };
 
+// `cmp` is the comparand, and only compare-and-swap reads it: that op stores
+// `rhs` when the loaded word equals `cmp` and leaves memory alone otherwise.
+// Every other op ignores it.
 inline AmoComputeResult amo_compute(MemOp op, uint8_t width,
                                     uint64_t old_word, uint64_t rhs,
-                                    bool unsigned_minmax = false) {
+                                    bool unsigned_minmax = false,
+                                    uint64_t cmp = 0) {
   // Mask both inputs to width-sized values; sign-extension at the
   // word boundary is needed for signed comparisons (MIN/MAX).
   const bool is_w = (width == 2);
@@ -63,6 +67,7 @@ inline AmoComputeResult amo_compute(MemOp op, uint8_t width,
                                                 : (uint64_t)((ai < bi) ? ai : bi); break;
   case MemOp::AMO_MAX:   newv = unsigned_minmax ? ((a > b) ? a : b)
                                                 : (uint64_t)((ai > bi) ? ai : bi); break;
+  case MemOp::AMO_CAS:   newv = (a == (is_w ? mask_w(cmp) : cmp)) ? b : a; break;
   default:
     std::abort();
   }

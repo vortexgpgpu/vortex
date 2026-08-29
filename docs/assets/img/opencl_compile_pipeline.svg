@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 560" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="ca" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .in   { fill:#eef2f6; stroke:#5a7184; stroke-width:1.5; }
+    .fe   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.6; }
+    .vx   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.7; }
+    .out  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.7; }
+    .t    { fill:#1b2733; font-size:18px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:13px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tm   { font-family:"DejaVu Sans Mono", monospace; font-size:10.5px; fill:#33404c; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.9; fill:none; marker-end:url(#ca); }
+    .lbl  { fill:#33404c; font-size:10.5px; }
+    .stage{ fill:#8a6d00; font-size:11px; font-weight:bold; }
+  </style>
+
+  <rect x="0" y="0" width="1180" height="560" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Program build — OpenCL C / SPIR-V to a Vortex .vxbin</text>
+  <text x="24" y="55" class="tt">clBuildProgram (or clCreateProgramWithIL) → PoCL central pipeline → the Vortex post_build_program hook</text>
+
+  <!-- Row 1: front end -->
+  <text x="24" y="92" class="stage">Front end (PoCL core)</text>
+  <rect x="24" y="102" width="150" height="64" rx="6" class="in"/>
+  <text x="99" y="128" class="th" text-anchor="middle">OpenCL C</text>
+  <text x="99" y="146" class="tt" text-anchor="middle">or SPIR-V</text>
+  <text x="99" y="160" class="tt" text-anchor="middle">(ENABLE_SPIRV)</text>
+
+  <path d="M 174 134 L 214 134" class="flow"/>
+  <rect x="214" y="102" width="160" height="64" rx="6" class="fe"/>
+  <text x="294" y="126" class="th" text-anchor="middle">Clang / spirv_parser</text>
+  <text x="294" y="146" class="ts" text-anchor="middle">→ LLVM IR</text>
+  <text x="294" y="160" class="tt" text-anchor="middle">riscv{32,64}, xvortex</text>
+
+  <path d="M 374 134 L 414 134" class="flow"/>
+  <rect x="414" y="102" width="170" height="64" rx="6" class="fe"/>
+  <text x="499" y="126" class="th" text-anchor="middle">llvm-link builtins</text>
+  <text x="499" y="146" class="tm" text-anchor="middle">kernel-riscv32.bc</text>
+  <text x="499" y="160" class="tt" text-anchor="middle">math/atomics/images/…</text>
+
+  <path d="M 584 134 L 624 134" class="flow"/>
+  <rect x="624" y="102" width="160" height="64" rx="6" class="fe"/>
+  <text x="704" y="126" class="th" text-anchor="middle">work-group passes</text>
+  <text x="704" y="146" class="ts" text-anchor="middle">run_passes_on_program</text>
+  <text x="704" y="160" class="tt" text-anchor="middle">verifyModule guards</text>
+
+  <!-- down to row 2 -->
+  <path d="M 704 166 L 704 196 L 704 226" class="flow"/>
+  <text x="716" y="192" class="lbl">module verified</text>
+
+  <!-- Row 2: vortex transform -->
+  <text x="516" y="222" class="stage">Vortex transform (vortex_utils.cc)</text>
+  <rect x="560" y="226" width="290" height="96" rx="6" class="vx"/>
+  <text x="705" y="248" class="th" text-anchor="middle">processKernels — argument-buffer wrapper</text>
+  <text x="574" y="268" class="ts">each kernel → wrapper that unpacks args from one</text>
+  <text x="574" y="283" class="ts">device buffer; tagged </text>
+  <text x="700" y="283" class="tm">vortex-kernel</text>
+  <text x="574" y="302" class="tt">in-module callees cloned to a .callee copy first,</text>
+  <text x="574" y="316" class="tt">so the moved body leaves no dangling call</text>
+
+  <path d="M 560 274 L 400 274" class="flow"/>
+  <text x="410" y="266" class="lbl">verify after transform</text>
+
+  <!-- down to row 3 -->
+  <path d="M 705 322 L 705 352" class="flow"/>
+
+  <text x="516" y="348" class="stage">Backend + link (compile_vortex_program)</text>
+  <rect x="470" y="356" width="470" height="86" rx="6" class="vx"/>
+  <text x="705" y="378" class="th" text-anchor="middle">codegen → object → ELF link</text>
+  <text x="484" y="398" class="tm">libvortex2.a</text>
+  <text x="560" y="398" class="ts">(device runtime: vx_vprintf, KMU entry)  +</text>
+  <text x="484" y="416" class="tm">libc.a</text>
+  <text x="530" y="416" class="ts">(newlib: cbrt/erf/hypot/tgamma/… libm symbols)</text>
+  <text x="484" y="433" class="tt">--gc-sections drops the unreferenced; linked at a per-program 16MB code slot</text>
+
+  <path d="M 470 399 L 300 399" class="flow"/>
+  <rect x="60" y="356" width="240" height="86" rx="6" class="out"/>
+  <text x="180" y="380" class="th" text-anchor="middle">.vxbin</text>
+  <text x="74" y="401" class="ts">vxbin.py objcopy packages the ELF</text>
+  <text x="74" y="420" class="tm">vx_module_load_file</text>
+  <text x="74" y="435" class="tt">one vx_module per program; kernels</text>
+
+  <path d="M 180 442 L 180 478" class="flow"/>
+  <rect x="60" y="478" width="240" height="46" rx="6" class="out"/>
+  <text x="180" y="500" class="th" text-anchor="middle">vx_module — resident on device</text>
+  <text x="180" y="516" class="tt" text-anchor="middle">vx_module_get_kernel per named entry</text>
+
+  <text x="470" y="500" class="tt">The .bc is intentionally not self-contained: libm / KMU globals / vx_vprintf stay</text>
+  <text x="470" y="516" class="tt">undefined and resolve at ELF link — a truly missing builtin fails loudly here.</text>
+</svg>

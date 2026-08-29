@@ -30,8 +30,19 @@ module VX_mem_scheduler #(
     // staging depth so clients can provision extra memory-level parallelism.
     parameter PENDING_SIZE  = CORE_QUEUE_SIZE,
     parameter RSP_PARTIAL   = 0,
+    // 0 for a client that only ever reads: the staging queue then drops the
+    // write-data field, which is the bulk of an entry once CORE_REQS is large.
+    parameter RW_ENABLE     = 1,
     parameter CORE_OUT_BUF  = 0,
     parameter MEM_OUT_BUF   = 0,
+    parameter LUTRAM        = 0,
+    // Distributed RAM for the staging queue, kept separate from LUTRAM above
+    // because the two differ by orders of magnitude in width. A staging entry
+    // is CORE_REQS requests wide; once that is large, block RAM holds a few
+    // entries across dozens of tiles at a percent of their capacity, scattered,
+    // all feeding the one output register -- which then cannot be placed near
+    // its own data. Distributed RAM lands in the slices that hold that register.
+    parameter REQQ_LUTRAM   = 0,
 
     parameter WORD_WIDTH    = WORD_SIZE * 8,
     parameter LINE_WIDTH    = LINE_SIZE * 8,
@@ -172,20 +183,43 @@ module VX_mem_scheduler #(
         assign reqq_tag_u = ibuf_waddr;
     end
 
-    VX_elastic_buffer #(
-        .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(USER_WIDTH) + WORD_WIDTH) + REQQ_TAG_WIDTH),
-        .SIZE    (CORE_QUEUE_SIZE),
-        .OUT_REG (1)
-    ) req_queue (
-        .clk      (clk),
-        .reset    (reset),
-        .valid_in (reqq_valid_in),
-        .ready_in (reqq_ready_in),
-        .data_in  ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_user, core_req_data, reqq_tag_u}),
-        .data_out ({reqq_rw,     reqq_mask,     reqq_byteen,     reqq_addr,     reqq_user,     reqq_data,     reqq_tag}),
-        .valid_out(reqq_valid),
-        .ready_out(reqq_ready)
-    );
+    if (RW_ENABLE != 0) begin : g_req_queue_rw
+        VX_elastic_buffer #(
+            .DATAW   (1 + CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(USER_WIDTH) + WORD_WIDTH) + REQQ_TAG_WIDTH),
+            .SIZE    (CORE_QUEUE_SIZE),
+            .OUT_REG (1),
+            .LUTRAM  (REQQ_LUTRAM)
+        ) req_queue (
+            .clk      (clk),
+            .reset    (reset),
+            .valid_in (reqq_valid_in),
+            .ready_in (reqq_ready_in),
+            .data_in  ({core_req_rw, core_req_mask, core_req_byteen, core_req_addr, core_req_user, core_req_data, reqq_tag_u}),
+            .data_out ({reqq_rw,     reqq_mask,     reqq_byteen,     reqq_addr,     reqq_user,     reqq_data,     reqq_tag}),
+            .valid_out(reqq_valid),
+            .ready_out(reqq_ready)
+        );
+    end else begin : g_req_queue_ro
+        `UNUSED_VAR (core_req_rw)
+        `UNUSED_VAR (core_req_data)
+        assign reqq_rw   = 1'b0;
+        assign reqq_data = '0;
+        VX_elastic_buffer #(
+            .DATAW   (CORE_REQS * (1 + WORD_SIZE + ADDR_WIDTH + `UP(USER_WIDTH)) + REQQ_TAG_WIDTH),
+            .SIZE    (CORE_QUEUE_SIZE),
+            .OUT_REG (1),
+            .LUTRAM  (REQQ_LUTRAM)
+        ) req_queue (
+            .clk      (clk),
+            .reset    (reset),
+            .valid_in (reqq_valid_in),
+            .ready_in (reqq_ready_in),
+            .data_in  ({core_req_mask, core_req_byteen, core_req_addr, core_req_user, reqq_tag_u}),
+            .data_out ({reqq_mask,     reqq_byteen,     reqq_addr,     reqq_user,     reqq_tag}),
+            .valid_out(reqq_valid),
+            .ready_out(reqq_ready)
+        );
+    end
 
     // can accept another request?
     assign core_req_ready = reqq_ready_in && ibuf_ready;
@@ -208,7 +242,8 @@ module VX_mem_scheduler #(
 
     VX_index_buffer #(
         .DATAW (TAG_ID_WIDTH),
-        .SIZE  (PENDING_SIZE)
+        .SIZE  (PENDING_SIZE),
+        .LUTRAM(LUTRAM)
     ) req_ibuf (
         .clk          (clk),
         .reset        (reset),
@@ -465,6 +500,16 @@ module VX_mem_scheduler #(
             end
         end
 
+        // rsp_rem_mask and rsp_sop_r below both write the incoming request's
+        // slot before writing the retiring one's, so if a slot is acquired in
+        // the same cycle a response for it is consumed, the retiring packet's
+        // update lands last and the new occupant inherits its remainder. A zero
+        // remainder marks the new load complete on its first beat, releasing the
+        // slot while lanes are still outstanding; those later lanes then answer
+        // against a reallocated slot and carry another instruction's rd.
+        `RUNTIME_ASSERT(~(ibuf_push && mem_rsp_fire_s && (ibuf_waddr == ibuf_raddr)),
+            ("%t: *** slot %0d acquired while a response for it is consumed", $time, ibuf_waddr))
+
         wire rsp_complete = ~(| rsp_rem_mask_n) || (CORE_REQS == 1);
 
         if (RSP_PARTIAL != 0) begin : g_rsp_partial
@@ -527,7 +572,12 @@ module VX_mem_scheduler #(
                 assign crsp_data[r] = rsp_store_n[j][i];
             end
 
-            assign mem_rsp_ready_s = crsp_ready || ~rsp_complete;
+            // The completion test reduces over every lane of the request, and
+            // this is where that reduction entered the response store's own
+            // write enable, once per lane. Gating only on room in the output
+            // buffer costs throughput while the caller is already stalling,
+            // which is the one time there is nothing to gain by accepting.
+            assign mem_rsp_ready_s = crsp_ready;
         end
 
         assign crsp_eop = rsp_complete;

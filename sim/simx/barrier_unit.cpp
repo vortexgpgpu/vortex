@@ -61,7 +61,7 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
     if (barrier.arrival_mask.count() == active_warps.count() && barrier.events == 0) {
       // wait_mask is preserved across the async hop (holds warps resumed by
       // global_resume) and cleared there. arrival_mask is local-only and reset here.
-      core_->socket()->global_barrier_arrive(bar_id, count, core_->id());
+      core_->gbar_arrive_out.send({bar_id, count, core_->id()});
       barrier.arrival_mask.reset();
       barrier.count  = 0;
       barrier.events = 0;
@@ -143,8 +143,7 @@ void BarrierUnit::event_release(uint32_t bar_id) {
     if (is_global) {
       if (barrier.arrival_mask.count() == active_warps.count()) {
         uint32_t num_cores = barrier.count;
-        // notify global barrier
-        core_->socket()->global_barrier_arrive(bar_id, num_cores, core_->id());
+        core_->gbar_arrive_out.send({bar_id, num_cores, core_->id()});
         barrier.arrival_mask.reset();
         barrier.count  = 0;
         barrier.events = 0;

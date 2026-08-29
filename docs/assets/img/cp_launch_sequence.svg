@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="arrk" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.3; }
+    .loop { fill:none; stroke:#a03020; stroke-width:1.5; stroke-dasharray:7 4; }
+    .loopl{ fill:#fbeeea; stroke:#a03020; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#arr); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#arrp); }
+    .mk   { stroke:#44525f; stroke-width:1.5; fill:none; marker-end:url(#arrk); stroke-dasharray:6 4; }
+    .mg   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#arrg); }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lbk  { fill:#44525f; font-size:10.5px; }
+    .lbg  { fill:#2f6b39; font-size:10.5px; }
+    .lbr  { fill:#a03020; font-size:11px; font-weight:bold; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t">A kernel launch — 22 ring commands, unbatched</text>
+  <text x="24" y="56" class="tt">vx_enqueue_launch on the shipping path. Every red frame is a full doorbell + fetch + execute + retire + busy-poll round trip.</text>
+
+  <!-- lifelines -->
+  <text x="150" y="94" class="th" text-anchor="middle" fill="#8e4a7e">host worker thread</text>
+  <text x="520" y="94" class="th" text-anchor="middle" fill="#2e5e82">CP ring + CPE</text>
+  <text x="812" y="94" class="th" text-anchor="middle" fill="#2e5e82">dcr_proxy / launch</text>
+  <text x="1150" y="94" class="th" text-anchor="middle" fill="#2f6b39">Vortex (KMU + cores)</text>
+
+  <line x1="150"  y1="104" x2="150"  y2="836" class="lane"/>
+  <line x1="520"  y1="104" x2="520"  y2="836" class="lane"/>
+  <line x1="812"  y1="104" x2="812"  y2="836" class="lane"/>
+  <line x1="1150" y1="104" x2="1150" y2="836" class="lane"/>
+
+  <!-- staging -->
+  <rect x="40" y="116" width="220" height="42" rx="5" class="actp"/>
+  <text x="50" y="134" class="ts">stage the args blob into</text>
+  <text x="50" y="150" class="ts">device memory (CMD_MEM_WRITE)</text>
+
+  <!-- ===== DCR loop frame ===== -->
+  <rect x="96" y="180" width="1100" height="196" rx="6" class="loop"/>
+  <rect x="96" y="180" width="196" height="24" rx="4" class="loopl"/>
+  <text x="106" y="197" class="lbr">loop  x20 CMD_DCR_WRITE</text>
+
+  <path d="M 260 226 L 516 226" class="mp"/>
+  <text x="272" y="218" class="lbp">append 1 line, doorbell (Q_TAIL_LO, _HI)</text>
+
+  <path d="M 520 258 L 808 258" class="m"/>
+  <text x="536" y="250" class="lb">fetch, decode, bid RES_DCR, grant</text>
+
+  <path d="M 812 290 L 1146 290" class="mg"/>
+  <text x="828" y="282" class="lbg">dcr_req: {rw=1, addr, data} — one KMU DCR</text>
+
+  <path d="M 808 322 L 524 322" class="mk"/>
+  <text x="560" y="314" class="lbk">done — retire, seqnum += 1</text>
+
+  <path d="M 516 356 L 154 356" class="mp"/>
+  <text x="176" y="348" class="lbp">busy-poll Q_SEQNUM until it catches up</text>
+
+  <rect x="176" y="240" width="304" height="88" rx="6" class="note"/>
+  <text x="188" y="260" class="th">The 20 KMU DCRs</text>
+  <text x="188" y="278" class="ts">4   STARTUP_ADDR0/1 + KERNEL_ENTRY0/1</text>
+  <text x="188" y="294" class="ts">2   STARTUP_ARG0/1</text>
+  <text x="188" y="310" class="ts">14  block/grid/cluster dims, lmem_size,</text>
+  <text x="212" y="326" class="ts">block_size, warp steps</text>
+
+  <!-- ===== LAUNCH ===== -->
+  <rect x="96" y="396" width="1100" height="200" rx="6" class="loop"/>
+  <rect x="96" y="396" width="152" height="24" rx="4" class="loopl"/>
+  <text x="106" y="413" class="lbr">CMD_LAUNCH</text>
+
+  <path d="M 260 442 L 516 442" class="mp"/>
+  <text x="272" y="434" class="lbp">append + doorbell</text>
+
+  <path d="M 520 474 L 808 474" class="m"/>
+  <text x="536" y="466" class="lb">bid RES_KMU, grant — the payload is ignored</text>
+
+  <path d="M 812 506 L 1146 506" class="mg"/>
+  <text x="828" y="498" class="lbg">start — one-cycle pulse (S_PULSE_START)</text>
+
+  <rect x="1040" y="520" width="220" height="42" rx="5" class="actg"/>
+  <text x="1050" y="538" class="ts">busy rises; the grid runs</text>
+  <text x="1050" y="554" class="ts">to completion</text>
+
+  <path d="M 1146 578 L 816 578" class="mg"/>
+  <text x="880" y="570" class="lbg">busy falls — S_WAIT_DRAIN ends, done fires</text>
+
+  <!-- ===== FLUSH ===== -->
+  <rect x="96" y="616" width="1100" height="140" rx="6" class="loop"/>
+  <rect x="96" y="616" width="180" height="24" rx="4" class="loopl"/>
+  <text x="106" y="633" class="lbr">CMD_CACHE_FLUSH</text>
+
+  <path d="M 260 662 L 516 662" class="mp"/>
+  <text x="272" y="654" class="lbp">append + doorbell; arg0 = num_cores</text>
+
+  <path d="M 812 694 L 1146 694" class="mg"/>
+  <text x="828" y="686" class="lbg">dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid) — once per core, serially</text>
+
+  <path d="M 1146 726 L 816 726" class="mg"/>
+  <text x="880" y="718" class="lbg">per-core flush-complete response</text>
+
+  <!-- cout drain -->
+  <rect x="40" y="778" width="220" height="42" rx="5" class="actp"/>
+  <text x="50" y="796" class="ts">drain_cout() — further</text>
+  <text x="50" y="812" class="ts">CMD_MEM_* round trips</text>
+  <path d="M 260 800 L 516 800" class="mp"/>
+  <text x="272" y="792" class="lbp">console output is now coherent, so read it back</text>
+
+  <text x="24" y="866" class="tt">Each group is independently skippable — a launch with no kernel, no args, or ndim == 0 emits fewer DCRs — so the real count is 20 in the full case and as low as 0.</text>
+  <text x="24" y="884" class="tt">CMD_LAUNCH_QMD collapses the whole red loop into one command by moving the 20 {dcr_addr, value} pairs into an in-memory descriptor. Emulation CP only today.</text>
+</svg>
