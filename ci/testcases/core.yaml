@@ -162,10 +162,7 @@ tests:
   # shared-L2 path compounds two unmodelled RTL effects: the decoupled LSU
   # pending pool and the reworked cache bank pipeline. Parity divergence only;
   # pending SimX LSU/cache timing alignment.
-  # 0.30 covers the documented ~28% divergence; the known_issue conversion
-  # (162d0c424) wrote 0.10 against its own measurement, leaving the test red
-  # from birth. Tighten when the SimX alignment lands.
-  tolerance: 0.30
+  tolerance: 0.10   # SimX models neither the decoupled LSU pending pool nor the reworked cache banks (instrs match; cycles ~28%)
   via: blackbox
   app: sgemm
   args: -n128
