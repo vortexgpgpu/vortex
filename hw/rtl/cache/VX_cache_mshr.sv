@@ -53,6 +53,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter WRITEBACK         = 0,          // Enable cache writeback
     parameter AMO_ENABLE        = 0,          // Per-entry AMO tracking (probe outputs)
     parameter AMO_PASSTHRU      = 0,          // Non-LLC passthrough: AMO entries never coalesce
+    parameter WORD_SEL_WIDTH    = 1,          // word-in-line select width (order-hazard granularity)
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE)
 ) (
@@ -102,12 +103,14 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire                          allocate_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr,
     input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] allocate_sector,
+    input wire [WORD_SEL_WIDTH-1:0]     allocate_word_idx,
     input wire                          allocate_rw,
     input wire                          allocate_is_amo, // AMO: never coalesce
     input wire [DATA_WIDTH-1:0]         allocate_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_id,
     output wire                         allocate_pending,
     output wire                         allocate_pending_wr,
+    output wire                         allocate_pending_ovl,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_previd,
     output wire                         allocate_ready,
 
@@ -131,6 +134,12 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // different-sector misses get independent fills (each replay then hits its
     // own filled sector). Zero-width-equivalent (1 bit, all 0) when 1 sector/line.
     reg [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_table [0:MSHR_SIZE-1];
+    // Per-entry word-in-line select, kept outside the payload RAM so the
+    // allocate probe can compare it: the hit-demotion order hazard is
+    // word-granular (a chained entry constrains only requests that touch
+    // the same word), and demoting on the {line, sector} match alone costs
+    // streaming workloads their hits-under-drain.
+    reg [WORD_SEL_WIDTH-1:0] word_table [0:MSHR_SIZE-1];
     reg [MSHR_ADDR_WIDTH-1:0] next_index [0:MSHR_SIZE-1];
 
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
@@ -261,6 +270,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         if (allocate_fire) begin
             addr_table[allocate_id] <= allocate_addr;
             sector_table[allocate_id] <= allocate_sector;
+            word_table[allocate_id] <= allocate_word_idx;
             write_table[allocate_id] <= allocate_rw;
         end
 
@@ -415,11 +425,22 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         assign allocate_pending = |(addr_matches & ~write_table);
     end
 
-    // The probed line's chain holds a WRITE that has not reached the data array
-    // yet. A same-line hit completing ahead of it would read pre-store data (or
+    // Word-granular order-hazard probes. A chained entry only constrains a
+    // requester that touches the SAME word: the entry's replay reads or
+    // writes exactly its own word, so disjoint-word hits under a draining
+    // chain are hazard-free and keep the fast release path.
+    wire [MSHR_SIZE-1:0] word_matches;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_word_matches
+        assign word_matches[i] = (word_table[i] == allocate_word_idx);
+    end
+    // The probed word's chain holds a WRITE that has not reached the data array
+    // yet. A same-word hit completing ahead of it would read pre-store data (or
     // a write-hit would be overwritten by the older store's replay), inverting
     // arrival order — the bank demotes such a hit to a chained miss.
-    assign allocate_pending_wr = |(addr_matches & write_table);
+    assign allocate_pending_wr  = |(addr_matches & write_table & word_matches);
+    // Any undrained same-word entry: an incoming WRITE hit must not land ahead
+    // of an older chained read of the same word.
+    assign allocate_pending_ovl = |(addr_matches & word_matches);
 
     assign dequeue_valid = dequeue_val;
     // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather

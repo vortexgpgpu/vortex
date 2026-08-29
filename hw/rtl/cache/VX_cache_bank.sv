@@ -172,6 +172,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [MSHR_ADDR_WIDTH-1:0] mshr_alloc_id, mshr_previd;
     wire mshr_pending_raw;
     wire mshr_pending_wr_raw;
+    wire mshr_pending_ovl_raw;
 
     // MSHR replay (dequeue) sideband
     wire                           replay_valid, replay_ready, replay_rw;
@@ -336,8 +337,15 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // pointer cannot be re-armed mid-chain. The forward port needs no hold: it
     // answers from the staged fill sector, which a younger array access cannot
     // disturb.
+    // The hold matters only when the vanishing entry would have constrained
+    // the prober: same word, and at least one side writes. Read-after-read and
+    // disjoint words carry no order constraint, so the entry may hide and the
+    // prober proceed as a fresh hit — which keeps a streaming drain from being
+    // stalled one cycle per incoming same-line beat.
     wire replay_link_hold = replay_valid && mshr_allocate_st0 && ~pipe_stall
-                         && (st0.req.addr == replay_addr);
+                         && (st0.req.addr == replay_addr)
+                         && (replay_rw || st0.req.rw)
+                         && (replay_wsel == st0.req.word_idx);
 
     wire replay_mux    = replay_valid && ~fwd_head && ~replay_link_hold;
     wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~fill_inflight && ~replay_link_hold;
@@ -598,18 +606,21 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         `UNUSED_PIN (valid_out)
     );
 
-    // A tags-hit is completable only while no OLDER same-line MSHR chain entry
-    // could still change the line (a chained write not yet applied) or observe
+    // A tags-hit is completable only while no OLDER same-WORD MSHR chain entry
+    // could still change the word (a chained write not yet applied) or observe
     // it (any chained entry, against a write request): chained entries replay
     // through the pipe AFTER this request's data-array access, so completing
     // the hit would invert arrival order — a load reads pre-store data, or a
     // store lands before an older chained load reads. Demote such a hit to a
     // chained miss: the request links onto the line's chain (it is pending, so
     // no fill is issued) and replays in arrival order once the chain drains.
-    // Read-after-read keeps the fast release path.
+    // A chained entry's replay touches exactly its own word, so hits to
+    // disjoint words — the common case in streaming, where the whole warp's
+    // beats land on one sector — keep the fast release path, as does
+    // read-after-read on the same word.
     wire creq_hit_order_hazard_st0 = st0.req.is_creq && ~st0.req.is_replay
                                   && mshr_pending_raw
-                                  && (mshr_pending_wr_raw || st0.req.rw)
+                                  && (mshr_pending_wr_raw || (st0.req.rw && mshr_pending_ovl_raw))
                                   && ~is_amo_fwd_st0
                                   && ~((AMO_ENABLE != 0) && st0.req.amo.amo_valid);
 
@@ -822,6 +833,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .WRITEBACK   (WRITEBACK),
         .AMO_ENABLE  (AMO_ENABLE != 0),
         .AMO_PASSTHRU ((AMO_ENABLE != 0) && (IS_LLC == 0)),
+        .WORD_SEL_WIDTH (WORD_SEL_WIDTH),
         .DATA_WIDTH  (WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + TAG_WIDTH + REQ_SEL_WIDTH + AMO_REQ_BITS)
     ) cache_mshr (
         .clk                 (clk),
@@ -849,6 +861,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_valid      (mshr_allocate_st0 && ~pipe_stall),
         .allocate_addr       (st0.req.addr),
         .allocate_sector     (sector_idx_st0),
+        .allocate_word_idx   (st0.req.word_idx),
         .allocate_rw         (st0.req.rw),
         // Only non-LLC AMOs must not coalesce; at the LLC same-line AMOs coalesce
         // and serialize their commits on the single filled line.
@@ -857,6 +870,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_id         (mshr_alloc_id),
         .allocate_pending    (mshr_pending_raw),
         .allocate_pending_wr (mshr_pending_wr_raw),
+        .allocate_pending_ovl (mshr_pending_ovl_raw),
         .allocate_previd     (mshr_previd),
         `UNUSED_PIN (allocate_ready),
         .finalize_valid      (mshr_finalize_st1 && ~pipe_stall),
