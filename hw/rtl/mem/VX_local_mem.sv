@@ -316,6 +316,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         wire [WORD_WIDTH-1:0]      amo_wb_data;
         wire                       sc_resolving;  // SC outcome replaces the response
         wire                       sc_fail;
+        wire                       sc_lane_hi;    // outcome lane of a resolving .W SC
 
         if (AMO_ENABLE != 0) begin : g_amo
 
@@ -386,6 +387,22 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             assign sc_fail = res_is_sc_r && ~res_check;
             assign sc_resolving = res_valid_r && res_is_sc_r;
 
+            // The SC outcome must land in the addressed lane: the LSU extracts
+            // the subword by address, so a .W outcome left at bit 0 would read
+            // as 0 ("success") for every upper-lane SC, including a failed one
+            // whose store was suppressed.
+            if (WORD_WIDTH == 64) begin : g_sc_lane
+                reg res_lane_hi_r;
+                always @(posedge clk) begin
+                    if (lsu_active) begin
+                        res_lane_hi_r <= ~per_bank_req_byteen[i][0];
+                    end
+                end
+                assign sc_lane_hi = res_lane_hi_r;
+            end else begin : g_sc_lane0
+                assign sc_lane_hi = 1'b0;
+            end
+
             // Everything that ends up writing the word: a plain store, a
             // read-modify-write atomic (which carries rw=0 and so is not a store by
             // the request flag), and a store-conditional that found its reservation.
@@ -433,6 +450,30 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             // old_word is this cycle's SRAM output -- the same value the response
             // carries back, which is why ret_word is not used here.
             wire [63:0] amo_new_word, amo_ret_word;
+
+            // Lane-align the RMW operands. The bank word is XLEN wide, so on a
+            // 64-bit hart a .W atomic addresses one of two 32-bit lanes; the
+            // ALU computes right-aligned. Store data arrives lane-positioned
+            // (same packing as a plain store), so old and rhs shift down by
+            // the lane offset and the result shifts back up under the request
+            // byteen. The comparand arrives right-aligned from rs3 and needs
+            // no shift. The addressed lane is recovered from the byteen: an
+            // atomic is naturally aligned, so a .W to the upper lane never
+            // covers byte 0 and a .D covers the full word.
+            wire [63:0] amo_old_lane, amo_rhs_lane;
+            wire [1:0]  amo_width;
+            if (WORD_WIDTH == 64) begin : g_amo_lane
+                wire lane_hi = ~amo_wb_byteen_r[0];
+                assign amo_width    = (&amo_wb_byteen_r) ? 2'd3 : 2'd2;
+                assign amo_old_lane = lane_hi ? {32'h0, amo_old_r[63:32]} : amo_old_r;
+                assign amo_rhs_lane = lane_hi ? {32'h0, amo_wb_rhs_r[63:32]} : amo_wb_rhs_r;
+                assign amo_wb_data  = lane_hi ? {amo_new_word[31:0], 32'h0} : amo_new_word;
+            end else begin : g_amo_word
+                assign amo_width    = 2'd2;
+                assign amo_old_lane = 64'(amo_old_r);
+                assign amo_rhs_lane = 64'(amo_wb_rhs_r);
+                assign amo_wb_data  = amo_new_word[WORD_WIDTH-1:0];
+            end
             // VX_CFG_AMO_RS_SIZE sizes ONE shared LLC bank's contention; deployed
             // per lmem bank it multiplies by NUM_LMEM_BANKS x NUM_CORES. After the
             // holder-credit protocol a hot word maps to exactly one station, so
@@ -451,9 +492,9 @@ module VX_local_mem import VX_gpu_pkg::*; #(
                 .pipe_stall       (1'b0),
                 .compute_op       (amo_op_e'(amo_wb_op_r)),
                 .compute_unsigned (amo_wb_unsigned_r),
-                .compute_width    (2'd2),
-                .compute_old      (64'(amo_old_r)),
-                .compute_rhs      (64'(amo_wb_rhs_r)),
+                .compute_width    (amo_width),
+                .compute_old      (amo_old_lane),
+                .compute_rhs      (amo_rhs_lane),
             `ifdef VX_CFG_EXT_ZACAS_ENABLE
                 .compute_cmp      (64'(amo_wb_cmp_r)),
             `else
@@ -479,7 +520,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
 
             assign amo_wb_addr   = amo_wb_addr_r;
             assign amo_wb_byteen = amo_wb_byteen_r;
-            assign amo_wb_data   = amo_new_word[WORD_WIDTH-1:0];
 
         end else begin : g_no_amo
             assign amo_busy      = 1'b0;
@@ -489,6 +529,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             assign amo_wb_data   = '0;
             assign sc_resolving  = 1'b0;
             assign sc_fail       = 1'b0;
+            assign sc_lane_hi    = 1'b0;
             `UNUSED_VAR (per_bank_req_amo_valid[i])
             `UNUSED_VAR (per_bank_req_amo_op[i])
             `UNUSED_VAR (per_bank_req_amo_unsigned[i])
@@ -575,11 +616,13 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         );
 
         // A store-conditional returns its outcome, not the word it read: zero
-        // for success, one for failure. The outcome is resolved at the commit
+        // for success, one for failure, positioned in the addressed lane for
+        // the LSU's subword extraction. The outcome is resolved at the commit
         // stage, which is the same cycle the response carries the SRAM output,
         // so it substitutes here rather than needing a response of its own.
         wire [WORD_WIDTH-1:0] bank_rsp_word = sc_resolving
-                                            ? WORD_WIDTH'(sc_fail)
+                                            ? (sc_lane_hi ? (WORD_WIDTH'(sc_fail) << (WORD_WIDTH/2))
+                                                          : WORD_WIDTH'(sc_fail))
                                             : per_bank_rsp_data[i];
 
         // Back-pressure-safe LSU response data. The bank SRAM OUT_REG

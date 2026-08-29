@@ -303,9 +303,13 @@ void kernel_lrsc_lmem(kernel_arg_t* __UNIFORM__ arg) {
   auto lmem     = (int32_t*)__local_mem();
   auto per_hart = (uint32_t*)arg->per_hart_addr;
   const uint32_t hid = hart_id();
+  // Slot 1 (byte offset 4) sits in the upper lane of a 64-bit hart's lmem
+  // bank word, so the contended loop exercises the sub-word LR/SC datapath
+  // and the SC-outcome lane; on a 32-bit hart it is an ordinary word.
+  auto counter  = &lmem[1];
 
   if (threadIdx.x == 0) {
-    *lmem = 0;
+    *counter = 0;
   }
   __syncthreads();
 
@@ -315,12 +319,12 @@ void kernel_lrsc_lmem(kernel_arg_t* __UNIFORM__ arg) {
     do {
       asm volatile ("lr.w %0, (%1)"
                     : "=r"(old)
-                    : "r"(lmem)
+                    : "r"(counter)
                     : "memory");
       int32_t newv = old + 1;
       asm volatile ("sc.w %0, %2, (%1)"
                     : "=r"(sc_fail)
-                    : "r"(lmem), "r"(newv)
+                    : "r"(counter), "r"(newv)
                     : "memory");
       ++guard;
     } while (sc_fail && guard < LRSC_MAX_RETRIES);
@@ -328,7 +332,7 @@ void kernel_lrsc_lmem(kernel_arg_t* __UNIFORM__ arg) {
   __syncthreads();
 
   if (threadIdx.x == 0) {
-    per_hart[hid] = (uint32_t)*lmem;
+    per_hart[hid] = (uint32_t)*counter;
   }
 }
 
