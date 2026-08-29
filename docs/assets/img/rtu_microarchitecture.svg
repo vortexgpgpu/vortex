@@ -118,21 +118,22 @@
   <text x="932" y="182" class="ts">context-pool walker, one for both formats</text>
   <text x="932" y="198" class="ts">(CW-BVH width&gt;0 | flat width=0)</text>
   <text x="932" y="220" class="ts">3-stage pipeline over the context store:</text>
-  <text x="948" y="238" class="tt">SELECT — RR-pick a ready ctx, issue reads</text>
+  <text x="948" y="238" class="tt">SELECT — RR grant a cycle ahead, registered</text>
   <text x="948" y="254" class="tt">ALIGN — snapshot + absolute address</text>
   <text x="948" y="270" class="tt">EXEC — decode, advance FSM, drive PEs</text>
   <text x="932" y="292" class="ts">retires 1 micro-step/cycle across contexts;</text>
   <text x="932" y="308" class="ts">event-driven wake bits, no stall network</text>
-  <text x="932" y="330" class="ts">short stack (depth STACK_DEPTH) + restart;</text>
-  <text x="932" y="346" class="ts">box collector sorts children nearest-first</text>
-  <text x="932" y="370" class="tt">commit engine + barrier walker → window store</text>
+  <text x="932" y="326" class="ts">short stack (depth STACK_DEPTH) + restart;</text>
+  <text x="932" y="342" class="ts">box collector sorts children nearest-first</text>
+  <text x="932" y="358" class="ts">(insertion slot ← admit thermometer)</text>
+  <text x="932" y="378" class="tt">commit engine + barrier walker → window store</text>
 
   <path d="M 892 320 L 908 320 L 908 240 L 920 240" class="flow"/>
   <text x="866" y="278" class="lbl">launch</text>
 
   <!-- PEs -->
   <rect x="664" y="416" width="546" height="128" rx="6" class="grp"/>
-  <text x="676" y="438" class="t" fill="#3a7d44">geometry PEs — FP32, fixed-latency, reuse ISA FMA / divide (barrel-hidden)</text>
+  <text x="676" y="438" class="t" fill="#3a7d44">geometry PEs — FP32, fixed-latency FMA / divide (RTU_USE_DSP; barrel-hidden)</text>
 
   <rect x="676" y="450" width="124" height="84" rx="6" class="pe"/>
   <text x="688" y="472" class="t">VX_rtu_box_pe</text>
@@ -150,7 +151,7 @@
   <text x="960" y="472" class="t">VX_rtu_xform</text>
   <text x="960" y="490" class="ts">TLAS world→object</text>
   <text x="960" y="506" class="ts">Rᵀ·(ro−t), FMA-only</text>
-  <text x="960" y="522" class="ts">(TLAS_ENABLE)</text>
+  <text x="960" y="522" class="ts">native LEAF_INST</text>
 
   <rect x="1084" y="450" width="114" height="84" rx="6" class="pe"/>
   <text x="1096" y="472" class="t">VX_rtu_recip</text>

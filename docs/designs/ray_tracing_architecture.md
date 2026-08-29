@@ -262,9 +262,17 @@ core idea: **per-context state is an address, not a mux.** All of it lives in a
 context-indexed BRAM (the *context store*), walked by a three-stage pipeline:
 
 - **SELECT** — a round-robin arbiter picks a ready context (one whose wake bit is
-  set) and issues every context-indexed RAM read for it.
+  set) and issues every context-indexed RAM read for it. The arbiter actually
+  runs one cycle *ahead*, on the next-cycle wake vector, and its grant is
+  registered — so every context-indexed BRAM's address pins are driven from
+  flops, with round-robin order and pipeline latency unchanged. Wake events fold
+  into that vector: the long-latency ones (memory response, tri/xform/reciprocal
+  results, a ray landing) join combinationally, while the two deep sources — an
+  EXEC self-wake and a box-collection completion — are registered first.
 - **ALIGN** — capture the RAM outputs into the stage snapshot; precompute the
-  absolute structure address.
+  absolute structure address. The snapshot also samples the context's box-
+  collector head (proc-hit flag, nearest `t`, entry count), so EXEC reads
+  registers instead of re-muxing the collector file through the context word.
 - **EXEC** — byte-align and decode the fetched line image, advance the context
   FSM (~30 states: setup → header → node fetch → box feed/collect → stack push/pop
   → leaf triangle/instance/proc loops → done), drive the PEs and the memory port,
@@ -295,13 +303,22 @@ per-context node stack RAM; on overflow the walker sets an `ovf` flag and, at
 pop-time, **re-descends** the subtree pruned by the tightened `best_t` (bounded by
 `RTU_RESTART_CAP = 8` restarts) — a full traversal on a finite stack. A 16-entry
 box collector insertion-sorts a node's child hits t-ascending so descent is
-nearest-first.
+nearest-first. The insertion slot is decoded from the **admit thermometer**: the
+collected list is sorted and its count mask is a prefix, so the "entries at or
+below the incoming `t`" bits are a prefix of ones and the insertion slot is the
+first zero — a neighbouring-bit decode, with no popcount and no index compare on
+the ordering-write path. The collector row itself is pre-selected a cycle early
+from the tag the box PE presents one stage ahead of its result
+(`tag_out_pre`), so the row mux never lands on the result cycle.
 
 ### 4.4 The geometry PEs
 
-All FP32, all fixed-latency, all reusing the ISA FPU's hardened cores so the RTU
-adds no new floating-point datapath (`VX_CFG_FMA_LATENCY` / `VX_CFG_RTU_FDIV_LATENCY`
-track the active backend, and the barrel scheduler hides the latency):
+All FP32, all fixed-latency. The FMAs, divides and compares reuse the ISA FPU's
+cores (`VX_fma_unit`, `VX_fdiv_unit`, `VX_fncp_unit`); `VX_CFG_RTU_USE_DSP` maps
+them onto the hardened vendor FP IP on FPGA synthesis (soft cores in sim/ASIC,
+subnormals flushed either way), and `VX_CFG_FMA_LATENCY` /
+`VX_CFG_RTU_FDIV_LATENCY` track the active backend — the barrel scheduler hides
+whatever depth results:
 
 - **`VX_rtu_box_pe`** — pipelined ray/AABB slab test, one child box per cycle,
   emitting `{hit, t_near}`. Dequantizes the node's int8 child corners
@@ -310,10 +327,16 @@ track the active backend, and the barrel scheduler hides the latency):
   rays (`inv_d = ±inf`) stay NaN-free. Also handles raw/procedural boxes.
 - **`VX_rtu_tri_pe`** — pipelined Möller–Trumbore triangle test, one triangle per
   cycle, emitting `{hit, t, u, v, back_facing}`; reuses `VX_fma_unit`,
-  `VX_fdiv_unit` (1/det), `VX_fncp_unit`, and `VX_rtu_fdot3`/`fcross3`.
+  `VX_fdiv_unit` (1/det), `VX_fncp_unit`, and `VX_rtu_fdot3`/`fcross3`. The
+  dot/cross helpers pipeline their 24×24 mantissa products into DSP multipliers
+  (`LATENCY_IMUL` deep) fed the **raw** mantissas: a flushed (subnormal/zero)
+  term is discarded downstream in the `VX_rtu_fmac3` accumulator by its zero
+  product-exponent, so no subnormal-flush select sits in front of the multiplier
+  inputs and the DSPs launch straight from the source flops.
 - **`VX_rtu_xform`** — TLAS world→object transform, `obj = Rᵀ·(ro−t)` — FMA-only
-  (an orthonormal TLAS rotation needs no determinant or divide), under
-  `VX_CFG_RTU_TLAS_ENABLE`.
+  (an orthonormal TLAS rotation needs no determinant or divide). Always built:
+  the CW-BVH walker descends `LEAF_INST` natively; only the flat walker's
+  (`WIDTH = 0`) instancing loop is gated by `VX_CFG_RTU_TLAS_ENABLE`.
 - **`VX_rtu_recip`** — F32 reciprocal for `inv_d`, either a portable LUT+Newton
   `VX_fdiv_unit` (0 DSP, default) or a BRAM-seed + DSP Newton-Raphson variant
   (`VX_CFG_RTU_RECIP_DSP_SEED`, ~9e-8 error, trades ~2K LUT onto idle BRAM/DSP).
@@ -375,7 +398,7 @@ two-level TLAS→BLAS with instance transforms. Scenes are capped at
 `RTU_BVH_MAX_SCENE_BYTES = 16 KB` (the per-lane pre-fetch budget). The Vulkan
 driver transcodes an app `VkAccelerationStructure` to this layout
 (`vp_transcode_as`) and makes it resident; today it is rebuilt per dispatch (AS
-residency is a tracked gap — see §9).
+residency is a tracked gap — see §10).
 
 ---
 
@@ -403,7 +426,7 @@ that write is per-`{warp}` addressed, so nothing depends on cross-trace order.
 The engine services **many warps concurrently** (one slot each), but a given warp
 holds **one trace at a time** (staging is one entry per `{src, wid}`). Multiple
 concurrent traces from a *single* warp — an async batch of traces issued before
-any wait, or a nested (recursive) trace — are the deferred gap (§9): they need a
+any wait, or a nested (recursive) trace — are the deferred gap (§10): they need a
 per-warp multi-trace pool and, for recursion, a per-warp context stack.
 
 ---
@@ -414,21 +437,31 @@ per-warp multi-trace pool and, for recursion, a per-warp context stack.
 oracle**:
 
 - **`rtu_unit.cpp`** — the per-core PE: TRACE/WAIT window ABI, macro-op → uop
-  generation, and the park/revive of a WAIT against latched terminal/candidate
-  responses (same parked-WAIT semantics as the RTL).
+  generation, the park/revive of a WAIT against latched terminal/candidate
+  responses (same parked-WAIT semantics as the RTL), and the pool-slot claim at
+  TRACE-issue time — a full pool stalls the warp at issue instead of jamming the
+  in-order SFU head.
 - **`rtu_core.cpp`** — the traversal model: multi-AS / TLAS with instance
   transforms, the object-ray slots, all four candidate types (AHS / IS / CHS /
   MISS), a **ReformationEngine** that batches same-warp yields by `(warp_id,
   sbt_idx)` under a per-warp callback-in-flight gate, and real `MemReq`/`MemRsp`
   RTCache traffic for cycle parity on the `graphics_parity` matrix.
-- **`rtu_walker.cpp` / `rtu_isect.cpp`** — the CW-BVH/flat walk and the ray/AABB +
-  triangle math (shared FP helpers with the host reference).
+- **`rtu_walker.cpp` / `rtu_isect.cpp` / `rtu_classifier.cpp`** — the CW-BVH/flat
+  walk under a demand-fetch replay model (a read of a line the context does not
+  hold unwinds the walk; the sequence of misses *is* the hardware's node-fetch
+  sequence), the ray/AABB + triangle math (shared FP helpers with the host
+  reference), and the stateless hit-policy classifier (ray flags × per-triangle
+  opacity × instance flags).
+- **`rtu_memory.cpp`** — the node-fetch engine: round-robin context select, one
+  MSHR entry and exactly one load per fetch. Duplicate fetches are not coalesced
+  (a static assert refuses `RTU_MERGE_DEPTH != 0`, matching the RTL's).
 
-SimX additionally models **multi-warp and divergent-SBT reformation** and
-**per-warp multi-trace concurrency**, which the RTL core does not yet implement —
-SimX remains the oracle for those. Perf: MPM class `RTU`, with per-core traversal
-occupancy (busy / write / callback / fill and the two idle causes: idle-with-a-ray
-vs starved) available under `DBG_RTU_OCC`.
+SimX additionally models **per-warp multi-trace concurrency** (several traces in
+flight from one warp), which the RTL core does not implement — SimX remains the
+oracle for that. Perf: MPM class `RTU` plus the SimX `PerfStats` (context/slot
+occupancy, front-end busy ticks, box/tri test counts); the RTL core keeps its own
+per-slot occupancy counters (busy / write / callback / fill and the two idle
+causes: idle-with-a-ray vs starved) under `DBG_RTU_OCC`.
 
 ---
 
@@ -442,9 +475,10 @@ vs starved) available under `DBG_RTU_OCC`.
 | `VX_CFG_RTU_NUM_SLOTS` | `SOCKET_SIZE / NUM_RTU_CORES` | concurrent traces per core (derived) |
 | `VX_CFG_RTU_NUM_CTX` | `NUM_SLOTS × NUM_THREADS` | traversal contexts (derived) |
 | `VX_CFG_RTU_STACK_DEPTH` | 16 | short-stack depth per context |
-| `VX_CFG_RTU_MERGE_DEPTH` | 0 | node-fetch MSHR merge (0 = no merge; only value implemented) |
-| `VX_CFG_NUM_RTU_BLOCKS` | 2 | parallel RTCache request ports per core |
-| `VX_CFG_RTU_TLAS_ENABLE` | false | instancing / TLAS descent + `VX_rtu_xform` |
+| `VX_CFG_RTU_MERGE_DEPTH` | 0 | node-fetch MSHR merge — **unimplemented**: any non-zero value fails elaboration (RTL and SimX static asserts) |
+| `VX_CFG_NUM_RTU_BLOCKS` | 2 | RTCache input lanes per core in the SimX crossbar; the RTL core drives one request port |
+| `VX_CFG_RTU_TLAS_ENABLE` | false | flat-walker (`WIDTH = 0`) instancing/TLAS path — the CW-BVH walker descends `LEAF_INST` natively |
+| `VX_CFG_RTU_USE_DSP` | FPGA synth 1, sim/ASIC 0 | geometry-PE FMA/FDIV on hardened vendor FP IP (mirrors `VX_CFG_FPU_USE_DSP`) |
 | `VX_CFG_RTU_RECIP_DSP_SEED` | 0 | `inv_d` reciprocal backend (0 = LUT-NR, 1 = BRAM-seed + DSP) |
 | `VX_CFG_RTU_FDIV_LATENCY` | vendor 28 / altera 15 / soft 17 | RTU divide depth (backend-keyed) |
 | `VX_CFG_RTCACHE_SIZE / NUM_BANKS / NUM_WAYS / MSHR_SIZE` | 8 KB / 1 / 2 / 16 | RTCache geometry |
@@ -458,7 +492,7 @@ derived) is enforced by static assert — they used to be free knobs, and the
 
 ## 10. State of the implementation
 
-Grades: ✅ done · ⚠️ partial · ❌ pending. All committed on `prism`.
+Grades: ✅ done · ⚠️ partial · ❌ pending.
 
 | Area | State | Note |
 |---|:--:|---|
@@ -469,10 +503,9 @@ Grades: ✅ done · ⚠️ partial · ❌ pending. All committed on `prism`.
 | Per-triangle AHS classifier in the CW-BVH walker | ✅ | opacity/face-cull/force-opaque, terminate-on-first-hit |
 | Read-only hit window (RTU sole writer; no `SETW`; overlap with graphics removed) | ✅ | window is the RTU's alone |
 | Multi-warp concurrent traversal (`NUM_SLOTS` traces) | ✅ | one trace **per warp** |
-| Same-warp single-group reformation | ✅ | RTL + SimX |
+| Reformation — single-group, divergent-SBT multi-group, multi-warp | ✅ | RTL + SimX (partial candidate batches + PENDING lanes) |
 | Host CW-BVH / TLAS builder | ✅ | `vortex::raytrace` |
 | **Per-warp multi-trace pool** (async batch / recursion) | ❌ | staging is one entry per `{src, wid}`; recursion also needs a per-warp context stack |
-| **Multi-warp / divergent-SBT reformation** | ❌ | SimX-only (models both) |
 | **AS + module residency** | ❌ | BVH rebuilt per dispatch (driver) |
 
 **Tests:** [`tests/raytracing/`](../../tests/raytracing/) — **34/34 simx,
@@ -494,7 +527,7 @@ shaders) depends on: (a) AS + module residency (stop the per-dispatch rebuild) a
 plumbing the resident AS pointer into a fragment shader's arg block; and (b) fixing
 the `rtquery` llvmpipe fallback so RT runs under `STRICT=1`. `dEQP-VK.ray_tracing_pipeline.*`
 (traceRays + SBT, recursion) is a larger, separate track gated on the per-warp
-multi-trace pool and the multi-warp / divergent-SBT reformation tails.
+multi-trace pool (and, for recursion, its per-warp context stack).
 
 **Superseded / rejected directions** (recorded to avoid revival): RTU ISA v1
 (funct3=5 windowed-quad, retired for the v2 window ABI); a shader-writable window
