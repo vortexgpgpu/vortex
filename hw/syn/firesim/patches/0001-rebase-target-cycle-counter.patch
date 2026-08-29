@@ -1,0 +1,73 @@
+--- build_firesim/firesim/sim/midas/src/main/cc/core/simulation.h.orig	2026-08-02 05:13:08.369209268 -0700
++++ build_firesim/firesim/sim/midas/src/main/cc/core/simulation.h	2026-08-02 05:16:23.260800446 -0700
+@@ -145,7 +145,18 @@
+   midas_time_t end_time;
+   std::optional<uint64_t> start_hcycle;
+   std::optional<uint64_t> end_hcycle;
++  uint64_t start_tcycle = 0;
+   uint64_t end_tcycle = 0;
++
++  /// Target cycles consumed by *this* run.
++  /// The counter lives in fabric and persists while the bitstream stays
++  /// programmed, so it must be rebased against the start sample -- host
++  /// cycles are already handled this way.
++  /// Saturates rather than wrapping: a device reprogrammed mid-run can leave
++  /// end < start, and an unsigned wrap would report a nonsense duration.
++  uint64_t elapsed_tcycles() const {
++    return (end_tcycle >= start_tcycle) ? (end_tcycle - start_tcycle) : 0;
++  }
+ };
+ 
+ #endif // __SIMULATION_H
+--- build_firesim/firesim/sim/midas/src/main/cc/core/simulation.cc.orig	2026-08-02 05:13:08.373209261 -0700
++++ build_firesim/firesim/sim/midas/src/main/cc/core/simulation.cc	2026-08-02 05:16:23.260800446 -0700
+@@ -41,6 +41,7 @@
+ 
+ void simulation_t::record_start_times() {
+   start_hcycle = clock.hcycle();
++  start_tcycle = clock.tcycle();
+   start_time = timestamp();
+ }
+ 
+@@ -58,10 +59,13 @@
+ 
+   const uint64_t hcycles = *end_hcycle - *start_hcycle;
+   const double sim_time = diff_secs(end_time, start_time);
+-  const double sim_speed = ((double)end_tcycle) / (sim_time * 1000.0);
++  const uint64_t tcycles = elapsed_tcycles();
++  const double sim_speed = ((double)tcycles) / (sim_time * 1000.0);
+   const double measured_host_frequency =
+       ((double)hcycles) / (sim_time * 1000.0);
+-  const double fmr = ((double)hcycles / end_tcycle);
++  // A run that steps no target cycles is legal (e.g. fingerprint-only);
++  // reporting inf/nan for it would be worse than reporting zero.
++  const double fmr = tcycles ? ((double)hcycles / tcycles) : 0.0;
+ 
+   fprintf(stderr, "\nEmulation Performance Summary\n");
+   fprintf(stderr, "------------------------------\n");
+@@ -74,7 +78,7 @@
+     fprintf(stderr, "%.3f KHz\n", measured_host_frequency);
+   }
+ 
+-  fprintf(stderr, "Target Cycles Emulated: %" PRIu64 "\n", end_tcycle);
++  fprintf(stderr, "Target Cycles Emulated: %" PRIu64 "\n", tcycles);
+   fprintf(stderr, "Effective Target Frequency: ");
+   if (sim_speed > 1000.0) {
+     fprintf(stderr, "%.3f MHz\n", sim_speed / 1000.0);
+@@ -154,13 +158,13 @@
+     fprintf(stderr,
+             "*** FAILED *** (code = %d) after %" PRIu64 " cycles\n",
+             exit_code,
+-            end_tcycle);
++            elapsed_tcycles());
+   } else if (timeout) {
+     fprintf(stderr,
+             "*** FAILED *** simulation timed out after %" PRIu64 " cycles\n",
+-            end_tcycle);
++            elapsed_tcycles());
+   } else {
+-    fprintf(stderr, "*** PASSED *** after %" PRIu64 " cycles\n", end_tcycle);
++    fprintf(stderr, "*** PASSED *** after %" PRIu64 " cycles\n", elapsed_tcycles());
+   }
+ 
+   print_simulation_performance_summary();

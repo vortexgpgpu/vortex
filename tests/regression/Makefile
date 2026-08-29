@@ -3,6 +3,7 @@ include $(ROOT_DIR)/config.mk
 
 # --- master list ------------------------------------------------------
 TESTS := \
+    minimal                                                           \
     basic demo dogfood dropout dotproduct dotproduct2 mstress io_addr \
     arith printf diverge sort fence                                   \
     vecadd vecadd_v1 sgemm sgemmx sgemm_v1 conv3 relu sgemv           \
@@ -12,8 +13,9 @@ TESTS := \
     sgemm2_dxa sgemm2_tcu sgemm_tcu_wg_dxa sgemm_tcu_wg_sp_dxa        \
     sgemm2_dxa_mcast sgemm_tcu_wg_dxa_mcast                           \
     dxa_copy dxa_copy_mcast dxa_kmajor_check                          \
-    async_barrier async_gbarrier packld wgather wsync                 \
-    occupancy multikernel
+    async_barrier async_gbarrier packld wgather wsync quad_lod        \
+    occupancy multikernel reopen module_reload single_cta            \
+    vm_test vm_fault
 
 # --- common exclude list ---------------------------------------------
 EXCLUDE :=

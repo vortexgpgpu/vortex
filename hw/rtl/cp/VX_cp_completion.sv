@@ -19,14 +19,15 @@
 //     the chosen source's pending bit clears AND its `retire_ready` is
 //     asserted that cycle, releasing the engine.
 //   * If two CPEs retire on the same cycle, BOTH latch immediately; the
-//     selector drains them on consecutive cycles. The higher-QID retire
-//     is no longer lost.
+//     selector drains them on consecutive cycles, so neither retire is
+//     lost.
 //   * The drain FIFO absorbs bursty AXI back-pressure; if it ever fills,
 //     `retire_ready[i]` stays low and the engine stalls in S_RETIRE
 //     until space frees — propagating back-pressure all the way to fetch
 //     instead of silently dropping a seqnum on the floor.
 //
-// AXI drain FSM is unchanged: S_IDLE → S_REQ_AW → S_REQ_W → S_WAIT_B.
+// AXI drain FSM: S_IDLE → S_REQ_AW → S_REQ_W → S_WAIT_B → S_FLUSH_AR →
+// S_FLUSH_R (read-back of the written line; see the note at the FSM).
 // FIFO_DEPTH defaults to 2 * NUM_QUEUES, sized to keep at least one
 // completion in flight per queue under typical AXI latency.
 // ============================================================================
@@ -112,8 +113,27 @@ module VX_cp_completion
     end
   end
 
-  // FSM driving the AXI write.
-  typedef enum logic [1:0] { S_IDLE, S_REQ_AW, S_REQ_W, S_WAIT_B } state_e;
+  // FSM driving the AXI write, then a SHOVE write to the adjacent line.
+  //
+  // On the V80's HBM host path, the newest write into the NoC ingress stays
+  // invisible to the host's QDMA reads until later WRITE traffic pushes it
+  // through -- measured on silicon as the completion line trailing Q_SEQNUM
+  // by exactly one retire, for over a second, immune to polling patterns,
+  // cache-eviction sweeps and a same-port read-back (the drain counters
+  // prove every write left the AFU with its BRESP collected, so the parking
+  // is beyond the AFU and reads do not dislodge it). What does dislodge it,
+  // every time, is the next command's writes.
+  //
+  // So supply that push ourselves: after the completion write's BRESP, write
+  // the seqnum again to the line 64 B above (the completion region is a
+  // dedicated >=4 KB allocation, so the address exists and the host ignores
+  // it). Ingress order is data flits -> completion flit -> shove flit; when
+  // the host observes the completion, everything written before it -- the
+  // download payload included -- is observable too. The shove itself parks
+  // where nothing reads.
+  typedef enum logic [2:0] {
+    S_IDLE, S_REQ_AW, S_REQ_W, S_WAIT_B, S_SHOVE_AW, S_SHOVE_W, S_SHOVE_B
+  } state_e;
   state_e state;
 
   cmpl_ent_t cur_ent;
@@ -168,6 +188,15 @@ module VX_cp_completion
           if (axi_m.wvalid && axi_m.wready) state <= S_WAIT_B;
         end
         S_WAIT_B: begin
+          if (axi_m.bvalid && axi_m.bready) state <= S_SHOVE_AW;
+        end
+        S_SHOVE_AW: begin
+          if (axi_m.awvalid && axi_m.awready) state <= S_SHOVE_W;
+        end
+        S_SHOVE_W: begin
+          if (axi_m.wvalid && axi_m.wready) state <= S_SHOVE_B;
+        end
+        S_SHOVE_B: begin
           if (axi_m.bvalid && axi_m.bready) state <= S_IDLE;
         end
         default: state <= S_IDLE;
@@ -181,30 +210,40 @@ module VX_cp_completion
     axi_m.arvalid = 1'b0;
     axi_m.araddr  = '0;
     axi_m.arid    = '0;
-    axi_m.arlen   = '0;
-    axi_m.arsize  = '0;
+    axi_m.arlen   = 8'd0;
+    axi_m.arsize  = 3'd6;
     axi_m.arburst = 2'b01;
     axi_m.rready  = 1'b1;
 
-    // AW
-    axi_m.awvalid = (state == S_REQ_AW);
-    axi_m.awaddr  = cur_ent.addr;
+    // AW. A full cacheline, not an 8-byte narrow write. The line is a
+    // dedicated CP-owned allocation, so the padding clobbers nothing -- and
+    // the full-width beat is load-bearing on hardware: this used to be
+    // awsize=3 with wstrb[7:0], the ONLY partial-line write any CP master
+    // issues, and on the V80 that write parked between the AFU port and HBM
+    // (a partial write costs the memory system a read-modify-write) and
+    // stayed invisible to host reads of the line long after its BRESP --
+    // measured: still absent ONE SECOND later, landing only around the next
+    // retire's write. Every full-line write from the very same port lands
+    // promptly. A completion signal that trails its BRESP by a second is not
+    // a completion signal.
+    axi_m.awvalid = (state == S_REQ_AW) || (state == S_SHOVE_AW);
+    axi_m.awaddr  = (state == S_SHOVE_AW) ? (cur_ent.addr + 64'd64)
+                                          : cur_ent.addr;
     axi_m.awid    = TID_PREFIX;
-    axi_m.awlen   = 8'd0;        // single 8 B beat per write
-    axi_m.awsize  = 3'd3;        // 2^3 = 8 bytes
+    axi_m.awlen   = 8'd0;        // single full-width beat
+    axi_m.awsize  = 3'd6;        // 2^6 = 64 bytes
     axi_m.awburst = 2'b01;
 
-    // W: 64-bit seqnum at the low 8 bytes of the data bus; wstrb selects
-    // those bytes as a byte enable for the partial write.
-    axi_m.wvalid = (state == S_REQ_W);
+    // W: 64-bit seqnum in the low 8 bytes, the rest of the line written as
+    // zero. All strobes set -- see the AW note.
+    axi_m.wvalid = (state == S_REQ_W) || (state == S_SHOVE_W);
     axi_m.wdata  = '0;
     axi_m.wdata[63:0] = cur_ent.seqnum;
-    axi_m.wstrb  = '0;
-    axi_m.wstrb[7:0]  = 8'hFF;
+    axi_m.wstrb  = '1;
     axi_m.wlast  = 1'b1;
 
     // B
-    axi_m.bready = (state == S_WAIT_B);
+    axi_m.bready = (state == S_WAIT_B) || (state == S_SHOVE_B);
   end
 
   // Sanity / unused.

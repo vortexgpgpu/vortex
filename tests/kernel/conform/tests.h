@@ -26,5 +26,6 @@ int test_tls();
 int test_vote();
 
 int test_shfl();
+int test_qshfl();
 
 #endif

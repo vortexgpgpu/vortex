@@ -68,7 +68,7 @@ ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	FPU_INCLUDE += -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -I$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -I$(THIRD_PARTY_DIR)/cvfpu/src
 	FPU_INCLUDE += -y $(THIRD_PARTY_DIR)/cvfpu/src/stubs
 endif
-RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache $(FPU_INCLUDE)
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SRC_DIR) -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache $(FPU_INCLUDE)
 RTL_INCLUDE += -I$(AFU_DIR) -I$(AFU_DIR)/ccip
 RTL_INCLUDE += -I$(RTL_DIR)/cp
 
@@ -126,12 +126,6 @@ ifneq (,$(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
 	RTL_INCLUDE += -I$(RTL_DIR)/rtu
 endif
 
-# Add shared graphics-window sources (present for any graphics extension)
-ifneq (,$(filter -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)))
-	RTL_PKGS += $(RTL_DIR)/gfx/VX_gfx_window_pkg.sv
-	RTL_INCLUDE += -I$(RTL_DIR)/gfx
-endif
-
 RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 
 # Command Processor: declare the package only. Interfaces live in
@@ -143,11 +137,17 @@ RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
 TOP = vortex_afu_shim
 
 VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
-VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-fatal
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += verilator.vlt
 VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-VL_FLAGS += $(CONFIGS)
+# Scalar config values come from the included VX_config.vh; passing the full
+# resolved XCONFIGS here would fight the header and break parameter constancy.
+# Raw $(CONFIGS) carries only the enum *value* (e.g. VX_CFG_TCU_TYPE=DPI), which
+# leaves the RTL `ifdef selectors (which key off the *companion*
+# VX_CFG_TCU_TYPE_DPI) unmatched. Add just the enum companions gen_config
+# resolves, so a CONFIGS enum override actually selects its RTL implementation.
+VL_FLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
 

@@ -1,0 +1,134 @@
+#version 450
+
+/* Shared-memory atomic coverage kernel for the vortexpipe driver.
+ *
+ * Contends the same integer atomic op set as atomic.comp -- iadd, iand, ior,
+ * ixor, signed and unsigned min/max, and exchange -- but on `shared` variables
+ * rather than on an SSBO, so the operation is an AMO whose address lands in the
+ * local-memory aperture instead of the dcache.
+ *
+ * Every check the host makes is order-independent, for the reasons atomic.comp
+ * records: add/and/or/xor/min/max are commutative and associative, and exchange
+ * is checked as a multiset over the old values each invocation reports.
+ *
+ * The dispatch runs several workgroups, and each writes the results of its OWN
+ * shared block to its own output row. Every slot whose operand derives from the
+ * global invocation id -- add, xor, both min/max pairs, exchange -- expects a
+ * different value per row, so a device whose workgroups aliased one shared
+ * allocation produces equal rows and fails rather than passing on a
+ * coincidence. The and/or slots are keyed on the local index and therefore do
+ * match across rows; they cover the bitwise ops, not the aliasing question.
+ */
+
+layout(local_size_x_id = 0) in;
+
+#define S_ADD    0u
+#define S_AND    1u
+#define S_OR     2u
+#define S_XOR    3u
+#define S_UMIN   4u
+#define S_UMAX   5u
+#define S_XCHG   6u
+#define S_USLOTS 7u
+#define S_IMIN   7u
+#define S_IMAX   8u
+#define S_SLOTS  9u
+
+#define XCHG_SEED 0xA5A5A5A5u
+
+/* Base of the per-invocation seeds. Disjoint from the values the shader writes
+ * (1..N), so a result landing on the wrong lane is always visible. */
+#define LANE_SEED 0x5A5A0000u
+
+/* Upper bound on the workgroup size, so the per-lane shared array has a
+ * compile-time extent; spec constant 0 is already taken by local_size_x_id. */
+#define LSIZE_MAX 64u
+
+layout(constant_id = 1) const uint NVOC = 64u;
+
+layout(std430, binding = 0) buffer Out { uint o[]; };   /* S_SLOTS per workgroup */
+/* xr[0 .. N-1] : old value from the contended exchange
+ * xr[N .. 2N-1]: old value from each invocation's own shared slot */
+layout(std430, binding = 1) buffer Xr  { uint xr[]; };
+
+shared uint su[S_USLOTS];
+shared int  si[2];
+shared uint sown[LSIZE_MAX];
+
+void main()
+{
+   uint lid = gl_LocalInvocationID.x;
+   uint gid = gl_GlobalInvocationID.x;
+   uint wg  = gl_WorkGroupID.x;
+   uint v   = gid + 1u;                 /* 1..N, never 0 */
+   int  sv  = int(gid) - 32;            /* spans negative, so imin/imax differ
+                                         * from umin/umax on the same data */
+   /* Half the invocations contend the unsigned min/max slots with a value above
+    * 0x7fffffff. Without one, every operand is a small positive number, signed
+    * and unsigned compares agree, and the umin/umax checks cannot tell an
+    * AMOMINU executed as AMOMIN from a correct one. */
+   uint mv  = ((lid & 1u) != 0u) ? (0x80000000u + v) : v;
+
+   /* Identities for each op, seeded by one invocation and published to the
+    * rest by the barrier. */
+   if (lid == 0u) {
+      su[S_ADD]  = 0u;
+      su[S_AND]  = 0xFFFFFFFFu;
+      su[S_OR]   = 0u;
+      su[S_XOR]  = 0u;
+      su[S_UMIN] = 0xFFFFFFFFu;
+      su[S_UMAX] = 0u;
+      su[S_XCHG] = XCHG_SEED;
+      /* INT_MIN written as a cast rather than a negated literal: 2147483648
+       * does not fit in a signed int, so the negated form depends on how the
+       * compiler folds an out-of-range literal. */
+      si[0]      = 0x7fffffff;
+      si[1]      = int(0x80000000u);
+   }
+   barrier();
+
+   /* --- unsigned ------------------------------------------------------- */
+   atomicAdd(su[S_ADD], v);
+   /* Keyed on the LOCAL index, not the global one: the bit pattern a group
+    * ends with then depends only on its own size, which the host can predict
+    * without knowing how the groups were scheduled. */
+   atomicAnd(su[S_AND], ~(1u << (lid & 31u)));
+   atomicOr (su[S_OR],   (1u << (lid & 31u)));
+   atomicXor(su[S_XOR], v);
+   atomicMin(su[S_UMIN], mv);
+   atomicMax(su[S_UMAX], mv);
+
+   /* --- signed --------------------------------------------------------- */
+   atomicMin(si[0], sv);
+   atomicMax(si[1], sv);
+
+   /* --- exchange: report the old value for the host's multiset check ---- */
+   xr[gid] = atomicExchange(su[S_XCHG], v);
+
+   /* --- per-lane response routing --------------------------------------
+    * The multiset check is satisfied by any permutation of the returned values
+    * across lanes, so it cannot tell whether each invocation received its own.
+    * Here every invocation owns a distinct shared slot holding a distinct
+    * seed, which makes the expected result per-lane and a permutation visible.
+    *
+    * This covers response routing only, not per-lane hart identity: the LMEM
+    * path can drop its per-lane tids and still pass here, because hart_id
+    * decides LR/SC reservations rather than which lane an AMO response
+    * reaches. Covering hart identity needs compare-and-swap.
+    *
+    * No barrier is needed around the seeding: an invocation only ever touches
+    * its own slot, so program order is enough. */
+   sown[lid] = LANE_SEED + gid;
+   xr[NVOC + gid] = atomicExchange(sown[lid], v);
+
+   barrier();
+
+   if (lid == 0u) {
+      uint b = wg * S_SLOTS;
+      for (uint k = 0u; k < S_USLOTS; k++) {
+         o[b + k] = su[k];
+      }
+      o[b + S_IMIN] = uint(si[0]);
+      o[b + S_IMAX] = uint(si[1]);
+   }
+}

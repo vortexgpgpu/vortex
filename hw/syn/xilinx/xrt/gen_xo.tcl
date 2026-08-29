@@ -33,6 +33,12 @@ set argv [list ${build_dir}/ip]
 set argc 1
 source ${tool_dir}/xilinx_ip_gen.tcl
 
+# Always-on module-interface registration gate: elaborate the kernel and abort
+# (with full broken-path debug) if any module boundary is not registered on
+# both directions of an SLR-crossable interface. Runs before packaging so a
+# violation stops the build in minutes, not after hours of implementation.
+source ${tool_dir}/xilinx_elab_check.tcl
+
 set argv [list ${krnl_name} ${vcs_file} ${build_dir}]
 set argc 3
 source ${script_dir}/package_kernel.tcl

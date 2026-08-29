@@ -1,8 +1,8 @@
 // gfx_v2 bin-sort binning — functional validation unit test.
 // Build/run via the test harness: make -C tests/unittest/gfx_binsort run
 //
-// Proves the core design claim of docs/proposals/gfx_v2_tile_binning_redesign.md
-// at GROUND TRUTH (per covered sample): for every covered pixel, the
+// Proves the bin-sort design claim at GROUND TRUTH (per covered sample): for
+// every covered pixel, the
 // draw-ordered list of primitives covering it is IDENTICAL between the gfx-v1
 // path (bbox binning, draw order) and the bin-sort pipeline (coarse 128px bins,
 // count->prefix-sum->emit->sort->header-scan). Per-pixel ordered coverage is

@@ -13,57 +13,40 @@
 
 `include "VX_define.vh"
 
+// Reduces the pre-conditioned accumulator operands (masked, negated and
+// sign-extended by the align stage). The +1 completions of the fp
+// ones-complement negations enter the tree as a single popcount operand.
 module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter N  = 5,
-    parameter WI = 26,
     parameter WO = 30
 ) (
     input  wire                 clk,
     input  wire                 valid_in,
     input  wire [31:0]          req_id,
-    input  wire [N-2:0]         lane_mask,
-    input  wire                 is_int,
-    input  wire [N-1:0][WI-1:0] sigs_in,
+    input  wire [N-1:0][WO-1:0] sigs_in,
     input  wire [N-1:0]         sticky_in,
-    output wire [WO-1:0]        sig_out,   // Signed two's-complement sum
+    input  wire [N-1:0]         fp_negs,
+    output wire [WO-1:0]        sig_out,   // Sum magnitude
+    output wire                 sign_out,  // Sum sign
     output wire                 sticky_out
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, valid_in, req_id})
-
-    wire [N-1:0][WI-1:0] masked_sigs;
-    wire [N-1:0]        masked_sticky;
-    // Mask vector lanes (0 to N-2)
-    for (genvar i = 0; i < N-1; ++i) begin : g_mask
-        assign masked_sigs[i]   = sigs_in[i] & {WI{lane_mask[i]}};
-        assign masked_sticky[i] = sticky_in[i] & lane_mask[i];
-    end
-
-    // Pass C-term (N-1) unmasked
-    assign masked_sigs[N-1]   = sigs_in[N-1];
-    assign masked_sticky[N-1] = sticky_in[N-1];
-
-    // Sign Extension
-    wire [N-1:0] fp_neg_terms;
-    wire [N:0][WO-1:0] sig_operands;
-
-    for (genvar i = 0; i < N; ++i) begin : g_ext
-        wire [WO-1:0] int_sig = $signed({{(WO-WI){masked_sigs[i][WI-1]}}, masked_sigs[i]});
-        wire [WO-1:0] fp_mag  = WO'(masked_sigs[i][WI-2:0]);
-        assign fp_neg_terms[i] = ~is_int & masked_sigs[i][WI-1];
-        assign sig_operands[i] = is_int ? int_sig : (fp_neg_terms[i] ? ~fp_mag : fp_mag);
-    end
 
     // Count number of negative FP terms for final correction
     wire [`CLOG2(N+1)-1:0] fp_neg_count;
     VX_popcount #(
         .N (N)
     ) fp_neg_popcount (
-        .data_in  (fp_neg_terms),
+        .data_in  (fp_negs),
         .data_out (fp_neg_count)
     );
 
+    wire [N:0][WO-1:0] sig_operands;
+    for (genvar i = 0; i < N; ++i) begin : g_ops
+        assign sig_operands[i] = sigs_in[i];
+    end
     assign sig_operands[N] = WO'(fp_neg_count);
 
     // Fast Reduction (CSA Tree)
@@ -80,7 +63,9 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         .carry    (carry_vec)
     );
 
-    // Final adder
+    // Resolve the sum in sign-magnitude form with two parallel adders, so the
+    // norm stage can run its LZC directly on the exact magnitude.
+    wire [WO-1:0] sig_pos;
     VX_ks_adder #(
         .N (WO),
         .BYPASS (`FORCE_BUILTIN_ADDER(WO))
@@ -88,23 +73,40 @@ module VX_tcu_tfr_acc import VX_tcu_pkg::*; #(
         .cin   (1'b0),
         .dataa (sum_vec),
         .datab (carry_vec),
-        .sum   (sig_out),
+        .sum   (sig_pos),
         `UNUSED_PIN (cout)
     );
 
+    // -(a+b) = ~a + ~b + 2: cin=1 yields ~(a+b), the +1 completes the negate.
+    wire [WO-1:0] sig_neg_raw;
+    VX_ks_adder #(
+        .N (WO),
+        .BYPASS (`FORCE_BUILTIN_ADDER(WO))
+    ) neg_adder (
+        .cin   (1'b1),
+        .dataa (~sum_vec),
+        .datab (~carry_vec),
+        .sum   (sig_neg_raw),
+        `UNUSED_PIN (cout)
+    );
+    wire [WO-1:0] sig_neg = sig_neg_raw + WO'(1);
+
+    assign sign_out = sig_pos[WO-1];
+    assign sig_out  = sign_out ? sig_neg : sig_pos;
+
     // Sticky bit aggregation
-    assign sticky_out = |masked_sticky;
+    assign sticky_out = |sticky_in;
 
 `ifdef DBG_TRACE_TCU
     always_ff @(posedge clk) begin
         if (valid_in) begin
-            `TRACE(4, ("%t: %s FEDP-ACC(%0d): lane_mask=%b, sigs_in=", $time, INSTANCE_ID, req_id, lane_mask));
+            `TRACE(4, ("%t: %s FEDP-ACC(%0d): sigs_in=", $time, INSTANCE_ID, req_id));
             `TRACE_ARRAY1D(4, "0x%0h", sigs_in, N)
-            `TRACE(4, (", masked_sigs="));
-            `TRACE_ARRAY1D(4, "0x%0h", masked_sigs, N)
             `TRACE(4, (", sticky_in="));
             `TRACE_ARRAY1D(4, "%0d", sticky_in, N)
-            `TRACE(4, (", sig_out=0x%0h, sticky_out=%0d\n", sig_out, sticky_out));
+            `TRACE(4, (", fp_negs="));
+            `TRACE_ARRAY1D(4, "%0d", fp_negs, N)
+            `TRACE(4, (", sig_out=0x%0h, sign_out=%0d, sticky_out=%0d\n", sig_out, sign_out, sticky_out));
         end
     end
 `endif

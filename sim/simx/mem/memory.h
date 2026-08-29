@@ -13,10 +13,9 @@
 
 #pragma once
 
-#include <simobject.h>
+#include "types.h"
 #include <mem.h>
 #include <functional>
-#include "types.h"
 
 namespace vortex {
 

@@ -31,7 +31,9 @@ CONFIGS += -DSYNTHESIS -DQUARTUS -DNDEBUG
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-CFLAGS += $(CONFIGS)
+# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
+# resolved type selectors so an enum override selects its RTL implementation.
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 CFLAGS += $(RTL_INCLUDE)
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf

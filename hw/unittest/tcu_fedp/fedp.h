@@ -505,7 +505,7 @@ private:
 
   acc_t accumulate(const align_t &a) {
     const int Wa = W_ + 2;
-    const int Ww = W_ + 1 + HR_;
+    const int Ww = Wa + HR_;
     const uint32_t mask = (1ULL << Ww) - 1;
     uint32_t s_acc = 0, c_acc = 0;
     for (const auto &val : a.terms) {
@@ -517,7 +517,7 @@ private:
   }
 
   nrm_t normalize(const acc_t &x) {
-    const int Ww = W_ + 1 + HR_;
+    const int Ww = (W_ + 2) + HR_;
     const uint32_t mask = (1ULL << Ww) - 1;
     if (x.V == 0) return {0, 0, 0, x.sticky, -1000000000, x.flags, 0, 0, 0};
 

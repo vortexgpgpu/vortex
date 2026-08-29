@@ -171,6 +171,10 @@ struct om_state_t {
   uint32_t depth_enabled, stencil_enabled[2], blend_enabled;
   uint32_t cbuf_writemask;             // expanded 32-bit byte mask
   uint32_t color_read, color_write;
+  // depth bounds test; min/max are encoded in the bound depth format's
+  // value range (inclusive) so the compare stays integer on the device
+  uint32_t depth_bounds_enable;
+  uint32_t depth_bounds_min, depth_bounds_max;
 };
 
 // Derive the enable flags + expanded color mask exactly as the FF unit does.
@@ -306,6 +310,16 @@ static inline __attribute__((always_inline)) bool ds_test(const om_state_t& s, u
   uint32_t depth_val   = ds_val & dd.dmask;
   uint32_t stencil_val = dd.has_stencil ? ((ds_val >> dd.sshift) & 0xff) : 0;
   uint32_t depth_ref   = depth & dd.dmask;
+
+  /* Depth bounds test. Vulkan orders it before the stencil test, and a fragment
+   * it rejects is discarded outright -- no stencil op runs and the packed word
+   * is left as it was found. The comparison is against the depth ALREADY in the
+   * buffer, not the incoming fragment's, and the bounds are inclusive. */
+  if (s.depth_bounds_enable && dd.has_depth &&
+      (depth_val < s.depth_bounds_min || depth_val > s.depth_bounds_max)) {
+    *ds_result = ds_val;
+    return false;
+  }
 
   uint32_t sref = s.stencil_ref[f], smask = s.stencil_mask[f];
   uint32_t sref_m = sref & smask, sval_m = stencil_val & smask;
@@ -502,6 +516,13 @@ struct TexState {
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
   uint32_t border;                        // ARGB8888 border colour (WRAP_BORDER)
   uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
+  uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 => none
+  uint32_t swizzle;                       // view component map: r|g<<3|b<<6|a<<9 (0..3=RGBA, 4=0, 5=1)
+  uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
+  uint32_t max_lod;                       // sampler LOD clamp upper bound, Q(VX_TEX_LOD_FRAC_BITS)
+  int32_t  lod_bias;                      // sampler LOD bias, signed Q(VX_TEX_LOD_FRAC_BITS)
+  uint32_t depth;                         // sampler3D: mip-0 depth-slice count; samplerCubeArray: cube count; 0 otherwise
+  uint32_t wrap_w;                        // VX_TEX_WRAP_* for the 3D depth (r) axis
 };
 
 // Full vx_tex4 SW fallback: a complete (u, v, lod) sample including the
@@ -509,11 +530,14 @@ struct TexState {
 // math via tex_sample_sw_lod, same two-mip TexLodLerp), so it is bit-identical
 // to the FF unit. `lod` is fixed-point when the mip filter is linear.
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
-    const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t layer) {
-  // mag/min selects the per-LOD tap pattern; the mip-linear bit is consumed here.
-  uint32_t tap_filter = s.filter & TEX_FILTER_MAGMIN_MASK;
+    const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t layer,
+    uint32_t filter) {
+  // `filter` (tap in bit0, mip-linear in bit1) overrides s.filter: a fragment
+  // shader resolves min-vs-mag per fragment and passes the result, since the one
+  // descriptor holds both taps. mag/min selects the per-LOD tap pattern.
+  uint32_t tap_filter = filter & TEX_FILTER_MAGMIN_MASK;
   uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;   // array/cube slice
-  if (s.filter & VX_TEX_FILTER_MIP_LINEAR) {
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
     uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
     uint32_t lj   = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
     uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
@@ -527,23 +551,127 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_layer(
                            tap_filter, s.wrap, u, v, lod, s.width, s.height, s.border);
 }
 
+// One LOD's sample of a float-format texture, as four float channels. Mirrors
+// tex_sample_ext_lod tap for tap -- same tex_compute_request addressing, same
+// border mask, same blend weights -- but decodes each tap with TexDecodeFloat4
+// and blends in float, so a texel outside [0,1] keeps its magnitude instead of
+// being clamped by the 8-bit working space.
+static inline __attribute__((always_inline)) void tex_sample_f32_lod(
+    uint64_t base_addr, uint32_t logdim, uint32_t format, uint32_t filter,
+    uint32_t wrap, int32_t u, int32_t v, uint32_t lod,
+    uint32_t width, uint32_t height, uint32_t border, float out[4]) {
+  gfx_tex::TexelRequest req =
+    gfx_tex::tex_compute_request(0, logdim, format, filter, wrap, u, v, lod, width, height);
+  uint32_t log_width  = (uint32_t)gfx_tex::tex_imax((int32_t)(logdim & 0xffff) - (int32_t)lod, 0);
+  uint32_t log_height = (uint32_t)gfx_tex::tex_imax((int32_t)(logdim >> 16) - (int32_t)lod, 0);
+  uint32_t w = width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(width  >> lod), 1) : (1u << log_width);
+  uint32_t h = height ? (uint32_t)gfx_tex::tex_imax((int32_t)(height >> lod), 1) : (1u << log_height);
+  uint32_t bmask = gfx_tex::TexBorderMask(u, v, w, h, log_width, log_height,
+                                          wrap & 0xffff, wrap >> 16, req.filter);
+  // The border colour is an ARGB8888 constant; expand it to the same [0,1]
+  // channels the 8-bit path would produce.
+  const float inv255 = 1.0f / 255.0f;
+  const float bf[4] = { (float)((border >> 16) & 0xff) * inv255,
+                        (float)((border >> 8) & 0xff) * inv255,
+                        (float)(border & 0xff) * inv255,
+                        (float)(border >> 24) * inv255 };
+  uint32_t taps = (req.filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
+  float t[4][4];
+  for (uint32_t i = 0; i < taps; ++i) {
+    if ((bmask >> i) & 1u) {
+      for (uint32_t c = 0; c < 4; ++c) t[i][c] = bf[c];
+    } else {
+      gfx_tex::TexDecodeFloat4(format, (const void*)(uintptr_t)(base_addr + req.addr[i]),
+                               req.stride, t[i]);
+    }
+  }
+  if (req.filter == VX_TEX_FILTER_BILINEAR) {
+    gfx_tex::TexFilterLinearF4(t[0], t[1], t[2], t[3], req.alpha, req.beta, out);
+    return;
+  }
+  for (uint32_t c = 0; c < 4; ++c) out[c] = t[0][c];
+}
+
+// Full sample returning four float channels -- the float twin of
+// tex_sample_sw_layer, including the mip blend.
+//
+// A float format decodes and filters natively (tex_sample_f32_lod). EVERY OTHER
+// format delegates to tex_sample_sw_layer and expands the packed word, so its
+// result stays bit-identical to the 8-bit path: same byte positions, same
+// multiply-by-reciprocal the shader's own unpack uses (a divide by 255.0f differs
+// in the last bit for 126 of the 256 byte values). Only float formats run new
+// arithmetic.
+static inline __attribute__((always_inline)) void tex_sample_f32_layer(
+    const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t layer,
+    uint32_t filter, float out[4]) {
+  if (!gfx_tex::TexIsFloatFormat(s.format)) {
+    uint32_t argb = tex_sample_sw_layer(s, u, v, lod, layer, filter);
+    const float inv255 = 1.0f / 255.0f;
+    out[0] = (float)((argb >> 16) & 0xff) * inv255;
+    out[1] = (float)((argb >> 8) & 0xff) * inv255;
+    out[2] = (float)(argb & 0xff) * inv255;
+    out[3] = (float)(argb >> 24) * inv255;
+    return;
+  }
+  uint32_t tap_filter = filter & TEX_FILTER_MAGMIN_MASK;
+  uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;   // array/cube slice
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
+    uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj   = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+    float c0[4], c1[4];
+    tex_sample_f32_lod(lbase + s.mip_off[li], s.logdim, s.format, tap_filter, s.wrap,
+                       u, v, li, s.width, s.height, s.border, c0);
+    tex_sample_f32_lod(lbase + s.mip_off[lj], s.logdim, s.format, tap_filter, s.wrap,
+                       u, v, lj, s.width, s.height, s.border, c1);
+    gfx_tex::TexLodLerpF4(c0, c1, frac, out);
+    return;
+  }
+  tex_sample_f32_lod(lbase + s.mip_off[lod], s.logdim, s.format, tap_filter, s.wrap,
+                     u, v, lod, s.width, s.height, s.border, out);
+}
+
+// Sample using the descriptor's own filter (the fixed single-filter path).
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
     const TexState& s, int32_t u, int32_t v, uint32_t lod) {
-  return tex_sample_sw_layer(s, u, v, lod, 0);
+  return tex_sample_sw_layer(s, u, v, lod, 0, s.filter);
+}
+
+// Sample with a caller-resolved filter (tap in bit0, mip-linear in bit1): a
+// fragment shader picks the min or mag tap per fragment from the sign of its LOD,
+// since the one descriptor holds both taps.
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t filter) {
+  return tex_sample_sw_layer(s, u, v, lod, 0, filter);
+}
+
+// Bound an array layer to the descriptor's slice count so a coordinate past the
+// last layer reads the last one rather than memory beyond the resource.
+static inline __attribute__((always_inline)) uint32_t array_layer_clamp(
+    const TexState& s, uint32_t layer) {
+  return (s.depth && layer >= s.depth) ? s.depth - 1u : layer;
 }
 
 // 2D-array view: integer layer index selects the slice at layer*layer_stride.
 static inline __attribute__((always_inline)) uint32_t tex_sample_sw_array(
     const TexState& s, int32_t u, int32_t v, uint32_t layer, uint32_t lod) {
-  return tex_sample_sw_layer(s, u, v, lod, layer);
+  return tex_sample_sw_layer(s, u, v, lod, array_layer_clamp(s, layer), s.filter);
 }
 
-// Cube view: pick the face from the major axis of the (sc,tc,rc) direction and
-// project to the face's [0,1] uv, then sample that face's slice (face index is the
-// layer). Face order matches Vulkan/GL cube layers: +X,-X,+Y,-Y,+Z,-Z = 0..5.
-// Coordinates are floats (the FS supplies the interpolated direction vector).
-static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
-    const TexState& s, float sc, float tc, float rc, uint32_t lod) {
+// Float twin of tex_sample_sw_array, for a texture whose texels leave [0,1]. It
+// takes the descriptor's own filter for the same reason the packed twin does.
+static inline __attribute__((always_inline)) void tex_sample_f32_array(
+    const TexState& s, int32_t u, int32_t v, uint32_t layer, uint32_t lod,
+    float out[4]) {
+  tex_sample_f32_layer(s, u, v, lod, array_layer_clamp(s, layer), s.filter, out);
+}
+
+// Pick the cube face from the major axis of the (sc,tc,rc) direction and project
+// to the face's [0,1] uv (returned as S.23 fixed-point in *u,*v). Face order
+// matches Vulkan/GL cube layers: +X,-X,+Y,-Y,+Z,-Z = 0..5. Shared by the colour
+// and shadow cube samplers.
+static inline __attribute__((always_inline)) uint32_t cube_face_uv(
+    float sc, float tc, float rc, int32_t* u, int32_t* v) {
   float asx = sc < 0 ? -sc : sc, asy = tc < 0 ? -tc : tc, asz = rc < 0 ? -rc : rc;
   uint32_t face; float ma, uc, vc;
   if (asx >= asy && asx >= asz) {
@@ -556,8 +684,431 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
   float inv = (ma != 0.0f) ? (0.5f / ma) : 0.0f;
   float fu = uc * inv + 0.5f, fv = vc * inv + 0.5f;
   const int32_t ONE = 1 << TEX_FXD_FRAC;
-  int32_t u = (int32_t)(fu * (float)ONE), v = (int32_t)(fv * (float)ONE);
-  return tex_sample_sw_layer(s, u, v, lod, face);
+  *u = (int32_t)(fu * (float)ONE);
+  *v = (int32_t)(fv * (float)ONE);
+  return face;
+}
+
+// Cube view: pick the face + project, then sample that face's slice (face index
+// is the layer). Coordinates are floats (the FS supplies the interpolated
+// direction vector).
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw_cube(
+    const TexState& s, float sc, float tc, float rc, uint32_t lod) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  return tex_sample_sw_layer(s, u, v, lod, face, s.filter);
+}
+
+// Float twin of tex_sample_sw_cube, for a texture whose texels leave [0,1]. It
+// picks the face with the same cube_face_uv, so both twins sample the same texels.
+static inline __attribute__((always_inline)) void tex_sample_f32_cube(
+    const TexState& s, float sc, float tc, float rc, uint32_t lod, float out[4]) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  tex_sample_f32_layer(s, u, v, lod, face, s.filter, out);
+}
+
+// Clamp a cube-array cube index to the resident range [0, s.depth-1] (s.depth is
+// the cube count for a cube-array; 0 => unknown, no clamp). Matches the reference
+// selectLayer upper clamp; the FS emit already clamps the lower bound to >= 0.
+static inline __attribute__((always_inline)) uint32_t cube_array_clamp(
+    const TexState& s, uint32_t array_index) {
+  return (s.depth && array_index >= s.depth) ? s.depth - 1u : array_index;
+}
+
+// samplerCubeArray: `array_index` selects the cube, the (sc,tc,rc) direction the
+// face; the 6*N faces stack as slices, so the slice is array_index*6 + face.
+static inline __attribute__((always_inline)) uint32_t tex_sample_cube_array_sw(
+    const TexState& s, float sc, float tc, float rc, uint32_t array_index,
+    uint32_t lod) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  return tex_sample_sw_layer(s, u, v, lod,
+                             cube_array_clamp(s, array_index) * 6u + face, s.filter);
+}
+
+// Float twin of tex_sample_cube_array_sw, for a texture whose texels leave [0,1].
+// It resolves the face and the cube index exactly as the packed twin does.
+static inline __attribute__((always_inline)) void tex_sample_f32_cube_array(
+    const TexState& s, float sc, float tc, float rc, uint32_t array_index,
+    uint32_t lod, float out[4]) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  tex_sample_f32_layer(s, u, v, lod,
+                       cube_array_clamp(s, array_index) * 6u + face, s.filter, out);
+}
+
+// One 3D mip level: `w` (S.23 depth coord) selects the slice within level `lod`.
+// A linear tap (filter bit0) blends the two bracketing slices by the depth
+// fraction; nearest picks the closest slice. The in-slice (u,v) filter is
+// `filter`, as for 2D/array. Trilinear (inter-level) is layered on top by
+// tex_sample_sw_3d.
+// The depth-slice addressing of one 3D mip level, shared by the packed and float
+// samplers so the two cannot drift: level `lod` starts at s.mip_off[lod] and holds
+// d_l = max(depth>>lod,1) slices of w_l x h_l, and slice z sits at
+// mip_off[lod] + z*(w_l*h_l*stride). A nearest tap resolves one slice (z0 == z1,
+// frac 0); a linear tap resolves the two bracketing slices -- each tap
+// (w -/+ half-slice) wrapped independently and floored -- plus z0's sub-slice
+// fraction, matching the 2D bilinear depth addressing (TexAddressLinear).
+struct Tex3DSlices {
+  uint64_t lvl_base;
+  uint64_t slice_sz;
+  uint32_t z0, z1, frac;
+};
+
+static inline __attribute__((always_inline)) Tex3DSlices tex_3d_slices(
+    const TexState& s, int32_t w, uint32_t lod, uint32_t tap) {
+  uint32_t stride = gfx_tex::FormatStride(s.format);
+  uint32_t log_w = s.logdim & 0xffff, log_h = s.logdim >> 16;
+  uint32_t w_l = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1)
+                          : (1u << (uint32_t)gfx_tex::tex_imax((int32_t)log_w - (int32_t)lod, 0));
+  uint32_t h_l = s.height ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.height >> lod), 1)
+                          : (1u << (uint32_t)gfx_tex::tex_imax((int32_t)log_h - (int32_t)lod, 0));
+  uint32_t depth = s.depth ? s.depth : 1u;
+  uint32_t d_l = (uint32_t)gfx_tex::tex_imax((int32_t)(depth >> lod), 1);
+
+  Tex3DSlices sl{};
+  sl.slice_sz = (uint64_t)w_l * h_l * stride;
+  sl.lvl_base = s.base + s.mip_off[lod];
+  if (tap == 0) {
+    uint32_t ww = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w), s.wrap_w);
+    uint32_t z = (uint32_t)(((uint64_t)ww * d_l) >> TEX_FXD_FRAC);
+    if (z >= d_l) {
+      z = d_l - 1u;
+    }
+    sl.z0 = sl.z1 = z;
+    sl.frac = 0;
+    return sl;
+  }
+  int32_t dz = (int32_t)(gfx_tex::TFixed<TEX_FXD_FRAC>::HALF / (int32_t)d_l);
+  uint32_t z0w = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w - dz), s.wrap_w);
+  uint32_t z1w = (uint32_t)gfx_tex::TextureWrap(gfx_tex::TFixed<TEX_FXD_FRAC>::make(w + dz), s.wrap_w);
+  uint32_t z0s = (uint32_t)(((uint64_t)z0w * d_l * 256u) >> TEX_FXD_FRAC);
+  sl.z0 = z0s >> 8;
+  sl.z1 = (uint32_t)(((uint64_t)z1w * d_l) >> TEX_FXD_FRAC);
+  sl.frac = z0s & 0xffu;
+  if (sl.z0 >= d_l) {
+    sl.z0 = d_l - 1u;
+  }
+  if (sl.z1 >= d_l) {
+    sl.z1 = d_l - 1u;
+  }
+  return sl;
+}
+
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d_level(
+    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
+  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+  Tex3DSlices sl = tex_3d_slices(s, w, lod, tap);
+  uint32_t c0 = tex_sample_sw_lod(sl.lvl_base + sl.z0 * sl.slice_sz, s.logdim, s.format,
+                                  tap, s.wrap, u, v, lod, s.width, s.height, s.border);
+  if (tap == 0) {
+    return c0;
+  }
+  uint32_t c1 = tex_sample_sw_lod(sl.lvl_base + sl.z1 * sl.slice_sz, s.logdim, s.format,
+                                  tap, s.wrap, u, v, lod, s.width, s.height, s.border);
+  return gfx_tex::TexLodLerp(c0, c1, sl.frac);
+}
+
+// Float twin of tex_sample_sw_3d_level, for a texture whose texels leave [0,1].
+static inline __attribute__((always_inline)) void tex_sample_f32_3d_level(
+    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter,
+    float out[4]) {
+  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+  Tex3DSlices sl = tex_3d_slices(s, w, lod, tap);
+  float c0[4];
+  tex_sample_f32_lod(sl.lvl_base + sl.z0 * sl.slice_sz, s.logdim, s.format, tap, s.wrap,
+                     u, v, lod, s.width, s.height, s.border, c0);
+  if (tap == 0) {
+    for (uint32_t c = 0; c < 4; ++c) out[c] = c0[c];
+    return;
+  }
+  float c1[4];
+  tex_sample_f32_lod(sl.lvl_base + sl.z1 * sl.slice_sz, s.logdim, s.format, tap, s.wrap,
+                     u, v, lod, s.width, s.height, s.border, c1);
+  gfx_tex::TexLodLerpF4(c0, c1, sl.frac, out);
+}
+
+// 3D view with the full mip resolution. A mip-linear sampler (filter bit1)
+// splits the Q(VX_TEX_LOD_FRAC_BITS) `lod` into floor level `li`, `lj=li+1`, and
+// blends the two per-level 3D samples by the level fraction -- full trilinear is
+// then 2 levels x 2 slices x bilinear. Otherwise `lod` is an integer level and
+// this is the single per-level sample (nearest-mip / single-level), unchanged.
+static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d(
+    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter) {
+  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
+    uint32_t li = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+    uint32_t c0 = tex_sample_sw_3d_level(s, u, v, w, li, tap);
+    uint32_t c1 = tex_sample_sw_3d_level(s, u, v, w, lj, tap);
+    return gfx_tex::TexLodLerp(c0, c1, frac);
+  }
+  return tex_sample_sw_3d_level(s, u, v, w, lod, tap);
+}
+
+// Float twin of tex_sample_sw_3d: the same slice-then-level blend order, in float.
+// A non-float format delegates to the packed sampler and expands the result, so it
+// stays bit-identical (see tex_sample_f32_layer).
+static inline __attribute__((always_inline)) void tex_sample_f32_3d(
+    const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter,
+    float out[4]) {
+  if (!gfx_tex::TexIsFloatFormat(s.format)) {
+    uint32_t argb = tex_sample_sw_3d(s, u, v, w, lod, filter);
+    const float inv255 = 1.0f / 255.0f;
+    out[0] = (float)((argb >> 16) & 0xff) * inv255;
+    out[1] = (float)((argb >> 8) & 0xff) * inv255;
+    out[2] = (float)(argb & 0xff) * inv255;
+    out[3] = (float)(argb >> 24) * inv255;
+    return;
+  }
+  uint32_t tap = filter & TEX_FILTER_MAGMIN_MASK;
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
+    uint32_t li = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
+    float c0[4], c1[4];
+    tex_sample_f32_3d_level(s, u, v, w, li, tap, c0);
+    tex_sample_f32_3d_level(s, u, v, w, lj, tap, c1);
+    gfx_tex::TexLodLerpF4(c0, c1, frac, out);
+    return;
+  }
+  tex_sample_f32_3d_level(s, u, v, w, lod, tap, out);
+}
+
+// texelFetch addressing: byte address of the texel at integer (x,y) of `layer`
+// and `lod`, plus the texel stride. Coords are clamped into range (Vulkan leaves
+// an out-of-range fetch undefined; clamp is a safe, deterministic choice). Each
+// level is laid out row-major and contiguous (matching the host mip-chain upload),
+// so the texel index is x + y*w; `layer` steps whole mip chains.
+static inline __attribute__((always_inline)) uint64_t tex_fetch_addr(
+    const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod,
+    uint32_t* stride) {
+  uint32_t log_width  = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim & 0xffff) - (int32_t)lod, 0);
+  uint32_t log_height = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim >> 16) - (int32_t)lod, 0);
+  uint32_t w = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1) : (1u << log_width);
+  uint32_t h = s.height ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.height >> lod), 1) : (1u << log_height);
+  uint32_t xi = (x < 0) ? 0u : ((uint32_t)x >= w ? w - 1u : (uint32_t)x);
+  uint32_t yi = (y < 0) ? 0u : ((uint32_t)y >= h ? h - 1u : (uint32_t)y);
+  *stride = gfx_tex::FormatStride(s.format);
+  return s.base + (uint64_t)layer * s.layer_stride + s.mip_off[lod]
+       + (uint64_t)(xi + yi * w) * (*stride);
+}
+
+// texelFetch: the four channels of the exact texel at (x,y) of integer `lod`, as
+// floats in RGBA order -- no wrap, no filter, no mip blend. Floats, not packed
+// 8-bit ARGB, because a float-format texture holds values well outside [0,1]; a
+// non-float format decodes to the same [0,1] channels the shader unpack would
+// produce.
+static inline __attribute__((always_inline)) void tex_fetch_f32(
+    const TexState& s, int32_t x, int32_t y, uint32_t lod, float out[4]) {
+  uint32_t stride;
+  uint64_t addr = tex_fetch_addr(s, x, y, 0, lod, &stride);
+  gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)addr, stride, out);
+}
+
+// texelFetch for an integer sampler: the four channels of the texel at (x,y) of
+// integer `lod` as raw 0..255 values. An isampler/usampler must yield the stored
+// integer, not a normalised colour, so no scaling happens here; the shader knows
+// the sampler's signedness statically and sign- or zero-extends. Exact because the
+// integer formats reach the sampler as A8R8G8B8, whose decode preserves each byte.
+static inline __attribute__((always_inline)) void tex_fetch_i32(
+    const TexState& s, int32_t x, int32_t y, uint32_t lod, uint32_t layer,
+    int32_t out[4]) {
+  uint32_t stride;
+  uint64_t addr = tex_fetch_addr(s, x, y, layer, lod, &stride);
+  uint32_t argb = gfx_tex::TexDecodeArgb8(s.format, (const void*)(uintptr_t)addr, stride);
+  out[0] = (int32_t)((argb >> 16) & 0xff);
+  out[1] = (int32_t)((argb >> 8) & 0xff);
+  out[2] = (int32_t)(argb & 0xff);
+  out[3] = (int32_t)(argb >> 24);
+}
+
+// texelFetch on a 2D array: the texel at (x,y) of integer `layer` (slice at
+// layer*layer_stride) and `lod` (see tex_fetch_f32).
+static inline __attribute__((always_inline)) void tex_fetch_array_f32(
+    const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod,
+    float out[4]) {
+  uint32_t stride;
+  uint64_t addr = tex_fetch_addr(s, x, y, layer, lod, &stride);
+  gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)addr, stride, out);
+}
+
+// textureGather: channel `comp` of the 2x2 texel footprint at (u,v) of the base
+// level, unfiltered, packed in GL gather order {(i0,j1),(i1,j1),(i1,j0),(i0,j0)} as
+// bytes x | y<<8 | z<<16 | w<<24. The footprint is the bilinear tap footprint, so
+// reuse tex_compute_request (BILINEAR taps + wrap); gather order maps to taps
+// {2,3,1,0} (tap order is (u-,v-),(u+,v-),(u-,v+),(u+,v+)). Non-border wraps only.
+// `layer` selects the slice for an array view and is 0 for a plain 2D one.
+static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t comp, uint32_t layer = 0) {
+  // Apply the view's component swizzle: the requested output component maps to a
+  // source channel (0..3 = R,G,B,A) or a constant (4 = 0, 5 = 1). Identity
+  // (r|g<<3|b<<6|a<<9 = X,Y,Z,W) reproduces the un-swizzled channel select.
+  uint32_t map = (s.swizzle >> ((comp & 3) * 3)) & 0x7u;
+  if (map == 4u) {
+    return 0x00000000u;   // PIPE_SWIZZLE_0 -> all four taps 0
+  }
+  if (map == 5u) {
+    return 0xffffffffu;   // PIPE_SWIZZLE_1 -> all four taps 255
+  }
+  gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
+      s.base + (uint64_t)array_layer_clamp(s, layer) * s.layer_stride, s.logdim, s.format,
+      VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
+      s.width, s.height);
+  const uint32_t argb_shift[4] = { 16, 8, 0, 24 };   // R,G,B,A within ARGB8888
+  const uint32_t order[4]      = { 2, 3, 1, 0 };      // GL gather order over the taps
+  uint32_t sh = argb_shift[map & 3];
+  uint32_t packed = 0;
+  for (uint32_t i = 0; i < 4; ++i) {
+    uint32_t argb = gfx_tex::TexDecodeArgb8(
+        s.format, (const void*)(uintptr_t)req.addr[order[i]], req.stride);
+    packed |= ((argb >> sh) & 0xffu) << (i * 8);
+  }
+  return packed;
+}
+
+// Read one raw depth texel as a float in [0,1] from resident memory at `p`.
+// D32F is stored as a raw float; D16 as a 16-bit unorm (/65535). Any other
+// format falls back to the luminance of its ARGB decode (so a colour texture
+// bound to a shadow sampler still yields a deterministic value).
+static inline __attribute__((always_inline)) float decode_depth_f(
+    uint32_t format, const void* p, uint32_t stride) {
+  if (format == VX_TEX_FORMAT_D32F) {
+    float f; __builtin_memcpy(&f, p, 4); return f;
+  }
+  if (format == VX_TEX_FORMAT_D16) {
+    uint16_t d; __builtin_memcpy(&d, p, 2); return (float)d * (1.0f / 65535.0f);
+  }
+  uint32_t argb = gfx_tex::TexDecodeArgb8(format, p, stride);
+  return (float)((argb >> 16) & 0xff) * (1.0f / 255.0f);   // R as luminance
+}
+
+// Float compare for shadow: `ref <compare_func> depth`. Reuses the OM depth
+// compare enum (VkCompareOp maps to it host-side), evaluated on the raw depth
+// floats so a D32F sample keeps full precision (unlike the 8-bit ARGB decode).
+static inline __attribute__((always_inline)) float shadow_compare_f(
+    uint32_t compare_func, float ref, float depth) {
+  bool pass;
+  switch (compare_func) {
+  case VX_OM_DEPTH_FUNC_NEVER:    pass = false;           break;
+  case VX_OM_DEPTH_FUNC_LESS:     pass = (ref <  depth);  break;
+  case VX_OM_DEPTH_FUNC_EQUAL:    pass = (ref == depth);  break;
+  case VX_OM_DEPTH_FUNC_LEQUAL:   pass = (ref <= depth);  break;
+  case VX_OM_DEPTH_FUNC_GREATER:  pass = (ref >  depth);  break;
+  case VX_OM_DEPTH_FUNC_NOTEQUAL: pass = (ref != depth);  break;
+  case VX_OM_DEPTH_FUNC_GEQUAL:   pass = (ref >= depth);  break;
+  default:                        pass = true;            break;   // ALWAYS
+  }
+  return pass ? 1.0f : 0.0f;
+}
+
+// sampler2DShadow: sample the depth texture at (u,v), compare each tap against
+// `ref` with s.compare_func, and return the result as a float in [0,1]. A point
+// (mag=POINT) sampler compares one texel (0/1); a bilinear (mag=BILINEAR)
+// sampler does PCF — the four 2x2 taps' 0/1 results bilinearly blended by the
+// footprint's alpha/beta fractions. Base level only (non-mipmapped). Returns the
+// float bit-pattern so the C ABI stays uint32_t like the other samplers.
+// Depth compare at one mip `level`: point (1 tap) or PCF (2x2 taps blended by the
+// footprint alpha/beta). `lbase` already carries the array/cube slice offset.
+static inline __attribute__((always_inline)) float tex_shadow_level(
+    const TexState& s, int32_t u, int32_t v, float ref, uint32_t filter,
+    uint64_t lbase, uint32_t level) {
+  bool pcf = (filter & TEX_FILTER_MAGMIN_MASK) == VX_TEX_FILTER_BILINEAR;
+  gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
+      lbase + s.mip_off[level], s.logdim, s.format,
+      pcf ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT,
+      s.wrap, u, v, level, s.width, s.height);
+  if (pcf) {
+    // tap order (u-,v-),(u+,v-),(u-,v+),(u+,v+); alpha = u-frac, beta = v-frac
+    // (both 8-bit); blend in u then v to match the colour bilinear path.
+    float p0 = shadow_compare_f(s.compare_func, ref,
+                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[0], req.stride));
+    float p1 = shadow_compare_f(s.compare_func, ref,
+                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[1], req.stride));
+    float p2 = shadow_compare_f(s.compare_func, ref,
+                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[2], req.stride));
+    float p3 = shadow_compare_f(s.compare_func, ref,
+                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[3], req.stride));
+    float a = (float)req.alpha * (1.0f / 256.0f);
+    float b = (float)req.beta  * (1.0f / 256.0f);
+    float row0 = p0 * (1.0f - a) + p1 * a;
+    float row1 = p2 * (1.0f - a) + p3 * a;
+    return row0 * (1.0f - b) + row1 * b;
+  }
+  return shadow_compare_f(s.compare_func, ref,
+           decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[0], req.stride));
+}
+
+// `lod` selects the mip level (mip-nearest = integer level; mip-linear = Q(LOD_FRAC)
+// blend of the two bracketing levels), mirroring tex_sample_sw_layer. layer=0,lod=0
+// is the base-level 2D shadow.
+static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter,
+    uint32_t layer = 0, uint32_t lod = 0) {
+  float ref; __builtin_memcpy(&ref, &ref_bits, 4);
+  uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;
+  float result;
+  if (filter & VX_TEX_FILTER_MIP_LINEAR) {
+    uint32_t li = lod >> VX_TEX_LOD_FRAC_BITS;
+    uint32_t lj = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
+    float frac = (float)(lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1))
+               * (1.0f / (float)(1u << VX_TEX_LOD_FRAC_BITS));
+    float r0 = tex_shadow_level(s, u, v, ref, filter, lbase, li);
+    float r1 = tex_shadow_level(s, u, v, ref, filter, lbase, lj);
+    result = r0 * (1.0f - frac) + r1 * frac;
+  } else {
+    result = tex_shadow_level(s, u, v, ref, filter, lbase, lod);
+  }
+  uint32_t out; __builtin_memcpy(&out, &result, 4);
+  return out;
+}
+
+// samplerCubeShadow: pick the cube face + project (cube_face_uv), then compare
+// against `ref_bits` at that face's slice (face index is the layer, as for the
+// colour cube path).
+static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_sw(
+    const TexState& s, float sc, float tc, float rc, uint32_t ref_bits,
+    uint32_t filter, uint32_t lod = 0) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  return tex_shadow_sw(s, u, v, ref_bits, filter, face, lod);
+}
+
+// samplerCubeArrayShadow: array_index selects the cube, (sc,tc,rc) the face;
+// compare against ref at slice array_index*6 + face.
+static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_array_sw(
+    const TexState& s, float sc, float tc, float rc, uint32_t array_index,
+    uint32_t ref_bits, uint32_t filter, uint32_t lod = 0) {
+  int32_t u, v;
+  uint32_t face = cube_face_uv(sc, tc, rc, &u, &v);
+  return tex_shadow_sw(s, u, v, ref_bits, filter,
+                       cube_array_clamp(s, array_index) * 6u + face, lod);
+}
+
+// textureGatherCmp: compare each of the 2x2 depth taps at (u,v) against `ref_bits`
+// with s.compare_func, packing the 0/1 result (0xff pass / 0x00 fail) per tap in
+// GL gather order {2,3,1,0} (same footprint + order as tex_gather_sw). The FS
+// unpacks /255 -> 0.0/1.0, the same unpack the colour gather uses.
+static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_sw(
+    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t layer = 0) {
+  float ref; __builtin_memcpy(&ref, &ref_bits, 4);
+  // Array shadow gather: the layer selects the slice; s.depth bounds it.
+  uint32_t ly = (s.depth && layer >= s.depth) ? s.depth - 1u : layer;
+  gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
+      s.base + (uint64_t)ly * s.layer_stride, s.logdim, s.format,
+      VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
+      s.width, s.height);
+  const uint32_t order[4] = { 2, 3, 1, 0 };
+  uint32_t packed = 0;
+  for (uint32_t i = 0; i < 4; ++i) {
+    float d = decode_depth_f(s.format,
+                (const void*)(uintptr_t)req.addr[order[i]], req.stride);
+    float p = shadow_compare_f(s.compare_func, ref, d);
+    packed |= (p != 0.0f ? 0xffu : 0x00u) << (i * 8);
+  }
+  return packed;
 }
 
 // libgfx_sw build contract: om_fragment's full depth+blend+ROP merge (below)

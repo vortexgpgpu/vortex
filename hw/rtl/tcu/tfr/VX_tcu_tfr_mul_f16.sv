@@ -21,9 +21,11 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     parameter W     = 25,
     parameter WA    = 28,
     parameter EXP_W = 10,
-    parameter USE_DSP = 0   // map the 11x11 mantissa multiply onto a DSP48 slice
+    parameter USE_DSP = 0,  // map the 11x11 mantissa multiply onto a DSP48 slice
+    parameter PROD_REG = 0  // product/flag register stages (multiply-stage seam)
 ) (
     input wire                      clk,
+    input wire                      enable,
     input wire                      valid_in,
     input wire [31:0]               req_id,
 
@@ -33,13 +35,42 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
     input wire [N-1:0][31:0]        a_row,
     input wire [N-1:0][31:0]        b_col,
 
-    output logic [TCK-1:0][24:0]      result_sig,
+    // result_exp/exceptions are pre-seam (classify cycle); result_sig is
+    // post-seam (PROD_REG cycles later).
+    output wire  [TCK-1:0][24:0]      result_sig,
     output logic [TCK-1:0][EXP_W-1:0] result_exp,
     output fedp_excep_t [TCK-1:0]     exceptions
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
     `UNUSED_VAR (vld_mask)
+
+    // Bank-select for the significand path, delayed to post-seam timing.
+    logic sig_en;
+    always_comb begin
+        case (fmt_f)
+        `ifdef VX_CFG_TCU_FP16_ENABLE
+            TCU_FP16_ID,
+            TCU_BF16_ID: sig_en = 1'b1;
+        `endif
+        `ifdef VX_CFG_TCU_TF32_ENABLE
+            TCU_TF32_ID: sig_en = 1'b1;
+        `endif
+            default:     sig_en = 1'b0;
+        endcase
+    end
+
+    wire sig_en_r;
+    VX_pipe_register #(
+        .DATAW (1),
+        .DEPTH (PROD_REG)
+    ) pipe_sig_en (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  (sig_en),
+        .data_out (sig_en_r)
+    );
 
     localparam F32_BIAS  = 127;
     localparam S_FP32    = 23;
@@ -219,29 +250,33 @@ module VX_tcu_tfr_mul_f16 import VX_tcu_pkg::*;
         assign result_exp[i] = (~zero_sel && lane_valid) ? exp_final : '0;
 
         // Mantissa product: 11x11 -> 22. USE_DSP maps it to a DSP48 (the 22-bit
-        // product fits one DSP48E2 27x18); otherwise a LUT Wallace tree.
+        // product fits one DSP48E2 27x18); PROD_REG lands in its PREG.
         wire [21:0] man_prod;
         VX_tcu_tfr_wmul #(
             .N (11),
-            .USE_DSP (USE_DSP)
+            .USE_DSP (USE_DSP),
+            .OUT_REG (PROD_REG)
         ) wtmul (
+            .clk    (clk),
+            .enable (enable),
             .a (ma_sel),
             .b (mb_sel),
             .p (man_prod)
         );
 
-        always_comb begin
-            case (fmt_f)
-            `ifdef VX_CFG_TCU_FP16_ENABLE
-                TCU_FP16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
-                TCU_BF16_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
-            `endif
-            `ifdef VX_CFG_TCU_TF32_ENABLE
-                TCU_TF32_ID: result_sig[i] = {sign_sel, man_prod, 2'b0};
-            `endif
-                default:     result_sig[i] = '0;
-            endcase
-        end
+        wire sign_sel_r;
+        VX_pipe_register #(
+            .DATAW (1),
+            .DEPTH (PROD_REG)
+        ) pipe_sign (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  (sign_sel),
+            .data_out (sign_sel_r)
+        );
+
+        assign result_sig[i] = sig_en_r ? {sign_sel_r, man_prod, 2'b0} : '0;
 
         assign exceptions[i].is_nan = nan_sel && lane_valid;
         assign exceptions[i].is_inf = inf_sel && lane_valid;

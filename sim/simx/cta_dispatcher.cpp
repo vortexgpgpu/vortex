@@ -14,9 +14,6 @@
 #include <VX_types.h>
 #include "cta_dispatcher.h"
 #include "core.h"
-#include "socket.h"
-#include "cluster.h"
-#include "processor_impl.h"
 #include <VX_config.h>
 #include <cassert>
 
@@ -24,8 +21,9 @@ using namespace vortex;
 
 CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core)
   : SimObject<CtaDispatcher>(ctx, name)
+  , bus_in(this, 1)
+  , credit_out(this)
   , core_(core)
-  , kmu_(&core->socket()->cluster()->processor()->kmu())
   , num_threads_(VX_CFG_NUM_THREADS)
   , num_warps_(VX_CFG_NUM_WARPS)
   , lmem_base_(VX_MEM_LMEM_BASE_ADDR)
@@ -39,25 +37,32 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , rank_(0)
   , block_size_rem_(0)
   , lmem_addr_(0)
-  , has_pending_(false)
   , cur_kernel_pc_(0)
-  , warp_init_mask_(num_warps_, false)
+  , cur_ctx_id_(0)
+  , warp_init_lanes_(num_warps_)
 {
   thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
+  for (auto& lanes : warp_init_lanes_) {
+    lanes.resize(num_threads_);
+  }
 }
 
 CtaDispatcher::~CtaDispatcher() {}
 
 void CtaDispatcher::on_reset() {
   has_cta_    = false;
-  has_pending_= false;
   tail_slot_  = 0;
   for (uint32_t i = 0; i < num_warps_; ++i) {
     slot_rem_warps_[i] = 0;
     wid_to_slot_[i]    = num_warps_;  // invalid
-    warp_init_mask_[i] = false;
   }
   cur_kernel_pc_ = 0;
+  // warp_init_lanes_ and cur_ctx_id_ are excluded: which lanes of a slot have
+  // already run the startup is keyed on the context, and a launch is not a
+  // device reset. Clearing them here would make the context check dead and
+  // re-run the startup on every launch, including one that dispatches no CTAs
+  // of its own. A context change in step() remains the only invalidator, and
+  // both are zero-initialized at construction.
 }
 
 uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
@@ -71,11 +76,13 @@ uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
 
 bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_warp_record_t* rec_out) {
   if (!has_cta_) {
-    // Load next CTA: use stashed pending CTA if available, else request from KMU.
-    if (!has_pending_) {
-      if (!kmu_->step(&pending_cta_)) return false;
-      has_pending_ = true;
-    }
+    // The KMU pushes CTAs down a registered, credit-gated launch lane; the
+    // endpoint holds the one CTA committed to this core. It is popped only on
+    // admission — an unadmitted CTA keeps the lane's credit, so the KMU
+    // cannot over-commit work to a busy core.
+    if (bus_in.empty())
+      return false;
+    const kmu_req_t& next = bus_in.peek();
 
     // Fixed-stride admission. Round the per-CTA LMEM size up to a
     // MEM_BLOCK_SIZE multiple — this uniform stride is the slot pitch.
@@ -83,7 +90,7 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     // and the LMEM model is block-addressed (byteen-masked), so a non-aligned
     // stride would truncate the destination; the descriptor handler rounds
     // its stride the same way to stay consistent.
-    uint32_t stride = (pending_cta_.lmem_size + VX_CFG_MEM_BLOCK_SIZE - 1u)
+    uint32_t stride = (next.lmem_size + VX_CFG_MEM_BLOCK_SIZE - 1u)
                       & ~uint32_t(VX_CFG_MEM_BLOCK_SIZE - 1u);
     uint32_t max_slots = usable_slots(stride);
 
@@ -98,10 +105,10 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     // (members must occupy consecutive slots for multicast). All K must be free
     // up front so the following members never stall mid-cluster.
     uint32_t k = 1;
-    if (pending_cta_.is_first_of_cluster) {
-      k = pending_cta_.cluster_dim[0]
-        * pending_cta_.cluster_dim[1]
-        * pending_cta_.cluster_dim[2];
+    if (next.is_first_of_cluster) {
+      k = next.cluster_dim[0]
+        * next.cluster_dim[1]
+        * next.cluster_dim[2];
       if (k == 0) k = 1;
       if (base + k > max_slots)
         base = 0;
@@ -118,17 +125,21 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
         return false;
     }
 
-    // Reset Warp initialization states on kernel transitions
-    if (pending_cta_.PC != cur_kernel_pc_) {
-      cur_kernel_pc_ = pending_cta_.PC;
+    // A new launch is a new context: every slot owes the startup again. Keyed on
+    // the launch id, not the PC, so relaunching the same kernel still re-inits.
+    cur_kernel_pc_ = next.PC;
+    if (next.ctx_id != cur_ctx_id_) {
+      cur_ctx_id_ = next.ctx_id;
       for (uint32_t i = 0; i < num_warps_; ++i) {
-        warp_init_mask_[i] = false;
+        warp_init_lanes_[i].reset();
       }
     }
 
-    // Accept the pending CTA into its slot.
-    cta_ = pending_cta_;
-    has_pending_ = false;
+    // Accept the CTA into its slot; the pop returns the lane's credit and
+    // the admission is reported back to the KMU's launch accounting.
+    cta_ = next;
+    bus_in.pop();
+    credit_out.send(1, 1);
 
     cta_size_       = (cta_.block_size + num_threads_ - 1) / num_threads_;
     rank_           = 0;
@@ -153,11 +164,23 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
   }
   if (free_wid < 0) return false;
 
-  if (!next_warp(!warp_init_mask_[free_wid], rec_out))
+  // Skip the startup only if every lane this launch activates has already run it.
+  uint32_t active = (block_size_rem_ >= num_threads_) ? num_threads_ : block_size_rem_;
+  auto& inited = warp_init_lanes_[free_wid];
+  bool needs_init = false;
+  for (uint32_t t = 0; t < active; ++t) {
+    if (!inited.test(t)) {
+      needs_init = true;
+      break;
+    }
+  }
+
+  if (!next_warp(needs_init, rec_out))
     return false;
 
-  // Mark warp as initialized
-  warp_init_mask_[free_wid] = true;
+  for (uint32_t t = 0; t < active; ++t) {
+    inited.set(t);
+  }
 
   wid_to_slot_[free_wid] = cur_slot_;
   *wid_out = uint32_t(free_wid);
@@ -172,6 +195,23 @@ void CtaDispatcher::warp_done(uint32_t wid) {
   // When the last warp of a CTA exits, its slot (and the LMEM region at
   // slot × stride) frees immediately for reuse — no in-order reclaim.
   --slot_rem_warps_[slot];
+}
+
+bool CtaDispatcher::slot_needs_init(uint32_t wid, const ThreadMask& tmask) const {
+  const auto& inited = warp_init_lanes_[wid];
+  for (uint32_t t = 0; t < num_threads_; ++t) {
+    if (tmask.test(t) && !inited.test(t))
+      return true;
+  }
+  return false;
+}
+
+void CtaDispatcher::mark_slot_inited(uint32_t wid, const ThreadMask& tmask) {
+  auto& inited = warp_init_lanes_[wid];
+  for (uint32_t t = 0; t < num_threads_; ++t) {
+    if (tmask.test(t))
+      inited.set(t);
+  }
 }
 
 bool CtaDispatcher::next_warp(bool do_init, cta_warp_record_t* out) {

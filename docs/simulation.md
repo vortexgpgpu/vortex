@@ -15,6 +15,35 @@ SimX is a C++ cycle-level in-house simulator developed for Vortex. The relevant 
 
 The guide to build the fpga with specific configurations is located [here.](fpga_setup.md) You can find instructions for both Xilinx and Altera based FPGAs.
 
+### FPGA-Accelerated Simulation (FireSim)
+
+[FireSim](https://fires.im/) runs the Vortex RTL on an FPGA as a
+*host-decoupled* simulation: the design is transformed so that every target
+clock edge is scheduled by the host driver, and target DRAM is served by a
+timing model (FASED) rather than by the raw FPGA memory. That decoupling is
+what separates it from the plain FPGA flow — the results are cycle-accurate
+against the RTL rather than dependent on the board's real memory timing, while
+running orders of magnitude faster than Verilator.
+
+For scale, `sgemm -n32` takes ~1228 ms on rtlsim and ~8 ms on an Alveo U55C,
+and `sgemm -n1024` — over a billion instructions — completes in ~85 s.
+
+```bash
+export TARGET=hw
+export FPGA_BIN_DIR=<directory containing firesim.xclbin>
+./ci/blackbox.sh --driver=firesim --app=sgemm --args="-n1024"
+```
+
+The architecture, build flow and design invariants are documented in
+[designs/firesim_integration.md](designs/firesim_integration.md); the
+toolchain component is [section 12 of the toolchain
+guide](building_toolchain.md#12-firesim).
+
+One caveat worth knowing when reading its output: FireSim's
+`Target Cycles Emulated` counts cycles the *driver stepped*, not cycles the
+kernel took, and is quantized by the driver's polling schedule. Use Vortex's
+own `PERF: cycles=` line, which is exact.
+
 ### How to Test (using `blackbox.sh`)
 
 Running tests under specific drivers (rtlsim,simx,fpga) is done using the script named `blackbox.sh` located in the `ci` folder. Running command `./ci/blackbox.sh --help` from the Vortex root directory will display the following command line arguments for `blackbox.sh`:
@@ -25,7 +54,7 @@ Running tests under specific drivers (rtlsim,simx,fpga) is done using the script
 - *Threads* - used to specify the number of threads (smallest unit of computation) within a configuration.
 - *L2cache* - used to enable the shared l2cache among the Vortex cores.
 - *L3cache* - used to enable the shared l3cache among the Vortex clusters.
-- *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, opae, xrt, simx).
+- *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, opae, xrt, simx, firesim).
 - *Debug* - used to enable debug mode for the Vortex simulation.
 - *Perf* - used to enable the detailed performance counters within the Vortex simulation.
 - *App* - used to specify which test/benchmark to run in the Vortex simulation. The main choices are vecadd, sgemm, basic, demo, and dogfood. Other tests/benchmarks are located in the `/benchmarks/opencl` folder though not all of them work wit the current version of Vortex.

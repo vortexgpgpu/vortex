@@ -42,6 +42,7 @@ LsuMemAdapter::LsuMemAdapter(
       // Carry warp-uniform attributes (amo_unsigned, …) and tag the
       // address class once so consumers don't re-derive it.
       mr.flags = req.flags;
+      mr.amo_cmp = req.amo_cmp.at(0);
       auto t = get_addr_type(mr.addr);
       mr.flags.io    = (t == AddrType::IO);
       mr.flags.local = (t == AddrType::Shared);
@@ -65,8 +66,11 @@ void LsuMemAdapter::on_reset() {
 
 void LsuMemAdapter::on_tick() {
   uint32_t input_size = ReqOut.size();
-  if (input_size == 1)
+  // bypass mode: both directions are forwarded at bind time.
+  if (input_size == 1) {
+    this->tick_sleep();
     return;
+  }
 
   // process outgoing responses
   for (uint32_t i = 0; i < input_size; ++i) {
@@ -130,6 +134,7 @@ void LsuMemAdapter::on_tick() {
       out_req.uuid    = in_req.uuid;
       out_req.data    = in_req.data.at(i);
       out_req.byteen  = in_req.byteen.at(i);
+      out_req.amo_cmp = in_req.amo_cmp.at(i);
       out_req.op      = in_req.op;
       out_req.flags   = in_req.flags;
       {
@@ -148,5 +153,15 @@ void LsuMemAdapter::on_tick() {
     if (pending_mask_.none()) {
       ReqIn.pop();
     }
+  }
+
+  // sleep when nothing is queued or in flight toward us; a partial request
+  // round (pending_mask_) implies a non-empty ReqIn, so it cannot be lost.
+  bool idle = (ReqIn.size() == 0);
+  for (uint32_t i = 0; idle && i < input_size; ++i) {
+    idle = (RspIn.at(i).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
   }
 }

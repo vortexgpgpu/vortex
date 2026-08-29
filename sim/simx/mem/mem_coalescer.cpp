@@ -26,7 +26,9 @@ MemCoalescer::MemCoalescer(
   uint32_t queue_size,
   uint32_t delay
 ) : SimObject<MemCoalescer>(ctx, name)
-  , ReqIn(this)
+  // Single-entry ingress: one request in build/drain flight at a time; a
+  // second request waits upstream rather than in local queue slack.
+  , ReqIn(this, 1)
   , RspOut(this)
   , ReqOut(output_size, this)
   , RspIn(output_size, this)
@@ -131,8 +133,20 @@ void MemCoalescer::on_tick() {
   }
 
   // process incoming requests
-  if (ReqIn.empty())
+  if (ReqIn.empty()) {
+    // sleep when idle: no queued or in-flight input on either direction and
+    // no partial round to drain (out_round_ was handled above). Outstanding
+    // fills in pending_rd_reqs_ re-arm the tick when their response is
+    // reserved toward RspIn.
+    bool idle = (ReqIn.size() == 0);
+    for (uint32_t o = 0; idle && o < output_size_; ++o) {
+      idle = (RspIn.at(o).size() == 0);
+    }
+    if (idle) {
+      this->tick_sleep();
+    }
     return;
+  }
 
   auto& in_req = ReqIn.peek();
   assert(in_req.mask.size() == input_size_);
@@ -152,6 +166,9 @@ void MemCoalescer::on_tick() {
   std::vector<uint64_t> out_addrs(output_size_);
   std::vector<std::shared_ptr<mem_block_t>> out_data(output_size_);
   std::vector<uint64_t> out_byteen(output_size_, 0);
+  // Comparand rides with the lane that owns the output. AMOs never coalesce
+  // across lanes, so there is exactly one owner and no merge to do.
+  std::vector<uint64_t> out_amo_cmp(output_size_, 0);
   std::vector<uint32_t> out_tids(output_size_, 0);
 
   BitVector<> cur_mask(input_size_);
@@ -220,6 +237,7 @@ void MemCoalescer::on_tick() {
       // place the RMW result at the correct offset within the line.
       // Non-AMO requests stay line-aligned (no semantic change).
       out_addrs.at(o) = in_is_amo ? in_req.addrs.at(i) : seed_addr;
+      out_amo_cmp.at(o) = in_req.amo_cmp.at(i);
       break;
     }
   }
@@ -248,6 +266,7 @@ void MemCoalescer::on_tick() {
     mr.addr   = out_addrs.at(o);
     mr.data   = std::move(out_data.at(o));
     mr.byteen = out_byteen.at(o);
+    mr.amo_cmp = out_amo_cmp.at(o);
     mr.tag    = tag;
     mr.hart_id = make_hart_id(in_req.cid, in_req.wid, out_tids.at(o));
     mr.uuid   = in_req.uuid;

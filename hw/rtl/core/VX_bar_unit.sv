@@ -77,7 +77,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                 // event tracking
                 if (req_data.phase) begin
                     // attach/expect_tx: increment by (size_m1 + 1) so that
-                    // a software expect_tx(N) adds N events, while legacy
+                    // a software expect_tx(N) adds N events, while ordinary
                     // single-event paths (size_m1=0) add 1.
                     events_n = events_r + EVENT_WIDTH'(req_data.size_m1) + EVENT_WIDTH'(1);
                 end else begin

@@ -153,7 +153,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign bar.is_global= wctl_bar_enable && rs1_data[31];
     // expect_tx is not a normal arrival (it does not advance arrive_count)
     assign bar.is_arrive= (execute_if.data.op_args.wctl.is_bar_arrive && ~rs2_data[31]) || execute_if.data.op_args.wctl.is_sync_bar;
-    // expect_tx → phase=1 (attach/increment); legacy txbar release → phase=0
+    // expect_tx → phase=1 (attach/increment); txbar release → phase=0
     assign bar.phase    = is_tx_expect ? 1'b1 : (wctl_bar_enable ? rs2_data[0] : ~txbar_bus_if.data.is_done);
     // For expect_tx: size_m1 carries (count - 1); for normal arrive: (num_warps - 1).
     // bar_unit will + 1 when consuming on the event path so the actual increment is `count`.

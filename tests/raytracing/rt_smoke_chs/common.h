@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU Closest-Hit Shader smoke — Phase 5.
+// PRISM RTU Closest-Hit Shader smoke.
 //
 // Single lane fires one ray at a single opaque triangle with the
 // VX_RT_FLAG_ENABLE_CHS bit set. RtuCore commits the hit, then queues

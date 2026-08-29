@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke test — Phase 1 host driver.
+// PRISM RTU smoke test — host driver.
 //
 // Sets up a single-triangle scene in device memory, launches a 1-warp
 // kernel where each lane fires a primary ray, reads back per-lane hit
@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
   //   v1 = ( 1, 0, 5)
   //   v2 = ( 0, 1, 5)
   // Ray from origin (0.25, 0.25, 0) shooting +z → hits triangle at t=5.
-  // Phase 1 smoke marks the triangle OPAQUE so RtuCore commits the hit
+  // The triangle is marked OPAQUE so RtuCore commits the hit
   // immediately — no AHS callback path.
   std::vector<uint8_t> scene_bytes(64, 0);   // one cache line
   uint32_t* hdr = reinterpret_cast<uint32_t*>(scene_bytes.data());

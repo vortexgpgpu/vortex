@@ -31,6 +31,8 @@ constexpr uint32_t PTE_R = 1u << 1;
 constexpr uint32_t PTE_W = 1u << 2;
 constexpr uint32_t PTE_X = 1u << 3;
 constexpr uint32_t PTE_U = 1u << 4;
+constexpr uint32_t PTE_A = 1u << 6;
+constexpr uint32_t PTE_D = 1u << 7;
 
 // Driver-supplied raw device-memory I/O. PA-addressed bulk read/write
 // with no ACL semantics — VMManager batches all PT updates at PT-page

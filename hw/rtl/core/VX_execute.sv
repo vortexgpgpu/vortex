@@ -57,17 +57,15 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_bus_if.master     om_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // FWD raster payload-stage write port (from the core-level distributor).
-    VX_gfx_win_wr_if.slave                                 rast_win_wr_if,
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     VX_rtu_bus_if.master    rtu_bus_if,
-    VX_async_trap_if.master async_trap_if,
+    VX_sched_unlock_if.master sched_unlock_if,
 `endif
 
     // scheduler interfaces
@@ -167,14 +165,12 @@ module VX_execute import VX_gpu_pkg::*; #(
         .tex_bus_if     (tex_bus_if),
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
-        .om_bus_if      (om_bus_if),
     `endif
     `ifdef VX_CFG_EXT_RASTER_ENABLE
-        .rast_win_wr_if    (rast_win_wr_if),
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),
-        .async_trap_if  (async_trap_if),
+        .sched_unlock_if (sched_unlock_if),
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if),

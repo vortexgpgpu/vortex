@@ -25,7 +25,8 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
     VX_dcr_bus_if.slave     dcr_bus_if,
 
     // Output
-    output om_dcrs_t        om_dcrs
+    output om_dcrs_t        om_dcrs,
+    output om_rt_dcrs_t     om_rt_dcrs [`VX_OM_MAX_RT]
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
@@ -56,21 +57,36 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
         && (dst_rgb  == `VX_OM_BLEND_FUNC_ZERO) \
         && (dst_a    == `VX_OM_BLEND_FUNC_ZERO))
 
-    om_dcrs_t dcrs;
+    om_dcrs_t    dcrs;
+    om_rt_dcrs_t rt_dcrs [`VX_OM_MAX_RT];
+
+    // Attachment the colour registers below write. Reset to 0 so a pass with a
+    // single attachment never has to name one.
+    reg [OM_RT_IDX_BITS-1:0] rt_sel;
 
     // DCRs write
+
+    always @(posedge clk) begin
+        if (reset) begin
+            rt_sel <= '0;
+        end else if (write_valid) begin
+            if (write_addr == `VX_DCR_OM_RT_SELECT) begin
+                rt_sel <= write_data[0 +: OM_RT_IDX_BITS];
+            end
+        end
+    end
 
     always @(posedge clk) begin
         if (write_valid) begin
             case (write_addr)
                 `VX_DCR_OM_CBUF_ADDR: begin
-                    dcrs.cbuf_addr <= write_data[`OM_ADDR_BITS-1:0];
+                    rt_dcrs[rt_sel].cbuf_addr <= write_data[`OM_ADDR_BITS-1:0];
                 end
                 `VX_DCR_OM_CBUF_PITCH: begin
-                    dcrs.cbuf_pitch <= write_data[OM_PITCH_BITS-1:0];
+                    rt_dcrs[rt_sel].cbuf_pitch <= write_data[OM_PITCH_BITS-1:0];
                 end
                 `VX_DCR_OM_CBUF_WRITEMASK: begin
-                    dcrs.cbuf_writemask <= write_data[3:0];
+                    rt_dcrs[rt_sel].cbuf_writemask <= write_data[3:0];
                 end
                 `VX_DCR_OM_ZBUF_ADDR: begin
                     dcrs.zbuf_addr <= write_data[`OM_ADDR_BITS-1:0];
@@ -114,20 +130,32 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
                     dcrs.stencil_writemask[1] <= write_data[16 +: `VX_OM_STENCIL_BITS];
                 end
                 `VX_DCR_OM_BLEND_MODE: begin
-                    dcrs.blend_mode_rgb <= write_data[0  +: OM_BLEND_MODE_BITS];
-                    dcrs.blend_mode_a   <= write_data[16 +: OM_BLEND_MODE_BITS];
+                    rt_dcrs[rt_sel].blend_mode_rgb <= write_data[0  +: OM_BLEND_MODE_BITS];
+                    rt_dcrs[rt_sel].blend_mode_a   <= write_data[16 +: OM_BLEND_MODE_BITS];
                 end
                 `VX_DCR_OM_BLEND_FUNC: begin
-                    dcrs.blend_src_rgb <= write_data[0  +: OM_BLEND_FUNC_BITS];
-                    dcrs.blend_src_a   <= write_data[8  +: OM_BLEND_FUNC_BITS];
-                    dcrs.blend_dst_rgb <= write_data[16 +: OM_BLEND_FUNC_BITS];
-                    dcrs.blend_dst_a   <= write_data[24 +: OM_BLEND_FUNC_BITS];
+                    rt_dcrs[rt_sel].blend_src_rgb <= write_data[0  +: OM_BLEND_FUNC_BITS];
+                    rt_dcrs[rt_sel].blend_src_a   <= write_data[8  +: OM_BLEND_FUNC_BITS];
+                    rt_dcrs[rt_sel].blend_dst_rgb <= write_data[16 +: OM_BLEND_FUNC_BITS];
+                    rt_dcrs[rt_sel].blend_dst_a   <= write_data[24 +: OM_BLEND_FUNC_BITS];
                 end
                 `VX_DCR_OM_BLEND_CONST: begin
-                    dcrs.blend_const <= write_data[0 +: 32];
+                    rt_dcrs[rt_sel].blend_const <= write_data[0 +: 32];
                 end
                 `VX_DCR_OM_LOGIC_OP: begin
-                    dcrs.logic_op <= write_data[0 +: OM_LOGIC_OP_BITS];
+                    rt_dcrs[rt_sel].logic_op <= write_data[0 +: OM_LOGIC_OP_BITS];
+                end
+                `VX_DCR_OM_APERTURE_XBITS: begin
+                    dcrs.aperture_xbits <= write_data[0 +: OM_APERTURE_BITS_W];
+                end
+                `VX_DCR_OM_APERTURE_YBITS: begin
+                    dcrs.aperture_ybits <= write_data[0 +: OM_APERTURE_BITS_W];
+                end
+                `VX_DCR_OM_APERTURE_RECORD_SHIFT: begin
+                    dcrs.aperture_record_shift <= write_data[0 +: 2];
+                end
+                `VX_DCR_OM_APERTURE_DEPTH_ONLY: begin
+                    dcrs.aperture_depth_only <= write_data[0];
                 end
                 default:;
             endcase
@@ -135,11 +163,19 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
         dcrs.stencil_enable[0] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[0], dcrs.stencil_zpass[0], dcrs.stencil_zfail[0]);
         dcrs.stencil_enable[1] <= `STENCIL_TEST_ENABLE(dcrs.stencil_func[1], dcrs.stencil_zpass[1], dcrs.stencil_zfail[1]);
         dcrs.depth_enable      <= `DEPTH_TEST_ENABLE(dcrs.depth_func, dcrs.depth_writemask);
-        dcrs.blend_enable      <= `BLEND_ENABLE(dcrs.blend_mode_rgb, dcrs.blend_mode_a, dcrs.blend_src_rgb, dcrs.blend_src_a, dcrs.blend_dst_rgb, dcrs.blend_dst_a);
+        for (integer i = 0; i < `VX_OM_MAX_RT; ++i) begin
+            rt_dcrs[i].blend_enable <= `BLEND_ENABLE(rt_dcrs[i].blend_mode_rgb, rt_dcrs[i].blend_mode_a,
+                                                     rt_dcrs[i].blend_src_rgb, rt_dcrs[i].blend_src_a,
+                                                     rt_dcrs[i].blend_dst_rgb, rt_dcrs[i].blend_dst_a);
+        end
     end
 
     // DCRs read
     assign om_dcrs = dcrs;
+
+    for (genvar i = 0; i < `VX_OM_MAX_RT; ++i) begin : g_rt_dcrs
+        assign om_rt_dcrs[i] = rt_dcrs[i];
+    end
 
 `ifdef DBG_TRACE_OM
     always @(posedge clk) begin

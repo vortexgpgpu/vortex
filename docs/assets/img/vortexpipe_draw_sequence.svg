@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 760" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .host { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .dev  { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.4; }
+    .fb   { fill:#fdf6e3; stroke:#b58900; stroke-width:1.4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:13px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11.5px; }
+    .tt   { fill:#5a6772; font-size:11px; font-style:italic; }
+    .msg  { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#arrb); }
+    .msgg { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#arrg); }
+    .ret  { stroke:#444; stroke-width:1.5; fill:none; marker-end:url(#arr); stroke-dasharray:6 4; }
+    .lblb { fill:#2e5e82; font-size:11.5px; }
+    .lblg { fill:#8a6d00; font-size:11.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1180" height="760" fill="#ffffff"/>
+  <text x="24" y="32" class="t" font-size="18">One vkCmdDraw — vp_draw_vbo, then a single device-resident OP_DRAW batch</text>
+
+  <!-- lifelines -->
+  <text x="200" y="64" class="th" text-anchor="middle" fill="#2e5e82">vortexpipe (host)</text>
+  <text x="620" y="64" class="th" text-anchor="middle" fill="#33404c">Vortex CP + device (SIMT + FF)</text>
+  <text x="1040" y="64" class="th" text-anchor="middle" fill="#8a6d00">framebuffer (resident)</text>
+  <line x1="200" y1="74" x2="200" y2="712" class="lane"/>
+  <line x1="620" y1="74" x2="620" y2="712" class="lane"/>
+  <line x1="1040" y1="74" x2="1040" y2="712" class="lane"/>
+
+  <!-- host: eligibility -->
+  <rect x="96" y="88" width="208" height="66" rx="5" class="host"/>
+  <text x="108" y="108" class="th">vp_draw_vbo</text>
+  <text x="108" y="126" class="ts">eligibility: triangle-topology</text>
+  <text x="108" y="142" class="ts">draw + translated VS?</text>
+
+  <!-- host: index upload -->
+  <rect x="96" y="164" width="208" height="44" rx="5" class="host"/>
+  <text x="108" y="184" class="ts">(indexed/strip/fan) build u32</text>
+  <text x="108" y="200" class="ts">index list; restart cuts resolved</text>
+
+  <!-- host: build draw -->
+  <rect x="96" y="218" width="208" height="80" rx="5" class="host"/>
+  <text x="108" y="238" class="th">vp_raster_draw</text>
+  <text x="108" y="256" class="ts">pick FS variant; build batch;</text>
+  <text x="108" y="272" class="ts">program RASTER / OM / TEX</text>
+  <text x="108" y="288" class="ts">DCRs + FS launch descriptor</text>
+
+  <!-- enqueue draw -->
+  <path d="M 304 316 L 616 316" class="msg"/>
+  <text x="330" y="308" class="lblb">vx_enqueue_draw — one doorbell, one OP_DRAW batch</text>
+
+  <!-- device stages -->
+  <rect x="512" y="332" width="300" height="42" rx="5" class="dev"/>
+  <text x="524" y="352" class="th">expand_k</text>
+  <text x="596" y="352" class="ts">VS assembly → setup_vertex_t</text>
+
+  <rect x="512" y="382" width="300" height="42" rx="5" class="dev"/>
+  <text x="524" y="402" class="th">setup_k</text>
+  <text x="596" y="402" class="ts">clip + cull + setup → rast_prim_t</text>
+
+  <rect x="512" y="432" width="300" height="42" rx="5" class="dev"/>
+  <text x="524" y="452" class="th">binning_k</text>
+  <text x="596" y="452" class="ts">sort-middle → primbuf + headers</text>
+
+  <rect x="512" y="482" width="300" height="58" rx="5" class="dev"/>
+  <text x="524" y="502" class="th">RASTER (FF)</text>
+  <text x="524" y="520" class="ts">walker → early-Z → packer → dispatch:</text>
+  <text x="524" y="536" class="tt">launch 1-warp frag CTA per wave (pure-DCR)</text>
+
+  <rect x="512" y="548" width="300" height="78" rx="5" class="dev"/>
+  <text x="524" y="568" class="th">FS wrapper — run once</text>
+  <text x="524" y="586" class="ts">read FRAG_POS/FRAG_PID (CSRs)</text>
+  <text x="524" y="602" class="ts">recompute edges; interp ÷ 1/w; flat words</text>
+  <text x="524" y="618" class="ts">fs_main → vx_tex ; vx_om_export per RT</text>
+
+  <!-- stage ordering arrows -->
+  <path d="M 620 374 L 620 382" class="msg"/>
+  <path d="M 620 424 L 620 432" class="msg"/>
+  <path d="M 620 474 L 620 482" class="msg"/>
+  <path d="M 620 540 L 620 548" class="msg"/>
+
+  <!-- OM write to framebuffer -->
+  <path d="M 812 596 L 1040 596" class="msgg"/>
+  <text x="840" y="588" class="lblg">OM AXI master writes colour + depth</text>
+
+  <!-- framebuffer box -->
+  <rect x="944" y="614" width="192" height="52" rx="5" class="fb"/>
+  <text x="956" y="634" class="ts">stays render-pass-</text>
+  <text x="956" y="650" class="ts">resident (pinned PA)</text>
+
+  <!-- return -->
+  <path d="M 616 648 L 304 648" class="ret"/>
+  <text x="330" y="640" class="lblb">batch complete</text>
+
+  <rect x="96" y="664" width="208" height="40" rx="5" class="host"/>
+  <text x="108" y="688" class="ts">vx_queue_finish</text>
+
+  <text x="330" y="694" class="tt">colour/depth never leave the device — present is the only egress. No host graphics::Binning on this path (oracle only).</text>
+</svg>

@@ -135,6 +135,12 @@ public:
     virtual vx_result_t host_mem_alloc(uint64_t size, void** out_host_ptr,
                                        uint64_t* out_cp_addr) = 0;
     virtual vx_result_t host_mem_free (uint64_t cp_addr) = 0;
+    // Refresh the host view of one region after the CP wrote it (see
+    // callbacks.h). Called before reading a MEM_READ staging buffer.
+    virtual vx_result_t host_mem_pull (uint64_t cp_addr) = 0;
+    // Make one region's host writes visible to the CP (see callbacks.h).
+    // Called after filling a staging buffer, before submitting its command.
+    virtual vx_result_t host_mem_push (uint64_t cp_addr) = 0;
 };
 
 // ============================================================================
@@ -175,6 +181,14 @@ public:
     }
     vx_result_t host_mem_free(uint64_t cp_addr) override {
         return r(cb_.host_mem_free(dev_ctx_, cp_addr));
+    }
+    vx_result_t host_mem_pull(uint64_t cp_addr) override {
+        if (!cb_.host_mem_pull) return VX_SUCCESS;  // older backend: coherent
+        return r(cb_.host_mem_pull(dev_ctx_, cp_addr));
+    }
+    vx_result_t host_mem_push(uint64_t cp_addr) override {
+        if (!cb_.host_mem_push) return VX_SUCCESS;  // older backend: coherent
+        return r(cb_.host_mem_push(dev_ctx_, cp_addr));
     }
 
 private:
@@ -246,6 +260,15 @@ public:
     // command only when the last core's flush completes. A no-op on
     // write-through cache configs. Posted after every CMD_LAUNCH.
     vx_result_t cp_submit_cache_flush();
+
+    // Program the device MMU's SATP once, ahead of the first launch that
+    // could translate. Called from every launch path.
+    vx_result_t ensure_mmu_satp();
+
+    // Read the device's page-fault report after a launch retires. Returns
+    // VX_ERR_DEVICE_LOST (after printing the faulting access) when the MMU
+    // latched a fault, meaning the launch was torn down mid-flight.
+    vx_result_t check_mmu_fault();
 
     // ----- Batched CP submission (one draw = one ring batch) -----
     // cp_batch_begin holds the ring lock and switches cp_submit_* into
@@ -338,11 +361,32 @@ private:
     // Called from Device::open() after the platform is ready.
     vx_result_t cp_init();
 
+    // Clear Q_CONTROL.enable + CP_CTRL.enable and wait out the drain, so no
+    // master is left running against memory the caller is about to release.
+    // Idempotent, best-effort, and safe on a device that has stopped
+    // answering. Must run before the ring / head / completion buffers are
+    // freed.
+    void cp_quiesce_();
+
     // Push one pre-built CL into the ring + commit Q_TAIL + wait. Used by
     // cp_submit_dcr_write / cp_submit_launch — they just build the CL.
-    // When a batch is open (cp_in_batch_) it appends only; the single
+    // While this thread has a batch open it appends only; the single
     // doorbell + poll are deferred to cp_batch_end.
     vx_result_t cp_submit_cl_(const void* cl);
+
+    // Block until the CP has retired seqnum >= target.
+    //
+    // Both submit paths (cp_submit_cl_ non-batch, and cp_batch_end) poll the
+    // same register for the same reason, so they share this one implementation
+    // -- previously each had its own copy of the loop, and instrumenting only
+    // one of them hid the stall that was actually happening in the other.
+    //
+    // A CP that never retires would otherwise spin here forever at 100% CPU
+    // with no output at all, which says nothing about the cause. This reports
+    // the stall (Q_SEQNUM / target / CP_STATUS / Q_ERROR) after ~10s. Warn-only
+    // by default so slow backends (rtlsim) are never failed spuriously; set
+    // VORTEX_CP_POLL_TIMEOUT_S=<seconds> to abort instead.
+    vx_result_t cp_poll_seqnum_(uint64_t target);
 
     // Append one CL at the current tail and reserve its seqnum (bump
     // cp_tail_ + cp_expected_seqnum_). Caller must hold cp_mu_ (directly in
@@ -414,12 +458,17 @@ private:
     uint64_t                       cp_expected_seqnum_ = 0;
     uint64_t                       cp_num_cores_       = 0; // cached VX_CAPS_NUM_CORES, used for CMD_CACHE_FLUSH
     std::mutex                     cp_mu_;             // serialize ring writes
-    // Batched-submit state. cp_in_batch_ is set between cp_batch_begin and
-    // cp_batch_end (cp_mu_ held throughout); while set, cp_submit_* append
-    // without ringing the doorbell. cp_batch_target_ tracks the seqnum the
-    // last appended command will reach, which cp_batch_end polls for once.
-    bool                           cp_in_batch_        = false;
+    // Seqnum the last command appended to the open batch will reach;
+    // cp_batch_end polls for it once. Touched only by the batch owner, which
+    // holds cp_mu_ from cp_batch_begin to cp_batch_end. Whether a batch is
+    // open is per-thread state in device.cpp, not a member: a shared flag
+    // would tell a non-owning submitter to append with no lock held.
     uint64_t                       cp_batch_target_    = 0;
+
+    // Bound on the teardown drain poll (cp_quiesce_). Generous, because the
+    // in-flight command it waits out may be a whole kernel launch, and cheap,
+    // because it only spins when the device is genuinely still working.
+    static constexpr int           CP_QUIESCE_POLLS    = 100000;
 
     // Virtual memory — the Device owns the VMManager (the page-table
     // builder) iff the device reports an MMU (vm_enabled_, discovered from
@@ -427,6 +476,11 @@ private:
     // walk. CpMemIO is the VMManager's device-memory port — PA-direct CP
     // DMA. Always compiled; vm_mgr_/vm_io_ stay null on an MMU-less device.
     bool                                vm_enabled_ = false;
+    // Device MMU SATP is programmed on the command queue before the first
+    // launch (the ring is not live during device init).
+    bool                                mmu_satp_programmed_ = false;
+    // Device decodes the MMU fault-report DCRs (CP DEV_CAPS bit 27).
+    bool                                mmu_fault_report_ = false;
     // CP advertises CMD_DRAW (OP_DRAW) decode (CP DEV_CAPS bit 25). When false,
     // vx_enqueue_draw streams the draw as a ring batch instead (RTL CP without
     // the OP_DRAW mirror). Discovered at open.

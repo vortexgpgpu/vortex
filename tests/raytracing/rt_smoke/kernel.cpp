@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke test — ISA ABI v2 kernel (rtu_isa_v2_proposal.md).
+// PRISM RTU smoke test.
 //
 // Each lane: assemble the per-thread ray, issue ONE trace (config lane-packed
 // into rs1, ray in the f0..f7 window) + ONE wait (hit attrs returned in
@@ -41,8 +41,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   ray.tmin      = arg->tmin;
   ray.tmax      = arg->tmax;
 
-  // One trace + one wait. cull_mask = 0xff = no culling (matches the
-  // Phase-1 default). payload = 0 (smoke test reads no payload).
+  // One trace + one wait. cull_mask = 0xff = no culling (the default).
+  // payload = 0 (smoke test reads no payload).
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t h = vx_rt_wtrace(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
   vx_hit_t hit;
