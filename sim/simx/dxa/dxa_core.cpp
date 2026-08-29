@@ -116,7 +116,8 @@ public:
 
     // gmem_req → rsp_buf → smem_wr inflight bookkeeping.
     std::array<InflightSlot, VX_CFG_DXA_MAX_INFLIGHT> inflight;
-    std::deque<uint32_t>    issued_order;        // tag order, FIFO drain
+    std::deque<uint32_t>    issued_order;        // outstanding tags in issue order
+    uint32_t                drain_slot = UINT32_MAX; // slot currently draining
 
     // smem_wr multicast replay state.
     uint32_t                mc_cta_idx = 0;      // 0..cta_indices.size()
@@ -144,6 +145,7 @@ public:
       w.work_list.clear();
       w.cta_indices.clear();
       w.issued_order.clear();
+      w.drain_slot = UINT32_MAX;
       for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
       w.ag_idx = 0;
       w.mc_cta_idx = 0;
@@ -334,6 +336,7 @@ private:
     w.work_list.clear();
     w.ag_idx = 0;
     w.issued_order.clear();
+    w.drain_slot = UINT32_MAX;
     for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
     w.mc_cta_idx = 0;
     w.km_elem_idx = 0;
@@ -574,9 +577,6 @@ private:
   }
 
   // ── smem_wr: drain ready slots, build LMEM MemReqs ───────────────────
-  //
-  // In-order: consume issued_order.front(); stall on the head until its
-  // GMEM response has arrived.
   void tick_worker_smem_wr(Worker& w) {
     if (w.issued_order.empty()) {
       // Nothing in flight — if all addr_gen done, transfer is finished.
@@ -584,9 +584,33 @@ private:
       return;
     }
 
-    uint32_t slot = w.issued_order.front();
+    // Match the RTL's OoO direct-drain behavior: select any ready non-last
+    // slot without waiting for older requests. Once selected, keep draining
+    // the same slot because the multicast/scatter cursors are worker-local.
+    // The last work item carries notify_done and must remain deferred until
+    // it is the only outstanding slot.
+    uint32_t slot = w.drain_slot;
+    if (slot == UINT32_MAX) {
+      for (uint32_t i = 0; i < w.inflight.size(); ++i) {
+        const auto& candidate = w.inflight[i];
+        if (candidate.allocated && candidate.rsp_arrived && !candidate.work.last) {
+          slot = i;
+          break;
+        }
+      }
+
+      if (slot == UINT32_MAX && w.issued_order.size() == 1) {
+        uint32_t last_slot = w.issued_order.front();
+        const auto& candidate = w.inflight[last_slot];
+        if (candidate.allocated && candidate.rsp_arrived)
+          slot = last_slot;
+      }
+
+      if (slot == UINT32_MAX) return;
+      w.drain_slot = slot;
+    }
+
     auto& s = w.inflight[slot];
-    if (!s.rsp_arrived) return; // wait
 
     // Determine destination core's LMEM port.
     uint32_t socket_local_cid = w.req.core->id() % kCoresPerSocket;
@@ -695,7 +719,9 @@ private:
         s.allocated = false;
         s.rsp_arrived = false;
         s.rsp_data.reset();
-        w.issued_order.pop_front();
+        auto it = std::find(w.issued_order.begin(), w.issued_order.end(), slot);
+        if (it != w.issued_order.end()) w.issued_order.erase(it);
+        w.drain_slot = UINT32_MAX;
       }
     }
   }
@@ -726,6 +752,7 @@ private:
     w.work_list.clear();
     w.cta_indices.clear();
     w.issued_order.clear();
+    w.drain_slot = UINT32_MAX;
     w.ag_idx = 0;
     w.mc_cta_idx = 0;
     w.km_elem_idx = 0;
