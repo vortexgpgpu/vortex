@@ -28,4 +28,6 @@ int test_vote();
 int test_shfl();
 int test_qshfl();
 
+int test_jalr();
+
 #endif
