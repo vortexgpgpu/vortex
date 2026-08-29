@@ -44,11 +44,12 @@
   <rect x="222" y="92" width="166" height="130" rx="6" class="mem"/>
   <text x="234" y="112" class="t">primbuf (pbuf)</text>
   <line x1="222" y1="122" x2="388" y2="122" stroke="#b58900"/>
-  <text x="234" y="140" class="ts">rast_prim_t × P, 132 B</text>
-  <text x="234" y="156" class="ts">w0–8  edges (Q15.16)</text>
-  <text x="234" y="171" class="ts">w9–11 z-plane (Q7.24)</text>
-  <text x="234" y="186" class="ts">w12–35 attribs (FS only)</text>
-  <text x="234" y="212" class="tt">HW reads w0–8 [+9–11]</text>
+  <text x="234" y="139" class="ts">rast_prim_t × P, 212 B</text>
+  <text x="234" y="154" class="ts">w0–8  edges (Q15.16)</text>
+  <text x="234" y="169" class="ts">w9–11 z-plane (Q7.24)</text>
+  <text x="234" y="184" class="ts">w12–50 attribs (FS only)</text>
+  <text x="234" y="199" class="ts">w51–52 facing, rhw_scale</text>
+  <text x="234" y="216" class="tt">HW reads w0–8 [+9–11]</text>
 
   <rect x="40" y="236" width="348" height="58" rx="6" class="sw"/>
   <text x="52" y="256" class="t">on-device front end (SIMT compute)</text>

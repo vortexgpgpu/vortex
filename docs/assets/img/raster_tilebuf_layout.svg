@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 400" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 690" font-family="Helvetica, Arial, sans-serif">
   <defs>
     <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
@@ -21,7 +21,7 @@
     .lbl  { fill:#1c6ca8; font-size:12px; }
   </style>
 
-  <rect x="0" y="0" width="980" height="400" fill="#ffffff"/>
+  <rect x="0" y="0" width="980" height="690" fill="#ffffff"/>
   <text x="20" y="30" class="tb" font-size="17">Tile buffer (tbuf) memory layout</text>
 
   <!-- base pointer -->
@@ -76,4 +76,41 @@
   <text x="600" y="242" class="ts">(no divide anywhere in the fetch path)</text>
 
   <text x="20" y="372" class="tt">Headers are the only striped structure (engine i owns headers i, i+N, …); sorted_pids and the primitive buffer are shared.</text>
+
+  <!-- ══════════ primitive buffer record ══════════ -->
+  <text x="20" y="424" class="tb" font-size="17">Primitive buffer (pbuf) — rast_prim_t record layout</text>
+
+  <!-- base pointer -->
+  <text x="20" y="500" class="mono">pbuf_addr</text>
+  <path d="M 96 496 L 148 496" class="flow"/>
+
+  <rect x="150" y="446" width="560" height="190" class="mem"/>
+  <text x="164" y="468" class="t">one record (53 words, indexed by pid)</text>
+  <rect x="164" y="478" width="532" height="24" class="hdr"/>
+  <text x="172" y="495" class="mono">w0–w8:  edges[3] — 3 × {A, B, C}  (Q15.16)</text>
+  <text x="588" y="495" class="ts">bytes 0–35</text>
+  <rect x="164" y="506" width="532" height="24" class="hdr"/>
+  <text x="172" y="523" class="mono">w9–w11: attribs.z — depth plane  (Q7.24)</text>
+  <text x="588" y="523" class="ts">bytes 36–47</text>
+  <rect x="164" y="534" width="532" height="24" class="word"/>
+  <text x="172" y="551" class="mono">w12–w50: attribs.{r,g,b,a,u,v,rhw,w0–w5}  (Q7.24)</text>
+  <text x="588" y="551" class="ts">bytes 48–203</text>
+  <rect x="164" y="562" width="532" height="24" class="word"/>
+  <text x="172" y="579" class="mono">w51: facing  (u32)</text>
+  <text x="588" y="579" class="ts">bytes 204–207</text>
+  <rect x="164" y="590" width="532" height="24" class="word"/>
+  <text x="172" y="607" class="mono">w52: rhw_scale  (f32)</text>
+  <text x="588" y="607" class="ts">bytes 208–211</text>
+
+  <!-- hardware-read slice bracket -->
+  <path d="M 724 478 L 732 478 L 732 530 L 724 530" class="flowb" style="marker-end:none"/>
+  <text x="740" y="496" class="lbl">RASTER fetch: one 9-word burst</text>
+  <text x="740" y="512" class="lbl">(12 words with early-Z)</text>
+
+  <text x="740" y="560" class="ts">shaded rows = hardware-visible;</text>
+  <text x="740" y="576" class="ts">white rows = FS-only, read by pid</text>
+  <text x="740" y="592" class="ts">(trailing fields cost stride only)</text>
+
+  <!-- stride -->
+  <text x="150" y="662" class="mono">pbuf_stride = sizeof(rast_prim_t) = 212 B   (any 4-byte multiple is legal; prim addr = pbuf_addr + pid × pbuf_stride)</text>
 </svg>

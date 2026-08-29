@@ -61,7 +61,7 @@ little-endian.
 
 Two dense blocks, back to back:
 
-![Tile buffer memory layout](../assets/img/raster_tilebuf_layout.svg)
+![Tile and primitive buffer memory layout](../assets/img/raster_tilebuf_layout.svg)
 
 `rast_bin_header_t` (3 words):
 
@@ -93,22 +93,31 @@ Load-bearing properties:
 ### 2.3 Primitive buffer (`pbuf`)
 
 A flat array of `rast_prim_t` records, indexed by `pid`, with byte stride
-`pbuf_stride` (= `sizeof(rast_prim_t)` = 132 B; any 4-byte-multiple stride is
+`pbuf_stride` (= `sizeof(rast_prim_t)` = 212 B; any 4-byte-multiple stride is
 legal — the hardware computes `pid × pbuf_stride`):
 
-| words | field | format | read by |
-|---|---|---|---|
-| 0–8 | `edges[3]` — three `{A, B, C}` edge equations | Q15.16 | RASTER |
-| 9–11 | `attribs.z` — screen-space depth plane `{A′, B′, C′}` | Q7.24 | RASTER (early-Z only) + FS |
-| 12–35 | `attribs.{r,g,b,a,u,v,rhw}` — barycentric-delta planes | Q7.24 | FS only |
+| words | bytes | field | format | read by |
+|---|---|---|---|---|
+| 0–8 | 0–35 | `edges[3]` — three `{A, B, C}` edge equations | Q15.16 | RASTER |
+| 9–11 | 36–47 | `attribs.z` — screen-space depth plane `{A′, B′, C′}` | Q7.24 | RASTER (early-Z only) + FS |
+| 12–50 | 48–203 | `attribs.{r,g,b,a,u,v,rhw,w0–w5}` — barycentric-delta planes | Q7.24 | FS only |
+| 51 | 204–207 | `facing` — source winding | u32 | FS only |
+| 52 | 208–211 | `rhw_scale` — `rhw` premultiply factor | f32 | FS only |
 
 The depth plane sits **contiguously after the edges** so the entire
-hardware-visible slice is one 9-word (12-word with early-Z) burst. The
-remaining attribute planes are never touched by the rasterizer; the fragment
-shader reads them by `pid`. The colour/texcoord planes are
+hardware-visible slice is one 9-word (12-word with early-Z) burst. Everything
+after it is never touched by the rasterizer; the fragment shader reads it by
+`pid`. The twelve generic varying planes (`r,g,b,a,u,v,w0–w5` — enough for
+three vec4 varyings, packed in declaration order by the front end) are
 perspective-premultiplied (`a·(1/w)`), with `rhw` carrying the max-normalized
 `1/w` plane — see the `rast_attribs_t` comment in `vx_gfx_abi.h` for the
-interpolation contract.
+interpolation contract. The two trailing scalars are per-primitive facts only
+the shader needs: `facing` is the source triangle's winding
+(`gl_FrontFacing`), recorded before setup flips the edges to make the interior
+positive; `rhw_scale` is the combined factor folded into the `rhw` plane (the
+per-triangle max normalization times the power-of-2 range fold) — it cancels
+in the FS's varying divide, but `gl_FragCoord.w` reads the `rhw` plane alone
+and must undo it (`1/w = interp(rhw) / rhw_scale`).
 
 An edge function is `E_k(x, y) = A_k·x + B_k·y + C_k` in Q15.16; a pixel is
 inside when all three are non-negative (with the top-left tie rule of §7.4).
@@ -406,8 +415,10 @@ index, core-in-socket first):
 
 - Common envelope: `PC` = the snooped KMU startup PC (`__vx_cta_entry`),
   `entry` = `FRAG_ENTRY`, `param` = `FRAG_PARAM`, no LMEM.
-- `args.fragment` (an overlay of the compute grid descriptor —
-  a fragment has no grid): the wave's stamps plus the covered-quad `count`.
+- `args.fragment` — one variant of the tagged `kmu_args_t` **packed union**
+  (the other, `args.compute`, is the full CTA grid descriptor; a fragment has
+  no grid, and the envelope takes whichever variant is wider): the wave's
+  stamps plus the covered-quad `count`.
   A quad's 48-bit stamp is **striped across its four lanes** (lane `l`
   carries slice `l & 3` of quad `l >> 2`'s stamp), which is what keeps the
   whole wave inside the single-beat header.
@@ -418,9 +429,10 @@ The per-core CTA dispatcher
 ([`VX_cta_dispatch.sv`](../../hw/rtl/core/VX_cta_dispatch.sv)) treats a
 fragment launch as a degenerate CTA supplied from `kind`: grid `[1,1,1]`,
 `block_idx = 0`, block size = `count × 4` active lanes, cluster size 1 — one
-warp, one slot. The per-lane launch record is a tagged **overlay**: a compute
-launch lands the expanded `{x,y,z}` thread index, a fragment launch lands the
-lane's stamp slice. The record is written into the warp's launch-register RAM
+warp, one slot. The per-lane launch record (`cta_lane_t`) is a tagged
+**overlay** sized to the wider view (either may win, so a packed union cannot
+express it): a compute launch lands the expanded `{x,y,z}` thread index, a
+fragment launch lands the lane's stamp slice. The record is written into the warp's launch-register RAM
 before the warp is activated, so the shader's stamp is readable at its first
 instruction with no memory traffic.
 
@@ -492,8 +504,11 @@ Sizing note: the TE quadrant FIFOs scale as `4^(BIN−BLOCK)` (§7.3) — raisin
 duplication) at exponential TE buffering cost.
 
 `OUTPUT_QUADS` is fixed to `VX_CFG_NUM_THREADS`, and raster requires
-`NUM_THREADS ≥ 4` (a quad is four lanes; NT > 16 fragment stamps would
-overflow the compute-pinned launch envelope — statically asserted).
+`NUM_THREADS` to be a multiple of 4 (a quad is four lanes — statically
+asserted in the packer and launch builder). The launch envelope sizes itself
+to the wider `kmu_args_t` variant: the compute grid descriptor dominates up
+to NT = 16, and the fragment's per-thread stamp slices overtake it from
+NT = 32.
 
 ## 13. SimX model and performance counters
 
