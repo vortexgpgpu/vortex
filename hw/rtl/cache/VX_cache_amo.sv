@@ -232,28 +232,6 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         wire post_wb_word_hit = post_wb_valid && (post_wb_addr == addr_st1)
                              && (post_wb_wsel == word_idx_st1);
 
-        // Old-operand forward: two AMOs to different words/bytes of the same line
-        // are independent RMWs, so the matching entry feeds the old value only
-        // when it fully covers this AMO's bytes; else the just-drained (settling)
-        // entry, else the cache array.
-        reg [WORD_WIDTH-1:0] wbq_fwd_word;
-        reg                  wbq_fwd_cover;
-        always @(*) begin
-            wbq_fwd_word  = '0;
-            wbq_fwd_cover = 1'b0;
-            for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                if (wbq_word_hit[i]) begin
-                    wbq_fwd_word = wbq_fwd_word | wbq_data[i];   // one-hot select
-                    if ((wbq_byteen[i] & byteen_st1) == byteen_st1) begin
-                        wbq_fwd_cover = 1'b1;
-                    end
-                end
-            end
-        end
-        wire post_wb_cover = post_wb_word_hit && ((post_wb_byteen & byteen_st1) == byteen_st1);
-        wire [WORD_WIDTH-1:0] line_word_st1 = wbq_fwd_cover ? wbq_fwd_word
-                                            : (post_wb_cover ? post_wb_data : read_word_st1);
-
         // Read-forward network: the queued writer of each byte of
         // {addr_st1, word_idx_st1} wins over the settling entry, which wins over
         // the array (mask bit stays 0). One-hot over the WBQ per byte.
@@ -289,6 +267,20 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         end
         assign rd_fwd_mask = rd_fwd_mask_w;
         assign rd_fwd_data = rd_fwd_data_w;
+
+        // Old-operand forward: the AMO reads only its own byteen bytes (the
+        // shift + width truncation below select exactly those), and for each
+        // byte the read-forward network already yields the newest value --
+        // queued writer over settling entry over array. Reusing it here keeps
+        // the cmp_old capture off the wide byteen-cover compare a word-granular
+        // mux needs, and stays correct when a matching entry only partially
+        // covers this AMO's bytes (reachable through MSHR replay chains, which
+        // do not wait out commit_busy).
+        wire [WORD_WIDTH-1:0] line_word_st1;
+        for (genvar b = 0; b < WORD_SIZE; ++b) begin : g_line_word_fwd
+            assign line_word_st1[b*8 +: 8] = rd_fwd_mask_w[b] ? rd_fwd_data_w[b*8 +: 8]
+                                                              : read_word_st1[b*8 +: 8];
+        end
 
         // A younger plain store to queued/settling bytes supersedes them (its
         // array write is later in pipeline order): clear those byte lanes so
