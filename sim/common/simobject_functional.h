@@ -893,14 +893,14 @@ private:
 
 namespace detail {
 template <typename Pkt, std::size_t N, std::size_t... Is>
-inline std::array<SimChannel<Pkt>, N> make_sim_channels_impl(SimObjectBase* owner, std::index_sequence<Is...>) {
-  return std::array<SimChannel<Pkt>, N>{ ((void)Is, SimChannel<Pkt>(owner))... };
+inline std::array<SimChannel<Pkt>, N> make_sim_channels_impl(SimObjectBase* owner, uint32_t capacity, std::index_sequence<Is...>) {
+  return std::array<SimChannel<Pkt>, N>{ ((void)Is, SimChannel<Pkt>(owner, capacity))... };
 }
 } // namespace detail
 
 template <typename Pkt, std::size_t N>
-inline std::array<SimChannel<Pkt>, N> make_sim_channels(SimObjectBase* owner) {
-  return detail::make_sim_channels_impl<Pkt, N>(owner, std::make_index_sequence<N>{});
+inline std::array<SimChannel<Pkt>, N> make_sim_channels(SimObjectBase* owner, uint32_t capacity = 2) {
+  return detail::make_sim_channels_impl<Pkt, N>(owner, capacity, std::make_index_sequence<N>{});
 }
 
 ///////////////////////////////////////////////////////////////////////////////
