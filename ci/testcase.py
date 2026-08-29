@@ -238,11 +238,33 @@ def load_category(path):
     return cases
 
 
+def _reject_rtl_xrt_duplicates(cases):
+    """One RTL-executing driver per functional point. xrtsim wraps the same
+    verilated core in the AFU shell and the host driver stack, so its coverage
+    strictly contains rtlsim's: authoring the same (app, configs, shape, args)
+    point on both buys runtime, not coverage. Suites that need the integration
+    layer author the xrt leg; the cheap breadth sweep authors rtlsim. Checks
+    are exempt -- model_parity and perf_gate pin rtlsim as the cycle-truth
+    substrate, which is a role, not a coverage claim."""
+    seen = {}
+    for c in cases:
+        if c.check or c.driver not in ("rtlsim", "xrt"):
+            continue
+        key = (c.via, c.app, c.dir, c.target, c.args, c.configs,
+               tuple(sorted(c.shape.items())), tuple(c.xlens))
+        other = seen.setdefault(key, c)
+        if other is not c and other.driver != c.driver:
+            raise ValueError(
+                "rtlsim/xrtsim duplicate: {} and {} author the same functional "
+                "point; keep only the xrt leg".format(other.id, c.id))
+
+
 def load_all(testcases_dir=TESTCASES_DIR):
     """Load every ci/testcases/*.yaml into a flat list of concrete cases."""
     cases = []
     for path in sorted(glob.glob(os.path.join(testcases_dir, "*.yaml"))):
         cases.extend(load_category(path))
+    _reject_rtl_xrt_duplicates(cases)
     return cases
 
 

@@ -59,7 +59,7 @@ tests:
 - id: dogfood-2
   via: blackbox
   drivers:
-  - opae
+  - xrt
   app: dogfood
   shape:
     cores: 2

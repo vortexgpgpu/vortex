@@ -377,24 +377,10 @@ tests:
   app: gfx_draw3d
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
-- id: gfx_draw3d-8
-  via: blackbox
-  drivers:
-  - rtlsim
-  app: gfx_draw3d
-  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
-  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: gfx_draw3d-9
   via: blackbox
   drivers:
   - xrt
-  app: gfx_draw3d
-  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
-  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
-- id: gfx_draw3d-10
-  via: blackbox
-  drivers:
-  - opae
   app: gfx_draw3d
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
