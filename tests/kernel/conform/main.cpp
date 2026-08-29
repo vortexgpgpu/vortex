@@ -29,6 +29,8 @@ int main() {
 	errors += test_shfl();
 	errors += test_qshfl();
 
+	errors += test_jalr();
+
 	if (0 == errors) {
 		PRINTF("Passed!\n");
 	} else {

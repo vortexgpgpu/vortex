@@ -397,7 +397,9 @@ void AluUnit::execute(instr_trace_t* trace) {
 				if (!tmask.test(t)) continue;
 				rd_data[t].i = link_pc;
 			}
-			warp.PC = rs1_data[thread_last].i + offset;
+			// JALR clears bit 0 of the computed target (RISC-V ISA); the RTL
+			// release build drops it implicitly via from_fullPC() truncation.
+			warp.PC = (rs1_data[thread_last].u + offset) & ~Word(1);
 			core_->perf_stats().branches += 1;
 		} break;
 		case BrType::SYS:
