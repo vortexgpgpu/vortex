@@ -170,6 +170,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mem_rsp_sector; // sector this fill installs
     wire [MSHR_ADDR_WIDTH-1:0] mshr_alloc_id, mshr_previd;
     wire mshr_pending_raw;
+    wire mshr_pending_wr_raw;
 
     // MSHR replay (dequeue) sideband
     wire                           replay_valid, replay_ready, replay_rw;
@@ -324,8 +325,21 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // (it completes at the forward-response port instead of replaying); a
     // fill is held off while a forward drain is in progress so the staged
     // sector is not overwritten mid-chain.
-    wire replay_mux    = replay_valid && ~fwd_head;
-    wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~fill_inflight;
+    // The MSHR hides an entry being dequeued this cycle from the same-line
+    // match (linking behind a slot invalidated the same cycle would orphan the
+    // new entry). If that entry is a not-yet-applied chain member and a
+    // same-line request is probing right now, the prober would sail past it as
+    // a fresh hit/miss and break arrival order. Hold the replay for that cycle
+    // instead — the entry stays valid, the prober links behind it, and the
+    // drain resumes next cycle. The fill path is held with it so the dequeue
+    // pointer cannot be re-armed mid-chain. The forward port needs no hold: it
+    // answers from the staged fill sector, which a younger array access cannot
+    // disturb.
+    wire replay_link_hold = replay_valid && mshr_allocate_st0 && ~pipe_stall
+                         && (st0.req.addr == replay_addr);
+
+    wire replay_mux    = replay_valid && ~fwd_head && ~replay_link_hold;
+    wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~fill_inflight && ~replay_link_hold;
 
     wire replay_grant  = ~init_valid;
     wire replay_enable = replay_grant && replay_mux;
@@ -342,8 +356,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire amo_wb_path   = amo_wb_pending && ~amo_hit_st1;
     wire creq_enable   = creq_grant && (amo_creq_path || amo_wb_path);
 
-    assign replay_ready   = replay_grant && ~fwd_head && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
-    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~fill_inflight && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
+    assign replay_ready   = replay_grant && ~fwd_head && ~replay_link_hold && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
+    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~fill_inflight && ~replay_link_hold && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign flush_ready    = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign core_req_ready = creq_grant && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall
                          && ~amo_commit_busy && ~req_input_defer;
@@ -573,11 +587,26 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         `UNUSED_PIN (valid_out)
     );
 
+    // A tags-hit is completable only while no OLDER same-line MSHR chain entry
+    // could still change the line (a chained write not yet applied) or observe
+    // it (any chained entry, against a write request): chained entries replay
+    // through the pipe AFTER this request's data-array access, so completing
+    // the hit would invert arrival order — a load reads pre-store data, or a
+    // store lands before an older chained load reads. Demote such a hit to a
+    // chained miss: the request links onto the line's chain (it is pending, so
+    // no fill is issued) and replays in arrival order once the chain drains.
+    // Read-after-read keeps the fast release path.
+    wire creq_hit_order_hazard_st0 = st0.req.is_creq && ~st0.req.is_replay
+                                  && mshr_pending_raw
+                                  && (mshr_pending_wr_raw || st0.req.rw)
+                                  && ~is_amo_fwd_st0
+                                  && ~((AMO_ENABLE != 0) && st0.req.amo.amo_valid);
+
     // S0 lookup delta (single combinational driver). The AMO requester is forced
     // non-pending so it never coalesces onto a prior same-line entry.
     always @(*) begin
         lk_st0 = '0;
-        lk_st0.is_hit       = (| tag_matches_st0);
+        lk_st0.is_hit       = (| tag_matches_st0) && ~creq_hit_order_hazard_st0;
         lk_st0.is_dirty     = evict_dirty_st0;
         lk_st0.is_refill    = st0.req.is_fill && line_present_any_st0;
         lk_st0.evict_dirty_mask = evict_dirty_mask_st0;
@@ -812,6 +841,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_data       ({st0.req.word_idx, st0.req.byteen, write_word_st0, st0.req.tag, st0.req.req_idx, st0.req.amo}),
         .allocate_id         (mshr_alloc_id),
         .allocate_pending    (mshr_pending_raw),
+        .allocate_pending_wr (mshr_pending_wr_raw),
         .allocate_previd     (mshr_previd),
         `UNUSED_PIN (allocate_ready),
         .finalize_valid      (mshr_finalize_st1 && ~pipe_stall),
