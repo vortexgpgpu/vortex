@@ -27,6 +27,13 @@ int main() {
 	errors += test_vote();
 
 	errors += test_shfl();
+	errors += test_qshfl();
+
+	errors += test_jalr();
+
+	errors += test_feq_x0_scoreboard();
+
+	errors += test_reserved_funct7();
 
 	if (0 == errors) {
 		PRINTF("Passed!\n");

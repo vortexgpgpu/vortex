@@ -10,6 +10,11 @@
  * Vortex OM unit's depth test the near triangle wins -- the centre
  * pixel must come out blue, not red.
  *
+ * A second pass repeats the draw with a shader that writes gl_FragDepth,
+ * inverting the two triangles' depths. The exported depth has to decide the
+ * test, so the centre comes out red -- the opposite of the interpolated
+ * case, which is what makes a dropped export visible.
+ *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe: vertex shading
  * + hardware rasterization + fragment shading + the OM unit's depth
  * test all run on the Vortex device.
@@ -295,6 +300,17 @@ main(int argc, char **argv)
    VkPipeline pipe;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
 
+   /* The same geometry and depth state, shaded by the gl_FragDepth variant. */
+   VkShaderModule fs_fd = load_module(dev, (argc > 3) ? argv[3]
+                                                      : "depth_frag.frag.spv");
+   if (!fs_fd) return 1;
+   VkPipelineShaderStageCreateInfo stages_fd[2] = { stages[0], stages[1] };
+   stages_fd[1].module = fs_fd;
+   gpci.pStages = stages_fd;
+   VkPipeline pipe_fd;
+   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_fd));
+   gpci.pStages = stages;
+
    /* --- host-visible readback buffer ------------------------------ */
    const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4;
    VkBufferCreateInfo bci = {
@@ -335,6 +351,10 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
    };
+   /* Pass 0 shades with the plain shader, pass 1 with the gl_FragDepth
+    * variant; each records, submits and reads back its own image. */
+   uint8_t centre_rgb[2][3];
+   for (unsigned pass = 0; pass < 2; pass++) {
    CHECK(vkBeginCommandBuffer(cmd, &cbbi));
 
    VkClearValue clears[2] = {
@@ -348,7 +368,8 @@ main(int argc, char **argv)
       .clearValueCount = 2, .pClearValues = clears,
    };
    vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
-   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                     pass == 0 ? pipe : pipe_fd);
    vkCmdDraw(cmd, 6, 1, 0, 0);   /* two triangles */
    vkCmdEndRenderPass(cmd);
 
@@ -367,23 +388,34 @@ main(int argc, char **argv)
    };
    CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
    CHECK(vkQueueWaitIdle(queue));
+   {
+      uint8_t *pp;
+      CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&pp));
+      const uint8_t *c = pp + ((size_t)(HEIGHT / 2) * WIDTH + WIDTH / 2) * 4;
+      centre_rgb[pass][0] = c[0];
+      centre_rgb[pass][1] = c[1];
+      centre_rgb[pass][2] = c[2];
+      vkUnmapMemory(dev, bmem);
+   }
+   }
 
-   /* --- verify: the centre must be the near (blue) triangle ------- */
-   uint8_t *px;
-   CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
-   const uint8_t *centre = px + ((size_t)(HEIGHT / 2) * WIDTH + WIDTH / 2) * 4;
-   uint8_t pr = centre[0], pg = centre[1], pb = centre[2];
-   /* near triangle is pure blue: depth test passed iff blue beats red */
-   bool depth_ok = (pb > pr) && (pb > 80);
-   vkUnmapMemory(dev, bmem);
+   /* --- verify ------------------------------------------------------ *
+    * Interpolated depth: the near (blue) triangle wins the centre.
+    * Exported depth: the shader inverts the two, so red wins instead. */
+   uint8_t pr = centre_rgb[0][0], pg = centre_rgb[0][1], pb = centre_rgb[0][2];
+   uint8_t fdr = centre_rgb[1][0], fdb = centre_rgb[1][2];
+   bool depth_ok    = (pb > pr) && (pb > 80);
+   bool fragdepth_ok = (fdr > fdb) && (fdr > 80);
 
    vkDestroyCommandPool(dev, cp, NULL);
    vkFreeMemory(dev, bmem, NULL);
    vkDestroyBuffer(dev, rb, NULL);
    vkDestroyPipeline(dev, pipe, NULL);
+   vkDestroyPipeline(dev, pipe_fd, NULL);
    vkDestroyPipelineLayout(dev, pl, NULL);
    vkDestroyShaderModule(dev, vs, NULL);
    vkDestroyShaderModule(dev, fs, NULL);
+   vkDestroyShaderModule(dev, fs_fd, NULL);
    vkDestroyFramebuffer(dev, fb, NULL);
    vkDestroyRenderPass(dev, rp, NULL);
    vkDestroyImageView(dev, dview, NULL);
@@ -400,7 +432,12 @@ main(int argc, char **argv)
              "triangle won, depth test did not)\n", pr, pg, pb);
       return 1;
    }
-   printf("PASSED (depth test: near triangle won the centre, RGB = %u,%u,%u)\n",
-          pr, pg, pb);
+   if (!fragdepth_ok) {
+      printf("FAILED (gl_FragDepth: centre R=%u B=%u -- expected red; the "
+             "exported depth did not decide the test)\n", fdr, fdb);
+      return 1;
+   }
+   printf("PASSED (depth test: near triangle won at RGB = %u,%u,%u; "
+          "gl_FragDepth inverted it, R=%u B=%u)\n", pr, pg, pb, fdr, fdb);
    return 0;
 }

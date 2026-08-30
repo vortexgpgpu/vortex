@@ -11,11 +11,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU reformation multi-warp smoke — Phase 3-A2 non-interference.
+// PRISM RTU reformation multi-warp smoke — non-interference.
 //
 // num_warps blocks × VX_CFG_NUM_THREADS lanes each. Every warp fires
-// the same ray at the same non-opaque triangle (sbt_idx=0). The Phase
-// 3-A2 reformation must NEVER bundle lanes from different warps into
+// the same ray at the same non-opaque triangle (sbt_idx=0). Reformation
+// must NEVER bundle lanes from different warps into
 // one CB_YIELD — same-sbt or not, a cb_active_mask is per-warp scope.
 // Validation:
 //   * every lane HITs at t=5

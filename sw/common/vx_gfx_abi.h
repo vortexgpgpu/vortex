@@ -168,38 +168,72 @@ struct rast_attrib_t {
 
 // Attribute planes carried per primitive (Q7.24 barycentric deltas {a0-a2,
 // a1-a2, a2}). Depth `z` is a screen-space affine plane (correct as-is). The
-// colour/texcoord planes r,g,b,a,u,v carry the *perspective-premultiplied*
+// generic varying planes r,g,b,a,u,v,w0..w5 carry the *perspective-premultiplied*
 // attribute a·(1/w); `rhw` carries the (max-normalized) 1/w plane. The FS
-// interpolates all planes affinely in screen space, then divides the colour/uv
+// interpolates all planes affinely in screen space, then divides the varying
 // planes by the interpolated 1/w to recover the perspective-correct attribute.
 // The 1/w values are normalized by their per-triangle max in setup so the
 // stored fixed-point stays in range (the scale cancels in the FS divide); when
 // w is constant this reduces exactly to plain affine interpolation. Setup also
 // folds an extra common power-of-2 downscale into 1/w when a premultiplied
-// texcoord would exceed FloatA's Q7.24 range (large tiling/wrap UV), which
+// varying would exceed FloatA's Q7.24 range (large tiling/wrap UV), which
 // likewise cancels in the FS divide — so tiled UV well beyond 1.0 stays exact.
+//
+// The front end packs a draw's user varyings into these planes in declaration
+// order [u,v,r,g,b,a,w0..w5] (gfx_frontend_k.h expand_k); the FS reads them back
+// the same way. Twelve scalar planes let a fragment carry up to three vec4
+// varyings (e.g. samplerCube textureGrad's coord + dPdx + dPdy), past the six a
+// single colour+texcoord allowed. `z`/`rhw` stay fixed-function.
 struct rast_attribs_t {
-  rast_attrib_t z, r, g, b, a, u, v, rhw;
+  rast_attrib_t z, r, g, b, a, u, v, rhw, w0, w1, w2, w3, w4, w5;
 };
 
+// Per-primitive scalars the fragment shader needs but the raster hardware does
+// not. They sit AFTER the attribute planes on purpose: RASTER fetches only words
+// 0..11 (the three edges plus the depth plane) and finds primitive N through the
+// VX_DCR_RASTER_PBUF_STRIDE DCR, so trailing fields cost stride and nothing else.
+//
+//   facing    1 = the source triangle wound backwards, 0 = forwards. EdgeEquation
+//             flips the edges so the interior is positive either way, which
+//             destroys the winding; gl_FrontFacing is this bit, recorded before
+//             the flip.
+//   rhw_scale the combined factor the `rhw` plane is premultiplied by (the
+//             per-triangle max normalization times the power-of-2 range fold).
+//             It cancels in the FS's interp(a*rhw)/interp(rhw) divide, so a
+//             varying never needs it -- but gl_FragCoord.w reads the rhw plane
+//             ALONE and must undo it: 1/w = interp(rhw) / rhw_scale. Zero when
+//             every vertex w was zero.
 struct rast_prim_t {
   vec3e_t        edges[3];
   rast_attribs_t attribs;
+  uint32_t       facing;
+  float          rhw_scale;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-// Fragment-wave payload (RASTER dispatch v2).
+// Fragment-wave payload.
 //
-// One per active lane of a launched fragment wave. At fragment-wave launch the
-// raster work distributor stages NUM_THREADS of these into the warp's gfx
-// register window (lane t at slot VX_GFX_FRAG_SLOT_BASE..); the FS reads its own
-// lane's record via vx_frag_load()/GETWS — no LMEM traffic, no polling. The
-// record is just {pos_mask, pid}; the FS recomputes per-corner edge values from
-// the primitive edges + the quad origin (pos_mask decodes to pos_y<<18 |
-// pos_x<<4 | cov_mask).
+// One lane is one pixel, and a 2x2 pixel quad is four adjacent lanes. Each lane
+// gets its OWN pixel position and the primitive it belongs to; it recomputes the
+// per-corner edge values from the primitive edges and its position.
+//
+// A lane whose pixel the primitive misses is a HELPER: it runs the shader anyway,
+// so that its covered neighbours in the quad have a value to shuffle when they
+// take a derivative (vx_quad_ddx/ddy, and hence the texture LOD). `covered` is
+// what says whether the lane may export its result — never the thread mask.
 ///////////////////////////////////////////////////////////////////////////////
+// A quad is 2x2 pixels, so a quad group is four adjacent lanes. Lane l holds
+// sub-pixel sub = l & (VX_FRAG_QUAD_LANES-1), at (2*qx + (sub&1), 2*qy + (sub>>1)).
+// The quad SHFL that carries a derivative permutes within this group, so a warp
+// must be a whole number of groups.
+#define VX_FRAG_QUAD_LANES 4
+
+#define VX_FRAG_POS_X(pos)       ((pos) & 0xffff)
+#define VX_FRAG_POS_Y(pos)       (((pos) >> 16) & 0x7fff)
+#define VX_FRAG_POS_COVERED(pos) (((pos) >> 31) & 1)
+
 struct frag_payload_t {
-  uint32_t pos_mask;            // cov_mask[3:0] | (pos_x<<4) | (pos_y<<18)
+  uint32_t pos;                 // x[15:0] | y[30:16] | covered[31]
   uint32_t pid;                 // primitive id
 };
 

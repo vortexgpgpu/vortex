@@ -1,6 +1,6 @@
 """Perf-regression baselines: golden rtlsim cycle counts per benchmark.
 
-Baselines live in the SOURCE tree at ci/perf/baselines/<category>.json (canonical
+Baselines live in the SOURCE tree at ci/baselines/perf/<category>.json (canonical
 sorted JSON, one file per category). They are read by ci/test_runner.py's
 perf_gate check and (re)written only by `pytest --update-baselines`; CI
 never writes them. See docs/designs/continuous_integration.md §3.4.
@@ -37,7 +37,7 @@ def _source_root():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-BASELINE_DIR = os.path.join(_source_root(), "ci", "perf", "baselines")
+BASELINE_DIR = os.path.join(_source_root(), "ci", "baselines", "perf")
 
 
 def _path(category):
@@ -49,6 +49,29 @@ def config_hash(case):
     key = "|".join([case.app, case.args, case.configs,
                     repr(sorted(case.shape.items()))])
     return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
+# Shape knobs blackbox.sh turns into -D macros (same order it appends them), so a
+# baseline records the fully-resolved CONFIGS the run actually used and stays
+# reproducible without the testcase. Mirrors ci/blackbox.sh's flag handling.
+_SHAPE_MACROS = (
+    ("clusters", "-DVX_CFG_NUM_CLUSTERS={}"),
+    ("cores",    "-DVX_CFG_NUM_CORES={}"),
+    ("warps",    "-DVX_CFG_NUM_WARPS={}"),
+    ("threads",  "-DVX_CFG_NUM_THREADS={}"),
+    ("l2cache",  "-DVX_CFG_L2_ENABLE"),
+    ("l3cache",  "-DVX_CFG_L3_ENABLE"),
+)
+
+
+def resolved_configs(case):
+    """The CONFIGS blackbox builds: the case's configs plus its shape macros."""
+    parts = [case.configs] if case.configs else []
+    for knob, macro in _SHAPE_MACROS:
+        val = case.shape.get(knob)
+        if val:
+            parts.append(macro.format(val) if "{}" in macro else macro)
+    return " ".join(parts)
 
 
 def load(category):
@@ -64,12 +87,11 @@ _pending = collections.defaultdict(dict)
 
 
 def record(case, xlen, cycles, instrs):
-    entry = _pending[case.category].setdefault(case.id, {
-        "app": case.app, "args": case.args, "configs": case.configs,
-        "config_hash": config_hash(case),
-    })
+    entry = _pending[case.category].setdefault(case.id, {})
     entry["app"], entry["args"] = case.app, case.args
-    entry["configs"], entry["config_hash"] = case.configs, config_hash(case)
+    entry["driver"] = case.driver
+    entry["configs"] = resolved_configs(case)
+    entry["config_hash"] = config_hash(case)
     entry[str(xlen)] = {"cycles": int(cycles), "instrs": int(instrs)}
 
 

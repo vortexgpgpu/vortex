@@ -59,7 +59,7 @@ tests:
 - id: dogfood-2
   via: blackbox
   drivers:
-  - opae
+  - xrt
   app: dogfood
   shape:
     cores: 2
@@ -82,3 +82,32 @@ tests:
   - simx
   app: vecadd
   flags: --nohup
+- id: reopen-1
+  via: blackbox
+  drivers:
+  - xrt
+  app: reopen
+- id: reopen-2
+  via: script
+  run: "XRTSIM_WARM_OPEN=1 ./ci/blackbox.sh --driver=xrt --app=reopen"
+- id: reopen-3
+  via: script
+  run: "OPAESIM_WARM_OPEN=1 ./ci/blackbox.sh --driver=opae --app=reopen"
+# Degenerate dispatch: one CTA of one thread. The launch/completion path at
+# minimum slack (no following CTA across the handoff); also checks the launch
+# shape (gridDim/blockDim) read back as data and per-CTA store coverage.
+- id: single_cta-1
+  via: blackbox
+  drivers:
+  - simx
+  app: single_cta
+- id: single_cta-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: single_cta
+- id: module_reload-1
+  via: blackbox
+  drivers:
+  - simx
+  app: module_reload

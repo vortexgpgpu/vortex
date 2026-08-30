@@ -17,7 +17,7 @@
 
 module VX_om_core_top import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter NUM_LANES = `VX_CFG_NUM_THREADS
+    parameter NUM_LANES = OM_CORE_LANES
 ) (
     input wire                              clk,
     input wire                              reset,
@@ -116,7 +116,8 @@ module VX_om_core_top import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .dcr_bus_if    (dcr_bus_if),
         .om_bus_if    (om_bus_if),
         .cache_bus_if  (cache_bus_if),
-        `UNUSED_PIN (busy)
+        `UNUSED_PIN (busy),
+        `UNUSED_PIN (om_dcrs)
     );
 
 endmodule

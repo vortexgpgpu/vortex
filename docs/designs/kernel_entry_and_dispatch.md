@@ -8,6 +8,9 @@ symbol-table mechanism that lets one binary hold several named kernels
 [`sw/kernel/scripts/vxbin.py`](../../sw/kernel/scripts/vxbin.py),
 the link scripts, and
 [`sw/runtime/common/module.cpp`](../../sw/runtime/common/module.cpp).
+The runtime module/kernel handle API
+is in [`vortex_runtime_api.md`](vortex_runtime_api.md); the KMU CTA
+dispatch is in [`cta_dispatch_architecture.md`](cta_dispatch_architecture.md).
 
 ---
 
@@ -65,19 +68,10 @@ the multi-entry path.
 
 ## 4. Proposed but not yet implemented
 
-1. **Single-entry regression re-validation** (proposal §8): the ~50
+1. **Single-entry regression re-validation**: the ~50
    single-entry `tests/regression` kernels should be re-run to confirm the
    legacy path's move from a direct `jal kernel_main` to `jalr ra, s11`
    (PoCL's runs already prove `jalr`/CTA-rewind compatibility; this is a
    test-coverage TODO, not a code gap).
 2. **PoCL trampoline interop** (`__vx_tramp_<name>`) lives in the external
    mesa/PoCL tree; `__vx_cta_entry` is agnostic to it by design.
-
----
-
-## 5. Source proposal
-
-This design consolidates and supersedes `kmu_kernel_entry_proposal.md`
-(now removed from `docs/proposals/`). The runtime module/kernel handle API
-is in [`vortex_runtime_api.md`](vortex_runtime_api.md); the KMU CTA
-dispatch is in [`cta_clustering_and_dispatch.md`](cta_clustering_and_dispatch.md).

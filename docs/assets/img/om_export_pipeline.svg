@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 300" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .core { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .unit { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .box  { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .t    { fill:#1b2733; font-size:14.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12px; }
+    .tt   { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.7; fill:none; marker-end:url(#arr); }
+    .flowg{ stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#arrg); }
+    .lbl  { fill:#1c6ca8; font-size:11.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1180" height="300" fill="#ffffff"/>
+  <text x="20" y="28" class="t" font-size="17">Fragment export pipeline — one fragment's path</text>
+
+  <rect x="20" y="60" width="170" height="76" rx="6" class="core"/>
+  <text x="32" y="84" class="t">FS warp</text>
+  <text x="32" y="104" class="ts">vx_om_export: 1–2</text>
+  <text x="32" y="120" class="ts">posted stores per rt</text>
+
+  <rect x="226" y="60" width="150" height="76" rx="6" class="core"/>
+  <text x="238" y="84" class="t">L1</text>
+  <text x="238" y="104" class="ts">IO bypass</text>
+  <text x="238" y="120" class="ts">(uncached, posted)</text>
+
+  <rect x="412" y="60" width="160" height="76" rx="6" class="unit"/>
+  <text x="424" y="84" class="t">VX_om_steer</text>
+  <text x="424" y="104" class="ts">peel off socket→L2</text>
+  <text x="424" y="120" class="ts">trunk by attr bit</text>
+
+  <rect x="608" y="60" width="180" height="76" rx="6" class="unit"/>
+  <text x="620" y="84" class="t">VX_om_ingress</text>
+  <text x="620" y="104" class="ts">addr → {rt, x, y, face};</text>
+  <text x="620" y="120" class="ts">pair colour + depth</text>
+
+  <rect x="824" y="60" width="140" height="76" rx="6" class="unit"/>
+  <text x="836" y="84" class="t">VX_om_bus_arb</text>
+  <text x="836" y="104" class="ts">static map:</text>
+  <text x="836" y="120" class="ts">ingress → OM core</text>
+
+  <path d="M 190 98 L 226 98" class="flow"/>
+  <path d="M 376 98 L 412 98" class="flow"/>
+  <path d="M 572 98 L 608 98" class="flow"/>
+  <path d="M 788 98 L 824 98" class="flow"/>
+  <path d="M 964 98 L 1000 98" class="flow"/>
+
+  <!-- OM core -->
+  <rect x="1000" y="46" width="160" height="104" rx="6" class="unit"/>
+  <text x="1012" y="70" class="t">VX_om_core</text>
+  <text x="1012" y="90" class="ts">read fb →</text>
+  <text x="1012" y="106" class="ts">depth/stencil ∥ blend</text>
+  <text x="1012" y="122" class="ts">→ write fb</text>
+  <text x="1012" y="140" class="tt">same-pixel interlocked</text>
+
+  <!-- ocache -->
+  <rect x="1000" y="196" width="160" height="70" rx="6" class="mem"/>
+  <text x="1012" y="220" class="t">ocache</text>
+  <text x="1012" y="240" class="ts">RMW word traffic;</text>
+  <text x="1012" y="256" class="ts">own L2 port</text>
+  <path d="M 1060 150 L 1060 196" class="flowg"/>
+  <path d="M 1100 196 L 1100 150" class="flowg"/>
+  <text x="968" y="176" class="lbl">read</text>
+  <text x="1110" y="176" class="lbl">write</text>
+
+  <!-- non-OM traffic continues -->
+  <path d="M 492 136 L 492 210 L 620 210" class="flow"/>
+  <rect x="620" y="192" width="168" height="40" rx="6" class="box"/>
+  <text x="632" y="217" class="ts">everything else → L2</text>
+  <text x="200" y="56" class="lbl">socket→L2 trunk</text>
+
+  <text x="20" y="286" class="tt">The store is ordinary end to end — no cache level decodes the aperture; only the steer's one attribute bit routes it.</text>
+</svg>

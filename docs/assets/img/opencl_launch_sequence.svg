@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 940" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="kl_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/></marker>
+    <marker id="kl_p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/></marker>
+    <marker id="kl_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/></marker>
+    <marker id="kl_y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b58900"/></marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .cm   { font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#1b2733; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.3; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#kl_a); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#kl_p); }
+    .mg   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#kl_g); }
+    .my   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#kl_y); }
+    .rtn  { stroke:#8e4a7e; stroke-width:1.4; fill:none; marker-end:url(#kl_p); stroke-dasharray:6 4; }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lby  { fill:#8a6d00; font-size:10.5px; }
+    .lbg  { fill:#2f6b39; font-size:10.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1440" height="940" fill="#ffffff"/>
+  <text x="24" y="34" class="t">clEnqueueNDRangeKernel — one kernel launch, end to end</text>
+  <text x="24" y="55" class="tt">Enqueue is asynchronous: the app returns at submit; a driver worker thread runs the command off the caller's stack.</text>
+
+  <text x="130"  y="90" class="th" text-anchor="middle" fill="#5a7184">host app thread</text>
+  <text x="410"  y="90" class="th" text-anchor="middle" fill="#8e4a7e">PoCL queue + worker</text>
+  <text x="720"  y="90" class="th" text-anchor="middle" fill="#2e5e82">pocl_vortex_run</text>
+  <text x="1010" y="90" class="th" text-anchor="middle" fill="#8a6d00">Vortex SDK / KMU</text>
+  <text x="1300" y="90" class="th" text-anchor="middle" fill="#2f6b39">device warps</text>
+
+  <line x1="130"  y1="100" x2="130"  y2="884" class="lane"/>
+  <line x1="410"  y1="100" x2="410"  y2="884" class="lane"/>
+  <line x1="720"  y1="100" x2="720"  y2="884" class="lane"/>
+  <line x1="1010" y1="100" x2="1010" y2="884" class="lane"/>
+  <line x1="1300" y1="100" x2="1300" y2="884" class="lane"/>
+
+  <!-- submit -->
+  <path d="M 134 130 L 406 130" class="m"/>
+  <text x="150" y="122" class="lb">clEnqueueNDRangeKernel → ops->submit</text>
+  <rect x="300" y="144" width="220" height="42" rx="5" class="actp"/>
+  <text x="310" y="162" class="ts">command_push → ready_list</text>
+  <text x="310" y="178" class="cm">signal cq_cond</text>
+  <path d="M 406 210 L 134 210" class="rtn"/>
+  <text x="150" y="202" class="lbp">returns immediately (event handed back)</text>
+
+  <!-- worker wakes -->
+  <rect x="300" y="230" width="220" height="40" rx="5" class="actp"/>
+  <text x="310" y="248" class="ts">worker wakes, drains ready_list</text>
+  <text x="310" y="264" class="cm">pocl_exec_command → ops->run</text>
+  <path d="M 414 292 L 716 292" class="mp"/>
+  <text x="430" y="284" class="lbp">run(cmd) — off the caller's stack</text>
+
+  <!-- pack args -->
+  <rect x="600" y="306" width="300" height="90" rx="5" class="act"/>
+  <text x="610" y="324" class="th">pack the argument buffer</text>
+  <text x="610" y="342" class="cm">POD   → inline at ABI offset</text>
+  <text x="610" y="358" class="cm">ptr   → device addr (+ sub-buffer origin)</text>
+  <text x="610" y="374" class="cm">local → offset, 128B-aligned (VX_LOCAL_ALIGN)</text>
+  <text x="610" y="390" class="tt">__local sizes summed into one scratchpad request</text>
+
+  <!-- write arg buffer -->
+  <path d="M 724 420 L 1006 420" class="my"/>
+  <text x="740" y="412" class="lby">vx_enqueue_write — arg buffer → device</text>
+  <rect x="930" y="434" width="200" height="34" rx="5" class="mem"/>
+  <text x="940" y="455" class="ts">args resident in global mem</text>
+
+  <!-- launch -->
+  <path d="M 724 494 L 1006 494" class="my"/>
+  <text x="740" y="486" class="lby">vx_enqueue_launch(li) — grid_dim, block_dim, kernel, args</text>
+  <rect x="900" y="508" width="240" height="58" rx="5" class="mem"/>
+  <text x="910" y="526" class="ts">KMU expands grid → CTAs</text>
+  <text x="910" y="542" class="ts">one work-group = one CTA</text>
+  <text x="910" y="560" class="tt">round-robins CTAs to ready cores</text>
+
+  <!-- into device -->
+  <path d="M 1014 590 L 1296 590" class="my"/>
+  <text x="1030" y="582" class="lby">CTA fire → warps</text>
+  <rect x="1160" y="604" width="270" height="76" rx="5" class="actg"/>
+  <text x="1170" y="622" class="th">kernel_main entry glue</text>
+  <text x="1170" y="640" class="cm">g_work_dim, g_global_offset set</text>
+  <text x="1170" y="657" class="ts">enter vortex-kernel wrapper</text>
+  <text x="1170" y="674" class="tt">wrapper unpacks args, calls body</text>
+
+  <rect x="1160" y="694" width="270" height="70" rx="5" class="actg"/>
+  <text x="1170" y="712" class="th">kernel body runs</text>
+  <text x="1170" y="730" class="cm">get_global_id() ← KMU CSRs</text>
+  <text x="1170" y="748" class="ts">warps retire on tmc(tmask=0)</text>
+
+  <!-- completion path -->
+  <path d="M 1296 792 L 1014 792" class="mg"/>
+  <text x="1040" y="784" class="lbg">grid complete</text>
+  <path d="M 1006 820 L 724 820" class="my"/>
+  <text x="770" y="812" class="lby">vx_sync_event returns</text>
+  <path d="M 716 848 L 414 848" class="rtn"/>
+  <text x="430" y="840" class="lbp">node complete → ops->notify → event callbacks; idle_cond broadcast</text>
+
+  <!-- notes -->
+  <rect x="40" y="430" width="330" height="150" rx="6" class="note"/>
+  <text x="52" y="450" class="th">Why a worker thread</text>
+  <text x="52" y="470" class="ts">Commands must run off the caller's stack:</text>
+  <text x="52" y="486" class="ts">a migration submitted while PoCL holds a</text>
+  <text x="52" y="502" class="ts">buffer lock would re-enter that lock inline</text>
+  <text x="52" y="518" class="ts">and self-deadlock. submit only pushes +</text>
+  <text x="52" y="534" class="ts">signals; the worker drains ready_list and</text>
+  <text x="52" y="550" class="ts">executes. clFinish / join wait on idle_cond</text>
+  <text x="52" y="566" class="ts">until both lists are empty.</text>
+
+  <rect x="40" y="612" width="330" height="150" rx="6" class="note"/>
+  <text x="52" y="632" class="th">Work-item → hardware mapping</text>
+  <text x="52" y="652" class="ts">A work-group runs as one CTA and never</text>
+  <text x="52" y="668" class="ts">spans cores, so it must fit</text>
+  <text x="230" y="668" class="cm">num_warps ×</text>
+  <text x="52" y="684" class="cm">num_threads</text>
+  <text x="150" y="684" class="ts">= MAX_WORK_GROUP_SIZE.</text>
+  <text x="52" y="704" class="ts">Work-items map to warp lanes; the KMU</text>
+  <text x="52" y="720" class="ts">publishes group/local ids into CSRs that</text>
+  <text x="52" y="736" class="ts">the get_* builtins read. Multiple CTAs of</text>
+  <text x="52" y="752" class="ts">a grid run concurrently across the cores.</text>
+</svg>

@@ -36,9 +36,6 @@ ensure_file $NETLIST "NETLIST not found"
 
 file mkdir $RPT_DIR
 
-# ---- (optional) reporting units; you can omit to silence unit-scale warnings
-# set_cmd_units -time ns -capacitance fF -voltage V -current mA -resistance kOhm -power mW -distance um
-
 # ---- liberty ----
 if {$LIB_ROOT ne "" && [file isdirectory $LIB_ROOT]} {
   foreach lib [split [exec bash -lc "shopt -s nullglob globstar; printf '%s\n' $LIB_ROOT/**/*.lib | sort -u"] "\n"] {
@@ -49,6 +46,9 @@ if {$LIB_TGT ne "" && [file exists $LIB_TGT]} {
   puts "read_liberty $LIB_TGT"
   read_liberty $LIB_TGT
 }
+
+# SDC values are expressed in ns regardless of the selected Liberty time unit.
+set_cmd_units -time ns -capacitance fF -voltage V -current mA -resistance kOhm -power mW -distance um
 
 # ---- netlist ----
 puts "read_verilog $NETLIST"
@@ -73,31 +73,42 @@ if {[llength $clks] > 0} { report_clock_properties $clks } else { puts "No clock
 
 report_wns
 report_tns
+report_wns > [file join $RPT_DIR "wns.rpt"]
+report_tns > [file join $RPT_DIR "tns.rpt"]
 
 # Keep report_checks options conservative for 2.7.0 compatibility
 report_checks -path_delay max -digits 3 -format full_clock_expanded
 report_checks -path_delay min -digits 3 -format full_clock_expanded
+report_checks -path_delay max -digits 3 -format full_clock_expanded > [file join $RPT_DIR "setup.rpt"]
+report_checks -path_delay min -digits 3 -format full_clock_expanded > [file join $RPT_DIR "hold.rpt"]
 
-# If SAIF is not provided (or unsupported), we intentionally fall back to vectorless/default power.
+# A requested SAIF must be annotated; vectorless power is used only when none is requested.
 if {$SAIF_FILE ne "" && [file exists $SAIF_FILE]} {
-  if {[has_cmd read_saif]} {
-    if {$SAIF_INST ne ""} {
-      puts "read_saif -instance $SAIF_INST $SAIF_FILE"
-      read_saif -instance $SAIF_INST $SAIF_FILE
-    } else {
-      puts "read_saif $SAIF_FILE"
-      read_saif $SAIF_FILE
-    }
-  } else {
-    puts "WARNING: 'read_saif' not available in this STA build; cannot annotate SAIF (power will be vectorless/default)."
+  if {![has_cmd read_saif]} {
+    puts stderr "FATAL: this OpenSTA build has no read_saif command"
+    exit 1
   }
+  if {$SAIF_INST ne ""} {
+    puts "read_saif -scope $SAIF_INST $SAIF_FILE"
+    read_saif -scope $SAIF_INST $SAIF_FILE
+  } else {
+    puts "read_saif $SAIF_FILE"
+    read_saif $SAIF_FILE
+  }
+} elseif {$SAIF_FILE ne ""} {
+  puts stderr "FATAL: SAIF_FILE not found: $SAIF_FILE"
+  exit 1
 } else {
-  puts "INFO: SAIF_FILE not provided (or not found); power will be vectorless/default."
+  puts "INFO: SAIF_FILE not provided; power is vectorless/default."
 }
 
-# Optional: help diagnose annotation coverage when SAIF is used
-if {[has_cmd report_switching_activity]} {
-  catch { report_switching_activity -list_not_annotated > [file join $RPT_DIR "saif_unannotated.rpt"] }
+if {$SAIF_FILE ne ""} {
+  if {![has_cmd report_activity_annotation]} {
+    puts stderr "FATAL: this OpenSTA build cannot report SAIF annotation coverage"
+    exit 1
+  }
+  report_activity_annotation -report_annotated > [file join $RPT_DIR "saif_annotated.rpt"]
+  report_activity_annotation -report_unannotated > [file join $RPT_DIR "saif_unannotated.rpt"]
 }
 
 # ---- power reports (always) ----

@@ -48,6 +48,14 @@ module VX_cp_fetch
   // for the host to read back.
   output logic [63:0]               head_out,
 
+  // Queue reset. `stop_req` holds the fetch at a cache-line boundary so it
+  // stops issuing new AR; `clear` zeroes the head pointer and is only ever
+  // asserted by VX_cp_core when this fetch reports idle, so a read is never
+  // abandoned mid-flight.
+  input  wire                       stop_req,
+  input  wire                       clear,
+  output wire                       idle,
+
   // Decoded command stream out to the CPE.
   output logic                      cmd_out_valid,
   output cmd_t                      cmd_out,
@@ -86,8 +94,17 @@ module VX_cp_fetch
   // Wrap-aware ring offset.
   wire [63:0] ring_offset = head_r & {48'd0, state_in.ring_size_mask};
 
+  // S_IDLE is the only state with no AXI read outstanding and no partially
+  // consumed cache line, so it is the one safe point to clear the head.
+  assign idle = (state == S_IDLE);
+
   always_ff @(posedge clk) begin
     if (reset) begin
+      state     <= S_IDLE;
+      head_r    <= '0;
+      cl_data_r <= '0;
+      offset_r  <= '0;
+    end else if (clear) begin
       state     <= S_IDLE;
       head_r    <= '0;
       cl_data_r <= '0;
@@ -95,7 +112,7 @@ module VX_cp_fetch
     end else begin
       case (state)
         S_IDLE: begin
-          if (state_in.enabled && (head_r < state_in.tail)) begin
+          if (!stop_req && state_in.enabled && (head_r < state_in.tail)) begin
             state <= S_ISSUE_AR;
           end
         end

@@ -21,8 +21,10 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     input wire clk,
     input wire reset,
 
-    // Device configuration
-    input om_dcrs_t dcrs,
+    // Device configuration. rt_dcrs is the attachment state already selected for
+    // the request in flight, so the address pipeline never sees the index.
+    input om_dcrs_t    dcrs,
+    input om_rt_dcrs_t rt_dcrs,
 
     // Memory interface
     VX_mem_bus_if.master                            cache_bus_if [OCACHE_NUM_REQS],
@@ -59,6 +61,12 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     localparam NUM_REQS    = OM_MEM_REQS;
     localparam W_ADDR_BITS = (`OM_ADDR_BITS + 6) - 2;
 
+    // The memory scheduler cannot fill more memory channels than it has core
+    // requests, so a build with more ocache banks than OM memory ports clamps
+    // the channel count; the leftover cache ports keep the uniform ocache
+    // attach geometry and are tied off below.
+    localparam MEM_CHANNELS = `MIN(NUM_REQS, OCACHE_NUM_REQS);
+
     wire                        mreq_valid, mreq_valid_r;
     wire                        mreq_rw, mreq_rw_r;
     wire [NUM_REQS-1:0]         mreq_mask, mreq_mask_r;
@@ -67,7 +75,6 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire [NUM_REQS-1:0][3:0]    mreq_byteen, mreq_byteen_r;
     wire [TAG_WIDTH-1:0]        mreq_tag, mreq_tag_r;
     wire                        mreq_ready_r;
-    wire                        mreq_stall;
 
     wire                        req_queue_empty_w;
     wire                        mrsp_valid;
@@ -77,15 +84,19 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire                        mrsp_ready;
 
     `UNUSED_VAR (dcrs)
+    `UNUSED_VAR (rt_dcrs)
 
-    wire [3:0] color_byteen = dcrs.cbuf_writemask;
+    wire [3:0] color_byteen = rt_dcrs.cbuf_writemask;
     wire [2:0] depth_byteen = {3{dcrs.depth_writemask}};
     wire [NUM_LANES-1:0] stencil_byteen;
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_stencil_byteen
         assign stencil_byteen[i] = (dcrs.stencil_writemask[req_face[i]] != 0);
     end
 
-    wire mul_enable;
+    // A request enters the fixed-latency address pipe only with a reserved
+    // slot in the landing queue below, so the pipe never stalls mid-flight and
+    // no enable network spans it: multipliers and shift registers free-run.
+    wire req_fire = req_valid && req_ready;
 
     // depth/stencil values submission
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_DS
@@ -99,7 +110,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
             .clk    (clk),
-            .enable (mul_enable),
+            .enable (1'b1),
             .dataa  (req_pos_y[i]),
             .datab  (dcrs.zbuf_pitch),
             .result (m_y_pitch)
@@ -118,7 +129,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         ) shift_reg (
             .clk      (clk),
             `UNUSED_PIN (reset),
-            .enable   (mul_enable),
+            .enable   (1'b1),
             .data_in  ({mask,         byteen,         baddr,   data}),
             .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s, mreq_data[i]})
         );
@@ -139,14 +150,14 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             .LATENCY (`LATENCY_IMUL)
         ) multiplier (
             .clk    (clk),
-            .enable (mul_enable),
+            .enable (1'b1),
             .dataa  (req_pos_y[i - NUM_LANES]),
-            .datab  (dcrs.cbuf_pitch),
+            .datab  (rt_dcrs.cbuf_pitch),
             .result (m_y_pitch)
         );
 
         wire [W_ADDR_BITS-1:0] baddr, baddr_s;
-        assign baddr = {dcrs.cbuf_addr, 4'b0} + W_ADDR_BITS'(req_pos_x[i - NUM_LANES]);
+        assign baddr = {rt_dcrs.cbuf_addr, 4'b0} + W_ADDR_BITS'(req_pos_x[i - NUM_LANES]);
 
         wire [3:0]  byteen = req_rw ? color_byteen : 4'b1111;
         wire [31:0] data = req_color[i - NUM_LANES];
@@ -158,7 +169,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         ) shift_reg (
             .clk      (clk),
             `UNUSED_PIN (reset),
-            .enable   (mul_enable),
+            .enable   (1'b1),
             .data_in  ({mask,         byteen,         baddr,    data}),
             .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s,  mreq_data[i]})
         );
@@ -174,46 +185,61 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     ) shift_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (mul_enable),
-        .data_in  ({req_valid,  req_rw,  req_tag}),
+        .enable   (1'b1),
+        .data_in  ({req_fire,   req_rw,  req_tag}),
         .data_out ({mreq_valid, mreq_rw, mreq_tag})
     );
 
-    assign req_ready = mul_enable;
+    // Landing-slot reservation: a credit is taken at admission and released
+    // when the landed request leaves for the memory scheduler, so the queue
+    // can absorb everything the free-running pipe delivers and back-pressure
+    // never has to reach inside it.
+    localparam LANDQ_SIZE = 1 << `CLOG2(`LATENCY_IMUL + 2);
 
-    // Address-pipeline occupancy: requests admitted into the multiplier shift
-    // registers but not yet accepted by the memory scheduler are invisible to
-    // its queue status; track them so `busy` covers the whole unit.
-    localparam OCC_W = `CLOG2(`LATENCY_IMUL+2) + 1;
-    reg [OCC_W-1:0] pipe_occ;
-    always @(posedge clk) begin
-        if (reset) begin
-            pipe_occ <= '0;
-        end else begin
-            pipe_occ <= pipe_occ + OCC_W'(req_valid && req_ready)
-                                 - OCC_W'(mreq_valid_r && mreq_ready_r);
-        end
-    end
+    wire pipe_empty;
+    wire credits_full;
+    wire landq_ready;
 
-    assign mul_enable = ~(mreq_valid && mreq_stall);
+    assign req_ready = ~credits_full;
 
-    VX_pipe_register #(
-        .DATAW	(1 + 1 + NUM_REQS * (1 + 4 + OCACHE_ADDR_WIDTH + 32) + TAG_WIDTH),
-        .RESETW (1)
-    ) mreq_pipe_reg (
-        .clk      (clk),
-        .reset    (reset),
-        .enable	  (~mreq_stall),
-        .data_in  ({mreq_valid,   mreq_rw,   mreq_mask,   mreq_byteen,   mreq_addr,   mreq_data,   mreq_tag}),
-        .data_out ({mreq_valid_r, mreq_rw_r, mreq_mask_r, mreq_byteen_r, mreq_addr_r, mreq_data_r, mreq_tag_r})
+    VX_pending_size #(
+        .SIZE (LANDQ_SIZE)
+    ) landq_credits (
+        .clk   (clk),
+        .reset (reset),
+        .incr  (req_fire),
+        .decr  (mreq_valid_r && mreq_ready_r),
+        .empty (pipe_empty),
+        `UNUSED_PIN (alm_empty),
+        .full  (credits_full),
+        `UNUSED_PIN (alm_full),
+        `UNUSED_PIN (size)
     );
 
-    assign mreq_stall = mreq_valid_r && ~mreq_ready_r;
+    VX_elastic_buffer #(
+        .DATAW   (1 + NUM_REQS * (1 + 4 + OCACHE_ADDR_WIDTH + 32) + TAG_WIDTH),
+        .SIZE    (LANDQ_SIZE),
+        .OUT_REG (1),
+        .LUTRAM  (1)
+    ) landing_buf (
+        .clk       (clk),
+        .reset     (reset),
+        .valid_in  (mreq_valid),
+        .ready_in  (landq_ready),
+        .data_in   ({mreq_rw,   mreq_mask,   mreq_byteen,   mreq_addr,   mreq_data,   mreq_tag}),
+        .data_out  ({mreq_rw_r, mreq_mask_r, mreq_byteen_r, mreq_addr_r, mreq_data_r, mreq_tag_r}),
+        .valid_out (mreq_valid_r),
+        .ready_out (mreq_ready_r)
+    );
 
-    assign busy = (pipe_occ != 0) || ~req_queue_empty_w;
+    `RUNTIME_ASSERT(~(mreq_valid && ~landq_ready),
+        ("%t: *** %s: landing queue overflow — the credit reservation is broken", $time, INSTANCE_ID))
+    `UNUSED_VAR (landq_ready)
+
+    assign busy = ~pipe_empty || ~req_queue_empty_w;
 
     VX_lsu_mem_if #(
-        .NUM_LANES (OCACHE_NUM_REQS),
+        .NUM_LANES (MEM_CHANNELS),
         .DATA_SIZE (4),
         .TAG_WIDTH (OCACHE_TAG_WIDTH)
     ) mem_bus_if();
@@ -221,7 +247,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     VX_mem_scheduler #(
         .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
         .CORE_REQS    (NUM_REQS),
-        .MEM_CHANNELS (OCACHE_NUM_REQS),
+        .MEM_CHANNELS (MEM_CHANNELS),
         .WORD_SIZE    (4),
         .ADDR_WIDTH   (OCACHE_ADDR_WIDTH),
         .USER_WIDTH   (0),
@@ -279,8 +305,13 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // OM never sets any memory attr; tie off the scheduler-driven LSU bus.
     assign mem_bus_if.req_data.user = '0;
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (4),
+        .TAG_WIDTH (OCACHE_TAG_WIDTH)
+    ) sched_bus_if [MEM_CHANNELS]();
+
     VX_lsu_adapter #(
-        .NUM_LANES    (OCACHE_NUM_REQS),
+        .NUM_LANES    (MEM_CHANNELS),
         .DATA_SIZE    (4),
         .TAG_WIDTH    (OCACHE_TAG_WIDTH),
         .TAG_SEL_BITS (OCACHE_TAG_WIDTH - UUID_WIDTH),
@@ -290,8 +321,21 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .clk        (clk),
         .reset      (reset),
         .lsu_mem_if (mem_bus_if),
-        .mem_bus_if (cache_bus_if)
+        .mem_bus_if (sched_bus_if)
     );
+
+    for (genvar i = 0; i < OCACHE_NUM_REQS; ++i) begin : g_cache_bus_if
+        if (i < MEM_CHANNELS) begin : g_active
+            `ASSIGN_VX_MEM_BUS_IF (cache_bus_if[i], sched_bus_if[i]);
+        end else begin : g_tieoff
+            assign cache_bus_if[i].req_valid = 1'b0;
+            assign cache_bus_if[i].req_data  = '0;
+            assign cache_bus_if[i].rsp_ready = 1'b0;
+            `UNUSED_VAR (cache_bus_if[i].req_ready)
+            `UNUSED_VAR (cache_bus_if[i].rsp_valid)
+            `UNUSED_VAR (cache_bus_if[i].rsp_data)
+        end
+    end
 
     assign rsp_valid = mrsp_valid;
 

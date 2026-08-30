@@ -14,7 +14,7 @@
 #pragma once
 
 #include <mempool.h>
-#include <simobject.h>
+#include "types.h"
 #include "instr.h"
 
 namespace vortex {

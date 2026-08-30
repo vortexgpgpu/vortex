@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 840" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="bl_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/></marker>
+    <marker id="bl_p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/></marker>
+    <marker id="bl_y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#b58900"/></marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .cm   { font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#1b2733; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#bl_a); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#bl_p); }
+    .my   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#bl_y); }
+    .rtn  { stroke:#2e5e82; stroke-width:1.4; fill:none; marker-end:url(#bl_a); stroke-dasharray:6 4; }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lby  { fill:#8a6d00; font-size:10.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1440" height="840" fill="#ffffff"/>
+  <text x="24" y="34" class="t">clBuildProgram — OpenCL source to a resident vx_module</text>
+  <text x="24" y="55" class="tt">The PoCL central pipeline produces linked LLVM IR; the Vortex post_build_program hook turns it into a device ELF.</text>
+
+  <text x="140"  y="90" class="th" text-anchor="middle" fill="#5a7184">host app</text>
+  <text x="430"  y="90" class="th" text-anchor="middle" fill="#8e4a7e">PoCL core pipeline</text>
+  <text x="740"  y="90" class="th" text-anchor="middle" fill="#2e5e82">post_build_program</text>
+  <text x="1030" y="90" class="th" text-anchor="middle" fill="#2e5e82">compile_vortex_program</text>
+  <text x="1320" y="90" class="th" text-anchor="middle" fill="#8a6d00">SDK / device</text>
+
+  <line x1="140"  y1="100" x2="140"  y2="784" class="lane"/>
+  <line x1="430"  y1="100" x2="430"  y2="784" class="lane"/>
+  <line x1="740"  y1="100" x2="740"  y2="784" class="lane"/>
+  <line x1="1030" y1="100" x2="1030" y2="784" class="lane"/>
+  <line x1="1320" y1="100" x2="1320" y2="784" class="lane"/>
+
+  <path d="M 144 128 L 426 128" class="m"/>
+  <text x="160" y="120" class="lb">clBuildProgram (or clCreateProgramWithIL)</text>
+  <rect x="320" y="142" width="220" height="56" rx="5" class="actp"/>
+  <text x="330" y="160" class="ts">front end → LLVM IR</text>
+  <text x="330" y="176" class="cm">llvm-link kernel-riscv32.bc</text>
+  <text x="330" y="192" class="tt">work-group passes</text>
+
+  <path d="M 434 224 L 736 224" class="mp"/>
+  <text x="450" y="216" class="lbp">post_build_program(program, device_i)</text>
+
+  <rect x="620" y="238" width="240" height="40" rx="5" class="act"/>
+  <text x="630" y="256" class="cm">binary_type == EXECUTABLE?</text>
+  <text x="630" y="272" class="tt">libraries / objects stay bitcode → return</text>
+
+  <rect x="620" y="290" width="240" height="58" rx="5" class="act"/>
+  <text x="630" y="308" class="ts">verify → run_passes → verify</text>
+  <text x="630" y="324" class="ts">ISA gate: atomics need 'A'</text>
+  <text x="630" y="342" class="cm">slot = first free of 112</text>
+
+  <path d="M 748 380 L 1026 380" class="m"/>
+  <text x="764" y="372" class="lb">compile_vortex_program(vxbin, module, slot)</text>
+
+  <rect x="900" y="394" width="270" height="78" rx="5" class="act"/>
+  <text x="910" y="412" class="th">processKernels + verify</text>
+  <text x="910" y="430" class="ts">arg-buffer wrapper per kernel</text>
+  <text x="910" y="446" class="cm">attr vortex-kernel</text>
+  <text x="910" y="464" class="tt">clone in-module callees first</text>
+
+  <rect x="900" y="486" width="270" height="72" rx="5" class="act"/>
+  <text x="910" y="504" class="th">codegen → ELF link → .vxbin</text>
+  <text x="910" y="522" class="cm">+ libvortex2.a + libc.a</text>
+  <text x="910" y="540" class="ts">vxbin.py objcopy; 16MB code slot</text>
+  <text x="910" y="555" class="tt">--gc-sections</text>
+
+  <path d="M 1038 590 L 1316 590" class="my"/>
+  <text x="1054" y="582" class="lby">vx_module_load_file(.vxbin)</text>
+  <rect x="1210" y="604" width="210" height="40" rx="5" class="mem"/>
+  <text x="1220" y="622" class="ts">module resident on device</text>
+  <text x="1220" y="638" class="tt">kernels via vx_module_get_kernel</text>
+
+  <path d="M 1026 668 L 748 668" class="rtn"/>
+  <text x="800" y="660" class="lb">module handle</text>
+  <rect x="620" y="682" width="240" height="34" rx="5" class="act"/>
+  <text x="630" y="703" class="cm">module_slot_used[slot] = 1</text>
+
+  <path d="M 736 744 L 144 744" class="rtn"/>
+  <text x="360" y="736" class="lb">CL_SUCCESS  (slot returned to the pool in free_program)</text>
+
+  <rect x="40" y="392" width="330" height="150" rx="6" class="note"/>
+  <text x="52" y="412" class="th">Verify guards, not debugging</text>
+  <text x="52" y="432" class="ts">PoCL runs codegen with the LLVM verifier</text>
+  <text x="52" y="448" class="ts">disabled, so broken IR would fault the</text>
+  <text x="52" y="464" class="ts">register allocator instead of erroring. The</text>
+  <text x="52" y="480" class="ts">wrapper/clone transform is verified on both</text>
+  <text x="52" y="496" class="ts">sides so a bad transform becomes a clean</text>
+  <text x="52" y="512" class="ts">CL_BUILD_PROGRAM_FAILURE at the one</text>
+  <text x="52" y="528" class="ts">program that triggers it.</text>
+
+  <rect x="40" y="560" width="330" height="120" rx="6" class="note"/>
+  <text x="52" y="580" class="th">Code-region slots</text>
+  <text x="52" y="600" class="ts">Each live program links at a distinct 16MB</text>
+  <text x="52" y="616" class="ts">base so programs in one context never</text>
+  <text x="52" y="632" class="ts">overlap. The slot is returned when the</text>
+  <text x="52" y="648" class="ts">program is freed, so a long-lived process</text>
+  <text x="52" y="664" class="ts">(a full CTS run) cannot exhaust the space.</text>
+</svg>

@@ -40,10 +40,15 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     VX_dcr_flush_if.slave   dcr_flush_if,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
-    // Per-block empty: high when the global-store path (coalescer + adapter)
-    // holds no in-flight write. Folded into core `busy` so the end-of-kernel
-    // cache flush is ordered strictly behind the last store.
+    // Per-block empty: high when the global-store path holds no in-flight
+    // write. Folded into core `busy` so the end-of-kernel cache flush is
+    // ordered strictly behind the last store. Two terms: the coalescer/passthru
+    // producer, and the dcache adapter's request buffer (which carries state
+    // when REQ_OUT_BUF > 0 and would otherwise hide a still-settling store).
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_path_empty;
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_adapter_empty;
     wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] per_block_empty;
+    assign per_block_empty = per_block_path_empty & per_block_adapter_empty;
     VX_lsu_mem_if #(
         .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
@@ -226,6 +231,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .TAG_WIDTH   (LSU_TAG_WIDTH),
         .DMA_ENABLE  (LMEM_DMA_EN),
         .DMA_TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
+        .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED),
         .OUT_BUF     (3)
     ) local_mem (
         .clk         (clk),
@@ -294,7 +300,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 `UNUSED_PIN (misses),
             `endif
 
-                .empty          (per_block_empty[i]),
+                .empty          (per_block_path_empty[i]),
 
                 // Input request
                 .in_req_valid   (lsu_dcache_if[i].req_valid),
@@ -347,9 +353,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         `ifdef PERF_ENABLE
             assign per_block_coalescer_misses[i] = '0;
         `endif
-            // No coalescer: the passthrough holds no state, so a store still
-            // in flight is one being presented to the adapter input.
-            assign per_block_empty[i] = ~dcache_coalesced_if[i].req_valid;
+            // No coalescer: a store still in flight upstream of the adapter is
+            // one being presented to the adapter input. The adapter's own buffer
+            // is accounted for separately by per_block_adapter_empty.
+            assign per_block_path_empty[i] = ~dcache_coalesced_if[i].req_valid;
         end
 
     end
@@ -367,7 +374,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .TAG_WIDTH    (DCACHE_CORE_TAG_WIDTH),
             .TAG_SEL_BITS (DCACHE_CORE_TAG_WIDTH - UUID_WIDTH),
             .ARBITER      ("P"),
-            .REQ_OUT_BUF  (0),
+            .REQ_OUT_BUF  (3), // register dcache-request master boundary on all channels (passthru ports 1+)
             .RSP_OUT_BUF  (0)
         ) dcache_adapter (
             .clk        (clk),
@@ -375,6 +382,15 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .lsu_mem_if (dcache_coalesced_if[i]),
             .mem_bus_if (dcache_bus_tmp_if)
         );
+
+        // A store buffered in the adapter's REQ_OUT_BUF has left dcache_coalesced_if
+        // but not yet reached the flush-injection point; keep the block non-empty
+        // until every channel's request has drained past the adapter output.
+        wire [DCACHE_CHANNELS-1:0] adapter_req_valid;
+        for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_adapter_req_valid
+            assign adapter_req_valid[j] = dcache_bus_tmp_if[j].req_valid;
+        end
+        assign per_block_adapter_empty[i] = ~(| adapter_req_valid);
 
         for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_dcache_bus_if
             if (i == 0 && j == 0) begin : g_flush_port

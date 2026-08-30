@@ -1,0 +1,192 @@
+# FPGA synthesis-regression gate: post-implementation Fmax/area must not regress
+# past a threshold vs. a checked-in golden result
+# (ci/baselines/synthesis/xilinx/<group>.json).
+#
+# Sibling of the perf_gate (core.yaml): same discipline — golden baseline, hard
+# threshold, ratcheted improvements, results only ever re-recorded by a human —
+# but it gates what SYNTHESIS costs (timing closure, area) rather than what
+# execution costs (cycles).
+#
+# ---------------------------------------------------------------------------
+# Two blocks, two consumers. A Vivado build is NOT a pytest case: it has no
+# driver, no sim build tree, no xlen expansion, no app. Modelling nine of them as
+# nine cases would fake a shape they do not have AND lose the scheduler (the
+# builds must be ordered longest-first and run 2-up, which is a property of the
+# SET, not of any one build).
+#
+#   tests:   what pytest/CI sees — ONE case, whose `run:` is literally the
+#            command CI executes. No second entry point, no divergence.
+#   builds:  what ci/fpga_gate.py reads — the build list, with its per-build
+#            `known_issue` and `thresholds`. The pytest loader ignores this key.
+#
+# TIER `fpga` IS OPT-IN. An empty --tier means "everything", and everything is
+# what a HOSTED runner can run — which these cannot: they need a licensed Vivado
+# and hours of a whole machine. OPT_IN_TIERS in testcase.py keeps them out of
+# every hosted event (including the nightly); they run only on the self-hosted
+# runner's own workflow (.github/workflows/fpga_gate.yml), or by hand.
+#
+# See docs/designs/continuous_integration.md §3.5.
+category: fpga_gate
+defaults:
+  # 32-bit only: synthesis results are recorded against RV32.
+  xlen:
+  - 32
+  tier: fpga
+  via: script
+  # Any RTL change can move Fmax or area.
+  touches:
+  - hw/rtl/
+tests:
+# The gate is one command over the whole build set: ci/fpga_gate.py owns the
+# longest-first scheduling (a long build is always in flight, short ones fill the
+# headroom), the resume-from-checkpoint session, the RTL-elaboration watch that
+# fails a config typo in minutes rather than hours, and the per-build verdicts.
+- id: xilinx
+  run: ci/fpga_gate.py --tool=xilinx -j 2
+
+# ---------------------------------------------------------------------------
+# builds — read by ci/fpga_gate.py, ignored by the pytest catalog loader.
+#
+#   dut         hw/syn/xilinx/dut/<dut> target to synthesize
+#   clock_mhz   target clock, baked into the constraint via CLK_FREQ_MHZ
+#   group       which golden file the results land in
+#   impl_strategy  Vivado implementation strategy for this build (IMPL_STRATEGY
+#               env into project.tcl); absent = the OPT_LEVEL default. Part of
+#               the config fingerprint when set.
+#   thresholds  per-metric gate tolerance, overriding --metric-threshold and
+#               --threshold (e.g. {lut: 0.10} to allow 10% area growth)
+#   known_issue tracked expected failure: still builds and reports, does not fail
+#               the run (same contract as a known_issue: test case)
+#
+# Run one by name:  ci/fpga_gate.py -b tcu
+# Run a group:      ci/fpga_gate.py -b graphics
+# Re-record:        ci/fpga_gate.py --update-baseline   (human-reviewed, never CI)
+# ---------------------------------------------------------------------------
+builds:
+
+# --- core: the base pipeline and its memory system ---------------------------
+
+# L1/LLC datapath with atomics: tag/data pipeline, MSHR, AMO unit.
+- id: cache
+  group: core
+  dut: cache
+  clock_mhz: 300
+  configs: -DVX_CFG_EXT_A_ENABLE
+
+# Wide-SIMD core: issue/operand-collect/LSU/FPU at NT=NW=16, plus the RVC
+# decompressor and atomics.
+- id: core
+  group: core
+  dut: core
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE -DVX_CFG_EXT_A_ENABLE
+
+# Multi-core system top: 2 cores at NT=NW=4, atomics + virtual memory (MMU).
+# Closes the cross-module boundaries (socket arbiters, socket MMU, cluster mem
+# network) that the per-unit DUTs do not; 250 MHz (routing-bound, misses 300).
+- id: top
+  group: core
+  dut: top
+  clock_mhz: 250
+  configs: >-
+    -DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4
+    -DVX_CFG_NUM_CORES=2
+    -DVX_CFG_EXT_A_ENABLE -DVX_CFG_VM_ENABLE
+    -DVX_CFG_DCACHE_LATENCY=3
+
+# --- dxa ---------------------------------------------------------------------
+
+# DXA engine: descriptor queue, address generation, multicast distribution.
+- id: dxa
+  group: dxa
+  dut: dxa
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- tensor ------------------------------------------------------------------
+
+# TFR tensor core with every datatype plus sparsity and WGMMA. Widest FEDP/DSP48
+# mapping in the tree, so it is the DSP + Fmax bellwether.
+- id: tcu
+  group: tensor
+  dut: tcu
+  clock_mhz: 300
+  configs: >-
+    -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_TCU_TYPE_TFR
+    -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE -DVX_CFG_TCU_INT8_ENABLE
+    -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE
+    -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
+
+# --- graphics ----------------------------------------------------------------
+
+# Ray-tracing unit: CW-BVH4 walker, box/triangle PEs, short stack.
+#
+# An earlier 201 MHz / 94k LUT figure for this DUT is NOT a usable baseline — it
+# was measured before the wrapper forwarded the cache parameters, so it
+# synthesized an RTU whose RTCache tag path was 1 bit wide.
+- id: rtu
+  group: graphics
+  dut: rtu
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Rasterizer: bin/block/quad walker, edge evaluators, rcache port.
+- id: raster
+  group: graphics
+  dut: raster
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Output merger: depth/stencil test, blend, ocache port.
+- id: om
+  group: graphics
+  dut: om
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# Texture unit: address generation, LOD, bilinear filter, tcache port.
+- id: tex
+  group: graphics
+  dut: tex
+  clock_mhz: 300
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- vm ----------------------------------------------------------------------
+
+# Standalone MMU network: dTLB + iTLB, pooled L1 TLB MSHR, L2 TLB, PTW walker
+# hierarchy, fed by a shared L2. The memory-translation bellwether; the rest of
+# the extension config comes from hw/syn/xilinx/dut/vm/Makefile.
+- id: vm
+  group: vm
+  dut: vm
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_CORES=2
+
+# --- graphics (combined subsystem) -------------------------------------------
+
+# Full graphics subsystem in one wrapper: raster + om + tex + rtu + dxa behind a
+# shared L2, 2 cores / socket. Closes the graphics cross-unit boundaries that the
+# per-unit DUTs above do not. Subsystem enables come from
+# hw/syn/xilinx/dut/gfx/Makefile.
+- id: gfx
+  group: graphics
+  dut: gfx
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+
+# --- tensor (combined subsystem) ---------------------------------------------
+
+# Full tensor subsystem in one wrapper: TCU (WGMMA + MX) + dxa behind a shared L2,
+# 2 cores / socket. The DSP + Fmax bellwether at the subsystem level. Enables come
+# from hw/syn/xilinx/dut/tensor/Makefile.
+- id: tensor
+  group: tensor
+  dut: tensor
+  clock_mhz: 250
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+  # Route-dominated at this size: identical-area netlists swung 207-242 MHz
+  # under the default strategy (placement variance), which no 5% gate
+  # tolerance survives. The worst arc is 80%+ route (L1 tag way-decode to the
+  # data-store write enables), so the closure pick is the post-route physical
+  # optimizer: 251.8 vs 244.2 for NetDelay_high on the same netlist.
+  impl_strategy: Performance_ExplorePostRoutePhysOpt

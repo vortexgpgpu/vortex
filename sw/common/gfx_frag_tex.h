@@ -50,6 +50,10 @@ struct TexelRequest {
   uint32_t filter;    // VX_TEX_FILTER_POINT or _BILINEAR
   uint32_t alpha;     // u-fraction (BILINEAR only)
   uint32_t beta;      // v-fraction (BILINEAR only)
+  // CLAMP_TO_BORDER: which taps left the texture and take `border` instead of
+  // what their address points at. Zero unless an axis wraps to a border.
+  uint32_t border_mask;
+  uint32_t border;    // ARGB8888
 };
 
 template <uint32_t F>
@@ -296,6 +300,63 @@ static inline uint32_t TexDecodeArgb8(uint32_t format, const void* p, uint32_t s
   return TexDecodeExtended(format, p);
 }
 
+// The half/float sampled formats (VX_TEX_FORMAT_R16F..RGBA32F, contiguous). Their
+// texels are not confined to [0,1], so decoding or filtering them in the 8-bit ARGB
+// working space clamps them; a sampler must take the float path for these.
+static inline bool TexIsFloatFormat(uint32_t format) {
+  return format >= (uint32_t)VX_TEX_FORMAT_R16F
+      && format <= (uint32_t)VX_TEX_FORMAT_RGBA32F;
+}
+
+// Decode one texel of ANY format at `p` (stride bytes) to four float channels in
+// RGBA order. A float format keeps its real magnitude — its value range is not
+// [0,1], so routing it through the 8-bit ARGB working space would clamp the texel
+// and destroy the range. Every other format decodes through TexDecodeArgb8 and
+// scales by the same multiply-by-reciprocal the shader unpack uses, so the result
+// is bit-identical to the 8-bit path. Absent channels read (0,0,1) for g/b/a, as
+// in TexDecodeExtended.
+static inline void TexDecodeFloat4(uint32_t format, const void* p, uint32_t stride,
+                                   float out[4]) {
+  const uint8_t* b = (const uint8_t*)p;
+  out[0] = 0.0f; out[1] = 0.0f; out[2] = 0.0f; out[3] = 1.0f;
+  switch (format) {
+  case VX_TEX_FORMAT_R16F: {
+    uint16_t h; __builtin_memcpy(&h, b, 2);
+    out[0] = HalfToFloat(h);
+    return;
+  }
+  case VX_TEX_FORMAT_RG16F: {
+    uint16_t h[2]; __builtin_memcpy(h, b, 4);
+    out[0] = HalfToFloat(h[0]); out[1] = HalfToFloat(h[1]);
+    return;
+  }
+  case VX_TEX_FORMAT_RGBA16F: {
+    uint16_t h[4]; __builtin_memcpy(h, b, 8);
+    for (uint32_t i = 0; i < 4; ++i) {
+      out[i] = HalfToFloat(h[i]);
+    }
+    return;
+  }
+  case VX_TEX_FORMAT_R32F:
+    __builtin_memcpy(&out[0], b, 4);
+    return;
+  case VX_TEX_FORMAT_RG32F:
+    __builtin_memcpy(out, b, 8);
+    return;
+  case VX_TEX_FORMAT_RGBA32F:
+    __builtin_memcpy(out, b, 16);
+    return;
+  default: break;
+  }
+  // Non-float: the 8-bit ARGB decode, scaled to [0,1].
+  const uint32_t argb = TexDecodeArgb8(format, p, stride);
+  const float inv255 = 1.0f / 255.0f;
+  out[0] = (float)((argb >> 16) & 0xff) * inv255;
+  out[1] = (float)((argb >> 8) & 0xff) * inv255;
+  out[2] = (float)(argb & 0xff) * inv255;
+  out[3] = (float)(argb >> 24) * inv255;
+}
+
 // NPOT flag: true when the (per-LOD) integer dims are not exact powers of two
 // matching {log_width, log_height}. POT keeps the bit-exact shift/mask addressing
 // (matches the FF TEX unit); NPOT falls back to the multiply-addressing path
@@ -454,66 +515,9 @@ static inline uint32_t TexFilterPoint(int format, uint32_t texel) {
   return Pack8888(cl, ch);
 }
 
-// Free per-sample request: produce the TexelRequest from already-resolved tex
-// state (no DCR object), so the host FF sampler and the device SW path share
-// it. `base_addr` is the mip's base (mip_base + mip_off for this lod); `logdim`
-// is {log_h<<16 | log_w} of mip 0; `u`/`v` are TEX_FXD_FRAC fixed-point.
-// `width0`/`height0` carry the mip-0 integer dims for the NPOT multiply path;
-// pass 0 to derive POT dims from `logdim` (bit-exact FF shift addressing).
-static inline TexelRequest tex_compute_request(uint64_t base_addr,
-                                               uint32_t logdim,
-                                               uint32_t format,
-                                               uint32_t filter,
-                                               uint32_t wrap,
-                                               int32_t  u,
-                                               int32_t  v,
-                                               uint32_t lod,
-                                               uint32_t width0 = 0,
-                                               uint32_t height0 = 0) {
-  uint32_t log_width  = (uint32_t)tex_imax((int32_t)(logdim & 0xffff) - (int32_t)lod, 0);
-  uint32_t log_height = (uint32_t)tex_imax((int32_t)(logdim >> 16) - (int32_t)lod, 0);
-
-  // Per-LOD integer dims. When width0/height0 are given (NPOT-capable path) the
-  // LOD dims are max(dim >> lod, 1); otherwise the POT dims from logdim, which
-  // keeps TexIsNPOT() false and the addressing bit-exact with the FF unit.
-  uint32_t width  = width0  ? (uint32_t)tex_imax((int32_t)(width0  >> lod), 1) : (1u << log_width);
-  uint32_t height = height0 ? (uint32_t)tex_imax((int32_t)(height0 >> lod), 1) : (1u << log_height);
-
-  uint32_t wrapu = wrap & 0xffff;
-  uint32_t wrapv = wrap >> 16;
-
-  uint32_t stride = FormatStride(format);
-
-  auto xu = TFixed<TEX_FXD_FRAC>::make(u);
-  auto xv = TFixed<TEX_FXD_FRAC>::make(v);
-
-  TexelRequest req{};
-  req.stride = stride;
-  req.format = format;
-  req.filter = filter;
-
-  if (filter == VX_TEX_FILTER_BILINEAR) {
-    uint32_t offset00, offset01, offset10, offset11;
-    uint32_t alpha, beta;
-    TexAddressLinear(xu, xv, width, height, log_width, log_height, wrapu, wrapv,
-      &offset00, &offset01, &offset10, &offset11, &alpha, &beta);
-    req.addr[0] = base_addr + offset00 * stride;
-    req.addr[1] = base_addr + offset01 * stride;
-    req.addr[2] = base_addr + offset10 * stride;
-    req.addr[3] = base_addr + offset11 * stride;
-    req.alpha   = alpha;
-    req.beta    = beta;
-  } else { // VX_TEX_FILTER_POINT
-    uint32_t offset;
-    TexAddressPoint(xu, xv, width, height, log_width, log_height, wrapu, wrapv, &offset);
-    req.addr[0] = base_addr + offset * stride;
-  }
-  return req;
-}
-
-// CLAMP_TO_BORDER: compute the per-tap border mask for the extended SW
-// sampler. A tap is the border colour when its pre-wrap coordinate leaves [0,1)
-// on an axis whose wrap is VX_TEX_WRAP_BORDER. Tap order matches TexAddressLinear
+// CLAMP_TO_BORDER: which taps take the border colour. A tap does when its
+// pre-wrap coordinate leaves [0,1) on an axis whose wrap is
+// VX_TEX_WRAP_BORDER. Tap order matches TexAddressLinear
 // (00,01,10,11 = (u-,v-),(u+,v-),(u-,v+),(u+,v+)); POINT uses tap 0 only. The
 // half-texel deltas match tex_compute_request's addressing so the border edge
 // lands on the same taps the real fetch would.
@@ -543,8 +547,88 @@ static inline uint32_t TexBorderMask(int32_t u, int32_t v, uint32_t width, uint3
   return mask;
 }
 
+// Free per-sample request: produce the TexelRequest from already-resolved tex
+// state (no DCR object), so the host FF sampler and the device SW path share
+// it. `base_addr` is the mip's base (mip_base + mip_off for this lod); `logdim`
+// is {log_h<<16 | log_w} of mip 0; `u`/`v` are TEX_FXD_FRAC fixed-point.
+// `width0`/`height0` carry the mip-0 integer dims for the NPOT multiply path;
+// pass 0 to derive POT dims from `logdim` (bit-exact FF shift addressing).
+static inline TexelRequest tex_compute_request(uint64_t base_addr,
+                                               uint32_t logdim,
+                                               uint32_t format,
+                                               uint32_t filter,
+                                               uint32_t wrap,
+                                               int32_t  u,
+                                               int32_t  v,
+                                               uint32_t lod,
+                                               uint32_t width0 = 0,
+                                               uint32_t height0 = 0,
+                                               uint32_t border = 0) {
+  uint32_t log_width  = (uint32_t)tex_imax((int32_t)(logdim & 0xffff) - (int32_t)lod, 0);
+  uint32_t log_height = (uint32_t)tex_imax((int32_t)(logdim >> 16) - (int32_t)lod, 0);
+
+  // Per-LOD integer dims. When width0/height0 are given (NPOT-capable path) the
+  // LOD dims are max(dim >> lod, 1); otherwise the POT dims from logdim, which
+  // keeps TexIsNPOT() false and the addressing bit-exact with the FF unit.
+  uint32_t width  = width0  ? (uint32_t)tex_imax((int32_t)(width0  >> lod), 1) : (1u << log_width);
+  uint32_t height = height0 ? (uint32_t)tex_imax((int32_t)(height0 >> lod), 1) : (1u << log_height);
+
+  uint32_t wrapu = wrap & 0xffff;
+  uint32_t wrapv = wrap >> 16;
+
+  uint32_t stride = FormatStride(format);
+
+  auto xu = TFixed<TEX_FXD_FRAC>::make(u);
+  auto xv = TFixed<TEX_FXD_FRAC>::make(v);
+
+  TexelRequest req{};
+  req.stride = stride;
+  req.format = format;
+  req.filter = filter;
+  req.border = border;
+  req.border_mask = TexBorderMask(u, v, width, height, log_width, log_height,
+                                  wrapu, wrapv, filter);
+
+  if (filter == VX_TEX_FILTER_BILINEAR) {
+    uint32_t offset00, offset01, offset10, offset11;
+    uint32_t alpha, beta;
+    TexAddressLinear(xu, xv, width, height, log_width, log_height, wrapu, wrapv,
+      &offset00, &offset01, &offset10, &offset11, &alpha, &beta);
+    req.addr[0] = base_addr + offset00 * stride;
+    req.addr[1] = base_addr + offset01 * stride;
+    req.addr[2] = base_addr + offset10 * stride;
+    req.addr[3] = base_addr + offset11 * stride;
+    req.alpha   = alpha;
+    req.beta    = beta;
+  } else { // VX_TEX_FILTER_POINT
+    uint32_t offset;
+    TexAddressPoint(xu, xv, width, height, log_width, log_height, wrapu, wrapv, &offset);
+    req.addr[0] = base_addr + offset * stride;
+  }
+  return req;
+}
+
 // Free filter: format-decode + bilinear/point combine of fetched texels.
 static inline uint32_t tex_apply_filter(const TexelRequest& req, const uint32_t texels[4]) {
+  if (req.border_mask != 0) {
+    // A border tap has no texel to decode, so the decode has to happen first and
+    // the filter then runs over already-decoded ARGB. That is a different shape
+    // from the path below, which unpacks inside the filter — hence the split
+    // rather than one path with a mux: samples that never asked for a border
+    // keep the exact code they had.
+    if (req.filter == VX_TEX_FILTER_BILINEAR) {
+      uint32_t argb[4];
+      for (uint32_t i = 0; i < 4; ++i) {
+        argb[i] = ((req.border_mask >> i) & 0x1) ? req.border
+                                                 : TexFilterPoint(req.format, texels[i]);
+      }
+      return TexFilterLinear(VX_TEX_FORMAT_A8R8G8B8, argb[0], argb[1], argb[2], argb[3],
+                             req.alpha, req.beta);
+    }
+    if (req.border_mask & 0x1) {
+      return req.border;
+    }
+  }
   if (req.filter == VX_TEX_FILTER_BILINEAR)
     return TexFilterLinear(req.format, texels[0], texels[1], texels[2], texels[3],
                            req.alpha, req.beta);
@@ -562,6 +646,30 @@ static inline uint32_t TexLodLerp(uint32_t c0, uint32_t c1, uint32_t frac) {
     out |= (((a * inv + b * frac) >> 8) & 0xff) << s;
   }
   return out;
+}
+
+// Float twins of TexFilterLinear / TexLodLerp, for a texture whose texels leave
+// [0,1] and so cannot be filtered in the 8-bit working space. They take the same
+// x/256 blend weights the fixed-point path uses (TexAddressLinear's alpha/beta,
+// TexLodLerp's frac), so both paths pick the same tap weights and only the
+// channel arithmetic differs.
+static inline __attribute__((always_inline)) void TexFilterLinearF4(
+    const float t00[4], const float t01[4], const float t10[4], const float t11[4],
+    uint32_t alpha, uint32_t beta, float out[4]) {
+  const float fa = (float)(alpha & 0xff) * (1.0f / 256.0f);
+  const float fb = (float)(beta & 0xff) * (1.0f / 256.0f);
+  for (uint32_t c = 0; c < 4; ++c) {
+    const float c01 = t00[c] + (t01[c] - t00[c]) * fa;
+    const float c23 = t10[c] + (t11[c] - t10[c]) * fa;
+    out[c] = c01 + (c23 - c01) * fb;
+  }
+}
+
+static inline __attribute__((always_inline)) void TexLodLerpF4(
+    const float c0[4], const float c1[4], uint32_t frac, float out[4]) {
+  const float f = (float)(frac & 0xff) * (1.0f / 256.0f);
+  for (uint32_t c = 0; c < 4; ++c)
+    out[c] = c0[c] + (c1[c] - c0[c]) * f;
 }
 
 } // namespace gfx_tex

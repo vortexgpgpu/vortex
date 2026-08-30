@@ -185,7 +185,7 @@ RTL) and compares the runtime's final `PERF: instrs=…, cycles=…` summary:
 
 Every case also prints a `PARITY:` line with both counts and the measured gap, so
 green runs still leave a trend trail in the logs. The general-pipeline matrix
-(vecadd, sgemm) lives in `ci/testcases/model_parity.yaml`; each extension
+(vecadd, sgemm) lives in `ci/testcases/core.yaml`; each extension
 (tensor*, raytracing, graphics TEX/RASTER/OM, dxa) carries its own
 `model_parity-*` case in its category file, with only that extension enabled so a
 regression is attributable. Workloads are sized so steady state dominates
@@ -194,13 +194,21 @@ and makes the gap ratio noisy. A `model_parity` marker selects them all:
 `pytest ci -m model_parity`. Use `known_issue:` (not a loosened tolerance) for a
 tracked gap under investigation.
 
-The `model_parity` category (`ci/testcases/model_parity.yaml`) is a **dedicated
-cell**: because every `check: model_parity` case also carries the `model_parity`
-marker, the `model_parity` cell runs `-m "model_parity and rtlsim"` and thereby
-sweeps *every* parity case catalog-wide — one centralized simx↔RTL gate across
-`{xlen 32, xlen 64}`. It runs at **`full`** tier (rtlsim-heavy → PR + nightly).
-So a parity case never double-runs: category cells exclude the check markers
-(`… and not model_parity and not perf_gate`); the check cells own them.
+**A check is a marker, never a file or a category.** `model_parity` gets a
+**dedicated cell** — `-m "model_parity and rtlsim"` sweeps *every* parity case
+catalog-wide, one centralized simx↔RTL gate — and a parity case never
+double-runs, because each category cell excludes the check markers (`… and not
+model_parity and not perf_gate`) and the check cell owns them. It runs at
+**`full`** tier (rtlsim-heavy → PR + nightly).
+
+That cell is emitted by the planner **from the check itself** (`cmd_matrix`:
+`name = c.check or c.category`), not as a side effect of some category being
+*named* after the check. It used to be the latter — so renaming that category
+silently deleted the cell, taking every `check:` case in the catalog with it, and
+the gate evaporated **green**. Two lint rules now hold the line: a file's name
+must equal its `category:`, and a file may not be named after a check. The
+workflow reads the check list from `testcase.py checks` rather than hardcoding
+it, so the same knowledge does not live in two places.
 
 ### 3.4 Perf-regression checks (`check: perf_gate`)
 
@@ -211,7 +219,7 @@ checked-in golden baseline** within ±2% (`ci/perf_baseline.py`). Because rtlsim
 cycle counts are deterministic and host-independent, there is no noise to handle —
 the threshold only absorbs benign, intended micro-changes.
 
-- **Baselines** live in the source tree at `ci/perf/baselines/<category>.json`
+- **Baselines** live in the source tree at `ci/baselines/perf/<category>.json`
   (canonical sorted JSON, one file per category). Each entry stores the measured
   `cycles`/`instrs` per xlen, plus a `config_hash` (of app/args/configs/shape)
   and the workload's `instrs` as **staleness guards**: if the run config changes
@@ -229,8 +237,97 @@ the threshold only absorbs benign, intended micro-changes.
   commits. **CI must never pass `--update-baselines`** — an auto-updated baseline
   would silently absorb every regression. Same discipline as a golden image.
 - Benchmarks **reuse the steady-state model_parity workloads** (base pipeline in
-  `ci/testcases/perf_gate.yaml`; extensions as `perf_gate-*` cases in
-  their category files) — one run, its own gate.
+  `ci/testcases/core.yaml`, alongside their parity twins; extensions as
+  `perf_gate-*` cases in their category files) — one run, its own gate. A case
+  carries exactly one check, so the parity and perf views of the same workload
+  are separate cases: perf ids stay bare (`sgemm` — the golden baseline is keyed
+  by it, `core:sgemm:rtlsim`), parity twins are prefixed `parity-`.
+
+### 3.5 Synthesis-regression checks (`fpga_gate`)
+
+The perf_gate catches a change that costs *cycles*. The fpga_gate catches one
+that costs *timing closure or area*: it synthesizes a catalog of DUTs with
+Vivado and asserts the post-implementation **Fmax** and **LUT** count against a
+checked-in golden baseline within ±5% (`ci/fpga_gate.py`). Same discipline as
+§3.4 — regression fails, an unlocked improvement also fails and asks you to
+record it, and CI never writes a baseline.
+
+It is **not** a pytest cell. A cell is a build tree plus a driver; an fpga_gate
+build is an hours-long Vivado run that only exists on a host with the licensed
+toolchain, so it is a standalone script driven by its own workflow on the
+self-hosted runner (§4.4). `asic_gate` — the same script over
+`ci/baselines/synthesis/yosys/` — is the planned second tool.
+
+- **Spec and baseline are split**, exactly as everywhere else in the catalog.
+  The spec is `ci/testcases/fpga_gate.yaml` — hand-authored, commented,
+  reviewed: per build a DUT target, a target clock, a `CONFIGS` string, an
+  optional `known_issue`/`thresholds`, and a `group`. The goldens are
+  `ci/baselines/synthesis/xilinx/<group>.json` — machine-written, never
+  hand-edited, carrying only measured metrics plus the config fingerprint and
+  tool env they were measured under. Groups: `core` (cache+AMO, wide core, full
+  4-core AFU), `tensor` (all-datatype TCU), `graphics` (RTU/RASTER/OM/TEX),
+  `dxa`. A `config_hash` (dut/clock/configs/device/opt-level/xlen) ties the two
+  together — edit the spec and the gate refuses to compare against numbers
+  recorded for the old one (`STALE`).
+- **Tier `fpga` is opt-in.** An empty `--tier` means "everything", and
+  everything is what a *hosted* runner can run — which these cannot: they need a
+  licensed Vivado and hours of a whole machine. `OPT_IN_TIERS` in `testcase.py`
+  keeps them out of every hosted event (including the nightly) unless asked for
+  by name, so they run only on the self-hosted runner's own workflow (§4.4).
+- **Metrics** all come from `synth_summary.csv`, which `hw/syn/xilinx/dut/
+  project.tcl` already emits post-implementation: Fmax, WNS, LUT, LUTRAM, FF,
+  BRAM, URAM, DSP — plus the wall-clock build time the runner measures. Every
+  metric is recorded and reported; `--gate` picks which ones are *asserted*
+  (Fmax and LUT by default). Build time is bookkeeping, not a gate: it is too
+  host-dependent to assert, and it is what the scheduler orders the queue by.
+- **Critical paths**: each build also records its **top 10 unique critical
+  paths** (slack, logic levels, clock group, startpoint, endpoint) — emitted by
+  `project.tcl` whether or not timing closed, because a design that *meets* its
+  target still has a worst path, and watching where it sits across commits is
+  what turns a Fmax regression from a number into a location. Never gated;
+  `-unique_pins` keeps the list 10 distinct paths rather than 10 views of one.
+- **Thresholds** resolve most-specific-first: a build's `"thresholds": {"lut":
+  0.10}` beats `--metric-threshold lut=0.10` (global, per-metric), which beats
+  `--threshold` (global, all metrics, default 5%). Same shape as `model_parity`'s
+  `tolerance` (per-case → category `defaults:` → `DEFAULT_PARITY_TOLERANCE`).
+  Note `perf_gate` (§3.4) does **not** have this — it reads one hardcoded
+  `TOLERANCE` constant, with no per-case override.
+- **`known_issue`**: a build carrying a reason string is a tracked expected
+  failure — it still builds, still reports, its numbers still land in the table,
+  but its verdict does not fail the run. Same contract as a `known_issue:` test
+  case (which conftest marks `xfail(strict=False)`), including that a known issue
+  which stops reproducing surfaces as **XPASS** — reported loudly, asking you to
+  clear the flag, but not converted into a hard failure.
+- **Early-failure watch**: a config mistake — a bad define, a missing source, a
+  parameter or hierarchy error — kills a build during *RTL elaboration*, seconds
+  into an otherwise multi-hour Vivado run. The runner follows each build's log
+  live and announces `Finished RTL Elaboration` as it lands, so a typo surfaces
+  in minutes instead of at the end of the sweep; a build that dies before that
+  point is reported as `FAILED BEFORE SYNTHESIS` with its Vivado `ERROR:` lines
+  quoted inline, not as a generic non-zero make.
+- **Resumable sessions**: a sweep is hours long, so an interrupted one is picked
+  back up rather than restarted. Each build dir carries a stamp
+  (`fpga_gate.json`: config hash + status + metrics), so `--resume` reuses a
+  build already finished *for this config*, lets an unfinished one pick up from
+  its Vivado post-synth/post-impl checkpoint, and runs the rest. A build whose
+  config changed since its stamp is rebuilt clean — resuming from those
+  checkpoints would silently re-synthesize the old design. State lives next to
+  the build tree it describes, not in a central session file, so it survives a
+  kill and never desynchronizes from what is on disk.
+- **Progress**: each build reports Vivado phase transitions (setup →
+  elaboration → synthesis → opt → placement → routing → reporting) as they
+  land, with a heartbeat in between; `-v` streams the raw Vivado log instead.
+- **Scheduling** is longest-processing-time-first over the recorded build times:
+  the longest build is dispatched first so it is in flight from t=0, and the
+  remaining slots churn through the short ones behind it. `-j` caps parallel
+  builds (2 on the runner) and each build's Vivado job count is derived from it
+  so the machine is not oversubscribed. Every build gets a unique `PREFIX`
+  (`fpga_gate_<id>`), so it has its own build tree and log and cannot collide
+  with a parallel build or with a hand-run synthesis on the same machine.
+- **Updating** — `ci/fpga_gate.py --update-baseline`, human-reviewed, committed
+  as an explicit `Fmax: 312 → 287` diff. Baselines also record the Vivado
+  version they were measured on; a run under a different version warns, because
+  Fmax across tool versions is not comparable.
 
 ---
 
@@ -288,6 +385,21 @@ abstraction). It stays a separate, minimal workflow that:
 
 Recommended triggers: weekly **offset** from the host weekly (so a failure is attributable
 to the container, not the code) plus `paths:` on the container-definition files.
+
+### 4.4 `fpga_gate.yml` — nightly synthesis on the self-hosted runner
+
+The §3.5 gate needs a licensed Vivado and half a machine for hours, so it cannot
+be a cell in `ci.yml`'s hosted matrix. It is its own nightly workflow on the
+self-hosted runner, and it **hard-pins `origin/master`** — whatever branch the
+schedule fires on, the thing being gated is master's head.
+
+Because the sweep is expensive, it **skips itself when master has not moved**:
+the runner keeps the last gated SHA in `~/.cache/vortex/fpga_gate.<repo>.sha`
+and the run is a no-op when it matches (`force: true` on `workflow_dispatch`
+overrides). The SHA is recorded once the gate reaches a *verdict* — pass or
+regression — so a red master is not re-synthesized every night (the failed run
+is the record); an infra/build error does not record, so the next nightly
+retries it.
 
 ---
 

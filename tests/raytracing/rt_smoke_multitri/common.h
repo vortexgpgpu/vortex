@@ -11,12 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU multi-triangle smoke — Phase 4.
+// PRISM RTU multi-triangle smoke.
 //
 // Scene with N opaque triangles, all at distinct depths along +Z. The
 // ray fires from (0.25, 0.25, 0) toward +Z, intersecting every
-// triangle. The RtuCore must walk all N tris (linear-scan replacement
-// for Phase 1's kPhase1MaxTris=1 cap) and return the CLOSEST hit. The
+// triangle. The RtuCore must walk all N tris (linear scan, no
+// kPhase1MaxTris=1 cap) and return the CLOSEST hit. The
 // scene spans multiple cache lines for N >= 2, so this also exercises
 // the two-phase fetch (header line → body lines) plumbing.
 

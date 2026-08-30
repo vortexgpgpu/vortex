@@ -19,11 +19,27 @@ else
 	C_EXT :=
 endif
 
+# Zacas rides after the single-letter extensions, which is where the ISA
+# string wants multi-letter names. It extends the A set rather than replacing
+# it, so it is only meaningful alongside it.
+# The pinned GNU assembler does not know the extension, so a test that builds
+# its kernel through that toolchain declares GNU_KERNEL and keeps the base
+# string. Such a kernel gets the compare-exchange retry loop instead.
+ifneq (,$(filter -DVX_CFG_EXT_ZACAS_ENABLE, $(XCONFIGS)))
+ifeq ($(GNU_KERNEL),)
+	ZACAS_EXT := _zacas
+else
+	ZACAS_EXT :=
+endif
+else
+	ZACAS_EXT :=
+endif
+
 ifeq ($(XLEN),64)
-	VX_CFLAGS += -march=rv64imafd$(C_EXT) -mabi=lp64d
+	VX_CFLAGS += -march=rv64imafd$(C_EXT)$(ZACAS_EXT) -mabi=lp64d
 	STARTUP_ADDR ?= 0x180000000
 else
-	VX_CFLAGS += -march=rv32imaf$(C_EXT) -mabi=ilp32f
+	VX_CFLAGS += -march=rv32imaf$(C_EXT)$(ZACAS_EXT) -mabi=ilp32f
 	STARTUP_ADDR ?= 0x80000000
 endif
 
@@ -159,25 +175,37 @@ $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a:
 
 RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF)) $(if $(SCOPE),SCOPE=$(SCOPE)) $(if $(SAIF),SAIF=$(SAIF))
 
-$(VORTEX_RT_LIB)/libvortex.so:
+# FORCE, not a bare rule: a rule with no prerequisites runs only when its target
+# is missing, so once this library exists make never re-enters the sub-make that
+# owns it and every test goes on linking whichever build happened to land first.
+$(VORTEX_RT_LIB)/libvortex.so: FORCE
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub DESTDIR=$(VORTEX_RT_LIB)
 
+# Headers the device kernel and the host binary are built from. Neither target
+# lists any by default, so editing a shared header under sw/common or sw/gfx
+# rebuilds nothing and both sides go on running against the previous layout --
+# silently, and reporting a pass or a mismatch that describes the old build. A
+# test that includes such headers declares them here. They are filtered out of
+# the compiler's inputs below, being prerequisites only.
+VX_HDRS ?=
+HDRS ?=
+
 ifneq ($(filter %.S,$(VX_SRCS)),)
-kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
-	$(VX_CXX) $(VX_CFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(VX_LDFLAGS) -o $@
+kernel.elf: $(VX_SRCS) $(VX_HDRS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+	$(VX_CXX) $(VX_CFLAGS) $(filter-out $(CONFIG_STAMP) $(VX_HDRS),$^) $(VX_LDFLAGS) -o $@
 else
-vx_start.o: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+vx_start.o: $(VX_SRCS) $(VX_HDRS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
 	$(VX_CXX) $(VX_CFLAGS) -c $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) -DNEED_GP -DNEED_TLS -DNEED_INITFINI $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@
 	$(VX_CXX) $(VX_CFLAGS) $@ $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@.elf
 	$(VX_CXX) $(VX_CFLAGS) $$($(KERNEL_STARTUP) $(VX_DP) $@.elf) $(VX_KMU_FLAG) -c $(VX_STARTUP_SRC) -o $@ && rm -f $@.elf
 
-kernel.elf: vx_start.o $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
+kernel.elf: vx_start.o $(VX_SRCS) $(VX_HDRS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
 	$(VX_CXX) $(VX_CFLAGS) vx_start.o $(VX_APP_OBJS) $(VX_LDFLAGS) -o $@
 endif
 
-$(APP): $(SRCS) $(RT_LIB_DIR)/libvortex.so $(CONFIG_STAMP)
-	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(LDFLAGS) -o $@
+$(APP): $(SRCS) $(HDRS) $(RT_LIB_DIR)/libvortex.so $(CONFIG_STAMP)
+	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP) $(HDRS),$^) $(LDFLAGS) -o $@
 
 # Cross-compiled stub for non-native HOST_ARCH.
 ifneq ($(HOST_ARCH),x86_64)
@@ -193,6 +221,14 @@ run-rtlsim: $(PROJECT) kernel.vxbin
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/rtlsim DESTDIR=$(VORTEX_RT_LIB)
 	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=rtlsim ./$(PROJECT) $(OPTS)
 
+run-firesim: $(PROJECT) kernel.vxbin
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/firesim DESTDIR=$(VORTEX_RT_LIB)
+ifeq ($(TARGET), hw)
+	XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else
+	XCL_EMULATION_MODE=$(TARGET) EMCONFIG_PATH=$(FPGA_BIN_DIR) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+endif
+
 run-opae: $(PROJECT) kernel.vxbin
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/opae DESTDIR=$(VORTEX_RT_LIB)
 	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
@@ -200,11 +236,19 @@ run-opae: $(PROJECT) kernel.vxbin
 run-xrt: $(PROJECT) kernel.vxbin
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/xrt DESTDIR=$(VORTEX_RT_LIB)
 ifeq ($(TARGET), hw)
-	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else ifeq ($(TARGET), hw_emu)
-	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XRT_XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/xrt/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XRT_DEVICE_INDEX=$(XRT_DEVICE_INDEX) XCLBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 else
 	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
+endif
+
+run-aved: $(PROJECT) kernel.vxbin
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/aved DESTDIR=$(VORTEX_RT_LIB)
+ifeq ($(filter hw sim, $(TARGET)),)
+	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=aved ./$(PROJECT) $(OPTS)
+else
+	SCOPE_JSON_PATH=$(FPGA_BIN_DIR)/scope.json VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/vortex_afu.vbin $(if $(filter hw,$(TARGET)),VORTEX_AVED_NO_PROGRAM=$(or $(VORTEX_AVED_NO_PROGRAM),1)) LD_LIBRARY_PATH=$(VRT_HOME)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=aved ./$(PROJECT) $(OPTS)
 endif
 
 .depend: $(SRCS)

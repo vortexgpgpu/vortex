@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include <simobject.h>
+#include "types.h"
 #include <mempool.h>
 #include <array>
 #include "instr_trace.h"
@@ -22,8 +22,8 @@
 #include "tcu_tbuf.h"
 
 // The TCU metadata SRAM is present when any metadata-consuming mode (MX or
-// sparse) is enabled. Internal derived macro — not a VX_CFG_* knob; mirrors the
-// RTL derivation in hw/rtl/VX_define.vh.
+// sparse) is enabled. Internal derived macro — not a VX_CFG_* knob; mirrors
+// the hardware derivation.
 #if defined(VX_CFG_TCU_MX_ENABLE) || defined(VX_CFG_TCU_SPARSE_ENABLE)
 #define TCU_META_ENABLE
 #endif

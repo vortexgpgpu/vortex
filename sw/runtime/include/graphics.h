@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -39,11 +40,13 @@ namespace graphics {
 // FF models). Triangle-setup + tile-binning input types follow.
 ///////////////////////////////////////////////////////////////////////////////
 
-// One vertex in clip space, plus RASTER-interpolable attributes.
+// One vertex in clip space, plus RASTER-interpolable attributes. Byte-identical
+// to gfx_frontend::setup_vertex_t so the host can feed Binning() directly.
 struct vertex_t {
   float pos[4];        // clip-space x, y, z, w
   float color[4];      // r, g, b, a in [0, 1]
   float texcoord[2];   // u, v
+  float varying2[6];   // extra varying scalars -> setup planes w0..w5
 };
 
 // One triangle, by vertex index into the caller's vertex container.
@@ -57,7 +60,7 @@ struct primitive_t {
 // Produces two device-ready buffers:
 //   - primbuf: contiguous array of rast_prim_t (edge equations + attribute
 //     deltas in Q15.16 / Q23.8 fixed-point form the RASTER unit reads).
-//   - tilebuf: the gfx_v2 §6.3 coarse-bin layout — a dense rast_bin_header_t
+//   - tilebuf: the coarse-bin layout — a dense rast_bin_header_t
 //     block (each header's pids_offset an ABSOLUTE index into the pid array)
 //     followed by the sorted primitive-ID array.
 //
@@ -93,7 +96,7 @@ uint32_t Binning(std::vector<uint8_t>& tilebuf,
 // (vx_enqueue_commands): one doorbell, one completion event, the host
 // untouched between stages. The CP's launch-drain serialization provides the
 // device-wide inter-stage barrier the sort-middle front end needs (setup →
-// binning → raster). This is the charter §6.4 graphics command-sequence
+// binning → raster). This is the graphics command-sequence
 // builder; vortexpipe and the regression tests emit a draw through it instead
 // of issuing per-stage launches with a host round-trip each.
 //
@@ -149,7 +152,7 @@ private:
 // FrontEndPool — the on-device setup+binning working set + launch emitter.
 //
 // Owns the device-resident scratch + output buffers the nine-stage front end
-// reads/writes (the charter §4.1 tiling pool), allocated once sized to a
+// reads/writes (the tiling pool), allocated once sized to a
 // triangle / key high-water mark. Per draw, append() emits the front end's
 // nine launches into a DrawCommands, reading the runtime counts from pipe_arg_t
 // so the launch dims stay static. The pool is OVERWRITTEN by each draw and so
@@ -159,7 +162,7 @@ private:
 // pinned outputs the RASTER unit consumes; num_bins() is the host-static tile
 // count RASTER walks.
 //
-// This is the §6.1/§6.2 front end as a runtime-provided capability: callers
+// This is the front end as a runtime-provided capability: callers
 // (regression tests, vortexpipe) get the front end without re-deriving its
 // ~16-buffer layout or stage schedule. The two kernel entries are supplied by
 // the caller (app-loaded module) until the front-end kernels ship in the
@@ -251,6 +254,23 @@ struct om_state_t {
   // Early-Z reads depth out of OM order, so under blending it can drop a
   // fragment whose color contribution is legitimate. Defaults off (late-Z only).
   uint32_t earlyz_safe     = 0;
+  // ── fragment-export aperture ───────────────
+  // The FS exports a fragment by STORING to VX_MEM_OM_BASE_ADDR + offset. The
+  // encoding is SHIFT-ONLY so the OM ingress decodes it by bit-slicing rather
+  // than dividing:
+  //     offset = ((face << (xbits+ybits)) | (y << xbits) | x) << record_shift
+  // Hence the pitch is padded to a power of two. The aperture is virtual --
+  // nothing is stored there -- so the padded address space costs nothing.
+  //
+  // Set these with om_state_t::set_aperture(); the shader needs the same three
+  // numbers to build its address, so pass them through to the kernel arg.
+  uint32_t aperture_xbits    = 0;   // ceil(log2(width))
+  uint32_t aperture_ybits    = 0;   // ceil(log2(height))
+  // Record shape: 2 = one word (colour only, or depth only), 3 = colour+depth.
+  // A shader emits colour only (early-Z owns the depth test AND write -- the
+  // common case), depth only (z-prepass / shadow map), or both (gl_FragDepth).
+  uint32_t aperture_record_shift = 2;
+  uint32_t aperture_depth_only   = 0;   // disambiguates the two one-word modes
   // stencil (defaults disable)
   uint32_t stencil_func      = VX_OM_DEPTH_FUNC_ALWAYS;
   uint32_t stencil_zpass     = VX_OM_STENCIL_OP_KEEP;
@@ -283,6 +303,45 @@ struct tex_state_t {
 // Immediate emit (one vx_enqueue_dcr_write per register). Returns the first
 // non-VX_SUCCESS status, or VX_SUCCESS.
 vx_result_t program_raster(vx_queue_h q, const raster_state_t& s);
+
+// Bits the fragment-export aperture window spans, and the bits the colour
+// attachment index takes out of it.
+constexpr uint32_t om_aperture_bits() {
+  uint64_t span = uint64_t(VX_MEM_OM_END_ADDR) - uint64_t(VX_MEM_OM_BASE_ADDR);
+  uint32_t b = 0;
+  while ((uint64_t(1) << b) < span) { ++b; }
+  return b;
+}
+
+constexpr uint32_t om_rt_index_bits() {
+  uint32_t b = 0;
+  while ((1u << b) < VX_OM_MAX_RT) { ++b; }
+  return b;
+}
+
+// Derive the aperture encoding from the framebuffer and the shader's output
+// signature. `has_colour`/`has_depth` must match the funct7 mask the shader
+// passes to vx_om_export, or the ingress will misread the record.
+inline void set_aperture(om_state_t& s, uint32_t width, uint32_t height,
+                         bool has_colour, bool has_depth) {
+  auto ceil_log2 = [](uint32_t v) {
+    uint32_t b = 0;
+    while ((1u << b) < v) ++b;
+    return b;
+  };
+  s.aperture_xbits = ceil_log2(width);
+  s.aperture_ybits = ceil_log2(height);
+  s.aperture_record_shift = (has_colour && has_depth) ? 3 : 2;
+  s.aperture_depth_only   = (!has_colour && has_depth) ? 1 : 0;
+  // The aperture is a fixed window and the encoding pads each field to a power
+  // of two, so a large enough framebuffer runs the record index off the top and
+  // wraps two pixels onto one. Nothing downstream can detect that, so it is
+  // caught here where the width and height are still in hand.
+  assert(s.aperture_xbits + s.aperture_ybits + 1
+       + om_rt_index_bits() + s.aperture_record_shift <= om_aperture_bits()
+       && "framebuffer too large for the fragment-export aperture");
+}
+
 vx_result_t program_om    (vx_queue_h q, const om_state_t& s);
 vx_result_t program_tex   (vx_queue_h q, const tex_state_t& s);
 

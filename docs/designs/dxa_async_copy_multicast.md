@@ -167,8 +167,8 @@ descriptor programming `vortex::dxa::program_{1..5}d`,
 
 ## 7. Proposed but not yet implemented
 
-1. **Per-socket DXA relocation** (`dxa_multicast_proposal` §5 / Phase 2 —
-   the single biggest unbuilt item). Move `VX_dxa_core` into
+1. **Per-socket DXA relocation** (the single biggest unbuilt item).
+   Move `VX_dxa_core` into
    `VX_socket.sv` with a `dxa_dcache_arb` (dcache > DXA priority) and
    delete the cluster-scoped DXA fabric, with a matching `Socket`-owned
    `DxaCore` in SimX. Motivated by measured GMEM latency growth with core
@@ -176,12 +176,12 @@ descriptor programming `vortex::dxa::program_{1..5}d`,
    planned `VX_cta_table_if.sv` per-slot LMEM-base table was abandoned in
    favor of the shipped "Path A" stride-arithmetic + cluster-contiguous
    LMEM placement ([`VX_mem_unit.sv:144-152`](../../hw/rtl/core/VX_mem_unit.sv#L144)).
-2. **Multicast LMEM-arbiter hoist** (`dxa_worker_rtl_redesign` Phase 5):
+2. **Multicast LMEM-arbiter hoist**:
    collapse M-way multicast from `popcount(mask)` beats/word to one via a
    bank-broadcast / side-band `cta_mask` + `smem_stride` in the LMEM
    arbiter, removing `replay_remaining_r` and the per-beat priority
    encoder. Multicast is serial today in both RTL and SimX.
-3. **SimX 5-stage worker objectification** (`dxa_simx_v3` Phase 3):
+3. **SimX 5-stage worker objectification**:
    replace the flat `work_list` engine with Setup/AddrGen/GmemReq/RspBuf/
    SmemWr sub-objects for true RTL module-correspondence and on-demand
    address generation.
@@ -195,7 +195,7 @@ descriptor programming `vortex::dxa::program_{1..5}d`,
    ([`VX_types.toml:282-291`](../../VX_types.toml#L282)) — allocated but
    wired nowhere; placeholders for SMEM swizzling / L2 prefetch promotion.
 6. **Cross-issuer multicast** (`dxa_multicast_from(rank)`) and the
-   Hopper-style cross-core DSMEM path (multicast Open Questions), plus a
+   Hopper-style cross-core DSMEM path, plus a
    zero-arg `dxa_multicast` overload now feasible against the
    `get_cluster_size()` CSR.
 
@@ -205,11 +205,3 @@ allocator/inflight-FIFO (replaced by the 4-active-stage direct-drain
 pipeline with `slot_table` credit model); the `VX_cta_table_if.sv`
 per-slot LMEM-base table (replaced by Path-A stride arithmetic); and the
 `_mw`/`_mc` test naming (actual tests use `_mcast`, plus `dxa_kmajor_check`).
-
----
-
-## 8. Source proposals
-
-This design consolidates and supersedes the following proposals (now
-removed from `docs/proposals/`): `dxa_multicast_proposal.md`,
-`dxa_simx_v3_proposal.md`, `dxa_worker_rtl_redesign_proposal.md`.

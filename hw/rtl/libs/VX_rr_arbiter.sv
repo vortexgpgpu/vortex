@@ -19,7 +19,9 @@ module VX_rr_arbiter #(
     parameter MODEL    = 1,
     parameter LOG_NUM_REQS = `LOG2UP(NUM_REQS),
     parameter STICKY   = 0, // hold the grant until its request is deasserted
-    parameter LUT_OPT  = 0
+    // Widths 2..8 use a casez round-robin (g_lutN), grant-identical to g_model1
+    // given the NUM_REQS-1 reset seed. Off for STICKY / MODEL != 1.
+    parameter LUT_OPT  = (MODEL == 1 && STICKY == 0)
 ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -62,7 +64,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin
             if (reset) begin
-                state <= '0;
+                state <= LOG_NUM_REQS'(NUM_REQS-1);
             end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
@@ -97,7 +99,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin
             if (reset) begin
-                state <= '0;
+                state <= LOG_NUM_REQS'(NUM_REQS-1);
             end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
@@ -139,7 +141,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin
             if (reset) begin
-                state <= '0;
+                state <= LOG_NUM_REQS'(NUM_REQS-1);
             end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
@@ -190,7 +192,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin
             if (reset) begin
-                state <= '0;
+                state <= LOG_NUM_REQS'(NUM_REQS-1);
             end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
@@ -252,7 +254,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin
             if (reset) begin
-                state <= '0;
+                state <= LOG_NUM_REQS'(NUM_REQS-1);
             end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
@@ -276,8 +278,8 @@ module VX_rr_arbiter #(
             10'b001_00000?1,
             10'b010_0000??1,
             10'b011_000???1,
-            10'b100_000???1,
-            10'b101_00????1,
+            10'b100_00????1,
+            10'b101_0?????1,
             10'b110_??????1: begin grant_onehot_w = 7'b0000001; grant_index_w = LOG_NUM_REQS'(0); end
             10'b000_?????1?,
             10'b001_0000010,
@@ -327,7 +329,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin
             if (reset) begin
-                state <= '0;
+                state <= LOG_NUM_REQS'(NUM_REQS-1);
             end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
@@ -417,7 +419,7 @@ module VX_rr_arbiter #(
 
         always @(posedge clk) begin
             if (reset) begin
-                state <= '0;
+                state <= LOG_NUM_REQS'(NUM_REQS-1);
             end else if (grant_valid && grant_ready) begin
                 state <= grant_index_w;
             end
@@ -429,21 +431,16 @@ module VX_rr_arbiter #(
 
     end else if (MODEL == 1) begin : g_model1
 
-        wire [NUM_REQS-1:0] masked_pri_reqs /* verilator split_var*/;
-        wire [NUM_REQS-1:0] unmasked_pri_reqs /* verilator split_var*/;
+        wire [NUM_REQS-1:0] masked_pri_reqs;
+        wire [NUM_REQS-1:0] unmasked_pri_reqs;
         reg [NUM_REQS-1:0] reqs_mask;
 
         wire [NUM_REQS-1:0] masked_reqs = requests & reqs_mask;
 
-        assign masked_pri_reqs[0] = 1'b0;
-        for (genvar i = 1; i < NUM_REQS; ++i) begin : g_masked_pri_reqs
-            assign masked_pri_reqs[i] = masked_pri_reqs[i-1] | masked_reqs[i-1];
-        end
-
-        assign unmasked_pri_reqs[0] = 1'b0;
-        for (genvar i = 1; i < NUM_REQS; ++i) begin : g_unmasked_pri_reqs
-            assign unmasked_pri_reqs[i] = unmasked_pri_reqs[i-1] | requests[i-1];
-        end
+        wire [NUM_REQS-1:0] masked_lsb   = masked_reqs & (~masked_reqs + NUM_REQS'(1));
+        wire [NUM_REQS-1:0] unmasked_lsb = requests    & (~requests    + NUM_REQS'(1));
+        assign masked_pri_reqs   = ~(masked_lsb   | (masked_lsb   - NUM_REQS'(1)));
+        assign unmasked_pri_reqs = ~(unmasked_lsb | (unmasked_lsb - NUM_REQS'(1)));
 
         wire [NUM_REQS-1:0] grant_masked = masked_reqs & ~masked_pri_reqs;
         wire [NUM_REQS-1:0] grant_unmasked = requests & ~unmasked_pri_reqs;

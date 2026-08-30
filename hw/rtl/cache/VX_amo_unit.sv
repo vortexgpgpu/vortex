@@ -23,7 +23,10 @@
 // registered output lands the same cycle the SC commit decision is made; the
 // valid bits live in resettable flops (BRAM contents are not reset).
 //
-//   LR  : claim the slot for {hart, line}  (overwrites any prior occupant).
+//   LR  : claim the slot for {hart, line}. A slot already held by a different
+//         hart for the same line is protected until it ages out (below); an
+//         empty slot, a same-hart refresh, or a different line (index conflict)
+//         always claims.
 //   SC  : succeeds iff the slot still holds {hart, line}; the success store
 //         then clears it through the write path below.
 //   write: a committed store/RMW to a line clears the slot iff it holds that
@@ -31,12 +34,22 @@
 //
 // A bounded set with conflict/capacity eviction is RISC-V-legal: SC may fail
 // spuriously for any reason, and forward progress is a system property (some
-// hart's SC wins each round). This is how real GPUs/CPUs implement LR/SC, and
-// it removes the per-hart table's O(NUM_HARTS) storage and CAM.
+// hart's SC wins each round). To keep that property when the L1 is non-LLC —
+// where an LR->SC spans a full round-trip to this bank and a co-contending
+// hart's LR would otherwise overwrite the slot before the SC returns — a live
+// reservation resists a different hart's LR for a bounded age, so its own SC
+// lands first; the age still frees an abandoned slot. This removes the per-hart
+// table's O(NUM_HARTS) storage and CAM.
 module VX_amo_unit import VX_gpu_pkg::*; #(
     parameter NUM_RES_ENTRIES = 4,   // reservation stations per bank (NUM_RS)
+    // Holder-refusal budget, in refused-LR events, before a held station may
+    // be displaced. Sized for the holder's LR->SC round trip: the LLC sees an
+    // L1-miss round trip (default 6 bits = 63 refusals); a local-memory bank's
+    // round trip is single-digit cycles and needs far less.
+    parameter HOLD_CREDIT_BITS = 6,
     parameter LINE_ADDR_BITS  = 32,
-    parameter DATA_WIDTH      = 64   // ALU operand width (cache word, capped at 64)
+    parameter DATA_WIDTH      = 64,  // ALU operand width (cache word, capped at 64)
+    parameter ARITH_WIDTH     = DATA_WIDTH // non-CAS op width (see VX_amo_alu)
 ) (
     input  wire                          clk,
     input  wire                          reset,
@@ -48,6 +61,7 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     input  wire [1:0]                    compute_width,
     input  wire [63:0]                   compute_old,
     input  wire [63:0]                   compute_rhs,
+    input  wire [63:0]                   compute_cmp,
     output wire [63:0]                   compute_new_word,
     output wire [63:0]                   compute_ret_word,
 
@@ -63,13 +77,15 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
 
     // Pure ALU (no state, no clock).
     VX_amo_alu #(
-        .DATA_WIDTH (DATA_WIDTH)
+        .DATA_WIDTH  (DATA_WIDTH),
+        .ARITH_WIDTH (ARITH_WIDTH)
     ) alu (
         .op       (compute_op),
         .is_unsigned (compute_unsigned),
         .width    (compute_width),
         .old_word (compute_old),
         .rhs      (compute_rhs),
+        .cmp      (compute_cmp),
         .new_word (compute_new_word),
         .ret_word (compute_ret_word)
     );
@@ -144,21 +160,49 @@ module VX_amo_unit import VX_gpu_pkg::*; #(
     // SC outcome: this hart's reservation on this line is still live.
     assign res_check = own_match;
 
+    // A live reservation on a line is not handed to another hart on demand.
+    // A station is indexed by line, so every hart contending one word maps to
+    // the same station; letting each LR overwrite it means no SC ever finds
+    // its own reservation and a contended retry loop makes no progress. The
+    // holder keeps the station until its own SC resolves it, so one hart wins
+    // per round. A refused LR simply does not reserve, and its SC fails --
+    // architecturally legal, since SC may fail for any reason.
+    //
+    // The hold is bounded: a holder that never issues its SC (a retry loop is
+    // free to abandon an attempt) would otherwise own the station forever.
+    // Each refused LR spends one credit, so the holder gets a bounded number
+    // of chances before the station may be taken.
+    localparam [HOLD_CREDIT_BITS-1:0] HOLD_CREDITS = {HOLD_CREDIT_BITS{1'b1}};
+
+    reg [RS_DEPTH-1:0][HOLD_CREDIT_BITS-1:0] rs_hold_r;
+    wire hold_lapsed = (rs_hold_r[rs_idx] == '0);
+
+    // Refuse only a foreign hart on the same line. Re-reserving by the holder
+    // refreshes it, and a station holding a different line is displaced as
+    // before -- that is ordinary capacity behaviour, not the livelock.
+    wire res_held = res_reserve && en && line_match && ~own_match && ~hold_lapsed;
+
     // LR installs the payload; a matching SC/store clears the valid bit.
-    assign rs_we = res_reserve && en;
+    assign rs_we = res_reserve && en && ~res_held;
     wire   rs_clr = en && ((res_invalidate && line_match)      // any write breaks the reserver
                         || (res_clear && own_match));          // SC clears its own
 
     always @(posedge clk) begin
         if (reset) begin
             rs_valid <= '0;
+            rs_hold_r <= '0;
         end else begin
             if (rs_we) begin
                 rs_valid[rs_idx] <= 1'b1;
+                rs_hold_r[rs_idx] <= HOLD_CREDITS;
             end else if (rs_clr) begin
                 rs_valid[rs_idx] <= 1'b0;
+                rs_hold_r[rs_idx] <= '0;
+            end else if (res_held) begin
+                rs_hold_r[rs_idx] <= rs_hold_r[rs_idx] - HOLD_CREDIT_BITS'(1);
             end
         end
     end
+
 
 endmodule

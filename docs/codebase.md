@@ -7,7 +7,8 @@ The directory/file layout of the Vortex codebase is as follows:
   [build configuration system](designs/build_configuration_system.md)).
 - `ci`: continuous integration scripts
   - `testcases`: declarative test catalog (YAML), executed by the pytest harness
-  - `perf/baselines`: golden performance baselines for the perf-regression gate
+  - `baselines/perf`: golden performance baselines for the perf-regression gate
+  - `baselines/synthesis/xilinx`: golden FPGA synthesis baselines for the fpga_gate
   - `blackbox.sh`: universal application launcher for all drivers
   - `regression.sh`: local entry point into the CI catalog
 - `docs`: documentation

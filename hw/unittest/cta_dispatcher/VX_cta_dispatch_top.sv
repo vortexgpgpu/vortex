@@ -50,37 +50,50 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
 
     VX_kmu_bus_if kmu_bus();
 
-    assign kmu_bus.valid             = task_in_valid;
-    assign task_in_ready             = kmu_bus.ready;
-    assign kmu_bus.data.PC           = in_PC;
-    assign kmu_bus.data.entry        = in_PC;
-    assign kmu_bus.data.ctx_id       = '0;
-    assign kmu_bus.data.cta_id       = in_cta_id;
-    assign kmu_bus.data.block_idx[0] = in_block_idx_x;
-    assign kmu_bus.data.block_idx[1] = in_block_idx_y;
-    assign kmu_bus.data.block_idx[2] = in_block_idx_z;
-    assign kmu_bus.data.block_dim[0] = in_block_dim_x;
-    assign kmu_bus.data.block_dim[1] = in_block_dim_y;
-    assign kmu_bus.data.block_dim[2] = in_block_dim_z;
-    assign kmu_bus.data.grid_dim[0]  = in_grid_dim_x;
-    assign kmu_bus.data.grid_dim[1]  = in_grid_dim_y;
-    assign kmu_bus.data.grid_dim[2]  = in_grid_dim_z;
-    assign kmu_bus.data.param        = in_param;
     // The KMU is not instantiated in this unit test, so the bench supplies the
-    // values the dispatcher now expects precomputed on the bus:
+    // values the dispatcher expects precomputed on the bus:
     //   aligned_lmem_size  — in_lmem_size rounded up to MEM_BLOCK_SIZE.
     //   cluster_size = 1 — degenerate (1,1,1) cluster, so every block is its own
     //   cluster and always first-of-cluster.
     wire [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size_w =
         ((`VX_CFG_LMEM_LOG_SIZE+1)'(in_lmem_size) + (`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE-1))
         & ~((`VX_CFG_LMEM_LOG_SIZE+1)'(`VX_CFG_MEM_BLOCK_SIZE-1));
-    assign kmu_bus.data.aligned_lmem_size = aligned_lmem_size_w;
-    assign kmu_bus.data.block_size   = in_block_size;
-    assign kmu_bus.data.warp_step[0] = in_warp_step_x;
-    assign kmu_bus.data.warp_step[1] = in_warp_step_y;
-    assign kmu_bus.data.warp_step[2] = in_warp_step_z;
-    assign kmu_bus.data.cluster_size = (NW_WIDTH+1)'(1);
-    assign kmu_bus.data.is_first_of_cluster = 1'b1;
+
+    // The bus carries the launch as a flat data beat; the dispatcher casts it
+    // back to kmu_req_t. CTA ids are allocated inside the dispatcher.
+    kmu_req_t kmu_req;
+    always_comb begin
+        kmu_req = '0;
+        kmu_req.kind              = KMU_KIND_COMPUTE;
+        kmu_req.PC                = in_PC;
+        kmu_req.entry             = in_PC;
+        kmu_req.param             = in_param;
+        kmu_req.ctx_id            = '0;
+        kmu_req.aligned_lmem_size = aligned_lmem_size_w;
+        kmu_req.args.compute.grid_dim[0]  = in_grid_dim_x;
+        kmu_req.args.compute.grid_dim[1]  = in_grid_dim_y;
+        kmu_req.args.compute.grid_dim[2]  = in_grid_dim_z;
+        kmu_req.args.compute.block_idx[0] = in_block_idx_x;
+        kmu_req.args.compute.block_idx[1] = in_block_idx_y;
+        kmu_req.args.compute.block_idx[2] = in_block_idx_z;
+        kmu_req.args.compute.block_dim[0] = in_block_dim_x;
+        kmu_req.args.compute.block_dim[1] = in_block_dim_y;
+        kmu_req.args.compute.block_dim[2] = in_block_dim_z;
+        kmu_req.args.compute.block_size   = in_block_size;
+        kmu_req.args.compute.warp_step[0] = in_warp_step_x;
+        kmu_req.args.compute.warp_step[1] = in_warp_step_y;
+        kmu_req.args.compute.warp_step[2] = in_warp_step_z;
+        kmu_req.args.compute.cluster_size = (NW_WIDTH+1)'(1);
+        kmu_req.args.compute.is_first_of_cluster = 1'b1;
+    end
+
+    assign kmu_bus.valid = task_in_valid;
+    assign kmu_bus.kind  = KMU_KIND_COMPUTE;
+    assign kmu_bus.eop   = 1'b1;
+    assign kmu_bus.dest  = '0;
+    assign kmu_bus.data  = kmu_req;
+    assign task_in_ready = kmu_bus.ready;
+    `UNUSED_VAR (in_cta_id)
 
     wire [PC_BITS-1:0]      cta_PC;
     wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask;
@@ -92,7 +105,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     // (it only checks warp dispatch via cta_fire/cta_wid), so the read indices
     // are tied off and the read-back outputs are left unused.
     cta_csrs_t              cta_rd_csrs;
-    wire [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_rd_tid;
+    cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_rd_lane;
     wire [NCTA_WIDTH-1:0]   schedule_cta_id;
 
     `UNUSED_VAR (cta_PC)
@@ -101,7 +114,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     `UNUSED_VAR (cta_init)
     `UNUSED_VAR (busy)
     `UNUSED_VAR (cta_rd_csrs)
-    `UNUSED_VAR (cta_rd_tid)
+    `UNUSED_VAR (cta_rd_lane)
     `UNUSED_VAR (schedule_cta_id)
 
     VX_cta_dispatch cta_dispatch (
@@ -120,7 +133,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
         .csr_rd_wid    ('0),
         .csr_rd_cta_id ('0),
         .cta_rd_csrs   (cta_rd_csrs),
-        .cta_rd_tid    (cta_rd_tid),
+        .cta_rd_lane   (cta_rd_lane),
         .schedule_wid  ('0),
         .schedule_cta_id (schedule_cta_id),
         .busy          (busy)

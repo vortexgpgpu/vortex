@@ -10,6 +10,8 @@
 #ifdef VX_CFG_VM_ENABLE
 
 #include "mmu_tlb.h"
+#include "tlb_types.h"
+#include <VX_types.h>
 #include <cstddef>
 
 namespace vortex {
@@ -18,20 +20,29 @@ Tlb::Tlb(uint32_t size)
     : entries_(size)
 {}
 
-std::pair<bool, uint64_t> Tlb::lookup(uint64_t vpn) {
+static constexpr uint32_t VPN_LEVEL_BITS = TLB_VPN_LEVEL_BITS;
+static_assert((VX_VM_PT_SIZE / VX_VM_PTE_SIZE) == (1u << VPN_LEVEL_BITS),
+              "TLB_VPN_LEVEL_BITS must match the page-table fan-out");
+
+Tlb::Result Tlb::lookup(uint64_t vpn) {
   ++reads_;
   for (auto& e : entries_) {
-    if (e.valid && e.vpn == vpn) {
+    if (!e.valid) {
+      continue;
+    }
+    uint32_t shift = e.level * VPN_LEVEL_BITS;
+    if ((e.vpn >> shift) == (vpn >> shift)) {
       e.mru = true;
       ++hits_;
-      return {true, e.ppn};
+      uint64_t low_mask = (uint64_t(1) << shift) - 1;
+      return {true, e.ppn | (vpn & low_mask), e.flags, e.level};
     }
   }
   ++misses_;
-  return {false, 0};
+  return {};
 }
 
-void Tlb::fill(uint64_t vpn, uint64_t ppn, uint8_t flags) {
+void Tlb::fill(uint64_t vpn, uint64_t ppn, uint8_t flags, uint8_t level) {
   // Prefer an invalid slot; fall back to a non-MRU victim. If all slots
   // are valid AND every slot has mru=true, clear all MRU bits and evict slot 0.
   int victim = -1;
@@ -49,14 +60,17 @@ void Tlb::fill(uint64_t vpn, uint64_t ppn, uint8_t flags) {
     victim = 0;
   }
 
-  if (entries_[victim].valid)
+  if (entries_[victim].valid) {
     ++evictions_;
+  }
 
+  uint64_t low_mask = (uint64_t(1) << (level * VPN_LEVEL_BITS)) - 1;
   entries_[victim].valid = true;
   entries_[victim].mru   = true;
   entries_[victim].vpn   = vpn;
-  entries_[victim].ppn   = ppn;
+  entries_[victim].ppn   = ppn & ~low_mask;
   entries_[victim].flags = flags;
+  entries_[victim].level = level;
 }
 
 void Tlb::flush() {

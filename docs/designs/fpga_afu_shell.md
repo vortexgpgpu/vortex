@@ -25,11 +25,21 @@ DMA-command engine have been removed.
 | [`vortex_afu.vh`](../../hw/rtl/afu/xrt/vortex_afu.vh) | Defines/macros (`GEN_AXI_MEM`, `GEN_AXI_HOST`, the bit-12 window). |
 | [`VX_afu_wrap.sv`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv) | The real shell (~696 LOC): AXI-Lite bit-12 demux, `VX_cp_core`, `m_axi_host`, bank-0 `VX_axi_arb2`, the `Vortex_axi` instance. |
 | [`VX_afu_ctrl.sv`](../../hw/rtl/afu/xrt/VX_afu_ctrl.sv) | Slimmed AXI-Lite slave (~322 LOC): `ap_ctrl` stub at 0x00 + a SCOPE serial register pair + SCOPE watchdog. |
+| [`VX_afu_axil_demux.sv`](../../hw/rtl/afu/common/VX_afu_axil_demux.sv) | AXI-Lite demux splitting the control space on `addr[12]`, one outstanding transaction per direction. |
+| [`VX_afu_axi_drain.sv`](../../hw/rtl/afu/common/VX_afu_axi_drain.sv) | Outstanding-transaction tracker per AXI master; reports when a port owes the interconnect nothing. |
+| [`VX_afu_reset_seq.sv`](../../hw/rtl/afu/common/VX_afu_reset_seq.sv) | Quiesce-before-reset sequencer for the soft reset; refuses rather than resetting a master that will not drain. |
 
 - **Control.** Host AXI-Lite `addr[12]` splits the slave: `addr[12]=0` →
   `VX_afu_ctrl` (ap_ctrl + SCOPE); `addr[12]=1` → the CP regfile (seeing
-  its own 0x000-based space). Routing is latched at AW/AR fire
-  ([`VX_afu_wrap.sv:159-218`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L159)).
+  its own 0x000-based space). The split lives in
+  [`VX_afu_axil_demux.sv`](../../hw/rtl/afu/common/VX_afu_axil_demux.sv),
+  which holds one outstanding write and one outstanding read. **W routing
+  falls through from the AW being accepted in the same cycle** rather than
+  using the latched route alone — AXI4 permits write data to arrive before or
+  with its address, and routing W by a register that only updates at the AW
+  handshake sent AW and W to different slaves and deadlocked the interface.
+  Covered by `hw/unittest/afu_axil_demux`; see
+  [`../proposals/afu_reset_architecture_proposal.md`](../proposals/afu_reset_architecture_proposal.md).
 - **Memory.** Vortex banks 1..N pass straight to platform AXI; bank 0
   shares with CP `axi_dev` via `VX_axi_arb2`
   ([`:506-558`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L506)); CP `axi_host`
@@ -82,9 +92,13 @@ keeping direct `start`/`busy`/`dcr_*` ports.
 **Key XRT↔OPAE asymmetries:** dedicated host-AXI master (`m_axi_host`) vs.
 a CCI-P host-DMA state machine; an interrupt pin vs. none; `VX_axi_arb2`
 vs. `VX_mem_arb` for bank-0 sharing; AXI-Lite `addr[12]` vs. CCI-P MMIO
-word-address bit 10 for the control demux. Both key the Vortex reset-delay
-shift register on `reset` alone (no host ap_reset), and both expose SCOPE
-over a serial sideband.
+word-address bit 10 for the control demux. Both expose SCOPE over a serial
+sideband.
+
+The XRT shell's reset-delay shift register is reloaded either by the platform
+`reset` or by `VX_afu_reset_seq`, which drains every AXI master first and
+refuses if one will not. The OPAE shell has no host soft reset and keys the
+shift register on `reset` alone.
 
 ---
 
@@ -111,16 +125,6 @@ over a serial sideband.
 launch FSM, per-AFU DCR registers, duplicated `dev_caps`/`isa_caps`, the
 GIE/IER/ISR interrupt block in `VX_afu_ctrl`, and the OPAE `STATE_*`
 DMA-command FSM / `MMIO_STATUS` / COUT-snoop — all removed in favor of the
-CP being the sole command path. The proposal's "collapse to a single
-AXI-Lite slave" idea was superseded by keeping `VX_afu_ctrl` as a slim
-second slave. The source proposal is itself misnamed (its content is the
-CP command-path consolidation) and its OPAE-phase checkboxes are stale —
-the OPAE cleanup has landed.
-
----
-
-## 5. Source proposal
-
-This design consolidates and supersedes `afu_shell_cleanup_proposal.md`
-(now removed from `docs/proposals/`). The CP control/data planes it
-references are in [`command_processor.md`](command_processor.md).
+CP being the sole command path. Collapsing everything onto a single
+AXI-Lite slave was also considered and rejected: `VX_afu_ctrl` is kept as
+a slim second slave.

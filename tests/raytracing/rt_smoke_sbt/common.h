@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU Shader Binding Table smoke — Phase 7.
+// PRISM RTU Shader Binding Table smoke.
 //
 // Single primitive marked PROCEDURAL with per-tri sbt_idx = 1.
 // The kernel populates a 2-record SBT in memory: record 0 has an IS

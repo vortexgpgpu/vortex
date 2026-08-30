@@ -39,8 +39,8 @@ module VX_onehot_encoder #(
 
     end else if (MODEL == 1) begin : g_model1
         localparam M = 1 << LN;
-        wire [M-1:0] addr [LN] /* verilator split_var*/;
-        wire [M-1:0] v [LN+1] /* verilator split_var*/;
+        wire [M-1:0] addr [LN];
+        wire [M-1:0] v [LN+1];
 
         // base case, also handle padding for non-power of two inputs
         assign v[0] = REVERSE ? (M'(data_in) << (M - N)) : M'(data_in);

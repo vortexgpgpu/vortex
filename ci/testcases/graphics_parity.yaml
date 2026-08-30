@@ -45,7 +45,7 @@ tests:
   shape:
     cores: 1
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: box-2core
   app: gfx_draw3d
@@ -53,7 +53,7 @@ tests:
   shape:
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 - id: box-4core
   app: gfx_draw3d
@@ -61,7 +61,7 @@ tests:
   shape:
     cores: 4
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 
 # --- cross-core RASTER arbitration (multiple raster cores share one front end) #
@@ -72,7 +72,7 @@ tests:
   shape:
     cores: 4
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 
 # --- multi-cluster (static tile ownership must hold across clusters) --------- #
@@ -83,7 +83,7 @@ tests:
     clusters: 2
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
 
 # --- second scene under multi-core (triangle: distinct setup/coverage path) --- #
@@ -98,5 +98,5 @@ tests:
   shape:
     cores: 2
     warps: 1
-    threads: 2
+    threads: 4
   args: -w 64 -h 64 -t triangle.cgltrace -r triangle_ref_64.png

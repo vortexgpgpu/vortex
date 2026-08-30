@@ -1,0 +1,122 @@
+# Copyright © 2019-2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+#
+# fpga_gate — nightly FPGA synthesis-regression gate on the self-hosted Vivado
+# runner. Synthesizes the DUT catalog (ci/testcases/fpga_gate.yaml) and asserts
+# Fmax/LUT against the golden results in ci/baselines/synthesis/xilinx/, so an
+# RTL change that costs timing closure or area cannot sit unnoticed on master.
+#
+# Nightly builds are hours long, so the run is SKIPPED unless origin/master has
+# actually moved since the last gate run on this runner (state file below). It
+# always gates origin/master, whatever branch the schedule happens to fire on.
+#
+# See docs/designs/continuous_integration.md §3.5.
+
+name: FPGA Gate
+
+on:
+  schedule:
+    - cron: '0 3 * * *'         # nightly 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      builds:
+        description: "build ids/categories, space separated (blank = all)"
+        default: ""
+      jobs:
+        description: "max parallel Vivado builds"
+        default: "2"
+      force:
+        description: "run even if origin/master has not moved"
+        type: boolean
+        default: false
+
+# One synthesis sweep at a time: parallel Vivado runs would oversubscribe the
+# machine and make Fmax non-comparable. Never cancel a run in flight.
+concurrency:
+  group: fpga-gate
+  cancel-in-progress: false
+
+jobs:
+  fpga_gate:
+    runs-on: [self-hosted, linux, vivado]
+    timeout-minutes: 720
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master               # hard-pinned: the gate always tracks master
+          fetch-depth: 0
+          submodules: recursive
+
+      # Vivado builds are hours long; only pay for them when master moved.
+      - name: Check master for new commits
+        id: gate
+        env:
+          FORCE: ${{ github.event.inputs.force }}
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          STATE="$HOME/.cache/vortex/fpga_gate.$(echo '${{ github.repository }}' | tr / _).sha"
+          LAST=$(cat "$STATE" 2>/dev/null || echo "")
+          echo "sha=$SHA"    >> "$GITHUB_OUTPUT"
+          echo "state=$STATE" >> "$GITHUB_OUTPUT"
+          if [ "$SHA" = "$LAST" ] && [ "$FORCE" != "true" ]; then
+            echo "master unchanged since the last gate run ($SHA) — skipping"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "gating $SHA (last run: ${LAST:-none})"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The command is the one the catalog declares (ci/testcases/fpga_gate.yaml's
+      # single `run:` case), so what CI runs and what the catalog says cannot
+      # drift apart. Dispatch inputs only narrow it, and reach the shell through
+      # env vars: interpolating them into the script would let a dispatch value
+      # execute arbitrary commands on the runner.
+      - name: Run fpga_gate
+        id: run
+        if: steps.gate.outputs.run == 'true'
+        env:
+          IN_BUILDS: ${{ github.event.inputs.builds }}
+          IN_JOBS: ${{ github.event.inputs.jobs }}
+        run: |
+          set -uo pipefail
+          source ~/dev/xilinx_setup.sh
+          CMD=$(python3 -c "import yaml; print(yaml.safe_load(open('ci/testcases/fpga_gate.yaml'))['tests'][0]['run'])")
+          ARGS=()
+          for b in ${IN_BUILDS:-}; do ARGS+=(-b "$b"); done
+          [ -n "${IN_JOBS:-}" ] && ARGS+=(-j "$IN_JOBS")
+          rc=0
+          $CMD "${ARGS[@]}" --report fpga_gate_report.json || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # Record the SHA once the gate has actually reached a verdict (pass=0 or
+      # regression=1), so a red master is not re-synthesized every night — the
+      # failed run is the record. An infra/build failure (2) does NOT record, so
+      # the next nightly retries it.
+      - name: Record gated SHA
+        if: steps.gate.outputs.run == 'true' && steps.run.outputs.rc != '2'
+        run: |
+          mkdir -p "$(dirname '${{ steps.gate.outputs.state }}')"
+          echo "${{ steps.gate.outputs.sha }}" > "${{ steps.gate.outputs.state }}"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.gate.outputs.run == 'true'
+        with:
+          name: fpga-gate-report
+          path: |
+            fpga_gate_report.json
+            build32_fpga_gate/hw/syn/xilinx/dut/*/fpga_gate_*/build.log
+            build32_fpga_gate/hw/syn/xilinx/dut/*/fpga_gate_*/*.rpt
+            build32_fpga_gate/hw/syn/xilinx/dut/*/fpga_gate_*/synth_summary.csv
+          if-no-files-found: warn
+
+      - name: Verdict
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          case "${{ steps.run.outputs.rc }}" in
+            0) echo "fpga_gate passed" ;;
+            1) echo "::error::fpga_gate FAILED — Fmax/LUT moved beyond threshold vs baseline"; exit 1 ;;
+            *) echo "::error::fpga_gate build error (see logs)"; exit 1 ;;
+          esac

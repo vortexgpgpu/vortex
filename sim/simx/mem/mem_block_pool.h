@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <cstdlib>
 #include <memory>
 #include <memory_resource>
 #include "types.h"
@@ -30,20 +31,28 @@ namespace vortex {
 // blocks remain — destruction order between libsimx.so and the runtime
 // does not matter.
 //
-// SimX is single-threaded; unsynchronized_pool_resource is lock-free.
+// Serial runs keep the lock-free unsynchronized pool. Under the parallel
+// executor a block routinely crosses threads (a core-side LSU allocates it,
+// the uncore L2 releases it on eviction), so the pool must be synchronized.
 
 namespace detail {
 
 struct mem_block_pool_t : public std::pmr::memory_resource {
-  std::pmr::unsynchronized_pool_resource pool;
+  std::unique_ptr<std::pmr::memory_resource> pool;
 
-  explicit mem_block_pool_t(const std::pmr::pool_options& opts) : pool(opts) {}
+  explicit mem_block_pool_t(const std::pmr::pool_options& opts) {
+    if constexpr (SIMX_NUM_WORKERS > 1) {
+      pool = std::make_unique<std::pmr::synchronized_pool_resource>(opts);
+    } else {
+      pool = std::make_unique<std::pmr::unsynchronized_pool_resource>(opts);
+    }
+  }
 
   void* do_allocate(std::size_t bytes, std::size_t align) override {
-    return pool.allocate(bytes, align);
+    return pool->allocate(bytes, align);
   }
   void do_deallocate(void* p, std::size_t bytes, std::size_t align) override {
-    pool.deallocate(p, bytes, align);
+    pool->deallocate(p, bytes, align);
   }
   bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
     return this == &other;

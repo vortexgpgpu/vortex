@@ -25,26 +25,28 @@ EXCLUDE :=
 # --- per-backend exclude lists ---------------------------------------
 # The RTL RTU runs the opaque trace path (flat WIDTH=0 + CW-BVH WIDTH=4/6),
 # TLAS/instancing (flat-TLAS, CW-BVH LEAF_INST via the XformUnit), and the
-# shader-callback / async-trap path (AHS/IS/CHS/MISS/SBT/proc) plus single-group
-# reformation — all green on rtlsim.
+# candidate-return shader path (AHS/IS/CHS/MISS/SBT/proc — a returned candidate
+# is serviced inline by the warp's CONTINUE loop) plus single-group reformation
+# — all green on rtlsim.
 # rt_raycast and rt_bvh_multinode issue one trace per thread and immediately
 # wait on it (a single trace in flight per warp): they serialise through the
 # single-trace RTU core but each completes, so they are green on rtlsim (full
 # framebuffer + 36-node BVH both validated) and run there now.
-# rtlsim-deferred = features/limits not yet in the RTL core. These all require
-# MULTIPLE traces in flight concurrently — the §8.6 async ray pool the RTL core
-# does not yet implement (it services one trace-warp at a time):
-#   - rt_smoke_recursive  : in-trap nested-trace re-entrancy (RTU FSM)
-#   - rt_smoke_reform_mw  : multi-warp reformation (concurrent traces)
-#   - rt_smoke_reform_sbt : divergent-SBT multi-group reformation dispatch
-#   - rt_smoke_async_batch: §8.6 async ray pool — 4 vx_rt_wtrace issued
+# rtlsim-deferred = features/limits not yet in the RTL core. Both require
+# MULTIPLE traces in flight per warp, which the RTL does not implement:
+#   - rt_smoke_recursive  : nested-trace re-entrancy needs a per-warp window
+#                            context stack (single-context window on RTL)
+#   - rt_smoke_async_batch: async ray pool — 4 vx_rt_wtrace issued
 #                            back-to-back before any wait (4 traces in flight)
-# These remain simx-only until the RTU core grows the bounded N-slot in-flight
-# trace pool (SimX §8.6 semantics).
+# Reformation (rt_smoke_reform / rt_smoke_reform_sbt / rt_smoke_reform_mw —
+# single-group, divergent-SBT multi-group, and multi-warp) is implemented and
+# green on rtlsim.
 EXCLUDE_simx   :=
+# Both remaining entries need SEVERAL TRACES IN FLIGHT PER WARP, which the RTL does
+# not implement: staging holds one trace per warp, and recursion additionally needs a
+# per-warp context stack (a nested trace cannot evict its parent).
 RTLSIM_DEFERRED := \
-    rt_smoke_recursive rt_smoke_reform_mw rt_smoke_reform_sbt \
-    rt_smoke_async_batch
+    rt_smoke_recursive rt_smoke_async_batch
 EXCLUDE_rtlsim := $(RTLSIM_DEFERRED)
 EXCLUDE_opae   := $(TESTS)
 EXCLUDE_xrt    := $(TESTS)

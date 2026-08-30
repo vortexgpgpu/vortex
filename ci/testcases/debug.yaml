@@ -73,3 +73,30 @@ tests:
   app: sgemm_tcu
   configs: -DVX_CFG_EXT_TCU_ENABLE
   flags: --debug=3 --log=run_rtlsim.log
+- id: simx_mt-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DSIMX_MT=4
+  shape:
+    cores: 4
+    l2cache: true
+  args: -n128
+- id: simx_functional-1
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DSIMX_FUNCTIONAL
+  args: -n128
+- id: simx_functional-2
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  configs: -DSIMX_FUNCTIONAL -DSIMX_MT=4
+  shape:
+    cores: 4
+    l2cache: true
+  args: -n128

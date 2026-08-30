@@ -108,12 +108,12 @@ end
   endinterface
   ```
 
-- **Buffering ownership.** Pipeline/buffer stages on an interface belong to the *producer/distribution side* — the arb, fork, or xbar that drives the bus — via their standard `*_OUT_BUF` knobs (see §11 library modules). A `.slave` consumer must use the interface as delivered: it must not internally re-register the incoming bus to fix timing. Consumer-side latching desynchronizes that consumer from every other endpoint of a shared broadcast/fork (breaking the bus's delivery contract) and hides the retiming from the module that owns the route. If a path into a consumer fails timing, raise the `OUT_BUF` depth at the driving distribution module (or add a registered slice at the boundary in the parent), never inside the leaf.
+- **Interface ownership.** A module *owns* the signals it drives on an interface — a master port's `valid`/`data`, a slave port's `ready` — **if and only if** it contains the combinational logic that produces them. Combinationally routing a sub-module's port onward — an `ASSIGN_*` re-label, a rename, a passthrough wire — does **not** transfer ownership: the sub-module that implements the logic stays the owner. A module that only receives or re-wires an interface owns nothing on it.
 
-- **Register your outgoing external interfaces.** The corollary of buffering ownership: every module registers the signals it *drives* onto an interface — the forward `valid`/`data` of a master port, the `ready` of a slave port — at its own output boundary, via an output elastic buffer (`VX_elastic_buffer`, a `VX_*_bus_slice`, or the module's own `*_OUT_BUF` knob set to a registered depth).
+- **The owner registers its own interface; no other module may register it.** The owner **must** export every signal it drives *fully registered at its own output boundary* — via its own `*_OUT_BUF` knob at a registered depth, a `VX_elastic_buffer`, or a `VX_*_bus_slice` on its own output. Conversely, **it is illegal for any module to register (slice or buffer) an interface it does not own.** This forbids, equally: a `.slave` consumer re-registering its incoming bus, and a parent inserting a slice on a sub-module's port it merely routes. Registering another module's driven signals desynchronizes that endpoint from every other endpoint of a shared broadcast/fork (breaking the delivery contract) and hides the retiming from the module that owns the route. When a path off an interface fails timing, the register belongs in the **owning** module's output — raise that module's `*_OUT_BUF` or add the slice *inside* it, never latch the interface in a downstream consumer or a routing parent.
 
 ## 5. Handling Warnings
-Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. There are some code structures that Verilator's static analyzer doesn't know how to handle properly (e.g. cyclic loops in arrays) and will throw a warning, for those types of error use the corresponding warning handling macros defined in **VX_platform.vh**.
+Vortex uses explicit warning management i.e. we directly resolve the warning inside the code. Warnings that exist inside external code should be resolved using **Verilator.vlt** lint file. For unused signals/pins/params use the warning handling macros defined in **VX_platform.vh** (below). Some code structures the static analyzer cannot schedule (e.g. apparent cyclic loops in arrays) are resolved structurally — see Circular Combinational Logic below.
 
 - **Blanket `/* verilator lint_off … */` / `/* verilator lint_on … */` pragmas are forbidden in Vortex RTL.** They suppress warnings over wide spans, hide future regressions, and bypass the per-signal review the macros below enforce. Use `` `UNUSED_VAR `` / `` `UNUSED_PARAM `` / `` `UNUSED_PIN `` / `` `UNUSED_SPARAM `` to tag the *specific* signal/pin/param being silenced. Warnings inside third-party code go in **Verilator.vlt**, not pragmas embedded in `.sv` files.
 
@@ -150,10 +150,19 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
       `UNUSED_PIN (valid_out)
   );
   ```
-- **Other warnings**
+- **Circular Combinational Logic (`UNOPTFLAT`) false positives.** Multi-level prefix/tree
+  arrays where element `i` reads element `i-1` are acyclic per element but can look
+  self-referential to Verilator. Resolve by declaring the array **fully packed** — Verilator
+  auto-splits packed variables and schedules each element independently. Do **not** reach for
+  the `/* verilator split_var */` pragma, and avoid multi-dimensional *unpacked* arrays for
+  these patterns (those are what still trip `UNOPTFLAT`).
+
   ```verilog
-  // Silencing Circular Combinational Logic warnings in Verilator..
-  logic [N-1:0] G [LEVELS+1] /* verilator split_var*/;
+  // AVOID — 2D unpacked array trips UNOPTFLAT
+  wire [WN-1:0] tree_sig [DEPTH+1][TOP_N];
+
+  // PREFERRED — fully packed, auto-split by Verilator; same indexing tree_sig[lvl][i]
+  wire [DEPTH:0][TOP_N-1:0][WN-1:0] tree_sig;
   ```
 
 ## 6. Assertions
@@ -167,6 +176,11 @@ Vortex uses explicit warning management i.e. we directly resolve the warning ins
   ```
 
 ## 7. Using `ifdef
+- `VX_CFG_*` macros are assigned in `VX_config.toml` ONLY — never `define` or
+  default them in RTL headers or sources. The generated `VX_config.vh` is their
+  single source of truth; a stray `ifndef/define` fallback silently forks the
+  configuration. The one exception is a test Makefile passing `-DVX_CFG_*` to
+  configure that test's default settings.
 - Preserve indent of nested code and shift pre-processor left by one level
 
 Base version (before):
@@ -229,7 +243,7 @@ Comments describe what the adjacent code does and why, not the process that prod
 
 ## 10. Combinational Logic Depth & Timing Closure
 
-Strive for moderate combinatorial logic depths that balance latency with synthesis portability. Our baseline for timing closure is the U55C prototyping board running at 300 MHz, so paths should be kept short enough to meet this frequency. When a cross-module path fails timing, add the register at the producing distribution module's `OUT_BUF` — never by latching the interface inside the consumer (see §4, Buffering ownership).
+Strive for moderate combinatorial logic depths that balance latency with synthesis portability. Our baseline for timing closure is the U55C prototyping board running at 300 MHz, so paths should be kept short enough to meet this frequency. When a cross-module path fails timing, add the register in the module that *owns* the interface (raise its `OUT_BUF` or slice inside it) — never by latching the interface in a downstream consumer or a routing parent (see §4, Interface ownership).
 
 ## 11. Reuse the Hardware IP Library
 

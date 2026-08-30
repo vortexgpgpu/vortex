@@ -233,13 +233,22 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Per-row 32-bit-word offset (relative to fetch_base_r * BANK_ROW_WORDS).
     // Width = LDM (row stride) + counter + a bit for step_k*TC_K headroom.
+    // The offset is linear in the fetch counter and the first issue is at
+    // least one cycle after alloc: the step_k product is registered at alloc
+    // and each request/response accumulates the row stride, keeping the
+    // multiplier off the LMEM request-address and response-lane paths.
     localparam ROW_OFF_W = LDM_W + FETCH_CTR_W + 4;
     wire [3:0] row_k_words = slot_is_sparse_r ? 4'(TCU_TC_K) : 4'(TCU_WG_FEDP_K);
-    wire [ROW_OFF_W-1:0] row_word_off_req =
-        ROW_OFF_W'(req_ctr_r) * ROW_OFF_W'(slot_ldm_words_r)
-      + ROW_OFF_W'(slot_step_k_r) * ROW_OFF_W'(row_k_words);
+    wire [3:0] row_k_words_alloc = req_is_sparse ? 4'(TCU_TC_K) : 4'(TCU_WG_FEDP_K);
+
+    wire [ROW_OFF_W-1:0] row_word_off_init =
+        ROW_OFF_W'(req_step_k_trunc) * ROW_OFF_W'(row_k_words_alloc);
+
+    logic [ROW_OFF_W-1:0] row_word_off_req_r;
+    logic [ROW_OFF_W-1:0] row_word_off_rsp_r;
+
     wire [BANK_ADDR_WIDTH-1:0] row_lmem_addr =
-        fetch_base_r + BANK_ADDR_WIDTH'(row_word_off_req >> BANK_ROW_WORDS_LOG2);
+        fetch_base_r + BANK_ADDR_WIDTH'(row_word_off_req_r >> BANK_ROW_WORDS_LOG2);
 
     // LMEM master driver
     assign tcu_lmem_if.req_valid       = can_issue;
@@ -260,6 +269,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             fsm_state_r            <= S_IDLE;
             req_ctr_r              <= '0;
             rsp_ctr_r              <= '0;
+            row_word_off_req_r     <= '0;
+            row_word_off_rsp_r     <= '0;
             req_inflight_r         <= 1'b0;
             slot_valid_r           <= 1'b0;
             slot_fetching_r        <= 1'b0;
@@ -315,12 +326,16 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                 : stripe_base;
                             req_ctr_r        <= '0;
                             rsp_ctr_r        <= '0;
+                            row_word_off_req_r <= row_word_off_init;
+                            row_word_off_rsp_r <= row_word_off_init;
                             req_inflight_r   <= 1'b0;
                         end
                     end
                     S_FETCH: begin
-                        if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
+                        if (tcu_lmem_if.req_valid && tcu_lmem_if.req_ready) begin
                             req_ctr_r <= req_ctr_r + FETCH_CTR_W'(1);
+                            row_word_off_req_r <= row_word_off_req_r + ROW_OFF_W'(slot_ldm_words_r);
+                        end
                         if (last_rsp) begin
                             fsm_state_r     <= S_IDLE;
                             slot_fetching_r <= 1'b0;
@@ -328,6 +343,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             req_inflight_r  <= 1'b0;
                         end else if (tcu_lmem_if.rsp_valid) begin
                             rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
+                            row_word_off_rsp_r <= row_word_off_rsp_r + ROW_OFF_W'(slot_ldm_words_r);
                         end
                     end
                     default: fsm_state_r <= S_IDLE;
@@ -346,12 +362,9 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Row-major per-response decoding: the row being written is rsp_ctr_r,
     // and its tcK source words start at lane = row_word_off & (BANK_ROW_WORDS-1)
-    // within the LMEM response.
-    wire [ROW_OFF_W-1:0] row_word_off_rsp =
-        ROW_OFF_W'(rsp_ctr_r) * ROW_OFF_W'(slot_ldm_words_r)
-      + ROW_OFF_W'(slot_step_k_r) * ROW_OFF_W'(row_k_words);
+    // within the LMEM response (registered accumulator, see above).
     wire [BANK_ROW_WORDS_LOG2:0] row_lane_rsp = (BANK_ROW_WORDS_LOG2+1)'(
-        row_word_off_rsp & ROW_OFF_W'(BANK_ROW_WORDS - 1));
+        row_word_off_rsp_r & ROW_OFF_W'(BANK_ROW_WORDS - 1));
 
     always_comb begin
         storage_wdata = '0;

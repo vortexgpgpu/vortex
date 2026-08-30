@@ -28,9 +28,13 @@
 #   [CLOCK_FREQ=800]
 #   [DELAY_UNC=0.02]
 #   [DELAY_IO=0.05]
+#   [ABC_DRIVER_CELL=<lib_cell>] [ABC_LOAD=<ff>]
+#   [YOSYS_FLATTEN=1]
+#   [YOSYS_SHARE=1]
 #   [SAIF_FILE=<activity.saif>]
 #   [SAIF_INST=<tb.dut>]
 #   [BB_MODULES="modA,modB"]
+#   [PDK=asap7]
 #   [SRAM_BIT_AREA=0.1]
 #   [SRAM_OVERHEAD=100.0]
 #   [SRAM_W_PORTS="wdata,rdata"]
@@ -62,6 +66,7 @@ SRC_FILE="${SRC_FILE:-}"; [[ -n "${SRC_FILE}" ]] || die "SRC_FILE required"
 
 LIB_ROOT="${LIB_ROOT:-}"
 LIB_TGT="${LIB_TGT:-}"
+PDK="${PDK:-custom}"
 SDC_FILE="${SDC_FILE:-}"
 OUT_DIR="${OUT_DIR:-out}"
 RPT_DIR="${RPT_DIR:-reports}"
@@ -71,6 +76,10 @@ RUN_STA="${RUN_STA:-0}"
 CLOCK_FREQ="${CLOCK_FREQ:-800}"
 DELAY_UNC="${DELAY_UNC:-0.02}"
 DELAY_IO="${DELAY_IO:-0.05}"
+ABC_DRIVER_CELL="${ABC_DRIVER_CELL:-}"
+ABC_LOAD="${ABC_LOAD:-}"
+YOSYS_FLATTEN="${YOSYS_FLATTEN:-1}"
+YOSYS_SHARE="${YOSYS_SHARE:-1}"
 SAIF_FILE="${SAIF_FILE:-}"
 SAIF_INST="${SAIF_INST:-}"
 BB_MODULES="${BB_MODULES:-}"
@@ -99,16 +108,29 @@ declare -a DEFINES=()
 expand_filelist() {
   local f="$1"
   [[ -f "$f" ]] || die "filelist not found: $f"
+  local base
+  base="$(cd "$(dirname "$f")" && pwd)"
   local next_is_file=0
   while IFS= read -r raw || [[ -n "$raw" ]]; do
     local line="${raw#"${raw%%[![:space:]]*}"}"; line="${line%"${line##*[![:space:]]}"}"
     [[ -z "$line" || "$line" =~ ^# ]] && continue
     for tok in $line; do
       if [[ "$tok" == "-f" ]]; then next_is_file=1; continue; fi
-      if [[ $next_is_file -eq 1 ]]; then expand_filelist "$tok"; next_is_file=0; continue; fi
-      if [[ "$tok" == +incdir+* ]]; then INC_DIRS+=("${tok#+incdir+}"); continue; fi
+      if [[ $next_is_file -eq 1 ]]; then
+        [[ "$tok" == /* ]] || tok="$base/$tok"
+        expand_filelist "$tok"; next_is_file=0; continue
+      fi
+      if [[ "$tok" == +incdir+* ]]; then
+        IFS='+' read -r -a dirs <<< "${tok#+incdir+}"
+        for d in "${dirs[@]}"; do
+          [[ "$d" == /* ]] || d="$base/$d"
+          INC_DIRS+=("$d")
+        done
+        continue
+      fi
       if [[ "$tok" == +define+* ]]; then d="${tok#+define+}"; [[ "$d" == *=* ]] && DEFINES+=("$d") || DEFINES+=("$d=1"); continue; fi
       [[ "$tok" == +* ]] && continue
+      [[ "$tok" == /* ]] || tok="$base/$tok"
       SRC_FILES+=("$tok")
     done
   done < "$f"
@@ -117,7 +139,16 @@ expand_filelist "$SRC_FILE"
 
 # -------- liberty discovery --------
 mapfile -t LIB_LIST < <( ( [[ -n "$LIB_ROOT" ]] && find "$LIB_ROOT" -type f -name '*.lib' -print ) | sort -u )
-[[ -n "$LIB_TGT" ]] && [[ -f "$LIB_TGT" ]] || true
+[[ -n "$LIB_TGT" ]] && LIB_LIST+=("$LIB_TGT")
+mapfile -t LIB_LIST < <(printf '%s\n' "${LIB_LIST[@]}" | awk 'NF && !seen[$0]++')
+[[ ${#LIB_LIST[@]} -gt 0 ]] || die "no Liberty libraries selected"
+for lib in "${LIB_LIST[@]}"; do
+  [[ -f "$lib" ]] || die "Liberty file not found: $lib"
+done
+if [[ "$RUN_MAP" == "1" ]]; then
+  [[ -n "$LIB_TGT" ]] || die "LIB_TGT is required for technology mapping"
+  [[ -f "$LIB_TGT" ]] || die "LIB_TGT not found: $LIB_TGT"
+fi
 
 # -------- compute PERIOD_NS, TARGET_UNC, and TARGET_IO --------
 PERIOD_NS="$(python3 - <<PY
@@ -138,9 +169,13 @@ print(p*float("$DELAY_IO"))
 PY
 )"
 
-ABC_PERIOD="$PERIOD_NS"
+ABC_PERIOD="$(python3 - <<PY
+print(float("$PERIOD_NS") * 1000.0)
+PY
+)"
 
 RESOLVED_SDC=""
+ABC_CONSTR=""
 if [[ -n "$SDC_FILE" && -f "$SDC_FILE" ]]; then
   RESOLVED_SDC="$OUT_DIR/${TOP}.resolved.sdc"
   {
@@ -153,10 +188,20 @@ if [[ -n "$SDC_FILE" && -f "$SDC_FILE" ]]; then
   } > "$RESOLVED_SDC"
 fi
 
+if [[ "$RUN_MAP" == "1" && -n "$ABC_DRIVER_CELL" ]]; then
+  ABC_CONSTR="$OUT_DIR/${TOP}.abc.constr"
+  {
+    printf "set_driving_cell %s\n" "$ABC_DRIVER_CELL"
+    printf "set_load %s\n" "${ABC_LOAD:-0.0}"
+  } > "$ABC_CONSTR"
+fi
+
 log "TOP=$TOP  RUN_SYNTH=$RUN_SYNTH RUN_MAP=$RUN_MAP RUN_STA=$RUN_STA"
+log "PDK=$PDK  Liberty=${#LIB_LIST[@]}"
 log "Sources=${#SRC_FILES[@]}  Incdirs=${#INC_DIRS[@]}  Defines=${#DEFINES[@]}"
-[[ -n "$ABC_PERIOD" ]] && log "ABC_PERIOD=$PERIOD_NS ns" || log "ABC_PERIOD not set"
+[[ -n "$ABC_PERIOD" ]] && log "ABC_PERIOD=$ABC_PERIOD ps" || log "ABC_PERIOD not set"
 [[ -n "$RESOLVED_SDC" ]] && log "Resolved SDC: $RESOLVED_SDC"
+[[ -n "$ABC_CONSTR" ]] && log "ABC constraints: $ABC_CONSTR"
 [[ -n "$SAIF_FILE" ]] && log "SAIF_FILE=$SAIF_FILE  SAIF_INST=${SAIF_INST:-<none>}"
 
 # -------- synth.ys --------
@@ -168,8 +213,6 @@ log "Writing $YS"
   for d in "${DEFINES[@]}"; do printf "verilog_defaults -add -D %q\n" "$d"; done
 
   for l in "${LIB_LIST[@]}"; do printf "read_liberty -lib %q\n" "$l"; done
-  [[ -n "$LIB_TGT" ]] && printf "read_liberty -lib %q\n" "$LIB_TGT"
-
   echo "# read sources"
   for s in "${SRC_FILES[@]}"; do printf "read_verilog -defer %q\n" "$s"; done
 
@@ -184,7 +227,13 @@ log "Writing $YS"
     echo "fsm; opt"
     echo "memory; opt"
     echo "memory_map; opt"
-    echo "alumacc; wreduce; share; opt"
+    echo "alumacc; wreduce; opt"
+    if [[ "$YOSYS_SHARE" == "1" ]]; then
+      echo "share; opt"
+    fi
+    if [[ "$YOSYS_FLATTEN" == "1" ]]; then
+      echo "flatten; opt"
+    fi
     echo "techmap; opt"
   fi
 
@@ -193,7 +242,11 @@ log "Writing $YS"
 
   if [[ "$RUN_MAP" == "1" ]]; then
     printf "dfflibmap -liberty %q\n" "$LIB_TGT"
-    printf "abc -markgroups -D %q -liberty %q\n" "$ABC_PERIOD" "$LIB_TGT"
+    if [[ -n "$ABC_CONSTR" ]]; then
+      printf "abc -markgroups -D %q -liberty %q -constr %q\n" "$ABC_PERIOD" "$LIB_TGT" "$ABC_CONSTR"
+    else
+      printf "abc -markgroups -D %q -liberty %q\n" "$ABC_PERIOD" "$LIB_TGT"
+    fi
     printf "tee -o %q stat -liberty %q -top %q -width -tech cmos\n" "$RPT_DIR/stat_lib.rpt" "$LIB_TGT" "$TOP"
     printf "write_verilog -noattr -noexpr %q\n" "$NET_POST"
   fi
@@ -240,6 +293,11 @@ if [[ "$RUN_STA" == "1" ]]; then
   log "TOP=$TOP NETLIST=$NETLIST LIB_TGT=$LIB_TGT LIB_ROOT=$LIB_ROOT SDC_FILE=$STA_SDC RPT_DIR=$RPT_DIR SAIF_FILE=$SAIF_FILE SAIF_INST=$SAIF_INST $STA $STA_SCRIPT"
   TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$STA_SDC" RPT_DIR="$RPT_DIR" SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" "$STA" "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1
   cat "$RPT_DIR/sta.log"
+  if [[ -n "$SAIF_FILE" ]]; then
+    [[ -s "$RPT_DIR/saif_annotated.rpt" ]] || die "SAIF annotation report was not produced"
+    grep -Eq '^saif[[:space:]]+[1-9][0-9]*$' "$RPT_DIR/saif_annotated.rpt" \
+      || die "SAIF annotated zero pins; check SAIF_INST and the SAIF hierarchy"
+  fi
   stamp "sta"
 fi
 

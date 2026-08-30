@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke — Phase 4 chunk 3 host driver.
+// PRISM RTU smoke — host driver.
 //
 // Builds a 2-level BVH4 scene:
 //   - Root internal node with 2 leaf children

@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 620" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="arru" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { fill:#f7f9fb; stroke:#c2ccd6; stroke-width:1.2; }
+    .warp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .rtu  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12px; }
+    .tt   { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .msg  { stroke:#444; stroke-width:1.6; fill:none; marker-end:url(#arr); }
+    .msgu { stroke:#2e5e82; stroke-width:1.6; fill:none; marker-end:url(#arru); }
+    .msgp { stroke:#8e4a7e; stroke-width:1.6; fill:none; marker-end:url(#arrp); }
+    .lbl  { fill:#33404c; font-size:11.5px; }
+    .lblu { fill:#2e5e82; font-size:11.5px; }
+    .lblp { fill:#8e4a7e; font-size:11.5px; }
+    .loop { fill:none; stroke:#8e4a7e; stroke-width:1.3; stroke-dasharray:5 4; }
+  </style>
+
+  <rect x="0" y="0" width="1180" height="620" fill="#ffffff"/>
+  <text x="24" y="32" class="t" font-size="18">RTU trace lifecycle — async trace, then the candidate-return proceed loop</text>
+
+  <!-- lifelines -->
+  <text x="150" y="66" class="th" text-anchor="middle" fill="#8e4a7e">issuing warp (SIMT core)</text>
+  <text x="640" y="66" class="th" text-anchor="middle" fill="#2e5e82">RTU (socket, async)</text>
+  <text x="1010" y="66" class="th" text-anchor="middle" fill="#8a6d00">RTCache / L2</text>
+  <line x1="150" y1="76" x2="150" y2="590" class="lane"/>
+  <line x1="640" y1="76" x2="640" y2="590" class="lane"/>
+  <line x1="1010" y1="76" x2="1010" y2="590" class="lane"/>
+
+  <!-- TRACE -->
+  <rect x="66" y="92" width="168" height="50" rx="5" class="warp"/>
+  <text x="78" y="112" class="th">vx_rt_wtrace</text>
+  <text x="78" y="130" class="ts">4-uop fu_lock burst → handle</text>
+
+  <path d="M 234 116 L 636 116" class="msgu"/>
+  <text x="270" y="108" class="lblu">arm doorbell (scene/flags/payload) + RAY beats</text>
+
+  <rect x="556" y="150" width="168" height="46" rx="5" class="rtu"/>
+  <text x="568" y="170" class="th">stage ray → claim slot</text>
+  <text x="568" y="187" class="ts">fill engine launches lanes</text>
+
+  <!-- warp does independent work -->
+  <rect x="66" y="150" width="168" height="44" rx="5" class="warp"/>
+  <text x="78" y="170" class="th">independent work</text>
+  <text x="78" y="187" class="tt">traversal overlaps</text>
+
+  <!-- traversal loop with memory -->
+  <rect x="540" y="212" width="200" height="86" rx="5" class="rtu"/>
+  <text x="552" y="232" class="th">context-pool traversal</text>
+  <text x="552" y="250" class="ts">SELECT / ALIGN / EXEC;</text>
+  <text x="552" y="266" class="ts">box + tri + xform PEs;</text>
+  <text x="552" y="282" class="ts">park on fetch → run another ctx</text>
+
+  <path d="M 740 244 L 1006 244" class="msg"/>
+  <text x="792" y="236" class="lbl">node/leaf line read (ctx-id tag)</text>
+  <path d="M 1006 274 L 742 274" class="msg" marker-end="url(#arr)"/>
+  <text x="820" y="290" class="lbl">64 B line</text>
+
+  <!-- WAIT -->
+  <rect x="66" y="320" width="168" height="48" rx="5" class="warp"/>
+  <text x="78" y="340" class="th">vx_rt_wait(handle)</text>
+  <text x="78" y="357" class="ts">parks; frees execute port</text>
+
+  <path d="M 540 344 L 236 344" class="msgp"/>
+  <text x="250" y="336" class="lblp">win record (STATUS last): status = YIELD_*</text>
+
+  <rect x="556" y="300" width="130" height="34" rx="5" class="rtu"/>
+  <text x="568" y="322" class="ts">candidate yield</text>
+
+  <!-- proceed loop box -->
+  <rect x="40" y="392" width="1100" height="150" rx="8" class="loop"/>
+  <text x="56" y="412" class="th" fill="#8e4a7e">while (vx_rt_sts_is_yield): the proceed loop — inline on the warp, no trap</text>
+
+  <rect x="66" y="426" width="200" height="64" rx="5" class="warp"/>
+  <text x="78" y="446" class="th">shade candidate</text>
+  <text x="78" y="463" class="ts">read hit / object ray (GETWF/GETW);</text>
+  <text x="78" y="479" class="ts">any-hit / intersection decision</text>
+
+  <path d="M 266 458 L 636 458" class="msgu"/>
+  <text x="292" y="450" class="lblu">vx_rt_continue: {action, t, attr} on the operands</text>
+
+  <rect x="540" y="440" width="200" height="60" rx="5" class="rtu"/>
+  <text x="552" y="460" class="th">resume traversal</text>
+  <text x="552" y="477" class="ts">apply action, merge attr,</text>
+  <text x="552" y="493" class="ts">continue the walk</text>
+
+  <path d="M 636 512 L 236 512" class="msgp"/>
+  <text x="286" y="528" class="lblp">next win record → YIELD_* (loop) or DONE_HIT / DONE_MISS (exit)</text>
+
+  <!-- terminal -->
+  <rect x="66" y="560" width="620" height="34" rx="5" class="warp"/>
+  <text x="78" y="582" class="ts">terminal: vx_rt_wait returns DONE_*; hit attrs land in registers (t/u/v → f0..f2, ids → GP)</text>
+
+  <text x="760" y="582" class="tt">PENDING lanes stay in the loop; the RTU ignores a PENDING lane's action.</text>
+</svg>

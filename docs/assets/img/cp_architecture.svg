@@ -1,0 +1,254 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+  </defs>
+  <style>
+    .grp  { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.6; }
+    .host { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .unit { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.4; }
+    .gpu  { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .arb  { fill:#eef3f8; stroke:#5a7184; stroke-width:1.2; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .gt   { fill:#33404c; font-size:14px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .lbl  { fill:#44525f; font-size:10.5px; }
+    .lblb { fill:#2e5e82; font-size:10.5px; }
+    .lblg { fill:#8a6d00; font-size:10.5px; }
+    .lblp { fill:#8e4a7e; font-size:10.5px; }
+    .w    { stroke:#44525f; stroke-width:1.5; fill:none; marker-end:url(#arr); }
+    .wb   { stroke:#2e5e82; stroke-width:1.6; fill:none; marker-end:url(#arrb); }
+    .wg   { stroke:#b58900; stroke-width:1.6; fill:none; marker-end:url(#arrg); }
+    .wp   { stroke:#8e4a7e; stroke-width:1.6; fill:none; marker-end:url(#arrp); }
+  </style>
+
+  <rect x="0" y="0" width="1600" height="1000" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Command Processor — control plane between the host runtime and Vortex</text>
+  <text x="24" y="56" class="tt">N command engines (one per queue) bid for four shared resources. The ring lives in host memory; the CP fetches it over axi_host.</text>
+
+  <!-- ================= HOST ================= -->
+  <rect x="24" y="80" width="268" height="700" rx="7" class="grp"/>
+  <text x="38" y="104" class="gt" fill="#8e4a7e">Host</text>
+
+  <rect x="42" y="118" width="232" height="52" rx="5" class="host"/>
+  <text x="54" y="138" class="th">vortex2.h — vx_enqueue_*</text>
+  <text x="54" y="156" class="ts">async API; per-queue worker thread</text>
+
+  <rect x="42" y="182" width="232" height="52" rx="5" class="host"/>
+  <text x="54" y="202" class="th">encode one 64 B cache line</text>
+  <text x="54" y="220" class="ts">memcpy into ring; tail += 64</text>
+
+  <rect x="42" y="246" width="232" height="52" rx="5" class="host"/>
+  <text x="54" y="266" class="th">doorbell: Q_TAIL_LO then _HI</text>
+  <text x="54" y="284" class="ts">the HI write commits the 64-bit tail</text>
+
+  <rect x="42" y="310" width="232" height="52" rx="5" class="host"/>
+  <text x="54" y="330" class="th">busy-poll Q_SEQNUM</text>
+  <text x="54" y="348" class="ts">until seqnum &gt;= expected; no sleep</text>
+
+  <rect x="42" y="390" width="232" height="76" rx="5" class="mem"/>
+  <text x="54" y="410" class="th">host-pinned ring (64 KiB)</text>
+  <text x="54" y="428" class="ts">host_mem_alloc; CP-visible address</text>
+  <text x="54" y="446" class="tt">ring_base + (head &amp; ring_size_mask)</text>
+
+  <rect x="42" y="478" width="232" height="48" rx="5" class="mem"/>
+  <text x="54" y="498" class="th">cmpl slot (8 B seqnum)</text>
+  <text x="54" y="516" class="tt">CP writes it; host reads Q_SEQNUM MMIO</text>
+
+  <rect x="42" y="538" width="232" height="48" rx="5" class="mem"/>
+  <text x="54" y="558" class="th">head slot</text>
+  <text x="54" y="576" class="tt">programmed but never written (§10)</text>
+
+  <text x="42" y="620" class="tt">Transport HAL (callbacks.h) — 6 functions:</text>
+  <text x="42" y="636" class="tt">dev_open/close, cp_reg_read/write,</text>
+  <text x="42" y="652" class="tt">host_mem_alloc/free. Everything above it</text>
+  <text x="42" y="668" class="tt">is backend-agnostic common code.</text>
+  <text x="42" y="694" class="tt">Backends: simx · rtlsim · xrt · opae · gem5</text>
+  <text x="42" y="720" class="tt">The runtime programs queue 0 only; the</text>
+  <text x="42" y="736" class="tt">ring is the single point of serialization</text>
+  <text x="42" y="752" class="tt">for every host queue (§4.4).</text>
+
+  <!-- ================= CP CORE ================= -->
+  <rect x="330" y="80" width="900" height="820" rx="7" class="grp"/>
+  <text x="346" y="104" class="gt" fill="#2e5e82">VX_cp_core</text>
+
+  <!-- regfile -->
+  <rect x="350" y="120" width="330" height="74" rx="5" class="unit"/>
+  <text x="362" y="140" class="th">VX_cp_axil_regfile</text>
+  <text x="362" y="158" class="ts">the only AXI-Lite slave; globals 0x000+,</text>
+  <text x="362" y="174" class="ts">per-queue block at 0x100 + qid*0x40</text>
+  <text x="362" y="189" class="tt">drives q_state[NUM_QUEUES]</text>
+
+  <!-- CPE group -->
+  <rect x="350" y="222" width="330" height="238" rx="6" class="grp"/>
+  <text x="362" y="243" class="th" fill="#2e5e82">CPE q0 .. qN-1  (one per queue)</text>
+
+  <rect x="366" y="256" width="298" height="80" rx="5" class="unit"/>
+  <text x="378" y="276" class="th">VX_cp_fetch</text>
+  <text x="378" y="294" class="ts">ring walker: one 64 B AR per line,</text>
+  <text x="378" y="310" class="ts">single outstanding (no prefetch)</text>
+  <text x="378" y="327" class="tt">embeds VX_cp_unpack — 1 cmd/cycle</text>
+
+  <rect x="366" y="352" width="298" height="94" rx="5" class="unit"/>
+  <text x="378" y="372" class="th">VX_cp_engine</text>
+  <text x="378" y="390" class="ts">IDLE - DECODE - BID - WAIT_DONE - RETIRE</text>
+  <text x="378" y="406" class="ts">classifies opcode to one resource,</text>
+  <text x="378" y="422" class="ts">bids, waits for done, then retires</text>
+  <text x="378" y="439" class="tt">NOP / FENCE retire without bidding</text>
+
+  <path d="M 515 336 L 515 352" class="wb"/>
+
+  <!-- arbiters -->
+  <rect x="706" y="222" width="128" height="238" rx="6" class="grp"/>
+  <text x="716" y="243" class="th" fill="#5a7184">arbiters (4x)</text>
+  <rect x="718" y="256" width="104" height="40" rx="4" class="arb"/>
+  <text x="732" y="281" class="ts">RES_KMU</text>
+  <rect x="718" y="304" width="104" height="40" rx="4" class="arb"/>
+  <text x="732" y="329" class="ts">RES_DMA</text>
+  <rect x="718" y="352" width="104" height="40" rx="4" class="arb"/>
+  <text x="732" y="377" class="ts">RES_DCR</text>
+  <rect x="718" y="400" width="104" height="40" rx="4" class="arb"/>
+  <text x="732" y="425" class="ts">RES_EVT</text>
+  <text x="714" y="452" class="tt">round-robin, 1 cyc</text>
+
+  <!-- bid arrows -->
+  <path d="M 666 386 L 706 276" class="wb"/>
+  <path d="M 666 390 L 706 324" class="wb"/>
+  <path d="M 666 396 L 706 372" class="wb"/>
+  <path d="M 666 402 L 706 420" class="wb"/>
+
+  <!-- resources -->
+  <rect x="860" y="222" width="280" height="238" rx="6" class="grp"/>
+  <text x="872" y="243" class="th" fill="#2e5e82">shared resource units</text>
+
+  <rect x="872" y="256" width="256" height="40" rx="4" class="unit"/>
+  <text x="884" y="273" class="th">VX_cp_launch</text>
+  <text x="884" y="289" class="tt">pulse start, hold until busy falls</text>
+
+  <rect x="872" y="304" width="256" height="40" rx="4" class="unit"/>
+  <text x="884" y="321" class="th">VX_cp_dcr_proxy</text>
+  <text x="884" y="337" class="tt">DCR wr/rd + per-core flush sweep</text>
+
+  <rect x="872" y="352" width="256" height="40" rx="4" class="unit"/>
+  <text x="884" y="369" class="th">VX_cp_dma</text>
+  <text x="884" y="385" class="tt">dual-port bursts, up to 4 KB/chunk</text>
+
+  <rect x="872" y="400" width="256" height="40" rx="4" class="unit"/>
+  <text x="884" y="417" class="th">VX_cp_event_unit</text>
+  <text x="884" y="433" class="tt">SIGNAL write / WAIT AR-poll spin</text>
+
+  <path d="M 834 276 L 872 276" class="wb"/>
+  <path d="M 834 324 L 872 324" class="wb"/>
+  <path d="M 834 372 L 872 372" class="wb"/>
+  <path d="M 834 420 L 872 420" class="wb"/>
+
+  <!-- done pulses back to engines -->
+  <path d="M 1000 440 L 1000 486 L 515 486 L 515 446" class="w"/>
+  <text x="366" y="480" class="lblb">bid + cmd</text>
+  <text x="548" y="480" class="lbl">done pulse (broadcast to every CPE; only the granted one is waiting)</text>
+
+  <!-- gpu slice -->
+  <rect x="860" y="512" width="340" height="76" rx="5" class="unit"/>
+  <text x="872" y="532" class="th">VX_cp_gpu_slice</text>
+  <text x="872" y="550" class="ts">registered CP - Vortex boundary (SLR-safe):</text>
+  <text x="872" y="566" class="ts">elastic buffer on dcr_req; pipe registers on</text>
+  <text x="872" y="582" class="tt">start (pulse), dcr_rsp (valid), busy (level)</text>
+
+  <path d="M 1128 276 L 1190 276 L 1190 512" class="wb"/>
+  <text x="1200" y="440" class="lblb" transform="rotate(-90 1200 440)">start / busy</text>
+  <path d="M 1128 324 L 1158 324 L 1158 512" class="wb"/>
+  <text x="1166" y="450" class="lblb" transform="rotate(-90 1166 450)">DCR req / rsp</text>
+
+  <!-- completion -->
+  <rect x="350" y="512" width="330" height="86" rx="5" class="unit"/>
+  <text x="362" y="532" class="th">VX_cp_completion</text>
+  <text x="362" y="550" class="ts">per-source latch + shared drain FIFO;</text>
+  <text x="362" y="566" class="ts">retire_ready backpressure — no seqnum lost</text>
+  <text x="362" y="583" class="tt">AXI write of the 8 B seqnum to cmpl_addr</text>
+
+  <path d="M 430 446 L 430 512" class="wb"/>
+  <text x="438" y="484" class="lblb">retire</text>
+
+  <!-- xbars -->
+  <rect x="350" y="650" width="410" height="92" rx="5" class="unit"/>
+  <text x="362" y="670" class="th">host xbar — VX_mem_axi_xbar</text>
+  <text x="362" y="688" class="ts">sources: fetch[N] + completion + DMA(host)</text>
+  <text x="362" y="704" class="ts">ID-routed fan-in; keeps transactions</text>
+  <text x="362" y="720" class="ts">concurrently in flight (MULTI_OUT)</text>
+  <text x="362" y="736" class="tt">then VX_mem_axi_slice (timing / SLR)</text>
+
+  <rect x="786" y="650" width="344" height="92" rx="5" class="unit"/>
+  <text x="798" y="670" class="th">dev xbar — VX_mem_axi_xbar</text>
+  <text x="798" y="688" class="ts">sources: DMA(dev) + event unit</text>
+  <text x="798" y="704" class="ts">ID-routed fan-in (MULTI_OUT)</text>
+  <text x="798" y="736" class="tt">then VX_mem_axi_slice (timing / SLR)</text>
+
+  <path d="M 400 336 L 400 650" class="wg"/>
+  <text x="406" y="632" class="lblg">ring AR/R</text>
+  <path d="M 620 598 L 620 650" class="wg"/>
+  <text x="626" y="632" class="lblg">seqnum AW/W</text>
+  <path d="M 920 440 L 920 650" class="wg"/>
+  <text x="820" y="628" class="lblg">DMA host port</text>
+  <path d="M 1090 440 L 1090 650" class="wg"/>
+  <text x="990" y="628" class="lblg">DMA dev + event</text>
+
+  <text x="350" y="782" class="tt">axi_host (AXI4, 512 b) — host memory</text>
+  <text x="786" y="782" class="tt">axi_dev (AXI4, 512 b) — device memory</text>
+
+  <!-- ================= GPU ================= -->
+  <rect x="1268" y="80" width="308" height="820" rx="7" class="grp"/>
+  <text x="1284" y="104" class="gt" fill="#3a7d44">Vortex GPU</text>
+
+  <rect x="1286" y="120" width="274" height="76" rx="5" class="gpu"/>
+  <text x="1298" y="140" class="th">KMU — kernel management</text>
+  <text x="1298" y="158" class="ts">start pulse launches the grid;</text>
+  <text x="1298" y="174" class="ts">busy stays high until it drains</text>
+  <text x="1298" y="190" class="tt">geometry arrives over the KMU DCRs</text>
+
+  <rect x="1286" y="214" width="274" height="92" rx="5" class="gpu"/>
+  <text x="1298" y="234" class="th">DCR bus</text>
+  <text x="1298" y="252" class="ts">device control registers: KMU launch</text>
+  <text x="1298" y="268" class="ts">geometry, TEX / RASTER / OM / RTU</text>
+  <text x="1298" y="284" class="ts">config, VX_DCR_BASE_CACHE_FLUSH</text>
+  <text x="1298" y="300" class="tt">no req_ready backpressure today (§10)</text>
+
+  <rect x="1286" y="650" width="274" height="92" rx="5" class="mem"/>
+  <text x="1298" y="670" class="th">device memory</text>
+  <text x="1298" y="688" class="ts">DMA dev port + event counter slots</text>
+  <text x="1298" y="706" class="ts">XRT: shares bank 0 (VX_mm_axi_arb)</text>
+  <text x="1298" y="724" class="tt">OPAE: bridged by VX_membus_from_axi</text>
+
+  <!-- slice -> GPU -->
+  <path d="M 1200 538 L 1252 538 L 1252 158 L 1286 158" class="wb"/>
+  <path d="M 1200 562 L 1238 562 L 1238 260 L 1286 260" class="wb"/>
+
+  <!-- axi_dev -->
+  <path d="M 1130 696 L 1286 696" class="wg"/>
+
+  <!-- host-side links -->
+  <path d="M 274 144 L 316 144 L 316 152 L 350 152" class="wp"/>
+  <text x="288" y="128" class="lblp">AXI-Lite</text>
+  <path d="M 274 272 L 328 272 L 328 166 L 350 166" class="wp"/>
+  <path d="M 350 180 L 338 180 L 338 336 L 274 336" class="wp"/>
+
+  <!-- axi_host back to host memory -->
+  <path d="M 350 676 L 310 676 L 310 428 L 274 428" class="wg"/>
+  <path d="M 350 712 L 298 712 L 298 502 L 274 502" class="wg"/>
+
+  <text x="24" y="946" class="tt">Dual data plane: XRT pins each kernel AXI master to exactly one memory resource, so the CP carries two. The DMA engine straddles both, and its opcode picks the</text>
+  <text x="24" y="964" class="tt">read-source and write-destination port: MEM_WRITE = host to device, MEM_READ = device to host, MEM_COPY = device to device.</text>
+  <text x="24" y="986" class="tt">Compile-time defaults (hw/rtl/VX_define.vh): NUM_QUEUES=1, RING_SIZE_LOG2=16, MAX_CMDS_PER_CL=5, AXI_TID_WIDTH=6. There is no [cp] block in VX_config.toml.</text>
+</svg>

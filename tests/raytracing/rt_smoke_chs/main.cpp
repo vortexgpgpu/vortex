@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU Closest-Hit Shader smoke — Phase 5 host driver.
+// PRISM RTU Closest-Hit Shader smoke — host driver.
 //
 // Scene: one opaque triangle at z=5. Single lane fires a ray that
 // hits it. The kernel opts in to CHS via VX_RT_FLAG_ENABLE_CHS and

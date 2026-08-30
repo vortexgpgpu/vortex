@@ -186,8 +186,8 @@ typedef struct {
     vx_kernel_h  kernel;
     // Kernel argument block as a host-side blob. The runtime stages it into
     // a device-side scratch slot at launch time and programs the KMU ARG
-    // pointer — callers no longer allocate/upload/free an args device
-    // buffer. Buffers passed as kernel args appear as their uint64_t
+    // pointer — callers pass a host pointer and the runtime owns the device
+    // staging. Buffers passed as kernel args appear as their uint64_t
     // device addresses inline in the blob (see vx_buffer_address).
     //
     // args_host may be NULL (args_size 0) — the legacy escape hatch: the

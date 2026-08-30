@@ -17,19 +17,43 @@ package VX_rtu_pkg;
 
 `IGNORE_UNUSED_BEGIN
 
-    // The window op selector (op_args.gfxw.op: SETW/TRACE2/WAIT2/GETWF/GETW/
-    // CB_RET), the per-lane slot register-file dimensions, and the TRACE2 uop
-    // roles live in VX_gfx_window_pkg — the window is shared by the FF graphics
-    // units, the RTU is one consumer. This package keeps only the RTU traversal
-    // datapath (bus packets + walker/PE/node configuration).
+    // ── the hit window ─────────────────────────────────────────────────────
+    // The per-(warp, lane) slot register file the RTU stages a candidate's hit
+    // state in. It holds RESULTS ONLY: the RTU is its sole writer and the shader
+    // its sole reader. No instruction writes it, and the RTU never reads it. A
+    // ray is not staged here — it streams from the TRACE macro-op's own operands
+    // straight into the traversal datapath (see VX_rtu_bus_if).
 
-    // RTU bus packet kinds. The request is a fresh ray
-    // TRACE or a CB_ACTION from a callback dispatcher; the response is a
-    // TERMINAL (DONE_HIT/MISS) or a CB_YIELD of a candidate hit to a shader.
-    localparam RTU_REQ_TRACE   = 1'b0;
-    localparam RTU_REQ_CBACT   = 1'b1;
-    localparam RTU_RSP_TERMINAL= 1'b0;
-    localparam RTU_RSP_CBYIELD = 1'b1;
+    // Window op selector, stored in op_args.rtuw.op. The (funct3, funct2) -> op
+    // mapping is done in decode. One disjoint 4-bit namespace.
+    localparam RTUW_OP_BITS   = 4;
+    localparam RTUW_OP_TRACE  = 4'd4;  // funct3=7 sub0 — trace macro-op
+    localparam RTUW_OP_WAIT   = 4'd5;  // funct3=7 sub1 — terminal block
+    localparam RTUW_OP_GETWF  = 4'd6;  // funct3=6 sub2 — FP windowed read macro-op
+    localparam RTUW_OP_GETW   = 4'd7;  // funct3=6 sub3 — GP windowed read macro-op
+    localparam RTUW_OP_CB_RET = 4'd8;  // funct3=6 sub0 — callback return / continue
+
+    // Per-lane window register file, one 32-bit word per slot.
+    localparam RTUW_SLOT_COUNT = `VX_RT_SLOT_COUNT;
+    localparam RTUW_SLOT_BITS  = `CLOG2(`VX_RT_SLOT_COUNT);
+
+    // Macro-op uop roles (op_args.rtuw.uop), assigned by VX_gfx_uops. These are the
+    // TRACE roles; for GETWF/GETW the uop field carries the window element index.
+    // The four are one ATOMIC issue burst (fu_lock): they hand the RTU a ray, and
+    // the RTU has room for exactly one.
+    localparam RTUW_UOP_CFG    = 3'd0;  // uop0: unpack rs1 config, arm; rd<-handle
+    localparam RTUW_UOP_ORIGIN = 3'd1;  // uop1: f0..f2 -> ray beats 0..2
+    localparam RTUW_UOP_DIR    = 3'd2;  // uop2: f3..f5 -> ray beats 3..5
+    localparam RTUW_UOP_ARM    = 3'd3;  // uop3: f6,f7  -> ray beats 6..7
+
+    // Kind tag on the window->RTU `req` channel (see VX_rtu_bus_if): a ray word
+    // on its way into the traversal datapath, or the warp's CONTINUE.
+    localparam RTU_REQ_CONT = 1'b0;
+    localparam RTU_REQ_RAY  = 1'b1;
+
+    // Window addressing carried on every RTU bus beat. A beat names {wid, slot}:
+    // the RTU traces a whole warp, so there is no simd group to address.
+    localparam RTU_SLOT_BITS = `CLOG2(`VX_RT_SLOT_COUNT);
 
     // Callback metadata field widths carried on the RTU bus.
     //   action : VX_RT_CB_{IGNORE,ACCEPT,TERMINATE,DONE}  (0..3)
@@ -84,7 +108,6 @@ package VX_rtu_pkg;
 
     // Child-offset word: bit 31 = leaf flag, bits 0..30 = byte offset from
     // BVH root, value 0 = empty (no child).
-    localparam RTU_CHILD_LEAF_BIT  = 31;
     localparam RTU_CHILD_OFF_MASK  = 32'h7fffffff;
 
     // ─────────────────────────────────────────────────────────────────
@@ -120,10 +143,6 @@ package VX_rtu_pkg;
     // 16 B scene header: root_node_offset @0, scene_kind @4.
     localparam RTU_SCENE_OFF_ROOT  = 0;
     localparam RTU_SCENE_OFF_KIND  = 4;
-    localparam RTU_SCENE_KIND_TRI_LIST = 32'd0;
-    localparam RTU_SCENE_KIND_TLAS = 32'd1;
-    localparam RTU_SCENE_KIND_BVH4 = 32'd2;
-    localparam RTU_SCENE_KIND_BVH6 = 32'd3;
 
     // 16 B leaf header: kind @0 (+count bits 8..15), geometry_index @4,
     // flags @8, prim_base @12. 40 B triangle: v0 @0, v1 @12, v2 @24, flags @36.
@@ -163,7 +182,6 @@ package VX_rtu_pkg;
     // Decode span must cover the flag word (byte 36..39) so the AHS/IS
     // classifier sees per-tri opacity even for records straddling a line.
     localparam RTU_FLAT_DEC_BYTES  = RTU_FLAT_OFF_FLAGS + 4;   // 40 (through flags)
-    localparam RTU_FLAT_IMG_BITS   = RTU_FLAT_DEC_BYTES * 8;
     localparam RTU_FLAT_LINES      = ((`VX_CFG_MEM_BLOCK_SIZE - 1 + RTU_FLAT_DEC_BYTES - 1) / `VX_CFG_MEM_BLOCK_SIZE) + 1;
     localparam RTU_FLAT_LINES_BITS = `CLOG2(RTU_FLAT_LINES + 1);
 
@@ -196,7 +214,6 @@ package VX_rtu_pkg;
     localparam RTU_INST_FLAG_FORCE_NO_OPQ = 8'h8; // FORCE_NO_OPAQUE
     // The decoders read all 64 bytes; an instance record may straddle two lines.
     localparam RTU_INST_DEC_BYTES    = RTU_INST_STRIDE;
-    localparam RTU_INST_IMG_BITS     = RTU_INST_DEC_BYTES * 8;
     localparam RTU_INST_LINES        = ((RTU_LINE_BYTES - 1 + RTU_INST_DEC_BYTES - 1) / RTU_LINE_BYTES) + 1;
 
     // ─────────────────────────────────────────────────────────────────
@@ -205,12 +222,12 @@ package VX_rtu_pkg;
     // per-child quantized AABB corners are int8 (one per axis).
     // ─────────────────────────────────────────────────────────────────
     typedef struct packed {
-        logic [2:0][31:0]                      origin;     // common origin (fp32)
-        logic [2:0][7:0]                       exp;        // per-axis exponent (int8)
-        logic [RTU_CHILD_BITS-1:0]             n_children;
-        logic [RTU_NODE_W-1:0][31:0]           child_off;  // raw child-offset words
-        logic [RTU_NODE_W-1:0][2:0][7:0]       qmin;       // quantized child mins
-        logic [RTU_NODE_W-1:0][2:0][7:0]       qmax;       // quantized child maxs
+        logic [2:0][31:0]                   origin;     // common origin (fp32)
+        logic [2:0][7:0]                    exp;        // per-axis exponent (int8)
+        logic [RTU_CHILD_BITS-1:0]          n_children;
+        logic [RTU_NODE_W-1:0][31:0]        child_off;  // raw child-offset words
+        logic [RTU_NODE_W-1:0][2:0][7:0]    qmin;       // quantized child mins
+        logic [RTU_NODE_W-1:0][2:0][7:0]    qmax;       // quantized child maxs
     } rtu_node_t;
 
     // ─────────────────────────────────────────────────────────────────
@@ -227,16 +244,63 @@ package VX_rtu_pkg;
     } rtu_ray_t;
 
     // ─────────────────────────────────────────────────────────────────
-    // Beat order on VX_rtu_bus_if. Both endpoints index the same tables, so a
-    // change here moves the window's slot map and the RTU core's field select
-    // together. scene_base is absent from the request beats: it is warp-uniform
-    // and rides sideband.
+    // The ray stream, and the window slots the RTU writes.
+    //
+    // A ray is never a window slot. The TRACE burst pushes it as RAY beats on the
+    // `req` channel, straight into the traversal datapath's per-context ray state.
+    // Beat order is the order the burst's operands arrive in, so the RTU names a
+    // field by its arrival index and no beat carries an address:
+    //
+    //   0..2  origin.{x,y,z}    (uop ORIGIN: f0..f2)
+    //   3..5  direction.{x,y,z} (uop DIR:    f3..f5)
+    //   6..7  t_min, t_max      (uop ARM:    f6,f7)
+    //
+    // The rest of the ray — scene_base, flags, cull_mask, payload_ptr — is
+    // warp-uniform, so it rides the arm doorbell as a sideband instead of costing
+    // a per-lane beat each.
+    //
+    // What the RTU WRITES back is a window slot, and those spans are contiguous
+    // (see VX_types.toml [rtu_slots]) so a write adds an index to a base:
+    //
+    //   hit attrs  [RES_BASE, +RES_HIT)   written by every response
+    //   candidate  [RES_BASE, +RES_CAND)  + object ray, cb_type, sbt, handle
+    //   payload     PAYLOAD_SLOT          written once, at arm (warp-uniform)
+    //   hit attr    ATTR_SLOT             the IS shader's hitAttribute, on commit
+    //   status      STATUS_SLOT           written LAST
+    //
+    // Status is last by design: writing it is what completes the warp's parked
+    // WAIT, so every slot the warp may then read must already be in place.
     // ─────────────────────────────────────────────────────────────────
-    localparam RTU_REQ_BEATS      = 10;  // origin[3], dir[3], t_min, t_max, flags, cull_mask
-    localparam RTU_RSP_HIT_BEATS  = 7;   // hit_t, hit_u, hit_v, prim, instance, geometry, custom
-    localparam RTU_RSP_TERM_BEATS = 8;   // + status
-    localparam RTU_RSP_CB_BEATS   = 10;  // + cb_type, cb_sbt_idx, cb_handle
-    localparam RTU_BEAT_BITS      = `CLOG2(RTU_RSP_CB_BEATS);
+    localparam RTU_RAY_BEATS    = 8;   // origin[3], dir[3], t_min, t_max
+    localparam RTU_RES_BASE     = `VX_RT_HIT_T;
+    localparam RTU_RES_HIT      = 7;   // hit_t, hit_u, hit_v, prim, instance, geometry, custom
+    localparam RTU_RES_CAND     = 16;  // + object ray (6), cb_type, cb_sbt_idx, cb_handle
+    localparam RTU_STATUS_SLOT  = `VX_RT_STATUS;
+    localparam RTU_PAYLOAD_SLOT = `VX_RT_PAYLOAD_PTR_LO;
+    localparam RTU_ATTR_SLOT    = `VX_RT_HIT_ATTR_0;
+    localparam RTU_IDX_BITS     = `CLOG2(RTU_RES_CAND + 1);
+
+    // ─────────────────────────────────────────────────────────────────
+    // Window store — the per-slot result record, one NUM_LANES*32 row per word,
+    // addressed {slot, word}. The scheduler's commit engine writes it, the core's
+    // record walk reads it one row per cycle. Word order of the hit/candidate
+    // spans matches the record's window-slot order, so the walk is a counter.
+    // ─────────────────────────────────────────────────────────────────
+    localparam RTU_WS_HIT_BASE  = 0;   // committed hit: t,u,v,prim,inst,geom,custom
+    localparam RTU_WS_YLD_BASE  = 8;   // candidate:     t,u,v,prim,inst,geom,custom
+    localparam RTU_WS_F_T       = 0;   // field offsets within either span
+    localparam RTU_WS_F_U       = 1;
+    localparam RTU_WS_F_V       = 2;
+    localparam RTU_WS_F_PRIM    = 3;
+    localparam RTU_WS_F_INST    = 4;
+    localparam RTU_WS_F_GEOM    = 5;
+    localparam RTU_WS_F_CUST    = 6;
+    localparam RTU_WS_YLD_SBT   = 15;  // candidate SBT index (low byte per lane)
+    localparam RTU_WS_CONT_T    = 16;  // CONTINUE beat 0: the shader's own t
+    localparam RTU_WS_CONT_ATTR = 17;  // CONTINUE beat 1: the shader's hitAttribute
+    localparam RTU_WS_RES_ATTR  = 18;  // accepted candidate's bound hitAttribute
+    localparam RTU_WS_WORDS     = 32;  // rows per slot (power of two for addressing)
+    localparam RTU_WS_WORD_BITS = `CLOG2(RTU_WS_WORDS);
 
 `IGNORE_UNUSED_END
 
