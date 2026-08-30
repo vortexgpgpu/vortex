@@ -1,0 +1,247 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 1040" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="p_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="p_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="p_y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+    <marker id="p_r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a03020"/>
+    </marker>
+  </defs>
+  <style>
+    .t   { fill:#1b2733; font-size:20px; font-weight:bold; }
+    .st  { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .th  { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts  { fill:#44525f; font-size:10.5px; }
+    .tt  { fill:#5a6772; font-size:9.5px; font-style:italic; }
+    .cm  { font-family:"DejaVu Sans Mono", monospace; font-size:9.5px; fill:#1b2733; }
+    .box { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.3; }
+    .hdr { fill:#eef1f4; stroke:#5a7184; stroke-width:1.2; }
+    .stg { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.6; }
+    .reg { fill:#d7e3ee; stroke:#2e5e82; stroke-width:1.4; }
+    .arr { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .ram { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .mshr{ fill:#f4faf4; stroke:#3a7d44; stroke-width:1.5; }
+    .q   { fill:#e9eef2; stroke:#5a7184; stroke-width:1.4; }
+    .w   { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#p_a); }
+    .wg  { stroke:#3a7d44; stroke-width:1.6; fill:none; marker-end:url(#p_g); }
+    .wy  { stroke:#b58900; stroke-width:1.6; fill:none; marker-end:url(#p_y); }
+    .wr  { stroke:#a03020; stroke-width:1.6; fill:none; marker-end:url(#p_r); stroke-dasharray:5 3; }
+    .lb  { fill:#2e5e82; font-size:9.5px; }
+    .lbg { fill:#2f6b39; font-size:9.5px; }
+    .lby { fill:#8a6d00; font-size:9.5px; }
+    .lbr { fill:#a03020; font-size:9.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1560" height="1040" fill="#ffffff"/>
+  <text x="24" y="34" class="t">VX_cache_bank — the non-blocking pipeline</text>
+  <text x="24" y="56" class="st">One bank. PIPELINE_STAGES = LATENCY; PIPE_EX = LATENCY − 2 extra stages defer the data array and the commit consumers. PIPE_EX = 0 is the classic 2-stage bank.</text>
+
+  <!-- ===== INPUT ARBITRATION ===== -->
+  <rect x="26" y="82" width="248" height="286" rx="8" class="arr"/>
+  <text x="38" y="104" class="th">Input arbitration</text>
+  <text x="38" y="122" class="tt">strict priority, one fires per cycle</text>
+
+  <rect x="40" y="136" width="220" height="30" rx="4" class="hdr"/>
+  <text x="50" y="156" class="cm">1  init      </text>
+  <text x="150" y="156" class="tt">reset tag walk</text>
+  <rect x="40" y="172" width="220" height="30" rx="4" class="hdr"/>
+  <text x="50" y="192" class="cm">2  replay</text>
+  <text x="150" y="192" class="tt">guaranteed hit</text>
+  <rect x="40" y="208" width="220" height="30" rx="4" class="hdr"/>
+  <text x="50" y="228" class="cm">3  fill</text>
+  <text x="150" y="228" class="tt">mem response</text>
+  <rect x="40" y="244" width="220" height="30" rx="4" class="hdr"/>
+  <text x="50" y="264" class="cm">4  flush</text>
+  <text x="150" y="264" class="tt">counter walk</text>
+  <rect x="40" y="280" width="220" height="30" rx="4" class="hdr"/>
+  <text x="50" y="300" class="cm">5  core_req</text>
+  <text x="150" y="300" class="tt">+ AMO writeback</text>
+
+  <text x="38" y="332" class="tt">Replay first maximizes utilization; fill</text>
+  <text x="38" y="346" class="tt">precedes flush/creq to avoid deadlock on</text>
+  <text x="38" y="360" class="tt">a miss; flush precedes creq for consistency.</text>
+
+  <path d="M 274 224 L 320 224" class="w"/>
+
+  <!-- ===== S0 ===== -->
+  <rect x="320" y="82" width="34" height="286" rx="4" class="reg"/>
+  <text x="337" y="230" class="cm" transform="rotate(-90 337 230)">reg_s0</text>
+
+  <rect x="366" y="82" width="272" height="286" rx="8" class="stg"/>
+  <text x="378" y="104" class="th">S0 — lookup</text>
+  <text x="378" y="122" class="tt">tags, replacement, MSHR allocate</text>
+
+  <rect x="380" y="136" width="244" height="52" rx="4" class="ram"/>
+  <text x="390" y="154" class="cm">VX_cache_tags</text>
+  <text x="390" y="169" class="tt">1 BRAM word = all ways' {valid[SEC], tag}</text>
+  <text x="390" y="182" class="tt">per-way write-enable · read-first bypass</text>
+
+  <rect x="380" y="196" width="244" height="40" rx="4" class="ram"/>
+  <text x="390" y="214" class="cm">dirty_store (LUTRAM)</text>
+  <text x="390" y="229" class="tt">per-sector dirty, decoupled from the tag</text>
+
+  <rect x="380" y="244" width="244" height="38" rx="4" class="box"/>
+  <text x="390" y="262" class="cm">VX_cache_repl</text>
+  <text x="390" y="276" class="tt">random / FIFO / PLRU victim</text>
+
+  <rect x="380" y="290" width="244" height="38" rx="4" class="mshr"/>
+  <text x="390" y="308" class="cm">MSHR allocate</text>
+  <text x="390" y="322" class="tt">returns alloc_id + previd (chain tail)</text>
+
+  <text x="378" y="350" class="tt">outputs: tag_matches, line_present,</text>
+  <text x="378" y="362" class="tt">evict_dirty_mask, evict_tag, mshr_pending</text>
+
+  <!-- ===== split: data path vs commit path ===== -->
+  <path d="M 638 160 L 700 160 L 700 448 L 742 448" class="wy"/>
+  <text x="646" y="152" class="lby">data path</text>
+
+  <path d="M 638 300 L 700 300 L 700 210 L 742 210" class="w"/>
+  <text x="646" y="316" class="lb">commit path</text>
+
+  <!-- ===== S1 ===== -->
+  <rect x="742" y="82" width="34" height="248" rx="4" class="reg"/>
+  <text x="759" y="212" class="cm" transform="rotate(-90 759 212)">reg_s1</text>
+
+  <rect x="788" y="82" width="260" height="248" rx="8" class="stg"/>
+  <text x="800" y="104" class="th">S1 — MSHR finalize</text>
+  <text x="800" y="122" class="tt">EXACTLY one cycle after allocate</text>
+
+  <rect x="802" y="136" width="232" height="76" rx="4" class="mshr"/>
+  <text x="812" y="154" class="cm">VX_cache_mshr</text>
+  <text x="812" y="170" class="ts">hit  → release the entry</text>
+  <text x="812" y="186" class="ts">miss → persist + link onto previd</text>
+  <text x="812" y="202" class="tt">coalescing keys on {line, sector}</text>
+
+  <rect x="802" y="222" width="232" height="94" rx="4" class="box"/>
+  <text x="812" y="240" class="th">Why allocate/finalize cannot move</text>
+  <text x="812" y="258" class="ts">The chain needs allocate(S0) → finalize(S1)</text>
+  <text x="812" y="274" class="ts">exactly 1 cycle apart. Deferring finalize</text>
+  <text x="812" y="290" class="ts">orphans coalesced same-line entries and</text>
+  <text x="812" y="306" class="ts">the bank deadlocks. Only stD/stC defer.</text>
+
+  <!-- ===== stD data array ===== -->
+  <rect x="742" y="410" width="34" height="180" rx="4" class="reg"/>
+  <text x="759" y="500" class="cm" transform="rotate(-90 759 500)">reg_dat (DEPTH=PIPE_EX)</text>
+
+  <rect x="788" y="410" width="260" height="180" rx="8" class="stg"/>
+  <text x="800" y="432" class="th">stD — data array drive</text>
+  <text x="800" y="450" class="tt">driven by REGISTERED tag compares</text>
+
+  <rect x="802" y="464" width="232" height="82" rx="4" class="ram"/>
+  <text x="812" y="482" class="cm">VX_cache_data</text>
+  <text x="812" y="498" class="ts">word-sliced · way folded into the</text>
+  <text x="812" y="514" class="ts">address as {way, line_idx}</text>
+  <text x="812" y="532" class="tt">load reads ONE slice; fill writes a sector</text>
+
+  <text x="800" y="566" class="tt">This is the tag→data critical path. PIPE_EX</text>
+  <text x="800" y="580" class="tt">registers break it at the cost of depth.</text>
+
+  <!-- ===== stC commit ===== -->
+  <rect x="1092" y="82" width="34" height="508" rx="4" class="reg"/>
+  <text x="1109" y="336" class="cm" transform="rotate(-90 1109 336)">reg_cmt (DEPTH=PIPE_EX)</text>
+
+  <rect x="1140" y="82" width="292" height="508" rx="8" class="stg"/>
+  <text x="1152" y="104" class="th">stC — commit</text>
+  <text x="1152" y="122" class="tt">response + memory request issue</text>
+
+  <rect x="1154" y="136" width="264" height="76" rx="4" class="q"/>
+  <text x="1164" y="154" class="cm">core_rsp_queue</text>
+  <text x="1164" y="170" class="ts">reads (and LLC AMO commits) on hit</text>
+  <text x="1164" y="186" class="cm">CRSQ_QUEUE_SIZE = pow2(2 + CRSQ_SIZE)</text>
+  <text x="1164" y="204" class="tt">CRSQ_SIZE adds slots over the skid minimum</text>
+
+  <rect x="1154" y="222" width="264" height="106" rx="4" class="q"/>
+  <text x="1164" y="240" class="cm">mem_req_queue</text>
+  <text x="1164" y="256" class="ts">fill request on a read/write miss</text>
+  <text x="1164" y="272" class="ts">writeback on a dirty eviction</text>
+  <text x="1164" y="288" class="ts">write-through store on every write</text>
+  <text x="1164" y="308" class="cm">MREQ_QUEUE_SIZE = pow2(max(2*PIPELINE,</text>
+  <text x="1164" y="322" class="cm">  WRITEBACK ? MSHR_SIZE : 0) + MREQ_SIZE)</text>
+
+  <rect x="1154" y="338" width="264" height="106" rx="4" class="box"/>
+  <text x="1164" y="356" class="th">Why the mreq floor reserves MSHR_SIZE</text>
+  <text x="1164" y="374" class="ts">A write-back bank emits an eviction ALONGSIDE</text>
+  <text x="1164" y="390" class="ts">the fill on a dirty miss, so up to MSHR_SIZE</text>
+  <text x="1164" y="406" class="ts">writebacks can enqueue at once — one per</text>
+  <text x="1164" y="422" class="ts">outstanding miss. Reserving that many slots</text>
+  <text x="1164" y="438" class="ts">keeps the queue from stalling the fill drain.</text>
+
+  <rect x="1154" y="454" width="264" height="122" rx="4" class="box"/>
+  <text x="1164" y="472" class="th">Per-sector writeback sequencer</text>
+  <text x="1164" y="490" class="ts">A dirty eviction writes back each dirty</text>
+  <text x="1164" y="506" class="ts">sector as its own beat — one per cycle,</text>
+  <text x="1164" y="522" class="ts">lowest first — holding stC via wb_hold</text>
+  <text x="1164" y="538" class="ts">until the last beat is accepted.</text>
+  <text x="1164" y="558" class="tt">With 1 sector/line this is a single beat and</text>
+  <text x="1164" y="572" class="tt">wb_hold never asserts.</text>
+
+  <!-- ===== FILL BUFFER + FORWARDING ===== -->
+  <rect x="26" y="628" width="700" height="180" rx="8" class="box"/>
+  <rect x="26" y="628" width="290" height="24" rx="4" class="hdr"/>
+  <text x="38" y="645" class="th">Fill buffer — fill data never rides the pipe</text>
+
+  <rect x="42" y="668" width="200" height="62" rx="4" class="ram"/>
+  <text x="52" y="686" class="cm">fbuf_data_r</text>
+  <text x="52" y="702" class="cm">fbuf_addr_r</text>
+  <text x="52" y="720" class="tt">staged at fill accept</text>
+
+  <text x="262" y="682" class="ts">The sector staged at fill accept owns ALL in-flight fill data. It</text>
+  <text x="262" y="698" class="ts">feeds the data-array fill port and the forward-response word, so</text>
+  <text x="262" y="714" class="ts">the pipeline payload stays one word wide instead of one line wide.</text>
+  <text x="262" y="736" class="tt">fbuf_line replicates the sector across the line; the data array's per-slice</text>
+  <text x="262" y="750" class="tt">gate writes only the installed sector.</text>
+
+  <text x="42" y="774" class="ts">At PIPE_EX &gt; 0 a back-to-back fill must be held off (fill_inflight) while one is in flight, because the sector lives only in the buffer</text>
+  <text x="42" y="790" class="ts">until its stD write. At PIPE_EX = 0 the array write samples the buffer on the same edge a new fill re-stages it, so no interlock is needed.</text>
+
+  <rect x="746" y="628" width="686" height="180" rx="8" class="box"/>
+  <rect x="746" y="628" width="240" height="24" rx="4" class="hdr"/>
+  <text x="758" y="645" class="th">Fill forwarding</text>
+
+  <text x="762" y="676" class="ts">When the fill returns, the MSHR dequeue stream walks the pending chain in order and</text>
+  <text x="762" y="692" class="ts">completes its LEADING RUN OF PLAIN READS straight into the response queue — no pipeline</text>
+  <text x="762" y="708" class="ts">traversal, and the input arbiter stays open to new requests. This removes the</text>
+  <text x="762" y="724" class="ts">read-after-fill round trip from miss latency.</text>
+
+  <rect x="762" y="738" width="654" height="56" rx="4" class="mshr"/>
+  <text x="772" y="756" class="th">The window closes on the first write or AMO head</text>
+  <text x="772" y="774" class="ts">That head and every later chain entry replay through the pipeline as usual, preserving program</text>
+  <text x="772" y="788" class="ts">order — an older store must merge before a younger same-line read responds.</text>
+
+  <!-- ===== BOTTOM: what the knobs really mean ===== -->
+  <rect x="26" y="828" width="700" height="192" rx="8" class="box"/>
+  <rect x="26" y="828" width="330" height="24" rx="4" class="hdr"/>
+  <text x="38" y="845" class="th">MSHR entries are consumed PER REQUEST</text>
+
+  <text x="42" y="876" class="ts">Every non-replay core request allocates its own entry at S0. A hit releases it at S1;</text>
+  <text x="42" y="892" class="ts">a miss keeps it and LINKS it onto the tail of any same-{line, sector} chain via next_index.</text>
+
+  <text x="42" y="918" class="ts">So chaining does not save entries — it saves FILLS. Only the chain head issues a memory</text>
+  <text x="42" y="934" class="ts">request (mshr_pending suppresses the rest); all of them still hold a slot until the fill</text>
+  <text x="42" y="950" class="ts">returns and replays them in arrival order.</text>
+
+  <text x="42" y="976" class="tt">MSHR_SIZE therefore bounds outstanding MISSED REQUESTS per bank, not distinct missing lines.</text>
+  <text x="42" y="992" class="tt">AMO entries never coalesce at a non-LLC level: each atomic needs its own downstream round trip.</text>
+  <text x="42" y="1010" class="tt">Total per-cache memory-level parallelism = NUM_BANKS x MSHR_SIZE.</text>
+
+  <rect x="746" y="828" width="686" height="192" rx="8" class="box"/>
+  <rect x="746" y="828" width="290" height="24" rx="4" class="hdr"/>
+  <text x="758" y="845" class="th">Backpressure and deadlock freedom</text>
+
+  <text x="762" y="876" class="cm">pipe_stall = crsp_queue_stall || amo_chain_stall || wb_hold</text>
+
+  <text x="762" y="902" class="ts">Two deadlocks are structurally excluded rather than detected:</text>
+  <text x="762" y="924" class="ts">1.  MSHR full with a request already in the pipe — core_req_ready gates on mshr_alm_full,</text>
+  <text x="786" y="940" class="ts">so a request never enters the pipeline unless its entry is already guaranteed.</text>
+  <text x="762" y="962" class="ts">2.  Memory request queue full when a fill arrives — the queue floor reserves a slot for</text>
+  <text x="786" y="978" class="ts">every outstanding miss, so fills always have somewhere to drain.</text>
+
+  <text x="762" y="1004" class="tt">Note the write-through path gates flush/replay on mreq_queue_alm_full only when WRITEBACK,</text>
+  <text x="762" y="1018" class="tt">because a write-through flush emits no writebacks at all.</text>
+</svg>

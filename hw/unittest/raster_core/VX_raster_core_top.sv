@@ -34,8 +34,9 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     input  wire                             launch_valid,
     output wire                             launch_ready,
 
+    // The raster core emits fragment LAUNCHES now (header + stamp payload beats
+    // on the KMU bus), not a stamp data bus.
     output wire                             raster_req_valid,
-    output raster_stamp_t [OUTPUT_QUADS-1:0] raster_req_stamps,
     output wire                             raster_busy,
     input wire                              raster_req_ready,
 
@@ -77,13 +78,14 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     assign launch_if.valid = launch_valid;
     assign launch_ready    = launch_if.ready;
 
-    VX_raster_bus_if #(
-        .NUM_LANES (OUTPUT_QUADS)
-    ) raster_bus_if();
+    VX_kmu_bus_if kmu_bus_if();
 
-    assign raster_req_valid = raster_bus_if.req_valid;
-    assign raster_req_stamps = raster_bus_if.req_data.stamps;
-    assign raster_bus_if.req_ready = raster_req_ready;
+    assign raster_req_valid  = kmu_bus_if.valid;
+    assign kmu_bus_if.ready  = raster_req_ready;
+    `UNUSED_VAR (kmu_bus_if.data)
+    `UNUSED_VAR (kmu_bus_if.kind)
+    `UNUSED_VAR (kmu_bus_if.eop)
+    `UNUSED_VAR (kmu_bus_if.dest)
 
     VX_mem_bus_if #(
         .DATA_SIZE (RCACHE_WORD_SIZE),
@@ -123,7 +125,7 @@ module VX_raster_core_top import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     `endif
         .dcr_bus_if    (dcr_bus_if),
         .launch_if     (launch_if),
-        .raster_bus_if (raster_bus_if),
+        .kmu_bus_if    (kmu_bus_if),
         .cache_bus_if  (cache_bus_if),
         .busy          (raster_busy)
     );

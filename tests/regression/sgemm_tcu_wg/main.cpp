@@ -1,4 +1,5 @@
 #include "common.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -10,14 +11,23 @@
 #include <vector>
 #include <vortex2.h>
 
-// The TCU chains K/tcK dot-product ops, each rounding its accumulator to fp32
-// once, while matmul_cpu's reference accumulates in double (no intermediate
-// rounding). The gap is therefore ~K/tcK ULP and grows with the accumulation
-// depth: measured max is 16 ULP at K=128 (the deepest gated run). The RTL
-// datapath itself is verified bit-exactly against its windowed reference by
-// hw/unittest/tcu_fedp (`make -C hw/unittest run-tcu`), so this bounds a
-// reference idealization, not a hardware tolerance.
-#define FLOAT_ULP 16
+// The TCU chains K/tileK dot-product ops, each rounding its accumulator to fp32
+// once, while the reference accumulates in double (no intermediate rounding). A
+// wider tile rounds fewer times but sums more elements per rounding, so the two
+// effects cancel: the drift tracks K, not the chain depth, and a fixed bound
+// silently depends on the tile shape. Measured on rtlsim (NUM_THREADS=16, fp16):
+// 8 ULP at K=64, 18 ULP at K=128. float_ulp() scales with K and keeps headroom
+// over those points. The RTL datapath itself is verified bit-exactly against its
+// windowed reference by hw/unittest/tcu_fedp (`make -C hw/unittest run-tcu`), so
+// this bounds a reference idealization, not a hardware tolerance; the run reports
+// its observed drift so a shape change that erodes the margin is visible.
+static uint32_t g_float_ulp = 16;
+static uint32_t g_max_ulp = 0;
+
+static uint32_t float_ulp(uint32_t K) {
+  return std::max<uint32_t>(8, K / 5);
+}
+
 #define MAX_ERRORS 100
 
 #define RT_CHECK(_expr)                                      \
@@ -324,7 +334,8 @@ public:
       fa.f = a;
       fb.f = b;
       auto d = std::abs(fa.i - fb.i);
-      if (d > FLOAT_ULP) {
+      g_max_ulp = std::max(g_max_ulp, static_cast<uint32_t>(d));
+      if (d > static_cast<int32_t>(g_float_ulp)) {
         if (errors < MAX_ERRORS) {
           printf("*** error: [%d] expected=%f, actual=%f\n", index, fb.f, fa.f);
         }
@@ -629,6 +640,8 @@ int main(int argc, char *argv[]) {
   uint32_t N = xn;
   uint32_t K = xk;
 
+  g_float_ulp = float_ulp(K);
+
   uint32_t cta_M = warps * per_warp_M;
   uint32_t a_size = cta_M * wg_cfg::tileK;
   uint32_t b_size = wg_cfg::tileK * wg_cfg::xtileN;
@@ -792,6 +805,9 @@ int main(int argc, char *argv[]) {
       }
     }
   }
+  // std::dec: an earlier dump leaves the stream in hex.
+  std::cout << std::dec << "reference drift: max=" << g_max_ulp << " ULP, bound="
+            << g_float_ulp << " ULP (K=" << K << ")" << std::endl;
 
   std::cout << "cleanup" << std::endl;
   cleanup();

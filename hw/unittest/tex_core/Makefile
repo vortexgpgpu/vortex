@@ -20,7 +20,7 @@ VL_FLAGS += -DVX_CFG_EXT_TEX_ENABLE
 RTL_PKGS := $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/tex/VX_tex_pkg.sv
 
 RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(DPI_DIR) -I$(RTL_DIR)/libs
-RTL_INCLUDE += -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/mem -I$(RTL_DIR)/tex -I$(SRC_DIR)
+RTL_INCLUDE += -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/tex -I$(SRC_DIR)
 
 TOP := VX_tex_core_top
 

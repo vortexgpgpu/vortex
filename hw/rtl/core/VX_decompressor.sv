@@ -33,8 +33,8 @@
 //   - state[]  + buf_pc[]    : flops (small, 64x33b ≈ 2K flops at NW=64,
 //                               needed combinationally for sched_buffered_match
 //                               and fast-path gating)
-//   - {hw, uuid, tmask}      : VX_dp_ram, OUT_REG=1, async write/read-first
-//                               (the bulky payload, ~80b × NW)
+//   - {payload, uuid, tmask} : VX_dp_ram, OUT_REG=1, async write/read-first
+//                               (the bulky payload, ~96b × NW)
 //
 // Pipelining:
 //   - Fast path (rsp_valid && pc_low && !rsp_low_c && state[rsp_wid]==BUF_EMPTY
@@ -42,12 +42,13 @@
 //     icache rsp; no decompress16/BRAM dependency.
 //   - Slow path: 2 stages.
 //       Stage 0 (combinational): decode case, drive BRAM read addr +
-//         BRAM write, update state[]/buf_pc[], capture s1_ctx into the
-//         stage-1 register. sched_buffered_match runs here on flop reads
-//         only (no BRAM dep) so schedule_if.ready is short-path.
+//         BRAM write, update state[]/buf_pc[], expand any RVC halfword
+//         (decompress16) into the registered 32-bit payload, capture s1_ctx
+//         into the stage-1 register. sched_buffered_match runs here on flop
+//         reads only (no BRAM dep) so schedule_if.ready is short-path.
 //       Stage 1 (combinational from registered s1_ctx + registered BRAM
-//         output): mux dec_hw, run decompress16, build fsm_data, drive
-//         fetch_if.
+//         output): a 32-bit select over pre-expanded payloads builds
+//         fsm_data and drives fetch_if — no decompress16 on this path.
 //
 // Slow-path FSM cases handled in stage 0:
 //   C. BUF_RVC emit  : sched_buffered_match && state[sched_wid]==BUF_RVC
@@ -73,7 +74,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // Scheduler peek (read-only). VX_fetch decides ready/fire.
     input  wire                         sched_valid,
     input  wire [PC_BITS-1:0]           sched_PC,
-    input  wire [`VX_CFG_NUM_THREADS-1:0]      sched_tmask,
+    input  wire [`VX_CFG_NUM_THREADS-1:0] sched_tmask,
     input  wire [NCTA_WIDTH-1:0]        sched_cta_id,
     input  wire [NW_WIDTH-1:0]          sched_wid,
     output wire                         sched_buffered_match,
@@ -86,7 +87,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     input  wire                         rsp_valid,
     input  wire [31:0]                  rsp_word,
     input  wire [PC_BITS-1:0]           rsp_PC,
-    input  wire [`VX_CFG_NUM_THREADS-1:0]      rsp_tmask,
+    input  wire [`VX_CFG_NUM_THREADS-1:0] rsp_tmask,
     input  wire [NCTA_WIDTH-1:0]        rsp_cta_id,
     input  wire [NW_WIDTH-1:0]          rsp_wid,
     input  wire [UUID_WIDTH-1:0]        rsp_uuid,
@@ -99,7 +100,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // Follow-up icache request (cross-word 32-bit).
     output logic                        follow_req_valid,
     output logic [PC_BITS-1:0]          follow_req_PC,
-    output logic [`VX_CFG_NUM_THREADS-1:0]     follow_req_tmask,
+    output logic [`VX_CFG_NUM_THREADS-1:0] follow_req_tmask,
     output logic [NW_WIDTH-1:0]         follow_req_wid,
     output logic [UUID_WIDTH-1:0]       follow_req_uuid,
 
@@ -119,8 +120,12 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         BUF_32RDY = 2'b11  // follow arrived (high half latched), awaiting scheduler
     } buf_state_e;
 
+    // payload holds the already-expanded 32-bit instruction for a buffered RVC
+    // (BUF_RVC), or the straddle low half in payload[15:0] with payload[31:16]=0
+    // for a cross-word 32-bit (BUF_32HI/BUF_32RDY). The RVC expansion is done at
+    // stash time (stage 0) so stage 1 needs no decompress16.
     typedef struct packed {
-        logic [15:0]              hw;
+        logic [31:0]              payload;
         logic [UUID_WIDTH-1:0]    uuid;
         logic [`VX_CFG_NUM_THREADS-1:0]  tmask;
         logic [NCTA_WIDTH-1:0]    cta_id;
@@ -132,18 +137,19 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // (S1_BR, S1_D) carry their own fetch-time tmask.
     typedef enum logic [2:0] {
         S1_NONE = 3'b000,
-        S1_C    = 3'b001, // BUF_RVC emit (scheduler): instr = decompress16(BRAM.hw)
-        S1_B    = 3'b010, // BUF_32RDY emit (scheduler): instr = {ctx.inline_hw, BRAM.hw}
-        S1_D    = 3'b011, // BUF_EMPTY RVC (response): instr = decompress16(ctx.inline_hw)
-        S1_BR   = 3'b100  // BUF_32HI emit (response): instr = {ctx.inline_hw, BRAM.hw}
+        S1_C    = 3'b001, // BUF_RVC emit (scheduler): instr = BRAM.payload
+        S1_B    = 3'b010, // BUF_32RDY emit (scheduler): instr = {ctx.payload32[15:0], BRAM.payload[15:0]}
+        S1_D    = 3'b011, // BUF_EMPTY RVC (response): instr = ctx.payload32
+        S1_BR   = 3'b100  // BUF_32HI emit (response): instr = {ctx.payload32[15:0], BRAM.payload[15:0]}
     } s1_kind_e;
 
     // Stage-1 context. For S1_C/S1_B, BRAM read at sched/rsp wid supplies
-    // {hw, uuid, tmask}; ctx.PC/wid latch the metadata flop arrays read.
+    // {payload, uuid, tmask}; ctx.PC/wid latch the metadata flop arrays read.
     // For S1_D, BRAM read is don't-care; ctx.{uuid, tmask} are latched
-    // from rsp.
+    // from rsp. payload32 holds the expanded 32-bit RVC (S1_D), or the straddle
+    // high half in payload32[15:0] (S1_B/S1_BR); both are formed in stage 0.
     typedef struct packed {
-        logic [15:0]               inline_hw;
+        logic [31:0]               payload32;
         logic [PC_BITS-1:0]        PC;
         logic [NW_WIDTH-1:0]       wid;
         logic [UUID_WIDTH-1:0]     uuid;
@@ -397,6 +403,11 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // PC_BITS = XLEN-1 under EXT_C: rsp_PC[0] is byte-PC[1] (halfword sel).
     wire        pc_low     = (rsp_PC[0] == 1'b0);
 
+    // Stash payload for a captured rsp_high halfword: a complete RVC is
+    // pre-expanded here (stage 0), a straddle low half is stored raw in [15:0].
+    wire [31:0] stash_payload = rsp_high_c ? decompress16(rsp_high)
+                                           : {16'b0, rsp_high};
+
     // ------------------------------------------------------------------
     // Stage 1 register: pending slow-path emit (drains into fetch_if)
     // ------------------------------------------------------------------
@@ -576,7 +587,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 s1_ctx_in.wid       = sched_wid;
                 s1_ctx_in.tmask     = sched_tmask;
                 s1_ctx_in.cta_id    = sched_cta_id;
-                s1_ctx_in.inline_hw = hi_hw[sched_wid]; // combined_32 = {inline_hw, BRAM.hw}
+                s1_ctx_in.payload32 = 32'(hi_hw[sched_wid]); // straddle high half -> [15:0]
                 state_n[sched_wid]  = BUF_EMPTY;
 
             end else if (rsp_discard) begin
@@ -595,7 +606,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 s1_kind_in          = S1_BR;
                 s1_ctx_in.PC        = buf_pc[rsp_wid];
                 s1_ctx_in.wid       = rsp_wid;
-                s1_ctx_in.inline_hw = rsp_low; // combined_32 = {inline_hw, BRAM.hw}
+                s1_ctx_in.payload32 = 32'(rsp_low); // straddle high half -> [15:0]
                 slow_rsp_ready      = 1'b1;
                 state_n[rsp_wid]    = BUF_EMPTY;
 
@@ -617,11 +628,11 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 s1_ctx_in.uuid      = rsp_uuid;
                 s1_ctx_in.tmask     = rsp_tmask;
                 s1_ctx_in.cta_id    = rsp_cta_id;
-                s1_ctx_in.inline_hw = rsp_low;
+                s1_ctx_in.payload32 = decompress16(rsp_low);
                 slow_rsp_ready      = 1'b1;
                 buf_we    = 1'b1;
                 buf_waddr = rsp_wid;
-                buf_wdata = '{hw: rsp_high, uuid: rsp_uuid, tmask: rsp_tmask, cta_id: rsp_cta_id};
+                buf_wdata = '{payload: stash_payload, uuid: rsp_uuid, tmask: rsp_tmask, cta_id: rsp_cta_id};
                 buf_pc_n[rsp_wid] = buf_hw_pc;
                 if (rsp_high_c) begin
                     state_n[rsp_wid] = BUF_RVC;
@@ -641,7 +652,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 s1_ctx_in.uuid      = rsp_uuid;
                 s1_ctx_in.tmask     = rsp_tmask;
                 s1_ctx_in.cta_id    = rsp_cta_id;
-                s1_ctx_in.inline_hw = rsp_high;
+                s1_ctx_in.payload32 = decompress16(rsp_high);
                 slow_rsp_ready      = 1'b1;
                 state_n[rsp_wid]    = BUF_EMPTY;
 
@@ -653,7 +664,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 slow_rsp_ready      = 1'b1;
                 buf_we    = 1'b1;
                 buf_waddr = rsp_wid;
-                buf_wdata = '{hw: rsp_high, uuid: rsp_uuid, tmask: rsp_tmask, cta_id: rsp_cta_id};
+                buf_wdata = '{payload: stash_payload, uuid: rsp_uuid, tmask: rsp_tmask, cta_id: rsp_cta_id};
                 buf_pc_n[rsp_wid]  = rsp_PC;
                 state_n[rsp_wid]   = BUF_32HI;
                 spec_n[rsp_wid]    = 1'b0; // warp is committed to this straddle PC
@@ -695,9 +706,11 @@ module VX_decompressor import VX_gpu_pkg::*; #(
     // Stage 1 (combinational): build fsm_data from registered ctx + BRAM
     // ------------------------------------------------------------------
 
-    wire [15:0] dec_hw    = (s1_kind == S1_C) ? buf_rdata.hw : s1_ctx.inline_hw;
-    wire [31:0] dec_instr = decompress16(dec_hw);
-    wire [31:0] combined_32 = {s1_ctx.inline_hw, buf_rdata.hw};
+    // Both RVC and straddle sources are registered 32-bit payloads pre-formed in
+    // stage 0; this stage only selects, no decompress16.
+    wire [31:0] instr_rvc   = (s1_kind == S1_C) ? buf_rdata.payload   // buffered RVC
+                                                : s1_ctx.payload32;   // immediate RVC (S1_D)
+    wire [31:0] combined_32 = {s1_ctx.payload32[15:0], buf_rdata.payload[15:0]};
 
     fetch_t fsm_data;
     always_comb begin
@@ -710,7 +723,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
         case (s1_kind)
             S1_C: begin
                 // Scheduler-gated RVC: tmask from ctx (scheduler), uuid from BRAM.
-                fsm_data.instr  = dec_instr;
+                fsm_data.instr  = instr_rvc;
                 fsm_data.is_rvc = 1'b1;
                 fsm_data.uuid   = buf_rdata.uuid;
                 fsm_data.tmask  = s1_ctx.tmask;
@@ -731,7 +744,7 @@ module VX_decompressor import VX_gpu_pkg::*; #(
                 fsm_data.tmask  = buf_rdata.tmask;
             end
             S1_D: begin
-                fsm_data.instr  = dec_instr;
+                fsm_data.instr  = instr_rvc;
                 fsm_data.is_rvc = 1'b1;
                 fsm_data.uuid   = s1_ctx.uuid;
                 fsm_data.tmask  = s1_ctx.tmask;

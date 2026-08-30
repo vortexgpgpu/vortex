@@ -12,7 +12,7 @@
 // limitations under the License.
 //
 // PRISM RTU host-config smoke kernel — fires one primary ray against a scene
-// transcoded host-side by vortex::raytrace::build_bvh_scene (ISA v2 §5.3).
+// transcoded host-side by vortex::raytrace::build_bvh_scene.
 // Kernel is identical to the bvh_basic kernel; the new coverage is host-side.
 
 #include <vx_spawn2.h>

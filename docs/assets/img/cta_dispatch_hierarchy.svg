@@ -1,0 +1,208 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1010" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="dh_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="dh_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+  </defs>
+  <style>
+    .t   { fill:#1b2733; font-size:20px; font-weight:bold; }
+    .st  { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .th  { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts  { fill:#44525f; font-size:10.5px; }
+    .tt  { fill:#5a6772; font-size:10px; font-style:italic; }
+    .cm  { font-family:"DejaVu Sans Mono", monospace; font-size:9.5px; fill:#1b2733; }
+    .cmb { font-family:"DejaVu Sans Mono", monospace; font-size:9.5px; fill:#1b2733; font-weight:bold; }
+    .box { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.3; }
+    .kmu { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.6; }
+    .arb { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .core{ fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .gfx { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .scope { fill:none; stroke:#a9b4bf; stroke-width:1.2; stroke-dasharray:6 4; }
+    .req { stroke:#2e5e82; stroke-width:1.8; fill:none; marker-end:url(#dh_a); }
+    .gq  { stroke:#3a7d44; stroke-width:1.6; fill:none; marker-end:url(#dh_g); stroke-dasharray:6 3; }
+    .lb  { fill:#2e5e82; font-size:9.5px; }
+    .lbg { fill:#2f6b39; font-size:9.5px; }
+    .sc  { fill:#8795a1; font-size:10.5px; font-weight:bold; letter-spacing:1px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="1010" fill="#ffffff"/>
+  <text x="24" y="34" class="t">The launch path — one KMU, every core</text>
+  <text x="24" y="56" class="st">A launch is a message on VX_kmu_bus_if. Three levels of VX_kmu_bus_arb fan it out; each level consumes its own slice of `dest`. Compute is load-balanced, fragment is not.</text>
+
+  <!-- ===== scopes ===== -->
+  <rect x="34" y="80" width="700" height="118" rx="8" class="scope"/>
+  <text x="46" y="100" class="sc">DEVICE — Vortex.sv</text>
+
+  <rect x="34" y="214" width="700" height="196" rx="8" class="scope"/>
+  <text x="46" y="234" class="sc">CLUSTER — VX_cluster.sv  (× VX_CFG_NUM_CLUSTERS)</text>
+
+  <rect x="34" y="426" width="700" height="118" rx="8" class="scope"/>
+  <text x="340" y="446" class="sc">SOCKET — VX_socket.sv  (× NUM_SOCKETS)</text>
+
+  <rect x="34" y="560" width="700" height="230" rx="8" class="scope"/>
+  <text x="340" y="580" class="sc">CORE — VX_core.sv  (× VX_CFG_SOCKET_SIZE)</text>
+
+  <!-- ===== device ===== -->
+  <rect x="56" y="112" width="196" height="68" rx="6" class="kmu"/>
+  <text x="68" y="132" class="th">VX_kmu</text>
+  <text x="68" y="150" class="ts">grid walk — one CTA/beat</text>
+  <text x="68" y="168" class="cm">valid = running</text>
+
+  <path d="M 252 146 L 320 146" class="req"/>
+
+  <rect x="320" y="112" width="230" height="68" rx="6" class="arb"/>
+  <text x="332" y="132" class="th">kmu_arb — Vortex.sv:186</text>
+  <text x="332" y="150" class="cm">1 -&gt; NUM_CLUSTERS</text>
+  <text x="332" y="168" class="cm">DEST_LSB_DEVICE</text>
+
+  <path d="M 435 180 L 435 246" class="req"/>
+
+  <!-- ===== cluster ===== -->
+  <rect x="320" y="246" width="230" height="82" rx="6" class="arb"/>
+  <text x="332" y="266" class="th">kmu_arb — VX_cluster.sv:105</text>
+  <text x="332" y="284" class="cm">2 -&gt; NUM_SOCKETS,  ARBITER "R"</text>
+  <text x="332" y="300" class="cm">DEST_LSB_CLUSTER</text>
+  <text x="332" y="319" class="tt">the only level with 2 inputs</text>
+
+  <rect x="56" y="246" width="196" height="82" rx="6" class="gfx"/>
+  <text x="68" y="266" class="th">VX_raster_launch</text>
+  <text x="68" y="284" class="ts">pushes FRAGMENT waves</text>
+  <text x="68" y="302" class="ts">onto the same bus</text>
+  <text x="68" y="320" class="tt">EXT_RASTER only — input [1]</text>
+
+  <path d="M 252 288 L 320 288" class="req"/>
+
+  <path d="M 435 328 L 435 366 L 200 366 L 200 458" class="req"/>
+  <path d="M 435 328 L 435 366 L 670 366 L 670 458" class="req"/>
+  <text x="446" y="360" class="lb">one output per socket</text>
+
+  <!-- ===== socket ===== -->
+  <rect x="86" y="458" width="228" height="68" rx="6" class="arb"/>
+  <text x="98" y="478" class="th">kmu_arb — VX_socket.sv:69</text>
+  <text x="98" y="496" class="cm">1 -&gt; VX_CFG_SOCKET_SIZE</text>
+  <text x="98" y="514" class="cm">DEST_LSB_SOCKET</text>
+
+  <rect x="556" y="458" width="160" height="68" rx="6" class="box"/>
+  <text x="568" y="480" class="th">socket 1..N</text>
+  <text x="568" y="500" class="tt">identical</text>
+
+  <path d="M 200 526 L 200 592" class="req"/>
+
+  <!-- ===== core ===== -->
+  <rect x="86" y="592" width="410" height="180" rx="6" class="core"/>
+  <text x="98" y="612" class="th">VX_scheduler</text>
+  <text x="98" y="630" class="ts">warp activation, barriers, split/join, machine CSRs</text>
+
+  <rect x="106" y="646" width="370" height="108" rx="6" class="kmu"/>
+  <text x="118" y="666" class="th">VX_cta_dispatch — the CTA dispatcher</text>
+  <text x="118" y="684" class="ts">admission + fixed-stride LMEM slots + warp expansion</text>
+  <text x="118" y="700" class="ts">CTA/warp context RAMs + per-lane TID ripple</text>
+  <text x="118" y="718" class="ts">retirement counters + CTA-CSR read-back</text>
+  <text x="118" y="740" class="tt">the single owner of CTA launch AND context</text>
+
+  <path d="M 496 700 L 566 700" class="req"/>
+  <text x="500" y="692" class="lb">warps</text>
+  <rect x="566" y="674" width="150" height="52" rx="6" class="box"/>
+  <text x="578" y="696" class="th">warp slots</text>
+  <text x="578" y="716" class="cm">1 warp / cycle</text>
+
+  <!-- ===== right: the bus contract ===== -->
+  <rect x="762" y="80" width="712" height="216" rx="8" class="box"/>
+  <text x="776" y="102" class="th">VX_kmu_bus_if — the launch stream</text>
+  <text x="776" y="122" class="ts">A launch is a MESSAGE, not a beat. The arbiters lock an input→output pair at the header and release on `eop`.</text>
+
+  <rect x="776" y="136" width="330" height="146" rx="5" class="arb"/>
+  <text x="788" y="156" class="cmb">logic                  valid</text>
+  <text x="788" y="174" class="cmb">logic                  kind</text>
+  <text x="788" y="192" class="cmb">logic                  eop</text>
+  <text x="788" y="210" class="cmb">logic [KMU_DEST_W-1:0] dest</text>
+  <text x="788" y="228" class="cmb">logic [KMU_DATAW-1:0]  data</text>
+  <text x="788" y="246" class="cmb">logic                  ready</text>
+  <text x="788" y="270" class="tt">data beat 0 = kmu_req_t</text>
+
+  <text x="1130" y="158" class="ts">kind — the args discriminant, tapped from</text>
+  <text x="1130" y="174" class="ts">the payload so an arb routes without unpacking</text>
+  <text x="1130" y="196" class="ts">eop — always 1 today: every launch is ONE beat</text>
+  <text x="1130" y="212" class="ts">(a fragment carries its stamps in the header)</text>
+  <text x="1130" y="234" class="ts">dest — global core index, FRAGMENT only. Each</text>
+  <text x="1130" y="250" class="ts">level consumes its slice, LSB first: core-in-socket,</text>
+  <text x="1130" y="266" class="ts">socket-in-cluster, then cluster.</text>
+
+  <!-- kmu_req_t -->
+  <rect x="762" y="312" width="712" height="292" rx="8" class="box"/>
+  <text x="776" y="334" class="th">kmu_req_t — a common envelope plus a tagged union</text>
+  <text x="776" y="354" class="ts">Compute and fragment carry different argument records, so the union pins to the compute side (the wider variant at every NT ≤ 16).</text>
+
+  <rect x="776" y="368" width="326" height="118" rx="5" class="kmu"/>
+  <text x="788" y="388" class="cmb">logic               kind</text>
+  <text x="788" y="406" class="cmb">logic [PC_BITS-1:0] PC, entry</text>
+  <text x="788" y="424" class="cmb">logic [...]         param</text>
+  <text x="788" y="442" class="cmb">logic [7:0]         ctx_id</text>
+  <text x="788" y="460" class="cmb">logic [...]         aligned_lmem_size</text>
+  <text x="788" y="478" class="cmb">kmu_args_t          args</text>
+
+  <rect x="1128" y="368" width="330" height="118" rx="5" class="arb"/>
+  <text x="1140" y="388" class="th">args.compute — kmu_compute_args_t</text>
+  <text x="1140" y="406" class="cm">grid_dim[3], block_idx[3]</text>
+  <text x="1140" y="424" class="cm">block_dim[3], block_size</text>
+  <text x="1140" y="442" class="cm">warp_step[3]</text>
+  <text x="1140" y="460" class="cm">cluster_size, is_first_of_cluster</text>
+  <text x="1140" y="478" class="tt">a GPGPU kernel, or a geometry stage</text>
+
+  <rect x="1128" y="498" width="330" height="92" rx="5" class="gfx"/>
+  <text x="1140" y="518" class="th">args.fragment — kmu_fragment_args_t</text>
+  <text x="1140" y="536" class="cm">stamps[NUM_THREADS], count</text>
+  <text x="1140" y="556" class="ts">A fragment is not a CTA: no grid, no cluster,</text>
+  <text x="1140" y="572" class="ts">no thread-index stride. It reuses those bits.</text>
+
+  <rect x="776" y="498" width="326" height="92" rx="5" class="box"/>
+  <text x="788" y="518" class="th">Why cluster_size, not cluster_dim[3]</text>
+  <text x="788" y="536" class="ts">The KMU computes the product ONCE per kernel and</text>
+  <text x="788" y="552" class="ts">broadcasts the scalar. Every field of the envelope is</text>
+  <text x="788" y="568" class="ts">a register, so this chip-spanning output has no</text>
+  <text x="788" y="584" class="ts">combinational logic on the source side.</text>
+
+  <!-- routing -->
+  <rect x="762" y="620" width="712" height="170" rx="8" class="box"/>
+  <text x="776" y="642" class="th">Fan-out picks the output by `kind` — and the difference is architectural</text>
+
+  <rect x="776" y="656" width="326" height="118" rx="5" class="arb"/>
+  <text x="788" y="676" class="th">COMPUTE — a message is one CLUSTER</text>
+  <text x="788" y="696" class="ts">No placement hint: the fan-out drops a cluster's FIRST</text>
+  <text x="788" y="712" class="ts">member on any ready core and the lock keeps the rest</text>
+  <text x="788" y="728" class="ts">with it. So clusters, not CTAs, round-robin — and a</text>
+  <text x="788" y="744" class="ts">cta_id is a LOCAL slot the walk order does not survive.</text>
+  <text x="788" y="766" class="tt">rr_ptr advances only on eop = once per cluster</text>
+
+  <rect x="1128" y="656" width="330" height="118" rx="5" class="gfx"/>
+  <text x="1140" y="676" class="th">FRAGMENT — routed by `dest`</text>
+  <text x="1140" y="696" class="ts">Fragment work is bin→core affine, and that affinity is</text>
+  <text x="1140" y="712" class="ts">what keeps same-pixel blend order correct. Load-</text>
+  <text x="1140" y="728" class="ts">balancing it the way a compute CTA is balanced would</text>
+  <text x="1140" y="744" class="ts">break the blend order outright.</text>
+  <text x="1140" y="766" class="tt">so it cannot be spread</text>
+
+  <!-- bottom banner -->
+  <rect x="34" y="812" width="1440" height="176" rx="8" class="box"/>
+  <text x="48" y="834" class="th">Two rules the tree gets right that a plain stream arbiter would not</text>
+
+  <rect x="48" y="848" width="700" height="126" rx="5" class="arb"/>
+  <text x="60" y="868" class="th">The message lock keys on `eop`, never on `valid` falling</text>
+  <text x="60" y="888" class="ts">A stream arbiter's usual "sticky until the request drops" rule is wrong on this</text>
+  <text x="60" y="904" class="ts">bus. VX_kmu holds `valid` high continuously for as long as it has CTAs left, so a</text>
+  <text x="60" y="920" class="ts">valid-keyed lock would never release — it would starve every other master forever.</text>
+  <text x="60" y="942" class="cm">lock_v &lt;= ~m_data[PW_EOP];   // released by eop, not by a lull</text>
+  <text x="60" y="964" class="tt">Ready is masked alongside valid, or an ungranted input would believe its beat was taken.</text>
+
+  <rect x="762" y="848" width="712" height="126" rx="5" class="gfx"/>
+  <text x="774" y="868" class="th">Every arb exports `busy` — and it has to</text>
+  <text x="774" y="888" class="ts">A descriptor buffered inside an arb (IN_BUF / OUT_BUF are 3 at every level with</text>
+  <text x="774" y="904" class="ts">fan-out) has already left its producer but has not reached a consumer, so it is</text>
+  <text x="774" y="920" class="ts">invisible to BOTH ends. Without this the launch reports complete while CTAs are</text>
+  <text x="774" y="936" class="ts">still queued in the tree — the host's edge-sensitive idle-wait latches it and the</text>
+  <text x="774" y="952" class="ts">kernel never runs. One up/down counter covers all internal storage.</text>
+  <text x="774" y="972" class="tt">Any buffer on the launch path MUST be visible to the busy tree.</text>
+</svg>

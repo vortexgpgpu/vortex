@@ -11,12 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU short-stack-overflow smoke — W9(b) host driver.
+// PRISM RTU short-stack-overflow smoke — host driver.
 //
 // Builds a CW-BVH4 over N triangles stacked in depth along the ray, so the
 // tree is several levels deep — deeper than the modest short stack the Makefile
 // configures (VX_CFG_RTU_STACK_DEPTH). A +z ray hits every triangle; the walker
-// must overflow, drop far subtrees, and re-descend (§8.5.1 restart) to still
+// must overflow, drop far subtrees, and re-descend (restart) to still
 // return the CLOSEST hit (nearest triangle, prim 0, t=5).
 
 #include <iostream>

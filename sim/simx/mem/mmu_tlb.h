@@ -22,13 +22,22 @@ class Tlb {
 public:
   explicit Tlb(uint32_t size = VX_CFG_TLB_SIZE);
 
-  // Returns {hit, ppn} for the given vpn. Increments `reads_` on every
-  // call and `hits_` on a successful lookup.
-  std::pair<bool, uint64_t> lookup(uint64_t vpn);
+  struct Result {
+    bool     hit = false;
+    uint64_t ppn = 0;     // 4KB-granule translation (superpage entries
+                          // splice the vpn low bits back in)
+    uint8_t  flags = 0;
+    uint8_t  level = 0;
+  };
 
-  // Install a new translation. Evicts a non-MRU entry when the TLB is
-  // full; updates `evictions_` if the chosen slot was previously valid.
-  void fill(uint64_t vpn, uint64_t ppn, uint8_t flags);
+  // Increments `reads_` on every call and `hits_` on a successful lookup.
+  Result lookup(uint64_t vpn);
+
+  // Install a new translation at the given page level (0 = base page,
+  // 1 = mega, 2 = giga); one superpage entry covers its whole range.
+  // Evicts a non-MRU entry when the TLB is full; updates `evictions_`
+  // if the chosen slot was previously valid.
+  void fill(uint64_t vpn, uint64_t ppn, uint8_t flags, uint8_t level);
 
   // Invalidate every entry (sfence.vma equivalent).
   void flush();
@@ -43,8 +52,9 @@ private:
     bool     valid = false;
     bool     mru   = false;
     uint64_t vpn   = 0;
-    uint64_t ppn   = 0;
+    uint64_t ppn   = 0;   // aligned down to the entry's level
     uint8_t  flags = 0;
+    uint8_t  level = 0;
   };
 
   // Linear flat array; small enough (typ. 32 entries) for a per-cycle

@@ -17,6 +17,8 @@ all:
 	$(MAKE) -C cp_dcr_proxy
 	$(MAKE) -C cp_unpack
 	$(MAKE) -C cp_axil_regfile
+	$(MAKE) -C afu_axil_demux
+	$(MAKE) -C afu_reset_seq
 	$(MAKE) -C cp_axi_path
 	$(MAKE) -C cp_dma
 	$(MAKE) -C cp_core
@@ -45,6 +47,8 @@ run:
 	$(MAKE) -C cp_dcr_proxy run
 	$(MAKE) -C cp_unpack run
 	$(MAKE) -C cp_axil_regfile run
+	$(MAKE) -C afu_axil_demux run
+	$(MAKE) -C afu_reset_seq run
 	$(MAKE) -C cp_axi_path run
 	$(MAKE) -C cp_dma run
 	$(MAKE) -C cp_core run
@@ -72,11 +76,11 @@ TCU_BASE := -DSIMULATION -DSV_DPI -DVX_CFG_EXT_TCU_ENABLE
 # USE_DSP=1 maps the native-TFR FEDP multipliers onto DSP48 (vs the default
 # LUT/Wallace path). Forwarded to tcu_fedp; ignored by the non-TFR datapaths.
 USE_DSP ?= 0
-# $(1)=NUM_REGS $(2)=LATENCY $(3)=extra CONFIGS $(4)=run OPTS
+# $(1)=NUM_REGS $(2)=extra CONFIGS $(3)=run OPTS
 define tcu_case
 	$(MAKE) -C tcu_fedp clean
-	$(MAKE) -C tcu_fedp NUM_REGS=$(1) LATENCY=$(2) USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) $(3)"
-	$(MAKE) -C tcu_fedp run NUM_REGS=$(1) LATENCY=$(2) USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) $(3)" OPTS="$(4)"
+	$(MAKE) -C tcu_fedp NUM_REGS=$(1) USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) $(2)"
+	$(MAKE) -C tcu_fedp run NUM_REGS=$(1) USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) $(2)" OPTS="$(3)"
 endef
 # integer pair on one build (int8/uint8 share INT8; int4/uint4 share INT4)
 # $(1)=type $(2)=enable $(3)=fmtA $(4)=fmtB
@@ -87,12 +91,16 @@ define tcu_int_pair
 	$(MAKE) -C tcu_fedp run USE_DSP=$(USE_DSP) CONFIGS="$(TCU_BASE) -DVX_CFG_TCU_TYPE_$(1) -DVX_CFG_TCU_$(2)_ENABLE" OPTS="--fmt=$(4)"
 endef
 # Native-TFR float + integer formats; USE_DSP comes from the caller.
+# The testbench latency derives from the configured VX_CFG_TCU_LATENCY; the
+# last case pins the 2-stage multiply used for FPGA synthesis
+# (VX_CFG_TCU_LATENCY=5).
 define tcu_tfr_suite
-	$(call tcu_case,2,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_TF32_ENABLE,--fmt=1 --W=25)
-	$(call tcu_case,2,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP,--fmt=2 --W=25)
-	$(call tcu_case,4,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP,--fmt=3 --W=25)
-	$(call tcu_case,4,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_FP8_ENABLE,--fmt=4 --W=25)
-	$(call tcu_case,2,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_FP8_ENABLE,--fmt=5 --W=25)
+	$(call tcu_case,2,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_TF32_ENABLE,--fmt=1 --W=25)
+	$(call tcu_case,2,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP,--fmt=2 --W=25)
+	$(call tcu_case,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP,--fmt=3 --W=25)
+	$(call tcu_case,4,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_FP8_ENABLE,--fmt=4 --W=25)
+	$(call tcu_case,2,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_FP8_ENABLE,--fmt=5 --W=25)
+	$(call tcu_case,2,-DVX_CFG_TCU_TYPE_TFR -DUSE_FEDP -DVX_CFG_TCU_LATENCY=5,--fmt=2 --W=25)
 	$(call tcu_int_pair,TFR,INT8,17,18)
 	$(call tcu_int_pair,TFR,INT4,19,20)
 endef
@@ -100,11 +108,11 @@ run-tcu:
 	# native TFR — LUT/Wallace multipliers (USE_DSP=0)
 	$(call tcu_tfr_suite)
 	# DPI reference — float (discrete mul/add, --no-fused)
-	$(call tcu_case,1,4,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_TF32_ENABLE,--fmt=1 --no-fused)
-	$(call tcu_case,1,4,-DVX_CFG_TCU_TYPE_DPI,--fmt=2 --no-fused)
-	$(call tcu_case,1,4,-DVX_CFG_TCU_TYPE_DPI,--fmt=3 --no-fused)
-	$(call tcu_case,1,4,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE,--fmt=4 --no-fused)
-	$(call tcu_case,1,4,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE,--fmt=5 --no-fused)
+	$(call tcu_case,1,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_TF32_ENABLE,--fmt=1 --no-fused)
+	$(call tcu_case,1,-DVX_CFG_TCU_TYPE_DPI,--fmt=2 --no-fused)
+	$(call tcu_case,1,-DVX_CFG_TCU_TYPE_DPI,--fmt=3 --no-fused)
+	$(call tcu_case,1,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE,--fmt=4 --no-fused)
+	$(call tcu_case,1,-DVX_CFG_TCU_TYPE_DPI -DVX_CFG_TCU_FP8_ENABLE,--fmt=5 --no-fused)
 	# DPI reference — integer
 	$(call tcu_int_pair,DPI,INT8,17,18)
 	$(call tcu_int_pair,DPI,INT4,19,20)

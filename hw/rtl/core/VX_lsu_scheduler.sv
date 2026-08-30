@@ -216,7 +216,8 @@ module VX_lsu_scheduler import VX_gpu_pkg::*; #(
         .UUID_WIDTH  (UUID_WIDTH),
         .RSP_PARTIAL (1),
         .MEM_OUT_BUF (0),
-        .CORE_OUT_BUF(0)
+        .CORE_OUT_BUF(0),
+        .LUTRAM      (1)
     ) mem_scheduler (
         .clk            (clk),
         .reset          (reset),

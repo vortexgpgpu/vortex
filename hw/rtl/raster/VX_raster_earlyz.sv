@@ -71,47 +71,18 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; import VX
     // Candidate depth: bit-identical to the FS late-Z (kernel PLANE_Z Q7.24 plane
     // MAC, saturated to the 24-bit zbuf range). Absolute pixel coords per pixel:
     //   X = pos_x*2 + (i&1),  Y = pos_y*2 + (i>>1)
+    //
+    // Late-Z truncates the int64 MAC to int32 before saturating, so the whole
+    // evaluation is mod-2^32 and 32-bit products suffice. The quad origin term
+    // za*2qx + zb*2qy + zc is computed once per quad from the registered wave;
+    // each pixel then adds za/zb for its intra-quad offset a stage later.
     // ═══════════════════════════════════════════════════════════════════════
-    wire signed [31:0] za = zplane_in[0];   // A' (Q7.24)
-    wire signed [31:0] zb = zplane_in[1];   // B'
-    wire signed [31:0] zc = zplane_in[2];   // C'
 
-    wire [NUM_PIX-1:0]        pix_cov_in;
-    wire [NUM_PIX-1:0][`VX_RASTER_DIM_BITS-1:0] pix_x;
-    wire [NUM_PIX-1:0][`VX_RASTER_DIM_BITS-1:0] pix_y;
-    wire [NUM_PIX-1:0][23:0]  pix_cand;
-
-    for (genvar q = 0; q < OUTPUT_QUADS; ++q) begin : g_quad
+    wire [NUM_PIX-1:0] pix_cov_in;
+    for (genvar q = 0; q < OUTPUT_QUADS; ++q) begin : g_cov_in
         for (genvar i = 0; i < 4; ++i) begin : g_pix
-            localparam p = q * 4 + i;
-            wire [`VX_RASTER_DIM_BITS-1:0] px = {stamps_in[q].pos_x, 1'b0} | `VX_RASTER_DIM_BITS'(i[0]);
-            wire [`VX_RASTER_DIM_BITS-1:0] py = {stamps_in[q].pos_y, 1'b0} | `VX_RASTER_DIM_BITS'(i[1]);
-            assign pix_x[p]      = px;
-            assign pix_y[p]      = py;
-            assign pix_cov_in[p] = stamps_in[q].mask[i];
-
-            // int64 MAC then int32 truncation (matches fixed24_t::make).
-            wire signed [63:0] acc = za * $signed({{(64-`VX_RASTER_DIM_BITS){1'b0}}, px})
-                                   + zb * $signed({{(64-`VX_RASTER_DIM_BITS){1'b0}}, py})
-                                   + $signed({{32{zc[31]}}, zc});
-            // Saturate the Q7.24 plane MAC to the 24-bit zbuf range: negative
-            // clamps to near, overflow clamps to far.
-            wire signed [31:0] zbits = acc[31:0];
-            assign pix_cand[p] = zbits[31] ? 24'd0
-                               : (|zbits[30:24]) ? 24'(OM_DEPTH_MASK)
-                               : zbits[23:0];
-            `UNUSED_VAR (acc)
+            assign pix_cov_in[q * 4 + i] = stamps_in[q].mask[i];
         end
-    end
-
-    // ── Depth-buffer word address per pixel (mirrors VX_om_mem) ────────────
-    // word_addr = {zbuf_addr,4'b0} + X + (Y * zbuf_pitch)[31:2]
-    wire [NUM_PIX-1:0][W_ADDR_BITS-1:0] pix_waddr;
-    for (genvar p = 0; p < NUM_PIX; ++p) begin : g_waddr
-        wire [31:0] y_pitch = pix_y[p] * dcrs.zbuf_pitch;
-        wire [W_ADDR_BITS-1:0] baddr = {dcrs.zbuf_addr, 4'b0} + W_ADDR_BITS'(pix_x[p]);
-        assign pix_waddr[p] = baddr + W_ADDR_BITS'(y_pitch[31:2]);
-        `UNUSED_VAR (y_pitch)
     end
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -119,17 +90,63 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; import VX
     // depth, compare, narrow coverage, forward. Serializing waves keeps the
     // logic simple; correctness (not throughput) is the goal.
     // ═══════════════════════════════════════════════════════════════════════
-    localparam STATE_IDLE = 2'd0;
-    localparam STATE_READ = 2'd1;   // issuing depth reads
-    localparam STATE_WAIT = 2'd2;   // waiting for the batch response
-    localparam STATE_SEND = 2'd3;   // forwarding the narrowed wave
+    localparam STATE_IDLE  = 3'd0;
+    localparam STATE_EVAL1 = 3'd1;  // per-quad plane MAC / pitch products
+    localparam STATE_EVAL2 = 3'd2;  // per-pixel offsets, saturation, addresses
+    localparam STATE_READ  = 3'd3;  // issuing depth reads
+    localparam STATE_WAIT  = 3'd4;  // waiting for the batch response
+    localparam STATE_SEND  = 3'd5;  // forwarding the narrowed wave
 
-    reg [1:0] state;
+    reg [2:0] state;
 
     raster_stamp_t [OUTPUT_QUADS-1:0] wave_stamps;
+    reg [2:0][`RASTER_DATA_BITS-1:0]  wave_zplane;
     reg [NUM_PIX-1:0][23:0]           wave_cand;
     reg [NUM_PIX-1:0][W_ADDR_BITS-1:0] wave_waddr;
     reg [NUM_PIX-1:0]                  wave_cov;
+
+    // Per-quad EVAL1 products (from the registered wave).
+    reg [OUTPUT_QUADS-1:0][31:0]      quad_zbase;   // za*2qx + zb*2qy + zc (mod 2^32)
+    reg [OUTPUT_QUADS-1:0][31:0]      quad_ypitch;  // 2qy * zbuf_pitch
+
+    wire signed [31:0] za = wave_zplane[0];   // A' (Q7.24)
+    wire signed [31:0] zb = wave_zplane[1];   // B'
+    wire signed [31:0] zc = wave_zplane[2];   // C'
+
+    wire [OUTPUT_QUADS-1:0][31:0] quad_zbase_n;
+    wire [OUTPUT_QUADS-1:0][31:0] quad_ypitch_n;
+    for (genvar q = 0; q < OUTPUT_QUADS; ++q) begin : g_quad_eval
+        wire [`VX_RASTER_DIM_BITS-1:0] qx2 = {wave_stamps[q].pos_x, 1'b0};
+        wire [`VX_RASTER_DIM_BITS-1:0] qy2 = {wave_stamps[q].pos_y, 1'b0};
+        assign quad_zbase_n[q] = 32'(za * $signed({{(32-`VX_RASTER_DIM_BITS){1'b0}}, qx2})
+                                   + zb * $signed({{(32-`VX_RASTER_DIM_BITS){1'b0}}, qy2})
+                                   + zc);
+        assign quad_ypitch_n[q] = 32'(qy2) * dcrs.zbuf_pitch;
+    end
+
+    // Per-pixel EVAL2 composition (from the registered per-quad products):
+    //   zbits(p) = quad_zbase + i0*za + i1*zb  (mod 2^32), then saturate;
+    //   waddr(p) = {zbuf_addr,4'b0} + X + ((2qy + i1) * pitch)[31:2]
+    // The [31:2] shift is applied after the full 32-bit row product, so the
+    // odd row adds the pitch before shifting (carries out of bits [1:0]).
+    wire [NUM_PIX-1:0][23:0]           pix_cand_n;
+    wire [NUM_PIX-1:0][W_ADDR_BITS-1:0] pix_waddr_n;
+    for (genvar q = 0; q < OUTPUT_QUADS; ++q) begin : g_pix_eval
+        for (genvar i = 0; i < 4; ++i) begin : g_pix
+            localparam p = q * 4 + i;
+            wire [`VX_RASTER_DIM_BITS-1:0] px = {wave_stamps[q].pos_x, 1'b0} | `VX_RASTER_DIM_BITS'(i[0]);
+            wire signed [31:0] zbits = $signed(quad_zbase[q])
+                                     + (i[0] ? za : 32'sd0)
+                                     + (i[1] ? zb : 32'sd0);
+            assign pix_cand_n[p] = zbits[31] ? 24'd0
+                                 : (|zbits[30:24]) ? 24'(OM_DEPTH_MASK)
+                                 : zbits[23:0];
+            wire [31:0] y_pitch = quad_ypitch[q] + (i[1] ? dcrs.zbuf_pitch : 32'd0);
+            wire [W_ADDR_BITS-1:0] baddr = {dcrs.zbuf_addr, 4'b0} + W_ADDR_BITS'(px);
+            assign pix_waddr_n[p] = baddr + W_ADDR_BITS'(y_pitch[31:2]);
+            `UNUSED_VAR (y_pitch)
+        end
+    end
 
     // Memory request/response (batch read of covered pixels)
     reg                          mreq_valid;
@@ -209,13 +226,22 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; import VX
             STATE_IDLE: begin
                 if (valid_in && enabled) begin
                     wave_stamps <= stamps_in;
-                    wave_cand   <= pix_cand;
-                    wave_waddr  <= pix_waddr;
+                    wave_zplane <= zplane_in;
                     wave_cov    <= pix_cov_in;
-                    // No covered pixels at all → nothing to read; drop in SEND.
-                    mreq_valid  <= (| pix_cov_in);
-                    state       <= (| pix_cov_in) ? STATE_READ : STATE_SEND;
+                    state       <= STATE_EVAL1;
                 end
+            end
+            STATE_EVAL1: begin
+                quad_zbase  <= quad_zbase_n;
+                quad_ypitch <= quad_ypitch_n;
+                state       <= STATE_EVAL2;
+            end
+            STATE_EVAL2: begin
+                wave_cand  <= pix_cand_n;
+                wave_waddr <= pix_waddr_n;
+                // No covered pixels at all → nothing to read; drop in SEND.
+                mreq_valid <= (| wave_cov);
+                state      <= (| wave_cov) ? STATE_READ : STATE_SEND;
             end
             STATE_READ: begin
                 if (mreq_fire) begin
@@ -281,6 +307,7 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; import VX
         .CORE_QUEUE_SIZE(`VX_CFG_RASTER_MEM_QUEUE_SIZE),
         .UUID_WIDTH   (UUID_WIDTH),
         .RSP_PARTIAL  (0),
+        .RW_ENABLE    (0),
         .MEM_OUT_BUF  (2),
         .CORE_OUT_BUF (2)
     ) mem_scheduler (

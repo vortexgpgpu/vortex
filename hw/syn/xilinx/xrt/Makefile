@@ -1,5 +1,9 @@
 ROOT_DIR := $(realpath ../../../..)
 include $(ROOT_DIR)/config.mk
+# Exports VERILATOR/VERILATOR_PATH as absolute paths. gen_sources.sh resolves
+# verilator from the environment, so without this the flow silently depends on
+# verilator being on PATH and fails with "verilator: command not found".
+include $(VORTEX_HOME)/hw/syn/common.mk
 
 ifneq ($(findstring Makefile, $(MAKEFILE_LIST)), Makefile)
 help:
@@ -32,6 +36,7 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
+AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 VIVADO := $(XILINX_VIVADO)/bin/vivado
@@ -100,7 +105,7 @@ ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR)
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(AFU_COMMON_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE)
 
 # Command Processor sources. RTL_PKGS holds packages only; the CP
@@ -108,7 +113,7 @@ RTL_INCLUDE += $(FPU_INCLUDE)
 RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
 RTL_INCLUDE += -I$(RTL_DIR)/cp
 
-# Per-extension RTL sources (TCU/DXA/V/gfx-window/RTU/TEX/RASTER/OM) —
+# Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
 # single source of truth, appended based on the resolved XCONFIGS.
 include $(VORTEX_HOME)/hw/syn/extensions.mk
 
@@ -121,6 +126,18 @@ KERNEL_FREQ ?= 300
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 VPP_FLAGS += --kernel_frequency $(KERNEL_FREQ)
+
+# Auto-frequency-scaling control.
+# The Alveo flow drives the kernel clock from a runtime-programmable (scalable)
+# MMCM, so a design that misses --kernel_frequency does NOT fail: the compiler
+# silently reprograms the clock down to whatever met timing and still exits 0
+# (the drop shows up only as "Achieved Freq" in xclbin.info). Disabling scaling
+# forces a normal post-route timing check that FAILS the build on a miss.
+# Set ALLOW_FREQ_SCALING=1 to restore stock behavior (emit a downscaled bitstream).
+ALLOW_FREQ_SCALING ?= 0
+ifeq ($(ALLOW_FREQ_SCALING),0)
+VPP_FLAGS += --advanced.param compiler.enableAutoFrequencyScaling=false
+endif
 
 # register compilation hooks
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE=${SRC_DIR}/pre_opt_hook.tcl"
@@ -165,7 +182,9 @@ endif
 
 # compilation flags
 CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-CFLAGS += $(CONFIGS)
+# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
+# resolved type selectors so an enum override selects its RTL implementation.
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 CFLAGS += $(RTL_INCLUDE)
 
 # ast dump flags
@@ -212,6 +231,14 @@ ifeq ($(TARGET), hw)
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_utilization_placed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/hier_utilization.rpt $(BUILD_DIR)/bin
+ifeq ($(ALLOW_FREQ_SCALING),0)
+	@if grep -q 'AUTO-FREQ-SCALING-04' $(BUILD_DIR)/bin/vivado.log; then \
+		echo "ERROR: kernel clock failed to meet --kernel_frequency=$(KERNEL_FREQ) MHz; Vitis auto-scaled it down:"; \
+		grep 'AUTO-FREQ-SCALING-04' $(BUILD_DIR)/bin/vivado.log; \
+		echo "Build FAILED (set ALLOW_FREQ_SCALING=1 to accept a downscaled bitstream)."; \
+		exit 1; \
+	fi
+endif
 endif
 
 chipscope:

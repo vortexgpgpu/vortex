@@ -46,20 +46,15 @@ import VX_raster_pkg::*;
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_bus_if.master     om_bus_if,
 `endif
 
-`ifdef VX_CFG_EXT_RASTER_ENABLE
-    // Fragment payload-stage write port into the gfx window. Driven by the
-    // per-core fragment dispatcher (VX_raster_dispatch, at core level): the raster
-    // bus is consumed there, not in the SFU. RASTER's own SFU op is gone
-    // (push, not pull) — its PE slot is retired to a tie-off below.
-    VX_gfx_win_wr_if.slave                                 rast_win_wr_if,
-`endif
+    // RASTER has no SFU port at all now: the fragment shader is launched by the
+    // raster engine (push, not pull) and its stamp arrives in the launch, so
+    // nothing about a fragment passes through this unit.
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     VX_rtu_bus_if.master    rtu_bus_if,
-    VX_async_trap_if.master async_trap_if,
+    VX_sched_unlock_if.master sched_unlock_if,
 `endif
 
     VX_sched_csr_if.slave   sched_csr_if,
@@ -73,7 +68,7 @@ import VX_raster_pkg::*;
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = 1;
     localparam NUM_LANES    = `VX_CFG_NUM_SFU_LANES;
-    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `EXT_GFX_ANY_ENABLED;
+    localparam PE_COUNT     = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
     localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
     localparam PE_IDX_WCTL  = 0;
     localparam PE_IDX_CSRS  = 1;
@@ -89,8 +84,8 @@ import VX_raster_pkg::*;
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     localparam PE_IDX_RASTER = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED;
 `endif
-`ifdef EXT_GFX_ANY_ENABLE
-    localparam PE_IDX_GFXW  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    localparam PE_IDX_RTUW  = 2 + `VX_CFG_EXT_DXA_ENABLED + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RASTER_ENABLED;
 `endif
 
     VX_execute_if #(
@@ -146,9 +141,9 @@ import VX_raster_pkg::*;
             pe_select = PE_SEL_BITS'(PE_IDX_RASTER);
         end
     `endif
-    `ifdef EXT_GFX_ANY_ENABLE
-        if (per_block_execute_if[0].data.op_type == INST_SFU_GFXW) begin
-            pe_select = PE_SEL_BITS'(PE_IDX_GFXW);
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        if (per_block_execute_if[0].data.op_type == INST_SFU_RTUW) begin
+            pe_select = PE_SEL_BITS'(PE_IDX_RTUW);
         end
     `endif
     end
@@ -230,100 +225,36 @@ import VX_raster_pkg::*;
     `UNUSED_VAR (txbar_bus_if.ready)
 `endif
 
-`ifdef EXT_GFX_ANY_ENABLE
-    // Shared-window FF-consumer wires: the TEX/OM datapath PEs read their input
-    // payload from VX_gfx_window's slot RAM, and TEX additionally writes its
-    // texel back. Each unit consumes exactly two slots per cycle and addresses
-    // them with a runtime slot index, so two read ports suffice for both
-    // (vx_tex4: u[f],v[f]; vx_om4: colour[f],depth[f]).
-    // The SFU issues one op to one PE per cycle (VX_pe_switch demux + the
-    // multi-cycle macro-op holds execute_if), so TEX and OM never read the
-    // window in the same cycle — a select mux drives the single read-port set,
-    // avoiding duplicated RAM mirrors (area/timing). Only TEX writes.
-    localparam GFXW_CONS_RD_PORTS = 2;
-    VX_gfx_win_rd_if #(.NUM_LANES (NUM_LANES), .NUM_PORTS (GFXW_CONS_RD_PORTS)) gfxw_cons_rd_if();
-    VX_gfx_win_wr_if #(.NUM_LANES (NUM_LANES)) gfxw_cons_wr_if();
-
-    // Fragment payload → window write port (2nd consumer write port). With
-    // RASTER the seed is forwarded from the core-level dispatcher (VX_raster_dispatch);
-    // without RASTER (e.g. RTU-only) it is tied off so VX_gfx_window still elaborates.
-    VX_gfx_win_wr_if #(.NUM_LANES (NUM_LANES)) gfxw_rast_wr_if();
-  `ifdef VX_CFG_EXT_RASTER_ENABLE
-    assign gfxw_rast_wr_if.valid = rast_win_wr_if.valid;
-    assign gfxw_rast_wr_if.data  = rast_win_wr_if.data;
-    assign rast_win_wr_if.ready  = gfxw_rast_wr_if.ready;
-  `else
-    assign gfxw_rast_wr_if.valid = 1'b0;
-    assign gfxw_rast_wr_if.data  = '0;
-    `UNUSED_VAR (gfxw_rast_wr_if.ready)
-  `endif
-
-  `ifdef VX_CFG_EXT_TEX_ENABLE
-    VX_gfx_win_rd_if #(.NUM_LANES (NUM_LANES), .NUM_PORTS (GFXW_CONS_RD_PORTS)) tex_cons_rd_if();
-  `endif
-  `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_gfx_win_rd_if #(.NUM_LANES (NUM_LANES), .NUM_PORTS (GFXW_CONS_RD_PORTS)) om_cons_rd_if();
-  `endif
-
-    // ── read-port select mux (TEX vs OM) ──────────────────────────────────
-  `ifdef VX_CFG_EXT_TEX_ENABLE
-   `ifdef VX_CFG_EXT_OM_ENABLE
-    wire om_rd_active = pe_execute_if[PE_IDX_OM].valid;  // serialized w.r.t. TEX
-    assign gfxw_cons_rd_if.req = om_rd_active ? om_cons_rd_if.req : tex_cons_rd_if.req;
-    assign tex_cons_rd_if.data = gfxw_cons_rd_if.data;
-    assign om_cons_rd_if.data  = gfxw_cons_rd_if.data;
-   `else
-    assign gfxw_cons_rd_if.req = tex_cons_rd_if.req;
-    assign tex_cons_rd_if.data = gfxw_cons_rd_if.data;
-   `endif
-    // write port driven directly by TEX (cons_wr_if at the tex_unit instance).
-  `else
-   `ifdef VX_CFG_EXT_OM_ENABLE
-    assign gfxw_cons_rd_if.req = om_cons_rd_if.req;
-    assign om_cons_rd_if.data  = gfxw_cons_rd_if.data;
-   `else
-    // No FF consumer (e.g. RTU-only): tie off the read port.
-    assign gfxw_cons_rd_if.req = '0;
-    `UNUSED_VAR (gfxw_cons_rd_if.data)
-   `endif
-    // No TEX → no window writeback.
-    assign gfxw_cons_wr_if.valid = 1'b0;
-    assign gfxw_cons_wr_if.data  = '0;
-    `UNUSED_VAR (gfxw_cons_wr_if.ready)
-  `endif
-`endif
+// The hit window has no FF consumers left. TEX was the last one — it spilled
+// its 2x2 quad's eight (u,v) operands into window slots because no RISC-V encoding
+// holds eight inputs, and that cost the window two full RAM mirrors. It now takes
+// u/v/lod in registers (vx_tex, R4-type) and its shader computes the mip LOD with
+// vx_tex_quad_lod(), so the window is down to a single mirror and its only tenant
+// is the RTU.
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-tex", INSTANCE_ID))),
         .CORE_ID     (CORE_ID),
-        .NUM_LANES   (NUM_LANES),
-        .CONS_RD_PORTS (GFXW_CONS_RD_PORTS)
+        .NUM_LANES   (NUM_LANES)
     ) tex_unit (
         .clk        (clk),
         .reset      (reset),
         .execute_if (pe_execute_if[PE_IDX_TEX]),
         .result_if  (pe_result_if[PE_IDX_TEX]),
-        .tex_bus_if (tex_bus_if),
-        .cons_rd_if    (tex_cons_rd_if),
-        .cons_wr_if    (gfxw_cons_wr_if)
+        .tex_bus_if (tex_bus_if)
     );
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
-    VX_om_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-om", INSTANCE_ID))),
-        .CORE_ID     (CORE_ID),
-        .NUM_LANES   (NUM_LANES),
-        .CONS_RD_PORTS (GFXW_CONS_RD_PORTS)
-    ) om_unit (
-        .clk        (clk),
-        .reset      (reset),
-        .execute_if (pe_execute_if[PE_IDX_OM]),
-        .result_if  (pe_result_if[PE_IDX_OM]),
-        .cons_rd_if    (om_cons_rd_if),
-        .om_bus_if  (om_bus_if)
-    );
+    // OM export (v2): a fragment leaves the shader as a STORE to the OM aperture
+    // (vx_om_export -> VX_gfx_uops -> the LSU), so the SFU services no OM op. The
+    // PE slot is retained for index stability and tied off, as RASTER's is.
+    assign pe_execute_if[PE_IDX_OM].ready = 1'b1;
+    assign pe_result_if[PE_IDX_OM].valid  = 1'b0;
+    assign pe_result_if[PE_IDX_OM].data   = '0;
+    `UNUSED_VAR (pe_execute_if[PE_IDX_OM].valid)
+    `UNUSED_VAR (pe_execute_if[PE_IDX_OM].data)
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -339,29 +270,23 @@ import VX_raster_pkg::*;
     `UNUSED_VAR (pe_result_if[PE_IDX_RASTER].ready)
 `endif
 
-`ifdef EXT_GFX_ANY_ENABLE
-    VX_gfx_window #(
-        .INSTANCE_ID (`SFORMATF(("%s-gfxw", INSTANCE_ID))),
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_unit #(
+        .INSTANCE_ID (`SFORMATF(("%s-rtuw", INSTANCE_ID))),
         .CORE_ID     (CORE_ID),
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .RTU_TAG_WIDTH (RTU_REQ_TAG_WIDTH),
     `endif
-        .NUM_LANES   (NUM_LANES),
-        .CONS_RD_PORTS (GFXW_CONS_RD_PORTS)
-    ) gfx_window (
+        .NUM_LANES   (NUM_LANES)
+    ) rtu_unit (
         .clk        (clk),
         .reset      (reset),
-        .execute_if (pe_execute_if[PE_IDX_GFXW]),
-        .result_if  (pe_result_if[PE_IDX_GFXW]),
-        // FF-consumer window access (driven by the TEX/OM PEs, or tied off above).
-        .cons_rd_if    (gfxw_cons_rd_if),
-        .cons_wr_if    (gfxw_cons_wr_if),
-        // FWD raster payload write port (2nd consumer write port)
-        .rast_wr_if    (gfxw_rast_wr_if)
+        .execute_if (pe_execute_if[PE_IDX_RTUW]),
+        .result_if  (pe_result_if[PE_IDX_RTUW])
     `ifdef VX_CFG_EXT_RTU_ENABLE
         ,
         .rtu_bus_if (rtu_bus_if),
-        .async_trap_if (async_trap_if)
+        .sched_unlock_if (sched_unlock_if)
     `endif
     );
 `endif

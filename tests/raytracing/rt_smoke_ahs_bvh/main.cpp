@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU AHS-on-CW-BVH smoke — Phase 2 host driver.
+// PRISM RTU AHS-on-CW-BVH smoke — host driver.
 //
 // Identical to rt_smoke_ahs (ray, callback, oracle) except the lone
 // non-opaque triangle lives in a CW-BVH4 leaf instead of a flat list, so
@@ -148,8 +148,7 @@ int main(int argc, char* argv[]) {
 
   // Exercise both AHS branches. With an explicit -d, run only that one; with
   // no -d, run IGNORE->MISS then ACCEPT->HIT back to back so a single CI run
-  // covers both the miss path and the committed-hit path (the accept branch
-  // was previously never exercised in CI — the Makefile only passed -d0).
+  // covers both the miss path and the committed-hit path.
   uint32_t decisions[2];
   int      num_decisions;
   if (decision_set) {

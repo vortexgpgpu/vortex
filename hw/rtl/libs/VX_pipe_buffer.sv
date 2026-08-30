@@ -40,7 +40,7 @@ module VX_pipe_buffer #(
         assign data_out  = data_in;
     end else begin : g_register
         wire [DEPTH:0] valid;
-        wire ready [DEPTH+1] /* verilator split_var*/;
+        wire ready [DEPTH+1];
         wire [DEPTH:0][DATAW-1:0] data;
 
         assign valid[0] = valid_in;

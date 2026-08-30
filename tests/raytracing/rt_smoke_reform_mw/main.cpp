@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU reformation multi-warp smoke — Phase 3-A2 non-interference.
+// PRISM RTU reformation multi-warp smoke — non-interference.
 //
 // Launches num_warps blocks × lanes_per_warp threads each, so the CTA
 // dispatcher hands each block to a distinct warp. Every lane fires the

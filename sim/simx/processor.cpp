@@ -13,6 +13,8 @@
 
 #include "processor.h"
 #include "processor_impl.h"
+#include "core.h"
+#include "scheduler.h"
 #include <VX_types.h>
 
 #include <cstdlib>
@@ -37,11 +39,13 @@ ProcessorImpl::ProcessorImpl()
   : clusters_(VX_CFG_NUM_CLUSTERS)
 {
   SimPlatform::instance().initialize();
+  SimPlatform::instance().set_num_workers(SIMX_NUM_WORKERS);
 
 	assert(VX_CFG_PLATFORM_MEMORY_DATA_SIZE == VX_CFG_MEM_BLOCK_SIZE);
 
   // create kernel management unit (SimObject)
-  kmu_ = Kmu::Create("kmu");
+  constexpr uint32_t total_cores = VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+  kmu_ = Kmu::Create("kmu", total_cores);
 
   // create memory simulator
   memsim_ = Memory::Create("dram", Memory::Config{
@@ -57,6 +61,28 @@ ProcessorImpl::ProcessorImpl()
   for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
     snprintf(sname, 100, "cluster%d", i);
     clusters_.at(i) = Cluster::Create(sname, i, this);
+  }
+
+  // Launch bus: a registered, credit-gated lane from the KMU to each core's
+  // dispatcher; CTAs cross into the core's domain through the slice, and
+  // admission credits return to the KMU through a slice of their own.
+  constexpr uint32_t cores_per_cluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+  for (uint32_t i = 0; i < total_cores; ++i) {
+    snprintf(sname, 100, "kmu-lane%d", i);
+    auto slice = RegSlice<kmu_req_t>::Create(sname, 1);
+    auto* core = clusters_.at(i / cores_per_cluster)->get_core(i % cores_per_cluster);
+    kmu_->bus_out.at(i).bind(&slice->In);
+    slice->Out.bind(&core->scheduler().cta_dispatcher()->bus_in);
+    snprintf(sname, 100, "kmu-credit%d", i);
+    RegSlice<uint8_t>::Ptr cslice;
+    {
+      // The return slice is owned by the sending core's partition so its
+      // output is the registered crossing back into the uncore domain.
+      SimPlatform::DomainScope core_scope(core);
+      cslice = RegSlice<uint8_t>::Create(sname, 1);
+    }
+    core->scheduler().cta_dispatcher()->credit_out.bind(&cslice->In);
+    cslice->Out.bind(&kmu_->credit_in.at(i));
   }
 
   // create L3 cache; when L3 is enabled it is the LLC, otherwise it is a
@@ -194,7 +220,7 @@ void ProcessorImpl::flush_caches() {
       if (!cluster->rtcache_flush_done()) { all_done = false; break; }
 #endif
     }
-    if (all_done && SimChannelBase::inflight_count() == 0)
+    if (all_done && SimPlatform::instance().idle())
       break;
     SimPlatform::instance().tick();
   }
@@ -208,14 +234,14 @@ void ProcessorImpl::flush_caches() {
     for (auto& cluster : clusters_) {
       if (!cluster->l2_flush_done()) { all_done = false; break; }
     }
-    if (all_done && SimChannelBase::inflight_count() == 0)
+    if (all_done && SimPlatform::instance().idle())
       break;
     SimPlatform::instance().tick();
   }
 
   // L3 cache (single instance at processor level).
   l3cache_->flush_begin();
-  while (!l3cache_->flush_done() || SimChannelBase::inflight_count() != 0) {
+  while (!l3cache_->flush_done() || !SimPlatform::instance().idle()) {
     SimPlatform::instance().tick();
   }
 }
@@ -237,15 +263,31 @@ int ProcessorImpl::run() {
         exitcode |= cluster->get_exitcode();
       }
     }
-    // Stop only when cores are idle AND no channel still carries an
-    // undelivered packet. Cache pipelines wrap a SimChannel inside TFifo,
-    // so cache-pipe state (and any in-flight cache→memory writethrough)
-    // shows up in the same counter — no per-module busy reporting needed.
-    done = !any_running && (SimChannelBase::inflight_count() == 0);
+    // A page fault kills its accesses. Most warps drain on the kill
+    // responses, but one on a path that owes no response (an instruction
+    // fetch) would stall forever: end the launch as soon as a fault is
+    // latched and the fabric is quiet, and let the host read the report.
+    bool faulted = this->mmu_fault_pending();
+    // Stop only when cores are idle AND the platform holds no undelivered
+    // work: cache pipelines wrap a SimChannel inside TFifo, so cache-pipe
+    // state (and any in-flight cache→memory writethrough) shows up in
+    // idle(), as do launch-lane CTAs and barrier hops between domains.
+    done = (!any_running || faulted) && SimPlatform::instance().idle();
     perf_mem_latency_ += perf_mem_pending_reads_;
   } while (!done);
 
   return exitcode;
+}
+
+bool ProcessorImpl::mmu_fault_pending() const {
+#ifdef VX_CFG_VM_ENABLE
+  for (auto& cluster : clusters_) {
+    if (cluster->mmu_fault_info() & VX_MMU_FAULT_VALID) {
+      return true;
+    }
+  }
+#endif
+  return false;
 }
 
 void ProcessorImpl::forward_delegated_launch() {
@@ -290,6 +332,29 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
     kmu_->dcr_write(addr, value);
     return 0;
   }
+#ifdef VX_CFG_VM_ENABLE
+  // Device SATP for the shared walker complex, assembled from two
+  // 32-bit halves and fanned out to every cluster on the high write.
+  if (addr == VX_DCR_MMU_SATP_LO) {
+    mmu_satp_ = (mmu_satp_ & ~uint64_t(0xFFFFFFFF)) | value;
+    return 0;
+  }
+  if (addr == VX_DCR_MMU_FAULT_INFO) {
+    // Write-to-clear: the host drops the report once it has read it, so a
+    // fault raised by one launch stays readable across the next one's reset.
+    for (auto& cluster : clusters_) {
+      cluster->mmu_clear_fault();
+    }
+    return 0;
+  }
+  if (addr == VX_DCR_MMU_SATP_HI) {
+    mmu_satp_ = (mmu_satp_ & 0xFFFFFFFF) | ((uint64_t)value << 32);
+    for (auto& cluster : clusters_) {
+      cluster->set_mmu_satp(mmu_satp_);
+    }
+    return 0;
+  }
+#endif
   for (auto& cluster : clusters_) {
     int ret = cluster->dcr_write(addr, value);
     if (ret != 0)
@@ -307,6 +372,31 @@ int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
     *value = 0;
     return 0;
   }
+#ifdef VX_CFG_VM_ENABLE
+  if (addr == VX_DCR_MMU_FAULT_VA
+   || addr == VX_DCR_MMU_FAULT_VA_HI
+   || addr == VX_DCR_MMU_FAULT_INFO) {
+    // Report the first cluster holding a latched fault; the latches clear
+    // on reset, so each launch starts with a clean report.
+    *value = 0;
+    for (auto& cluster : clusters_) {
+      uint32_t info = cluster->mmu_fault_info();
+      if (0 == (info & VX_MMU_FAULT_VALID)) {
+        continue;
+      }
+      uint64_t va = cluster->mmu_fault_va();
+      if (addr == VX_DCR_MMU_FAULT_INFO) {
+        *value = info;
+      } else if (addr == VX_DCR_MMU_FAULT_VA) {
+        *value = (uint32_t)va;
+      } else {
+        *value = (uint32_t)(va >> 32);
+      }
+      break;
+    }
+    return 0;
+  }
+#endif
   for (auto& cluster : clusters_) {
     int ret = cluster->dcr_read(addr, tag, value);
     if (ret != 0)
@@ -324,7 +414,7 @@ bool ProcessorImpl::any_running() const {
   for (auto& cluster : clusters_) {
     if (cluster->running()) return true;
   }
-  return (SimChannelBase::inflight_count() != 0);
+  return !SimPlatform::instance().idle();
 }
 
 ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {

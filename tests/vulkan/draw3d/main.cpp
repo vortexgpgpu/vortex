@@ -440,8 +440,7 @@ main(int argc, char **argv)
           * gfx_render Unpack8888), so the uploaded texels are identical to
           * the native draw3d path's HW-expanded ones -- the reference PNG
           * was rendered that way. Traces store textures as A8R8G8B8 (B,G,R,A
-          * in memory) or R5G6B5 (16bpp); box is R5G6B5. The previous code
-          * only handled A8R8G8B8 and uploaded a white block otherwise. */
+          * in memory) or R5G6B5 (16bpp); box is R5G6B5. */
          if (tx.format == FORMAT_A8R8G8B8 && tx.pixels.size() >= npix * 4) {
             for (size_t i = 0; i < npix; i++) {
                rgba[i*4+0] = tx.pixels[i*4+2];   /* R */

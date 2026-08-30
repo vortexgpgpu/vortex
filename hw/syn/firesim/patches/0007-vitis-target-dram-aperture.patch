@@ -1,0 +1,157 @@
+--- build_firesim/firesim/sim/midas/src/main/cc/simif_vitis.cc.orig
++++ build_firesim/firesim/sim/midas/src/main/cc/simif_vitis.cc
+@@ -1,4 +1,8 @@
++#include <algorithm>
+ #include <cassert>
++#include <stdexcept>
++#include <string>
++#include <vector>
+ 
+ #include <fcntl.h>
+ #include <iostream>
+@@ -12,6 +16,7 @@
+ #include "experimental/xrt_device.h"
+ #include "experimental/xrt_ip.h"
+ #include "experimental/xrt_kernel.h"
++#include "experimental/xrt_xclbin.h"
+ 
+ class simif_vitis_t final : public simif_t, public FPGAManagedStreamIO {
+ public:
+@@ -48,10 +53,61 @@
+   xrt::bo fpga_mem_0;
+ };
+ 
+-/// Size of the single device-memory window backing host_mem_0.
+-/// One U55C HBM pseudo-channel is 512 MB; a U250 DDR bank is larger, but a
+-/// single channel is all this simif supports either way.
+-constexpr size_t host_mem_0_size_bytes = 512ULL * 1024 * 1024;
++/// Size of the device-memory window backing host_mem_0.
++///
++/// This must cover the target's whole address map, not merely the part of it a
++/// given test happens to touch. A 32-bit target places its stack at the top of
++/// 4 GiB and its program image well above any buffer it allocates, so anything
++/// smaller leaves those accesses unserved: writes are dropped and reads return
++/// an address-independent value, with no error anywhere to say so.
++///
++/// One U55C HBM pseudo-channel is 512 MB, so 4 GiB spans eight of them and
++/// `--connectivity.sp` must bind host_mem_0 to a matching range (HOST_MEM_SP in
++/// the Vitis kernel Makefile). The two are a pair: widening one alone silently
++/// truncates.
++constexpr size_t host_mem_0_size_bytes = 4ULL * 1024 * 1024 * 1024;
++
++/// Allocates the device-memory window backing host_mem_0, choosing a memory
++/// region that can hold all of it. Tries the largest usable regions first so a
++/// range group is preferred over any single pseudo-channel inside it.
++static xrt::bo allocate_host_mem(const xrt::device &device,
++                                 const std::string &binary_file,
++                                 size_t bytes) {
++  xrt::xclbin xclbin(binary_file);
++  const auto mems = xclbin.get_mems();
++
++  std::vector<size_t> candidates;
++  for (size_t i = 0; i < mems.size(); ++i) {
++    if (mems[i].get_used()) {
++      candidates.push_back(i);
++    }
++  }
++  std::stable_sort(candidates.begin(), candidates.end(),
++                   [&mems](size_t a, size_t b) {
++                     return mems[a].get_size_kb() > mems[b].get_size_kb();
++                   });
++
++  for (size_t idx : candidates) {
++    try {
++      xrt::bo bo(device, bytes, xrt::bo::flags::device_only, idx);
++      std::cerr << "[vitis] host_mem_0 backed by memory index " << idx << " ("
++                << mems[idx].get_tag() << ")" << std::endl;
++      return bo;
++    } catch (const std::exception &) {
++      // Too small, or not allocatable: try the next region.
++    }
++  }
++
++  std::cerr << "[vitis] no memory region can back a 0x" << std::hex << bytes
++            << std::dec << "-byte host_mem_0 window. Topology:" << std::endl;
++  for (size_t i = 0; i < mems.size(); ++i) {
++    std::cerr << "[vitis]   [" << i << "] " << mems[i].get_tag() << " "
++              << mems[i].get_size_kb() << " KB"
++              << (mems[i].get_used() ? " (used)" : "") << std::endl;
++  }
++  throw std::runtime_error("host_mem_0 window does not fit any memory region; "
++                           "widen --connectivity.sp (HOST_MEM_SP)");
++}
+ 
+ simif_vitis_t::simif_vitis_t(const TargetConfig &config,
+                              const std::vector<std::string> &args)
+@@ -92,12 +148,15 @@
+   kernel_handle = xrt::ip(device_handle, uuid, "firesim");
+ 
+   // Intialize FPGA-DRAM regions.
+-  // The final argument is the bank index for the DRAM channel, found with
+-  // xclbinutil: https://xilinx.github.io/XRT/master/html/xclbintools.html
+-  fpga_mem_0 = xrt::bo(device_handle,
+-                       host_mem_0_size_bytes,
+-                       xrt::bo::flags::device_only,
+-                       0);
++  //
++  // The last argument is a memory index into the xclbin's topology. Binding
++  // host_mem_0 to a range of pseudo-channels makes the region a memory *group*
++  // whose index is not knowable from the port name, and xrt::ip -- unlike
++  // xrt::kernel -- exposes no group_id() to ask for it. So try the indices the
++  // xclbin reports until one can back the whole window, and fail loudly with
++  // the topology printed if none can. Quietly settling for a smaller region is
++  // the exact failure this window size exists to prevent.
++  fpga_mem_0 = allocate_host_mem(device_handle, binary_file, host_mem_0_size_bytes);
+ 
+   // NOTE: the kernel's host_mem_0_offset register (package_kernel.tcl, s_axi_lite
+   // 0x010) is IP-XACT metadata only -- it does not appear in the generated RTL,
+--- build_firesim/firesim/sim/midas/src/main/cc/core/simulation.cc.orig
++++ build_firesim/firesim/sim/midas/src/main/cc/core/simulation.cc
+@@ -203,7 +203,20 @@
+       mpz_init(wr);
+       mpz_init(rd);
+       unsigned failures = 0;
+-      const size_t probes[] = {0x0, 0x40, 0x1000, 0x40000, 0xF0000};
++      // Probes must span the target's whole address map, not just its bottom.
++      // An earlier list stopped below 1 MB and so passed against a window that
++      // served only its first eighth, while the target's program image and
++      // stack -- which sit at 0x80000000 and just under 4 GiB -- landed
++      // outside it. Proving the path works says nothing about how far it
++      // reaches; these last three are what test the reach.
++      const size_t probes[] = {0x0,
++                               0x40,
++                               0x1000,
++                               0x40000,
++                               0xF0000,
++                               0x20000000,
++                               0x80000000,
++                               0xFFFF0000};
+       for (size_t addr : probes) {
+         // A value that is distinct per address and not all-ones/all-zeros.
+         mpz_set_ui(wr, 0);
+--- build_firesim/firesim/platforms/vitis/cl_firesim/Makefile.orig
++++ build_firesim/firesim/platforms/vitis/cl_firesim/Makefile
+@@ -50,7 +50,13 @@
+ # Memory resource backing the simulator's host_mem_0 port. Upstream hardcodes
+ # DDR[0]; HBM-only cards (Alveo U55C) expose no DDR bank at all, so this must
+ # be overridable per platform.
+-HOST_MEM_SP ?= HBM[0]
++#
++# The range must span the target's whole address map: a 32-bit target needs
++# 4 GiB, which on a U55C is eight 512 MB HBM pseudo-channels. It is bound
++# together with host_mem_0_size_bytes in simif_vitis.cc -- the port reaches
++# what this binds, and the driver backs what that allocates, so widening
++# either alone silently truncates.
++HOST_MEM_SP ?= HBM[0:7]
+ 
+ # Provide's the desired simulator frequency. This is generated from the clock
+ # provided to the kernel using an internal MMCM.
+@@ -118,7 +124,7 @@
+ VPP_MSG_FLAGS = --message-rules $(MSG_RULES) --log_dir $(LOG_SUBDIR) --report_dir $(REPORT_SUBDIR)
+ VPP_COMMON_ARGS = \
+ 	--platform $(DEVICE) \
+-	--temp_dir $(TEMP_SUBDIR) \
++	--temp_dir vpp_temp.$(XSA) \
+ 	$(VPP_OTHER_FLAGS) \
+ 	$(VPP_MSG_FLAGS)
+ 

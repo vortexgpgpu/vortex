@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke — §8.8 CULL_BACK_FACING host driver.
+// PRISM RTU smoke — CULL_BACK_FACING host driver.
 //
 // Triangle vertices (0,0,5)/(0,1,5)/(1,0,5) — vertex winding chosen
 // so the geometric normal points in -z direction. Front face is the

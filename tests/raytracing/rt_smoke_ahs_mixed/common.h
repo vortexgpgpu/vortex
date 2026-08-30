@@ -11,17 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU mixed-scene AHS smoke — Phase 11.
+// PRISM RTU mixed-scene AHS smoke.
 //
 // Scene = one NON-OPAQUE triangle at z=5 followed by one OPAQUE
-// triangle at z=10 along the ray. With the Phase 11 walker the
+// triangle at z=10 along the ray. The walker considers both: the
 // closest non-opaque hit (z=5) is yielded to AHS; the kernel's
 // ACCEPT / IGNORE choice then determines which surface wins:
 //   ACCEPT -> non-opaque wins, hit_t = 5.
 //   IGNORE -> opaque (z=10) wins as fallback, hit_t = 10.
-// Before Phase 11 the walker `break`ed on first non-opaque and the
-// opaque tri at z=10 was never even checked: IGNORE produced MISS
-// (status=1, hit_t=0) instead of the correct HIT-at-10.
 
 #ifndef _RTU_SMOKE_AHS_MIXED_COMMON_H_
 #define _RTU_SMOKE_AHS_MIXED_COMMON_H_

@@ -1,0 +1,47 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * VK_KHR_zero_initialize_workgroup_memory: a shared variable with a null
+ * initializer must read back as zero at the start of every dispatch.
+ *
+ * Vortex local memory is NOT cleared between dispatches, so this can only be
+ * tested by dirtying it and coming back. Each invocation records what its slot
+ * held on entry, then poisons that slot for whoever runs next. Dispatched
+ * twice against the same buffer, the second dispatch is the one that matters:
+ * it runs over local memory the first dispatch deliberately filled with
+ * 0xDEADBEEF, and must still see zero.
+ *
+ * A single dispatch would pass on a driver that emits no zeroing at all,
+ * whenever the memory happened to start clean -- which is exactly how an
+ * unemitted pass hides. */
+#version 450
+#extension GL_EXT_null_initializer : require
+
+/* The workgroup size arrives as specialization constant 0, capped by the host at
+ * SLOTS; the shared array is sized for that cap so a smaller workgroup simply
+ * leaves the tail untouched. */
+layout(local_size_x_id = 0) in;
+
+#define SLOTS 16
+
+layout(std430, binding = 0) buffer Out { uint seen[]; };
+
+shared uint s[SLOTS] = {};
+
+void main()
+{
+   uint i = gl_LocalInvocationIndex;
+   uint base = gl_WorkGroupID.x * gl_WorkGroupSize.x;
+
+   /* Read before any write in this dispatch: this is the zero-initialized
+    * value, or whatever the previous dispatch left behind. */
+   uint v = s[i];
+   barrier();
+
+   seen[base + i] = v;
+
+   /* Poison for the next dispatch. The barrier before it keeps the store from
+    * racing the reads above. */
+   s[i] = 0xDEADBEEFu;
+   barrier();
+}

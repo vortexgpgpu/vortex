@@ -105,6 +105,10 @@ module VX_dp_ram #(
 
 `ifdef SYNTHESIS
     localparam FORCE_BRAM = !LUTRAM && `FORCE_BRAM(SIZE, DATAW);
+    // Async reads have no native block-RAM form, so forcing BRAM pulls in the
+    // async-RAM patch. That only pays off for a read-first RAM; a write-first one
+    // adds a read/write collision bypass that is larger than plain distributed RAM.
+    localparam FORCE_BRAM_ASYNC = FORCE_BRAM && (OUT_REG == 0) && (RDW_MODE == "R");
 `ifdef ASIC
     if (FORCE_BRAM && (OUT_REG != 0 || RADDR_REG != 0)) begin : g_asic
         VX_dp_ram_asic #(
@@ -283,7 +287,7 @@ module VX_dp_ram #(
         end
     end else begin : g_async
         `UNUSED_VAR (read)
-        if (FORCE_BRAM) begin : g_bram
+        if (FORCE_BRAM_ASYNC) begin : g_bram
         `ifdef ASYNC_BRAM_PATCH
             VX_async_ram_patch #(
                 .DATAW      (DATAW),

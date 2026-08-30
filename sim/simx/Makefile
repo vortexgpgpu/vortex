@@ -59,6 +59,8 @@ endif
 ifneq ($(filter -DVX_CFG_VM_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/mem/mmu.cpp
 	SRCS += $(SRC_DIR)/mem/mmu_tlb.cpp
+	SRCS += $(SRC_DIR)/mem/tlb_l2.cpp
+	SRCS += $(SRC_DIR)/mem/ptw.cpp
 endif
 
 # Add DXA extension sources
@@ -90,7 +92,7 @@ ifneq ($(filter -DVX_CFG_EXT_RASTER_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/raster/raster_core.cpp
 endif
 
-# Add RTU extension sources (PRISM Phase 1)
+# Add RTU extension sources
 ifneq ($(filter -DVX_CFG_EXT_RTU_ENABLE, $(XCONFIGS)),)
 	SRCS += $(SRC_DIR)/rtu/rtu_core.cpp
 	SRCS += $(SRC_DIR)/rtu/rtu_unit.cpp
@@ -138,8 +140,10 @@ SIM_COMMON_OBJS := $(patsubst $(SIM_COMMON_DIR)/%.cpp,$(OBJ_DIR)/sim_common/%.o,
 SRC_OBJS        := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC_SRCS))
 OBJS            := $(COMMON_OBJS) $(SIM_COMMON_OBJS) $(SRC_OBJS)
 MAIN_OBJ    := $(OBJ_DIR)/main.o
+DXA_OOO_TEST_OBJ  := $(OBJ_DIR)/tests/dxa_ooo_test.o
+DXA_OOO_TEST      := $(DESTDIR)/dxa_ooo_test
 
-DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d)
+DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d) $(DXA_OOO_TEST_OBJ:.o=.d)
 
 # generate .d files alongside .o files
 CXXFLAGS += -MMD -MP -MF $(@:.o=.d)
@@ -162,7 +166,7 @@ PROJECT := simx
 VORTEX_LIB := libvortex.so
 VORTEX_GEM5_LIB := libvortex-gem5.so
 
-.PHONY: all force clean clean-lib clean-exe clean-obj libvortex clean-libvortex libvortex-gem5 clean-libvortex-gem5
+.PHONY: all force test-dxa-ooo clean clean-lib clean-exe clean-obj libvortex clean-libvortex libvortex-gem5 clean-libvortex-gem5
 
 ifeq ($(USE_SST), 1)
 all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_LIB)
@@ -197,8 +201,18 @@ $(MAIN_OBJ): $(SRC_DIR)/main.cpp $(CONFIG_FILE)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(DXA_OOO_TEST_OBJ): $(VORTEX_HOME)/tests/unittest/dxa_ooo/main.cpp $(CONFIG_FILE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 # Main executable
 $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+test-dxa-ooo: $(DXA_OOO_TEST)
+	$(DXA_OOO_TEST)
+
+$(DXA_OOO_TEST): $(OBJS) $(DXA_OOO_TEST_OBJ)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # Shared library
@@ -245,7 +259,7 @@ clean-libvortex-gem5:
 	rm -f $(DESTDIR)/$(VORTEX_GEM5_LIB)
 
 clean-exe:
-	rm -f $(DESTDIR)/$(PROJECT)
+	rm -f $(DESTDIR)/$(PROJECT) $(DXA_OOO_TEST)
 
 clean-obj:
 	rm -rf $(OBJ_DIR)

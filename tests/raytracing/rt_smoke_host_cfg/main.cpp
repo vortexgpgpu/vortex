@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU host-config smoke — exercises the vortex::raytrace host library
-// (ISA v2 §5.3): build_bvh_scene<4> transcodes a one-triangle host scene into
+// PRISM RTU host-config smoke — exercises the vortex::raytrace host library:
+// build_bvh_scene<4> transcodes a one-triangle host scene into
 // the CW-BVH4 bytes the walker reads, and program() writes the VX_DCR_RTU_*
 // per-dispatch config before launch. The kernel then traces one ray; the hit
 // must match the bvh_basic oracle, proving the host-built scene is walkable.

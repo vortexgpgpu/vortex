@@ -22,7 +22,7 @@ interface VX_tex_bus_if import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     typedef struct packed {
         logic [NUM_LANES-1:0]            mask;
         logic [1:0][NUM_LANES-1:0][31:0] coords;
-        logic [NUM_LANES-1:0][TEX_LOD_BITS-1:0] lod;
+        logic [NUM_LANES-1:0][TEX_LODF_BITS-1:0] lod;
         logic [TEX_STAGE_BITS-1:0]   stage;
         logic [TAG_WIDTH-1:0]            tag;  
     } req_data_t;

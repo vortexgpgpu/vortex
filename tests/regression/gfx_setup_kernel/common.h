@@ -1,10 +1,10 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
-// gfx_v2 on-device triangle setup — shared host/device ABI.
+// On-device triangle setup — shared host/device ABI.
 //
-// Tests the setup front end (charter §6.1 / gfx_v2_vertex_setup_pipeline.md
-// stages A–D): VS output (resident vertex_t) -> near-plane clip -> per-(sub)tri
+// Tests the setup front end (stages A–D):
+// VS output (resident vertex_t) -> near-plane clip -> per-(sub)tri
 // edge equations + attribute deltas + screen bbox, emitted as a dense
 // rast_prim_t[] + bbox[] — exactly binning stage 1's input.
 //

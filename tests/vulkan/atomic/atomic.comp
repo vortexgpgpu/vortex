@@ -1,0 +1,92 @@
+#version 450
+
+/* Atomic coverage kernel for the vortexpipe driver.
+ *
+ * Contends the integer atomics the device implements -- iadd, iand, ior,
+ * ixor, signed and unsigned min/max, and exchange -- on an SSBO, from every
+ * invocation of the dispatch at once.
+ *
+ * Every check the host makes is order-independent by construction, because
+ * nothing here may depend on the order the device happens to schedule warps:
+ *   - add/and/or/xor/min/max are commutative and associative, so the final
+ *     memory value is fixed no matter how the invocations interleave;
+ *   - exchange is not, so each invocation reports the old value it received
+ *     and the host checks a multiset invariant over the whole set instead.
+ *
+ * The same op set on `shared` variables is covered by tests/vulkan/atomic_shared,
+ * a separate test because the device implements only one of the two address
+ * spaces today. Compare-and-swap is absent from both: it lowers to an LR/SC pair
+ * whose forward progress is a separate open defect, and adding it back to either
+ * kernel reproduces that directly.
+ *
+ * tests/vulkan/ssbo already covers the single atomicAdd-on-SSBO case as a
+ * side-check of its store lowering; this kernel is what covers the op set.
+ *
+ * Binding 3 is a storage image whose ONLY access is an atomic. That is its own
+ * case in the driver: descriptors are discovered by scanning the shader's
+ * accesses, and an image reached solely through imageAtomic* has to be found by
+ * that scan or its descriptor is never relocated and the atomic lands on a host
+ * address. Every invocation targets the same texel, so the result is the
+ * invocation count regardless of scheduling order. */
+
+layout(local_size_x_id = 0) in;
+
+#define G_ADD   0u
+#define G_AND   1u
+#define G_OR    2u
+#define G_XOR   3u
+#define G_UMIN  4u
+#define G_UMAX  5u
+#define G_XCHG  6u
+
+layout(std430, binding = 0) buffer Gu  { uint g[]; };
+layout(std430, binding = 1) buffer Gi  { int  gi[]; };
+/* r[0 .. N-1]  : old value each invocation got from the contended exchange
+ * r[N .. 2N-1] : one uncontended AMO target per invocation, host-seeded
+ * r[2N .. 3N-1]: old value each invocation got from its own target */
+layout(std430, binding = 2) buffer Res { uint r[]; };
+
+layout(constant_id = 1) const uint INVOCS = 64u;
+
+layout(binding = 3, r32ui) uniform uimage2D img;
+
+void main()
+{
+   uint gid = gl_GlobalInvocationID.x;
+   uint v   = gid + 1u;                 /* 1..N, never 0 */
+   /* The image's only access in this kernel. All invocations hit texel (0,0),
+    * so the final value is the invocation count. */
+   imageAtomicAdd(img, ivec2(0, 0), 1u);
+   int  sv  = int(gid) - 32;            /* spans negative, so imin/imax differ
+                                         * from umin/umax on the same data */
+   /* Half the invocations contend the unsigned min/max slots with a value above
+    * 0x7fffffff. Without one, every operand is a small positive number, signed
+    * and unsigned compares agree, and the umin/umax checks cannot tell an
+    * AMOMINU executed as AMOMIN from a correct one. */
+   uint mv  = ((gid & 1u) != 0u) ? (0x80000000u + v) : v;
+
+   /* --- unsigned ------------------------------------------------------- */
+   atomicAdd(g[G_ADD], v);
+   /* Each invocation clears and sets one bit, so with 32 or more invocations
+    * every bit is touched and the result does not depend on ordering. */
+   atomicAnd(g[G_AND], ~(1u << (gid & 31u)));
+   atomicOr (g[G_OR],   (1u << (gid & 31u)));
+   atomicXor(g[G_XOR], v);
+   atomicMin(g[G_UMIN], mv);
+   atomicMax(g[G_UMAX], mv);
+
+   /* --- signed --------------------------------------------------------- */
+   atomicMin(gi[0], sv);
+   atomicMax(gi[1], sv);
+
+   /* --- exchange: report the old value for the host's multiset check ---- */
+   r[gid] = atomicExchange(g[G_XCHG], v);
+
+   /* --- per-lane response routing --------------------------------------
+    * The multiset check above proves no exchange was dropped or duplicated,
+    * but it cannot tell whether each invocation received ITS OWN result: any
+    * permutation of the returned values across lanes satisfies it. Here every
+    * invocation owns a distinct address holding a distinct seed, so the value
+    * it gets back is predictable per lane and a permutation cannot pass. */
+   r[2u * INVOCS + gid] = atomicExchange(r[INVOCS + gid], v);
+}

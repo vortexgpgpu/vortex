@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vortex.h>
+#include "common.h"
 
 void cleanup();
 
@@ -339,6 +340,140 @@ public:
   }
 };
 
+// 13) LMEM AMOADD hammer: the same contention as amoadd, on local memory, so
+//     the LMEM banks resolve the read-modify-write rather than the dcache.
+//     Local memory is per-workgroup, so each group's leader publishes its
+//     group's final count and the published values sum to n * iters -- a closed
+//     form independent of how the launch was shaped into groups.
+class Test_AMOADD_LMEM : public ITestCase {
+public:
+  Test_AMOADD_LMEM(TestSuite* s) : ITestCase(s, "amoadd_lmem") {}
+  void setup(uint32_t n, uint32_t* /*shared*/, uint32_t* per_hart) override {
+    for (uint32_t h = 0; h < n; ++h) per_hart[h] = 0;
+  }
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* /*shared*/, const uint32_t* per_hart) override {
+    uint64_t total = 0;
+    uint32_t groups = 0;
+    for (uint32_t h = 0; h < n; ++h) {
+      if (per_hart[h] != 0) { total += per_hart[h]; ++groups; }
+    }
+    uint64_t expected = (uint64_t)n * iters;
+    if (groups == 0) {
+      std::cout << "  no group published a count -- the kernel did not run"
+                << std::endl;
+      return 1;
+    }
+    if (total != expected) {
+      std::cout << "  published total=" << total << " expected=" << expected
+                << " across " << groups << " group(s)" << std::endl;
+      return 1;
+    }
+    return 0;
+  }
+};
+
+// 14) LMEM LR/SC counter: the lock-free retry of test 7 on local memory, so
+//     the LMEM banks resolve the reservation. Published per-group counts sum
+//     to n * iters, independent of how the launch was shaped into groups.
+class Test_LRSC_LMEM : public ITestCase {
+public:
+  Test_LRSC_LMEM(TestSuite* s) : ITestCase(s, "lrsc_lmem") {}
+  void setup(uint32_t n, uint32_t* /*shared*/, uint32_t* per_hart) override {
+    for (uint32_t h = 0; h < n; ++h) per_hart[h] = 0;
+  }
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* /*shared*/, const uint32_t* per_hart) override {
+    uint64_t total = 0;
+    uint32_t groups = 0;
+    for (uint32_t h = 0; h < n; ++h) {
+      if (per_hart[h] != 0) { total += per_hart[h]; ++groups; }
+    }
+    uint64_t expected = (uint64_t)n * iters;
+    if (groups == 0) {
+      std::cout << "  no group published a count -- no store-conditional succeeded"
+                << std::endl;
+      return 1;
+    }
+    if (total != expected) {
+      std::cout << "  published total=" << total << " expected=" << expected
+                << " across " << groups << " group(s)" << std::endl;
+      return 1;
+    }
+    return 0;
+  }
+};
+
+// 15) Native compare-and-swap ladder: every hart races for each slot, so each
+//     slot has exactly one winner. Summing the per-hart win counts checks the
+//     per-lane return value, which a compare-and-swap that returned the wrong
+//     old word would get wrong even while leaving the ladder itself plausible.
+class Test_CAS_LADDER : public ITestCase {
+public:
+  Test_CAS_LADDER(TestSuite* s) : ITestCase(s, "cas_ladder") {}
+  void setup(uint32_t n, uint32_t* shared, uint32_t* per_hart) override {
+    for (uint32_t i = 0; i < n; ++i) per_hart[i] = 0;
+    // The ladder lives in the shared region; iters slots, all unclaimed.
+    for (uint32_t i = 0; i < CAS_LADDER_SLOTS; ++i) shared[i] = 0;
+  }
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* shared, const uint32_t* per_hart) override {
+    const uint32_t slots = (iters < CAS_LADDER_SLOTS) ? iters : CAS_LADDER_SLOTS;
+    uint64_t wins = 0;
+    for (uint32_t h = 0; h < n; ++h) wins += per_hart[h];
+    if (wins != slots) {
+      std::cout << "  wins=" << wins << " expected=" << slots
+                << " (each slot must have exactly one winner)" << std::endl;
+      return 1;
+    }
+    // Every slot must hold some hart's claim, and no slot may still be empty.
+    for (uint32_t i = 0; i < slots; ++i) {
+      if (shared[i] == 0 || shared[i] > n) {
+        std::cout << "  slot " << i << " holds " << shared[i]
+                  << ", expected a claim in 1.." << n << std::endl;
+        return 1;
+      }
+    }
+    return 0;
+  }
+};
+
+// 16) LMEM compare-and-swap ladder: the cas_ladder race on local memory, so
+//     the LMEM banks resolve the swap and the returned old word. Each group
+//     has its own ladder with exactly one winner per slot; the leaders' publish
+//     marker carries the group count, so the win counts must sum to
+//     groups * slots whatever the launch geometry.
+class Test_CAS_LMEM : public ITestCase {
+public:
+  Test_CAS_LMEM(TestSuite* s) : ITestCase(s, "cas_lmem") {}
+  void setup(uint32_t n, uint32_t* /*shared*/, uint32_t* per_hart) override {
+    for (uint32_t h = 0; h < n; ++h) per_hart[h] = 0;
+  }
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* /*shared*/, const uint32_t* per_hart) override {
+    const uint32_t slots = (iters < CAS_LMEM_SLOTS) ? iters : CAS_LMEM_SLOTS;
+    uint64_t wins = 0;
+    uint32_t groups = 0;
+    for (uint32_t h = 0; h < n; ++h) {
+      uint32_t v = per_hart[h];
+      if (v >= CAS_LMEM_GROUP_MARK) { ++groups; v -= CAS_LMEM_GROUP_MARK; }
+      wins += v;
+    }
+    if (groups == 0) {
+      std::cout << "  no group published -- the kernel did not run" << std::endl;
+      return 1;
+    }
+    uint64_t expected = (uint64_t)groups * slots;
+    if (wins != expected) {
+      std::cout << "  wins=" << wins << " expected=" << expected
+                << " across " << groups << " group(s)"
+                << " (each slot must have exactly one winner)" << std::endl;
+      return 1;
+    }
+    return 0;
+  }
+};
+
 inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   // Test_ATOMIC_CRITICAL needs to know VX_CFG_NUM_THREADS to compute the
   // expected count; query it from the device caps.
@@ -358,6 +493,15 @@ inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   add_test(new Test_ATOMIC_REDUCTION(this));
   add_test(new Test_ATOMIC_CRITICAL(this, (uint32_t)num_threads));
   add_test(new Test_SELF_CONSISTENCY(this));
+  add_test(new Test_AMOADD_LMEM(this));
+  add_test(new Test_LRSC_LMEM(this));
+#if VX_CFG_EXT_ZACAS_ENABLED
+  // Native compare-and-swap only exists when Zacas is built in. Without it a
+  // compare-exchange lowers to an LR/SC retry loop, which is the construct
+  // this instruction exists to replace and which does not survive contention.
+  add_test(new Test_CAS_LADDER(this));
+  add_test(new Test_CAS_LMEM(this));
+#endif
 }
 
 inline TestSuite::~TestSuite() {
