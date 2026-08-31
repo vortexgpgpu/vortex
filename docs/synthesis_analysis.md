@@ -74,6 +74,26 @@ PREFIX=build_4c NUM_CORES=4 make -C hw/syn/xilinx/xrt
 PREFIX=my_test make -C hw/syn/synopsys synthesis
 ```
 
+### The `tinygpu` Configuration for Fast Turnaround
+
+When the component under investigation is *outside* the GPU core — the AFU shell, the command processor, the runtime, or the FPGA driver — a full-size Vortex build is wasted synthesis time. Most of the hours go into cores and caches that the bug does not live in, and every debug iteration pays for them again.
+
+For those cases, use a deliberately minimal GPU: one core, two warps of two threads, all L1 caches off, and shared memory off.
+
+```bash
+CONFIGS="-DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=1 \
+         -DVX_CFG_NUM_WARPS=2 -DVX_CFG_NUM_THREADS=2 \
+         -DVX_CFG_ICACHE_DISABLE -DVX_CFG_DCACHE_DISABLE -DVX_CFG_LMEM_DISABLE"
+```
+
+Note the `_DISABLE` spelling: knobs that default to `true` in `VX_config.toml` are turned off by defining their `_DISABLE` guard, not by assigning `=0`.
+
+This strips the design down to a single pipeline talking straight to the memory interface. Synthesis and place-and-route finish in a small fraction of the time a production configuration takes, and the resulting bitstream still exercises the complete external path: host to driver, driver to shell, shell to command processor, command processor to core, and the memory traffic back out. Timing closure is generally uneventful at this size, so a failure to close is itself a signal that the problem is in the surrounding logic rather than in core density.
+
+Pair it with the `sgemm` benchmark. `sgemm` is well understood, self-checking, and touches every part of the external path — kernel launch, argument passing, bulk DMA in both directions, and completion signalling — while staying small enough to run quickly. A `sgemm` failure on `tinygpu` isolates the defect to the surrounding infrastructure, because the core configuration is too small to be hiding a microarchitectural corner case. Conversely, `sgemm` passing on `tinygpu` but failing at full size points back at the core, cache hierarchy, or a concurrency effect that only appears with more warps in flight.
+
+Treat this as the first move when debugging external components, not a fallback after a long build fails. Once `tinygpu` is green, scale back up to the target configuration to confirm the fix under real conditions.
+
 ---
 
 ## Generating SAIF Files

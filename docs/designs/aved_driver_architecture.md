@@ -387,5 +387,4 @@ threads. `xrt` and `aved` both guard it.
 3. **Drop the VRT-internal reach** once VRT exposes the simulated memory
    windows and the ZMQ server through public API.
 4. **Gate the build on timing closure.** The V80 flow packages a bitstream
-   that does not meet timing without saying so; see
-   [`../reports/v80_timing_closure.md`](../reports/v80_timing_closure.md).
+   that does not meet timing without saying so.
