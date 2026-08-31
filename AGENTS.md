@@ -25,7 +25,7 @@ This is the canonical entry point for **both human contributors and AI coding ag
 ### Simulation & test
 - [docs/simulation.md](docs/simulation.md) — driver modes (simx, rtlsim, opae, xrt) and blackbox usage
 - [docs/testing.md](docs/testing.md) — test and regression flow
-- [docs/debugging.md](docs/debugging.md) — debug traces (`--debug`), VCD, scope, trace_csv
+- [docs/debugging.md](docs/debugging.md) — debug traces (`--debug`), VCD (`--vcd`), scope, trace_csv
 - [docs/debug_mode.md](docs/debug_mode.md) — debug-mode hardware support
 - [docs/perfetto_analysis.md](docs/perfetto_analysis.md) — Perfetto trace and analysis
 - [docs/synthesis_analysis.md](docs/synthesis_analysis.md) — synthesis/PPA analysis
@@ -108,7 +108,7 @@ make -C tests/opencl     run-rtlsim
 
 ### Architecture overrides
 
-`blackbox.sh` exposes the common knobs directly: `--clusters=`, `--cores=`, `--warps=`, `--threads=`, `--l2cache`, `--l3cache`, `--debug=`, `--perf=`. For anything not exposed as a flag, use `CONFIGS="-D..."` (all parameters take the `VX_CFG_*` prefix — e.g. `-DVX_CFG_NUM_THREADS=8`, `-DVX_CFG_EXT_TCU_ENABLE`). Baseline parameters live in `VX_config.toml` and `VX_types.toml` at the repo root — edit those only when an override is needed for *all* builds, and re-`configure` afterward.
+`blackbox.sh` exposes the common knobs directly: `--clusters=`, `--cores=`, `--warps=`, `--threads=`, `--l2cache`, `--l3cache`, `--debug=`, `--vcd`, `--perf=`. For anything not exposed as a flag, use `CONFIGS="-D..."` (all parameters take the `VX_CFG_*` prefix — e.g. `-DVX_CFG_NUM_THREADS=8`, `-DVX_CFG_EXT_TCU_ENABLE`). Baseline parameters live in `VX_config.toml` and `VX_types.toml` at the repo root — edit those only when an override is needed for *all* builds, and re-`configure` afterward.
 
 ```bash
 ./ci/blackbox.sh --driver=simx --app=sgemm --clusters=1 --cores=2 --warps=4 --threads=4 --l2cache

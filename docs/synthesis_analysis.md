@@ -127,6 +127,10 @@ When `--saif` is passed, blackbox.sh:
 2. Runs the application
 3. Copies the resulting `trace.saif` to the current directory
 
+`--saif` composes with `--debug` on every RTL driver, so a run can emit both the
+`run.log` trace and the SAIF. It cannot be combined with `--vcd`: a model emits one
+waveform format or the other.
+
 Available drivers for SAIF generation:
 
 | Driver | Simulator | Use Case |
