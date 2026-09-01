@@ -25,8 +25,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_REQS    = DCACHE_NUM_REQS,
     parameter TLB_SIZE     = `VX_CFG_DTLB_SIZE,
-    parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
-    parameter REPLAY_DEPTH = 2,
+    parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE, // walk-ID space (>= NUM_BANKS)
     parameter EXEC_SIDE    = 0,
     parameter DATA_SIZE    = DCACHE_WORD_SIZE,
     parameter TAG_WIDTH    = DCACHE_TAG_WIDTH_BASE,
@@ -147,11 +146,9 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     wire [NUM_REQS-1:0]        bank_conflict;
 
-    // L1 storage organization: banked (per-bank lookup port + one parked
-    // miss per bank, losing lanes hold via bank_conflict) or the baseline
-    // multi-ported CAM + MSHR.
-    if (`VX_CFG_L1_TLB_NUM_BANKS != 0) begin : g_tlb_banked
-    VX_tlb_l1_banked #(
+    // L1 storage: banked — per-bank lookup port + one parked miss per bank;
+    // losing lanes hold via bank_conflict.
+    VX_tlb_l1 #(
         .NUM_REQS    (NUM_REQS),
         .TLB_SIZE    (TLB_SIZE),
         .NUM_BANKS   (`VX_CFG_L1_TLB_NUM_BANKS),
@@ -193,50 +190,6 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .flush         (flush_clear),
         .empty         (tlb_empty)
     );
-    end else begin : g_tlb_baseline
-    assign bank_conflict = '0;
-    VX_tlb_l1 #(
-        .NUM_REQS    (NUM_REQS),
-        .TLB_SIZE     (TLB_SIZE),
-        .MSHR_SIZE    (MSHR_SIZE),
-        .REPLAY_DEPTH (REPLAY_DEPTH),
-        .PAYLOAD_W    (PAYLOAD_W),
-        .ID_WIDTH     (ID_WIDTH)
-    ) tlb (
-        .clk           (clk),
-        .reset         (reset),
-    `ifdef PERF_ENABLE
-        .mmu_perf      (mmu_perf),
-    `endif
-        .lookup_vpn    (cam_vpn),
-        .lookup_hit    (cam_hit),
-        .lookup_ppn    (cam_ppn),
-        .lookup_flags  (cam_flags),
-        .access_hit    (cam_access_hit),
-        .mshr_match    (mshr_match),
-        .park_valid    (park_valid),
-        .park_vpn      (park_vpn),
-        .park_access   (park_access),
-        .park_amo      (park_amo),
-        .park_lane     (park_lane),
-        .park_payload  (park_payload),
-        .park_ready    (park_ready),
-        .replay_valid  (replay_valid),
-        .replay_payload(replay_payload),
-        .replay_ppn    (replay_ppn),
-        .replay_level  (replay_level),
-        .replay_flags  (replay_flags),
-        .replay_ready  (replay_ready),
-        .kill_valid    (kill_valid),
-        .kill_ready    (kill_ready),
-        .mshr_fault_valid  (mshr_fault_valid),
-        .mshr_fault_vpn    (mshr_fault_vpn),
-        .mshr_fault_access (mshr_fault_access),
-        .tlb_bus_if    (tlb_bus_if),
-        .flush         (flush_clear),
-        .empty         (tlb_empty)
-    );
-    end
 
 
     // ---------------------------------------------------------------------
