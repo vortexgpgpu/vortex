@@ -145,6 +145,56 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     wire                       flush_clear;
 
+    wire [NUM_REQS-1:0]        bank_conflict;
+
+    // L1 storage organization: banked (per-bank lookup port + one parked
+    // miss per bank, losing lanes hold via bank_conflict) or the baseline
+    // multi-ported CAM + MSHR.
+    if (`VX_CFG_L1_TLB_NUM_BANKS != 0) begin : g_tlb_banked
+    VX_tlb_l1_banked #(
+        .NUM_REQS    (NUM_REQS),
+        .TLB_SIZE    (TLB_SIZE),
+        .NUM_BANKS   (`VX_CFG_L1_TLB_NUM_BANKS),
+        .PAYLOAD_W   (PAYLOAD_W),
+        .ID_WIDTH    (ID_WIDTH)
+    ) tlb (
+        .clk           (clk),
+        .reset         (reset),
+    `ifdef PERF_ENABLE
+        .mmu_perf      (mmu_perf),
+    `endif
+        .lookup_vpn    (cam_vpn),
+        .lookup_valid  (req_valid & ~req_bypass),
+        .lookup_hit    (cam_hit),
+        .lookup_ppn    (cam_ppn),
+        .lookup_flags  (cam_flags),
+        .bank_conflict (bank_conflict),
+        .access_hit    (cam_access_hit),
+        .mshr_match    (mshr_match),
+        .park_valid    (park_valid),
+        .park_vpn      (park_vpn),
+        .park_access   (park_access),
+        .park_amo      (park_amo),
+        .park_lane     (park_lane),
+        .park_payload  (park_payload),
+        .park_ready    (park_ready),
+        .replay_valid  (replay_valid),
+        .replay_payload(replay_payload),
+        .replay_ppn    (replay_ppn),
+        .replay_level  (replay_level),
+        .replay_flags  (replay_flags),
+        .replay_ready  (replay_ready),
+        .kill_valid    (kill_valid),
+        .kill_ready    (kill_ready),
+        .mshr_fault_valid  (mshr_fault_valid),
+        .mshr_fault_vpn    (mshr_fault_vpn),
+        .mshr_fault_access (mshr_fault_access),
+        .tlb_bus_if    (tlb_bus_if),
+        .flush         (flush_clear),
+        .empty         (tlb_empty)
+    );
+    end else begin : g_tlb_baseline
+    assign bank_conflict = '0;
     VX_tlb_l1 #(
         .NUM_REQS    (NUM_REQS),
         .TLB_SIZE     (TLB_SIZE),
@@ -186,6 +236,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .flush         (flush_clear),
         .empty         (tlb_empty)
     );
+    end
+
 
     // ---------------------------------------------------------------------
     // Per-lane request category (mutually exclusive, by priority)
@@ -199,9 +251,9 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
         assign perm_hit[l]   = tlb_perm_ok(cam_flags[l], req_acc[l], req_amo[l]);
         assign cat_bypass[l] = req_valid[l] && req_bypass[l];
-        assign cat_park[l]   = req_valid[l] && !req_bypass[l] && (mshr_match[l] || !cam_hit[l]);
-        assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && perm_hit[l];
-        assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && !perm_hit[l];
+        assign cat_park[l]   = req_valid[l] && !req_bypass[l] && !bank_conflict[l] && (mshr_match[l] || !cam_hit[l]);
+        assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !bank_conflict[l] && !mshr_match[l] && cam_hit[l] && perm_hit[l];
+        assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !bank_conflict[l] && !mshr_match[l] && cam_hit[l] && !perm_hit[l];
     end
 
     // Park arbitration: at most one lane parks a miss per cycle (lowest lane).
