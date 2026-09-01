@@ -45,6 +45,8 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `ifdef VX_CFG_VM_ENABLE
     // Device MMU sideband from the top DCR surface.
     input  wire [`VX_CFG_XLEN-1:0] mmu_satp,
+    // Device-level walker: the L2 TLB's miss bus, exported to the device.
+    VX_tlb_bus_if.master           dev_ptw_if,
     input  wire                    mmu_flush_req,
     output wire                    mmu_flush_done,
     output wire                    mmu_fault_valid,
@@ -328,7 +330,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     VX_tlb_flush_if l2_flush_if ();
     VX_tlb_flush_if ptw_flush_if ();
-    wire l2_empty, ptw_empty;
+    wire l2_empty;
 
     VX_tlb_l2 #(
         .INSTANCE_ID (`SFORMATF(("%s-l2tlb", INSTANCE_ID))),
@@ -342,44 +344,30 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .empty     (l2_empty)
     );
 
-    VX_mmu_fault_if ptw_fault_if ();
-    VX_mem_bus_if #(
-        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
-        .TAG_WIDTH (L2_TAG_WIDTH)
-    ) ptw_mem_if ();
+    // The walker lives at the device: export the L2 TLB's miss bus. The
+    // L2 cache carries no PTE-fetch client; its bandwidth is all sockets'.
+    assign dev_ptw_if.req_valid = l2_ptw_if.req_valid;
+    assign dev_ptw_if.req_data  = l2_ptw_if.req_data;
+    assign l2_ptw_if.req_ready  = dev_ptw_if.req_ready;
+    assign l2_ptw_if.rsp_valid  = dev_ptw_if.rsp_valid;
+    assign l2_ptw_if.rsp_data   = dev_ptw_if.rsp_data;
+    assign dev_ptw_if.rsp_ready = l2_ptw_if.rsp_ready;
 
-    VX_ptw #(
-        .ID_WIDTH       (L2_TLB_SLOT_WIDTH),
-        .MEM_TAG_WIDTH  (L2_TAG_WIDTH)
-    ) ptw (
-        .clk        (clk),
-        .reset      (reset),
-        .satp       (mmu_satp),
-        .miss_if    (l2_ptw_if),
-        .mem_bus_if (ptw_mem_if),
-        .flush_if   (ptw_flush_if),
-        .fault_if   (ptw_fault_if),
-        .empty      (ptw_empty)
-    );
-
-    // PTE fetches attach as one more L2-cache client (like ocache/rcache).
-    `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_PTW_IDX], ptw_mem_if);
-
-    // Flush root fans to the cluster L2 + walker; each socket self-times its own
-    // L1 TLB flush off the SATP DCR write, so only these two legs report done.
+    // Flush root fans to the cluster L2; each socket self-times its own L1
+    // TLB flush off the SATP DCR write, and the device walker reports its
+    // own done leg at the top.
     assign l2_flush_if.req  = mmu_flush_req;
-    assign ptw_flush_if.req = mmu_flush_req;
-    assign mmu_flush_done   = l2_flush_if.done && ptw_flush_if.done;
+    assign mmu_flush_done   = l2_flush_if.done;
 
-    // Only the shared walker's structural faults are surfaced. L1 permission
-    // faults are not reported: cluster_tlb_bus_if is the sole MMU signal
-    // crossing the socket boundary, and it stays a pure translation fabric.
-    assign mmu_fault_valid  = ptw_fault_if.valid;
-    assign mmu_fault_va     = ptw_fault_if.va;
-    assign mmu_fault_access = ptw_fault_if.access;
-    assign mmu_fault_amo    = ptw_fault_if.amo;
+    // Structural faults surface at the device walker; L1 permission faults
+    // are not reported here — cluster_tlb_bus_if stays a pure translation
+    // fabric across the socket boundary.
+    assign mmu_fault_valid  = 1'b0;
+    assign mmu_fault_va     = '0;
+    assign mmu_fault_access = 2'b0;
+    assign mmu_fault_amo    = 1'b0;
 
-    wire mmu_busy = ~l2_empty || ~ptw_empty;
+    wire mmu_busy = ~l2_empty;
 `else
     wire mmu_busy = 1'b0;
 `endif
