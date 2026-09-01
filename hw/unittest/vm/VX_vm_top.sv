@@ -27,13 +27,16 @@
 //   per cluster:
 //     VX_tlb_bus_arb : folds all sockets' miss ports -> the L2 TLB client bus
 //     VX_tlb_l2      : shared L2 TLB
-//     VX_ptw         : page-table walker (fed satp; PTE reads through the L2)
-//     VX_cache_wrap  : the shared L2, fed by the sockets' L1 mem ports + the PTW
+//   at the device (topologically identical at one cluster):
+//     VX_tlb_bus_arb : folds the clusters' L2-TLB miss buses -> the walker
+//     VX_ptw         : device-level page-table walker (fed satp; PTE reads on
+//                      a dedicated LLC-client port, NOT through the L2)
+//     VX_cache_wrap  : the shared L2, fed by the sockets' L1 mem ports
 //
-// Memory hierarchy: the L1 dcaches and the PTW are clients of the shared L2
-// (the real L2_NUM_REQS client set, minus graphics), so the L2 input-arb and
-// its PTE-fetch boundary carry realistic timing. The icaches' memory side and
-// the L2's memory side exit to top-level ports.
+// Memory hierarchy: the L1 dcaches are clients of the shared L2 (the real
+// L2_NUM_REQS client set, minus graphics), so the L2 input-arb carries
+// realistic timing. The icaches' memory side, the L2's memory side, and the
+// walker's LLC-client port exit to top-level ports.
 //
 // Fidelity: every MMU/PTW timing boundary is present and loaded by its real
 // neighbour (MMU->real L1 cache, PTW->real L2). What is removed (cores/FPU/
@@ -118,7 +121,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     output wire [IC_MEM_PORTS-1:0]                       ic_mem_rsp_ready,
 
     // -----------------------------------------------------------------------
-    // L2 memory side (master): L1 dcache + PTE traffic reach memory here
+    // L2 memory side (master): L1 dcache traffic reaches memory here
     // -----------------------------------------------------------------------
     output wire [L2_MEM_PORTS-1:0]                       l2_mem_req_valid,
     output wire [L2_MEM_PORTS-1:0]                       l2_mem_req_rw,
@@ -132,6 +135,23 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     input  wire [L2_MEM_PORTS-1:0][L2_SECTOR_SIZE*8-1:0] l2_mem_rsp_data,
     input  wire [L2_MEM_PORTS-1:0][L2_MEM_TAG_WIDTH-1:0] l2_mem_rsp_tag,
     output wire [L2_MEM_PORTS-1:0]                       l2_mem_rsp_ready,
+
+    // -----------------------------------------------------------------------
+    // Device walker LLC-client port (master): PTE fetches exit here, at the
+    // boundary where production attaches per_cluster_mem_bus_if[L3_PTW_IDX]
+    // -----------------------------------------------------------------------
+    output wire                                          ptw_mem_req_valid,
+    output wire                                          ptw_mem_req_rw,
+    output wire [L2_SECTOR_SIZE-1:0]                     ptw_mem_req_byteen,
+    output wire [L2_MEM_ADDR_W-1:0]                      ptw_mem_req_addr,
+    output wire [L3_TAG_WIDTH-1:0]                       ptw_mem_req_tag,
+    output wire [L2_SECTOR_SIZE*8-1:0]                   ptw_mem_req_data,
+    input  wire                                          ptw_mem_req_ready,
+
+    input  wire                                          ptw_mem_rsp_valid,
+    input  wire [L2_SECTOR_SIZE*8-1:0]                   ptw_mem_rsp_data,
+    input  wire [L3_TAG_WIDTH-1:0]                       ptw_mem_rsp_tag,
+    output wire                                          ptw_mem_rsp_ready,
 
     // -----------------------------------------------------------------------
     // Page-fault sideband (from the walker) + drain
@@ -448,7 +468,8 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // Cluster TLB + walker tail
     // ========================================================================
     VX_tlb_bus_if #(.ID_WIDTH (TLB_CLUSTER_ID_WIDTH)) l2_client_if ();
-    VX_tlb_bus_if #(.ID_WIDTH (L2_TLB_SLOT_WIDTH))    l2_ptw_if ();
+    // one cluster's L2-TLB miss bus, as the device arb's input array
+    VX_tlb_bus_if #(.ID_WIDTH (L2_TLB_SLOT_WIDTH))    dev_ptw_in_if [1] ();
 
     VX_tlb_bus_arb #(
         .NUM_INPUTS  (NS),
@@ -470,30 +491,59 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .clk       (clk),
         .reset     (reset),
         .client_if (l2_client_if),
-        .ptw_if    (l2_ptw_if),
+        .ptw_if    (dev_ptw_in_if[0]),
         .flush_if  (l2_flush_if),
         .empty     (l2tlb_empty)
     );
 
+    // Device-level walker tail: the arb is a passthrough at one cluster but
+    // keeps the production boundary (and its ID growth) in the netlist.
+    VX_tlb_bus_if #(.ID_WIDTH (TLB_DEV_ID_WIDTH)) dev_ptw_bus_if ();
+
+    VX_tlb_bus_arb #(
+        .NUM_INPUTS  (1),
+        .ID_WIDTH_IN (L2_TLB_SLOT_WIDTH),
+        .OUT_BUF     (3)
+    ) tlb_dev_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (dev_ptw_in_if),
+        .bus_out_if (dev_ptw_bus_if)
+    );
+
     VX_mmu_fault_if ptw_fault_if ();
     VX_mem_bus_if #(
-        .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
-        .TAG_WIDTH (L2_TAG_WIDTH)
+        .DATA_SIZE (L2_SECTOR_SIZE),
+        .TAG_WIDTH (L3_TAG_WIDTH)
     ) ptw_mem_if ();
 
     VX_ptw #(
-        .ID_WIDTH      (L2_TLB_SLOT_WIDTH),
-        .MEM_TAG_WIDTH (L2_TAG_WIDTH)
+        .ID_WIDTH      (TLB_DEV_ID_WIDTH),
+        .DATA_SIZE     (L2_SECTOR_SIZE),
+        .MEM_TAG_WIDTH (L3_TAG_WIDTH)
     ) ptw (
         .clk        (clk),
         .reset      (reset),
         .satp       (satp),
-        .miss_if    (l2_ptw_if),
+        .miss_if    (dev_ptw_bus_if),
         .mem_bus_if (ptw_mem_if),
         .flush_if   (ptw_flush_if),
         .fault_if   (ptw_fault_if),
         .empty      (ptw_empty)
     );
+
+    assign ptw_mem_req_valid        = ptw_mem_if.req_valid;
+    assign ptw_mem_req_rw           = ptw_mem_if.req_data.rw;
+    assign ptw_mem_req_byteen       = ptw_mem_if.req_data.byteen;
+    assign ptw_mem_req_addr         = ptw_mem_if.req_data.addr;
+    assign ptw_mem_req_tag          = ptw_mem_if.req_data.tag;
+    assign ptw_mem_req_data         = ptw_mem_if.req_data.data;
+    assign ptw_mem_if.req_ready     = ptw_mem_req_ready;
+    assign ptw_mem_if.rsp_valid     = ptw_mem_rsp_valid;
+    assign ptw_mem_if.rsp_data.data = ptw_mem_rsp_data;
+    assign ptw_mem_if.rsp_data.tag  = ptw_mem_rsp_tag;
+    assign ptw_mem_rsp_ready        = ptw_mem_if.rsp_ready;
+    `UNUSED_VAR (ptw_mem_if.req_data.attr)
 
     assign fault_valid  = ptw_fault_if.valid;
     assign fault_va     = ptw_fault_if.va;
@@ -501,8 +551,8 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     assign fault_amo    = ptw_fault_if.amo;
 
     // ========================================================================
-    // Shared L2: sockets' L1 dcache mem ports + the PTW (the real client set,
-    // minus graphics) -> memory ports
+    // Shared L2: sockets' L1 dcache mem ports (the real client set, minus
+    // graphics; the walker is an LLC client, not an L2 client) -> memory ports
     // ========================================================================
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
@@ -513,8 +563,6 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         if (i < L2_SOCKET_REQS) begin : g_socket
             // socket L1 mem port (dcache), widened to the L2 client tag width
             `ASSIGN_VX_MEM_BUS_IF_EX (l2_core_if[i], all_dc_mem_if[i], L2_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH, UUID_WIDTH);
-        end else if (i == L2_PTW_IDX) begin : g_ptw
-            `ASSIGN_VX_MEM_BUS_IF (l2_core_if[i], ptw_mem_if);
         end else begin : g_tie
             // graphics client slots (unused in this DUT)
             assign l2_core_if[i].req_valid = 1'b0;
