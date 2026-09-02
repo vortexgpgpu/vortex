@@ -142,7 +142,13 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Workers
     // ================================================================
     localparam GMEM_ARB_SEL_BITS = `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, GMEM_OUT_PORTS);
-    localparam WORKER_GMEM_TAG_WIDTH = SOCKET_MEM_TAG_WIDTH - GMEM_ARB_SEL_BITS;
+    localparam WORKER_GMEM_TAG_WIDTH = L1_MEM_ARB_TAG_WIDTH - GMEM_ARB_SEL_BITS;
+
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    `STATIC_ASSERT(DXA_LMEM_OUT_TAG_W == (DXA_LMEM_TAG_W
+        + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1)),
+        ("DXA worker arb tag width does not preserve the response route"))
+`endif
 
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
@@ -155,6 +161,19 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .ATTR_WIDTH  (DXA_LMEM_ATTR_W),
         .ADDR_WIDTH  (DXA_LMEM_ADDR_W)
     ) worker_smem_bus_if[`VX_CFG_NUM_DXA_CORES]();
+
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    `STATIC_ASSERT($bits(worker_smem_bus_if[0].req_data.tag) == DXA_LMEM_TAG_W,
+        ("DXA worker request tag width mismatch"))
+    `STATIC_ASSERT($bits(worker_smem_bus_if[0].rsp_data.tag) == DXA_LMEM_TAG_W,
+        ("DXA worker response tag width mismatch"))
+    `STATIC_ASSERT($bits(smem_bus_if[0].req_data.tag) == DXA_LMEM_OUT_TAG_W,
+        ("DXA worker-arb output request tag width mismatch"))
+    `STATIC_ASSERT($bits(smem_bus_if[0].rsp_data.tag) == DXA_LMEM_OUT_TAG_W,
+        ("DXA worker-arb output response tag width mismatch"))
+`endif
+
+    wire [`VX_CFG_NUM_DXA_CORES-1:0] worker_busy;
 
 `ifdef PERF_ENABLE
     dxa_perf_t worker_dxa_perf [`VX_CFG_NUM_DXA_CORES];
@@ -173,7 +192,8 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         `endif
             .req_if         (worker_req_if[i]),
             .gmem_bus_if    (worker_gmem_bus_if[i]),
-            .smem_bus_if    (worker_smem_bus_if[i])
+            .smem_bus_if    (worker_smem_bus_if[i]),
+            .busy           (worker_busy[i])
         );
     end
 
@@ -223,19 +243,26 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         assign req_bus_valid[i] = req_bus_if[i].req_valid;
     end
 
-    wire [`VX_CFG_NUM_DXA_CORES-1:0] worker_idle;
-    for (genvar i = 0; i < `VX_CFG_NUM_DXA_CORES; ++i) begin : g_worker_idle
-        assign worker_idle[i] = worker_req_if[i].ready;
-    end
+    wire ingress_busy = (|req_bus_valid)
+                     || arb_out_bus_if[0].req_valid
+                     || queue_out_bus_if[0].req_valid
+                     || (fetch_state_r == FETCH_PRESENT);
+
+    // The worker completes when its final write enters lmem_arb. Keep the core
+    // live while that registered output is still waiting for the socket switch.
+    wire core_active = dcr_bus_if.req_valid
+                    || ingress_busy
+                    || (|worker_busy)
+                    || smem_bus_if[0].req_valid;
 
     reg dxa_busy_r;
     always @(posedge clk) begin
         if (reset)
             dxa_busy_r <= 1'b0;
         else
-            dxa_busy_r <= dcr_bus_if.req_valid | (|req_bus_valid) | ~(&worker_idle);
+            dxa_busy_r <= core_active;
     end
-    assign busy = dxa_busy_r | dcr_bus_if.req_valid | (|req_bus_valid);
+    assign busy = dxa_busy_r | core_active;
 
 `ifdef PERF_ENABLE
     always_comb begin

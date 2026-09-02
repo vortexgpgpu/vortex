@@ -43,6 +43,8 @@ module VX_dxa_group_completion_hub import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [NUM_CORES-1:0][DXA_GROUP_COMPL_W-1:0]     dst_data,
     input  wire [NUM_CORES-1:0]                            dst_ready
 );
+    localparam DXA_GROUP_COMPL_W = $bits(dxa_group_completion_t);
+
     // stage 1: arbitrate all sources into one event stream (the core-id
     // routing header rides along for the switch)
     wire                                   arb_valid;

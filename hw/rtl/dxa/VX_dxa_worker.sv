@@ -20,7 +20,7 @@
 module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter WORKER_ID = 0,
-    parameter GMEM_TAG_WIDTH = SOCKET_MEM_TAG_WIDTH
+    parameter GMEM_TAG_WIDTH = L1_MEM_ARB_TAG_WIDTH
 ) (
     input wire clk,
     input wire reset,
@@ -29,7 +29,11 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `endif
     VX_dxa_worker_req_if.slave req_if,
     VX_mem_bus_if.master gmem_bus_if,
-    VX_mem_bus_if.master smem_bus_if
+    VX_mem_bus_if.master smem_bus_if,
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    VX_dxa_group_completion_if.master completion_if,
+`endif
+    output wire busy
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_SPARAM (WORKER_ID)
@@ -46,6 +50,18 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam TAG_W = `CLOG2(MAX_OUTSTANDING);
     localparam SEQ_W = `CLOG2(MAX_OUTSTANDING + 1);
 
+    VX_mem_bus_if #(
+        .DATA_SIZE (GMEM_BYTES),
+        .TAG_WIDTH (GMEM_TAG_WIDTH)
+    ) g2s_gmem_bus_if();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE  (SMEM_BYTES),
+        .TAG_WIDTH  (DXA_LMEM_TAG_W),
+        .ATTR_WIDTH (DXA_LMEM_ATTR_W),
+        .ADDR_WIDTH (SMEM_ADDR_WIDTH)
+    ) g2s_smem_bus_if();
+
     // ════════════════════════════════════════════════════════════════════
     // Inter-module wires
     // ════════════════════════════════════════════════════════════════════
@@ -57,6 +73,12 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [NC_WIDTH-1:0]         active_core_id;
     wire [UUID_WIDTH-1:0]       active_uuid;
     wire [NW_WIDTH-1:0]         active_wid;
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    dxa_dir_t                    active_dir;
+    wire [DXA_GROUP_EPOCH_W-1:0] active_epoch;
+    wire [DXA_GROUP_SEQ_W-1:0]   active_group_seq;
+    wire [DXA_GROUP_OPID_W-1:0]  active_op_id;
+`endif
     wire [BAR_ADDR_W-1:0]       active_bar_addr;
     wire                        active_notify_smem_done;
     wire                        active_is_multicast;
@@ -104,6 +126,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // smem_wr → setup (completion)
     wire                        transfer_done;
+    wire                        g2s_transfer_done;
     wire [31:0]                 wr_done_count;
     wire                        smem_req_fire;
 
@@ -135,12 +158,38 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .active_core_id       (active_core_id),
         .active_uuid          (active_uuid),
         .active_wid           (active_wid),
+    `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+        .active_dir           (active_dir),
+        .active_epoch         (active_epoch),
+        .active_group_seq     (active_group_seq),
+        .active_op_id         (active_op_id),
+    `endif
         .active_bar_addr      (active_bar_addr),
         .active_notify_smem_done (active_notify_smem_done),
         .active_is_multicast  (active_is_multicast),
         .active_cta_mask      (active_cta_mask),
         .active_smem_stride   (active_smem_stride)
     );
+
+    // req_if.ready reports setup-slot capacity, not worker idleness. The setup
+    // slot can be idle while the active transfer is still draining.
+    assign busy = transfer_active || !req_if.ready;
+
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    wire active_s2g = (active_dir == DXA_DIR_S2G);
+    wire g2s_transfer_active = transfer_active && !active_s2g;
+    wire g2s_pipeline_start = pipeline_start && !active_s2g;
+    wire g2s_ag_valid = ag_valid && !active_s2g;
+    wire g2s_ag_ready;
+    wire s2g_ag_ready;
+    assign ag_ready = active_s2g ? s2g_ag_ready : g2s_ag_ready;
+`else
+    wire g2s_transfer_active = transfer_active;
+    wire g2s_pipeline_start = pipeline_start;
+    wire g2s_ag_valid = ag_valid;
+    wire g2s_ag_ready;
+    assign ag_ready = g2s_ag_ready;
+`endif
 
     // ════════════════════════════════════════════════════════════════════
     // Stage 2: Address Generator
@@ -194,10 +243,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .perf_gmem_reqs       (perf_gmem_reqs),
         .perf_gmem_span_cycles(perf_gmem_span_cycles),
     `endif
-        .transfer_active    (transfer_active),
+        .transfer_active    (g2s_transfer_active),
         .active_uuid        (active_uuid),
-        .ag_valid           (ag_valid),
-        .ag_ready           (ag_ready),
+        .ag_valid           (g2s_ag_valid),
+        .ag_ready           (g2s_ag_ready),
         .ag_cl_addr         (ag_cl_addr),
         .ag_smem_byte_addr  (ag_smem_byte_addr),
         .ag_byte_offset     (ag_byte_offset),
@@ -206,7 +255,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .ag_last            (ag_last),
         .ag_k_row           (ag_k_row),
         .ag_n_base          (ag_n_base),
-        .gmem_bus_if        (gmem_bus_if),
+        .gmem_bus_if        (g2s_gmem_bus_if),
         .sw_valid           (sw_valid),
         .sw_ready           (sw_ready),
         .sw_tag             (sw_tag),
@@ -243,8 +292,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `ifdef PERF_ENABLE
         .perf_lmem_writes      (perf_lmem_writes),
     `endif
-        .transfer_active       (transfer_active),
-        .transfer_start        (pipeline_start),
+        .transfer_active       (g2s_transfer_active),
+        .transfer_start        (g2s_pipeline_start),
         .cfill                 (ag_cfill),
         .active_core_id        (active_core_id),
         .active_uuid           (active_uuid),
@@ -264,8 +313,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .sw_outstanding        (sw_outstanding),
         .release_en            (sw_release_en),
         .release_tag           (sw_release_tag),
-        .smem_bus_if           (smem_bus_if),
-        .transfer_done         (transfer_done),
+        .smem_bus_if           (g2s_smem_bus_if),
+        .transfer_done         (g2s_transfer_done),
         .wr_done_count         (wr_done_count),
         .smem_req_fire         (smem_req_fire),
         .is_multicast          (active_is_multicast),
@@ -281,6 +330,102 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .smem_base             (ag_smem_base)
     );
 
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    VX_mem_bus_if #(
+        .DATA_SIZE (GMEM_BYTES),
+        .TAG_WIDTH (GMEM_TAG_WIDTH)
+    ) s2g_gmem_bus_if();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE  (SMEM_BYTES),
+        .TAG_WIDTH  (DXA_LMEM_TAG_W),
+        .ATTR_WIDTH (DXA_LMEM_ATTR_W),
+        .ADDR_WIDTH (SMEM_ADDR_WIDTH)
+    ) s2g_smem_bus_if();
+
+    wire s2g_transfer_done;
+    wire [31:0] s2g_sent_count;
+    wire [31:0] s2g_read_count;
+
+    VX_dxa_s2g_data #(
+        .GMEM_LINE_SIZE (GMEM_BYTES),
+        .GMEM_ADDR_WIDTH(GMEM_ADDR_WIDTH),
+        .GMEM_OFF_BITS  (GMEM_OFF_BITS)
+    ) s2g_data (
+        .clk                (clk),
+        .reset              (reset),
+        .transfer_active    (transfer_active && active_s2g),
+        .pipeline_start     (pipeline_start && active_s2g),
+        .ag_valid           (ag_valid && active_s2g),
+        .ag_ready           (s2g_ag_ready),
+        .ag_cl_addr         (ag_cl_addr),
+        .ag_smem_byte_addr  (ag_smem_byte_addr),
+        .ag_byte_offset     (ag_byte_offset),
+        .ag_valid_length    (ag_valid_length),
+        .ag_oob             (ag_oob),
+        .ag_last            (ag_last),
+        .active_core_id     (active_core_id),
+        .active_uuid        (active_uuid),
+        .active_wid         (active_wid),
+        .active_epoch       (active_epoch),
+        .active_group_seq   (active_group_seq),
+        .active_op_id       (active_op_id),
+        .gmem_bus_if        (s2g_gmem_bus_if),
+        .smem_bus_if        (s2g_smem_bus_if),
+        .completion_if      (completion_if),
+        .transfer_done      (s2g_transfer_done),
+        .sent_count         (s2g_sent_count),
+        .read_count         (s2g_read_count)
+    );
+
+    assign transfer_done = active_s2g ? s2g_transfer_done : g2s_transfer_done;
+
+    assign gmem_bus_if.req_valid = active_s2g
+                                 ? s2g_gmem_bus_if.req_valid
+                                 : g2s_gmem_bus_if.req_valid;
+    assign gmem_bus_if.req_data = active_s2g
+                                ? s2g_gmem_bus_if.req_data
+                                : g2s_gmem_bus_if.req_data;
+    assign g2s_gmem_bus_if.req_ready = !active_s2g && gmem_bus_if.req_ready;
+    assign s2g_gmem_bus_if.req_ready = active_s2g && gmem_bus_if.req_ready;
+    assign g2s_gmem_bus_if.rsp_valid = !active_s2g && gmem_bus_if.rsp_valid;
+    assign s2g_gmem_bus_if.rsp_valid = active_s2g && gmem_bus_if.rsp_valid;
+    assign g2s_gmem_bus_if.rsp_data = gmem_bus_if.rsp_data;
+    assign s2g_gmem_bus_if.rsp_data = gmem_bus_if.rsp_data;
+    assign gmem_bus_if.rsp_ready = active_s2g
+                                 ? s2g_gmem_bus_if.rsp_ready
+                                 : g2s_gmem_bus_if.rsp_ready;
+
+    assign smem_bus_if.req_valid = active_s2g
+                                 ? s2g_smem_bus_if.req_valid
+                                 : g2s_smem_bus_if.req_valid;
+    assign smem_bus_if.req_data = active_s2g
+                                ? s2g_smem_bus_if.req_data
+                                : g2s_smem_bus_if.req_data;
+    assign g2s_smem_bus_if.req_ready = !active_s2g && smem_bus_if.req_ready;
+    assign s2g_smem_bus_if.req_ready = active_s2g && smem_bus_if.req_ready;
+    assign g2s_smem_bus_if.rsp_valid = !active_s2g && smem_bus_if.rsp_valid;
+    assign s2g_smem_bus_if.rsp_valid = active_s2g && smem_bus_if.rsp_valid;
+    assign g2s_smem_bus_if.rsp_data = smem_bus_if.rsp_data;
+    assign s2g_smem_bus_if.rsp_data = smem_bus_if.rsp_data;
+    assign smem_bus_if.rsp_ready = active_s2g
+                                 ? s2g_smem_bus_if.rsp_ready
+                                 : g2s_smem_bus_if.rsp_ready;
+
+    `RUNTIME_ASSERT(!pipeline_start || !active_s2g
+                 || (setup_params.dest_mode == DXA_DEST_ROWMAJOR),
+        ("S2G requires row-major local-memory layout"))
+    `RUNTIME_ASSERT(!pipeline_start || !active_s2g || !active_is_multicast,
+        ("S2G multicast is not supported"))
+
+    `UNUSED_VAR (s2g_sent_count)
+    `UNUSED_VAR (s2g_read_count)
+`else
+    assign transfer_done = g2s_transfer_done;
+    `ASSIGN_VX_MEM_BUS_IF (gmem_bus_if, g2s_gmem_bus_if);
+    `ASSIGN_VX_MEM_BUS_IF (smem_bus_if, g2s_smem_bus_if);
+`endif
+
     // ════════════════════════════════════════════════════════════════════
     // Watchdog
     // ════════════════════════════════════════════════════════════════════
@@ -290,7 +435,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     ) watchdog (
         .clk              (clk),
         .reset            (reset),
-        .transfer_active  (transfer_active),
+        .transfer_active  (g2s_transfer_active),
         .gmem_req_fire    (gmem_req_fire),
         .gmem_rsp_valid   (sw_valid && sw_ready),  // any CL delivered to smem_wr
         .smem_req_fire    (smem_req_fire),
@@ -319,9 +464,15 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end else begin
             if (transfer_active && transfer_done) begin
                 perf_transfers_r   <= perf_transfers_r + PERF_CTR_BITS'(1);
+            `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+                if (!active_s2g) begin
+            `endif
                 perf_gmem_reads_r  <= perf_gmem_reads_r + PERF_CTR_BITS'(perf_gmem_reqs);
                 perf_lmem_writes_r <= perf_lmem_writes_r + PERF_CTR_BITS'(perf_lmem_writes);
                 perf_gmem_lt_r     <= perf_gmem_lt_r + PERF_CTR_BITS'(perf_gmem_span_cycles);
+            `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+                end
+            `endif
             end
         end
     end

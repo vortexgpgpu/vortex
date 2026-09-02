@@ -61,6 +61,12 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dxa_req_data_in.core_id   = NC_WIDTH'(CORE_ID);
     assign dxa_req_data_in.uuid      = execute_if.data.header.uuid;
     assign dxa_req_data_in.wid       = execute_if.data.header.wid;
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    assign dxa_req_data_in.dir       = DXA_DIR_G2S;
+    assign dxa_req_data_in.epoch     = '0;
+    assign dxa_req_data_in.group_seq = '0;
+    assign dxa_req_data_in.op_id     = '0;
+`endif
     assign dxa_req_data_in.smem_addr = lmem_rel_byte_addr[DXA_SMEM_ADDR_W-1:0];
     assign dxa_req_data_in.meta      = lane1_rs1[31:0];
     assign dxa_req_data_in.coords[0] = lane2_rs1[31:0];

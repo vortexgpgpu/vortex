@@ -31,6 +31,23 @@ package VX_dxa_pkg;
     localparam DXA_DESC_SLOT_BITS = `CLOG2(`VX_DCR_DXA_DESC_COUNT);
     localparam DXA_DESC_SLOT_W    = `UP(DXA_DESC_SLOT_BITS);
 
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    localparam DXA_GROUP_SEQ_W      = 8;
+    localparam DXA_GROUP_EPOCH_W    = 2;
+    localparam DXA_GROUP_DEPTH      = `VX_CFG_DXA_GROUP_DEPTH;
+    localparam DXA_GROUP_CONTEXTS   = `VX_CFG_DXA_GROUP_CONTEXTS;
+    localparam DXA_GROUP_CTX_IDX_W  = `UP(`CLOG2(DXA_GROUP_CONTEXTS));
+    localparam DXA_GROUP_CTX_GEN_W  = `VX_CFG_DXA_GROUP_CTX_GEN_BITS;
+    localparam DXA_GROUP_OPID_W     = DXA_GROUP_CTX_IDX_W + DXA_GROUP_CTX_GEN_W;
+`endif
+
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    typedef enum logic {
+        DXA_DIR_G2S,
+        DXA_DIR_S2G
+    } dxa_dir_t;
+`endif
+
     // Descriptor-meta field widths and bit offsets (offsets = running sum of the
     // widths). RTL-owned; the host/SimX encoder-decoder derive the same locally.
     localparam DXA_DESC_META_DIM_BITS        = 3;
@@ -54,6 +71,12 @@ package VX_dxa_pkg;
         logic [NC_WIDTH-1:0]      core_id;
         logic [UUID_WIDTH-1:0]    uuid;
         logic [NW_WIDTH-1:0]      wid;
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+        dxa_dir_t                        dir;
+        logic [DXA_GROUP_EPOCH_W-1:0]   epoch;
+        logic [DXA_GROUP_SEQ_W-1:0]     group_seq;
+        logic [DXA_GROUP_OPID_W-1:0]    op_id;
+`endif
         logic [DXA_SMEM_ADDR_W-1:0]      smem_addr;   // from lane 0 rs1; LMEM byte address
         logic [31:0]                     meta;        // from lane 1 rs1 (desc[3:0], bar[30:4], 1[31]); 32-bit ABI word
         logic [4:0][31:0]                coords;      // [0]=lane2.rs1,[1]=lane3.rs1,[2]=lane0.rs2,[3]=lane1.rs2,[4]=lane2.rs2; element indices, 32-bit ABI
@@ -167,14 +190,6 @@ package VX_dxa_pkg;
     endfunction
 
 `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
-    localparam DXA_GROUP_SEQ_W      = 8;
-    localparam DXA_GROUP_EPOCH_W    = 2;
-    localparam DXA_GROUP_DEPTH      = `VX_CFG_DXA_GROUP_DEPTH;
-    localparam DXA_GROUP_CONTEXTS   = `VX_CFG_DXA_GROUP_CONTEXTS;
-    localparam DXA_GROUP_CTX_IDX_W  = `UP(`CLOG2(DXA_GROUP_CONTEXTS));
-    localparam DXA_GROUP_CTX_GEN_W  = `VX_CFG_DXA_GROUP_CTX_GEN_BITS;
-    localparam DXA_GROUP_OPID_W     = DXA_GROUP_CTX_IDX_W + DXA_GROUP_CTX_GEN_W;
-
     // One event means the worker no longer reads the issuer's local-memory
     // source. Destination visibility is intentionally a separate extension.
     typedef struct packed {
@@ -184,7 +199,6 @@ package VX_dxa_pkg;
         logic [DXA_GROUP_OPID_W-1:0]   op_id;
     } dxa_group_completion_t;
 
-    localparam DXA_GROUP_COMPL_W = $bits(dxa_group_completion_t);
 `endif
 
     task automatic trace_ex_op(input int level,

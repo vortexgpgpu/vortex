@@ -136,6 +136,14 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     if (LMEM_DMA_INPUTS > 0) begin : g_lmem_dma
 
+    `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+        `STATIC_ASSERT(LMEM_DMA_IN_TAG_W >= DXA_LMEM_OUT_TAG_W,
+            ("core DMA input tag truncates the DXA response route"))
+        `STATIC_ASSERT(LMEM_DMA_TAG_WIDTH == (LMEM_DMA_IN_TAG_W
+            + `ARB_SEL_BITS(LMEM_DMA_INPUTS, 1)),
+            ("core DMA arb tag width does not preserve the response route"))
+    `endif
+
         VX_mem_bus_if #(
             .DATA_SIZE   (LMEM_DMA_DATA_SIZE),
             .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
@@ -149,6 +157,17 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
             .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH)
         ) dma_arb_out_if[1]();
+
+    `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+        `STATIC_ASSERT($bits(dma_arb_in_if[LMEM_DMA_DXA_IDX].req_data.tag)
+            == LMEM_DMA_IN_TAG_W, ("core DMA input request tag width mismatch"))
+        `STATIC_ASSERT($bits(dma_arb_in_if[LMEM_DMA_DXA_IDX].rsp_data.tag)
+            == LMEM_DMA_IN_TAG_W, ("core DMA input response tag width mismatch"))
+        `STATIC_ASSERT($bits(dma_arb_out_if[0].req_data.tag)
+            == LMEM_DMA_TAG_WIDTH, ("core DMA output request tag width mismatch"))
+        `STATIC_ASSERT($bits(dma_arb_out_if[0].rsp_data.tag)
+            == LMEM_DMA_TAG_WIDTH, ("core DMA output response tag width mismatch"))
+    `endif
 
         // Wire DXA and/or TCU into the arbiter input array.
     `ifdef VX_CFG_EXT_DXA_ENABLE
