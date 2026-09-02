@@ -34,11 +34,27 @@ package VX_dxa_pkg;
 `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
     localparam DXA_GROUP_SEQ_W      = 8;
     localparam DXA_GROUP_EPOCH_W    = 2;
-    localparam DXA_GROUP_DEPTH      = `VX_CFG_DXA_GROUP_DEPTH;
     localparam DXA_GROUP_CONTEXTS   = `VX_CFG_DXA_GROUP_CONTEXTS;
     localparam DXA_GROUP_CTX_IDX_W  = `UP(`CLOG2(DXA_GROUP_CONTEXTS));
     localparam DXA_GROUP_CTX_GEN_W  = `VX_CFG_DXA_GROUP_CTX_GEN_BITS;
     localparam DXA_GROUP_OPID_W     = DXA_GROUP_CTX_IDX_W + DXA_GROUP_CTX_GEN_W;
+
+    // Sequence arithmetic is modulo 2^DXA_GROUP_SEQ_W. A snapshot behind the
+    // current head therefore appears as a large unsigned distance; because a
+    // live group window can never exceed ring_depth, that case is satisfied.
+    function automatic logic dxa_group_wait_satisfied(
+        input logic [4:0] n,
+        input logic [DXA_GROUP_SEQ_W-1:0] snapshot,
+        input logic [DXA_GROUP_SEQ_W-1:0] head,
+        input logic [DXA_GROUP_SEQ_W-1:0] ring_depth
+    );
+        logic [DXA_GROUP_SEQ_W-1:0] required;
+        begin
+            required = snapshot - head;
+            dxa_group_wait_satisfied = (required > ring_depth)
+                                    || (required <= DXA_GROUP_SEQ_W'(n));
+        end
+    endfunction
 `endif
 
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE

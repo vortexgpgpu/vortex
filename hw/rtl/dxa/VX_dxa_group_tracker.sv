@@ -17,7 +17,7 @@
 
 // Logical READ-group streams are per issuer warp. Exact-once operation state
 // is allocated from one physical pool shared by every warp in the core.
-module VX_dxa_group_tracker import VX_gpu_pkg::*; #(
+module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter NUM_WARPS = 4,
     parameter RING_DEPTH = `VX_CFG_DXA_GROUP_DEPTH,
     parameter NUM_CONTEXTS = `VX_CFG_DXA_GROUP_CONTEXTS,
@@ -114,10 +114,14 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*; #(
     reg [NUM_WARPS-1:0] wait_active_r;
     reg [WAIT_N_W-1:0] wait_n_r [NUM_WARPS];
     reg [SEQ_W-1:0] wait_snap_r [NUM_WARPS];
+`ifdef PERF_ENABLE
     reg [CNTR_W-1:0] stale_drops_r [NUM_WARPS];
     reg [CNTR_W-1:0] duplicate_drops_r [NUM_WARPS];
     reg [CNTR_W-1:0] invalid_drops_r [NUM_WARPS];
     reg [CNTR_W-1:0] context_stalls_r;
+`else
+    `UNUSED_VAR (issue_query)
+`endif
 
     logic free_valid;
     logic [CTX_IDX_W-1:0] free_idx;
@@ -216,23 +220,15 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*; #(
         end
     end
 
-    function automatic wait_satisfied(
-        input [WAIT_N_W-1:0] n,
-        input [SEQ_W-1:0] snapshot,
-        input [SEQ_W-1:0] head
-    );
-        logic [SEQ_W-1:0] required;
-        begin
-            required = snapshot - head;
-            wait_satisfied = (required > SEQ_W'(RING_DEPTH))
-                          || (required <= SEQ_W'(n));
-        end
-    endfunction
+    `STATIC_ASSERT(SEQ_W == DXA_GROUP_SEQ_W, ("DXA group sequence width mismatch"))
+    `STATIC_ASSERT(WAIT_N_W == 5, ("DXA wait-N width mismatch"))
 
-    assign wq_satisfied = wait_satisfied(wq_n, sealed_tail_r[wq_wid], read_head_r[wq_wid]);
+    assign wq_satisfied = dxa_group_wait_satisfied(
+        wq_n, sealed_tail_r[wq_wid], read_head_r[wq_wid], SEQ_W'(RING_DEPTH));
     for (genvar w = 0; w < NUM_WARPS; ++w) begin : g_outputs
         wire parked_unlock = wait_active_r[w]
-            && wait_satisfied(wait_n_r[w], wait_snap_r[w], read_head_r[w]);
+            && dxa_group_wait_satisfied(
+                wait_n_r[w], wait_snap_r[w], read_head_r[w], SEQ_W'(RING_DEPTH));
         assign unlock_mask[w] = parked_unlock
                               || (wq_valid && (wq_wid == WID_W'(w)) && wq_satisfied);
 
@@ -252,9 +248,15 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*; #(
         assign obs_sealed_tail[w] = sealed_tail_r[w];
         assign obs_read_head[w] = read_head_r[w];
         assign obs_open_ops[w] = open_remaining_r[w];
+    `ifdef PERF_ENABLE
         assign obs_stale_drops[w] = stale_drops_r[w];
         assign obs_duplicate_drops[w] = duplicate_drops_r[w];
         assign obs_invalid_drops[w] = invalid_drops_r[w];
+    `else
+        assign obs_stale_drops[w] = '0;
+        assign obs_duplicate_drops[w] = '0;
+        assign obs_invalid_drops[w] = '0;
+    `endif
         assign obs_ring_live[w] = ring_live_r[w];
         for (genvar s = 0; s < RING_DEPTH; ++s) begin : g_ring_obs
             assign obs_ring_remaining[w][s*REMAIN_W +: REMAIN_W]
@@ -262,7 +264,11 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*; #(
         end
     end
     assign obs_context_live = ctx_live_r;
+`ifdef PERF_ENABLE
     assign obs_context_stalls = context_stalls_r;
+`else
+    assign obs_context_stalls = '0;
+`endif
 
     always @(posedge clk) begin
         if (reset) begin
@@ -271,7 +277,9 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*; #(
             ctx_done_r <= '0;
             poisoned_r <= '0;
             wait_active_r <= '0;
+        `ifdef PERF_ENABLE
             context_stalls_r <= '0;
+        `endif
             for (integer i = 0; i < NUM_CONTEXTS; ++i) begin
                 ctx_gen_r[i] <= '0;
                 ctx_wid_r[i] <= '0;
@@ -287,15 +295,19 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*; #(
                 sticky_r[w] <= '0;
                 wait_n_r[w] <= '0;
                 wait_snap_r[w] <= '0;
+            `ifdef PERF_ENABLE
                 stale_drops_r[w] <= '0;
                 duplicate_drops_r[w] <= '0;
                 invalid_drops_r[w] <= '0;
+            `endif
                 for (integer i = 0; i < RING_DEPTH; ++i)
                     ring_remaining_r[w][i] <= '0;
             end
         end else begin
+        `ifdef PERF_ENABLE
             if (issue_query && (issue_result == ISSUE_BACKPRESSURE))
                 context_stalls_r <= context_stalls_r + 1'b1;
+        `endif
 
             if (issue_fire) begin
                 ctx_live_r[free_idx] <= 1'b1;
@@ -353,15 +365,20 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*; #(
                         sticky_n = sticky_n & ~sticky_clear_mask;
                     if (poison_valid && (poison_wid == WID_W'(w)))
                         sticky_n = sticky_n | 2'b10;
+                    if ((completion_duplicate || completion_invalid)
+                     && (completion_wid == WID_W'(w)))
+                        sticky_n = sticky_n | 2'b01;
                     sticky_r[w] <= sticky_n;
                 end
 
+            `ifdef PERF_ENABLE
                 if (completion_stale && (completion_wid == WID_W'(w)))
                     stale_drops_r[w] <= stale_drops_r[w] + 1'b1;
                 if (completion_duplicate && (completion_wid == WID_W'(w)))
                     duplicate_drops_r[w] <= duplicate_drops_r[w] + 1'b1;
                 if (completion_invalid && (completion_wid == WID_W'(w)))
                     invalid_drops_r[w] <= invalid_drops_r[w] + 1'b1;
+            `endif
             end
         end
     end
@@ -378,6 +395,8 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*; #(
         ("%t: *** dxa-group-tracker: sealed count underflow", $time))
     `RUNTIME_ASSERT(!assert_on_drop || !completion_duplicate,
         ("%t: *** dxa-group-tracker: duplicate completion", $time))
+    `RUNTIME_ASSERT(!assert_on_drop || !completion_invalid,
+        ("%t: *** dxa-group-tracker: invalid completion", $time))
 
 endmodule
 

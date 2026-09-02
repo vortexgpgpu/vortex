@@ -42,7 +42,12 @@ module VX_dxa_group_tracker_top (
     output wire [7:0]  ring_live_flat,
     output wire [23:0] ring_remaining_flat,
     output wire [3:0]  context_live,
-    output wire [31:0] context_stalls
+    output wire [31:0] context_stalls,
+    input  wire [4:0]  cmp_n,
+    input  wire [7:0]  cmp_snapshot,
+    input  wire [7:0]  cmp_head,
+    input  wire [7:0]  cmp_ring_depth,
+    output wire        cmp_satisfied
 );
     localparam NUM_WARPS = 2;
     localparam RING_DEPTH = 4;
@@ -55,9 +60,7 @@ module VX_dxa_group_tracker_top (
                         | |32'(VX_dxa_pkg::DXA_DESC_META_TOTAL_BITS)
                         | |32'(VX_dxa_pkg::DXA_DEST_ROWMAJOR)
                         | |32'(VX_dxa_pkg::DXA_DEST_KMAJOR)
-                        | |32'(VX_dxa_pkg::DXA_DEST_BLOCKMAJOR)
-                        | |32'(VX_dxa_pkg::DXA_GROUP_DEPTH)
-                        | |32'(VX_dxa_pkg::DXA_GROUP_COMPL_W);
+                        | |32'(VX_dxa_pkg::DXA_DEST_BLOCKMAJOR);
     `UNUSED_VAR (unused_dxa_pkg)
 
     wire [1:0] epoch_w [NUM_WARPS];
@@ -121,6 +124,9 @@ module VX_dxa_group_tracker_top (
         .obs_context_live    (context_live),
         .obs_context_stalls  (context_stalls)
     );
+
+    assign cmp_satisfied = VX_dxa_pkg::dxa_group_wait_satisfied(
+        cmp_n, cmp_snapshot, cmp_head, cmp_ring_depth);
 
     for (genvar w = 0; w < NUM_WARPS; ++w) begin : g_flatten
         assign epoch_flat[w*2 +: 2] = epoch_w[w];
