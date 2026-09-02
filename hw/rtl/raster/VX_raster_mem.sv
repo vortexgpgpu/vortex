@@ -333,7 +333,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .NUM_LANES (RCACHE_NUM_REQS),
         .DATA_SIZE (`RASTER_DATA_BITS / 8),
         .TAG_WIDTH (RCACHE_FETCH_TAG_WIDTH)
-    ) mem_bus_if();
+    ) lsu_mem_if();
 
     // Pad the raster tag with leading UUID zeros so the scheduler can
     // slice off the upper UUID_WIDTH bits unconditionally (matches the
@@ -385,26 +385,26 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .core_rsp_ready (mem_rsp_ready),
 
         // Memory request
-        .mem_req_valid  (mem_bus_if.req_valid),
-        .mem_req_rw     (mem_bus_if.req_data.rw),
-        .mem_req_mask   (mem_bus_if.req_data.mask),
-        .mem_req_byteen (mem_bus_if.req_data.byteen),
-        .mem_req_addr   (mem_bus_if.req_data.addr),
+        .mem_req_valid  (lsu_mem_if.req_valid),
+        .mem_req_rw     (lsu_mem_if.req_data.rw),
+        .mem_req_mask   (lsu_mem_if.req_data.mask),
+        .mem_req_byteen (lsu_mem_if.req_data.byteen),
+        .mem_req_addr   (lsu_mem_if.req_data.addr),
         `UNUSED_PIN (mem_req_user),
-        .mem_req_data   (mem_bus_if.req_data.data),
-        .mem_req_tag    (mem_bus_if.req_data.tag),
-        .mem_req_ready  (mem_bus_if.req_ready),
+        .mem_req_data   (lsu_mem_if.req_data.data),
+        .mem_req_tag    (lsu_mem_if.req_data.tag),
+        .mem_req_ready  (lsu_mem_if.req_ready),
 
         // Memory response
-        .mem_rsp_valid  (mem_bus_if.rsp_valid),
-        .mem_rsp_mask   (mem_bus_if.rsp_data.mask),
-        .mem_rsp_data   (mem_bus_if.rsp_data.data),
-        .mem_rsp_tag    (mem_bus_if.rsp_data.tag),
-        .mem_rsp_ready  (mem_bus_if.rsp_ready)
+        .mem_rsp_valid  (lsu_mem_if.rsp_valid),
+        .mem_rsp_mask   (lsu_mem_if.rsp_data.mask),
+        .mem_rsp_data   (lsu_mem_if.rsp_data.data),
+        .mem_rsp_tag    (lsu_mem_if.rsp_data.tag),
+        .mem_rsp_ready  (lsu_mem_if.rsp_ready)
     );
 
     // Raster never sets any memory attr; tie off the scheduler-driven LSU bus.
-    assign mem_bus_if.req_data.user = '0;
+    assign lsu_mem_if.req_data.user = '0;
 
     VX_lsu_adapter #(
         .NUM_LANES    (RCACHE_NUM_REQS),
@@ -416,7 +416,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     ) lsu_adapter (
         .clk        (clk),
         .reset      (reset),
-        .lsu_mem_if (mem_bus_if),
+        .lsu_mem_if (lsu_mem_if),
         .mem_bus_if (cache_bus_if)
     );
 
