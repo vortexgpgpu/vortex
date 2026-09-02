@@ -10,6 +10,7 @@ all:
 	$(MAKE) -C cta_dispatcher
 	$(MAKE) -C kmu
 	$(MAKE) -C dxa_core
+	$(MAKE) -C dxa_group_tracker
 	$(MAKE) -C tcu_unit
 	$(MAKE) -C cp_arbiter
 	$(MAKE) -C cp_engine
@@ -40,6 +41,7 @@ run:
 	$(MAKE) -C cta_dispatcher run
 	$(MAKE) -C kmu run
 	$(MAKE) -C dxa_core run
+	$(MAKE) -C dxa_group_tracker run
 	$(MAKE) -C tcu_unit run
 	$(MAKE) -C cp_arbiter run
 	$(MAKE) -C cp_engine run
@@ -136,6 +138,7 @@ clean:
 	$(MAKE) -C cta_dispatcher clean
 	$(MAKE) -C kmu clean
 	$(MAKE) -C dxa_core clean
+	$(MAKE) -C dxa_group_tracker clean
 	$(MAKE) -C tcu_unit clean
 	$(MAKE) -C cp_arbiter clean
 	$(MAKE) -C cp_engine clean

@@ -166,6 +166,27 @@ package VX_dxa_pkg;
         dxa_tiled_dest_byte = DXA_SMEM_ADDR_W'(dest_elem << esize);
     endfunction
 
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    localparam DXA_GROUP_SEQ_W      = 8;
+    localparam DXA_GROUP_EPOCH_W    = 2;
+    localparam DXA_GROUP_DEPTH      = `VX_CFG_DXA_GROUP_DEPTH;
+    localparam DXA_GROUP_CONTEXTS   = `VX_CFG_DXA_GROUP_CONTEXTS;
+    localparam DXA_GROUP_CTX_IDX_W  = `UP(`CLOG2(DXA_GROUP_CONTEXTS));
+    localparam DXA_GROUP_CTX_GEN_W  = `VX_CFG_DXA_GROUP_CTX_GEN_BITS;
+    localparam DXA_GROUP_OPID_W     = DXA_GROUP_CTX_IDX_W + DXA_GROUP_CTX_GEN_W;
+
+    // One event means the worker no longer reads the issuer's local-memory
+    // source. Destination visibility is intentionally a separate extension.
+    typedef struct packed {
+        logic [NW_WIDTH-1:0]           wid;
+        logic [DXA_GROUP_EPOCH_W-1:0]  epoch;
+        logic [DXA_GROUP_SEQ_W-1:0]    group_seq;
+        logic [DXA_GROUP_OPID_W-1:0]   op_id;
+    } dxa_group_completion_t;
+
+    localparam DXA_GROUP_COMPL_W = $bits(dxa_group_completion_t);
+`endif
+
     task automatic trace_ex_op(input int level,
                      input [INST_OP_BITS-1:0] op_type,
                      input op_args_t op_args

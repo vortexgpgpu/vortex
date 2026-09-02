@@ -37,6 +37,8 @@ VX_CFG_EXT_ZICOND_ENABLE = true
 VX_CFG_EXT_TCU_ENABLE = false
 VX_CFG_EXT_DMA_ENABLE = false
 VX_CFG_EXT_DXA_ENABLE = false
+VX_CFG_EXT_DXA_GROUP_ENABLE = false
+VX_CFG_EXT_DXA_S2G_ENABLE = false
 VX_CFG_EXT_TEX_ENABLE = false
 VX_CFG_EXT_RASTER_ENABLE = false
 VX_CFG_EXT_OM_ENABLE = false
@@ -292,6 +294,11 @@ VX_CFG_NUM_DXA_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
 VX_CFG_DXA_MEM_PORTS = "expr: min($VX_CFG_NUM_DXA_CORES, up($VX_CFG_NUM_CORES / $VX_CFG_SOCKET_SIZE) * $VX_CFG_L1_MEM_PORTS)"
 VX_CFG_DXA_QUEUE_SIZE = 16
 VX_CFG_DXA_MAX_INFLIGHT = 8
+# Committed READ boundaries retained per issuer warp.
+VX_CFG_DXA_GROUP_DEPTH = 8
+# Exact-once S2G operation contexts shared by every warp in one SM core.
+VX_CFG_DXA_GROUP_CONTEXTS = 16
+VX_CFG_DXA_GROUP_CTX_GEN_BITS = 4
 
 [rtu]
 # RTU (Ray-Tracing Unit)
