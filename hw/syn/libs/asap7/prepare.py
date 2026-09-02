@@ -38,7 +38,7 @@ def verify(downloads, files):
     for expected, name in files:
         path = downloads / name
         if not path.is_file():
-            raise SystemExit(f'ERROR: missing {path}; rerun asap7_install.sh')
+            raise SystemExit(f'ERROR: missing {path}; rerun install.sh')
         actual = sha256(path)
         if actual != expected:
             raise SystemExit(f'ERROR: checksum mismatch for {path}')

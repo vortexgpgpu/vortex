@@ -1,9 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MANIFEST="$SCRIPT_DIR/asap7_manifest.txt"
-PREPARE="$SCRIPT_DIR/asap7_prepare.py"
+# Read the manifest and preparation script from the source tree: they are
+# inputs, not build artifacts, so they are never copied into the build dir
+# (configure instantiates only this .in file).
+MANIFEST="@VORTEX_HOME@/hw/syn/libs/asap7/manifest.txt"
+PREPARE="@VORTEX_HOME@/hw/syn/libs/asap7/prepare.py"
 
 usage() {
   echo "Usage: $0 --install-dir=<path> [--vt=lvt|rvt] [--models]" >&2
