@@ -16,11 +16,19 @@
 
 namespace vortex {
 
-// Per-core TLB. Small fully-associative CAM of {vpn → ppn} translations
-// with MRU-style eviction. Tracks MMU perf counters (VX_DCR_MPM_CLASS_MEM).
+// Per-core TLB, banked: the entry array splits into num_banks single-ported
+// partitions selected by the low VPN bits (mirrors hw/rtl/vm/VX_tlb_l1.sv).
+// Each partition is a small fully-associative CAM with MRU-style eviction;
+// the per-cycle one-lookup-per-bank discipline is enforced by the Mmu stage.
+// Tracks MMU perf counters (VX_DCR_MPM_CLASS_MEM).
 class Tlb {
 public:
-  explicit Tlb(uint32_t size = VX_CFG_TLB_SIZE);
+  explicit Tlb(uint32_t size = VX_CFG_TLB_SIZE,
+               uint32_t num_banks = VX_CFG_L1_TLB_NUM_BANKS);
+
+  // Which bank a VPN's lookup (and fill) must use.
+  uint32_t bank_of(uint64_t vpn) const { return vpn & (num_banks_ - 1); }
+  uint32_t num_banks() const { return num_banks_; }
 
   struct Result {
     bool     hit = false;
@@ -57,9 +65,12 @@ private:
     uint8_t  level = 0;
   };
 
-  // Linear flat array; small enough (typ. 32 entries) for a per-cycle
-  // linear scan to model CAM lookup behavior.
+  // Flat array, partitioned by bank: bank b owns the contiguous slice
+  // [b*bank_size_, (b+1)*bank_size_). Small enough (typ. 32 entries) for a
+  // per-cycle linear scan to model CAM lookup behavior.
   std::vector<Entry> entries_;
+  uint32_t num_banks_;
+  uint32_t bank_size_;
 
   uint64_t reads_     = 0;
   uint64_t hits_      = 0;

@@ -134,6 +134,21 @@ ProcessorImpl::ProcessorImpl()
     }
   }
 
+#ifdef VX_CFG_VM_ENABLE
+  // Device-level walker: every cluster's L2-TLB miss link folds through the
+  // mux into one shared Ptw whose PTE fetches ride the LLC's last input slot.
+  dev_ptw_ = Ptw::Create("dev-ptw");
+  dev_ptw_mux_ = PtwMux::Create("dev-ptwmux", VX_CFG_NUM_CLUSTERS);
+  for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
+    clusters_.at(i)->ptw_req_out().bind(&dev_ptw_mux_->ReqIn.at(i));
+    dev_ptw_mux_->RspOut.at(i).bind(&clusters_.at(i)->ptw_rsp_in());
+  }
+  dev_ptw_mux_->ReqOut.bind(&dev_ptw_->ReqIn);
+  dev_ptw_->RspOut.bind(&dev_ptw_mux_->RspIn);
+  dev_ptw_->MemReqOut.bind(&l3cache_->core_req_in.at(VX_CFG_L3_PTW_IDX));
+  l3cache_->core_rsp_out.at(VX_CFG_L3_PTW_IDX).bind(&dev_ptw_->MemRspIn);
+#endif
+
   // connect L3 memory interfaces
   for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
     l3cache_->mem_req_out.at(i).bind(&memsim_->mem_req_in.at(i));
@@ -263,6 +278,13 @@ int ProcessorImpl::run() {
         exitcode |= cluster->get_exitcode();
       }
     }
+#ifdef VX_CFG_VM_ENABLE
+    // A walk in flight holds no channel packet while it waits on memory,
+    // so quiescence must ask the device walker directly.
+    if (dev_ptw_->busy()) {
+      any_running = true;
+    }
+#endif
     // A page fault kills its accesses. Most warps drain on the kill
     // responses, but one on a path that owes no response (an instruction
     // fetch) would stall forever: end the launch as soon as a fault is
@@ -281,13 +303,10 @@ int ProcessorImpl::run() {
 
 bool ProcessorImpl::mmu_fault_pending() const {
 #ifdef VX_CFG_VM_ENABLE
-  for (auto& cluster : clusters_) {
-    if (cluster->mmu_fault_info() & VX_MMU_FAULT_VALID) {
-      return true;
-    }
-  }
-#endif
+  return dev_ptw_->fault_info().valid;
+#else
   return false;
+#endif
 }
 
 void ProcessorImpl::forward_delegated_launch() {
@@ -342,13 +361,12 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
   if (addr == VX_DCR_MMU_FAULT_INFO) {
     // Write-to-clear: the host drops the report once it has read it, so a
     // fault raised by one launch stays readable across the next one's reset.
-    for (auto& cluster : clusters_) {
-      cluster->mmu_clear_fault();
-    }
+    dev_ptw_->clear_fault();
     return 0;
   }
   if (addr == VX_DCR_MMU_SATP_HI) {
     mmu_satp_ = (mmu_satp_ & 0xFFFFFFFF) | ((uint64_t)value << 32);
+    dev_ptw_->set_satp(mmu_satp_);
     for (auto& cluster : clusters_) {
       cluster->set_mmu_satp(mmu_satp_);
     }
@@ -376,23 +394,20 @@ int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   if (addr == VX_DCR_MMU_FAULT_VA
    || addr == VX_DCR_MMU_FAULT_VA_HI
    || addr == VX_DCR_MMU_FAULT_INFO) {
-    // Report the first cluster holding a latched fault; the latches clear
-    // on reset, so each launch starts with a clean report.
+    // The device walker owns the (single) fault latch; it clears on
+    // reset, so each launch starts with a clean report.
     *value = 0;
-    for (auto& cluster : clusters_) {
-      uint32_t info = cluster->mmu_fault_info();
-      if (0 == (info & VX_MMU_FAULT_VALID)) {
-        continue;
-      }
-      uint64_t va = cluster->mmu_fault_va();
+    const auto& f = dev_ptw_->fault_info();
+    if (f.valid) {
       if (addr == VX_DCR_MMU_FAULT_INFO) {
-        *value = info;
+        *value = VX_MMU_FAULT_VALID
+               | (((uint32_t)f.access << VX_MMU_FAULT_ACCESS_SH) & VX_MMU_FAULT_ACCESS)
+               | (f.amo ? VX_MMU_FAULT_AMO : 0u);
       } else if (addr == VX_DCR_MMU_FAULT_VA) {
-        *value = (uint32_t)va;
+        *value = (uint32_t)f.va;
       } else {
-        *value = (uint32_t)(va >> 32);
+        *value = (uint32_t)(f.va >> 32);
       }
-      break;
     }
     return 0;
   }
@@ -424,6 +439,9 @@ ProcessorImpl::PerfStats ProcessorImpl::perf_stats() const {
   perf.mem_latency = perf_mem_latency_;
   perf.l3cache     = l3cache_->perf_stats();
   perf.memsim      = memsim_->perf_stats();
+#ifdef VX_CFG_VM_ENABLE
+  perf.ptw         = dev_ptw_->perf_stats();
+#endif
   return perf;
 }
 
