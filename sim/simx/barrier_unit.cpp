@@ -82,7 +82,7 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
       }
       // reset barrier and advance phase
       barrier.wait_mask.reset();
-      ++barrier.phase;
+      barrier.phase ^= 1u;
     }
     // update count and wrap around
     if (count == 0) {
@@ -123,7 +123,7 @@ void BarrierUnit::global_resume(uint32_t bar_id) {
     }
   }
   barrier.wait_mask.reset();
-  ++barrier.phase;
+  barrier.phase ^= 1u;
 }
 
 void BarrierUnit::event_attach(uint32_t bar_id, uint32_t count) {
@@ -159,7 +159,7 @@ void BarrierUnit::event_release(uint32_t bar_id) {
         }
         // reset barrier and advance phase
         barrier.wait_mask.reset();
-        ++barrier.phase;
+        barrier.phase ^= 1u;
       }
     }
   }
