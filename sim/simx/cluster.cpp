@@ -156,8 +156,6 @@ public:
     uint32_t num_tlb_clients = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2;
     snprintf(sname, 100, "%s-l2tlb", name.c_str());
     l2tlb_ = L2Tlb::Create(sname, num_tlb_clients);
-    snprintf(sname, 100, "%s-ptw", name.c_str());
-    ptw_ = Ptw::Create(sname);
 
     for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
       for (uint32_t c = 0; c < VX_CFG_SOCKET_SIZE; ++c) {
@@ -170,22 +168,11 @@ public:
       }
     }
 
-    l2tlb_->PtwReqOut.bind(&ptw_->ReqIn);
-    ptw_->RspOut.bind(&l2tlb_->PtwRspIn);
-
-    // PTE fetches take the high-priority row: every translated access
-    // behind a walk is blocked until it completes, and the walkers issue
-    // far too little traffic to starve the demand stream. The reverse
-    // order starves the walker outright once untranslated clients (OM,
-    // raster) share this port, since they never stall waiting on it.
-    snprintf(sname, 100, "%s-ptwarb", name.c_str());
-    auto ptwarb = MemArbiter::Create(sname, ArbiterType::Priority, 2, 1);
-    ptw_->MemReqOut.bind(&ptwarb->ReqIn.at(0));
-    ptwarb->RspOut.at(0).bind(&ptw_->MemRspIn);
-    l2_port0_req->bind(&ptwarb->ReqIn.at(1));
-    ptwarb->RspOut.at(1).bind(l2_port0_rsp);
-    ptwarb->ReqOut.at(0).bind(&l2cache_->core_req_in.at(0));
-    l2cache_->core_rsp_out.at(0).bind(&ptwarb->RspIn.at(0));
+    // The walker lives at the device (bound by the processor through the
+    // PtwMux); PTE fetches no longer touch this cluster's L2 cache, so
+    // port 0 goes back to its demand client undivided.
+    l2_port0_req->bind(&l2cache_->core_req_in.at(0));
+    l2cache_->core_rsp_out.at(0).bind(l2_port0_rsp);
 #endif
 
 #ifdef VX_CFG_EXT_OM_ENABLE
@@ -347,9 +334,9 @@ public:
         return true;
     }
   #ifdef VX_CFG_VM_ENABLE
-    // A pending walk or parked fill holds no channel packet while it
-    // waits, so completion must ask the TLB complex directly.
-    if (l2tlb_->busy() || ptw_->busy()) {
+    // A parked fill holds no channel packet while it waits, so completion
+    // must ask the TLB directly. (The device walker is the processor's.)
+    if (l2tlb_->busy()) {
       return true;
     }
   #endif
@@ -424,17 +411,16 @@ public:
 #endif
 #ifdef VX_CFG_VM_ENABLE
     perf_stats.l2tlb = l2tlb_->perf_stats();
-    perf_stats.ptw   = ptw_->perf_stats();
 #endif
     return perf_stats;
   }
 
 #ifdef VX_CFG_VM_ENABLE
   void set_mmu_satp(uint64_t value) {
-    // Single DCR source of truth: fan the device-programmed satp to the shared
-    // walker and to every core's L1 MMUs. Mirrors the RTL, where the L1 TLBs
-    // and the PTW all source satp from the DCR broadcast (not the per-core CSR).
-    ptw_->set_satp(value);
+    // Single DCR source of truth: fan the device-programmed satp to every
+    // core's L1 MMUs. Mirrors the RTL, where the L1 TLBs source satp from
+    // the DCR broadcast (not the per-core CSR); the device walker receives
+    // its copy from the processor directly.
     for (auto& socket : sockets_) {
       for (uint32_t c = 0; c < cores_per_socket_; ++c) {
         socket->core(c)->set_satp(value);
@@ -442,22 +428,12 @@ public:
     }
   }
 
-  void mmu_clear_fault() {
-    ptw_->clear_fault();
+  SimChannel<TlbReq>& ptw_req_out() {
+    return l2tlb_->PtwReqOut;
   }
 
-  uint64_t mmu_fault_va() const {
-    return ptw_->fault_info().va;
-  }
-
-  uint32_t mmu_fault_info() const {
-    auto& f = ptw_->fault_info();
-    if (!f.valid) {
-      return 0;
-    }
-    return VX_MMU_FAULT_VALID
-         | (((uint32_t)f.access << VX_MMU_FAULT_ACCESS_SH) & VX_MMU_FAULT_ACCESS)
-         | (f.amo ? VX_MMU_FAULT_AMO : 0u);
+  SimChannel<TlbRsp>& ptw_rsp_in() {
+    return l2tlb_->PtwRspIn;
   }
 #endif
 
@@ -609,7 +585,6 @@ private:
   uint32_t                    cores_per_socket_;
 #ifdef VX_CFG_VM_ENABLE
   L2Tlb::Ptr                  l2tlb_;
-  Ptw::Ptr                    ptw_;
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
   OmCore::Ptr                 om_core_;
@@ -672,16 +647,12 @@ void Cluster::set_mmu_satp(uint64_t value) {
   impl_->set_mmu_satp(value);
 }
 
-void Cluster::mmu_clear_fault() {
-  impl_->mmu_clear_fault();
+SimChannel<TlbReq>& Cluster::ptw_req_out() {
+  return impl_->ptw_req_out();
 }
 
-uint64_t Cluster::mmu_fault_va() const {
-  return impl_->mmu_fault_va();
-}
-
-uint32_t Cluster::mmu_fault_info() const {
-  return impl_->mmu_fault_info();
+SimChannel<TlbRsp>& Cluster::ptw_rsp_in() {
+  return impl_->ptw_rsp_in();
 }
 #endif
 
