@@ -1,0 +1,28 @@
+{
+  "cache": {
+    "clock_mhz": 800,
+    "config_hash": "b511dc803abcf2a1",
+    "configs": "",
+    "dut": "cache",
+    "result": {
+      "build_time_s": 280,
+      "cell_area_um2": 47068.22,
+      "cell_count": 422936,
+      "env": {
+        "corner": "tt",
+        "pdk": "asap7",
+        "sta": "2.7.0",
+        "sv2v": "sv2v v0.0.13-3-g80a2f0c",
+        "vt": "rvt",
+        "xlen": 32,
+        "yosys": "Yosys 0.57+157"
+      },
+      "fmax_mhz": 951.294,
+      "power_mw": 147.0,
+      "seq_area_um2": 22783.874,
+      "sram_area_um2": 16307.2,
+      "tns_ns": 0.0,
+      "wns_ns": 0.199
+    }
+  }
+}
