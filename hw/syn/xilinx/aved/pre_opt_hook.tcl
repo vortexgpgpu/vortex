@@ -13,18 +13,12 @@
 # omitted -- this AFU sits in a DFX reconfigurable partition and does not have
 # that problem.
 #
-# What it does have is the opposite problem. pblock_slash constrains the RM to
-# the dynamic region but spans all three SLRs, so it never asks the placer to
-# keep the RM together: a 3%-utilization build was measured smeared over all
-# three SLRs with 1691 SLL crossings, and all ten of its worst setup paths
-# crossed SLR1->SLR2 (~1.9 ns on the crossing net alone, against a 3.333 ns
-# period). xilinx_dfx_slr_confine.tcl pins the user logic to one SLR using
-# ranges clipped from pblock_slash itself, so it constrains strictly inside the
-# reconfigurable region rather than fighting it.
+# Nor does it need the opposite. Constraining the RM's placement was tried five
+# ways and every one measured worse than leaving the placer alone; see
+# pre_synth_hook.tcl for the numbers. The SLR split those attempts were
+# chasing is fixed shell-side, in slash_base.tcl.
 
 set tool_dir $::env(TOOL_DIR)
 source ${tool_dir}/xilinx_async_bram_patch.tcl
-source ${tool_dir}/xilinx_dfx_slr_confine.tcl
-source ${tool_dir}/xilinx_noc_slr_steer.tcl
 
 report_utilization -file hier_utilization.rpt -hierarchical -hierarchical_percentages
