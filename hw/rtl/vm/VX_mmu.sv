@@ -25,7 +25,8 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_REQS    = DCACHE_NUM_REQS,
     parameter TLB_SIZE     = `VX_CFG_DTLB_SIZE,
-    parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE, // walk-ID space (>= NUM_BANKS)
+    parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
+    parameter REPLAY_DEPTH = 2,
     parameter EXEC_SIDE    = 0,
     parameter DATA_SIZE    = DCACHE_WORD_SIZE,
     parameter TAG_WIDTH    = DCACHE_TAG_WIDTH_BASE,
@@ -146,14 +147,16 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     wire [NUM_REQS-1:0]        bank_conflict;
 
-    // L1 storage: banked — per-bank lookup port + one parked miss per bank;
-    // losing lanes hold via bank_conflict.
+    // L1 storage: banked single-port CAMs (losing lanes hold via
+    // bank_conflict) in front of the shared non-blocking miss station.
     VX_tlb_l1 #(
-        .NUM_REQS    (NUM_REQS),
-        .TLB_SIZE    (TLB_SIZE),
-        .NUM_BANKS   (`VX_CFG_L1_TLB_NUM_BANKS),
-        .PAYLOAD_W   (PAYLOAD_W),
-        .ID_WIDTH    (ID_WIDTH)
+        .NUM_REQS     (NUM_REQS),
+        .TLB_SIZE     (TLB_SIZE),
+        .NUM_BANKS    (`VX_CFG_L1_TLB_NUM_BANKS),
+        .MSHR_SIZE    (MSHR_SIZE),
+        .REPLAY_DEPTH (REPLAY_DEPTH),
+        .PAYLOAD_W    (PAYLOAD_W),
+        .ID_WIDTH     (ID_WIDTH)
     ) tlb (
         .clk           (clk),
         .reset         (reset),
@@ -190,7 +193,6 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .flush         (flush_clear),
         .empty         (tlb_empty)
     );
-
 
     // ---------------------------------------------------------------------
     // Per-lane request category (mutually exclusive, by priority)

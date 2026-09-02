@@ -141,8 +141,9 @@ VX_CFG_NUM_VPU_BLOCKS = 1
 # VM page-table format is a HW<->SW contract, moved to VX_types.toml [vm]; TLB depth stays here.
 VX_CFG_TLB_SIZE = 32
 
-# L1 TLB banks (power of two): per-bank single lookup ports with one
-# parked miss per bank; hits in other banks proceed under a miss.
+# L1 TLB banks (power of two, dividing the TLB sizes): the entry array is
+# split by low VPN bits into single-lookup-port banks; lanes contending for
+# a bank serialize, misses go to the shared miss station below.
 VX_CFG_L1_TLB_NUM_BANKS = 4
 
 # L1 TLB stage (per core): D-side / I-side entries and the per-instance
