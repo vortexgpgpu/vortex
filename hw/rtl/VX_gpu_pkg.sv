@@ -939,9 +939,25 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(wctl_args_t) == INST_ARGS_BITS)
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    // EXT1/funct7=3 DXA sub-operations. funct3=4 is intentionally reserved:
+    // this extension implements source-READ lifetime only, not FULL/cache
+    // visibility semantics.
+    localparam INST_DXA_ISSUE_G2S    = 3'd0;
+    localparam INST_DXA_ISSUE_S2G    = 3'd1;
+    localparam INST_DXA_COMMIT_GROUP = 3'd2;
+    localparam INST_DXA_WAIT_READ    = 3'd3;
+
+    typedef struct packed {
+        logic [INST_ARGS_BITS-8-1:0] __padding;
+        logic [4:0]                  uimm5;
+        logic [2:0]                  subop;
+    } dxa_args_t;
+`else
     typedef struct packed {
         logic [INST_ARGS_BITS-1:0] __padding;
     } dxa_args_t;
+`endif
     `PACKAGE_ASSERT($bits(dxa_args_t) == INST_ARGS_BITS)
 `endif
 

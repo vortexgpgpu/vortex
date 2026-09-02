@@ -46,6 +46,9 @@ module VX_decode import
     reg [NUM_XREGS-1:0] wr_xregs;
     reg [BYTESEL_BITS-1:0] bytesel;
     reg is_wstall;
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    reg illegal_dxa_group;
+`endif
 
     wire [31:0] instr = fetch_if.data.instr;
     wire [6:0] opcode = instr[6:0];
@@ -200,6 +203,9 @@ module VX_decode import
         wr_xregs  = '0;
         bytesel   = BYTESEL_DEFAULT;
         is_wstall = 0;
+    `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+        illegal_dxa_group = 1'b0;
+    `endif
 
     `ifdef VX_CFG_EXT_A_ENABLE
         // Default the LSU amo sideband to "not an AMO" so plain
@@ -718,12 +724,51 @@ module VX_decode import
                 `endif
                 `ifdef VX_CFG_EXT_DXA_ENABLE
                     7'h03: begin // DXA issue
+                    `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+                        unique case (funct3)
+                            INST_DXA_ISSUE_G2S: begin
+                                ex_type = EX_SFU;
+                                op_type = INST_OP_BITS'(INST_SFU_DXA);
+                                op_args.dxa.subop = INST_DXA_ISSUE_G2S;
+                                op_args.dxa.uimm5 = '0;
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                        `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+                            INST_DXA_ISSUE_S2G: begin
+                                ex_type = EX_SFU;
+                                op_type = INST_OP_BITS'(INST_SFU_DXA);
+                                op_args.dxa.subop = INST_DXA_ISSUE_S2G;
+                                op_args.dxa.uimm5 = '0;
+                                `USED_IREG (rs1);
+                                `USED_IREG (rs2);
+                            end
+                        `endif
+                            INST_DXA_COMMIT_GROUP: begin
+                                ex_type = EX_SFU;
+                                op_type = INST_OP_BITS'(INST_SFU_DXA);
+                                op_args.dxa.subop = INST_DXA_COMMIT_GROUP;
+                                op_args.dxa.uimm5 = '0;
+                            end
+                            INST_DXA_WAIT_READ: begin
+                                ex_type = EX_SFU;
+                                op_type = INST_OP_BITS'(INST_SFU_DXA);
+                                op_args.dxa.subop = INST_DXA_WAIT_READ;
+                                op_args.dxa.uimm5 = rs2;
+                                is_wstall = 1'b1;
+                            end
+                            default: begin
+                                illegal_dxa_group = 1'b1;
+                            end
+                        endcase
+                    `else
                         // Multicast is determined by cta_mask (>1 bit set).
                         // Expanded into micro-ops by VX_dxa_uops.
                         ex_type = EX_SFU;
                         op_type = INST_OP_BITS'(INST_SFU_DXA);
                         `USED_IREG (rs1);
                         `USED_IREG (rs2);
+                    `endif
                     end
                 `endif
                     7'h04: begin // Load packing: vx_packlb_f / vx_packlh_f
@@ -902,6 +947,11 @@ module VX_decode import
 
     wire fetch_fire = fetch_if.valid && fetch_if.ready;
 
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    `RUNTIME_ASSERT (!(fetch_fire && illegal_dxa_group),
+        ("%t: invalid READ-only DXA group funct3=%0d", $time, funct3))
+`endif
+
     // Register decode_sched_if to break the long combinational path.
     reg                  decode_sched_valid_r;
     reg                  decode_sched_unlock_r;
@@ -931,6 +981,12 @@ module VX_decode import
 `endif
 
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
+
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    if (`VX_CFG_NUM_THREADS < 4) begin : g_invalid_dxa_group_threads
+        VX_DXA_GROUP_REQUIRES_AT_LEAST_FOUR_THREADS invalid_config();
+    end
+`endif
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin

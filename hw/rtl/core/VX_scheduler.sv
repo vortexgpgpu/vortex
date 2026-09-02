@@ -33,6 +33,14 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     VX_decode_sched_if.slave decode_sched_if,
     VX_issue_sched_if.slave issue_sched_if [`VX_CFG_ISSUE_WIDTH],
     VX_commit_sched_if.slave commit_sched_if,
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    input wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_unlock_mask,
+    input wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_drained_mask,
+    output wire                        dxa_group_epoch_adv_valid,
+    output wire [NW_WIDTH-1:0]         dxa_group_epoch_adv_wid,
+    output wire                        dxa_group_poison_valid,
+    output wire [NW_WIDTH-1:0]         dxa_group_poison_wid,
+`endif
 
     // KMU bus
     VX_kmu_bus_if.slave     kmu_bus_if,
@@ -80,8 +88,56 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_rd_lane;
     wire [NCTA_WIDTH-1:0]                                   schedule_cta_id;
 
-    // Warp retirement: TMC with tmask==0 permanently deactivates the warp
-    wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0);
+    // Warp retirement: active execution stops at TMC(tmask=0), but a wid that
+    // still owns S2G contexts cannot be handed to another CTA.  Keep that
+    // lifetime hold separate from active_warps so barriers see only live warps.
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    reg [`VX_CFG_NUM_WARPS-1:0] dxa_group_exit_pending_r;
+    wire dxa_group_exit_req = warp_ctl_if.tmc_valid
+                           && (warp_ctl_if.tmc.tmask == 0);
+    wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_exit_req_mask
+        = dxa_group_exit_req
+        ? ((`VX_CFG_NUM_WARPS)'(1) << warp_ctl_if.wid) : '0;
+    wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_exit_ready_mask
+        = (dxa_group_exit_pending_r | dxa_group_exit_req_mask)
+        & dxa_group_drained_mask;
+    wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_exit_release_mask;
+    wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_exit_hold_mask
+        = (dxa_group_exit_pending_r | dxa_group_exit_req_mask)
+        & ~dxa_group_exit_release_mask;
+    wire [NW_WIDTH-1:0] cta_warp_done_wid;
+    wire cta_warp_done;
+
+    VX_priority_encoder #(
+        .N (`VX_CFG_NUM_WARPS)
+    ) dxa_group_exit_select (
+        .data_in    (dxa_group_exit_ready_mask),
+        .onehot_out (dxa_group_exit_release_mask),
+        .index_out  (cta_warp_done_wid),
+        .valid_out  (cta_warp_done)
+    );
+
+    always @(posedge clk) begin
+        if (reset) begin
+            dxa_group_exit_pending_r <= '0;
+        end else begin
+            dxa_group_exit_pending_r <= (dxa_group_exit_pending_r
+                                       | dxa_group_exit_req_mask)
+                                       & ~dxa_group_exit_release_mask;
+        end
+    end
+
+    // Poison closes the retiring logical stream. A subsequently dispatched
+    // CTA advances the drained wid epoch and reopens a fresh stream.
+    assign dxa_group_poison_valid   = dxa_group_exit_req;
+    assign dxa_group_poison_wid     = warp_ctl_if.wid;
+    assign dxa_group_epoch_adv_valid = cta_fire;
+    assign dxa_group_epoch_adv_wid   = cta_wid;
+`else
+    wire cta_warp_done = warp_ctl_if.tmc_valid
+                      && (warp_ctl_if.tmc.tmask == 0);
+    wire [NW_WIDTH-1:0] cta_warp_done_wid = warp_ctl_if.wid;
+`endif
 
     VX_cta_dispatch #(
         .INSTANCE_ID (`SFORMATF(("%s-cta_dispatch", INSTANCE_ID)))
@@ -90,8 +146,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .reset      (reset),
         .kmu_bus_if (kmu_bus_if),
         .active_warps(active_warps),
+    `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+        .exit_pending_warps(dxa_group_exit_hold_mask),
+    `endif
         .warp_done  (cta_warp_done),
-        .warp_done_wid(warp_ctl_if.wid),
+        .warp_done_wid(cta_warp_done_wid),
         .cta_fire   (cta_fire),
         .cta_wid    (cta_wid),
         .cta_PC     (cta_PC),
@@ -224,10 +283,18 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n[join_wid] = 0; // unlock warp
         end
 
-        // barrier unlock handling
+        // Barrier and S2G READ-group completion can release different warps in
+        // the same cycle; combine both masks instead of prioritizing one.
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+        if (bar_unlock_valid || (|dxa_group_unlock_mask)) begin
+            stalled_warps_n &= ~((bar_unlock_valid ? bar_unlock_mask : '0)
+                               | dxa_group_unlock_mask);
+        end
+`else
         if (bar_unlock_valid) begin
             stalled_warps_n &= ~bar_unlock_mask;
         end
+`endif
 
         // wsync unlock: warp pipeline drained
         if (warp_ctl_if.wsync_valid) begin
@@ -549,7 +616,12 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 
     wire busy_buf;
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    `BUFFER_EX(busy_buf, ((active_warps_n | dxa_group_exit_hold_mask) != 0
+                       || ~(&pending_warp_empty)), 1'b1, 1, 1);
+`else
     `BUFFER_EX(busy_buf, (active_warps_n != 0 || ~(&pending_warp_empty)), 1'b1, 1, 1);
+`endif
     assign busy = busy_buf || cta_dispatcher_busy;
 
     assign warp_ctl_if.warp_pending_alm_empty = pending_warp_alm_empty;
@@ -559,6 +631,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign sched_csr_if.instret = instret;
     assign sched_csr_if.active_warps = active_warps;
     assign sched_csr_if.thread_masks = thread_masks;
+
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    `RUNTIME_ASSERT (!cta_fire || dxa_group_drained_mask[cta_wid],
+        ("%t: *** dxa-group: CTA reused wid=%0d before drain", $time, cta_wid))
+`endif
 
    // timeout handling
     reg [31:0] timeout_ctr;

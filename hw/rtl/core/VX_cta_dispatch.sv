@@ -25,6 +25,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
 
     // from scheduler
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    input wire [`VX_CFG_NUM_WARPS-1:0] exit_pending_warps,
+`endif
     input wire                      warp_done,
     input wire [NW_WIDTH-1:0]       warp_done_wid,
 
@@ -148,7 +151,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         .N       (`VX_CFG_NUM_WARPS),
         .REVERSE (0)
     ) priority_enc (
-        .data_in   (~(active_warps | dispatched_warps)),
+        .data_in   (~(active_warps | dispatched_warps
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+                    | exit_pending_warps
+`endif
+                    )),
         `UNUSED_PIN(onehot_out),
         .index_out (warp_id_n),
         .valid_out (warp_ready)

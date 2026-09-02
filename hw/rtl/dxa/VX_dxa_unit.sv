@@ -23,6 +23,21 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_execute_if.slave     execute_if,
     VX_result_if.master     result_if,
     VX_dxa_req_bus_if.master dxa_req_bus_if
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    , output wire                         group_issue_valid
+    , output wire                         group_issue_query
+    , output wire [NW_WIDTH-1:0]          group_issue_wid
+    , input  wire [1:0]                   group_issue_result
+    , input  wire [DXA_GROUP_EPOCH_W-1:0] group_issue_epoch
+    , input  wire [DXA_GROUP_SEQ_W-1:0]   group_issue_seq
+    , input  wire [DXA_GROUP_OPID_W-1:0]  group_issue_op_id
+    , output wire                         group_commit_valid
+    , output wire [NW_WIDTH-1:0]          group_commit_wid
+    , input  wire [1:0]                   group_commit_result
+    , output wire                         group_wq_valid
+    , output wire [NW_WIDTH-1:0]          group_wq_wid
+    , output wire [4:0]                   group_wq_n
+`endif
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (execute_if.data.rs3_data)
@@ -62,10 +77,15 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dxa_req_data_in.uuid      = execute_if.data.header.uuid;
     assign dxa_req_data_in.wid       = execute_if.data.header.wid;
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
-    assign dxa_req_data_in.dir       = DXA_DIR_G2S;
-    assign dxa_req_data_in.epoch     = '0;
-    assign dxa_req_data_in.group_seq = '0;
-    assign dxa_req_data_in.op_id     = '0;
+    assign dxa_req_data_in.dir       = (execute_if.data.op_args.dxa.subop == INST_DXA_ISSUE_S2G)
+                                     ? DXA_DIR_S2G : DXA_DIR_G2S;
+    assign dxa_req_data_in.epoch     = group_issue_epoch;
+    assign dxa_req_data_in.group_seq = group_issue_seq;
+    assign dxa_req_data_in.op_id     = group_issue_op_id;
+`elsif VX_CFG_EXT_DXA_GROUP_ENABLE
+    `UNUSED_VAR (group_issue_epoch)
+    `UNUSED_VAR (group_issue_seq)
+    `UNUSED_VAR (group_issue_op_id)
 `endif
     assign dxa_req_data_in.smem_addr = lmem_rel_byte_addr[DXA_SMEM_ADDR_W-1:0];
     assign dxa_req_data_in.meta      = lane1_rs1[31:0];
@@ -89,8 +109,44 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // dxa_req_arb and this unit. Barrier transaction registration is
     // handled by software via vx_barrier.h::expect_tx.
     wire dxa_buf_ready, wb_ready;
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    wire [2:0] group_subop = execute_if.data.op_args.dxa.subop;
+    wire is_g2s = (group_subop == INST_DXA_ISSUE_G2S);
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    wire is_s2g = (group_subop == INST_DXA_ISSUE_S2G);
+`else
+    wire is_s2g = 1'b0;
+`endif
+    wire is_commit = (group_subop == INST_DXA_COMMIT_GROUP);
+    wire is_wait_read = (group_subop == INST_DXA_WAIT_READ);
+    wire group_issue_tracked = (group_issue_result == 2'd0);
+    wire group_issue_ignored = (group_issue_result == 2'd2);
+    wire commit_accepted = (group_commit_result != 2'd1);
+
+    // Only S2G consumes a group-operation context. G2S retains its existing
+    // transactional-barrier completion path and is independent of group-pool
+    // pressure. Poisoned streams consume the instruction without launching a
+    // transfer; a full physical pool or boundary ring applies backpressure.
+    wire accept = wb_ready
+               && (is_g2s ? dxa_buf_ready
+                 : is_s2g ? ((group_issue_tracked && dxa_buf_ready)
+                           || group_issue_ignored)
+                 : is_commit ? commit_accepted
+                 : is_wait_read);
+    wire fire = execute_if.valid && accept;
+
+    assign group_issue_valid = fire && is_s2g;
+    assign group_issue_query = execute_if.valid && is_s2g;
+    assign group_issue_wid = execute_if.data.header.wid;
+    assign group_commit_valid = fire && is_commit;
+    assign group_commit_wid = execute_if.data.header.wid;
+    assign group_wq_valid = fire && is_wait_read;
+    assign group_wq_wid = execute_if.data.header.wid;
+    assign group_wq_n = execute_if.data.op_args.dxa.uimm5;
+`else
     wire accept = dxa_buf_ready && wb_ready;
     wire fire   = execute_if.valid && accept;
+`endif
 
     assign execute_if.ready = accept;
 
@@ -101,7 +157,11 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     ) dxa_req_buf (
         .clk       (clk),
         .reset     (reset),
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+        .valid_in  (fire && (is_g2s || (is_s2g && group_issue_tracked))),
+`else
         .valid_in  (fire),
+`endif
         .ready_in  (dxa_buf_ready),
         .data_in   (dxa_req_data_in),
         .valid_out (dxa_req_bus_if.req_valid),

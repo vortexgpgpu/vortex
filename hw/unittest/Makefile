@@ -12,6 +12,7 @@ all:
 	$(MAKE) -C dxa_core
 	$(MAKE) -C dxa_group_tracker
 	$(MAKE) -C dxa_s2g
+	$(MAKE) -C scheduler
 	$(MAKE) -C tcu_unit
 	$(MAKE) -C cp_arbiter
 	$(MAKE) -C cp_engine
@@ -44,6 +45,7 @@ run:
 	$(MAKE) -C dxa_core run
 	$(MAKE) -C dxa_group_tracker run
 	$(MAKE) -C dxa_s2g run
+	$(MAKE) -C scheduler run
 	$(MAKE) -C tcu_unit run
 	$(MAKE) -C cp_arbiter run
 	$(MAKE) -C cp_engine run

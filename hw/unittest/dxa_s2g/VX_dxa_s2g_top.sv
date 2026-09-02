@@ -82,7 +82,6 @@ module VX_dxa_s2g_top import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     localparam GMEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(GMEM_LINE_SIZE);
     localparam GMEM_TAG_WIDTH = L1_MEM_ARB_TAG_WIDTH;
     wire unused_package_constants = |32'(DXA_DESC_SLOT_W)
-                                  | |32'(DXA_GROUP_DEPTH)
                                   | |32'(DXA_DEST_BLOCKMAJOR);
     `UNUSED_VAR (unused_package_constants)
 

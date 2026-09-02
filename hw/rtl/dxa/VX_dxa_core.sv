@@ -27,6 +27,9 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     VX_dxa_req_bus_if.slave req_bus_if[NUM_REQS],
     VX_mem_bus_if.master gmem_bus_if[GMEM_OUT_PORTS],
     VX_mem_bus_if.master smem_bus_if[1],
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    VX_dxa_group_completion_if.master completion_if[NUM_REQS],
+`endif
     output wire busy
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -175,6 +178,10 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire [`VX_CFG_NUM_DXA_CORES-1:0] worker_busy;
 
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    VX_dxa_group_completion_if worker_completion_if[`VX_CFG_NUM_DXA_CORES]();
+`endif
+
 `ifdef PERF_ENABLE
     dxa_perf_t worker_dxa_perf [`VX_CFG_NUM_DXA_CORES];
 `endif
@@ -193,9 +200,26 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             .req_if         (worker_req_if[i]),
             .gmem_bus_if    (worker_gmem_bus_if[i]),
             .smem_bus_if    (worker_smem_bus_if[i]),
+        `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+            .completion_if  (worker_completion_if[i]),
+        `endif
             .busy           (worker_busy[i])
         );
     end
+
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    VX_dxa_group_completion_hub #(
+        .NUM_SRCS  (`VX_CFG_NUM_DXA_CORES),
+        .NUM_CORES (NUM_REQS),
+        .CORE_W    (`UP(`CLOG2(NUM_REQS))),
+        .OUT_BUF   (2)
+    ) completion_hub (
+        .clk    (clk),
+        .reset  (reset),
+        .src_if (worker_completion_if),
+        .dst_if (completion_if)
+    );
+`endif
 
     // ================================================================
     // Output arbitration
@@ -248,12 +272,23 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                      || queue_out_bus_if[0].req_valid
                      || (fetch_state_r == FETCH_PRESENT);
 
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    wire [NUM_REQS-1:0] completion_valid;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_completion_valid
+        assign completion_valid[i] = completion_if[i].valid;
+    end
+`endif
+
     // The worker completes when its final write enters lmem_arb. Keep the core
     // live while that registered output is still waiting for the socket switch.
     wire core_active = dcr_bus_if.req_valid
                     || ingress_busy
                     || (|worker_busy)
-                    || smem_bus_if[0].req_valid;
+                    || smem_bus_if[0].req_valid
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+                    || (|completion_valid)
+`endif
+                    ;
 
     reg dxa_busy_r;
     always @(posedge clk) begin

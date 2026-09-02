@@ -129,6 +129,17 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .TAG_WIDTH (GMEM_TAG_WIDTH)
     ) gmem_bus_if[GMEM_OUT_PORTS]();
 
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    VX_dxa_group_completion_if completion_if[`VX_CFG_SOCKET_SIZE]();
+    for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE; ++i) begin : g_completion_sink
+        assign completion_if[i].ready = 1'b1;
+        wire unused_completion = completion_if[i].valid
+                               || (|completion_if[i].core_id)
+                               || (|completion_if[i].data);
+        `UNUSED_VAR (unused_completion)
+    end
+`endif
+
     for (genvar i = 0; i < GMEM_OUT_PORTS; i++) begin
         assign gmem_req_valid[i]           = gmem_bus_if[i].req_valid;
         assign gmem_req_rw[i]              = gmem_bus_if[i].req_data.rw;
@@ -173,6 +184,9 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .req_bus_if        (req_bus_if),
         .smem_bus_if       (lmem_bus_if),
         .gmem_bus_if       (gmem_bus_if),
+    `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+        .completion_if     (completion_if),
+    `endif
         .busy              (busy)
     );
 

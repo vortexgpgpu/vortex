@@ -39,6 +39,21 @@ import VX_raster_pkg::*;
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
     VX_txbar_bus_if.slave   dxa_txbar_bus_if,
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    output wire                         dxa_group_issue_valid,
+    output wire                         dxa_group_issue_query,
+    output wire [NW_WIDTH-1:0]          dxa_group_issue_wid,
+    input  wire [1:0]                   dxa_group_issue_result,
+    input  wire [VX_dxa_pkg::DXA_GROUP_EPOCH_W-1:0] dxa_group_issue_epoch,
+    input  wire [VX_dxa_pkg::DXA_GROUP_SEQ_W-1:0] dxa_group_issue_seq,
+    input  wire [VX_dxa_pkg::DXA_GROUP_OPID_W-1:0] dxa_group_issue_op_id,
+    output wire                         dxa_group_commit_valid,
+    output wire [NW_WIDTH-1:0]          dxa_group_commit_wid,
+    input  wire [1:0]                   dxa_group_commit_result,
+    output wire                         dxa_group_wq_valid,
+    output wire [NW_WIDTH-1:0]          dxa_group_wq_wid,
+    output wire [4:0]                   dxa_group_wq_n,
+`endif
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -212,6 +227,21 @@ import VX_raster_pkg::*;
         .execute_if (pe_execute_if[PE_IDX_DXA]),
         .result_if  (pe_result_if[PE_IDX_DXA]),
         .dxa_req_bus_if (dxa_req_bus_if)
+    `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+        , .group_issue_valid (dxa_group_issue_valid)
+        , .group_issue_query (dxa_group_issue_query)
+        , .group_issue_wid   (dxa_group_issue_wid)
+        , .group_issue_result(dxa_group_issue_result)
+        , .group_issue_epoch (dxa_group_issue_epoch)
+        , .group_issue_seq   (dxa_group_issue_seq)
+        , .group_issue_op_id (dxa_group_issue_op_id)
+        , .group_commit_valid(dxa_group_commit_valid)
+        , .group_commit_wid  (dxa_group_commit_wid)
+        , .group_commit_result(dxa_group_commit_result)
+        , .group_wq_valid    (dxa_group_wq_valid)
+        , .group_wq_wid      (dxa_group_wq_wid)
+        , .group_wq_n        (dxa_group_wq_n)
+    `endif
     );
 
     // The only txbar producer is the SMEM-completion path through

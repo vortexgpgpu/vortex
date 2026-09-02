@@ -101,6 +101,26 @@ module VX_core_top import VX_gpu_pkg::*;
     assign dxa_lmem_bus_if.req_valid = 1'b0;
     assign dxa_lmem_bus_if.req_data  = '0;
     assign dxa_lmem_bus_if.rsp_ready = 1'b1;
+
+    wire unused_dxa_outputs = dxa_req_bus_if.req_valid
+                            || (|dxa_req_bus_if.req_data)
+                            || dxa_lmem_bus_if.req_ready
+                            || dxa_lmem_bus_if.rsp_valid
+                            || (|dxa_lmem_bus_if.rsp_data)
+                            || (|32'(DXA_DESC_SLOT_W))
+                            || (|32'(DXA_DESC_META_TOTAL_BITS))
+                            || (|32'(DXA_DEST_ROWMAJOR))
+                            || (|32'(DXA_DEST_KMAJOR))
+                            || (|32'(DXA_DEST_BLOCKMAJOR));
+    `UNUSED_VAR (unused_dxa_outputs)
+
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    VX_dxa_group_completion_if dxa_completion_if();
+    assign dxa_completion_if.valid   = 1'b0;
+    assign dxa_completion_if.core_id = '0;
+    assign dxa_completion_if.data    = '0;
+    `UNUSED_VAR (dxa_completion_if.ready)
+`endif
 `endif
 
     // Graphics cluster-bus tie-offs. VX_core exposes these interfaces to the
@@ -230,6 +250,9 @@ module VX_core_top import VX_gpu_pkg::*;
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_lmem_bus_if(dxa_lmem_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+        .dxa_completion_if(dxa_completion_if),
     `endif
 
     `ifdef VX_CFG_EXT_TEX_ENABLE

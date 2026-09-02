@@ -436,6 +436,10 @@ module VX_socket import VX_gpu_pkg::*;
     ) dxa_lmem_bus_if[1]();
 
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    VX_dxa_group_completion_if dxa_completion_if[`VX_CFG_SOCKET_SIZE]();
+`endif
+
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
     `STATIC_ASSERT($bits(dxa_lmem_bus_if[0].req_data.tag) == DXA_LMEM_OUT_TAG_W,
         ("DXA socket input request tag width mismatch"))
     `STATIC_ASSERT($bits(dxa_lmem_bus_if[0].rsp_data.tag) == DXA_LMEM_OUT_TAG_W,
@@ -467,6 +471,9 @@ module VX_socket import VX_gpu_pkg::*;
         .req_bus_if   (per_core_dxa_req_bus_if),
         .smem_bus_if  (dxa_lmem_bus_if),
         .gmem_bus_if  (dxa_gmem_bus_if),
+    `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+        .completion_if(dxa_completion_if),
+    `endif
         .busy         (dxa_core_busy)
     );
 
@@ -572,6 +579,10 @@ module VX_socket import VX_gpu_pkg::*;
         `ifdef VX_CFG_EXT_DXA_ENABLE
             .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),
             .dxa_lmem_bus_if(per_core_dxa_lmem_bus_if[core_id]),
+        `endif
+
+        `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+            .dxa_completion_if(dxa_completion_if[core_id]),
         `endif
 
         `ifdef VX_CFG_EXT_TEX_ENABLE

@@ -17,7 +17,7 @@
 `include "VX_fpu_define.vh"
 `endif
 
-module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
+module VX_core import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0,
     parameter `STRING INSTANCE_ID = ""
 ) (
@@ -37,17 +37,13 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     VX_mem_bus_if.master    icache_bus_if,
 
-`ifdef VX_CFG_VM_ENABLE
-    // Address translation is relocated to the socket (one MMU per L1 cache); the
-    // core emits virtual addresses on its cache buses. The socket returns its
-    // MMU drain state so the core's busy/barrier logic still waits for in-flight
-    // translations to retire before completion/suspend.
-    input wire              mmu_drained,
-`endif
-
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
     VX_mem_bus_if.slave     dxa_lmem_bus_if,
+`endif
+
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    VX_dxa_group_completion_if.slave dxa_completion_if,
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -55,9 +51,11 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
+    VX_om_bus_if.master     om_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_raster_bus_if.slave  raster_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
@@ -87,7 +85,7 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     VX_branch_ctl_if    branch_ctl_if[`VX_CFG_NUM_ALU_BLOCKS]();
     VX_warp_ctl_if      warp_ctl_if();
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_sched_unlock_if  sched_unlock_if();  // RTU TRACE wstall release -> scheduler
+    VX_async_trap_if    async_trap_if();   // RTU shader-callback yield -> scheduler
 `endif
 
     VX_dispatch_if      dispatch_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
@@ -175,12 +173,7 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     VX_dcr_flush_if dcr_flush_dcache_if();
     VX_dcr_flush_if dcr_flush_icache_if();
 
-    // Hold the dcache flush request until this core's stores have all reached L1.
-    // Stores are ack-less and lag warp-exit by many cycles, and the flush arbiter
-    // sits at the adapter output with no upstream visibility, so without this gate a
-    // flush could inject ahead of a store still in the LSU/coalescer and lose it.
-    wire store_drained = (&lsu_sched_empty) && mem_unit_empty;
-    assign dcr_flush_dcache_if.req = dcr_flush_if.req && store_drained;
+    assign dcr_flush_dcache_if.req = dcr_flush_if.req;
     // Both L1s forward their flush to the shared next level, and a cache that
     // is flushing locks out incoming core requests for its whole sweep. The
     // icache carries no dirty data and so retires almost immediately; gate it
@@ -200,6 +193,7 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     assign dcr_flush_if.done = dcr_flush_dcache_if.done & dcr_flush_icache_if.done;
 `endif
 
+    wire dcr_busy;
     VX_dcr_data #(
         .INSTANCE_ID (`SFORMATF(("%s-dcr_data", INSTANCE_ID))),
         .CORE_ID (CORE_ID)
@@ -208,11 +202,162 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
         .dcr_csr_if (dcr_csr_if),
-        .dcr_flush_if(dcr_flush_if)
+        .dcr_flush_if(dcr_flush_if),
+        .dcr_busy   (dcr_busy)
     );
 
     `SCOPE_IO_SWITCH (3);
 
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // Graphics work distributor: merge the device-KMU stream with the local
+    // fragment stream onto the scheduler's kmu bus (VX_cta_dispatch stays a
+    // single-source consumer — fragment waves are ordinary kmu CTAs).
+    VX_kmu_bus_if raster_frag_kmu_if();   // distributor → arb
+    VX_kmu_bus_if kmu_arb_in_if[2]();
+    VX_kmu_bus_if sched_kmu_arr_if[1]();   // arb → scheduler
+
+    // input 0 = device-KMU stream (the core's incoming kmu bus)
+    assign kmu_arb_in_if[0].valid = kmu_bus_if.valid;
+    assign kmu_arb_in_if[0].data  = kmu_bus_if.data;
+    assign kmu_bus_if.ready       = kmu_arb_in_if[0].ready;
+    // input 1 = local fragment stream (the distributor)
+    assign kmu_arb_in_if[1].valid       = raster_frag_kmu_if.valid;
+    assign kmu_arb_in_if[1].data        = raster_frag_kmu_if.data;
+    assign raster_frag_kmu_if.ready     = kmu_arb_in_if[1].ready;
+
+    VX_kmu_arb #(
+        .NUM_INPUTS (2),
+        .NUM_OUTPUTS(1),
+        .ARBITER    ("P"),   // prioritize the device-KMU stream
+        .OUT_BUF    (0)
+    ) frag_kmu_merge (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (kmu_arb_in_if),
+        .bus_out_if (sched_kmu_arr_if)
+    );
+
+    VX_gfx_win_wr_if #(.NUM_LANES (`VX_CFG_NUM_SFU_LANES)) rast_win_if();
+
+    // Fragment warp aggregator: compact sparse covered-quad waves into full warps
+    // before launch, so the dispatcher issues one CTA per full warp.
+    VX_raster_bus_if #(.NUM_LANES (`VX_CFG_NUM_SFU_LANES)) packed_raster_bus_if();
+    wire raster_packer_busy;
+    VX_raster_packer #(
+        .INSTANCE_ID (`SFORMATF(("%s-raster_packer", INSTANCE_ID))),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+    ) raster_packer (
+        .clk        (clk),
+        .reset      (reset),
+        .in_bus_if  (raster_bus_if),
+        .out_bus_if (packed_raster_bus_if),
+        .busy       (raster_packer_busy)
+    );
+
+    wire raster_dispatch_busy;
+    VX_raster_dispatch #(
+        .INSTANCE_ID (`SFORMATF(("%s-raster_dispatch", INSTANCE_ID))),
+        .CORE_ID     (CORE_ID),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
+    ) raster_dispatch (
+        .clk             (clk),
+        .reset           (reset),
+        .dcr_write_valid (dcr_bus_if.req_valid && dcr_bus_if.req_data.rw),
+        .dcr_write_addr  (dcr_bus_if.req_data.addr),
+        .dcr_write_data  (dcr_bus_if.req_data.data),
+        .raster_bus_if   (packed_raster_bus_if),
+        .kmu_bus_if      (raster_frag_kmu_if),
+        .win_wr_if       (rast_win_if),
+        .busy            (raster_dispatch_busy)
+    );
+`endif
+
+`ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+    // One centralized endpoint per SM core: per-warp logical group rows share
+    // one bounded physical S2G-operation pool.
+    wire dxa_group_issue_valid;
+    wire dxa_group_issue_query;
+    wire [NW_WIDTH-1:0] dxa_group_issue_wid;
+    wire [1:0] dxa_group_issue_result;
+    wire [VX_dxa_pkg::DXA_GROUP_EPOCH_W-1:0] dxa_group_issue_epoch;
+    wire [VX_dxa_pkg::DXA_GROUP_SEQ_W-1:0] dxa_group_issue_seq;
+    wire [VX_dxa_pkg::DXA_GROUP_OPID_W-1:0] dxa_group_issue_op_id;
+    wire dxa_group_commit_valid;
+    wire [NW_WIDTH-1:0] dxa_group_commit_wid;
+    wire [1:0] dxa_group_commit_result;
+    wire dxa_group_wq_valid;
+    wire [NW_WIDTH-1:0] dxa_group_wq_wid;
+    wire [4:0] dxa_group_wq_n;
+    wire dxa_group_wq_satisfied;
+    wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_unlock_mask;
+    wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_drained_mask;
+    wire [1:0] dxa_group_sticky_status[`VX_CFG_NUM_WARPS];
+    wire dxa_group_completion_ready;
+    wire dxa_group_epoch_adv_valid;
+    wire [NW_WIDTH-1:0] dxa_group_epoch_adv_wid;
+    wire dxa_group_poison_valid;
+    wire [NW_WIDTH-1:0] dxa_group_poison_wid;
+
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    wire dxa_group_completion_valid = dxa_completion_if.valid;
+    wire [NW_WIDTH-1:0] dxa_group_completion_wid = dxa_completion_if.data.wid;
+    wire [VX_dxa_pkg::DXA_GROUP_EPOCH_W-1:0] dxa_group_completion_epoch
+        = dxa_completion_if.data.epoch;
+    wire [VX_dxa_pkg::DXA_GROUP_SEQ_W-1:0] dxa_group_completion_seq
+        = dxa_completion_if.data.group_seq;
+    wire [VX_dxa_pkg::DXA_GROUP_OPID_W-1:0] dxa_group_completion_op
+        = dxa_completion_if.data.op_id;
+    assign dxa_completion_if.ready = dxa_group_completion_ready;
+    `UNUSED_VAR (dxa_completion_if.core_id)
+`else
+    wire dxa_group_completion_valid = 1'b0;
+    wire [NW_WIDTH-1:0] dxa_group_completion_wid = '0;
+    wire [VX_dxa_pkg::DXA_GROUP_EPOCH_W-1:0] dxa_group_completion_epoch = '0;
+    wire [VX_dxa_pkg::DXA_GROUP_SEQ_W-1:0] dxa_group_completion_seq = '0;
+    wire [VX_dxa_pkg::DXA_GROUP_OPID_W-1:0] dxa_group_completion_op = '0;
+    `UNUSED_VAR (dxa_group_completion_ready)
+`endif
+
+    VX_dxa_group_core_endpoint #(
+        .NUM_WARPS (`VX_CFG_NUM_WARPS)
+    ) dxa_group_endpoint (
+        .clk               (clk),
+        .reset             (reset),
+        .issue_valid       (dxa_group_issue_valid),
+        .issue_query       (dxa_group_issue_query),
+        .issue_wid         (dxa_group_issue_wid),
+        .issue_result      (dxa_group_issue_result),
+        .issue_epoch       (dxa_group_issue_epoch),
+        .issue_seq         (dxa_group_issue_seq),
+        .issue_op_id       (dxa_group_issue_op_id),
+        .commit_valid      (dxa_group_commit_valid),
+        .commit_wid        (dxa_group_commit_wid),
+        .commit_result     (dxa_group_commit_result),
+        .completion_valid  (dxa_group_completion_valid),
+        .completion_ready  (dxa_group_completion_ready),
+        .completion_wid    (dxa_group_completion_wid),
+        .completion_epoch  (dxa_group_completion_epoch),
+        .completion_seq    (dxa_group_completion_seq),
+        .completion_op     (dxa_group_completion_op),
+        .wq_valid          (dxa_group_wq_valid),
+        .wq_wid            (dxa_group_wq_wid),
+        .wq_n              (dxa_group_wq_n),
+        .wq_satisfied      (dxa_group_wq_satisfied),
+        .unlock_mask       (dxa_group_unlock_mask),
+        .poison_valid      (dxa_group_poison_valid),
+        .poison_wid        (dxa_group_poison_wid),
+        .epoch_adv_valid   (dxa_group_epoch_adv_valid),
+        .epoch_adv_wid     (dxa_group_epoch_adv_wid),
+        .drained_mask      (dxa_group_drained_mask),
+        .sticky_status     (dxa_group_sticky_status)
+    );
+
+    `UNUSED_VAR (dxa_group_wq_satisfied)
+    for (genvar w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin : g_unused_dxa_group_state
+        wire unused_group_state = |dxa_group_sticky_status[w];
+        `UNUSED_VAR (unused_group_state)
+    end
+`endif
 
     wire sched_busy;
     VX_scheduler #(
@@ -229,14 +374,27 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .warp_ctl_if    (warp_ctl_if),
         .branch_ctl_if  (branch_ctl_if),
     `ifdef VX_CFG_EXT_RTU_ENABLE
-        .sched_unlock_if (sched_unlock_if),
+        .async_trap_if  (async_trap_if),
     `endif
 
         .decode_sched_if(decode_sched_if),
         .issue_sched_if (issue_sched_if),
         .commit_sched_if(commit_sched_if),
 
+    `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+        .dxa_group_unlock_mask(dxa_group_unlock_mask),
+        .dxa_group_drained_mask(dxa_group_drained_mask),
+        .dxa_group_epoch_adv_valid(dxa_group_epoch_adv_valid),
+        .dxa_group_epoch_adv_wid(dxa_group_epoch_adv_wid),
+        .dxa_group_poison_valid(dxa_group_poison_valid),
+        .dxa_group_poison_wid(dxa_group_poison_wid),
+    `endif
+
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        .kmu_bus_if     (sched_kmu_arr_if[0]),
+    `else
         .kmu_bus_if     (kmu_bus_if),
+    `endif
 
         .schedule_if    (schedule_if),
         .sched_csr_if   (sched_csr_if),
@@ -340,15 +498,34 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
+    `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+        .dxa_group_issue_valid(dxa_group_issue_valid),
+        .dxa_group_issue_query(dxa_group_issue_query),
+        .dxa_group_issue_wid  (dxa_group_issue_wid),
+        .dxa_group_issue_result(dxa_group_issue_result),
+        .dxa_group_issue_epoch(dxa_group_issue_epoch),
+        .dxa_group_issue_seq  (dxa_group_issue_seq),
+        .dxa_group_issue_op_id(dxa_group_issue_op_id),
+        .dxa_group_commit_valid(dxa_group_commit_valid),
+        .dxa_group_commit_wid (dxa_group_commit_wid),
+        .dxa_group_commit_result(dxa_group_commit_result),
+        .dxa_group_wq_valid   (dxa_group_wq_valid),
+        .dxa_group_wq_wid     (dxa_group_wq_wid),
+        .dxa_group_wq_n       (dxa_group_wq_n),
+    `endif
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),
     `endif
     `ifdef VX_CFG_EXT_OM_ENABLE
+        .om_bus_if      (om_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        .rast_win_wr_if    (rast_win_if),
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),
-        .sched_unlock_if (sched_unlock_if),
+        .async_trap_if  (async_trap_if),
     `endif
 
         .warp_ctl_if    (warp_ctl_if),
@@ -451,39 +628,74 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .dcache_bus_if (mmu_dcache_if)
     );
 
-    // Address translation is relocated to the socket (one MMU per L1 cache).
-    // The core's dcache/icache buses carry the addresses the mem_unit and fetch
-    // produce straight through — virtual under VM, physical otherwise. Same
-    // widths on both sides (BASE == full for both L1s).
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_passthru
+`ifdef VX_CFG_VM_ENABLE
+`ifdef PERF_ENABLE
+    mmu_perf_t dcache_mmu_perf;
+    mmu_perf_t icache_mmu_perf;
+    // Combine icache + dcache MMU counters into the pipeline_perf.mmu
+    // struct so VX_csr_data can read them under MPM_CLASS_CORE.
+    assign pipeline_perf.mmu.tlb_reads     = dcache_mmu_perf.tlb_reads     + icache_mmu_perf.tlb_reads;
+    assign pipeline_perf.mmu.tlb_hits      = dcache_mmu_perf.tlb_hits      + icache_mmu_perf.tlb_hits;
+    assign pipeline_perf.mmu.tlb_misses    = dcache_mmu_perf.tlb_misses    + icache_mmu_perf.tlb_misses;
+    assign pipeline_perf.mmu.tlb_evictions = dcache_mmu_perf.tlb_evictions + icache_mmu_perf.tlb_evictions;
+    assign pipeline_perf.mmu.ptw_walks     = dcache_mmu_perf.ptw_walks     + icache_mmu_perf.ptw_walks;
+    assign pipeline_perf.mmu.ptw_latency   = dcache_mmu_perf.ptw_latency   + icache_mmu_perf.ptw_latency;
+`endif
+
+    // Per-core dcache MMU.
+    VX_mmu #(
+        .NUM_REQS  (DCACHE_NUM_REQS),
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH_BASE)
+    ) dcache_mmu (
+        .clk           (clk),
+        .reset         (reset),
+    `ifdef PERF_ENABLE
+        .mmu_perf      (dcache_mmu_perf),
+    `endif
+        .satp          (sched_csr_if.csr_satp),
+        .lsu_mem_if    (mmu_dcache_if),
+        .dcache_mem_if (dcache_bus_if)
+    );
+
+    // Per-core icache MMU. NUM_REQS=1.
+    VX_mem_bus_if #(
+        .DATA_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_TAG_WIDTH)
+    ) icache_mmu_out_if[1]();
+
+    VX_mmu #(
+        .NUM_REQS  (1),
+        .DATA_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_TAG_WIDTH_BASE)
+    ) icache_mmu (
+        .clk           (clk),
+        .reset         (reset),
+    `ifdef PERF_ENABLE
+        .mmu_perf      (icache_mmu_perf),
+    `endif
+        .satp          (sched_csr_if.csr_satp),
+        .lsu_mem_if    (mmu_icache_if),
+        .dcache_mem_if (icache_mmu_out_if)
+    );
+
+    `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, icache_mmu_out_if[0]);
+`else
+    // No-VM passthrough: same widths on both sides.
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_no_vm
         `ASSIGN_VX_MEM_BUS_IF (dcache_bus_if[i], mmu_dcache_if[i]);
     end
     `ASSIGN_VX_MEM_BUS_IF (icache_bus_if, mmu_icache_if[0]);
-
-`ifdef VX_CFG_VM_ENABLE
-`ifdef PERF_ENABLE
-    // The relocated MMU's perf counters live at the socket and are not yet routed
-    // through sysmem_perf, so the in-core pipeline view reads zero.
-    assign pipeline_perf.mmu = '0;
 `endif
-    // Translation drains at the socket MMU; the socket returns its empty status.
-    wire mmu_empty = mmu_drained;
-    // The socket MMU takes its satp from the shared DCR root, so the per-core CSR
-    // satp is not a translation source.
-    `UNUSED_VAR (sched_csr_if.csr_satp)
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || raster_dispatch_busy || raster_packer_busy;
 `else
-    wire mmu_empty = 1'b1;
+    assign busy = sched_busy || dcr_busy || ~(&lsu_sched_empty) || ~mem_unit_empty;
 `endif
 
-    // Fragment work drains at the producer (VX_raster_core.busy), not here.
-    // DCR reads (cache flush, MPM readback) order on their own DCR response, so
-    // busy tracks only kernel execution: warps resident or stores not yet at L1.
-    // ~mmu_empty also keeps the core busy while a translation or parked store is
-    // still in flight, so kernel completion cannot race un-drained accesses.
-    assign busy = sched_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || ~mmu_empty;
-
-    // BAR (vx_barrier / vx_barrier_arrive) drains LSU + MMU before suspending or registering arrival.
-    assign warp_ctl_if.lsu_sched_drained = (&lsu_sched_empty) && mmu_empty;
+    // BAR (vx_barrier / vx_barrier_arrive) drains LSU before suspending or registering arrival.
+    assign warp_ctl_if.lsu_sched_drained = &lsu_sched_empty;
 
 `ifdef PERF_ENABLE
 

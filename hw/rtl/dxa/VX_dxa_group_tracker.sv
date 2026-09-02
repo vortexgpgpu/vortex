@@ -83,10 +83,10 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam RING_ADDR_W = `CLOG2(RING_DEPTH);
     localparam ISSUE_TRACKED       = 2'd0;
     localparam ISSUE_BACKPRESSURE  = 2'd1;
-    localparam ISSUE_DROP_POISONED = 2'd2;
+    localparam ISSUE_IGNORED_POISONED = 2'd2;
     localparam COMMIT_ACCEPTED      = 2'd0;
     localparam COMMIT_BACKPRESSURE  = 2'd1;
-    localparam COMMIT_DROP_POISONED = 2'd2;
+    localparam COMMIT_IGNORED_POISONED = 2'd2;
 
     `STATIC_ASSERT(NUM_CONTEXTS > 0, ("DXA group context pool must be nonempty"))
     `STATIC_ASSERT(`IS_POW2(NUM_CONTEXTS), ("DXA group context pool must be power-of-two"))
@@ -136,7 +136,7 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
     end
 
-    assign issue_result = poisoned_r[issue_wid] ? ISSUE_DROP_POISONED
+    assign issue_result = poisoned_r[issue_wid] ? ISSUE_IGNORED_POISONED
                         : !free_valid             ? ISSUE_BACKPRESSURE
                                                   : ISSUE_TRACKED;
     wire issue_fire = issue_valid && (issue_result == ISSUE_TRACKED);
@@ -145,7 +145,7 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire [SEQ_W-1:0] commit_span = sealed_tail_r[commit_wid] - read_head_r[commit_wid];
     wire commit_ring_full = (commit_span >= SEQ_W'(RING_DEPTH));
-    assign commit_result = poisoned_r[commit_wid] ? COMMIT_DROP_POISONED
+    assign commit_result = poisoned_r[commit_wid] ? COMMIT_IGNORED_POISONED
                          : commit_ring_full        ? COMMIT_BACKPRESSURE
                                                    : COMMIT_ACCEPTED;
     wire commit_fire = commit_valid && (commit_result == COMMIT_ACCEPTED);
