@@ -7,6 +7,10 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ## [Unreleased]
 
+### Removed
+
+- **FireSim and SLASH are no longer provisioned by the toolchain scripts.** Both are platform stacks an administrator installs once per machine — like XRT, which was never packaged either — and CI never consumed them. `ci/toolchain_install.sh --firesim|--slash`, the matching `ci/toolchain_prebuilt.sh` packaging targets, and `ci/firesim_install.sh` are gone; install instructions live in [docs/building_toolchain.md](docs/building_toolchain.md) (FireSim) and [docs/xilinx_slash_setup.md](docs/xilinx_slash_setup.md) (SLASH). `$(FIRESIM_PATH)` and `$(VRT_HOME)` still select the installed trees, unchanged.
+
 ### Fixed
 
 - **SimX arbiter input grouping.** `TxArbiter`/`TxRxArbiter` grouped inputs by `log2ceil(inputs / outputs)` where `VX_stream_arb` uses ceiling division, so a request count that is not a multiple of the output count left the trailing inputs unserved (3 cores over 2 shared icaches hangs at boot). Covered by the `cache: demo-shared-icache-odd` catalog case.
