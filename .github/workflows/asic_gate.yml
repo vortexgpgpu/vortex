@@ -1,0 +1,243 @@
+# Copyright © 2019-2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+#
+# asic_gate — nightly ASIC synthesis-regression gate on hosted runners.
+# Synthesizes the DUT catalog (ci/testcases/asic_gate.yaml) through
+# Yosys + OpenSTA on ASAP7 and asserts Fmax/cell area against the golden results
+# in ci/baselines/synthesis/yosys/, so an RTL change that costs timing closure or
+# area cannot sit unnoticed on master.
+#
+# Why its own workflow rather than a cell in ci.yml:
+#
+#   - A DUT takes 1-2 hours, so the builds must fan out to ONE STANDALONE JOB
+#     EACH. A ci.yml cell is one job running a pytest slice; eleven sequential
+#     synthesis runs in one cell would be a day.
+#   - Nightly builds are expensive even when free, so the run is SKIPPED unless
+#     master has actually moved since the last gate run. Unlike the self-hosted
+#     fpga_gate, a hosted runner keeps no state between runs, so the "already
+#     gated this commit" marker lives in the actions cache, keyed by SHA.
+#
+# It always gates master, whatever branch the schedule happens to fire on. No
+# licence and no dedicated machine: yosys/sv2v/OpenSTA ship in the prebuilt
+# toolchain and ASAP7 is a 59 MB content-addressed fetch.
+#
+# See docs/designs/continuous_integration.md §3.5.
+
+name: ASIC Gate
+
+on:
+  schedule:
+    - cron: '0 4 * * *'         # nightly 04:00 UTC (an hour behind fpga_gate)
+  workflow_dispatch:
+    inputs:
+      builds:
+        description: "build ids/groups, space separated (blank = all)"
+        default: ""
+      force:
+        description: "run even if master has not moved since the last gate"
+        type: boolean
+        default: false
+
+# One sweep at a time, so two nights' runs cannot both claim the SHA marker.
+# Never cancel a run in flight -- hours of synthesis are already spent.
+concurrency:
+  group: asic-gate
+  cancel-in-progress: false
+
+env:
+  CCACHE_DISABLE: 1
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # plan — decide whether to run at all, and emit one matrix entry per build.
+  # No build env; just PyYAML.
+  # ---------------------------------------------------------------------------
+  plan:
+    runs-on: ubuntu-22.04
+    outputs:
+      run: ${{ steps.q.outputs.run }}
+      builds: ${{ steps.q.outputs.builds }}
+      sha: ${{ steps.q.outputs.sha }}
+      key: ${{ steps.q.outputs.key }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master               # hard-pinned: the gate always tracks master
+          fetch-depth: 0
+      - run: pip install --quiet pyyaml
+
+      # The marker key is master's head AS CHECKED OUT, not github.sha: on a
+      # schedule those are normally the same, but the thing being gated is what
+      # the checkout produced. Computed here rather than with hashFiles() in the
+      # step below, which cannot see a runtime value.
+      - name: Compute gate key
+        id: key
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          # The spec is in the key too, so editing the build list re-gates a
+          # commit that was already gated under the old list.
+          SPEC=$(sha256sum ci/testcases/asic_gate.yaml | cut -c1-16)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "key=asic-gate-$SHA-$SPEC" >> "$GITHUB_OUTPUT"
+
+      # Probe (lookup-only, no download) for this commit's marker. A HIT means a
+      # previous run already reached a verdict on this SHA, so master has not
+      # moved and there is nothing new to gate. The `report` job writes the
+      # marker at the end.
+      - name: Read gate marker
+        id: marker
+        uses: actions/cache/restore@v4
+        with:
+          path: .asic_gate_sha
+          key: ${{ steps.key.outputs.key }}
+          lookup-only: true
+
+      - name: Plan builds
+        id: q
+        env:
+          IN_BUILDS: ${{ github.event.inputs.builds }}
+          FORCE: ${{ github.event.inputs.force }}
+          HIT: ${{ steps.marker.outputs.cache-hit }}
+          SHA: ${{ steps.key.outputs.sha }}
+          KEY: ${{ steps.key.outputs.key }}
+        run: |
+          set -euo pipefail
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+          if [ "$HIT" = "true" ] && [ "${FORCE:-}" != "true" ]; then
+            echo "master unchanged since the last gate run ($SHA) — skipping"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "builds=[]" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "gating $SHA"
+          # Dispatch inputs only narrow the catalog, and reach the shell through
+          # an env var: interpolating one into the script would let a dispatch
+          # value execute arbitrary commands on the runner.
+          ARGS=()
+          for b in ${IN_BUILDS:-}; do ARGS+=(-b "$b"); done
+          BUILDS=$(python3 ci/asic_gate.py --matrix "${ARGS[@]}")
+          echo "builds=$BUILDS" >> "$GITHUB_OUTPUT"
+          [ "$BUILDS" = "[]" ] && echo "run=false" >> "$GITHUB_OUTPUT" || echo "run=true" >> "$GITHUB_OUTPUT"
+          python3 ci/testcase.py lint
+
+  # ---------------------------------------------------------------------------
+  # synth — one standalone job per DUT. Each configures its own build tree and
+  # gates exactly one build, so a 2-hour DUT costs 2 hours of wall time, not 2
+  # hours of everyone else's.
+  # ---------------------------------------------------------------------------
+  synth:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    strategy:
+      # Never cancel siblings: each DUT is an independent measurement, and one
+      # regression must not hide the ten other numbers this run would have
+      # produced.
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        build: ${{ fromJson(needs.plan.outputs.builds) }}
+    steps:
+      # The SHA the plan job resolved, not `master`: master moving mid-run must
+      # not split one gate across two source trees.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          submodules: recursive
+
+      # Restores the prebuilt toolchain cache, which already carries yosys, sv2v
+      # and OpenSTA (ci/toolchain_install.sh installs all three by default).
+      - name: Setup Vortex
+        uses: ./.github/actions/setup-vortex
+
+      # ASAP7 is content-addressed by its manifest, so that file's hash IS the
+      # cache key. Every job in the matrix shares it; the first to finish saves
+      # it and the rest log a harmless "cache already exists". The gate installs
+      # it on a miss (hw/syn/yosys/Makefile's `asap7` target) -- about a minute.
+      - name: Cache ASAP7 PDK
+        uses: actions/cache@v4
+        with:
+          path: build32_asic_gate/hw/syn/libs/asap7
+          key: asap7-rvt-${{ hashFiles('hw/syn/libs/asap7/manifest.txt') }}
+
+      # The command is the one the catalog declares (ci/testcases/asic_gate.yaml's
+      # single `run:` case), narrowed to this job's build, so what CI runs and
+      # what the catalog says cannot drift apart.
+      - name: Gate ${{ matrix.build.id }}
+        id: run
+        env:
+          BUILD_ID: ${{ matrix.build.id }}
+        run: |
+          set -uo pipefail
+          CMD=$(python3 -c "import yaml; print(yaml.safe_load(open('ci/testcases/asic_gate.yaml'))['tests'][0]['run'])")
+          rc=0
+          # --timeout under the job's timeout-minutes, so a hung build is
+          # reported BY the gate (with the phase it died in, and a report to
+          # upload) instead of vanishing into a GitHub job kill.
+          $CMD -b "$BUILD_ID" --timeout 16200 \
+               --report "asic_gate_$BUILD_ID.json" || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: asic-gate-${{ matrix.build.id }}
+          path: |
+            asic_gate_${{ matrix.build.id }}.json
+            build32_asic_gate/hw/syn/yosys/asic_gate_*/build.log
+            build32_asic_gate/hw/syn/yosys/asic_gate_*/synth_summary.csv
+            build32_asic_gate/hw/syn/yosys/asic_gate_*/reports/
+          if-no-files-found: warn
+
+      - name: Verdict
+        run: |
+          case "${{ steps.run.outputs.rc }}" in
+            0) echo "asic_gate ${{ matrix.build.id }} passed" ;;
+            1) echo "::error::asic_gate ${{ matrix.build.id }} FAILED — Fmax/area moved beyond threshold vs baseline"; exit 1 ;;
+            *) echo "::error::asic_gate ${{ matrix.build.id }} build error (see logs)"; exit 1 ;;
+          esac
+
+  # ---------------------------------------------------------------------------
+  # report — collect every build's verdict into one summary, and record the SHA
+  # so tomorrow's run skips an unchanged master.
+  # ---------------------------------------------------------------------------
+  report:
+    needs: [plan, synth]
+    if: always() && needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: asic-gate-*
+          path: reports
+          merge-multiple: true
+
+      - name: Summarize
+        id: sum
+        run: |
+          set -uo pipefail
+          python3 ci/synth_report.py reports >> "$GITHUB_STEP_SUMMARY"
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # Record the SHA once every build has reached a VERDICT (pass or
+      # regression), so a red master is not re-synthesized every night — the
+      # failed run is the record. A build error (rc=2) does NOT record, so the
+      # next nightly retries it.
+      - name: Record gated SHA
+        if: steps.sum.outputs.rc != '2'
+        run: echo "${{ needs.plan.outputs.sha }}" > .asic_gate_sha
+      - name: Save gate marker
+        if: steps.sum.outputs.rc != '2'
+        uses: actions/cache/save@v4
+        with:
+          path: .asic_gate_sha
+          key: ${{ needs.plan.outputs.key }}
