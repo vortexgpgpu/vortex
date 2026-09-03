@@ -219,10 +219,20 @@ DecompResult rvc_decompress(uint32_t word) {
             uint32_t subfunct = bits(h, 11, 10);
             if (subfunct == 0b00) { // C.SRLI
                 uint32_t rd_ = rcp(bits(h,9,7));
+#ifndef VX_CFG_XLEN_64
+            // For XLEN=32 shamt[5] must be zero; those code points belong to
+            // custom extensions, not to a shift by 32 or more.
+            if (bit(h, 12)) { out.illegal = true; break; }
+#endif
                 uint32_t sh  = (bit(h,12)<<5) | bits(h,6,2);
                 out.instr32 = ENCI(sh, rd_, 0b101, rd_, 0b0010011);
             } else if (subfunct == 0b01) { // C.SRAI
                 uint32_t rd_ = rcp(bits(h,9,7));
+#ifndef VX_CFG_XLEN_64
+            // For XLEN=32 shamt[5] must be zero; those code points belong to
+            // custom extensions, not to a shift by 32 or more.
+            if (bit(h, 12)) { out.illegal = true; break; }
+#endif
                 uint32_t sh  = (bit(h,12)<<5) | bits(h,6,2);
                 out.instr32 = ENCI(sh, rd_, 0b101, rd_, 0b0010011) | (0x40000000u);
             } else if (subfunct == 0b10) { // C.ANDI
@@ -289,8 +299,13 @@ DecompResult rvc_decompress(uint32_t word) {
         switch (funct3) {
         case 0b000: { // C.SLLI
             uint32_t rd = bits(h, 11, 7);
-            uint32_t sh = (bit(h,12)<<5) | bits(h,6,2);
             if (rd == 0) { out.illegal = true; break; }
+#ifndef VX_CFG_XLEN_64
+            // For XLEN=32 shamt[5] must be zero; those code points belong to
+            // custom extensions, not to a shift by 32 or more.
+            if (bit(h, 12)) { out.illegal = true; break; }
+#endif
+            uint32_t sh = (bit(h,12)<<5) | bits(h,6,2);
             out.instr32 = ENCI(sh, rd, 0b001, rd, 0b0010011);
             break;
         }
