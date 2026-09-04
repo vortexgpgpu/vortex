@@ -113,6 +113,21 @@ Each line context would need `{valid, local-word progress, source buffer,
 global address, byteen, last}`. That is orthogonal to the group tracker: it must
 still return the same exact operation token once every line source is captured.
 
+For deterministic SimX stress, the optional C++ build define
+`VX_CFG_DXA_S2G_DEBUG_LATENCY=<cycles>` delays the first source request of each
+high-level S2G transfer (with a small `{wid, group_seq}` skew).  Its default is
+zero, it is not an RTL/ISA feature, and it changes neither the completion
+definition nor destination-store ordering.  A large-tile regression can use
+it to force two committed boundaries to coexist long enough to observe
+`wait.read<1>`; normal builds leave it disabled. The integrated regression
+exposes this as:
+
+```text
+make -C tests/regression/dxa_s2g_bulk_groups_ws run-simx-stress
+```
+
+Override `S2G_STRESS_LATENCY` for a shorter or longer delay.
+
 ## Centralized logical per-warp tracker
 
 There is no sparse ActiveIssuerDirectory and no per-warp copy of the physical
@@ -189,12 +204,13 @@ delayed through 16 reallocations of the same slot and simultaneously collide
 in owner epoch and sequence. `VX_CFG_DXA_GROUP_CTX_GEN_BITS` is configurable
 and should be raised if an implementation cannot prove that latency bound.
 
-The RTL endpoint also assumes that a real S2G source completion is separated
-from allocation by at least one clock. That is true of the current LMEM
-request/response path: a completion can only be generated after a response has
-returned. A synthetic zero-latency completion presented in the exact cycle
-that a context is allocated is intentionally not bypassed; such a producer
-must add a completion/issue bypass before being connected to this tracker.
+The normal RTL endpoint naturally separates a real S2G source completion from
+allocation because a completion can only be generated after an LMEM response
+returns. The tracker also has an explicit issue/completion bypass for a
+zero-latency or cancelled endpoint: if the returned token exactly matches the
+token being allocated in the same cycle, it is marked done without an
+underflow. Any other same-cycle token remains subject to the ordinary
+generation/owner checks.
 
 ### Wait N
 

@@ -179,27 +179,41 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire [CTX_IDX_W-1:0] completion_idx = completion_op[CTX_IDX_W-1:0];
     wire [CTX_GEN_W-1:0] completion_gen = completion_op[OP_ID_W-1 -: CTX_GEN_W];
-    wire completion_epoch_stale = completion_valid
+    // A zero-latency source (for example, a cancelled/empty operation in a
+    // test endpoint) may return its completion in the same cycle as ISSUE.
+    // The physical context is still in its pre-issue state during this
+    // combinational evaluation, so explicitly bypass the old ctx_live/seen
+    // lookup when the returned token is exactly the token being allocated.
+    wire completion_new_issue = completion_valid && issue_fire
+        && (completion_wid == issue_wid)
+        && (completion_epoch == epoch_r[issue_wid])
+        && (completion_seq == sealed_tail_r[issue_wid])
+        && (completion_op == issue_op_id);
+    wire completion_epoch_stale = completion_valid && !completion_new_issue
         && (completion_epoch != epoch_r[completion_wid]);
     wire completion_gen_stale = completion_valid
-        && !completion_epoch_stale
+        && !completion_new_issue && !completion_epoch_stale
         && ctx_seen_r[completion_idx]
         && (ctx_gen_r[completion_idx] != completion_gen);
-    wire completion_stale = completion_epoch_stale || completion_gen_stale;
+    wire completion_stale = !completion_new_issue
+                          && (completion_epoch_stale || completion_gen_stale);
     wire completion_owner_match = ctx_seen_r[completion_idx]
         && (ctx_gen_r[completion_idx] == completion_gen)
         && (ctx_wid_r[completion_idx] == completion_wid)
         && (ctx_epoch_r[completion_idx] == completion_epoch)
         && (ctx_seq_r[completion_idx] == completion_seq);
-    wire completion_duplicate = completion_valid && !completion_stale
+    wire completion_duplicate = completion_valid && !completion_new_issue
+        && !completion_stale
         && completion_owner_match && ctx_done_r[completion_idx];
-    wire completion_apply = completion_valid && !completion_stale
-        && completion_owner_match && ctx_live_r[completion_idx]
-        && !ctx_done_r[completion_idx];
+    wire completion_apply_existing = completion_valid && !completion_new_issue
+        && !completion_stale && completion_owner_match
+        && ctx_live_r[completion_idx] && !ctx_done_r[completion_idx];
+    wire completion_apply = completion_new_issue || completion_apply_existing;
     wire [SEQ_W-1:0] completion_span = completion_seq - read_head_r[completion_wid];
     wire completion_is_open = completion_apply
-        && open_valid_r[completion_wid]
-        && (completion_seq == sealed_tail_r[completion_wid]);
+        && ((completion_new_issue && (completion_wid == issue_wid))
+         || (open_valid_r[completion_wid]
+          && (completion_seq == sealed_tail_r[completion_wid])));
     wire completion_is_sealed = completion_apply && !completion_is_open
         && (completion_span < (sealed_tail_r[completion_wid] - read_head_r[completion_wid]));
     wire [RING_ADDR_W-1:0] completion_slot = completion_seq[RING_ADDR_W-1:0];
@@ -219,10 +233,13 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         for (integer w = 0; w < NUM_WARPS; ++w) begin
             open_v[w] = open_remaining_r[w];
             if (completion_count_apply && completion_is_open
+             && !completion_new_issue
              && (completion_wid == WID_W'(w)))
                 open_v[w] = open_v[w] - REMAIN_W'(1);
             if (issue_fire && (issue_wid == WID_W'(w)))
                 open_v[w] = open_v[w] + REMAIN_W'(1);
+            if (completion_new_issue && (issue_wid == WID_W'(w)))
+                open_v[w] = open_v[w] - REMAIN_W'(1);
 
             tail_v[w] = sealed_tail_r[w];
             if (commit_fire && (commit_wid == WID_W'(w))
@@ -452,6 +469,7 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `RUNTIME_ASSERT(!completion_apply || completion_target_valid,
         ("%t: *** dxa-group-tracker: completion targeted a retired group", $time))
     `RUNTIME_ASSERT(!completion_count_apply || !completion_is_open
+                 || completion_new_issue
                  || (open_remaining_r[completion_wid] != '0),
         ("%t: *** dxa-group-tracker: open count underflow", $time))
     `RUNTIME_ASSERT(!completion_count_apply || !completion_is_sealed

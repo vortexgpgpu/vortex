@@ -104,6 +104,27 @@ struct Bench {
     return op;
   }
 
+  Op issue_and_complete(int wid) {
+    sim->issue_query = 1;
+    sim->issue_wid = wid;
+    sim->eval();
+    CHECK(sim->issue_result == 0,
+          "warp %d same-cycle issue unexpectedly blocked", wid);
+    Op op{uint8_t(wid), uint8_t((sim->epoch_flat >> (wid * 2)) & 3),
+          tail(wid), uint8_t(sim->issue_op_id)};
+    sim->issue_valid = 1;
+    sim->completion_valid = 1;
+    sim->completion_wid = op.wid;
+    sim->completion_epoch = op.epoch;
+    sim->completion_seq = op.seq;
+    sim->completion_op = op.id;
+    sim->eval();
+    CHECK(sim->completion_ready,
+          "same-cycle completion transport backpressured");
+    tick();
+    return op;
+  }
+
   void commit(int wid) {
     sim->commit_wid = wid;
     sim->eval();
@@ -292,6 +313,22 @@ int main(int argc, char **argv) {
     CHECK(b.head(0) == 3, "tracker retired other than one row in cycle 2");
     b.tick();
     CHECK(b.head(0) == 4, "tracker did not drain final empty row");
+  }
+
+  {
+    b.reset();
+    std::printf("[2b] zero-latency issue/completion is exact-once\n");
+    Op instant = b.issue_and_complete(0);
+    CHECK(b.open(0) == 0,
+          "same-cycle completion left an open operation pending");
+    b.commit(0);
+    CHECK(b.head(0) == b.tail(0),
+          "same-cycle completed group did not retire at commit");
+    const uint32_t stale_before = uint32_t(b.sim->stale_flat);
+    b.complete(instant);
+    CHECK(uint32_t(b.sim->duplicate_flat) != 0
+          || uint32_t(b.sim->stale_flat) != stale_before,
+          "same-cycle token was not protected against a duplicate");
   }
 
   {

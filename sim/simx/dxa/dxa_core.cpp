@@ -51,6 +51,15 @@ static_assert(kS2gLmemWordSize != 0
               "DXA S2G LMEM word size must be a power of two");
 static_assert(kS2gLmemWordSize <= VX_CFG_MEM_BLOCK_SIZE,
               "DXA S2G LMEM word must fit in a SimX mem block");
+
+// Optional deterministic stress knob for the functional model.  It delays
+// only the first source request of each high-level S2G transfer, so a test can
+// make committed groups overlap without changing the architectural meaning
+// of SOURCE_CONSUMED.  The default is zero and RTL does not consume this
+// macro.
+#ifndef VX_CFG_DXA_S2G_DEBUG_LATENCY
+#define VX_CFG_DXA_S2G_DEBUG_LATENCY 0
+#endif
 #endif
 
 // GMEM line size + mask.
@@ -156,6 +165,7 @@ public:
     uint32_t                s2g_stores_sent = 0;
     bool                    s2g_read_pending = false;
     bool                    s2g_read_sent = false;
+    uint32_t                s2g_debug_delay = 0;
 #endif
   };
 
@@ -202,6 +212,7 @@ public:
       w.s2g_stores_sent = 0;
       w.s2g_read_pending = false;
       w.s2g_read_sent = false;
+      w.s2g_debug_delay = 0;
 #endif
     }
   }
@@ -563,6 +574,15 @@ private:
     w.s2g_stores_sent = 0;
     w.s2g_read_pending = false;
     w.s2g_read_sent = false;
+    // Delay the first source request only.  A delay per LMEM word would
+    // model an artificial bandwidth change rather than a slow source path,
+    // and would make it impossible to distinguish group overlap from worker
+    // throughput.  Include the owner/group in the small skew so two issuer
+    // streams do not become perfectly lock-stepped in stress runs.
+    w.s2g_debug_delay = VX_CFG_DXA_S2G_DEBUG_LATENCY
+                      ? VX_CFG_DXA_S2G_DEBUG_LATENCY
+                        + ((req.wid + req.group_seq) & 0x3u)
+                      : 0;
 #endif
 
     // Multicast setup.
@@ -845,6 +865,10 @@ private:
   // LMEM word needed by the current global line, then emit that ordinary
   // response-free store. Different workers may progress independently.
   void tick_worker_s2g_lmem_req(Worker& w) {
+    if (w.s2g_debug_delay != 0) {
+      --w.s2g_debug_delay;
+      return;
+    }
     if (w.issued_order.empty()) {
       if (w.ag_idx >= w.work_list.size())
         return;
@@ -1149,6 +1173,7 @@ private:
     w.s2g_stores_sent = 0;
     w.s2g_read_pending = false;
     w.s2g_read_sent = false;
+    w.s2g_debug_delay = 0;
 #endif
   }
 
