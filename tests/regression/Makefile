@@ -15,7 +15,7 @@ TESTS := \
     dxa_copy dxa_copy_mcast dxa_kmajor_check                          \
     async_barrier async_gbarrier packld wgather wsync quad_lod        \
     occupancy multikernel reopen module_reload single_cta            \
-    vm_test vm_fault
+    vm_test vm_fault vm_stress
 
 # --- common exclude list ---------------------------------------------
 EXCLUDE :=
