@@ -25,7 +25,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t phase = bar1.arrive();
 
   uint32_t overlap_work = ((cid + 1) * 0x9e3779b9u) ^ ((wid + 1) * 0x85ebca6bu) ^ (tid + 1);
-  for (uint32_t i = 0; i < 32; ++i) {
+  for (uint32_t i = 0; i < 1024; ++i) {
     overlap_work = overlap_work * 1664525u + 1013904223u;
     overlap_work ^= (overlap_work >> 13);
   }
