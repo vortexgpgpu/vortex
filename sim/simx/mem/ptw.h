@@ -110,6 +110,40 @@ private:
   friend class SimObject<Ptw>;
 };
 
+// Folds the clusters' L2-TLB walker links into the one device-level Ptw,
+// mirroring the RTL's VX_tlb_bus_arb: the input (cluster) index rides the
+// high bits of `slot` on the way in and is stripped off the fill on the way
+// out, exactly the bus-ID growth of the hardware arb. Pure routing — the
+// walker itself neither knows nor cares how many clusters feed it.
+class PtwMux : public SimObject<PtwMux> {
+public:
+  using Ptr = std::shared_ptr<PtwMux>;
+
+  // Cluster side.
+  std::vector<SimChannel<TlbReq>> ReqIn;
+  std::vector<SimChannel<TlbRsp>> RspOut;
+
+  // Walker side.
+  SimChannel<TlbReq> ReqOut;
+  SimChannel<TlbRsp> RspIn;
+
+  PtwMux(const SimContext& ctx, const char* name, uint32_t num_inputs);
+  ~PtwMux();
+
+protected:
+  void on_reset();
+  void on_tick();
+
+private:
+  // High-bit position for the input index: above the L2 TLB's slot space.
+  static constexpr uint32_t SLOT_BITS = log2ceil(VX_CFG_L2_TLB_MSHR_SIZE);
+
+  uint32_t num_inputs_;
+  uint32_t grant_rr_ = 0;
+
+  friend class SimObject<PtwMux>;
+};
+
 } // namespace vortex
 
 #endif // VX_CFG_VM_ENABLE

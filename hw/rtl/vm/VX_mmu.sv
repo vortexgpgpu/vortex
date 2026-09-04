@@ -145,9 +145,14 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     wire                       flush_clear;
 
+    wire [NUM_REQS-1:0]        bank_conflict;
+
+    // L1 storage: banked single-port CAMs (losing lanes hold via
+    // bank_conflict) in front of the shared non-blocking miss station.
     VX_tlb_l1 #(
-        .NUM_REQS    (NUM_REQS),
+        .NUM_REQS     (NUM_REQS),
         .TLB_SIZE     (TLB_SIZE),
+        .NUM_BANKS    (`VX_CFG_L1_TLB_NUM_BANKS),
         .MSHR_SIZE    (MSHR_SIZE),
         .REPLAY_DEPTH (REPLAY_DEPTH),
         .PAYLOAD_W    (PAYLOAD_W),
@@ -159,9 +164,11 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .mmu_perf      (mmu_perf),
     `endif
         .lookup_vpn    (cam_vpn),
+        .lookup_valid  (req_valid & ~req_bypass),
         .lookup_hit    (cam_hit),
         .lookup_ppn    (cam_ppn),
         .lookup_flags  (cam_flags),
+        .bank_conflict (bank_conflict),
         .access_hit    (cam_access_hit),
         .mshr_match    (mshr_match),
         .park_valid    (park_valid),
@@ -199,9 +206,9 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_cat
         assign perm_hit[l]   = tlb_perm_ok(cam_flags[l], req_acc[l], req_amo[l]);
         assign cat_bypass[l] = req_valid[l] && req_bypass[l];
-        assign cat_park[l]   = req_valid[l] && !req_bypass[l] && (mshr_match[l] || !cam_hit[l]);
-        assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && perm_hit[l];
-        assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !mshr_match[l] && cam_hit[l] && !perm_hit[l];
+        assign cat_park[l]   = req_valid[l] && !req_bypass[l] && !bank_conflict[l] && (mshr_match[l] || !cam_hit[l]);
+        assign cat_hit[l]    = req_valid[l] && !req_bypass[l] && !bank_conflict[l] && !mshr_match[l] && cam_hit[l] && perm_hit[l];
+        assign cat_pfault[l] = req_valid[l] && !req_bypass[l] && !bank_conflict[l] && !mshr_match[l] && cam_hit[l] && !perm_hit[l];
     end
 
     // Park arbitration: at most one lane parks a miss per cycle (lowest lane).
