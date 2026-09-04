@@ -15,8 +15,9 @@
 
 `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
 
-// Logical READ-group streams are per issuer warp. Exact-once operation state
-// is allocated from one physical pool shared by every warp in the core.
+// Logical READ-group streams are per issuer warp. Operation contexts live in
+// one direct-indexed physical array, but each warp owns a static partition;
+// there is no global free-list or cross-warp allocation dependency.
 module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter NUM_WARPS = 4,
     parameter RING_DEPTH = `VX_CFG_DXA_GROUP_DEPTH,
@@ -81,6 +82,7 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [CNTR_W-1:0]              obs_context_stalls
 );
     localparam RING_ADDR_W = `CLOG2(RING_DEPTH);
+    localparam CONTEXTS_PER_WARP = NUM_CONTEXTS / NUM_WARPS;
     localparam ISSUE_TRACKED       = 2'd0;
     localparam ISSUE_BACKPRESSURE  = 2'd1;
     localparam ISSUE_IGNORED_POISONED = 2'd2;
@@ -90,7 +92,15 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     `STATIC_ASSERT(NUM_CONTEXTS > 0, ("DXA group context pool must be nonempty"))
     `STATIC_ASSERT(`IS_POW2(NUM_CONTEXTS), ("DXA group context pool must be power-of-two"))
-    `STATIC_ASSERT(RING_DEPTH > 0, ("DXA group ring must be nonempty"))
+    `STATIC_ASSERT(NUM_CONTEXTS >= NUM_WARPS, ("DXA group context pool must cover every warp"))
+    `STATIC_ASSERT((NUM_CONTEXTS % NUM_WARPS) == 0,
+        ("DXA group contexts must be evenly partitioned by warp"))
+    `STATIC_ASSERT(`IS_POW2(CONTEXTS_PER_WARP),
+        ("DXA contexts-per-warp must be power-of-two"))
+    // The ring pointers are modulo-addressed with CLOG2(RING_DEPTH) bits;
+    // depth one would produce a zero-width slice and cannot represent a
+    // committed boundary separately from the open group.
+    `STATIC_ASSERT(RING_DEPTH >= 2, ("DXA group ring must have at least two slots"))
     `STATIC_ASSERT(`IS_POW2(RING_DEPTH), ("DXA group ring must be power-of-two"))
     `STATIC_ASSERT(RING_DEPTH < (1 << (SEQ_W - 1)), ("DXA group ring exceeds sequence half-window"))
     `STATIC_ASSERT(RING_DEPTH <= (1 << WAIT_N_W), ("DXA group ring exceeds wait-N encoding"))
@@ -107,6 +117,7 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [REMAIN_W-1:0] ring_remaining_r [NUM_WARPS][RING_DEPTH];
     reg [SEQ_W-1:0] sealed_tail_r [NUM_WARPS];
     reg [SEQ_W-1:0] read_head_r [NUM_WARPS];
+    reg open_valid_r [NUM_WARPS];
     reg [REMAIN_W-1:0] open_remaining_r [NUM_WARPS];
     reg [EPOCH_W-1:0] epoch_r [NUM_WARPS];
     reg [NUM_WARPS-1:0] poisoned_r;
@@ -129,22 +140,38 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         free_valid = 1'b0;
         free_idx = '0;
         for (integer i = 0; i < NUM_CONTEXTS; ++i) begin
-            if (!free_valid && !ctx_live_r[i]) begin
+            // Each warp owns a fixed contiguous context partition. This is
+            // equivalent to a single RAM indexed by {issue_wid, local_slot}
+            // while preventing an unrelated warp from consuming its slots.
+            if (!free_valid
+             && (i >= (32'(issue_wid) * CONTEXTS_PER_WARP))
+             && (i < ((32'(issue_wid) + 1) * CONTEXTS_PER_WARP))
+             && !ctx_live_r[i]) begin
                 free_valid = 1'b1;
                 free_idx = CTX_IDX_W'(i);
             end
         end
     end
 
+    wire [SEQ_W-1:0] issue_span = sealed_tail_r[issue_wid]
+                                - read_head_r[issue_wid];
+    wire issue_ring_full = !open_valid_r[issue_wid]
+                         && (issue_span >= SEQ_W'(RING_DEPTH));
     assign issue_result = poisoned_r[issue_wid] ? ISSUE_IGNORED_POISONED
-                        : !free_valid             ? ISSUE_BACKPRESSURE
-                                                  : ISSUE_TRACKED;
+                        : (issue_ring_full || !free_valid)
+                                                    ? ISSUE_BACKPRESSURE
+                                                    : ISSUE_TRACKED;
     wire issue_fire = issue_valid && (issue_result == ISSUE_TRACKED);
     wire [CTX_GEN_W-1:0] issue_gen = ctx_gen_r[free_idx] + CTX_GEN_W'(1);
     assign issue_op_id = {issue_gen, free_idx};
 
     wire [SEQ_W-1:0] commit_span = sealed_tail_r[commit_wid] - read_head_r[commit_wid];
-    wire commit_ring_full = (commit_span >= SEQ_W'(RING_DEPTH));
+    // An empty commit is a valid zero-operation boundary when the ring has
+    // space.  If the ring is full, it is accepted as a trivially complete
+    // no-op (without advancing the sequence); non-empty open groups still
+    // require a free sealed row.
+    wire commit_ring_full = open_valid_r[commit_wid]
+                         && (commit_span >= SEQ_W'(RING_DEPTH));
     assign commit_result = poisoned_r[commit_wid] ? COMMIT_IGNORED_POISONED
                          : commit_ring_full        ? COMMIT_BACKPRESSURE
                                                    : COMMIT_ACCEPTED;
@@ -171,6 +198,7 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         && !ctx_done_r[completion_idx];
     wire [SEQ_W-1:0] completion_span = completion_seq - read_head_r[completion_wid];
     wire completion_is_open = completion_apply
+        && open_valid_r[completion_wid]
         && (completion_seq == sealed_tail_r[completion_wid]);
     wire completion_is_sealed = completion_apply && !completion_is_open
         && (completion_span < (sealed_tail_r[completion_wid] - read_head_r[completion_wid]));
@@ -197,7 +225,9 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 open_v[w] = open_v[w] + REMAIN_W'(1);
 
             tail_v[w] = sealed_tail_r[w];
-            if (commit_fire && (commit_wid == WID_W'(w)))
+            if (commit_fire && (commit_wid == WID_W'(w))
+             && (!((!open_valid_r[w])
+                 && (commit_span >= SEQ_W'(RING_DEPTH)))))
                 tail_v[w] = sealed_tail_r[w] + SEQ_W'(1);
 
             for (integer i = 0; i < RING_DEPTH; ++i) begin
@@ -208,6 +238,8 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                  && (completion_slot == RING_ADDR_W'(i)))
                     ring_remaining_v[w][i] = ring_remaining_r[w][i] - REMAIN_W'(1);
                 if (commit_fire && (commit_wid == WID_W'(w))
+                 && (!((!open_valid_r[w])
+                     && (commit_span >= SEQ_W'(RING_DEPTH))))
                  && (sealed_tail_r[w][RING_ADDR_W-1:0] == RING_ADDR_W'(i))) begin
                     ring_live_v[w][i] = 1'b1;
                     ring_remaining_v[w][i] = open_v[w];
@@ -290,6 +322,7 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 ring_live_r[w] <= '0;
                 sealed_tail_r[w] <= '0;
                 read_head_r[w] <= '0;
+                open_valid_r[w] <= 1'b0;
                 open_remaining_r[w] <= '0;
                 epoch_r[w] <= '0;
                 sticky_r[w] <= '0;
@@ -325,7 +358,15 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
             for (integer w = 0; w < NUM_WARPS; ++w) begin
                 for (integer i = 0; i < RING_DEPTH; ++i) begin
-                    if (head_done_v[w]
+                    if (epoch_adv_valid && (epoch_adv_wid == WID_W'(w))
+                     && drained_mask[w]) begin
+                        // Sequence state belongs to the CTA lifetime. The
+                        // ring is empty by `drained_mask`; clearing rows here
+                        // also makes the next epoch start at group sequence 0
+                        // instead of carrying an arbitrary modulo value.
+                        ring_live_r[w][i] <= 1'b0;
+                        ring_remaining_r[w][i] <= '0;
+                    end else if (head_done_v[w]
                      && (read_head_r[w][RING_ADDR_W-1:0] == RING_ADDR_W'(i))) begin
                         ring_live_r[w][i] <= 1'b0;
                         ring_remaining_r[w][i] <= '0;
@@ -334,15 +375,35 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                         ring_remaining_r[w][i] <= ring_remaining_v[w][i];
                     end
                 end
-                sealed_tail_r[w] <= tail_v[w];
-                read_head_r[w] <= read_head_r[w] + SEQ_W'(head_done_v[w]);
+                if (epoch_adv_valid && (epoch_adv_wid == WID_W'(w))
+                 && drained_mask[w]) begin
+                    sealed_tail_r[w] <= '0;
+                    read_head_r[w] <= '0;
+                end else begin
+                    sealed_tail_r[w] <= tail_v[w];
+                    read_head_r[w] <= read_head_r[w] + SEQ_W'(head_done_v[w]);
+                end
                 if ((epoch_adv_valid && (epoch_adv_wid == WID_W'(w)) && drained_mask[w])
                  || (commit_fire && (commit_wid == WID_W'(w))))
                     open_remaining_r[w] <= '0;
                 else
                     open_remaining_r[w] <= open_v[w];
 
+                // ISSUE and COMMIT are mutually exclusive at the integrated
+                // front end: both are decoded on the single SFU/DXA control
+                // stream, so one warp cannot present both handshakes in one
+                // cycle.  A completion may still coincide with COMMIT; the
+                // next-state vectors above account for that race.
+                if (commit_fire && (commit_wid == WID_W'(w))) begin
+                    open_valid_r[w] <= 1'b0;
+                end else if (issue_fire && (issue_wid == WID_W'(w))) begin
+                    open_valid_r[w] <= 1'b1;
+                end
+
                 if (epoch_adv_valid && (epoch_adv_wid == WID_W'(w)) && drained_mask[w]) begin
+                    // A completed-but-uncommitted open group is drainable;
+                    // clear its marker before the next CTA/epoch can issue.
+                    open_valid_r[w] <= 1'b0;
                     epoch_r[w] <= epoch_r[w] + 1'b1;
                     poisoned_r[w] <= 1'b0;
                     wait_active_r[w] <= 1'b0;
@@ -383,6 +444,9 @@ module VX_dxa_group_tracker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
     end
 
+    // The current decode/front-end emits at most one DXA sub-operation per
+    // cycle.  Keeping this invariant explicit prevents a future second
+    // request path from silently creating an issue/commit ordering hole.
     `RUNTIME_ASSERT(!(issue_valid && commit_valid),
         ("%t: *** dxa-group-tracker: issue and commit in the same cycle", $time))
     `RUNTIME_ASSERT(!completion_apply || completion_target_valid,

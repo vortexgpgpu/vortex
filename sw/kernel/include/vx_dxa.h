@@ -277,8 +277,216 @@ inline void vx_dxa_issue_5d_multicast_wg(uint32_t desc_slot,
       : "memory");
 }
 
+#ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+
+// S2G uses the same descriptor/coordinate lane packing as G2S.  The meta word
+// contains only the destination descriptor slot: S2G completion is routed by
+// the operation token allocated at issue, not by an mbarrier id.
+inline void vx_dxa_issue_s2g_1d_wg(uint32_t desc_slot,
+                                    const void* smem_addr,
+                                    uint32_t coord0) {
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)desc_slot,
+                                            (size_t)coord0,
+                                            (size_t)0u);
+  __asm__ volatile (
+      ".insn r %0, 1, %1, x0, %2, x0\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0)
+      : "memory");
+}
+
+inline void vx_dxa_issue_s2g_2d_wg(uint32_t desc_slot,
+                                    const void* smem_addr,
+                                    uint32_t coord0,
+                                    uint32_t coord1) {
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)desc_slot,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  __asm__ volatile (
+      ".insn r %0, 1, %1, x0, %2, x0\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0)
+      : "memory");
+}
+
+inline void vx_dxa_issue_s2g_3d_wg(uint32_t desc_slot,
+                                    const void* smem_addr,
+                                    uint32_t coord0,
+                                    uint32_t coord1,
+                                    uint32_t coord2) {
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)desc_slot,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+                                            (size_t)0u,
+                                            (size_t)0u,
+                                            (size_t)0u);
+  __asm__ volatile (
+      ".insn r %0, 1, %1, x0, %2, %3\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
+      : "memory");
+}
+
+inline void vx_dxa_issue_s2g_4d_wg(uint32_t desc_slot,
+                                    const void* smem_addr,
+                                    uint32_t coord0,
+                                    uint32_t coord1,
+                                    uint32_t coord2,
+                                    uint32_t coord3) {
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)desc_slot,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+                                            (size_t)coord3,
+                                            (size_t)0u,
+                                            (size_t)0u);
+  __asm__ volatile (
+      ".insn r %0, 1, %1, x0, %2, %3\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
+      : "memory");
+}
+
+inline void vx_dxa_issue_s2g_5d_wg(uint32_t desc_slot,
+                                    const void* smem_addr,
+                                    uint32_t coord0,
+                                    uint32_t coord1,
+                                    uint32_t coord2,
+                                    uint32_t coord3,
+                                    uint32_t coord4) {
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
+                                            (size_t)desc_slot,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+                                            (size_t)coord3,
+                                            (size_t)coord4,
+                                            (size_t)0u);
+  __asm__ volatile (
+      ".insn r %0, 1, %1, x0, %2, %3\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
+      : "memory");
+}
+
+#endif // VX_CFG_EXT_DXA_S2G_ENABLE
+
+inline void vx_dxa_commit_group() {
+  __asm__ volatile (
+      ".insn r %0, 2, %1, x0, x0, x0\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7)
+      : "memory");
+}
+
+#define VX_DXA_STRINGIFY_I(x) #x
+#define VX_DXA_STRINGIFY(x) VX_DXA_STRINGIFY_I(x)
+
+// N is the literal five-bit rs2 field.  There is intentionally no FULL form
+// in this extension: wait_read only transfers ownership of the SMEM source.
+// Keep this spelling as a compatibility macro for existing C kernels.
+#define vx_dxa_wait_read(n) \
+  __asm__ volatile ( \
+      ".insn r %0, 3, %1, x0, x0, x" VX_DXA_STRINGIFY(n) "\n\t" \
+      : \
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7) \
+      : "memory")
+
+#endif // VX_CFG_EXT_DXA_GROUP_ENABLE
+
 #ifdef __cplusplus
 }
+#endif
+
+#if defined(__cplusplus) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE) \
+    && defined(VX_CFG_EXT_DXA_S2G_ENABLE)
+
+// The native programming model is warp-uniform.  The template makes N a
+// compile-time immediate (and therefore keeps the instruction one uop); the
+// runtime macro above remains available for C and legacy callers.
+template <unsigned N>
+inline void vx_dxa_wait_group_read() {
+  static_assert(N < 32, "wait_group_read<N> immediate must fit in five bits");
+  // RISC-V's custom encoding names the rs2 register in the assembly text,
+  // rather than accepting a normal integer immediate.  A constexpr switch
+  // preserves a literal xN field after instantiation.
+  switch (N) {
+    case 0:  vx_dxa_wait_read(0);  break;
+    case 1:  vx_dxa_wait_read(1);  break;
+    case 2:  vx_dxa_wait_read(2);  break;
+    case 3:  vx_dxa_wait_read(3);  break;
+    case 4:  vx_dxa_wait_read(4);  break;
+    case 5:  vx_dxa_wait_read(5);  break;
+    case 6:  vx_dxa_wait_read(6);  break;
+    case 7:  vx_dxa_wait_read(7);  break;
+    case 8:  vx_dxa_wait_read(8);  break;
+    case 9:  vx_dxa_wait_read(9);  break;
+    case 10: vx_dxa_wait_read(10); break;
+    case 11: vx_dxa_wait_read(11); break;
+    case 12: vx_dxa_wait_read(12); break;
+    case 13: vx_dxa_wait_read(13); break;
+    case 14: vx_dxa_wait_read(14); break;
+    case 15: vx_dxa_wait_read(15); break;
+    case 16: vx_dxa_wait_read(16); break;
+    case 17: vx_dxa_wait_read(17); break;
+    case 18: vx_dxa_wait_read(18); break;
+    case 19: vx_dxa_wait_read(19); break;
+    case 20: vx_dxa_wait_read(20); break;
+    case 21: vx_dxa_wait_read(21); break;
+    case 22: vx_dxa_wait_read(22); break;
+    case 23: vx_dxa_wait_read(23); break;
+    case 24: vx_dxa_wait_read(24); break;
+    case 25: vx_dxa_wait_read(25); break;
+    case 26: vx_dxa_wait_read(26); break;
+    case 27: vx_dxa_wait_read(27); break;
+    case 28: vx_dxa_wait_read(28); break;
+    case 29: vx_dxa_wait_read(29); break;
+    case 30: vx_dxa_wait_read(30); break;
+    case 31: vx_dxa_wait_read(31); break;
+  }
+}
+
+// Explicit low-level names for new code.  The original issue_* names are
+// retained as ABI-compatible aliases because both forms emit the same raw
+// grouped S2G instruction.
+inline void vx_dxa_s2g_issue_grouped_1d(uint32_t desc_slot,
+                                         const void* smem_addr,
+                                         uint32_t coord0) {
+  vx_dxa_issue_s2g_1d_wg(desc_slot, smem_addr, coord0);
+}
+inline void vx_dxa_s2g_issue_grouped_2d(uint32_t desc_slot,
+                                         const void* smem_addr,
+                                         uint32_t coord0, uint32_t coord1) {
+  vx_dxa_issue_s2g_2d_wg(desc_slot, smem_addr, coord0, coord1);
+}
+inline void vx_dxa_s2g_issue_grouped_3d(uint32_t desc_slot,
+                                         const void* smem_addr,
+                                         uint32_t coord0, uint32_t coord1,
+                                         uint32_t coord2) {
+  vx_dxa_issue_s2g_3d_wg(desc_slot, smem_addr, coord0, coord1, coord2);
+}
+inline void vx_dxa_s2g_issue_grouped_4d(uint32_t desc_slot,
+                                         const void* smem_addr,
+                                         uint32_t coord0, uint32_t coord1,
+                                         uint32_t coord2, uint32_t coord3) {
+  vx_dxa_issue_s2g_4d_wg(desc_slot, smem_addr, coord0, coord1,
+                         coord2, coord3);
+}
+inline void vx_dxa_s2g_issue_grouped_5d(uint32_t desc_slot,
+                                         const void* smem_addr,
+                                         uint32_t coord0, uint32_t coord1,
+                                         uint32_t coord2, uint32_t coord3,
+                                         uint32_t coord4) {
+  vx_dxa_issue_s2g_5d_wg(desc_slot, smem_addr, coord0, coord1,
+                         coord2, coord3, coord4);
+}
+
 #endif
 
 // ════════════════════════════════════════════════════════════════════════

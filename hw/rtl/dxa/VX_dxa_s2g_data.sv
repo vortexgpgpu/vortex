@@ -26,6 +26,9 @@ module VX_dxa_s2g_data import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input wire reset,
     input wire transfer_active,
     input wire pipeline_start,
+    // Empty descriptors still complete as one source-consumed operation, but
+    // must not enter the normal zero-length cache-line path.
+    input wire zero_length,
 
     input wire                       ag_valid,
     output wire                      ag_ready,
@@ -128,11 +131,18 @@ module VX_dxa_s2g_data import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign sent_count = sent_count_r;
 
     always @(posedge clk) begin
-        if (reset || pipeline_start) begin
+        if (reset) begin
             completion_pending_r <= 1'b0;
             completion_sent_r <= 1'b0;
             destination_done_r <= 1'b0;
             sent_count_r <= '0;
+        end else if (pipeline_start) begin
+            completion_pending_r <= 1'b0;
+            completion_sent_r <= 1'b0;
+            destination_done_r <= zero_length;
+            sent_count_r <= '0;
+            if (zero_length)
+                completion_pending_r <= 1'b1;
         end else begin
             if (source_done) begin
                 completion_pending_r <= 1'b1;

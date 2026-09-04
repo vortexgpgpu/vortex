@@ -17,9 +17,9 @@
 #include <array>
 #include <cstring>
 #include <deque>
+#include <stdexcept>
 #include <vector>
 #include "core.h"
-#include "socket.h"
 #include "socket.h"
 #include "mem_block_pool.h"
 #include "debug.h"
@@ -29,8 +29,11 @@ using namespace vortex;
 
 namespace {
 
-// One GMEM port: the DXA joins its socket's L2-facing arb as a single peer.
-constexpr uint32_t kDxaMemPorts = 1;
+// Number of GMEM ports for one socket-local engine. Each output joins the
+// corresponding socket L2-facing port before traffic reaches the cluster.
+constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(
+    VX_CFG_DXA_MEM_PORTS,
+    std::min<uint32_t>(VX_CFG_NUM_DXA_CORES, VX_CFG_L1_MEM_PORTS));
 
 // LMEM "word" granularity for splitting DXA writes. The LocalMem bank
 // model applies byteen relative to a VX_CFG_MEM_BLOCK_SIZE-aligned address,
@@ -38,11 +41,23 @@ constexpr uint32_t kDxaMemPorts = 1;
 // region. mem_block granularity is the byteen-mask scope.
 constexpr uint32_t kLmemWordSize = VX_CFG_MEM_BLOCK_SIZE;
 
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+// One RTL LMEM DMA read returns all banks for one word.  SimX transports that
+// word inside a mem_block payload and selects the byte range by request addr.
+constexpr uint32_t kS2gLmemWordSize =
+    VX_CFG_LMEM_NUM_BANKS * (VX_CFG_XLEN / 8);
+static_assert(kS2gLmemWordSize != 0
+           && (kS2gLmemWordSize & (kS2gLmemWordSize - 1)) == 0,
+              "DXA S2G LMEM word size must be a power of two");
+static_assert(kS2gLmemWordSize <= VX_CFG_MEM_BLOCK_SIZE,
+              "DXA S2G LMEM word must fit in a SimX mem block");
+#endif
+
 // GMEM line size + mask.
 constexpr uint32_t kGmemLineSize = VX_CFG_L1_LINE_SIZE;
 constexpr uint64_t kGmemLineMask = ~uint64_t(VX_CFG_L1_LINE_SIZE - 1);
 
-// Cores served by one (socket-resident) DXA engine.
+// Cores served by one socket-local engine.
 constexpr uint32_t kCoresPerSocket = VX_CFG_SOCKET_SIZE;
 
 } // namespace
@@ -70,8 +85,8 @@ public:
   // single contiguous LMEM word write; a K-major transposing load fans it out
   // to `km_num_elems` strided per-element destinations, which smem_wr coalesces
   // back into full byte-masked block writes (one read → bank-parallel scatter,
-  // never re-reading a line per element — TMA-style, matching the hardware
-  // address generator, which reads per cache line).
+  // never re-reading a line per element — TMA-style, matching the RTL addr_gen
+  // which reads per cache line).
   struct LineWork {
     uint64_t gmem_cl_addr;     // CL-aligned global address
     uint64_t smem_word_addr;   // word-aligned SMEM byte address (element 0)
@@ -92,6 +107,16 @@ public:
   struct InflightSlot {
     bool      allocated = false;
     bool      rsp_arrived = false;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    bool      s2g_lmem_pending = false;
+    uint32_t  s2g_word_index = 0;
+    uint32_t  s2g_word_count = 0;
+    uint32_t  s2g_bytes_copied = 0;
+    // OOB work items are source-free/no-store tokens. Normally they bypass
+    // the inflight list; retain an accounting bit so a future producer of an
+    // OOB slot cannot emit a destination store or lose the source event.
+    bool      s2g_source_accounted = false;
+#endif
     LineWork  work;            // captured at allocation
     std::shared_ptr<mem_block_t> rsp_data;
   };
@@ -116,13 +141,22 @@ public:
 
     // gmem_req → rsp_buf → smem_wr inflight bookkeeping.
     std::array<InflightSlot, VX_CFG_DXA_MAX_INFLIGHT> inflight;
-    std::deque<uint32_t>    issued_order;        // outstanding tags in issue order
-    uint32_t                drain_slot = UINT32_MAX; // slot currently draining
+    std::deque<uint32_t>    issued_order;        // tag order, FIFO drain
 
     // smem_wr multicast replay state.
     uint32_t                mc_cta_idx = 0;      // 0..cta_indices.size()
     uint32_t                km_elem_idx = 0;     // 0..km_num_elems (K-major scatter)
     uint32_t                writes_emitted = 0;  // count for perf
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    // V1 intentionally keeps one line token active per worker. READ becomes
+    // pending after all source bytes are copied into worker-owned payload;
+    // destination stores are ordinary response-free requests.
+    uint32_t                s2g_sources_copied = 0;
+    uint32_t                s2g_stores_required = 0;
+    uint32_t                s2g_stores_sent = 0;
+    bool                    s2g_read_pending = false;
+    bool                    s2g_read_sent = false;
+#endif
   };
 
   // ── Constructor ──────────────────────────────────────────────────────
@@ -138,6 +172,7 @@ public:
 
   void reset() {
     cycle_ = 0;
+    rr_req_ = 0;
     queue_.clear();
     perf_stats_ = DxaCore::PerfStats();
     for (auto& w : workers_) {
@@ -145,12 +180,29 @@ public:
       w.work_list.clear();
       w.cta_indices.clear();
       w.issued_order.clear();
-      w.drain_slot = UINT32_MAX;
-      for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
+      for (auto& s : w.inflight) {
+        s.allocated = false;
+        s.rsp_arrived = false;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+        s.s2g_lmem_pending = false;
+        s.s2g_word_index = 0;
+        s.s2g_word_count = 0;
+        s.s2g_bytes_copied = 0;
+        s.s2g_source_accounted = false;
+#endif
+        s.rsp_data.reset();
+      }
       w.ag_idx = 0;
       w.mc_cta_idx = 0;
       w.km_elem_idx = 0;
       w.writes_emitted = 0;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+      w.s2g_sources_copied = 0;
+      w.s2g_stores_required = 0;
+      w.s2g_stores_sent = 0;
+      w.s2g_read_pending = false;
+      w.s2g_read_sent = false;
+#endif
     }
   }
 
@@ -208,7 +260,7 @@ public:
     // addr_gen → setup → req-arb) so each stage's tick reads what its
     // upstream produced earlier this cycle, mimicking forward stage flow.
 
-    // 1) Drain GMEM responses → mark inflight slots arrived.
+    // 1) Drain G2S GMEM responses → mark inflight slots arrived.
     // gmem_arb_ already routes responses back to RspOut[worker_id] (its
     // input index) and restores the user's tag (the per-worker slot id).
     for (uint32_t worker_id = 0; worker_id < workers_.size(); ++worker_id) {
@@ -218,19 +270,130 @@ public:
         auto& rsp = ch.peek();
         uint32_t slot_id = uint32_t(rsp.tag) & (VX_CFG_DXA_MAX_INFLIGHT - 1);
         auto& w = workers_[worker_id];
-        if (slot_id < w.inflight.size() && w.inflight[slot_id].allocated) {
-          w.inflight[slot_id].rsp_arrived = true;
-          w.inflight[slot_id].rsp_data    = rsp.data;
+        // S2G destination writes are deliberately outside the source-
+        // consumed completion domain.  Most configurations suppress write
+        // responses, but a downstream/cache setup may still return one.  A
+        // response must never be interpreted using whatever direction or
+        // slot happens to occupy the worker after the request was issued:
+        // worker reuse and out-of-order return can otherwise turn a stale
+        // S2G ACK into a false G2S read completion.  The request UUID is the
+        // stable operation identity on this response path.
+        const bool response_matches_g2s =
+            (w.state == WState::RUNNING)
+            && (w.req.direction == DxaDirection::G2S)
+            && (rsp.uuid == w.req.uuid)
+            && (slot_id < w.inflight.size())
+            && w.inflight[slot_id].allocated;
+        if (!response_matches_g2s) {
+          DT(2, simobject_->name() << "[" << worker_id
+             << "] ignoring unexpected DXA GMEM response tag=" << rsp.tag
+             << " uuid=" << rsp.uuid);
+          ch.pop();
+          continue;
         }
+        w.inflight[slot_id].rsp_arrived = true;
+        w.inflight[slot_id].rsp_data    = rsp.data;
         ch.pop();
       }
     }
 
-    // 2) Tick workers (smem_wr drain → gmem_req issue).
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    // S2G LMEM responses carry (worker, slot) in the restored request tag.
+    // Each response is copied into the line payload before READ can fire.
+    for (auto& ch : simobject_->lmem_rsp_in) {
+      if (ch.empty())
+        continue;
+      auto& rsp = ch.peek();
+      const uint32_t worker_id = rsp.tag / VX_CFG_DXA_MAX_INFLIGHT;
+      const uint32_t slot_id = rsp.tag % VX_CFG_DXA_MAX_INFLIGHT;
+      if (worker_id >= workers_.size() || slot_id >= VX_CFG_DXA_MAX_INFLIGHT) {
+        DT(2, simobject_->name() << " ignoring stale DXA S2G LMEM response tag="
+           << rsp.tag << " uuid=" << rsp.uuid);
+        ch.pop();
+        continue;
+      }
+
+      auto& w = workers_[worker_id];
+      auto& slot = w.inflight[slot_id];
+      // A response can remain in the local-memory fabric across a worker
+      // lifetime boundary.  Treat an identity mismatch as a stale transport
+      // beat and consume it; never let it populate a newly allocated line
+      // slot.  UUID is an additional check to the slot's live/pending bits
+      // (in NDEBUG builds Vortex UUIDs may all be zero, so the slot checks are
+      // still the authoritative guard).
+      const bool response_matches_s2g =
+          (w.state == WState::RUNNING)
+          && (w.req.direction == DxaDirection::S2G)
+          && (rsp.uuid == w.req.uuid)
+          && slot.allocated
+          && !slot.rsp_arrived
+          && slot.s2g_lmem_pending;
+      if (!response_matches_s2g) {
+        DT(2, simobject_->name() << " ignoring stale DXA S2G LMEM response worker="
+           << worker_id << " slot=" << slot_id << " uuid=" << rsp.uuid);
+        ch.pop();
+        continue;
+      }
+      if (!rsp.data)
+        throw std::logic_error("DXA S2G LMEM response has no payload");
+
+      const auto& lw = slot.work;
+      const uint64_t source_start = lw.smem_word_addr + lw.smem_byte_offset;
+      const uint32_t first_word_offset =
+          uint32_t(source_start & (kS2gLmemWordSize - 1));
+      const uint64_t request_addr =
+          (source_start & ~uint64_t(kS2gLmemWordSize - 1))
+          + uint64_t(slot.s2g_word_index) * kS2gLmemWordSize;
+      const uint32_t word_offset = slot.s2g_word_index == 0
+          ? first_word_offset : 0;
+      const uint32_t source_offset =
+          uint32_t(request_addr & (VX_CFG_MEM_BLOCK_SIZE - 1)) + word_offset;
+      const uint32_t bytes_left = lw.valid_length - slot.s2g_bytes_copied;
+      const uint32_t copy_bytes = std::min<uint32_t>(
+          kS2gLmemWordSize - word_offset, bytes_left);
+      const uint32_t dest_offset = lw.cl_byte_offset + slot.s2g_bytes_copied;
+      if (source_offset + copy_bytes > rsp.data->size()
+          || !slot.rsp_data
+          || dest_offset + copy_bytes > slot.rsp_data->size())
+        throw std::logic_error("invalid DXA S2G source gather span");
+
+      std::memcpy(slot.rsp_data->data() + dest_offset,
+                  rsp.data->data() + source_offset,
+                  copy_bytes);
+      slot.s2g_lmem_pending = false;
+      ++slot.s2g_word_index;
+      slot.s2g_bytes_copied += copy_bytes;
+      if (slot.s2g_bytes_copied == lw.valid_length) {
+        if (slot.s2g_word_index != slot.s2g_word_count)
+          throw std::logic_error("DXA S2G source word-count mismatch");
+        slot.rsp_arrived = true;
+        if (!slot.s2g_source_accounted) {
+          slot.s2g_source_accounted = true;
+          ++w.s2g_sources_copied;
+          if (w.s2g_sources_copied == w.work_list.size())
+            w.s2g_read_pending = true;
+        }
+      }
+      ch.pop();
+    }
+#endif
+
+    // 2) Tick workers.
     for (auto& w : workers_) {
       if (w.state == WState::RUNNING) {
-        tick_worker_smem_wr(w);
-        tick_worker_gmem_req(w);
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+        if (w.req.direction == DxaDirection::S2G) {
+          tick_worker_s2g_completion(w);
+          if (w.state == WState::RUNNING) {
+            tick_worker_s2g_gmem_store(w);
+            tick_worker_s2g_lmem_req(w);
+          }
+        } else
+#endif
+        {
+          tick_worker_smem_wr(w);
+          tick_worker_gmem_req(w);
+        }
       }
     }
 
@@ -245,6 +408,48 @@ public:
   }
 
   const DxaCore::PerfStats& perf_stats() const { return perf_stats_; }
+
+  bool running() const {
+    if (!queue_.empty())
+      return true;
+
+    // SimChannel::size() includes packets reserved for a future delivery as
+    // well as packets already at the endpoint. Keep the socket alive across
+    // those boundary handoffs, including the final LMEM write after a worker
+    // has retired its last internal entry.
+    for (const auto& ch : simobject_->dxa_req_in) {
+      if (ch.size() != 0)
+        return true;
+    }
+    for (const auto& ch : simobject_->gmem_req_out) {
+      if (ch.size() != 0)
+        return true;
+    }
+    for (const auto& ch : simobject_->gmem_rsp_in) {
+      if (ch.size() != 0)
+        return true;
+    }
+    for (const auto& ch : simobject_->lmem_req_out) {
+      if (ch.size() != 0)
+        return true;
+    }
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    for (const auto& ch : simobject_->lmem_rsp_in) {
+      if (ch.size() != 0)
+        return true;
+    }
+    for (const auto& ch : simobject_->completion_out) {
+      if (ch.size() != 0)
+        return true;
+    }
+#endif
+
+    for (const auto& w : workers_) {
+      if (w.state != WState::IDLE || !w.issued_order.empty())
+        return true;
+    }
+    return false;
+  }
 
 private:
   // ── Descriptor helpers ───────────────────────────────────────────────
@@ -333,14 +538,32 @@ private:
   void start_worker(Worker& w, const DxaReq& req) {
     w.req = req;
     w.issue_cycle = cycle_;
+    w.state = WState::RUNNING;
     w.work_list.clear();
     w.ag_idx = 0;
     w.issued_order.clear();
-    w.drain_slot = UINT32_MAX;
-    for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
+    for (auto& s : w.inflight) {
+      s.allocated = false;
+      s.rsp_arrived = false;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+      s.s2g_lmem_pending = false;
+      s.s2g_word_index = 0;
+      s.s2g_word_count = 0;
+      s.s2g_bytes_copied = 0;
+      s.s2g_source_accounted = false;
+#endif
+      s.rsp_data.reset();
+    }
     w.mc_cta_idx = 0;
     w.km_elem_idx = 0;
     w.writes_emitted = 0;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    w.s2g_sources_copied = 0;
+    w.s2g_stores_required = 0;
+    w.s2g_stores_sent = 0;
+    w.s2g_read_pending = false;
+    w.s2g_read_sent = false;
+#endif
 
     // Multicast setup.
     w.is_multicast = (__builtin_popcount(req.cta_mask) > 1);
@@ -352,20 +575,41 @@ private:
     }
 
     if (req.desc_slot >= VX_DCR_DXA_DESC_COUNT) {
-      // Invalid descriptor — release barrier(s) directly without any LMEM write.
-      release_all_barriers(w);
-      finish_worker(w);
+      // No data movement, but an accepted S2G operation still owes one READ.
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+      if (req.direction == DxaDirection::S2G) {
+        w.s2g_read_pending = true;
+      } else
+#endif
+      {
+        release_all_barriers(w);
+        finish_worker(w);
+      }
       return;
     }
 
     w.desc = descriptors_.at(req.desc_slot);
     w.smem_stride = w.desc.smem_stride;
 
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    if (req.direction == DxaDirection::S2G
+        && (__builtin_popcount(req.cta_mask) > 1
+            || desc_layout(w.desc.meta) != DestLayout::RowMajor))
+      throw std::logic_error(
+          "SimX S2G supports row-major, non-multicast transfers only");
+#endif
+
     enumerate_work_list(w);
     if (w.work_list.empty()) {
-      // No work — same edge case as above.
-      release_all_barriers(w);
-      finish_worker(w);
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+      if (req.direction == DxaDirection::S2G) {
+        w.s2g_read_pending = true;
+      } else
+#endif
+      {
+        release_all_barriers(w);
+        finish_worker(w);
+      }
       return;
     }
 
@@ -373,11 +617,19 @@ private:
     // notify_done.
     w.work_list.back().last = true;
 
-    w.state = WState::RUNNING;
-    perf_stats_.gmem_reads += w.work_list.size();
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    if (req.direction == DxaDirection::S2G) {
+      for (const auto& work : w.work_list)
+        w.s2g_stores_required += !work.oob;
+    } else
+#endif
+    {
+      perf_stats_.gmem_reads += w.work_list.size();
+    }
 
     DT(3, simobject_->name() << "[" << w.worker_id << "] start: core="
        << req.core->id() << ", wid=" << req.wid
+       << ", dir=" << (req.direction == DxaDirection::S2G ? "s2g" : "g2s")
        << ", slot=" << req.desc_slot
        << ", lines=" << w.work_list.size()
        << ", multicast=" << w.is_multicast
@@ -396,6 +648,11 @@ private:
     DestLayout layout      = desc_layout(desc.meta);
     bool       dest_kmajor = (layout == DestLayout::KMajor);
     bool       dest_tiled  = desc_dest_tiled(desc.meta);
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    const bool source_s2g = w.req.direction == DxaDirection::S2G;
+#else
+    const bool source_s2g = false;
+#endif
     std::array<uint32_t, 5> tiles = {};
     for (uint32_t d = 0; d < 5; ++d)
       tiles[d] = (d < rank) ? std::max<uint32_t>(1u, desc.tile_sizes[d]) : 1u;
@@ -481,11 +738,14 @@ private:
         // covers as many as fit. K-major then SCATTERS those elements to
         // strided SMEM destinations (one read → km_num_elems writes); row-major
         // writes them contiguously (bounded by the SMEM word). This mirrors the
-        // hardware address generator, which reads per cache line and never
-        // re-reads per element.
+        // RTL addr_gen, which reads per cache line and never re-reads per element.
         uint32_t gspan = scatter
             ? std::min({cl_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)})
-            : std::min({cl_room, sw_room, row_room, uint32_t(VX_CFG_MEM_BLOCK_SIZE)});
+            : source_s2g
+                ? std::min({cl_room, row_room,
+                            uint32_t(VX_CFG_MEM_BLOCK_SIZE)})
+                : std::min({cl_room, sw_room, row_room,
+                            uint32_t(VX_CFG_MEM_BLOCK_SIZE)});
         // Round to a whole-element multiple — ensures e0 advances by an
         // integer count and avoids off-by-one element splits.
         gspan -= gspan % elem_bytes;
@@ -577,6 +837,156 @@ private:
   }
 
   // ── smem_wr: drain ready slots, build LMEM MemReqs ───────────────────
+  //
+  // In-order: consume issued_order.front(); stall on the head until its
+  // GMEM response has arrived.
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+  // V1 deliberately serializes line tokens within a worker: gather every
+  // LMEM word needed by the current global line, then emit that ordinary
+  // response-free store. Different workers may progress independently.
+  void tick_worker_s2g_lmem_req(Worker& w) {
+    if (w.issued_order.empty()) {
+      if (w.ag_idx >= w.work_list.size())
+        return;
+
+      const auto& next = w.work_list[w.ag_idx];
+      if (next.oob) {
+        ++w.ag_idx;
+        ++w.s2g_sources_copied;
+        if (w.s2g_sources_copied == w.work_list.size())
+          w.s2g_read_pending = true;
+        return;
+      }
+
+      uint32_t free_slot = 0;
+      while (free_slot < w.inflight.size()
+             && w.inflight[free_slot].allocated)
+        ++free_slot;
+      if (free_slot == w.inflight.size())
+        throw std::logic_error("serial DXA S2G worker has no free slot");
+
+      auto& slot = w.inflight[free_slot];
+      slot.allocated = true;
+      slot.rsp_arrived = false;
+      slot.s2g_lmem_pending = false;
+      slot.s2g_word_index = 0;
+      const uint64_t source_start =
+          next.smem_word_addr + next.smem_byte_offset;
+      const uint32_t first_word_offset =
+          uint32_t(source_start & (kS2gLmemWordSize - 1));
+      slot.s2g_word_count =
+          (first_word_offset + next.valid_length + kS2gLmemWordSize - 1)
+          / kS2gLmemWordSize;
+      slot.s2g_bytes_copied = 0;
+      slot.s2g_source_accounted = false;
+      slot.work = next;
+      slot.rsp_data = make_mem_block();
+      std::memset(slot.rsp_data->data(), 0, slot.rsp_data->size());
+      w.issued_order.push_back(free_slot);
+      ++w.ag_idx;
+    }
+
+    const uint32_t slot_id = w.issued_order.front();
+    auto& slot = w.inflight[slot_id];
+    if (slot.rsp_arrived || slot.s2g_lmem_pending)
+      return;
+    if (slot.s2g_word_index >= slot.s2g_word_count)
+      throw std::logic_error("DXA S2G exhausted source words");
+
+    const auto& lw = slot.work;
+    const uint64_t source_start = lw.smem_word_addr + lw.smem_byte_offset;
+    MemReq req;
+    req.op = MemOp::LD;
+    req.addr = (source_start & ~uint64_t(kS2gLmemWordSize - 1))
+             + uint64_t(slot.s2g_word_index) * kS2gLmemWordSize;
+    req.tag = w.worker_id * VX_CFG_DXA_MAX_INFLIGHT + slot_id;
+    req.hart_id = w.req.core->id();
+    req.uuid = w.req.uuid;
+    req.flags.local = 1;
+
+    const uint32_t local_cid = w.req.core->id() % kCoresPerSocket;
+    if (!simobject_->lmem_req_out.at(local_cid).try_send(req))
+      return;
+    slot.s2g_lmem_pending = true;
+    ++perf_stats_.s2g_lmem_reads;
+  }
+
+  void tick_worker_s2g_gmem_store(Worker& w) {
+    if (w.issued_order.empty())
+      return;
+    const uint32_t slot_id = w.issued_order.front();
+    auto& slot = w.inflight[slot_id];
+    if (!slot.allocated || !slot.rsp_arrived)
+      return;
+
+    const auto& lw = slot.work;
+    // An OOB S2G token has no source bytes and must not manufacture a global
+    // store.  The normal source-gather stage bypasses OOB entries entirely;
+    // keep this defensive path so a future address-generator change cannot
+    // turn an OOB marker into a zero-filled write or leave the source-event
+    // accounting permanently short.
+    if (lw.oob) {
+      slot.allocated = false;
+      slot.rsp_arrived = false;
+      slot.s2g_lmem_pending = false;
+      slot.rsp_data.reset();
+      w.issued_order.pop_front();
+      if (!slot.s2g_source_accounted) {
+        slot.s2g_source_accounted = true;
+        ++w.s2g_sources_copied;
+        if (w.s2g_sources_copied == w.work_list.size())
+          w.s2g_read_pending = true;
+      }
+      return;
+    }
+    MemReq req;
+    req.op = MemOp::ST;
+    req.addr = lw.gmem_cl_addr;
+    req.data = slot.rsp_data;
+    req.tag = slot_id;
+    req.hart_id = w.req.core->id();
+    req.uuid = w.req.uuid;
+    const uint64_t span_mask = lw.valid_length >= 64
+        ? ~uint64_t(0)
+        : ((uint64_t(1) << lw.valid_length) - 1u);
+    req.byteen = span_mask << lw.cl_byte_offset;
+
+    if (!gmem_arb_->ReqIn.at(w.worker_id).try_send(req))
+      return;
+
+    slot.allocated = false;
+    slot.rsp_arrived = false;
+    slot.s2g_lmem_pending = false;
+    slot.rsp_data.reset();
+    w.issued_order.pop_front();
+    ++w.s2g_stores_sent;
+    ++perf_stats_.s2g_gmem_writes;
+  }
+
+  void tick_worker_s2g_completion(Worker& w) {
+    if (w.s2g_read_pending) {
+      const uint32_t local_cid = w.req.core->id() % kCoresPerSocket;
+      DxaReadCompletion completion{
+        w.req.wid,
+        w.req.epoch,
+        w.req.group_seq,
+        w.req.op_id,
+      };
+      if (!simobject_->completion_out.at(local_cid).try_send(completion))
+        return;
+      w.s2g_read_pending = false;
+      w.s2g_read_sent = true;
+      ++perf_stats_.s2g_read_events;
+    }
+
+    if (w.s2g_read_sent
+        && w.ag_idx == w.work_list.size()
+        && w.issued_order.empty()
+        && w.s2g_stores_sent == w.s2g_stores_required)
+      finish_worker(w);
+  }
+#endif
+
   void tick_worker_smem_wr(Worker& w) {
     if (w.issued_order.empty()) {
       // Nothing in flight — if all addr_gen done, transfer is finished.
@@ -584,33 +994,9 @@ private:
       return;
     }
 
-    // Match the RTL's OoO direct-drain behavior: select any ready non-last
-    // slot without waiting for older requests. Once selected, keep draining
-    // the same slot because the multicast/scatter cursors are worker-local.
-    // The last work item carries notify_done and must remain deferred until
-    // it is the only outstanding slot.
-    uint32_t slot = w.drain_slot;
-    if (slot == UINT32_MAX) {
-      for (uint32_t i = 0; i < w.inflight.size(); ++i) {
-        const auto& candidate = w.inflight[i];
-        if (candidate.allocated && candidate.rsp_arrived && !candidate.work.last) {
-          slot = i;
-          break;
-        }
-      }
-
-      if (slot == UINT32_MAX && w.issued_order.size() == 1) {
-        uint32_t last_slot = w.issued_order.front();
-        const auto& candidate = w.inflight[last_slot];
-        if (candidate.allocated && candidate.rsp_arrived)
-          slot = last_slot;
-      }
-
-      if (slot == UINT32_MAX) return;
-      w.drain_slot = slot;
-    }
-
+    uint32_t slot = w.issued_order.front();
     auto& s = w.inflight[slot];
+    if (!s.rsp_arrived) return; // wait
 
     // Determine destination core's LMEM port.
     uint32_t socket_local_cid = w.req.core->id() % kCoresPerSocket;
@@ -719,9 +1105,7 @@ private:
         s.allocated = false;
         s.rsp_arrived = false;
         s.rsp_data.reset();
-        auto it = std::find(w.issued_order.begin(), w.issued_order.end(), slot);
-        if (it != w.issued_order.end()) w.issued_order.erase(it);
-        w.drain_slot = UINT32_MAX;
+        w.issued_order.pop_front();
       }
     }
   }
@@ -744,6 +1128,9 @@ private:
       uint64_t latency = cycle_ - w.issue_cycle;
       ++perf_stats_.transfers;
       perf_stats_.total_latency += latency;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+      perf_stats_.s2g_transfers += w.req.direction == DxaDirection::S2G;
+#endif
       DT(3, simobject_->name() << "[" << w.worker_id << "] complete: core="
          << w.req.core->id() << ", bar=" << w.req.bar_id
          << ", writes=" << w.writes_emitted << ", latency=" << latency);
@@ -752,11 +1139,17 @@ private:
     w.work_list.clear();
     w.cta_indices.clear();
     w.issued_order.clear();
-    w.drain_slot = UINT32_MAX;
     w.ag_idx = 0;
     w.mc_cta_idx = 0;
     w.km_elem_idx = 0;
     w.writes_emitted = 0;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+    w.s2g_sources_copied = 0;
+    w.s2g_stores_required = 0;
+    w.s2g_stores_sent = 0;
+    w.s2g_read_pending = false;
+    w.s2g_read_sent = false;
+#endif
   }
 
   // ── Members ──────────────────────────────────────────────────────────
@@ -780,6 +1173,10 @@ DxaCore::DxaCore(const SimContext& ctx, const char* name, Socket* socket)
   , gmem_req_out(kDxaMemPorts, this)
   , gmem_rsp_in(kDxaMemPorts, this)
   , lmem_req_out(kCoresPerSocket, this)
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+  , lmem_rsp_in(kCoresPerSocket, this)
+  , completion_out(kCoresPerSocket, this)
+#endif
 {
   __unused(socket);
 
@@ -807,6 +1204,10 @@ void DxaCore::on_tick()  { impl_->tick(); }
 
 int DxaCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+bool DxaCore::running() const {
+  return impl_->running();
 }
 
 const DxaCore::PerfStats& DxaCore::perf_stats() const {

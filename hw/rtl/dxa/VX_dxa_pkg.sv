@@ -16,6 +16,14 @@
 
 `include "VX_define.vh"
 
+`ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+`ifndef VX_CFG_EXT_DXA_GROUP_ENABLE
+    // SOURCE_CONSUMED groups are the architectural owner of S2G operations;
+    // an S2G-only build has no legal completion sink or wait instruction.
+    `error "VX_CFG_EXT_DXA_S2G_ENABLE requires VX_CFG_EXT_DXA_GROUP_ENABLE"
+`endif
+`endif
+
 package VX_dxa_pkg;
 
     import VX_gpu_pkg::*;

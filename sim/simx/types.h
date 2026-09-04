@@ -628,14 +628,36 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
 #ifdef VX_CFG_EXT_DXA_ENABLE
 
 enum class DxaType {
+#ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+  ISSUE_G2S,
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+  ISSUE_S2G,
+#endif
+  COMMIT_GROUP,
+  WAIT_READ
+#else
   ISSUE
+#endif
 };
 
-struct IntrDxaArgs {};
+struct IntrDxaArgs {
+#ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+  uint32_t uimm5;
+#endif
+};
 
 inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
   switch (type) {
+#ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+  case DxaType::ISSUE_G2S:    os << "DXA.ISSUE.G2S"; break;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+  case DxaType::ISSUE_S2G:    os << "DXA.ISSUE.S2G"; break;
+#endif
+  case DxaType::COMMIT_GROUP: os << "DXA.COMMIT"; break;
+  case DxaType::WAIT_READ:    os << "DXA.WAIT.READ"; break;
+#else
   case DxaType::ISSUE: os << "DXA.ISSUE"; break;
+#endif
   default: os << "?"; break;
   }
   return os;

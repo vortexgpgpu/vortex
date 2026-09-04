@@ -394,8 +394,24 @@ static op_string_t op_string(const Instr &instr) {
       }
     }
 #ifdef VX_CFG_EXT_DXA_ENABLE
-    ,[&](DxaType /*dxa_type*/)-> op_string_t {
+    ,[&](DxaType dxa_type)-> op_string_t {
+#ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+      auto dxaArgs = std::get<IntrDxaArgs>(instrArgs);
+      switch (dxa_type) {
+      case DxaType::ISSUE_G2S:    return {"DXA.ISSUE.G2S", ""};
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+      case DxaType::ISSUE_S2G:    return {"DXA.ISSUE.S2G", ""};
+#endif
+      case DxaType::COMMIT_GROUP: return {"DXA.COMMIT", ""};
+      case DxaType::WAIT_READ:
+        return {"DXA.WAIT.READ", std::to_string(dxaArgs.uimm5)};
+      default:
+        std::abort();
+      }
+#else
+      __unused(dxa_type);
       return {"DXA.ISSUE", ""};
+#endif
     }
 #endif
   #ifdef VX_CFG_EXT_TCU_ENABLE
@@ -892,11 +908,41 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
 #ifdef VX_CFG_EXT_DXA_ENABLE
     case 3: { // DXA issue
       instr->set_fu_type(FUType::SFU);
+#ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+      IntrDxaArgs dxaArgs{0};
+      switch (funct3) {
+      case 0:
+        instr->set_op_type(DxaType::ISSUE_G2S);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+      case 1:
+        instr->set_op_type(DxaType::ISSUE_S2G);
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+        break;
+#endif
+      case 2:
+        instr->set_op_type(DxaType::COMMIT_GROUP);
+        break;
+      case 3:
+        instr->set_op_type(DxaType::WAIT_READ);
+        dxaArgs.uimm5 = rs2;
+        instr->set_wstall(true);
+        break;
+      default:
+        // funct3=4 (FULL) is deliberately illegal in this READ-only stack.
+        std::abort();
+      }
+      instr->set_args(dxaArgs);
+#else
       IntrDxaArgs dxaArgs{};
       instr->set_args(dxaArgs);
       instr->set_op_type(DxaType::ISSUE);
       instr->set_src_reg(0, rs1, RegType::Integer);
       instr->set_src_reg(1, rs2, RegType::Integer);
+#endif
     } break;
 #endif
   #ifdef VX_CFG_EXT_TCU_ENABLE

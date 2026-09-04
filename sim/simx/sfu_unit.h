@@ -63,6 +63,15 @@ public:
 	// DxaCore::dxa_req_in[cid]. Owned here (SfuUnit is the SimObject;
 	// DxaUnit is a plain helper sub-class).
 	SimChannel<DxaReq> dxa_req_out;
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+	// Inbound READ milestones from the socket-local S2G workers.
+	SimChannel<DxaReadCompletion> dxa_completion_in;
+#endif
+#ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+	void dxa_warp_exit(uint32_t wid) { dxa_unit_->poison(wid); }
+	bool dxa_warp_drained(uint32_t wid) const { return dxa_unit_->drained(wid); }
+	bool dxa_warp_activate(uint32_t wid) { return dxa_unit_->advance_epoch(wid); }
+#endif
 #endif
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -114,6 +123,7 @@ public:
 #endif
 
 protected:
+	void on_reset() override;
 	void on_tick() override;
 
 private:

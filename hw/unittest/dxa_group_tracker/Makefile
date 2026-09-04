@@ -11,6 +11,7 @@ SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SW_COMMON_DIR)
 CXXFLAGS += -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw
 CXXFLAGS += -I$(VORTEX_HOME)/sim/simx
+CXXFLAGS += -I$(VORTEX_HOME)/sim/simx/dxa
 
 SRCS := $(SRC_DIR)/main.cpp
 

@@ -34,6 +34,9 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core, 6)
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	, dxa_req_out(this)
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+	, dxa_completion_in(this)
+#endif
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 	, tex_req_out(this)
@@ -53,7 +56,11 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	, wctl_unit_(new WctlUnit(core))
 	, csr_unit_(new CsrUnit(core))
 #ifdef VX_CFG_EXT_DXA_ENABLE
+#ifdef VX_CFG_EXT_DXA_S2G_ENABLE
+	, dxa_unit_(new DxaUnit(core, dxa_req_out, dxa_completion_in))
+#else
 	, dxa_unit_(new DxaUnit(core, dxa_req_out))
+#endif
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 	, tex_unit_(new TexUnit(core, tex_req_out))
@@ -82,7 +89,37 @@ bool SfuUnit::rtu_trace2_reserve_slot(uint32_t wid) {
 #endif
 
 
+void SfuUnit::on_reset() {
+#ifdef VX_CFG_EXT_DXA_ENABLE
+	// DxaUnit is a helper owned by this SimObject; forward the lifecycle event
+	// so its source-group tracker and parked wait traces cannot leak across
+	// Processor::reset()/back-to-back kernel launches.
+	dxa_unit_->reset();
+#endif
+}
+
 void SfuUnit::on_tick() {
+#ifdef VX_CFG_EXT_DXA_ENABLE
+	dxa_unit_->tick();
+#ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
+	// An unsatisfied wait owns its trace outside the normal SFU input FIFO.
+	// Return it through the original block output only after its snapshot is
+	// satisfied; that normal writeback path resumes the warp.
+	for (;;) {
+		uint32_t wid = 0, block_id = 0;
+		instr_trace_t* trace = nullptr;
+		if (!dxa_unit_->peek_ready_wait(&wid, &block_id, &trace))
+			break;
+		auto& output = Outputs.at(block_id);
+		if (output.full())
+			break;
+		trace->resume_warp = true;
+		output.send(trace, this->latency_of(trace));
+		dxa_unit_->pop_ready_wait(wid);
+	}
+#endif
+#endif
+
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	// Drain RTU rsps. Two flavors, both completing the warp's parked WAIT
 	// through the same writeback path (candidate-return, no async trap):
@@ -414,7 +451,12 @@ void SfuUnit::on_tick() {
 		} else if (std::get_if<DxaType>(&trace->op_type)) {
 			// process() returns nullptr on backpressure (idempotent retry next
 			// cycle) or the trace on success → fall through to send/pop.
-			if (!dxa_unit_->process(trace)) {
+			bool parked = false;
+			if (!dxa_unit_->process(trace, b, &release_warp, &parked)) {
+				continue;
+			}
+			if (parked) {
+				input.pop();
 				continue;
 			}
 #endif

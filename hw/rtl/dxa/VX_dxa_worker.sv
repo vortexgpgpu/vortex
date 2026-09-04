@@ -183,6 +183,16 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
     wire active_s2g = (active_dir == DXA_DIR_S2G);
+    // A zero row/tile has no source bytes.  Keep the normal G2S address
+    // generator untouched, but bypass its zero-trip-count corner for S2G so
+    // the source-consumed completion can be generated as a no-op event.
+    wire s2g_zero_length = active_s2g
+                         && ((setup_params.row_len_bytes == 0)
+                          || (setup_params.dim_tiles[0] == 0)
+                          || (setup_params.dim_tiles[1] == 0)
+                          || (setup_params.dim_tiles[2] == 0)
+                          || (setup_params.dim_tiles[3] == 0));
+    wire addr_pipeline_start = pipeline_start && !s2g_zero_length;
     wire g2s_transfer_active = transfer_active && !active_s2g;
     wire g2s_pipeline_start = pipeline_start && !active_s2g;
     wire g2s_ag_valid = ag_valid && !active_s2g;
@@ -190,6 +200,9 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire s2g_ag_ready;
     assign ag_ready = active_s2g ? s2g_ag_ready : g2s_ag_ready;
 `else
+    // S2G is compiled out: the shared address generator follows the legacy
+    // G2S pipeline start directly.
+    wire addr_pipeline_start = pipeline_start;
     wire g2s_transfer_active = transfer_active;
     wire g2s_pipeline_start = pipeline_start;
     wire g2s_ag_valid = ag_valid;
@@ -207,7 +220,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     ) addr_gen (
         .clk                  (clk),
         .reset                (reset),
-        .start                (pipeline_start),
+        .start                (addr_pipeline_start),
         .setup_params         (setup_params),
         .out_valid            (ag_valid),
         .out_ready            (ag_ready),
@@ -371,6 +384,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .reset              (reset),
         .transfer_active    (transfer_active && active_s2g),
         .pipeline_start     (pipeline_start && active_s2g),
+        .zero_length        (s2g_zero_length),
         .ag_valid           (ag_valid && active_s2g),
         .ag_ready           (s2g_ag_ready),
         .ag_cl_addr         (ag_cl_addr),

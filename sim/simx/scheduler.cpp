@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <math.h>
 #include <assert.h>
+#include <stdexcept>
 #include <util.h>
 
 #include "scheduler.h"
@@ -37,16 +38,14 @@ warp_t::warp_t(uint32_t num_threads)
   , PC(0)
   , uuid(0)
   , mscratch(0)
+  , mscratch_tmask(num_threads)
   , cta_csrs()
 {
 }
 
 void warp_t::reset() {
   this->tmask.reset();
-  // PC is excluded: a slot that has already run the startup resumes at its
-  // dispatch window, which is derived from where the previous CTA left this
-  // register, and a launch is not a device reset. It is zero-initialized at
-  // construction, and every activation path assigns the PC before it is read.
+  this->PC   = 0;
   this->uuid = 0;
   this->fcsr = 0;
   this->mstatus = 0;
@@ -54,6 +53,7 @@ void warp_t::reset() {
   this->mepc    = 0;
   this->mcause  = 0;
   this->mtval   = 0;
+  this->mscratch_tmask.reset();
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -63,6 +63,10 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     : SimObject<Scheduler>(ctx, name)
     , core_(core)
     , warps_(VX_CFG_NUM_WARPS, VX_CFG_NUM_THREADS)
+    , in_async_trap_(VX_CFG_NUM_WARPS, false)
+    , trap_epoch_(VX_CFG_NUM_WARPS, 0)
+    , last_mret_cycle_(VX_CFG_NUM_WARPS, 0)
+    , async_trap_snapshot_(VX_CFG_NUM_WARPS)
     , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
   std::srand(50);
@@ -90,6 +94,11 @@ void Scheduler::on_reset() {
   stalled_warps_.reset();
   stalled_warps_next_.reset();
   active_warps_.reset();
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+  dxa_retiring_warps_.reset();
+#endif
+  std::fill(in_async_trap_.begin(), in_async_trap_.end(), false);
+  std::fill(trap_epoch_.begin(), trap_epoch_.end(), 0);
   // Sequencers live on Core now; Core::on_reset() resets them.
   wspawn_.valid = false;
 
@@ -109,6 +118,10 @@ void Scheduler::on_reset() {
 }
 
 void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+  if (!core_->sfu_unit()->dxa_warp_activate(wid))
+    throw std::logic_error("CTA reused a warp with live DXA READ state");
+#endif
   auto& warp = warps_[wid];
 
   // Reusing a warp for the next CTA skips the one-time prologue and rewinds to
@@ -158,26 +171,63 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
 instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   int scheduled_warp = -1;
 
-  // Dispatch one CTA warp
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+  for (uint32_t wid = 0; wid < VX_CFG_NUM_WARPS; ++wid) {
+    if (dxa_retiring_warps_.test(wid)
+        && core_->sfu_unit()->dxa_warp_drained(wid))
+      finish_dxa_retiring_warp(wid);
+  }
+#endif
+
+  // Dispatch one CTA warp. A warp that executed TMC(0) may already be absent
+  // from active_warps_ while its DXA source contexts are draining. Keep that
+  // lifetime hold visible to the CTA dispatcher as an occupied slot;
+  // otherwise it could hand the wid to a new CTA before the tracker epoch is
+  // advanced (a late SOURCE_CONSUMED beat would then target the new CTA).
   {
+    WarpMask dispatch_occupied = active_warps_;
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+    dispatch_occupied |= dxa_retiring_warps_;
+#endif
     uint32_t wid;
     cta_warp_record_t rec;
-    if (cta_dispatcher_->step(active_warps_, &wid, &rec)) {
+    if (cta_dispatcher_->step(dispatch_occupied, &wid, &rec)) {
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+      // Keep the lifetime invariant local to the dispatcher hand-off so a
+      // future CtaDispatcher change cannot silently reintroduce this race.
+      assert(!dxa_retiring_warps_.test(wid));
+#endif
       activate_warp(wid, rec);
     }
   }
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
-  // Inject ready fragment waves into free warp slots.
+  // Inject ready fragment waves into free warp slots (RASTER dispatch v2).
   if (fwd_armed_)
     fwd_try_inject();
 #endif
 
-  // process pending wspawn when we are down to a single active warp
-  if (wspawn_.valid && active_warps_.count() == 1) {
+  // Process a pending wspawn when we are down to a single active warp.  DXA
+  // lifetime-held slots are not reusable yet even though they are absent from
+  // active_warps_; defer the spawn until every requested wid has drained.
+  bool wspawn_slots_ready = true;
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+  if (wspawn_.valid) {
+    for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
+      if (dxa_retiring_warps_.test(i)) {
+        wspawn_slots_ready = false;
+        break;
+      }
+    }
+  }
+#endif
+  if (wspawn_.valid && wspawn_slots_ready && active_warps_.count() == 1) {
     DP(3, "*** Activate " << (wspawn_.num_warps-1) << " warps at PC: " << std::hex << wspawn_.nextPC << std::dec);
     auto spawning_mscratch = warps_.at(0).mscratch;
     for (uint32_t i = 1; i < wspawn_.num_warps; ++i) {
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+      assert(!dxa_retiring_warps_.test(i));
+#endif
       auto& warp = warps_.at(i);
       warp.PC = wspawn_.nextPC;
       warp.tmask.set(0);
@@ -225,9 +275,13 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     trace->cta_id = warp.cta_csrs.cta_id;
     trace->PC     = warp.PC;
     trace->tmask  = warp.tmask;
+    // PRISM RTU §6/§8.6: stamp trap_epoch so advance_pc can discard
+    // a stale post-trap fetch (trap-epoch trailing the warp's current
+    // trap_epoch_) without clobbering the trap-set mtvec.
+    trace->trap_epoch = trap_epoch_.at(scheduled_warp);
 
     // PC is advanced at decode (+2 for RVC, +4 otherwise) — matches
-    // the hardware warp-PC update at decode.
+    // RTL VX_scheduler updating warp_pcs on decode_sched_if.valid.
     // Branch/JAL/JALR commit later overrides warp.PC with the
     // resolved target.
 
@@ -244,7 +298,11 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
 }
 
 bool Scheduler::running() const {
-  return active_warps_.any() || cta_dispatcher_->running()
+  return active_warps_.any()
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+    || dxa_retiring_warps_.any()
+#endif
+    || cta_dispatcher_->running()
 #ifdef VX_CFG_EXT_RASTER_ENABLE
     || fwd_armed_
 #endif
@@ -270,6 +328,14 @@ void Scheduler::resume(uint32_t wid) {
 }
 
 void Scheduler::advance_pc(const instr_trace_t* trace, uint32_t inc) {
+  // Drop stale post-trap fetches. A trace whose trap_epoch trails the
+  // warp's current epoch was scheduled BEFORE the most recent async
+  // trap; if we let it advance warp.PC now we'd step past the
+  // trap-set mtvec and the dispatcher's first instruction would never
+  // execute (the bug that broke the Phase 5 MISS test).
+  if (trace->trap_epoch != trap_epoch_.at(trace->wid)) {
+    return;
+  }
   warps_.at(trace->wid).PC += inc;
 }
 
@@ -281,6 +347,22 @@ bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
   warp.tmask = tmask;
   // deactivate warp if no active threads
   if (!tmask.any()) {
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+    core_->sfu_unit()->dxa_warp_exit(wid);
+    // A warp that has executed TMC(0) must leave the runnable/active set
+    // immediately, even when its accepted S2G source contexts are still
+    // draining.  Keeping it active with an empty tmask lets the next
+    // scheduler pass select it and hit the `warp.tmask.any()` invariant.
+    // CTA completion itself remains deferred until finish_dxa_retiring_warp()
+    // observes a drained tracker epoch.
+    active_warps_.reset(wid);
+    stalled_warps_.reset(wid);
+    stalled_warps_next_.reset(wid);
+    if (!core_->sfu_unit()->dxa_warp_drained(wid)) {
+      dxa_retiring_warps_.set(wid);
+      return false;
+    }
+#endif
     active_warps_.reset(wid);
 #ifdef VX_CFG_EXT_RASTER_ENABLE
     // An injected fragment wave retiring closes one FWD epoch slot.
@@ -294,6 +376,22 @@ bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
   }
   return true;
 }
+
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+void Scheduler::finish_dxa_retiring_warp(uint32_t wid) {
+  dxa_retiring_warps_.reset(wid);
+  active_warps_.reset(wid);
+  stalled_warps_.reset(wid);
+  stalled_warps_next_.reset(wid);
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  if (fwd_is_fragment_[wid]) {
+    fwd_is_fragment_[wid] = false;
+    ++fwd_retired_;
+  }
+#endif
+  cta_dispatcher_->warp_done(wid);
+}
+#endif
 
 bool Scheduler::wspawn(uint32_t num_warps, Word nextPC) {
   num_warps = std::min<uint32_t>(num_warps, VX_CFG_NUM_WARPS);
@@ -320,6 +418,7 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
   warp.mepc   = trap_pc;
   warp.mcause = cause;
   warp.mtval  = 0;
+  warp.mscratch_tmask = warp.tmask;
   // Redirect to the handler. Low 2 bits of mtvec are the MODE field;
   // v1 supports direct mode only, so mask them off.
   warp.PC = warp.mtvec & ~Word(3);
@@ -327,11 +426,67 @@ void Scheduler::raise_trap(uint32_t wid, Word cause, Word trap_pc) {
      << ", mepc=0x" << std::hex << trap_pc << ", mtvec=0x" << warp.mtvec << std::dec);
 }
 
+void Scheduler::raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const ThreadMask& new_tmask) {
+  // Flush this warp's unissued instructions BEFORE the trap CSRs are
+  // written, so the resume PC reflects the oldest flushed instruction
+  // (where the warp will re-fetch on mret). Real RISC-V trap entry
+  // flushes the pipeline for the trapping context; SimX needs the same
+  // because otherwise ibuf_inflight stays pegged at IBUF_SIZE and the
+  // post-trap fetch can't make progress.
+  Word resume_pc = core_->flush_warp_pipeline(wid);
+  if (resume_pc == 0) {
+    // ibuffer was empty — use the caller's PC as-is.
+    resume_pc = trap_pc;
+  }
+  this->raise_trap(wid, cause, resume_pc);
+  auto& warp = warps_.at(wid);
+  warp.tmask = new_tmask;
+  in_async_trap_.at(wid) = true;
+  // Re-activate the warp if a flushed wstall instruction had suspended it. A
+  // macro-op (e.g. the WAIT2 hit-window GETWF/GETW, or TRACE2) sets fetch_stall,
+  // which suspends the warp until that op commits; if the async trap flushes it
+  // mid-flight it never commits, so its resume_warp never fires. The trap is
+  // taking over the warp to run the dispatcher, so resume it here. Idempotent:
+  // only resume if currently stalled.
+  if (stalled_warps_next_.test(wid))
+    this->resume(wid);
+  // Lift the warp's outstanding scoreboard reservations (the parked
+  // vx_rt_wait's rd) so the callback dispatcher can save/restore the full
+  // register context without deadlocking on a reservation only its own
+  // cb_ret can release. Re-installed at mret. (RTU callback-trap, §4.6.)
+  async_trap_snapshot_.at(wid) = core_->scoreboard().snapshot_warp(wid);
+  // Bump the per-warp trap epoch so any pre-trap fetch still in flight
+  // (fetch_latch_ / pending icache rsp) can be detected at advance_pc
+  // and discarded — its decoded trace.trap_epoch will be one behind.
+  ++trap_epoch_.at(wid);
+  DT(3, core_->name() << " async-trap: wid=" << wid
+     << ", new_tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec
+     << ", mepc=0x" << std::hex << warp.mepc << std::dec);
+}
+
 void Scheduler::mret(uint32_t wid) {
   auto& warp = warps_.at(wid);
   warp.PC    = warp.mepc;
+  // Only restore the trap-saved mask when a trap actually saved one. A trap is
+  // always taken by at least one active thread, so mscratch_tmask is non-empty
+  // after any raise_trap; it is empty only in the pre-trap startup state. A bare
+  // MRET used purely as a privilege switch (e.g. the riscv-tests startup jumping
+  // into the test via mepc) must leave the running mask intact rather than clear
+  // it, which would deactivate the warp.
+  if (warp.mscratch_tmask.any())
+    warp.tmask = warp.mscratch_tmask;
+  // Re-install the reservations lifted at trap entry so the resumed
+  // kernel's vx_rt_get_after still stalls until the ray's TERMINAL lands.
+  // The matching TERMINAL writeback is held off until in_async_trap clears
+  // (SfuUnit), so the dispatcher's epilogue restore can't clobber the
+  // status word.
+  core_->scoreboard().restore_warp(async_trap_snapshot_.at(wid));
+  async_trap_snapshot_.at(wid).clear();
+  in_async_trap_.at(wid) = false;
+  last_mret_cycle_.at(wid) = SimPlatform::instance().cycles();
   DT(3, core_->name() << " mret: wid=" << wid
-     << ", mepc=0x" << std::hex << warp.mepc << std::dec);
+     << ", mepc=0x" << std::hex << warp.mepc << std::dec
+     << ", restored tmask=0x" << std::hex << warp.tmask.to_ulong() << std::dec);
 }
 
 void Scheduler::trigger_ecall(uint32_t wid, Word trap_pc) {
@@ -344,7 +499,8 @@ void Scheduler::trigger_ebreak(uint32_t wid, Word trap_pc) {
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 ///////////////////////////////////////////////////////////////////////////////
-// Fragment Work Distributor (FWD).
+// Fragment Work Distributor (RASTER dispatch v2 — §4 FWD). See
+// docs/proposals/gfx_v2_fwd_simx_impl.md.
 ///////////////////////////////////////////////////////////////////////////////
 
 // Per-warp LMEM band stride. The payload itself is seeded into the register
@@ -385,18 +541,15 @@ bool Scheduler::fwd_done() const {
 
 void Scheduler::fwd_disarm() {
   fwd_armed_ = false;
-  core_->fwd_done_out.send({core_->id()});
 }
 
 void Scheduler::fwd_try_inject() {
-  // A fresh warp slot begins at the program image base (where __vx_cta_entry is
-  // linked), exactly as a KMU-launched CTA does; the per-CTA dispatch window
-  // reads VX_CSR_CTA_ENTRY (= rec.entry, the FS function) and VX_CSR_MSCRATCH
+  // The warp begins at the program image base (where __vx_cta_entry is linked),
+  // exactly as a KMU-launched CTA does; the per-CTA dispatch window reads
+  // VX_CSR_CTA_ENTRY (= rec.entry, the FS function) and VX_CSR_MSCRATCH
   // (= rec.mscratch, the FS args) and calls into the shader. The image base
   // is the KMU's startup PC (set by the grid-less draw kick, persists across
   // SimPlatform reset); the FS entry/arg come from the RASTER_FRAG_* descriptor.
-  // A slot that already ran the startup for these lanes rewinds into the
-  // dispatch window instead -- see activate_warp.
   const Word startup_pc =
     Word(core_->socket()->cluster()->processor()->kmu().startup_pc());
 
@@ -404,18 +557,21 @@ void Scheduler::fwd_try_inject() {
     // Find any free warp slot — there is no driver warp to skip in the push model.
     int wid = -1;
     for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
-      if (!active_warps_.test(w)) { wid = int(w); break; }
+      if (active_warps_.test(w)) continue;
+#if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
+      // A retired warp remains unavailable until all S2G source contexts have
+      // drained and finish_dxa_retiring_warp() advances its epoch.
+      if (dxa_retiring_warps_.test(w)) continue;
+#endif
+      wid = int(w);
+      break;
     }
     if (wid < 0) break;  // no free slot this cycle
 
     const FwdWave& wave = fwd_waves_.front();
 
     cta_warp_record_t rec;  // ThreadMask member needs sizing; assigned below
-    // A slot that has already run the startup for these lanes rewinds into the
-    // dispatch window instead of re-entering at the image base, exactly as a
-    // compute CTA does. The state is the dispatcher's because a slot is shared
-    // between the two launch paths.
-    rec.do_init  = cta_dispatcher_->slot_needs_init(uint32_t(wid), wave.tmask);
+    rec.do_init  = true;
     rec.PC       = startup_pc;                                         // image base (__vx_cta_entry)
     rec.entry    = fwd_frag_entry_;                                    // FS function entry (CTA_ENTRY)
     rec.mscratch = fwd_frag_param_;                                    // FS args pointer
@@ -424,23 +580,24 @@ void Scheduler::fwd_try_inject() {
     rec.cta_rank = 0;
     rec.cta_size = 1;
     rec.thread_idx[0] = rec.thread_idx[1] = rec.thread_idx[2] = 0;
-    // A fragment warp is not a CTA: it has no block index, and its "block" is
-    // exactly the lanes the packer filled — four per packed quad, so an empty quad
-    // slot costs no threads.
-    rec.block_idx[0]  = rec.block_idx[1]  = rec.block_idx[2]  = 0;
-    rec.block_dim[0]  = uint32_t(wave.tmask.count());
-    rec.block_dim[1]  = rec.block_dim[2]  = 1;
+    // block_idx carries the record slot: the FS reads its payload via GETWS
+    // (regfile[block_idx]). SimX seeds the window at regfile[wid] (it knows the
+    // minted wid directly), so the slot IS the wid here — mirrors the RTL, where
+    // the raster unit seeds regfile[slot] and passes slot as block_idx.
+    rec.block_idx[0]  = uint32_t(wid);
+    rec.block_idx[1]  = rec.block_idx[2]  = 0;
+    rec.block_dim[0]  = VX_CFG_NUM_THREADS; rec.block_dim[1] = 1; rec.block_dim[2] = 1;
     rec.grid_dim[0]   = rec.grid_dim[1]   = rec.grid_dim[2]   = 1;
     rec.lmem_addr     = uint64_t(VX_MEM_LMEM_BASE_ADDR) + uint64_t(wid) * kFwdPayloadStride;
     rec.cluster_size  = 1;
     rec.tmask         = wave.tmask;
 
     activate_warp(uint32_t(wid), rec);
-    cta_dispatcher_->mark_slot_inited(uint32_t(wid), wave.tmask);
 
-    // The stamp arrives with the launch: land it in this warp's launch registers
-    // (read back as the FRAG_* CSRs). No window tenancy, no slot, no window op.
-    warps_.at(wid).frag = wave.payload;
+    // Seed the per-lane payload into this warp's gfx register window (FWD-5,
+    // zero-LMEM): the FS reads it back with GETW. Reuses the SFU window-stage
+    // path the pull op used.
+    core_->sfu_unit()->stage_fwd_window(uint32_t(wid), wave);
 
     fwd_is_fragment_[wid] = true;
     ++fwd_launched_;

@@ -1,5 +1,6 @@
 #include "vl_simulator.h"
 #include "VVX_dxa_group_tracker_top.h"
+#include "dxa_group_tracker.h"
 
 #include <array>
 #include <cstdint>
@@ -145,8 +146,117 @@ struct Bench {
   }
 };
 
+static void check_functional_model_edges() {
+  // The RTL wrapper intentionally uses a tiny two-warp/four-context shape.
+  // Exercise the model with a larger per-warp partition so a single warp can
+  // fill all four boundary rows without needing an artificial second port.
+  vortex::DxaGroupTracker model(/*warps=*/1, /*contexts=*/8,
+                                /*ring=*/4, /*generation_bits=*/4);
+  std::array<vortex::DxaGroupTracker::OperationToken, 4> pending{};
+  for (auto& token : pending) {
+    CHECK(model.issue(0, &token)
+              == vortex::DxaGroupTracker::IssueResult::Tracked,
+          "model issue unexpectedly blocked while filling the ring");
+    CHECK(model.commit(0)
+              == vortex::DxaGroupTracker::CommitResult::Accepted,
+          "model commit unexpectedly blocked while filling the ring");
+  }
+  const uint8_t tail_before = model.sealed_tail(0);
+  CHECK(model.committed_depth(0) == 4,
+        "model did not retain four pending boundaries");
+  CHECK(model.commit(0)
+            == vortex::DxaGroupTracker::CommitResult::Accepted,
+        "empty commit must remain a trivially complete no-op at ring full");
+  CHECK(model.sealed_tail(0) == tail_before,
+        "full-ring empty commit advanced the sequence/overwrote a row");
+  for (const auto& token : pending) {
+    CHECK(model.complete(0, token.epoch, token.group_seq, token.op_id)
+              == vortex::DxaGroupTracker::CompletionResult::Applied,
+          "model completion failed while draining full ring");
+  }
+  for (int i = 0; i < 4; ++i)
+    model.tick();
+  CHECK(model.drained(0), "model did not drain completed boundaries");
+
+  model.reset();
+  vortex::DxaGroupTracker::OperationToken old;
+  CHECK(model.issue(0, &old)
+            == vortex::DxaGroupTracker::IssueResult::Tracked,
+        "model epoch setup issue failed");
+  CHECK(model.complete(0, old.epoch, old.group_seq, old.op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "model epoch setup completion failed");
+  const uint32_t old_epoch = model.epoch(0);
+  CHECK(model.advance_epoch(0),
+        "completed uncommitted open group was not epoch-drainable");
+  CHECK(model.epoch(0) == ((old_epoch + 1) & 3),
+        "model epoch did not advance after open-group discard");
+  vortex::DxaGroupTracker::OperationToken fresh;
+  CHECK(model.issue(0, &fresh)
+            == vortex::DxaGroupTracker::IssueResult::Tracked,
+        "model rejected first issue in a fresh epoch");
+  CHECK(fresh.epoch != old.epoch && fresh.group_seq == 0,
+        "fresh epoch retained stale open-group identity");
+
+  // An uncommitted group is intentionally invisible to wait.read.  Once it
+  // is sealed, the same three heterogeneous operations form one boundary and
+  // the N threshold is evaluated against groups (not operation count).
+  model.reset();
+  std::array<vortex::DxaGroupTracker::OperationToken, 3> triple{};
+  for (auto& token : triple)
+    CHECK(model.issue(0, &token)
+              == vortex::DxaGroupTracker::IssueResult::Tracked,
+          "model rejected a second/third operation in an open group");
+  const uint8_t open_snapshot = model.wait_snapshot(0);
+  CHECK(model.wait_satisfied(0, 0, open_snapshot),
+        "wait.read observed an uncommitted open group");
+  CHECK(model.commit(0) == vortex::DxaGroupTracker::CommitResult::Accepted,
+        "three-operation group did not commit");
+  const uint8_t first_seq = triple[0].group_seq;
+  CHECK(first_seq != model.wait_snapshot(0),
+        "commit did not advance the group boundary");
+  CHECK(!model.wait_satisfied(0, 0, model.wait_snapshot(0)),
+        "wait<0> passed while the committed group was pending");
+  CHECK(model.wait_satisfied(0, 1, model.wait_snapshot(0)),
+        "wait<1> did not retain the newest committed group");
+  // Complete out of order; FIFO retirement must still wait for all three.
+  CHECK(model.complete(0, triple[2].epoch, triple[2].group_seq, triple[2].op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "third operation completion failed");
+  model.tick();
+  CHECK(!model.wait_satisfied(0, 0, model.wait_snapshot(0)),
+        "out-of-order completion retired a partial group");
+  CHECK(model.complete(0, triple[0].epoch, triple[0].group_seq, triple[0].op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "first operation completion failed");
+  CHECK(model.complete(0, triple[1].epoch, triple[1].group_seq, triple[1].op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "second operation completion failed");
+  model.tick();
+  CHECK(model.wait_satisfied(0, 0, model.wait_snapshot(0)),
+        "wait<0> remained blocked after the complete group retired");
+
+  // Reset is a hard lifetime boundary: an old token must not complete a new
+  // operation even when the physical slot is reused from sequence zero.
+  model.reset();
+  vortex::DxaGroupTracker::OperationToken before_reset;
+  CHECK(model.issue(0, &before_reset)
+            == vortex::DxaGroupTracker::IssueResult::Tracked,
+        "reset setup issue failed");
+  model.reset();
+  vortex::DxaGroupTracker::OperationToken after_reset;
+  CHECK(model.issue(0, &after_reset)
+            == vortex::DxaGroupTracker::IssueResult::Tracked,
+        "post-reset issue failed");
+  CHECK(model.complete(0, before_reset.epoch, before_reset.group_seq,
+                       before_reset.op_id)
+            != vortex::DxaGroupTracker::CompletionResult::Applied,
+        "pre-reset token mutated a post-reset context");
+}
+
 int main(int argc, char **argv) {
   Verilated::commandArgs(argc, argv);
+  check_functional_model_edges();
   Bench b;
   {
     std::printf("[1] completion+commit snapshots the decremented open count\n");
@@ -161,6 +271,7 @@ int main(int argc, char **argv) {
     CHECK(b.head(0) == uint8_t(before + 1)
           && b.tail(0) == uint8_t(before + 1),
           "empty group did not seal and retire in its commit cycle");
+
   }
 
   {
@@ -185,7 +296,7 @@ int main(int argc, char **argv) {
 
   {
     b.reset();
-    std::printf("[3] shared P-context pool backpressures without drop\n");
+    std::printf("[3] statically partitioned contexts backpressure only owner warp\n");
     std::array<Op, 4> pool;
     pool[0] = b.issue(0);
     pool[1] = b.issue(1);
@@ -194,20 +305,27 @@ int main(int argc, char **argv) {
     b.sim->issue_query = 1;
     b.sim->issue_wid = 0;
     b.sim->eval();
-    CHECK(b.sim->issue_result == 1, "full physical pool did not backpressure");
+    CHECK(b.sim->issue_result == 1, "warp0 context partition did not backpressure");
     const uint8_t live_before = b.sim->context_live;
     b.tick();
     CHECK(b.sim->context_live == live_before,
           "backpressured issue changed physical allocation state");
     CHECK(b.sim->context_stalls == 1, "pool stall was not counted");
+    b.sim->issue_wid = 1;
+    b.sim->eval();
+    CHECK(b.sim->issue_result == 1, "warp1 context partition did not backpressure");
     b.complete(pool[1]);
-    Op recycled = b.issue(0);
+    // Freeing warp1's slot must not make warp0's issue succeed.
+    b.sim->issue_wid = 0;
+    b.sim->eval();
+    CHECK(b.sim->issue_result == 1,
+          "warp0 borrowed a context from another warp");
+    Op recycled = b.issue(1);
     CHECK(recycled.id != pool[1].id,
           "recycled context did not change generation");
-    for (const auto &op : pool) {
-      if (op.id != pool[1].id)
-        b.complete(op);
-    }
+    b.complete(pool[0]);
+    b.complete(pool[2]);
+    b.complete(pool[3]);
     b.complete(recycled);
   }
 
@@ -219,6 +337,10 @@ int main(int argc, char **argv) {
     b.commit(0);
     Op w1g0 = b.issue(1);
     b.commit(1);
+    // The unit configuration has two operation contexts per warp. Reclaim
+    // one old operation before opening the next group, while leaving the
+    // other old operation pending to test FIFO retirement.
+    b.complete(w0g0b);
     Op w0g1 = b.issue(0);
     b.commit(0);
 
@@ -234,8 +356,6 @@ int main(int argc, char **argv) {
     CHECK(b.head(1) == b.tail(1), "warp1 did not retire independently");
     CHECK(b.head(0) + 2 == b.tail(0), "warp1 completion disturbed warp0");
 
-    b.complete(w0g0b);
-    b.tick();
     CHECK(b.head(0) + 2 == b.tail(0), "partial old group released wait early");
     b.complete(w0g0a);
     CHECK(b.head(0) + 1 == b.tail(0),
