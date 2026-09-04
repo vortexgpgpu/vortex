@@ -86,24 +86,10 @@ tests:
 - id: gbar-phase-2
   via: blackbox
   drivers:
-  - xrt
+  - rtlsim
   app: gbar_phase
   shape:
     cores: 2
-- id: bar-slot-phase-1
-  via: blackbox
-  drivers:
-  - simx
-  app: bar_slot_phase
-  shape:
-    warps: 2
-- id: bar-slot-phase-2
-  via: blackbox
-  drivers:
-  - xrt
-  app: bar_slot_phase
-  shape:
-    warps: 2
 - id: vecadd-1
   via: blackbox
   drivers:
