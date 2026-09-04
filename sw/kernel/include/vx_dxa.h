@@ -487,6 +487,41 @@ inline void vx_dxa_s2g_issue_grouped_5d(uint32_t desc_slot,
                          coord2, coord3, coord4);
 }
 
+// The unranked spelling is a convenient 1-D entry point for kernels whose
+// descriptor already contains the complete tile shape.  Keep the ranked
+// overloads above for callers that want the dimensionality to be explicit.
+inline void vx_dxa_s2g_issue_grouped(uint32_t desc_slot,
+                                     const void* smem_addr,
+                                     uint32_t coord0) {
+  vx_dxa_s2g_issue_grouped_1d(desc_slot, smem_addr, coord0);
+}
+inline void vx_dxa_s2g_issue_grouped(uint32_t desc_slot,
+                                     const void* smem_addr,
+                                     uint32_t coord0, uint32_t coord1) {
+  vx_dxa_s2g_issue_grouped_2d(desc_slot, smem_addr, coord0, coord1);
+}
+inline void vx_dxa_s2g_issue_grouped(uint32_t desc_slot,
+                                     const void* smem_addr,
+                                     uint32_t coord0, uint32_t coord1,
+                                     uint32_t coord2) {
+  vx_dxa_s2g_issue_grouped_3d(desc_slot, smem_addr, coord0, coord1, coord2);
+}
+inline void vx_dxa_s2g_issue_grouped(uint32_t desc_slot,
+                                     const void* smem_addr,
+                                     uint32_t coord0, uint32_t coord1,
+                                     uint32_t coord2, uint32_t coord3) {
+  vx_dxa_s2g_issue_grouped_4d(desc_slot, smem_addr, coord0, coord1,
+                               coord2, coord3);
+}
+inline void vx_dxa_s2g_issue_grouped(uint32_t desc_slot,
+                                     const void* smem_addr,
+                                     uint32_t coord0, uint32_t coord1,
+                                     uint32_t coord2, uint32_t coord3,
+                                     uint32_t coord4) {
+  vx_dxa_s2g_issue_grouped_5d(desc_slot, smem_addr, coord0, coord1,
+                               coord2, coord3, coord4);
+}
+
 #endif
 
 // ════════════════════════════════════════════════════════════════════════

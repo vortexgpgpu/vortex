@@ -273,6 +273,97 @@ static void check_functional_model_edges() {
                        before_reset.op_id)
             != vortex::DxaGroupTracker::CompletionResult::Applied,
         "pre-reset token mutated a post-reset context");
+
+  // Source completion is independent of the commit boundary.  Completing an
+  // open operation first releases its source lifetime, but the completed
+  // group remains a real boundary until commit seals it.
+  model.reset();
+  vortex::DxaGroupTracker::OperationToken early;
+  CHECK(model.issue(0, &early)
+            == vortex::DxaGroupTracker::IssueResult::Tracked,
+        "early-completion setup issue failed");
+  CHECK(model.complete(0, early.epoch, early.group_seq, early.op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "completion before commit was rejected");
+  CHECK(model.open_remaining(0) == 0 && model.committed_depth(0) == 0,
+        "completion before commit changed the sealed depth incorrectly");
+  CHECK(model.commit(0) == vortex::DxaGroupTracker::CommitResult::Accepted,
+        "completed open group did not commit");
+  CHECK(model.committed_depth(0) == 1,
+        "completed open group disappeared before commit");
+  model.tick();
+  CHECK(model.drained(0), "completed group did not drain after commit");
+
+  // A wait snapshots a boundary, then retains the newest N groups while the
+  // older prefix retires.  This is the observable distinction between
+  // wait<1> and a conservative wait-for-all implementation.
+  model.reset();
+  std::array<vortex::DxaGroupTracker::OperationToken, 3> staged{};
+  for (auto& token : staged) {
+    CHECK(model.issue(0, &token)
+              == vortex::DxaGroupTracker::IssueResult::Tracked,
+          "three-group wait setup issue failed");
+    CHECK(model.commit(0) == vortex::DxaGroupTracker::CommitResult::Accepted,
+          "three-group wait setup commit failed");
+  }
+  const uint8_t three_snapshot = model.wait_snapshot(0);
+  CHECK(!model.wait_satisfied(0, 1, three_snapshot),
+        "wait<1> passed with three incomplete committed groups");
+  CHECK(model.complete(0, staged[0].epoch, staged[0].group_seq,
+                       staged[0].op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "oldest wait group completion failed");
+  model.tick();
+  CHECK(!model.wait_satisfied(0, 1, three_snapshot),
+        "wait<1> passed while two committed groups remained");
+  CHECK(model.complete(0, staged[1].epoch, staged[1].group_seq,
+                       staged[1].op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "middle wait group completion failed");
+  model.tick();
+  CHECK(model.wait_satisfied(0, 1, three_snapshot),
+        "wait<1> did not pass with exactly one newest group retained");
+  CHECK(!model.wait_satisfied(0, 0, three_snapshot),
+        "wait<0> passed while the newest group remained pending");
+  CHECK(model.complete(0, staged[2].epoch, staged[2].group_seq,
+                       staged[2].op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "newest wait group completion failed");
+  model.tick();
+  CHECK(model.wait_satisfied(0, 0, three_snapshot),
+        "wait<0> did not pass after all three groups retired");
+
+  // Ring pressure is local to an issuer.  A full warp-0 boundary ring must
+  // not consume warp-1's statically owned context or boundary capacity.
+  vortex::DxaGroupTracker two_warp(/*warps=*/2, /*contexts=*/8,
+                                   /*ring=*/4, /*generation_bits=*/4);
+  std::array<vortex::DxaGroupTracker::OperationToken, 4> ring_ops{};
+  for (auto& token : ring_ops) {
+    CHECK(two_warp.issue(0, &token)
+              == vortex::DxaGroupTracker::IssueResult::Tracked,
+          "warp-0 ring fill issue failed");
+    CHECK(two_warp.commit(0) == vortex::DxaGroupTracker::CommitResult::Accepted,
+          "warp-0 ring fill commit failed");
+  }
+  vortex::DxaGroupTracker::OperationToken other_warp;
+  CHECK(two_warp.issue(1, &other_warp)
+            == vortex::DxaGroupTracker::IssueResult::Tracked,
+        "warp-1 was blocked by warp-0 ring pressure");
+  CHECK(two_warp.issue(0, nullptr)
+            == vortex::DxaGroupTracker::IssueResult::Backpressured,
+        "full warp-0 ring did not backpressure a new group");
+  CHECK(two_warp.complete(0, ring_ops[0].epoch, ring_ops[0].group_seq,
+                         ring_ops[0].op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "warp-0 ring head completion failed");
+  two_warp.tick();
+  CHECK(two_warp.issue(0, nullptr)
+            == vortex::DxaGroupTracker::IssueResult::Tracked,
+        "warp-0 did not reopen after one boundary retired");
+  CHECK(two_warp.complete(1, other_warp.epoch, other_warp.group_seq,
+                         other_warp.op_id)
+            == vortex::DxaGroupTracker::CompletionResult::Applied,
+        "warp-1 independent operation completion failed");
 }
 
 int main(int argc, char **argv) {
