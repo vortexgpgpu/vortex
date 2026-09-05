@@ -1,4 +1,20 @@
 /build*
 /.*
+# ...but not the CI definitions. `/.*` ignores every dotfile at the root, and
+# .github is one: the workflows already tracked are unaffected (ignore rules do
+# not apply to tracked files), so a NEW workflow or action would be silently
+# dropped from a commit with nothing to notice.
+!/.github/
 # Archived/superseded docs — kept on disk, never tracked
 docs/archives/
+
+# ci/ holds importable modules now (synth_gate is imported by its entry points)
+__pycache__/
+
+# ASAP7 collateral fetched by hw/syn/libs/asap7/install.sh (never vendored)
+hw/syn/libs/asap7/downloads/
+hw/syn/libs/asap7/lib/
+hw/syn/libs/asap7/verilog/
+hw/syn/libs/asap7/metadata/
+hw/syn/libs/asap7/.installed_*
+hw/syn/libs/asap7/install.sh

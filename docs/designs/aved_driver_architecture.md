@@ -100,12 +100,27 @@ a specific failure this platform can produce.
 `vrt::Device(bdf, vbin_path, program)` opens the board and optionally
 reprograms the PL; `vrt::Kernel` then parses the vbin's `system_map.xml`.
 
-`VORTEX_AVED_NO_PROGRAM=1` constructs with `program=false`. This matters
-because each open that programs the PL goes through `vrtd`'s design writer,
-which runs a reset sequence whenever the requested shell differs from the
-current one — and that toggles a **secondary bus reset** on the card's root
-port. With the design already resident (loaded over JTAG), skipping the
-reprogram removes that path entirely.
+The driver always programs (`program=true`), as the XRT driver's
+`load_xclbin()` does. There is no opt-out switch.
+
+There used to be one — `VORTEX_AVED_NO_PROGRAM=1` constructed with
+`program=false` — because each open that programs the PL goes through `vrtd`'s
+design writer, which runs its reset sequence only when the requested shell
+differs from the current one. On a board whose static shell was never written
+to OSPI flash, that comparison never settles: no reset runs, the design write
+fails with `Input/output error`, and the AMC can be left in `NO_AMC`, costing a
+recovery.
+
+That is a property of an **unflashed board**, not of the driver. Write the
+static shell to flash first (§5 of `xilinx_slash_setup.md`, *both* boot
+partitions) and programming on open is well-defined. Verified on silicon:
+consecutive programs with `v80-smi list` reporting a valid shell, sgemm passing
+each time, no AMC loss.
+
+The switch and the `/tmp/v80_resident_afu.path` fallback that let a run reuse
+whatever bitstream happened to be resident were both removed. Running against a
+resident image is what silently produces results attributed to the wrong
+bitstream when `FPGA_BIN_DIR` changes.
 
 ### 3.2 The transport gate
 
@@ -387,5 +402,4 @@ threads. `xrt` and `aved` both guard it.
 3. **Drop the VRT-internal reach** once VRT exposes the simulated memory
    windows and the ZMQ server through public API.
 4. **Gate the build on timing closure.** The V80 flow packages a bitstream
-   that does not meet timing without saying so; see
-   [`../reports/v80_timing_closure.md`](../reports/v80_timing_closure.md).
+   that does not meet timing without saying so.

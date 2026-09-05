@@ -240,13 +240,42 @@ Expect several hours of Vivado. Three prerequisites, all easy to conflate:
    cd linker/slashkit/resources/base/iprepo && make
    ```
 
-Programming the shell to flash, once built:
+### Programming the shell to flash
+
+Use `v80-smi`, which goes through the AMC over GCQ behind PF0 (`ami.ko` must be
+loaded). Write **both** boot partitions, same PDI, ~10 min each:
 
 ```bash
-sudo ami_tool cfgmem_program -d <BDF> -t primary -p 0 \
-  -i <path>/static_shell/amd_v80_gen5x8_25.1.pdi
-sudo reboot
+PDI=<resources>/static_shell_compute/amd_v80_gen5x8_25.1.pdi
+
+v80-smi write-static-shell --flash --shell-type compute -d 0000:01:00 --pdi $PDI
+v80-smi write-static-shell --flash --shell-type service -d 0000:01:00 --pdi $PDI
 ```
+
+Four things that are easy to get wrong:
+
+1. **`--pdi` is effectively mandatory.** Without it, `v80-smi` resolves an
+   *installed* shell path, which may be the root-owned
+   `/usr/lib/python3.12/dist-packages/slashkit/resources/static_shell_compute/`
+   copy rather than the tree you just built — silently reflashing an older
+   shell. Point it at the PDI you mean.
+2. **Both partitions, or the next reboot may lose the card.** `compute` is boot
+   partition 1, `service` is partition 0, and **POST reads partition 0**.
+   Writing only `compute` works immediately — the board comes back reporting
+   `Shell: compute` and tests pass — and then fails to enumerate after the next
+   reboot, with root port `0000:00:01.1` absent and no JTAG that boot.
+3. **Use the FPT image, not `_nofpt`.** `--flash` needs the flash image; the two
+   differ by a 32 KB FPT header (magic `0x92F7A516`). `_nofpt` is JTAG-only.
+4. **`--shell-type all` is rejected with `--pdi`**, despite what `--help`
+   implies, so the two writes must be separate commands.
+
+**No reboot or power cycle is needed.** Each write ends by resetting the link
+(`Toggling secondary bus reset` / `Removing PCIe functions`, then
+`Rescanning PCIe`) and the board returns on its own. Confirm with `v80-smi list`
+— all PFs `OK` and a shell reported rather than `unknown`.
+
+Once both partitions are written, the runtime programs the PL on device open
+like XRT's `load_xclbin()`; there is no never-program switch.
 
 > **Flashing writes the card's boot memory.** A bad write can leave the board
 > unbootable, recoverable only over JTAG. Confirm the image and the BDF before

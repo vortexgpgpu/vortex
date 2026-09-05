@@ -122,25 +122,29 @@ include $(VORTEX_HOME)/hw/syn/extensions.mk
 # timing-closure margin.
 KERNEL_FREQ ?= 300
 
+# Timing-miss policy. Default (1): a design that misses KERNEL_FREQ is
+# auto-scaled down to the achieved frequency and the build succeeds with
+# truthful metadata (the stock Alveo behavior). FREQ_SCALING=0 makes a
+# scaled result unacceptable: any miss fails the build — for sign-off
+# builds where the target is the contract. Either way the post-build gate
+# verifies the implementation was actually timed at KERNEL_FREQ and that a
+# scaled bitstream reports its real clock.
+FREQ_SCALING ?= 1
+
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
 VPP_FLAGS += --kernel_frequency $(KERNEL_FREQ)
 
-# Auto-frequency-scaling control.
-# The Alveo flow drives the kernel clock from a runtime-programmable (scalable)
-# MMCM, so a design that misses --kernel_frequency does NOT fail: the compiler
-# silently reprograms the clock down to whatever met timing and still exits 0
-# (the drop shows up only as "Achieved Freq" in xclbin.info). Disabling scaling
-# forces a normal post-route timing check that FAILS the build on a miss.
-# Set ALLOW_FREQ_SCALING=1 to restore stock behavior (emit a downscaled bitstream).
-ALLOW_FREQ_SCALING ?= 0
-ifeq ($(ALLOW_FREQ_SCALING),0)
-VPP_FLAGS += --advanced.param compiler.enableAutoFrequencyScaling=false
-endif
-
 # register compilation hooks
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE=${SRC_DIR}/pre_opt_hook.tcl"
+
+# Implementation strategy. Unset by default: vpl picks the platform's own.
+# Name a Vivado impl strategy (e.g. Performance_ExplorePostRoutePhysOpt) to
+# trade build time for timing closure on a design that is routing-bound.
+ifdef IMPL_STRATEGY
+VPP_FLAGS += --xp "vivado_prop:run.impl_1.STRATEGY=$(IMPL_STRATEGY)"
+endif
 
 # load platform settings
 include $(SRC_DIR)/platforms.mk
@@ -217,7 +221,7 @@ $(XO_CONTAINER): $(BUILD_DIR)/sources.txt
 
 gen-bin: $(XCLBIN_CONTAINER)
 $(XCLBIN_CONTAINER): $(XO_CONTAINER) $(SCOPE_JSON)
-	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); TOOL_DIR=$(SCRIPT_DIR) $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
+	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); TOOL_DIR=$(SCRIPT_DIR) KERNEL_FREQ=$(KERNEL_FREQ) $(if $(IMPL_MAX_THREADS),IMPL_MAX_THREADS=$(IMPL_MAX_THREADS)) $(if $(VORTEX_SLR),VORTEX_SLR=$(VORTEX_SLR)) $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
 
 emconfig: $(BIN_DIR)/emconfig.json
 $(BIN_DIR)/emconfig.json:
@@ -231,14 +235,10 @@ ifeq ($(TARGET), hw)
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_utilization_placed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/hier_utilization.rpt $(BUILD_DIR)/bin
-ifeq ($(ALLOW_FREQ_SCALING),0)
-	@if grep -q 'AUTO-FREQ-SCALING-04' $(BUILD_DIR)/bin/vivado.log; then \
-		echo "ERROR: kernel clock failed to meet --kernel_frequency=$(KERNEL_FREQ) MHz; Vitis auto-scaled it down:"; \
-		grep 'AUTO-FREQ-SCALING-04' $(BUILD_DIR)/bin/vivado.log; \
-		echo "Build FAILED (set ALLOW_FREQ_SCALING=1 to accept a downscaled bitstream)."; \
-		exit 1; \
-	fi
-endif
+	python3 $(SCRIPT_DIR)/xilinx_check_kernel_clock.py --freq $(KERNEL_FREQ) \
+		--report $(BUILD_DIR)/bin/impl_1_hw_bb_locked_timing_summary_routed.rpt \
+		--new-clk-freq $(BUILD_DIR)/_x/link/int/_new_clk_freq \
+		$(if $(filter 0,$(FREQ_SCALING)),--no-scaling)
 endif
 
 chipscope:

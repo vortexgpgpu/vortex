@@ -243,7 +243,7 @@ the threshold only absorbs benign, intended micro-changes.
   are separate cases: perf ids stay bare (`sgemm` — the golden baseline is keyed
   by it, `core:sgemm:rtlsim`), parity twins are prefixed `parity-`.
 
-### 3.5 Synthesis-regression checks (`fpga_gate`)
+### 3.5 Synthesis-regression gates (`fpga_gate`, `asic_gate`)
 
 The perf_gate catches a change that costs *cycles*. The fpga_gate catches one
 that costs *timing closure or area*: it synthesizes a catalog of DUTs with
@@ -252,11 +252,42 @@ checked-in golden baseline within ±5% (`ci/fpga_gate.py`). Same discipline as
 §3.4 — regression fails, an unlocked improvement also fails and asks you to
 record it, and CI never writes a baseline.
 
-It is **not** a pytest cell. A cell is a build tree plus a driver; an fpga_gate
-build is an hours-long Vivado run that only exists on a host with the licensed
-toolchain, so it is a standalone script driven by its own workflow on the
-self-hosted runner (§4.4). `asic_gate` — the same script over
-`ci/baselines/synthesis/yosys/` — is the planned second tool.
+`asic_gate` is the same gate over the open-source flow: Yosys + OpenSTA on
+ASAP7, asserting post-synthesis **Fmax** and **standard-cell area** against
+`ci/baselines/synthesis/yosys/` (`ci/asic_gate.py`, §4.5).
+
+Neither is a pytest cell. A cell is a build tree plus a driver; a synthesis build
+is neither, and both gates are hours long — Vivado because it is Vivado, Yosys
+because a DUT is 1–2 hours. They are standalone scripts driven by their own
+workflows (§4.4, §4.5), and their tiers (`fpga`, `asic`) are opt-in so `ci.yml`'s
+hosted matrix never emits a cell for them.
+
+**One implementation, two adapters.** `ci/synth_gate.py` holds everything that is
+not tool-specific — catalog loading, `config_hash`, threshold resolution,
+`known_issue`, the resumable session, the scheduler, the gate itself and the
+report. A `Tool` supplies only what genuinely differs: the metric names, how the
+flow is invoked, what its log looks like, and which environment fields make two
+runs comparable. `ci/fpga_gate.py` and `ci/asic_gate.py` are entry points that
+pin `--tool`; everything below applies to both unless it names one.
+
+| | `fpga_gate` (xilinx) | `asic_gate` (yosys) |
+|---|---|---|
+| flow | Vivado synth + place-and-route | sv2v → Yosys → ABC → OpenSTA |
+| DUT tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` |
+| gated | `fmax_mhz`, `lut` | `fmax_mhz`, `cell_area_um2` |
+| also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` |
+| comparable when | same device, opt level, xlen | same PDK, VT, corner, xlen |
+| runner | self-hosted, licensed Vivado | hosted, one job per DUT |
+
+**Fmax means something different on the two.** Vivado's placer-and-router
+reports what the implemented design achieved. ABC maps to the *target* period and
+stops, so a Yosys DUT that closes does so with picoseconds of margin
+(`om`: +0.032 ns on a 1.25 ns period) and its Fmax sits just above the clock it
+was built for by construction. That makes **cell area the sensitive metric** on
+the ASIC side, and Fmax mostly a met/missed signal — which is exactly what the
+target-frequency check below asserts. It also makes the slack source matter:
+`report_wns` is worst *negative* slack and clamps at zero, so `run_sta.tcl` uses
+`report_worst_slack`, which is signed.
 
 - **Spec and baseline are split**, exactly as everywhere else in the catalog.
   The spec is `ci/testcases/fpga_gate.yaml` — hand-authored, commented,
@@ -266,21 +297,29 @@ self-hosted runner (§4.4). `asic_gate` — the same script over
   hand-edited, carrying only measured metrics plus the config fingerprint and
   tool env they were measured under. Groups: `core` (cache+AMO, wide core, full
   4-core AFU), `tensor` (all-datatype TCU), `graphics` (RTU/RASTER/OM/TEX),
-  `dxa`. A `config_hash` (dut/clock/configs/device/opt-level/xlen) ties the two
-  together — edit the spec and the gate refuses to compare against numbers
-  recorded for the old one (`STALE`).
-- **Tier `fpga` is opt-in.** An empty `--tier` means "everything", and
-  everything is what a *hosted* runner can run — which these cannot: they need a
-  licensed Vivado and hours of a whole machine. `OPT_IN_TIERS` in `testcase.py`
-  keeps them out of every hosted event (including the nightly) unless asked for
-  by name, so they run only on the self-hosted runner's own workflow (§4.4).
-- **Metrics** all come from `synth_summary.csv`, which `hw/syn/xilinx/dut/
-  project.tcl` already emits post-implementation: Fmax, WNS, LUT, LUTRAM, FF,
-  BRAM, URAM, DSP — plus the wall-clock build time the runner measures. Every
-  metric is recorded and reported; `--gate` picks which ones are *asserted*
-  (Fmax and LUT by default). Build time is bookkeeping, not a gate: it is too
-  host-dependent to assert, and it is what the scheduler orders the queue by.
-- **Critical paths**: each build also records its **top 10 unique critical
+  `dxa`; `asic_gate` mirrors them so a divergence between the two tools on the
+  same module is a real finding. A `config_hash` ties the two files together —
+  edit the spec and the gate refuses to compare against numbers recorded for the
+  old one (`STALE`). Its tool-specific half is the FPGA part plus opt level for
+  Vivado, and the PDK/VT/corner for Yosys, since ASAP7 RVT-TT and LVT-SS numbers
+  are not comparable any more than two different FPGAs are.
+- **Tiers `fpga` and `asic` are opt-in.** An empty `--tier` means "everything",
+  and everything is what a `ci.yml` *cell* can run — which these cannot. `fpga`
+  needs a licensed Vivado and hours of a whole machine; `asic` needs no licence
+  at all but 1–2 hours **per DUT**, which is a fan-out of standalone jobs rather
+  than one cell. `OPT_IN_TIERS` in `testcase.py` keeps both out of every hosted
+  event (including the nightly) unless asked for by name, so each runs only from
+  its own workflow (§4.4, §4.5).
+- **Metrics** all come from one `synth_summary.csv` per build, so the gate needs
+  no per-report parser and format knowledge stays next to the tool that produces
+  it. `hw/syn/xilinx/dut/project.tcl` writes it post-implementation;
+  `hw/syn/yosys/synth_summary.py` writes the ASIC equivalent by collapsing the
+  `reports/{stat_lib,sram_area,worst_slack,tns,power}.rpt` set the flow already
+  emits. Every metric is recorded and reported; `--gate` picks which ones are
+  *asserted*. Build time is bookkeeping, not a gate: it is too host-dependent to
+  assert, and it is what the scheduler orders the queue by.
+- **Critical paths** (Vivado only — Yosys/OpenSTA writes no equivalent report
+  the gate reads): each build also records its **top 10 unique critical
   paths** (slack, logic levels, clock group, startpoint, endpoint) — emitted by
   `project.tcl` whether or not timing closed, because a design that *meets* its
   target still has a worst path, and watching where it sits across commits is
@@ -299,35 +338,55 @@ self-hosted runner (§4.4). `asic_gate` — the same script over
   which stops reproducing surfaces as **XPASS** — reported loudly, asking you to
   clear the flag, but not converted into a hard failure.
 - **Early-failure watch**: a config mistake — a bad define, a missing source, a
-  parameter or hierarchy error — kills a build during *RTL elaboration*, seconds
-  into an otherwise multi-hour Vivado run. The runner follows each build's log
-  live and announces `Finished RTL Elaboration` as it lands, so a typo surfaces
-  in minutes instead of at the end of the sweep; a build that dies before that
-  point is reported as `FAILED BEFORE SYNTHESIS` with its Vivado `ERROR:` lines
+  parameter or hierarchy error — kills a build in the front end, seconds into an
+  otherwise multi-hour run. The runner follows each build's log live and
+  announces the point past which that can no longer happen: `Finished RTL
+  Elaboration` for Vivado, and for Yosys the `TIME gen-ys` stamp, which lands
+  once source generation *and* sv2v conversion have both succeeded — sv2v is the
+  parser on that flow, so it is where a bad define dies. A build that fails
+  before that point is reported as `FAILED BEFORE SYNTHESIS` with its error lines
   quoted inline, not as a generic non-zero make.
 - **Resumable sessions**: a sweep is hours long, so an interrupted one is picked
   back up rather than restarted. Each build dir carries a stamp
-  (`fpga_gate.json`: config hash + status + metrics), so `--resume` reuses a
+  (`<gate>.json`: config hash + status + metrics), so `--resume` reuses a
   build already finished *for this config*, lets an unfinished one pick up from
-  its Vivado post-synth/post-impl checkpoint, and runs the rest. A build whose
+  whatever it already produced (Vivado's post-synth/post-impl checkpoint; make's
+  own dependency graph on the Yosys side), and runs the rest. A build whose
   config changed since its stamp is rebuilt clean — resuming from those
   checkpoints would silently re-synthesize the old design. State lives next to
   the build tree it describes, not in a central session file, so it survives a
   kill and never desynchronizes from what is on disk.
-- **Progress**: each build reports Vivado phase transitions (setup →
-  elaboration → synthesis → opt → placement → routing → reporting) as they
-  land, with a heartbeat in between; `-v` streams the raw Vivado log instead.
+- **Progress**: each build reports its flow's phase transitions as they land
+  (Vivado: setup → elaboration → synthesis → opt → placement → routing →
+  reporting; Yosys: sources → sv2v → synthesis → sram → timing → reporting),
+  with a heartbeat in between; `-v` streams the raw tool log instead.
 - **Scheduling** is longest-processing-time-first over the recorded build times:
   the longest build is dispatched first so it is in flight from t=0, and the
   remaining slots churn through the short ones behind it. `-j` caps parallel
   builds (2 on the runner) and each build's Vivado job count is derived from it
   so the machine is not oversubscribed. Every build gets a unique `PREFIX`
-  (`fpga_gate_<id>`), so it has its own build tree and log and cannot collide
-  with a parallel build or with a hand-run synthesis on the same machine.
-- **Updating** — `ci/fpga_gate.py --update-baseline`, human-reviewed, committed
-  as an explicit `Fmax: 312 → 287` diff. Baselines also record the Vivado
-  version they were measured on; a run under a different version warns, because
-  Fmax across tool versions is not comparable.
+  (`<gate>_<id>`), so it has its own build tree and log and cannot collide
+  with a parallel build or with a hand-run synthesis on the same machine. On the
+  Yosys flow that is load-bearing rather than hygienic: `hw/syn/yosys/Makefile`
+  caches `$(BUILD_DIR)/src` and does not regenerate it when `EXTRA_INCLUDE`
+  changes, so two DUTs sharing one tree would silently synthesize the first
+  one's sources.
+- **Target-frequency check**: Fmax must also be within tolerance of the clock
+  the design was *built* for, independent of the baseline. A baseline recorded
+  below target must not let a build pass just by matching it — the gate answers
+  "does it meet the frequency it targets?", not only "did it get worse than last
+  time?". On the ASIC side this is the primary Fmax assertion, for the ABC reason
+  above.
+- **Updating** — `ci/{fpga,asic}_gate.py --update-baseline`, human-reviewed,
+  committed as an explicit `Fmax: 312 → 287` diff. Baselines also record the tool
+  versions they were measured on (Vivado; Yosys/OpenSTA/sv2v), and a run under a
+  different version warns — results across tool versions are not comparable, and
+  Yosys/ABC move area and Fmax far more between releases than Vivado does.
+- **DUT catalogs.** Each flow declares its DUTs once, in `dut/catalog.mk`, and
+  both a human (`make -C hw/syn/yosys/dut om`) and the gate go through it — so
+  the command CI runs and the command a developer runs cannot diverge. The gate
+  reads `DUTS` from that file to reject an unknown `dut:` in the spec before
+  starting a build.
 
 ---
 
@@ -400,6 +459,39 @@ overrides). The SHA is recorded once the gate reaches a *verdict* — pass or
 regression — so a red master is not re-synthesized every night (the failed run
 is the record); an infra/build error does not record, so the next nightly
 retries it.
+
+### 4.5 `asic_gate.yml` — nightly synthesis, fanned out on hosted runners
+
+The ASIC gate needs no licence and no dedicated machine, so it runs on stock
+hosted runners. What it does need is *time*: 1–2 hours **per DUT**. That is the
+shape that keeps it out of `ci.yml` — a cell is one job running a pytest slice,
+and eleven synthesis runs in series inside one cell would be a day.
+
+So it is its own workflow, and its builds **fan out to one standalone job each**:
+
+- `plan` reads `ci/testcases/asic_gate.yaml` via `ci/asic_gate.py --matrix` and
+  emits one matrix entry per build, ordered longest-first (GitHub starts matrix
+  jobs in order, so the slowest DUT is dispatched first — the same makespan
+  argument the in-process scheduler makes).
+- `synth` runs one build per job with `fail-fast: false`. Each DUT is an
+  independent measurement, and one regression must not cancel the ten other
+  numbers the run would have produced. The job's command comes from the
+  catalog's single `run:` case, narrowed with `-b <id>`, so what CI runs and what
+  the catalog declares cannot drift apart.
+- `report` joins the per-job `--report` JSONs into one table
+  (`ci/synth_report.py`) in the workflow summary, and records the SHA marker.
+
+Like `fpga_gate.yml` it **hard-pins master** and **skips itself when master has
+not moved** — but a hosted runner keeps no state between runs, so the "already
+gated this commit" marker is an actions-cache entry keyed by SHA (plus the spec's
+hash, so editing the build list re-gates) rather than a file in `~/.cache`. The
+marker is written once every build has reached a *verdict*, on the same reasoning
+as §4.4: a red master is not re-synthesized every night, and a build error does
+not record so the next nightly retries it.
+
+The prebuilt toolchain already carries yosys, sv2v and OpenSTA, so `setup-vortex`
+needs no change. ASAP7 is content-addressed by `hw/syn/libs/asap7/manifest.txt`,
+so that file's hash is the PDK cache key; the flow installs it on a miss.
 
 ---
 

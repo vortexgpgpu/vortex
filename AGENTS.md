@@ -25,7 +25,7 @@ This is the canonical entry point for **both human contributors and AI coding ag
 ### Simulation & test
 - [docs/simulation.md](docs/simulation.md) — driver modes (simx, rtlsim, opae, xrt) and blackbox usage
 - [docs/testing.md](docs/testing.md) — test and regression flow
-- [docs/debugging.md](docs/debugging.md) — debug traces (`--debug`), VCD, scope, trace_csv
+- [docs/debugging.md](docs/debugging.md) — debug traces (`--debug`), VCD (`--vcd`), scope, trace_csv
 - [docs/debug_mode.md](docs/debug_mode.md) — debug-mode hardware support
 - [docs/perfetto_analysis.md](docs/perfetto_analysis.md) — Perfetto trace and analysis
 - [docs/synthesis_analysis.md](docs/synthesis_analysis.md) — synthesis/PPA analysis
@@ -87,6 +87,7 @@ See [docs/testing.md](docs/testing.md) and [docs/debugging.md](docs/debugging.md
 - **RTL coverage path is `xrt`, not `rtlsim`.** When discussing or planning RTL verification, `xrt` is the canonical path — `rtlsim` bypasses the AFU surface. `rtlsim` remains useful for fast iteration on processor RTL; `xrt` is what proves the full integration.
 - **`ci/regression.sh` is the canonical source of tested configurations.** Use it to discover supported parameter combinations before inventing ad hoc ones.
 - **Perf-regression baselines (`ci/baselines/perf/*.json`) are golden data — never hand-edit them, and never "fix" a red perf gate by bumping the number.** They are regenerated only by `pytest ci -m perf_gate --update-baselines` (a human-run, reviewed step), and CI must never pass that flag. A `perf_gate` failure means real cycles moved: root-cause it, or — if the change is intended — regenerate the baseline so the diff shows the perf delta for review. Same rule as image goldens and `known_issue:`.
+- **Synthesis baselines (`ci/baselines/synthesis/{xilinx,yosys}/*.json`) are golden data under the same rule** — never hand-edited, regenerated only by a human running `ci/fpga_gate.py --update-baseline` / `ci/asic_gate.py --update-baseline`, never by CI. A red `fpga_gate`/`asic_gate` means real Fmax or area moved. Note the two gates measure the *same* `hw/unittest/*/VX_*_top.sv` wrappers through different flows, so a divergence between them is a finding, not noise — keep `hw/syn/{xilinx,yosys}/dut/catalog.mk` in step when you add or rename a DUT. See [docs/designs/continuous_integration.md §3.5](docs/designs/continuous_integration.md).
 - **SimX is the RTL's timing model — keep them in lockstep.** Any change that moves RTL cycles (pipeline structure, arbitration, queue depths, cache/memory behavior) must land together with the matching SimX timing-model update, and vice-versa. The `model_parity` CI gate enforces this: a `check: model_parity` case (`ci/testcases/core.yaml` + per-extension parity categories) runs the same app/args/configs on simx and rtlsim and asserts exact retired-instruction match plus cycle agreement within the case tolerance (default 5%). Never widen a tolerance to absorb a divergence — model the behavior. When adding a hardware feature, add or extend a parity case that exercises it.
 - **When RTL debugging stalls, switch to the SimX-as-oracle pattern.** For numerical bugs, deep pipeline races, or any failure mode where rtlsim is "close but wrong": (1) build/extend the SimX C++ model so it mirrors the *new* RTL architecture and gets to PASS; (2) add matching trace dumps to both SimX and RTL (cycle, FU events, SRAM addresses+data, hazards) — same CSV format on both sides; (3) diff trace files — the first divergence is the bug. Don't keep guessing from output values; localize via trace diff. See [docs/debugging.md](docs/debugging.md#simx-as-oracle-for-rtl-debug).
 
@@ -108,7 +109,7 @@ make -C tests/opencl     run-rtlsim
 
 ### Architecture overrides
 
-`blackbox.sh` exposes the common knobs directly: `--clusters=`, `--cores=`, `--warps=`, `--threads=`, `--l2cache`, `--l3cache`, `--debug=`, `--perf=`. For anything not exposed as a flag, use `CONFIGS="-D..."` (all parameters take the `VX_CFG_*` prefix — e.g. `-DVX_CFG_NUM_THREADS=8`, `-DVX_CFG_EXT_TCU_ENABLE`). Baseline parameters live in `VX_config.toml` and `VX_types.toml` at the repo root — edit those only when an override is needed for *all* builds, and re-`configure` afterward.
+`blackbox.sh` exposes the common knobs directly: `--clusters=`, `--cores=`, `--warps=`, `--threads=`, `--l2cache`, `--l3cache`, `--debug=`, `--vcd`, `--perf=`. For anything not exposed as a flag, use `CONFIGS="-D..."` (all parameters take the `VX_CFG_*` prefix — e.g. `-DVX_CFG_NUM_THREADS=8`, `-DVX_CFG_EXT_TCU_ENABLE`). Baseline parameters live in `VX_config.toml` and `VX_types.toml` at the repo root — edit those only when an override is needed for *all* builds, and re-`configure` afterward.
 
 ```bash
 ./ci/blackbox.sh --driver=simx --app=sgemm --clusters=1 --cores=2 --warps=4 --threads=4 --l2cache

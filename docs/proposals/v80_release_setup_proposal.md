@@ -273,7 +273,6 @@ simply was not running as a service. It was deleted rather than kept.
 This makes *setup* release-quality. It does not address the open hardware
 issues — the `demo`/`stencil3d` wrong results, or the shell's fixed 200 MHz
 kernel clock. Those are tracked in
-[`../reports/v80_timing_closure.md`](../reports/v80_timing_closure.md) and
 [`../designs/aved_driver_architecture.md`](../designs/aved_driver_architecture.md).
 
 A clean install that reaches a board with known bugs is still progress: the
