@@ -252,39 +252,18 @@ public:
 
   #ifdef CPP_API
 
-    // When no usable vbin was named, fall back to the one that is actually
-    // resident on the card: jtag_load_vortex.sh records its absolute path in
-    // /tmp/v80_resident_afu.path (cleared by reboot, exactly when the AFU is
-    // lost too). This is also the SAFEST choice -- the vbin here supplies
-    // metadata (system_map.xml), and metadata must describe the image the
-    // silicon is really running.
-    std::string vbin_storage;
-    if (access(vbin_path, R_OK) != 0) {
-      std::ifstream stamp("/tmp/v80_resident_afu.path");
-      std::string line;
-      if (std::getline(stamp, line) && !line.empty()
-          && access(line.c_str(), R_OK) == 0) {
-        vbin_storage = line;
-        fprintf(stderr, "[VXDRV] using resident vbin %s (set VRT_VBIN_PATH "
-                "to override)\n", vbin_storage.c_str());
-        vbin_path = vbin_storage.c_str();
-      }
-    }
-
-    // Each vrt::Device open reprograms the PL, and a design write only
-    // succeeds on a freshly reset device: vrtd runs its reset sequence only
-    // when the requested shell differs from the current one, so once the shell
-    // reads "compute" no reset happens and the load fails with "Input/output
-    // error", taking the AMC to NO_AMC and costing a recovery -- observed
-    // 2026-08-28: a programming attempt on the live card knocked the ami
-    // kernel module out entirely. The test harness therefore defaults
-    // hardware runs to VORTEX_AVED_NO_PROGRAM=1 (tests/regression/common.mk);
-    // set VORTEX_AVED_NO_PROGRAM=0 explicitly to program.
-    const char* noprog = getenv("VORTEX_AVED_NO_PROGRAM");
-    const bool program = (noprog == nullptr || noprog[0] == '\0'
-                          || noprog[0] == '0');
+    // Program the PL on open, exactly as the XRT driver's load_xclbin() does.
+    //
+    // This is only correct because the static shell lives in OSPI flash. vrtd
+    // runs its reset sequence when the requested shell differs from the
+    // current one, and a design write only succeeds on a freshly reset device.
+    // A board whose flash was never written reports Shell: unknown, so the
+    // requested/current comparison never settles and a program attempt can
+    // fail mid-write and take the AMC to NO_AMC. Write the shell to flash
+    // (v80-smi write-static-shell --flash, BOTH boot partitions) before using
+    // this driver; `v80-smi list` must report Shell: compute.
     VRT_TRY()
-      vrtDevice_ = vrt::Device(bdf, vbin_path, program);
+      vrtDevice_ = vrt::Device(bdf, vbin_path, /*program=*/true);
       // Only the hardware platform has a slave bridge, so anything else needs
       // the explicit host-memory sync in cp_reg_write/cp_reg_read.
       sim_mode_  = (vrtDevice_.getPlatform() != vrt::Platform::HARDWARE);

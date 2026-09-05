@@ -16,13 +16,6 @@ TEST="${1:?usage: run_hw_test.sh <test> [opts]}"
 shift
 TIMEOUT="${HW_TIMEOUT:-300}"
 
-# The design is loaded over JTAG (jtag_load_vortex.sh), so the runtime must not
-# reprogram it. Letting it try goes through vrtd's design writer, which runs a
-# reset sequence and toggles a secondary bus reset on the card's root port --
-# the path this whole flow exists to avoid. Set VORTEX_AVED_NO_PROGRAM=0 to
-# opt back in.
-export VORTEX_AVED_NO_PROGRAM="${VORTEX_AVED_NO_PROGRAM:-1}"
-
 source /home/blaise/dev/xilinx_setup_aved.sh >/dev/null || exit 1
 
 VORTEX_HOME=/home/blaise/dev/vortex_gfxw_v2
@@ -46,7 +39,7 @@ export LD_LIBRARY_PATH="$BUILD/sw/runtime:${LD_LIBRARY_PATH:-}"
 # Which synthesis output to run -- and it must be the one actually resident in
 # the fabric.
 #
-# With VORTEX_AVED_NO_PROGRAM=1 this vbin is never written to the card, so it
+# The vbin is programmed on open by the runtime, so it
 # is tempting to treat it as a formality. It is not: portMemoryConfig() reads
 # its system_map.xml to decide whether the CP's memory is staged in HBM or
 # reached through the QDMA slave bridge. Hand over a vbin from a different
