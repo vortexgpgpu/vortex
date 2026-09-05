@@ -71,10 +71,22 @@ report_units
 set clks [get_clocks *]
 if {[llength $clks] > 0} { report_clock_properties $clks } else { puts "No clocks defined." }
 
-report_wns
-report_tns
-report_wns > [file join $RPT_DIR "wns.rpt"]
-report_tns > [file join $RPT_DIR "tns.rpt"]
+# -digits 4, not the default 2: ABC maps to the target period and stops, so the
+# design closes with picoseconds of margin (0.032 ns on a 1.25 ns period is
+# typical). At 2 digits that rounds to 0.00 and "met with margin" becomes
+# indistinguishable from "missed by 4 ps" -- which is the whole signal, since
+# Fmax is derived from this slack.
+report_wns -digits 4
+report_tns -digits 4
+report_wns -digits 4 > [file join $RPT_DIR "wns.rpt"]
+report_tns -digits 4 > [file join $RPT_DIR "tns.rpt"]
+
+# report_wns is worst NEGATIVE slack: it clamps at 0, so a design that closes
+# reports 0 no matter how much margin it has, and an Fmax derived from it is
+# just the target clock read back. report_worst_slack is signed, so it is what
+# says how fast the netlist can actually go.
+report_worst_slack -digits 4
+report_worst_slack -digits 4 > [file join $RPT_DIR "worst_slack.rpt"]
 
 # Keep report_checks options conservative for 2.7.0 compatibility
 report_checks -path_delay max -digits 3 -format full_clock_expanded
