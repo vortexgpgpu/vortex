@@ -287,6 +287,8 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `RUNTIME_ASSERT(!gmem_bus_if.rsp_valid, ("unexpected response to S2G store"))
     `RUNTIME_ASSERT(!read_response_fire || (smem_bus_if.rsp_data.tag.uuid == active_uuid),
         ("S2G LMEM response UUID mismatch"))
+    `RUNTIME_ASSERT(!read_response_fire || (smem_bus_if.rsp_data.tag.value == route_tag),
+        ("S2G LMEM response route tag mismatch"))
 
 endmodule
 
