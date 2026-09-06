@@ -1,0 +1,4 @@
+mode,description,cycles,instructions,ipc,host_seconds
+0,TMA load + WGMMA/epilogue + S2G store,579919,102113,0.176,11.2334
+1,TMA load + WGMMA/epilogue + global store,568686,100867,0.177,11.0935
+2,LSU load + WGMMA/epilogue + global store,833697,127066,0.152,13.0926
