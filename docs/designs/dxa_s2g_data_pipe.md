@@ -18,6 +18,24 @@ adding read credits requires extending that tag route or using a per-port
 response reorder table.  The line FIFO still removes store-side head-of-line
 blocking and provides the integration point for that future credit extension.
 
+The reserved `VX_CFG_DXA_S2G_PIPE_MULTI_READ` switch adds
+`slot_bits + 4` bits to `DXA_LMEM_TAG_W` (commit `369dfbae3`).  The intended
+encoding is:
+
+```text
+tag.value = {word_index[3:0], slot_index, core_id, dxa_engine_bit}
+```
+
+`VX_dxa_s2g_data_pipe` can then issue up to `READ_CREDITS` LMEM requests,
+incrementing `words_issued[slot]` on each handshake.  A response decodes
+`{slot,word}` and writes directly into that slot's payload; `words_done[slot]`
+sets `complete` when it reaches `word_count`.  The existing
+`VX_dxa_core.sv`/`VX_socket.sv` tag adapters already derive their widths from
+`DXA_LMEM_TAG_W` and `DXA_LMEM_OUT_TAG_W`, so the macro preserves the default
+route and makes the extra width explicit for synthesis assertions.  The
+multi-read datapath itself is intentionally left behind this switch until a
+directed OOO-response test is added.
+
 `SOURCE_CONSUMED` is generated once, after the final address-generator token
 has arrived and every accepted line has captured all source words.  It is
 independent of destination visibility.  OOB tokens consume no payload slot;
