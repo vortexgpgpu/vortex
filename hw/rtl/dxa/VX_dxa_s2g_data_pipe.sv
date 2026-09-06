@@ -18,7 +18,6 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input wire transfer_active,
     input wire pipeline_start,
     input wire zero_length,
-    input wire                       zero_length,
     input wire                       ag_valid,
     output wire                      ag_ready,
     input wire [GMEM_ADDR_WIDTH-1:0] ag_cl_addr,
@@ -77,7 +76,6 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [SLOT_W-1:0] read_slot_r;
     reg [WORD_INDEX_W-1:0] read_word_r;
     reg source_done_r;
-    reg source_done_has_store_r;
     reg source_signaled_r;
     reg last_token_seen_r;
     reg last_token_has_store_r;
@@ -89,7 +87,7 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire [GMEM_OFF_BITS:0] input_source_end =
         (GMEM_OFF_BITS+1)'(ag_smem_byte_addr[SMEM_OFF_BITS-1:0]) + ag_valid_length;
-    wire [GMEM_OFF_BITS:0] input_word_count =
+    wire [WORD_COUNT_W-1:0] input_word_count =
         (input_source_end + (GMEM_OFF_BITS+1)'(SMEM_BYTES - 1)) >> SMEM_OFF_BITS;
     wire token_fire = ag_valid && ag_ready;
     wire have_free = valid_count_r < SLOT_COUNT_W'(SLOTS);
@@ -153,6 +151,7 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [GMEM_BYTES:0] byteen_seed =
         ((GMEM_BYTES+1)'(1) << slots_r[emit_slot].valid_length) - (GMEM_BYTES+1)'(1);
     wire [GMEM_BYTES-1:0] emit_byteen = GMEM_BYTES'(byteen_seed) << slots_r[emit_slot].byte_offset;
+    `UNUSED_VAR (byteen_seed[GMEM_BYTES])
     wire store_fire = out_valid && gmem_bus_if.req_ready;
     wire last_store_fire = store_fire && slots_r[emit_slot].last;
     assign gmem_bus_if.req_valid = out_valid;
@@ -196,7 +195,6 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             read_slot_r <= '0;
             read_word_r <= '0;
             source_done_r <= zero_length;
-            source_done_has_store_r <= 1'b0;
             source_signaled_r <= 1'b0;
             last_token_seen_r <= 1'b0;
             last_token_has_store_r <= 1'b0;
@@ -208,14 +206,12 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             for (si = 0; si < SLOTS; ++si) slots_r[si] <= '0;
             if (pipeline_start && zero_length) begin
                 source_done_r <= 1'b1;
-                source_done_has_store_r <= 1'b0;
                 source_signaled_r <= 1'b1;
                 completion_pending_r <= 1'b1;
                 destination_done_r <= 1'b1;
             end
         end else begin
             source_done_r <= 1'b0;
-            source_done_has_store_r <= 1'b0;
             if (!read_active_r && have_read_candidate) begin
                 read_active_r <= 1'b1;
                 read_slot_r <= read_candidate;
@@ -269,7 +265,6 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             if (!source_signaled_r && (last_token_seen_r || (token_fire && ag_last))
                 && !(token_fire && !ag_oob) && !read_active_r && !source_pending_any) begin
                 source_done_r <= 1'b1;
-                source_done_has_store_r <= last_token_has_store_r || (token_fire && ag_last && !ag_oob);
                 source_signaled_r <= 1'b1;
                 completion_pending_r <= 1'b1;
                 if (!(last_token_has_store_r || (token_fire && ag_last && !ag_oob)))
