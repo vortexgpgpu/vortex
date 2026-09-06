@@ -668,6 +668,8 @@ VX_CSR_MPM_LOAD_LT      = 0xB1D # total LSU load latency
 VX_CSR_MPM_LOAD_LT_H    = 0xB9D
 VX_CSR_MPM_STORES       = 0xB1E # total LSU store requests
 VX_CSR_MPM_STORES_H     = 0xB9E
+VX_CSR_MPM_STACK_STORES = 0xB1F # LSU store lanes whose address is in the per-thread stack window (register spills)
+VX_CSR_MPM_STACK_STORES_H = 0xB9F
 
 # VM/MMU counters are part of the MEM class (see [csr_mpm_mem] below).
 

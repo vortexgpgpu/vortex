@@ -66,6 +66,7 @@ public:
     uint64_t ifetches = 0;
     uint64_t loads = 0;
     uint64_t stores = 0;
+    uint64_t stack_stores = 0;   // store lanes into the per-thread stack window (spills)
     uint64_t ifetch_latency = 0;
     uint64_t load_latency = 0;
   };

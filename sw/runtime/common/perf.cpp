@@ -644,22 +644,22 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       if (rep_core >= num_cores)
         break;
       uint64_t v = 0;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OP_REQS,     rep_core, &v), { return err; }); op_reqs     += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OUT_REQS,    rep_core, &v), { return err; }); out_reqs    += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_COMPUTE,     rep_core, &v), { return err; }); compute     += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_NEXT_K_LOAD_STALL,    rep_core, &v), { return err; }); next_k_load_stall    += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_MEM_WAIT,    rep_core, &v), { return err; }); tma_mem_wait    += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_BUF_STARVE,    rep_core, &v), { return err; }); tma_buf_starve    += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_OP_FILL,   rep_core, &v), { return err; }); tma_op_fill   += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_ADDRGEN,     rep_core, &v), { return err; }); tma_addrgen     += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_STORE_ISSUE_STALL,  rep_core, &v), { return err; }); tma_store_issue_stall  += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_STORE_DRAIN, rep_core, &v), { return err; }); store_drain += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_SMEM_READ_MODEL,      rep_core, &v), { return err; }); smem_read_model      += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,  rep_core, &v), { return err; }); next_tile_load_stall  += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL, rep_core, &v), { return err; }); prev_tile_store_stall += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_DESC_WAIT,   rep_core, &v), { return err; }); desc_wait    += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_BUSY,        rep_core, &v), { return err; }); busy         += v;
-      CHECK_ERR(vx_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_ACC_INIT, rep_core, &v), { return err; }); tma_acc_init += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OP_REQS,     rep_core, &v), { return err; }); op_reqs     += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_OUT_REQS,    rep_core, &v), { return err; }); out_reqs    += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_COMPUTE,     rep_core, &v), { return err; }); compute     += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_NEXT_K_LOAD_STALL,    rep_core, &v), { return err; }); next_k_load_stall    += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_MEM_WAIT,    rep_core, &v), { return err; }); tma_mem_wait    += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_BUF_STARVE,    rep_core, &v), { return err; }); tma_buf_starve    += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_OP_FILL,   rep_core, &v), { return err; }); tma_op_fill   += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_ADDRGEN,     rep_core, &v), { return err; }); tma_addrgen     += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_STORE_ISSUE_STALL,  rep_core, &v), { return err; }); tma_store_issue_stall  += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_STORE_DRAIN, rep_core, &v), { return err; }); store_drain += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_SMEM_READ_MODEL,      rep_core, &v), { return err; }); smem_read_model      += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_NEXT_TILE_LOAD_STALL,  rep_core, &v), { return err; }); next_tile_load_stall  += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_PREV_TILE_STORE_STALL, rep_core, &v), { return err; }); prev_tile_store_stall += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_DESC_WAIT,   rep_core, &v), { return err; }); desc_wait    += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_BUSY,        rep_core, &v), { return err; }); busy         += v;
+      CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DTCU_TMA_ACC_INIT, rep_core, &v), { return err; }); tma_acc_init += v;
     }
     // Labels match the CSR names. The FSM family sums to the busy timeline;
     // the tma_* engine family overlaps compute (never add the two).

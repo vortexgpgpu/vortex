@@ -160,6 +160,7 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_IFETCH_LT, core_perf.ifetch_latency);
         CSR_READ_64(VX_CSR_MPM_LOADS, core_perf.loads);
         CSR_READ_64(VX_CSR_MPM_STORES, core_perf.stores);
+        CSR_READ_64(VX_CSR_MPM_STACK_STORES, core_perf.stack_stores);
         CSR_READ_64(VX_CSR_MPM_LOAD_LT, core_perf.load_latency);
         }
       } break;

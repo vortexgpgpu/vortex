@@ -444,10 +444,20 @@ void LsuUnit::process_request_step(uint32_t b) {
 		uint32_t t0 = state.addr_list.size() - state.remain_addrs;
 		uint32_t beat_n = std::min<uint32_t>(VX_CFG_NUM_LSU_LANES, state.remain_addrs);
 		std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
+		// Per-thread stacks occupy [STACK_BASE - threads * 2^STACK_LOG2_SIZE, STACK_BASE);
+		// a store landing there is a register spill (or a genuine stack variable), and a
+		// 32-lane spill scatters over 32 lines 8 KB apart -- expensive enough to count.
+		constexpr uint64_t kStackHi = uint64_t(VX_MEM_STACK_BASE_ADDR);
+		constexpr uint64_t kStackLo = kStackHi
+			- (uint64_t(VX_CFG_NUM_CLUSTERS) * VX_CFG_NUM_CORES * VX_CFG_NUM_WARPS * VX_CFG_NUM_THREADS
+			   << VX_MEM_STACK_LOG2_SIZE);
+		uint32_t stack_count = 0;
 		for (uint32_t i = 0; i < beat_n; ++i) {
 			auto& entry = state.addr_list.at(t0 + i);
 			if (entry.size == 0)
 				continue; // inactive tid: keep the lane hole (tid-stable mapping)
+			if (is_write && !is_amo && entry.addr >= kStackLo && entry.addr < kStackHi)
+				++stack_count;
 			// Address goes downstream as VA. The per-core dcache MMU
 			// (under VX_CFG_VM_ENABLE) substitutes PA before the request reaches
 			// the cache; with VM off, the address is already the PA.
@@ -503,6 +513,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 		// update stats
 		if (is_write) {
 			core_->perf_stats().stores += count;
+			core_->perf_stats().stack_stores += stack_count;
 		} else {
 			core_->perf_stats().loads += count;
 			pending_loads_ += count;
