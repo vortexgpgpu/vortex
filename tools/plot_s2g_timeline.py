@@ -42,7 +42,7 @@ def parse(path, binsize, line_bytes):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin-cycles", type=int, default=512)
-    ap.add_argument("--smooth-bins", type=int, default=9)
+    ap.add_argument("--smooth-bins", type=int, default=11)
     ap.add_argument("--line-bytes", type=int, default=64)
     ap.add_argument("--issue-width", type=int, default=2)
     ap.add_argument("--out", required=True)
