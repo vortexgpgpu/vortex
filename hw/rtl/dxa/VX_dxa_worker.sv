@@ -17,6 +17,12 @@
 
 `include "VX_define.vh"
 
+`ifdef VX_CFG_DXA_S2G_PIPELINED
+`ifndef VX_CFG_DXA_S2G_PIPE_SLOTS
+`define VX_CFG_DXA_S2G_PIPE_SLOTS 4
+`endif
+`endif
+
 module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter WORKER_ID = 0,
@@ -347,11 +353,20 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [31:0] s2g_sent_count;
     wire [31:0] s2g_read_count;
 
+`ifdef VX_CFG_DXA_S2G_PIPELINED
+    VX_dxa_s2g_data_pipe #(
+        .SLOTS            (`VX_CFG_DXA_S2G_PIPE_SLOTS),
+        .GMEM_LINE_SIZE   (GMEM_BYTES),
+        .GMEM_ADDR_WIDTH  (GMEM_ADDR_WIDTH),
+        .GMEM_OFF_BITS    (GMEM_OFF_BITS)
+    ) s2g_data (
+`else
     VX_dxa_s2g_data #(
         .GMEM_LINE_SIZE (GMEM_BYTES),
         .GMEM_ADDR_WIDTH(GMEM_ADDR_WIDTH),
         .GMEM_OFF_BITS  (GMEM_OFF_BITS)
     ) s2g_data (
+`endif
         .clk                (clk),
         .reset              (reset),
         .transfer_active    (transfer_active && active_s2g),
