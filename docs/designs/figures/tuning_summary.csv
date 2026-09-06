@@ -3,3 +3,5 @@ stages,wait_n,wgmma_nrc,k_tiles,iters,mode0_s2g_cycles,mode1_staged_global_cycle
 3,2,16,4,16,563882,601005,864703,fair SMEM-staged global baseline; S2G 1.066x faster
 3,0,16,4,8,280000,NA,NA,wait-N sensitivity sweep; correctness pass
 3,2,16,4,8,NA,NA,NA,artificial 1M-cycle source delay; wait-N correctness pass, no speedup because compute dominates
+3,2,16,1,8,246607,277694,NA,4 compute warps and 32x16 output; S2G 1.126x faster than staged global
+2,1,16,2,1,47482,50922,64777,4 compute warps and 32x16 output; S2G 1.072x faster than staged global
