@@ -162,12 +162,14 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign gmem_bus_if.req_data.tag.uuid = active_uuid;
     assign gmem_bus_if.req_data.tag.value = '0;
     assign gmem_bus_if.rsp_ready = 1'b0;
+    wire [GMEM_DATAW-1:0] emit_bus_data;
+    assign gmem_bus_if.req_data.data = emit_bus_data;
     genvar bi;
     generate for (bi = 0; bi < GMEM_BYTES; ++bi) begin : g_emit_byte
         wire [SOURCE_BYTE_W-1:0] source_byte =
             SOURCE_BYTE_W'(slots_r[emit_slot].smem_byte_offset)
             + SOURCE_BYTE_W'((GMEM_OFF_BITS+1)'(bi) - {1'b0, slots_r[emit_slot].byte_offset});
-        assign gmem_bus_if.req_data.data[bi*8 +: 8] = emit_byteen[bi]
+        assign emit_bus_data[bi*8 +: 8] = emit_byteen[bi]
             ? emit_data[source_byte*8 +: 8] : 8'h00;
     end endgenerate
 
@@ -222,7 +224,7 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             end
             if (read_response_fire) begin
                 slots_r[read_slot].data[slots_r[read_slot].words_done*SMEM_BYTES*8 +: SMEM_BYTES*8]
-                    <= smem_bus_if.rsp_data.data;
+                    <= SOURCE_DATAW'(smem_bus_if.rsp_data.data);
                 read_active_r <= 1'b0;
                 if (slots_r[read_slot].words_done + 1 < slots_r[read_slot].word_count) begin
                     slots_r[read_slot].words_done <= slots_r[read_slot].words_done + 1'b1;
