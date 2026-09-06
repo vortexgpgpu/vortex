@@ -4,7 +4,9 @@ These three plots were generated from DEBUG=4 SimX traces produced on
 `orcas2.cs.ucla.edu` (`chengxuan`, RTX A4000 host), with L2 enabled and
 `WGMMA_NRC=16`, `ATT_K_TILES=4`, `ATT_ITERS=16`, and a real three-slot output
 ring. Each trace was filtered only to pipeline-issue, L2 request, and DRAM
-request records before plotting with `plot_util_timeline.py`.
+request records before plotting with `tools/plot_s2g_timeline.py`. The dark
+curves are an 11-bin moving average; faint curves retain the raw samples so
+the smoothing does not hide burstiness.
 
 The measured cycle counts are in `steady_kernel_metrics.csv`. For the fair
 staged comparison, S2G is 1.066x faster than the TMA-load path whose output is
