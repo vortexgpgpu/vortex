@@ -52,6 +52,13 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam SOURCE_BYTE_W = `CLOG2(MAX_WORDS * SMEM_BYTES);
     localparam SLOT_W = `UP(`CLOG2(SLOTS));
     localparam SLOT_COUNT_W = `CLOG2(SLOTS + 1);
+`ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+    localparam READ_CREDITS = SLOTS;
+`else
+    localparam READ_CREDITS = 1;
+`endif
+    localparam READ_COUNT_W = `UP(`CLOG2(READ_CREDITS + 1));
+    localparam TAG_BASE_W = NC_BITS + 1;
 
     typedef struct packed {
         logic [GMEM_ADDR_WIDTH-1:0] cl_addr;
@@ -64,6 +71,10 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         logic complete;
         logic emitted;
         logic [WORD_INDEX_W-1:0] words_done;
+        logic [WORD_INDEX_W-1:0] words_issued;
+`ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+        logic [MAX_WORDS-1:0] words_seen;
+`endif
         logic [WORD_COUNT_W-1:0] word_count;
         logic [SOURCE_DATAW-1:0] data;
     } slot_t;
@@ -72,10 +83,11 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [SLOTS-1:0] valid_r;
     reg [SLOT_W-1:0] alloc_ptr_r;
     reg [SLOT_COUNT_W-1:0] valid_count_r;
-    reg read_active_r;
-    reg read_req_sent_r;
-    reg [SLOT_W-1:0] read_slot_r;
-    reg [WORD_INDEX_W-1:0] read_word_r;
+    reg [READ_COUNT_W-1:0] read_pending_r;
+`ifndef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+    reg [SLOT_W-1:0] request_slot_r;
+    reg [WORD_INDEX_W-1:0] request_word_r;
+`endif
     reg source_signaled_r;
     reg last_token_seen_r;
     reg last_token_has_store_r;
@@ -94,21 +106,40 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign ag_ready = have_free && !pipeline_start;
 
     wire [SLOT_W-1:0] alloc_slot = alloc_ptr_r;
-    wire [SLOT_W-1:0] read_slot = read_slot_r;
-    wire read_request_valid = read_active_r && !read_req_sent_r;
+    wire [SLOT_W-1:0] read_slot = read_candidate;
+    wire [WORD_INDEX_W-1:0] read_word = slots_r[read_candidate].words_issued;
+    wire read_request_valid = have_read_candidate && (read_pending_r < READ_COUNT_W'(READ_CREDITS));
     wire [SMEM_TAG_VALUE_W-1:0] route_tag =
         (SMEM_TAG_VALUE_W'(active_core_id) << 1) | SMEM_TAG_VALUE_W'(1);
     assign smem_bus_if.req_valid = read_request_valid;
     assign smem_bus_if.req_data.rw = 1'b0;
-    assign smem_bus_if.req_data.addr = slots_r[read_slot].smem_word_addr + SMEM_ADDR_WIDTH'(read_word_r);
+    assign smem_bus_if.req_data.addr = slots_r[read_slot].smem_word_addr + SMEM_ADDR_WIDTH'(read_word);
     assign smem_bus_if.req_data.data = '0;
     assign smem_bus_if.req_data.byteen = '0;
     assign smem_bus_if.req_data.attr = '0;
     assign smem_bus_if.req_data.tag.uuid = active_uuid;
-    assign smem_bus_if.req_data.tag.value = route_tag;
+`ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+    wire [SMEM_TAG_VALUE_W-1:0] request_tag_value = route_tag
+        | (SMEM_TAG_VALUE_W'(read_slot) << TAG_BASE_W)
+        | (SMEM_TAG_VALUE_W'(read_word) << (TAG_BASE_W + `VX_DXA_PIPE_SLOT_BITS));
+`else
+    wire [SMEM_TAG_VALUE_W-1:0] request_tag_value = route_tag;
+`endif
+    assign smem_bus_if.req_data.tag.value = request_tag_value;
     wire read_request_fire = smem_bus_if.req_valid && smem_bus_if.req_ready;
-    assign smem_bus_if.rsp_ready = read_active_r;
+    assign smem_bus_if.rsp_ready = (read_pending_r != 0);
     wire read_response_fire = smem_bus_if.rsp_valid && smem_bus_if.rsp_ready;
+
+`ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+    wire [SLOT_W-1:0] response_slot =
+        smem_bus_if.rsp_data.tag.value[TAG_BASE_W + `VX_DXA_PIPE_SLOT_BITS - 1:TAG_BASE_W];
+    wire [WORD_INDEX_W-1:0] response_word =
+        WORD_INDEX_W'(smem_bus_if.rsp_data.tag.value >>
+            (TAG_BASE_W + `VX_DXA_PIPE_SLOT_BITS));
+`else
+    wire [SLOT_W-1:0] response_slot = request_slot_r;
+    wire [WORD_INDEX_W-1:0] response_word = request_word_r;
+`endif
 
     reg have_read_candidate;
     reg [SLOT_W-1:0] read_candidate;
@@ -117,7 +148,8 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         have_read_candidate = 1'b0;
         read_candidate = '0;
         for (ri = 0; ri < SLOTS; ++ri) begin
-            if (!have_read_candidate && valid_r[ri] && !slots_r[ri].complete) begin
+            if (!have_read_candidate && valid_r[ri] && !slots_r[ri].complete
+                && (slots_r[ri].words_issued < slots_r[ri].word_count)) begin
                 have_read_candidate = 1'b1;
                 read_candidate = SLOT_W'(ri);
             end
@@ -193,10 +225,11 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             valid_r <= '0;
             alloc_ptr_r <= '0;
             valid_count_r <= '0;
-            read_active_r <= 1'b0;
-            read_req_sent_r <= 1'b0;
-            read_slot_r <= '0;
-            read_word_r <= '0;
+            read_pending_r <= '0;
+`ifndef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+            request_slot_r <= '0;
+            request_word_r <= '0;
+`endif
             source_signaled_r <= 1'b0;
             last_token_seen_r <= 1'b0;
             last_token_has_store_r <= 1'b0;
@@ -212,27 +245,38 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                 destination_done_r <= 1'b1;
             end
         end else begin
-            if (!read_active_r && have_read_candidate) begin
-                read_active_r <= 1'b1;
-                read_req_sent_r <= 1'b0;
-                read_slot_r <= read_candidate;
-                read_word_r <= slots_r[read_candidate].words_done;
-            end
             if (read_request_fire) begin
-                read_req_sent_r <= 1'b1;
+`ifndef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+                request_slot_r <= read_slot;
+                request_word_r <= read_word;
+`endif
+                slots_r[read_slot].words_issued <= slots_r[read_slot].words_issued + 1'b1;
                 read_count_r <= read_count_r + 32'd1;
             end
             if (read_response_fire) begin
-                slots_r[read_slot].data[slots_r[read_slot].words_done*SMEM_BYTES*8 +: SMEM_BYTES*8]
-                    <= smem_bus_if.rsp_data.data[SMEM_BYTES*8-1:0];
-                read_active_r <= 1'b0;
-                read_req_sent_r <= 1'b0;
-                if (slots_r[read_slot].words_done + 1 < slots_r[read_slot].word_count) begin
-                    slots_r[read_slot].words_done <= slots_r[read_slot].words_done + 1'b1;
-                end else begin
-                    slots_r[read_slot].complete <= 1'b1;
+`ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+                if (!slots_r[response_slot].words_seen[response_word]) begin
+                    slots_r[response_slot].data[response_word*SMEM_BYTES*8 +: SMEM_BYTES*8]
+                        <= smem_bus_if.rsp_data.data[SMEM_BYTES*8-1:0];
+                    slots_r[response_slot].words_seen[response_word] <= 1'b1;
+                    slots_r[response_slot].words_done <= slots_r[response_slot].words_done + 1'b1;
+                    if (slots_r[response_slot].words_done + 1 >= slots_r[response_slot].word_count)
+                        slots_r[response_slot].complete <= 1'b1;
                 end
+`else
+                slots_r[response_slot].data[response_word*SMEM_BYTES*8 +: SMEM_BYTES*8]
+                    <= smem_bus_if.rsp_data.data[SMEM_BYTES*8-1:0];
+                if (slots_r[response_slot].words_done + 1 < slots_r[response_slot].word_count)
+                    slots_r[response_slot].words_done <= slots_r[response_slot].words_done + 1'b1;
+                else
+                    slots_r[response_slot].complete <= 1'b1;
+`endif
             end
+            case ({read_request_fire, read_response_fire})
+                2'b10: read_pending_r <= read_pending_r + 1'b1;
+                2'b01: read_pending_r <= read_pending_r - 1'b1;
+                default: read_pending_r <= read_pending_r;
+            endcase
             if (token_fire) begin
                 if (ag_oob) begin
                     // Out-of-bounds address-generator tokens carry no source
@@ -251,6 +295,10 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     slots_r[alloc_slot].last <= ag_last;
                     slots_r[alloc_slot].oob <= 1'b0;
                     slots_r[alloc_slot].words_done <= '0;
+                    slots_r[alloc_slot].words_issued <= '0;
+`ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+                    slots_r[alloc_slot].words_seen <= '0;
+`endif
                     slots_r[alloc_slot].word_count <= WORD_COUNT_W'(input_word_count);
                     slots_r[alloc_slot].emitted <= 1'b0;
                     slots_r[alloc_slot].data <= '0;
@@ -266,7 +314,7 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             // while earlier lines are still gathering.  Delay the
             // SOURCE_CONSUMED event until every accepted line is complete.
             if (!source_signaled_r && (last_token_seen_r || (token_fire && ag_last))
-                && !(token_fire && !ag_oob) && !read_active_r && !source_pending_any) begin
+                && !(token_fire && !ag_oob) && (read_pending_r == 0) && !source_pending_any) begin
                 source_signaled_r <= 1'b1;
                 completion_pending_r <= 1'b1;
                 if (!(last_token_has_store_r || (token_fire && ag_last && !ag_oob)))
@@ -294,7 +342,8 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     `RUNTIME_ASSERT(!gmem_bus_if.rsp_valid, ("unexpected response to S2G store"))
     `RUNTIME_ASSERT(!read_response_fire || (smem_bus_if.rsp_data.tag.uuid == active_uuid),
         ("S2G LMEM response UUID mismatch"))
-    `RUNTIME_ASSERT(!read_response_fire || (smem_bus_if.rsp_data.tag.value == route_tag),
+    `RUNTIME_ASSERT(!read_response_fire ||
+        ((smem_bus_if.rsp_data.tag.value & ((SMEM_TAG_VALUE_W'(1) << TAG_BASE_W) - 1)) == route_tag),
         ("S2G LMEM response route tag mismatch"))
 
 endmodule

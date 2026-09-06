@@ -16,6 +16,7 @@
 #include "VVX_dxa_s2g_top.h"
 
 #include <array>
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -67,6 +68,16 @@ struct Bench {
   uint32_t lmem_delay = 0;
   uint32_t lmem_tag = 0;
   std::array<uint8_t, kLmemWordBytes> lmem_rsp{};
+#ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+  struct PendingRead {
+    uint32_t tag;
+    uint32_t delay;
+    std::array<uint8_t, kLmemWordBytes> data;
+  };
+  std::vector<PendingRead> lmem_queue;
+  int response_index = -1;
+  size_t max_lmem_pending = 0;
+#endif
   uint32_t lmem_reads = 0;
   uint32_t stores = 0;
   uint32_t requests = 0;
@@ -104,6 +115,11 @@ struct Bench {
     sim->gmem_rsp_valid = 0;
     sim->completion_ready = 0;
     lmem_pending = false;
+#ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+    lmem_queue.clear();
+    response_index = -1;
+    max_lmem_pending = 0;
+#endif
     lmem_delay = 0;
     lmem_reads = 0;
     stores = 0;
@@ -118,9 +134,27 @@ struct Bench {
     sim->lmem_req_ready = ((timestamp / 2) % 4) != 0;
     sim->gmem_req_ready = ((timestamp / 2) % 5) != 1;
     sim->completion_ready = completion_ready;
+#ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+    response_index = -1;
+    for (int i = int(lmem_queue.size()) - 1; i >= 0; --i) {
+      if (lmem_queue[i].delay == 0) {
+        response_index = i;
+        break;
+      }
+    }
+    sim->lmem_rsp_valid = response_index >= 0;
+    if (response_index >= 0) {
+      sim->lmem_rsp_tag = lmem_queue[response_index].tag;
+      set_lmem_rsp(sim->lmem_rsp_data, lmem_queue[response_index].data);
+    } else {
+      sim->lmem_rsp_tag = 0;
+      set_lmem_rsp(sim->lmem_rsp_data, lmem_rsp);
+    }
+#else
     sim->lmem_rsp_valid = lmem_pending && (lmem_delay == 0);
     sim->lmem_rsp_tag = lmem_tag;
     set_lmem_rsp(sim->lmem_rsp_data, lmem_rsp);
+#endif
     sim->gmem_rsp_valid = 0;
     sim->gmem_rsp_tag = 0;
   }
@@ -135,6 +169,17 @@ struct Bench {
 
     if (sim->lmem_req_valid && sim->lmem_req_ready) {
       CHECKX(!sim->lmem_req_rw, "S2G issued an LMEM write");
+#ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+      PendingRead pending;
+      pending.tag = sim->lmem_req_tag;
+      pending.delay = 4 + (lmem_reads % 4);
+      const uint32_t base = sim->lmem_req_addr * kLmemWordBytes;
+      CHECKX(base + kLmemWordBytes <= lmem.size(), "LMEM request out of range");
+      for (uint32_t i = 0; i < kLmemWordBytes; ++i)
+        pending.data[i] = lmem[base + i];
+      lmem_queue.push_back(pending);
+      max_lmem_pending = std::max(max_lmem_pending, lmem_queue.size());
+#else
       CHECKX(!lmem_pending, "more than one LMEM read is outstanding");
       lmem_pending = true;
       lmem_delay = 1 + (lmem_reads % 4);
@@ -143,11 +188,17 @@ struct Bench {
       CHECKX(base + kLmemWordBytes <= lmem.size(), "LMEM request out of range");
       for (uint32_t i = 0; i < kLmemWordBytes; ++i)
         lmem_rsp[i] = lmem[base + i];
+#endif
       ++lmem_reads;
     }
 
-    if (sim->lmem_rsp_valid && sim->lmem_rsp_ready)
+    if (sim->lmem_rsp_valid && sim->lmem_rsp_ready) {
+#ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+      lmem_queue.erase(lmem_queue.begin() + response_index);
+#else
       lmem_pending = false;
+#endif
+    }
 
     if (sim->gmem_req_valid && sim->gmem_req_ready) {
       CHECKX(sim->gmem_req_rw, "S2G issued a global-memory read");
@@ -191,8 +242,15 @@ struct Bench {
     }
 
     timestamp = sim.step(timestamp, 2);
+#ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+    for (auto &pending : lmem_queue) {
+      if (pending.delay != 0)
+        --pending.delay;
+    }
+#else
     if (lmem_pending && lmem_delay != 0)
       --lmem_delay;
+#endif
   }
 
   void drive_transfer(const Transfer &transfer) {
@@ -272,6 +330,10 @@ struct Bench {
 
     CHECKX(events.size() == 1, "completion count got=%zu want=1", events.size());
     CHECKX(requests == 1, "request handshakes got=%u want=1", requests);
+#ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+    if (transfer.expected_stores > 1)
+      CHECKX(max_lmem_pending > 1, "multi-read never exceeded one LMEM credit");
+#endif
     CHECKX(stores == transfer.expected_stores, "store beats got=%u want=%u",
            stores, transfer.expected_stores);
     sim->eval();
@@ -289,6 +351,7 @@ int main(int argc, char **argv) {
   bench.run(Transfer{"unaligned two-line copy", 0x1003, 37, 100, 1, 1, 0, 2, true});
   bench.run(Transfer{"single partial with LMEM crossing", 0x200d, 255, 29, 1, 1, 0, 1, false});
   bench.run(Transfer{"two valid rows plus OOB row", 0x3005, 511, 20, 3, 2, 64, 2, false});
+  bench.run(Transfer{"four-line credit window", 0x5000, 1024, 200, 1, 1, 0, 4, false});
   bench.run(Transfer{"fully OOB transfer", 0x4007, 777, 23, 1, 0, 64, 0, false});
 
   std::printf("checks=%d failed=%d\n", checks_total, checks_failed);
