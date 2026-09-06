@@ -17,6 +17,8 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input wire reset,
     input wire transfer_active,
     input wire pipeline_start,
+    input wire zero_length,
+    input wire                       zero_length,
     input wire                       ag_valid,
     output wire                      ag_ready,
     input wire [GMEM_ADDR_WIDTH-1:0] ag_cl_addr,
@@ -179,7 +181,8 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign completion_if.data.group_seq = active_group_seq;
     assign completion_if.data.op_id = active_op_id;
     wire completion_fire = completion_if.valid && completion_if.ready;
-    assign transfer_done = transfer_active && !pipeline_start && source_event_done && destination_event_done;
+    assign transfer_done = transfer_active && !pipeline_start
+        && (zero_length || (source_event_done && destination_event_done));
     assign sent_count = sent_count_r;
     assign read_count = read_count_r;
 
@@ -192,17 +195,24 @@ module VX_dxa_s2g_data_pipe import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             read_active_r <= 1'b0;
             read_slot_r <= '0;
             read_word_r <= '0;
-            source_done_r <= 1'b0;
+            source_done_r <= zero_length;
             source_done_has_store_r <= 1'b0;
             source_signaled_r <= 1'b0;
             last_token_seen_r <= 1'b0;
             last_token_has_store_r <= 1'b0;
             completion_pending_r <= 1'b0;
             completion_sent_r <= 1'b0;
-            destination_done_r <= 1'b0;
+            destination_done_r <= zero_length;
             sent_count_r <= '0;
             read_count_r <= '0;
             for (si = 0; si < SLOTS; ++si) slots_r[si] <= '0;
+            if (pipeline_start && zero_length) begin
+                source_done_r <= 1'b1;
+                source_done_has_store_r <= 1'b0;
+                source_signaled_r <= 1'b1;
+                completion_pending_r <= 1'b1;
+                destination_done_r <= 1'b1;
+            end
         end else begin
             source_done_r <= 1'b0;
             source_done_has_store_r <= 1'b0;
