@@ -1680,6 +1680,12 @@ package VX_gpu_pkg;
 
     localparam L1_MEM_TAG_WIDTH     = `MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
 
+    // Tag width after the per-port I/D-cache arbiter.  The arbiter prepends
+    // one input-select bit (I-cache versus D-cache) to the L1 tag.  DXA and
+    // the socket arbiter use this width when they join the same L2-facing
+    // request fabric.
+    localparam L1_MEM_ARB_TAG_WIDTH = L1_MEM_TAG_WIDTH + `ARB_SEL_BITS(2, 1);
+
     // Socket L2-facing arb (mem port 0): icache and dcache arbitrate with the
     // socket-resident units' memory ports (tcache, rtcache, DXA gmem) as peers.
     localparam ICACHE_MEM_ARB_IDX   = 0;
