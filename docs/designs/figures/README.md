@@ -6,8 +6,9 @@ These three plots were generated from DEBUG=4 SimX traces produced on
 ring. Each trace was filtered only to pipeline-issue, L2 request, and DRAM
 request records before plotting with `plot_util_timeline.py`.
 
-The measured cycle counts are in `steady_kernel_metrics.csv`. S2G is 1.46x
-faster than the LSU-load/global-store baseline, but remains 1.98% slower than
-the current TMA-load/global-store path. The plots therefore document genuine
-steady-state activity and the current bottleneck; they are not presented as a
-fabricated S2G speedup over the already asynchronous TMA baseline.
+The measured cycle counts are in `steady_kernel_metrics.csv`. For the fair
+staged comparison, S2G is 1.066x faster than the TMA-load path whose output is
+also staged in SMEM and then copied with LSU stores, and 1.534x faster than the
+LSU-load/global-store baseline. The older direct-register global-store mode is
+not used for this claim because it does not have the same cross-warp SMEM
+ownership requirement.
