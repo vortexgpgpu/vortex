@@ -38,6 +38,26 @@ The unit test drives variable latency and deliberately chooses the newest
 ready response first.  The four-line case reaches four simultaneous LMEM
 reads and passes the same memory checks as the default one-credit path.
 
+For example, with 64-byte GMEM lines and 16-byte LMEM words, two accepted
+address-generator tokens can be gathered as follows:
+
+```text
+cycle       0       1       2       3       4       5
+request     S0/W0   S0/W1   S0/W2   S0/W3   S1/W0   S1/W1
+tag         ...00   ...01   ...02   ...03   ...10   ...11
+response            S0/W2           S0/W0   S1/W1   S0/W3
+payload     S0[2]           S0[0]   S1[1]   S0[3]
+```
+
+The `...` portion is the existing route (`core_id` plus the DXA-engine bit);
+the extension is `{word_index, slot_index}`.  `read_pending_r` is the credit
+counter.  It reaches four in this example, then stops issuing until a response
+decrements it.  Completion is per slot, not per response order: `words_seen`
+prevents a duplicate response from decrementing the source lifetime twice.
+Thus a slot is emitted only after all of its words have been captured, and the
+group tracker receives exactly one `SOURCE_CONSUMED` event for the architectural
+S2G operation.
+
 `SOURCE_CONSUMED` is generated once, after the final address-generator token
 has arrived and every accepted line has captured all source words.  It is
 independent of destination visibility.  OOB tokens consume no payload slot;
