@@ -454,7 +454,9 @@ void Scheduler::raise_async_trap(uint32_t wid, Word cause, Word trap_pc, const T
   // vx_rt_wait's rd) so the callback dispatcher can save/restore the full
   // register context without deadlocking on a reservation only its own
   // cb_ret can release. Re-installed at mret. (RTU callback-trap, §4.6.)
+#ifdef VX_CFG_EXT_RTU_ENABLE
   async_trap_snapshot_.at(wid) = core_->scoreboard().snapshot_warp(wid);
+#endif
   // Bump the per-warp trap epoch so any pre-trap fetch still in flight
   // (fetch_latch_ / pending icache rsp) can be detected at advance_pc
   // and discarded — its decoded trace.trap_epoch will be one behind.
@@ -480,8 +482,10 @@ void Scheduler::mret(uint32_t wid) {
   // The matching TERMINAL writeback is held off until in_async_trap clears
   // (SfuUnit), so the dispatcher's epilogue restore can't clobber the
   // status word.
+#ifdef VX_CFG_EXT_RTU_ENABLE
   core_->scoreboard().restore_warp(async_trap_snapshot_.at(wid));
   async_trap_snapshot_.at(wid).clear();
+#endif
   in_async_trap_.at(wid) = false;
   last_mret_cycle_.at(wid) = SimPlatform::instance().cycles();
   DT(3, core_->name() << " mret: wid=" << wid

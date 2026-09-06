@@ -70,6 +70,10 @@ public:
   bool resume_warp;
 
   uint64_t issue_time ;
+  // Fetch epoch used to discard a trace fetched before an asynchronous trap.
+  // Kept in the trace object so scheduler-side epoch validation remains
+  // local and does not affect the S2G request ABI.
+  uint32_t trap_epoch;
 
   instr_trace_t(uint64_t uuid)
     : uuid(uuid)
@@ -94,6 +98,7 @@ public:
     , fetch_stall(false)
     , resume_warp(false)
     , issue_time(SimPlatform::instance().cycles())
+    , trap_epoch(0)
     , log_once_(false)
   {}
 
@@ -121,6 +126,7 @@ public:
     , fetch_stall(rhs.fetch_stall)
     , resume_warp(rhs.resume_warp)
     , issue_time(rhs.issue_time)
+    , trap_epoch(rhs.trap_epoch)
     , log_once_(false)
   {}
 

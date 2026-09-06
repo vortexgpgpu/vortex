@@ -194,6 +194,7 @@ public:
   uint32_t ipdom_size() const { return ipdom_size_; }
   const auto& active_warps() const { return active_warps_; }
   const auto& stalled_warps() const { return stalled_warps_; }
+  CtaDispatcher* cta_dispatcher() { return cta_dispatcher_.get(); }
   // True while a warp is between async-trap entry and matching mret —
   // used by SfuUnit's RTU callback drain to serialize multiple CB_YIELDs
   // for the same warp (Phase 3-A2 divergent-SBT path).

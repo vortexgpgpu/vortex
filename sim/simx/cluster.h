@@ -110,6 +110,11 @@ public:
 
   class Core* get_core(uint32_t idx) const;
 
+  // Socket-facing global-barrier ingress.  The implementation owns the
+  // cluster-wide phase state; exposing this narrow wrapper keeps the S2G
+  // completion wiring independent of the scheduler internals.
+  void global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
+
   // Cache flush walk. ProcessorImpl ticks in level order (L1 in parallel
   // → L2 → L3) to avoid downstream evictions racing the next-level walk.
   // L1 fanout: dcache + icache + socket-local {tcache, rtcache} (forwarded

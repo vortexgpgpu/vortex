@@ -72,6 +72,9 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+  void global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
+  void global_barrier_resume(uint32_t bar_id, uint32_t core_index);
+
   std::shared_ptr<Core>& core(uint32_t idx);
 
   // Forwarded cache flush (write-back eviction walk). The walk is a no-op
@@ -100,6 +103,7 @@ public:
 
 protected:
   void on_reset();
+  void on_tick();
 
 private:
   uint32_t socket_id_;

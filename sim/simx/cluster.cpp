@@ -663,6 +663,11 @@ void Cluster::on_gbar_arrive(const GbarArrive& msg) {
   impl_->global_barrier_arrive(msg.bar_id, msg.count, msg.core_id);
 }
 
+void Cluster::global_barrier_arrive(uint32_t bar_id, uint32_t count,
+                                    uint32_t core_id) {
+  impl_->global_barrier_arrive(bar_id, count, core_id);
+}
+
 Cluster::PerfStats Cluster::perf_stats() const {
   return impl_->perf_stats();
 }
@@ -746,4 +751,3 @@ RasterCore::Ptr& Cluster::raster_core() {
   return impl_->raster_core();
 }
 #endif
-
