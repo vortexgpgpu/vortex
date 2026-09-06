@@ -14,3 +14,6 @@ also staged in SMEM and then copied with LSU stores, and 1.534x faster than the
 LSU-load/global-store baseline. The older direct-register global-store mode is
 not used for this claim because it does not have the same cross-warp SMEM
 ownership requirement.
+
+Stage/wait-N sweep notes, including negative results, are in
+`tuning_summary.csv`; all tested points retained correctness.
