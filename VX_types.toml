@@ -714,6 +714,8 @@ VX_CSR_MPM_L2CACHE_BANK_ST = 0xB08  # bank conflicts
 VX_CSR_MPM_L2CACHE_BANK_ST_H = 0xB88
 VX_CSR_MPM_L2CACHE_MSHR_ST = 0xB09  # MSHR stalls
 VX_CSR_MPM_L2CACHE_MSHR_ST_H = 0xB89
+VX_CSR_MPM_L2CACHE_WRITE_NOFETCH = 0xB0A  # full-sector write misses allocated without a DRAM fetch
+VX_CSR_MPM_L2CACHE_WRITE_NOFETCH_H = 0xB8A
 
 [csr_mpm_l3cache]
 VX_CSR_MPM_L3CACHE_READS = 0xB03  # total reads

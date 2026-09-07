@@ -54,6 +54,7 @@ public:
 		uint64_t bank_stalls = 0;
 		uint64_t mshr_stalls = 0;
 		uint64_t mem_latency = 0;
+		uint64_t write_nofetch = 0;   // full-sector write misses allocated without a DRAM fetch
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->reads += rhs.reads;
@@ -62,6 +63,7 @@ public:
 			this->write_misses += rhs.write_misses;
 			this->evictions += rhs.evictions;
 			this->bank_stalls += rhs.bank_stalls;
+			this->write_nofetch += rhs.write_nofetch;
 			this->mshr_stalls += rhs.mshr_stalls;
 			this->mem_latency += rhs.mem_latency;
 			return *this;

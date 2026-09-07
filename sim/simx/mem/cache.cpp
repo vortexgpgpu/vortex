@@ -13,12 +13,21 @@
 
 #include "cache.h"
 #include "mem_block_pool.h"
+
+// RFC 260904 7.2: a write-back bank that misses on a store covering the WHOLE sector
+// allocates the sector from the store data instead of fetching it from DRAM first.
+// Modelled by feeding the normal MSHR/replay path a synthetic all-zero fill, so the
+// replay merges the store bytes exactly as after a real fill; only the DRAM read is gone.
+#ifndef VX_CFG_L2_WRITE_NOFETCH
+#define VX_CFG_L2_WRITE_NOFETCH 0
+#endif
 #include "debug.h"
 #include "types.h"
 #if VX_CFG_EXT_A_ENABLED
 #include "amo_unit.h"
 #endif
 #include <cstring>
+#include <deque>
 #include <list>
 #include <queue>
 #include <sstream>
@@ -660,6 +669,7 @@ protected:
   void on_reset() {
     perf_stats_ = Cache::PerfStats();
     pending_mshr_size_ = 0;
+    nofetch_fills_.clear();
     pending_amo_probes_ = 0;
     pipe_core_lines_.clear();
     pending_read_reqs_ = 0;
@@ -792,6 +802,25 @@ private:
       mshr_.dequeue(&bank_req);
       pipe_req_->push(bank_req);
       DT(3, this->name() << " replay-deq: " << bank_req);
+      return;
+    }
+
+    // 2a) synthetic no-fetch fills (RFC 260904 7.2): same gating as a real fill.
+    if (!nofetch_fills_.empty() && !fwd_active_) {
+      uint32_t mshr_id = nofetch_fills_.front();
+      const auto &root_peek = mshr_.peek(mshr_id);
+      bank_req_t bank_req;
+      bank_req.reset();
+      bank_req.type    = bank_req_t::Fill;
+      bank_req.addr    = params_.mem_addr_sector(bank_id_, root_peek.set_id, root_peek.addr_tag, root_peek.sector_id);
+      bank_req.hart_id = root_peek.bank_req.hart_id;
+      bank_req.uuid    = root_peek.bank_req.uuid;
+      bank_req.mshr_id = mshr_id;
+      bank_req.data    = make_mem_block();
+      std::memset(bank_req.data->data(), 0, bank_req.data->size());
+      pipe_req_->push(bank_req);
+      DT(3, this->name() << " nofetch-fill: mshr=" << mshr_id);
+      nofetch_fills_.pop_front();
       return;
     }
 
@@ -1593,13 +1622,20 @@ private:
           // entries never mark new waiters, so they must not suppress the
           // fill for this fresh miss.
           bool fill_pending = mshr_.has_pending_fill(set_id, addr_tag, sector_id, -1);
-          if (!fill_pending && this->mem_req_out.full())
+          // Full-sector store miss: allocate without fetching (RFC 260904 7.2).
+          const bool nofetch = VX_CFG_L2_WRITE_NOFETCH && config_.write_back && bank_req.write
+                            && !fill_pending
+                            && (__builtin_popcountll(bank_req.byteen) == (int)VX_CFG_MEM_BLOCK_SIZE);
+          if (!fill_pending && !nofetch && this->mem_req_out.full())
             return;
 
           assert(!mshr_.full());
           int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag, sector_id);
           DT(3, this->name() << " mshr-enqueue: " << bank_req);
-          if (!fill_pending) {
+          if (nofetch) {
+            nofetch_fills_.push_back(mshr_id);
+            ++perf_stats_.write_nofetch;
+          } else if (!fill_pending) {
             MemReq fill;
             fill.addr  = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
             // op defaults to MemOp::LD — fill is a load.
@@ -1676,6 +1712,7 @@ private:
   std::vector<set_t> sets_;
   MSHR mshr_;
   uint32_t pending_mshr_size_;
+  std::deque<uint32_t> nofetch_fills_;   // MSHR ids awaiting a synthetic (no-fetch) fill
   uint32_t pending_amo_probes_; // AmoProbe requests in the pipe, each holding a table reservation
   // (set, tag) of Core requests inside the pipe: their MSHR entries exist
   // only from pipe exit, so ordering checks against in-flight lines (the
