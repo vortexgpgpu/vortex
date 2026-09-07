@@ -613,6 +613,15 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_DEDUP, rep_core, &gmem_dedup), { return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_LMEM_WRITES,rep_core, &lmem_writes),{ return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_LT,    rep_core, &gmem_lt),    { return err; });
+      {
+        uint64_t st_w = 0, st_r = 0, st_lt = 0, st_n = 0;
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_WRITES, rep_core, &st_w),  { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_LMEM_READS,  rep_core, &st_r),  { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_STORE_LT,    rep_core, &st_lt), { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_STORES,      rep_core, &st_n),  { return err; });
+        perf_print_core(stream, rep_core, "dxa-store: stores=%" PRIu64 ", gmem_writes=%" PRIu64 ", lmem_reads=%" PRIu64 ", avg_lat=%.1f",
+                        st_n, st_w, st_r, safe_div((double)st_lt, (double)st_n));
+      }
       tot_transfers  += transfers;
       tot_gmem_reads += gmem_reads;
       tot_gmem_dedup += gmem_dedup;

@@ -888,11 +888,16 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       }
     } break;
 #ifdef VX_CFG_EXT_DXA_ENABLE
-    case 3: { // DXA issue
+    case 3: { // DXA issue (funct3 = 0: load GMEM->LMEM, funct3 = 1: store LMEM->GMEM)
       instr->set_fu_type(FUType::SFU);
       IntrDxaArgs dxaArgs{};
+      dxaArgs.is_store = (funct3 == 1);
+      if (funct3 > 1) {
+        std::cout << "Error: invalid DXA funct3=" << funct3 << std::endl;
+        std::abort();
+      }
       instr->set_args(dxaArgs);
-      instr->set_op_type(DxaType::ISSUE);
+      instr->set_op_type(dxaArgs.is_store ? DxaType::STORE : DxaType::ISSUE);
       instr->set_src_reg(0, rs1, RegType::Integer);
       instr->set_src_reg(1, rs2, RegType::Integer);
     } break;

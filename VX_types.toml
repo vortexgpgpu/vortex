@@ -775,6 +775,14 @@ VX_CSR_MPM_DXA_LMEM_WRITES  = 0xB06  # SMEM word writes issued
 VX_CSR_MPM_DXA_LMEM_WRITES_H  = 0xB86
 VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
 VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
+VX_CSR_MPM_DXA_GMEM_WRITES  = 0xB08  # DXA.STORE: full-line GMEM writes issued
+VX_CSR_MPM_DXA_GMEM_WRITES_H  = 0xB88
+VX_CSR_MPM_DXA_LMEM_READS  = 0xB09  # DXA.STORE: LMEM word reads issued
+VX_CSR_MPM_DXA_LMEM_READS_H  = 0xB89
+VX_CSR_MPM_DXA_STORE_LT  = 0xB0A  # DXA.STORE: total issue->ack latency (sum; avg = LT/STORES)
+VX_CSR_MPM_DXA_STORE_LT_H  = 0xB8A
+VX_CSR_MPM_DXA_STORES  = 0xB0B  # DXA.STORE: completed store transfers
+VX_CSR_MPM_DXA_STORES_H  = 0xB8B
 
 [csr_mpm_dtcu]
 # PERF: DTCU disaggregated tensor engine. Shared by BOTH classes -- the class is the

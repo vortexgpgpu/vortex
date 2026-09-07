@@ -84,6 +84,47 @@ inline void vx_dxa_issue_2d_wg(uint32_t desc_slot,
       : "memory");
 }
 
+// ---------------------------------------------------------------------------
+// DXA.STORE (funct3 = 1): LMEM tile -> GMEM, the reverse of vx_dxa_issue_*_wg.
+// Same descriptor, same coordinates, same barrier completion (release when every
+// line has been acknowledged by the L2). smem_src must be 64 B-aligned. The warp
+// must make its LMEM stores visible first: vx_fence() PLUS an all-lane read-back of
+// each lane's last-written element (the LSU fence does not track plain stores; see
+// cgo27_motivation/docs/260904_DXA_store_RFC.md 3.3). Do not overwrite smem_src until
+// the barrier has released.
+inline void vx_dxa_store_1d_wg(uint32_t desc_slot,
+                               uint32_t barrier_id,
+                               const void* smem_src,
+                               uint32_t coord0) {
+  const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_src,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)0u);
+  __asm__ volatile (
+      ".insn r %0, 1, %1, x0, %2, x0\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0)
+      : "memory");
+}
+
+inline void vx_dxa_store_2d_wg(uint32_t desc_slot,
+                               uint32_t barrier_id,
+                               const void* smem_src,
+                               uint32_t coord0,
+                               uint32_t coord1) {
+  const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
+  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_src,
+                                            (size_t)meta,
+                                            (size_t)coord0,
+                                            (size_t)coord1);
+  __asm__ volatile (
+      ".insn r %0, 1, %1, x0, %2, x0\n\t"
+      :
+      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0)
+      : "memory");
+}
+
 // 3D–5D: rs2 = wgather(coord2, coord3, coord4, 0)
 inline void vx_dxa_issue_3d_wg(uint32_t desc_slot,
                                 uint32_t barrier_id,

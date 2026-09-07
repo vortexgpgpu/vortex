@@ -219,6 +219,8 @@ public:
         Core* core = sockets_.at(s)->core(c).get();
         auto& ch = dxa_core_->lmem_req_out.at(cid);
         ch.bind(&core->local_mem()->Inputs.at(port_dxa));
+        // DXA.STORE reads LMEM through the same port; its data comes back here.
+        core->local_mem()->Outputs.at(port_dxa).bind(&dxa_core_->lmem_rsp_in.at(cid));
         ch.tx_callback([core](const MemReq& req, uint64_t /*cycles*/) {
           if (req.is_write() && req.flags.dxa_notify_done) {
             // notify_bar_id arrives in raw (encoded) form: low byte = cta_no,

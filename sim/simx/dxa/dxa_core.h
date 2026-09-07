@@ -37,6 +37,12 @@ public:
     uint64_t gmem_dedup     = 0;
     uint64_t lmem_writes    = 0;
     uint64_t total_latency  = 0;
+    // DXA.STORE side (RFC 260904): full-line GMEM writes, LMEM word reads,
+    // completed store transfers and their issue->ack latency sum.
+    uint64_t gmem_writes    = 0;
+    uint64_t lmem_reads     = 0;
+    uint64_t store_transfers = 0;
+    uint64_t store_latency  = 0;
 
     PerfStats& operator+=(const PerfStats& rhs) {
       transfers     += rhs.transfers;
@@ -44,6 +50,10 @@ public:
       gmem_dedup    += rhs.gmem_dedup;
       lmem_writes   += rhs.lmem_writes;
       total_latency += rhs.total_latency;
+      gmem_writes   += rhs.gmem_writes;
+      lmem_reads    += rhs.lmem_reads;
+      store_transfers += rhs.store_transfers;
+      store_latency += rhs.store_latency;
       return *this;
     }
   };
@@ -58,9 +68,12 @@ public:
   std::vector<SimChannel<MemRsp>>  gmem_rsp_in;
   MemArbiter::Ptr                  gmem_arb_;
 
-  // Per-core LMEM write ports (size = NUM_CORES_PER_CLUSTER). Cluster binds
-  // each core's LocalMem::Inputs[port_dxa] here. Write-only — no rsp.
+  // Per-core LMEM ports (size = NUM_CORES_PER_CLUSTER). Cluster binds each
+  // core's LocalMem::Inputs[port_dxa] to lmem_req_out (loads write LMEM,
+  // stores read it) and LocalMem::Outputs[port_dxa] to lmem_rsp_in (read data
+  // for DXA.STORE; the load side never receives a response here).
   std::vector<SimChannel<MemReq>>  lmem_req_out;
+  std::vector<SimChannel<MemRsp>>  lmem_rsp_in;
 
   DxaCore(const SimContext& ctx, const char* name, Cluster* cluster);
   virtual ~DxaCore();

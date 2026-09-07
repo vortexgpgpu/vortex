@@ -615,14 +615,18 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
 #ifdef VX_CFG_EXT_DXA_ENABLE
 
 enum class DxaType {
-  ISSUE
+  ISSUE,   // GMEM tile -> LMEM (funct3 = 0)
+  STORE    // LMEM tile -> GMEM (funct3 = 1), see cgo27_motivation/docs/260904_DXA_store_RFC.md
 };
 
-struct IntrDxaArgs {};
+struct IntrDxaArgs {
+  bool is_store = false;
+};
 
 inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
   switch (type) {
   case DxaType::ISSUE: os << "DXA.ISSUE"; break;
+  case DxaType::STORE: os << "DXA.STORE"; break;
   default: os << "?"; break;
   }
   return os;

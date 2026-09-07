@@ -43,6 +43,14 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace) {
   uint32_t cta_mask  = rs2.at(3).u;
   uint32_t desc_slot = meta & 0x0fu;
   uint32_t raw_bar   = (meta >> 4) & 0x07ffffffu;
+  const bool is_store = (std::get<DxaType>(trace->op_type) == DxaType::STORE);
+  if (is_store && __builtin_popcount(cta_mask) > 1) {
+    // Multicast is a load-side replay of one GMEM read into several CTAs' LMEM;
+    // a store has one source and one destination. Refuse rather than write garbage.
+    std::cout << "Error: DXA.STORE with multicast cta_mask=0x" << std::hex << cta_mask
+              << std::dec << " (core=" << core_->id() << ", wid=" << trace->wid << ")" << std::endl;
+    std::abort();
+  }
 
   DxaReq req;
   req.core      = core_;
@@ -54,6 +62,7 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace) {
   // Release call site decodes via bar_decode_id().
   req.bar_id    = raw_bar;
   req.cta_mask  = cta_mask;
+  req.is_store  = is_store;
   req.smem_addr = smem_addr;
   for (int i = 0; i < 5; ++i) req.coords[i] = coords[i];
 

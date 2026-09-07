@@ -91,7 +91,8 @@ public:
   // ── Inflight slot for a GMEM read ──────────────────────────────────
   struct InflightSlot {
     bool      allocated = false;
-    bool      rsp_arrived = false;
+    bool      rsp_arrived = false;   // load: GMEM data here; store: LMEM data here
+    bool      ack_pending = false;   // store: GMEM write sent, strsp ack not yet seen
     LineWork  work;            // captured at allocation
     std::shared_ptr<mem_block_t> rsp_data;
   };
@@ -122,6 +123,13 @@ public:
     uint32_t                mc_cta_idx = 0;      // 0..cta_indices.size()
     uint32_t                km_elem_idx = 0;     // 0..km_num_elems (K-major scatter)
     uint32_t                writes_emitted = 0;  // count for perf
+
+    // DXA.STORE: LMEM -> GMEM. Same work list, walked the other way:
+    // lmem_rd (read one LMEM word per LineWork) -> gmem_wr (one full-line ST with
+    // strsp) -> ack (strsp response frees the slot). Barrier releases when every
+    // line has been acknowledged by the L2.
+    bool                    is_store = false;
+    uint32_t                st_pending_acks = 0;
   };
 
   // ── Constructor ──────────────────────────────────────────────────────
@@ -144,11 +152,13 @@ public:
       w.work_list.clear();
       w.cta_indices.clear();
       w.issued_order.clear();
-      for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
+      for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.ack_pending = false; s.rsp_data.reset(); }
       w.ag_idx = 0;
       w.mc_cta_idx = 0;
       w.km_elem_idx = 0;
       w.writes_emitted = 0;
+      w.is_store = false;
+      w.st_pending_acks = 0;
     }
   }
 
@@ -217,18 +227,49 @@ public:
         uint32_t slot_id = uint32_t(rsp.tag) & (VX_CFG_DXA_MAX_INFLIGHT - 1);
         auto& w = workers_[worker_id];
         if (slot_id < w.inflight.size() && w.inflight[slot_id].allocated) {
-          w.inflight[slot_id].rsp_arrived = true;
-          w.inflight[slot_id].rsp_data    = rsp.data;
+          if (w.is_store) {
+            // strsp acknowledgement of a full-line write: the L2 has the data.
+            auto& s = w.inflight[slot_id];
+            s.allocated = false; s.rsp_arrived = false; s.ack_pending = false; s.rsp_data.reset();
+            if (w.st_pending_acks) --w.st_pending_acks;
+          } else {
+            w.inflight[slot_id].rsp_arrived = true;
+            w.inflight[slot_id].rsp_data    = rsp.data;
+          }
         }
         ch.pop();
       }
     }
 
-    // 2) Tick workers (smem_wr drain → gmem_req issue).
+    // 1b) Drain LMEM read responses (DXA.STORE source data). The tag carries
+    // worker and slot; one response per core port per cycle.
+    for (uint32_t cid = 0; cid < simobject_->lmem_rsp_in.size(); ++cid) {
+      auto& ch = simobject_->lmem_rsp_in.at(cid);
+      if (ch.empty()) continue;
+      auto& rsp = ch.peek();
+      uint32_t worker_id = uint32_t(rsp.tag) / VX_CFG_DXA_MAX_INFLIGHT;
+      uint32_t slot_id   = uint32_t(rsp.tag) % VX_CFG_DXA_MAX_INFLIGHT;
+      if (worker_id < workers_.size()) {
+        auto& w = workers_[worker_id];
+        if (w.is_store && w.inflight[slot_id].allocated && !w.inflight[slot_id].ack_pending) {
+          w.inflight[slot_id].rsp_arrived = true;
+          w.inflight[slot_id].rsp_data    = rsp.data;
+        }
+      }
+      ch.pop();
+    }
+
+    // 2) Tick workers (loads: smem_wr drain → gmem_req issue;
+    //    stores: gmem_wr issue → lmem_rd issue).
     for (auto& w : workers_) {
       if (w.state == WState::RUNNING) {
-        tick_worker_smem_wr(w);
-        tick_worker_gmem_req(w);
+        if (w.is_store) {
+          tick_worker_gmem_wr(w);
+          tick_worker_lmem_rd(w);
+        } else {
+          tick_worker_smem_wr(w);
+          tick_worker_gmem_req(w);
+        }
       }
     }
 
@@ -334,10 +375,12 @@ private:
     w.work_list.clear();
     w.ag_idx = 0;
     w.issued_order.clear();
-    for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
+    for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.ack_pending = false; s.rsp_data.reset(); }
     w.mc_cta_idx = 0;
     w.km_elem_idx = 0;
     w.writes_emitted = 0;
+    w.is_store = req.is_store;
+    w.st_pending_acks = 0;
 
     // Multicast setup.
     w.is_multicast = (__builtin_popcount(req.cta_mask) > 1);
@@ -359,6 +402,24 @@ private:
     w.smem_stride = w.desc.smem_stride;
 
     enumerate_work_list(w);
+    if (w.is_store) {
+      // Store restrictions (RFC 260904 §4/§5.2): row-major LMEM source only, and
+      // OOB spans are simply not written -- drop them from the list.
+      if (desc_layout(w.desc.meta) != DestLayout::RowMajor) {
+        std::cout << "Error: DXA.STORE requires a RowMajor descriptor layout (slot="
+                  << req.desc_slot << ")" << std::endl;
+        std::abort();
+      }
+      if ((w.req.smem_addr & (kLmemWordSize - 1)) != 0) {
+        std::cout << "Error: DXA.STORE source 0x" << std::hex << w.req.smem_addr << std::dec
+                  << " is not " << kLmemWordSize << "-byte aligned" << std::endl;
+        std::abort();
+      }
+      w.work_list.erase(std::remove_if(w.work_list.begin(), w.work_list.end(),
+                                       [](const LineWork& lw) { return lw.oob; }),
+                        w.work_list.end());
+      if (!w.work_list.empty()) w.work_list.back().last = true;
+    }
     if (w.work_list.empty()) {
       // No work — same edge case as above.
       release_all_barriers(w);
@@ -371,7 +432,7 @@ private:
     w.work_list.back().last = true;
 
     w.state = WState::RUNNING;
-    perf_stats_.gmem_reads += w.work_list.size();
+    if (!w.is_store) perf_stats_.gmem_reads += w.work_list.size();
 
     DT(3, simobject_->name() << "[" << w.worker_id << "] start: core="
        << req.core->id() << ", wid=" << req.wid
@@ -699,6 +760,83 @@ private:
     }
   }
 
+  // ── DXA.STORE stage: lmem_rd — one LMEM word read per LineWork, one per cycle ──
+  void tick_worker_lmem_rd(Worker& w) {
+    if (w.ag_idx >= w.work_list.size())
+      return;
+    uint32_t slot = UINT32_MAX;
+    for (uint32_t s = 0; s < w.inflight.size(); ++s) {
+      if (!w.inflight[s].allocated) { slot = s; break; }
+    }
+    if (slot == UINT32_MAX) return;
+
+    uint32_t cluster_local_cid = w.req.core->id() % kCoresPerCluster;
+    auto& lmem_ch = simobject_->lmem_req_out.at(cluster_local_cid);
+    if (lmem_ch.full()) return;
+
+    const LineWork& lw = w.work_list[w.ag_idx];
+    MemReq req;
+    req.addr    = lw.smem_word_addr;
+    req.op      = MemOp::LD;
+    req.tag     = w.worker_id * VX_CFG_DXA_MAX_INFLIGHT + slot;   // routed back on lmem_rsp_in
+    req.hart_id = w.req.core->id();
+    req.uuid    = w.req.uuid;
+    lmem_ch.send(req);
+    ++perf_stats_.lmem_reads;
+
+    w.inflight[slot].allocated   = true;
+    w.inflight[slot].rsp_arrived = false;
+    w.inflight[slot].ack_pending = false;
+    w.inflight[slot].rsp_data.reset();
+    w.inflight[slot].work        = lw;
+    w.issued_order.push_back(slot);
+    ++w.ag_idx;
+  }
+
+  // ── DXA.STORE stage: gmem_wr — oldest slot whose LMEM word arrived becomes one
+  //    full-line (or, for edge spans, partial-byteen) store with strsp ─────────
+  void tick_worker_gmem_wr(Worker& w) {
+    if (w.issued_order.empty()) {
+      if (w.ag_idx == w.work_list.size() && w.st_pending_acks == 0) finish_worker(w);
+      return;
+    }
+    uint32_t slot = w.issued_order.front();
+    auto& s = w.inflight[slot];
+    if (!s.rsp_arrived) return;   // LMEM data not here yet
+
+    const LineWork& lw = s.work;
+    auto blk = make_mem_block();
+    std::memset(blk->data(), 0, blk->size());
+    if (s.rsp_data) {
+      std::memcpy(blk->data() + lw.cl_byte_offset,
+                  s.rsp_data->data() + lw.smem_byte_offset, lw.valid_length);
+    }
+    uint64_t byteen = (lw.valid_length >= 64) ? ~uint64_t(0)
+                                              : (((uint64_t(1) << lw.valid_length) - 1ull) << lw.cl_byte_offset);
+    MemReq mreq;
+    mreq.addr    = lw.gmem_cl_addr;
+    mreq.op      = MemOp::ST;
+    mreq.data    = blk;
+    mreq.byteen  = byteen;
+    mreq.tag     = slot;
+    mreq.hart_id = w.req.core->id();
+    mreq.uuid    = w.req.uuid;
+    mreq.flags.strsp = 1;          // completion = acknowledged by the L2
+    auto& ch = gmem_arb_->ReqIn.at(w.worker_id);
+    if (!ch.try_send(mreq)) return; // arb backpressure: retry next cycle, no state change
+
+    s.rsp_arrived = false;
+    s.rsp_data.reset();
+    s.ack_pending = true;          // slot stays allocated until the strsp ack
+    ++w.st_pending_acks;
+    ++w.writes_emitted;
+    ++perf_stats_.gmem_writes;
+    w.issued_order.pop_front();
+    DT(4, simobject_->name() << "[" << w.worker_id << "] store-line: addr=0x" << std::hex
+       << mreq.addr << std::dec << " byteen=0x" << std::hex << byteen << std::dec
+       << " pending_acks=" << w.st_pending_acks);
+  }
+
   void release_all_barriers(Worker& w) {
     // bar_id is RAW (encoded); decode at release call site.
     if (w.is_multicast) {
@@ -713,7 +851,17 @@ private:
   }
 
   void finish_worker(Worker& w) {
-    if (w.state == WState::RUNNING || w.state == WState::IDLE) {
+    if (w.state == WState::RUNNING && w.is_store) {
+      // Store completion: every line acknowledged. The load side releases its
+      // barrier from the last LMEM write's notify sideband; the store side has no
+      // LMEM write, so release here, after the last ack.
+      release_all_barriers(w);
+      ++perf_stats_.store_transfers;
+      perf_stats_.store_latency += cycle_ - w.issue_cycle;
+      DT(3, simobject_->name() << "[" << w.worker_id << "] store complete: core="
+         << w.req.core->id() << ", bar=" << w.req.bar_id << ", lines=" << w.writes_emitted
+         << ", latency=" << (cycle_ - w.issue_cycle));
+    } else if (w.state == WState::RUNNING || w.state == WState::IDLE) {
       uint64_t latency = cycle_ - w.issue_cycle;
       ++perf_stats_.transfers;
       perf_stats_.total_latency += latency;
@@ -729,6 +877,8 @@ private:
     w.mc_cta_idx = 0;
     w.km_elem_idx = 0;
     w.writes_emitted = 0;
+    w.is_store = false;
+    w.st_pending_acks = 0;
   }
 
   // ── Members ──────────────────────────────────────────────────────────
@@ -752,6 +902,7 @@ DxaCore::DxaCore(const SimContext& ctx, const char* name, Cluster* cluster)
   , gmem_req_out(kDxaMemPorts, this)
   , gmem_rsp_in(kDxaMemPorts, this)
   , lmem_req_out(kCoresPerCluster, this)
+  , lmem_rsp_in(kCoresPerCluster, this)
 {
   __unused(cluster);
 

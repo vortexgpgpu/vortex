@@ -34,6 +34,7 @@ struct DxaReq {
                           // increments cta_no in the encoded low byte.
                           // Decoded only at the release call site.
   uint32_t cta_mask;      // multicast warp mask (>1 bit ⇒ multicast)
+  bool     is_store;      // LMEM -> GMEM (DXA.STORE) instead of GMEM -> LMEM
   uint64_t smem_addr;
   uint32_t coords[5];
 };
