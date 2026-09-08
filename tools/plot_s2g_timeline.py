@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot trace-derived FU and memory timelines with an optional moving average."""
+"""Plot frontend issue shares and line-equivalent memory request rates."""
 import argparse
 import re
 from collections import defaultdict
@@ -45,25 +45,30 @@ def main():
     ap.add_argument("--smooth-bins", type=int, default=11)
     ap.add_argument("--line-bytes", type=int, default=64)
     ap.add_argument("--issue-width", type=int, default=2)
+    ap.add_argument("--cores", type=int, default=1, help="total cores included in this trace")
     ap.add_argument("--out", required=True)
     ap.add_argument("trace")
     args = ap.parse_args()
+    if min(args.bin_cycles, args.line_bytes, args.issue_width, args.cores) <= 0:
+        ap.error("bin size, line bytes, issue width, and core count must be positive")
+    if args.smooth_bins < 1 or args.smooth_bins % 2 == 0:
+        ap.error("smooth-bins must be a positive odd number")
     bins, fu, l2, dram = parse(args.trace, args.bin_cycles, args.line_bytes)
     x = [b * args.bin_cycles for b in bins]
     fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
     colors = {"ALU":"#4c78a8", "FPU":"#f58518", "LSU":"#54a24b", "SFU":"#e45756", "TCU":"#72b7b2"}
     for unit in FUS:
-        raw = [100.0 * fu[unit][b] / (args.bin_cycles * args.issue_width) for b in bins]
+        raw = [100.0 * fu[unit][b] / (args.bin_cycles * args.issue_width * args.cores) for b in bins]
         axes[0].plot(x, raw, color=colors[unit], alpha=.12, linewidth=.7)
         axes[0].plot(x, smooth(raw, args.smooth_bins), color=colors[unit], label=unit, linewidth=1.8)
     l2raw = [l2[b] / args.bin_cycles for b in bins]; dramraw = [dram[b] / args.bin_cycles for b in bins]
     axes[1].plot(x, l2raw, color="#1f77b4", alpha=.12, linewidth=.7)
-    axes[1].plot(x, smooth(l2raw, args.smooth_bins), color="#1f77b4", label="L2 B/cycle", linewidth=1.8)
+    axes[1].plot(x, smooth(l2raw, args.smooth_bins), color="#1f77b4", label="L2 line-equivalent B/cycle", linewidth=1.8)
     axes[1].plot(x, dramraw, "--", color="#ff7f0e", alpha=.12, linewidth=.7)
-    axes[1].plot(x, smooth(dramraw, args.smooth_bins), "--", color="#ff7f0e", label="DRAM B/cycle", linewidth=1.8)
-    axes[0].set_ylabel("FU issue utilization (%)"); axes[1].set_ylabel("request bandwidth (B/cycle)"); axes[1].set_xlabel("simulated cycle")
-    axes[0].set_title(f"Functional-unit utilization (moving average: {args.smooth_bins} bins; raw trace faint)")
-    axes[1].set_title("L2 and DRAM request bandwidth (moving average)")
+    axes[1].plot(x, smooth(dramraw, args.smooth_bins), "--", color="#ff7f0e", label="DRAM line-equivalent B/cycle", linewidth=1.8)
+    axes[0].set_ylabel("Frontend issue share (%)"); axes[1].set_ylabel("line-equivalent B/cycle"); axes[1].set_xlabel("simulated cycle")
+    axes[0].set_title(f"Frontend issues, not FU busy cycles ({args.cores} cores x {args.issue_width} issue slots/cycle)\nMoving average: {args.smooth_bins} x {args.bin_cycles} cycles; raw trace faint", fontsize=11)
+    axes[1].set_title(f"Accepted memory requests x {args.line_bytes} B (not measured data-bus occupancy)", fontsize=11)
     for axis in axes: axis.grid(alpha=.25); axis.legend(ncol=5, fontsize=8)
     fig.tight_layout(); fig.savefig(args.out, dpi=150)
 

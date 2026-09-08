@@ -133,6 +133,7 @@ module VX_dxa_core import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     VX_dxa_dispatch #(
         .NUM_INPUTS  (1),
+        .NUM_CORES   (NUM_REQS),
         .NUM_OUTPUTS (`VX_CFG_NUM_DXA_CORES)
     ) issue_dispatch (
         .clk       (clk),

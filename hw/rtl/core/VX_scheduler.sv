@@ -36,10 +36,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
     input wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_unlock_mask,
     input wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_drained_mask,
-    output wire                        dxa_group_epoch_adv_valid,
-    output wire [NW_WIDTH-1:0]         dxa_group_epoch_adv_wid,
-    output wire                        dxa_group_poison_valid,
-    output wire [NW_WIDTH-1:0]         dxa_group_poison_wid,
+    output wire                        dxa_group_owner_start_valid,
+    output wire [NW_WIDTH-1:0]         dxa_group_owner_start_wid,
+    output wire                        dxa_group_owner_close_valid,
+    output wire [NW_WIDTH-1:0]         dxa_group_owner_close_wid,
 `endif
 
     // KMU bus
@@ -89,7 +89,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [NCTA_WIDTH-1:0]                                   schedule_cta_id;
 
     // Warp retirement: active execution stops at TMC(tmask=0), but a wid that
-    // still owns S2G contexts cannot be handed to another CTA.  Keep that
+    // still has S2G source reads cannot be handed to another CTA. Keep that
     // lifetime hold separate from active_warps so barriers see only live warps.
 `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
     reg [`VX_CFG_NUM_WARPS-1:0] dxa_group_exit_pending_r;
@@ -127,12 +127,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
     end
 
-    // Poison closes the retiring logical stream. A subsequently dispatched
-    // CTA advances the drained wid epoch and reopens a fresh stream.
-    assign dxa_group_poison_valid   = dxa_group_exit_req;
-    assign dxa_group_poison_wid     = warp_ctl_if.wid;
-    assign dxa_group_epoch_adv_valid = cta_fire;
-    assign dxa_group_epoch_adv_wid   = cta_wid;
+    assign dxa_group_owner_close_valid = dxa_group_exit_req;
+    assign dxa_group_owner_close_wid   = warp_ctl_if.wid;
+    assign dxa_group_owner_start_valid = cta_fire;
+    assign dxa_group_owner_start_wid   = cta_wid;
 `else
     wire cta_warp_done = warp_ctl_if.tmc_valid
                       && (warp_ctl_if.tmc.tmask == 0);

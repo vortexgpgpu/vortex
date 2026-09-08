@@ -297,6 +297,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // elem_bytes ≤ 8, so a 64-bit window covers the live element.
     wire [$clog2(FILL_CAP*8)-1:0] km_rd_bit = ($clog2(FILL_CAP*8))'({km_rd_off_r, 3'b000});
     wire [63:0] km_elem_bytes_slice = fb_data_r[km_rd_bit +: 64];
+    `UNUSED_VAR (km_elem_bytes_slice)
     wire [SMEM_DATAW-1:0] km_elem_data_shifted =
         SMEM_DATAW'(km_elem_bytes_slice) << ({3'b000, km_in_word_off} << 3);
 

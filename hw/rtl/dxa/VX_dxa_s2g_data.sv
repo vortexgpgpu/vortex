@@ -42,9 +42,7 @@ module VX_dxa_s2g_data import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input wire [NC_WIDTH-1:0]        active_core_id,
     input wire [UUID_WIDTH-1:0]      active_uuid,
     input wire [NW_WIDTH-1:0]        active_wid,
-    input wire [DXA_GROUP_EPOCH_W-1:0] active_epoch,
-    input wire [DXA_GROUP_SEQ_W-1:0] active_group_seq,
-    input wire [DXA_GROUP_OPID_W-1:0] active_op_id,
+    input wire [DXA_GROUP_ID_W-1:0] active_group_id,
 
     VX_mem_bus_if.master gmem_bus_if,
     VX_mem_bus_if.master smem_bus_if,
@@ -118,9 +116,7 @@ module VX_dxa_s2g_data import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign completion_if.valid = completion_pending_r && !pipeline_start;
     assign completion_if.core_id = active_core_id;
     assign completion_if.data.wid = active_wid;
-    assign completion_if.data.epoch = active_epoch;
-    assign completion_if.data.group_seq = active_group_seq;
-    assign completion_if.data.op_id = active_op_id;
+    assign completion_if.data.group_id = active_group_id;
     wire completion_fire = completion_if.valid && completion_if.ready;
 
     wire source_event_done = completion_sent_r || completion_fire;

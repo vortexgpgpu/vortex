@@ -16,7 +16,7 @@
 `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
 
 // Lossless worker-to-core completion transport. The core-id route header is
-// consumed here; the tracker sees only the exact operation token.
+// consumed here; the tracker sees only {wid, group_id}.
 module VX_dxa_group_completion_hub import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter NUM_SRCS  = 1,
     parameter NUM_CORES = 1,

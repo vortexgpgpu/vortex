@@ -7,9 +7,9 @@ SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 override CONFIGS += -DVX_CFG_EXT_DXA_ENABLE \
                     -DVX_CFG_EXT_DXA_GROUP_ENABLE \
                     -DVX_CFG_EXT_DXA_S2G_ENABLE \
+                    -DVX_CFG_L2_ENABLE \
                     -DVX_CFG_NUM_WARPS=8 \
-                    -DVX_CFG_NUM_DXA_CORES=2 \
-                    -DVX_CFG_DXA_GROUP_CONTEXTS=64
+                    -DVX_CFG_NUM_DXA_CORES=2
 
 # Functional-model-only stress target. The knob delays the first source
 # request of each high-level S2G transfer; it is intentionally not part of the

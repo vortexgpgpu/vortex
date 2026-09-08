@@ -40,29 +40,7 @@ package VX_dxa_pkg;
     localparam DXA_DESC_SLOT_W    = `UP(DXA_DESC_SLOT_BITS);
 
 `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
-    localparam DXA_GROUP_SEQ_W      = 8;
-    localparam DXA_GROUP_EPOCH_W    = 2;
-    localparam DXA_GROUP_CONTEXTS   = `VX_CFG_DXA_GROUP_CONTEXTS;
-    localparam DXA_GROUP_CTX_IDX_W  = `UP(`CLOG2(DXA_GROUP_CONTEXTS));
-    localparam DXA_GROUP_CTX_GEN_W  = `VX_CFG_DXA_GROUP_CTX_GEN_BITS;
-    localparam DXA_GROUP_OPID_W     = DXA_GROUP_CTX_IDX_W + DXA_GROUP_CTX_GEN_W;
-
-    // Sequence arithmetic is modulo 2^DXA_GROUP_SEQ_W. A snapshot behind the
-    // current head therefore appears as a large unsigned distance; because a
-    // live group window can never exceed ring_depth, that case is satisfied.
-    function automatic logic dxa_group_wait_satisfied(
-        input logic [4:0] n,
-        input logic [DXA_GROUP_SEQ_W-1:0] snapshot,
-        input logic [DXA_GROUP_SEQ_W-1:0] head,
-        input logic [DXA_GROUP_SEQ_W-1:0] ring_depth
-    );
-        logic [DXA_GROUP_SEQ_W-1:0] required;
-        begin
-            required = snapshot - head;
-            dxa_group_wait_satisfied = (required > ring_depth)
-                                    || (required <= DXA_GROUP_SEQ_W'(n));
-        end
-    endfunction
+    localparam DXA_GROUP_ID_W = `CLOG2(`VX_CFG_DXA_GROUP_DEPTH);
 `endif
 
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
@@ -97,9 +75,7 @@ package VX_dxa_pkg;
         logic [NW_WIDTH-1:0]      wid;
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
         dxa_dir_t                        dir;
-        logic [DXA_GROUP_EPOCH_W-1:0]   epoch;
-        logic [DXA_GROUP_SEQ_W-1:0]     group_seq;
-        logic [DXA_GROUP_OPID_W-1:0]    op_id;
+        logic [DXA_GROUP_ID_W-1:0]     group_id;
 `endif
         logic [DXA_SMEM_ADDR_W-1:0]      smem_addr;   // from lane 0 rs1; LMEM byte address
         logic [31:0]                     meta;        // from lane 1 rs1 (desc[3:0], bar[30:4], 1[31]); 32-bit ABI word
@@ -218,9 +194,7 @@ package VX_dxa_pkg;
     // source. Destination visibility is intentionally a separate extension.
     typedef struct packed {
         logic [NW_WIDTH-1:0]           wid;
-        logic [DXA_GROUP_EPOCH_W-1:0]  epoch;
-        logic [DXA_GROUP_SEQ_W-1:0]    group_seq;
-        logic [DXA_GROUP_OPID_W-1:0]   op_id;
+        logic [DXA_GROUP_ID_W-1:0]    group_id;
     } dxa_group_completion_t;
 
 `endif

@@ -70,8 +70,8 @@ struct Bench {
     uint32_t mask = 0;
     for (uint32_t guard = 0; guard < 1000 && count != 0; ++guard) {
       eval();
-      if (sim->epoch_adv_valid) {
-        const uint32_t wid = sim->epoch_adv_wid;
+      if (sim->owner_start_valid) {
+        const uint32_t wid = sim->owner_start_wid;
         CHECKX((mask & (1u << wid)) == 0,
                "wid %u dispatched more than once", wid);
         mask |= 1u << wid;
@@ -83,15 +83,15 @@ struct Bench {
     return mask;
   }
 
-  void tmc(uint32_t wid, uint32_t tmask, bool expect_poison = false) {
+  void tmc(uint32_t wid, uint32_t tmask, bool expect_owner_close = false) {
     sim->ctl_wid = wid;
     sim->ctl_tmask = tmask;
     sim->ctl_tmc_valid = 1;
     eval();
-    CHECKX(bool(sim->poison_valid) == expect_poison,
-           "poison valid mismatch for wid%u tmask=0x%x", wid, tmask);
-    if (expect_poison)
-      CHECKX(sim->poison_wid == wid, "poison tagged wrong wid");
+    CHECKX(bool(sim->owner_close_valid) == expect_owner_close,
+           "owner_close valid mismatch for wid%u tmask=0x%x", wid, tmask);
+    if (expect_owner_close)
+      CHECKX(sim->owner_close_wid == wid, "owner_close tagged wrong wid");
     tick();
     sim->ctl_tmc_valid = 0;
   }
@@ -123,7 +123,7 @@ struct Bench {
     submit_cta(VX_CFG_NUM_THREADS, 2);
     for (uint32_t cycle = 0; cycle < 16; ++cycle) {
       eval();
-      CHECKX(!sim->epoch_adv_valid,
+      CHECKX(!sim->owner_start_valid,
              "CTA reused a wid while its prior owner had not drained");
       tick();
     }
@@ -132,10 +132,10 @@ struct Bench {
     bool reused = false;
     for (uint32_t guard = 0; guard < 64 && !reused; ++guard) {
       eval();
-      if (sim->epoch_adv_valid) {
-        CHECKX(sim->epoch_adv_wid == 0,
+      if (sim->owner_start_valid) {
+        CHECKX(sim->owner_start_wid == 0,
                "post-drain dispatch reused wid%u instead of wid0",
-               unsigned(sim->epoch_adv_wid));
+               unsigned(sim->owner_start_wid));
         reused = true;
       }
       tick();

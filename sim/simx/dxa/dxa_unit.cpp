@@ -44,9 +44,7 @@ void DxaUnit::reset() {
     wait = ParkedWait{};
 #endif
 #ifdef VX_CFG_EXT_DXA_S2G_ENABLE
-  // A completion beat can already be queued at the SFU endpoint when a reset
-  // is requested.  It belongs to the old tracker epoch; discard it here so a
-  // subsequent image cannot observe a stale SOURCE_CONSUMED notification.
+  // Reset also flushes the worker transport; no pre-reset event may survive.
   while (!completion_in_.empty())
     completion_in_.pop();
 #endif
@@ -61,44 +59,11 @@ void DxaUnit::tick() {
   // The RTL core endpoint accepts one worker completion beat per cycle.
   if (!completion_in_.empty()) {
     const auto completion = completion_in_.peek();
-    auto result = tracker_.complete(completion.wid,
-                                    completion.epoch,
-                                    completion.group_seq,
-                                    completion.op_id);
-    if (result == DxaGroupTracker::CompletionResult::Applied) {
-      DT(4, "SOURCE_CONSUMED core=" << core_->id()
-         << " wid=" << completion.wid
-         << " seq=" << unsigned(completion.group_seq)
-         << " slot=" << tracker_.op_slot(completion.op_id)
-         << " gen=" << tracker_.op_generation(completion.op_id)
-         << " pending=" << tracker_.open_remaining(completion.wid)
-         << " depth=" << tracker_.committed_depth(completion.wid));
-    } else if (result == DxaGroupTracker::CompletionResult::Stale) {
-      // A late response from a recycled physical context is harmless but is
-      // deliberately visible in traces.  The generation/epoch check is the
-      // exact-once guard; never let a stale response decrement a new group.
-      DT(2, "SOURCE_CONSUMED_STALE core=" << core_->id()
-         << " wid=" << completion.wid
-         << " seq=" << unsigned(completion.group_seq)
-         << " slot=" << tracker_.op_slot(completion.op_id)
-         << " gen=" << tracker_.op_generation(completion.op_id)
-         << " depth=" << tracker_.committed_depth(completion.wid));
-    } else if (result == DxaGroupTracker::CompletionResult::Duplicate) {
-      DT(2, "SOURCE_CONSUMED_DUPLICATE core=" << core_->id()
-         << " wid=" << completion.wid
-         << " seq=" << unsigned(completion.group_seq)
-         << " slot=" << tracker_.op_slot(completion.op_id)
-         << " gen=" << tracker_.op_generation(completion.op_id)
-         << " depth=" << tracker_.committed_depth(completion.wid));
-    } else {
-      std::cerr << "invalid DXA S2G READ completion: core=" << core_->id()
-                << ", wid=" << completion.wid
-                << ", seq=" << unsigned(completion.group_seq)
-                << ", slot=" << tracker_.op_slot(completion.op_id)
-                << ", gen=" << tracker_.op_generation(completion.op_id)
-                << std::endl;
-      std::abort();
-    }
+    tracker_.complete(completion.wid, completion.group_id);
+    DT(4, "SOURCE_CONSUMED core=" << core_->id()
+       << ", wid=" << completion.wid << ", gid=" << completion.group_id
+       << ", pending=" << tracker_.remaining(completion.wid, completion.group_id)
+       << ", depth=" << tracker_.committed_depth(completion.wid));
     completion_in_.pop();
   }
 #endif
@@ -111,17 +76,16 @@ void DxaUnit::tick() {
       // tick() retires at most one row per warp. The retired sequence is the
       // old head, before the modulo pointer advances.
       DT(4, "GROUP_SOURCE_RETIRE core=" << core_->id()
-         << " wid=" << wid << " seq=" << unsigned(before)
+         << " wid=" << wid << " gid=" << unsigned(before & (VX_CFG_DXA_GROUP_DEPTH - 1))
          << " depth=" << tracker_.committed_depth(wid));
     }
   }
   for (uint32_t wid = 0; wid < parked_waits_.size(); ++wid) {
     auto& wait = parked_waits_[wid];
-    if (wait.trace && tracker_.wait_satisfied(wid, wait.n, wait.snapshot)) {
+    if (wait.trace && !wait.ready && tracker_.wait_satisfied(wid, wait.n)) {
       wait.ready = true;
       DT(3, "WAIT_READ_WAKE core=" << core_->id() << " wid=" << wid
-         << " N=" << wait.n << " snapshot="
-         << unsigned(wait.snapshot));
+         << ", N=" << wait.n);
     }
   }
 #endif
@@ -149,16 +113,16 @@ void DxaUnit::pop_ready_wait(uint32_t wid) {
   wait = ParkedWait{};
 }
 
-void DxaUnit::poison(uint32_t wid) {
-  tracker_.poison(wid);
+void DxaUnit::close_owner(uint32_t wid) {
+  tracker_.close_owner(wid);
 }
 
 bool DxaUnit::drained(uint32_t wid) const {
   return tracker_.drained(wid);
 }
 
-bool DxaUnit::advance_epoch(uint32_t wid) {
-  return tracker_.advance_epoch(wid);
+bool DxaUnit::reinitialize_owner(uint32_t wid) {
+  return tracker_.reinitialize_owner(wid);
 }
 #endif
 
@@ -176,30 +140,27 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace, uint32_t block_id,
 
   if (dxa_type == DxaType::COMMIT_GROUP) {
     const bool had_open = tracker_.open_valid(trace->wid);
-    const uint8_t commit_seq = tracker_.sealed_tail(trace->wid);
+    const uint32_t commit_gid = tracker_.open_gid(trace->wid);
     const uint32_t pending = tracker_.open_remaining(trace->wid);
-    auto result = tracker_.commit(trace->wid);
-    if (result == DxaGroupTracker::CommitResult::Backpressured)
-      return nullptr;
+    tracker_.commit(trace->wid);
     // DT() is compiled out in normal builds; keep the state snapshots useful
     // for trace builds without triggering -Werror in trace-off builds.
     (void)had_open;
-    (void)commit_seq;
+    (void)commit_gid;
     (void)pending;
     DT(4, "GROUP_COMMIT core=" << core_->id() << " wid=" << trace->wid
-       << " seq=" << unsigned(commit_seq)
-       << " ops=" << pending << " empty=" << !had_open
+       << " gid=" << commit_gid
+       << " pending=" << pending << " empty=" << !had_open
        << " depth=" << tracker_.committed_depth(trace->wid));
     return trace;
   }
 
   if (dxa_type == DxaType::WAIT_READ) {
     auto args = std::get<IntrDxaArgs>(trace->instr_ptr->get_args());
-    const uint8_t snapshot = tracker_.wait_snapshot(trace->wid);
-    if (tracker_.wait_satisfied(trace->wid, args.uimm5, snapshot)) {
+    if (tracker_.wait_satisfied(trace->wid, args.uimm5)) {
       *release_warp = true;
       DT(4, "WAIT_READ_PASS core=" << core_->id() << " wid=" << trace->wid
-         << " N=" << args.uimm5 << " snapshot=" << unsigned(snapshot)
+         << " N=" << args.uimm5
          << " depth=" << tracker_.committed_depth(trace->wid));
     } else {
       auto& wait = parked_waits_.at(trace->wid);
@@ -207,11 +168,10 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace, uint32_t block_id,
         std::abort();
       wait.trace = trace;
       wait.block_id = block_id;
-      wait.snapshot = snapshot;
       wait.n = args.uimm5;
       *parked = true;
       DT(3, "WAIT_READ_STALL core=" << core_->id() << " wid=" << trace->wid
-         << " N=" << args.uimm5 << " snapshot=" << unsigned(snapshot)
+         << " N=" << args.uimm5
          << " depth=" << tracker_.committed_depth(trace->wid));
     }
     return trace;
@@ -224,41 +184,32 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace, uint32_t block_id,
   const bool is_s2g = false;
 #endif
 
-  // The group tracker is architectural state: allocate/debit an operation
-  // only when the corresponding DXA request can be accepted by this unit's
-  // outbound channel.  Checking the channel first is essential because the
-  // SFU retries the same trace after a nullptr return; mutating the tracker
-  // before that retry would create a phantom operation (and, for S2G, attach
-  // a different token to each retry of one instruction).
+  // A retried request must not increment the group counter twice.
   if (req_out_.full())
     return nullptr;
 
 #ifdef VX_CFG_EXT_DXA_S2G_ENABLE
-  // G2S shares the transport packet with S2G but does not consume a READ
-  // group context.  Keep the optional token fields deterministic for that
-  // direction; downstream G2S code ignores them, while uninitialised values
-  // would make traces and sanitizers needlessly nondeterministic.
+  // G2S does not participate in source groups.
   DxaGroupTracker::OperationToken token{};
   if (is_s2g) {
     const bool opening = !tracker_.open_valid(trace->wid);
     auto result = tracker_.issue(trace->wid, &token);
     if (result == DxaGroupTracker::IssueResult::Backpressured) {
-      DT(3, "GROUP_RING_FULL core=" << core_->id() << " wid=" << trace->wid
-         << " depth=" << tracker_.committed_depth(trace->wid));
+      DT(3, "GROUP_BACKPRESSURE core=" << core_->id() << " wid=" << trace->wid
+         << " depth=" << tracker_.committed_depth(trace->wid)
+         << " pending=" << tracker_.open_remaining(trace->wid));
       return nullptr;
     }
-    if (result == DxaGroupTracker::IssueResult::IgnoredPoisoned)
+    if (result == DxaGroupTracker::IssueResult::OwnerClosed)
       return trace;
     (void)opening;
     if (opening) {
       DT(4, "GROUP_OPEN core=" << core_->id() << " wid=" << trace->wid
-         << " seq=" << unsigned(token.group_seq)
+         << " gid=" << unsigned(token.group_id)
          << " depth=" << tracker_.committed_depth(trace->wid));
     }
     DT(4, "GROUP_ISSUE core=" << core_->id() << " wid=" << trace->wid
-       << " seq=" << unsigned(token.group_seq)
-       << " slot=" << tracker_.op_slot(token.op_id)
-       << " gen=" << tracker_.op_generation(token.op_id)
+       << " gid=" << unsigned(token.group_id)
        << " pending=" << tracker_.open_remaining(trace->wid)
        << " depth=" << tracker_.committed_depth(trace->wid));
   }
@@ -291,9 +242,7 @@ instr_trace_t* DxaUnit::process(instr_trace_t* trace, uint32_t block_id,
   req.wid       = trace->wid;
   req.direction = is_s2g ? DxaDirection::S2G : DxaDirection::G2S;
 #ifdef VX_CFG_EXT_DXA_S2G_ENABLE
-  req.epoch     = token.epoch;
-  req.group_seq = token.group_seq;
-  req.op_id     = token.op_id;
+  req.group_id  = token.group_id;
 #endif
   req.desc_slot = desc_slot;
   // Keep raw bar_id; multicast offset arithmetic relies on encoded form

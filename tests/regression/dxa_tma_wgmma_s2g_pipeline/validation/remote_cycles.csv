@@ -1,0 +1,13 @@
+pipe,k_tiles,iters,input_stages,output_stages,state_stages,mode,instructions,device_cycles,status,remote_log
+0,4,16,3,3,3,0,21690,70293,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/perf-k4-i16-s3-mode-0.log
+0,4,16,3,3,3,1,25266,76381,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/perf-k4-i16-s3-mode-1.log
+0,4,16,3,3,3,2,53490,314227,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/perf-k4-i16-s3-mode-2.log
+0,4,16,3,3,3,3,21632,70209,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/perf-k4-i16-s3-mode-3.log
+1,4,16,3,3,3,0,21690,70309,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/pipe-perf-k4-i16-s3-mode-0.log
+1,4,16,3,3,3,1,25266,76381,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/pipe-perf-k4-i16-s3-mode-1.log
+1,4,16,3,3,3,2,53490,314227,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/pipe-perf-k4-i16-s3-mode-2.log
+1,4,16,3,3,3,3,21632,69993,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/pipe-perf-k4-i16-s3-mode-3.log
+0,4,32,3,4,4,0,39634,138597,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/perf-k4-i32-s4-mode-0.log
+0,4,32,3,4,4,1,46540,151111,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/perf-k4-i32-s4-mode-1.log
+0,4,32,3,4,4,2,102988,611455,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/perf-k4-i32-s4-mode-2.log
+0,4,32,3,4,4,3,39502,139057,PASS,/home/chengxuan/codex-runs/simple-groups-ws.P8caul/perf-k4-i32-s4-mode-3.log

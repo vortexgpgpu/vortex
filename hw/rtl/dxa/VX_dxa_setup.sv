@@ -52,9 +52,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     output wire [NW_WIDTH-1:0]         active_wid,
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
     output dxa_dir_t                    active_dir,
-    output wire [DXA_GROUP_EPOCH_W-1:0] active_epoch,
-    output wire [DXA_GROUP_SEQ_W-1:0]   active_group_seq,
-    output wire [DXA_GROUP_OPID_W-1:0]  active_op_id,
+    output wire [DXA_GROUP_ID_W-1:0]   active_group_id,
 `endif
     output wire [BAR_ADDR_W-1:0]       active_bar_addr,
     output wire                        active_notify_smem_done,
@@ -192,9 +190,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [NW_WIDTH-1:0]                     r_wid;
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
     dxa_dir_t                               r_dir;
-    reg [DXA_GROUP_EPOCH_W-1:0]            r_epoch;
-    reg [DXA_GROUP_SEQ_W-1:0]              r_group_seq;
-    reg [DXA_GROUP_OPID_W-1:0]             r_op_id;
+    reg [DXA_GROUP_ID_W-1:0]              r_group_id;
 `endif
     reg [BAR_ADDR_W-1:0]                   r_bar_addr;
     reg                                    r_notify_smem_done;
@@ -226,9 +222,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     reg [NW_WIDTH-1:0]                     s_wid;
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
     dxa_dir_t                               s_dir;
-    reg [DXA_GROUP_EPOCH_W-1:0]            s_epoch;
-    reg [DXA_GROUP_SEQ_W-1:0]              s_group_seq;
-    reg [DXA_GROUP_OPID_W-1:0]             s_op_id;
+    reg [DXA_GROUP_ID_W-1:0]              s_group_id;
 `endif
     reg [BAR_ADDR_W-1:0]                   s_bar_addr;
     reg                                    s_notify_smem_done;
@@ -255,9 +249,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     assign active_wid              = r_wid;
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
     assign active_dir              = r_dir;
-    assign active_epoch            = r_epoch;
-    assign active_group_seq        = r_group_seq;
-    assign active_op_id            = r_op_id;
+    assign active_group_id        = r_group_id;
 `endif
     assign active_bar_addr         = r_bar_addr;
     assign active_notify_smem_done = r_notify_smem_done;
@@ -413,13 +405,9 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
             r_wid              <= '0;
         `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
             r_dir              <= DXA_DIR_G2S;
-            r_epoch            <= '0;
-            r_group_seq        <= '0;
-            r_op_id            <= '0;
+            r_group_id        <= '0;
             s_dir              <= DXA_DIR_G2S;
-            s_epoch            <= '0;
-            s_group_seq        <= '0;
-            s_op_id            <= '0;
+            s_group_id        <= '0;
         `endif
             r_bar_addr         <= '0;
             r_notify_smem_done <= 1'b0;
@@ -452,9 +440,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                 r_wid               <= s_wid;
             `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
                 r_dir               <= s_dir;
-                r_epoch             <= s_epoch;
-                r_group_seq         <= s_group_seq;
-                r_op_id             <= s_op_id;
+                r_group_id         <= s_group_id;
             `endif
                 r_bar_addr          <= s_bar_addr;
                 r_notify_smem_done  <= s_notify_smem_done;
@@ -493,9 +479,7 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
                     s_wid               <= req_data.wid;
                 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
                     s_dir               <= req_data.dir;
-                    s_epoch             <= req_data.epoch;
-                    s_group_seq         <= req_data.group_seq;
-                    s_op_id             <= req_data.op_id;
+                    s_group_id         <= req_data.group_id;
                 `endif
                     s_bar_addr          <= launch_bar_addr;
                 `ifdef VX_CFG_EXT_DXA_ENABLE

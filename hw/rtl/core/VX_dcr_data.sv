@@ -27,7 +27,8 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     VX_dcr_csr_if.master    dcr_csr_if,
 
     // DCR-triggered cache flush
-    VX_dcr_flush_if.master  dcr_flush_if
+    VX_dcr_flush_if.master  dcr_flush_if,
+    output wire            dcr_busy
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -115,6 +116,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
 
     assign dcr_bus_if.rsp_valid = rsp_valid_r;
     assign dcr_bus_if.rsp_data  = rsp_data_r;
+    assign dcr_busy = is_mpm_read || dcr_csr_pending_r || is_flush_read || flush_pending_r || rsp_valid_r;
 
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin

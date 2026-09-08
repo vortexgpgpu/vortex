@@ -35,6 +35,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
     // Enable DMA port
     parameter DMA_ENABLE        = 0,
     parameter DMA_TAG_WIDTH     = 1,
+    parameter AMO_ENABLE        = 1,
 
     // Response buffer
     parameter OUT_BUF           = 0
@@ -258,7 +259,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         assign bank_amo = amo_req_t'(per_bank_req_attr[i][MEM_ATTR_AMO_OFFS +: AMO_REQ_BITS]);
         `UNUSED_VAR (bank_amo.hart_id)
         `UNUSED_VAR (bank_amo.amo_unsigned)
-        wire per_bank_req_is_amo = bank_amo.amo_valid;
+        wire per_bank_req_is_amo = AMO_ENABLE && bank_amo.amo_valid;
         wire per_bank_req_is_add = per_bank_req_is_amo && (bank_amo.amo_op == AMO_OP_ADD);
         wire per_bank_req_is_word;
         if (WORD_SIZE == 4) begin : g_amo_word32
@@ -343,6 +344,7 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             .width       (2'd2),
             .old_word    (amo_old_operand),
             .rhs         (amo_rhs_operand),
+            .cmp         ('0),
             .new_word    (amo_new_word),
             .ret_word    (amo_ret_word)
         );

@@ -179,11 +179,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   }
 #endif
 
-  // Dispatch one CTA warp. A warp that executed TMC(0) may already be absent
-  // from active_warps_ while its DXA source contexts are draining. Keep that
-  // lifetime hold visible to the CTA dispatcher as an occupied slot;
-  // otherwise it could hand the wid to a new CTA before the tracker epoch is
-  // advanced (a late SOURCE_CONSUMED beat would then target the new CTA).
+  // TMC(0) removes a warp from scheduling, but outstanding reads retain its SMEM.
   {
     WarpMask dispatch_occupied = active_warps_;
 #if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
@@ -349,12 +345,7 @@ bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
   if (!tmask.any()) {
 #if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
     core_->sfu_unit()->dxa_warp_exit(wid);
-    // A warp that has executed TMC(0) must leave the runnable/active set
-    // immediately, even when its accepted S2G source contexts are still
-    // draining.  Keeping it active with an empty tmask lets the next
-    // scheduler pass select it and hit the `warp.tmask.any()` invariant.
-    // CTA completion itself remains deferred until finish_dxa_retiring_warp()
-    // observes a drained tracker epoch.
+    // Source drain defers CTA release, not removal from the runnable set.
     active_warps_.reset(wid);
     stalled_warps_.reset(wid);
     stalled_warps_next_.reset(wid);
@@ -563,8 +554,7 @@ void Scheduler::fwd_try_inject() {
     for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
       if (active_warps_.test(w)) continue;
 #if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
-      // A retired warp remains unavailable until all S2G source contexts have
-      // drained and finish_dxa_retiring_warp() advances its epoch.
+      // The source drain also protects SMEM against fragment-wave reuse.
       if (dxa_retiring_warps_.test(w)) continue;
 #endif
       wid = int(w);

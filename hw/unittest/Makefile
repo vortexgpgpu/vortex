@@ -10,6 +10,7 @@ all:
 	$(MAKE) -C cta_dispatcher
 	$(MAKE) -C kmu
 	$(MAKE) -C dxa_core
+	$(MAKE) -C dxa_dispatch
 	$(MAKE) -C dxa_group_tracker
 	$(MAKE) -C dxa_s2g
 	$(MAKE) -C scheduler
@@ -43,6 +44,7 @@ run:
 	$(MAKE) -C cta_dispatcher run
 	$(MAKE) -C kmu run
 	$(MAKE) -C dxa_core run
+	$(MAKE) -C dxa_dispatch run
 	$(MAKE) -C dxa_group_tracker run
 	$(MAKE) -C dxa_s2g run
 	$(MAKE) -C scheduler run

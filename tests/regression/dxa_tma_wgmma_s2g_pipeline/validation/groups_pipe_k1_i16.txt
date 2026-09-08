@@ -1,0 +1,247 @@
+TRACE       7827: GROUP_OPEN core=0 wid=4 gid=0 depth=0
+TRACE       7827: GROUP_ISSUE core=0 wid=4 gid=0 pending=1 depth=0
+TRACE       7840: SOURCE_CONSUMED core=0, wid=4, gid=0, pending=0, depth=0
+TRACE       7965: GROUP_ISSUE core=0 wid=4 gid=0 pending=1 depth=0
+TRACE       7975: SOURCE_CONSUMED core=0, wid=4, gid=0, pending=0, depth=0
+TRACE       7984: GROUP_OPEN core=0 wid=3 gid=0 depth=0
+TRACE       7984: GROUP_ISSUE core=0 wid=3 gid=0 pending=1 depth=0
+TRACE       7996: GROUP_ISSUE core=0 wid=3 gid=0 pending=2 depth=0
+TRACE       8000: GROUP_COMMIT core=0 wid=3 gid=0 ops=2 empty=0 depth=1
+TRACE       8024: SOURCE_CONSUMED core=0, wid=3, gid=0, pending=1, depth=1
+TRACE       8031: GROUP_ISSUE core=0 wid=4 gid=0 pending=1 depth=0
+TRACE       8032: SOURCE_CONSUMED core=0, wid=3, gid=0, pending=0, depth=1
+TRACE       8032: GROUP_SOURCE_RETIRE core=0 wid=3 gid=0 depth=0
+TRACE       8037: GROUP_COMMIT core=0 wid=4 gid=0 ops=1 empty=0 depth=1
+TRACE       8040: SOURCE_CONSUMED core=0, wid=4, gid=0, pending=0, depth=1
+TRACE       8040: GROUP_SOURCE_RETIRE core=0 wid=4 gid=0 depth=0
+TRACE       9483: GROUP_OPEN core=0 wid=4 gid=1 depth=0
+TRACE       9483: GROUP_ISSUE core=0 wid=4 gid=1 pending=1 depth=0
+TRACE       9495: SOURCE_CONSUMED core=0, wid=4, gid=1, pending=0, depth=0
+TRACE       9555: GROUP_COMMIT core=0 wid=4 gid=1 ops=0 empty=0 depth=1
+TRACE       9556: GROUP_SOURCE_RETIRE core=0 wid=4 gid=1 depth=0
+TRACE       9636: GROUP_OPEN core=0 wid=3 gid=1 depth=0
+TRACE       9636: GROUP_ISSUE core=0 wid=3 gid=1 pending=1 depth=0
+TRACE       9648: GROUP_ISSUE core=0 wid=3 gid=1 pending=2 depth=0
+TRACE       9652: GROUP_COMMIT core=0 wid=3 gid=1 ops=2 empty=0 depth=1
+TRACE       9676: SOURCE_CONSUMED core=0, wid=3, gid=1, pending=1, depth=1
+TRACE       9684: SOURCE_CONSUMED core=0, wid=3, gid=1, pending=0, depth=1
+TRACE       9684: GROUP_SOURCE_RETIRE core=0 wid=3 gid=1 depth=0
+TRACE      11115: GROUP_OPEN core=0 wid=4 gid=2 depth=0
+TRACE      11115: GROUP_ISSUE core=0 wid=4 gid=2 pending=1 depth=0
+TRACE      11127: SOURCE_CONSUMED core=0, wid=4, gid=2, pending=0, depth=0
+TRACE      11179: GROUP_ISSUE core=0 wid=4 gid=2 pending=1 depth=0
+TRACE      11189: SOURCE_CONSUMED core=0, wid=4, gid=2, pending=0, depth=0
+TRACE      11213: GROUP_COMMIT core=0 wid=4 gid=2 ops=0 empty=0 depth=1
+TRACE      11214: GROUP_SOURCE_RETIRE core=0 wid=4 gid=2 depth=0
+TRACE      11338: GROUP_OPEN core=0 wid=3 gid=2 depth=0
+TRACE      11338: GROUP_ISSUE core=0 wid=3 gid=2 pending=1 depth=0
+TRACE      11350: GROUP_ISSUE core=0 wid=3 gid=2 pending=2 depth=0
+TRACE      11354: GROUP_COMMIT core=0 wid=3 gid=2 ops=2 empty=0 depth=1
+TRACE      11363: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      11378: SOURCE_CONSUMED core=0, wid=3, gid=2, pending=1, depth=1
+TRACE      11386: SOURCE_CONSUMED core=0, wid=3, gid=2, pending=0, depth=1
+TRACE      11386: GROUP_SOURCE_RETIRE core=0 wid=3 gid=2 depth=0
+TRACE      11510: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      13127: GROUP_OPEN core=0 wid=4 gid=3 depth=0
+TRACE      13127: GROUP_ISSUE core=0 wid=4 gid=3 pending=1 depth=0
+TRACE      13139: SOURCE_CONSUMED core=0, wid=4, gid=3, pending=0, depth=0
+TRACE      13199: GROUP_COMMIT core=0 wid=4 gid=3 ops=0 empty=0 depth=1
+TRACE      13200: GROUP_SOURCE_RETIRE core=0 wid=4 gid=3 depth=0
+TRACE      13290: GROUP_OPEN core=0 wid=3 gid=3 depth=0
+TRACE      13290: GROUP_ISSUE core=0 wid=3 gid=3 pending=1 depth=0
+TRACE      13302: GROUP_ISSUE core=0 wid=3 gid=3 pending=2 depth=0
+TRACE      13306: GROUP_COMMIT core=0 wid=3 gid=3 ops=2 empty=0 depth=1
+TRACE      13330: SOURCE_CONSUMED core=0, wid=3, gid=3, pending=1, depth=1
+TRACE      13338: SOURCE_CONSUMED core=0, wid=3, gid=3, pending=0, depth=1
+TRACE      13338: GROUP_SOURCE_RETIRE core=0 wid=3 gid=3 depth=0
+TRACE      13343: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      13473: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      15097: GROUP_OPEN core=0 wid=4 gid=4 depth=0
+TRACE      15097: GROUP_ISSUE core=0 wid=4 gid=4 pending=1 depth=0
+TRACE      15109: SOURCE_CONSUMED core=0, wid=4, gid=4, pending=0, depth=0
+TRACE      15169: GROUP_ISSUE core=0 wid=4 gid=4 pending=1 depth=0
+TRACE      15179: SOURCE_CONSUMED core=0, wid=4, gid=4, pending=0, depth=0
+TRACE      15233: GROUP_ISSUE core=0 wid=4 gid=4 pending=1 depth=0
+TRACE      15239: GROUP_COMMIT core=0 wid=4 gid=4 ops=1 empty=0 depth=1
+TRACE      15242: SOURCE_CONSUMED core=0, wid=4, gid=4, pending=0, depth=1
+TRACE      15242: GROUP_SOURCE_RETIRE core=0 wid=4 gid=4 depth=0
+TRACE      15260: GROUP_OPEN core=0 wid=3 gid=4 depth=0
+TRACE      15260: GROUP_ISSUE core=0 wid=3 gid=4 pending=1 depth=0
+TRACE      15272: GROUP_ISSUE core=0 wid=3 gid=4 pending=2 depth=0
+TRACE      15276: GROUP_COMMIT core=0 wid=3 gid=4 ops=2 empty=0 depth=1
+TRACE      15300: SOURCE_CONSUMED core=0, wid=3, gid=4, pending=1, depth=1
+TRACE      15308: SOURCE_CONSUMED core=0, wid=3, gid=4, pending=0, depth=1
+TRACE      15308: GROUP_SOURCE_RETIRE core=0 wid=3 gid=4 depth=0
+TRACE      15405: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      15424: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      17057: GROUP_OPEN core=0 wid=4 gid=5 depth=0
+TRACE      17057: GROUP_ISSUE core=0 wid=4 gid=5 pending=1 depth=0
+TRACE      17069: SOURCE_CONSUMED core=0, wid=4, gid=5, pending=0, depth=0
+TRACE      17129: GROUP_COMMIT core=0 wid=4 gid=5 ops=0 empty=0 depth=1
+TRACE      17130: GROUP_SOURCE_RETIRE core=0 wid=4 gid=5 depth=0
+TRACE      17220: GROUP_OPEN core=0 wid=3 gid=5 depth=0
+TRACE      17220: GROUP_ISSUE core=0 wid=3 gid=5 pending=1 depth=0
+TRACE      17232: GROUP_ISSUE core=0 wid=3 gid=5 pending=2 depth=0
+TRACE      17236: GROUP_COMMIT core=0 wid=3 gid=5 ops=2 empty=0 depth=1
+TRACE      17260: SOURCE_CONSUMED core=0, wid=3, gid=5, pending=1, depth=1
+TRACE      17268: SOURCE_CONSUMED core=0, wid=3, gid=5, pending=0, depth=1
+TRACE      17268: GROUP_SOURCE_RETIRE core=0 wid=3 gid=5 depth=0
+TRACE      17273: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      17393: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      19013: GROUP_OPEN core=0 wid=4 gid=6 depth=0
+TRACE      19013: GROUP_ISSUE core=0 wid=4 gid=6 pending=1 depth=0
+TRACE      19025: SOURCE_CONSUMED core=0, wid=4, gid=6, pending=0, depth=0
+TRACE      19085: GROUP_ISSUE core=0 wid=4 gid=6 pending=1 depth=0
+TRACE      19095: SOURCE_CONSUMED core=0, wid=4, gid=6, pending=0, depth=0
+TRACE      19117: GROUP_COMMIT core=0 wid=4 gid=6 ops=0 empty=0 depth=1
+TRACE      19118: GROUP_SOURCE_RETIRE core=0 wid=4 gid=6 depth=0
+TRACE      19176: GROUP_OPEN core=0 wid=3 gid=6 depth=0
+TRACE      19176: GROUP_ISSUE core=0 wid=3 gid=6 pending=1 depth=0
+TRACE      19188: GROUP_ISSUE core=0 wid=3 gid=6 pending=2 depth=0
+TRACE      19192: GROUP_COMMIT core=0 wid=3 gid=6 ops=2 empty=0 depth=1
+TRACE      19216: SOURCE_CONSUMED core=0, wid=3, gid=6, pending=1, depth=1
+TRACE      19224: SOURCE_CONSUMED core=0, wid=3, gid=6, pending=0, depth=1
+TRACE      19224: GROUP_SOURCE_RETIRE core=0 wid=3 gid=6 depth=0
+TRACE      19269: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      19340: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      20973: GROUP_OPEN core=0 wid=4 gid=7 depth=0
+TRACE      20973: GROUP_ISSUE core=0 wid=4 gid=7 pending=1 depth=0
+TRACE      20985: SOURCE_CONSUMED core=0, wid=4, gid=7, pending=0, depth=0
+TRACE      21045: GROUP_COMMIT core=0 wid=4 gid=7 ops=0 empty=0 depth=1
+TRACE      21046: GROUP_SOURCE_RETIRE core=0 wid=4 gid=7 depth=0
+TRACE      21136: GROUP_OPEN core=0 wid=3 gid=7 depth=0
+TRACE      21136: GROUP_ISSUE core=0 wid=3 gid=7 pending=1 depth=0
+TRACE      21148: GROUP_ISSUE core=0 wid=3 gid=7 pending=2 depth=0
+TRACE      21152: GROUP_COMMIT core=0 wid=3 gid=7 ops=2 empty=0 depth=1
+TRACE      21176: SOURCE_CONSUMED core=0, wid=3, gid=7, pending=1, depth=1
+TRACE      21184: SOURCE_CONSUMED core=0, wid=3, gid=7, pending=0, depth=1
+TRACE      21184: GROUP_SOURCE_RETIRE core=0 wid=3 gid=7 depth=0
+TRACE      21189: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      21315: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      22935: GROUP_OPEN core=0 wid=4 gid=0 depth=0
+TRACE      22935: GROUP_ISSUE core=0 wid=4 gid=0 pending=1 depth=0
+TRACE      22947: SOURCE_CONSUMED core=0, wid=4, gid=0, pending=0, depth=0
+TRACE      23007: GROUP_ISSUE core=0 wid=4 gid=0 pending=1 depth=0
+TRACE      23017: SOURCE_CONSUMED core=0, wid=4, gid=0, pending=0, depth=0
+TRACE      23071: GROUP_ISSUE core=0 wid=4 gid=0 pending=1 depth=0
+TRACE      23077: GROUP_COMMIT core=0 wid=4 gid=0 ops=1 empty=0 depth=1
+TRACE      23080: SOURCE_CONSUMED core=0, wid=4, gid=0, pending=0, depth=1
+TRACE      23080: GROUP_SOURCE_RETIRE core=0 wid=4 gid=0 depth=0
+TRACE      23098: GROUP_OPEN core=0 wid=3 gid=0 depth=0
+TRACE      23098: GROUP_ISSUE core=0 wid=3 gid=0 pending=1 depth=0
+TRACE      23110: GROUP_ISSUE core=0 wid=3 gid=0 pending=2 depth=0
+TRACE      23114: GROUP_COMMIT core=0 wid=3 gid=0 ops=2 empty=0 depth=1
+TRACE      23138: SOURCE_CONSUMED core=0, wid=3, gid=0, pending=1, depth=1
+TRACE      23146: SOURCE_CONSUMED core=0, wid=3, gid=0, pending=0, depth=1
+TRACE      23146: GROUP_SOURCE_RETIRE core=0 wid=3 gid=0 depth=0
+TRACE      23252: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      23262: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      24913: GROUP_OPEN core=0 wid=4 gid=1 depth=0
+TRACE      24913: GROUP_ISSUE core=0 wid=4 gid=1 pending=1 depth=0
+TRACE      24925: SOURCE_CONSUMED core=0, wid=4, gid=1, pending=0, depth=0
+TRACE      24985: GROUP_COMMIT core=0 wid=4 gid=1 ops=0 empty=0 depth=1
+TRACE      24986: GROUP_SOURCE_RETIRE core=0 wid=4 gid=1 depth=0
+TRACE      25076: GROUP_OPEN core=0 wid=3 gid=1 depth=0
+TRACE      25076: GROUP_ISSUE core=0 wid=3 gid=1 pending=1 depth=0
+TRACE      25088: GROUP_ISSUE core=0 wid=3 gid=1 pending=2 depth=0
+TRACE      25092: GROUP_COMMIT core=0 wid=3 gid=1 ops=2 empty=0 depth=1
+TRACE      25116: SOURCE_CONSUMED core=0, wid=3, gid=1, pending=1, depth=1
+TRACE      25124: SOURCE_CONSUMED core=0, wid=3, gid=1, pending=0, depth=1
+TRACE      25124: GROUP_SOURCE_RETIRE core=0 wid=3 gid=1 depth=0
+TRACE      25129: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      25249: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      26869: GROUP_OPEN core=0 wid=4 gid=2 depth=0
+TRACE      26869: GROUP_ISSUE core=0 wid=4 gid=2 pending=1 depth=0
+TRACE      26881: SOURCE_CONSUMED core=0, wid=4, gid=2, pending=0, depth=0
+TRACE      26941: GROUP_ISSUE core=0 wid=4 gid=2 pending=1 depth=0
+TRACE      26951: SOURCE_CONSUMED core=0, wid=4, gid=2, pending=0, depth=0
+TRACE      26973: GROUP_COMMIT core=0 wid=4 gid=2 ops=0 empty=0 depth=1
+TRACE      26974: GROUP_SOURCE_RETIRE core=0 wid=4 gid=2 depth=0
+TRACE      27032: GROUP_OPEN core=0 wid=3 gid=2 depth=0
+TRACE      27032: GROUP_ISSUE core=0 wid=3 gid=2 pending=1 depth=0
+TRACE      27044: GROUP_ISSUE core=0 wid=3 gid=2 pending=2 depth=0
+TRACE      27048: GROUP_COMMIT core=0 wid=3 gid=2 ops=2 empty=0 depth=1
+TRACE      27072: SOURCE_CONSUMED core=0, wid=3, gid=2, pending=1, depth=1
+TRACE      27080: SOURCE_CONSUMED core=0, wid=3, gid=2, pending=0, depth=1
+TRACE      27080: GROUP_SOURCE_RETIRE core=0 wid=3 gid=2 depth=0
+TRACE      27125: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      27196: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      28829: GROUP_OPEN core=0 wid=4 gid=3 depth=0
+TRACE      28829: GROUP_ISSUE core=0 wid=4 gid=3 pending=1 depth=0
+TRACE      28841: SOURCE_CONSUMED core=0, wid=4, gid=3, pending=0, depth=0
+TRACE      28901: GROUP_COMMIT core=0 wid=4 gid=3 ops=0 empty=0 depth=1
+TRACE      28902: GROUP_SOURCE_RETIRE core=0 wid=4 gid=3 depth=0
+TRACE      28992: GROUP_OPEN core=0 wid=3 gid=3 depth=0
+TRACE      28992: GROUP_ISSUE core=0 wid=3 gid=3 pending=1 depth=0
+TRACE      29004: GROUP_ISSUE core=0 wid=3 gid=3 pending=2 depth=0
+TRACE      29008: GROUP_COMMIT core=0 wid=3 gid=3 ops=2 empty=0 depth=1
+TRACE      29032: SOURCE_CONSUMED core=0, wid=3, gid=3, pending=1, depth=1
+TRACE      29040: SOURCE_CONSUMED core=0, wid=3, gid=3, pending=0, depth=1
+TRACE      29040: GROUP_SOURCE_RETIRE core=0 wid=3 gid=3 depth=0
+TRACE      29045: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      29175: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      30823: GROUP_OPEN core=0 wid=4 gid=4 depth=0
+TRACE      30823: GROUP_ISSUE core=0 wid=4 gid=4 pending=1 depth=0
+TRACE      30835: SOURCE_CONSUMED core=0, wid=4, gid=4, pending=0, depth=0
+TRACE      30895: GROUP_ISSUE core=0 wid=4 gid=4 pending=1 depth=0
+TRACE      30905: SOURCE_CONSUMED core=0, wid=4, gid=4, pending=0, depth=0
+TRACE      30959: GROUP_ISSUE core=0 wid=4 gid=4 pending=1 depth=0
+TRACE      30965: GROUP_COMMIT core=0 wid=4 gid=4 ops=1 empty=0 depth=1
+TRACE      30968: SOURCE_CONSUMED core=0, wid=4, gid=4, pending=0, depth=1
+TRACE      30968: GROUP_SOURCE_RETIRE core=0 wid=4 gid=4 depth=0
+TRACE      30986: GROUP_OPEN core=0 wid=3 gid=4 depth=0
+TRACE      30986: GROUP_ISSUE core=0 wid=3 gid=4 pending=1 depth=0
+TRACE      30998: GROUP_ISSUE core=0 wid=3 gid=4 pending=2 depth=0
+TRACE      31002: GROUP_COMMIT core=0 wid=3 gid=4 ops=2 empty=0 depth=1
+TRACE      31026: SOURCE_CONSUMED core=0, wid=3, gid=4, pending=1, depth=1
+TRACE      31034: SOURCE_CONSUMED core=0, wid=3, gid=4, pending=0, depth=1
+TRACE      31034: GROUP_SOURCE_RETIRE core=0 wid=3 gid=4 depth=0
+TRACE      31113: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      31148: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      32765: GROUP_OPEN core=0 wid=4 gid=5 depth=0
+TRACE      32765: GROUP_ISSUE core=0 wid=4 gid=5 pending=1 depth=0
+TRACE      32777: SOURCE_CONSUMED core=0, wid=4, gid=5, pending=0, depth=0
+TRACE      32837: GROUP_COMMIT core=0 wid=4 gid=5 ops=0 empty=0 depth=1
+TRACE      32838: GROUP_SOURCE_RETIRE core=0 wid=4 gid=5 depth=0
+TRACE      32928: GROUP_OPEN core=0 wid=3 gid=5 depth=0
+TRACE      32928: GROUP_ISSUE core=0 wid=3 gid=5 pending=1 depth=0
+TRACE      32940: GROUP_ISSUE core=0 wid=3 gid=5 pending=2 depth=0
+TRACE      32944: GROUP_COMMIT core=0 wid=3 gid=5 ops=2 empty=0 depth=1
+TRACE      32968: SOURCE_CONSUMED core=0, wid=3, gid=5, pending=1, depth=1
+TRACE      32976: SOURCE_CONSUMED core=0, wid=3, gid=5, pending=0, depth=1
+TRACE      32976: GROUP_SOURCE_RETIRE core=0 wid=3 gid=5 depth=0
+TRACE      32981: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      33090: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      34707: GROUP_OPEN core=0 wid=4 gid=6 depth=0
+TRACE      34707: GROUP_ISSUE core=0 wid=4 gid=6 pending=1 depth=0
+TRACE      34719: SOURCE_CONSUMED core=0, wid=4, gid=6, pending=0, depth=0
+TRACE      34779: GROUP_ISSUE core=0 wid=4 gid=6 pending=1 depth=0
+TRACE      34789: SOURCE_CONSUMED core=0, wid=4, gid=6, pending=0, depth=0
+TRACE      34811: GROUP_COMMIT core=0 wid=4 gid=6 ops=0 empty=0 depth=1
+TRACE      34812: GROUP_SOURCE_RETIRE core=0 wid=4 gid=6 depth=0
+TRACE      34870: GROUP_OPEN core=0 wid=3 gid=6 depth=0
+TRACE      34870: GROUP_ISSUE core=0 wid=3 gid=6 pending=1 depth=0
+TRACE      34882: GROUP_ISSUE core=0 wid=3 gid=6 pending=2 depth=0
+TRACE      34886: GROUP_COMMIT core=0 wid=3 gid=6 ops=2 empty=0 depth=1
+TRACE      34910: SOURCE_CONSUMED core=0, wid=3, gid=6, pending=1, depth=1
+TRACE      34918: SOURCE_CONSUMED core=0, wid=3, gid=6, pending=0, depth=1
+TRACE      34918: GROUP_SOURCE_RETIRE core=0 wid=3 gid=6 depth=0
+TRACE      34961: WAIT_READ_PASS core=0 wid=4 N=2 depth=0
+TRACE      35032: WAIT_READ_PASS core=0 wid=3 N=2 depth=0
+TRACE      36709: GROUP_OPEN core=0 wid=4 gid=7 depth=0
+TRACE      36709: GROUP_ISSUE core=0 wid=4 gid=7 pending=1 depth=0
+TRACE      36721: SOURCE_CONSUMED core=0, wid=4, gid=7, pending=0, depth=0
+TRACE      36771: GROUP_COMMIT core=0 wid=4 gid=7 ops=0 empty=0 depth=1
+TRACE      36772: GROUP_SOURCE_RETIRE core=0 wid=4 gid=7 depth=0
+TRACE      36866: GROUP_OPEN core=0 wid=3 gid=7 depth=0
+TRACE      36866: GROUP_ISSUE core=0 wid=3 gid=7 pending=1 depth=0
+TRACE      36878: GROUP_ISSUE core=0 wid=3 gid=7 pending=2 depth=0
+TRACE      36882: GROUP_COMMIT core=0 wid=3 gid=7 ops=2 empty=0 depth=1
+TRACE      36906: SOURCE_CONSUMED core=0, wid=3, gid=7, pending=1, depth=1
+TRACE      36914: SOURCE_CONSUMED core=0, wid=3, gid=7, pending=0, depth=1
+TRACE      36914: GROUP_SOURCE_RETIRE core=0 wid=3 gid=7 depth=0
+TRACE      36975: WAIT_READ_PASS core=0 wid=4 N=0 depth=0
+TRACE      37084: WAIT_READ_PASS core=0 wid=3 N=0 depth=0
+PERF: instrs=11058, cycles=40486, IPC=0.273
+mode 0 TMA + pipelined S2G PASS; 16x16x8, iters=16, stages=3/3/3
+PASS: independent output/state issuers; 2D/3D groups; optional 1/2/3-op groups; source/destination canaries; L2 enabled

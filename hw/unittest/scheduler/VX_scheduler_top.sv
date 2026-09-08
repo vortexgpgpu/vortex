@@ -23,10 +23,10 @@ module VX_scheduler_top import VX_gpu_pkg::*; (
 
     output wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
     output wire scheduler_busy,
-    output wire epoch_adv_valid,
-    output wire [NW_WIDTH-1:0] epoch_adv_wid,
-    output wire poison_valid,
-    output wire [NW_WIDTH-1:0] poison_wid
+    output wire owner_start_valid,
+    output wire [NW_WIDTH-1:0] owner_start_wid,
+    output wire owner_close_valid,
+    output wire [NW_WIDTH-1:0] owner_close_wid
 );
     VX_warp_ctl_if warp_ctl_if();
     assign warp_ctl_if.wspawn_valid = 1'b0;
@@ -75,21 +75,26 @@ module VX_scheduler_top import VX_gpu_pkg::*; (
 
     VX_kmu_bus_if kmu_bus_if();
     assign kmu_bus_if.valid = task_valid;
+    kmu_req_t task_data;
+    assign kmu_bus_if.data = task_data;
+    assign kmu_bus_if.dest = '0;
+    assign kmu_bus_if.kind = KMU_KIND_COMPUTE;
+    assign kmu_bus_if.eop = 1'b1;
     always_comb begin
-        kmu_bus_if.data = '0;
-        kmu_bus_if.data.PC = PC_BITS'(32'h100);
-        kmu_bus_if.data.entry = PC_BITS'(32'h100);
-        kmu_bus_if.data.ctx_id = task_ctx_id;
-        kmu_bus_if.data.block_dim[0] = task_block_size;
-        kmu_bus_if.data.block_dim[1] = 1;
-        kmu_bus_if.data.block_dim[2] = 1;
-        kmu_bus_if.data.grid_dim[0] = 1;
-        kmu_bus_if.data.grid_dim[1] = 1;
-        kmu_bus_if.data.grid_dim[2] = 1;
-        kmu_bus_if.data.block_size = task_block_size;
-        kmu_bus_if.data.warp_step[0] = CTA_TID_WIDTH'(`VX_CFG_NUM_THREADS);
-        kmu_bus_if.data.cluster_size = (NW_WIDTH+1)'(1);
-        kmu_bus_if.data.is_first_of_cluster = 1'b1;
+        task_data = '0;
+        task_data.PC = PC_BITS'(32'h100);
+        task_data.entry = PC_BITS'(32'h100);
+        task_data.ctx_id = task_ctx_id;
+        task_data.args.compute.block_dim[0] = task_block_size;
+        task_data.args.compute.block_dim[1] = 1;
+        task_data.args.compute.block_dim[2] = 1;
+        task_data.args.compute.grid_dim[0] = 1;
+        task_data.args.compute.grid_dim[1] = 1;
+        task_data.args.compute.grid_dim[2] = 1;
+        task_data.args.compute.block_size = task_block_size;
+        task_data.args.compute.warp_step[0] = CTA_TID_WIDTH'(`VX_CFG_NUM_THREADS);
+        task_data.args.compute.cluster_size = (NW_WIDTH+1)'(1);
+        task_data.args.compute.is_first_of_cluster = 1'b1;
     end
     assign task_ready = kmu_bus_if.ready;
 
@@ -129,10 +134,10 @@ module VX_scheduler_top import VX_gpu_pkg::*; (
         .commit_sched_if           (commit_sched_if),
         .dxa_group_unlock_mask     ('0),
         .dxa_group_drained_mask    (group_drained_mask),
-        .dxa_group_epoch_adv_valid (epoch_adv_valid),
-        .dxa_group_epoch_adv_wid   (epoch_adv_wid),
-        .dxa_group_poison_valid    (poison_valid),
-        .dxa_group_poison_wid      (poison_wid),
+        .dxa_group_owner_start_valid (owner_start_valid),
+        .dxa_group_owner_start_wid   (owner_start_wid),
+        .dxa_group_owner_close_valid    (owner_close_valid),
+        .dxa_group_owner_close_wid      (owner_close_wid),
         .kmu_bus_if                (kmu_bus_if),
         .schedule_if               (schedule_if),
         .sched_csr_if              (sched_csr_if),
@@ -154,7 +159,7 @@ module VX_scheduler_top import VX_gpu_pkg::*; (
                         || (|sched_csr_if.thread_masks)
                         || (|sched_csr_if.mscratch)
                         || (|sched_csr_if.cta_csrs)
-                        || (|sched_csr_if.cta_tid)
+                        || (|sched_csr_if.cta_lane)
                         || (|sched_csr_if.csr_mstatus)
                         || (|sched_csr_if.csr_mtvec)
                         || (|sched_csr_if.csr_mepc)

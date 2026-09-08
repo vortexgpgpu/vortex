@@ -241,8 +241,7 @@ private:
   WarpMask stalled_warps_;       // registered (current) state read by schedule()
   WarpMask stalled_warps_next_;  // next-state written by suspend()/resume()
 #if defined(VX_CFG_EXT_DXA_ENABLE) && defined(VX_CFG_EXT_DXA_GROUP_ENABLE)
-  // A zero-tmask warp remains unavailable to CTA dispatch until its accepted
-  // S2G READ contexts have drained and the tracker epoch can advance.
+  // Do not reuse a warp or its SMEM until its accepted S2G reads drain.
   WarpMask dxa_retiring_warps_;
 #endif
   // Per-warp gate set on async-trap entry, cleared on mret. Lets the

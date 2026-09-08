@@ -16,21 +16,6 @@
 
 `include "VX_define.vh"
 
-// Optional S2G LMEM read-credit tag extension.  Disabled builds retain the
-// original `{uuid, engine, core}` width and routing ABI.
-`ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
-`ifndef VX_CFG_DXA_S2G_PIPE_SLOTS
-`define VX_CFG_DXA_S2G_PIPE_SLOTS 4
-`endif
-`define VX_DXA_PIPE_SLOT_BITS `UP(`CLOG2(`VX_CFG_DXA_S2G_PIPE_SLOTS))
-`define VX_DXA_PIPE_WORD_BITS 4
-`define VX_DXA_PIPE_TAG_BITS (`VX_DXA_PIPE_SLOT_BITS + `VX_DXA_PIPE_WORD_BITS)
-`else
-`define VX_DXA_PIPE_SLOT_BITS 0
-`define VX_DXA_PIPE_WORD_BITS 0
-`define VX_DXA_PIPE_TAG_BITS 0
-`endif
-
 `IGNORE_UNUSED_BEGIN
 
 package VX_gpu_pkg;
@@ -1432,7 +1417,16 @@ package VX_gpu_pkg;
     // DXA lmem tag and attr widths for DMA arb.
     localparam DXA_LMEM_ATTR_W = (BAR_ADDR_W + 1);
     localparam DXA_LMEM_ENGINE_TAG_W = UUID_WIDTH + 1;
-    localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS + `VX_DXA_PIPE_TAG_BITS;
+`ifdef VX_CFG_DXA_S2G_PIPE_MULTI_READ
+    localparam DXA_PIPE_SMEM_BYTES = `VX_CFG_LMEM_NUM_BANKS * (`VX_CFG_XLEN / 8);
+    localparam DXA_PIPE_MAX_WORDS = (`VX_CFG_L1_LINE_SIZE + 2 * DXA_PIPE_SMEM_BYTES - 2) / DXA_PIPE_SMEM_BYTES;
+    localparam DXA_PIPE_SLOT_BITS = `UP(`CLOG2(`VX_CFG_DXA_S2G_PIPE_SLOTS));
+    localparam DXA_PIPE_WORD_BITS = `UP(`CLOG2(DXA_PIPE_MAX_WORDS));
+    localparam DXA_PIPE_TAG_BITS = DXA_PIPE_SLOT_BITS + DXA_PIPE_WORD_BITS;
+`else
+    localparam DXA_PIPE_TAG_BITS = 0;
+`endif
+    localparam DXA_LMEM_TAG_W = DXA_LMEM_ENGINE_TAG_W + NC_BITS + DXA_PIPE_TAG_BITS;
     localparam DXA_LMEM_OUT_TAG_W = DXA_LMEM_TAG_W + `ARB_SEL_BITS(`VX_CFG_NUM_DXA_CORES, 1);
 
     // TCU lmem tag and attr widths for DMA arb.

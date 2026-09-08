@@ -40,9 +40,7 @@ struct DxaReq {
   uint32_t wid;
   DxaDirection direction;
 #ifdef VX_CFG_EXT_DXA_S2G_ENABLE
-  uint32_t epoch;
-  uint8_t  group_seq;
-  uint32_t op_id;
+  uint32_t group_id;
 #endif
   uint32_t desc_slot;     // descriptor table index
   uint32_t bar_id;        // RAW (pre bar_decode_id) — kept raw so that
@@ -59,9 +57,7 @@ struct DxaReq {
 // high-level S2G operation have been copied into worker-owned payload storage.
 struct DxaReadCompletion {
   uint32_t wid;
-  uint32_t epoch;
-  uint8_t group_seq;
-  uint32_t op_id;
+  uint32_t group_id;
 };
 #endif
 
@@ -98,9 +94,9 @@ public:
   bool peek_ready_wait(uint32_t* wid, uint32_t* block_id,
                        instr_trace_t** trace) const;
   void pop_ready_wait(uint32_t wid);
-  void poison(uint32_t wid);
+  void close_owner(uint32_t wid);
   bool drained(uint32_t wid) const;
-  bool advance_epoch(uint32_t wid);
+  bool reinitialize_owner(uint32_t wid);
 #endif
 
   // Decode lanes 0..3 from the trace's source operands and try to push a
@@ -121,7 +117,6 @@ private:
   struct ParkedWait {
     instr_trace_t* trace = nullptr;
     uint32_t block_id = 0;
-    uint8_t snapshot = 0;
     uint32_t n = 0;
     bool ready = false;
   };

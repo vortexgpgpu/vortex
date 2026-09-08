@@ -77,9 +77,10 @@ module VX_socket import VX_gpu_pkg::*;
 
     VX_kmu_bus_if per_core_kmu_bus_if[`VX_CFG_SOCKET_SIZE]();
 
-    VX_kmu_arb #(
+    VX_kmu_bus_arb #(
         .NUM_INPUTS (1),
         .NUM_OUTPUTS (`VX_CFG_SOCKET_SIZE),
+        .DEST_LSB    (KMU_DEST_LSB_SOCKET),
         .OUT_BUF    ((`VX_CFG_SOCKET_SIZE > 1) ? 3 : 0)
     ) kmu_arb (
         .clk        (clk),
@@ -211,6 +212,7 @@ module VX_socket import VX_gpu_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
+    localparam DXA_L2_GMEM_PORTS_PER_SOCKET = `MIN(`VX_CFG_DXA_MEM_PORTS, `MIN(`VX_CFG_NUM_DXA_CORES, L1_MEM_PORTS));
     // Pair each engine stream with one socket memory port to avoid a second
     // cluster-level arbitration hop.
     VX_mem_bus_if #(

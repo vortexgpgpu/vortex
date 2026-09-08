@@ -28,9 +28,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     , output wire                         group_issue_query
     , output wire [NW_WIDTH-1:0]          group_issue_wid
     , input  wire [1:0]                   group_issue_result
-    , input  wire [DXA_GROUP_EPOCH_W-1:0] group_issue_epoch
-    , input  wire [DXA_GROUP_SEQ_W-1:0]   group_issue_seq
-    , input  wire [DXA_GROUP_OPID_W-1:0]  group_issue_op_id
+    , input  wire [DXA_GROUP_ID_W-1:0]   group_issue_gid
     , output wire                         group_commit_valid
     , output wire [NW_WIDTH-1:0]          group_commit_wid
     , input  wire [1:0]                   group_commit_result
@@ -79,13 +77,9 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
     assign dxa_req_data_in.dir       = (execute_if.data.op_args.dxa.subop == INST_DXA_ISSUE_S2G)
                                      ? DXA_DIR_S2G : DXA_DIR_G2S;
-    assign dxa_req_data_in.epoch     = group_issue_epoch;
-    assign dxa_req_data_in.group_seq = group_issue_seq;
-    assign dxa_req_data_in.op_id     = group_issue_op_id;
+    assign dxa_req_data_in.group_id = group_issue_gid;
 `elsif VX_CFG_EXT_DXA_GROUP_ENABLE
-    `UNUSED_VAR (group_issue_epoch)
-    `UNUSED_VAR (group_issue_seq)
-    `UNUSED_VAR (group_issue_op_id)
+    `UNUSED_VAR (group_issue_gid)
 `endif
     assign dxa_req_data_in.smem_addr = lmem_rel_byte_addr[DXA_SMEM_ADDR_W-1:0];
     assign dxa_req_data_in.meta      = lane1_rs1[31:0];
@@ -123,10 +117,7 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire group_issue_ignored = (group_issue_result == 2'd2);
     wire commit_accepted = (group_commit_result != 2'd1);
 
-    // Only S2G consumes a group-operation context. G2S retains its existing
-    // transactional-barrier completion path and is independent of group-pool
-    // pressure. Poisoned streams consume the instruction without launching a
-    // transfer; a full physical pool or boundary ring applies backpressure.
+    // Only S2G reserves a group-counter credit; G2S completes through its barrier.
     wire accept = wb_ready
                && (is_g2s ? dxa_buf_ready
                  : is_s2g ? ((group_issue_tracked && dxa_buf_ready)

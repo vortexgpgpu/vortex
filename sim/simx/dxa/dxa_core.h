@@ -75,7 +75,7 @@ public:
   std::vector<SimChannel<MemReq>>  lmem_req_out;
 #ifdef VX_CFG_EXT_DXA_S2G_ENABLE
   std::vector<SimChannel<MemRsp>>  lmem_rsp_in;
-  // READ completions route to the issuing core's centralized tracker.
+  // Source completions route to the issuing core's per-warp group counters.
   std::vector<SimChannel<DxaReadCompletion>> completion_out;
 #endif
 

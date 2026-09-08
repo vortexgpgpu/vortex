@@ -24,9 +24,7 @@ module VX_dxa_s2g_top import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     input wire [NC_WIDTH-1:0] req_core_id,
     input wire [UUID_WIDTH-1:0] req_uuid,
     input wire [NW_WIDTH-1:0] req_wid,
-    input wire [DXA_GROUP_EPOCH_W-1:0] req_epoch,
-    input wire [DXA_GROUP_SEQ_W-1:0] req_group_seq,
-    input wire [DXA_GROUP_OPID_W-1:0] req_op_id,
+    input wire [DXA_GROUP_ID_W-1:0] req_group_id,
     input wire [DXA_SMEM_ADDR_W-1:0] req_smem_addr,
     input wire [31:0] req_meta,
     input wire [4:0][31:0] req_coords,
@@ -72,9 +70,7 @@ module VX_dxa_s2g_top import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     input wire completion_ready,
     output wire [NC_WIDTH-1:0] completion_core_id,
     output wire [NW_WIDTH-1:0] completion_wid,
-    output wire [DXA_GROUP_EPOCH_W-1:0] completion_epoch,
-    output wire [DXA_GROUP_SEQ_W-1:0] completion_group_seq,
-    output wire [DXA_GROUP_OPID_W-1:0] completion_op_id,
+    output wire [DXA_GROUP_ID_W-1:0] completion_group_id,
 
     output wire busy
 );
@@ -95,9 +91,7 @@ module VX_dxa_s2g_top import VX_gpu_pkg::*, VX_dxa_pkg::*; (
         req_data.uuid = req_uuid;
         req_data.wid = req_wid;
         req_data.dir = DXA_DIR_S2G;
-        req_data.epoch = req_epoch;
-        req_data.group_seq = req_group_seq;
-        req_data.op_id = req_op_id;
+        req_data.group_id = req_group_id;
         req_data.smem_addr = req_smem_addr;
         req_data.meta = req_meta;
         req_data.coords = req_coords;
@@ -167,9 +161,7 @@ module VX_dxa_s2g_top import VX_gpu_pkg::*, VX_dxa_pkg::*; (
     assign completion_valid = completion_if.valid;
     assign completion_core_id = completion_if.core_id;
     assign completion_wid = completion_if.data.wid;
-    assign completion_epoch = completion_if.data.epoch;
-    assign completion_group_seq = completion_if.data.group_seq;
-    assign completion_op_id = completion_if.data.op_id;
+    assign completion_group_id = completion_if.data.group_id;
     assign completion_if.ready = completion_ready;
 
     VX_dxa_worker #(

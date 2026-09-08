@@ -1,0 +1,50 @@
+--- before/kernel.cpp
++++ helper6-offload/kernel.cpp
+@@ -86,18 +86,8 @@
+       if (iter >= TMA_PIPE_OUT_STAGES) { role_barrier(kOutFree, os, 4).arrive_and_wait(); }
+       if (iter >= TMA_PIPE_STATE_STAGES) { role_barrier(kStateFree, ss, 4).arrive_and_wait(); }
+       auto out = output + os * kOutStride;
+-      auto st = state + ss * kStateStride;
+       for (uint32_t r = 0; r < ctx::fragment_acc::NR; ++r) { accum.data[r] = accum.data[r] * 0.5f + float(iter + 1); }
+       ctx::store_matrix_sync(out + warp * ctx::xtileM * kN, accum, kN);
+-      vx_fence();
+-      for (uint32_t r = lane; r < ctx::xtileM; r += VX_CFG_NUM_THREADS) {
+-        const uint32_t row = warp * ctx::xtileM + r;
+-        float sum = 0.0f, maximum = 0.0f;
+-        for (uint32_t c = 0; c < kN; ++c) { const float x = out[row * kN + c]; sum += x; maximum = __builtin_fmaxf(maximum, x); }
+-        st[row] = sum;
+-        st[kM + row] = maximum;
+-        st[2 * kM + row] = sum / kN;
+-      }
+       vx_fence(); // Drain producer LSU writes before publishing to a different warp/DXA.
+       role_barrier(kOutReady, os, 4).arrive();
+       role_barrier(kStateReady, ss, 4).arrive();
+@@ -110,14 +100,26 @@
+     const uint32_t formatted_base = output_role ? kOutFormatted : kStateFormatted;
+     for (uint32_t iter = 0; iter < TMA_PIPE_ITERS; ++iter) {
+       const uint32_t s = iter % stages;
+-      if (iter >= stages) { role_barrier(free_base, s, 4).arrive_and_wait(); }
++      if (!output_role && iter >= stages) { role_barrier(free_base, s, 4).arrive_and_wait(); }
+       role_barrier(ready_base, s, 4).arrive_and_wait();
+       if (output_role) {
+         auto bias = output + s * kOutStride + kOutputWords;
+         for (uint32_t i = lane; i < kN; i += VX_CFG_NUM_THREADS) { bias[i] = float(iter + i) + 0.25f; }
+       } else {
+-        auto meta = state + s * kStateStride + 3 * kM;
++        const uint32_t os = iter % TMA_PIPE_OUT_STAGES;
++        auto out = output + os * kOutStride;
++        auto st = state + s * kStateStride;
++        for (uint32_t row = lane; row < kM; row += VX_CFG_NUM_THREADS) {
++          float sum = 0.0f, maximum = 0.0f;
++          for (uint32_t c = 0; c < kN; ++c) { const float x = out[row * kN + c]; sum += x; maximum = __builtin_fmaxf(maximum, x); }
++          st[row] = sum;
++          st[kM + row] = maximum;
++          st[2 * kM + row] = sum / kN;
++        }
++        auto meta = st + 3 * kM;
+         for (uint32_t i = lane; i < TMA_PIPE_META_WORDS; i += VX_CFG_NUM_THREADS) { meta[i] = float(iter * TMA_PIPE_META_WORDS + i); }
++        vx_wsync();
++        if (iter + TMA_PIPE_OUT_STAGES < TMA_PIPE_ITERS) { role_barrier(kOutFree, os, 4).arrive(); }
+       }
+       vx_fence();
+       role_barrier(formatted_base, s, 2).arrive();

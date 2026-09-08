@@ -225,7 +225,7 @@ module VX_core import VX_gpu_pkg::*; #(
     assign kmu_arb_in_if[1].data        = raster_frag_kmu_if.data;
     assign raster_frag_kmu_if.ready     = kmu_arb_in_if[1].ready;
 
-    VX_kmu_arb #(
+    VX_kmu_bus_arb #(
         .NUM_INPUTS (2),
         .NUM_OUTPUTS(1),
         .ARBITER    ("P"),   // prioritize the device-KMU stream
@@ -273,15 +273,11 @@ module VX_core import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
-    // One centralized endpoint per SM core: per-warp logical group rows share
-    // one bounded physical S2G-operation pool.
     wire dxa_group_issue_valid;
     wire dxa_group_issue_query;
     wire [NW_WIDTH-1:0] dxa_group_issue_wid;
     wire [1:0] dxa_group_issue_result;
-    wire [VX_dxa_pkg::DXA_GROUP_EPOCH_W-1:0] dxa_group_issue_epoch;
-    wire [VX_dxa_pkg::DXA_GROUP_SEQ_W-1:0] dxa_group_issue_seq;
-    wire [VX_dxa_pkg::DXA_GROUP_OPID_W-1:0] dxa_group_issue_op_id;
+    wire [VX_dxa_pkg::DXA_GROUP_ID_W-1:0] dxa_group_issue_gid;
     wire dxa_group_commit_valid;
     wire [NW_WIDTH-1:0] dxa_group_commit_wid;
     wire [1:0] dxa_group_commit_result;
@@ -291,30 +287,22 @@ module VX_core import VX_gpu_pkg::*; #(
     wire dxa_group_wq_satisfied;
     wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_unlock_mask;
     wire [`VX_CFG_NUM_WARPS-1:0] dxa_group_drained_mask;
-    wire [1:0] dxa_group_sticky_status[`VX_CFG_NUM_WARPS];
     wire dxa_group_completion_ready;
-    wire dxa_group_epoch_adv_valid;
-    wire [NW_WIDTH-1:0] dxa_group_epoch_adv_wid;
-    wire dxa_group_poison_valid;
-    wire [NW_WIDTH-1:0] dxa_group_poison_wid;
+    wire dxa_group_owner_start_valid;
+    wire [NW_WIDTH-1:0] dxa_group_owner_start_wid;
+    wire dxa_group_owner_close_valid;
+    wire [NW_WIDTH-1:0] dxa_group_owner_close_wid;
 
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
     wire dxa_group_completion_valid = dxa_completion_if.valid;
     wire [NW_WIDTH-1:0] dxa_group_completion_wid = dxa_completion_if.data.wid;
-    wire [VX_dxa_pkg::DXA_GROUP_EPOCH_W-1:0] dxa_group_completion_epoch
-        = dxa_completion_if.data.epoch;
-    wire [VX_dxa_pkg::DXA_GROUP_SEQ_W-1:0] dxa_group_completion_seq
-        = dxa_completion_if.data.group_seq;
-    wire [VX_dxa_pkg::DXA_GROUP_OPID_W-1:0] dxa_group_completion_op
-        = dxa_completion_if.data.op_id;
+    wire [VX_dxa_pkg::DXA_GROUP_ID_W-1:0] dxa_group_completion_gid = dxa_completion_if.data.group_id;
     assign dxa_completion_if.ready = dxa_group_completion_ready;
     `UNUSED_VAR (dxa_completion_if.core_id)
 `else
     wire dxa_group_completion_valid = 1'b0;
     wire [NW_WIDTH-1:0] dxa_group_completion_wid = '0;
-    wire [VX_dxa_pkg::DXA_GROUP_EPOCH_W-1:0] dxa_group_completion_epoch = '0;
-    wire [VX_dxa_pkg::DXA_GROUP_SEQ_W-1:0] dxa_group_completion_seq = '0;
-    wire [VX_dxa_pkg::DXA_GROUP_OPID_W-1:0] dxa_group_completion_op = '0;
+    wire [VX_dxa_pkg::DXA_GROUP_ID_W-1:0] dxa_group_completion_gid = '0;
     `UNUSED_VAR (dxa_group_completion_ready)
 `endif
 
@@ -327,36 +315,27 @@ module VX_core import VX_gpu_pkg::*; #(
         .issue_query       (dxa_group_issue_query),
         .issue_wid         (dxa_group_issue_wid),
         .issue_result      (dxa_group_issue_result),
-        .issue_epoch       (dxa_group_issue_epoch),
-        .issue_seq         (dxa_group_issue_seq),
-        .issue_op_id       (dxa_group_issue_op_id),
+        .issue_gid         (dxa_group_issue_gid),
         .commit_valid      (dxa_group_commit_valid),
         .commit_wid        (dxa_group_commit_wid),
         .commit_result     (dxa_group_commit_result),
         .completion_valid  (dxa_group_completion_valid),
         .completion_ready  (dxa_group_completion_ready),
         .completion_wid    (dxa_group_completion_wid),
-        .completion_epoch  (dxa_group_completion_epoch),
-        .completion_seq    (dxa_group_completion_seq),
-        .completion_op     (dxa_group_completion_op),
+        .completion_gid    (dxa_group_completion_gid),
         .wq_valid          (dxa_group_wq_valid),
         .wq_wid            (dxa_group_wq_wid),
         .wq_n              (dxa_group_wq_n),
         .wq_satisfied      (dxa_group_wq_satisfied),
         .unlock_mask       (dxa_group_unlock_mask),
-        .poison_valid      (dxa_group_poison_valid),
-        .poison_wid        (dxa_group_poison_wid),
-        .epoch_adv_valid   (dxa_group_epoch_adv_valid),
-        .epoch_adv_wid     (dxa_group_epoch_adv_wid),
-        .drained_mask      (dxa_group_drained_mask),
-        .sticky_status     (dxa_group_sticky_status)
+        .owner_close_valid (dxa_group_owner_close_valid),
+        .owner_close_wid   (dxa_group_owner_close_wid),
+        .owner_start_valid (dxa_group_owner_start_valid),
+        .owner_start_wid   (dxa_group_owner_start_wid),
+        .drained_mask      (dxa_group_drained_mask)
     );
 
     `UNUSED_VAR (dxa_group_wq_satisfied)
-    for (genvar w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin : g_unused_dxa_group_state
-        wire unused_group_state = |dxa_group_sticky_status[w];
-        `UNUSED_VAR (unused_group_state)
-    end
 `endif
 
     wire sched_busy;
@@ -384,10 +363,10 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
         .dxa_group_unlock_mask(dxa_group_unlock_mask),
         .dxa_group_drained_mask(dxa_group_drained_mask),
-        .dxa_group_epoch_adv_valid(dxa_group_epoch_adv_valid),
-        .dxa_group_epoch_adv_wid(dxa_group_epoch_adv_wid),
-        .dxa_group_poison_valid(dxa_group_poison_valid),
-        .dxa_group_poison_wid(dxa_group_poison_wid),
+        .dxa_group_owner_start_valid(dxa_group_owner_start_valid),
+        .dxa_group_owner_start_wid(dxa_group_owner_start_wid),
+        .dxa_group_owner_close_valid(dxa_group_owner_close_valid),
+        .dxa_group_owner_close_wid(dxa_group_owner_close_wid),
     `endif
 
     `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -503,9 +482,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .dxa_group_issue_query(dxa_group_issue_query),
         .dxa_group_issue_wid  (dxa_group_issue_wid),
         .dxa_group_issue_result(dxa_group_issue_result),
-        .dxa_group_issue_epoch(dxa_group_issue_epoch),
-        .dxa_group_issue_seq  (dxa_group_issue_seq),
-        .dxa_group_issue_op_id(dxa_group_issue_op_id),
+        .dxa_group_issue_gid  (dxa_group_issue_gid),
         .dxa_group_commit_valid(dxa_group_commit_valid),
         .dxa_group_commit_wid (dxa_group_commit_wid),
         .dxa_group_commit_result(dxa_group_commit_result),

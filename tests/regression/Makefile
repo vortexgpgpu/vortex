@@ -12,7 +12,7 @@ TESTS := \
     sgemm2_dxa sgemm2_tcu sgemm_tcu_wg_dxa sgemm_tcu_wg_sp_dxa        \
     sgemm2_dxa_mcast sgemm_tcu_wg_dxa_mcast                           \
     dxa_copy dxa_copy_mcast dxa_kmajor_check                          \
-    dxa_s2g_bulk_groups_ws                                            \
+    dxa_s2g_bulk_groups_ws dxa_tma_wgmma_s2g_pipeline                   \
     async_barrier async_gbarrier packld wgather wsync                 \
     occupancy multikernel
 

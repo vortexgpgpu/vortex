@@ -68,9 +68,9 @@ public:
 	SimChannel<DxaReadCompletion> dxa_completion_in;
 #endif
 #ifdef VX_CFG_EXT_DXA_GROUP_ENABLE
-	void dxa_warp_exit(uint32_t wid) { dxa_unit_->poison(wid); }
+	void dxa_warp_exit(uint32_t wid) { dxa_unit_->close_owner(wid); }
 	bool dxa_warp_drained(uint32_t wid) const { return dxa_unit_->drained(wid); }
-	bool dxa_warp_activate(uint32_t wid) { return dxa_unit_->advance_epoch(wid); }
+	bool dxa_warp_activate(uint32_t wid) { return dxa_unit_->reinitialize_owner(wid); }
 #endif
 #endif
 

@@ -212,6 +212,27 @@ $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)
 test-dxa-ooo: $(DXA_OOO_TEST)
 	$(DXA_OOO_TEST)
 
+.PHONY: test-dxa-groups
+test-dxa-groups: $(DESTDIR)/dxa_group_tracker_test
+	$<
+
+$(DESTDIR)/dxa_group_tracker_test: $(SRC_DIR)/tests/dxa_group_tracker.cpp $(SRC_DIR)/dxa/dxa_group_tracker.h $(CONFIG_FILE)
+	$(CXX) $(CXXFLAGS) $< -o $@
+
+.PHONY: test-dxa-s2g-pipe
+test-dxa-s2g-pipe: $(DESTDIR)/dxa_s2g_pipe_test
+	$<
+
+$(DESTDIR)/dxa_s2g_pipe_test: $(SRC_DIR)/tests/dxa_s2g_pipe.cpp $(SRC_DIR)/dxa/dxa_s2g_pipe.h $(CONFIG_FILE)
+	$(CXX) $(CXXFLAGS) $< -o $@
+
+.PHONY: test-dxa-s2g-worker
+test-dxa-s2g-worker: $(DESTDIR)/dxa_s2g_worker_test
+	$<
+
+$(DESTDIR)/dxa_s2g_worker_test: $(OBJS) $(OBJ_DIR)/tests/dxa_s2g_worker.o
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
 $(DXA_OOO_TEST): $(OBJS) $(DXA_OOO_TEST_OBJ)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 

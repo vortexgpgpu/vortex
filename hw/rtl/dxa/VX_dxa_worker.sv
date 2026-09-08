@@ -17,12 +17,6 @@
 
 `include "VX_define.vh"
 
-`ifdef VX_CFG_DXA_S2G_PIPELINED
-`ifndef VX_CFG_DXA_S2G_PIPE_SLOTS
-`define VX_CFG_DXA_S2G_PIPE_SLOTS 4
-`endif
-`endif
-
 module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter WORKER_ID = 0,
@@ -81,9 +75,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [NW_WIDTH-1:0]         active_wid;
 `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
     dxa_dir_t                    active_dir;
-    wire [DXA_GROUP_EPOCH_W-1:0] active_epoch;
-    wire [DXA_GROUP_SEQ_W-1:0]   active_group_seq;
-    wire [DXA_GROUP_OPID_W-1:0]  active_op_id;
+    wire [DXA_GROUP_ID_W-1:0]   active_group_id;
 `endif
     wire [BAR_ADDR_W-1:0]       active_bar_addr;
     wire                        active_notify_smem_done;
@@ -166,9 +158,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .active_wid           (active_wid),
     `ifdef VX_CFG_EXT_DXA_S2G_ENABLE
         .active_dir           (active_dir),
-        .active_epoch         (active_epoch),
-        .active_group_seq     (active_group_seq),
-        .active_op_id         (active_op_id),
+        .active_group_id     (active_group_id),
     `endif
         .active_bar_addr      (active_bar_addr),
         .active_notify_smem_done (active_notify_smem_done),
@@ -396,9 +386,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .active_core_id     (active_core_id),
         .active_uuid        (active_uuid),
         .active_wid         (active_wid),
-        .active_epoch       (active_epoch),
-        .active_group_seq   (active_group_seq),
-        .active_op_id       (active_op_id),
+        .active_group_id   (active_group_id),
         .gmem_bus_if        (s2g_gmem_bus_if),
         .smem_bus_if        (s2g_smem_bus_if),
         .completion_if      (completion_if),
