@@ -252,6 +252,19 @@ VX_CFG_L3_MEM_PORTS = "expr: min($VX_CFG_L3_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_N
 VX_CFG_LMEM_LOG_SIZE = 14
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 
+[diverge]
+# string enum: 'DEFAULT' (upstream IPDOM baseline) | 'SPLIT' (schedulable
+# convergence stack + vx_yield) | 'NV_ITS' (per-thread PCs + convergence
+# barriers). Selects the divergence architecture in both SimX and RTL.
+VX_CFG_DIVERGE_TYPE = "SPLIT"
+# Convergence barriers per warp (NV_ITS only); barrier-mask flops scale
+# linearly with this, the 5-bit bid field allows up to 32.
+VX_CFG_ITS_NUM_BARRIERS = 8
+# Yielded thread state (NV_ITS only): vx_yield parks the issuing group and
+# barrier release ignores yielded participants, giving blocking loops forward
+# progress. Disabling reproduces the barriers-only ablation.
+VX_CFG_ITS_YIELD_ENABLE = true
+
 [tcu]
 # string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'; TFR is the universal default. On
 # FPGA its FEDP multipliers map onto DSP48 via VX_CFG_TCU_USE_DSP below.
@@ -438,6 +451,7 @@ VX_CFG_XLEN = [32, 64]
 VX_CFG_FLEN = [32, 64]
 VX_CFG_FPU_TYPE = ["DPI", "DSP", "FPNEW", "STD"]
 VX_CFG_TCU_TYPE = ["DPI", "DSP", "BHF", "TFR", "FPNEW"]
+VX_CFG_DIVERGE_TYPE = ["DEFAULT", "SPLIT", "NV_ITS"]
 
 [[param]]
 VX_CFG_DCACHE_NUM_REQS = "int"

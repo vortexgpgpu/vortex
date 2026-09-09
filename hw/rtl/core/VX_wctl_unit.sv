@@ -49,9 +49,17 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
     wire is_wsync  = (execute_if.data.op_type == INST_SFU_WSYNC);
     wire is_yield  = (execute_if.data.op_type == INST_SFU_YIELD);
+`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+    wire is_bar_add  = (execute_if.data.op_type == INST_SFU_BAR_ADD);
+    wire is_bar_wait = (execute_if.data.op_type == INST_SFU_BAR_WAIT);
+`endif
 
     wire wctl_valid;
+`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
     wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid, wsync_valid, yield_valid;
+`else
+    wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid, wsync_valid;
+`endif
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
 	    if (LANE_BITS != 0) begin : g_last_tid
@@ -109,9 +117,15 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // tmc / pred
 
     wire [`VX_CFG_NUM_THREADS-1:0] pred_mask = has_then ? then_tmask : rs2_data[`VX_CFG_NUM_THREADS-1:0];
+`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+    // PRED is an architectural no-op under per-thread PCs (warp unlock only).
+    assign tmc_valid = wctl_valid && is_tmc;
+`else
     assign tmc_valid = wctl_valid && (is_tmc || is_pred);
+`endif
     assign tmc.tmask = is_pred ? pred_mask : rs1_data[`VX_CFG_NUM_THREADS-1:0];
 
+`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
     // SCS: when vx_pred narrows a divergent warp (some lanes kept spinning, others
     // masked off after acquiring), park the masked-off lanes (else_tmask) as a
     // runnable split instead of dropping them. Resume PC is taken from the warp's
@@ -121,6 +135,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // vx_pred with no kept (still-spinning) lane → the loop reconverged; signal
     // the scheduler to merge any parked split back in.
     wire pred_restore_valid_w = wctl_valid && is_pred && ~has_then;
+`endif // VX_CFG_DIVERGE_TYPE_SPLIT
 
     // split
 
@@ -200,11 +215,48 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire execute_fire = execute_if.valid && execute_if.ready;
     assign wctl_valid = execute_fire && execute_if.data.header.eop;
 
+`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
     assign wsync_valid = wctl_valid && is_wsync;
     assign yield_valid = wctl_valid && is_yield;
+`elsif VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_ITS_YIELD_ENABLE
+    // vx_yield acts on the ITS Yielded thread state (its channel below);
+    // PRED degrades to a warp unlock.
+    assign wsync_valid = wctl_valid && (is_wsync || is_pred);
+`else
+    assign wsync_valid = wctl_valid && (is_wsync || is_yield || is_pred);
+`endif
+`else
+    // vx_yield is decoded in every mode (threadsplit binaries carry it); outside
+    // SPLIT it degrades to a wsync-style warp unlock with no other effect.
+    assign wsync_valid = wctl_valid && (is_wsync || is_yield);
+`endif
+
+`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+    // ITS: bar_add / bar_wait control, registered in lockstep with wctl_reg.
+    its_bar_t its_r;
+`ifdef VX_CFG_ITS_YIELD_ENABLE
+    assign its_r.valid   = wctl_valid && (is_bar_add || is_bar_wait || is_yield);
+`else
+    assign its_r.valid   = wctl_valid && (is_bar_add || is_bar_wait);
+`endif
+    assign its_r.is_wait  = is_bar_wait;
+    assign its_r.is_yield = is_yield;
+    assign its_r.bid     = execute_if.data.op_args.wctl.bid[ITS_BAR_IDW-1:0];
+    assign its_r.tmask   = execute_if.data.header.tmask;
+    // resume point for the executing group (park PC for bar_wait/yield,
+    // re-activation PC for TMC)
+    wire [PC_BITS-1:0] its_pc_r = execute_if.data.header.PC + from_fullPC(`VX_CFG_XLEN'(4));
+`endif
 
     VX_pipe_register #(
+`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
         .DATAW (9 + `VX_CFG_NUM_THREADS + NW_WIDTH + WCTL_WIDTH),
+`elsif VX_CFG_DIVERGE_TYPE_NV_ITS
+        .DATAW (6 + $bits(its_bar_t) + PC_BITS + NW_WIDTH + WCTL_WIDTH),
+`else
+        .DATAW (6 + NW_WIDTH + WCTL_WIDTH),
+`endif
         .RESETW (1)
     ) wctl_reg (
         .clk      (clk),
@@ -217,10 +269,16 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             sjoin_valid,
             bar_valid,
             wsync_valid,
+`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
             yield_valid,
             pred_park_valid_w,
             pred_park_tmask_w,
             pred_restore_valid_w,
+`endif
+`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+            its_r,
+            its_pc_r,
+`endif
             execute_if.data.header.wid,
             tmc,
             wspawn,
@@ -235,10 +293,16 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             warp_ctl_if.sjoin_valid,
             warp_ctl_if.bar_valid,
             warp_ctl_if.wsync_valid,
+`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
             warp_ctl_if.yield_valid,
             warp_ctl_if.pred_park_valid,
             warp_ctl_if.pred_park_tmask,
             warp_ctl_if.pred_restore_valid,
+`endif
+`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+            warp_ctl_if.its,
+            warp_ctl_if.its_pc,
+`endif
             warp_ctl_if.wid,
             warp_ctl_if.tmc,
             warp_ctl_if.wspawn,

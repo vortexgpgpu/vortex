@@ -48,6 +48,18 @@ VX_CFLAGS  += -O3 -mcmodel=medany --sysroot=$(RISCV_SYSROOT) --gcc-toolchain=$(R
 VX_CFLAGS  += -fno-rtti -fno-exceptions -nostartfiles -nostdlib -fdata-sections -ffunction-sections
 VX_CFLAGS  += -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(VORTEX_HOME)/sw/kernel/include -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) -DNDEBUG $(CONFIGS) -D__VORTEX__
 VX_CFLAGS  += -Xclang -target-feature -Xclang +xvortex
+
+# Map the divergence architecture to the matching compiler codegen mode
+# (tsplit is the compiler default, selected for VX_CFG_DIVERGE_TYPE=SPLIT).
+ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_DEFAULT, $(XCONFIGS)))
+VX_CFLAGS  += -mllvm -vortex-divergence-arch=ipdom
+endif
+ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_NV_ITS, $(XCONFIGS)))
+VX_CFLAGS  += -mllvm -vortex-divergence-arch=its
+ifeq (,$(filter -DVX_CFG_ITS_YIELD_ENABLE, $(XCONFIGS)))
+VX_CFLAGS  += -mllvm -vortex-its-yield=0
+endif
+endif
 VX_CFLAGS  += -Xclang -target-feature -Xclang +zicond
 VX_LDFLAGS += -fuse-ld=lld
 VX_CFLAGS  += -mllvm -disable-loop-idiom-all	# disable memset/memcpy loop replacement

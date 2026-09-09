@@ -1,6 +1,6 @@
 # Schedulable Convergence Stack (SCS) — Deadlock-Free SIMT Without ITS
 
-**Scope:** [hw/rtl/core/VX_ipdom_stack.sv](../../hw/rtl/core/VX_ipdom_stack.sv), [VX_split_join.sv](../../hw/rtl/core/VX_split_join.sv), [VX_schedule.sv](../../hw/rtl/core/VX_schedule.sv), [hw/rtl/VX_gpu_pkg.sv](../../hw/rtl/VX_gpu_pkg.sv), [sim/simx/wctl_unit.cpp](../../sim/simx/wctl_unit.cpp), [sim/simx/scheduler.h](../../sim/simx/scheduler.h), [sim/simx/decode.cpp](../../sim/simx/decode.cpp), LLVM-Vortex divergence pass (`~/dev/llvm_vortex`)
+**Scope:** [hw/rtl/core/VX_ipdom_stack.sv](../../hw/rtl/core/VX_ipdom_stack.sv), [VX_split_join.sv](../../hw/rtl/core/VX_split_join.sv), [VX_scheduler.sv](../../hw/rtl/core/VX_scheduler.sv), [hw/rtl/VX_gpu_pkg.sv](../../hw/rtl/VX_gpu_pkg.sv), [sim/simx/wctl_unit.cpp](../../sim/simx/wctl_unit.cpp), [sim/simx/scheduler.h](../../sim/simx/scheduler.h), [sim/simx/decode.cpp](../../sim/simx/decode.cpp), LLVM-Vortex divergence pass (`~/dev/llvm_vortex`)
 **Reference:** ElTantawy & Aamodt, *MIMD Synchronization on SIMT Architectures*, MICRO 2016 (multi-path execution); Diamos et al., *Execution of Divergent Threads Using a Convergence Barrier*, US 2016/0019066A1 (ITS, the rejected baseline)
 **Branch:** `threadsplit` (vortex + llvm-vortex; see §12 for the toolchain setup)
 **Status:** Proposal — for review
@@ -362,7 +362,7 @@ Per the SimX-as-oracle methodology:
 - **Phase 3 — RTL.** Implement the schedulable table + spill in
   [VX_ipdom_stack.sv](../../hw/rtl/core/VX_ipdom_stack.sv) /
   [VX_split_join.sv](../../hw/rtl/core/VX_split_join.sv) /
-  [VX_schedule.sv](../../hw/rtl/core/VX_schedule.sv); verify via xrt.
+  [VX_scheduler.sv](../../hw/rtl/core/VX_scheduler.sv); verify via xrt.
 - **Phase 4 — timing.** Close 300 MHz on the U55C; confirm area delta vs.
   baseline IPDOM is within noise and far below an ITS estimate.
 

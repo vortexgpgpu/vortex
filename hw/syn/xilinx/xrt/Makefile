@@ -188,7 +188,7 @@ endif
 CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 # raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
 # resolved type selectors so an enum override selects its RTL implementation.
-CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_% -DVX_CFG_DIVERGE_TYPE_%,$(XCONFIGS))
 CFLAGS += $(RTL_INCLUDE)
 
 # ast dump flags

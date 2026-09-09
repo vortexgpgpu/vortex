@@ -26,6 +26,18 @@ CFLAGS += -I$(VORTEX_HOME)/sw/kernel/include -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -
 CFLAGS += -DNDEBUG $(CONFIGS) -D__VORTEX__
 # Expand VX_config.toml + CONFIGS overrides into -DVX_CFG_* flags.
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
+
+# Map the divergence architecture to the matching compiler codegen mode
+# (tsplit is the compiler default, selected for VX_CFG_DIVERGE_TYPE=SPLIT).
+ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_DEFAULT, $(XCONFIGS)))
+LLVM_CFLAGS += -mllvm -vortex-divergence-arch=ipdom
+endif
+ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_NV_ITS, $(XCONFIGS)))
+LLVM_CFLAGS += -mllvm -vortex-divergence-arch=its
+ifeq (,$(filter -DVX_CFG_ITS_YIELD_ENABLE, $(XCONFIGS)))
+LLVM_CFLAGS += -mllvm -vortex-its-yield=0
+endif
+endif
 CFLAGS += $(XCONFIGS)
 
 LIBC_LIB += -L$(LIBC_PATH)/lib -lm -lc

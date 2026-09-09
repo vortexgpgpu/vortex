@@ -73,7 +73,7 @@ RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs 
 # by the generated VX_config.vh behind an ifndef, so defining them here replaces
 # those computations with the generator's report values -- which sets the memory
 # port counts to zero and yields a design with no memory interface at all.
-TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(CONFIGS))
+TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_% -DVX_CFG_DIVERGE_TYPE_%,$(CONFIGS))
 
 # The same defines every other synthesis flow passes (hw/syn/xilinx, hw/syn/altera).
 # VX_dp_ram and VX_sp_ram gate all block-RAM inference behind SYNTHESIS, and

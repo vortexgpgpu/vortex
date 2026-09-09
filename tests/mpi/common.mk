@@ -40,6 +40,18 @@ LLVM_CFLAGS += --target=riscv$(XLEN)-unknown-elf
 LLVM_CFLAGS += --sysroot=$(RISCV_SYSROOT)
 LLVM_CFLAGS += --gcc-toolchain=$(RISCV_TOOLCHAIN_PATH)
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +xvortex
+
+# Map the divergence architecture to the matching compiler codegen mode
+# (tsplit is the compiler default, selected for VX_CFG_DIVERGE_TYPE=SPLIT).
+ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_DEFAULT, $(XCONFIGS)))
+LLVM_CFLAGS += -mllvm -vortex-divergence-arch=ipdom
+endif
+ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_NV_ITS, $(XCONFIGS)))
+LLVM_CFLAGS += -mllvm -vortex-divergence-arch=its
+ifeq (,$(filter -DVX_CFG_ITS_YIELD_ENABLE, $(XCONFIGS)))
+LLVM_CFLAGS += -mllvm -vortex-its-yield=0
+endif
+endif
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +zicond
 LLVM_CFLAGS += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 LLVM_CFLAGS += -Wno-unused-command-line-argument

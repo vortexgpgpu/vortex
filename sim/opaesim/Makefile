@@ -147,7 +147,7 @@ VL_FLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 # leaves the RTL `ifdef selectors (which key off the *companion*
 # VX_CFG_TCU_TYPE_DPI) unmatched. Add just the enum companions gen_config
 # resolves, so a CONFIGS enum override actually selects its RTL implementation.
-VL_FLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
+VL_FLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_% -DVX_CFG_DIVERGE_TYPE_%,$(XCONFIGS))
 VL_FLAGS += $(RTL_INCLUDE)
 VL_FLAGS += $(RTL_PKGS)
 

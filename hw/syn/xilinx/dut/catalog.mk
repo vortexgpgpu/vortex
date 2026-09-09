@@ -10,7 +10,7 @@
 # Add a DUT: append its name to DUTS and define the five variables. No new
 # directory, no dispatcher edit.
 
-DUTS := cache core cp dxa fpu gfx issue lmem mem_unit om raster rtu \
+DUTS := cache core cp dxa fpu gfx issue lmem mem_unit om raster rtu scheduler \
         scope tcu tensor tex top unittest vm vortex
 
 # ---------------------------------------------------------------------------
@@ -48,6 +48,9 @@ core_PRJ  := VX_core_top
 core_IP   := 1
 core_EXT  := 1
 core_INC   = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache $(FPU_INC) -I$(UNITTEST_DIR)/core
+
+scheduler_PRJ := VX_scheduler_top
+scheduler_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache $(FPU_INC) -I$(UNITTEST_DIR)/core
 
 cp_PRJ := VX_cp_core_top
 cp_INC  = $(BASE_INC) -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/cp -I$(UNITTEST_DIR)/cp_core

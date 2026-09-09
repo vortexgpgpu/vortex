@@ -364,6 +364,25 @@ void AluUnit::execute(instr_trace_t* trace) {
 		Word offset = sext<Word>(brArgs.offset, 32);
 		switch (br_type) {
 		case BrType::BR: {
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+			// NV_ITS: branches may diverge — each thread computes its own next PC.
+			Word fallthrough_pc = trace->PC + (brArgs.is_rvc ? 2 : 4);
+			for (uint32_t t = thread_start; t < num_threads; ++t) {
+				if (!trace->tmask.test(t)) continue;
+				bool curr_taken = false;
+				switch (brArgs.cmp) {
+				case 0: curr_taken = (rs1_data[t].i == rs2_data[t].i); break;
+				case 1: curr_taken = (rs1_data[t].i != rs2_data[t].i); break;
+				case 4: curr_taken = (rs1_data[t].i <  rs2_data[t].i); break;
+				case 5: curr_taken = (rs1_data[t].i >= rs2_data[t].i); break;
+				case 6: curr_taken = (rs1_data[t].u <  rs2_data[t].u); break;
+				case 7: curr_taken = (rs1_data[t].u >= rs2_data[t].u); break;
+				default: std::abort();
+				}
+				warp.tpc[t] = curr_taken ? (trace->PC + offset) : fallthrough_pc;
+			}
+			warp.PC = warp.tpc[thread_last];
+#else
 			bool curr_taken = false;
 			uint32_t t = static_cast<uint32_t>(thread_last);
 			switch (brArgs.cmp) {
@@ -378,6 +397,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 			if (curr_taken) {
 				warp.PC = trace->PC + offset;
 			}
+#endif
 			core_->perf_stats().branches += 1;
 		} break;
 		case BrType::JAL: {
@@ -388,6 +408,12 @@ void AluUnit::execute(instr_trace_t* trace) {
 				rd_data[t].i = link_pc;
 			}
 			warp.PC = trace->PC + offset;
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+			for (uint32_t t = thread_start; t < num_threads; ++t) {
+				if (trace->tmask.test(t))
+					warp.tpc[t] = warp.PC;
+			}
+#endif
 			core_->perf_stats().branches += 1;
 		} break;
 		case BrType::JALR: {
@@ -400,6 +426,13 @@ void AluUnit::execute(instr_trace_t* trace) {
 			// JALR clears bit 0 of the computed target (RISC-V ISA); the RTL
 			// release build drops it implicitly via from_fullPC() truncation.
 			warp.PC = (rs1_data[thread_last].u + offset) & ~Word(1);
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+			// NV_ITS: indirect jumps may diverge — per-thread targets.
+			for (uint32_t t = thread_start; t < num_threads; ++t) {
+				if (trace->tmask.test(t))
+					warp.tpc[t] = (rs1_data[t].u + offset) & ~Word(1);
+			}
+#endif
 			core_->perf_stats().branches += 1;
 		} break;
 		case BrType::SYS:

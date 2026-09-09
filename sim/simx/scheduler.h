@@ -44,20 +44,25 @@ struct ipdom_entry_t {
   Word        else_PC;
   bool        fallthrough;
 
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   ThreadMask  passed_tmask;   // subgroup that reached the join first
   Word        passed_pc;      // its forward (post-join) PC
   bool        has_passed;
+#endif
 
   ipdom_entry_t(const ThreadMask &tmask, Word PC)
     : orig_tmask  (tmask)
     , else_PC     (PC)
     , fallthrough (false)
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
     , passed_tmask(tmask)
     , passed_pc   (0)
     , has_passed  (false)
+#endif
   {}
 };
 
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
 // SCS: an independently-schedulable divergent subgroup. Beyond a resume
 // {mask, PC} it carries its OWN reconvergence nesting (a snapshot of the IPDOM
 // stack), so two subgroups parked at different program points never share or
@@ -77,6 +82,7 @@ struct scs_split_t {
   scs_split_t(const ThreadMask& m, Word p, const std::stack<ipdom_entry_t>& s)
     : tmask(m), pc(p), ipdom(s) {}
 };
+#endif // VX_CFG_DIVERGE_TYPE_SPLIT
 
 // Per-CTA CSR snapshot (block/grid/thread indices, lmem base) populated at
 // CTA dispatch and read by CSR reads in the warp.
@@ -116,6 +122,7 @@ struct warp_t {
   Byte                              fcsr;
   uint32_t                          uuid;
 
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   // SCS forward-progress state.
   uint32_t                          scs_stall = 0;   // no-progress watchdog counter
   Word                              scs_maxpc = 0;   // furthest PC reached (progress probe)
@@ -129,6 +136,17 @@ struct warp_t {
   // (pred empties), or committed to scs_runnable on a forward-progress stall.
   std::vector<scs_split_t>          scs_pending;     // maskoff subgroups awaiting fold (cancellable)
   std::vector<scs_split_t>          scs_runnable;    // committed runnable subgroups (round-robin pool)
+#endif // VX_CFG_DIVERGE_TYPE_SPLIT
+
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+  // NV_ITS state: per-thread PCs with convergence barriers. tmask/PC remain
+  // the current issue group's scratch, recomputed at every schedule pick.
+  std::vector<Word>                 tpc;             // per-thread pending PC
+  ThreadMask                        amask;           // alive threads
+  ThreadMask                        yielded;         // threads parked by vx_yield
+  std::array<ThreadMask, VX_CFG_ITS_NUM_BARRIERS> bar_participate;
+  std::array<ThreadMask, VX_CFG_ITS_NUM_BARRIERS> bar_arrived;
+#endif // VX_CFG_DIVERGE_TYPE_NV_ITS
 
   // Per-warp MSCRATCH (holds kernel arg pointer, set at CTA dispatch)
   Word                              mscratch;
@@ -173,10 +191,12 @@ public:
   // depending on is_rvc; mirrors the hardware warp-PC update at decode).
   void advance_pc(const instr_trace_t* trace, uint32_t inc);
   bool running() const;
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   // SCS: explicit vx_yield — deschedule the running split (resuming it past the
   // yield) and rotate to the next runnable split; no-op if there is none. This
   // is the deterministic, single-cycle alternative to the stall watchdog.
   bool yield_warp(uint32_t wid);
+#endif
   bool wspawn(uint32_t num_warps, Word nextPC);
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
 
@@ -254,6 +274,7 @@ private:
   void fwd_try_inject();
 #endif
 
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   // SCS: snapshot the warp's current running subgroup (mask, PC, reconvergence
   // nesting) as a schedulable split, and install a split as the running one.
   scs_split_t scs_capture_current(warp_t& warp);
@@ -272,6 +293,7 @@ private:
   // SCS: pull the next runnable subgroup with live (non-exited) lanes into the
   // running slot; drops stale all-exited entries. Returns true on success.
   bool scs_resume_next(warp_t& warp);
+#endif // VX_CFG_DIVERGE_TYPE_SPLIT
 
   Core* core_;
 

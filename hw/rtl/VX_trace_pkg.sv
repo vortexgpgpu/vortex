@@ -261,6 +261,11 @@ package VX_trace_pkg;
                 INST_SFU_DXA: VX_dxa_pkg::trace_ex_op(level, op_type, op_args);
             `endif
                 INST_SFU_WSYNC: `TRACE(level, ("WSYNC"))
+                INST_SFU_YIELD: `TRACE(level, ("YIELD"))
+            `ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+                INST_SFU_BAR_ADD:  `TRACE(level, ("BAR_ADD %0d", op_args.wctl.bid))
+                INST_SFU_BAR_WAIT: `TRACE(level, ("BAR_WAIT %0d", op_args.wctl.bid))
+            `endif
             `ifdef VX_CFG_EXT_TEX_ENABLE
                 INST_SFU_TEX: `TRACE(level, ("TEX"))
             `endif

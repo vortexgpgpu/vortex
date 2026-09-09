@@ -390,6 +390,8 @@ static op_string_t op_string(const Instr &instr) {
       case WctlType::PRED:   return {wctlArgs.is_cond_neg ? "PRED.N":"PRED", ""};
       case WctlType::WSYNC:  return {"WSYNC", ""};
       case WctlType::YIELD:  return {"YIELD", ""};
+      case WctlType::BAR_ADD:  return {"BAR_ADD", std::to_string(wctlArgs.bid)};
+      case WctlType::BAR_WAIT: return {"BAR_WAIT", std::to_string(wctlArgs.bid)};
       default:
         std::abort();
       }
@@ -869,6 +871,21 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(IntrWctlArgs{});
       instr->set_wstall(true);
     } break;
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+    case 6: { // ITS convergence barriers — bid is a 5-bit literal in the rs1 field
+      instr->set_fu_type(FUType::SFU);
+      IntrWctlArgs wctlArgs{};
+      wctlArgs.bid = rs1;
+      switch (funct3) {
+      case 0: instr->set_op_type(WctlType::BAR_ADD); break;
+      case 1: instr->set_op_type(WctlType::BAR_WAIT); break;
+      default:
+        std::abort();
+      }
+      instr->set_args(wctlArgs);
+      instr->set_wstall(true);
+    } break;
+#endif
     case 1: { // VOTE
       instr->set_dest_reg(rd, RegType::Integer);
       instr->set_src_reg(0, rs1, RegType::Integer);

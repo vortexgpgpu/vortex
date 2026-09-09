@@ -600,13 +600,16 @@ enum class WctlType {
   BAR,
   PRED,
   WSYNC,
-  YIELD
+  YIELD,
+  BAR_ADD,
+  BAR_WAIT
 };
 
 struct IntrWctlArgs {
   uint32_t is_cond_neg : 1;
   uint32_t is_sync_bar : 1;
   uint32_t is_bar_arrive : 1;
+  uint32_t bid : 5; // convergence-barrier id (NV_ITS bar_add/bar_wait)
 };
 
 inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
@@ -619,6 +622,8 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
   case WctlType::PRED:   os << "PRED"; break;
   case WctlType::WSYNC:  os << "WSYNC"; break;
   case WctlType::YIELD:  os << "YIELD"; break;
+  case WctlType::BAR_ADD:  os << "BAR_ADD"; break;
+  case WctlType::BAR_WAIT: os << "BAR_WAIT"; break;
   default:
     assert(false);
   }

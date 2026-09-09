@@ -36,9 +36,16 @@ warp_t::warp_t(uint32_t num_threads)
   : tmask(num_threads)
   , PC(0)
   , uuid(0)
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   , scs_orig(num_threads)
   , scs_done(num_threads)
   , scs_parked(num_threads)
+#endif
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+  , tpc(num_threads, 0)
+  , amask(num_threads)
+  , yielded(num_threads)
+#endif
   , mscratch(0)
   , cta_csrs()
 {
@@ -57,6 +64,7 @@ void warp_t::reset() {
   this->mepc    = 0;
   this->mcause  = 0;
   this->mtval   = 0;
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   this->scs_stall = 0;
   this->scs_maxpc = 0;
   this->scs_orig.reset();
@@ -65,6 +73,18 @@ void warp_t::reset() {
   this->scs_cooldown = 0;
   this->scs_pending.clear();
   this->scs_runnable.clear();
+#endif
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+  std::fill(this->tpc.begin(), this->tpc.end(), 0);
+  this->amask.reset();
+  this->yielded.reset();
+  for (auto& m : this->bar_participate) {
+    m = ThreadMask(this->tpc.size());
+  }
+  for (auto& m : this->bar_arrived) {
+    m = ThreadMask(this->tpc.size());
+  }
+#endif
   // Register files live in OpcUnit and are reset there.
 }
 
@@ -150,6 +170,7 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
 
   while (!warp.ipdom_stack.empty()) warp.ipdom_stack.pop();
 
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   // SCS: clear per-warp forward-progress state when reusing a warp for a new CTA,
   // so stale parked/exited sets from the previous CTA do not leak in.
   warp.scs_stall = 0;
@@ -160,6 +181,21 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   warp.scs_cooldown = 0;
   warp.scs_pending.clear();
   warp.scs_runnable.clear();
+#endif
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+  // NV_ITS: all dispatched threads start alive at the entry PC with clean
+  // barrier state.
+  warp.amask = warp.tmask;
+  for (uint32_t t = 0, nt = warp.tpc.size(); t < nt; ++t) {
+    warp.tpc[t] = warp.PC;
+  }
+  for (auto& m : warp.bar_participate) {
+    m.reset();
+  }
+  for (auto& m : warp.bar_arrived) {
+    m.reset();
+  }
+#endif
 
   active_warps_.set(wid);
   // CTA activation is not the registered suspend/resume path; clear both the
@@ -177,6 +213,7 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
      << ", mscratch=0x" << std::hex << warp.mscratch << std::dec);
 }
 
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
 // SCS: number of no-progress issues before the warp switches subgroups. Small
 // relative to VX_DBG_STALL_TIMEOUT so deadlocks are broken well before the
 // pipeline's debug stall detector trips.
@@ -272,6 +309,7 @@ bool Scheduler::scs_rotate(warp_t& warp) {
   }
   return false;
 }
+#endif // VX_CFG_DIVERGE_TYPE_SPLIT
 
 instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   int scheduled_warp = -1;
@@ -299,6 +337,10 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
       auto& warp = warps_.at(i);
       warp.PC = wspawn_.nextPC;
       warp.tmask.set(0);
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+      warp.amask = warp.tmask;
+      warp.tpc[0] = warp.PC;
+#endif
       warp.mscratch = spawning_mscratch;
       active_warps_.set(i);
       // wspawn activation, like CTA dispatch: immediate (both current + next).
@@ -310,6 +352,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     this->resume(0);
   }
 
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   // SCS spin back-off: tick down cooldowns of all schedulable warps so a warp
   // that is purely spinning (waiting on a lock held by another warp) stops
   // hammering shared memory, freeing dcache resources for the holder to release.
@@ -326,6 +369,56 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
       break;
     }
   }
+#elif defined(VX_CFG_DIVERGE_TYPE_NV_ITS)
+  // ITS within-warp scheduling: pick the next warp with at least one runnable
+  // thread (alive and not blocked at a convergence barrier), then form the
+  // execution group from the runnable threads sharing the lowest pending PC.
+  for (size_t wid = 0, nw = VX_CFG_NUM_WARPS; wid < nw; ++wid) {
+    if (!active_warps_.test(wid) || stalled_warps_.test(wid) || !warp_mask.test(wid))
+      continue;
+    auto& warp = warps_.at(wid);
+    uint32_t num_threads = warp.tpc.size();
+    ThreadMask blocked(num_threads);
+    for (auto& m : warp.bar_arrived) {
+      blocked |= m;
+    }
+    ThreadMask runnable = warp.amask & ~blocked & ~warp.yielded;
+    if (!runnable.any()) {
+      // Yielded threads wake once nothing else in the warp can run; this
+      // gives blocking loops the spinner/holder alternation.
+      ThreadMask wakeable = warp.amask & ~blocked & warp.yielded;
+      if (!wakeable.any())
+        continue; // every alive thread is parked at a barrier
+      warp.yielded.reset();
+      runnable = wakeable;
+    }
+    Word group_pc = 0;
+    bool first = true;
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      if (runnable.test(t) && (first || warp.tpc[t] < group_pc)) {
+        group_pc = warp.tpc[t];
+        first = false;
+      }
+    }
+    ThreadMask group(num_threads);
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      if (runnable.test(t) && warp.tpc[t] == group_pc)
+        group.set(t);
+    }
+    warp.tmask = group;
+    warp.PC = group_pc;
+    scheduled_warp = wid;
+    break;
+  }
+#else
+  // pick next ready warp
+  for (size_t wid = 0, nw = VX_CFG_NUM_WARPS; wid < nw; ++wid) {
+    if (active_warps_.test(wid) && !stalled_warps_.test(wid) && warp_mask.test(wid)) {
+      scheduled_warp = wid;
+      break;
+    }
+  }
+#endif
 
   instr_trace_t* trace = nullptr;
   if (scheduled_warp != -1) {
@@ -333,6 +426,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     auto& warp = warps_.at(scheduled_warp);
     assert(warp.tmask.any());
 
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
     // SCS forward-progress watchdog. A warp that keeps issuing without reaching
     // new code (PC never exceeds its max) is spinning. Once it has SCS-parked work
     // (a subgroup masked off in a spin loop, or a deferred subgroup in the pool),
@@ -363,6 +457,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
         warp.scs_cooldown = SCS_BACKOFF;
       }
     }
+#endif // VX_CFG_DIVERGE_TYPE_SPLIT
 
     // Generate UUID
     uint64_t uuid = 0;
@@ -409,6 +504,7 @@ bool Scheduler::running() const {
     ;
 }
 
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
 bool Scheduler::yield_warp(uint32_t wid) {
   auto& warp = warps_.at(wid);
   // PC was already advanced past the yield at decode, so scs_rotate captures the
@@ -417,6 +513,7 @@ bool Scheduler::yield_warp(uint32_t wid) {
   this->scs_rotate(warp);
   return true;
 }
+#endif
 
 // suspend()/resume() drive the next-state; schedule() clocks it into the
 // registered stalled_warps_ at the end of the cycle, so the change is observed
@@ -437,11 +534,22 @@ void Scheduler::resume(uint32_t wid) {
 }
 
 void Scheduler::advance_pc(const instr_trace_t* trace, uint32_t inc) {
-  warps_.at(trace->wid).PC += inc;
+  auto& warp = warps_.at(trace->wid);
+  warp.PC += inc;
+#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+  // NV_ITS: the issued group's threads advance to the fallthrough PC; a
+  // PC-redirecting instruction (branch/jump/trap) overwrites tpc at execute,
+  // during which the warp is fetch-stalled so no regrouping sees this value.
+  for (uint32_t t = 0, nt = warp.tpc.size(); t < nt; ++t) {
+    if (trace->tmask.test(t))
+      warp.tpc[t] = warp.PC;
+  }
+#endif
 }
 
 bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask_in) {
   auto& warp = warps_.at(wid);
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   // SCS: a subgroup resumed early (e.g. lock holder) may have already exited the
   // kernel; never let a later mask-restore (e.g. vx_pred fallback) reactivate
   // those exited lanes with stale state (scs_done). Likewise, a mask restore
@@ -450,13 +558,19 @@ bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask_in) {
   // exactly the multi-loop corruption this design eliminates. Exited lanes are
   // recorded by TMC only; parked lanes by the fold/rotate path.
   ThreadMask tmask = tmask_in & ~warp.scs_done & ~warp.scs_parked;
+#else
+  const ThreadMask& tmask = tmask_in;
+#endif
   if (warp.tmask != tmask) {
     DT(3, core_->name() << " warp-state: wid=" << wid << ", tmask=" << tmask);
   }
   warp.tmask = tmask;
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
   warp.scs_orig = warp.scs_orig | tmask;  // SCS: track full warp participation
+#endif
   // deactivate warp if no active threads
   if (!tmask.any()) {
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
     // SCS: a finished subgroup yields to a deferred runnable subgroup (if any)
     // rather than retiring the warp, so deferred work still completes.
     // Fold any still-parked subgroup (e.g. lock holders masked off by vx_pred)
@@ -468,6 +582,7 @@ bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask_in) {
       DT(3, core_->name() << " SCS-resume(subgroup-done): wid=" << wid << ", tmask=" << warp.tmask << ", PC=0x" << std::hex << warp.PC << std::dec);
       return true;
     }
+#endif // VX_CFG_DIVERGE_TYPE_SPLIT
     active_warps_.reset(wid);
 #ifdef VX_CFG_EXT_RASTER_ENABLE
     // An injected fragment wave retiring closes one FWD epoch slot.

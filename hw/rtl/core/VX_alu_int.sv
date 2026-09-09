@@ -364,6 +364,32 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     end
     `IGNORE_UNOPTFLAT_END
 
+`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+    // ITS: resolve each thread's branch independently so the scheduler can give
+    // diverging threads their own PC. Indirect (static) branch targets remain
+    // warp-level (`dest` from the last active lane), matching the reference.
+    `STATIC_ASSERT(NUM_LANES == `VX_CFG_NUM_THREADS, ("NV_ITS requires NUM_ALU_LANES == NUM_THREADS"))
+    wire [NUM_LANES-1:0] br_taken_mask;
+    // Indirect (static) targets are per-thread: precompiled library code (libm)
+    // contains jump tables whose targets diverge across lanes.
+    wire [NUM_LANES-1:0][PC_BITS-1:0] br_dest_its;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_br_taken_mask
+        assign br_taken_mask[i] = ((is_br_less ? alu_result_r[i][0] : alu_result_r[i][1]) ^ is_br_neg) | is_br_static;
+        assign br_dest_its[i]   = is_br_static ? from_fullPC(alu_result_r[i]) : cbr_dest_r;
+    end
+    wire [PC_BITS-1:0] br_ntaken_pc = current_pc + from_fullPC(`VX_CFG_XLEN'(4));
+
+    VX_pipe_register #(
+        .DATAW (`VX_CFG_NUM_THREADS + `VX_CFG_NUM_THREADS + (`VX_CFG_NUM_THREADS * PC_BITS) + PC_BITS)
+    ) branch_its_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({br_taken_mask,            result_if.data.header.tmask, br_dest_its,            br_ntaken_pc}),
+        .data_out ({branch_ctl_if.taken_mask, branch_ctl_if.tmask,         branch_ctl_if.dest_its, branch_ctl_if.ntaken_pc})
+    );
+`endif
+
 `ifdef DBG_TRACE_PIPELINE
     always @(posedge clk) begin
         if (br_enable) begin
