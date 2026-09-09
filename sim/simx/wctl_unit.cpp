@@ -13,6 +13,7 @@
 
 #include "wctl_unit.h"
 #include <iostream>
+#include <util.h>
 #include "core.h"
 #include "scheduler.h"
 #include "constants.h"
@@ -36,6 +37,24 @@ static void its_try_release(warp_t& warp, uint32_t b) {
 }
 #endif
 
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
+// Per-lane branch comparison for the fused divergence branches vx_pbr/vx_sbr.
+// `cmp` is the B-type funct3 (matches the ALU branch path in alu_unit.cpp).
+template <typename T>
+static inline bool scs_eval_cmp(uint32_t cmp, const T& a, const T& b) {
+  switch (cmp) {
+  case 0: return a.i == b.i; // eq
+  case 1: return a.i != b.i; // ne
+  case 4: return a.i <  b.i; // lt  (signed)
+  case 5: return a.i >= b.i; // ge  (signed)
+  case 6: return a.u <  b.u; // ltu (unsigned)
+  case 7: return a.u >= b.u; // geu (unsigned)
+  default: std::abort();
+  }
+  return false;
+}
+#endif
+
 
 bool WctlUnit::process(instr_trace_t* trace) {
   bool release_warp = trace->fetch_stall;
@@ -43,7 +62,10 @@ bool WctlUnit::process(instr_trace_t* trace) {
   auto& sched       = core_->scheduler();
   auto& warp        = sched.warp(trace->wid);
   auto instrArgs    = trace->instr_ptr->get_args();
-  auto wctlArgs     = std::get<IntrWctlArgs>(instrArgs);
+  // PBR/SBR carry IntrBrArgs (cc + branch offset); all other wctl ops carry
+  // IntrWctlArgs. Extract defensively so the shared prologue works for both.
+  IntrWctlArgs wctlArgs{};
+  if (auto* p = std::get_if<IntrWctlArgs>(&instrArgs)) wctlArgs = *p;
   uint32_t num_threads = VX_CFG_NUM_THREADS;
   auto& rs1_data    = trace->src_data[0];
   auto& rs2_data    = trace->src_data[1];
@@ -170,12 +192,16 @@ bool WctlUnit::process(instr_trace_t* trace) {
     }
   } break;
   case WctlType::JOIN: {
-    auto stack_ptr = rs1_data.at(thread_last).u;
     auto stack_size = warp.ipdom_stack.size();
     ThreadMask next_tmask = warp.tmask;
+    // Legacy join keys off the split stack-token; the SCS fused join (rs1==x0)
+    // is tokenless and simply acts on the stack top by LIFO (vx_sbr always
+    // pushed a paired entry).
+    bool act = wctlArgs.is_tokenless ? (stack_size != 0)
+                                     : (rs1_data.at(thread_last).u != stack_size);
     // ipdom_stack pop + tmask update
     if (trace->eop) {
-      if (stack_ptr != stack_size) {
+      if (act) {
         if (warp.ipdom_stack.empty()) {
           std::cout << "IPDOM stack is empty!\n" << std::flush;
           std::abort();
@@ -184,16 +210,24 @@ bool WctlUnit::process(instr_trace_t* trace) {
           next_tmask = warp.ipdom_stack.top().orig_tmask;
           warp.ipdom_stack.pop();
         } else {
+          ThreadMask deferred = ~warp.tmask & warp.ipdom_stack.top().orig_tmask;
+          if (wctlArgs.is_tokenless && !deferred.any()) {
+            // Uniform vx_sbr: nothing was deferred to the sibling side, so the
+            // paired (always-pushed) entry reconverges and pops in one arrival.
+            next_tmask = warp.ipdom_stack.top().orig_tmask;
+            warp.ipdom_stack.pop();
+          } else {
 #ifdef VX_CFG_DIVERGE_TYPE_SCS
-          // SCS: capture the arriving subgroup's forward (post-join) PC before
-          // it is set aside, so the watchdog can resume it if the sibling spins.
-          warp.ipdom_stack.top().passed_tmask = warp.tmask;
-          warp.ipdom_stack.top().passed_pc    = trace->PC + 4;
-          warp.ipdom_stack.top().has_passed   = true;
+            // SCS: capture the arriving subgroup's forward (post-join) PC before
+            // it is set aside, so the watchdog can resume it if the sibling spins.
+            warp.ipdom_stack.top().passed_tmask = warp.tmask;
+            warp.ipdom_stack.top().passed_pc    = trace->PC + 4;
+            warp.ipdom_stack.top().has_passed   = true;
 #endif
-          next_tmask = ~warp.tmask & warp.ipdom_stack.top().orig_tmask;
-          warp.PC = warp.ipdom_stack.top().else_PC;
-          warp.ipdom_stack.top().fallthrough = true;
+            next_tmask = deferred;
+            warp.PC = warp.ipdom_stack.top().else_PC;
+            warp.ipdom_stack.top().fallthrough = true;
+          }
         }
       }
       release_warp = core_->setTmask(trace->wid, next_tmask);
@@ -301,6 +335,103 @@ bool WctlUnit::process(instr_trace_t* trace) {
     }
 #endif
 #endif // !VX_CFG_DIVERGE_TYPE_NV_ITS
+  } break;
+  // SCS fused predicate-branch: keep = active & (rs1 cc rs2) = the loop-continue
+  // (pred-kept) lanes. Mirrors the SCS PRED park/reconverge, then redirects the
+  // warp to the loop target while any lane continues, else to the fall-through.
+  case WctlType::PBR: {
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
+    auto brArgs = std::get<IntrBrArgs>(instrArgs);
+    Word offset = sext<Word>(brArgs.offset, 32);
+    Word target_pc = trace->PC + offset;
+    Word fall_pc   = trace->PC + (brArgs.is_rvc ? 2 : 4);
+    ThreadMask keep(num_threads);
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      keep[t] = warp.tmask.test(t)
+             && scs_eval_cmp(brArgs.cmp, rs1_data.at(t), rs2_data.at(t));
+    }
+    ThreadMask next_tmask = warp.tmask;
+    if (!sched.scs_enabled()) {
+      // A/B disabled -> baseline predicate. pbr never permanently drops a lane
+      // on its own, so reconverge restores the current warp participants.
+      next_tmask = keep.any() ? keep : warp.tmask;
+      if (trace->eop) {
+        warp.PC = keep.any() ? target_pc : fall_pc;
+        release_warp = core_->setTmask(trace->wid, next_tmask);
+      }
+      break;
+    }
+    bool reconverged = false;
+    if (keep.any()) {
+      next_tmask &= keep;
+    } else {
+      next_tmask = warp.tmask;
+      for (auto& p : warp.scs_pending)
+        next_tmask |= p.tmask;
+      reconverged = true;
+    }
+    if (trace->eop) {
+      if (reconverged) {
+        warp.scs_pending.clear();
+      } else {
+        ThreadMask just_off = warp.tmask & ~next_tmask;
+        if (just_off.any()) {
+          // Lanes that left the loop this iteration park as a distinct pending
+          // subgroup resuming at the fused op's fall-through (the loop exit),
+          // carrying their reconvergence snapshot — same as legacy vx_pred.
+          warp.scs_pending.emplace_back(just_off, fall_pc, warp.ipdom_stack);
+          sched.observe_split_contexts(warp);
+        }
+      }
+      warp.PC = keep.any() ? target_pc : fall_pc;
+      release_warp = core_->setTmask(trace->wid, next_tmask);
+    }
+#else
+    if (trace->eop)
+      release_warp = true;
+#endif
+  } break;
+  // SCS fused split-branch: keep = active & (rs1 cc rs2) go to the branch target;
+  // `other` (fall-through) run first, keep deferred to resume at target via the
+  // (tokenless) vx_join. Always pushes a paired stack entry so the join balances.
+  case WctlType::SBR: {
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
+    auto brArgs = std::get<IntrBrArgs>(instrArgs);
+    Word offset = sext<Word>(brArgs.offset, 32);
+    Word target_pc = trace->PC + offset;
+    Word fall_pc   = trace->PC + (brArgs.is_rvc ? 2 : 4);
+    ThreadMask keep(num_threads), other(num_threads);
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      bool c = warp.tmask.test(t)
+            && scs_eval_cmp(brArgs.cmp, rs1_data.at(t), rs2_data.at(t));
+      keep[t]  = c;
+      other[t] = warp.tmask.test(t) && !c;
+    }
+    if (trace->eop) {
+      auto stack_size = warp.ipdom_stack.size();
+      if (stack_size == sched.ipdom_size()) {
+        std::cout << "IPDOM stack is full! size=" << stack_size << ", PC=0x"
+                  << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n"
+                  << std::flush;
+        std::abort();
+      }
+      // Run the fall-through (`other`) side now, defer `keep` to the target. The
+      // join reconstructs the deferred mask as ~current & orig; when nothing is
+      // deferred (uniform) the tokenless join pops in one arrival.
+      bool run_other = other.any();
+      ThreadMask run_mask = run_other ? other : keep;
+      Word run_pc   = run_other ? fall_pc : target_pc;
+      Word defer_pc = run_other ? target_pc : fall_pc;
+      warp.ipdom_stack.emplace(warp.tmask, defer_pc);
+      if (keep.any() && other.any())
+        core_->perf_stats().divergence += 1;
+      warp.PC = run_pc;
+      release_warp = core_->setTmask(trace->wid, run_mask);
+    }
+#else
+    if (trace->eop)
+      release_warp = true;
+#endif
   } break;
   case WctlType::WSYNC:
     release_warp = true;

@@ -587,6 +587,27 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_src_reg(1, rs2, RegType::Integer);
     instr->set_wstall(true);
   } break;
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
+  // SCS fused divergence branches: B-type carrying cc (funct3) + branch offset.
+  // vx_pbr (EXT3/0x5B) predicate-branch, vx_sbr (EXT4/0x7B) split-branch. Both
+  // execute on the wctl (SFU) path (they carry a divergence side effect and a
+  // PC redirect), reusing the SPLIT/PRED/JOIN machinery.
+  case Opcode::EXT3:
+  case Opcode::EXT4: {
+    auto bit_11   = rd & 0x1;
+    auto bits_4_1 = rd >> 1;
+    auto bit_10_5 = funct7 & 0x3f;
+    auto bit_12   = funct7 >> 6;
+    auto imm12 = (bits_4_1 << 1) | (bit_10_5 << 5) | (bit_11 << 11) | (bit_12 << 12);
+    auto addr = sext(imm12, width_i_imm+1);
+    instr->set_fu_type(FUType::SFU);
+    instr->set_op_type((op == Opcode::EXT3) ? WctlType::PBR : WctlType::SBR);
+    instr->set_args(IntrBrArgs{funct3, is_rvc, addr});
+    instr->set_src_reg(0, rs1, RegType::Integer);
+    instr->set_src_reg(1, rs2, RegType::Integer);
+    instr->set_wstall(true);
+  } break;
+#endif
   case Opcode::JAL: {
     auto unordered  = code >> shift_funct3;
     auto bits_19_12 = unordered & 0xff;
@@ -829,6 +850,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       case 3: // JOIN
         instr->set_op_type(WctlType::JOIN);
         instr->set_src_reg(0, rs1, RegType::Integer);
+        // SCS fused lowering neutralizes the split stack-token: rs1==x0 marks a
+        // tokenless join that pops the stack top by LIFO (its vx_sbr partner has
+        // no rd to carry a token). A legacy split-token is never x0.
+        wctlArgs.is_tokenless = (rs1 == 0);
         instr->set_wstall(true);
         break;
       case 4: // BAR (sync)

@@ -34,6 +34,14 @@ interface VX_branch_ctl_if import VX_gpu_pkg::*; ();
     wire [`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0] dest_its; // per-thread taken target
     wire [PC_BITS-1:0]             ntaken_pc;   // not-taken fallthrough (PC + 4)
 `endif
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+    // SCS fused predicate-branch (vx_pbr): the branch unit resolves the per-lane
+    // continue set so the scheduler drives the loop predicate directly.
+    wire                           is_pbr;      // this branch is a vx_pbr
+    wire [`VX_CFG_NUM_THREADS-1:0] keep_mask;   // lanes that continue the loop
+    wire [`VX_CFG_NUM_THREADS-1:0] pbr_tmask;   // issued execution group
+    wire [PC_BITS-1:0]             pbr_ntaken_pc; // loop-exit / fall-through PC (PC+4)
+`endif
 
     modport master (
         output valid,
@@ -48,6 +56,12 @@ interface VX_branch_ctl_if import VX_gpu_pkg::*; ();
         output tmask,
         output dest_its,
         output ntaken_pc
+`endif
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+        ,output is_pbr,
+        output keep_mask,
+        output pbr_tmask,
+        output pbr_ntaken_pc
 `endif
     );
 
@@ -64,6 +78,12 @@ interface VX_branch_ctl_if import VX_gpu_pkg::*; ();
         input tmask,
         input dest_its,
         input ntaken_pc
+`endif
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+        ,input is_pbr,
+        input keep_mask,
+        input pbr_tmask,
+        input pbr_ntaken_pc
 `endif
     );
 

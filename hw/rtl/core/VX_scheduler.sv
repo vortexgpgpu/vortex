@@ -291,6 +291,12 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0] branch_dest_its;
     wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][PC_BITS-1:0]              branch_ntaken_pc;
 `endif
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0]                          branch_is_pbr;
+    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][`VX_CFG_NUM_THREADS-1:0] branch_keep_mask;
+    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][`VX_CFG_NUM_THREADS-1:0] branch_pbr_tmask;
+    wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][PC_BITS-1:0]             branch_pbr_ntaken_pc;
+`endif
     for (genvar i = 0; i < `VX_CFG_NUM_ALU_BLOCKS; ++i) begin : g_branch_init
         assign branch_valid[i]      = branch_ctl_if[i].valid;
         assign branch_wid[i]        = branch_ctl_if[i].wid;
@@ -304,6 +310,12 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         assign branch_tmask[i]      = branch_ctl_if[i].tmask;
         assign branch_dest_its[i]   = branch_ctl_if[i].dest_its;
         assign branch_ntaken_pc[i]  = branch_ctl_if[i].ntaken_pc;
+`endif
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+        assign branch_is_pbr[i]        = branch_ctl_if[i].is_pbr;
+        assign branch_keep_mask[i]     = branch_ctl_if[i].keep_mask;
+        assign branch_pbr_tmask[i]     = branch_ctl_if[i].pbr_tmask;
+        assign branch_pbr_ntaken_pc[i] = branch_ctl_if[i].pbr_ntaken_pc;
 `endif
     end
 
@@ -618,6 +630,27 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 grp_stale_n[branch_wid[i]] = 1;
 `else
                 stalled_warps_n[branch_wid[i]] = 0; // unlock warp
+`endif
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+                // SCS fused predicate-branch: the PC redirect above already sent
+                // the warp to the loop target when any lane continues (taken =
+                // keep!=0) or fell through to the exit otherwise. Here we apply
+                // the loop predicate: narrow to the continuing lanes and park the
+                // exiting ones at the loop exit, mirroring vx_pred's park; when no
+                // lane continues (reconverged) restore the parked lanes.
+                if (scs_enabled && branch_is_pbr[i]) begin
+                    if (branch_keep_mask[i] != 0) begin
+                        thread_masks_n[branch_wid[i]] = branch_keep_mask[i];
+                        cs_ptmask_n[branch_wid[i]] = (cs_pend[branch_wid[i]] ? cs_ptmask[branch_wid[i]] : '0)
+                                                   | (~branch_keep_mask[i] & branch_pbr_tmask[i]);
+                        cs_pend_n[branch_wid[i]] = 1;
+                        cs_ppc_n[branch_wid[i]]  = branch_pbr_ntaken_pc[i];
+                    end else begin
+                        thread_masks_n[branch_wid[i]] = (thread_masks[branch_wid[i]] | cs_ptmask[branch_wid[i]]) & ~cs_done[branch_wid[i]];
+                        active_warps_n[branch_wid[i]] = ((thread_masks[branch_wid[i]] | cs_ptmask[branch_wid[i]]) & ~cs_done[branch_wid[i]]) != 0;
+                        cs_pend_n[branch_wid[i]] = 0;
+                    end
+                end
 `endif
             end
         end
@@ -1248,16 +1281,14 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
     end
 
-    // stage-2 combinational: min-PC tournament tree + group install signals.
+    // stage-2a combinational: the min-PC tournament tree only. This isolates the
+    // log-depth PC-comparator chain (the 300 MHz-limiting path) from the group
+    // membership equality + group-cache write that follow, by registering the
+    // winning PC (st2_grp_pc) into a third pipeline stage (s2_*). The extra cycle
+    // of regroup latency is hidden: the serviced warp stays grp_stale until srv.
+    logic [PC_BITS-1:0] st2_grp_pc;
     always @(*) begin
         logic [`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0] lvl;
-
-        srv_valid     = s1_valid;
-        srv_wid       = s1_wid;
-        srv_amask     = s1_amask;
-        srv_yielded   = s1_yielded;
-        srv_warp_done = s1_warp_done;
-
         for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
             lvl[t] = s1_runnable[t] ? s1_pcs[t] : {PC_BITS{1'b1}};
         end
@@ -1266,13 +1297,48 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 lvl[i] = (lvl[2*i] < lvl[2*i+1]) ? lvl[2*i] : lvl[2*i+1];
             end
         end
-        srv_grp_pc = lvl[0];
-        for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
-            srv_grp_mask[t] = s1_runnable[t] && (s1_pcs[t] == srv_grp_pc);
+        st2_grp_pc = s1_keep_grp ? s1_keep_pc : lvl[0];
+    end
+
+    // stage-2a -> stage-2b pipeline register
+    reg                                        s2_valid;
+    reg [NW_WIDTH-1:0]                          s2_wid;
+    reg [`VX_CFG_NUM_THREADS-1:0]              s2_amask, s2_yielded;
+    reg [`VX_CFG_NUM_THREADS-1:0]              s2_runnable;
+    reg [`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0] s2_pcs;
+    reg                                        s2_warp_done, s2_keep_grp;
+    reg [PC_BITS-1:0]                          s2_grp_pc;
+    reg [`VX_CFG_NUM_THREADS-1:0]              s2_keep_mask;
+    always @(posedge clk) begin
+        if (reset) begin
+            s2_valid <= 1'b0;
+        end else begin
+            s2_valid     <= s1_valid;
+            s2_wid       <= s1_wid;
+            s2_amask     <= s1_amask;
+            s2_yielded   <= s1_yielded;
+            s2_runnable  <= s1_runnable;
+            s2_pcs       <= s1_pcs;
+            s2_warp_done <= s1_warp_done;
+            s2_grp_pc    <= st2_grp_pc;
+            s2_keep_grp  <= s1_keep_grp;
+            s2_keep_mask <= s1_keep_mask;
         end
-        if (s1_keep_grp) begin
-            srv_grp_pc   = s1_keep_pc;
-            srv_grp_mask = s1_keep_mask;
+    end
+
+    // stage-2b combinational: group membership (PC equality) + install signals.
+    always @(*) begin
+        srv_valid     = s2_valid;
+        srv_wid       = s2_wid;
+        srv_amask     = s2_amask;
+        srv_yielded   = s2_yielded;
+        srv_warp_done = s2_warp_done;
+        srv_grp_pc    = s2_grp_pc;
+        for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
+            srv_grp_mask[t] = s2_runnable[t] && (s2_pcs[t] == s2_grp_pc);
+        end
+        if (s2_keep_grp) begin
+            srv_grp_mask = s2_keep_mask;
         end
     end
 

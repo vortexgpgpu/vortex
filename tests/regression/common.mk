@@ -60,6 +60,15 @@ endif
 ifeq (,$(filter -DVX_CFG_SCS_YIELD_ENABLE, $(XCONFIGS)))
 LLVM_CFLAGS += -mllvm -vortex-scs-yield=0
 endif
+# SCS-only fused divergence branches. VX_FUSED=1 enables the loop predicate-branch
+# (vx_pbr); VX_FUSED_SPLIT=1 additionally enables the split-branch (vx_sbr).
+# Honored by the compiler only under -vortex-divergence-arch=scs.
+ifeq ($(VX_FUSED),1)
+LLVM_CFLAGS += -mllvm -vortex-fused-divergence=true
+endif
+ifeq ($(VX_FUSED_SPLIT),1)
+LLVM_CFLAGS += -mllvm -vortex-fuse-split-branch=true
+endif
 LLVM_CFLAGS += -Xclang -target-feature -Xclang +zicond
 LLVM_CFLAGS += -mllvm -disable-loop-idiom-all # disable memset/memcpy loop idiom
 LLVM_CFLAGS += -Wno-unused-command-line-argument

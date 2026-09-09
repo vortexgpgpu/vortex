@@ -298,18 +298,29 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     wire is_rvc_in = execute_if.data.op_args.br.is_rvc;
     wire is_rvc_r;
 `endif
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+    // SCS fused predicate-branch flag, pipelined to the resolve stage.
+    wire is_pbr_in = execute_if.data.op_args.br.is_pbr;
+    wire is_pbr_r;
+`endif
 
     VX_elastic_buffer #(
-        .DATAW ($bits(alu_header_t) + (NUM_LANES * `VX_CFG_XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH + `VX_CFG_EXT_C_ENABLED)
+        .DATAW ($bits(alu_header_t) + (NUM_LANES * `VX_CFG_XLEN) + PC_BITS + 1 + INST_BR_BITS + LANE_WIDTH + `VX_CFG_EXT_C_ENABLED
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+            + 1
+`endif
+        )
     ) rsp_buf (
         .clk      (clk),
         .reset    (reset),
         .valid_in (execute_if.valid),
         .ready_in (execute_if.ready),
         .data_in  ({alu_hdr_in,           alu_result,   cbr_dest,   is_br_op,   br_op,   last_tid
-            `ifdef VX_CFG_EXT_C_ENABLE , is_rvc_in `endif }),
+            `ifdef VX_CFG_EXT_C_ENABLE , is_rvc_in `endif
+            `ifdef VX_CFG_DIVERGE_TYPE_SCS , is_pbr_in `endif }),
         .data_out ({result_if.data.header, alu_result_r, cbr_dest_r, is_br_op_r, br_op_r, last_tid_r
-            `ifdef VX_CFG_EXT_C_ENABLE , is_rvc_r `endif }),
+            `ifdef VX_CFG_EXT_C_ENABLE , is_rvc_r `endif
+            `ifdef VX_CFG_DIVERGE_TYPE_SCS , is_pbr_r `endif }),
         .valid_out (result_if.valid),
         .ready_out (result_if.ready)
     );
@@ -332,7 +343,25 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     wire result_fire = result_if.valid && result_if.ready;
     wire br_enable = result_fire && is_br_op_r && result_if.data.header.eop;
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+    // SCS fused predicate-branch: resolve the per-lane continue (keep) set the
+    // same way the warp-level compare resolves taken, restricted to the issued
+    // group. The warp redirects to the loop target while any lane continues.
+    // NOTE: like the NV_ITS cone this assumes the whole warp is resolved in one
+    // pass (NUM_LANES == NUM_THREADS); lanes beyond NUM_LANES read 0.
+    wire [`VX_CFG_NUM_THREADS-1:0] pbr_keep_raw;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_pbr_keep
+        assign pbr_keep_raw[i] = (is_br_less ? alu_result_r[i][0] : alu_result_r[i][1]) ^ is_br_neg;
+    end
+    if (NUM_LANES < `VX_CFG_NUM_THREADS) begin : g_pbr_keep_pad
+        assign pbr_keep_raw[`VX_CFG_NUM_THREADS-1:NUM_LANES] = '0;
+    end
+    wire [`VX_CFG_NUM_THREADS-1:0] pbr_keep_act = pbr_keep_raw & result_if.data.header.tmask;
+    wire br_taken = is_pbr_r ? (| pbr_keep_act)
+                             : (((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static);
+`else
     wire br_taken = ((is_br_less ? is_less : is_equal) ^ is_br_neg) | is_br_static;
+`endif
     // For a trap entry, `dest` carries the faulting PC (saved into mepc).
     wire [PC_BITS-1:0] br_dest = is_trap_entry ? result_if.data.header.PC
                                : is_br_static  ? from_fullPC(br_result)
@@ -387,6 +416,21 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         .enable   (1'b1),
         .data_in  ({br_taken_mask,            result_if.data.header.tmask, br_dest_its,            br_ntaken_pc}),
         .data_out ({branch_ctl_if.taken_mask, branch_ctl_if.tmask,         branch_ctl_if.dest_its, branch_ctl_if.ntaken_pc})
+    );
+`endif
+
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+    // SCS fused predicate-branch outputs to the scheduler (1-stage, matching the
+    // main branch register): the continue set, the issued group and the exit PC.
+    wire [PC_BITS-1:0] pbr_ntaken = current_pc + from_fullPC(`VX_CFG_XLEN'(4));
+    VX_pipe_register #(
+        .DATAW (1 + `VX_CFG_NUM_THREADS + `VX_CFG_NUM_THREADS + PC_BITS)
+    ) branch_pbr_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({is_pbr_r,             pbr_keep_act,            result_if.data.header.tmask, pbr_ntaken}),
+        .data_out ({branch_ctl_if.is_pbr, branch_ctl_if.keep_mask, branch_ctl_if.pbr_tmask,     branch_ctl_if.pbr_ntaken_pc})
     );
 `endif
 

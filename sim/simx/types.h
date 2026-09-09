@@ -602,7 +602,9 @@ enum class WctlType {
   WSYNC,
   YIELD,
   BAR_ADD,
-  BAR_WAIT
+  BAR_WAIT,
+  PBR, // SCS fused predicate-branch (vx_pbr); carries IntrBrArgs (cc + offset)
+  SBR  // SCS fused split-branch    (vx_sbr); carries IntrBrArgs (cc + offset)
 };
 
 struct IntrWctlArgs {
@@ -610,6 +612,7 @@ struct IntrWctlArgs {
   uint32_t is_sync_bar : 1;
   uint32_t is_bar_arrive : 1;
   uint32_t bid : 5; // convergence-barrier id (NV_ITS bar_add/bar_wait)
+  uint32_t is_tokenless : 1; // SCS fused vx_join (rs1==x0): pop stack top by LIFO
 };
 
 inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
@@ -624,6 +627,8 @@ inline std::ostream &operator<<(std::ostream &os, const WctlType& type) {
   case WctlType::YIELD:  os << "YIELD"; break;
   case WctlType::BAR_ADD:  os << "BAR_ADD"; break;
   case WctlType::BAR_WAIT: os << "BAR_WAIT"; break;
+  case WctlType::PBR:    os << "PBR"; break;
+  case WctlType::SBR:    os << "SBR"; break;
   default:
     assert(false);
   }

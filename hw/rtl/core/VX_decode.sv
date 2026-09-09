@@ -327,6 +327,9 @@ module VX_decode import
                 op_args.br.use_imm= 1;
                 op_args.br.imm20  = jal_imm;
                 op_args.br.is_rvc = decode_is_rvc;
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+                op_args.br.is_pbr = 0;
+`endif
                 is_wstall = 1;
                 `USED_IREG (rd);
             end
@@ -338,6 +341,9 @@ module VX_decode import
                 op_args.br.use_imm= 1;
                 op_args.br.imm20  = `SEXT(20, u_12);
                 op_args.br.is_rvc = decode_is_rvc;
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+                op_args.br.is_pbr = 0;
+`endif
                 is_wstall = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
@@ -350,10 +356,32 @@ module VX_decode import
                 op_args.br.use_imm= 1;
                 op_args.br.imm20  = `SEXT(20, b_imm);
                 op_args.br.is_rvc = decode_is_rvc;
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+                op_args.br.is_pbr = 0;
+`endif
                 is_wstall = 1;
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
             end
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+            // SCS fused predicate-branch (vx_pbr): a B-type branch (cc in funct3,
+            // same immediate layout as INST_B) that also carries the loop
+            // predicate. Resolves on the ALU branch path; op_args.br.is_pbr tells
+            // the branch unit to emit the per-lane keep mask for the scheduler.
+            INST_EXT3: begin
+                ex_type = EX_ALU;
+                op_type = INST_OP_BITS'(b_type);
+                op_args.br.xtype  = ALU_TYPE_BRANCH;
+                op_args.br.use_PC = 1;
+                op_args.br.use_imm= 1;
+                op_args.br.imm20  = `SEXT(20, b_imm);
+                op_args.br.is_rvc = decode_is_rvc;
+                op_args.br.is_pbr = 1;
+                is_wstall = 1;
+                `USED_IREG (rs1);
+                `USED_IREG (rs2);
+            end
+`endif
             INST_FENCE: begin
                 ex_type = EX_LSU;
                 op_type = INST_LSU_FENCE;
@@ -418,6 +446,9 @@ module VX_decode import
                     op_args.br.use_PC = 1;
                     op_args.br.imm20  = 20'd4;
                     op_args.br.is_rvc = decode_is_rvc;
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
+                    op_args.br.is_pbr = 0;
+`endif
                     is_wstall = 1;
                     `USED_IREG (rd);
                 end

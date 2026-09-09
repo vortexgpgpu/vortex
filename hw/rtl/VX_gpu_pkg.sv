@@ -890,7 +890,8 @@ package VX_gpu_pkg;
 
     // Branch instructions (JAL/JALR/B/SYS) execute on the ALU pipeline.
     typedef struct packed {
-        logic [1:0] __padding;
+        logic       __padding;
+        logic       is_pbr;   // SCS fused predicate-branch (vx_pbr); op_type carries the cc
         logic use_PC;
         logic use_imm;
         logic is_rvc;
