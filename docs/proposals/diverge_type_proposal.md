@@ -1,4 +1,4 @@
-# VX_CFG_DIVERGE_TYPE — Selectable Divergence Architecture (DEFAULT / SPLIT / NV_ITS)
+# VX_CFG_DIVERGE_TYPE — Selectable Divergence Architecture (DEFAULT / SCS / NV_ITS)
 
 **Scope:** [VX_config.toml](../../VX_config.toml), [ci/gen_config.py](../../ci/gen_config.py),
 [sim/simx/{scheduler,wctl_unit,decode,types}](../../sim/simx),
@@ -28,11 +28,11 @@ designs can be compared head-to-head on the same tree, same toolchain, same test
 | `VX_CFG_DIVERGE_TYPE` | Design | Today |
 |---|---|---|
 | `DEFAULT` | Upstream baseline: IPDOM stack, strict-LIFO serialization | exists, but SCS code is fused into it |
-| `SPLIT` | threadsplit / SCS: schedulable splits + `vx_yield` (deadlock-free) | current unconditional behavior of this branch |
+| `SCS` | threadsplit / SCS: schedulable splits + `vx_yield` (deadlock-free) | current unconditional behavior of this branch |
 | `NV_ITS` | NVIDIA-style ITS: per-thread PCs + convergence barriers (`bar_add`/`bar_wait`), lowest-PC group scheduling | exists only in the Vortex 2.0 snapshot at `~/dev/vortexz_its`; must be ported |
 
 Both SimX and RTL honor the switch. `DEFAULT` must be behavior- and cycle-identical to
-upstream master; `SPLIT` must be bit-identical to this branch today.
+upstream master; `SCS` must be bit-identical to this branch today.
 
 ## 2. Config plumbing
 
@@ -42,19 +42,19 @@ The tree already has the exact pattern needed — the `TCU_TYPE`/`FPU_TYPE` stri
 
 ```toml
 [diverge]
-# string enum: 'DEFAULT' (IPDOM baseline) | 'SPLIT' (schedulable convergence
+# string enum: 'DEFAULT' (IPDOM baseline) | 'SCS' (schedulable convergence
 # stack + vx_yield) | 'NV_ITS' (per-thread PCs + convergence barriers)
-VX_CFG_DIVERGE_TYPE = "SPLIT"
+VX_CFG_DIVERGE_TYPE = "SCS"
 
 [[enum]]
-VX_CFG_DIVERGE_TYPE = ["DEFAULT", "SPLIT", "NV_ITS"]
+VX_CFG_DIVERGE_TYPE = ["DEFAULT", "SCS", "NV_ITS"]
 ```
 
-Default `SPLIT` preserves this branch's current behavior (flag for review: `DEFAULT` would
+Default `SCS` preserves this branch's current behavior (flag for review: `DEFAULT` would
 instead make the tree upstream-identical unless opted in).
 
 `gen_config.py` needs **no changes**: `[[enum]]` parsing, the companion-define synthesis
-(`VX_CFG_DIVERGE_TYPE_SPLIT`), both override spellings (`-DVX_CFG_DIVERGE_TYPE=NV_ITS` and
+(`VX_CFG_DIVERGE_TYPE_SCS`), both override spellings (`-DVX_CFG_DIVERGE_TYPE=NV_ITS` and
 `-DVX_CFG_DIVERGE_TYPE_NV_ITS`), and the cflags emission are all generic.
 
 **Makefile companion re-injection** (the part that bites): RTL and SimX code select on the
@@ -96,7 +96,7 @@ any re-partitioning risks re-opening timing for zero architectural gain.
 **(b) Inline `` `ifdef VX_CFG_DIVERGE_TYPE_* `` fences** inside the existing files: this is
 exactly the delta structure the Vortex 2.0 ITS implementation already proved out
 (clean `#ifdef/#else` at statement granularity, baseline preserved verbatim in the `#else`
-arms), and it leaves the timing-closed SPLIT logic untouched down to the bit.
+arms), and it leaves the timing-closed SCS logic untouched down to the bit.
 
 **Recommendation: (b)** for both RTL and SimX. The SCS additions get wrapped where they
 sit; the ITS port lands as parallel guarded blocks following the old tree's structure.
@@ -104,13 +104,13 @@ Option (a) remains the documented follow-up if a fourth design ever appears.
 
 ## 4. SimX design
 
-### 4.1 Gating the existing SCS code under `SPLIT`
+### 4.1 Gating the existing SCS code under `SCS`
 
 The SCS delta touches five files and is mostly additive; the fences are:
 
 - `scheduler.h`: `scs_split_t`, the eight `warp_t::scs_*` fields, the five `scs_*` method
   declarations, `yield_warp()`, and `ipdom_entry_t`'s three SCS fields
-  (`passed_tmask`/`passed_pc`/`has_passed`) → `#ifdef VX_CFG_DIVERGE_TYPE_SPLIT`. Guarding
+  (`passed_tmask`/`passed_pc`/`has_passed`) → `#ifdef VX_CFG_DIVERGE_TYPE_SCS`. Guarding
   the ipdom fields keeps DEFAULT's stack entry bit-identical to upstream.
 - `scheduler.cpp`: the five `scs_*` helpers, `yield_warp`, ctor/reset/activate_warp SCS
   lines, and the three inserts inside `schedule()` (cooldown tick, pick-predicate term,
@@ -130,7 +130,7 @@ the port maps onto the current architecture as follows:
 - **`warp_t` state** (`scheduler.h`, `#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS`): `tpc[]`
   (per-thread PC), `amask` (alive), `bar_participate[]`/`bar_arrived[]`
   (`VX_CFG_ITS_NUM_BARRIERS` each — see §6; the old tree hardcoded 32). `ipdom_stack`
-  remains declared (SPLIT/JOIN become no-ops that never touch it) so shared code compiles;
+  remains declared (SCS/JOIN become no-ops that never touch it) so shared code compiles;
   `tmask`/`PC` are retained as the current-issue-group scratch, recomputed at each pick,
   exactly as the old model did.
 - **Group selection** (`scheduler.cpp schedule()`): under NV_ITS the warp-pick loop gains
@@ -173,13 +173,13 @@ statements hold for the RTL port in §5.2.
    does not terminate in a statically determined number of instructions"; yielded threads
    are excluded from the barrier-release check. The reference omits this entirely, and the
    port keeps the omission **deliberately**: adding yield to NV_ITS would reproduce the
-   very mechanism SPLIT's `vx_yield` provides and blur the comparison (§10.3). The lock
+   very mechanism SCS's `vx_yield` provides and blur the comparison (§10.3). The lock
    test deadlocks under NV_ITS therefore measure *barriers without yield*, not the full
    patented design — the evaluation write-up must say so.
 2. **Scheduling policy.** The patent's scheduler picks the divergent path with the
    *fewest active threads* (depth-first on structured code); the reference picks the
    *lowest-PC* runnable group and the port keeps that. Both converge identically on
-   structured code but interleave differently, so IPC deltas vs SPLIT partly reflect
+   structured code but interleave differently, so IPC deltas vs SCS partly reflect
    pick policy, not just the barrier mechanism.
 3. **Thread exit.** The patent keeps exited (OPT-OUT) threads in the participation mask
    and has the release check ignore them. The reference instead leaves TMC-killed threads
@@ -190,7 +190,7 @@ statements hold for the RTL port in §5.2.
 
 ## 5. RTL design
 
-### 5.1 Gating the existing SCS code under `SPLIT`
+### 5.1 Gating the existing SCS code under `SCS`
 
 `VX_scheduler.sv` (renamed from `VX_schedule.sv` upstream): fence the identified SCS
 blocks — design comment + `CS_*` localparams + state regs (57-93), `cs_pool_ram` +
@@ -199,9 +199,9 @@ TMC exit/rotate rewrite (295-340; upstream's two-line TMC handler returns in the
 arm), pred_park/pred_restore (342-375), yield (409-447), sequential resets (523-539).
 `VX_wctl_unit.sv`: `is_yield`, the pred_park/restore wires, `yield_valid`, and the SCS
 widening of the `wctl_reg` DATAW. `VX_warp_ctl_if.sv`: the four SCS fields. All under
-`` `ifdef VX_CFG_DIVERGE_TYPE_SPLIT ``.
+`` `ifdef VX_CFG_DIVERGE_TYPE_SCS ``.
 
-Verification that the fences are inert: a SPLIT build must produce bit-identical Verilator
+Verification that the fences are inert: a SCS build must produce bit-identical Verilator
 output to today's tree (same binary hash modulo timestamps), and a DEFAULT build must diff
 clean against upstream master's generated code for these files.
 
@@ -215,7 +215,7 @@ Following the old tree's additive structure, with its known defects fixed:
   guard, never unconditional as it was in the old tree), `its_bar_t`,
   `wctl_args_t.bid` carved from padding (guarded).
 - **`VX_decode.sv`**: the new encodings (§6) decoded only under NV_ITS; under
-  DEFAULT/SPLIT the slot stays reserved so the `conform` reserved-funct7 test keeps its
+  DEFAULT/SCS the slot stays reserved so the `conform` reserved-funct7 test keeps its
   meaning (the conform expectations become DIVERGE_TYPE-dependent — see §8).
 - **`VX_branch_ctl_if.sv` + `VX_alu_int.sv`**: additive `taken_mask`/`tmask`/`ntaken_pc`
   fields and the per-lane branch-resolution pipe register. Two fixes over the old tree:
@@ -251,8 +251,8 @@ under `EXT1` (0x0B):
 
 | funct7 | funct3 | Op | Mode |
 |---|---|---|---|
-| 0x00 | 0-7 | TMC/WSPAWN/SPLIT/JOIN/BAR/PRED/BAR-arr/WSYNC | all (SPLIT/JOIN/PRED are architectural no-ops under NV_ITS, as in the old tree) |
-| 0x05 | 0 | `vx_yield` | decoded in **all** modes; acts only under SPLIT, no-op (warp unlock only) under DEFAULT/NV_ITS |
+| 0x00 | 0-7 | TMC/WSPAWN/SCS/JOIN/BAR/PRED/BAR-arr/WSYNC | all (SCS/JOIN/PRED are architectural no-ops under NV_ITS, as in the old tree) |
+| 0x05 | 0 | `vx_yield` | decoded in **all** modes; acts only under SCS, no-op (warp unlock only) under DEFAULT/NV_ITS |
 | **0x06** | **0** | **`vx_bar_add`** (bid = rs1 field literal, no register read) | NV_ITS only |
 | **0x06** | **1** | **`vx_bar_wait`** (bid = rs1 field literal) | NV_ITS only |
 
@@ -265,7 +265,7 @@ into blocking loops; a DEFAULT/NV_ITS build must still run those binaries (and
 but the old tree's 32 was field-width-driven, not need-driven (the diverge test uses 8);
 barrier-mask flops scale linearly with it.
 
-Two pre-existing SPLIT-branch defects get fixed in the same series since the code is open
+Two pre-existing SCS-branch defects get fixed in the same series since the code is open
 anyway: `INST_SFU_YIELD = 4'hE` collides with `INST_SFU_RTUW = 4'hE` under
 `EXT_GFX_ANY_ENABLE` (YIELD moves to `4'hF`, the last free code with all gfx extensions
 on), and `VX_trace_pkg.sv` has no YIELD trace case. The 4-bit SFU code space is otherwise
@@ -279,7 +279,7 @@ One toolchain build serves all three architectures via a **runtime backend flag*
 per-mode LLVM rebuilds:
 
 ```
--mllvm -vortex-divergence-arch={ipdom|tsplit|its}     (default: tsplit)
+-mllvm -vortex-divergence-arch={ipdom|scs|its}     (default: scs)
 ```
 
 A new `cl::opt` enum in `RISCVTargetMachine.cpp`, **orthogonal** to the existing
@@ -287,12 +287,12 @@ A new `cl::opt` enum in `RISCVTargetMachine.cpp`, **orthogonal** to the existing
 structurization-aggressiveness / master-enable knob. Overloading that int would conflate
 two axes — its value is consumed positionally at `RISCVTargetMachine.cpp:539`
 (`SkipRegionalBranches = (mode==1)`), and the copy stored in `VortexBranchDivergence1`
-(`divergenceMode_`) is a dead field today. The default `tsplit` mirrors the proposed hw
+(`divergenceMode_`) is a dead field today. The default `scs` mirrors the proposed hw
 default; reviewer call, jointly with §10.2.
 
 ### 7.1 Per-mode codegen
 
-| | `ipdom` | `tsplit` | `its` |
+| | `ipdom` | `scs` | `its` |
 |---|---|---|---|
 | StructurizeCFG + `setRequiresStructuredCFG` | yes | yes | **no** (per-thread PCs make reducible-but-unstructured CFG legal) |
 | `processBranches` | `vx_split`/`vx_join` | `vx_split`/`vx_join` | `vx_bar_add bid` before the divergent branch, `vx_bar_wait bid` in the join stub at the ipdom |
@@ -301,7 +301,7 @@ default; reviewer call, jointly with §10.2.
 | `VortexBranchDivergence0` | full | full | keep ret/unreachable unification (PDT must stay valid for barrier placement); **skip** the divergent-select/min-max unswitching (pure pessimization under per-thread PCs) |
 | `VortexBranchDivergence2` | both modes | both modes | keep the pre-RA `VX_MOV` elimination; skip the pre-emit `BEQ/BNE` assert + split-polarity fixup (no splits exist) |
 
-`ipdom` is `tsplit` minus exactly one thing — the yield emission block at
+`ipdom` is `scs` minus exactly one thing — the yield emission block at
 `VortexBranchDivergence.cpp:1439-1444` — so its output must diff-match upstream
 llvm-vortex codegen; that is its Phase gate. The `its` mode reuses the existing ipdom
 computation (`PDT.findNearestCommonDominator`) and join-stub/`replaceSuccessor`
@@ -345,7 +345,7 @@ for split/join, pred, yield, and bar emission — the regression net the switch 
 The kernel-side flag derives from the same config the hardware reads: each
 `tests/*/common.mk` (which already inject `-Xclang -target-feature -Xclang +xvortex`)
 maps `$(filter -DVX_CFG_DIVERGE_TYPE_%,$(XCONFIGS))` → `-mllvm -vortex-divergence-arch=`
-(`DEFAULT→ipdom`, `SPLIT→tsplit`, `NV_ITS→its`). `sw/kernel/Makefile` keeps
+(`DEFAULT→ipdom`, `SCS→scs`, `NV_ITS→its`). `sw/kernel/Makefile` keeps
 `-vortex-branch-divergence=0` (runtime lib builds divergence-off, unchanged). For OpenCL,
 POCL's own `init_build` does not pass `+xvortex` — the mode flag rides the same channel
 the feature flag already uses (the final clang invocation / `POCL_VORTEX_CFLAGS`), and
@@ -368,17 +368,17 @@ it is not ported to ELF32 beyond what that single crosscheck needs.
 
 ## 8. Validation plan
 
-| Gate | DEFAULT | SPLIT | NV_ITS |
+| Gate | DEFAULT | SCS | NV_ITS |
 |---|---|---|---|
 | SimX regression suite | must equal upstream master results **and cycle counts** (perf_gate) | must equal this branch today (52/52) | full divergence subset (diverge/bfs/dogfood/jacobi/softmax/raycast + regressions) compiled with `-vortex-divergence-arch=its` — no longer limited to patched binaries (§7) |
 | dogfood bar/gbar subtests | excluded upstream (`OPTS ?= -n64 -xbar -xgbar`); not part of any gate | same | same — CTA barriers with intra-warp divergence are out of eval scope |
 | Lock tests (lockht/lclist/rangelock, EXT_A) | expected DEADLOCK (documents the baseline defect) | PASS | expected DEADLOCK — no yield in the ported design (a deliberate deviation from the patent, §4.3.1); this is a *finding*, not a bug: it quantifies that bare ITS barriers don't buy forward progress |
 | rtlsim | diverge/jacobi/bfs/dogfood/raycast + legacy-spawn set | same + lock tests | diverge + bfs + dogfood (its-compiled) |
-| LLVM lit tests (§7.2) | ipdom-mode CHECKs == upstream codegen | tsplit CHECKs == today's output | its CHECKs: bar placement, no split/join/pred |
+| LLVM lit tests (§7.2) | ipdom-mode CHECKs == upstream codegen | scs CHECKs == today's output | its CHECKs: bar placement, no split/join/pred |
 | Patcher crosscheck | — | — | patched vs its-compiled diverge: identical barrier-event trace (§7.4, one-time gate) |
 | conform (reserved funct7) | green as-is | green as-is | expectations adjusted for funct7=6 |
-| Cycle parity | `diverge` cycle-identical upstream↔DEFAULT and (already proven) DEFAULT↔SPLIT-convergent-path | — | IPC comparison table (the §3.2 scaling study of the ITS report, re-run on this tree at NT=8/NW=8 and the report's 1c/2w/4t point) |
-| Synthesis (after rtlsim-green) | existing baselines | existing `scs_*` DUTs | new `its_nt8nw8` DUT: Fmax + area vs SPLIT vs DEFAULT |
+| Cycle parity | `diverge` cycle-identical upstream↔DEFAULT and (already proven) DEFAULT↔SCS-convergent-path | — | IPC comparison table (the §3.2 scaling study of the ITS report, re-run on this tree at NT=8/NW=8 and the report's 1c/2w/4t point) |
+| Synthesis (after rtlsim-green) | existing baselines | existing `scs_*` DUTs | new `its_nt8nw8` DUT: Fmax + area vs SCS vs DEFAULT |
 
 The evaluation deliverable is the three-way table the threadsplit proposal could only
 estimate: area (LUT/FF/BRAM), Fmax, IPC on convergent code, IPC on divergent code, and
@@ -389,11 +389,11 @@ forward-progress capability.
 | Phase | Deliverable | Gate |
 |---|---|---|
 | 0 | This proposal | reviewed |
-| 1 | Config plumbing (toml enum, Makefile companion filters, synth flows) | `DEFAULT/SPLIT/NV_ITS` builds all configure; SPLIT build bit-identical to today |
-| 2 | SimX SPLIT fences | DEFAULT run == upstream simx; SPLIT run == today (52/52 + lock tests) |
-| 3 | LLVM `-vortex-divergence-arch` switch + lit tests (§7) | ipdom output diff-matches upstream llvm-vortex; tsplit output bit-identical to today; its emits bar ops (lit-verified); prebuilt refresh staged |
+| 1 | Config plumbing (toml enum, Makefile companion filters, synth flows) | `DEFAULT/SCS/NV_ITS` builds all configure; SCS build bit-identical to today |
+| 2 | SimX SCS fences | DEFAULT run == upstream simx; SCS run == today (52/52 + lock tests) |
+| 3 | LLVM `-vortex-divergence-arch` switch + lit tests (§7) | ipdom output diff-matches upstream llvm-vortex; scs output bit-identical to today; its emits bar ops (lit-verified); prebuilt refresh staged |
 | 4 | SimX NV_ITS port | its-compiled diverge PASS on simx; patcher crosscheck trace-identical (§7.4); divergence subset PASS |
-| 5 | RTL SPLIT fences | DEFAULT rtlsim == upstream; SPLIT rtlsim == today |
+| 5 | RTL SCS fences | DEFAULT rtlsim == upstream; SCS rtlsim == today |
 | 6 | RTL NV_ITS port | its-compiled diverge PASS on rtlsim; SimX-as-oracle trace diff on divergence events |
 | 7 | Evaluation runs + synth DUTs | the §8 three-way table |
 
@@ -401,14 +401,14 @@ forward-progress capability.
 
 1. **DEFAULT cycle parity**: SCS claimed cycle-identity on `diverge`; fencing must not
    perturb DEFAULT's cycle counts anywhere else — perf_gate is the arbiter.
-2. **Default value of the switch** (`SPLIT` proposed) — reviewer call.
+2. **Default value of the switch** (`SCS` proposed) — reviewer call.
 3. **ITS scheduler fairness**: lowest-PC-first starves a high-PC thread behind a
    low-PC spin loop; combined with no yield this is why lock tests deadlock. We document
    rather than fix — fixing it (adding yield to ITS) would blur the comparison the switch
    exists to make. See §4.3 for how this and the pick policy deviate from the patent.
 4. **Multi-warp CTA interactions**: the old ITS was validated single-kernel on the diverge
    test only; CTA dispatch/retire under `amask`-based warp retirement needs fresh
-   validation against the current KMU/CTA dispatcher (the SPLIT bring-up found two
+   validation against the current KMU/CTA dispatcher (the SCS bring-up found two
    multi-workgroup bugs in exactly this area — expect the same class here).
 5. **`NUM_LANES == NUM_THREADS`** elaboration guard means NV_ITS excludes lane-blocked
    configs; acceptable for evaluation, stated openly.
@@ -423,7 +423,7 @@ forward-progress capability.
    `setRequiresStructuredCFG` re-enables TailDuplication/MachineBlockPlacement/
    EarlyIfConversion effects, so DEFAULT-vs-NV_ITS IPC deltas include general codegen
    differences, not just the divergence mechanism. Stated in the eval write-up; the
-   SPLIT-vs-NV_ITS comparison on the same divergent kernels is the primary headline.
+   SCS-vs-NV_ITS comparison on the same divergent kernels is the primary headline.
 9. **Barrier-id exhaustion** under `its` is a compile error, not a spill (§7.1); deep
    divergence nesting in future workloads would need an allocator iteration.
 
@@ -439,16 +439,16 @@ CXXFLAGS/VL_FLAGS/synth CFLAGS (12 filter sites + simx injection).
 
 **Fence inertness** (mechanical `unifdef`-style resolution, per macro arm):
 SimX `scheduler.{h,cpp}`/`wctl_unit.cpp` and RTL `VX_scheduler.sv`/`VX_wctl_unit.sv`/
-`VX_warp_ctl_if.sv` — SPLIT arm identical to pre-fence HEAD; DEFAULT arm identical to
+`VX_warp_ctl_if.sv` — SCS arm identical to pre-fence HEAD; DEFAULT arm identical to
 upstream 451e04858887 except the designed always-decoded YIELD (wsync-style unlock).
-tsplit toolchain output: diverge kernel **bit-identical** before/after the LLVM changes
+scs toolchain output: diverge kernel **bit-identical** before/after the LLVM changes
 (inline-asm→intrinsic yield promotion included).
 
-**SimX**: SPLIT — diverge/demo/lockht(EXT_A) pass unchanged. DEFAULT — diverge/demo pass.
+**SimX**: SCS — diverge/demo/lockht(EXT_A) pass unchanged. DEFAULT — diverge/demo pass.
 NV_ITS — diverge, bfs, jacobi, dogfood (22/22, upstream default opts), sgemm, vecadd,
 demo, dotproduct, basic all PASS with its-compiled kernels (no binary patcher used).
 
-**rtlsim**: SPLIT demo/diverge PASS; DEFAULT demo/diverge PASS; NV_ITS diverge/bfs/
+**rtlsim**: SCS demo/diverge PASS; DEFAULT demo/diverge PASS; NV_ITS diverge/bfs/
 demo/dogfood(22/22 incl. trig) PASS. NV_ITS diverge instruction count matches SimX
 exactly (223063) — SimX-as-oracle.
 
@@ -465,14 +465,14 @@ exactly (223063) — SimX-as-oracle.
 | | instrs | SimX cycles | rtlsim cycles |
 |---|---|---|---|
 | DEFAULT | 248436 | 822423 | 892235 |
-| SPLIT | 253191 (SimX) / 248436 (RTL) | 1056432 | **892235 — cycle-identical to DEFAULT** |
+| SCS | 253191 (SimX) / 248436 (RTL) | 1056432 | **892235 — cycle-identical to DEFAULT** |
 | NV_ITS | 223063 | 735480 | 828435 (−7.1% vs baseline; −10% instrs, split/join/pred gone) |
 
-SPLIT RTL is provably inert on convergent code (no watchdog in RTL; SimX's extra instrs
+SCS RTL is provably inert on convergent code (no watchdog in RTL; SimX's extra instrs
 come from its software watchdog safety net firing on the test's spin-wait loops —
 a documented model/RTL fidelity difference, not a defect).
 
-**Forward progress (lockht -n16, EXT_A, SimX)**: SPLIT PASS; DEFAULT and NV_ITS
+**Forward progress (lockht -n16, EXT_A, SimX)**: SCS PASS; DEFAULT and NV_ITS
 deadlock (timeout), as predicted — bare ITS barriers do not buy forward progress (§4.3.1).
 
 **Synthesis** (U55C, 300 MHz, core DUT at NT=8/NW=8): the reference's serial min-PC
@@ -487,11 +487,11 @@ cycle-identical. The pre-reset `scs_bram_nt8nw8` baseline (109K LUTs) is NOT com
 | core @ NT=8/NW=8, U55C, 300 MHz | LUTs | FFs | WNS |
 |---|---|---|---|
 | DEFAULT (`def_nt8nw8`) | 67,946 | 65,114 | **MET (+0.060 ns)** |
-| SPLIT (`split_nt8nw8`) | 69,713 (+2.6%) | 65,390 (+276) | **MET (+0.064 ns)** |
+| SCS (`split_nt8nw8`) | 69,713 (+2.6%) | 65,390 (+276) | **MET (+0.064 ns)** |
 | NV_ITS (`its_tree_nt8nw8`) | 80,054 (+17.8%) | 69,041 (+3,927) | VIOLATED (−1.053 ns ≈ 228 MHz) |
 
-SPLIT's forward-progress capability costs 2.6% core LUTs and 276 flops and closes
-300 MHz with margin. NV_ITS costs 6.9× more area than SPLIT (per-thread PCs + barrier
+SCS's forward-progress capability costs 2.6% core LUTs and 276 flops and closes
+300 MHz with margin. NV_ITS costs 6.9× more area than SCS (per-thread PCs + barrier
 masks ≈ +3.9K flops, matching the §5.3 estimate) and, even with the balanced tree, still
 misses 300 MHz by 1.05 ns on the `its_arr`→blocked→min-PC-tree→schedule path (17 logic
 levels). The remaining closure lever — registering the per-warp blocked mask at the cost
@@ -499,7 +499,7 @@ of one cycle of barrier-wakeup latency — is documented future work, deliberate
 taken: it would change NV_ITS cycle behavior mid-evaluation.
 
 **Deferred**: full perf_gate DEFAULT-vs-upstream cycle sweep (source-level identity +
-spot checks done); rtlsim SPLIT lock tests under EXT_A re-run (covered by fence
+spot checks done); rtlsim SCS lock tests under EXT_A re-run (covered by fence
 bit-identity + pre-fence validation); conform-test funct7=6 expectations only apply to
 NV_ITS builds; `vortex-toolchain-prebuilt` refresh required before any dependent push.
 
@@ -508,7 +508,7 @@ NV_ITS builds; `vortex-toolchain-prebuilt` refresh required before any dependent
 ## 12. Completing the ITS arm — minimal A100-equivalent (IMPLEMENTED 2026-09-09)
 
 **Status: implemented and validated.** The ITS arm now passes all ten benchmarks on
-both SimX and rtlsim under ITS+Y; the ablation (`-DVX_CFG_ITS_YIELD_DISABLE`) reproduces
+both SimX and rtlsim under ITS+Y; the ablation (`-DVX_CFG_SCS_YIELD_DISABLE`) reproduces
 the barriers-only deadlocks. Two RTL bugs surfaced during the §13 storage redesign and
 were root-caused via SimX-as-oracle trace diff:
 
@@ -564,14 +564,14 @@ release; the compiler inserts YIELD on control paths without statically bounded 
   `VX_wctl_unit`: yield under NV_ITS routes through the `its` channel (a third op kind next
   to add/wait, reusing the existing `its_pc` = PC+4 payload as the park PC) instead of the
   wsync fold.
-- **Compiler**: widen the yield-emission gate in `processLoops` from `== VXDA_TSPLIT` to
-  `!= VXDA_IPDOM` (heuristic and insertion point shared verbatim with tsplit), and in `its`
+- **Compiler**: widen the yield-emission gate in `processLoops` from `== VXDA_SCS` to
+  `!= VXDA_IPDOM` (heuristic and insertion point shared verbatim with scs), and in `its`
   mode emit in **both** exit polarities (the pred_n-arm restriction is a predication
   artifact ITS doesn't have). Lit test gains ITS-YIELD CHECK lines.
-- **Ablation preserved**: toml knob `VX_CFG_ITS_YIELD_ENABLE` (default **true**; disable
-  with the config system's canonical `-DVX_CFG_ITS_YIELD_DISABLE` spelling to reproduce
+- **Ablation preserved**: toml knob `VX_CFG_SCS_YIELD_ENABLE` (default **true**; disable
+  with the config system's canonical `-DVX_CFG_SCS_YIELD_DISABLE` spelling to reproduce
   the barriers-only arm already measured). The build system forwards the knob as
-  `-mllvm -vortex-its-yield=0` when disabled so hardware and generated code always agree.
+  `-mllvm -vortex-scs-yield=0` when disabled so hardware and generated code always agree.
 
 ### 12.2 OPT-OUT — already satisfied, no work
 
@@ -596,11 +596,11 @@ exit also clears its `yielded` bit.
 | Gate | Expectation |
 |---|---|
 | Lock suite (lockht/lclist/rangelock), NV_ITS+YIELD, SimX + rtlsim | **PASS** → ITS arm reaches 10/10 |
-| Lock suite with `VX_CFG_ITS_YIELD_ENABLE=0` | DEADLOCK (ablation reproduces the current report) |
+| Lock suite with `VX_CFG_SCS_YIELD_ENABLE=0` | DEADLOCK (ablation reproduces the current report) |
 | 10-benchmark campaign, NV_ITS+YIELD | no regression on the 7 already-passing kernels (yield fires only in blocking loops) |
 | lit + conform | ITS-YIELD CHECK lines; no new encodings to cover |
 | Synthesis | re-run `sched_nvits` / `its_tree` DUTs; +64 flops + release-eq masking, expected ≈neutral timing |
-| Report/artifact | four-way tables: Baseline / TSPLIT / ITS-CB (ablation) / **ITS+Y**; headline becomes complete-vs-complete |
+| Report/artifact | four-way tables: Baseline / SCS / ITS-CB (ablation) / **ITS+Y**; headline becomes complete-vs-complete |
 
 ### 12.5 Phasing
 
@@ -608,7 +608,7 @@ exit also clears its `yielded` bit.
 |---|---|---|---|
 | 8a | SimX yielded state + compiler gate widening + knob | SimX lock suite PASS under ITS+Y; knob=0 reproduces deadlocks | **DONE** — SimX 10/10; ablation deadlocks |
 | 8b | RTL yielded state + §13 storage redesign | rtlsim lock suite PASS; SimX-as-oracle instruction-exact on the campaign kernels | **DONE** — rtlsim 10/10; two hazards fixed (§12 top) |
-| 8c | Re-synthesis + campaign re-run + report/artifact update | four-way evaluation published | **DONE** — report + design reviews updated; scheduler + core re-synthesized. §13 v2 area redesign hit target (scheduler 17.4K→7.4K LUT, core 80K→70.6K), pipelined to −1.579 scheduler / −1.894 core. Result: TSPLIT Pareto-dominates both ITS design points (smaller than v1, faster than both, matches v3 area at 60% higher Fmax) |
+| 8c | Re-synthesis + campaign re-run + report/artifact update | four-way evaluation published | **DONE** — report + design reviews updated; scheduler + core re-synthesized. §13 v2 area redesign hit target (scheduler 17.4K→7.4K LUT, core 80K→70.6K), pipelined to −1.579 scheduler / −1.894 core. Result: SCS Pareto-dominates both ITS design points (smaller than v1, faster than both, matches v3 area at 60% higher Fmax) |
 
 Review outcome (approved): knob default = 1; completed arm's report label = **ITS+Y**.
 
@@ -625,10 +625,10 @@ fabric for flop arrays.
 | scheduler DUT | LUT as logic | LUT as mem | FF | BRAM | WNS |
 |---|---|---|---|---|---|
 | DEFAULT | 3,685 | 334 | 4,009 | 0 | +0.350 |
-| SPLIT | 6,006 | 334 | 4,525 | 1 | +0.323 |
+| SCS | 6,006 | 334 | 4,525 | 1 | +0.323 |
 | NV_ITS (v1) | 17,092 | 286 | 7,451 | 0 | −0.725 |
 
-**SPLIT verdict — already conformant.** Its one large structure (the parked-split pool,
+**SCS verdict — already conformant.** Its one large structure (the parked-split pool,
 `NW×2NT` entries of `{tmask,pc}`) is in BRAM with a registered 1-cycle pop. The residual
 +516 FF are per-warp scratch (`cs_ptmask/cs_ppc/cs_done/cs_inpool/cs_head/cs_cnt`,
 ~520 bits) — the same storage class as the baseline's own `warp_pcs`/`thread_masks` flops,
@@ -679,7 +679,7 @@ from issue of the causing instruction until its resolution). So:
   | yield | `its_pc` → yielding group | tree over runnable & ~yielded |
   | branch | per-thread dest / `ntaken_pc` → issued group | tree |
   | wake | none (clear yielded) | tree |
-- **Expected result**: scheduler LUTs from ~17.1K to the SPLIT class (~6K); FFs from
+- **Expected result**: scheduler LUTs from ~17.1K to the SCS class (~6K); FFs from
   7.45K to ~4.8K (group cache + skids + `yielded`/`amask` replace 2.9K state flops);
   timing closed — the tree runs off registered event payloads into registers, and the
   schedule path is baseline-shaped.

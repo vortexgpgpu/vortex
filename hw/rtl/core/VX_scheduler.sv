@@ -54,7 +54,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] thread_masks, thread_masks_n;
     reg [`VX_CFG_NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
 
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
 `ifdef THREADSPLIT_EVAL
     // ThreadSplit A/B: +threadsplit_ipdom disables the SCS machinery at runtime.
     reg scs_enabled;
@@ -108,7 +108,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     logic [NW_WIDTH-1:0] cs_pop_wid;
     reg                  cs_pop_valid_r;
     reg [NW_WIDTH-1:0]   cs_pop_wid_r;
-`endif // VX_CFG_DIVERGE_TYPE_SPLIT
+`endif // VX_CFG_DIVERGE_TYPE_SCS
 `ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
     // ITS (mirror of the SimX NV_ITS model): threads diverge on per-thread
     // PCs, regrouped through convergence barriers and the Yielded state.
@@ -182,7 +182,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_rd_lane;
     wire [NCTA_WIDTH-1:0]                                   schedule_cta_id;
 
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
     // SCS parked-split pool: per-warp round-robin FIFO {tmask,pc} in BRAM.
     // 1W1R, addressed by {wid, slot}; registered read gives the 1-cycle pop.
     VX_dp_ram #(
@@ -220,7 +220,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 `else
     // Warp retirement: TMC with tmask==0 permanently deactivates the warp
     wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0);
-`endif // VX_CFG_DIVERGE_TYPE_SPLIT
+`endif // VX_CFG_DIVERGE_TYPE_SCS
 
     VX_cta_dispatch #(
         .INSTANCE_ID (`SFORMATF(("%s-cta_dispatch", INSTANCE_ID)))
@@ -325,7 +325,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         stalled_warps_n = stalled_warps;
         thread_masks_n  = thread_masks;
         warp_pcs_n      = warp_pcs;
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
         cs_pend_n       = cs_pend;
         cs_ptmask_n     = cs_ptmask;
         cs_ppc_n        = cs_ppc;
@@ -350,7 +350,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n[cs_pop_wid_r] = 0; // release the park (set at pop-issue)
             cs_inpool_n[cs_pop_wid_r]    = cs_inpool[cs_pop_wid_r] & ~cs_rdata[PC_BITS +: `VX_CFG_NUM_THREADS];
         end
-`endif // VX_CFG_DIVERGE_TYPE_SPLIT
+`endif // VX_CFG_DIVERGE_TYPE_SCS
 `ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
         grp_pc_n     = grp_pc;
         grp_mask_n   = grp_mask;
@@ -368,7 +368,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             // reloads the entry pointer and kargs before re-calling.
             warp_pcs_n[cta_wid] = cta_init ? cta_PC : (warp_pcs[cta_wid] - from_fullPC(`VX_CFG_XLEN'(20)));
             thread_masks_n[cta_wid] = cta_tmask;
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
             // SCS: reset per-warp split state for the (re)dispatched CTA.
             cs_pend_n[cta_wid]   = 0;
             cs_cnt_n[cta_wid]    = '0;
@@ -404,7 +404,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n[wspawn_wid] = 0; // unlock warp
         end
 
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
         // SCS: TMC — either a normal mask set, or kernel-exit of the running
         // split. On exit, record its lanes as done, then run the next runnable
         // subgroup: pending acquirers (if any) directly, else the oldest pooled
@@ -469,9 +469,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             thread_masks_n[warp_ctl_if.wid]  = warp_ctl_if.tmc.tmask;
             stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
         end
-`endif // VX_CFG_DIVERGE_TYPE_SPLIT
+`endif // VX_CFG_DIVERGE_TYPE_SCS
 
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
         // SCS: vx_pred masked off lanes — record them as the warp's (cancellable)
         // pending split, resuming at its (already +4) PC. ACCUMULATE into the
         // pending mask: a divergent loop peels lanes off across several iterations
@@ -509,7 +509,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 active_warps_n[warp_ctl_if.wid] = (thread_masks[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]) != 0;
             end
         end
-`endif // VX_CFG_DIVERGE_TYPE_SPLIT
+`endif // VX_CFG_DIVERGE_TYPE_SCS
 
         // split handling (no-op under ITS: divergence is per-thread PC)
         if (warp_ctl_if.split_valid) begin
@@ -544,7 +544,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps_n[warp_ctl_if.wid] = 0;
         end
 
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
         // SCS: vx_yield — defer the running (spinning) split and run the next
         // runnable one so a lock holder makes progress while spinners wait.
         // Pending acquirers run immediately; else rotate to the oldest pooled
@@ -591,11 +591,12 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             // unlock — unless we issued a pop this cycle (parked until install)
             if (!cs_pop_set) stalled_warps_n[warp_ctl_if.wid] = 0;
         end
-`endif // VX_CFG_DIVERGE_TYPE_SPLIT
 
+        // A/B ipdom mode: yield is a plain warp unlock (no split rotation).
         if (!scs_enabled && warp_ctl_if.yield_valid) begin
             stalled_warps_n[warp_ctl_if.wid] = 0;
         end
+`endif // VX_CFG_DIVERGE_TYPE_SCS
 
         // Branch handling
         for (integer i = 0; i < `VX_CFG_NUM_ALU_BLOCKS; ++i) begin
@@ -700,7 +701,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             mepc_r          <= '0;
             mcause_r        <= '0;
             mtval_r         <= '0;
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
             cs_pend         <= '0;
             cs_cnt          <= '0;
             cs_head         <= '0;
@@ -721,7 +722,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             stalled_warps  <= stalled_warps_n;
             thread_masks   <= thread_masks_n;
             warp_pcs       <= warp_pcs_n;
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
             cs_pend        <= cs_pend_n;
             cs_ptmask      <= cs_ptmask_n;
             cs_ppc         <= cs_ppc_n;
@@ -1541,7 +1542,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 `endif
 
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
 `ifdef THREADSPLIT_EVAL
     longint unsigned eval_issued;
     longint unsigned eval_lanes;
@@ -1648,5 +1649,5 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                  eval_runnable_sum, eval_runnable_peak);
     end
 `endif // THREADSPLIT_EVAL
-`endif // VX_CFG_DIVERGE_TYPE_SPLIT
+`endif // VX_CFG_DIVERGE_TYPE_SCS
 endmodule

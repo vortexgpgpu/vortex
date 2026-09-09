@@ -29,7 +29,7 @@ module VX_scheduler_top import VX_gpu_pkg::*; #(
     input wire                              wctl_sjoin_valid,
     input wire                              wctl_bar_valid,
     input wire                              wctl_wsync_valid,
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
     input wire                              wctl_yield_valid,
     input wire                              wctl_pred_park_valid,
     input wire [`VX_CFG_NUM_THREADS-1:0]    wctl_pred_park_tmask,
@@ -132,7 +132,7 @@ module VX_scheduler_top import VX_gpu_pkg::*; #(
     assign warp_ctl_if.sjoin_valid  = wctl_sjoin_valid;
     assign warp_ctl_if.bar_valid    = wctl_bar_valid;
     assign warp_ctl_if.wsync_valid  = wctl_wsync_valid;
-`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef VX_CFG_DIVERGE_TYPE_SCS
     assign warp_ctl_if.yield_valid        = wctl_yield_valid;
     assign warp_ctl_if.pred_park_valid    = wctl_pred_park_valid;
     assign warp_ctl_if.pred_park_tmask    = wctl_pred_park_tmask;

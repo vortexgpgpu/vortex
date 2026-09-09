@@ -247,7 +247,7 @@ divergent `vx_split` and pop on `vx_join`. The dp_ram read is registered
 | **watchdog** (new, tiny) | One saturating counter per warp (`~10 b`) + threshold compare; increments on back-edge-with-no-exit / contended-atomic, resets on loop-exit or successful mutation. |
 | `VX_split_join.sv` | `vx_join`/`reconv_PC` match becomes order-independent (merge when all siblings of a `reconv_PC` have arrived) instead of LIFO pop. |
 | `VX_scheduler.sv` | Split selection folds into the existing **pipelined** warp-select stage (decision registered one cycle ahead — see §6.4). |
-| `decode.cpp`/decode RTL | Add `vx_yield` (SFU op); reuse SPLIT/JOIN encodings. |
+| `decode.cpp`/decode RTL | Add `vx_yield` (SFU op); reuse SCS/JOIN encodings. |
 | **`VX_cstack_spill`** (optional, v2) | Small FSM that evicts/refills `{mask,PC,reconv_PC}` descriptors to a warp-private memory region via an existing LSU port; staging register only. |
 
 No per-thread PC, no named-barrier table, no compiler resource allocator.
@@ -352,7 +352,7 @@ Per the SimX-as-oracle methodology:
   argument; settle `K`, spill format, watchdog threshold `T`, yield-on-
   resume policy.
 - **Phase 1 — SimX.** Extend [wctl_unit.cpp](../../sim/simx/wctl_unit.cpp)
-  SPLIT/JOIN to the schedulable table; add the watchdog + RR scheduler in
+  SCS/JOIN to the schedulable table; add the watchdog + RR scheduler in
   [scheduler.h](../../sim/simx/scheduler.h); add `vx_yield` in
   [decode.cpp](../../sim/simx/decode.cpp). Acceptance: `lockht` and
   `lclist` **PASS** in SimX (today they hang). Add a deliberately

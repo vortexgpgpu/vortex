@@ -64,7 +64,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
       next_tmask.set(t, rs1_data.at(thread_last).u & (1 << t));
     }
     if (trace->eop) {
-#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
       // SCS: record lanes a TMC turns off as exited ONLY while the warp has
       // schedulable parked work. scs_done exists solely to stop a resuming parked
       // subgroup (e.g. a lock holder) from resurrecting a lane that already left
@@ -184,7 +184,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
           next_tmask = warp.ipdom_stack.top().orig_tmask;
           warp.ipdom_stack.pop();
         } else {
-#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
           // SCS: capture the arriving subgroup's forward (post-join) PC before
           // it is set aside, so the watchdog can resume it if the sibling spins.
           warp.ipdom_stack.top().passed_tmask = warp.tmask;
@@ -244,7 +244,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
       pred[t] = warp.tmask.test(t) && cond;
     }
     ThreadMask next_tmask = warp.tmask;
-#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
     bool reconverged = false;
     if (!sched.scs_enabled()) {
       next_tmask = pred.any() ? pred : ThreadMask(num_threads, rs2_data.at(thread_last).u);
@@ -306,16 +306,16 @@ bool WctlUnit::process(instr_trace_t* trace) {
     release_warp = true;
     break;
   case WctlType::YIELD: {
-    // SCS: deschedule the running split, rotate to the next runnable one.
-    // Decoded in every mode (threadsplit binaries carry it); acts only under
-    // SPLIT, elsewhere it just unlocks the warp.
+    // vx_yield is decoded in every mode. Under SCS it deschedules the running
+    // split and rotates to the next runnable one; under NV_ITS the issuing
+    // group enters the Yielded state; elsewhere it just unlocks the warp. When
+    // the compiler emits no yields (ablation), this case is simply never hit.
     if (trace->eop) {
-#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+#ifdef VX_CFG_DIVERGE_TYPE_SCS
       release_warp = sched.yield_warp(trace->wid);
-#elif defined(VX_CFG_DIVERGE_TYPE_NV_ITS) && defined(VX_CFG_ITS_YIELD_ENABLE)
-      // ITS: the issuing group enters the Yielded state (resume PC is already
-      // tpc = PC+4); barriers whose missing participants are now all yielded
-      // release so blocked threads make progress.
+#elif defined(VX_CFG_DIVERGE_TYPE_NV_ITS)
+      // ITS: resume PC is already tpc = PC+4; barriers whose missing
+      // participants are now all yielded release so blocked threads proceed.
       warp.yielded |= warp.tmask;
       for (uint32_t b = 0; b < VX_CFG_ITS_NUM_BARRIERS; ++b) {
         its_try_release(warp, b);

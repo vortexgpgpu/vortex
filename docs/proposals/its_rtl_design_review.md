@@ -1,7 +1,7 @@
 # NVIDIA-style ITS RTL Design Review
 
 **Module:** [hw/rtl/core/VX_scheduler.sv](../../hw/rtl/core/VX_scheduler.sv) under
-`VX_CFG_DIVERGE_TYPE_NV_ITS` (+ `VX_CFG_ITS_YIELD_ENABLE`) · **Config:** NT=8/NW=8, U55C
+`VX_CFG_DIVERGE_TYPE_NV_ITS` (+ `VX_CFG_SCS_YIELD_ENABLE`) · **Config:** NT=8/NW=8, U55C
 **Status:** validated (rtlsim 10/10 under ITS+Y; ablation reproduces the barriers-only
 deadlocks). Storage redesigned memory-first (v2 group-cache engine).
 
@@ -86,7 +86,7 @@ SimX parity tolerance.
 | scheduler DUT | LUT (logic+mem) | FF | WNS | note |
 |---|---|---|---|---|
 | DEFAULT | 4,019 | 4,009 | +0.350 | |
-| TSPLIT | 6,340 | 4,525 | +0.323 | |
+| SCS | 6,340 | 4,525 | +0.323 | |
 | NV_ITS v1 (flop state, per-warp tree) | 17,408 | 7,451 | −0.725 | reference-shaped |
 | NV_ITS+Y v2 (group-cache, 1-cycle service) | 7,686 | 4,249 | −6.474 | area met, timing broke |
 | **NV_ITS+Y v3 (group-cache, pipelined)** | **7,393** | 4,565 | **−1.579** | shipping |
@@ -96,7 +96,7 @@ FFs**, with all the divergence state now in distributed LUTRAM (0 BRAM, 815 LUT-
 single-cycle service datapath, however, routed at −6.474 ns; the 2-stage pipeline recovered it to
 −1.579 ns. The residual is 64% routing and standalone-DUT-placement-bound — the authoritative
 figure is the full core, where the scheduler places densely. Whatever residual delta remains over
-TSPLIT is the genuine, irreducible ITS cost — per-thread PC storage and the barrier machinery —
+SCS is the genuine, irreducible ITS cost — per-thread PC storage and the barrier machinery —
 now paid in the right primitive rather than in LUT fabric.
 
 ## 6. Verdict
@@ -106,5 +106,5 @@ now memory-first, matching the baseline's use of RAM for large state. It remains
 expensive of the three arms in both area and its extra ISA/compiler surface (per-thread
 PCs, convergence barriers, the dropped `setRequiresStructuredCFG`), and its lowest-PC
 scheduling shows real runtime pathologies on some kernels (softmax group splintering). The
-paper's headline — TSPLIT matches ITS's forward-progress capability at a fraction of the
+paper's headline — SCS matches ITS's forward-progress capability at a fraction of the
 area and ISA cost — holds even after completing the ITS arm.

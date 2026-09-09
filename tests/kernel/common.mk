@@ -28,15 +28,16 @@ CFLAGS += -DNDEBUG $(CONFIGS) -D__VORTEX__
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 # Map the divergence architecture to the matching compiler codegen mode
-# (tsplit is the compiler default, selected for VX_CFG_DIVERGE_TYPE=SPLIT).
+# (scs is the compiler default, selected for VX_CFG_DIVERGE_TYPE=SCS).
 ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_DEFAULT, $(XCONFIGS)))
 LLVM_CFLAGS += -mllvm -vortex-divergence-arch=ipdom
 endif
 ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_NV_ITS, $(XCONFIGS)))
 LLVM_CFLAGS += -mllvm -vortex-divergence-arch=its
-ifeq (,$(filter -DVX_CFG_ITS_YIELD_ENABLE, $(XCONFIGS)))
-LLVM_CFLAGS += -mllvm -vortex-its-yield=0
 endif
+# Unified yield toggle (SCS + NV_ITS): disable emission when the knob is off.
+ifeq (,$(filter -DVX_CFG_SCS_YIELD_ENABLE, $(XCONFIGS)))
+LLVM_CFLAGS += -mllvm -vortex-scs-yield=0
 endif
 CFLAGS += $(XCONFIGS)
 

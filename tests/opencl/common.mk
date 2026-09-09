@@ -50,15 +50,16 @@ VX_CFLAGS  += -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(VORTEX_HOME)/sw/kernel/inclu
 VX_CFLAGS  += -Xclang -target-feature -Xclang +xvortex
 
 # Map the divergence architecture to the matching compiler codegen mode
-# (tsplit is the compiler default, selected for VX_CFG_DIVERGE_TYPE=SPLIT).
+# (scs is the compiler default, selected for VX_CFG_DIVERGE_TYPE=SCS).
 ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_DEFAULT, $(XCONFIGS)))
 VX_CFLAGS  += -mllvm -vortex-divergence-arch=ipdom
 endif
 ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_NV_ITS, $(XCONFIGS)))
 VX_CFLAGS  += -mllvm -vortex-divergence-arch=its
-ifeq (,$(filter -DVX_CFG_ITS_YIELD_ENABLE, $(XCONFIGS)))
-VX_CFLAGS  += -mllvm -vortex-its-yield=0
 endif
+# Unified yield toggle (SCS + NV_ITS): disable emission when the knob is off.
+ifeq (,$(filter -DVX_CFG_SCS_YIELD_ENABLE, $(XCONFIGS)))
+VX_CFLAGS  += -mllvm -vortex-scs-yield=0
 endif
 VX_CFLAGS  += -Xclang -target-feature -Xclang +zicond
 VX_LDFLAGS += -fuse-ld=lld
