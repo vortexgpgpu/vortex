@@ -220,12 +220,19 @@ jobs:
           path: reports
           merge-multiple: true
 
+      # `|| rc=$?` is load-bearing, exactly as in the Gate step: GitHub runs
+      # `run:` under `bash -e`, and `set -uo pipefail` adds to that rather than
+      # replacing it. Without the guard, synth_report.py's non-zero exit (1 =
+      # regression, 2 = build error -- i.e. every case this step exists to
+      # report) kills the step on that line, so `rc` never reaches
+      # $GITHUB_OUTPUT and the marker steps below read it as "".
       - name: Summarize
         id: sum
         run: |
           set -uo pipefail
-          python3 ci/synth_report.py reports >> "$GITHUB_STEP_SUMMARY"
-          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          rc=0
+          python3 ci/synth_report.py reports >> "$GITHUB_STEP_SUMMARY" || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
       # Record the SHA once every build has reached a VERDICT (pass or

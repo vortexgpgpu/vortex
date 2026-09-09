@@ -914,6 +914,14 @@ def gate(result, env, args, gated, tool):
     verdict does not fail the run. Same contract as a `known_issue:` test case
     (conftest marks those xfail strict=False), including that an unexpected pass
     is surfaced (XPASS) rather than converted into a hard failure.
+
+    A BUILD-FAIL is NOT covered by that contract. `known_issue` annotates what a
+    DUT's numbers do -- a PPA regression, a metric this RTL cannot yet hit -- and
+    a build that never produced numbers has not reached the thing being excused.
+    Treating the two alike lets an infrastructure outage read as green: when a
+    missing TOOLDIR broke every asic_gate build at once, the six DUTs carrying a
+    `known_issue` reported KNOWN-ISSUE and the run looked like five ordinary
+    regressions instead of a gate that could not build anything.
     """
     build = result["build"]
     known = build.get("known_issue")
@@ -923,8 +931,9 @@ def gate(result, env, args, gated, tool):
             return name, reasons
         return "KNOWN-ISSUE", reasons + ["known issue: " + known]
 
+    # Deliberately not routed through verdict(): see the docstring.
     if result["error"]:
-        return verdict("BUILD-FAIL", [result["error"]])
+        return "BUILD-FAIL", [result["error"]]
 
     base = build.get("baseline") or {}
     if not any(base.get(m) is not None for m in gated):
@@ -1182,11 +1191,12 @@ def main(argv=None, default_tool="xilinx"):
 
 
     if args.update_baseline:
-        # Recording IS the intent; a delta is what we just wrote down. Only a
-        # build that never produced metrics is still a failure -- unless it is a
-        # tracked known issue.
-        broken = [r for r in results
-                  if not r["metrics"] and not r["build"].get("known_issue")]
+        # Recording IS the intent; a delta is what we just wrote down. A build
+        # that never produced metrics is still a failure, `known_issue` or not:
+        # there is nothing to record, so excusing it would end the run claiming
+        # a baseline it did not write. Same reasoning as the BUILD-FAIL verdict
+        # in gate().
+        broken = [r for r in results if not r["metrics"]]
         return 2 if broken else 0
     if any(v == "BUILD-FAIL" for _, v, _ in failures):
         return 2
