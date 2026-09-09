@@ -1,4 +1,4 @@
-ROOT_DIR := $(realpath ../../../../../..)
+ROOT_DIR := $(realpath ../../../../..)
 include $(ROOT_DIR)/config.mk
 # Exports VERILATOR/VERILATOR_PATH as absolute paths. gen_sources.sh resolves
 # verilator from the environment, so without this the flow silently depends on
@@ -30,7 +30,12 @@ UNITTEST_DIR := $(VORTEX_HOME)/hw/unittest
 NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
 JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
-CONFIGS += -DSYNTHESIS -DVIVADO -DNDEBUG
+# `override`: these are facts about this flow, not preferences. A caller that
+# sets CONFIGS on the MAKE COMMAND LINE would otherwise kill every `CONFIGS +=`
+# here and in build.mk silently -- command-line variables win over `+=`, and
+# nothing warns. With `override`, a command-line CONFIGS is extra defines on
+# top, which is what it reads as.
+override CONFIGS += -DSYNTHESIS -DVIVADO -DNDEBUG
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 

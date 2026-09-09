@@ -89,6 +89,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         assign evict_tag = read_tag[evict_way];
     end else begin : g_evict_tag_wt
         `UNUSED_VAR (read_dirty)
+        `UNUSED_VAR (read_tag)
         assign evict_dirty = 1'b0;
         assign evict_dirty_mask = '0;
         assign evict_tag = '0;
@@ -117,11 +118,6 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     wire [NUM_WAYS-1:0][SEC-1:0] dirty_rdata;
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_way_decode
-        // hit: tag match AND the requested sector is valid. read_tag/read_valid
-        // fold in a same-set fill from the previous cycle (see the read-first
-        // bypass below), so this compare is exact even on the fill's write edge.
-        wire raw_hit = read_valid[i][sector_idx] && (line_tag == read_tag[i]);
-
         wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
         wire do_init  = init; // init all ways
         // The fill way select comes in one-hot (line_present or the registered
@@ -130,8 +126,6 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         wire do_fill  = fill && ((NUM_WAYS == 1) || fill_way_oh[i]);
         wire do_flush = flush && (!WRITEBACK || way_en); // flush all ways in writethrough mode
         wire do_write = WRITEBACK && write && tag_matches[i]; // only write on tag hit
-        // AMO passthrough invalidate: clear the requested sector's valid.
-        wire do_inval = (AMO_ENABLE != 0) && invalidate && raw_hit;
 
         // Tag store: the tag changes only on a fill (a refill rewrites the
         // identical tag, harmless), so its write-enable does not depend on the
@@ -139,23 +133,6 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         // invalidate only touch the valid vector (below), never the tag.
         assign line_write[i] = do_fill;
         assign line_wdata[i] = line_tag;
-
-        // A fill into a way that already holds this line (a sector refill) sets
-        // the fetched sector in the existing valid vector; a fill into a fresh
-        // victim way installs only the fetched sector (others cleared). With
-        // 1 sector/line a fill is always to a fresh way.
-        wire fill_refill = do_fill && (line_tag == read_tag[i]) && (| read_valid[i]);
-
-        // Per-sector valid update as per-bit set/clear for the LUTRAM (no
-        // read-modify-write): set the filled sector; clear the whole line on
-        // init/flush, the other sectors on a fresh victim install, the requested
-        // sector on invalidate.
-        wire [SEC-1:0] vset_oh = do_fill ? sec_oh : {SEC{1'b0}};
-        wire [SEC-1:0] vclr_oh = ((do_init || do_flush)     ? {SEC{1'b1}} : {SEC{1'b0}})
-                               | ((do_fill && ~fill_refill) ? ~sec_oh     : {SEC{1'b0}})
-                               | (do_inval                  ? sec_oh      : {SEC{1'b0}});
-        assign valid_wren[i]  = vset_oh | vclr_oh;
-        assign valid_wdata[i] = vset_oh;
 
         // Read-First BRAM: a fill committed on the previous cycle isn't yet in
         // the readout. The bypass is keyed on the SET and the FILLED WAY: that
@@ -173,12 +150,41 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
         wire [`CS_LINE_SEL_BITS-1:0] rdw_set;
         wire rdw_refill;
         `BUFFER_EX(rdw_fill_raw, do_fill, ~stall, 1, 1);
-        `BUFFER_EX(rdw_refill, do_fill && fill_refill, ~stall, 1, 1);
         `BUFFER_EX(rdw_sec_oh, sec_oh, ~stall, $bits(rdw_sec_oh), 1);
         `BUFFER_EX(rdw_tag, line_tag, ~stall, $bits(rdw_tag), 1);
         `BUFFER_EX(rdw_set, line_idx, ~stall, $bits(rdw_set), 1);
         // do_fill is way-gated, so rdw_fill_raw identifies the filled way.
         wire way_filled = rdw_fill_raw && (line_idx == rdw_set);
+
+        // Tag equality with the bypass folded in: both compares run in parallel
+        // and way_filled selects the result, so the set compare never sits in
+        // series with the wide tag compare on the tag->data write-enable arc.
+        wire tag_eq = way_filled ? (line_tag == rdw_tag) : (line_tag == tag_rdata[i]);
+
+        // hit: tag match AND the requested sector is valid. read_valid folds in
+        // a same-set fill from the previous cycle (see the bypass above), so
+        // this compare is exact even on the fill's write edge.
+        wire raw_hit = read_valid[i][sector_idx] && tag_eq;
+        // AMO passthrough invalidate: clear the requested sector's valid.
+        wire do_inval = (AMO_ENABLE != 0) && invalidate && raw_hit;
+
+        // A fill into a way that already holds this line (a sector refill) sets
+        // the fetched sector in the existing valid vector; a fill into a fresh
+        // victim way installs only the fetched sector (others cleared). With
+        // 1 sector/line a fill is always to a fresh way.
+        wire fill_refill = do_fill && tag_eq && (| read_valid[i]);
+        `BUFFER_EX(rdw_refill, do_fill && fill_refill, ~stall, 1, 1);
+
+        // Per-sector valid update as per-bit set/clear for the LUTRAM (no
+        // read-modify-write): set the filled sector; clear the whole line on
+        // init/flush, the other sectors on a fresh victim install, the requested
+        // sector on invalidate.
+        wire [SEC-1:0] vset_oh = do_fill ? sec_oh : {SEC{1'b0}};
+        wire [SEC-1:0] vclr_oh = ((do_init || do_flush)     ? {SEC{1'b1}} : {SEC{1'b0}})
+                               | ((do_fill && ~fill_refill) ? ~sec_oh     : {SEC{1'b0}})
+                               | (do_inval                  ? sec_oh      : {SEC{1'b0}});
+        assign valid_wren[i]  = vset_oh | vclr_oh;
+        assign valid_wdata[i] = vset_oh;
 
         // Tag from the tag BRAM, valid from the decoupled LUTRAM. Both share the
         // same look-ahead read / read-first access pattern, so the way_filled
@@ -220,8 +226,8 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
 
         assign tag_matches[i] = raw_hit;
         // line resident in this way: tag matches and at least one sector valid
-        // (a same-cycle-prior fill is folded into read_tag/read_valid).
-        assign line_present[i] = (line_tag == read_tag[i]) && (| read_valid[i]);
+        // (a same-cycle-prior fill is folded into tag_eq/read_valid).
+        assign line_present[i] = tag_eq && (| read_valid[i]);
     end
 
     // Single tag array: one BRAM word holds all ways' tags; per-way write-enable

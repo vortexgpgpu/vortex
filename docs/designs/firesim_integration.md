@@ -369,6 +369,7 @@ shrink over time as changes are accepted upstream.
   been swept exhaustively, and a large share of it requires extensions this
   configuration disables.
 - **The conda environment is not relocatable** as built. It records its own
-  prefix in every script shebang and in package metadata, so it must be
-  packaged with `conda-pack` and unpacked with `conda-unpack`; see the
-  packaging notes in `ci/toolchain_prebuilt.sh`.
+  prefix in every script shebang and in package metadata, so the tree must
+  stay where `build-setup.sh` created it, or be re-packaged with `conda-pack`
+  and unpacked with `conda-unpack` at the new location. See
+  [`../building_toolchain.md`](../building_toolchain.md) (section: FireSim).

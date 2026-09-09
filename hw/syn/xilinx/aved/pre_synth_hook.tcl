@@ -17,3 +17,35 @@ if {![info exists ::env(TOOL_DIR)]} {
 
 set_property STEPS.OPT_DESIGN.TCL.PRE $pre_opt [get_runs impl_1]
 puts "INFO: attached pre-opt hook to impl_1: $pre_opt"
+
+# Post-route physical optimization. Required to close 300 MHz.
+#
+# With the static shell's vNOC memory ingress pinned to SLR2, the RM routes
+# with a small, uniform residual -- ~265 endpoints averaging -13 ps, the worst
+# being a replica-to-replica hop on a high-fanout register the placer had
+# already tried to fix by replication. That profile is fanout-driven rather
+# than logic depth, which is what post-route phys_opt targets:
+#
+#     without   WNS -0.034   297.0 MHz
+#     with      WNS  0.000   300.0 MHz
+set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.IS_ENABLED true [get_runs impl_1]
+set_property STEPS.POST_ROUTE_PHYS_OPT_DESIGN.ARGS.DIRECTIVE AggressiveExplore \
+    [get_runs impl_1]
+
+# ---------------------------------------------------------------------------
+# DO NOT add an implementation-strategy override here, and do not pblock the
+# AFU. Both were tried against the shell's Congestion_SSI_SpreadLogic_high and
+# both measured worse than leaving placement alone:
+#
+#     free placement                 WNS -0.260   942 failing
+#     confine AFU to SLR1            WNS -0.801
+#     confine AFU to SLR2            WNS -1.599
+#     clear BalancedSLR strategy     WNS -0.343  4831 failing
+#     confine SmartConnects to SLR2  WNS -0.326  3216 failing
+#
+# The SLR split those were fighting was never a placement decision. It came
+# from the static shell leaving CONFIG.PHYSICAL_LOC empty on its eight
+# hbm_vnoc_* NoC ingress units, so the NoC compiler scattered them while every
+# HBM NMU sits in SLR2. An RM cannot move them -- DRC HDPR-122 allows each RM
+# NoC port exactly one site. It is fixed shell-side in slash_base.tcl.
+# ---------------------------------------------------------------------------

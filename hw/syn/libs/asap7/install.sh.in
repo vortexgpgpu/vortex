@@ -1,0 +1,118 @@
+#!/bin/bash
+set -euo pipefail
+
+# Read the manifest and preparation script from the source tree: they are
+# inputs, not build artifacts, so they are never copied into the build dir
+# (configure instantiates only this .in file).
+MANIFEST="@VORTEX_HOME@/hw/syn/libs/asap7/manifest.txt"
+PREPARE="@VORTEX_HOME@/hw/syn/libs/asap7/prepare.py"
+
+usage() {
+  echo "Usage: $0 --install-dir=<path> [--vt=lvt|rvt] [--models]" >&2
+  exit 1
+}
+
+INSTALL_DIR=""
+VT="rvt"
+MODELS=0
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install-dir=*) INSTALL_DIR="${1#*=}" ;;
+    --vt=*) VT="${1#*=}" ;;
+    --models) MODELS=1 ;;
+    -h|--help) usage ;;
+    *) usage ;;
+  esac
+  shift
+done
+
+[[ -n "$INSTALL_DIR" ]] || usage
+[[ "$VT" == "lvt" || "$VT" == "rvt" ]] || {
+  echo "ERROR: --vt must be lvt or rvt" >&2
+  exit 1
+}
+
+DOWNLOAD_DIR="$INSTALL_DIR/downloads"
+LIB_DIR="$INSTALL_DIR/lib"
+MODEL_FILE="$INSTALL_DIR/verilog/asap7_${VT}_cells.v"
+MARKER="$INSTALL_DIR/.installed_${VT}"
+
+repository=$(awk '$1 == "repository" { print $2 }' "$MANIFEST")
+commit=$(awk '$1 == "commit" { print $2 }' "$MANIFEST")
+source_repository=$(awk '$1 == "source_repository" { print $2 }' "$MANIFEST")
+source_commit=$(awk '$1 == "source_commit" { print $2 }' "$MANIFEST")
+[[ -n "$repository" && -n "$commit" && -n "$source_repository" && -n "$source_commit" ]] || {
+  echo "ERROR: repository references missing from $MANIFEST" >&2
+  exit 1
+}
+
+if command -v curl >/dev/null 2>&1; then
+  fetch() { curl --fail --location --retry 3 --silent --show-error --output "$2" "$1"; }
+elif command -v wget >/dev/null 2>&1; then
+  fetch() { wget --tries=3 --output-document="$2" "$1"; }
+else
+  echo "ERROR: curl or wget is required" >&2
+  exit 1
+fi
+
+required_libs=()
+flavor="${VT^^}"
+while read -r checksum path extra; do
+  [[ "$checksum" =~ ^[0-9a-f]{64}$ && -n "$path" && -z "${extra:-}" ]] || continue
+  [[ "$path" == *"_${flavor}_"* ]] || continue
+  if [[ "$path" == *.lib || "$path" == *.lib.gz ]]; then
+    required_libs+=("$path")
+  fi
+done < "$MANIFEST"
+
+[[ ${#required_libs[@]} -gt 0 ]] || {
+  echo "ERROR: no $flavor Liberty inputs in $MANIFEST" >&2
+  exit 1
+}
+
+complete=1
+for corner in tt ss ff; do
+  [[ -s "$LIB_DIR/asap7_${VT}_${corner}.lib" ]] || complete=0
+done
+if [[ $MODELS -eq 1 && ! -s "$MODEL_FILE" ]]; then
+  complete=0
+fi
+if [[ $complete -eq 1 && -f "$MARKER" ]]; then
+  echo "ASAP7 $VT collateral is already installed in $INSTALL_DIR"
+  exit 0
+fi
+
+while read -r checksum path extra; do
+  [[ "$checksum" =~ ^[0-9a-f]{64}$ && -n "$path" && -z "${extra:-}" ]] || continue
+  [[ "$path" == *"_${flavor}_"* ]] || continue
+  if [[ $MODELS -eq 0 && "$path" == *.v ]]; then
+    continue
+  fi
+  output="$DOWNLOAD_DIR/$path"
+  mkdir -p "$(dirname "$output")"
+  if [[ -f "$output" ]] && echo "$checksum  $output" | sha256sum --check --status; then
+    continue
+  fi
+  tmp="$output.tmp"
+  rm -f "$tmp"
+  echo "Downloading $path"
+  if [[ "$path" == source/* ]]; then
+    fetch "${source_repository}/raw/${source_commit}/${path#source/}" "$tmp"
+  else
+    fetch "${repository}/raw/${commit}/${path}" "$tmp"
+  fi
+  echo "$checksum  $tmp" | sha256sum --check --status || {
+    rm -f "$tmp"
+    echo "ERROR: checksum mismatch for $path" >&2
+    exit 1
+  }
+  mv "$tmp" "$output"
+done < "$MANIFEST"
+
+prepare_args=(--manifest "$MANIFEST" --downloads "$DOWNLOAD_DIR" --output "$INSTALL_DIR" --vt "$VT")
+if [[ $MODELS -eq 1 ]]; then
+  prepare_args+=(--models)
+fi
+python3 "$PREPARE" "${prepare_args[@]}"
+touch "$MARKER"
+echo "ASAP7 $VT collateral is ready in $INSTALL_DIR"

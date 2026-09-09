@@ -53,7 +53,7 @@ for t in $TESTS; do
     MMIO="$LOGDIR/mmio_$t.tsv"; : > "$MMIO"
     OUT="$LOGDIR/$t.log"
     stdbuf -oL -eL env HW_TIMEOUT=300 VORTEX_CP_POLL_TIMEOUT_S=90 \
-        VORTEX_AVED_NO_PROGRAM=1 VORTEX_AVED_MMIO_TRACE="$MMIO" \
+        VORTEX_AVED_MMIO_TRACE="$MMIO" \
         timeout 400 bash "$TOOLS_DIR/run_hw_test.sh" "$t" > "$OUT" 2>&1
     rc=$?
     cycles=$(grep -oE "cycles=[0-9]+" "$OUT" | tail -1 | cut -d= -f2)

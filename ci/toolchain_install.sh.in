@@ -194,64 +194,6 @@ sta()
 # gem5 — slim runtime (build/{X86,ARM}/gem5.opt + configs/), ~50 MB
 # uncompressed. Produced by ci/gem5_install.sh; consumed via $GEM5_HOME
 # by ci/gem5_run_app.py / ci/gem5_run_hostless_app.py.
-# FireSim, as packaged by ci/toolchain_prebuilt.sh --firesim: the
-# vortexgpgpu/firesim sources plus the conda environment that Golden Gate
-# elaboration needs (JVM, sbt, Scala). Only bitstream and metasimulation
-# builds need this; running an existing image needs nothing from here, since
-# the driver links against XRT and the Vortex runtime alone.
-#
-# conda-unpack is not optional. A conda environment records its build-time
-# prefix in every script shebang and in its package metadata, so without this
-# step `conda activate` resolves to the packaging machine's path and the first
-# symptom is an unrelated missing-header error rather than anything naming
-# conda. See the packaging invariant in ci/toolchain_prebuilt.sh.
-#
-# This component is far larger than the others -- 25 parts at the time of
-# writing, one shy of the 26 a single-letter sweep can address -- so it walks
-# the full two-letter suffix space `split -a 2` produces and stops at the first
-# part that is not there. A {a..z} sweep would silently truncate the download at
-# part 'az' the moment the bundle grows, and fail later in tar, naming the wrong
-# thing.
-firesim()
-{
-    parts=$(eval echo {a..z}{a..z})
-    rm -f firesim.tar.bz2.part*
-    for x in $parts
-    do
-        wget -q $REPOSITORY/firesim/$OSVERSION/firesim.tar.bz2.part$x || break
-    done
-    cat firesim.tar.bz2.part* > firesim.tar.bz2
-    tar -xvf firesim.tar.bz2
-    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/firesim && mv firesim $TOOLDIR
-    rm -rf firesim firesim.tar.bz2*
-    # Unpack the environment in place, then rewrite its prefixes.
-    env_dir="$TOOLDIR/firesim/.conda-env"
-    if [ -f "$env_dir/firesim-conda-env.tar" ]; then
-        tar -C "$env_dir" -xf "$env_dir/firesim-conda-env.tar"
-        rm -f "$env_dir/firesim-conda-env.tar"
-        # conda-pack gives conda-unpack a `#!/usr/bin/env python` shebang so it
-        # can run from any prefix, but a stock Ubuntu has python3 and no
-        # python, so calling it directly dies with a bare ENOENT. Drive it with
-        # the interpreter that ships in the environment.
-        if [ -x "$env_dir/bin/conda-unpack" ]; then
-            "$env_dir/bin/python" "$env_dir/bin/conda-unpack"
-        else
-            echo "WARNING: conda-unpack missing; \$TOOLDIR/firesim/.conda-env" >&2
-            echo "         still carries the packaging machine's prefix" >&2
-        fi
-    fi
-
-    # GitHub Actions: propagate to subsequent steps, as chipstar and gem5 do.
-    if [ -n "$GITHUB_ENV" ]; then
-        echo "FIRESIM_PATH=$TOOLDIR/firesim" >> "$GITHUB_ENV"
-    fi
-
-    echo ""
-    echo "firesim installed at $TOOLDIR/firesim"
-    echo "  activate: source $TOOLDIR/firesim/.conda-env/bin/activate"
-    echo "  verify:   make -C hw/syn/firesim check-firesim"
-}
-
 gem5()
 {
     # The prebuilt gem5.opt is linked against tcmalloc (gem5_install.sh builds
@@ -293,44 +235,16 @@ install_base()
 # SST is built from source by ci/sst_install.sh — see the matching
 # comment in toolchain_prebuilt.sh.in.
 
-slash()
-{
-    # SLASH is the AMD Alveo V80 platform stack (VRT runtime, vrtd, slashkit
-    # linker, kernel driver) and the prerequisite for the `aved` backend. The
-    # V80 is not an XDMA shell, so XRT does not apply to it.
-    #
-    # Deliberately NOT part of install_base: the userspace half installs like
-    # any other component, but a working board also needs the kernel modules
-    # built against the running kernel and Vivado on PATH for slashkit. Pulling
-    # that into the default install would fail on every machine without a V80.
-    #
-    # The prebuilt carries the vortexgpgpu fork, not upstream Xilinx/SLASH --
-    # it adds host-buffer allocation (the CP's command ring lives in host
-    # memory the device masters into), kernel-compat shims for 6.15+, and
-    # slashkit fixes. See docs/building_toolchain.md.
-    wget $REPOSITORY/slash/$OSVERSION/slash.tar.bz2
-    tar -xvf slash.tar.bz2
-    mkdir -p $TOOLDIR && rm -rf $TOOLDIR/slash && mv slash $TOOLDIR
-    rm -rf slash slash.tar.bz2
-    echo "SLASH userspace installed to $TOOLDIR/slash."
-    echo "  export VRT_HOME=$TOOLDIR/slash"
-    echo "The kernel driver must still be built against the running kernel:"
-    echo "  see docs/building_toolchain.md (section: SLASH / Alveo V80)"
-}
-
 show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--slash] [--firesim] [--all] [-h|--help]"
-    echo "  (no arguments: install all components except gem5, slash and firesim)"
-    echo "  gem5, slash and firesim are opt-in: gem5 is a large source build,"
-    echo "  slash is AMD Alveo V80-specific, and firesim is a 1.2 GB bundle"
-    echo "  that only an FPGA flow can use."
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "  (no arguments: install all components except gem5)"
+    echo "  gem5 is opt-in: it is a large source build."
 }
 
-# Default with no arguments: install every component except gem5 and slash.
-# Both are opt-in: gem5 is large, and slash is Alveo V80-specific and needs a
-# kernel-module build plus Vivado that most machines cannot satisfy.
+# Default with no arguments: install every component except gem5, which is
+# opt-in because it is large.
 if [ "$#" -eq 0 ]; then
     install_base
     exit 0
@@ -367,10 +281,6 @@ while [ "$1" != "" ]; do
         --sta ) sta
                 ;;
         --gem5 ) gem5
-                ;;
-        --slash ) slash
-                ;;
-        --firesim ) firesim
                 ;;
         --all ) install_base
                 gem5

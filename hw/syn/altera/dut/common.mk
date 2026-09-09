@@ -1,4 +1,4 @@
-ROOT_DIR := $(realpath ../../../../../..)
+ROOT_DIR := $(realpath ../../../../..)
 include $(ROOT_DIR)/config.mk
 
 # Synthesis optimization level (standardized across hw/syn):
@@ -26,7 +26,10 @@ ifeq ($(DEVICE_FAMILY), arria10)
 	DEVICE = 10AX115N3F40E2SG
 endif
 
-CONFIGS += -DSYNTHESIS -DQUARTUS -DNDEBUG
+# `override`: see the matching note in hw/syn/xilinx/dut/common.mk -- a
+# command-line CONFIGS must add to this flow's mandatory defines, not replace
+# them.
+override CONFIGS += -DSYNTHESIS -DQUARTUS -DNDEBUG
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
