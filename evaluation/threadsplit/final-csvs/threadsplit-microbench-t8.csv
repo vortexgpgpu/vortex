@@ -1,0 +1,181 @@
+benchmark,parameters,threads,warps,cores,configuration,status,cycles,dynamic_instructions,issued_instructions,active_lane_instructions,simd_utilization,vx_yield_count,subgroup_switch_count,watchdog_switch_count,peak_live_split_contexts,normalized_time,normalized_instructions,wall_seconds,notes
+am_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,598815,122468,122468,305804,0.31212643302740306,0,0,0,0,1.0,1.0,7.684,
+am_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+am_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+am_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,900247,218555,218555,374180,0.2140079156276452,38951,35590,0,8,1.5033808438332372,1.7845886272332365,11.945,
+am_cg,"{""local"":32,""percent"":25,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,187013,46960,46960,206152,0.548743611584327,0,0,0,0,1.0,1.0,4.577,
+am_cg,"{""local"":32,""percent"":25,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+am_cg,"{""local"":32,""percent"":25,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+am_cg,"{""local"":32,""percent"":25,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,232484,53574,53574,110857,0.258653917945272,9118,8603,0,6,1.2431435247816998,1.1408432708688245,5.279,
+am_cg,"{""local"":32,""percent"":50,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,323978,72716,72716,239956,0.41248831068815667,0,0,0,0,1.0,1.0,6.983,
+am_cg,"{""local"":32,""percent"":50,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+am_cg,"{""local"":32,""percent"":50,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+am_cg,"{""local"":32,""percent"":50,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,455718,107666,107666,200368,0.23262682741069604,18882,17647,0,7,1.406632549123706,1.4806369987348038,9.039,
+am_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,493727,76592,76592,259928,0.424208794652183,0,0,0,0,1.0,1.0,7.886,
+am_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+am_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+am_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,649107,132260,132260,208740,0.19728186904581885,21832,20544,0,8,1.3147083307171776,1.7268121997075412,12.343,
+am_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,439952,51864,51864,235200,0.5668671911152244,0,0,0,0,1.0,1.0,7.476,
+am_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+am_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+am_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,180466,10525,10525,55400,0.6579572446555819,417,320,0,2,0.4101947485180201,0.202934598179855,4.471,
+am_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,444800,55236,55236,238572,0.5398924614381925,0,0,0,0,1.0,1.0,7.881,
+am_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+am_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+am_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,250135,20755,20755,100640,0.60611900746808,2463,1692,0,2,0.5623538669064748,0.37575132160185387,5.629,
+am_fg,"{""local"":32,""percent"":25,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,164428,37300,37300,196492,0.6584852546916891,0,0,0,0,1.0,1.0,3.725,
+am_fg,"{""local"":32,""percent"":25,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+am_fg,"{""local"":32,""percent"":25,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+am_fg,"{""local"":32,""percent"":25,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,166273,33944,33944,71792,0.26437662031581427,5300,5024,0,8,1.0112207166662612,0.9100268096514745,4.276,
+am_fg,"{""local"":32,""percent"":25,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,145793,29160,29160,188352,0.8074074074074075,0,0,0,0,1.0,1.0,3.874,
+am_fg,"{""local"":32,""percent"":25,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+am_fg,"{""local"":32,""percent"":25,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+am_fg,"{""local"":32,""percent"":25,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,54587,4664,4664,30112,0.807032590051458,104,80,0,2,0.3744144094709623,0.15994513031550067,2.421,
+am_fg,"{""local"":32,""percent"":25,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,150591,30996,30996,190188,0.76698606271777,0,0,0,0,1.0,1.0,3.574,
+am_fg,"{""local"":32,""percent"":25,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+am_fg,"{""local"":32,""percent"":25,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+am_fg,"{""local"":32,""percent"":25,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,72325,7159,7159,40972,0.7153932113423662,603,480,0,2,0.4802743855874521,0.23096528584333462,2.822,
+atm,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,1203936,334288,334288,517176,0.193387139233236,0,0,0,0,1.0,1.0,20.965,
+atm,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+atm,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+atm,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,1734415,377346,377346,700367,0.2320042480906118,71586,64042,0,8,1.4406205977726392,1.1288051021873355,26.433,
+atm,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,852596,84112,84112,267000,0.39679237207532814,0,0,0,0,1.0,1.0,15.506,
+atm,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.017,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+atm,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+atm,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,871908,98099,98099,159642,0.2034195047859815,16289,10032,0,8,1.0226508217256474,1.1662901845158835,15.956,
+atm,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,893925,126932,126932,309820,0.30510430781835945,0,0,0,0,1.0,1.0,15.688,
+atm,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+atm,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+atm,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,1281095,226456,226456,382917,0.2113639073374077,41470,23394,0,6,1.4331123975725033,1.7840733621151483,20.766,
+atomicreduce,"{""args"":""-n1024""}",8,8,1,IPDOM_SW,PASS,71480,44952,44952,44952,0.125,0,0,0,0,1.0,1.0,2.321,
+atomicreduce,"{""args"":""-n1024""}",8,8,1,IPDOM_native,PASS,71480,44952,44952,44952,0.125,0,0,0,0,1.0,1.0,2.721,
+atomicreduce,"{""args"":""-n1024""}",8,8,1,ITS,,,,,,,,,,,,,,
+atomicreduce,"{""args"":""-n1024""}",8,8,1,SCS,PASS,71480,44952,44952,44952,0.125,0,0,0,1,1.0,1.0,2.271,
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,61314,26281,26281,118651,0.5643383052395267,0,0,0,0,1.0,1.0,2.622,
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,25675,3680,3680,25152,0.8543478260869565,101,8,0,2,0.4187461264963956,0.14002511319964994,1.919,
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,114794,54604,54604,233630,0.5348280345762215,0,0,0,0,1.0,1.0,2.773,
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.034,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":256,""stride"":1}",8,8,1,SCS,PASS,38690,5936,5936,39712,0.8362533692722371,117,8,0,2,0.337038521177065,0.10870998461651162,2.17,
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":512,""stride"":1}",8,8,1,IPDOM_SW,PASS,232031,116752,116752,469090,0.5022290838700836,0,0,0,0,1.0,1.0,5.229,
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":512,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":512,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+bh_st,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":512,""stride"":1}",8,8,1,SCS,PASS,65797,10448,10448,68832,0.8235068912710567,149,8,0,2,0.2835698678193862,0.08948883102644922,2.621,
+cp_ds,"{""local"":32,""percent"":100,""resources"":16,""rounds"":2,""size"":512,""stride"":1}",8,8,1,IPDOM_SW,PASS,934781,164998,164998,521646,0.3951911538321677,0,0,0,0,1.0,1.0,12.244,
+cp_ds,"{""local"":32,""percent"":100,""resources"":16,""rounds"":2,""size"":512,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.017,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+cp_ds,"{""local"":32,""percent"":100,""resources"":16,""rounds"":2,""size"":512,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+cp_ds,"{""local"":32,""percent"":100,""resources"":16,""rounds"":2,""size"":512,""stride"":1}",8,8,1,SCS,PASS,1133077,224189,224189,347266,0.19362346056229343,35024,12078,0,6,1.2121309697137619,1.3587376816688688,17.912,
+cp_ds,"{""local"":32,""percent"":100,""resources"":256,""rounds"":2,""size"":512,""stride"":1}",8,8,1,IPDOM_SW,PASS,919357,142408,142408,499056,0.43805123307679344,0,0,0,0,1.0,1.0,11.347,
+cp_ds,"{""local"":32,""percent"":100,""resources"":256,""rounds"":2,""size"":512,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.017,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+cp_ds,"{""local"":32,""percent"":100,""resources"":256,""rounds"":2,""size"":512,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+cp_ds,"{""local"":32,""percent"":100,""resources"":256,""rounds"":2,""size"":512,""stride"":1}",8,8,1,SCS,PASS,578890,50764,50764,171852,0.4231640532660941,3732,2255,0,3,0.6296683442884538,0.3564687377113645,10.644,
+cp_ds,"{""local"":32,""percent"":100,""resources"":64,""rounds"":2,""size"":512,""stride"":1}",8,8,1,IPDOM_SW,PASS,921767,142922,142922,499570,0.43692538587481283,0,0,0,0,1.0,1.0,17.059,
+cp_ds,"{""local"":32,""percent"":100,""resources"":64,""rounds"":2,""size"":512,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+cp_ds,"{""local"":32,""percent"":100,""resources"":64,""rounds"":2,""size"":512,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+cp_ds,"{""local"":32,""percent"":100,""resources"":64,""rounds"":2,""size"":512,""stride"":1}",8,8,1,SCS,PASS,692888,74052,74052,169746,0.28653176146491655,6944,5014,0,5,0.751695385059348,0.5181287695386294,12.147,
+histogram,"{""args"":""-n1024""}",8,8,1,IPDOM_SW,PASS,82425,53144,53144,53144,0.125,0,0,0,0,1.0,1.0,2.371,
+histogram,"{""args"":""-n1024""}",8,8,1,IPDOM_native,PASS,82425,53144,53144,53144,0.125,0,0,0,0,1.0,1.0,2.921,
+histogram,"{""args"":""-n1024""}",8,8,1,ITS,,,,,,,,,,,,,,
+histogram,"{""args"":""-n1024""}",8,8,1,SCS,PASS,82425,53144,53144,53144,0.125,0,0,0,1,1.0,1.0,2.872,
+lclist,"{""local"":32,""percent"":0,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,3465752,911596,911596,1006260,0.13798053084919196,0,0,0,0,1.0,1.0,42.362,
+lclist,"{""local"":32,""percent"":0,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lclist,"{""local"":32,""percent"":0,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lclist,"{""local"":32,""percent"":0,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,3578030,309736,309736,429582,0.17336618927086292,32695,29288,0,7,1.0323964322894426,0.33977332063765087,44.221,
+lclist,"{""local"":32,""percent"":0,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,1018235,272401,272401,367065,0.16843963494994513,0,0,0,0,1.0,1.0,18.756,
+lclist,"{""local"":32,""percent"":0,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lclist,"{""local"":32,""percent"":0,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lclist,"{""local"":32,""percent"":0,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,1057343,110054,110054,237085,0.2692825794609919,13650,9475,0,5,1.0384076367439736,0.40401466954967125,18.614,
+lclist,"{""local"":32,""percent"":0,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,479369,177725,177725,272389,0.19158039105359403,0,0,0,0,1.0,1.0,9.586,
+lclist,"{""local"":32,""percent"":0,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lclist,"{""local"":32,""percent"":0,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lclist,"{""local"":32,""percent"":0,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,458400,64616,64616,206712,0.39988547728116874,9792,2747,0,3,0.9562570796192494,0.3635729357152905,9.189,
+lclist,"{""local"":32,""percent"":100,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,3474013,918882,918882,1013658,0.13789284151827982,0,0,0,0,1.0,1.0,36.409,
+lclist,"{""local"":32,""percent"":100,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lclist,"{""local"":32,""percent"":100,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lclist,"{""local"":32,""percent"":100,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,3600481,307656,307656,440322,0.17890192292690538,32151,29038,0,6,1.0364040088508593,0.3348155693549335,41.852,
+lclist,"{""local"":32,""percent"":100,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,1016092,276108,276108,370884,0.16790712329957844,0,0,0,0,1.0,1.0,17.358,
+lclist,"{""local"":32,""percent"":100,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lclist,"{""local"":32,""percent"":100,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lclist,"{""local"":32,""percent"":100,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,1087299,118459,118459,265965,0.2806509003115002,15203,10168,0,5,1.0700792841593083,0.42903139351268343,18.562,
+lclist,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,492130,184863,184863,279639,0.18908529559728016,0,0,0,0,1.0,1.0,9.789,
+lclist,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lclist,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lclist,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,449253,66646,66646,191802,0.3597402694835399,10070,2849,0,3,0.9128746469428809,0.36051562508452206,8.738,
+lclist,"{""local"":32,""percent"":50,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,3473905,913787,913787,1008507,0.13795706767550864,0,0,0,0,1.0,1.0,44.464,
+lclist,"{""local"":32,""percent"":50,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lclist,"{""local"":32,""percent"":50,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lclist,"{""local"":32,""percent"":50,""resources"":128,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,3591180,314321,314321,445082,0.1770013775726089,33548,30629,0,8,1.0337588391162107,0.34397622202986033,45.059,
+lclist,"{""local"":32,""percent"":50,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,1018638,272713,272713,367433,0.16841560541668346,0,0,0,0,1.0,1.0,14.152,
+lclist,"{""local"":32,""percent"":50,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lclist,"{""local"":32,""percent"":50,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lclist,"{""local"":32,""percent"":50,""resources"":32,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,1073496,113654,113654,254810,0.28024750558713285,14306,10267,0,4,1.0538542642234041,0.41675314341450537,16.908,
+lclist,"{""local"":32,""percent"":50,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,503511,184433,184433,279153,0.1891967543769282,0,0,0,0,1.0,1.0,8.236,
+lclist,"{""local"":32,""percent"":50,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.017,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lclist,"{""local"":32,""percent"":50,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lclist,"{""local"":32,""percent"":50,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,452257,63991,63991,197672,0.38613242487224764,9603,2822,0,3,0.8982067919072274,0.3469606849099673,9.189,
+lockht,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,80131,19052,19052,111924,0.7343323535586815,0,0,0,0,1.0,1.0,2.923,
+lockht,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lockht,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lockht,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,116943,16404,16404,69850,0.5322634723238234,2604,448,0,2,1.459397736206961,0.861011967247533,2.621,
+lockht,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":512,""stride"":1}",8,8,1,IPDOM_SW,PASS,294485,73852,73852,426020,0.7210705194172128,0,0,0,0,1.0,1.0,6.482,
+lockht,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":512,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lockht,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":512,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lockht,"{""local"":32,""percent"":100,""resources"":1,""rounds"":1,""size"":512,""stride"":1}",8,8,1,SCS,PASS,431591,66296,66296,255740,0.4821934958368529,11104,1792,0,2,1.465578891963937,0.8976872664247414,8.737,
+lockht,"{""local"":32,""percent"":100,""resources"":64,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,72453,15992,15992,108864,0.8509254627313657,0,0,0,0,1.0,1.0,2.722,
+lockht,"{""local"":32,""percent"":100,""resources"":64,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lockht,"{""local"":32,""percent"":100,""resources"":64,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lockht,"{""local"":32,""percent"":100,""resources"":64,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,32989,2552,2552,17600,0.8620689655172413,64,64,0,2,0.4553158599367866,0.15957978989494748,1.97,
+lockht,"{""local"":32,""percent"":100,""resources"":64,""rounds"":1,""size"":512,""stride"":1}",8,8,1,IPDOM_SW,PASS,265414,61208,61208,413376,0.8442033721082212,0,0,0,0,1.0,1.0,5.931,
+lockht,"{""local"":32,""percent"":100,""resources"":64,""rounds"":1,""size"":512,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lockht,"{""local"":32,""percent"":100,""resources"":64,""rounds"":1,""size"":512,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lockht,"{""local"":32,""percent"":100,""resources"":64,""rounds"":1,""size"":512,""stride"":1}",8,8,1,SCS,PASS,106084,7448,7448,48320,0.8109559613319012,256,247,0,2,0.3996925557807802,0.12168344007319305,3.273,
+lockht,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_SW,PASS,71588,16056,16056,108928,0.8480318883906328,0,0,0,0,1.0,1.0,2.521,
+lockht,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.017,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lockht,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lockht,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":128,""stride"":1}",8,8,1,SCS,PASS,40569,3417,3417,23300,0.8523558677202224,237,64,0,2,0.5667011230932558,0.21281763826606875,2.27,
+lockht,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":512,""stride"":1}",8,8,1,IPDOM_SW,PASS,261194,61388,61388,413556,0.8420945461653744,0,0,0,0,1.0,1.0,5.83,
+lockht,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":512,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+lockht,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":512,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+lockht,"{""local"":32,""percent"":100,""resources"":8,""rounds"":1,""size"":512,""stride"":1}",8,8,1,SCS,PASS,134850,11233,11233,70580,0.7854090625834594,1013,255,0,2,0.516282916146619,0.18298364501205447,3.625,
+pathfinder,"{""args"":""-r16 -c64 -y2 -b16""}",8,8,1,IPDOM_SW,PASS,251590,32589,32589,246214,0.9443907453435209,0,0,0,0,1.0,1.0,6.432,
+pathfinder,"{""args"":""-r16 -c64 -y2 -b16""}",8,8,1,IPDOM_native,PASS,251590,32589,32589,246214,0.9443907453435209,0,0,0,0,1.0,1.0,5.83,
+pathfinder,"{""args"":""-r16 -c64 -y2 -b16""}",8,8,1,ITS,,,,,,,,,,,,,,
+pathfinder,"{""args"":""-r16 -c64 -y2 -b16""}",8,8,1,SCS,PASS,251590,32589,32589,246214,0.9443907453435209,0,0,0,1,1.0,1.0,6.731,
+psort,"{""args"":""-f -n256""}",8,8,1,IPDOM_SW,PASS,1522044,869272,869272,869272,0.125,0,0,0,0,1.0,1.0,22.623,
+psort,"{""args"":""-f -n256""}",8,8,1,IPDOM_native,PASS,1522044,869272,869272,869272,0.125,0,0,0,0,1.0,1.0,22.223,
+psort,"{""args"":""-f -n256""}",8,8,1,ITS,,,,,,,,,,,,,,
+psort,"{""args"":""-f -n256""}",8,8,1,SCS,PASS,1522044,869272,869272,869272,0.125,0,0,0,1,1.0,1.0,22.118,
+tl_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":16,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,2102060,285076,285076,463932,0.20342470078154598,0,0,0,0,1.0,1.0,22.922,
+tl_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":16,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+tl_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":16,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+tl_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":16,""size"":256,""stride"":1}",8,8,1,SCS,PASS,4179140,1150155,1150155,1401664,0.15233425060100594,222167,217100,0,8,1.988116419131709,4.034555697428054,49.082,
+tl_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,536149,86444,86444,265300,0.38362986442089675,0,0,0,0,1.0,1.0,10.642,
+tl_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.017,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+tl_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+tl_cg,"{""local"":32,""percent"":100,""resources"":1,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,887091,202262,202262,369716,0.22848829735689352,38118,35115,0,8,1.6545605792419644,2.3398038036185276,11.744,
+tl_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":16}",8,8,1,IPDOM_SW,PASS,469012,58836,58836,237692,0.5049884424502006,0,0,0,0,1.0,1.0,6.381,
+tl_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":16}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+tl_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":16}",8,8,1,ITS,,,,,,,,,,,,,,
+tl_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":16}",8,8,1,SCS,PASS,634109,119694,119694,189941,0.19836102895717414,21626,20781,0,8,1.3520101831083213,2.034366714256578,11.945,
+tl_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,470461,58120,58120,236976,0.5096696490020647,0,0,0,0,1.0,1.0,7.384,
+tl_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+tl_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+tl_fg,"{""local"":32,""percent"":100,""resources"":2,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,638889,117830,117830,188311,0.19976979546804718,21269,19936,0,8,1.358006295952268,2.0273571920165177,12.144,
+tl_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":16}",8,8,1,IPDOM_SW,PASS,438859,39960,39960,218816,0.6844844844844845,0,0,0,0,1.0,1.0,8.838,
+tl_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":16}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+tl_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":16}",8,8,1,ITS,,,,,,,,,,,,,,
+tl_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":16}",8,8,1,SCS,PASS,186835,7032,7032,38976,0.6928327645051194,416,320,0,2,0.42572899268329917,0.17597597597597597,4.527,
+tl_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,436305,39960,39960,218816,0.6844844844844845,0,0,0,0,1.0,1.0,8.937,
+tl_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+tl_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+tl_fg,"{""local"":32,""percent"":100,""resources"":32,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,177529,7037,7037,39016,0.6930510160579793,417,319,0,2,0.4068919677748364,0.1761011011011011,4.476,
+tl_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":16}",8,8,1,IPDOM_SW,PASS,442429,43260,43260,222116,0.6418053629218677,0,0,0,0,1.0,1.0,7.28,
+tl_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":16}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+tl_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":16}",8,8,1,ITS,,,,,,,,,,,,,,
+tl_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":16}",8,8,1,SCS,PASS,234618,17002,17002,82416,0.6059287142689095,2410,1728,0,2,0.5302952564140235,0.3930189551548775,5.428,
+tl_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_SW,PASS,442291,43484,43484,222340,0.63914313310643,0,0,0,0,1.0,1.0,7.284,
+tl_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,IPDOM_native,DEADLOCK,,,,,,,,,,,,20.033,Natural IPDOM has a same-warp holder/waiter dependency at the polling-loop reconvergence; observed nontermination after 20s. See README for the per-kernel dependency argument.
+tl_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,ITS,,,,,,,,,,,,,,
+tl_fg,"{""local"":32,""percent"":100,""resources"":8,""rounds"":4,""size"":256,""stride"":1}",8,8,1,SCS,PASS,247535,16842,16842,81916,0.6079741123382021,2378,1741,0,2,0.5596654691142257,0.38731487443657436,5.329,

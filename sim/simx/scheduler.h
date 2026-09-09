@@ -196,6 +196,10 @@ public:
   // yield) and rotate to the next runnable split; no-op if there is none. This
   // is the deterministic, single-cycle alternative to the stall watchdog.
   bool yield_warp(uint32_t wid);
+  // ThreadSplit A/B: runtime toggle of the SCS machinery, and per-issue live
+  // schedulable-context accounting for the evaluation harness.
+  bool scs_enabled() const { return scs_enabled_; }
+  void observe_split_contexts(const warp_t& warp);
 #endif
   bool wspawn(uint32_t num_warps, Word nextPC);
   bool setTmask(uint32_t wid, const ThreadMask& tmask);
@@ -293,6 +297,16 @@ private:
   // SCS: pull the next runnable subgroup with live (non-exited) lanes into the
   // running slot; drops stale all-exited entries. Returns true on success.
   bool scs_resume_next(warp_t& warp);
+
+  // ThreadSplit evaluation: A/B toggle + metric accumulators (SCS arm only).
+  bool scs_enabled_ = true;
+  bool eval_metrics_ = false;
+  uint64_t eval_issued_ = 0;
+  uint64_t eval_active_lanes_ = 0;
+  uint64_t eval_yields_ = 0;
+  uint64_t eval_switches_ = 0;
+  uint64_t eval_watchdog_switches_ = 0;
+  uint64_t eval_peak_contexts_ = 0;
 #endif // VX_CFG_DIVERGE_TYPE_SPLIT
 
   Core* core_;

@@ -114,6 +114,15 @@ public:
     // memory. Per-context, the list dies with the models it names. Reset values,
     // the seed and the assertion window are per-context settings and move with it.
     context_ = new VerilatedContext();
+#ifdef THREADSPLIT_EVAL
+    const char* mode = std::getenv("VORTEX_SCS_MODE");
+    if (mode && std::string(mode) != "ipdom" && std::string(mode) != "scs") {
+      std::cerr << "VORTEX_SCS_MODE must be scs or ipdom\n";
+      std::abort();
+    }
+    const char* eval_args[] = {"rtlsim", "+threadsplit_ipdom"};
+    context_->commandArgs(mode && std::string(mode) == "ipdom" ? 2 : 1, eval_args);
+#endif
 
     // force random values for uninitialized signals
     context_->randReset(VERILATOR_RESET_VALUE);
@@ -165,6 +174,7 @@ public:
     // Model before context: the model holds a reference to the context it was
     // built with, so releasing the context first would leave that reference
     // dangling through the model's own destruction.
+    device_->final();
     delete device_;
     delete context_;
   }

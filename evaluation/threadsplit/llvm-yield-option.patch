@@ -1,0 +1,37 @@
+diff --git a/llvm/lib/Target/RISCV/VortexBranchDivergence.cpp b/llvm/lib/Target/RISCV/VortexBranchDivergence.cpp
+index c808e1fc9..ad21d1fdf 100644
+--- a/llvm/lib/Target/RISCV/VortexBranchDivergence.cpp
++++ b/llvm/lib/Target/RISCV/VortexBranchDivergence.cpp
+@@ -72,6 +72,9 @@ using namespace llvm::PatternMatch;
+ // minutes-hours. Skip the divergence pipeline for functions over this BB
+ // count — critical SIMT math (sinf=25, sin/cos=13) is well under. Such large
+ // functions are usually I/O / parsing / crypto that aren't called from SIMT.
++static cl::opt<bool> VortexSCSYield("vortex-scs-yield", cl::init(true),
++                                  cl::desc("Insert yields in blocking Vortex loops"));
++
+ static cl::opt<unsigned> VortexMaxDivergenceBBs(
+     "vortex-divergence-max-bbs",
+     cl::desc("Skip the Vortex divergence pipeline for functions with more "
+@@ -1435,16 +1438,15 @@ void VortexBranchDivergence1::processLoops(LLVMContext* context, Function* funct
+           LLVM_DEBUG(dbgs() << "*** VX: insert thread predicate '" << namePrinter_.ValueName(cond) << "' before exiting block: " << namePrinter_.BBName(exiting_block) << "\n");
+           if (!loop->contains(succ0)) {
+             CallInst::Create(pred_n_func_, {cond, tmask}, "", branch);
+-            // SCS: spinners (lanes kept active by pred_n) yield on the back-edge.
+-            if (loop_blocks) {
+-              auto yield_ty = FunctionType::get(Type::getVoidTy(*context), false);
+-              auto yield_asm = InlineAsm::get(yield_ty, ".insn r 0x0B, 0, 5, x0, x0, x0", "~{memory}", /*hasSideEffects=*/true);
+-              CallInst::Create(yield_asm, "", branch);
+-              LLVM_DEBUG(dbgs() << "*** VX: insert vx_yield on blocking-loop back-edge: " << namePrinter_.BBName(exiting_block) << "\n");
+-            }
+           } else {
+             CallInst::Create(pred_func_, {cond, tmask}, "", branch);
+           }
++          if (loop_blocks && VortexSCSYield) {
++            auto yield_ty = FunctionType::get(Type::getVoidTy(*context), false);
++            auto yield_asm = InlineAsm::get(yield_ty, ".insn r 0x0B, 0, 5, x0, x0, x0", "~{memory}", /*hasSideEffects=*/true);
++            CallInst::Create(yield_asm, "", branch);
++            LLVM_DEBUG(dbgs() << "*** VX: insert vx_yield on blocking-loop back-edge: " << namePrinter_.BBName(exiting_block) << "\n");
++          }
+           LLVM_DEBUG(dbgs() << "*** VX: after predicate change!\n" << function << "\n");
+
+           // change branch condition

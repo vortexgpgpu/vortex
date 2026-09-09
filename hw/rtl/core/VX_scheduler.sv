@@ -55,6 +55,14 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg [`VX_CFG_NUM_WARPS-1:0][PC_BITS-1:0] warp_pcs, warp_pcs_n;
 
 `ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef THREADSPLIT_EVAL
+    // ThreadSplit A/B: +threadsplit_ipdom disables the SCS machinery at runtime.
+    reg scs_enabled;
+    initial scs_enabled = !$test$plusargs("threadsplit_ipdom");
+`else
+    wire scs_enabled = 1'b1;
+`endif
+
     // SCS schedulable splits (mirrors the validated SimX model).
     //  - pending: the masked-off (e.g. lock-acquiring) lanes of the CURRENT loop;
     //    cancellable (merged back if the loop reconverges), else committed on
@@ -67,9 +75,18 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     //    This keeps the pool off the warp-PC critical path (was a combinational
     //    read-after-write over a large FF array → 300 MHz timing failure).
     localparam CS_W     = `VX_CFG_NUM_THREADS + PC_BITS;     // {tmask, pc}
-    localparam CS_DEPTH = 2 * `VX_CFG_NUM_THREADS;           // pow2; headroom over per-lane splits
-    localparam CS_SLOTW = `CLOG2(CS_DEPTH);                  // ring slot index
-    localparam CS_CW    = `CLOG2(CS_DEPTH+1);                // occupancy count
+`ifdef VX_CFG_SCS_POOL_DEPTH
+    // Case-study capacity sweep: override the resident pool depth K independently
+    // of warp width, to measure how few schedulable contexts SCS actually needs.
+    localparam CS_DEPTH = `VX_CFG_SCS_POOL_DEPTH;
+`else
+    localparam CS_DEPTH = `VX_CFG_NUM_THREADS;               // one resident pool slot per lane
+`endif
+    // CLOG2(1) == 0, which would declare zero-width head/address vectors; a
+    // 1-entry pool still needs a 1-bit ring index (it just alternates 0/1 while
+    // holding at most one entry — see the BRAM sizing note below).
+    localparam CS_SLOTW = (CS_DEPTH > 1) ? `CLOG2(CS_DEPTH) : 1;
+    localparam CS_CW    = `CLOG2(CS_DEPTH+1);                // occupancy count (0..CS_DEPTH)
     localparam CS_AW    = NW_WIDTH + CS_SLOTW;               // pool address {wid, slot}
     reg [`VX_CFG_NUM_WARPS-1:0] cs_pend, cs_pend_n;
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] cs_ptmask, cs_ptmask_n;
@@ -170,7 +187,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // 1W1R, addressed by {wid, slot}; registered read gives the 1-cycle pop.
     VX_dp_ram #(
         .DATAW     (CS_W),
-        .SIZE      (`VX_CFG_NUM_WARPS * CS_DEPTH),
+        .SIZE      (`VX_CFG_NUM_WARPS * (1 << CS_SLOTW)),   // covers the full {wid,slot} address range
         .RDW_MODE  ("R"),
         .OUT_REG   (1)
     ) cs_pool_ram (
@@ -465,7 +482,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // once. cs_pend is cleared between distinct loops (by restore) and in the
         // lock pattern (by vx_yield committing pending to the pool), so a fresh
         // park there correctly starts a new mask.
-        if (warp_ctl_if.pred_park_valid) begin
+        if (scs_enabled && warp_ctl_if.pred_park_valid) begin
             cs_ptmask_n[warp_ctl_if.wid] = (cs_pend[warp_ctl_if.wid] ? cs_ptmask[warp_ctl_if.wid]
                                                                      : '0)
                                          | warp_ctl_if.pred_park_tmask;
@@ -482,7 +499,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // would resume at the wrong PC with garbage registers (raycast misalign);
         // they stay parked until their own loop reconverges. With no matching park
         // the current subgroup alone is the correct reconvergence.
-        if (warp_ctl_if.pred_restore_valid) begin
+        if (scs_enabled && warp_ctl_if.pred_restore_valid) begin
             if (cs_pend[warp_ctl_if.wid] && (cs_ppc[warp_ctl_if.wid] == warp_pcs[warp_ctl_if.wid])) begin
                 thread_masks_n[warp_ctl_if.wid] = (thread_masks[warp_ctl_if.wid] | cs_ptmask[warp_ctl_if.wid]) & ~cs_done[warp_ctl_if.wid];
                 active_warps_n[warp_ctl_if.wid] = ((thread_masks[warp_ctl_if.wid] | cs_ptmask[warp_ctl_if.wid]) & ~cs_done[warp_ctl_if.wid]) != 0;
@@ -534,11 +551,19 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // split. The pool is 1W1R, so pushing the current split at the tail and
         // popping the head happen in the same cycle (distinct slots). No-op when
         // nothing else is runnable.
-        if (warp_ctl_if.yield_valid) begin
-            cs_pend_n[warp_ctl_if.wid] = 0;
+        if (scs_enabled && warp_ctl_if.yield_valid) begin
+            // Installing pending requires pushing the current split to the pool
+            // tail (net +1 occupancy), so it is only taken with free capacity
+            // (case-study K-sweep: CS_DEPTH can be << NUM_THREADS). When the pool
+            // is full, cs_pend/cs_ptmask/cs_ppc are left untouched — never
+            // dropped — and picked up later either by a subsequent yield once a
+            // pop frees a slot, or directly by this warp's own kernel-exit path,
+            // which installs pending without touching the pool at all.
             if (cs_pend[warp_ctl_if.wid]
-             && (cs_ptmask[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]) != 0) begin
+             && (cs_ptmask[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]) != 0
+             && (cs_cnt[warp_ctl_if.wid] < CS_CW'(CS_DEPTH))) begin
                 // defer current to the tail, run pending acquirers directly
+                cs_pend_n[warp_ctl_if.wid] = 0;
                 cs_we    = 1;
                 cs_waddr = {warp_ctl_if.wid, CS_SLOTW'(cs_head[warp_ctl_if.wid] + cs_cnt[warp_ctl_if.wid])};
                 cs_wdata = {thread_masks[warp_ctl_if.wid], warp_pcs[warp_ctl_if.wid]};
@@ -567,6 +592,10 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             if (!cs_pop_set) stalled_warps_n[warp_ctl_if.wid] = 0;
         end
 `endif // VX_CFG_DIVERGE_TYPE_SPLIT
+
+        if (!scs_enabled && warp_ctl_if.yield_valid) begin
+            stalled_warps_n[warp_ctl_if.wid] = 0;
+        end
 
         // Branch handling
         for (integer i = 0; i < `VX_CFG_NUM_ALU_BLOCKS; ++i) begin
@@ -1512,4 +1541,112 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     end
 `endif
 
+`ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+`ifdef THREADSPLIT_EVAL
+    longint unsigned eval_issued;
+    longint unsigned eval_lanes;
+    longint unsigned eval_yields;
+    longint unsigned eval_switches;
+    longint unsigned eval_peak;
+    longint unsigned eval_peak_next;
+    // Case-study A/B instrumentation: per-warp-cycle "live" context count is the
+    // same quantity eval_peak already maximizes (running + pending + pooled);
+    // here every warp-cycle with >=1 live context is also binned into a
+    // histogram (fig. A1) and "runnable" (pending + pooled, i.e. everything
+    // *other* than the currently running split) is separately summed/maxed.
+    longint unsigned eval_live_cycles;    // sum of warp-cycles with >=1 live context
+    longint unsigned eval_hist1, eval_hist2, eval_hist3, eval_hist4, eval_hist5p;
+    longint unsigned eval_runnable_sum;
+    longint unsigned eval_runnable_peak, eval_runnable_peak_next;
+    wire eval_tmc_exit = warp_ctl_if.tmc_valid && warp_ctl_if.tmc.tmask == 0;
+    wire eval_pending_switch = scs_enabled && (warp_ctl_if.yield_valid || eval_tmc_exit)
+                            && cs_pend[warp_ctl_if.wid]
+                            && ((cs_ptmask[warp_ctl_if.wid] & ~cs_done[warp_ctl_if.wid]
+                               & ~(eval_tmc_exit ? thread_masks[warp_ctl_if.wid] : '0)) != 0);
+    initial begin
+        eval_issued = 0;
+        eval_lanes = 0;
+        eval_yields = 0;
+        eval_switches = 0;
+        eval_peak = 0;
+        eval_live_cycles = 0;
+        eval_hist1 = 0;
+        eval_hist2 = 0;
+        eval_hist3 = 0;
+        eval_hist4 = 0;
+        eval_hist5p = 0;
+        eval_runnable_sum = 0;
+        eval_runnable_peak = 0;
+    end
+    // Per-cycle deltas, summed combinationally across all warps. Each accumulator
+    // below is written by exactly one nonblocking assignment per clock edge; do
+    // NOT fold the per-warp loop into the posedge block directly; NUM_WARPS
+    // nonblocking writes to the same register in one always block all sample the
+    // same pre-edge value; only the last write survives, silently undercounting
+    // whenever >=2 warps hit the same bin in the same cycle.
+    longint unsigned eval_delta_live_cycles;
+    longint unsigned eval_delta_runnable_sum;
+    longint unsigned eval_delta_hist1, eval_delta_hist2, eval_delta_hist3, eval_delta_hist4, eval_delta_hist5p;
+    always @(*) begin
+        eval_peak_next = eval_peak;
+        eval_runnable_peak_next = eval_runnable_peak;
+        eval_delta_live_cycles = 0;
+        eval_delta_runnable_sum = 0;
+        eval_delta_hist1 = 0;
+        eval_delta_hist2 = 0;
+        eval_delta_hist3 = 0;
+        eval_delta_hist4 = 0;
+        eval_delta_hist5p = 0;
+        for (integer w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
+            automatic longint unsigned live_w = 64'(active_warps[w] && thread_masks[w] != 0)
+                                               + 64'(cs_pend[w]) + 64'(cs_cnt[w]);
+            automatic longint unsigned runnable_w = 64'(cs_pend[w]) + 64'(cs_cnt[w]);
+            if (scs_enabled && live_w > eval_peak_next) begin
+                eval_peak_next = live_w;
+            end
+            if (scs_enabled && runnable_w > eval_runnable_peak_next) begin
+                eval_runnable_peak_next = runnable_w;
+            end
+            if (scs_enabled && live_w != 0) begin
+                eval_delta_live_cycles = eval_delta_live_cycles + 1;
+                eval_delta_runnable_sum = eval_delta_runnable_sum + runnable_w;
+                case (live_w)
+                    64'd1:   eval_delta_hist1  = eval_delta_hist1  + 1;
+                    64'd2:   eval_delta_hist2  = eval_delta_hist2  + 1;
+                    64'd3:   eval_delta_hist3  = eval_delta_hist3  + 1;
+                    64'd4:   eval_delta_hist4  = eval_delta_hist4  + 1;
+                    default: eval_delta_hist5p = eval_delta_hist5p + 1;
+                endcase
+            end
+        end
+    end
+    always @(posedge clk) begin
+        if (!reset) begin
+            if (schedule_if_fire) begin
+                eval_issued <= eval_issued + 1;
+                eval_lanes <= eval_lanes + 64'($countones(schedule_if.data.tmask));
+            end
+            if (warp_ctl_if.yield_valid) begin
+                eval_yields <= eval_yields + 1;
+            end
+            eval_switches <= eval_switches + 64'(cs_pop_valid_r) + 64'(eval_pending_switch);
+            eval_peak <= eval_peak_next;
+            eval_runnable_peak <= eval_runnable_peak_next;
+            eval_live_cycles  <= eval_live_cycles  + eval_delta_live_cycles;
+            eval_runnable_sum <= eval_runnable_sum + eval_delta_runnable_sum;
+            eval_hist1  <= eval_hist1  + eval_delta_hist1;
+            eval_hist2  <= eval_hist2  + eval_delta_hist2;
+            eval_hist3  <= eval_hist3  + eval_delta_hist3;
+            eval_hist4  <= eval_hist4  + eval_delta_hist4;
+            eval_hist5p <= eval_hist5p + eval_delta_hist5p;
+        end
+    end
+    final begin
+        $display("EVAL: core=%0d issued=%0d active_lanes=%0d yields=%0d switches=%0d watchdog_switches=0 peak_contexts=%0d live_cycles=%0d hist1=%0d hist2=%0d hist3=%0d hist4=%0d hist5p=%0d runnable_sum=%0d runnable_peak=%0d",
+                 CORE_ID, eval_issued, eval_lanes, eval_yields, eval_switches, eval_peak,
+                 eval_live_cycles, eval_hist1, eval_hist2, eval_hist3, eval_hist4, eval_hist5p,
+                 eval_runnable_sum, eval_runnable_peak);
+    end
+`endif // THREADSPLIT_EVAL
+`endif // VX_CFG_DIVERGE_TYPE_SPLIT
 endmodule

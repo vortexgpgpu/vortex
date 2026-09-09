@@ -97,6 +97,17 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
   std::srand(50);
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+  const char* mode = std::getenv("VORTEX_SCS_MODE");
+  if (mode) {
+    if (std::string(mode) != "scs" && std::string(mode) != "ipdom") {
+      std::cerr << "VORTEX_SCS_MODE must be scs or ipdom\n";
+      std::abort();
+    }
+    scs_enabled_ = std::string(mode) == "scs";
+  }
+  eval_metrics_ = std::getenv("VORTEX_EVAL_METRICS") != nullptr;
+#endif
 
   // create child SimObjects (CTA dispatcher + barrier unit). Both are
   // registered with SimPlatform and get their own do_reset()/do_tick() calls.
@@ -111,7 +122,34 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
 #endif
 }
 
-Scheduler::~Scheduler() {}
+Scheduler::~Scheduler() {
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+  if (eval_metrics_) {
+    std::cout << "EVAL: core=" << core_->id()
+              << " issued=" << eval_issued_
+              << " active_lanes=" << eval_active_lanes_
+              << " yields=" << eval_yields_
+              << " switches=" << eval_switches_
+              << " watchdog_switches=" << eval_watchdog_switches_
+              << " peak_contexts=" << eval_peak_contexts_ << std::endl;
+  }
+#endif
+}
+
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+void Scheduler::observe_split_contexts(const warp_t& warp) {
+  if (eval_metrics_ && scs_enabled_) {
+    uint64_t live = warp.tmask.any();
+    for (const auto& split : warp.scs_pending) {
+      live += (split.tmask & ~warp.scs_done).any();
+    }
+    for (const auto& split : warp.scs_runnable) {
+      live += (split.tmask & ~warp.scs_done).any();
+    }
+    eval_peak_contexts_ = std::max(eval_peak_contexts_, live);
+  }
+}
+#endif
 
 void Scheduler::on_reset() {
   for (auto& warp : warps_) {
@@ -288,6 +326,7 @@ bool Scheduler::scs_resume_next(warp_t& warp) {
     if (live.any()) {
       next.tmask = live;
       this->scs_install(warp, std::move(next));
+      ++eval_switches_;
       return true;
     }
   }
@@ -444,6 +483,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     // level mid-divergence — popping the join the still-running sibling later needs
     // (manifested as "IPDOM stack is empty"). A genuinely stuck split/join spin
     // still folds: it makes no forward progress, so the counter accrues anyway.
+    if (scs_enabled_) {
     bool has_parked = !warp.scs_runnable.empty() || !warp.scs_pending.empty();
     if (!has_parked && warp.PC > warp.scs_maxpc) {
       warp.scs_maxpc = warp.PC;
@@ -455,8 +495,11 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
         // warp stops saturating shared dcache resources, letting the lock
         // holder in another warp get serviced and release.
         warp.scs_cooldown = SCS_BACKOFF;
+      } else {
+        ++eval_watchdog_switches_;
       }
     }
+    } // scs_enabled_
 #endif // VX_CFG_DIVERGE_TYPE_SPLIT
 
     // Generate UUID
@@ -478,6 +521,13 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
     trace->cta_id = warp.cta_csrs.cta_id;
     trace->PC     = warp.PC;
     trace->tmask  = warp.tmask;
+#ifdef VX_CFG_DIVERGE_TYPE_SPLIT
+    if (eval_metrics_) {
+      ++eval_issued_;
+      eval_active_lanes_ += warp.tmask.count();
+      observe_split_contexts(warp);
+    }
+#endif
 
     // PC is advanced at decode (+2 for RVC, +4 otherwise) — matches
     // the hardware warp-PC update at decode.
@@ -506,6 +556,10 @@ bool Scheduler::running() const {
 
 #ifdef VX_CFG_DIVERGE_TYPE_SPLIT
 bool Scheduler::yield_warp(uint32_t wid) {
+  ++eval_yields_;
+  if (!scs_enabled_) {
+    return true;
+  }
   auto& warp = warps_.at(wid);
   // PC was already advanced past the yield at decode, so scs_rotate captures the
   // yielding split at its post-yield resume point and switches to a sibling.

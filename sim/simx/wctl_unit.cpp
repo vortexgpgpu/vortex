@@ -246,6 +246,13 @@ bool WctlUnit::process(instr_trace_t* trace) {
     ThreadMask next_tmask = warp.tmask;
 #ifdef VX_CFG_DIVERGE_TYPE_SPLIT
     bool reconverged = false;
+    if (!sched.scs_enabled()) {
+      next_tmask = pred.any() ? pred : ThreadMask(num_threads, rs2_data.at(thread_last).u);
+      if (trace->eop) {
+        release_warp = core_->setTmask(trace->wid, next_tmask);
+      }
+      break;
+    }
     if (pred.any()) {
       next_tmask &= pred;
     } else {
@@ -278,6 +285,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
           // are what stop two different blocking loops from conflating. Kept
           // pending (cancellable) until the loop reconverges or the warp stalls.
           warp.scs_pending.emplace_back(just_off, trace->PC + 4, warp.ipdom_stack);
+          sched.observe_split_contexts(warp);
         }
       }
       release_warp = core_->setTmask(trace->wid, next_tmask);
