@@ -101,12 +101,19 @@ module VX_cp_dma
   endfunction
 
   // Next chunk length = min(rem_beats, src 4K span, dst 4K span).
+  //
+  // The span comparison is done on the cache-line indices rather than on the
+  // spans: since beats_to_4k is (MAX_BURST - cl_idx) and cl_idx is 6 bits so
+  // never underflows, min(MAX_BURST - s, MAX_BURST - d) == MAX_BURST -
+  // max(s, d). That is one 6-bit compare followed by one subtract, instead of
+  // two subtracts followed by a compare, and it shortens the src_r ->
+  // chunk_beats path that limits this design at 300 MHz.
   logic [BCNT_W-1:0] next_chunk;
   always_comb begin
-    logic [BCNT_W-1:0] s4k, d4k, lim;
-    s4k = beats_to_4k(src_r[11:6]);
-    d4k = beats_to_4k(dst_r[11:6]);
-    lim = (s4k < d4k) ? s4k : d4k;
+    logic [5:0]        cl_max;
+    logic [BCNT_W-1:0] lim;
+    cl_max = (src_r[11:6] > dst_r[11:6]) ? src_r[11:6] : dst_r[11:6];
+    lim    = beats_to_4k(cl_max);
     if (rem_beats < 64'({1'b0, lim}))
       next_chunk = BCNT_W'(rem_beats);
     else
@@ -235,6 +242,15 @@ module VX_cp_dma
 
   wire [7:0]         burst_len  = 8'({1'b0, chunk_beats - BCNT_W'(1)});
 
+  // The read-ready decode drives the clock enable of every bit of the stream
+  // buffer feeding this engine -- 264 enables that the placer spreads well
+  // away from this FSM. At 300 MHz that path is the design's critical one:
+  // three logic levels carrying 0.267ns of logic behind 2.008ns of route.
+  // Replicating the decode lets each copy enable a nearby group. Logically
+  // identical to inlining these expressions; affects implementation only.
+  (* MAX_FANOUT = 32 *) wire host_rready = (rd_rready & rd_from_host) || (state == S_FLUSH_R);
+  (* MAX_FANOUT = 32 *) wire dev_rready  = rd_rready & ~rd_from_host;
+
   // ---- Drive both AXI masters; only the routed port asserts valid ----
   always_comb begin
     // ----- axi_host -----
@@ -244,7 +260,7 @@ module VX_cp_dma
     axi_host.arlen   = (state == S_FLUSH_AR) ? 8'd0 : burst_len;
     axi_host.arsize  = 3'd6;                 // 64 bytes per beat
     axi_host.arburst = 2'b01;                // INCR
-    axi_host.rready  = (rd_rready & rd_from_host) || (state == S_FLUSH_R);
+    axi_host.rready  = host_rready;
 
     axi_host.awvalid = wr_awvalid &  wr_to_host;
     axi_host.awaddr  = dst_r;
@@ -265,7 +281,7 @@ module VX_cp_dma
     axi_dev.arlen    = burst_len;
     axi_dev.arsize   = 3'd6;
     axi_dev.arburst  = 2'b01;
-    axi_dev.rready   = rd_rready  & ~rd_from_host;
+    axi_dev.rready   = dev_rready;
 
     axi_dev.awvalid  = wr_awvalid & ~wr_to_host;
     axi_dev.awaddr   = dst_r;

@@ -67,6 +67,14 @@ module vortex_afu #(
     output wire                                 interrupt
 );
 
+	// The platform drives ap_rst_n from a synchronizer that may sit on another
+	// die. Registering it once here keeps that crossing on a single flop
+	// instead of on every reset fan-out inside the kernel.
+	reg reset_r = 1'b1;
+	always @(posedge ap_clk) begin
+		reset_r <= ~ap_rst_n;
+	end
+
 	VX_afu_wrap #(
 		.C_S_AXI_CTRL_ADDR_WIDTH (C_S_AXI_CTRL_ADDR_WIDTH),
 		.C_S_AXI_CTRL_DATA_WIDTH (C_S_AXI_CTRL_DATA_WIDTH),
@@ -76,7 +84,7 @@ module vortex_afu #(
 		.C_M_AXI_MEM_NUM_BANKS   (C_M_AXI_MEM_NUM_BANKS)
 	) afu_wrap (
 		.clk             	(ap_clk),
-		.reset           	(~ap_rst_n),
+		.reset           	(reset_r),
 	`ifdef PLATFORM_MERGED_MEMORY_INTERFACE
 		`MP_REPEAT (1, AXI_MEM_ARGS, MP_COMMA),
 	`else

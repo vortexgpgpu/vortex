@@ -65,11 +65,11 @@ The recommended method to enable debugging is to pass the `--debug` flag to `bla
     // Running demo program on rtlsim in debug mode
     $ ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=1
 
-A debug trace `run.log` is generated in the current directory during the program execution. The trace includes important states of the simulated processor (memory, caches, pipeline, stalls, etc..). A waveform trace `trace.vcd` is also generated in the current directory during the program execution.
+A debug trace `run.log` is generated in the current directory during the program execution. The trace includes important states of the simulated processor (memory, caches, pipeline, stalls, etc..). To also capture a waveform, pass `--vcd` (optionally `--vcd_file=`); a `trace.vcd` is then written to the current directory. `--vcd` is independent of `--debug` — either can be used without the other — but it cannot be combined with `--saif`, which captures the same signals in a different format.
 By default all library modules under the /libs/ folder are excluded from the trace to reduce the waveform file size, you can change that behavior by either explicitly commenting out `TRACING_OFF`/`TRACING_ON` inside a lib module source (e.g. VX_stream_buffer.sv) or simply enabling a full trace by defining TRACING_ALL as follows.
 
     // Debugging the demo program with rtlsim in full tracing mode
-    $ CONFIGS="-DTRACING_ALL" ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=1
+    $ CONFIGS="-DTRACING_ALL" ./ci/blackbox.sh --driver=rtlsim --app=demo --debug=1 --vcd
 
 You can visualize the waveform trace using any tool that can open VCD files (Modelsim, Quartus, Vivado, etc..). [GTKwave] (http://gtkwave.sourceforge.net) is a great open-source scope analyzer that also works with VCD files.
 

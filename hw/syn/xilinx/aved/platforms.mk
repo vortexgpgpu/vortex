@@ -64,4 +64,4 @@ HOST_TAG = HBM1
 
 # Kernel clock target (MHz). The linker also accepts a frequency request;
 # the runtime can retune within the platform's supported range.
-KERNEL_FREQ ?= 200
+KERNEL_FREQ ?= 300

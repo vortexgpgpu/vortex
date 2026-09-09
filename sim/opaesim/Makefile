@@ -34,7 +34,7 @@ DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
 DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
 
-DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) -DVCD_OUTPUT $(DBG_TRACE_FLAGS)
+DBG_FLAGS += -DVX_DBG_DEBUG_LEVEL=$(DEBUG) $(DBG_TRACE_FLAGS)
 
 # `override` so a command-line `make CONFIGS=...` cannot drop these mandatory flags.
 override CONFIGS += -DSIMULATION -DSV_DPI
@@ -164,7 +164,7 @@ VL_FLAGS += -j $(THREADS)
 
 # Debugging
 ifdef DEBUG
-	VL_FLAGS += --trace --trace-structs $(DBG_FLAGS)
+	VL_FLAGS += $(DBG_FLAGS)
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else
 	VL_FLAGS += -DNDEBUG
@@ -182,6 +182,12 @@ endif
 ifdef PERF
 	VL_FLAGS += -DPERF_ENABLE
 	CXXFLAGS += -DPERF_ENABLE
+endif
+
+# Enable VCD waveform
+ifdef VCD
+	VL_FLAGS += --trace --trace-structs
+	CXXFLAGS += -DVCD_OUTPUT
 endif
 
 # Enable SAIF tracing

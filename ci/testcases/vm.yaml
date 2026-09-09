@@ -137,6 +137,18 @@ tests:
     OPTS: -t2 -n16 -p4
   env:
     VORTEX_RANDOMIZE_VA: 1
+# TLB-pressure sweep mixed with a VX_MEM_PHYS identity-mapped buffer: every
+# task strides across pages (odd stride) while also reading through the
+# pinned slab, so paged and identity translations contend in the same run.
+- id: vm-stress
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/regression/vm_stress
+  target: run-{driver}
+  env:
+    VORTEX_RANDOMIZE_VA: 1
 - id: vm-amo
   via: make-run
   drivers:

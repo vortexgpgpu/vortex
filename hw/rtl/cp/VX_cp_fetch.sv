@@ -94,6 +94,20 @@ module VX_cp_fetch
   // Wrap-aware ring offset.
   wire [63:0] ring_offset = head_r & {48'd0, state_in.ring_size_mask};
 
+  // ring_base lives in the AXI-Lite regfile, which the placer puts far from
+  // this engine: at 300 MHz the regfile -> address adder -> AR-slice path is
+  // one of the critical ones. The value is quasi-static -- the host writes it
+  // during queue setup and it cannot change while a fetch is in flight -- so
+  // a locally registered copy is equivalent and keeps that long route out of
+  // the adder.
+  logic [63:0] ring_base_r;
+  always_ff @(posedge clk) begin
+    if (reset)
+      ring_base_r <= '0;
+    else
+      ring_base_r <= state_in.ring_base;
+  end
+
   // S_IDLE is the only state with no AXI read outstanding and no partially
   // consumed cache line, so it is the one safe point to clear the head.
   assign idle = (state == S_IDLE);
@@ -162,7 +176,7 @@ module VX_cp_fetch
 
     // AR drive
     axi_m.arvalid = (state == S_ISSUE_AR);
-    axi_m.araddr  = state_in.ring_base + ring_offset;
+    axi_m.araddr  = ring_base_r + ring_offset;
     axi_m.arid    = TID_PREFIX;
     axi_m.arlen   = 8'd0;                  // single beat
     axi_m.arsize  = 3'd6;                  // 64 bytes per transfer
