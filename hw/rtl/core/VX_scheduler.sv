@@ -109,8 +109,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg                  cs_pop_valid_r;
     reg [NW_WIDTH-1:0]   cs_pop_wid_r;
 `endif // VX_CFG_DIVERGE_TYPE_SCS
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
-    // ITS (mirror of the SimX NV_ITS model): threads diverge on per-thread
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
+    // ITS (mirror of the SimX ITS model): threads diverge on per-thread
     // PCs, regrouped through convergence barriers and the Yielded state.
     // Storage is memory-first: parked per-thread PCs and the barrier masks
     // live in per-warp LUTRAM rows owned by a single regroup engine, and the
@@ -150,11 +150,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     logic [`VX_CFG_NUM_THREADS-1:0] srv_yielded;
     logic                           srv_warp_done;
 
-    `STATIC_ASSERT(`VX_CFG_NUM_ALU_BLOCKS == 1, ("NV_ITS requires a single ALU block"))
+    `STATIC_ASSERT(`VX_CFG_NUM_ALU_BLOCKS == 1, ("ITS requires a single ALU block"))
 `ifdef VX_CFG_EXT_C_ENABLE
-    `STATIC_ASSERT(0, ("NV_ITS is incompatible with the C extension"))
+    `STATIC_ASSERT(0, ("ITS is incompatible with the C extension"))
 `endif
-`endif // VX_CFG_DIVERGE_TYPE_NV_ITS
+`endif // VX_CFG_DIVERGE_TYPE_ITS
     reg [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch_r;
 
     // Per-warp machine-mode trap CSRs. csrw writes arrive on
@@ -213,7 +213,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                           && ((cs_ptmask[warp_ctl_if.wid] & ~cta_exit_mask) != 0);
     wire cta_warp_done = warp_ctl_if.tmc_valid && (warp_ctl_if.tmc.tmask == 0)
                       && !cta_pend_survivor && (cs_cnt[warp_ctl_if.wid] == 0);
-`elsif VX_CFG_DIVERGE_TYPE_NV_ITS
+`elsif VX_CFG_DIVERGE_TYPE_ITS
     // Warp retirement: threads exit per-group, so the warp is done only when
     // a TMC exit empties the alive set (reported by the regroup engine).
     wire cta_warp_done = srv_valid && srv_warp_done;
@@ -230,7 +230,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .kmu_bus_if (kmu_bus_if),
         .active_warps(active_warps),
         .warp_done  (cta_warp_done),
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
         .warp_done_wid(srv_wid),
 `else
         .warp_done_wid(warp_ctl_if.wid),
@@ -285,7 +285,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [`VX_CFG_NUM_ALU_BLOCKS-1:0]               branch_is_trap;
     wire [`VX_CFG_NUM_ALU_BLOCKS-1:0]               branch_is_mret;
     wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][3:0]          branch_trap_cause;
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][`VX_CFG_NUM_THREADS-1:0] branch_taken_mask;
     wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][`VX_CFG_NUM_THREADS-1:0] branch_tmask;
     wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0] branch_dest_its;
@@ -305,7 +305,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         assign branch_is_trap[i]    = branch_ctl_if[i].is_trap;
         assign branch_is_mret[i]    = branch_ctl_if[i].is_mret;
         assign branch_trap_cause[i] = branch_ctl_if[i].trap_cause;
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
         assign branch_taken_mask[i] = branch_ctl_if[i].taken_mask;
         assign branch_tmask[i]      = branch_ctl_if[i].tmask;
         assign branch_dest_its[i]   = branch_ctl_if[i].dest_its;
@@ -363,7 +363,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             cs_inpool_n[cs_pop_wid_r]    = cs_inpool[cs_pop_wid_r] & ~cs_rdata[PC_BITS +: `VX_CFG_NUM_THREADS];
         end
 `endif // VX_CFG_DIVERGE_TYPE_SCS
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
         grp_pc_n     = grp_pc;
         grp_mask_n   = grp_mask;
         amask_n      = amask;
@@ -388,7 +388,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             cs_done_n[cta_wid]   = '0;
             cs_inpool_n[cta_wid] = '0;
 `endif
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
             // ITS: hold the warp unschedulable until its init event has
             // cleared the PC/barrier rows through the regroup engine.
             grp_stale_n[cta_wid] = 1;
@@ -407,7 +407,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 if (wspawn.wmask[i] && (NW_WIDTH'(i) != wspawn_wid)) begin
                     thread_masks_n[i][0] = 1;
                     warp_pcs_n[i] = wspawn.pc;
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
                     grp_stale_n[i]  = 1;
                     ws_pending_n[i] = 1;
 `endif
@@ -462,7 +462,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             // unlock — unless we issued a pop this cycle (warp stays parked until install)
             if (!cs_pop_set) stalled_warps_n[warp_ctl_if.wid] = 0;
         end
-`elsif VX_CFG_DIVERGE_TYPE_NV_ITS
+`elsif VX_CFG_DIVERGE_TYPE_ITS
         // ITS: TMC, bar_add/bar_wait and yield are regroup events applied by
         // the engine below; the warp stays parked until its event is served.
         if (warp_ctl_if.tmc_valid || warp_ctl_if.its.valid) begin
@@ -525,7 +525,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
         // split handling (no-op under ITS: divergence is per-thread PC)
         if (warp_ctl_if.split_valid) begin
-`ifndef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifndef VX_CFG_DIVERGE_TYPE_ITS
             if (warp_ctl_if.split.is_dvg) begin
                 thread_masks_n[warp_ctl_if.wid] = warp_ctl_if.split.then_tmask;
             end
@@ -535,7 +535,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
         // join handling (no-op under ITS: reconvergence is bar_wait / min-PC grouping)
         if (join_valid) begin
-`ifndef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifndef VX_CFG_DIVERGE_TYPE_ITS
             if (join_is_dvg) begin
                 if (join_is_else) begin
                     warp_pcs_n[join_wid] = join_pc;
@@ -624,7 +624,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                 end else if (branch_taken[i]) begin
                     warp_pcs_n[branch_wid[i]] = branch_dest[i];
                 end
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
                 // the per-thread PC writes and the warp unlock happen when
                 // the regroup engine serves this resolution.
                 grp_stale_n[branch_wid[i]] = 1;
@@ -678,7 +678,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     `else
         if (schedule_if_fire) begin
             warp_pcs_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`VX_CFG_XLEN'(4));
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
             // ITS: the issued group advances to the fallthrough PC.
             grp_pc_n[schedule_if.data.wid] = schedule_if.data.PC + from_fullPC(`VX_CFG_XLEN'(4));
 `endif
@@ -695,7 +695,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         end
     `endif
 
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
         // ITS regroup service: install the recomputed group, release the warp,
         // and retire it once a kernel-exit TMC has emptied the alive set.
         if (srv_valid) begin
@@ -742,7 +742,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             cs_inpool       <= '0;
             cs_pop_valid_r  <= '0;
 `endif
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
             grp_pc          <= '0;
             grp_mask        <= '0;
             amask           <= '0;
@@ -766,7 +766,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             cs_pop_valid_r <= cs_pop_set;
             cs_pop_wid_r   <= cs_pop_wid;
 `endif
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
             grp_pc         <= grp_pc_n;
             grp_mask       <= grp_mask_n;
             amask          <= amask_n;
@@ -854,7 +854,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 
     // split/join handling
 
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     // ITS carries no IPDOM stack: split/join are architectural no-ops, so the
     // divergence-stack storage is generated away entirely (fair area account).
     assign join_valid   = 1'b0;
@@ -888,11 +888,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .stack_wid  (warp_ctl_if.dvstack_wid),
         .stack_ptr  (warp_ctl_if.dvstack_ptr)
     );
-`endif // !VX_CFG_DIVERGE_TYPE_NV_ITS
+`endif // !VX_CFG_DIVERGE_TYPE_ITS
 
     // schedule the next ready warp
 
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     // ITS regroup engine (see the state-declaration comment for the design).
 
     // event capture: branch resolution
@@ -943,6 +943,24 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .valid_out (wake_any),
         `UNUSED_PIN (onehot_out)
     );
+
+    // Timing: the wake priority-encoder is a full amask/yielded scan and sits on
+    // the event-service critical path (amask -> wake_wid -> st1_wid -> row read).
+    // Register the wake candidate (derived entirely from registered scheduler
+    // state) so the arbiter request and the wake service PC read come from flops
+    // instead of that cone. A 1-cycle-old candidate is re-validated at grant time
+    // (wk_stale below) so a warp that acquired a group or exited in the interim is
+    // not woken. Common br/wc/init events are unaffected (their wids are FIFO/live).
+    reg wake_any_r;
+    reg [NW_WIDTH-1:0] wake_wid_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            wake_any_r <= 1'b0;
+        end else begin
+            wake_any_r <= wake_any;
+            wake_wid_r <= wake_wid;
+        end
+    end
 
     // per-class FIFOs; a class serves its FIFO head before its live event
     wire br_q_pop, wc_q_pop, in_q_pop;
@@ -1009,7 +1027,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign ev_req[0] = !br_q_empty || br_ev_live;
     assign ev_req[1] = !wc_q_empty || wc_ev_live;
     assign ev_req[2] = !in_q_empty || init_ev_live;
-    assign ev_req[3] = wake_any;
+    assign ev_req[3] = wake_any_r; // registered wake candidate (off the amask cone)
 
     wire [3:0] ev_grant;
     wire ev_grant_valid;
@@ -1029,6 +1047,11 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire wc_srv = ev_grant_valid && ev_grant[1];
     wire in_srv = ev_grant_valid && ev_grant[2];
     wire wk_srv = ev_grant_valid && ev_grant[3];
+    // Re-validate the registered wake candidate against current state: if the
+    // warp acquired a group / exited since the candidate was latched, the grant
+    // is dropped (service nothing this cycle) so no stale wake commits. This
+    // check gates st1_valid only (not st1_wid), so it stays off the row-read path.
+    wire wk_stale = wk_srv && !wake_eligible[wake_wid_r];
 
     assign br_q_pop  = br_srv && !br_q_empty;
     assign wc_q_pop  = wc_srv && !wc_q_empty;
@@ -1063,6 +1086,56 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [`VX_CFG_NUM_THREADS-1:0] in_ev_tmask;
     wire [PC_BITS-1:0] in_ev_pc;
     assign {in_ev_wid, in_ev_tmask, in_ev_pc} = in_ev_data;
+
+    // ---- event-select pipeline register (stage e0) --------------------------
+    // Timing cut: the event arbiter -> selected wid -> row read -> barrier
+    // re-evaluation -> runnable path was one ~16-level combinational cone (the
+    // 300 MHz limiter). Register the SELECTED event here so the row read is
+    // driven by a flop (e0_wid) and the arbiter/priority logic lands in the
+    // previous cycle. Costs one extra cycle of event-service latency; it is
+    // hazard-free because the serviced warp is frozen (grp_stale) from event
+    // enqueue until the regroup installs, so it can never have two events in
+    // flight and no same-warp row read/write can race across the added stage.
+    // Queue pops stay at selection (cycle 0); only the row-read/apply moves.
+    wire [NW_WIDTH-1:0] sel_wid = wc_srv ? wc_ev_wid
+                                : in_srv ? in_ev_wid
+                                : wk_srv ? wake_wid_r
+                                :          br_ev_wid;
+    reg e0_valid, e0_br, e0_wc, e0_in, e0_wk;
+    reg [NW_WIDTH-1:0]                            e0_wid;
+    reg e0_br_is_trap, e0_br_is_mret;
+    reg [`VX_CFG_NUM_THREADS-1:0]                e0_br_taken, e0_br_group;
+    reg [`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0]   e0_br_dests;
+    reg [PC_BITS-1:0]                            e0_br_ntaken;
+    reg [1:0]                                    e0_wc_op;
+    reg [ITS_BAR_IDW-1:0]                        e0_wc_bid;
+    reg [`VX_CFG_NUM_THREADS-1:0]                e0_wc_group, e0_wc_tmc_tmask;
+    reg [PC_BITS-1:0]                            e0_wc_pc;
+    reg [`VX_CFG_NUM_THREADS-1:0]                e0_in_tmask;
+    reg [PC_BITS-1:0]                            e0_in_pc;
+    always @(posedge clk) begin
+        if (reset) begin
+            e0_valid <= 1'b0;
+            e0_br <= 1'b0; e0_wc <= 1'b0; e0_in <= 1'b0; e0_wk <= 1'b0;
+        end else begin
+            e0_valid <= ev_grant_valid && !wk_stale;
+            e0_br <= br_srv; e0_wc <= wc_srv; e0_in <= in_srv; e0_wk <= wk_srv;
+            e0_wid <= sel_wid;
+            e0_br_is_trap  <= br_ev_is_trap;
+            e0_br_is_mret  <= br_ev_is_mret;
+            e0_br_taken    <= br_ev_taken;
+            e0_br_group    <= br_ev_group;
+            e0_br_dests    <= br_ev_dests;
+            e0_br_ntaken   <= br_ev_ntaken;
+            e0_wc_op       <= wc_ev_op;
+            e0_wc_bid      <= wc_ev_bid;
+            e0_wc_group    <= wc_ev_group;
+            e0_wc_tmc_tmask<= wc_ev_tmc_tmask;
+            e0_wc_pc       <= wc_ev_pc;
+            e0_in_tmask    <= in_ev_tmask;
+            e0_in_pc       <= in_ev_pc;
+        end
+    end
 
     // row stores: per-thread PCs and the {participate, arrived} barrier masks.
     // The service datapath is a 2-stage pipeline to keep 300 MHz: stage 1
@@ -1122,7 +1195,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // runnable set for the tree, plus the row-store writes (committed this cycle).
     logic                                        st1_keep_grp;
     logic [`VX_CFG_NUM_THREADS-1:0]              st1_amask, st1_yielded;
-    logic [`VX_CFG_NUM_THREADS-1:0]              st1_runnable;
+    logic [`VX_CFG_NUM_THREADS-1:0]              st1_blocked;
     logic [`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0] st1_pcs;
     logic                                        st1_warp_done;
     logic [PC_BITS-1:0]                          st1_keep_pc;
@@ -1130,72 +1203,68 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     always @(*) begin
         logic [`VX_CFG_NUM_THREADS-1:0] blocked;
 
-        st1_valid     = ev_grant_valid;
-        st1_wid       = br_ev_wid;
+        // Registered event (stage e0). Re-validate a registered wake at apply —
+        // flop-addressed and gating st1_valid only (not the row address), so it
+        // stays off the row-read path — so a warp that lost eligibility during
+        // the added pipeline cycle never wake-commits.
+        st1_valid     = e0_valid && !(e0_wk && !wake_eligible[e0_wid]);
+        st1_wid       = e0_wid;
         st1_wren      = '0;
         st1_wpcs      = '0;
         st1_bar_we    = 1'b0;
         st1_warp_done = 1'b0;
         st1_keep_grp  = 1'b0;
 
-        if (wc_srv) begin
-            st1_wid = wc_ev_wid;
-        end else if (in_srv) begin
-            st1_wid = in_ev_wid;
-        end else if (wk_srv) begin
-            st1_wid = wake_wid;
-        end
-
         st1_amask   = amask[st1_wid];
         st1_yielded = yielded[st1_wid];
         part_new    = part_row;
         arr_new     = arr_row;
 
-        if (br_srv) begin
-            st1_wren = br_ev_group;
+        if (e0_br) begin
+            st1_wren = e0_br_group;
             for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
-                if (br_ev_is_trap) begin
+                if (e0_br_is_trap) begin
                     st1_wpcs[t] = from_fullPC(mtvec_r[st1_wid] & ~`VX_CFG_XLEN'(3));
-                end else if (br_ev_is_mret) begin
+                end else if (e0_br_is_mret) begin
                     st1_wpcs[t] = from_fullPC(mepc_r[st1_wid]);
                 end else begin
-                    st1_wpcs[t] = br_ev_taken[t] ? br_ev_dests[t] : br_ev_ntaken;
+                    st1_wpcs[t] = e0_br_taken[t] ? e0_br_dests[t] : e0_br_ntaken;
                 end
             end
-        end else if (wc_srv) begin
-            case (wc_ev_op)
+        end else if (e0_wc) begin
+            case (e0_wc_op)
                 2'd0: begin // bar_add: the group registers as participants.
                     // No regroup: the running group's row entries are stale
                     // (their truth is grp_pc), and nothing became runnable.
-                    part_new[wc_ev_bid] = part_row[wc_ev_bid] | wc_ev_group;
+                    part_new[e0_wc_bid] = part_row[e0_wc_bid] | e0_wc_group;
                     st1_bar_we   = 1'b1;
                     st1_keep_grp = 1'b1;
                 end
                 2'd1: begin // bar_wait: masked arrival; empty barrier passes
-                    st1_wren = wc_ev_group;
+                    st1_wren = e0_wc_group;
                     for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
-                        st1_wpcs[t] = wc_ev_pc;
+                        st1_wpcs[t] = e0_wc_pc;
                     end
-                    arr_new[wc_ev_bid] = arr_row[wc_ev_bid] | (wc_ev_group & part_row[wc_ev_bid]);
+                    arr_new[e0_wc_bid] = arr_row[e0_wc_bid] | (e0_wc_group & part_row[e0_wc_bid]);
                     st1_bar_we = 1'b1;
                 end
                 2'd2: begin // yield: the group enters the Yielded state
-                    st1_wren = wc_ev_group;
+                    st1_wren = e0_wc_group;
                     for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
-                        st1_wpcs[t] = wc_ev_pc;
+                        st1_wpcs[t] = e0_wc_pc;
                     end
-                    st1_yielded = yielded[st1_wid] | wc_ev_group;
+                    st1_yielded = yielded[st1_wid] | e0_wc_group;
                     st1_bar_we = 1'b1;
                 end
                 default: begin // tmc: mask set, or per-group kernel exit
-                    if (wc_ev_tmc_tmask == 0) begin
-                        st1_amask = amask[st1_wid] & ~wc_ev_group;
+                    if (e0_wc_tmc_tmask == 0) begin
+                        st1_amask = amask[st1_wid] & ~e0_wc_group;
                         st1_warp_done = (st1_amask == 0);
                     end else begin
-                        st1_amask = wc_ev_tmc_tmask;
-                        st1_wren  = wc_ev_tmc_tmask;
+                        st1_amask = e0_wc_tmc_tmask;
+                        st1_wren  = e0_wc_tmc_tmask;
                         for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
-                            st1_wpcs[t] = wc_ev_pc;
+                            st1_wpcs[t] = e0_wc_pc;
                         end
                     end
                     st1_yielded = yielded[st1_wid] & st1_amask;
@@ -1216,19 +1285,19 @@ module VX_scheduler import VX_gpu_pkg::*; #(
                     arr_new[b]  = '0;
                 end
             end
-        end else if (in_srv) begin
+        end else if (e0_in) begin
             // init: all dispatched threads start alive at the entry PC with
             // clean barrier state
-            st1_amask   = in_ev_tmask;
+            st1_amask   = e0_in_tmask;
             st1_yielded = '0;
-            st1_wren    = in_ev_tmask;
+            st1_wren    = e0_in_tmask;
             for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
-                st1_wpcs[t] = in_ev_pc;
+                st1_wpcs[t] = e0_in_pc;
             end
             part_new   = '0;
             arr_new    = '0;
             st1_bar_we = 1'b1;
-        end else if (wk_srv) begin
+        end else if (e0_wk) begin
             // wake: nothing else in the warp can run - clear the yielded set
             st1_yielded = '0;
         end
@@ -1240,14 +1309,13 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         for (integer b = 0; b < ITS_NBAR; ++b) begin
             blocked |= arr_new[b];
         end
-        st1_runnable = st1_amask & ~blocked & ~st1_yielded;
-        // Wake-when-nothing-else-runnable, applied in-service so the just-
-        // yielded group's fresh resume PC comes from st1_wpcs (row bypass)
-        // rather than a next-cycle row read that races the yield's RAM write.
-        if ((st1_runnable == 0) && ((st1_amask & ~blocked & st1_yielded) != 0)) begin
-            st1_yielded  = st1_yielded & ~(st1_amask & ~blocked);
-            st1_runnable = st1_amask & ~blocked & ~st1_yielded;
-        end
+        // Barrier machinery ends here: register `blocked` (the union of un-released
+        // barrier arrivals) into stage 1. The runnable set and the wake-when-
+        // nothing-runnable un-yield are finalized in stage 2a, OFF this barrier-RAM
+        // path — so st1's critical cone stops at `blocked` instead of running
+        // (RAM read -> per-barrier release -> blocked -> runnable -> yielded) all in
+        // one cycle. The serviced warp stays grp_stale, so the extra stage is hidden.
+        st1_blocked = blocked;
         for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
             st1_pcs[t] = st1_wren[t] ? st1_wpcs[t] : tpc_row[t];
         end
@@ -1259,7 +1327,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     reg                                        s1_valid;
     reg [NW_WIDTH-1:0]                          s1_wid;
     reg [`VX_CFG_NUM_THREADS-1:0]              s1_amask, s1_yielded;
-    reg [`VX_CFG_NUM_THREADS-1:0]              s1_runnable;
+    reg [`VX_CFG_NUM_THREADS-1:0]              s1_blocked;
     reg [`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0] s1_pcs;
     reg                                        s1_warp_done, s1_keep_grp;
     reg [PC_BITS-1:0]                          s1_keep_pc;
@@ -1272,7 +1340,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             s1_wid       <= st1_wid;
             s1_amask     <= st1_amask;
             s1_yielded   <= st1_yielded;
-            s1_runnable  <= st1_runnable;
+            s1_blocked   <= st1_blocked;
             s1_pcs       <= st1_pcs;
             s1_warp_done <= st1_warp_done;
             s1_keep_grp  <= st1_keep_grp;
@@ -1286,11 +1354,27 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     // membership equality + group-cache write that follow, by registering the
     // winning PC (st2_grp_pc) into a third pipeline stage (s2_*). The extra cycle
     // of regroup latency is hidden: the serviced warp stays grp_stale until srv.
-    logic [PC_BITS-1:0] st2_grp_pc;
+    logic [PC_BITS-1:0]              st2_grp_pc;
+    logic [`VX_CFG_NUM_THREADS-1:0] st2_runnable, st2_yielded;
     always @(*) begin
         logic [`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0] lvl;
+        logic [`VX_CFG_NUM_THREADS-1:0] avail;
+        // Finalize runnable/yielded here, off the barrier-RAM path (stage 1 carried
+        // the registered `blocked`). avail = alive & unblocked, computed once;
+        // runnable is a mux, not a second `& ~yielded` reduction. Wake-when-nothing-
+        // runnable un-yields the available-but-yielded lanes; their fresh resume PC
+        // is already in s1_pcs (row-bypassed in st1), so the min-PC tree below picks
+        // it up without a racing row read.
+        avail = s1_amask & ~s1_blocked;
+        if (((avail & ~s1_yielded) == 0) && ((avail & s1_yielded) != 0)) begin
+            st2_yielded  = s1_yielded & ~avail;
+            st2_runnable = avail;
+        end else begin
+            st2_yielded  = s1_yielded;
+            st2_runnable = avail & ~s1_yielded;
+        end
         for (integer t = 0; t < `VX_CFG_NUM_THREADS; ++t) begin
-            lvl[t] = s1_runnable[t] ? s1_pcs[t] : {PC_BITS{1'b1}};
+            lvl[t] = st2_runnable[t] ? s1_pcs[t] : {PC_BITS{1'b1}};
         end
         for (integer l = 0; l < ITS_MIN_LVLS; ++l) begin
             for (integer i = 0; i < (`VX_CFG_NUM_THREADS >> (l + 1)); ++i) begin
@@ -1316,8 +1400,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             s2_valid     <= s1_valid;
             s2_wid       <= s1_wid;
             s2_amask     <= s1_amask;
-            s2_yielded   <= s1_yielded;
-            s2_runnable  <= s1_runnable;
+            s2_yielded   <= st2_yielded;
+            s2_runnable  <= st2_runnable;
             s2_pcs       <= s1_pcs;
             s2_warp_done <= s1_warp_done;
             s2_grp_pc    <= st2_grp_pc;
@@ -1405,7 +1489,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         assign schedule_data[i] = {thread_masks[i], warp_pcs[i]};
     end
 
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     `UNUSED_VAR (schedule_data)
     assign schedule_tmask = grp_mask[schedule_wid];
     assign schedule_pc    = grp_pc[schedule_wid];

@@ -521,8 +521,8 @@ package VX_gpu_pkg;
     // SCS: deschedule current split, rotate to next runnable. 4'hF is the last
     // free code with all gfx extensions on (4'hE collides with INST_SFU_RTUW).
     localparam INST_SFU_YIELD =  4'hF;
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
-    // ITS convergence barriers reuse the gfx code space; an NV_ITS+gfx build is
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
+    // ITS convergence barriers reuse the gfx code space; an ITS+gfx build is
     // rejected at elaboration (STATIC_ASSERT in VX_decode).
     localparam INST_SFU_BAR_ADD  = 4'hB;
     localparam INST_SFU_BAR_WAIT = 4'hC;
@@ -554,7 +554,7 @@ package VX_gpu_pkg;
             || (op == INST_SFU_PRED)
             || (op == INST_SFU_WSYNC)
             || (op == INST_SFU_YIELD)
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
             || (op == INST_SFU_BAR_ADD)
             || (op == INST_SFU_BAR_WAIT)
 `endif
@@ -946,7 +946,7 @@ package VX_gpu_pkg;
     } csr_args_t;
     `PACKAGE_ASSERT($bits(csr_args_t) == INST_ARGS_BITS)
 
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     localparam ITS_BAR_IDW = `CLOG2(`VX_CFG_ITS_NUM_BARRIERS);
     // ITS convergence-barrier control (wctl -> scheduler)
     typedef struct packed {
@@ -959,7 +959,7 @@ package VX_gpu_pkg;
 `endif
 
     typedef struct packed {
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
         logic [(INST_ARGS_BITS-8)-1:0] __padding;
         logic [4:0] bid; // convergence-barrier id (bar_add/bar_wait)
 `else

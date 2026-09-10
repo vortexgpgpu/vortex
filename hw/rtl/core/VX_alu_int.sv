@@ -347,7 +347,7 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     // SCS fused predicate-branch: resolve the per-lane continue (keep) set the
     // same way the warp-level compare resolves taken, restricted to the issued
     // group. The warp redirects to the loop target while any lane continues.
-    // NOTE: like the NV_ITS cone this assumes the whole warp is resolved in one
+    // NOTE: like the ITS cone this assumes the whole warp is resolved in one
     // pass (NUM_LANES == NUM_THREADS); lanes beyond NUM_LANES read 0.
     wire [`VX_CFG_NUM_THREADS-1:0] pbr_keep_raw;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_pbr_keep
@@ -393,11 +393,11 @@ module VX_alu_int import VX_gpu_pkg::*; #(
     end
     `IGNORE_UNOPTFLAT_END
 
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     // ITS: resolve each thread's branch independently so the scheduler can give
     // diverging threads their own PC. Indirect (static) branch targets remain
     // warp-level (`dest` from the last active lane), matching the reference.
-    `STATIC_ASSERT(NUM_LANES == `VX_CFG_NUM_THREADS, ("NV_ITS requires NUM_ALU_LANES == NUM_THREADS"))
+    `STATIC_ASSERT(NUM_LANES == `VX_CFG_NUM_THREADS, ("ITS requires NUM_ALU_LANES == NUM_THREADS"))
     wire [NUM_LANES-1:0] br_taken_mask;
     // Indirect (static) targets are per-thread: precompiled library code (libm)
     // contains jump tables whose targets diverge across lanes.

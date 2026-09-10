@@ -364,8 +364,8 @@ void AluUnit::execute(instr_trace_t* trace) {
 		Word offset = sext<Word>(brArgs.offset, 32);
 		switch (br_type) {
 		case BrType::BR: {
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
-			// NV_ITS: branches may diverge — each thread computes its own next PC.
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
+			// ITS: branches may diverge — each thread computes its own next PC.
 			Word fallthrough_pc = trace->PC + (brArgs.is_rvc ? 2 : 4);
 			for (uint32_t t = thread_start; t < num_threads; ++t) {
 				if (!trace->tmask.test(t)) continue;
@@ -408,7 +408,7 @@ void AluUnit::execute(instr_trace_t* trace) {
 				rd_data[t].i = link_pc;
 			}
 			warp.PC = trace->PC + offset;
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
 			for (uint32_t t = thread_start; t < num_threads; ++t) {
 				if (trace->tmask.test(t))
 					warp.tpc[t] = warp.PC;
@@ -426,8 +426,8 @@ void AluUnit::execute(instr_trace_t* trace) {
 			// JALR clears bit 0 of the computed target (RISC-V ISA); the RTL
 			// release build drops it implicitly via from_fullPC() truncation.
 			warp.PC = (rs1_data[thread_last].u + offset) & ~Word(1);
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
-			// NV_ITS: indirect jumps may diverge — per-thread targets.
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
+			// ITS: indirect jumps may diverge — per-thread targets.
 			for (uint32_t t = thread_start; t < num_threads; ++t) {
 				if (trace->tmask.test(t))
 					warp.tpc[t] = (rs1_data[t].u + offset) & ~Word(1);

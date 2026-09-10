@@ -54,10 +54,10 @@ VX_CFLAGS  += -Xclang -target-feature -Xclang +xvortex
 ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_DEFAULT, $(XCONFIGS)))
 VX_CFLAGS  += -mllvm -vortex-divergence-arch=ipdom
 endif
-ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_NV_ITS, $(XCONFIGS)))
+ifneq (,$(filter -DVX_CFG_DIVERGE_TYPE_ITS, $(XCONFIGS)))
 VX_CFLAGS  += -mllvm -vortex-divergence-arch=its
 endif
-# Unified yield toggle (SCS + NV_ITS): disable emission when the knob is off.
+# Unified yield toggle (SCS + ITS): disable emission when the knob is off.
 ifeq (,$(filter -DVX_CFG_SCS_YIELD_ENABLE, $(XCONFIGS)))
 VX_CFLAGS  += -mllvm -vortex-scs-yield=0
 endif

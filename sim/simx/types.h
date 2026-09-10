@@ -611,7 +611,7 @@ struct IntrWctlArgs {
   uint32_t is_cond_neg : 1;
   uint32_t is_sync_bar : 1;
   uint32_t is_bar_arrive : 1;
-  uint32_t bid : 5; // convergence-barrier id (NV_ITS bar_add/bar_wait)
+  uint32_t bid : 5; // convergence-barrier id (ITS bar_add/bar_wait)
   uint32_t is_tokenless : 1; // SCS fused vx_join (rs1==x0): pop stack top by LIFO
 };
 

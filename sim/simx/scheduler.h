@@ -76,11 +76,15 @@ struct scs_split_t {
   ThreadMask                 tmask;
   Word                       pc;
   std::stack<ipdom_entry_t>  ipdom;   // per-subgroup reconvergence nesting
+  std::stack<bool>           sbr_marker; // vx_sbr "diverged?" bits for this nesting
 
   scs_split_t(const ThreadMask& m, Word p)
     : tmask(m), pc(p) {}
   scs_split_t(const ThreadMask& m, Word p, const std::stack<ipdom_entry_t>& s)
     : tmask(m), pc(p), ipdom(s) {}
+  scs_split_t(const ThreadMask& m, Word p, const std::stack<ipdom_entry_t>& s,
+              const std::stack<bool>& mk)
+    : tmask(m), pc(p), ipdom(s), sbr_marker(mk) {}
 };
 #endif // VX_CFG_DIVERGE_TYPE_SCS
 
@@ -138,15 +142,29 @@ struct warp_t {
   std::vector<scs_split_t>          scs_runnable;    // committed runnable subgroups (round-robin pool)
 #endif // VX_CFG_DIVERGE_TYPE_SCS
 
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
-  // NV_ITS state: per-thread PCs with convergence barriers. tmask/PC remain
+  // Fused split-branch (vx_sbr) reconvergence marker stack (SCS-only in use, but
+  // declared unconditionally so the shared JOIN handler compiles for every diverge
+  // type). Classic SIMT stack discipline: vx_sbr pushes a real {tmask,pc} IPDOM
+  // entry ONLY when it actually diverges (so the costly stack stays bounded by
+  // NUM_THREADS-1), and pushes one bit here per open region recording whether it
+  // diverged. The tokenless vx_join peeks the top bit to decide whether to act and
+  // pops it when the level reconverges. Depth tracks static nesting, so this is a
+  // cheap bit-stack (mirrors the fixed-depth marker register planned for the RTL);
+  // it snapshots WITH the per-subgroup ipdom nesting in scs_split_t. The compiler
+  // guarantees a fused region never nests deeper than SBR_MARKER_DEPTH (else it
+  // leaves legacy split/join), which SimX backstops.
+  static constexpr uint32_t         SBR_MARKER_DEPTH = 32;
+  std::stack<bool>                  sbr_marker;      // LIFO of "diverged?" bits
+
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
+  // ITS state: per-thread PCs with convergence barriers. tmask/PC remain
   // the current issue group's scratch, recomputed at every schedule pick.
   std::vector<Word>                 tpc;             // per-thread pending PC
   ThreadMask                        amask;           // alive threads
   ThreadMask                        yielded;         // threads parked by vx_yield
   std::array<ThreadMask, VX_CFG_ITS_NUM_BARRIERS> bar_participate;
   std::array<ThreadMask, VX_CFG_ITS_NUM_BARRIERS> bar_arrived;
-#endif // VX_CFG_DIVERGE_TYPE_NV_ITS
+#endif // VX_CFG_DIVERGE_TYPE_ITS
 
   // Per-warp MSCRATCH (holds kernel arg pointer, set at CTA dispatch)
   Word                              mscratch;

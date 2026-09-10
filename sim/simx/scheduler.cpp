@@ -41,7 +41,7 @@ warp_t::warp_t(uint32_t num_threads)
   , scs_done(num_threads)
   , scs_parked(num_threads)
 #endif
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
   , tpc(num_threads, 0)
   , amask(num_threads)
   , yielded(num_threads)
@@ -73,8 +73,9 @@ void warp_t::reset() {
   this->scs_cooldown = 0;
   this->scs_pending.clear();
   this->scs_runnable.clear();
+  while (!this->sbr_marker.empty()) this->sbr_marker.pop();
 #endif
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
   std::fill(this->tpc.begin(), this->tpc.end(), 0);
   this->amask.reset();
   this->yielded.reset();
@@ -219,9 +220,10 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
   warp.scs_cooldown = 0;
   warp.scs_pending.clear();
   warp.scs_runnable.clear();
+  while (!warp.sbr_marker.empty()) warp.sbr_marker.pop();
 #endif
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
-  // NV_ITS: all dispatched threads start alive at the entry PC with clean
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
+  // ITS: all dispatched threads start alive at the entry PC with clean
   // barrier state.
   warp.amask = warp.tmask;
   for (uint32_t t = 0, nt = warp.tpc.size(); t < nt; ++t) {
@@ -265,6 +267,8 @@ static constexpr uint32_t SCS_BACKOFF = 256;
 // IPDOM stack is moved out (the running slot is about to hold a different
 // subgroup), giving the captured subgroup its own private reconvergence nesting.
 scs_split_t Scheduler::scs_capture_current(warp_t& warp) {
+  // The sbr marker stack is part of this subgroup's reconvergence nesting, so it
+  // is snapshotted alongside the IPDOM stack and cleared from the running slot.
   scs_split_t s(warp.tmask, warp.PC, warp.ipdom_stack);
   while (!warp.ipdom_stack.empty()) warp.ipdom_stack.pop();
   return s;
@@ -376,7 +380,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
       auto& warp = warps_.at(i);
       warp.PC = wspawn_.nextPC;
       warp.tmask.set(0);
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
       warp.amask = warp.tmask;
       warp.tpc[0] = warp.PC;
 #endif
@@ -408,7 +412,7 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
       break;
     }
   }
-#elif defined(VX_CFG_DIVERGE_TYPE_NV_ITS)
+#elif defined(VX_CFG_DIVERGE_TYPE_ITS)
   // ITS within-warp scheduling: pick the next warp with at least one runnable
   // thread (alive and not blocked at a convergence barrier), then form the
   // execution group from the runnable threads sharing the lowest pending PC.
@@ -590,8 +594,8 @@ void Scheduler::resume(uint32_t wid) {
 void Scheduler::advance_pc(const instr_trace_t* trace, uint32_t inc) {
   auto& warp = warps_.at(trace->wid);
   warp.PC += inc;
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
-  // NV_ITS: the issued group's threads advance to the fallthrough PC; a
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
+  // ITS: the issued group's threads advance to the fallthrough PC; a
   // PC-redirecting instruction (branch/jump/trap) overwrites tpc at execute,
   // during which the warp is fetch-stalled so no regrouping sees this value.
   for (uint32_t t = 0, nt = warp.tpc.size(); t < nt; ++t) {

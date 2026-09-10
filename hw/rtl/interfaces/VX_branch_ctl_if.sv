@@ -27,7 +27,7 @@ interface VX_branch_ctl_if import VX_gpu_pkg::*; ();
     wire                is_trap;
     wire                is_mret;
     wire [3:0]          trap_cause;
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     // ITS: per-thread branch outcome so the scheduler can diverge per-thread PCs.
     wire [`VX_CFG_NUM_THREADS-1:0] taken_mask;  // per-thread taken
     wire [`VX_CFG_NUM_THREADS-1:0] tmask;       // issued execution group
@@ -51,7 +51,7 @@ interface VX_branch_ctl_if import VX_gpu_pkg::*; ();
         output is_trap,
         output is_mret,
         output trap_cause
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
         ,output taken_mask,
         output tmask,
         output dest_its,
@@ -73,7 +73,7 @@ interface VX_branch_ctl_if import VX_gpu_pkg::*; ();
         input is_trap,
         input is_mret,
         input trap_cause
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
         ,input taken_mask,
         input tmask,
         input dest_its,

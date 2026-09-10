@@ -31,7 +31,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     // parked split for this warp back into the active mask (cancel the park).
     wire pred_restore_valid;
 `endif // VX_CFG_DIVERGE_TYPE_SCS
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     its_bar_t its;              // ITS: bar_add / bar_wait control
     wire [PC_BITS-1:0] its_pc;  // issuing PC+4 (TMC resume point)
 `endif
@@ -75,7 +75,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output pred_park_tmask,
         output pred_restore_valid,
 `endif
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
         output its,
         output its_pc,
 `endif
@@ -111,7 +111,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input pred_park_tmask,
         input pred_restore_valid,
 `endif
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
         input its,
         input its_pc,
 `endif

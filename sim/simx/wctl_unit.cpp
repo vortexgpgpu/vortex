@@ -21,7 +21,7 @@
 
 using namespace vortex;
 
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
 // Release a convergence barrier — clearing both masks so the bid is reusable —
 // once every participant still able to arrive has arrived: exited threads are
 // already masked out by TMC and yielded participants are excluded so a parked
@@ -102,7 +102,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
         warp.scs_done = warp.scs_done | (warp.tmask & ~next_tmask);
       }
 #endif
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
       // ITS: threads diverge on per-thread PCs, so a kernel-exit TMC reaches
       // the scheduler from whichever group gets there first — it must opt out
       // only the issuing group's threads (the patent's per-thread EXIT), never
@@ -143,7 +143,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
       release_warp = core_->wspawn(rs1_data.at(thread_last).u, rs2_data.at(thread_last).u);
     }
   } break;
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
   // ITS: the legacy IPDOM ops are architectural no-ops (divergence is handled
   // by per-thread PCs + convergence barriers). SPLIT still writes its result
   // register so IPDOM-compiled binaries remain executable.
@@ -194,46 +194,56 @@ bool WctlUnit::process(instr_trace_t* trace) {
   case WctlType::JOIN: {
     auto stack_size = warp.ipdom_stack.size();
     ThreadMask next_tmask = warp.tmask;
-    // Legacy join keys off the split stack-token; the SCS fused join (rs1==x0)
-    // is tokenless and simply acts on the stack top by LIFO (vx_sbr always
-    // pushed a paired entry).
-    bool act = wctlArgs.is_tokenless ? (stack_size != 0)
-                                     : (rs1_data.at(thread_last).u != stack_size);
+    // Legacy join keys off the split stack-token. The SCS fused join (rs1==x0)
+    // is tokenless: its paired vx_sbr pushed a marker bit recording whether it
+    // diverged (and thus pushed an IPDOM level). PEEK the marker to decide whether
+    // to act; a divergent join runs TWICE (swap, then reconverge) but must consume
+    // exactly one marker, so the pop is tied to the IPDOM-level pop below.
+    bool act = wctlArgs.is_tokenless
+             ? (!warp.sbr_marker.empty() && warp.sbr_marker.top())
+             : (rs1_data.at(thread_last).u != stack_size);
     // ipdom_stack pop + tmask update
     if (trace->eop) {
+      if (wctlArgs.is_tokenless && warp.sbr_marker.empty()) {
+        std::cout << "vx_sbr marker underflow: tokenless join without a matching "
+                  << "vx_sbr!\n" << std::flush;
+        std::abort();
+      }
       if (act) {
         if (warp.ipdom_stack.empty()) {
           std::cout << "IPDOM stack is empty!\n" << std::flush;
           std::abort();
         }
         if (warp.ipdom_stack.top().fallthrough) {
+          // Final reconverge: restore the original mask and pop the level. For a
+          // tokenless/fused join this is where the level's marker bit is consumed.
           next_tmask = warp.ipdom_stack.top().orig_tmask;
           warp.ipdom_stack.pop();
+          if (wctlArgs.is_tokenless) warp.sbr_marker.pop();
         } else {
+          // First arrival: defer to the sibling side. The marker stays until the
+          // deferred side returns here and reconverges (branch above).
           ThreadMask deferred = ~warp.tmask & warp.ipdom_stack.top().orig_tmask;
-          if (wctlArgs.is_tokenless && !deferred.any()) {
-            // Uniform vx_sbr: nothing was deferred to the sibling side, so the
-            // paired (always-pushed) entry reconverges and pops in one arrival.
-            next_tmask = warp.ipdom_stack.top().orig_tmask;
-            warp.ipdom_stack.pop();
-          } else {
 #ifdef VX_CFG_DIVERGE_TYPE_SCS
-            // SCS: capture the arriving subgroup's forward (post-join) PC before
-            // it is set aside, so the watchdog can resume it if the sibling spins.
-            warp.ipdom_stack.top().passed_tmask = warp.tmask;
-            warp.ipdom_stack.top().passed_pc    = trace->PC + 4;
-            warp.ipdom_stack.top().has_passed   = true;
+          // SCS: capture the arriving subgroup's forward (post-join) PC before it
+          // is set aside, so the watchdog can resume it if the sibling spins.
+          warp.ipdom_stack.top().passed_tmask = warp.tmask;
+          warp.ipdom_stack.top().passed_pc    = trace->PC + 4;
+          warp.ipdom_stack.top().has_passed   = true;
 #endif
-            next_tmask = deferred;
-            warp.PC = warp.ipdom_stack.top().else_PC;
-            warp.ipdom_stack.top().fallthrough = true;
-          }
+          next_tmask = deferred;
+          warp.PC = warp.ipdom_stack.top().else_PC;
+          warp.ipdom_stack.top().fallthrough = true;
         }
+      } else if (wctlArgs.is_tokenless) {
+        // Uniform fused sbr (marker=0, no IPDOM level was pushed): the join is a
+        // mask no-op but still consumes its one marker bit.
+        warp.sbr_marker.pop();
       }
       release_warp = core_->setTmask(trace->wid, next_tmask);
     }
   } break;
-#endif // !VX_CFG_DIVERGE_TYPE_NV_ITS
+#endif // !VX_CFG_DIVERGE_TYPE_ITS
   case WctlType::BAR: {
     uint32_t arg1 = rs1_data[thread_last].u;
     uint32_t arg2 = rs2_data[thread_last].u;
@@ -266,7 +276,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
     }
   } break;
   case WctlType::PRED: {
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
     // ITS: PRED is an architectural no-op (see SPLIT/JOIN above).
     if (trace->eop)
       release_warp = true;
@@ -318,7 +328,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
           // snapshot. Distinct per-loop entries (vs. one shared {mask,PC} slot)
           // are what stop two different blocking loops from conflating. Kept
           // pending (cancellable) until the loop reconverges or the warp stalls.
-          warp.scs_pending.emplace_back(just_off, trace->PC + 4, warp.ipdom_stack);
+          warp.scs_pending.emplace_back(just_off, trace->PC + 4, warp.ipdom_stack, warp.sbr_marker);
           sched.observe_split_contexts(warp);
         }
       }
@@ -334,7 +344,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
       release_warp = core_->setTmask(trace->wid, next_tmask);
     }
 #endif
-#endif // !VX_CFG_DIVERGE_TYPE_NV_ITS
+#endif // !VX_CFG_DIVERGE_TYPE_ITS
   } break;
   // SCS fused predicate-branch: keep = active & (rs1 cc rs2) = the loop-continue
   // (pred-kept) lanes. Mirrors the SCS PRED park/reconverge, then redirects the
@@ -379,7 +389,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
           // Lanes that left the loop this iteration park as a distinct pending
           // subgroup resuming at the fused op's fall-through (the loop exit),
           // carrying their reconvergence snapshot — same as legacy vx_pred.
-          warp.scs_pending.emplace_back(just_off, fall_pc, warp.ipdom_stack);
+          warp.scs_pending.emplace_back(just_off, fall_pc, warp.ipdom_stack, warp.sbr_marker);
           sched.observe_split_contexts(warp);
         }
       }
@@ -408,25 +418,41 @@ bool WctlUnit::process(instr_trace_t* trace) {
       other[t] = warp.tmask.test(t) && !c;
     }
     if (trace->eop) {
-      auto stack_size = warp.ipdom_stack.size();
-      if (stack_size == sched.ipdom_size()) {
-        std::cout << "IPDOM stack is full! size=" << stack_size << ", PC=0x"
-                  << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n"
-                  << std::flush;
+      bool divergent = keep.any() && other.any();
+      // Marker: record whether this fused split-branch diverged, so the paired
+      // tokenless vx_join knows whether an IPDOM level must be reconverged. Classic
+      // SIMT stack discipline — ONLY real divergence consumes the costly {tmask,pc}
+      // stack, keeping it bounded by NUM_THREADS-1. The 1-bit-per-region marker
+      // stack (bounded by static nesting) is the level-identity signal that the
+      // rd-less fused encoding cannot carry as a register token.
+      if (warp.sbr_marker.size() >= warp_t::SBR_MARKER_DEPTH) {
+        std::cout << "vx_sbr marker overflow: fused-region nesting > "
+                  << warp_t::SBR_MARKER_DEPTH << " (compiler must fall back to legacy "
+                  << "split/join here). PC=0x" << std::hex << warp.PC << std::dec
+                  << " (#" << trace->uuid << ")\n" << std::flush;
         std::abort();
       }
-      // Run the fall-through (`other`) side now, defer `keep` to the target. The
-      // join reconstructs the deferred mask as ~current & orig; when nothing is
-      // deferred (uniform) the tokenless join pops in one arrival.
-      bool run_other = other.any();
-      ThreadMask run_mask = run_other ? other : keep;
-      Word run_pc   = run_other ? fall_pc : target_pc;
-      Word defer_pc = run_other ? target_pc : fall_pc;
-      warp.ipdom_stack.emplace(warp.tmask, defer_pc);
-      if (keep.any() && other.any())
+      warp.sbr_marker.push(divergent);
+      if (divergent) {
+        auto stack_size = warp.ipdom_stack.size();
+        if (stack_size == sched.ipdom_size()) {
+          std::cout << "IPDOM stack is full! size=" << stack_size << ", PC=0x"
+                    << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n"
+                    << std::flush;
+          std::abort();
+        }
+        // Run the fall-through (`other`) side now, defer `keep` to the target; the
+        // join reconstructs the deferred mask as ~current & orig on the return arrival.
+        warp.ipdom_stack.emplace(warp.tmask, target_pc);
         core_->perf_stats().divergence += 1;
-      warp.PC = run_pc;
-      release_warp = core_->setTmask(trace->wid, run_mask);
+        warp.PC = fall_pc;
+        release_warp = core_->setTmask(trace->wid, other);
+      } else {
+        // Uniform: every active lane takes the same side — no divergence, no IPDOM
+        // level (marker=0 above), just redirect the whole subgroup.
+        warp.PC = keep.any() ? target_pc : fall_pc;
+        release_warp = core_->setTmask(trace->wid, keep.any() ? keep : other);
+      }
     }
 #else
     if (trace->eop)
@@ -438,13 +464,13 @@ bool WctlUnit::process(instr_trace_t* trace) {
     break;
   case WctlType::YIELD: {
     // vx_yield is decoded in every mode. Under SCS it deschedules the running
-    // split and rotates to the next runnable one; under NV_ITS the issuing
+    // split and rotates to the next runnable one; under ITS the issuing
     // group enters the Yielded state; elsewhere it just unlocks the warp. When
     // the compiler emits no yields (ablation), this case is simply never hit.
     if (trace->eop) {
 #ifdef VX_CFG_DIVERGE_TYPE_SCS
       release_warp = sched.yield_warp(trace->wid);
-#elif defined(VX_CFG_DIVERGE_TYPE_NV_ITS)
+#elif defined(VX_CFG_DIVERGE_TYPE_ITS)
       // ITS: resume PC is already tpc = PC+4; barriers whose missing
       // participants are now all yielded release so blocked threads proceed.
       warp.yielded |= warp.tmask;
@@ -457,7 +483,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
 #endif
     }
   } break;
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
   case WctlType::BAR_ADD: {
     // ITS: the executing group registers as participants of barrier <bid>;
     // threads are not masked and may diverge at the next branch.
@@ -487,7 +513,7 @@ bool WctlUnit::process(instr_trace_t* trace) {
       release_warp = true;
     }
   } break;
-#endif // VX_CFG_DIVERGE_TYPE_NV_ITS
+#endif // VX_CFG_DIVERGE_TYPE_ITS
   default:
     std::abort();
   }

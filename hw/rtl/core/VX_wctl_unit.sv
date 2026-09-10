@@ -49,7 +49,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
     wire is_wsync  = (execute_if.data.op_type == INST_SFU_WSYNC);
     wire is_yield  = (execute_if.data.op_type == INST_SFU_YIELD);
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     wire is_bar_add  = (execute_if.data.op_type == INST_SFU_BAR_ADD);
     wire is_bar_wait = (execute_if.data.op_type == INST_SFU_BAR_WAIT);
 `endif
@@ -117,7 +117,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     // tmc / pred
 
     wire [`VX_CFG_NUM_THREADS-1:0] pred_mask = has_then ? then_tmask : rs2_data[`VX_CFG_NUM_THREADS-1:0];
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     // PRED is an architectural no-op under per-thread PCs (warp unlock only).
     assign tmc_valid = wctl_valid && is_tmc;
 `else
@@ -218,7 +218,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 `ifdef VX_CFG_DIVERGE_TYPE_SCS
     assign wsync_valid = wctl_valid && is_wsync;
     assign yield_valid = wctl_valid && is_yield;
-`elsif VX_CFG_DIVERGE_TYPE_NV_ITS
+`elsif VX_CFG_DIVERGE_TYPE_ITS
     // vx_yield acts on the ITS Yielded thread state (its channel below); when
     // the compiler emits no yields (ablation) that channel simply idles. PRED
     // degrades to a warp unlock.
@@ -229,7 +229,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign wsync_valid = wctl_valid && (is_wsync || is_yield);
 `endif
 
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     // ITS: bar_add / bar_wait control, registered in lockstep with wctl_reg.
     its_bar_t its_r;
     assign its_r.valid   = wctl_valid && (is_bar_add || is_bar_wait || is_yield);
@@ -245,7 +245,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     VX_pipe_register #(
 `ifdef VX_CFG_DIVERGE_TYPE_SCS
         .DATAW (9 + `VX_CFG_NUM_THREADS + NW_WIDTH + WCTL_WIDTH),
-`elsif VX_CFG_DIVERGE_TYPE_NV_ITS
+`elsif VX_CFG_DIVERGE_TYPE_ITS
         .DATAW (6 + $bits(its_bar_t) + PC_BITS + NW_WIDTH + WCTL_WIDTH),
 `else
         .DATAW (6 + NW_WIDTH + WCTL_WIDTH),
@@ -268,7 +268,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             pred_park_tmask_w,
             pred_restore_valid_w,
 `endif
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
             its_r,
             its_pc_r,
 `endif
@@ -292,7 +292,7 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             warp_ctl_if.pred_park_tmask,
             warp_ctl_if.pred_restore_valid,
 `endif
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
             warp_ctl_if.its,
             warp_ctl_if.its_pc,
 `endif

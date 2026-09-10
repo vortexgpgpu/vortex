@@ -262,7 +262,7 @@ package VX_trace_pkg;
             `endif
                 INST_SFU_WSYNC: `TRACE(level, ("WSYNC"))
                 INST_SFU_YIELD: `TRACE(level, ("YIELD"))
-            `ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+            `ifdef VX_CFG_DIVERGE_TYPE_ITS
                 INST_SFU_BAR_ADD:  `TRACE(level, ("BAR_ADD %0d", op_args.wctl.bid))
                 INST_SFU_BAR_WAIT: `TRACE(level, ("BAR_WAIT %0d", op_args.wctl.bid))
             `endif

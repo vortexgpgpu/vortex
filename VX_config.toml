@@ -254,13 +254,13 @@ VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 
 [diverge]
 # string enum: 'DEFAULT' (upstream IPDOM baseline) | 'SCS' (ThreadSplit:
-# schedulable convergence stack + vx_yield) | 'NV_ITS' (per-thread PCs +
+# schedulable convergence stack + vx_yield) | 'ITS' (per-thread PCs +
 # convergence barriers). Selects the divergence architecture in both SimX and RTL.
 VX_CFG_DIVERGE_TYPE = "SCS"
-# Convergence barriers per warp (NV_ITS only); barrier-mask flops scale
+# Convergence barriers per warp (ITS only); barrier-mask flops scale
 # linearly with this, the 5-bit bid field allows up to 32.
 VX_CFG_ITS_NUM_BARRIERS = 8
-# Emit vx_yield on blocking-loop back-edges (SCS and NV_ITS). Governs the
+# Emit vx_yield on blocking-loop back-edges (SCS and ITS). Governs the
 # compiler via -mllvm -vortex-scs-yield; disabling reproduces the no-yield
 # ablation (SCS stall-watchdog only / ITS barriers-only).
 VX_CFG_SCS_YIELD_ENABLE = true
@@ -451,7 +451,7 @@ VX_CFG_XLEN = [32, 64]
 VX_CFG_FLEN = [32, 64]
 VX_CFG_FPU_TYPE = ["DPI", "DSP", "FPNEW", "STD"]
 VX_CFG_TCU_TYPE = ["DPI", "DSP", "BHF", "TFR", "FPNEW"]
-VX_CFG_DIVERGE_TYPE = ["DEFAULT", "SCS", "NV_ITS"]
+VX_CFG_DIVERGE_TYPE = ["DEFAULT", "SCS", "ITS"]
 
 [[param]]
 VX_CFG_DCACHE_NUM_REQS = "int"

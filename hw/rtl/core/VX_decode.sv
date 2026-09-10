@@ -35,10 +35,10 @@ module VX_decode import
     `UNUSED_VAR (clk)
     `UNUSED_VAR (reset)
 
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
 `ifdef EXT_GFX_ANY_ENABLE
-    // NV_ITS reuses the gfx SFU opcode space (see VX_gpu_pkg INST_SFU_BAR_*).
-    `STATIC_ASSERT(0, ("VX_CFG_DIVERGE_TYPE=NV_ITS is incompatible with graphics extensions"))
+    // ITS reuses the gfx SFU opcode space (see VX_gpu_pkg INST_SFU_BAR_*).
+    `STATIC_ASSERT(0, ("VX_CFG_DIVERGE_TYPE=ITS is incompatible with graphics extensions"))
 `endif
 `endif
 
@@ -673,7 +673,7 @@ module VX_decode import
                         is_wstall = 1; // hold the warp until the scheduler rotates it
                         op_type = INST_OP_BITS'(INST_SFU_YIELD);
                     end
-                `ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+                `ifdef VX_CFG_DIVERGE_TYPE_ITS
                     7'h06: begin // ITS convergence barriers; bid is a literal in the rs1 field
                         ex_type = EX_SFU;
                         is_wstall = 1;

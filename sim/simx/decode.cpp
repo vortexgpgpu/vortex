@@ -896,7 +896,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(IntrWctlArgs{});
       instr->set_wstall(true);
     } break;
-#ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+#ifdef VX_CFG_DIVERGE_TYPE_ITS
     case 6: { // ITS convergence barriers — bid is a 5-bit literal in the rs1 field
       instr->set_fu_type(FUType::SFU);
       IntrWctlArgs wctlArgs{};

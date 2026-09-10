@@ -35,7 +35,7 @@ module VX_scheduler_top import VX_gpu_pkg::*; #(
     input wire [`VX_CFG_NUM_THREADS-1:0]    wctl_pred_park_tmask,
     input wire                              wctl_pred_restore_valid,
 `endif
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     input its_bar_t                         wctl_its,
     input wire [PC_BITS-1:0]                wctl_its_pc,
 `endif
@@ -60,7 +60,7 @@ module VX_scheduler_top import VX_gpu_pkg::*; #(
     input wire [`VX_CFG_NUM_ALU_BLOCKS-1:0]                 branch_is_trap,
     input wire [`VX_CFG_NUM_ALU_BLOCKS-1:0]                 branch_is_mret,
     input wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][3:0]            branch_trap_cause,
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     input wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][`VX_CFG_NUM_THREADS-1:0] branch_taken_mask,
     input wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][`VX_CFG_NUM_THREADS-1:0] branch_tmask,
     input wire [`VX_CFG_NUM_ALU_BLOCKS-1:0][`VX_CFG_NUM_THREADS-1:0][PC_BITS-1:0] branch_dest_its,
@@ -138,7 +138,7 @@ module VX_scheduler_top import VX_gpu_pkg::*; #(
     assign warp_ctl_if.pred_park_tmask    = wctl_pred_park_tmask;
     assign warp_ctl_if.pred_restore_valid = wctl_pred_restore_valid;
 `endif
-`ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+`ifdef VX_CFG_DIVERGE_TYPE_ITS
     assign warp_ctl_if.its    = wctl_its;
     assign warp_ctl_if.its_pc = wctl_its_pc;
 `endif
@@ -164,7 +164,7 @@ module VX_scheduler_top import VX_gpu_pkg::*; #(
         assign branch_ctl_if[i].is_trap    = branch_is_trap[i];
         assign branch_ctl_if[i].is_mret    = branch_is_mret[i];
         assign branch_ctl_if[i].trap_cause = branch_trap_cause[i];
-    `ifdef VX_CFG_DIVERGE_TYPE_NV_ITS
+    `ifdef VX_CFG_DIVERGE_TYPE_ITS
         assign branch_ctl_if[i].taken_mask = branch_taken_mask[i];
         assign branch_ctl_if[i].tmask      = branch_tmask[i];
         assign branch_ctl_if[i].dest_its   = branch_dest_its[i];
