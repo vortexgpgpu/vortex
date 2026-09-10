@@ -41,6 +41,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     //                    warp mask + warp count + event count
     localparam EVENT_WIDTH = `CLOG2(`VX_CFG_MAX_BAR_EVENTS + 1);
     localparam BAR_STATEW = `VX_CFG_NUM_WARPS + NW_WIDTH + EVENT_WIDTH;
+    localparam GBAR_REQW = NB_WIDTH + NC_WIDTH;
     localparam USE_GBAR = (`VX_CFG_NUM_CORES > 1);
 
     logic [`VX_CFG_NUM_WARPS-1:0] mask_r, mask_n;
@@ -51,10 +52,18 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     logic                  unlock_valid_n;
     logic [`VX_CFG_NUM_WARPS-1:0] unlock_mask_n;
 
-    logic gbar_req_valid_r, gbar_req_valid_n;
-    logic [NB_WIDTH-1:0] gbar_req_id_r, gbar_req_id_n;
-    logic [NC_WIDTH-1:0] gbar_req_size_m1_r, gbar_req_size_m1_n;
+    // A response carries only its id after the barrier-store read port has moved on.
+    logic [`VX_CFG_NUM_BARRIERS-1:0] gbar_pending_r, gbar_pending_n;
+    logic [`VX_CFG_NUM_BARRIERS-1:0] gbar_pending_phase_r, gbar_pending_phase_n;
+    logic [`VX_CFG_NUM_BARRIERS-1:0][`VX_CFG_NUM_WARPS-1:0] gbar_waiters_r, gbar_waiters_n;
+
+    logic gbar_enqueue;
+    logic [NB_WIDTH-1:0] gbar_enqueue_id;
+    logic [NC_WIDTH-1:0] gbar_enqueue_size_m1;
+
     wire gbar_rsp_ready = ~req_valid;
+    wire gbar_rsp_fire = gbar_bus_if.rsp_valid && gbar_rsp_ready;
+    wire gbar_rsp_apply = USE_GBAR && gbar_rsp_fire && gbar_pending_r[gbar_bus_if.rsp_data.id];
 
     wire [`VX_CFG_NUM_WARPS-1:0] wait_mask = ((`VX_CFG_NUM_WARPS)'(1) << req_wid) | mask_r;
     wire [NW_WIDTH-1:0] next_count  = count_r + NW_WIDTH'(1);
@@ -67,9 +76,12 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         phase_n = phase_r;
         unlock_valid_n = 0;
         unlock_mask_n = 'x;
-        gbar_req_valid_n = gbar_req_valid_r;
-        gbar_req_id_n = gbar_req_id_r;
-        gbar_req_size_m1_n = gbar_req_size_m1_r;
+        gbar_pending_n = gbar_pending_r;
+        gbar_pending_phase_n = gbar_pending_phase_r;
+        gbar_waiters_n = gbar_waiters_r;
+        gbar_enqueue = 0;
+        gbar_enqueue_id = 'x;
+        gbar_enqueue_size_m1 = 'x;
 
         // local barrier scheduling
         if (req_valid && ~req_data.is_global) begin
@@ -134,20 +146,23 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                     // unlock warps if decrementing event to 0 and all warps have arrived
                     if ((req_data.phase == 0) && (events_r == EVENT_WIDTH'(1)) && (wait_mask == active_warps)) begin
                         mask_n = '0;
-                        gbar_req_valid_n = 1; // notify global barrier
-                        gbar_req_id_n = req_data.id;
-                        gbar_req_size_m1_n = NC_WIDTH'(count_r); // was saved in barrier_arrive
+                        gbar_enqueue = 1; // notify global barrier
+                        gbar_enqueue_id = req_data.id;
+                        gbar_enqueue_size_m1 = NC_WIDTH'(count_r); // was saved in barrier_arrive
                     end
                 end else if (req_data.is_arrive) begin
                     // barrier arrival
                     count_n = NW_WIDTH'(req_data.size_m1); // store participating number of cores
+                    if (req_data.is_sync) begin
+                        gbar_waiters_n[req_data.id][req_wid] = 1;
+                    end
                     if (wait_mask == active_warps && events_r == 0) begin
                         mask_n = '0;
-                        gbar_req_valid_n = 1; // notify global barrier
-                        gbar_req_id_n = req_data.id;
-                        gbar_req_size_m1_n = NC_WIDTH'(req_data.size_m1);
+                        gbar_enqueue = 1; // notify global barrier
+                        gbar_enqueue_id = req_data.id;
+                        gbar_enqueue_size_m1 = NC_WIDTH'(req_data.size_m1);
                     end else begin
-                        // Add arriving warp to wait mask
+                        // Add arriving warp to arrival mask
                         mask_n = wait_mask;
                     end
                 end else begin
@@ -157,21 +172,22 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
                         unlock_mask_n = (`VX_CFG_NUM_WARPS)'(1) << req_wid;
                     end else begin
                         // add warp to wait list
-                        mask_n = wait_mask;
+                        gbar_waiters_n[req_data.id][req_wid] = 1;
                     end
                 end
             end
 
             // global barrier response handling
-            if (gbar_bus_if.rsp_valid && gbar_rsp_ready && (gbar_bus_if.rsp_data.id == gbar_req_id_r)) begin
-                unlock_valid_n = 1; // release stalled warps
-                unlock_mask_n = active_warps; // release all active warps
-                phase_n = next_phase; // advance phase
+            if (gbar_rsp_apply) begin
+                unlock_valid_n = (gbar_waiters_r[gbar_bus_if.rsp_data.id] != '0);
+                unlock_mask_n = gbar_waiters_r[gbar_bus_if.rsp_data.id];
+                gbar_waiters_n[gbar_bus_if.rsp_data.id] = '0;
+                gbar_pending_n[gbar_bus_if.rsp_data.id] = 0;
             end
 
-            // global barrier request handshake
-            if (gbar_req_valid_r && gbar_bus_if.req_ready) begin
-                gbar_req_valid_n = 0;
+            if (gbar_enqueue) begin
+                gbar_pending_n[gbar_enqueue_id] = 1;
+                gbar_pending_phase_n[gbar_enqueue_id] = phase_r;
             end
         end
     end
@@ -182,8 +198,10 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     wire [BAR_ADDR_W-1:0] store_raddr = read_addr;
     reg [BAR_ADDR_W-1:0]  store_waddr;
     wire [BAR_STATEW-1:0] store_state_wdata = {mask_n, count_n, events_n};
-    wire                  store_phase_wdata = phase_n;
-    wire                  store_write = req_valid || gbar_bus_if.rsp_valid;
+    wire                  store_state_write = req_valid;
+    wire [BAR_ADDR_W-1:0] store_phase_waddr = gbar_rsp_apply ? BAR_ADDR_W'(gbar_bus_if.rsp_data.id) : store_waddr;
+    wire                  store_phase_wdata = gbar_rsp_apply ? ~gbar_pending_phase_r[gbar_bus_if.rsp_data.id] : phase_n;
+    wire                  store_phase_write = req_valid || gbar_rsp_apply;
 
     VX_dp_ram #(
         .DATAW    (BAR_STATEW),
@@ -194,7 +212,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
-        .write (store_write),
+        .write (store_state_write),
         .wren  (1'b1),
         .raddr (store_raddr),
         .waddr (store_waddr),
@@ -211,17 +229,17 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (1'b1),
-        .write (store_write),
+        .write (store_phase_write),
         .wren  (1'b1),
         .raddr (store_raddr),
-        .waddr (store_waddr),
+        .waddr (store_phase_waddr),
         .wdata (store_phase_wdata),
         .rdata (store_phase_rdata)
     );
 
     // Store reset handling
     reg [(1 << BAR_ADDR_BITS)-1:0] store_valids;
-    wire is_rdw_hazard = store_write && (store_waddr == store_raddr);
+    wire is_phase_rdw_hazard = store_phase_write && (store_phase_waddr == store_raddr);
 
     wire store_phase_rdata_v = store_valids[store_raddr] ? store_phase_rdata : '0;
 
@@ -230,17 +248,17 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
             store_valids <= '0;
             phase_r <= '0;
         end else begin
-            if (store_write) begin
+            if (store_state_write) begin
                 store_valids[store_waddr] <= 1'b1;
             end
-            phase_r <= store_write ? store_phase_wdata : store_phase_rdata_v;
+            phase_r <= is_phase_rdw_hazard ? store_phase_wdata : store_phase_rdata_v;
         end
         store_waddr <= store_raddr;
     end
 
     assign {mask_r, count_r, events_r} = store_valids[store_waddr] ? store_state_rdata : '0;
 
-    wire phase_async = is_rdw_hazard ? phase_n : store_phase_rdata_v;
+    wire phase_async = is_phase_rdw_hazard ? store_phase_wdata : store_phase_rdata_v;
 
     reg unlock_valid_r;
     reg [`VX_CFG_NUM_WARPS-1:0] unlock_mask_r;
@@ -258,35 +276,56 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     assign unlock_valid = unlock_valid_r;
     assign unlock_mask  = unlock_mask_r;
 
+    always @(posedge clk) begin
+        if (reset) begin
+            gbar_pending_r <= '0;
+            gbar_pending_phase_r <= '0;
+            gbar_waiters_r <= '0;
+        end else begin
+            gbar_pending_r <= gbar_pending_n;
+            gbar_pending_phase_r <= gbar_pending_phase_n;
+            gbar_waiters_r <= gbar_waiters_n;
+        end
+    end
+
     if (USE_GBAR) begin : g_gbar
 
-        always @(posedge clk) begin
-            if (reset) begin
-                gbar_req_valid_r <= 0;
-            end else begin
-                gbar_req_valid_r <= gbar_req_valid_n;
-            end
-            gbar_req_size_m1_r <= gbar_req_size_m1_n;
-            gbar_req_id_r <= gbar_req_id_n;
-        end
+        wire [GBAR_REQW-1:0] req_queue_data;
+        wire req_empty;
+        wire req_pop = ~req_empty && gbar_bus_if.req_ready;
 
-        assign gbar_bus_if.req_valid        = gbar_req_valid_r;
-        assign gbar_bus_if.req_data.id      = gbar_req_id_r;
-        assign gbar_bus_if.req_data.size_m1 = gbar_req_size_m1_r;
+        VX_fifo_queue #(
+            .DATAW  (GBAR_REQW),
+            .DEPTH  (1 << NB_WIDTH),
+            .LUTRAM (1)
+        ) req_queue (
+            .clk     (clk),
+            .reset   (reset),
+            .push    (gbar_enqueue),
+            .pop     (req_pop),
+            .data_in ({gbar_enqueue_id, gbar_enqueue_size_m1}),
+            .data_out(req_queue_data),
+            .empty   (req_empty),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (size)
+        );
+
+        assign gbar_bus_if.req_valid        = ~req_empty;
+        assign {gbar_bus_if.req_data.id, gbar_bus_if.req_data.size_m1} = req_queue_data;
         assign gbar_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID % `VX_CFG_NUM_CORES);
         assign gbar_bus_if.rsp_ready        = gbar_rsp_ready;
 
+        `RUNTIME_ASSERT(~gbar_enqueue || ~gbar_pending_r[gbar_enqueue_id], ("%s duplicate global barrier generation: id=%0d", INSTANCE_ID, gbar_enqueue_id))
+        `RUNTIME_ASSERT(~gbar_enqueue || (store_waddr == BAR_ADDR_W'(gbar_enqueue_id)), ("%s invalid global barrier slot: id=%0d, slot=%0d", INSTANCE_ID, gbar_enqueue_id, store_waddr))
     end else begin : g_nogbar
-
-        assign gbar_req_valid_r = 0;
-        assign gbar_req_size_m1_r = 'x;
-        assign gbar_req_id_r    = 'x;
 
         assign gbar_bus_if.req_valid = 0;
         assign gbar_bus_if.req_data  = 'x;
         assign gbar_bus_if.rsp_ready = 0;
 
-        `UNUSED_VAR ({gbar_req_valid_n, gbar_req_size_m1_n, gbar_req_id_n})
+        `UNUSED_VAR (gbar_enqueue_size_m1)
 
     end
 
@@ -296,9 +335,9 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
             `TRACE(2, ("%t: %s req: wid=%0d, bar_id=%0d, is_global=%b, is_event=%b, is_arrive=%b, is_sync=%b, phase=%b, size_m1=%0d\n",
                 $time, INSTANCE_ID, req_wid, req_data.id, req_data.is_global, req_data.is_event, req_data.is_arrive, req_data.is_sync, req_data.phase, req_data.size_m1))
         end
-        if (USE_GBAR && gbar_req_valid_n && ~gbar_req_valid_r) begin
+        if (USE_GBAR && gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
             `TRACE(2, ("%t: %s global-req: bar_id=%0d, size_m1=%0d\n",
-                $time, INSTANCE_ID, gbar_req_id_n, gbar_req_size_m1_n))
+                $time, INSTANCE_ID, gbar_bus_if.req_data.id, gbar_bus_if.req_data.size_m1))
         end
         if (USE_GBAR && gbar_bus_if.rsp_valid && gbar_rsp_ready) begin
             `TRACE(2, ("%t: %s global-rsp: bar_id=%0d\n",
