@@ -26,6 +26,9 @@ public:
   struct PerfStats {
     Cache::PerfStats l3cache;
     Memory::PerfStats memsim;
+#ifdef VX_CFG_VM_ENABLE
+    Ptw::PerfStats ptw;
+#endif
     uint64_t mem_reads = 0;
     uint64_t mem_writes = 0;
     uint64_t mem_latency = 0;
@@ -77,7 +80,7 @@ private:
   // the frame kick is forwarded to every cluster's raster engine instead.
   void forward_delegated_launch();
 
-  // True once any cluster's walker complex has latched a page fault.
+  // True once the device walker has latched a page fault.
   bool mmu_fault_pending() const;
 
   Kmu::Ptr    kmu_;
@@ -85,6 +88,10 @@ private:
   Memory::Ptr memsim_;
 #ifdef VX_CFG_VM_ENABLE
   uint64_t    mmu_satp_ = 0;    // assembled from the two DCR halves
+  // Device-level walker: one Ptw serves every cluster's L2 TLB, its PTE
+  // fetches on the LLC's last input slot (mirrors hw/rtl/Vortex.sv).
+  Ptw::Ptr    dev_ptw_;
+  PtwMux::Ptr dev_ptw_mux_;
 #endif
   RAM*        ram_ = nullptr;   // functional backing store (set by attach_ram)
   Cache::Ptr l3cache_;

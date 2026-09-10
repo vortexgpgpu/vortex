@@ -12,13 +12,19 @@
 #include "mmu_tlb.h"
 #include "tlb_types.h"
 #include <VX_types.h>
+#include <cassert>
 #include <cstddef>
 
 namespace vortex {
 
-Tlb::Tlb(uint32_t size)
+Tlb::Tlb(uint32_t size, uint32_t num_banks)
     : entries_(size)
-{}
+    , num_banks_(num_banks)
+    , bank_size_(size / num_banks)
+{
+  assert(num_banks != 0 && (num_banks & (num_banks - 1)) == 0);
+  assert(size % num_banks == 0);
+}
 
 static constexpr uint32_t VPN_LEVEL_BITS = TLB_VPN_LEVEL_BITS;
 static_assert((VX_VM_PT_SIZE / VX_VM_PTE_SIZE) == (1u << VPN_LEVEL_BITS),
@@ -26,7 +32,12 @@ static_assert((VX_VM_PT_SIZE / VX_VM_PTE_SIZE) == (1u << VPN_LEVEL_BITS),
 
 Tlb::Result Tlb::lookup(uint64_t vpn) {
   ++reads_;
-  for (auto& e : entries_) {
+  // Only the VPN's own bank is searched: a superpage translation serves
+  // lookups from other banks only after each re-walks and installs its own
+  // copy, exactly as the banked CAMs behave.
+  uint32_t base = bank_of(vpn) * bank_size_;
+  for (uint32_t i = base; i < base + bank_size_; ++i) {
+    auto& e = entries_[i];
     if (!e.valid) {
       continue;
     }
@@ -43,21 +54,24 @@ Tlb::Result Tlb::lookup(uint64_t vpn) {
 }
 
 void Tlb::fill(uint64_t vpn, uint64_t ppn, uint8_t flags, uint8_t level) {
-  // Prefer an invalid slot; fall back to a non-MRU victim. If all slots
-  // are valid AND every slot has mru=true, clear all MRU bits and evict slot 0.
+  // Victim selection stays within the VPN's bank: prefer an invalid slot,
+  // fall back to a non-MRU victim, and if the whole bank is valid + MRU,
+  // clear the bank's MRU bits and evict its slot 0.
+  uint32_t base = bank_of(vpn) * bank_size_;
   int victim = -1;
-  for (size_t i = 0; i < entries_.size(); ++i) {
+  for (uint32_t i = base; i < base + bank_size_; ++i) {
     if (!entries_[i].valid) { victim = (int)i; break; }
   }
   if (victim < 0) {
-    for (size_t i = 0; i < entries_.size(); ++i) {
+    for (uint32_t i = base; i < base + bank_size_; ++i) {
       if (!entries_[i].mru) { victim = (int)i; break; }
     }
   }
   if (victim < 0) {
-    // All entries are valid + MRU. Clear MRU bits and pick slot 0.
-    for (auto& e : entries_) e.mru = false;
-    victim = 0;
+    for (uint32_t i = base; i < base + bank_size_; ++i) {
+      entries_[i].mru = false;
+    }
+    victim = (int)base;
   }
 
   if (entries_[victim].valid) {

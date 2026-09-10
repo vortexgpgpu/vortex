@@ -66,7 +66,14 @@ inline constexpr uint32_t VX_CFG_DCACHE_NUM_REQS	= (VX_CFG_NUM_LSU_BLOCKS * DCAC
 inline constexpr uint32_t NUM_SOCKETS     = __UP(VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE);
 
 inline constexpr uint32_t VX_CFG_L2_NUM_REQS     = NUM_SOCKETS * VX_CFG_L1_MEM_PORTS;
+// +1 under VM: the device-level walker's PTE fetches attach as one more LLC
+// client on the last requestor slot (mirrors L3_NUM_REQS in VX_gpu_pkg.sv).
+#ifdef VX_CFG_VM_ENABLE
+inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS + 1;
+inline constexpr uint32_t VX_CFG_L3_PTW_IDX      = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS;
+#else
 inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS;
+#endif
 
 inline constexpr uint32_t PER_ISSUE_WARPS = VX_CFG_NUM_WARPS / VX_CFG_ISSUE_WIDTH;
 inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);

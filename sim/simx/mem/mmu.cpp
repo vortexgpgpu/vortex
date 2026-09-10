@@ -252,6 +252,10 @@ void Mmu::on_tick() {
   // while older requests are still parked, so only same-address order is
   // guaranteed — those share a VPN, hence one entry and its arrival-order
   // parked list. Replays drain ahead of new input on the same port.
+  // The entry array is banked with one lookup port per bank: the lowest
+  // port wins a bank each cycle and later ports on the same bank hold
+  // (the RTL's bank_conflict).
+  std::vector<bool> bank_taken(tlb_.num_banks(), false);
   for (uint32_t p = 0; p < num_ports_; ++p) {
     if (!replay_.at(p).empty()) {
       if (ReqOut.at(p).try_send(replay_.at(p).front())) {
@@ -273,6 +277,11 @@ void Mmu::on_tick() {
     }
 
     uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
+    uint32_t bank = tlb_.bank_of(vpn);
+    if (bank_taken.at(bank)) {
+      continue;
+    }
+    bank_taken.at(bank) = true;
     auto res = tlb_.lookup(vpn);
     if (res.hit) {
       // A cached translation still has to satisfy the access: the entry

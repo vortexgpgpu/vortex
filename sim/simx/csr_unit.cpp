@@ -218,7 +218,6 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         }
       #ifdef VX_CFG_VM_ENABLE
         auto mmu_perf = core_->mmu_perf_stats();
-        auto cluster_mmu_perf = core_->socket()->cluster()->perf_stats();
       #endif
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_MEM_READS, proc_perf.mem_reads);
@@ -234,8 +233,8 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_TLB_HITS, mmu_perf.tlb_hits);
         CSR_READ_64(VX_CSR_MPM_TLB_MISSES, mmu_perf.tlb_misses);
         CSR_READ_64(VX_CSR_MPM_TLB_EVICTS, mmu_perf.tlb_evictions);
-        CSR_READ_64(VX_CSR_MPM_PTW_WALKS, cluster_mmu_perf.ptw.walks);
-        CSR_READ_64(VX_CSR_MPM_PTW_LATENCY, cluster_mmu_perf.ptw.walk_latency);
+        CSR_READ_64(VX_CSR_MPM_PTW_WALKS, proc_perf.ptw.walks);
+        CSR_READ_64(VX_CSR_MPM_PTW_LATENCY, proc_perf.ptw.walk_latency);
       #endif
         }
       } break;
