@@ -196,6 +196,21 @@ if [[ "$RUN_MAP" == "1" && -n "$ABC_DRIVER_CELL" ]]; then
   } > "$ABC_CONSTR"
 fi
 
+if [[ "$RUN_MAP" == "1" ]]; then
+  # Bounded ABC mapping script -- see the comment at the `abc` command below
+  # for why the default script's sequential passes are excluded.
+  cat > "$OUT_DIR/abc_map.script" <<'ABCEOF'
+strash
+&get -n
+&nf {D}
+&put
+buffer
+upsize {D}
+dnsize {D}
+stime -p
+ABCEOF
+fi
+
 log "TOP=$TOP  RUN_SYNTH=$RUN_SYNTH RUN_MAP=$RUN_MAP RUN_STA=$RUN_STA"
 log "PDK=$PDK  Liberty=${#LIB_LIST[@]}"
 log "Sources=${#SRC_FILES[@]}  Incdirs=${#INC_DIRS[@]}  Defines=${#DEFINES[@]}"
@@ -242,10 +257,32 @@ log "Writing $YS"
 
   if [[ "$RUN_MAP" == "1" ]]; then
     printf "dfflibmap -liberty %q\n" "$LIB_TGT"
+    # Bounded ABC script: yosys's default -liberty script minus its sequential
+    # passes (&fraig; scorr; dc2; dretime; retime; &dch). Two reasons, both
+    # load-bearing:
+    #
+    #   - scorr/&dch have no runtime bound and blow up on flop count: gfx
+    #     (517914 DFFs) sat in them for 16+ hours without terminating, while
+    #     this script maps the identical netlist in under 4 minutes and meets
+    #     the same 2500ps target (1469ps critical path). core and rtu owed
+    #     their 4-5 hour builds to the same passes.
+    #   - retime/dretime move flops, so the gate would be measuring a design
+    #     ABC re-architected rather than the RTL as written. A synthesis
+    #     regression gate must not do sequential re-timing.
+    #
+    # The mapper (&nf) is unchanged from the default script, so results stay
+    # comparable in kind; baselines were re-recorded when this landed.
+    #
+    # The script goes through a FILE, not the +cmd;cmd inline form: the inline
+    # form's ;&{} characters have to survive printf %q, this .ys file AND
+    # yosys's tokenizer, and in practice they did not (%q's backslashes reached
+    # ABC verbatim, and yosys's brace handling relocated the first {D}'s
+    # closing brace). A file path has no metacharacters to lose. Yosys applies
+    # the {D} -> "-D <period>" substitution to script files all the same.
     if [[ -n "$ABC_CONSTR" ]]; then
-      printf "abc -markgroups -D %q -liberty %q -constr %q\n" "$ABC_PERIOD" "$LIB_TGT" "$ABC_CONSTR"
+      printf "abc -markgroups -D %q -liberty %q -constr %q -script %q\n" "$ABC_PERIOD" "$LIB_TGT" "$ABC_CONSTR" "$OUT_DIR/abc_map.script"
     else
-      printf "abc -markgroups -D %q -liberty %q\n" "$ABC_PERIOD" "$LIB_TGT"
+      printf "abc -markgroups -D %q -liberty %q -script %q\n" "$ABC_PERIOD" "$LIB_TGT" "$OUT_DIR/abc_map.script"
     fi
     printf "tee -o %q stat -liberty %q -top %q -width -tech cmos\n" "$RPT_DIR/stat_lib.rpt" "$LIB_TGT" "$TOP"
     printf "write_verilog -noattr -noexpr %q\n" "$NET_POST"
