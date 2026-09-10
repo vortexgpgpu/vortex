@@ -78,6 +78,14 @@ public:
   }
   int cp_reg_read(uint32_t off, uint32_t* value) {
     for (int i = 0; i < 256 && cp_.busy(); ++i) cp_.tick();
+    // Still busy after a full burst only when the CP is blocked on a kernel
+    // running on the async sim thread; park the host's MMIO poll on the
+    // future (bounded) instead of spinning a full core. Completion unblocks
+    // immediately, and a ready future returns without waiting, so DMA-only
+    // polling is never throttled.
+    if (cp_.busy() && future_.valid()) {
+      (void)future_.wait_for(std::chrono::microseconds(50));
+    }
     *value = cp_.mmio_read(off);
     return 0;
   }
@@ -108,6 +116,16 @@ public:
     free(reinterpret_cast<void*>(cp_addr));
     return 0;
   }
+
+  // Host memory is the process's own memory: always coherent.
+  int host_mem_pull(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
+  int host_mem_push(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
 
 private:
   // If `addr` falls in a registered host region, return it as a host
@@ -158,6 +176,8 @@ private:
       if (!future_.valid()) return false;
       return future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
     };
+    // ProcessorImpl decodes the MMU fault-report DCRs.
+    h.mmu_fault_report = true;
     return h;
   }
 

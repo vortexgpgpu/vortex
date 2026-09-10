@@ -14,8 +14,8 @@
 `include "VX_define.vh"
 
 module VX_decode import
-`ifdef EXT_GFX_ANY_ENABLE
-    VX_gfx_window_pkg::*,
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_pkg::*,
 `endif
     VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -175,6 +175,9 @@ module VX_decode import
             5'h14: amo_type = AMO_OP_MAX;
             5'h18: begin amo_type = AMO_OP_MIN; amo_unsigned = 1'b1; end
             5'h1c: begin amo_type = AMO_OP_MAX; amo_unsigned = 1'b1; end
+        `ifdef VX_CFG_EXT_ZACAS_ENABLE
+            5'h05: amo_type = AMO_OP_CAS;
+        `endif
             default: amo_type = AMO_OP_LR;
         endcase
     end
@@ -202,6 +205,13 @@ module VX_decode import
         // Default the LSU amo sideband to "not an AMO" so plain
         // loads/stores/fences/packed-loads don't propagate 'x through
         op_args.lsu.amo_valid = 1'b0;
+    `endif
+    `ifdef VX_CFG_EXT_OM_ENABLE
+        // Same reason: op_args defaults to 'x, and a stale export_mask makes
+        // VX_gfx_uops expand an ORDINARY store into an aperture record --
+        // rewriting its offset and renaming rs2:=rs3, i.e. corrupting the
+        // address of every store in the program.
+        op_args.lsu.export_mask = 2'b00;
     `endif
 
         case (opcode)
@@ -368,6 +378,16 @@ module VX_decode import
                 if (amo_type != AMO_OP_LR) begin
                     `USED_IREG (rs2);
                 end
+            `ifdef VX_CFG_EXT_ZACAS_ENABLE
+                // Compare-and-swap reads rd as well as writing it: rd holds
+                // the comparand. The third operand slot carries any register
+                // the decoder puts in it, so rd goes there directly -- the
+                // rs3 wire is the funct5 field for an AMO and is not used.
+                if (amo_type == AMO_OP_CAS) begin
+                    reg_ids[RV_RS3]  = make_reg_num(REG_TYPE_I, RV_REGS_BITS'(rd));
+                    use_regs[RV_RS3] = 1'b1;
+                end
+            `endif
             end
         `endif
             INST_SYS : begin
@@ -750,101 +770,107 @@ module VX_decode import
                     op_type = INST_OP_BITS'(INST_WGATHER);
                 end
             `ifdef VX_CFG_EXT_TEX_ENABLE
-                3'h5: begin // vx_tex4: R-type. rs1=lod, rs2=in-slot base, rd=texel+sync handle, funct7={out_slot,stage,mode}
+                3'h5: begin // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
+                            // TEX takes its operands in registers.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_TEX);
-                    op_args.tex.is_tex4  = 1'b1;
-                    op_args.tex.mode     = funct7[0];                       // 0=single (P1)
-                    op_args.tex.stage    = funct7[1 +: TEX_STAGE_BITS];
-                    op_args.tex.out_slot = funct7[6:2];                    // texel window slot base
-                    `USED_IREG (rd);    // texel writeback = scoreboard sync handle (a
-                                        // chained GETW reads the same texel from the window)
-                    `USED_IREG (rs1);   // explicit LOD
-                    `USED_IREG (rs2);   // (u,v) window input slot base (value)
+                    op_args.tex.stage = funct2[0 +: TEX_STAGE_BITS];
+                    `USED_IREG (rd);    // texel
+                    `USED_IREG (rs1);   // u
+                    `USED_IREG (rs2);   // v
+                    `USED_IREG (rs3);   // explicit LOD
                 end
             `endif
             `ifdef VX_CFG_EXT_OM_ENABLE
-                3'h2: begin // vx_om4: R-type, rd=x0 (fire-and-forget), rs1=quad descriptor, rs2=payload window slot base
-                    ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_OM);
-                    `USED_IREG (rs1);   // pos_mask (cov_mask + quad origin) | (face<<31)
-                    `USED_IREG (rs2);   // color/depth window slot base (value)
-                end
-            `endif
-            `ifdef EXT_GFX_ANY_ENABLE
-                3'h4: begin // GETWS: GP windowed read; warp-dimension index (slot) from rs1 (frag record)
-                    ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
-                    op_args.gfxw.slot  = funct7[6:2];
-                    op_args.gfxw.count = rs2[3:0];
-                    op_args.gfxw.uop   = '0;
-                    op_args.gfxw.op    = GFXW_OP_BITS'(GFXW_OP_GETWS);
-                    `USED_IREG (rd);    // GP window base register
-                    `USED_IREG (rs1);   // slot (block_idx) = warp-dimension index
-                end
-                3'h6: begin // graphics-window ops. funct2: 1=SETW, 2=GETWF, 3=GETW; 0=CB_RET (RTU).
-                    ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
-                    op_args.gfxw.slot      = funct7[6:2];
-                    op_args.gfxw.count     = rs2[3:0];
-                    op_args.gfxw.uop       = '0;
-                    if (funct2 == 2'd1) begin
-                        // SETW: write the slot at funct7[6:2] from rs1 (e.g. a
-                        // callback dispatcher staging the IS-computed hit_t). No rd.
-                        op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_SETW);
-                        `USED_IREG (rs1);  // value
-                    end else if (funct2 != 2'd0) begin
-                        // GETWF/GETW windowed read: start slot rides funct7[6:2],
-                        // count rides the rs2 instruction field (e.g. x3 -> 3).
-                        if (funct2 == 2'd2) begin
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_GETWF);
-                            `USED_FREG (rd);   // FP window base register
-                        end else begin
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_GETW);
-                            `USED_IREG (rd);   // GP window base register
-                        end
-                        `USED_IREG (rs1);      // status word (scoreboard chain)
-                    end
-                `ifdef VX_CFG_EXT_RTU_ENABLE
-                    else begin // funct2==0
-                        // CB_RET: dispatcher submits its per-lane action (rs1);
-                        // no writeback. An inline mret follows in the kernel.
-                        op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_CB_RET);
-                        `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
-                    end
-                `endif
+                3'h3: begin // vx_om_export: R4-type, rd=x0 (posted). The fragment export.
+                    // funct7[1:0] = {has_depth, has_colour}: a shader may emit colour
+                    // only (early-Z owns depth), depth only (z-prepass), or both
+                    // (gl_FragDepth). VX_gfx_uops expands this into one store uop per
+                    // set bit, locking the issue stage across the pair so no warp can
+                    // split it -- which is what bounds the OM ingress to one hold
+                    // register per source port.
+                    ex_type = EX_LSU;
+                    op_type = INST_OP_BITS'(INST_LSU_SW);   // word beats, full byteen
+                    // op_args is a union defaulting to 'x, so set EVERY field of the
+                    // variant: a field left stray resolves per-instance under
+                    // --x-assign unique, so the bug only shows up at cores > 1.
+                    op_args.lsu.is_store = 1'b1;
+                    op_args.lsu.is_float = 1'b0;            // integer colour/depth words
+                    op_args.lsu.export_mask = funct7[1:0];
+                    op_args.lsu.pack = 2'b00;               // plain addressing: the AGU
+                                                            // must add the depth uop's
+                                                            // offset, not a pack stride
+                    op_args.lsu.offset = '0;                // address is rs1, verbatim
+                    `USED_IREG (rs1);   // aperture record address
+                    `USED_IREG (rs2);   // colour  -> record + 0
+                    `USED_IREG (rs3);   // depth   -> record + 4
                 end
             `endif
             `ifdef VX_CFG_EXT_RTU_ENABLE
-                3'h7: begin // vx_rt_* v2 trace/wait. funct2: 0=TRACE2, 1=WAIT2.
+                3'h6: begin // hit-window reads / callback return. funct2: 0=CB_RET, 2=GETWF, 3=GETW.
                     ex_type = EX_SFU;
-                    op_type = INST_OP_BITS'(INST_SFU_GFXW);
-                    // TRACE2 (not WAIT2) suspends the warp until it commits, so
-                    // WAIT2/GETWF cannot fetch ahead: on a shader callback the
-                    // async trap takes over the warp parked at the WAIT2 PC, and
-                    // any younger op queued ahead of the dispatcher would
-                    // deadlock the in-order warp. The trace's retire unlock is
-                    // delivered by the RTU unit via async_trap_if (opaque path)
-                    // or the trap redirect (callback path). WAIT2 unlocks at
-                    // decode and blocks via its terminal-status dependency.
-                    is_wstall = (funct2 != 2'd1);
-                    op_args.gfxw.slot      = '0;
-                    op_args.gfxw.count     = '0;
-                    op_args.gfxw.uop       = '0;
+                    op_type = INST_OP_BITS'(INST_SFU_RTUW);
+                    op_args.rtuw.slot      = funct7[6:2];
+                    op_args.rtuw.count     = rs2[3:0];
+                    op_args.rtuw.uop       = '0;
+                    if (funct2 != 2'd0) begin
+                        // GETWF/GETW windowed read: start slot rides funct7[6:2],
+                        // count rides the rs2 instruction field (e.g. x3 -> 3).
+                        if (funct2 == 2'd2) begin
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_GETWF);
+                            `USED_FREG (rd);   // FP window base register
+                        end else begin
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_GETW);
+                            `USED_IREG (rd);   // GP window base register
+                        end
+                        `USED_IREG (rs1);      // status word (scoreboard chain)
+                    end else begin
+                        // CB_RET / CONTINUE: the lane's action (rs1) with the hit
+                        // distance (rs2) and attribute (rs3) it decided. No writeback.
+                        op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_CB_RET);
+                        // The shared decode above latches count from rs2, which for
+                        // a verdict is a real FP register, not x0. op_args is a
+                        // union: leave no field of a variant holding a stray value.
+                        op_args.rtuw.count = '0;
+                        `USED_IREG (rs1);  // action (ACCEPT/IGNORE/TERMINATE)
+                        `USED_FREG (rs2);  // hit distance t
+                        `USED_IREG (rs3);  // hit attribute
+                    end
+                end
+            `endif
+            `ifdef VX_CFG_EXT_RTU_ENABLE
+                3'h7: begin // vx_rt_* trace/wait. funct2: 0=TRACE, 1=WAIT.
+                    ex_type = EX_SFU;
+                    op_type = INST_OP_BITS'(INST_SFU_RTUW);
+                    // Both suspend the warp, and the RTU releases each through
+                    // sched_unlock_if:
+                    //   TRACE — a locked 4-uop burst; released once the last uop
+                    //           has handed the RTU its ray.
+                    //   WAIT  — the block itself; released when a record lands and
+                    //           the WAIT retires with its status. A returned
+                    //           candidate is serviced inline by the warp's CONTINUE
+                    //           loop (no trap), which re-enters WAIT and re-stalls.
+                    // WAIT owning its own stall is what keeps it from fetching ahead
+                    // of a response, so TRACE does not have to hold the warp until
+                    // the traversal answers.
+                    is_wstall = 1;
+                    op_args.rtuw.slot      = '0;
+                    op_args.rtuw.count     = '0;
+                    op_args.rtuw.uop       = '0;
                     case (funct2)
-                        2'd1: begin // WAIT2 — single-op terminal block
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_WAIT2);
+                        2'd1: begin // WAIT — single-op terminal block
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_WAIT);
                             `USED_IREG (rd);   // status
                             `USED_IREG (rs1);  // handle
                         end
-                        default: begin // TRACE2 — warp-uniform (funct2=0)
-                            op_args.gfxw.op = GFXW_OP_BITS'(GFXW_OP_TRACE2);
+                        default: begin // TRACE — warp-uniform (funct2=0)
+                            op_args.rtuw.op = RTUW_OP_BITS'(RTUW_OP_TRACE);
                             `USED_IREG (rd);   // handle
                             `USED_IREG (rs1);  // lane-packed config
                         end
                     endcase
                     // The f0..f7 ray window is read by HW convention (the
-                    // VX_gfxw_uops expander names f0..f7 per uop); it is not in
+                    // VX_gfx_uops expander names f0..f7 per uop); it is not in
                     // the architectural encoding, so it is not marked here.
                 end
             `endif

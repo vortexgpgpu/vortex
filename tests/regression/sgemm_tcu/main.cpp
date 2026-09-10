@@ -1,4 +1,5 @@
 #include "common.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -539,6 +540,7 @@ const char *kernel_file = "kernel.vxbin";
 uint32_t xm = 64;
 uint32_t xn = 64;
 uint32_t xk = 64;
+uint32_t xr = 1; // repeat count: relaunch the same kernel N times on one device session
 
 vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
@@ -554,12 +556,12 @@ kernel_arg_t kernel_arg = {};
 
 static void show_usage() {
   std::cout << "Vortex Sgemm TCU Test." << std::endl;
-  std::cout << "Usage: [-m: m] [-n N] [-k: K] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m: m] [-n N] [-k: K] [-r: repeat] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:i:o:hs")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:r:i:o:hs")) != -1) {
     switch (c) {
     case 'm':
       xm = atoi(optarg);
@@ -569,6 +571,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'k':
       xk = atoi(optarg);
+      break;
+    case 'r':
+      xr = atoi(optarg);
       break;
     case 'h':
       show_usage();
@@ -725,10 +730,7 @@ int main(int argc, char *argv[]) {
   std::vector<uint32_t> h_cycles(num_blocks);
 #endif
 
-  auto time_start = std::chrono::high_resolution_clock::now();
-
-  // launch kernel — args passed as a host blob (UVA), no args device buffer
-  std::cout << "launch kernel" << std::endl;
+  // launch args are constant across repeats — args passed as a host blob (UVA)
   vx_launch_info_t li = {};
   li.struct_size  = sizeof(li);
   li.kernel       = kernel;
@@ -739,53 +741,73 @@ int main(int argc, char *argv[]) {
   li.grid_dim[1]  = grid_dim[1];
   li.block_dim[0] = block_dim[0];
   li.block_dim[1] = block_dim[1];
-  vx_event_h launch_ev = nullptr;
-  RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
 
-  // read results back — chained after the launch on the same queue
-  std::cout << "download destination buffer" << std::endl;
-  vx_event_h read_ev = nullptr;
-  RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0,
-                           sizeC * sizeof(otype_t), 1, &launch_ev, &read_ev));
-#ifdef PROFILE_ENABLE
-  vx_event_h cyc_ev = nullptr;
-  RT_CHECK(vx_enqueue_read(queue, h_cycles.data(), cycles_buffer, 0,
-                           num_blocks * sizeof(uint32_t), 1, &read_ev, &cyc_ev));
-#endif
+  // reference is input-invariant across repeats — compute once
+  std::vector<otype_t> h_ref(sizeC);
+  matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), M, N, K);
 
-  std::cout << "wait for completion" << std::endl;
-#ifdef PROFILE_ENABLE
-  RT_CHECK(vx_event_wait_value(cyc_ev, 1, VX_TIMEOUT_INFINITE));
-  vx_event_release(cyc_ev);
-#else
-  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
-#endif
-  vx_event_release(read_ev);
-  vx_event_release(launch_ev);
-
-  auto time_end = std::chrono::high_resolution_clock::now();
-  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
-  printf("Elapsed time: %lg ms\n", elapsed);
-
-#ifdef PROFILE_ENABLE
-  // report TCU cycle counts
-  {
-    uint32_t max_cycles = 0;
-    for (auto c : h_cycles) max_cycles = std::max(max_cycles, c);
-    printf("TCU_CYCLES: max=%u (across %u blocks)\n", max_cycles, num_blocks);
-  }
-#endif
-
-  std::cout << "verify result" << std::endl;
+  // Every iteration recomputes the same result from the same inputs, so a
+  // mismatch on a later iteration means device state leaked across launches.
   int errors = 0;
-  {
-    std::vector<otype_t> h_ref(sizeC);
-    matmul_cpu(h_ref.data(), h_A.data(), h_B.data(), M, N, K);
+  for (uint32_t iter = 0; iter < xr; ++iter) {
+    std::fill(h_C.begin(), h_C.end(), otype_t(0));
 
-    for (uint32_t i = 0; i < h_ref.size(); ++i) {
-      if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, errors)) {
-        ++errors;
+    auto time_start = std::chrono::high_resolution_clock::now();
+
+    std::cout << "[iter " << iter << "] launch kernel" << std::endl;
+    vx_event_h launch_ev = nullptr;
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+
+    // read results back — chained after the launch on the same queue
+    std::cout << "[iter " << iter << "] download destination buffer" << std::endl;
+    vx_event_h read_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0,
+                             sizeC * sizeof(otype_t), 1, &launch_ev, &read_ev));
+#ifdef PROFILE_ENABLE
+    vx_event_h cyc_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, h_cycles.data(), cycles_buffer, 0,
+                             num_blocks * sizeof(uint32_t), 1, &read_ev, &cyc_ev));
+#endif
+
+    std::cout << "[iter " << iter << "] wait for completion" << std::endl;
+#ifdef PROFILE_ENABLE
+    RT_CHECK(vx_event_wait_value(cyc_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(cyc_ev);
+#else
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+#endif
+    vx_event_release(read_ev);
+    vx_event_release(launch_ev);
+
+    auto time_end = std::chrono::high_resolution_clock::now();
+    double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+    printf("[iter %u] Elapsed time: %lg ms\n", iter, elapsed);
+
+#ifdef PROFILE_ENABLE
+    // report TCU cycle counts
+    {
+      uint32_t max_cycles = 0;
+      for (auto c : h_cycles) {
+        max_cycles = std::max(max_cycles, c);
       }
+      printf("[iter %u] TCU_CYCLES: max=%u (across %u blocks)\n", iter, max_cycles, num_blocks);
+    }
+#endif
+
+    std::cout << "[iter " << iter << "] verify result" << std::endl;
+    int iter_errors = 0;
+    for (uint32_t i = 0; i < h_ref.size(); ++i) {
+      if (!Comparator<vt::OTYPE>::compare(h_C[i], h_ref[i], i, iter_errors)) {
+        ++iter_errors;
+      }
+    }
+    printf("[iter %u] %s (%d errors)\n", iter, iter_errors ? "MISMATCH" : "match", iter_errors);
+    errors += iter_errors;
+
+    // cumulative counters: a cycle count that stops advancing across
+    // iterations means the device is no longer retiring work
+    if (xr > 1) {
+      vx_device_dump_perf(device, stdout);
     }
   }
 

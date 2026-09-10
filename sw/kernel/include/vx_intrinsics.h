@@ -422,6 +422,16 @@ inline __attribute__((const)) size_t vx_shfl_down(size_t value, int bval, int cv
     return ret;
 }
 
+// Segment operands that scope a shuffle to a group of four adjacent lanes:
+// lane l's group is [l & ~3, (l & ~3) | 3]. The mask is spelled at the full
+// 6-bit operand width; the hardware truncates it to the lane-index width, and
+// ~3 truncates to ~3 at every width from 2 to 6 bits.
+//
+// A shuffle whose source lane is inactive returns the reader's own value, so a
+// group's lanes must all be active for a cross-lane read to see its neighbours.
+#define VX_QUAD_CVAL 3
+#define VX_QUAD_MASK 0x3c
+
 // “Butterfly” exchange using XOR with b as a bit‐mask: each lane swaps with lane ⊕ b.
 inline __attribute__((const)) size_t vx_shfl_bfly(size_t value, int bval, int cval, int mask) {
     size_t ret;
@@ -436,6 +446,58 @@ inline __attribute__((const)) size_t vx_shfl_idx(size_t value, int bval, int cva
     int bc = (mask << 12) | (cval << 6) | bval;
     __asm__ volatile (".insn r %1, 7, 1, %0, %2, %3" : "=r"(ret) : "i"(RISCV_CUSTOM0), "r"(value), "r"(bc));
     return ret;
+}
+
+//
+// Quad ops
+//
+// A pixel quad occupies four adjacent lanes, so lane l's horizontal neighbour is
+// l^1 and its vertical neighbour is l^2. A derivative is the difference against
+// that neighbour, which is why derivatives are undefined when a quad diverges:
+// an inactive source lane returns the reader's own value, so the difference
+// collapses to zero rather than faulting.
+
+// Exchange with a quad neighbour: dir 1 = horizontal, 2 = vertical.
+inline __attribute__((const)) size_t vx_quad_swap(size_t value, int dir) {
+    return vx_shfl_bfly(value, dir, VX_QUAD_CVAL, VX_QUAD_MASK);
+}
+
+// Read quad lane `idx` (0..3); every lane of the quad gets the same value.
+inline __attribute__((const)) size_t vx_quad_bcast(size_t value, int idx) {
+    return vx_shfl_idx(value, idx, VX_QUAD_CVAL, VX_QUAD_MASK);
+}
+
+// The exchange is symmetric, so a bare (neighbour - self) would hand the two lanes
+// of a pair opposite signs. A derivative points the same way for the whole quad --
+// towards increasing x for ddx, increasing y for ddy -- so the lane holding the FAR
+// pixel of the pair subtracts the other way. (A caller that only wants the magnitude
+// is free to skip this, but the sign is what makes these derivatives.)
+inline __attribute__((const)) int32_t vx_quad_ddx_i32(int32_t value) {
+    int32_t neighbor = (int32_t)vx_quad_swap((size_t)value, 1);
+    return (vx_thread_id() & 1) ? (value - neighbor) : (neighbor - value);
+}
+
+inline __attribute__((const)) int32_t vx_quad_ddy_i32(int32_t value) {
+    int32_t neighbor = (int32_t)vx_quad_swap((size_t)value, 2);
+    return (vx_thread_id() & 2) ? (value - neighbor) : (neighbor - value);
+}
+
+inline __attribute__((const)) float vx_quad_ddx_f32(float value) {
+    uint32_t bits;
+    __builtin_memcpy(&bits, &value, sizeof(bits));
+    uint32_t nbits = (uint32_t)vx_quad_swap((size_t)bits, 1);
+    float neighbor;
+    __builtin_memcpy(&neighbor, &nbits, sizeof(neighbor));
+    return (vx_thread_id() & 1) ? (value - neighbor) : (neighbor - value);
+}
+
+inline __attribute__((const)) float vx_quad_ddy_f32(float value) {
+    uint32_t bits;
+    __builtin_memcpy(&bits, &value, sizeof(bits));
+    uint32_t nbits = (uint32_t)vx_quad_swap((size_t)bits, 2);
+    float neighbor;
+    __builtin_memcpy(&neighbor, &nbits, sizeof(neighbor));
+    return (vx_thread_id() & 2) ? (value - neighbor) : (neighbor - value);
 }
 
 //

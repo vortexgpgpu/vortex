@@ -40,6 +40,21 @@
    sourcing is required and multiple Vortex trees can coexist on one
    machine without a global `~/.bashrc` clobber.
 
+   Useful configure options: `--xlen={32,64}` selects the ISA width and
+   `--prefix=<path>` the install location. Two SimX build knobs are plain
+   config defines, passed like any `VX_CFG_*` option through `CONFIGS`:
+   `-DSIMX_MT=<T>` runs the simulator on `T` host threads (default serial;
+   cycle results are bit-identical for every thread count), and
+   `-DSIMX_FUNCTIONAL` builds the **functional** simulation kernel (timing
+   disabled, for full-speed architectural runs such as conformance suites —
+   functional cycle counts are non-physical and must never be used for
+   performance comparisons):
+
+   ```
+   $ CONFIGS="-DSIMX_MT=4" ./ci/blackbox.sh --driver=simx --app=sgemm --cores=4 --l2cache
+   $ CONFIGS="-DSIMX_FUNCTIONAL" ./ci/blackbox.sh --driver=simx --app=sgemm
+   ```
+
    `make install` lays out the Vortex SDK under `$VORTEX_PATH` (default
    `<build>/install`, override with `../configure --prefix=...`):
 

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU Intersection Shader (IS) smoke — Phase 6.
+// PRISM RTU Intersection Shader (IS) smoke.
 //
 // Scene has one primitive whose tri.flags carries PROCEDURAL (bit 1)
 // instead of OPAQUE. The walker still uses the triangle vertices to

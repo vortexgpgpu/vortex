@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU multi-triangle smoke kernel — Phase 4.
+// PRISM RTU multi-triangle smoke kernel.
 //
 // Single lane fires one ray at a scene of N opaque triangles. RtuCore
 // walks all N tris and returns the closest. No AHS callback path.

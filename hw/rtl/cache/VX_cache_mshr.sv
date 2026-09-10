@@ -53,6 +53,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter WRITEBACK         = 0,          // Enable cache writeback
     parameter AMO_ENABLE        = 0,          // Per-entry AMO tracking (probe outputs)
     parameter AMO_PASSTHRU      = 0,          // Non-LLC passthrough: AMO entries never coalesce
+    parameter WORD_SEL_WIDTH    = 1,          // word-in-line select width (order-hazard granularity)
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE)
 ) (
@@ -82,6 +83,13 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire [`CS_LINE_ADDR_WIDTH-1:0] probe_addr,
     output wire                         probe_pending_ld,
     output wire                         probe_pending_amo,
+    // payload-free companions for a registered consumer of the probes: any
+    // persisted entry of the class, and the cycle an entry becomes persisted
+    // (the transition a result registered last cycle cannot have seen).
+    output wire                         probe_any_ld,
+    output wire                         probe_any_amo,
+    output wire                         persist_ld,
+    output wire                         persist_amo,
 
     // dequeue
     output wire                         dequeue_valid,
@@ -95,11 +103,14 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire                          allocate_valid,
     input wire [`CS_LINE_ADDR_WIDTH-1:0] allocate_addr,
     input wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] allocate_sector,
+    input wire [WORD_SEL_WIDTH-1:0]     allocate_word_idx,
     input wire                          allocate_rw,
     input wire                          allocate_is_amo, // AMO: never coalesce
     input wire [DATA_WIDTH-1:0]         allocate_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_id,
     output wire                         allocate_pending,
+    output wire                         allocate_pending_wr,
+    output wire                         allocate_pending_ovl,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_previd,
     output wire                         allocate_ready,
 
@@ -108,7 +119,13 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire                          finalize_is_release,
     input wire                          finalize_is_pending,
     input wire [MSHR_ADDR_WIDTH-1:0]    finalize_previd,
-    input wire [MSHR_ADDR_WIDTH-1:0]    finalize_id
+    input wire [MSHR_ADDR_WIDTH-1:0]    finalize_id,
+
+    // Authoritative occupancy. The bank also tracks outstanding requests with a
+    // VX_pending_size counter, but that counter is a proxy fed by separate
+    // increment and decrement events and can drift from the entries actually
+    // held. A flush gated on the proxy alone hangs forever when it drifts high.
+    output wire                         empty
 );
     `UNUSED_PARAM (BANK_ID)
 
@@ -117,6 +134,12 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // different-sector misses get independent fills (each replay then hits its
     // own filled sector). Zero-width-equivalent (1 bit, all 0) when 1 sector/line.
     reg [`UP(`CS_SECTOR_SEL_BITS)-1:0] sector_table [0:MSHR_SIZE-1];
+    // Per-entry word-in-line select, kept outside the payload RAM so the
+    // allocate probe can compare it: the hit-demotion order hazard is
+    // word-granular (a chained entry constrains only requests that touch
+    // the same word), and demoting on the {line, sector} match alone costs
+    // streaming workloads their hits-under-drain.
+    reg [WORD_SEL_WIDTH-1:0] word_table [0:MSHR_SIZE-1];
     reg [MSHR_ADDR_WIDTH-1:0] next_index [0:MSHR_SIZE-1];
 
     reg [MSHR_SIZE-1:0] valid_table, valid_table_n;
@@ -148,15 +171,36 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         // after the tail is invalidated and be orphaned (nothing would wake
         // it). Excluded, the requester proceeds as a fresh hit/miss, which is
         // safe — a draining chain implies its fill has already completed.
+        // The same hazard applies to an entry being released (a hit) this
+        // cycle: a released head never fills, so a request that linked behind
+        // it would wait forever. Exclude it too — the requester re-looks-up
+        // and hits the line the releasing entry just installed.
         assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr)
                               && (sector_table[i] == allocate_sector) && ~amo_mask[i]
-                              && ~(dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i)));
+                              && ~(dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i)))
+                              && ~(finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
     end
+
+    // Free-slot select input, retimed off the bank replay chain. Rather than
+    // deriving the next-free id from valid_table_n -- which is assembled inside
+    // the multi-purpose dequeue/finalize/allocate update block, downstream of the
+    // combinational dequeue_ready -- build it directly from the registered
+    // occupancy plus this cycle's at-most-one-per-source slot deltas. free_set is
+    // bit-identical to ~valid_table_n: a dequeue or a release frees its slot, and
+    // the allocate self-set (which wins in valid_table_n) masks its slot out so
+    // the next id never re-selects the slot being allocated this cycle.
+    wire [MSHR_SIZE-1:0] dequeue_free_oh, finalize_free_oh, allocate_set_oh;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_free_delta
+        assign dequeue_free_oh[i]  = dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i));
+        assign finalize_free_oh[i] = finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i));
+        assign allocate_set_oh[i]  = allocate_fire && (allocate_id == MSHR_ADDR_WIDTH'(i));
+    end
+    wire [MSHR_SIZE-1:0] free_set = (~valid_table | dequeue_free_oh | finalize_free_oh) & ~allocate_set_oh;
 
     VX_priority_encoder #(
         .N (MSHR_SIZE)
     ) allocate_sel (
-        .data_in   (~valid_table_n),
+        .data_in   (free_set),
         .index_out (allocate_id_n),
         .valid_out (allocate_rdy_n),
         `UNUSED_PIN (onehot_out)
@@ -226,6 +270,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         if (allocate_fire) begin
             addr_table[allocate_id] <= allocate_addr;
             sector_table[allocate_id] <= allocate_sector;
+            word_table[allocate_id] <= allocate_word_idx;
             write_table[allocate_id] <= allocate_rw;
         end
 
@@ -246,6 +291,35 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
     `RUNTIME_ASSERT(~(fill_valid && ~valid_table[fill_id]), ("*** %s invalid fill: addr=0x%0h, id=%0d", INSTANCE_ID,
         `CS_BANK_TO_FULL_ADDR(addr_table[fill_id], BANK_ID), fill_id))
+
+    // A walk confined to its own live chain never lands on an entry that is
+    // already invalid. next_table and next_index are cleared only at allocate,
+    // so an entry that is dequeued or released keeps its successor link; a walk
+    // that reaches it follows that stale link back into entries already
+    // replayed and re-emits their payloads.
+    `RUNTIME_ASSERT(~(dequeue_fire && ~valid_table[dequeue_id]), ("*** %s dequeue on invalid entry: id=%0d, next=%0b", INSTANCE_ID,
+        dequeue_id, next_table[dequeue_id]))
+
+`ifdef SIMULATION
+    // Every entry the dequeue pointer lands on must belong to the line whose
+    // fill opened the chain, whichever way the pointer got there (fill,
+    // next_index walk, or same-cycle late-joiner splice). Checked here rather
+    // than at the bank's forward port because only the MSHR can see all three.
+    reg [`CS_LINE_ADDR_WIDTH-1:0] chain_addr_r;
+    always @(posedge clk) begin
+        if (fill_valid) begin
+            chain_addr_r <= addr_table[fill_id];
+        end
+    end
+    `RUNTIME_ASSERT(~(dequeue_val && ~fill_valid && (addr_table[dequeue_id] != chain_addr_r)), ("*** %s chain entry on foreign line: dequeue_id=%0d, entry=0x%0h, chain=0x%0h", INSTANCE_ID,
+        dequeue_id, `CS_BANK_TO_FULL_ADDR(addr_table[dequeue_id], BANK_ID), `CS_BANK_TO_FULL_ADDR(chain_addr_r, BANK_ID)))
+
+    // The slot the dequeue pointer names must not be handed to another line
+    // while the pointer still rests on it: `dequeue_addr` is combinational on
+    // `addr_table[dequeue_id_r]`, so the rewrite retargets an in-flight replay.
+    `RUNTIME_ASSERT(~(allocate_fire && dequeue_val && (allocate_id == dequeue_id)), ("*** %s allocate over live dequeue pointer: id=%0d, addr=0x%0h", INSTANCE_ID,
+        allocate_id, `CS_BANK_TO_FULL_ADDR(allocate_addr, BANK_ID)))
+`endif
 
     VX_dp_ram #(
         .DATAW (DATA_WIDTH),
@@ -306,12 +380,36 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
             assign probe_ld[i]  = addr_match && ~amo_table[i];
             assign probe_amo[i] = addr_match && amo_table[i];
         end
-        assign probe_pending_ld  = (| probe_ld);
-        assign probe_pending_amo = (| probe_amo);
+        // Balanced OR-tree (depth ceil(log2(MSHR_SIZE))) keeps the associative
+        // probe result off the serial LUT chain Vivado infers for a wide `|`.
+        VX_reduce_tree #(
+            .IN_W  (1),
+            .OUT_W (1),
+            .N     (MSHR_SIZE),
+            .OP    ("|")
+        ) probe_ld_reduce (
+            .data_in  (probe_ld),
+            .data_out (probe_pending_ld)
+        );
+        VX_reduce_tree #(
+            .IN_W  (1),
+            .OUT_W (1),
+            .N     (MSHR_SIZE),
+            .OP    ("|")
+        ) probe_amo_reduce (
+            .data_in  (probe_amo),
+            .data_out (probe_pending_amo)
+        );
+
+        assign probe_any_ld  = |(valid_table & persisted_table & ~amo_table);
+        assign probe_any_amo = |(valid_table & persisted_table &  amo_table);
+        assign persist_ld  = finalize_valid && ~finalize_is_release && ~amo_table[finalize_id];
+        assign persist_amo = finalize_valid && ~finalize_is_release &&  amo_table[finalize_id];
     end else begin : g_no_amo
         assign amo_mask = '0;
         assign probe_pending_ld  = 1'b0;
         assign probe_pending_amo = 1'b0;
+        assign {probe_any_ld, probe_any_amo, persist_ld, persist_amo} = '0;
         `UNUSED_PARAM (AMO_PASSTHRU)
         `UNUSED_VAR ({allocate_is_amo, probe_addr})
     end
@@ -327,9 +425,50 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         assign allocate_pending = |(addr_matches & ~write_table);
     end
 
+    // Word-granular order-hazard probes. A chained entry only constrains a
+    // requester that touches the SAME word: the entry's replay reads or
+    // writes exactly its own word, so disjoint-word hits under a draining
+    // chain are hazard-free and keep the fast release path.
+    wire [MSHR_SIZE-1:0] word_matches;
+    for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_word_matches
+        assign word_matches[i] = (word_table[i] == allocate_word_idx);
+    end
+    // The probed word's chain holds a WRITE that has not reached the data array
+    // yet. A same-word hit completing ahead of it would read pre-store data (or
+    // a write-hit would be overwritten by the older store's replay), inverting
+    // arrival order — the bank demotes such a hit to a chained miss.
+    assign allocate_pending_wr  = |(addr_matches & write_table & word_matches);
+    // Any undrained same-word entry: an incoming WRITE hit must not land ahead
+    // of an older chained read of the same word.
+    assign allocate_pending_ovl = |(addr_matches & word_matches);
+
     assign dequeue_valid = dequeue_val;
-    assign dequeue_addr  = addr_table[dequeue_id_r];
-    assign dequeue_rw    = write_table[dequeue_id_r];
+    // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather
+    // than read live at dequeue_id_r a cycle later. The entry's slot can be
+    // freed and reallocated while the pointer still names it -- the free set
+    // offers a slot released by a dequeue or a finalize in the same cycle -- and
+    // a live read then retargets an in-flight replay onto the new occupant's
+    // line. The bank's fill-forward path answers that replay from the staged
+    // sector of the line it was actually issued for, so the requester silently
+    // receives another line's data; the guard for it is a RUNTIME_ASSERT, which
+    // synthesis compiles out.
+    //
+    // Taking the address from the same snapshot as the payload also removes an
+    // inconsistency that was there regardless: the payload was a snapshot and
+    // the address was not, so the two could describe different entries.
+    //
+    // Withholding the slot from the free set instead deadlocks: the pointer can
+    // park on a blocked replay, and if that slot is the last free one the core
+    // stalls and the replay never drains.
+    reg [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr_r;
+    reg dequeue_rw_r;
+    always @(posedge clk) begin
+        dequeue_addr_r <= addr_table[dequeue_id_n];
+        dequeue_rw_r   <= write_table[dequeue_id_n];
+    end
+
+    assign dequeue_addr  = dequeue_addr_r;
+    assign dequeue_rw    = dequeue_rw_r;
     assign dequeue_id    = dequeue_id_r;
 
 `ifdef DBG_TRACE_CACHE
@@ -377,5 +516,11 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         end
     end
 `endif
+
+    // No entry held. Reported straight off the valid mask so a consumer that
+    // needs the truth -- the flush sweep, which must not start while an entry is
+    // outstanding and must not be blocked forever when none is -- does not have
+    // to trust a separately-maintained count.
+    assign empty = ~(| valid_table);
 
 endmodule

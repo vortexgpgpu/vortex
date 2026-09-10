@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Build fragment for device fragment-kernels that use the SIMT software
-# output-merger sw/common/gfx_sw.h::om_fragment (the gfx_v2 §6.5 SW back end).
+# output-merger sw/common/gfx_sw.h::om_fragment (the SW back end).
 #
 # om_fragment's full depth + stencil + blend + logic-op merge inlines a large
 # divergent CFG into the fragment kernel — past the Vortex divergence pass's

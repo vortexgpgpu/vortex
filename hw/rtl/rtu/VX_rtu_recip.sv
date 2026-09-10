@@ -45,12 +45,20 @@ module VX_rtu_recip import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
         localparam KIDX = 10;
         localparam SEED_N = 1 << KIDX;
         reg [31:0] seed_rom [0:SEED_N-1];
+        // round(2^31 / a) in exact integer arithmetic. Substituting
+        // a = (2*SEED_N + 2i + 1) / (2*SEED_N) gives
+        //     round(2^32 * SEED_N / d) == (2^33*SEED_N + d) / (2*d),  d odd
+        // which is bit-identical to the float form for every entry: d is odd
+        // and > 1, so 2^33*SEED_N/d is never a half-integer and the exact and
+        // double-rounded results cannot disagree. Written this way because
+        // yosys rejects `real` outright (TOK_REAL), and the ASIC flow needs
+        // this module to elaborate.
         initial begin
             for (int i = 0; i < SEED_N; i++) begin
-                real a, y;
-                a = 1.0 + (real'(i) + 0.5) / real'(SEED_N);
-                y = (1.0 / a) * 2147483648.0;            // * 2^31
-                seed_rom[i] = 32'($rtoi(y + 0.5));
+                reg [63:0] d, num;
+                d   = 64'(2*SEED_N + 2*i + 1);
+                num = (64'd1 << 33) * SEED_N;
+                seed_rom[i] = 32'((num + d) / (2 * d));
             end
         end
 

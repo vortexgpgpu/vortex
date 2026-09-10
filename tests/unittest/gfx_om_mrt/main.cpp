@@ -1,4 +1,4 @@
-// gfx_v2 SW output-merger MRT unit test (§ W6).
+// gfx_v2 SW output-merger MRT unit test.
 //
 // Proves the on-device SIMT software fallback for multiple render targets —
 // gfx_sw.h om_fragment_mrt() — writes N colour attachments from one fragment

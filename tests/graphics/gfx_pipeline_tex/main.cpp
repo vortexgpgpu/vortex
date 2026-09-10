@@ -98,7 +98,7 @@ static TileMap binning_oracle(const std::vector<setup_vertex_t>& verts, uint32_t
   num_tiles = graphics::Binning(tilebuf, primbuf, vmap, prims, dst_width, dst_height,
                                 SETUP_NEAR, SETUP_FAR, PIPE_BIN_LOG);
   TileMap m;
-  // Host Binning() now emits the gfx_v2 §6.3 coarse-bin layout (dense
+  // Host Binning() emits the coarse-bin layout (dense
   // rast_bin_header_t block + absolute-indexed sorted-pid array); repack_bins
   // below re-emits the same schema for the device.
   auto* hdr = reinterpret_cast<const rast_bin_header_t*>(tilebuf.data());
@@ -112,8 +112,8 @@ static TileMap binning_oracle(const std::vector<setup_vertex_t>& verts, uint32_t
   return m;
 }
 
-// Repack the host Binning() (tile -> pids) map into the gfx_v2 on-wire schema
-// the RASTER unit now reads: a compact rast_bin_header_t block (one per
+// Repack the host Binning() (tile -> pids) map into the on-wire schema
+// the RASTER unit reads: a compact rast_bin_header_t block (one per
 // non-empty bin) followed by the absolute-indexed sorted_pids. Lets Path A
 // drive the FF units from the same format the device front end emits.
 static std::vector<uint8_t> repack_bins(const TileMap& m) {
@@ -190,6 +190,16 @@ int main(int argc, char** argv) {
   for (uint32_t i = 0; i < mip_offsets.size(); ++i)
     vx_enqueue_dcr_write(q, VX_DCR_TEX_MIPOFF(i), mip_offsets[i], 0, nullptr, nullptr);
 
+  // Fragment-export aperture: the FS stores fragments here and the OM ingress
+  // bit-slices the offset back into (x, y, face) -- hence the power-of-two pitch.
+  // Derived once and copied into the kernel arg so the two cannot drift.
+  uint32_t ap_xbits = log2ceil(dst_width);
+  uint32_t ap_ybits = log2ceil(dst_height);
+  uint32_t ap_shift = 3;
+  vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_XBITS, ap_xbits, 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_YBITS, ap_ybits, 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_RECORD_SHIFT, ap_shift, 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_DEPTH_ONLY, 0, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_ADDR, cbuf_addr / 64, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_PITCH, cbuf_pitch, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_WRITEMASK, 0xffffffff, 0, nullptr, nullptr);
@@ -207,6 +217,9 @@ int main(int argc, char** argv) {
     | (VX_OM_BLEND_FUNC_ONE << 8)   | (VX_OM_BLEND_FUNC_ONE << 0), 0, nullptr, nullptr);
 
   frag_arg_t fa = {};
+  fa.aperture_xbits        = ap_xbits;
+  fa.aperture_ybits        = ap_ybits;
+  fa.aperture_record_shift = ap_shift;
   fa.depth_enabled = 0; fa.color_enabled = 0; fa.tex_enabled = 1; fa.tex_modulate = 0;
 
   // RASTER dispatch v2 (push): the FS entry PC is fixed; the args live in a
@@ -256,7 +269,7 @@ int main(int argc, char** argv) {
   std::cout << "quad: tris=" << ntri << " P=" << P_ref << " tiles=" << a_tiles << std::endl;
 
   // Repack the host Binning() output into the rast_bin_header_t schema RASTER
-  // reads (the host buffer's 8 B tile headers are no longer the on-wire format).
+  // reads.
   std::vector<uint8_t> a_binbuf = repack_bins(gold);
   vx_buffer_h a_tb = nullptr, a_pb = nullptr; uint64_t a_tb_addr = 0, a_pb_addr = 0;
   RT_CHECK(vx_buffer_create(dev, a_binbuf.size(), VX_MEM_READ | VX_MEM_PHYS, &a_tb));
@@ -276,8 +289,8 @@ int main(int argc, char** argv) {
   uint32_t keys_ref = 0; for (auto& kv : gold) keys_ref += (uint32_t)kv.second.size();
   const uint32_t Kcap = keys_ref ? keys_ref : 1;
 
-  // The front end's working set is now a runtime-owned pool (the §4.1 tiling
-  // pool); the test owns only the input vertices. One pool backs every path
+  // The front end's working set is a runtime-owned tiling pool;
+  // the test owns only the input vertices. One pool backs every path
   // below (and both draws of the Path D frame — reused per draw).
   graphics::FrontEndPool pool;
   RT_CHECK(pool.init(dev, k_setup, k_binning, ntri, dst_width, dst_height,
@@ -300,7 +313,7 @@ int main(int argc, char** argv) {
   std::vector<uint8_t> img_dev;
   render(tilebuf_addr, prim_addr, B, img_dev);
 
-  // ---- Path C: the whole draw as ONE CP command batch (charter §6.4) -------
+  // ---- Path C: the whole draw as ONE CP command batch -----------------------
   // Front-end 9 stages + RASTER config + fragment launch are submitted as a
   // single vx_enqueue_commands: the host writes the whole sequence into the CP
   // ring, rings the doorbell once, and polls completion once. The CP runs every
@@ -378,12 +391,12 @@ int main(int argc, char** argv) {
     if (devmap != gold) { std::printf("*** tilebuf bin->pid map != Binning()\n"); ++errors; } }
   std::cout << (errors ? "buffer cross-check: FAIL" : "buffer cross-check: PASS (device == Binning)") << std::endl;
 
-  // ---- Path D: a depth-tested multi-draw frame in ONE batch (§8 / pillar 4) -
+  // ---- Path D: a depth-tested multi-draw frame in ONE batch -----------------
   // Two draws into a shared, device-resident color + depth attachment: a NEAR
   // centered quad first, then a FAR full-screen quad. With DEPTH_FUNC_LESS the
   // far quad is depth-REJECTED where it overlaps the near one, so the centre
   // keeps the near draw. The depth buffer is resident and accumulates across
-  // draws (charter pillar 4: depth never surfaces to host); the front-end pool
+  // draws (depth never surfaces to the host); the front-end pool
   // is reused per draw. Validated: whole frame in ONE batch == two host
   // batches (depth carries across draws in one submission); and result differs
   // from the far-quad-only image (img_dev) — proof depth gated the later draw.
@@ -473,7 +486,7 @@ int main(int argc, char** argv) {
   std::cout << "image device vs host-Binning: " << (img_diff ? "FAIL" : "PASS") << std::endl;
 
   // Batched-draw cross-check: the whole draw as one CP command batch must
-  // render bit-identically to the host-Binning reference (§6.4).
+  // render bit-identically to the host-Binning reference.
   int batch_diff = (img_batched == img_ref) ? 0 : 1;
   if (batch_diff) { size_t n = 0; for (size_t i = 0; i < img_batched.size(); ++i) if (img_batched[i] != img_ref[i]) ++n;
     std::printf("*** image batched-draw vs host-Binning differs in %zu bytes\n", n); }

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU recursive-trace smoke — Phase 12.
+// PRISM RTU recursive-trace smoke.
 //
 // Kernel fires a primary ray at scene A (opaque tri @ z=5). The CHS
 // dispatcher reads the sub-scene address from VX_RT_HIT_ATTR_0

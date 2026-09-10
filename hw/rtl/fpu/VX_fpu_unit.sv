@@ -61,16 +61,16 @@ module VX_fpu_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
         fpu_header_t fpu_hdr, fpu_hdr_wb, fpu_hdr_store;
 
-        // FPU always writes back, so header.wb is always 1 at dispatch.
+        // Carry the decoded wb through the tag store: FPU compares may target
+        // integer x0 (e.g. feq.s x0, ...), which decode does not reserve in the
+        // scoreboard, so forcing wb=1 on readback would trip the invalid
+        // writeback assertion.
         always_comb begin
-            fpu_hdr_store    = per_block_execute_if[block_idx].data.header;
-            fpu_hdr_store.wb = 1'b0;
+            fpu_hdr_store = per_block_execute_if[block_idx].data.header;
         end
 
-        // Force wb=1 on the readback path.
         always_comb begin
-            fpu_hdr_wb    = fpu_hdr;
-            fpu_hdr_wb.wb = 1'b1;
+            fpu_hdr_wb = fpu_hdr;
         end
 
         wire [TAG_WIDTH-1:0] fpu_req_tag, fpu_rsp_tag;

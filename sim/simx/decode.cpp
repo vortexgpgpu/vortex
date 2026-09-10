@@ -325,6 +325,7 @@ static op_string_t op_string(const Instr &instr) {
         case AmoType::AMOMAX:  return {"AMOMAX.W", ""};
         case AmoType::AMOMINU: return {"AMOMINU.W", ""};
         case AmoType::AMOMAXU: return {"AMOMAXU.W", ""};
+        case AmoType::AMOCAS:  return {"AMOCAS.W", ""};
         default:
           std::abort();
         }
@@ -342,6 +343,7 @@ static op_string_t op_string(const Instr &instr) {
         case AmoType::AMOMAX:  return {"AMOMAX.D", ""};
         case AmoType::AMOMINU: return {"AMOMINU.D", ""};
         case AmoType::AMOMAXU: return {"AMOMAXU.D", ""};
+        case AmoType::AMOCAS:  return {"AMOCAS.D", ""};
         default:
           std::abort();
         }
@@ -412,18 +414,16 @@ static op_string_t op_string(const Instr &instr) {
       return {"OM", ""};
     }
   #endif
-  #ifdef VX_GFX_WINDOW_ENABLE
-    ,[&](RtuType rtu_type)-> op_string_t {
+  #ifdef VX_CFG_EXT_RTU_ENABLE
+    ,[&](GfxwType rtu_type)-> op_string_t {
       switch (rtu_type) {
-      case RtuType::SETW:   return {"RT.SETW",   ""};
-      case RtuType::CB_RET: return {"RT.CB_RET", ""};
-      case RtuType::TRACE2: return {"RT.TRACE2", ""};
-      case RtuType::WAIT2:  return {"RT.WAIT2",  ""};
-      case RtuType::GETWF:  return {"RT.GETWF",  ""};
-      case RtuType::GETW:   return {"RT.GETW",   ""};
-      case RtuType::GETWS:  return {"RT.GETWS",  ""};
+      case GfxwType::CB_RET: return {"GFXW.CB_RET", ""};
+      case GfxwType::TRACE: return {"GFXW.TRACE", ""};
+      case GfxwType::WAIT:  return {"GFXW.WAIT",  ""};
+      case GfxwType::GETWF:  return {"GFXW.GETWF",  ""};
+      case GfxwType::GETW:   return {"GFXW.GETW",   ""};
       }
-      return {"RT.?", ""};
+      return {"GFXW.?", ""};
     }
   #endif
  );
@@ -521,7 +521,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_op_type(AluType::CZERO);
       instr->set_args(IntrAluArgs{0, 0, imm});
     } else
-    if ((op == Opcode::R || op == Opcode::R_W) && (funct7 & 0x1)) {
+    if ((op == Opcode::R || op == Opcode::R_W) && (funct7 == 0x1)) {
       switch (funct3) {
       case 0: instr->set_op_type(MdvType::MUL); break;
       case 1: instr->set_op_type(MdvType::MULH); break;
@@ -649,6 +649,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     case 0x14: instr->set_op_type(AmoType::AMOMAX); break;
     case 0x18: instr->set_op_type(AmoType::AMOMINU); break;
     case 0x1c: instr->set_op_type(AmoType::AMOMAXU); break;
+    case 0x05: instr->set_op_type(AmoType::AMOCAS); break;
     default:
       std::abort();
     }
@@ -656,6 +657,13 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_dest_reg(rd, RegType::Integer);
     instr->set_src_reg(0, rs1, RegType::Integer);
     instr->set_src_reg(1, rs2, RegType::Integer);
+    if (funct5 == 0x05) {
+      // Compare-and-swap reads rd as well as writing it: rd carries the
+      // comparand in, the loaded word out. It has to join the source set or
+      // the operand collector supplies a stale comparand and the swap decides
+      // on the wrong value.
+      instr->set_src_reg(2, rd, RegType::Integer);
+    }
   } break;
   case Opcode::SYS: {
     if (funct3 != 0) { // CSRRW/CSRRS/CSRRC — dispatched to the SFU's CSR sub-unit
@@ -966,76 +974,68 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(wgArgs);
     } break;
 #ifdef VX_CFG_EXT_TEX_ENABLE
-    case 5: { // vx_tex4: R-type. rs1=lod, rs2=in-slot base, rd=texel+sync handle, funct7={out_slot,stage,mode}
+    case 5: { // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
       instr->set_fu_type(FUType::SFU);
       instr->set_op_type(TexType::SAMPLE);
-      instr->set_dest_reg(rd, RegType::Integer);   // texel writeback = sync handle
-      instr->set_src_reg(0, rs1, RegType::Integer); // lod
-      instr->set_src_reg(1, rs2, RegType::Integer); // (u,v) window input slot base
+      instr->set_dest_reg(rd, RegType::Integer);    // texel
+      instr->set_src_reg(0, rs1, RegType::Integer); // u
+      instr->set_src_reg(1, rs2, RegType::Integer); // v
+      instr->set_src_reg(2, rs3, RegType::Integer); // lod
       IntrTexArgs texArgs{};
-      texArgs.is_tex4  = 1;
-      texArgs.mode     = funct7 & 0x1;          // 0=single, 1=quad
-      texArgs.stage    = (funct7 >> 1) & 0x1;
-      texArgs.out_slot = (funct7 >> 2) & 0x1f;
+      texArgs.stage = funct2 & 0x1;
       instr->set_args(texArgs);
     } break;
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
-    case 2: { // vx_om4: R-type, rs1=quad descriptor, rs2=payload window slot base
+    case 3: { // vx_om_export: R4-type, rd=x0. rs1=aperture address, rs2=colour,
+              // rs3=depth; funct7[1:0] = {has_depth, has_colour}.
+              //
+              // In hardware this expands into one or two ordinary stores that the
+              // cluster's OM steer peels off the L1->L2 trunk. SimX is
+              // transaction-level and does not model memory beats, so it submits
+              // the fragment directly -- functionally identical, and it keeps the
+              // model from carrying a beat protocol that exists only to fit a
+              // 4-byte bus.
       instr->set_fu_type(FUType::SFU);
-      instr->set_op_type(OmType::WRITE);
-      instr->set_src_reg(0, rs1, RegType::Integer);
-      instr->set_src_reg(1, rs2, RegType::Integer);
+      instr->set_op_type(OmType::EXPORT);
+      instr->set_src_reg(0, rs1, RegType::Integer);  // aperture address
+      instr->set_src_reg(1, rs2, RegType::Integer);  // colour
+      instr->set_src_reg(2, rs3, RegType::Integer);  // depth
       IntrOmArgs omArgs{};
+      omArgs.export_mask = funct7 & 0x3;
       instr->set_args(omArgs);
-    } break;
-#endif
-#ifdef VX_GFX_WINDOW_ENABLE
-    case 4: { // GETWS — GP windowed read; the window's warp dimension is indexed
-              // by rs1 (block_idx/slot), not the executing wid. The FWD-v2
-              // fragment shader reads its raster record with this (slot in
-              // funct7[6:2]; rs2 = count imm; single-slot for frag payload).
-      instr->set_fu_type(FUType::SFU);
-      instr->set_op_type(RtuType::GETWS);
-      instr->set_dest_reg(rd, RegType::Integer);      // window base register
-      instr->set_src_reg(0, rs1, RegType::Integer);   // block_idx (warp-dim index)
-      IntrRtuArgs args{};
-      args.slot  = (funct7 >> 2) & 0x1F;
-      args.count = rs2 & 0xF;
-      instr->set_args(args);
-      if (args.count > 1) {                           // windowed -> macro-op
+      // A colour+depth record needs two 4-byte beats, and hardware retires one
+      // store uop per beat. Expand so the retired count tracks it; the OM still
+      // sees a single fragment, submitted on the last beat.
+      if ((omArgs.export_mask & 0x3) == 0x3) {
         instr->set_macro_op();
         instr->set_wstall(true);
       }
     } break;
-    case 6: { // Graphics-window / RTU callback ops. funct2 selects:
-              //   sub_op=0  CB_RET  R-type, rs1=action, no rd (RTU only)
-              //   sub_op=1  SETW    R-type, rs1=value -> slot funct7[6:2], no rd
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    case 6: { // RTU callback / hit-window ops. funct2 selects:
+              //   sub_op=0  CB_RET  R4-type, rs1=action, rs2=t, rs3=attr, no rd
               //   sub_op=2  GETWF   FP windowed read; sub_op=3 GETW (GP twin)
-              // SETW/GETW/GETWF are pure graphics-window ops shared by RTU /
-              // TEX / OM; CB_RET is RTU-only (parked-context release).
+              // The window is written by the RTU and read by the shader; a
+              // candidate's verdict carries its own t/attr, so there is no
+              // shader-side window write.
       instr->set_fu_type(FUType::SFU);
       uint32_t sub_op = funct2;
       switch (sub_op) {
 #ifdef VX_CFG_EXT_RTU_ENABLE
-      case 0: { // CB_RET — releases this lane's parked context in
-                // RtuCore. Dispatcher follows up with `mret` to resume
-                // the post-vx_rt_wait2 PC (see proposal §4.6).
-        instr->set_op_type(RtuType::CB_RET);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-        IntrRtuArgs args{};
+      case 0: { // CB_RET — releases this lane's parked context in RtuCore,
+                // handing back the shader's hit distance and attribute.
+                // Dispatcher follows up with `mret` to resume the post-wait PC.
+        instr->set_op_type(GfxwType::CB_RET);
+        instr->set_src_reg(0, rs1, RegType::Integer); // action
+        instr->set_src_reg(1, rs2, RegType::Float);   // hit distance t
+        instr->set_src_reg(2, rs3, RegType::Integer); // hit attribute
+        IntrGfxwArgs args{};
         instr->set_args(args);
       } break;
 #endif
-      case 1: { // SETW — write one RTU slot from rs1 (a callback dispatcher
-                // staging e.g. the IS-computed hit_t). Slot in funct7[6:2].
-        instr->set_op_type(RtuType::SETW);
-        instr->set_src_reg(0, rs1, RegType::Integer);
-        IntrRtuArgs args{};
-        args.slot = (funct7 >> 2) & 0x1F;          // 5-bit window slot (RTL funct7[6:2])
-        instr->set_args(args);
-      } break;
-      // GETWF / GETW are window reads shared by RTU (vx_rt_get / vx_rt_wait2 hit
+      // GETWF / GETW are window reads shared by RTU (vx_rt_get / vx_rt_wait hit
       // window) AND the gfx FF path (FWD-5 vx_frag_payload), so they are gated on
       // the window, not the RTU. A multi-slot read (count > 1, only RTU's windowed
       // vx_rt_wait) is a macro-op expanded by RtuUopGen; a single-slot read
@@ -1043,11 +1043,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       // directly by the SFU window dispatch — so it needs no RTU uop sequencer and
       // works in a pure-gfx (no-RTU) build.
       case 2: { // GETWF — FP windowed regfile read into rd..rd+count-1.
-        instr->set_op_type(RtuType::GETWF);
+        instr->set_op_type(GfxwType::GETWF);
         instr->set_dest_reg(rd, RegType::Float);   // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
-        IntrRtuArgs args{};
-        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window start slot (RTL funct7[6:2])
+        IntrGfxwArgs args{};
+        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window start slot (funct7[6:2])
         args.count = rs2 & 0xF;                     // slot count (rs2 = imm)
         instr->set_args(args);
         if (args.count > 1) {                      // windowed (RTU) -> macro-op
@@ -1056,11 +1056,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         }
       } break;
       case 3: { // GETW — GP twin of GETWF: read `count` contiguous integer slots.
-        instr->set_op_type(RtuType::GETW);
+        instr->set_op_type(GfxwType::GETW);
         instr->set_dest_reg(rd, RegType::Integer);  // window base register
         instr->set_src_reg(0, rs1, RegType::Integer); // optional scoreboard chain (x0=none)
-        IntrRtuArgs args{};
-        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window slot (RTL funct7[6:2])
+        IntrGfxwArgs args{};
+        args.slot  = (funct7 >> 2) & 0x1F;         // 5-bit window slot (funct7[6:2])
         args.count = rs2 & 0xF;
         instr->set_args(args);
         if (args.count > 1) {                      // windowed (RTU) -> macro-op
@@ -1072,37 +1072,43 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
     } break;
-#endif // VX_GFX_WINDOW_ENABLE
+#endif // VX_CFG_EXT_RTU_ENABLE
 #ifdef VX_CFG_EXT_RTU_ENABLE
-    case 7: { // RTU ISA v2 — single-issue trace / register-window wait.
+    case 7: { // RTU — single-issue trace / register-window wait.
               // Both are macro-ops: the per-warp sequencer (RtuUopGen)
               // expands them into the micro-ops that stream the f0..f7 ray
-              // window into the pool slot (TRACE2) or retire the hit window
-              // (WAIT2). funct2 selects:
-              //   sub_op=0  TRACE2  rd=handle, rs1=lane-packed config
-              //   sub_op=1  WAIT2   rd=status, rs1=handle
+              // window into the pool slot (TRACE) or retire the hit window
+              // (WAIT). funct2 selects:
+              //   sub_op=0  TRACE  rd=handle, rs1=lane-packed config
+              //   sub_op=1  WAIT   rd=status, rs1=handle
               // The f0..f7 ray window / f0..f2 + t3..t5 hit window are read
               // and written by HW convention (see RtuUopGen), so the
               // architectural encoding names only rd/rs1.
       instr->set_fu_type(FUType::SFU);
       uint32_t sub_op = funct2;
       switch (sub_op) {
-      case 0: { // TRACE2 — warp-uniform scene (lane-packed config in rs1)
-        instr->set_op_type(RtuType::TRACE2);
+      case 0: { // TRACE — warp-uniform scene (lane-packed config in rs1)
+        instr->set_op_type(GfxwType::TRACE);
         instr->set_dest_reg(rd, RegType::Integer);   // handle
         instr->set_src_reg(0, rs1, RegType::Integer); // lane-packed config
-        instr->set_args(IntrRtuArgs{});
+        instr->set_args(IntrGfxwArgs{});
         instr->set_macro_op();
         instr->set_wstall(true);
       } break;
-      case 1: { // WAIT2 — single-op block: park until terminal, return status.
+      case 1: { // WAIT — single-op block: park until terminal, return status.
                 // NOT a macro-op; reuses the v1 park/revive path so it survives
                 // an async callback trap. The hit window is delivered by a
-                // separate WAIT_WB the vx_rt_wait2 intrinsic emits next.
-        instr->set_op_type(RtuType::WAIT2);
+                // separate WAIT_WB the vx_rt_wait intrinsic emits next.
+        instr->set_op_type(GfxwType::WAIT);
         instr->set_dest_reg(rd, RegType::Integer);   // status
         instr->set_src_reg(0, rs1, RegType::Integer); // handle
-        instr->set_args(IntrRtuArgs{});
+        instr->set_args(IntrGfxwArgs{});
+        // WAIT owns the block: it suspends its warp until a record lands and it
+        // retires with the status. That is what keeps the warp from fetching past
+        // a WAIT whose response has not arrived, so TRACE does not have to hold
+        // the warp until the traversal answers — it is released at burst end like
+        // any other macro-op.
+        instr->set_wstall(true);
       } break;
       default:
         std::abort();
@@ -1112,7 +1118,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     default:
       std::abort();
     }
-    // FF<->SIMT interface-law structural assertion (gfx_v2 §1.3, P0): every FF
+    // FF<->SIMT interface-law structural assertion: every FF
     // op routed to the SFU must declare a scoreboarded / side-effect-free /
     // known-violation handoff class, checked against its decoded destination.
     gfx_doctrine::check(*instr);

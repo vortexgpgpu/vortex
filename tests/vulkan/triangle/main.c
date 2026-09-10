@@ -13,6 +13,13 @@
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe: it exercises
  * vkCreateGraphicsPipelines (vertex stage -> vortexpipe) and
  * vkCmdDraw. The fragment stage stays on llvmpipe's CPU path.
+ *
+ * It is also the suite's only test that binds both a compute and a graphics
+ * pipeline in one context, which is its own driver case: compute kernels and
+ * fragment shaders are linked at the same fixed device address, so only one can
+ * be resident and whichever holds it must release it when the other runs. A
+ * compute dispatch either side of the draw makes both handovers happen, and the
+ * buffer must come back incremented twice.
  */
 
 #include <vulkan/vulkan.h>
@@ -21,6 +28,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define CN      64u    /* compute elements, one dispatch's worth */
+#define CLOCAL  16u    /* compute local_size_x upper bound */
 #define WIDTH   64u
 #define HEIGHT  64u
 #define FORMAT  VK_FORMAT_R8G8B8A8_UNORM
@@ -82,6 +91,7 @@ main(int argc, char **argv)
 {
    const char *vs_path = (argc > 1) ? argv[1] : "triangle.vert.spv";
    const char *fs_path = (argc > 2) ? argv[2] : "triangle.frag.spv";
+   const char *cs_path = (argc > 3) ? argv[3] : "triangle.comp.spv";
 
    /* --- instance --------------------------------------------------- */
    VkApplicationInfo app = {
@@ -215,6 +225,112 @@ main(int argc, char **argv)
    VkPipelineLayout pl;
    CHECK(vkCreatePipelineLayout(dev, &plci, NULL, &pl));
 
+   /* --- the compute half ------------------------------------------- */
+   VkShaderModule cs = load_module(dev, cs_path);
+   if (cs == VK_NULL_HANDLE) {
+      fprintf(stderr, "FAILED: could not load %s\n", cs_path);
+      return 1;
+   }
+   const VkDeviceSize cbytes = (VkDeviceSize)CN * sizeof(uint32_t);
+   VkBufferCreateInfo cbci = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = cbytes, .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+   };
+   VkBuffer cbuf;
+   CHECK(vkCreateBuffer(dev, &cbci, NULL, &cbuf));
+   VkMemoryRequirements cmr;
+   vkGetBufferMemoryRequirements(dev, cbuf, &cmr);
+   VkPhysicalDeviceMemoryProperties cmp;
+   vkGetPhysicalDeviceMemoryProperties(pd, &cmp);
+   uint32_t cmt = find_mem(&cmp, cmr.memoryTypeBits,
+                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                           | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+   if (cmt == UINT32_MAX) {
+      fprintf(stderr, "FAILED: no host-visible memory for the compute buffer\n");
+      return 1;
+   }
+   VkMemoryAllocateInfo cmai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = cmr.size, .memoryTypeIndex = cmt,
+   };
+   VkDeviceMemory cmem;
+   CHECK(vkAllocateMemory(dev, &cmai, NULL, &cmem));
+   CHECK(vkBindBufferMemory(dev, cbuf, cmem, 0));
+   uint32_t *cp_map;
+   CHECK(vkMapMemory(dev, cmem, 0, cbytes, 0, (void **)&cp_map));
+   for (uint32_t i = 0; i < CN; i++)
+      cp_map[i] = i;
+   vkUnmapMemory(dev, cmem);
+
+   VkDescriptorSetLayoutBinding cdslb = {
+      .binding = 0, .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+   };
+   VkDescriptorSetLayoutCreateInfo cdslci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 1, .pBindings = &cdslb,
+   };
+   VkDescriptorSetLayout cdsl;
+   CHECK(vkCreateDescriptorSetLayout(dev, &cdslci, NULL, &cdsl));
+   VkPipelineLayoutCreateInfo cplci = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 1, .pSetLayouts = &cdsl,
+   };
+   VkPipelineLayout cpl;
+   CHECK(vkCreatePipelineLayout(dev, &cplci, NULL, &cpl));
+
+   uint32_t clocal = CLOCAL < props.limits.maxComputeWorkGroupSize[0]
+                   ? CLOCAL : props.limits.maxComputeWorkGroupSize[0];
+   while (clocal > 1 && (CN % clocal) != 0)
+      clocal >>= 1;
+   if (clocal == 0)
+      clocal = 1;
+   VkSpecializationMapEntry csme = {
+      .constantID = 0, .offset = 0, .size = sizeof(uint32_t),
+   };
+   VkSpecializationInfo cspec = {
+      .mapEntryCount = 1, .pMapEntries = &csme,
+      .dataSize = sizeof(uint32_t), .pData = &clocal,
+   };
+   VkComputePipelineCreateInfo cpci = {
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+         .stage = VK_SHADER_STAGE_COMPUTE_BIT, .module = cs, .pName = "main",
+         .pSpecializationInfo = &cspec,
+      },
+      .layout = cpl,
+   };
+   VkPipeline cpipe;
+   CHECK(vkCreateComputePipelines(dev, VK_NULL_HANDLE, 1, &cpci, NULL, &cpipe));
+
+   VkDescriptorPoolSize cdps = {
+      .type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, .descriptorCount = 1,
+   };
+   VkDescriptorPoolCreateInfo cdpci = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &cdps,
+   };
+   VkDescriptorPool cdp;
+   CHECK(vkCreateDescriptorPool(dev, &cdpci, NULL, &cdp));
+   VkDescriptorSetAllocateInfo cdsai = {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = cdp, .descriptorSetCount = 1, .pSetLayouts = &cdsl,
+   };
+   VkDescriptorSet cds;
+   CHECK(vkAllocateDescriptorSets(dev, &cdsai, &cds));
+   VkDescriptorBufferInfo cdbi = {
+      .buffer = cbuf, .offset = 0, .range = cbytes,
+   };
+   VkWriteDescriptorSet cwds = {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = cds, .dstBinding = 0, .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .pBufferInfo = &cdbi,
+   };
+   vkUpdateDescriptorSets(dev, 1, &cwds, 0, NULL);
+
    VkPipelineShaderStageCreateInfo stages[2] = {
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vs, .pName = "main" },
@@ -307,6 +423,12 @@ main(int argc, char **argv)
    };
    CHECK(vkBeginCommandBuffer(cmd, &cbbi));
 
+   /* Compute first: the kernel takes the shared device address. */
+   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cpipe);
+   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cpl,
+                           0, 1, &cds, 0, NULL);
+   vkCmdDispatch(cmd, CN / clocal, 1, 1);
+
    VkClearValue clear = { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } };
    VkRenderPassBeginInfo rpbi = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -318,6 +440,14 @@ main(int argc, char **argv)
    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
    vkCmdDraw(cmd, 3, 1, 0, 0);
    vkCmdEndRenderPass(cmd);
+
+   /* Compute again, now that a fragment shader has taken the address the
+    * kernel was using. Without the handover the kernel cannot load and the
+    * dispatch fails outright. */
+   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cpipe);
+   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, cpl,
+                           0, 1, &cds, 0, NULL);
+   vkCmdDispatch(cmd, CN / clocal, 1, 1);
 
    /* render pass finalLayout left the image in TRANSFER_SRC_OPTIMAL */
    VkBufferImageCopy region = {
@@ -354,6 +484,20 @@ main(int argc, char **argv)
    /* the triangle covers roughly an eighth of the frame */
    bool coverage_ok = colored > 100u && colored < 3500u;
 
+   /* Both dispatches ran, and the second one survived the draw taking the
+    * device address in between: data[i] was seeded i and incremented twice. */
+   unsigned cfails = 0;
+   CHECK(vkMapMemory(dev, cmem, 0, cbytes, 0, (void **)&cp_map));
+   for (uint32_t i = 0; i < CN; i++) {
+      if (cp_map[i] != i + 2u) {
+         if (cfails < 5)
+            fprintf(stderr, "  compute data[%u] = %u, want %u\n",
+                    i, cp_map[i], i + 2u);
+         cfails++;
+      }
+   }
+   vkUnmapMemory(dev, cmem);
+
    /* cleanup (best-effort; a smoke test exits anyway) */
    vkDestroyCommandPool(dev, cp, NULL);
    vkFreeMemory(dev, bmem, NULL);
@@ -370,12 +514,12 @@ main(int argc, char **argv)
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 
-   if (!centre_lit || !corner_clear || !coverage_ok) {
-      printf("FAILED (centre_lit=%d corner_clear=%d colored=%u)\n",
-             centre_lit, corner_clear, colored);
+   if (!centre_lit || !corner_clear || !coverage_ok || cfails) {
+      printf("FAILED (centre_lit=%d corner_clear=%d colored=%u compute_fails=%u)\n",
+             centre_lit, corner_clear, colored, cfails);
       return 1;
    }
-   printf("PASSED (triangle rendered, %u/%u pixels covered)\n",
-          colored, WIDTH * HEIGHT);
+   printf("PASSED (triangle rendered, %u/%u pixels covered; compute dispatched"
+          " either side of the draw)\n", colored, WIDTH * HEIGHT);
    return 0;
 }

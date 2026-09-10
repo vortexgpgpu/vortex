@@ -89,8 +89,9 @@ module VX_dxa_unit import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign execute_if.ready = accept;
 
     VX_elastic_buffer #(
-        .DATAW ($bits(dxa_req_data_t)),
-        .SIZE  (2)
+        .DATAW   ($bits(dxa_req_data_t)),
+        .SIZE    (2),
+        .OUT_REG (1) // register the dxa-request master boundary
     ) dxa_req_buf (
         .clk       (clk),
         .reset     (reset),

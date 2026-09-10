@@ -65,6 +65,25 @@ typedef struct {
                         void** out_host_ptr, uint64_t* out_cp_addr);
   int (*host_mem_free) (void* dev_ctx, uint64_t cp_addr);
 
+  // Refresh the host (CPU) view of ONE region after the CP has written it —
+  // called by the core before it reads a MEM_READ staging buffer through
+  // out_host_ptr. Backends whose host memory is genuinely coherent with the
+  // CP's view implement this as a no-op returning 0. Backends that shadow
+  // CP memory (device-resident staging) sync exactly this region, and ONLY
+  // on this call: a blanket refresh of every region from a polling thread
+  // overwrites staging another thread is concurrently filling for an upload
+  // (measured on V80 silicon: src buffers uploaded as zeros).
+  int (*host_mem_pull) (void* dev_ctx, uint64_t cp_addr);
+
+  // Mirror of host_mem_pull for the other direction: make ONE region's host
+  // writes visible to the CP — called by the core after it has finished
+  // filling a staging buffer, before submitting the command that names it.
+  // Coherent backends: no-op. Shadowing backends sync exactly this region,
+  // on the calling (owning) thread. The push/pull pair is the ONLY sync of
+  // generic regions; the backend itself syncs only what it owns (the ring
+  // at each doorbell, the head/completion lines it manages).
+  int (*host_mem_push) (void* dev_ctx, uint64_t cp_addr);
+
 } callbacks_t;
 
 // Each backend's vortex.cpp implements this function (typically via the

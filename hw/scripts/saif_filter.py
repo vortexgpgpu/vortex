@@ -18,7 +18,8 @@
 #                full hierarchy path, so "execute/tcu_unit" or just "tcu_unit" both work.
 #   --top        wrapper instance name placed above the extracted subtree (and written
 #                as the SAIF DESIGN).  Omit to emit the extracted instance as the root.
-#   --all        extract every match instead of only the first (names disambiguated).
+#   --rename-root rename the extracted root instance to --top instead of wrapping it.
+#   --all        extract every match instead of requiring a unique match.
 #   --list       print the instance hierarchy (for discovering paths) and exit.
 
 import argparse
@@ -90,6 +91,16 @@ def dedent(block, pad):
     return out
 
 
+def escape_activity_name(line):
+    """Replace Verilator parentheses in activity identifiers for OpenSTA."""
+    match = re.match(r'^(\s*)\((.+?)(\s+\(T0\b)', line)
+    if not match:
+        return line
+    name = match.group(2).replace('(', '_').replace(')', '_')
+    name = name.replace('\\[', '[').replace('\\]', ']')
+    return match.group(1) + '(' + name + line[match.start(3):]
+
+
 def grab_header(lines):
     """Collect header fields to carry over into the emitted SAIF."""
     hdr = {}
@@ -103,7 +114,7 @@ def grab_header(lines):
     return hdr
 
 
-def emit(out, header, top, subtrees):
+def emit(out, header, top, subtrees, rename_root=False):
     w = out.write
     w('(SAIFILE\n')
     w(header.get('SAIFVERSION', '(SAIFVERSION "2.0")') + '\n')
@@ -115,15 +126,20 @@ def emit(out, header, top, subtrees):
     w(header.get('DIVIDER', '(DIVIDER / )') + '\n')
     w(header.get('TIMESCALE', '(TIMESCALE 1ps)') + '\n')
     w(header.get('DURATION', '(DURATION 0)') + '\n')
-    if top:
+    if top and not rename_root:
         w(' (INSTANCE %s\n' % top)
         pad = '  '
     else:
         pad = ' '
     for block in subtrees:
+        if rename_root:
+            block = list(block)
+            block[0] = re.sub(r'^(\s*)\(INSTANCE\s+\S+',
+                              r'\1(INSTANCE ' + top, block[0])
         for line in dedent(block, pad):
+            line = escape_activity_name(line)
             w(line if line.endswith('\n') else line + '\n')
-    if top:
+    if top and not rename_root:
         w(' )\n')
     w(')\n')
 
@@ -134,6 +150,8 @@ def main():
     ap.add_argument('saif', help='master SAIF produced by Verilator --trace-saif')
     ap.add_argument('--instance', help='slash-separated instance path to extract (suffix match)')
     ap.add_argument('--top', help='wrapper top-module/instance name for the extracted subtree')
+    ap.add_argument('--rename-root', action='store_true',
+                    help='rename the extracted root to --top instead of adding a wrapper')
     ap.add_argument('--all', action='store_true', help='extract every match, not just the first')
     ap.add_argument('-o', '--output', help='output SAIF path (default: stdout)')
     ap.add_argument('--list', action='store_true', help='print the instance hierarchy and exit')
@@ -151,6 +169,10 @@ def main():
 
     if not args.instance:
         ap.error('--instance is required unless --list is given')
+    if args.rename_root and not args.top:
+        ap.error('--rename-root requires --top')
+    if args.rename_root and args.all:
+        ap.error('--rename-root cannot be combined with --all')
 
     target = [p for p in args.instance.strip('/').split('/') if p]
     n = len(target)
@@ -158,15 +180,18 @@ def main():
     if not matches:
         sys.stderr.write('ERROR: instance path not found: %s\n' % args.instance)
         return 1
-    if not args.all:
-        matches = matches[:1]
+    if len(matches) > 1 and not args.all:
+        sys.stderr.write('ERROR: instance path is ambiguous (%d matches): %s\n'
+                         '       use a longer suffix or pass --all explicitly\n'
+                         % (len(matches), args.instance))
+        return 1
 
     subtrees = [capture_subtree(lines, idx) for idx in matches]
     header = grab_header(lines)
 
     out = open(args.output, 'w') if args.output else sys.stdout
     try:
-        emit(out, header, args.top, subtrees)
+        emit(out, header, args.top, subtrees, args.rename_root)
     finally:
         if args.output:
             out.close()

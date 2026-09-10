@@ -55,6 +55,8 @@ inline uint32_t encode_pos_mask(uint32_t pos_x, uint32_t pos_y, uint32_t mask) {
        | ((pos_y & ((1u << kPosBits) - 1u)) << (4 + kPosBits));
 }
 
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+
 // Early-Z: evaluate the screen-space depth plane at pixel center (X,Y) and
 // quantize to the 24-bit zbuf value. Bit-identical to the FS late-Z path (kernel
 // PLANE_Z Q7.24 plane MAC written SATURATED to [0, OM_DEPTH_MASK]), so early-Z
@@ -93,6 +95,8 @@ inline bool earlyz_occluded(uint32_t func, uint32_t cand, uint32_t stored) {
   default:                       return false;            // never early-cull
   }
 }
+
+#endif
 
 } // namespace
 
@@ -156,6 +160,7 @@ public:
     // supplied by each draw's config sequence).
     frag_armed_  = false;
     arm_pending_ = false;
+    fwd_live_    = 0;
   }
 
   void set_frag_descriptor(uint64_t frag_entry, uint64_t frag_param) {
@@ -173,6 +178,14 @@ public:
     arm_pending_ = true;
   }
 
+  void on_fwd_done(const FwdDone& msg) {
+    __unused(msg);
+    assert(fwd_live_ > 0);
+    if (--fwd_live_ == 0) {
+      frag_armed_ = false;
+    }
+  }
+
   int dcr_write(uint32_t addr, uint32_t value) {
     dcrs_.write(addr, value);
     // DCR reconfigure invalidates the cached queue + load state and re-arms the
@@ -187,6 +200,7 @@ public:
   // can test against committed depth. Called by Cluster::dcr_write for OM-range
   // writes; does NOT re-arm the producer (unlike a raster DCR write).
   void om_dcr_snoop(uint32_t addr, uint32_t value) {
+  #if VX_CFG_RASTER_EARLYZ_ENABLED
     switch (addr) {
     case VX_DCR_OM_ZBUF_ADDR:    zbuf_base_  = uint64_t(value) << 6; break;
     case VX_DCR_OM_ZBUF_PITCH:   zbuf_pitch_ = value; break;
@@ -194,6 +208,9 @@ public:
     case VX_DCR_OM_EARLYZ_SAFE:  earlyz_safe_ = value; break;
     default: break;
     }
+  #else
+    __unused(addr, value);
+  #endif
   }
 
   const RasterCore::PerfStats& perf_stats() const { return perf_stats_; }
@@ -212,9 +229,9 @@ public:
       arm_pending_ = false;
       if (frag_entry_ != 0) {
         frag_armed_ = true;
+        fwd_live_ = cores_per_cluster_;
         for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
-          if (Core* core = cluster_->get_core(c))
-            core->scheduler().fwd_arm(Word(frag_entry_), Word(frag_param_));
+          simobject_->fwd_arm_out.at(c).send({Word(frag_entry_), Word(frag_param_)});
         }
       }
     }
@@ -230,19 +247,10 @@ public:
       serve_consumers();
     }
 
-    // 4) Close this draw's fragment phase once every owned distributor has
-    //    drained (each disarmed by its SFU on fwd_done). Clearing frag_armed_
-    //    here lets the NEXT draw's FS-descriptor edge (arm_pending_) re-arm, and
-    //    guarantees no re-arm during the next draw's front end.
-    if (frag_armed_) {
-      bool all_disarmed = true;
-      for (uint32_t c = 0; c < cores_per_cluster_; ++c) {
-        if (Core* core = cluster_->get_core(c))
-          if (core->scheduler().fwd_armed()) { all_disarmed = false; break; }
-      }
-      if (all_disarmed)
-        frag_armed_ = false;
-    }
+    // The draw's fragment phase closes in on_fwd_done: each distributor
+    // reports its drain on the done link, and the last report clears
+    // frag_armed_, letting the NEXT draw's FS-descriptor edge (arm_pending_)
+    // re-arm without any re-arm during the next draw's front end.
 
     // perf
     if (state_ == State::LOAD_TILES || state_ == State::LOAD_PIDS ||
@@ -895,6 +903,8 @@ private:
     have_drained_signal_ = true;
   }
 
+#if VX_CFG_RASTER_EARLYZ_ENABLED
+
   // ── Early-Z: narrow a served quad's coverage against committed depth ──
   // Tests each covered pixel's plane depth against the depth buffer and clears
   // its coverage bit only when the fragment is STRICTLY behind (earlyz_occluded).
@@ -939,6 +949,8 @@ private:
     s.pos_mask = (s.pos_mask & ~0xfu) | new_cov;
   }
 
+#endif
+
   // ── Serve per-core pops from the requester's owned queue ────────────
   void serve_consumers() {
     auto& req_ch = simobject_->raster_req_in.at(0);
@@ -960,8 +972,11 @@ private:
         if (q.empty()) continue;
         rsp.stamps[t] = q.front();
         q.pop();
-        if (earlyz_safe_)
+      #if VX_CFG_RASTER_EARLYZ_ENABLED
+        if (earlyz_safe_) {
           early_z_cull(rsp.stamps[t]);
+        }
+      #endif
       }
       rsp_ch.send(rsp);
       req_ch.pop();
@@ -973,13 +988,17 @@ private:
   Cluster*                   cluster_;
   RasterDCRS       dcrs_;
 
+#if VX_CFG_RASTER_EARLYZ_ENABLED
   // Early-Z config snooped from the OM depth DCRs (the depth buffer is
   // shared with the ROP). Gated by VX_DCR_OM_EARLYZ_SAFE, which the driver sets
   // only when the FS has no depth-export and the func is monotonic (LESS/LEQUAL).
+  // The whole stage follows the same knob the datapath does, so a configuration
+  // without it does not model a cull it would never perform.
   uint32_t                   earlyz_safe_ = 0;
   uint64_t                   zbuf_base_   = 0;   // byte address (ZBUF_ADDR << 6)
   uint32_t                   zbuf_pitch_  = 0;
   uint32_t                   depth_func_  = VX_OM_DEPTH_FUNC_ALWAYS;
+#endif
 
   // Fragment-shader dispatch descriptor (RASTER_FRAG_* DCRs). Persists across
   // the per-launch reset (re-supplied by each draw's DCR sequence); used to arm
@@ -990,8 +1009,8 @@ private:
   //   arm_pending_ : one-shot request set by frame_kick (the draw's grid-less
   //                  launch, delivered after the per-launch reset and the whole
   //                  DCR sequence); consumed on the next tick.
-  //   frag_armed_  : the owned distributors are armed for this draw; cleared once
-  //                  they all drain (tick step 4), releasing the next draw's kick.
+  //   frag_armed_  : the owned distributors are armed for this draw; cleared by
+  //                  the last done-link report, releasing the next draw's kick.
   // Triggered by the real per-draw launch — NOT level-triggered on persistent
   // DCR state and NOT gated on the TILE_COUNT poll — so a fully-culled draw arms,
   // drains to zero quads, and cannot leave a stale arm that re-fires during a
@@ -1000,6 +1019,8 @@ private:
   // because those launches carry non-empty grids and produce no kick.
   bool                       arm_pending_ = false;
   bool                       frag_armed_  = false;
+  // Distributors still armed this draw (counted down by done-link reports).
+  uint32_t                   fwd_live_    = 0;
 
   State                      state_;
 
@@ -1054,8 +1075,11 @@ RasterCore::RasterCore(const SimContext& ctx, const char* name, Cluster* cluster
   , raster_rsp_out(kNumRasterLanes, this)
   , rcache_req_out(kRcacheNumReqs, this)
   , rcache_rsp_in(kRcacheNumReqs, this)
+  , fwd_arm_out(NUM_SOCKETS * VX_CFG_SOCKET_SIZE, this)
+  , fwd_done_in(this)
 {
   impl_ = new Impl(this, cluster);
+  fwd_done_in.bind(this, &RasterCore::on_fwd_done);
 }
 
 RasterCore::~RasterCore() {
@@ -1064,6 +1088,7 @@ RasterCore::~RasterCore() {
 
 void RasterCore::on_reset() { impl_->reset(); }
 void RasterCore::on_tick()  { impl_->tick(); }
+void RasterCore::on_fwd_done(const FwdDone& msg) { impl_->on_fwd_done(msg); }
 
 int RasterCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);

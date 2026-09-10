@@ -38,9 +38,31 @@ typedef struct {
   bool     is_host;   // XRT_BO_FLAGS_HOST_ONLY — backed by host memory
 } buffer_t;
 
+// XRTSIM_WARM_OPEN=1 keeps the simulated device alive across close/open,
+// modeling the shell's same-xclbin warm open: ap_rst_n is not pulsed and
+// all device state survives into the next session.
+static xrt_sim* warm_sim = nullptr;
+
+static bool warm_open_enabled() {
+  const char* s = getenv("XRTSIM_WARM_OPEN");
+  return (s != nullptr && s[0] != '\0' && s[0] != '0');
+}
+
+static void warm_sim_cleanup() {
+  if (warm_sim != nullptr) {
+    delete warm_sim;
+    warm_sim = nullptr;
+  }
+}
+
 extern xrtDeviceHandle xrtDeviceOpen(unsigned int index) {
   if (index != 0)
     return nullptr;
+  if (warm_sim != nullptr) {
+    auto sim = warm_sim;
+    warm_sim = nullptr;
+    return sim;
+  }
   auto sim = new xrt_sim();
   int ret = sim->init();
   if (ret != 0) {
@@ -67,6 +89,15 @@ extern int xrtDeviceClose(xrtDeviceHandle dhdl) {
   if (dhdl == nullptr)
     return -1;
   auto sim = reinterpret_cast<xrt_sim*>(dhdl);
+  if (warm_open_enabled() && warm_sim == nullptr) {
+    warm_sim = sim;
+    static bool cleanup_registered = false;
+    if (!cleanup_registered) {
+      atexit(warm_sim_cleanup);
+      cleanup_registered = true;
+    }
+    return 0;
+  }
   delete sim;
   return 0;
 }

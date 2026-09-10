@@ -97,6 +97,10 @@ module VX_cp_core
   // and event-counter traffic.
   VX_mem_axi_if.master             axi_dev,
 
+  // AFU host-port drain counters, packed by VX_afu_wrap; regfile debug regs.
+  input  wire [31:0]               dbg_host_w_counts,
+  input  wire [31:0]               dbg_host_r_counts,
+
   // GPU-facing handshake (Vortex DCR + start/busy).
   VX_cp_gpu_if.master               gpu_if,
 
@@ -132,6 +136,17 @@ module VX_cp_core
 
   wire [`VX_DCR_DATA_BITS-1:0] dcr_last_rsp_data;
 
+  // Queue-reset plumbing (used by the regfile port map directly below and by
+  // the g_queue_reset block; declared BEFORE first use -- Vivado mints 1-bit
+  // implicit nets at a pre-declaration use and keeps both, which silently
+  // severed q_clear_ack from the real q_clear in synthesis while Verilator
+  // accepted the ordering. Same footgun as the drain-counter wires in
+  // VX_afu_wrap.)
+  logic       q_reset_pending [NUM_QUEUES];
+  logic       q_clear         [NUM_QUEUES];
+  logic       fetch_idle      [NUM_QUEUES];
+  logic       engine_idle     [NUM_QUEUES];
+
   VX_cp_axil_regfile #(
     .NUM_QUEUES (NUM_QUEUES),
     .ADDR_W     (AXIL_AW)
@@ -146,7 +161,10 @@ module VX_cp_core
     .q_error        (q_error_to_reg),
     .last_dcr_rsp   (dcr_last_rsp_data),
     .q_state        (q_state),
-    .q_reset_pulse  (q_reset_pulse)
+    .q_reset_pulse  (q_reset_pulse),
+    .q_clear_ack    (q_clear),
+    .dbg_host_w_counts (dbg_host_w_counts),
+    .dbg_host_r_counts (dbg_host_r_counts)
   );
 
   // ----- Per-CPE wires -----
@@ -191,6 +209,9 @@ module VX_cp_core
         .cmd_out_valid (cpe_cmd_valid[q]),
         .cmd_out       (cpe_cmd[q]),
         .cmd_out_ready (cpe_cmd_ready[q]),
+        .stop_req      (q_reset_pending[q]),
+        .clear         (q_clear[q]),
+        .idle          (fetch_idle[q]),
         .axi_m         (fetch_axi[q])
       );
 
@@ -219,7 +240,9 @@ module VX_cp_core
         .submit_evt    (submit_evt[q]),
         .start_evt     (start_evt[q]),
         .end_evt       (end_evt[q]),
-        .profile_slot  (profile_slot[q])
+        .profile_slot  (profile_slot[q]),
+        .clear         (q_clear[q]),
+        .idle          (engine_idle[q])
       );
 
       // Telemetry up to the regfile.
@@ -489,13 +512,33 @@ module VX_cp_core
         any_event_grant) cp_busy = 1'b1;
   end
 
-  // Reset pulse from regfile (Q_CONTROL.reset / CP_CTRL.reset_all) is
-  // not propagated to CPEs as a separate signal. To stop a queue, the
-  // host clears Q_CONTROL.enable and the fetch parks in IDLE while
-  // in-flight commands drain naturally.
+  // ----- Queue reset (Q_CONTROL.reset / CP_CTRL.reset_all) -----
+  //
+  // The pulse from the regfile is latched as a *pending* request rather than
+  // applied immediately. While it is pending the fetch stops issuing new
+  // reads, so the CPE drains to idle on its own; the clear is then applied in
+  // the single cycle when both the fetch and the engine report idle. That
+  // keeps the head pointer, the retire counter and the host-visible tail
+  // consistent, and it never abandons an AXI read the fetch has in flight.
+  //
+  // Without this the counters survived a process exit, a fresh process
+  // inherited them, and its queue silently never ran because the fetch gate
+  // is `head < tail` on absolute byte counts.
   generate
-    for (genvar q = 0; q < NUM_QUEUES; ++q) begin : g_unused_reset
-      `UNUSED_VAR (q_reset_pulse[q])
+    for (genvar q = 0; q < NUM_QUEUES; ++q) begin : g_queue_reset
+      always_ff @(posedge clk) begin
+        if (reset) begin
+          q_reset_pending[q] <= 1'b0;
+        end else if (q_reset_pulse[q]) begin
+          q_reset_pending[q] <= 1'b1;
+        end else if (q_clear[q]) begin
+          q_reset_pending[q] <= 1'b0;
+        end
+      end
+
+      assign q_clear[q] = q_reset_pending[q]
+                       && fetch_idle[q]
+                       && engine_idle[q];
     end
   endgenerate
 

@@ -108,6 +108,7 @@ private:
 		uint64_t addr;
 		uint32_t size;
 		uint64_t data;
+		uint64_t amo_cmp;
 		uint32_t tid;
 	};
 

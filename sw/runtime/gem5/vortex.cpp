@@ -101,6 +101,15 @@ public:
         return host_mem_.release(cp_addr);
     }
 
+    // Host memory is coherent with the CP's view here.
+    int host_mem_pull(uint64_t /*cp_addr*/) {
+        return 0;
+    }
+
+    int host_mem_push(uint64_t /*cp_addr*/) {
+        return 0;
+    }
+
 private:
     std::mutex      host_mu_;
     MemoryAllocator host_mem_;   // CP-visible host-memory aperture

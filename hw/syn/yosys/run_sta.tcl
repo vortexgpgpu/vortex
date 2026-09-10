@@ -36,9 +36,6 @@ ensure_file $NETLIST "NETLIST not found"
 
 file mkdir $RPT_DIR
 
-# ---- (optional) reporting units; you can omit to silence unit-scale warnings
-# set_cmd_units -time ns -capacitance fF -voltage V -current mA -resistance kOhm -power mW -distance um
-
 # ---- liberty ----
 if {$LIB_ROOT ne "" && [file isdirectory $LIB_ROOT]} {
   foreach lib [split [exec bash -lc "shopt -s nullglob globstar; printf '%s\n' $LIB_ROOT/**/*.lib | sort -u"] "\n"] {
@@ -49,6 +46,9 @@ if {$LIB_TGT ne "" && [file exists $LIB_TGT]} {
   puts "read_liberty $LIB_TGT"
   read_liberty $LIB_TGT
 }
+
+# SDC values are expressed in ns regardless of the selected Liberty time unit.
+set_cmd_units -time ns -capacitance fF -voltage V -current mA -resistance kOhm -power mW -distance um
 
 # ---- netlist ----
 puts "read_verilog $NETLIST"
@@ -71,33 +71,56 @@ report_units
 set clks [get_clocks *]
 if {[llength $clks] > 0} { report_clock_properties $clks } else { puts "No clocks defined." }
 
-report_wns
-report_tns
+# -digits 4, not the default 2: ABC maps to the target period and stops, so the
+# design closes with picoseconds of margin (0.032 ns on a 1.25 ns period is
+# typical). At 2 digits that rounds to 0.00 and "met with margin" becomes
+# indistinguishable from "missed by 4 ps" -- which is the whole signal, since
+# Fmax is derived from this slack.
+report_wns -digits 4
+report_tns -digits 4
+report_wns -digits 4 > [file join $RPT_DIR "wns.rpt"]
+report_tns -digits 4 > [file join $RPT_DIR "tns.rpt"]
+
+# report_wns is worst NEGATIVE slack: it clamps at 0, so a design that closes
+# reports 0 no matter how much margin it has, and an Fmax derived from it is
+# just the target clock read back. report_worst_slack is signed, so it is what
+# says how fast the netlist can actually go.
+report_worst_slack -digits 4
+report_worst_slack -digits 4 > [file join $RPT_DIR "worst_slack.rpt"]
 
 # Keep report_checks options conservative for 2.7.0 compatibility
 report_checks -path_delay max -digits 3 -format full_clock_expanded
 report_checks -path_delay min -digits 3 -format full_clock_expanded
+report_checks -path_delay max -digits 3 -format full_clock_expanded > [file join $RPT_DIR "setup.rpt"]
+report_checks -path_delay min -digits 3 -format full_clock_expanded > [file join $RPT_DIR "hold.rpt"]
 
-# If SAIF is not provided (or unsupported), we intentionally fall back to vectorless/default power.
+# A requested SAIF must be annotated; vectorless power is used only when none is requested.
 if {$SAIF_FILE ne "" && [file exists $SAIF_FILE]} {
-  if {[has_cmd read_saif]} {
-    if {$SAIF_INST ne ""} {
-      puts "read_saif -instance $SAIF_INST $SAIF_FILE"
-      read_saif -instance $SAIF_INST $SAIF_FILE
-    } else {
-      puts "read_saif $SAIF_FILE"
-      read_saif $SAIF_FILE
-    }
-  } else {
-    puts "WARNING: 'read_saif' not available in this STA build; cannot annotate SAIF (power will be vectorless/default)."
+  if {![has_cmd read_saif]} {
+    puts stderr "FATAL: this OpenSTA build has no read_saif command"
+    exit 1
   }
+  if {$SAIF_INST ne ""} {
+    puts "read_saif -scope $SAIF_INST $SAIF_FILE"
+    read_saif -scope $SAIF_INST $SAIF_FILE
+  } else {
+    puts "read_saif $SAIF_FILE"
+    read_saif $SAIF_FILE
+  }
+} elseif {$SAIF_FILE ne ""} {
+  puts stderr "FATAL: SAIF_FILE not found: $SAIF_FILE"
+  exit 1
 } else {
-  puts "INFO: SAIF_FILE not provided (or not found); power will be vectorless/default."
+  puts "INFO: SAIF_FILE not provided; power is vectorless/default."
 }
 
-# Optional: help diagnose annotation coverage when SAIF is used
-if {[has_cmd report_switching_activity]} {
-  catch { report_switching_activity -list_not_annotated > [file join $RPT_DIR "saif_unannotated.rpt"] }
+if {$SAIF_FILE ne ""} {
+  if {![has_cmd report_activity_annotation]} {
+    puts stderr "FATAL: this OpenSTA build cannot report SAIF annotation coverage"
+    exit 1
+  }
+  report_activity_annotation -report_annotated > [file join $RPT_DIR "saif_annotated.rpt"]
+  report_activity_annotation -report_unannotated > [file join $RPT_DIR "saif_unannotated.rpt"]
 }
 
 # ---- power reports (always) ----

@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 960" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="m_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="m_p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="m_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="m_y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .cm   { font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#1b2733; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.3; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .loop { fill:none; stroke:#2f6b39; stroke-width:1.5; stroke-dasharray:7 4; }
+    .loopl{ fill:#eef7ef; stroke:#2f6b39; stroke-width:1.3; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#m_a); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#m_p); }
+    .mg   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#m_g); }
+    .my   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#m_y); }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lbg  { fill:#2f6b39; font-size:10.5px; }
+    .lby  { fill:#8a6d00; font-size:10.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="960" fill="#ffffff"/>
+  <text x="24" y="34" class="t">A read miss, a same-line follower, and the fill — where the latency actually goes</text>
+  <text x="24" y="56" class="tt">Two loads to the same {line, sector} arrive back to back. The second never issues a second fill, and neither pays a read-after-fill round trip.</text>
+
+  <!-- lifelines -->
+  <text x="130"  y="94" class="th" text-anchor="middle" fill="#8e4a7e">LSU / core port</text>
+  <text x="420"  y="94" class="th" text-anchor="middle" fill="#2e5e82">bank pipeline (S0 → S1 → stC)</text>
+  <text x="790"  y="94" class="th" text-anchor="middle" fill="#2f6b39">MSHR</text>
+  <text x="1050" y="94" class="th" text-anchor="middle" fill="#2e5e82">fill buffer</text>
+  <text x="1330" y="94" class="th" text-anchor="middle" fill="#8a6d00">next level</text>
+
+  <line x1="130"  y1="104" x2="130"  y2="892" class="lane"/>
+  <line x1="420"  y1="104" x2="420"  y2="892" class="lane"/>
+  <line x1="790"  y1="104" x2="790"  y2="892" class="lane"/>
+  <line x1="1050" y1="104" x2="1050" y2="892" class="lane"/>
+  <line x1="1330" y1="104" x2="1330" y2="892" class="lane"/>
+
+  <!-- ===== request A ===== -->
+  <path d="M 134 132 L 416 132" class="mp"/>
+  <text x="150" y="124" class="lbp">load A — {line L, sector S}</text>
+
+  <rect x="300" y="146" width="240" height="42" rx="5" class="act"/>
+  <text x="310" y="164" class="ts">S0: tag compare → MISS</text>
+  <text x="310" y="180" class="ts">victim way from VX_cache_repl</text>
+
+  <path d="M 424 208 L 786 208" class="mg"/>
+  <text x="440" y="200" class="lbg">allocate — returns {alloc_id, previd, pending=0}</text>
+
+  <path d="M 424 240 L 786 240" class="mg"/>
+  <text x="440" y="232" class="lbg">S1 finalize: miss → PERSIST the entry</text>
+
+  <path d="M 424 274 L 1326 274" class="my"/>
+  <text x="440" y="266" class="lby">stC: fill request for sector S — tag = {uuid, mshr_id}</text>
+
+  <!-- ===== request B ===== -->
+  <path d="M 134 312 L 416 312" class="mp"/>
+  <text x="150" y="304" class="lbp">load B — SAME {line L, sector S}</text>
+
+  <rect x="300" y="326" width="240" height="42" rx="5" class="act"/>
+  <text x="310" y="344" class="ts">S0: tag compare → MISS again</text>
+  <text x="310" y="360" class="ts">(the fill has not landed yet)</text>
+
+  <path d="M 424 388 L 786 388" class="mg"/>
+  <text x="440" y="380" class="lbg">allocate — pending = 1, previd = A's id</text>
+
+  <path d="M 424 420 L 786 420" class="mg"/>
+  <text x="440" y="412" class="lbg">S1 finalize: persist AND link onto A's tail</text>
+
+  <rect x="560" y="436" width="420" height="60" rx="5" class="note"/>
+  <text x="572" y="454" class="th">B allocates its OWN entry — chaining does not save slots</text>
+  <text x="572" y="472" class="ts">What it saves is the FILL: mshr_pending suppresses B's memory request at stC,</text>
+  <text x="572" y="488" class="ts">so only the chain head ever goes downstream.</text>
+
+  <!-- ===== fill returns ===== -->
+  <path d="M 1326 540 L 1054 540" class="my"/>
+  <text x="1090" y="532" class="lby">fill response: sector data + mshr_id</text>
+
+  <rect x="960" y="554" width="180" height="42" rx="5" class="act"/>
+  <text x="970" y="572" class="ts">stage the sector:</text>
+  <text x="970" y="588" class="cm">fbuf_data_r/addr_r</text>
+
+  <path d="M 1046 616 L 794 616" class="m"/>
+  <text x="830" y="608" class="lb">fwd_active_r = 1 — arm the forward window</text>
+
+  <path d="M 786 648 L 428 648" class="mg"/>
+  <text x="470" y="640" class="lbg">dequeue A (chain head) — a plain read</text>
+
+  <!-- forward loop -->
+  <rect x="180" y="676" width="1140" height="128" rx="6" class="loop"/>
+  <rect x="180" y="676" width="292" height="24" rx="4" class="loopl"/>
+  <text x="190" y="693" class="lbg">loop  leading run of plain reads — FORWARDED</text>
+
+  <path d="M 1046 724 L 138 724" class="m"/>
+  <text x="330" y="716" class="lb">A's word straight from the fill buffer into core_rsp_queue — the pipeline is never entered</text>
+
+  <path d="M 786 756 L 428 756" class="mg"/>
+  <text x="470" y="748" class="lbg">dequeue B — also a plain read on the same chain</text>
+
+  <path d="M 1046 788 L 138 788" class="m"/>
+  <text x="330" y="780" class="lb">B's word forwarded the same way — the input arbiter stays open to new requests throughout</text>
+
+  <!-- fill install -->
+  <path d="M 1046 830 L 428 830" class="m"/>
+  <text x="470" y="822" class="lb">in parallel: the staged sector installs into the data array at stD (tags marked at S0)</text>
+
+  <rect x="180" y="846" width="620" height="60" rx="5" class="note"/>
+  <text x="192" y="864" class="th">The window closes on the first write or AMO head</text>
+  <text x="192" y="882" class="ts">A store head would end forwarding here: it and every later chain entry replay through</text>
+  <text x="192" y="898" class="ts">the pipeline, so an older store merges before a younger same-line read responds.</text>
+
+  <rect x="830" y="846" width="490" height="60" rx="5" class="note"/>
+  <text x="842" y="864" class="th">Why this matters</text>
+  <text x="842" y="882" class="ts">Without forwarding, every chain entry would replay through S0→stC after the fill,</text>
+  <text x="842" y="898" class="ts">paying a full pipeline traversal to read back data the bank already had in hand.</text>
+
+  <!-- side note -->
+  <rect x="180" y="120" width="0" height="0" fill="none"/>
+  <rect x="600" y="120" width="300" height="0" fill="none"/>
+</svg>

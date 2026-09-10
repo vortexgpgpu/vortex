@@ -28,8 +28,8 @@ module VX_find_first #(
     localparam TL   = (1 << LOGN) - 1;
     localparam TN   = (1 << (LOGN+1)) - 1;
 
-    wire s_n [TN] /* verilator split_var*/;
-    wire [DATAW-1:0] d_n [TN] /* verilator split_var*/;
+    wire s_n [TN];
+    wire [DATAW-1:0] d_n [TN];
 
     for (genvar i = 0; i < N; ++i) begin : g_fill
         assign s_n[TL+i] = REVERSE ? valid_in[N-1-i] : valid_in[i];

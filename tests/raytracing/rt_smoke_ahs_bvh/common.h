@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU AHS-on-CW-BVH smoke — Phase 2.
+// PRISM RTU AHS-on-CW-BVH smoke.
 //
 // Same lone NON-opaque triangle + ray + AHS dispatcher as rt_smoke_ahs,
 // but the acceleration structure is a CW-BVH4 leaf (VX_CFG_RTU_BVH_WIDTH=4)

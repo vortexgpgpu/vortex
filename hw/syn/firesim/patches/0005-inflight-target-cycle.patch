@@ -1,0 +1,54 @@
+Correct the target-cycle count across the counter's origin.
+
+The clock bridge counts target cycles *started*, not completed: under FAME-1
+the target accepts the clock token for cycle N+1 and only then stalls on the
+channels it needs to finish it, so exactly one cycle is in flight whenever the
+target has started at least one. (The clock-token channel is wired to the
+target combinationally -- SimWrapper.genClockChannel -- so a token that has
+fired has been accepted, not buffered.)
+
+That in-flight cycle is present at both samples taken by
+0001-rebase-target-cycle-counter.patch and cancels -- except across the
+counter's origin, where the start sample sees a target that has yet to start
+its first cycle. The result was a count that depended on whether the bitstream
+had been run before: 14 cycles on the first run after programming and 13 on
+every run after it, for a test that provably steps the target exactly 13 times
+(TestAdder4: target_reset(5) plus 8 single steps). A fresh metasim is always
+the origin case, so upstream reports the +1 on every metasim run.
+
+Corrects for the in-flight cycle explicitly: cycles completed at a sample are
+"started - in flight", and in flight is 0 exactly when the counter reads 0 and
+1 otherwise. Validated on the vitis metasim: Adder4 14 -> 13, matching the
+counted steps and the card's steady state; PointerChaser 1625 -> 1624, result
+still bit-exact at 0x498. Host-side only, no bitstream rebuild needed.
+
+This deliberately diverges from upstream, which reports the +1.
+
+--- build_firesim/firesim/sim/midas/src/main/cc/core/simulation.h.orig
++++ build_firesim/firesim/sim/midas/src/main/cc/core/simulation.h
+@@ -152,14 +152,23 @@
+   uint64_t start_tcycle = 0;
+   uint64_t end_tcycle = 0;
+ 
+-  /// Target cycles consumed by *this* run.
++  /// Target cycles completed by *this* run.
++  ///
+   /// The counter lives in fabric and persists while the bitstream stays
+   /// programmed, so it must be rebased against the start sample -- host
+   /// cycles are already handled this way.
++  ///
++  /// It counts cycles *started*, so one cycle is in flight at any sample taken
++  /// after the target's first. That cancels between the two samples, except at
++  /// the counter's origin, where the start sample sees none.
++  ///
+   /// Saturates rather than wrapping: a device reprogrammed mid-run can leave
+   /// end < start, and an unsigned wrap would report a nonsense duration.
+   uint64_t elapsed_tcycles() const {
+-    return (end_tcycle >= start_tcycle) ? (end_tcycle - start_tcycle) : 0;
++    if (end_tcycle <= start_tcycle) {
++      return 0;
++    }
++    return end_tcycle - start_tcycle - (start_tcycle == 0 ? 1 : 0);
+   }
+ };
+ 

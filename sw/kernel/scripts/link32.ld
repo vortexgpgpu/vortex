@@ -11,6 +11,10 @@ SECTIONS
 {
   . = STARTUP_ADDR;
   /DISCARD/ : {
+    /* No unwinding on device; .eh_frame R_RISCV_SET32 relocations also
+     * overflow (signed 32-bit) once the image links at >= 0x80000000. */
+    *(.eh_frame .eh_frame.*)
+    *(.eh_frame_hdr .eh_frame_entry .eh_frame_entry.*)
     *(.interp)
     *(.dynsym)
     *(.dynstr)

@@ -12,6 +12,20 @@
 // limitations under the License.
 
 #include <stdint.h>
+
+// The softfloat library is built with per-thread rounding/flags state
+// (-DTHREAD_LOCAL=_Thread_local); every TU that sees its headers must
+// declare that state with the same storage class, so the define ships with
+// this wrapper instead of being restated by each consumer's Makefile.
+// Include this header before any softfloat header.
+#ifndef THREAD_LOCAL
+#ifdef __cplusplus
+#define THREAD_LOCAL thread_local
+#else
+#define THREAD_LOCAL _Thread_local
+#endif
+#endif
+
 #include <softfloat_types.h>
 
 #ifdef __cplusplus

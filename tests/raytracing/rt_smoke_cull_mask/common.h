@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU §8.8 instanceCullMask smoke.
+// PRISM RTU instanceCullMask smoke.
 //
 // 2-instance TLAS sharing one BLAS:
 //   instance 0 at world z=5,  cull_mask=0x01

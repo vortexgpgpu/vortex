@@ -13,6 +13,8 @@
 
 `include "VX_define.vh"
 
+// Joins the per-format exponent/exception lanes by format and decomposes the
+// C accumulator term. Significand joining happens post-seam in shared_mul.
 module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter N     = 2,
@@ -35,40 +37,29 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
 `endif
 
 `ifdef TFR_JOIN_F16_ENABLE
-    input wire [TCK-1:0][24:0]      sig_f16,
     input wire [TCK-1:0][EXP_W-1:0] exp_f16,
     input fedp_excep_t [TCK-1:0]    exc_f16,
 `endif
 
 `ifdef VX_CFG_TCU_FP8_ENABLE
-    input wire [TCK-1:0][24:0]      sig_f8,
     input wire [TCK-1:0][EXP_W-1:0] exp_f8,
     input fedp_excep_t [TCK-1:0]    exc_f8,
 `endif
 
 `ifdef VX_CFG_TCU_MX_ENABLE
 `ifdef VX_CFG_TCU_FP4_ENABLE
-    input wire [TCK-1:0][24:0]      sig_f4,
     input wire [TCK-1:0][EXP_W-1:0] exp_f4,
     input fedp_excep_t [TCK-1:0]    exc_f4,
 `endif
 `endif
 
-`ifdef VX_CFG_TCU_INT8_ENABLE
-    input wire [TCK-1:0][24:0]      sig_int8,
-`endif
-`ifdef VX_CFG_TCU_INT4_ENABLE
-    input wire [TCK-1:0][24:0]      sig_int4,
-`endif
-
-    output logic [TCK:0][24:0]      sig_out,
     output logic [TCK:0][EXP_W-1:0] exp_out,
-    output fedp_excep_t [TCK:0]     exc_out
+    output fedp_excep_t [TCK:0]     exc_out,
+    output wire [24:0]              c_sig
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
 
-    logic [TCK-1:0][24:0]      sig_sel;
     logic [TCK-1:0][EXP_W-1:0] exp_sel;
     fedp_excep_t [TCK-1:0]     exc_sel;
 
@@ -79,14 +70,12 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
         `ifdef VX_CFG_TCU_FP16_ENABLE
             TCU_FP16_ID,
             TCU_BF16_ID: begin
-                sig_sel = sig_f16;
                 exp_sel = exp_f16;
                 exc_sel = exc_f16;
             end
         `endif
         `ifdef VX_CFG_TCU_TF32_ENABLE
             TCU_TF32_ID: begin
-                sig_sel = sig_f16;
                 exp_sel = exp_f16;
                 exc_sel = exc_f16;
             end
@@ -99,7 +88,6 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
             , TCU_MXFP8_ID, TCU_MXBF8_ID
         `endif
             : begin
-                sig_sel = sig_f8;
                 exp_sel = exp_f8;
                 exc_sel = exc_f8;
             end
@@ -109,14 +97,12 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
         `ifdef VX_CFG_TCU_FP4_ENABLE
         `ifdef VX_CFG_TCU_MXFP4_ENABLE
             TCU_MXFP4_ID: begin
-                sig_sel = sig_f4;
                 exp_sel = exp_f4;
                 exc_sel = exc_f4;
             end
         `endif
         `ifdef VX_CFG_TCU_NVFP4_ENABLE
             TCU_NVFP4_ID: begin
-                sig_sel = sig_f4;
                 exp_sel = exp_f4;
                 exc_sel = exc_f4;
             end
@@ -124,23 +110,7 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
         `endif
         `endif
 
-        `ifdef VX_CFG_TCU_INT8_ENABLE
-            TCU_I8_ID, TCU_U8_ID
-            : begin
-                sig_sel = sig_int8;
-                exp_sel = '0;
-                exc_sel = '0;
-            end
-        `endif
-        `ifdef VX_CFG_TCU_INT4_ENABLE
-            TCU_I4_ID, TCU_U4_ID: begin
-                sig_sel = sig_int4;
-                exp_sel = '0;
-                exc_sel = '0;
-            end
-        `endif
             default: begin
-                sig_sel = '0;
                 exp_sel = '0;
                 exc_sel = '0;
             end
@@ -162,14 +132,13 @@ module VX_tcu_tfr_mul_join import VX_tcu_pkg::*; #(
 
     wire c_sign = c_val[31];
 
-    wire [24:0] c_sig_final = c_is_int ? c_val[24:0] : (cls_c.is_zero ? 25'd0 : {c_val[31], (cls_c.is_sub ? 1'b0 : 1'b1), c_val[22:0]});
+    assign c_sig = c_is_int ? c_val[24:0] : (cls_c.is_zero ? 25'd0 : {c_val[31], (cls_c.is_sub ? 1'b0 : 1'b1), c_val[22:0]});
 
     wire [7:0] c_exp_raw = (cls_c.is_sub || cls_c.is_zero) ? 8'd1 : c_val[30:23];
     wire [EXP_W-1:0] c_exp_adj = EXP_W'(c_exp_raw) - EXP_W'(W-1) + EXP_W'(WA-1) + 128;
     wire [EXP_W-1:0] c_exp_final = cls_c.is_zero ? '0 : c_exp_adj;
 
     // Output aggregation
-    assign sig_out = {c_sig_final, sig_sel};
     assign exp_out = {c_exp_final, exp_sel};
 
     for (genvar i = 0; i < TCK; ++i) begin : g_exc

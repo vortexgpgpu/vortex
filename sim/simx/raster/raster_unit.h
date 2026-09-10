@@ -14,10 +14,9 @@
 #pragma once
 
 #include <array>
-#include <simobject.h>
+#include "types.h"
 #include "instr_trace.h"
 #include "constants.h"
-#include "types.h"
 
 namespace vortex {
 
@@ -54,7 +53,7 @@ struct RasterStamp {
 };
 
 // RasterRsp — per-lane raster payload returned to SfuUnit, which stages each
-// covered lane's stamp into the launched warp's gfx window frag_payload_t.
+// covered lane's stamp into the launched warp's launch record.
 struct RasterRsp {
   uint64_t                                   uuid     = 0;
   uint32_t                                   tag      = 0;

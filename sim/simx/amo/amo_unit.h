@@ -40,7 +40,8 @@ public:
   // selects the unsigned variant of MIN/MAX (signed by default).
   AmoComputeResult compute(MemOp op, uint8_t width,
                            uint64_t old_word, uint64_t rhs,
-                           bool unsigned_minmax = false) const;
+                           bool unsigned_minmax = false,
+                           uint64_t cmp = 0) const;
 
   // LR installs a reservation for (hart_id, line_addr). LRU eviction
   // when the table is full.

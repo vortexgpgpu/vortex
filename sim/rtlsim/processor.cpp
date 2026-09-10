@@ -102,18 +102,31 @@ bool sim_trace_enabled() {
 class Processor::Impl {
 public:
   Impl() : dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO) {
+    // restart sim time so a re-created model registers at time zero
+    timestamp = 0;
+
+    // A context of our own rather than the process-wide default. A model
+    // registers a trace callback on its context at construction, and
+    // VerilatedContext::addModel has no counterpart -- the registration lives as
+    // long as the context does. On the shared default context those entries
+    // accumulate across device opens and keep naming models that have since been
+    // deleted, so tracing a second open walks the list and dereferences freed
+    // memory. Per-context, the list dies with the models it names. Reset values,
+    // the seed and the assertion window are per-context settings and move with it.
+    context_ = new VerilatedContext();
+
     // force random values for uninitialized signals
-    Verilated::randReset(VERILATOR_RESET_VALUE);
-    Verilated::randSeed(50);
+    context_->randReset(VERILATOR_RESET_VALUE);
+    context_->randSeed(50);
 
     // turn off assertion before reset
-    Verilated::assertOn(false);
+    context_->assertOn(false);
 
     // create device instance
-    device_ = new Vrtlsim_shim();
+    device_ = new Vrtlsim_shim(context_);
 
   #ifdef VCD_OUTPUT
-    Verilated::traceEverOn(true);
+    context_->traceEverOn(true);
     tfp_ = new VerilatedVcdC();
     device_->trace(tfp_, 99);
     const char* vcd_file = std::getenv("VCD_FILE");
@@ -121,7 +134,7 @@ public:
   #endif
 
   #ifdef SAIF_OUTPUT
-    Verilated::traceEverOn(true);
+    context_->traceEverOn(true);
     sfp_ = new VerilatedSaifC();
     device_->trace(sfp_, 99);
     const char* saif_file = std::getenv("SAIF_FILE");
@@ -134,7 +147,7 @@ public:
     this->reset();
 
     // Turn on assertion after reset
-    Verilated::assertOn(true);
+    context_->assertOn(true);
   }
 
   ~Impl() {
@@ -149,7 +162,11 @@ public:
     delete sfp_;
   #endif
 
+    // Model before context: the model holds a reference to the context it was
+    // built with, so releasing the context first would leave that reference
+    // dangling through the model's own destruction.
     delete device_;
+    delete context_;
   }
 
   void cout_flush() {
@@ -443,6 +460,7 @@ private:
 
   DramSim dram_sim_;
 
+  VerilatedContext* context_;
   Vrtlsim_shim* device_;
 
   RAM* ram_;

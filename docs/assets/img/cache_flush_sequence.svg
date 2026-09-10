@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1520 1060" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="f_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="f_p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="f_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="f_y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .cm   { font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#1b2733; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actg { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .loop { fill:none; stroke:#a03020; stroke-width:1.5; stroke-dasharray:7 4; }
+    .loopl{ fill:#fbeeea; stroke:#a03020; stroke-width:1.3; }
+    .lock { fill:#fdeeea; stroke:#a03020; stroke-width:1.4; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#f_a); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#f_p); }
+    .mg   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#f_g); }
+    .my   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#f_y); }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lbg  { fill:#2f6b39; font-size:10.5px; }
+    .lby  { fill:#8a6d00; font-size:10.5px; }
+    .lbr  { fill:#a03020; font-size:11px; font-weight:bold; }
+  </style>
+
+  <rect x="0" y="0" width="1520" height="1060" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Cache flush — DCR read to last writeback drained</text>
+  <text x="24" y="56" class="tt">One flush primitive exists: whole-cache invalidate-and-writeback. It is triggered by a DCR READ, carried as an ordinary MemReq with attr.is_flush, and it freezes the cache for its whole sweep.</text>
+
+  <!-- lifelines -->
+  <text x="112"  y="94" class="th" text-anchor="middle" fill="#8e4a7e">host / CP</text>
+  <text x="330"  y="94" class="th" text-anchor="middle" fill="#2e5e82">VX_dcr_data</text>
+  <text x="580"  y="94" class="th" text-anchor="middle" fill="#2e5e82">VX_dcr_flush</text>
+  <text x="840"  y="94" class="th" text-anchor="middle" fill="#2e5e82">VX_cache_init</text>
+  <text x="1090" y="94" class="th" text-anchor="middle" fill="#2f6b39">VX_cache_flush (per bank)</text>
+  <text x="1400" y="94" class="th" text-anchor="middle" fill="#8a6d00">next level</text>
+
+  <line x1="112"  y1="104" x2="112"  y2="1030" class="lane"/>
+  <line x1="330"  y1="104" x2="330"  y2="1030" class="lane"/>
+  <line x1="580"  y1="104" x2="580"  y2="1030" class="lane"/>
+  <line x1="840"  y1="104" x2="840"  y2="1030" class="lane"/>
+  <line x1="1090" y1="104" x2="1090" y2="1030" class="lane"/>
+  <line x1="1400" y1="104" x2="1400" y2="1030" class="lane"/>
+
+  <!-- trigger -->
+  <path d="M 116 132 L 326 132" class="mp"/>
+  <text x="124" y="124" class="lbp">dcr_read(VX_DCR_BASE_CACHE_FLUSH, core_id)</text>
+
+  <rect x="228" y="146" width="286" height="58" rx="5" class="act"/>
+  <text x="238" y="164" class="ts">latch flush_pending_r</text>
+  <text x="238" y="182" class="tt">a DCR READ, not a write — the read's</text>
+  <text x="238" y="196" class="tt">response is what acknowledges the flush</text>
+
+  <path d="M 334 226 L 576 226" class="m"/>
+  <text x="346" y="218" class="lb">dcr_flush_if.req = 1 (level-held)</text>
+
+  <!-- synthetic memreq -->
+  <rect x="466" y="242" width="248" height="62" rx="5" class="act"/>
+  <text x="476" y="260" class="ts">synthesize a degenerate MemReq:</text>
+  <text x="476" y="278" class="cm">rw=0, addr=0, data=0, byteen=0</text>
+  <text x="476" y="296" class="cm">attr = 1 &lt;&lt; MEM_ATTR_FLUSH_OFFS</text>
+
+  <path d="M 584 326 L 836 326" class="m"/>
+  <text x="596" y="318" class="lb">the flush rides port 0 as ordinary cache traffic</text>
+
+  <!-- input lock -->
+  <rect x="716" y="348" width="264" height="78" rx="5" class="lock"/>
+  <text x="726" y="366" class="th">LOCK EVERY INPUT PORT</text>
+  <text x="726" y="384" class="cm">input_enable = ~flush_req_enable</text>
+  <text x="726" y="398" class="cm">             || lock_released[i]</text>
+  <text x="726" y="418" class="tt">valid=0 downstream, ready=0 upstream</text>
+
+  <rect x="1000" y="348" width="230" height="48" rx="5" class="act"/>
+  <text x="1010" y="366" class="ts">STATE_WAIT1: drain the</text>
+  <text x="1010" y="384" class="ts">request crossbar</text>
+
+  <path d="M 844 446 L 1086 446" class="mg"/>
+  <text x="856" y="438" class="lbg">flush_begin — a 1-cycle pulse to ALL banks at once</text>
+
+  <!-- per-bank FSM -->
+  <rect x="896" y="462" width="380" height="80" rx="5" class="actg"/>
+  <text x="906" y="480" class="th">STATE_WAIT1 — quiesce</text>
+  <text x="906" y="498" class="cm">wait mshr_empty AND bank_empty</text>
+  <text x="906" y="518" class="tt">both, not just the MSHR: no in-flight fill may</text>
+  <text x="906" y="532" class="tt">install a line behind the walk pointer</text>
+
+  <!-- walk loop -->
+  <rect x="880" y="548" width="600" height="234" rx="6" class="loop"/>
+  <rect x="880" y="548" width="304" height="24" rx="4" class="loopl"/>
+  <text x="890" y="565" class="lbr">STATE_FLUSH  counter walk, one entry/cycle</text>
+
+  <rect x="896" y="584" width="290" height="62" rx="5" class="actg"/>
+  <text x="906" y="602" class="ts">drive flush_valid + flush_line + flush_way</text>
+  <text x="906" y="618" class="ts">into the bank's sel arbiter (priority slot 4)</text>
+  <text x="906" y="638" class="cm">CTR_WIDTH = LINE_SEL + (WB ? WAY_SEL : 0)</text>
+
+  <rect x="896" y="656" width="290" height="78" rx="5" class="act"/>
+  <text x="906" y="674" class="ts">S0: cache_tags clears valid for this entry</text>
+  <text x="906" y="690" class="ts">stD: cache_data reads the line (WB only)</text>
+  <text x="906" y="706" class="ts">stC: push a writeback per DIRTY SECTOR</text>
+  <text x="906" y="726" class="tt">write-through: valid cleared, zero writebacks ever</text>
+
+  <path d="M 1194 700 L 1396 700" class="my"/>
+  <text x="1206" y="692" class="lby">writeback</text>
+
+  <text x="1206" y="622" class="tt">one dirty sector</text>
+  <text x="1206" y="636" class="tt">per beat</text>
+
+  <text x="896" y="758" class="tt">flush_ready gates the counter, so the walk pauses whenever the memory-request queue is near full.</text>
+  <text x="896" y="772" class="tt">A write-through bank never gates on it — it emits no writebacks at all.</text>
+
+  <!-- WAIT2 -->
+  <rect x="1000" y="798" width="330" height="78" rx="5" class="actg"/>
+  <text x="1010" y="816" class="th">STATE_WAIT2 — every bank EXCEPT bank 0</text>
+  <text x="1010" y="834" class="ts">Banks 1..N−1 wait for bank_empty. Bank 0 skips to</text>
+  <text x="1010" y="850" class="ts">DONE, so its request — the one that propagates the</text>
+  <text x="1010" y="866" class="ts">flush downstream — is the last to be issued.</text>
+
+  <path d="M 1086 898 L 848 898" class="mg"/>
+  <text x="880" y="890" class="lbg">flush_end — one pulse per bank</text>
+
+  <rect x="640" y="914" width="290" height="48" rx="5" class="act"/>
+  <text x="650" y="932" class="ts">STATE_WAIT2: accumulate until</text>
+  <text x="650" y="950" class="cm">flush_done == {NUM_BANKS{1'b1}}</text>
+
+  <path d="M 836 984 L 588 984" class="m"/>
+  <text x="612" y="976" class="lb">release ONLY the originating port; its MemReq acks</text>
+
+  <path d="M 576 1014 L 338 1014" class="m"/>
+  <text x="352" y="1006" class="lb">dcr_flush_if.done — LEVEL-HELD until req drops</text>
+
+  <path d="M 326 1044 L 116 1044" class="mp"/>
+  <text x="124" y="1036" class="lbp">DCR response — the flush read finally returns</text>
+
+  <!-- ===== left notes ===== -->
+  <rect x="24" y="146" width="180" height="0" fill="none"/>
+
+  <rect x="24" y="240" width="410" height="86" rx="6" class="note"/>
+  <text x="36" y="260" class="th">Core traffic has arbitration PRIORITY</text>
+  <text x="36" y="278" class="ts">The 2:1 arb puts core_bus_if on input 0, not the</text>
+  <text x="36" y="294" class="ts">flush. The flush waits until the LSU goes quiet —</text>
+  <text x="36" y="310" class="ts">which it does, because the host only issues a flush</text>
+  <text x="36" y="322" class="tt">after busy drops. STICKY hardens the 1-cycle gaps.</text>
+
+  <rect x="24" y="348" width="620" height="110" rx="6" class="note"/>
+  <text x="36" y="368" class="th">Why done is level-held rather than a pulse</text>
+  <text x="36" y="386" class="ts">One core's flush fans out to the dcache, the icache, and — with graphics enabled — the</text>
+  <text x="36" y="402" class="ts">socket and cluster gfx caches. Each leg finishes at a different time. Holding every</text>
+  <text x="36" y="418" class="ts">done high until req drops lets the parent simply AND them together, race-free.</text>
+  <text x="36" y="440" class="tt">A pulse would need a latch at every junction and would drop legs that finished early.</text>
+
+  <rect x="24" y="476" width="620" height="126" rx="6" class="note"/>
+  <text x="36" y="496" class="th">What the lock buys</text>
+  <text x="36" y="514" class="ts">Once locked, no core request can reach any bank pipeline. That single fact is what lets</text>
+  <text x="36" y="530" class="ts">STATE_FLUSH assume the only in-flight entries are its own walk, and it is why WAIT2's</text>
+  <text x="36" y="546" class="ts">bank_empty check need not re-test mshr_empty — nothing can refill the MSHR.</text>
+  <text x="36" y="568" class="ts">The cost: the cache is effectively OFF for the whole walk. Every other warp's loads and</text>
+  <text x="36" y="584" class="ts">stores stall. Flush is linear in cache size and is meant to be infrequent.</text>
+
+  <rect x="24" y="620" width="620" height="124" rx="6" class="note"/>
+  <text x="36" y="640" class="th">Walk length</text>
+  <text x="36" y="662" class="cm">write-through:  LINES_PER_BANK</text>
+  <text x="36" y="682" class="cm">write-back:     LINES_PER_BANK x NUM_WAYS</text>
+  <text x="36" y="706" class="ts">Write-through clears all ways in parallel (no way_en gate), so one pass over the lines</text>
+  <text x="36" y="722" class="ts">suffices. Write-back must visit each (way, line) separately because each dirty line</text>
+  <text x="36" y="738" class="ts">emits its own memory request. All banks walk concurrently.</text>
+
+  <rect x="24" y="762" width="590" height="96" rx="6" class="note"/>
+  <text x="36" y="782" class="th">Reset reuses the same machinery</text>
+  <text x="36" y="800" class="ts">The FSM's reset state is STATE_INIT, not STATE_IDLE: it walks every line clearing valid</text>
+  <text x="36" y="816" class="ts">bits, so the tag SRAM needs no async reset — which is what makes it map cleanly to BRAM.</text>
+  <text x="36" y="836" class="tt">A flush arriving during init is latched and answered immediately: init already invalidated</text>
+  <text x="36" y="848" class="tt">everything, so the init walk stands in for the flush walk.</text>
+</svg>

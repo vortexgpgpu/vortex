@@ -103,6 +103,7 @@ module VX_local_mem_top import VX_gpu_pkg::*; #(
         .WORD_SIZE  (WORD_SIZE),
         .ADDR_WIDTH (ADDR_WIDTH),
         .TAG_WIDTH  (TAG_WIDTH),
+        .AMO_ENABLE (`VX_CFG_EXT_A_ENABLED),
         .OUT_BUF    (3)
     ) local_mem (
         .clk        (clk),

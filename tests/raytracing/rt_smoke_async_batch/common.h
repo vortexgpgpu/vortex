@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// §8.6 async batch smoke test. Kernel issues N back-to-back
+// Async batch smoke test. Kernel issues N back-to-back
 // vx_rt_wtrace calls (no intervening WAIT), then drains the handles
 // with N vx_rt_waits in declared order. Validates that:
 //   - vx_rt_wtrace returns a real handle (slot index) and is
@@ -20,7 +20,7 @@
 //   - vx_rt_wait returns the per-lane TERMINAL status of the
 //     specific handle (each ray is paired with its own status,
 //     not the latest TERMINAL on the warp).
-//   - vx_gfx_get_after(slot, sts) reads the regfile after WAIT has
+//   - vx_rt_get_attr(slot, sts) reads the regfile after WAIT has
 //     applied the matching TERMINAL response, so post-WAIT reads
 //     see THAT ray's hit attrs, not a later ray's.
 //

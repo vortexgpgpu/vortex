@@ -23,8 +23,7 @@
 # could add that path; the name slot is reserved.
 #
 # For memHierarchy timing modeling, the VortexGPGPU component exposes
-# an optional `memIface` SubComponent slot — see
-# docs/proposals/sst_simx_v3_proposal.md for the wiring recipe.
+# an optional `memIface` SubComponent slot.
 #
 # Configurable via env vars (parallel to ci/gem5_run_hostless_app.py):
 #   VORTEX_TEST_DIR    — directory containing the kernel .vxbin

@@ -269,8 +269,8 @@ module VX_dxa_setup import VX_gpu_pkg::*, VX_dxa_pkg::*; (
 
     // Two genuine 32×32 multipliers (DSP). mul_off computes the dim offsets
     // coordN×stride(N-1); mul_dlt computes the wrap deltas (tileN-1)×stride(N-1).
-    // The former phase-0 ×elem_bytes products are now launch-time shifts (see
-    // dec_row_len_bytes / dec_dim0_offset), so the third multiplier is gone.
+    // The phase-0 ×elem_bytes products are launch-time shifts (see
+    // dec_row_len_bytes / dec_dim0_offset), so no third multiplier is needed.
     wire [31:0] mul_off_result, mul_dlt_result;
     reg  [31:0] mul_off_a, mul_off_b, mul_dlt_a, mul_dlt_b;
     // Registered operands: gives each DSP an input-register stage so the

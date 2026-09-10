@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// §8.6 async batch smoke — host driver. Allocates RTU_ASYNC_NUM_BATCH
+// Async batch smoke — host driver. Allocates RTU_ASYNC_NUM_BATCH
 // independent single-triangle scenes (each triangle at a unique z so
 // hit_t is unique per ray), launches the kernel, validates that the
 // per-ray status + hit_t match the expected values for each handle.

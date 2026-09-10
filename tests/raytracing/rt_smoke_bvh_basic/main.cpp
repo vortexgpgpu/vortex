@@ -11,10 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke — Phase 4 chunk 2 host driver.
+// PRISM RTU smoke — host driver.
 //
 // Builds a tiny BVH4 scene whose root IS a leaf with one opaque
-// triangle. Exercises the new scene_kind=2 walker end-to-end:
+// triangle. Exercises the scene_kind=2 walker end-to-end:
 //   - scene header parsed → l.bvh_root_offset = 16
 //   - drain_mem_rsp pre-fetches the full per-lane line budget
 //   - compute_intersections_bvh4_lane() decodes the leaf and walks

@@ -47,6 +47,7 @@ Vortex news can be found on its [website](https://vortex.cc.gatech.edu/)
     - Altera Arria 10
     - Altera Stratix 10
     - Xilinx Alveo U50, U55C, U250, U280
+    - Xilinx Alveo V80 (Versal, via the SLASH platform — see [setup guide](docs/xilinx_slash_setup.md))
     - Xilinx Versal VCK5000
 
 ## Directory structure

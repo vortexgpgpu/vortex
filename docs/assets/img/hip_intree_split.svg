@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 560" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .intree { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.8; }
+    .ext    { fill:#fdf6e3; stroke:#b58900; stroke-width:1.6; }
+    .lane   { fill:none; stroke-width:1.2; stroke-dasharray:4 4; }
+    .t   { fill:#1b2733; font-size:18px; font-weight:bold; }
+    .hh  { font-size:14px; font-weight:bold; }
+    .th  { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts  { fill:#44525f; font-size:12px; }
+    .tt  { fill:#5a6772; font-size:11px; font-style:italic; }
+    .conn { stroke:#8a6d00; stroke-width:1.8; fill:none; marker-end:url(#arr); stroke-dasharray:6 4; }
+    .lblg { fill:#8a6d00; font-size:11.5px; }
+  </style>
+
+  <rect x="0" y="0" width="940" height="560" fill="#ffffff"/>
+  <text x="24" y="34" class="t">HIP on Vortex — in-tree vs. external ownership</text>
+
+  <!-- lanes -->
+  <rect x="30" y="58" width="410" height="470" rx="8" class="lane" stroke="#2e5e82"/>
+  <rect x="500" y="58" width="410" height="470" rx="8" class="lane" stroke="#b58900"/>
+  <text x="48" y="82" class="hh" fill="#2e5e82">In-tree — the Vortex repo owns</text>
+  <text x="518" y="82" class="hh" fill="#8a6d00">External — installed into $TOOLDIR</text>
+
+  <!-- LEFT column -->
+  <rect x="50" y="100" width="370" height="70" rx="6" class="intree"/>
+  <text x="64" y="122" class="th">HIP test sources</text>
+  <text x="64" y="141" class="ts">tests/hip/{vecadd,sgemm,histogram,atomicreduce}/</text>
+  <text x="64" y="159" class="tt">main.cpp + common.h — __global__ kernels, HIP host API</text>
+
+  <rect x="50" y="184" width="370" height="72" rx="6" class="intree"/>
+  <text x="64" y="206" class="th">Build / run engine</text>
+  <text x="64" y="225" class="ts">tests/hip/common.mk + Makefile</text>
+  <text x="64" y="243" class="tt">hipcc → SPIR-V, POCL JIT, run on simx/rtlsim/opae/xrt</text>
+
+  <rect x="50" y="270" width="370" height="88" rx="6" class="intree"/>
+  <text x="64" y="292" class="th">CI install / package glue</text>
+  <text x="64" y="311" class="ts">ci/chipstar_install.sh.in</text>
+  <text x="64" y="329" class="ts">ci/toolchain_install.sh.in · toolchain_prebuilt.sh.in</text>
+  <text x="64" y="347" class="tt">chipstar + pocl are in the default --all set</text>
+
+  <rect x="50" y="372" width="370" height="70" rx="6" class="intree"/>
+  <text x="64" y="394" class="th">CI catalog category</text>
+  <text x="64" y="413" class="ts">ci/testcases/hip.yaml  →  pytest ci -m hip</text>
+  <text x="64" y="431" class="tt">drivers simx/rtlsim/opae/xrt · xlen 32 + 64 · tier smoke</text>
+
+  <!-- RIGHT column -->
+  <rect x="520" y="100" width="370" height="96" rx="6" class="ext"/>
+  <text x="534" y="122" class="th">chipStar</text>
+  <text x="534" y="141" class="ts">vortexgpgpu/chipStar @ vortex_3.x</text>
+  <text x="534" y="159" class="ts">hipcc · libCHIP.so · hipspv-spirv{32,64}.bc</text>
+  <text x="534" y="178" class="tt">built -DCHIP_TARGET_POINTER_WIDTHS="32;64"</text>
+
+  <rect x="520" y="210" width="370" height="70" rx="6" class="ext"/>
+  <text x="534" y="232" class="th">llvm-vortex</text>
+  <text x="534" y="251" class="ts">clang++ (host X86 + device RISCV), ld.lld</text>
+  <text x="534" y="269" class="ts">llvm-spirv (SPIRV-LLVM-Translator)</text>
+
+  <rect x="520" y="294" width="370" height="82" rx="6" class="ext"/>
+  <text x="534" y="316" class="th">POCL</text>
+  <text x="534" y="335" class="ts">vortexgpgpu/pocl — libpocl + OpenCL ICD</text>
+  <text x="534" y="353" class="ts">Vortex device (address_bits = 32 or 64)</text>
+  <text x="534" y="371" class="tt">shared with the OpenCL test path</text>
+
+  <!-- connectors -->
+  <path d="M 420 220 L 520 148" class="conn"/>
+  <text x="430" y="196" class="lblg">invokes per recipe</text>
+  <path d="M 420 314 L 520 330" class="conn"/>
+  <text x="430" y="300" class="lblg">install / package</text>
+</svg>

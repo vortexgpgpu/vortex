@@ -62,7 +62,13 @@ uint32_t depth = TFixed<24>(0.5f).data();
 bool blend_enable = false;
 bool depth_enable = false;
 bool backface     = false;
-bool sw_path      = false;   // -S : merge via gfx_sw::om_fragment (§5)
+bool sw_path      = false;   // -S : merge via gfx_sw::om_fragment
+bool mrt_enable   = false;   // -m : also render to a second colour attachment
+
+// Second colour attachment, cleared to a value no fragment produces so that a
+// channel the writemask should have protected is visible if it is overwritten.
+const uint32_t kRt1Clear = 0x11223344;
+const uint32_t kRt1Mask  = 0x0000ff00;   // CBUF_WRITEMASK 0b0010: green only
 
 uint32_t clear_color = 0x00000000;
 uint32_t clear_depth = TFixed<24>(0.5f).data();
@@ -80,15 +86,17 @@ vx_module_h module_      = nullptr;
 vx_kernel_h kernel       = nullptr;
 vx_buffer_h depth_buffer = nullptr;
 vx_buffer_h color_buffer = nullptr;
+vx_buffer_h color_buffer1 = nullptr;
+uint64_t    cbuf1_addr = 0;
 
 static void show_usage() {
    std::cout << "Vortex Render Output Test (v2 KMU)." << std::endl;
-   std::cout << "Usage: [-c color] [-d depth] [-b blend] [-f face] [-k kernel] [-o image] [-r reference] [-w width] [-h height]" << std::endl;
+   std::cout << "Usage: [-c color] [-d depth] [-b blend] [-m mrt] [-f face] [-k kernel] [-o image] [-r reference] [-w width] [-h height]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:bdfS?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:bdfmS?")) != -1) {
     switch (c) {
     case 'o': output_file = optarg; break;
     case 'r': reference_file = optarg; break;
@@ -99,6 +107,7 @@ static void parse_args(int argc, char **argv) {
     case 'c': color = std::atoi(optarg); break;
     case 'd': depth_enable = true; break;
     case 'b': blend_enable = true; break;
+    case 'm': mrt_enable = true; break;
     case 'S': sw_path = true; break;
     case '?': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
@@ -108,12 +117,26 @@ static void parse_args(int argc, char **argv) {
     std::cout << "Error: output file is missing for reference validation" << std::endl;
     exit(1);
   }
+  // The attachments share one depth buffer, so a fragment covering several of
+  // them runs the depth test once per attachment. That only agrees with itself
+  // if the test writes nothing back.
+  if (mrt_enable && depth_enable) {
+    std::cout << "Error: -m and -d cannot be combined: several colour attachments "
+                 "share the depth buffer, which the depth write would then change "
+                 "between one attachment and the next" << std::endl;
+    exit(1);
+  }
+  if (mrt_enable && sw_path) {
+    std::cout << "Error: -m is a fixed-function path; -S merges in software" << std::endl;
+    exit(1);
+  }
 }
 
 void cleanup() {
   if (device) {
     if (depth_buffer) vx_buffer_release(depth_buffer);
     if (color_buffer) vx_buffer_release(color_buffer);
+    if (color_buffer1) vx_buffer_release(color_buffer1);
     if (kernel)  vx_kernel_release(kernel);
     if (module_) vx_module_release(module_);
     if (queue)   vx_queue_release(queue);
@@ -142,7 +165,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS,   &num_warps));
 
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
-  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
+  RT_CHECK(vx_module_get_kernel(module_, mrt_enable ? "kernel_main_mrt" : "main", &kernel));
 
   // ---- allocate cbuf + zbuf --------------------------------------------
   zbuf_pitch = dst_width * 4;
@@ -160,6 +183,10 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_buffer_address(depth_buffer, &zbuf_addr));
   RT_CHECK(vx_buffer_create(device, cbuf_size, om_flags, &color_buffer));
   RT_CHECK(vx_buffer_address(color_buffer, &cbuf_addr));
+  if (mrt_enable) {
+    RT_CHECK(vx_buffer_create(device, cbuf_size, om_flags, &color_buffer1));
+    RT_CHECK(vx_buffer_address(color_buffer1, &cbuf1_addr));
+  }
 
   // depth checkerboard prefill.
   {
@@ -184,6 +211,13 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
     vx_event_release(ev);
   }
+  if (mrt_enable) {
+    std::vector<uint32_t> staging(cbuf_size / 4, kRt1Clear);
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_write(queue, color_buffer1, 0, staging.data(), cbuf_size, 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
+  }
 
   // ---- configure OM DCRs -----------------------------------------------
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_ADDR,      cbuf_addr / 64, 0, nullptr, nullptr));
@@ -191,6 +225,19 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_WRITEMASK, 0xf, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_ADDR,      zbuf_addr / 64, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_PITCH,     zbuf_pitch, 0, nullptr, nullptr));
+
+  // Fragment-export aperture. The kernel stores its fragments here; the OM
+  // ingress bit-slices the offset back into (x, y, face), which is why the pitch
+  // is padded to a power of two. Derived once and passed to the kernel arg too --
+  // if the two ever disagree the ingress silently misreads every record.
+  auto ceil_log2 = [](uint32_t v) { uint32_t b = 0; while ((1u << b) < v) ++b; return b; };
+  uint32_t ap_xbits = ceil_log2(dst_width);
+  uint32_t ap_ybits = ceil_log2(dst_height);
+  uint32_t ap_shift = 3;   // this kernel exports colour AND depth
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_XBITS,        ap_xbits, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_YBITS,        ap_ybits, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_RECORD_SHIFT, ap_shift, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_DEPTH_ONLY,   0, 0, nullptr, nullptr));
 
   if (depth_enable) {
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FUNC,      VX_OM_DEPTH_FUNC_LESS, 0, nullptr, nullptr));
@@ -230,6 +277,28 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_BLEND_CONST, 0, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_LOGIC_OP,    VX_OM_LOGIC_OP_COPY, 0, nullptr, nullptr));
 
+  // Colour attachment 1. Everything above landed on attachment 0, which the
+  // select register names by default. Attachment 1 differs from it in exactly
+  // the two things that are per-attachment -- the buffer it writes and the
+  // channels it writes there -- and, under -b, in whether it blends at all.
+  if (mrt_enable) {
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_RT_SELECT,      1, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_ADDR,      cbuf1_addr / 64, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_PITCH,     cbuf_pitch, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_WRITEMASK, 0x2, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_BLEND_MODE,
+                          (VX_OM_BLEND_MODE_ADD << 16) | VX_OM_BLEND_MODE_ADD, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_BLEND_FUNC,
+                            (VX_OM_BLEND_FUNC_ZERO << 24)
+                          | (VX_OM_BLEND_FUNC_ZERO << 16)
+                          | (VX_OM_BLEND_FUNC_ONE  <<  8)
+                          |  VX_OM_BLEND_FUNC_ONE, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_BLEND_CONST, 0, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_LOGIC_OP,    VX_OM_LOGIC_OP_COPY, 0, nullptr, nullptr));
+    // Leave the select where the next caller expects to find it.
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_RT_SELECT,   0, 0, nullptr, nullptr));
+  }
+
   // ---- pack kernel arg + launch ----------------------------------------
   kernel_arg_t kernel_arg = {};
   kernel_arg.dst_width    = dst_width;
@@ -238,6 +307,9 @@ int main(int argc, char *argv[]) {
   kernel_arg.depth        = depth;
   kernel_arg.backface     = backface ? 1 : 0;
   kernel_arg.blend_enable = blend_enable ? 1 : 0;
+  kernel_arg.aperture_xbits        = ap_xbits;
+  kernel_arg.aperture_ybits        = ap_ybits;
+  kernel_arg.aperture_record_shift = ap_shift;
   uint32_t r = (color >> 16) & 0xff;
   uint32_t g = (color >>  8) & 0xff;
   uint32_t b = (color      ) & 0xff;
@@ -246,7 +318,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.g_scale_q16 = (g    << 16) / dst_height;
   kernel_arg.b_scale_q16 = (b    << 16) / (dst_width + dst_height);
 
-  // Software OM state (§5): mirror the OM DCR config above into om_state_t so the
+  // Software OM state: mirror the OM DCR config above into om_state_t so the
   // kernel's gfx_sw::om_fragment merges identically to the FF OM unit. The enable
   // flags + expanded color mask are derived exactly as the FF unit does, via
   // resolve_om_state() (the same logic om_core/DepthTencil/Blender::configure use).
@@ -324,7 +396,42 @@ int main(int argc, char *argv[]) {
                        -(int)cbuf_pitch));
   }
 
+  // Colour attachment 1, checked against the colour the kernel computes rather
+  // than against attachment 0: reading the answer back off the device's own
+  // other attachment would pass even if the two shared one buffer.
+  int mrt_errors = 0;
+  if (mrt_enable) {
+    std::vector<uint32_t> rt1(cbuf_size / 4);
+    vx_event_h read_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, rt1.data(), color_buffer1, 0, cbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+
+    for (uint32_t y = 0; y < dst_height && mrt_errors < 16; ++y) {
+      for (uint32_t x = 0; x < dst_width && mrt_errors < 16; ++x) {
+        uint32_t alpha = blend_enable ? ((y * kernel_arg.a_scale_q16) >> 16) : 0xff;
+        uint32_t src   = (alpha << 24)
+                       | (((x * kernel_arg.r_scale_q16) >> 16) << 16)
+                       | (((y * kernel_arg.g_scale_q16) >> 16) <<  8)
+                       |  (((x + y) * kernel_arg.b_scale_q16) >> 16);
+        // Attachment 1 does not blend, so the source colour reaches it intact --
+        // and only through the channels its own writemask opens.
+        uint32_t want = (kRt1Clear & ~kRt1Mask) | (src & kRt1Mask);
+        uint32_t got  = rt1[x + y * dst_width];
+        if (got != want) {
+          std::cout << "FAILED: attachment 1 at (" << x << "," << y << "): got 0x"
+                    << std::hex << got << ", expected 0x" << want << std::dec << std::endl;
+          ++mrt_errors;
+        }
+      }
+    }
+  }
+
   cleanup();
+
+  if (mrt_errors != 0) {
+    return 1;
+  }
 
   if (reference_file) {
     auto reference_file_s = resolve_path(reference_file, ASSETS_PATHS);

@@ -207,7 +207,7 @@ module VX_fsqrt_unit_rtl import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     `UNUSED_VAR (siga_ljn[SUPER_SIG-1])
     wire [SUPER_MAN-1:0] man_a = siga_ljn[SUPER_MAN-1:0];
 
-    // SQRT W_0 / S_0 (see header; derived symbolically, reduce to legacy F32 consts)
+    // SQRT W_0 / S_0 (see header; derived symbolically; reduce to the F32 constants at SUPER=F32)
     wire [W_BITS-1:0] manSC1 = W_BITS'(man_a) << (SCALE_SQRT + 1);  // man * 2^(SC+1)
 
     wire [W_BITS-1:0] S0_sq = nr_offset0_sq ? W_BITS'(3) << (SQRT_LEAD - 1)  // 3*2^(LEAD-1)

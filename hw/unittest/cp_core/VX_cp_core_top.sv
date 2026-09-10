@@ -234,6 +234,8 @@ module VX_cp_core_top
     .reset     (reset),
     .axil_s    (axil_s_if),
     .axi_host  (axi_host_if),
+    .dbg_host_w_counts (32'd0),
+    .dbg_host_r_counts (32'd0),
     .axi_dev   (axi_dev_if),
     .gpu_if    (gpu_if_inst),
     .irq       (irq)

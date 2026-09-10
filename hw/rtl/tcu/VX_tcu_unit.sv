@@ -191,6 +191,11 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // any block sees the loaded metadata.
     // -----------------------------------------------------------------------
 `ifdef TCU_META_ENABLE
+    // The AGU streams NUM_TCU_LANES operands over the LSU memory client, whose
+    // request/response mask and data are sized by NUM_LSU_LANES; the two lane
+    // counts must match for the per-lane completion tracking to be correct.
+    `STATIC_ASSERT (NUM_LANES == `VX_CFG_NUM_LSU_LANES, ("VX_tcu_agu requires NUM_TCU_LANES == NUM_LSU_LANES"));
+
     wire                                              agu_meta_wr_en;
     wire [NW_WIDTH-1:0]                               agu_meta_wr_wid;
     wire [4:0]                                        agu_meta_wr_idx;

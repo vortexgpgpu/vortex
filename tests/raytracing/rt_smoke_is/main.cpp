@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU Intersection Shader smoke — Phase 6 host driver.
+// PRISM RTU Intersection Shader smoke — host driver.
 
 #include <iostream>
 #include <unistd.h>

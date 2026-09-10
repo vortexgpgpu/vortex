@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU Miss Shader smoke — Phase 5.
+// PRISM RTU Miss Shader smoke.
 //
 // Ray fires away from the lone scene triangle (direction -Z instead of
 // +Z) so traversal misses. With VX_RT_FLAG_ENABLE_MISS set, RtuCore

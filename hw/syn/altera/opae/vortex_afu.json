@@ -20,6 +20,7 @@
       "mmio-scope-write": 22,
       "mmio-dev-caps":    24,
       "mmio-isa-caps":    26,
+      "mmio-reset":       30,
 
       "afu-top-interface":
          {

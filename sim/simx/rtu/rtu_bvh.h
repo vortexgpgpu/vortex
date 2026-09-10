@@ -39,6 +39,7 @@
 
 #include <cstddef>   // offsetof (layout guards)
 #include <cstdint>
+#include <VX_config.h>   // VX_CFG_RTU_BVH_WIDTH — the generator is its only source
 
 namespace vortex { namespace rtu {
 
@@ -73,9 +74,6 @@ constexpr uint32_t kVxBvhChildOffsetMask= 0x7fffffffu;    // bits 0..30: byte of
 //     independent — it decodes whichever format a scene declares via
 //     scene_kind — so a build can still walk a wider scene.
 // ---------------------------------------------------------------------
-#ifndef VX_CFG_RTU_BVH_WIDTH
-#define VX_CFG_RTU_BVH_WIDTH 4
-#endif
 constexpr uint32_t kVxBvh4Width   = 4;   // CW-BVH4 fan-out (fixed, 64 B node)
 constexpr uint32_t kVxBvh6Width   = 6;   // CW-BVH6 fan-out (fixed, 96 B node)
 constexpr uint32_t kVxBvhMaxWidth = 6;   // sizes the width-generic NodeView
@@ -206,8 +204,8 @@ inline void decode_bvh6_node(const VxBvh6InternalNode* n, uint32_t count,
 //                             primitive; the walker reports
 //                             prim_base + within-leaf index so a
 //                             transcoder can preserve Vulkan primitive
-//                             IDs. Legacy fixtures leave it 0 → the old
-//                             within-leaf-index behaviour.
+//                             IDs. When 0, the reported ID is just the
+//                             within-leaf index.
 //
 // After this header (offset +16):
 //   LeafTri  : VxBvhTri[prim_count]      — 40 B each (matches flat-list)

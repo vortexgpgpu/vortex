@@ -90,7 +90,9 @@ static std::vector<setup_vertex_t> expand_vertices(const CGLTrace::drawcall_t& d
     uint32_t idx[3] = { p.i0, p.i1, p.i2 };
     for (int k = 0; k < 3; ++k) {
       const auto& v = dc.vertices.at(idx[k]);
-      setup_vertex_t s;
+      setup_vertex_t s{};   // varying2 feeds the w0..w5 planes; an
+                            // indeterminate one reaches setup as an
+                            // attribute plane.
       s.pos[0] = v.pos.x; s.pos[1] = v.pos.y; s.pos[2] = v.pos.z; s.pos[3] = v.pos.w;
       s.color[0] = v.color.r; s.color[1] = v.color.g; s.color[2] = v.color.b; s.color[3] = v.color.a;
       s.texcoord[0] = v.texcoord.u; s.texcoord[1] = v.texcoord.v;
@@ -113,7 +115,7 @@ static TileMap binning_oracle(const std::vector<setup_vertex_t>& verts, uint32_t
   nb = graphics::Binning(tilebuf, primbuf_out, vmap, prims, dst_width, dst_height,
                          SETUP_NEAR, SETUP_FAR, PIPE_BIN_LOG);
   TileMap m;
-  // Host Binning() now emits the gfx_v2 §6.3 coarse-bin layout (dense
+  // Host Binning() emits the coarse-bin layout (dense
   // rast_bin_header_t block + absolute-indexed sorted-pid array).
   auto* hdr = reinterpret_cast<const rast_bin_header_t*>(tilebuf.data());
   const uint32_t* pids = reinterpret_cast<const uint32_t*>(
@@ -282,6 +284,20 @@ int main(int argc, char** argv) {
     vx_enqueue_dcr_write(q, VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0, 0, nullptr, nullptr);
     // configure OM: colour write; depth/stencil/blend disabled (the triangle's
     // state — matches gfx_draw3d's disabled-feature branches).
+    // Fragment-export aperture: the FS stores fragments here and the OM ingress
+    // bit-slices the offset back into (x, y, face) -- hence the power-of-two pitch.
+    // Derived once, and passed to the kernel arg, so the two cannot drift.
+    auto ceil_log2 = [](uint32_t v) { uint32_t b = 0; while ((1u << b) < v) ++b; return b; };
+    uint32_t ap_xbits = ceil_log2(dst_width);
+    uint32_t ap_ybits = ceil_log2(dst_height);
+    uint32_t ap_shift = 3;
+    vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_XBITS, ap_xbits, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_YBITS, ap_ybits, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_RECORD_SHIFT, ap_shift, 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(q, VX_DCR_OM_APERTURE_DEPTH_ONLY, 0, 0, nullptr, nullptr);
+    fa.aperture_xbits        = ap_xbits;
+    fa.aperture_ybits        = ap_ybits;
+    fa.aperture_record_shift = ap_shift;
     vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_ADDR, cbuf_addr / 64, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_PITCH, cbuf_pitch, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(q, VX_DCR_OM_CBUF_WRITEMASK, dc.states.color_writemask, 0, nullptr, nullptr);

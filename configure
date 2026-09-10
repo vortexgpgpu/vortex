@@ -114,12 +114,19 @@ copy_files() {
             rel_path="${rel_path#/}" # Remove leading slash, if present
             local full_target_dir="$target_dir/$rel_path"
 
-            # Copy and update Makefile and common.mk if they exist
+            # A partially-copied directory gets its build description and
+            # nothing else: the Makefile, every fragment it includes (*.mk --
+            # common.mk, catalog.mk, build.mk, extensions.mk, platforms.mk),
+            # and every template to instantiate. Sources stay in the source
+            # tree and are reached from there. Copying only SOME fragments is
+            # the footgun: an include that resolves in the source tree and
+            # fails in the build tree is invisible until someone runs the
+            # target from build/.
             if [ $full_copy -eq 1 ]; then
                 copy_and_update "$dir/*" "$full_target_dir"
             else
                 copy_and_update "$dir/Makefile" "$full_target_dir"
-                copy_and_update "$dir/common.mk" "$full_target_dir"
+                copy_and_update "$dir/*.mk" "$full_target_dir"
                 copy_and_update "$dir/*.in" "$full_target_dir"
             fi
         done

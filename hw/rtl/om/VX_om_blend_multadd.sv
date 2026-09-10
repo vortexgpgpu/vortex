@@ -38,6 +38,35 @@ module VX_om_blend_multadd import VX_om_pkg::*; #(
     `STATIC_ASSERT((LATENCY == 3), ("invalid parameter"))
     `UNUSED_VAR (reset)
 
+    // The sum is one stage behind the inputs and the clamp two, so each needs
+    // the mode of the fragment it is working on rather than the one at the port:
+    // consecutive fragments need not share a colour attachment, and attachments
+    // need not share a blend mode.
+    wire [OM_BLEND_MODE_BITS-1:0] mode_rgb_s1, mode_a_s1;
+    wire [OM_BLEND_MODE_BITS-1:0] mode_rgb_s2, mode_a_s2;
+
+    VX_shift_register #(
+        .DATAW (2 * OM_BLEND_MODE_BITS),
+        .DEPTH (1)
+    ) mode_reg1 (
+        .clk      (clk),
+        `UNUSED_PIN (reset),
+        .enable   (enable),
+        .data_in  ({mode_rgb,    mode_a}),
+        .data_out ({mode_rgb_s1, mode_a_s1})
+    );
+
+    VX_shift_register #(
+        .DATAW (2 * OM_BLEND_MODE_BITS),
+        .DEPTH (1)
+    ) mode_reg2 (
+        .clk      (clk),
+        `UNUSED_PIN (reset),
+        .enable   (enable),
+        .data_in  ({mode_rgb_s1, mode_a_s1}),
+        .data_out ({mode_rgb_s2, mode_a_s2})
+    );
+
     // multiply-add
 
     reg [15:0] prod_src_r, prod_src_g, prod_src_b, prod_src_a;
@@ -56,7 +85,7 @@ module VX_om_blend_multadd import VX_om_pkg::*; #(
             prod_dst_b <= dst_color.argb[7:0] * dst_factor.argb[7:0];
             prod_dst_a <= dst_color.argb[31:24] * dst_factor.argb[31:24];
 
-            case (mode_rgb)
+            case (mode_rgb_s1)
                 `VX_OM_BLEND_MODE_ADD: begin
                     sum_r <= prod_src_r + prod_dst_r + 16'h80;
                     sum_g <= prod_src_g + prod_dst_g + 16'h80;
@@ -73,7 +102,7 @@ module VX_om_blend_multadd import VX_om_pkg::*; #(
                     sum_b <= prod_dst_b - prod_src_b + 16'h80;
                 end
             endcase
-            case (mode_a)
+            case (mode_a_s1)
                 `VX_OM_BLEND_MODE_ADD: begin
                     sum_a <= prod_src_a + prod_dst_a + 16'h80;
                 end
@@ -92,7 +121,7 @@ module VX_om_blend_multadd import VX_om_pkg::*; #(
     reg [15:0] clamp_r, clamp_g, clamp_b, clamp_a;
 
     always @(*) begin
-        case (mode_rgb)
+        case (mode_rgb_s2)
             `VX_OM_BLEND_MODE_ADD: begin
                 clamp_r = (sum_r > 17'hFF00) ? 16'hFF00 : sum_r[15:0];
                 clamp_g = (sum_g > 17'hFF00) ? 16'hFF00 : sum_g[15:0];
@@ -110,7 +139,7 @@ module VX_om_blend_multadd import VX_om_pkg::*; #(
                 clamp_b = 'x;
             end
         endcase
-        case (mode_a)
+        case (mode_a_s2)
             `VX_OM_BLEND_MODE_ADD: begin
                 clamp_a = (sum_a > 17'hFF00) ? 16'hFF00 : sum_a[15:0];
             end

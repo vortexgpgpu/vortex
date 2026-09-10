@@ -10,8 +10,6 @@
 #   - device properties           -> vx_device_query() (VX_CAPS_*)
 #   - build parameters            -> config.mk
 #   - compile-time HW config      -> gen_config.py --cflags (build -D flags)
-#
-# See docs/proposals/config_hw_sw_layering_proposal.md.
 
 set -euo pipefail
 

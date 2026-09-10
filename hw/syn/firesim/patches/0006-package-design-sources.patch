@@ -1,0 +1,112 @@
+Carry design sources that simulation resolves by library search into the kernel.
+
+Vortex is handed to Verilator as a handful of packages plus a wrapper, with the
+remaining modules resolved by library search over the include paths. Vivado has
+no equivalent, so without this it synthesizes a design whose submodules are all
+missing.
+
+The sources cannot simply be added to the packaging project. ipx::package_project
+infers bus interfaces from everything it imports, and a design carrying
+SystemVerilog interfaces has no IP-XACT representation, so packaging fails on
+ports it cannot express. They are instead attached to the core after packaging,
+where the inference pass never sees them.
+
+Attaching alone is not enough either. A file referenced outside the component
+root does not travel with the IP, leaving the linker to find the instantiation
+but not the module, so each file is copied into the component and registered
+relatively. It is registered in both the synthesis and behavioural-simulation
+file groups: the first builds bitstreams, the second builds hardware emulation,
+and a file present in only one is invisible to the other flow.
+
+The kernel top is named explicitly as well. Vivado infers it from the source set,
+and a design large enough to need this hook is large enough for that inference to
+settle on one of its internal modules, which then fails to package.
+
+Absent VORTEX_VIVADO_SRCS the flow is unchanged.
+
+--- build_firesim/firesim/platforms/vitis/cl_firesim/scripts/package_kernel.tcl.orig
++++ build_firesim/firesim/platforms/vitis/cl_firesim/scripts/package_kernel.tcl
+@@ -46,6 +46,45 @@
+     $path_to_hdl/FireSim-generated.post-processed.sv \
+ ]
+ 
++# The design under test may resolve most of its RTL by library search during
++# simulation, which Vivado has no equivalent for. When a flattened source list is
++# supplied, every file in it is added explicitly and its search paths recorded.
++if {[info exists ::env(VORTEX_VIVADO_SRCS)]} {
++    set vortex_list $::env(VORTEX_VIVADO_SRCS)
++    if {![file exists $vortex_list]} {
++        puts "ERROR: VORTEX_VIVADO_SRCS points at a missing file: $vortex_list"
++        exit 1
++    }
++    set fh [open $vortex_list r]
++    set vortex_files {}
++    set vortex_incdirs {}
++    while {[gets $fh line] >= 0} {
++        set line [string trim $line]
++        if {$line eq ""} { continue }
++        if {[string match "+incdir+*" $line]} {
++            lappend vortex_incdirs [string range $line 8 end]
++        } elseif {[string match "+*" $line]} {
++            continue
++        } else {
++            lappend vortex_files $line
++        }
++    }
++    close $fh
++    if {[llength $vortex_files] == 0} {
++        puts "ERROR: no sources listed in $vortex_list"
++        exit 1
++    }
++    puts "collected [llength $vortex_files] design sources from $vortex_list"
++    # Deliberately not added to this project. ipx::package_project infers bus
++    # interfaces from every file it imports, and a design carrying SystemVerilog
++    # interfaces cannot be expressed in IP-XACT -- packaging fails on ports it
++    # has no way to represent. The files are attached to the packaged core
++    # further down instead, so they ship with the IP without being parsed here.
++    if {[llength $vortex_incdirs] > 0} {
++        set_property include_dirs $vortex_incdirs [get_filesets sources_1]
++    }
++}
++
+ set_property USED_IN_SYNTHESIS false     [get_files $impl_xdc_path]
+ set_property USED_IN_IMPLEMENTATION true [get_files $impl_xdc_path]
+ 
+@@ -102,6 +141,37 @@
+ set_property sdx_kernel_type rtl $core
+ set_property supported_families { } $core
+ set_property auto_family_support_level level_2 $core
++# Deliver the design sources with the packaged core. They are added to the
++# synthesis file group directly rather than through the project, so synthesis
++# sees them while the packager's interface inference never does.
++if {[info exists vortex_files] && [llength $vortex_files] > 0} {
++    # Both groups: synthesis builds the bitstream, behavioural simulation builds
++    # hardware emulation, and a file registered in only one is invisible to the
++    # other flow.
++    set target_fgs [list \
++        [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects $core] \
++        [ipx::get_file_groups xilinx_anylanguagebehavioralsimulation -of_objects $core]]
++    # Copied into the core rather than referenced where they lie: a path outside
++    # the component root does not survive IP delivery, so the linker would find
++    # the instantiation but not the module.
++    set vortex_dst $path_to_packaged/src
++    file mkdir $vortex_dst
++    foreach vf $vortex_files {
++        set base [file tail $vf]
++        file copy -force $vf $vortex_dst/$base
++        foreach fg $target_fgs {
++            set added [ipx::add_file src/$base $fg]
++            if {[string match "*.vh" $base] || [string match "*.svh" $base]} {
++                set_property type verilogSource $added
++                set_property is_include true $added
++            } elseif {[string match "*.sv" $base]} {
++                set_property type systemVerilogSource $added
++            }
++        }
++    }
++    puts "attached [llength $vortex_files] design sources to the packaged core"
++}
++
+ ipx::create_xgui_files $core
+ ipx::update_checksums $core
+ ipx::check_integrity -kernel $core

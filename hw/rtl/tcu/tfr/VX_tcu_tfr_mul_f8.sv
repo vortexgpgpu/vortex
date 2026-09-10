@@ -21,9 +21,11 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     parameter W     = 25,
     parameter WA    = 28,
     parameter EXP_W = 10,
-    parameter USE_DSP = 0   // map mantissa multipliers onto DSP48 slices
+    parameter USE_DSP = 0,  // map mantissa multipliers onto DSP48 slices
+    parameter PROD_REG = 0  // product/flag register stages (multiply-stage seam)
 ) (
     input wire                      clk,
+    input wire                      enable,
     input wire                      valid_in,
     input wire [31:0]               req_id,
 
@@ -37,9 +39,14 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
     input wire [7:0]                sf_b,
 `endif
 
+    // result_exp/exceptions are pre-seam (classify cycle); result_sig and
+    // sig_zero are post-seam (PROD_REG cycles later). sig_zero flags exact
+    // cancellation of the two sub-products: the joined exponent must be
+    // zeroed so the lane is excluded from the max-exponent search.
     output logic [TCK-1:0][24:0]      result_sig,
     output logic [TCK-1:0][EXP_W-1:0] result_exp,
-    output fedp_excep_t [TCK-1:0]     exceptions
+    output fedp_excep_t [TCK-1:0]     exceptions,
+    output wire  [TCK-1:0]            sig_zero
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
@@ -123,7 +130,8 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
 
             assign ea_sel[j] = is_ea_zero ? 5'b1 : raw_ea;
             assign eb_sel[j] = is_eb_zero ? 5'b1 : raw_eb;
-            assign ma_sel[j] = {~is_ea_zero, raw_ma};
+            // Invalid lanes zero the A mantissa so the product is zero.
+            assign ma_sel[j] = lane_valid[j] ? {~is_ea_zero, raw_ma} : 4'b0;
             assign mb_sel[j] = {~is_eb_zero, raw_mb};
             `UNUSED_VAR (cls_a.is_sub)
             `UNUSED_VAR (cls_b.is_sub)
@@ -228,37 +236,54 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
 
         // The two fp8 mantissa products in a lane are independent unsigned 4x4
         // multiplies — small enough to pack into a single DSP48 (USE_DSP),
-        // halving the f8 DSP count vs one DSP per product.
+        // halving the f8 DSP count vs one DSP per product. PROD_REG lands the
+        // products in the DSP48 PREG.
         wire [1:0][7:0] man_prod;
         VX_tcu_tfr_wmul #(
             .N       (4),
             .LANES   (2),
-            .USE_DSP (USE_DSP)
+            .USE_DSP (USE_DSP),
+            .OUT_REG (PROD_REG)
         ) wtmul (
+            .clk    (clk),
+            .enable (enable),
             .a (ma_sel),
             .b (mb_sel),
             .p (man_prod)
         );
 
-        wire [7:0] man_prod0_v = man_prod[0] & {8{lane_valid[0]}};
-        wire [7:0] man_prod1_v = man_prod[1] & {8{lane_valid[1]}};
+        // Sort/align controls depend only on exponents and signs: pre-seam
+        // compute, post-seam use.
+        wire       diff_sign_r;
+        wire       diff_ge_32_r;
+        wire [4:0] shamt_r;
+        wire [1:0] sign_sel_r;
+        wire       pre_sum_eq_r;
+        VX_pipe_register #(
+            .DATAW (1 + 1 + 5 + 2 + 1),
+            .DEPTH (PROD_REG)
+        ) pipe_ctrl (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  ({diff_sign,   diff_abs[5],  diff_abs[4:0], sign_sel,   (pre_sum_0 == pre_sum_1)}),
+            .data_out ({diff_sign_r, diff_ge_32_r, shamt_r,       sign_sel_r, pre_sum_eq_r})
+        );
 
-        wire [7:0] prod_max = diff_sign ? man_prod0_v : man_prod1_v;
-        wire [7:0] prod_min = diff_sign ? man_prod1_v : man_prod0_v;
-        wire       sign_max = diff_sign ? sign_sel[0] : sign_sel[1];
-        wire       sign_min = diff_sign ? sign_sel[1] : sign_sel[0];
+        wire [7:0] prod_max = diff_sign_r ? man_prod[0] : man_prod[1];
+        wire [7:0] prod_min = diff_sign_r ? man_prod[1] : man_prod[0];
+        wire       sign_max = diff_sign_r ? sign_sel_r[0] : sign_sel_r[1];
+        wire       sign_min = diff_sign_r ? sign_sel_r[1] : sign_sel_r[0];
 
         // Alignment
         wire [23:0] sig_max = {prod_max, 16'b0};
-        wire diff_ge_32 = diff_abs[5];
-        wire [4:0] shamt = diff_abs[4:0];
-        wire [23:0] sig_min_shifted = diff_ge_32 ? 24'b0 : ({prod_min, 16'b0} >> shamt);
+        wire [23:0] sig_min_shifted = diff_ge_32_r ? 24'b0 : ({prod_min, 16'b0} >> shamt_r);
 
         // Add/sub reduction
         wire [24:0] sig_max_ext = {1'b0, sig_max};
         wire [24:0] sig_min_ext = {1'b0, sig_min_shifted};
 
-        wire do_sub = sign_sel[0] ^ sign_sel[1];
+        wire do_sub = sign_sel_r[0] ^ sign_sel_r[1];
 
         wire [24:0] add_raw;
         VX_ks_adder #(
@@ -292,15 +317,15 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
         wire [23:0] sig_add = sig_add_raw[24:1];
         `UNUSED_VAR (sig_add_raw[0])
 
-        wire pre_sum_eq = (pre_sum_0 == pre_sum_1);
-        wire mag_is_equal = pre_sum_eq && (man_prod0_v == man_prod1_v);
+        wire mag_is_equal = pre_sum_eq_r && (man_prod[0] == man_prod[1]);
         wire is_zero_out = do_sub && mag_is_equal;
 
         wire sig_sign_raw = sub_neg ? sign_min : sign_max;
         wire sig_sign = is_zero_out ? 1'b0 : sig_sign_raw;
 
         assign result_sig[i] = {sig_sign, sig_add};
-        assign result_exp[i] = ((v0 || v1) && !is_zero_out) ? final_exp : '0;
+        assign sig_zero[i]   = is_zero_out;
+        assign result_exp[i] = (v0 || v1) ? final_exp : '0;
 
         // Exception merging
         wire pos_inf_0 = inf_sel[0] && ~sign_sel[0] && lane_valid[0];
@@ -315,17 +340,31 @@ module VX_tcu_tfr_mul_f8 import VX_tcu_pkg::*;
 
         wire final_sign_inf = inf_sel[0] ? sign_sel[0] : sign_sel[1];
 
+        // The sign field is only consumed for infinity lanes downstream.
         assign exceptions[i].is_nan = any_nan;
         assign exceptions[i].is_inf = any_inf;
-        assign exceptions[i].sign   = any_inf ? final_sign_inf : sig_sign;
+        assign exceptions[i].sign   = final_sign_inf;
 
     `ifdef DBG_TRACE_TCU
+        wire        trace_valid;
+        wire [31:0] trace_req_id;
+        wire [1:0]  trace_lane_valid;
+        VX_pipe_register #(
+            .DATAW (1 + 32 + 2),
+            .DEPTH (PROD_REG)
+        ) pipe_trace (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  ({valid_in,    req_id,       lane_valid}),
+            .data_out ({trace_valid, trace_req_id, trace_lane_valid})
+        );
         always_ff @(posedge clk) begin
-            if (valid_in && g_lane[i].lane_valid != 0) begin
-                `TRACE(4, ("%t: %s FEDP-REDUCE(%0d) lane=%0d: ", $time, INSTANCE_ID, req_id, i));
-                `TRACE(4, ("max=(%0d, 0x%0h, %0d), ", sign_max, sig_max, max_pre_sum));
+            if (trace_valid && trace_lane_valid != 0) begin
+                `TRACE(4, ("%t: %s FEDP-REDUCE(%0d) lane=%0d: ", $time, INSTANCE_ID, trace_req_id, i));
+                `TRACE(4, ("max=(%0d, 0x%0h), ", sign_max, sig_max));
                 `TRACE(4, ("min=(%0d, 0x%0h) ", sign_min, sig_min_shifted));
-                `TRACE(4, ("-> s=%0d, P=0x%0h, E=%0d\n", sig_sign, sig_add, final_exp));
+                `TRACE(4, ("-> s=%0d, P=0x%0h\n", sig_sign, sig_add));
             end
         end
     `endif

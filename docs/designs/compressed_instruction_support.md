@@ -93,22 +93,6 @@ test binaries are built from upstream riscv-tests, not checked in.
 2. **A-extension in the SimX LSU aborts** (orthogonal to RVC) — blocks the
    combined `imac`+A path the RVC march flags imply.
 
-**Superseded directions** (recorded so the stale proposal narrative is not
-followed): the SimX files are `decompressor.{cpp,h}` (not `decompress.*`);
-the config macro is `VX_CFG_EXT_C_ENABLE` (not `EXT_C_ENABLE`); the SimX
-fetch logic is a dedicated `Decompressor` SimObject (not inline
-`RvcSlot`/`rvc_pending_refetch_` in `Core::fetch()`); the RTL feedback is a
-single `decode_sched_if.is_rvc` wire (not a 3-port
-`decompress_finished`/`pc_incr_by_2`/`decompress_wid` bundle); `is_rvc` is
-carried via `op_args.br.is_rvc` + `fetch_t.is_rvc` (not threaded through
-`decode_t`/`ibuffer_t`/`scoreboard_t`/etc.); and CI gating shipped (the
-proposal marked it deferred). Note the proposal's own §7 timing concern
-(WNS −1.765 ns ≈ 196 MHz) is attributable to pre-existing scheduler/CSR
-fanout, not the 1-bit RVC additions.
-
----
-
-## 6. Source proposal
-
-This design consolidates and supersedes `rvc_migration_proposal.md` (now
-removed from `docs/proposals/`).
+**Timing note:** the RVC plumbing added to the pipeline is 1-bit wide; the
+WNS observed on RVC-enabled builds (−1.765 ns ≈ 196 MHz) is attributable
+to pre-existing scheduler/CSR fanout, not the RVC additions.

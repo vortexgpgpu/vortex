@@ -23,8 +23,9 @@ AmoUnit::AmoUnit(uint32_t reservation_size) {
 
 AmoComputeResult AmoUnit::compute(MemOp op, uint8_t width,
                                   uint64_t old_word, uint64_t rhs,
-                                  bool unsigned_minmax) const {
-  return amo_compute(op, width, old_word, rhs, unsigned_minmax);
+                                  bool unsigned_minmax,
+                                  uint64_t cmp) const {
+  return amo_compute(op, width, old_word, rhs, unsigned_minmax, cmp);
 }
 
 void AmoUnit::reserve(uint32_t hart_id, uint64_t line_addr) {

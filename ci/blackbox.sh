@@ -19,14 +19,15 @@ ROOT_DIR=$SCRIPT_DIR/..
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--saif] [--perf=#class] [--vcd_file=#file] [--saif_file=#file] [--log=logfile] [--nohup] [--help]]"
+    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--target=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--vcd] [--saif] [--perf=#class] [--vcd_file=#file] [--saif_file=#file] [--log=logfile] [--nohup] [--help]]"
 }
 
 show_help()
 {
     show_usage
     echo "  where"
-    echo "--driver: gpu, simx, rtlsim, oape, xrt"
+    echo "--driver: gpu, simx, rtlsim, opae, xrt, aved"
+    echo "--target: aved driver only -- avedsim (default), sim, hw"
     echo "--app: any subfolder test under regression, graphics, mpi, opencl, or hip"
     echo "--perf: 0=disable, 1=core, 3=icache, 4=dcache, 5=l2cache, 6=l3cache, 7=mem,"
     echo "        11=tcu, 12=raster, 13=tex, 14=om, 15=rtu, 16=dxa"
@@ -43,10 +44,12 @@ add_option() {
 
 DEFAULTS() {
     DRIVER=simx
+    TARGET=
     APP=sgemm
     DEBUG=0
     DEBUG_LEVEL=0
     SCOPE=0
+    VCD=0
     SAIF=0
     HAS_ARGS=0
     HAS_NP=0
@@ -63,6 +66,7 @@ parse_args() {
     for i in "$@"; do
         case $i in
             --driver=*) DRIVER=${i#*=} ;;
+            --target=*) TARGET=${i#*=} ;;
             --app=*)    APP=${i#*=} ;;
             --clusters=*) CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_NUM_CLUSTERS=${i#*=}") ;;
             --cores=*)  CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_NUM_CORES=${i#*=}") ;;
@@ -73,6 +77,7 @@ parse_args() {
             --perf=*)   CONFIGS=$(add_option "$CONFIGS" "-DPERF_ENABLE"); PERF_CLASS=${i#*=} ;;
             --debug=*)  DEBUG=1; DEBUG_LEVEL=${i#*=} ;;
             --scope)    SCOPE=1 ;;
+            --vcd)      VCD=1 ;;
             --saif)     SAIF=1 ;;
             --vcd_file=*)  VCD_FILE=${i#*=} ;;
             --saif_file=*) SAIF_FILE=${i#*=} ;;
@@ -90,7 +95,7 @@ parse_args() {
 set_driver_path() {
     case $DRIVER in
         gpu) DRIVER_PATH="" ;;
-        simx|rtlsim|opae|xrt) DRIVER_PATH="$ROOT_DIR/sw/runtime/$DRIVER" ;;
+        simx|rtlsim|opae|xrt|aved|firesim) DRIVER_PATH="$ROOT_DIR/sw/runtime/$DRIVER" ;;
         *) echo "Invalid driver: $DRIVER"; exit 1 ;;
     esac
 }
@@ -122,7 +127,9 @@ build_driver() {
     local cmd_opts=""
     [ $DEBUG -ne 0 ] && cmd_opts=$(add_option "$cmd_opts" "DEBUG=$DEBUG_LEVEL")
     [ $SCOPE -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SCOPE=1")
+    [ $VCD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VCD=1")
     [ $SAIF -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SAIF=1")
+    [ -n "$TARGET" ] && cmd_opts=$(add_option "$cmd_opts" "TARGET=$TARGET")
     [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "DESTDIR=\"$TEMPDIR\"")
     [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")
     cmd_opts=$(add_option "$cmd_opts" "make -C $DRIVER_PATH > /dev/null")
@@ -142,10 +149,12 @@ run_app() {
     # too, else it relinks libvortex without -DSCOPE and the scope drains
     # are silently compiled out.
     [ $SCOPE -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SCOPE=1")
-    # SAIF must be propagated here too: the test target rebuilds the rtlsim
-    # model, so without it the model is relinked without --trace-saif and no
-    # SAIF is written (mirrors the SCOPE note above).
+    # VCD and SAIF must be propagated here too: the test target rebuilds the
+    # model, so without them it is relinked without --trace/--trace-saif and
+    # no waveform or SAIF is written (mirrors the SCOPE note above).
+    [ $VCD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VCD=1")
     [ $SAIF -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SAIF=1")
+    [ -n "$TARGET" ] && cmd_opts=$(add_option "$cmd_opts" "TARGET=$TARGET")
     [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VORTEX_RT_LIB=\"$TEMPDIR\"")
     [ $HAS_ARGS -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "OPTS=\"$ARGS\"")
     [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")
@@ -164,6 +173,11 @@ main() {
 
     if [ $SAIF -eq 1 ] && [ "$DRIVER" = "simx" ]; then
         echo "Error: SAIF is not supported with the simx driver"
+        exit 1
+    fi
+
+    if [ $VCD -eq 1 ] && [ "$DRIVER" = "simx" ]; then
+        echo "Error: VCD is not supported with the simx driver"
         exit 1
     fi
 

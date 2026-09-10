@@ -118,7 +118,8 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
 #endif
             const uint32_t supports_draw = 1u << 25;
             const uint32_t supports_qmd  = 1u << 26;
-            return supports_qmd | supports_draw | vm_enabled
+            const uint32_t fault_report  = hooks_.mmu_fault_report ? (1u << 27) : 0;
+            return supports_qmd | supports_draw | vm_enabled | fault_report
                  | (uint32_t(6) << 16) | (uint32_t(16) << 8) | uint32_t(1);
         }
         case 0x010: return uint32_t(cycle_counter_ & 0xFFFFFFFF);

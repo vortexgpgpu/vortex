@@ -14,7 +14,9 @@ suite rides on. Covers the RTL
 > **Scope note:** what is implemented is the **synchronous-trap
 > foundation only** (ECALL/EBREAK/MRET, single-hart `env/p/`). The named
 > "preemption" capability — async preempt-from-CP, interrupts, supervisor
-> mode, fault producers, register-file/IPDOM save — is future work (§5).
+> mode, fault producers, register-file/IPDOM save — is future work (§4).
+> The kernel-entry/dispatch mechanism is in
+> [`kernel_entry_and_dispatch.md`](kernel_entry_and_dispatch.md).
 
 ---
 
@@ -79,8 +81,7 @@ on Vortex; the 616 checked-in `.bin` files and the
 
 ## 4. Proposed but not yet implemented
 
-The named **preemption** capability is future work (the proposal scoped
-these out as non-goals):
+The named **preemption** capability is future work:
 
 1. **Async preempt-from-CP** — a `preempt_pending` port, a custom trap
    cause, and a safe-point check so the CP can preempt a running grid.
@@ -92,7 +93,7 @@ these out as non-goals):
 4. **Interrupts** — `mie`/`mip`, async injection, `mcause` MSB.
 5. **Register-file / IPDOM-stack save-restore** — required for true
    context switch (only the trap CSRs are saved today).
-6. **`tests/regression/csr_smoke/`** unit test (Milestone 1) — absent.
+6. **`tests/regression/csr_smoke/`** unit test — absent.
 7. **Guardrails** (open risks): same-cycle `csrw`/trap conflict assertion,
    `mtvec` MODE≠0 assertion, multi-warp `tohost` race.
 
@@ -101,11 +102,3 @@ these out as non-goals):
 addresses to a hand-written `VX_csr.vh` (they live in the generated
 `VX_types.vh`); and the SimX "kill all warps" trap hack (replaced by
 per-warp `raise_trap`).
-
----
-
-## 5. Source proposal
-
-This design consolidates and supersedes `preemption_foundation_proposal.md`
-(now removed from `docs/proposals/`). The kernel-entry/dispatch mechanism
-is in [`kernel_entry_and_dispatch.md`](kernel_entry_and_dispatch.md).

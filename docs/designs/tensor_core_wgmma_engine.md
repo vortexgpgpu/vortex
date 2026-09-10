@@ -244,59 +244,36 @@ structs and tile-geometry templates; `sw/runtime/include/tensor_sp.h` and
 
 ## 7. Proposed but not yet implemented
 
-The following were specified across the source proposals and remain open;
-they are recorded so the intent is preserved.
+The following extension points remain open; they are recorded so the
+intent is preserved.
 
-1. **SimX↔RTL precision trace-alignment infrastructure**
-   (`wgmma_smem_ordering_trace_alignment_proposal`, Phases 2–6 — the
-   least-realized proposal). Only the Phase-1 UUID un-drops landed
+1. **SimX↔RTL precision trace-alignment infrastructure.** Only the
+   UUID un-drops landed
    ([`VX_tcu_abuf.sv:259`](../../hw/rtl/tcu/VX_tcu_abuf.sv#L259),
    [`VX_tcu_bbuf.sv:385`](../../hw/rtl/tcu/VX_tcu_bbuf.sv#L385)). Still
-   unbuilt: the reusable `DBG_TRACE_TXN` phase emitters, a true
+   unbuilt: reusable `DBG_TRACE_TXN` phase emitters, a true
    `SMEM_WR_COMMIT` event in `VX_local_mem`, SimX barrier/TCU-read TLM
-   strengthening, and the `ci/trace_align.py` aligner. The proposal frames
-   this as standing infrastructure for *all* future TCU/DXA/barrier
-   ordering bugs — high preservation value. The underlying `VX_local_mem`
-   DMA-port read-during-write interlock is the prime suspect for the
-   NRC=8 shared-memory ordering hazard.
-2. **WGMMA latency-hiding refinements** (`wgmma_simx_v3_proposal` §4.10):
+   strengthening, and a `ci/trace_align.py` aligner. This would serve as
+   standing infrastructure for *all* future TCU/DXA/barrier ordering
+   bugs. The underlying `VX_local_mem` DMA-port read-during-write
+   interlock is the prime suspect for the NRC=8 shared-memory ordering
+   hazard.
+2. **WGMMA latency-hiding refinements**:
    k-transition prefetch and B ping-pong buffering — deferred as optional.
-3. **DXA / k-major cleanup** (`wgmma_kmajor_completion_proposal` Phases
-   6–7): retiring the legacy block-major B-buffer path (both paths
-   currently coexist, ≈2× bbuf area) and the U55C PPA quantification on
-   Yosys/OpenSTA — deliberately deferred; block-major is retained as the
-   transition default.
-4. **TCU_LD generalization** (`tcu_ld_proposal` open items): a
+3. **DXA / k-major cleanup**: retiring the legacy block-major B-buffer
+   path (both paths currently coexist, ≈2× bbuf area) and the U55C PPA
+   quantification on Yosys/OpenSTA — deliberately deferred; block-major
+   is retained as the transition default.
+4. **TCU_LD generalization**: a
    multi-request stride AGU, double-buffered `VX_tcu_sp_meta` slots, and
    RTX/TEX/OM warp-level preload clients on the shared `VX_lsu_scheduler`
    (the multi-client boundary exists; ports 2..N are reserved but unused).
-5. **MN-major SS descriptor + SMEM swizzling**
-   (`wgmma_kmajor_completion_proposal`, out of scope): NVIDIA's third
+5. **MN-major SS descriptor + SMEM swizzling**: NVIDIA's third
    descriptor leg and bank-conflict swizzle — bit space reserved, no
    implementation.
 
-**Open bugs flagged in proposals (status unverified):** XLEN=64
-`sgemm_tcu_wg` fp16 rtlsim numerical failure (`wgmma_opt1` PW1) and the
-tf32 rtlsim poisoned cycle-counter (`tcu_ld` PW2).
-
-**Superseded directions** (recorded to avoid revival): the
-`wgmma_simx_v3_addendum` "drop row-major end-to-end, no fallback" stance
-(reversed — k-major is now a first-class retained path); the `simx_v3`
-Phase-E "third buffered sparse-streaming path" and the `VX_tcu_mbuf`
-metadata buffer (replaced by TCU_LD into `VX_tcu_sp_meta`; `VX_tcu_mbuf.sv`
-deleted); and the proposed SimX file/class splits (`TcuTbufA`+`TcuSharedB`,
-`tcu_wgmma.cpp`) which were flagged cosmetic and never landed — the
-*structure* matches, the *decomposition* differs.
-
----
-
-## 8. Source proposals
-
-This design consolidates and supersedes the following proposals (now
-removed from `docs/proposals/`): `wgmma_simx_v3_proposal.md`,
-`wgmma_simx_v3_addendum.md`, `wgmma_opt1_proposal.md`,
-`wgmma_kmajor_completion_proposal.md`,
-`wgmma_smem_ordering_trace_alignment_proposal.md`, `tcu_ld_proposal.md`.
+**Open bugs (status unverified):** XLEN=64 `sgemm_tcu_wg` fp16 rtlsim
+numerical failure and the tf32 rtlsim poisoned cycle-counter.
 
 The k-major DXA writer that pairs with the TCU's k-major buffers is
 described in the DXA design (`dxa_async_copy_multicast.md`).

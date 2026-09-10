@@ -16,7 +16,6 @@
 #include <cstdint>
 #include <queue>
 #include <vector>
-#include <simobject.h>
 #include "types.h"
 
 namespace vortex {

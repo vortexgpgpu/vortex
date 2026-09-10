@@ -11,12 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU short-stack-overflow smoke — W9(b).
+// PRISM RTU short-stack-overflow smoke.
 //
 // A single ray traverses a host-built CW-BVH4 whose depth exceeds the modest
 // per-context short stack (VX_CFG_RTU_STACK_DEPTH set small in the Makefile).
 // The HW must still return the closest hit: it overflows, drops subtrees, and
-// re-descends from root (§8.5.1 restart) pruning by best_t. SimX keeps an
+// re-descends from root (restart) pruning by best_t. SimX keeps an
 // unbounded stack and is the exact oracle.
 
 #ifndef _RTU_SMOKE_DEEP_STACK_COMMON_H_

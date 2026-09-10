@@ -64,6 +64,11 @@ public:
     bool      face               = false;
     uint32_t  src_color          = 0;
     uint32_t  src_depth          = 0;
+    // Which records this fragment actually carries (the export mask). A record
+    // it does not carry has no source value, so it can be neither tested nor
+    // written.
+    bool      has_color          = false;
+    bool      has_depth          = false;
 
     uint64_t  zbuf_addr_byte     = 0;
     uint64_t  cbuf_addr_byte     = 0;
@@ -90,7 +95,7 @@ public:
     bool      c_read_issued      = false;
     // Write-completion acks (ocache write responses). A slot holds its
     // same-pixel R-M-W interlock until its writes COMMIT, not merely issue, so a
-    // later same-pixel fragment's read can't bypass an in-flight write (the §8
+    // later same-pixel fragment's read can't bypass an in-flight write (the
     // cross-draw depth-ordering hazard).
     bool      z_write_acked      = false;
     bool      c_write_acked      = false;
@@ -137,7 +142,9 @@ public:
   int dcr_write(uint32_t addr, uint32_t value) {
     dcrs_.write(addr, value);
     depth_stencil_.configure(dcrs_);
-    blender_.configure(dcrs_);
+    for (uint32_t rt = 0; rt < VX_OM_MAX_RT; ++rt) {
+      blender_[rt].configure(dcrs_, rt);
+    }
     recompute_state();
     return 0;
   }
@@ -189,15 +196,17 @@ private:
     stencil_front_writemask_ = dcrs_.read(VX_DCR_OM_STENCIL_WRITEMASK) & 0xffff;
     stencil_back_writemask_  = dcrs_.read(VX_DCR_OM_STENCIL_WRITEMASK) >> 16;
 
-    cbuf_baseaddr_ = uint64_t(dcrs_.read(VX_DCR_OM_CBUF_ADDR)) << 6;
-    cbuf_pitch_    = dcrs_.read(VX_DCR_OM_CBUF_PITCH);
-    uint32_t cbuf_writemask = dcrs_.read(VX_DCR_OM_CBUF_WRITEMASK) & 0xf;
-    cbuf_writemask_ = (((cbuf_writemask >> 0) & 0x1) * 0x000000ff)
-                    | (((cbuf_writemask >> 1) & 0x1) * 0x0000ff00)
-                    | (((cbuf_writemask >> 2) & 0x1) * 0x00ff0000)
-                    | (((cbuf_writemask >> 3) & 0x1) * 0xff000000);
-    color_read_  = (cbuf_writemask != 0xf);
-    color_write_ = (cbuf_writemask != 0x0);
+    for (uint32_t rt = 0; rt < VX_OM_MAX_RT; ++rt) {
+      cbuf_baseaddr_[rt] = uint64_t(dcrs_.read(rt, VX_DCR_OM_CBUF_ADDR)) << 6;
+      cbuf_pitch_[rt]    = dcrs_.read(rt, VX_DCR_OM_CBUF_PITCH);
+      uint32_t cbuf_writemask = dcrs_.read(rt, VX_DCR_OM_CBUF_WRITEMASK) & 0xf;
+      cbuf_writemask_[rt] = (((cbuf_writemask >> 0) & 0x1) * 0x000000ff)
+                          | (((cbuf_writemask >> 1) & 0x1) * 0x0000ff00)
+                          | (((cbuf_writemask >> 2) & 0x1) * 0x00ff0000)
+                          | (((cbuf_writemask >> 3) & 0x1) * 0xff000000);
+      color_read_[rt]  = (cbuf_writemask != 0xf);
+      color_write_[rt] = (cbuf_writemask != 0x0);
+    }
   }
 
   // Same-pixel R-M-W interlock: a real ROP serialises fragments that touch the
@@ -205,7 +214,15 @@ private:
   // to the next. OM runs up to kInflight slots concurrently, so two same-pixel
   // fragments could otherwise both READ stale depth before either WRITES, and
   // the last write would win by slot scheduling rather than submit order.
-  // Returns true if `cand` covers any pixel an in-flight slot still owns.
+  //
+  static uint32_t pixel_hash(uint32_t x, uint32_t y) {
+    return ((y & 0x7) << 3) | (x & 0x7);
+  }
+
+  // The compare is on the pixel's 8x8-tile hash bucket, not the exact
+  // coordinate: two pixels alias only across tiles and an alias costs a
+  // stall, never a wrong result.
+  // Returns true if `cand` covers a bucket an in-flight slot still owns.
   bool collides_with_inflight(const OmReq& cand) const {
     for (uint32_t s = 0; s < slots_.size(); ++s) {
       if (!slots_[s].in_use) continue;
@@ -214,8 +231,10 @@ private:
         if (!(cand.tmask_bits & (1u << a))) continue;
         for (uint32_t b = 0; b < VX_CFG_NUM_THREADS; ++b) {
           if (!(other.tmask_bits & (1u << b))) continue;
-          if (cand.pos_x[a] == other.pos_x[b] && cand.pos_y[a] == other.pos_y[b])
+          if (pixel_hash(cand.pos_x[a], cand.pos_y[a])
+           == pixel_hash(other.pos_x[b], other.pos_y[b])) {
             return true;
+          }
         }
       }
     }
@@ -223,6 +242,56 @@ private:
   }
 
   // ── Stage: ACCEPT (drain per-core inputs into free slots) ───────────
+  // vx_om_export arrives as an aperture ADDRESS, not a position: recovering
+  // (x, y, face) needs the aperture DCRs, which are cluster state. This is the
+  // SimX counterpart of VX_om_ingress -- the core-side unit deliberately does not
+  // have the OM's DCRs, so the decode belongs here.
+  //
+  // The encoding is shift-only (the pitch is padded to a power of two), so this
+  // is bit-slicing, not division:
+  //     offset = ((((rt << 1) | face) << ybits | y) << xbits | x) << record_shift
+  void decode_aperture(OmReq& req) const {
+    uint32_t xbits = dcrs_.read(VX_DCR_OM_APERTURE_XBITS);
+    uint32_t ybits = dcrs_.read(VX_DCR_OM_APERTURE_YBITS);
+    uint32_t shift = dcrs_.read(VX_DCR_OM_APERTURE_RECORD_SHIFT);
+    bool rt_seen = false;
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      if (!(req.tmask_bits & (1u << t))) continue;
+      uint64_t off = req.addr[t] - uint64_t(VX_MEM_OM_BASE_ADDR);
+      uint64_t rec = off >> shift;
+      req.pos_x[t] = uint32_t(rec & ((1ull << xbits) - 1));
+      req.pos_y[t] = uint32_t((rec >> xbits) & ((1ull << ybits) - 1));
+      req.face[t]  = uint8_t((rec >> (xbits + ybits)) & 0x1);
+      // The index is above face, so a single-attachment export decodes to zero
+      // without its producer knowing the field exists. It names the attachment
+      // of the whole record, so every lane of one export must agree.
+      uint32_t rt = uint32_t((rec >> (xbits + ybits + 1)) & (VX_OM_MAX_RT - 1));
+      assert((!rt_seen || rt == req.rt) && "OM: one export spans two colour attachments");
+      req.rt  = rt;
+      rt_seen = true;
+    }
+    __unused(rt_seen);
+    // Several attachments share one depth attachment, so a fragment covering
+    // them exports once per attachment and each export runs the depth/stencil
+    // test. The repeats only agree if the test writes nothing back.
+    assert((req.rt == 0
+            || !(dcrs_.read(VX_DCR_OM_DEPTH_WRITEMASK) & 0x1))
+           && "OM: colour attachment exported while the depth write is enabled");
+    assert((req.rt == 0 || dcrs_.read(VX_DCR_OM_STENCIL_WRITEMASK) == 0)
+           && "OM: colour attachment exported while the stencil write is enabled");
+    // A one-word record holds colour or depth, never both. Which one is stated
+    // twice and by two different producers: the host writes it as a DCR, the
+    // shader encodes it in the export. This is the only place that holds both,
+    // and a disagreement writes the wrong buffer with no other symptom.
+    if (shift != 3) {
+      uint32_t depth_only = dcrs_.read(VX_DCR_OM_APERTURE_DEPTH_ONLY);
+      assert((req.export_mask & 0x3) == (depth_only ? 0x2u : 0x1u)
+             && "OM: aperture record shape disagrees with the export mask");
+      __unused(depth_only);
+    }
+    req.from_aperture = false;   // decoded; downstream sees an ordinary request
+  }
+
   void drain_req_in() {
     auto& chs = simobject_->om_req_in;
     if (chs.empty()) return;
@@ -231,9 +300,15 @@ private:
       auto& ch = chs.at(cid);
       if (ch.empty()) continue;
 
+      OmReq req = ch.peek();
+      if (req.from_aperture) {
+        decode_aperture(req);
+      }
+
       // Hold a same-pixel fragment until the in-flight owner retires (ROP
       // ordering); other pixels on other channels still make progress.
-      if (collides_with_inflight(ch.peek())) continue;
+      // NOTE: this must run on the DECODED request -- it compares positions.
+      if (collides_with_inflight(req)) continue;
 
       uint32_t free_slot = UINT32_MAX;
       for (uint32_t s = 0; s < slots_.size(); ++s) {
@@ -244,7 +319,7 @@ private:
       auto& slot = slots_[free_slot];
       slot.in_use      = true;
       slot.state       = State::ADDR;
-      slot.req         = ch.peek();
+      slot.req         = req;
       slot.issue_cycle = cycle_;
       for (auto& l : slot.lanes) l = LaneState{};
       ch.pop();
@@ -258,7 +333,13 @@ private:
   // ── Stage: ADDR — compute per-lane addresses + read/write enables ───
   void advance_addr(Slot& s) {
     bool depth_enabled    = depth_stencil_.depth_enabled();
-    bool blend_enabled    = blender_.enabled();
+    bool blend_enabled    = blender_[s.req.rt].enabled();
+    // funct7[1:0] = {has_depth, has_colour}. A shader may export colour only
+    // (the common case once early-Z owns both the depth test and the depth
+    // write), depth only (z-prepass), or both. A record the fragment does not
+    // carry cannot be tested or written: there is no source value for it.
+    bool has_color = (s.req.export_mask & 0x1) != 0;
+    bool has_depth = (s.req.export_mask & 0x2) != 0;
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!(s.req.tmask_bits & (1u << t))) {
@@ -267,6 +348,8 @@ private:
       }
       LaneState& l = s.lanes[t];
       l.active    = true;
+      l.has_color = has_color;
+      l.has_depth = has_depth;
       l.pos_x     = s.req.pos_x[t];
       l.pos_y     = s.req.pos_y[t];
       l.face      = s.req.face[t] != 0;
@@ -274,11 +357,11 @@ private:
       l.src_depth = s.req.depth[t];
 
       l.zbuf_addr_byte = zbuf_baseaddr_ + uint64_t(l.pos_y) * zbuf_pitch_ + l.pos_x * 4;
-      l.cbuf_addr_byte = cbuf_baseaddr_ + uint64_t(l.pos_y) * cbuf_pitch_ + l.pos_x * 4;
+      l.cbuf_addr_byte = cbuf_baseaddr_[s.req.rt] + uint64_t(l.pos_y) * cbuf_pitch_[s.req.rt] + l.pos_x * 4;
 
       bool stencil_enabled = depth_stencil_.stencil_enabled(l.face);
-      l.need_z_read = depth_enabled || stencil_enabled;
-      l.need_c_read = color_write_ && (color_read_ || blend_enabled);
+      l.need_z_read = has_depth && (depth_enabled || stencil_enabled);
+      l.need_c_read = has_color && color_write_[s.req.rt] && (color_read_[s.req.rt] || blend_enabled);
     }
     s.state = State::READ_ISSUE;
   }
@@ -418,14 +501,15 @@ private:
   // ── Stage: COMPUTE — run DS test + blend, decide writes ─────────────
   void advance_compute(Slot& s) {
     bool depth_enabled = depth_stencil_.depth_enabled();
-    bool blend_enabled = blender_.enabled();
+    bool blend_enabled = blender_[s.req.rt].enabled();
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
 
-      bool stencil_enabled = depth_stencil_.stencil_enabled(l.face);
-      bool ds_active = depth_enabled || stencil_enabled;
+      bool stencil_enabled = l.has_depth && depth_stencil_.stencil_enabled(l.face);
+      bool ds_active = l.has_depth && depth_enabled;
+      ds_active = ds_active || stencil_enabled;
 
       uint32_t merged = 0;
       l.ds_pass = !ds_active
@@ -433,13 +517,13 @@ private:
       l.merged_depthstencil = merged;
 
       l.blended_color = (blend_enabled && l.ds_pass)
-                      ? blender_.blend(l.src_color, l.dst_color)
+                      ? blender_[s.req.rt].blend(l.src_color, l.dst_color)
                       : l.src_color;
 
       // Decide writes.
       uint32_t stencil_writemask = l.face ? stencil_back_writemask_ : stencil_front_writemask_;
       uint32_t ds_writemask =
-          ((depth_enabled && l.ds_pass && depth_writemask_) ? OM_DEPTH_MASK : 0u)
+          ((l.has_depth && depth_enabled && l.ds_pass && depth_writemask_) ? OM_DEPTH_MASK : 0u)
         | (stencil_enabled ? (uint32_t(stencil_writemask) << VX_OM_DEPTH_BITS) : 0u);
 
       l.need_z_write = (ds_writemask != 0);
@@ -448,12 +532,12 @@ private:
                         | (l.merged_depthstencil & ds_writemask);
       }
 
-      l.need_c_write = color_write_ && l.ds_pass;
+      l.need_c_write = l.has_color && color_write_[s.req.rt] && l.ds_pass;
       if (l.need_c_write) {
         // If color_read_ is false (writemask == 0xf), dst_color is unread —
         // we'll still write the full word; the merge is a no-op.
-        l.c_write_value = (l.dst_color & ~cbuf_writemask_)
-                        | (l.blended_color & cbuf_writemask_);
+        l.c_write_value = (l.dst_color & ~cbuf_writemask_[s.req.rt])
+                        | (l.blended_color & cbuf_writemask_[s.req.rt]);
       }
     }
     s.state = State::WRITE_ISSUE;
@@ -562,14 +646,15 @@ private:
   OmCore*                                   simobject_;
   OMDCRS                          dcrs_;
   DepthTencil                     depth_stencil_;
-  Blender                         blender_;
+  // One blender per colour attachment; the depth/stencil test is shared.
+  Blender                         blender_[VX_OM_MAX_RT];
 
   // DCR-derived cache (recomputed on every dcr_write).
-  uint64_t  cbuf_baseaddr_   = 0;
-  uint32_t  cbuf_pitch_      = 0;
-  uint32_t  cbuf_writemask_  = 0;
-  bool      color_read_      = false;
-  bool      color_write_     = false;
+  uint64_t  cbuf_baseaddr_[VX_OM_MAX_RT]  = {};
+  uint32_t  cbuf_pitch_[VX_OM_MAX_RT]     = {};
+  uint32_t  cbuf_writemask_[VX_OM_MAX_RT] = {};
+  bool      color_read_[VX_OM_MAX_RT]     = {};
+  bool      color_write_[VX_OM_MAX_RT]    = {};
   uint64_t  zbuf_baseaddr_   = 0;
   uint32_t  zbuf_pitch_      = 0;
   bool      depth_writemask_ = false;

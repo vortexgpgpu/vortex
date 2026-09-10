@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// §8.6 async batch smoke kernel — ISA ABI v2. Issues RTU_ASYNC_NUM_BATCH
+// Async batch smoke kernel. Issues RTU_ASYNC_NUM_BATCH
 // back-to-back vx_rt_wtrace calls — each one targets a different scene with
 // a triangle at a unique z — then drains the handles with the matching
 // vx_rt_wait. If any of the WAIT-handle ↔ TERMINAL routings is wrong,

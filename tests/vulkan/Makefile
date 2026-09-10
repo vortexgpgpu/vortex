@@ -9,13 +9,27 @@ include $(ROOT_DIR)/config.mk
 
 # --- master list ------------------------------------------------------
 TESTS := compute cflow shmem triangle indexed tristrip cull ubo depth multidraw swom swom_draw3d textured draw3d raytrace rtquery rtquery_id \
-         ssbo instanced mrt ubo_multiset rtquery_anyhit
+         ssbo instanced mrt ubo_multiset rtquery_anyhit \
+         tex_fetch tex_gather tex_shadow tex_lod tex_array tex_cube tex_3d tex_1d tex_border \
+         stencil logicop blend dsclear firstvertex \
+         alu fp16 subgroup atomic atomic_shared
 
 # --- common exclude list ---------------------------------------------
 # Unsupported on the vortexpipe/simx path:
-#   instanced, mrt, ubo_multiset : render hang
-#   rtquery_anyhit               : any-hit does not cull non-opaque candidates
-EXCLUDE := instanced mrt ubo_multiset rtquery_anyhit
+#   (none)
+#
+# An entry here is a claim about today's driver, not a property of the test, so
+# it has to be re-checked rather than inherited. instanced, mrt and ubo_multiset
+# sat here for a month under "render hang" after the hang had been fixed, which
+# cost three features their only coverage. Re-run an excluded test before
+# trusting its entry.
+EXCLUDE :=
+
+# --- driver-defect coverage ------------------------------------------
+# Each of these pins a specific defect in the vortexpipe driver and fails when
+# it regresses; they are a separate assignment only so the master list above
+# stays one block to edit.
+TESTS += redraw realloc fallback_mix subgroup_vs bigwg manyvary image bgra bgra_om omfmt mrtfmt srgbblend flatvary subgroup_fs zeroshared deriv discard dispatchq imagedraw rtqdraw localarr multiview occlusion csstats condrender manydesc csmultiset ubo_lastset msaa texwrap earlyz tex_trilinear msaa2x msaa_read texnpot drawindirect viewindex
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=

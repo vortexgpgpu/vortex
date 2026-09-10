@@ -1,4 +1,4 @@
-ROOT_DIR := $(realpath ../../../../../..)
+ROOT_DIR := $(realpath ../../../../..)
 include $(ROOT_DIR)/config.mk
 
 # Synthesis optimization level (standardized across hw/syn):
@@ -26,12 +26,17 @@ ifeq ($(DEVICE_FAMILY), arria10)
 	DEVICE = 10AX115N3F40E2SG
 endif
 
-CONFIGS += -DSYNTHESIS -DQUARTUS -DNDEBUG
+# `override`: see the matching note in hw/syn/xilinx/dut/common.mk -- a
+# command-line CONFIGS must add to this flow's mandatory defines, not replace
+# them.
+override CONFIGS += -DSYNTHESIS -DQUARTUS -DNDEBUG
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-CFLAGS += $(CONFIGS)
+# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
+# resolved type selectors so an enum override selects its RTL implementation.
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 CFLAGS += $(RTL_INCLUDE)
 
 PROJECT_FILES = $(PROJECT).qpf $(PROJECT).qsf

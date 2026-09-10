@@ -11,36 +11,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU reformation smoke kernel — Phase 3-A2 (option A).
+// PRISM RTU reformation smoke kernel — candidate-return loop.
 //
 // Single block, N <= VX_CFG_NUM_THREADS lanes (= one warp). Every lane
 // fires the same ray at the same non-opaque triangle, then waits on the
 // per-lane handle. RtuCore's reformation pass batches all N lanes into
-// one CB_YIELD (same sbt_idx=0), trap dispatcher ACCEPTs for the whole
-// virtual warp, then a single TERMINAL rsp drains every lane to HIT.
+// one CB_YIELD (same sbt_idx=0), the warp ACCEPTs the candidate for the
+// whole virtual warp via vx_rt_continue, then a single TERMINAL rsp
+// drains every lane to HIT.
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
 #include "common.h"
 
-// ACCEPT every yield. EXT2 / funct3=6 / sub-op=0 R-type: vx_rt_cb_ret rs1.
-__attribute__((naked, used))
-static void rt_dispatcher_accept(void) {
-  __asm__ volatile (
-    "li t0, %0\n"
-    ".insn r %1, 6, 0, x0, t0, x0\n"
-    "mret\n"
-    :: "i"(VX_RT_CB_ACCEPT), "i"(0x2b)
-  );
-}
-
 __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = threadIdx.x;
   if (tid >= arg->num_lanes) return;
-
-  // Register the ACCEPT dispatcher (CSR 0x305 = mtvec) once per warp.
-  // All lanes write the same handler — the regfile update is idempotent.
-  csr_write(0x305, (uintptr_t)&rt_dispatcher_accept);
 
   // Same ray per lane → same yield → reformation collapses all lanes
   // into one CB_YIELD with sbt_idx=0.
@@ -54,6 +40,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t h   = vx_rt_wtrace(scene_lo, 0u, 0u, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
+  while (vx_rt_sts_is_yield(sts)) {
+    sts = vx_rt_continue(h, VX_RT_CB_ACCEPT, hit.t, 0u, &hit);
+  }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[tid].status            = sts;

@@ -1,5 +1,9 @@
 ROOT_DIR := $(realpath ../../../..)
 include $(ROOT_DIR)/config.mk
+# Exports VERILATOR/VERILATOR_PATH as absolute paths. gen_sources.sh resolves
+# verilator from the environment, so without this the flow silently depends on
+# verilator being on PATH and fails with "verilator: command not found".
+include $(VORTEX_HOME)/hw/syn/common.mk
 
 ifneq ($(findstring Makefile, $(MAKEFILE_LIST)), Makefile)
 help:
@@ -32,6 +36,7 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
+AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 VIVADO := $(XILINX_VIVADO)/bin/vivado
@@ -100,7 +105,7 @@ ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
 	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
 	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
 endif
-RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/cache -I$(AFU_DIR)
+RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(AFU_COMMON_DIR)
 RTL_INCLUDE += $(FPU_INCLUDE)
 
 # Command Processor sources. RTL_PKGS holds packages only; the CP
@@ -108,7 +113,7 @@ RTL_INCLUDE += $(FPU_INCLUDE)
 RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
 RTL_INCLUDE += -I$(RTL_DIR)/cp
 
-# Per-extension RTL sources (TCU/DXA/V/gfx-window/RTU/TEX/RASTER/OM) —
+# Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
 # single source of truth, appended based on the resolved XCONFIGS.
 include $(VORTEX_HOME)/hw/syn/extensions.mk
 
@@ -117,6 +122,15 @@ include $(VORTEX_HOME)/hw/syn/extensions.mk
 # timing-closure margin.
 KERNEL_FREQ ?= 300
 
+# Timing-miss policy. Default (1): a design that misses KERNEL_FREQ is
+# auto-scaled down to the achieved frequency and the build succeeds with
+# truthful metadata (the stock Alveo behavior). FREQ_SCALING=0 makes a
+# scaled result unacceptable: any miss fails the build — for sign-off
+# builds where the target is the contract. Either way the post-build gate
+# verifies the implementation was actually timed at KERNEL_FREQ and that a
+# scaled bitstream reports its real clock.
+FREQ_SCALING ?= 1
+
 # Kernel compiler global settings
 VPP_FLAGS += --link --target $(TARGET) --platform $(PLATFORM) --save-temps --no_ip_cache
 VPP_FLAGS += --vivado.synth.jobs $(JOBS) --vivado.impl.jobs $(JOBS)
@@ -124,6 +138,13 @@ VPP_FLAGS += --kernel_frequency $(KERNEL_FREQ)
 
 # register compilation hooks
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.OPT_DESIGN.TCL.PRE=${SRC_DIR}/pre_opt_hook.tcl"
+
+# Implementation strategy. Unset by default: vpl picks the platform's own.
+# Name a Vivado impl strategy (e.g. Performance_ExplorePostRoutePhysOpt) to
+# trade build time for timing closure on a design that is routing-bound.
+ifdef IMPL_STRATEGY
+VPP_FLAGS += --xp "vivado_prop:run.impl_1.STRATEGY=$(IMPL_STRATEGY)"
+endif
 
 # load platform settings
 include $(SRC_DIR)/platforms.mk
@@ -165,7 +186,9 @@ endif
 
 # compilation flags
 CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-CFLAGS += $(CONFIGS)
+# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
+# resolved type selectors so an enum override selects its RTL implementation.
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 CFLAGS += $(RTL_INCLUDE)
 
 # ast dump flags
@@ -198,7 +221,7 @@ $(XO_CONTAINER): $(BUILD_DIR)/sources.txt
 
 gen-bin: $(XCLBIN_CONTAINER)
 $(XCLBIN_CONTAINER): $(XO_CONTAINER) $(SCOPE_JSON)
-	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); TOOL_DIR=$(SCRIPT_DIR) $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
+	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); TOOL_DIR=$(SCRIPT_DIR) KERNEL_FREQ=$(KERNEL_FREQ) $(if $(IMPL_MAX_THREADS),IMPL_MAX_THREADS=$(IMPL_MAX_THREADS)) $(if $(VORTEX_SLR),VORTEX_SLR=$(VORTEX_SLR)) $(VPP) $(VPP_FLAGS) -o ../$(XCLBIN_CONTAINER) ../$(XO_CONTAINER)
 
 emconfig: $(BIN_DIR)/emconfig.json
 $(BIN_DIR)/emconfig.json:
@@ -212,6 +235,10 @@ ifeq ($(TARGET), hw)
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_utilization_placed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/reports/link/imp/impl_1_hw_bb_locked_timing_summary_routed.rpt $(BUILD_DIR)/bin
 	cp $(BUILD_DIR)/_x/link/vivado/vpl/prj/prj.runs/impl_1/hier_utilization.rpt $(BUILD_DIR)/bin
+	python3 $(SCRIPT_DIR)/xilinx_check_kernel_clock.py --freq $(KERNEL_FREQ) \
+		--report $(BUILD_DIR)/bin/impl_1_hw_bb_locked_timing_summary_routed.rpt \
+		--new-clk-freq $(BUILD_DIR)/_x/link/int/_new_clk_freq \
+		$(if $(filter 0,$(FREQ_SCALING)),--no-scaling)
 endif
 
 chipscope:

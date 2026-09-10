@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1020" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="cs_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="cs_p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="cs_g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="cs_r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a03020"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .cm   { font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#1b2733; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.3; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .warn { fill:#fdeeea; stroke:#a03020; stroke-width:1.4; }
+    .loop { fill:none; stroke:#2f6b39; stroke-width:1.5; stroke-dasharray:7 4; }
+    .loopl{ fill:#eef7ef; stroke:#2f6b39; stroke-width:1.3; }
+    .altf { fill:none; stroke:#a03020; stroke-width:1.5; stroke-dasharray:7 4; }
+    .altl { fill:#fdeeea; stroke:#a03020; stroke-width:1.3; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#cs_a); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#cs_p); }
+    .mg   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#cs_g); }
+    .mr   { stroke:#a03020; stroke-width:1.7; fill:none; marker-end:url(#cs_r); }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lbg  { fill:#2f6b39; font-size:10.5px; }
+    .lbr  { fill:#a03020; font-size:10.5px; font-weight:bold; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="1020" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Admitting a cluster — reserve the whole window, then let the followers fall in</text>
+  <text x="24" y="56" class="tt">cluster_dim = (3,1,1). Only the FIRST member does any cluster reasoning; the other two are admitted by the ordinary standalone path.</text>
+
+  <!-- lifelines -->
+  <text x="140"  y="94" class="th" text-anchor="middle" fill="#8e4a7e">VX_kmu — grid walk</text>
+  <text x="470"  y="94" class="th" text-anchor="middle" fill="#2e5e82">admission logic</text>
+  <text x="800"  y="94" class="th" text-anchor="middle" fill="#2e5e82">slot_valid_r / tail_r</text>
+  <text x="1130" y="94" class="th" text-anchor="middle" fill="#3a7d44">warps of the cluster</text>
+  <text x="1400" y="94" class="th" text-anchor="middle" fill="#8a6d00">LMEM</text>
+
+  <line x1="140"  y1="104" x2="140"  y2="836" class="lane"/>
+  <line x1="470"  y1="104" x2="470"  y2="836" class="lane"/>
+  <line x1="800"  y1="104" x2="800"  y2="836" class="lane"/>
+  <line x1="1130" y1="104" x2="1130" y2="836" class="lane"/>
+  <line x1="1400" y1="104" x2="1400" y2="836" class="lane"/>
+
+  <!-- ===== CTA A ===== -->
+  <path d="M 144 136 L 466 136" class="mp"/>
+  <text x="160" y="128" class="lbp">CTA A — is_first_of_cluster = 1, cluster_size = 3</text>
+
+  <rect x="330" y="150" width="330" height="58" rx="5" class="act"/>
+  <text x="340" y="168" class="cm">cluster_k = clamp(3, 1, usable_slots_r)</text>
+  <text x="340" y="184" class="cm">base_slot = prewrap ? 0 : base_tail</text>
+  <text x="340" y="202" class="tt">the clamp is why an oversized cluster degrades, not deadlocks</text>
+
+  <path d="M 474 232 L 796 232" class="m"/>
+  <text x="490" y="224" class="lb">test the WHOLE window: (slot_valid_r &amp; cluster_window) == 0</text>
+
+  <!-- alt frame: not free -->
+  <rect x="110" y="252" width="1070" height="112" rx="6" class="altf"/>
+  <rect x="110" y="252" width="250" height="24" rx="4" class="altl"/>
+  <text x="120" y="269" class="lbr">alt  window NOT free</text>
+
+  <path d="M 796 300 L 478 300" class="mr"/>
+  <text x="530" y="292" class="lbr">admit_ok = 0  →  kmu_bus_if.ready = 0</text>
+
+  <path d="M 466 332 L 144 332" class="mr"/>
+  <text x="180" y="324" class="lbr">back-pressure — the KMU holds CTA A on the wire, `valid` stays high</text>
+
+  <text x="880" y="296" class="ts">The walk does not advance, so no member of this</text>
+  <text x="880" y="312" class="ts">cluster is emitted early. The cluster is admitted</text>
+  <text x="880" y="328" class="ts">atomically or not at all — there is no partial state</text>
+  <text x="880" y="344" class="ts">to unwind.</text>
+
+  <!-- window free -->
+  <rect x="110" y="380" width="1070" height="24" rx="4" class="loopl"/>
+  <text x="120" y="397" class="lbg">else  window free — admit</text>
+
+  <path d="M 796 432 L 478 432" class="mg"/>
+  <text x="540" y="424" class="lbg">admit_ok = 1</text>
+
+  <rect x="660" y="446" width="300" height="58" rx="5" class="actp"/>
+  <text x="670" y="464" class="cm">slot_valid_r[base_slot] &lt;= 1</text>
+  <text x="670" y="480" class="cm">tail_r &lt;= next_tail</text>
+  <text x="670" y="498" class="tt">only slot base_slot is claimed — NOT the window</text>
+
+  <rect x="1000" y="424" width="480" height="100" rx="5" class="note"/>
+  <text x="1012" y="444" class="th">The window is a TEST, not a claim</text>
+  <text x="1012" y="464" class="ts">Nothing marks the other K−1 slots as reserved. They stay free in</text>
+  <text x="1012" y="480" class="ts">slot_valid_r, and what protects them is simply that no other CTA</text>
+  <text x="1012" y="496" class="ts">can reach this dispatcher before the followers do — the bus is in</text>
+  <text x="1012" y="512" class="ts">order and the walk emits them next.</text>
+
+  <!-- ===== CTA B / C ===== -->
+  <path d="M 144 552 L 466 552" class="mp"/>
+  <text x="160" y="544" class="lbp">CTA B — is_first_of_cluster = 0</text>
+
+  <rect x="330" y="566" width="330" height="42" rx="5" class="act"/>
+  <text x="340" y="584" class="cm">admit_ok = ~slot_valid_r[base_slot]</text>
+  <text x="340" y="600" class="tt">the plain standalone test — no cluster logic at all</text>
+
+  <path d="M 474 632 L 796 632" class="m"/>
+  <text x="490" y="624" class="lb">claim base_slot = s0+1  (guaranteed free by A&#8217;s window test)</text>
+
+  <path d="M 144 672 L 466 672" class="mp"/>
+  <text x="160" y="664" class="lbp">CTA C — is_first_of_cluster = 0</text>
+
+  <path d="M 474 704 L 796 704" class="m"/>
+  <text x="490" y="696" class="lb">claim base_slot = s0+2</text>
+
+  <rect x="880" y="640" width="600" height="76" rx="5" class="actg"/>
+  <text x="892" y="660" class="th">The cluster is now resident: slots s0, s0+1, s0+2</text>
+  <text x="892" y="680" class="cm">member r LMEM base = (s0 + r) * stride = issuer_base + r * stride</text>
+  <text x="892" y="700" class="tt">get_cluster_rank() = CTA_ID % CTA_CLUSTER_SIZE — the rank is derived, never sent</text>
+
+  <!-- ===== DXA ===== -->
+  <path d="M 1134 768 L 1396 768" class="mg"/>
+  <text x="1150" y="760" class="lbg">rank 0 issues one DXA multicast</text>
+
+  <rect x="880" y="782" width="600" height="46" rx="5" class="mem"/>
+  <text x="892" y="800" class="ts">the SMEM writer resolves each receiver as base + r · smem_stride</text>
+  <text x="892" y="818" class="tt">no per-slot base table, no receiver-side translation — the stride arithmetic is exact</text>
+
+  <rect x="140" y="740" width="700" height="88" rx="5" class="note"/>
+  <text x="152" y="760" class="th">This is the entire point of clustering</text>
+  <text x="152" y="780" class="ts">Without it, all K CTAs load the same operand independently — K fetches of the same</text>
+  <text x="152" y="796" class="ts">bytes. With it, rank 0 fetches once and multicasts to its K−1 peers in lockstep, at</text>
+  <text x="152" y="812" class="ts">the same SMEM offset, because their LMEM bases are a known stride apart.</text>
+
+  <!-- ===== footer ===== -->
+  <rect x="30" y="866" width="1440" height="136" rx="8" class="note"/>
+  <text x="44" y="888" class="th">The ordering this rests on — and what enforces it</text>
+  <text x="44" y="910" class="ts">Read the sequence again with one question in mind: what guarantees CTA B reaches the SAME dispatcher as CTA A? Nothing in the dispatcher does. The window test at</text>
+  <text x="44" y="926" class="ts">A&#8217;s admission proves the slots are free on THIS core, and B&#8217;s standalone test then finds slot s0+1 free — but only if B was routed here at all.</text>
+  <text x="44" y="950" class="ts">The LAUNCH BUS is what routes it here. A compute message is one CLUSTER: VX_kmu marks `eop` on the last member, and every arb level locks its input&#8594;output pair</text>
+  <text x="44" y="966" class="ts">from the first beat to `eop`. So A picks a ready core and B and C are delivered to that same core — clusters, not CTAs, are what round-robin across the machine.</text>
+  <text x="44" y="982" class="ts">cluster_dim (1,1,1), the default, marks every CTA `eop` and the lock never engages: the plain per-CTA round-robin, bit for bit. Same mechanism as fragment affinity.</text>
+</svg>

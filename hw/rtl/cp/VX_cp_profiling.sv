@@ -41,9 +41,14 @@ module VX_cp_profiling
 
   // Future work: per-CPE timestamp FIFO; on end_evt, pop and write
   // {queued_ns=0, submit_ts, start_ts, end_ts} (32 B) to slot_addr.
-  `UNUSED_VAR (submit_evt)
-  `UNUSED_VAR (start_evt)
-  `UNUSED_VAR (end_evt)
-  `UNUSED_VAR (slot_addr)
+  // UNUSED_VAR operates on packed types; these ports are unpacked arrays, so
+  // suppress per element (a whole-array UNUSED_VAR assigns unpacked->packed,
+  // which Vivado rejects).
+  for (genvar i = 0; i < NUM_QUEUES; ++i) begin : g_unused
+    `UNUSED_VAR (submit_evt[i])
+    `UNUSED_VAR (start_evt[i])
+    `UNUSED_VAR (end_evt[i])
+    `UNUSED_VAR (slot_addr[i])
+  end
 
 endmodule : VX_cp_profiling

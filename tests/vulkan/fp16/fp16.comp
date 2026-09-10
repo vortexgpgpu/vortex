@@ -1,0 +1,49 @@
+#version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+
+/* fp16 coverage kernel for the vortexpipe driver.
+ *
+ * Every operand and every result is exactly representable in binary16, so the
+ * host compares the fp32-widened results with ==. Nothing here needs a
+ * tolerance, which keeps a rounding regression from hiding inside one.
+ *
+ * Denormals are deliberately NOT exercised: whether they survive is governed
+ * by VkPhysicalDeviceFloatControlsProperties.shaderDenormFlushToZeroFloat16,
+ * so asserting either behaviour would encode a device-specific choice as a
+ * correctness requirement. That belongs in its own test with the property
+ * queried.
+ *
+ * shaderFloat16 is inherited from llvmpipe and is not overridden by
+ * vortexpipe. If the Vortex device cannot actually execute fp16, the shader
+ * bails and -- under MESA_VORTEX_STRICT=1 -- the dispatch becomes a no-op,
+ * leaving the sentinel behind. That failure is the point: it would mean the
+ * feature is advertised but not implemented. */
+
+layout(local_size_x_id = 0) in;
+
+#define NUM_OPS 8u
+
+layout(std430, binding = 0) buffer Buf {
+   float data[];
+};
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   uint o = i * NUM_OPS;
+
+   /* 1.5 + i for i < 64 is exact in fp16 (integers and halves well inside
+    * the 11-bit significand); 2.25 and 2.0 are exact. */
+   float16_t a = float16_t(1.5) + float16_t(float(i));
+   float16_t b = float16_t(2.25);
+   float16_t two = float16_t(2.0);
+
+   data[o + 0u] = float(a + b);              /* 3.75 + i */
+   data[o + 1u] = float(a - b);              /* -0.75 + i */
+   data[o + 2u] = float(a * two);            /* 3.0 + 2i */
+   data[o + 3u] = float(min(a, b));
+   data[o + 4u] = float(max(a, b));
+   data[o + 5u] = float(abs(-a));            /* == a */
+   data[o + 6u] = float(float16_t(int(i)));  /* int -> fp16 -> fp32 */
+   data[o + 7u] = float(float16_t(0.5) * float16_t(0.5));   /* 0.25 */
+}

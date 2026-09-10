@@ -11,82 +11,70 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU — scene walkers (Layer 4 of the rtu_implementation.md
-// refactor, Option C / 13 files).
+// PRISM RTU — scene walkers.
 //
-// Two walker classes: FlatWalker traverses a flat triangle list (with
-// optional one-deep TLAS instance expansion), Bvh4Walker traverses a
-// CW-BVH4 scene with TLAS→BLAS recursion. Both expose the same
-// one-method interface:
+// Two walker classes: FlatWalker traverses a flat triangle list (with optional
+// one-deep TLAS instance expansion), Bvh4Walker traverses a CW-BVH scene with
+// TLAS→BLAS recursion. Both expose the same one-method interface:
 //
-//   bool walk_lane(Slot& s, LaneState& l, uint32_t lane, uint32_t slot_idx)
+//   WalkResult walk_lane(const RtuReq&, lane, SceneView&, LaneState&, PerfStats&)
 //
-// returning true iff the lane queued a CB_YIELD entry into the shared
-// AHS queue. The orchestrator (RtuCore::Impl::compute_intersections)
-// picks which walker to drive per lane based on l.scene_kind, and ORs
-// the per-lane returns to decide whether the slot advances to IN_QUEUE
-// (callback pending) or RESP (terminal).
+// The walk reads the scene through a SceneView — the set of cache lines the
+// calling context has already pulled. A read of a line the context does not
+// hold sets SceneView::miss and unwinds the walk immediately: nothing is
+// committed, and the caller fetches the reported line and calls again. The walk
+// is deterministic, so replaying it against a larger line set reproduces the
+// same prefix and gets one step further. That is the demand-fetch model: the
+// sequence of misses IS the sequence of node fetches the hardware issues, in
+// hardware order, and the difference in the PerfStats test counts between two
+// calls is the work the newly-arrived node unlocked.
 //
-// Walkers are pure mechanics — no policy. Per-tri opacity / culling /
-// flag decisions go through rtu_classifier::classify_tri_hit; the
-// end-of-lane CHS/MISS/yield decision goes through finalise_lane.
-// Primitive math (ray-triangle, ray-aabb, affine ray xform) lives in
-// rtu_isect. The walker owns only the traversal FSM + memory reads.
+// The caller therefore passes a PerfStats that accumulates across the replays
+// of one ray, and reads it as a cumulative total, not a delta.
 //
-// SystemC mapping: each walker becomes one SC_MODULE with a traversal
-// FSM. Per-walker state (perf counter handle, queue handle) becomes
-// constructor-bound module ports.
+// Walkers are pure mechanics — no policy. Per-tri opacity / culling / flag
+// decisions go through rtu_classifier::classify_tri_hit; the end-of-lane
+// CHS/MISS/yield decision goes through finalise_lane. Primitive math lives in
+// rtu_isect. The walker owns only the traversal FSM + scene reads.
 
 #ifndef _VX_RTU_WALKER_H_
 #define _VX_RTU_WALKER_H_
 
 #include <cstdint>
-#include <deque>
 
 namespace vortex { namespace rtu {
 
-struct Slot;
+struct RtuReq;
+struct SceneView;
 struct LaneState;
 struct PerfStats;
-struct QueueEntry;
 
-// ────────────────────────────────────────────────────────────────────
-// FlatWalker — Phase 1/8 walker. Handles TRI_LIST scenes (the entire
-// flat list is the BLAS) and Phase-8 TLAS scenes (loop over instance
-// records, transform world ray into each instance's object space,
-// walk that instance's BLAS as a flat list).
-// ────────────────────────────────────────────────────────────────────
-class FlatWalker {
-public:
-  FlatWalker(PerfStats& perf, std::deque<QueueEntry>& queue)
-    : perf_(perf), queue_(queue) {}
-
-  bool walk_lane(Slot& s, LaneState& l, uint32_t lane, uint32_t slot_idx);
-
-private:
-  PerfStats& perf_;
-  std::deque<QueueEntry>& queue_;
+struct WalkResult {
+  bool stalled  = false;   // a needed line is absent; nothing was committed
+  bool cb_yield = false;   // the completed walk ended on a callback candidate
 };
 
 // ────────────────────────────────────────────────────────────────────
-// Bvh4Walker — Phase 4 walker. Depth-first traversal of a compressed
-// wide-BVH scene with TLAS→BLAS LeafInst recursion. The internal-node
-// fan-out is width-generic: CW-BVH4 (scene_kind=2, 64 B nodes) and
-// CW-BVH6 (scene_kind=3, 96 B nodes) decode into a common VxBvhNodeView,
-// so one traversal datapath serves both widths (RTL parametrizes the
-// box-PE array by VX_CFG_RTU_BVH_WIDTH). Recursion is bounded by a
-// fixed-depth stack (kBvhStackCap inside the .cpp).
+// FlatWalker — TRI_LIST scenes (the whole flat list is the BLAS) and flat TLAS
+// scenes (loop over instance records, transform the world ray into each
+// instance's object space, walk that instance's BLAS as a flat list).
+// ────────────────────────────────────────────────────────────────────
+class FlatWalker {
+public:
+  WalkResult walk_lane(const RtuReq& req, uint32_t lane, SceneView& sv,
+                       LaneState& out, PerfStats& perf);
+};
+
+// ────────────────────────────────────────────────────────────────────
+// Bvh4Walker — depth-first traversal of a compressed wide-BVH scene with
+// TLAS→BLAS LeafInst recursion. The internal-node fan-out is width-generic:
+// CW-BVH4 (64 B nodes) and CW-BVH6 (96 B nodes) decode into a common
+// VxBvhNodeView, so one traversal datapath serves both widths.
 // ────────────────────────────────────────────────────────────────────
 class Bvh4Walker {
 public:
-  Bvh4Walker(PerfStats& perf, std::deque<QueueEntry>& queue)
-    : perf_(perf), queue_(queue) {}
-
-  bool walk_lane(Slot& s, LaneState& l, uint32_t lane, uint32_t slot_idx);
-
-private:
-  PerfStats& perf_;
-  std::deque<QueueEntry>& queue_;
+  WalkResult walk_lane(const RtuReq& req, uint32_t lane, SceneView& sv,
+                       LaneState& out, PerfStats& perf);
 };
 
 }}  // namespace vortex::rtu

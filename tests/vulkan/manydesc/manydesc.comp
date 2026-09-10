@@ -1,0 +1,61 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * More distinct storage-buffer bindings than the driver's descriptor scan can
+ * record. The scan keeps a fixed number of entries and drops the rest, so the
+ * bindings past that point are never relocated and the device is left holding
+ * the host's own pointers for them.
+ *
+ * Every binding is written, and each with a value that identifies it, so the
+ * check says which bindings arrived rather than only that something differed. */
+#version 450
+
+layout(local_size_x_id = 0) in;
+
+#define NBUF 20u
+
+layout(set = 0, binding = 0, std430)  buffer B0  { uint d[]; } b0;
+layout(set = 0, binding = 1, std430)  buffer B1  { uint d[]; } b1;
+layout(set = 0, binding = 2, std430)  buffer B2  { uint d[]; } b2;
+layout(set = 0, binding = 3, std430)  buffer B3  { uint d[]; } b3;
+layout(set = 0, binding = 4, std430)  buffer B4  { uint d[]; } b4;
+layout(set = 0, binding = 5, std430)  buffer B5  { uint d[]; } b5;
+layout(set = 0, binding = 6, std430)  buffer B6  { uint d[]; } b6;
+layout(set = 0, binding = 7, std430)  buffer B7  { uint d[]; } b7;
+layout(set = 0, binding = 8, std430)  buffer B8  { uint d[]; } b8;
+layout(set = 0, binding = 9, std430)  buffer B9  { uint d[]; } b9;
+layout(set = 0, binding = 10, std430) buffer B10 { uint d[]; } b10;
+layout(set = 0, binding = 11, std430) buffer B11 { uint d[]; } b11;
+layout(set = 0, binding = 12, std430) buffer B12 { uint d[]; } b12;
+layout(set = 0, binding = 13, std430) buffer B13 { uint d[]; } b13;
+layout(set = 0, binding = 14, std430) buffer B14 { uint d[]; } b14;
+layout(set = 0, binding = 15, std430) buffer B15 { uint d[]; } b15;
+layout(set = 0, binding = 16, std430) buffer B16 { uint d[]; } b16;
+layout(set = 0, binding = 17, std430) buffer B17 { uint d[]; } b17;
+layout(set = 0, binding = 18, std430) buffer B18 { uint d[]; } b18;
+layout(set = 0, binding = 19, std430) buffer B19 { uint d[]; } b19;
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   b0.d[i]  = 1000u * 0u  + i;
+   b1.d[i]  = 1000u * 1u  + i;
+   b2.d[i]  = 1000u * 2u  + i;
+   b3.d[i]  = 1000u * 3u  + i;
+   b4.d[i]  = 1000u * 4u  + i;
+   b5.d[i]  = 1000u * 5u  + i;
+   b6.d[i]  = 1000u * 6u  + i;
+   b7.d[i]  = 1000u * 7u  + i;
+   b8.d[i]  = 1000u * 8u  + i;
+   b9.d[i]  = 1000u * 9u  + i;
+   b10.d[i] = 1000u * 10u + i;
+   b11.d[i] = 1000u * 11u + i;
+   b12.d[i] = 1000u * 12u + i;
+   b13.d[i] = 1000u * 13u + i;
+   b14.d[i] = 1000u * 14u + i;
+   b15.d[i] = 1000u * 15u + i;
+   b16.d[i] = 1000u * 16u + i;
+   b17.d[i] = 1000u * 17u + i;
+   b18.d[i] = 1000u * 18u + i;
+   b19.d[i] = 1000u * 19u + i;
+}

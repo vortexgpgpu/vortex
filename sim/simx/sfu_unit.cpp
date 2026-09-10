@@ -18,7 +18,6 @@
 #include "scheduler.h"
 #include "mem/local_mem.h"
 #include "debug.h"
-#include <vx_tex_lod.h>   // vx_tex_quad_lod — shared HW-LOD formula (vx_tex4 quad)
 #ifdef VX_CFG_EXT_OM_ENABLE
 #include "om/om_core.h"
 #endif
@@ -32,7 +31,7 @@
 using namespace vortex;
 
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core)
+	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core, 6)
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	, dxa_req_out(this)
 #endif
@@ -63,8 +62,7 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	, om_unit_(new OmUnit(core, om_req_out))
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
-	, rtu_unit_(new RtuUnit(core, rtu_req_out, gfx_window_))
-	, rtu_trap_slot_(VX_CFG_NUM_WARPS, uint32_t(-1))
+	, rtu_unit_(new RtuUnit(core, rtu_req_out, rtu_window_))
 #endif
 {
 }
@@ -83,113 +81,42 @@ bool SfuUnit::rtu_trace2_reserve_slot(uint32_t wid) {
 }
 #endif
 
-#ifdef VX_CFG_EXT_RASTER_ENABLE
-void SfuUnit::stage_fwd_window(uint32_t wid, const Scheduler::FwdWave& wave) {
-#ifdef VX_GFX_WINDOW_ENABLE
-	// P2: the record is just {pos_mask, pid}; the FS recomputes per-corner edge
-	// values from the primitive edges + the quad origin (no bcoords seeded).
-	constexpr uint32_t B = GfxWindow::FRAG_SLOT_BASE;
-	for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-		if (!wave.tmask.test(t)) continue;
-		const auto& p = wave.payload[t];
-		gfx_window_.set(wid, t, B + 0, p.pos_mask);
-		gfx_window_.set(wid, t, B + 1, p.pid);
-	}
-#else
-	(void)wid; (void)wave;
-#endif
-}
-#endif
 
 void SfuUnit::on_tick() {
 #ifdef VX_CFG_EXT_RTU_ENABLE
-	// Drain RTU rsps. Two flavors:
+	// Drain RTU rsps. Two flavors, both completing the warp's parked WAIT
+	// through the same writeback path (candidate-return, no async trap):
 	//   TERMINAL — the ray finished; apply hit attrs into the RTU regfile,
-	//              write per-lane status into trace->dst_data, forward the
-	//              parked trace (the TRACE instr) to writeback.
-	//   CB_YIELD — the ray yielded to AHS/IS. Stage candidate-hit attrs +
-	//              cb_type into the yielded lanes' RTU regs and raise an
-	//              async trap on the warp. The trace stays parked in
-	//              RtuCore; a later TERMINAL drains it via the path above.
-	//              See proposal §4.6 (option-c: reuse existing mtvec/MRET).
+	//              write the terminal status into trace->dst_data, free the
+	//              slot, forward the parked WAIT trace to writeback.
+	//   CB_YIELD — a non-opaque candidate (AHS / procedural) is returned to
+	//              the issuing warp; stage candidate attrs into the yielded
+	//              lanes' RTU regs and complete the parked WAIT with a YIELD
+	//              status. The slot stays live; the warp reads the candidate,
+	//              decides, and issues vx_rt_continue (CB_ACTION) to resume.
 	while (!rtu_rsp_in.empty()) {
 		auto& rsp = rtu_rsp_in.peek();
-		if (rsp.kind == RtuRspKind::CB_YIELD) {
-			auto& sched = core_->scheduler();
-			// Phase 3-A2 divergent-SBT: this warp may be running a
-			// previous dispatcher and not yet have executed `mret`.
-			// raising another async-trap on the warp now would
-			// clobber mepc/mtvec, losing the resume PC. Defer until
-			// the in-flight trap is retired.
-			if (sched.in_async_trap(rsp.warp_id)) break;
-			// Also defer if the warp just mret'd this cycle: a back-to-back
-			// mret + async-trap collides on the warp's tmask/PC (restored vs
-			// newly-trapped contexts race), skipping the next dispatcher's
-			// cb_ret. Let the mret settle one cycle (reformation multi-group).
-			if (SimPlatform::instance().cycles() <= sched.last_mret_cycle(rsp.warp_id)) break;
-			rtu_unit_->apply_callback_payload(rsp);
-			auto& warp  = sched.warp(rsp.warp_id);
-			ThreadMask yielded(VX_CFG_NUM_THREADS);
-			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-				if ((rsp.cb_active_mask >> t) & 1u) yielded.set(t);
-			}
-			// mepc = current fetch PC. The warp's pipeline still has the
-			// pre-trap instructions (incl. the parked TRACE's scoreboard
-			// dependency on rd) in-flight; the dispatcher's instructions
-			// fire alongside but don't touch TRACE's rd, so they make
-			// progress while the post-WAIT kernel ops stay stalled on
-			// TRACE until the final TERMINAL rsp.
-			constexpr Word TRAP_CAUSE_RTU_CALLBACK = VX_TRAP_CAUSE_RTU_CALLBACK;
-			sched.raise_async_trap(rsp.warp_id, TRAP_CAUSE_RTU_CALLBACK,
-			                       warp.PC, yielded);
-			// Remember which ray's dispatcher is now running (cb_handle =
-			// slot, uniform across yielded lanes) so only THIS ray's TERMINAL
-			// is held off until mret — a recursive traceRay the dispatcher
-			// itself fires must complete normally.
-			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-				if ((rsp.cb_active_mask >> t) & 1u) {
-					rtu_trap_slot_.at(rsp.warp_id) = rsp.cb_handle[t];
-					break;
-				}
-			}
-			DT(3, "rtu-cb_yield: core=" << core_->id() << ", wid=" << rsp.warp_id
-			      << ", mask=0x" << std::hex << rsp.cb_active_mask << std::dec);
-			rtu_rsp_in.pop();
-			continue;
-		}
-		// Defer THIS ray's TERMINAL writeback while its callback dispatcher
-		// is still running. A high-pressure dispatcher (e.g. an FP
-		// intersection shader) saves/restores the WAIT's rd register; its
-		// scoreboard reservation was lifted at trap entry and re-installed
-		// at mret, so the status word must not land until after mret —
-		// otherwise the epilogue restore would clobber it. Only the
-		// trap-triggering ray (rtu_trap_slot_) is held off; a nested
-		// recursive traceRay must drain normally or the dispatcher (blocked
-		// on the nested wait) would deadlock.
-		if (core_->scheduler().in_async_trap(rsp.warp_id)
-		    && rsp.slot_idx == rtu_trap_slot_.at(rsp.warp_id)) break;
-		// §8.6 TERMINAL: route to the parked WAIT trace (if WAIT
-		// already issued) or latch into pending_terminals_ (if
-		// WAIT hasn't issued yet — slot is short-lived enough
-		// that TERMINAL beat WAIT to the SFU). The TRACE trace
-		// is NOT used here — TRACE's writeback already happened
-		// synchronously at vx_rt_trace dispatch (its dst_data
-		// carries the slot handle). Pre-check output.full() before
-		// calling on_terminal_rsp because the latter is destructive
-		// (frees the slot and erases the parked entry).
+		const bool is_candidate = (rsp.kind == RtuRspKind::CB_YIELD);
+		// Both paths complete the parked WAIT: pre-check output.full() before
+		// the destructive on_*_rsp() (which erases the parked entry / frees
+		// the slot). If no WAIT is parked yet, the rsp is latched and picked
+		// up when WAIT issues.
 		uint32_t bid = 0;
-		if (rtu_unit_->terminal_would_writeback(rsp, &bid)
-		    && Outputs.at(bid).full()) {
+		const bool would_wb = is_candidate
+			? rtu_unit_->candidate_would_writeback(rsp, &bid)
+			: rtu_unit_->terminal_would_writeback(rsp, &bid);
+		if (would_wb && Outputs.at(bid).full()) {
 			break;  // backpressure: retry next tick
 		}
-		auto wb = rtu_unit_->on_terminal_rsp(rsp);
+		auto wb = is_candidate ? rtu_unit_->on_candidate_rsp(rsp)
+		                       : rtu_unit_->on_terminal_rsp(rsp);
 		if (wb.trace) {
 			Outputs.at(wb.block_id).send(wb.trace, this->latency_of(wb.trace));
 			DT(3, "rtu-rsp deliver: core=" << core_->id()
-				 << ", wid=" << wb.trace->wid << ", slot=" << rsp.slot_idx);
+				 << ", wid=" << wb.trace->wid << ", cand=" << is_candidate);
 		} else {
 			DT(3, "rtu-rsp latch: core=" << core_->id()
-				 << ", wid=" << rsp.warp_id << ", slot=" << rsp.slot_idx);
+				 << ", wid=" << rsp.warp_id << ", cand=" << is_candidate);
 		}
 		rtu_rsp_in.pop();
 	}
@@ -201,31 +128,15 @@ void SfuUnit::on_tick() {
 	// onto the originally-recorded writeback output lane.
 	while (!tex_rsp_in.empty()) {
 		auto& rsp = tex_rsp_in.peek();
-		// Single (and legacy vx_tex) retire on their one response; a quad retires
-		// only on its 4th fragment — frags 0..2 just land their texel in the window.
-		bool retire = !rsp.is_quad || (rsp.frag == 3);
 		auto& output = Outputs.at(rsp.block_id);
-		if (retire && output.full())
+		if (output.full())
 			break;
 		instr_trace_t* trace = rsp.trace;
 		for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 			if (!trace->tmask.test(t)) continue;
-#ifdef VX_GFX_WINDOW_ENABLE
-			// vx_tex4: land this fragment's texel in the window at out_slot+frag.
-			if (rsp.is_tex4)
-				gfx_window_.set(trace->wid, t, (rsp.out_slot + rsp.frag) & 0x1f, rsp.texels[t]);
-#endif
-			if (retire)
-				trace->dst_data[t].i = rsp.texels[t];   // rd = scoreboard sync handle
+			trace->dst_data[t].i = rsp.texels[t];   // rd = texel
 		}
-		if (rsp.is_quad) {
-			// advance the per-block fragment sequencer; the input was held across
-			// the four issues and is released here on the last response.
-			q_issued_[rsp.block_id] = 0;
-			if (rsp.frag == 3) { q_frag_[rsp.block_id] = 0; Inputs.at(rsp.block_id).pop(); }
-			else ++q_frag_[rsp.block_id];
-		}
-		if (retire) {
+		{
 			// Unit latency is already modeled by the TEX pipeline; charge only
 			// the gather/writeback hop.
 			output.send(trace, 2);
@@ -237,12 +148,11 @@ void SfuUnit::on_tick() {
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
 	{
-		// RASTER dispatch v2 (push). The per-core fragment work distributor pulls
-		// covered-quad waves from the cluster RasterCore autonomously (no kernel
-		// op): each tick post RasterReqs while the producer is armed and has
-		// request budget, then convert each RasterRsp into a FwdWave the scheduler
-		// launches as a fragment warp (payload seeded into the warp's register
-		// window at launch). An all-zero (pos_mask==0) rsp is the drained sentinel.
+		// Fragment dispatch is PUSH. The per-core fragment work distributor pulls
+		// covered-quad waves from the cluster RasterCore autonomously (no kernel op):
+		// each tick post RasterReqs while the producer is armed and has request
+		// budget, then convert each RasterRsp into a FwdWave the scheduler launches as
+		// a fragment warp. An all-zero (pos_mask==0) rsp is the drained sentinel.
 		auto& sched = core_->scheduler();
 
 		// 1) Autonomous wave-pull: keep the producer fed while armed.
@@ -261,14 +171,36 @@ void SfuUnit::on_tick() {
 		}
 
 		// 2) Drain responses, compacting covered quads across responses into full
-		//    NUM_THREADS warps (mirror of VX_raster_packer): launch one warp per
-		//    full/flushed pack, not one per sparse response. Image-neutral.
+		//    warps: launch one warp per full/flushed pack, not one per sparse
+		//    response. Image-neutral.
+		//
+		//    A quad owns four adjacent lanes, so the flush expands each buffered stamp
+		//    into four per-lane payloads. All four lanes are thread-active, including
+		//    those the primitive misses: they run as helper lanes so their covered
+		//    neighbours can shuffle a value out of them for a derivative. The `covered`
+		//    bit, not the thread mask, is what gates the export.
+		constexpr uint32_t kQuadLanes = VX_FRAG_QUAD_LANES;
+		constexpr uint32_t kPosBits   = VX_RASTER_DIM_BITS - 1;
+		constexpr uint32_t kPosMask   = (1u << kPosBits) - 1u;
+
 		auto fwd_flush_pack = [&]() {
-			if (fwd_pack_count_ == 0) return;
+			if (fwd_pack_count_ == 0) {
+				return;
+			}
 			Scheduler::FwdWave wave;
-			for (uint32_t j = 0; j < fwd_pack_count_; ++j) {
-				wave.tmask.set(j);
-				wave.payload[j] = fwd_pack_buf_[j];
+			for (uint32_t q = 0; q < fwd_pack_count_; ++q) {
+				const auto& s = fwd_pack_buf_[q];
+				uint32_t qx = (s.pos_mask >> 4) & kPosMask;
+				uint32_t qy = (s.pos_mask >> (4 + kPosBits)) & kPosMask;
+				for (uint32_t sub = 0; sub < kQuadLanes; ++sub) {
+					uint32_t l = q * kQuadLanes + sub;
+					uint32_t x = 2 * qx + (sub & 1);
+					uint32_t y = 2 * qy + (sub >> 1);
+					uint32_t covered = (s.pos_mask >> sub) & 1;
+					wave.tmask.set(l);
+					wave.payload[l].pos = x | (y << 16) | (covered << 31);
+					wave.payload[l].pid = s.pid;
+				}
 			}
 			sched.fwd_push_wave(wave);
 			fwd_pack_count_ = 0;
@@ -276,29 +208,37 @@ void SfuUnit::on_tick() {
 		while (!raster_rsp_in.empty()) {
 			auto& rsp = raster_rsp_in.peek();
 			bool drained = true;
-			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
-				if (rsp.stamps[t].pos_mask != 0) drained = false;
+			for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+				if (rsp.stamps[t].pos_mask != 0) {
+					drained = false;
+				}
+			}
 			if (drained) {
 				fwd_flush_pack();               // flush the tail partial warp
 				sched.fwd_mark_drained();
 			} else {
 				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
 					const auto& s = rsp.stamps[t];
-					// Skip uncovered quads (coverage nibble empty): block batches
-					// carry mask=0 fillers with valid positions that must not
-					// occupy a wave lane.
-					if ((s.pos_mask & 0xf) == 0) continue;
-					// Never co-pack two quads at the same (pos_x,pos_y): flush first
-					// so same-pixel fragments land in distinct, ordered warps.
+					// Skip uncovered quads (coverage nibble empty): block batches carry
+					// mask=0 fillers with valid positions that must not occupy a slot.
+					if ((s.pos_mask & 0xf) == 0) {
+						continue;
+					}
+					// Never co-pack two quads at the same (pos_x,pos_y): flush first so
+					// same-pixel fragments land in distinct, ordered warps.
 					bool collide = false;
-					for (uint32_t j = 0; j < fwd_pack_count_; ++j)
-						if ((fwd_pack_buf_[j].pos_mask >> 4) == (s.pos_mask >> 4)) collide = true;
-					if (collide || fwd_pack_count_ == VX_CFG_NUM_THREADS)
+					for (uint32_t j = 0; j < fwd_pack_count_; ++j) {
+						if ((fwd_pack_buf_[j].pos_mask >> 4) == (s.pos_mask >> 4)) {
+							collide = true;
+						}
+					}
+					if (collide || fwd_pack_count_ == FWD_PACK_QUADS) {
 						fwd_flush_pack();
-					fwd_pack_buf_[fwd_pack_count_].pos_mask = s.pos_mask;
-					fwd_pack_buf_[fwd_pack_count_].pid      = s.pid;
-					if (++fwd_pack_count_ == VX_CFG_NUM_THREADS)
+					}
+					fwd_pack_buf_[fwd_pack_count_] = s;
+					if (++fwd_pack_count_ == FWD_PACK_QUADS) {
 						fwd_flush_pack();
+					}
 				}
 			}
 			sched.fwd_on_response();
@@ -307,8 +247,9 @@ void SfuUnit::on_tick() {
 
 		// 3) Epoch complete (producer drained AND every launched wave retired):
 		//    return the core to idle so run()/busy can settle.
-		if (sched.fwd_done())
+		if (sched.fwd_done()) {
 			sched.fwd_disarm();
+		}
 	}
 #endif
 
@@ -325,56 +266,9 @@ void SfuUnit::on_tick() {
 		// TEX path is async: don't gate on output.full() yet — that check
 		// happens on completion. Submit only.
 		if (std::get_if<TexType>(&trace->op_type)) {
-#ifdef VX_GFX_WINDOW_ENABLE
-			// vx_tex4: source the payload from the shared graphics window (staged by
-			// SETW) so TexUnit::process sees the legacy operand layout (u=src0,
-			// v=src1, lod=src2). src_data is always NUM_SRC_REGS-wide.
-			auto targs = std::get<IntrTexArgs>(trace->instr_ptr->get_args());
-			if (targs.is_tex4 && targs.mode) {
-				// quad mode: one fragment in flight. Cache rs1(dims)/rs2(in_slot) at
-				// fragment 0 (src_data is overwritten per fragment below), compute the
-				// integer LOD from the quad derivatives, and issue fragment F. The
-				// frag-3 response retires the op and pops the input.
-				if (q_issued_[b]) continue;
-				uint32_t F = q_frag_[b];
-				if (F == 0) {
-					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-						if (!trace->tmask.test(t)) continue;
-						q_in_slot_[b] = trace->src_data[1].at(t).u & 0x1f;
-						q_dims_[b]    = trace->src_data[0].at(t).u;
-						break;
-					}
-				}
-				uint32_t logw = q_dims_[b] & 0xffff, logh = q_dims_[b] >> 16;
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-					if (!trace->tmask.test(t)) continue;
-					int32_t u[4], v[4];
-					for (int k = 0; k < 4; ++k) {
-						u[k] = (int32_t)gfx_window_.get(trace->wid, t, (q_in_slot_[b] + k) & 0x1f);
-						v[k] = (int32_t)gfx_window_.get(trace->wid, t, (q_in_slot_[b] + 4 + k) & 0x1f);
-					}
-					uint32_t lod = vx_tex_quad_lod(u, v, logw, logh);
-					trace->src_data[0].at(t).u = (uint32_t)u[F];
-					trace->src_data[1].at(t).u = (uint32_t)v[F];
-					trace->src_data[2].at(t).u = lod;
-				}
-				if (!tex_unit_->process(trace, b, F))
-					continue; // backpressure
-				q_issued_[b] = 1;
-				continue;     // do NOT pop — the frag-3 response pops the input
-			}
-			if (targs.is_tex4) {
-				// single mode: u at in_slot, v at in_slot+1, lod from rs1.
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-					if (!trace->tmask.test(t)) continue;
-					uint32_t in_slot = trace->src_data[1].at(t).u & 0x1f;
-					uint32_t lod     = trace->src_data[0].at(t).u;
-					trace->src_data[0].at(t).u = gfx_window_.get(trace->wid, t, in_slot);
-					trace->src_data[1].at(t).u = gfx_window_.get(trace->wid, t, (in_slot + 1) & 0x1f);
-					trace->src_data[2].at(t).u = lod;
-				}
-			}
-#endif
+			// vx_tex: u/v/lod are already in src_data[0..2] (rs1/rs2/rs3). TEX does
+			// not read or write the hit window, so there is nothing to
+			// stage and nothing to sequence -- one request, one response.
 			if (!tex_unit_->process(trace, b))
 				continue; // backpressure — leave trace in input, retry next cycle
 			input.pop();
@@ -383,110 +277,80 @@ void SfuUnit::on_tick() {
 #endif
 
 #ifdef VX_CFG_EXT_OM_ENABLE
-		// vx_om4: one thread owns a 2x2 quad. Emit one OmReq per covered
-		// sub-pixel F (0..3), skipping sub-pixels no lane covers, reading
-		// colour[F]/depth[F] from the shared window; retire (send+pop, no rd)
-		// after the last sub-pixel.
+		// vx_om_export: one packet for the whole warp. Each lane holds its aperture
+		// address, colour and depth in registers -- no window read, no sub-pixel
+		// loop. The address stays UNDECODED: recovering (x, y, face) needs the
+		// aperture DCRs, which are cluster state, so OmCore does it (the SimX
+		// counterpart of VX_om_ingress).
 		if (std::get_if<OmType>(&trace->op_type)) {
-#ifdef VX_GFX_WINDOW_ENABLE
-			if (!om_last_sent_[b]) {
-				uint32_t F = om_q_frag_[b];
-				// Capture desc/base ONCE per op (see om_captured_): the loop below
-				// overwrites src_data in place, so a re-entry must not re-read it.
-				if (!om_captured_[b]) {
-					om_captured_[b] = 1;
-					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t)
-						om_desc_[b][t] = trace->src_data[0].at(t).u;
-					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-						if (!trace->tmask.test(t)) continue;
-						om_base_[b] = trace->src_data[1].at(t).u & 0x1f;
-						break;
-					}
-					// Latch the full colour/depth payload now: the op has no
-					// completion handle, so the window can be re-seeded for the
-					// next fragment CTA before later sub-pixels are emitted.
-					for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-						if (!trace->tmask.test(t)) continue;
-						for (uint32_t k = 0; k < 4; ++k) {
-							om_color_[b][t][k] = (uint32_t)gfx_window_.get(trace->wid, t, (om_base_[b] + k) & 0x1f);
-							om_depth_[b][t][k] = (uint32_t)gfx_window_.get(trace->wid, t, (om_base_[b] + 4 + k) & 0x1f);
-						}
-					}
-				}
-				uint32_t fmask = 0;
-				for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-					if (!trace->tmask.test(t)) continue;
-					uint32_t desc = om_desc_[b][t];
-					if (!((desc >> F) & 0x1)) continue;   // lane not covered for F
-					uint32_t qx   = (desc >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
-					uint32_t qy   = (desc >> (4 + (VX_RASTER_DIM_BITS - 1))) & ((1u << (VX_RASTER_DIM_BITS - 2)) - 1);
-					uint32_t face = (desc >> 31) & 0x1;
-					uint32_t pos_x = (qx << 1) | (F & 1);
-					uint32_t pos_y = (qy << 1) | ((F >> 1) & 1);
-					trace->src_data[0].at(t).u = (pos_y << 16) | (pos_x << 1) | face;
-					trace->src_data[1].at(t).u = om_color_[b][t][F];
-					trace->src_data[2].at(t).u = om_depth_[b][t][F];
-					fmask |= (1u << t);
-				}
-				if (fmask != 0 && !om_unit_->process(trace, fmask))
-					continue; // OM bus backpressure — retry this sub-pixel
-				if (F < 3) { om_q_frag_[b] = F + 1; continue; }
-				om_last_sent_[b] = 1;
-			}
+			// Every stall check must come BEFORE the export: process_export SENDS the
+			// fragment, and a uop that cannot retire stays at the head of the input
+			// queue and is re-run next cycle. Testing `output` afterwards exported the
+			// same fragment twice — invisible for a plain colour or depth write, which
+			// is idempotent, but a blend reads the destination first, so the second
+			// fragment blended the pixel against itself.
 			if (output.full())
-				continue; // last sub-pixel submitted; retire when output frees
-			om_q_frag_[b]    = 0;
-			om_last_sent_[b] = 0;
-			om_captured_[b]  = 0;
-			output.send(trace, this->latency_of(trace));
+				continue;
+			auto omArgs = std::get<IntrOmArgs>(trace->instr_ptr->get_args());
+			// A multi-beat record retires one uop per beat but completes once: the
+			// staging beat carries no mask and only occupies the issue slot.
+			if (omArgs.export_mask != 0) {
+				if (!om_unit_->process_export(trace, omArgs.export_mask)) {
+					continue;   // OM back-pressure — nothing was sent; retry
+				}
+			}
+			output.send(trace, 1);
 			input.pop();
 			continue;
-#endif
 		}
 #endif
 
-#ifdef VX_GFX_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
 		// Graphics-window / RTU dispatch. SETW (write) and GETW/GETWF (windowed
 		// read) are pure register-window ops, available whenever any FF consumer
-		// is built. The RTU-specific ops (CB_RET / TRACE2 / WAIT2) are gated on
+		// is built. The RTU-specific ops (CB_RET / TRACE / WAIT) are gated on
 		// VX_CFG_EXT_RTU_ENABLE — they are only ever decoded with the RTU built,
 		// and they touch rtu_unit_ which does not exist otherwise.
 		//   SETW / GETW[F]      — synchronous graphics-window updates / reads.
-		//   TRACE2              — synchronous writeback of the slot handle; the
+		//   TRACE              — synchronous writeback of the slot handle; the
 		//                          ray walks async in RtuCore.
-		//   WAIT2               — fast path (short-circuit) when the TERMINAL
+		//   WAIT               — fast path (short-circuit) when the TERMINAL
 		//                          already landed; otherwise parked in RtuUnit.
 		//   CB_RET              — async (TEX-shape): submit, drop input.
-		if (auto rtu_p = std::get_if<RtuType>(&trace->op_type)) {
+		if (auto rtu_p = std::get_if<GfxwType>(&trace->op_type)) {
 #ifdef VX_CFG_EXT_RTU_ENABLE
-			if (*rtu_p == RtuType::CB_RET) {
-				// Phase 2: send the per-lane action to RtuCore via the bus
-				// and retire the CB_RET op synchronously (no rd). The
-				// dispatcher follows up with `mret` to resume the kernel
-				// at the post-WAIT PC.
-				if (!rtu_unit_->process_cb_ret(trace, b))
-					continue; // backpressure
+			if (*rtu_p == GfxwType::CB_RET) {
+				// Send the per-lane action to RtuCore via the bus and retire the
+				// CB_RET op synchronously (no rd). The dispatcher follows up with
+				// `mret` to resume the kernel at the post-WAIT PC.
+				//
+				// Both stall checks come BEFORE the send: process_cb_ret puts the
+				// action packet on the bus, and a uop that cannot retire is re-run
+				// from the head of the input queue next cycle — which would resolve
+				// the same candidate twice.
 				if (output.full()) continue;
+				if (!rtu_unit_->process_cb_ret(trace, b))
+					continue; // bus backpressure — nothing was sent
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;
 			}
-			// ISA v2 (rtu_isa_v2_proposal.md §5.6): each TRACE2/WAIT2 macro-op
+			// Each TRACE/WAIT macro-op
 			// arrives here already expanded by the per-warp sequencer into
 			// micro-ops; args.uop is the micro-op index.
-			if (*rtu_p == RtuType::TRACE2) {
+			if (*rtu_p == GfxwType::TRACE) {
 				// All 4 uops complete synchronously (the async traversal kicks
 				// off when uop 3 arms the slot). Backpressure: pool full at
 				// uop 0, bus full at uop 3 — retry the same uop next cycle.
-				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+				auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
-				if (!rtu_unit_->process_trace2_uop(trace, b, args.uop))
+				if (!rtu_unit_->process_trace_uop(trace, b, args.uop))
 					continue;
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;
 			}
-			if (*rtu_p == RtuType::WAIT2) {
+			if (*rtu_p == GfxwType::WAIT) {
 				// single-op block. Identical park / short-circuit to v1
 				// WAIT, so it survives an async callback trap (parked traces are
 				// revived by on_terminal_rsp; a macro-op could not be). The hit
@@ -507,35 +371,19 @@ void SfuUnit::on_tick() {
 			// GETWF / GETW: FP / GP windowed read, expanded by the
 			// sequencer into one synchronous uop per window slot (args.uop = slot
 			// offset). Reads are synchronous; any ordering vs terminal is enforced
-			// by the optional rs1 scoreboard chain (vx_rt_wait2 sets it to status).
-			if (*rtu_p == RtuType::GETWF || *rtu_p == RtuType::GETW) {
-				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
+			// by the optional rs1 scoreboard chain (vx_rt_wait sets it to status).
+			if (*rtu_p == GfxwType::GETWF || *rtu_p == GfxwType::GETW) {
+				auto args = std::get<IntrGfxwArgs>(trace->instr_ptr->get_args());
 				if (output.full()) continue;
-				gfx_window_.process_getw_uop(trace, args.uop, *rtu_p == RtuType::GETWF);
+				rtu_window_.process_getw_uop(trace, args.uop, *rtu_p == GfxwType::GETWF);
 				output.send(trace, this->latency_of(trace));
 				input.pop();
 				continue;
 			}
-			// GETWS: GP windowed read indexed by rs1 (block_idx) — the FWD-v2
-			// fragment-record read (single-slot; block_idx recovered from CTA_BLOCK_ID).
-			if (*rtu_p == RtuType::GETWS) {
-				auto args = std::get<IntrRtuArgs>(trace->instr_ptr->get_args());
-				if (output.full()) continue;
-				gfx_window_.process_getws_uop(trace, args.uop);
-				output.send(trace, this->latency_of(trace));
-				input.pop();
-				continue;
-			}
-			// SETW: synchronous regfile write (callback writeback).
-			if (output.full()) continue;
-			gfx_window_.process_set(trace);
-			output.send(trace, this->latency_of(trace));
-			input.pop();
-			continue;
 		}
-#endif // VX_GFX_WINDOW_ENABLE
+#endif // VX_CFG_EXT_RTU_ENABLE
 
-		// RASTER dispatch v2 is push, not pull: there is no kernel-side raster op.
+		// Fragment dispatch is push, not pull: there is no kernel-side raster op.
 		// The fragment work distributor (above + scheduler) launches fragment
 		// warps directly from the autonomously-pulled covered-quad waves.
 

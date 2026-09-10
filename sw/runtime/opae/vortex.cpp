@@ -44,6 +44,7 @@ using namespace vortex;
 
 #define MMIO_SCOPE_READ  (AFU_IMAGE_MMIO_SCOPE_READ * 4)
 #define MMIO_SCOPE_WRITE (AFU_IMAGE_MMIO_SCOPE_WRITE * 4)
+#define MMIO_RESET       (AFU_IMAGE_MMIO_RESET * 4)
 
 // ----- Command Processor regfile (host byte addresses) -----
 // The AFU's MMIO demux routes byte addresses 0x1000..0x1FFF to the CP
@@ -140,6 +141,32 @@ public:
       return -1;
     });
 
+    // reset the device
+    CHECK_FPGA_ERR(api_.fpgaWriteMMIO64(fpga_, 0, MMIO_RESET, 0x1), {
+      api_.fpgaClose(fpga_);
+      return -1;
+    });
+
+    // wait for the reset sequence to complete (the register reads non-zero
+    // while the device reset is in flight)
+    {
+      uint64_t busy = 1;
+      for (int retry = 0; retry < 1000; ++retry) {
+        CHECK_FPGA_ERR(api_.fpgaReadMMIO64(fpga_, 0, MMIO_RESET, &busy), {
+          api_.fpgaClose(fpga_);
+          return -1;
+        });
+        if (busy == 0) {
+          break;
+        }
+      }
+      if (busy != 0) {
+        printf("[VXDRV] Error: device reset timeout!\n");
+        api_.fpgaClose(fpga_);
+        return -1;
+      }
+    }
+
   #ifdef SCOPE
     {
       scope_callback_t callback;
@@ -209,6 +236,15 @@ public:
       return -1;
     api_.fpgaReleaseBuffer(fpga_, it->second.wsid);
     host_bos_.erase(it);
+    return 0;
+  }
+
+  // CCI-P shared buffers are coherent with the AFU's view.
+  int host_mem_pull(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
+  int host_mem_push(uint64_t /*cp_addr*/) {
     return 0;
   }
 

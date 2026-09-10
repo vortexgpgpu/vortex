@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke — §8.8 shadow-ray kernel.
+// PRISM RTU smoke — shadow-ray kernel.
 // Fires one ray with VX_RT_FLAG_OPAQUE | VX_RT_FLAG_TERMINATE_ON_FIRST_HIT.
 
 #include <vx_spawn2.h>

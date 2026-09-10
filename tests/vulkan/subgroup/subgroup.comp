@@ -1,0 +1,76 @@
+#version 450
+#extension GL_KHR_shader_subgroup_basic      : require
+#extension GL_KHR_shader_subgroup_ballot     : require
+#extension GL_KHR_shader_subgroup_vote       : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
+#extension GL_KHR_shader_subgroup_shuffle    : require
+
+/* Subgroup coverage kernel for the vortexpipe driver.
+ *
+ * A Vortex warp is a subgroup: gl_SubgroupInvocationID is the thread id and
+ * gl_SubgroupID is the warp id, so every op below is a real cross-lane
+ * instruction (VOTE.*, SHFL.*) rather than something the compiler can fold.
+ *
+ * Slots 0-2 report the lane identity the device itself observed. The host
+ * groups invocations by those *reported* values before computing any
+ * cross-lane expectation, so the test never assumes a workgroup-to-warp
+ * mapping — if that mapping ever changes, the reference follows it instead of
+ * failing for the wrong reason.
+ *
+ * The trailing block is deliberately divergent: only even lanes reduce. A
+ * subgroup reduction must fold over the ACTIVE lanes, and the driver's scan
+ * intersects with the active-lane ballot to get that right. A uniform-only
+ * test cannot tell a correct implementation from one that folds all lanes, so
+ * the divergent case is what gives that code a regression guard.
+ *
+ * Under MESA_VORTEX_STRICT=1 an unlowered intrinsic bails the whole shader and
+ * the dispatch becomes a no-op, leaving the host's sentinel in place -- which
+ * is what makes a pass evidence the device executed these ops. */
+
+layout(local_size_x_id = 0) in;
+
+#define NUM_OPS 16u
+
+layout(std430, binding = 0) buffer Buf {
+   uint data[];
+};
+
+void main()
+{
+   uint gid  = gl_GlobalInvocationID.x;
+   uint o    = gid * NUM_OPS;
+   uint lane = gl_SubgroupInvocationID;
+   uint v    = gid + 1u;              /* non-zero, distinct per invocation */
+
+   /* --- lane identity, so the host can reconstruct the subgroups -------- */
+   data[o +  0u] = gl_SubgroupID;
+   data[o +  1u] = lane;
+   data[o +  2u] = gl_SubgroupSize;
+
+   /* --- ballot / elect / broadcast / shuffle ---------------------------- */
+   data[o +  3u] = subgroupBallot(true).x;
+   data[o +  4u] = subgroupElect() ? 1u : 0u;
+   data[o +  5u] = subgroupBroadcastFirst(v);
+   /* Reverse the lane order. Every lane of a full subgroup is active here, so
+    * the source lane is always in range and the result is well-defined. */
+   data[o +  6u] = subgroupShuffle(v, gl_SubgroupSize - 1u - lane);
+
+   /* --- vote ------------------------------------------------------------ */
+   data[o +  7u] = subgroupAll(v > 0u) ? 1u : 0u;             /* all true  */
+   data[o +  8u] = subgroupAny(lane == 0u) ? 1u : 0u;         /* any true  */
+   data[o +  9u] = subgroupAllEqual(gl_SubgroupSize) ? 1u : 0u;  /* uniform */
+   data[o + 10u] = subgroupAllEqual(v) ? 1u : 0u;             /* varying   */
+
+   /* --- arithmetic reduce + scans --------------------------------------- */
+   data[o + 11u] = subgroupAdd(v);
+   data[o + 12u] = subgroupMax(v);
+   data[o + 13u] = subgroupInclusiveAdd(v);
+   data[o + 14u] = subgroupExclusiveAdd(v);
+
+   /* --- divergent reduce: even lanes only ------------------------------- */
+   uint even_sum = 0u;
+   if ((lane & 1u) == 0u) {
+      even_sum = subgroupAdd(v);
+   }
+   data[o + 15u] = even_sum;
+}

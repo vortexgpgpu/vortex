@@ -1,202 +1,271 @@
-// Copyright © 2019-2025
+// Copyright © 2019-2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
 
-#include <VX_types.h>
 #include <VX_config.h>
 
 #ifdef VX_CFG_VM_ENABLE
 
 #include "mmu.h"
-#include "../debug.h"
+#include "debug.h"
 
-#include <cstring>
-
-namespace vortex {
+using namespace vortex;
 
 Mmu::Mmu(const SimContext& ctx,
-        const char* name,
-        uint32_t num_ports)
-  : SimObject<Mmu>(ctx, name)
-  , ReqIn (num_ports, this)
+         const char* name,
+         uint32_t num_ports,
+         uint32_t tlb_size,
+         uint32_t client_id,
+         bool exec_side)
+  : SimObject(ctx, name)
+  , ReqIn(num_ports, this)
   , RspOut(num_ports, this)
   , ReqOut(num_ports, this)
-  , RspIn (num_ports, this)
+  , RspIn(num_ports, this)
+  , TlbMissOut(this)
+  , TlbFillIn(this)
   , num_ports_(num_ports)
-  , tlb_(VX_CFG_TLB_SIZE)
+  , client_id_(client_id)
+  , exec_side_(exec_side)
+  , tlb_(tlb_size)
+  , mshr_(VX_CFG_L1_TLB_MSHR_SIZE)
+  , replay_(num_ports)
+  , fault_rsp_(num_ports)
 {}
 
-Mmu::~Mmu() = default;
+Mmu::~Mmu() {}
 
 void Mmu::on_reset() {
-  ptw_state_ = PTW_IDLE;
-  // SATP is set externally via set_satp(); don't clear on simulator reset.
+  for (auto& e : mshr_) {
+    e = MshrEntry();
+  }
+  for (auto& q : replay_) {
+    q = {};
+  }
+  for (auto& q : fault_rsp_) {
+    q = {};
+  }
+  reports_ = {};
+  // Physical pages move under a virtual address between launches, so
+  // cached translations cannot outlive one — the shared levels clear here
+  // too and would otherwise disagree with this one.
+  tlb_.flush();
 }
 
 void Mmu::set_satp(uint64_t satp) {
+  // Every CTA and every spawned warp re-writes the same satp; only an
+  // actual address-space change invalidates cached translations.
+  if (satp_ && satp_->get_satp() == satp) {
+    return;
+  }
   satp_ = std::make_unique<SATP_t>(satp);
   tlb_.flush();  // sfence.vma
 }
 
-bool Mmu::needs_translation(uint64_t addr) const {
-  (void)addr;
+bool Mmu::empty() const {
+  for (auto& e : mshr_) {
+    if (e.valid) {
+      return false;
+    }
+  }
+  for (auto& q : replay_) {
+    if (!q.empty()) {
+      return false;
+    }
+  }
+  for (auto& q : fault_rsp_) {
+    if (!q.empty()) {
+      return false;
+    }
+  }
+  return reports_.empty();
+}
+
+bool Mmu::needs_translation(const MemReq& req) const {
   // The runtime installs identity PTEs at boot for every PA-addressed
-  // region (IO MMIO, kernel image, page table, stacks), so any access
-  // post-SATP-set walks the page table — there is no longer a need to
-  // address-range bypass. The only path that skips translation is one
-  // issued before SATP is programmed (BARE mode); this covers the
-  // few instruction fetches between reset and the kernel's csrw satp.
-  if (!satp_ || satp_->get_mode() == BARE) return false;
+  // region (kernel image, page table, stacks), so a plain access
+  // post-SATP-set walks the page table — no address-range bypass is
+  // needed. BARE mode (SATP unprogrammed) skips translation, covering
+  // the few instruction fetches between reset and the kernel's csrw
+  // satp. IO-flagged requests skip it too: the IO/OM apertures carry
+  // device registers or encoded coordinates, not virtual addresses.
+  if (!satp_ || satp_->get_mode() == BARE) {
+    return false;
+  }
+  if (req.flags.io) {
+    return false;
+  }
   return true;
 }
 
-void Mmu::start_ptw(uint64_t va, ACCESS_TYPE type, MemReq orig, uint32_t port) {
-  // Walk from the root table down: level VX_VM_PT_LEVEL-1 .. 0
-  // (Sv32: L1->L0; Sv39: L2->L1->L0). The root table is at the SATP PPN.
-  ptw_state_     = PTW_REQ;
-  ptw_level_     = VX_VM_PT_LEVEL - 1;
-  ptw_cur_ppn_   = satp_->get_base_ppn();
-  ptw_vaddr_     = va;
-  ptw_type_      = type;
-  ptw_orig_req_  = orig;
-  ptw_orig_port_ = port;
-  walk_start_cyc_= SimPlatform::instance().cycles();
-  ++walks_;
+int Mmu::mshr_find(uint64_t vpn) const {
+  for (size_t i = 0; i < mshr_.size(); ++i) {
+    if (mshr_[i].valid && mshr_[i].vpn == vpn) {
+      return (int)i;
+    }
+  }
+  return -1;
 }
 
-void Mmu::on_ptw_response(const MemRsp& rsp) {
-  // Extract the PTE from the cache-line payload at the recorded PTE
-  // address (low bits give the byte offset within the line). A PTE is
-  // VX_VM_PTE_SIZE bytes — 4 for Sv32, 8 for Sv39.
-  uint64_t pte_bytes = 0;
-  if (rsp.data) {
-    uint32_t byte_off = (uint32_t)(ptw_pte_addr_ & (VX_CFG_MEM_BLOCK_SIZE - 1));
-    std::memcpy(&pte_bytes,
-                reinterpret_cast<const uint8_t*>(rsp.data->data()) + byte_off,
-                VX_VM_PTE_SIZE);
+int Mmu::mshr_alloc(uint64_t vpn) {
+  for (size_t i = 0; i < mshr_.size(); ++i) {
+    if (!mshr_[i].valid) {
+      mshr_[i].valid = true;
+      mshr_[i].issued = false;
+      mshr_[i].vpn = vpn;
+      mshr_[i].parked.clear();
+      return (int)i;
+    }
   }
-  PTE_t pte(pte_bytes);
+  return -1;
+}
 
-  // Validity check per RISC-V privileged spec (Sv32/Sv39).
-  bool invalid = (pte.v == 0) | ((pte.r == 0) & (pte.w == 1));
-  if (invalid) {
-    // Page fault — for now, abort the simulator with a clear message.
-    // TODO: route a page-fault exception back to the LSU.
-    std::cerr << "MMU: page fault on PTE at 0x" << std::hex << ptw_pte_addr_
-              << " (vaddr 0x" << ptw_vaddr_ << ")" << std::dec << std::endl;
-    std::abort();
+TlbAccess Mmu::access_of(const MemReq& req) const {
+  if (exec_side_) {
+    return TlbAccess::Exec;
   }
+  return req.is_write() ? TlbAccess::Write : TlbAccess::Read;
+}
 
-  // A PTE with any of R/W/X set is a leaf; R=W=X=0 is a pointer to the
-  // next-level table. A leaf found at level L is a (super)page — L0 =
-  // 4 KB, L1 = megapage, L2 = gigapage; PTW_FILL composes the PA from
-  // ptw_leaf_level_, so the level just needs to be recorded here.
-  bool is_leaf = (pte.r != 0) | (pte.w != 0) | (pte.x != 0);
-  if (is_leaf) {
-    ptw_final_ppn_  = pte.ppn;
-    ptw_flags_      = pte.flags;
-    ptw_leaf_level_ = ptw_level_;
-    ptw_state_      = PTW_FILL;
+void Mmu::kill_request(uint32_t port, const MemReq& req) {
+  // A killed access never reaches memory. The data side still owes the
+  // pipeline whatever response the caches would have produced, or the warp
+  // waits on it forever; the fetch side is left dangling on purpose,
+  // because a fabricated instruction word would be decoded as real.
+  if (exec_side_) {
     return;
   }
-  // Interior node — descend to the next level. A non-leaf at level 0
-  // means the walk ran out of levels with no leaf: a page fault.
-  if (ptw_level_ == 0) {
-    std::cerr << "MMU: page fault — no leaf PTE for vaddr 0x"
-              << std::hex << ptw_vaddr_ << std::dec << std::endl;
-    std::abort();
+  // Same rule the caches apply: only a plain store retires without one.
+  if (req.op != MemOp::ST || req.flags.strsp) {
+    auto data = std::make_shared<mem_block_t>();
+    data->fill(0);
+    fault_rsp_.at(port).push(MemRsp(req.tag, req.hart_id, req.uuid, data));
   }
-  ptw_cur_ppn_ = pte.ppn;
-  --ptw_level_;
-  ptw_state_   = PTW_REQ;
 }
 
-void Mmu::drive_ptw() {
-  // Bits of VA per page-table level. Derived from PT geometry:
-  // VX_VM_PT_SIZE / VX_VM_PTE_SIZE = entries per table = 2^VPN_BITS_PER_LEVEL.
-  const uint32_t VPN_BITS = log2ceil(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
-  const uint64_t VPN_MASK = (1ULL << VPN_BITS) - 1;
-  switch (ptw_state_) {
-  case PTW_REQ: {
-    // Index the page table at the current level by this level's VPN
-    // slice. The root level uses the SATP base PPN (set in start_ptw);
-    // deeper levels use the interior PTE's PPN recorded by the response.
-    uint32_t shift = VX_VM_PAGE_LOG2_SIZE + ptw_level_ * VPN_BITS;
-    uint64_t vpn   = (ptw_vaddr_ >> shift) & VPN_MASK;
-    ptw_pte_addr_  = pte_addr(ptw_cur_ppn_, vpn);
-    MemReq req(MemOp::LD, ptw_pte_addr_, /*data*/nullptr, /*byteen*/0,
-               PTW_TAG_MARKER, /*hart_id*/0, /*uuid*/0);
-    if (ReqOut.at(0).try_send(req)) {
-      DT(4, this->name() << " ptw L" << (uint32_t)ptw_level_
-                         << "-req: addr=0x" << std::hex << ptw_pte_addr_ << std::dec);
-      ptw_state_ = PTW_WAIT;
-    }
-    break;
-  }
-  case PTW_FILL: {
-    // Compose the PA. For a leaf at level L the low 12 + L*VPN_BITS VA
-    // bits are the offset within the (super)page — L0 = 4 KB (pgoff
-    // only), L1 = megapage, L2 = gigapage — and come from the VA, not
-    // the leaf PPN.
-    uint32_t off_bits = VX_VM_PAGE_LOG2_SIZE +
-                        ptw_leaf_level_ * log2ceil(VX_VM_PT_SIZE / VX_VM_PTE_SIZE);
-    uint64_t off_mask = (1ULL << off_bits) - 1;
-    uint64_t pa_base = (ptw_final_ppn_ << VX_VM_PAGE_LOG2_SIZE) & ~off_mask;
-    uint64_t pa = pa_base | (ptw_vaddr_ & off_mask);
-    // Cache the per-4KB sub-page mapping in the TLB. A megapage walk
-    // therefore only services the specific 4 KB that triggered the
-    // miss; subsequent VAs in the same megapage will re-walk (correct,
-    // just less optimal — fine for the rare system regions we identity-map).
-    uint64_t vpn = ptw_vaddr_ >> VX_VM_PAGE_LOG2_SIZE;
-    uint64_t ppn_4kb = pa >> VX_VM_PAGE_LOG2_SIZE;
-    tlb_.fill(vpn, ppn_4kb, ptw_flags_);
-    MemReq translated = ptw_orig_req_;
-    translated.addr = pa;
-    if (ReqOut.at(ptw_orig_port_).try_send(translated)) {
-      walk_latency_ += (SimPlatform::instance().cycles() - walk_start_cyc_);
-      ptw_state_ = PTW_IDLE;
-    }
-    break;
-  }
-  default:
-    break;
-  }
+void Mmu::report_fault(const MemReq& req) {
+  TlbReq report;
+  report.vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
+  report.access = access_of(req);
+  report.amo = memop_is_amo(req.op);
+  report.client_id = client_id_;
+  report.report_only = true;
+  reports_.push(report);
 }
 
 void Mmu::on_tick() {
-  // 1) Drain responses. PTW responses are claimed by the FSM; everything
-  // else flows back upstream unchanged.
+  // 1) Forward downstream responses upstream unchanged. Kill responses go
+  // first: they belong to accesses that will never reach the cache, and the
+  // warps waiting on them cannot drain until they land.
   for (uint32_t p = 0; p < num_ports_; ++p) {
-    if (RspIn.at(p).empty()) continue;
-    const MemRsp& rsp = RspIn.at(p).peek();
-    if (rsp.tag & PTW_TAG_MARKER) {
-      // PTW response. Only PTW state cares about it.
-      if (ptw_state_ == PTW_WAIT) {
-        on_ptw_response(rsp);
-      }
-      RspIn.at(p).pop();
-    } else {
-      if (RspOut.at(p).full()) continue;
-      RspOut.at(p).send(rsp, 1);
-      RspIn.at(p).pop();
+    if (RspOut.at(p).full()) {
+      continue;
     }
+    if (!fault_rsp_.at(p).empty()) {
+      RspOut.at(p).send(fault_rsp_.at(p).front(), 0);
+      fault_rsp_.at(p).pop();
+      continue;
+    }
+    if (RspIn.at(p).empty()) {
+      continue;
+    }
+    // Responses pass straight through with no added latency: the translation
+    // stage's cost is charged on the request path, not the reply path.
+    RspOut.at(p).send(RspIn.at(p).peek(), 0);
+    RspIn.at(p).pop();
   }
 
-  // 2) Run PTW FSM — emit pending PTE fetches / fill.
-  if (ptw_state_ != PTW_IDLE && ptw_state_ != PTW_WAIT) {
-    drive_ptw();
+  // 2) Consume fills: install the translation, then move parked
+  // requests to their per-port replay queues in arrival order. A fault
+  // installs nothing and kills its parked accesses instead: memory is
+  // never touched, but every access that owes the pipeline a response
+  // still gets one, so the warp can drain and the launch can be torn
+  // down. The fault itself is reported out of band.
+  if (!TlbFillIn.empty()) {
+    const TlbRsp& rsp = TlbFillIn.peek();
+    int id = (int)rsp.slot;
+    // Dropping a fill would leave its parked requests waiting forever.
+    __assert(id >= 0 && id < (int)mshr_.size() && mshr_[id].valid,
+             "TLB fill does not match an outstanding miss");
+    uint64_t page_mask = (uint64_t(1) << VX_VM_PAGE_LOG2_SIZE) - 1;
+    uint32_t shift = rsp.level * TLB_VPN_LEVEL_BITS;
+    uint64_t low_mask = (uint64_t(1) << shift) - 1;
+    if (!rsp.fault) {
+      tlb_.fill(mshr_[id].vpn, rsp.ppn, rsp.flags, rsp.level);
+    }
+    for (auto& [port, req] : mshr_[id].parked) {
+      // Requests of differing intent chain onto one entry, so the walk's
+      // own check covers only the request that allocated it. Each parked
+      // request is re-checked against the flags the walk brought back.
+      if (rsp.fault) {
+        kill_request(port, req);
+      } else if (!tlb_perm_ok(rsp.flags, access_of(req), memop_is_amo(req.op))) {
+        kill_request(port, req);
+        report_fault(req);
+        DT(3, this->name() << " perm-fault: vpn=0x" << std::hex
+                           << (req.addr >> VX_VM_PAGE_LOG2_SIZE) << std::dec);
+      } else {
+        MemReq translated = req;
+        uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
+        uint64_t ppn = (rsp.ppn & ~low_mask) | (vpn & low_mask);
+        translated.addr = (ppn << VX_VM_PAGE_LOG2_SIZE) | (req.addr & page_mask);
+        replay_.at(port).push(translated);
+      }
+    }
+    mshr_[id] = MshrEntry();
+    TlbFillIn.pop();
   }
 
-  // 3) Forward incoming requests. Bypass for non-translated addresses;
-  // TLB-hit translates inline; TLB-miss kicks PTW (if free).
+  // 3) Issue pending miss requests (one per tick over the shared link).
+  for (size_t i = 0; i < mshr_.size(); ++i) {
+    auto& e = mshr_[i];
+    if (!e.valid || e.issued) {
+      continue;
+    }
+    if (TlbMissOut.full()) {
+      break;
+    }
+    const MemReq& head = e.parked.front().second;
+    TlbReq miss;
+    miss.vpn = e.vpn;
+    miss.access = access_of(head);
+    miss.amo = memop_is_amo(head.op);
+    miss.client_id = client_id_;
+    miss.slot = (uint32_t)i;
+    TlbMissOut.send(miss, 1);
+    DT(4, this->name() << " tlb-miss: " << miss);
+    e.issued = true;
+    break;
+  }
+
+  // 3b) Drain fault reports on the same link. These carry no slot and
+  // expect no fill, so they cannot be folded into the miss station.
+  if (!reports_.empty() && !TlbMissOut.full()) {
+    TlbMissOut.send(reports_.front(), 1);
+    reports_.pop();
+  }
+
+  // 4) Forward requests. This is a hit-under-miss stage: a hit issues
+  // while older requests are still parked, so only same-address order is
+  // guaranteed — those share a VPN, hence one entry and its arrival-order
+  // parked list. Replays drain ahead of new input on the same port.
   for (uint32_t p = 0; p < num_ports_; ++p) {
-    if (ReqIn.at(p).empty()) continue;
+    if (!replay_.at(p).empty()) {
+      if (ReqOut.at(p).try_send(replay_.at(p).front())) {
+        replay_.at(p).pop();
+      }
+      continue;
+    }
+
+    if (ReqIn.at(p).empty()) {
+      continue;
+    }
     const MemReq& req = ReqIn.at(p).peek();
 
-    if (!needs_translation(req.addr)) {
+    if (!needs_translation(req)) {
       if (ReqOut.at(p).try_send(req)) {
         ReqIn.at(p).pop();
       }
@@ -204,27 +273,37 @@ void Mmu::on_tick() {
     }
 
     uint64_t vpn = req.addr >> VX_VM_PAGE_LOG2_SIZE;
-    auto [hit, ppn] = tlb_.lookup(vpn);
-    if (hit) {
+    auto res = tlb_.lookup(vpn);
+    if (res.hit) {
+      // A cached translation still has to satisfy the access: the entry
+      // was installed for whichever intent first missed on this page.
+      if (!tlb_perm_ok(res.flags, access_of(req), memop_is_amo(req.op))) {
+        DT(3, this->name() << " perm-fault: vpn=0x" << std::hex << vpn << std::dec);
+        kill_request(p, req);
+        report_fault(req);
+        ReqIn.at(p).pop();
+        continue;
+      }
       MemReq translated = req;
-      translated.addr = (ppn << VX_VM_PAGE_LOG2_SIZE) |
+      translated.addr = (res.ppn << VX_VM_PAGE_LOG2_SIZE) |
                         (req.addr & ((1ULL << VX_VM_PAGE_LOG2_SIZE) - 1));
       if (ReqOut.at(p).try_send(translated)) {
         ReqIn.at(p).pop();
       }
     } else {
-      // TLB miss — kick PTW if it's idle. Otherwise this request waits
-      // (stays at the head of ReqIn[p]) until the in-flight walk completes.
-      if (ptw_state_ == PTW_IDLE) {
-        // ACCESS_TYPE inferred from req op (no FETCH on dcache port).
-        ACCESS_TYPE type = req.is_write() ? ACCESS_TYPE::STORE : ACCESS_TYPE::LOAD;
-        start_ptw(req.addr, type, req, p);
+      // Park the miss and keep the port flowing (hit-under-miss).
+      // Same-VPN misses chain on one entry, preserving arrival order;
+      // a full entry or a full station stalls this port only.
+      int id = mshr_find(vpn);
+      if (id < 0) {
+        id = mshr_alloc(vpn);
+      }
+      if (id >= 0 && mshr_[id].parked.size() < 2) {
+        mshr_[id].parked.emplace_back(p, req);
         ReqIn.at(p).pop();
       }
     }
   }
 }
-
-} // namespace vortex
 
 #endif // VX_CFG_VM_ENABLE

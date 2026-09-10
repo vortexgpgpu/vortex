@@ -152,7 +152,7 @@ public:
       device_index = atoi(device_index_s);
     }
 
-    const char *xlbin_path_s = getenv("XRT_XCLBIN_PATH");
+    const char *xlbin_path_s = getenv("XCLBIN_PATH");
     if (xlbin_path_s == nullptr) {
       xlbin_path_s = DEFAULT_XCLBIN_PATH;
     }
@@ -206,6 +206,24 @@ public:
     CHECK_ERR(this->write_register(MMIO_CTL_ADDR, CTL_AP_RESET), {
       return err;
     });
+
+    // wait for the reset sequence to complete (ap_idle deasserts while the
+    // device reset is in flight)
+    {
+      uint32_t ctl = 0;
+      for (int retry = 0; retry < 1000; ++retry) {
+        CHECK_ERR(this->read_register(MMIO_CTL_ADDR, &ctl), {
+          return err;
+        });
+        if (ctl & CTL_AP_IDLE) {
+          break;
+        }
+      }
+      if ((ctl & CTL_AP_IDLE) == 0) {
+        printf("[VXDRV] Error: device reset timeout!\n");
+        return -1;
+      }
+    }
 
   #ifdef SCOPE
     {
@@ -299,6 +317,15 @@ public:
   #else
     free(reinterpret_cast<void *>(cp_addr));
   #endif
+    return 0;
+  }
+
+  // Host BOs are host-resident and coherent with the AFU's view.
+  int host_mem_pull(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
+  int host_mem_push(uint64_t /*cp_addr*/) {
     return 0;
   }
 

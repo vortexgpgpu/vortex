@@ -27,7 +27,7 @@ module VX_scan #(
 );
     localparam LOGN = `CLOG2(N);
 
-    wire [LOGN:0][N-1:0] t /* verilator split_var*/;
+    wire [LOGN:0][N-1:0] t;
 
     // reverses bits
     if (REVERSE != 0) begin : g_data_in_reverse

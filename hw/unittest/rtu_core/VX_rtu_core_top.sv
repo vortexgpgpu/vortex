@@ -13,117 +13,153 @@
 
 `include "VX_define.vh"
 
-// Flat-port wrapper around VX_rtu_core. Exposes the cluster-shared RTU bus and
-// the RTCache memory port as individual logic ports for Verilator and
-// FPGA/ASIC synthesis (interface modports cannot cross the synthesis top).
+// Flat-port wrapper around VX_rtu_core for out-of-context synthesis. The RTU bus
+// (arm / req / win) and the RTCache port are interfaces, which cannot cross the
+// synthesis top, so each channel is presented as one packed vector. Every I/O is
+// registered at the boundary so the report measures the core, not the pad path.
 
 module VX_rtu_core_top import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter NUM_LANES = `VX_CFG_NUM_SFU_LANES,
-    parameter TAG_WIDTH = RTU_REQ_TAG_WIDTH,
-    // RTCache port geometry (line-granular: word size == cache line)
+    parameter NUM_WARPS = `VX_CFG_NUM_WARPS,
+    parameter NUM_SRCS  = 1,
+    parameter TAG_WIDTH = RTU_REQ_ARB1_TAG_WIDTH,
     parameter CACHE_WORD_SIZE  = RTCACHE_WORD_SIZE,
     parameter CACHE_TAG_WIDTH  = RTCACHE_TAG_WIDTH,
     parameter CACHE_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(CACHE_WORD_SIZE),
-    parameter RAY_BITS         = $bits(rtu_ray_t)
+
+    // Channel widths (mirror VX_rtu_bus_slice / VX_rtu_bus_if).
+    parameter SRC_WIDTH = `UP(`CLOG2(NUM_SRCS)),
+    parameter ARM_DATAW = SRC_WIDTH + NW_WIDTH + NUM_LANES
+                        + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + 32 + TAG_WIDTH,
+    parameter REQ_DATAW = 1 + SRC_WIDTH + NW_WIDTH
+                        + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS,
+    parameter WIN_DATAW = 1 + NW_WIDTH + RTU_SLOT_BITS
+                        + NUM_LANES + NUM_LANES * 32 + TAG_WIDTH
 ) (
     input  wire clk,
     input  wire reset,
 
-    // -----------------------------------------------------------------------
-    // RTU request bus (slave): active-lane mask + per-lane ray snapshot
-    // -----------------------------------------------------------------------
-    input  wire                              rtu_req_valid,
-    input  wire [NUM_LANES-1:0]              rtu_req_mask,
-    input  wire [NUM_LANES-1:0][RAY_BITS-1:0] rtu_req_rays,
-    input  wire [TAG_WIDTH-1:0]              rtu_req_tag,
-    output wire                              rtu_req_ready,
+    // arm (unit -> RTU): a warp armed a TRACE; its warp-uniform ray half
+    input  wire                        arm_valid,
+    input  wire [ARM_DATAW-1:0]        arm_data,
+    output wire                        arm_ready,
 
-    // RTU response bus: per-lane terminal status + closest-hit attributes
-    output wire                              rtu_rsp_valid,
-    output wire [NUM_LANES-1:0][31:0]        rtu_rsp_status,
-    output wire [NUM_LANES-1:0][31:0]        rtu_rsp_hit_t,
-    output wire [NUM_LANES-1:0][31:0]        rtu_rsp_hit_u,
-    output wire [NUM_LANES-1:0][31:0]        rtu_rsp_hit_v,
-    output wire [NUM_LANES-1:0][31:0]        rtu_rsp_hit_prim_id,
-    output wire [NUM_LANES-1:0][31:0]        rtu_rsp_hit_geometry,
-    output wire [TAG_WIDTH-1:0]              rtu_rsp_tag,
-    input  wire                              rtu_rsp_ready,
+    // req (unit -> RTU): RAY beats, and the warp's CONTINUE
+    input  wire                        req_valid,
+    input  wire [REQ_DATAW-1:0]        req_data,
+    output wire                        req_ready,
 
-    // -----------------------------------------------------------------------
+    // win (RTU -> unit): one masked hit-window slot write per beat
+    output wire                        win_valid,
+    output wire [WIN_DATAW-1:0]        win_data,
+    input  wire                        win_ready,
+
     // RTCache port (master): node/leaf line fetch
-    // -----------------------------------------------------------------------
-    output wire                              cache_req_valid,
-    output wire                              cache_req_rw,
-    output wire [CACHE_WORD_SIZE-1:0]        cache_req_byteen,
-    output wire [CACHE_ADDR_WIDTH-1:0]       cache_req_addr,
-    output wire [CACHE_WORD_SIZE*8-1:0]      cache_req_data,
-    output wire [CACHE_TAG_WIDTH-1:0]        cache_req_tag,
-    input  wire                              cache_req_ready,
+    output wire                        cache_req_valid,
+    output wire                        cache_req_rw,
+    output wire [CACHE_WORD_SIZE-1:0]  cache_req_byteen,
+    output wire [CACHE_ADDR_WIDTH-1:0] cache_req_addr,
+    output wire [CACHE_WORD_SIZE*8-1:0] cache_req_data,
+    output wire [CACHE_TAG_WIDTH-1:0]  cache_req_tag,
+    input  wire                        cache_req_ready,
 
-    input  wire                              cache_rsp_valid,
-    input  wire [CACHE_WORD_SIZE*8-1:0]      cache_rsp_data,
-    input  wire [CACHE_TAG_WIDTH-1:0]        cache_rsp_tag,
-    output wire                              cache_rsp_ready
+    input  wire                        cache_rsp_valid,
+    input  wire [CACHE_WORD_SIZE*8-1:0] cache_rsp_data,
+    input  wire [CACHE_TAG_WIDTH-1:0]  cache_rsp_tag,
+    output wire                        cache_rsp_ready
 );
-    // -----------------------------------------------------------------------
-    // RTU request/response bus
-    // -----------------------------------------------------------------------
+    // ── registered input boundary ─────────────────────────────────────────
+    reg arm_valid_r, req_valid_r, win_ready_r, cache_req_ready_r, cache_rsp_valid_r, cache_rsp_ready_out;
+    reg [ARM_DATAW-1:0]         arm_data_r;
+    reg [REQ_DATAW-1:0]         req_data_r;
+    reg [CACHE_WORD_SIZE*8-1:0] cache_rsp_data_r;
+    reg [CACHE_TAG_WIDTH-1:0]   cache_rsp_tag_r;
+    always @(posedge clk) begin
+        arm_valid_r       <= arm_valid;
+        arm_data_r        <= arm_data;
+        req_valid_r       <= req_valid;
+        req_data_r        <= req_data;
+        win_ready_r       <= win_ready;
+        cache_req_ready_r <= cache_req_ready;
+        cache_rsp_valid_r <= cache_rsp_valid;
+        cache_rsp_data_r  <= cache_rsp_data;
+        cache_rsp_tag_r   <= cache_rsp_tag;
+    end
+
+    // ── the RTU bus interface, fed from the registered ports ───────────────
     VX_rtu_bus_if #(
         .NUM_LANES (NUM_LANES),
-        .TAG_WIDTH (TAG_WIDTH)
+        .TAG_WIDTH (TAG_WIDTH),
+        .SRC_WIDTH (SRC_WIDTH)
     ) rtu_bus_if ();
 
-    assign rtu_bus_if.req_valid     = rtu_req_valid;
-    assign rtu_bus_if.req_data.mask = rtu_req_mask;
-    assign rtu_bus_if.req_data.rays = rtu_req_rays;
-    assign rtu_bus_if.req_data.tag  = rtu_req_tag;
-    assign rtu_req_ready            = rtu_bus_if.req_ready;
+    assign rtu_bus_if.arm_valid = arm_valid_r;
+    assign rtu_bus_if.arm_data  = arm_data_r;   // packed bitcast (equal width)
+    assign rtu_bus_if.req_valid = req_valid_r;
+    assign rtu_bus_if.req_data  = req_data_r;
+    assign rtu_bus_if.win_ready = win_ready_r;
 
-    assign rtu_rsp_valid        = rtu_bus_if.rsp_valid;
-    assign rtu_rsp_status       = rtu_bus_if.rsp_data.status;
-    assign rtu_rsp_hit_t        = rtu_bus_if.rsp_data.hit_t;
-    assign rtu_rsp_hit_u        = rtu_bus_if.rsp_data.hit_u;
-    assign rtu_rsp_hit_v        = rtu_bus_if.rsp_data.hit_v;
-    assign rtu_rsp_hit_prim_id  = rtu_bus_if.rsp_data.hit_prim_id;
-    assign rtu_rsp_hit_geometry = rtu_bus_if.rsp_data.hit_geometry;
-    assign rtu_rsp_tag          = rtu_bus_if.rsp_data.tag;
-    assign rtu_bus_if.rsp_ready = rtu_rsp_ready;
-
-    // -----------------------------------------------------------------------
-    // RTCache memory port
-    // -----------------------------------------------------------------------
+    // ── the RTCache memory interface ───────────────────────────────────────
     VX_mem_bus_if #(
         .DATA_SIZE (CACHE_WORD_SIZE),
         .TAG_WIDTH (CACHE_TAG_WIDTH)
     ) cache_bus_if ();
 
-    assign cache_req_valid          = cache_bus_if.req_valid;
-    assign cache_req_rw             = cache_bus_if.req_data.rw;
-    assign cache_req_byteen         = cache_bus_if.req_data.byteen;
-    assign cache_req_addr           = cache_bus_if.req_data.addr;
-    assign cache_req_data           = cache_bus_if.req_data.data;
-    assign cache_req_tag            = cache_bus_if.req_data.tag;
-    assign cache_bus_if.req_ready   = cache_req_ready;
-    `UNUSED_VAR (cache_bus_if.req_data.attr)
+    assign cache_bus_if.req_ready    = cache_req_ready_r;
+    assign cache_bus_if.rsp_valid    = cache_rsp_valid_r;
+    assign cache_bus_if.rsp_data.data = cache_rsp_data_r;
+    assign cache_bus_if.rsp_data.tag  = cache_rsp_tag_r;
 
-    assign cache_bus_if.rsp_valid    = cache_rsp_valid;
-    assign cache_bus_if.rsp_data.data = cache_rsp_data;
-    assign cache_bus_if.rsp_data.tag  = cache_rsp_tag;
-    assign cache_rsp_ready           = cache_bus_if.rsp_ready;
-
-    // -----------------------------------------------------------------------
-    // DUT
-    // -----------------------------------------------------------------------
+    // ── DUT ────────────────────────────────────────────────────────────────
     VX_rtu_core #(
-        .INSTANCE_ID (INSTANCE_ID),
-        .NUM_LANES   (NUM_LANES),
-        .TAG_WIDTH   (TAG_WIDTH)
+        .INSTANCE_ID     (INSTANCE_ID),
+        .NUM_LANES       (NUM_LANES),
+        .NUM_WARPS       (NUM_WARPS),
+        .NUM_SRCS        (NUM_SRCS),
+        .TAG_WIDTH       (TAG_WIDTH),
+        .CACHE_DATA_SIZE (CACHE_WORD_SIZE),
+        .CACHE_TAG_WIDTH (CACHE_TAG_WIDTH)
     ) rtu_core (
         .clk          (clk),
         .reset        (reset),
         .rtu_bus_if   (rtu_bus_if),
         .cache_bus_if (cache_bus_if)
     );
+
+    // ── registered output boundary ─────────────────────────────────────────
+    reg arm_ready_o, req_ready_o, win_valid_o, cache_req_valid_o, cache_req_rw_o;
+    reg [WIN_DATAW-1:0]         win_data_o;
+    reg [CACHE_WORD_SIZE-1:0]   cache_req_byteen_o;
+    reg [CACHE_ADDR_WIDTH-1:0]  cache_req_addr_o;
+    reg [CACHE_WORD_SIZE*8-1:0] cache_req_data_o;
+    reg [CACHE_TAG_WIDTH-1:0]   cache_req_tag_o;
+    always @(posedge clk) begin
+        arm_ready_o        <= rtu_bus_if.arm_ready;
+        req_ready_o        <= rtu_bus_if.req_ready;
+        win_valid_o        <= rtu_bus_if.win_valid;
+        win_data_o         <= rtu_bus_if.win_data;   // packed bitcast
+        cache_req_valid_o  <= cache_bus_if.req_valid;
+        cache_req_rw_o     <= cache_bus_if.req_data.rw;
+        cache_req_byteen_o <= cache_bus_if.req_data.byteen;
+        cache_req_addr_o   <= cache_bus_if.req_data.addr;
+        cache_req_data_o   <= cache_bus_if.req_data.data;
+        cache_req_tag_o    <= cache_bus_if.req_data.tag;
+        cache_rsp_ready_out <= cache_bus_if.rsp_ready;
+    end
+
+    assign arm_ready       = arm_ready_o;
+    assign req_ready       = req_ready_o;
+    assign win_valid       = win_valid_o;
+    assign win_data        = win_data_o;
+    assign cache_req_valid = cache_req_valid_o;
+    assign cache_req_rw    = cache_req_rw_o;
+    assign cache_req_byteen= cache_req_byteen_o;
+    assign cache_req_addr  = cache_req_addr_o;
+    assign cache_req_data  = cache_req_data_o;
+    assign cache_req_tag   = cache_req_tag_o;
+    assign cache_rsp_ready = cache_rsp_ready_out;
+
+    `UNUSED_VAR (cache_bus_if.req_data.attr)
 
 endmodule

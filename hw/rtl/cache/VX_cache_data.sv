@@ -72,8 +72,8 @@ module VX_cache_data import VX_gpu_pkg::*; #(
 
     // Resolve the access way: hit way for core read/write, victim way for
     // fill/flush. Encoded combinationally from tag_matches so the data array
-    // is addressed at read-issue (S0). This is the tag-compare -> way ->
-    // data-address path (see redesign proposal, timing section).
+    // is addressed at read-issue (S0). This is the timing-critical
+    // tag-compare -> way -> data-address path.
     wire [`CS_WAY_SEL_WIDTH-1:0] hit_way;
     VX_onehot_encoder #(
         .N (NUM_WAYS)

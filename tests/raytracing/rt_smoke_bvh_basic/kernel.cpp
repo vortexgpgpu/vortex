@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke test — Phase 4 chunk 2 kernel.
+// PRISM RTU smoke test — kernel.
 // Fires one primary ray against a BVH4 scene with a single leaf.
 
 #include <vx_spawn2.h>

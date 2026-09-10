@@ -14,7 +14,6 @@
 #pragma once
 
 #include <memory>
-#include <simobject.h>
 #include "types.h"
 #include "raster_unit.h"
 
@@ -60,6 +59,11 @@ public:
   std::vector<SimChannel<MemReq>>     rcache_req_out;
   std::vector<SimChannel<MemRsp>>     rcache_rsp_in;
 
+  // Fragment-work-distributor control links: one arm strobe per owned core;
+  // every core reports its drain back on the shared done link.
+  std::vector<SimEventLink<FwdArm>>   fwd_arm_out;
+  SimEventLink<FwdDone>               fwd_done_in;
+
   RasterCore(const SimContext& ctx, const char* name, Cluster* cluster);
   virtual ~RasterCore();
 
@@ -90,6 +94,8 @@ protected:
   void on_tick();
 
 private:
+  void on_fwd_done(const FwdDone& msg);
+
   class Impl;
   Impl* impl_;
 

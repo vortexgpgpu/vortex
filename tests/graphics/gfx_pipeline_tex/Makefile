@@ -4,10 +4,9 @@ include $(ROOT_DIR)/config.mk
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_RASTER_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_RASTER_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_OM_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_OM_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_TEX_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TEX_ENABLE)
-# vx_om4 / vx_tex4 stage their payload in the shared graphics window (SETW). That
-# window is owned at the SFU level (GfxWindow) and exists whenever OM / TEX is
-# built, so RTU is NOT required — this config exercises the OM+TEX-without-RTU
-# path that the A2 decouple enables.
+# TEX takes its operands in registers and the OM exports through its aperture, so
+# neither touches the hit window and neither needs the RTU. This config exercises
+# the OM+TEX-without-RTU path.
 
 PROJECT := gfx_pipeline_tex
 

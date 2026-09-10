@@ -1,0 +1,18 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ */
+
+/* Larger than any Vortex CTA, and deliberately free of shared memory and
+ * barriers: that combination is what a driver is most tempted to split across
+ * several smaller device workgroups, because nothing in the shader appears to
+ * depend on the workgroup shape. gl_GlobalInvocationID does. */
+layout(local_size_x = 128) in;
+
+layout(std430, binding = 0) buffer Buf { float data[]; };
+
+void main()
+{
+   data[gl_GlobalInvocationID.x] += 1.0;
+}

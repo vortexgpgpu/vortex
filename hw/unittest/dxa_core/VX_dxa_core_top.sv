@@ -24,7 +24,7 @@ module VX_dxa_core_top import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter ENABLE          = 1,
     // gmem bus geometry (matches VX_mem_bus_if defaults for L1_LINE_SIZE)
     parameter GMEM_LINE_SIZE  = `VX_CFG_L1_LINE_SIZE,
-    parameter GMEM_TAG_WIDTH  = L1_MEM_ARB_TAG_WIDTH,
+    parameter GMEM_TAG_WIDTH  = SOCKET_MEM_TAG_WIDTH,
     parameter GMEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(GMEM_LINE_SIZE)
 ) (
     input  wire clk,

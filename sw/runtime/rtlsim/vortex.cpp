@@ -110,6 +110,16 @@ public:
     return 0;
   }
 
+  // Host memory is the process's own memory: always coherent.
+  int host_mem_pull(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
+  int host_mem_push(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
+
 private:
   // If `addr` falls in a registered host region, return it as a host
   // pointer (cp_addr == the pointer); otherwise nullptr → device memory.
@@ -160,6 +170,10 @@ private:
       if (!future_.valid()) return false;
       return future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
     };
+#ifdef VX_CFG_VM_ENABLE
+    // The device MMU control surface answers the fault-report DCRs.
+    h.mmu_fault_report = true;
+#endif
     return h;
   }
 

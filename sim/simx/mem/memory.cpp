@@ -31,6 +31,12 @@ using namespace vortex;
 
 class Memory::Impl {
 private:
+	// A completed read is not visible to the device the same cycle it leaves
+	// the DRAM model: the platform stages the response and completes a
+	// registered valid/ready handshake at the device boundary, adding two
+	// cycles beyond the response register.
+	static constexpr uint64_t RSP_BOUNDARY_DELAY = 3;
+
 	Memory*   simobject_;
 	Config    config_;
 	MemCrossBar::Ptr mem_xbar_;
@@ -131,7 +137,7 @@ public:
 					} else {
 								MemRsp mem_rsp{rsp_args->request.tag, rsp_args->request.hart_id, rsp_args->request.uuid};
 						mem_rsp.data = rsp_args->rsp_data;
-						if (rsp_args->memsim->mem_xbar_->RspIn.at(rsp_args->bank_id).try_send(mem_rsp)) {
+						if (rsp_args->memsim->mem_xbar_->RspIn.at(rsp_args->bank_id).try_send(mem_rsp, RSP_BOUNDARY_DELAY)) {
 							DT(3, rsp_args->memsim->simobject_->name() << " mem-rsp" << rsp_args->bank_id << ": " << mem_rsp);
 							delete rsp_args;
 							return true;

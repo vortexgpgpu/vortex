@@ -9,11 +9,9 @@
 software stack ([`sw/runtime/common/vm.{cpp,h}`](../../sw/runtime/common/vm.cpp),
 [`sw/common/vm_types.h`](../../sw/common/vm_types.h)).
 
-This document is the architectural reference; the existing
-[`docs/vm.md`](../vm.md) covers usage and perf counters (and has some
-stale file-path references that this document corrects — the RTL MMU lives
-in `hw/rtl/mem/`, and SimX uses a dedicated `sim/simx/mem/mmu.cpp`
-SimObject, not the old `sim/common/mem.cpp` `MemoryUnit`).
+This document is the single reference for the subsystem: the architecture
+below, plus the usage surface — the perf counters and the randomized-VA
+testing knobs (§8).
 
 VM is gated by `VX_CFG_VM_ENABLE` (default off,
 [`VX_config.toml:24`](../../VX_config.toml#L24)).
@@ -188,25 +186,65 @@ are not mistaken for bugs:
 
 ---
 
-## 8. Proposed but not yet implemented
+## 8. Usage: perf counters and randomized-VA testing
 
-1. **GPU-aligned multi-level TLB hierarchy** — this is the subject of a
-   **retained** proposal, `mmu_perf_optimization_proposal.md` (kept in
-   `docs/proposals/` because **none** of it is implemented yet). It
-   specifies a 3-level L1/L2/L3 TLB hierarchy (multi-banked post-coalescer
-   L1 DTLB, per-core L1 ITLB, per-cluster L2, chip-wide L3), a centralized
-   multi-walker PTW with a PTE walk-cache, non-blocking TLB MSHRs, TLB
-   inclusion-policy knobs (NINE/INCL/EXCL), broadcast `SFENCE.VMA`
-   invalidation, and a `VX_dma` block split out of the CP with its own TLB
-   into the shared hierarchy. It is the forward roadmap (`feature_vm_v2`);
-   the current MMU is a single flat 32-entry FA TLB per cache port.
+### 8.1 Perf counters
+
+Six MMU counters live in the memory-subsystem MPM class
+(`VX_DCR_MPM_CLASS_MEM`, §2); the hardware sums the icache- and dcache-MMU
+counters into one bank.
+[`sw/runtime/common/perf.cpp:579-584`](../../sw/runtime/common/perf.cpp#L579)
+reads them and prints a per-core `vm:` line in the memory report (the MEM
+class, selected with `--perf=7` to `blackbox.sh`):
+
+| CSR | Meaning |
+|---|---|
+| `VX_CSR_MPM_TLB_READS` | Total TLB lookups (icache + dcache MMU) |
+| `VX_CSR_MPM_TLB_HITS` | TLB hits |
+| `VX_CSR_MPM_TLB_MISSES` | TLB misses (each triggers a PTW) |
+| `VX_CSR_MPM_TLB_EVICTS` | TLB evictions on fill |
+| `VX_CSR_MPM_PTW_WALKS` | Completed PTW walks |
+| `VX_CSR_MPM_PTW_LATENCY` | Total PTW latency in cycles (avg = LATENCY / WALKS) |
+
+```
+PERF: vm: tlb_reads=96, hit=96%, evicts=0, ptw_walks=4, ptw_avg_lat=84.75
+```
+
+### 8.2 Randomized-VA testing knobs
+
+`VMManager`'s constructor
+([`vm.cpp:49-53`](../../sw/runtime/common/vm.cpp#L49)) reads two environment
+variables to stress the translation path:
+
+- `VORTEX_RANDOMIZE_VA=0` (default) — identity mapping: `vx_mem_alloc`
+  returns a VA equal to the underlying PA, so the pipeline is exercised
+  without address remapping (a clean baseline).
+- `VORTEX_RANDOMIZE_VA=1` — each `vx_mem_alloc` mints a random page-aligned
+  base VA, reserves the contiguous range, and installs per-page PTEs; the
+  caller receives the random VA while the PA stays in `global_mem_`.
+  Multi-page buffers stay VA-contiguous.
+- `VORTEX_VA_SEED=N` — seed for the `std::mt19937_64` RNG (default
+  `0x12345678`). A fixed seed reproduces the same VA stream across runs.
+
+---
+
+## 9. Proposed but not yet implemented
+
+1. **GPU-aligned multi-level TLB hierarchy** — a 3-level L1/L2/L3 TLB
+   hierarchy (multi-banked post-coalescer L1 DTLB, per-core L1 ITLB,
+   per-cluster L2, chip-wide L3), a centralized multi-walker PTW with a
+   PTE walk-cache, non-blocking TLB MSHRs, TLB inclusion-policy knobs
+   (NINE/INCL/EXCL), broadcast `SFENCE.VMA` invalidation, and a `VX_dma`
+   block split out of the CP with its own TLB into the shared hierarchy.
+   None of it is implemented yet; the current MMU is a single flat
+   32-entry FA TLB per cache port.
 2. **RTL PTW Sv39 + superpage fills** — the RTL walker is Sv32-only and
    stores megapages as 4 KB entries. Generalizing it (as SimX already is)
    is required for RV64 VM on FPGA.
 3. **RTL page-fault delivery** — check PTE `V/R/W/X/U` and route a fault to
    the LSU as an exception (`VX_mmu_ptw.sv:113` stub).
-4. **RTL CP shared device-side MMU** — Phase 2 of `vm_sw_stack_redesign`,
-   deferred past v3: add the SATP regfile decode + a hardware walker so the
+4. **RTL CP shared device-side MMU** — add the SATP regfile decode + a
+   hardware walker so the
    CP DMA honors VM in RTL, matching the SimX/CP-software path (see
    `command_processor.md` §10 item 2).
 5. **`configure --vm` first-class flag** — VM is still forced per build via
@@ -214,19 +252,10 @@ are not mistaken for bugs:
 6. **RTL VM in CI** — the `vm()` regression runs SimX-only; the rtlsim/xrt
    lines are commented out pending RTL PTW completion.
 
-**Superseded directions** (recorded to avoid revival): the per-LSU-slice
-MMU placement of `vm_migration` (replaced by a single per-core MMU after
+**Superseded directions** (recorded to avoid revival): a per-LSU-slice
+MMU placement (replaced by a single per-core MMU after
 the coalescer); wiring the orphaned `sim/common/mem.cpp` `MemoryUnit`
 (replaced by the dedicated `sim/simx/mem/mmu.cpp` SimObject); and the
 original compile-time `VM_ENABLE` + per-transfer host-side translation
 model (replaced by runtime `DEV_CAPS.VM_ENABLED` discovery + MMU-aware CP
 DMA — the host no longer translates per transfer).
-
----
-
-## 9. Source proposals
-
-This design consolidates and supersedes `vm_migration_proposal.md` and
-`vm_sw_stack_redesign_proposal.md` (now removed from `docs/proposals/`).
-`mmu_perf_optimization_proposal.md` is **retained** in `docs/proposals/`
-as the unimplemented forward roadmap (§8 item 1).

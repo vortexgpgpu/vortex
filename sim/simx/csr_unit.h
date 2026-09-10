@@ -43,8 +43,8 @@ public:
 private:
   Core* core_;
 #ifdef VX_CFG_VM_ENABLE
-  // Mirror of the kernel-visible SATP CSR. Forwarded to Core::set_satp
-  // on write so the per-core MMU updates its translation root.
+  // Readback mirror of the kernel-visible SATP CSR. Not a translation source:
+  // the MMUs take their root from the device DCR (see Cluster::set_mmu_satp).
   uint64_t satp_ = 0;
 #endif
 };

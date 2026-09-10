@@ -1,5 +1,9 @@
-ROOT_DIR := $(realpath ../../../../../..)
+ROOT_DIR := $(realpath ../../../../..)
 include $(ROOT_DIR)/config.mk
+# Exports VERILATOR/VERILATOR_PATH as absolute paths. gen_sources.sh resolves
+# verilator from the environment, so without this the flow silently depends on
+# verilator being on PATH and fails with "verilator: command not found".
+include $(VORTEX_HOME)/hw/syn/common.mk
 
 DEVICE ?= xcu55c-fsvh2892-2L-e
 
@@ -19,18 +23,26 @@ SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/dut
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 DPI_DIR := $(VORTEX_HOME)/hw/dpi
 AFU_DIR := $(RTL_DIR)/afu/xrt
+AFU_COMMON_DIR := $(RTL_DIR)/afu/common
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 UNITTEST_DIR := $(VORTEX_HOME)/hw/unittest
 
 NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
 JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
-CONFIGS += -DSYNTHESIS -DVIVADO -DNDEBUG
+# `override`: these are facts about this flow, not preferences. A caller that
+# sets CONFIGS on the MAKE COMMAND LINE would otherwise kill every `CONFIGS +=`
+# here and in build.mk silently -- command-line variables win over `+=`, and
+# nothing warns. With `override`, a command-line CONFIGS is extra defines on
+# top, which is what it reads as.
+override CONFIGS += -DSYNTHESIS -DVIVADO -DNDEBUG
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-CFLAGS += $(CONFIGS)
+# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
+# resolved type selectors so an enum override selects its RTL implementation.
+CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 CFLAGS += $(RTL_INCLUDE)
 
 # Power analysis via SAIF switching-activity annotation.

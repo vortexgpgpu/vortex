@@ -157,13 +157,22 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // ------------------------------------------------------------------------
     // Shared signals
     // ------------------------------------------------------------------------
-    wire crsp_queue_stall, mshr_alm_full, mshr_empty;
+    wire crsp_queue_stall, mshr_alm_full;
+    // Authoritative "no entry held", straight off the MSHR's valid mask. The
+    // pending-size counter below is a proxy: it is fed by separate increment and
+    // decrement events and, as the finalize_is_pending comment above records,
+    // can underflow on a double free. A flush gated on the proxy alone hangs
+    // forever once it drifts high, so the gate consults both.
+    wire mshr_valid_empty;
     wire mshr_probe_pending_ld, mshr_probe_pending_amo;
+    wire mshr_any_ld, mshr_any_amo, mshr_persist_ld, mshr_persist_amo;
     wire mreq_queue_empty, mreq_queue_alm_full;
     wire [`CS_LINE_ADDR_WIDTH-1:0] mem_rsp_addr;
     wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] mem_rsp_sector; // sector this fill installs
     wire [MSHR_ADDR_WIDTH-1:0] mshr_alloc_id, mshr_previd;
     wire mshr_pending_raw;
+    wire mshr_pending_wr_raw;
+    wire mshr_pending_ovl_raw;
 
     // MSHR replay (dequeue) sideband
     wire                           replay_valid, replay_ready, replay_rw;
@@ -289,7 +298,15 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .flush_line  (flush_sel),
         .flush_way   (flush_way),
         .flush_ready (flush_ready),
-        .mshr_empty  (mshr_empty),
+        // Gated on the MSHR's own valid mask, not on the pending-size counter.
+        // The counter is a proxy fed by separate increment and decrement events
+        // and can underflow on a double free (see the finalize_is_pending comment
+        // below); once it drifts high the flush waits forever on a condition that
+        // is already true. The mask is authoritative for entries actually held,
+        // and the accept-to-allocate window is covered by bank_empty: a request
+        // accepted at the input is still in the pipeline, so pipe_inflight holds
+        // bank_empty low until allocation completes at st0.
+        .mshr_empty  (mshr_valid_empty),
         .bank_empty  (no_pending_req)
     );
 
@@ -298,7 +315,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire wb_hold;
     // amo_chain_stall paces a same-line AMO behind an in-flight commit by one
     // cycle; it is 0 for non-AMO traffic, so the baseline pipe is unaffected.
-    wire pipe_stall = crsp_queue_stall || amo_chain_stall || wb_hold;
+    (* max_fanout = 64 *) wire pipe_stall = crsp_queue_stall || amo_chain_stall || wb_hold;
 
     // ========================================================================
     // Input arbitration
@@ -310,8 +327,28 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // (it completes at the forward-response port instead of replaying); a
     // fill is held off while a forward drain is in progress so the staged
     // sector is not overwritten mid-chain.
-    wire replay_mux    = replay_valid && ~fwd_head;
-    wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~fill_inflight;
+    // The MSHR hides an entry being dequeued this cycle from the same-line
+    // match (linking behind a slot invalidated the same cycle would orphan the
+    // new entry). If that entry is a not-yet-applied chain member and a
+    // same-line request is probing right now, the prober would sail past it as
+    // a fresh hit/miss and break arrival order. Hold the replay for that cycle
+    // instead — the entry stays valid, the prober links behind it, and the
+    // drain resumes next cycle. The fill path is held with it so the dequeue
+    // pointer cannot be re-armed mid-chain. The forward port needs no hold: it
+    // answers from the staged fill sector, which a younger array access cannot
+    // disturb.
+    // The hold matters only when the vanishing entry would have constrained
+    // the prober: same word, and at least one side writes. Read-after-read and
+    // disjoint words carry no order constraint, so the entry may hide and the
+    // prober proceed as a fresh hit — which keeps a streaming drain from being
+    // stalled one cycle per incoming same-line beat.
+    wire replay_link_hold = replay_valid && mshr_allocate_st0 && ~pipe_stall
+                         && (st0.req.addr == replay_addr)
+                         && (replay_rw || st0.req.rw)
+                         && (replay_wsel == st0.req.word_idx);
+
+    wire replay_mux    = replay_valid && ~fwd_head && ~replay_link_hold;
+    wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~fill_inflight && ~replay_link_hold;
 
     wire replay_grant  = ~init_valid;
     wire replay_enable = replay_grant && replay_mux;
@@ -328,8 +365,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire amo_wb_path   = amo_wb_pending && ~amo_hit_st1;
     wire creq_enable   = creq_grant && (amo_creq_path || amo_wb_path);
 
-    assign replay_ready   = replay_grant && ~fwd_head && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
-    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~fill_inflight && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
+    assign replay_ready   = replay_grant && ~fwd_head && ~replay_link_hold && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
+    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~fill_inflight && ~replay_link_hold && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign flush_ready    = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign core_req_ready = creq_grant && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall
                          && ~amo_commit_busy && ~req_input_defer;
@@ -484,7 +521,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // A fill into a line that is already resident (a sector refill) must target
     // the resident way, not a fresh victim, so the new sector lands in the same
     // line copy. With 1 sector/line a fill's line is never already resident, so
-    // this is gated off and the victim way is always used (legacy behavior).
+    // this is gated off and the victim way is always used.
     wire line_present_any_st0 = (`CS_SECTORS_PER_LINE > 1) && (| line_present_st0);
     wire [`CS_WAY_SEL_WIDTH-1:0] present_way_st0;
     VX_onehot_encoder #(
@@ -496,6 +533,15 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     );
     wire [`CS_WAY_SEL_WIDTH-1:0] fill_way_st0 = line_present_any_st0 ? present_way_st0 : victim_way;
     wire [`CS_WAY_SEL_WIDTH-1:0] evict_way_st0 = st0.req.is_fill ? fill_way_st0 : st0.req.way_idx;
+
+    // Fill way as one-hot, straight from the per-way presence vector: routing
+    // it through the binary encode -> evict_way -> per-way compare round trip
+    // put the tag-read cone on the tag store's own write-enable pins. The
+    // victim decode is early (replacement state is registered), and
+    // line_present_st0 is one-hot by the tag-array invariant, so this selects
+    // the exact way the binary path did.
+    wire [NUM_WAYS-1:0] victim_way_oh = NUM_WAYS'(1'b1) << victim_way;
+    wire [NUM_WAYS-1:0] fill_way_oh_st0 = line_present_any_st0 ? line_present_st0 : victim_way_oh;
 
     VX_cache_repl #(
         .CACHE_SIZE  (CACHE_SIZE),
@@ -544,6 +590,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .line_tag    (line_tag_st0),
         .sector_idx  (sector_idx_st0),
         .evict_way   (evict_way_st0),
+        .fill_way_oh (fill_way_oh_st0),
         .tag_matches (tag_matches_st0),
         .line_present (line_present_st0),
         .evict_dirty (evict_dirty_st0),
@@ -559,11 +606,29 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         `UNUSED_PIN (valid_out)
     );
 
+    // A tags-hit is completable only while no OLDER same-WORD MSHR chain entry
+    // could still change the word (a chained write not yet applied) or observe
+    // it (any chained entry, against a write request): chained entries replay
+    // through the pipe AFTER this request's data-array access, so completing
+    // the hit would invert arrival order — a load reads pre-store data, or a
+    // store lands before an older chained load reads. Demote such a hit to a
+    // chained miss: the request links onto the line's chain (it is pending, so
+    // no fill is issued) and replays in arrival order once the chain drains.
+    // A chained entry's replay touches exactly its own word, so hits to
+    // disjoint words — the common case in streaming, where the whole warp's
+    // beats land on one sector — keep the fast release path, as does
+    // read-after-read on the same word.
+    wire creq_hit_order_hazard_st0 = st0.req.is_creq && ~st0.req.is_replay
+                                  && mshr_pending_raw
+                                  && (mshr_pending_wr_raw || (st0.req.rw && mshr_pending_ovl_raw))
+                                  && ~is_amo_fwd_st0
+                                  && ~((AMO_ENABLE != 0) && st0.req.amo.amo_valid);
+
     // S0 lookup delta (single combinational driver). The AMO requester is forced
     // non-pending so it never coalesces onto a prior same-line entry.
     always @(*) begin
         lk_st0 = '0;
-        lk_st0.is_hit       = (| tag_matches_st0);
+        lk_st0.is_hit       = (| tag_matches_st0) && ~creq_hit_order_hazard_st0;
         lk_st0.is_dirty     = evict_dirty_st0;
         lk_st0.is_refill    = st0.req.is_fill && line_present_any_st0;
         lk_st0.evict_dirty_mask = evict_dirty_mask_st0;
@@ -637,10 +702,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     );
 
     // a passthru-AMO replay carries its result word instead of an installed
-    // line, so it counts as a hit at the commit stage.
-    wire eff_hit_st1 = st1.lk.is_hit || is_amo_replay_st1;
+    // line, so it counts as a hit at the commit stage. The AMO commit signals
+    // (is_amo_replay_st1) resolve at stC, so the replay-must-hit check is taken
+    // there; with PIPE_EX>0 an st1-staged check would sample them a stage early.
     wire eff_hit_stc = stC.lk.is_hit || is_amo_replay_st1;
-    `RUNTIME_ASSERT (~(st1.req.valid && st1.req.is_replay && ~eff_hit_st1), ("missed mshr replay"))
+    `RUNTIME_ASSERT (~(stC.req.valid && stC.req.is_replay && ~eff_hit_stc), ("missed mshr replay"))
 
     // ========================================================================
     // Data array (driven at stD; outputs land at stC)
@@ -718,15 +784,24 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mshr_allocate_st0 = st0.req.valid && st0.req.is_creq && ~st0.req.is_replay;
     wire mshr_finalize_st1 = st1.req.valid && st1.req.is_creq && ~st1.req.is_replay;
 
-    // release the entry on a hit. A forwarded AMO keeps its entry until its
-    // downstream response returns (fill/dequeue frees it), so never release it.
+    // A forwarded (non-LLC passthru) AMO keeps its entry until its downstream
+    // response returns (fill/dequeue frees it), so never release it. This is an
+    // st1 decision, but the AMO unit resolves is_amo_fwd at its stC-fed port; at
+    // PIPE_EX>0 those stages differ, so evaluate the forwarded-AMO condition on
+    // the st1 request itself — otherwise a forwarded AMO sitting at stC would
+    // gate an unrelated store at st1 and strand its MSHR entry.
+    wire is_amo_fwd_rel = (AMO_ENABLE != 0) && (IS_LLC == 0)
+                        && st1.req.amo.amo_valid && st1.req.valid
+                        && st1.req.is_creq && ~st1.req.is_replay;
+
+    // release the entry on a hit.
     wire mshr_release_st1;
     if (WRITEBACK) begin : g_mshr_release
-        assign mshr_release_st1 = st1.lk.is_hit && ~is_amo_fwd_st1;
+        assign mshr_release_st1 = st1.lk.is_hit && ~is_amo_fwd_rel;
     end else begin : g_mshr_release_ro
         // keep missed writes in MSHR if a pending entry exists for the line, so a
         // pending fill arriving without the write content replays them locally.
-        assign mshr_release_st1 = (st1.lk.is_hit || (st1.req.rw && ~st1.lk.mshr_pending)) && ~is_amo_fwd_st1;
+        assign mshr_release_st1 = (st1.lk.is_hit || (st1.req.rw && ~st1.lk.mshr_pending)) && ~is_amo_fwd_rel;
     end
     wire mshr_release_fire = mshr_finalize_st1 && mshr_release_st1 && ~pipe_stall;
 
@@ -741,7 +816,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .reset (reset),
         .incr  (core_req_fire),
         .decr  (mshr_dequeue),
-        .empty (mshr_empty),
+        `UNUSED_PIN (empty),
         `UNUSED_PIN (alm_empty),
         .full  (mshr_alm_full),
         `UNUSED_PIN (alm_full),
@@ -758,6 +833,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .WRITEBACK   (WRITEBACK),
         .AMO_ENABLE  (AMO_ENABLE != 0),
         .AMO_PASSTHRU ((AMO_ENABLE != 0) && (IS_LLC == 0)),
+        .WORD_SEL_WIDTH (WORD_SEL_WIDTH),
         .DATA_WIDTH  (WORD_SEL_WIDTH + WORD_SIZE + `CS_WORD_WIDTH + TAG_WIDTH + REQ_SEL_WIDTH + AMO_REQ_BITS)
     ) cache_mshr (
         .clk                 (clk),
@@ -772,6 +848,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .probe_addr          (core_req_addr),
         .probe_pending_ld    (mshr_probe_pending_ld),
         .probe_pending_amo   (mshr_probe_pending_amo),
+        .probe_any_ld        (mshr_any_ld),
+        .probe_any_amo       (mshr_any_amo),
+        .persist_ld          (mshr_persist_ld),
+        .persist_amo         (mshr_persist_amo),
         .dequeue_valid       (replay_valid),
         .dequeue_addr        (replay_addr),
         .dequeue_rw          (replay_rw),
@@ -781,6 +861,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_valid      (mshr_allocate_st0 && ~pipe_stall),
         .allocate_addr       (st0.req.addr),
         .allocate_sector     (sector_idx_st0),
+        .allocate_word_idx   (st0.req.word_idx),
         .allocate_rw         (st0.req.rw),
         // Only non-LLC AMOs must not coalesce; at the LLC same-line AMOs coalesce
         // and serialize their commits on the single filled line.
@@ -788,6 +869,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_data       ({st0.req.word_idx, st0.req.byteen, write_word_st0, st0.req.tag, st0.req.req_idx, st0.req.amo}),
         .allocate_id         (mshr_alloc_id),
         .allocate_pending    (mshr_pending_raw),
+        .allocate_pending_wr (mshr_pending_wr_raw),
+        .allocate_pending_ovl (mshr_pending_ovl_raw),
         .allocate_previd     (mshr_previd),
         `UNUSED_PIN (allocate_ready),
         .finalize_valid      (mshr_finalize_st1 && ~pipe_stall),
@@ -800,7 +883,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         // with sectoring, where a hot line accumulates a long same-line chain.
         .finalize_is_pending (st1.lk.mshr_pending && ~mshr_release_st1),
         .finalize_id         (st1.req.mshr_id),
-        .finalize_previd     (st1.lk.mshr_previd)
+        .finalize_previd     (st1.lk.mshr_previd),
+        .empty               (mshr_valid_empty)
     );
 
     // ========================================================================
@@ -810,23 +894,27 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // it at S1 (== stC when PIPE_EX=0, the validated case).
     // ========================================================================
     if (AMO_ENABLE) begin : g_amo
-        // Look-ahead line address for the reservation cache's sync-BRAM read:
-        // the line entering the commit stage (stC) next cycle, so the registered
-        // read lands at stC. stC = st1 delayed by PIPE_EX; one stage earlier is
-        // st0 (PIPE_EX=0) or st1 delayed by PIPE_EX-1 (PIPE_EX>0).
+        // Look-ahead {line address, byteen} for the AMO engine: the request
+        // entering the commit stage (stC) next cycle, so a registered consumer
+        // lands at stC. stC = st1 delayed by PIPE_EX; one stage earlier is
+        // st0 (PIPE_EX=0) or st1 delayed by PIPE_EX-1 (PIPE_EX>0). The address
+        // feeds the reservation cache's sync-BRAM read and the chain-stall
+        // match; the byteen feeds the byte-offset encoder.
         wire [`CS_LINE_ADDR_WIDTH-1:0] amo_res_addr_n;
+        wire [WORD_SIZE-1:0]           amo_byteen_n;
         if (PIPE_EX == 0) begin : g_resn0
             assign amo_res_addr_n = st0.req.addr;
+            assign amo_byteen_n   = st0.req.byteen;
         end else begin : g_resn
             VX_pipe_register #(
-                .DATAW (`CS_LINE_ADDR_WIDTH),
+                .DATAW (`CS_LINE_ADDR_WIDTH + WORD_SIZE),
                 .DEPTH (PIPE_EX - 1)
             ) reg_resn (
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (~pipe_stall),
-                .data_in  (st1.req.addr),
-                .data_out (amo_res_addr_n)
+                .data_in  ({st1.req.addr, st1.req.byteen}),
+                .data_out ({amo_res_addr_n, amo_byteen_n})
             );
         end
 
@@ -868,9 +956,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .write_word_st1         (word_stc),
             .word_idx_st0           (st0.req.word_idx),
             .word_idx_st1           (stC.req.word_idx),
-            .addr_st0               (st0.req.addr),
             .addr_st1               (addr_stc),
             .res_addr_n             (amo_res_addr_n),
+            .byteen_n               (amo_byteen_n),
             .tag_st1                (stC.req.tag),
             .req_idx_st1            (stC.req.req_idx),
             .attr_st1               (stC.req.attr),
@@ -885,10 +973,14 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .core_req_valid         (core_req_valid),
             .core_req_is_amo        (core_req_amo.amo_valid),
             .core_req_rw            (core_req_rw),
-            .core_req_addr          (core_req_addr),
+            .core_req_fire          (core_req_fire),
             .rw_st0                 (st0.req.rw),
             .mshr_probe_pending_ld  (mshr_probe_pending_ld),
             .mshr_probe_pending_amo (mshr_probe_pending_amo),
+            .mshr_any_ld            (mshr_any_ld),
+            .mshr_any_amo           (mshr_any_amo),
+            .mshr_persist_ld        (mshr_persist_ld),
+            .mshr_persist_amo       (mshr_persist_amo),
             .amo_hit_st1            (amo_hit_st1),
             .commit_busy            (amo_commit_busy),
             .chain_stall            (amo_chain_stall),
@@ -919,6 +1011,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign {is_passthru_fill_sel, amo_ptw_word_st1, req_input_defer} = '0;
         // S1-only signals consumed solely by the AMO engine.
         `UNUSED_VAR ({amo_wb_fire, mshr_probe_pending_ld, mshr_probe_pending_amo, st1.req.amo, st1.req.attr, st1.req.req_idx, st1.req.word_idx, st1.req.byteen})
+        `UNUSED_VAR ({mshr_any_ld, mshr_any_amo, mshr_persist_ld, mshr_persist_amo})
     end
 
     // ========================================================================
@@ -1028,7 +1121,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // eviction writes back each dirty sector as its own sector-sized beat: the
     // sequencer below drains one dirty sector per cycle, holding the commit at
     // stC until the last beat is accepted. With 1 sector/line this is a single
-    // beat (wb_hold never asserts) — byte-identical to the legacy path.
+    // beat (wb_hold never asserts).
     // ========================================================================
     localparam SEC = `CS_SECTORS_PER_LINE;
     wire mreq_queue_push, mreq_queue_pop;

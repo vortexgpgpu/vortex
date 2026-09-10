@@ -165,7 +165,7 @@ def parse_simx(log_lines):
                                 break
                     continue
 
-                # Legacy logs without (#uuid) suffix — attribute to the most
+                # Log lines without a (#uuid) suffix — attribute to the most
                 # recently seen Instr.
                 if current_debug_uuid is not None:
                     legacy_src = re.search(debug_src_legacy_pattern, line)

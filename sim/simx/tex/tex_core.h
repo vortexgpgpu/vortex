@@ -14,15 +14,14 @@
 #pragma once
 
 #include <memory>
-#include <simobject.h>
 #include "types.h"
 #include "tex_unit.h"
 
 namespace vortex {
 
-class Cluster;
+class Socket;
 
-// Cluster-shared TEX engine: cluster-level arbitration feeds the texture
+// Socket-resident TEX engine: socket-level arbitration feeds the texture
 // address/memory/sampler pipeline. All texel reads flow through the tcache
 // via MemReq/MemRsp; functional and timing are resolved at MemRsp arrival.
 class TexCore : public SimObject<TexCore> {
@@ -50,7 +49,7 @@ public:
   std::vector<SimChannel<MemReq>>  tcache_req_out;
   std::vector<SimChannel<MemRsp>>  tcache_rsp_in;
 
-  TexCore(const SimContext& ctx, const char* name, Cluster* cluster);
+  TexCore(const SimContext& ctx, const char* name, Socket* socket);
   virtual ~TexCore();
 
   int dcr_write(uint32_t addr, uint32_t value);

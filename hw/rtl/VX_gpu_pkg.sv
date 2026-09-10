@@ -97,8 +97,13 @@ package VX_gpu_pkg;
 
     localparam UOP_PACKLD = 0;
     localparam UOP_TCU = UOP_PACKLD + 1;
-    localparam UOP_GFXW = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
-    localparam UOP_MAX = UOP_GFXW + `EXT_GFX_ANY_ENABLED;
+    // One graphics expander slot, not two. Each slot costs a full ibuffer_t input
+    // on the sequencer's output mux (uop_out_data[UOP_MAX]) plus a bit of its
+    // priority encoder, so the OM export shares the graphics expander rather than
+    // owning one: the two are combinational rewrites of ibuf_in with mutually
+    // exclusive selects (EX_LSU + export_mask vs EX_SFU + INST_SFU_RTUW).
+    localparam UOP_GFX = UOP_TCU + `VX_CFG_EXT_TCU_ENABLED;
+    localparam UOP_MAX = UOP_GFX + `EXT_GFX_ANY_ENABLED;
     localparam UOP_CTR_W = 8;
 
     localparam CTA_TID_WIDTH = `UP(NW_BITS + NT_BITS);
@@ -175,15 +180,23 @@ package VX_gpu_pkg;
         AMO_OP_OR    = 4'h5,
         AMO_OP_AND   = 4'h6,
         AMO_OP_MIN   = 4'h7,
-        AMO_OP_MAX   = 4'h8
+        AMO_OP_MAX   = 4'h8,
         // MINU/MAXU collapse into MIN/MAX + amo_unsigned bit.
+        AMO_OP_CAS   = 4'h9
     } amo_op_e;
 
     // Slim AMO sideband. width derives from byteen popcount at the cache
     // bank; rhs is read from the request's data field. Includes scalar
     // hart_id for the LLC reservation table.
+    // Compare-and-swap needs a third operand, and the request's single data
+    // word already carries the swap value, so the comparand travels here. It
+    // must reach wherever the read-modify-write commits, which is the local
+    // bank for shared memory and the last-level bank for global memory.
     typedef struct packed {
         logic [HART_ID_WIDTH-1:0]   hart_id;
+    `ifdef VX_CFG_EXT_ZACAS_ENABLE
+        logic [`VX_CFG_XLEN-1:0]     amo_cmp;
+    `endif
         logic                        amo_unsigned;
         amo_op_e                     amo_op;
         logic                        amo_valid;
@@ -193,22 +206,22 @@ package VX_gpu_pkg;
     // Cross-cache mem-bus attr — FIXED OFFSETS so arbitration is clean.
     // Shared by every VX_mem_bus_if instance that carries attr.
     // is_flush at LSB so dcr_flush can drive it deterministically.
+    // is_addr_om is appended ABOVE amo, deliberately: the amo field is cast by
+    // offset (VX_cache_bank), so inserting a bit below it would silently shift
+    // MEM_ATTR_AMO_OFFS and reinterpret the AMO sideband.
     typedef struct packed {
-        amo_req_t                    amo;          // at MEM_ATTR_AMO_OFFS=3 (valid + op + unsigned + hart_id)
+        amo_req_t                    amo;           // MEM_ATTR_AMO_OFFS   = 4
+        logic                        is_addr_om;    // MEM_ATTR_OM_OFFS    = 3
         logic                        is_addr_local; // MEM_ATTR_LOCAL_OFFS = 2
         logic                        is_addr_io;    // MEM_ATTR_IO_OFFS    = 1
         logic                        is_flush;      // MEM_ATTR_FLUSH_OFFS = 0
     } mem_bus_attr_t;
 
-    // FIXED bit-position offsets — invariant across all VX_mem_bus_if
-    // instances and cache levels. Don't change without coordinating
-    // every cache/source/arbiter that touches attr.
-    // The amo bits are always allocated; AMO_ENABLE on the cache controls
-    // whether AMO logic is generated, not whether the field is present.
     localparam MEM_ATTR_FLUSH_OFFS  = 0;
     localparam MEM_ATTR_IO_OFFS     = 1;
     localparam MEM_ATTR_LOCAL_OFFS  = 2;
-    localparam MEM_ATTR_AMO_OFFS    = 3;        // amo_req_t cast site (valid + op + unsigned + hart_id)
+    localparam MEM_ATTR_OM_OFFS     = 3;
+    localparam MEM_ATTR_AMO_OFFS    = 4;
 
     // Total width of the mem-bus attr field. Use this as the parameter
     // default for VX_mem_bus_if's ATTR_WIDTH parameter and as the
@@ -515,7 +528,7 @@ package VX_gpu_pkg;
     localparam INST_SFU_RASTER = 4'hD;
 `endif
 `ifdef EXT_GFX_ANY_ENABLE
-    localparam INST_SFU_GFXW =   4'hE;  // shared graphics window (SETW/GETW/GETWF) + RTU trace ops
+    localparam INST_SFU_RTUW =   4'hE;  // RTU hit window (GETW/GETWF) + trace ops
 `endif
     localparam INST_SFU_BITS =   4;
 
@@ -663,21 +676,126 @@ package VX_gpu_pkg;
         logic [VX_DCR_DATA_WIDTH-1:0] data;
     } dcr_rsp_t;
 
+    // Per-quad fragment stamp, delivered inside the launch (see VX_raster_launch)
+    // and read back as the FRAG_* CSRs. Same layout as raster_stamp_t; spelled
+    // from the VX_types macros because VX_raster_pkg is compiled after this one.
+    localparam FRAG_STAMP_BITS = 2 * (`VX_RASTER_DIM_BITS - 1) + 4 + `VX_RASTER_PID_BITS;
+
+    // A pixel quad occupies four adjacent lanes, so its four lanes share ONE
+    // stamp: lane l holds slice (l & 3) of its quad's stamp and the CSR read
+    // gathers the four back. Storing a full copy per lane would cost 4x the
+    // width for the same bits.
+    localparam FRAG_QUAD_LANES = 4;
+    localparam FRAG_LANE_BITS  = FRAG_STAMP_BITS / FRAG_QUAD_LANES;
+
+    // A launch is EITHER a COMPUTE launch (a CTA grid: a GPGPU kernel, or a graphics
+    // frame's own geometry stages -- vertex shading, binning -- which run as compute
+    // grids too) or a FRAGMENT launch (a pixel wave a rasterizer pushes), selected by
+    // `kind`. The two carry different argument records, so kmu_req_t is a common
+    // envelope (every launch: PC/entry/param/ctx_id/lmem) plus a tagged `args` union of
+    // the two argument sets. A fragment is not a CTA -- no grid, no cluster, no
+    // thread-index stride -- so those fields live only in the compute variant and a
+    // fragment reuses their bits for its stamps.
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // A fragment stamp: lane l holds slice (l & 3) of quad (l >> 2)'s stamp. Four
+    // lanes share a stamp, so this is a quarter of a naive per-lane copy.
+    localparam KMU_FRAG_BITS = `VX_CFG_NUM_THREADS * FRAG_LANE_BITS;
+    // A fragment carries its covered-quad count instead of borrowing a CTA's block_size;
+    // active lanes = count * FRAG_QUAD_LANES.
+    localparam FRAG_QUADS          = `VX_CFG_NUM_THREADS / FRAG_QUAD_LANES;
+    // UP() guards the degenerate NT < FRAG_QUAD_LANES case (FRAG_QUADS == 0), where
+    // CLOG2(1) is 0 and the count field would be a zero-width [-1:0] range.
+    localparam KMU_FRAG_COUNT_BITS = `UP(`CLOG2(FRAG_QUADS + 1));
+    localparam KMU_FRAG_PAYLOAD_BITS = KMU_FRAG_BITS + KMU_FRAG_COUNT_BITS;
+`else
+    localparam KMU_FRAG_BITS = 0;
+    localparam KMU_FRAG_PAYLOAD_BITS = 0;
+`endif
+
+    // Width of the compute variant's fields, computed arithmetically because the union
+    // envelope has to be sized before the type exists. The assertion under the typedef
+    // pins the two together: add or resize a field without updating this sum and
+    // elaboration fails, rather than the envelope silently mis-sizing.
+    localparam KMU_COMPUTE_BITS = 3*32                    // grid_dim
+                                + 3*32                    // block_idx
+                                + 3*(CTA_TID_WIDTH+1)     // block_dim
+                                + (CTA_TID_WIDTH+1)       // block_size
+                                + 3*CTA_TID_WIDTH         // warp_step
+                                + (NW_WIDTH+1)            // cluster_size
+                                + 1;                      // is_first_of_cluster
+
+    // The envelope takes whichever variant is wider. Compute dominates up to NT=16;
+    // the fragment's per-thread stamps grow with NT and overtake it by NT=32. The
+    // trailing +1 keeps both paddings non-zero: a zero-width packed field is illegal,
+    // and without it whichever variant is the wider one would have exactly zero.
+    localparam KMU_ARGS_BITS = `MAX(KMU_COMPUTE_BITS, KMU_FRAG_PAYLOAD_BITS) + 1;
+
+    // Compute arguments: the full CTA grid descriptor (a GPGPU kernel or a graphics
+    // geometry stage).
     typedef struct packed {
-        logic [PC_BITS-1:0] PC;
-        logic [PC_BITS-1:0] entry;
-        logic [7:0]       ctx_id;
-        logic [31:0]      cta_id;
-        logic [2:0][31:0] block_idx;
-        logic [2:0][CTA_TID_WIDTH:0] block_dim;
-        logic [2:0][31:0] grid_dim;
-        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
-        logic [`VX_CFG_LMEM_LOG_SIZE:0] aligned_lmem_size;
-        logic [CTA_TID_WIDTH:0] block_size;
+        logic [KMU_ARGS_BITS-KMU_COMPUTE_BITS-1:0] __padding;
+        logic [2:0][31:0]              grid_dim;
+        logic [2:0][31:0]              block_idx;
+        logic [2:0][CTA_TID_WIDTH:0]   block_dim;
+        logic [CTA_TID_WIDTH:0]        block_size;
         logic [2:0][CTA_TID_WIDTH-1:0] warp_step;
-        logic [NW_WIDTH:0] cluster_size;
-        logic             is_first_of_cluster;
+        logic [NW_WIDTH:0]             cluster_size;
+        logic                          is_first_of_cluster;
+    } kmu_compute_args_t;
+    `PACKAGE_ASSERT($bits(kmu_compute_args_t) == KMU_ARGS_BITS)
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    // Fragment arguments: the wave's stamps and its active-lane count. Self-describing --
+    // a fragment does not borrow a CTA's block_size.
+    typedef struct packed {
+        logic [KMU_ARGS_BITS-KMU_FRAG_PAYLOAD_BITS-1:0]     __padding;
+        logic [`VX_CFG_NUM_THREADS-1:0][FRAG_LANE_BITS-1:0] stamps;
+        logic [KMU_FRAG_COUNT_BITS-1:0]                     count;     // valid quads
+    } kmu_fragment_args_t;
+    `PACKAGE_ASSERT($bits(kmu_fragment_args_t) == KMU_ARGS_BITS)
+`endif
+
+    typedef union packed {
+        kmu_compute_args_t  compute;
+    `ifdef VX_CFG_EXT_RASTER_ENABLE
+        kmu_fragment_args_t fragment;
+    `endif
+    } kmu_args_t;
+
+    typedef struct packed {
+        logic                              kind;   // KMU_KIND_* -- the args discriminant
+        logic [PC_BITS-1:0]                PC;
+        logic [PC_BITS-1:0]                entry;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] param;
+        logic [7:0]                        ctx_id;
+        logic [`VX_CFG_LMEM_LOG_SIZE:0]    aligned_lmem_size;
+        kmu_args_t                         args;   // .compute | .fragment
     } kmu_req_t;
+
+    // ── KMU launch messages ──────────────────────────────────────────────
+    // Every beat is a self-contained kmu_req_t -- a fragment carries its stamps in
+    // the header, so nothing on this bus has a follow-on payload. A COMPUTE message
+    // still spans one beat per cluster member (see VX_kmu_bus_if); `eop` delimits
+    // it, not the beat count.
+    localparam KMU_DATAW = $bits(kmu_req_t);
+
+    localparam KMU_KIND_COMPUTE  = 1'b0;   // a cluster; its first member picks any ready core
+    localparam KMU_KIND_FRAGMENT = 1'b1;   // one wave, routed by `dest`
+    localparam KMU_KIND_BITS     = 1;
+
+    // Placement hint: the global index of the core a fragment launch must land
+    // on. Fragment work is bin->core affine (that is what makes same-pixel blend
+    // order safe), so a fragment message cannot be load-balanced like a compute
+    // CTA. Each fan-out level consumes its own slice of this index, LSB first:
+    // core-in-socket, then socket-in-cluster, then cluster (see KMU_DEST_LSB_*).
+    // Device-wide, so the hint can name any core: VX_CFG_NUM_CORES is per-cluster.
+    // `UP` so a single-core build still has a 1-bit (unused) hint rather than a
+    // zero-width vector.
+    localparam KMU_DEST_W = `UP(`CLOG2(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_CORES));
+
+    localparam KMU_DEST_LSB_SOCKET  = 0;
+    localparam KMU_DEST_LSB_CLUSTER = `CLOG2(`VX_CFG_SOCKET_SIZE);
+    localparam KMU_DEST_LSB_DEVICE  = KMU_DEST_LSB_CLUSTER + `CLOG2(NUM_SOCKETS);
 
     typedef struct packed {
         logic [NCTA_WIDTH-1:0] cta_id;
@@ -703,9 +821,41 @@ package VX_gpu_pkg;
         logic [31:0]                    cluster_size;
     } cta_ctx_t;
 
+    // ── the per-lane launch record ─────────────────────────────────────────
+    // A warp is launched EITHER as a CTA warp (compute: the lane carries its
+    // expanded {x,y,z} thread index, read as the CTA_THREAD_ID_* CSRs) OR as a
+    // fragment warp (raster push: the lane carries one slice of its quad's
+    // stamp, read as the FRAG_* CSRs). The two are alternatives, not companions:
+    //
+    //   - a raster-pushed fragment warp is not a CTA. It has no block_dim, so a
+    //     thread index is not merely unused but undefined -- exactly as a real
+    //     GPU's fragment shader has gl_FragCoord and no threadIdx;
+    //   - a compute warp never reads FRAG_*.
+    //
+    // So they are one resource, and the lane payload is their OVERLAY, not their
+    // concatenation. This RAM is only 32 entries deep, so it is entirely
+    // width-bound in BRAM and the lane width is what costs area.
+    localparam CTA_TID_LANE_BITS = 3 * CTA_TID_WIDTH;
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    localparam LANE_LAUNCH_BITS = (FRAG_LANE_BITS > CTA_TID_LANE_BITS)
+                                ? FRAG_LANE_BITS : CTA_TID_LANE_BITS;
+`else
+    localparam LANE_LAUNCH_BITS = CTA_TID_LANE_BITS;
+`endif
+
+    // The per-lane record, holding whichever view the warp's launch kind selected
+    // (`is_frag_warp`, riding the pipeline): a compute warp's expanded thread index
+    // (CTA_THREAD_ID_* CSRs, low CTA_TID_LANE_BITS) or a fragment warp's stamp
+    // slice (FRAG_* CSRs, low FRAG_LANE_BITS). Both views sit in the low bits and
+    // the narrower one leaves the high bits unused. A packed union cannot express
+    // the overlay -- its members must be equal-width, and either view may be the
+    // wider one depending on NW/NT vs the raster dimensions -- so the record is
+    // the raw vector and each accessor takes its own slice.
+    typedef logic [LANE_LAUNCH_BITS-1:0] cta_lane_t;
+
     typedef struct packed {
-        logic [NW_WIDTH-1:0]            cta_rank;
-        logic [`VX_CFG_NUM_THREADS-1:0][2:0][CTA_TID_WIDTH-1:0] cta_tid;
+        logic [NW_WIDTH-1:0]                     cta_rank;
+        cta_lane_t [`VX_CFG_NUM_THREADS-1:0]     lane_launch;
     } cta_warp_t;
 
     //////////////////////// instruction arguments ////////////////////////////
@@ -746,8 +896,20 @@ package VX_gpu_pkg;
     // amo_valid / amo_op are inspected only when amo_valid==1; for plain
     // loads/stores they're zero. aq/rl are decoded but unused (sequentially
     // consistent). amo_unsigned distinguishes the U-variants of MIN/MAX.
+    // export_mask marks a vx_om_export (OM fragment export) and says which
+    // words of the aperture record the shader is writing:
+    //   bit 0 = colour (record + 0), bit 1 = depth (record + 4)
+    // A fragment shader may emit colour only (the common case -- early-Z owns the
+    // depth test AND the depth write), depth only (z-prepass / shadow map, no
+    // colour target at all), or both (gl_FragDepth). So the record is 1 or 2
+    // words, and VX_gfx_uops emits one uop per set bit.
+    // Zero = not an export. Read ONLY by VX_gfx_uops; the LSU never sees it set
+    // (the expander clears it), so the LSU stays a general-purpose unit.
+    // Spends two of the struct's spare padding bits -- INST_ARGS_BITS is
+    // unchanged (the PACKAGE_ASSERT below proves it).
     typedef struct packed {
-        logic [(INST_ARGS_BITS-1-1-12-2-1-1-$bits(amo_op_e)-2)-1:0] __padding; // 1 bit
+        logic [(INST_ARGS_BITS-1-1-12-2-1-1-$bits(amo_op_e)-2-2)-1:0] __padding;
+        logic [1:0]                 export_mask;
         logic                       amo_valid;
         logic                       amo_unsigned;
         amo_op_e                    amo_op;
@@ -799,23 +961,16 @@ package VX_gpu_pkg;
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
-    // Texture sample op args. `stage` selects the sampler/image state. For the
-    // legacy vx_tex (CUSTOM1 funct3=1, R4-type) is_tex4=0 and u/v/lod ride
-    // rs1/rs2/rs3. For vx_tex4 (funct3=5, R-type) is_tex4=1: the u/v payload is
-    // read from the shared graphics window at the slot base in rs2 (+1 holds v),
-    // lod rides rs1, the texel is written to the window at `out_slot` (and to rd
-    // as the scoreboard sync handle), and `mode` selects single (0, P1) vs quad
-    // (1, P2). `out_slot` rides funct7; the input slot base rides rs2 so the
-    // encoding stays expressible in `.insn r` inline asm.
+    // Texture sample op args (vx_tex, CUSTOM1 funct3=5, R4-type): u/v/lod ride
+    // rs1/rs2/rs3, the texel lands in rd, and `stage` (funct2) selects the
+    // sampler/image state. That is the whole op — TEX does not touch the graphics
+    // window, so there is no slot base and no writeback slot to encode.
     // TEX stage-select width — used here in the core op-args encoding, so it is
     // owned by the core package (not VX_tex_pkg, which the core cannot import).
     localparam TEX_STAGE_BITS = `CLOG2(`VX_TEX_STAGE_COUNT);
     typedef struct packed {
-        logic [INST_ARGS_BITS-TEX_STAGE_BITS-7-1:0] __padding;
-        logic [4:0]                    out_slot;
-        logic                          mode;
-        logic                          is_tex4;
-        logic [TEX_STAGE_BITS-1:0]     stage;
+        logic [INST_ARGS_BITS-TEX_STAGE_BITS-1:0] __padding;
+        logic [TEX_STAGE_BITS-1:0]                stage;
     } tex_args_t;
     `PACKAGE_ASSERT($bits(tex_args_t) == INST_ARGS_BITS)
 `endif
@@ -835,20 +990,20 @@ package VX_gpu_pkg;
 `endif
 
 `ifdef EXT_GFX_ANY_ENABLE
-    // Graphics-window op args (op_args.gfxw). `op` is the window op selector
-    // (VX_gfx_window_pkg GFXW_OP_*). `slot` is the start regfile slot (set/get/
+    // Graphics-window op args (op_args.rtuw). `op` is the window op selector
+    // (VX_rtu_pkg RTUW_OP_*). `slot` is the start regfile slot (get/
     // getwf/getw) or the per-uop target slot stamped by the macro-op expander
-    // (trace2). `count` is the GETWF/GETW window length. `uop` carries the
-    // per-uop role/index filled by the sequencer's VX_gfxw_uops expander (0 for
-    // non-macro ops). Literal widths here avoid a VX_gfx_window_pkg dependency.
+    // (trace). `count` is the GETWF/GETW window length. `uop` carries the
+    // per-uop role/index filled by the sequencer's VX_gfx_uops expander (0 for
+    // non-macro ops). Literal widths here avoid a VX_rtu_pkg dependency.
     typedef struct packed {
         logic [INST_ARGS_BITS-16-1:0] __padding;
         logic [2:0]                  uop;
         logic [3:0]                  count;
         logic [4:0]                  slot;
-        logic [3:0]                  op;       // GFXW_OP_BITS (VX_gfx_window_pkg) = 4
-    } gfxw_args_t;
-    `PACKAGE_ASSERT($bits(gfxw_args_t) == INST_ARGS_BITS)
+        logic [3:0]                  op;       // RTUW_OP_BITS (VX_rtu_pkg) = 4
+    } rtuw_args_t;
+    `PACKAGE_ASSERT($bits(rtuw_args_t) == INST_ARGS_BITS)
 `endif
 
     typedef union packed {
@@ -874,7 +1029,7 @@ package VX_gpu_pkg;
         raster_args_t raster;
     `endif
     `ifdef EXT_GFX_ANY_ENABLE
-        gfxw_args_t gfxw;
+        rtuw_args_t rtuw;
     `endif
     } op_args_t;
     `PACKAGE_ASSERT($bits(op_args_t) == INST_ARGS_BITS)
@@ -1065,7 +1220,15 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] misses;
     } coalescer_perf_t;
 
-`ifdef VX_CFG_VM_ENABLE
+// Declared unconditionally, because its references do not agree on a guard:
+// the ports of VX_mmu and VX_tlb_l1 and the signals in VX_socket are gated on
+// PERF_ENABLE, while the field in pipeline_perf_t is gated on VM. Gating the
+// declaration on either one alone breaks the other combination -- VM without
+// PERF, or PERF without VM. The latter is what failed here: Vivado elaborates
+// every file in the source list whether or not the module is ever instantiated,
+// so VX_mmu.sv was compiled in a VM-disabled build and found no such type.
+// The Verilator flow hides the mismatch, because its library search compiles
+// only what is reachable. A typedef with no instances costs no hardware.
     typedef struct packed {
         logic [PERF_CTR_BITS-1:0] tlb_reads;
         logic [PERF_CTR_BITS-1:0] tlb_hits;
@@ -1074,7 +1237,6 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] ptw_walks;
         logic [PERF_CTR_BITS-1:0] ptw_latency;
     } mmu_perf_t;
-`endif
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
     typedef struct packed {
@@ -1244,15 +1406,15 @@ package VX_gpu_pkg;
 
     // TCU lmem tag and attr widths for DMA arb.
     // Masters into the TCU LMEM port: BLOCK_SIZE abufs + 1 shared bbuf.
-    // (Sparse metadata no longer fetches from LMEM — it preloads into the
+    // (Sparse metadata does not fetch from LMEM — it preloads into the
     // VX_tcu_sp_meta SRAM via TCU_LD ahead of the MMA dispatch.)
     localparam TCU_LMEM_ATTR_W = 1;
     localparam TCU_LMEM_BLK_TAG_W = UUID_WIDTH + 1;
     localparam TCU_LMEM_NUM_MASTERS = `VX_CFG_NUM_TCU_BLOCKS + 1;
     localparam TCU_LMEM_TAG_W = TCU_LMEM_BLK_TAG_W + `ARB_SEL_BITS(TCU_LMEM_NUM_MASTERS, 1);
 
-    // LMEM DMA port parameters. (RASTER dispatch v2 / FWD no longer uses an LMEM
-    // DMA agent — the raster payload is staged straight into the gfx window.)
+    // LMEM DMA port parameters. (The raster FWD needs no LMEM DMA agent —
+    // the raster stamp rides the launch itself.)
     localparam LMEM_DMA_EN         = (`VX_CFG_EXT_DXA_ENABLED + `VX_CFG_TCU_WGMMA_ENABLED) != 0;
     localparam LMEM_DMA_DATA_SIZE  = `VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE;
     localparam LMEM_DMA_ADDR_WIDTH = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(`VX_CFG_LMEM_NUM_BANKS * LSU_WORD_SIZE);
@@ -1284,15 +1446,10 @@ package VX_gpu_pkg;
     // icache_bus_if (ICACHE_TAG_WIDTH below) carries that wider tag.
     // The +1 is the VX_dcr_flush arb-sel bit injected on the icache side.
     localparam ICACHE_TAG_WIDTH_BASE = (ICACHE_FETCH_TAG_WIDTH + 1);
-`ifdef VX_CFG_VM_ENABLE
-    localparam ICACHE_TLB_SOURCE_BITS = `UP(`CLOG2(1));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam ICACHE_ARB_BITS        = `CLOG2(`CDIV(2 * 1 + 1, 1));
-    localparam ICACHE_TAG_WIDTH       = (ICACHE_TAG_WIDTH_BASE + ICACHE_TLB_SOURCE_BITS + ICACHE_ARB_BITS);
-`else
+    // The iMMU forwards the translated tag unchanged: ITLB misses are walked
+    // by the shared per-core walker, whose PTE fetches ride the dcache port,
+    // so the icache stream carries no extra MMU arbitration bit.
     localparam ICACHE_TAG_WIDTH       = ICACHE_TAG_WIDTH_BASE;
-`endif
 
     // Memory request data bits
     localparam ICACHE_MEM_DATA_WIDTH = (ICACHE_LINE_SIZE * 8);
@@ -1337,15 +1494,10 @@ package VX_gpu_pkg;
     // for its internal bypass/TLB/PTW arbiter, so the cache cluster sees
     // the wider DCACHE_TAG_WIDTH below.
     localparam DCACHE_TAG_WIDTH_BASE = (DCACHE_CORE_TAG_WIDTH + 1);
-`ifdef VX_CFG_VM_ENABLE
-    localparam DCACHE_TLB_SOURCE_BITS = `UP(`CLOG2(DCACHE_NUM_REQS));
-    // VX_mmu's internal merge_arb folds (2*NUM_REQS+1) inputs to NUM_REQS
-    // outputs, inserting CLOG2(CDIV(2*NUM_REQS+1, NUM_REQS)) sel bits.
-    localparam DCACHE_ARB_BITS        = `CLOG2(`CDIV(2 * DCACHE_NUM_REQS + 1, DCACHE_NUM_REQS));
-    localparam DCACHE_TAG_WIDTH       = (DCACHE_TAG_WIDTH_BASE + DCACHE_TLB_SOURCE_BITS + DCACHE_ARB_BITS);
-`else
+    // The dMMU translates each lane in place (no serialize/deserialize). The
+    // shared walker lives at the cluster and fetches PTEs through the L2 cache,
+    // so the dcache tag is the base width in every mode.
     localparam DCACHE_TAG_WIDTH       = DCACHE_TAG_WIDTH_BASE;
-`endif
 
     // Memory request data bits (mem transacts in sectors)
     localparam DCACHE_MEM_DATA_WIDTH = (DCACHE_SECTOR_SIZE * 8);
@@ -1366,16 +1518,20 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_TEX_ENABLE
     // tex unit: per-request queue + per-request tag
     localparam TEX_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(`VX_CFG_TEX_REQ_QUEUE_SIZE));
-    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_REQ_TAG_WIDTH + `CLOG2(`VX_CFG_SOCKET_SIZE));
-    localparam TEX_REQ_ARB2_TAG_WIDTH = (TEX_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, `VX_CFG_NUM_TEX_CORES));
+    // Single socket-level arb: socket cores -> per-socket TEX units
+    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_TEX_CORES));
 
     localparam TCACHE_WORD_SIZE     = 4;
     localparam TCACHE_ADDR_WIDTH    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(TCACHE_WORD_SIZE));
     localparam TCACHE_LINE_SIZE     = `VX_CFG_L1_LINE_SIZE;
     localparam TCACHE_NUM_REQS      = `VX_CFG_TCACHE_NUM_BANKS;
 
-    // Per-tex-unit memory port count (4 bilinear taps × NUM_SFU_LANES)
-    localparam TEX_MEM_REQS         = (4 * `VX_CFG_NUM_SFU_LANES);
+    // Mip levels a sample reads at once: two, so a mip-linear sample carries
+    // both levels in one request and no stage has to pair two responses.
+    localparam TEX_NUM_LEVELS       = 2;
+
+    // Per-tex-unit memory port count (4 bilinear taps × levels × NUM_SFU_LANES)
+    localparam TEX_MEM_REQS         = (4 * TEX_NUM_LEVELS * `VX_CFG_NUM_SFU_LANES);
 
     localparam TCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(TEX_MEM_REQS, TCACHE_NUM_REQS);
     localparam TCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
@@ -1439,8 +1595,13 @@ package VX_gpu_pkg;
     localparam OCACHE_LINE_SIZE      = `VX_CFG_L1_LINE_SIZE;
     localparam OCACHE_NUM_REQS       = `VX_CFG_OCACHE_NUM_BANKS;
 
-    // Per-OM-unit memory port count (2 ports × NUM_SFU_LANES: color + depth)
-    localparam OM_MEM_REQS           = (2 * `VX_CFG_NUM_SFU_LANES);
+    // OM cores are beat-serial: the ingress emits one fragment per request and
+    // the ocache drains at bank rate, so per-fragment lane width buys no fill
+    // rate. Fill rate scales with NUM_OM_CORES x OCACHE_NUM_BANKS instead.
+    localparam OM_CORE_LANES         = 1;
+
+    // Per-OM-unit memory port count (2 ports × OM_CORE_LANES: color + depth)
+    localparam OM_MEM_REQS           = (2 * OM_CORE_LANES);
 
     localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(OM_MEM_REQS, OCACHE_NUM_REQS);
     localparam OCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_OM_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);
@@ -1455,7 +1616,7 @@ package VX_gpu_pkg;
     // the shared per-input bus tag is the wider of the OM and early-Z requesters
     // (a narrower requester zero-pads via _EX).
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
-    localparam OCACHE_EARLYZ_REQS      = (4 * `VX_CFG_NUM_SFU_LANES);
+    localparam OCACHE_EARLYZ_REQS      = (4 * `VX_CFG_NUM_THREADS);
     // Per-slice reader scheduler tag (one committed-depth word per covered pixel).
     localparam OCACHE_EARLYZ_REQ_TAG_WIDTH = (UUID_WIDTH + `CLOG2(`VX_CFG_RASTER_MEM_QUEUE_SIZE) + `ARB_SEL_BITS(OCACHE_EARLYZ_REQS, OCACHE_NUM_REQS));
     // A raster engine merges its NUM_SLICES readers onto its single ocache input
@@ -1481,8 +1642,8 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam RTU_REQ_QUEUE_SIZE     = 4;
     localparam RTU_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(RTU_REQ_QUEUE_SIZE));
-    localparam RTU_REQ_ARB1_TAG_WIDTH = (RTU_REQ_TAG_WIDTH + `CLOG2(`VX_CFG_SOCKET_SIZE));
-    localparam RTU_REQ_ARB2_TAG_WIDTH = (RTU_REQ_ARB1_TAG_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, `VX_CFG_NUM_RTU_CORES));
+    // Single socket-level arb: socket cores -> per-socket RTU units
+    localparam RTU_REQ_ARB1_TAG_WIDTH = (RTU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_RTU_CORES));
 
     // The RTU fetches a whole CW-BVH node (one 64 B cache line) per request,
     // so its cache is line-granular: word size == line size, one port/core.
@@ -1501,14 +1662,31 @@ package VX_gpu_pkg;
 
     /////////////////////////////// L1 Parameters /////////////////////////////
 
-    // arbitrate between icache and dcache
     localparam L1_MEM_TAG_WIDTH     = `MAX(ICACHE_MEM_TAG_WIDTH, DCACHE_MEM_TAG_WIDTH);
-    localparam L1_MEM_ARB_TAG_WIDTH = (L1_MEM_TAG_WIDTH + `CLOG2(2));
 
-    /////////////////////////////// L2 Parameters /////////////////////////////
-
+    // Socket L2-facing arb (mem port 0): icache and dcache arbitrate with the
+    // socket-resident units' memory ports (tcache, rtcache, DXA gmem) as peers.
     localparam ICACHE_MEM_ARB_IDX   = 0;
     localparam DCACHE_MEM_ARB_IDX   = ICACHE_MEM_ARB_IDX + 1;
+    localparam TCACHE_MEM_ARB_IDX   = DCACHE_MEM_ARB_IDX + 1;
+    localparam RTCACHE_MEM_ARB_IDX  = TCACHE_MEM_ARB_IDX + `VX_CFG_EXT_TEX_ENABLED;
+    localparam DXA_MEM_ARB_IDX      = RTCACHE_MEM_ARB_IDX + `VX_CFG_EXT_RTU_ENABLED;
+    localparam SOCKET_MEM_ARB_REQS  = 2 + `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RTU_ENABLED + `VX_CFG_EXT_DXA_ENABLED;
+
+    // Widest tag among the socket arb inputs (DXA adapts to the given budget)
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    localparam SOCKET_MEM_TAG_W1    = `MAX(L1_MEM_TAG_WIDTH, TCACHE_MEM_TAG_WIDTH);
+`else
+    localparam SOCKET_MEM_TAG_W1    = L1_MEM_TAG_WIDTH;
+`endif
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    localparam SOCKET_MEM_TAG_WIDTH = `MAX(SOCKET_MEM_TAG_W1, RTCACHE_MEM_TAG_WIDTH);
+`else
+    localparam SOCKET_MEM_TAG_WIDTH = SOCKET_MEM_TAG_W1;
+`endif
+    localparam SOCKET_MEM_ARB_TAG_WIDTH = (SOCKET_MEM_TAG_WIDTH + `CLOG2(SOCKET_MEM_ARB_REQS));
+
+    /////////////////////////////// L2 Parameters /////////////////////////////
 
     // Word size in bytes
     localparam L2_WORD_SIZE	        = `VX_CFG_L1_LINE_SIZE;
@@ -1516,35 +1694,32 @@ package VX_gpu_pkg;
     // Sector = mem transaction granule (= line when 1 sector/line)
     localparam L2_SECTOR_SIZE       = `VX_CFG_L2_SECTOR_SIZE;
 
-    // Input request size — socket-only (DXA merges via per-port priority arb)
+    // Input request size — sockets (TEX/RTU/DXA traffic rides the socket ports)
     localparam L2_SOCKET_REQS       = NUM_SOCKETS * L1_MEM_PORTS;
 
-    // Graphics caches add dedicated L2 input slots (one per enabled cache)
-    localparam L2_GFX_REQS          = `VX_CFG_EXT_TEX_ENABLED + `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_OM_ENABLED + `VX_CFG_EXT_RTU_ENABLED;
-    localparam L2_GFX_TEX_IDX       = L2_SOCKET_REQS;
-    localparam L2_GFX_RASTER_IDX    = L2_GFX_TEX_IDX + `VX_CFG_EXT_TEX_ENABLED;
+    // Cluster-resident graphics caches add dedicated L2 input slots
+    localparam L2_GFX_REQS          = `VX_CFG_EXT_RASTER_ENABLED + `VX_CFG_EXT_OM_ENABLED;
+    localparam L2_GFX_RASTER_IDX    = L2_SOCKET_REQS;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
-    localparam L2_GFX_RTU_IDX       = L2_GFX_OM_IDX + `VX_CFG_EXT_OM_ENABLED;
 
-    localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS;
+    // The shared page-table walker attaches one PTE-fetch port under VM, right
+    // after the socket and graphics ports (like ocache/rcache).
+    localparam L2_PTW_REQS          = `VX_CFG_VM_ENABLED;
+    localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
 
-`ifdef VX_CFG_EXT_DXA_ENABLE
-  `ifdef VX_CFG_NUM_DXA_CORES
-    localparam L2_DXA_NUM_REQS      = `VX_CFG_NUM_DXA_CORES;
-  `else
-    localparam L2_DXA_NUM_REQS      = 1;
-  `endif
-`else
-    localparam L2_DXA_NUM_REQS      = 0;
-`endif
-    // DXA uses a fixed small number of L2 ports (= NUM_DXA_UNITS) to avoid
-    // a combinational ready-valid loop when output-select distribution fans
-    // out 1 worker across many L2 ports in multi-core configs.
-    localparam DXA_L2_GMEM_PORTS    = `MIN(L2_DXA_NUM_REQS, L2_SOCKET_REQS);
-    localparam DXA_L2_ARB_TAG_BITS  = `VX_CFG_EXT_DXA_ENABLED * `CLOG2(2);
+    localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
 
-    // Core request tag bits (includes DXA arb overhead when enabled)
-    localparam L2_TAG_WIDTH         = L1_MEM_ARB_TAG_WIDTH + DXA_L2_ARB_TAG_BITS;
+    // Core request tag bits (socket arb output width)
+    localparam L2_TAG_WIDTH         = SOCKET_MEM_ARB_TAG_WIDTH;
+
+    // TLB miss/fill fabric id widths. The id starts as the L1 miss-station slot
+    // and each arb level prepends its grant index so fills route back exactly.
+    localparam L1_TLB_ID_WIDTH       = `CLOG2(`VX_CFG_L1_TLB_MSHR_SIZE);
+    // A socket exposes two L1 MMUs (dtlb + itlb), regardless of SOCKET_SIZE, each
+    // driving one bus into the socket TLB arbiter.
+    localparam TLB_SOCKET_ID_WIDTH   = L1_TLB_ID_WIDTH + `ARB_SEL_BITS(2, 1);
+    localparam TLB_CLUSTER_ID_WIDTH  = TLB_SOCKET_ID_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, 1);
+    localparam L2_TLB_SLOT_WIDTH     = `CLOG2(`VX_CFG_L2_TLB_MSHR_SIZE);
 
     // Memory request data bits (mem transacts in sectors)
     localparam L2_MEM_DATA_WIDTH	= (L2_SECTOR_SIZE * 8);

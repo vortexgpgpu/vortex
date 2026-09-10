@@ -281,21 +281,27 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     //   lane     = word_off & (BANK_ROW_WORDS - 1)
     // k_words is fedpK for dense and tcK for sparse
 
-    wire [3:0] km_k_words = slot_is_sparse_r ? 4'(TCU_TC_K) : 4'(TCU_WG_FEDP_K);
+    // The word offset is linear in the row counter and the first issue is at
+    // least one cycle after alloc: the product is registered at alloc (from
+    // the values being latched into the slot) and each request/response
+    // accumulates the row stride, keeping the multiplier chain off the LMEM
+    // request-address and response-lane paths.
+    wire [LDM_W-1:0] km_ldm_words_alloc =
+        req_is_first_uop ? desc_b_ldm_words : slot_ldm_words_r;
+    wire [3:0] km_k_words_alloc = req_is_sparse ? 4'(TCU_TC_K) : 4'(TCU_WG_FEDP_K);
 
-    wire [KM_OFF_W-1:0] km_word_off_req =
-        KM_OFF_W'(slot_step_n_r) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(slot_ldm_words_r)
-      + KM_OFF_W'(km_req_ctr_r) * KM_OFF_W'(slot_ldm_words_r)
-      + KM_OFF_W'(slot_step_k_r) * KM_OFF_W'(km_k_words);
+    wire [KM_OFF_W-1:0] km_word_off_init =
+        KM_OFF_W'(req_step_n) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(km_ldm_words_alloc)
+      + KM_OFF_W'(req_step_k) * KM_OFF_W'(km_k_words_alloc);
+
+    logic [KM_OFF_W-1:0] km_word_off_req_r;
+    logic [KM_OFF_W-1:0] km_word_off_rsp_r;
+
     wire [BANK_ADDR_WIDTH-1:0] km_lmem_addr =
-        slot_desc_b_row_base_r + BANK_ADDR_WIDTH'(km_word_off_req >> BANK_ROW_WORDS_LOG2);
+        slot_desc_b_row_base_r + BANK_ADDR_WIDTH'(km_word_off_req_r >> BANK_ROW_WORDS_LOG2);
 
-    wire [KM_OFF_W-1:0] km_word_off_rsp =
-        KM_OFF_W'(slot_step_n_r) * KM_OFF_W'(TCU_TC_N) * KM_OFF_W'(slot_ldm_words_r)
-      + KM_OFF_W'(km_rsp_ctr_r) * KM_OFF_W'(slot_ldm_words_r)
-      + KM_OFF_W'(slot_step_k_r) * KM_OFF_W'(km_k_words);
     wire [BANK_ROW_WORDS_LOG2:0] km_lane_rsp = (BANK_ROW_WORDS_LOG2+1)'(
-        km_word_off_rsp & KM_OFF_W'(BANK_ROW_WORDS - 1));
+        km_word_off_rsp_r & KM_OFF_W'(BANK_ROW_WORDS - 1));
 
     // Storage offset where this K-major block lands (matches tcu_core's
     // b_off = (step_n & (B_SUB_BLOCKS-1)) << LG_B_BLOCK_WORDS so the
@@ -378,6 +384,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             refetched_for_first_uop_r <= 1'b0;
             km_req_ctr_r           <= '0;
             km_rsp_ctr_r           <= '0;
+            km_word_off_req_r      <= '0;
+            km_word_off_rsp_r      <= '0;
         end else begin
             if (req_setup) begin
                 slot_a_valid_r  <= 1'b0;
@@ -408,10 +416,14 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
                 // K-major req/rsp counters advance independently of FSM state
                 // (single-outstanding still enforced via req_inflight_r).
-                if (slot_row_major_r && tcu_lmem_if.req_valid && tcu_lmem_if.req_ready)
-                    km_req_ctr_r <= km_req_ctr_r + KM_CTR_W'(1);
-                if (slot_row_major_r && tcu_lmem_if.rsp_valid && !km_final_rsp)
-                    km_rsp_ctr_r <= km_rsp_ctr_r + KM_CTR_W'(1);
+                if (slot_row_major_r && tcu_lmem_if.req_valid && tcu_lmem_if.req_ready) begin
+                    km_req_ctr_r      <= km_req_ctr_r + KM_CTR_W'(1);
+                    km_word_off_req_r <= km_word_off_req_r + KM_OFF_W'(slot_ldm_words_r);
+                end
+                if (slot_row_major_r && tcu_lmem_if.rsp_valid && !km_final_rsp) begin
+                    km_rsp_ctr_r      <= km_rsp_ctr_r + KM_CTR_W'(1);
+                    km_word_off_rsp_r <= km_word_off_rsp_r + KM_OFF_W'(slot_ldm_words_r);
+                end
 
                 case (fsm_state_r)
                     S_IDLE: begin
@@ -434,6 +446,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             // descriptor and reused for all compute refills.
                             km_req_ctr_r        <= '0;
                             km_rsp_ctr_r        <= '0;
+                            km_word_off_req_r   <= km_word_off_init;
+                            km_word_off_rsp_r   <= km_word_off_init;
                             req_inflight_r      <= 1'b0;
                         end
                     end

@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU smoke test — Phase 1 + 2.
+// PRISM RTU smoke test.
 //
 // Scene format (host-defined, also matches RtuCore's expected layout):
 //   struct simple_tri_t {

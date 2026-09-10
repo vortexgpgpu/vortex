@@ -108,8 +108,7 @@ than a mix of knobs and computed results.
 
 ## 4. Proposed but not yet implemented
 
-1. **SystemVerilog typed-config package** (`config_macro_namespace` §9,
-   `config_hw_sw_layering` §2.2) — **deliberately not done and not to be
+1. **SystemVerilog typed-config package** — **deliberately not done and not to be
    re-attempted without first solving sv2v re-export.** A typed-localparam
    `VX_config_pkg`/`VX_types_pkg` was built and reverted: sv2v drops
    wildcard `export pkg::*` symbols (the yosys ASIC flow failed on
@@ -132,13 +131,3 @@ than a mix of knobs and computed results.
 `VX_gpu_pkg import VX_types_pkg` package-import model (RTL reads
 `VX_types.vh` backtick macros directly); and the `[isa_signatures]`
 expansion (dissolved to `VX_CFG_MISA_STD/EXT` with literal bit shifts).
-Note: both source proposals still carry "Draft"/"not approved" status
-headers despite their cores being landed.
-
----
-
-## 5. Source proposals
-
-This design consolidates and supersedes `config_hw_sw_layering_proposal.md`
-and `config_macro_namespace_proposal.md` (now removed from
-`docs/proposals/`).

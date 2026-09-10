@@ -74,6 +74,26 @@ PREFIX=build_4c NUM_CORES=4 make -C hw/syn/xilinx/xrt
 PREFIX=my_test make -C hw/syn/synopsys synthesis
 ```
 
+### The `tinygpu` Configuration for Fast Turnaround
+
+When the component under investigation is *outside* the GPU core — the AFU shell, the command processor, the runtime, or the FPGA driver — a full-size Vortex build is wasted synthesis time. Most of the hours go into cores and caches that the bug does not live in, and every debug iteration pays for them again.
+
+For those cases, use a deliberately minimal GPU: one core, two warps of two threads, all L1 caches off, and shared memory off.
+
+```bash
+CONFIGS="-DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=1 \
+         -DVX_CFG_NUM_WARPS=2 -DVX_CFG_NUM_THREADS=2 \
+         -DVX_CFG_ICACHE_DISABLE -DVX_CFG_DCACHE_DISABLE -DVX_CFG_LMEM_DISABLE"
+```
+
+Note the `_DISABLE` spelling: knobs that default to `true` in `VX_config.toml` are turned off by defining their `_DISABLE` guard, not by assigning `=0`.
+
+This strips the design down to a single pipeline talking straight to the memory interface. Synthesis and place-and-route finish in a small fraction of the time a production configuration takes, and the resulting bitstream still exercises the complete external path: host to driver, driver to shell, shell to command processor, command processor to core, and the memory traffic back out. Timing closure is generally uneventful at this size, so a failure to close is itself a signal that the problem is in the surrounding logic rather than in core density.
+
+Pair it with the `sgemm` benchmark. `sgemm` is well understood, self-checking, and touches every part of the external path — kernel launch, argument passing, bulk DMA in both directions, and completion signalling — while staying small enough to run quickly. A `sgemm` failure on `tinygpu` isolates the defect to the surrounding infrastructure, because the core configuration is too small to be hiding a microarchitectural corner case. Conversely, `sgemm` passing on `tinygpu` but failing at full size points back at the core, cache hierarchy, or a concurrency effect that only appears with more warps in flight.
+
+Treat this as the first move when debugging external components, not a fallback after a long build fails. Once `tinygpu` is green, scale back up to the target configuration to confirm the fix under real conditions.
+
 ---
 
 ## Generating SAIF Files
@@ -106,6 +126,10 @@ When `--saif` is passed, blackbox.sh:
 1. Builds the simulator with `SAIF=1`
 2. Runs the application
 3. Copies the resulting `trace.saif` to the current directory
+
+`--saif` composes with `--debug` on every RTL driver, so a run can emit both the
+`run.log` trace and the SAIF. It cannot be combined with `--vcd`: a model emits one
+waveform format or the other.
 
 Available drivers for SAIF generation:
 
@@ -359,21 +383,23 @@ Reports are generated in the synthesis build directory by the Quartus report scr
 
 ## Yosys (Open-Source)
 
-Located in `hw/syn/yosys/`. Uses Yosys for synthesis, optional ABC for technology mapping, and OpenSTA for static timing analysis.
+Located in `hw/syn/yosys/`. Uses Yosys/ABC for technology mapping and OpenSTA for pre-layout timing and power analysis. ASAP7 7.5-track v28 is the default PDK; NanGate45 remains available as a legacy option.
 
 ### Running Synthesis
 
 ```bash
-cd hw/syn/yosys
-
+# First use installs the selected, pinned ASAP7 Liberty files automatically.
 # Synthesis only (generic gates)
-PREFIX=test NUM_CORES=1 make synthesis
+make -C build/hw/syn/yosys PREFIX=test NUM_CORES=1 synthesis
+
+# Explicit legacy library selection
+make -C build/hw/syn/yosys PREFIX=test NUM_CORES=1 PDK=nangate45 timing
 
 # Synthesis + technology mapping
-PREFIX=test NUM_CORES=1 make techmap
+make -C build/hw/syn/yosys PREFIX=test NUM_CORES=1 techmap
 
 # Full flow: synthesis + mapping + STA + power
-PREFIX=test NUM_CORES=1 SAIF_FILE=/path/to/trace.saif SAIF_INST=<inst> make timing
+make -C build/hw/syn/yosys PREFIX=test NUM_CORES=1 SAIF_FILE=/path/to/trace.saif SAIF_INST=<inst> timing
 ```
 
 Key variables:
@@ -387,13 +413,91 @@ Key variables:
 | `CLOCK_FREQ` | 800 | Target clock frequency in MHz |
 | `DELAY_UNC` | 0.02 | Clock uncertainty (fraction of period) |
 | `DELAY_IO` | 0.05 | I/O delay (fraction of period) |
-| `LIB_TGT` | NanGate 15nm OCL | Liberty file for technology mapping |
+| `ABC_DRIVER_CELL` | ASAP7 RVT: `BUFx4_ASAP7_75t_R` | Input driver cell used by ABC for buffering and sizing |
+| `ABC_LOAD` | ASAP7: `5.0` | ABC primary-output load in fF |
+| `YOSYS_FLATTEN` | 1 | Flatten hierarchy before technology mapping for better cross-module optimization |
+| `YOSYS_SHARE` | 1 | Enable Yosys resource sharing before mapping; set to 0 to disable |
+| `PDK` | `asap7` | `asap7` or the legacy `nangate45` library |
+| `ASAP7_VT` | `rvt` | ASAP7 threshold-voltage library: `rvt` or `lvt` |
+| `CORNER` | `tt` | ASAP7 `tt`, `ss`, or `ff` NLDM corner |
+| `LIB_TGT` | selected by `PDK` | Explicit custom Liberty override |
 | `SAIF_FILE` | - | SAIF file for power annotation |
-| `SAIF_INST` | - | Instance path prefix to strip |
+| `SAIF_INST` | top module | OpenSTA SAIF scope override |
+| `DUT_FILELIST` | - | VCS-style filelist for an arbitrary DUT |
+| `SDC_FILE` | `project.sdc` | Clock, reset, and I/O constraints |
+
+Example synthesizing a TFR FEDP unit with FP8 and MX enabled with ASAP7 RVT at the default 800 MHz:
+```bash
+make -C build/hw/syn/yosys timing TOP_LEVEL_ENTITY=VX_tcu_fedp_tfr PREFIX=tfr_fedp CORNER=tt EXTRA_CONFIGS='-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_NUM_THREADS=32 -DVX_CFG_TCU_FEDP_FP8_ENABLE -DVX_CFG_TCU_MX_ENABLE'
+```
+Output reports are written to `build/hw/syn/yosys/tfr_fedp_VX_tcu_fedp_tfr/reports/`
 
 Build directory: `<PREFIX>_<TOP_LEVEL_ENTITY>/` (e.g., `test_Vortex/`).
 
 The flow uses `sv2v` to convert SystemVerilog sources to Verilog before feeding them to Yosys.
+
+#### Per-DUT synthesis
+
+The DUTs above are declared once, in `hw/syn/yosys/dut/catalog.mk` — a top module, an include path and a define set each — and driven through one dispatcher, so a hand run and the `asic_gate` (below) build the same thing:
+
+```bash
+make -C build/hw/syn/yosys/dut list                 # what is available
+make -C build/hw/syn/yosys/dut om                   # synthesis + STA (TARGET=timing)
+make -C build/hw/syn/yosys/dut tcu TARGET=synthesis # synthesis only
+make -C build/hw/syn/yosys/dut om CLOCK_FREQ=500    # override the target clock
+```
+
+`PREFIX` defaults to the DUT name, so each DUT gets its own tree. That is not cosmetic: the flow caches `$(BUILD_DIR)/src` and does **not** regenerate it when `EXTRA_INCLUDE` changes, so two DUTs sharing one tree silently synthesize the first one's sources. Override `PREFIX` to keep an automated sweep away from a hand-run build of the same DUT.
+
+#### Synthesis-regression gate (`asic_gate`)
+
+`ci/asic_gate.py` runs that catalog against checked-in goldens in `ci/baselines/synthesis/yosys/` and fails on a Fmax or cell-area move beyond ±5%. It is the ASIC sibling of `ci/fpga_gate.py` and shares its implementation (`ci/synth_gate.py`).
+
+```bash
+ci/asic_gate.py --list             # builds and their recorded baselines
+ci/asic_gate.py -b om -b tex       # gate two builds
+ci/asic_gate.py --update-baseline  # re-record (human-reviewed, never in CI)
+```
+
+Two things about Fmax on this flow are worth knowing before reading a number. ABC maps to the *target* period and stops, so a design that closes does so with picoseconds of margin and its Fmax sits just above `CLOCK_FREQ` by construction — **cell area is the sensitive metric**, and Fmax is mostly a met/missed signal. And `report_wns` is worst *negative* slack, clamped at zero: `run_sta.tcl` uses `report_worst_slack` (signed) for exactly this reason, which is what `worst_slack.rpt` holds.
+
+See [docs/designs/continuous_integration.md](designs/continuous_integration.md) §3.5 and §4.5.
+
+The first ASAP7 invocation runs the generated `build/hw/syn/libs/asap7/install.sh` installer. It downloads and SHA-256 verifies only the selected VT's five logical groups (`INVBUF`, `SIMPLE`, `AO`, `OA`, and `SEQ`) at TT, SS, and FF, then writes the merged Liberty files to `build/hw/syn/libs/asap7/lib/`. Gate-level simulation additionally installs the selected functional Verilog models in `build/hw/syn/libs/asap7/verilog/`. Later invocations verify the installed files and skip the download and preparation. The pin manifest, installer, preparation script, and upstream license are versioned in `hw/syn/libs/asap7/`, alongside the other standard-cell collateral; `configure` instantiates only `install.sh.in` into the build tree, and it reads the manifest and preparation script from the source tree in place. No ASAP7 collateral is kept under `third_party/`, and the flow requires no OpenROAD executable or physical collateral.
+
+### Threshold-Voltage Selection
+
+RVT is the default because it is the appropriate general-purpose implementation library. Use LVT to establish a timing-focused bound or when a design does not meet its target with RVT:
+
+```bash
+make -C build/hw/syn/yosys timing ASAP7_VT=lvt CLOCK_FREQ=1000
+```
+
+### Arbitrary DUT and Gate-Level SAIF
+
+An arbitrary Verilog DUT can bypass Vortex source generation with its own top, filelist, and SDC. Filelists may contain RTL files, `-f`, `+incdir+`, and `+define+` entries.
+
+```bash
+make -C build/hw/syn/yosys timing TOP_LEVEL_ENTITY=my_dut \
+  DUT_FILELIST=/absolute/path/to/dut.f \
+  SDC_FILE=/absolute/path/to/dut.sdc PREFIX=my_dut
+```
+
+For gate-level simulation, provide a Verilator-compatible testbench filelist. The testbench must instantiate the mapped DUT (the default instance name is `dut`) and call `$dumpfile("gate_raw.saif")` plus `$dumpvars`. `SIM_ARGS`, `GATE_SIM_FLAGS`, `TB_TOP`, and `GATE_DUT_INSTANCE` are available for testbench-specific needs.
+
+```bash
+make -C build/hw/syn/yosys gate-saif TOP_LEVEL_ENTITY=my_dut \
+  DUT_FILELIST=/absolute/path/to/dut.f \
+  SDC_FILE=/absolute/path/to/dut.sdc \
+  TB_FILELIST=/absolute/path/to/tb.f SIM_ARGS="+seed=1"
+
+make -C build/hw/syn/yosys timing TOP_LEVEL_ENTITY=my_dut \
+  DUT_FILELIST=/absolute/path/to/dut.f \
+  SDC_FILE=/absolute/path/to/dut.sdc \
+  SAIF_FILE=$PWD/build_my_dut/gate.saif
+```
+
+The gate simulation traces Yosys-generated underscore nets and retains the complete mapped-cell hierarchy before re-rooting the DUT SAIF scope. OpenSTA writes annotated and unannotated pin reports and treats a requested SAIF with zero coverage as an error.
 
 ### SRAM Area Estimation
 
@@ -415,8 +519,13 @@ All reports are under `<BUILD_DIR>/reports/`:
 | `stat_lib.rpt` | Cell count and area (post-mapping, by liberty cell type) |
 | `sram_area.rpt` | Estimated SRAM area breakdown |
 | `sta.log` | OpenSTA timing log |
+| `setup.rpt` / `hold.rpt` | Detailed setup and hold paths |
+| `wns.rpt` / `tns.rpt` | Worst and total negative slack (clamped at 0 when timing closes) |
+| `worst_slack.rpt` | Worst slack, **signed** — positive when the design closes with margin |
+| `synth_summary.csv` | One-row machine-readable summary of all of the above (`synth_summary.py`) |
 | `power.rpt` | Power estimate (vectorless or SAIF-annotated) |
 | `power_hier.rpt` | Hierarchical power breakdown |
+| `saif_annotated.rpt` | Pins covered by SAIF |
 | `saif_unannotated.rpt` | Signals not covered by SAIF |
 
 Netlists are written to `<BUILD_DIR>/out/`:

@@ -68,7 +68,6 @@ public:
     , fetch_latch_(ctx, "fetch_latch", 2, 2)
     , decode_latch_(ctx, "decode_latch", 1, 2)
     , pending_icache_(VX_CFG_NUM_WARPS)
-    , commit_arbs_(VX_CFG_ISSUE_WIDTH)
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
     , fu_locked_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
@@ -190,17 +189,21 @@ public:
     }
 
   #ifdef VX_CFG_VM_ENABLE
-    // Per-core dcache MMU: TLB lookup + bypass for non-translated regions;
-    // on miss, the embedded PTW FSM emits PTE fetches via ReqOut[0]
-    // through the same cache hierarchy as regular loads.
+    // Per-core L1 TLB stages: hits translate in place, misses park in
+    // the miss station and resolve through the shared cluster TLB/PTW
+    // over the TlbMissOut/TlbFillIn channels (bound at cluster level).
+    uint32_t cores_per_cluster = NUM_SOCKETS * VX_CFG_SOCKET_SIZE;
+    uint32_t local_core = simobject_->id() % cores_per_cluster;
     snprintf(sname, 100, "%s-dcache_mmu", name.c_str());
-    dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS);
+    dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS,
+                              VX_CFG_DTLB_SIZE, local_core * 2 + 0, false);
 
     // Per-core icache MMU (1 port). Fetch reads/writes its upstream
     // channels (ReqIn[0]/RspOut[0]) directly; the downstream side is
     // bound to the Core's icache port below.
     snprintf(sname, 100, "%s-icache_mmu", name.c_str());
-    icache_mmu_ = Mmu::Create(sname, 1);
+    icache_mmu_ = Mmu::Create(sname, 1,
+                              VX_CFG_ITLB_SIZE, local_core * 2 + 1, true);
 
     // LSU memory side -> dcache MMU -> core's dcache port
     for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
@@ -263,13 +266,16 @@ public:
   #endif
   #endif
 
-    // commit arbiters — per-iw inputs are filled at runtime in commit() by
-    // routing per-block FU outputs to commit_arbs_[trace->wid % VX_CFG_ISSUE_WIDTH]
-    // (no static binding because the iw is not knowable at setup time when
-    // NUM_*_BLOCKS < VX_CFG_ISSUE_WIDTH).
+    // commit queues — per-iw, per-FU staging fed at runtime in commit() by
+    // routing per-block FU outputs on trace->wid (no static binding because
+    // the iw is not knowable at setup time when NUM_*_BLOCKS <
+    // VX_CFG_ISSUE_WIDTH). Selection happens inside commit() itself so a
+    // granted beat retires one registered stage after the FU presents it.
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
-      snprintf(sname, 100, "%s-commit-arb%d", name.c_str(), iw);
-      commit_arbs_.at(iw) = TraceArbiter::Create(sname, ArbiterType::RoundRobin, (uint32_t)FUType::Count, 1);
+      auto& queues = commit_queues_.emplace_back();
+      for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
+        queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, 2));
+      }
     }
 
     this->reset();
@@ -288,7 +294,11 @@ public:
 
     std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
 
-    perf_stats_ = PerfStats();
+    // perf_stats_ deliberately survives: these are the MPM counters, which are
+    // free-running from device reset. A kernel launch re-enters reset() here but
+    // does not reset the hardware, so clearing them would make each dump report
+    // only the last launch -- an app that dumps between launches would then see
+    // per-launch counts where the device reports a running total.
   }
 
   void tick() {
@@ -554,19 +564,19 @@ public:
             continue; // blocked by FU lock
           }
         #ifdef VX_CFG_EXT_RTU_ENABLE
-          // A TRACE2 macro must hold a ray-pool slot before its head uop enters
+          // A TRACE macro must hold a ray-pool slot before its head uop enters
           // the SFU, or it stalls at the head of that unit's queue and starves
-          // the WAIT2 that would release one. Claiming it here, rather than
+          // the WAIT that would release one. Claiming it here, rather than
           // testing for a free one, also keeps another core from taking the
           // last slot between issue and execute.
-          if (!this->rtu_trace2_reserve(uop_trace)) {
+          if (!this->rtu_trace_reserve(uop_trace)) {
             continue; // ray pool full
           }
         #endif
           ready_set.set(w); // mark instruction as ready
           // suppress warps whose target FU dispatch queue is going-full. Credit
           // based: spent at issue, returned at FU accept, so it counts in-flight
-          // ops still in operand collection (like the RTL scoreboard), not just
+          // ops still in operand collection (like the hardware scoreboard), not just
           // what has already reached the queue.
           if (fu_credits_.at(iw).at(fu) >= VX_CFG_DISPATCH_QUEUE_SIZE - 1) {
             suppress_set.set(w);
@@ -685,10 +695,10 @@ public:
   }
 
   void commit() {
-    // Fan-in: route per-block FU outputs to per-iw commit arbs by trace->wid.
+    // Fan-in: route per-block FU outputs to per-iw commit queues by trace->wid.
     // Each FU has NUM_*_BLOCKS outputs; the original iw was lost during
     // dispatcher aggregation, so we recover it from the warp id and try_send
-    // into the matching commit_arb input slot.
+    // into the matching commit queue.
     for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
       auto& func_unit = func_units_.at(fu);
       uint32_t nb = func_unit->num_blocks();
@@ -698,7 +708,7 @@ public:
           continue;
         auto trace = fu_out.peek();
         uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
-        auto& arb_in = commit_arbs_.at(iw)->Inputs.at(fu);
+        auto& arb_in = *commit_queues_.at(iw).at(fu);
         if (arb_in.try_send(trace)) {
           // Release the warp as soon as its stalling instruction's result leaves
           // the functional unit — the branch target / fence / warp-control is
@@ -712,12 +722,27 @@ public:
       }
     }
 
-    // process completed instructions
+    // process completed instructions: one beat per issue slice per cycle,
+    // granted fixed-priority in EX-unit order (ALU highest, then LSU, SFU,
+    // FPU, TCU) — a busy higher class starves lower ones' writebacks.
+    static constexpr FUType kCommitPrio[] = {
+      FUType::ALU, FUType::LSU, FUType::SFU, FUType::FPU,
+    #ifdef VX_CFG_EXT_TCU_ENABLE
+      FUType::TCU,
+    #endif
+    };
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
-      auto& commit_arb = commit_arbs_.at(iw);
-      if (commit_arb->Outputs.at(0).empty())
+      SimChannel<instr_trace_t*>* granted = nullptr;
+      for (auto fu : kCommitPrio) {
+        auto& queue = *commit_queues_.at(iw).at((uint32_t)fu);
+        if (!queue.empty()) {
+          granted = &queue;
+          break;
+        }
+      }
+      if (!granted)
         continue;
-      auto trace = commit_arb->Outputs.at(0).peek().data;
+      auto trace = granted->peek();
 
       // advance to commit stage
       DT(3, simobject_->name() << "-pipeline commit: " << *trace);
@@ -761,7 +786,7 @@ public:
       trace->~instr_trace_t();
       trace_pool_.deallocate(trace, 1);
 
-      commit_arb->Outputs.at(0).pop();
+      granted->pop();
     }
   }
 
@@ -771,6 +796,13 @@ public:
     if (scheduler_->running() || !pending_instrs_.empty()) {
       return true;
     }
+  #ifdef VX_CFG_VM_ENABLE
+    // Parked translations hold no in-flight channel packet, so they are
+    // invisible to SimPlatform::idle(); completion must wait for them.
+    if (!dcache_mmu_->empty() || !icache_mmu_->empty()) {
+      return true;
+    }
+  #endif
     return false;
   }
 
@@ -885,15 +917,18 @@ public:
   }
 
 #ifdef VX_CFG_EXT_RTU_ENABLE
-  // Only a TRACE2 macro head claims a ray-pool slot; every other uop holds no
+  // Only a TRACE macro head claims a ray-pool slot; every other uop holds no
   // new resource. The claim is per-warp and idempotent, so a warp that passes
   // the ready-scan but loses arbitration keeps its slot for the next cycle.
-  bool rtu_trace2_reserve(const instr_trace_t* uop_trace) {
-    auto rtu_p = std::get_if<RtuType>(&uop_trace->op_type);
-    if (rtu_p == nullptr || *rtu_p != RtuType::TRACE2) {
+  bool rtu_trace_reserve(const instr_trace_t* uop_trace) {
+    // TRACE is a WINDOW op here, not an RTU op: the P2 inversion made the RTU the
+    // bus master and the window a passive slot file, so the macro lives in
+    // GfxwType/IntrGfxwArgs. Upstream still had a separate RtuType.
+    auto gfxw_p = std::get_if<GfxwType>(&uop_trace->op_type);
+    if (gfxw_p == nullptr || *gfxw_p != GfxwType::TRACE) {
       return true;
     }
-    auto args = std::get<IntrRtuArgs>(uop_trace->instr_ptr->get_args());
+    auto args = std::get<IntrGfxwArgs>(uop_trace->instr_ptr->get_args());
     if (args.uop != 0) {
       return true;
     }
@@ -906,13 +941,32 @@ public:
   const std::shared_ptr<LocalMemSwitch>& lmem_switch(uint32_t idx) const { return lmem_switch_.at(idx); }
 
 #ifdef VX_CFG_VM_ENABLE
-  // SATP write fans out to both per-core MMUs (dcache + icache). They
-  // each maintain an independent TLB but share the same PT base from
-  // SATP.
+  // Device satp (from the DCR, via Cluster::set_mmu_satp) fans out to both
+  // per-core MMUs (dcache + icache). They each maintain an independent TLB
+  // but share the same PT base.
   void set_satp(uint64_t satp) {
     dcache_mmu_->set_satp(satp);
     icache_mmu_->set_satp(satp);
   }
+
+  // Combined icache + dcache MMU counters (one bank per core).
+  Core::MmuPerfStats mmu_perf_stats() const {
+    Core::MmuPerfStats stats;
+    stats.tlb_reads     = dcache_mmu_->tlb_reads()     + icache_mmu_->tlb_reads();
+    stats.tlb_hits      = dcache_mmu_->tlb_hits()      + icache_mmu_->tlb_hits();
+    stats.tlb_misses    = dcache_mmu_->tlb_misses()    + icache_mmu_->tlb_misses();
+    stats.tlb_evictions = dcache_mmu_->tlb_evictions() + icache_mmu_->tlb_evictions();
+    return stats;
+  }
+
+  SimChannel<TlbReq>& tlb_miss_out(uint32_t which) {
+    return (which == 0) ? dcache_mmu_->TlbMissOut : icache_mmu_->TlbMissOut;
+  }
+
+  SimChannel<TlbRsp>& tlb_fill_in(uint32_t which) {
+    return (which == 0) ? dcache_mmu_->TlbFillIn : icache_mmu_->TlbFillIn;
+  }
+
 #endif
 
   PoolAllocator<instr_trace_t, 64>& trace_pool() { return trace_pool_; }
@@ -949,7 +1003,9 @@ private:
 
   mutable PerfStats perf_stats_;
 
-  std::vector<TraceArbiter::Ptr> commit_arbs_;
+  // [iw][fu] commit staging: FU outputs land here one registered stage
+  // before retirement; commit() grants among them fixed-priority.
+  std::vector<std::vector<std::unique_ptr<SimChannel<instr_trace_t*>>>> commit_queues_;
 
   std::vector<Arbiter> ibuffer_arbs_;
 
@@ -983,10 +1039,21 @@ Core::Core(const SimContext& ctx,
   , icache_rsp_in(1, this)
   , dcache_req_out(VX_CFG_DCACHE_NUM_REQS, this)
   , dcache_rsp_in(VX_CFG_DCACHE_NUM_REQS, this)
+  , gbar_arrive_out(this)
+  , gbar_resume_in(this)
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  , fwd_arm_in(this)
+  , fwd_done_out(this)
+#endif
   , core_id_(core_id)
   , socket_(socket)
   , impl_(new Impl(ctx, this))
-{}
+{
+  gbar_resume_in.bind(this, &Core::on_gbar_resume);
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  fwd_arm_in.bind(this, &Core::on_fwd_arm);
+#endif
+}
 
 Core::~Core() {
   delete impl_;
@@ -1031,6 +1098,16 @@ bool Core::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
 void Core::global_barrier_resume(uint32_t bar_id) {
   impl_->scheduler()->barrier_unit().global_resume(bar_id);
 }
+
+void Core::on_gbar_resume(const GbarResume& msg) {
+  this->global_barrier_resume(msg.bar_id);
+}
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+void Core::on_fwd_arm(const FwdArm& msg) {
+  impl_->scheduler()->fwd_arm(msg.frag_entry, msg.frag_param);
+}
+#endif
 
 void Core::barrier_event_attach(uint32_t bar_id, uint32_t count) {
   impl_->scheduler()->barrier_unit().event_attach(bar_id, count);
@@ -1102,6 +1179,21 @@ const std::shared_ptr<MemCoalescer>& Core::mem_coalescer(uint32_t idx) const {
 const std::shared_ptr<LocalMemSwitch>& Core::lmem_switch(uint32_t idx) const {
   return impl_->lmem_switch(idx);
 }
+
+#ifdef VX_CFG_VM_ENABLE
+Core::MmuPerfStats Core::mmu_perf_stats() const {
+  return impl_->mmu_perf_stats();
+}
+
+SimChannel<TlbReq>& Core::tlb_miss_out(uint32_t which) {
+  return impl_->tlb_miss_out(which);
+}
+
+SimChannel<TlbRsp>& Core::tlb_fill_in(uint32_t which) {
+  return impl_->tlb_fill_in(which);
+}
+
+#endif
 
 PoolAllocator<instr_trace_t, 64>& Core::trace_pool() {
   return impl_->trace_pool();

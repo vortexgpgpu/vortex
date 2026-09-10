@@ -26,5 +26,12 @@ int test_tls();
 int test_vote();
 
 int test_shfl();
+int test_qshfl();
+
+int test_jalr();
+
+int test_feq_x0_scoreboard();
+
+int test_reserved_funct7();
 
 #endif

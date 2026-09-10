@@ -28,8 +28,12 @@
 // {uint16 tile_x, tile_y, pids_offset, pids_count} followed by the per-tile
 // uint32 pid lists, where pids_offset is in uint32 words measured from the end
 // of its header (so RASTER computes pid_addr = header_addr + 8 + offset*4 —
-// see sim/simx/raster/raster_core.cpp). Paired with the dense rast_prim_t
-// primbuf, this is a drop-in for host Binning()'s tilebuf + primbuf.
+// see sim/simx/raster/raster_core.cpp).
+//
+// Host Binning() emits a different layout — the coarse-bin one, with 12-byte
+// rast_bin_header_t records whose pids_offset is an absolute index into the
+// sorted-pid array. The two buffers are not interchangeable: main.cpp decodes
+// each with its own walk and compares only the resulting (tile -> pids) maps.
 
 #define PIPE_STAGE_SETUP    0   // multi-CTA: clip+setup -> per-tri slot bbox + keep
 #define PIPE_STAGE_SCAN     1   // single-CTA: prefix-sum keep -> offset, P=meta[0]

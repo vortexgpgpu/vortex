@@ -1,0 +1,20 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * imageAtomicAdd against the storage image. The image-atomic intrinsics are a
+ * separate discovery case from load/store in the driver's descriptor scan: a
+ * scan that misses them leaves the descriptor unrelocated, so the atomic is
+ * issued against a host address from device code.
+ */
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+layout(binding = 0, r32ui) uniform uimage2D img;
+
+void main()
+{
+   ivec2 c = ivec2(gl_GlobalInvocationID.xy);
+   imageAtomicAdd(img, c, 7u);
+}

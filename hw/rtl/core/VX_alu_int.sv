@@ -176,7 +176,9 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         assign wgather_result[0] = alu_in1[0];
     end
 
-    // SHFL
+    // SHFL. The lane-select operands are packed into rs2 at fixed 6-bit strides,
+    // so a lane index wider than 6 bits would make the fields overlap.
+    `STATIC_ASSERT(LANE_BITS <= 6, ("invalid parameter: NUM_LANES=%0d exceeds the 6-bit SHFL operand stride", NUM_LANES))
     if (NUM_LANES > 1) begin : g_shfl
         for (genvar i = 0; i < NUM_LANES; ++i) begin : g_i
             wire [LANE_BITS-1:0] bval = alu_in2[i][0 +: LANE_BITS];

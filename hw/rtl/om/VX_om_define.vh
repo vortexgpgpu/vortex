@@ -26,6 +26,7 @@
 
 `define TRACE_OM_DCR(level, state) \
     case (state) \
+        `VX_DCR_OM_RT_SELECT:           `TRACE(level, ("RT_SELECT")) \
         `VX_DCR_OM_CBUF_ADDR:           `TRACE(level, ("CBUF_ADDR")) \
         `VX_DCR_OM_CBUF_PITCH:          `TRACE(level, ("CBUF_PITCH")) \
         `VX_DCR_OM_CBUF_WRITEMASK:      `TRACE(level, ("CBUF_WRITEMASK")) \
@@ -44,13 +45,6 @@
         `VX_DCR_OM_BLEND_FUNC:          `TRACE(level, ("BLEND_FUNC")) \
         `VX_DCR_OM_BLEND_CONST:         `TRACE(level, ("BLEND_CONST")) \
         `VX_DCR_OM_LOGIC_OP:            `TRACE(level, ("LOGIC_OP")) \
-        default:                        `TRACE(level, ("?")) \
-    endcase
-
-`define TRACE_OM_CSR(level, addr) \
-    case (addr) \
-        `VX_CSR_OM_RT_IDX:              `TRACE(level, ("RT_IDX")) \
-        `VX_CSR_OM_SAMPLE_IDX:          `TRACE(level, ("SAMPLE_IDX")) \
         default:                        `TRACE(level, ("?")) \
     endcase
 

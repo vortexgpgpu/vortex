@@ -14,11 +14,13 @@
 #pragma once
 
 #include <memory>
-#include <simobject.h>
-#include <mempool.h>
 #include "types.h"
+#include <mempool.h>
 #include "instr_trace.h"
 #include "VX_config.h"
+#ifdef VX_CFG_VM_ENABLE
+#include "mem/tlb_types.h"
+#endif
 
 namespace vortex {
 
@@ -76,6 +78,16 @@ public:
   std::vector<SimChannel<MemReq>> dcache_req_out;
   std::vector<SimChannel<MemRsp>> dcache_rsp_in;
 
+  // Global-barrier event links, wired core <-> cluster at elaboration.
+  SimEventLink<GbarArrive> gbar_arrive_out;
+  SimEventLink<GbarResume> gbar_resume_in;
+
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  // Fragment-work-distributor event links, wired core <-> raster core.
+  SimEventLink<FwdArm>  fwd_arm_in;
+  SimEventLink<FwdDone> fwd_done_out;
+#endif
+
   Core(const SimContext& ctx,
        const char* name,
        uint32_t core_id,
@@ -117,6 +129,25 @@ public:
 
   const std::shared_ptr<MemCoalescer>& mem_coalescer(uint32_t idx) const;
 
+#ifdef VX_CFG_VM_ENABLE
+  struct MmuPerfStats {
+    uint64_t tlb_reads = 0;
+    uint64_t tlb_hits = 0;
+    uint64_t tlb_misses = 0;
+    uint64_t tlb_evictions = 0;
+  };
+
+  // Combined icache + dcache MMU counters (one bank per core).
+  MmuPerfStats mmu_perf_stats() const;
+
+  // Miss/fill channel access for cluster-level TLB binding:
+  // which 0 = dcache-side, 1 = icache-side.
+  SimChannel<TlbReq>& tlb_miss_out(uint32_t which);
+  SimChannel<TlbRsp>& tlb_fill_in(uint32_t which);
+
+  // Device-idle TLB invalidation (host-driven flush broadcast).
+#endif
+
   // Used by LsuUnit to drive the per-block load/store switch.
   const std::shared_ptr<LocalMemSwitch>& lmem_switch(uint32_t idx) const;
 
@@ -138,9 +169,9 @@ public:
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
 #ifdef VX_CFG_VM_ENABLE
-  // SATP write — invoked by CsrUnit on kernel `csrw satp`. Fans out to
-  // both per-core MMUs (dcache + icache). Translation itself happens
-  // asynchronously inside the Mmu SimObject; LSU/fetch emit VAs.
+  // Device satp — invoked from Cluster::set_mmu_satp on the MMU DCR write.
+  // Fans out to both per-core MMUs (dcache + icache). Translation itself
+  // happens asynchronously inside the Mmu SimObject; LSU/fetch emit VAs.
   void set_satp(uint64_t satp);
 #endif
 
@@ -174,6 +205,11 @@ protected:
   void on_tick();
 
 private:
+  void on_gbar_resume(const GbarResume& msg);
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  void on_fwd_arm(const FwdArm& msg);
+#endif
+
   uint32_t core_id_;
   Socket*  socket_;
 

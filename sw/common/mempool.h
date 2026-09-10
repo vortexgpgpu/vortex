@@ -13,57 +13,96 @@
 
 #pragma once
 
-#include <memory>
+#include <atomic>
 #include <cassert>
 #include <cstdlib>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <vector>
 
 namespace vortex {
 
-// Memory pool for fixed-size objects with fallback to new/delete
+// Memory pool for fixed-size objects with fallback to new/delete.
+// Every block carries an owner tag ahead of the payload, so a block may be
+// freed on any thread: same-pool frees take the unsynchronized fast path,
+// frees of another pool's block go through that pool's lock-free return
+// stack, and heap-fallback blocks are deleted directly.
 template<typename T, size_t PoolSize = 64>
 class MemoryPool {
 public:
   MemoryPool() {
-    // Allocate raw memory without constructing objects
-    pool_ = static_cast<char*>(aligned_alloc(alignof(T), sizeof(T) * PoolSize));
-    // Initialize free list using pointer arithmetic
+    chunk_ = static_cast<char*>(aligned_alloc(kAlign, kStride * PoolSize));
     for (size_t i = 0; i < PoolSize; ++i) {
-      *reinterpret_cast<void**>(pool_ + i * sizeof(T)) =
-        (i < PoolSize - 1) ? pool_ + (i + 1) * sizeof(T) : nullptr;
+      char* block = chunk_ + i * kStride;
+      owner_of(block) = this;
+      next_of(block) = (i < PoolSize - 1) ? (chunk_ + (i + 1) * kStride) : nullptr;
     }
-    free_list_ = pool_;
+    free_list_ = chunk_;
   }
 
   ~MemoryPool() noexcept {
-    free(pool_);
+    free(chunk_);
   }
 
   T* allocate() {
-    if (free_list_) {
-      void* block = free_list_;
-      free_list_ = *reinterpret_cast<void**>(block);
-      return static_cast<T*>(block);
+    if (!free_list_) {
+      // Reclaim blocks returned by other threads.
+      free_list_ = static_cast<char*>(remote_free_.exchange(nullptr, std::memory_order_acquire));
     }
-    return static_cast<T*>(::operator new(sizeof(T)));
+    if (free_list_) {
+      char* block = free_list_;
+      free_list_ = next_of(block);
+      return payload_of(block);
+    }
+    char* block = static_cast<char*>(::operator new(kStride, std::align_val_t(kAlign)));
+    owner_of(block) = nullptr;
+    return payload_of(block);
   }
 
   void deallocate(T* ptr) noexcept {
-    if (belongs_to_pool(ptr)) {
-      *reinterpret_cast<void**>(ptr) = free_list_;
-      free_list_ = ptr;
+    char* block = reinterpret_cast<char*>(ptr) - kHeader;
+    auto* owner = owner_of(block);
+    if (owner == this) {
+      next_of(block) = free_list_;
+      free_list_ = block;
+    } else if (owner) {
+      owner->remote_free_push(block);
     } else {
-      ::operator delete(ptr);
+      ::operator delete(block, std::align_val_t(kAlign));
     }
   }
 
 private:
-  char* pool_ = nullptr;
-  void* free_list_ = nullptr;
+  static constexpr size_t kAlign  = (alignof(T) > alignof(void*)) ? alignof(T) : alignof(void*);
+  static constexpr size_t kHeader = kAlign;  // owner tag, padded to payload alignment
+  static constexpr size_t kStride = kHeader + ((sizeof(T) + kAlign - 1) / kAlign) * kAlign;
 
-  bool belongs_to_pool(T* ptr) const noexcept {
-    return ptr >= reinterpret_cast<T*>(pool_) &&
-           ptr < reinterpret_cast<T*>(pool_ + sizeof(T) * PoolSize);
+  // The free-list link is stored in the (dead) payload area.
+  static_assert(sizeof(T) >= sizeof(void*), "pooled type too small");
+
+  static MemoryPool*& owner_of(char* block) noexcept {
+    return *reinterpret_cast<MemoryPool**>(block);
   }
+  static char*& next_of(char* block) noexcept {
+    return *reinterpret_cast<char**>(block + kHeader);
+  }
+  static T* payload_of(char* block) noexcept {
+    return reinterpret_cast<T*>(block + kHeader);
+  }
+
+  // Push-only Treiber stack; the owner drains it with a single exchange.
+  void remote_free_push(char* block) noexcept {
+    void* head = remote_free_.load(std::memory_order_relaxed);
+    do {
+      next_of(block) = static_cast<char*>(head);
+    } while (!remote_free_.compare_exchange_weak(head, block,
+                 std::memory_order_release, std::memory_order_relaxed));
+  }
+
+  char* chunk_ = nullptr;
+  char* free_list_ = nullptr;
+  std::atomic<void*> remote_free_{nullptr};
 };
 
 // Custom allocator using the memory pool with fallback
@@ -97,9 +136,43 @@ public:
 private:
   template<typename, size_t> friend class PoolAllocator;
 
+  // Pools are per-thread so the hot path needs no locking, but a block may be
+  // freed on a different thread than allocated it (owner-tag return path) and
+  // may outlive its allocating thread. An exiting thread parks its pool in a
+  // process-lifetime registry for a later thread to adopt; pools are never
+  // destroyed while their blocks can still be in flight.
+  struct registry_t {
+    std::mutex lock;
+    std::vector<MemoryPool<T, PoolSize>*> idle;
+
+    MemoryPool<T, PoolSize>* acquire() {
+      std::lock_guard<std::mutex> g(lock);
+      if (!idle.empty()) {
+        auto* pool = idle.back();
+        idle.pop_back();
+        return pool;
+      }
+      return new MemoryPool<T, PoolSize>();
+    }
+    void release(MemoryPool<T, PoolSize>* pool) {
+      std::lock_guard<std::mutex> g(lock);
+      idle.push_back(pool);
+    }
+  };
+
+  static registry_t& registry() {
+    static registry_t* registry = new registry_t();  // immortal: outlives every thread
+    return *registry;
+  }
+
   static MemoryPool<T, PoolSize>& get_pool() {
-    static MemoryPool<T, PoolSize> pool;
-    return pool;
+    struct holder_t {
+      MemoryPool<T, PoolSize>* pool;
+      holder_t() : pool(registry().acquire()) {}
+      ~holder_t() { registry().release(pool); }
+    };
+    static thread_local holder_t holder;
+    return *holder.pool;
   }
 };
 

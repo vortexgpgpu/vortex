@@ -1,0 +1,197 @@
+# ASIC synthesis-regression gate: post-synthesis Fmax/cell area must not regress
+# past a threshold vs. a checked-in golden result
+# (ci/baselines/synthesis/yosys/<group>.json).
+#
+# Sibling of the fpga_gate (fpga_gate.yaml): same discipline — golden baseline,
+# hard threshold, ratcheted improvements, results only ever re-recorded by a
+# human — over the open-source flow instead of Vivado. What changes is the
+# target: LUT/BRAM/DSP have no ASIC meaning, standard-cell area and SRAM area do.
+#
+# ---------------------------------------------------------------------------
+# Two blocks, two consumers, exactly as in fpga_gate.yaml:
+#
+#   tests:   what pytest/CI sees — ONE case, whose `run:` is literally the
+#            command CI executes. No second entry point, no divergence.
+#   builds:  what ci/asic_gate.py reads — the build list, with its per-build
+#            `known_issue` and `thresholds`. The pytest loader ignores this key.
+#
+# UNLIKE fpga_gate, THIS ONE RUNS ON A HOSTED RUNNER. Yosys, sv2v and OpenSTA
+# ship in the prebuilt toolchain (ci/toolchain_install.sh installs all three by
+# default) and ASAP7 is a 59 MB content-addressed fetch, so there is no licence
+# and no dedicated machine in the way — which is the whole point of having an
+# open-source flow.
+#
+# It is still nightly, not a PR gate: a DUT takes 1-2 hours. Tier `asic` is
+# OPT-IN (OPT_IN_TIERS in testcase.py), so ci.yml's hosted matrix never emits a
+# cell for it; .github/workflows/asic_gate.yml owns it, fanning the `builds:`
+# block below out to ONE JOB PER BUILD so the wall times run concurrently
+# instead of in series.
+#
+# The DUTs are the same hw/unittest/*/VX_*_top.sv wrappers the Xilinx gate
+# synthesizes (hw/syn/yosys/dut/catalog.mk holds each one's top, include path
+# and defines), so both gates measure the same modules and a divergence between
+# them is a real finding rather than an artefact of two DUT lists.
+#
+# See docs/designs/continuous_integration.md §3.5.
+category: asic_gate
+defaults:
+  # 32-bit only: synthesis results are recorded against RV32.
+  xlen:
+  - 32
+  tier: asic
+  via: script
+  # Any RTL change can move Fmax or area.
+  touches:
+  - hw/rtl/
+tests:
+# The base command. asic_gate.yml reads it from here and appends `-b <id>` for
+# the one build that job owns, so what CI runs and what the catalog says cannot
+# drift apart. Run bare, it gates every build in series.
+#
+# `-j 1`: the workflow gets its parallelism from the job fan-out, and one Yosys
+# build already saturates a hosted runner's two cores.
+- id: gate
+  run: ci/asic_gate.py -j 1
+
+# ---------------------------------------------------------------------------
+# builds — read by ci/asic_gate.py, ignored by the pytest catalog loader.
+#
+#   dut         hw/syn/yosys/dut/catalog.mk target to synthesize; that catalog
+#               carries the DUT's top module, include path and defines
+#   clock_mhz   target clock the design is constrained to, via CLOCK_FREQ. Fmax
+#               is derived from it and the worst slack, and the gate also asserts
+#               the design MEETS it — so this is a commitment, not a hint.
+#   configs     EXTRA defines, appended to the catalog's. Usually empty: the DUT
+#               configuration belongs in one place, and that place is catalog.mk.
+#   group       which golden file the results land in (mirrors the Xilinx groups)
+#   thresholds  per-metric gate tolerance, overriding --metric-threshold and
+#               --threshold (e.g. {cell_area_um2: 0.10})
+#   known_issue tracked expected failure: still builds and reports, does not fail
+#               the run (same contract as a known_issue: test case)
+#
+# Run one by name:  ci/asic_gate.py -b tcu
+# Run a group:      ci/asic_gate.py -b graphics
+# By hand, no gate: make -C hw/syn/yosys/dut tcu
+# Re-record:        ci/asic_gate.py --update-baseline   (human-reviewed, never CI)
+#
+# PDK: ASAP7 7.5-track, RVT, TT corner (hw/syn/yosys/Makefile defaults). The
+# corner is part of config_hash — RVT-TT and LVT-SS numbers are not comparable.
+# ---------------------------------------------------------------------------
+builds:
+
+# --- core: the base pipeline and its memory system ---------------------------
+
+# L1/LLC datapath with atomics: tag/data pipeline, MSHR, AMO unit.
+- id: cache
+  group: core
+  dut: cache
+  clock_mhz: 800
+  configs: ""
+
+# Wide-SIMD core: issue/operand-collect/LSU/FPU at NT=NW=16, plus the RVC
+# decompressor and atomics.
+- id: core
+  group: core
+  dut: core
+  clock_mhz: 500
+  configs: ""
+  known_issue: >-
+    no baseline recorded yet, so its numbers are reported but not asserted. The
+    nightly job still builds it — read the run's metrics, sanity-check
+    clock_mhz, then record with `ci/asic_gate.py -b core --update-baseline`.
+
+# --- dxa ---------------------------------------------------------------------
+
+# DXA engine: descriptor queue, address generation, multicast distribution.
+- id: dxa
+  group: dxa
+  dut: dxa
+  clock_mhz: 800
+  configs: ""
+
+# --- tensor ------------------------------------------------------------------
+
+# TFR tensor core with every datatype plus sparsity and WGMMA. The widest
+# datapath in the tree, so it is the area + Fmax bellwether.
+- id: tcu
+  group: tensor
+  dut: tcu
+  clock_mhz: 500
+  configs: ""
+  known_issue: >-
+    no baseline recorded yet, so its numbers are reported but not asserted. The
+    nightly job still builds it — read the run's metrics, sanity-check
+    clock_mhz, then record with `ci/asic_gate.py -b tcu --update-baseline`.
+
+# Full tensor subsystem in one wrapper: TCU (WGMMA + MX) + dxa behind a shared
+# L2, 2 cores / socket.
+- id: tensor
+  group: tensor
+  dut: tensor
+  clock_mhz: 500
+  configs: ""
+  known_issue: >-
+    no baseline recorded yet, so its numbers are reported but not asserted. The
+    nightly job still builds it — read the run's metrics, sanity-check
+    clock_mhz, then record with `ci/asic_gate.py -b tensor --update-baseline`.
+
+# --- graphics ----------------------------------------------------------------
+
+# Rasterizer: bin/block/quad walker, edge evaluators, rcache port.
+- id: raster
+  group: graphics
+  dut: raster
+  clock_mhz: 800
+  configs: ""
+
+# Output merger: depth/stencil test, blend, ocache port.
+- id: om
+  group: graphics
+  dut: om
+  clock_mhz: 800
+  configs: ""
+
+# Texture unit: address generation, LOD, bilinear filter, tcache port.
+- id: tex
+  group: graphics
+  dut: tex
+  clock_mhz: 800
+  configs: ""
+
+# Ray-tracing unit: CW-BVH4 walker, box/triangle PEs, short stack.
+- id: rtu
+  group: graphics
+  dut: rtu
+  clock_mhz: 400
+  configs: ""
+  known_issue: >-
+    no baseline recorded yet. An earlier run showed its RTCache inferred to
+    flip-flops (sram_area_um2 = 0 against 1.2M cells) — that was the dispatcher
+    dropping -DASIC, since fixed, but the DUT has not been re-measured since.
+    Confirm sram_area_um2 is non-zero before recording.
+
+# Full graphics subsystem in one wrapper: raster + om + tex + rtu + dxa behind a
+# shared L2, 2 cores / socket.
+- id: gfx
+  group: graphics
+  dut: gfx
+  clock_mhz: 400
+  configs: ""
+  known_issue: >-
+    no baseline recorded yet, so its numbers are reported but not asserted. The
+    nightly job still builds it — read the run's metrics, sanity-check
+    clock_mhz, then record with `ci/asic_gate.py -b gfx --update-baseline`.
+
+# --- vm ----------------------------------------------------------------------
+
+# Standalone MMU network: dTLB + iTLB, pooled L1 TLB MSHR, L2 TLB, PTW walker
+# hierarchy, fed by a shared L2.
+- id: vm
+  group: vm
+  dut: vm
+  clock_mhz: 500
+  configs: ""
+  known_issue: >-
+    no baseline recorded yet, so its numbers are reported but not asserted. The
+    nightly job still builds it — read the run's metrics, sanity-check
+    clock_mhz, then record with `ci/asic_gate.py -b vm --update-baseline`.

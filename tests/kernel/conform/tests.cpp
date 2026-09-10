@@ -398,3 +398,152 @@ int test_shfl() {
   vx_tmc_one(); // back to thread0
 	return check_error(shfl_buffer, 0, num_threads);
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+#define QSHFL_GROUP_SZ 4
+int qshfl_buffer[QSHFL_GROUP_SZ];
+
+// Every lane's XOR-1 partner is inactive here, so the segment-scoped shuffle
+// must fall back to the reader's own value rather than read a masked lane's
+// stale register.
+void __attribute__((noinline)) do_qshfl_masked() {
+	int tid = vx_thread_id();
+	int value = 65 + tid;
+	int v_bfly = vx_shfl_bfly(value, 1, VX_QUAD_CVAL, VX_QUAD_MASK);
+	qshfl_buffer[tid] = (v_bfly == value) ? (65 + tid) : 0;
+}
+
+// With the whole quad active, the same shuffle reads the neighbour.
+void __attribute__((noinline)) do_qshfl_full() {
+	int tid = vx_thread_id();
+	int value = 65 + tid;
+	int v_bfly = vx_shfl_bfly(value, 1, VX_QUAD_CVAL, VX_QUAD_MASK);
+	int v_bfly2 = vx_shfl_bfly(value, 2, VX_QUAD_CVAL, VX_QUAD_MASK);
+	int passed = (v_bfly == (65 + (tid ^ 1))) && (v_bfly2 == (65 + (tid ^ 2)));
+	qshfl_buffer[tid] = passed ? (65 + tid) : 0;
+}
+
+int test_qshfl() {
+	PRINTF("Quad Shuffle Test\n");
+	if (vx_num_threads() < QSHFL_GROUP_SZ) {
+		return 0; // a quad does not fit in this warp
+	}
+
+	// masked-source-lane rule: activate lanes 0 and 2 only, so each active
+	// lane's partner is masked. The inactive lanes' slots are pre-seeded so the
+	// shared checker only sees what the active lanes wrote.
+	for (int i = 0; i < QSHFL_GROUP_SZ; ++i) {
+		qshfl_buffer[i] = 65 + i;
+	}
+	vx_tmc(0x5);
+	do_qshfl_masked();
+	vx_tmc_one();
+	int errors = check_error(qshfl_buffer, 0, QSHFL_GROUP_SZ);
+
+	// whole quad active: the shuffle reads its neighbours
+	vx_tmc(make_full_tmask(QSHFL_GROUP_SZ));
+	do_qshfl_full();
+	vx_tmc_one();
+	errors += check_error(qshfl_buffer, 0, QSHFL_GROUP_SZ);
+
+	return errors;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+#define JALR_PASS_VALUE 0x13579bdf
+
+uint32_t __attribute__((noinline)) do_jalr_misaligned() {
+	uint32_t value = 0;
+	asm volatile(
+		// x1 is prepared so that the misaligned decode path can immediately
+		// execute a valid JALR to label 3 and produce a deterministic failure
+		// value instead of aborting in the decoder.
+		"la x1, 3f\n"
+		// 1744 matches the immediate embedded in the overlapped misaligned
+		// instruction below: jalr x0, -1744(x1).
+		"addi x1, x1, 1744\n"
+		"la t0, 1f\n"
+		// Add 1 on purpose. A correct JALR implementation must clear bit 0 and
+		// land at 1f. An incorrect implementation enters at 1f + 1 instead.
+		"addi t0, t0, 1\n"
+		"jalr x0, t0, 0\n"
+		".balign 4\n"
+		"1:\n"
+		// 0x00806713 is a hand-picked overlapped instruction word:
+		// - from the aligned entry at 1f it decodes as: ori x14, x0, 8
+		// - from the misaligned entry at 1f + 1 it decodes as:
+		//   jalr x0, -1744(x1)
+		// That lets both fixed and unfixed builds decode valid instructions
+		// while still producing different results.
+		".4byte 0x00806713\n"
+		// next aligned instruction after the pass-path overlap word
+		".4byte 0x00000093\n"
+		"j 4f\n"
+		"3:\n"
+		// fail signature: JALR did not clear bit 0
+		"li %[value], 0x2468ace0\n"
+		"j 5f\n"
+		"4:\n"
+		// pass signature: JALR correctly cleared bit 0
+		"li %[value], 0x13579bdf\n"
+		"5:\n"
+		: [value] "=r" (value)
+		:
+		: "x1", "t0", "x14");
+	return value;
+}
+
+int test_jalr() {
+	PRINTF("JALR Test\n");
+	vx_tmc_one();
+	uint32_t value = do_jalr_misaligned();
+	if (value != JALR_PASS_VALUE) {
+		PRINTF("*** error: jalr value=0x%x, expected=0x%x\n", value, JALR_PASS_VALUE);
+		return 1;
+	}
+	return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+void __attribute__((noinline)) do_feq_x0_scoreboard() {
+	asm volatile(
+		"fsgnj.s f24, f0, f0\n"
+		"fsgnj.s f1, f0, f0\n"
+		"feq.s x0, f24, f1\n"
+		:
+		:
+		: "memory");
+}
+
+int test_feq_x0_scoreboard() {
+	PRINTF("FEQ x0 Scoreboard Test\n");
+	int num_threads = std::min(vx_num_threads(), 4);
+	int tmask = make_full_tmask(num_threads);
+	vx_tmc(tmask);
+	do_feq_x0_scoreboard();
+	vx_tmc_one();
+	return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+
+int test_reserved_funct7() {
+	PRINTF("Reserved funct7 Test\n");
+	vx_tmc_one();
+	// funct7=0x3 is a reserved OP encoding. The RTL decoder's exact funct7
+	// case-match falls through to the base-ALU default (ADD for funct3=0);
+	// SimX must decode it identically instead of treating any odd funct7 as
+	// an M-extension op (which executed this word as MUL).
+	uint32_t a = 7, b = 9, r = 0;
+	asm volatile(".insn r 0x33, 0x0, 0x3, %0, %1, %2"
+	             : "=r"(r)
+	             : "r"(a), "r"(b));
+	if (r != a + b) {
+		PRINTF("*** error: reserved funct7 decode: r=%d, expected=%d\n", r, a + b);
+		return 1;
+	}
+	return 0;
+}

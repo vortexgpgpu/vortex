@@ -30,31 +30,50 @@ module VX_rtu_fdot3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     input  wire [2:0][31:0] b,
     output wire [31:0]      result
 );
+    // output pad must cover the pipelined multiply + fmac3 depth
+    `STATIC_ASSERT((LATENCY >= (`LATENCY_IMUL + 7)), ("VX_rtu_fdot3: LATENCY too small for the pipelined multiply"))
+
     wire [2:0]       m_sign;
     wire [2:0][8:0]  m_pe;
     wire [2:0][47:0] m_prod;
     for (genvar i = 0; i < 3; ++i) begin : g_mul
         wire [7:0]  ea = a[i][30:23], eb = b[i][30:23];
         wire        az = (ea == 8'd0), bz = (eb == 8'd0);
-        wire [23:0] ma = az ? 24'd0 : {1'b1, a[i][22:0]};
-        wire [23:0] mb = bz ? 24'd0 : {1'b1, b[i][22:0]};
+        wire [23:0] ma = {1'b1, a[i][22:0]};
+        wire [23:0] mb = {1'b1, b[i][22:0]};
         assign m_sign[i] = a[i][31] ^ b[i][31];
         assign m_pe[i]   = (az | bz) ? 9'd0 : ({1'b0, ea} + {1'b0, eb});
-        assign m_prod[i] = ma * mb;
+        // 24x24 mantissa product pipelined into the DSP48 (LATENCY_IMUL deep).
+        // The operands are the raw mantissas: a flushed term is discarded
+        // downstream by its pe=0, so nothing selects in front of the multiplier
+        // inputs and the DSP is driven straight from the source flops.
+        VX_multiplier #(
+            .A_WIDTH (24),
+            .B_WIDTH (24),
+            .SIGNED  (0),
+            .LATENCY (`LATENCY_IMUL)
+        ) mul (
+            .clk    (clk),
+            .enable (enable),
+            .dataa  (ma),
+            .datab  (mb),
+            .result (m_prod[i])
+        );
     end
 
+    // sign/exponent side-band delayed to align with the multiply latency
     wire [2:0]       q_sign;
     wire [2:0][8:0]  q_pe;
-    wire [2:0][47:0] q_prod;
+    wire [2:0][47:0] q_prod = m_prod;   // products already registered by the DSPs
     VX_pipe_register #(
-        .DATAW (3 + 3*9 + 3*48),
-        .DEPTH (1)
+        .DATAW (3 + 3*9),
+        .DEPTH (`LATENCY_IMUL)
     ) p0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  ({m_sign, m_pe, m_prod}),
-        .data_out ({q_sign, q_pe, q_prod})
+        .data_in  ({m_sign, m_pe}),
+        .data_out ({q_sign, q_pe})
     );
 
     wire [31:0] dot;
@@ -70,7 +89,7 @@ module VX_rtu_fdot3 import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     VX_shift_register #(
         .DATAW (32),
-        .DEPTH (LATENCY - 8)
+        .DEPTH (LATENCY - (`LATENCY_IMUL + 7))   // 7 = VX_rtu_fmac3 depth
     ) sr_pad (
         .clk      (clk),
         .reset    (reset),

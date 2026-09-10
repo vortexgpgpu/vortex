@@ -26,7 +26,7 @@
 #include "cout_drainer.h"
 #include "constants.h"
 #include <util.h>
-#include <simobject.h>
+#include "types.h"
 #include "core.h"
 #include "scheduler.h"
 #include "VX_types.h"

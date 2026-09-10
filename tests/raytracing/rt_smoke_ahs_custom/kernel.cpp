@@ -11,42 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU any-hit candidate instance-attribute smoke kernel — I1 guard.
+// PRISM RTU any-hit candidate instance-attribute smoke kernel — candidate-
+// return loop.
+//
+// A non-opaque triangle returns an any-hit candidate to the warp. The kernel
+// reads the CANDIDATE instance attributes (instance_custom, instance_id) from
+// the register window, stashes them into the trace payload buffer, and ACCEPTs
+// so the candidate commits.
 
 #include <vx_spawn2.h>
 #include <vx_raytrace.h>
 #include "common.h"
 
-// Naked AHS dispatcher, entered via the M-mode trap (mtvec) during the
-// vx_rt_wait candidate callback (see rt_smoke_ahs_bvh / rt_smoke_is for
-// the trap-path pattern). It reads the CANDIDATE instance attributes from
-// the register window and stashes them into the trace payload buffer, then
-// ACCEPTs so the candidate commits.
-//
-// GETW reads one window slot into rd (funct3=6, funct7 = (slot<<2)|3):
-//   VX_RT_PAYLOAD_PTR_LO      (25) -> (25<<2)|3 = 103   (capture buffer ptr)
-//   VX_RT_HIT_INSTANCE_CUSTOM (24) -> (24<<2)|3 =  99
-//   VX_RT_HIT_INSTANCE_ID     (22) -> (22<<2)|3 =  91
-__attribute__((naked, used))
-static void rt_ahs_custom_dispatcher(void) {
-  __asm__ volatile (
-    ".insn r 0x2b, 6, 103, t1, x0, x1\n"   // t1 = candidate-capture buffer ptr
-    ".insn r 0x2b, 6, 99,  t2, x0, x1\n"   // t2 = candidate instance_custom
-    ".insn r 0x2b, 6, 91,  t3, x0, x1\n"   // t3 = candidate instance_id
-    "sw t2, 0(t1)\n"                        // cand->cand_instance_custom
-    "sw t3, 4(t1)\n"                        // cand->cand_instance_id
-    "li t4, %0\n"                           // t4 = CB_ACCEPT
-    ".insn r 0x2b, 6, 0, x0, t4, x0\n"      // vx_rt_cb_ret(CB_ACCEPT)
-    "mret\n"
-    :: "i"(VX_RT_CB_ACCEPT)
-  );
-}
-
 __kernel void kernel_main(kernel_arg_t* arg) {
   uint32_t tid = blockIdx.x;
   if (tid != 0) return;
-
-  csr_write(0x305, (uintptr_t)&rt_ahs_custom_dispatcher);
 
   vx_ray_t ray = { {arg->ray_origin[0], arg->ray_origin[1], arg->ray_origin[2]},
                    {arg->ray_direction[0], arg->ray_direction[1], arg->ray_direction[2]},
@@ -55,12 +34,23 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // Ray flags = 0: the non-opaque triangle drives the opacity classifier so
   // the walker yields an AHS candidate callback. The candidate-capture buffer
   // rides the trace as the payload pointer (VX_RT_PAYLOAD_PTR_LO), so the
-  // dispatcher can locate it from the window.
+  // loop can locate it from the window.
   uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
   uint32_t cand_lo  = (uint32_t)(arg->cand_addr  & 0xffffffffu);
   uint32_t h   = vx_rt_wtrace(scene_lo, cand_lo, 0u, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
+  while (vx_rt_sts_is_yield(sts)) {
+    // Read the candidate instance attributes and the capture buffer pointer
+    // (staged as the trace payload) from the register window, then stash.
+    uint32_t cand_ptr    = vx_rt_get_attr(VX_RT_PAYLOAD_PTR_LO, sts);
+    uint32_t cand_custom = vx_rt_get_attr(VX_RT_HIT_INSTANCE_CUSTOM, sts);
+    uint32_t cand_inst   = vx_rt_get_attr(VX_RT_HIT_INSTANCE_ID, sts);
+    uint32_t* cand = (uint32_t*)(uintptr_t)cand_ptr;
+    cand[0] = cand_custom;   // cand->cand_instance_custom
+    cand[1] = cand_inst;     // cand->cand_instance_id
+    sts = vx_rt_continue(h, VX_RT_CB_ACCEPT, hit.t, 0u, &hit);
+  }
 
   rtu_result_t* results = (rtu_result_t*)((uintptr_t)arg->results_addr);
   results[0].status          = sts;

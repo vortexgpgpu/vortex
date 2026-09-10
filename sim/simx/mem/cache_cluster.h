@@ -36,10 +36,6 @@ public:
 	void flush_begin();
 	bool flush_done() const;
 
-protected:
-	void on_reset() {}
-	void on_tick() {}
-
 private:
 	std::vector<Cache::Ptr> caches_;
 

@@ -1,0 +1,68 @@
+Vitis flow fixes required to build a FireSim xclbin for the Alveo U55C
+under Vitis 2024.2. Upstream FireSim targets Vitis 2022.1 and a U250.
+
+  1. host_mem_0 connectivity was hardcoded to DDR[0]; the U55C is HBM-only
+     (platforminfo reports "Bus SP Tag: HBM" and no DDR entry). Parameterized
+     as HOST_MEM_SP so non-HBM platforms can override it.
+  2. package_kernel.tcl hardcoded the U250 part, so kernel IP was generated
+     for the wrong device regardless of DEVICE=.
+  3. package_xo silently produced no .xo: create_project chdirs into the temp
+     project and the closing "close_project -delete" removes it, leaving the
+     process CWD on a deleted path so package_xo dies inside
+     boost::filesystem::current_path(). Save and restore the CWD.
+  4. v++ --temp_dir pointed at the same directory the .xo is written to, and
+     Vitis 2024.2 clears its temp dir at startup -- deleting the .xo before
+     the link step reads it.
+
+--- build_firesim/firesim/platforms/vitis/cl_firesim/Makefile.orig	2026-08-02 05:18:37.916499449 -0700
++++ build_firesim/firesim/platforms/vitis/cl_firesim/Makefile	2026-08-02 05:18:37.948499376 -0700
+@@ -47,6 +47,11 @@
+ # current support on firesim1
+ DEVICE ?= xilinx_u250_gen3x16_xdma_3_1_202020_1
+ 
++# Memory resource backing the simulator's host_mem_0 port. Upstream hardcodes
++# DDR[0]; HBM-only cards (Alveo U55C) expose no DDR bank at all, so this must
++# be overridable per platform.
++HOST_MEM_SP ?= HBM[0]
++
+ # Provide's the desired simulator frequency. This is generated from the clock
+ # provided to the kernel using an internal MMCM.
+ FREQUENCY ?= 90
+@@ -168,7 +173,7 @@
+ 	mkdir -p $(@D)
+ 	# Move into temp directory to avoid polluting top-level workdir
+ 	cd $(@D)/..; $(VPP) $(vpp_config_overlay_args) $(VPP_TARGET_SPECIFIC_ARGS) $(VPP_COMMON_ARGS) \
+-	--connectivity.sp $(PROJECT_NAME)_1.host_mem_0:DDR[0] \
++	--connectivity.sp $(PROJECT_NAME)_1.host_mem_0:$(HOST_MEM_SP) \
+ 	--link $(VPP_LDFLAGS) -o $@ $<
+ 
+ 
+--- build_firesim/firesim/platforms/vitis/cl_firesim/scripts/package_kernel.tcl.orig	2026-08-02 00:47:00.546532830 -0700
++++ build_firesim/firesim/platforms/vitis/cl_firesim/scripts/package_kernel.tcl	2026-08-02 00:47:00.718532277 -0700
+@@ -19,7 +19,9 @@
+ set path_to_packaged "./packaged_kernel_${suffix}"
+ set path_to_tmp_project "./tmp_kernel_pack_${suffix}"
+ 
+-set projPart "xcu250-figd2104-2L-e"
++# Upstream hardcodes the U250 part; the kernel-packaging project must use
++# the part of the target platform or its IP is generated for the wrong device.
++set projPart "xcu55c-fsvh2892-2L-e"
+ 
+ set base_filename "FireSim-generated"
+ set synth_xdc_path "${path_to_hdl}/${base_filename}.synthesis.xdc"
+--- build_firesim/firesim/platforms/vitis/cl_firesim/scripts/gen_xo.tcl.orig	2026-08-02 00:51:18.973709853 -0700
++++ build_firesim/firesim/platforms/vitis/cl_firesim/scripts/gen_xo.tcl	2026-08-02 00:51:19.061709575 -0700
+@@ -33,7 +33,13 @@
+ set script_path [file dirname [file normalize [info script]]]
+ 
+ #source -notrace ./scripts/package_kernel.tcl
++# Vivado's create_project chdirs into the project dir, and package_kernel.tcl's
++# closing "close_project -delete" then removes it -- leaving the process CWD
++# pointing at a deleted directory. package_xo subsequently dies inside
++# boost::filesystem::current_path(). Save the CWD and restore it below.
++set origin_cwd [pwd]
+ source ${script_path}/package_kernel.tcl
++cd $origin_cwd
+ 
+ if {[file exists "${xoname}"]} {
+     file delete -force "${xoname}"

@@ -317,6 +317,30 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
         lg_in[i] = lg;
     }
 
+    // A CTA maps to a single core, so its block cannot exceed the core's thread
+    // capacity (NUM_WARPS × NUM_THREADS). Reject an oversized block here — the
+    // maxThreadsPerBlock contract — instead of letting the KMU block-size
+    // descriptor silently wrap to a bogus value.
+    if (ndim > 0) {
+        uint64_t nt = 0, nw = 0;
+        auto r = device_->query_caps(VX_CAPS_NUM_THREADS, &nt);
+        if (r == VX_SUCCESS) {
+            r = device_->query_caps(VX_CAPS_NUM_WARPS, &nw);
+        }
+        if (r != VX_SUCCESS) {
+            if (kernel) kernel->release();
+            return r;
+        }
+        uint32_t block_size = 1;
+        for (uint32_t i = 0; i < ndim; ++i) {
+            block_size *= block_in[i];
+        }
+        if (block_size > (uint32_t)(nt * nw)) {
+            if (kernel) kernel->release();
+            return VX_ERR_INVALID_VALUE;
+        }
+    }
+
     Command cmd;
     cmd.queued_ns = now_ns();
     cmd.work = [this, kernel, ndim, lmem_size, grid_in, block_in, lg_in,
@@ -674,12 +698,12 @@ vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
             return rq;
         }
 
-        // Phase 1 — stage each launch's args + QMD into device scratch.
+        // Step 1 — stage each launch's args + QMD into device scratch.
         std::vector<CmdStaged> staged(recs.size());
         const uint32_t tpw = (uint32_t)num_threads; (void)num_warps;
         vx_result_t r = cmd_stage_qmds(device_, recs, staged, tpw);
 
-        // Phase 2 — emit the whole sequence as one ring batch: each launch is a
+        // Step 2 — emit the whole sequence as one ring batch: each launch is a
         // single CMD_LAUNCH_QMD (the CP replays the staged descriptor); FF/state
         // DCR writes pass through directly. One doorbell, one poll.
         if (r == VX_SUCCESS) {
@@ -746,12 +770,12 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
             return rq;
         }
 
-        // Phase 1 — stage each launch's args + QMD into device scratch.
+        // Step 1 — stage each launch's args + QMD into device scratch.
         std::vector<CmdStaged> staged(recs.size());
         const uint32_t tpw = (uint32_t)num_threads; (void)num_warps;
         vx_result_t r = cmd_stage_qmds(device_, recs, staged, tpw);
 
-        // Phase 2 — build the resident draw descriptor: [u32 num_steps] then
+        // Step 2 — build the resident draw descriptor: [u32 num_steps] then
         // 28-byte cmd-record steps. A launch becomes a CMD_LAUNCH_QMD step
         // followed by a CMD_CACHE_FLUSH step — the same sequence the ring batch
         // streams (cp_submit_launch_qmd appends a flush after every launch), so
@@ -795,7 +819,7 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
             }
         }
 
-        // Phase 3 — submit. OP_DRAW: one ring command the CP expands on-device,
+        // Step 3 — submit. OP_DRAW: one ring command the CP expands on-device,
         // draining each launch (the inter-stage barrier) with no host between.
         // Fallback: the same sequence as a single ring batch (one doorbell).
         if (r == VX_SUCCESS) {
@@ -888,8 +912,14 @@ vx_result_t resolve_rect(const vx_rect_info_t& in, ResolvedRect* out) {
                                               : out->host_row * in.region[1];
     if (out->buffer_row < in.region[0] || out->host_row < in.region[0])
         return VX_ERR_INVALID_VALUE;
-    if (out->buffer_slice < out->buffer_row * in.region[1] ||
-        out->host_slice   < out->host_row   * in.region[1])
+    // The slice pitch only strides between slices, so it is used solely when
+    // region[2] > 1. A single-slice rect (region[2] == 1) never dereferences it
+    // -- e.g. a 1D image array is presented as {width, layers, 1} with a slice
+    // pitch of image_row_pitch, legitimately smaller than row * layers. Only
+    // enforce the lower bound where the slice pitch is actually addressed.
+    if (in.region[2] > 1 &&
+        (out->buffer_slice < out->buffer_row * in.region[1] ||
+         out->host_slice   < out->host_row   * in.region[1]))
         return VX_ERR_INVALID_VALUE;
     return VX_SUCCESS;
 }

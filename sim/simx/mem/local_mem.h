@@ -13,7 +13,6 @@
 
 #pragma once
 
-#include <simobject.h>
 #include "types.h"
 
 namespace vortex {

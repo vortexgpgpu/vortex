@@ -58,7 +58,9 @@ cgl_to_gfx_vertices(const std::unordered_map<uint32_t, CGLTrace::vertex_t>& cgl)
   out.reserve(cgl.size());
   for (auto& kv : cgl) {
     const auto& v = kv.second;
-    graphics::vertex_t vx;
+    graphics::vertex_t vx{};   // varying2 feeds the w0..w5 planes; an
+                               // indeterminate one reaches setup as an
+                               // attribute plane.
     vx.pos[0] = v.pos.x;       vx.pos[1] = v.pos.y;
     vx.pos[2] = v.pos.z;       vx.pos[3] = v.pos.w;
     vx.color[0] = v.color.r;   vx.color[1] = v.color.g;
@@ -129,9 +131,9 @@ kernel_arg_t kernel_arg = {};
 
 // Host Binning() must emit coarse-bin headers at the granularity the RASTER
 // walker descends by (1 << VX_CFG_RASTER_BIN_LOG_SIZE) — see graphics.cpp
-// Binning(). Binning at the legacy VX_CFG_RASTER_TILE_LOG_SIZE instead lets the
+// Binning(). Binning at VX_CFG_RASTER_TILE_LOG_SIZE instead lets the
 // BIN_LOGSIZE walker over-cover smaller tiles (dropped/corrupt quads in
-// non-origin tiles; gfx_raster was missed in the §6.3 coarse-bin migration).
+// non-origin tiles).
 uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;
 
 static void show_usage() {
@@ -240,7 +242,7 @@ int render(const CGLTrace& trace) {
       kernel_arg.cbuf_addr   = cbuf_addr;
       kernel_arg.cbuf_stride = cbuf_stride;
       kernel_arg.cbuf_pitch  = cbuf_pitch;
-      // §5 SW raster routing: dense visible-prim count + the walk tile size.
+      // SW raster routing: dense visible-prim count + the walk tile size.
       kernel_arg.sw_path      = use_sw ? 1u : 0u;
       kernel_arg.num_prims    = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
       kernel_arg.tile_logsize = tileLogSize;
@@ -281,13 +283,15 @@ int render(const CGLTrace& trace) {
 
     // HW path: grid-less kick (grid_dim=0 → no host warps; the armed raster work
     // distributor injects the fragment warps and sustains the run). SW path: one
-    // thread per primitive — launch enough CTAs to cover num_prims threads.
+    // lane is one pixel, so a quad needs four adjacent lanes — give each primitive
+    // a group of VX_FRAG_QUAD_LANES threads and launch enough CTAs to cover them.
     vx_event_h launch_ev = nullptr;
     {
       uint32_t block_sz = (uint32_t)(num_threads * num_warps);
       uint32_t grid0;
       if (use_sw) {
-        grid0 = (kernel_arg.num_prims + block_sz - 1) / block_sz;
+        uint32_t sw_threads = kernel_arg.num_prims * VX_FRAG_QUAD_LANES;
+        grid0 = (sw_threads + block_sz - 1) / block_sz;
         if (grid0 == 0) grid0 = 1;
       } else {
         grid0 = 0;   // grid-less kick (push dispatch)

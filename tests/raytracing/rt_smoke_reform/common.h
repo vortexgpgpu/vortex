@@ -11,15 +11,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU reformation smoke — Phase 3-A2 (option A: same-sbt batching).
+// PRISM RTU reformation smoke — same-sbt batching.
 //
 // All N lanes belong to ONE warp and trace the SAME ray against the SAME
 // non-opaque triangle (sbt_idx = 0). The RtuCore yields an AHS callback
 // for every active lane; reformation_dispatch groups them by (warp_id,
 // sbt_idx) and emits a SINGLE CB_YIELD whose cb_mask covers all N lanes.
 // That trap runs one ACCEPT dispatcher for the whole virtual warp — the
-// SIMT-coherence win Phase 3-A2 exists to demonstrate. Per-lane HIT
-// status is then validated host-side.
+// SIMT-coherence win. Per-lane HIT status is then validated host-side.
 
 #ifndef _RTU_SMOKE_REFORM_COMMON_H_
 #define _RTU_SMOKE_REFORM_COMMON_H_

@@ -165,7 +165,7 @@ if [ -n "$copy_folder" ]; then
   # Files from extern dirs (-J). When preprocessing, run them through the
   # same path as everything else so their `include directives get inlined.
   # This makes the packaged output self-contained — downstream synthesis
-  # no longer needs the original third-party source tree on disk (e.g.
+  # does not need the third-party source tree on disk (e.g.
   # cvfpu's common_cells/*.svh headers, which IP packaging does not carry
   # along since they are reachable only via +incdir+).
   if [ "$preprocessor" != 0 ]; then

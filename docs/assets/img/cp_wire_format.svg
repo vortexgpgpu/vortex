@@ -1,0 +1,204 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 880" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+  </defs>
+  <style>
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .gt   { fill:#33404c; font-size:14px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .mono { font-family:"DejaVu Sans Mono", monospace; font-size:11px; fill:#1b2733; }
+    .hdr  { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .a0   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .a1   { fill:#dde9f3; stroke:#2e5e82; stroke-width:1.4; }
+    .a2   { fill:#cfe0ee; stroke:#2e5e82; stroke-width:1.4; }
+    .prof { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .pad  { fill:#f0f2f4; stroke:#9aa7b2; stroke-width:1.2; stroke-dasharray:4 3; }
+    .cl   { fill:none; stroke:#5a7184; stroke-width:1.8; }
+    .grp  { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.5; }
+    .tick { stroke:#9aa7b2; stroke-width:1; }
+    .w    { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="880" fill="#ffffff"/>
+  <text x="24" y="34" class="t">Command ABI — on-wire layout</text>
+  <text x="24" y="56" class="tt">Little-endian, byte-packed, never crosses a cache line. The host writes one 64 B line per doorbell today, but the format allows up to MAX_CMDS_PER_CL = 5.</text>
+
+  <!-- ============ 1. the 64 B cache line ============ -->
+  <text x="24" y="96" class="gt">A 64-byte ring slot</text>
+
+  <rect x="24" y="112" width="1216" height="56" class="cl"/>
+  <!-- byte ticks every 8 -->
+  <g class="tick">
+    <line x1="176" y1="112" x2="176" y2="168"/>
+    <line x1="328" y1="112" x2="328" y2="168"/>
+    <line x1="480" y1="112" x2="480" y2="168"/>
+    <line x1="632" y1="112" x2="632" y2="168"/>
+    <line x1="784" y1="112" x2="784" y2="168"/>
+    <line x1="936" y1="112" x2="936" y2="168"/>
+    <line x1="1088" y1="112" x2="1088" y2="168"/>
+  </g>
+  <text x="24" y="106" class="tt">byte 0</text>
+  <text x="168" y="106" class="tt">8</text>
+  <text x="320" y="106" class="tt">16</text>
+  <text x="472" y="106" class="tt">24</text>
+  <text x="624" y="106" class="tt">32</text>
+  <text x="776" y="106" class="tt">40</text>
+  <text x="928" y="106" class="tt">48</text>
+  <text x="1080" y="106" class="tt">56</text>
+  <text x="1216" y="106" class="tt">64</text>
+
+  <!-- example: a DCR_WRITE (20B) then a LAUNCH (12B) then padding -->
+  <rect x="24" y="112" width="76" height="56" class="hdr"/>
+  <text x="34" y="136" class="th">hdr</text>
+  <text x="34" y="152" class="tt">4 B</text>
+
+  <rect x="100" y="112" width="152" height="56" class="a0"/>
+  <text x="112" y="136" class="th">arg0 — dcr_addr</text>
+  <text x="112" y="152" class="tt">8 B @ offset 4 (unaligned)</text>
+
+  <rect x="252" y="112" width="152" height="56" class="a1"/>
+  <text x="264" y="136" class="th">arg1 — value</text>
+  <text x="264" y="152" class="tt">8 B @ offset 12</text>
+
+  <rect x="404" y="112" width="76" height="56" class="hdr"/>
+  <text x="414" y="136" class="th">hdr</text>
+  <text x="414" y="152" class="tt">4 B</text>
+
+  <rect x="480" y="112" width="152" height="56" class="a0"/>
+  <text x="492" y="136" class="th">arg0 (unused)</text>
+  <text x="492" y="152" class="tt">8 B @ offset 24</text>
+
+  <rect x="632" y="112" width="608" height="56" class="pad"/>
+  <text x="644" y="136" class="th" fill="#5a6772">zero padding — the end-of-line sentinel</text>
+  <text x="644" y="152" class="tt">a header with opcode == 0 and flags == 0 stops the walk</text>
+
+  <path d="M 24 182 L 404 182" class="w"/>
+  <path d="M 404 182 L 24 182" class="w"/>
+  <text x="150" y="198" class="ts">CMD_DCR_WRITE — cmd_size_bytes = 20</text>
+  <path d="M 404 182 L 632 182" class="w"/>
+  <path d="M 632 182 L 404 182" class="w"/>
+  <text x="440" y="198" class="ts">CMD_LAUNCH — 12</text>
+
+  <text x="24" y="228" class="ts">The fetcher walks the line by advancing offset += cmd_size_bytes(opcode, profiled) after each command. It ends the line on a zero header, on an unknown</text>
+  <text x="24" y="244" class="ts">opcode (its size is unknowable, so walking on would re-parse payload bytes as phantom commands), or when a command would overrun the 64 B boundary.</text>
+
+  <!-- ============ 2. the header ============ -->
+  <text x="24" y="292" class="gt">Command header (4 B)</text>
+
+  <rect x="24" y="308" width="608" height="52" class="hdr"/>
+  <line x1="176" y1="308" x2="176" y2="360" class="tick"/>
+  <line x1="328" y1="308" x2="328" y2="360" class="tick"/>
+  <text x="60" y="332" class="th">opcode [7:0]</text>
+  <text x="60" y="350" class="tt">byte 0</text>
+  <text x="212" y="332" class="th">flags [7:0]</text>
+  <text x="212" y="350" class="tt">byte 1</text>
+  <text x="404" y="332" class="th">reserved [15:0]</text>
+  <text x="404" y="350" class="tt">bytes 2..3</text>
+
+  <rect x="660" y="292" width="580" height="120" rx="6" class="grp"/>
+  <text x="674" y="313" class="th">Header flags</text>
+  <text x="674" y="333" class="ts">bit 0  F_PROFILE — appends an 8 B profile_slot trailer,</text>
+  <text x="700" y="349" class="ts">so every size below grows by 8</text>
+  <text x="674" y="367" class="ts">bit 1  F_FENCE_PRE — declared; not acted on</text>
+  <text x="674" y="385" class="ts">bit 2  F_MEM_PHYSICAL — CMD_MEM_* operand is a physical</text>
+  <text x="700" y="401" class="ts">address; the MMU-aware DMA skips translation (§8)</text>
+
+  <!-- ============ 3. size table ============ -->
+  <text x="24" y="452" class="gt">Payload slots actually on the wire, by opcode</text>
+
+  <g class="mono">
+    <!-- column headers -->
+    <text x="30" y="480" class="th">opcode</text>
+    <text x="250" y="480" class="th">size</text>
+    <text x="320" y="480" class="th">wire image (each cell = the bytes the ABI defines)</text>
+  </g>
+
+  <!-- rows -->
+  <g>
+    <text x="30" y="512" class="mono">CMD_NOP            0x00</text>
+    <text x="250" y="512" class="mono">4</text>
+    <rect x="320" y="498" width="76" height="20" class="hdr"/><text x="330" y="513" class="tt">hdr</text>
+
+    <text x="30" y="544" class="mono">CMD_FENCE          0x07</text>
+    <text x="250" y="544" class="mono">8</text>
+    <rect x="320" y="530" width="76" height="20" class="hdr"/><text x="330" y="545" class="tt">hdr</text>
+    <rect x="396" y="530" width="76" height="20" class="a0"/><text x="404" y="545" class="tt">arg0 (4 B)</text>
+
+    <text x="30" y="576" class="mono">CMD_LAUNCH         0x06</text>
+    <text x="250" y="576" class="mono">12</text>
+    <rect x="320" y="562" width="76" height="20" class="hdr"/><text x="330" y="577" class="tt">hdr</text>
+    <rect x="396" y="562" width="152" height="20" class="a0"/><text x="404" y="577" class="tt">arg0 — unused</text>
+
+    <text x="30" y="608" class="mono">CMD_CACHE_FLUSH    0x0A</text>
+    <text x="250" y="608" class="mono">12</text>
+    <rect x="320" y="594" width="76" height="20" class="hdr"/><text x="330" y="609" class="tt">hdr</text>
+    <rect x="396" y="594" width="152" height="20" class="a0"/><text x="404" y="609" class="tt">arg0 — num_cores</text>
+
+    <text x="30" y="640" class="mono">CMD_LAUNCH_QMD     0x0B</text>
+    <text x="250" y="640" class="mono">12</text>
+    <rect x="320" y="626" width="76" height="20" class="hdr"/><text x="330" y="641" class="tt">hdr</text>
+    <rect x="396" y="626" width="152" height="20" class="a0"/><text x="404" y="641" class="tt">arg0 — QMD desc addr</text>
+
+    <text x="30" y="672" class="mono">CMD_DRAW           0x0C</text>
+    <text x="250" y="672" class="mono">12</text>
+    <rect x="320" y="658" width="76" height="20" class="hdr"/><text x="330" y="673" class="tt">hdr</text>
+    <rect x="396" y="658" width="152" height="20" class="a0"/><text x="404" y="673" class="tt">arg0 — draw desc addr</text>
+
+    <text x="30" y="704" class="mono">CMD_DCR_WRITE      0x04</text>
+    <text x="250" y="704" class="mono">20</text>
+    <rect x="320" y="690" width="76" height="20" class="hdr"/><text x="330" y="705" class="tt">hdr</text>
+    <rect x="396" y="690" width="152" height="20" class="a0"/><text x="404" y="705" class="tt">arg0 — dcr_addr</text>
+    <rect x="548" y="690" width="152" height="20" class="a1"/><text x="556" y="705" class="tt">arg1 — value</text>
+
+    <text x="30" y="736" class="mono">CMD_DCR_READ       0x05</text>
+    <text x="250" y="736" class="mono">20</text>
+    <rect x="320" y="722" width="76" height="20" class="hdr"/><text x="330" y="737" class="tt">hdr</text>
+    <rect x="396" y="722" width="152" height="20" class="a0"/><text x="404" y="737" class="tt">arg0 — dcr_addr</text>
+    <rect x="548" y="722" width="152" height="20" class="a1"/><text x="556" y="737" class="tt">arg1 — tag</text>
+
+    <text x="30" y="768" class="mono">CMD_EVENT_SIGNAL   0x08</text>
+    <text x="250" y="768" class="mono">20</text>
+    <rect x="320" y="754" width="76" height="20" class="hdr"/><text x="330" y="769" class="tt">hdr</text>
+    <rect x="396" y="754" width="152" height="20" class="a0"/><text x="404" y="769" class="tt">arg0 — counter slot addr</text>
+    <rect x="548" y="754" width="152" height="20" class="a1"/><text x="556" y="769" class="tt">arg1 — value to write</text>
+
+    <text x="30" y="800" class="mono">CMD_EVENT_WAIT     0x09</text>
+    <text x="250" y="800" class="mono">28</text>
+    <rect x="320" y="786" width="76" height="20" class="hdr"/><text x="330" y="801" class="tt">hdr</text>
+    <rect x="396" y="786" width="152" height="20" class="a0"/><text x="404" y="801" class="tt">arg0 — counter slot addr</text>
+    <rect x="548" y="786" width="152" height="20" class="a1"/><text x="556" y="801" class="tt">arg1 — target</text>
+    <rect x="700" y="786" width="152" height="20" class="a2"/><text x="708" y="801" class="tt">arg2[1:0] — wait_op</text>
+
+    <text x="30" y="832" class="mono">CMD_MEM_WRITE/READ/COPY</text>
+    <text x="250" y="832" class="mono">28</text>
+    <rect x="320" y="818" width="76" height="20" class="hdr"/><text x="330" y="833" class="tt">hdr</text>
+    <rect x="396" y="818" width="152" height="20" class="a0"/><text x="404" y="833" class="tt">arg0 — dst</text>
+    <rect x="548" y="818" width="152" height="20" class="a1"/><text x="556" y="833" class="tt">arg1 — src</text>
+    <rect x="700" y="818" width="152" height="20" class="a2"/><text x="708" y="833" class="tt">arg2 — size in bytes</text>
+  </g>
+
+  <!-- profile trailer callout -->
+  <rect x="900" y="492" width="470" height="120" rx="6" class="grp"/>
+  <text x="914" y="513" class="th">The F_PROFILE trailer</text>
+  <text x="914" y="533" class="ts">When flags[0] is set, an 8 B profile_slot is appended at</text>
+  <text x="914" y="549" class="ts">offset (size - 8) and the size grows by 8. The decoder</text>
+  <text x="914" y="565" class="ts">reads it; the engine fires submit/start/end pulses —</text>
+  <text x="914" y="581" class="ts">but nothing writes a timestamp record back yet, and</text>
+  <text x="914" y="597" class="ts">VX_cp_profiling is not instantiated at all (§10).</text>
+
+  <rect x="900" y="628" width="470" height="152" rx="6" class="grp"/>
+  <text x="914" y="649" class="th">Two decoder subtleties worth knowing</text>
+  <text x="914" y="669" class="ts">1. arg0 sits at byte offset 4, so the 64-bit args are</text>
+  <text x="932" y="685" class="ts">not naturally aligned. This is a byte-packed format.</text>
+  <text x="914" y="705" class="ts">2. The decoder always reads three 8 B arg slots, even</text>
+  <text x="932" y="721" class="ts">for a 4 B NOP or an 8 B FENCE — so it over-reads into</text>
+  <text x="932" y="737" class="ts">the next command's bytes. Only the bytes covered by</text>
+  <text x="932" y="753" class="ts">cmd_size_bytes() are architecturally defined; FENCE</text>
+  <text x="932" y="769" class="ts">reads just arg0[1:0], which is inside its 8 B.</text>
+
+  <text x="24" y="866" class="tt">CMD_LAUNCH_QMD (0x0B) and CMD_DRAW (0x0C) are decoded by the Emulation CP only — VX_cp_pkg's opcode enum stops at CMD_CACHE_FLUSH, and its unpacker treats both as unknown (end-of-line).</text>
+</svg>

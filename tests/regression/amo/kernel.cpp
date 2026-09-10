@@ -2,6 +2,11 @@
 #include <vx_intrinsics.h>
 #include "common.h"
 
+// Retry bound for the local-memory LR/SC loop. High enough that genuine
+// contention between the harts of a group always resolves, low enough that a
+// store-conditional which never succeeds fails the case instead of hanging it.
+static const uint32_t LRSC_MAX_RETRIES = 4096;
+
 // All harts contend on a single shared word. Each test exercises a
 // different RVA primitive; the host validates the closed-form expected
 // final value against the post-run shared word, plus per-hart "observed
@@ -257,6 +262,145 @@ void kernel_self_consistency(kernel_arg_t* __UNIFORM__ arg) {
   per_hart[hid] = *p;  // plain load after the AMO: must observe the +1
 }
 
+// 13) LMEM AMOADD hammer.
+//   The same contention as test 0, moved onto local memory so the
+//   read-modify-write is resolved by the LMEM banks instead of the dcache.
+//   Local memory is per-workgroup and the host cannot read it, so each group's
+//   leader publishes its group's final count into its own slot of the per-hart
+//   buffer. Every hart contributes `iters` increments to exactly one group, so
+//   the published values sum to num_harts * iters however the groups are
+//   shaped -- a closed form that does not depend on the launch geometry.
+void kernel_amoadd_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto lmem     = (int32_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+
+  if (threadIdx.x == 0) {
+    *lmem = 0;
+  }
+  __syncthreads();
+
+  for (uint32_t i = 0; i < arg->iters; ++i) {
+    __atomic_fetch_add(lmem, 1, __ATOMIC_SEQ_CST);
+  }
+  __syncthreads();
+
+  if (threadIdx.x == 0) {
+    per_hart[hid] = (uint32_t)*lmem;
+  }
+}
+
+// 14) LMEM LR/SC counter.
+//   The lock-free retry of test 7, moved onto local memory so the reservation
+//   is resolved by the LMEM banks. Each group's leader publishes its group's
+//   final count, so the published values sum to num_harts * iters whatever the
+//   launch geometry -- the same closed form test 13 uses.
+//
+//   The retry is bounded. A store-conditional that never reports success would
+//   otherwise spin forever, and a test that hangs reports nothing; with the
+//   bound, the published total comes up short and the case fails.
+void kernel_lrsc_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto lmem     = (int32_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  // Slot 1 (byte offset 4) sits in the upper lane of a 64-bit hart's lmem
+  // bank word, so the contended loop exercises the sub-word LR/SC datapath
+  // and the SC-outcome lane; on a 32-bit hart it is an ordinary word.
+  auto counter  = &lmem[1];
+
+  if (threadIdx.x == 0) {
+    *counter = 0;
+  }
+  __syncthreads();
+
+  for (uint32_t i = 0; i < arg->iters; ++i) {
+    int32_t old, sc_fail;
+    uint32_t guard = 0;
+    do {
+      asm volatile ("lr.w %0, (%1)"
+                    : "=r"(old)
+                    : "r"(counter)
+                    : "memory");
+      int32_t newv = old + 1;
+      asm volatile ("sc.w %0, %2, (%1)"
+                    : "=r"(sc_fail)
+                    : "r"(counter), "r"(newv)
+                    : "memory");
+      ++guard;
+    } while (sc_fail && guard < LRSC_MAX_RETRIES);
+  }
+  __syncthreads();
+
+  if (threadIdx.x == 0) {
+    per_hart[hid] = (uint32_t)*counter;
+  }
+}
+
+#if VX_CFG_EXT_ZACAS_ENABLED
+// 15) Native compare-and-swap contention.
+//   Every hart races to claim each slot of a ladder with its own id, so for
+//   slot i exactly one hart sees the empty value and swaps, and the others see
+//   that winner's id. Each hart records how many slots it won.
+//
+//   The point is the per-hart return value, not just the final memory: a
+//   compare-and-swap that returned the wrong old word would still leave the
+//   ladder looking plausible while every loser believed it had won. The host
+//   checks that the wins across harts sum to exactly the number of slots.
+void kernel_cas_ladder(kernel_arg_t* __UNIFORM__ arg) {
+  auto shared   = (uint32_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  const uint32_t claim = hid + 1;   // 0 is the unclaimed marker
+  uint32_t wins = 0;
+
+  const uint32_t slots = (arg->iters < CAS_LADDER_SLOTS)
+                       ? arg->iters : CAS_LADDER_SLOTS;
+  for (uint32_t i = 0; i < slots; ++i) {
+    uint32_t expected = 0;
+    // Returns true only for the hart whose swap actually landed; `expected`
+    // is updated with the observed word either way.
+    if (__atomic_compare_exchange_n(&shared[i], &expected, claim, 0,
+                                    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+      ++wins;
+    }
+  }
+  per_hart[hid] = wins;
+}
+
+// 16) LMEM compare-and-swap ladder.
+//   The cas_ladder race moved onto local memory, so the swap and the old word
+//   it returns come from the LMEM banks. Each group races for its own ladder
+//   and exactly one of its harts wins each slot, so the win counts sum to
+//   groups * slots. The host cannot read local memory or the launch shape, so
+//   the group count rides with each leader's publish as a marker well above
+//   any possible win count -- the same closed-form idea as tests 13/14.
+void kernel_cas_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto lmem     = (uint32_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  const uint32_t claim = hid + 1;   // 0 is the unclaimed marker
+
+  const uint32_t slots = (arg->iters < CAS_LMEM_SLOTS)
+                       ? arg->iters : CAS_LMEM_SLOTS;
+  if (threadIdx.x == 0) {
+    for (uint32_t i = 0; i < slots; ++i) {
+      lmem[i] = 0;
+    }
+  }
+  __syncthreads();
+
+  uint32_t wins = 0;
+  for (uint32_t i = 0; i < slots; ++i) {
+    uint32_t expected = 0;
+    if (__atomic_compare_exchange_n(&lmem[i], &expected, claim, 0,
+                                    __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+      ++wins;
+    }
+  }
+  per_hart[hid] = wins + ((threadIdx.x == 0) ? CAS_LMEM_GROUP_MARK : 0);
+}
+#endif
+
 static const PFN_Kernel sc_tests[] = {
   kernel_amoadd,             // 0
   kernel_amoor,              // 1
@@ -271,6 +415,12 @@ static const PFN_Kernel sc_tests[] = {
   kernel_atomic_reduction,   // 10  CUDA-style reduction
   kernel_atomic_critical,    // 11  CUDA-style critical section
   kernel_self_consistency,   // 12  issuer self-consistency (load->AMO->load)
+  kernel_amoadd_lmem,        // 13  AMOADD on local memory (LMEM banks)
+  kernel_lrsc_lmem,          // 14  LR/SC on local memory (LMEM banks)
+#if VX_CFG_EXT_ZACAS_ENABLED
+  kernel_cas_ladder,         // 15  native compare-and-swap (Zacas amocas)
+  kernel_cas_lmem,           // 16  compare-and-swap on local memory (LMEM banks)
+#endif
 };
 
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {

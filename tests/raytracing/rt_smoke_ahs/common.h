@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU AHS-callback smoke — Phase 2.
+// PRISM RTU AHS-callback smoke.
 //
 // Scene format identical to rt_smoke; tri.flags bit 0 = OPAQUE. For
 // this test the lone triangle is marked NON-opaque so the RtuCore yields

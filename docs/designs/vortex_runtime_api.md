@@ -82,19 +82,11 @@ transition window was used). Deferred, out-of-scope-by-design:
    `vx_kernel_get_pointer_size` helper — only `get_max_block_size`
    shipped); scratch-pool growth/sizing; and external-client shim timing.
 
-**Superseded directions** (recorded to avoid revival): the phased
-dual-API / deprecated-shim rollout (Phase 1a/1b shims) — the API shipped
+**Superseded directions** (recorded to avoid revival): a phased
+dual-API / deprecated-shim rollout — the API shipped
 the final shape directly; and the kernel-handle disambiguation *tag* on
 `vx_launch_info_t.kernel` — replaced by the simpler `NULL` escape hatch.
 
-The PoCL `vortex2.h` API additions (event callbacks `vx_event_set_callback`
-and `vx_kernel_set_arg`/`set_local_arg`) requested by the retained
-`pocl_on_vortex2_proposal.md` are **not** in the header yet — see that
-proposal.
-
----
-
-## 4. Source proposal
-
-This design consolidates and supersedes `vortex2_v1_shape_lock_proposal.md`
-(now removed from `docs/proposals/`).
+The `vortex2.h` API additions needed by the PoCL backend (event callbacks
+`vx_event_set_callback` and `vx_kernel_set_arg`/`set_local_arg`) are
+**not** in the header yet.

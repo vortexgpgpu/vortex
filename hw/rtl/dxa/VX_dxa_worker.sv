@@ -20,7 +20,7 @@
 module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter WORKER_ID = 0,
-    parameter GMEM_TAG_WIDTH = L1_MEM_ARB_TAG_WIDTH
+    parameter GMEM_TAG_WIDTH = SOCKET_MEM_TAG_WIDTH
 ) (
     input wire clk,
     input wire reset,

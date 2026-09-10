@@ -26,26 +26,37 @@
 #include <stringutil.h>
 #include <VX_config.h>
 #include <VX_types.h>
+
+// Simulation-kernel selection for the SimX build. The component-facing API
+// (SimObject, SimChannel, SimEventLink, SimPlatform) is identical in both
+// kernels; -DSIMX_FUNCTIONAL (set via build CONFIGS, uniform across every
+// object in a build) selects the functional kernel, which disables timing
+// simulation (unit latency, no back-pressure) for full-speed architectural
+// runs. Each kernel's symbols differ at link time, so mixing objects built
+// against different kernels fails loudly instead of violating ODR.
+#ifdef SIMX_FUNCTIONAL
+#include <simobject_functional.h>
+#else
 #include <simobject.h>
+#endif
+
+#include <regslice.h>
 #include <bitvector.h>
 #include <iostream>
 #include "debug.h"
+
+// Worker-thread count for the lockstep executor, set by the build system
+// (e.g. CONFIGS="-DSIMX_MT=4"); 0 or 1 selects serial execution. Resolved
+// here into a typed constant and handed to the kernel at platform setup —
+// the kernel headers themselves are knob-free.
+#ifndef SIMX_MT
+#define SIMX_MT 0
+#endif
 #include "constants.h"
 
-// The graphics register window (the SETW / GETW / GETWF per-(warp,lane,slot)
-// slot file) is shared by all fixed-function consumers: the RTU streams the ray
-// / hit window through it, TEX (vx_tex4) reads its u,v payload and writes its
-// texel, and OM (vx_om4) reads its quad payload. It is therefore available
-// whenever ANY of those blocks is built — decoupled from the RTU. This mirrors
-// the RTL, where VX_gfx_window_pkg.sv lives at the SFU level, not inside the RTU
-// core. The RtuType op set (which carries SETW/GETW/GETWF alongside the
-// RTU-only CB_RET/TRACE2/WAIT2) and IntrRtuArgs are gated on this macro; the
-// RTU-only ops are still only *decoded* under VX_CFG_EXT_RTU_ENABLE.
-#if defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE)
-#define VX_GFX_WINDOW_ENABLE
-#endif
-
 namespace vortex {
+
+constexpr uint32_t SIMX_NUM_WORKERS = (SIMX_MT > 1) ? SIMX_MT : 1;
 
 // One memory block (a cache line / DRAM transfer unit). Carried by
 // MemReq/MemRsp in TLM data-path mode. Use `shared_ptr<mem_block_t>` so
@@ -407,13 +418,17 @@ enum class MemOp : uint8_t {
   // `flags.amo_unsigned` for AMOMINU/AMOMAXU and the AMO ALU branches on it.
   AMO_MIN   = 10,
   AMO_MAX   = 11,
+  // Compare-and-swap. Kept last so the range checks below stay contiguous;
+  // it is the only atomic that reads a third operand (the comparand, which
+  // the instruction takes from rd).
+  AMO_CAS   = 12,
 };
 
 inline bool memop_is_atomic(MemOp op) {
-  return op >= MemOp::AMO_LR && op <= MemOp::AMO_MAX;
+  return op >= MemOp::AMO_LR && op <= MemOp::AMO_CAS;
 }
 inline bool memop_is_amo_rmw(MemOp op) {
-  return op >= MemOp::AMO_SWAP && op <= MemOp::AMO_MAX;
+  return op >= MemOp::AMO_SWAP && op <= MemOp::AMO_CAS;
 }
 inline bool memop_is_write(MemOp op) {
   return op == MemOp::ST || op == MemOp::AMO_SC || memop_is_amo_rmw(op);
@@ -474,6 +489,7 @@ inline std::ostream &operator<<(std::ostream &os, const MemOp& op) {
   case MemOp::AMO_XOR:   os << "AMO_XOR"; break;
   case MemOp::AMO_MIN:   os << "AMO_MIN"; break;
   case MemOp::AMO_MAX:   os << "AMO_MAX"; break;
+  case MemOp::AMO_CAS:   os << "AMO_CAS"; break;
   default:               os << "?MemOp" << (int)op; break;
   }
   return os;
@@ -490,7 +506,8 @@ enum class AmoType {
   AMOMIN,
   AMOMAX,
   AMOMINU,
-  AMOMAXU
+  AMOMAXU,
+  AMOCAS
 };
 
 struct IntrAmoArgs {
@@ -633,10 +650,7 @@ inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
 enum class TexType { SAMPLE };
 
 struct IntrTexArgs {
-  uint32_t stage : 2;     // texture stage
-  uint32_t is_tex4 : 1;   // 0 = vx_tex (R4), 1 = vx_tex4 (window, R-type)
-  uint32_t mode : 1;      // vx_tex4: 0 = single, 1 = quad (hardware LOD)
-  uint32_t out_slot : 5;  // vx_tex4: texel output window slot (funct7[6:2])
+  uint32_t stage : 2;     // texture stage (funct2)
 };
 
 inline std::ostream &operator<<(std::ostream &os, const TexType& type) {
@@ -651,13 +665,17 @@ inline std::ostream &operator<<(std::ostream &os, const TexType& type) {
 
 #ifdef VX_CFG_EXT_OM_ENABLE
 
-enum class OmType { WRITE };
+enum class OmType { EXPORT };
 
-struct IntrOmArgs {};
+struct IntrOmArgs {
+  // vx_om_export only: bit 0 = colour, bit 1 = depth. A shader emits colour only
+  // (early-Z owns depth), depth only (z-prepass), or both (gl_FragDepth).
+  uint32_t export_mask = 0;
+};
 
 inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
   switch (type) {
-  case OmType::WRITE: os << "OM"; break;
+  case OmType::EXPORT: os << "OM_EXPORT"; break;
   default: os << "?"; break;
   }
   return os;
@@ -666,7 +684,7 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 #endif
 
 
-#ifdef VX_GFX_WINDOW_ENABLE
+#ifdef VX_CFG_EXT_RTU_ENABLE
 
 // RTU (Ray-Tracing Unit) — PRISM ops.
 // All share CUSTOM1 / funct3=5; sub-op (funct2) selects.
@@ -674,39 +692,32 @@ inline std::ostream &operator<<(std::ostream &os, const OmType& type) {
 //   sub-op=1 GET    read one RTU reg
 //   sub-op=2 TRACE  async ray issue; returns handle
 //   sub-op=3 WAIT   block on handle; returns terminal status
-//   sub-op=4 CB_RET Phase 2: release a yielded ray with an action code
+//   sub-op=4 CB_RET release a yielded ray with an action code
 //                   (ACCEPT / IGNORE / TERMINATE). rs1 = action.
-enum class RtuType {
-  SETW,       // funct3=6 sub1: in-trap callback regfile write (§5.5)
+enum class GfxwType {
   CB_RET,     // funct3=6 sub0: release a parked callback context
-  TRACE2,   // ISA v2: single-issue trace macro-op (rtu_isa_v2_proposal.md §5.1)
-  WAIT2,    // SINGLE-OP block — parks until terminal, returns status
-            // (reuses the v1 park/revive so it survives an async callback trap)
+  TRACE,    // single-issue trace macro-op (expands to CFG/ORIGIN/DIR/ARM uops)
+  WAIT,     // single-op block — parks until terminal, returns status
+            // (parks/revives so it survives an async callback trap)
   GETWF,    // FP windowed regfile read (collapses N contiguous
-            // float-slot vx_rt_get into one macro-op; callback read path §5.5)
-  GETW,     // GP twin of GETWF (integer slots, no NaN-box). vx_rt_wait2
-            // reads t/u/v via GETWF and the IDs via GETW after the WAIT2 block.
-  GETWS,    // GP windowed read, but the window's warp dimension is indexed by
-            // rs1 (block_idx/slot) instead of the executing wid — the FWD-v2
-            // fragment-record read (funct3=4). Decouples the read from the
-            // minted warp-id so the raster unit seeds by slot.
+            // float-slot vx_rt_get into one macro-op; callback read path)
+  GETW,     // GP twin of GETWF (integer slots, no NaN-box). vx_rt_wait
+            // reads t/u/v via GETWF and the IDs via GETW after the WAIT block.
 };
 
-struct IntrRtuArgs {
-  uint32_t slot  : 6;  // RTU register-file slot ID; GETWF: window start slot
-  uint32_t uop   : 4;  // macro-op micro-op index (TRACE2/WAIT2/GETWF)
+struct IntrGfxwArgs {
+  uint32_t slot  : 6;  // hit-window slot ID; GETWF: window start slot
+  uint32_t uop   : 4;  // macro-op micro-op index (TRACE/WAIT/GETWF)
   uint32_t count : 4;  // GETWF: number of contiguous slots in the window (1..8)
 };
 
-inline std::ostream &operator<<(std::ostream &os, const RtuType& type) {
+inline std::ostream &operator<<(std::ostream &os, const GfxwType& type) {
   switch (type) {
-  case RtuType::SETW:   os << "RT.SETW";   break;
-  case RtuType::CB_RET: os << "RT.CB_RET"; break;
-  case RtuType::TRACE2: os << "RT.TRACE2"; break;
-  case RtuType::WAIT2:  os << "RT.WAIT2";  break;
-  case RtuType::GETWF:  os << "RT.GETWF";  break;
-  case RtuType::GETW:   os << "RT.GETW";   break;
-  case RtuType::GETWS:  os << "RT.GETWS";  break;
+  case GfxwType::CB_RET: os << "GFXW.CB_RET"; break;
+  case GfxwType::TRACE: os << "GFXW.TRACE"; break;
+  case GfxwType::WAIT:  os << "GFXW.WAIT";  break;
+  case GfxwType::GETWF:  os << "GFXW.GETWF";  break;
+  case GfxwType::GETW:   os << "GFXW.GETW";   break;
   default: os << "?"; break;
   }
   return os;
@@ -816,8 +827,8 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_OM_ENABLE
 , OmType
 #endif
-#ifdef VX_GFX_WINDOW_ENABLE
-, RtuType
+#ifdef VX_CFG_EXT_RTU_ENABLE
+, GfxwType
 #endif
 >;
 
@@ -843,8 +854,8 @@ using IntrArgs = std::variant<
 #ifdef VX_CFG_EXT_OM_ENABLE
 , IntrOmArgs
 #endif
-#ifdef VX_GFX_WINDOW_ENABLE
-, IntrRtuArgs
+#ifdef VX_CFG_EXT_RTU_ENABLE
+, IntrGfxwArgs
 #endif
 >;
 
@@ -1117,6 +1128,9 @@ struct LsuReq {
   std::vector<uint64_t> addrs;
   std::vector<std::shared_ptr<mem_block_t>> data;
   std::vector<uint64_t> byteen;
+  // Comparand per lane. Only compare-and-swap reads it; it is a separate
+  // field because the data operand is already carrying the swap value.
+  std::vector<uint64_t> amo_cmp;
   BitVector<> mask;
   std::vector<uint32_t> tids;
   uint32_t tag;
@@ -1130,6 +1144,7 @@ struct LsuReq {
     , addrs(size, 0)
     , data(size)
     , byteen(size, 0)
+    , amo_cmp(size, 0)
     , mask(size)
     , tids(size, 0)
     , tag(0)
@@ -1203,6 +1218,7 @@ inline MemOp amo_to_memop(AmoType t) {
   case AmoType::AMOMINU: return MemOp::AMO_MIN;
   case AmoType::AMOMAX:
   case AmoType::AMOMAXU: return MemOp::AMO_MAX;
+  case AmoType::AMOCAS:  return MemOp::AMO_CAS;
   }
   std::abort();
 }
@@ -1228,6 +1244,9 @@ struct MemReq {
   uint64_t addr;
   std::shared_ptr<mem_block_t> data;
   uint64_t byteen = 0;
+  // Comparand, read only by compare-and-swap. The data block carries the
+  // swap value, so the comparand needs a field of its own.
+  uint64_t amo_cmp = 0;
   uint32_t tag;
   uint32_t hart_id;
   uint64_t uuid;
@@ -1411,15 +1430,6 @@ public:
     channel_.pop();
   }
 
-protected:
-  void on_reset() {
-    //--
-  }
-
-  void on_tick() {
-    //--
-  }
-
 private:
   SimChannel<Type> channel_;
   uint32_t delay_;
@@ -1463,7 +1473,7 @@ public:
     , Inputs(num_inputs, this)
     , Outputs(num_outputs, this)
     , delay_(delay)
-    , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
+    , lg2_num_reqs_(log2ceil((num_inputs + num_outputs - 1) / num_outputs))
     , arbiters_(num_outputs, {type, 1u << lg2_num_reqs_})
   {
     assert(num_inputs <= 64);
@@ -1512,9 +1522,12 @@ void TxArbiter<Type>::on_tick() {
   uint32_t O = Outputs.size();
   uint32_t R = 1 << lg2_num_reqs_;
 
-  // skip bypass mode
-  if (I == O)
+  // bypass mode: inputs are forwarded to outputs at bind time; this object
+  // never has per-cycle work.
+  if (I == O) {
+    this->tick_sleep();
     return;
+  }
 
   // process inputs
   for (uint32_t o = 0; o < O; ++o) {
@@ -1535,6 +1548,16 @@ void TxArbiter<Type>::on_tick() {
         req_in.pop();
       }
     }
+  }
+
+  // sleep when no input holds a queued or in-flight request; any reserve()
+  // toward an input channel re-arms the tick.
+  bool idle = true;
+  for (uint32_t i = 0; i < I; ++i) {
+    idle &= (Inputs.at(i).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
   }
 }
 
@@ -1623,8 +1646,10 @@ template <typename Type>
 void TxCrossBar<Type>::on_tick() {
   uint32_t I = Inputs.size();
   uint32_t O = Outputs.size();
-  if (I == 1 && O == 1)
+  if (I == 1 && O == 1) {
+    this->tick_sleep();
     return;
+  }
 
   // process incoming requests
   for (uint32_t o = 0; o < O; ++o) {
@@ -1659,6 +1684,14 @@ void TxCrossBar<Type>::on_tick() {
       collisions_ += has_collision;
     }
   }
+
+  bool idle = true;
+  for (uint32_t i = 0; i < I; ++i) {
+    idle &= (Inputs.at(i).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1692,7 +1725,7 @@ public:
     , RspIn(num_outputs, this)
     , arbiter_(nullptr)
     , rsp_delay_(rsp_delay)
-    , lg2_num_reqs_(log2ceil(num_inputs / num_outputs))
+    , lg2_num_reqs_(log2ceil((num_inputs + num_outputs - 1) / num_outputs))
   {
     if (num_inputs != num_outputs) {
       arbiter_ = ReqArb::Create(name, type, num_inputs, num_outputs, req_delay);
@@ -1747,13 +1780,17 @@ protected:
 
 template <typename Req, typename Rsp>
 void TxRxArbiter<Req, Rsp>::on_tick() {
-  if (!arbiter_)
+  // bypass mode: all channels are forwarded at bind time.
+  if (!arbiter_) {
+    this->tick_sleep();
     return;
+  }
 
   uint32_t O = ReqOut.size();
   uint32_t R = 1 << lg2_num_reqs_;
 
   // process outgoing responses
+  bool idle = true;
   for (uint32_t o = 0; o < O; ++o) {
     auto& rsp_in = RspIn.at(o);
     if (!rsp_in.empty()) {
@@ -1770,6 +1807,10 @@ void TxRxArbiter<Req, Rsp>::on_tick() {
         rsp_in.pop();
       }
     }
+    idle &= (rsp_in.size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
   }
 }
 
@@ -1867,8 +1908,11 @@ protected:
 
 template <typename Req, typename Rsp>
 void TxRxCrossBar<Req, Rsp>::on_tick() {
-  if (!crossbar_)
+  // bypass mode: all channels are forwarded at bind time.
+  if (!crossbar_) {
+    this->tick_sleep();
     return;
+  }
 
   uint32_t I = ReqIn.size();
   uint32_t O = ReqOut.size();
@@ -1904,10 +1948,46 @@ void TxRxCrossBar<Req, Rsp>::on_tick() {
       }
     }
   }
+
+  bool idle = true;
+  for (uint32_t o = 0; o < O; ++o) {
+    idle &= (RspIn.at(o).size() == 0);
+  }
+  if (idle) {
+    this->tick_sleep();
+  }
 }
+
+///////////////////////////////////////////////////////////////////////////////
+
+// Global-barrier control messages, carried on core <-> cluster event links.
+struct GbarArrive {
+  uint32_t bar_id;
+  uint32_t count;
+  uint32_t core_id;
+};
+
+struct GbarResume {
+  uint32_t bar_id;
+};
+
+// Fragment-work-distributor control messages, carried on raster-core <-> core
+// event links.
+struct FwdArm {
+  Word frag_entry;
+  Word frag_param;
+};
+
+struct FwdDone {
+  uint32_t core_id;
+};
+
+///////////////////////////////////////////////////////////////////////////////
 
 using LsuArbiter  = TxRxArbiter<LsuReq, LsuRsp>;
 using MemArbiter  = TxRxArbiter<MemReq, MemRsp>;
 using MemCrossBar = TxRxCrossBar<MemReq, MemRsp>;
+using MemReqSlice = RegSlice<MemReq>;
+using MemRspSlice = RegSlice<MemRsp>;
 
 }

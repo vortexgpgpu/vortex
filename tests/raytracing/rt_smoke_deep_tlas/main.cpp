@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU deep multi-instance TLAS smoke — I6(b) host driver.
+// PRISM RTU deep multi-instance TLAS smoke — host driver.
 //
 // A TLAS with NUM_INST instances, each referencing the SAME deep BLAS (a stack
 // of triangles that builds a multi-level CW-BVH4 deeper than the short stack the
@@ -20,10 +20,10 @@
 // FARTHEST and the LAST instance is the CLOSEST. A +z ray hits every instance's
 // every triangle; the true closest hit is the last instance's nearest triangle.
 //
-// Each BLAS descent overflows the short stack and must restart (§8.5.1). With a
-// single per-ray-global restart budget the deep FIRST instance exhausts it, so
-// the closest (LAST) instance drops subtrees and returns a FARTHER hit. The
-// I6(b) fix resets the restart budget on every instance/BLAS entry, so every
+// Each BLAS descent overflows the short stack and must restart. With a
+// single per-ray-global restart budget the deep FIRST instance would exhaust it,
+// so the closest (LAST) instance would drop subtrees and return a FARTHER hit.
+// The restart budget is reset on every instance/BLAS entry, so every
 // instance gets a full budget and the walker returns the true closest hit —
 // matching the SimX oracle (unbounded stack). Runs on simx AND rtlsim; both must
 // agree on (t, prim, instance).

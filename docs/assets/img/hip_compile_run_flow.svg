@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 640" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .intree { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.8; }
+    .ext    { fill:#fdf6e3; stroke:#b58900; stroke-width:1.6; }
+    .t   { fill:#1b2733; font-size:18px; font-weight:bold; }
+    .th  { fill:#1b2733; font-size:14px; font-weight:bold; }
+    .ts  { fill:#44525f; font-size:12px; }
+    .tt  { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .flow { stroke:#444; stroke-width:1.9; fill:none; marker-end:url(#arr); }
+    .lbl  { fill:#33404c; font-size:11.5px; }
+    .lblg { fill:#8a6d00; font-size:11.5px; }
+  </style>
+
+  <rect x="0" y="0" width="940" height="640" fill="#ffffff"/>
+  <text x="24" y="34" class="t">HIP on Vortex — compile and run path</text>
+  <text x="24" y="56" class="ts">chipStar → SPIR-V → POCL → Vortex   (both rv32 and rv64)</text>
+
+  <!-- legend -->
+  <rect x="640" y="26" width="16" height="16" class="intree"/>
+  <text x="662" y="39" class="ts">in-tree (Vortex repo)</text>
+  <rect x="640" y="48" width="16" height="16" class="ext"/>
+  <text x="662" y="61" class="ts">external ($TOOLDIR toolchain)</text>
+
+  <!-- 1: HIP source -->
+  <rect x="210" y="82" width="380" height="56" rx="6" class="intree"/>
+  <text x="400" y="105" class="th" text-anchor="middle">main.cpp  (HIP)</text>
+  <text x="400" y="124" class="ts" text-anchor="middle">__global__ kernels · hipMalloc / hipMemcpy / &lt;&lt;&lt; &gt;&gt;&gt;</text>
+  <text x="610" y="114" class="lbl">tests/hip/{vecadd,sgemm,histogram,atomicreduce}</text>
+  <path d="M 400 138 L 400 168" class="flow"/>
+
+  <!-- 2: chipStar hipcc -->
+  <rect x="210" y="168" width="380" height="90" rx="6" class="ext"/>
+  <text x="400" y="191" class="th" text-anchor="middle">chipStar hipcc</text>
+  <text x="400" y="211" class="ts" text-anchor="middle">clang++ (llvm-vortex) → device.spv  (Physical32/64)</text>
+  <text x="400" y="229" class="ts" text-anchor="middle">host ELF embeds the SPIR-V fatbin, links libCHIP.so</text>
+  <text x="400" y="248" class="tt" text-anchor="middle">--offload-pointer-width=$XLEN  rewrites the .hipInfo triple</text>
+  <path d="M 400 258 L 400 288" class="flow"/>
+
+  <!-- 3: libCHIP -> POCL -->
+  <rect x="210" y="288" width="380" height="66" rx="6" class="ext"/>
+  <text x="400" y="311" class="th" text-anchor="middle">libCHIP.so  (CHIP_BE=opencl)</text>
+  <text x="400" y="330" class="ts" text-anchor="middle">HIP host calls → OpenCL; ocl-icd loader finds the</text>
+  <text x="400" y="347" class="ts" text-anchor="middle">POCL Vortex platform via OCL_ICD_VENDORS</text>
+  <path d="M 400 354 L 400 384" class="flow"/>
+
+  <!-- 4: POCL JIT -->
+  <rect x="210" y="384" width="380" height="66" rx="6" class="ext"/>
+  <text x="400" y="407" class="th" text-anchor="middle">POCL — JIT the SPIR-V</text>
+  <text x="400" y="426" class="ts" text-anchor="middle">SPIR-V → riscv$XLEN → .vxbin</text>
+  <text x="400" y="443" class="tt" text-anchor="middle">clang + vxbin.py  ·  POCL_VORTEX_XLEN=$XLEN</text>
+  <path d="M 400 450 L 400 480" class="flow"/>
+
+  <!-- 5: libvortex runtime -->
+  <rect x="210" y="480" width="380" height="66" rx="6" class="intree"/>
+  <text x="400" y="503" class="th" text-anchor="middle">libvortex.so</text>
+  <text x="400" y="522" class="ts" text-anchor="middle">executes the .vxbin on the selected driver</text>
+  <text x="400" y="539" class="tt" text-anchor="middle">simx · rtlsim · opae · xrt</text>
+
+  <text x="24" y="600" class="lblg">The Vortex sw/ runtime tree is untouched by HIP — hipcc, libCHIP.so, the device libs,</text>
+  <text x="24" y="617" class="lblg">the SPIR-V→Vortex lowering, and POCL all live in $TOOLDIR, installed by CI.</text>
+</svg>

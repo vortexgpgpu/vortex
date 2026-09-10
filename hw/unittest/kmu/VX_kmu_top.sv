@@ -34,6 +34,9 @@ module VX_kmu_top import VX_gpu_pkg::*;
     assign kmu_bus_if.ready = 1'b1;
 
     `UNUSED_VAR (kmu_bus_if.valid)
+    `UNUSED_VAR (kmu_bus_if.kind)
+    `UNUSED_VAR (kmu_bus_if.eop)
+    `UNUSED_VAR (kmu_bus_if.dest)
     `UNUSED_VAR (kmu_bus_if.data)
 
     wire kmu_busy;

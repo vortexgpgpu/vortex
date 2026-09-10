@@ -13,8 +13,17 @@
 
 #pragma once
 
-#include <simobject.h>
+#include "types.h"
 #include "cache.h"
+#ifdef VX_CFG_EXT_DXA_ENABLE
+#include "dxa_core.h"
+#endif
+#ifdef VX_CFG_EXT_TEX_ENABLE
+#include "tex_core.h"
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#include "rtu_core.h"
+#endif
 
 namespace vortex {
 
@@ -26,6 +35,17 @@ public:
   struct PerfStats {
     Cache::PerfStats icache;
     Cache::PerfStats dcache;
+#ifdef VX_CFG_EXT_DXA_ENABLE
+    DxaCore::PerfStats dxa;
+#endif
+#ifdef VX_CFG_EXT_TEX_ENABLE
+    TexCore::PerfStats tex;
+    Cache::PerfStats   tcache;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+    RtuCore::PerfStats rtu;
+    Cache::PerfStats   rtcache;
+#endif
   };
 
   std::vector<SimChannel<MemReq>> mem_req_out;
@@ -46,10 +66,6 @@ public:
 
   int get_exitcode() const;
 
-  void global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
-
-  void global_barrier_resume(uint32_t bar_id, uint32_t core_id);
-
   PerfStats perf_stats() const;
 
   int dcr_write(uint32_t addr, uint32_t value);
@@ -65,10 +81,25 @@ public:
   bool dcache_flush_done() const;
   void icache_flush_begin();
   bool icache_flush_done() const;
+#ifdef VX_CFG_EXT_TEX_ENABLE
+  void tcache_flush_begin();
+  bool tcache_flush_done() const;
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  void rtcache_flush_begin();
+  bool rtcache_flush_done() const;
+#endif
+
+#ifdef VX_CFG_EXT_DXA_ENABLE
+  DxaCore::Ptr& dxa_core();
+#endif
+
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  RtuCore::Ptr& rtu_core();
+#endif
 
 protected:
   void on_reset();
-  void on_tick();
 
 private:
   uint32_t socket_id_;

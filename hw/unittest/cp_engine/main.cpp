@@ -219,20 +219,27 @@ static uint64_t run_one_cmd(vl_simulator<T>& sim, uint64_t& tick,
         sim->event_done_i = 0;
     }
 
-    // ----- RETIRE cycle: retire_evt high, seqnum still old value -----
+    // ----- RETIRE cycle: retire_evt high, payload is the POST-retire count -----
+    // retire_seqnum carries prior+1: the value Q_SEQNUM reads once this
+    // handshake fires. It used to carry the pre-increment value, which put
+    // the completion line permanently one retire behind the MMIO register --
+    // on silicon that read as an interconnect mystery for a whole night.
     sim->eval();
     EXPECT(sim->retire_evt == 1, "retire_evt did not fire");
-    EXPECT(sim->retire_seqnum == prior_seqnum, "seqnum should not yet have advanced");
+    EXPECT(sim->retire_seqnum == prior_seqnum + 1, "retire payload must be the post-retire count");
     EXPECT((sim->end_evt != 0) == prof, "end_evt mismatch");
     if (prof) {
         EXPECT(sim->profile_slot == 0xDEADBEEFull, "profile_slot did not propagate");
     }
     cycle(sim, tick);
 
-    // After RETIRE, FSM is IDLE and seqnum has incremented.
+    // After RETIRE, FSM is IDLE and the internal counter has incremented,
+    // so the NEXT retire's payload will be prior+2. (retire_seqnum is
+    // internal-counter + 1; between retires its value is only meaningful as
+    // that relationship.)
     sim->eval();
     EXPECT(sim->cmd_in_ready == 1, "engine did not return to IDLE");
-    EXPECT(sim->retire_seqnum == prior_seqnum + 1, "seqnum did not increment");
+    EXPECT(sim->retire_seqnum == prior_seqnum + 2, "internal seqnum did not increment");
     EXPECT(sim->retire_evt == 0, "retire_evt should not stick");
 
     return prior_seqnum + 1;

@@ -75,7 +75,8 @@ public:
 
   void configure(const OMDCRS& dcrs) {
     depthStencil_.configure(dcrs);
-    blender_.configure(dcrs);
+    // This model draws to one colour attachment.
+    blender_.configure(dcrs, 0);
 
     zbuf_baseaddr_ = uint64_t(dcrs.read(VX_DCR_OM_ZBUF_ADDR)) << 6;
     zbuf_pitch_    = dcrs.read(VX_DCR_OM_ZBUF_PITCH);

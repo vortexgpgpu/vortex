@@ -60,11 +60,11 @@ per-feature edits.
 1. **Posted writes / store responses** (out of scope): `rw` stays a bit
    today; a `MEM_OP`-style posted-write encoding is future.
 2. **Per-level (L2/L3) distinct attribute typedefs** — the as-built uses
-   one unified `mem_bus_attr_t` everywhere; the proposal's separate
+   one unified `mem_bus_attr_t` everywhere; separate
    `l2_bus_attr_t`/`l3_bus_attr_t` aliases were not needed.
 3. **`VX_axi_adapter` attr→AxUSER 1:1 mapping** — propagating the
    attribute onto AXI `AxUSER` at the platform boundary is unverified.
-4. **Standalone validation matrix** (Stage F): a `VX_mem_scheduler`
+4. **Standalone validation matrix**: a `VX_mem_scheduler`
    unit test building without `EXT_A_ENABLED`, plus `amo`/`dxa_copy`
    smoke — a test checklist not encoded in source.
 
@@ -76,14 +76,6 @@ typedefs with `DCACHE_ATTR_*_OFF` (collapsed to a single unified
 also folded cache-flush into `mem_bus_attr_t.is_flush` rather than a
 separate `MEM_REQ_FLAG_FLUSH`.
 
-This redesign delivered the same end as the abandoned
-`amo_packing_optimization` Part-A `mem_op_e` route (AMO-clean library IP),
-by the attribute-passthrough mechanism instead — see
+The attribute-passthrough mechanism is what keeps the library IP
+AMO-clean — see
 [`atomic_memory_operations.md`](atomic_memory_operations.md) §6.
-
----
-
-## 4. Source proposal
-
-This design consolidates and supersedes `libs_feature_agnostic_redesign.md`
-(now removed from `docs/proposals/`).

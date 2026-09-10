@@ -32,9 +32,6 @@
 //             (c0 reads / c1 writes) via VX_membus_from_axi + a small
 //             CCI-P bridge. This is the only user of CCI-P c0/c1, and the
 //             only host<->device DMA on the platform.
-//
-// The legacy STATE_* command FSM, the legacy CCI-P DMA engine, and the
-// legacy MMIO command/caps/DCR surface were removed — the CP replaces them.
 // ============================================================================
 
 module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_gpu_pkg::*; #(
@@ -170,6 +167,47 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         end
     end
 
+    // Device soft reset //////////////////////////////////////////////////////
+
+    localparam MMIO_RESET = `AFU_IMAGE_MMIO_RESET;
+
+    reg [`VX_CFG_RESET_DELAY-1:0] vx_reset_shift_r;
+    wire vx_reset;
+
+    initial begin
+        vx_reset_shift_r = {`VX_CFG_RESET_DELAY{1'b1}};
+    end
+    assign vx_reset = vx_reset_shift_r[`VX_CFG_RESET_DELAY-1];
+
+    // Host soft-reset request — MMIO write to MMIO_RESET with bit 0 set.
+    // Reads of the same register return 1 while the sequence is in flight.
+    reg soft_reset_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            soft_reset_r <= 1'b0;
+        end else begin
+            soft_reset_r <= cp2af_sRxPort.c0.mmioWrValid
+                         && (MMIO_RESET == mmio_req_hdr.address)
+                         && cp2af_sRxPort.c0.data[0];
+        end
+    end
+
+    // Vortex reset-delay shift register, reloaded by the platform reset or
+    // by a host soft-reset request.
+    always @(posedge clk) begin
+        if (reset || soft_reset_r) begin
+            vx_reset_shift_r <= {`VX_CFG_RESET_DELAY{1'b1}};
+        end else begin
+            vx_reset_shift_r <= {vx_reset_shift_r[`VX_CFG_RESET_DELAY-2:0], 1'b0};
+        end
+    end
+
+    // Soft-resettable subsystem domain: every block holding state that must
+    // clear on a device soft reset (CP command state, shared memory
+    // plumbing). The MMIO path stays on `reset` alone so the reset status
+    // register remains readable during the sequence.
+    wire subsys_reset = reset || vx_reset;
+
 `ifdef SCOPE
 
     localparam MMIO_SCOPE_READ  = `AFU_IMAGE_MMIO_SCOPE_READ;
@@ -230,8 +268,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         $assertoff;
     end
     always @(posedge clk) begin
-        if (reset) begin
+        if (reset || vx_reset) begin
             assert_delay_ctr <= '0;
+            $assertoff;
         end else begin
             assert_delay_ctr <= assert_delay_ctr + $bits(assert_delay_ctr)'(1);
             if (assert_delay_ctr == (`VX_CFG_RESET_DELAY-1)) begin
@@ -276,6 +315,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                 mmio_rsp.data <= cmd_scope_rdata;
             end
         `endif
+            MMIO_RESET: begin
+                mmio_rsp.data <= 64'(vx_reset || soft_reset_r);
+            end
             default: begin
                 mmio_rsp.data <= 64'h0;
             `ifdef DBG_TRACE_AFU
@@ -294,27 +336,10 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     end
 `endif
 
-    // Vortex reset shift ////////////////////////////////////////////////////
+    // Command Processor //////////////////////////////////////////////////////
 
-    reg [`VX_CFG_RESET_DELAY-1:0] vx_reset_shift_r;
-    wire vx_reset;
     wire vx_start;
     wire vx_busy;
-
-    initial begin
-        vx_reset_shift_r = {`VX_CFG_RESET_DELAY{1'b1}};
-    end
-    assign vx_reset = vx_reset_shift_r[`VX_CFG_RESET_DELAY-1];
-
-    always @(posedge clk) begin
-        if (reset) begin
-            vx_reset_shift_r <= {`VX_CFG_RESET_DELAY{1'b1}};
-        end else begin
-            vx_reset_shift_r <= {vx_reset_shift_r[`VX_CFG_RESET_DELAY-2:0], 1'b0};
-        end
-    end
-
-    // Command Processor //////////////////////////////////////////////////////
 
     VX_cp_gpu_if cp_gpu_if ();
     VX_mem_axi_if #(.ADDR_W(64), .DATA_W(LMEM_DATA_WIDTH), .ID_W(`VX_CP_AXI_TID_WIDTH)) cp_axi_dev  ();
@@ -325,9 +350,9 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
     wire cp_interrupt;
     `UNUSED_VAR (cp_interrupt)
 
-    VX_cp_core u_cp_core (
+    VX_cp_core cp_core (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (subsys_reset),
         .axil_s     (cp_axil),
         .axi_host   (cp_axi_host),
         .axi_dev    (cp_axi_dev),
@@ -375,7 +400,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .ID_W   (`VX_CP_AXI_TID_WIDTH)
     ) u_cp_host_bridge (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (subsys_reset),
         .axi_s          (cp_axi_host),
         .mem_req_valid  (hb_req_valid),
         .mem_req_rw     (hb_req_rw),
@@ -408,7 +433,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
                  && !cp2af_sRxPort.c1TxAlmFull;
 
     always @(posedge clk) begin
-        if (reset) begin
+        if (subsys_reset) begin
             hb_state  <= HB_IDLE;
             hb_data_r <= '0;
         end else begin
@@ -477,7 +502,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
             .RSP_OUT_BUF    (2)
         ) vx_mem_data_adapter (
             .clk                (clk),
-            .reset              (reset),
+            .reset              (subsys_reset),
 
             .mem_req_valid_in   (vx_mem_req_valid[i]),
             .mem_req_addr_in    (vx_mem_req_addr[i]),
@@ -533,7 +558,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .ID_W     (`VX_CP_AXI_TID_WIDTH)
     ) u_cp_dev_bridge (
         .clk            (clk),
-        .reset          (reset),
+        .reset          (subsys_reset),
         .axi_s          (cp_axi_dev),
         .mem_req_valid  (cp_membus_req_valid),
         .mem_req_rw     (cp_membus_req_rw),
@@ -584,7 +609,7 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .RSP_OUT_BUF (0)
     ) mem_arb (
         .clk        (clk),
-        .reset      (reset),
+        .reset      (subsys_reset),
         .bus_in_if  (cp_vx_mem_arb_in_if),
         .bus_out_if (cp_vx_mem_arb_out_if)
     );

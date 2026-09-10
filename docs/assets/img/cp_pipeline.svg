@@ -1,0 +1,191 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="arrd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8a6d00"/>
+    </marker>
+    <marker id="arrr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a03020"/>
+    </marker>
+  </defs>
+  <style>
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .gt   { fill:#33404c; font-size:14px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .stg  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .grp  { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.5; }
+    .chip { fill:#ffffff; stroke:#5a7184; stroke-width:1.1; }
+    .chipw{ fill:#fdf6e3; stroke:#b58900; stroke-width:1.2; }
+    .hot  { fill:#fbeeea; stroke:#a03020; stroke-width:1.3; }
+    .cm   { font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#1b2733; }
+    .w    { stroke:#2e5e82; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .wd   { stroke:#8a6d00; stroke-width:1.6; fill:none; marker-end:url(#arrd); stroke-dasharray:5 3; }
+    .wr   { stroke:#a03020; stroke-width:1.6; fill:none; marker-end:url(#arrr); }
+    .lbl  { fill:#44525f; font-size:10.5px; }
+    .lblr { fill:#a03020; font-size:10.5px; }
+    .lbld { fill:#8a6d00; font-size:10.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1480" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t">One command's path through a command engine</text>
+  <text x="24" y="56" class="tt">Every stage is a hard handshake. A CPE holds exactly one command at a time — there is no pipelining within a queue.</text>
+
+  <!-- ============ stage chain ============ -->
+  <!-- 1 fetch -->
+  <rect x="24" y="86" width="270" height="232" rx="6" class="stg"/>
+  <text x="38" y="108" class="th">1 · VX_cp_fetch</text>
+  <text x="38" y="126" class="tt">ring walker, one per queue</text>
+
+  <rect x="38" y="138" width="242" height="24" rx="4" class="chip"/>
+  <text x="48" y="155" class="cm">S_IDLE      head &lt; tail ?</text>
+  <rect x="38" y="168" width="242" height="24" rx="4" class="chip"/>
+  <text x="48" y="185" class="cm">S_ISSUE_AR  AR @ base+off</text>
+  <rect x="38" y="198" width="242" height="24" rx="4" class="chipw"/>
+  <text x="48" y="215" class="cm">S_WAIT_R    &lt;- memory latency</text>
+  <rect x="38" y="228" width="242" height="24" rx="4" class="chip"/>
+  <text x="48" y="245" class="cm">S_EMIT      walk the line</text>
+
+  <text x="38" y="272" class="ts">One 64 B AR per line, arlen=0,</text>
+  <text x="38" y="288" class="ts">arsize=6. Single outstanding —</text>
+  <text x="38" y="304" class="ts">no prefetch, no second line.</text>
+
+  <!-- 2 unpack -->
+  <rect x="318" y="86" width="228" height="232" rx="6" class="stg"/>
+  <text x="332" y="108" class="th">2 · VX_cp_unpack</text>
+  <text x="332" y="126" class="tt">combinational, inside fetch</text>
+
+  <rect x="332" y="138" width="200" height="84" rx="4" class="chip"/>
+  <text x="342" y="156" class="cm">decode @ offset</text>
+  <text x="342" y="172" class="cm">has_cmd, cmd,</text>
+  <text x="342" y="188" class="cm">cmd_size</text>
+  <text x="342" y="210" class="cm">offset += cmd_size</text>
+
+  <text x="332" y="244" class="ts">One command per cycle. Was a</text>
+  <text x="332" y="260" class="ts">whole-line combinational walk —</text>
+  <text x="332" y="276" class="ts">a 35-level path — so it became a</text>
+  <text x="332" y="292" class="ts">single decode plus a registered</text>
+  <text x="332" y="308" class="ts">offset add (~4 levels).</text>
+
+  <!-- 3 engine -->
+  <rect x="570" y="86" width="286" height="232" rx="6" class="stg"/>
+  <text x="584" y="108" class="th">3 · VX_cp_engine</text>
+  <text x="584" y="126" class="tt">the CPE proper, one per queue</text>
+
+  <rect x="584" y="138" width="258" height="24" rx="4" class="chip"/>
+  <text x="594" y="155" class="cm">S_IDLE       accept cmd</text>
+  <rect x="584" y="168" width="258" height="24" rx="4" class="chip"/>
+  <text x="594" y="185" class="cm">S_DECODE     opcode -&gt; resource</text>
+  <rect x="584" y="198" width="258" height="24" rx="4" class="chipw"/>
+  <text x="594" y="215" class="cm">S_BID        &lt;- wait for grant</text>
+  <rect x="584" y="228" width="258" height="24" rx="4" class="chipw"/>
+  <text x="594" y="245" class="cm">S_WAIT_DONE  &lt;- wait for done</text>
+  <rect x="584" y="258" width="258" height="24" rx="4" class="chip"/>
+  <text x="594" y="275" class="cm">S_RETIRE     held til ready</text>
+
+  <text x="584" y="304" class="ts">NOP and FENCE skip straight to S_RETIRE.</text>
+
+  <!-- 4 arbiter -->
+  <rect x="880" y="86" width="196" height="232" rx="6" class="stg"/>
+  <text x="894" y="108" class="th">4 · VX_cp_arbiter</text>
+  <text x="894" y="126" class="tt">4x, one per resource</text>
+
+  <rect x="894" y="138" width="168" height="72" rx="4" class="chip"/>
+  <text x="904" y="156" class="cm">VX_rr_arbiter</text>
+  <text x="904" y="172" class="cm">grant_ready = 1</text>
+  <text x="904" y="188" class="cm">1-cycle grant,</text>
+  <text x="904" y="204" class="cm">non-sticky</text>
+
+  <text x="894" y="234" class="ts">Round-robin over the</text>
+  <text x="894" y="250" class="ts">bidding CPEs.</text>
+  <text x="894" y="272" class="ts">bid_priority is wired</text>
+  <text x="894" y="288" class="ts">in from q_state.prio</text>
+  <text x="894" y="304" class="ts">but tied off unused.</text>
+
+  <!-- 5 resource -->
+  <rect x="1100" y="86" width="356" height="232" rx="6" class="stg"/>
+  <text x="1114" y="108" class="th">5 · the shared resource</text>
+  <text x="1114" y="126" class="tt">one instance per CP, not per queue</text>
+
+  <rect x="1114" y="138" width="328" height="24" rx="4" class="chip"/>
+  <text x="1124" y="155" class="cm">launch  PULSE_START-WAIT_BUSY-WAIT_DRAIN</text>
+  <rect x="1114" y="168" width="328" height="24" rx="4" class="chip"/>
+  <text x="1124" y="185" class="cm">dcr     REQ-WAIT_RSP-DONE (x num_cores)</text>
+  <rect x="1114" y="198" width="328" height="24" rx="4" class="chip"/>
+  <text x="1124" y="215" class="cm">dma     SETUP-AR-READ-AW-WRITE-WAIT_B</text>
+  <rect x="1114" y="228" width="328" height="24" rx="4" class="chip"/>
+  <text x="1124" y="245" class="cm">event   AW/W/B  or  AR/R spin until match</text>
+
+  <text x="1114" y="276" class="ts">Each pulses `done` for one cycle when it finishes.</text>
+  <text x="1114" y="292" class="ts">The pulse is broadcast to every CPE; only the CPE in</text>
+  <text x="1114" y="308" class="ts">S_WAIT_DONE for that resource acts on it.</text>
+
+  <!-- chain arrows -->
+  <path d="M 294 200 L 318 200" class="w"/>
+  <path d="M 546 200 L 570 200" class="w"/>
+  <path d="M 856 200 L 880 200" class="w"/>
+  <path d="M 1076 200 L 1100 200" class="w"/>
+
+  <!-- done pulse back -->
+  <path d="M 1280 318 L 1280 348 L 713 348 L 713 318" class="wd"/>
+  <text x="880" y="342" class="lbld">done pulse — releases S_WAIT_DONE</text>
+
+  <!-- ============ completion ============ -->
+  <rect x="570" y="380" width="286" height="118" rx="6" class="stg"/>
+  <text x="584" y="402" class="th">6 · VX_cp_completion</text>
+  <rect x="584" y="414" width="258" height="22" rx="4" class="chip"/>
+  <text x="594" y="430" class="cm">latch -&gt; rr select -&gt; drain FIFO</text>
+  <rect x="584" y="442" width="258" height="22" rx="4" class="chip"/>
+  <text x="594" y="458" class="cm">AW -&gt; W(8 B seqnum) -&gt; B</text>
+  <text x="584" y="482" class="ts">retire_ready backpressures S_RETIRE.</text>
+
+  <path d="M 713 318 L 713 380" class="w"/>
+  <text x="720" y="360" class="lbl">retire</text>
+
+  <!-- ============ parallelism panel ============ -->
+  <rect x="24" y="546" width="700" height="326" rx="7" class="grp"/>
+  <text x="40" y="570" class="gt">What actually runs in parallel</text>
+
+  <text x="40" y="596" class="ts">Across queues (NUM_QUEUES &gt; 1), the CP is genuinely parallel up to the</text>
+  <text x="40" y="612" class="ts">resource boundary:</text>
+  <text x="52" y="634" class="ts">·  N fetchers each keep their own AR in flight; the host xbar is ID-routed</text>
+  <text x="66" y="650" class="ts">(MULTI_OUT), so the reads overlap rather than serialize.</text>
+  <text x="52" y="670" class="ts">·  N engines decode and bid concurrently.</text>
+  <text x="52" y="690" class="ts">·  The four resources are independent — a DMA on q0 overlaps a DCR write</text>
+  <text x="66" y="706" class="ts">on q1 and a launch on q2. Only same-resource traffic serializes.</text>
+  <text x="52" y="726" class="ts">·  Completion latches every retire in the same cycle and drains them over</text>
+  <text x="66" y="742" class="ts">consecutive cycles, so simultaneous retires cannot drop a seqnum.</text>
+
+  <text x="40" y="774" class="ts">Within one queue there is no parallelism at all: a CPE accepts the next</text>
+  <text x="40" y="790" class="ts">command only from S_IDLE, so fetch, decode, execute and retire of</text>
+  <text x="40" y="806" class="ts">successive commands never overlap. Ring throughput is therefore</text>
+  <text x="40" y="822" class="ts">1 command per (AR latency + execute + writeback), not 1 per cycle.</text>
+  <text x="40" y="850" class="tt">NUM_QUEUES defaults to 1, and the runtime programs only queue 0 — so none</text>
+  <text x="40" y="866" class="tt">of the cross-queue parallelism above is exercised on any shipping build.</text>
+
+  <!-- ============ serialization panel ============ -->
+  <rect x="748" y="546" width="708" height="326" rx="7" class="grp"/>
+  <text x="764" y="570" class="gt">Where a launch's time actually goes</text>
+
+  <text x="764" y="596" class="ts">A single kernel launch costs 22 ring commands, each one a full round trip:</text>
+
+  <rect x="764" y="610" width="676" height="26" rx="4" class="hot"/>
+  <text x="774" y="628" class="cm">20 x CMD_DCR_WRITE   -&gt; doorbell, fetch, DCR, retire, poll   (x20)</text>
+  <rect x="764" y="642" width="676" height="26" rx="4" class="hot"/>
+  <text x="774" y="660" class="cm">1  x CMD_LAUNCH      -&gt; pulse start, wait for the grid to drain</text>
+  <rect x="764" y="674" width="676" height="26" rx="4" class="hot"/>
+  <text x="774" y="692" class="cm">1  x CMD_CACHE_FLUSH -&gt; a DCR read per core, serially</text>
+
+  <text x="764" y="726" class="ts">The launch path does not batch: each of the 22 lines gets its own doorbell</text>
+  <text x="764" y="742" class="ts">(2 MMIO writes) and its own busy-poll loop on Q_SEQNUM. That is 22 doorbells</text>
+  <text x="764" y="758" class="ts">and 22 poll loops to start one kernel. Only enqueue_commands and the</text>
+  <text x="764" y="774" class="ts">enqueue_draw fallback use cp_batch_begin/end to collapse this to one.</text>
+
+  <text x="764" y="802" class="ts">CMD_LAUNCH_QMD (§2.3) is the fix already built for the Emulation CP: the 20</text>
+  <text x="764" y="818" class="ts">DCR pairs move into an in-memory descriptor, so the whole launch becomes</text>
+  <text x="764" y="834" class="ts">one command. The RTL CP does not decode it yet, so on FPGA every launch</text>
+  <text x="764" y="850" class="ts">still pays the 20-write dance.</text>
+</svg>

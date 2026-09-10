@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1420 880" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="arry" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .lane { stroke:#c2ccd6; stroke-width:1.3; }
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .act  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.3; }
+    .actp { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.3; }
+    .actg { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.3; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.3; }
+    .loop { fill:none; stroke:#2f6b39; stroke-width:1.5; stroke-dasharray:7 4; }
+    .loopl{ fill:#eef7ef; stroke:#2f6b39; stroke-width:1.3; }
+    .note { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.2; }
+    .cm   { font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#1b2733; }
+    .m    { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#arr); }
+    .mp   { stroke:#8e4a7e; stroke-width:1.7; fill:none; marker-end:url(#arrp); }
+    .mg   { stroke:#3a7d44; stroke-width:1.7; fill:none; marker-end:url(#arrg); }
+    .my   { stroke:#b58900; stroke-width:1.7; fill:none; marker-end:url(#arry); }
+    .lb   { fill:#2e5e82; font-size:10.5px; }
+    .lbp  { fill:#8e4a7e; font-size:10.5px; }
+    .lbg  { fill:#2f6b39; font-size:10.5px; }
+    .lby  { fill:#8a6d00; font-size:10.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1420" height="880" fill="#ffffff"/>
+  <text x="24" y="34" class="t">CMD_DRAW — one doorbell, a whole draw</text>
+  <text x="24" y="56" class="tt">The CP walks a resident descriptor and drains each stage's launch as the inter-stage barrier. Emulation CP only; the RTL mirror is deferred (§8.1).</text>
+
+  <!-- lifelines -->
+  <text x="140" y="94" class="th" text-anchor="middle" fill="#8e4a7e">vortexpipe / host</text>
+  <text x="470" y="94" class="th" text-anchor="middle" fill="#2e5e82">CP engine (OP_DRAW walk)</text>
+  <text x="820" y="94" class="th" text-anchor="middle" fill="#8a6d00">device memory</text>
+  <text x="1180" y="94" class="th" text-anchor="middle" fill="#2f6b39">Vortex (KMU + FF units)</text>
+
+  <line x1="140"  y1="104" x2="140"  y2="808" class="lane"/>
+  <line x1="470"  y1="104" x2="470"  y2="808" class="lane"/>
+  <line x1="820"  y1="104" x2="820"  y2="808" class="lane"/>
+  <line x1="1180" y1="104" x2="1180" y2="808" class="lane"/>
+
+  <!-- build descriptor -->
+  <rect x="30" y="116" width="220" height="58" rx="5" class="actp"/>
+  <text x="40" y="134" class="ts">build the draw descriptor</text>
+  <text x="40" y="150" class="ts">once: num_steps + a step</text>
+  <text x="40" y="166" class="ts">per stage</text>
+
+  <path d="M 250 192 L 816 192" class="my"/>
+  <text x="280" y="184" class="lby">stage it resident (args_slot_acquire + dev_write)</text>
+
+  <rect x="880" y="116" width="330" height="112" rx="6" class="mem"/>
+  <text x="892" y="136" class="th">draw descriptor</text>
+  <text x="892" y="154" class="cm">u32 num_steps</text>
+  <text x="892" y="170" class="cm">step[0..n]  28 B stride</text>
+  <text x="892" y="190" class="ts">each step is a cmd record prefix:</text>
+  <text x="892" y="206" class="cm">{op, flags, rsvd, arg0, arg1, arg2}</text>
+  <text x="892" y="222" class="tt">only 20 of the 28 bytes are used</text>
+
+  <!-- doorbell -->
+  <path d="M 250 254 L 466 254" class="mp"/>
+  <text x="264" y="246" class="lbp">CMD_DRAW (arg0 = desc addr) — one doorbell</text>
+
+  <path d="M 470 286 L 816 286" class="my"/>
+  <text x="490" y="278" class="lby">read num_steps (translated via cp_translate)</text>
+
+  <!-- ===== walk loop ===== -->
+  <rect x="86" y="316" width="1224" height="336" rx="6" class="loop"/>
+  <rect x="86" y="316" width="238" height="24" rx="4" class="loopl"/>
+  <text x="96" y="333" class="lbg">loop  for each step, in order</text>
+
+  <path d="M 470 366 L 816 366" class="my"/>
+  <text x="490" y="358" class="lby">read step[i] — 28 B at desc + 4 + i*28</text>
+
+  <!-- DCR step -->
+  <rect x="96" y="386" width="220" height="52" rx="5" class="act"/>
+  <text x="106" y="404" class="ts">a DCR_WRITE step:</text>
+  <text x="106" y="420" class="ts">apply inline, i += 1,</text>
+  <text x="106" y="435" class="ts">no barrier</text>
+
+  <path d="M 470 410 L 1176 410" class="mg"/>
+  <text x="500" y="402" class="lbg">dcr_write — RASTER / OM / TEX / KMU config for this stage</text>
+
+  <!-- QMD launch step -->
+  <rect x="96" y="454" width="220" height="52" rx="5" class="act"/>
+  <text x="106" y="472" class="ts">a LAUNCH_QMD step:</text>
+  <text x="106" y="488" class="ts">apply the QMD, then</text>
+  <text x="106" y="503" class="ts">wait (DrawLaunchWait)</text>
+
+  <path d="M 470 466 L 816 466" class="my"/>
+  <text x="490" y="458" class="lby">read the QMD: {u32 count, count x (dcr_addr, value)}</text>
+
+  <path d="M 470 498 L 1176 498" class="mg"/>
+  <text x="500" y="490" class="lbg">replay the pairs as DCR writes, then pulse start</text>
+
+  <rect x="1050" y="514" width="256" height="44" rx="5" class="actg"/>
+  <text x="1060" y="532" class="ts">the stage kernel runs</text>
+  <text x="1060" y="548" class="ts">(expand / setup / bin / FS)</text>
+
+  <path d="M 1176 574 L 476 574" class="mg"/>
+  <text x="560" y="566" class="lbg">busy falls — the drain IS the inter-stage barrier</text>
+
+  <!-- flush step -->
+  <rect x="96" y="592" width="220" height="46" rx="5" class="act"/>
+  <text x="106" y="610" class="ts">a CACHE_FLUSH step:</text>
+  <text x="106" y="626" class="ts">sweep every core</text>
+
+  <path d="M 470 614 L 1176 614" class="mg"/>
+  <text x="500" y="606" class="lbg">per-core dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid)</text>
+
+  <!-- retire -->
+  <rect x="360" y="672" width="220" height="44" rx="5" class="act"/>
+  <text x="370" y="690" class="ts">steps exhausted —</text>
+  <text x="370" y="706" class="ts">retire the ONE OP_DRAW</text>
+
+  <path d="M 466 740 L 144 740" class="mp"/>
+  <text x="170" y="732" class="lbp">seqnum += 1 — the host's single poll finally returns</text>
+
+  <!-- note -->
+  <rect x="620" y="664" width="690" height="88" rx="6" class="note"/>
+  <text x="632" y="684" class="th">Why this is the "true GPU" shape</text>
+  <text x="632" y="702" class="ts">The host records the descriptor once and rings the doorbell once. The whole sort-middle front end — expand, setup,</text>
+  <text x="632" y="718" class="ts">bin, FF config, FS — runs device-resident with no host round trip between stages. The descriptor is an indirect command</text>
+  <text x="632" y="734" class="ts">bundle, so the executed sequence is byte-identical to streaming the same commands through the ring.</text>
+  <text x="632" y="750" class="tt">Requires both SUPPORTS_DRAW (bit 25) and SUPPORTS_QMD (bit 26), because draw bundles embed LAUNCH_QMD steps.</text>
+
+  <text x="24" y="794" class="tt">Note the asymmetry with cp_submit_launch: cp_submit_draw posts no trailing CMD_CACHE_FLUSH of its own. The flush lives inside the descriptor — the host emits a</text>
+  <text x="24" y="812" class="tt">CACHE_FLUSH step after every launch step when it builds the bundle.</text>
+  <text x="24" y="840" class="tt">Fallback when either cap bit is clear: the runtime opens a cp_batch_begin/end batch and streams the equivalent launch + DCR commands through the ring — one</text>
+  <text x="24" y="858" class="tt">doorbell and one poll for the whole batch, but the CP no longer orchestrates the stages, so each launch's drain is observed by the host instead.</text>
+</svg>

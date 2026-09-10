@@ -11,8 +11,8 @@ typedef struct {
   uint32_t cbuf_pitch;
   uint64_t prim_addr;
 
-  // Software fine-rasterizer path (gfx_rast::rast_walk_primitive) — gfx_v2 §5
-  // on-device routing (the -z/use_sw fork). When sw_path != 0 the kernel walks
+  // Software fine-rasterizer path (gfx_rast::rast_walk_primitive) — on-device
+  // routing (the -z/use_sw fork). When sw_path != 0 the kernel walks
   // the resident primitives itself (one thread per primitive) instead of being
   // launched per covered-quad wave by the FF RASTER work distributor (push).
   uint32_t sw_path;

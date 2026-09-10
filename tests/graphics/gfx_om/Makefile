@@ -1,11 +1,8 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
-# vx_om4 reads/writes the shared graphics window (SETW); in SimX the window
-# storage lives in the RTU, so co-enable RTU alongside OM (as gfx_tex4q does).
-# On rtlsim the window rides EXT_GFX_ANY (OM alone), and RTU is inert here.
+# The OM exports through its aperture, so this needs nothing but OM.
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_OM_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_OM_ENABLE)
-CONFIGS := $(if $(findstring -DVX_CFG_EXT_RTU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_RTU_ENABLE -DVX_CFG_RTU_BVH_WIDTH=0)
 
 PROJECT := gfx_om
 
@@ -17,7 +14,7 @@ VX_SRCS := $(SRC_DIR)/kernel.cpp
 
 VX_CFLAGS += -I$(VORTEX_HOME)/sw/common -I$(THIRD_PARTY_DIR)
 
-# common.h pulls gfx_sw.h for the -S software-OM path (§5); its build contract
+# common.h pulls gfx_sw.h for the -S software-OM path; its build contract
 # requires the divergence-bbs flag + GFX_SW_DIVERGENCE_OK.
 include $(VORTEX_HOME)/sw/gfx/libgfx_sw.mk
 VX_CFLAGS += $(LIBGFX_SW_VX_CFLAGS)

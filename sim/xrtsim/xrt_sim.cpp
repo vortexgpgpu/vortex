@@ -26,6 +26,7 @@
 #error "VCD_OUTPUT and SAIF_OUTPUT cannot both be defined"
 #endif
 
+#include <cstdio>
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
@@ -41,6 +42,8 @@
 #include <list>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 #include <util.h>
 #include <mem_alloc.h>
 #include <mp_macros.h>
@@ -156,6 +159,11 @@ public:
     if (future_.valid()) {
       future_.wait();
     }
+    if (rsp_reorder_seed() != 0) {
+      fprintf(stderr, "[xrtsim] response reordering: seed=%u, %lu responses "
+                      "returned ahead of an older ready one\n",
+              rsp_reorder_seed(), (unsigned long)rsp_reordered_);
+    }
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       delete mem_alloc_[b];
     }
@@ -186,6 +194,9 @@ public:
   }
 
   int init() {
+    // restart sim time so a re-created model registers at time zero
+    timestamp = 0;
+
     // force random values for uninitialized signals
     Verilated::randReset(VERILATOR_RESET_VALUE);
     Verilated::randSeed(50);
@@ -348,14 +359,64 @@ public:
     return 0;
   }
 
+  // Cycles to wait for one AXI-Lite handshake phase before declaring the
+  // slave unresponsive. Orders of magnitude above what the control path
+  // needs, so it fires only for a handshake that is never coming.
+  static constexpr uint64_t CTRL_HANDSHAKE_TIMEOUT = 100000;
+
+  // Cycles to run after releasing ap_rst_n, before any transaction is allowed.
+  // Wide margin over the AFU's reset shift register and the relay stages
+  // below it, since the whole cost is paid once at device open.
+  static constexpr int RESET_SETTLE_CYCLES = 16 * VX_CFG_RESET_DELAY + 256;
+
+  // Bounded waits for the two AXI-Lite handshake shapes. Both must be
+  // bounded: an address the AFU does not decode -- or a control path wedged
+  // behind a stalled master -- never raises its handshake, and an unbounded
+  // spin turns that into a silent 100%-CPU hang with no diagnostic anywhere.
+  // Returning an error surfaces it through the driver's ordinary failure path.
+  bool handshake_timeout(const char* phase, uint32_t offset) {
+    fprintf(stderr,
+            "[XRTSIM] Error: AXI-Lite %s never completed for offset 0x%x "
+            "after %lu cycles; the AFU is not answering that address.\n",
+            phase, offset, (unsigned long)CTRL_HANDSHAKE_TIMEOUT);
+    return false;
+  }
+
+  // Sample first, then advance: the signal may already be high, in which case
+  // the phase costs no cycles at all.
+  template <typename T>
+  bool tick_while_low(const T& ready, const char* phase, uint32_t offset) {
+    for (uint64_t i = 0; i < CTRL_HANDSHAKE_TIMEOUT; ++i) {
+      if (ready) {
+        return true;
+      }
+      this->tick();
+    }
+    return handshake_timeout(phase, offset);
+  }
+
+  // Advance first, then sample: a response cannot be valid in the same cycle
+  // its request was accepted.
+  template <typename T>
+  bool tick_until_high(const T& valid, const char* phase, uint32_t offset) {
+    for (uint64_t i = 0; i < CTRL_HANDSHAKE_TIMEOUT; ++i) {
+      this->tick();
+      if (valid) {
+        return true;
+      }
+    }
+    return handshake_timeout(phase, offset);
+  }
+
   int register_write(uint32_t offset, uint32_t value) {
     HostLock guard(*this);
 
     // write address
     device_->s_axi_ctrl_awvalid = 1;
     device_->s_axi_ctrl_awaddr = offset;
-    while (!device_->s_axi_ctrl_awready) {
-      this->tick();
+    if (!tick_while_low(device_->s_axi_ctrl_awready, "awready", offset)) {
+      device_->s_axi_ctrl_awvalid = 0;
+      return -1;
     }
     this->tick();
     device_->s_axi_ctrl_awvalid = 0;
@@ -364,16 +425,17 @@ public:
     device_->s_axi_ctrl_wvalid = 1;
     device_->s_axi_ctrl_wdata = value;
     device_->s_axi_ctrl_wstrb = 0xf;
-    while (!device_->s_axi_ctrl_wready) {
-      this->tick();
+    if (!tick_while_low(device_->s_axi_ctrl_wready, "wready", offset)) {
+      device_->s_axi_ctrl_wvalid = 0;
+      return -1;
     }
     this->tick();
     device_->s_axi_ctrl_wvalid = 0;
 
     // write response
-    do {
-      this->tick();
-    } while (!device_->s_axi_ctrl_bvalid);
+    if (!tick_until_high(device_->s_axi_ctrl_bvalid, "bvalid", offset)) {
+      return -1;
+    }
     device_->s_axi_ctrl_bready = 1;
     this->tick();
     device_->s_axi_ctrl_bready = 0;
@@ -385,16 +447,17 @@ public:
     // read address
     device_->s_axi_ctrl_arvalid = 1;
     device_->s_axi_ctrl_araddr = offset;
-    while (!device_->s_axi_ctrl_arready) {
-      this->tick();
+    if (!tick_while_low(device_->s_axi_ctrl_arready, "arready", offset)) {
+      device_->s_axi_ctrl_arvalid = 0;
+      return -1;
     }
     this->tick();
     device_->s_axi_ctrl_arvalid = 0;
 
     // read response
-    do {
-      this->tick();
-    } while (!device_->s_axi_ctrl_rvalid);
+    if (!tick_until_high(device_->s_axi_ctrl_rvalid, "rvalid", offset)) {
+      return -1;
+    }
     *value = device_->s_axi_ctrl_rdata;
     device_->s_axi_ctrl_rready = 1;
     this->tick();
@@ -434,6 +497,16 @@ private:
       *m_axi_mem_[b].arready = 1;
       *m_axi_mem_[b].awready = 1;
       *m_axi_mem_[b].wready  = 1;
+    }
+
+    // Deasserting ap_rst_n does not release the design: the AFU stretches it
+    // through a reset shift register, and the relays beneath that add further
+    // stages. During that window the AXI-Lite slave already asserts arready,
+    // so a request issued too early is accepted and then swallowed -- no
+    // response ever comes and the model presents as a device that has stopped
+    // answering. Clock it out here, where the cost is a few microseconds once.
+    for (int i = 0; i < RESET_SETTLE_CYCLES; ++i) {
+      this->tick();
     }
   }
 
@@ -660,11 +733,16 @@ private:
       if (*m_axi_mem_[b].rvalid && m_axi_states_[b].read_rsp_ready) {
         *m_axi_mem_[b].rvalid = 0;
       }
-      if (!*m_axi_mem_[b].rvalid) {
-        if (!pending_mem_reqs_[b].empty()
-        && (*pending_mem_reqs_[b].begin())->ready
-        && !(*pending_mem_reqs_[b].begin())->write) {
-          auto mem_rsp_it = pending_mem_reqs_[b].begin();
+      if (!*m_axi_mem_[b].rvalid && !rsp_stall()) {
+        auto mem_rsp_it = pending_mem_reqs_[b].end();
+        if (rsp_reorder_seed() != 0) {
+          mem_rsp_it = pick_response(pending_mem_reqs_[b], false);
+        } else if (!pending_mem_reqs_[b].empty()
+                && (*pending_mem_reqs_[b].begin())->ready
+                && !(*pending_mem_reqs_[b].begin())->write) {
+          mem_rsp_it = pending_mem_reqs_[b].begin();
+        }
+        if (mem_rsp_it != pending_mem_reqs_[b].end()) {
           auto mem_rsp = *mem_rsp_it;
           *m_axi_mem_[b].rvalid = 1;
           *m_axi_mem_[b].rid    = mem_rsp->tag;
@@ -681,10 +759,15 @@ private:
         *m_axi_mem_[b].bvalid = 0;
       }
       if (!*m_axi_mem_[b].bvalid) {
-        if (!pending_mem_reqs_[b].empty()
-        && (*pending_mem_reqs_[b].begin())->ready
-        && (*pending_mem_reqs_[b].begin())->write) {
-          auto mem_rsp_it = pending_mem_reqs_[b].begin();
+        auto mem_rsp_it = pending_mem_reqs_[b].end();
+        if (rsp_reorder_seed() != 0) {
+          mem_rsp_it = pick_response(pending_mem_reqs_[b], true);
+        } else if (!pending_mem_reqs_[b].empty()
+                && (*pending_mem_reqs_[b].begin())->ready
+                && (*pending_mem_reqs_[b].begin())->write) {
+          mem_rsp_it = pending_mem_reqs_[b].begin();
+        }
+        if (mem_rsp_it != pending_mem_reqs_[b].end()) {
           auto mem_rsp = *mem_rsp_it;
           *m_axi_mem_[b].bvalid = 1;
           *m_axi_mem_[b].bid    = mem_rsp->tag;
@@ -771,6 +854,79 @@ private:
     bool last;     // last beat of its burst — drives rlast
   } mem_req_t;
 
+  // Whether read/write responses may complete out of request order, and the
+  // seed that makes a reordering run reproducible.
+  //
+  // AXI4 orders responses only within an ID; across IDs a slave may return them
+  // in any order, and real memory systems do. This model returned them strictly
+  // in request order, so no simulation here has ever exercised out-of-order
+  // completion -- a device-side path that assumes it passes every test and
+  // fails only on hardware. Off by default so existing runs are unchanged.
+  static uint32_t rsp_reorder_seed() {
+    static const uint32_t value = [] {
+      const char *env = getenv("VX_MEM_RSP_REORDER");
+      return env != nullptr ? uint32_t(strtoul(env, nullptr, 0)) : 0u;
+    }();
+    return value;
+  }
+
+  uint32_t next_rand() {
+    rsp_rng_ = rsp_rng_ * 1103515245u + 12345u;
+    return rsp_rng_ >> 16;
+  }
+
+  // Reordering needs responses to accumulate before there is anything to
+  // reorder. Draining one the cycle it becomes ready leaves a choice of one,
+  // which is how the first version of this knob reordered exactly nothing.
+  // Randomly withholding the response channel builds up a pool and jitters
+  // latency the way a real controller does.
+  // Fraction of cycles the response channel is withheld, in eighths. Deeper
+  // pools mean more candidates to choose between and so more reordering;
+  // VX_MEM_RSP_STALL tunes it because how much depth is needed to expose a
+  // given race is not knowable in advance.
+  static uint32_t rsp_stall_eighths() {
+    static const uint32_t value = [] {
+      const char *env = getenv("VX_MEM_RSP_STALL");
+      return env != nullptr ? uint32_t(strtoul(env, nullptr, 0)) : 4u;
+    }();
+    return value > 7 ? 7u : value;
+  }
+
+  bool rsp_stall() {
+    return (rsp_reorder_seed() != 0) && ((next_rand() & 7) < rsp_stall_eighths());
+  }
+
+  // The oldest still-pending response of each ID, in the requested direction.
+  // Only these may complete: anything behind an entry of the same ID would
+  // violate the per-ID ordering AXI does require, and returning it would make
+  // the model illegal rather than merely adversarial.
+  std::list<mem_req_t*>::iterator pick_response(std::list<mem_req_t*>& reqs, bool write) {
+    std::unordered_set<uint32_t> seen;
+    std::vector<std::list<mem_req_t*>::iterator> eligible;
+    for (auto it = reqs.begin(); it != reqs.end(); ++it) {
+      if ((*it)->write != write) {
+        continue;
+      }
+      if (!seen.insert((*it)->tag).second) {
+        continue; // an older response with this ID has not gone out yet
+      }
+      if ((*it)->ready) {
+        eligible.push_back(it);
+      }
+    }
+    if (eligible.empty()) {
+      return reqs.end();
+    }
+    const size_t pick = next_rand() % eligible.size();
+    // A run that passes proves nothing unless the model actually reordered
+    // anything. Count the responses returned ahead of an older ready one so a
+    // green result can be told apart from a knob that silently did nothing.
+    if (pick != 0) {
+      ++rsp_reordered_;
+    }
+    return eligible[pick];
+  }
+
   typedef struct {
     CData* awvalid;
     CData* awready;
@@ -830,6 +986,8 @@ private:
   };
 
   std::list<mem_req_t*> pending_mem_reqs_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
+  uint32_t rsp_rng_ = rsp_reorder_seed();
+  uint64_t rsp_reordered_ = 0;
 
   m_axi_mem_t m_axi_mem_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
 

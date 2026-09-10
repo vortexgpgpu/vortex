@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// PRISM RTU reformation smoke — Phase 3-A2 (option A) host driver.
+// PRISM RTU reformation smoke — host driver.
 //
 // Launches num_lanes threads in ONE block (so they share a single warp).
 // All lanes trace the same ray against the same non-opaque triangle; the

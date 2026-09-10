@@ -161,9 +161,9 @@ Conformance: `tests/regression/amo` (~12 cases) and the gated
 
 ---
 
-## 6. Proposed but not yet implemented
+## 6. Not implemented
 
-1. **RTL non-LLC AMO passthrough** (`amo_rtl_v3_proposal` §3.8 / Phase 3).
+1. **RTL non-LLC AMO passthrough.**
    RTL only stubs the non-LLC case
    ([`VX_cache_bank.sv:809-818`](../../hw/rtl/cache/VX_cache_bank.sv#L809));
    SimX's `AmoProbe` path is the reference implementation. Needed for
@@ -175,36 +175,12 @@ Conformance: `tests/regression/amo` (~12 cases) and the gated
    Multi-hart correctness against non-AMO stores depends on this.
 3. **RTL AMO unit testbench** `hw/unittest/VX_amo_unit_tb.sv` — not built.
 4. **RTL AMO perf counters** (`amo_total`, `amo_sc_fail`,
-   `amo_reservation_evictions`) — proposed, not present in RTL.
-5. **RTL rtlsim/FPGA conformance sign-off** (`amo_rtl_v3` Phase 5):
+   `amo_reservation_evictions`) — not present in RTL.
+5. **RTL rtlsim/FPGA conformance sign-off:**
    `rv32ua`/`rv64ua` + `regression/amo` under rtlsim/xrt — not confirmed.
 6. **SimX↔RTL bit-level AMO trace parity.** The RTL `amo_op_e` value space
    (`LR=0…MAX=8`) and the SimX `MemOp` value space (`AMO_LR=3…AMO_MAX=11`,
    with ADD/SWAP and AND/OR/XOR reordered) differ; trace parity needs a
-   translation layer and the static-assert parity header proposed in
-   `amo_packing_optimization_proposal` §16. Functionally each side is
-   self-consistent; this is a tooling gap, not a correctness bug.
-
-**Superseded directions** (recorded to avoid revival): the
-`amo_packing_optimization_proposal`'s **Part A** RTL refactor — an
-opcode-based `mem_op_e` interface that fully dissolved `amo_req_t` — was
-**not** adopted; the codebase instead reached the same "AMO-agnostic
-library IP" goal via `libs_feature_agnostic_redesign` (the opaque
-`mem_bus_attr_t` attribute carrying a slim `amo_req_t`). `grep mem_op_e
-hw/rtl/` is empty. The proposal's **Part B** (the SimX `MemOp`/`MemFlags`
-migration, `cid→hart_id` rename, per-lane `tids[]`) *did* ship. The
-`amo_rtl_v3_proposal` status header claiming "Phases 2/4/5 deferred" was
-stale — Phases 2 and 4 are fully built; only 3 and 5 remain (items 1, 5
-above).
-
----
-
-## 7. Source proposals
-
-This design consolidates and supersedes the following proposals (now
-removed from `docs/proposals/`): `amo_rtl_v3_proposal.md`,
-`amo_simx_v3_proposal.md`, `amo_packing_optimization_proposal.md`.
-
-The opaque memory-attribute interface that carries the AMO sideband is
-part of the broader library-IP refactor (see `vortex_runtime_api.md` /
-`libs_feature_agnostic_redesign`).
+   translation layer and a static-assert parity header. Functionally
+   each side is self-consistent; this is a tooling gap, not a
+   correctness bug.

@@ -1,0 +1,156 @@
+Diagnostic and correctness fixes for FireSim on the Alveo U55C.
+Applies on top of 0001-rebase-target-cycle-counter.patch.
+
+  1. simif_vitis.cc: hold the host_mem_0 xrt::bo as a member. Upstream
+     allocates it as a constructor local, so the device allocation is freed
+     when the constructor returns and XRT may reassign that memory for the
+     entire life of the simulation.
+
+  2. simif_vitis.cc: drop the hardcoded U250 DDR base assertion. The kernel's
+     host_mem_0_offset register is IP-XACT metadata only -- it is absent from
+     the generated RTL, and writing it lands in FireSim's own widget MMIO
+     space. Address mapping is done by the platform memory subsystem via
+     --connectivity.sp.
+
+  3. simulation.{h,cc}: add +memcheck, which round-trips a known pattern
+     through the LoadMem widget before target execution, testing the target
+     DRAM path independently of the design under test. This is what identified
+     the U55C HBM memory path as non-functional while the control plane works
+     (see docs/proposals/firesim_vitis_host_mem_offset.md).
+
+--- build_firesim/firesim/sim/midas/src/main/cc/simif_vitis.cc.orig	2026-08-02 03:11:40.536120157 -0700
++++ build_firesim/firesim/sim/midas/src/main/cc/simif_vitis.cc	2026-08-02 06:01:44.813949894 -0700
+@@ -42,16 +42,16 @@
+   xrt::uuid uuid;
+   xrt::ip kernel_handle;
+   xrt::run run_handle;
++  /// The device-side memory backing host_mem_0. Must outlive the
++  /// simulation: as a constructor local its allocation is freed on
++  /// return, leaving the window pointing at memory XRT may reuse.
++  xrt::bo fpga_mem_0;
+ };
+ 
+-constexpr size_t u250_dram_channel_size_bytes = 16ULL * 1024 * 1024 * 1024;
+-/**
+- * We currently support only a single FPGA DRAM channel. When the buffer is
+- * allocated in XRT, we'd generally have to write the offset back to the kernel
+- * using MMIO. For now we've hardcoded the offset for a U250 with no other
+- * concurrently running kernel.
+- */
+-constexpr uint64_t u250_dram_expected_offset = 0x4000000000L;
++/// Size of the single device-memory window backing host_mem_0.
++/// One U55C HBM pseudo-channel is 512 MB; a U250 DDR bank is larger, but a
++/// single channel is all this simif supports either way.
++constexpr size_t host_mem_0_size_bytes = 512ULL * 1024 * 1024;
+ 
+ simif_vitis_t::simif_vitis_t(const TargetConfig &config,
+                              const std::vector<std::string> &args)
+@@ -92,22 +92,21 @@
+   kernel_handle = xrt::ip(device_handle, uuid, "firesim");
+ 
+   // Intialize FPGA-DRAM regions.
+-  // The final argument here is the bank index for the dram channel.
+-  // I used xclbinutil to find this
+-  // https://xilinx.github.io/XRT/master/html/xclbintools.html
+-  auto fpga_mem_0 = xrt::bo(device_handle,
+-                            u250_dram_channel_size_bytes,
+-                            xrt::bo::flags::device_only,
+-                            0);
+-
+-  if (fpga_mem_0.address() != u250_dram_expected_offset) {
+-    std::cerr
+-        << "Allocated device_only buffer address not match the expected offset."
+-        << std::endl;
+-    std::cerr << "Expected: " << u250_dram_expected_offset
+-              << "Received: " << fpga_mem_0.address() << std::endl;
+-    exit(1);
+-  }
++  // The final argument is the bank index for the DRAM channel, found with
++  // xclbinutil: https://xilinx.github.io/XRT/master/html/xclbintools.html
++  fpga_mem_0 = xrt::bo(device_handle,
++                       host_mem_0_size_bytes,
++                       xrt::bo::flags::device_only,
++                       0);
++
++  // NOTE: the kernel's host_mem_0_offset register (package_kernel.tcl, s_axi_lite
++  // 0x010) is IP-XACT metadata only -- it does not appear in the generated RTL,
++  // and writing it would land in FireSim's own widget MMIO space. Address
++  // mapping into HBM is done by the platform memory subsystem via
++  // --connectivity.sp, so nothing needs programming here.
++  std::cerr << "[vitis] host_mem_0 base = 0x" << std::hex
++           << fpga_mem_0.address() << " size = 0x" << host_mem_0_size_bytes
++           << std::dec << std::endl;
+ }
+ 
+ void simif_vitis_t::write(size_t addr, uint32_t data) {
+--- build_firesim/patchbase/simulation.h	2026-08-02 06:12:46.916218880 -0700
++++ build_firesim/firesim/sim/midas/src/main/cc/core/simulation.h	2026-08-02 06:06:05.805273470 -0700
+@@ -130,6 +130,10 @@
+    */
+   bool do_zero_out_dram = false;
+ 
++  /// Diagnostic: round-trip a pattern through the LoadMem widget after
++  /// loading, to prove the target DRAM path independently of the DUT.
++  bool do_memcheck = false;
++
+   /**
+    * If set, read the presence register, check it, and exit the simulation
+    * cleanly
+--- build_firesim/patchbase/simulation.cc	2026-08-02 06:12:46.916218880 -0700
++++ build_firesim/firesim/sim/midas/src/main/cc/core/simulation.cc	2026-08-02 06:06:05.805273470 -0700
+@@ -24,6 +24,9 @@
+     if (arg.find("+loadmem=") == 0) {
+       load_mem_path = arg.c_str() + 9;
+     }
++    if (arg.find("+memcheck") == 0) {
++      do_memcheck = true;
++    }
+     if (arg.find("+zero-out-dram") == 0) {
+       do_zero_out_dram = true;
+     }
+@@ -189,6 +192,45 @@
+     if (!load_mem_path.empty()) {
+       loadmem->load_mem_from_file(load_mem_path);
+     }
++
++    // Diagnostic: write a known pattern through the LoadMem widget and read it
++    // back through the same widget. This isolates "the target DRAM path works"
++    // from any question about the design under test -- if this round-trip
++    // fails, no memory-touching target can possibly pass.
++    if (do_memcheck) {
++      const size_t chunk_bits = loadmem->get_mem_data_chunk() * 8;
++      mpz_t wr, rd;
++      mpz_init(wr);
++      mpz_init(rd);
++      unsigned failures = 0;
++      const size_t probes[] = {0x0, 0x40, 0x1000, 0x40000, 0xF0000};
++      for (size_t addr : probes) {
++        // A value that is distinct per address and not all-ones/all-zeros.
++        mpz_set_ui(wr, 0);
++        mpz_setbit(wr, 0);
++        mpz_mul_2exp(wr, wr, chunk_bits / 2);
++        mpz_add_ui(wr, wr, (unsigned long)(0xA5A50000u | (addr & 0xFFFF)));
++        loadmem->write_mem(addr, wr);
++        loadmem->read_mem(addr, rd);
++        const bool ok = (mpz_cmp(wr, rd) == 0);
++        gmp_fprintf(stderr,
++                    "[memcheck] addr=0x%zx wrote=0x%Zx read=0x%Zx %s\n",
++                    addr,
++                    wr,
++                    rd,
++                    ok ? "OK" : "MISMATCH");
++        if (!ok) {
++          failures++;
++        }
++      }
++      mpz_clear(wr);
++      mpz_clear(rd);
++      fprintf(stderr,
++              "[memcheck] %s (%u/%zu probes failed)\n",
++              failures ? "TARGET DRAM PATH IS BROKEN" : "target DRAM path OK",
++              failures,
++              sizeof(probes) / sizeof(probes[0]));
++    }
+   } else {
+     if (do_zero_out_dram || !load_mem_path.empty()) {
+       fprintf(stderr,

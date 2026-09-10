@@ -17,8 +17,8 @@ module VX_uop_sequencer import
 `ifdef VX_CFG_EXT_TCU_ENABLE
     VX_tcu_pkg::*,
 `endif
-`ifdef EXT_GFX_ANY_ENABLE
-    VX_gfx_window_pkg::*,
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_pkg::*,
 `endif
     VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
@@ -154,23 +154,42 @@ module VX_uop_sequencer import
 
 `ifdef EXT_GFX_ANY_ENABLE
     // ------------------------------------------------------------------
-    // Graphics-window uop expander (GETWF/GETW windowed reads; RTU TRACE2)
+    // Graphics uop expander: the window macro-ops (GETWF/GETW, RTU TRACE)
+    // and the OM fragment export (vx_om_export -> colour store + depth store).
+    //
+    // They share ONE slot. A slot is a full ibuffer_t input on the output mux
+    // below plus a bit of its priority encoder, and the two selects are mutually
+    // exclusive -- an export is an LSU op, a window op is an SFU op -- so a second
+    // expander would buy nothing but area and mux depth.
     // ------------------------------------------------------------------
-    assign uop_in_valid[UOP_GFXW] = (uop_in_data.ex_type == EX_SFU)
-        && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_GFXW))
-        && (uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_TRACE2)
-         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWF)
-         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETW)
-         || uop_in_data.op_args.gfxw.op == GFXW_OP_BITS'(GFXW_OP_GETWS));
-    VX_gfxw_uops gfxw_uops (
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    wire is_gfxw_op = (uop_in_data.ex_type == EX_SFU)
+        && (uop_in_data.op_type == INST_OP_BITS'(INST_SFU_RTUW))
+        && (uop_in_data.op_args.rtuw.op == RTUW_OP_BITS'(RTUW_OP_TRACE)
+         || uop_in_data.op_args.rtuw.op == RTUW_OP_BITS'(RTUW_OP_GETWF)
+         || uop_in_data.op_args.rtuw.op == RTUW_OP_BITS'(RTUW_OP_GETW));
+`else
+    wire is_gfxw_op = 1'b0;
+`endif
+
+`ifdef VX_CFG_EXT_OM_ENABLE
+    wire is_om_export = (uop_in_data.ex_type == EX_LSU)
+                     && (uop_in_data.op_args.lsu.export_mask != 2'b00);
+`else
+    wire is_om_export = 1'b0;
+`endif
+
+    assign uop_in_valid[UOP_GFX] = is_gfxw_op || is_om_export;
+
+    VX_gfx_uops gfx_uops (
         .clk       (clk),
         .reset     (reset),
         .ibuf_in   (uop_in_data),
-        .start     (uop_in_start[UOP_GFXW]),
-        .advance   (uop_in_next[UOP_GFXW]),
+        .start     (uop_in_start[UOP_GFX]),
+        .advance   (uop_in_next[UOP_GFX]),
         .uop_idx   (uop_ctr),
-        .ibuf_out  (uop_out_data[UOP_GFXW]),
-        .uop_count (uop_out_count[UOP_GFXW])
+        .ibuf_out  (uop_out_data[UOP_GFX]),
+        .uop_count (uop_out_count[UOP_GFX])
     );
 `endif
 

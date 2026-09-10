@@ -1,0 +1,29 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Storage buffers reached through two descriptor sets from a compute shader.
+ * Each set becomes its own constant-buffer blob, and a descriptor's recorded
+ * byte offset is an offset within its own blob; relocating every descriptor
+ * into one blob puts the set-1 rewrites at meaningless addresses and leaves
+ * the set-1 descriptors holding the host's pointers.
+ *
+ * Four bindings, well inside any per-shader descriptor limit, so the only
+ * thing under test is which blob each one belongs to. Every buffer carries a
+ * value naming its (set, binding) so the check says which ones arrived. */
+#version 450
+
+layout(local_size_x_id = 0) in;
+
+layout(set = 0, binding = 0, std430) buffer A0 { uint d[]; } a0;
+layout(set = 0, binding = 1, std430) buffer A1 { uint d[]; } a1;
+layout(set = 1, binding = 0, std430) buffer B0 { uint d[]; } b0;
+layout(set = 1, binding = 1, std430) buffer B1 { uint d[]; } b1;
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   a0.d[i] = 1000u * 0u + i;
+   a1.d[i] = 1000u * 1u + i;
+   b0.d[i] = 1000u * 2u + i;
+   b1.d[i] = 1000u * 3u + i;
+}

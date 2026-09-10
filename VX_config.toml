@@ -28,6 +28,10 @@ VX_CFG_EXT_M_ENABLE = true
 VX_CFG_EXT_F_ENABLE = true
 VX_CFG_EXT_C_ENABLE = false
 VX_CFG_EXT_A_ENABLE = false
+# Zacas: native compare-and-swap (amocas). Requires the A extension -- it adds
+# an atomic, it does not replace the set. Off by default because it widens the
+# memory request with a comparand operand.
+VX_CFG_EXT_ZACAS_ENABLE = false
 
 VX_CFG_EXT_ZICOND_ENABLE = true
 VX_CFG_EXT_TCU_ENABLE = false
@@ -137,6 +141,21 @@ VX_CFG_NUM_VPU_BLOCKS = 1
 # VM page-table format is a HW<->SW contract, moved to VX_types.toml [vm]; TLB depth stays here.
 VX_CFG_TLB_SIZE = 32
 
+# L1 TLB stage (per core): D-side / I-side entries and the per-instance
+# miss station depth (distinct outstanding VPN misses).
+VX_CFG_DTLB_SIZE        = 16
+VX_CFG_ITLB_SIZE        = 8
+VX_CFG_L1_TLB_MSHR_SIZE = 4
+
+# Shared cluster TLB and page-table walker complex.
+VX_CFG_L2_TLB_SIZE         = 512
+VX_CFG_L2_TLB_NUM_WAYS     = 4
+VX_CFG_L2_TLB_MEGA_SIZE    = 8
+VX_CFG_L2_TLB_MSHR_SIZE    = 8
+VX_CFG_L2_TLB_LATENCY      = 4
+VX_CFG_PTW_NUM_WALKERS     = 2
+VX_CFG_PTW_WALK_CACHE_SIZE = 16
+
 VX_CFG_VM_PINNED_REGION_SIZE = 0x10000000   # 256 MB
 
 [cache]
@@ -241,6 +260,18 @@ VX_CFG_NUM_TCU_LANES = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_TCU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
 # Map FEDP multipliers onto DSP48: on for FPGA synth, off for ASIC/sim.
 VX_CFG_TCU_USE_DSP = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
+# Block-geometry K (mirrors VX_tcu_pkg's TCU_TC_K derivation).
+tcu_tc_k = "expr: 1 << (clog2($VX_CFG_NUM_THREADS) // 2)"
+# Per-type FEDP pipeline latency; each FEDP variant asserts the selected
+# value against its internal stage structure at elaboration.
+tcu_latency_dsp   = "expr: 1 + 8 + clog2(2 * $tcu_tc_k + 1) * 11"
+tcu_latency_bhf   = "expr: 4 + clog2(2 * $tcu_tc_k + 1) * 3"
+tcu_latency_fpnew = "expr: 14 + clog2(2 * $tcu_tc_k) * 7"
+tcu_latency_dpi   = 4
+# TFR = mul stages + align + accumulate + round: 5 = 2-stage multiply
+# (DSP48 PREG on FPGA), 4 = single-cycle multiply used in simulation.
+tcu_latency_tfr   = "expr: 5 if ($VIVADO or $QUARTUS) else 4"
+VX_CFG_TCU_LATENCY = "expr: $tcu_latency_dsp if $VX_CFG_TCU_TYPE_DSP else ($tcu_latency_bhf if $VX_CFG_TCU_TYPE_BHF else ($tcu_latency_fpnew if $VX_CFG_TCU_TYPE_FPNEW else ($tcu_latency_dpi if $VX_CFG_TCU_TYPE_DPI else $tcu_latency_tfr)))"
 VX_CFG_TCU_TF32_ENABLE = false
 VX_CFG_TCU_FP16_ENABLE = true
 VX_CFG_TCU_FP8_ENABLE = false
@@ -263,14 +294,13 @@ VX_CFG_DXA_QUEUE_SIZE = 16
 VX_CFG_DXA_MAX_INFLIGHT = 8
 
 [rtu]
-# RTU (Ray-Tracing Unit) — PRISM Phase 1: ray-query, opaque triangles only.
-# See docs/proposals/rtu_simx_proposal.md §5.7 for sizing rationale.
-VX_CFG_NUM_RTU_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 4))"
-VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4 in Phase 1
-# Flat-walker (BVH_WIDTH=0) TLAS/instancing path, gated by VX_rtu_flat_scheduler
-# ifdefs. Off by default: the CW-BVH4 walker descends LEAF_INST natively, so this
-# is only needed in a flat (WIDTH=0) build. Made explicit so the ifdef has a
-# defined producer instead of resolving to always-false.
+# RTU (Ray-Tracing Unit)
+VX_CFG_NUM_RTU_CORES       = "expr: up($VX_CFG_SOCKET_SIZE / 4)"
+VX_CFG_RTU_BVH_WIDTH       = 4    # CW-BVH4
+# Flat-walker (BVH_WIDTH=0) TLAS/instancing path. Off by default: the CW-BVH4
+# walker descends LEAF_INST natively, so this is only needed in a flat (WIDTH=0)
+# build. Made explicit so the ifdef has a defined producer instead of resolving
+# to always-false.
 VX_CFG_RTU_TLAS_ENABLE     = false
 VX_CFG_RTU_STACK_DEPTH     = 16   # short-stack depth per context
 VX_CFG_RTU_RECIP_DSP_SEED  = 0    # inv_d reciprocal backend: 0=LUT-NR, 1=BRAM seed + DSP Newton-Raphson
@@ -284,19 +314,44 @@ VX_CFG_RTU_USE_DSP         = "expr: 1 if ($SYNTHESIS and not $ASIC) else 0"
 # Quartus, soft VX_fdiv_unit_rtl F32=17 in sim/ASIC. Matches VX_fdiv_unit's own
 # USE_VENDOR_IP = USE_DSP(=RTU_USE_DSP) && (VIVADO||QUARTUS).
 VX_CFG_RTU_FDIV_LATENCY    = "expr: 28 if $VIVADO else (15 if $QUARTUS else 17)"
-VX_CFG_RTU_NUM_CTX         = "expr: $VX_CFG_NUM_THREADS"  # in-flight ray contexts (>= NUM_THREADS); decoupled from SIMD width
+# Slot pool: resident traces. A slot stages one vx_rt_wtrace (its rays, its
+# control state and its result record) from issue to terminal; a context is one
+# ray's live BVH walk. The two are independent axes: slots buy residency,
+# contexts buy traversal parallelism. Slots partition statically across the
+# cores an RTU serves (CORES_PER_RTU = SOCKET_SIZE / NUM_RTU_CORES), so the
+# count must be a whole multiple of that — the expression below is one slot per
+# core at every socket size. A kernel that keeps more traces in flight per warp
+# than its core owns slots needs a larger pool (see tests/raytracing).
+VX_CFG_RTU_NUM_SLOTS       = "expr: $VX_CFG_SOCKET_SIZE / $VX_CFG_NUM_RTU_CORES"
+# In-flight ray contexts. DERIVED, not a free knob: a SLOT OWNS ITS CONTEXTS (one per
+# thread of the warp it is tracing), so the two cannot be set independently. They used to
+# be, and the "extra contexts idle" configuration that allowed was a machine in which
+# slots bought residency but never traversal parallelism.
+# Raising slots past 1 MEASURES WORSE (rt_raycast, rtlsim: 1 slot 197,404 cy; 2 slots
+# +3.7%; 4 slots +28.5%) — more contexts spread a saturated front end across more
+# claimants and lengthen every ray's serial chain. Widen the front end before revisiting.
+VX_CFG_RTU_NUM_CTX         = "expr: $VX_CFG_RTU_NUM_SLOTS * $VX_CFG_NUM_THREADS"
+# RTU MSHR file: distinct node fetches the traversal front end may keep in
+# flight, and the table that merges duplicate ones. Near the BVH root every
+# context wants the same node, so one entry can serve many. 0 disables merging
+# (per-context tags — one request per context per fetch).
+VX_CFG_RTU_MERGE_DEPTH     = 0
 VX_CFG_NUM_RTU_BLOCKS      = 2    # parallel memory request ports per RtuCore
 
 [tex]
 VX_CFG_NUM_TEX_CORES = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
-VX_CFG_TEX_REQ_QUEUE_SIZE = "expr: max(2, 2 * up($VX_CFG_NUM_THREADS / $VX_CFG_NUM_SFU_LANES))"
+# Texture memory-level parallelism: the request queue is the hard limit on how
+# many texture instructions a core can have in flight, so it must be sized by
+# the latency to hide, not by the SIMD-group count (which was 1 in every
+# graphics config, capping the unit at 2 outstanding requests).
+VX_CFG_TEX_REQ_QUEUE_SIZE = "expr: max(8, 2 * up($VX_CFG_NUM_THREADS / $VX_CFG_NUM_SFU_LANES))"
 VX_CFG_TEX_MEM_QUEUE_SIZE = "expr: $VX_CFG_TEX_REQ_QUEUE_SIZE"
 
 [raster]
 VX_CFG_NUM_RASTER_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 16))"
 VX_CFG_RASTER_NUM_SLICES      = 1
 VX_CFG_RASTER_TILE_LOG_SIZE    = 5
-# gfx_v2 §6.3 coarse bin: on-device binning groups prims into 128 px bins and
+# Coarse bin: on-device binning groups prims into 128 px bins and
 # the RASTER front end descends bin -> block -> quad, re-evaluating edges. Far
 # fewer coverage entries than 32 px tiles; identical pixel coverage.
 VX_CFG_RASTER_BIN_LOG_SIZE     = 7
@@ -331,7 +386,7 @@ VX_CFG_RCACHE_MREQ_SIZE = 0
 VX_CFG_NUM_RCACHES      = "expr: max(1, up($VX_CFG_NUM_RASTER_CORES / 4))"
 
 [rtcache]
-# §8.10 RTU-private L1 BVH/scene cache. Mirrors the rcache shape
+# RTU-private L1 BVH/scene cache. Mirrors the rcache shape
 # (raster cache) — RtuCore goes direct to L2 today; this cache sits
 # between them so cross-ray reuse of the same BVH nodes (root,
 # upper-level internals) hits in L1 instead of thrashing L2.

@@ -12,8 +12,6 @@ This document covers both the **architecture** of the integration and
 the **build / install / run** mechanics for the current (v2 CP-first)
 design. The CP architecture itself is in
 [`command_processor.md`](command_processor.md).
-The earlier OPAE-protocol and v2 CP-migration proposals have been
-consolidated into this document (see *Source proposals* at the end).
 
 ## At a glance
 
@@ -556,7 +554,7 @@ scope. Use the hosted CI for gem5.
 
 ---
 
-## 6. Proposed but not yet implemented
+## 6. Not implemented
 
 1. **v2 DMA-port memory seam.** The `DevMemAccessor` interface exists, but
    `DmaPortDevMem` backing VRAM through gem5's `SimpleMemory` over the
@@ -585,20 +583,3 @@ scope. Use the hosted CI for gem5.
 policy; and `ci/gem5_run_app.py` carries **stale comments** describing the
 superseded `cp_mmio_write`/`mem_upload` HAL rather than the landed
 `cp_reg_*` + `host_mem_alloc` transport.
-
-**Superseded directions** (recorded to avoid revival): the OPAE-style MMIO
-command FSM (`CMD_TYPE`/`CMD_RUN`/`MMIO_STATUS`) and staging-buffer DMA
-protocol (torn out — grep-clean of OPAE leftovers); and the
-`cp_mmio_{read,write}` + `mem_upload/download/copy` HAL signature (replaced
-by the 5-callback `cp_pure_v2` transport HAL the whole runtime tree now
-shares). The claim that `vortex_dcr_read` is not a hook was also discarded —
-the shipped `CommandProcessor::Hooks` keeps it as a real 6th hook.
-
----
-
-## 7. Source proposals
-
-This design consolidates and supersedes the following proposals (now
-removed from `docs/proposals/`): `gem5_simx_v3_proposal.md`,
-`gem5_v2_cp_migration_proposal.md`. The CP architecture is in
-[`command_processor.md`](command_processor.md).

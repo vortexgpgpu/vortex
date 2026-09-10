@@ -1,0 +1,66 @@
+Fix the FireSim Vitis shim hardcoding the U250 DDR base address in RTL.
+
+VitisShim added a literal 0x4000000000 -- the base of DDR[0] on a U250 -- to
+every host_mem_0 address, in the generated RTL rather than in any register.
+On an HBM-only part such as the Alveo U55C, host_mem_0 binds to HBM[0] at
+0x0 with a 512 MB (29-bit) aperture, so every access landed far outside the
+bound pseudo-channel: reads returned a fixed bus default independent of
+address and writes were dropped, leaving the target DRAM path silently dead
+while the MMIO/control plane still worked.
+
+Replaced with a documented constant in VitisConstants so the base tracks
+whatever --connectivity.sp binds host_mem_0 to. A proper upstream fix makes
+this a Config field keyed off the platform; it is a constant here because
+this tree targets one card, and the code says so.
+
+Validated under hw_emu, which exercises the same block design without
+place-and-route:
+
+  pre-fix  (control): +memcheck 5/5 probes fail, address-independent constant
+  with fix          : +memcheck 0/5 probes fail, every probe reads back what
+                      was written
+
+The regenerated RTL was independently confirmed to contain zero occurrences
+of the old constant, down from two.
+
+--- build_firesim/firesim/sim/midas/src/main/scala/midas/platform/VitisShim.scala.orig	2026-08-02 07:11:46.303359225 -0700
++++ build_firesim/firesim/sim/midas/src/main/scala/midas/platform/VitisShim.scala	2026-08-02 07:11:46.331359159 -0700
+@@ -21,6 +21,25 @@
+ 
+   /** The hardcoded TCL variable name used to specify the simulator's frequency */
+   val frequencyVariableName = "frequency"
++
++  /** Base address added to every host_mem_0 access.
++    *
++    * The shim drives absolute device addresses, so this must match the base of
++    * whatever memory resource `--connectivity.sp` binds host_mem_0 to.
++    *
++    *   U250 / U280, DDR[0]        -> 0x4000000000
++    *   U55C, HBM[0] (HBM-only)    -> 0x0, with a 512 MB (29-bit) aperture
++    *
++    * Upstream hardcoded the U250 DDR base inline. On an HBM part every access
++    * then lands far outside the bound pseudo-channel: reads return a fixed bus
++    * default independent of address and writes are dropped, so the target DRAM
++    * path is silently dead while the control plane still works.
++    *
++    * A proper upstream fix makes this a Config field keyed off the platform
++    * rather than a constant; it is a constant here because this tree targets
++    * one card.
++    */
++  val hostMemBaseAddress = 0x0L
+ }
+ 
+ class VitisShim(implicit p: Parameters) extends PlatformShim {
+@@ -89,8 +108,10 @@
+       host_mem_cdc.io.s_axi.drivenByStandardAXI4(top.module.mem(0), hostClock, hostSyncReset)
+       host_mem_cdc.io.s_axi_aclk    := hostClock
+       host_mem_cdc.io.s_axi_aresetn := (!hostSyncReset).asAsyncReset
+-      host_mem_cdc.io.s_axi.araddr  := 0x4000000000L.U(addrWidth) + top.module.mem(0).ar.bits.addr
+-      host_mem_cdc.io.s_axi.awaddr  := 0x4000000000L.U(addrWidth) + top.module.mem(0).aw.bits.addr
++      host_mem_cdc.io.s_axi.araddr  :=
++        VitisConstants.hostMemBaseAddress.U(addrWidth) + top.module.mem(0).ar.bits.addr
++      host_mem_cdc.io.s_axi.awaddr  :=
++        VitisConstants.hostMemBaseAddress.U(addrWidth) + top.module.mem(0).aw.bits.addr
+       host_mem_cdc.io.s_axi.arcache.foreach { _ := AXI4Parameters.CACHE_MODIFIABLE }
+       host_mem_cdc.io.s_axi.awcache.foreach { _ := AXI4Parameters.CACHE_MODIFIABLE }
+ 

@@ -39,20 +39,10 @@ static constexpr bool kFedp2K = true;
 static constexpr bool kFedp2K = false;
 #endif
 
-// Dot-product pipeline depth of the configured tensor-PE type
-// (multiply / align / accumulate-reduce / round stage sum).
-#if defined(VX_CFG_TCU_TYPE_DSP)
-static constexpr uint32_t kFedpLatency = 1 + 8 + log2ceil(2 * cfg::tcK + 1) * 11;
-#elif defined(VX_CFG_TCU_TYPE_BHF)
-static constexpr uint32_t kFedpLatency = (2 + 1) + 1 + log2ceil(2 * cfg::tcK + 1) * (2 + 1);
-#elif defined(VX_CFG_TCU_TYPE_FPNEW)
-static constexpr uint32_t kFedpLatency = 6 + 1 + log2ceil(2 * cfg::tcK) * 7 + 7;
-#elif defined(VX_CFG_TCU_TYPE_DPI)
-static constexpr uint32_t kFedpLatency = 2 + 2;
-#else // TFR
-static constexpr uint32_t kFedpLatency = 1 + 1 + 1 + 1;
-#endif
-// End-to-end MMA uop cost: dispatch plus the dot-product pipeline.
+// Dot-product pipeline depth of the configured tensor-PE type.
+static constexpr uint32_t kFedpLatency = VX_CFG_TCU_LATENCY;
+// End-to-end MMA uop cost: dispatch plus the dot-product pipeline (an
+// unblocked result bypasses the landing queue).
 static constexpr uint32_t kMmaLatency = 1 + kFedpLatency;
 
 inline uint64_t nan_box(uint32_t value) {
@@ -1622,7 +1612,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TcuUnit::TcuUnit(const SimContext &ctx, const char* name, Core* core)
-	: FuncUnit(ctx, name, core)
+	: FuncUnit(ctx, name, core, 1u << log2ceil(VX_CFG_TCU_LATENCY + 1)) // landing-queue depth bounds results awaiting the consumer
 #ifdef TCU_META_ENABLE
 	, agu_req_out(this)
 	, agu_rsp_in(this)

@@ -77,9 +77,15 @@ private:
   // the frame kick is forwarded to every cluster's raster engine instead.
   void forward_delegated_launch();
 
+  // True once any cluster's walker complex has latched a page fault.
+  bool mmu_fault_pending() const;
+
   Kmu::Ptr    kmu_;
   std::vector<Cluster::Ptr> clusters_;
   Memory::Ptr memsim_;
+#ifdef VX_CFG_VM_ENABLE
+  uint64_t    mmu_satp_ = 0;    // assembled from the two DCR halves
+#endif
   RAM*        ram_ = nullptr;   // functional backing store (set by attach_ram)
   Cache::Ptr l3cache_;
   uint64_t perf_mem_reads_;

@@ -1,0 +1,221 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="gw_a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e5e82"/>
+    </marker>
+  </defs>
+  <style>
+    .t   { fill:#1b2733; font-size:20px; font-weight:bold; }
+    .st  { fill:#5a6772; font-size:11.5px; font-style:italic; }
+    .th  { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts  { fill:#44525f; font-size:10.5px; }
+    .tt  { fill:#5a6772; font-size:10px; font-style:italic; }
+    .cm  { font-family:"DejaVu Sans Mono", monospace; font-size:9.5px; fill:#1b2733; }
+    .cn  { font-family:"DejaVu Sans Mono", monospace; font-size:13px; fill:#1b2733; font-weight:bold; }
+    .cxy { font-family:"DejaVu Sans Mono", monospace; font-size:8.5px; fill:#7a8894; }
+    .box { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.3; }
+    .cell   { fill:#eef3f8; stroke:#9fb3c6; stroke-width:1; }
+    .cfirst { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.6; }
+    .clus   { fill:none; stroke:#2e5e82; stroke-width:2.2; }
+    .kmu { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .arb { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .gfx { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .warn{ fill:#fdeeea; stroke:#a03020; stroke-width:1.5; }
+    .lbr { fill:#a03020; font-size:10px; font-weight:bold; }
+    .req { stroke:#2e5e82; stroke-width:1.7; fill:none; marker-end:url(#gw_a); }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t">The grid walk — why a cluster&#8217;s CTAs land contiguously</text>
+  <text x="24" y="56" class="st">The KMU walks the grid two levels deep. The inner level fills a cluster before the outer level moves on, so a cluster&#8217;s K CTAs are consecutive in dispatch order.</text>
+
+  <!-- ===== the walk figure ===== -->
+  <text x="60" y="92" class="th">grid_dim = (6, 4, 1)   cluster_dim = (2, 2, 1)   &#8594;   24 CTAs in 6 clusters of 4</text>
+  <text x="60" y="112" class="ts">Cell number = dispatch order. Cell subscript = block_idx. Purple = is_first_of_cluster.</text>
+  <text x="60" y="132" class="tt">A flat row-major walk would emit 0,1,2,3,4,5 across the top row — the four members of a cluster would be scattered across the grid and could not co-reside.</text>
+
+  <text x="60" y="176" class="th">block_idx[i] = group_origin[i] + intra_offset[i]</text>
+  <text x="60" y="196" class="ts">intra_offset advances by 1 and wraps at cluster_dim[i]; when it fully wraps, group_origin advances by cluster_dim[i].</text>
+
+  <rect x="60" y="230" width="44" height="44" rx="3" class="cfirst"/>
+  <text x="82" y="251" class="cn" text-anchor="middle">0</text>
+  <text x="82" y="264" class="cxy" text-anchor="middle">0,0</text>
+  <rect x="106" y="230" width="44" height="44" rx="3" class="cell"/>
+  <text x="128" y="251" class="cn" text-anchor="middle">1</text>
+  <text x="128" y="264" class="cxy" text-anchor="middle">1,0</text>
+  <rect x="152" y="230" width="44" height="44" rx="3" class="cfirst"/>
+  <text x="174" y="251" class="cn" text-anchor="middle">4</text>
+  <text x="174" y="264" class="cxy" text-anchor="middle">2,0</text>
+  <rect x="198" y="230" width="44" height="44" rx="3" class="cell"/>
+  <text x="220" y="251" class="cn" text-anchor="middle">5</text>
+  <text x="220" y="264" class="cxy" text-anchor="middle">3,0</text>
+  <rect x="244" y="230" width="44" height="44" rx="3" class="cfirst"/>
+  <text x="266" y="251" class="cn" text-anchor="middle">8</text>
+  <text x="266" y="264" class="cxy" text-anchor="middle">4,0</text>
+  <rect x="290" y="230" width="44" height="44" rx="3" class="cell"/>
+  <text x="312" y="251" class="cn" text-anchor="middle">9</text>
+  <text x="312" y="264" class="cxy" text-anchor="middle">5,0</text>
+  <rect x="60" y="276" width="44" height="44" rx="3" class="cell"/>
+  <text x="82" y="297" class="cn" text-anchor="middle">2</text>
+  <text x="82" y="310" class="cxy" text-anchor="middle">0,1</text>
+  <rect x="106" y="276" width="44" height="44" rx="3" class="cell"/>
+  <text x="128" y="297" class="cn" text-anchor="middle">3</text>
+  <text x="128" y="310" class="cxy" text-anchor="middle">1,1</text>
+  <rect x="152" y="276" width="44" height="44" rx="3" class="cell"/>
+  <text x="174" y="297" class="cn" text-anchor="middle">6</text>
+  <text x="174" y="310" class="cxy" text-anchor="middle">2,1</text>
+  <rect x="198" y="276" width="44" height="44" rx="3" class="cell"/>
+  <text x="220" y="297" class="cn" text-anchor="middle">7</text>
+  <text x="220" y="310" class="cxy" text-anchor="middle">3,1</text>
+  <rect x="244" y="276" width="44" height="44" rx="3" class="cell"/>
+  <text x="266" y="297" class="cn" text-anchor="middle">10</text>
+  <text x="266" y="310" class="cxy" text-anchor="middle">4,1</text>
+  <rect x="290" y="276" width="44" height="44" rx="3" class="cell"/>
+  <text x="312" y="297" class="cn" text-anchor="middle">11</text>
+  <text x="312" y="310" class="cxy" text-anchor="middle">5,1</text>
+  <rect x="60" y="322" width="44" height="44" rx="3" class="cfirst"/>
+  <text x="82" y="343" class="cn" text-anchor="middle">12</text>
+  <text x="82" y="356" class="cxy" text-anchor="middle">0,2</text>
+  <rect x="106" y="322" width="44" height="44" rx="3" class="cell"/>
+  <text x="128" y="343" class="cn" text-anchor="middle">13</text>
+  <text x="128" y="356" class="cxy" text-anchor="middle">1,2</text>
+  <rect x="152" y="322" width="44" height="44" rx="3" class="cfirst"/>
+  <text x="174" y="343" class="cn" text-anchor="middle">16</text>
+  <text x="174" y="356" class="cxy" text-anchor="middle">2,2</text>
+  <rect x="198" y="322" width="44" height="44" rx="3" class="cell"/>
+  <text x="220" y="343" class="cn" text-anchor="middle">17</text>
+  <text x="220" y="356" class="cxy" text-anchor="middle">3,2</text>
+  <rect x="244" y="322" width="44" height="44" rx="3" class="cfirst"/>
+  <text x="266" y="343" class="cn" text-anchor="middle">20</text>
+  <text x="266" y="356" class="cxy" text-anchor="middle">4,2</text>
+  <rect x="290" y="322" width="44" height="44" rx="3" class="cell"/>
+  <text x="312" y="343" class="cn" text-anchor="middle">21</text>
+  <text x="312" y="356" class="cxy" text-anchor="middle">5,2</text>
+  <rect x="60" y="368" width="44" height="44" rx="3" class="cell"/>
+  <text x="82" y="389" class="cn" text-anchor="middle">14</text>
+  <text x="82" y="402" class="cxy" text-anchor="middle">0,3</text>
+  <rect x="106" y="368" width="44" height="44" rx="3" class="cell"/>
+  <text x="128" y="389" class="cn" text-anchor="middle">15</text>
+  <text x="128" y="402" class="cxy" text-anchor="middle">1,3</text>
+  <rect x="152" y="368" width="44" height="44" rx="3" class="cell"/>
+  <text x="174" y="389" class="cn" text-anchor="middle">18</text>
+  <text x="174" y="402" class="cxy" text-anchor="middle">2,3</text>
+  <rect x="198" y="368" width="44" height="44" rx="3" class="cell"/>
+  <text x="220" y="389" class="cn" text-anchor="middle">19</text>
+  <text x="220" y="402" class="cxy" text-anchor="middle">3,3</text>
+  <rect x="244" y="368" width="44" height="44" rx="3" class="cell"/>
+  <text x="266" y="389" class="cn" text-anchor="middle">22</text>
+  <text x="266" y="402" class="cxy" text-anchor="middle">4,3</text>
+  <rect x="290" y="368" width="44" height="44" rx="3" class="cell"/>
+  <text x="312" y="389" class="cn" text-anchor="middle">23</text>
+  <text x="312" y="402" class="cxy" text-anchor="middle">5,3</text>
+
+  <rect x="57" y="227" width="92" height="92" rx="4" class="clus"/>
+  <rect x="149" y="227" width="92" height="92" rx="4" class="clus"/>
+  <rect x="241" y="227" width="92" height="92" rx="4" class="clus"/>
+  <rect x="57" y="319" width="92" height="92" rx="4" class="clus"/>
+  <rect x="149" y="319" width="92" height="92" rx="4" class="clus"/>
+  <rect x="241" y="319" width="92" height="92" rx="4" class="clus"/>
+
+  <text x="60" y="440" class="tt">block_idx X &#8594;</text>
+
+  <!-- explanation column -->
+  <rect x="400" y="222" width="360" height="94" rx="6" class="arb"/>
+  <text x="412" y="242" class="th">Inner level — fill the cluster</text>
+  <text x="412" y="262" class="cm">intra_x_wrap = (intra_x_n == cluster_dim[0])</text>
+  <text x="412" y="278" class="cm">intra_y_wrap = intra_x_wrap &amp;&amp; (...)</text>
+  <text x="412" y="296" class="ts">Bounded by NUM_WARPS (members co-reside on one</text>
+  <text x="412" y="310" class="ts">core), so NW_WIDTH+1 bits — not a 32-bit counter.</text>
+
+  <rect x="400" y="328" width="360" height="86" rx="6" class="arb"/>
+  <text x="412" y="348" class="th">Outer level — move to the next cluster</text>
+  <text x="412" y="368" class="cm">group_complete = intra_z_wrap</text>
+  <text x="412" y="384" class="cm">origin_x_n = group_origin[0] + cluster_dim[0]</text>
+  <text x="412" y="404" class="ts">Advances in (X, Y, Z) order against grid_dim.</text>
+
+  <rect x="400" y="426" width="360" height="76" rx="6" class="box"/>
+  <text x="412" y="446" class="th">cluster_dim = (1,1,1) is the degenerate case</text>
+  <text x="412" y="466" class="ts">Every intra_offset wraps immediately, so group_origin</text>
+  <text x="412" y="482" class="ts">advances every beat and block_idx is the plain</text>
+  <text x="412" y="498" class="ts">row-major walk. This is the default.</text>
+
+  <!-- ===== is_first_of_cluster ===== -->
+  <rect x="60" y="472" width="330" height="120" rx="6" class="kmu"/>
+  <text x="72" y="492" class="th">is_first_of_cluster is a REGISTER</text>
+  <text x="72" y="512" class="cm">reg is_first_r;</text>
+  <text x="72" y="528" class="cm">is_first_r &lt;= group_complete;</text>
+  <text x="72" y="550" class="ts">Not the combinational predicate intra_offset == 0.</text>
+  <text x="72" y="566" class="ts">The next fire starts a cluster exactly when this one</text>
+  <text x="72" y="582" class="ts">completes one, so the walk tracks it in lockstep.</text>
+
+  <rect x="60" y="604" width="700" height="96" rx="6" class="box"/>
+  <text x="72" y="624" class="th">Every output field is flop-driven — deliberately</text>
+  <text x="72" y="644" class="ts">block_idx_r and is_first_r are registered walk variables updated alongside the counters; the rest are config or walk flops. The KMU&#8217;s output</text>
+  <text x="72" y="660" class="ts">is a chip-spanning broadcast to every core&#8217;s dispatcher, so it carries no combinational logic on the source side and adds no latency. The</text>
+  <text x="72" y="676" class="ts">32-bit block_idx add stays an internal reg&#8594;reg path (one add per axis), off both the output and the KMU&#8594;core route.</text>
+  <text x="72" y="694" class="tt">cluster_size and aligned_lmem_size are computed once per kernel and registered the same way — DCRs settle before `start`.</text>
+
+  <!-- ===== right: DCR surface ===== -->
+  <rect x="790" y="80" width="686" height="330" rx="8" class="box"/>
+  <text x="804" y="102" class="th">The programming surface — DCRs, written before `start`</text>
+  <text x="804" y="122" class="ts">The host writes these through the command processor&#8217;s DCR_WRITE path; VX_kmu latches them and never reads them back.</text>
+
+  <rect x="804" y="136" width="330" height="256" rx="5" class="kmu"/>
+  <text x="816" y="156" class="cm">STARTUP_ADDR0/1   0x010  program image PC</text>
+  <text x="816" y="176" class="cm">KERNEL_ENTRY0/1   0x012  kernel entry PC</text>
+  <text x="816" y="196" class="cm">STARTUP_ARG0/1    0x014  kargs pointer</text>
+  <text x="816" y="216" class="cm">BLOCK_DIM_X/Y/Z   0x016  threads per CTA axis</text>
+  <text x="816" y="236" class="cm">GRID_DIM_X/Y/Z    0x019  CTAs per grid axis</text>
+  <text x="816" y="256" class="cm">LMEM_SIZE         0x01C  per-CTA LMEM bytes</text>
+  <text x="816" y="276" class="cm">BLOCK_SIZE        0x01D  total threads per CTA</text>
+  <text x="816" y="296" class="cm">WARP_STEP_X/Y/Z   0x01E  thread-index delta</text>
+  <text x="816" y="316" class="cm">CLUSTER_DIM_X/Y/Z 0x021  cluster shape</text>
+  <text x="816" y="342" class="tt">VX_DCR_KMU_STATE_BEGIN = 0x010</text>
+  <text x="816" y="358" class="tt">VX_DCR_KMU_STATE_END   = 0x024</text>
+  <text x="816" y="380" class="tt">CLUSTER_DIM is internal-only: not a CSR, not on the bus.</text>
+
+  <rect x="1146" y="136" width="316" height="118" rx="5" class="arb"/>
+  <text x="1158" y="156" class="th">WARP_STEP — the host does the division</text>
+  <text x="1158" y="176" class="ts">The per-warp thread-index delta is derived on the</text>
+  <text x="1158" y="192" class="ts">HOST, once, so the KMU never divides:</text>
+  <text x="1158" y="212" class="cm">ws_x = NT % block[0]</text>
+  <text x="1158" y="228" class="cm">ws_y = (NT / block[0]) % block[1]</text>
+  <text x="1158" y="244" class="cm">ws_z = (NT / (block[0]*block[1])) % block[2]</text>
+
+  <rect x="1146" y="266" width="316" height="126" rx="5" class="box"/>
+  <text x="1158" y="286" class="th">ctx_id — the launch identity</text>
+  <text x="1158" y="306" class="ts">An 8-bit counter bumped on every `start`, carried on</text>
+  <text x="1158" y="322" class="ts">every CTA. It is what tells a dispatcher that a NEW</text>
+  <text x="1158" y="338" class="ts">launch has begun, so relaunching the same kernel at</text>
+  <text x="1158" y="354" class="ts">the same PC is still a distinct context.</text>
+  <text x="1158" y="376" class="tt">Keyed on the launch id, not the PC — see the init record.</text>
+
+  <!-- empty grid -->
+  <rect x="790" y="426" width="686" height="164" rx="8" class="warn"/>
+  <text x="804" y="448" class="lbr">AN EMPTY GRID IS NOT A NO-OP</text>
+  <text x="804" y="470" class="cm">grid_nonempty = (grid_dim[0] != 0) &amp;&amp; (grid_dim[1] != 0) &amp;&amp; (grid_dim[2] != 0)</text>
+  <text x="804" y="494" class="ts">The walk&#8217;s wrap comparisons test origin_*_n == grid_dim[*], and a zero bound can never be reached — so starting the</text>
+  <text x="804" y="510" class="ts">walk on an empty grid would fire CTAs forever. `running` is armed only when the grid is non-empty.</text>
+  <text x="804" y="534" class="ts">A grid-less start is instead a DELEGATED DRAW LAUNCH: the KMU walks no CTAs and forwards the frame kick to the</text>
+  <text x="804" y="550" class="ts">raster engines over VX_raster_launch_if. raster_start_r holds `busy` from the start pulse until every engine has</text>
+  <text x="804" y="566" class="ts">acknowledged, so the launch fence always observes the frame. With no raster engines it self-completes.</text>
+  <text x="804" y="584" class="tt">busy = running | raster_start_r</text>
+
+  <!-- bottom: what the dispatcher does NOT get -->
+  <rect x="790" y="604" width="686" height="96" rx="8" class="gfx"/>
+  <text x="804" y="626" class="th">What the KMU does NOT send</text>
+  <text x="804" y="646" class="ts">No cta_id. The RTL walk keeps a cta_id counter for tracing only — it never reaches the bus. A CTA&#8217;s architectural</text>
+  <text x="804" y="662" class="ts">VX_CSR_CTA_ID is the LOCAL dispatcher slot it lands in, assigned on arrival. Two CTAs on different cores routinely</text>
+  <text x="804" y="678" class="ts">share a cta_id; a kernel that needs its global identity reads block_idx instead.</text>
+  <text x="804" y="696" class="tt">SimX&#8217;s kmu_req_t does carry cta_id — a model-only field with no RTL counterpart (see the SimX section).</text>
+
+  <!-- footer -->
+  <rect x="60" y="722" width="1416" height="152" rx="8" class="box"/>
+  <text x="74" y="744" class="th">The dispatch-order contract, stated once</text>
+  <text x="74" y="766" class="ts">The K CTAs of a cluster are emitted back to back on the launch bus. That is the ENTIRE mechanism — there is no cluster tag, no rendezvous, and no</text>
+  <text x="74" y="782" class="ts">handshake between members. A dispatcher recognises a cluster solely by is_first_of_cluster arriving with a cluster_size &gt; 1, reserves the whole window</text>
+  <text x="74" y="798" class="ts">on that beat, and then simply lets the next K&#8722;1 beats fall into the slots it already set aside.</text>
+  <text x="74" y="822" class="ts">Adjacency in the stream is not by itself adjacency on a core, so the bus carries the rest of the contract: a compute message is one CLUSTER, and every arb level</text>
+  <text x="74" y="838" class="ts">locks its input&#8594;output pair from a message&#8217;s first beat to its `eop`. The walk emits the members back to back; the lock delivers them to one core. `eop` here is</text>
+  <text x="74" y="854" class="ts">is_last_r, a registered down-counter — so clusters, not CTAs, are what round-robin across the machine.</text>
+</svg>

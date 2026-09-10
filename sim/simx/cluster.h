@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include <simobject.h>
+#include "types.h"
 #include "cache.h"
 #ifdef VX_CFG_EXT_DXA_ENABLE
 #include "dxa_core.h"
@@ -29,6 +29,10 @@
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
 #include "rtu_core.h"
+#endif
+#ifdef VX_CFG_VM_ENABLE
+#include "mem/tlb_l2.h"
+#include "mem/ptw.h"
 #endif
 
 namespace vortex {
@@ -60,10 +64,19 @@ public:
     RtuCore::PerfStats rtu;
     Cache::PerfStats   rtcache;
 #endif
+#ifdef VX_CFG_VM_ENABLE
+    L2Tlb::PerfStats l2tlb;
+    Ptw::PerfStats   ptw;
+#endif
   };
 
   std::vector<SimChannel<MemReq>> mem_req_out;
   std::vector<SimChannel<MemRsp>> mem_rsp_in;
+
+  // Global-barrier event links: every core's arrive end fans into
+  // gbar_arrive_in; resume links fan back out, one per cluster core.
+  SimEventLink<GbarArrive> gbar_arrive_in;
+  std::vector<SimEventLink<GbarResume>> gbar_resume_out;
 
   Cluster(const SimContext& ctx,
           const char* name,
@@ -80,11 +93,18 @@ public:
 
   int get_exitcode() const;
 
-  void global_barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t core_id);
-
   PerfStats perf_stats() const;
 
   int dcr_write(uint32_t addr, uint32_t value);
+
+#ifdef VX_CFG_VM_ENABLE
+  // Host-side VM control: device SATP for the walker complex, the
+  // device-idle TLB flush broadcast, and first-fault readback.
+  void set_mmu_satp(uint64_t value);
+  void mmu_clear_fault();
+  uint64_t mmu_fault_va() const;
+  uint32_t mmu_fault_info() const;
+#endif
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
@@ -92,8 +112,8 @@ public:
 
   // Cache flush walk. ProcessorImpl ticks in level order (L1 in parallel
   // → L2 → L3) to avoid downstream evictions racing the next-level walk.
-  // L1 fanout: dcache + icache + {tcache, rcache, ocache} (gated by
-  // VX_CFG_EXT_* macros).
+  // L1 fanout: dcache + icache + socket-local {tcache, rtcache} (forwarded
+  // to the sockets) + cluster-local {rcache, ocache}.
   void dcache_flush_begin();
   bool dcache_flush_done() const;
   void icache_flush_begin();
@@ -117,25 +137,18 @@ public:
   void l2_flush_begin();
   bool l2_flush_done() const;
 
-#ifdef VX_CFG_EXT_DXA_ENABLE
-  DxaCore::Ptr& dxa_core();
-#endif
-
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   // Cluster-shared raster engine (armed by the KMU's delegated draw launch;
   // the per-core SFU wave-pull launches covered-quad waves autonomously).
   RasterCore::Ptr& raster_core();
 #endif
 
-#ifdef VX_CFG_EXT_RTU_ENABLE
-  RtuCore::Ptr& rtu_core();
-#endif
-
 protected:
   void on_reset();
-  void on_tick();
 
 private:
+  void on_gbar_arrive(const GbarArrive& msg);
+
   uint32_t       cluster_id_;
   ProcessorImpl* processor_;
 
