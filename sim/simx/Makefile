@@ -142,8 +142,10 @@ OBJS            := $(COMMON_OBJS) $(SIM_COMMON_OBJS) $(SRC_OBJS)
 MAIN_OBJ    := $(OBJ_DIR)/main.o
 DXA_OOO_TEST_OBJ  := $(OBJ_DIR)/tests/dxa_ooo_test.o
 DXA_OOO_TEST      := $(DESTDIR)/dxa_ooo_test
+RVC_TEST_OBJ      := $(OBJ_DIR)/tests/rvc_decompress_test.o
+RVC_TEST          := $(DESTDIR)/rvc_decompress_test
 
-DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d) $(DXA_OOO_TEST_OBJ:.o=.d)
+DEPS := $(OBJS:.o=.d) $(MAIN_OBJ:.o=.d) $(DXA_OOO_TEST_OBJ:.o=.d) $(RVC_TEST_OBJ:.o=.d)
 
 # generate .d files alongside .o files
 CXXFLAGS += -MMD -MP -MF $(@:.o=.d)
@@ -166,7 +168,7 @@ PROJECT := simx
 VORTEX_LIB := libvortex.so
 VORTEX_GEM5_LIB := libvortex-gem5.so
 
-.PHONY: all force test-dxa-ooo clean clean-lib clean-exe clean-obj libvortex clean-libvortex libvortex-gem5 clean-libvortex-gem5
+.PHONY: all force test-dxa-ooo test-rvc-decompress clean clean-lib clean-exe clean-obj libvortex clean-libvortex libvortex-gem5 clean-libvortex-gem5
 
 ifeq ($(USE_SST), 1)
 all: $(DESTDIR)/$(PROJECT) $(DESTDIR)/$(VORTEX_LIB)
@@ -205,6 +207,10 @@ $(DXA_OOO_TEST_OBJ): $(VORTEX_HOME)/tests/unittest/dxa_ooo/main.cpp $(CONFIG_FIL
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(RVC_TEST_OBJ): $(VORTEX_HOME)/tests/unittest/rvc_decompress/main.cpp $(CONFIG_FILE)
+	@mkdir -p $(@D)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 # Main executable
 $(DESTDIR)/$(PROJECT): $(OBJS) $(MAIN_OBJ)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
@@ -213,6 +219,12 @@ test-dxa-ooo: $(DXA_OOO_TEST)
 	$(DXA_OOO_TEST)
 
 $(DXA_OOO_TEST): $(OBJS) $(DXA_OOO_TEST_OBJ)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+test-rvc-decompress: $(RVC_TEST)
+	$(RVC_TEST)
+
+$(RVC_TEST): $(OBJS) $(RVC_TEST_OBJ)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # Shared library
