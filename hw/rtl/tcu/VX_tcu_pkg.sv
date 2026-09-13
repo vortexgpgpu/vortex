@@ -223,42 +223,6 @@ package VX_tcu_pkg;
     localparam TCU_RA = 10;
     localparam TCU_RB = (TCU_NRB == 4) ? 28 : 24;
 
-    localparam TCU_UOPS = TCU_M_STEPS * TCU_N_STEPS * TCU_K_STEPS;
-
-`ifdef TCU_OP
-    localparam TCU_TC_K_OP = `MAX(32'b1, `MAX((TCU_TC_M * TCU_TC_K) / 32 /*TCU_TILE_M*/,
-                                              (TCU_TC_K * TCU_TC_N) / 32 /*TCU_TILE_N*/));
-    localparam TCU_EXPANSION_RATIO = TCU_TC_K / TCU_TC_K_OP;
-
-    localparam TCU_TC_M_OP = 32;
-    localparam TCU_TC_N_OP = 32;
-    localparam LG_TCU_TC_M_OP = $clog2(TCU_TC_M_OP);
-    localparam LG_TCU_TC_N_OP = $clog2(TCU_TC_N_OP);
-
-    localparam TCU_M_STEPS_OP = 4;
-    localparam TCU_N_STEPS_OP = 2;
-    localparam TCU_K_STEPS_OP = TCU_K_STEPS * TCU_EXPANSION_RATIO;
-
-    localparam TCU_C_BLOCKS_IN_ACCU = TCU_TC_M_OP * TCU_TC_N_OP / `VX_CFG_NUM_LSU_LANES;
-    localparam TCU_OPS_PER_C_BLOCK = TCU_K_STEPS_OP / TCU_C_BLOCKS_IN_ACCU;
-
-    localparam TCU_UOPS_OP = TCU_M_STEPS_OP * TCU_N_STEPS_OP * TCU_K_STEPS_OP;
-
-    /* Parameters for FEOP steps */
-    localparam TCU_FEOP_BLOCK_M_SIZE = 4;
-    localparam TCU_FEOP_BLOCK_N_SIZE = 8;
-
-    localparam TCU_FEOP_M_STEPS = TCU_TC_M_OP / TCU_FEOP_BLOCK_M_SIZE; // m-dimension steps to calculate an accu buffer
-    localparam TCU_FEOP_N_STEPS = TCU_TC_N_OP / TCU_FEOP_BLOCK_N_SIZE; // n-dimension steps to calculate an accu buffer
-    localparam TCU_FEOP_STEPS = TCU_FEOP_M_STEPS * TCU_FEOP_N_STEPS;
-
-    localparam LG_TCU_FEOP_BLOCK_M_SIZE = $clog2(TCU_FEOP_BLOCK_M_SIZE);
-    localparam LG_TCU_FEOP_BLOCK_N_SIZE = $clog2(TCU_FEOP_BLOCK_N_SIZE);
-    localparam LG_TCU_FEOP_M_STEPS = $clog2(TCU_FEOP_M_STEPS);
-    localparam LG_TCU_FEOP_N_STEPS = $clog2(TCU_FEOP_N_STEPS);
-    localparam LG_TCU_FEOP_STEPS = $clog2(TCU_FEOP_STEPS);
-`endif // TCU_OP
-
     localparam TCU_MAX_INPUTS = TCU_TC_K * TCU_MAX_ELT_RATIO;
 
     function automatic int unsigned mx_fedp_sf_count(
