@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <iostream>
 #include <vector>
-#include <vortex.h>
+#include <vortex2.h>
 
 #define RT_CHECK(expr)                                                   \
   do {                                                                   \
@@ -23,17 +23,19 @@ vx_buffer_h q_buffer = nullptr;
 vx_buffer_h k_buffer = nullptr;
 vx_buffer_h v_buffer = nullptr;
 vx_buffer_h output_buffer = nullptr;
-vx_buffer_h kernel_buffer = nullptr;
-vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 
 static void cleanup() {
-  if (q_buffer) vx_mem_free(q_buffer);
-  if (k_buffer) vx_mem_free(k_buffer);
-  if (v_buffer) vx_mem_free(v_buffer);
-  if (output_buffer) vx_mem_free(output_buffer);
-  if (kernel_buffer) vx_mem_free(kernel_buffer);
-  if (args_buffer) vx_mem_free(args_buffer);
-  if (device) vx_dev_close(device);
+  if (q_buffer) vx_buffer_release(q_buffer);
+  if (k_buffer) vx_buffer_release(k_buffer);
+  if (v_buffer) vx_buffer_release(v_buffer);
+  if (output_buffer) vx_buffer_release(output_buffer);
+  if (kernel)  vx_kernel_release(kernel);
+  if (module_) vx_module_release(module_);
+  if (queue)   vx_queue_release(queue);
+  if (device) vx_device_release(device);
 }
 
 static float input_value(uint32_t row, uint32_t column, uint32_t salt) {
@@ -43,10 +45,13 @@ static float input_value(uint32_t row, uint32_t column, uint32_t salt) {
 }
 
 int main() {
-  RT_CHECK(vx_dev_open(&device));
+  RT_CHECK(vx_device_open(0, &device));
+
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   uint64_t isa_flags = 0;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
   if ((isa_flags & VX_ISA_EXT_TCU) == 0) {
     std::cerr << "TCU extension not supported\n";
     cleanup();
@@ -54,7 +59,7 @@ int main() {
   }
 
   uint64_t device_threads = 0;
-  RT_CHECK(vx_dev_caps(device, VX_CAPS_NUM_THREADS, &device_threads));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &device_threads));
   if (device_threads != NUM_THREADS) {
     std::cerr << "Device warp size " << device_threads
               << " does not match NUM_THREADS=" << NUM_THREADS << '\n';
@@ -144,35 +149,46 @@ int main() {
   kernel_arg_t args = {};
   args.causal = 1;
 
-  RT_CHECK(vx_mem_alloc(
+  RT_CHECK(vx_buffer_create(
       device, q.size() * sizeof(uint16_t), VX_MEM_READ, &q_buffer));
-  RT_CHECK(vx_mem_address(q_buffer, &args.q_addr));
-  RT_CHECK(vx_mem_alloc(
+  RT_CHECK(vx_buffer_address(q_buffer, &args.q_addr));
+  RT_CHECK(vx_buffer_create(
       device, k.size() * sizeof(uint16_t), VX_MEM_READ, &k_buffer));
-  RT_CHECK(vx_mem_address(k_buffer, &args.k_addr));
-  RT_CHECK(vx_mem_alloc(
+  RT_CHECK(vx_buffer_address(k_buffer, &args.k_addr));
+  RT_CHECK(vx_buffer_create(
       device, v.size() * sizeof(uint16_t), VX_MEM_READ, &v_buffer));
-  RT_CHECK(vx_mem_address(v_buffer, &args.v_addr));
-  RT_CHECK(vx_mem_alloc(
+  RT_CHECK(vx_buffer_address(v_buffer, &args.v_addr));
+  RT_CHECK(vx_buffer_create(
       device, output.size() * sizeof(float), VX_MEM_WRITE, &output_buffer));
-  RT_CHECK(vx_mem_address(output_buffer, &args.output_addr));
+  RT_CHECK(vx_buffer_address(output_buffer, &args.output_addr));
 
-  RT_CHECK(vx_copy_to_dev(
-      q_buffer, q.data(), 0, q.size() * sizeof(uint16_t)));
-  RT_CHECK(vx_copy_to_dev(
-      k_buffer, k.data(), 0, k.size() * sizeof(uint16_t)));
-  RT_CHECK(vx_copy_to_dev(
-      v_buffer, v.data(), 0, v.size() * sizeof(uint16_t)));
-  RT_CHECK(vx_upload_kernel_file(device, "kernel.vxbin", &kernel_buffer));
-  RT_CHECK(vx_upload_bytes(device, &args, sizeof(args), &args_buffer));
+  RT_CHECK(vx_enqueue_write(queue, q_buffer, 0, q.data(), q.size() * sizeof(uint16_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, k_buffer, 0, k.data(), k.size() * sizeof(uint16_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, v_buffer, 0, v.data(), v.size() * sizeof(uint16_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_module_load_file(device, "kernel.vxbin", &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   uint32_t grid_dim[1] = {1};
   uint32_t block_dim[1] = {NUM_THREADS};
-  RT_CHECK(vx_start_g(device, kernel_buffer, args_buffer, 1,
-                      grid_dim, block_dim, kLocalMemoryBytes));
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
-  RT_CHECK(vx_copy_from_dev(
-      output.data(), output_buffer, 0, output.size() * sizeof(float)));
+  vx_launch_info_t li = {};
+  li.struct_size  = sizeof(li);
+  li.kernel       = kernel;
+  li.args_host    = &args;
+  li.args_size    = sizeof(args);
+  li.ndim         = 1;
+  li.grid_dim[0]  = grid_dim[0];
+  li.block_dim[0] = block_dim[0];
+  li.lmem_size    = kLocalMemoryBytes;
+  vx_event_h launch_ev = nullptr;
+  RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+  RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(launch_ev);
+  {
+    vx_event_h rd_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, output.data(), output_buffer, 0, output.size() * sizeof(float), 0, nullptr, &rd_ev));
+    RT_CHECK(vx_event_wait_value(rd_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(rd_ev);
+  }
 
   uint32_t errors = 0;
   float max_error = 0.0f;

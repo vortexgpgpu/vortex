@@ -909,7 +909,6 @@ int main(int argc, char *argv[]) {
     printf("TCU_CYCLES: max-block=%lu, total-body=%lu (across %u blocks)\n",
            max_block_cycles, h_metrics[0], num_blocks);
   }
-#endif
 
   std::cout << "Kernel body cycles: " << h_metrics[0] << std::endl;
   std::cout << "Kernel body instructions: " << h_metrics[1] << std::endl;

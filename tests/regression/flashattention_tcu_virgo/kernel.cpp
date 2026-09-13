@@ -20,7 +20,7 @@ static_assert(kKeyGroupSize % ctx::tileN == 0,
 static_assert(kHeadDimension % ctx::tileN == 0,
               "head dimension must be an exact number of N tiles");
 
-static constexpr uint32_t kKeyGroups = kSequenceLength / kKeyGroupSize;
+[[maybe_unused]] static constexpr uint32_t kKeyGroups = kSequenceLength / kKeyGroupSize;
 static constexpr uint32_t kScoreTiles = kKeyGroupSize / ctx::tileN;
 static constexpr uint32_t kOutputTiles = kHeadDimension / ctx::tileN;
 
