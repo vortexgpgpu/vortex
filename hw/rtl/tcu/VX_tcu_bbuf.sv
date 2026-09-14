@@ -95,10 +95,23 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam bit SPARSE_TWO_SLOT = (LOGICAL_ROWS_PER_BLK == 2);
     localparam bit SPARSE_TWO_FETCH = SPARSE_TWO_SLOT && (XLEN_RATIO == 1);
 
+    // Dense blocks double under FEDP2K and can then span two logical
+    // 32-bit bank-rows (B_BLOCK_WORDS > NUM_BANKS; e.g. NT=16 fp16 FEDP2K:
+    // 32-word blocks over 16 banks). Mirrors the sparse two-slot machinery.
+    localparam DENSE_ROWS_PER_BLK = (B_BLOCK_WORDS > NUM_BANKS) ? (B_BLOCK_WORDS / NUM_BANKS) : 1;
+    `STATIC_ASSERT (DENSE_ROWS_PER_BLK == 1 || DENSE_ROWS_PER_BLK == 2,
+                    ("dense B supports 1 or 2 logical bank-rows per block"))
+    localparam bit DENSE_TWO_SLOT  = (DENSE_ROWS_PER_BLK == 2);
+    localparam bit DENSE_TWO_FETCH = DENSE_TWO_SLOT && (XLEN_RATIO == 1);
+
     // Canonical-config invariant: 1 logical (32-bit-equivalent) bank-row
-    // holds B_SUB_BLOCKS blocks (the smem layout is XLEN-independent).
-    `STATIC_ASSERT (B_BLOCK_WORDS * TCU_WG_B_SUB_BLOCKS == NUM_BANKS,
+    // holds B_SUB_BLOCKS blocks (the smem layout is XLEN-independent) —
+    // unless the block itself spans two rows, which implies one block per
+    // refill (SUB_BLOCKS == 0).
+    `STATIC_ASSERT (DENSE_TWO_SLOT || (B_BLOCK_WORDS * TCU_WG_B_SUB_BLOCKS == NUM_BANKS),
                     ("VX_tcu_bbuf assumes one bank-row per B_SUB_BLOCKS blocks"))
+    `STATIC_ASSERT (!DENSE_TWO_SLOT || (TCU_WG_B_SUB_BLOCKS == 0),
+                    ("two-row dense blocks imply a single block per refill"))
 
     // K-major (= row-major SMEM where K runs along contiguous bytes; the
     // WGMMA SS-descriptor's canonical layout) fetch path. Engaged
@@ -163,6 +176,15 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [SUB_HALF_W-1:0] sp_sub_b = (LG_XLEN_RATIO == 0) ? '0
                                    : SUB_HALF_W'(sp_logrow_b & SP_LOGROW_W'((1 << LG_XLEN_RATIO) - 1));
 
+    // Two-row dense blocks: consecutive logical rows per block_index.
+    wire [SP_LOGROW_W-1:0] dn_logrow_a =
+        SP_LOGROW_W'(block_index) * SP_LOGROW_W'(DENSE_ROWS_PER_BLK);
+    wire [SP_LOGROW_W-1:0] dn_logrow_b = dn_logrow_a + SP_LOGROW_W'(1);
+    wire [SUB_HALF_W-1:0] dn_sub_a = (LG_XLEN_RATIO == 0) ? '0
+                                   : SUB_HALF_W'(dn_logrow_a & SP_LOGROW_W'((1 << LG_XLEN_RATIO) - 1));
+    wire [SUB_HALF_W-1:0] dn_sub_b = (LG_XLEN_RATIO == 0) ? '0
+                                   : SUB_HALF_W'(dn_logrow_b & SP_LOGROW_W'((1 << LG_XLEN_RATIO) - 1));
+
     // -----------------------------------------------------------------------
     // Address compute (block-major)
     // -----------------------------------------------------------------------
@@ -223,8 +245,12 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // directly. desc_b_ldm_words on the bus is used only for setup.
 
     // Per-mode fetch addresses.
-    wire [BANK_ADDR_WIDTH-1:0] fetch_addr_dense =
-        effective_desc_b_row_base + BANK_ADDR_WIDTH'(dense_offset);
+    wire [BANK_ADDR_WIDTH-1:0] fetch_addr_dense = DENSE_TWO_SLOT
+        ? (effective_desc_b_row_base + BANK_ADDR_WIDTH'(dn_logrow_a >> LG_XLEN_RATIO))
+        : (effective_desc_b_row_base + BANK_ADDR_WIDTH'(dense_offset));
+    wire [BANK_ADDR_WIDTH-1:0] fetch_addr_dense_b =
+        effective_desc_b_row_base + BANK_ADDR_WIDTH'(dn_logrow_b >> LG_XLEN_RATIO);
+    wire [SUB_HALF_W-1:0] dense_sub_a = DENSE_TWO_SLOT ? dn_sub_a : dense_sub_half;
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_a_sparse =
         effective_desc_b_row_base + BANK_ADDR_WIDTH'(sp_logrow_a >> LG_XLEN_RATIO);
     wire [BANK_ADDR_WIDTH-1:0] fetch_addr_b_sparse =
@@ -236,7 +262,10 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire bank_row_resident_dense =
         slot_a_valid_r && !slot_is_sparse_r
         && (slot_a_addr_r == fetch_addr_dense)
-        && (slot_a_sub_half_r == dense_sub_half);
+        && (slot_a_sub_half_r == dense_sub_a)
+        && (!DENSE_TWO_SLOT || (slot_b_valid_r
+                                 && (slot_b_addr_r == fetch_addr_dense_b)
+                                 && (slot_b_sub_half_r == dn_sub_b)));
 
     wire bank_row_resident_sparse =
         slot_a_valid_r && slot_is_sparse_r
@@ -433,9 +462,10 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             slot_a_valid_r      <= 1'b0;
                             slot_b_valid_r      <= 1'b0;
                             slot_a_addr_r       <= fetch_addr_a;
-                            slot_a_sub_half_r   <= req_is_sparse ? sp_sub_a : dense_sub_half;
-                            slot_b_addr_r       <= fetch_addr_b_sparse;
-                            slot_b_sub_half_r   <= sp_sub_b;
+                            slot_a_sub_half_r   <= req_is_sparse ? sp_sub_a : dense_sub_a;
+                            slot_b_addr_r       <= req_is_sparse ? fetch_addr_b_sparse
+                                                                 : fetch_addr_dense_b;
+                            slot_b_sub_half_r   <= req_is_sparse ? sp_sub_b : dn_sub_b;
                             slot_is_sparse_r    <= req_is_sparse;
                             // K-major per-compute slot state for this
                             // (step_k, step_n) block.
@@ -455,14 +485,19 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         if (last_rsp) begin
                             slot_a_valid_r <= 1'b1;
                             req_inflight_r <= 1'b0;
-                            if (slot_is_sparse_r && slot_row_major_r) begin
-                                slot_b_valid_r  <= 1'b1;
+                            if (slot_row_major_r) begin
+                                // K-major fills both slots within FETCH_A
+                                // (sparse split, or dense two-row spill).
+                                if (slot_is_sparse_r || DENSE_TWO_SLOT)
+                                    slot_b_valid_r <= 1'b1;
                                 fsm_state_r     <= S_IDLE;
                                 slot_fetching_r <= 1'b0;
-                            end else if (slot_is_sparse_r && SPARSE_TWO_FETCH) begin
+                            end else if ((slot_is_sparse_r && SPARSE_TWO_FETCH)
+                                      || (!slot_is_sparse_r && DENSE_TWO_FETCH)) begin
                                 fsm_state_r <= S_FETCH_B;
                             end else begin
-                                if (slot_is_sparse_r && SPARSE_TWO_SLOT)
+                                if ((slot_is_sparse_r && SPARSE_TWO_SLOT)
+                                 || (!slot_is_sparse_r && DENSE_TWO_SLOT))
                                     slot_b_valid_r <= 1'b1;
                                 fsm_state_r     <= S_IDLE;
                                 slot_fetching_r <= 1'b0;
@@ -506,6 +541,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [OFF_W-1:0] b_off_words = OFF_W'(slot_b_sub_half_r) * OFF_W'(NUM_BANKS);
     wire sparse_b_from_a = SPARSE_TWO_SLOT && !SPARSE_TWO_FETCH
                           && slot_is_sparse_r && !slot_row_major_r;
+    wire dense_b_from_a  = DENSE_TWO_SLOT && !DENSE_TWO_FETCH
+                          && !slot_is_sparse_r && !slot_row_major_r;
 
     always_comb begin
         storage_a_wdata = '0;
@@ -552,10 +589,16 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                       + int'(km_rsp_ctr_r) * TCU_WG_FEDP_K
                                       + k;
                     automatic int src = int'(km_lane_rsp) + k;
-                    if (dst < B_BUF_WORDS && src < (NUM_BANKS * XLEN_RATIO) && in_fetch_a) begin
-                        storage_a_wren[dst]             = 1'b1;
-                        storage_a_wdata[dst * 32 +: 32] =
-                            tcu_lmem_if.rsp_data.data[src * 32 +: 32];
+                    if (src < (NUM_BANKS * XLEN_RATIO) && in_fetch_a) begin
+                        if (dst < B_BUF_WORDS) begin
+                            storage_a_wren[dst]             = 1'b1;
+                            storage_a_wdata[dst * 32 +: 32] =
+                                tcu_lmem_if.rsp_data.data[src * 32 +: 32];
+                        end else if (DENSE_TWO_SLOT && (dst - B_BUF_WORDS) < B_BUF_WORDS) begin
+                            storage_b_wren[dst - B_BUF_WORDS]             = 1'b1;
+                            storage_b_wdata[(dst - B_BUF_WORDS) * 32 +: 32] =
+                                tcu_lmem_if.rsp_data.data[src * 32 +: 32];
+                        end
                     end
                 end
             end else begin
@@ -564,7 +607,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         storage_a_wren[b]             = 1'b1;
                         storage_a_wdata[b * 32 +: 32] =
                             tcu_lmem_if.rsp_data.data[(int'(a_off_words) + b) * 32 +: 32];
-                        if (sparse_b_from_a) begin
+                        if (sparse_b_from_a || dense_b_from_a) begin
                             storage_b_wren[b]             = 1'b1;
                             storage_b_wdata[b * 32 +: 32] =
                                 tcu_lmem_if.rsp_data.data[(int'(b_off_words) + b) * 32 +: 32];
@@ -614,7 +657,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .read  (1'b1),
         .write ((in_fetch_b && tcu_lmem_if.rsp_valid)
              || (in_fetch_a && tcu_lmem_if.rsp_valid && slot_is_sparse_r
-                 && (slot_row_major_r || sparse_b_from_a))),
+                 && (slot_row_major_r || sparse_b_from_a))
+             || (in_fetch_a && tcu_lmem_if.rsp_valid && !slot_is_sparse_r
+                 && (dense_b_from_a || (slot_row_major_r && DENSE_TWO_SLOT)))),
         .wren  (storage_b_wren),
         .waddr (1'b0),
         .wdata (storage_b_wdata),
@@ -658,6 +703,9 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 end
             end else if (lane < int'(B_BUF_WORDS)) begin
                 rs2_mux[lane] = `VX_CFG_XLEN'(storage_a_rdata[lane]);
+            end else if (DENSE_TWO_SLOT && (lane < int'(2 * B_BUF_WORDS))) begin
+                rs2_mux[lane] = `VX_CFG_XLEN'(
+                    storage_b_rdata[(lane - int'(B_BUF_WORDS)) & (B_BUF_WORDS-1)]);
             end
         end
     end

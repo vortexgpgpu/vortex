@@ -290,8 +290,12 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign b_off_wm = (OFF_W'(step_n) & OFF_W'(TCU_B_SUB_BLOCKS-1)) << LG_B_BS;
 `endif
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    wire [WG_B_OFF_W-1:0] b_off_wg =
-        (WG_B_OFF_W'(step_n) & WG_B_OFF_W'(TCU_WG_B_SUB_BLOCKS-1)) << LG_WG_B_BS;
+    // A two-row dense block (SUB_BLOCKS == 0, FEDP2K at NT=16) fills the
+    // whole rs2 bus by itself; the sub-block select would otherwise mask
+    // with an all-ones (0-1) pattern.
+    wire [WG_B_OFF_W-1:0] b_off_wg = (TCU_WG_B_SUB_BLOCKS > 1)
+        ? ((WG_B_OFF_W'(step_n) & WG_B_OFF_W'(TCU_WG_B_SUB_BLOCKS-1)) << LG_WG_B_BS)
+        : '0;
 `endif
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
