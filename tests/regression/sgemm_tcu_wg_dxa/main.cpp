@@ -354,8 +354,13 @@ int main(int argc, char *argv[]) {
   uint32_t grid_dim[2]  = {N / cfg::xtileN, M / cta_M};
   uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
-  // SMEM: A tile [cta_M x tileK] + B tile [tileK x tileN]
+  // SMEM: A tile [cta_M x tileK] + B tile [tileK x tileN]; doubled under
+  // DXA_DOUBLE_BUFFER so DXA staging of tile i+1 overlaps compute of tile i.
+#ifdef DXA_DOUBLE_BUFFER
+  uint32_t smem_size = 2 * (cta_M * cfg::tileK + cfg::tileK * cfg::xtileN) * sizeof(itype_t);
+#else
   uint32_t smem_size = (cta_M * cfg::tileK + cfg::tileK * cfg::xtileN) * sizeof(itype_t);
+#endif
 
   std::cout << "input type: " << vt::ITYPE::name << ", output type: " << vt::OTYPE::name << std::endl;
   std::cout << "WGMMA tile: M=" << cfg::xtileM << ", N=" << cfg::xtileN << ", K=" << cfg::tileK << std::endl;
