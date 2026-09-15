@@ -107,6 +107,13 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
                     end
                 end
             `endif
+        `ifdef VX_CFG_TCU_IF4_ENABLE
+                TCU_IF4_ID: begin
+                    for (int e = 0; e < 8; ++e) begin
+                        vld_mask_per_k[k][e] = a_i4_nz[e] && b_i4_nz[e];
+                    end
+                end
+            `endif
             `ifdef VX_CFG_TCU_RZR4_ENABLE
                 TCU_RZR4_ID: begin
                     for (int e = 0; e < 8; ++e) begin

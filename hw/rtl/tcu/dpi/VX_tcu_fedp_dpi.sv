@@ -209,6 +209,40 @@ module VX_tcu_fedp_dpi import VX_tcu_pkg::*; #(
                 end
             end
         `endif  // VX_CFG_TCU_NVFP4_ENABLE
+        `ifdef VX_CFG_TCU_IF4_ENABLE
+            TCU_IF4_ID: begin
+                prod = 64'hffffffff00000000;
+                for (int s = 0; s < SF; ++s) begin
+                    group_prod = 64'hffffffff00000000;
+                    for (int j = 0; j < 8; j++) begin
+                        if ((((i * 8 + j) * SF) / (N * 8)) == s) begin
+                            if (sf_a[s][7]) begin
+                                dpi_itof(enable, int'(0), int'(0), {{60{a_row[i][j * 4 + 3]}}, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
+                            end else begin
+                                dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, a_row[i][j * 4 +: 4]}, 3'b0, a_f, fflags);
+                            end
+                            if (sf_b[s][7]) begin
+                                dpi_itof(enable, int'(0), int'(0), {{60{b_col[i][j * 4 + 3]}}, b_col[i][j * 4 +: 4]}, 3'b0, b_f, fflags);
+                            end else begin
+                                dpi_f2f(enable, int'(0), int'(7), {60'hfffffffffffffff, b_col[i][j * 4 +: 4]}, 3'b0, b_f, fflags);
+                            end
+                            dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                            dpi_fadd(enable, int'(0), temp, group_prod, 3'b0, group_prod, fflags);
+                        end
+                    end
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, 1'b0, sf_a[s][6:0]}, 3'b0, a_f, fflags);
+                    dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, 1'b0, sf_b[s][6:0]}, 3'b0, b_f, fflags);
+                    dpi_fmul(enable, int'(0), a_f, b_f, 3'b0, temp, fflags);
+                    if (sf_a[s][7] && sf_b[s][7]) begin
+                        dpi_fmul(enable, int'(0), temp, 64'hffffffff3f3c14e6, 3'b0, temp, fflags);
+                    end else if (sf_a[s][7] || sf_b[s][7]) begin
+                        dpi_fmul(enable, int'(0), temp, 64'hffffffff3f5b6db7, 3'b0, temp, fflags);
+                    end
+                    dpi_fmul(enable, int'(0), group_prod, temp, 3'b0, group_prod, fflags);
+                    dpi_fadd(enable, int'(0), group_prod, prod, 3'b0, prod, fflags);
+                end
+            end
+        `endif  // VX_CFG_TCU_IF4_ENABLE
         `ifdef VX_CFG_TCU_RZR4_ENABLE
             TCU_RZR4_ID: begin
                 prod = 64'hffffffff00000000;

@@ -612,6 +612,203 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     end
 `endif  // VX_CFG_TCU_RZR4_ENABLE
 
+`ifdef VX_CFG_TCU_IF4_ENABLE
+    wire [TCK-1:0][24:0] result_sig_if4;
+    wire [TCK-1:0][EXP_W-1:0] result_exp_if4;
+    fedp_excep_t [TCK-1:0] exceptions_if4;
+    wire [TCK-1:0] sig_zero_if4;
+
+    wire [3:0] if4_exp_a = (sf_a[6:3] == 0) ? 4'd1 : sf_a[6:3];
+    wire [3:0] if4_exp_b = (sf_b[6:3] == 0) ? 4'd1 : sf_b[6:3];
+    wire [3:0] if4_man_a = {|sf_a[6:3], sf_a[2:0]};
+    wire [3:0] if4_man_b = {|sf_b[6:3], sf_b[2:0]};
+    wire [7:0] if4_man_prod;
+    VX_tcu_tfr_wmul #(
+        .N       (4),
+        .USE_DSP (USE_DSP)
+    ) if4_sf_mul (
+        .clk    (clk),
+        .enable (enable),
+        .a      (if4_man_a),
+        .b      (if4_man_b),
+        .p      (if4_man_prod)
+    );
+    wire [2:0] if4_scale_lz;
+    VX_lzc #(
+        .N (8)
+    ) if4_scale_lzc (
+        .data_in   (if4_man_prod),
+        .data_out  (if4_scale_lz),
+        `UNUSED_PIN (valid_out)
+    );
+    wire [7:0] if4_man_norm = if4_man_prod << if4_scale_lz;
+
+    // FP elements decode at twice their value; integers retain their magnitude.
+    // Fold 1, 12/7 or 144/49 into the shared scale, with 25 fractional bits.
+    wire [26:0] if4_range = (sf_a[7] && sf_b[7]) ? 27'd98608943
+                         : (sf_a[7] || sf_b[7]) ? 27'd57521883 : 27'd33554432;
+    wire [34:0] if4_scale_prod;
+    VX_tcu_tfr_wmul #(
+        .N       (27),
+        .M       (8),
+        .USE_DSP (USE_DSP)
+    ) if4_range_mul (
+        .clk    (clk),
+        .enable (enable),
+        .a      (if4_range),
+        .b      (if4_man_norm),
+        .p      (if4_scale_prod)
+    );
+    // Normalize the shared scale so small magnitudes retain fractional precision.
+    wire if4_scale_round = if4_scale_prod[7] && ((|if4_scale_prod[6:0]) || if4_scale_prod[8]);
+    wire [26:0] if4_scale_w = if4_scale_prod[34:8] + 27'(if4_scale_round);
+    wire [1:0] if4_range_shift = if4_scale_w[26] ? 2'd2 : if4_scale_w[25] ? 2'd1 : 2'd0;
+    wire [26:0] if4_scale_shifted = if4_scale_w >> if4_range_shift;
+    wire [24:0] if4_scale = if4_scale_shifted[24:0];
+    `UNUSED_VAR (if4_scale_shifted[26:25])
+    localparam IF4_EXP_BASE = 127 + 2*(23 - 22) - W + WA - 1 + 128 - 44 + 32 + 4 + 1;
+    wire [EXP_W-1:0] if4_exp = EXP_W'(IF4_EXP_BASE) + EXP_W'(if4_exp_a)
+                           + EXP_W'(if4_exp_b) - EXP_W'(if4_scale_lz) + EXP_W'(if4_range_shift);
+
+    for (genvar i = 0; i < TCK; ++i) begin : g_lane_if4
+        localparam K_WORD = i / 2;
+
+        wire [3:0][3:0] elem_mag_a, elem_mag_b;
+        wire [3:0][7:0] elem_mag_prod;
+        wire [3:0] elem_sign;
+        wire [3:0] elem_valid;
+        wire [3:0][10:0] elem_signed;
+
+        for (genvar j = 0; j < 4; ++j) begin : g_term
+            localparam OFF = (i % 2) * 16 + j * 4;
+            wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
+            wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
+
+            assign elem_mag_a[j] = sf_a[7] ? (raw_a[3] ? (4'd0 - raw_a) : raw_a) : e2m1_mag_x2(raw_a);
+            assign elem_mag_b[j] = sf_b[7] ? (raw_b[3] ? (4'd0 - raw_b) : raw_b) : e2m1_mag_x2(raw_b);
+            assign elem_sign[j] = raw_a[3] ^ raw_b[3];
+            assign elem_valid[j] = vld_mask[i * 4 + j];
+
+            wire [10:0] elem_mag_ext = elem_valid[j] ? {3'b0, elem_mag_prod[j]} : 11'd0;
+            wire [10:0] elem_neg;
+            VX_ks_adder #(
+                .N       (11),
+                .BYPASS  (`FORCE_BUILTIN_ADDER(11))
+            ) elem_neg_ksa (
+                .dataa   (~elem_mag_ext),
+                .datab   (11'd0),
+                .cin     (1'b1),
+                .sum     (elem_neg),
+                `UNUSED_PIN(cout)
+            );
+            assign elem_signed[j] = elem_sign[j] ? elem_neg : elem_mag_ext;
+        end
+
+        VX_tcu_tfr_wmul #(
+            .N       (4),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) elem_m01 (
+            .clk     (clk),
+            .enable  (enable),
+            .a       (elem_mag_a[1:0]),
+            .b       (elem_mag_b[1:0]),
+            .p       (elem_mag_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N       (4),
+            .LANES   (2),
+            .USE_DSP (USE_DSP)
+        ) elem_m23 (
+            .clk     (clk),
+            .enable  (enable),
+            .a       (elem_mag_a[3:2]),
+            .b       (elem_mag_b[3:2]),
+            .p       (elem_mag_prod[3:2])
+        );
+
+        wire [10:0] dot_sum_vec, dot_carry_vec;
+        VX_csa_tree #(
+            .N       (4),
+            .W       (11),
+            .S       (11)
+        ) dot_csa (
+            .operands(elem_signed),
+            .sum     (dot_sum_vec),
+            .carry   (dot_carry_vec)
+        );
+
+        wire [10:0] signed_dot;
+        VX_ks_adder #(
+            .N       (11),
+            .BYPASS  (`FORCE_BUILTIN_ADDER(11))
+        ) dot_ksa (
+            .dataa   (dot_sum_vec),
+            .datab   (dot_carry_vec),
+            .cin     (1'b0),
+            .sum     (signed_dot),
+            `UNUSED_PIN(cout)
+        );
+
+        wire dot_sign = signed_dot[10];
+        wire [9:0] neg_dot;
+        VX_ks_adder #(
+            .N       (10),
+            .BYPASS  (`FORCE_BUILTIN_ADDER(10))
+        ) dot_neg_ksa (
+            .dataa   (~signed_dot[9:0]),
+            .datab   (10'd0),
+            .cin     (1'b1),
+            .sum     (neg_dot),
+            `UNUSED_PIN(cout)
+        );
+        wire [9:0] abs_dot = dot_sign ? neg_dot : signed_dot[9:0];
+
+        wire [3:0] dot_lz;
+        VX_lzc #(
+            .N (10)
+        ) dot_lzc (
+            .data_in   (abs_dot),
+            .data_out  (dot_lz),
+            `UNUSED_PIN (valid_out)
+        );
+        wire [9:0] dot_norm = abs_dot << dot_lz;
+        wire [34:0] scaled_mag;
+        VX_tcu_tfr_wmul #(
+            .N       (25),
+            .M       (10),
+            .USE_DSP (USE_DSP),
+            .OUT_REG (PROD_REG)
+        ) scale_mul (
+            .clk    (clk),
+            .enable (enable),
+            .a      (if4_scale),
+            .b      (dot_norm),
+            .p      (scaled_mag)
+        );
+        wire dot_sign_r;
+        VX_pipe_register #(
+            .DATAW (1),
+            .DEPTH (PROD_REG)
+        ) pipe_sign (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  (dot_sign),
+            .data_out (dot_sign_r)
+        );
+        wire round_up = scaled_mag[10] && ((|scaled_mag[9:0]) || scaled_mag[11]);
+        wire [23:0] result_mag = scaled_mag[34:11] + 24'(round_up);
+        wire is_zero_out = ~|result_mag;
+        assign result_sig_if4[i] = {dot_sign_r & ~is_zero_out, result_mag};
+        assign sig_zero_if4[i] = is_zero_out;
+        assign result_exp_if4[i] = if4_exp - EXP_W'(dot_lz);
+        assign exceptions_if4[i].is_nan = (sf_a[6:0] == 7'h7f) || (sf_b[6:0] == 7'h7f);
+        assign exceptions_if4[i].is_inf = 1'b0;
+        assign exceptions_if4[i].sign = 1'b0;
+    end
+`endif  // VX_CFG_TCU_IF4_ENABLE
+
     // Exponent/exception outputs join at pre-seam timing; significand and
     // sig_zero outputs join at post-seam timing.
     always_comb begin
@@ -634,6 +831,12 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             4'(TCU_RZR4_ID): begin
                 result_exp = result_exp_rzr4;
                 exceptions = exceptions_rzr4;
+            end
+        `endif
+        `ifdef VX_CFG_TCU_IF4_ENABLE
+            4'(TCU_IF4_ID): begin
+                result_exp = result_exp_if4;
+                exceptions = exceptions_if4;
             end
         `endif
             default: begin
@@ -663,6 +866,12 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             4'(TCU_RZR4_ID): begin
                 result_sig = result_sig_rzr4;
                 sig_zero   = sig_zero_rzr4;
+            end
+        `endif
+        `ifdef VX_CFG_TCU_IF4_ENABLE
+            4'(TCU_IF4_ID): begin
+                result_sig = result_sig_if4;
+                sig_zero   = sig_zero_if4;
             end
         `endif
             default: begin

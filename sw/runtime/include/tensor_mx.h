@@ -83,6 +83,9 @@ struct data_accessor_t<nvfp4> {
 };
 
 template <>
+struct data_accessor_t<if4> : data_accessor_t<nvfp4> {};
+
+template <>
 struct data_accessor_t<rzr4> : data_accessor_t<nvfp4> {};
 
 enum class mx_block_layout_t {
@@ -170,6 +173,12 @@ struct mx_format_t<nvfp4> {
 };
 
 template <>
+struct mx_format_t<if4> {
+  using storage_type = uint8_t;
+  static constexpr bool needs_tensor_scale = true;
+};
+
+template <>
 struct mx_format_t<rzr4> {
   using storage_type = uint8_t;
   static constexpr bool needs_tensor_scale = true;
@@ -198,7 +207,7 @@ inline rzr4_nearest_t nearest_rzr4_e2m1(float value) {
   return {6.0f, 0x07};
 }
 
-inline uint8_t quantize_rzr4_ue4m3(float value) {
+inline uint8_t quantize_ue4m3(float value) {
   uint8_t best_code = 0;
   float best_error = std::numeric_limits<float>::infinity();
   for (uint32_t code = 0; code <= 0x7e; ++code) {
@@ -252,6 +261,52 @@ inline bool quantize_mx_blocks(typename mx_format_t<FormatT>::storage_type* quan
 
   uint32_t major_count = scale_over_rows ? cols : rows;
 
+  if constexpr (std::is_same_v<FormatT, if4>) {
+    if (tensor_scale == 0.0f) {
+      std::fill(scale_meta.begin(), scale_meta.end(), uint8_t(0));
+      return true;
+    }
+    for (uint32_t major = 0; major < major_count; ++major) {
+      for (uint32_t kb = 0; kb < k_blocks; ++kb) {
+        std::array<float, if4::ele_block> values{};
+        std::array<uint8_t, if4::ele_block> fp_codes{}, int_codes{};
+        float max_abs = 0.0f;
+        for (uint32_t i = 0; i < if4::ele_block; ++i) {
+          uint32_t k = kb * if4::ele_block + i;
+          uint32_t row = scale_over_rows ? k : major;
+          uint32_t col = scale_over_rows ? major : k;
+          values[i] = dense[row * cols + col] / tensor_scale;
+          max_abs = std::max(max_abs, std::abs(values[i]));
+        }
+        uint8_t sf = quantize_ue4m3(std::min(448.0f, max_abs / 6.0f));
+        float scale = bit_cast<float>(rv_e4m3tof_s(sf, 0, nullptr));
+        double fp_error = 0.0, int_error = 0.0;
+        for (uint32_t i = 0; i < if4::ele_block; ++i) {
+          float normalized = scale > 0.0f ? values[i] / scale : 0.0f;
+          fp_codes[i] = rv_ftoe2m1_s(bit_cast<uint32_t>(normalized), 0, nullptr);
+          double int_value = std::max(-7.0, std::min(7.0, double(normalized) * (7.0 / 6.0)));
+          int32_t lower = int32_t(std::floor(int_value));
+          double fraction = int_value - lower;
+          int32_t rounded = lower + (fraction > 0.5 || (fraction == 0.5 && (lower & 1)));
+          int_codes[i] = uint8_t(rounded) & 0xf;
+          double fp_delta = double(values[i]) - double(bit_cast<float>(rv_if4tof_s(fp_codes[i], sf, 0, nullptr)));
+          double int_delta = double(values[i]) - double(bit_cast<float>(rv_if4tof_s(int_codes[i], sf | 0x80, 0, nullptr)));
+          fp_error += fp_delta * fp_delta;
+          int_error += int_delta * int_delta;
+        }
+        bool use_int = int_error < fp_error;
+        uint32_t scale_index = scale_over_rows ? kb * cols + major : major * k_blocks + kb;
+        scale_meta[scale_index] = sf | (use_int ? 0x80 : 0);
+        for (uint32_t i = 0; i < if4::ele_block; ++i) {
+          uint32_t k = kb * if4::ele_block + i;
+          uint32_t out_offset = major * kdim + k;
+          write_mx_value<FormatT>(quantized, out_offset, use_int ? int_codes[i] : fp_codes[i]);
+        }
+      }
+    }
+    return true;
+  }
+
   if constexpr (std::is_same_v<FormatT, rzr4>) {
     if (tensor_scale == 0.0f) {
       std::fill(scale_meta.begin(), scale_meta.end(), uint8_t(0x01));
@@ -272,7 +327,7 @@ inline bool quantize_mx_blocks(typename mx_format_t<FormatT>::storage_type* quan
         float scale_target = block_absmax / tensor_scale / 6.0f;
         scale_target = std::max(std::ldexp(1.0f, -9),
                                 std::min(448.0f, scale_target));
-        uint8_t scale_raw = quantize_rzr4_ue4m3(scale_target);
+        uint8_t scale_raw = quantize_ue4m3(scale_target);
         float block_scale = bit_cast<float>(
             rv_e4m3tof_s(scale_raw, 0, nullptr));
         float combined_scale = tensor_scale * block_scale;
@@ -322,7 +377,7 @@ inline bool quantize_mx_blocks(typename mx_format_t<FormatT>::storage_type* quan
     return true;
   }
 
-  if constexpr (!std::is_same_v<FormatT, rzr4>) {
+  if constexpr (!std::is_same_v<FormatT, rzr4> && !std::is_same_v<FormatT, if4>) {
     for (uint32_t major = 0; major < major_count; ++major) {
       for (uint32_t kb = 0; kb < k_blocks; ++kb) {
         uint32_t k0 = kb * FormatT::ele_block;
@@ -366,7 +421,7 @@ inline float select_tensor_scale(const float* dense, uint32_t rows, uint32_t col
   for (uint32_t i = 0; i < rows * cols; ++i) {
     tensor_max = std::max(tensor_max, std::abs(dense[i]));
   }
-  if constexpr (std::is_same_v<FormatT, rzr4>) {
+  if constexpr (std::is_same_v<FormatT, rzr4> || std::is_same_v<FormatT, if4>) {
     return tensor_max / (6.0f * 448.0f);
   }
   return select_nvfp4_tensor_scale(tensor_max);
@@ -416,7 +471,7 @@ inline bool quantize_mx_a_rowmajor(typename detail::mx_format_t<FormatT>::storag
                                    uint32_t cols) {
   static_assert(detail::mx_format_t<FormatT>::needs_tensor_scale,
                 "Use the overload without tensor_scale for this MX format");
-  if constexpr (std::is_same_v<FormatT, rzr4>) {
+  if constexpr (std::is_same_v<FormatT, rzr4> || std::is_same_v<FormatT, if4>) {
     if (!detail::finite_tensor(dense, rows, cols)) {
       return false;
     }
@@ -435,7 +490,7 @@ inline bool quantize_mx_b_colmajor(typename detail::mx_format_t<FormatT>::storag
                                    uint32_t N) {
   static_assert(detail::mx_format_t<FormatT>::needs_tensor_scale,
                 "Use the overload without tensor_scale for this MX format");
-  if constexpr (std::is_same_v<FormatT, rzr4>) {
+  if constexpr (std::is_same_v<FormatT, rzr4> || std::is_same_v<FormatT, if4>) {
     if (!detail::finite_tensor(dense_rowmajor, K, N)) {
       return false;
     }

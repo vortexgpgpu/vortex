@@ -239,7 +239,7 @@ module VX_tcu_fedp_tfr import VX_tcu_pkg::*; #(
         .SHARED_DATAW(EXP_W + EXC_W + ACC_SIG_W + 1 + 1 + C_HI_W + 1),
         .LANE_DATAW (ACC_SIG_W + 2),
         .DEPTH      (ALN_LATENCY),
-        .LANE_MASK  (LANE_MASK)
+        .LANE_MASK  (0)
     ) pipe_aln (
         .clk(clk),
         .reset(reset),

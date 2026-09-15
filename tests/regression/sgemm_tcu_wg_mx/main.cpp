@@ -140,6 +140,11 @@ static float dequantize_mx_value(const itype_t *data,
       uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
       return bit_cast<float>(rv_rzr4tof_s(q, sf, 0, nullptr)) * tensor_scale;
     }
+  case vt::if4::id:
+    {
+      uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
+      return bit_cast<float>(rv_if4tof_s(q, sf, 0, nullptr)) * tensor_scale;
+    }
   default:
     std::abort();
   }
@@ -415,6 +420,7 @@ int main(int argc, char *argv[]) {
   int errors = 0;
   float rel_tol = (std::is_same<vt::ITYPE, vt::nvfp4>::value
                 || std::is_same<vt::ITYPE, vt::rzr4>::value
+                || std::is_same<vt::ITYPE, vt::if4>::value
                 || std::is_same<vt::ITYPE, vt::mxfp4>::value) ? 0.25f : 0.05f;
   for (uint32_t i = 0; i < h_ref.size(); ++i) {
     float actual = static_cast<float>(h_C[i]);

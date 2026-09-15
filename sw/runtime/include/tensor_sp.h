@@ -87,6 +87,9 @@ template <>
 struct data_accessor_t<nvfp4> : data_accessor_t<uint4> {};
 
 template <>
+struct data_accessor_t<if4> : data_accessor_t<nvfp4> {};
+
+template <>
 struct data_accessor_t<rzr4> : data_accessor_t<uint4> {};
 
 template <typename TensorT>

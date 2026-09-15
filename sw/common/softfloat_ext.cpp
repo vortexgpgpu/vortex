@@ -1005,6 +1005,18 @@ float32_t nvfp4_to_f32(nvfloat4_t a) {
   return res;
 }
 
+float32_t if4_to_f32(ifloat4_t a) {
+  if (!(a.sf & 0x80)) {
+    return nvfp4_to_f32({a.v, a.sf});
+  }
+  int32_t value = (a.v & 7) - (a.v & 8);
+  uint32_t fflags = 0;
+  float scale = cvt_custom_to_f32(a.sf & 0x7f, 4, 3,
+                                 softfloat_roundingMode, &fflags);
+  softfloat_exceptionFlags |= fflags;
+  return {vortex::bit_cast<uint32_t>(float(double(value) * double(scale) * (6.0 / 7.0)))};
+}
+
 float32_t rzr4_to_f32(rzrfloat4_t a) {
   uint32_t fflags = 0;
   uint8_t code = a.v & 0x0f;

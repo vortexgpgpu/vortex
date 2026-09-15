@@ -138,6 +138,11 @@ static float dequantize_mx_value(const itype_t *data,
       uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
       return bit_cast<float>(rv_rzr4tof_s(q, sf, 0, nullptr)) * tensor_scale;
     }
+  case vt::if4::id:
+    {
+      uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
+      return bit_cast<float>(rv_if4tof_s(q, sf, 0, nullptr)) * tensor_scale;
+    }
   default:
     std::abort();
   }
@@ -348,6 +353,22 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
+  if constexpr (std::is_same<vt::ITYPE, vt::if4>::value) {
+    uint32_t combinations[4] = {};
+    uint32_t blocks = K_logical / vt::ITYPE::ele_block;
+    for (uint32_t m = 0; m < M; ++m) {
+      for (uint32_t n = 0; n < N; ++n) {
+        for (uint32_t k = 0; k < blocks; ++k) {
+          uint32_t mode = ((scale_a[m * blocks + k] >> 7) << 1) | (scale_b[k * N + n] >> 7);
+          ++combinations[mode];
+        }
+      }
+    }
+    std::cout << "IF4 block products: FPxFP=" << combinations[0]
+              << " FPxINT=" << combinations[1] << " INTxFP=" << combinations[2]
+              << " INTxINT=" << combinations[3] << std::endl;
+  }
+
   std::vector<uint32_t> h_mx_a;
   std::vector<uint32_t> h_mx_b;
   pack_mx_a_metadata(h_mx_a, scale_a, M, K_logical);
@@ -407,8 +428,9 @@ int main(int argc, char *argv[]) {
              A_tensor_scale, B_tensor_scale, M, N, K_logical);
 
   int errors = 0;
-  float rel_tol = (std::is_same<vt::ITYPE, vt::nvfp4>::value
+  float rel_tol = std::is_same<vt::ITYPE, vt::if4>::value ? 1.0e-4f : (std::is_same<vt::ITYPE, vt::nvfp4>::value
                 || std::is_same<vt::ITYPE, vt::rzr4>::value
+                || std::is_same<vt::ITYPE, vt::if4>::value
                 || std::is_same<vt::ITYPE, vt::mxfp4>::value) ? 0.25f : 0.05f;
   for (uint32_t i = 0; i < h_ref.size(); ++i) {
     float actual = static_cast<float>(h_C[i]);
