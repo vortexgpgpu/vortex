@@ -1111,6 +1111,7 @@ private:
     case vt::mxfp4::id:
     case vt::nvfp4::id:
     case vt::rzr4::id:
+    case vt::if4::id:
       return 4;
     default:
       std::abort();
@@ -1172,6 +1173,9 @@ private:
           } else if (fmt_s == vt::nvfp4::id) {
             xa = rv_nvfp4tof_s((a_row[z].u32 >> (4 * e)) & 0xf, scale_a(elem_k), 0, nullptr);
             xb = rv_nvfp4tof_s((b_col[z].u32 >> (4 * e)) & 0xf, scale_b(elem_k), 0, nullptr);
+          } else if (fmt_s == vt::if4::id) {
+            xa = rv_if4tof_s((a_row[z].u32 >> (4 * e)) & 0xf, scale_a(elem_k), 0, nullptr);
+            xb = rv_if4tof_s((b_col[z].u32 >> (4 * e)) & 0xf, scale_b(elem_k), 0, nullptr);
           } else if (fmt_s == vt::rzr4::id) {
             xa = rv_rzr4tof_s((a_row[z].u32 >> (4 * e)) & 0xf, scale_a(elem_k), 0, nullptr);
             xb = rv_rzr4tof_s((b_col[z].u32 >> (4 * e)) & 0xf, scale_b(elem_k), 0, nullptr);

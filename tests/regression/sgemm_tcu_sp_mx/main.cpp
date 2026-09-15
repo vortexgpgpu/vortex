@@ -199,6 +199,11 @@ static float dequantize_mx_value(const itype_t *data,
       uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
       return bit_cast<float>(rv_rzr4tof_s(q, sf, 0, nullptr)) * tensor_scale;
     }
+  case vt::if4::id:
+    {
+      uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
+      return bit_cast<float>(rv_if4tof_s(q, sf, 0, nullptr)) * tensor_scale;
+    }
   default:
     std::abort();
   }
@@ -398,7 +403,8 @@ int main(int argc, char *argv[]) {
   for (auto &v : h_B_dense) {
     v = (static_cast<float>(std::rand()) / RAND_MAX) * 2.0f - 1.0f;
   }
-  if constexpr (std::is_same<vt::ITYPE, vt::rzr4>::value) {
+  if constexpr (std::is_same<vt::ITYPE, vt::rzr4>::value
+                || std::is_same<vt::ITYPE, vt::if4>::value) {
     h_A_dense[0] = 6.0f;
     h_A_dense[1] = 5.0f;
     h_A_dense[2] = 0.0f;
@@ -425,6 +431,13 @@ int main(int argc, char *argv[]) {
       return -1;
     }
   }
+  if constexpr (std::is_same<vt::ITYPE, vt::if4>::value) {
+    if (read_nibble(h_A_full.data(), 0) != 0x7
+     || read_nibble(h_A_full.data(), 1) != 0x6) {
+      std::cout << "Error: directed if4 values were not quantized as expected!" << std::endl;
+      return -1;
+    }
+  }
 
   if (!vt::prune_2to4_matrix<vt::ITYPE>(h_A_full.data(), M, K_storage)) {
     std::cout << "Error: sparse pruning failed!" << std::endl;
@@ -435,6 +448,15 @@ int main(int argc, char *argv[]) {
      || (read_nibble(h_A_full.data(), 2) != 0x8
       && read_nibble(h_A_full.data(), 3) != 0x8)) {
       std::cout << "Error: RaZeR sparse zero/special semantics were not preserved!" << std::endl;
+      return -1;
+    }
+  }
+  if constexpr (std::is_same<vt::ITYPE, vt::if4>::value) {
+    if (read_nibble(h_A_full.data(), 0) != 0x7
+     || read_nibble(h_A_full.data(), 1) != 0x6
+     || read_nibble(h_A_full.data(), 2) != 0x0
+     || read_nibble(h_A_full.data(), 3) != 0x0) {
+      std::cout << "Error: if4 sparse zero semantics were not preserved!" << std::endl;
       return -1;
     }
   }
@@ -511,6 +533,7 @@ int main(int argc, char *argv[]) {
   int errors = 0;
   float rel_tol = (std::is_same<vt::ITYPE, vt::nvfp4>::value
                 || std::is_same<vt::ITYPE, vt::rzr4>::value
+                || std::is_same<vt::ITYPE, vt::if4>::value
                 || std::is_same<vt::ITYPE, vt::mxfp4>::value) ? 0.25f : 0.05f;
   for (uint32_t i = 0; i < h_ref.size(); ++i) {
     float actual = static_cast<float>(h_C[i]);

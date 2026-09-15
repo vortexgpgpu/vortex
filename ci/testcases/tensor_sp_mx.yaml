@@ -54,3 +54,22 @@ tests:
   app: sgemm_tcu_sp_mx
   configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_RZR4_ENABLE -DVX_CFG_TCU_TYPE_TFR -DITYPE=rzr4 -DOTYPE=fp32 -DTCU_MX_TLS
   args: "-k32"
+
+- id: sgemm_tcu_sp_mx-simx-if4
+  via: blackbox
+  drivers: [simx]
+  app: sgemm_tcu_sp_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_IF4_ENABLE -DITYPE=if4 -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-k32"
+- id: sgemm_tcu_sp_mx-rtlsim-if4-dpi
+  via: blackbox
+  drivers: [rtlsim]
+  app: sgemm_tcu_sp_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_IF4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=if4 -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-k32"
+- id: sgemm_tcu_sp_mx-rtlsim-if4-tfr
+  via: blackbox
+  drivers: [rtlsim]
+  app: sgemm_tcu_sp_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_IF4_ENABLE -DVX_CFG_TCU_TYPE_TFR -DITYPE=if4 -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-k32"
