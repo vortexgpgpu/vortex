@@ -71,6 +71,7 @@ public:
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
     , fu_locked_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
+    , fu_unlock_pending_(VX_CFG_ISSUE_WIDTH, std::vector<const instr_trace_t*>((uint32_t)FUType::Count, nullptr))
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
   {
     const std::string& name = simobject_->name();
@@ -284,6 +285,9 @@ public:
   void reset() {
     for (auto& arb : ibuffer_arbs_) {
       arb.reset();
+    }
+    for (auto& up : fu_unlock_pending_) {
+      std::fill(up.begin(), up.end(), nullptr);
     }
     for (auto& fc : fu_credits_) {
       std::fill(fc.begin(), fc.end(), 0);
@@ -621,7 +625,8 @@ public:
             if (fl && !ful) {
               fu_locked_.at(iw).set(fui);
             } else if (!fl && ful) {
-              fu_locked_.at(iw).reset(fui);
+              // Defer the release to FU accept (see fu_unlock_pending_).
+              fu_unlock_pending_.at(iw).at(fui) = uop_trace;
             }
           }
           // Advance sequencer; pop ibuffer only when all micro-ops issued
@@ -677,6 +682,10 @@ public:
           uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
           if (fu_credits_.at(iw).at(fu) > 0)
             --fu_credits_.at(iw).at(fu);
+          if (fu_unlock_pending_.at(iw).at(fu) == trace) {
+            fu_unlock_pending_.at(iw).at(fu) = nullptr;
+            fu_locked_.at(iw).reset(fu);
+          }
         } else {
           // track functional unit stalls
           switch ((FUType)fu) {
@@ -1011,6 +1020,11 @@ private:
 
   std::vector<BitVector<>> fu_locked_;
   std::vector<std::vector<uint32_t>> fu_credits_; // [iw][fu] in-flight dispatch credits
+  // Unlock uop issued but not yet accepted by its FU: the lock must be held
+  // until FU accept, or reordering across the per-warp operand collectors can
+  // let another warp's locking uop reach the FU queue ahead of this final uop
+  // and head-of-line block it behind the TCU's CTA fence (deadlock).
+  std::vector<std::vector<const instr_trace_t*>> fu_unlock_pending_; // [iw][fu]
 
   std::vector<uint32_t> ibuf_inflight_;
 
