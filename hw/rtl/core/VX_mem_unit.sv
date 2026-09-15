@@ -209,7 +209,11 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
     `ifdef VX_CFG_EXT_DXA_ENABLE
         wire [`VX_CFG_LMEM_NUM_BANKS-1:0] dxa_bank_wr_fire;
         for (genvar i = 0; i < `VX_CFG_LMEM_NUM_BANKS; ++i) begin : g_dxa_bank_wr_fire
+            // Qualify with req_ready: bank-level DMA/LSU fairness can stall
+            // an accepted-by-valid beat, and an unqualified fire would count
+            // the same write once per stalled cycle.
             assign dxa_bank_wr_fire[i] = lmem_dma_if.req_valid
+                                      && lmem_dma_if.req_ready
                                       && lmem_dma_if.req_data.rw
                                       && (|lmem_dma_if.req_data.byteen[i*LSU_WORD_SIZE +: LSU_WORD_SIZE]);
         end
