@@ -73,7 +73,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
 #ifdef TCU_MX_TLS
   if constexpr (std::is_same<vt::ITYPE, vt::nvfp4>::value
-             || std::is_same<vt::ITYPE, vt::rzr4>::value) {
+             || std::is_same<vt::ITYPE, vt::rzr4>::value
+                || std::is_same<vt::ITYPE, vt::if4>::value) {
     float tensor_scale = (*pATensorScale) * (*pBTensorScale);
     for (uint32_t r = 0; r < ctx::fragment_acc::NR; ++r)
       fragC.data[r] *= tensor_scale;

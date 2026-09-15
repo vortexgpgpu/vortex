@@ -84,6 +84,9 @@ module VX_tcu_tfr_lane_mask import VX_tcu_pkg::*; #(
         `ifdef VX_CFG_TCU_NVFP4_ENABLE
             TCU_NVFP4_ID:lane_mask = mask_4;
         `endif
+        `ifdef VX_CFG_TCU_IF4_ENABLE
+            TCU_IF4_ID:lane_mask = mask_4;
+        `endif
         `ifdef VX_CFG_TCU_RZR4_ENABLE
             TCU_RZR4_ID: lane_mask = mask_4;
         `endif
