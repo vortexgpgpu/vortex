@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 600" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="arry" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .blk  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.6; }
+    .ff   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.6; }
+    .ram  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.6; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .w    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .wva  { stroke:#8e4a7e; stroke-width:2.0; fill:none; marker-end:url(#arrp); }
+    .whit { stroke:#3a7d44; stroke-width:2.0; fill:none; marker-end:url(#arrg); }
+    .wmis { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); }
+    .wbus { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); marker-start:url(#arrb); }
+    .wram { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arry); }
+    .wctl { stroke:#3a7d44; stroke-width:1.5; fill:none; marker-end:url(#arrg); stroke-dasharray:4 3; }
+    .l    { fill:#444; font-size:12px; }
+    .li   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .lp   { fill:#8e4a7e; font-size:12px; }
+    .lg   { fill:#2f6b39; font-size:12px; }
+    .lb   { fill:#1c6ca8; font-size:12px; }
+    .ly   { fill:#8a6d00; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="600" fill="#ffffff"/>
+  <text x="24" y="34" class="t" font-size="20">VX_tlb_l2 — cluster TLB</text>
+
+  <rect x="180" y="120" width="170" height="90" rx="6" class="blk"/>
+  <text x="265" y="150" class="t" text-anchor="middle">Lookup pipe</text>
+  <text x="265" y="170" class="ts" text-anchor="middle">VX_pipe_buffer</text>
+  <text x="265" y="186" class="ts" text-anchor="middle">LATENCY stages · 1 req/cycle</text>
+
+  <rect x="180" y="250" width="170" height="56" rx="6" class="blk"/>
+  <text x="265" y="273" class="t" text-anchor="middle">Occupancy</text>
+  <text x="265" y="291" class="ts" text-anchor="middle">pipe count</text>
+
+  <rect x="420" y="80" width="200" height="70" rx="6" class="ff"/>
+  <text x="520" y="106" class="t" text-anchor="middle">Megapage CAM</text>
+  <text x="520" y="126" class="ts" text-anchor="middle">VX_tlb_cam · MEGA_SIZE · level ≠ 0</text>
+
+  <rect x="420" y="190" width="200" height="90" rx="6" class="ram"/>
+  <text x="520" y="220" class="t" text-anchor="middle">Set array</text>
+  <text x="520" y="240" class="ts" text-anchor="middle">LUTRAM · 4 KB pages</text>
+  <text x="520" y="256" class="ts" text-anchor="middle">NUM_SETS × NUM_WAYS</text>
+
+  <rect x="680" y="190" width="170" height="90" rx="6" class="blk"/>
+  <text x="765" y="220" class="t" text-anchor="middle">Way compare</text>
+  <text x="765" y="240" class="ts" text-anchor="middle">tag == t_tag ∧ valid</text>
+  <text x="765" y="256" class="ts" text-anchor="middle">hit_way (lowest)</text>
+
+  <rect x="680" y="320" width="170" height="70" rx="6" class="ff"/>
+  <text x="765" y="346" class="t" text-anchor="middle">Replacement</text>
+  <text x="765" y="366" class="ts" text-anchor="middle">valid / MRU per set (FF)</text>
+  <text x="765" y="380" class="ts" text-anchor="middle">invalid → non-MRU → way 0</text>
+
+  <rect x="920" y="120" width="170" height="90" rx="6" class="blk"/>
+  <text x="1005" y="150" class="t" text-anchor="middle">Retire</text>
+  <text x="1005" y="170" class="ts" text-anchor="middle">megapage first</text>
+  <text x="1005" y="186" class="ts" text-anchor="middle">hit → response · miss → alloc</text>
+
+  <rect x="1160" y="120" width="200" height="130" rx="6" class="blk"/>
+  <text x="1260" y="150" class="t" text-anchor="middle">VX_tlb_mshr</text>
+  <text x="1260" y="170" class="ts" text-anchor="middle">MSHR_SIZE entries · 4 tokens</text>
+  <text x="1260" y="186" class="ts" text-anchor="middle">token = client id</text>
+  <text x="1260" y="202" class="ts" text-anchor="middle">VPN dedup</text>
+  <text x="1260" y="226" class="ts" text-anchor="middle">alloc → issue → fill → drain</text>
+
+  <rect x="920" y="320" width="170" height="70" rx="6" class="blk"/>
+  <text x="1005" y="346" class="t" text-anchor="middle">Install</text>
+  <text x="1005" y="366" class="ts" text-anchor="middle">level ≠ 0 → CAM</text>
+  <text x="1005" y="380" class="ts" text-anchor="middle">level = 0 → set array [victim way]</text>
+
+  <rect x="920" y="440" width="170" height="70" rx="6" class="blk"/>
+  <text x="1005" y="466" class="t" text-anchor="middle">Rsp arb</text>
+  <text x="1005" y="486" class="ts" text-anchor="middle">VX_stream_arb 2 → 1</text>
+  <text x="1005" y="500" class="ts" text-anchor="middle">OUT_BUF 2</text>
+
+  <!-- wires -->
+  <path d="M 40 165 L 180 165" class="wva"/>
+  <text x="40" y="146" class="li">client_if.req</text>
+  <text x="40" y="160" class="lp">{id, vpn, access, amo}</text>
+  <path d="M 265 210 L 265 250" class="w"/>
+  <path d="M 180 278 L 40 278" class="wctl"/>
+  <text x="40" y="270" class="li">empty</text>
+  <path d="M 350 145 L 385 145 L 385 115 L 420 115" class="wva"/>
+  <text x="358" y="108" class="lp">t_vpn</text>
+  <path d="M 350 185 L 385 185 L 385 235 L 420 235" class="wva"/>
+  <text x="358" y="230" class="lp">t_set</text>
+  <path d="M 620 235 L 680 235" class="wram"/>
+  <text x="628" y="228" class="ly">row</text>
+  <path d="M 620 115 L 1005 115 L 1005 120" class="whit"/>
+  <text x="700" y="108" class="lg">mega hit · ppn · flags · level</text>
+  <path d="M 850 235 L 885 235 L 885 165 L 920 165" class="whit"/>
+  <text x="858" y="200" class="lg">set hit</text>
+  <text x="858" y="214" class="lg">way · ppn · flags</text>
+  <path d="M 765 280 L 765 320" class="w"/>
+  <text x="772" y="304" class="l">MRU bump</text>
+  <path d="M 1090 165 L 1160 165" class="wmis"/>
+  <text x="1098" y="158" class="lb">alloc (miss)</text>
+  <path d="M 1360 165 L 1440 165" class="wbus"/>
+  <text x="1362" y="146" class="li">ptw_if</text>
+  <text x="1362" y="160" class="lb">req / rsp</text>
+  <path d="M 1260 250 L 1260 355 L 1090 355" class="wram"/>
+  <text x="1120" y="348" class="ly">install_entry</text>
+  <path d="M 920 340 L 640 340 L 640 140 L 620 140" class="wram"/>
+  <path d="M 920 370 L 600 370 L 600 280" class="wram"/>
+  <text x="620" y="364" class="ly">set_fill</text>
+  <path d="M 850 355 L 920 355" class="w"/>
+  <text x="856" y="348" class="l">victim way</text>
+  <path d="M 1005 210 L 1005 300 L 1110 300 L 1110 475 L 1090 475" class="whit"/>
+  <text x="1020" y="294" class="lg">hit rsp</text>
+  <path d="M 1300 250 L 1300 490 L 1090 490" class="wmis"/>
+  <text x="1150" y="484" class="lb">drain rsp</text>
+  <path d="M 920 475 L 40 475" class="whit"/>
+  <text x="40" y="495" class="li">client_if.rsp</text>
+  <text x="40" y="509" class="lg">{id, fault, level, ppn, flags}</text>
+  <path d="M 40 560 L 500 560 L 500 540" class="wctl"/>
+  <text x="40" y="548" class="li">flush_if</text>
+  <text x="510" y="548" class="lg">clear CAM · set valid/MRU · station, when empty</text>
+</svg>

@@ -15,7 +15,6 @@
 # process's CTL_AP_RESET had its AW delivered to VX_afu_ctrl and its W to the
 # CP regfile. No BRESP was produced, the shell's AXI-Lite master stalled, and
 # every later read died of a PCIe completion timeout -- 0xFFFFFFFF forever.
-# See docs/proposals/afu_reset_architecture_proposal.md.
 #
 # A passing run 1 therefore proves nothing at all, which is exactly why this
 # script insists on two and inspects the register trace of each rather than
