@@ -4,7 +4,6 @@
 #include <vx_dxa.h>
 #include <vx_tensor.h>
 
-#include <VX_config.h>
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <stdint.h>
@@ -51,7 +50,7 @@
 #endif
 
 namespace vt = vortex::tensor;
-using ctx = vt::wmma_context<NUM_THREADS, vt::ITYPE, vt::OTYPE>;
+using ctx = vt::wmma_context<VX_CFG_NUM_THREADS, vt::ITYPE, vt::OTYPE>;
 static constexpr uint32_t kDescA = 0;
 static constexpr uint32_t kDescB = 1;
 static constexpr uint32_t kDescC = 2;
@@ -118,11 +117,11 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
   vortex::barrier load_bar[2] = { vortex::barrier(0, num_warps_per_cta), vortex::barrier(1, num_warps_per_cta) };
   vortex::barrier tcu_bar[2]  = { vortex::barrier(2, num_warps_per_cta), vortex::barrier(3, num_warps_per_cta) };
 
-  static_assert (LMEM_ENABLED);
+  static_assert (VX_CFG_LMEM_ENABLED);
 
   static constexpr uint32_t tileC_regs = tile_M * tile_N / o_ratio;
   static constexpr uint32_t tileD_regs = tile_M * tile_N / o_ratio;
-  static constexpr uint32_t lmem_capacity_bytes = (1u << LMEM_LOG_SIZE);
+  static constexpr uint32_t lmem_capacity_bytes = (1u << VX_CFG_LMEM_LOG_SIZE);
   static constexpr uint32_t half_lmem_bytes = lmem_capacity_bytes >> 1;
   static constexpr uint32_t dense_a_tile_regs = tile_M * tile_K / i_ratio;
   static constexpr uint32_t dense_b_tile_regs = tile_K * tile_N / i_ratio;
