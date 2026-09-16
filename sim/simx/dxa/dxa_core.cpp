@@ -32,6 +32,19 @@ namespace {
 // Number of GMEM ports DxaCore exposes to L2 (one arb output per port).
 constexpr uint32_t kDxaMemPorts = std::min<uint32_t>(VX_CFG_NUM_DXA_CORES, VX_CFG_L2_NUM_REQS);
 
+// RFC 260904 §5.6: workers reserved for DXA.STORE. 0 = every worker serves one mixed
+// FIFO (a 16-line store then occupies a worker until its last ack and delays the B-tile
+// load queued behind it). k > 0 = the last k workers take stores from their own queue and
+// the first NUM_DXA_CORES - k take loads only, so a store burst never blocks a load.
+#ifndef VX_CFG_DXA_STORE_WORKERS
+#define VX_CFG_DXA_STORE_WORKERS 0
+#endif
+constexpr uint32_t kStoreWorkers = VX_CFG_DXA_STORE_WORKERS;
+static_assert((VX_CFG_DXA_MAX_INFLIGHT & (VX_CFG_DXA_MAX_INFLIGHT - 1)) == 0,
+              "VX_CFG_DXA_MAX_INFLIGHT must be a power of two (slot id is masked from the tag)");
+static_assert(kStoreWorkers < VX_CFG_NUM_DXA_CORES || kStoreWorkers == 0,
+              "VX_CFG_DXA_STORE_WORKERS must leave at least one load worker");
+
 // LMEM "word" granularity for splitting DXA writes. The LocalMem bank
 // model applies byteen relative to a VX_CFG_MEM_BLOCK_SIZE-aligned address,
 // so each LineWork's destination must lie within one VX_CFG_MEM_BLOCK_SIZE-aligned
@@ -130,6 +143,15 @@ public:
     // line has been acknowledged by the L2.
     bool                    is_store = false;
     uint32_t                st_pending_acks = 0;
+    // §5.6: with dedicated store workers this worker serves only one direction.
+    bool                    store_only = false;
+    bool                    load_only  = false;
+  };
+
+  // Queue entry: the request plus the cycle it entered the queue (queue-wait counter).
+  struct QEntry {
+    DxaReq   req;
+    uint64_t enq_cycle;
   };
 
   // ── Constructor ──────────────────────────────────────────────────────
@@ -139,13 +161,17 @@ public:
     , workers_(VX_CFG_NUM_DXA_CORES)
     , cycle_(0)
   {
-    for (uint32_t i = 0; i < VX_CFG_NUM_DXA_CORES; ++i)
-      workers_[i].worker_id = i;
+    for (uint32_t i = 0; i < VX_CFG_NUM_DXA_CORES; ++i) {
+      workers_[i].worker_id  = i;
+      workers_[i].store_only = (kStoreWorkers > 0) && (i >= VX_CFG_NUM_DXA_CORES - kStoreWorkers);
+      workers_[i].load_only  = (kStoreWorkers > 0) && !workers_[i].store_only;
+    }
   }
 
   void reset() {
     cycle_ = 0;
     queue_.clear();
+    store_queue_.clear();
     perf_stats_ = DxaCore::PerfStats();
     for (auto& w : workers_) {
       w.state = WState::IDLE;
@@ -263,6 +289,7 @@ public:
     //    stores: gmem_wr issue → lmem_rd issue).
     for (auto& w : workers_) {
       if (w.state == WState::RUNNING) {
+        ++perf_stats_.busy_cycles;
         if (w.is_store) {
           tick_worker_gmem_wr(w);
           tick_worker_lmem_rd(w);
@@ -273,10 +300,17 @@ public:
       }
     }
 
-    // 3) Dispatch from queue to idle workers.
+    // 3) Dispatch from the queue(s) to idle workers. A store-only worker takes
+    //    from store_queue_, everything else from queue_ (mixed when kStoreWorkers == 0).
     for (auto& w : workers_) {
-      if (w.state == WState::IDLE && !queue_.empty())
-        start_worker(w, queue_.front()), queue_.pop_front();
+      if (w.state != WState::IDLE) continue;
+      auto& q = w.store_only ? store_queue_ : queue_;
+      if (q.empty()) continue;
+      const QEntry e = q.front();
+      q.pop_front();
+      if (e.req.is_store) perf_stats_.store_qwait += cycle_ - e.enq_cycle;
+      else                perf_stats_.load_qwait  += cycle_ - e.enq_cycle;
+      start_worker(w, e.req);
     }
 
     // 4) Drain DxaUnit channels → req queue (round-robin).
@@ -360,8 +394,9 @@ private:
       uint32_t cid = (rr_req_ + i) % chs.size();
       auto& ch = chs.at(cid);
       if (ch.empty()) continue;
-      if (queue_.size() >= VX_CFG_DXA_QUEUE_SIZE) break;
-      queue_.push_back(ch.peek());
+      auto& q = (kStoreWorkers > 0 && ch.peek().is_store) ? store_queue_ : queue_;
+      if (q.size() >= VX_CFG_DXA_QUEUE_SIZE) break;
+      q.push_back(QEntry{ch.peek(), cycle_});
       ch.pop();
       rr_req_ = (cid + 1) % chs.size();
       break;
@@ -885,7 +920,8 @@ private:
   DxaCore*    simobject_;
   MemArbiter* gmem_arb_;
   std::array<Descriptor, VX_DCR_DXA_DESC_COUNT> descriptors_;
-  std::deque<DxaReq>     queue_;
+  std::deque<QEntry>     queue_;         // loads (and stores when kStoreWorkers == 0)
+  std::deque<QEntry>     store_queue_;   // stores, when kStoreWorkers > 0
   std::vector<Worker>    workers_;
   uint32_t               rr_req_ = 0;
   uint64_t               cycle_;

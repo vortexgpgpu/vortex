@@ -559,7 +559,7 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
   // are distinct buffers.
   const bool c_preloaded_d = (desc.flags & DTENSOR_FLAG_ZERO_ACC) == 0
                           && desc.ptrC == desc.ptrD && desc.ldmC == desc.ldmD;
-  if (k_idx == 0 && !c_preloaded_d) {
+  if (VX_CFG_DTCU_D_PRETOUCH && k_idx == 0 && !c_preloaded_d) {
     uint64_t baseD = calculate_base_D_out_();
     for (uint32_t m = 0; m < tile_m; ++m) {
       if (!row_in_bounds_(tma_m_, m))

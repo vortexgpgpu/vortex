@@ -614,13 +614,19 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_LMEM_WRITES,rep_core, &lmem_writes),{ return err; });
       CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_LT,    rep_core, &gmem_lt),    { return err; });
       {
-        uint64_t st_w = 0, st_r = 0, st_lt = 0, st_n = 0;
+        uint64_t st_w = 0, st_r = 0, st_lt = 0, st_n = 0, busy = 0, ld_qw = 0, st_qw = 0;
         CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_GMEM_WRITES, rep_core, &st_w),  { return err; });
         CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_LMEM_READS,  rep_core, &st_r),  { return err; });
         CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_STORE_LT,    rep_core, &st_lt), { return err; });
         CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_STORES,      rep_core, &st_n),  { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_BUSY,        rep_core, &busy),  { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_LOAD_QWAIT,  rep_core, &ld_qw), { return err; });
+        CHECK_ERR(vx_device_mpm_query(hdevice, mpm_class, VX_CSR_MPM_DXA_STORE_QWAIT, rep_core, &st_qw), { return err; });
         perf_print_core(stream, rep_core, "dxa-store: stores=%" PRIu64 ", gmem_writes=%" PRIu64 ", lmem_reads=%" PRIu64 ", avg_lat=%.1f",
                         st_n, st_w, st_r, safe_div((double)st_lt, (double)st_n));
+        // Worker occupancy: busy is summed over workers; queue wait is per request.
+        perf_print_core(stream, rep_core, "dxa-occ: busy_worker_cycles=%" PRIu64 ", avg_load_qwait=%.1f, avg_store_qwait=%.1f",
+                        busy, safe_div((double)ld_qw, (double)transfers), safe_div((double)st_qw, (double)st_n));
       }
       tot_transfers  += transfers;
       tot_gmem_reads += gmem_reads;

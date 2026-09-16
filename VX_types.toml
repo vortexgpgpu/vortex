@@ -785,6 +785,12 @@ VX_CSR_MPM_DXA_STORE_LT  = 0xB0A  # DXA.STORE: total issue->ack latency (sum; av
 VX_CSR_MPM_DXA_STORE_LT_H  = 0xB8A
 VX_CSR_MPM_DXA_STORES  = 0xB0B  # DXA.STORE: completed store transfers
 VX_CSR_MPM_DXA_STORES_H  = 0xB8B
+VX_CSR_MPM_DXA_BUSY  = 0xB0C  # worker-cycles RUNNING (sum over workers)
+VX_CSR_MPM_DXA_BUSY_H  = 0xB8C
+VX_CSR_MPM_DXA_LOAD_QWAIT  = 0xB0D  # load requests: cycles queued before a worker took them (sum)
+VX_CSR_MPM_DXA_LOAD_QWAIT_H  = 0xB8D
+VX_CSR_MPM_DXA_STORE_QWAIT  = 0xB0E  # store requests: cycles queued before a worker took them (sum)
+VX_CSR_MPM_DXA_STORE_QWAIT_H  = 0xB8E
 
 [csr_mpm_dtcu]
 # PERF: DTCU disaggregated tensor engine. Shared by BOTH classes -- the class is the

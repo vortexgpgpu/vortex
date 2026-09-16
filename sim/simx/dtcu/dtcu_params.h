@@ -62,6 +62,17 @@
 #define DTCU_CLUSTER_NUM_PE (4 * DTCU_SOCKET_NUM_PE)
 #endif
 
+// VX_CFG_DTCU_D_PRETOUCH: read every D line of a tile once before its first store
+// (dtcu_tma.cpp, build_op_req_lines_). 1 = reference behaviour: the read allocates the
+// line in the write-through/no-write-allocate D-port cache and costs one DRAM read per
+// D line. 0 = skip it; with the L2's full-sector no-fetch policy
+// (VX_CFG_L2_WRITE_NOFETCH) the store allocates without a fill, so the touch's DRAM
+// read is pure cost -- except that the consumer cores' L1 then misses on D
+// (tests/regression/cgo27_motivation/docs/260916_DTCU_pretouch_RFC.md).
+#ifndef VX_CFG_DTCU_D_PRETOUCH
+#define VX_CFG_DTCU_D_PRETOUCH 1
+#endif
+
 // DTCU_COMPUTE_LATENCY: pipeline fill latency per native tile (cycles).
 //   DERIVED, not chosen: it follows the in-core TCU's kMmaLatency, which upstream made a
 //   function of VX_CFG_TCU_TYPE (5 for TFR, 17 BHF, 36 FPNEW, 54 DSP). It used to be a

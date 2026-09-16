@@ -43,6 +43,12 @@ public:
     uint64_t lmem_reads     = 0;
     uint64_t store_transfers = 0;
     uint64_t store_latency  = 0;
+    // Occupancy (RFC 260904 §5.6): cycles any worker was RUNNING (summed over
+    // workers, so busy / (cycles * workers) is utilisation), and the time requests
+    // sat in the queue before a worker took them, split by direction.
+    uint64_t busy_cycles    = 0;
+    uint64_t load_qwait     = 0;
+    uint64_t store_qwait    = 0;
 
     PerfStats& operator+=(const PerfStats& rhs) {
       transfers     += rhs.transfers;
@@ -54,6 +60,9 @@ public:
       lmem_reads    += rhs.lmem_reads;
       store_transfers += rhs.store_transfers;
       store_latency += rhs.store_latency;
+      busy_cycles   += rhs.busy_cycles;
+      load_qwait    += rhs.load_qwait;
+      store_qwait   += rhs.store_qwait;
       return *this;
     }
   };

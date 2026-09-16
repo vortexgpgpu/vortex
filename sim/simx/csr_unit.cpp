@@ -248,6 +248,9 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_DXA_LMEM_READS,  cluster_perf.dxa.lmem_reads);
         CSR_READ_64(VX_CSR_MPM_DXA_STORE_LT,    cluster_perf.dxa.store_latency);
         CSR_READ_64(VX_CSR_MPM_DXA_STORES,      cluster_perf.dxa.store_transfers);
+        CSR_READ_64(VX_CSR_MPM_DXA_BUSY,        cluster_perf.dxa.busy_cycles);
+        CSR_READ_64(VX_CSR_MPM_DXA_LOAD_QWAIT,  cluster_perf.dxa.load_qwait);
+        CSR_READ_64(VX_CSR_MPM_DXA_STORE_QWAIT, cluster_perf.dxa.store_qwait);
         }
       } break;
     #endif
