@@ -27,10 +27,6 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   uint32_t tile_col = blockIdx.x * ctx::tileN;
 
   ctx::fill_fragment(fragC, 0);
-#ifdef PROFILE_ENABLE
-  uint32_t cycles = 0;
-#endif
-
   // Per-K-tile metadata reload
   constexpr uint32_t rtl_i_ratio = 32 / vt::ITYPE::bits;
   constexpr uint32_t meta_cols = (VX_CFG_NUM_THREADS * 2 * rtl_i_ratio + 31) / 32;
@@ -50,17 +46,10 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
 
   auto pTileB = pB + tile_col * K;
   for (int i = 0; i < (int)K; i += (int)ctx::tileK) {
-#ifdef PROFILE_ENABLE
-    __rdcycle_time t0 = vx_rdcycle_sync_begin();
-#endif
     ctx::load_matrix_sync<vt::row_major>(fragA, pTileA, stride_A);
     ctx::load_sp_metadata(fragA, pMetaSp);
     ctx::load_matrix_sync<vt::col_major>(fragB, pTileB, K);
     ctx::mma_sync(fragC, fragA, fragB, fragC);
-#ifdef PROFILE_ENABLE
-    __rdcycle_time t1 = vx_rdcycle_sync_end();
-    cycles += vx_rdcycle_sync_diff(t0, t1);
-#endif
     pMetaSp += per_k_tile_words;
     pTileA += a_k_stride;
     pTileB += ctx::tileK;

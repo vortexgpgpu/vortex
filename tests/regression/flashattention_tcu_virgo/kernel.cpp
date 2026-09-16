@@ -90,7 +90,7 @@ static inline void thread_block_O_rescale(float *output_accumulator,
   }
 }
 
-extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) 
+__kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) 
 {
   auto q = reinterpret_cast<const ctx::input_t *>(arg->q_addr);
   auto k = reinterpret_cast<const ctx::input_t *>(arg->k_addr);

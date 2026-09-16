@@ -18,7 +18,11 @@ TESTS := \
     vm_test vm_fault vm_stress
 
 # --- common exclude list ---------------------------------------------
-EXCLUDE :=
+# flashattention_tcu_virgo: fp32-input TCU attention; a single run exceeds
+# 30 minutes on simx regardless of sequence length — not smoke material.
+# Excluded from build and run targets (clean still walks the full list);
+# build and run it explicitly from its own directory.
+EXCLUDE := flashattention_tcu_virgo
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=

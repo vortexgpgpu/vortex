@@ -13,7 +13,7 @@ static_assert(ctx::tileM == kQueryRows, "query tile must match the TCU M tile");
 static_assert(ctx::tileN == 8, "key/output tile must match the TCU N tile");
 static_assert(ctx::tileK == kHeadDimension, "head dimension must match the TCU K tile");
 
-extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
+__kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg) {
   auto q = reinterpret_cast<const ctx::input_t *>(arg->q_addr);
   auto k = reinterpret_cast<const ctx::input_t *>(arg->k_addr);
   auto v = reinterpret_cast<const ctx::input_t *>(arg->v_addr);

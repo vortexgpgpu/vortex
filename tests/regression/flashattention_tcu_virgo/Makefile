@@ -1,6 +1,8 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
 
+CONFIGS := $(if $(findstring -DVX_CFG_EXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TCU_ENABLE)
+CONFIGS := $(if $(findstring -DVX_CFG_NUM_THREADS,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_NUM_THREADS=32)
 PROJECT := flashattention_tcu_virgo
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
