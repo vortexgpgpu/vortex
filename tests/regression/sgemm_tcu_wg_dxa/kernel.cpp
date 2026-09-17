@@ -185,5 +185,50 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   // Store the computed C tile to global memory.
   auto pTileC = pC + (tile_row + warp_rank * ctx::xtileM) * N + tile_col;
+#ifdef CSTORE_LMEM
+  // Coalesced epilogue: store_matrix_sync's lane mapping puts each lane's
+  // element ldm*sizeof(output_t) bytes from its row neighbor, so one store
+  // instruction touches tcM*m_steps distinct cache lines and the LSU
+  // coalescer can merge nothing. Through the write-allocate dcache every
+  // touched line costs a DRAM fill plus a writeback, and the epilogue
+  // serializes into the dominant K-independent term of the whole kernel.
+  // Instead, stage each warp's C sub-tile through its private slice of the
+  // (now dead) LMEM staging buffer and write global memory in full 64B
+  // segments: LMEM absorbs the scatter (bank conflicts cost cycles, not
+  // DRAM round-trips) and each global store instruction covers two
+  // consecutive 64B lines.
+  static_assert(ctx::xtileN % 16 == 0, "coalesced C store assumes 16-col chunks");
+  vx_barrier(bar_cur, num_bar_warps);   // staging buffers now safe to reuse
+  {
+    constexpr uint32_t kChunkCols = 16;                    // fp32 words
+    constexpr uint32_t kChunkRows = ctx::tcM;
+    constexpr uint32_t kSliceWords = kChunkRows * kChunkCols;
+    auto wslice = reinterpret_cast<ctx::output_t*>(__local_mem())
+                + warp_rank * kSliceWords;
+    const uint32_t lane = vx_thread_id();
+    const uint32_t r_lo = lane / ctx::tcN;                 // row in m-block
+    const uint32_t c_lo = lane % ctx::tcN;                 // col in n-block
+    const uint32_t ro_row = lane / kChunkCols;             // read-out row pair
+    const uint32_t ro_col = lane % kChunkCols;
+    constexpr uint32_t kRowsPerStore = VX_CFG_NUM_THREADS / kChunkCols;
+    for (uint32_t m = 0; m < ctx::m_steps; ++m) {
+      for (uint32_t h = 0; h < ctx::xtileN / kChunkCols; ++h) {
+        // Scatter this chunk's registers into the LMEM slice (n-major regs).
+        for (uint32_t nb = 0; nb < kChunkCols / ctx::tcN; ++nb) {
+          uint32_t r = (h * (kChunkCols / ctx::tcN) + nb) * ctx::m_steps + m;
+          wslice[r_lo * kChunkCols + nb * ctx::tcN + c_lo] =
+              *reinterpret_cast<const ctx::output_t*>(&fragC.data[r]);
+        }
+        // Coalesced read-out: each store covers kRowsPerStore full rows.
+        for (uint32_t rr = 0; rr < kChunkRows; rr += kRowsPerStore) {
+          uint32_t row = rr + ro_row;
+          pTileC[(m * ctx::tcM + row) * N + h * kChunkCols + ro_col] =
+              wslice[row * kChunkCols + ro_col];
+        }
+      }
+    }
+  }
+#else
   ctx::store_matrix_sync(pTileC, fragC, N);
+#endif
 }
