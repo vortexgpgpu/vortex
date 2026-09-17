@@ -26,6 +26,16 @@
 
 using namespace vortex;
 
+#ifdef VX_CFG_LMEM_ENABLE
+static_assert(((1ull << VX_CFG_LMEM_LOG_SIZE) % VX_CFG_MEM_BLOCK_SIZE) == 0,
+              "VX_CFG_LMEM_LOG_SIZE: local memory size must be a multiple of "
+              "VX_CFG_MEM_BLOCK_SIZE");
+static_assert((uint64_t(VX_MEM_LMEM_BASE_ADDR) % (1ull << VX_CFG_LMEM_LOG_SIZE)) == 0,
+              "VX_CFG_LMEM_LOG_SIZE: VX_MEM_LMEM_BASE_ADDR must be aligned to the "
+              "local memory size (the default base is 64 KB aligned, so "
+              "VX_CFG_LMEM_LOG_SIZE must be <= 16)");
+#endif
+
 class LocalMem::Impl {
 protected:
 	LocalMem* simobject_;

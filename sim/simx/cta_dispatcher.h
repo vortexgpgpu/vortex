@@ -89,7 +89,7 @@ private:
   // Usable slot count for a given per-CTA stride: floor(capacity/stride) capped
   // at NUM_WARPS (all slots when stride is 0). This is the occupancy bound that
   // replaces the byte ring's free_size — slots at index >= this never fit.
-  uint32_t usable_slots(uint32_t stride) const;
+  uint32_t usable_slots(uint32_t stride, uint32_t cta_warps) const;
 
   Core*     core_;
   uint32_t  num_threads_;

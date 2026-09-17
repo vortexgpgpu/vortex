@@ -327,23 +327,27 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
                                 : (cluster_k_raw == 0) ? (NW_WIDTH+1)'(1) : cluster_k_raw;
 
     // Occupancy bound, registered (off the ready path). usable = largest m in
-    // [1, NUM_WARPS] with m*stride <= LMEM_SIZE; all slots when stride == 0.
-    // The product m*stride is a constant-times-variable (shift/add), so the
-    // NUM_WARPS-wide comparator tree has no divider.
-    localparam PROD_W = LMEM_LOG + NW_WIDTH + 2;
+    // [1, NUM_WARPS] with m*stride <= LMEM_SIZE (LMEM test skipped when
+    // stride == 0) AND m*cta_warps <= NUM_WARPS. The second term is a
+    // co-residency bound. A slot only counts if a CTA can actually occupy it,
+    // and a CTA of cta_warps warps needs that many warps free, so at most
+    // NUM_WARPS/cta_warps CTAs are ever co-resident. Both products are
+    // constant-times-variable (shift/add), so the NUM_WARPS-wide comparator
+    // tree has no divider.
+    localparam PROD_W  = LMEM_LOG + NW_WIDTH + 2;
+    localparam WPROD_W = 2 * (NW_WIDTH + 1) + 1;
     reg [NW_WIDTH:0] usable_slots_r;
     always_ff @(posedge clk) begin
         if (reset) begin
             usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
         end else begin
-            if (stride == 0) begin
-                usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
-            end else begin
-                usable_slots_r <= (NW_WIDTH+1)'(1);
-                for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
-                    if (PROD_W'(m) * PROD_W'(stride) <= PROD_W'(LMEM_SIZE)) begin
-                        usable_slots_r <= (NW_WIDTH+1)'(m);
-                    end
+            usable_slots_r <= (NW_WIDTH+1)'(1);
+            for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
+                if (((stride == 0)
+                     || (PROD_W'(m) * PROD_W'(stride) <= PROD_W'(LMEM_SIZE)))
+                 && ((kmu_num_warps == '0)
+                     || (WPROD_W'(m) * WPROD_W'(kmu_num_warps) <= WPROD_W'(NUM_CTA_SLOTS)))) begin
+                    usable_slots_r <= (NW_WIDTH+1)'(m);
                 end
             end
         end
