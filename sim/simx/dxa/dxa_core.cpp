@@ -276,22 +276,27 @@ private:
 
   // Flat (sparse) / BlockMajor (dense) reuse the K-major SCATTER datapath
   // (contiguous GMEM read → permuted SMEM write) with a richer per-element
-  // destination index. tcN rides ESTRIDE2 (set_tile_geometry).
+  // destination index. The tile geometry rides ESTRIDE2 (set_tile_geometry).
   static bool desc_dest_tiled(uint32_t meta) {
     DestLayout l = desc_layout(meta);
     return l == DestLayout::Flat || l == DestLayout::BlockMajor;
   }
 
-  // WGMMA tile geometry conveyed by set_tile_geometry() via ESTRIDE2.
+  // WGMMA tile geometry conveyed by set_tile_geometry() via ESTRIDE2:
+  // tcN in [15:0], the dense B block K extent (elements) in [31:16].
   static uint32_t desc_geo_tcn(const Descriptor& d) {
-    return std::max<uint32_t>(1u, d.element_strides[2]);
+    return std::max<uint32_t>(1u, d.element_strides[2] & 0xffffu);
+  }
+  static uint32_t desc_geo_bkk(const Descriptor& d) {
+    return std::max<uint32_t>(1u, d.element_strides[2] >> 16);
   }
 
   // SMEM element-index for B element (k = K-row, n = N-col) under the bbuf's
   // native layouts. Mirrors vx_tensor.h::b_sp_flat_idx / b_blockmajor_idx
   // (tcK == tcN for canonical WGMMA configs; ratio = 32-bit-word / elem).
   static uint32_t tiled_dest_elem(DestLayout lay, uint32_t k, uint32_t n,
-                                  uint32_t ratio, uint32_t tcN, uint32_t n_steps) {
+                                  uint32_t ratio, uint32_t tcN, uint32_t n_steps,
+                                  uint32_t bkK) {
     if (lay == DestLayout::Flat) {
       uint32_t b_tcK_words = tcN * 2;
       uint32_t blk_words   = tcN * b_tcK_words;
@@ -304,8 +309,9 @@ private:
       uint32_t word_off = (k_blk * n_steps + n_blk) * blk_words + (kw_in * tcN + n_in);
       return word_off * ratio + elem;
     }
-    // BlockMajor (dense): within-block N-outer, K-inner.
-    uint32_t kw          = tcN * ratio;        // tcK * i_ratio
+    // BlockMajor (dense): within-block N-outer, K-inner; the block K extent
+    // follows the consumer's FEDP depth and is conveyed by the descriptor.
+    uint32_t kw          = bkK;
     uint32_t b_blk_elems = kw * tcN;
     uint32_t k_blk = k / kw;
     uint32_t r_in  = k % kw;
@@ -421,6 +427,7 @@ private:
     // ESTRIDE2, n_steps = row_elems(=xtileN) / tcN.
     uint32_t geo_ratio  = dest_tiled ? std::max<uint32_t>(1u, 4u / elem_bytes) : 1u;
     uint32_t geo_tcN    = dest_tiled ? desc_geo_tcn(desc) : 1u;
+    uint32_t geo_bkK    = dest_tiled ? desc_geo_bkk(desc) : 1u;
     uint32_t geo_nsteps = dest_tiled ? std::max<uint32_t>(1u, row_elems / geo_tcN) : 1u;
 
     uint32_t cfill = desc.cfill;
@@ -462,7 +469,7 @@ private:
         uint64_t gaddr_e = row_gbase + uint64_t(e0) * elem_bytes;
         uint64_t saddr_e;
         if (dest_tiled) {
-          uint32_t de = tiled_dest_elem(layout, outer[0], e0, geo_ratio, geo_tcN, geo_nsteps);
+          uint32_t de = tiled_dest_elem(layout, outer[0], e0, geo_ratio, geo_tcN, geo_nsteps, geo_bkK);
           saddr_e = w.req.smem_addr + uint64_t(de) * elem_bytes;
         } else if (dest_kmajor) {
           saddr_e = row_smem_base + uint64_t(e0) * uint64_t(per_lane_stride_bytes);
@@ -645,11 +652,12 @@ private:
     const uint32_t t_eb     = desc_elem_bytes(w.desc.meta);
     const uint32_t t_ratio  = tiled ? std::max<uint32_t>(1u, 4u / t_eb) : 1u;
     const uint32_t t_tcN    = tiled ? desc_geo_tcn(w.desc) : 1u;
+    const uint32_t t_bkK    = tiled ? desc_geo_bkk(w.desc) : 1u;
     const uint32_t t_nsteps = tiled ? std::max<uint32_t>(1u, uint32_t(w.desc.tile_sizes[0]) / t_tcN) : 1u;
     auto dest_byte_of = [&](uint32_t idx) -> uint64_t {
       if (tiled) {
         uint32_t de = tiled_dest_elem(DestLayout(lw.dest_layout), lw.tile_k_row,
-                                      lw.tile_n_base + idx, t_ratio, t_tcN, t_nsteps);
+                                      lw.tile_n_base + idx, t_ratio, t_tcN, t_nsteps, t_bkK);
         return w.req.smem_addr + uint64_t(de) * t_eb + cta_off;
       }
       return lw.smem_word_addr + lw.smem_byte_offset

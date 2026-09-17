@@ -411,7 +411,8 @@ int main(int argc, char *argv[]) {
   //   stride0_bytes = row stride of B = N * sizeof(itype_t)
   //   layout = BLOCK_MAJOR → DXA reads B[K][N] row-major and scatters each
   //            element to the bbuf-native dense block-major destination
-  //            (vx_tensor.h::b_blockmajor_idx); set_tile_geometry conveys tcN.
+  //            (vx_tensor.h::b_blockmajor_idx); set_tile_geometry conveys tcN
+  //            and the dense block K extent.
   RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
@@ -419,7 +420,7 @@ int main(int argc, char *argv[]) {
     /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_layout(device, kDescB,
     vortex::dxa::Layout::BlockMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN));
+  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN, /*blk_k=*/cfg::b_blk_k));
 
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));

@@ -93,6 +93,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [3:0]                  lg_ratio,
     input  wire [3:0]                  lg_tcN,
     input  wire [3:0]                  lg_nsteps,
+    input  wire [3:0]                  lg_bkK,
     input  wire [DXA_SMEM_ADDR_W-1:0]  smem_base    // tile SMEM byte base
 
 `ifdef PERF_ENABLE
@@ -126,7 +127,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [1:0]                 dest_mode_q;
     reg                       dest_kmajor_q;
     reg [3:0]                 elem_bytes_q;
-    reg [3:0]                 lg_ratio_q, lg_tcN_q, lg_nsteps_q;
+    reg [3:0]                 lg_ratio_q, lg_tcN_q, lg_nsteps_q, lg_bkK_q;
     reg [DXA_SMEM_ADDR_W-1:0] smem_base_q;
     reg [DXA_SMEM_ADDR_W-1:0] per_lane_stride_q;
     always @(posedge clk) begin
@@ -136,6 +137,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         lg_ratio_q        <= lg_ratio;
         lg_tcN_q          <= lg_tcN;
         lg_nsteps_q       <= lg_nsteps;
+        lg_bkK_q          <= lg_bkK;
         smem_base_q       <= smem_base;
         per_lane_stride_q <= DXA_SMEM_ADDR_W'(per_lane_stride_bytes);
     end
@@ -159,8 +161,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // per CL at capture (sw_dest_addr below).
     //   FLAT:        step = 1 << (lg_ratio+esize)
     //                wrap = ((1 << (2*lg_tcN+1)) - (tcN-1)) << (lg_ratio+esize)
-    //   BlockMajor:  step = 1 << (lg_tcN+lg_ratio+esize)
-    //                wrap = ((1 << lg_tcN) - (tcN-1)) << (lg_tcN+lg_ratio+esize)
+    //   BlockMajor:  step = 1 << (lg_bkK+esize)
+    //                wrap = ((1 << lg_tcN) - (tcN-1)) << (lg_bkK+esize)  (= step)
     reg [15:0]                tcn_mask_q;
     reg [DXA_SMEM_ADDR_W-1:0] tiled_step_q;
     reg [DXA_SMEM_ADDR_W-1:0] tiled_wrap_q;
@@ -168,7 +170,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire is_flat_w = (dest_mode_q == DXA_DEST_FLAT);
     wire [15:0] tcn_mask_w = (16'd1 << lg_tcN_q) - 16'd1;
     wire [4:0] step_sh_w = is_flat_w ? (5'(lg_ratio_q) + 5'(esize))
-                                     : (5'(lg_tcN_q) + 5'(lg_ratio_q) + 5'(esize));
+                                     : (5'(lg_bkK_q) + 5'(esize));
     wire [DXA_SMEM_ADDR_W-1:0] wrap_elems_w = is_flat_w
         ? ((DXA_SMEM_ADDR_W'(1) << (5'(lg_tcN_q) + 5'(lg_tcN_q) + 5'd1)) - DXA_SMEM_ADDR_W'(tcn_mask_w))
         : ((DXA_SMEM_ADDR_W'(1) << lg_tcN_q) - DXA_SMEM_ADDR_W'(tcn_mask_w));
@@ -177,9 +179,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         tiled_step_q <= DXA_SMEM_ADDR_W'(1) << step_sh_w;
         tiled_wrap_q <= wrap_elems_w << step_sh_w;
         // block-index shift of the per-CL dest calc (stage 2 below):
-        //   FLAT: 2*lg_tcN+1+lg_ratio+esize   BM: 2*lg_tcN+lg_ratio+esize
-        calc_sh2_q   <= 5'(lg_tcN_q) + 5'(lg_tcN_q) + (is_flat_w ? 5'd1 : 5'd0)
-                      + 5'(lg_ratio_q) + 5'(esize);
+        //   FLAT: 2*lg_tcN+1+lg_ratio+esize   BM: lg_tcN+lg_bkK+esize
+        calc_sh2_q   <= is_flat_w
+            ? (5'(lg_tcN_q) + 5'(lg_tcN_q) + 5'd1 + 5'(lg_ratio_q) + 5'(esize))
+            : (5'(lg_tcN_q) + 5'(lg_bkK_q) + 5'(esize));
     end
 
     // ════════════════════════════════════════════════════════════════════
@@ -425,21 +428,21 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire [15:0] ratio_mask_w = (16'd1 << lg_ratio_q) - 16'd1;
     wire [15:0] ktck_mask_w  = (16'd2 << lg_tcN_q) - 16'd1;
-    wire [15:0] kw_mask_w    = (16'd1 << (lg_tcN_q + lg_ratio_q)) - 16'd1;
+    wire [15:0] kw_mask_w    = (16'd1 << lg_bkK_q) - 16'd1;
     wire [15:0] calc_n_blk   = calc_n >> lg_tcN_q;
     wire [15:0] calc_n_in    = calc_n & tcn_mask_q;
     wire [15:0] f_k_word     = calc_k >> lg_ratio_q;
     wire [15:0] f_elem       = calc_k & ratio_mask_w;
     wire [15:0] f_k_blk      = f_k_word >> (lg_tcN_q + 4'd1);
     wire [15:0] f_kw_in      = f_k_word & ktck_mask_w;
-    wire [15:0] b_k_blk      = calc_k >> (lg_tcN_q + lg_ratio_q);
+    wire [15:0] b_k_blk      = calc_k >> lg_bkK_q;
     wire [15:0] b_r_in       = calc_k & kw_mask_w;
 
     wire [15:0] calc_k_blk = is_flat_w ? f_k_blk : b_k_blk;
     wire [31:0] calc_blk_w   = (32'(calc_k_blk) << lg_nsteps_q) + 32'(calc_n_blk);
     wire [31:0] calc_intra_w = is_flat_w
         ? (((((32'(f_kw_in) << lg_tcN_q) + 32'(calc_n_in)) << lg_ratio_q) + 32'(f_elem)) << esize)
-        : (((32'(calc_n_in) << (lg_tcN_q + lg_ratio_q)) + 32'(b_r_in)) << esize);
+        : (((32'(calc_n_in) << lg_bkK_q) + 32'(b_r_in)) << esize);
 
     reg [31:0] calc_blk_r, calc_intra_r;
     reg        calc2_valid_r, calc2_pend_r;

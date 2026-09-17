@@ -80,6 +80,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [3:0]                  ag_lg_ratio;
     wire [3:0]                  ag_lg_tcN;
     wire [3:0]                  ag_lg_nsteps;
+    wire [3:0]                  ag_lg_bkK;
     wire [15:0]                 ag_k_row;
     wire [15:0]                 ag_n_base;
     wire [DXA_SMEM_ADDR_W-1:0]  ag_smem_base;
@@ -170,6 +171,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .out_lg_ratio         (ag_lg_ratio),
         .out_lg_tcN           (ag_lg_tcN),
         .out_lg_nsteps        (ag_lg_nsteps),
+        .out_lg_bkK           (ag_lg_bkK),
         .out_k_row            (ag_k_row),
         .out_n_base           (ag_n_base),
         .out_smem_base        (ag_smem_base)
@@ -278,6 +280,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .lg_ratio              (ag_lg_ratio),
         .lg_tcN                (ag_lg_tcN),
         .lg_nsteps             (ag_lg_nsteps),
+        .lg_bkK                (ag_lg_bkK),
         .smem_base             (ag_smem_base)
     );
 

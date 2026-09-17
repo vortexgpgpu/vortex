@@ -745,7 +745,8 @@ public:
   // BLOCK = micro-tile (tcM × tcK or tcK × tcN), measured in input_t element units.
   static constexpr uint32_t a_blk_elems  = tcM * fedpK * i_ratio; // elements per A block
   static constexpr uint32_t a_warp_elems = xtileM * tileK;      // elements per warp's A slice
-  static constexpr uint32_t b_blk_elems  = fedpK * i_ratio * tcN; // elements per B block
+  static constexpr uint32_t b_blk_k      = fedpK * i_ratio;     // K elements per B block
+  static constexpr uint32_t b_blk_elems  = b_blk_k * tcN;       // elements per B block
 
   // Cooperative-load index into A_smem for an (r, c) target in the
   // row-major-equivalent A view (r ∈ [0, cta_M), c ∈ [0, tileK)).
@@ -767,12 +768,12 @@ public:
   // Within-block layout: N outer, K inner — each 32-bit word packs i_ratio
   // K-elements at one (j, k_word) cell, matching tcu_core's b_off + j*TC_K + k.
   static __attribute__((always_inline)) uint32_t b_blockmajor_idx(uint32_t r, uint32_t c) {
-    uint32_t k_blk = r / (fedpK * i_ratio);
-    uint32_t r_in  = r % (fedpK * i_ratio);
+    uint32_t k_blk = r / b_blk_k;
+    uint32_t r_in  = r % b_blk_k;
     uint32_t n_blk = c / tcN;
     uint32_t n_in  = c % tcN;
     return (k_blk * n_steps + n_blk) * b_blk_elems
-         + n_in * (fedpK * i_ratio) + r_in;
+         + n_in * b_blk_k + r_in;
   }
 
   // Flat sparse-B SMEM layout: per (k_blk, n_blk) block, words are stored
