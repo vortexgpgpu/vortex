@@ -267,7 +267,22 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     // K-major/tiled drain quantum (in bytes) = 1 element per beat in scatter
     // mode, SMEM_WORD_SIZE bytes per beat in row-major streaming mode.
-    wire [FILL_W-1:0] drain_q_bytes = scatter ? FILL_W'(elem_bytes_q) : FILL_W'(SMEM_WORD_SIZE);
+    //
+    // BlockMajor grouped drain: the tcN consecutive elements of one n-block
+    // are contiguous in the source CL (consecutive n) and land in the SAME
+    // SMEM word at tiled_step_q stride, so they drain as ONE masked write
+    // per beat — tcN× fewer port beats AND cycles than element-wise. A CL's
+    // element 0 is always n-block aligned (rows and CL boundaries are both
+    // tcN-aligned), so groups never straddle words; a partial tail group is
+    // masked by the remaining fill level. Configs whose group span exceeds
+    // the SMEM word fall back to the element-wise path.
+    wire is_bm_q = (dest_mode_q == DXA_DEST_BLOCKMAJOR);
+    wire [FILL_W-1:0] bm_group_bytes = FILL_W'(16'(elem_bytes_q) << lg_tcN_q);
+    wire bm_group_fits = ((32'(tcn_mask_q) + 32'd1) << step_sh_w) <= 32'(SMEM_WORD_SIZE);
+    wire bm_grouped = is_bm_q && bm_group_fits;
+    wire [FILL_W-1:0] drain_q_bytes = scatter ? (bm_grouped ? bm_group_bytes
+                                                            : FILL_W'(elem_bytes_q))
+                                              : FILL_W'(SMEM_WORD_SIZE);
     // Effective per-element SMEM byte address: both scatter sub-modes read
     // the fb_byte_addr_r accumulator.
     wire [SMEM_OFF_W-1:0] km_in_word_off = fb_byte_addr_r[SMEM_OFF_W-1:0];
@@ -281,7 +296,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     //   K-major:    one element at a time, no partials (valid_length is a
     //               multiple of elem_bytes by descriptor invariant).
     wire has_full_word    = (fb_level_r >= drain_q_bytes);
-    wire has_last_partial = !scatter && !has_full_word && (fb_level_r > 0);
+    // Trailing partials exist in row-major mode and in grouped BlockMajor
+    // mode (a tail group shorter than tcN elements); element-wise scatter
+    // has none (valid_length is a multiple of elem_bytes by invariant).
+    wire has_last_partial = (!scatter || bm_grouped) && !has_full_word && (fb_level_r > 0);
     wire drain_valid      = fb_active_r && (has_full_word || has_last_partial);
     wire drain_will_empty = (fb_level_r <= drain_q_bytes);
 
@@ -310,13 +328,54 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [SMEM_DATAW-1:0] km_elem_data_shifted =
         SMEM_DATAW'(km_elem_bytes_slice) << ({3'b000, km_in_word_off} << 3);
 
-    wire [SMEM_DATAW-1:0] fb_word_data = scatter ? km_elem_data_shifted
-                                                 : fb_data_r[SMEM_DATAW-1:0];
-
     // K-major byteen: `elem_bytes` contiguous bytes at km_in_word_off.
     wire [SMEM_WORD_SIZE-1:0] km_elem_mask_raw =
         SMEM_WORD_SIZE'((SMEM_WORD_SIZE'(1) << elem_bytes_q) - SMEM_WORD_SIZE'(1));
     wire [SMEM_WORD_SIZE-1:0] km_byteen = km_elem_mask_raw << km_in_word_off;
+
+    // Grouped BlockMajor lanes: lane j sources elem_bytes at
+    // km_rd_off_r + j*elem_bytes (contiguous n in the CL) and lands them at
+    // km_in_word_off + (j << step_sh_w) inside the word. km_in_word_off is
+    // constant across a CL's grouped beats (the dest advances by whole
+    // blocks), so the placement network is bounded by the SMEM word.
+    localparam BM_MAX_LANES = 16;
+    localparam RD_BIT_W = $clog2(FILL_CAP*8);
+    wire [SMEM_DATAW-1:0]     bm_lane_data [BM_MAX_LANES];
+    wire [SMEM_WORD_SIZE-1:0] bm_lane_mask [BM_MAX_LANES];
+    for (genvar j = 0; j < BM_MAX_LANES; ++j) begin : g_bm_lane
+        wire [15:0] lane_src_off = 16'(j) * 16'(elem_bytes_q);
+        wire lane_in_grp = (j == 0) || (16'(j) <= tcn_mask_q);
+        wire lane_en = bm_grouped
+                    && lane_in_grp
+                    && (FILL_W'(lane_src_off) < fb_level_r);
+        wire [RD_BIT_W-1:0] lane_rd_bit =
+            RD_BIT_W'((32'(km_rd_off_r) + 32'(lane_src_off)) << 3);
+        wire [63:0] lane_slice = fb_data_r[lane_rd_bit +: 64];
+        // Keep only this element's bytes so a wide slice cannot smear into
+        // a neighboring lane's destination.
+        wire [63:0] lane_elem = (elem_bytes_q >= 4'd8) ? lane_slice
+            : (lane_slice & ((64'd1 << {3'b000, elem_bytes_q, 3'b000}) - 64'd1));
+        wire [SMEM_OFF_W-1:0] lane_woff =
+            SMEM_OFF_W'(32'(km_in_word_off) + (32'(j) << step_sh_w));
+        assign bm_lane_data[j] = lane_en
+            ? (SMEM_DATAW'(lane_elem) << {lane_woff, 3'b000}) : '0;
+        assign bm_lane_mask[j] = lane_en
+            ? (km_elem_mask_raw << lane_woff) : '0;
+    end
+    logic [SMEM_DATAW-1:0]     bm_data_w;
+    logic [SMEM_WORD_SIZE-1:0] bm_byteen_w;
+    always @(*) begin
+        bm_data_w   = '0;
+        bm_byteen_w = '0;
+        for (int j = 0; j < BM_MAX_LANES; ++j) begin
+            bm_data_w   |= bm_lane_data[j];
+            bm_byteen_w |= bm_lane_mask[j];
+        end
+    end
+
+    wire [SMEM_DATAW-1:0] fb_word_data = scatter ? (bm_grouped ? bm_data_w
+                                                               : km_elem_data_shifted)
+                                                 : fb_data_r[SMEM_DATAW-1:0];
 
     wire [SMEM_WORD_SIZE-1:0] rm_byteen;
     for (genvar i = 0; i < SMEM_WORD_SIZE; ++i) begin : g_byteen
@@ -328,7 +387,9 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             assign rm_byteen[i] = byte_has_data;
         end
     end
-    wire [SMEM_WORD_SIZE-1:0] fb_word_byteen = scatter ? km_byteen : rm_byteen;
+    wire [SMEM_WORD_SIZE-1:0] fb_word_byteen = scatter ? (bm_grouped ? bm_byteen_w
+                                                                     : km_byteen)
+                                                       : rm_byteen;
 
     // ════════════════════════════════════════════════════════════════════
     // sw-channel accept + load scheduling
@@ -495,10 +556,13 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     // Read pointer advances; fb_data_r is NOT shifted. K-major
                     // strides the dest uniformly; tiled advances it by the
                     // in-block/wrap constant selected by the registered flag.
-                    km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(elem_bytes_q);
+                    // Grouped BlockMajor consumes a whole n-group per beat and
+                    // steps the dest by one block (1 << calc_sh2_q).
+                    km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(drain_q_bytes);
                     fb_level_r     <= fb_level_r - drain_q_bytes;
                     fb_byte_addr_r <= fb_byte_addr_r
-                        + (dest_tiled ? (fb_n_wrap_r ? tiled_wrap_q : tiled_step_q)
+                        + (bm_grouped ? (DXA_SMEM_ADDR_W'(1) << calc_sh2_q)
+                         : dest_tiled ? (fb_n_wrap_r ? tiled_wrap_q : tiled_step_q)
                                       : per_lane_stride_q);
                     fb_n_in_r      <= fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1);
                     fb_n_wrap_r    <= ((fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1)) == tcn_mask_q);
