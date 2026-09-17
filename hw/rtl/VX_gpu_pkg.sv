@@ -1704,8 +1704,7 @@ package VX_gpu_pkg;
 
     // The shared page-table walker attaches one PTE-fetch port under VM, right
     // after the socket and graphics ports (like ocache/rcache).
-    localparam L2_PTW_REQS          = `VX_CFG_VM_ENABLED;
-    localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
+    localparam L2_PTW_REQS          = 0; // walker is device-level (LLC client)
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
 
@@ -1720,6 +1719,8 @@ package VX_gpu_pkg;
     localparam TLB_SOCKET_ID_WIDTH   = L1_TLB_ID_WIDTH + `ARB_SEL_BITS(2, 1);
     localparam TLB_CLUSTER_ID_WIDTH  = TLB_SOCKET_ID_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, 1);
     localparam L2_TLB_SLOT_WIDTH     = `CLOG2(`VX_CFG_L2_TLB_MSHR_SIZE);
+    // Device-level walker: cluster L2-TLB miss buses arb into one walker.
+    localparam TLB_DEV_ID_WIDTH      = L2_TLB_SLOT_WIDTH + `ARB_SEL_BITS(`VX_CFG_NUM_CLUSTERS, 1);
 
     // Memory request data bits (mem transacts in sectors)
     localparam L2_MEM_DATA_WIDTH	= (L2_SECTOR_SIZE * 8);
@@ -1743,7 +1744,11 @@ package VX_gpu_pkg;
     localparam L3_SECTOR_SIZE       = `VX_CFG_L3_SECTOR_SIZE;
 
     // Input request size
-    localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
+    // The device-level walker attaches its PTE fetches as one more LLC
+    // client on the last requestor slot.
+    localparam L3_PTW_IDX           = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
+    localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS
+                                    + `VX_CFG_VM_ENABLED;
 
     // Core request tag bits
     localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;

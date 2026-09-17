@@ -14,16 +14,21 @@
 `include "VX_define.vh"
 
 // L1 TLB storage: the pure lookup + miss-handling core, with no address
-// translation of its own. It holds the fully-associative entry array
-// (parallel per-lane read), the non-blocking miss station (park / replay /
-// kill), and the fill path from the shared walker over `tlb_bus`. The parent
-// `VX_mmu` drives the VPN probes and consumes the raw lookup results (PPN,
-// flags) plus the replay/kill streams, doing the VA→PA splice and permission
-// checks itself. Splitting the storage out keeps "TLB = lookup" explicit and
-// lets the banked variant live entirely here.
+// translation of its own. The entry array is banked: NUM_BANKS CAMs selected
+// by the low VPN bits, each with a single lookup port, so a lookup costs
+// TLB_SIZE comparators in total instead of NUM_REQS x TLB_SIZE. Lanes that
+// contend for one bank are serialized (bank_conflict tells the parent to
+// hold the losers; lowest lane wins); lanes on different banks proceed in
+// the same cycle. Misses go to the shared non-blocking miss station
+// (`VX_tlb_mshr`: park / dedup / replay / kill), so a miss never blocks its
+// bank and same-VPN requests join the in-flight walk. The fill installs into
+// the bank of the walked VPN. The parent `VX_mmu` drives the VPN probes and
+// consumes the raw lookup results (PPN, flags) plus the replay/kill streams,
+// doing the VA→PA splice and permission checks itself.
 module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
-    parameter NUM_REQS    = DCACHE_NUM_REQS,
+    parameter NUM_REQS     = DCACHE_NUM_REQS,
     parameter TLB_SIZE     = `VX_CFG_DTLB_SIZE,
+    parameter NUM_BANKS    = `VX_CFG_L1_TLB_NUM_BANKS,
     parameter MSHR_SIZE    = `VX_CFG_L1_TLB_MSHR_SIZE,
     parameter REPLAY_DEPTH = 2,
     parameter PAYLOAD_W    = 1,
@@ -36,11 +41,15 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     output mmu_perf_t    mmu_perf,
 `endif
 
-    // Per-lane combinational lookup (VPN in, raw translation out).
+    // Per-lane combinational lookup (VPN in, raw translation out). A lane
+    // that loses its bank's port this cycle gets bank_conflict (parent must
+    // hold it); hit/miss is only meaningful for lanes with bank_conflict == 0.
     input  wire [NUM_REQS-1:0][TLB_VPN_WIDTH-1:0]   lookup_vpn,
+    input  wire [NUM_REQS-1:0]                       lookup_valid,
     output wire [NUM_REQS-1:0]                       lookup_hit,
     output wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]    lookup_ppn,
     output wire [NUM_REQS-1:0][TLB_FLAGS_WIDTH-1:0]  lookup_flags,
+    output wire [NUM_REQS-1:0]                       bank_conflict,
     input  wire [NUM_REQS-1:0]                       access_hit,
     output wire [NUM_REQS-1:0]                       mshr_match,
 
@@ -76,37 +85,101 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     input  wire                       flush,
     output wire                       empty
 );
+    `STATIC_ASSERT(`IS_POW2(NUM_BANKS), ("NUM_BANKS must be a power of 2"))
+    `STATIC_ASSERT((TLB_SIZE % NUM_BANKS) == 0, ("NUM_BANKS must divide TLB_SIZE"))
+
+    localparam ENTRIES_PER_BANK = TLB_SIZE / NUM_BANKS;
+    localparam BANK_W = `UP(`CLOG2(NUM_BANKS));
+    localparam LANE_W = `UP(`CLOG2(NUM_REQS));
+
+    function automatic logic [BANK_W-1:0] bank_of(input logic [BANK_W-1:0] vpn_lo);
+        if (NUM_BANKS == 1) bank_of = '0;
+        else                bank_of = vpn_lo;
+    endfunction
+
     // ---------------------------------------------------------------------
-    // Entry array (fully-associative, parallel per-lane read)
+    // Bank lookup port arbitration: lowest contending lane wins the bank.
+    // ---------------------------------------------------------------------
+    wire [NUM_REQS-1:0][BANK_W-1:0] lane_bank;
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lane_bank
+        assign lane_bank[l] = bank_of(lookup_vpn[l][BANK_W-1:0]);
+    end
+
+    wire [NUM_REQS-1:0] lane_grant;
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_grant
+        logic older_same_bank;
+        always @(*) begin
+            older_same_bank = 1'b0;
+            for (int k = 0; k < l; ++k) begin
+                if (lookup_valid[k] && (lane_bank[k] == lane_bank[l])) begin
+                    older_same_bank = 1'b1;
+                end
+            end
+        end
+        assign lane_grant[l]    = lookup_valid[l] && !older_same_bank;
+        assign bank_conflict[l] = lookup_valid[l] && older_same_bank;
+    end
+
+    // ---------------------------------------------------------------------
+    // Entry array: one single-port CAM per bank, granted lane only.
     // ---------------------------------------------------------------------
     wire               install_valid;
     tlb_entry_t        install_entry;
-    wire               install_evict;
+    wire [BANK_W-1:0]  install_bank = bank_of(install_entry.vpn[BANK_W-1:0]);
 
-    VX_tlb_cam #(
-        .NUM_REQS (NUM_REQS),
-        .TLB_SIZE  (TLB_SIZE)
-    ) cam (
-        .clk           (clk),
-        .reset         (reset),
-        .lookup_vpn    (lookup_vpn),
-        .lookup_hit    (lookup_hit),
-        .lookup_ppn    (lookup_ppn),
-        .lookup_flags  (lookup_flags),
-        `UNUSED_PIN (lookup_ppn_raw),
-        `UNUSED_PIN (lookup_level),
-        .access_hit    (access_hit),
-        .install_valid (install_valid),
-        .install_entry (install_entry),
-        .install_evict (install_evict),
-        .flush         (flush)
-    );
+    wire [NUM_BANKS-1:0]                       bank_install_valid;
+    wire [NUM_BANKS-1:0]                       bank_install_evict;
+    wire [NUM_BANKS-1:0]                       bank_lookup_hit;
+    wire [NUM_BANKS-1:0][TLB_PPN_WIDTH-1:0]    bank_lookup_ppn;
+    wire [NUM_BANKS-1:0][TLB_FLAGS_WIDTH-1:0]  bank_lookup_flags;
+    wire [NUM_BANKS-1:0][TLB_VPN_WIDTH-1:0]    bank_lookup_vpn;
+    wire [NUM_BANKS-1:0]                       bank_access_hit;
 `ifndef PERF_ENABLE
-    `UNUSED_VAR (install_evict)
+    `UNUSED_VAR (bank_install_evict)
 `endif
 
+    for (genvar b = 0; b < NUM_BANKS; ++b) begin : g_banks
+        logic [LANE_W-1:0] owner;
+        always @(*) begin
+            owner = '0;
+            for (int l = NUM_REQS-1; l >= 0; --l) begin
+                if (lane_grant[l] && (lane_bank[l] == BANK_W'(b))) begin
+                    owner = LANE_W'(l);
+                end
+            end
+        end
+        assign bank_lookup_vpn[b]    = lookup_vpn[owner];
+        assign bank_access_hit[b]    = access_hit[owner] && (lane_bank[owner] == BANK_W'(b));
+        assign bank_install_valid[b] = install_valid && (install_bank == BANK_W'(b));
+
+        VX_tlb_cam #(
+            .NUM_REQS (1),
+            .TLB_SIZE (ENTRIES_PER_BANK)
+        ) cam (
+            .clk           (clk),
+            .reset         (reset),
+            .lookup_vpn    (bank_lookup_vpn[b]),
+            .lookup_hit    (bank_lookup_hit[b]),
+            .lookup_ppn    (bank_lookup_ppn[b]),
+            .lookup_flags  (bank_lookup_flags[b]),
+            `UNUSED_PIN (lookup_ppn_raw),
+            `UNUSED_PIN (lookup_level),
+            .access_hit    (bank_access_hit[b]),
+            .install_valid (bank_install_valid[b]),
+            .install_entry (install_entry),
+            .install_evict (bank_install_evict[b]),
+            .flush         (flush)
+        );
+    end
+
+    for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lane_out
+        assign lookup_hit[l]   = lane_grant[l] && bank_lookup_hit[lane_bank[l]];
+        assign lookup_ppn[l]   = bank_lookup_ppn[lane_bank[l]];
+        assign lookup_flags[l] = bank_lookup_flags[lane_bank[l]];
+    end
+
     // ---------------------------------------------------------------------
-    // Miss station
+    // Miss station (shared across banks)
     // ---------------------------------------------------------------------
     wire [`UP(ID_WIDTH)-1:0]   tlb_req_id;
     tlb_access_e               tlb_req_access;
@@ -204,7 +277,7 @@ module VX_tlb_l1 import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             perf_reads  <= perf_reads  + PERF_CTR_BITS'(n_hits) + PERF_CTR_BITS'(miss_ev);
             perf_hits   <= perf_hits   + PERF_CTR_BITS'(n_hits);
             perf_misses <= perf_misses + PERF_CTR_BITS'(miss_ev);
-            if (install_valid && install_evict) begin
+            if (| (bank_install_valid & bank_install_evict)) begin
                 perf_evicts <= perf_evicts + PERF_CTR_BITS'(1);
             end
             if (tlb_bus_if.req_valid && tlb_bus_if.req_ready) begin
