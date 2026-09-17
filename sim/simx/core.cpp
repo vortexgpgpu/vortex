@@ -27,6 +27,7 @@
 #include "cache.h"
 #include "local_mem.h"
 #include "local_mem_switch.h"
+#include "dxa_core.h"
 #include "lsu_mem_adapter.h"
 #include "scoreboard.h"
 #include "operands.h"
@@ -121,8 +122,12 @@ public:
     }
 
     // create local memory.
+    // The DXA drains one full LMEM row per cycle; a row wider than the 64B
+    // mem_block byteen scope arrives as multiple same-cycle block writes on
+    // adjacent input ports (see DxaCore::LMEM_PORTS_PER_CORE).
     snprintf(sname, 100, "%s-lmem", name.c_str());
-    uint32_t lmem_num_reqs = LSU_NUM_REQS + VX_CFG_EXT_TCU_ENABLED + VX_CFG_EXT_DXA_ENABLED;
+    uint32_t lmem_num_reqs = LSU_NUM_REQS + VX_CFG_EXT_TCU_ENABLED
+        + VX_CFG_EXT_DXA_ENABLED * DxaCore::LMEM_PORTS_PER_CORE;
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << VX_CFG_LMEM_LOG_SIZE),
       LSU_WORD_SIZE,

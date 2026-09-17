@@ -615,12 +615,22 @@ private:
       w.drain_slot = slot;
     }
 
-    auto& s = w.inflight[slot];
-
-    // Determine destination core's LMEM port.
+    // Determine destination core's LMEM port group.
     uint32_t socket_local_cid = w.req.core->id() % kCoresPerSocket;
-    auto& lmem_ch = simobject_->lmem_req_out.at(socket_local_cid);
-    if (lmem_ch.full()) return; // backpressure
+
+    // One drain beat per cycle covers one aligned LMEM row
+    // (DxaCore::LMEM_ROW_SIZE bytes — the full banked row the RTL writes in
+    // a single cycle). A row wider than the 64B mem_block byteen scope is
+    // emitted as LMEM_PORTS_PER_CORE same-cycle block writes, one per row
+    // half on its own LocalMem input port. A row narrower than a block
+    // (small NT) bounds the per-beat gather instead.
+    constexpr uint64_t kRowMask = ~uint64_t(DxaCore::LMEM_ROW_SIZE - 1);
+    uint64_t beat_row = UINT64_MAX;
+
+    for (uint32_t emitted = 0; emitted < DxaCore::LMEM_PORTS_PER_CORE; ++emitted) {
+    slot = w.drain_slot;
+    if (slot == UINT32_MAX) break; // slot released mid-beat
+    auto& s = w.inflight[slot];
 
     const LineWork& lw = s.work;
 
@@ -661,9 +671,25 @@ private:
            + uint64_t(idx) * lw.km_lane_stride + cta_off;
     };
 
-    // The block targeted this beat = the block of scatter element e0.
+    // The block targeted this write = the block of scatter element e0.
     uint64_t base_byte0 = dest_byte_of(e0);
     uint64_t dword = base_byte0 & ~uint64_t(kLmemWordSize - 1);
+
+    // Row constraint: every write of this beat stays in one aligned LMEM row.
+    uint64_t row = base_byte0 & kRowMask;
+    if (beat_row == UINT64_MAX) {
+      beat_row = row;
+    } else if (row != beat_row) {
+      break; // next block lands in a different row — next cycle's beat
+    }
+
+    // Route this row half to its own LocalMem input port.
+    uint32_t half = (DxaCore::LMEM_PORTS_PER_CORE > 1)
+        ? uint32_t((dword / kLmemWordSize) & (DxaCore::LMEM_PORTS_PER_CORE - 1))
+        : 0u;
+    auto& lmem_ch = simobject_->lmem_req_out.at(
+        socket_local_cid * DxaCore::LMEM_PORTS_PER_CORE + half);
+    if (lmem_ch.full()) break; // backpressure
 
     // Build LMEM MemReq with TLM payload.
     MemReq req;
@@ -676,11 +702,13 @@ private:
     auto blk = make_mem_block();
     const uint32_t pat = lw.cfill;
 
-    // Gather every scatter element that falls in this block into one write.
+    // Gather every scatter element that falls in this block (and, for rows
+    // narrower than a block, this row) into one write.
     uint32_t ee = e0;
     for (; ee < num_elems; ++ee) {
       uint64_t dest_byte = dest_byte_of(ee);
       if ((dest_byte & ~uint64_t(kLmemWordSize - 1)) != dword) break;
+      if ((dest_byte & kRowMask) != row) break;
       uint32_t doff  = uint32_t(dest_byte - dword);
       uint64_t emask = (wlen >= 64) ? ~uint64_t(0) : ((uint64_t(1) << wlen) - 1ull);
       byteen |= emask << doff;
@@ -729,6 +757,7 @@ private:
         w.drain_slot = UINT32_MAX;
       }
     }
+    } // per-tick row-beat emission loop
   }
 
   void release_all_barriers(Worker& w) {
@@ -784,7 +813,7 @@ DxaCore::DxaCore(const SimContext& ctx, const char* name, Socket* socket)
   , dxa_req_in(kCoresPerSocket, this)
   , gmem_req_out(kDxaMemPorts, this)
   , gmem_rsp_in(kDxaMemPorts, this)
-  , lmem_req_out(kCoresPerSocket, this)
+  , lmem_req_out(kCoresPerSocket * LMEM_PORTS_PER_CORE, this)
 {
   __unused(socket);
 
