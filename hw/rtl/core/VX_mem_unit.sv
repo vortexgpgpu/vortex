@@ -182,6 +182,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         wire [`VX_CFG_LMEM_NUM_BANKS-1:0] dxa_bank_wr_fire;
         for (genvar i = 0; i < `VX_CFG_LMEM_NUM_BANKS; ++i) begin : g_dxa_bank_wr_fire
             assign dxa_bank_wr_fire[i] = lmem_dma_if.req_valid
+                                      && lmem_dma_if.req_ready
                                       && lmem_dma_if.req_data.rw
                                       && (|lmem_dma_if.req_data.byteen[i*LSU_WORD_SIZE +: LSU_WORD_SIZE]);
         end
