@@ -240,6 +240,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_txbar_bus_if per_block_txbar_if[BLOCK_SIZE]();
 
+    VX_lsu_mem_if #(
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
+        .DATA_SIZE (LSU_WORD_SIZE),
+        .TAG_WIDTH (LSU_TAG_WIDTH)
+    ) per_block_lsu_mem_if[BLOCK_SIZE]();
+
 `endif // TCU_OP
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
@@ -251,7 +257,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .clk            (clk),
             .reset          (reset),
             .execute_if     (per_block_execute_if[block_idx]),
-            .tcu_lsu_mem_if (tcu_lsu_mem_if),
+            .tcu_lsu_mem_if (per_block_lsu_mem_if[block_idx]),
             .txbar_bus_if   (per_block_txbar_if[block_idx]),
             .result_if      (per_block_result_if[block_idx])
         );
@@ -290,6 +296,28 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .bus_in_if (per_block_txbar_if),
         .bus_out_if(txbar_bus_if)
     );
+
+    // Only issue block 0 reaches memory: the TCU_OP programming model runs a
+    // single self-managed warp (warp 0 => issue block 0), so the other blocks
+    // never issue MMA_OPs. Binding every block to the shared tcu_lsu_mem_if
+    // multi-drives it (idle blocks' zeros mask the active block's requests);
+    // dead-ending the idle blocks makes a stray MMA_OP on one of them
+    // back-pressure forever instead of silently corrupting the bus.
+    assign tcu_lsu_mem_if.req_valid = per_block_lsu_mem_if[0].req_valid;
+    assign tcu_lsu_mem_if.req_data  = per_block_lsu_mem_if[0].req_data;
+    assign per_block_lsu_mem_if[0].req_ready = tcu_lsu_mem_if.req_ready;
+    assign per_block_lsu_mem_if[0].rsp_valid = tcu_lsu_mem_if.rsp_valid;
+    assign per_block_lsu_mem_if[0].rsp_data  = tcu_lsu_mem_if.rsp_data;
+    assign tcu_lsu_mem_if.rsp_ready = per_block_lsu_mem_if[0].rsp_ready;
+
+    for (genvar block_idx = 1; block_idx < BLOCK_SIZE; ++block_idx) begin : g_tcu_mem_tieoff
+        assign per_block_lsu_mem_if[block_idx].req_ready = 1'b0;
+        assign per_block_lsu_mem_if[block_idx].rsp_valid = 1'b0;
+        assign per_block_lsu_mem_if[block_idx].rsp_data  = '0;
+        `UNUSED_VAR (per_block_lsu_mem_if[block_idx].req_valid)
+        `UNUSED_VAR (per_block_lsu_mem_if[block_idx].req_data)
+        `UNUSED_VAR (per_block_lsu_mem_if[block_idx].rsp_ready)
+    end
 `endif
 
     // -----------------------------------------------------------------------

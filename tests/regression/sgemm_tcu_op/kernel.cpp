@@ -84,7 +84,7 @@ static constexpr uint32_t div_up_constexpr(uint32_t value, uint32_t divisor) {
 
 
 
-extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg) 
+__kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
 {
   const uint64_t instret_begin = vx_rdinstret_local();
   const __rdcycle_time cycle_begin = vx_rdcycle_sync_begin();
@@ -136,9 +136,14 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
   uint32_t* half0_base = lmem_base;
   uint32_t* half1_base = half0_base + (half_lmem_bytes / sizeof(uint32_t));
   static constexpr uint32_t half_lmem_regs = half_lmem_bytes / sizeof(uint32_t);
-  // uint32_t* half0_C_base = half0_base + half_lmem_regs - tileC_regs;
-  // uint32_t* half1_C_base = half1_base + half_lmem_regs - tileC_regs;
-  // uint32_t* C_lmem = half0_C_base;
+  // C accumulator-init slot at the top of each half (the TCU op core requires
+  // all operands LMEM-resident; C is DXA-staged once per output tile). Needs
+  // half_lmem_bytes >= A tile + B tile + C tile (build with LMEM_LOG_SIZE=15).
+  uint32_t* half0_C_base = half0_base + half_lmem_regs - tileC_regs;
+  uint32_t* half1_C_base = half1_base + half_lmem_regs - tileC_regs;
+  uint32_t* C_lmem[2] = {half0_C_base, half1_C_base};
+  static_assert(half_lmem_bytes >= (dense_a_tile_regs + dense_b_tile_regs + tileC_regs) * sizeof(uint32_t),
+                "LMEM half must hold A + B + C tiles (raise VX_CFG_LMEM_LOG_SIZE)");
   // auto pA_gmem = reinterpret_cast<ctx::input_t *>(pA);
   // auto pB_gmem = reinterpret_cast<ctx::input_t *>(pB);
   // const uint32_t gtid = vx_thread_id();
@@ -207,10 +212,14 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
           }
 
           if (is_dxa_warp) {
-            // if (first_dense_launch) {
-            //   vx_dxa_issue_2d_wg(kDescC, load_bar[next_stage].id(), mma_C, 0, tile_id);
-            // }
-            // tcu_bar[next_stage].arrive_and_wait();
+            // Post-rebase tx-barrier semantics: expectations are armed in
+            // software before issue; DXA only delivers done events. The first
+            // chunk of each output tile also stages C (accumulator init).
+            const bool stage_c = (dense_iter == 0);
+            load_bar[next_stage].expect_tx(stage_c ? 3 : 2);
+            if (stage_c) {
+              vx_dxa_issue_2d_wg(kDescC, load_bar[next_stage].id(), C_lmem[next_stage], 0, tile_id);
+            }
             vx_dxa_issue_2d_wg(kDescA, load_bar[next_stage].id(), A_lmem[next_stage], 0, tile_row_idx * tiles_k + k_tile_idx);
             vx_dxa_issue_2d_wg(kDescB, load_bar[next_stage].id(), B_lmem[next_stage], 0, tile_col_idx * tiles_k + k_tile_idx);
           }
@@ -219,12 +228,14 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
           uintptr_t rs2_val = 0;
 
           if (is_dxa_warp) {
+            // init_flag=1 loads the accumulator's initial value from C; the
+            // op core requires it LMEM-resident (DXA-staged above).
             rs1_val = (uintptr_t)vx_wgather(
                       (size_t)(uintptr_t)A_lmem[next_stage],
                       (size_t)(uintptr_t)B_lmem[next_stage],
-                      (size_t)(uintptr_t)nullptr /* mma_C */,
+                      (size_t)(uintptr_t)C_lmem[next_stage],
                       (size_t)(uintptr_t)mma_D_addr);
-                      
+
             rs2_val = (uintptr_t)vx_wgather(
                       (size_t)(uintptr_t)nullptr /*mma_A_bitmap*/,
                       (size_t)(uintptr_t)nullptr /*mma_B_bitmap*/,
@@ -329,6 +340,9 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
           }
 
           if (is_dxa_warp) {
+            // Post-rebase tx-barrier semantics: arm one expectation per DXA
+            // issue in software before issuing; DXA only delivers done events.
+            load_bar[next_stage].expect_tx(kSparseA ? 4 : 3);
             if constexpr (kSparseA) {
               const uint32_t a_bitmap_start = tile_row_idx * K + k_offset;
               vx_dxa_issue_1d_wg(kDescABitmap, load_bar[next_stage].id(), A_bitmap_lmem[next_stage], a_bitmap_start);
@@ -346,10 +360,15 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
           uintptr_t rs2_val = 0;
 
           if (is_dxa_warp) {
+            // init_flag=1 loads the accumulator's initial value from C, so
+            // point it at the host's zero-filled tile-packed C buffer (a null
+            // pointer reads DRAM poison at address 0).
+            const uintptr_t mma_C_addr = static_cast<uintptr_t>(arg->C_addr) +
+                static_cast<uintptr_t>(tile_id) * tileC_regs * sizeof(uint32_t);
             rs1_val = (uintptr_t)vx_wgather(
                       (size_t)(uintptr_t)A_lmem[next_stage],
                       (size_t)(uintptr_t)B_lmem[next_stage],
-                      (size_t)(uintptr_t)nullptr /* mma_C */,
+                      (size_t)mma_C_addr,
                       (size_t)(uintptr_t)mma_D_addr);
             rs2_val = (uintptr_t)vx_wgather(
                       (size_t)(uintptr_t)A_bitmap_lmem[next_stage],

@@ -162,7 +162,11 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
             fflags = '0;
 `endif
             case (fmt_s)
-            4'd0: begin // fp32
+            // Format ids follow the modern tensor_cfg.h/VX_tcu_pkg encoding
+            // (fp32=0, fp16=2, fp8=4, int8=17 truncated to 4 bits = 1); the
+            // legacy literals (fp16=1, fp8=3, int8=9) decoded nothing and
+            // fell into the zero default.
+            4'(TCU_FP32_ID): begin // fp32
 `ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = {32'hffffffff, bhf_prod_fp32};
 `elsif VX_CFG_TCU_TYPE_DPI
@@ -172,7 +176,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
                 // `TRACE(1, ("%t: [feop %0d]: j=%0d, a_f=0x%0h, b_f=0x%0h, feop_output[N] (ID=%0d)=0x%0h\n", $time, ID, j, a_f, b_f, ID, feop_output[j]));
 `endif
             end
-            4'd1: begin // fp16
+            4'(TCU_FP16_ID): begin // fp16
 `ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = {32'hffffffff, bhf_prod_fp16};
 `elsif VX_CFG_TCU_TYPE_DPI
@@ -182,7 +186,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
                 // `TRACE(1, ("%t: [feop %0d]: j=%0d, a_f=0x%0h, b_f=0x%0h, feop_output[N] (ID=%0d)=0x%0h\n", $time, ID, j, a_f, b_f, ID, feop_output[j]));
 `endif
             end
-            4'd3: begin // fp8
+            4'(TCU_FP8_ID): begin // fp8
 `ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = {32'hffffffff, bhf_prod_fp8};
 `elsif VX_CFG_TCU_TYPE_DPI
@@ -191,7 +195,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
                 dpi_fmadd(enable, int'(0), a_f, b_f, xprod, 3'b0, feop_output[j], fflags);
 `endif
             end
-            4'd9: begin // int8
+            4'(TCU_I8_ID): begin // int8
                 // lower 32 bits are what pipe_mult forwards; upper 32 just sign-extend
 `ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = {{32{prod_i32_delayed[31]}}, prod_i32_delayed};
