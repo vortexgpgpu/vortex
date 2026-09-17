@@ -4,7 +4,11 @@
 #include <stdint.h>
 
 #ifndef NUM_THREADS
+#ifdef VX_CFG_NUM_THREADS
+#define NUM_THREADS VX_CFG_NUM_THREADS
+#else
 #define NUM_THREADS 4
+#endif
 #endif
 
 #ifndef ITYPE

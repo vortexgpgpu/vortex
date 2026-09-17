@@ -1,3 +1,9 @@
+// Legacy fork kernel: the dense/sparse/trace-marker variants leave many
+// declarations unused in any single build configuration.
+#pragma clang diagnostic ignored "-Wunused-variable"
+#pragma clang diagnostic ignored "-Wunused-const-variable"
+#pragma clang diagnostic ignored "-Wunneeded-internal-declaration"
+
 #include "common.h"
 #include <vx_spawn2.h>
 #include <vx_barrier.h>
@@ -151,7 +157,7 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
     tcu_bar[current_stage].arrive_and_wait();
     load_bar[next_stage].arrive_and_wait();
 
-    ctx::mma_op(pending_rs1_val, pending_rs2_val);
+    vt::mma_op(pending_rs1_val, pending_rs2_val);
 
     current_stage = next_stage;
     next_stage ^= 1u;
@@ -165,11 +171,11 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
 
 #pragma unroll
     for (uint32_t tile_row_idx = 0; tile_row_idx < tiles_m; ++tile_row_idx) {
-      const uint32_t a_tile_base = tile_row_idx * tile_M * K;
+      [[maybe_unused]] const uint32_t a_tile_base = tile_row_idx * tile_M * K;
 #pragma unroll
       for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
 
-        const uint32_t b_tile_base = tile_col_idx * K * tile_N;
+        [[maybe_unused]] const uint32_t b_tile_base = tile_col_idx * K * tile_N;
         const uint32_t tile_row_tiles_base = tile_row_idx * tiles_k;
         const uint32_t tile_col_tiles_base = tile_col_idx * tiles_k;
 
@@ -286,12 +292,12 @@ extern "C" void kernel_main(kernel_arg_t *__UNIFORM__ arg)
     
 #pragma unroll
     for (uint32_t tile_row_idx = 0; tile_row_idx < tiles_m; ++tile_row_idx) {
-      const uint32_t a_tile_base = tile_row_idx * tile_M * K;
+      [[maybe_unused]] const uint32_t a_tile_base = tile_row_idx * tile_M * K;
       const uint32_t tile_row_tiles_base = tile_row_idx * tiles_k;
 #pragma unroll
       for (uint32_t tile_col_idx = 0; tile_col_idx < tiles_n; ++tile_col_idx) {
 
-        const uint32_t b_tile_base = tile_col_idx * K * tile_N;
+        [[maybe_unused]] const uint32_t b_tile_base = tile_col_idx * K * tile_N;
         const uint32_t tile_col_tiles_base = tile_col_idx * tiles_k;
 
         const uint32_t tile_id = tile_row_idx * tiles_n + tile_col_idx;

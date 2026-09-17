@@ -204,6 +204,9 @@ public:
   }
 };
 
+// vt::mxint8 was removed by the upstream rebase; this test only exercises
+// it via ITYPE=mxint8 builds, which are disabled until the type returns.
+#ifdef VT_HAS_MXINT8
 template <>
 class Comparator<vt::mxint8> {
 public:
@@ -220,6 +223,7 @@ public:
     return true;
   }
 };
+#endif // VT_HAS_MXINT8
 
 template <>
 class Comparator<vt::int32> {
@@ -602,6 +606,7 @@ struct muladd_t<vt::uint4, vt::int32> {
   }
 };
 
+#ifdef VT_HAS_MXINT8
 template <>
 struct muladd_t<vt::mxint8, vt::int32> {
   static int32_t eval(int8_t a, int8_t b, int32_t c) {
@@ -615,6 +620,7 @@ struct muladd_t<vt::mxint8, vt::int32> {
     return (int32_t)product + c;
   }
 };
+#endif // VT_HAS_MXINT8
 
 template<typename T>
 inline typename T::dtype generate_A_value() {
@@ -992,6 +998,9 @@ vx_buffer_h B_bitmap_buffer = nullptr;
 vx_buffer_h metrics_buffer = nullptr;
 vx_buffer_h krnl_buffer = nullptr;
 vx_buffer_h args_buffer = nullptr;
+vx_queue_h  queue   = nullptr;
+vx_module_h module_ = nullptr;
+vx_kernel_h kernel  = nullptr;
 kernel_arg_t kernel_arg = {};
 static constexpr uint32_t kDescA = 0;
 static constexpr uint32_t kDescB = 1;
@@ -1119,6 +1128,9 @@ void cleanup() {
     vx_mem_free(metrics_buffer);
     vx_mem_free(krnl_buffer);
     vx_mem_free(args_buffer);
+    if (kernel)  vx_kernel_release(kernel);
+    if (module_) vx_module_release(module_);
+    if (queue)   vx_queue_release(queue);
     vx_dev_close(device);
   }
 }
@@ -1546,7 +1558,7 @@ int main(int argc, char *argv[]) {
     const uint32_t tile_c_elems = tile_M * tile_N;
     const uint32_t total_c_tiles = (M / tile_M) * (N / tile_N);
 
-    RT_CHECK(vx_dxa_program_desc_2d(
+    RT_CHECK(dxa::program_2d(
         device, kDescC, kernel_arg.C_addr,
         tile_c_elems, total_c_tiles,
         tile_c_elems * sizeof(otype_t),
@@ -1565,14 +1577,14 @@ int main(int argc, char *argv[]) {
     if (sparsity == 2) {
       const uint32_t a_transfer_elems =
           (((kernel_arg.max_a_blocks != 0) ? kernel_arg.max_a_blocks : 1) * 128) / sizeof(itype_t);
-      RT_CHECK(vx_dxa_program_desc_2d(
+      RT_CHECK(dxa::program_2d(
           device, kDescA, kernel_arg.A_addr,
           a_transfer_elems, total_a_tiles,
           tile_a_elems * sizeof(itype_t),
           a_transfer_elems, 1,
           sizeof(itype_t)));
     } else {
-      RT_CHECK(vx_dxa_program_desc_2d(
+      RT_CHECK(dxa::program_2d(
           device, kDescA, kernel_arg.A_addr,
           tile_a_elems, total_a_tiles,
           tile_a_elems * sizeof(itype_t),
@@ -1583,14 +1595,14 @@ int main(int argc, char *argv[]) {
     if (sparsity >= 1) {
       const uint32_t b_transfer_elems =
           (((kernel_arg.max_b_blocks != 0) ? kernel_arg.max_b_blocks : 1) * 128) / sizeof(itype_t);
-      RT_CHECK(vx_dxa_program_desc_2d(
+      RT_CHECK(dxa::program_2d(
           device, kDescB, kernel_arg.B_addr,
           b_transfer_elems, total_b_tiles,
           tile_b_elems * sizeof(itype_t),
           b_transfer_elems, 1,
           sizeof(itype_t)));
     } else {
-      RT_CHECK(vx_dxa_program_desc_2d(
+      RT_CHECK(dxa::program_2d(
           device, kDescB, kernel_arg.B_addr,
           tile_b_elems, total_b_tiles,
           tile_b_elems * sizeof(itype_t),
@@ -1599,7 +1611,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (sparsity == 2) {
-      RT_CHECK(vx_dxa_program_desc_1d(
+      RT_CHECK(dxa::program_1d(
           device, kDescABitmap, kernel_arg.A_bitmap_addr,
           h_A_bitmap_words,
           dxa_tile_k,
@@ -1607,7 +1619,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (sparsity >= 1) {
-      RT_CHECK(vx_dxa_program_desc_1d(
+      RT_CHECK(dxa::program_1d(
           device, kDescBBitmap, kernel_arg.B_bitmap_addr,
           h_B_bitmap_words,
           dxa_tile_k,
@@ -1615,23 +1627,39 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // upload program
-  std::cout << "upload program" << std::endl;
-  RT_CHECK(vx_upload_kernel_file(device, kernel_file, &krnl_buffer));
+  // load kernel module (modern flow; the legacy grid launch vx_start_g was
+  // removed by the upstream rebase)
+  std::cout << "load kernel module" << std::endl;
+  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
-  // upload kernel argument
-  std::cout << "upload kernel argument" << std::endl;
-  RT_CHECK(vx_upload_bytes(device, &kernel_arg, sizeof(kernel_arg_t), &args_buffer));
+  vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
+  RT_CHECK(vx_queue_create(device, &qi, &queue));
 
   auto time_start = std::chrono::high_resolution_clock::now();
 
-  // start device
+  // start device (same grid/block/lmem as the legacy vx_start_g call)
   std::cout << "start device" << std::endl;
-  RT_CHECK(vx_start_g(device, krnl_buffer, args_buffer, 2, grid_dim, block_dim, 0));
+  {
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 2;
+    li.grid_dim[0]  = grid_dim[0];
+    li.grid_dim[1]  = grid_dim[1];
+    li.block_dim[0] = block_dim[0];
+    li.block_dim[1] = block_dim[1];
+    li.lmem_size    = 0;
+    vx_event_h launch_ev = nullptr;
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
+    if (launch_ev) vx_event_release(launch_ev);
+  }
 
   // wait for completion
   std::cout << "wait for completion" << std::endl;
-  RT_CHECK(vx_ready_wait(device, VX_MAX_TIMEOUT));
+  RT_CHECK(vx_queue_finish(queue, ~0ull));
 
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();

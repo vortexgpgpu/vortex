@@ -31,13 +31,13 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
     input  wire [3:0] fmt_s,
     input  wire [3:0] fmt_d,
 
-    input  wire [`XLEN-1:0]        a_elem,
-    input  wire [N-1:0][`XLEN-1:0] b_row,
+    input  wire [`VX_CFG_XLEN-1:0]        a_elem,
+    input  wire [N-1:0][`VX_CFG_XLEN-1:0] b_row,
     
-    output wire   [N-1:0][`XLEN-1:0] d_block // Output D block to the tcu_core
+    output wire   [N-1:0][`VX_CFG_XLEN-1:0] d_block // Output D block to the tcu_core
 );
     localparam TOTAL_LATENCY = FMUL_LATENCY + FRND_LATENCY;
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
     `UNUSED_PARAM (TOTAL_LATENCY)
 `endif
 
@@ -51,7 +51,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
     // multiplication stage
     for (genvar j = 0; j < N; j++) begin : g_prod
 
-`ifdef TCU_TYPE_DPI
+`ifdef VX_CFG_TCU_TYPE_DPI
         reg [63:0] a_f, b_f;
         reg [63:0] xprod;
         reg [4:0] fflags;
@@ -67,7 +67,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
         wire signed [7:0]  b_i8 = valid_in_bitmap[j] ? $signed(b_8b) : 8'sd0;
         wire signed [31:0] prod_i32 = a_i8 * b_i8;
 
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
         wire signed [31:0] prod_i32_delayed;
         wire [31:0] bhf_prod_fp16;
         wire [31:0] bhf_prod_fp32;
@@ -154,7 +154,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
 
         always @(*) begin
             feop_output[j] = '0;
-`ifdef TCU_TYPE_DPI
+`ifdef VX_CFG_TCU_TYPE_DPI
             // Default assignments avoid inferred latches in combinational logic.
             a_f    = {32'hffffffff, 32'h0};
             b_f    = {32'hffffffff, 32'h0};
@@ -163,9 +163,9 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
 `endif
             case (fmt_s)
             4'd0: begin // fp32
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = {32'hffffffff, bhf_prod_fp32};
-`elsif TCU_TYPE_DPI
+`elsif VX_CFG_TCU_TYPE_DPI
                 a_f = {32'hffffffff, a_elem};
                 b_f = valid_in_bitmap[j] ? {32'hffffffff, b_row[j][31:0]} : {32'hffffffff, 32'h0};
                 dpi_fmadd(enable, int'(0), a_f, b_f, xprod, 3'b0, feop_output[j], fflags);
@@ -173,9 +173,9 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
 `endif
             end
             4'd1: begin // fp16
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = {32'hffffffff, bhf_prod_fp16};
-`elsif TCU_TYPE_DPI
+`elsif VX_CFG_TCU_TYPE_DPI
                 dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, a_16b},       3'b0, a_f, fflags);
                 dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, b_16b_gated}, 3'b0, b_f, fflags);
                 dpi_fmadd(enable, int'(0), a_f, b_f, xprod, 3'b0, feop_output[j], fflags);
@@ -183,9 +183,9 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
 `endif
             end
             4'd3: begin // fp8
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = {32'hffffffff, bhf_prod_fp8};
-`elsif TCU_TYPE_DPI
+`elsif VX_CFG_TCU_TYPE_DPI
                 dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, a_elem[7:0]}, 3'b0, a_f, fflags);
                 dpi_f2f(enable, int'(0), int'(4), {56'hffffffffffffff, b_8b_gated}, 3'b0, b_f, fflags);
                 dpi_fmadd(enable, int'(0), a_f, b_f, xprod, 3'b0, feop_output[j], fflags);
@@ -193,17 +193,17 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
             end
             4'd9: begin // int8
                 // lower 32 bits are what pipe_mult forwards; upper 32 just sign-extend
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = {{32{prod_i32_delayed[31]}}, prod_i32_delayed};
-`elsif TCU_TYPE_DPI
+`elsif VX_CFG_TCU_TYPE_DPI
                 feop_output[j] = {{32{prod_i32[31]}}, prod_i32};
 `endif
                 // `TRACE(1, ("%t: [feop %0d]: j=%0d, a_f=0x%0h, b_f=0x%0h, feop_output[N] (ID=%0d)=0x%0h\n", $time, ID, j, a_f, b_f, ID, feop_output[j]));
             end
             default: begin
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = '0;
-`elsif TCU_TYPE_DPI
+`elsif VX_CFG_TCU_TYPE_DPI
                 feop_output[j] = '0;
 `endif
             end
@@ -214,9 +214,9 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
         VX_pipe_register #(
             .DATAW  (32),
             .RESETW (32),
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
             .DEPTH  (0)
-`elsif TCU_TYPE_DPI
+`elsif VX_CFG_TCU_TYPE_DPI
             .DEPTH  (TOTAL_LATENCY)
 `endif
         ) pipe_mult (

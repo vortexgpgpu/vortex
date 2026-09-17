@@ -23,7 +23,7 @@ module VX_tcu_feop_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire                                  read_en,
     input  wire [BLOCK_M-1:0]                    read_row_valid,
     input  wire [$clog2(TCU_FEOP_STEPS)-1:0]     read_block_idx,
-    output wire [BLOCK_M*BLOCK_N-1:0][`XLEN-1:0] read_data,
+    output wire [BLOCK_M*BLOCK_N-1:0][`VX_CFG_XLEN-1:0] read_data,
 
     // ---- WRITE PORT: per-element addressing ----
     input  wire                                        write_valid,
@@ -32,7 +32,7 @@ module VX_tcu_feop_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [BLOCK_M-1:0]                          write_addr_row_valid,
     input  wire [BLOCK_N-1:0][$clog2(TCU_TC_N_OP)-1:0] write_addr_col,
     input  wire [BLOCK_N-1:0]                          write_addr_col_valid,
-    input  wire [BLOCK_M*BLOCK_N-1:0][`XLEN-1:0]       write_data,
+    input  wire [BLOCK_M*BLOCK_N-1:0][`VX_CFG_XLEN-1:0]       write_data,
     input  wire                                        overwrite,            // 1: overwrite, 0: accumulate
 
     output wire                                        accu_ready_to_flush   // Must be empty in order to commence the flushing
@@ -48,7 +48,7 @@ end
     localparam int SLOTS   = TCU_FEOP_STEPS;
     localparam int BANK_AW = $clog2(SLOTS);
     localparam int BANK_BW = $clog2(BANKS);
-    localparam [`XLEN-1:0] ACCU_INIT_VALUE = `XLEN'(32'hf0ffffff); // Junk values to detect uninitialized reads
+    localparam [`VX_CFG_XLEN-1:0] ACCU_INIT_VALUE = `VX_CFG_XLEN'(32'hf0ffffff); // Junk values to detect uninitialized reads
 
 // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 // ADDRESS CONVERSION
@@ -86,7 +86,7 @@ end
 // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 // QUEUES
 
-    localparam XBAR_QUEUE_WIDTH = `XLEN + BANK_AW + BANK_BW; // {data, slot, bank}
+    localparam XBAR_QUEUE_WIDTH = `VX_CFG_XLEN + BANK_AW + BANK_BW; // {data, slot, bank}
 
     wire [XBAR_INPUTS-1:0] xbar_queue_full;
     wire [XBAR_INPUTS-1:0] xbar_queue_empty;
@@ -98,7 +98,7 @@ end
     wire [XBAR_INPUTS-1:0] xbar_queue_push;
     wire [XBAR_INPUTS-1:0] xbar_queue_pop;
 
-    wire [XBAR_INPUTS-1:0][`XLEN-1:0]   xbar_queue_data_out;
+    wire [XBAR_INPUTS-1:0][`VX_CFG_XLEN-1:0]   xbar_queue_data_out;
     wire [XBAR_INPUTS-1:0][BANK_AW-1:0] xbar_queue_slot_out;
     wire [XBAR_INPUTS-1:0][BANK_BW-1:0] xbar_queue_bank_out;
 
@@ -155,7 +155,7 @@ end
     localparam int XBAR_INPUTS  = BLOCK_M * BLOCK_N; // 32;
     localparam int XBAR_OUTPUTS = BANKS;             // 32;
     localparam int XBAR_SELW    = $clog2(XBAR_OUTPUTS);
-    localparam XBAR_DATAW = 1 + BANK_AW + `XLEN; // {from_queue, slot, data}
+    localparam XBAR_DATAW = 1 + BANK_AW + `VX_CFG_XLEN; // {from_queue, slot, data}
 
     wire [XBAR_INPUTS-1:0][XBAR_DATAW-1:0] xbar_data_in;
     wire [XBAR_INPUTS-1:0][XBAR_SELW-1:0]  xbar_sel_in;
@@ -170,7 +170,7 @@ end
     wire [PERF_CTR_BITS-1:0]  xbar_collisions;
 
     wire [XBAR_OUTPUTS-1:0][BANK_AW-1:0] xbar_slot_out;
-    wire [XBAR_OUTPUTS-1:0][`XLEN-1:0]   xbar_result_out;
+    wire [XBAR_OUTPUTS-1:0][`VX_CFG_XLEN-1:0]   xbar_result_out;
     wire [XBAR_OUTPUTS-1:0]              xbar_from_queue_out;
 
     for (genvar i = 0; i < XBAR_INPUTS; ++i) begin : g_xbar_inputs
@@ -250,20 +250,20 @@ end
     `UNUSED_VAR(bank_from_queue)
 
     reg [63:0] sum64;
-`ifdef TCU_TYPE_DPI
+`ifdef VX_CFG_TCU_TYPE_DPI
     reg [4:0]  fflags_unused;
     `UNUSED_VAR (sum64[63:32]);
 `endif
     wire [BANKS-1:0] forwarding_condition;
-    wire [BANKS-1:0][`XLEN-1:0] accum_source;
+    wire [BANKS-1:0][`VX_CFG_XLEN-1:0] accum_source;
 
     for (genvar j = 0; j < BANKS; ++j) begin : g_accum_source
         assign forwarding_condition[j] = bank_write_bitmap[j] && (xbar_slot_out[j] == bank_slots[j]);
-        assign accum_source[j] = overwrite_delayed ? `XLEN'(0) :
+        assign accum_source[j] = overwrite_delayed ? `VX_CFG_XLEN'(0) :
                                  (forwarding_condition[j] ? result_delayed[j] : bank_rdata[j]);
     end
 
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
 
     `UNUSED_VAR (sum64[63:0]);
     wire [BANKS-1:0][31:0] bhf_fadd_result;
@@ -310,13 +310,13 @@ end
     always_comb begin
         result = '0;
         sum64  = '0;
-`ifdef TCU_TYPE_DPI
+`ifdef VX_CFG_TCU_TYPE_DPI
         fflags_unused = '0;
 `endif
 
         for (integer j = 0; j < BANKS; ++j) begin
             // Adder operates only if input is valid - energy saving
-`ifdef TCU_TYPE_BHF
+`ifdef VX_CFG_TCU_TYPE_BHF
             if (~reset && enable && bank_write_bitmap[j]) begin
                 if (fmt_d == TCU_I32_ID) begin // int32
                     result[j] = int_sum_delayed[j];
@@ -335,7 +335,7 @@ end
                     sum64 = {{32{accum_source[j][31]}}, accum_source[j]} + {{32{xbar_result_out[j][31]}}, xbar_result_out[j]};
                 end
                 else begin // all floating-point accumulator formats use fp32 accumulation
-`ifdef TCU_TYPE_DPI
+`ifdef VX_CFG_TCU_TYPE_DPI
                     dpi_fadd(enable, int'(0),
                              {32'hffffffff, accum_source[j]},
                              {32'hffffffff, xbar_result_out[j]},
@@ -350,14 +350,14 @@ end
     end
 
 
-    reg [BLOCK_M*BLOCK_N-1:0][`XLEN-1:0] result;
-    reg [BLOCK_M*BLOCK_N-1:0][`XLEN-1:0] result_delayed;
+    reg [BLOCK_M*BLOCK_N-1:0][`VX_CFG_XLEN-1:0] result;
+    reg [BLOCK_M*BLOCK_N-1:0][`VX_CFG_XLEN-1:0] result_delayed;
     // Delay the accumulation result by FACC_LATENCY cycles
     VX_pipe_register #(
-        .DATAW (`XLEN * BLOCK_M * BLOCK_N),
-`ifdef TCU_TYPE_DPI
+        .DATAW (`VX_CFG_XLEN * BLOCK_M * BLOCK_N),
+`ifdef VX_CFG_TCU_TYPE_DPI
         .DEPTH (FACC_LATENCY)
-`elsif TCU_TYPE_BHF
+`elsif VX_CFG_TCU_TYPE_BHF
         .DEPTH (0)
 `endif
     ) pipe_acc (
@@ -373,12 +373,12 @@ end
 // ACCUMULATOR BUFFER
 
     // Accumulator buffer: BANKS banks (one per element), depth=SLOTS
-    wire [BANKS-1:0][`XLEN-1:0]   bank_rdata;
+    wire [BANKS-1:0][`VX_CFG_XLEN-1:0]   bank_rdata;
     wire [BANKS-1:0]              bank_read_en;
     wire [BANKS-1:0][BANK_AW-1:0] bank_raddr;
     wire [BANKS-1:0]              bank_write_en;
     wire [BANKS-1:0][BANK_AW-1:0] bank_waddr;
-    wire [BANKS-1:0][`XLEN-1:0]   bank_wdata;
+    wire [BANKS-1:0][`VX_CFG_XLEN-1:0]   bank_wdata;
 
     for (genvar b = 0; b < BANKS; ++b) begin : g_bank_ctrl
         /*             read because we are flushing or   read because we are in the gather stage */
@@ -411,7 +411,7 @@ end
 
     for (genvar b = 0; b < BANKS; ++b) begin : g_accu_banks
         VX_dp_ram #(
-            .DATAW      (`XLEN),
+            .DATAW      (`VX_CFG_XLEN),
             .SIZE       (SLOTS),
             .OUT_REG    (0),
             .RDW_MODE   ("W"), // If read and write fall to the same address, write is done first

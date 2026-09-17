@@ -365,11 +365,11 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
             if (unlock_valid_r) begin
                 `TRACE(1, ("%t: [bar] unlock_r mask=%b\n", $time, unlock_mask_r))
             end
-            if (gbar_req_valid_r && gbar_bus_if.req_ready) begin
-                `TRACE(1, ("%t: [bar] gbar req fire id=%0d size_m1=%0d\n", $time, gbar_req_id_r, gbar_req_size_m1_r))
+            if (gbar_bus_if.req_valid && gbar_bus_if.req_ready) begin
+                `TRACE(1, ("%t: [bar] gbar req fire id=%0d size_m1=%0d\n", $time, gbar_bus_if.req_data.id, gbar_bus_if.req_data.size_m1))
             end
             if (gbar_bus_if.rsp_valid && gbar_rsp_ready) begin
-                `TRACE(1, ("%t: [bar] gbar rsp id=%0d (pending_id=%0d)\n", $time, gbar_bus_if.rsp_data.id, gbar_req_id_r))
+                `TRACE(1, ("%t: [bar] gbar rsp id=%0d\n", $time, gbar_bus_if.rsp_data.id))
             end
         end
     end

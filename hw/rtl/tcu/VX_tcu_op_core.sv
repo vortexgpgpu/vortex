@@ -34,20 +34,20 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     localparam MDATA_WIDTH = UUID_WIDTH + NW_WIDTH + PC_BITS + NUM_REGS_BITS;
 
-`ifdef TCU_TYPE_DPI
+`ifdef VX_CFG_TCU_TYPE_DPI
     localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 1;
     localparam FRND_LATENCY = 1;
     localparam FACC_LATENCY = FADD_LATENCY;// + FRND_LATENCY;
     localparam FEOP_LATENCY = FMUL_LATENCY + FRND_LATENCY;
-`elsif TCU_TYPE_BHF
+`elsif VX_CFG_TCU_TYPE_BHF
     localparam FMUL_LATENCY = 2;
     localparam FADD_LATENCY = 1;
     localparam FRND_LATENCY = 1;
     localparam FACC_LATENCY = FADD_LATENCY;// + FRND_LATENCY; // $clog2(2 * TCU_TC_K + 1) * (FADD_LATENCY + FRND_LATENCY);
     localparam FEOP_LATENCY = FMUL_LATENCY + FRND_LATENCY; // (FMUL_LATENCY + FRND_LATENCY) + 1 + FACC_LATENCY;
 `else
-    `error "VX_tcu_op_core: TCU_TYPE_DPI or TCU_TYPE_BHF must be defined"
+    `error "VX_tcu_op_core: VX_CFG_TCU_TYPE_DPI or VX_CFG_TCU_TYPE_BHF must be defined"
 `endif
     localparam MDATA_QUEUE_DEPTH = 1; // At maximum we have another intruction pending when the current one is finishing
     localparam XBAR_LATENCY      = TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE / 32; // TODO: Not sure if condition is legit
@@ -70,10 +70,10 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     endfunction
 
     initial begin
-`ifdef TCU_TYPE_BHF
-        `TRACE(1, ("[tcu_op_core]: TCU_TYPE_BHF defined!\n\n"));
-`elsif TCU_TYPE_DPI
-        `TRACE(1, ("[tcu_op_core]: TCU_TYPE_DPI defined!\n\n"));
+`ifdef VX_CFG_TCU_TYPE_BHF
+        `TRACE(1, ("[tcu_op_core]: VX_CFG_TCU_TYPE_BHF defined!\n\n"));
+`elsif VX_CFG_TCU_TYPE_DPI
+        `TRACE(1, ("[tcu_op_core]: VX_CFG_TCU_TYPE_DPI defined!\n\n"));
 `endif
     end
 
@@ -82,7 +82,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 // INITIALIZATIONS & FSM
 
     /* Memory Requests handling */
-    localparam BYTES_PER_MEM_REQUEST = LSU_WORD_SIZE * `NUM_LSU_LANES;
+    localparam BYTES_PER_MEM_REQUEST = LSU_WORD_SIZE * `VX_CFG_NUM_LSU_LANES;
 `ifndef TCU_DISABLE_S1
     localparam SETS_PER_S1_BITMAP_BLOCK = BYTES_PER_MEM_REQUEST * 8 / TCU_TC_N_OP;
     localparam LG_SETS_PER_S1_BITMAP_BLOCK = $clog2(SETS_PER_S1_BITMAP_BLOCK);
@@ -100,61 +100,61 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 
     // Registers_per_FEOP_block / registers_per_LSU_load - 1
-    localparam C_BUF_SLOTS = 6'(TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE / `NUM_LSU_LANES - 1); // Amount of responses we can store before accumulating
+    localparam C_BUF_SLOTS = 6'(TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE / `VX_CFG_NUM_LSU_LANES - 1); // Amount of responses we can store before accumulating
     
     `STATIC_ASSERT ((TCU_FEOP_STEPS != 32) || C_BUF_SLOTS == '0, ("for 32 steps, we dont accumulate C"));
 
     /* Used to calculate the total A, B blocks */
-    localparam LG_REGS_PER_BLOCK = $clog2(`NUM_LSU_LANES);
+    localparam LG_REGS_PER_BLOCK = $clog2(`VX_CFG_NUM_LSU_LANES);
 
-    reg [`XLEN-1:0] K;
+    reg [`VX_CFG_XLEN-1:0] K;
     reg [3:0]       fmt_s;
     reg [3:0]       fmt_d;
     reg [1:0]       sparsity; // 0: Dense x Dense, 1: Dense x Sparse, 2: Sparse x Sparse
 
-    reg [`XLEN-1:0] a_tile_addr;
+    reg [`VX_CFG_XLEN-1:0] a_tile_addr;
     reg             a_tile_addr_valid;                             // Is set to false when all A blocks have been requested
-    reg [`XLEN-1:0] a_req_blocks_remaining;                        // Requested to be fetched
+    reg [`VX_CFG_XLEN-1:0] a_req_blocks_remaining;                        // Requested to be fetched
     reg [A_BUF_SLOTS-1:0] a_blk_rq_bits;
     reg [A_BUF_SLOTS-1:0] a_blk_ld_bits;
     reg [A_BUF_SLOTS-1:0] a_active_block;
     reg [A_BUF_SLOTS-1:0] a_load_block;
-    reg [A_BUF_SLOTS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] A_buffered; // Holds loaded data to be processed
+    reg [A_BUF_SLOTS-1:0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] A_buffered; // Holds loaded data to be processed
     wire a_req_ready = a_tile_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (a_blk_rq_bits != '1); // A requests start only after the ACCU is initialized with the values of C
 
-    reg [`XLEN-1:0] b_tile_addr;
+    reg [`VX_CFG_XLEN-1:0] b_tile_addr;
     reg             b_tile_addr_valid;                             // Is set to false when all B blocks have been requested
-    reg [`XLEN-1:0] b_req_blocks_remaining;                        // Requested to be fetched
-    reg [B_BUF_SLOTS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] B_buffered; // Holds loaded data to be processed
+    reg [`VX_CFG_XLEN-1:0] b_req_blocks_remaining;                        // Requested to be fetched
+    reg [B_BUF_SLOTS-1:0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] B_buffered; // Holds loaded data to be processed
     wire b_req_ready = b_tile_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (b_blk_rq_bits != '1);
     reg [B_BUF_SLOTS-1:0] b_blk_rq_bits;
     reg [B_BUF_SLOTS-1:0] b_blk_ld_bits;
     reg [B_BUF_SLOTS-1:0] b_active_block;
     reg [B_BUF_SLOTS-1:0] b_load_block;
 
-    reg [`XLEN-1:0] a_bitmap_addr;
-    reg [`XLEN-1:0] b_bitmap_addr;
+    reg [`VX_CFG_XLEN-1:0] a_bitmap_addr;
+    reg [`VX_CFG_XLEN-1:0] b_bitmap_addr;
     reg             bitmap_addr_valid;
-    reg [`XLEN-1:0] bitmap_req_blocks_remaining;   // Requested to be fetched
+    reg [`VX_CFG_XLEN-1:0] bitmap_req_blocks_remaining;   // Requested to be fetched
     reg [BITMAP_BUF_SLOTS-1:0] bitmap_blk_rq_bits;
     reg [BITMAP_BUF_SLOTS-1:0] bitmap_blk_ld_bits;
     reg [BITMAP_BUF_SLOTS-1:0] bitmap_active_block;
-    reg [`XLEN-1:0] bitmap_blocks_loaded;                                    // Loaded but not processed
-    reg [BITMAP_BUF_SLOTS-1:0][`NUM_THREADS-1:0][`XLEN-1:0] Bitmap_buffered; // Holds loaded data to be processed
+    reg [`VX_CFG_XLEN-1:0] bitmap_blocks_loaded;                                    // Loaded but not processed
+    reg [BITMAP_BUF_SLOTS-1:0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] Bitmap_buffered; // Holds loaded data to be processed
     wire bitmap_req_ready = bitmap_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (bitmap_blk_rq_bits != '1); // Bitmap requests start only after the ACCU is initialized with the values of C
 
-    reg [`XLEN-1:0]                      c_tile_addr;
+    reg [`VX_CFG_XLEN-1:0]                      c_tile_addr;
     reg                                  c_tile_addr_valid;    // Is set to false when all C blocks have been requested
     reg [$clog2(TCU_C_BLOCKS_IN_ACCU):0] c_blocks_requested;     // Requested to be fetched
     reg [$clog2(TCU_C_BLOCKS_IN_ACCU):0] c_blocks_loaded;        // Loaded but not accumulated
     reg [$clog2(TCU_C_BLOCKS_IN_ACCU):0] c_blocks_accumulated;   // Accumulated / loaded (once loaded they are directly accumulated)
 
-    reg [`MAX(0, C_BUF_SLOTS-1):0][`NUM_THREADS-1:0][`XLEN-1:0] C_buffered; // Holds loaded data to be accumulated
+    reg [`MAX(0, C_BUF_SLOTS-1):0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] C_buffered; // Holds loaded data to be accumulated
     `UNUSED_VAR (C_buffered); // Only used when C_BUF_SLOTS > 0
 
     wire c_req_ready = init_flag && c_tile_addr_valid;
      
-    reg [`XLEN-1:0] d_tile_addr;
+    reg [`VX_CFG_XLEN-1:0] d_tile_addr;
 
     wire op_ctx_full;
     wire execute_ready_no_txbar = (execute_if.data.op_type == INST_TCU_MMA_OP) && (~busy_r) && (~mqueue_full) && (~op_ctx_full);
@@ -175,14 +175,14 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire mem_stall = valid_out && ~tcu_lsu_mem_if.req_ready;
 
     /* Processing of execute_if data */
-    wire [`XLEN-1:0] a_tile_addr_imm = execute_if.data.rs1_data[0];
-    wire [`XLEN-1:0] b_tile_addr_imm = execute_if.data.rs1_data[1];
-    wire [`XLEN-1:0] c_tile_addr_imm = execute_if.data.rs1_data[2];
-    wire [`XLEN-1:0] d_tile_addr_imm = execute_if.data.rs1_data[3];
+    wire [`VX_CFG_XLEN-1:0] a_tile_addr_imm = execute_if.data.rs1_data[0];
+    wire [`VX_CFG_XLEN-1:0] b_tile_addr_imm = execute_if.data.rs1_data[1];
+    wire [`VX_CFG_XLEN-1:0] c_tile_addr_imm = execute_if.data.rs1_data[2];
+    wire [`VX_CFG_XLEN-1:0] d_tile_addr_imm = execute_if.data.rs1_data[3];
 
-    wire [`XLEN-1:0] a_bitmap_addr_imm = execute_if.data.rs2_data[0];
-    wire [`XLEN-1:0] b_bitmap_addr_imm = execute_if.data.rs2_data[1];
-    wire [`XLEN-1:0] txbar_bar_id_imm  = execute_if.data.rs2_data[2];
+    wire [`VX_CFG_XLEN-1:0] a_bitmap_addr_imm = execute_if.data.rs2_data[0];
+    wire [`VX_CFG_XLEN-1:0] b_bitmap_addr_imm = execute_if.data.rs2_data[1];
+    wire [`VX_CFG_XLEN-1:0] txbar_bar_id_imm  = execute_if.data.rs2_data[2];
     wire flush_flag_imm                = execute_if.data.rs2_data[3][0];
     wire init_flag_imm                 = execute_if.data.rs2_data[3][1];
     wire [1:0] sparsity_imm            = execute_if.data.rs2_data[3][3:2];
@@ -201,7 +201,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire busy = busy_r || execute_fire;
     reg  busy_r;
     // Debugging: counts cycles where TCU stalls because accumulator queues are full.
-    reg [`XLEN-1:0] full_queue_stall_cycles;
+    reg [`VX_CFG_XLEN-1:0] full_queue_stall_cycles;
 
     always @ (posedge clk) begin
         if (reset) begin
@@ -291,41 +291,41 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 // Compute total blocks using the incoming instruction fields to avoid stale values
                 if (sparsity_imm == 2'b00) begin
                     /* a_req_blocks_remaining = K * TCU_TC_M_OP / i_ratio */
-                    a_req_blocks_remaining  <= 32'((`XLEN'(K_imm) << LG_TCU_TC_M_OP) >> (32'(calc_lg_i_ratio(fmt_s_imm)) + LG_REGS_PER_BLOCK));
+                    a_req_blocks_remaining  <= 32'((`VX_CFG_XLEN'(K_imm) << LG_TCU_TC_M_OP) >> (32'(calc_lg_i_ratio(fmt_s_imm)) + LG_REGS_PER_BLOCK));
                     /* b_req_blocks_remaining = K * TCU_TC_N_OP / i_ratio */
-                    b_req_blocks_remaining  <= 32'((`XLEN'(K_imm) << LG_TCU_TC_N_OP) >> (32'(calc_lg_i_ratio(fmt_s_imm)) + LG_REGS_PER_BLOCK));
+                    b_req_blocks_remaining  <= 32'((`VX_CFG_XLEN'(K_imm) << LG_TCU_TC_N_OP) >> (32'(calc_lg_i_ratio(fmt_s_imm)) + LG_REGS_PER_BLOCK));
                     /* No bitmap in dense case */
                     bitmap_req_blocks_remaining <= '0;
                 end
             `ifndef TCU_DISABLE_S1
                 else if (sparsity_imm == 2'b01) begin
                     /* a_req_blocks_remaining = K * TCU_TC_M_OP / i_ratio */
-                    a_req_blocks_remaining  <= 32'((`XLEN'(K_imm) << LG_TCU_TC_M_OP) >> (32'(calc_lg_i_ratio(fmt_s_imm)) + LG_REGS_PER_BLOCK));
+                    a_req_blocks_remaining  <= 32'((`VX_CFG_XLEN'(K_imm) << LG_TCU_TC_M_OP) >> (32'(calc_lg_i_ratio(fmt_s_imm)) + LG_REGS_PER_BLOCK));
                     /* b_req_blocks_remaining = B_compressed_blocks */
-                    b_req_blocks_remaining  <= (`XLEN)'(b_blocks_imm);
+                    b_req_blocks_remaining  <= (`VX_CFG_XLEN)'(b_blocks_imm);
                     /* bitmap_req_blocks_remaining = ceil(K / SETS_PER_S1_BITMAP_BLOCK) */
-                    bitmap_req_blocks_remaining <= 32'((`XLEN'(K_imm) + SETS_PER_S1_BITMAP_BLOCK - 1) >> LG_SETS_PER_S1_BITMAP_BLOCK);
+                    bitmap_req_blocks_remaining <= 32'((`VX_CFG_XLEN'(K_imm) + SETS_PER_S1_BITMAP_BLOCK - 1) >> LG_SETS_PER_S1_BITMAP_BLOCK);
                 end 
             `endif
                 else begin /* s2 case */
                     /* a_req_blocks_remaining = A_compressed_blocks */
-                    a_req_blocks_remaining  <= (`XLEN)'(a_blocks_imm);
+                    a_req_blocks_remaining  <= (`VX_CFG_XLEN)'(a_blocks_imm);
                     /* b_req_blocks_remaining = B_compressed_blocks */
-                    b_req_blocks_remaining  <= (`XLEN)'(b_blocks_imm);
+                    b_req_blocks_remaining  <= (`VX_CFG_XLEN)'(b_blocks_imm);
                     /* bitmap_req_blocks_remaining = ceil(K * 2 / 32) */
-                    bitmap_req_blocks_remaining <= 32'((`XLEN'(K_imm) + 15) >> 4);
+                    bitmap_req_blocks_remaining <= 32'((`VX_CFG_XLEN'(K_imm) + 15) >> 4);
                 end
 
                 /* Get configuration from the instruction */
-                a_tile_addr <= (`XLEN)'(a_tile_addr_imm);
-                b_tile_addr <= (`XLEN)'(b_tile_addr_imm);
-                c_tile_addr <= (`XLEN)'(c_tile_addr_imm);
-                d_tile_addr <= (`XLEN)'(d_tile_addr_imm);
+                a_tile_addr <= (`VX_CFG_XLEN)'(a_tile_addr_imm);
+                b_tile_addr <= (`VX_CFG_XLEN)'(b_tile_addr_imm);
+                c_tile_addr <= (`VX_CFG_XLEN)'(c_tile_addr_imm);
+                d_tile_addr <= (`VX_CFG_XLEN)'(d_tile_addr_imm);
 
-                a_bitmap_addr <= (`XLEN)'(a_bitmap_addr_imm);
-                b_bitmap_addr <= (`XLEN)'(b_bitmap_addr_imm);
+                a_bitmap_addr <= (`VX_CFG_XLEN)'(a_bitmap_addr_imm);
+                b_bitmap_addr <= (`VX_CFG_XLEN)'(b_bitmap_addr_imm);
                 
-                K <= (`XLEN)'(K_imm);
+                K <= (`VX_CFG_XLEN)'(K_imm);
                 fmt_s    <= 4'(fmt_s_imm);
                 fmt_d    <= 4'(fmt_d_imm);
                 sparsity <= 2'(sparsity_imm);
@@ -517,8 +517,8 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 b_offset <= '0; 
             end
             if (last_step_in_set) begin
-                a_offset <= (a_offset + 32'(a_set_elems)) & ((32'(i_ratio) << $clog2(`NUM_LSU_LANES))-1);
-                b_offset <= (b_offset + 32'(b_non_zeros)) & ((32'(i_ratio) << $clog2(`NUM_LSU_LANES))-1);
+                a_offset <= (a_offset + 32'(a_set_elems)) & ((32'(i_ratio) << $clog2(`VX_CFG_NUM_LSU_LANES))-1);
+                b_offset <= (b_offset + 32'(b_non_zeros)) & ((32'(i_ratio) << $clog2(`VX_CFG_NUM_LSU_LANES))-1);
             end
 
             if (~execute_fire && result_fire) begin
@@ -561,15 +561,15 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [MATRIX_ID_BITS-1:0] grant_onehot;
     wire rd_req_fire;
     wire rd_req_valid;
-    wire [`XLEN-1:0] req_rd_addr;
+    wire [`VX_CFG_XLEN-1:0] req_rd_addr;
 
-    localparam int C_BLOCKS_PER_FEOP_BLOCK = TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE / `NUM_LSU_LANES;
+    localparam int C_BLOCKS_PER_FEOP_BLOCK = TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE / `VX_CFG_NUM_LSU_LANES;
     localparam LG_C_BLOCKS_PER_FEOP_BLOCK = $clog2(C_BLOCKS_PER_FEOP_BLOCK);
     wire rd_rsp_fire;
     wire [MATRIX_ID_BITS-1:0] rsp_matrix_id;
     wire accumulate_c;
     wire [$clog2(TCU_FEOP_STEPS):0] c_blk_idx;
-    wire [C_BUF_SLOTS:0][`NUM_THREADS-1:0][`XLEN-1:0] C_feop_block;
+    wire [C_BUF_SLOTS:0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] C_feop_block;
 
     wire [LG_TCU_FEOP_M_STEPS:0] vertical_steps;
     wire [LG_TCU_FEOP_N_STEPS:0] horizontal_steps;
@@ -578,7 +578,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [LG_TCU_FEOP_M_STEPS:0] vertical_skips;
 
     reg [LG_TCU_FEOP_STEPS-1:0] step; // step increments from 0 -> set_steps
-    reg [`XLEN-1:0] set;
+    reg [`VX_CFG_XLEN-1:0] set;
     reg issuing_done;
     wire [LG_TCU_FEOP_N_STEPS:0] horizontal_steps_safe;
     wire [LG_TCU_TC_M_OP-1:0] m;
@@ -593,7 +593,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [LG_TCU_TC_M_OP:0] a_set_elems;
     wire a_curr_loaded;
     wire a_next_loaded;
-    wire [`XLEN-1:0] a_window_need;
+    wire [`VX_CFG_XLEN-1:0] a_window_need;
     wire a_window_ready;
     wire b_curr_loaded;
     wire b_next_loaded;
@@ -635,13 +635,13 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_FEOP_BLOCK_M_SIZE-1:0] a_step_valids_delayed;
     wire [TCU_FEOP_BLOCK_N_SIZE-1:0] b_step_valids_delayed;
 
-    localparam int A_BUF_W = `NUM_LSU_LANES * `XLEN;
-    localparam int B_BUF_W = `NUM_LSU_LANES * `XLEN;
-    localparam int A_SET_W = TCU_TC_M_OP * `XLEN;
-    localparam int B_SET_W = TCU_TC_N_OP * `XLEN;
-    // TODO: Limit a_offset size to WorstCaseScenario: $clog2(`NUM_LSU_LANES * biggest_i_ratio) = 5+3=8 bits
-    reg [`XLEN-1:0] a_offset;
-    reg [`XLEN-1:0] b_offset;
+    localparam int A_BUF_W = `VX_CFG_NUM_LSU_LANES * `VX_CFG_XLEN;
+    localparam int B_BUF_W = `VX_CFG_NUM_LSU_LANES * `VX_CFG_XLEN;
+    localparam int A_SET_W = TCU_TC_M_OP * `VX_CFG_XLEN;
+    localparam int B_SET_W = TCU_TC_N_OP * `VX_CFG_XLEN;
+    // TODO: Limit a_offset size to WorstCaseScenario: $clog2(`VX_CFG_NUM_LSU_LANES * biggest_i_ratio) = 5+3=8 bits
+    reg [`VX_CFG_XLEN-1:0] a_offset;
+    reg [`VX_CFG_XLEN-1:0] b_offset;
     reg [A_SET_W-1:0] a_set_flat_compressed; // Only used in S1 case
     wire [A_SET_W-1:0] a_set_flat_processed;
 
@@ -653,14 +653,14 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire last_set_in_block_b;
 
     localparam int STEP_ELEM_CNT = TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE;
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] write_data;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][TCU_FEOP_BLOCK_N_SIZE-1:0][`VX_CFG_XLEN-1:0] write_data;
     wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] write_addr_row;
     wire [TCU_FEOP_BLOCK_N_SIZE-1:0][LG_TCU_TC_N_OP-1:0] write_addr_col;
     wire [TCU_FEOP_BLOCK_M_SIZE-1:0] read_row_valid;
     wire [TCU_FEOP_BLOCK_M_SIZE-1:0] write_addr_row_valid;
     wire [TCU_FEOP_BLOCK_N_SIZE-1:0] write_addr_col_valid;
     wire [LG_TCU_FEOP_STEPS-1:0] read_block_idx;
-    wire [STEP_ELEM_CNT-1:0][`XLEN-1:0] read_data;
+    wire [STEP_ELEM_CNT-1:0][`VX_CFG_XLEN-1:0] read_data;
     wire [LG_TCU_FEOP_STEPS-1:0] write_block_idx;
     wire [LG_TCU_FEOP_BLOCK_M_SIZE-1:0] read_row_in_block;
     wire [TCU_FEOP_BLOCK_M_SIZE-1:0][LG_TCU_TC_M_OP-1:0] c_blk_rows;
@@ -671,8 +671,8 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire accu_queues_ready;
     wire accu_ready_to_flush;
 
-    localparam int PAD_LANES = `NUM_LSU_LANES - TCU_FEOP_BLOCK_N_SIZE;
-    wire [`XLEN-1:0] txbar_bar_id;
+    localparam int PAD_LANES = `VX_CFG_NUM_LSU_LANES - TCU_FEOP_BLOCK_N_SIZE;
+    wire [`VX_CFG_XLEN-1:0] txbar_bar_id;
     wire [BAR_ADDR_W-1:0] txbar_addr;
     wire [BAR_ADDR_W-1:0] op_ctx_bar_addr;
     wire op_ctx_empty;
@@ -682,8 +682,8 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire [MDATA_WIDTH-1:0] mdata_queue_din, mdata_queue_dout;
     wire mqueue_full;
-    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] d_block;
-    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] d_line;
+    wire [TCU_FEOP_BLOCK_M_SIZE-1:0][TCU_FEOP_BLOCK_N_SIZE-1:0][`VX_CFG_XLEN-1:0] d_block;
+    wire [TCU_FEOP_BLOCK_N_SIZE-1:0][`VX_CFG_XLEN-1:0] d_line;
     wire wr_req_fire;
     wire ready_to_flush_delayed;
     wire [LG_TCU_TC_M_OP + LG_TCU_FEOP_BLOCK_N_SIZE-1:0] d_line_to_flush_delayed;
@@ -698,15 +698,15 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     reg  result_pending_r;
 
     // preserve full byte address for correct LMEM detection
-    localparam MEM_ASHIFT = `CLOG2(`MEM_BLOCK_SIZE);      // bytes -> block
-    localparam MEM_ADDRW  = `MEM_ADDR_WIDTH - MEM_ASHIFT; // block address width
+    localparam MEM_ASHIFT = `CLOG2(`VX_CFG_MEM_BLOCK_SIZE);      // bytes -> block
+    localparam MEM_ADDRW  = `VX_CFG_MEM_ADDR_WIDTH - MEM_ASHIFT; // block address width
     localparam REQ_ASHIFT = `CLOG2(LSU_WORD_SIZE);        // bytes -> LSU word
-    localparam [MEM_ADDRW-1:0] LMEM_ADDR_START = MEM_ADDRW'(`XLEN'(`LMEM_BASE_ADDR) >> MEM_ASHIFT);
-    localparam [MEM_ADDRW-1:0] LMEM_ADDR_END   = MEM_ADDRW'((`XLEN'(`LMEM_BASE_ADDR) + `XLEN'(1 << `LMEM_LOG_SIZE)) >> MEM_ASHIFT);
+    localparam [MEM_ADDRW-1:0] LMEM_ADDR_START = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
+    localparam [MEM_ADDRW-1:0] LMEM_ADDR_END   = MEM_ADDRW'((`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) + `VX_CFG_XLEN'(1 << `VX_CFG_LMEM_LOG_SIZE)) >> MEM_ASHIFT);
 
-    wire [`NUM_LSU_LANES-1:0] wr_mask;
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] wr_mask;
     wire [15:0] bitmap_half_mask;
-    wire [`NUM_LSU_LANES-1:0] bitmap_small_k_mask;
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] bitmap_small_k_mask;
     wire [31:0] bitmap_s1_mask;
 
 
@@ -851,11 +851,11 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // In s1/s0 modes, A is dense in memory and bitmap extraction scans the whole set.
     // In s2 mode, A is compressed and only non-zero payload is needed.
     assign a_window_need = (sparsity == 2'd2) ? `MIN((32'(a_non_zeros)), (32'(m) + TCU_FEOP_BLOCK_M_SIZE)) : 32'(a_set_elems);
-    assign a_window_ready = a_curr_loaded && (((a_offset + a_window_need) <= (32'(i_ratio) << $clog2(`NUM_LSU_LANES))) || a_next_loaded);
+    assign a_window_ready = a_curr_loaded && (((a_offset + a_window_need) <= (32'(i_ratio) << $clog2(`VX_CFG_NUM_LSU_LANES))) || a_next_loaded);
 
     assign b_curr_loaded = |(b_blk_ld_bits & b_active_block);
     assign b_next_loaded = |(b_blk_ld_bits & ~b_active_block);
-    assign b_window_ready = b_curr_loaded && (((b_offset + `MIN((32'(b_non_zeros)), (32'(n) + TCU_FEOP_BLOCK_N_SIZE))) <= (32'(i_ratio) << $clog2(`NUM_LSU_LANES))) || b_next_loaded);
+    assign b_window_ready = b_curr_loaded && (((b_offset + `MIN((32'(b_non_zeros)), (32'(n) + TCU_FEOP_BLOCK_N_SIZE))) <= (32'(i_ratio) << $clog2(`VX_CFG_NUM_LSU_LANES))) || b_next_loaded);
 
     assign issue_busy = busy_r && feop_enable && ~issuing_done && ~accumulate_c
                       && a_window_ready
@@ -889,7 +889,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     assign a_bitmap_s2 = Bitmap_buffered[(set >> LG_SETS_PER_S2_BITMAP_BLOCK) & (BITMAP_BUF_SLOTS-1)][                         set & (SETS_PER_S2_BITMAP_BLOCK-1)];
-    assign b_bitmap_s2 = Bitmap_buffered[(set >> LG_SETS_PER_S2_BITMAP_BLOCK) & (BITMAP_BUF_SLOTS-1)][(`NUM_LSU_LANES >> 1) + (set & (SETS_PER_S2_BITMAP_BLOCK-1))];
+    assign b_bitmap_s2 = Bitmap_buffered[(set >> LG_SETS_PER_S2_BITMAP_BLOCK) & (BITMAP_BUF_SLOTS-1)][(`VX_CFG_NUM_LSU_LANES >> 1) + (set & (SETS_PER_S2_BITMAP_BLOCK-1))];
 
     assign a_bitmap_in = (sparsity == 2'd2) ? a_bitmap_s2 : 
                         `ifndef TCU_DISABLE_S1
@@ -973,22 +973,22 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
     assign A_window = {A_buffered[a_active_block[0]], A_buffered[~a_active_block[0]]};
-    assign a_set_flat = (A_SET_W)'(A_window >> (a_offset << ($clog2(`XLEN) - 32'(lg_i_ratio))));
+    assign a_set_flat = (A_SET_W)'(A_window >> (a_offset << ($clog2(`VX_CFG_XLEN) - 32'(lg_i_ratio))));
 
     assign B_window = {B_buffered[b_active_block[0]], B_buffered[~b_active_block[0]]};
-    assign b_set_flat = (B_SET_W)'(B_window >> (b_offset << ($clog2(`XLEN) - 32'(lg_i_ratio))));
+    assign b_set_flat = (B_SET_W)'(B_window >> (b_offset << ($clog2(`VX_CFG_XLEN) - 32'(lg_i_ratio))));
 
-    assign last_set_in_block_a = (a_offset + 32'(a_set_elems)) >= (32'(i_ratio) << $clog2(`NUM_LSU_LANES));
-    assign last_set_in_block_b = (b_offset + 32'(b_non_zeros)) >= (32'(i_ratio) << $clog2(`NUM_LSU_LANES));
+    assign last_set_in_block_a = (a_offset + 32'(a_set_elems)) >= (32'(i_ratio) << $clog2(`VX_CFG_NUM_LSU_LANES));
+    assign last_set_in_block_b = (b_offset + 32'(b_non_zeros)) >= (32'(i_ratio) << $clog2(`VX_CFG_NUM_LSU_LANES));
 
 
     // TODO: Remove for-genvar and make 1 feop module that produces BLOCK_M x BLOCK_N output 
     for (genvar id = 0; id < TCU_FEOP_BLOCK_M_SIZE; id++) begin : g_feop_units
 
-        wire [`XLEN-1:0] a_elem = `XLEN'(a_set_flat_processed >> (((32'(m) + 32'(id))) << ($clog2(`XLEN) - 32'(lg_i_ratio)))); 
+        wire [`VX_CFG_XLEN-1:0] a_elem = `VX_CFG_XLEN'(a_set_flat_processed >> (((32'(m) + 32'(id))) << ($clog2(`VX_CFG_XLEN) - 32'(lg_i_ratio)))); 
         // TODO: Fix the flattening here too
-        wire [TCU_FEOP_BLOCK_N_SIZE*`XLEN-1:0] b_row_flat = (TCU_FEOP_BLOCK_N_SIZE*`XLEN)'(b_set_flat >> ((32'(n) >> lg_i_ratio) << $clog2(`XLEN)));
-        wire [TCU_FEOP_BLOCK_N_SIZE-1:0][`XLEN-1:0] b_row = b_row_flat;
+        wire [TCU_FEOP_BLOCK_N_SIZE*`VX_CFG_XLEN-1:0] b_row_flat = (TCU_FEOP_BLOCK_N_SIZE*`VX_CFG_XLEN)'(b_set_flat >> ((32'(n) >> lg_i_ratio) << $clog2(`VX_CFG_XLEN)));
+        wire [TCU_FEOP_BLOCK_N_SIZE-1:0][`VX_CFG_XLEN-1:0] b_row = b_row_flat;
 
         wire [TCU_FEOP_BLOCK_N_SIZE-1:0] feop_bitmap = a_step_valids[id] ? b_step_valids : '0;
 
@@ -1012,8 +1012,8 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     `ifdef DBG_TRACE_TCU
         // wire [LG_TCU_FEOP_N_STEPS:0] horizontal_skips = (LG_TCU_FEOP_N_STEPS+1)'(32'(b_zeros) >> LG_TCU_FEOP_BLOCK_N_SIZE);
-        // wire [TCU_TC_N_OP-1:0][`XLEN-1:0] b_set = b_set_flat;
-        // wire [TCU_TC_M_OP-1:0][`XLEN-1:0] a_set = a_set_flat_processed;
+        // wire [TCU_TC_N_OP-1:0][`VX_CFG_XLEN-1:0] b_set = b_set_flat;
+        // wire [TCU_TC_M_OP-1:0][`VX_CFG_XLEN-1:0] a_set = a_set_flat_processed;
         always @(posedge clk) begin
             if (issue_busy) begin
                 `TRACE(1, ("%t: FEOP-enq(%0d): wid=%0d, a_elem(idx=%0d)=0x%0h, set=%0d, m=%0d, n=%0d, id=%0d, step=%0d\n", $time, id, execute_if.data.header.wid,  ((32'(m) + 32'(id)) >> lg_i_ratio), a_elem, set, m, n, id, step));
@@ -1187,7 +1187,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     
     assign txbar_bar_id = txbar_bar_id_imm;
      
-    if (`NUM_WARPS > 1) begin : g_txbar_addr_w
+    if (`VX_CFG_NUM_WARPS > 1) begin : g_txbar_addr_w
         assign txbar_addr = {txbar_bar_id[NW_BITS-1:0], txbar_bar_id[BAR_ID_SHIFT +: NB_BITS]};
     end else begin : g_txbar_addr_wo
         assign txbar_addr = BAR_ADDR_W'(txbar_bar_id[BAR_ID_SHIFT +: NB_BITS]);
@@ -1337,7 +1337,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     assign result_if.data.header.wb    = 1'b0;
     assign result_if.data.header.wr_xregs = '0;
-    assign result_if.data.header.tmask = {`NUM_THREADS{1'b1}};
+    assign result_if.data.header.tmask = {`VX_CFG_NUM_THREADS{1'b1}};
     assign result_if.data.data  = '0;
     assign result_if.data.header.pid   =  0;
     assign result_if.data.header.sop   = 1'b1;
@@ -1348,7 +1348,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 
     /* Flush the D line to MEM - Pad with zeros to fill the 32 spots */
-    assign tcu_lsu_mem_if.req_data.data = rd_req_valid ? '0 : {{PAD_LANES{`XLEN'(0)}}, d_line};
+    assign tcu_lsu_mem_if.req_data.data = rd_req_valid ? '0 : {{PAD_LANES{`VX_CFG_XLEN'(0)}}, d_line};
     
 
     assign wr_req_fire = (valid_out && feop_enable) && tcu_lsu_mem_if.req_ready && (tcu_lsu_mem_if.req_data.rw == 1'b1);
@@ -1381,10 +1381,14 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
        Matrix ID is stored in the upper UUID bits, block index in the remaining UUID bits.
        Value bits are left for arbiters to overwrite. */
     // TODO: Clean this up - remove the zeros
-    assign tcu_lsu_mem_if.req_data.tag.uuid[MATRIX_ID_BITS-1:0]  = rd_req_valid ? grant_onehot : '0;
+    // Full-member assign: a part-select of tag.uuid through the interface
+    // is not a legal lvalue for Verilator's codegen, and the upper bits
+    // were undriven.
+    assign tcu_lsu_mem_if.req_data.tag.uuid =
+        UUID_WIDTH'(rd_req_valid ? grant_onehot : '0);
     assign tcu_lsu_mem_if.req_data.tag.value = '0;
 
-    assign wr_mask = {{(`NUM_LSU_LANES - TCU_FEOP_BLOCK_N_SIZE){1'b0}}, {TCU_FEOP_BLOCK_N_SIZE{1'b1}}};
+    assign wr_mask = {{(`VX_CFG_NUM_LSU_LANES - TCU_FEOP_BLOCK_N_SIZE){1'b0}}, {TCU_FEOP_BLOCK_N_SIZE{1'b1}}};
     // For bitmap reads with K<16, request identical 16-bit lane masks for A-half and B-half:
     // [31:16] = 0...01...1 (K ones in LSBs), [15:0] = same.
     // TODO: Unnecessary checks for K >= 16
@@ -1399,45 +1403,50 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                         `ifndef TCU_DISABLE_S1
                                             (grant_onehot == MATRIX_ID_BITS'(1) && K < 32 && sparsity == 2'd1) ? bitmap_s1_mask : 
                                         `endif
-                                            {`NUM_LSU_LANES{1'b1}};
-    assign tcu_lsu_mem_if.req_data.byteen = {`NUM_LSU_LANES{{LSU_WORD_SIZE{1'b1}}}};
+                                            {`VX_CFG_NUM_LSU_LANES{1'b1}};
+    assign tcu_lsu_mem_if.req_data.byteen = {`VX_CFG_NUM_LSU_LANES{{LSU_WORD_SIZE{1'b1}}}};
     
-    for (genvar l = 0; l < `NUM_LSU_LANES; l++) begin : g_mem_addr
+    for (genvar l = 0; l < `VX_CFG_NUM_LSU_LANES; l++) begin : g_mem_addr
         
         wire [LSU_ADDR_WIDTH-1:0] word_addr;
         wire [MEM_ADDRW-1:0] block_addr;
         wire is_lmem;
 
-        // wire [`XLEN-1:0] lane_byte_addr;
+        // wire [`VX_CFG_XLEN-1:0] lane_byte_addr;
         // if (rd_req_valid) begin : g_rd
         //     if (grant_onehot[0] && (sparsity == 2'd2)) begin : g_bitmap
-        //         if (l < `NUM_LSU_LANES/2) begin : g_a_bitmap
-        //             assign lane_byte_addr = a_bitmap_addr + (`XLEN'(l) * LSU_WORD_SIZE);
+        //         if (l < `VX_CFG_NUM_LSU_LANES/2) begin : g_a_bitmap
+        //             assign lane_byte_addr = a_bitmap_addr + (`VX_CFG_XLEN'(l) * LSU_WORD_SIZE);
         //         end else begin : g_b_bitmap
-        //             assign lane_byte_addr = b_bitmap_addr + ((`XLEN'(l) - `NUM_LSU_LANES/2) * LSU_WORD_SIZE);
+        //             assign lane_byte_addr = b_bitmap_addr + ((`VX_CFG_XLEN'(l) - `VX_CFG_NUM_LSU_LANES/2) * LSU_WORD_SIZE);
         //         end
         //     end else begin : g_data
-        //         assign lane_byte_addr = req_rd_addr + (`XLEN'(l) * LSU_WORD_SIZE);
+        //         assign lane_byte_addr = req_rd_addr + (`VX_CFG_XLEN'(l) * LSU_WORD_SIZE);
         //     end
         // end else begin : g_wr
-        //     assign lane_byte_addr = d_tile_addr + (`XLEN'(l) * LSU_WORD_SIZE);
+        //     assign lane_byte_addr = d_tile_addr + (`VX_CFG_XLEN'(l) * LSU_WORD_SIZE);
         // end
-        wire [`XLEN-1:0] lane_byte_addr = rd_req_valid ? 
+        wire [`VX_CFG_XLEN-1:0] lane_byte_addr = rd_req_valid ? 
                                             ((grant_onehot[0] && sparsity == 2'd2)? 
-                                                (l < `NUM_LSU_LANES/2 ? 
-                                                    a_bitmap_addr + (`XLEN'(l) << $clog2(LSU_WORD_SIZE)) : 
-                                                    b_bitmap_addr + ((`XLEN'(l) - (`NUM_LSU_LANES >> 1)) << $clog2(LSU_WORD_SIZE))) : 
-                                                req_rd_addr + (`XLEN'(l) << $clog2(LSU_WORD_SIZE))) :
-                                            d_tile_addr + (`XLEN'(l) << $clog2(LSU_WORD_SIZE));
+                                                (l < `VX_CFG_NUM_LSU_LANES/2 ? 
+                                                    a_bitmap_addr + (`VX_CFG_XLEN'(l) << $clog2(LSU_WORD_SIZE)) : 
+                                                    b_bitmap_addr + ((`VX_CFG_XLEN'(l) - (`VX_CFG_NUM_LSU_LANES >> 1)) << $clog2(LSU_WORD_SIZE))) : 
+                                                req_rd_addr + (`VX_CFG_XLEN'(l) << $clog2(LSU_WORD_SIZE))) :
+                                            d_tile_addr + (`VX_CFG_XLEN'(l) << $clog2(LSU_WORD_SIZE));
 
         `UNUSED_VAR (lane_byte_addr[1:0]);
         assign word_addr = lane_byte_addr[LSU_ADDR_WIDTH + REQ_ASHIFT - 1 : REQ_ASHIFT]; // LSU word address per lane
-        assign block_addr = lane_byte_addr[`MEM_ADDR_WIDTH-1:MEM_ASHIFT];                     // MEM block address for LMEM flagging
+        assign block_addr = lane_byte_addr[`VX_CFG_MEM_ADDR_WIDTH-1:MEM_ASHIFT];                     // MEM block address for LMEM flagging
         assign is_lmem = (block_addr >= LMEM_ADDR_START) && (block_addr < LMEM_ADDR_END);
 
-        assign tcu_lsu_mem_if.req_data.flags[l][MEM_REQ_FLAG_FLUSH] = 1'b0;
-        assign tcu_lsu_mem_if.req_data.flags[l][MEM_REQ_FLAG_IO]    = 1'b0;
-        assign tcu_lsu_mem_if.req_data.flags[l][MEM_REQ_FLAG_LOCAL] = is_lmem;
+        // Post-rebase the per-lane sideband is a packed mem_bus_attr_t in
+        // req_data.user; only the LMEM route bit is set (flush/io stay 0).
+        mem_bus_attr_t lane_attr_w;
+        always_comb begin
+            lane_attr_w = '0;
+            lane_attr_w.is_addr_local = is_lmem;
+        end
+        assign tcu_lsu_mem_if.req_data.user[l] = lane_attr_w;
 
         assign tcu_lsu_mem_if.req_data.addr[l] = word_addr;
 
@@ -1525,7 +1534,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                             (rsp_matrix_id == 4'b0001) ? "Bitmap" : (rsp_matrix_id == 4'b0010) ? "A" : (rsp_matrix_id == 4'b0100) ? "B" : "C",
                             accumulate_c, c_blocks_loaded, c_blocks_accumulated, c_blocks_loaded % (C_BUF_SLOTS+1)));
                 
-                for (integer l = 0; l < `NUM_LSU_LANES; l++) begin
+                for (integer l = 0; l < `VX_CFG_NUM_LSU_LANES; l++) begin
                     if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
                         if (rsp_matrix_id == 4'b0001) begin // Bitmap printing
                             `TRACE(2, ("    lane[%0d]: data=%b\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
@@ -1537,20 +1546,20 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (rsp_matrix_id == 4'b0001) begin
                     `TRACE(2, ("\n"));
                     if (sparsity == 2'd2) begin
-                        for (integer l = 0; l < `NUM_LSU_LANES; l++) begin
+                        for (integer l = 0; l < `VX_CFG_NUM_LSU_LANES; l++) begin
                             if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
-                                if (l < `NUM_LSU_LANES / 2) begin
+                                if (l < `VX_CFG_NUM_LSU_LANES / 2) begin
                                     `TRACE(2, ("    A_bitmap[%0d]=%b\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
                                 end
-                                else if (l >= `NUM_LSU_LANES / 2) begin
-                                    `TRACE(2, ("    B_bitmap[%0d]=%b\n", l - `NUM_LSU_LANES / 2, tcu_lsu_mem_if.rsp_data.data[l]));
+                                else if (l >= `VX_CFG_NUM_LSU_LANES / 2) begin
+                                    `TRACE(2, ("    B_bitmap[%0d]=%b\n", l - `VX_CFG_NUM_LSU_LANES / 2, tcu_lsu_mem_if.rsp_data.data[l]));
                                 end
                             end
                         end
                     end
                 `ifndef TCU_DISABLE_S1
                     else if (sparsity == 2'd1) begin
-                        for (integer l = 0; l < `NUM_LSU_LANES; l++) begin
+                        for (integer l = 0; l < `VX_CFG_NUM_LSU_LANES; l++) begin
                             if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
                                 `TRACE(2, ("    B_bitmap[%0d]=%b\n", l, tcu_lsu_mem_if.rsp_data.data[l]));
                             end
@@ -1579,7 +1588,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 `TRACE(2, ("\n"));
 
                 // `TRACE(2, ("[tcu_op_core]: req_data.data="));
-                // `TRACE_ARRAY1D(2, "0x%0h", tcu_lsu_mem_if.req_data.data, `NUM_LSU_LANES);
+                // `TRACE_ARRAY1D(2, "0x%0h", tcu_lsu_mem_if.req_data.data, `VX_CFG_NUM_LSU_LANES);
                 // `TRACE(2, ("\n"));
             end
             if (busy_r) begin

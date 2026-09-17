@@ -73,11 +73,10 @@ package VX_tcu_pkg;
     localparam TCU_TC_N = 1 << TCU_BLOCK_EN;
     localparam TCU_TC_K = (TCU_DP != 0) ? TCU_DP : (TCU_BLOCK_CAP / ((TCU_TC_M > TCU_TC_N) ? TCU_TC_M : TCU_TC_N));
 
-    // Step counts
-`ifndef TCU_OP
+    // Step counts (also under TCU_OP: the WMMA meta-store localparams below
+    // reference them; they are pure functions of the tile geometry).
     localparam TCU_M_STEPS = TCU_TILE_M / TCU_TC_M;
     localparam TCU_N_STEPS = TCU_TILE_N / TCU_TC_N;
-`endif
     localparam TCU_K_STEPS = TCU_TILE_K / TCU_TC_K;
 
 `ifdef TCU_OP
@@ -95,7 +94,7 @@ package VX_tcu_pkg;
     localparam TCU_N_STEPS_OP = 2;
     localparam TCU_K_STEPS_OP = TCU_K_STEPS * TCU_EXPANSION_RATIO;
 
-    localparam TCU_C_BLOCKS_IN_ACCU = TCU_TC_M_OP * TCU_TC_N_OP / `NUM_LSU_LANES;
+    localparam TCU_C_BLOCKS_IN_ACCU = TCU_TC_M_OP * TCU_TC_N_OP / `VX_CFG_NUM_LSU_LANES;
     localparam TCU_OPS_PER_C_BLOCK = TCU_K_STEPS_OP / TCU_C_BLOCKS_IN_ACCU;
 
     localparam TCU_UOPS_OP = TCU_M_STEPS_OP * TCU_N_STEPS_OP * TCU_K_STEPS_OP;
