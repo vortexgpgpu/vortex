@@ -78,7 +78,7 @@
   },
   "dxa:perf_gate-wgmma-dxa-mcast-nt16:rtlsim": {
     "32": {
-      "cycles": 134782,
+      "cycles": 108106,
       "instrs": 32384
     },
     "app": "sgemm_tcu_wg_dxa_mcast",
@@ -89,7 +89,7 @@
   },
   "dxa:perf_gate-wgmma-dxa-mcast-nt4:rtlsim": {
     "32": {
-      "cycles": 427262,
+      "cycles": 393379,
       "instrs": 234560
     },
     "app": "sgemm_tcu_wg_dxa_mcast",
@@ -100,7 +100,7 @@
   },
   "dxa:perf_gate-wgmma-dxa:rtlsim": {
     "32": {
-      "cycles": 63004,
+      "cycles": 51130,
       "instrs": 10080
     },
     "app": "sgemm_tcu_wg_dxa",
