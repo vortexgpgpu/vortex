@@ -139,11 +139,13 @@ public:
 
 	// Store one element per thread into TMEM. tmem_addr is software-computed
 	// (vx_make_tmem_addr(lane_base, handle + local_col)) so the handle's base
-	// column is already folded in.
-	void tmem_st(uint32_t tmem_addr, const std::vector<reg_data_t>& value_data);
+	// column is already folded in. Inactive lanes are skipped.
+	void tmem_st(uint32_t tmem_addr, const std::vector<reg_data_t>& value_data,
+	             const ThreadMask& tmask);
 
-	// Load one element per thread from TMEM.
-	void tmem_ld(uint32_t tmem_addr, std::vector<reg_data_t>& rd_data);
+	// Load one element per thread from TMEM. Inactive lanes are skipped.
+	void tmem_ld(uint32_t tmem_addr, std::vector<reg_data_t>& rd_data,
+	             const ThreadMask& tmask);
 
 	// UMMA: A/B from SMEM via descriptors, C/D accumulator in TMEM addressed 
 	// via `handle`.

@@ -767,11 +767,11 @@ public:
         } break;
         case TcuType::TMEM_ST: {
           uint32_t tmem_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
-          this->tmem_st(tmem_addr, rs2_data);
+          this->tmem_st(tmem_addr, rs2_data, trace->tmask);
         } break;
         case TcuType::TMEM_LD: {
           uint32_t tmem_addr = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
-          this->tmem_ld(tmem_addr, rd_data);
+          this->tmem_ld(tmem_addr, rd_data, trace->tmask);
         } break;
       #endif
         default:
@@ -1255,24 +1255,34 @@ public:
     std::abort();
   }
 
-  void tmem_st(uint32_t tmem_addr, const std::vector<reg_data_t>& value_data) {
+  void tmem_st(uint32_t tmem_addr, const std::vector<reg_data_t>& value_data,
+               const ThreadMask& tmask) {
     uint32_t lane_base = (tmem_addr >> 16) & 0xFFFF;
     uint32_t col       = tmem_addr & 0xFFFF;
+    uint32_t active    = 0;
     for (uint32_t t = 0; t < value_data.size(); ++t) {
+      if (!tmask.test(t))
+        continue;
       validate_tmem_lane_col(lane_base + t, col);
       tmem_data_.at(lane_base + t).at(col) = value_data.at(t).u32;
+      ++active;
     }
-    perf_stats_.tmem_writes += value_data.size();
+    perf_stats_.tmem_writes += active;
   }
 
-  void tmem_ld(uint32_t tmem_addr, std::vector<reg_data_t>& rd_data) {
+  void tmem_ld(uint32_t tmem_addr, std::vector<reg_data_t>& rd_data,
+               const ThreadMask& tmask) {
     uint32_t lane_base = (tmem_addr >> 16) & 0xFFFF;
     uint32_t col       = tmem_addr & 0xFFFF;
+    uint32_t active    = 0;
     for (uint32_t t = 0; t < rd_data.size(); ++t) {
+      if (!tmask.test(t))
+        continue;
       validate_tmem_lane_col(lane_base + t, col);
       rd_data.at(t).u64 = nan_box(tmem_data_.at(lane_base + t).at(col));
+      ++active;
     }
-    perf_stats_.tmem_reads += rd_data.size();
+    perf_stats_.tmem_reads += active;
   }
 
   // UMMA: A/B fetched via the shared tile buffer exactly like WGMMA's
@@ -2079,12 +2089,14 @@ void TcuUnit::tmem_dealloc(uint32_t handle, int32_t cta_id, uint32_t wid) {
   impl_->tmem_dealloc(handle, cta_id, wid);
 }
 
-void TcuUnit::tmem_st(uint32_t tmem_addr, const std::vector<reg_data_t>& value_data) {
-  impl_->tmem_st(tmem_addr, value_data);
+void TcuUnit::tmem_st(uint32_t tmem_addr, const std::vector<reg_data_t>& value_data,
+                      const ThreadMask& tmask) {
+  impl_->tmem_st(tmem_addr, value_data, tmask);
 }
 
-void TcuUnit::tmem_ld(uint32_t tmem_addr, std::vector<reg_data_t>& rd_data) {
-  impl_->tmem_ld(tmem_addr, rd_data);
+void TcuUnit::tmem_ld(uint32_t tmem_addr, std::vector<reg_data_t>& rd_data,
+                      const ThreadMask& tmask) {
+  impl_->tmem_ld(tmem_addr, rd_data, tmask);
 }
 
 void TcuUnit::umma(uint32_t wid,
