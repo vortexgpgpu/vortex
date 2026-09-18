@@ -1,0 +1,115 @@
+# Test cases for `tensor_op` -- the TCU_OP (SparseWeaver) decoupled tensor
+# engine driven by the MMA_OP instruction.
+#
+# Two things make this suite different from the other tensor suites:
+#
+#  * There is no simx model. MMA_OP is implemented only in RTL (no reference in
+#    sim/simx), so every case pins rtlsim and there is no model_parity check to
+#    author.
+#
+#  * Every defect this engine shipped with hid behind quiet-memory single-tile
+#    microbenchmarks and fired only when DXA staging overlapped MMA execution.
+#    The response-tag, partial-response and LMEM-arbitration defects were all
+#    invisible until A/B/C staging contended with the engine's own operand
+#    fetches. The multi-tile cases below exist specifically to keep memory busy
+#    while MMA ops are in flight; do not "simplify" them to a single tile.
+category: tensor_op
+defaults:
+  xlen:
+  - 32
+  tier: smoke
+  touches: [hw/rtl/tcu, tests/regression/sgemm_tcu_op]
+tests:
+
+# --- Minimum viable point: one output tile, one k-chunk. Fast smoke gate. ---
+- id: tcu_op-single-tile
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  args: -m 32 -n 32 -k 128 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=32 -DSGEMM_CONST_N=32 -DSGEMM_CONST_K=128
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DTCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE=2 -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=4
+    -DVX_DBG_DEBUG_LEVEL=0
+
+# --- 16 output tiles under sustained DXA staging. This is the configuration
+#     that exposed the response-tag aliasing, the mask-blind response
+#     consumption and the LMEM bank-priority starvation. ---
+- id: tcu_op-dxa-stress-128
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  args: -m 128 -n 128 -k 128 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=128
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DTCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE=2 -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=4
+    -DVX_DBG_DEBUG_LEVEL=0
+
+# --- D = A*B + C with a REAL C. With C == 0 the app cannot distinguish an
+#     accumulated C from a dropped one, which is precisely how the null-C
+#     latching defect stayed invisible. Keep this case non-zero. ---
+- id: tcu_op-nonzero-c
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  args: -m 128 -n 128 -k 128 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=128
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DTCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE=2 -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=4
+    -DSGEMM_NONZERO_C -DVX_DBG_DEBUG_LEVEL=0
+
+# --- K-chunked continuation at the DEFAULT tile_K: 8 chunks per output tile,
+#     init on the first, flush on the last, neither in between. This is the
+#     accumulator's whole reason for existing and the path a larger
+#     SGEMM_TILE_K_MULT was used to avoid. ---
+- id: tcu_op-kchunk-default
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  tier: nightly
+  args: -m 128 -n 128 -k 512 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=512
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DTCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE=2 -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=2
+    -DVX_DBG_DEBUG_LEVEL=0
+
+# --- Issue-width sweep. IW changes the TCU block replication and the LSU
+#     arbitration order, both of which this engine is sensitive to. ---
+- id: tcu_op-iw1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  tier: nightly
+  args: -m 128 -n 128 -k 128 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=1 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=128
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DTCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE=2 -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=4
+    -DVX_DBG_DEBUG_LEVEL=0
+- id: tcu_op-iw2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  tier: nightly
+  args: -m 128 -n 128 -k 128 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=128
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DTCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE=2 -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=4
+    -DVX_DBG_DEBUG_LEVEL=0
