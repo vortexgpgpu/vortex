@@ -1305,7 +1305,11 @@ int main(int argc, char *argv[]) {
   uint32_t K = xk;
   const uint32_t input_word_ratio = sizeof(uint32_t) / sizeof(itype_t);
   const uint32_t input_tile_k = 16 * input_word_ratio;
-  const uint32_t dxa_tile_k = 2 * input_tile_k;
+  // Must match the kernel's tile_K (16 * i_ratio * SGEMM_TILE_K_MULT).
+#ifndef SGEMM_TILE_K_MULT
+#define SGEMM_TILE_K_MULT 2
+#endif
+  const uint32_t dxa_tile_k = SGEMM_TILE_K_MULT * input_tile_k;
 
   if ((M % 32) != 0) {
     std::cout << "Error: M must be a multiple of 32!" << std::endl;

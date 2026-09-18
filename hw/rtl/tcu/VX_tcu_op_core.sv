@@ -120,13 +120,19 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     reg [A_BUF_SLOTS-1:0] a_active_block;
     reg [A_BUF_SLOTS-1:0] a_load_block;
     reg [A_BUF_SLOTS-1:0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] A_buffered; // Holds loaded data to be processed
-    wire a_req_ready = a_tile_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (a_blk_rq_bits != '1); // A requests start only after the ACCU is initialized with the values of C
+    // One request in flight per stream (~*_req_pending_r): the response
+    // packer can interleave partial beats of two same-stream requests, and
+    // the per-stream lane-coverage merge cannot untangle that (it would
+    // merge across requests and wedge with permanently-partial coverage).
+    // LMEM latency is far below the 32-cycle per-block consumption period,
+    // so prefetch depth 1 costs almost nothing on A/B streaming.
+    wire a_req_ready = a_tile_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (a_blk_rq_bits != '1) && ~a_req_pending_r; // A requests start only after the ACCU is initialized with the values of C
 
     reg [`VX_CFG_XLEN-1:0] b_tile_addr;
     reg             b_tile_addr_valid;                             // Is set to false when all B blocks have been requested
     reg [`VX_CFG_XLEN-1:0] b_req_blocks_remaining;                        // Requested to be fetched
     reg [B_BUF_SLOTS-1:0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] B_buffered; // Holds loaded data to be processed
-    wire b_req_ready = b_tile_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (b_blk_rq_bits != '1);
+    wire b_req_ready = b_tile_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (b_blk_rq_bits != '1) && ~b_req_pending_r;
     reg [B_BUF_SLOTS-1:0] b_blk_rq_bits;
     reg [B_BUF_SLOTS-1:0] b_blk_ld_bits;
     reg [B_BUF_SLOTS-1:0] b_active_block;
@@ -141,7 +147,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     reg [BITMAP_BUF_SLOTS-1:0] bitmap_active_block;
     reg [`VX_CFG_XLEN-1:0] bitmap_blocks_loaded;                                    // Loaded but not processed
     reg [BITMAP_BUF_SLOTS-1:0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] Bitmap_buffered; // Holds loaded data to be processed
-    wire bitmap_req_ready = bitmap_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (bitmap_blk_rq_bits != '1); // Bitmap requests start only after the ACCU is initialized with the values of C
+    wire bitmap_req_ready = bitmap_addr_valid && (c_blocks_requested == TCU_C_BLOCKS_IN_ACCU) && (bitmap_blk_rq_bits != '1) && ~bm_req_pending_r; // Bitmap requests start only after the ACCU is initialized with the values of C
 
     reg [`VX_CFG_XLEN-1:0]                      c_tile_addr;
     reg                                  c_tile_addr_valid;    // Is set to false when all C blocks have been requested
@@ -152,7 +158,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     reg [`MAX(0, C_BUF_SLOTS-1):0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] C_buffered; // Holds loaded data to be accumulated
     `UNUSED_VAR (C_buffered); // Only used when C_BUF_SLOTS > 0
 
-    wire c_req_ready = init_flag && c_tile_addr_valid;
+    wire c_req_ready = init_flag && c_tile_addr_valid && ~c_req_pending_r;
      
     reg [`VX_CFG_XLEN-1:0] d_tile_addr;
 
@@ -413,7 +419,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     if (~(rd_req_fire && grant_onehot == MATRIX_ID_BITS'(2))) begin
                         a_blk_rq_bits <= (a_blk_rq_bits >> 1);
                     end
-                    if (~(rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(2))) begin
+                    if (~(rsp_block_done && rsp_matrix_id == MATRIX_ID_BITS'(2))) begin
                         a_blk_ld_bits <= a_blk_ld_bits & ~a_active_block;
                     end
                     a_active_block <= ~a_active_block; // 01->10, 10->01
@@ -422,7 +428,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     if (~(rd_req_fire && grant_onehot == MATRIX_ID_BITS'(4))) begin
                         b_blk_rq_bits <= (b_blk_rq_bits >> 1);
                     end
-                    if (~(rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(4))) begin
+                    if (~(rsp_block_done && rsp_matrix_id == MATRIX_ID_BITS'(4))) begin
                         b_blk_ld_bits <= b_blk_ld_bits & ~b_active_block;
                     end
                     b_active_block <= ~b_active_block; // 01->10, 10->01
@@ -431,54 +437,74 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     if (~(rd_req_fire && grant_onehot == MATRIX_ID_BITS'(1))) begin
                         bitmap_blk_rq_bits <= (bitmap_blk_rq_bits >> 1);
                     end
-                    if (~(rd_rsp_fire && rsp_matrix_id == MATRIX_ID_BITS'(1))) begin
+                    if (~(rsp_block_done && rsp_matrix_id == MATRIX_ID_BITS'(1))) begin
                         bitmap_blk_ld_bits <= bitmap_blk_ld_bits & ~bitmap_active_block;
                     end
                     bitmap_active_block <= ~bitmap_active_block; // 01->10, 10->01
                 end
             end
 
-            // Load data mechanism
+            // Load data mechanism. Data merges per-lane under the response
+            // mask (the packer may split a request into partial beats); all
+            // block-level bookkeeping advances only on rsp_block_done.
             if (~reset && rd_rsp_fire) begin
                 case (rsp_matrix_id)
                     MATRIX_ID_BITS'(1): begin  // Bitmap
-                        bitmap_blocks_loaded <= bitmap_blocks_loaded + 1'b1; // Necessary for the bitmap_block_ready
-                        Bitmap_buffered[bitmap_blk_ld_bits[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
-                        if (~last_step_in_bitmap_block) begin
-                            bitmap_blk_ld_bits <= {|bitmap_blk_ld_bits, 1'b1}; // 00->01, 01->11, 10->11
-                            // `TRACE(2, ("%t: [NEW] Bitmap_loaded && ~Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, {|bitmap_blk_ld_bits, 1'b1}));
-                        end else begin
-                            bitmap_blk_ld_bits <= ~bitmap_blk_ld_bits; // 01->10, 10->01
-                            // `TRACE(2, ("%t: [NEW] Bitmap_loaded && Bitmap_processed: bitmap_blk_ld_bits=%b->%b\n", $time, bitmap_blk_ld_bits, ~bitmap_blk_ld_bits));
-                        end 
+                        for (integer l = 0; l < `VX_CFG_NUM_LSU_LANES; ++l) begin
+                            if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
+                                Bitmap_buffered[bitmap_blk_ld_bits[0]][l] <= tcu_lsu_mem_if.rsp_data.data[l]; // Double buffering
+                            end
+                        end
+                        if (rsp_block_done) begin
+                            bitmap_blocks_loaded <= bitmap_blocks_loaded + 1'b1; // Necessary for the bitmap_block_ready
+                            if (~last_step_in_bitmap_block) begin
+                                bitmap_blk_ld_bits <= {|bitmap_blk_ld_bits, 1'b1}; // 00->01, 01->11, 10->11
+                            end else begin
+                                bitmap_blk_ld_bits <= ~bitmap_blk_ld_bits; // 01->10, 10->01
+                            end
+                        end
                     end
                     MATRIX_ID_BITS'(2): begin  // A
-                        A_buffered[~a_load_block[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
-                        if (~last_step_in_block_a) begin
-                            a_blk_ld_bits <= ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11); // 00->a_load_block, 01->11, 10->11        // {|a_blk_ld_bits, 1'b1}; 
-                            // `TRACE(2, ("%t: [NEW] A_loaded && ~A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11)));
-                        end else begin
-                            a_blk_ld_bits <= ~a_blk_ld_bits; // 01->10, 10->01
-                            // `TRACE(2, ("%t: [NEW] A_loaded && A_processed: a_blk_ld_bits=%b->%b\n", $time, a_blk_ld_bits, ~a_blk_ld_bits));
-                        end 
-                        a_load_block <= ~a_load_block; // 01->10, 10->01
+                        for (integer l = 0; l < `VX_CFG_NUM_LSU_LANES; ++l) begin
+                            if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
+                                A_buffered[~a_load_block[0]][l] <= tcu_lsu_mem_if.rsp_data.data[l]; // Double buffering
+                            end
+                        end
+                        if (rsp_block_done) begin
+                            if (~last_step_in_block_a) begin
+                                a_blk_ld_bits <= ((a_blk_ld_bits == 2'b00) ? a_load_block : 2'b11); // 00->a_load_block, 01->11, 10->11
+                            end else begin
+                                a_blk_ld_bits <= ~a_blk_ld_bits; // 01->10, 10->01
+                            end
+                            a_load_block <= ~a_load_block; // 01->10, 10->01
+                        end
                     end
                     MATRIX_ID_BITS'(4): begin  // B
-                        B_buffered[~b_load_block[0]] <= tcu_lsu_mem_if.rsp_data.data; // Double buffering
-                        if (~last_step_in_block_b) begin
-                            b_blk_ld_bits <= ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11); // 00->b_load_block, 01->11, 10->11
-                            // `TRACE(2, ("%t: [NEW] B_loaded && ~B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11)));
-                        end else begin
-                            b_blk_ld_bits <= ~b_blk_ld_bits; // 01->10, 10->01
-                            // `TRACE(2, ("%t: [NEW] B_loaded && B_processed: b_blk_ld_bits=%b->%b\n", $time, b_blk_ld_bits, ~b_blk_ld_bits));
-                        end 
-                        b_load_block <= ~b_load_block; // 01->10, 10->01
+                        for (integer l = 0; l < `VX_CFG_NUM_LSU_LANES; ++l) begin
+                            if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
+                                B_buffered[~b_load_block[0]][l] <= tcu_lsu_mem_if.rsp_data.data[l]; // Double buffering
+                            end
+                        end
+                        if (rsp_block_done) begin
+                            if (~last_step_in_block_b) begin
+                                b_blk_ld_bits <= ((b_blk_ld_bits == 2'b00) ? b_load_block : 2'b11); // 00->b_load_block, 01->11, 10->11
+                            end else begin
+                                b_blk_ld_bits <= ~b_blk_ld_bits; // 01->10, 10->01
+                            end
+                            b_load_block <= ~b_load_block; // 01->10, 10->01
+                        end
                     end
                     MATRIX_ID_BITS'(8): begin  // C
                         if (~accumulate_c && C_BUF_SLOTS > 0) begin
-                            C_buffered[c_blocks_loaded % (C_BUF_SLOTS+1)] <= tcu_lsu_mem_if.rsp_data.data; // Buffer until you can accumulate them all in 1 cycle
+                            for (integer l = 0; l < `VX_CFG_NUM_LSU_LANES; ++l) begin
+                                if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
+                                    C_buffered[c_blocks_loaded % (C_BUF_SLOTS+1)][l] <= tcu_lsu_mem_if.rsp_data.data[l]; // Buffer until you can accumulate them all in 1 cycle
+                                end
+                            end
                         end
-                        c_blocks_loaded <= c_blocks_loaded + 1'b1;
+                        if (rsp_block_done) begin
+                            c_blocks_loaded <= c_blocks_loaded + 1'b1;
+                        end
                     end
                     default: begin
                         `TRACE(1, ("[tcu_op_core]: ERROR: Unexpected response tag %d\n", rsp_matrix_id));
@@ -701,8 +727,15 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam MEM_ASHIFT = `CLOG2(`VX_CFG_MEM_BLOCK_SIZE);      // bytes -> block
     localparam MEM_ADDRW  = `VX_CFG_MEM_ADDR_WIDTH - MEM_ASHIFT; // block address width
     localparam REQ_ASHIFT = `CLOG2(LSU_WORD_SIZE);        // bytes -> LSU word
-    localparam [MEM_ADDRW-1:0] LMEM_ADDR_START = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
-    localparam [MEM_ADDRW-1:0] LMEM_ADDR_END   = MEM_ADDRW'((`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) + `VX_CFG_XLEN'(1 << `VX_CFG_LMEM_LOG_SIZE)) >> MEM_ASHIFT);
+    // 64-bit arithmetic: base + size overflows XLEN when LMEM tops out at
+    // 2^32 (e.g. base 0xffff0000 with LMEM_LOG_SIZE=16), wrapping END to 0.
+    // When LMEM reaches the very top of the block-address space, the
+    // exclusive END does not fit in MEM_ADDRW bits either, so the upper
+    // bound check must be dropped entirely (see LMEM_AT_ADDR_TOP uses).
+    localparam [63:0] LMEM_ADDR_END64 = (64'(`VX_MEM_LMEM_BASE_ADDR) + 64'(1 << `VX_CFG_LMEM_LOG_SIZE)) >> MEM_ASHIFT;
+    localparam LMEM_AT_ADDR_TOP = (LMEM_ADDR_END64 >= (64'd1 << MEM_ADDRW));
+    localparam [MEM_ADDRW-1:0] LMEM_ADDR_START = MEM_ADDRW'(64'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
+    localparam [MEM_ADDRW-1:0] LMEM_ADDR_END   = MEM_ADDRW'(LMEM_ADDR_END64);
 
     wire [`VX_CFG_NUM_LSU_LANES-1:0] wr_mask;
     wire [15:0] bitmap_half_mask;
@@ -742,6 +775,81 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     assign rsp_matrix_id = tcu_lsu_mem_if.rsp_data.tag.uuid[MATRIX_ID_BITS-1:0];
 
+    // ---- Partial-response merging ----
+    // The LSU adapter's response packer may split one request's lanes across
+    // several beats when per-bank timing skews (e.g. concurrent DXA traffic
+    // at the LMEM banks). Data merges per-lane on every beat; the per-block
+    // bookkeeping below advances only on rsp_block_done, i.e. once the
+    // originating request's full lane mask has been covered.
+    reg  [`VX_CFG_NUM_LSU_LANES-1:0] a_rsp_seen, b_rsp_seen, c_rsp_seen, bm_rsp_seen;
+    reg  [`VX_CFG_NUM_LSU_LANES-1:0] a_req_mask_r, b_req_mask_r, c_req_mask_r, bm_req_mask_r;
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] rsp_seen_cur =
+        (rsp_matrix_id == MATRIX_ID_BITS'(1)) ? bm_rsp_seen :
+        (rsp_matrix_id == MATRIX_ID_BITS'(2)) ? a_rsp_seen  :
+        (rsp_matrix_id == MATRIX_ID_BITS'(4)) ? b_rsp_seen  :
+                                                c_rsp_seen;
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] rsp_expected_mask =
+        (rsp_matrix_id == MATRIX_ID_BITS'(1)) ? bm_req_mask_r :
+        (rsp_matrix_id == MATRIX_ID_BITS'(2)) ? a_req_mask_r  :
+        (rsp_matrix_id == MATRIX_ID_BITS'(4)) ? b_req_mask_r  :
+                                                c_req_mask_r;
+    wire [`VX_CFG_NUM_LSU_LANES-1:0] rsp_seen_next = rsp_seen_cur | tcu_lsu_mem_if.rsp_data.mask;
+    wire rsp_block_done = rd_rsp_fire && ((rsp_seen_next & rsp_expected_mask) == rsp_expected_mask);
+
+    // Merge buffer for the direct (C_BUF_SLOTS == 0) C path, which feeds the
+    // accumulator straight from the response bus and has no backing buffer
+    // to accumulate partial beats into.
+    reg  [`VX_CFG_NUM_LSU_LANES-1:0][`VX_CFG_XLEN-1:0] c_partial_r;
+    wire [`VX_CFG_NUM_LSU_LANES-1:0][`VX_CFG_XLEN-1:0] c_block_merged;
+    for (genvar l = 0; l < `VX_CFG_NUM_LSU_LANES; ++l) begin : g_c_block_merged
+        assign c_block_merged[l] = tcu_lsu_mem_if.rsp_data.mask[l] ? tcu_lsu_mem_if.rsp_data.data[l] : c_partial_r[l];
+    end
+
+    reg a_req_pending_r, b_req_pending_r, c_req_pending_r, bm_req_pending_r;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            a_rsp_seen  <= '0; b_rsp_seen  <= '0; c_rsp_seen  <= '0; bm_rsp_seen <= '0;
+            a_req_mask_r <= '1; b_req_mask_r <= '1; c_req_mask_r <= '1; bm_req_mask_r <= '1;
+            a_req_pending_r <= 1'b0; b_req_pending_r <= 1'b0; c_req_pending_r <= 1'b0; bm_req_pending_r <= 1'b0;
+            c_partial_r <= '0;
+        end else begin
+            if (rd_req_fire) begin
+                case (grant_onehot)
+                    MATRIX_ID_BITS'(1): begin bm_req_mask_r <= tcu_lsu_mem_if.req_data.mask; bm_req_pending_r <= 1'b1; end
+                    MATRIX_ID_BITS'(2): begin a_req_mask_r  <= tcu_lsu_mem_if.req_data.mask; a_req_pending_r  <= 1'b1; end
+                    MATRIX_ID_BITS'(4): begin b_req_mask_r  <= tcu_lsu_mem_if.req_data.mask; b_req_pending_r  <= 1'b1; end
+                    default:            begin c_req_mask_r  <= tcu_lsu_mem_if.req_data.mask; c_req_pending_r  <= 1'b1; end
+                endcase
+            end
+            if (rd_rsp_fire) begin
+                case (rsp_matrix_id)
+                    MATRIX_ID_BITS'(1): begin
+                        bm_rsp_seen <= rsp_block_done ? '0 : rsp_seen_next;
+                        if (rsp_block_done) bm_req_pending_r <= 1'b0;
+                    end
+                    MATRIX_ID_BITS'(2): begin
+                        a_rsp_seen  <= rsp_block_done ? '0 : rsp_seen_next;
+                        if (rsp_block_done) a_req_pending_r <= 1'b0;
+                    end
+                    MATRIX_ID_BITS'(4): begin
+                        b_rsp_seen  <= rsp_block_done ? '0 : rsp_seen_next;
+                        if (rsp_block_done) b_req_pending_r <= 1'b0;
+                    end
+                    default: begin
+                        c_rsp_seen  <= rsp_block_done ? '0 : rsp_seen_next;
+                        if (rsp_block_done) c_req_pending_r <= 1'b0;
+                        for (integer l = 0; l < `VX_CFG_NUM_LSU_LANES; ++l) begin
+                            if (tcu_lsu_mem_if.rsp_data.mask[l]) begin
+                                c_partial_r[l] <= tcu_lsu_mem_if.rsp_data.data[l];
+                            end
+                        end
+                    end
+                endcase
+            end
+        end
+    end
+
                                       // If this is an bitmap block, accept it if we have a free slot in Bitmap_buffered
     assign tcu_lsu_mem_if.rsp_ready = (rsp_matrix_id == MATRIX_ID_BITS'(1)) ? (bitmap_blk_ld_bits != '1) :
                                       // If this is an A block, accept it if we have a free slot in A_buffered
@@ -752,7 +860,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                                       (rsp_matrix_id == MATRIX_ID_BITS'(8)) ? ((c_blocks_loaded % (C_BUF_SLOTS+1) == C_BUF_SLOTS) ? accu_enable : 1'b1) :
                                       1'b0;
     
-    assign accumulate_c = (rsp_matrix_id == MATRIX_ID_BITS'(8)) && rd_rsp_fire && (c_blocks_loaded - c_blocks_accumulated == C_BUF_SLOTS) && accu_enable;
+    assign accumulate_c = (rsp_matrix_id == MATRIX_ID_BITS'(8)) && rsp_block_done && (c_blocks_loaded - c_blocks_accumulated == C_BUF_SLOTS) && accu_enable;
     
 
     assign c_blk_idx = ($clog2(TCU_FEOP_STEPS+1))'(c_blocks_accumulated >> LG_C_BLOCKS_PER_FEOP_BLOCK);
@@ -770,7 +878,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         //     assign C_feop_block = tcu_lsu_mem_if.rsp_data.data;
         // end
 
-    assign C_feop_block = c_tile_addr == '0 ? '0 : tcu_lsu_mem_if.rsp_data.data;
+    assign C_feop_block = c_tile_addr == '0 ? '0 : c_block_merged;
     // end
 
 // MEMORY RESPONSE HANDLING
@@ -1180,7 +1288,24 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign ready_to_flush = flush_flag && ready_to_flush_raw;
 
     /* We are ready to commit at the moment we write the last d_line to LMEM */
-    assign no_flush_complete = busy && ~flush_flag && ready_to_flush_raw && (d_line_to_flush == '0) && ~result_pending_r;
+    // The no-flush completion must out-wait the FEOP->xbar->accu pipeline:
+    // issuing_done only says the last product ENTERED the multiply pipe, and
+    // accu_ready_to_flush cannot see products still inside it. The flush path
+    // models the drain with pipe_flush_dummy; give no-flush the same settling
+    // time by requiring the drained state to hold for the full pipe latency,
+    // otherwise the next chunk's gathers race this chunk's landing products.
+    localparam NOFLUSH_SETTLE = FEOP_LATENCY + FACC_LATENCY + XBAR_LATENCY + 1;
+    localparam NOFLUSH_CTR_W  = $clog2(NOFLUSH_SETTLE + 1);
+    wire no_flush_base = busy && ~flush_flag && ready_to_flush_raw && (d_line_to_flush == '0) && ~result_pending_r;
+    reg [NOFLUSH_CTR_W-1:0] noflush_settle_ctr;
+    always @(posedge clk) begin
+        if (reset || ~no_flush_base) begin
+            noflush_settle_ctr <= '0;
+        end else if (noflush_settle_ctr != NOFLUSH_CTR_W'(NOFLUSH_SETTLE)) begin
+            noflush_settle_ctr <= noflush_settle_ctr + NOFLUSH_CTR_W'(1);
+        end
+    end
+    assign no_flush_complete = no_flush_base && (noflush_settle_ctr == NOFLUSH_CTR_W'(NOFLUSH_SETTLE));
     assign result_pulse = no_flush_complete || (busy && flush_flag && (32'(d_line_to_flush_delayed) == TCU_TC_M_OP * TCU_FEOP_N_STEPS - 1) && wr_req_fire);
 
 // ----------------------------------- tx_bar HANDLING ----------------------------------------------
@@ -1386,7 +1511,25 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // were undriven.
     assign tcu_lsu_mem_if.req_data.tag.uuid =
         UUID_WIDTH'(rd_req_valid ? grant_onehot : '0);
-    assign tcu_lsu_mem_if.req_data.tag.value = '0;
+    // The LSU adapter's response packer (VX_stream_pack) groups per-lane
+    // responses by the low TAG_SEL_BITS of the tag — i.e. tag.value, NOT
+    // uuid. With value = 0 every outstanding request aliases: under DXA-
+    // induced bank skew the packer merges lanes across different requests
+    // (and matrices), corrupting the operand windows (observed as 66 B
+    // responses for 64 B requests, tile-wide ±few-product errors). Encode
+    // the matrix id plus a per-matrix sequence bit so concurrent requests
+    // never share a reassembly key.
+    reg [MATRIX_ID_BITS-1:0] req_seq_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            req_seq_r <= '0;
+        end else if (rd_req_fire) begin
+            req_seq_r <= req_seq_r ^ grant_onehot;
+        end
+    end
+    wire req_seq_bit = |(req_seq_r & grant_onehot);
+    assign tcu_lsu_mem_if.req_data.tag.value =
+        (LSU_TAG_WIDTH - UUID_WIDTH)'(rd_req_valid ? {req_seq_bit, grant_onehot} : '0);
 
     assign wr_mask = {{(`VX_CFG_NUM_LSU_LANES - TCU_FEOP_BLOCK_N_SIZE){1'b0}}, {TCU_FEOP_BLOCK_N_SIZE{1'b1}}};
     // For bitmap reads with K<16, request identical 16-bit lane masks for A-half and B-half:
@@ -1437,7 +1580,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `UNUSED_VAR (lane_byte_addr[1:0]);
         assign word_addr = lane_byte_addr[LSU_ADDR_WIDTH + REQ_ASHIFT - 1 : REQ_ASHIFT]; // LSU word address per lane
         assign block_addr = lane_byte_addr[`VX_CFG_MEM_ADDR_WIDTH-1:MEM_ASHIFT];                     // MEM block address for LMEM flagging
-        assign is_lmem = (block_addr >= LMEM_ADDR_START) && (block_addr < LMEM_ADDR_END);
+        assign is_lmem = (block_addr >= LMEM_ADDR_START) && (LMEM_AT_ADDR_TOP || (block_addr < LMEM_ADDR_END));
 
         // Post-rebase the per-lane sideband is a packed mem_bus_attr_t in
         // req_data.user; only the LMEM route bit is set (flush/io stay 0).

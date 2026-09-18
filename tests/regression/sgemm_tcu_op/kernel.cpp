@@ -112,7 +112,17 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
 
   static constexpr uint32_t tile_M = 32;
   static constexpr uint32_t tile_N = 32;
-  static constexpr uint32_t tile_K = 16 * i_ratio * 2;
+  // K-chunk depth per MMA op. The engine amortizes accumulator init and
+  // writeback by keeping the output tile resident across k-chunks, so the
+  // intended mode is the default (init on the first chunk, flush on the
+  // last). Raising this covers more of K per op, up to the descriptor's
+  // 8-bit K limit, at the cost of larger A/B tiles in LMEM; it was used to
+  // isolate the cross-op path while the response-path defects that
+  // corrupted it were being fixed, and should not be needed going forward.
+#ifndef SGEMM_TILE_K_MULT
+#define SGEMM_TILE_K_MULT 2
+#endif
+  static constexpr uint32_t tile_K = 16 * i_ratio * SGEMM_TILE_K_MULT;
   static constexpr uint32_t tiles_n = (N / tile_N);
   static constexpr uint32_t tiles_m = (M / tile_M);
   static constexpr uint32_t tiles_k = (K / tile_K);
