@@ -857,6 +857,16 @@ static bool check_sparse_tile_lmem_fit(const std::vector<itype_t>& A,
                                        uint32_t* max_b_blocks) {
   constexpr uint32_t tile_M = 32;
   constexpr uint32_t tile_N = 32;
+  // Hardcoded, and deliberately NOT derived from VX_CFG_LMEM_LOG_SIZE: the
+  // kernel's sparse staging slots are fixed at this size, so a larger LMEM does
+  // not buy a larger sparse tile.
+  //
+  // This caps the usable sparse tile depth well below the dense one. A 32xtile_K
+  // tile spends 4*tile_K bytes on its bitmap and must fit the compressed operand
+  // in the remainder, so at tile_K=128 only 3584 bytes (1792 fp16 elements) are
+  // left -- while a 128x32 B tile pruned 2:4 has 2048 nonzeros by construction.
+  // 2:4 structured pruning, the canonical DNN pattern, is therefore impossible
+  // at tile_K=128 and needs tile_K<=64 (SGEMM_TILE_K_MULT=2).
   constexpr uint32_t tile_payload_bytes = 4 * 1024;
   const uint32_t b_bitmap_skew_regs = sparse_a ? 16 : 0;
   const uint32_t b_tile_align_regs = sparse_a ? 16 : 0;
@@ -1131,6 +1141,11 @@ void cleanup() {
     if (kernel)  vx_kernel_release(kernel);
     if (module_) vx_module_release(module_);
     if (queue)   vx_queue_release(queue);
+    // Emit the device performance counters (--perf=<class>) before closing, as
+    // every other tensor app does. Without this the app reports only its own
+    // "Kernel body cycles" metric, which is not the whole-program cycle count
+    // the WGMMA/WMMA comparisons are measured on.
+    vx_dump_perf(device, stdout);
     vx_dev_close(device);
   }
 }
@@ -1455,12 +1470,19 @@ int main(int argc, char *argv[]) {
   
   // Fill C with a constant stride of 0x8000 in bit-pattern space
   static_assert(sizeof(otype_t) == sizeof(uint32_t), "C pattern fill assumes 32-bit output type");
+  // With C == 0 the test computes D = A*B and cannot distinguish a correctly
+  // accumulated C from one that was silently dropped -- which is exactly how
+  // the null-C latching defect stayed invisible. Build with -DSGEMM_NONZERO_C
+  // to fill C with a varying pattern and actually exercise D = A*B + C.
   for (uint32_t i = 0; i < sizeC; ++i) {
-    // uint32_t bits = 0x43800000 + (i * 0x8000); // start at 256.0f, step in 0x8000 increments
     otype_t tmp;
-    uint32_t zero = 0x0;
-    std::memcpy(&tmp, &zero, sizeof(tmp));  // bitwise copy, no conversion
-    h_C[i] = zero;
+#ifdef SGEMM_NONZERO_C
+    uint32_t bits = 0x43800000 + (i * 0x8000); // start at 256.0f, step in 0x8000 increments
+#else
+    uint32_t bits = 0x0;
+#endif
+    std::memcpy(&tmp, &bits, sizeof(tmp));  // bitwise copy, no conversion
+    h_C[i] = tmp;
   }
 
   std::cout << "Matrix A:" << std::endl;

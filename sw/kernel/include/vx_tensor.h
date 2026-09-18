@@ -1185,6 +1185,44 @@ public:
     uint8_t sparse;
   } mma_cfg_t;
 
+  // MMA_OP descriptor ABI (custom-0, funct3=3, funct7=2).
+  //
+  // One MMA_OP covers one 32x32xK output tile. rs1/rs2 are each a warp-gathered
+  // vector (vx_wgather) whose lanes are read by VX_tcu_op_core as follows:
+  //
+  //   rs1[0] A tile base      rs2[0] A bitmap base (sparse only, else 0)
+  //   rs1[1] B tile base      rs2[1] B bitmap base (sparse only, else 0)
+  //   rs1[2] C tile base      rs2[2] tx-barrier id
+  //   rs1[3] D tile base      rs2[3] packed config word, laid out below
+  //
+  //   rs2[3] bit layout:
+  //     [31:24] K          8 bits  -- NO hardware range check. K >= 256 wraps
+  //                                   silently (256 encodes as 0). This is why
+  //                                   K must be chunked across several ops.
+  //     [23:18] a_blocks   6 bits  -- compressed A block count (sparse only)
+  //     [17:12] b_blocks   6 bits  -- compressed B block count (sparse only)
+  //     [11: 8] fmt_d      4 bits  -- output format id
+  //     [ 7: 4] fmt_s      4 bits  -- input format id
+  //     [ 3: 2] sparsity   2 bits  -- 0 dense, 1 uncompressed-A x compressed-B,
+  //                                   2 compressed x compressed
+  //     [    1] init              -- load the accumulator from C this op
+  //     [    0] flush             -- write the accumulator out to D this op
+  //
+  // Constraints the hardware assumes and does not all check:
+  //
+  //  * A, B and C must be LMEM-resident. A global-memory operand makes the
+  //    dcache coalescer return partial-mask responses, the engine's block
+  //    accounting never completes, and it deadlocks. VX_tcu_op_core asserts
+  //    this per lane. D is written to global memory and is exempt.
+  //  * fmt_s/fmt_d are 4 bits but TCU_FMT_WIDTH is 5 (VX_tcu_pkg.sv). Every
+  //    integer id truncates into a float id -- U8 (18) aliases FP16 (2)
+  //    exactly -- and the RTL's own TCU_I8_ID/TCU_I32_ID case labels are
+  //    unreachable against a 4-bit selector. Only ids < 16 are usable until
+  //    the field is widened.
+  //  * A C base of 0 means "no C"; the accumulator is zero-initialized instead.
+  //  * init/flush amortize across K: set init on the first k-chunk of an output
+  //    tile, flush on the last, and neither in between so the accumulator stays
+  //    resident.
   inline __attribute__((always_inline)) void mma_op(uintptr_t rs1_val,
                                                     uintptr_t rs2_val)
   {

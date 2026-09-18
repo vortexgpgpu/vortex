@@ -123,6 +123,23 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
 #define SGEMM_TILE_K_MULT 2
 #endif
   static constexpr uint32_t tile_K = 16 * i_ratio * SGEMM_TILE_K_MULT;
+  // The MMA_OP descriptor carries K in rs2[3][31:24] -- 8 bits, no hardware
+  // range check. curr_k = min(k_remaining, tile_K), so tile_K bounds it; a
+  // tile_K of 256 would encode as K=0 and silently compute nothing.
+  static_assert(tile_K <= 255,
+                "tile_K exceeds the descriptor's 8-bit K field; lower SGEMM_TILE_K_MULT");
+
+  // The descriptor carries fmt_d in rs2[3][11:8] and fmt_s in rs2[3][7:4] --
+  // 4 bits each, against TCU_FMT_WIDTH == 5 ids (VX_tcu_pkg.sv). Every integer
+  // id (I32=16, I8=17, U8=18, I4=19, U4=20) truncates into a float id: U8
+  // aliases FP16 exactly, and the RTL's own TCU_I8_ID/TCU_U8_ID/TCU_I32_ID
+  // case labels become unreachable against a 4-bit selector, so the wrong
+  // element ratio and the wrong accumulate mode are chosen with no diagnostic.
+  // Reject at compile time until the descriptor field is widened.
+  static_assert(vt::ITYPE::id < 16,
+                "input format id does not fit the descriptor's 4-bit fmt_s field");
+  static_assert(vt::OTYPE::id < 16,
+                "output format id does not fit the descriptor's 4-bit fmt_d field");
   static constexpr uint32_t tiles_n = (N / tile_N);
   static constexpr uint32_t tiles_m = (M / tile_M);
   static constexpr uint32_t tiles_k = (K / tile_K);
@@ -352,7 +369,14 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
           if (is_dxa_warp) {
             // Post-rebase tx-barrier semantics: arm one expectation per DXA
             // issue in software before issuing; DXA only delivers done events.
-            load_bar[next_stage].expect_tx(kSparseA ? 4 : 3);
+            // C is staged once per output tile (on the first k-chunk), exactly
+            // as the dense path does: the op core requires every read operand
+            // LMEM-resident, so C cannot be handed to it as a global pointer.
+            const bool stage_c = (dense_iter == 0);
+            load_bar[next_stage].expect_tx((kSparseA ? 4 : 3) + (stage_c ? 1 : 0));
+            if (stage_c) {
+              vx_dxa_issue_2d_wg(kDescC, load_bar[next_stage].id(), C_lmem[next_stage], 0, tile_id);
+            }
             if constexpr (kSparseA) {
               const uint32_t a_bitmap_start = tile_row_idx * K + k_offset;
               vx_dxa_issue_1d_wg(kDescABitmap, load_bar[next_stage].id(), A_bitmap_lmem[next_stage], a_bitmap_start);
@@ -370,15 +394,17 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
           uintptr_t rs2_val = 0;
 
           if (is_dxa_warp) {
-            // init_flag=1 loads the accumulator's initial value from C, so
-            // point it at the host's zero-filled tile-packed C buffer (a null
-            // pointer reads DRAM poison at address 0).
-            const uintptr_t mma_C_addr = static_cast<uintptr_t>(arg->C_addr) +
-                static_cast<uintptr_t>(tile_id) * tileC_regs * sizeof(uint32_t);
+            // init_flag=1 loads the accumulator's initial value from C. Use the
+            // DXA-staged LMEM copy: this used to pass arg->C_addr directly,
+            // which is a global address and violates the engine's LMEM-residency
+            // contract -- the dcache coalescer then returns partial-mask
+            // responses and the engine deadlocks. (That in turn was a workaround
+            // for a null C pointer reading DRAM poison at address 0, which the
+            // null-C latching fix in VX_tcu_op_core now handles properly.)
             rs1_val = (uintptr_t)vx_wgather(
                       (size_t)(uintptr_t)A_lmem[next_stage],
                       (size_t)(uintptr_t)B_lmem[next_stage],
-                      (size_t)mma_C_addr,
+                      (size_t)(uintptr_t)C_lmem[next_stage],
                       (size_t)(uintptr_t)mma_D_addr);
             rs2_val = (uintptr_t)vx_wgather(
                       (size_t)(uintptr_t)A_bitmap_lmem[next_stage],
