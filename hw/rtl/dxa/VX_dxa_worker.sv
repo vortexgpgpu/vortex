@@ -197,6 +197,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .perf_gmem_span_cycles(perf_gmem_span_cycles),
     `endif
         .transfer_active    (transfer_active),
+        .transfer_start     (pipeline_start),
         .active_uuid        (active_uuid),
         .ag_valid           (ag_valid),
         .ag_ready           (ag_ready),
