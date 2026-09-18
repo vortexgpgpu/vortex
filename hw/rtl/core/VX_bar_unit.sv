@@ -325,6 +325,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
         assign gbar_bus_if.req_data  = 'x;
         assign gbar_bus_if.rsp_ready = 0;
 
+        `UNUSED_VAR (gbar_bus_if.req_ready)
         `UNUSED_VAR (gbar_enqueue_size_m1)
 
     end
