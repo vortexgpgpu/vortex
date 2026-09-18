@@ -262,10 +262,13 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         .ADDR_WIDTH  (LMEM_ADDR_WIDTH),
         .TAG_WIDTH   (LSU_TAG_WIDTH),
         .DMA_ENABLE  (LMEM_DMA_EN),
-`ifdef TCU_OP
-        // TCU ports preempt DMA (DXA) as well: TCU > DXA > LSU.
-        .DMA_DEFER_REQS (`VX_CFG_NUM_LSU_LANES),
-`endif
+        // Bank priority is DXA > TCU > LSU. The TCU block sits on ports
+        // [0, NUM_LSU_LANES) (see ADAPT_BASE above) so it preempts LSU, but
+        // DMA must keep priority over it: a running MMA issues an LMEM read
+        // every cycle, and deferring DMA to the TCU (DMA_DEFER_REQS) starves
+        // the DXA's staging writes unboundedly, deadlocking any kernel that
+        // overlaps staging with compute (caught by the DXA watchdog). DXA
+        // beats are bounded and gmem-paced, so the TCU only yields briefly.
         .DMA_TAG_WIDTH (LMEM_DMA_TAG_WIDTH),
         .AMO_ENABLE  (`VX_CFG_EXT_A_ENABLED),
         .OUT_BUF     (3)

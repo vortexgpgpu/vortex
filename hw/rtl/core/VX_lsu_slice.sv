@@ -113,9 +113,16 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                                                  || lane_is_om;
     `ifdef VX_CFG_LMEM_ENABLE
         // is local memory address
-        wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
-        wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) + `VX_CFG_XLEN'(1 << `VX_CFG_LMEM_LOG_SIZE)) >> MEM_ASHIFT);
-        assign mem_req_attr_struct[i].is_addr_local = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
+        // 64-bit arithmetic: base + size overflows XLEN when LMEM tops out
+        // at 2^32 (e.g. base 0xffff0000 with LMEM_LOG_SIZE=16), which made
+        // the end-of-range wrap to 0 and is_addr_local always false. When
+        // LMEM reaches the top of the block-address space the exclusive end
+        // does not fit in MEM_ADDRW bits either, so drop the upper bound.
+        localparam [63:0] LMEM_ADDR_END64 = (64'(`VX_MEM_LMEM_BASE_ADDR) + 64'(1 << `VX_CFG_LMEM_LOG_SIZE)) >> MEM_ASHIFT;
+        localparam LMEM_AT_ADDR_TOP = (LMEM_ADDR_END64 >= (64'd1 << MEM_ADDRW));
+        wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(64'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
+        wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'(LMEM_ADDR_END64);
+        assign mem_req_attr_struct[i].is_addr_local = (block_addr >= lmem_addr_start) && (LMEM_AT_ADDR_TOP || (block_addr < lmem_addr_end));
     `else
         assign mem_req_attr_struct[i].is_addr_local = 1'b0;
     `endif
