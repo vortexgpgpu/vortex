@@ -314,6 +314,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign per_block_lsu_mem_if[block_idx].req_ready = 1'b0;
         assign per_block_lsu_mem_if[block_idx].rsp_valid = 1'b0;
         assign per_block_lsu_mem_if[block_idx].rsp_data  = '0;
+        // "Only block 0 issues" is an assumption about the warp-to-issue-block
+        // mapping, not an invariant the hardware enforces. If an MMA_OP ever
+        // lands on another block it back-pressures forever, which presents as
+        // an unexplained hang. Name it instead.
+        `RUNTIME_ASSERT(~per_block_lsu_mem_if[block_idx].req_valid,
+            ("%t: *** %s: MMA_OP issued on TCU block %0d, but only block 0 is connected to memory; this would hang. Check the warp-to-issue-block mapping of the MMA-issuing warp.", $time, INSTANCE_ID, block_idx))
         `UNUSED_VAR (per_block_lsu_mem_if[block_idx].req_valid)
         `UNUSED_VAR (per_block_lsu_mem_if[block_idx].req_data)
         `UNUSED_VAR (per_block_lsu_mem_if[block_idx].rsp_ready)

@@ -151,6 +151,12 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     reg [`VX_CFG_XLEN-1:0]                      c_tile_addr;
     reg                                  c_tile_addr_valid;    // Is set to false when all C blocks have been requested
+    // Whether this op was issued with a null C pointer, latched once at accept.
+    // Must NOT be re-derived from c_tile_addr: that register is cleared as soon
+    // as the LAST C request issues, while its responses are still in flight, so
+    // any response-side test of (c_tile_addr == 0) silently zero-fills real C
+    // data at the tail of every tile.
+    reg                                  c_is_null_r;
     reg [$clog2(TCU_C_BLOCKS_IN_ACCU):0] c_blocks_requested;     // Requested to be fetched
     reg [$clog2(TCU_C_BLOCKS_IN_ACCU):0] c_blocks_loaded;        // Loaded but not accumulated
     reg [$clog2(TCU_C_BLOCKS_IN_ACCU):0] c_blocks_accumulated;   // Accumulated / loaded (once loaded they are directly accumulated)
@@ -231,7 +237,8 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             B_buffered         <= '0;
 
             c_tile_addr          <= '0;
-            c_tile_addr_valid    <= 1'b0; 
+            c_tile_addr_valid    <= 1'b0;
+            c_is_null_r          <= 1'b1;
             c_blocks_requested   <= '0;
             c_blocks_loaded      <= '0;
             c_blocks_accumulated <= '0;
@@ -326,6 +333,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 a_tile_addr <= (`VX_CFG_XLEN)'(a_tile_addr_imm);
                 b_tile_addr <= (`VX_CFG_XLEN)'(b_tile_addr_imm);
                 c_tile_addr <= (`VX_CFG_XLEN)'(c_tile_addr_imm);
+                c_is_null_r <= (c_tile_addr_imm == '0);
                 d_tile_addr <= (`VX_CFG_XLEN)'(d_tile_addr_imm);
 
                 a_bitmap_addr <= (`VX_CFG_XLEN)'(a_bitmap_addr_imm);
@@ -765,7 +773,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign req_rd_addr = grant_onehot[0] ? b_bitmap_addr : // Convenient for s1 case, not used in s2 case
                                    grant_onehot[1] ? a_tile_addr   :
                                    grant_onehot[2] ? b_tile_addr   :
-                                   c_tile_addr == '0 ? a_tile_addr : c_tile_addr; // If c_tile_addr is NULL, dont load it
+                                   c_is_null_r ? a_tile_addr : c_tile_addr; // If C is NULL, redirect the (discarded) read at A
 
 // MEMORY REQUEST HANDLING
 // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
@@ -773,7 +781,13 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     assign rd_rsp_fire = tcu_lsu_mem_if.rsp_valid && tcu_lsu_mem_if.rsp_ready;
 
-    assign rsp_matrix_id = tcu_lsu_mem_if.rsp_data.tag.uuid[MATRIX_ID_BITS-1:0];
+    // Read the matrix id back out of the field the request actually wrote:
+    // tag.value (see the request-side assignment below). tag.uuid collapses to
+    // UUID_WIDTH==1 whenever NDEBUG is set and SCOPE is not (VX_gpu_pkg.sv),
+    // i.e. in every non-debug build, so uuid[MATRIX_ID_BITS-1:0] read garbage
+    // there and no response was ever attributed to a matrix -- the engine
+    // stalled after its first read. Debug builds (UUID_WIDTH==44) masked it.
+    assign rsp_matrix_id = tcu_lsu_mem_if.rsp_data.tag.value[MATRIX_ID_BITS-1:0];
 
     // ---- Partial-response merging ----
     // The LSU adapter's response packer may split one request's lanes across
@@ -878,7 +892,7 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         //     assign C_feop_block = tcu_lsu_mem_if.rsp_data.data;
         // end
 
-    assign C_feop_block = c_tile_addr == '0 ? '0 : c_block_merged;
+    assign C_feop_block = c_is_null_r ? '0 : c_block_merged;
     // end
 
 // MEMORY RESPONSE HANDLING
@@ -1528,6 +1542,10 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
     wire req_seq_bit = |(req_seq_r & grant_onehot);
+    // tag.value must hold {req_seq_bit, grant_onehot} without truncation, and
+    // the response side recovers grant_onehot from value[MATRIX_ID_BITS-1:0].
+    `STATIC_ASSERT ((LSU_TAG_WIDTH - UUID_WIDTH) >= (MATRIX_ID_BITS + 1),
+        ("LSU tag id field too narrow to encode TCU matrix id + sequence bit"))
     assign tcu_lsu_mem_if.req_data.tag.value =
         (LSU_TAG_WIDTH - UUID_WIDTH)'(rd_req_valid ? {req_seq_bit, grant_onehot} : '0);
 
@@ -1593,12 +1611,16 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
         assign tcu_lsu_mem_if.req_data.addr[l] = word_addr;
 
-        always @(posedge clk) begin
-            if (~reset && rd_req_valid && ~is_lmem) begin
-                `TRACE(1, ("%t: [tcu_op_core]: ERROR: Address 0x%0h is not in LMEM (word_addr=0x%0h, block_addr=0x%0h, is_lmem=%b)\n", 
-                            $time, lane_byte_addr, word_addr, block_addr, is_lmem));
-            end
-        end
+        // The engine requires every read operand to be LMEM-resident. A non-LMEM
+        // operand used to emit a TRACE and proceed -- and TRACE compiles to
+        // nothing whenever DEBUG_LEVEL is 0, so in exactly the builds where it
+        // mattered the violation was silent. The dcache coalescer then returns
+        // partial-mask responses, the block accounting never completes, and the
+        // engine deadlocks with no diagnostic at all. Fail loudly instead.
+        // Gated on the lane mask: inactive lanes carry don't-care addresses.
+        `RUNTIME_ASSERT(~(rd_req_valid && tcu_lsu_mem_if.req_data.mask[l] && ~is_lmem),
+            ("%t: *** %s: TCU_OP read operand is not LMEM-resident: byte_addr=0x%0h word_addr=0x%0h block_addr=0x%0h lane=%0d",
+             $time, INSTANCE_ID, lane_byte_addr, word_addr, block_addr, l))
     end
 
     // TODO: In flushing, write back directly to GMEM
