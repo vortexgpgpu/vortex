@@ -82,7 +82,7 @@ VX_CFG_PLATFORM_CLOCK_RATE = 400
 
 [alu]
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
-VX_CFG_NUM_ALU_BLOCKS = 1
+VX_CFG_NUM_ALU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
 
 [sfu]
 VX_CFG_NUM_SFU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -90,7 +90,7 @@ VX_CFG_NUM_SFU_BLOCKS = 1
 
 [lsu]
 VX_CFG_NUM_LSU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
-VX_CFG_NUM_LSU_BLOCKS = 1
+VX_CFG_NUM_LSU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
 
 VX_CFG_LSU_LINE_SIZE = "expr: min($VX_CFG_NUM_LSU_LANES * ($VX_CFG_XLEN / 8), $VX_CFG_L1_LINE_SIZE)"
 VX_CFG_LSU_QUEUE_IN_SIZE = "expr: max(4, 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_LSU_LANES))"
@@ -107,7 +107,7 @@ VX_CFG_LSU_PENDING_SIZE = "expr: min(32, max(8, 2 * $VX_CFG_NUM_WARPS * ($VX_CFG
 VX_CFG_FPU_TYPE = "expr: ('STD' if $ASIC else 'DSP') if $SYNTHESIS else ('DPI' if $dpi_is_enabled else 'STD')"
 
 VX_CFG_NUM_FPU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
-VX_CFG_NUM_FPU_BLOCKS = 1
+VX_CFG_NUM_FPU_BLOCKS = "expr: $VX_CFG_ISSUE_WIDTH"
 VX_CFG_FPU_QUEUE_SIZE = "expr: 2 * ($VX_CFG_SIMD_WIDTH // $VX_CFG_NUM_FPU_LANES)"
 # Map the soft FPU (STD) mantissa multipliers onto DSP48: on for FPGA synth, off
 # for ASIC/sim (mirrors VX_CFG_TCU_USE_DSP). Single source of truth.
