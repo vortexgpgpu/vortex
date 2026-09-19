@@ -171,15 +171,25 @@ int main(int argc, char *argv[]) {
     std::cout << "TCU extension not supported!" << std::endl; return -1;
   }
 
-  uint64_t nt_q = 0, nw_q = 0, lmem_size = 0;
+  uint64_t nt_q = 0, nw_q = 0, lmem_size = 0, iw_q = 0;
   CHECK(vx_device_query(dev, VX_CAPS_NUM_THREADS,    &nt_q));
   CHECK(vx_device_query(dev, VX_CAPS_NUM_WARPS,      &nw_q));
   CHECK(vx_device_query(dev, VX_CAPS_LOCAL_MEM_SIZE, &lmem_size));
+  CHECK(vx_device_query(dev, VX_CAPS_ISSUE_WIDTH,    &iw_q));
   uint32_t num_threads = (uint32_t)nt_q, num_warps = (uint32_t)nw_q;
   if (num_threads != VX_CFG_NUM_THREADS) {
     std::cout << "Error: device threads (" << num_threads << ") != VX_CFG_NUM_THREADS="
               << VX_CFG_NUM_THREADS << std::endl; return -1;
   }
+
+  // Warps per CTA must equal ISSUE_WIDTH
+  uint32_t cta_warps = (uint32_t)iw_q;
+  if (cta_warps > num_warps) {
+    std::cout << "Error: ISSUE_WIDTH (" << cta_warps << ") exceeds the core's warp count ("
+              << num_warps << "), so a full warpgroup cannot be resident" << std::endl;
+    return -1;
+  }
+  const uint32_t req_Br = cta_warps * kQuantR;
 
   // Require clean divisibility
   auto round_up = [](uint32_t v, uint32_t m) { return ((v + m - 1) / m) * m; };
@@ -192,39 +202,45 @@ int main(int argc, char *argv[]) {
   // block_size_r steps by xtileM and block_size_c/head_dim_tile are rounded to
   // WGMMA quantum.
   auto lmem_for = [&](uint32_t r, uint32_t c, uint32_t dtile) -> uint64_t {
-    return (uint64_t)sizeof(input_t)  * ((uint64_t)r * d + 2ull * c * dtile + (uint64_t)r * c)
+    return (uint64_t)sizeof(input_t)  * ((uint64_t)r * d + (uint64_t)c * dtile + (uint64_t)r * c)
          + (uint64_t)sizeof(float)    * ((uint64_t)r * c + (uint64_t)r * d + 3ull * r);
   };
 
   uint32_t Br = 0, Bc = 0, dt = 0, occupancy = 0;
   uint64_t local_mem = 0;
   {
-    uint32_t r_start = r_override ? r_override
-                     : std::min(num_warps * kQuantR, round_up(std::min(N, num_warps * kQuantR), kQuantR));
-    if (r_start % kQuantR) {
-      std::cout << "Error: block_size_r " << r_start << " must be a multiple of xtileM="
-                << kQuantR << std::endl; return -1;
+    // block_size_r is pinned to one full warpgroup
+    if (r_override && r_override != req_Br) {
+      std::cout << "Error: block_size_r must be " << req_Br << " (ISSUE_WIDTH="
+                << cta_warps << " warps x xtileM=" << kQuantR
+                << "); a CTA narrower or wider than the warpgroup is not a valid"
+                   " WGMMA configuration" << std::endl;
+      return -1;
     }
-    for (uint32_t r = r_start; r >= kQuantR; r -= kQuantR) {
-      if (r / kQuantR > num_warps || N % r) continue;
-      uint32_t c = c_override ? c_override : std::max(kQuantC, round_up(num_threads, kQuantC));
-      if (c % kQuantC || N % c) continue;
+    const uint32_t r = req_Br;
+    if (N % r) {
+      std::cout << "Error: seq_len " << N << " is not a multiple of block_size_r "
+                << r << std::endl;
+      return -1;
+    }
+    uint32_t c = c_override ? c_override : std::max(kQuantC, round_up(num_threads, kQuantC));
+    if ((c % kQuantC) == 0 && (N % c) == 0) {
       for (uint32_t cand = d_override ? d_override : d; cand >= kQuantC; cand -= kQuantC) {
         if (d % cand) continue;
         uint64_t use = lmem_for(r, c, cand);
         if (use > lmem_size) { if (d_override) break; else continue; }
         Br = r; Bc = c; dt = cand; local_mem = use;
-        occupancy = std::min((uint32_t)std::max<uint64_t>(1, lmem_size / use), num_warps / (r / kQuantR));
+        occupancy = std::min((uint32_t)std::max<uint64_t>(1, lmem_size / use), num_warps / cta_warps);
         break;
       }
-      if (dt) break;
-      if (r_override) break;
     }
   }
   if (!dt) {
-    printf("Error: no (block_size_r, block_size_c, head_dim_tile) on the WGMMA quanta "
-           "(r step %u, c step %u) fits the LMEM budget (%llu bytes) for N=%u D=%u\n",
-           kQuantR, kQuantC, (unsigned long long)lmem_size, N, d);
+    printf("Error: with block_size_r pinned to %u (%u warps x xtileM=%u), no "
+           "(block_size_c, head_dim_tile) on the WGMMA quantum of %u fits the LMEM "
+           "budget (%llu bytes) for N=%u D=%u\n",
+           req_Br, cta_warps, kQuantR, kQuantC,
+           (unsigned long long)lmem_size, N, d);
     return -1;
   }
 

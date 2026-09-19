@@ -81,11 +81,14 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   const auto row0 = blockIdx.x * Br;
 
   // LMEM layout
+  //
+  // K and V share one dt*Bc buffer. They are never live at the same time,
+  // so alias them.
   auto lm       = __local_mem();
   auto local_Q  = reinterpret_cast<input_t*>(lm);
   auto local_K  = local_Q + Br * head_dim;
-  auto local_V  = local_K + dt * Bc;
-  auto local_P  = local_V + Bc * dt;                              // holds packed P (input_t)
+  auto local_V  = local_K;                                        // aliased
+  auto local_P  = local_K + dt * Bc;                              // holds packed P (input_t)
   auto local_S  = reinterpret_cast<output_t*>(local_P + Br * Bc); // holds S (output_t)
   auto local_O  = local_S + Br * Bc;
   auto local_m  = local_O + Br * head_dim;
