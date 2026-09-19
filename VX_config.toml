@@ -249,8 +249,9 @@ VX_CFG_L3_NUM_BANKS = "expr: pow(2, clog2(min($VX_CFG_L3_NUM_REQS, 16)))"
 VX_CFG_L3_MEM_PORTS = "expr: min($VX_CFG_L3_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS) if $VX_CFG_L3_ENABLE else min($VX_CFG_L3_NUM_REQS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS)"
 
 [lmem]
-VX_CFG_LMEM_LOG_SIZE = 14
+lmem_bytes_per_bank = 2048
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
+VX_CFG_LMEM_LOG_SIZE = "expr: clog2($VX_CFG_LMEM_NUM_BANKS * $lmem_bytes_per_bank)"
 
 [tcu]
 # string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'; TFR is the universal default. On
