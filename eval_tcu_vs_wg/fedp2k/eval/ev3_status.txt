@@ -1,0 +1,4 @@
+[03:14:51] START A_sgemm_tcu (sgemm_tcu)
+[03:18:16] START B_sgemm_tcu_wg_dxa (sgemm_tcu_wg_dxa)
+[03:21:59] START C_sgemm_tcu_op (sgemm_tcu_op)
+[03:24:53] EVAL-DONE ev3

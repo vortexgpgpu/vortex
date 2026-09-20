@@ -4,6 +4,12 @@
 # One app at a time -- concurrent builds share the same tree and silently
 # produce mixed binaries. Every app's binary and the driver library are deleted
 # first, so a stale artifact can never be mistaken for a result.
+#
+# Kernel self-timing is OFF in all three, or the comparison is not fair: the
+# instrumentation costs two vx_wsync warp-pipeline flushes per block, so its
+# price scales with a kernel's block count (A runs 64 blocks, C runs far
+# fewer). A is off by default now (PROFILE_ENABLE undefined), B has none, and
+# C needs -DSGEMM_NO_KERNEL_METRICS.
 set -u
 TAG=${1:-ev}
 BUILD=~/dev/vortex_spg/build
@@ -49,6 +55,6 @@ run_one () {
 # A: baseline TCU (mma), B: baseline TCU + WGMMA + DXA, C: TCU_OP outer product
 run_one A_sgemm_tcu        sgemm_tcu        ""
 run_one B_sgemm_tcu_wg_dxa sgemm_tcu_wg_dxa ""
-run_one C_sgemm_tcu_op     sgemm_tcu_op     "-DTCU_OP -DVX_CFG_EXT_DXA_ENABLE -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=128"
+run_one C_sgemm_tcu_op     sgemm_tcu_op     "-DTCU_OP -DSGEMM_NO_KERNEL_METRICS -DVX_CFG_EXT_DXA_ENABLE -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=128"
 
 echo "[$(date +%H:%M:%S)] EVAL-DONE $TAG" | tee -a $OUT/${TAG}_status.txt

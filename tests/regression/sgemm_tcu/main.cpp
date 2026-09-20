@@ -546,8 +546,9 @@ vx_device_h device = nullptr;
 vx_buffer_h A_buffer = nullptr;
 vx_buffer_h B_buffer = nullptr;
 vx_buffer_h C_buffer = nullptr;
+#ifdef PROFILE_ENABLE
 vx_buffer_h cycles_buffer = nullptr;
-vx_buffer_h metrics_buffer = nullptr;
+#endif
 vx_queue_h  queue = nullptr;
 vx_module_h module_ = nullptr;
 vx_kernel_h kernel = nullptr;
@@ -590,8 +591,9 @@ void cleanup() {
     if (A_buffer) vx_buffer_release(A_buffer);
     if (B_buffer) vx_buffer_release(B_buffer);
     if (C_buffer) vx_buffer_release(C_buffer);
+#ifdef PROFILE_ENABLE
     if (cycles_buffer) vx_buffer_release(cycles_buffer);
-    if (metrics_buffer) vx_buffer_release(metrics_buffer);
+#endif
     if (kernel)  vx_kernel_release(kernel);
     if (module_) vx_module_release(module_);
     if (queue)   vx_queue_release(queue);
@@ -650,10 +652,8 @@ int main(int argc, char *argv[]) {
   size_t sizeA = M * K;
   size_t sizeB = K * N;
   size_t sizeC = M * N;
-  constexpr size_t metrics_size = 2;
   uint32_t grid_dim[2]  = {N / cfg::tileN, M / cfg::tileM};
   uint32_t block_dim[2] = {(uint32_t)NT, 1};
-  uint32_t num_blocks = grid_dim[0] * grid_dim[1];
 
   std::cout << "input data type: " << vt::ITYPE::name << " (id=" << vt::ITYPE::id << ")" << std::endl;
   std::cout << "output data type: " << vt::OTYPE::name << " (id=" << vt::OTYPE::id << ")" << std::endl;
@@ -676,10 +676,11 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_buffer_create(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_buffer_address(C_buffer, &kernel_arg.C_addr));
 
-  RT_CHECK(vx_buffer_create(device, num_blocks * 2 * sizeof(uint64_t), VX_MEM_WRITE, &cycles_buffer));
+#ifdef PROFILE_ENABLE
+  uint32_t num_blocks = grid_dim[0] * grid_dim[1];
+  RT_CHECK(vx_buffer_create(device, num_blocks * sizeof(uint32_t), VX_MEM_WRITE, &cycles_buffer));
   RT_CHECK(vx_buffer_address(cycles_buffer, &kernel_arg.cycles_addr));
-  RT_CHECK(vx_buffer_create(device, metrics_size * sizeof(uint64_t), VX_MEM_READ_WRITE, &metrics_buffer));
-  RT_CHECK(vx_buffer_address(metrics_buffer, &kernel_arg.metrics_addr));
+#endif
 
   std::cout << "A_addr=0x" << std::hex << kernel_arg.A_addr << std::endl;
   std::cout << "B_addr=0x" << std::hex << kernel_arg.B_addr << std::endl;
@@ -689,7 +690,6 @@ int main(int argc, char *argv[]) {
   // generate source data
   std::vector<itype_t> h_A(sizeA);
   std::vector<itype_t> h_B(sizeB);
-  std::vector<uint64_t> h_metrics(metrics_size, 0);
   for (uint32_t i = 0; i < sizeA; ++i) {
     h_A[i] = generate_A_value<vt::ITYPE>();
   }
@@ -721,19 +721,15 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  {
-    std::cout << "upload metrics buffer" << std::endl;
-    RT_CHECK(vx_enqueue_write(queue, metrics_buffer, 0, h_metrics.data(),
-                              metrics_size * sizeof(uint64_t), 0, nullptr, nullptr));
-  }
-
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
 
   // Host result buffers — must outlive the async reads enqueued below.
   std::vector<otype_t> h_C(sizeC);
-  std::vector<uint64_t> h_cycles(num_blocks * 2);
+#ifdef PROFILE_ENABLE
+  std::vector<uint32_t> h_cycles(num_blocks);
+#endif
 
   // launch args are constant across repeats — args passed as a host blob (UVA)
   vx_launch_info_t li = {};
@@ -768,13 +764,19 @@ int main(int argc, char *argv[]) {
     vx_event_h read_ev = nullptr;
     RT_CHECK(vx_enqueue_read(queue, h_C.data(), C_buffer, 0,
                              sizeC * sizeof(otype_t), 1, &launch_ev, &read_ev));
+#ifdef PROFILE_ENABLE
     vx_event_h cyc_ev = nullptr;
     RT_CHECK(vx_enqueue_read(queue, h_cycles.data(), cycles_buffer, 0,
-                             h_cycles.size() * sizeof(uint64_t), 1, &read_ev, &cyc_ev));
+                             num_blocks * sizeof(uint32_t), 1, &read_ev, &cyc_ev));
+#endif
 
     std::cout << "[iter " << iter << "] wait for completion" << std::endl;
+#ifdef PROFILE_ENABLE
     RT_CHECK(vx_event_wait_value(cyc_ev, 1, VX_TIMEOUT_INFINITE));
     vx_event_release(cyc_ev);
+#else
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+#endif
     vx_event_release(read_ev);
     vx_event_release(launch_ev);
 
@@ -782,21 +784,16 @@ int main(int argc, char *argv[]) {
     double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
     printf("[iter %u] Elapsed time: %lg ms\n", iter, elapsed);
 
-    // report TCU cycle counts (per-block body start/end pairs)
+#ifdef PROFILE_ENABLE
+    // report TCU cycle counts
     {
-      uint64_t first_body_cycle = ~uint64_t{0};
-      uint64_t last_body_cycle = 0;
-      uint64_t max_block_cycles = 0;
-      for (uint32_t i = 0; i < num_blocks; ++i) {
-        uint64_t start = h_cycles[2 * i + 0];
-        uint64_t end = h_cycles[2 * i + 1];
-        first_body_cycle = std::min(first_body_cycle, start);
-        last_body_cycle = std::max(last_body_cycle, end);
-        max_block_cycles = std::max(max_block_cycles, end - start);
+      uint32_t max_cycles = 0;
+      for (auto c : h_cycles) {
+        max_cycles = std::max(max_cycles, c);
       }
-      printf("[iter %u] TCU_CYCLES: max-block=%lu, total-body=%lu (across %u blocks)\n",
-             iter, max_block_cycles, last_body_cycle - first_body_cycle, num_blocks);
+      printf("[iter %u] TCU_CYCLES: max=%u (across %u blocks)\n", iter, max_cycles, num_blocks);
     }
+#endif
 
     std::cout << "[iter " << iter << "] verify result" << std::endl;
     int iter_errors = 0;
@@ -813,17 +810,6 @@ int main(int argc, char *argv[]) {
     if (xr > 1) {
       vx_device_dump_perf(device, stdout);
     }
-  }
-
-  {
-    std::cout << "download metrics buffer" << std::endl;
-    vx_event_h m_ev = nullptr;
-    RT_CHECK(vx_enqueue_read(queue, h_metrics.data(), metrics_buffer, 0,
-                             metrics_size * sizeof(uint64_t), 0, nullptr, &m_ev));
-    RT_CHECK(vx_event_wait_value(m_ev, 1, VX_TIMEOUT_INFINITE));
-    vx_event_release(m_ev);
-    std::cout << "Kernel body cycles: " << h_metrics[0] << std::endl;
-    std::cout << "Kernel body instructions: " << h_metrics[1] << std::endl;
   }
 
   std::cout << "cleanup" << std::endl;
