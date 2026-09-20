@@ -39,6 +39,13 @@ protected:
   void on_reset();
 
 private:
+  // RTL holds completed global arrivals in a depth-VX_CFG_NUM_BARRIERS queue
+  // that drains at most one entry per cycle onto the gbar bus. Schedule each
+  // send on its own cycle so back-to-back completions serialize here too.
+  uint64_t gbar_send_next_;
+
+  void gbar_send(uint32_t bar_id, uint32_t count);
+
   Core*       core_;
   Scheduler*  scheduler_;
   std::vector<warp_barrier_t> barriers_;
