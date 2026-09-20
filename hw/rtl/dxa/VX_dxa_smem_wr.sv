@@ -764,7 +764,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Only the low SMEM_ADDR_WIDTH+SMEM_OFF_W bits of smem_stride are used.
     `UNUSED_VAR (smem_stride)
     // per_lane_stride_bytes is LMEM-bounded; only the low DXA_SMEM_ADDR_W bits feed fb_byte_addr_r.
-    `UNUSED_VAR (per_lane_stride_bytes[15:DXA_SMEM_ADDR_W])
+    // Wide LMEM configurations consume the whole field, leaving no high bits to tag.
+    if (DXA_SMEM_ADDR_W < 16) begin : g_stride_hi_unused
+        `UNUSED_VAR (per_lane_stride_bytes[15:DXA_SMEM_ADDR_W])
+    end
 
     assign smem_wr_valid   = mc_write_valid;
     assign smem_wr_addr    = is_multicast ? replay_addr : base_word_addr;
