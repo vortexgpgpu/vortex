@@ -212,7 +212,7 @@ int main(int argc, char *argv[]) {
   // block_size_r steps by xtileM and block_size_c/head_dim_tile are rounded to
   // UMMA quantum.
   auto lmem_for = [&](uint32_t r, uint32_t c, uint32_t dtile) -> uint64_t {
-    return (uint64_t)sizeof(input_t)  * ((uint64_t)r * d + 2ull * c * dtile + (uint64_t)r * c)
+    return (uint64_t)sizeof(input_t)  * ((uint64_t)r * d + (uint64_t)c * dtile + (uint64_t)r * c)
          + (uint64_t)sizeof(float)    * ((uint64_t)r * c + (uint64_t)r * d + 3ull * r);
   };
 
