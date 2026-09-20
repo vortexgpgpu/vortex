@@ -250,8 +250,12 @@ VX_CFG_L3_MEM_PORTS = "expr: min($VX_CFG_L3_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_N
 
 [lmem]
 lmem_bytes_per_bank = 2048
+# Narrow cores must keep a usable shared-memory window: scaling capacity with
+# bank count alone drops NT=1 to 2KB, below what CTAs that fit every other
+# configuration need.
+lmem_min_bytes = 8192
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
-VX_CFG_LMEM_LOG_SIZE = "expr: clog2($VX_CFG_LMEM_NUM_BANKS * $lmem_bytes_per_bank)"
+VX_CFG_LMEM_LOG_SIZE = "expr: clog2(max($lmem_min_bytes, $VX_CFG_LMEM_NUM_BANKS * $lmem_bytes_per_bank))"
 
 [tcu]
 # string enum: 'DPI'|'DSP'|'BHF'|'TFR'|'FPNEW'; TFR is the universal default. On
