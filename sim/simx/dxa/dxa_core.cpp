@@ -626,6 +626,16 @@ private:
     // emitted as LMEM_PORTS_PER_CORE same-cycle block writes, one per row
     // half on its own LocalMem input port. A row narrower than a block
     // (small NT) bounds the per-beat gather instead.
+
+    // A banked-row write is committed atomically, byte enables aside, so a row is
+    // never half-written. The row spans LMEM_PORTS_PER_CORE channels that fill
+    // independently, so gate the beat on the whole group being ready instead of
+    // stranding the half already sent.
+    for (uint32_t p = 0; p < DxaCore::LMEM_PORTS_PER_CORE; ++p) {
+      if (simobject_->lmem_req_out.at(socket_local_cid * DxaCore::LMEM_PORTS_PER_CORE + p).full())
+        return;
+    }
+
     constexpr uint64_t kRowMask = ~uint64_t(DxaCore::LMEM_ROW_SIZE - 1);
     uint64_t beat_row = UINT64_MAX;
 
@@ -745,7 +755,12 @@ private:
 
       lmem_ch.send(req);
       ++w.writes_emitted;
-      ++perf_stats_.lmem_writes;
+      // Count write transactions, not port requests: one per banked-row beat.
+      // A beat spans LMEM_PORTS_PER_CORE ports of the same row, so only its
+      // first emission is counted.
+      if (0 == emitted) {
+        ++perf_stats_.lmem_writes;
+      }
 
       // Advance scatter cursor (to first ungathered element); then multicast
       // cursor; then release the slot.
