@@ -197,14 +197,16 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // per-warp inside shared memory so LMEM detection is uniform across
     // lanes; compute once from the base address.
 `ifdef VX_CFG_LMEM_ENABLE
-    wire [LSU_ADDR_WIDTH-1:0] lmem_addr_lo =
+    // Equality on the word-address bits above the window: the base is asserted
+    // aligned to the capacity, so the prefix compare is exact and needs no end
+    // address -- which is not representable when the window ends at the top of
+    // the address space.
+    localparam LMEM_WORD_LSB = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
+    localparam [LSU_ADDR_WIDTH-1:0] LMEM_WORD_BASE =
         LSU_ADDR_WIDTH'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> `CLOG2(LSU_WORD_SIZE));
-    wire [LSU_ADDR_WIDTH-1:0] lmem_addr_hi =
-        LSU_ADDR_WIDTH'((`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR)
-                       + `VX_CFG_XLEN'(1 << `VX_CFG_LMEM_LOG_SIZE))
-                       >> `CLOG2(LSU_WORD_SIZE));
-    wire base_is_local = (base_word_addr >= lmem_addr_lo)
-                      && (base_word_addr <  lmem_addr_hi);
+    `STATIC_ASSERT (LSU_ADDR_WIDTH > LMEM_WORD_LSB, ("LMEM window wider than the word address space"))
+    wire base_is_local = (base_word_addr[LSU_ADDR_WIDTH-1:LMEM_WORD_LSB]
+                       == LMEM_WORD_BASE[LSU_ADDR_WIDTH-1:LMEM_WORD_LSB]);
 `else
     wire base_is_local = 1'b0;
 `endif
