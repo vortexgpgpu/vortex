@@ -28,6 +28,7 @@
 #   [CLOCK_FREQ=800]
 #   [DELAY_UNC=0.02]
 #   [DELAY_IO=0.05]
+#   [DFF_DONT_USE="<cell_glob> ..."]
 #   [ABC_DRIVER_CELL=<lib_cell>] [ABC_LOAD=<ff>]
 #   [YOSYS_FLATTEN=1]
 #   [YOSYS_SHARE=1]
@@ -76,6 +77,7 @@ RUN_STA="${RUN_STA:-0}"
 CLOCK_FREQ="${CLOCK_FREQ:-800}"
 DELAY_UNC="${DELAY_UNC:-0.02}"
 DELAY_IO="${DELAY_IO:-0.05}"
+DFF_DONT_USE="${DFF_DONT_USE:-}"
 ABC_DRIVER_CELL="${ABC_DRIVER_CELL:-}"
 ABC_LOAD="${ABC_LOAD:-}"
 YOSYS_FLATTEN="${YOSYS_FLATTEN:-1}"
@@ -256,7 +258,22 @@ log "Writing $YS"
   printf "write_json %q\n" "$JOUT"
 
   if [[ "$RUN_MAP" == "1" ]]; then
-    printf "dfflibmap -liberty %q\n" "$LIB_TGT"
+    # Flop cell selection is the single largest area term (flops are ~32% of
+    # this design), and dfflibmap picks one cell per FF type by its own cost
+    # model. DFF_DONT_USE withholds cells whose selection costs area for no
+    # timing: ASAP7 carries a non-inverting flop only at x4 drive, so yosys
+    # 0.69 -- which prefers non-inverting cells where 0.57 took the cheapest --
+    # mapped all 129564 flops to DFFHQx4 (0.3645) instead of DFFHQNx1 (0.2916),
+    # +25% sequential area with Fmax slightly WORSE.
+    #
+    # %s, not %q: these are globs, and %q escapes the asterisks
+    # (\*DFFHQx4\*), which yosys then matches literally and never applies.
+    # Values are whitespace-split above, so no token can carry a space.
+    dff_dont_use=""
+    for c in $DFF_DONT_USE; do
+      dff_dont_use+=" -dont_use $c"
+    done
+    printf "dfflibmap%s -liberty %q\n" "$dff_dont_use" "$LIB_TGT"
     # Bounded ABC script: yosys's default -liberty script minus its sequential
     # passes (&fraig; scorr; dc2; dretime; retime; &dch). Two reasons, both
     # load-bearing:
@@ -284,6 +301,13 @@ log "Writing $YS"
     else
       printf "abc -markgroups -D %q -liberty %q -script %q\n" "$ABC_PERIOD" "$LIB_TGT" "$OUT_DIR/abc_map.script"
     fi
+    # Drop what mapping left behind before anything measures or reads the
+    # netlist. Without it the gate reports dead cells as area, and the written
+    # netlist carries ~129 undriven `assign w = 'hx` wires -- sv2v function
+    # scopes that survive as debris. OpenSTA's Verilog reader rejects those
+    # outright once Yosys marks them `signed` (0.69 does, 0.57 did not), which
+    # is how a missing clean read as a Yosys incompatibility.
+    printf "opt_clean -purge\n"
     printf "tee -o %q stat -liberty %q -top %q -width -tech cmos\n" "$RPT_DIR/stat_lib.rpt" "$LIB_TGT" "$TOP"
     printf "write_verilog -noattr -noexpr %q\n" "$NET_POST"
   fi
@@ -294,6 +318,30 @@ stamp "gen-ys"
 log "$YOSYS -q -s $YS -l $YLOG"
 "$YOSYS" -q -s "$YS" -l "$YLOG"
 stamp "yosys"
+
+# -------- strip net signedness for OpenSTA --------
+# OpenSTA's Verilog grammar has no `signed` keyword, so ONE signed net
+# declaration makes it reject the whole netlist:
+#   Error: 171 <netlist> line N, syntax error
+# and the DUT reports no timing or power at all. Yosys preserves signedness on
+# every wire it writes as of 0.69; 0.57 dropped it, which is why this surfaced
+# with the toolchain bump rather than with the RTL.
+#
+# Signedness is information-free in a MAPPED netlist -- these are bit vectors
+# between library cells, and nothing in timing or power interprets them -- so
+# removing the qualifier cannot change what STA computes.
+#
+# This is a WORKAROUND, not a fix (AGENTS.md S3): the defect is OpenSTA's
+# reader, which should accept and ignore `signed`. Follow-up is an upstream
+# patch there, after which this block goes away.
+if [[ "$RUN_MAP" == "1" && -f "$NET_POST" ]]; then
+  n=$(grep -cE '^[[:space:]]*(wire|reg|input|output|inout)[[:space:]]+signed[[:space:]]' "$NET_POST" || true)
+  if [[ "$n" != "0" ]]; then
+    sed -i -E 's/^([[:space:]]*(wire|reg|input|output|inout))[[:space:]]+signed[[:space:]]+/\1 /' "$NET_POST"
+    log "stripped 'signed' from $n net declarations (OpenSTA reader limitation)"
+  fi
+  stamp "strip-signed"
+fi
 
 # -------- run sram area estimation --------
 if [[ -n "$BB_MODULES" ]]; then
