@@ -36,6 +36,7 @@ public:
     uint64_t gmem_dedup     = 0;
     uint64_t lmem_writes    = 0;
     uint64_t total_latency  = 0;
+    uint64_t noslot_stalls  = 0;
 
     PerfStats& operator+=(const PerfStats& rhs) {
       transfers     += rhs.transfers;
@@ -43,6 +44,7 @@ public:
       gmem_dedup    += rhs.gmem_dedup;
       lmem_writes   += rhs.lmem_writes;
       total_latency += rhs.total_latency;
+      noslot_stalls += rhs.noslot_stalls;
       return *this;
     }
   };

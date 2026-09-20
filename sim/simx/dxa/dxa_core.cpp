@@ -545,11 +545,22 @@ private:
     // Find a free slot.
     uint32_t slot = UINT32_MAX;
     for (uint32_t s = 0; s < w.inflight.size(); ++s) {
-      if (!w.inflight[s].allocated) { slot = s; break; }
+      if (!w.inflight[s].allocated) {
+        slot = s;
+        break;
+      }
     }
-    if (slot == UINT32_MAX) return; // all slots in flight
 
     const LineWork& lw = w.work_list[w.ag_idx];
+
+    if (slot == UINT32_MAX) {
+      // All slots in flight. Out-of-bounds lines issue no read, so they are
+      // excluded: this counts only reads the slot pool actually held back.
+      if (!lw.oob) {
+        ++perf_stats_.noslot_stalls;
+      }
+      return;
+    }
 
     // OOB lines skip the GMEM request entirely; we synthesize an immediate
     // arrival (rsp data left null — smem_wr will use cfill).

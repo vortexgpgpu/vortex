@@ -764,6 +764,8 @@ VX_CSR_MPM_DXA_LMEM_WRITES  = 0xB06  # SMEM word writes issued
 VX_CSR_MPM_DXA_LMEM_WRITES_H  = 0xB86
 VX_CSR_MPM_DXA_GMEM_LT  = 0xB07  # total GMEM latency cycles (sum; avg = LT/TRANSFERS)
 VX_CSR_MPM_DXA_GMEM_LT_H  = 0xB87
+VX_CSR_MPM_DXA_NOSLOT_STALLS  = 0xB08  # cycles: read stalled with no free inflight slot
+VX_CSR_MPM_DXA_NOSLOT_STALLS_H  = 0xB88
 
 [csr_mpm_tcu]
 # PERF: WGMMA tile-buffer (per-core; summed across blocks)

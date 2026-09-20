@@ -313,6 +313,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [PERF_CTR_BITS-1:0] perf_gmem_dedup_r;
     reg [PERF_CTR_BITS-1:0] perf_lmem_writes_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_lt_r;
+    reg [PERF_CTR_BITS-1:0] perf_noslot_r;
     always @(posedge clk) begin
         if (reset) begin
             perf_transfers_r   <= '0;
@@ -320,7 +321,11 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             perf_gmem_dedup_r  <= '0;
             perf_lmem_writes_r <= '0;
             perf_gmem_lt_r     <= '0;
+            perf_noslot_r      <= '0;
         end else begin
+            if (stall_no_slot) begin
+                perf_noslot_r <= perf_noslot_r + PERF_CTR_BITS'(1);
+            end
             if (transfer_active && transfer_done) begin
                 perf_transfers_r   <= perf_transfers_r + PERF_CTR_BITS'(1);
                 perf_gmem_reads_r  <= perf_gmem_reads_r + PERF_CTR_BITS'(perf_gmem_reqs);
@@ -334,9 +339,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dxa_perf.gmem_dedup   = perf_gmem_dedup_r;
     assign dxa_perf.lmem_writes  = perf_lmem_writes_r;
     assign dxa_perf.gmem_latency = perf_gmem_lt_r;
-`endif
-
+    assign dxa_perf.noslot_stalls = perf_noslot_r;
+`else
     `UNUSED_VAR (stall_no_slot)
+`endif
 `ifndef DBG_TRACE_DXA
     `UNUSED_VAR (wr_done_count)
 `endif
