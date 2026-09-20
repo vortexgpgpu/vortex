@@ -495,11 +495,8 @@ tests:
     threads: [4, 16]
 - id: model_parity-wgmma-dxa
   check: model_parity
-  # Instructions match exactly; cycles diverge ~6% (RTL faster). The gap is
-  # insensitive to every issue/commit/execution-window mechanism the SimX
-  # timing model carries, which points at the DXA producer path's own
-  # timing. Tracked with its wgmma siblings as DXA-path follow-up.
-  known_issue: "SimX over-serializes the DXA-fed warp-group pipeline (instrs match; cycles ~6%)"
+  # Instructions match exactly; cycles agree within ~1.2%. The gap was ~6%
+  # (RTL faster) until the per-thread stacks were interleaved across a warp.
   via: blackbox
   app: sgemm_tcu_wg_dxa
   args: -m 128 -n 128 -k 64

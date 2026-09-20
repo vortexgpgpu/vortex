@@ -6,6 +6,7 @@
 #include <mem.h>
 #include <VX_config.h>
 #include <bitmanip.h>
+#include "stack_interleave.h"
 
 namespace {
 
@@ -913,7 +914,9 @@ vortex::Word DebugModule::read_program_memory(vortex::Word addr, size_t size) co
     }
     // Read the specified number of bytes
     uint8_t buffer[8] = {0};  // Max 8 bytes for 64-bit access
-    ram_->read(buffer, static_cast<uint64_t>(addr), size);
+    for (size_t i = 0; i < size && i < sizeof(buffer); ++i) {
+        ram_->read(&buffer[i], vortex::StackInterleave::map(uint64_t(addr) + i), 1);
+    }
     
     // Convert to Word based on size
     vortex::Word value = 0;
@@ -934,7 +937,9 @@ void DebugModule::write_program_memory(vortex::Word addr, vortex::Word value, si
     for (size_t i = 0; i < size && i < sizeof(vortex::Word); ++i) {
         buffer[i] = static_cast<uint8_t>((value >> (i * 8)) & 0xFF);
     }
-    ram_->write(buffer, static_cast<uint64_t>(addr), size);
+    for (size_t i = 0; i < size && i < sizeof(buffer); ++i) {
+        ram_->write(&buffer[i], vortex::StackInterleave::map(uint64_t(addr) + i), 1);
+    }
 }
 
 vortex::Word DebugModule::direct_read_register(uint16_t regaddr)
