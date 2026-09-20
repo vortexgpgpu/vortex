@@ -173,7 +173,10 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [$clog2(TCU_FEOP_STEPS):0] c_blk_idx;
     wire [C_BUF_SLOTS:0][`VX_CFG_NUM_THREADS-1:0][`VX_CFG_XLEN-1:0] C_feop_block;
 
+    // Tracked for the issue FSM's step accounting; only horizontal_steps and
+    // set_steps are read back.
     reg  [LG_TCU_FEOP_M_STEPS:0] vertical_steps;
+    `UNUSED_VAR (vertical_steps)
     reg  [LG_TCU_FEOP_N_STEPS:0] horizontal_steps;
     reg  [LG_TCU_FEOP_STEPS:0]   set_steps;
 
@@ -224,16 +227,23 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_FEOP_BLOCK_M_SIZE-1:0] a_step_valids_delayed;
     wire [TCU_FEOP_BLOCK_N_SIZE-1:0] b_step_valids_delayed;
 
+    // Elements per LSU block at the current format: i_ratio * NUM_LSU_LANES.
+    wire [31:0] window_elems;
+    reg [OFFSET_W-1:0] a_offset;
+    reg [OFFSET_W-1:0] b_offset;
+    wire last_set_in_block_a;
+    wire last_set_in_block_b;
+
+`ifndef VX_CFG_TCU_TYPE_TFR
+    // Operand-window state for the legacy datapath, which shifts the double
+    // buffers rather than indexing them (D2). Declared here because nothing on
+    // the TFR path drives or reads it.
     localparam int A_BUF_W = `VX_CFG_NUM_LSU_LANES * `VX_CFG_XLEN;
     localparam int B_BUF_W = `VX_CFG_NUM_LSU_LANES * `VX_CFG_XLEN;
     localparam int A_SET_W = TCU_TC_M_OP * `VX_CFG_XLEN;
     localparam int B_SET_W = TCU_TC_N_OP * `VX_CFG_XLEN;
-    // Elements per LSU block at the current format: i_ratio * NUM_LSU_LANES.
-    wire [31:0] window_elems;
     // Bit offset of an operand window into its double buffer.
     localparam WIN_SHIFT_W = $clog2(A_BUF_W * A_BUF_SLOTS) + 1;
-    reg [OFFSET_W-1:0] a_offset;
-    reg [OFFSET_W-1:0] b_offset;
     reg [A_SET_W-1:0] a_set_flat_compressed; // Only used in S1 case
     wire [A_SET_W-1:0] a_set_flat_processed;
 
@@ -241,11 +251,8 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [A_SET_W-1:0]               a_set_flat;
     wire [B_BUF_W * B_BUF_SLOTS-1:0] B_window;
     wire [B_SET_W-1:0]               b_set_flat;
-    wire last_set_in_block_a;
-    wire last_set_in_block_b;
 
     localparam int STEP_ELEM_CNT = TCU_FEOP_BLOCK_M_SIZE * TCU_FEOP_BLOCK_N_SIZE;
-`ifndef VX_CFG_TCU_TYPE_TFR
     wire [TCU_FEOP_BLOCK_M_SIZE-1:0][TCU_FEOP_BLOCK_N_SIZE-1:0][`VX_CFG_XLEN-1:0] write_data;
     wire [STEP_ELEM_CNT-1:0][`VX_CFG_XLEN-1:0] read_data;
 `else
@@ -332,6 +339,9 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // The descriptor's format field is 4 bits (see the kernel's static_asserts);
     // every format this datapath supports fits, so zero-extension is exact.
     wire [TCU_FMT_WIDTH-1:0] fmt_s5 = TCU_FMT_WIDTH'(fmt_s);
+    // The destination format is not consulted on this path: the accumulator
+    // always flushes fp32. Only the legacy FEOP and its accumulator read it.
+    `UNUSED_VAR (fmt_d)
 `endif
     reg [1:0]       sparsity; // 0: Dense x Dense, 1: Dense x Sparse, 2: Sparse x Sparse
 
@@ -1259,13 +1269,6 @@ module VX_tcu_op_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [WIN_WORDS-1:0][`VX_CFG_XLEN-1:0] b_words;
     assign a_words = {A_buffered[a_active_block[0]], A_buffered[~a_active_block[0]]};
     assign b_words = {B_buffered[b_active_block[0]], B_buffered[~b_active_block[0]]};
-
-    `UNUSED_VAR (A_window)
-    `UNUSED_VAR (B_window)
-    `UNUSED_VAR (a_set_flat)
-    `UNUSED_VAR (b_set_flat)
-    `UNUSED_VAR (a_set_flat_processed)
-    `UNUSED_VAR (a_set_flat_compressed)
 
     // A: one element per FEOP unit. Under S1 the compacted position's source
     // index comes from the sorter; A is dense in memory there. Under S2 A is

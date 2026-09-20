@@ -1065,18 +1065,24 @@ static constexpr uint32_t kDescC = 2;
 static constexpr uint32_t kDescABitmap = 3;
 static constexpr uint32_t kDescBBitmap = 4;
 
+// Dumping every matrix costs one line per row -- 512 lines at 128^3, which
+// buries the run. Off by default so the output matches the other sgemm tests;
+// -v brings it back for debugging.
+static bool verbose = false;
+
 // std::string last_build_options;
 
 static void show_usage() {
   std::cout << "Vortex Sgemm TCU Test." << std::endl;
-  std::cout << "Usage: [-m: m] [-n: N] [-k: K] [-s: Sparsity_mode] [-a: A_sparsity (0.0 - 1.0)] [-b: B_sparsity (0.0 - 1.0)] [-p: pruning_type] [-h: help]" << std::endl;
+  std::cout << "Usage: [-m: m] [-n: N] [-k: K] [-s: Sparsity_mode] [-a: A_sparsity (0.0 - 1.0)] [-b: B_sparsity (0.0 - 1.0)] [-p: pruning_type] [-v: verbose] [-h: help]" << std::endl;
   std::cout << "  -s  Sparsity Modes: 0: Dense x Dense   1: Dense x Sparse   2: Sparse x Sparse" << std::endl;
   std::cout << "  -p  Pruning Types: u: unstructured   c: checkered   n: B matrix 2:4 structured" << std::endl;
+  std::cout << "  -v  Verbose: dump the A/B/C/D matrices and tiling diagnostics" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "m:n:k:i:o:s:a:b:p:h")) != -1) {
+  while ((c = getopt(argc, argv, "m:n:k:i:o:s:a:b:p:vh")) != -1) {
     switch (c) {
     case 'm':
       xm = atoi(optarg);
@@ -1107,6 +1113,9 @@ static void parse_args(int argc, char **argv) {
         exit(-1);
       }
       std::cout << "Pruning type set to: " << pruning_type << std::endl;
+      break;
+    case 'v':
+      verbose = true;
       break;
     case 'h':
       show_usage();
@@ -1545,14 +1554,16 @@ int main(int argc, char *argv[]) {
     h_C[i] = tmp;
   }
 
-  std::cout << "Matrix A:" << std::endl;
-  print_2d_input_matrix(h_A, M, K);
+  if (verbose) {
+    std::cout << "Matrix A:" << std::endl;
+    print_2d_input_matrix(h_A, M, K);
 
-  std::cout << "Matrix B:" << std::endl;
-  print_2d_input_matrix(h_B, K, N);
+    std::cout << "Matrix B:" << std::endl;
+    print_2d_input_matrix(h_B, K, N);
 
-  std::cout << "Matrix C:" << std::endl;
-  print_2d_output_matrix(h_C, M, N, h_C);
+    std::cout << "Matrix C:" << std::endl;
+    print_2d_output_matrix(h_C, M, N, h_C);
+  }
   if (sparsity != 2) {
     h_A_packed = pack_A_colmajor_tiled32(h_A, M, K, 32, dxa_tile_k);
   }
@@ -1568,27 +1579,33 @@ int main(int argc, char *argv[]) {
   if (sparsity == 2) {
     h_A_compressed = pack_A_compressed_dense_slots(h_A, M, K, 32, dxa_tile_k);
 
-    std::cout << "Compressed A (dense-spaced tile slots, column-major nonzeros), count="
-              << h_A_compressed.size() << std::endl;
-    for (size_t i = 0; i < h_A_compressed.size(); ++i) {
-      printf("0x%04x ", static_cast<uint32_t>(h_A_compressed[i]));
+    if (verbose) {
+      std::cout << "Compressed A (dense-spaced tile slots, column-major nonzeros), count="
+                << h_A_compressed.size() << std::endl;
+      for (size_t i = 0; i < h_A_compressed.size(); ++i) {
+        printf("0x%04x ", static_cast<uint32_t>(h_A_compressed[i]));
+      }
+      printf("\n");
     }
-    printf("\n");
   }
   if (sparsity >= 1) {
     h_B_compressed = pack_B_compressed_dense_slots(h_B, K, N, dxa_tile_k, 32);
 
-    std::cout << "Compressed B "
-              << "(dense-spaced tile slots, row-major nonzeros), count="
-              << h_B_compressed.size() << std::endl;
-    for (size_t i = 0; i < h_B_compressed.size(); ++i) {
-      printf("0x%04x ", static_cast<uint32_t>(h_B_compressed[i]));
+    if (verbose) {
+      std::cout << "Compressed B "
+                << "(dense-spaced tile slots, row-major nonzeros), count="
+                << h_B_compressed.size() << std::endl;
+      for (size_t i = 0; i < h_B_compressed.size(); ++i) {
+        printf("0x%04x ", static_cast<uint32_t>(h_B_compressed[i]));
+      }
+      printf("\n");
     }
-    printf("\n");
   }
 
-  std::cout << "Max A tile blocks: " << kernel_arg.max_a_blocks << std::endl;
-  std::cout << "Max B tile blocks: " << kernel_arg.max_b_blocks << std::endl;
+  if (verbose) {
+    std::cout << "Max A tile blocks: " << kernel_arg.max_a_blocks << std::endl;
+    std::cout << "Max B tile blocks: " << kernel_arg.max_b_blocks << std::endl;
+  }
   if (sparsity >= 1) {
     const uint32_t dense_a_tile_bytes = 32 * dxa_tile_k * sizeof(itype_t);
     const uint32_t dense_b_tile_bytes = dxa_tile_k * 32 * sizeof(itype_t);
@@ -1765,8 +1782,10 @@ int main(int argc, char *argv[]) {
   std::cout << "Kernel body cycles: " << h_metrics[0] << std::endl;
   std::cout << "Kernel body instructions: " << h_metrics[1] << std::endl;
 
-  std::cout << "Matrix D:" << std::endl;
-  print_2d_output_matrix(h_D, M, N, h_C);
+  if (verbose) {
+    std::cout << "Matrix D:" << std::endl;
+    print_2d_output_matrix(h_D, M, N, h_C);
+  }
 
   // verify result
   std::cout << "verify result" << std::endl;

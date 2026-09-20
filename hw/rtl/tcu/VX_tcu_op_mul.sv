@@ -74,6 +74,8 @@ module VX_tcu_op_mul import VX_tcu_pkg::*; #(
         input logic [31:0]              w
     );
         unpack_t u;
+        // Narrow formats read only the low field of the word.
+        `UNUSED_VAR (w)
         u = '0;
         case (fmt)
             TCU_FP16_ID: begin

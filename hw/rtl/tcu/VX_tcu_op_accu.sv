@@ -47,6 +47,8 @@
 module VX_tcu_op_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter int BLOCK_M          = 2,
     parameter int BLOCK_N          = 16,
+    // Kept in the interface because the core sizes its address and valid
+    // pipelines from the same number; nothing inside this module reads it.
     parameter int XBAR_LATENCY     = 1,
     parameter int XBAR_QUEUE_DEPTH = 2,
     // A queue with more than this many entries withholds issue credit.
@@ -118,6 +120,8 @@ module VX_tcu_op_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Flush stages: entry, |sum+carry|, lzc, normalize, fuse-align, fuse-add, round.
     localparam int FLUSH_LATENCY = 7;
+    `UNUSED_PARAM (XBAR_LATENCY)
+    `UNUSED_PARAM (FLUSH_LATENCY)
 
     `STATIC_ASSERT (XBAR_INPUTS <= 32, ("tcu_op_accu: crossbar supports at most 32 inputs, got %0d", XBAR_INPUTS))
     `STATIC_ASSERT (PAD_W <= W, ("tcu_op_accu: TCU_OP_ACC_W too small for the magnitude and growth"))
@@ -282,11 +286,12 @@ module VX_tcu_op_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // reproduces the same corruption the decomposed network shows, on this very
     // topology -- which is how that order dependence was localised.
     wire xbar_busy = 1'b0;
-`ifdef SIMULATION
-    // Say which network is live. Several experiments were run believing this
-    // ifdef had selected the flat crossbar; nothing in the logs confirmed it.
-    initial $display("[tcu_op_accu] NETWORK=flat ARBITER=%s", FLAT_ARBITER);
-`endif
+    // Which network is live. Behind the trace level: several experiments were
+    // once run believing this ifdef had selected the flat crossbar, with nothing
+    // in the logs to confirm it.
+    initial begin
+        `TRACE(1, ("[tcu_op_accu] NETWORK=flat ARBITER=%s\n", FLAT_ARBITER))
+    end
     localparam `STRING FLAT_ARBITER = "R";
     VX_stream_xbar #(
         .NUM_INPUTS    (XBAR_INPUTS),
@@ -310,9 +315,9 @@ module VX_tcu_op_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     );
 `else
     wire xbar_busy;
-`ifdef SIMULATION
-    initial $display("[tcu_op_accu] NETWORK=decomposed");
-`endif
+    initial begin
+        `TRACE(1, ("[tcu_op_accu] NETWORK=decomposed\n"))
+    end
     VX_tcu_op_xbar #(
         .BLOCK_M       (BLOCK_M),
         .BLOCK_N       (BLOCK_N),
@@ -447,7 +452,9 @@ module VX_tcu_op_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         // 3:2 compression of {stored sum, stored carry, addend}.
         wire [W-1:0] csa_sum   = cur_sum ^ cur_carry ^ ac_addend[i];
         wire [W-1:0] csa_maj   = (cur_sum & cur_carry) | (cur_sum & ac_addend[i]) | (cur_carry & ac_addend[i]);
+        // The top bit of csa_maj is shifted out by construction.
         wire [W-1:0] csa_carry = {csa_maj[W-2:0], 1'b0};
+        `UNUSED_VAR (csa_maj)
 
         wire [W-1:0] new_sum   = ac_establish[i] ? (ac_is_c[i] ? W'(0) : ac_addend[i]) : csa_sum;
         wire [W-1:0] new_carry = ac_establish[i] ? W'(0) : csa_carry;
@@ -580,6 +587,8 @@ module VX_tcu_op_accu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
         wire [MAG_W-1:0] f4_mag;
         wire [EXP_W-1:0] f4_exp;
+        // Narrowed to FUSE_EXP_W at the fuse; both terms are fp32-scale there.
+        `UNUSED_VAR (f4_exp)
         wire f4_sign, f4_sticky, f4_nan, f4_inf, f4_isgn;
         wire [`VX_CFG_XLEN-1:0] f4_c;
         VX_pipe_register #(.DATAW (MAG_W + EXP_W + 5 + `VX_CFG_XLEN)) pipe_f4 (
