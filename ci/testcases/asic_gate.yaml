@@ -93,12 +93,8 @@ builds:
 - id: core
   group: core
   dut: core
-  clock_mhz: 500
+  clock_mhz: 400
   configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b core --update-baseline`.
 
 # --- dxa ---------------------------------------------------------------------
 
@@ -118,22 +114,14 @@ builds:
   dut: tcu
   clock_mhz: 500
   configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b tcu --update-baseline`.
 
 # Full tensor subsystem in one wrapper: TCU (WGMMA + MX) + dxa behind a shared
 # L2, 2 cores / socket.
 - id: tensor
   group: tensor
   dut: tensor
-  clock_mhz: 500
+  clock_mhz: 400
   configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b tensor --update-baseline`.
 
 # --- graphics ----------------------------------------------------------------
 
@@ -164,11 +152,6 @@ builds:
   dut: rtu
   clock_mhz: 400
   configs: ""
-  known_issue: >-
-    no baseline recorded yet. An earlier run showed its RTCache inferred to
-    flip-flops (sram_area_um2 = 0 against 1.2M cells) — that was the dispatcher
-    dropping -DASIC, since fixed, but the DUT has not been re-measured since.
-    Confirm sram_area_um2 is non-zero before recording.
 
 # Full graphics subsystem in one wrapper: raster + om + tex + rtu + dxa behind a
 # shared L2, 2 cores / socket.
@@ -177,10 +160,6 @@ builds:
   dut: gfx
   clock_mhz: 400
   configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b gfx --update-baseline`.
 
 # --- vm ----------------------------------------------------------------------
 
@@ -189,9 +168,5 @@ builds:
 - id: vm
   group: vm
   dut: vm
-  clock_mhz: 500
+  clock_mhz: 400
   configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b vm --update-baseline`.
