@@ -1,0 +1,389 @@
+<title>TCU_OP Design Review</title>
+<style>
+:root {
+  --bg: #f7f6f2;
+  --surface: #ffffff;
+  --surface2: #efede6;
+  --ink: #1f2328;
+  --ink-soft: #57606a;
+  --accent: #8a3ffc;
+  --accent-ink: #6929c4;
+  --good: #1a7f37;
+  --warn: #9a6700;
+  --bad: #cf222e;
+  --line: #d8d5cc;
+  --code-bg: #f2f0ea;
+  --chip-fixed: #dafbe1;
+  --chip-fixed-ink: #116329;
+  --chip-open: #ffebe9;
+  --chip-open-ink: #a40e26;
+  --chip-flaw: #fff8c5;
+  --chip-flaw-ink: #7d4e00;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161a;
+    --surface: #1c1f24;
+    --surface2: #22262c;
+    --ink: #e6e4df;
+    --ink-soft: #9aa3ad;
+    --accent: #a56eff;
+    --accent-ink: #be95ff;
+    --good: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --line: #30363d;
+    --code-bg: #22262c;
+    --chip-fixed: #12351c;
+    --chip-fixed-ink: #3fb950;
+    --chip-open: #3d1418;
+    --chip-open-ink: #ff7b72;
+    --chip-flaw: #3a2d00;
+    --chip-flaw-ink: #e3b341;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161a;
+  --surface: #1c1f24;
+  --surface2: #22262c;
+  --ink: #e6e4df;
+  --ink-soft: #9aa3ad;
+  --accent: #a56eff;
+  --accent-ink: #be95ff;
+  --good: #3fb950;
+  --warn: #d29922;
+  --bad: #f85149;
+  --line: #30363d;
+  --code-bg: #22262c;
+  --chip-fixed: #12351c;
+  --chip-fixed-ink: #3fb950;
+  --chip-open: #3d1418;
+  --chip-open-ink: #ff7b72;
+  --chip-flaw: #3a2d00;
+  --chip-flaw-ink: #e3b341;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.6 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  margin: 0;
+  padding: 0 16px;
+}
+main { max-width: 60rem; margin: 0 auto; padding-block: 2.5rem 5rem; }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .3rem; text-wrap: balance; }
+h2 { font-size: 1.35rem; margin: 2.6rem 0 .8rem; padding-top: 1.2rem; border-top: 1px solid var(--line); text-wrap: balance; }
+h3 { font-size: 1.05rem; margin: 1.8rem 0 .5rem; }
+p, li { max-width: 65ch; }
+.subtitle { color: var(--ink-soft); margin: 0 0 1.6rem; }
+code, pre { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .86em; }
+code { background: var(--code-bg); padding: .1em .35em; border-radius: 4px; }
+pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1rem; overflow-x: auto; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; }
+.tablewrap { overflow-x: auto; }
+th, td { text-align: left; padding: .45rem .7rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--ink-soft); font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; border-radius: 999px; padding: .05rem .6rem; font-size: .78rem; font-weight: 600; white-space: nowrap; }
+.chip.fixed { background: var(--chip-fixed); color: var(--chip-fixed-ink); }
+.chip.open { background: var(--chip-open); color: var(--chip-open-ink); }
+.chip.flaw { background: var(--chip-flaw); color: var(--chip-flaw-ink); }
+.verdict { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 1rem 1.2rem; margin: 1.4rem 0; }
+.verdict strong { color: var(--accent-ink); }
+.callout { background: var(--surface2); border-radius: 8px; padding: .8rem 1.1rem; margin: 1rem 0; }
+.filecite { color: var(--ink-soft); font-size: .84rem; }
+.sevband { font-weight: 700; }
+.sev-crit { color: var(--bad); }
+.sev-major { color: var(--warn); }
+.sev-minor { color: var(--ink-soft); }
+ul { padding-left: 1.3rem; }
+li { margin: .3rem 0; }
+.toc { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: .9rem 1.4rem; font-size: .92rem; }
+.toc ol { margin: .3rem 0; padding-left: 1.2rem; }
+.legend { color: var(--ink-soft); font-size: .85rem; }
+
+.tier { margin: 2rem 0 .5rem; padding: .5rem .9rem; border-radius: 6px; font-weight: 700; font-size: 1rem; }
+.tier small { font-weight: 400; opacity: .85; display: block; font-size: .82rem; margin-top: .15rem; }
+.t0 { background: var(--chip-open); color: var(--chip-open-ink); }
+.t1 { background: var(--chip-flaw); color: var(--chip-flaw-ink); }
+.t2 { background: var(--surface2); color: var(--ink); }
+.t3 { background: var(--surface2); color: var(--ink); }
+td.id { font-family: ui-monospace, Menlo, monospace; font-size: .82rem; white-space: nowrap; color: var(--ink-soft); }
+td.eff { white-space: nowrap; font-size: .82rem; color: var(--ink-soft); }
+</style>
+<main>
+<h1>TCU_OP Architecture Design Review</h1>
+<p class="subtitle">Vortex <code>vortex_spg</code>, branch <code>tcu_op</code> · reviewed 2026-09-17 · covers <code>hw/rtl/tcu/VX_tcu_op_core.sv</code> (1,635 loc), <code>VX_tcu_feop.sv</code>, <code>VX_tcu_feop_accu.sv</code>, <code>VX_tcu_pkg.sv</code>, <code>VX_tcu_unit.sv</code>, <code>tests/regression/sgemm_tcu_op/{kernel,main}.cpp</code>, plus the core-side integration (decode, wctl, mem_unit, local_mem)</p>
+
+<div class="verdict">
+<strong>Verdict.</strong> TCU_OP (published as <em>SparseWeaver</em>) is a sparsity-first decoupled tensor engine whose architecture is sound and whose design decisions — outer-product FEOP datapath, bitmap-driven dual-side sparsity with hardware step-skipping, direct shared-memory operands, on-TCU accumulation, asynchronous tx-barrier completion — hold up under review and are worth keeping. The <em>implementation</em> had never been brought up against the modern Vortex tree and was riddled with defects: this session found and fixed <strong>11 functional bugs</strong> (4 of them in shared core RTL or its contracts, latent for other clients) to take the model from "does not launch" to passing numerical verification at 1, 2, 4 and 16 output tiles.
+<br><br>
+<strong>Two caveats on that claim.</strong> First, every passing run was a <code>--debug=2</code> build; the <code>--perf</code> and plain builds deadlock reproducibly at 128³ (and still do with the stall timeout raised to 2M cycles), so a correctness difference remains between debug and non-debug builds and the model is <em>not</em> yet verified in a normal build (§5.1). Second, the 161,988-cycle / 25.9 FLOP-per-cycle figure below is from that debug build and should be treated as provisional.
+<br><br>
+Beyond correctness, the RTL carries real synthesis and efficiency flaws — a runtime 32-bit divide/modulo in the per-cycle issue path, 4× area replication with one usable instance, half-width memory port utilization, and zero inter-op pipelining. But note what is <em>not</em> a flaw: the crossbar, input queues, sorters and dynamic step counts exist to convert unstructured dual-side sparsity into skipped work, and judging them against dense GEMM (where the bank mapping is static and conflict-free) misreads the design's purpose. The dense corner tops out at 64 FLOP/cycle at the 2×16 geometry — parity with the measured WGMMA+DXA pipeline — and the architecture's actual value proposition lies in the sparse regime plus the area/throughput scaling axis that its barely-utilized LMEM port can still feed.</div>
+
+<div class="callout"><strong>Source note.</strong> This review was written from the RTL and kernel sources, then cross-checked against the design paper (<em>SparseWeaver: Co-Design Tensor Core and Microarchitectural Adaptations for Unstructured Sparsity in RISC-V GPUs</em>, DATE 2027 submission, <code>custom/DATE_2027___SPARSE_TCU.pdf</code>). The paper's architecture, dataflow and kernel sections match the implementation closely and are used here for intent and naming; its evaluation section describes an older, discontinued Vortex 2.0 implementation and is therefore <strong>not</strong> used as a performance reference.</div>
+
+<nav class="toc">
+<strong>Contents</strong>
+<ol>
+<li>Architecture overview &amp; motivation</li>
+<li>Microarchitecture walk-through</li>
+<li>Comparison against baseline WGMMA</li>
+<li>Defects found and fixed (9)</li>
+<li>Open defects (2 + latent)</li>
+<li>Design flaws &amp; inefficiencies</li>
+<li>Code-quality audit</li>
+<li>Performance analysis &amp; ceiling</li>
+<li>Prioritized fix backlog</li>
+</ol>
+</nav>
+
+<h2>1. Architecture overview &amp; motivation</h2>
+
+<p>TCU_OP replaces the WMMA/WGMMA "instruction-per-µ-tile" model with a <em>descriptor-launched, memory-coupled tensor engine</em>. A single <code>MMA_OP</code> instruction (custom-0 opcode, <code>funct3=3, funct7=2</code>) hands the engine pointers and configuration; the engine then autonomously streams operands out of LMEM, runs the full 32×32×K tile computation, accumulates in a private SRAM, writes D back to memory, and signals completion through the transaction-barrier fabric. The issuing warp is free the entire time.</p>
+
+<p>The instruction encodes its descriptor across the two source vector registers, packed per-lane with <code>vx_wgather</code>:</p>
+
+<div class="tablewrap"><table>
+<tr><th>Field</th><th>Location</th><th>Notes</th></tr>
+<tr><td>A, B, C, D pointers</td><td><code>rs1[0..3]</code></td><td>A/B/C must be LMEM-resident; D is a global address</td></tr>
+<tr><td>A/B bitmap pointers</td><td><code>rs2[0..1]</code></td><td>sparse modes only</td></tr>
+<tr><td>tx-barrier id</td><td><code>rs2[2]</code></td><td>standard <code>(id&lt;&lt;8)|group</code> encoding</td></tr>
+<tr><td>flags word</td><td><code>rs2[3]</code></td><td><code>[0]</code> flush, <code>[1]</code> init, <code>[3:2]</code> sparsity, <code>[7:4]</code> fmt_s, <code>[11:8]</code> fmt_d, <code>[17:12]</code>/<code>[23:18]</code> compressed block counts, <code>[31:24]</code> K</td></tr>
+</table></div>
+
+<p><strong>Motivation</strong> (reconstructed from the design and its host recipe): the WGMMA pipeline at NT=32 is limited not by the datapath but by everything around it — 17–32 µops of issue bandwidth per instruction, operand staging through the register file, C-tile writeback through the LSU, and a warp-group's worth of scheduler state. TCU_OP attacks all four at once:</p>
+<ul>
+<li><strong>Issue amortization:</strong> one instruction covers an entire 32×32×K tile op (vs. 256 WGMMA instructions × 17–32 µops for the same 128³ GEMM).</li>
+<li><strong>Register-file bypass:</strong> operands never touch the GPR file; the accumulator lives in a dedicated 32-bank × 32-slot SRAM instead of <code>fragC</code> registers, eliminating the WGMMA C-store epilogue that we measured as a ~45k-cycle K-independent floor.</li>
+<li><strong>Warp decoupling:</strong> the hardware acquire/release contract on the tx-barrier lets one warp orchestrate DXA staging and MMA launches as a software pipeline — the same double-buffer discipline as the WGMMA DXA kernels, but with 1 warp instead of 16.</li>
+<li><strong>Structured sparsity:</strong> bitmap-driven zero-skipping with 32-way sorters compresses A and/or B, shrinking both the memory footprint and the number of issue steps (<code>set_steps = ⌈nzA/2⌉·⌈nzB/16⌉</code>).</li>
+</ul>
+
+<h2>2. Microarchitecture walk-through</h2>
+
+<pre class="mermaid">
+flowchart LR
+  subgraph warp["warp 0 (software pipeline)"]
+    K[kernel: DXA stage + expect_tx + MMA_OP + bar wait]
+  end
+  subgraph engine["VX_tcu_op_core (block 0)"]
+    RE["read engine<br/>4-way rr-rot arbiter<br/>A / B / C / bitmap"]
+    AB["A/B/bitmap windows<br/>2-deep double buffers"]
+    SRT["Tile Index Aligner<br/>32-way sorters + popcount"]
+    ISS["issue FSM<br/>set = k-step, step = block pos"]
+    FEOP["FEOP array 2×16<br/>fmadd @ II=1 (DPI/BHF)"]
+    XB["stream xbar 32→32<br/>per-lane queues + RAW fwd"]
+    ACCU["accumulator SRAM<br/>32 banks × 32 slots × 32b"]
+    FL["flush engine<br/>64 d_lines"]
+  end
+  LMEM[(LMEM)]
+  GMEM[(global mem)]
+  TXB[tx-barrier fabric]
+  K -- MMA_OP --> RE
+  RE <--> LMEM
+  RE --> AB --> SRT --> ISS --> FEOP --> XB --> ACCU
+  RE -- "C blocks (overwrite)" --> XB
+  ACCU --> FL --> GMEM
+  RE -. acquire .-> TXB
+  FL -. release .-> TXB
+  TXB -. wake .-> K
+</pre>
+
+<h3>Read engine</h3>
+<p>A single 16-lane (of 32 available) LSU-width port serves all four streams through a rotating arbiter. A/B/bitmap use 2-deep double-buffered windows with request/loaded/active bit-pair tracking; C bypasses buffering and feeds the accumulator directly in <em>overwrite</em> mode (C is the accumulator's initial value, not an addend). A-and-B requests are held back until all C requests have issued (<code>a_req_ready</code> gates on <code>c_blocks_requested == 32</code>), serializing the init phase.</p>
+
+<h3>Tile Index Aligner (sparsity front-end)</h3>
+<p>Per k-step, A's and B's element bitmaps feed two 32-way sorters (<code>VX_tcu_32_way_sorter</code>) that emit, for each compacted position, the <em>original</em> logical index plus a validity mask, and the zero population count. Three things fall out of that single structure: operands are compacted so the FEOP array only ever sees non-zeros; the original indices survive as the accumulator's row/column addresses, so compacted products land at their true output coordinates; and the popcounts set the step counts for this k-step (<code>vertical_steps = ⌈nzA/BLOCK_M⌉</code>, <code>horizontal_steps = ⌈nzB/BLOCK_N⌉</code>), so all-zero steps are simply never issued. That last point is the architecturally load-bearing one and the paper's explicit departure from DSTC, where step-skipping is done in software by issuing only the active steps: moving it into hardware is what lets the engine stay asynchronous — the warp hands over one descriptor and the instruction stream never grows with the sparsity pattern. Three modes are supported: dense (bitmaps forced to all-ones), compressed×compressed (both operands pre-compacted in memory with bitmap metadata), and a hybrid uncompressed-A × compressed-B mode that compacts A online in hardware (<code>a_set_flat_compressed</code>), aimed at the common DNN case of statically-pruned weights against dynamic activations.</p>
+
+<h3>Issue FSM and FEOP array</h3>
+<p>Per k-step (<code>set</code>), the FSM walks <code>step = 0 … vertical_steps·horizontal_steps−1</code> block positions; at the default 2×16 FEOP geometry a dense set takes 32 cycles (16 vertical × 2 horizontal). Each cycle, one A sub-column (2 elements) is broadcast against a B sub-row (16 elements), producing 32 fmadd products at II=1. The multiply pipes are 3 deep (DPI: FMUL 2 + RND 1); addresses/valids ride a parallel delay pipe.</p>
+
+<h3>Accumulator</h3>
+<p>Products enter a 32→32 <code>VX_stream_xbar</code> keyed by <code>bank(r,c) = (r mod BLOCK_M)·BLOCK_N + (c mod BLOCK_N)</code>. In dense execution that mapping is static and every step touches all 32 banks exactly once, so the crossbar is pass-through and the queues idle; it is <em>sparse</em> compaction that produces irregular output addresses, several products targeting one bank in a cycle, and the need for both the crossbar and the per-lane skid queues ahead of it. At the bank, an fp32 adder (DPI call or BHF pipeline) implements read-add-write with a one-stage RAW forward (<code>forwarding_condition</code>) covering the write latency — the paper notes this bank-local placement as a deliberate departure from DSTC, which routes read-modify-write traffic through the crossbar instead.</p>
+<p><code>overwrite</code> selects <code>accum_source = 0</code> so a C block initializes rather than accumulates. There is <strong>no clear-on-flush</strong> path, and that is by design: C-init and D-writeback are meant to happen <em>once per output tile</em> while K runs in the inner loop, so the tile stays resident in the accumulator and both costs amortize over K. That intent is what makes §5.3 (the K-chunked continuation path) critical rather than cosmetic.</p>
+
+<h3>Completion</h3>
+<p>At instruction accept, the engine issues a hardware tx-barrier <em>acquire</em> (<code>is_done=0</code>); at flush completion (or the no-flush settle for <code>flush=0</code> ops), it issues the <em>release</em>. A 1-deep <code>op_ctx</code> FIFO carries the barrier address from accept to release — this depth-1 queue is what limits the engine to one in-flight op.</p>
+
+<h2>3. Comparison against baseline WGMMA</h2>
+
+<div class="tablewrap"><table>
+<tr><th></th><th>WGMMA + DXA (baseline)</th><th>TCU_OP</th></tr>
+<tr><td>Instruction granularity</td><td>1 instr = 64-wide µop sequence (17–32 µops at NRC=16); 256 instrs per 128³</td><td>1 instr = full 32×32×K tile op; 16 instrs per 128³ (at tile_K=128)</td></tr>
+<tr><td>Warp requirement</td><td>16-warp warp-group resident and issuing</td><td>1 warp, free during compute</td></tr>
+<tr><td>A operand</td><td>register fragments (RS) or SMEM descriptor</td><td>LMEM stream, engine-fetched</td></tr>
+<tr><td>B operand</td><td>SMEM descriptor → tbuf</td><td>LMEM stream, engine-fetched</td></tr>
+<tr><td>Accumulator</td><td>GPR fragments (<code>fragC</code>, NRC regs/lane)</td><td>32×32 fp32 SRAM (4 KB/instance)</td></tr>
+<tr><td>C store path</td><td>store_matrix_sync / CSTORE_LMEM epilogue (measured ≈45k-cycle floor)</td><td>engine flush direct to GMEM (write-allocate through dcache)</td></tr>
+<tr><td>Completion</td><td>in-order writeback, warp-visible</td><td>async tx-barrier release</td></tr>
+<tr><td>Sparsity</td><td>sparse metadata via TCU_LD (2:4-style)</td><td>arbitrary bitmap compression, sorter-driven zero skipping (S1/S2)</td></tr>
+<tr><td>Peak MAC/cycle/core</td><td class="num">— (measured 33–36 at NT=32)</td><td class="num">32 (2×16 FEOP), scalable via BLOCK_M/N</td></tr>
+<tr><td>Measured 128³ rtlsim</td><td class="num">63,412 cyc (66.1 FLOP/c); best bundle 58,035 (72.3)</td><td class="num">blocked — multi-tile hang open (§5); single-tile shape verified</td></tr>
+</table></div>
+
+<h3>Genuinely innovative elements worth preserving</h3>
+<ul>
+<li><strong>Instruction-as-descriptor via lane-packed registers.</strong> Reuses the vector register file as a descriptor carrier (<code>vx_wgather</code>), avoiding new architectural state or DCR round-trips per op. Clean and cheap.</li>
+<li><strong>Tx-barrier acquire/release as a completion contract.</strong> The engine arms the same barrier the software waits on, at accept-time — so the ordering window is airtight (no wait-before-arm race) and the mechanism composes with DXA's done-events on the same barrier fabric. This is the piece that makes the 1-warp orchestration model work, and it exposed (and now fixed) a real latent bug in <code>VX_wctl_unit</code> for all hardware acquirers.</li>
+<li><strong>C-as-initializer with accumulator overwrite mode.</strong> Folding accumulator initialization into the same xbar/adder pipeline as products (with <code>accum_source=0</code>) avoids a separate clear port on the SRAM and gives fused C-accumulate (D=A·B+C) for free.</li>
+<li><strong>The Tile Index Aligner.</strong> One structure delivers three things at once — operand compaction, restoration of true output coordinates for the accumulator, and popcount-derived step counts that skip all-zero work — for arbitrary per-element bitmaps on <em>both</em> operands. That is a strictly more general sparsity story than fixed 2:4 (which covers one operand at a fixed 50%), and crucially it keeps step-skipping in hardware, so exploiting sparsity never lengthens the instruction stream and never breaks the asynchronous execution model. This is the design's central idea and it is well executed.</li>
+<li><strong>Hybrid uncompressed × compressed mode.</strong> Compacting A online in hardware while B arrives pre-compressed targets the real DNN case — statically pruned weights, dynamically sparse activations — without paying software preprocessing on the activation side.</li>
+</ul>
+
+<h2>4. Defects found and fixed this session <span class="legend">(branch <code>tcu_op</code>: commits <code>15e5e145</code>, <code>e26da8b2</code>, <code>d8942a99</code> + working tree)</span></h2>
+
+<p>Ordered by discovery. Each was diagnosed from rtlsim debug traces against a shrinking repro (128³ → 32×32×64 → 2/4-tile bisects), then re-validated by rerun. Severity is <span class="sev-crit sevband">crit</span> = wrong results or hang, <span class="sev-major sevband">major</span> = wrong results in a reachable configuration, <span class="sev-minor sevband">minor</span> = latent or defensive.</p>
+
+<div class="tablewrap"><table>
+<tr><th>#</th><th>Sev</th><th>Defect</th><th>Layer</th><th>Symptom → root cause</th></tr>
+<tr><td>1</td><td class="sevband sev-crit">crit</td><td>Missing <code>__kernel</code> annotation <span class="chip fixed">fixed</span></td><td>kernel</td><td>All warps looped in <code>_start</code>: no vxbin kernel-table entry, garbage entry pointer in CSR <code>0xce1</code>.</td></tr>
+<tr><td>2</td><td class="sevband sev-crit">crit</td><td>Multi-driven <code>tcu_lsu_mem_if</code> <span class="chip fixed">fixed</span></td><td>RTL / tcu_unit</td><td>All <code>BLOCK_SIZE=ISSUE_WIDTH</code> op-core instances bound one interface; idle blocks' zeros masked the active block's requests — no TCU read ever reached memory. Fixed: per-block interfaces, block 0 routed, others dead-ended.</td></tr>
+<tr><td>3</td><td class="sevband sev-crit">crit</td><td>wctl leaks instruction fields into txbar events <span class="chip fixed">fixed</span></td><td>RTL / core (latent, shared)</td><td>A hardware acquire incremented the barrier's expected events by garbage <code>size_m1+1</code> (observed +18) and could register phantom arrivals. WGMMA never trips it (software <code>expect_tx</code> only). Fixed by gating on <code>wctl_bar_enable</code>.</td></tr>
+<tr><td>4</td><td class="sevband sev-major">major</td><td>Kernel missing <code>expect_tx</code> for DXA loads <span class="chip fixed">fixed</span></td><td>kernel</td><td>Post-rebase semantics arm expectations in software; the legacy kernel raced ahead of staging and unmatched done-events wrapped the event counter (observed <code>events=63</code>).</td></tr>
+<tr><td>5</td><td class="sevband sev-crit">crit</td><td>Stale format encodings in FEOP <span class="chip fixed">fixed</span></td><td>RTL / feop</td><td>Case labels used legacy ids (fp16=1, fp8=3, int8=9) vs. modern <code>tensor_cfg.h</code> (fp16=2, fp8=4, int8=17); fp16 fell into the zero default — every product 0.0, D all zeros.</td></tr>
+<tr><td>6</td><td class="sevband sev-major">major</td><td>Null C pointer → accumulator init from poison <span class="chip fixed">fixed</span></td><td>kernel</td><td><code>init_flag=1</code> loads C as the accumulator's initial value; the kernel passed <code>nullptr</code> (legacy relied on zero-filled DRAM at address 0; the modern model poisons with <code>baadf00d</code>). Restored the commented-out C DXA-staging into a per-half LMEM slot.</td></tr>
+<tr><td>7</td><td class="sevband sev-crit">crit</td><td>LMEM bank priority TCU &gt; DXA starves staging <span class="chip fixed">fixed</span></td><td>RTL / mem_unit</td><td><code>DMA_DEFER_REQS</code> gave the TCU's every-cycle read stream absolute priority over DXA writes → unbounded starvation → DXA-watchdog <code>$stop</code> on the first staging/compute overlap. Now DXA &gt; TCU &gt; LSU (DXA beats are bounded and gmem-paced).</td></tr>
+<tr><td>8</td><td class="sevband sev-major">major</td><td>LMEM range-check overflow (two layers) <span class="chip fixed">fixed</span></td><td>RTL / core (latent, shared)</td><td>With LMEM ending exactly at 2³² (base <code>0xffff0000</code>, 64 KB), <code>base+size</code> wraps in XLEN arithmetic <em>and</em> the exclusive end doesn't fit in <code>MEM_ADDRW</code> bits — <code>is_lmem</code> always false. Same bug in <code>VX_lsu_slice</code> (shared, latent for any client). Fixed with 64-bit arithmetic + at-top detection.</td></tr>
+<tr><td>9</td><td class="sevband sev-minor">minor</td><td>No-flush completion ignores pipe drain <span class="chip fixed">fixed (defensive)</span></td><td>RTL / op core</td><td><code>issuing_done</code> only means the last product <em>entered</em> the multiply pipe; the flush path models the drain (<code>pipe_flush_dummy</code>) but the no-flush path used the raw signal. Added a settle window.</td></tr>
+<tr><td>10</td><td class="sevband sev-crit">crit</td><td>Response reassembly tag aliasing <span class="chip fixed">fixed</span></td><td>RTL / op core</td><td>All TCU reads carried <code>tag.value = 0</code>, but the LSU adapter's response packer (<code>VX_stream_pack</code>) groups per-lane responses by exactly those low <code>TAG_SEL_BITS</code> — every outstanding request shared one reassembly key, so the packer could merge lanes across different requests and matrices. The in-code comment "Value bits are left for arbiters to overwrite" is wrong for this path and misled the author. Fixed by encoding matrix id + a per-matrix sequence bit into <code>tag.value</code>.</td></tr>
+<tr><td>11</td><td class="sevband sev-crit">crit</td><td>Mask-blind response consumption <span class="chip fixed">fixed</span></td><td>RTL / op core</td><td>Under per-bank timing skew the packer legitimately splits one request into partial beats (observed 16-lane half-masks; 66 B-labelled beats for 64 B requests on the DXA-overlapped op). The load mechanism ignored <code>rsp_data.mask</code>, wrote whole buffer slots from partial data, and advanced per-block bookkeeping on <em>every</em> beat — shifting the A/B operand streams (tile-wide ±few-product errors) and, at 16 tiles, running the C accounting past its terminal condition into a hang. Fixed with per-lane masked merging plus <code>rsp_block_done</code> (full lane-coverage) gating on all block bookkeeping, and a one-outstanding-request-per-stream gate so two same-stream requests can never interleave beats (the per-stream coverage accumulator cannot untangle that). The gate is correct but costs throughput — see §5.1 and §8.</td></tr>
+</table></div>
+
+<div class="callout"><strong>Diagnosis chain worth noting:</strong> defect #7 masked #10 and #11. The original TCU&gt;DXA bank priority (a deliberate design choice, per its comment) kept LMEM response timing perfectly uniform — so responses never aliased and never split, and the design "worked" in the author's quiet-memory single-op tests while deadlocking on any real double-buffered workload. Fixing the deadlock exposed both response-path defects at once. This is the archetypal hazard of validating an engine only against microbenchmarks that leave the rest of the memory system idle: the engine's implicit contract ("my responses arrive whole, in order, one request at a time") was never stated, never asserted, and silently false.</div>
+
+<h2>5. Open items</h2>
+
+<h3>5.1 Debug and non-debug builds disagree <span class="chip open">open · blocks acceptance</span></h3>
+<p>Every run reported as PASSED in this review was built with <code>--debug=2</code>. The same configuration built with <code>--perf=1</code>, and with no flags at all, <strong>deadlocks reproducibly at 128³</strong> on the scheduler stall assertion — and still deadlocks with <code>VX_DBG_STALL_TIMEOUT</code> raised to 2,000,000 cycles, so it is a genuine hang, not a threshold artifact. Tracing is a simulation side effect and must not change cycle behaviour, so a define-dependent behavioural difference exists somewhere in the design; the leading hypothesis is reliance on state that is only initialized in debug builds (X-propagation, or <code>VX_dp_ram</code>'s <code>RESET_RAM</code>/<code>INIT_VALUE</code> path), in which case the non-debug build is exposing a real reset-coverage hole rather than a new bug. Until this is closed, <strong>no functional claim about TCU_OP should be considered established for a normal build</strong>, and the cycle count in §8 is provisional. Next step: bisect the small cases (1/2/4 tiles) without <code>--debug</code> to find whether the divergence is size-dependent, then diff the effective define sets between the two builds.</p>
+
+<h3>5.2 K-chunked continuation path is unverified — and it is the primary intended mode <span class="chip open">open · design-critical</span></h3>
+<p>The architecture amortizes C-init and D-writeback over K by keeping the output tile resident in the accumulator across k-chunks: <code>init=1</code> on the first chunk, <code>flush=1</code> on the last, <em>neither</em> in between. The K field in the descriptor is 8 bits, so K &gt; 255 <em>must</em> be chunked — the continuation path is not an edge case, it is how the design is meant to run. All verified runs here use the opposite shape (<code>SGEMM_TILE_K_MULT=4</code>, one <code>init+flush</code> op per output tile), which works only because K=128 happens to fit in one op and which <em>defeats the amortization the architecture is built around</em>. The continuation path's earlier corruption is now explained by defect #11, but it has not been re-tested since that fix. Re-verifying it (e.g. 128×128×512, four chunks) is the highest-value correctness task after §5.1, and would retire both the workaround and its 64 KB LMEM requirement.</p>
+
+<h3>5.3 Performance recovery of the response-path fixes <span class="chip open">open · perf only</span></h3>
+<p>Correctness is settled (1-, 2-, 4-tile and full 128³ all PASSED), but defect #11's single-outstanding-request gate costs ~3.3k cycles/op (§8). Restoring depth-2 prefetch requires per-request reassembly state rather than one per-stream accumulator — i.e. tracking coverage per <em>sequence tag</em> (the bit already encoded in <code>tag.value</code> by fix #10), so two same-stream requests can be merged independently. This is the single highest-value follow-up.</p>
+
+<h3>5.4 Kernel metrics readback is dead <span class="chip open">open · minor</span></h3>
+<p>The app prints <code>Kernel body cycles: 0 / instructions: 0</code> — the <code>vx_rdcycle_sync_*</code> / <code>vx_rdinstret_local</code> path in the kernel epilogue writes zeros (and only from <code>vx_thread_id()==0</code>, which under the CTA_RANK-based warp split may not be the surviving warp). Cycle counts in this review therefore come from trace timestamps (CTA dispatch → <code>cta_done</code>), which is authoritative but inconvenient; the in-kernel counters should be repaired before any tuning campaign.</p>
+
+<h3>5.5 Latent defects found by inspection (not yet triggered)</h3>
+<ul>
+<li><strong>Real (non-zero) C initialization is broken.</strong> The response path decodes "null C" as <code>c_tile_addr == 0</code> (<span class="filecite">op_core:780</span>), but the request FSM <em>clears</em> <code>c_tile_addr</code> when the last C request issues (<span class="filecite">op_core:389</span>). Every C response arriving after that point — i.e., nearly all of them — is silently zero-filled. Only C≡0 workloads can pass; D=A·B+C with C≠0 will silently compute D=A·B (partially). The null-C flag must be latched at accept, not inferred from a mutating address register. Note this is <em>not</em> a corner case in either direction: continuation chunks legitimately carry no C (a designed mode), while fused D=A·B+C with real C is a first-class GEMM feature the paper assumes — and today only the former can work.</li>
+<li><strong>Null-C still burns bandwidth.</strong> With C=0 the engine still issues all 32 C reads (redirected to A's address, <span class="filecite">op_core:742</span>) and discards the data — a pure waste of the init phase. It should skip the requests entirely.</li>
+<li><strong>int8/uint8 format ids collide after truncation.</strong> <code>fmt_s</code> is a 4-bit field; modern <code>TCU_I8_ID=17</code> truncates to 1 (kernel side truncates identically, so it "works" by accident); <code>TCU_U8_ID=18</code> → 2 collides with fp16. bf16 (3) silently falls to the zero-output default in the FEOP case. The descriptor needs a 5-bit format field or its own compact encoding.</li>
+<li><strong>K is an 8-bit field</strong> (<code>rs2[3][31:24]</code>): K per op ≤ 255, undocumented; K=256 silently wraps to 0.</li>
+<li><strong>LMEM-only operand contract unenforced.</strong> A non-LMEM operand address only prints a debug TRACE (<span class="filecite">op_core:1454</span>) while the datapath proceeds and then deadlocks on the dcache coalescer's partial-mask responses (32 requests → 128 fragmented returns break the per-block accounting). This should be a <code>RUNTIME_ASSERT</code>.</li>
+</ul>
+
+<h2>6. Design flaws &amp; inefficiencies</h2>
+
+<p>One framing caveat before the list. Several structures that look extravagant against dense GEMM — the 32→32 crossbar, the per-lane input queues, the sorters, the dynamic step counts — are the sparsity mechanism, and in the dense corner they are provably idle (static conflict-free bank mapping). They are not waste; they are the feature. The items below are things that are genuinely suboptimal <em>on the design's own terms</em>.</p>
+
+<div class="tablewrap"><table>
+<tr><th>Sev</th><th>Flaw</th><th>Detail &amp; cost</th></tr>
+<tr><td class="sevband sev-crit">crit</td><td>Runtime divide/modulo in the issue path</td><td><code>m = (step / horizontal_steps) &lt;&lt; …; n = (step % horizontal_steps) &lt;&lt; …</code> (<span class="filecite">op_core:803–805</span>) — a 32-bit combinational divider feeding per-cycle issue logic. Dense values are powers of two, but the sparse path makes the divisor dynamic — and since dynamic step counts are exactly how hardware step-skipping works, the divisor cannot simply be constrained away. Restructure instead as two nested counters (the horizontal counter's carry increments the vertical one, both reloaded per k-step from the popcounts); the division disappears entirely while keeping the step counts fully dynamic.</td></tr>
+<tr><td class="sevband sev-crit">crit</td><td>4× area, 1× use</td><td><code>VX_tcu_unit</code> instantiates one full op-core per issue block (assert forces <code>BLOCK_SIZE == ISSUE_WIDTH</code>): at IW=4 that is 4 × (32 fmadd units + 4 KB accumulator SRAM + 32×32 xbar + sorters), of which exactly one is reachable in the single-warp programming model. My bring-up fix routes block 0 and dead-ends the rest, but the right fix is <code>NUM_TCU_OP_CORES=1</code> (or a real per-block memory arbiter if a multi-warp model is ever intended).</td></tr>
+<tr><td class="sevband sev-major">major</td><td>Half-width memory port</td><td>Every A/B/C read uses a 16-lane mask on the 32-lane port (<code>mask=0x0000FFFF</code>), and D writes use 16 lanes (<code>wr_mask</code>) — half of each LMEM row access is wasted. Full-row requests would halve the request count and the init/flush phase lengths.</td></tr>
+<tr><td class="sevband sev-major">major</td><td>Zero inter-op pipelining</td><td><code>execute_ready</code> requires <code>~busy_r</code>; <code>op_ctx</code> and <code>mdata</code> queues are depth 1. Each op pays serialized prologue (32-cycle C phase gating A/B requests — <span class="filecite">op_core:123</span>) and epilogue (64+ cycle flush) with the engine otherwise idle. Back-to-back tiles could overlap next-op C-init/A-prefetch with current-op flush for ~100 cycles/tile saved (~1.6k cycles at 128³, plus it removes the double-buffer's dead time).</td></tr>
+<tr><td class="sevband sev-minor">note</td><td>Throughput is area-limited, not shape-limited</td><td>At 2×16 each k-step costs 32 cycles for a 32×32 outer product — 32 MAC/cycle. To be clear, <em>the 2×16 shape itself is a well-argued choice, not an oversight</em>: at a fixed budget of m×n=32 multipliers the design space was swept and 2×16 beats 4×8 on accumulator bank conflicts (fewer distinct row/column residue classes per sparse step), which our own measurements do not contradict. The opportunity is on a different axis — raising the <em>total</em> multiplier count (e.g. 4×16 = 64, 8×16 = 128 MAC/cycle), which grows the A broadcast, adder count and crossbar, but which §8 shows the LMEM port has ample headroom to feed. That sweep was never run.</td></tr>
+<tr><td class="sevband sev-minor">minor</td><td>Global stall domain</td><td><code>feop_enable = accu_queues_ready</code> freezes the entire datapath (issue, pipes, accu) on any single-lane queue-full; with a TODO admitting the intended condition was never finished (<span class="filecite">op_core:172</span>).</td></tr>
+<tr><td class="sevband sev-minor">minor</td><td>Buffer depths hardcoded</td><td><code>A/B/BITMAP_BUF_SLOTS = 2 // "Current code only works for '2'"</code> — the double-buffer bit-pair FSMs (<code>rq/ld/active/load</code> bits) are hand-rolled per stream instead of a generic FIFO abstraction, which is where several of the reviewed state-transition subtleties (and likely the cross-op bug) live.</td></tr>
+</table></div>
+
+<h2>7. Code-quality audit</h2>
+<ul>
+<li><strong>Dead code:</strong> ~250 lines of commented-out trace blocks and abandoned variants (op_core ~140, accu ~100, kernel ~30), including whole commented generate branches (<span class="filecite">op_core:767–781</span>). Section banners literally named <code>NEW</code>, <code>NEW^2</code>, <code>NEW^3</code>.</li>
+<li><strong>15+ open TODOs</strong>, several load-bearing: <code>XBAR_LATENCY … "TODO: Not sure if condition is legit"</code>; <code>feop_enable</code>'s unfinished condition; "Fix all operations on 32'() to the smallest possible size".</li>
+<li><strong>Magic numbers:</strong> the S2 bitmap block math re-derives <code>(K+15)&gt;&gt;4</code> inline next to the localparam that encodes the same quantity (<span class="filecite">op_core:316</span>); matrix ids 1/2/4/8 as bare literals throughout.</li>
+<li><strong>Null-pointer sentinels</strong> woven through the address FSM (<code>c_tile_addr == '0</code> as both "no C" and "C done") — the source of latent defect §5.3a.</li>
+<li><strong>Kernel hygiene:</strong> redefines <code>__local_mem</code> via <code>#undef</code> to a raw CSR read ignoring the size argument; debug "trace marker" stores (<code>0x12345678</code>) compiled into result buffers by default (<code>SGEMM_TRACE_MARKERS=1</code>); required <code>-Wunused</code> pragma suppressions; both dense and sparse variants interleaved in one 400-line function.</li>
+<li><strong>Interface discipline:</strong> the original code drove a part-select of <code>tag.uuid</code> through an interface (illegal lvalue, broke Verilator codegen) and left the upper tag bits undriven; fixed during bring-up.</li>
+<li><strong>DPI calls inside <code>always_comb</code></strong> (<code>dpi_fadd</code>/<code>dpi_fmadd</code>) — fine for simulation, but it means the DPI configuration has no synthesizable adder implementation path at all; only BHF is real hardware.</li>
+<li><strong>Positive:</strong> parameterized FEOP geometry, clean latency-modeling pipe-register idiom, consistent banner structure, and honest debug instrumentation (the <code>ACCU_INIT_VALUE</code> poison and flush/gather conflict ERROR traces materially helped this review).</li>
+</ul>
+
+<h2>8. Performance analysis &amp; ceiling</h2>
+
+<p>Measured rtlsim baselines (128³, fp16→fp32, NW=16, NT=32, single core; FLOP/cyc = 4,194,304 / cycles):</p>
+
+<div class="tablewrap"><table>
+<tr><th>Config</th><th class="num">Cycles</th><th class="num">FLOP/cyc</th><th class="num">vs WMMA IW4</th></tr>
+<tr><td>WMMA (<code>sgemm_tcu</code>) IW=1</td><td class="num">97,797</td><td class="num">42.9</td><td class="num">1.02×</td></tr>
+<tr><td>WMMA IW=4</td><td class="num">99,927</td><td class="num">42.0</td><td class="num">1.00×</td></tr>
+<tr><td>WGMMA + DXA IW=4</td><td class="num">63,412</td><td class="num">66.1</td><td class="num">1.58×</td></tr>
+<tr><td>WGMMA + DXA best bundle (CSTORE+dbuf+inflight32)</td><td class="num">58,035</td><td class="num">72.3</td><td class="num">1.72×</td></tr>
+<tr><td>TCU_OP 2×16, dense (1 usable block, tile_K=128, LMEM 64 KB) — <em>debug build, provisional (§5.1)</em></td><td class="num">161,988</td><td class="num">25.9</td><td class="num">0.62×</td></tr>
+</table></div>
+
+<p><strong>Measured (first verified 128³ run, debug build; kernel span from CTA dispatch to cta_done; numerically PASSED):</strong> ~162k cycles — 2.5× the analytic floor. The per-op time is ≈8.8k cycles against a 4.1k ideal (128 k-steps × 32 cycles + ~500 init/flush). The gap decomposes into (a) the conservative single-outstanding-request gate added as part of fix #10: with LMEM response latency of ~90 cycles under DXA-priority bank contention and a 64-cycle per-block consumption window, the A/B streams starve ~26 cycles per block (~3.3k/op) — recoverable by restoring depth-2 prefetch with proper per-request (sequence-tagged) reassembly tracking; and (b) DXA bank-priority theft plus the serialized 32-read C-init phase (~1k/op) — recoverable via full-row accesses and C-phase overlap. With those three recoveries the projected time returns to ≈70–75k cycles. Note also that this run used crossbar queue depth 2 (inherited from <code>custom/run.sh</code>) where the design-space exploration settled on depth 4; that costs nothing in dense traffic, which never queues, but any sparse measurement must use depth 4.</p>
+
+<p><strong>Analytic floor at 2×16:</strong> dense compute alone needs 32 cycles/k-step × 128 k × 16 tiles = <strong>65,536 cycles → 64.0 FLOP/cycle</strong> — so even fully recovered, the current geometry <em>cannot beat</em> the tuned WGMMA bundle (58k); parity with plain WGMMA+DXA while using 1/16th the warps and no GPR pressure is the realistic best case, and the FEOP-widening path below is where the architecture actually wins.</p>
+
+<p><strong>Why the dense number is the wrong headline.</strong> Everything above measures the design's <em>worst</em> case. The architecture's primary throughput axis is sparsity: step counts scale as <code>⌈nzA/2⌉·⌈nzB/16⌉</code>, so dual-side density reductions compound — halving the density of both operands cuts transferred operand bytes ~2× but cuts issued steps ~4×. Nothing in the dense measurement exercises that, and no sparse configuration was run in this session (the sparse paths remain unvalidated post-rebase, and carry their own unexercised code including the S1 online-compaction logic). A fair assessment of this engine requires a sparsity sweep, and that is the single biggest gap in what we currently know about it.</p>
+
+<p><strong>The secondary axis is area, and the port has room.</strong> Per k-step the engine needs one A/B request pair per 32 cycles — roughly 6% utilization of a port it only half-uses in the first place. At 4×16 (64 MAC/cyc) the dense floor halves to 32,768 cycles; at 8×16 (128 MAC/cyc) it reaches 16,384 — territory the WGMMA pipeline cannot follow at NT=32, because WGMMA is bound by staging arithmetic intensity (~11 MAC/staged-byte against the ~45 it would need), not datapath width. Operands resident in LMEM is precisely how TCU_OP sidesteps that wall; DRAM staging bandwidth, shared with DXA, becomes the next binding constraint somewhere around 8×16.</p>
+
+<h2>9. Prioritized fix backlog</h2>
+
+<p>Every issue found in this review, ordered by what blocks what. Tiers are gates, not preferences: nothing in P1 can be honestly measured until P0 closes, and nothing in P3 is worth tuning until P2 shows the feature actually works. Effort is a rough size (S ≈ hours, M ≈ a day, L ≈ multi-day) for someone with the context in this document.</p>
+
+<div class="tier t0">P0 — Blocking. No functional or performance claim survives until these close. <small>Do these before anything else, in this order.</small></div>
+<div class="tablewrap"><table>
+<tr><th>ID</th><th>Issue</th><th>Where</th><th>Why it gates everything</th><th class="eff">Effort</th></tr>
+<tr><td class="id">P0.1</td><td><strong>Commit the four uncommitted fixes</strong></td><td>working tree</td><td>Fixes #7 (LMEM arbitration), #8 (LMEM range overflow), #10 (tag aliasing), #11 (partial-response merging) exist only in the working tree. They are the difference between "deadlocks immediately" and "runs"; losing them costs the whole session. Two of them (#8 in <code>VX_lsu_slice</code>, the <code>VX_wctl_unit</code> fix already committed) are shared-core fixes other clients need.</td><td class="eff">S</td></tr>
+<tr><td class="id">P0.2</td><td><strong>Debug vs non-debug build divergence</strong></td><td>unknown — bisect</td><td>All passing runs were <code>--debug=2</code>; <code>--perf</code> and plain builds deadlock at 128³ (confirmed genuine, not a timeout threshold). Tracing must not change cycle behaviour, so a define-dependent behavioural difference exists — most likely reliance on state only initialized in debug builds. Until this closes, <em>the model is not known to work at all</em> in a normal build.</td><td class="eff">M</td></tr>
+<tr><td class="id">P0.3</td><td><strong>Re-verify the K-chunked continuation path</strong></td><td><code>op_core</code> init/flush FSM</td><td>The <code>init=0, flush=0</code> chunk is the primary intended operating mode (C-init and writeback amortize over K) and is mandatory above K=255 because the descriptor's K field is 8 bits. The current <code>SGEMM_TILE_K_MULT</code> workaround defeats the amortization the accumulator exists for. Its earlier corruption is explained by #11 but was never re-tested. Target: 128×128×512, four chunks.</td><td class="eff">S–M</td></tr>
+</table></div>
+
+<div class="tier t1">P1 — Silently wrong answers. Reachable configurations that compute incorrect results without any error. <small>These are the bugs most likely to invalidate published numbers.</small></div>
+<div class="tablewrap"><table>
+<tr><th>ID</th><th>Issue</th><th>Where</th><th>Failure</th><th class="eff">Effort</th></tr>
+<tr><td class="id">P1.1</td><td><strong>Real (non-zero) C initialization is broken</strong></td><td><span class="filecite">op_core:780, :389</span></td><td>"No C" is inferred from <code>c_tile_addr == 0</code>, but the request FSM <em>clears</em> that register once the last C request issues — so nearly every C response is silently zero-filled. D = A·B + C with real C cannot work. Latch the null-C decision at accept instead of inferring it from a mutating address.</td><td class="eff">S</td></tr>
+<tr><td class="id">P1.2</td><td><strong>Format-id truncation collisions</strong></td><td><span class="filecite">descriptor <code>rs2[3][7:4]</code></span></td><td>The fmt field is 4 bits against modern 5-bit ids: <code>int8</code>(17)→1 works only because the kernel truncates identically, <code>uint8</code>(18)→2 <em>collides with fp16</em>, and <code>bf16</code>(3) falls into the FEOP zero default. Only fp32/fp16/fp8 are actually safe today. Widen the field or define a compact TCU-local encoding.</td><td class="eff">S</td></tr>
+<tr><td class="id">P1.3</td><td><strong>K field silently wraps above 255</strong></td><td><span class="filecite">descriptor <code>rs2[3][31:24]</code></span></td><td>8-bit K with no check: K=256 becomes 0. Undocumented, and it is the constraint that makes P0.3 mandatory. Widen, or assert at the kernel boundary.</td><td class="eff">S</td></tr>
+<tr><td class="id">P1.4</td><td><strong>LMEM-residency contract unenforced</strong></td><td><span class="filecite">op_core:1454</span></td><td>A non-LMEM operand prints a debug TRACE and proceeds; the dcache coalescer's partial-mask responses then break the block accounting and the engine deadlocks with no diagnostic. This cost real debugging time this session. Promote to <code>RUNTIME_ASSERT</code>.</td><td class="eff">S</td></tr>
+</table></div>
+
+<div class="tier t2">P2 — Unvalidated functionality. The design's actual thesis has never been exercised on this tree. <small>This is where the paper's claims live.</small></div>
+<div class="tablewrap"><table>
+<tr><th>ID</th><th>Issue</th><th>Scope</th><th>Note</th><th class="eff">Effort</th></tr>
+<tr><td class="id">P2.1</td><td><strong>Compressed × compressed sparsity (S2) unvalidated</strong></td><td>sorters, bitmap fetch, step skipping</td><td>The core contribution. Zero runs this session. Expect the same class of response-path and bookkeeping bugs that dense exposed, plus the bitmap stream's own double-buffer FSM.</td><td class="eff">L</td></tr>
+<tr><td class="id">P2.2</td><td><strong>Hybrid uncompressed × compressed (S1) unvalidated</strong></td><td><code>a_set_flat_compressed</code> online compaction</td><td>Second contribution, and the one targeting the realistic DNN case. Also guarded by <code>TCU_DISABLE_S1</code>, so it can silently vanish from a build.</td><td class="eff">M–L</td></tr>
+<tr><td class="id">P2.3</td><td><strong>BHF datapath unvalidated</strong></td><td><code>VX_tcu_feop</code>, <code>VX_tcu_feop_accu</code></td><td>Everything here ran on the DPI datapath, whose <code>dpi_fadd</code>/<code>dpi_fmadd</code> calls sit inside <code>always_comb</code> and are simulation-only. <strong>BHF is the synthesizable path</strong> — any area, power or critical-path claim depends on it, and my format-id fix (#5) touched its shared case labels without a BHF run.</td><td class="eff">M</td></tr>
+<tr><td class="id">P2.4</td><td><strong>No concurrent-DXA stress regression</strong></td><td>CI</td><td>Defects #7, #10 and #11 all hid behind quiet-memory microbenchmarks and all fired the moment staging overlapped compute. A test that runs MMA ops under sustained DXA traffic is the single highest-value test this design lacks.</td><td class="eff">S–M</td></tr>
+<tr><td class="id">P2.5</td><td><strong>Kernel metrics readback returns zero</strong></td><td>kernel epilogue</td><td><code>Kernel body cycles/instructions: 0</code>. The <code>vx_rdcycle_sync_*</code> path is broken and the write is guarded on <code>vx_thread_id()==0</code>, which under the CTA_RANK warp split may not be the surviving warp. Forces cycle counts to come from trace timestamps — workable but no basis for a tuning campaign.</td><td class="eff">S</td></tr>
+</table></div>
+
+<div class="tier t3">P3 — Performance recovery. Known, quantified losses. <small>Only meaningful once P0–P2 make the numbers real.</small></div>
+<div class="tablewrap"><table>
+<tr><th>ID</th><th>Issue</th><th>Est. gain (dense 128³)</th><th>Note</th><th class="eff">Effort</th></tr>
+<tr><td class="id">P3.1</td><td><strong>Restore prefetch depth with per-request reassembly</strong></td><td class="num">~53k cyc</td><td>The largest single win, and a direct undo of the conservative half of fix #11. Track lane coverage per <em>sequence tag</em> (already encoded in <code>tag.value</code> by fix #10) rather than per stream, so two same-stream requests can be in flight and merged independently.</td><td class="eff">M</td></tr>
+<tr><td class="id">P3.2</td><td><strong>Pipeline op boundaries</strong></td><td class="num">~1.6k cyc</td><td>Depth-1 <code>op_ctx</code>/<code>mdata</code> queues and <code>~busy_r</code> serialize every prologue and epilogue. Deepen to 2 and admit the next op's C-init during the current flush.</td><td class="eff">M</td></tr>
+<tr><td class="id">P3.3</td><td><strong>Full-row (32-lane) memory accesses</strong></td><td class="num">~0.5k cyc/op</td><td>A/B/C reads and D writes all use 16 of 32 lanes; halves the init and flush phase lengths and the request count.</td><td class="eff">M</td></tr>
+<tr><td class="id">P3.4</td><td><strong>Skip C requests entirely when C is null</strong></td><td class="num">32 reads/tile</td><td>Today the engine issues all 32 C reads redirected at A's address and discards them. Falls out naturally from the P1.1 fix.</td><td class="eff">S</td></tr>
+<tr><td class="id">P3.5</td><td><strong>Narrow the global stall domain</strong></td><td class="num">workload-dependent</td><td><code>feop_enable = accu_queues_ready</code> freezes issue, pipes and accumulator on any single-lane queue-full — with a TODO admitting the intended condition was never finished. Matters mainly for sparse, where queues actually fill.</td><td class="eff">M</td></tr>
+</table></div>
+
+<div class="tier t3">P4 — Synthesis quality and area. <small>Required before any area/power/timing claim.</small></div>
+<div class="tablewrap"><table>
+<tr><th>ID</th><th>Issue</th><th>Where</th><th>Note</th><th class="eff">Effort</th></tr>
+<tr><td class="id">P4.1</td><td><strong>Runtime 32-bit divide/modulo in the issue path</strong></td><td><span class="filecite">op_core:803–805</span></td><td>A combinational divider feeding per-cycle issue logic, on what is likely the critical path. The divisor must stay dynamic (that is how hardware step-skipping works), so the fix is nested vertical/horizontal counters reloaded per k-step from the popcounts — not constraining the divisor away.</td><td class="eff">M</td></tr>
+<tr><td class="id">P4.2</td><td><strong>4× engine replication, 1 usable instance</strong></td><td><code>VX_tcu_unit</code></td><td><code>BLOCK_SIZE == ISSUE_WIDTH</code> instantiates a complete op-core (32 fmadd + 4 KB SRAM + 32×32 crossbar + sorters) per issue block at IW=4. My bring-up fix routes block 0 and dead-ends the rest; the real fix is <code>NUM_TCU_OP_CORES=1</code> decoupled from ISSUE_WIDTH. Recovers ~3/4 of TCU area — material to any area number.</td><td class="eff">M</td></tr>
+<tr><td class="id">P4.3</td><td><strong>Hand-rolled double-buffer FSMs</strong></td><td>A/B/bitmap windows</td><td><code>A/B/BITMAP_BUF_SLOTS = 2 // "Current code only works for '2'"</code>, with four hand-maintained bit-pairs per stream (<code>rq</code>/<code>ld</code>/<code>active</code>/<code>load</code>). This is where the subtlest bugs of this session lived. Replace with a shared parameterized abstraction.</td><td class="eff">L</td></tr>
+</table></div>
+
+<div class="tier t3">P5 — Exploration and hygiene. <small>Do after the design is trustworthy.</small></div>
+<div class="tablewrap"><table>
+<tr><th>ID</th><th>Issue</th><th>Note</th><th class="eff">Effort</th></tr>
+<tr><td class="id">P5.1</td><td><strong>Area-axis step-shape sweep</strong></td><td>The existing exploration correctly picked 2×16 at a fixed 32-multiplier budget. The untried axis is total multiplier count: 4×16 and 8×16 (64/128 MAC/cycle), which the barely-utilized LMEM port can feed. This is the change that could put TCU_OP decisively ahead on dense as well as sparse.</td><td class="eff">M–L</td></tr>
+<tr><td class="id">P5.2</td><td><strong>Crossbar queue depth 4 for sparse runs</strong></td><td>All runs here used depth 2 (inherited from <code>custom/run.sh</code>) where the design-space exploration settled on 4. Irrelevant to dense (which never queues), necessary for sparse.</td><td class="eff">S</td></tr>
+<tr><td class="id">P5.3</td><td><strong>Document the descriptor ABI</strong></td><td>The rs1/rs2 lane packing, field widths, flag semantics and the LMEM-residency requirement exist only in the RTL's bit-slicing. Put them next to <code>mma_op</code> in <code>vx_tensor.h</code>.</td><td class="eff">S</td></tr>
+<tr><td class="id">P5.4</td><td><strong>Code hygiene pass</strong></td><td>~250 lines of commented-out trace blocks and abandoned variants; 15+ TODOs of which several are load-bearing; magic matrix ids 1/2/4/8; <code>NEW</code>/<code>NEW^2</code>/<code>NEW^3</code> section banners; null-pointer sentinels doubling as state flags.</td><td class="eff">M</td></tr>
+<tr><td class="id">P5.5</td><td><strong>Kernel hygiene</strong></td><td>Default <code>SGEMM_TRACE_MARKERS</code> to 0 (debug marker stores currently compile into result buffers by default); drop the <code>#undef __local_mem</code> redefinition that ignores its size argument; split the 400-line dense/sparse function; remove the <code>-Wunused</code> pragma suppressions once dead declarations go.</td><td class="eff">M</td></tr>
+</table></div>
+
+<div class="callout"><strong>Suggested first week.</strong> P0.1 → P0.2 → P0.3 gets a trustworthy dense baseline in a normal build. Then P1.1–P1.4 (all small, all silent-wrongness) and P2.4 (the stress regression that would have caught most of this session's bugs). Only then start P2.1/P2.2 — the sparse validation that the design actually stands or falls on — with P3.1 folded in first so the sparse numbers are not distorted by the prefetch throttle.</div>
+
+<p class="legend">Review artifacts: bring-up fixes on branch <code>tcu_op</code> (pushed to vortexgpgpu/vortex); run logs and repro scripts under <code>eval_tcu_vs_wg/fedp2k/</code>; this document is intentionally untracked.</p>
+</main>

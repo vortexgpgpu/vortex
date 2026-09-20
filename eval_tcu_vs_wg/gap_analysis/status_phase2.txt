@@ -1,0 +1,17 @@
+[15:07:01] START-DBG trace_wg_dxa_iw4
+[15:08:13] DONE-DBG trace_wg_dxa_iw4 rc=0 size=98M
+[15:08:13] START-DBG trace_sgemm_tcu_iw4
+[15:08:28] DONE-DBG trace_sgemm_tcu_iw4 rc=0 size=190M
+[15:08:28] START-DBG trace_wg_dxa_iw1
+[15:09:42] DONE-DBG trace_wg_dxa_iw1 rc=0 size=106M
+[15:09:42] START-VAR var_swloadB_iw4
+[15:09:58] DONE-VAR var_swloadB_iw4 rc=0
+[15:09:58] START-VAR var_swloadA_iw4
+[15:10:13] DONE-VAR var_swloadA_iw4 rc=0
+[15:10:13] START-VAR var_dbuf_iw4
+[15:10:31] DONE-VAR var_dbuf_iw4 rc=0
+[15:10:31] START-VAR var_k512_dxa_iw4
+[15:10:47] DONE-VAR var_k512_dxa_iw4 rc=0
+[15:10:47] START-VAR var_k512_base_iw4
+[15:10:54] DONE-VAR var_k512_base_iw4 rc=0
+PHASE2-COMPLETE

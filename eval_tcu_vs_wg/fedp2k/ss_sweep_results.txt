@@ -1,0 +1,6 @@
+ss_fedp2k_iw1_simx mode=RS-LEAKED rc=0 cycles=100006 instrs=11080 PASSED
+ss_fedp2k_iw2_simx mode=RS-LEAKED rc=0 cycles=73272 instrs=10128 PASSED
+ss_fedp2k_iw4_simx mode=RS-LEAKED rc=0 cycles=73831 instrs=9640 PASSED
+ss_fedp2k_iw1_rtl mode=RS-LEAKED rc=0 cycles=99065 instrs=11080 PASSED
+ss_fedp2k_iw2_rtl mode=RS-LEAKED rc=0 cycles=73654 instrs=10128 PASSED
+ss_fedp2k_iw4_rtl mode=RS-LEAKED rc=0 cycles=63175 instrs=9640 PASSED

@@ -1,0 +1,219 @@
+[16:21:53] START p1/TFR single32
+p1/TFR single32 cycles=8265 FAILED asserts=101 wall=173s
+[16:24:48] PHASE-DONE p1/TFR
+[16:25:28] START p2/TFR single32
+p2/TFR single32 cycles=8265 FAILED asserts=5 wall=128s
+[16:27:37] PHASE-DONE p2/TFR
+[16:29:01] START p3/TFR single32
+p3/TFR single32 cycles=8265 PASSED asserts=0 wall=6s
+[16:29:11] PHASE-DONE p3/TFR
+[16:29:36] START p4/TFR single64
+p4/TFR single64 cycles=NA ABORT(rc=2) asserts=1 wall=187s
+[16:32:45] START p4/TFR dxa128
+p4/TFR dxa128 cycles=76343 PASSED asserts=0 wall=186s
+[16:35:53] START p4/TFR nonzeroc128
+p4/TFR nonzeroc128 cycles=81578 FAILED asserts=101 wall=189s
+[16:39:03] START p4/TFR kchunk512
+p4/TFR kchunk512 cycles=286836 PASSED asserts=0 wall=251s
+[16:43:15] START p4/TFR coop128
+p4/TFR coop128 cycles=32028 PASSED asserts=0 wall=174s
+[16:46:10] START p4/TFR single256
+p4/TFR single256 cycles=568180 PASSED asserts=0 wall=341s
+[16:51:53] PHASE-DONE p4/TFR
+[16:52:35] START p5/TFR nonzeroc128
+p5/TFR nonzeroc128 cycles=NA ABORT(rc=2) asserts=2 wall=172s
+[16:55:29] START p5/TFR single32
+[16:57:28] START dbg/TFR nzc32
+p5/TFR single32 cycles=NA ABORT(rc=2) asserts=8 wall=172s
+[16:58:22] START p5/TFR signed128
+dbg/TFR nzc32 cycles=NA ABORT(rc=2) asserts=5 wall=213s
+[17:01:03] PHASE-DONE dbg/TFR
+[17:01:29] START dbg2/TFR nzc32
+dbg2/TFR nzc32 cycles=9186 FAILED asserts=101 wall=167s
+[17:04:18] PHASE-DONE dbg2/TFR
+[17:06:22] START p6/TFR nzc32
+p6/TFR nzc32 cycles=9186 FAILED asserts=101 wall=174s
+[17:09:17] PHASE-DONE p6/TFR
+[17:10:21] START dbg3/TFR nzc32
+dbg3/TFR nzc32 cycles=9186 FAILED asserts=101 wall=176s
+[17:13:18] PHASE-DONE dbg3/TFR
+[17:14:32] START dbg4/TFR nzc32
+dbg4/TFR nzc32 cycles=9186 FAILED asserts=101 wall=174s
+[17:17:28] PHASE-DONE dbg4/TFR
+[17:18:49] START dbg5/TFR nzc32
+dbg5/TFR nzc32 cycles=9186 FAILED asserts=101 wall=177s
+[17:21:47] PHASE-DONE dbg5/TFR
+[17:22:27] START p7/TFR nzc32
+p7/TFR nzc32 cycles=9186 FAILED asserts=101 wall=175s
+[17:25:23] PHASE-DONE p7/TFR
+[17:26:41] START p8/TFR nzc32
+p8/TFR nzc32 cycles=9186 FAILED asserts=101 wall=176s
+[17:29:39] PHASE-DONE p8/TFR
+[17:30:09] START p9/TFR nzc32
+p9/TFR nzc32 cycles=9186 PASSED asserts=0 wall=177s
+[17:33:07] PHASE-DONE p9/TFR
+[17:33:39] START v1/TFR single32
+v1/TFR single32 cycles=8266 PASSED asserts=0 wall=191s
+[17:36:51] START v1/TFR nonzeroc128
+v1/TFR nonzeroc128 cycles=81594 PASSED asserts=0 wall=216s
+[17:40:28] START v1/TFR signed128
+v1/TFR signed128 cycles=76359 PASSED asserts=0 wall=220s
+[17:44:10] START v1/TFR signednzc128
+v1/TFR signednzc128 cycles=81594 PASSED asserts=0 wall=225s
+[17:47:57] START v1/TFR dxa128
+v1/TFR dxa128 cycles=76359 PASSED asserts=0 wall=230s
+[17:51:49] START v1/TFR kchunk512
+v1/TFR kchunk512 cycles=286852 PASSED asserts=0 wall=301s
+[17:56:51] START v1/TFR coop128
+v1/TFR coop128 cycles=32013 PASSED asserts=0 wall=207s
+[18:00:19] START v1/TFR single256
+v1/TFR single256 cycles=568244 PASSED asserts=0 wall=412s
+[18:07:12] PHASE-DONE v1/TFR
+[18:07:12] START v1/TFR s1_128
+v1/TFR s1_128 cycles=0 ABORT(rc=2) asserts=1 wall=182s
+[18:10:15] PHASE-DONE v1/TFR
+[18:10:15] START v1/TFR s2_128
+v1/TFR s2_128 cycles=0 ABORT(rc=2) asserts=1 wall=172s
+[18:13:09] PHASE-DONE v1/TFR
+[18:13:09] START v1/DPI legacy128
+v1/DPI legacy128 cycles=81850 PASSED asserts=0 wall=164s
+[18:15:55] PHASE-DONE v1/DPI
+[19:09:03] START w1/TFR single32
+w1/TFR single32 cycles=8271 PASSED asserts=0 wall=218s
+[19:12:43] START w1/TFR nzc128
+w1/TFR nzc128 cycles=81674 PASSED asserts=0 wall=242s
+[19:16:46] START w1/TFR signednzc128
+w1/TFR signednzc128 cycles=81674 PASSED asserts=0 wall=233s
+[19:20:40] START w1/TFR kchunk512
+w1/TFR kchunk512 cycles=287156 PASSED asserts=0 wall=326s
+[19:26:08] PHASE-DONE w1/TFR
+[19:26:08] START w1/TFR s1_128
+w1/TFR s1_128 cycles=81191 PASSED asserts=0 wall=244s
+[19:30:14] PHASE-DONE w1/TFR
+[19:30:14] START w1/TFR s2_128
+w1/TFR s2_128 cycles=60497 PASSED asserts=0 wall=233s
+[19:34:08] PHASE-DONE w1/TFR
+[19:34:33] START x1/TFR single32
+x1/TFR single32 cycles=NA ABORT(rc=2) asserts=2 wall=246s
+[19:38:40] PHASE-DONE x1/TFR
+[19:40:14] START x2/TFR single32
+x2/TFR single32 cycles=8270 PASSED asserts=0 wall=215s
+[19:43:50] PHASE-DONE x2/TFR
+[19:44:06] START x3/TFR nzc128
+x3/TFR nzc128 cycles=81658 PASSED asserts=0 wall=237s
+[19:48:04] START x3/TFR signednzc128
+x3/TFR signednzc128 cycles=81658 PASSED asserts=0 wall=239s
+[19:52:04] START x3/TFR dxa128
+x3/TFR dxa128 cycles=76423 PASSED asserts=0 wall=222s
+[19:55:47] START x3/TFR kchunk512
+x3/TFR kchunk512 cycles=286916 PASSED asserts=0 wall=304s
+[20:00:52] START x3/TFR coop128
+x3/TFR coop128 cycles=32025 PASSED asserts=0 wall=221s
+[20:04:34] START x3/TFR single256
+x3/TFR single256 cycles=568500 PASSED asserts=0 wall=415s
+[20:11:31] PHASE-DONE x3/TFR
+[20:11:31] START x3/TFR s1_128
+x3/TFR s1_128 cycles=79915 PASSED asserts=0 wall=226s
+[20:15:19] PHASE-DONE x3/TFR
+[20:15:19] START x3/TFR s2_128
+x3/TFR s2_128 cycles=60617 PASSED asserts=0 wall=217s
+[20:18:57] PHASE-DONE x3/TFR
+[20:20:04] START y1/TFR nzc32
+y1/TFR nzc32 cycles=9190 PASSED asserts=0 wall=187s
+[20:23:13] PHASE-DONE y1/TFR
+[20:23:31] START y2/TFR nzc128
+y2/TFR nzc128 cycles=81658 PASSED asserts=0 wall=227s
+[20:27:19] START y2/TFR signednzc128
+y2/TFR signednzc128 cycles=81658 PASSED asserts=0 wall=217s
+[20:30:58] START y2/TFR dxa128
+y2/TFR dxa128 cycles=76423 PASSED asserts=0 wall=222s
+[20:34:42] START y2/TFR kchunk512
+y2/TFR kchunk512 cycles=286916 PASSED asserts=0 wall=294s
+[20:39:37] START y2/TFR coop128
+y2/TFR coop128 cycles=32025 PASSED asserts=0 wall=210s
+[20:43:08] START y2/TFR single256
+y2/TFR single256 cycles=568500 PASSED asserts=0 wall=405s
+[20:49:55] PHASE-DONE y2/TFR
+[20:49:55] START y2/TFR s1_128
+y2/TFR s1_128 cycles=79915 PASSED asserts=0 wall=225s
+[20:53:41] PHASE-DONE y2/TFR
+[20:53:41] START y2/TFR s2_128
+y2/TFR s2_128 cycles=60617 PASSED asserts=0 wall=207s
+[20:57:09] PHASE-DONE y2/TFR
+[21:02:52] START z1/TFR nzc32
+z1/TFR nzc32 cycles=NA ABORT(rc=2) asserts=1 wall=144s
+[21:05:17] PHASE-DONE z1/TFR
+[21:06:45] START z2/TFR nzc128
+z2/TFR nzc128 cycles=78952 PASSED asserts=0 wall=170s
+[21:09:37] START z2/TFR s2_128
+z2/TFR s2_128 cycles=78441 FAILED asserts=101 wall=171s
+[21:12:30] PHASE-DONE z2/TFR
+[21:15:55] START z3/TFR s2_128
+z3/TFR s2_128 cycles=78441 FAILED asserts=101 wall=171s
+[21:18:47] START z3/TFR nzc128
+[21:21:04] START z4/TFR s2_128
+z3/TFR nzc128 cycles=NA ABORT(rc=2) asserts=5 wall=141s
+[21:21:09] PHASE-DONE z3/TFR
+[21:22:16] START z5/TFR s2_128
+z5/TFR s2_128 cycles=78441 FAILED asserts=101 wall=171s
+[21:25:09] PHASE-DONE z5/TFR
+[21:26:20] START z6/TFR s2flatP
+z6/TFR s2flatP cycles=NA ABORT(rc=2) asserts=2 wall=3s
+[21:26:24] PHASE-DONE z6/TFR
+[21:26:39] START z7/TFR s2flatP
+z7/TFR s2flatP cycles=78441 FAILED asserts=101 wall=149s
+[21:29:09] PHASE-DONE z7/TFR
+[21:37:48] START z8/TFR flatP_dense
+z8/TFR flatP_dense cycles=78952 PASSED asserts=0 wall=149s
+[21:40:19] START z8/TFR flatP_s1
+z8/TFR flatP_s1 cycles=78723 FAILED asserts=101 wall=150s
+[21:42:51] PHASE-DONE z8/TFR
+[21:43:51] START z9/TFR flatP_s1_d32
+z9/TFR flatP_s1_d32 cycles=78723 FAILED asserts=101 wall=149s
+[21:46:21] START z9/TFR d4_s2_d32
+z9/TFR d4_s2_d32 cycles=78441 FAILED asserts=101 wall=174s
+[21:49:16] PHASE-DONE z9/TFR
+[21:50:07] START za/TFR flatR_s2
+za/TFR flatR_s2 cycles=78441 FAILED asserts=101 wall=206s
+[21:53:35] START za/TFR flatP_s2
+za/TFR flatP_s2 cycles=78441 FAILED asserts=101 wall=150s
+[21:56:06] START za/TFR flatR_dense
+za/TFR flatR_dense cycles=78952 PASSED asserts=0 wall=202s
+[21:59:30] PHASE-DONE za/TFR
+[22:00:27] START zb/TFR flatR_s2
+zb/TFR flatR_s2 cycles=78441 FAILED asserts=101 wall=205s
+[22:03:54] START zb/TFR d4_s2
+zb/TFR d4_s2 cycles=78441 FAILED asserts=101 wall=171s
+[22:06:47] PHASE-DONE zb/TFR
+[22:08:58] START zc/TFR flatR_dense
+zc/TFR flatR_dense cycles=78952 PASSED asserts=0 wall=205s
+[22:12:25] START zc/TFR flatR_s2
+zc/TFR flatR_s2 cycles=78441 FAILED asserts=101 wall=204s
+[22:15:50] PHASE-DONE zc/TFR
+[22:18:43] START zd/TFR flat_s2
+zd/TFR flat_s2 cycles=78441 FAILED asserts=101 wall=146s
+[22:21:10] PHASE-DONE zd/TFR
+[22:22:54] START ze/TFR d4_s2
+ze/TFR d4_s2 BUILD-FAIL(kernel)
+[22:22:54] START ze/TFR d4_s1
+ze/TFR d4_s1 BUILD-FAIL(kernel)
+[22:22:54] PHASE-DONE ze/TFR
+[22:23:13] START zf/TFR d4_s2
+zf/TFR d4_s2 cycles=NA ABORT(rc=2) asserts=2 wall=146s
+[22:25:41] PHASE-DONE zf/TFR
+[22:26:56] START g0/TFR nzc128
+g0/TFR nzc128 cycles=78952 PASSED asserts=0 wall=173s
+[22:29:50] START g0/TFR signednzc128
+g0/TFR signednzc128 cycles=78952 PASSED asserts=0 wall=172s
+[22:32:44] START g0/TFR dxa128
+g0/TFR dxa128 cycles=78952 PASSED asserts=0 wall=172s
+[22:35:37] PHASE-DONE g0/TFR
+[22:35:37] START g1/TFR s1_128
+g1/TFR s1_128 cycles=59064 PASSED asserts=0 wall=166s
+[22:38:25] PHASE-DONE g1/TFR
+[22:38:25] START g2/TFR s2_128
+g2/TFR s2_128 cycles=63808 PASSED asserts=0 wall=168s
+[22:41:15] PHASE-DONE g2/TFR
+[23:20:23] START zz/TFR s2_128
+zz/TFR s2_128 cycles=63808 PASSED asserts=0 wall=168s
+[23:23:13] PHASE-DONE zz/TFR

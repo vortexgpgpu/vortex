@@ -293,6 +293,11 @@ def infer_cache_level(path: str) -> str:
     return "l2"
   if "l3cache" in p:
     return "l3"
+  # Local (shared) memory: "...-core0-lmem bank-rd-req[4]". Checked before the
+  # generic "mem" test, which "-lmem" does not match, so it used to fall
+  # through to "unknown".
+  if "-lmem" in p or p.startswith("lmem"):
+    return "lmem"
   if p.startswith("mem") or "dram" in p or p.endswith("-mem") or "-mem" in p:
     return "mem"
   return "unknown"
@@ -432,12 +437,21 @@ class InstrRecord:
   dest_value: Optional[Dict[str, str]] = None
   op: Optional[str] = None
 
+# rtlsim, opaesim and xrtsim advance the trace timestamp once per eval() and
+# evaluate twice per clock (one per edge), so an RTL "tick:" prefix counts half
+# cycles. RtlParser divides it out so RTL and SimX events share a cycle axis.
+RTL_TICKS_PER_CYCLE = 2
+
 class RtlParser(ParserBase):
-  def __init__(self, *, values_mode: str, cycle_min: Optional[int], cycle_max: Optional[int], wait_for_vxdrv_start: bool = True):
+  def __init__(self, *, values_mode: str, cycle_min: Optional[int], cycle_max: Optional[int], wait_for_vxdrv_start: bool = True,
+               ticks_per_cycle: int = RTL_TICKS_PER_CYCLE, observer: Optional["DerivedTracks"] = None):
     super().__init__(values_mode=values_mode, cycle_min=cycle_min, cycle_max=cycle_max)
     self.wait_for_vxdrv_start = wait_for_vxdrv_start
     self._started = not wait_for_vxdrv_start
     self._instr: Dict[int, InstrRecord] = {}
+    self.ticks_per_cycle = max(1, ticks_per_cycle)
+    # Sees every kept line, including the ones the IR below has no event for.
+    self.observer = observer
 
   def parse_lines(self, lines: Iterable[str]) -> Iterator[Any]:
     for line in lines:
@@ -466,13 +480,17 @@ class RtlParser(ParserBase):
 
       m_tick = RTL_TICK_RE.match(line)
       if not m_tick:
+        if self.observer is not None:
+          self.observer.feed_untimed(line)
         continue
 
-      ts = int(m_tick.group(1))
+      ts = int(m_tick.group(1)) // self.ticks_per_cycle
       if not self._keep(ts):
         continue
 
       body = m_tick.group(2).strip()
+      if self.observer is not None:
+        self.observer.feed(ts, body)
       uuid: Optional[int] = None
       m_uuid = UUID_SUFFIX_RE.search(body)
       if m_uuid:
@@ -876,6 +894,306 @@ class SimxParser(ParserBase):
       return
 
 # -----------------------------
+# Derived analysis tracks (RTL)
+# -----------------------------
+#
+# Some units report their activity in TRACE lines that are not instruction
+# stages, warp state or cache events: they carry no "(#uuid)" suffix and no
+# "<path> <action>:" shape, so the parsers above drop them. The TCU_OP engine
+# (VX_tcu_op_core.sv) is the important case: a TCU_OP kernel is one warp and a
+# few hundred instructions while the engine runs for tens of thousands of
+# cycles, so without these tracks the time is invisible. DerivedTracks watches
+# every kept RTL line and reconstructs:
+#
+#   TCU_OP engine  per MMA_OP: fetch operands -> issue -> drain -> idle phases,
+#                  an issue-busy 0/1 counter, k-progress, and per-matrix
+#                  operand request rates.
+#   DXA            per worker: transfer-in-service slices (setup-done -> done)
+#                  and queued slices (dispatch-issue -> setup-done). Needs
+#                  DBG_TRACE_DXA, which --debug builds now enable.
+#   icache         miss -> response slices (the warp's fetch is blocked for
+#                  the whole refill), flagged when the TCU_OP engine is idle.
+#   DRAM           binned read/write request rates.
+#
+# Everything is emitted into its own Perfetto process so it is clearly derived
+# rather than observed. Trackers stay empty (and emit nothing) when the log has
+# no matching lines.
+
+DERIVED_PID = 2
+DERIVED_BIN_CYCLES = 64
+
+_TCU_FIRE = "[tcu_op_core] TCU execution fired"
+_TCU_ISSUE = "[tcu_op_core] Issue Busy processing"
+_TCU_ALL_ISSUED = "[tcu_op_core] All iterations issued"
+_TCU_RESULT = "[tcu_op_core] Result fired downstream"
+_TCU_EXEC_STALL = "[tcu_op_core]: execute stall"
+_TCU_LMEM_RD = "LMEM: Issuing read request"
+_TCU_LMEM_WR = "LMEM: Issuing write request"
+_TCU_SET_RE = re.compile(r"^c_blk_idx=.*\bset=(\d+)")
+_TCU_ADDR_RE = re.compile(r"(\w)_addr=0x([0-9a-fA-F]+)")
+_MATRIX_RE = re.compile(r"matrix=(\w+)")
+_DXA_REQ_RE = re.compile(r"\sdxa-req: .*smem=0x([0-9a-fA-F]+), meta=0x([0-9a-fA-F]+)")
+_DXA_ISSUE_RE = re.compile(r"\sdispatch-issue: worker=(\d+).*meta=0x([0-9a-fA-F]+)")
+_DXA_WORKER_RE = re.compile(r"dxa-worker(\d+)\s")
+_ICACHE_UUID_RE = re.compile(r"\(#(\d+)\)")
+_ADDR_RE = re.compile(r"addr=(0x[0-9a-fA-F]+)")
+
+
+@dataclass
+class _MmaOp:
+  fire: int
+  addrs: Dict[str, int] = field(default_factory=dict)
+  first_issue: Optional[int] = None
+  last_issue: Optional[int] = None
+  result: Optional[int] = None
+  issue_cycles: int = 0
+
+
+class DerivedTracks:
+  """Reconstructs unit-level activity from RTL TRACE lines (see above)."""
+
+  def __init__(self) -> None:
+    self.ops: List[_MmaOp] = []
+    self._await_addrs = False
+    self.issue_cycles: List[int] = []
+    self.k_sets: List[Tuple[int, int]] = []
+    self.operand_reqs: Dict[str, List[int]] = {}
+    self.d_writes: List[int] = []
+    self.exec_stalls: List[int] = []
+    self.dxa_reqs: Dict[str, List[int]] = {}          # meta -> [smem, ...] (FIFO)
+    self.dxa_issue: Dict[int, List[Tuple[int, Optional[int]]]] = {}  # worker -> [(cycle, smem)]
+    self.dxa_setup: Dict[int, List[int]] = {}
+    self.dxa_done: Dict[int, List[int]] = {}
+    self.icache_miss: Dict[str, Tuple[int, str]] = {}  # uuid -> (cycle, addr)
+    self.icache_rsp: Dict[str, int] = {}
+    self.dram_rd: List[int] = []
+    self.dram_wr: List[int] = []
+
+  # -- feeding ---------------------------------------------------------------
+
+  def feed_untimed(self, line: str) -> None:
+    # The operand addresses follow "TCU execution fired" on an untimed line.
+    if self._await_addrs and line.startswith("A_addr="):
+      self.ops[-1].addrs = {k: int(v, 16) for k, v in _TCU_ADDR_RE.findall(line)}
+      self._await_addrs = False
+
+  def feed(self, cyc: int, body: str) -> None:
+    if body.startswith("MEM Rd Req["):
+      self.dram_rd.append(cyc)
+      return
+    if body.startswith("MEM Wr Req["):
+      self.dram_wr.append(cyc)
+      return
+    if "-icache" in body:
+      m = _ICACHE_UUID_RE.search(body)
+      if m:
+        uid = m.group(1)
+        if " tags-miss:" in body:
+          ma = _ADDR_RE.search(body)
+          self.icache_miss.setdefault(uid, (cyc, ma.group(1) if ma else "?"))
+        elif " core-rd-rsp[" in body and uid in self.icache_miss:
+          self.icache_rsp.setdefault(uid, cyc)
+      return
+    if "dxa" in body:
+      if self._feed_dxa(cyc, body):
+        return
+    if "tcu_op_core" in body or body.startswith("c_blk_idx=") or body.startswith("LMEM: "):
+      self._feed_tcu(cyc, body)
+
+  def _feed_dxa(self, cyc: int, body: str) -> bool:
+    m = _DXA_REQ_RE.search(body)
+    if m:
+      self.dxa_reqs.setdefault(m.group(2), []).append(int(m.group(1), 16))
+      return True
+    m = _DXA_ISSUE_RE.search(body)
+    if m:
+      w, meta = int(m.group(1)), m.group(2)
+      q = self.dxa_reqs.get(meta)
+      self.dxa_issue.setdefault(w, []).append((cyc, q.pop(0) if q else None))
+      return True
+    m = _DXA_WORKER_RE.search(body)
+    if m:
+      w = int(m.group(1))
+      if " setup-done: " in body:
+        self.dxa_setup.setdefault(w, []).append(cyc)
+        return True
+      if " done: core=" in body:
+        self.dxa_done.setdefault(w, []).append(cyc)
+        return True
+    return False
+
+  def _feed_tcu(self, cyc: int, body: str) -> None:
+    op = self.ops[-1] if self.ops else None
+    if _TCU_FIRE in body:
+      self.ops.append(_MmaOp(fire=cyc))
+      self._await_addrs = True
+    elif _TCU_ISSUE in body:
+      self.issue_cycles.append(cyc)
+      if op is not None:
+        if op.first_issue is None:
+          op.first_issue = cyc
+        op.issue_cycles += 1
+    elif _TCU_ALL_ISSUED in body:
+      if op is not None:
+        op.last_issue = cyc
+    elif _TCU_RESULT in body:
+      if op is not None:
+        op.result = cyc
+    elif _TCU_EXEC_STALL in body:
+      self.exec_stalls.append(cyc)
+    elif body.startswith(_TCU_LMEM_RD):
+      m = _MATRIX_RE.search(body)
+      self.operand_reqs.setdefault(m.group(1) if m else "?", []).append(cyc)
+    elif body.startswith(_TCU_LMEM_WR):
+      self.d_writes.append(cyc)
+    else:
+      m = _TCU_SET_RE.match(body)
+      if m:
+        s = int(m.group(1))
+        if not self.k_sets or self.k_sets[-1][1] != s:
+          self.k_sets.append((cyc, s))
+
+  def empty(self) -> bool:
+    return not (self.ops or self.dxa_issue or self.icache_miss or self.dram_rd or self.dram_wr)
+
+  # -- emission --------------------------------------------------------------
+
+  def emit(self, writer: "TraceWriter", cfg: "EmitterConfig") -> Dict[str, int]:
+    """Write the derived process into the trace; returns per-kind counts."""
+    stats: Dict[str, int] = {}
+    if self.empty():
+      return stats
+    pid = DERIVED_PID
+    writer.emit({"ph": "M", "pid": pid, "name": "process_name",
+                 "args": {"name": "Vortex derived tracks (TCU_OP engine, DXA, icache, DRAM)"}})
+    writer.emit({"ph": "M", "pid": pid, "name": "process_sort_index", "args": {"sort_index": 0}})
+    named: set = set()
+
+    def track(tid: int, name: str) -> int:
+      if tid not in named:
+        named.add(tid)
+        writer.emit({"ph": "M", "pid": pid, "tid": tid, "name": "thread_name", "args": {"name": name}})
+        writer.emit({"ph": "M", "pid": pid, "tid": tid, "name": "thread_sort_index", "args": {"sort_index": tid}})
+      return tid
+
+    def span(tid: int, name: str, c0: Optional[int], c1: Optional[int], args: Dict[str, Any]) -> bool:
+      if c0 is None or c1 is None or c1 < c0:
+        return False
+      t0, t1 = ts_to_us(c0, cfg), ts_to_us(c1, cfg)
+      writer.emit({"ph": "X", "pid": pid, "tid": tid, "name": name, "cat": "vortex.derived",
+                   "ts": t0, "dur": max(t1 - t0, ts_to_us(1, cfg) * 0.5),
+                   "args": dict(args, cycles=c1 - c0)})
+      return True
+
+    def counter(tid: int, name: str, cyc: int, values: Dict[str, Any]) -> None:
+      writer.emit({"ph": "C", "pid": pid, "tid": tid, "name": name, "ts": ts_to_us(cyc, cfg), "args": values})
+
+    def binned(tid: int, name: str, cycles: List[int]) -> None:
+      if not cycles:
+        return
+      track(tid, name)
+      hist: Dict[int, int] = {}
+      for c in cycles:
+        hist[c // DERIVED_BIN_CYCLES] = hist.get(c // DERIVED_BIN_CYCLES, 0) + 1
+      for b in range(min(hist), max(hist) + 2):
+        counter(tid, name, b * DERIVED_BIN_CYCLES, {"per_cycle": round(hist.get(b, 0) / DERIVED_BIN_CYCLES, 4)})
+
+    # TCU_OP engine: one slice per MMA_OP plus its phases, all sequential.
+    if self.ops:
+      t_op, t_phase = track(1, "TCU_OP: MMA_OP lifetime"), track(2, "TCU_OP: engine phase")
+      n = 0
+      for i, op in enumerate(self.ops):
+        nxt = self.ops[i + 1].fire if i + 1 < len(self.ops) else None
+        n += span(t_op, f"MMA_OP {i}", op.fire, op.result, {"op": i, "issue_cycles": op.issue_cycles})
+        span(t_phase, "fetch operands", op.fire, op.first_issue, {"op": i})
+        span(t_phase, "issue (compute)", op.first_issue, op.last_issue, {"op": i, "issue_cycles": op.issue_cycles})
+        span(t_phase, "drain + D writeback", op.last_issue, op.result, {"op": i})
+        span(t_phase, "idle (no MMA_OP)", op.result, nxt, {"after_op": i})
+      stats["mma_ops"] = n
+    if self.issue_cycles:
+      t = track(3, "TCU_OP: issue busy (1 = FEOP step issued)")
+      prev: Optional[int] = None
+      for c in self.issue_cycles:
+        if prev is None or c - prev > 1:
+          if prev is not None:
+            counter(t, "issue busy", prev + 1, {"busy": 0})
+          counter(t, "issue busy", c, {"busy": 1})
+        prev = c
+      counter(t, "issue busy", prev + 1, {"busy": 0})
+    if self.k_sets:
+      t = track(4, "TCU_OP: k-progress (set)")
+      for c, s in self.k_sets:
+        counter(t, "k set", c, {"set": s})
+    for k, (mtx, cyc_list) in enumerate(sorted(self.operand_reqs.items())):
+      binned(5 + k, f"TCU_OP: operand requests {mtx} (per cycle)", cyc_list)
+    if self.d_writes:
+      binned(9, "TCU_OP: D write requests (per cycle)", self.d_writes)
+    if self.exec_stalls:
+      t = track(10, "TCU_OP: MMA_OP waiting at busy engine")
+      for c in self.exec_stalls:
+        span(t, "execute stall", c, c + 1, {})
+
+    # DXA: a worker has a one-deep hand-off slot. dispatch-issue queues a
+    # transfer, setup-done is when the worker starts it, done is when it
+    # finishes; per worker all three arrive in dispatch order.
+    labels = self._lmem_buffer_labels()
+    n = 0
+    for w in sorted(set(self.dxa_issue) | set(self.dxa_done)):
+      t_svc = track(20 + 2 * w, f"DXA worker {w}: transfer in service")
+      t_q = track(21 + 2 * w, f"DXA worker {w}: transfer queued")
+      for (c_issue, smem), c_start, c_done in zip(self.dxa_issue.get(w, []), self.dxa_setup.get(w, []),
+                                                  self.dxa_done.get(w, [])):
+        name = labels.get(smem & 0xFFFF, f"smem 0x{smem:x}") if smem is not None else "transfer"
+        args = {"smem": f"0x{smem:x}" if smem is not None else None, "queued_cycles": c_start - c_issue}
+        n += span(t_svc, name, c_start, c_done, args)
+        if c_start > c_issue:
+          span(t_q, f"{name} queued", c_issue, c_start, {})
+    if n:
+      stats["dxa_transfers"] = n
+
+    # icache misses: miss -> response for the same instruction uuid.
+    idle = [(op.result, self.ops[i + 1].fire) for i, op in enumerate(self.ops)
+            if op.result is not None and i + 1 < len(self.ops)]
+    n = 0
+    for uid, (c0, addr) in sorted(self.icache_miss.items(), key=lambda kv: kv[1][0]):
+      c1 = self.icache_rsp.get(uid)
+      if c1 is None:
+        continue
+      t = track(12, "icache miss -> refill (warp fetch blocked)")
+      engine_idle = any(c0 < b and c1 > a for a, b in idle)
+      n += span(t, f"icache miss {addr}" + (" [TCU_OP engine idle]" if engine_idle else ""), c0, c1,
+                {"addr": addr, "uuid": int(uid), "tcu_op_engine_idle": int(engine_idle)})
+    if n:
+      stats["icache_misses"] = n
+
+    binned(14, "DRAM read requests (per cycle)", self.dram_rd)
+    binned(15, "DRAM write requests (per cycle)", self.dram_wr)
+    return stats
+
+  def _lmem_buffer_labels(self) -> Dict[int, str]:
+    """LMEM offset -> 'A0'/'B1'/'C0'... from the operand addresses the engine
+    reports, so DXA transfers can be named by the buffer they fill."""
+    out: Dict[int, str] = {}
+    for i, op in enumerate(self.ops):
+      for mtx in ("A", "B", "C"):
+        if op.addrs.get(mtx):
+          out.setdefault(op.addrs[mtx] & 0xFFFF, f"{mtx} buffer {i % 2}")
+    return out
+
+  def summary(self) -> Optional[str]:
+    """One-line per-phase totals for the TCU_OP engine, or None."""
+    done = [op for op in self.ops if None not in (op.first_issue, op.last_issue, op.result)]
+    if not done:
+      return None
+    fetch = sum(op.first_issue - op.fire for op in done)
+    issue = sum(op.issue_cycles for op in done)
+    drain = sum(op.result - op.last_issue for op in done)
+    idle = sum(self.ops[i + 1].fire - op.result for i, op in enumerate(self.ops[:-1]) if op.result is not None)
+    return (f"tcu_op: {len(done)} MMA_OPs | fetch={fetch} issue={issue} drain={drain} "
+            f"idle_between={idle} cycles | first fire @{self.ops[0].fire}")
+
+
+# -----------------------------
 # Perfetto / Chrome Trace writer
 # -----------------------------
 
@@ -1115,17 +1433,20 @@ class PerfettoEmitter:
   def _emit_counter(self, ts_us: float, tid: int, name: str, value: Any) -> None:
     self.writer.emit({"ph": "C", "pid": self.pid, "tid": tid, "ts": ts_us, "name": name, "args": {"value": value}})
 
+  # Async ids are process-local ("id2": {"local": ...}). A bare "id" is global
+  # in the Chrome JSON format, so Perfetto filed every instruction slice under
+  # "Global Legacy Events" instead of this process.
   def _emit_async_begin(self, ts_us: float, tid: int, name: str, cat: str, async_id: Any, args: Dict[str, Any]) -> None:
-    self.writer.emit({"ph": "b", "pid": self.pid, "tid": tid, "ts": ts_us, "name": name, "cat": cat, "id": async_id, "args": args})
+    self.writer.emit({"ph": "b", "pid": self.pid, "tid": tid, "ts": ts_us, "name": name, "cat": cat, "id2": {"local": str(async_id)}, "args": args})
 
   def _emit_async_end(self, ts_us: float, tid: int, name: str, cat: str, async_id: Any, args: Dict[str, Any]) -> None:
-    self.writer.emit({"ph": "e", "pid": self.pid, "tid": tid, "ts": ts_us, "name": name, "cat": cat, "id": async_id, "args": args})
+    self.writer.emit({"ph": "e", "pid": self.pid, "tid": tid, "ts": ts_us, "name": name, "cat": cat, "id2": {"local": str(async_id)}, "args": args})
 
 # -----------------------------
 # main
 # -----------------------------
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
   ap = argparse.ArgumentParser(description="Convert Vortex RTL/SimX traces to Perfetto (Chrome Trace JSON).")
   ap.add_argument("input", help="Input log file.")
   ap.add_argument("-o", "--output", default=None, help="Output trace file (.json or .json.gz).")
@@ -1142,7 +1463,13 @@ def parse_args() -> argparse.Namespace:
                   help="Force parsing the whole log without gating on '[VXDRV] START:'. "
                        "By default the marker is honored only when present (else the whole log is parsed).")
   ap.add_argument("--parent-flow", action="store_true", help="Emit flow arrows for parent->uop when parent=#... is present. Default: off.")
-  return ap.parse_args()
+  ap.add_argument("--rtl-ticks-per-cycle", type=int, default=RTL_TICKS_PER_CYCLE,
+                  help="RTL trace ticks per core cycle (default 2: rtlsim/opaesim/xrtsim evaluate on both clock "
+                       "edges). The 'cycle' arg, --cycle-min/--cycle-max and the time base are all in cycles.")
+  ap.add_argument("--no-derived", action="store_true",
+                  help="RTL only: skip the derived tracks (TCU_OP engine phases, DXA transfers, icache refills, "
+                       "DRAM rates). They are emitted only when the log has matching lines.")
+  return ap.parse_args(argv)
 
 def _detect_log_type(peek_lines: List[str]) -> str:
   """Best-effort log type detection from the first handful of lines."""
@@ -1181,7 +1508,7 @@ def open_output(path: Path, compress: bool) -> io.TextIOBase:
   return open(path, "w", encoding="utf-8")
 
 def make_parser(args: argparse.Namespace, detected_type: Optional[str] = None,
-                has_vxdrv_start: bool = True) -> ParserBase:
+                has_vxdrv_start: bool = True, observer: Optional[DerivedTracks] = None) -> ParserBase:
   ptype = args.type
   if ptype == "auto":
     ptype = detected_type or "simx"
@@ -1194,7 +1521,9 @@ def make_parser(args: argparse.Namespace, detected_type: Optional[str] = None,
 
   if ptype == "rtlsim":
     return RtlParser(values_mode=args.values, cycle_min=args.cycle_min, cycle_max=args.cycle_max,
-                     wait_for_vxdrv_start=wait_for_start)
+                     wait_for_vxdrv_start=wait_for_start,
+                     ticks_per_cycle=getattr(args, "rtl_ticks_per_cycle", RTL_TICKS_PER_CYCLE),
+                     observer=observer)
   return SimxParser(values_mode=args.values, cycle_min=args.cycle_min, cycle_max=args.cycle_max,
                      wait_for_vxdrv_start=wait_for_start)
 
@@ -1239,8 +1568,8 @@ def reconcile(parser: ParserBase, emitter: PerfettoEmitter) -> None:
       file=sys.stderr,
     )
 
-def main() -> int:
-  args = parse_args()
+def main(argv: Optional[List[str]] = None) -> int:
+  args = parse_args(argv)
   in_path = Path(args.input)
   if not in_path.exists():
     print(f"error: input not found: {in_path}", file=sys.stderr)
@@ -1266,10 +1595,21 @@ def main() -> int:
         peek.append(ln)
       detected = _detect_log_type(peek)
       has_start = _has_vxdrv_start(peek)
-      parser = make_parser(args, detected_type=detected, has_vxdrv_start=has_start)
+      derived = None
+      if not args.no_derived and (args.type == "rtlsim" or (args.type == "auto" and detected == "rtlsim")):
+        derived = DerivedTracks()
+      parser = make_parser(args, detected_type=detected, has_vxdrv_start=has_start, observer=derived)
       n_events = run_export(parser, emitter, chain(peek, f))
 
     reconcile(parser, emitter)
+
+    if derived is not None:
+      stats = derived.emit(writer, cfg)
+      if stats:
+        print("derived: " + ", ".join(f"{k}={v}" for k, v in sorted(stats.items())), file=sys.stderr)
+      line = derived.summary()
+      if line:
+        print(line, file=sys.stderr)
 
     if args.cycle_ns is None and args.freq_mhz is None:
       print(

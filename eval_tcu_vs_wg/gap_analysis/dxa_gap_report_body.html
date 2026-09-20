@@ -1,0 +1,234 @@
+<div class="wrap">
+
+<div class="kicker">Vortex &middot; tcu-op fork &middot; simx investigation &middot; 2026-09-16</div>
+<h1>Why WGMMA+DXA isn't faster: the DXA critical path</h1>
+<p class="sub">A cycle-level autopsy of <span class="mono">sgemm_tcu_wg_dxa</span> vs <span class="mono">sgemm_tcu</span>
+at M=N=K=128, fp16&rarr;fp32, NW=16, NT=16, one core. Primary vehicle: simx with per-class MPM counters,
+cycle-stamped debug traces, and Perfetto exports; rtlsim numbers from the earlier sweep are used for cross-checking.</p>
+
+<div class="answer">
+<p><b>The answer in three sentences.</b> The WGMMA+DXA design is doing exactly what it promises on the
+compute side &mdash; 44% fewer instructions than the WMMA baseline, and the tensor pipes run at 3.35 of
+a possible 4 uops/cycle whenever they run. It is slow because <b>the single DXA engine is busy for 92.1%
+of the entire run and only 6.7% of that time overlaps any compute</b>: the kernel's single-buffer schedule
+serializes staging against WGMMA, and the engine itself moves data at 3.7 bytes/cycle against a 64-byte/cycle
+LMEM port. The gap is therefore <b>not expected and not fundamental</b> &mdash; it is the compounding of four
+identifiable implementation bottlenecks (ranked in &sect;4), and once staging is off the critical path the same
+kernel has roughly a 10&times; headroom at this problem size.</p>
+</div>
+
+<div class="stat-row">
+  <div class="stat dxa"><div class="v">92.1%</div><div class="l">of the run the DXA engine is busy (71,095 / 77,172 cycles, IW=4)</div></div>
+  <div class="stat tcu"><div class="v">6.3%</div><div class="l">of the run the tensor pipes execute anything (4,884 cycles)</div></div>
+  <div class="stat dxa"><div class="v">3.7 B/cyc</div><div class="l">effective DXA throughput vs 64 B/cyc LMEM port width</div></div>
+  <div class="stat crit"><div class="v">6.7%</div><div class="l">of DXA busy time overlapped by compute &mdash; staging is serialized</div></div>
+</div>
+
+<h2><span class="sec">1</span>The measured landscape</h2>
+<p>Total cycles for the three kernels on both simulators. Two things matter here. First, on the
+architectural model (simx) the DXA variant already <em>wins</em> at IW=4 &mdash; the "8% slower" result that
+prompted this investigation is an rtlsim-only effect. Second, both wins and losses are tiny compared to
+what the hardware could do: the compute roofline for this problem is <b>4,096 cycles</b> at IW=4
+(16,384 WGMMA uops &divide; 4 blocks), and every bar below is 19&ndash;80&times; above it.</p>
+
+<figure><div id="ch-landscape" class="chart"></div>
+<figcaption>End-to-end cycles, M=N=K=128. The WGMMA-without-DXA variant (<span class="mono">sgemm_tcu_wg</span>,
+software cooperative loads) is included to show that DXA is not the villain relative to its alternatives &mdash;
+it beats SW loading by 2.7&ndash;4.4&times;. The dashed line is the IW=4 TCU compute roofline.</figcaption></figure>
+
+<div class="tblwrap"><table>
+<tr><th>kernel</th><th class="n">instrs (simx)</th><th class="n">simx IW=1</th><th class="n">simx IW=4</th><th class="n">rtlsim IW=1</th><th class="n">rtlsim IW=4</th></tr>
+<tr><td><span class="mono">sgemm_tcu</span> (per-warp WMMA, dcache)</td><td class="n">53,359</td><td class="n">119,272</td><td class="n">99,038</td><td class="n">129,514</td><td class="n">111,373</td></tr>
+<tr class="hl"><td><span class="mono">sgemm_tcu_wg_dxa</span> (WGMMA + DXA)</td><td class="n">30,032</td><td class="n">142,480</td><td class="n">77,173</td><td class="n">342,897</td><td class="n">120,723</td></tr>
+<tr><td><span class="mono">sgemm_tcu_wg</span> (WGMMA, SW loads)</td><td class="n">255,296</td><td class="n">797,238</td><td class="n">335,957</td><td class="n">1,231,242</td><td class="n">331,466</td></tr>
+</table></div>
+
+<p>Note the rtlsim/simx divergence for the DXA kernel: 1.56&times; at IW=4 and 2.4&times; at IW=1. The RTL pays
+real microarchitectural costs the model idealizes (bbuf fetch width, uop issue, the LMEM-DMA priority
+arbiter). That divergence is a separate, secondary finding (&sect;6) &mdash; the primary story below is visible
+in both simulators and is analyzed on simx as requested.</p>
+
+<h2><span class="sec">2</span>What the machine is actually doing</h2>
+<p>The debug trace gives exact busy intervals: every DXA transfer's start/complete pair and every tensor-core
+uop retirement. Painting them on a common time axis answers "compute vs memory overlap" definitively:</p>
+
+<figure><div id="ch-timeline" class="chart"></div>
+<figcaption>Machine state over time, <span class="mono">sgemm_tcu_wg_dxa</span> IW=4 (256-cycle bins).
+Amber: fraction of the bin the DXA engine is busy. Teal: fraction the TCU executes uops.
+The DXA band is pinned at 100% nearly wall to wall; compute appears as thin teal spikes riding on it.
+The white gaps at the far left/right are kernel launch and the C-tile store epilogue.</figcaption></figure>
+
+<figure><div id="ch-classes" class="chart"></div>
+<figcaption>Every cycle of each run classified by activity. The baseline WMMA kernel has no DXA and stalls
+on dcache loads instead ("neither" = warps waiting on memory/scoreboard) &mdash; but it spreads those loads
+across 16 independent warps, so it degrades gracefully. The DXA kernel funnels all staging through one
+engine and one barrier, so its warps wait <em>together</em>: scheduler idle is 82&ndash;88%.</figcaption></figure>
+
+<p>Three numbers from these timelines carry the whole diagnosis:</p>
+<ul>
+<li><b>TCU compute is essentially free and essentially perfect.</b> 16,384 uops retire in 4,884 busy
+cycles at IW=4 &mdash; 3.35 uops/cycle against a hard ceiling of 4. When operands are resident, the
+warp-group machine runs at 84% of peak. (The WMMA baseline manages only 1.14 uops/cycle in its busy
+cycles &mdash; the warp-group lockstep genuinely is the denser way to feed the tensor pipes.)</li>
+<li><b>The DXA engine never rests and never shares.</b> Its 256 transfers occupy 71,095 of 77,172 cycles
+with a total of 808 idle cycles between transfers. It is the critical path; everything else is waiting for it.</li>
+<li><b>Overlap is 6.7%.</b> The single-buffer schedule (stage &rarr; barrier &rarr; compute &rarr; barrier &rarr; re-stage)
+makes staging and compute mutually exclusive within a CTA; the only overlap comes from other resident CTAs'
+transfers draining while one CTA computes.</li>
+</ul>
+
+<h2><span class="sec">3</span>Where the DXA cycles go</h2>
+<p>The engine's 71k busy cycles moved 256 KB of tile data (128 A-transfers + 128 B-transfers of 1 KB each).
+Pairing each transfer's start/complete with its descriptor slot splits the cost:</p>
+
+<div class="tblwrap"><table>
+<tr><th>transfer</th><th class="n">count</th><th class="n">GMEM lines read</th><th class="n">LMEM write beats</th><th class="n">bytes / beat</th><th class="n">span avg</th><th class="n">span median</th><th class="n">cycles / KB</th></tr>
+<tr><td>A tile (32&times;16 fp16, row-major dest)</td><td class="n">128</td><td class="n">32</td><td class="n">32</td><td class="n">32 B</td><td class="n">371</td><td class="n">266</td><td class="n">371</td></tr>
+<tr><td>B tile (16&times;32 fp16, BlockMajor dest)</td><td class="n">128</td><td class="n">16</td><td class="n">128</td><td class="n">8 B</td><td class="n">184</td><td class="n">150</td><td class="n">184</td></tr>
+</table></div>
+
+<p>Both rows are pathological, for different reasons:</p>
+<ul>
+<li><b>A pays DRAM latency, twice over.</b> A's tile rows are 32-byte segments of rows with a 256-byte
+stride, so every one of its 32 line reads returns 50% useful bytes &mdash; 2&times; the necessary DRAM traffic.
+Worse, the engine caps in-flight reads at 8 (<span class="mono">VX_CFG_DXA_MAX_INFLIGHT</span>), so a 32-line transfer
+exposes ~4 serial DRAM latencies. A single 1 KB A tile takes a median 266 cycles &mdash; ~10&times; the port-limited minimum.</li>
+<li><b>B pays scatter write amplification.</b> The BlockMajor destination layout interleaves K inside each
+64-byte block, so one GMEM line (one k-row of the tile) scatters 4 fp16 elements into each of 8 different
+LMEM blocks &mdash; 8 beats of 8 bytes each. Each LMEM block is written 8 times by 8 different beats.
+The port could carry the whole tile in 16 beats; the scatter takes 128.</li>
+<li><b>Transfers never pipeline into each other.</b> The lone worker
+(<span class="mono">VX_CFG_NUM_DXA_CORES = max(1, cores/8) = 1</span> on this config) runs address-generation
+&rarr; read &rarr; drain per transfer and only then starts the next, so all 256 transfers pay their startup
+latency serially. Average span &times; count &asymp; the whole DXA phase: 277.7 &times; 256 = 71k cycles.</li>
+</ul>
+
+<figure><div id="ch-waterfall" class="chart"></div>
+<figcaption>From roofline to reality at IW=4. Each step is measured or arithmetically implied by the
+counters: compute roofline 4,096 &rarr; add the serialized DXA phase (71,095, of which only 4,766 overlap
+compute) &rarr; simx total 77,173 &rarr; RTL adds another 1.56&times; &rarr; rtlsim total 120,723 vs the WMMA baseline's 111,373.</figcaption></figure>
+
+<h2><span class="sec">4</span>Root causes, ranked</h2>
+
+<div class="cause"><div class="head"><span class="rank">RC1</span><b>Staging is serialized against compute &mdash; by schedule, not by necessity</b><span class="cost">&asymp; 66k of 77k cycles</span></div>
+<div class="body"><p>The kernel's single-buffer loop (stage tile <i>i</i> &rarr; barrier &rarr; compute <i>i</i> &rarr; barrier &rarr; overwrite)
+makes every warp in the CTA sleep through every transfer: scheduler idle is 82%. Overlap exists only across
+co-resident CTAs and covers 6.7% of DXA time. This schedule was adopted because the double-buffered variant
+measured <em>worse</em> &mdash; &sect;5 shows that failure is a compiler artifact, not evidence that overlap doesn't pay.</p></div></div>
+
+<div class="cause"><div class="head"><span class="rank">RC2</span><b>The DXA engine drains at 5.6% of LMEM port bandwidth</b><span class="cost">71k cycles for 256 KB</span></div>
+<div class="body"><p>Three multiplicative engine losses: B's BlockMajor scatter lands 8 bytes per beat where the
+banked LMEM port accepts 64 (the RTL's own warp-array transpose writes full blocks &mdash; the engine could gather
+across k-rows the same way); A's half-used line reads double its DRAM traffic; and the 8-deep in-flight window
+plus no cross-transfer pipelining expose one full memory latency per 1 KB transfer. Fixing the scatter alone
+takes B from 128 to 16 beats; letting the next transfer's AGU run during the current drain removes ~256
+serial latency exposures.</p></div></div>
+
+<div class="cause"><div class="head"><span class="rank">RC3</span><b>CTA size is welded to ISSUE_WIDTH &rarr; tiny CTAs &rarr; zero data reuse</b><span class="cost">4&times; (IW=4) to 16&times; (IW=1) traffic</span></div>
+<div class="body"><p>The host derives warps-per-CTA from <span class="mono">VX_CAPS_ISSUE_WIDTH</span> because the WGMMA
+lockstep gate dispatches exactly ISSUE_WIDTH warps. At IW=4 that means 16 CTAs for a 128&sup2; output; each
+re-DMAs the same B tiles from DRAM (<span class="mono">gmem_dedup=0</span>, no multicast used, DXA bypasses every cache).
+The engine reads 384 KB of DRAM to deliver 64 KB of unique matrix data, while the WMMA baseline's dcache turns
+the same reuse into 70&ndash;93% hit rates for free. At IW=1 this same coupling produces single-warp CTAs, 1,024
+transfers, 16&times; B re-staging &mdash; plus TCU-side serialization from the CTA-overlap fence on the shared B-buffer.
+This is the main reason the IW=1 column is catastrophic.</p></div></div>
+
+<div class="cause"><div class="head"><span class="rank">RC4</span><b>TCU operand refetch through a 1-line/cycle tbuf port</b><span class="cost">tbuf stalls &asymp; 10% of cycles</span></div>
+<div class="body"><p>Every WGMMA instruction group re-plans its operand tile into the tile buffer through a single
+LMEM port at one 64 B line per cycle &mdash; 32 lines (16 A + 16 B) before any uop advances, and the lockstep gate
+holds all four blocks until the slowest is resident (<span class="mono">tbuf_stalls</span> = 7,570 &asymp; 9.8% of cycles;
+<span class="mono">tbuf_cache_hits</span> = 19 of 128, because the shared B-buffer is invalidated whenever the WGMMA
+pipeline drains &mdash; which the barrier forces every tile). Data staged into LMEM once is thus re-read 1.7&times;
+(6,978 lines for a 4,096-line minimum). Secondary today because RC1/RC2 hide it; it becomes the next
+wall once staging overlaps.</p></div></div>
+
+<h2><span class="sec">5</span>The double-buffer trap: why the "obvious fix" measured 8&times; worse</h2>
+<p>Overlap should erase RC1, and <span class="mono">DXA_DOUBLE_BUFFER</span> exists in the kernel &mdash; but it measured
+3.4&ndash;4.5&times; worse on rtlsim and <b>8.3&times; worse on simx</b> (637,819 cycles). The trace pins the mechanism precisely:</p>
+<ul>
+<li>With two buffers the buffer index <span class="mono">p</span> becomes runtime-varying, so the compiler can no longer
+scalarize <span class="mono">A_buf[2]</span>, <span class="mono">B_buf[2]</span>, and the two <span class="mono">vortex::barrier</span>
+objects into registers &mdash; they land on the per-thread stack (11 spill stores appear; frame grows 0x30&rarr;0x50).</li>
+<li>The hot reload sites bracket every <span class="mono">vx_bar</span>: the barrier object and buffer pointers are re-loaded
+from the stack in every loop phase. Dynamic loads triple: 35,840 &rarr; 100,352.</li>
+<li>Per-lane stacks live in <em>global</em> memory 8 KB apart, so one spill reload fans out to 16 uncoalesced
+DRAM lines (coalescer misses: 256 &rarr; 18,944; DRAM reads: 8,210 &rarr; 77,570) at 231-cycle average load latency,
+and the added DRAM pressure drags DXA line latency from 278 to 725 cycles.</li>
+</ul>
+<p><b>Verdict: the failed experiment convicts the compiler/ABI path (per-lane stack in DRAM), not the
+pipelining idea.</b> A manually 2&times;-unrolled loop with two statically-named buffer/barrier sets &mdash; no
+runtime-indexed arrays &mdash; keeps everything in registers and should recover the overlap that RC1 costs.</p>
+
+<h2><span class="sec">6</span>Cross-checks and the remaining questions</h2>
+<h3>Variant experiments (simx, IW=4)</h3>
+<figure><div id="ch-variants" class="chart"></div>
+<figcaption>Both hybrid variants (one operand via cooperative SW load) lose to full DXA: SW loading is
+even more expensive than bad DMA, because the index math runs 3&ndash;4&times; more instructions through 16 lanes
+and the scatter stores bank-conflict in LMEM. At K=512 the DXA kernel's fixed costs amortize and it beats
+the baseline 1.73&times; &mdash; the design's trajectory is correct; its constants are wrong.</figcaption></figure>
+
+<h3>Ruled out by measurement</h3>
+<div class="tblwrap"><table>
+<tr><th>suspect</th><th>evidence</th><th>verdict</th></tr>
+<tr><td>Register pressure / spills (single-buffer)</td><td>0 spill loads, 1 spill store in <span class="mono">kernel_main</span>; 0x30 frame</td><td class="n">clean</td></tr>
+<tr><td>Global-load coalescing</td><td>coalescer misses 256 (vs 18,944 in the dbuf pathology)</td><td class="n">clean</td></tr>
+<tr><td>WGMMA uop density</td><td>3.35 / 4 uops/cycle when active</td><td class="n">clean</td></tr>
+<tr><td>Dynamic instruction count</td><td>30,032 vs baseline's 53,359 (&minus;44%)</td><td class="n">wins</td></tr>
+<tr><td>dcache behavior of the DXA kernel</td><td>5,888 reqs, 95% read hit &mdash; global traffic nearly eliminated</td><td class="n">wins</td></tr>
+<tr><td>LMEM bank conflicts</td><td>23,348 stall-cycles on 60,226 reqs &mdash; real but an order below RC1/RC2</td><td class="n">minor</td></tr>
+</table></div>
+
+<h3>Is the gap "expected"?</h3>
+<div class="verdict">
+<span class="tag design">DESIGN</span><span>Partly, at this problem size. 128&sup3; streams comfortably through a
+16-warp dcache-backed WMMA kernel (70% hit rate, latency hidden by warp parallelism), so the baseline is
+strong and DXA's fixed costs dominate its benefits. The K=512 result (1.73&times; win) shows the crossover exists.</span>
+<span class="tag flaw">FLAW</span><span>Mostly not. A staging engine at 5.6% of port bandwidth, zero
+cross-transfer pipelining, one worker for the whole cluster, and 4&ndash;16&times; redundant DRAM traffic with the
+multicast/dedup hardware sitting unused are implementation gaps, not design intent. "On paper" &mdash; overlapped
+staging at even half the LMEM port rate &mdash; this kernel is compute-plus-tbuf-bound at roughly 8&ndash;12k cycles,
+i.e. <b>~10&times; faster than the WMMA baseline</b> instead of 1.28&times;.</span>
+<span class="tag compiler">TOOLCHAIN</span><span>The double-buffer failure is a spill/ABI artifact
+(runtime-indexed locals + per-lane stacks in DRAM). It blocked the single most valuable optimization and
+sent the earlier investigation down a "double buffering doesn't pay" path.</span>
+</div>
+
+<h2><span class="sec">7</span>Recommendations, in payoff order</h2>
+<ol>
+<li><b>Re-enable overlap without the stack (kernel, ~1 day).</b> Manually unroll the k-loop 2&times; with
+statically named <span class="mono">bar0/bar1</span> and buffer pointers so nothing is runtime-indexed. Expected: hides
+min(compute, staging) per tile; combined with #2 this is where the 10&times; lives. Verify with the same
+trace method (overlap % of DXA busy).</li>
+<li><b>Fix the B scatter drain (DXA engine).</b> Gather a full 64-byte block across k-rows before writing
+(a 1 KB staging register in the engine suffices &mdash; it already holds 8 lines in flight), or land B via the
+retile path. 128 &rarr; 16 beats per tile.</li>
+<li><b>Pipeline transfers in the worker + widen A reads.</b> Start transfer <i>i+1</i>'s AGU/reads while
+<i>i</i> drains; raise <span class="mono">DXA_MAX_INFLIGHT</span> 8&rarr;32; teach the A descriptor path to fetch two
+tile-rows per 64 B line (or store A K-major). Removes ~256 serial latency exposures and halves A's DRAM traffic.</li>
+<li><b>Exploit reuse: multicast or bigger CTAs.</b> The mcast path (<span class="mono">sgemm_tcu_wg_dxa_mcast</span>,
+<span class="mono">gmem_dedup</span>) exists precisely for RC3 &mdash; B tiles should be fetched once per core, not once
+per CTA. Longer term, decoupling CTA width from ISSUE_WIDTH in the lockstep gate removes the root coupling.</li>
+<li><b>Then revisit the tbuf.</b> Once staging overlaps, RC4's single 1-line/cycle port and the
+barrier-forced B-buffer invalidation become the wall; keeping B resident across the k-loop (it is re-staged
+in place) is the cheap version.</li>
+<li><b>Separately: close the rtlsim/simx gap at IW=1</b> (343k vs 142k). The model idealizes uop issue and
+bbuf fetch width; the earlier rtlsim work already implicates the LMEM-DMA priority arbiter and bbuf
+descriptor thrash. Worth its own pass with the RTL's <span class="mono">--perf</span> counters before trusting
+IW=1 conclusions from either simulator alone.</li>
+</ol>
+
+<div class="footnote">
+<p><b>Methodology.</b> All primary data from simx (<span class="mono">--driver=simx</span>) with MPM classes 1/3/4/7/11/16,
+plus <span class="mono">--debug=3</span> cycle-stamped traces parsed for DXA start/complete spans, TCU uop retirements,
+and per-bin activity; rtlsim figures from the earlier NT/IW sweep (<span class="mono">--perf=1</span>). Roofline:
+16,384 uops = 128&sup3; MACs &divide; 128 MACs/uop (16 lanes &times; 4 words &times; 2 fp16); tile geometry tcM=tcN=tcK=4,
+xtileM=8, xtileN=32, tileK=16, 8 k-tiles.</p>
+<p><b>Artifacts on disk</b> (this machine, <span class="mono">~/dev/vortex_spg/eval_tcu_vs_wg/gap_analysis/</span>):
+raw traces (<span class="mono">trace_*.trace.gz</span>), interval summaries (<span class="mono">summary_*.json</span>),
+counter matrix (<span class="mono">simx_matrix.json</span>, <span class="mono">*_iw*_perf*.log</span>), and Perfetto exports
+(<span class="mono">perfetto_wg_dxa_iw4.json.gz</span>, <span class="mono">perfetto_sgemm_tcu_iw4_window.json.gz</span>,
+<span class="mono">perfetto_dbuf_iw4_window.json.gz</span>) &mdash; load these in the Perfetto UI (ui.perfetto.dev) to walk the
+same timelines interactively; tracks of interest: <span class="mono">dxa-core</span>, <span class="mono">core0-tcu</span>, per-warp state.</p>
+<p>Report generated as part of the tcu-op fork performance investigation; nothing in this analysis is committed to git.</p>
+</div>
+</div>

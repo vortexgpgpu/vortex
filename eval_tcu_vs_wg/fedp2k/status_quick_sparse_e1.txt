@@ -1,0 +1,2 @@
+[04:59:43] START q_e1_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_e1_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=2 wall=200s cycles=59946 instrs=1208 FAILED

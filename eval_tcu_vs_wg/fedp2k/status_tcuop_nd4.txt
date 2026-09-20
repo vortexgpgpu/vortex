@@ -1,0 +1,2 @@
+[15:16:36] START tcuop_nd4
+[15:16:38] APP-BUILT, launching rtlsim (debug)

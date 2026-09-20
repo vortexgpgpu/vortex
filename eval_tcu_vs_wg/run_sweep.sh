@@ -1,0 +1,32 @@
+#!/bin/bash
+# rtlsim evaluation: sgemm_tcu (WMMA) vs sgemm_tcu_wg (WGMMA)
+# M=N=K=128, fp16->fp32, NW=16, NT in {4,8,16}, IW in {1,2,4}, --perf=1
+set -u
+BUILD=~/dev/vortex_spg/build
+LOGDIR=~/dev/vortex_spg/eval_tcu_vs_wg
+STATUS=$LOGDIR/status.txt
+cd "$BUILD"
+: > "$STATUS"
+
+for NT in 4 8 16; do
+  for IW in 1 2 4; do
+    CFG="-DVX_CFG_NUM_THREADS=$NT -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=$IW -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=16"
+    for APP in sgemm_tcu sgemm_tcu_wg; do
+      TAG="${APP}_nt${NT}_iw${IW}"
+      LOG=$LOGDIR/${TAG}.log
+      echo "[$(date +%H:%M:%S)] START $TAG" >> "$STATUS"
+      make -C tests/regression/$APP clean > /dev/null 2>&1
+      if ! CONFIGS="$CFG" make -C tests/regression/$APP > "$LOG" 2>&1; then
+        echo "[$(date +%H:%M:%S)] APP-BUILD-FAIL $TAG" >> "$STATUS"
+        continue
+      fi
+      t0=$(date +%s)
+      CONFIGS="$CFG" ./ci/blackbox.sh --driver=rtlsim --app=$APP \
+        --args="-m 128 -n 128 -k 128" --perf=1 >> "$LOG" 2>&1
+      rc=$?
+      t1=$(date +%s)
+      echo "[$(date +%H:%M:%S)] DONE $TAG rc=$rc wall=$((t1-t0))s" >> "$STATUS"
+    done
+  done
+done
+echo "SWEEP-COMPLETE" >> "$STATUS"

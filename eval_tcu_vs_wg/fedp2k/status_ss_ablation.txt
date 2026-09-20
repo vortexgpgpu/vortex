@@ -1,0 +1,9 @@
+[14:22:22] START ab_ss_lsu4 (LSU=4 ALU=1 FPU=1)
+[14:49:58] DONE ab_ss_lsu4 rc=0 wall=1656s cycles=68022 load_lat=427.14 PASSED
+[14:49:58] START ab_ss_alu4 (LSU=1 ALU=4 FPU=1)
+[15:12:18] DONE ab_ss_alu4 rc=0 wall=1340s cycles=63449 load_lat=104.33 PASSED
+[15:12:18] START ab_ss_fpu4 (LSU=1 ALU=1 FPU=4)
+[15:34:22] DONE ab_ss_fpu4 rc=0 wall=1324s cycles=62994 load_lat=180.75 PASSED
+[15:34:22] START ab_wmma_lsu4 (LSU=4 ALU=1 FPU=1)
+[15:40:42] DONE ab_wmma_lsu4 rc=0 wall=380s cycles=74524 load_lat=182.35 PASSED
+[15:40:42] SS-ABLATION-COMPLETE

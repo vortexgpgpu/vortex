@@ -1,0 +1,5 @@
+single nt8 iw2: PASSED! | PERF: instrs=110976, cycles=323604, IPC=0.343 | PERF: memory: ifetch_lat=4.15, load_lat=8.31, loads=68608, stores=17408
+single nt16 iw4: PASSED! | PERF: instrs=30032, cycles=117888, IPC=0.255 | PERF: memory: ifetch_lat=4.29, load_lat=17.68, loads=35840, stores=17408
+dbuf nt8 iw2: PASSED! | PERF: instrs=190144, cycles=1106375, IPC=0.172 | PERF: memory: ifetch_lat=4.32, load_lat=131.67, loads=226304, stores=27648
+dbuf nt16 iw4: PASSED! | PERF: instrs=46048, cycles=529914, IPC=0.087 | PERF: memory: ifetch_lat=9.87, load_lat=182.08, loads=100352, stores=27648
+MEASURE-COMPLETE

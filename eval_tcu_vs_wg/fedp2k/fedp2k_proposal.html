@@ -1,0 +1,264 @@
+<title>FEDP2K Unlock Proposal</title>
+<style>
+:root {
+  --bg: #f7f6f3;
+  --panel: #ffffff;
+  --ink: #1f2430;
+  --muted: #5b6372;
+  --line: #d9d6cf;
+  --accent: #7c3aed;
+  --accent-ink: #5b21b6;
+  --good: #0f766e;
+  --bad: #b91c1c;
+  --warn: #b45309;
+  --code-bg: #eeece7;
+  --th-bg: #eeece7;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161c;
+    --panel: #1c1f27;
+    --ink: #e7e9ee;
+    --muted: #9aa2b1;
+    --line: #303542;
+    --accent: #a78bfa;
+    --accent-ink: #c4b5fd;
+    --good: #34d399;
+    --bad: #f87171;
+    --warn: #fbbf24;
+    --code-bg: #262a35;
+    --th-bg: #262a35;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161c;
+  --panel: #1c1f27;
+  --ink: #e7e9ee;
+  --muted: #9aa2b1;
+  --line: #303542;
+  --accent: #a78bfa;
+  --accent-ink: #c4b5fd;
+  --good: #34d399;
+  --bad: #f87171;
+  --warn: #fbbf24;
+  --code-bg: #262a35;
+  --th-bg: #262a35;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.6 "Source Serif 4", Georgia, serif;
+  padding-inline: 16px;
+  padding-block: 0 48px;
+}
+.wrap { max-width: 880px; margin: 0 auto; }
+header.doc { border-bottom: 3px double var(--line); padding-block: 28px 18px; margin-bottom: 8px; }
+.eyebrow {
+  font: 600 11px/1 "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: .14em; text-transform: uppercase; color: var(--accent-ink);
+}
+h1 { font-size: 30px; line-height: 1.15; margin: 10px 0 8px; text-wrap: balance; }
+.sub { color: var(--muted); font-size: 15px; max-width: 64ch; }
+h2 {
+  font-size: 21px; margin: 40px 0 6px; text-wrap: balance;
+  padding-top: 14px; border-top: 1px solid var(--line);
+}
+h3 { font-size: 16px; margin: 24px 0 4px; }
+p { max-width: 70ch; margin: 10px 0; }
+ul, ol { max-width: 70ch; }
+li { margin: 5px 0; }
+code, .mono {
+  font: 13px/1.5 "IBM Plex Mono", ui-monospace, monospace;
+  background: var(--code-bg); border-radius: 4px; padding: 1px 5px;
+}
+table { border-collapse: collapse; font-size: 13.5px; min-width: 560px; }
+.tblwrap { overflow-x: auto; margin: 14px 0; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; text-align: right; }
+th { background: var(--th-bg); font: 600 12px/1.4 "IBM Plex Mono", monospace; }
+td:first-child, th:first-child { text-align: left; }
+td.l { text-align: left; }
+tr.hl td { background: color-mix(in srgb, var(--accent) 9%, var(--panel)); }
+.num { font-variant-numeric: tabular-nums; font-family: "IBM Plex Mono", monospace; font-size: 13px; }
+.good { color: var(--good); font-weight: 600; }
+.bad { color: var(--bad); font-weight: 600; }
+.warn { color: var(--warn); font-weight: 600; }
+.verdict {
+  background: var(--panel); border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  padding: 14px 18px; margin: 18px 0; border-radius: 0 8px 8px 0;
+}
+.verdict p { margin: 6px 0; }
+.note {
+  background: var(--panel); border: 1px solid var(--line);
+  padding: 10px 14px; margin: 14px 0; border-radius: 8px;
+  font-size: 14px; color: var(--muted);
+}
+figure { margin: 18px 0; }
+figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; max-width: 70ch; }
+.bars { display: grid; gap: 6px; margin: 14px 0; }
+.bar { display: grid; grid-template-columns: 180px 1fr 84px; gap: 10px; align-items: center; }
+.bar .lbl { font: 12px/1.3 "IBM Plex Mono", monospace; text-align: right; color: var(--muted); }
+.bar .track { background: var(--code-bg); border-radius: 3px; height: 18px; position: relative; }
+.bar .fill { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--accent); opacity: .85; }
+.bar .val { font: 12px/1 "IBM Plex Mono", monospace; }
+@media (max-width: 560px) { .bar { grid-template-columns: 110px 1fr 70px; } }
+</style>
+<div class="wrap">
+<header class="doc">
+  <div class="eyebrow">Proposal · Vortex TCU_OP · rtlsim + simx · NT=32</div>
+  <h1>FEDP2K Unlock Proposal</h1>
+  <p class="sub">Why doubling the tensor-core K width shows no end-to-end gain at NT=32, the audit
+  proving the FEDP2K implementation itself is sound, the measured attribution of where the cycles
+  actually go, and a verified fix bundle that exposes the doubled throughput.</p>
+</header>
+
+<div class="verdict">
+  <p><strong>Verdict.</strong> FEDP2K has <em>no fundamental implementation flaw</em>: the uop
+  sequencer, operand transport, LMEM alignment and datapath all deliver the designed 2×
+  MACs-per-uop, and the committed-uop counts match theory exactly. It shows nothing end-to-end
+  because the tensor pipes execute for only ~3% of the run: the wall is split between
+  <strong>DXA staging serialization</strong> (a 91-cycle DRAM latency against 8 outstanding reads
+  on a single worker) and a <strong>K-independent ~45k-cycle floor</strong> dominated by the
+  C-matrix store epilogue through the write-allocate dcache.</p>
+  <p><strong>Fix.</strong> A verified bundle — coalesced LMEM-staged C store, double buffering,
+  deeper DXA inflight, and (at large K) A-tile multicast — removes the masking terms.
+  <span class="mono">[STAGE4: headline FEDP2K delta with bundle at K=512]</span></p>
+</div>
+
+<h2>1 · The on-paper analysis, corrected</h2>
+<p>The expectation was: at NT=32 the FEDP2K B-block (128 B) aligns exactly with the LMEM row,
+the NT=16 staging collision disappears, so the 2× K width should translate into a substantial
+speedup — as Hopper's K-doubling did over Ampere. The alignment part is correct and measured
+(the NT=16 regression is gone). The missing premise is <em>where the critical path is</em>:
+Hopper's K-doubling paid off because its SMs were tensor-throughput-bound in the main loop.
+This kernel, at 128³ on one core, is nowhere near that regime:</p>
+<div class="tblwrap"><table>
+<tr><th>Quantity (NT=32, IW=4, 128³)</th><th>Value</th><th>Source</th></tr>
+<tr><td class="l">Total MACs</td><td class="num">2,097,152</td><td class="l">128³</td></tr>
+<tr><td class="l">Compute uops (base / FEDP2K)</td><td class="num">16,384 / 8,704</td><td class="l">256 wgmma × 64/34 per instr ÷ 2 blk-rows; matches committed-instr counters exactly</td></tr>
+<tr><td class="l">TCU-block cycles at II=1 (4 blocks)</td><td class="num">≈ 2,048 / 1,024</td><td class="l">uops ÷ 4</td></tr>
+<tr><td class="l">Measured run (rtlsim)</td><td class="num">63,412 / 63,501</td><td class="l">sweep</td></tr>
+<tr class="hl"><td class="l">Tensor-pipe share of the run</td><td class="num">≈ 3%</td><td class="l">—</td></tr>
+</table></div>
+<p>Halving a 3% term cannot move the total. The two runs differ by 0.1%, scheduler idle is 91%
+in both, and the machine sits ~15× above its compute roofline. The question is therefore not
+"what is wrong with FEDP2K" but "what occupies the other 97%".</p>
+
+<h2>2 · Audit: the FEDP2K implementation is sound</h2>
+<p>Every stage of the FEDP2K path was read end-to-end and checked against counters:</p>
+<ul>
+<li><strong>Geometry.</strong> <code>TCU_WG_FEDP_K = 2·tcK</code> halves <code>K_STEPS</code>
+(2→1); per-instruction uops go 32→17 at NRC=16 (the +1 is the descriptor setup uop that only
+dense FEDP2K RS needs). The hardcoded per-k-step uop counts hold at every NT because
+tcM·tcN = NT identically.</li>
+<li><strong>Operand transport.</strong> Each compute uop reads its A register pair through
+rs1+rs2 (fedpK spans two A registers); the B descriptor is latched at setup and replayed —
+verified in <code>VX_tcu_uops.sv</code> and the WGMMA orchestrator.</li>
+<li><strong>Datapath.</strong> The FEDP tree is instantiated at width fedpK behind a pipe
+register: initiation interval 1, one uop per cycle per block, genuinely 2× MACs per uop.</li>
+<li><strong>LMEM alignment at NT=32.</strong> The dense B block is fedpK·tcN = 32 words = 128 B
+= exactly one LMEM row; the bbuf fetches one bank-row per block (base packs 2 blocks per row —
+so both modes issue the <em>same</em> number of LMEM row fetches per instruction, which is why
+bbuf behavior cannot separate them).</li>
+<li><strong>Counters.</strong> Committed instrs 15,048→11,400 (Δ = the uop halving exactly);
+tbuf stalls 6,607→4,143; tbuf LMEM reads 1,756→1,222. Everything FEDP2K touches improves —
+and none of it is on the critical path.</li>
+</ul>
+
+<h2>3 · Where the cycles actually go</h2>
+<p>Two independent decompositions agree.</p>
+<h3>3.1 Staging: latency-bound, not bandwidth-bound</h3>
+<ul>
+<li>DRAM read latency measured at <strong>91.3 cycles</strong> (memory perf class); DRAM bank
+stalls ≈ 0 — bandwidth headroom is large.</li>
+<li>DXA gmem traffic: 5,120 cache lines per run (measured; 2.5 KB + 1 KB per CTA-k-tile, with A
+fetching a full 64 B line per 32 B row — 2× over-fetch by layout). With
+<code>DXA_MAX_INFLIGHT=8</code> the single worker sustains ≈ 8/91 ≈ 0.09 lines/cycle.</li>
+<li>simx engine counters (model-corrected): 128 transfers averaging ≈ 370 cycles each —
+the engine is busy ≈ ⅔ of the run staging serially through one worker.</li>
+</ul>
+<h3>3.2 The K-independent floor</h3>
+<p>Varying K isolates fixed from marginal cost (simx, base kernel): k=64 → 57,606, k=128 →
+70,304, i.e. ≈ <strong>3.2k cycles per k-tile</strong> of marginal staging and a
+<strong>≈ 45k fixed floor</strong>. The commit-timeline histogram attributes the floor: C-store
+commits dominate every window from ~10k cycles to the end of the run. The epilogue's lane
+mapping puts adjacent lanes N·4 B = 512 B apart, so one store instruction touches
+tcM·m_steps = 16 distinct lines, the LSU coalescer merges nothing, and the write-allocate
+dcache turns each touched line into a DRAM fill plus a writeback with MSHR replays behind it.</p>
+
+<h2>4 · Why each obvious fix fails alone (measured)</h2>
+<div class="tblwrap"><table>
+<tr><th>Experiment (rtlsim, k=128)</th><th>cycles</th><th>Δ vs 63,412</th><th>Why</th></tr>
+<tr><td class="l">DXA_MAX_INFLIGHT 8→32</td><td class="num">58,864</td><td class="num">−7%</td><td class="l">per-transfer latency + single-worker serialization remain; only intra-transfer streaming speeds up</td></tr>
+<tr><td class="l">Double buffering (LMEM 32 KB)</td><td class="num">63,166</td><td class="num">−0.4%</td><td class="l">the engine itself is the busy resource; there is nothing to overlap against</td></tr>
+<tr><td class="l">A-multicast + dbuf (4-CTA cluster)</td><td class="num">120,918</td><td class="num bad">+91%</td><td class="l">engine-side perfect (transfers 128→80, gmem lines 5,120→2,048) but whole-cluster slot reservation serializes the waves: wave 2 waits for the slowest wave-1 CTA to finish its C-store tail, which un-overlaps the largest cost in the kernel</td></tr>
+</table></div>
+<p>The multicast result is the key negative lesson: its 2.5× traffic reduction worked exactly as
+designed (verified by engine counters), yet end-to-end it lost 2× — because cluster-granular
+CTA admission turned the previously-overlapped C-store epilogue into a serial phase boundary.
+Any co-residency-clustered kernel must either amortize that boundary (large K) or make the
+epilogue cheap first.</p>
+
+<h2>5 · The fix bundle (verified)</h2>
+<h3>5.1 Coalesced C-store epilogue (<code>CSTORE_LMEM</code>)</h3>
+<p>After the k-loop the LMEM staging buffers are dead. Each warp stages its C sub-tile through a
+private 512 B LMEM slice in 16-column chunks, then writes global memory with every store
+instruction covering full consecutive 64 B segments. LMEM absorbs the scatter (bank conflicts
+cost cycles, not DRAM round trips). One extra CTA barrier makes the buffer reuse safe. The
+fragment-register mapping is unrolled at compile time; all state stays in caller-saved registers
+(the SIMT-stack spill rule).</p>
+<h3>5.2 Deeper DXA pipelining (<code>DXA_MAX_INFLIGHT=32</code>)</h3>
+<p>Widens the per-worker outstanding-read window against the 91-cycle DRAM latency. Tag and
+credit widths scale with the parameter; silicon cost is a deeper direct-drain slot array.</p>
+<h3>5.3 Double buffering (kernel, XOR-toggle)</h3>
+<p>Once staging and the epilogue shrink, stage/compute overlap starts to matter; the register-only
+double-buffer schedule from sgemm_tcu_wg_dxa provides it (LMEM 32 KB keeps 4 CTAs resident).</p>
+<h3>5.4 A-tile multicast (large-K regime)</h3>
+<p>The A slice is shared by all 4 co-resident CTAs and dominates staging traffic; the X-clustered
+multicast kernel (loader-warp rendezvous, rank-0 issue, per-receiver barrier events) cuts staged
+lines per round 320→128. Its cluster-admission boundary cost is fixed, so it pays off as K grows.</p>
+
+<h3>5.5 Results</h3>
+<div class="tblwrap"><table>
+<tr><th>rtlsim, NT=32, IW=4</th><th>k=128 base</th><th>k=128 FEDP2K</th><th>k=512 base</th><th>k=512 FEDP2K</th><th>FEDP2K gain</th></tr>
+<tr><td class="l">Upstream baseline</td><td class="num">63,412</td><td class="num">63,501</td><td class="num">[S4]</td><td class="num">[S4]</td><td class="num">≈ 0%</td></tr>
+<tr><td class="l">+ CSTORE_LMEM</td><td class="num">[S4]</td><td class="num">[S4]</td><td class="num">—</td><td class="num">—</td><td class="num">[S4]</td></tr>
+<tr class="hl"><td class="l">+ CSTORE + dbuf + inflight32</td><td class="num">[S4]</td><td class="num">[S4]</td><td class="num">[S4]</td><td class="num">[S4]</td><td class="num">[S4]</td></tr>
+<tr><td class="l">+ A-multicast (bundle, k=512)</td><td class="num">—</td><td class="num">—</td><td class="num">[S4]</td><td class="num">[S4]</td><td class="num">[S4]</td></tr>
+</table></div>
+
+<h2>6 · simx model fix: DXA drain width</h2>
+<p>The simx DXA emitted at most one 64 B block write per cycle, while the RTL drains one full
+LMEM row (128 B at NT=32) per cycle. At NT=32 this halved modeled drain bandwidth and, because
+FEDP2K's B blocks span the full row, charged FEDP2K a phantom staging penalty (−18% at K=512 on
+simx while rtlsim shows parity). The model now emits one row beat per cycle as
+<code>LMEM_PORTS_PER_CORE</code> same-cycle block writes on adjacent LocalMem ports (and bounds
+the beat by the row for small-NT configs). After the fix: NT=16 unchanged (77,176 vs 77,173);
+NT=32 FEDP2K parity restored at K=128 (70,145 vs 67,895) and K=512 (152,792 vs 153,690),
+matching rtlsim.</p>
+
+<h2>7 · Roadmap after this bundle</h2>
+<ol>
+<li><strong>Write-allocate bypass for full-line stores</strong> — the remaining epilogue cost is
+DRAM fills for lines that are fully overwritten; a no-fetch-on-full-line-write dcache path
+removes ~1k fills + writebacks per 64 KB of C.</li>
+<li><strong>Cluster admission below whole-group granularity</strong>, or epilogue-before-release
+restructuring, so multicast kernels regain inter-wave overlap at small K.</li>
+<li><strong>DXA worker transfer pipelining</strong> — overlap the next transfer's address
+generation and first reads with the current transfer's drain tail; per-transfer latency
+(≈ 370 cycles avg) is the staging floor once traffic shrinks.</li>
+<li><strong>A-descriptor packing</strong> — A rows are 32 B in 64 B lines (2× over-fetch);
+a packed-tile descriptor or 2-row fetch would halve A gmem traffic without multicast.</li>
+<li><strong>DXA RTL perf-counter repairs</strong> (P4) so rtlsim can report engine occupancy
+directly.</li>
+</ol>
+
+<div class="note">
+Method: rtlsim (Verilator) is ground truth for all headline numbers; simx (with the drain-width
+model fix above) for counters, traces and fast triage. All runs: 1 core, NW=16, fp16→fp32,
+WGMMA_RS, NRC=16, 128×128×K. Every configuration in every table passed its built-in
+correctness check. Kernels: tests/regression/sgemm_tcu_wg_dxa (CSTORE_LMEM, DXA_DOUBLE_BUFFER
+guards) and tests/regression/sgemm_tcu_wg_dxa_mcast (DXA_MCAST_A guard); engine knobs via
+CONFIGS defines only.
+</div>
+</div>

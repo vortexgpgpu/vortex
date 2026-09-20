@@ -1,0 +1,13 @@
+[19:17:36] START ss_fedp2k_iw1_simx
+[19:17:46] DONE ss_fedp2k_iw1_simx mode=RS-LEAKED rc=0 cycles=100006 PASSED
+[19:17:46] START ss_fedp2k_iw2_simx
+[19:17:56] DONE ss_fedp2k_iw2_simx mode=RS-LEAKED rc=0 cycles=73272 PASSED
+[19:17:56] START ss_fedp2k_iw4_simx
+[19:18:06] DONE ss_fedp2k_iw4_simx mode=RS-LEAKED rc=0 cycles=73831 PASSED
+[19:18:06] START ss_fedp2k_iw1_rtl
+[19:22:10] DONE ss_fedp2k_iw1_rtl mode=RS-LEAKED rc=0 cycles=99065 PASSED
+[19:22:10] START ss_fedp2k_iw2_rtl
+[19:29:44] DONE ss_fedp2k_iw2_rtl mode=RS-LEAKED rc=0 cycles=73654 PASSED
+[19:29:44] START ss_fedp2k_iw4_rtl
+[19:49:41] DONE ss_fedp2k_iw4_rtl mode=RS-LEAKED rc=0 cycles=63175 PASSED
+SS-SWEEP-COMPLETE

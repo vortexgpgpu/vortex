@@ -1,0 +1,9 @@
+# Local evaluation scratch: traces, logs, plots and the plotting virtualenv.
+# Only the run scripts, results tables and reports are tracked.
+.plotvenv/
+*.trace
+*.log
+*.json
+*.png
+*.gz
+*.vcd

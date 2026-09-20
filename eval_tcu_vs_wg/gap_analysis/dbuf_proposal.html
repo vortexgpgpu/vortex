@@ -1,0 +1,333 @@
+<title>Register-Resident Double Buffering</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#faf9f6; --panel:#f1efe9; --ink:#22242a; --muted:#5d6570;
+  --line:#d8d4c8; --dxa:#c05c10; --dxa-soft:#eeddcc; --tcu:#0f7b7a; --tcu-soft:#d3e7e4;
+  --idle:#a9aca8; --crit:#a83232; --ok:#3c7a3c; --code-bg:#edeae2; --accent:#0f7b7a;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#17181a; --panel:#1f2124; --ink:#e6e4de; --muted:#9aa0a8;
+    --line:#3a3d42; --dxa:#e0894a; --dxa-soft:#43301f; --tcu:#45b3ae; --tcu-soft:#1d3a38;
+    --idle:#5a5e63; --crit:#d47070; --ok:#7dbb7d; --code-bg:#232528; --accent:#45b3ae;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#17181a; --panel:#1f2124; --ink:#e6e4de; --muted:#9aa0a8;
+  --line:#3a3d42; --dxa:#e0894a; --dxa-soft:#43301f; --tcu:#45b3ae; --tcu-soft:#1d3a38;
+  --idle:#5a5e63; --crit:#d47070; --ok:#7dbb7d; --code-bg:#232528; --accent:#45b3ae;
+}
+body{background:var(--bg); color:var(--ink); font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:15.5px; line-height:1.62; padding:0 16px;}
+.wrap{max-width:900px; margin:0 auto; padding-block:40px 90px;}
+h1,h2,h3{line-height:1.22; text-wrap:balance; font-weight:600;}
+h1{font-size:2.05rem; margin:.2em 0 .1em;}
+h2{font-size:1.32rem; margin:2.6em 0 .5em; padding-top:1.2em; border-top:1px solid var(--line);}
+h2 .sec{color:var(--accent); font-family:"IBM Plex Mono",monospace; font-size:.95rem; margin-right:.6em; font-weight:600;}
+h3{font-size:1.02rem; margin:1.8em 0 .4em;}
+p,li{max-width:76ch;}
+p{margin:.7em 0;}
+.kicker{font-family:"IBM Plex Mono",monospace; font-size:.78rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);}
+.sub{color:var(--muted); max-width:76ch; font-size:.95rem;}
+code, .mono{font-family:"IBM Plex Mono",monospace; font-size:.86em;}
+code{background:var(--code-bg); padding:.1em .35em; border-radius:3px;}
+pre{background:var(--code-bg); padding:12px 14px; border-radius:6px; overflow-x:auto; font-size:.8rem; line-height:1.5;}
+pre code{background:none; padding:0;}
+a{color:var(--tcu);}
+table{border-collapse:collapse; width:100%; font-size:.88rem; font-variant-numeric:tabular-nums;}
+.tblwrap{overflow-x:auto; margin:1em 0;}
+th{font-family:"IBM Plex Mono",monospace; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase;
+   color:var(--muted); text-align:left; font-weight:600; padding:6px 12px 6px 0; border-bottom:1.5px solid var(--line);}
+td{padding:6px 12px 6px 0; border-bottom:1px solid var(--line); vertical-align:top;}
+td.n{text-align:right; font-family:"IBM Plex Mono",monospace; font-size:.84rem;}
+th.n{text-align:right;}
+tr.hl td{background:var(--panel);}
+.answer{background:var(--panel); border-left:4px solid var(--accent); padding:18px 22px; margin:1.6em 0; border-radius:0 6px 6px 0;}
+.answer p{margin:.5em 0;}
+.status{display:inline-flex; gap:8px; align-items:center; font-family:"IBM Plex Mono",monospace; font-size:.78rem;
+  background:var(--tcu-soft); color:var(--tcu); border-radius:5px; padding:4px 12px; font-weight:600; margin:10px 0 0;}
+.fail{border:1px solid var(--line); border-radius:6px; margin:1.1em 0; overflow:hidden;}
+.fail .head{display:flex; align-items:baseline; gap:12px; padding:11px 18px; background:var(--panel);}
+.fail .head .tag{font-family:"IBM Plex Mono",monospace; font-weight:600; color:var(--crit); white-space:nowrap;}
+.fail .head .cost{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--muted); white-space:nowrap;}
+.fail .body{padding:6px 18px 14px;}
+figure{margin:1.4em 0;}
+figcaption{font-size:.82rem; color:var(--muted); margin-top:8px; max-width:76ch;}
+.legend{display:flex; flex-wrap:wrap; gap:16px; font-size:.8rem; color:var(--muted); margin:.4em 0;}
+.legend span{display:inline-flex; align-items:center; gap:6px;}
+.sw{width:13px; height:13px; border-radius:3px; display:inline-block;}
+svg text{font-family:"IBM Plex Sans",system-ui,sans-serif;}
+svg .mono-t{font-family:"IBM Plex Mono",monospace;}
+.rule{background:var(--panel); border-radius:6px; padding:14px 18px; margin:1.2em 0; border-left:4px solid var(--crit);}
+.footnote{font-size:.82rem; color:var(--muted); border-top:1px solid var(--line); margin-top:3em; padding-top:1em;}
+@media (max-width:640px){ h1{font-size:1.55rem;} }
+</style>
+
+<div class="wrap">
+<div class="kicker">Vortex &middot; tcu-op fork &middot; design proposal &middot; 2026-09-16</div>
+<h1>Register-resident double buffering for WGMMA+DXA</h1>
+<p class="sub">Why the first double-buffering attempt lost 3&ndash;8&times;, the design rule that failure
+teaches, a pipeline that obeys it, and the measurements showing it holds up. Companion to the
+<a href="https://claude.ai/artifact/4kjLA5kKNzxapW7yRwRVqc">DXA critical-path report</a>.</p>
+<div class="status">IMPLEMENTED &amp; VALIDATED &middot; commit bd1420351 &middot; simx + rtlsim PASS</div>
+
+<div class="answer">
+<p><b>Summary.</b> Double buffering never failed because overlap doesn't pay &mdash; it failed because both
+prior formulations forced pipeline state onto the SIMT stack, and on Vortex <b>one spilled word costs
+sixteen uncoalesced, same-bank DRAM round-trips</b> (per-lane stacks sit in global memory at an 8&nbsp;KB
+stride). The fix is a schedule whose loop-carried state is three registers mutated in place &mdash; buffer
+pointers and the barrier id are <b>XOR-toggled</b>, with raw barrier intrinsics instead of barrier objects
+&mdash; so the hot loop touches the stack exactly zero times. Measured: the old 8.3&times; regression becomes a
+1&ndash;4% win on both simulators, correctness holds across IW, odd tile counts and K sweeps, and 93% of
+tensor-core compute now hides under DXA transfers. Today's gain is deliberately small &mdash; the DXA engine
+is still 87% of the critical path &mdash; and &sect;5 quantifies exactly when this structure starts paying
+its real dividend.</p>
+</div>
+
+<h2><span class="sec">1</span>Post-mortem: two ways double buffering died</h2>
+<p>Both failures share one amplifier. Vortex gives each thread a private stack in <em>global</em> memory,
+lanes 8&nbsp;KB apart. A single spilled word therefore becomes a 16-lane access whose addresses all map to
+the <em>same dcache bank</em> (8&nbsp;KB is a multiple of the bank stride): sixteen serialized, write-allocating
+DRAM round-trips at ~230 cycles each &mdash; per execution of that one instruction. Any double-buffering
+scheme that grows the kernel's memory-resident state gets destroyed by this amplifier before overlap can
+help.</p>
+
+<div class="fail"><div class="head"><span class="tag">v1</span><b>Runtime-indexed arrays &mdash; spills in the hot loop</b><span class="cost">637,819 cyc &middot; 8.3&times; worse</span></div>
+<div class="body"><p>The original ping-pong kept <code>A_buf[2]</code>, <code>B_buf[2]</code>, <code>bars[2]</code> and selected with a
+runtime-varying <code>p</code>. SROA cannot scalarize a runtime-indexed aggregate, so the two
+<code>vortex::barrier</code> objects lived on the stack and were re-loaded around <em>every</em> <code>vx_bar</code>
+in the k-loop. Dynamic loads tripled (35,840 &rarr; 100,352), coalescer misses went 256 &rarr; 18,944, and the
+spill traffic's DRAM pressure dragged DXA line latency from 278 to 725 cycles.</p></div></div>
+
+<div class="fail"><div class="head"><span class="tag">v2</span><b>2&times;-unrolled with named buffers &mdash; spills moved to the prologue, still fatal</b><span class="cost">188,262 cyc &middot; 2.5&times; worse</span></div>
+<div class="body"><p>Unrolling the loop over two statically-named buffer/barrier sets produced a spill-free loop body
+&mdash; and still ran 2.5&times; slower. The unrolled body's larger live set (two pointer pairs, two barrier
+objects, duplicated temporaries across the WGMMA asm blocks) pushed ~5 values into callee-saved registers,
+whose save/restore bursts hit the same 16-lane stack amplifier once per warp. With 16 CTAs launching in
+four waves, each wave re-paid the burst: the dcache logged <b>103,071 bank-stall cycles</b>, the timeline
+shows 12&ndash;19k-cycle dead zones at every wave boundary, and the DRAM contention stretched DXA spans from
+278 to 422 cycles average. (This attempt also exposed a schedule bug worth recording: a loop-end restage of
+the second buffer duplicated the next iteration's loop-top prefetch &mdash; 352 transfers instead of 256.
+The counter <code>dxa.transfers</code> catches this class of bug instantly.)</p></div></div>
+
+<div class="rule"><p style="margin:0"><b>Design rule.</b> On this architecture a double-buffering schedule is only viable if its
+<em>entire</em> loop-carried state fits in caller-saved registers: no runtime-indexed locals, no
+memory-resident synchronization objects, no live-set growth that triggers callee saves. Select buffers by
+<em>mutating</em> state, never by <em>indexing</em> it.</p></div>
+
+<h2><span class="sec">2</span>Design: toggle, don't select</h2>
+<p>The proposal keeps the single-buffer loop shape &mdash; same body, same barrier protocol, no unrolling
+&mdash; and swaps buffers by XOR-toggling three registers in place:</p>
+<ul>
+<li><b>Pointers:</b> <code>A_cur ^= a_tog</code>, <code>B_cur ^= b_tog</code>, where the toggles are loop-invariant
+constants (<code>ptr0 ^ ptr1</code>) computed once from the LMEM carve-out.</li>
+<li><b>Barrier:</b> the <code>vortex::barrier</code> objects are gone. The packed barrier id (slot in bit 8, CTA
+slot in the low byte &mdash; the same encoding the class used) lives in one register and toggles with
+<code>bar_cur ^= 0x100</code>; the kernel calls <code>vx_barrier</code> / <code>vx_barrier_expect_tx</code> /
+<code>vx_dxa_issue_2d_wg</code> directly with it.</li>
+</ul>
+<p>Net register cost over single-buffering: <b>two loop-invariant constants</b>. The generated body is 147
+static instructions vs the single buffer's 146, the frame <em>shrank</em> from 0x30 to 0x20 bytes, and the
+kernel contains one stack access total (the ABI <code>ra</code> save). The v1/v2 failure mechanism is not
+avoided by care &mdash; it is structurally impossible.</p>
+
+<h3>Schedule and phase protocol</h3>
+<pre><code>load_tile(A_cur, B_cur, bar_cur, 0);                 // prologue: stage tile 0
+for (i = 0; i &lt; num_k_tiles; ++i) {
+  if (i+1 &lt; n)                                       // prefetch tile i+1 into the
+    load_tile(A_cur^tog, B_cur^tog, bar_cur^0x100,   //   other buffer; its readers
+              (i+1)*tileK);                          //   were released at i-1
+  vx_barrier(bar_cur, nw);                           // wait: tile i staged (tx events + warps)
+  compute_tile(A_cur, B_cur);                        // WGMMA accumulate
+  if (i+2 &lt; n)
+    vx_barrier(bar_cur, nw);                         // release: buffer may restage at i+1
+  A_cur ^= a_tog;  B_cur ^= b_tog;  bar_cur ^= 0x100;
+}</code></pre>
+<pre class="mermaid">
+gantt
+    dateFormat X
+    axisFormat %s
+    section DXA engine
+    stage tile 0 (buf0)   :a0, 0, 3
+    stage tile 1 (buf1)   :a1, 3, 6
+    stage tile 2 (buf0)   :a2, 6, 9
+    stage tile 3 (buf1)   :a3, 9, 12
+    section warp-group
+    wait buf0             :w0, 0, 3
+    compute 0 + release   :c0, 3, 4
+    wait buf1             :w1, 4, 6
+    compute 1 + release   :c1, 6, 7
+    wait buf0             :w2, 7, 9
+    compute 2 + release   :c2, 9, 10
+</pre>
+<p>Each barrier id alternates two phase types &mdash; <em>staged</em> (waits on the DXA's
+<code>expect_tx</code> completion events plus all warps) and <em>released</em> (warps only). The release of
+buffer X at iteration <i>i</i> is exactly what licenses the prefetch into X at iteration <i>i+1</i>, so the
+conditions pair off (<code>i+1&lt;n</code> prefetch &harr; <code>i+2&lt;n</code> release) and the loop needs
+no tail: an odd tile count simply ends on the other buffer. The <code>expect_tx</code>-before-issue ordering
+is race-free because <code>vx_barrier</code> suspends the issuing warp until the whole CTA has passed the
+preceding release phase.</p>
+
+<h2><span class="sec">3</span>Validation</h2>
+<p>Everything below is measured on the committed implementation (fp16&rarr;fp32, NT=16, NW=16, one core;
+m=n=k=128 unless stated).</p>
+
+<figure><div id="ch-gens" class="chart"></div>
+<figcaption>Three generations of the same idea at IW=4 on simx, against the single-buffer reference
+(dashed). v3 is the first formulation that is not a regression &mdash; and it wins on both simulators.</figcaption></figure>
+
+<div class="tblwrap"><table>
+<tr><th>check</th><th class="n">double-buffer v3</th><th class="n">single-buffer</th><th>result</th></tr>
+<tr class="hl"><td>simx, IW=4</td><td class="n">76,300</td><td class="n">77,176</td><td>PASS, &minus;1.1% cycles</td></tr>
+<tr class="hl"><td>rtlsim, IW=4</td><td class="n">119,580</td><td class="n">120,723</td><td>PASS, &minus;0.9% (was +240&ndash;350% in v1)</td></tr>
+<tr><td>simx, IW=1</td><td class="n">148,162</td><td class="n">142,480</td><td>PASS, +4% &mdash; see limits (&sect;5)</td></tr>
+<tr><td>simx, IW=4, K=144 (9 tiles, odd)</td><td class="n">81,270</td><td class="n">&mdash;</td><td>PASS &mdash; tail-free odd-count path exercised</td></tr>
+<tr><td>simx, IW=4, K=512</td><td class="n">212,991</td><td class="n">210,794</td><td>PASS, break-even (DXA-bound)</td></tr>
+<tr><td>4 DXA workers + 32 inflight</td><td class="n">58,756</td><td class="n">61,472</td><td>PASS, &minus;4.4% &mdash; overlap pays as the engine speeds up</td></tr>
+</table></div>
+
+<h3>Structural evidence (the failure mechanism is gone)</h3>
+<div class="tblwrap"><table>
+<tr><th>metric</th><th class="n">v1 (arrays)</th><th class="n">v2 (unrolled)</th><th class="n">v3 (toggle)</th><th class="n">single-buffer</th></tr>
+<tr><td>hot-loop stack accesses</td><td class="n">yes (per vx_bar)</td><td class="n">0</td><td class="n">0</td><td class="n">0</td></tr>
+<tr><td>prologue/epilogue (sp) ops</td><td class="n">13</td><td class="n">11</td><td class="n">1</td><td class="n">1</td></tr>
+<tr><td>stack frame</td><td class="n">0x50</td><td class="n">0x40</td><td class="n">0x20</td><td class="n">0x30</td></tr>
+<tr><td>static body instrs</td><td class="n">177</td><td class="n">215</td><td class="n">147</td><td class="n">146</td></tr>
+<tr><td>dynamic loads (lanes)</td><td class="n">100,352</td><td class="n">40,960</td><td class="n">35,840-class</td><td class="n">35,840</td></tr>
+<tr><td>coalescer misses</td><td class="n">18,944</td><td class="n">2,816</td><td class="n">&asymp;256</td><td class="n">256</td></tr>
+</table></div>
+
+<p>Trace-level confirmation that the pipeline actually pipelines: in the v3 timeline, <b>4,666 of the 5,030
+TCU-busy cycles (93%) overlap a DXA transfer</b>, DXA spans returned to their unloaded shape (avg 260.8 vs
+single-buffer's 277.7 &mdash; earlier issue actually smooths DRAM queueing), and the machine-idle
+("neither") share fell from v2's 42% to 12%. The counter <code>dxa.transfers = 256</code> confirms no
+duplicate staging.</p>
+
+<h2><span class="sec">4</span>Why the gain is small today &mdash; and when it gets big</h2>
+<p>Per tile, single-buffering costs <span class="mono">t_stage + t_compute</span>; the pipeline costs
+<span class="mono">max(t_stage, t_compute)</span>. Overlap's payoff is therefore
+<span class="mono">min(t_stage, t_compute)</span> &mdash; and right now that min is tiny: the DXA engine holds
+87.5% of the v3 critical path while all WGMMA compute fits in 6.6%. Double buffering today buys the ~5k
+cycles compute used to add, nothing more. <b>This is the expected result, not a disappointment</b> &mdash; the
+companion report's RC2/RC3 fixes (scatter gather-to-full-blocks, cross-transfer pipelining, multicast) are
+what shrink <span class="mono">t_stage</span>, and each of them raises the value of this structure:</p>
+
+<figure><div id="ch-workers" class="chart"></div>
+<figcaption>Emulating a faster engine with config knobs only (workers &times; in-flight depth). At 4 workers
+the pipeline is worth 4.4%. Beyond that, <em>both</em> schedules flatten near 60k cycles: with staging off
+the critical path, the next wall &mdash; the tbuf's 1-line/cycle operand port, the CTA-overlap fence and
+barrier latency (RC4) &mdash; takes over, and no staging schedule can help with that. The bottlenecks are
+layered exactly as the gap report predicted: DXA engine &rarr; then tbuf/fence.</figcaption></figure>
+
+<p>The end-state arithmetic: with RC2-level staging (&asymp;16 beats per B tile, pipelined transfers) a
+k-tile stages in ~50&ndash;80 cycles while compute+tbuf costs ~100&ndash;150 &mdash; at that point the pipeline
+hides staging <em>entirely</em> and the kernel becomes tensor-pipe-bound, which is the design's original
+promise (&asymp;10&times; over today, per the report's roofline). Without this structure in place first, none
+of the engine work can show up in end-to-end numbers.</p>
+
+<h2><span class="sec">5</span>Limits, risks, and rollout</h2>
+<ul>
+<li><b>IW=1 stays off.</b> With single-warp CTAs, 16 resident CTAs &times; up to 4 outstanding transfers
+oversubscribe the 16-deep DXA queue; prefetch adds churn with no compute to hide (measured +4%). Keep
+<code>DXA_DOUBLE_BUFFER</code> opt-in, or gate it on <code>ISSUE_WIDTH &ge; 2</code> if it becomes a default.
+Raising <code>VX_CFG_DXA_QUEUE_SIZE</code> to <code>4 &times; resident CTAs</code> removes the constraint.</li>
+<li><b>LMEM footprint doubles</b> (host already sizes it: 2&times;(cta_M+xtileN)&times;tileK&times;2B &mdash; 4&nbsp;KB at
+IW=4/NT=16, comfortably within LMEM).</li>
+<li><b>Compiler fragility.</b> The scheme relies on the toggles staying register-allocated; the guard is the
+committed evidence (147-instr body, single (sp) op). A CI-friendly tripwire: fail the tensor suite build if
+<code>kernel_main</code>'s frame exceeds 0x30 or its body contains an (sp) access between the first and last
+<code>vx_bar</code> &mdash; both greppable from kernel.dump. Note the dump prints hex offsets: grep
+<code>\(sp\)</code>, not <code>[0-9]+\(sp\)</code>.</li>
+<li><b>Toolchain follow-up (upstream-worthy):</b> the root amplifier &mdash; per-lane stacks in DRAM at
+8&nbsp;KB same-bank stride &mdash; punishes every kernel, not just this one. Options worth a separate
+investigation: placing thread stacks in LMEM when a kernel's footprint allows, swizzling the per-lane
+stack stride to spread banks, or teaching the backend to SROA small constant-size local arrays under
+divergence-free indexing.</li>
+<li><b>Rollout:</b> landed as commit <code>bd1420351</code> on <code>tcu-op</code> (local, not pushed;
+push is your call). The old v1 behavior is gone; the define keeps its name, so existing
+<code>-DDXA_DOUBLE_BUFFER</code> configs pick up the fixed pipeline automatically. Suggested follow-on
+testcase for the CI catalog: a <code>dxa.yaml</code> case running <code>sgemm_tcu_wg_dxa</code> with
+<code>-DDXA_DOUBLE_BUFFER</code> at K=144 (odd tiles) on both drivers.</li>
+</ul>
+
+<div class="footnote">
+<p><b>Provenance.</b> All numbers from ~/dev/vortex_spg at commit bd1420351: simx MPM counter runs
+(classes 1/4/7/11/16), cycle-stamped <span class="mono">--debug=3</span> traces analyzed with
+<span class="mono">eval_tcu_vs_wg/gap_analysis/analyze_trace.py</span> (summaries:
+<span class="mono">summary_dbuf_v2_iw4.json</span>, <span class="mono">summary_dbuf_v3_iw4.json</span>), rtlsim
+<span class="mono">--perf=1</span> runs (<span class="mono">rtlsim_dbuf_v3_iw4.log</span>), and kernel.dump
+disassembly audits. Baseline figures and the RC1&ndash;RC4 taxonomy come from the
+<a href="https://claude.ai/artifact/4kjLA5kKNzxapW7yRwRVqc">DXA critical-path report</a>.</p>
+</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function svgEl(w,h){const s=document.createElementNS("http://www.w3.org/2000/svg","svg");
+  s.setAttribute("viewBox",`0 0 ${w} ${h}`); s.setAttribute("width","100%"); s.style.display="block"; return s;}
+function add(p,t,a,txt){const e=document.createElementNS("http://www.w3.org/2000/svg",t);
+  for(const k in a)e.setAttribute(k,a[k]); if(txt!=null)e.textContent=txt; p.appendChild(e); return e;}
+const fmt=n=>n.toLocaleString("en-US");
+
+function draw(){
+  const C={dxa:css("--dxa"),tcu:css("--tcu"),idle:css("--idle"),ink:css("--ink"),
+           muted:css("--muted"),line:css("--line"),crit:css("--crit")};
+
+  // generations chart
+  (function(){
+    const host=document.getElementById("ch-gens"); host.innerHTML="";
+    const rows=[
+      {k:"v1 · runtime-indexed arrays", v:637819, col:C.crit},
+      {k:"v2 · 2x-unrolled, named buffers", v:188262, col:C.crit},
+      {k:"v3 · register-resident toggle", v:76300, col:C.tcu},
+    ];
+    const W=900,L=280,R=90,bh=22,gap=12,maxV=650000;
+    const H=14+rows.length*(bh+gap)+26;
+    const s=svgEl(W,H); host.appendChild(s);
+    const x=v=>L+(W-L-R)*v/maxV;
+    let yy=10;
+    rows.forEach(r=>{
+      add(s,"text",{x:L-8,y:yy+bh-6,fill:C.ink,"font-size":12,"text-anchor":"end"},r.k);
+      add(s,"rect",{x:L,y:yy,width:Math.max(2,x(r.v)-L),height:bh,fill:r.col,opacity:.85,rx:2});
+      add(s,"text",{x:x(r.v)+6,y:yy+bh-6,fill:C.muted,"font-size":11,"class":"mono-t"},fmt(r.v));
+      yy+=bh+gap;
+    });
+    const bx=x(77176);
+    add(s,"line",{x1:bx,y1:6,x2:bx,y2:yy-4,stroke:C.idle,"stroke-width":1.4,"stroke-dasharray":"5 4"});
+    add(s,"text",{x:bx+5,y:yy+10,fill:C.muted,"font-size":10.5,"class":"mono-t"},"single-buffer 77,176");
+  })();
+
+  // worker scaling
+  (function(){
+    const host=document.getElementById("ch-workers"); host.innerHTML="";
+    const data=[
+      {g:"1 worker, 8 inflight (default)", s:77176, d:76300},
+      {g:"2 workers, 32 inflight", s:60113, d:60773},
+      {g:"4 workers, 32 inflight", s:61472, d:58756},
+      {g:"8 workers, 32 inflight", s:59653, d:60893},
+    ];
+    const W=900,L=270,R=90,bh=15,gap=4,grp=13,maxV=85000;
+    const H=14+data.length*(2*(bh+gap)+grp)+26;
+    const s=svgEl(W,H); host.appendChild(s);
+    const x=v=>L+(W-L-R)*v/maxV;
+    let yy=10;
+    data.forEach(r=>{
+      add(s,"text",{x:L-8,y:yy+bh+3,fill:C.ink,"font-size":11.5,"text-anchor":"end"},r.g);
+      add(s,"rect",{x:L,y:yy,width:x(r.s)-L,height:bh,fill:C.idle,opacity:.7,rx:2});
+      add(s,"text",{x:x(r.s)+6,y:yy+bh-3,fill:C.muted,"font-size":10,"class":"mono-t"},"single "+fmt(r.s));
+      yy+=bh+gap;
+      add(s,"rect",{x:L,y:yy,width:x(r.d)-L,height:bh,fill:C.tcu,opacity:.9,rx:2});
+      add(s,"text",{x:x(r.d)+6,y:yy+bh-3,fill:C.muted,"font-size":10,"class":"mono-t"},"pipeline "+fmt(r.d));
+      yy+=bh+gap+grp;
+    });
+    add(s,"text",{x:L,y:yy+6,fill:C.muted,"font-size":10.5,"class":"mono-t"},"simx cycles, IW=4, m=n=k=128 — lower is better");
+  })();
+}
+draw();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",draw);
+new MutationObserver(()=>draw()).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+})();
+</script>

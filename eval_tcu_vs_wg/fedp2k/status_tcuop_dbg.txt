@@ -1,0 +1,4 @@
+[14:08:11] START tcuop_dbg
+[14:08:13] APP-BUILT, launching rtlsim (debug)
+[14:12:27] DONE tcuop_dbg rc=0 wall=254s
+TCUOP-DBG-COMPLETE

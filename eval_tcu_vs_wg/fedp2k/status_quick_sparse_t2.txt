@@ -1,0 +1,4 @@
+[04:44:57] START q_t2_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t2_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=2 wall=190s cycles=77254 instrs=1016 FAILED
+[04:48:08] START q_t2_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t2_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=2 wall=186s cycles=60205 instrs=1208 FAILED

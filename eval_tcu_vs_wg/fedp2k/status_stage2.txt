@@ -1,0 +1,22 @@
+[06:12:12] stage1 complete, starting stage2
+[06:12:12] START mcA_dbuf_simx
+[06:13:05] DONE mcA_dbuf_simx rc=0 wall=52s
+[06:13:05] START inflight32_base
+[06:21:11] DONE inflight32_base rc=0 wall=484s
+[06:21:11] START inflight32_fedp2k
+[06:40:59] DONE inflight32_fedp2k rc=0 wall=1186s
+[06:40:59] START dbuf_only
+[06:48:53] DONE dbuf_only rc=0 wall=473s
+[06:48:53] START mcA_dbuf
+[06:58:06] DONE mcA_dbuf rc=0 wall=552s
+[06:58:06] START mcA_dbuf_2k
+[07:26:23] DONE mcA_dbuf_2k rc=0 wall=1696s
+[07:26:23] START mcA_dbuf_if32
+[07:36:23] DONE mcA_dbuf_if32 rc=0 wall=598s
+[07:36:23] START mcA_dbuf_if32_2k
+[08:03:34] DONE mcA_dbuf_if32_2k rc=0 wall=1630s
+[08:03:34] START trace_base
+[08:18:10] DONE trace_base rc=0 wall=875s
+[08:18:10] START trace_fedp2k
+[08:45:24] DONE trace_fedp2k rc=0 wall=1633s
+STAGE2-COMPLETE

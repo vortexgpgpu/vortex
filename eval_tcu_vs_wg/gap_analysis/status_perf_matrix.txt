@@ -1,0 +1,53 @@
+[15:00:45] START sgemm_tcu_iw1_perf1
+[15:02:00] DONE sgemm_tcu_iw1_perf1 rc=0 
+[15:02:00] START sgemm_tcu_wg_iw1_perf1
+[15:02:12] DONE sgemm_tcu_wg_iw1_perf1 rc=0 
+[15:02:12] START sgemm_tcu_wg_dxa_iw1_perf1
+[15:02:19] DONE sgemm_tcu_wg_dxa_iw1_perf1 rc=0 
+[15:02:19] START sgemm_tcu_iw1_perf4
+[15:02:25] DONE sgemm_tcu_iw1_perf4 rc=0 
+[15:02:26] START sgemm_tcu_wg_iw1_perf4
+[15:02:33] DONE sgemm_tcu_wg_iw1_perf4 rc=0 
+[15:02:33] START sgemm_tcu_wg_dxa_iw1_perf4
+[15:02:39] DONE sgemm_tcu_wg_dxa_iw1_perf4 rc=0 
+[15:02:39] START sgemm_tcu_iw1_perf7
+[15:02:46] DONE sgemm_tcu_iw1_perf7 rc=0 
+[15:02:46] START sgemm_tcu_wg_iw1_perf7
+[15:02:54] DONE sgemm_tcu_wg_iw1_perf7 rc=0 
+[15:02:54] START sgemm_tcu_wg_dxa_iw1_perf7
+[15:02:59] DONE sgemm_tcu_wg_dxa_iw1_perf7 rc=0 
+[15:02:59] START sgemm_tcu_iw1_perf11
+[15:03:05] DONE sgemm_tcu_iw1_perf11 rc=0 
+[15:03:05] START sgemm_tcu_wg_iw1_perf11
+[15:03:12] DONE sgemm_tcu_wg_iw1_perf11 rc=0 
+[15:03:12] START sgemm_tcu_wg_dxa_iw1_perf11
+[15:03:18] DONE sgemm_tcu_wg_dxa_iw1_perf11 rc=0 
+[15:03:18] START sgemm_tcu_wg_dxa_iw1_perf16
+[15:03:24] DONE sgemm_tcu_wg_dxa_iw1_perf16 rc=0 
+[15:03:24] START sgemm_tcu_iw4_perf1
+[15:04:22] DONE sgemm_tcu_iw4_perf1 rc=0 
+[15:04:22] START sgemm_tcu_wg_iw4_perf1
+[15:04:32] DONE sgemm_tcu_wg_iw4_perf1 rc=0 
+[15:04:32] START sgemm_tcu_wg_dxa_iw4_perf1
+[15:04:38] DONE sgemm_tcu_wg_dxa_iw4_perf1 rc=0 
+[15:04:38] START sgemm_tcu_iw4_perf4
+[15:04:45] DONE sgemm_tcu_iw4_perf4 rc=0 
+[15:04:45] START sgemm_tcu_wg_iw4_perf4
+[15:04:54] DONE sgemm_tcu_wg_iw4_perf4 rc=0 
+[15:04:54] START sgemm_tcu_wg_dxa_iw4_perf4
+[15:05:01] DONE sgemm_tcu_wg_dxa_iw4_perf4 rc=0 
+[15:05:01] START sgemm_tcu_iw4_perf7
+[15:05:09] DONE sgemm_tcu_iw4_perf7 rc=0 
+[15:05:09] START sgemm_tcu_wg_iw4_perf7
+[15:05:18] DONE sgemm_tcu_wg_iw4_perf7 rc=0 
+[15:05:18] START sgemm_tcu_wg_dxa_iw4_perf7
+[15:05:26] DONE sgemm_tcu_wg_dxa_iw4_perf7 rc=0 
+[15:05:26] START sgemm_tcu_iw4_perf11
+[15:05:34] DONE sgemm_tcu_iw4_perf11 rc=0 
+[15:05:34] START sgemm_tcu_wg_iw4_perf11
+[15:05:43] DONE sgemm_tcu_wg_iw4_perf11 rc=0 
+[15:05:43] START sgemm_tcu_wg_dxa_iw4_perf11
+[15:05:50] DONE sgemm_tcu_wg_dxa_iw4_perf11 rc=0 
+[15:05:50] START sgemm_tcu_wg_dxa_iw4_perf16
+[15:05:58] DONE sgemm_tcu_wg_dxa_iw4_perf16 rc=0 
+MATRIX-COMPLETE

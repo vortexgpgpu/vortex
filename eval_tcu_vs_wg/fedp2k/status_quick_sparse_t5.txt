@@ -1,0 +1,4 @@
+[05:52:59] START q_t5_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t5_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=208s cycles=77462 instrs=1016 PASSED
+[05:56:28] START q_t5_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t5_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=196s cycles=60436 instrs=1208 PASSED

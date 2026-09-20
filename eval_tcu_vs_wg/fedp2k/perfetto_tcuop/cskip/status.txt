@@ -1,0 +1,173 @@
+[22:06:45] START rtl-old nullc
+rtl-old nullc cycles=83553 instrs=553 PASSED asserts=0 wall=197s
+[22:10:04] START rtl-old forcec
+rtl-old forcec cycles=84212 instrs=646 PASSED asserts=0 wall=204s
+[22:13:30] PHASE-DONE rtl-old
+[22:14:21] START rtl-old-v2 forcec
+rtl-old-v2 forcec cycles=81087 instrs=617 PASSED asserts=0 wall=143s
+[22:16:46] START rtl-old-v2 nullc
+rtl-old-v2 nullc cycles=80839 instrs=537 PASSED asserts=0 wall=134s
+[22:19:01] PHASE-DONE rtl-old-v2
+[22:28:49] START rtl-new nullc
+rtl-new nullc cycles=76350 instrs=537 PASSED asserts=0 wall=198s
+[22:32:09] START rtl-new forcec
+rtl-new forcec cycles=81087 instrs=617 PASSED asserts=0 wall=201s
+[22:35:31] START rtl-new nonzeroc
+rtl-new nonzeroc cycles=81087 instrs=617 PASSED asserts=0 wall=210s
+[22:39:02] START rtl-new kchunk_nullc
+rtl-new kchunk_nullc cycles=286166 instrs=3153 PASSED asserts=0 wall=255s
+[22:43:18] PHASE-DONE rtl-new
+[00:34:22] START me-rtl single128_iw4
+me-rtl single128_iw4 cycles=NA instrs=NA ABORT(rc=2) asserts=2 wall=170s
+[00:37:14] START me-rtl coop4_128
+[00:47:06] START me-rtl2 single128_iw4
+me-rtl2 single128_iw4 cycles=76332 instrs=537 PASSED asserts=0 wall=165s
+[00:49:53] START me-rtl2 coop4_128
+me-rtl2 coop4_128 cycles=32012 instrs=515 PASSED asserts=0 wall=155s
+[00:52:30] START me-rtl2 coop4_256
+me-rtl2 coop4_256 cycles=179274 instrs=2761 PASSED asserts=0 wall=193s
+[00:55:44] PHASE-DONE me-rtl2
+[02:43:45] START rev1 single64
+rev1 single64 cycles=12065 instrs=187 FAILED asserts=101 wall=170s
+[02:46:36] START rev1 single128
+rev1 single128 cycles=78783 instrs=876 FAILED asserts=101 wall=176s
+[02:49:34] START rev1 single256
+[02:53:13] START rev2 single64
+rev2 single64 cycles=12065 instrs=187 PASSED asserts=0 wall=162s
+[02:55:56] PHASE-DONE rev2
+[02:56:00] START rev2 single64
+rev2 single64 cycles=12065 instrs=187 PASSED asserts=0 wall=5s
+[02:56:07] START rev2 single128
+rev2 single128 cycles=78783 instrs=876 PASSED asserts=0 wall=190s
+[02:59:18] START rev2 single256
+rev2 single256 cycles=576559 instrs=5487 PASSED asserts=0 wall=297s
+[03:04:17] START rev2 coop64
+rev2 coop64 cycles=9690 instrs=205 PASSED asserts=0 wall=157s
+[03:06:56] START rev2 coop128
+rev2 coop128 cycles=32012 instrs=515 PASSED asserts=0 wall=174s
+[03:09:52] START rev2 coop256
+rev2 coop256 cycles=179274 instrs=2761 PASSED asserts=0 wall=207s
+[03:13:20] START rev2 single128_iw1
+rev2 single128_iw1 BUILD-FAIL
+[03:13:20] PHASE-DONE rev2
+[03:39:31] REVIEW-REGRESS-DONE
+[04:30:09] START t1 single64
+[04:32:05] START t2 single64
+t2 single64 cycles=NA instrs=NA ABORT(rc=2) asserts=2 wall=0s
+[04:32:07] START t2 single128
+t2 single128 cycles=NA instrs=NA ABORT(rc=2) asserts=2 wall=0s
+[04:32:09] START t2 coop128
+t2 coop128 cycles=NA instrs=NA ABORT(rc=2) asserts=2 wall=0s
+[04:32:11] START t2 nonzeroc128
+[04:32:37] START t2 single64
+t2 single64 cycles=12100 instrs=187 PASSED asserts=0 wall=172s
+[04:35:31] START t2 single128
+t2 single128 cycles=79080 instrs=876 PASSED asserts=0 wall=186s
+[04:38:39] START t2 coop128
+t2 coop128 cycles=32063 instrs=515 PASSED asserts=0 wall=176s
+[04:41:36] START t2 nonzeroc128
+t2 nonzeroc128 cycles=82741 instrs=975 PASSED asserts=0 wall=199s
+[04:44:57] PHASE-DONE t2
+[04:44:57] START q_t2_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t2_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=2 wall=190s cycles=77254 instrs=1016 FAILED
+[04:48:08] START q_t2_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t2_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=2 wall=186s cycles=60205 instrs=1208 FAILED
+[04:51:16] QUICK-DONE t2
+[04:52:18] START q_t3_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t3_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=2 wall=191s cycles=77318 instrs=1016 FAILED
+[04:55:30] START q_t3_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t3_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=2 wall=190s cycles=60295 instrs=1208 FAILED
+[05:20:39] START t4 single64
+t4 single64 cycles=12108 instrs=187 PASSED asserts=0 wall=184s
+[05:23:45] START t4 single128
+t4 single128 cycles=79144 instrs=876 PASSED asserts=0 wall=204s
+[05:27:10] START t4 coop128
+t4 coop128 cycles=32064 instrs=515 PASSED asserts=0 wall=182s
+[05:30:14] START t4 nonzeroc128
+t4 nonzeroc128 cycles=82805 instrs=975 PASSED asserts=0 wall=193s
+[05:33:29] PHASE-DONE t4
+[05:33:29] START q_t4_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t4_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=190s cycles=77318 instrs=1016 PASSED
+[05:36:41] START q_t4_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t4_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=126s cycles=60295 instrs=1208 PASSED
+[05:38:48] QUICK-DONE t4
+[05:39:46] START t5 single64
+t5 single64 cycles=12116 instrs=187 PASSED asserts=0 wall=186s
+[05:42:53] START t5 single128
+t5 single128 cycles=79208 instrs=876 PASSED asserts=0 wall=199s
+[05:46:14] START t5 coop128
+t5 coop128 cycles=32044 instrs=515 PASSED asserts=0 wall=191s
+[05:49:27] START t5 nonzeroc128
+t5 nonzeroc128 cycles=82869 instrs=975 PASSED asserts=0 wall=211s
+[05:52:59] PHASE-DONE t5
+[05:52:59] START q_t5_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t5_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=208s cycles=77462 instrs=1016 PASSED
+[05:56:28] START q_t5_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t5_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=196s cycles=60436 instrs=1208 PASSED
+[05:59:47] QUICK-DONE t5
+[06:03:40] START t6 single64
+t6 single64 cycles=12116 instrs=187 PASSED asserts=0 wall=190s
+[06:06:52] START t6 single128
+t6 single128 cycles=79208 instrs=876 PASSED asserts=0 wall=205s
+[06:10:19] START t6 coop128
+t6 coop128 cycles=32044 instrs=515 PASSED asserts=0 wall=202s
+[06:13:43] START t6 nonzeroc128
+t6 nonzeroc128 cycles=82869 instrs=975 PASSED asserts=0 wall=209s
+[06:17:14] PHASE-DONE t6
+[06:17:14] START q_t6_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t6_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=202s cycles=77462 instrs=1016 PASSED
+[06:20:38] START q_t6_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t6_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=197s cycles=60436 instrs=1208 PASSED
+[06:23:57] QUICK-DONE t6
+[06:39:29] START q_t7_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t7_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=185s cycles=77964 instrs=1016 PASSED
+[06:42:36] START q_t7_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t7_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=188s cycles=60511 instrs=1208 PASSED
+[06:45:45] START t7d single64
+t7d single64 cycles=12116 instrs=187 PASSED asserts=0 wall=178s
+[06:48:45] START t7d single128
+t7d single128 cycles=79208 instrs=876 PASSED asserts=0 wall=194s
+[06:52:01] START t7d coop128
+t7d coop128 cycles=32044 instrs=515 PASSED asserts=0 wall=188s
+[06:55:11] START t7d nonzeroc128
+t7d nonzeroc128 cycles=82869 instrs=975 PASSED asserts=0 wall=198s
+[06:58:30] PHASE-DONE t7d
+[06:58:30] START q_t7d_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t7d_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=128s cycles=77964 instrs=1016 PASSED
+[07:00:39] START q_t7d_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t7d_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=122s cycles=60511 instrs=1208 PASSED
+[07:02:43] QUICK-DONE t7d
+[07:18:14] START t8 single64
+t8 single64 cycles=12124 instrs=187 PASSED asserts=0 wall=178s
+[07:21:14] START t8 single128
+t8 single128 cycles=79272 instrs=876 PASSED asserts=0 wall=184s
+[07:24:20] START t8 coop128
+t8 coop128 cycles=32076 instrs=515 PASSED asserts=0 wall=174s
+[07:27:15] START t8 nonzeroc128
+t8 nonzeroc128 cycles=82933 instrs=975 PASSED asserts=0 wall=194s
+[07:30:31] PHASE-DONE t8
+[07:30:31] START q_t8_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t8_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=185s cycles=78073 instrs=1016 PASSED
+[07:33:38] START q_t8_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t8_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=196s cycles=60621 instrs=1208 PASSED
+[07:36:55] QUICK-DONE t8
+[07:52:15] START q_t10_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t10_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=214s cycles=78206 instrs=1016 PASSED
+[07:55:51] START q_t10_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t10_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=199s cycles=60629 instrs=1208 PASSED
+[07:59:12] START final single64
+final single64 cycles=12132 instrs=187 PASSED asserts=0 wall=179s
+[08:02:13] START final single128
+final single128 cycles=79336 instrs=876 PASSED asserts=0 wall=196s
+[08:05:31] START final single256
+final single256 cycles=580527 instrs=5487 PASSED asserts=0 wall=316s
+[08:10:48] START final coop64
+final coop64 cycles=9707 instrs=205 PASSED asserts=0 wall=175s
+[08:13:45] START final coop128
+final coop128 cycles=32066 instrs=515 PASSED asserts=0 wall=182s
+[08:16:49] START final coop256
+final coop256 cycles=179344 instrs=2761 PASSED asserts=0 wall=233s
+[08:20:44] START final single128_iw1
+final single128_iw1 BUILD-FAIL
+[08:20:44] PHASE-DONE final
+[08:48:10] REVIEW-REGRESS-DONE

@@ -1,0 +1,7 @@
+[04:02:02] A: 128^3 kmult=4
+RESULT s23_a_128_k4 128x128x128 iw=4 kmult=4 rc=0 wall=209s cycles=81087 instrs=617 PASSED
+[04:05:33] B: 128x128x512 kmult=2 (P0.3, 8 chunks)
+RESULT s23_b_512_k2 128x128x512 iw=4 kmult=2 rc=0 wall=328s cycles=291471 instrs=3269 PASSED
+[04:11:03] C: 128x128x512 kmult=4 (P0.3, 4 chunks)
+RESULT s23_c_512_k4 128x128x512 iw=4 kmult=4 rc=0 wall=306s cycles=284517 instrs=1695 PASSED
+[04:16:11] STAGE23-COMPLETE

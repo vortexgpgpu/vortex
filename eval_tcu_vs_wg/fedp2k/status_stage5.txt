@@ -1,0 +1,7 @@
+[04:24:03] 256^3 IW=1
+RESULT s5_op_256_iw1 256x256x256 iw=1 kmult=4 rc=0 wall=209s cycles=586354 instrs=3652 kbody=0 PASSED
+[04:27:34] 256^3 IW=2
+RESULT s5_op_256_iw2 256x256x256 iw=2 kmult=4 rc=0 wall=224s cycles=586953 instrs=3652 kbody=0 PASSED
+[04:31:19] 256^3 IW=4
+RESULT s5_op_256_iw4 256x256x256 iw=4 kmult=4 rc=0 wall=418s cycles=586457 instrs=3652 kbody=0 PASSED
+[04:38:20] STAGE5-COMPLETE

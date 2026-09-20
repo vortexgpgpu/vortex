@@ -1,0 +1,31 @@
+[01:10:52] START dxa_nt16_iw4
+[01:15:12] DONE dxa_nt16_iw4 rc=0 wall=258s
+[01:15:12] START dxa_nt16_iw2
+[01:21:28] DONE dxa_nt16_iw2 rc=0 wall=374s
+[01:21:28] START dxa_nt16_iw1
+[01:23:05] DONE dxa_nt16_iw1 rc=0 wall=95s
+[01:23:05] START dxa_nt8_iw4
+[01:25:19] DONE dxa_nt8_iw4 rc=0 wall=132s
+[01:25:19] START dxa_nt8_iw2
+[01:27:11] DONE dxa_nt8_iw2 rc=0 wall=110s
+[01:27:11] START dxa_nt8_iw1
+[01:28:45] DONE dxa_nt8_iw1 rc=0 wall=92s
+[01:28:45] START dxa_nt4_iw4
+[01:30:25] DONE dxa_nt4_iw4 rc=0 wall=98s
+[01:30:25] START dxa_nt4_iw2
+[01:31:55] DONE dxa_nt4_iw2 rc=0 wall=88s
+[01:31:55] START dxa_nt4_iw1
+[01:33:17] DONE dxa_nt4_iw1 rc=0 wall=80s
+[01:33:17] START dxa2k_nt16_iw4
+[01:44:34] DONE dxa2k_nt16_iw4 rc=0 wall=675s
+[01:44:34] START dxa2k_nt16_iw2
+[01:55:44] DONE dxa2k_nt16_iw2 rc=0 wall=668s
+[01:55:44] START dxa2k_nt16_iw1
+[02:00:16] DONE dxa2k_nt16_iw1 rc=0 wall=270s
+[02:00:16] START dxa2k_nt8_iw4
+[02:03:19] DONE dxa2k_nt8_iw4 rc=0 wall=181s
+[02:03:19] START dxa2k_nt8_iw2
+[02:05:19] DONE dxa2k_nt8_iw2 rc=0 wall=118s
+[02:05:19] START dxa2k_nt8_iw1
+[02:07:08] DONE dxa2k_nt8_iw1 rc=0 wall=107s
+SWEEP-IMPROVED-COMPLETE

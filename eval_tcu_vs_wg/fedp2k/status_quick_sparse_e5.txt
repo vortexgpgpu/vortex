@@ -1,0 +1,2 @@
+[05:16:04] START q_e5_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_e5_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=191s cycles=60295 instrs=1208 PASSED

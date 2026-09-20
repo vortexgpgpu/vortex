@@ -1,0 +1,52 @@
+cal iw4_nullc cycles=72737 instrs=537 PASSED engines_used=0 wall=55s
+cal iw4_nullc cycles=72737 instrs=537 PASSED engines_used=0 wall=5s
+cal iw1_nullc cycles=72796 instrs=537 PASSED engines_used=0 wall=50s
+cal iw2_nullc cycles=72733 instrs=537 PASSED engines_used=0 wall=51s
+cal iw4_forcec cycles=77993 instrs=617 PASSED engines_used=0 wall=7s
+cal iw4_kchunk cycles=279901 instrs=3153 PASSED engines_used=0 wall=7s
+cal iw4_256_forcec cycles=567569 instrs=3652 PASSED engines_used=0 wall=8s
+mE128 e1 cycles=72737 instrs=537 PASSED engines_used=1 ops=16 wall=6s
+mE128 e2 cycles=41270 instrs=640 PASSED engines_used=2 ops=16 wall=9s
+mE128 e1k2 cycles=73553 instrs=876 PASSED engines_used=1 ops=32 wall=7s
+mE128 e2k2 cycles=44244 instrs=1032 PASSED engines_used=2 ops=32 wall=6s
+mE128 e4k2 cycles=49017 instrs=1160 PASSED engines_used=4 ops=32 wall=9s
+mE128 e4_rtl1 cycles=NA instrs=NA ABORT(rc=2) engines_used=0 ops=0 wall=8s
+nometric e1 cycles=72313 instrs=499 PASSED engines_used=1 ops=16 wall=7s
+nometric e2 cycles=40922 instrs=564 PASSED engines_used=2 ops=16 wall=7s
+nometric e4k2 cycles=40548 instrs=984 PASSED engines_used=4 ops=32 wall=7s
+dxa128 e2_d2 cycles=40850 instrs=564 PASSED engines_used=2 ops=16 wall=9s
+dxa128 e4_d2 cycles=39060 instrs=984 PASSED engines_used=4 ops=32 wall=7s
+dxa128 e4_d4 cycles=35212 instrs=984 PASSED engines_used=4 ops=32 wall=9s
+dxa128 e4_d1_if16 cycles=40548 instrs=984 PASSED engines_used=4 ops=32 wall=9s
+dxa128 e4_d4_if16 cycles=37608 instrs=984 PASSED engines_used=4 ops=32 wall=9s
+s256 e1 cycles=549245 instrs=3246 PASSED engines_used=1 ops=128 wall=8s
+s256 e1k2 cycles=561157 instrs=5499 PASSED engines_used=1 ops=256 wall=8s
+s256 e2 cycles=279066 instrs=3514 PASSED engines_used=2 ops=128 wall=8s
+s256 e2_d2 cycles=281058 instrs=3514 PASSED engines_used=2 ops=128 wall=8s
+s256 e4 cycles=277144 instrs=6740 PASSED engines_used=4 ops=256 wall=8s
+s256 e4_d2 cycles=285676 instrs=6740 PASSED engines_used=4 ops=256 wall=8s
+s256 e4_d4 cycles=224669 instrs=6740 PASSED engines_used=4 ops=256 wall=8s
+coop c2_128 cycles=40170 instrs=480 PASSED engines_used=2 ops=16 wall=7s
+coop c4_128 BUILD-FAIL
+coop c2_256 cycles=280330 instrs=3018 PASSED engines_used=2 ops=128 wall=8s
+coop c4_256 BUILD-FAIL
+coop c4k2_256 cycles=152324 instrs=5082 PASSED engines_used=4 ops=256 wall=7s
+coop2 e1_128_regress cycles=72313 instrs=499 PASSED engines_used=1 ops=16 wall=5s
+coop2 c4_128 cycles=26064 instrs=515 PASSED engines_used=4 ops=16 wall=7s
+coop2 c4k2_128 cycles=25000 instrs=813 PASSED engines_used=4 ops=32 wall=6s
+coop2 c4_256 cycles=148736 instrs=2761 PASSED engines_used=4 ops=128 wall=8s
+coop2 c4_256_d2 cycles=148408 instrs=2761 PASSED engines_used=4 ops=128 wall=8s
+coop2 c4k2_256_d2 cycles=148452 instrs=5082 PASSED engines_used=4 ops=256 wall=7s
+alt wide2_256 cycles=287629 instrs=3246 PASSED engines_used=1 ops=128 wall=9s
+alt wide4_256 cycles=277945 instrs=3246 PASSED engines_used=1 ops=128 wall=10s
+alt c2_iw2_256 cycles=280272 instrs=3018 PASSED engines_used=2 ops=128 wall=10s
+alt e1_512 cycles=4333249 instrs=21362 PASSED engines_used=1 ops=1024 wall=16s
+alt c4_512 BUILD-FAIL
+rolled c4r_256 cycles=316920 instrs=6020 PASSED engines_used=4 ops=128 wall=8s
+rolled c4r_512 cycles=2377799 instrs=37980 PASSED engines_used=4 ops=1024 wall=16s
+rolled2 c4_256_unrolled_regress cycles=148736 instrs=2761 PASSED engines_used=4 ops=128 wall=8s
+rolled2 c4r_256 cycles=203100 instrs=3312 PASSED engines_used=4 ops=128 wall=5s
+rolled2 c4r_512 cycles=1509896 instrs=21528 PASSED engines_used=4 ops=1024 wall=11s
+rolled3 c4r_256 cycles=203100 instrs=3312 PASSED engines_used=4 ops=128 wall=5s
+rolled3 c4r_512 cycles=1742028 instrs=28456 PASSED engines_used=4 ops=1024 wall=11s
+rolled4 c4r_512 cycles=1509896 instrs=21528 PASSED engines_used=4 ops=1024 wall=11s

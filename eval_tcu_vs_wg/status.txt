@@ -1,0 +1,37 @@
+[14:28:22] START sgemm_tcu_nt4_iw1
+[14:28:50] DONE sgemm_tcu_nt4_iw1 rc=0 wall=26s
+[14:28:50] START sgemm_tcu_wg_nt4_iw1
+[14:30:49] DONE sgemm_tcu_wg_nt4_iw1 rc=0 wall=117s
+[14:30:49] START sgemm_tcu_nt4_iw2
+[14:31:19] DONE sgemm_tcu_nt4_iw2 rc=0 wall=29s
+[14:31:19] START sgemm_tcu_wg_nt4_iw2
+[14:32:41] DONE sgemm_tcu_wg_nt4_iw2 rc=0 wall=81s
+[14:32:41] START sgemm_tcu_nt4_iw4
+[14:33:19] DONE sgemm_tcu_nt4_iw4 rc=0 wall=37s
+[14:33:19] START sgemm_tcu_wg_nt4_iw4
+[14:35:18] DONE sgemm_tcu_wg_nt4_iw4 rc=0 wall=118s
+[14:35:18] START sgemm_tcu_nt8_iw1
+[14:35:48] DONE sgemm_tcu_nt8_iw1 rc=0 wall=28s
+[14:35:48] START sgemm_tcu_wg_nt8_iw1
+[14:37:12] DONE sgemm_tcu_wg_nt8_iw1 rc=0 wall=82s
+[14:37:12] START sgemm_tcu_nt8_iw2
+[14:37:55] DONE sgemm_tcu_nt8_iw2 rc=0 wall=41s
+[14:37:55] START sgemm_tcu_wg_nt8_iw2
+[14:39:13] DONE sgemm_tcu_wg_nt8_iw2 rc=0 wall=77s
+[14:39:13] START sgemm_tcu_nt8_iw4
+[14:40:05] DONE sgemm_tcu_nt8_iw4 rc=0 wall=50s
+[14:40:05] START sgemm_tcu_wg_nt8_iw4
+[14:41:44] DONE sgemm_tcu_wg_nt8_iw4 rc=0 wall=98s
+[14:41:44] START sgemm_tcu_nt16_iw1
+[14:42:36] DONE sgemm_tcu_nt16_iw1 rc=0 wall=51s
+[14:42:36] START sgemm_tcu_wg_nt16_iw1
+[14:44:51] DONE sgemm_tcu_wg_nt16_iw1 rc=0 wall=134s
+[14:44:51] START sgemm_tcu_nt16_iw2
+[14:46:19] DONE sgemm_tcu_nt16_iw2 rc=0 wall=87s
+[14:46:19] START sgemm_tcu_wg_nt16_iw2
+[14:48:28] DONE sgemm_tcu_wg_nt16_iw2 rc=0 wall=128s
+[14:48:28] START sgemm_tcu_nt16_iw4
+[14:51:15] DONE sgemm_tcu_nt16_iw4 rc=0 wall=166s
+[14:51:15] START sgemm_tcu_wg_nt16_iw4
+[14:54:57] DONE sgemm_tcu_wg_nt16_iw4 rc=0 wall=221s
+SWEEP-COMPLETE

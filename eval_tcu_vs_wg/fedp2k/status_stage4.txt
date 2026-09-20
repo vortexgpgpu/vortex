@@ -1,0 +1,15 @@
+[09:03:26] START cstore_k128
+[09:10:53] DONE cstore_k128 rc=0 wall=445s
+[09:10:53] START cstore2k_k128
+[09:30:11] DONE cstore2k_k128 rc=0 wall=1157s
+[09:30:11] START bundle_k128
+[09:37:35] DONE bundle_k128 rc=0 wall=443s
+[09:37:35] START bundle2k_k128
+[10:02:23] DONE bundle2k_k128 rc=0 wall=1487s
+[10:02:23] START base_k512
+[10:09:35] DONE base_k512 rc=0 wall=431s
+[10:09:35] START fedp2k_k512
+[10:36:47] DONE fedp2k_k512 rc=0 wall=1631s
+[10:36:47] START bundle_k512
+[10:44:07] DONE bundle_k512 rc=0 wall=439s
+[10:44:07] START bundle2k_k512

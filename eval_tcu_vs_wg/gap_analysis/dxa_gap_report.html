@@ -1,0 +1,548 @@
+<title>The DXA Critical Path</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#faf9f6; --panel:#f1efe9; --panel2:#e9e6dd; --ink:#22242a; --muted:#5d6570;
+  --line:#d8d4c8; --dxa:#c05c10; --dxa-soft:#eeddcc; --tcu:#0f7b7a; --tcu-soft:#d3e7e4;
+  --idle:#a9aca8; --crit:#a83232; --ok:#3c7a3c; --code-bg:#edeae2; --accent:#c05c10;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#17181a; --panel:#1f2124; --panel2:#26282c; --ink:#e6e4de; --muted:#9aa0a8;
+    --line:#3a3d42; --dxa:#e0894a; --dxa-soft:#43301f; --tcu:#45b3ae; --tcu-soft:#1d3a38;
+    --idle:#5a5e63; --crit:#d47070; --ok:#7dbb7d; --code-bg:#232528; --accent:#e0894a;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#17181a; --panel:#1f2124; --panel2:#26282c; --ink:#e6e4de; --muted:#9aa0a8;
+  --line:#3a3d42; --dxa:#e0894a; --dxa-soft:#43301f; --tcu:#45b3ae; --tcu-soft:#1d3a38;
+  --idle:#5a5e63; --crit:#d47070; --ok:#7dbb7d; --code-bg:#232528; --accent:#e0894a;
+}
+body{background:var(--bg); color:var(--ink); font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:15.5px; line-height:1.62; padding:0 16px;}
+.wrap{max-width:900px; margin:0 auto; padding-block:40px 90px;}
+h1,h2,h3{line-height:1.22; text-wrap:balance; font-weight:600;}
+h1{font-size:2.1rem; margin:.2em 0 .1em;}
+h2{font-size:1.35rem; margin:2.6em 0 .5em; padding-top:1.2em; border-top:1px solid var(--line);}
+h2 .sec{color:var(--accent); font-family:"IBM Plex Mono",monospace; font-size:.95rem; margin-right:.6em; font-weight:600;}
+h3{font-size:1.02rem; margin:1.8em 0 .4em;}
+p{max-width:72ch; margin:.7em 0;}
+.kicker{font-family:"IBM Plex Mono",monospace; font-size:.78rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);}
+.sub{color:var(--muted); max-width:76ch; font-size:.95rem;}
+code, .mono{font-family:"IBM Plex Mono",monospace; font-size:.86em;}
+code{background:var(--code-bg); padding:.1em .35em; border-radius:3px;}
+pre{background:var(--code-bg); padding:12px 14px; border-radius:6px; overflow-x:auto; font-size:.82rem; line-height:1.5;}
+pre code{background:none; padding:0;}
+a{color:var(--tcu);}
+table{border-collapse:collapse; width:100%; font-size:.88rem; font-variant-numeric:tabular-nums;}
+.tblwrap{overflow-x:auto; margin:1em 0;}
+th{font-family:"IBM Plex Mono",monospace; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase;
+   color:var(--muted); text-align:left; font-weight:600; padding:6px 12px 6px 0; border-bottom:1.5px solid var(--line);}
+td{padding:6px 12px 6px 0; border-bottom:1px solid var(--line); vertical-align:top;}
+td.n{text-align:right; font-family:"IBM Plex Mono",monospace; font-size:.84rem;}
+th.n{text-align:right;}
+tr.hl td{background:var(--panel);}
+.answer{background:var(--panel); border-left:4px solid var(--accent); padding:18px 22px; margin:1.6em 0; border-radius:0 6px 6px 0;}
+.answer p{margin:.5em 0;}
+.stat-row{display:flex; flex-wrap:wrap; gap:12px; margin:1.4em 0;}
+.stat{flex:1 1 150px; background:var(--panel); border-radius:6px; padding:14px 16px;}
+.stat .v{font-family:"IBM Plex Mono",monospace; font-size:1.55rem; font-weight:600; line-height:1.1;}
+.stat .l{font-size:.78rem; color:var(--muted); margin-top:4px; line-height:1.35;}
+.stat.dxa .v{color:var(--dxa);} .stat.tcu .v{color:var(--tcu);} .stat.crit .v{color:var(--crit);} .stat.ok .v{color:var(--ok);}
+.cause{border:1px solid var(--line); border-radius:6px; margin:1.1em 0; overflow:hidden;}
+.cause .head{display:flex; align-items:baseline; gap:12px; padding:12px 18px; background:var(--panel);}
+.cause .rank{font-family:"IBM Plex Mono",monospace; font-weight:600; color:var(--accent); white-space:nowrap;}
+.cause .cost{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--muted); white-space:nowrap;}
+.cause .head b{font-weight:600;}
+.cause .body{padding:6px 18px 14px;}
+.legend{display:flex; flex-wrap:wrap; gap:16px; font-size:.8rem; color:var(--muted); margin:.4em 0 .2em;}
+.legend span{display:inline-flex; align-items:center; gap:6px;}
+.sw{width:13px; height:13px; border-radius:3px; display:inline-block;}
+figure{margin:1.4em 0;}
+figcaption{font-size:.82rem; color:var(--muted); margin-top:8px; max-width:76ch;}
+.chart{width:100%;}
+svg text{font-family:"IBM Plex Sans",system-ui,sans-serif;}
+svg .mono-t{font-family:"IBM Plex Mono",monospace;}
+.verdict{display:grid; grid-template-columns:auto 1fr; gap:8px 14px; font-size:.92rem; margin:1em 0;}
+.verdict .tag{font-family:"IBM Plex Mono",monospace; font-size:.74rem; font-weight:600; letter-spacing:.05em;
+  padding:2px 8px; border-radius:4px; align-self:start; white-space:nowrap; margin-top:2px;}
+.tag.flaw{background:var(--dxa-soft); color:var(--dxa);}
+.tag.design{background:var(--tcu-soft); color:var(--tcu);}
+.tag.compiler{background:var(--code-bg); color:var(--muted);}
+.footnote{font-size:.82rem; color:var(--muted); border-top:1px solid var(--line); margin-top:3em; padding-top:1em;}
+@media (max-width:640px){ h1{font-size:1.6rem;} .stat{flex-basis:120px;} }
+</style>
+
+<div class="wrap">
+
+<div class="kicker">Vortex &middot; tcu-op fork &middot; simx investigation &middot; 2026-09-16 &middot; re-evaluated on the improved architecture 2026-09-17</div>
+<h1>Why WGMMA+DXA isn't faster: the DXA critical path</h1>
+<p class="sub">A cycle-level autopsy of <span class="mono">sgemm_tcu_wg_dxa</span> vs <span class="mono">sgemm_tcu</span>
+at M=N=K=128, fp16&rarr;fp32, NW=16, NT=16, one core. Primary vehicle: simx with per-class MPM counters,
+cycle-stamped debug traces, and Perfetto exports; rtlsim numbers from the earlier sweep are used for cross-checking.</p>
+
+<div class="answer">
+<p><b>The answer in three sentences.</b> The WGMMA+DXA design is doing exactly what it promises on the
+compute side &mdash; 44% fewer instructions than the WMMA baseline, and the tensor pipes run at 3.35 of
+a possible 4 uops/cycle whenever they run. It is slow because <b>the single DXA engine is busy for 92.1%
+of the entire run and only 6.7% of that time overlaps any compute</b>: the kernel's single-buffer schedule
+serializes staging against WGMMA, and the engine itself moves data at 3.7 bytes/cycle against a 64-byte/cycle
+LMEM port. The gap is therefore <b>not expected and not fundamental</b> &mdash; it is the compounding of four
+identifiable implementation bottlenecks (ranked in &sect;4), and once staging is off the critical path the same
+kernel has roughly a 10&times; headroom at this problem size.</p>
+</div>
+
+<div class="answer" style="border-left-color:var(--tcu)">
+<p><b>Re-evaluation, 2026-09-17 &mdash; the diagnosis held and the top fixes are in.</b> Two of this report's
+recommendations were implemented and validated since it was written: register-resident double buffering
+(recommendation #1, commit <span class="mono">bd1420351</span>) and the DXA B-scatter drain fix
+(the core of recommendation #2, commit <span class="mono">fa1765c85</span>, grouped BlockMajor writes).
+On the improved architecture the headline question inverts: <b><span class="mono">sgemm_tcu_wg_dxa</span> is now
+1.49&times; faster than <span class="mono">sgemm_tcu</span> on rtlsim</b> (74,947 vs 111,373 cycles; was 8% slower),
+rtlsim agrees with the simx model within 3% (74,947 vs 77,176), and DXA LMEM beats dropped 69,632 &rarr; 20,480
+exactly as §3 predicted &mdash; the B drain now takes 128 beats per 1&nbsp;KB tile instead of 512.
+93% of tensor-pipe compute now hides under transfers. The scoped CI matrix (162 WGMMA/DXA cases, both
+simulators, XLEN 32+64) passes clean. The next wall is exactly the one §4 ranked next: the tbuf operand
+path (RC4, ~26k stall cycles), now the top open item. Original analysis below is kept intact as the
+diagnosis of record; updated numbers are flagged where they appear.</p>
+</div>
+
+<div class="stat-row">
+  <div class="stat dxa"><div class="v">92.1%</div><div class="l">of the run the DXA engine is busy (71,095 / 77,172 cycles, IW=4)</div></div>
+  <div class="stat tcu"><div class="v">6.3%</div><div class="l">of the run the tensor pipes execute anything (4,884 cycles)</div></div>
+  <div class="stat dxa"><div class="v">3.7 B/cyc</div><div class="l">effective DXA throughput vs 64 B/cyc LMEM port width</div></div>
+  <div class="stat crit"><div class="v">6.7%</div><div class="l">of DXA busy time overlapped by compute &mdash; staging is serialized</div></div>
+</div>
+
+<h2><span class="sec">1</span>The measured landscape</h2>
+<p>Total cycles for the three kernels on both simulators. Two things matter here. First, on the
+architectural model (simx) the DXA variant already <em>wins</em> at IW=4 &mdash; the "8% slower" result that
+prompted this investigation is an rtlsim-only effect. Second, both wins and losses are tiny compared to
+what the hardware could do: the compute roofline for this problem is <b>4,096 cycles</b> at IW=4
+(16,384 WGMMA uops &divide; 4 blocks), and every bar below is 19&ndash;80&times; above it.</p>
+
+<figure><div id="ch-landscape" class="chart"></div>
+<figcaption>End-to-end cycles, M=N=K=128. The WGMMA-without-DXA variant (<span class="mono">sgemm_tcu_wg</span>,
+software cooperative loads) is included to show that DXA is not the villain relative to its alternatives &mdash;
+it beats SW loading by 2.7&ndash;4.4&times;. The dashed line is the IW=4 TCU compute roofline.
+The teal row is the 2026-09-17 re-evaluation on the improved architecture (grouped scatter drain in the
+RTL DXA engine; the simx bars are unchanged because the model already assumed the fixed drain).</figcaption></figure>
+
+<div class="tblwrap"><table>
+<tr><th>kernel</th><th class="n">instrs (simx)</th><th class="n">simx IW=1</th><th class="n">simx IW=4</th><th class="n">rtlsim IW=1</th><th class="n">rtlsim IW=4</th></tr>
+<tr><td><span class="mono">sgemm_tcu</span> (per-warp WMMA, dcache)</td><td class="n">53,359</td><td class="n">119,272</td><td class="n">99,038</td><td class="n">129,514</td><td class="n">111,373</td></tr>
+<tr class="hl"><td><span class="mono">sgemm_tcu_wg_dxa</span> (WGMMA + DXA)</td><td class="n">30,032</td><td class="n">142,480</td><td class="n">77,173</td><td class="n">342,897</td><td class="n">120,723</td></tr>
+<tr><td><span class="mono">sgemm_tcu_wg</span> (WGMMA, SW loads)</td><td class="n">255,296</td><td class="n">797,238</td><td class="n">335,957</td><td class="n">1,231,242</td><td class="n">331,466</td></tr>
+<tr><td><b><span class="mono">sgemm_tcu_wg_dxa</span> &mdash; improved architecture</b> (grouped drain <span class="mono">fa1765c85</span>; dbuf v3 available)</td><td class="n">30,032</td><td class="n">142,480</td><td class="n">77,176</td><td class="n">149,591</td><td class="n"><b>74,947</b></td></tr>
+</table></div>
+
+<p><b>[Updated]</b> On the improved architecture the rtlsim/simx divergence at IW=4 is closed (74,947 vs
+77,176, RTL now 3% <em>ahead</em>): the element-wise B drain the model never had was the divergence, as the
+follow-up rtlsim investigation established. The simx columns are unchanged because the drain fix makes the
+RTL match what the model already assumed. The original divergence note below stands as the record of the
+stock architecture: 1.56&times; at IW=4 and 2.4&times; at IW=1, which &sect;6 attributed to RTL costs the model
+idealizes &mdash; of those, the drain dominated; the bbuf fetch path (RC4) is what remains.</p>
+
+<h2><span class="sec">2</span>What the machine is actually doing</h2>
+<p>The debug trace gives exact busy intervals: every DXA transfer's start/complete pair and every tensor-core
+uop retirement. Painting them on a common time axis answers "compute vs memory overlap" definitively:</p>
+
+<figure><div id="ch-timeline" class="chart"></div>
+<figcaption>Machine state over time, <span class="mono">sgemm_tcu_wg_dxa</span> IW=4 (256-cycle bins).
+Amber: fraction of the bin the DXA engine is busy. Teal: fraction the TCU executes uops.
+The DXA band is pinned at 100% nearly wall to wall; compute appears as thin teal spikes riding on it.
+The white gaps at the far left/right are kernel launch and the C-tile store epilogue.</figcaption></figure>
+
+<figure><div id="ch-classes" class="chart"></div>
+<figcaption>Every cycle of each run classified by activity. The baseline WMMA kernel has no DXA and stalls
+on dcache loads instead ("neither" = warps waiting on memory/scoreboard) &mdash; but it spreads those loads
+across 16 independent warps, so it degrades gracefully. The DXA kernel funnels all staging through one
+engine and one barrier, so its warps wait <em>together</em>: scheduler idle is 82&ndash;88%.</figcaption></figure>
+
+<p>Three numbers from these timelines carry the whole diagnosis:</p>
+<ul>
+<li><b>TCU compute is essentially free and essentially perfect.</b> 16,384 uops retire in 4,884 busy
+cycles at IW=4 &mdash; 3.35 uops/cycle against a hard ceiling of 4. When operands are resident, the
+warp-group machine runs at 84% of peak. (The WMMA baseline manages only 1.14 uops/cycle in its busy
+cycles &mdash; the warp-group lockstep genuinely is the denser way to feed the tensor pipes.)</li>
+<li><b>The DXA engine never rests and never shares.</b> Its 256 transfers occupy 71,095 of 77,172 cycles
+with a total of 808 idle cycles between transfers. It is the critical path; everything else is waiting for it.</li>
+<li><b>Overlap is 6.7%.</b> The single-buffer schedule (stage &rarr; barrier &rarr; compute &rarr; barrier &rarr; re-stage)
+makes staging and compute mutually exclusive within a CTA; the only overlap comes from other resident CTAs'
+transfers draining while one CTA computes.</li>
+</ul>
+
+<h2><span class="sec">3</span>Where the DXA cycles go</h2>
+<p>The engine's 71k busy cycles moved 256 KB of tile data (128 A-transfers + 128 B-transfers of 1 KB each).
+Pairing each transfer's start/complete with its descriptor slot splits the cost:</p>
+
+<div class="tblwrap"><table>
+<tr><th>transfer</th><th class="n">count</th><th class="n">GMEM lines read</th><th class="n">LMEM write beats</th><th class="n">bytes / beat</th><th class="n">span avg</th><th class="n">span median</th><th class="n">cycles / KB</th></tr>
+<tr><td>A tile (32&times;16 fp16, row-major dest)</td><td class="n">128</td><td class="n">32</td><td class="n">32</td><td class="n">32 B</td><td class="n">371</td><td class="n">266</td><td class="n">371</td></tr>
+<tr><td>B tile (16&times;32 fp16, BlockMajor dest)</td><td class="n">128</td><td class="n">16</td><td class="n">128</td><td class="n">8 B</td><td class="n">184</td><td class="n">150</td><td class="n">184</td></tr>
+</table></div>
+
+<p>Both rows are pathological, for different reasons:</p>
+<ul>
+<li><b>A pays DRAM latency, twice over.</b> A's tile rows are 32-byte segments of rows with a 256-byte
+stride, so every one of its 32 line reads returns 50% useful bytes &mdash; 2&times; the necessary DRAM traffic.
+Worse, the engine caps in-flight reads at 8 (<span class="mono">VX_CFG_DXA_MAX_INFLIGHT</span>), so a 32-line transfer
+exposes ~4 serial DRAM latencies. A single 1 KB A tile takes a median 266 cycles &mdash; ~10&times; the port-limited minimum.</li>
+<li><b>B pays scatter write amplification.</b> The BlockMajor destination layout interleaves K inside each
+64-byte block, so one GMEM line (one k-row of the tile) scatters 4 fp16 elements into each of 8 different
+LMEM blocks &mdash; 8 beats of 8 bytes each. Each LMEM block is written 8 times by 8 different beats.
+The port could carry the whole tile in 16 beats; the scatter takes 128.</li>
+<li><b>Transfers never pipeline into each other.</b> The lone worker
+(<span class="mono">VX_CFG_NUM_DXA_CORES = max(1, cores/8) = 1</span> on this config) runs address-generation
+&rarr; read &rarr; drain per transfer and only then starts the next, so all 256 transfers pay their startup
+latency serially. Average span &times; count &asymp; the whole DXA phase: 277.7 &times; 256 = 71k cycles.</li>
+</ul>
+
+<figure><div id="ch-waterfall" class="chart"></div>
+<figcaption>From roofline to reality at IW=4. Each step is measured or arithmetically implied by the
+counters: compute roofline 4,096 &rarr; add the serialized DXA phase (71,095, of which only 4,766 overlap
+compute) &rarr; simx total 77,173 &rarr; RTL adds another 1.56&times; &rarr; rtlsim total 120,723 vs the WMMA baseline's 111,373.</figcaption></figure>
+
+<h2><span class="sec">4</span>Root causes, ranked</h2>
+
+<div class="cause"><div class="head"><span class="rank">RC1</span><b>Staging is serialized against compute &mdash; by schedule, not by necessity</b><span class="cost">&asymp; 66k of 77k cycles</span></div>
+<div class="body"><p>The kernel's single-buffer loop (stage tile <i>i</i> &rarr; barrier &rarr; compute <i>i</i> &rarr; barrier &rarr; overwrite)
+makes every warp in the CTA sleep through every transfer: scheduler idle is 82%. Overlap exists only across
+co-resident CTAs and covers 6.7% of DXA time. This schedule was adopted because the double-buffered variant
+measured <em>worse</em> &mdash; &sect;5 shows that failure is a compiler artifact, not evidence that overlap doesn't pay.</p></div></div>
+
+<div class="cause"><div class="head"><span class="rank">RC2</span><b>The DXA engine drains at 5.6% of LMEM port bandwidth</b><span class="cost">71k cycles for 256 KB</span></div>
+<div class="body"><p>Three multiplicative engine losses: B's BlockMajor scatter lands 8 bytes per beat where the
+banked LMEM port accepts 64 (the RTL's own warp-array transpose writes full blocks &mdash; the engine could gather
+across k-rows the same way); A's half-used line reads double its DRAM traffic; and the 8-deep in-flight window
+plus no cross-transfer pipelining expose one full memory latency per 1 KB transfer. Fixing the scatter alone
+takes B from 128 to 16 beats; letting the next transfer's AGU run during the current drain removes ~256
+serial latency exposures.</p></div></div>
+
+<div class="cause"><div class="head"><span class="rank">RC3</span><b>CTA size is welded to ISSUE_WIDTH &rarr; tiny CTAs &rarr; zero data reuse</b><span class="cost">4&times; (IW=4) to 16&times; (IW=1) traffic</span></div>
+<div class="body"><p>The host derives warps-per-CTA from <span class="mono">VX_CAPS_ISSUE_WIDTH</span> because the WGMMA
+lockstep gate dispatches exactly ISSUE_WIDTH warps. At IW=4 that means 16 CTAs for a 128&sup2; output; each
+re-DMAs the same B tiles from DRAM (<span class="mono">gmem_dedup=0</span>, no multicast used, DXA bypasses every cache).
+The engine reads 384 KB of DRAM to deliver 64 KB of unique matrix data, while the WMMA baseline's dcache turns
+the same reuse into 70&ndash;93% hit rates for free. At IW=1 this same coupling produces single-warp CTAs, 1,024
+transfers, 16&times; B re-staging &mdash; plus TCU-side serialization from the CTA-overlap fence on the shared B-buffer.
+This is the main reason the IW=1 column is catastrophic.</p></div></div>
+
+<div class="cause"><div class="head"><span class="rank">RC4</span><b>TCU operand refetch through a 1-line/cycle tbuf port</b><span class="cost">tbuf stalls &asymp; 10% of cycles</span></div>
+<div class="body"><p>Every WGMMA instruction group re-plans its operand tile into the tile buffer through a single
+LMEM port at one 64 B line per cycle &mdash; 32 lines (16 A + 16 B) before any uop advances, and the lockstep gate
+holds all four blocks until the slowest is resident (<span class="mono">tbuf_stalls</span> = 7,570 &asymp; 9.8% of cycles;
+<span class="mono">tbuf_cache_hits</span> = 19 of 128, because the shared B-buffer is invalidated whenever the WGMMA
+pipeline drains &mdash; which the barrier forces every tile). Data staged into LMEM once is thus re-read 1.7&times;
+(6,978 lines for a 4,096-line minimum). Secondary today because RC1/RC2 hide it; it becomes the next
+wall once staging overlaps.</p></div></div>
+
+<h2><span class="sec">5</span>The double-buffer trap: why the "obvious fix" measured 8&times; worse</h2>
+<p>Overlap should erase RC1, and <span class="mono">DXA_DOUBLE_BUFFER</span> exists in the kernel &mdash; but it measured
+3.4&ndash;4.5&times; worse on rtlsim and <b>8.3&times; worse on simx</b> (637,819 cycles). The trace pins the mechanism precisely:</p>
+<ul>
+<li>With two buffers the buffer index <span class="mono">p</span> becomes runtime-varying, so the compiler can no longer
+scalarize <span class="mono">A_buf[2]</span>, <span class="mono">B_buf[2]</span>, and the two <span class="mono">vortex::barrier</span>
+objects into registers &mdash; they land on the per-thread stack (11 spill stores appear; frame grows 0x30&rarr;0x50).</li>
+<li>The hot reload sites bracket every <span class="mono">vx_bar</span>: the barrier object and buffer pointers are re-loaded
+from the stack in every loop phase. Dynamic loads triple: 35,840 &rarr; 100,352.</li>
+<li>Per-lane stacks live in <em>global</em> memory 8 KB apart, so one spill reload fans out to 16 uncoalesced
+DRAM lines (coalescer misses: 256 &rarr; 18,944; DRAM reads: 8,210 &rarr; 77,570) at 231-cycle average load latency,
+and the added DRAM pressure drags DXA line latency from 278 to 725 cycles.</li>
+</ul>
+<p><b>Verdict: the failed experiment convicts the compiler/ABI path (per-lane stack in DRAM), not the
+pipelining idea.</b> A manually 2&times;-unrolled loop with two statically-named buffer/barrier sets &mdash; no
+runtime-indexed arrays &mdash; keeps everything in registers and should recover the overlap that RC1 costs.</p>
+
+<h2><span class="sec">6</span>Cross-checks and the remaining questions</h2>
+<h3>Variant experiments (simx, IW=4)</h3>
+<figure><div id="ch-variants" class="chart"></div>
+<figcaption>Both hybrid variants (one operand via cooperative SW load) lose to full DXA: SW loading is
+even more expensive than bad DMA, because the index math runs 3&ndash;4&times; more instructions through 16 lanes
+and the scatter stores bank-conflict in LMEM. At K=512 the DXA kernel's fixed costs amortize and it beats
+the baseline 1.73&times; &mdash; the design's trajectory is correct; its constants are wrong.</figcaption></figure>
+
+<h3>Ruled out by measurement</h3>
+<div class="tblwrap"><table>
+<tr><th>suspect</th><th>evidence</th><th>verdict</th></tr>
+<tr><td>Register pressure / spills (single-buffer)</td><td>0 spill loads, 1 spill store in <span class="mono">kernel_main</span>; 0x30 frame</td><td class="n">clean</td></tr>
+<tr><td>Global-load coalescing</td><td>coalescer misses 256 (vs 18,944 in the dbuf pathology)</td><td class="n">clean</td></tr>
+<tr><td>WGMMA uop density</td><td>3.35 / 4 uops/cycle when active</td><td class="n">clean</td></tr>
+<tr><td>Dynamic instruction count</td><td>30,032 vs baseline's 53,359 (&minus;44%)</td><td class="n">wins</td></tr>
+<tr><td>dcache behavior of the DXA kernel</td><td>5,888 reqs, 95% read hit &mdash; global traffic nearly eliminated</td><td class="n">wins</td></tr>
+<tr><td>LMEM bank conflicts</td><td>23,348 stall-cycles on 60,226 reqs &mdash; real but an order below RC1/RC2</td><td class="n">minor</td></tr>
+</table></div>
+
+<h3>Is the gap "expected"?</h3>
+<div class="verdict">
+<span class="tag design">DESIGN</span><span>Partly, at this problem size. 128&sup3; streams comfortably through a
+16-warp dcache-backed WMMA kernel (70% hit rate, latency hidden by warp parallelism), so the baseline is
+strong and DXA's fixed costs dominate its benefits. The K=512 result (1.73&times; win) shows the crossover exists.</span>
+<span class="tag flaw">FLAW</span><span>Mostly not. A staging engine at 5.6% of port bandwidth, zero
+cross-transfer pipelining, one worker for the whole cluster, and 4&ndash;16&times; redundant DRAM traffic with the
+multicast/dedup hardware sitting unused are implementation gaps, not design intent. "On paper" &mdash; overlapped
+staging at even half the LMEM port rate &mdash; this kernel is compute-plus-tbuf-bound at roughly 8&ndash;12k cycles,
+i.e. <b>~10&times; faster than the WMMA baseline</b> instead of 1.28&times;.</span>
+<span class="tag compiler">TOOLCHAIN</span><span>The double-buffer failure is a spill/ABI artifact
+(runtime-indexed locals + per-lane stacks in DRAM). It blocked the single most valuable optimization and
+sent the earlier investigation down a "double buffering doesn't pay" path.</span>
+</div>
+
+<h2><span class="sec">7</span>Recommendations, in payoff order</h2>
+<ol>
+<li><b>[DONE, <span class="mono">bd1420351</span>] Re-enable overlap without the stack.</b> Landed &mdash; not as the
+unroll sketched here, which was tried and lost 2.5&times; to callee-save stack bursts, but as an XOR-toggle
+of buffer pointers and barrier ids that keeps all pipeline state in caller-saved registers (see the
+<a href="https://claude.ai/artifact/YFr7qvbcPBhfZehy4Ew5sx">double-buffering proposal</a>). Verified by the
+trace method as specified: 93% of compute now overlaps transfers. As predicted, its cycle gain waits on the
+tbuf wall (#5) now that staging is cheap.</li>
+<li><b>[DONE, <span class="mono">fa1765c85</span>] Fix the B scatter drain (DXA engine).</b> Landed as a grouped
+drain in the RTL write stage: the same-word elements are contiguous in the source line, so one masked write
+per beat replaces tcN element beats &mdash; 512 &rarr; 128 beats per tile, matching the model exactly
+(the further 128 &rarr; 16 by gathering across k-rows remains open). Measured: rtlsim 116,949 &rarr; 74,947,
+wg_dxa now 1.49&times; faster than the WMMA baseline on RTL
+(<a href="https://claude.ai/artifact/PH166m1B4Jf9mLyGwkddGS">rtlsim drain proposal</a>).</li>
+<li><b>[OPEN] Pipeline transfers in the worker + widen A reads.</b> Start transfer <i>i+1</i>'s AGU/reads while
+<i>i</i> drains; raise <span class="mono">DXA_MAX_INFLIGHT</span> 8&rarr;32; teach the A descriptor path to fetch two
+tile-rows per 64 B line (or store A K-major). Removes ~256 serial latency exposures and halves A's DRAM traffic.</li>
+<li><b>[OPEN] Exploit reuse: multicast or bigger CTAs.</b> The mcast path (<span class="mono">sgemm_tcu_wg_dxa_mcast</span>,
+<span class="mono">gmem_dedup</span>) exists precisely for RC3 &mdash; B tiles should be fetched once per core, not once
+per CTA. Longer term, decoupling CTA width from ISSUE_WIDTH in the lockstep gate removes the root coupling.</li>
+<li><b>[NOW THE ACTIVE WALL] Revisit the tbuf.</b> With #1/#2 landed this is the top open item: RC4's
+single-outstanding demand fetch costs ~26k stall cycles of the 74,947, and fast-engine probes bound the
+payoff at roughly the next 15&ndash;20%. A tested caveat from the follow-up work: re-prioritizing the shared
+DMA arbiter alone cuts tbuf stalls 2.4&times; but buys zero cycles until the fetch is pipelined &mdash; land
+them together.</li>
+<li><b>[CLOSED at IW=4 / superseded] The rtlsim/simx gap.</b> The follow-up rtlsim investigation localized
+the divergence to the element-wise drain (the no-DXA kernel already matched to 1.4%); with #2 landed, RTL
+and model agree within 3% at IW=4. IW=1 re-measured on the improved architecture: 149,591 cycles vs the model’s 142,480 — a 5% gap, closed as well (was 2.4×). What remains at IW=1 is a real architecture story, not a simulator artifact: wg_dxa still trails the WMMA baseline there (129,514) because single-warp CTAs forfeit reuse and serialize on the CTA fence — RC3, addressed by recommendation #4.</li>
+</ol>
+
+<div class="footnote">
+<p><b>Methodology.</b> All primary data from simx (<span class="mono">--driver=simx</span>) with MPM classes 1/3/4/7/11/16,
+plus <span class="mono">--debug=3</span> cycle-stamped traces parsed for DXA start/complete spans, TCU uop retirements,
+and per-bin activity; rtlsim figures from the earlier NT/IW sweep (<span class="mono">--perf=1</span>). Roofline:
+16,384 uops = 128&sup3; MACs &divide; 128 MACs/uop (16 lanes &times; 4 words &times; 2 fp16); tile geometry tcM=tcN=tcK=4,
+xtileM=8, xtileN=32, tileK=16, 8 k-tiles.</p>
+<p><b>Artifacts on disk</b> (this machine, <span class="mono">~/dev/vortex_spg/eval_tcu_vs_wg/gap_analysis/</span>):
+raw traces (<span class="mono">trace_*.trace.gz</span>), interval summaries (<span class="mono">summary_*.json</span>),
+counter matrix (<span class="mono">simx_matrix.json</span>, <span class="mono">*_iw*_perf*.log</span>), and Perfetto exports
+(<span class="mono">perfetto_wg_dxa_iw4.json.gz</span>, <span class="mono">perfetto_sgemm_tcu_iw4_window.json.gz</span>,
+<span class="mono">perfetto_dbuf_iw4_window.json.gz</span>) &mdash; load these in the Perfetto UI (ui.perfetto.dev) to walk the
+same timelines interactively; tracks of interest: <span class="mono">dxa-core</span>, <span class="mono">core0-tcu</span>, per-warp state.</p>
+<p>Report generated as part of the tcu-op fork performance investigation; the analysis artifacts stay
+untracked. <b>Update 2026-09-17:</b> re-evaluated after landing commits <span class="mono">bd1420351</span>
+(register-resident double buffering) and <span class="mono">fa1765c85</span> (grouped scatter drain) on
+<span class="mono">tcu-op</span> (local, unpushed); updated figures from fresh rtlsim runs at the same
+configurations, cross-checked by the 162-case WGMMA/DXA CI matrix (XLEN 32+64, both drivers, all passing).</p>
+</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function svgEl(w, h){
+  const s = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  s.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  s.setAttribute("width","100%");
+  s.style.display = "block";
+  return s;
+}
+function add(parent, tag, attrs, text){
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  parent.appendChild(e);
+  return e;
+}
+const fmt = n => n.toLocaleString("en-US");
+
+function draw(){
+  const C = { dxa: css("--dxa"), tcu: css("--tcu"), idle: css("--idle"), ink: css("--ink"),
+              muted: css("--muted"), line: css("--line"), crit: css("--crit"), panel: css("--panel") };
+
+  // ---------- 1. landscape: grouped horizontal bars ----------
+  (function(){
+    const host = document.getElementById("ch-landscape"); host.innerHTML = "";
+    const rows = [
+      {k:"sgemm_tcu",        vals:[["simx IW=1",119272],["simx IW=4",99038],["rtl IW=1",129514],["rtl IW=4",111373]]},
+      {k:"sgemm_tcu_wg_dxa", vals:[["simx IW=1",142480],["simx IW=4",77173],["rtl IW=1",342897],["rtl IW=4",120723]]},
+      {k:"sgemm_tcu_wg",     vals:[["simx IW=1",797238],["simx IW=4",335957],["rtl IW=1",1231242],["rtl IW=4",331466]]},
+      {k:"wg_dxa IMPROVED",  col:"tcu", vals:[["simx IW=1",142480],["simx IW=4",77176],["rtl IW=1",149591],["rtl IW=4",74947]]},
+    ];
+    const maxV = 1231242, W = 900, L = 170, R = 70, bh = 15, gap = 4, grp = 14;
+    const H = 30 + rows.length*(4*(bh+gap)+grp) + 24;
+    const s = svgEl(W, H); host.appendChild(s);
+    const x = v => L + (W-L-R) * v/maxV;
+    // axis gridlines
+    [0, 250000, 500000, 750000, 1000000].forEach(v=>{
+      add(s,"line",{x1:x(v),y1:20,x2:x(v),y2:H-22,stroke:C.line,"stroke-width":1});
+      add(s,"text",{x:x(v),y:H-8,fill:C.muted,"font-size":11,"text-anchor":"middle","class":"mono-t"}, v===0?"0":(v/1000)+"k");
+    });
+    // roofline
+    add(s,"line",{x1:x(4096),y1:20,x2:x(4096),y2:H-22,stroke:C.tcu,"stroke-width":1.5,"stroke-dasharray":"4 3"});
+    add(s,"text",{x:x(4096)+4,y:30,fill:C.tcu,"font-size":10.5,"class":"mono-t"},"roofline 4,096");
+    let y = 36;
+    const shade = ["", "", "", ""];
+    rows.forEach(r=>{
+      add(s,"text",{x:L-8,y:y+2*(bh+gap)+2,fill:C.ink,"font-size":12,"text-anchor":"end","class":"mono-t","font-weight":600}, r.k);
+      r.vals.forEach((v,i)=>{
+        const isRtl = i>=2, isDxaApp = r.k.includes("dxa");
+        const col = r.col === "tcu" ? C.tcu : (isDxaApp ? C.dxa : C.idle);
+        add(s,"rect",{x:L,y:y,width:Math.max(1.5,x(v[1])-L),height:bh,fill:col,opacity:isRtl?0.55:1,rx:2});
+        const lbl = v[0]+" · "+fmt(v[1]);
+        if (x(v[1]) > W-R-150)
+          add(s,"text",{x:x(v[1])-5,y:y+bh-3.5,fill:"#fff","font-size":10.5,"text-anchor":"end","class":"mono-t"}, lbl);
+        else
+          add(s,"text",{x:x(v[1])+5,y:y+bh-3.5,fill:C.muted,"font-size":10.5,"class":"mono-t"}, lbl);
+        y += bh+gap;
+      });
+      y += grp;
+    });
+  })();
+
+  // ---------- 2. timeline: wg_dxa iw4 ----------
+  (function(){
+    const host = document.getElementById("ch-timeline"); host.innerHTML = "";
+    const TL = window.__TL.wg_dxa_iw4;
+    const W = 900, H = 190, L = 46, R = 12, T = 16, B = 34;
+    const s = svgEl(W, H); host.appendChild(s);
+    const n = TL.tl.length, total = TL.total;
+    const x = c => L + (W-L-R)*c/total;
+    const y = f => T + (H-T-B)*(1-f);
+    // gridlines
+    [0,0.5,1].forEach(f=>{
+      add(s,"line",{x1:L,y1:y(f),x2:W-R,y2:y(f),stroke:C.line,"stroke-width":1});
+      add(s,"text",{x:L-6,y:y(f)+4,fill:C.muted,"font-size":10.5,"text-anchor":"end","class":"mono-t"},(f*100)+"%");
+    });
+    [0,20000,40000,60000].forEach(c=>{
+      add(s,"text",{x:x(c),y:H-10,fill:C.muted,"font-size":10.5,"text-anchor":c===0?"start":"middle","class":"mono-t"}, c===0?"cycle 0":(c/1000)+"k");
+    });
+    // dxa area
+    let dPath = `M ${x(TL.tl[0][0])} ${y(0)}`;
+    TL.tl.forEach(r=>{ dPath += ` L ${x(r[0]).toFixed(1)} ${y(r[1]).toFixed(1)}`; });
+    dPath += ` L ${x(total)} ${y(0)} Z`;
+    add(s,"path",{d:dPath,fill:C.dxa,opacity:0.55,stroke:"none"});
+    // tcu area (on top)
+    let tPath = `M ${x(TL.tl[0][0])} ${y(0)}`;
+    TL.tl.forEach(r=>{ tPath += ` L ${x(r[0]).toFixed(1)} ${y(r[2]).toFixed(1)}`; });
+    tPath += ` L ${x(total)} ${y(0)} Z`;
+    add(s,"path",{d:tPath,fill:C.tcu,opacity:0.9,stroke:"none"});
+    // legend
+    const lg = document.createElement("div"); lg.className = "legend";
+    lg.innerHTML = `<span><span class="sw" style="background:${C.dxa};opacity:.6"></span>DXA engine busy (fraction of bin)</span>
+                    <span><span class="sw" style="background:${C.tcu}"></span>TCU executing uops</span>`;
+    host.appendChild(lg);
+  })();
+
+  // ---------- 3. cycle classes: 100% stacked bars ----------
+  (function(){
+    const host = document.getElementById("ch-classes"); host.innerHTML = "";
+    const T = window.__TL;
+    const rows = [
+      {name:"wg_dxa IW=4",  d:T.wg_dxa_iw4},
+      {name:"wg_dxa IW=1",  d:T.wg_dxa_iw1},
+      {name:"sgemm_tcu IW=4 (baseline)", d:T.sgemm_tcu_iw4},
+    ];
+    const W = 900, L = 230, R = 14, bh = 26, gap = 18;
+    const H = 20 + rows.length*(bh+gap) + 26;
+    const s = svgEl(W, H); host.appendChild(s);
+    let yy = 18;
+    rows.forEach(r=>{
+      const tot = r.d.total;
+      const segs = [
+        ["both", r.d.both, C.tcu, 1],
+        ["DXA only", r.d.dxa_only, C.dxa, 0.75],
+        ["TCU only", r.d.tcu_only, C.tcu, 0.45],
+        ["neither (idle/scalar)", r.d.neither, C.idle, 0.5],
+      ];
+      add(s,"text",{x:L-8,y:yy+bh/2+4,fill:C.ink,"font-size":12,"text-anchor":"end","class":"mono-t"}, r.name);
+      let xx = L;
+      segs.forEach(sg=>{
+        const w = (W-L-R)*sg[1]/tot;
+        if (w < 0.5){ xx += w; return; }
+        add(s,"rect",{x:xx,y:yy,width:w,height:bh,fill:sg[2],opacity:sg[3]});
+        const pct = 100*sg[1]/tot;
+        if (pct >= 6)
+          add(s,"text",{x:xx+w/2,y:yy+bh/2+4,fill:sg[3]>=0.7?"#fff":C.ink,"font-size":10.5,"text-anchor":"middle","class":"mono-t","font-weight":600}, pct.toFixed(1)+"%");
+        xx += w;
+      });
+      yy += bh+gap;
+    });
+    const lg = document.createElement("div"); lg.className = "legend";
+    lg.innerHTML = `<span><span class="sw" style="background:${C.tcu}"></span>DXA + TCU overlapped</span>
+      <span><span class="sw" style="background:${C.dxa};opacity:.75"></span>DXA only</span>
+      <span><span class="sw" style="background:${C.tcu};opacity:.45"></span>TCU only</span>
+      <span><span class="sw" style="background:${C.idle};opacity:.5"></span>neither</span>`;
+    host.appendChild(lg);
+  })();
+
+  // ---------- 4. waterfall ----------
+  (function(){
+    const host = document.getElementById("ch-waterfall"); host.innerHTML = "";
+    const W = 900, H = 210, L = 10, R = 16, T = 14, B = 30;
+    const s = svgEl(W, H); host.appendChild(s);
+    const maxV = 130000;
+    const steps = [
+      {label:"TCU roofline (16,384 uops / 4 blocks)", from:0, to:4096, col:C.tcu, solid:true},
+      {label:"+ DXA staging, serialized (92% busy, 6.7% overlapped)", from:4096, to:70425, col:C.dxa, solid:true},
+      {label:"+ launch, epilogue, tbuf stalls", from:70425, to:77173, col:C.idle, solid:true},
+      {label:"simx total = 77,173", from:0, to:77173, col:C.ink, mark:true},
+      {label:"+ RTL microarchitecture (×1.56)", from:77173, to:120723, col:C.crit, solid:true},
+      {label:"rtlsim total = 120,723  (baseline WMMA: 111,373)", from:0, to:120723, col:C.ink, mark:true},
+    ];
+    const bh = 20, gap = 9;
+    const x = v => L + 320 + (W-L-R-320)*v/maxV;
+    let yy = T;
+    steps.forEach(st=>{
+      add(s,"text",{x:L,y:yy+bh-6,fill:C.muted,"font-size":11}, st.label);
+      if (st.mark){
+        add(s,"line",{x1:x(0),y1:yy+bh/2,x2:x(st.to),y2:yy+bh/2,stroke:st.col,"stroke-width":1.2,"stroke-dasharray":"3 3"});
+        add(s,"circle",{cx:x(st.to),cy:yy+bh/2,r:3.5,fill:st.col});
+        add(s,"text",{x:x(st.to)+7,y:yy+bh/2+4,fill:C.ink,"font-size":10.5,"class":"mono-t","font-weight":600}, fmt(st.to));
+      } else {
+        add(s,"rect",{x:x(st.from),y:yy,width:Math.max(1.5,x(st.to)-x(st.from)),height:bh,fill:st.col,opacity:0.8,rx:2});
+        add(s,"text",{x:x(st.to)+7,y:yy+bh-5,fill:C.muted,"font-size":10.5,"class":"mono-t"}, "+"+fmt(st.to-st.from));
+      }
+      yy += bh+gap;
+    });
+    // baseline marker
+    const bx = x(111373);
+    add(s,"line",{x1:bx,y1:T,x2:bx,y2:yy-4,stroke:C.idle,"stroke-width":1.4,"stroke-dasharray":"5 4"});
+    add(s,"text",{x:bx,y:yy+12,fill:C.muted,"font-size":10.5,"text-anchor":"middle","class":"mono-t"},"WMMA rtl 111,373");
+  })();
+
+  // ---------- 5. variants ----------
+  (function(){
+    const host = document.getElementById("ch-variants"); host.innerHTML = "";
+    const rows = [
+      {k:"wg_dxa single-buffer (as measured)", v:77173, col:C.dxa},
+      {k:"wg_dxa + SW-load A (DXA B only)", v:124312, col:C.idle},
+      {k:"wg_dxa + SW-load B (DXA A only)", v:172615, col:C.idle},
+      {k:"wg_dxa DXA_DOUBLE_BUFFER (spill trap, §5)", v:637819, col:C.crit},
+      {k:"— at K=512 —  wg_dxa", v:210794, col:C.dxa, grp:true},
+      {k:"— at K=512 —  sgemm_tcu baseline", v:364695, col:C.idle},
+    ];
+    const W = 900, L = 330, R = 80, bh = 17, gap = 7;
+    const H = 14 + rows.length*(bh+gap) + rows.filter(r=>r.grp).length*12 + 10;
+    const s = svgEl(W, H); host.appendChild(s);
+    const maxV = 650000;
+    const x = v => L + (W-L-R)*v/maxV;
+    let yy = 10;
+    rows.forEach(r=>{
+      if (r.grp) yy += 12;
+      add(s,"text",{x:L-8,y:yy+bh-4,fill:C.ink,"font-size":11.5,"text-anchor":"end"}, r.k);
+      add(s,"rect",{x:L,y:yy,width:Math.max(1.5,x(r.v)-L),height:bh,fill:r.col,opacity:0.85,rx:2});
+      add(s,"text",{x:x(r.v)+6,y:yy+bh-4,fill:C.muted,"font-size":10.5,"class":"mono-t"}, fmt(r.v));
+      yy += bh+gap;
+    });
+  })();
+}
+
+window.__TL = {"wg_dxa_iw4": {"bin": 256, "total": 77172, "tl": [[0, 0.0, 0.0, 0], [256, 0.0, 0.0, 0], [512, 0.0, 0.0, 0], [768, 0.0, 0.0, 0], [1024, 0.0, 0.0, 0], [1280, 0.0, 0.0, 0], [1536, 0.0, 0.0, 0], [1792, 0.0, 0.0, 0], [2048, 0.0, 0.0, 0], [2304, 0.0, 0.0, 0], [2560, 0.0, 0.0, 0], [2816, 0.0, 0.0, 0], [3072, 0.0, 0.0, 0], [3328, 0.0, 0.0, 0], [3584, 0.0, 0.0, 0], [3840, 0.215, 0.0, 0], [4096, 1.0, 0.0, 0], [4352, 1.0, 0.0, 0], [4608, 1.0, 0.0, 0], [4864, 1.0, 0.0, 0], [5120, 1.0, 0.0, 0], [5376, 1.0, 0.0, 0], [5632, 1.0, 0.0, 0], [5888, 1.0, 0.148, 128], [6144, 0.566, 0.332, 256], [6400, 0.434, 0.078, 79], [6656, 1.0, 0.07, 49], [6912, 1.0, 0.125, 128], [7168, 1.0, 0.0, 0], [7424, 1.0, 0.125, 128], [7680, 1.0, 0.125, 128], [7936, 1.0, 0.0, 0], [8192, 1.0, 0.125, 128], [8448, 1.0, 0.0, 0], [8704, 1.0, 0.125, 128], [8960, 1.0, 0.125, 128], [9216, 1.0, 0.0, 0], [9472, 1.0, 0.125, 128], [9728, 1.0, 0.121, 124], [9984, 1.0, 0.004, 4], [10240, 1.0, 0.125, 128], [10496, 1.0, 0.0, 0], [10752, 1.0, 0.125, 128], [11008, 1.0, 0.125, 128], [11264, 1.0, 0.0, 0], [11520, 1.0, 0.125, 128], [11776, 1.0, 0.016, 16], [12032, 1.0, 0.109, 112], [12288, 1.0, 0.125, 128], [12544, 1.0, 0.0, 0], [12800, 1.0, 0.125, 128], [13056, 1.0, 0.125, 128], [13312, 1.0, 0.0, 0], [13568, 1.0, 0.125, 128], [13824, 1.0, 0.0, 0], [14080, 1.0, 0.125, 128], [14336, 1.0, 0.125, 128], [14592, 1.0, 0.0, 0], [14848, 1.0, 0.125, 128], [15104, 1.0, 0.016, 16], [15360, 1.0, 0.109, 112], [15616, 1.0, 0.125, 128], [15872, 1.0, 0.0, 0], [16128, 1.0, 0.125, 128], [16384, 1.0, 0.125, 128], [16640, 1.0, 0.0, 0], [16896, 1.0, 0.125, 128], [17152, 1.0, 0.0, 0], [17408, 1.0, 0.082, 24], [17664, 1.0, 0.227, 104], [17920, 1.0, 0.0, 0], [18176, 1.0, 0.0, 0], [18432, 1.0, 0.02, 6], [18688, 1.0, 0.012, 3], [18944, 1.0, 0.164, 46], [19200, 1.0, 0.266, 73], [19456, 0.211, 0.18, 128], [19712, 1.0, 0.0, 0], [19968, 1.0, 0.0, 0], [20224, 1.0, 0.0, 0], [20480, 1.0, 0.0, 0], [20736, 1.0, 0.0, 0], [20992, 1.0, 0.0, 0], [21248, 1.0, 0.0, 0], [21504, 0.422, 0.0, 0], [21760, 0.223, 0.0, 0], [22016, 1.0, 0.141, 49], [22272, 1.0, 0.059, 15], [22528, 1.0, 0.156, 64], [22784, 1.0, 0.0, 0], [23040, 1.0, 0.0, 0], [23296, 1.0, 0.0, 0], [23552, 1.0, 0.0, 0], [23808, 1.0, 0.0, 0], [24064, 1.0, 0.125, 128], [24320, 1.0, 0.0, 0], [24576, 1.0, 0.125, 128], [24832, 1.0, 0.078, 80], [25088, 1.0, 0.176, 172], [25344, 1.0, 0.004, 4], [25600, 1.0, 0.125, 128], [25856, 1.0, 0.0, 0], [26112, 1.0, 0.125, 128], [26368, 1.0, 0.125, 128], [26624, 1.0, 0.0, 0], [26880, 1.0, 0.125, 128], [27136, 1.0, 0.027, 28], [27392, 1.0, 0.098, 100], [27648, 1.0, 0.125, 128], [27904, 1.0, 0.0, 0], [28160, 1.0, 0.125, 128], [28416, 1.0, 0.125, 128], [28672, 1.0, 0.0, 0], [28928, 1.0, 0.125, 128], [29184, 1.0, 0.0, 0], [29440, 1.0, 0.125, 128], [29696, 1.0, 0.125, 128], [29952, 1.0, 0.0, 0], [30208, 1.0, 0.125, 128], [30464, 1.0, 0.051, 52], [30720, 1.0, 0.074, 76], [30976, 1.0, 0.125, 128], [31232, 1.0, 0.0, 0], [31488, 1.0, 0.125, 128], [31744, 1.0, 0.125, 128], [32000, 1.0, 0.0, 0], [32256, 1.0, 0.125, 128], [32512, 1.0, 0.0, 0], [32768, 1.0, 0.125, 128], [33024, 1.0, 0.125, 128], [33280, 1.0, 0.0, 0], [33536, 1.0, 0.125, 128], [33792, 1.0, 0.051, 52], [34048, 1.0, 0.074, 76], [34304, 1.0, 0.125, 128], [34560, 1.0, 0.0, 0], [34816, 1.0, 0.125, 128], [35072, 1.0, 0.125, 128], [35328, 1.0, 0.0, 0], [35584, 1.0, 0.0, 0], [35840, 1.0, 0.148, 83], [36096, 1.0, 0.082, 45], [36352, 1.0, 0.0, 0], [36608, 1.0, 0.0, 0], [36864, 1.0, 0.0, 0], [37120, 1.0, 0.0, 0], [37376, 1.0, 0.004, 1], [37632, 1.0, 0.121, 32], [37888, 1.0, 0.32, 95], [38144, 1.0, 0.0, 0], [38400, 1.0, 0.0, 0], [38656, 1.0, 0.039, 27], [38912, 1.0, 0.176, 95], [39168, 1.0, 0.023, 6], [39424, 1.0, 0.0, 0], [39680, 1.0, 0.0, 0], [39936, 1.0, 0.0, 0], [40192, 1.0, 0.0, 0], [40448, 1.0, 0.0, 0], [40704, 1.0, 0.0, 0], [40960, 1.0, 0.0, 0], [41216, 1.0, 0.125, 32], [41472, 1.0, 0.043, 11], [41728, 1.0, 0.125, 32], [41984, 1.0, 0.172, 53], [42240, 1.0, 0.262, 125], [42496, 1.0, 0.012, 3], [42752, 1.0, 0.0, 0], [43008, 1.0, 0.0, 0], [43264, 1.0, 0.0, 0], [43520, 1.0, 0.125, 128], [43776, 1.0, 0.0, 0], [44032, 1.0, 0.125, 128], [44288, 1.0, 0.133, 128], [44544, 1.0, 0.125, 128], [44800, 1.0, 0.0, 0], [45056, 1.0, 0.125, 128], [45312, 1.0, 0.031, 32], [45568, 1.0, 0.094, 96], [45824, 1.0, 0.125, 128], [46080, 1.0, 0.0, 0], [46336, 1.0, 0.125, 128], [46592, 1.0, 0.125, 128], [46848, 1.0, 0.0, 0], [47104, 1.0, 0.125, 128], [47360, 1.0, 0.0, 0], [47616, 1.0, 0.125, 128], [47872, 1.0, 0.125, 128], [48128, 1.0, 0.0, 0], [48384, 1.0, 0.125, 128], [48640, 1.0, 0.062, 64], [48896, 1.0, 0.062, 64], [49152, 1.0, 0.125, 128], [49408, 1.0, 0.0, 0], [49664, 1.0, 0.125, 128], [49920, 1.0, 0.125, 128], [50176, 1.0, 0.0, 0], [50432, 1.0, 0.125, 128], [50688, 1.0, 0.0, 0], [50944, 1.0, 0.125, 128], [51200, 1.0, 0.125, 128], [51456, 1.0, 0.0, 0], [51712, 1.0, 0.125, 128], [51968, 1.0, 0.062, 64], [52224, 1.0, 0.062, 64], [52480, 1.0, 0.125, 128], [52736, 1.0, 0.0, 0], [52992, 1.0, 0.125, 128], [53248, 1.0, 0.125, 128], [53504, 1.0, 0.0, 0], [53760, 1.0, 0.125, 128], [54016, 1.0, 0.0, 0], [54272, 1.0, 0.125, 128], [54528, 1.0, 0.0, 0], [54784, 1.0, 0.066, 17], [55040, 1.0, 0.207, 111], [55296, 1.0, 0.0, 0], [55552, 1.0, 0.0, 0], [55808, 1.0, 0.0, 0], [56064, 1.0, 0.0, 0], [56320, 1.0, 0.0, 0], [56576, 1.0, 0.008, 2], [56832, 1.0, 0.262, 80], [57088, 1.0, 0.121, 31], [57344, 1.0, 0.059, 15], [57600, 1.0, 0.0, 0], [57856, 1.0, 0.125, 32], [58112, 1.0, 0.0, 0], [58368, 1.0, 0.0, 0], [58624, 1.0, 0.176, 96], [58880, 1.0, 0.0, 0], [59136, 1.0, 0.0, 0], [59392, 1.0, 0.0, 0], [59648, 1.0, 0.0, 0], [59904, 1.0, 0.0, 0], [60160, 1.0, 0.0, 0], [60416, 1.0, 0.0, 0], [60672, 1.0, 0.0, 0], [60928, 1.0, 0.188, 106], [61184, 1.0, 0.086, 22], [61440, 1.0, 0.0, 0], [61696, 1.0, 0.0, 0], [61952, 1.0, 0.125, 128], [62208, 1.0, 0.0, 0], [62464, 1.0, 0.0, 0], [62720, 1.0, 0.125, 128], [62976, 1.0, 0.0, 0], [63232, 1.0, 0.125, 128], [63488, 1.0, 0.133, 128], [63744, 1.0, 0.125, 128], [64000, 1.0, 0.0, 0], [64256, 1.0, 0.125, 128], [64512, 1.0, 0.0, 0], [64768, 1.0, 0.125, 128], [65024, 1.0, 0.125, 128], [65280, 1.0, 0.0, 0], [65536, 1.0, 0.125, 128], [65792, 1.0, 0.074, 76], [66048, 1.0, 0.051, 52], [66304, 1.0, 0.125, 128], [66560, 1.0, 0.0, 0], [66816, 1.0, 0.125, 128], [67072, 1.0, 0.125, 128], [67328, 1.0, 0.0, 0], [67584, 1.0, 0.125, 128], [67840, 1.0, 0.0, 0], [68096, 1.0, 0.125, 128], [68352, 1.0, 0.125, 128], [68608, 1.0, 0.0, 0], [68864, 1.0, 0.125, 128], [69120, 1.0, 0.094, 96], [69376, 1.0, 0.031, 32], [69632, 1.0, 0.125, 128], [69888, 1.0, 0.0, 0], [70144, 1.0, 0.125, 128], [70400, 1.0, 0.125, 128], [70656, 1.0, 0.0, 0], [70912, 1.0, 0.125, 128], [71168, 1.0, 0.0, 0], [71424, 1.0, 0.125, 128], [71680, 1.0, 0.125, 128], [71936, 1.0, 0.0, 0], [72192, 1.0, 0.125, 128], [72448, 1.0, 0.094, 96], [72704, 1.0, 0.031, 32], [72960, 1.0, 0.125, 128], [73216, 1.0, 0.0, 0], [73472, 1.0, 0.125, 128], [73728, 1.0, 0.0, 0], [73984, 1.0, 0.004, 1], [74240, 1.0, 0.293, 127], [74496, 1.0, 0.0, 0], [74752, 1.0, 0.031, 8], [75008, 1.0, 0.188, 96], [75264, 1.0, 0.031, 24], [75520, 1.0, 0.0, 0], [75776, 0.645, 0.0, 0], [76032, 0.0, 0.125, 128], [76288, 0.0, 0.0, 0], [76544, 0.0, 0.0, 0], [76800, 0.0, 0.0, 0], [77056, 0.0, 0.0, 0]], "dxa_busy": 71095, "tcu_busy": 4884, "both": 4766, "dxa_only": 66329, "tcu_only": 118, "neither": 5959}, "sgemm_tcu_iw4": {"bin": 256, "total": 99037, "tl": [[0, 0.0, 0.0, 0], [256, 0.0, 0.0, 0], [512, 0.0, 0.0, 0], [768, 0.0, 0.0, 0], [1024, 0.0, 0.0, 0], [1280, 0.0, 0.0, 0], [1536, 0.0, 0.0, 0], [1792, 0.0, 0.0, 0], [2048, 0.0, 0.0, 0], [2304, 0.0, 0.0, 0], [2560, 0.0, 0.0, 0], [2816, 0.0, 0.0, 0], [3072, 0.0, 0.0, 0], [3328, 0.0, 0.0, 0], [3584, 0.0, 0.0, 0], [3840, 0.0, 0.0, 0], [4096, 0.0, 0.0, 0], [4352, 0.0, 0.0, 0], [4608, 0.0, 0.0, 0], [4864, 0.0, 0.0, 0], [5120, 0.0, 0.156, 41], [5376, 0.0, 0.438, 132], [5632, 0.0, 0.074, 19], [5888, 0.0, 0.129, 33], [6144, 0.0, 0.312, 89], [6400, 0.0, 0.188, 56], [6656, 0.0, 0.301, 87], [6912, 0.0, 0.16, 48], [7168, 0.0, 0.184, 52], [7424, 0.0, 0.215, 61], [7680, 0.0, 0.266, 76], [7936, 0.0, 0.133, 35], [8192, 0.0, 0.234, 67], [8448, 0.0, 0.293, 93], [8704, 0.0, 0.168, 49], [8960, 0.0, 0.258, 66], [9216, 0.0, 0.246, 65], [9472, 0.0, 0.262, 72], [9728, 0.0, 0.211, 61], [9984, 0.0, 0.215, 64], [10240, 0.0, 0.25, 75], [10496, 0.0, 0.195, 54], [10752, 0.0, 0.219, 67], [11008, 0.0, 0.242, 69], [11264, 0.0, 0.309, 94], [11520, 0.0, 0.176, 48], [11776, 0.0, 0.148, 41], [12032, 0.0, 0.27, 77], [12288, 0.0, 0.199, 54], [12544, 0.0, 0.391, 127], [12800, 0.0, 0.168, 50], [13056, 0.0, 0.086, 26], [13312, 0.0, 0.0, 0], [13568, 0.0, 0.0, 0], [13824, 0.0, 0.0, 0], [14080, 0.0, 0.0, 0], [14336, 0.0, 0.0, 0], [14592, 0.0, 0.0, 0], [14848, 0.0, 0.0, 0], [15104, 0.0, 0.0, 0], [15360, 0.0, 0.0, 0], [15616, 0.0, 0.0, 0], [15872, 0.0, 0.0, 0], [16128, 0.0, 0.0, 0], [16384, 0.0, 0.0, 0], [16640, 0.0, 0.0, 0], [16896, 0.0, 0.0, 0], [17152, 0.0, 0.0, 0], [17408, 0.0, 0.062, 16], [17664, 0.0, 0.203, 61], [17920, 0.0, 0.055, 14], [18176, 0.0, 0.012, 3], [18432, 0.0, 0.035, 12], [18688, 0.0, 0.016, 4], [18944, 0.0, 0.023, 6], [19200, 0.0, 0.113, 29], [19456, 0.0, 0.379, 131], [19712, 0.0, 0.141, 36], [19968, 0.0, 0.031, 8], [20224, 0.0, 0.035, 9], [20480, 0.0, 0.191, 52], [20736, 0.0, 0.523, 193], [20992, 0.0, 0.031, 11], [21248, 0.0, 0.152, 49], [21504, 0.0, 0.477, 145], [21760, 0.0, 0.16, 46], [22016, 0.0, 0.105, 27], [22272, 0.0, 0.293, 84], [22528, 0.0, 0.375, 109], [22784, 0.0, 0.281, 84], [23040, 0.0, 0.258, 75], [23296, 0.0, 0.324, 102], [23552, 0.0, 0.062, 18], [23808, 0.0, 0.219, 67], [24064, 0.0, 0.344, 104], [24320, 0.0, 0.281, 79], [24576, 0.0, 0.242, 69], [24832, 0.0, 0.32, 98], [25088, 0.0, 0.43, 131], [25344, 0.0, 0.086, 22], [25600, 0.0, 0.078, 20], [25856, 0.0, 0.242, 70], [26112, 0.0, 0.125, 32], [26368, 0.0, 0.125, 32], [26624, 0.0, 0.0, 0], [26880, 0.0, 0.0, 0], [27136, 0.0, 0.0, 0], [27392, 0.0, 0.0, 0], [27648, 0.0, 0.0, 0], [27904, 0.0, 0.0, 0], [28160, 0.0, 0.0, 0], [28416, 0.0, 0.0, 0], [28672, 0.0, 0.0, 0], [28928, 0.0, 0.0, 0], [29184, 0.0, 0.027, 8], [29440, 0.0, 0.098, 28], [29696, 0.0, 0.047, 12], [29952, 0.0, 0.023, 6], [30208, 0.0, 0.129, 37], [30464, 0.0, 0.078, 23], [30720, 0.0, 0.066, 17], [30976, 0.0, 0.262, 75], [31232, 0.0, 0.176, 46], [31488, 0.0, 0.145, 41], [31744, 0.0, 0.273, 74], [32000, 0.0, 0.082, 21], [32256, 0.0, 0.043, 13], [32512, 0.0, 0.117, 30], [32768, 0.0, 0.207, 63], [33024, 0.0, 0.305, 98], [33280, 0.0, 0.023, 6], [33536, 0.0, 0.211, 59], [33792, 0.0, 0.16, 51], [34048, 0.0, 0.273, 87], [34304, 0.0, 0.164, 42], [34560, 0.0, 0.27, 81], [34816, 0.0, 0.324, 88], [35072, 0.0, 0.293, 96], [35328, 0.0, 0.203, 59], [35584, 0.0, 0.168, 52], [35840, 0.0, 0.434, 140], [36096, 0.0, 0.266, 82], [36352, 0.0, 0.254, 73], [36608, 0.0, 0.324, 95], [36864, 0.0, 0.246, 67], [37120, 0.0, 0.293, 92], [37376, 0.0, 0.129, 35], [37632, 0.0, 0.305, 91], [37888, 0.0, 0.078, 20], [38144, 0.0, 0.102, 28], [38400, 0.0, 0.0, 0], [38656, 0.0, 0.0, 0], [38912, 0.0, 0.0, 0], [39168, 0.0, 0.023, 6], [39424, 0.0, 0.0, 0], [39680, 0.0, 0.016, 4], [39936, 0.0, 0.051, 13], [40192, 0.0, 0.102, 28], [40448, 0.0, 0.031, 8], [40704, 0.0, 0.125, 34], [40960, 0.0, 0.055, 16], [41216, 0.0, 0.27, 79], [41472, 0.0, 0.133, 34], [41728, 0.0, 0.062, 17], [41984, 0.0, 0.031, 8], [42240, 0.0, 0.074, 19], [42496, 0.0, 0.105, 29], [42752, 0.0, 0.301, 92], [43008, 0.0, 0.176, 48], [43264, 0.0, 0.227, 73], [43520, 0.0, 0.062, 16], [43776, 0.0, 0.254, 75], [44032, 0.0, 0.324, 102], [44288, 0.0, 0.066, 17], [44544, 0.0, 0.203, 54], [44800, 0.0, 0.34, 116], [45056, 0.0, 0.082, 21], [45312, 0.0, 0.035, 11], [45568, 0.0, 0.121, 33], [45824, 0.0, 0.348, 95], [46080, 0.0, 0.191, 52], [46336, 0.0, 0.059, 15], [46592, 0.0, 0.355, 110], [46848, 0.0, 0.23, 66], [47104, 0.0, 0.184, 55], [47360, 0.0, 0.312, 101], [47616, 0.0, 0.371, 111], [47872, 0.0, 0.316, 96], [48128, 0.0, 0.109, 28], [48384, 0.0, 0.168, 46], [48640, 0.0, 0.27, 86], [48896, 0.0, 0.246, 66], [49152, 0.0, 0.117, 40], [49408, 0.0, 0.0, 0], [49664, 0.0, 0.0, 0], [49920, 0.0, 0.0, 0], [50176, 0.0, 0.0, 0], [50432, 0.0, 0.0, 0], [50688, 0.0, 0.074, 19], [50944, 0.0, 0.113, 29], [51200, 0.0, 0.0, 0], [51456, 0.0, 0.0, 0], [51712, 0.0, 0.062, 16], [51968, 0.0, 0.023, 6], [52224, 0.0, 0.188, 58], [52480, 0.0, 0.332, 102], [52736, 0.0, 0.027, 9], [52992, 0.0, 0.105, 27], [53248, 0.0, 0.105, 29], [53504, 0.0, 0.18, 46], [53760, 0.0, 0.324, 98], [54016, 0.0, 0.105, 29], [54272, 0.0, 0.188, 52], [54528, 0.0, 0.172, 48], [54784, 0.0, 0.152, 42], [55040, 0.0, 0.414, 133], [55296, 0.0, 0.238, 63], [55552, 0.0, 0.125, 36], [55808, 0.0, 0.312, 83], [56064, 0.0, 0.281, 87], [56320, 0.0, 0.16, 43], [56576, 0.0, 0.371, 120], [56832, 0.0, 0.211, 62], [57088, 0.0, 0.074, 19], [57344, 0.0, 0.199, 56], [57600, 0.0, 0.254, 74], [57856, 0.0, 0.148, 44], [58112, 0.0, 0.094, 27], [58368, 0.0, 0.145, 44], [58624, 0.0, 0.223, 68], [58880, 0.0, 0.207, 62], [59136, 0.0, 0.273, 79], [59392, 0.0, 0.098, 25], [59648, 0.0, 0.254, 69], [59904, 0.0, 0.258, 74], [60160, 0.0, 0.141, 39], [60416, 0.0, 0.176, 51], [60672, 0.0, 0.227, 64], [60928, 0.0, 0.0, 0], [61184, 0.0, 0.0, 0], [61440, 0.0, 0.0, 0], [61696, 0.0, 0.0, 0], [61952, 0.0, 0.0, 0], [62208, 0.0, 0.0, 0], [62464, 0.0, 0.0, 0], [62720, 0.0, 0.0, 0], [62976, 0.0, 0.0, 0], [63232, 0.0, 0.0, 0], [63488, 0.0, 0.203, 64], [63744, 0.0, 0.004, 1], [64000, 0.0, 0.129, 33], [64256, 0.0, 0.031, 8], [64512, 0.0, 0.289, 92], [64768, 0.0, 0.125, 40], [65024, 0.0, 0.031, 8], [65280, 0.0, 0.027, 7], [65536, 0.0, 0.133, 36], [65792, 0.0, 0.379, 109], [66048, 0.0, 0.215, 64], [66304, 0.0, 0.148, 38], [66560, 0.0, 0.238, 77], [66816, 0.0, 0.359, 126], [67072, 0.0, 0.277, 87], [67328, 0.0, 0.191, 52], [67584, 0.0, 0.246, 63], [67840, 0.0, 0.203, 64], [68096, 0.0, 0.254, 72], [68352, 0.0, 0.238, 75], [68608, 0.0, 0.297, 85], [68864, 0.0, 0.273, 75], [69120, 0.0, 0.141, 38], [69376, 0.0, 0.301, 91], [69632, 0.0, 0.137, 40], [69888, 0.0, 0.121, 36], [70144, 0.0, 0.078, 22], [70400, 0.0, 0.242, 67], [70656, 0.0, 0.277, 78], [70912, 0.0, 0.109, 34], [71168, 0.0, 0.062, 17], [71424, 0.0, 0.121, 31], [71680, 0.0, 0.305, 87], [71936, 0.0, 0.203, 71], [72192, 0.0, 0.062, 16], [72448, 0.0, 0.199, 64], [72704, 0.0, 0.07, 18], [72960, 0.0, 0.039, 10], [73216, 0.0, 0.0, 0], [73472, 0.0, 0.0, 0], [73728, 0.0, 0.012, 3], [73984, 0.0, 0.031, 8], [74240, 0.0, 0.02, 5], [74496, 0.0, 0.066, 20], [74752, 0.0, 0.0, 0], [75008, 0.0, 0.102, 26], [75264, 0.0, 0.105, 32], [75520, 0.0, 0.141, 42], [75776, 0.0, 0.051, 17], [76032, 0.0, 0.031, 8], [76288, 0.0, 0.133, 38], [76544, 0.0, 0.129, 38], [76800, 0.0, 0.027, 7], [77056, 0.0, 0.383, 116], [77312, 0.0, 0.211, 62], [77568, 0.0, 0.012, 3], [77824, 0.0, 0.027, 7], [78080, 0.0, 0.102, 28], [78336, 0.0, 0.473, 159], [78592, 0.0, 0.254, 79], [78848, 0.0, 0.18, 48], [79104, 0.0, 0.32, 101], [79360, 0.0, 0.379, 103], [79616, 0.0, 0.164, 45], [79872, 0.0, 0.18, 47], [80128, 0.0, 0.285, 92], [80384, 0.0, 0.258, 70], [80640, 0.0, 0.184, 50], [80896, 0.0, 0.293, 90], [81152, 0.0, 0.195, 58], [81408, 0.0, 0.316, 94], [81664, 0.0, 0.113, 32], [81920, 0.0, 0.188, 54], [82176, 0.0, 0.266, 86], [82432, 0.0, 0.098, 25], [82688, 0.0, 0.074, 19], [82944, 0.0, 0.121, 36], [83200, 0.0, 0.082, 23], [83456, 0.0, 0.109, 31], [83712, 0.0, 0.297, 90], [83968, 0.0, 0.059, 16], [84224, 0.0, 0.121, 32], [84480, 0.0, 0.18, 55], [84736, 0.0, 0.121, 31], [84992, 0.0, 0.031, 8], [85248, 0.0, 0.0, 0], [85504, 0.0, 0.016, 4], [85760, 0.0, 0.0, 0], [86016, 0.0, 0.0, 0], [86272, 0.0, 0.055, 14], [86528, 0.0, 0.0, 0], [86784, 0.0, 0.016, 4], [87040, 0.0, 0.062, 18], [87296, 0.0, 0.043, 11], [87552, 0.0, 0.082, 21], [87808, 0.0, 0.164, 43], [88064, 0.0, 0.137, 41], [88320, 0.0, 0.039, 12], [88576, 0.0, 0.121, 34], [88832, 0.0, 0.379, 112], [89088, 0.0, 0.152, 40], [89344, 0.0, 0.105, 32], [89600, 0.0, 0.25, 77], [89856, 0.0, 0.301, 97], [90112, 0.0, 0.223, 69], [90368, 0.0, 0.262, 72], [90624, 0.0, 0.305, 104], [90880, 0.0, 0.188, 52], [91136, 0.0, 0.297, 91], [91392, 0.0, 0.199, 55], [91648, 0.0, 0.164, 42], [91904, 0.0, 0.25, 73], [92160, 0.0, 0.34, 112], [92416, 0.0, 0.277, 83], [92672, 0.0, 0.141, 36], [92928, 0.0, 0.301, 93], [93184, 0.0, 0.215, 68], [93440, 0.0, 0.074, 20], [93696, 0.0, 0.141, 40], [93952, 0.0, 0.379, 113], [94208, 0.0, 0.059, 15], [94464, 0.0, 0.145, 44], [94720, 0.0, 0.25, 72], [94976, 0.0, 0.145, 38], [95232, 0.0, 0.121, 31], [95488, 0.0, 0.094, 24], [95744, 0.0, 0.082, 21], [96000, 0.0, 0.227, 58], [96256, 0.0, 0.266, 72], [96512, 0.0, 0.25, 72], [96768, 0.0, 0.172, 44], [97024, 0.0, 0.254, 82], [97280, 0.0, 0.133, 34], [97536, 0.0, 0.188, 48], [97792, 0.0, 0.062, 16], [98048, 0.0, 0.062, 16], [98304, 0.0, 0.0, 0], [98560, 0.0, 0.0, 0], [98816, 0.0, 0.0, 0]], "dxa_busy": 0, "tcu_busy": 14329, "both": 0, "dxa_only": 0, "tcu_only": 14329, "neither": 84708}, "wg_dxa_iw1": {"bin": 512, "total": 142479, "tl": [[0, 0.0, 0.0, 0], [512, 0.0, 0.0, 0], [1024, 0.0, 0.0, 0], [1536, 0.0, 0.0, 0], [2048, 0.0, 0.0, 0], [2560, 0.0, 0.0, 0], [3072, 0.502, 0.0, 0], [3584, 1.0, 0.0, 0], [4096, 1.0, 0.0, 0], [4608, 1.0, 0.162, 83], [5120, 1.0, 0.172, 88], [5632, 1.0, 0.199, 102], [6144, 1.0, 0.154, 79], [6656, 1.0, 0.188, 96], [7168, 1.0, 0.125, 64], [7680, 1.0, 0.135, 69], [8192, 1.0, 0.178, 91], [8704, 1.0, 0.125, 64], [9216, 1.0, 0.125, 64], [9728, 1.0, 0.125, 64], [10240, 1.0, 0.188, 96], [10752, 1.0, 0.125, 64], [11264, 1.0, 0.125, 64], [11776, 1.0, 0.125, 64], [12288, 1.0, 0.182, 93], [12800, 1.0, 0.131, 67], [13312, 1.0, 0.125, 64], [13824, 1.0, 0.125, 64], [14336, 1.0, 0.162, 83], [14848, 1.0, 0.15, 77], [15360, 1.0, 0.125, 64], [15872, 1.0, 0.125, 64], [16384, 1.0, 0.139, 71], [16896, 1.0, 0.174, 89], [17408, 1.0, 0.125, 64], [17920, 1.0, 0.125, 64], [18432, 1.0, 0.125, 64], [18944, 1.0, 0.188, 96], [19456, 1.0, 0.125, 64], [19968, 1.0, 0.125, 64], [20480, 1.0, 0.125, 64], [20992, 1.0, 0.184, 94], [21504, 1.0, 0.129, 66], [22016, 1.0, 0.125, 64], [22528, 1.0, 0.125, 64], [23040, 1.0, 0.168, 86], [23552, 1.0, 0.082, 42], [24064, 1.0, 0.125, 64], [24576, 1.0, 0.125, 64], [25088, 1.0, 0.125, 64], [25600, 1.0, 0.125, 64], [26112, 0.072, 0.062, 32], [26624, 0.0, 0.0, 0], [27136, 0.0, 0.0, 0], [27648, 0.0, 0.0, 0], [28160, 0.0, 0.0, 0], [28672, 0.0, 0.0, 0], [29184, 0.18, 0.0, 0], [29696, 1.0, 0.0, 0], [30208, 1.0, 0.117, 60], [30720, 1.0, 0.133, 68], [31232, 1.0, 0.062, 32], [31744, 1.0, 0.188, 96], [32256, 1.0, 0.188, 96], [32768, 1.0, 0.168, 86], [33280, 1.0, 0.145, 74], [33792, 1.0, 0.125, 64], [34304, 1.0, 0.125, 64], [34816, 1.0, 0.143, 73], [35328, 1.0, 0.17, 87], [35840, 1.0, 0.125, 64], [36352, 1.0, 0.125, 64], [36864, 1.0, 0.125, 64], [37376, 1.0, 0.178, 91], [37888, 1.0, 0.135, 69], [38400, 1.0, 0.125, 64], [38912, 1.0, 0.125, 64], [39424, 1.0, 0.154, 79], [39936, 1.0, 0.158, 81], [40448, 1.0, 0.125, 64], [40960, 1.0, 0.125, 64], [41472, 1.0, 0.129, 66], [41984, 1.0, 0.184, 94], [42496, 1.0, 0.125, 64], [43008, 1.0, 0.125, 64], [43520, 1.0, 0.125, 64], [44032, 1.0, 0.188, 96], [44544, 1.0, 0.125, 64], [45056, 1.0, 0.125, 64], [45568, 1.0, 0.125, 64], [46080, 1.0, 0.176, 90], [46592, 1.0, 0.137, 70], [47104, 1.0, 0.125, 64], [47616, 1.0, 0.125, 64], [48128, 1.0, 0.152, 78], [48640, 1.0, 0.16, 82], [49152, 1.0, 0.125, 64], [49664, 1.0, 0.125, 64], [50176, 1.0, 0.062, 32], [50688, 1.0, 0.125, 64], [51200, 1.0, 0.062, 32], [51712, 1.0, 0.104, 53], [52224, 1.0, 0.021, 11], [52736, 1.0, 0.0, 0], [53248, 1.0, 0.062, 32], [53760, 1.0, 0.062, 32], [54272, 1.0, 0.0, 0], [54784, 1.0, 0.062, 32], [55296, 1.0, 0.0, 0], [55808, 1.0, 0.062, 32], [56320, 1.0, 0.018, 9], [56832, 1.0, 0.223, 114], [57344, 1.0, 0.072, 37], [57856, 1.0, 0.188, 96], [58368, 1.0, 0.125, 64], [58880, 1.0, 0.188, 96], [59392, 1.0, 0.125, 64], [59904, 1.0, 0.139, 71], [60416, 1.0, 0.174, 89], [60928, 1.0, 0.125, 64], [61440, 1.0, 0.125, 64], [61952, 1.0, 0.125, 64], [62464, 1.0, 0.176, 90], [62976, 1.0, 0.137, 70], [63488, 1.0, 0.125, 64], [64000, 1.0, 0.125, 64], [64512, 1.0, 0.15, 77], [65024, 1.0, 0.162, 83], [65536, 1.0, 0.125, 64], [66048, 1.0, 0.125, 64], [66560, 1.0, 0.125, 64], [67072, 1.0, 0.188, 96], [67584, 1.0, 0.125, 64], [68096, 1.0, 0.125, 64], [68608, 1.0, 0.125, 64], [69120, 1.0, 0.188, 96], [69632, 1.0, 0.125, 64], [70144, 1.0, 0.125, 64], [70656, 1.0, 0.125, 64], [71168, 1.0, 0.172, 88], [71680, 1.0, 0.141, 72], [72192, 1.0, 0.125, 64], [72704, 1.0, 0.125, 64], [73216, 1.0, 0.15, 77], [73728, 1.0, 0.162, 83], [74240, 1.0, 0.125, 64], [74752, 1.0, 0.125, 64], [75264, 1.0, 0.125, 64], [75776, 1.0, 0.125, 64], [76288, 1.0, 0.062, 32], [76800, 1.0, 0.062, 32], [77312, 1.0, 0.062, 32], [77824, 1.0, 0.0, 0], [78336, 1.0, 0.062, 32], [78848, 1.0, 0.062, 32], [79360, 1.0, 0.062, 32], [79872, 1.0, 0.062, 32], [80384, 1.0, 0.0, 0], [80896, 1.0, 0.062, 32], [81408, 1.0, 0.062, 32], [81920, 1.0, 0.0, 0], [82432, 1.0, 0.062, 32], [82944, 1.0, 0.0, 0], [83456, 1.0, 0.188, 96], [83968, 1.0, 0.125, 64], [84480, 1.0, 0.188, 96], [84992, 1.0, 0.125, 64], [85504, 1.0, 0.127, 65], [86016, 1.0, 0.186, 95], [86528, 1.0, 0.125, 64], [87040, 1.0, 0.125, 64], [87552, 1.0, 0.125, 64], [88064, 1.0, 0.125, 64], [88576, 1.0, 0.188, 96], [89088, 1.0, 0.125, 64], [89600, 1.0, 0.125, 64], [90112, 1.0, 0.125, 64], [90624, 1.0, 0.188, 96], [91136, 1.0, 0.125, 64], [91648, 1.0, 0.125, 64], [92160, 1.0, 0.125, 64], [92672, 1.0, 0.178, 91], [93184, 1.0, 0.135, 69], [93696, 1.0, 0.125, 64], [94208, 1.0, 0.125, 64], [94720, 1.0, 0.154, 79], [95232, 1.0, 0.158, 81], [95744, 1.0, 0.125, 64], [96256, 1.0, 0.125, 64], [96768, 1.0, 0.127, 65], [97280, 1.0, 0.186, 95], [97792, 1.0, 0.125, 64], [98304, 1.0, 0.125, 64], [98816, 1.0, 0.125, 64], [99328, 1.0, 0.188, 96], [99840, 1.0, 0.125, 64], [100352, 1.0, 0.125, 64], [100864, 1.0, 0.125, 64], [101376, 1.0, 0.176, 90], [101888, 1.0, 0.137, 70], [102400, 1.0, 0.062, 32], [102912, 1.0, 0.062, 32], [103424, 1.0, 0.066, 34], [103936, 1.0, 0.121, 62], [104448, 1.0, 0.0, 0], [104960, 1.0, 0.0, 0], [105472, 1.0, 0.125, 64], [105984, 1.0, 0.0, 0], [106496, 1.0, 0.125, 64], [107008, 1.0, 0.0, 0], [107520, 1.0, 0.062, 32], [108032, 1.0, 0.0, 0], [108544, 1.0, 0.062, 32], [109056, 1.0, 0.062, 32], [109568, 1.0, 0.062, 32], [110080, 1.0, 0.188, 96], [110592, 1.0, 0.117, 60], [111104, 1.0, 0.133, 68], [111616, 1.0, 0.188, 96], [112128, 1.0, 0.125, 64], [112640, 1.0, 0.125, 64], [113152, 1.0, 0.127, 65], [113664, 1.0, 0.186, 95], [114176, 1.0, 0.121, 62], [114688, 1.0, 0.129, 66], [115200, 1.0, 0.125, 64], [115712, 1.0, 0.135, 69], [116224, 1.0, 0.178, 91], [116736, 1.0, 0.125, 64], [117248, 1.0, 0.125, 64], [117760, 1.0, 0.125, 64], [118272, 1.0, 0.188, 96], [118784, 1.0, 0.125, 64], [119296, 1.0, 0.125, 64], [119808, 1.0, 0.125, 64], [120320, 1.0, 0.182, 93], [120832, 1.0, 0.131, 67], [121344, 1.0, 0.125, 64], [121856, 1.0, 0.125, 64], [122368, 1.0, 0.162, 83], [122880, 1.0, 0.15, 77], [123392, 1.0, 0.125, 64], [123904, 1.0, 0.125, 64], [124416, 1.0, 0.139, 71], [124928, 1.0, 0.174, 89], [125440, 1.0, 0.125, 64], [125952, 1.0, 0.125, 64], [126464, 1.0, 0.125, 64], [126976, 1.0, 0.188, 96], [127488, 1.0, 0.125, 64], [128000, 1.0, 0.125, 64], [128512, 1.0, 0.125, 64], [129024, 1.0, 0.125, 64], [129536, 1.0, 0.0, 0], [130048, 1.0, 0.062, 32], [130560, 1.0, 0.062, 32], [131072, 1.0, 0.062, 32], [131584, 1.0, 0.062, 32], [132096, 1.0, 0.125, 64], [132608, 1.0, 0.062, 32], [133120, 1.0, 0.062, 32], [133632, 1.0, 0.062, 32], [134144, 1.0, 0.062, 32], [134656, 1.0, 0.125, 64], [135168, 1.0, 0.188, 96], [135680, 1.0, 0.127, 65], [136192, 1.0, 0.186, 95], [136704, 1.0, 0.125, 64], [137216, 1.0, 0.125, 64], [137728, 1.0, 0.125, 64], [138240, 1.0, 0.188, 96], [138752, 1.0, 0.125, 64], [139264, 1.0, 0.125, 64], [139776, 1.0, 0.125, 64], [140288, 1.0, 0.18, 92], [140800, 1.0, 0.107, 55], [141312, 0.961, 0.025, 13], [141824, 0.0, 0.062, 32], [142336, 0.0, 0.0, 0]], "dxa_busy": 135022, "tcu_busy": 16384, "both": 16320, "dxa_only": 118702, "tcu_only": 64, "neither": 7393}};
+draw();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+new MutationObserver(()=>draw()).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
+})();
+</script>

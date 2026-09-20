@@ -1,0 +1,12 @@
+sw_fedp2k_iw1_simx rc=0 cycles=99906 instrs=12840 PASSED
+sw_wmma_iw1_simx rc=0 cycles=93134 instrs=21999 PASSED
+sw_fedp2k_iw2_simx rc=0 cycles=74365 instrs=11888 PASSED
+sw_wmma_iw2_simx rc=0 cycles=87642 instrs=21999 PASSED
+sw_fedp2k_iw4_simx rc=0 cycles=70145 instrs=11400 PASSED
+sw_wmma_iw4_simx rc=0 cycles=85913 instrs=21999 PASSED
+sw_fedp2k_iw1_rtl rc=0 cycles=98370 instrs=12840 PASSED
+sw_wmma_iw1_rtl rc=0 cycles=97797 instrs=21999 PASSED
+sw_fedp2k_iw2_rtl rc=0 cycles=73427 instrs=11888 PASSED
+sw_wmma_iw2_rtl rc=0 cycles=99990 instrs=21999 PASSED
+sw_fedp2k_iw4_rtl rc=0 cycles=63501 instrs=11400 PASSED
+sw_wmma_iw4_rtl rc=0 cycles=99927 instrs=21999 PASSED

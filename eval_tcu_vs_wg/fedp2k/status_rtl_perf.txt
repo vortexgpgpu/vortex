@@ -1,0 +1,9 @@
+[05:23:41] START base_iw4_perf11
+[05:30:55] DONE base_iw4_perf11 rc=0
+[05:30:55] START fedp2k_iw4_perf11
+[05:48:06] DONE fedp2k_iw4_perf11 rc=0
+[05:48:06] START base_iw4_perf7
+[05:54:31] DONE base_iw4_perf7 rc=0
+[05:54:31] START fedp2k_iw4_perf7
+[06:12:09] DONE fedp2k_iw4_perf7 rc=0
+PERF-RUNS-COMPLETE

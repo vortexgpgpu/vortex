@@ -51,9 +51,16 @@ python3 vortex_perfetto.py run_rtlsim.log -t rtlsim \
   --cycle-min 10000 --cycle-max 20000 -c -o window.json.gz
 ```
 
-- **Provide a time base** (map cycles/ticks to microseconds):
+- **Provide a time base** (map cycles to microseconds):
   - `--freq-mhz <MHz>` or
   - `--cycle-ns <ns>` (overrides `--freq-mhz`)
+  - Without either, the axis reads 1 µs = 1 cycle.
+
+- **RTL time is in cycles.** rtlsim, opaesim and xrtsim print a timestamp that
+  advances on both clock edges, i.e. two ticks per cycle. The exporter divides
+  that out, so the `cycle` arg, `--cycle-min`/`--cycle-max` and the time base
+  are all in core cycles for RTL and SimX alike. For a harness that ticks once
+  per cycle, pass `--rtl-ticks-per-cycle 1`.
 
 - **Value capture** (`--values`):
   - `none`: no register values
@@ -93,7 +100,8 @@ Track names are derived from the module path and (when present) the `(cluster, s
 - Base name: `cluster<i>-socket<j>-core<k>` (or `global` if not present)
 - Warp tracks: `cluster0-socket0-core0: warp3`
 - Warp-state tracks: `cluster0-socket0-core0: warp3 state`
-- Memory/cache tracks: `cluster0-socket0-core0: dcache` / `...: l2` / `...: mem`, etc.
+- Memory/cache tracks: `cluster0-socket0-core0: dcache` / `...: lmem` / `...: l2` / `...: mem`, etc.
+- Instruction lifetimes are async slices inside **Vortex GPU 1** (process-local ids).
 
 Use Perfetto search to jump quickly:
 - `core0` / `core3`
@@ -140,6 +148,40 @@ with arguments (when present) such as `uuid`, `wid`, `PC`, `tmask`, `addr`, `tag
 
 If the parser sees a UUID-tagged line but can’t map it to a known stage, it is still emitted as a lightweight “raw” instant event so it remains searchable and visible.
 
+### 5) Derived tracks (RTL only)
+
+Some units log their activity in lines that carry no instruction UUID, so none
+of the above can represent them. The exporter reconstructs them into a second
+process, **Vortex derived tracks**, emitted only when the log has matching
+lines (disable with `--no-derived`):
+
+- **TCU_OP engine** (`VX_tcu_op_core`): one slice per MMA_OP, and an engine
+  phase track splitting each op into *fetch operands → issue (compute) → drain
+  + D writeback → idle (no MMA_OP)*. Also an *issue busy* 0/1 counter (1 = a
+  FEOP step issued that cycle), *k-progress*, and per-matrix operand request
+  rates. A TCU_OP kernel is one warp running a few hundred instructions while
+  the engine works for tens of thousands of cycles, so this is where its time
+  shows up.
+- **DXA**: per worker, *transfer in service* (setup-done → done) and *transfer
+  queued* (dispatch-issue → setup-done). Transfers are named by the LMEM buffer
+  they fill when TCU_OP operand addresses are available, e.g. "B buffer 1".
+- **icache miss → refill**: the warp's fetch is blocked for the whole slice.
+  Misses that overlap an idle TCU_OP engine are marked `[TCU_OP engine idle]`.
+- **DRAM read/write request rates**, binned per 64 cycles.
+
+The exporter also prints per-phase TCU_OP totals to stderr, e.g.
+`tcu_op: 16 MMA_OPs | fetch=4663 issue=65536 drain=2192 idle_between=3538 cycles`.
+
+### Tracing DXA
+
+DXA activity is traced under `DBG_TRACE_DXA`, which `--debug=N` builds of
+rtlsim, opaesim, avedsim and xrtsim enable.
+
+Debug level needed per derived track: DXA transfers and MMA_OP lifetimes need
+`--debug=1`; TCU_OP engine phases, k-progress and operand requests need
+`--debug=2`; icache refills need `--debug=3` (they key on the level-3
+cache-bank miss trace). `--debug=3` gives the full set.
+
 ---
 
 ## Recommended analysis workflows
@@ -181,7 +223,7 @@ The exporter normalizes RTL `tmask` bit ordering to match the SimX convention (`
 - **WID**: Warp id.
 - **tmask**: Thread mask (active lanes).
 - **Stages**: Stage markers like `schedule`, `decode`, `dispatch`, `execute`, `commit` emitted as instant events on a warp track.
-- **Cache levels**: `icache`, `dcache`, `l2`, `l3`, `mem` (inferred from the module path).
+- **Cache levels**: `icache`, `dcache`, `lmem`, `l2`, `l3`, `mem` (inferred from the module path).
 - **Flow arrow**: Optional parent→uop correlation when `--parent-flow` is enabled.
 
 ---

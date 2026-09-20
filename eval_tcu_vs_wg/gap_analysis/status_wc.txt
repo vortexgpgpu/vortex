@@ -1,0 +1,11 @@
+[21:10:41] START tiny32
+[21:17:10] DONE tiny32 rc=0
+[21:17:10] START full128_dxa
+[21:20:52] DONE full128_dxa rc=0
+[21:20:52] START full128_core
+[21:24:35] DONE full128_core rc=0
+[21:24:35] START full128_tcu
+[21:28:16] DONE full128_tcu rc=0
+[21:28:16] START mcast128
+[21:31:51] DONE mcast128 rc=0
+WC-COMPLETE

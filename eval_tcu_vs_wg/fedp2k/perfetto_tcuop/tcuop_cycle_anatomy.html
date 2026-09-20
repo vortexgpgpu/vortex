@@ -1,0 +1,377 @@
+<title>TCU_OP Cycle Anatomy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #F4F6F4;
+    --panel: #FFFFFF;
+    --ink: #16201C;
+    --muted: #58655E;
+    --rule: #D6DDD8;
+    --compute: #0F7C75;
+    --compute-soft: #D5ECEA;
+    --stall: #B4412C;
+    --stall-soft: #F6DED8;
+    --amber: #A86B12;
+    --amber-soft: #F3E6CF;
+    --slate: #6A7A8C;
+    --slate-soft: #E1E6EC;
+    --bar-other: #9AA59F;
+    --focus: #0F7C75;
+    --shadow: 0 1px 2px rgba(22, 32, 28, .06), 0 4px 16px rgba(22, 32, 28, .06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #111614;
+      --panel: #19201D;
+      --ink: #E4EAE6;
+      --muted: #98A49D;
+      --rule: #2B3430;
+      --compute: #3DB3A8;
+      --compute-soft: #173A37;
+      --stall: #E27C63;
+      --stall-soft: #3D2320;
+      --amber: #D9A24A;
+      --amber-soft: #3A2D17;
+      --slate: #93A4B8;
+      --slate-soft: #243039;
+      --bar-other: #66716B;
+      --focus: #3DB3A8;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #111614;
+    --panel: #19201D;
+    --ink: #E4EAE6;
+    --muted: #98A49D;
+    --rule: #2B3430;
+    --compute: #3DB3A8;
+    --compute-soft: #173A37;
+    --stall: #E27C63;
+    --stall-soft: #3D2320;
+    --amber: #D9A24A;
+    --amber-soft: #3A2D17;
+    --slate: #93A4B8;
+    --slate-soft: #243039;
+    --bar-other: #66716B;
+    --focus: #3DB3A8;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 4px 16px rgba(0, 0, 0, .25);
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 16px/1.6 "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    padding-inline: 20px;
+    padding-block: 40px 72px;
+  }
+  .wrap { max-width: 1040px; margin-inline: auto; display: grid; gap: 56px; }
+  .prose { max-width: 68ch; }
+  h1, h2, h3 {
+    font-family: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+    text-wrap: balance;
+    margin: 0;
+    line-height: 1.12;
+  }
+  h1 { font-size: clamp(2.1rem, 5vw, 3.1rem); font-weight: 700; letter-spacing: -.01em; }
+  h2 { font-size: 1.7rem; font-weight: 600; }
+  h3 { font-size: 1.22rem; font-weight: 600; }
+  p { margin: 0; }
+  .mono, code, .num { font-family: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace; }
+  code { font-size: .88em; background: var(--slate-soft); padding: .08em .35em; border-radius: 3px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .eyebrow {
+    font: 500 .78rem/1.3 "IBM Plex Mono", ui-monospace, monospace;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+  }
+  section { display: grid; gap: 20px; }
+  a { color: var(--compute); text-underline-offset: 2px; }
+  a:focus-visible, .shot a:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+
+  /* header */
+  header { display: grid; gap: 16px; }
+  .runline { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+  .chip {
+    font: 500 .8rem/1 "IBM Plex Mono", ui-monospace, monospace;
+    border: 1px solid var(--rule);
+    background: var(--panel);
+    border-radius: 999px;
+    padding: 6px 10px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .chip b { color: var(--ink); font-weight: 500; }
+  .verdict { font-size: 1.14rem; line-height: 1.55; }
+  .verdict strong { font-weight: 600; }
+
+  /* cycle budget bar */
+  .budget { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 22px; display: grid; gap: 18px; box-shadow: var(--shadow); }
+  .bar { display: flex; height: 44px; border-radius: 5px; overflow: hidden; }
+  .bar span { display: block; height: 100%; }
+  .bar span + span { border-left: 2px solid var(--panel); }
+  .c-compute { background: var(--compute); }
+  .c-cpre { background: var(--stall); }
+  .c-start { background: var(--amber); }
+  .c-icache { background: color-mix(in srgb, var(--stall) 62%, var(--panel)); }
+  .c-drain { background: var(--slate); }
+  .c-hand { background: color-mix(in srgb, var(--slate) 60%, var(--panel)); }
+  .c-tail { background: color-mix(in srgb, var(--amber) 60%, var(--panel)); }
+  .c-other { background: var(--bar-other); }
+  .bar-scale { display: flex; justify-content: space-between; font: 400 .76rem/1 "IBM Plex Mono", monospace; color: var(--muted); }
+  .legend-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: .94rem; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font: 500 .74rem/1.3 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  td.r, th.r { text-align: right; white-space: nowrap; font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: 0; }
+  .sw { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 8px; vertical-align: -1px; }
+
+  /* ceiling chart */
+  .ceiling { display: grid; gap: 12px; }
+  .crow { display: grid; grid-template-columns: minmax(150px, 230px) 1fr; gap: 14px; align-items: center; }
+  .crow .lbl { font-size: .92rem; line-height: 1.3; }
+  .crow .lbl small { display: block; color: var(--muted); font-size: .8rem; }
+  .ctrack { position: relative; height: 26px; background: var(--slate-soft); border-radius: 4px; }
+  .cfill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font: 500 .8rem/1 "IBM Plex Mono", monospace; color: var(--panel); font-variant-numeric: tabular-nums; }
+  .cfill.meas { background: var(--stall); }
+  .cfill.floor { background: var(--compute); }
+  .cfill.wg { background: var(--slate); }
+  .caxis { display: grid; grid-template-columns: minmax(150px, 230px) 1fr; gap: 14px; }
+  .caxis .ticks { display: flex; justify-content: space-between; font: 400 .74rem/1 "IBM Plex Mono", monospace; color: var(--muted); }
+
+  /* causes */
+  .causes { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .causes li { display: grid; grid-template-columns: 5.2rem 1fr; gap: 18px; padding-block: 18px; border-top: 1px solid var(--rule); }
+  .causes li:last-child { border-bottom: 1px solid var(--rule); }
+  .cost { font: 500 1.05rem/1.25 "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+  .cost small { display: block; font-size: .72rem; color: var(--muted); font-weight: 400; margin-top: 3px; }
+  .cost.struct { color: var(--stall); }
+  .causes .body { display: grid; gap: 6px; }
+  .causes .body p { color: var(--ink); max-width: 72ch; }
+  .fix { color: var(--muted); font-size: .93rem; }
+  .fix b { color: var(--ink); font-weight: 600; }
+  .note { background: var(--compute-soft); border-radius: 6px; padding: 14px 16px; max-width: 76ch; }
+  .note.warn { background: var(--amber-soft); }
+
+  /* figures */
+  .figs { display: grid; gap: 44px; }
+  figure { margin: 0; display: grid; gap: 12px; }
+  .shot { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 6px; box-shadow: var(--shadow); }
+  .shot a { display: block; }
+  .shot img { display: block; width: 100%; height: auto; border-radius: 3px; }
+  figcaption { display: grid; gap: 8px; max-width: 80ch; }
+  .figno { font: 500 .78rem/1 "IBM Plex Mono", monospace; letter-spacing: .06em; color: var(--compute); text-transform: uppercase; }
+  .window { font: 400 .8rem/1.3 "IBM Plex Mono", monospace; color: var(--muted); }
+  .look { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; color: var(--ink); }
+
+  footer { color: var(--muted); font-size: .9rem; display: grid; gap: 10px; max-width: 80ch; border-top: 1px solid var(--rule); padding-top: 22px; }
+  footer ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; }
+
+  @media (max-width: 640px) {
+    body { padding-block: 28px 56px; padding-inline: 16px; }
+    .causes li { grid-template-columns: 1fr; gap: 6px; }
+    .crow, .caxis { grid-template-columns: 1fr; gap: 6px; }
+    .caxis .spacer { display: none; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Perfetto investigation · rtlsim --debug=3</div>
+    <h1>TCU_OP Cycle Anatomy</h1>
+    <div class="runline">
+      <span class="chip">app <b>sgemm_tcu_op</b></span>
+      <span class="chip"><b>128×128×128</b> fp16→fp32, dense</span>
+      <span class="chip">NW=16 NT=32 <b>IW=4</b></span>
+      <span class="chip">16 MMA_OPs × 32×32×128 tile</span>
+      <span class="chip"><b>81,087</b> cycles traced = untraced</span>
+    </div>
+    <p class="verdict prose">The engine is <strong>busy 80.8% of the time</strong>, and while busy it runs at its full rate: one 32-MAC step every cycle, with no bubbles. TCU_OP is sub-optimal for two reasons. <strong>Its peak is low:</strong> one engine at 32 MACs/cycle, so even a perfect run is slower than WGMMA at IW=4. <strong>It also loses 19% to serialized overhead:</strong> an all-zero C preload before every tile, compulsory icache misses from fully unrolled code, and tile-0 staging with nothing to overlap it.</p>
+  </header>
+
+  <section aria-labelledby="budget-h">
+    <h2 id="budget-h">Where the 81,087 cycles go</h2>
+    <div class="budget">
+      <div class="bar" role="img" aria-label="Cycle budget: compute 80.8 percent, C preload 5.5, startup 5.0, icache-miss gaps 3.0, drain 2.7, handoff 1.4, tail 1.4, other 0.2">
+        <span class="c-compute" style="width:80.80%"></span>
+        <span class="c-cpre" style="width:5.54%"></span>
+        <span class="c-start" style="width:4.99%"></span>
+        <span class="c-icache" style="width:2.96%"></span>
+        <span class="c-drain" style="width:2.70%"></span>
+        <span class="c-hand" style="width:1.41%"></span>
+        <span class="c-tail" style="width:1.39%"></span>
+        <span class="c-other" style="width:0.21%"></span>
+      </div>
+      <div class="bar-scale"><span>0</span><span>20,272</span><span>40,544</span><span>60,815</span><span>81,087 cyc</span></div>
+      <div class="legend-wrap">
+        <table>
+          <thead><tr><th>Phase</th><th class="r">Cycles</th><th class="r">Share</th><th>How it was measured</th></tr></thead>
+          <tbody>
+            <tr><td><span class="sw c-compute"></span>Engine issuing one FEOP step per cycle</td><td class="r">65,520</td><td class="r">80.8%</td><td>First → last <code>Issue Busy</code> per tile; 4,096 steps in 4,095 cycles</td></tr>
+            <tr><td><span class="sw c-cpre"></span>C accumulator preload before any A/B read</td><td class="r">4,496</td><td class="r">5.5%</td><td>281 cyc/tile, first C request → first A request</td></tr>
+            <tr><td><span class="sw c-start"></span>Startup before the first MMA_OP</td><td class="r">4,048</td><td class="r">5.0%</td><td>Prologue + tile-0 DXA staging on the critical path</td></tr>
+            <tr><td><span class="sw c-icache"></span>Engine idle during icache refills</td><td class="r">2,397</td><td class="r">3.0%</td><td>Excess of the 3 gaps (850 / 910 / 868) over a normal ~77-cycle handoff</td></tr>
+            <tr><td><span class="sw c-drain"></span>Drain + D write-back</td><td class="r">2,192</td><td class="r">2.7%</td><td>137 cyc/tile, last step → <code>Result fired</code></td></tr>
+            <tr><td><span class="sw c-hand"></span>Software handoff between tiles</td><td class="r">1,141</td><td class="r">1.4%</td><td>~77 cyc: result → barrier waits → descriptor → next MMA_OP</td></tr>
+            <tr><td><span class="sw c-tail"></span>Tail after the last tile</td><td class="r">1,126</td><td class="r">1.4%</td><td>Dominated by one 794-cycle icache refill</td></tr>
+            <tr><td><span class="sw c-other"></span>A request → first step</td><td class="r">167</td><td class="r">0.2%</td><td>10–12 cyc/tile</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="ceil-h">
+    <h2 id="ceil-h">The ceiling is the first problem</h2>
+    <p class="prose">At IW=4, four TCU blocks are instantiated but only issue block 0 is connected to memory. That engine peaks at 2×16 = 32 MACs per cycle. With zero overhead the 2,097,152 MACs would still need 65,536 cycles, which is already slower than WGMMA with the same block provisioning.</p>
+    <div class="budget ceiling" role="img" aria-label="Cycles at 128 cubed IW=4: TCU_OP measured 81,087; TCU_OP compute-only floor 65,536; WGMMA RS 63,353">
+      <div class="crow"><div class="lbl">TCU_OP, measured<small>51.7 FLOP/cycle</small></div><div class="ctrack"><div class="cfill meas" style="width:95.40%">81,087</div></div></div>
+      <div class="crow"><div class="lbl">TCU_OP, zero-overhead floor<small>64.0 FLOP/cycle</small></div><div class="ctrack"><div class="cfill floor" style="width:77.10%">65,536</div></div></div>
+      <div class="crow"><div class="lbl">WGMMA RS, blocks=4<small>66.2 FLOP/cycle</small></div><div class="ctrack"><div class="cfill wg" style="width:74.53%">63,353</div></div></div>
+      <div class="caxis"><div class="spacer"></div><div class="ticks"><span>0</span><span>21,250</span><span>42,500</span><span>63,750</span><span>85,000 cyc</span></div></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="causes-h">
+    <h2 id="causes-h">Causes, largest first</h2>
+    <ol class="causes">
+      <li>
+        <div class="cost struct">ceiling<small>structural</small></div>
+        <div class="body">
+          <h3>One 32-MAC/cycle engine, whatever the issue width</h3>
+          <p>Only TCU block 0 reaches memory (the other three are tied off in <code>VX_tcu_unit.sv</code>), and the FEOP array is 2×16 by default. That's why TCU_OP is flat across IW and last at IW=4.</p>
+          <p class="fix"><b>To raise it:</b> connect more engines, or widen the FEOP array. DXA would limit next: its one worker needs about 2,560 cycles to stage each 20 KB tile, which caps throughput at roughly 1.6× today's compute rate.</p>
+        </div>
+      </li>
+      <li>
+        <div class="cost">4,496<small>5.5%</small></div>
+        <div class="body">
+          <h3>C is preloaded serially before every tile, and here C is all zeros</h3>
+          <p>The engine issues its 32 C requests about one every 9 cycles, 280 cycles in all, and only then starts A/B (<code>VX_tcu_op_core.sv:129</code>: “A requests start only after the ACCU is initialized”). Passing a null C doesn't help: line 776 still issues the reads, redirected to A, and just discards the data.</p>
+          <p class="fix"><b>Fix:</b> skip the preload when C is null (initialize the accumulator to zero), or let A/B fetch start while C is still loading. On the DXA side, skip staging C when it is known to be zero.</p>
+          <p class="note"><strong>Implemented and measured.</strong> For a dense tile with init set and a null C, the engine now skips the preload, and the first k-set's writes overwrite the accumulator instead of adding to it. With the same kernel binary: <span class="num">80,839 → 76,350</span> cycles (<strong>−4,489</strong>; predicted 16 × 281 = 4,496). Against the original 81,087: <strong>−5.8%</strong>, 54.9 FLOP/cycle. Operand fetch per tile fell from 291 to 11 cycles. All 6 CI cases and all 7 sparse and dense-control cases pass, and runs with a real C are unchanged at 81,087.</p>
+        </div>
+      </li>
+      <li>
+        <div class="cost">3,191<small>3.9% + startup</small></div>
+        <div class="body">
+          <h3>Compulsory icache misses from fully unrolled per-tile code</h3>
+          <p>All 38 code lines (<code>0x80000040</code>→<code>0x80000980</code>) are fetched exactly once, about two misses per tile. From tile 5 onward each tile's D write-back evicts older D lines, and refills slow from ≤323 to 650–850 cycles. Every slow refill had 30–51 DRAM write-backs issued during it; every fast one had none. Most misses are hidden behind compute. Three land in the result → next-MMA_OP window and stall the engine, and one more delays kernel exit.</p>
+          <p class="fix"><b>Fix:</b> keep the tile loop rolled so iterations reuse cached lines, or prefetch the next tile's code while the engine computes.</p>
+        </div>
+      </li>
+      <li>
+        <div class="cost">4,048<small>5.0%</small></div>
+        <div class="body">
+          <h3>Startup puts all of tile 0's staging on the critical path</h3>
+          <p>Warp 0 finishes its prologue (four compulsory misses) around cycle 1,140, then waits about 2,870 cycles while the single DXA worker stages C → A → B one after another, 830 cycles of it spent on the all-zero C. B0 lands 41 cycles before the first MMA_OP.</p>
+        </div>
+      </li>
+      <li>
+        <div class="cost">3,500<small>4.3%</small></div>
+        <div class="body">
+          <h3>Tiles never overlap</h3>
+          <p>Drain (137) + handoff (~77) + fetch (291) come to about 506 cycles per tile with no compute. The engine never received an MMA_OP while it was still busy (zero execute-stall events during the kernel), so the next tile's fetch can't hide behind the current tile's drain. Whether the engine can queue a second operation is <em>not yet verified</em>.</p>
+        </div>
+      </li>
+    </ol>
+    <p class="note">DXA staging is <strong>not</strong> a bottleneck after tile 0. Every transfer finishes at least 1,150 cycles before the tile that needs it fires.</p>
+  </section>
+
+  <section aria-labelledby="figs-h">
+    <h2 id="figs-h">Perfetto views</h2>
+    <p class="prose">These are real Perfetto UI renders (ui.perfetto.dev, headless Chrome). The time axis is 1 ns = 1 core cycle, so every duration reads directly as cycles. The top group, <em>TCU_OP analysis layer</em>, comes from a companion exporter because the stock one drops every engine line. The bottom group, <em>Vortex GPU</em>, is the stock <code>ci/perfetto.py</code> output. Click any frame to open it full-size.</p>
+
+    <div class="figs">
+      <figure>
+        <div class="shot"><a href="images/01_overview_whole_kernel.png" target="_blank" rel="noopener"><img src="images/01_overview_whole_kernel.png" alt="Perfetto timeline of the whole kernel: sixteen tile slices in sequence, solid issue-busy blocks, a k-progress sawtooth per tile, DXA transfers running ahead, three wider idle gaps after tiles 5, 11 and 12." loading="lazy" width="1900" height="1760"></a></div>
+        <figcaption>
+          <span class="figno">Figure 1 · whole kernel</span>
+          <span class="window">cycles 0 – 81,300</span>
+          <ul class="look">
+            <li>Row 1: sixteen tiles, strictly one after another.</li>
+            <li><em>issue busy</em> is solid inside each tile, and <em>k set</em> ramps 0 → 127 once per tile.</li>
+            <li>There are wider gaps after tiles 5, 11 and 12, each covered by an icache refill labelled <code>[ENGINE IDLE]</code> in row 5.</li>
+          </ul>
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="shot"><a href="images/02_startup_to_first_mma.png" target="_blank" rel="noopener"><img src="images/02_startup_to_first_mma.png" alt="Perfetto zoom on cycles 0 to 4,900: four icache miss slices early, then DXA worker transfers C, A and B for tile 0 back to back while warp 0 is stalled, then tile 0 fires near cycle 4,048." loading="lazy" width="1900" height="1760"></a></div>
+        <figcaption>
+          <span class="figno">Figure 2 · startup</span>
+          <span class="window">cycles 0 – 4,900 · first MMA_OP at 4,048</span>
+          <ul class="look">
+            <li>The four icache misses in row 5 are the prologue fetching never-seen code lines.</li>
+            <li>The DXA worker runs <em>C for tile 0</em> → <em>A</em> → <em>B</em> back to back while <em>stalled</em> (bottom) stays solid.</li>
+            <li><em>B for tile 0</em> ends 41 cycles before tile 0 fires.</li>
+          </ul>
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="shot"><a href="images/03_one_tile_steady_state.png" target="_blank" rel="noopener"><img src="images/03_one_tile_steady_state.png" alt="Perfetto zoom on tile 2: short fetch-operands phase, a long uninterrupted issue phase, a short drain; DXA staging for tile 3 runs in the background and finishes well before the tile ends." loading="lazy" width="1900" height="1760"></a></div>
+        <figcaption>
+          <span class="figno">Figure 3 · one tile in steady state</span>
+          <span class="window">cycles 13,100 – 17,950 · tile 2</span>
+          <ul class="look">
+            <li><em>fetch operands</em> 291 → <em>issue</em> 4,095 → <em>drain</em> 137. The issue phase has no bubbles.</li>
+            <li>A and B requests are a low, steady trickle (64 each over 4,096 cycles) with zero full-queue stalls, so the engine is compute-bound, not operand-bound.</li>
+            <li>DXA stages tile 3 (C → A → B) and finishes more than 1,100 cycles before tile 3 fires.</li>
+          </ul>
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="shot"><a href="images/04_tile_boundary_overhead.png" target="_blank" rel="noopener"><img src="images/04_tile_boundary_overhead.png" alt="Perfetto zoom on the boundary between tiles 1 and 2: drain and D write-back, a short idle, then a long fetch-operands phase in which only C requests appear before A and B start and issue begins." loading="lazy" width="1900" height="1760"></a></div>
+        <figcaption>
+          <span class="figno">Figure 4 · tile boundary</span>
+          <span class="window">cycles 13,060 – 13,640 · tile 1 → tile 2</span>
+          <ul class="look">
+            <li><em>drain + D writeback</em> 137, then <em>IDLE</em> 78, then <em>fetch operands</em> 291, with no compute.</li>
+            <li>In the fetch phase only <em>LMEM operand requests: C</em> is active for ~280 cycles. A and B start just before issue does.</li>
+            <li>This tile's icache miss (<code>0x80000240</code>) lands inside the fetch phase, so it costs nothing.</li>
+          </ul>
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="shot"><a href="images/05_icache_miss_stall_gap.png" target="_blank" rel="noopener"><img src="images/05_icache_miss_stall_gap.png" alt="Perfetto zoom on the gap after tile 5: the engine phase row shows a long IDLE slice exactly covered by an icache miss slice marked ENGINE IDLE, while memory tracks show a burst of D write-backs." loading="lazy" width="1900" height="1760"></a></div>
+        <figcaption>
+          <span class="figno">Figure 5 · 850-cycle gap after tile 5</span>
+          <span class="window">cycles 31,400 – 32,750</span>
+          <ul class="look">
+            <li><em>IDLE (no MMA_OP)</em> spans the whole window, covered by <em>icache miss 0x80000440 [ENGINE IDLE]</em> (775 cycles).</li>
+            <li>The <em>global: mem</em> row shows the D write-back burst (46 DRAM writes issued during this refill).</li>
+            <li>Warp 0 only resumes (instruction slices at right) once the line arrives, and tile 6 fires 34 cycles later.</li>
+          </ul>
+        </figcaption>
+      </figure>
+
+      <figure>
+        <div class="shot"><a href="images/06_kernel_tail.png" target="_blank" rel="noopener"><img src="images/06_kernel_tail.png" alt="Perfetto zoom on the kernel tail: tile 15 finishes, then a long icache miss slice before the final scalar instructions and kernel exit." loading="lazy" width="1900" height="1760"></a></div>
+        <figcaption>
+          <span class="figno">Figure 6 · kernel tail</span>
+          <span class="window">cycles 79,700 – 81,300</span>
+          <ul class="look">
+            <li>After tile 15's result, <em>icache miss 0x80000940</em> takes 794 of the 1,126 remaining cycles.</li>
+          </ul>
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>Tooling gaps found along the way.</strong> The stock exporter <code>ci/perfetto.py</code> drops the whole TCU_OP engine, because its trace lines carry no instruction UUID. <code>--debug</code> builds don't enable <code>DBG_TRACE_DXA</code>, so DXA is invisible unless you add it by hand. LMEM bank events land on an “unknown” track, and instruction lifetimes are filed under “Global Legacy Events”.</p>
+    <ul>
+      <li>Companion exporter: <code>tcuop_engine_tracks.py</code> (engine phases, DXA service and queueing, icache refills, binned bandwidth)</li>
+      <li>Render filter and driver: <code>focus_trace.py</code>, <code>pf_render.py</code></li>
+      <li>Traces for interactive use: <code>focus_dxa.json</code> (14 MB), <code>merged_dxa.json</code> (136 MB), in <code>eval_tcu_vs_wg/fedp2k/perfetto_tcuop/</code></li>
+    </ul>
+  </footer>
+</div>

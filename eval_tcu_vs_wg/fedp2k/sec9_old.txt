@@ -1,0 +1,17 @@
+<h2>9. Recommendations (priority order)</h2>
+<ol>
+<li><strong>Close the debug/non-debug divergence</strong> (§5.1). Nothing else can be trusted until a normal build passes; bisect the small cases without <code>--debug</code> and diff the effective define sets. Expect a reset-coverage hole.</li>
+<li><strong>Re-verify the K-chunked continuation path</strong> (§5.2) and retire <code>SGEMM_TILE_K_MULT</code>. This is the architecture's intended operating mode, mandatory above K=255, and the only way the C-init/writeback amortization that motivates the whole accumulator design actually pays off.</li>
+<li><strong>Run a sparsity sweep</strong> (§8). The design is sparsity-first and has only ever been measured here on its worst case. Validate all three modes (compressed×compressed, hybrid, dense), at crossbar queue depth 4, and treat that sweep — not the dense number — as the architecture's report card.</li>
+<li><strong>Restore prefetch depth with per-request reassembly</strong> (§5.3): track lane coverage per sequence tag instead of per stream, so two same-stream requests can be outstanding and merged independently. Recovers ~3.3k cycles/op (~53k at 128³) — the largest single perf win available and a direct undo of the conservative half of fix #11.</li>
+<li><strong>Regression-lock the response path</strong>: a test that runs MMA ops under sustained concurrent DXA traffic — the configuration whose absence hid defects #7, #10 and #11 for the lifetime of this design.</li>
+<li><strong>Latch the null-C decision at accept</strong> and skip C requests entirely for C=0; this fixes latent §5.3a and removes the wasted init reads in one change.</li>
+<li><strong>De-replicate the engine</strong>: one op-core per core (<code>NUM_TCU_OP_CORES=1</code>), decoupled from ISSUE_WIDTH; recover ~3/4 of the TCU area at IW=4.</li>
+<li><strong>Kill the divider</strong>: nested vertical/horizontal step counters in the issue FSM.</li>
+<li><strong>Full-row memory accesses</strong> (32-lane) for A/B/C/D; halves init/flush phases.</li>
+<li><strong>Extend the step-shape sweep along the area axis</strong> — the existing exploration held multipliers fixed at 32 and correctly picked 2×16; the untried question is 4×16 and 8×16 (64/128 MAC/cycle), which the LMEM port can feed and which is the change that could put TCU_OP decisively ahead of the WGMMA bundle on dense as well as sparse.</li>
+<li><strong>Pipeline op boundaries</strong>: deepen <code>op_ctx</code>/<code>mdata</code> to 2, admit the next op's C-init during the current flush.</li>
+<li><strong>Harden the contract</strong>: assert LMEM residency, widen the K and fmt fields, document the descriptor ABI in <code>vx_tensor.h</code> next to <code>mma_op</code>.</li>
+<li><strong>Hygiene pass</strong>: delete dead code, name the magic numbers, replace the hand-rolled double-buffer bit FSMs with a shared abstraction, default <code>SGEMM_TRACE_MARKERS=0</code>.</li>
+</ol>
+

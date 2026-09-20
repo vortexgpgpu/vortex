@@ -1,0 +1,12 @@
+bs_rs_iw1_nb1 IW=1 blocks=1 rc=0 wall=230s cycles=98370 instrs=12840 PASSED
+bs_rs_iw2_nb2 IW=2 blocks=2 rc=0 wall=517s cycles=73742 instrs=11888 PASSED
+bs_rs_iw4_nb4 IW=4 blocks=4 rc=0 wall=1651s cycles=63353 instrs=11400 PASSED
+bs_ss_iw1_nb1 IW=1 blocks=1 rc=0 wall=257s cycles=99065 instrs=11080 PASSED
+bs_ss_iw2_nb2 IW=2 blocks=2 rc=0 wall=539s cycles=73898 instrs=10128 PASSED
+bs_ss_iw4_nb4 IW=4 blocks=4 rc=0 wall=1655s cycles=66621 instrs=9640 PASSED
+bs_op_iw1_nb1 IW=1 blocks=1 rc=0 wall=126s cycles=81060 instrs=617 PASSED
+bs_op_iw2_nb1 IW=2 blocks=1 rc=0 wall=152s cycles=81159 instrs=617 PASSED
+bs_op_iw4_nb1 IW=4 blocks=1 rc=0 wall=202s cycles=81087 instrs=617 PASSED
+bs_op_iw1_nb1 IW=1 blocks=1 rc=0 wall=57s cycles=81060 instrs=617 PASSED
+bs_op_iw2_nb2 IW=2 blocks=2 rc=0 wall=126s cycles=81078 instrs=617 PASSED
+bs_op_iw4_nb4 IW=4 blocks=4 rc=0 wall=232s cycles=81511 instrs=617 PASSED

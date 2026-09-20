@@ -1,0 +1,7 @@
+[11:45:32] START wb_wmma_iw1_nb1 (IW=1 blocks=1)
+[11:47:04] DONE wb_wmma_iw1_nb1 rc=0 wall=92s cycles=97797 PASSED
+[11:47:04] START wb_wmma_iw2_nb2 (IW=2 blocks=2)
+[11:50:11] DONE wb_wmma_iw2_nb2 rc=0 wall=187s cycles=81033 PASSED
+[11:50:11] START wb_wmma_iw4_nb4 (IW=4 blocks=4)
+[11:57:13] DONE wb_wmma_iw4_nb4 rc=0 wall=422s cycles=73233 PASSED
+[11:57:13] WMMA-BLOCKS-COMPLETE

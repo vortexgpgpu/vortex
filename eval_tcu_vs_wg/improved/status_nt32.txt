@@ -1,0 +1,25 @@
+[03:51:08] START dxa_nt32_iw4
+[03:58:42] DONE dxa_nt32_iw4 rc=0 wall=453s
+[03:58:42] START dxa2k_nt32_iw4
+[04:18:24] DONE dxa2k_nt32_iw4 rc=0 wall=1180s
+[04:18:24] START wmma_nt32_iw4
+[04:23:06] DONE wmma_nt32_iw4 rc=0 wall=280s
+[04:23:06] START wg_nt32_iw4
+[04:28:30] DONE wg_nt32_iw4 rc=0 wall=322s
+[04:28:30] START dxa_nt32_iw2
+[04:32:23] DONE dxa_nt32_iw2 rc=0 wall=232s
+[04:32:23] START dxa2k_nt32_iw2
+[04:39:53] DONE dxa2k_nt32_iw2 rc=0 wall=449s
+[04:39:53] START wmma_nt32_iw2
+[04:42:18] DONE wmma_nt32_iw2 rc=0 wall=144s
+[04:42:18] START wg_nt32_iw2
+[04:45:01] DONE wg_nt32_iw2 rc=0 wall=162s
+[04:45:01] START dxa_nt32_iw1
+[04:47:26] DONE dxa_nt32_iw1 rc=0 wall=143s
+[04:47:26] START dxa2k_nt32_iw1
+[04:51:16] DONE dxa2k_nt32_iw1 rc=0 wall=228s
+[04:51:16] START wmma_nt32_iw1
+[04:52:39] DONE wmma_nt32_iw1 rc=0 wall=81s
+[04:52:39] START wg_nt32_iw1
+[04:54:56] DONE wg_nt32_iw1 rc=0 wall=135s
+SWEEP-NT32-COMPLETE

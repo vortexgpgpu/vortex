@@ -1,0 +1,25 @@
+[12:03:19] START bs_rs_iw1_nb1 (IW=1 blocks=1)
+[12:07:09] DONE bs_rs_iw1_nb1 rc=0 wall=230s cycles=98370 PASSED
+[12:07:09] START bs_rs_iw2_nb2 (IW=2 blocks=2)
+[12:15:46] DONE bs_rs_iw2_nb2 rc=0 wall=517s cycles=73742 PASSED
+[12:15:46] START bs_rs_iw4_nb4 (IW=4 blocks=4)
+[12:43:17] DONE bs_rs_iw4_nb4 rc=0 wall=1651s cycles=63353 PASSED
+[12:43:17] START bs_ss_iw1_nb1 (IW=1 blocks=1)
+[12:47:34] DONE bs_ss_iw1_nb1 rc=0 wall=257s cycles=99065 PASSED
+[12:47:34] START bs_ss_iw2_nb2 (IW=2 blocks=2)
+[12:56:33] DONE bs_ss_iw2_nb2 rc=0 wall=539s cycles=73898 PASSED
+[12:56:33] START bs_ss_iw4_nb4 (IW=4 blocks=4)
+[13:24:08] DONE bs_ss_iw4_nb4 rc=0 wall=1655s cycles=66621 PASSED
+[13:24:08] START bs_op_iw1_nb1 (IW=1 blocks=1)
+[13:26:14] DONE bs_op_iw1_nb1 rc=0 wall=126s cycles=81060 PASSED
+[13:26:14] START bs_op_iw2_nb1 (IW=2 blocks=1)
+[13:28:46] DONE bs_op_iw2_nb1 rc=0 wall=152s cycles=81159 PASSED
+[13:28:46] START bs_op_iw4_nb1 (IW=4 blocks=1)
+[13:32:08] DONE bs_op_iw4_nb1 rc=0 wall=202s cycles=81087 PASSED
+[13:32:08] START bs_op_iw1_nb1 (IW=1 blocks=1)
+[13:33:05] DONE bs_op_iw1_nb1 rc=0 wall=57s cycles=81060 PASSED
+[13:33:05] START bs_op_iw2_nb2 (IW=2 blocks=2)
+[13:35:11] DONE bs_op_iw2_nb2 rc=0 wall=126s cycles=81078 PASSED
+[13:35:11] START bs_op_iw4_nb4 (IW=4 blocks=4)
+[13:39:03] DONE bs_op_iw4_nb4 rc=0 wall=232s cycles=81511 PASSED
+[13:39:03] BLOCKS-SYM-COMPLETE

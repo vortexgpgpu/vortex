@@ -1,0 +1,5 @@
+[04:16:15] B1: 128^3 traces off (expect cycles=81087)
+RESULT s3b_noTrace_128 128x128x128 iw=4 kmult=4 rc=0 wall=206s cycles=81087 instrs=617 kbody=79533 PASSED
+[04:19:43] B2: 128^3 non-zero C (P1.1)
+RESULT s3b_nonzeroC_128 128x128x128 iw=4 kmult=4 rc=0 wall=256s cycles=81087 instrs=617 kbody=79533 PASSED
+[04:24:01] STAGE3B-COMPLETE

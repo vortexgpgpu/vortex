@@ -1,0 +1,2 @@
+[19:30:31] START trace
+[19:34:59] DONE rc=0 wall=266s PASSED PERF: instrs=617, cycles=81087 size=101M

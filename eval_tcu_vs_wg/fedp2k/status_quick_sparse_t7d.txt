@@ -1,0 +1,4 @@
+[06:58:30] START q_t7d_s1_128 (s=1 -b 0.5 -p n)
+RESULT q_t7d_s1_128 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=128s cycles=77964 instrs=1016 PASSED
+[07:00:39] START q_t7d_s2_128 (s=2 -a 0.5 -b 0.5 -p u)
+RESULT q_t7d_s2_128 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=122s cycles=60511 instrs=1208 PASSED

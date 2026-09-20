@@ -1,0 +1,5 @@
+[07:58:31] START wgmma
+[08:42:54] DONE wgmma rc=2 wall=2663s
+RESULT wgmma NO-SUMMARY rc=2
+/home/blaise/dev/vortex_spg/hw/syn/yosys/run_synth.sh: line 258: 245157 Killed                  "$YOSYS" -q -s "$YS" -l "$YLOG"
+[08:42:54] START tcuop

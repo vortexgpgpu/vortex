@@ -1,0 +1,306 @@
+<title>Grouped Scatter Drain</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#faf9f6; --panel:#f1efe9; --ink:#22242a; --muted:#5d6570;
+  --line:#d8d4c8; --dxa:#c05c10; --dxa-soft:#eeddcc; --tcu:#0f7b7a; --tcu-soft:#d3e7e4;
+  --idle:#a9aca8; --crit:#a83232; --ok:#3c7a3c; --code-bg:#edeae2; --accent:#c05c10;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#17181a; --panel:#1f2124; --ink:#e6e4de; --muted:#9aa0a8;
+    --line:#3a3d42; --dxa:#e0894a; --dxa-soft:#43301f; --tcu:#45b3ae; --tcu-soft:#1d3a38;
+    --idle:#5a5e63; --crit:#d47070; --ok:#7dbb7d; --code-bg:#232528; --accent:#e0894a;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#17181a; --panel:#1f2124; --ink:#e6e4de; --muted:#9aa0a8;
+  --line:#3a3d42; --dxa:#e0894a; --dxa-soft:#43301f; --tcu:#45b3ae; --tcu-soft:#1d3a38;
+  --idle:#5a5e63; --crit:#d47070; --ok:#7dbb7d; --code-bg:#232528; --accent:#e0894a;
+}
+body{background:var(--bg); color:var(--ink); font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:15.5px; line-height:1.62; padding:0 16px;}
+.wrap{max-width:900px; margin:0 auto; padding-block:40px 90px;}
+h1,h2,h3{line-height:1.22; text-wrap:balance; font-weight:600;}
+h1{font-size:2.05rem; margin:.2em 0 .1em;}
+h2{font-size:1.32rem; margin:2.6em 0 .5em; padding-top:1.2em; border-top:1px solid var(--line);}
+h2 .sec{color:var(--accent); font-family:"IBM Plex Mono",monospace; font-size:.95rem; margin-right:.6em; font-weight:600;}
+h3{font-size:1.02rem; margin:1.8em 0 .4em;}
+p,li{max-width:76ch;}
+p{margin:.7em 0;}
+.kicker{font-family:"IBM Plex Mono",monospace; font-size:.78rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);}
+.sub{color:var(--muted); max-width:76ch; font-size:.95rem;}
+code, .mono{font-family:"IBM Plex Mono",monospace; font-size:.86em;}
+code{background:var(--code-bg); padding:.1em .35em; border-radius:3px;}
+pre{background:var(--code-bg); padding:12px 14px; border-radius:6px; overflow-x:auto; font-size:.8rem; line-height:1.5;}
+pre code{background:none; padding:0;}
+a{color:var(--tcu);}
+table{border-collapse:collapse; width:100%; font-size:.88rem; font-variant-numeric:tabular-nums;}
+.tblwrap{overflow-x:auto; margin:1em 0;}
+th{font-family:"IBM Plex Mono",monospace; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase;
+   color:var(--muted); text-align:left; font-weight:600; padding:6px 12px 6px 0; border-bottom:1.5px solid var(--line);}
+td{padding:6px 12px 6px 0; border-bottom:1px solid var(--line); vertical-align:top;}
+td.n{text-align:right; font-family:"IBM Plex Mono",monospace; font-size:.84rem;}
+th.n{text-align:right;}
+tr.hl td{background:var(--panel);}
+.answer{background:var(--panel); border-left:4px solid var(--accent); padding:18px 22px; margin:1.6em 0; border-radius:0 6px 6px 0;}
+.answer p{margin:.5em 0;}
+.status{display:inline-flex; gap:8px; align-items:center; font-family:"IBM Plex Mono",monospace; font-size:.78rem;
+  background:var(--tcu-soft); color:var(--tcu); border-radius:5px; padding:4px 12px; font-weight:600; margin:10px 0 0;}
+.find{border:1px solid var(--line); border-radius:6px; margin:1.1em 0; overflow:hidden;}
+.find .head{display:flex; align-items:baseline; gap:12px; padding:11px 18px; background:var(--panel);}
+.find .head .tag{font-family:"IBM Plex Mono",monospace; font-weight:600; color:var(--accent); white-space:nowrap;}
+.find .head .cost{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:.8rem; color:var(--muted); white-space:nowrap;}
+.find .body{padding:6px 18px 14px;}
+.find.neg .head .tag{color:var(--crit);}
+figure{margin:1.4em 0;}
+figcaption{font-size:.82rem; color:var(--muted); margin-top:8px; max-width:76ch;}
+svg text{font-family:"IBM Plex Sans",system-ui,sans-serif;}
+svg .mono-t{font-family:"IBM Plex Mono",monospace;}
+.footnote{font-size:.82rem; color:var(--muted); border-top:1px solid var(--line); margin-top:3em; padding-top:1em;}
+@media (max-width:640px){ h1{font-size:1.55rem;} }
+</style>
+
+<div class="wrap">
+<div class="kicker">Vortex &middot; tcu-op fork &middot; rtlsim investigation &amp; proposal &middot; 2026-09-16</div>
+<h1>Fixing the rtlsim bottleneck: the grouped scatter drain</h1>
+<p class="sub">Why the RTL runs <span class="mono">sgemm_tcu_wg_dxa</span> 1.56&times; slower than the simx model
+and 7% behind the WMMA baseline, the investigation that found and disproved candidate causes, and the fix &mdash;
+prototyped, measured, and validated. Third installment after the
+<a href="https://claude.ai/artifact/4kjLA5kKNzxapW7yRwRVqc">DXA critical-path report</a> and the
+<a href="https://claude.ai/artifact/YFr7qvbcPBhfZehy4Ew5sx">register-resident double-buffering proposal</a>.</p>
+<div class="status">P1 PROTOTYPED &amp; MEASURED &middot; 116,949 &rarr; 74,947 cycles &middot; all validation PASSED</div>
+
+<div class="answer">
+<p><b>Summary.</b> The RTL's DXA engine drains BlockMajor B tiles <b>one element per LMEM beat</b> &mdash;
+512 beats and 512 cycles per 1&nbsp;KB tile where 16 would saturate the 64-byte port. That single
+microarchitectural shortcut is the rtlsim bottleneck: it quadruples the engine's port time versus the simx
+model (69,632 vs 20,480 beats per run) and puts the drain on the critical path for most of the kernel.
+The fix is a <b>grouped drain</b>: the tcN elements bound for one destination word are contiguous in the
+source line, so a bounded spread network emits them as one masked write per cycle. Prototyped in
+<span class="mono">VX_dxa_smem_wr.sv</span> (~60 lines, with a guarded fallback), it takes the kernel from
+<b>116,949 to 74,947 cycles</b> at IW=4/128&sup3; &mdash; wg_dxa goes from 7% <em>behind</em> the WMMA baseline
+to <b>1.49&times; ahead</b>, and rtlsim now lands within 3% of the architectural model. Two further fixes
+(bbuf prefetch, TCU-first DMA arbitration) address the next wall, and two candidate causes were tested and
+<em>rejected</em> along the way &mdash; including one that looked damning but was a broken perf counter.</p>
+</div>
+
+<h2><span class="sec">1</span>The question, precisely</h2>
+<p>At NT=16, NW=16, IW=4, fp16&rarr;fp32, 128&sup3; (all numbers this config unless stated):</p>
+<div class="tblwrap"><table>
+<tr><th>measurement</th><th class="n">simx</th><th class="n">rtlsim</th><th class="n">rtl/simx</th></tr>
+<tr><td><span class="mono">sgemm_tcu_wg</span> (WGMMA, SW loads, no DXA)</td><td class="n">335,957</td><td class="n">331,466</td><td class="n">0.99</td></tr>
+<tr><td><span class="mono">sgemm_tcu</span> (WMMA baseline)</td><td class="n">99,038</td><td class="n">111,373</td><td class="n">1.12</td></tr>
+<tr class="hl"><td><span class="mono">sgemm_tcu_wg_dxa</span> (single-buffer)</td><td class="n">77,176</td><td class="n">116,949</td><td class="n">1.52</td></tr>
+</table></div>
+<p>The first row is the tell: with DXA removed, RTL and model agree to 1.4% &mdash; the TCU/WGMMA machinery is
+faithfully modeled, so the entire divergence lives in the DXA path and its interactions. That scoped the
+whole investigation to the engine, its LMEM port, and the operand-fetch path that shares it.</p>
+
+<h2><span class="sec">2</span>Findings</h2>
+
+<div class="find"><div class="head"><span class="tag">F1</span><b>Element-wise BlockMajor drain &mdash; the bottleneck</b><span class="cost">512 vs 16 beats/tile &middot; confirmed by trace</span></div>
+<div class="body"><p>A <span class="mono">DBG_TRACE_DXA</span> cycle trace of a minimal run shows each 1&nbsp;KB B tile draining in
+<b>512 single-element beats</b> (<span class="mono">smem-wr-fire count=511</span>): the scatter path advances one
+element per cycle (<span class="mono">km_rd_off_r += elem_bytes</span>), each beat carrying 2 useful bytes through a
+64-byte port. Per run that is 69,632 beats (A rows drain 32B/beat and are fine; B is 92% of the beats).
+The simx model gathers same-word elements into 8 beats per line &mdash; this one difference is almost exactly
+the 4&times; engine-throughput gap, and since the earlier report showed the DXA engine owns &gt;90% of the
+critical path, it is almost exactly the end-to-end gap.</p></div></div>
+
+<div class="find"><div class="head"><span class="tag">F2</span><b>WGMMA operand fetches serialize behind the drain &mdash; but are hidden today</b><span class="cost">tbuf_stalls 37,375 vs 7,570 (model)</span></div>
+<div class="body"><p>RTL routes TCU tile-buffer reads and DXA writes into one <span class="mono">lmem_dma</span> port through a
+priority arbiter with <b>DXA at index 0</b> (the model gives each its own port), and the bbuf demand-fetches
+bank-rows with a <b>single outstanding request</b> &mdash; ~5k fetches &times; ~8-cycle serial round-trips &asymp; the
+37k stall count. Both effects are real and measured &mdash; and both are currently hidden under F1 (see the
+rejected experiment below).</p></div></div>
+
+<div class="find neg"><div class="head"><span class="tag">REJECTED</span><b>"Fix the arbiter priority" &mdash; tested, no effect today</b><span class="cost">118,107 vs 116,949 (noise)</span></div>
+<div class="body"><p>Swapping the DMA arbiter to TCU-first (honoring the bank-level "TCU &gt; DXA &gt; LSU" intent already in
+<span class="mono">VX_local_mem</span>) cut tbuf_stalls 2.4&times; (37,375 &rarr; 15,447) yet moved total cycles by &minus;1%
+noise: the relieved stalls were not on the critical path &mdash; warps just waited at the barrier instead. The
+edit was reverted. It becomes worth landing <em>with</em> P1/P2, when TCU fetch latency is exposed; alone it
+is a no-op, and this experiment is why it is ranked third, not first.</p></div></div>
+
+<div class="find neg"><div class="head"><span class="tag">REJECTED</span><b>"43&times; GMEM read amplification" &mdash; a broken perf counter, not real traffic</b><span class="cost">counter 160 vs 96 traced</span></div>
+<div class="body"><p>The DXA perf counters report absurd read counts (166,672 line reads at 128&sup3; where the trace fires
+6,144-class numbers, and 160 vs 96 actual on a minimal run — while the DRAM controller sees ~8k) and an
+<span class="mono">avg_gmem_lat</span> in the thousands. The request path itself is clean &mdash; one fire per line,
+slots released on <span class="mono">drain_complete</span>, no refetches. The
+<span class="mono">perf_gmem_reqs</span>/<span class="mono">gmem_span</span> accumulation in
+<span class="mono">VX_dxa_gmem_req.sv</span>/<span class="mono">VX_dxa_worker.sv</span> is what's wrong. Two hours of
+this investigation went to disproving the phantom amplification these counters implied &mdash; fixing them is
+P4, purely so the next investigation doesn't pay that tax.</p></div></div>
+
+<div class="find"><div class="head"><span class="tag">F3</span><b>Long response-bus holds during element-wise drains</b><span class="cost">secondary</span></div>
+<div class="body"><p>The gmem response for a line is held on the socket's shared response bus while the line drains
+(<span class="mono">rsp_ready</span> gated on the write side); at 512 beats/tile those holds are long and the socket
+response channel is shared with the dcache. The grouped drain shortens holds 4&times; as a side effect;
+explicit response buffering is kept as an optional P5.</p></div></div>
+
+<h2><span class="sec">3</span>P1 — the grouped scatter drain (implemented)</h2>
+<p>The observation that makes the fix cheap: in the BlockMajor layout, the tcN consecutive elements of one
+n-block are <em>contiguous in the source line</em> (consecutive n) and land in the <em>same destination
+word</em> at a fixed power-of-two stride. So a drain beat can take <span class="mono">tcN &times; elem_bytes</span>
+contiguous source bytes and spread them through a bounded shift network into one masked 64-byte write:</p>
+<pre><code>// per beat, BlockMajor grouped mode:
+//   source:  fb_data[km_rd_off +: tcN*elem_bytes]      (contiguous)
+//   dest:    lane j at  km_in_word_off + (j &lt;&lt; step_sh) (fixed stride, same word)
+//   advance: km_rd_off += tcN*elem_bytes;  dest_addr += one block (1 &lt;&lt; calc_sh2)
+</code></pre>
+<p>Properties that keep it safe and small (~60 lines in <span class="mono">VX_dxa_smem_wr.sv</span>):</p>
+<ul>
+<li><b>Alignment is structural:</b> a line's element 0 is always n-block-aligned (rows and line boundaries
+are both tcN-aligned), so groups never straddle words; a partial tail group is masked by the remaining fill
+level through the existing <span class="mono">fb_level</span> accounting.</li>
+<li><b>Guarded fallback:</b> configs whose group span exceeds the SMEM word (e.g. FEDP2K, whose
+<span class="mono">LG_FEDP_RATIO</span> doubles the stride) take the original element-wise path unchanged —
+correctness never depends on the new mode. Extending grouping to FEDP2K (two words per group) is a
+follow-on.</li>
+<li><b>Multicast unchanged:</b> the replay machinery operates per emitted word and simply replays 4&times;
+fewer words — validated on <span class="mono">sgemm_tcu_wg_dxa_mcast</span>.</li>
+<li><b>Model parity:</b> the grouped profile (8 beats per B line) is exactly what simx already models, so
+the fix <em>closes</em> a model/RTL divergence rather than opening one.</li>
+</ul>
+
+<h3>Measured results</h3>
+<figure><div id="ch-headline" class="chart"></div>
+<figcaption>rtlsim end-to-end cycles, IW=4, m=n=k=128. The grouped drain moves wg_dxa from behind the
+WMMA baseline to 1.49&times; ahead of it, and to within 3% of the simx model.</figcaption></figure>
+
+<div class="tblwrap"><table>
+<tr><th>validation (rtlsim)</th><th class="n">cycles</th><th class="n">dxa lmem beats</th><th>result</th></tr>
+<tr><td>32&sup3; smoke (1 CTA)</td><td class="n">3,489 (was 4,255)</td><td class="n">320 (was 1,088)</td><td>PASSED, beats exactly at target</td></tr>
+<tr class="hl"><td>128&sup3; IW=4 single-buffer</td><td class="n">74,947 (was 116,949)</td><td class="n">20,480 (was 69,632)</td><td>PASSED, &minus;36% cycles</td></tr>
+<tr><td>128&sup3; + DXA_DOUBLE_BUFFER v3</td><td class="n">75,052</td><td class="n">&mdash;</td><td>PASSED &mdash; at the post-P1 tbuf wall; overlap gains now await P2</td></tr>
+<tr><td>128&sup3; FEDP2K (fallback path)</td><td class="n">116,617</td><td class="n">69,632 (element-wise)</td><td>PASSED &mdash; guarded fallback exercised, correctness independent of grouping</td></tr>
+<tr><td>128&sup3; multicast app</td><td class="n">102,312</td><td class="n">20,480</td><td>PASSED, replay over grouped words</td></tr>
+</table></div>
+
+<h2><span class="sec">4</span>P2&ndash;P5 — the rest of the ranked plan</h2>
+<ol>
+<li value="2"><b>bbuf plan-ahead prefetch (next wall).</b> After P1, tbuf stalls are what remains between
+74,947 and the ~65k the fast-DXA simx probes bound (both schedules flatten near 60k when the drain is
+free). Replace the single-outstanding demand fetch in <span class="mono">VX_tcu_bbuf</span> with a per-WGMMA
+tile plan streamed at N&ge;4 outstanding line fetches into full-tile residency (1&nbsp;KB per core at this
+geometry — the simx tbuf's exact behavior). This also amortizes the barrier-forced refetch (cache hits are
+already 10,744/5,393-read ratio with slots; full-tile residency makes the refetch one burst, not per-uop
+round-trips).</li>
+<li><b>TCU-first DMA arbitration.</b> The rejected-today experiment: land the 1-line index swap together
+with P2, where its measured 2.4&times; tbuf-stall reduction converts into cycles instead of barrier wait.
+Zero hardware cost.</li>
+<li><b>Fix the DXA perf counters.</b> <span class="mono">perf_gmem_reqs</span> and the latency/span counter
+in the gmem_req/worker accumulate path report impossible values (F-rejected above). They cost this
+investigation real time and will cost the next one more.</li>
+<li><b>(Optional) DXA response staging.</b> A 2-line response skid decouples the socket response bus from
+drain progress entirely; mostly subsumed by P1's 4&times; shorter holds.</li>
+</ol>
+
+<h2><span class="sec">5</span>Where this lands the fork</h2>
+<figure><div id="ch-journey" class="chart"></div>
+<figcaption>The whole arc at rtlsim IW=4, 128&sup3;. Each step is a measured configuration; the last bar is
+the bound implied by the fast-DXA simx probes once P2/P3 land.</figcaption></figure>
+<p>With P1 alone, WGMMA+DXA is decisively the fastest sgemm on the RTL &mdash; the original "on paper it should
+be faster" claim now holds in hardware simulation, not just in the model. The remaining ~15k to the
+compute-plus-tbuf bound is P2/P3 territory; beyond that, the roofline arguments from the first report
+(multicast reuse, CTA/ISSUE_WIDTH decoupling) still stand for the order-of-magnitude horizon.</p>
+
+<h2><span class="sec">6</span>Risks and review notes</h2>
+<ul>
+<li><b>Timing:</b> the spread network is tcN bounded shifts plus an OR reduce inside the existing drain
+stage — comparable depth to the barrel shifter already there. If it pressures the clock, it pipelines
+cleanly one stage (the drain is throughput-bound, not latency-bound).</li>
+<li><b>Coverage:</b> validated on dense BlockMajor (grouped), FEDP2K (fallback), multicast (grouped), and
+the 32&sup3;/128&sup3; sizes; K-major, Flat, and row-major paths are untouched by construction. Recommended
+before landing: the full <span class="mono">dxa.yaml</span> + <span class="mono">tensor*.yaml</span> catalog and a
+<span class="mono">model_parity</span> pass (expected to <em>improve</em> — RTL now matches the model's drain).</li>
+<li><b>Perf-gate baselines:</b> cycle counts drop ~36% on DXA workloads — the affected gates will trip as
+intended-improvement and need the human-run baseline regeneration after landing.</li>
+<li><b>Counter semantics (P4)</b> should land with or before P1 so the gate baselines are regenerated
+against honest counters.</li>
+</ul>
+
+<div class="footnote">
+<p><b>Method.</b> rtlsim MPM counter matrix (classes 1/7/11/16) at IW&isin;{1,4};
+<span class="mono">DBG_TRACE_DXA</span> cycle traces (32&sup3;) for exact per-transfer fire/beat counts; two
+controlled experiments (arbiter swap — rejected; grouped-drain prototype — adopted); cross-checks against
+the simx interval analysis from the earlier reports. All artifacts in
+<span class="mono">~/dev/vortex_spg/eval_tcu_vs_wg/gap_analysis/</span> (rtl_*.log, wc_*.log, wcx_*.log,
+rtl_dxa_trace_32.log). Prototype: <span class="mono">hw/rtl/dxa/VX_dxa_smem_wr.sv</span>, committed on
+<span class="mono">tcu-op</span> (local only, nothing pushed); recommended before pushing: the full CI catalog,
+a model_parity pass, and the human-run perf-gate baseline regeneration.</p>
+</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function svgEl(w,h){const s=document.createElementNS("http://www.w3.org/2000/svg","svg");
+  s.setAttribute("viewBox",`0 0 ${w} ${h}`); s.setAttribute("width","100%"); s.style.display="block"; return s;}
+function add(p,t,a,txt){const e=document.createElementNS("http://www.w3.org/2000/svg",t);
+  for(const k in a)e.setAttribute(k,a[k]); if(txt!=null)e.textContent=txt; p.appendChild(e); return e;}
+const fmt=n=>n.toLocaleString("en-US");
+
+function draw(){
+  const C={dxa:css("--dxa"),tcu:css("--tcu"),idle:css("--idle"),ink:css("--ink"),
+           muted:css("--muted"),line:css("--line"),crit:css("--crit"),ok:css("--ok")};
+
+  (function(){
+    const host=document.getElementById("ch-headline"); if(!host) return; host.innerHTML="";
+    const rows=[
+      {k:"sgemm_tcu (WMMA baseline)", v:111373, col:C.idle},
+      {k:"wg_dxa · stock drain", v:116949, col:C.crit},
+      {k:"wg_dxa · stock + arb swap (rejected)", v:118107, col:C.idle},
+      {k:"wg_dxa · grouped drain (P1)", v:74947, col:C.tcu},
+      {k:"simx model reference", v:77176, col:C.dxa},
+    ];
+    const W=900,L=300,R=90,bh=21,gap=11,maxV=130000;
+    const H=14+rows.length*(bh+gap)+8;
+    const s=svgEl(W,H); host.appendChild(s);
+    const x=v=>L+(W-L-R)*v/maxV;
+    let yy=8;
+    rows.forEach(r=>{
+      add(s,"text",{x:L-8,y:yy+bh-6,fill:C.ink,"font-size":12,"text-anchor":"end"},r.k);
+      add(s,"rect",{x:L,y:yy,width:Math.max(2,x(r.v)-L),height:bh,fill:r.col,opacity:.85,rx:2});
+      add(s,"text",{x:x(r.v)+6,y:yy+bh-6,fill:C.muted,"font-size":11,"class":"mono-t"},fmt(r.v));
+      yy+=bh+gap;
+    });
+  })();
+
+  (function(){
+    const host=document.getElementById("ch-journey"); if(!host) return; host.innerHTML="";
+    const rows=[
+      {k:"where this started · rtl wg_dxa (sweep)", v:120723, col:C.crit},
+      {k:"+ double-buffer v3 (kernel, landed)", v:119580, col:C.dxa},
+      {k:"+ grouped drain P1 (this proposal)", v:74947, col:C.tcu},
+      {k:"+ dbuf v3 on grouped drain", v:75052, col:C.tcu},
+      {k:"P2/P3 bound (fast-DXA simx probes)", v:61000, col:C.idle, dash:true},
+    ];
+    const W=900,L=330,R=90,bh=21,gap=11,maxV=130000;
+    const H=14+rows.length*(bh+gap)+8;
+    const s=svgEl(W,H); host.appendChild(s);
+    const x=v=>L+(W-L-R)*v/maxV;
+    let yy=8;
+    rows.forEach(r=>{
+      add(s,"text",{x:L-8,y:yy+bh-6,fill:C.ink,"font-size":12,"text-anchor":"end"},r.k);
+      if(r.dash){
+        add(s,"rect",{x:L,y:yy,width:Math.max(2,x(r.v)-L),height:bh,fill:"none",stroke:r.col,
+          "stroke-width":1.5,"stroke-dasharray":"5 4",rx:2});
+        add(s,"text",{x:x(r.v)+6,y:yy+bh-6,fill:C.muted,"font-size":11,"class":"mono-t"},"~"+fmt(r.v));
+      } else {
+        add(s,"rect",{x:L,y:yy,width:Math.max(2,x(r.v)-L),height:bh,fill:r.col,opacity:.85,rx:2});
+        add(s,"text",{x:x(r.v)+6,y:yy+bh-6,fill:C.muted,"font-size":11,"class":"mono-t"},fmt(r.v));
+      }
+      yy+=bh+gap;
+    });
+    const bx=x(111373);
+    add(s,"line",{x1:bx,y1:4,x2:bx,y2:yy-4,stroke:C.idle,"stroke-width":1.4,"stroke-dasharray":"5 4"});
+    add(s,"text",{x:bx,y:yy+8,fill:C.muted,"font-size":10.5,"text-anchor":"middle","class":"mono-t"},"WMMA baseline 111,373");
+  })();
+}
+draw();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",draw);
+new MutationObserver(()=>draw()).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+})();
+</script>

@@ -1,0 +1,9 @@
+wg_dxa+2k nt8 rtlsim: PASSED!
+wg_dxa+2k nt16 rtlsim: FAIL
+wg_dxa+2k nt32 rtlsim: PASSED!
+wg+2k nt8 rtlsim: PASSED!
+wg+2k nt16 rtlsim: FAIL
+wg+2k nt32 rtlsim: PASSED!
+wg_dxa-no2k nt16 rtlsim (regression): PASSED!
+wg_sp_dxa-flat nt8 simx (regression): PASSED!
+VALIDATION-COMPLETE

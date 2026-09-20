@@ -1,0 +1,204 @@
+<script>
+(function(){
+"use strict";
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function svgEl(w, h){
+  const s = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  s.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  s.setAttribute("width","100%");
+  s.style.display = "block";
+  return s;
+}
+function add(parent, tag, attrs, text){
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  parent.appendChild(e);
+  return e;
+}
+const fmt = n => n.toLocaleString("en-US");
+
+function draw(){
+  const C = { dxa: css("--dxa"), tcu: css("--tcu"), idle: css("--idle"), ink: css("--ink"),
+              muted: css("--muted"), line: css("--line"), crit: css("--crit"), panel: css("--panel") };
+
+  // ---------- 1. landscape: grouped horizontal bars ----------
+  (function(){
+    const host = document.getElementById("ch-landscape"); host.innerHTML = "";
+    const rows = [
+      {k:"sgemm_tcu",        vals:[["simx IW=1",119272],["simx IW=4",99038],["rtl IW=1",129514],["rtl IW=4",111373]]},
+      {k:"sgemm_tcu_wg_dxa", vals:[["simx IW=1",142480],["simx IW=4",77173],["rtl IW=1",342897],["rtl IW=4",120723]]},
+      {k:"sgemm_tcu_wg",     vals:[["simx IW=1",797238],["simx IW=4",335957],["rtl IW=1",1231242],["rtl IW=4",331466]]},
+    ];
+    const maxV = 1231242, W = 900, L = 170, R = 70, bh = 15, gap = 4, grp = 14;
+    const H = 30 + rows.length*(4*(bh+gap)+grp) + 24;
+    const s = svgEl(W, H); host.appendChild(s);
+    const x = v => L + (W-L-R) * v/maxV;
+    // axis gridlines
+    [0, 250000, 500000, 750000, 1000000].forEach(v=>{
+      add(s,"line",{x1:x(v),y1:20,x2:x(v),y2:H-22,stroke:C.line,"stroke-width":1});
+      add(s,"text",{x:x(v),y:H-8,fill:C.muted,"font-size":11,"text-anchor":"middle","class":"mono-t"}, v===0?"0":(v/1000)+"k");
+    });
+    // roofline
+    add(s,"line",{x1:x(4096),y1:20,x2:x(4096),y2:H-22,stroke:C.tcu,"stroke-width":1.5,"stroke-dasharray":"4 3"});
+    add(s,"text",{x:x(4096)+4,y:30,fill:C.tcu,"font-size":10.5,"class":"mono-t"},"roofline 4,096");
+    let y = 36;
+    const shade = ["", "", "", ""];
+    rows.forEach(r=>{
+      add(s,"text",{x:L-8,y:y+2*(bh+gap)+2,fill:C.ink,"font-size":12,"text-anchor":"end","class":"mono-t","font-weight":600}, r.k);
+      r.vals.forEach((v,i)=>{
+        const isRtl = i>=2, isDxaApp = r.k.includes("dxa");
+        const col = isDxaApp ? C.dxa : C.idle;
+        add(s,"rect",{x:L,y:y,width:Math.max(1.5,x(v[1])-L),height:bh,fill:col,opacity:isRtl?0.55:1,rx:2});
+        add(s,"text",{x:x(v[1])+5,y:y+bh-3.5,fill:C.muted,"font-size":10.5,"class":"mono-t"}, v[0]+" · "+fmt(v[1]));
+        y += bh+gap;
+      });
+      y += grp;
+    });
+  })();
+
+  // ---------- 2. timeline: wg_dxa iw4 ----------
+  (function(){
+    const host = document.getElementById("ch-timeline"); host.innerHTML = "";
+    const TL = window.__TL.wg_dxa_iw4;
+    const W = 900, H = 190, L = 46, R = 12, T = 16, B = 34;
+    const s = svgEl(W, H); host.appendChild(s);
+    const n = TL.tl.length, total = TL.total;
+    const x = c => L + (W-L-R)*c/total;
+    const y = f => T + (H-T-B)*(1-f);
+    // gridlines
+    [0,0.5,1].forEach(f=>{
+      add(s,"line",{x1:L,y1:y(f),x2:W-R,y2:y(f),stroke:C.line,"stroke-width":1});
+      add(s,"text",{x:L-6,y:y(f)+4,fill:C.muted,"font-size":10.5,"text-anchor":"end","class":"mono-t"},(f*100)+"%");
+    });
+    [0,20000,40000,60000].forEach(c=>{
+      add(s,"text",{x:x(c),y:H-10,fill:C.muted,"font-size":10.5,"text-anchor":c===0?"start":"middle","class":"mono-t"}, c===0?"cycle 0":(c/1000)+"k");
+    });
+    // dxa area
+    let dPath = `M ${x(TL.tl[0][0])} ${y(0)}`;
+    TL.tl.forEach(r=>{ dPath += ` L ${x(r[0]).toFixed(1)} ${y(r[1]).toFixed(1)}`; });
+    dPath += ` L ${x(total)} ${y(0)} Z`;
+    add(s,"path",{d:dPath,fill:C.dxa,opacity:0.55,stroke:"none"});
+    // tcu area (on top)
+    let tPath = `M ${x(TL.tl[0][0])} ${y(0)}`;
+    TL.tl.forEach(r=>{ tPath += ` L ${x(r[0]).toFixed(1)} ${y(r[2]).toFixed(1)}`; });
+    tPath += ` L ${x(total)} ${y(0)} Z`;
+    add(s,"path",{d:tPath,fill:C.tcu,opacity:0.9,stroke:"none"});
+    // legend
+    const lg = document.createElement("div"); lg.className = "legend";
+    lg.innerHTML = `<span><span class="sw" style="background:${C.dxa};opacity:.6"></span>DXA engine busy (fraction of bin)</span>
+                    <span><span class="sw" style="background:${C.tcu}"></span>TCU executing uops</span>`;
+    host.appendChild(lg);
+  })();
+
+  // ---------- 3. cycle classes: 100% stacked bars ----------
+  (function(){
+    const host = document.getElementById("ch-classes"); host.innerHTML = "";
+    const T = window.__TL;
+    const rows = [
+      {name:"wg_dxa IW=4",  d:T.wg_dxa_iw4},
+      {name:"wg_dxa IW=1",  d:T.wg_dxa_iw1},
+      {name:"sgemm_tcu IW=4 (baseline)", d:T.sgemm_tcu_iw4},
+    ];
+    const W = 900, L = 230, R = 14, bh = 26, gap = 18;
+    const H = 20 + rows.length*(bh+gap) + 26;
+    const s = svgEl(W, H); host.appendChild(s);
+    let yy = 18;
+    rows.forEach(r=>{
+      const tot = r.d.total;
+      const segs = [
+        ["both", r.d.both, C.tcu, 1],
+        ["DXA only", r.d.dxa_only, C.dxa, 0.75],
+        ["TCU only", r.d.tcu_only, C.tcu, 0.45],
+        ["neither (idle/scalar)", r.d.neither, C.idle, 0.5],
+      ];
+      add(s,"text",{x:L-8,y:yy+bh/2+4,fill:C.ink,"font-size":12,"text-anchor":"end","class":"mono-t"}, r.name);
+      let xx = L;
+      segs.forEach(sg=>{
+        const w = (W-L-R)*sg[1]/tot;
+        if (w < 0.5){ xx += w; return; }
+        add(s,"rect",{x:xx,y:yy,width:w,height:bh,fill:sg[2],opacity:sg[3]});
+        const pct = 100*sg[1]/tot;
+        if (pct >= 6)
+          add(s,"text",{x:xx+w/2,y:yy+bh/2+4,fill:"#fff","font-size":10.5,"text-anchor":"middle","class":"mono-t","font-weight":600}, pct.toFixed(1)+"%");
+        xx += w;
+      });
+      yy += bh+gap;
+    });
+    const lg = document.createElement("div"); lg.className = "legend";
+    lg.innerHTML = `<span><span class="sw" style="background:${C.tcu}"></span>DXA + TCU overlapped</span>
+      <span><span class="sw" style="background:${C.dxa};opacity:.75"></span>DXA only</span>
+      <span><span class="sw" style="background:${C.tcu};opacity:.45"></span>TCU only</span>
+      <span><span class="sw" style="background:${C.idle};opacity:.5"></span>neither</span>`;
+    host.appendChild(lg);
+  })();
+
+  // ---------- 4. waterfall ----------
+  (function(){
+    const host = document.getElementById("ch-waterfall"); host.innerHTML = "";
+    const W = 900, H = 210, L = 10, R = 16, T = 14, B = 30;
+    const s = svgEl(W, H); host.appendChild(s);
+    const maxV = 130000;
+    const steps = [
+      {label:"TCU roofline (16,384 uops / 4 blocks)", from:0, to:4096, col:C.tcu, solid:true},
+      {label:"+ DXA staging, serialized (92% busy, 6.7% overlapped)", from:4096, to:70425, col:C.dxa, solid:true},
+      {label:"+ launch, epilogue, tbuf stalls", from:70425, to:77173, col:C.idle, solid:true},
+      {label:"simx total = 77,173", from:0, to:77173, col:C.ink, mark:true},
+      {label:"+ RTL microarchitecture (×1.56)", from:77173, to:120723, col:C.crit, solid:true},
+      {label:"rtlsim total = 120,723  (baseline WMMA: 111,373)", from:0, to:120723, col:C.ink, mark:true},
+    ];
+    const bh = 20, gap = 9;
+    const x = v => L + 320 + (W-L-R-320)*v/maxV;
+    let yy = T;
+    steps.forEach(st=>{
+      add(s,"text",{x:L,y:yy+bh-6,fill:C.muted,"font-size":11}, st.label);
+      if (st.mark){
+        add(s,"line",{x1:x(0),y1:yy+bh/2,x2:x(st.to),y2:yy+bh/2,stroke:st.col,"stroke-width":1.2,"stroke-dasharray":"3 3"});
+        add(s,"circle",{cx:x(st.to),cy:yy+bh/2,r:3.5,fill:st.col});
+        add(s,"text",{x:x(st.to)+7,y:yy+bh/2+4,fill:C.ink,"font-size":10.5,"class":"mono-t","font-weight":600}, fmt(st.to));
+      } else {
+        add(s,"rect",{x:x(st.from),y:yy,width:Math.max(1.5,x(st.to)-x(st.from)),height:bh,fill:st.col,opacity:0.8,rx:2});
+        add(s,"text",{x:x(st.to)+7,y:yy+bh-5,fill:C.muted,"font-size":10.5,"class":"mono-t"}, "+"+fmt(st.to-st.from));
+      }
+      yy += bh+gap;
+    });
+    // baseline marker
+    const bx = x(111373);
+    add(s,"line",{x1:bx,y1:T,x2:bx,y2:yy-4,stroke:C.idle,"stroke-width":1.4,"stroke-dasharray":"5 4"});
+    add(s,"text",{x:bx,y:yy+12,fill:C.muted,"font-size":10.5,"text-anchor":"middle","class":"mono-t"},"WMMA rtl 111,373");
+  })();
+
+  // ---------- 5. variants ----------
+  (function(){
+    const host = document.getElementById("ch-variants"); host.innerHTML = "";
+    const rows = [
+      {k:"wg_dxa single-buffer (as measured)", v:77173, col:C.dxa},
+      {k:"wg_dxa + SW-load A (DXA B only)", v:124312, col:C.idle},
+      {k:"wg_dxa + SW-load B (DXA A only)", v:172615, col:C.idle},
+      {k:"wg_dxa DXA_DOUBLE_BUFFER (spill trap, §5)", v:637819, col:C.crit},
+      {k:"— at K=512 —  wg_dxa", v:210794, col:C.dxa, grp:true},
+      {k:"— at K=512 —  sgemm_tcu baseline", v:364695, col:C.idle},
+    ];
+    const W = 900, L = 330, R = 80, bh = 17, gap = 7;
+    const H = 14 + rows.length*(bh+gap) + rows.filter(r=>r.grp).length*12 + 10;
+    const s = svgEl(W, H); host.appendChild(s);
+    const maxV = 650000;
+    const x = v => L + (W-L-R)*v/maxV;
+    let yy = 10;
+    rows.forEach(r=>{
+      if (r.grp) yy += 12;
+      add(s,"text",{x:L-8,y:yy+bh-4,fill:C.ink,"font-size":11.5,"text-anchor":"end"}, r.k);
+      add(s,"rect",{x:L,y:yy,width:Math.max(1.5,x(r.v)-L),height:bh,fill:r.col,opacity:0.85,rx:2});
+      add(s,"text",{x:x(r.v)+6,y:yy+bh-4,fill:C.muted,"font-size":10.5,"class":"mono-t"}, fmt(r.v));
+      yy += bh+gap;
+    });
+  })();
+}
+
+fetch("data:,").catch(()=>{});
+window.__TL = __TIMELINE_DATA__;
+draw();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+new MutationObserver(()=>draw()).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
+})();
+</script>

@@ -1,0 +1,25 @@
+[17:54:47] START sw_fedp2k_iw1_simx
+[17:55:40] DONE sw_fedp2k_iw1_simx rc=0 cycles=99906 PASSED
+[17:55:40] START sw_wmma_iw1_simx
+[17:56:27] DONE sw_wmma_iw1_simx rc=0 cycles=93134 PASSED
+[17:56:27] START sw_fedp2k_iw2_simx
+[17:57:20] DONE sw_fedp2k_iw2_simx rc=0 cycles=74365 PASSED
+[17:57:20] START sw_wmma_iw2_simx
+[17:58:07] DONE sw_wmma_iw2_simx rc=0 cycles=87642 PASSED
+[17:58:07] START sw_fedp2k_iw4_simx
+[17:58:17] DONE sw_fedp2k_iw4_simx rc=0 cycles=70145 PASSED
+[17:58:17] START sw_wmma_iw4_simx
+[17:58:27] DONE sw_wmma_iw4_simx rc=0 cycles=85913 PASSED
+[17:58:27] START sw_fedp2k_iw1_rtl
+[18:02:33] DONE sw_fedp2k_iw1_rtl rc=0 cycles=98370 PASSED
+[18:02:33] START sw_wmma_iw1_rtl
+[18:03:57] DONE sw_wmma_iw1_rtl rc=0 cycles=97797 PASSED
+[18:03:57] START sw_fedp2k_iw2_rtl
+[18:11:30] DONE sw_fedp2k_iw2_rtl rc=0 cycles=73427 PASSED
+[18:11:30] START sw_wmma_iw2_rtl
+[18:13:52] DONE sw_wmma_iw2_rtl rc=0 cycles=99990 PASSED
+[18:13:52] START sw_fedp2k_iw4_rtl
+[18:33:24] DONE sw_fedp2k_iw4_rtl rc=0 cycles=63501 PASSED
+[18:33:24] START sw_wmma_iw4_rtl
+[18:37:58] DONE sw_wmma_iw4_rtl rc=0 cycles=99927 PASSED
+IW-SWEEP-COMPLETE

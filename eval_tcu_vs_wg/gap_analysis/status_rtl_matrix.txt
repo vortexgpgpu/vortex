@@ -1,0 +1,13 @@
+[20:05:10] START rtl_sgemm_tcu_wg_dxa_iw4_perf1
+[20:09:08] DONE rtl_sgemm_tcu_wg_dxa_iw4_perf1 rc=0
+[20:09:08] START rtl_sgemm_tcu_wg_dxa_iw4_perf7
+[20:12:49] DONE rtl_sgemm_tcu_wg_dxa_iw4_perf7 rc=0
+[20:12:49] START rtl_sgemm_tcu_wg_dxa_iw4_perf11
+[20:16:37] DONE rtl_sgemm_tcu_wg_dxa_iw4_perf11 rc=0
+[20:16:37] START rtl_sgemm_tcu_wg_dxa_iw4_perf16
+[20:20:25] DONE rtl_sgemm_tcu_wg_dxa_iw4_perf16 rc=0
+[20:20:25] START rtl_sgemm_tcu_wg_dxa_iw1_perf1
+[20:22:50] DONE rtl_sgemm_tcu_wg_dxa_iw1_perf1 rc=0
+[20:22:50] START rtl_sgemm_tcu_wg_dxa_iw1_perf16
+[20:24:27] DONE rtl_sgemm_tcu_wg_dxa_iw1_perf16 rc=0
+RTL-MATRIX-COMPLETE

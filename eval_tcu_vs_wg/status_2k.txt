@@ -1,0 +1,13 @@
+[15:33:12] START sgemm_tcu_wg_dxa_2k_nt8_iw1
+[15:34:28] DONE sgemm_tcu_wg_dxa_2k_nt8_iw1 rc=0 wall=75s
+[15:34:28] START sgemm_tcu_wg_dxa_2k_nt8_iw2
+[15:36:03] DONE sgemm_tcu_wg_dxa_2k_nt8_iw2 rc=0 wall=94s
+[15:36:03] START sgemm_tcu_wg_dxa_2k_nt8_iw4
+[15:38:15] DONE sgemm_tcu_wg_dxa_2k_nt8_iw4 rc=0 wall=131s
+[15:38:15] START sgemm_tcu_wg_dxa_2k_nt16_iw1
+[15:41:03] DONE sgemm_tcu_wg_dxa_2k_nt16_iw1 rc=0 wall=166s
+[15:41:03] START sgemm_tcu_wg_dxa_2k_nt16_iw2
+[15:47:25] DONE sgemm_tcu_wg_dxa_2k_nt16_iw2 rc=0 wall=381s
+[15:47:25] START sgemm_tcu_wg_dxa_2k_nt16_iw4
+[15:54:26] DONE sgemm_tcu_wg_dxa_2k_nt16_iw4 rc=0 wall=420s
+SWEEP-COMPLETE

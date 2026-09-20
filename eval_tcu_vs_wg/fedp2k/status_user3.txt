@@ -1,0 +1,7 @@
+[11:02:54] START u3_wmma_dsec
+[11:03:41] DONE u3_wmma_dsec rc=0
+[11:03:41] START u3_dxa2k_bundle_dsec
+[11:04:07] DONE u3_dxa2k_bundle_dsec rc=0
+[11:04:07] START u3_mcast2k_bundle_dsec
+[11:04:17] DONE u3_mcast2k_bundle_dsec rc=0
+USER3-COMPLETE

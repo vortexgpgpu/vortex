@@ -1,0 +1,38 @@
+[20:50:58] START s256_rs_iw1_simx
+[20:51:06] DONE s256_rs_iw1_simx mode=RS cycles=636642 PASSED
+[20:51:06] START s256_rs_iw2_simx
+[20:51:13] DONE s256_rs_iw2_simx mode=RS cycles=461317 PASSED
+[20:51:13] START s256_rs_iw4_simx
+[20:51:20] DONE s256_rs_iw4_simx mode=RS cycles=393436 PASSED
+[20:51:20] START s256_ss_iw1_simx
+[20:51:30] DONE s256_ss_iw1_simx mode=SS cycles=634861 PASSED
+[20:51:30] START s256_ss_iw2_simx
+[20:51:39] DONE s256_ss_iw2_simx mode=SS cycles=465491 PASSED
+[20:51:39] START s256_ss_iw4_simx
+[20:51:46] DONE s256_ss_iw4_simx mode=SS cycles=403013 PASSED
+[20:51:46] START s256_wmma_iw1_simx
+[20:51:53] DONE s256_wmma_iw1_simx mode=n/a cycles=579646 PASSED
+[20:51:53] START s256_wmma_iw2_simx
+[20:52:01] DONE s256_wmma_iw2_simx mode=n/a cycles=541665 PASSED
+[20:52:01] START s256_wmma_iw4_simx
+[20:52:08] DONE s256_wmma_iw4_simx mode=n/a cycles=508534 PASSED
+SIMX-DONE
+[20:52:08] START s256_rs_iw1_rtl
+[20:58:49] DONE s256_rs_iw1_rtl mode=RS cycles=639432 PASSED
+[20:58:49] START s256_rs_iw2_rtl
+[21:11:30] DONE s256_rs_iw2_rtl mode=RS cycles=458356 PASSED
+[21:11:30] START s256_rs_iw4_rtl
+[22:03:50] DONE s256_rs_iw4_rtl mode=RS cycles=384659 PASSED
+[22:03:50] START s256_ss_iw1_rtl
+[22:10:43] DONE s256_ss_iw1_rtl mode=SS cycles=641871 PASSED
+[22:10:43] START s256_ss_iw2_rtl
+[22:22:45] DONE s256_ss_iw2_rtl mode=SS cycles=470392 PASSED
+[22:22:45] START s256_ss_iw4_rtl
+[23:13:39] DONE s256_ss_iw4_rtl mode=SS cycles=379292 PASSED
+[23:13:39] START s256_wmma_iw1_rtl
+[23:16:30] DONE s256_wmma_iw1_rtl mode=n/a cycles=654252 PASSED
+[23:16:30] START s256_wmma_iw2_rtl
+[23:21:55] DONE s256_wmma_iw2_rtl mode=n/a cycles=659903 PASSED
+[23:21:55] START s256_wmma_iw4_rtl
+[23:34:20] DONE s256_wmma_iw4_rtl mode=n/a cycles=656628 PASSED
+SWEEP256-COMPLETE

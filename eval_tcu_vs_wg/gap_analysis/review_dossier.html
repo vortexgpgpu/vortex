@@ -1,0 +1,328 @@
+<title>TCU-OP Review Dossier</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#faf9f6; --panel:#f1efe9; --ink:#22242a; --muted:#5d6570;
+  --line:#d8d4c8; --dxa:#c05c10; --dxa-soft:#eeddcc; --tcu:#0f7b7a; --tcu-soft:#d3e7e4;
+  --idle:#a9aca8; --crit:#a83232; --ok:#3c7a3c; --code-bg:#edeae2; --accent:#22242a;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#17181a; --panel:#1f2124; --ink:#e6e4de; --muted:#9aa0a8;
+    --line:#3a3d42; --dxa:#e0894a; --dxa-soft:#43301f; --tcu:#45b3ae; --tcu-soft:#1d3a38;
+    --idle:#5a5e63; --crit:#d47070; --ok:#7dbb7d; --code-bg:#232528; --accent:#e6e4de;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#17181a; --panel:#1f2124; --ink:#e6e4de; --muted:#9aa0a8;
+  --line:#3a3d42; --dxa:#e0894a; --dxa-soft:#43301f; --tcu:#45b3ae; --tcu-soft:#1d3a38;
+  --idle:#5a5e63; --crit:#d47070; --ok:#7dbb7d; --code-bg:#232528; --accent:#e6e4de;
+}
+body{background:var(--bg); color:var(--ink); font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:15.5px; line-height:1.62; padding:0 16px;}
+.wrap{max-width:920px; margin:0 auto; padding-block:40px 90px;}
+h1,h2,h3,h4{line-height:1.22; text-wrap:balance; font-weight:600;}
+h1{font-size:2rem; margin:.2em 0 .1em;}
+h2{font-size:1.35rem; margin:2.4em 0 .5em; padding-top:1.1em; border-top:2px solid var(--ink);}
+h3{font-size:1.05rem; margin:1.8em 0 .4em;}
+h4{font-size:.9rem; margin:1.1em 0 .2em; font-family:"IBM Plex Mono",monospace; text-transform:uppercase;
+   letter-spacing:.06em; color:var(--muted); font-weight:600;}
+p,li{max-width:80ch;}
+p{margin:.65em 0;}
+.kicker{font-family:"IBM Plex Mono",monospace; font-size:.78rem; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);}
+.sub{color:var(--muted); max-width:80ch; font-size:.95rem;}
+code, .mono{font-family:"IBM Plex Mono",monospace; font-size:.86em;}
+code{background:var(--code-bg); padding:.1em .35em; border-radius:3px;}
+a{color:var(--tcu);}
+table{border-collapse:collapse; width:100%; font-size:.87rem; font-variant-numeric:tabular-nums;}
+.tblwrap{overflow-x:auto; margin:1em 0;}
+th{font-family:"IBM Plex Mono",monospace; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase;
+   color:var(--muted); text-align:left; font-weight:600; padding:6px 12px 6px 0; border-bottom:1.5px solid var(--line);}
+td{padding:6px 12px 6px 0; border-bottom:1px solid var(--line); vertical-align:top;}
+td.n{text-align:right; font-family:"IBM Plex Mono",monospace; font-size:.83rem; white-space:nowrap;}
+.item{border:1px solid var(--line); border-radius:6px; margin:1.4em 0; overflow:hidden;}
+.item > .head{display:flex; align-items:baseline; gap:12px; padding:12px 18px; background:var(--panel); flex-wrap:wrap;}
+.item > .head .tag{font-family:"IBM Plex Mono",monospace; font-weight:700; white-space:nowrap;}
+.item.bug > .head .tag{color:var(--crit);}
+.item.opt > .head .tag{color:var(--tcu);}
+.item > .head b{font-weight:600;}
+.item > .head .meta{margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:.76rem; color:var(--muted); white-space:nowrap;}
+.item > .body{padding:4px 18px 16px;}
+.conf{display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:.74rem; font-weight:600;
+  padding:1px 8px; border-radius:4px; background:var(--tcu-soft); color:var(--tcu);}
+.conf.mid{background:var(--dxa-soft); color:var(--dxa);}
+.summary{background:var(--panel); border-left:4px solid var(--ink); padding:16px 22px; margin:1.4em 0; border-radius:0 6px 6px 0;}
+.footnote{font-size:.82rem; color:var(--muted); border-top:1px solid var(--line); margin-top:3em; padding-top:1em;}
+@media (max-width:640px){ h1{font-size:1.5rem;} .item > .head .meta{margin-left:0;} }
+</style>
+
+<div class="wrap">
+<div class="kicker">Vortex GPGPU &middot; fork GiorgosTriantafyllou324/vortex, branch tcu-op &middot; rebased on upstream master 1cd71c402 &middot; 2026-09-16</div>
+<h1>Bug-fix and optimization dossier for review</h1>
+<p class="sub">A self-contained account of (1) defects verified to exist in upstream <span class="mono">vortex/master</span>
+and fixed on this branch, and (2) performance optimizations identified, implemented, and validated — each with the
+analysis finding that motivated it, the mechanism of the fix in prose (no source code), why it works, measured
+results, and an explicit confidence assessment. Intended reader: a reviewing agent with access to the repository.
+Companion evidence documents: the
+<a href="https://claude.ai/artifact/4kjLA5kKNzxapW7yRwRVqc">DXA critical-path report</a>, the
+<a href="https://claude.ai/artifact/YFr7qvbcPBhfZehy4Ew5sx">double-buffering proposal</a>, and the
+<a href="https://claude.ai/artifact/PH166m1B4Jf9mLyGwkddGS">rtlsim drain proposal</a>.</p>
+
+<div class="summary">
+<p><b>Context for the reviewer.</b> The subject system is the fork's outer-product sparse tensor-core extension
+(<span class="mono">TCU_OP</span>): a WGMMA warp-group matrix pipeline fed from local memory (LMEM), plus a DXA
+asynchronous data-movement engine (a TMA analogue) that stages tiles from global memory into LMEM with
+layout transformation, synchronized through transaction barriers. Reference workload throughout:
+<span class="mono">sgemm_tcu_wg_dxa</span> at M=N=K=128, fp16&rarr;fp32, 16 warps &times; 16 threads, ISSUE_WIDTH=4,
+one core, compared against the per-warp-WMMA baseline <span class="mono">sgemm_tcu</span>. Two simulators:
+simx (cycle-level architectural model) and rtlsim (Verilated RTL). Methodology: MPM performance-counter
+classes, cycle-stamped instruction/engine traces with interval analysis, Perfetto exports, kernel disassembly
+audits, and controlled A/B experiments — including two candidate fixes that were tested and <em>rejected</em>,
+noted where relevant. All commits are local to the branch; nothing is pushed.</p>
+</div>
+
+<h2>Part 1 — Defects verified in upstream vortex/master, fixed here</h2>
+<p>Each of the four patterns below was checked verbatim against upstream master before being classified as an
+upstream defect (not a fork artifact). Confidence scores are for "the fix is a true, clean correction suitable
+for upstreaming," on a 0&ndash;5 scale, carried over from the dedicated verification pass and unchanged by
+subsequent regression coverage (all four fixes survived a 294-passing-case CI sweep untouched, plus this
+session's WGMMA/DXA-focused matrix).</p>
+
+<div class="item bug"><div class="head"><span class="tag">BUG-1</span><b>DXA BlockMajor destination layout ignores the FEDP2K geometry change</b><span class="meta">silent data corruption &middot; active in master</span></div><div class="body">
+<h4>Finding that exposed it</h4>
+<p>Every WGMMA configuration built with the FEDP2K option (which doubles the dot-product unit's K-depth per
+step) produced wrong results whenever tiles were staged by the DXA; the same kernels passed with cooperative
+software loads. Diffing the staged LMEM image against the golden layout function in the kernel-side tensor
+header showed the DXA scattering elements to the positions the <em>non</em>-2K geometry would use.</p>
+<h4>Defect</h4>
+<p>The BlockMajor destination-address computation in the DXA's LMEM write stage (RTL scatter unit, mirrored
+in the simx DXA model) derives block indices and intra-block offsets from the tile geometry — but the K-span
+of a block is a function of the FEDP depth, and the FEDP2K build doubles it. Five terms of the destination
+arithmetic (the per-beat step, the block-wrap step, the block-index shift, the K-word masking, and the
+block-row decomposition) were computed as if the K-span were the base value. The engine therefore wrote a
+layout the tensor core's B-buffer never reads correctly. Nothing faults: it is silent corruption.</p>
+<h4>Fix and why it works</h4>
+<p>A single compile-time log-ratio constant (0 for base, 1 for FEDP2K) is folded into each of the five terms,
+in both the RTL and the model. This restores the invariant the whole path depends on: the producer's
+destination formula must be congruent with the consumer's read formula (the same algebra appears in the
+kernel header's index function and in the B-buffer's fetch wiring), and that algebra is parameterized by the
+FEDP depth everywhere else already. The fix is a completion of the parameterization, not a workaround.</p>
+<h4>Validation &amp; confidence</h4>
+<p>FEDP2K&times;DXA configurations went from failing to passing on both simulators; non-2K configurations
+byte-identical. <span class="conf">CONFIDENCE 4/5</span> — clean fix; the missing point is upstream test
+coverage (recommendation: add a FEDP2K case to the DXA test catalog so the invariant is pinned).</p>
+</div></div>
+
+<div class="item bug"><div class="head"><span class="tag">BUG-2</span><b>Tensor B-buffer cannot hold dense blocks spanning two bank rows; unguarded sub-block offset wraps</b><span class="meta">wrong operands on affected geometries</span></div><div class="body">
+<h4>Finding that exposed it</h4>
+<p>Dense WGMMA at the 16-thread geometry read garbage B operands for the second half of each block: the
+B-buffer's resident-slot bookkeeping assumed one bank row per dense block, but at this geometry a dense
+block occupies two. Separately, an offset term used to select the sub-block within a warp-group tile was
+computed by masking even when the configuration defines only one sub-block — the mask then wrapped the
+offset into a neighboring block's storage.</p>
+<h4>Defect</h4>
+<p>Two related gaps in the B-buffer (RTL tensor-core operand buffer): (a) the fetch/residency state machine
+tracked a single dense bank-row slot, so geometries whose block straddles two rows fetched only the first
+and served stale or unrelated data for the second; (b) the sub-block offset was always masked-arithmetic,
+valid only when the sub-block count exceeds one.</p>
+<h4>Fix and why it works</h4>
+<p>(a) The dense path gained a second resident slot and a two-fetch sequence so a block's full extent is
+resident before any consuming step advances — the same discipline the sparse path already used for its
+two-row blocks, extended to dense. (b) The sub-block offset is forced to zero when the configuration
+declares one sub-block, making the mask arithmetic unreachable exactly where its precondition fails.
+Both changes align the buffer's state machine with the geometry algebra it serves.</p>
+<h4>Validation &amp; confidence</h4>
+<p>Affected dense geometries pass on both simulators; unaffected geometries unchanged.
+<span class="conf mid">CONFIDENCE 3/5</span> for the two-slot extension (the XLEN=64 and K-major spill
+corners of the buffer are not exercised by existing tests — this session's 64-bit WGMMA/DXA CI sweep,
+running at time of writing, addresses part of that gap); <span class="conf">5/5</span> for the offset guard
+alone, which is a strict precondition fix.</p>
+</div></div>
+
+<div class="item bug"><div class="head"><span class="tag">BUG-3</span><b>simx functional-unit lock released at issue of the last uop, not at acceptance — deadlock</b><span class="meta">model-only hang &middot; reproducible in master</span></div><div class="body">
+<h4>Finding that exposed it</h4>
+<p>A reproducible livelock: WGMMA sgemm at 4 threads, K=1024, issue width &lt; 8 hangs forever in the model
+(never in RTL). Drain-history instrumentation showed two warps each holding half of a functional unit's
+resources, each waiting for the other's half.</p>
+<h4>Defect</h4>
+<p>The model's sequencer expands multi-step instructions into micro-op chains carrying "lock the functional
+unit" on the first uop and "unlock" on the last. The unlock was applied when the last uop <em>issued</em>.
+Between issue and the functional unit's <em>acceptance</em> of that uop sit the operand collectors and a
+response arbiter, which can legally reorder warps. A second warp's chain could therefore acquire the lock
+and interleave into the unit while the first chain's tail was still in flight — each chain then blocks the
+other's completion. This is a model-fidelity bug: the RTL's issue path does not have the equivalent window.</p>
+<h4>Fix and why it works</h4>
+<p>The unlock is deferred: at issue of a chain's last uop the model records a pending release keyed by
+issue-slot and unit; the release executes at the point the functional unit accepts that uop (the same place
+credits return). This makes lock release atomic with resource handoff — the invariant the lock exists to
+provide — rather than atomic with issue, which was never sufficient. A controlled A/B (fix reverted, caches
+cleared, same seeds) shows bit-identical instruction and cycle counts on non-hanging workloads: the fix
+changes no timing, it only removes the illegal interleaving.</p>
+<h4>Validation &amp; confidence</h4>
+<p>The K=1024 hang is gone; parity numbers unchanged. <span class="conf">CONFIDENCE 4/5</span> — the
+deferred-release structure is the principled fix; the held-back point is that a full model-parity sweep
+across the catalog should accompany upstreaming since the change touches the central issue loop.</p>
+</div></div>
+
+<div class="item bug"><div class="head"><span class="tag">BUG-4</span><b>DXA completion counting fires on request-valid without request-ready</b><span class="meta">latent barrier-accounting corruption</span></div><div class="body">
+<h4>Finding that exposed it</h4>
+<p>An (ultimately reverted) experiment in LMEM bank arbitration created backpressure on the DXA's write path
+and immediately corrupted transaction-barrier accounting: barriers released early or never, though the
+experiment itself touched no barrier logic.</p>
+<h4>Defect</h4>
+<p>The per-bank write-fire signals that feed the DXA completion detector (which converts the final write of
+a transfer into a barrier event) were derived from request-valid and the byte-enable mask alone. Under
+backpressure a stalled beat stays valid for multiple cycles and is counted repeatedly. Upstream's default
+arbitration happens never to stall that path, so the bug is latent in master — but any change to arbitration,
+banking, or timing arms it.</p>
+<h4>Fix and why it works</h4>
+<p>The fire condition is additionally qualified with request-ready, making "fire" mean the transaction was
+accepted this cycle — the universal handshake convention the rest of the design uses. One condition, no
+behavioral change in the unstalled case.</p>
+<h4>Validation &amp; confidence</h4>
+<p>With the fix, the arbitration experiment no longer corrupts barrier state; default behavior identical.
+<span class="conf">CONFIDENCE 5/5</span> — handshake hygiene with a demonstrated failure mode.</p>
+</div></div>
+
+<h2>Part 2 — Performance optimizations: analysis, mechanism, results</h2>
+
+<div class="item opt"><div class="head"><span class="tag">OPT-1</span><b>Grouped BlockMajor scatter drain in the DXA write stage (RTL)</b><span class="meta">rtlsim 116,949 &rarr; 74,947 cycles (&minus;36%)</span></div><div class="body">
+<h4>Analysis that inspired it</h4>
+<p>The end-to-end investigation established a chain of three facts. First, interval analysis of engine traces
+showed the single DXA engine busy for 92% of the reference kernel's runtime with only 7% of that time
+overlapped by compute — the engine <em>is</em> the critical path. Second, the model/RTL divergence was
+localized to the DXA: the WGMMA-without-DXA variant matches between simulators to 1.4%, while the DXA
+variant diverges 1.5&times;. Third, a cycle trace of the RTL engine showed each 1&nbsp;KB BlockMajor B tile
+draining in 512 single-element beats — two useful bytes per beat through a 64-byte LMEM port — where the
+model (and the port) support gathered beats. One run moves 69,632 write beats where 20,480 suffice.
+A tempting alternative explanation (a 43&times; global-memory read amplification suggested by the DXA
+performance counters) was chased and <em>disproven</em>: the counters are broken (traced fire counts differ
+from counter values on a deterministic run), which is recorded separately as measurement debt.</p>
+<h4>Optimization and why it works</h4>
+<p>The BlockMajor layout has an algebraic gift: the tcN consecutive elements that belong to one destination
+LMEM word are <em>contiguous in the source cache line</em> (they are consecutive along the tile's N axis),
+and their destination offsets within that word form a fixed power-of-two stride. Gathering them therefore
+requires no crossbar and no data-dependent routing — a bounded spread network takes a contiguous byte run
+from the fill buffer and places its elements at the constant stride, emitting one masked write per cycle
+instead of tcN writes. The read cursor advances by a group per beat and the destination address by exactly
+one block per beat, which <em>simplifies</em> the address bookkeeping (the previous per-element step/wrap
+alternation collapses to a single constant). Alignment is structural — tile rows and cache-line boundaries
+are both multiples of the group — so groups never straddle destination words; a shorter tail group is
+handled by the existing fill-level masking; and configurations whose group span exceeds the LMEM word
+(e.g. FEDP2K today, some 64-bit geometries) are detected by a static fits-check and take the untouched
+element-wise path, so correctness never depends on the new mode. A deliberate side effect: the grouped
+profile is exactly what the simx model already assumed, so the change closes a model/RTL divergence
+rather than opening one.</p>
+<h4>Results and validation</h4>
+<p>Reference kernel on rtlsim: 116,949 &rarr; 74,947 cycles; the WGMMA+DXA kernel goes from 7% slower than
+the per-warp-WMMA baseline (111,373) to 1.49&times; faster; RTL now within 3% of the model (77,176). Beat
+counters land exactly on the predicted 20,480. Validated additionally on: a one-CTA smoke size (beats
+exactly at target, &minus;18% cycles), the multicast application (replay operates per emitted word,
+unchanged semantics), the FEDP2K build (fallback path exercised, passes), and the double-buffered kernel.
+A companion negative result matters for review: re-prioritizing the shared LMEM-DMA arbiter in favor of
+tensor-core reads — a plausible fix — was implemented and measured first, cut operand-fetch stalls 2.4&times;,
+and changed total cycles by noise, because those stalls were hidden under the drain critical path. It was
+reverted and re-ranked to accompany the next-wall work rather than shipped as a fix that "should" help.</p>
+</div></div>
+
+<div class="item opt"><div class="head"><span class="tag">OPT-2</span><b>Register-resident double buffering for the DXA-fed WGMMA kernel</b><span class="meta">recovers an 8.3&times; regression into a small win; enables overlap</span></div><div class="body">
+<h4>Analysis that inspired it</h4>
+<p>The critical-path report showed the kernel's single-buffer schedule serializes staging against compute
+(80&ndash;90% scheduler idle; overlap only from co-resident thread blocks). The existing opt-in
+double-buffer implementation measured 8.3&times; <em>worse</em> on the model and 3&ndash;4.5&times; worse on RTL.
+Tracing its dynamic loads found the mechanism, which generalizes beyond this kernel: this architecture's
+per-lane stacks live in <em>global</em> memory at an 8&nbsp;KB stride, so one stack-resident word costs sixteen
+uncoalesced accesses that all map to the same cache bank — one spilled value &asymp; sixteen serialized DRAM
+round-trips. The original ping-pong selected buffers and barrier objects through runtime-indexed local
+arrays, which the compiler cannot promote to registers; the synchronization objects were re-loaded from the
+stack around every barrier in the hot loop. A first rewrite (unrolling the loop two-fold over statically
+named buffers) eliminated hot-loop spills yet still ran 2.5&times; slower: its larger live set added roughly
+five callee-saved registers, and the prologue/epilogue save bursts — paid per warp, re-paid per thread-block
+wave — stalled the data cache for ~100k cycles. The derived design rule: a pipelined schedule is viable on
+this machine only if its <em>entire</em> loop-carried state fits in caller-saved registers.</p>
+<h4>Optimization and why it works</h4>
+<p>Keep the single-buffer loop shape — same body, same two-phase barrier protocol per buffer (staging
+complete; readers done) — and switch buffers by <em>mutating</em> state in place rather than <em>selecting</em>
+it: the two buffer pointers and the packed barrier identifier are exclusive-or-toggled between two
+precomputed constants each iteration, and raw barrier intrinsics take the identifier by value so no
+synchronization object exists in memory at all. Net register cost over the serial schedule is two
+loop-invariant constants; the compiled body is one instruction longer than the serial version, the stack
+frame is smaller, and the loop contains zero stack accesses — the prior failure mechanism is structurally
+impossible rather than merely avoided. The schedule prefetches tile i+1 into the idle buffer before waiting
+on tile i, and the release/prefetch conditions pair off so an odd tile count needs no tail code.</p>
+<h4>Results and validation</h4>
+<p>Model: 637,819 &rarr; 76,300 cycles (slightly ahead of the serial schedule's 77,176); RTL: 119,580 with
+the stock drain, 75,052 on the fixed drain. Passes at issue widths 1 and 4, odd tile counts, and K up to
+512. An honest bound is part of the result: with the drain fixed, staging is no longer the critical path,
+so overlap currently buys &asymp;0 — the trace shows 93% of tensor-core compute already hidden under
+transfers. The optimization's present value is that the pipeline is now <em>safe and free</em> (previously it
+was a trap), and it becomes load-bearing when the next wall (operand-fetch pipelining, below) is removed.
+Emulating a faster engine with configuration knobs (more workers, deeper in-flight) showed the pipeline
+winning 4.4% at the crossover point, confirming the mechanism.</p>
+</div></div>
+
+<div class="item opt"><div class="head"><span class="tag">OPT-3</span><b>Serial-schedule refinement: drop the final buffer-release barrier</b><span class="meta">minor; &minus;2.3% at reference config</span></div><div class="body">
+<p>From the same barrier-protocol analysis: the serial schedule's last iteration released the tile buffer
+for a re-staging that never comes. Removing the dead release phase (the release is conditional on a
+subsequent tile existing) saved one full-CTA barrier round-trip per kernel, measured at about 2.8k cycles
+at the reference configuration. Included for completeness; mechanically trivial.</p>
+</div></div>
+
+<h2>Part 3 — Identified, quantified, not yet implemented</h2>
+<p>These are findings the reviewing agent should treat as a ranked backlog with evidence, not as claims of
+completed work.</p>
+<div class="tblwrap"><table>
+<tr><th>item</th><th>evidence</th><th>expected effect</th></tr>
+<tr><td><b>Tensor-core operand-buffer plan-ahead prefetch.</b> The B-buffer demand-fetches bank rows with a
+single outstanding request; ~5k fetches &times; ~8-cycle serial LMEM round-trips.</td>
+<td class="n">tbuf stalls 26k of 75k cycles post-drain-fix; both schedules flatten at ~60k in fast-engine probes</td>
+<td>next ~15&ndash;20% on RTL; makes OPT-2's overlap load-bearing</td></tr>
+<tr><td><b>Tensor-first arbitration on the shared LMEM-DMA port.</b> Measured to cut operand stalls 2.4&times;
+but cycle-neutral while the drain dominated; deferred to land with the prefetch work.</td>
+<td class="n">A/B measured, reverted</td><td>converts to cycles once fetch latency is exposed</td></tr>
+<tr><td><b>DXA performance-counter repairs.</b> The engine's global-read and latency counters report
+impossible values (deterministic run: counter 160 vs 96 traced fires; latency fields in the tens of
+thousands). Cost this investigation hours chasing a phantom amplification.</td>
+<td class="n">trace vs counter cross-check</td><td>measurement integrity; should precede perf-gate re-baselining</td></tr>
+<tr><td><b>A-descriptor half-line reads.</b> Row-major A tiles with short rows read 2&times; the necessary
+DRAM lines (32 useful bytes per 64-byte line) and expose ~4 serial latency windows per transfer under the
+8-deep in-flight cap.</td>
+<td class="n">span decomposition: A transfers cost 2&times; B despite clean layout</td><td>halves A DRAM traffic; shortens transfer spans</td></tr>
+<tr><td><b>Data reuse: multicast / CTA-width decoupling.</b> Thread-block width is welded to ISSUE_WIDTH, so
+small configurations re-stage identical B tiles from DRAM 4&ndash;16&times; with the dedup/multicast hardware
+unused; the DXA bypasses all caches so no reuse is recovered downstream.</td>
+<td class="n">gmem dedup counter = 0; DRAM traffic 6&times; unique data</td><td>order-of-magnitude horizon item; architectural</td></tr>
+<tr><td><b>FEDP2K grouped-drain extension.</b> The grouped drain currently falls back to element-wise when
+the group spans two LMEM words (FEDP2K); a two-word emission extends the win there.</td>
+<td class="n">fallback validated passing</td><td>same 4&times; drain effect for FEDP2K builds</td></tr>
+<tr><td><b>Model/RTL divergence at ISSUE_WIDTH=1.</b> Largely explained by the above (fence serialization,
+re-staging, drain), but not re-measured post-fix.</td>
+<td class="n">2.4&times; pre-fix</td><td>re-measure before trusting IW=1 conclusions</td></tr>
+</table></div>
+
+<h2>Provenance and review pointers</h2>
+<div class="tblwrap"><table>
+<tr><th>item</th><th>where</th><th class="n">commit</th></tr>
+<tr><td>BUG-1 FEDP2K&times;DXA layout</td><td><span class="mono">hw/rtl/dxa/VX_dxa_smem_wr.sv</span>, <span class="mono">sim/simx/dxa/dxa_core.cpp</span></td><td class="n">7d6977bb6</td></tr>
+<tr><td>BUG-2 B-buffer two-row + offset guard</td><td><span class="mono">hw/rtl/tcu/VX_tcu_bbuf.sv</span>, <span class="mono">VX_tcu_core.sv</span></td><td class="n">11e1afc8d</td></tr>
+<tr><td>BUG-3 FU-lock deferred release</td><td><span class="mono">sim/simx/core.cpp</span></td><td class="n">6bd7f4536</td></tr>
+<tr><td>BUG-4 completion fire gating</td><td><span class="mono">hw/rtl/core/VX_mem_unit.sv</span></td><td class="n">02d54d393</td></tr>
+<tr><td>OPT-1 grouped scatter drain</td><td><span class="mono">hw/rtl/dxa/VX_dxa_smem_wr.sv</span></td><td class="n">fa1765c85</td></tr>
+<tr><td>OPT-2 register-resident double buffering</td><td><span class="mono">tests/regression/sgemm_tcu_wg_dxa/kernel.cpp</span></td><td class="n">bd1420351</td></tr>
+<tr><td>OPT-3 final-release elision (+ OPT-2's predecessor as opt-in)</td><td>same kernel</td><td class="n">780e3fdf3</td></tr>
+</table></div>
+<p>Raw evidence (counter logs, cycle traces, interval summaries, Perfetto exports, disassembly audits) lives
+untracked in <span class="mono">~/dev/vortex_spg/eval_tcu_vs_wg/</span>. A WGMMA/DXA-scoped CI matrix (both
+simulators, XLEN 32 and 64, parity/perf/asic/fpga gates excluded; 162 cases) is running at time of writing;
+its outcome should be appended to this dossier's validation claims before upstreaming decisions.
+Known review caveats: perf-gate baselines will trip by design after OPT-1 (&minus;36% cycles on DXA workloads)
+and require the human-run regeneration; BUG-3's model-parity sweep and BUG-2's 64-bit corners are the two
+coverage gaps explicitly acknowledged above.</p>
+
+<div class="footnote">
+<p>Prepared on branch <span class="mono">tcu-op</span> (43 fork commits rebased onto upstream
+<span class="mono">1cd71c402</span>, plus this session's fix/optimization stack). All performance numbers are
+from the machine-local simulators at the stated configurations; no hardware runs. Nothing in this dossier
+has been pushed to any remote.</p>
+</div>
+</div>

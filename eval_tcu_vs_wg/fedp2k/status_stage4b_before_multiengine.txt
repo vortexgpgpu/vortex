@@ -1,0 +1,13 @@
+[00:02:09] START tensor_op_tcu_op-single-tile_rtlsim
+RESULT tensor_op_tcu_op-single-tile_rtlsim rc=0 wall=90s PASSED
+[00:03:39] START tensor_op_tcu_op-dxa-stress-128_rtlsim
+RESULT tensor_op_tcu_op-dxa-stress-128_rtlsim rc=0 wall=103s PASSED
+[00:05:22] START tensor_op_tcu_op-nonzero-c_rtlsim
+RESULT tensor_op_tcu_op-nonzero-c_rtlsim rc=0 wall=105s PASSED
+[00:07:07] START tensor_op_tcu_op-kchunk-default_rtlsim
+RESULT tensor_op_tcu_op-kchunk-default_rtlsim rc=0 wall=149s PASSED
+[00:09:36] START tensor_op_tcu_op-iw1_rtlsim
+RESULT tensor_op_tcu_op-iw1_rtlsim rc=0 wall=43s PASSED
+[00:10:19] START tensor_op_tcu_op-iw2_rtlsim
+RESULT tensor_op_tcu_op-iw2_rtlsim rc=0 wall=63s PASSED
+[00:11:22] STAGE4B-COMPLETE

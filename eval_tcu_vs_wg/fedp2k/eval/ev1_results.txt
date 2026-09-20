@@ -1,0 +1,3 @@
+A_sgemm_tcu cycles=99927 instrs=21999 PASSED wall=244s
+B_sgemm_tcu_wg_dxa cycles=115449 instrs=20816 PASSED wall=273s
+C_sgemm_tcu_op cycles=78952 instrs=876 PASSED wall=191s

@@ -1,0 +1,15 @@
+[22:56:08] START s6_s1_32_24 (s=1 -b 0.5 -p n)
+RESULT s6_s1_32_24 32x32x128 s=1 [-b 0.5 -p n] rc=0 wall=180s cycles=7091 instrs=132 PASSED
+[22:59:09] START s6_s1_128_24 (s=1 -b 0.5 -p n)
+RESULT s6_s1_128_24 128x128x128 s=1 [-b 0.5 -p n] rc=0 wall=191s cycles=76350 instrs=1016 PASSED
+[23:02:22] START s6_s1_128_u75 (s=1 -b 0.75 -p u)
+RESULT s6_s1_128_u75 128x128x128 s=1 [-b 0.75 -p u] rc=0 wall=18s cycles=67726 instrs=1016 PASSED
+[23:02:42] START s6_s2_32_u (s=2 -a 0.5 -b 0.5 -p u)
+RESULT s6_s2_32_u 32x32x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=164s cycles=5289 instrs=145 PASSED
+[23:05:28] START s6_s2_128_u (s=2 -a 0.5 -b 0.5 -p u)
+RESULT s6_s2_128_u 128x128x128 s=2 [-a 0.5 -b 0.5 -p u] rc=0 wall=186s cycles=59316 instrs=1208 PASSED
+[23:08:35] START s6_s2_128_u75 (s=2 -a 0.75 -b 0.75 -p u)
+RESULT s6_s2_128_u75 128x128x128 s=2 [-a 0.75 -b 0.75 -p u] rc=0 wall=13s cycles=44010 instrs=1208 PASSED
+[23:08:50] START s6_dense_128_k2 (s=0 )
+RESULT s6_dense_128_k2 128x128x128 s=0 [] rc=0 wall=188s cycles=78777 instrs=876 PASSED
+[23:12:00] STAGE6-COMPLETE
