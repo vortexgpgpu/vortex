@@ -758,6 +758,8 @@ enum class TcuType {
   WMMA_SP,    // Sparse variants live in distinct op_types so IntrTcuArgs
   WGMMA_SP,   // doesn't carry a per-uop is_sparse bit.
   TCU_LD,     // Warp-level metadata load. rd[4] selects sparse/MX namespace.
+  MMA_OP,     // TCU_OP (SparseWeaver) decoupled engine op: one 32x32xK output
+              // tile per instruction, descriptor packed across rs1/rs2 lanes.
 };
 
 struct IntrTcuArgs {
@@ -795,6 +797,7 @@ inline std::ostream &operator<<(std::ostream &os, const TcuType& type) {
   case TcuType::WMMA_SP:    os << "WMMA.SP"; break;
   case TcuType::WGMMA_SP:   os << "WGMMA.SP"; break;
   case TcuType::TCU_LD:     os << "TCU_LD"; break;
+  case TcuType::MMA_OP:     os << "MMA_OP"; break;
   default:
     assert(false);
   }

@@ -240,10 +240,18 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     VX_txbar_bus_if per_block_txbar_if[BLOCK_SIZE]();
 
+    // Every engine reaches memory through one shared TCU port. The arbiter
+    // below inserts the engine index into the tag (bits [ENGINE_SEL_BITS-1:0]
+    // of tag.value) and routes responses back by it, so each engine's own tag
+    // is that much narrower; VX_tcu_op_core packs its matrix index and
+    // sequence bit into what is left.
+    localparam ENGINE_SEL_BITS  = `ARB_SEL_BITS(BLOCK_SIZE, 1);
+    localparam ENGINE_TAG_WIDTH = LSU_TAG_WIDTH - ENGINE_SEL_BITS;
+
     VX_lsu_mem_if #(
         .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
         .DATA_SIZE (LSU_WORD_SIZE),
-        .TAG_WIDTH (LSU_TAG_WIDTH)
+        .TAG_WIDTH (ENGINE_TAG_WIDTH)
     ) per_block_lsu_mem_if[BLOCK_SIZE]();
 
 `endif // TCU_OP
@@ -251,7 +259,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
     `ifdef TCU_OP
         VX_tcu_op_core #(
-            .INSTANCE_ID (`SFORMATF(("%s-op_core%0d", INSTANCE_ID, block_idx)))
+            .INSTANCE_ID (`SFORMATF(("%s-op_core%0d", INSTANCE_ID, block_idx))),
+            .TAG_WIDTH   (ENGINE_TAG_WIDTH)
         ) tcu_fp (
             `SCOPE_IO_BIND (block_idx)
             .clk            (clk),
@@ -291,38 +300,56 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .ARBITER  ("R"),
         .OUT_BUF  (0)
     ) txbar_arb (
-        .clk       (clk),
-        .reset     (reset),
-        .bus_in_if (per_block_txbar_if),
-        .bus_out_if(txbar_bus_if)
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_block_txbar_if),
+        .bus_out_if (txbar_bus_if)
     );
 
-    // Only issue block 0 reaches memory: the TCU_OP programming model runs a
-    // single self-managed warp (warp 0 => issue block 0), so the other blocks
-    // never issue MMA_OPs. Binding every block to the shared tcu_lsu_mem_if
-    // multi-drives it (idle blocks' zeros mask the active block's requests);
-    // dead-ending the idle blocks makes a stray MMA_OP on one of them
-    // back-pressure forever instead of silently corrupting the bus.
-    assign tcu_lsu_mem_if.req_valid = per_block_lsu_mem_if[0].req_valid;
-    assign tcu_lsu_mem_if.req_data  = per_block_lsu_mem_if[0].req_data;
-    assign per_block_lsu_mem_if[0].req_ready = tcu_lsu_mem_if.req_ready;
-    assign per_block_lsu_mem_if[0].rsp_valid = tcu_lsu_mem_if.rsp_valid;
-    assign per_block_lsu_mem_if[0].rsp_data  = tcu_lsu_mem_if.rsp_data;
-    assign tcu_lsu_mem_if.rsp_ready = per_block_lsu_mem_if[0].rsp_ready;
+    // All engines reach memory. Each issue block drives its own engine, so a
+    // kernel that places one MMA-issuing warp per issue slot (wid % ISSUE_WIDTH)
+    // runs the engines concurrently. Engine requests are arbitrated onto the
+    // single TCU port (round-robin); the engine index rides in the tag and
+    // routes each response back to its engine, and because it lands in
+    // tag.value it is also part of the LSU adapter's reassembly key, so two
+    // engines' outstanding requests never alias.
+    if (BLOCK_SIZE > 1) begin : g_tcu_mem_arb
+        VX_lsu_mem_if #(
+            .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
+            .DATA_SIZE (LSU_WORD_SIZE),
+            .TAG_WIDTH (LSU_TAG_WIDTH)
+        ) arb_out_if[1]();
 
-    for (genvar block_idx = 1; block_idx < BLOCK_SIZE; ++block_idx) begin : g_tcu_mem_tieoff
-        assign per_block_lsu_mem_if[block_idx].req_ready = 1'b0;
-        assign per_block_lsu_mem_if[block_idx].rsp_valid = 1'b0;
-        assign per_block_lsu_mem_if[block_idx].rsp_data  = '0;
-        // "Only block 0 issues" is an assumption about the warp-to-issue-block
-        // mapping, not an invariant the hardware enforces. If an MMA_OP ever
-        // lands on another block it back-pressures forever, which presents as
-        // an unexplained hang. Name it instead.
-        `RUNTIME_ASSERT(~per_block_lsu_mem_if[block_idx].req_valid,
-            ("%t: *** %s: MMA_OP issued on TCU block %0d, but only block 0 is connected to memory; this would hang. Check the warp-to-issue-block mapping of the MMA-issuing warp.", $time, INSTANCE_ID, block_idx))
-        `UNUSED_VAR (per_block_lsu_mem_if[block_idx].req_valid)
-        `UNUSED_VAR (per_block_lsu_mem_if[block_idx].req_data)
-        `UNUSED_VAR (per_block_lsu_mem_if[block_idx].rsp_ready)
+        VX_lsu_mem_arb #(
+            .NUM_INPUTS  (BLOCK_SIZE),
+            .NUM_OUTPUTS (1),
+            .NUM_LANES   (`VX_CFG_NUM_LSU_LANES),
+            .DATA_SIZE   (LSU_WORD_SIZE),
+            .TAG_WIDTH   (ENGINE_TAG_WIDTH),
+            .TAG_SEL_IDX (0),
+            .ARBITER     ("R"),
+            .REQ_OUT_BUF (0),
+            .RSP_OUT_BUF (0)
+        ) tcu_mem_arb (
+            .clk        (clk),
+            .reset      (reset),
+            .bus_in_if  (per_block_lsu_mem_if),
+            .bus_out_if (arb_out_if)
+        );
+
+        assign tcu_lsu_mem_if.req_valid  = arb_out_if[0].req_valid;
+        assign tcu_lsu_mem_if.req_data   = arb_out_if[0].req_data;
+        assign arb_out_if[0].req_ready   = tcu_lsu_mem_if.req_ready;
+        assign arb_out_if[0].rsp_valid   = tcu_lsu_mem_if.rsp_valid;
+        assign arb_out_if[0].rsp_data    = tcu_lsu_mem_if.rsp_data;
+        assign tcu_lsu_mem_if.rsp_ready  = arb_out_if[0].rsp_ready;
+    end else begin : g_tcu_mem_direct
+        assign tcu_lsu_mem_if.req_valid = per_block_lsu_mem_if[0].req_valid;
+        assign tcu_lsu_mem_if.req_data  = per_block_lsu_mem_if[0].req_data;
+        assign per_block_lsu_mem_if[0].req_ready = tcu_lsu_mem_if.req_ready;
+        assign per_block_lsu_mem_if[0].rsp_valid = tcu_lsu_mem_if.rsp_valid;
+        assign per_block_lsu_mem_if[0].rsp_data  = tcu_lsu_mem_if.rsp_data;
+        assign tcu_lsu_mem_if.rsp_ready = per_block_lsu_mem_if[0].rsp_ready;
     end
 `endif
 
@@ -350,7 +377,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
         `else
             if (per_block_execute_if[0].data.op_type == INST_TCU_WMMA) begin
-                `TRACE(1, ("%t: [tcu_unit]: Activated (inner-product dense)\n", $time)); 
+                `TRACE(1, ("%t: [tcu_unit]: Activated (inner-product dense)\n", $time));
             end
             `ifdef TCU_SPARSE_ENABLE
             else if (per_block_execute_if[0].data.op_type == INST_TCU_WMMA_SP) begin

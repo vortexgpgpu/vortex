@@ -48,6 +48,11 @@ public:
 
   const PerfStats& perf_stats() const;
 
+  // Functional read of the backing store, bypassing ports, banks and timing.
+  // For unit models whose operand traffic is timed analytically (the TCU_OP
+  // engine model); never for anything the LSU or DXA timing depends on.
+  void backdoor_read(void* data, uint64_t addr, uint32_t size);
+
 protected:
 
   void on_reset();

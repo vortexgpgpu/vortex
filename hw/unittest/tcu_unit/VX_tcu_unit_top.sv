@@ -18,6 +18,10 @@
 // ports so that the Verilator C++ testbench can drive them directly.
 // Only ISSUE_WIDTH == 1 is supported by this wrapper.
 
+// Packed widths of VX_lsu_mem_if req/rsp data (checked against $bits below).
+`define TCU_LSU_REQ_DATAW (`VX_CFG_NUM_LSU_LANES * (1 + (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(LSU_WORD_SIZE)) + 8 * LSU_WORD_SIZE + LSU_WORD_SIZE + `UP(MEM_ATTR_WIDTH)) + 1 + LSU_TAG_WIDTH)
+`define TCU_LSU_RSP_DATAW (`VX_CFG_NUM_LSU_LANES * (1 + 8 * LSU_WORD_SIZE) + LSU_TAG_WIDTH)
+
 module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     `SCOPE_IO_DECL
 
@@ -44,6 +48,22 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     input  wire                                tcu_mem_rsp_valid,
     output wire                                tcu_mem_rsp_ready,
     input  wire [$bits(lsu_rsp_data_t)-1:0]    tcu_mem_rsp_data,
+`endif
+
+`ifdef TCU_OP
+    // TCU_OP engine memory port (master) and transaction-barrier arrive bus,
+    // exposed flat so the operand-fetch and D-flush paths stay live through
+    // synthesis.
+    output wire                                tcu_lsu_req_valid,
+    input  wire                                tcu_lsu_req_ready,
+    output wire [`TCU_LSU_REQ_DATAW-1:0]        tcu_lsu_req_data,
+    input  wire                                tcu_lsu_rsp_valid,
+    output wire                                tcu_lsu_rsp_ready,
+    input  wire [`TCU_LSU_RSP_DATAW-1:0]        tcu_lsu_rsp_data,
+
+    output wire                                txbar_valid,
+    input  wire                                txbar_ready,
+    output wire [$bits(txbar_t)-1:0]           txbar_data,
 `endif
 
     // Dispatch interface — slot 0 (ISSUE_WIDTH must be 1)
@@ -115,6 +135,29 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     assign tcu_mem_rsp_ready    = tcu_mem_if.rsp_ready;
 `endif
 
+`ifdef TCU_OP
+    VX_lsu_mem_if #(
+        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
+        .DATA_SIZE (LSU_WORD_SIZE),
+        .TAG_WIDTH (LSU_TAG_WIDTH)
+    ) tcu_lsu_mem_if();
+
+    `STATIC_ASSERT ($bits(tcu_lsu_mem_if.req_data) == `TCU_LSU_REQ_DATAW, ("tcu_unit_top: TCU_LSU_REQ_DATAW mismatch"))
+    `STATIC_ASSERT ($bits(tcu_lsu_mem_if.rsp_data) == `TCU_LSU_RSP_DATAW, ("tcu_unit_top: TCU_LSU_RSP_DATAW mismatch"))
+
+    assign tcu_lsu_req_valid        = tcu_lsu_mem_if.req_valid;
+    assign tcu_lsu_req_data         = tcu_lsu_mem_if.req_data;
+    assign tcu_lsu_mem_if.req_ready = tcu_lsu_req_ready;
+    assign tcu_lsu_mem_if.rsp_valid = tcu_lsu_rsp_valid;
+    assign tcu_lsu_mem_if.rsp_data  = tcu_lsu_rsp_data;
+    assign tcu_lsu_rsp_ready        = tcu_lsu_mem_if.rsp_ready;
+
+    VX_txbar_bus_if txbar_bus_if();
+    assign txbar_valid           = txbar_bus_if.valid;
+    assign txbar_data            = txbar_bus_if.data;
+    assign txbar_bus_if.ready    = txbar_ready;
+`endif
+
     VX_dispatch_if dispatch_if[`VX_CFG_ISSUE_WIDTH]();
     VX_commit_if   commit_if  [`VX_CFG_ISSUE_WIDTH]();
 
@@ -177,6 +220,10 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
         .tcu_mem_if  (tcu_mem_if),
     `endif
         .dispatch_if (dispatch_if),
+    `ifdef TCU_OP
+        .tcu_lsu_mem_if (tcu_lsu_mem_if),
+        .txbar_bus_if   (txbar_bus_if),
+    `endif
         .commit_if   (commit_if)
     );
 

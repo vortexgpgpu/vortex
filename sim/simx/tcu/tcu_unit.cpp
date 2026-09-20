@@ -333,6 +333,54 @@ static inline uint32_t meta_row_width(uint32_t elem_bits) {
   return cfg::tcK * 2 * (32 / elem_bits);
 }
 
+#ifdef TCU_OP
+///////////////////////////////////////////////////////////////////////////////
+// TCU_OP (SparseWeaver) engine model.
+//
+// One engine per TCU block. An MMA_OP computes one 32x32xK output tile:
+// A (32xK, column-major) and B (Kx32, row-major) are read from LMEM, the fp32
+// accumulator is initialised from C (or zero) when init is set, and written to
+// global memory as a row-major 32x32 tile when flush is set. Completion is
+// signalled on the tx-barrier carried in rs2[2], exactly as VX_tcu_op_core
+// does (attach at accept = RTL "START fire", release at result = "DONE fire").
+//
+// Operand traffic is NOT simulated through the memory system: operands are
+// read through LocalMem::backdoor_read and D is written straight to RAM, and
+// the engine's time is modelled analytically per op with phase latencies
+// calibrated against rtlsim traces of VX_tcu_op_core (128^3 and 128x128x512,
+// fp16->fp32, FEOP block 2x16):
+//
+//   fetch  = TCU_OP_FETCH_CYCLES (+ TCU_OP_C_PRELOAD_CYCLES when the op
+//            preloads C: init set, and C non-null or sparse)
+//   issue  = K * 32 FEOP steps / TCU_OP_STEPS_PER_CYCLE  (32x32 tile, 2x16)
+//   drain  = TCU_OP_DRAIN_FLUSH_CYCLES with flush, else TCU_OP_DRAIN_CYCLES
+//
+// Dense fp16->fp32 only. TCU_OP_ENGINES is how many TCU blocks are wired to
+// memory; the RTL arbitrates every block onto the TCU port (VX_tcu_unit), so
+// it defaults to all of them. Set it to 1 to model the earlier RTL, which tied
+// blocks 1..N-1 off: an MMA_OP reaching an unwired block aborts.
+#ifndef TCU_OP_ENGINES
+#define TCU_OP_ENGINES VX_CFG_NUM_TCU_BLOCKS
+#endif
+#ifndef TCU_OP_FETCH_CYCLES
+#define TCU_OP_FETCH_CYCLES 11
+#endif
+#ifndef TCU_OP_C_PRELOAD_CYCLES
+#define TCU_OP_C_PRELOAD_CYCLES 280
+#endif
+#ifndef TCU_OP_DRAIN_FLUSH_CYCLES
+#define TCU_OP_DRAIN_FLUSH_CYCLES 137
+#endif
+#ifndef TCU_OP_DRAIN_CYCLES
+#define TCU_OP_DRAIN_CYCLES 12
+#endif
+#ifndef TCU_OP_STEPS_PER_CYCLE
+#define TCU_OP_STEPS_PER_CYCLE 1
+#endif
+static_assert(TCU_OP_ENGINES >= 1 && TCU_OP_ENGINES <= VX_CFG_NUM_TCU_BLOCKS,
+              "TCU_OP_ENGINES must be between 1 and VX_CFG_NUM_TCU_BLOCKS");
+#endif // TCU_OP
+
 class TcuUnit::Impl {
 public:
 
@@ -358,10 +406,26 @@ public:
     wgmma_desc_.fill({0, 0});
   }
 
-  ~Impl() {}
+  ~Impl() {
+  #ifdef TCU_OP
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& e = tcu_op_.at(b);
+      if (e.ops == 0) continue;
+      std::cout << "TCU_OP engine " << b << ": ops=" << e.ops
+                << " busy=" << e.busy_cycles << " fetch=" << e.fetch_cycles
+                << " issue=" << e.issue_cycles << " drain=" << e.drain_cycles
+                << " preloads=" << e.preloads << " wait_busy=" << e.wait_cycles
+                << " first_accept=" << e.first_accept << " last_done=" << e.last_done
+                << std::endl;
+    }
+  #endif
+  }
 
   void reset() {
     perf_stats_ = PerfStats();
+  #ifdef TCU_OP
+    for (auto& e : tcu_op_) e = tcu_op_engine_t{};
+  #endif
     for (auto& sparse_meta : sparse_meta_) {
       std::fill(sparse_meta.begin(), sparse_meta.end(), 0);
     }
@@ -523,7 +587,143 @@ public:
   }
 #endif // TCU_META_ENABLE
 
+#ifdef TCU_OP
+  static uint64_t tcu_op_lane(const std::vector<reg_data_t>& v, uint32_t i) {
+    return (VX_CFG_XLEN == 64) ? v.at(i).u64 : v.at(i).u32;
+  }
+
+  // Runs before the WMMA/WGMMA dispatch loop, which skips MMA_OP heads.
+  void tcu_op_tick() {
+    uint64_t now = SimPlatform::instance().cycles();
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& e = tcu_op_.at(b);
+
+      // Completion: release the tx-barrier (RTL "DONE fire").
+      if (e.busy && now >= e.done_cycle) {
+        core_->barrier_event_release(bar_decode_id(e.bar_raw, VX_CFG_NUM_BARRIERS));
+        e.busy = false;
+        e.last_done = now;
+        // One line per op: the timeline the prototype analysis is built from.
+        std::cout << "TCU_OP op: engine=" << b << " seq=" << (e.ops - 1)
+                  << " accept=" << e.accept_cycle << " done=" << now
+                  << " K=" << e.cur_K << " init=" << e.cur_init << " flush=" << e.cur_flush
+                  << " preload=" << e.cur_preload << std::endl;
+      }
+
+      auto& input = simobject_->Inputs.at(b);
+      if (input.empty()) continue;
+      auto trace = input.peek();
+      if (std::get<TcuType>(trace->op_type) != TcuType::MMA_OP) continue;
+
+      if (b >= TCU_OP_ENGINES) {
+        std::cerr << "*** TCU_OP: MMA_OP issued on TCU block " << b << " (wid=" << trace->wid
+                  << ") but only " << TCU_OP_ENGINES << " engine(s) are wired to memory;"
+                  << " the RTL would hang here (see VX_tcu_unit g_tcu_mem_tieoff)." << std::endl;
+        std::abort();
+      }
+
+      auto& rs1 = trace->src_data[0];
+      auto& rs2 = trace->src_data[1];
+
+      // Attach as soon as the op is visible, so a wait on its barrier can
+      // never slip through before the engine accepts it.
+      if (!e.attached) {
+        e.pending_bar_raw = uint32_t(tcu_op_lane(rs2, 2));
+        core_->barrier_event_attach(bar_decode_id(e.pending_bar_raw, VX_CFG_NUM_BARRIERS));
+        e.attached = true;
+      }
+
+      if (e.busy) {
+        ++e.wait_cycles;   // RTL "execute stall": op waits for the engine
+        continue;
+      }
+
+      if (!exec_done_.at(b)) {
+        uint64_t a_addr = tcu_op_lane(rs1, 0), b_addr = tcu_op_lane(rs1, 1);
+        uint64_t c_addr = tcu_op_lane(rs1, 2), d_addr = tcu_op_lane(rs1, 3);
+        uint32_t cfg    = uint32_t(tcu_op_lane(rs2, 3));
+        uint32_t K        = (cfg >> 24) & 0xff;
+        uint32_t fmt_d    = (cfg >> 8) & 0xf;
+        uint32_t fmt_s    = (cfg >> 4) & 0xf;
+        uint32_t sparsity = (cfg >> 2) & 0x3;
+        bool init  = (cfg >> 1) & 1;
+        bool flush = cfg & 1;
+        if (sparsity != 0 || fmt_s != vt::fp16::id || fmt_d != vt::fp32::id) {
+          std::cerr << "*** TCU_OP model: only dense fp16->fp32 is modelled (sparsity=" << sparsity
+                    << " fmt_s=" << fmt_s << " fmt_d=" << fmt_d << ")" << std::endl;
+          std::abort();
+        }
+
+        // Functional: acc = (init ? C or 0 : acc) + A x B.
+        auto& acc = e.acc;
+        auto& lmem = core_->local_mem();
+        if (init) {
+          if (c_addr != 0) {
+            // C tile layout (pack_C_blocked_tiled32): 2x16 FEOP blocks.
+            std::array<uint32_t, 1024> c_blk;
+            lmem->backdoor_read(c_blk.data(), c_addr, sizeof(c_blk));
+            for (uint32_t i = 0; i < 1024; ++i) {
+              uint32_t blk = i / 32, in = i % 32;
+              uint32_t row = (blk / 2) * 2 + in / 16, col = (blk % 2) * 16 + in % 16;
+              acc[row * 32 + col] = c_blk[i];
+            }
+          } else {
+            acc.fill(0);
+          }
+        }
+        std::vector<uint16_t> a_t(32 * K), b_t(K * 32);
+        lmem->backdoor_read(a_t.data(), a_addr, a_t.size() * sizeof(uint16_t));
+        lmem->backdoor_read(b_t.data(), b_addr, b_t.size() * sizeof(uint16_t));
+        for (uint32_t k = 0; k < K; ++k) {
+          for (uint32_t m = 0; m < 32; ++m) {
+            uint16_t a = a_t[k * 32 + m];            // A: column-major
+            for (uint32_t n = 0; n < 32; ++n) {
+              acc[m * 32 + n] = FMA<vt::fp16, vt::fp32>::eval(a, b_t[k * 32 + n], acc[m * 32 + n]);
+            }
+          }
+        }
+        if (flush) {
+          core_->processor()->ram()->write(acc.data(), d_addr, acc.size() * sizeof(uint32_t));
+        }
+
+        // Timing (see the phase model above).
+        bool preload = init && !(c_addr == 0 && sparsity == 0
+                         #ifdef TCU_OP_NO_ZERO_INIT
+                                 && false
+                         #endif
+                                 );
+        uint64_t fetch = TCU_OP_FETCH_CYCLES + (preload ? TCU_OP_C_PRELOAD_CYCLES : 0);
+        uint64_t issue = (uint64_t(K) * 32 + TCU_OP_STEPS_PER_CYCLE - 1) / TCU_OP_STEPS_PER_CYCLE;
+        uint64_t drain = flush ? TCU_OP_DRAIN_FLUSH_CYCLES : TCU_OP_DRAIN_CYCLES;
+        e.latency = fetch + issue + drain - 1;
+        e.fetch_cycles += fetch; e.issue_cycles += issue; e.drain_cycles += drain;
+        e.preloads += preload;
+        e.cur_K = K; e.cur_init = init; e.cur_flush = flush; e.cur_preload = preload;
+        exec_done_.at(b) = true;
+      }
+
+      // Commit at result, as in the RTL (the warp keeps issuing meanwhile).
+      if (simobject_->Outputs.at(b).try_send(trace, e.latency)) {
+        exec_done_.at(b) = false;
+        e.busy = true;
+        e.done_cycle = now + e.latency;
+        e.bar_raw = e.pending_bar_raw;
+        e.attached = false;
+        e.accept_cycle = now;
+        if (e.ops == 0) e.first_accept = now;
+        ++e.ops;
+        e.busy_cycles += e.latency;
+        DT(3, simobject_->name() << " MMA_OP accept: block=" << b << ", latency=" << e.latency << ", " << *trace);
+        input.pop();
+      }
+    }
+  }
+#endif // TCU_OP
+
   void tick() {
+  #ifdef TCU_OP
+    this->tcu_op_tick();
+  #endif
   #ifdef TCU_META_ENABLE
     this->agu_step();
   #endif
@@ -635,6 +835,10 @@ public:
       auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
+    #ifdef TCU_OP
+      if (tcu_type == TcuType::MMA_OP)
+        continue;   // handled by tcu_op_tick()
+    #endif
 
       #ifdef VX_CFG_TCU_WGMMA_ENABLE
       // CTA-overlap fence deferred this block — skip until pass 1 plans it.
@@ -1363,6 +1567,24 @@ private:
   // CTA owner per block's A buffer and the shared B buffer (-1 = unowned).
   std::array<int32_t, VX_CFG_NUM_TCU_BLOCKS> cta_owner_a_{};
   int32_t cta_owner_b_ = -1;
+#ifdef TCU_OP
+  struct tcu_op_engine_t {
+    bool     busy = false;
+    bool     attached = false;       // head op's barrier already attached
+    uint64_t done_cycle = 0;
+    uint64_t latency = 0;            // of the op computed under exec_done_
+    uint32_t bar_raw = 0;            // barrier of the op in flight
+    uint32_t pending_bar_raw = 0;    // barrier of the op at the input head
+    std::array<uint32_t, 32 * 32> acc{};  // fp32 bits, persists across K-chunks
+    uint64_t ops = 0, busy_cycles = 0, fetch_cycles = 0, issue_cycles = 0;
+    uint64_t drain_cycles = 0, preloads = 0, wait_cycles = 0;
+    uint64_t first_accept = 0, last_done = 0;
+    uint64_t accept_cycle = 0;
+    uint32_t cur_K = 0;
+    bool     cur_init = false, cur_flush = false, cur_preload = false;
+  };
+  std::array<tcu_op_engine_t, VX_CFG_NUM_TCU_BLOCKS> tcu_op_{};
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1386,6 +1608,8 @@ op_string_t TcuUnit::op_string(TcuType tcu_type, IntrTcuArgs args) {
   case TcuType::TCU_LD:
     return {"TCU_LD." + std::string((args.fmt_d & 0x10) ? "MX." : "SP.")
              + std::string(vt::fmt_string(args.fmt_s)) + ".slot" + std::to_string(args.fmt_d & 0xf), ""};
+  case TcuType::MMA_OP:
+    return {"MMA_OP", ""};
   default:
     std::abort();
   }

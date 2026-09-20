@@ -19,6 +19,7 @@ module VX_tcu_bhf_fmul #(
     parameter IN_SIGW  = 24,    // Includes implicit bit
     parameter OUT_EXPW = IN_EXPW,
     parameter OUT_SIGW = IN_SIGW,    // Includes implicit bit
+    parameter REC_LATENCY = 0,  // stages between input recoding and the multiply
     parameter MUL_LATENCY = 1,
     parameter RND_LATENCY = 1,
     parameter IN_REC   = 0,     // 0: IEEE754, 1: recoded
@@ -76,6 +77,20 @@ module VX_tcu_bhf_fmul #(
         );
     end
 
+    wire [IN_RECW-1:0] a_rec_s, b_rec_s;
+    wire [2:0]         frm_s;
+
+    VX_pipe_register #(
+        .DATAW (2 * IN_RECW + 3),
+        .DEPTH (REC_LATENCY)
+    ) pipe_rec (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .data_in ({a_rec,   b_rec,   frm}),
+        .data_out({a_rec_s, b_rec_s, frm_s})
+    );
+
     // Raw multiplication
 
     mulRecFNToFullRaw #(
@@ -83,8 +98,8 @@ module VX_tcu_bhf_fmul #(
         .sigWidth (IN_SIGW)
     ) multiplier (
         .control   (control),
-        .a         (a_rec),
-        .b         (b_rec),
+        .a         (a_rec_s),
+        .b         (b_rec_s),
         .invalidExc(s1_invalidExc),
         .out_isNaN (s1_isNaN),
         .out_isInf (s1_isInf),
@@ -101,7 +116,7 @@ module VX_tcu_bhf_fmul #(
         .clk     (clk),
         .reset   (reset),
         .enable  (enable),
-        .data_in ({s1_invalidExc, s1_isNaN, s1_isInf, s1_isZero, s1_sign, s1_sExp, s1_sig, frm}),
+        .data_in ({s1_invalidExc, s1_isNaN, s1_isInf, s1_isZero, s1_sign, s1_sExp, s1_sig, frm_s}),
         .data_out({s2_invalidExc, s2_isNaN, s2_isInf, s2_isZero, s2_sign, s2_sExp, s2_sig, s2_frm})
     );
 

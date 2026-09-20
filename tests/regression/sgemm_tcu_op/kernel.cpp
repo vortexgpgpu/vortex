@@ -86,13 +86,24 @@ static constexpr uint32_t div_up_constexpr(uint32_t value, uint32_t divisor) {
 
 __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
 {
+  // Kernel self-timing. The begin values must survive the whole unrolled body,
+  // so they are spilled to the per-thread stack -- and a warp-wide stack store
+  // is one uncoalesced cache-line miss per thread (stacks are 8KB apart). One
+  // warp absorbs that; the multi-engine kernel's warps queue their misses
+  // behind each other and delay the first DXA issue by thousands of cycles.
+  // -DSGEMM_NO_KERNEL_METRICS drops the self-timing (metrics are reported 0).
+#ifndef SGEMM_NO_KERNEL_METRICS
   const uint64_t instret_begin = vx_rdinstret_local();
   const __rdcycle_time cycle_begin = vx_rdcycle_sync_begin();
+#endif
 
   auto pA = reinterpret_cast<uint32_t *>(arg->A_addr);
   auto pB = reinterpret_cast<uint32_t *>(arg->B_addr);
   auto pC = reinterpret_cast<uint32_t *>(arg->C_addr);
   auto pD = reinterpret_cast<uint32_t *>(arg->D_addr);
+  // No C (beta == 0, see SGEMM_HAS_C in common.h): skip staging it and pass the
+  // engine a null C, which initialises the accumulator from zero instead.
+  static constexpr bool has_c = (SGEMM_HAS_C != 0);
   auto pA_bitmap = reinterpret_cast<const uint32_t *>(arg->A_bitmap_addr);
   auto pB_bitmap = reinterpret_cast<const uint32_t *>(arg->B_bitmap_addr);
 
@@ -145,8 +156,18 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
   static constexpr uint32_t tiles_k = (K / tile_K);
   static constexpr uint32_t total_tiles = tiles_n * tiles_m;
   const uint32_t block_tile_id = blockIdx.y * gridDim.x + blockIdx.x;
+  // Multi-engine (see SGEMM_TCU_ENGINES in common.h): this CTA is engine
+  // block_tile_id and owns every kEngines-th output tile.
+  static constexpr uint32_t kEngines = SGEMM_TCU_ENGINES;
+  static_assert(kEngines == 1 || kDense, "multi-engine TCU_OP is dense-only");
+  static_assert(total_tiles % kEngines == 0, "output tiles must divide evenly across engines");
 
-  static constexpr uint32_t num_warps_per_cta = 1;
+#ifdef SGEMM_TCU_COOP
+  static constexpr bool kCoop = true;
+#else
+  static constexpr bool kCoop = false;
+#endif
+  static constexpr uint32_t num_warps_per_cta = SGEMM_COOP_WARPS;
   vortex::barrier load_bar[2] = { vortex::barrier(0, num_warps_per_cta), vortex::barrier(1, num_warps_per_cta) };
   vortex::barrier tcu_bar[2]  = { vortex::barrier(2, num_warps_per_cta), vortex::barrier(3, num_warps_per_cta) };
 
@@ -196,7 +217,7 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
   };
 
 
-  if constexpr (kDense) 
+  if constexpr (kDense && kEngines == 1)
   {
     uint32_t* A_lmem[2] = {half0_base, half1_base};
     uint32_t* B_lmem[2] = {A_lmem[0] + dense_a_tile_regs, A_lmem[1] + dense_a_tile_regs};
@@ -241,8 +262,9 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
           if (is_dxa_warp) {
             // Post-rebase tx-barrier semantics: expectations are armed in
             // software before issue; DXA only delivers done events. The first
-            // chunk of each output tile also stages C (accumulator init).
-            const bool stage_c = (dense_iter == 0);
+            // chunk of each output tile also stages C (accumulator init),
+            // unless there is no C.
+            const bool stage_c = has_c && (dense_iter == 0);
             load_bar[next_stage].expect_tx(stage_c ? 3 : 2);
             if (stage_c) {
               vx_dxa_issue_2d_wg(kDescC, load_bar[next_stage].id(), C_lmem[next_stage], 0, tile_id);
@@ -256,11 +278,12 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
 
           if (is_dxa_warp) {
             // init_flag=1 loads the accumulator's initial value from C; the
-            // op core requires it LMEM-resident (DXA-staged above).
+            // op core requires it LMEM-resident (DXA-staged above). A null C
+            // makes a dense op start the accumulator from zero instead.
             rs1_val = (uintptr_t)vx_wgather(
                       (size_t)(uintptr_t)A_lmem[next_stage],
                       (size_t)(uintptr_t)B_lmem[next_stage],
-                      (size_t)(uintptr_t)C_lmem[next_stage],
+                      (size_t)(has_c ? (uintptr_t)C_lmem[next_stage] : (uintptr_t)0),
                       (size_t)(uintptr_t)mma_D_addr);
 
             rs2_val = (uintptr_t)vx_wgather(
@@ -279,8 +302,221 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
 
     launch_pending_mma();
     tcu_bar[current_stage].arrive_and_wait();
-  } 
-  
+  }
+
+#ifdef SGEMM_TCU_COOP
+  else if constexpr (kDense && kCoop)
+  {
+    // Cooperative multi-engine path (see SGEMM_TCU_COOP in common.h): one CTA
+    // of kEngines warps covering GM x GN blocks of output tiles. Warp 0 stages
+    // the block's GM A tiles and GN B tiles; every warp then issues the MMA_OP
+    // for its own tile (A tile wr, B tile wc) on its own engine. Barriers count
+    // all warps, so the engines advance stage by stage together.
+    static constexpr uint32_t GM = SGEMM_COOP_GM, GN = SGEMM_COOP_GN;
+    static_assert(tiles_m % GM == 0 && tiles_n % GN == 0, "output tiles must tile by the cooperative block");
+    static_assert(!has_c, "the cooperative prototype stages no C (null C only)");
+    static constexpr uint32_t stage_regs = GM * dense_a_tile_regs + GN * dense_b_tile_regs;
+    static_assert(2 * stage_regs * sizeof(uint32_t) <= lmem_capacity_bytes,
+                  "two stages of GM A + GN B tiles must fit in LMEM");
+    const uint32_t wrank = csr_read(VX_CSR_CTA_RANK);
+    const uint32_t wr = wrank / GN, wc = wrank % GN;
+    auto A_at = [&](uint32_t s, uint32_t i) __attribute__((always_inline)) {
+      return lmem_base + s * stage_regs + i * dense_a_tile_regs;
+    };
+    auto B_at = [&](uint32_t s, uint32_t j) __attribute__((always_inline)) {
+      return lmem_base + s * stage_regs + GM * dense_a_tile_regs + j * dense_b_tile_regs;
+    };
+    static constexpr uint32_t blocks_m = tiles_m / GM, blocks_n = tiles_n / GN;
+    static constexpr uint32_t kDenseLaunches = div_up_constexpr(K, tile_K);
+
+#ifdef SGEMM_TCU_ROLLED
+    // Rolled block loop. The stage index must stay a compile-time constant:
+    // a runtime-indexed load_bar[]/tcu_bar[]/buffer-pointer array is spilled
+    // to the per-thread stack, and every access becomes one uncoalesced
+    // cache-line miss per thread (the plain rolled loop ran 2.1x slower). With
+    // an even K-chunk count, step s = bi*L + dense_iter has parity
+    // dense_iter & 1, so the fully unrolled inner loop sees constant stages.
+    // Protocol per step s: wait the op two steps back (tcu_bar[s&1]), launch
+    // op s-1 from stage (s-1)&1, then stage step s into stage s&1 -- exactly
+    // what launch_pending_mma() does with current/next_stage.
+    static_assert(kDenseLaunches % 2 == 0,
+                  "rolled cooperative loop needs an even K-chunk count (compile-time stage parity)");
+#pragma unroll 1
+    for (uint32_t bi = 0; bi < blocks_m * blocks_n; ++bi) {
+      const uint32_t block_row = bi / blocks_n, block_col = bi % blocks_n;
+      const uint32_t tile_id = (block_row * GM + wr) * tiles_n + (block_col * GN + wc);
+      const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr) + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
+#pragma unroll
+      for (uint32_t dense_iter = 0; dense_iter < kDenseLaunches; ++dense_iter) {
+        const uint32_t s_cur = dense_iter & 1u;   // stage staged at this step
+        const uint32_t s_prv = s_cur ^ 1u;        // stage of the op launched now
+        const uint32_t curr_k = std::min(K - dense_iter * tile_K, tile_K);
+        const uint32_t flags_chunk = (uint32_t(dense_iter == 0) << 1) | uint32_t(dense_iter == (kDenseLaunches - 1));
+
+        tcu_bar[s_cur].arrive_and_wait();
+        if ((bi | dense_iter) != 0) {
+          tcu_bar[s_cur].arrive_and_wait();
+          load_bar[s_prv].arrive_and_wait();
+          vt::mma_op(pending_rs1_val, pending_rs2_val);
+        }
+        if (is_dxa_warp) {
+          load_bar[s_cur].expect_tx(GM + GN);
+          for (uint32_t i = 0; i < GM; ++i) {
+            vx_dxa_issue_2d_wg(kDescA, load_bar[s_cur].id(), A_at(s_cur, i), 0,
+                               (block_row * GM + i) * tiles_k + dense_iter);
+          }
+          for (uint32_t j = 0; j < GN; ++j) {
+            vx_dxa_issue_2d_wg(kDescB, load_bar[s_cur].id(), B_at(s_cur, j), 0,
+                               (block_col * GN + j) * tiles_k + dense_iter);
+          }
+        }
+        pending_rs1_val = (uintptr_t)vx_wgather((size_t)(uintptr_t)A_at(s_cur, wr),
+                                                (size_t)(uintptr_t)B_at(s_cur, wc),
+                                                (size_t)0, (size_t)(uintptr_t)mma_D_addr);
+        pending_rs2_val = (uintptr_t)vx_wgather((size_t)(uintptr_t)nullptr, (size_t)(uintptr_t)nullptr,
+                                                (size_t)tcu_bar[s_cur].id(),
+                                                (size_t)((curr_k << 24) | (vt::OTYPE::id << 8) |
+                                                         (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
+      }
+    }
+    // Last step staged into stage 1 (even chunk count): launch it and drain.
+    tcu_bar[0].arrive_and_wait();
+    load_bar[1].arrive_and_wait();
+    vt::mma_op(pending_rs1_val, pending_rs2_val);
+    tcu_bar[1].arrive_and_wait();
+    (void)current_stage; (void)next_stage;
+#else  // fully unrolled: stage indices fold to constants on their own
+#pragma unroll
+    for (uint32_t bi = 0; bi < blocks_m * blocks_n; ++bi) {
+      const uint32_t block_row = bi / blocks_n, block_col = bi % blocks_n;
+      const uint32_t tile_row_idx = block_row * GM + wr;
+      const uint32_t tile_col_idx = block_col * GN + wc;
+      const uint32_t tile_id = tile_row_idx * tiles_n + tile_col_idx;
+      const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr) + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
+
+#pragma unroll
+      for (uint32_t dense_iter = 0; dense_iter < kDenseLaunches; ++dense_iter) {
+        const uint32_t k_tile_idx = dense_iter;
+        const uint32_t k_remaining = K - dense_iter * tile_K;
+        uint32_t curr_k = std::min(k_remaining, tile_K);
+        const uint32_t flags_chunk = (uint32_t(dense_iter == 0) << 1) | uint32_t(dense_iter == (kDenseLaunches - 1));
+
+        tcu_bar[current_stage].arrive_and_wait();
+        if ((bi | dense_iter) != 0) {
+          launch_pending_mma();
+        }
+
+        if (is_dxa_warp) {
+          load_bar[next_stage].expect_tx(GM + GN);
+          for (uint32_t i = 0; i < GM; ++i) {
+            vx_dxa_issue_2d_wg(kDescA, load_bar[next_stage].id(), A_at(next_stage, i), 0,
+                               (block_row * GM + i) * tiles_k + k_tile_idx);
+          }
+          for (uint32_t j = 0; j < GN; ++j) {
+            vx_dxa_issue_2d_wg(kDescB, load_bar[next_stage].id(), B_at(next_stage, j), 0,
+                               (block_col * GN + j) * tiles_k + k_tile_idx);
+          }
+        }
+
+        pending_rs1_val = (uintptr_t)vx_wgather(
+                          (size_t)(uintptr_t)A_at(next_stage, wr),
+                          (size_t)(uintptr_t)B_at(next_stage, wc),
+                          (size_t)0,
+                          (size_t)(uintptr_t)mma_D_addr);
+        pending_rs2_val = (uintptr_t)vx_wgather(
+                          (size_t)(uintptr_t)nullptr,
+                          (size_t)(uintptr_t)nullptr,
+                          (size_t)tcu_bar[next_stage].id(),
+                          (size_t)((curr_k << 24) | (vt::OTYPE::id << 8) |
+                                   (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
+      }
+    }
+
+    launch_pending_mma();
+    tcu_bar[current_stage].arrive_and_wait();
+#endif // SGEMM_TCU_ROLLED
+  }
+#endif // SGEMM_TCU_COOP
+
+  else if constexpr (kDense)
+  {
+    // Multi-engine dense path. Same staging/barrier/launch protocol as the
+    // single-engine path above; only the tile assignment and the LMEM base
+    // differ. This CTA's LMEM share holds two stages of A + B [+ C], and all
+    // kEngines shares must fit at once or the CTAs would not be co-resident
+    // and the engines would run one after another.
+    static constexpr uint32_t kCtaLmemBytes = SGEMM_CTA_LMEM_BYTES(sizeof(ctx::input_t), tile_K, has_c);
+    // kernel_main is not a template, so this branch's asserts are evaluated
+    // even when another branch is taken; hence the kCoop guard.
+    static_assert(kCoop || kEngines * kCtaLmemBytes <= lmem_capacity_bytes,
+                  "all engine CTAs must be LMEM-resident at once (raise VX_CFG_LMEM_LOG_SIZE or lower SGEMM_TILE_K_MULT)");
+    static constexpr uint32_t stage_regs = kCtaLmemBytes / 2 / sizeof(uint32_t);
+    uint32_t* cta_lmem = reinterpret_cast<uint32_t *>(__local_mem(kCtaLmemBytes));
+    uint32_t* A_lmem[2]  = {cta_lmem, cta_lmem + stage_regs};
+    uint32_t* B_lmem[2]  = {A_lmem[0] + dense_a_tile_regs, A_lmem[1] + dense_a_tile_regs};
+    uint32_t* Ce_lmem[2] = {B_lmem[0] + dense_b_tile_regs, B_lmem[1] + dense_b_tile_regs};
+    static constexpr uint32_t tiles_per_cta = total_tiles / kEngines;
+    static constexpr uint32_t kDenseLaunches = div_up_constexpr(K, tile_K);
+
+#ifdef SGEMM_TCU_ROLLED
+#pragma unroll 1
+#else
+#pragma unroll
+#endif
+    for (uint32_t i = 0; i < tiles_per_cta; ++i) {
+      const uint32_t tile_id = block_tile_id + i * kEngines;
+      const uint32_t tile_row_idx = tile_id / tiles_n;
+      const uint32_t tile_col_idx = tile_id % tiles_n;
+      const uintptr_t mma_D_addr = static_cast<uintptr_t>(arg->D_addr) + static_cast<uintptr_t>(tile_id) * tileD_regs * sizeof(uint32_t);
+
+#pragma unroll
+      for (uint32_t dense_iter = 0; dense_iter < kDenseLaunches; ++dense_iter) {
+        const uint32_t k_tile_idx = dense_iter;
+        const uint32_t k_remaining = K - dense_iter * tile_K;
+        uint32_t curr_k = std::min(k_remaining, tile_K);
+        const uint32_t flags_chunk = (uint32_t(dense_iter == 0) << 1) | uint32_t(dense_iter == (kDenseLaunches - 1));
+
+        tcu_bar[current_stage].arrive_and_wait();
+
+        /* In the very first execution, no data are ready so skip the mma_op */
+        if ((i | dense_iter) != 0) {
+          launch_pending_mma();
+        }
+
+        if (is_dxa_warp) {
+          const bool stage_c = has_c && (dense_iter == 0);
+          load_bar[next_stage].expect_tx(stage_c ? 3 : 2);
+          if (stage_c) {
+            vx_dxa_issue_2d_wg(kDescC, load_bar[next_stage].id(), Ce_lmem[next_stage], 0, tile_id);
+          }
+          vx_dxa_issue_2d_wg(kDescA, load_bar[next_stage].id(), A_lmem[next_stage], 0, tile_row_idx * tiles_k + k_tile_idx);
+          vx_dxa_issue_2d_wg(kDescB, load_bar[next_stage].id(), B_lmem[next_stage], 0, tile_col_idx * tiles_k + k_tile_idx);
+        }
+
+        uintptr_t rs1_val = 0;
+        uintptr_t rs2_val = 0;
+        if (is_dxa_warp) {
+          rs1_val = (uintptr_t)vx_wgather(
+                    (size_t)(uintptr_t)A_lmem[next_stage],
+                    (size_t)(uintptr_t)B_lmem[next_stage],
+                    (size_t)(has_c ? (uintptr_t)Ce_lmem[next_stage] : (uintptr_t)0),
+                    (size_t)(uintptr_t)mma_D_addr);
+          rs2_val = (uintptr_t)vx_wgather(
+                    (size_t)(uintptr_t)nullptr,
+                    (size_t)(uintptr_t)nullptr,
+                    (size_t)tcu_bar[next_stage].id(),
+                    (size_t)((curr_k << 24) | (vt::OTYPE::id << 8) |
+                             (vt::ITYPE::id << 4) | (kConstSparsity << 2) | flags_chunk));
+        }
+        pending_rs1_val = rs1_val;
+        pending_rs2_val = rs2_val;
+      }
+    }
+
+    launch_pending_mma();
+    tcu_bar[current_stage].arrive_and_wait();
+  }
+
   else {
 
     /* Constants for the sparse case only */
@@ -372,7 +608,8 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
             // C is staged once per output tile (on the first k-chunk), exactly
             // as the dense path does: the op core requires every read operand
             // LMEM-resident, so C cannot be handed to it as a global pointer.
-            const bool stage_c = (dense_iter == 0);
+            // With no C, nothing is staged and the engine gets a null C.
+            const bool stage_c = has_c && (dense_iter == 0);
             load_bar[next_stage].expect_tx((kSparseA ? 4 : 3) + (stage_c ? 1 : 0));
             if (stage_c) {
               vx_dxa_issue_2d_wg(kDescC, load_bar[next_stage].id(), C_lmem[next_stage], 0, tile_id);
@@ -404,7 +641,7 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
             rs1_val = (uintptr_t)vx_wgather(
                       (size_t)(uintptr_t)A_lmem[next_stage],
                       (size_t)(uintptr_t)B_lmem[next_stage],
-                      (size_t)(uintptr_t)C_lmem[next_stage],
+                      (size_t)(has_c ? (uintptr_t)C_lmem[next_stage] : (uintptr_t)0),
                       (size_t)(uintptr_t)mma_D_addr);
             rs2_val = (uintptr_t)vx_wgather(
                       (size_t)(uintptr_t)A_bitmap_lmem[next_stage],
@@ -430,6 +667,7 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
     tcu_bar[current_stage].arrive_and_wait();
   }
 
+#ifndef SGEMM_NO_KERNEL_METRICS
   const __rdcycle_time cycle_end = vx_rdcycle_sync_end();
   const uint64_t instret_end = vx_rdinstret_local();
   const uint64_t total_cycles = vx_rdcycle_sync_diff(cycle_begin, cycle_end);
@@ -440,4 +678,5 @@ __kernel void kernel_main(kernel_arg_t *__UNIFORM__ arg)
     metrics[0] = total_cycles;
     metrics[1] = total_instructions;
   }
+#endif
 }

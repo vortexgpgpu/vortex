@@ -50,6 +50,17 @@ ifneq (,$(filter -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_TCU_ENABLE=1 -DVX_CFG_EXT_
 		RTL_INCLUDE += -I$(RTL_DIR)/tcu/bhf
 		RTL_INCLUDE += -J$(THIRD_PARTY_DIR)/hardfloat/source/RISCV
 		RTL_INCLUDE += -I$(THIRD_PARTY_DIR)/hardfloat/source
+		# HardFloat modules the BHF datapath instantiates (package first), as
+		# sim/rtlsim/Makefile lists them; include paths alone do not add them.
+		RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/bsg_hardfloat_pkg.sv
+		RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_primitives.v
+		RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/HardFloat_rawFN.v
+		RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/isSigNaNRecFN.v
+		RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/fNToRecFN.v
+		RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToFN.v
+		RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/recFNToRecFN.v
+		RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/mulRecFN.v
+		RTL_PKGS += $(THIRD_PARTY_DIR)/hardfloat/source/addRecFN.v
 	endif
 	ifneq (,$(filter -DVX_CFG_TCU_TYPE_FPNEW, $(XCONFIGS)))
 		RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv

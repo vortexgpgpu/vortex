@@ -11,15 +11,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "VX_define.vh" 
+`include "VX_define.vh"
+// dpi_float.vh is simulation-only; only the DPI backend below uses it.
+`ifdef VX_CFG_TCU_TYPE_DPI
 `include "dpi_float.vh"
+`endif
 
+`ifdef TCU_OP
+// The exact-product datapath (VX_CFG_TCU_TYPE_TFR) uses VX_tcu_op_mul and
+// VX_tcu_op_accu instead; this module's BHF/DPI-only parameter lists do not
+// elaborate without one of those backends selected.
+`ifndef VX_CFG_TCU_TYPE_TFR
 
 module VX_tcu_feop import VX_tcu_pkg::*; #(
     parameter N            = 16,
+    parameter FREC_LATENCY = 0,
     parameter FMUL_LATENCY = 2,
     parameter FRND_LATENCY = 1,
-    parameter ID           = 0  // FEOP instance ID for debugging
+    parameter ID           = 0  // instance index, used in traces
 ) (
     input  wire clk,
     input  wire reset,
@@ -34,14 +43,15 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
     input  wire [`VX_CFG_XLEN-1:0]        a_elem,
     input  wire [N-1:0][`VX_CFG_XLEN-1:0] b_row,
     
-    output wire   [N-1:0][`VX_CFG_XLEN-1:0] d_block // Output D block to the tcu_core
+    output wire [N-1:0][`VX_CFG_XLEN-1:0] d_block // Output D block to the tcu_core
 );
-    localparam TOTAL_LATENCY = FMUL_LATENCY + FRND_LATENCY;
+    localparam TOTAL_LATENCY = FREC_LATENCY + FMUL_LATENCY + FRND_LATENCY;
 `ifdef VX_CFG_TCU_TYPE_BHF
     `UNUSED_PARAM (TOTAL_LATENCY)
 `endif
 
-    `UNUSED_VAR (fmt_d);
+    `UNUSED_PARAM (ID)
+    `UNUSED_VAR (fmt_d)
 
     wire [15:0] a_16b = a_elem[15:0];
 
@@ -79,6 +89,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
             .OUT_SIGW     (24),   // fp32 significand size
             .IN_REC       (0),    // input is IEEE754  (not in recoded format)
             .OUT_REC      (0),    // output is IEEE754 (not in recoded format)
+            .REC_LATENCY  (FREC_LATENCY),
             .MUL_LATENCY  (FMUL_LATENCY),
             .RND_LATENCY  (FRND_LATENCY)
         ) fp16_mul (
@@ -99,6 +110,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
             .OUT_SIGW     (24),   // fp32 significand size
             .IN_REC       (0),    // input is IEEE754  (not in recoded format)
             .OUT_REC      (0),    // output is IEEE754 (not in recoded format)
+            .REC_LATENCY  (FREC_LATENCY),
             .MUL_LATENCY  (FMUL_LATENCY),
             .RND_LATENCY  (FRND_LATENCY)
         ) fp8_mul (
@@ -123,6 +135,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
             .OUT_SIGW     (24),   // fp32 significand size
             .IN_REC       (0),    // input is IEEE754  (not in recoded format)
             .OUT_REC      (0),    // output is IEEE754 (not in recoded format)
+            .REC_LATENCY  (FREC_LATENCY),
             .MUL_LATENCY  (FMUL_LATENCY),
             .RND_LATENCY  (FRND_LATENCY)
         ) fp32_mul (
@@ -138,7 +151,6 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
 
         // BHF FP mul units are internally pipelined, but int8 multiply is combinational.
         // Delay int8 products to keep alignment with FEOP control timing.
-        // TODO: Remove these registers
         VX_pipe_register #(
             .DATAW  (32),
             .RESETW (32),
@@ -162,10 +174,7 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
             fflags = '0;
 `endif
             case (fmt_s)
-            // Format ids follow the modern tensor_cfg.h/VX_tcu_pkg encoding
-            // (fp32=0, fp16=2, fp8=4, int8=17 truncated to 4 bits = 1); the
-            // legacy literals (fp16=1, fp8=3, int8=9) decoded nothing and
-            // fell into the zero default.
+            // Format ids are VX_tcu_pkg's, truncated to the 4-bit fmt field.
             4'(TCU_FP32_ID): begin // fp32
 `ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = {32'hffffffff, bhf_prod_fp32};
@@ -173,7 +182,6 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
                 a_f = {32'hffffffff, a_elem};
                 b_f = valid_in_bitmap[j] ? {32'hffffffff, b_row[j][31:0]} : {32'hffffffff, 32'h0};
                 dpi_fmadd(enable, int'(0), a_f, b_f, xprod, 3'b0, feop_output[j], fflags);
-                // `TRACE(1, ("%t: [feop %0d]: j=%0d, a_f=0x%0h, b_f=0x%0h, feop_output[N] (ID=%0d)=0x%0h\n", $time, ID, j, a_f, b_f, ID, feop_output[j]));
 `endif
             end
             4'(TCU_FP16_ID): begin // fp16
@@ -183,7 +191,6 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
                 dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, a_16b},       3'b0, a_f, fflags);
                 dpi_f2f(enable, int'(0), int'(2), {48'hffffffffffff, b_16b_gated}, 3'b0, b_f, fflags);
                 dpi_fmadd(enable, int'(0), a_f, b_f, xprod, 3'b0, feop_output[j], fflags);
-                // `TRACE(1, ("%t: [feop %0d]: j=%0d, a_f=0x%0h, b_f=0x%0h, feop_output[N] (ID=%0d)=0x%0h\n", $time, ID, j, a_f, b_f, ID, feop_output[j]));
 `endif
             end
             4'(TCU_FP8_ID): begin // fp8
@@ -202,14 +209,9 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
 `elsif VX_CFG_TCU_TYPE_DPI
                 feop_output[j] = {{32{prod_i32[31]}}, prod_i32};
 `endif
-                // `TRACE(1, ("%t: [feop %0d]: j=%0d, a_f=0x%0h, b_f=0x%0h, feop_output[N] (ID=%0d)=0x%0h\n", $time, ID, j, a_f, b_f, ID, feop_output[j]));
             end
             default: begin
-`ifdef VX_CFG_TCU_TYPE_BHF
                 feop_output[j] = '0;
-`elsif VX_CFG_TCU_TYPE_DPI
-                feop_output[j] = '0;
-`endif
             end
             endcase
         end
@@ -233,27 +235,14 @@ module VX_tcu_feop import VX_tcu_pkg::*; #(
     end
 
     always @(posedge clk) begin
-        if (reset) begin
-            feop_output [N-1:0] <= '{default:'0};
-        end 
-        else begin
-            if (valid_in && enable) begin
-                `TRACE(1, ("%t: [feop %0d]: Started\n", $time, ID));
-                // `TRACE(2, ("a_16b=0x%0h\n", 16'(a_16b)));
-                // `TRACE(2, ("b_row="));
-                // `TRACE_ARRAY1D(2, "0x%0h", b_row, (N/2));
-                // `TRACE(2, ("\n"));
-
-                // `TRACE(2, ("feop_output[N] (ID=%0d):\n", ID));
-                // `TRACE_ARRAY1D(2, "0x%0h", feop_output, N);
-
-                // `TRACE(2, ("\n%t: feop_output_delayed[N] (ID=%0d):\n", $time, ID));
-                // `TRACE_ARRAY1D(2, "0x%0h", feop_output_delayed, N);
-                `TRACE(2, ("\n"));
-            end
+        if (~reset && valid_in && enable) begin
+            `TRACE(1, ("%t: [feop %0d]: Started\n", $time, ID))
         end
     end
 
     assign d_block = feop_output_delayed;
 
 endmodule
+
+`endif // !VX_CFG_TCU_TYPE_TFR
+`endif // TCU_OP

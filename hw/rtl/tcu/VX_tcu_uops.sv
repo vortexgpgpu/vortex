@@ -13,6 +13,8 @@
 
 `include "VX_define.vh"
 
+`ifndef TCU_OP
+
 //
 // TCU uop expander.
 //
@@ -432,3 +434,5 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     assign ibuf_out = ibuf_r;
 
 endmodule
+
+`endif // TCU_OP

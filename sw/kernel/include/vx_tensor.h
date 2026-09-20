@@ -1220,6 +1220,10 @@ public:
   //    unreachable against a 4-bit selector. Only ids < 16 are usable until
   //    the field is widened.
   //  * A C base of 0 means "no C"; the accumulator is zero-initialized instead.
+  //    Prefer it whenever C is zero: on a dense init op it also skips the C
+  //    preload (32 serialized requests, ~280 cycles, before any A/B fetch),
+  //    and the kernel need not stage C at all. Sparse ops still preload, with
+  //    the reads redirected and the data discarded.
   //  * init/flush amortize across K: set init on the first k-chunk of an output
   //    tile, flush on the last, and neither in between so the accumulator stays
   //    resident.

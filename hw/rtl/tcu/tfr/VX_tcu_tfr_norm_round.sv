@@ -54,7 +54,15 @@ module VX_tcu_tfr_norm_round import VX_tcu_pkg::*; #(
     wire signed [EXP_W-1:0] norm_exp_base;
     wire signed [EXP_W-1:0] norm_exp_plus1;
 
-    wire [EXP_W-1:0] sub_term = EXP_W'({1'b1, 2'b00, lz_count});
+    // The exponent correction is 128 + lz_count. The concatenation below spells
+    // that out without an adder, but only while the leading-zero count is five
+    // bits wide (WA of 17..32, which every FEDP configuration uses). A wider
+    // accumulator -- TCU_OP's fixed-point banks, for one -- needs the explicit
+    // form. LZW is a localparam, so only one branch is ever synthesized and the
+    // FEDP path keeps the exact logic it had.
+    localparam LZW = $clog2(WA);
+    wire [EXP_W-1:0] sub_term = (LZW == 5) ? EXP_W'({1'b1, 2'b00, lz_count})
+                                           : (EXP_W'(lz_count) + EXP_W'(128));
     VX_ks_adder #(
         .N(EXP_W),
         .BYPASS (`FORCE_BUILTIN_ADDER(EXP_W))

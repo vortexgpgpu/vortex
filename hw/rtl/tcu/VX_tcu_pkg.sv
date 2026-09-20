@@ -114,6 +114,12 @@ package VX_tcu_pkg;
 
 `ifdef TCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE
     localparam TCU_FEOP_XBAR_QUEUE_DEPTH = `TCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE;
+`elsif VX_CFG_TCU_TYPE_TFR
+    // Credit-based back-pressure (D1) needs room for every step in flight, so
+    // the queues are deep enough that issue, not the write port, throttles.
+    // They are LUTRAM-backed, which makes depth 8 cheaper than the depth-1
+    // register FIFOs it replaces.
+    localparam TCU_FEOP_XBAR_QUEUE_DEPTH = 8;
 `else
     localparam TCU_FEOP_XBAR_QUEUE_DEPTH = 1;
 `endif
@@ -121,6 +127,125 @@ package VX_tcu_pkg;
     localparam TCU_FEOP_M_STEPS = TCU_TC_M_OP / TCU_FEOP_BLOCK_M_SIZE; // m-dimension steps to calculate an accu buffer
     localparam TCU_FEOP_N_STEPS = TCU_TC_N_OP / TCU_FEOP_BLOCK_N_SIZE; // n-dimension steps to calculate an accu buffer
     localparam TCU_FEOP_STEPS = TCU_FEOP_M_STEPS * TCU_FEOP_N_STEPS;
+
+    // ---- TCU_OP fixed-point accumulator domain ----------------------------
+    // The outer-product engine multiplies exactly and accumulates in fixed
+    // point, so a product is carried as {sign, exponent, magnitude} and never
+    // rounded until the tile is flushed.
+    //
+    // A term's magnitude is TCU_OP_MAG_W bits, left-aligned for every format
+    // (significands are padded to TCU_OP_SIG_W before the multiply), and its
+    // value is  mag * 2^(pexp - TCU_OP_EXP_BIAS)  with
+    //
+    //     pexp = exp_a + exp_b + tcu_op_exp_k(fmt)          (products)
+    //     pexp = exp_c + TCU_OP_EXP_BIAS - 127 - 23         (the fp32 C term)
+    //
+    // Padding every significand to TCU_OP_SIG_W makes the product scale
+    // format-independent, so one multiplier and one exponent formula serve all
+    // formats (the same trick as VX_tcu_tfr_mul_f16's BIAS_CONST_*).
+    localparam TCU_OP_EXP_W    = 11;  // holds every pexp and the flush max_exp
+    localparam TCU_OP_EXP_BIAS = 512;
+    localparam TCU_OP_SIG_W    = 11;  // padded significand (fp16/bf16 need 11)
+    localparam TCU_OP_MAG_W    = 24;  // left-aligned product magnitude
+    // Headroom above the LARGEST product the format can produce, for the sign
+    // and for summing up to 2^(TCU_OP_ACC_GROWTH-1) terms.
+    localparam TCU_OP_ACC_GROWTH = 10;
+    // Accumulator width. The anchor is a per-format constant, so the window has
+    // to span the format's whole product range or small operands would quantise
+    // away -- a data-dependent loss that no amount of tuning fixes. The exact
+    // width for a format is
+    //     2 * max_exponent_field + 2 * ACC_GROWTH + 22
+    // which is 102 for fp16 and bf8, 72 for fp8, and 550 for bf16. 104 covers
+    // every format except bf16, whose 254-binade exponent range is windowed
+    // instead (62 binades of dynamic range, with the dropped bits recorded in
+    // the sticky bit).
+`ifdef TCU_OP_ACC_WIDTH_OVERRIDE
+    localparam TCU_OP_ACC_W = `TCU_OP_ACC_WIDTH_OVERRIDE;
+`else
+    localparam TCU_OP_ACC_W = 104;
+`endif
+    // Bits below the LSB of a term whose pexp equals the anchor.
+    localparam TCU_OP_ACC_FRAC = TCU_OP_ACC_W - TCU_OP_ACC_GROWTH - TCU_OP_MAG_W;
+
+    // Per-format exponent constant (see pexp above).
+    function automatic int tcu_op_exp_k(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        case (fmt)
+            TCU_FP16_ID: return TCU_OP_EXP_BIAS -  15 -  15 - 22;
+            TCU_BF16_ID: return TCU_OP_EXP_BIAS - 127 - 127 - 22;
+            TCU_FP8_ID:  return TCU_OP_EXP_BIAS -   7 -   7 - 22;
+            TCU_BF8_ID:  return TCU_OP_EXP_BIAS -  15 -  15 - 22;
+            default:     return 0;
+        endcase
+    endfunction
+
+    // Largest exponent field a format's operands can carry (all-ones is
+    // inf/nan and never reaches the multiplier).
+    function automatic int tcu_op_exp_max(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        case (fmt)
+            TCU_FP16_ID: return  30;
+            TCU_BF16_ID: return 254;
+            TCU_FP8_ID:  return  15;
+            TCU_BF8_ID:  return  30;
+            default:     return 0;
+        endcase
+    endfunction
+
+    // The accumulator anchor: a constant per format, so alignment is
+    // feed-forward and no per-tile exponent state exists.
+    function automatic int tcu_op_anchor(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        return 2 * tcu_op_exp_max(fmt) + tcu_op_exp_k(fmt) + TCU_OP_ACC_GROWTH;
+    endfunction
+
+    // max_exp handed to VX_tcu_tfr_norm_round at flush. Derivation: the
+    // accumulator integer's LSB has weight 2^(anchor - EXP_BIAS - ACC_FRAC),
+    // and norm_round expects max_exp = weight + WA + 254.
+    function automatic int tcu_op_flush_exp(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        return tcu_op_anchor(fmt) - TCU_OP_EXP_BIAS - TCU_OP_ACC_FRAC + TCU_OP_ACC_W + 254;
+    endfunction
+
+    // Accumulator width at which a format loses nothing (see TCU_OP_ACC_W).
+    function automatic int tcu_op_exact_acc_w(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        return 2 * tcu_op_exp_max(fmt) + 2 * TCU_OP_ACC_GROWTH + 22;
+    endfunction
+
+    // ---- the fp32 C term, in the same domain -------------------------------
+    localparam TCU_OP_C_EXP_K = TCU_OP_EXP_BIAS - 127 - 23;
+
+    typedef struct packed {
+        logic                    sign;
+        logic [TCU_OP_EXP_W-1:0] exp;
+        logic [TCU_OP_MAG_W-1:0] mag;
+        logic                    is_nan;
+        logic                    is_inf;
+    } tcu_op_term_t;
+
+    function automatic tcu_op_term_t tcu_op_unpack_fp32(input logic [31:0] c);
+        automatic logic [7:0]  ce     = c[30:23];
+        automatic logic [22:0] cm     = c[22:0];
+        automatic logic        e_zero = ~|ce;
+        automatic logic        e_ones =  &ce;
+        tcu_op_term_t t;
+        t.sign   = c[31];
+        t.is_nan = e_ones &  |cm;
+        t.is_inf = e_ones & ~|cm;
+        if ((e_zero & ~|cm) | e_ones) begin
+            // zero, inf and nan carry no value
+            t.exp = '0;
+            t.mag = '0;
+        end else begin
+            // subnormals are exact: exponent 1 with no hidden bit
+            t.exp = TCU_OP_EXP_W'(e_zero ? 8'd1 : ce) + TCU_OP_EXP_W'(TCU_OP_C_EXP_K);
+            t.mag = {~e_zero, cm};
+        end
+        return t;
+    endfunction
+
+    function automatic logic tcu_op_fmt_supported(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        case (fmt)
+            TCU_FP16_ID, TCU_BF16_ID, TCU_FP8_ID, TCU_BF8_ID: return 1'b1;
+            default:                                          return 1'b0;
+        endcase
+    endfunction
 
     localparam LG_TCU_FEOP_BLOCK_M_SIZE = $clog2(TCU_FEOP_BLOCK_M_SIZE);
     localparam LG_TCU_FEOP_BLOCK_N_SIZE = $clog2(TCU_FEOP_BLOCK_N_SIZE);

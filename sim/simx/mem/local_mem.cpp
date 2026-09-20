@@ -258,6 +258,10 @@ public:
 		return perf_stats_;
 	}
 
+	void backdoor_read(void* data, uint64_t addr, uint32_t size) {
+		ram_.read(data, to_local_addr(addr), size);
+	}
+
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -283,4 +287,8 @@ void LocalMem::on_tick() {
 
 const LocalMem::PerfStats& LocalMem::perf_stats() const {
   return impl_->perf_stats();
+}
+
+void LocalMem::backdoor_read(void* data, uint64_t addr, uint32_t size) {
+  impl_->backdoor_read(data, addr, size);
 }

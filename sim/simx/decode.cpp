@@ -933,6 +933,16 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_src_reg(0, rs1, RegType::Integer);
       } break;
     #endif // TCU_META_ENABLE
+    #ifdef TCU_OP
+      case 3: { // MMA_OP (custom-0, funct3=3, funct7=2): TCU_OP engine op.
+        // rs1/rs2 are warp-gathered descriptor vectors (vx_tensor.h mma_op);
+        // no destination register, completion signals a tx-barrier.
+        instr->set_op_type(TcuType::MMA_OP);
+        instr->set_args(IntrTcuArgs{0, 0, 0, 0, 0, 0, 0, 0, 0, 0});
+        instr->set_src_reg(0, rs1, RegType::Integer);
+        instr->set_src_reg(1, rs2, RegType::Integer);
+      } break;
+    #endif // TCU_OP
       default:
         std::abort();
       }

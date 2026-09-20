@@ -113,3 +113,58 @@ tests:
     -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
     -DTCU_FEOP_XBAR_QUEUE_DEPTH_OVERRIDE=2 -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=4
     -DVX_DBG_DEBUG_LEVEL=0
+
+# --- The SYNTHESIZED datapath. Every case above pins VX_CFG_TCU_TYPE=DPI, whose
+#     dpi_fmadd/dpi_fadd models exist only in simulation: until these cases were
+#     added, the arithmetic that goes to the FPGA was never functionally
+#     verified. TFR is the exact-product datapath (VX_tcu_op_mul into
+#     VX_tcu_op_accu) and is what synthesis builds, so it is verified here at the
+#     queue depth synthesis actually uses -- the DPI cases override it to 2,
+#     which hides the depth-1 back-pressure the timed design has. Do not add a
+#     DEPTH override to these. ---
+- id: tcu_op-tfr-single-tile
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  args: -m 32 -n 32 -k 128 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=TFR -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=32 -DSGEMM_CONST_N=32 -DSGEMM_CONST_K=128
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=4 -DVX_DBG_DEBUG_LEVEL=0
+- id: tcu_op-tfr-dxa-stress-128
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  args: -m 128 -n 128 -k 128 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=TFR -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=128
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=4 -DVX_DBG_DEBUG_LEVEL=0
+- id: tcu_op-tfr-nonzero-c
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  args: -m 128 -n 128 -k 128 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=TFR -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=128
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=4 -DSGEMM_NONZERO_C
+    -DVX_DBG_DEBUG_LEVEL=0
+- id: tcu_op-tfr-kchunk-default
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sgemm_tcu_op
+  tier: nightly
+  args: -m 128 -n 128 -k 512 -s 0
+  configs: -DTCU_OP -DVX_CFG_TCU_TYPE=TFR -DVX_CFG_NUM_THREADS=32 -DVX_CFG_NUM_WARPS=16
+    -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+    -DITYPE=fp16 -DOTYPE=fp32 -DSGEMM_CONST_M=128 -DSGEMM_CONST_N=128 -DSGEMM_CONST_K=512
+    -DSGEMM_CONST_SPARSITY=0 -DTCU_FEOP_BLOCK_M_OVERRIDE=2 -DTCU_FEOP_BLOCK_N_OVERRIDE=16
+    -DVX_CFG_LMEM_LOG_SIZE=16 -DSGEMM_TILE_K_MULT=2 -DVX_DBG_DEBUG_LEVEL=0

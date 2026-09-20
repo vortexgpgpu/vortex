@@ -173,6 +173,11 @@ proc run_setup {} {
 
   # Add the design sources
   add_files -norecurse -verbose $vsources_list
+  # Third-party .v sources (bsg HardFloat) use SystemVerilog syntax.
+  set v_files [get_files -quiet *.v]
+  if {[llength $v_files] > 0} {
+    set_property file_type SystemVerilog $v_files
+  }
 
   # process defines
   set_property verilog_define ${vdefines_list} [current_fileset]

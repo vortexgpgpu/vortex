@@ -133,6 +133,15 @@ struct data_accessor_t<vt::nvfp4> {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Test-data range. The default [0,1) never produces a negative product, so it
+// exercises neither the accumulator's two's-complement path nor cancellation.
+// SGEMM_SIGNED_INPUTS spans [-1,1) and leaves the default bit-identical.
+#ifdef SGEMM_SIGNED_INPUTS
+#define SGEMM_RAND_UNIT() (2.0f * (float(rand()) / RAND_MAX) - 1.0f)
+#else
+#define SGEMM_RAND_UNIT() (float(rand()) / RAND_MAX)
+#endif
+
 template <typename Type>
 class Comparator {};
 
@@ -246,7 +255,7 @@ template <>
 class Comparator<vt::fp16> {
 public:
   static uint16_t generate() {
-    auto fvalue = float(rand()) / RAND_MAX;
+    auto fvalue = SGEMM_RAND_UNIT();
     return rv_ftoh_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
   static bool compare(uint16_t a, uint16_t b, int index, int errors) {
@@ -264,7 +273,7 @@ template <>
 class Comparator<vt::bf16> {
 public:
   static uint16_t generate() {
-    auto fvalue = float(rand()) / RAND_MAX;
+    auto fvalue = SGEMM_RAND_UNIT();
     return rv_ftob_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
   static bool compare(uint16_t a, uint16_t b, int index, int errors) {
@@ -282,7 +291,7 @@ template <>
 class Comparator<vt::fp8> {
 public:
   static uint8_t generate() {
-    auto fvalue = float(rand()) / RAND_MAX;
+    auto fvalue = SGEMM_RAND_UNIT();
     return rv_ftoe4m3_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
   static bool compare(uint8_t a, uint8_t b, int index, int errors) {
@@ -300,7 +309,7 @@ template <>
 class Comparator<vt::bf8> {
 public:
   static uint8_t generate() {
-    auto fvalue = float(rand()) / RAND_MAX;
+    auto fvalue = SGEMM_RAND_UNIT();
     return rv_ftoe5m2_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
   static bool compare(uint8_t a, uint8_t b, int index, int errors) {
@@ -318,7 +327,7 @@ template <>
 class Comparator<vt::tf32> {
 public:
   static uint32_t generate() {
-    auto fvalue = float(rand()) / RAND_MAX;
+    auto fvalue = SGEMM_RAND_UNIT();
     return rv_ftotf32_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
   }
   static bool compare(uint32_t a, uint32_t b, int index, int errors) {
@@ -346,7 +355,7 @@ public:
   }
   
   static uint8_t generate_with_scale(uint8_t scale_factor) {
-    auto fvalue = float(rand()) / RAND_MAX;
+    auto fvalue = SGEMM_RAND_UNIT();
     return rv_ftomxfp8_s(bit_cast<uint32_t>(fvalue), scale_factor, 0, nullptr);
   }
   
@@ -369,7 +378,7 @@ public:
   }
   
   static uint8_t generate_with_scale(uint8_t scale_factor) {
-    auto fvalue = float(rand()) / RAND_MAX;
+    auto fvalue = SGEMM_RAND_UNIT();
     return rv_ftonvfp4_s(bit_cast<uint32_t>(fvalue), scale_factor, 0, nullptr);
   }
   
@@ -388,7 +397,7 @@ template <>
 class Comparator<vt::fp32> {
 public:
   static float generate() {
-    return static_cast<float>(rand()) / RAND_MAX;
+    return SGEMM_RAND_UNIT();
   }
   static bool compare(float a, float b, int index, int errors) {
     if constexpr (std::is_same<vt::ITYPE, vt::fp8>::value || std::is_same<vt::ITYPE, vt::bf8>::value ||
@@ -968,18 +977,56 @@ static bool check_sparse_tile_lmem_fit(const std::vector<itype_t>& A,
 }
 
 
+// The reference must model the accumulation the hardware actually performs, or
+// the ULP gate compares two different algorithms:
+//
+//  * The exact datapath (VX_CFG_TCU_TYPE_TFR: VX_tcu_op_mul into
+//    VX_tcu_op_accu) multiplies exactly and accumulates in fixed point,
+//    rounding ONCE per output element. Its reference is the mathematically
+//    correct sum -- products of every supported input format are exact in
+//    float, and the running sum is kept in double so nothing rounds early.
+//
+//  * The legacy datapath rounds every product and every k-step, so its
+//    reference is the sequentially-rounded fp32 sum.
+//
+// Both are then checked at the same tight tolerance against their own
+// semantics, instead of one being graded against an equally-lossy model.
+#if defined(TCU_OP) && defined(VX_CFG_TCU_TYPE_TFR)
+#define SGEMM_REF_EXACT_ACC 1
+#else
+#define SGEMM_REF_EXACT_ACC 0
+#endif
+
 static void matmul_cpu(otype_t *D, const itype_t *A, const itype_t *B, otype_t *C, uint32_t M, uint32_t N, uint32_t K) {
   uint32_t subbytes = 8 / vt::ITYPE::bits;
   uint32_t KS = subbytes ? (K * subbytes) : K;
   for (uint32_t m = 0; m < M; ++m) {
     for (uint32_t n = 0; n < N; ++n) {
-      otype_t sum = data_accessor_t<vt::OTYPE>::read(C, m * N + n);
-      for (uint32_t k = 0; k < KS; ++k) {
-        auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
-        auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
-        sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
+      if constexpr (SGEMM_REF_EXACT_ACC && std::is_same<vt::OTYPE, vt::fp32>::value) {
+        // The hardware sums the products exactly, rounds that sum once, then
+        // fuses the C term with a second rounding (C cannot enter the
+        // fixed-point banks: its fp32 exponent range does not fit a window
+        // anchored at the product scale). Model both roundings.
+        double psum = 0.0;
+        for (uint32_t k = 0; k < KS; ++k) {
+          auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
+          auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
+          // eval(a, b, 0) is the exact product for every supported format.
+          psum += static_cast<double>(muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, 0.0f));
+        }
+        float rounded_psum = static_cast<float>(psum);
+        double total = static_cast<double>(rounded_psum)
+                     + static_cast<double>(data_accessor_t<vt::OTYPE>::read(C, m * N + n));
+        data_accessor_t<vt::OTYPE>::write(D, m * N + n, static_cast<float>(total));
+      } else {
+        otype_t sum = data_accessor_t<vt::OTYPE>::read(C, m * N + n);
+        for (uint32_t k = 0; k < KS; ++k) {
+          auto a = data_accessor_t<vt::ITYPE>::read(A, m * KS + k);
+          auto b = data_accessor_t<vt::ITYPE>::read(B, k * N + n);
+          sum = muladd_t<vt::ITYPE, vt::OTYPE>::eval(a, b, sum);
+        }
+        data_accessor_t<vt::OTYPE>::write(D, m * N + n, sum);
       }
-      data_accessor_t<vt::OTYPE>::write(D, m * N + n, sum);
     }
   }
 }
@@ -1358,8 +1405,14 @@ int main(int argc, char *argv[]) {
   std::cout << "matrix A: " << M << "x" << K << std::endl;
   std::cout << "matrix B: " << K << "x" << N << std::endl;
   std::cout << "matrix C: " << M << "x" << N << std::endl;
+  // Multi-engine (common.h): one single-warp CTA per engine, or with
+  // SGEMM_TCU_COOP one CTA of SGEMM_TCU_ENGINES warps.
+#ifdef SGEMM_TCU_COOP
   uint32_t grid_dim[2]  = {1, 1};
-  uint32_t block_dim[2] = {(uint32_t)NT, 1};
+#else
+  uint32_t grid_dim[2]  = {SGEMM_TCU_ENGINES, 1};
+#endif
+  uint32_t block_dim[2] = {(uint32_t)NT * SGEMM_COOP_WARPS, 1};
 
   // set matrix dimensions
   kernel_arg.M = M;
@@ -1377,6 +1430,13 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_mem_address(B_buffer, &kernel_arg.B_addr));
   RT_CHECK(vx_mem_alloc(device, sizeC * sizeof(otype_t), VX_MEM_WRITE, &C_buffer));
   RT_CHECK(vx_mem_address(C_buffer, &kernel_arg.C_addr));
+  // No C (beta == 0, see SGEMM_HAS_C in common.h): pass a null C_addr. The
+  // kernel then skips the C staging transfer and hands the engine a null C,
+  // which lets a dense op initialise its accumulator without the C preload.
+  constexpr bool kHasC = (SGEMM_HAS_C != 0);
+  if (!kHasC) {
+    kernel_arg.C_addr = 0;
+  }
   RT_CHECK(vx_mem_alloc(device, sizeD * sizeof(otype_t), VX_MEM_WRITE, &D_buffer));
   RT_CHECK(vx_mem_address(D_buffer, &kernel_arg.D_addr));
   RT_CHECK(vx_mem_alloc(device, metrics_size * sizeof(uint64_t), VX_MEM_READ_WRITE, &metrics_buffer));
@@ -1578,7 +1638,7 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_copy_to_dev(metrics_buffer, h_metrics.data(), 0, h_metrics.size() * sizeof(uint64_t)));
   }
 
-  {
+  if (kHasC) {
     constexpr uint32_t tile_M = 32;
     constexpr uint32_t tile_N = 32;
     const uint32_t tile_c_elems = tile_M * tile_N;
@@ -1677,7 +1737,10 @@ int main(int argc, char *argv[]) {
     li.grid_dim[1]  = grid_dim[1];
     li.block_dim[0] = block_dim[0];
     li.block_dim[1] = block_dim[1];
-    li.lmem_size    = 0;
+    // Multi-engine: each CTA declares its own LMEM share so they are placed
+    // side by side (and co-resident); must match the kernel's __local_mem size.
+    li.lmem_size    = (SGEMM_TCU_ENGINES > 1 && SGEMM_COOP_WARPS == 1)
+                    ? SGEMM_CTA_LMEM_BYTES(sizeof(itype_t), dxa_tile_k, (SGEMM_HAS_C != 0)) : 0;
     vx_event_h launch_ev = nullptr;
     RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     if (launch_ev) vx_event_release(launch_ev);
