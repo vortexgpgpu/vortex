@@ -163,6 +163,14 @@ run_app() {
     echo "Running: $cmd_opts"
     eval "$cmd_opts"
     status=$?
+    # A debug run sends everything to the log, so a failure would otherwise
+    # surface as a bare exit code with no output at all -- the reason is in a
+    # file the caller never sees. Echo the tail on the way out.
+    if [ $status -ne 0 ] && [ $DEBUG -ne 0 ] && [ -f "$LOGFILE" ]; then
+        echo "--- $LOGFILE (last 100 lines) ---"
+        tail -100 "$LOGFILE"
+        echo "--- end $LOGFILE ---"
+    fi
     return $status
 }
 
