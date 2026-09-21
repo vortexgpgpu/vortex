@@ -186,3 +186,10 @@ tests:
   check: model_parity
   via: blackbox
   app: raycast
+# Same raycaster at full warp width: spills and call frames exercise the
+# interleaved stack window with 16 threads per access.
+- id: parity-raycast-nt16
+  check: model_parity
+  via: blackbox
+  app: raycast
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16

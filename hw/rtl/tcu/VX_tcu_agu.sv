@@ -255,6 +255,15 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     end
     `UNUSED_PARAM (PWD)
     `STATIC_ASSERT (LSU_CLIENT_TAG_WIDTH >= BLOCK_IDX_BITS, ("LSU client tag cannot encode TCU block"))
+`ifdef VX_CFG_LSU_STACK_INTERLEAVE_ENABLE
+    // Metadata is read as a linear warp-wide tile, which an interleaved
+    // per-thread stack cannot provide.
+    if (`VX_CFG_NUM_THREADS > 1) begin : g_meta_stack_check
+        wire [`VX_CFG_XLEN-1:0] meta_end_addr = base_addr + `VX_CFG_XLEN'(NUM_LANES * 4 - 1);
+        `RUNTIME_ASSERT(~req_fire || (meta_end_addr < STACK_WINDOW_BOTTOM) || (base_addr >= STACK_WINDOW_TOP),
+            ("%t: *** %s TCU metadata inside the thread stack window: addr=0x%0h", $time, INSTANCE_ID, base_addr))
+    end
+`endif
     assign client_if.req_valid  = req_valid;
     assign client_if.req_data   = req_w;
     assign client_if.rsp_ready  = busy_r[rsp_block] && issued_r[rsp_block]

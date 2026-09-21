@@ -181,21 +181,40 @@ package VX_tcu_pkg;
         return (fedp_elems + block_elems - 1) / block_elems;
     endfunction
 
-    function automatic int unsigned mx_max_fedp_sf();
-        automatic int unsigned max_sf = 1;
-    `ifdef VX_CFG_TCU_FP8_ENABLE
-        max_sf = `MAX(max_sf, mx_fedp_sf_count(8, 32));
-    `endif
-    `ifdef VX_CFG_TCU_MXFP4_ENABLE
-        max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 32));
-    `endif
-    `ifdef VX_CFG_TCU_NVFP4_ENABLE
-        max_sf = `MAX(max_sf, mx_fedp_sf_count(4, 16));
-    `endif
-        return max_sf;
-    endfunction
+    // Per-format scale-factor counts, folded into TCU_MX_MAX_SF below.
+    //
+    // These are localparams rather than the one zero-argument helper function
+    // they replace, because sv2v miscompiles a ZERO-ARGUMENT function while
+    // folding an argument-taking one correctly: mx_fedp_sf_count() above
+    // disappears from the generated Verilog entirely, but a `mx_max_fedp_sf()`
+    // came out as a hierarchically-qualified call carrying a spurious argument,
+    //   ...tcu_core.VX_tcu_pkg_mx_max_fedp_sf(0)
+    // which Yosys rejects with "syntax error, unexpected '('". It only surfaced
+    // once the module sat inside generate scopes, so the standalone `tcu` DUT
+    // synthesized while `tensor` -- the same RTL nested under
+    // g_cores[].tcu_unit.g_blocks[].tcu_core -- failed asic_gate before Yosys
+    // read a line. Expressing the value as constants avoids that folding path.
+    //
+    // A disabled format contributes 1, matching the old max_sf = 1 seed, so the
+    // computed value is unchanged for every configuration.
+`ifdef VX_CFG_TCU_FP8_ENABLE
+    localparam TCU_MX_SF_FP8 = mx_fedp_sf_count(8, 32);
+`else
+    localparam TCU_MX_SF_FP8 = 1;
+`endif
+`ifdef VX_CFG_TCU_MXFP4_ENABLE
+    localparam TCU_MX_SF_MXFP4 = mx_fedp_sf_count(4, 32);
+`else
+    localparam TCU_MX_SF_MXFP4 = 1;
+`endif
+`ifdef VX_CFG_TCU_NVFP4_ENABLE
+    localparam TCU_MX_SF_NVFP4 = mx_fedp_sf_count(4, 16);
+`else
+    localparam TCU_MX_SF_NVFP4 = 1;
+`endif
 
-    localparam TCU_MX_MAX_SF = mx_max_fedp_sf();
+    localparam TCU_MX_MAX_SF = `MAX(`MAX(TCU_MX_SF_FP8, TCU_MX_SF_MXFP4),
+                                    TCU_MX_SF_NVFP4);
 
     `ifdef VX_CFG_TCU_TF32_ENABLE
         localparam TCU_EXP_BITS = 10;

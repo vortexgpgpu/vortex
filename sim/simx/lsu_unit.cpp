@@ -22,6 +22,7 @@
 #include "local_mem_switch.h"
 #include "constants.h"
 #include "mem_block_pool.h"
+#include "stack_interleave.h"
 #include "VX_types.h"
 #include "VX_config.h"
 
@@ -163,6 +164,15 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			// upper bits into the 64-bit address field.
 			e.addr = Word(rs1_data[t].i + (uint64_t)stride * rs2_data[t].u + offset);
 			e.size = data_bytes;
+			if (StackInterleave::contains(e.addr)) {
+				// Interleaving is word-granular; a wider access would straddle two threads.
+				if (e.size > StackInterleave::WORD_SIZE) {
+					std::cout << "Error: stack access wider than a word: addr=0x" << std::hex
+					          << e.addr << std::dec << ", size=" << e.size << std::endl;
+					std::abort();
+				}
+				e.addr = StackInterleave::map(e.addr);
+			}
 			// The datapath has no misalignment support: only a naturally aligned
 			// access is guaranteed to sit inside one memory block, which is what
 			// lets a lane's payload pack into a single block downstream.

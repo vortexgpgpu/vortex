@@ -291,7 +291,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     if (USE_GBAR) begin : g_gbar
 
         wire [GBAR_REQW-1:0] req_queue_data;
-        wire req_empty;
+        wire req_empty, req_alm_empty;
         wire req_pop = ~req_empty && gbar_bus_if.req_ready;
 
         VX_fifo_queue #(
@@ -306,13 +306,28 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
             .data_in ({gbar_enqueue_id, gbar_enqueue_size_m1}),
             .data_out(req_queue_data),
             .empty   (req_empty),
-            `UNUSED_PIN (alm_empty),
+            .alm_empty(req_alm_empty),
             `UNUSED_PIN (alm_full),
             `UNUSED_PIN (full),
             `UNUSED_PIN (size)
         );
 
-        assign gbar_bus_if.req_valid        = ~req_empty;
+        // The queue's empty flag is already a register, but inverting it for the
+        // outgoing valid leaves a combinational cell on a net that crosses the
+        // core, socket and cluster boundaries. Track non-emptiness in its own
+        // flop: same next state on the same edge, so the request still leaves
+        // one cycle after the arrival that produced it.
+        reg gbar_req_valid_r;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                gbar_req_valid_r <= 0;
+            end else begin
+                gbar_req_valid_r <= gbar_enqueue | (req_pop ? ~req_alm_empty : ~req_empty);
+            end
+        end
+
+        assign gbar_bus_if.req_valid        = gbar_req_valid_r;
         assign {gbar_bus_if.req_data.id, gbar_bus_if.req_data.size_m1} = req_queue_data;
         assign gbar_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID % `VX_CFG_NUM_CORES);
         assign gbar_bus_if.rsp_ready        = gbar_rsp_ready;

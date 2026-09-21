@@ -12,7 +12,7 @@
   },
   "graphics:perf_gate-draw3d-nt16:rtlsim": {
     "32": {
-      "cycles": 203037,
+      "cycles": 149499,
       "instrs": 51475
     },
     "app": "gfx_draw3d",
@@ -34,7 +34,7 @@
   },
   "graphics:perf_gate-om-nt16:rtlsim": {
     "32": {
-      "cycles": 539979,
+      "cycles": 192077,
       "instrs": 69648
     },
     "app": "gfx_om",
@@ -45,7 +45,7 @@
   },
   "graphics:perf_gate-om-nt4:rtlsim": {
     "32": {
-      "cycles": 813751,
+      "cycles": 755028,
       "instrs": 278544
     },
     "app": "gfx_om",
@@ -56,7 +56,7 @@
   },
   "graphics:perf_gate-raster-nt16:rtlsim": {
     "32": {
-      "cycles": 75760,
+      "cycles": 14959,
       "instrs": 4708
     },
     "app": "gfx_raster",
@@ -67,7 +67,7 @@
   },
   "graphics:perf_gate-raster-nt4:rtlsim": {
     "32": {
-      "cycles": 63367,
+      "cycles": 55633,
       "instrs": 18640
     },
     "app": "gfx_raster",
@@ -78,7 +78,7 @@
   },
   "graphics:perf_gate-tex-nt16:rtlsim": {
     "32": {
-      "cycles": 77440,
+      "cycles": 34994,
       "instrs": 12304
     },
     "app": "gfx_tex",
