@@ -1267,6 +1267,7 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] gmem_dedup;
         logic [PERF_CTR_BITS-1:0] lmem_writes;
         logic [PERF_CTR_BITS-1:0] gmem_latency;
+        logic [PERF_CTR_BITS-1:0] noslot_stalls;
     } dxa_perf_t;
 `endif
 

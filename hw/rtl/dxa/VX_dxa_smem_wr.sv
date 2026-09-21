@@ -21,7 +21,10 @@
 // released, then promote it to pend.
 //
 // Drain: pend → barrel-shift → fb_data_r → SMEM_WORD beats.
-// 1 SMEM-word/cycle steady state.
+// 1 SMEM-word/cycle steady state. Scatter modes with a power-of-two element
+// stride (BlockMajor, K-major) also drain one SMEM word per beat: every
+// element of the beat that lands in the current word is gathered into one
+// byte-masked write.
 
 `include "VX_define.vh"
 
@@ -78,21 +81,22 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire [31:0]                 smem_stride,
 
     // K-major scatter mode (stable per transfer):
-    //   dest_kmajor=1 → drain one element (elem_bytes wide) per SMEM beat,
-    //   with per-beat addr += per_lane_stride_bytes. byteen masks all bytes
-    //   except the `elem_bytes`-wide window at the current in-word offset.
+    //   dest_kmajor=1 → elements are `per_lane_stride_bytes` apart in SMEM;
+    //   byteen masks all bytes except the `elem_bytes`-wide windows the beat
+    //   writes.
     input  wire                        dest_kmajor,
     input  wire [15:0]                 per_lane_stride_bytes,
     input  wire [3:0]                  elem_bytes,
 
     // Tiled (Flat/BlockMajor) scatter geometry (stable per transfer). When
     // dest_mode is Flat/BlockMajor the per-element SMEM byte address is the
-    // bbuf-native index dxa_tiled_dest_byte(k_row, n), drained 1 element/beat
-    // like K-major but with a permuted (non-uniform) destination.
+    // bbuf-native index dxa_tiled_dest_byte(k_row, n): BlockMajor is a uniform
+    // stride along n, Flat a permuted (non-uniform) destination.
     input  wire [1:0]                  dest_mode,
     input  wire [3:0]                  lg_ratio,
     input  wire [3:0]                  lg_tcN,
     input  wire [3:0]                  lg_nsteps,
+    input  wire [3:0]                  lg_bkK,
     input  wire [DXA_SMEM_ADDR_W-1:0]  smem_base    // tile SMEM byte base
 
 `ifdef PERF_ENABLE
@@ -126,7 +130,7 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [1:0]                 dest_mode_q;
     reg                       dest_kmajor_q;
     reg [3:0]                 elem_bytes_q;
-    reg [3:0]                 lg_ratio_q, lg_tcN_q, lg_nsteps_q;
+    reg [3:0]                 lg_ratio_q, lg_tcN_q, lg_nsteps_q, lg_bkK_q;
     reg [DXA_SMEM_ADDR_W-1:0] smem_base_q;
     reg [DXA_SMEM_ADDR_W-1:0] per_lane_stride_q;
     always @(posedge clk) begin
@@ -136,13 +140,14 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         lg_ratio_q        <= lg_ratio;
         lg_tcN_q          <= lg_tcN;
         lg_nsteps_q       <= lg_nsteps;
+        lg_bkK_q          <= lg_bkK;
         smem_base_q       <= smem_base;
         per_lane_stride_q <= DXA_SMEM_ADDR_W'(per_lane_stride_bytes);
     end
 
     // ════════════════════════════════════════════════════════════════════
     // Scatter mode: K-major (uniform stride) OR tiled Flat/BlockMajor
-    // (permuted dest). Both drain 1 element/beat (vs row-major streaming).
+    // (permuted dest), vs row-major streaming.
     // ════════════════════════════════════════════════════════════════════
     wire dest_tiled = (dest_mode_q == DXA_DEST_FLAT) || (dest_mode_q == DXA_DEST_BLOCKMAJOR);
     wire scatter    = dest_kmajor_q || dest_tiled;
@@ -159,8 +164,8 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // per CL at capture (sw_dest_addr below).
     //   FLAT:        step = 1 << (lg_ratio+esize)
     //                wrap = ((1 << (2*lg_tcN+1)) - (tcN-1)) << (lg_ratio+esize)
-    //   BlockMajor:  step = 1 << (lg_tcN+lg_ratio+esize)
-    //                wrap = ((1 << lg_tcN) - (tcN-1)) << (lg_tcN+lg_ratio+esize)
+    //   BlockMajor:  step = 1 << (lg_bkK+esize)
+    //                wrap = ((1 << lg_tcN) - (tcN-1)) << (lg_bkK+esize)  (= step)
     reg [15:0]                tcn_mask_q;
     reg [DXA_SMEM_ADDR_W-1:0] tiled_step_q;
     reg [DXA_SMEM_ADDR_W-1:0] tiled_wrap_q;
@@ -168,18 +173,41 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire is_flat_w = (dest_mode_q == DXA_DEST_FLAT);
     wire [15:0] tcn_mask_w = (16'd1 << lg_tcN_q) - 16'd1;
     wire [4:0] step_sh_w = is_flat_w ? (5'(lg_ratio_q) + 5'(esize))
-                                     : (5'(lg_tcN_q) + 5'(lg_ratio_q) + 5'(esize));
+                                     : (5'(lg_bkK_q) + 5'(esize));
     wire [DXA_SMEM_ADDR_W-1:0] wrap_elems_w = is_flat_w
         ? ((DXA_SMEM_ADDR_W'(1) << (5'(lg_tcN_q) + 5'(lg_tcN_q) + 5'd1)) - DXA_SMEM_ADDR_W'(tcn_mask_w))
         : ((DXA_SMEM_ADDR_W'(1) << lg_tcN_q) - DXA_SMEM_ADDR_W'(tcn_mask_w));
+    // Uniform-stride gather. BlockMajor is linear in n for a fixed k-row (its
+    // block-wrap step equals the in-block step) and K-major strides by
+    // per_lane_stride, so whenever that stride is a power of two the elements
+    // of one beat sit a fixed distance apart inside one SMEM word and the beat
+    // drains all of them. Flat keeps a non-uniform wrap, and a non-power-of-two
+    // K-major stride has no fixed spacing; both stay element-wise.
+    localparam GCNT_W = SMEM_OFF_W + 1;
+    function automatic [4:0] lg2_addr(input [DXA_SMEM_ADDR_W-1:0] v);
+        lg2_addr = '0;
+        for (int i = 1; i < DXA_SMEM_ADDR_W; i++) begin
+            if (v[i]) begin
+                lg2_addr = 5'(i);
+            end
+        end
+    endfunction
+    wire pls_pow2 = (per_lane_stride_q != '0)
+                 && ((per_lane_stride_q & (per_lane_stride_q - DXA_SMEM_ADDR_W'(1))) == '0);
+    wire is_bm_w  = (dest_mode_q == DXA_DEST_BLOCKMAJOR);
+    reg       gather_q;
+    reg [4:0] lg_stride_q;
     always @(posedge clk) begin
         tcn_mask_q   <= tcn_mask_w;
         tiled_step_q <= DXA_SMEM_ADDR_W'(1) << step_sh_w;
         tiled_wrap_q <= wrap_elems_w << step_sh_w;
+        gather_q     <= is_bm_w || (dest_kmajor_q && pls_pow2);
+        lg_stride_q  <= is_bm_w ? step_sh_w : lg2_addr(per_lane_stride_q);
         // block-index shift of the per-CL dest calc (stage 2 below):
-        //   FLAT: 2*lg_tcN+1+lg_ratio+esize   BM: 2*lg_tcN+lg_ratio+esize
-        calc_sh2_q   <= 5'(lg_tcN_q) + 5'(lg_tcN_q) + (is_flat_w ? 5'd1 : 5'd0)
-                      + 5'(lg_ratio_q) + 5'(esize);
+        //   FLAT: 2*lg_tcN+1+lg_ratio+esize   BM: lg_tcN+lg_bkK+esize
+        calc_sh2_q   <= is_flat_w
+            ? (5'(lg_tcN_q) + 5'(lg_tcN_q) + 5'd1 + 5'(lg_ratio_q) + 5'(esize))
+            : (5'(lg_tcN_q) + 5'(lg_bkK_q) + 5'(esize));
     end
 
     // ════════════════════════════════════════════════════════════════════
@@ -255,12 +283,23 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [15:0]                fb_n_in_r;
     reg                       fb_n_wrap_r;
 
-    // K-major/tiled drain quantum (in bytes) = 1 element per beat in scatter
-    // mode, SMEM_WORD_SIZE bytes per beat in row-major streaming mode.
-    wire [FILL_W-1:0] drain_q_bytes = scatter ? FILL_W'(elem_bytes_q) : FILL_W'(SMEM_WORD_SIZE);
-    // Effective per-element SMEM byte address: both scatter sub-modes read
-    // the fb_byte_addr_r accumulator.
+    // Effective SMEM byte address of the beat's first element: both scatter
+    // sub-modes read the fb_byte_addr_r accumulator.
     wire [SMEM_OFF_W-1:0] km_in_word_off = fb_byte_addr_r[SMEM_OFF_W-1:0];
+    // Elements drained this beat: with a uniform stride, every element that
+    // still fits in the current word from the first element's offset, bounded
+    // by what the fill buffer holds; otherwise one.
+    wire [GCNT_W-1:0] fit_elems = gather_q
+        ? (GCNT_W'((SMEM_OFF_W'(SMEM_WORD_SIZE - 1) - km_in_word_off) >> lg_stride_q) + GCNT_W'(1))
+        : GCNT_W'(1);
+    wire [FILL_W-1:0] avail_elems = fb_level_r >> esize;
+    wire [GCNT_W-1:0] beat_elems  = (FILL_W'(fit_elems) < avail_elems) ? fit_elems : GCNT_W'(avail_elems);
+    // Drain quantum (in bytes): the gathered elements in scatter mode,
+    // SMEM_WORD_SIZE bytes per beat in row-major streaming mode.
+    wire [FILL_W-1:0] drain_q_bytes = scatter ? (FILL_W'(beat_elems) << esize) : FILL_W'(SMEM_WORD_SIZE);
+    wire [DXA_SMEM_ADDR_W-1:0] beat_addr_step = gather_q
+        ? (DXA_SMEM_ADDR_W'(beat_elems) << lg_stride_q)
+        : (dest_tiled ? (fb_n_wrap_r ? tiled_wrap_q : tiled_step_q) : per_lane_stride_q);
     wire [SMEM_ADDR_WIDTH-1:0] km_word_addr = SMEM_ADDR_WIDTH'(fb_byte_addr_r >> SMEM_OFF_W);
 
     // ════════════════════════════════════════════════════════════════════
@@ -268,9 +307,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // ════════════════════════════════════════════════════════════════════
     // Mode-aware drain accounting.
     //   Row-major:  word at a time, possibly with a trailing partial word.
-    //   K-major:    one element at a time, no partials (valid_length is a
+    //   Scatter:    whole elements only, no partials (valid_length is a
     //               multiple of elem_bytes by descriptor invariant).
-    wire has_full_word    = (fb_level_r >= drain_q_bytes);
+    wire has_full_word    = scatter ? (fb_level_r >= FILL_W'(elem_bytes_q))
+                                    : (fb_level_r >= FILL_W'(SMEM_WORD_SIZE));
     wire has_last_partial = !scatter && !has_full_word && (fb_level_r > 0);
     wire drain_valid      = fb_active_r && (has_full_word || has_last_partial);
     wire drain_will_empty = (fb_level_r <= drain_q_bytes);
@@ -287,26 +327,55 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     //   leading/trailing mask. is_first_word covers the leading mask;
     //   trailing-tail bytes are masked by `byte_has_data` running out.
     //
-    // K-major scatter: fb_data_r holds source bytes starting at element 0;
-    //   per beat we emit one element worth of bytes shifted to km_in_word_off
-    //   and a byteen of `elem_bytes` contiguous ones at that offset.
+    // Scatter: fb_data_r holds source bytes starting at element 0; per beat
+    //   the run of beat_elems elements at the read pointer is spread to the
+    //   element stride, shifted to km_in_word_off, and masked accordingly.
     wire is_first_word = (fb_word_addr_r == fb_start_word_r);
 
-    // Per-beat element bytes: the 64-bit window at km_rd_off_r (a moving read
-    // pointer, not a shifted register), then scattered to km_in_word_off below.
-    // elem_bytes ≤ 8, so a 64-bit window covers the live element.
+    // Source run for this beat: a SMEM-word-wide window at km_rd_off_r (a
+    // moving read pointer, not a shifted register). The pointer stays below
+    // CL_SIZE, so the window lies inside FILL_CAP.
     wire [$clog2(FILL_CAP*8)-1:0] km_rd_bit = ($clog2(FILL_CAP*8))'({km_rd_off_r, 3'b000});
-    wire [63:0] km_elem_bytes_slice = fb_data_r[km_rd_bit +: 64];
+    wire [SMEM_DATAW-1:0]     run_data = fb_data_r[km_rd_bit +: SMEM_DATAW];
+    wire [SMEM_WORD_SIZE-1:0] run_mask;
+    for (genvar b = 0; b < SMEM_WORD_SIZE; ++b) begin : g_run_mask
+        assign run_mask[b] = (FILL_W'(b) < drain_q_bytes);
+    end
+
+    // Spread network: stage s doubles the spacing of 2^s-byte chunks (chunk c
+    // moves from c*2^s to 2c*2^s, the gap fills with zeros). Enabling the
+    // stages with elem_bytes <= 2^s < stride places the run's contiguous
+    // elements `stride` bytes apart. Each stage is a fixed rewiring behind one
+    // 2:1 mux, so the network is SMEM_OFF_W muxes deep. With gathering off the
+    // run is a single element and every stage is bypassed.
+    wire [SMEM_OFF_W:0][SMEM_DATAW-1:0]     spread_data;
+    wire [SMEM_OFF_W:0][SMEM_WORD_SIZE-1:0] spread_mask;
+    assign spread_data[0] = run_data;
+    assign spread_mask[0] = run_mask;
+    for (genvar s = 0; s < SMEM_OFF_W; ++s) begin : g_spread
+        localparam CHUNK = 1 << s;
+        wire stage_en = gather_q && (4'(s) >= esize) && (5'(s) < lg_stride_q);
+        wire [SMEM_DATAW-1:0]     stage_data;
+        wire [SMEM_WORD_SIZE-1:0] stage_mask;
+        for (genvar c = 0; c < SMEM_WORD_SIZE / CHUNK; ++c) begin : g_chunk
+            if (c % 2 == 0) begin : g_even
+                assign stage_data[c*CHUNK*8 +: CHUNK*8] = spread_data[s][(c/2)*CHUNK*8 +: CHUNK*8];
+                assign stage_mask[c*CHUNK +: CHUNK]     = spread_mask[s][(c/2)*CHUNK +: CHUNK];
+            end else begin : g_odd
+                assign stage_data[c*CHUNK*8 +: CHUNK*8] = '0;
+                assign stage_mask[c*CHUNK +: CHUNK]     = '0;
+            end
+        end
+        assign spread_data[s+1] = stage_en ? stage_data : spread_data[s];
+        assign spread_mask[s+1] = stage_en ? stage_mask : spread_mask[s];
+    end
+
     wire [SMEM_DATAW-1:0] km_elem_data_shifted =
-        SMEM_DATAW'(km_elem_bytes_slice) << ({3'b000, km_in_word_off} << 3);
+        spread_data[SMEM_OFF_W] << ({3'b000, km_in_word_off} << 3);
+    wire [SMEM_WORD_SIZE-1:0] km_byteen = spread_mask[SMEM_OFF_W] << km_in_word_off;
 
     wire [SMEM_DATAW-1:0] fb_word_data = scatter ? km_elem_data_shifted
                                                  : fb_data_r[SMEM_DATAW-1:0];
-
-    // K-major byteen: `elem_bytes` contiguous bytes at km_in_word_off.
-    wire [SMEM_WORD_SIZE-1:0] km_elem_mask_raw =
-        SMEM_WORD_SIZE'((SMEM_WORD_SIZE'(1) << elem_bytes_q) - SMEM_WORD_SIZE'(1));
-    wire [SMEM_WORD_SIZE-1:0] km_byteen = km_elem_mask_raw << km_in_word_off;
 
     wire [SMEM_WORD_SIZE-1:0] rm_byteen;
     for (genvar i = 0; i < SMEM_WORD_SIZE; ++i) begin : g_byteen
@@ -425,21 +494,21 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 
     wire [15:0] ratio_mask_w = (16'd1 << lg_ratio_q) - 16'd1;
     wire [15:0] ktck_mask_w  = (16'd2 << lg_tcN_q) - 16'd1;
-    wire [15:0] kw_mask_w    = (16'd1 << (lg_tcN_q + lg_ratio_q)) - 16'd1;
+    wire [15:0] kw_mask_w    = (16'd1 << lg_bkK_q) - 16'd1;
     wire [15:0] calc_n_blk   = calc_n >> lg_tcN_q;
     wire [15:0] calc_n_in    = calc_n & tcn_mask_q;
     wire [15:0] f_k_word     = calc_k >> lg_ratio_q;
     wire [15:0] f_elem       = calc_k & ratio_mask_w;
     wire [15:0] f_k_blk      = f_k_word >> (lg_tcN_q + 4'd1);
     wire [15:0] f_kw_in      = f_k_word & ktck_mask_w;
-    wire [15:0] b_k_blk      = calc_k >> (lg_tcN_q + lg_ratio_q);
+    wire [15:0] b_k_blk      = calc_k >> lg_bkK_q;
     wire [15:0] b_r_in       = calc_k & kw_mask_w;
 
     wire [15:0] calc_k_blk = is_flat_w ? f_k_blk : b_k_blk;
     wire [31:0] calc_blk_w   = (32'(calc_k_blk) << lg_nsteps_q) + 32'(calc_n_blk);
     wire [31:0] calc_intra_w = is_flat_w
         ? (((((32'(f_kw_in) << lg_tcN_q) + 32'(calc_n_in)) << lg_ratio_q) + 32'(f_elem)) << esize)
-        : (((32'(calc_n_in) << (lg_tcN_q + lg_ratio_q)) + 32'(b_r_in)) << esize);
+        : (((32'(calc_n_in) << lg_bkK_q) + 32'(b_r_in)) << esize);
 
     reg [31:0] calc_blk_r, calc_intra_r;
     reg        calc2_valid_r, calc2_pend_r;
@@ -482,14 +551,13 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             // ── Drain advance (mid-CL beat) ──
             if (drain_fire && ~drain_will_empty) begin
                 if (scatter) begin
-                    // Read pointer advances; fb_data_r is NOT shifted. K-major
-                    // strides the dest uniformly; tiled advances it by the
-                    // in-block/wrap constant selected by the registered flag.
-                    km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(elem_bytes_q);
+                    // Read pointer advances; fb_data_r is NOT shifted. The dest
+                    // advances by the gathered elements at the uniform stride,
+                    // or by the in-block/wrap constant selected by the
+                    // registered flag when draining element-wise.
+                    km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(drain_q_bytes);
                     fb_level_r     <= fb_level_r - drain_q_bytes;
-                    fb_byte_addr_r <= fb_byte_addr_r
-                        + (dest_tiled ? (fb_n_wrap_r ? tiled_wrap_q : tiled_step_q)
-                                      : per_lane_stride_q);
+                    fb_byte_addr_r <= fb_byte_addr_r + beat_addr_step;
                     fb_n_in_r      <= fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1);
                     fb_n_wrap_r    <= ((fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1)) == tcn_mask_q);
                 end else begin
@@ -696,7 +764,10 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Only the low SMEM_ADDR_WIDTH+SMEM_OFF_W bits of smem_stride are used.
     `UNUSED_VAR (smem_stride)
     // per_lane_stride_bytes is LMEM-bounded; only the low DXA_SMEM_ADDR_W bits feed fb_byte_addr_r.
-    `UNUSED_VAR (per_lane_stride_bytes[15:DXA_SMEM_ADDR_W])
+    // Wide LMEM configurations consume the whole field, leaving no high bits to tag.
+    if (DXA_SMEM_ADDR_W < 16) begin : g_stride_hi_unused
+        `UNUSED_VAR (per_lane_stride_bytes[15:DXA_SMEM_ADDR_W])
+    end
 
     assign smem_wr_valid   = mc_write_valid;
     assign smem_wr_addr    = is_multicast ? replay_addr : base_word_addr;

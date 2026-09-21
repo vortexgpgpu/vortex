@@ -27,6 +27,7 @@
 #include "cache.h"
 #include "local_mem.h"
 #include "local_mem_switch.h"
+#include "dxa_core.h"
 #include "lsu_mem_adapter.h"
 #include "scoreboard.h"
 #include "operands.h"
@@ -70,6 +71,7 @@ public:
     , pending_icache_(VX_CFG_NUM_WARPS)
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
     , fu_locked_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
+    , fu_unlock_pending_(VX_CFG_ISSUE_WIDTH, std::vector<const instr_trace_t*>((uint32_t)FUType::Count, nullptr))
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
   {
@@ -120,8 +122,12 @@ public:
     }
 
     // create local memory.
+    // The DXA drains one full LMEM row per cycle; a row wider than the 64B
+    // mem_block byteen scope arrives as multiple same-cycle block writes on
+    // adjacent input ports (see DxaCore::LMEM_PORTS_PER_CORE).
     snprintf(sname, 100, "%s-lmem", name.c_str());
-    uint32_t lmem_num_reqs = LSU_NUM_REQS + VX_CFG_EXT_TCU_ENABLED + VX_CFG_EXT_DXA_ENABLED;
+    uint32_t lmem_num_reqs = LSU_NUM_REQS + VX_CFG_EXT_TCU_ENABLED
+        + VX_CFG_EXT_DXA_ENABLED * DxaCore::LMEM_PORTS_PER_CORE;
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << VX_CFG_LMEM_LOG_SIZE),
       LSU_WORD_SIZE,
@@ -287,6 +293,12 @@ public:
     }
     for (auto& fc : fu_credits_) {
       std::fill(fc.begin(), fc.end(), 0);
+    }
+    for (auto& fl : fu_locked_) {
+      fl.reset();
+    }
+    for (auto& fp : fu_unlock_pending_) {
+      std::fill(fp.begin(), fp.end(), nullptr);
     }
 
     pending_instrs_.clear();
@@ -613,7 +625,11 @@ public:
             // update scoreboard
             scoreboard_->reserve(uop_trace);
           }
-          // Update FU lock state: 10=acquire, 01=release
+          // Update FU lock state: 10=acquire, 01=release. The lock keeps a
+          // uop sequence contiguous at its functional unit, but the operand
+          // collectors and their arbiter can reorder warps between issue
+          // and the unit's input, so the release is deferred until the unit
+          // accepts the sequence's last uop (see execute()).
           {
             auto fui = (int)uop_trace->fu_type;
             bool fl = uop_trace->instr_ptr->get_fu_lock();
@@ -621,7 +637,7 @@ public:
             if (fl && !ful) {
               fu_locked_.at(iw).set(fui);
             } else if (!fl && ful) {
-              fu_locked_.at(iw).reset(fui);
+              fu_unlock_pending_.at(iw).at(fui) = uop_trace;
             }
           }
           // Advance sequencer; pop ibuffer only when all micro-ops issued
@@ -677,6 +693,13 @@ public:
           uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
           if (fu_credits_.at(iw).at(fu) > 0)
             --fu_credits_.at(iw).at(fu);
+          // The sequence's last uop reached the unit: release its FU lock.
+          // A pid-split sequence hands the original trace over last.
+          auto& pending_unlock = fu_unlock_pending_.at(iw).at(fu);
+          if (pending_unlock == trace) {
+            fu_locked_.at(iw).reset(fu);
+            pending_unlock = nullptr;
+          }
         } else {
           // track functional unit stalls
           switch ((FUType)fu) {
@@ -1010,6 +1033,7 @@ private:
   std::vector<Arbiter> ibuffer_arbs_;
 
   std::vector<BitVector<>> fu_locked_;
+  std::vector<std::vector<const instr_trace_t*>> fu_unlock_pending_; // [iw][fu] last uop of a locked sequence, released on FU accept
   std::vector<std::vector<uint32_t>> fu_credits_; // [iw][fu] in-flight dispatch credits
 
   std::vector<uint32_t> ibuf_inflight_;

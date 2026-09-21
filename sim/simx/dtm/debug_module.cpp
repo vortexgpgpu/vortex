@@ -1,4 +1,5 @@
 #include "debug_module.h"
+#include <algorithm>
 #include <cstdarg>
 #include <atomic>
 #include <cstring>
@@ -11,6 +12,14 @@
 namespace {
 
 std::atomic<bool> g_debug_module_verbose{false};
+
+size_t mapped_access_bytes(uint64_t addr, size_t remain) {
+    if (!vortex::StackInterleave::contains(addr)) {
+        return 1;
+    }
+    size_t word_off = addr & (vortex::StackInterleave::WORD_SIZE - 1);
+    return std::min(remain, vortex::StackInterleave::WORD_SIZE - word_off);
+}
 
 void dm_log(const char* fmt, ...) {
     if (!g_debug_module_verbose.load(std::memory_order_relaxed)) {
@@ -914,8 +923,12 @@ vortex::Word DebugModule::read_program_memory(vortex::Word addr, size_t size) co
     }
     // Read the specified number of bytes
     uint8_t buffer[8] = {0};  // Max 8 bytes for 64-bit access
-    for (size_t i = 0; i < size && i < sizeof(buffer); ++i) {
-        ram_->read(&buffer[i], vortex::StackInterleave::map(uint64_t(addr) + i), 1);
+    size_t limit = std::min(size, sizeof(buffer));
+    for (size_t i = 0; i < limit; ) {
+        uint64_t read_addr = uint64_t(addr) + i;
+        size_t chunk = mapped_access_bytes(read_addr, limit - i);
+        ram_->read(&buffer[i], vortex::StackInterleave::map(read_addr), chunk);
+        i += chunk;
     }
     
     // Convert to Word based on size
@@ -934,11 +947,15 @@ void DebugModule::write_program_memory(vortex::Word addr, vortex::Word value, si
     
     // Write the specified number of bytes
     uint8_t buffer[8];  // Max 8 bytes for 64-bit access
-    for (size_t i = 0; i < size && i < sizeof(vortex::Word); ++i) {
+    size_t limit = std::min(size, sizeof(vortex::Word));
+    for (size_t i = 0; i < limit; ++i) {
         buffer[i] = static_cast<uint8_t>((value >> (i * 8)) & 0xFF);
     }
-    for (size_t i = 0; i < size && i < sizeof(buffer); ++i) {
-        ram_->write(&buffer[i], vortex::StackInterleave::map(uint64_t(addr) + i), 1);
+    for (size_t i = 0; i < limit; ) {
+        uint64_t write_addr = uint64_t(addr) + i;
+        size_t chunk = mapped_access_bytes(write_addr, limit - i);
+        ram_->write(&buffer[i], vortex::StackInterleave::map(write_addr), chunk);
+        i += chunk;
     }
 }
 
@@ -1123,4 +1140,3 @@ void DebugModule::run_test_idle()
         }
     }
 }
-

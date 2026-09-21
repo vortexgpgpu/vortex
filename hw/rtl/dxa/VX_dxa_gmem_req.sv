@@ -34,6 +34,7 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     input  wire                        clk,
     input  wire                        reset,
     input  wire                        transfer_active,
+    input  wire                        transfer_start,
 
     // UUID for GMEM request tagging.
     input  wire [UUID_WIDTH-1:0]       active_uuid,
@@ -261,7 +262,7 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg        rdp_has_req_r;
 
     always @(posedge clk) begin
-        if (reset || !transfer_active) begin
+        if (reset || transfer_start) begin
             rdp_total_gmem_req_r  <= '0;
             rdp_cycle_ctr_r       <= '0;
             rdp_first_req_cycle_r <= '0;
@@ -303,6 +304,7 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
 `endif
 
     `UNUSED_VAR (transfer_active)
+    `UNUSED_VAR (transfer_start)
     `UNUSED_VAR (mem_bus_w.req_data.tag.value[GMEM_TAG_VALUEW-1:TAG_W])
 
 endmodule

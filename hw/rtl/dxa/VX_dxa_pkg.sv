@@ -116,11 +116,12 @@ package VX_dxa_pkg;
         // Tiled (Flat/BlockMajor) scatter: the per-element SMEM destination is
         // the bbuf-native index (vx_tensor.h::b_sp_flat_idx / b_blockmajor_idx).
         // All tile divisors are powers of two → log shift amounts. Derived once
-        // in setup from tcN (estride2) and elem_bytes.
+        // in setup from the tile geometry (estride2) and elem_bytes.
         logic [1:0]                 dest_mode;   // DXA_DEST_*
         logic [3:0]                 lg_ratio;    // log2(32-bit-word / elem) = 2 - log2(elem_bytes)
         logic [3:0]                 lg_tcN;      // log2(tcN)  (= log2(tcK))
         logic [3:0]                 lg_nsteps;   // log2(xtileN / tcN)
+        logic [3:0]                 lg_bkK;      // log2(dense B block K extent, in elements)
     } dxa_setup_params_t;
 
     // SMEM byte destination for B element (k = K-row, n = N-col) under the
@@ -134,6 +135,7 @@ package VX_dxa_pkg;
         input logic [3:0]  lg_ratio,
         input logic [3:0]  lg_tcN,
         input logic [3:0]  lg_nsteps,
+        input logic [3:0]  lg_bkK,
         input logic [3:0]  esize       // log2(elem_bytes)
     );
         logic [15:0] tcN_mask, ratio_mask, ktck_mask, kw_mask;
@@ -155,13 +157,13 @@ package VX_dxa_pkg;
                          + (32'(kw_in) << lg_tcN) + 32'(n_in));
             dest_elem = (word_off << lg_ratio) + 32'(elem);
         end else begin
-            // BlockMajor: dest = (k_blk*n_steps + n_blk)*b_blk_elems + n_in*kw + r_in,
-            // kw = tcN*ratio, b_blk_elems = kw*tcN.
-            kw_mask   = (16'd1 << (lg_tcN + lg_ratio)) - 16'd1;
-            k_blk     = k >> (lg_tcN + lg_ratio);
+            // BlockMajor: dest = (k_blk*n_steps + n_blk)*b_blk_elems + n_in*bkK + r_in,
+            // bkK = fedpK*ratio (conveyed by the descriptor), b_blk_elems = bkK*tcN.
+            kw_mask   = (16'd1 << lg_bkK) - 16'd1;
+            k_blk     = k >> lg_bkK;
             r_in      = k & kw_mask;
-            dest_elem = ((((32'(k_blk) << lg_nsteps) + 32'(n_blk)) << (lg_tcN + lg_ratio + lg_tcN))
-                         + (32'(n_in) << (lg_tcN + lg_ratio)) + 32'(r_in));
+            dest_elem = ((((32'(k_blk) << lg_nsteps) + 32'(n_blk)) << (lg_tcN + lg_bkK))
+                         + (32'(n_in) << lg_bkK) + 32'(r_in));
         end
         dxa_tiled_dest_byte = DXA_SMEM_ADDR_W'(dest_elem << esize);
     endfunction

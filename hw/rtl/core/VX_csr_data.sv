@@ -378,6 +378,7 @@ import VX_fpu_pkg::*;
                         `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_DEDUP, read_data_ro_w, sysmem_perf.dxa.gmem_dedup);
                         `CSR_READ_64(`VX_CSR_MPM_DXA_LMEM_WRITES,read_data_ro_w, sysmem_perf.dxa.lmem_writes);
                         `CSR_READ_64(`VX_CSR_MPM_DXA_GMEM_LT,    read_data_ro_w, sysmem_perf.dxa.gmem_latency);
+                        `CSR_READ_64(`VX_CSR_MPM_DXA_NOSLOT_STALLS, read_data_ro_w, sysmem_perf.dxa.noslot_stalls);
                         default:;
                         endcase
                     end
