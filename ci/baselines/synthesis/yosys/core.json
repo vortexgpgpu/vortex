@@ -1,54 +1,54 @@
 {
   "cache": {
     "clock_mhz": 800,
-    "config_hash": "b511dc803abcf2a1",
+    "config_hash": "2a2e389ea6c04b0b",
     "configs": "",
     "dut": "cache",
     "result": {
-      "build_time_s": 270,
-      "cell_area_um2": 49301.526,
-      "cell_count": 461981,
+      "build_time_s": 325,
+      "cell_area_um2": 48726.098,
+      "cell_count": 456296,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
-        "sta": "2.7.0",
-        "sv2v": "sv2v v0.0.13-3-g80a2f0c",
+        "sta": "3.1.0",
+        "sv2v": "sv2v v0.0.13-13-g493a88f",
         "vt": "rvt",
         "xlen": 32,
-        "yosys": "Yosys 0.57+157"
+        "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 1210.507,
-      "power_mw": 135.0,
-      "seq_area_um2": 22783.874,
+      "fmax_mhz": 1228.049,
+      "power_mw": 126.0,
+      "seq_area_um2": 22490.525,
       "sram_area_um2": 16307.2,
       "tns_ns": 0.0,
-      "wns_ns": 0.424
+      "wns_ns": 0.436
     }
   },
   "core": {
     "clock_mhz": 400,
-    "config_hash": "6faeba3aaa4e431f",
-    "configs": "",
+    "config_hash": "49f5e8ba89630b35",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "core",
     "result": {
-      "build_time_s": 3280,
-      "cell_area_um2": 190737.251,
-      "cell_count": 2022825,
+      "build_time_s": 1271,
+      "cell_area_um2": 84623.53,
+      "cell_count": 871400,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
-        "sta": "2.7.0",
-        "sv2v": "sv2v v0.0.13-3-g80a2f0c",
+        "sta": "3.1.0",
+        "sv2v": "sv2v v0.0.13-13-g493a88f",
         "vt": "rvt",
         "xlen": 32,
-        "yosys": "Yosys 0.57+157"
+        "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 589.762,
-      "power_mw": 670.0,
-      "seq_area_um2": 51329.765,
-      "sram_area_um2": 70497.6,
+      "fmax_mhz": 586.717,
+      "power_mw": 352.0,
+      "seq_area_um2": 24513.646,
+      "sram_area_um2": 27814.4,
       "tns_ns": 0.0,
-      "wns_ns": 0.804
+      "wns_ns": 0.796
     }
   }
 }

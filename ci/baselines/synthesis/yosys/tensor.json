@@ -1,28 +1,28 @@
 {
   "tcu": {
     "clock_mhz": 500,
-    "config_hash": "504b5c430ca3eafc",
+    "config_hash": "5c950d99fa9e1f2a",
     "configs": "",
     "dut": "tcu",
     "result": {
-      "build_time_s": 715,
-      "cell_area_um2": 74237.832,
-      "cell_count": 783075,
+      "build_time_s": 910,
+      "cell_area_um2": 74406.828,
+      "cell_count": 762884,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
-        "sta": "2.7.0",
-        "sv2v": "sv2v v0.0.13-3-g80a2f0c",
+        "sta": "3.1.0",
+        "sv2v": "sv2v v0.0.13-13-g493a88f",
         "vt": "rvt",
         "xlen": 32,
-        "yosys": "Yosys 0.57+157"
+        "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 799.68,
-      "power_mw": 212.0,
-      "seq_area_um2": 11848.291,
+      "fmax_mhz": 854.701,
+      "power_mw": 205.0,
+      "seq_area_um2": 11843.917,
       "sram_area_um2": 0.0,
       "tns_ns": 0.0,
-      "wns_ns": 0.75
+      "wns_ns": 0.83
     }
   },
   "tensor": {
