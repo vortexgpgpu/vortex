@@ -347,7 +347,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
         end
     end
 
-    `RUNTIME_ASSERT((stride == 0) || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE)),
+    // `data` is a launch descriptor only while `valid` is high: the launch buffers
+    // reset the valid bit alone, so an idle beat carries arbitrary bits.
+    `RUNTIME_ASSERT(~kmu_bus_if.valid || (stride == 0) || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE)),
         ("%t: %s CTA shared-memory footprint %0d exceeds the %0d-byte capacity; the CTA overruns its slot", $time, INSTANCE_ID, stride, LMEM_SIZE))
 
     // Normalize the round-robin pointer to the usable range (covers a kernel
