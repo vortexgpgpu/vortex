@@ -11,7 +11,7 @@
 # Why its own workflow rather than a cell in ci.yml:
 #
 #   - A DUT takes 1-2 hours, so the builds must fan out to ONE STANDALONE JOB
-#     EACH. A ci.yml cell is one job running a pytest slice; nine sequential
+#     EACH. A ci.yml cell is one job running a pytest slice; eight sequential
 #     synthesis runs in one cell would be a day.
 #   - Nightly builds are expensive even when free, so the run is SKIPPED unless
 #     master has actually moved since the last gate run. Unlike the self-hosted
@@ -132,7 +132,7 @@ jobs:
   # carries the commit TOOLCHAIN_REV currently resolves to, so a prebuilt refresh
   # misses it by construction. Without this job the whole matrix would then run
   # against an empty $TOOLDIR and every build would die in gen_sources.sh looking
-  # for verilator: a toolchain bump would read as nine simultaneous RTL errors.
+  # for verilator: a toolchain bump would read as eight simultaneous RTL errors.
   # ci.yml warms the same cache from its own `setup` job, but ci.yml is weekly
   # plus on-push, so a nightly cannot depend on it having run since the bump.
   #
@@ -164,7 +164,7 @@ jobs:
     timeout-minutes: 300
     strategy:
       # Never cancel siblings: each DUT is an independent measurement, and one
-      # regression must not hide the eight other numbers this run would have
+      # regression must not hide the seven other numbers this run would have
       # produced.
       fail-fast: false
       max-parallel: 6

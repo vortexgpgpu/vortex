@@ -42,11 +42,18 @@
 # `tensor` are therefore NOT gated here, and `core`/`tex` are gated at a reduced
 # width (see their entries).
 #
-# What decides membership is the measured peak, not whether a DUT is a composite:
-# `vm` is a two-core MMU network behind a shared L2 and synthesizes inside the
-# budget, so it stays. Measure before adding anything back -- an over-budget DUT
-# costs a silent job kill, not a red gate. fpga_gate.yaml owns `top`, `gfx`,
-# `tensor` and the wide `core`/`tex` on the self-hosted Vivado runner.
+# `vm` is NOT gated here either, and the reason is worth recording. It passed the
+# last hosted nightly at 1.0M cells in 11 minutes, which looked like it fit --
+# but that run was building a DUT whose L2 was a BYPASS: the Yosys catalog was
+# missing L2_ENABLE, and VX_vm_top wires the L2 as
+# `VX_cache_wrap #(.PASSTHRU(!`VX_CFG_L2_ENABLED))`, whose cache body is guarded
+# by `if (PASSTHRU == 0)`. No tags, no data arrays. With that corrected to match
+# the Xilinx catalog, `vm` carries a real 256 KB L2 and its peak RSS is
+# unmeasured -- so it is treated as over-budget rather than assumed to fit.
+#
+# Measure before adding anything back -- an over-budget DUT costs a silent job
+# kill, not a red gate. fpga_gate.yaml owns `top`, `gfx`, `tensor`, `vm` and the
+# wide `core`/`tex` on the self-hosted Vivado runner.
 #
 # See docs/designs/continuous_integration.md §3.5.
 category: asic_gate
@@ -163,15 +170,5 @@ builds:
 - id: rtu
   group: graphics
   dut: rtu
-  clock_mhz: 400
-  configs: ""
-
-# --- vm ----------------------------------------------------------------------
-
-# Standalone MMU network: dTLB + iTLB, pooled L1 TLB MSHR, L2 TLB, PTW walker
-# hierarchy, fed by a shared L2.
-- id: vm
-  group: vm
-  dut: vm
   clock_mhz: 400
   configs: ""

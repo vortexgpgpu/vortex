@@ -467,7 +467,7 @@ retries it.
 The ASIC gate needs no licence and no dedicated machine, so it runs on stock
 hosted runners. What it does need is *time*: 1–2 hours **per DUT**. That is the
 shape that keeps it out of `ci.yml` — a cell is one job running a pytest slice,
-and nine synthesis runs in series inside one cell would be a day.
+and eight synthesis runs in series inside one cell would be a day.
 
 So it is its own workflow, and its builds **fan out to one standalone job each**:
 
@@ -507,12 +507,15 @@ a DUT that needs more does not fail — the VM is killed under it and the job en
 at exit 143 with no report, which is indistinguishable from an infrastructure
 outage. Measured peak RSS for a single Yosys process put `gfx` at 44 GB and the
 16-thread/16-warp `core` and `tex` at 20.7 GB and 28.0 GB, so `asic_gate.yaml`
-drops `gfx` and `tensor` and gates `core`/`tex` at a reduced width; `top`, `gfx`, `tensor` and the wide `core`/`tex` stay on `fpga_gate`, whose
-self-hosted runner has the memory for them. **Membership is decided by the
-measured peak, not by whether a DUT is a composite** — `vm` is a two-core MMU
-network behind a shared L2 and synthesizes inside the budget, so it is gated
-here too. Measure before adding anything back: an over-budget DUT costs a silent
-job kill, not a red gate.
+drops `gfx`, `tensor` and `vm`, and gates `core`/`tex` at a reduced width; those
+DUTs and the wide `core`/`tex` stay on `fpga_gate`, whose self-hosted runner has
+the memory for them. `vm` is the cautionary one: it passed a hosted nightly in 11
+minutes, but only because the Yosys catalog was missing `L2_ENABLE`, so
+`VX_vm_top`'s `VX_cache_wrap #(.PASSTHRU(!VX_CFG_L2_ENABLED))` elaborated with
+its cache body guarded out — the DUT measured was an MMU network in front of a
+*bypass*, not a cache. Corrected to match the Xilinx catalog, its peak is
+unmeasured. Measure before adding anything back: an over-budget DUT costs a
+silent job kill, not a red gate.
 
 ---
 
