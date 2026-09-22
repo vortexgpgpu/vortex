@@ -81,7 +81,7 @@
     .m_axi_mem_``i``_bid(m_axi_mem_``i``_bid)
 
 // Host-memory AXI4 master port (CP command ring + host side of DMA).
-// XRT pins this kernel port to HOST[0] (see hw/syn/xilinx/xrt/platforms.mk).
+// XRT pins this kernel port to the card descriptor's host tag (hw/syn/xilinx/platforms).
 `define GEN_AXI_HOST \
 	output wire                                 m_axi_host_awvalid, \
 	input  wire                                 m_axi_host_awready, \

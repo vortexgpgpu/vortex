@@ -1,0 +1,15 @@
+# AMD VCK5000 (Versal AI Core). Device memory sits at 0xC0_0000_0000.
+[card]
+name = "vck5000"
+flow = "xrt"
+family = "versal"
+part = "xcvc1902-vsvd1760-2MP-e-S"
+match_xsa = ["xilinx_vck5000_*"]
+
+[memory]
+banks = 1
+addr_width = 32
+base = 0xC000000000
+
+[clock]
+kernel_mhz = 300
