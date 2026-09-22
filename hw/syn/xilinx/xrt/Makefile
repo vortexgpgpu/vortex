@@ -23,7 +23,6 @@ PREFIX ?= build$(XLEN)
 
 SAIF_FILE ?=
 SAIF_INST ?=
-MAX_JOBS ?= 8
 
 # Synthesis optimization level (standardized across hw/syn):
 #   0 -- fastest compile, no optimization (Vitis --optimize 0)
@@ -32,28 +31,14 @@ MAX_JOBS ?= 8
 OPT_LEVEL ?= 3
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/xilinx/xrt
+AFU_DIR := $(VORTEX_HOME)/hw/rtl/afu/xrt
 
-RTL_DIR := $(VORTEX_HOME)/hw/rtl
-DPI_DIR := $(VORTEX_HOME)/hw/dpi
-AFU_DIR := $(RTL_DIR)/afu/xrt
-AFU_COMMON_DIR := $(RTL_DIR)/afu/common
-SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
-
-VIVADO := $(XILINX_VIVADO)/bin/vivado
 VPP := $(XILINX_VITIS)/bin/v++
-
-CP = cp -rf
-RMDIR = rm -rf
-ECHO = @echo
-
-NCPUS := $(shell lscpu | grep "^Core(s) per socket:" | awk '{print $$4}')
-JOBS ?= $(shell echo $$(( $(NCPUS) > $(MAX_JOBS) ? $(MAX_JOBS) : $(NCPUS) )))
 
 PLATFORM_TO_XSA = $(strip $(patsubst %.xpfm, % , $(shell basename $(PLATFORM))))
 XSA := $(call PLATFORM_TO_XSA, $(PLATFORM))
 
 DEV_ARCH := $(shell platforminfo -p $(PLATFORM) | grep 'FPGA Family' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
-CPU_TYPE := $(shell platforminfo -p $(PLATFORM) | grep 'CPU Type' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
 
 BUILD_DIR := $(PREFIX)_$(XSA)_$(TARGET)
 BIN_DIR := $(BUILD_DIR)/bin
@@ -61,61 +46,12 @@ BIN_DIR := $(BUILD_DIR)/bin
 XO_CONTAINER := $(BIN_DIR)/vortex_afu.xo
 XCLBIN_CONTAINER := $(BIN_DIR)/vortex_afu.xclbin
 
-# Control RTL debug tracing states
-DBG_TRACE_FLAGS += -DDBG_TRACE_PIPELINE
-DBG_TRACE_FLAGS += -DDBG_TRACE_MEM
-DBG_TRACE_FLAGS += -DDBG_TRACE_CACHE
-DBG_TRACE_FLAGS += -DDBG_TRACE_AFU
-DBG_TRACE_FLAGS += -DDBG_TRACE_TEX
-DBG_TRACE_FLAGS += -DDBG_TRACE_RASTER
-DBG_TRACE_FLAGS += -DDBG_TRACE_OM
-DBG_TRACE_FLAGS += -DDBG_TRACE_GBAR
-DBG_TRACE_FLAGS += -DDBG_TRACE_TCU
-
-# Control logic analyzer monitors
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_AFU
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_ISSUE
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_FETCH
-DBG_SCOPE_FLAGS += -DDBG_SCOPE_LSU
-
-ifdef NUM_CORES
-# cluster configuration
-CONFIGS_1c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=1
-CONFIGS_2c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=2
-CONFIGS_4c  := -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=4
-CONFIGS_8c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=8
-CONFIGS_16c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16
-CONFIGS_32c := -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16
-CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16
-CONFIGS += $(CONFIGS_$(NUM_CORES)c)
-endif
-
-CONFIGS += -DSYNTHESIS -DVIVADO
-
 ifeq ($(TARGET), hw_emu)
-	CONFIGS += -DSIMULATION
+	override CONFIGS += -DSIMULATION
 endif
 
-XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
-
-# include sources
-RTL_PKGS = $(RTL_DIR)/VX_gpu_pkg.sv $(RTL_DIR)/fpu/VX_fpu_pkg.sv
-FPU_INCLUDE = -I$(RTL_DIR)/fpu
-ifneq (,$(filter -DVX_CFG_FPU_TYPE_FPNEW, $(XCONFIGS)))
-	RTL_PKGS += $(THIRD_PARTY_DIR)/cvfpu/src/fpnew_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src/cf_math_pkg.sv $(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
-	FPU_INCLUDE += -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/include -J$(THIRD_PARTY_DIR)/cvfpu/src/common_cells/src -J$(THIRD_PARTY_DIR)/cvfpu/src/fpu_div_sqrt_mvp/hdl -J$(THIRD_PARTY_DIR)/cvfpu/src
-endif
-RTL_INCLUDE = -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm -I$(RTL_DIR)/cache -I$(AFU_DIR) -I$(AFU_COMMON_DIR)
-RTL_INCLUDE += $(FPU_INCLUDE)
-
-# Command Processor sources. RTL_PKGS holds packages only; the CP
-# interface files are auto-discovered via the -I path below.
-RTL_PKGS += $(RTL_DIR)/cp/VX_cp_pkg.sv
-RTL_INCLUDE += -I$(RTL_DIR)/cp
-
-# Per-extension RTL sources (TCU/DXA/V/RTU/TEX/RASTER/OM) —
-# single source of truth, appended based on the resolved XCONFIGS.
-include $(VORTEX_HOME)/hw/syn/extensions.mk
+.DEFAULT_GOAL := all
+include $(VORTEX_HOME)/hw/syn/xilinx/common.mk
 
 # Kernel clock target frequency (MHz). The card descriptor supplies the
 # default; override on the command line (e.g. KERNEL_FREQ=250) for extra
@@ -154,11 +90,6 @@ endif
 VPP_FLAGS += --report_level 2
 VPP_FLAGS += --config $(SRC_DIR)/vitis.ini
 
-# Enable perf counters
-ifdef PERF
-	CFLAGS += -DPERF_ENABLE
-endif
-
 # Generates profile summary report
 ifdef PROFILE
 	VPP_FLAGS += --profile_kernel data:all:all:all
@@ -180,42 +111,16 @@ else
 	CFLAGS += -DNDEBUG
 endif
 
-# Enable scope analyzer
-ifdef SCOPE
-	CFLAGS += -DSCOPE $(DBG_SCOPE_FLAGS)
-	SCOPE_JSON += $(BIN_DIR)/scope.json
-endif
-
-# compilation flags
-CFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
-# raw CONFIGS carries only an enum *value* (e.g. VX_CFG_TCU_TYPE=TFR); append the
-# resolved type selectors so an enum override selects its RTL implementation.
-CFLAGS += $(CONFIGS) $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
-CFLAGS += $(RTL_INCLUDE)
-
-# ast dump flags
-XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_DIR) -DSV_DPI
+CFLAGS += $(COMPILE_CFLAGS)
 
 # RTL Kernel only supports Hardware and Hardware Emulation.
 ifneq ($(TARGET),$(findstring $(TARGET), hw hw_emu))
 	$(warning WARNING:Application supports only hw hw_emu TARGET. Please use the target for running the application)
 endif
 
-.PHONY: all clean gen-sources gen-ast emconfig check-devices power
+.PHONY: all clean emconfig check-devices power
 
-all: check-devices emconfig $(XCLBIN_CONTAINER) report
-
-gen-sources: $(BUILD_DIR)/sources.txt
-$(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt
-
-gen-ast: $(BUILD_DIR)/vortex.xml
-$(BUILD_DIR)/vortex.xml:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(VERILATOR_PATH)/bin/verilator --xml-only -O0 $(XML_CFLAGS) vortex_afu.v --xml-output vortex.xml
-
-scope-json: $(BIN_DIR)/scope.json
-$(BIN_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o bin/scope.json
+all: check-devices check-axil-blocks emconfig $(XCLBIN_CONTAINER) report
 
 gen-xo: $(XO_CONTAINER)
 $(XO_CONTAINER): $(BUILD_DIR)/sources.txt
