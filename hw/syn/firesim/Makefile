@@ -259,6 +259,7 @@ kernel-env:
 bitstream: vivado-sources sources xilinx-ips stage
 	$(MAKE) -C $(FIRESIM_PATH)/sim replace-rtl $(FIRESIM_TARGET_ARGS)
 	VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST) VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR) \
+	VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl TOOL_DIR=$(SCRIPT_DIR) \
 	$(MAKE) -C $(FIRESIM_PATH)/platforms/$(PLATFORM)/cl_$(QUINTUPLET) bitstream \
 		DEVICE=$(DEVICE) HOST_MEM_SP='$(HOST_MEM_SP)' FREQUENCY=$(FREQUENCY) STRATEGY=$(STRATEGY)
 
