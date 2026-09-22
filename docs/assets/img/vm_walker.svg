@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 820" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="arrr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b03a2e"/>
+    </marker>
+    <marker id="arry" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+  <style>
+    .st   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.8; }
+    .stg  { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.8; }
+    .str  { fill:#fbeeed; stroke:#b03a2e; stroke-width:1.8; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .box  { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tt   { fill:#5a6772; font-size:12px; font-style:italic; }
+    .cm   { font-family:"DejaVu Sans Mono", monospace; font-size:12px; fill:#1b2733; }
+    .flow { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .ok   { stroke:#3a7d44; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .bad  { stroke:#b03a2e; stroke-width:1.8; fill:none; marker-end:url(#arrr); stroke-dasharray:5 3; }
+    .memf { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arry); }
+    .lbl  { fill:#44525f; font-size:12px; }
+    .lblg { fill:#2f6b39; font-size:12px; }
+    .lblr { fill:#b03a2e; font-size:12px; }
+    .lbly { fill:#8a6d00; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="820" fill="#ffffff"/>
+  <text x="24" y="34" class="t" font-size="20">VX_ptw_walker — one level-counted walk, and the walk cache that lets it skip to the leaf table</text>
+  <text x="24" y="56" class="tt">The same four-state machine walks Sv32 (2 levels, 4-byte PTE) and Sv39 (3 levels, 8-byte PTE); the geometry comes from the VX_VM_* contract, the level from a counter.</text>
+
+  <!-- FSM -->
+  <rect x="24" y="80" width="760" height="470" rx="6" class="grp"/>
+  <text x="36" y="104" class="t">Walker state machine (per walker, NUM_WALKERS independent copies)</text>
+
+  <ellipse cx="120" cy="200" rx="64" ry="34" class="st"/>
+  <text x="120" y="196" class="t" text-anchor="middle">IDLE</text>
+  <text x="120" y="212" class="ts" text-anchor="middle">req_ready = 1</text>
+
+  <ellipse cx="360" cy="200" rx="64" ry="34" class="st"/>
+  <text x="360" y="196" class="t" text-anchor="middle">REQ</text>
+  <text x="360" y="212" class="ts" text-anchor="middle">mem req_valid</text>
+
+  <ellipse cx="600" cy="200" rx="64" ry="34" class="st"/>
+  <text x="600" y="196" class="t" text-anchor="middle">WAIT</text>
+  <text x="600" y="212" class="ts" text-anchor="middle">mem rsp_ready</text>
+
+  <ellipse cx="360" cy="420" rx="64" ry="34" class="stg"/>
+  <text x="360" y="416" class="t" text-anchor="middle">RESP</text>
+  <text x="360" y="432" class="ts" text-anchor="middle">rsp_valid</text>
+
+  <path d="M 184 200 L 296 200" class="flow"/>
+  <text x="196" y="176" class="lbl">dispatch: latch id, vpn,</text>
+  <text x="196" y="190" class="lbl">base_ppn, level</text>
+  <path d="M 424 200 L 536 200" class="flow"/>
+  <text x="436" y="176" class="lbl">req fire: pte_sel</text>
+  <text x="436" y="190" class="lbl">latched</text>
+  <path d="M 570 170 L 570 150 L 390 150 L 390 170" class="flow"/>
+  <text x="400" y="142" class="lbl">rsp fire, non-leaf, level &gt; 0: base_ppn ← pte.ppn, level ← level − 1</text>
+  <path d="M 600 234 L 600 420 L 424 420" class="ok"/>
+  <text x="612" y="300" class="lblg">rsp fire ∧ walk_done:</text>
+  <text x="612" y="316" class="lblg">result ← {pte.ppn, flags,</text>
+  <text x="612" y="332" class="lblg">level, walk_fault}</text>
+  <path d="M 296 420 L 120 420 L 120 234" class="flow"/>
+  <text x="130" y="330" class="lbl">rsp_ready:</text>
+  <text x="130" y="346" class="lbl">result → rsp arb</text>
+
+  <rect x="40" y="470" width="728" height="68" rx="6" class="box"/>
+  <text x="52" y="490" class="cm">pte_addr  = {base_ppn, vpn[level·LEVEL_BITS +: LEVEL_BITS] &lt;&lt; PTE_SHIFT}      (one PTE per level)</text>
+  <text x="52" y="508" class="cm">pte       = rsp.data[pte_sel·PTE_W +: PTE_W]        pte_sel = pte_addr[WORD_SHIFT-1:PTE_SHIFT]</text>
+  <text x="52" y="526" class="cm">leaf = R|W|X    bad = ¬V ∨ (¬R∧W)    misaligned = pte.ppn &amp; ((1 &lt;&lt; level·LEVEL_BITS) − 1) ≠ 0</text>
+
+  <!-- fault box -->
+  <rect x="820" y="80" width="656" height="150" rx="6" class="str"/>
+  <text x="832" y="104" class="t">walk_fault — the only faults a walker raises</text>
+  <text x="832" y="126" class="ts">walk_fault = bad ∨ (leaf ∧ misaligned) ∨ (¬leaf ∧ level == 0)</text>
+  <text x="832" y="146" class="ts">walk_done  = walk_fault ∨ leaf</text>
+  <text x="832" y="168" class="tt">A faulting walk still answers its miss-station slot (fault=1, nothing installed), so every</text>
+  <text x="832" y="184" class="tt">parked requester is killed rather than left waiting. The same cycle, fault_if pulses once with</text>
+  <text x="832" y="200" class="tt">{va = vpn ≪ PAGE_LOG2, access, amo} as recorded at dispatch; VX_mmu_dcr latches the first.</text>
+  <text x="832" y="220" class="tt">Permission (R/W/X/U) is never judged here: a walk is shared by requests of differing intent.</text>
+
+  <!-- walk cache -->
+  <rect x="820" y="250" width="656" height="300" rx="6" class="mem"/>
+  <text x="832" y="274" class="t">VX_ptw_cache — direct-mapped last-level table pointers (WALK_CACHE_SIZE entries)</text>
+  <text x="832" y="298" class="cm">tag  = vpn[VPN_W-1 : LEVEL_BITS]          (the VPN with its last-level index stripped)</text>
+  <text x="832" y="316" class="cm">idx  = tag[IDX_W-1 : 0]                   IDX_W = clog2(WALK_CACHE_SIZE)</text>
+  <text x="832" y="334" class="cm">hit  = valid[idx] ∧ tag_r[idx] == tag  →  start_ppn = ppn_r[idx], start_level = 0</text>
+  <text x="832" y="352" class="cm">miss →  start_ppn = satp.PPN,  start_level = PT_LEVELS − 1</text>
+  <text x="832" y="380" class="ts">Written by any walker the cycle its walk steps from level 1 into level 0: {tag(vpn) → pte.ppn}.</text>
+  <text x="832" y="396" class="ts">At most one write per cycle (lowest walker index wins). Cleared on every flush_if.req.</text>
+  <text x="832" y="418" class="ts">Effect: a walk whose 4 KB neighbours were recently walked costs one PTE fetch instead of</text>
+  <text x="832" y="434" class="ts">PT_LEVELS — two on Sv32, three on Sv39. The saving grows with the depth of the table.</text>
+  <text x="832" y="458" class="tt">Probed combinationally on the incoming miss (miss_if.req_data.vpn) so the walker is</text>
+  <text x="832" y="474" class="tt">dispatched already pointed at the right table. Only interior tables are cached; a</text>
+  <text x="832" y="490" class="tt">superpage leaf found above level 0 is returned with its level and never cached here.</text>
+  <text x="832" y="514" class="tt">PT_LEVELS == 1 disables the probe (wc_use gated) — there is no interior level to skip.</text>
+
+  <!-- pool -->
+  <rect x="24" y="574" width="1452" height="222" rx="6" class="grp"/>
+  <text x="36" y="598" class="t">Walker pool and its ports (VX_ptw)</text>
+  <rect x="40" y="612" width="440" height="170" rx="6" class="box"/>
+  <text x="52" y="634" class="t">Dispatch</text>
+  <text x="52" y="654" class="ts">miss_if.req_ready = ∃ idle walker; the lowest idle</text>
+  <text x="52" y="670" class="ts">index takes the request. dispatch_i latches the</text>
+  <text x="52" y="686" class="ts">request's vpn / access / amo for the fault report.</text>
+  <text x="52" y="706" class="tt">No queue in front of the pool: a full pool back-</text>
+  <text x="52" y="722" class="tt">pressures the cluster TLB's issue buffer, which</text>
+  <text x="52" y="738" class="tt">holds the request. Walkers are independent, so</text>
+  <text x="52" y="754" class="tt">NUM_WALKERS walks overlap their PTE latency.</text>
+
+  <rect x="500" y="612" width="470" height="170" rx="6" class="box"/>
+  <text x="512" y="634" class="t">PTE fetch port</text>
+  <text x="512" y="654" class="ts">VX_mem_bus_arb NUM_WALKERS→1, round-robin; the walker index is</text>
+  <text x="512" y="670" class="ts">appended to the tag (TAG_SEL_IDX) so responses demux back.</text>
+  <text x="512" y="686" class="ts">REQ_OUT_BUF=3: the port leaves the PTW fully registered.</text>
+  <text x="512" y="706" class="ts">DATA_SIZE = L1 line: one line read per level, PTE word selected</text>
+  <text x="512" y="722" class="ts">by pte_sel; rw=0, byteen all ones, attr=0 (cacheable, no bypass).</text>
+  <text x="512" y="742" class="tt">Attached to the shared L2 as client L2_PTW_IDX — PTEs are cached</text>
+  <text x="512" y="758" class="tt">like data, and repeat walks of a hot table hit in the L2.</text>
+
+  <rect x="990" y="612" width="470" height="170" rx="6" class="box"/>
+  <text x="1002" y="634" class="t">Response and fault</text>
+  <text x="1002" y="654" class="ts">VX_stream_arb NUM_WALKERS→1 (round-robin, OUT_BUF=2) returns</text>
+  <text x="1002" y="670" class="ts">{id, fault, level, ppn, flags} to the cluster TLB's miss station.</text>
+  <text x="1002" y="686" class="ts">A response that fires with fault=1 also drives fault_if for one</text>
+  <text x="1002" y="702" class="ts">cycle (lowest faulting walker wins if two coincide).</text>
+  <text x="1002" y="722" class="tt">empty = no walker active; flush_if.done = req ∧ empty. An in-flight</text>
+  <text x="1002" y="738" class="tt">walk is never aborted: the flush waits for it, and its fill lands</text>
+  <text x="1002" y="754" class="tt">in a miss station that is itself waiting to clear on empty.</text>
+
+  <path d="M 480 690 L 500 690" class="memf"/>
+  <path d="M 970 690 L 990 690" class="flow"/>
+</svg>

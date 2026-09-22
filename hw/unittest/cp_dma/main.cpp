@@ -22,6 +22,7 @@
 // ============================================================================
 
 #include "vl_simulator.h"
+#include "util.h"
 #include "VVX_cp_dma_top.h"
 #include <cstdint>
 #include <cstdio>
@@ -115,7 +116,9 @@ struct AxiSlave {
         top->d_rid    = r_id;
         top->d_rlast  = 1;
         top->d_rresp  = 0;
-        if (r_inflight) mem_read_cl(r_addr, top->d_rdata);
+        if (r_inflight) {
+            mem_read_cl(r_addr, vortex::VDataCast<uint32_t*, sizeof(top->d_rdata)>::get(top->d_rdata));
+        }
 
         top->d_awready = !aw_taken;
         top->d_wready  = aw_taken && !b_pending;

@@ -297,8 +297,10 @@ target-frequency check below asserts. It also makes the slack source matter:
   hand-edited, carrying only measured metrics plus the config fingerprint and
   tool env they were measured under. Groups: `core` (cache+AMO, wide core, full
   4-core AFU), `tensor` (all-datatype TCU), `graphics` (RTU/RASTER/OM/TEX),
-  `dxa`; `asic_gate` mirrors them so a divergence between the two tools on the
-  same module is a real finding. A `config_hash` ties the two files together —
+  `dxa`; `asic_gate` mirrors the groups, so where the two gates share a DUT a
+  divergence between the tools on the same module is a real finding. Its build
+  list is a *subset*: see the runner ceiling below. A `config_hash` ties the two
+  files together —
   edit the spec and the gate refuses to compare against numbers recorded for the
   old one (`STALE`). Its tool-specific half is the FPGA part plus opt level for
   Vivado, and the PDK/VT/corner for Yosys, since ASAP7 RVT-TT and LVT-SS numbers
@@ -465,7 +467,7 @@ retries it.
 The ASIC gate needs no licence and no dedicated machine, so it runs on stock
 hosted runners. What it does need is *time*: 1–2 hours **per DUT**. That is the
 shape that keeps it out of `ci.yml` — a cell is one job running a pytest slice,
-and eleven synthesis runs in series inside one cell would be a day.
+and eight synthesis runs in series inside one cell would be a day.
 
 So it is its own workflow, and its builds **fan out to one standalone job each**:
 
@@ -490,8 +492,30 @@ as §4.4: a red master is not re-synthesized every night, and a build error does
 not record so the next nightly retries it.
 
 The prebuilt toolchain already carries yosys, sv2v and OpenSTA, so `setup-vortex`
-needs no change. ASAP7 is content-addressed by `hw/syn/libs/asap7/manifest.txt`,
-so that file's hash is the PDK cache key; the flow installs it on a miss.
+needs no change — but a `toolchain` job runs it with `prepare: true` ahead of the
+matrix. `prepare: false` restores the cache and installs nothing on a miss, and
+that cache key carries the commit `TOOLCHAIN_REV` resolves to, so refreshing the
+prebuilts misses it by construction; without the warm job a toolchain bump would
+surface as every DUT failing at once in `gen_sources.sh`. `ci.yml` warms the same
+cache, but weekly and on pushes, which a nightly cannot rely on. ASAP7 is
+content-addressed by `hw/syn/libs/asap7/manifest.txt`, so that file's hash is the
+PDK cache key; the flow installs it on a miss.
+
+**A hosted runner's 16 GB of RAM is what bounds the build list**, not its clock.
+Yosys holds the whole elaborated netlist in memory and offers no cap to tune, so
+a DUT that needs more does not fail — the VM is killed under it and the job ends
+at exit 143 with no report, which is indistinguishable from an infrastructure
+outage. Measured peak RSS for a single Yosys process put `gfx` at 44 GB and the
+16-thread/16-warp `core` and `tex` at 20.7 GB and 28.0 GB, so `asic_gate.yaml`
+drops `gfx`, `tensor` and `vm`, and gates `core`/`tex` at a reduced width; those
+DUTs and the wide `core`/`tex` stay on `fpga_gate`, whose self-hosted runner has
+the memory for them. `vm` is the cautionary one: it passed a hosted nightly in 11
+minutes, but only because the Yosys catalog was missing `L2_ENABLE`, so
+`VX_vm_top`'s `VX_cache_wrap #(.PASSTHRU(!VX_CFG_L2_ENABLED))` elaborated with
+its cache body guarded out — the DUT measured was an MMU network in front of a
+*bypass*, not a cache. Corrected to match the Xilinx catalog, its peak is
+unmeasured. Measure before adding anything back: an over-budget DUT costs a
+silent job kill, not a red gate.
 
 ---
 

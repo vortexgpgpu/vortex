@@ -38,6 +38,13 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     localparam REQ_ASHIFT   = `CLOG2(LSU_WORD_SIZE);
     localparam MEM_ASHIFT   = `CLOG2(`VX_CFG_MEM_BLOCK_SIZE);
     localparam MEM_ADDRW    = `VX_CFG_MEM_ADDR_WIDTH - MEM_ASHIFT;
+    // Window membership is an equality on the block-address bits above the
+    // window: the LMEM base is asserted aligned to the capacity, so the prefix
+    // compare is exact and needs no end address -- which is not representable
+    // when the window ends at the top of the address space.
+    localparam LMEM_BLK_LSB = `VX_CFG_LMEM_LOG_SIZE - MEM_ASHIFT;
+    localparam [MEM_ADDRW-1:0] LMEM_BLK_BASE = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
+    `STATIC_ASSERT (MEM_ADDRW > LMEM_BLK_LSB, ("LMEM window wider than the block address space"))
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -113,9 +120,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                                                  || lane_is_om;
     `ifdef VX_CFG_LMEM_ENABLE
         // is local memory address
-        wire [MEM_ADDRW-1:0] lmem_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
-        wire [MEM_ADDRW-1:0] lmem_addr_end = MEM_ADDRW'((`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) + `VX_CFG_XLEN'(1 << `VX_CFG_LMEM_LOG_SIZE)) >> MEM_ASHIFT);
-        assign mem_req_attr_struct[i].is_addr_local = (block_addr >= lmem_addr_start) && (block_addr < lmem_addr_end);
+        assign mem_req_attr_struct[i].is_addr_local =
+            (block_addr[MEM_ADDRW-1:LMEM_BLK_LSB] == LMEM_BLK_BASE[MEM_ADDRW-1:LMEM_BLK_LSB]);
     `else
         assign mem_req_attr_struct[i].is_addr_local = 1'b0;
     `endif

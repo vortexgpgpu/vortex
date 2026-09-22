@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <style>
+    .f1   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .f2   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .f3   { fill:#fdf6e3; stroke:#b58900; stroke-width:1.4; }
+    .f4   { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.4; }
+    .f5   { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.4; }
+    .box  { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tt   { fill:#5a6772; font-size:12px; font-style:italic; }
+    .fl   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .fb   { fill:#44525f; font-size:10.5px; }
+    .cm   { font-family:"DejaVu Sans Mono", monospace; font-size:12px; fill:#1b2733; }
+    .flow { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t" font-size="20">Address formats and the translation arithmetic every level shares</text>
+  <text x="24" y="56" class="tt">The geometry is the RISC-V Sv32 / Sv39 contract from VX_types.toml [vm]; the hardware derives LEVEL_BITS, VPN_W and PPN_W from it and never hard-codes a mode.</text>
+
+  <!-- Sv32 VA -->
+  <rect x="24" y="80" width="700" height="300" rx="6" class="grp"/>
+  <text x="36" y="104" class="t">Sv32 (XLEN=32): PT_LEVELS=2, LEVEL_BITS=10, PTE 4 bytes, VPN_W=20</text>
+
+  <text x="36" y="132" class="ts">virtual address (32)</text>
+  <rect x="36"  y="140" width="240" height="34" class="f1"/>
+  <rect x="276" y="140" width="240" height="34" class="f1"/>
+  <rect x="516" y="140" width="190" height="34" class="f3"/>
+  <text x="156" y="162" class="fl" text-anchor="middle">VPN[1]  (10)</text>
+  <text x="396" y="162" class="fl" text-anchor="middle">VPN[0]  (10)</text>
+  <text x="611" y="162" class="fl" text-anchor="middle">page offset (12)</text>
+  <text x="36"  y="186" class="fb">31</text><text x="270" y="186" class="fb" text-anchor="end">22</text>
+  <text x="280" y="186" class="fb">21</text><text x="510" y="186" class="fb" text-anchor="end">12</text>
+  <text x="520" y="186" class="fb">11</text><text x="700" y="186" class="fb" text-anchor="end">0</text>
+
+  <text x="36" y="214" class="ts">page-table entry (32)</text>
+  <rect x="36"  y="222" width="440" height="34" class="f2"/>
+  <rect x="476" y="222" width="46"  height="34" class="f5"/>
+  <rect x="522" y="222" width="184" height="34" class="f4"/>
+  <text x="256" y="244" class="fl" text-anchor="middle">PPN  [31:10]  (22)</text>
+  <text x="499" y="244" class="fl" text-anchor="middle">RSW</text>
+  <text x="614" y="244" class="fl" text-anchor="middle">D A G U X W R V</text>
+  <text x="36"  y="268" class="fb">31</text><text x="470" y="268" class="fb" text-anchor="end">10</text>
+  <text x="480" y="268" class="fb">9  8</text>
+  <text x="526" y="268" class="fb">7</text><text x="700" y="268" class="fb" text-anchor="end">0</text>
+
+  <text x="36" y="296" class="ts">physical address (MEM_ADDR_WIDTH=32)</text>
+  <rect x="36"  y="304" width="480" height="34" class="f2"/>
+  <rect x="516" y="304" width="190" height="34" class="f3"/>
+  <text x="276" y="326" class="fl" text-anchor="middle">PPN  (PPN_W = 32 − 12 = 20)</text>
+  <text x="611" y="326" class="fl" text-anchor="middle">page offset (12)</text>
+  <text x="36" y="362" class="tt">satp: MODE = bit 31 (1 = Sv32), ASID [30:22] (unused), PPN [21:0]. vm_active ← SATP_LO[31].</text>
+
+  <!-- Sv39 -->
+  <rect x="760" y="80" width="716" height="300" rx="6" class="grp"/>
+  <text x="772" y="104" class="t">Sv39 (XLEN=64): PT_LEVELS=3, LEVEL_BITS=9, PTE 8 bytes, VPN_W=27</text>
+
+  <text x="772" y="132" class="ts">virtual address (low 39 bits used; bits above the VPN are dropped at translation)</text>
+  <rect x="772"  y="140" width="160" height="34" class="f1"/>
+  <rect x="932"  y="140" width="160" height="34" class="f1"/>
+  <rect x="1092" y="140" width="160" height="34" class="f1"/>
+  <rect x="1252" y="140" width="210" height="34" class="f3"/>
+  <text x="852"  y="162" class="fl" text-anchor="middle">VPN[2] (9)</text>
+  <text x="1012" y="162" class="fl" text-anchor="middle">VPN[1] (9)</text>
+  <text x="1172" y="162" class="fl" text-anchor="middle">VPN[0] (9)</text>
+  <text x="1357" y="162" class="fl" text-anchor="middle">page offset (12)</text>
+  <text x="772"  y="186" class="fb">38</text><text x="926"  y="186" class="fb" text-anchor="end">30</text>
+  <text x="936"  y="186" class="fb">29</text><text x="1086" y="186" class="fb" text-anchor="end">21</text>
+  <text x="1096" y="186" class="fb">20</text><text x="1246" y="186" class="fb" text-anchor="end">12</text>
+  <text x="1256" y="186" class="fb">11</text><text x="1456" y="186" class="fb" text-anchor="end">0</text>
+
+  <text x="772" y="214" class="ts">page-table entry (64)</text>
+  <rect x="772"  y="222" width="120" height="34" class="f5"/>
+  <rect x="892"  y="222" width="380" height="34" class="f2"/>
+  <rect x="1272" y="222" width="46"  height="34" class="f5"/>
+  <rect x="1318" y="222" width="144" height="34" class="f4"/>
+  <text x="832"  y="244" class="fl" text-anchor="middle">N PBMT rsvd</text>
+  <text x="1082" y="244" class="fl" text-anchor="middle">PPN  [53:10]  (44)</text>
+  <text x="1295" y="244" class="fl" text-anchor="middle">RSW</text>
+  <text x="1390" y="244" class="fl" text-anchor="middle">D A G U X W R V</text>
+  <text x="772"  y="268" class="fb">63</text><text x="886" y="268" class="fb" text-anchor="end">54</text>
+  <text x="896"  y="268" class="fb">53</text><text x="1266" y="268" class="fb" text-anchor="end">10</text>
+  <text x="1322" y="268" class="fb">7</text><text x="1456" y="268" class="fb" text-anchor="end">0</text>
+
+  <text x="772" y="296" class="ts">physical address (MEM_ADDR_WIDTH=48)</text>
+  <rect x="772"  y="304" width="480" height="34" class="f2"/>
+  <rect x="1252" y="304" width="210" height="34" class="f3"/>
+  <text x="1012" y="326" class="fl" text-anchor="middle">PPN  (PPN_W = 48 − 12 = 36; PTE bits above are unmapped)</text>
+  <text x="1357" y="326" class="fl" text-anchor="middle">page offset (12)</text>
+  <text x="772" y="362" class="tt">satp: MODE [63:60] (8 = Sv39), ASID [59:44] (unused), PPN [43:0]. vm_active ← SATP_HI[31:28] ≠ 0.</text>
+
+  <!-- TLB entry -->
+  <rect x="24" y="404" width="700" height="150" rx="6" class="grp"/>
+  <text x="36" y="428" class="t">tlb_entry_t — what every TLB level stores (VX_tlb_pkg)</text>
+  <rect x="36"  y="444" width="110" height="34" class="f5"/>
+  <rect x="146" y="444" width="220" height="34" class="f1"/>
+  <rect x="366" y="444" width="220" height="34" class="f2"/>
+  <rect x="586" y="444" width="120" height="34" class="f4"/>
+  <text x="91"  y="466" class="fl" text-anchor="middle">level</text>
+  <text x="256" y="466" class="fl" text-anchor="middle">vpn (VPN_W)</text>
+  <text x="476" y="466" class="fl" text-anchor="middle">ppn (PPN_W)</text>
+  <text x="646" y="466" class="fl" text-anchor="middle">flags (8)</text>
+  <text x="36" y="500" class="ts">level 0 = 4 KB page; level L ≥ 1 = superpage spanning L index groups (Sv32: 4 MB; Sv39: 2 MB, 1 GB).</text>
+  <text x="36" y="516" class="ts">Validity is a separate flash-clearable bitmask, not an entry field, so a flush is one cycle at any size.</text>
+  <text x="36" y="538" class="tt">The L2 set array drops level (4 KB only) and stores {tag, ppn, flags}; superpages live in its megapage CAM.</text>
+
+  <!-- equations -->
+  <rect x="760" y="404" width="716" height="150" rx="6" class="grp"/>
+  <text x="772" y="428" class="t">Permission predicate — tlb_perm_ok(flags, access, amo), identical in RTL and SimX</text>
+  <text x="772" y="452" class="cm">want_w = (access == WR) ∨ amo        want_x = (access == EX)</text>
+  <text x="772" y="470" class="cm">ok = U ∧ (¬want_w ∨ W) ∧ (¬want_x ∨ X) ∧ (want_w ∨ want_x ∨ R)</text>
+  <text x="772" y="496" class="ts">V is enforced by entry validity (the walker rejects ¬V before anything is installed); U is always</text>
+  <text x="772" y="512" class="ts">required because kernels run in U-mode. An atomic arrives as rw=0 with the AMO attribute, so amo</text>
+  <text x="772" y="528" class="ts">supplies its write intent. The check runs on the hit path, on every replay, and in the SimX fill.</text>
+
+  <!-- splice -->
+  <rect x="24" y="578" width="1452" height="300" rx="6" class="grp"/>
+  <text x="36" y="602" class="t">The splice — one formula for base pages and superpages</text>
+  <text x="36" y="628" class="cm">mask(L)   = ~0 &lt;&lt; (L · LEVEL_BITS)                              (VPN bits an entry of level L actually compares)</text>
+  <text x="36" y="648" class="cm">hit       = valid ∧ ((entry.vpn &amp; mask(L)) == (vpn &amp; mask(L)))</text>
+  <text x="36" y="668" class="cm">low       = vpn &amp; ~mask(L)                                     (the index within the superpage, taken from the VA)</text>
+  <text x="36" y="688" class="cm">PA        = { entry.ppn | low ,  VA[PAGE_LOG2-1:0] }              (entry.ppn is stored aligned down to its level)</text>
+  <text x="36" y="716" class="cm">PTE addr  = { table_ppn ,  vpn[L·LEVEL_BITS +: LEVEL_BITS] &lt;&lt; PTE_SHIFT }      for L = PT_LEVELS−1 … 0</text>
+  <text x="36" y="736" class="cm">L2 set    = vpn[SET_SEL_BITS-1:0]      L2 tag = vpn[VPN_W-1:SET_SEL_BITS]      NUM_SETS = L2_TLB_SIZE / NUM_WAYS</text>
+  <text x="36" y="756" class="cm">walk tag  = vpn[VPN_W-1:LEVEL_BITS]     walk idx = walk_tag[IDX_W-1:0]         (the last-level table a VPN belongs to)</text>
+  <text x="36" y="784" class="ts">For L = 0 the mask is all ones, low is zero, and the splice reduces to {ppn, offset}. The walker checks superpage alignment</text>
+  <text x="36" y="800" class="ts">(pte.ppn &amp; ~mask(L) == 0) so that the OR above is exact. The L1 CAM does the splice inside its lookup; VX_mmu repeats it on</text>
+  <text x="36" y="816" class="ts">replay from the raw {ppn, level} the miss station kept; SimX's Tlb::lookup and Mmu fill path compute the same expression.</text>
+  <text x="36" y="840" class="tt">Sv39 VA bits above the VPN (the sign-extension region) never reach the physical address: translation replaces the whole page number.</text>
+  <text x="36" y="860" class="tt">Runtime and CP walkers reconstruct a superpage PA the same way: (leaf_ppn ≪ 12 &amp; ~off_mask) | (VA &amp; off_mask), off_mask = 2^(12 + L·LEVEL_BITS) − 1.</text>
+</svg>

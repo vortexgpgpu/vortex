@@ -57,6 +57,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     `STATIC_ASSERT(`VX_CFG_LMEM_ENABLED, ("TCU_WGMMA_ENABLE requires LMEM_ENABLE"))
+    // The WGMMA shared-memory descriptor carries the LMEM byte offset in a 16-bit
+    // field, so a WGMMA-visible LMEM cannot exceed 64KB; beyond that the offset
+    // wraps into the adjacent stride field.
+    `STATIC_ASSERT(`VX_CFG_LMEM_LOG_SIZE <= 16, ("LMEM exceeds the 16-bit smem descriptor offset field"))
 `endif
 
 `ifdef VX_CFG_LMEM_ENABLE
@@ -182,6 +186,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         wire [`VX_CFG_LMEM_NUM_BANKS-1:0] dxa_bank_wr_fire;
         for (genvar i = 0; i < `VX_CFG_LMEM_NUM_BANKS; ++i) begin : g_dxa_bank_wr_fire
             assign dxa_bank_wr_fire[i] = lmem_dma_if.req_valid
+                                      && lmem_dma_if.req_ready
                                       && lmem_dma_if.req_data.rw
                                       && (|lmem_dma_if.req_data.byteen[i*LSU_WORD_SIZE +: LSU_WORD_SIZE]);
         end

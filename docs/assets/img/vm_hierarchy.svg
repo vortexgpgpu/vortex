@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 760" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e4a7e"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+    <marker id="arry" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+    <marker id="arrr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b03a2e"/>
+    </marker>
+  </defs>
+  <style>
+    .core { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.6; }
+    .blk  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.6; }
+    .mem  { fill:#fdf6e3; stroke:#b58900; stroke-width:1.6; }
+    .ctl  { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.6; }
+    .host { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.6; }
+    .grp  { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t    { fill:#1b2733; font-size:15px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:12.5px; }
+    .tg   { fill:#5a6772; font-size:13px; font-weight:bold; }
+    .w    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .wva  { stroke:#8e4a7e; stroke-width:2.0; fill:none; marker-end:url(#arrp); }
+    .wbus { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); marker-start:url(#arrb); }
+    .wmem { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arry); marker-start:url(#arry); }
+    .wpte { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arry); }
+    .wctl { stroke:#3a7d44; stroke-width:1.5; fill:none; marker-end:url(#arrg); stroke-dasharray:4 3; }
+    .wflt { stroke:#b03a2e; stroke-width:1.6; fill:none; marker-end:url(#arrr); stroke-dasharray:5 3; }
+    .l    { fill:#444; font-size:12px; }
+    .lp   { fill:#8e4a7e; font-size:12px; }
+    .lb   { fill:#1c6ca8; font-size:12px; }
+    .ly   { fill:#8a6d00; font-size:12px; }
+    .lg   { fill:#2f6b39; font-size:12px; }
+    .lr   { fill:#b03a2e; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1500" height="760" fill="#ffffff"/>
+  <text x="24" y="34" class="t" font-size="20">Virtual memory — translation hierarchy and control plane</text>
+
+  <!-- top row: host, CP, device MMU surface -->
+  <rect x="40" y="80" width="220" height="80" rx="6" class="host"/>
+  <text x="150" y="108" class="t" text-anchor="middle">Host runtime</text>
+  <text x="150" y="128" class="ts" text-anchor="middle">VMManager · shadow page tables</text>
+  <text x="150" y="144" class="ts" text-anchor="middle">VA allocator</text>
+
+  <rect x="340" y="80" width="200" height="80" rx="6" class="host"/>
+  <text x="440" y="108" class="t" text-anchor="middle">Command processor</text>
+  <text x="440" y="128" class="ts" text-anchor="middle">ring · DMA · DCR writes</text>
+  <text x="440" y="144" class="ts" text-anchor="middle">sim: cp_translate()</text>
+
+  <rect x="620" y="80" width="240" height="80" rx="6" class="ctl"/>
+  <text x="740" y="108" class="t" text-anchor="middle">VX_mmu_dcr</text>
+  <text x="740" y="128" class="ts" text-anchor="middle">satp · flush done-tree</text>
+  <text x="740" y="144" class="ts" text-anchor="middle">first-fault latch</text>
+
+  <path d="M 260 120 L 340 120" class="w"/>
+  <text x="270" y="112" class="l">commands</text>
+  <path d="M 540 120 L 620 120" class="wctl"/>
+  <text x="560" y="112" class="lg">DCR</text>
+
+  <!-- socket -->
+  <rect x="40" y="210" width="660" height="520" rx="6" class="grp"/>
+  <text x="52" y="232" class="tg">Socket × NUM_SOCKETS</text>
+
+  <rect x="60" y="250" width="200" height="70" rx="6" class="core"/>
+  <text x="160" y="278" class="t" text-anchor="middle">VX_core × SOCKET_SIZE</text>
+  <text x="160" y="298" class="ts" text-anchor="middle">virtual addresses only</text>
+
+  <rect x="480" y="250" width="200" height="70" rx="6" class="ctl"/>
+  <text x="580" y="278" class="t" text-anchor="middle">VX_mmu_snoop</text>
+  <text x="580" y="298" class="ts" text-anchor="middle">vm_active · L1 flush</text>
+
+  <rect x="60" y="390" width="200" height="80" rx="6" class="blk"/>
+  <text x="160" y="418" class="t" text-anchor="middle">dMMU — VX_mmu</text>
+  <text x="160" y="438" class="ts" text-anchor="middle">DTLB_SIZE · L1 MSHR</text>
+  <text x="160" y="454" class="ts" text-anchor="middle">SOCKET_SIZE × NUM_REQS lanes</text>
+
+  <rect x="300" y="390" width="150" height="80" rx="6" class="blk"/>
+  <text x="375" y="418" class="t" text-anchor="middle">iMMU — VX_mmu</text>
+  <text x="375" y="438" class="ts" text-anchor="middle">ITLB_SIZE</text>
+  <text x="375" y="454" class="ts" text-anchor="middle">SOCKET_SIZE lanes</text>
+
+  <rect x="480" y="470" width="200" height="60" rx="6" class="blk"/>
+  <text x="580" y="494" class="t" text-anchor="middle">VX_tlb_bus_arb 2:1</text>
+  <text x="580" y="514" class="ts" text-anchor="middle">id ← {mmu, slot}</text>
+
+  <rect x="60" y="560" width="200" height="60" rx="6" class="mem"/>
+  <text x="160" y="584" class="t" text-anchor="middle">L1 dcache</text>
+  <text x="160" y="604" class="ts" text-anchor="middle">VX_cache_cluster</text>
+
+  <rect x="300" y="560" width="150" height="60" rx="6" class="mem"/>
+  <text x="375" y="584" class="t" text-anchor="middle">L1 icache</text>
+  <text x="375" y="604" class="ts" text-anchor="middle">VX_cache_cluster</text>
+
+  <path d="M 740 160 L 740 190 L 580 190 L 580 250" class="wctl"/>
+  <text x="600" y="184" class="lg">DCR chain</text>
+  <path d="M 580 320 L 580 350 L 160 350 L 160 390" class="wctl"/>
+  <path d="M 580 350 L 375 350 L 375 390" class="wctl"/>
+  <text x="400" y="344" class="lg">vm_active · flush</text>
+  <path d="M 130 320 L 130 390" class="wva"/>
+  <text x="70" y="360" class="lp">VA data</text>
+  <path d="M 220 320 L 220 335 L 340 335 L 340 390" class="wva"/>
+  <text x="228" y="330" class="lp">VA fetch</text>
+  <path d="M 160 470 L 160 560" class="w"/>
+  <text x="168" y="520" class="l">PA</text>
+  <path d="M 375 470 L 375 560" class="w"/>
+  <text x="383" y="520" class="l">PA</text>
+  <path d="M 260 460 L 280 460 L 280 505 L 480 505" class="wbus"/>
+  <text x="290" y="522" class="lb">tlb_bus miss / fill</text>
+  <path d="M 450 445 L 465 445 L 465 485 L 480 485" class="wbus"/>
+  <path d="M 680 500 L 780 500 L 780 470" class="wbus"/>
+
+  <!-- cluster -->
+  <rect x="740" y="210" width="720" height="520" rx="6" class="grp"/>
+  <text x="752" y="232" class="tg">Cluster</text>
+
+  <rect x="760" y="400" width="200" height="70" rx="6" class="blk"/>
+  <text x="860" y="428" class="t" text-anchor="middle">VX_tlb_bus_arb N:1</text>
+  <text x="860" y="448" class="ts" text-anchor="middle">id ← {socket, mmu, slot}</text>
+
+  <rect x="1020" y="250" width="200" height="90" rx="6" class="blk"/>
+  <text x="1120" y="278" class="t" text-anchor="middle">VX_tlb_l2</text>
+  <text x="1120" y="298" class="ts" text-anchor="middle">L2_TLB_SIZE × NUM_WAYS</text>
+  <text x="1120" y="314" class="ts" text-anchor="middle">megapage CAM · MSHR</text>
+
+  <rect x="1020" y="400" width="200" height="90" rx="6" class="blk"/>
+  <text x="1120" y="428" class="t" text-anchor="middle">VX_ptw</text>
+  <text x="1120" y="448" class="ts" text-anchor="middle">NUM_WALKERS walkers</text>
+  <text x="1120" y="464" class="ts" text-anchor="middle">walk cache</text>
+
+  <rect x="1260" y="400" width="180" height="90" rx="6" class="mem"/>
+  <text x="1350" y="428" class="t" text-anchor="middle">L2 cache</text>
+  <text x="1350" y="448" class="ts" text-anchor="middle">VX_cache_wrap</text>
+  <text x="1350" y="464" class="ts" text-anchor="middle">client L2_PTW_IDX</text>
+
+  <rect x="1260" y="580" width="180" height="60" rx="6" class="mem"/>
+  <text x="1350" y="604" class="t" text-anchor="middle">Device memory</text>
+  <text x="1350" y="624" class="ts" text-anchor="middle">page tables</text>
+
+  <path d="M 960 435 L 990 435 L 990 295 L 1020 295" class="wbus"/>
+  <path d="M 1120 340 L 1120 400" class="wbus"/>
+  <text x="1128" y="376" class="lb">miss / fill</text>
+  <path d="M 1220 445 L 1260 445" class="wpte"/>
+  <text x="1222" y="438" class="ly">PTE read</text>
+  <path d="M 1350 490 L 1350 580" class="wmem"/>
+  <path d="M 160 620 L 160 650 L 1240 650 L 1240 480 L 1260 480" class="wmem"/>
+  <path d="M 375 620 L 375 650" class="wmem" marker-end="none" marker-start="url(#arry)"/>
+  <text x="700" y="644" class="ly">data miss / fill</text>
+
+  <path d="M 860 130 L 1020 130 L 1020 232 L 1240 232 L 1240 390 L 1200 390 L 1200 400" class="wctl"/>
+  <path d="M 1120 232 L 1120 250" class="wctl"/>
+  <text x="1030" y="226" class="lg">satp · flush_req</text>
+  <path d="M 1020 480 L 1010 480 L 1010 250 L 850 250 L 850 160" class="wflt"/>
+  <text x="860" y="244" class="lr">first fault {va, access, amo}</text>
+  <path d="M 440 80 L 440 60 L 1470 60 L 1470 610 L 1440 610" class="wpte" stroke-dasharray="2 3"/>
+  <text x="1290" y="54" class="ly">CMD_MEM_WRITE (page tables)</text>
+</svg>

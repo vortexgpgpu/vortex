@@ -316,7 +316,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire is_first_of_cluster = eff_is_first;
 
     // Cluster member count K, capped at the slot count (a cluster larger than
-    // co-residency degenerates to a clamp — matches the SimX model).
+    // co-residency degenerates to a clamp).
     wire [NW_WIDTH:0] cluster_k_raw = eff_cluster_size;
     wire [NW_WIDTH:0] cluster_k = (cluster_k_raw > usable_slots_r) ? usable_slots_r
                                 : (cluster_k_raw == 0) ? (NW_WIDTH+1)'(1) : cluster_k_raw;
@@ -334,6 +334,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             if (stride == 0) begin
                 usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
             end else begin
+                // Granting one slot to a CTA that exceeds capacity keeps the
+                // launch making forward progress, at the cost of letting it
+                // write past its slot.
                 usable_slots_r <= (NW_WIDTH+1)'(1);
                 for (integer m = 1; m <= NUM_CTA_SLOTS; m = m + 1) begin
                     if (PROD_W'(m) * PROD_W'(stride) <= PROD_W'(LMEM_SIZE)) begin
@@ -343,6 +346,11 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
             end
         end
     end
+
+    // `data` is a launch descriptor only while `valid` is high: the launch buffers
+    // reset the valid bit alone, so an idle beat carries arbitrary bits.
+    `RUNTIME_ASSERT(~kmu_bus_if.valid || (stride == 0) || (PROD_W'(stride) <= PROD_W'(LMEM_SIZE)),
+        ("%t: %s CTA shared-memory footprint %0d exceeds the %0d-byte capacity; the CTA overruns its slot", $time, INSTANCE_ID, stride, LMEM_SIZE))
 
     // Normalize the round-robin pointer to the usable range (covers a kernel
     // transition that shrank usable_slots_r), then apply cluster pre-wrap.

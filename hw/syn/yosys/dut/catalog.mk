@@ -23,7 +23,10 @@ core_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_C_ENABLE 
 
 tcu_TOP := VX_tcu_unit_top
 tcu_INC := -I$(UNITTEST_DIR)/tcu_unit
+# EXT_F_DISABLE mirrors the Xilinx catalog: this DUT is the tensor datapath, and
+# leaving the scalar FPU in inflates it without exercising the TCU.
 tcu_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_TCU_ENABLE \
+           -DVX_CFG_EXT_F_DISABLE \
            -DVX_CFG_TCU_TYPE_TFR -DVX_CFG_TCU_FP16_ENABLE -DVX_CFG_TCU_FP8_ENABLE \
            -DVX_CFG_TCU_INT8_ENABLE -DVX_CFG_TCU_INT4_ENABLE -DVX_CFG_TCU_TF32_ENABLE \
            -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE
@@ -58,7 +61,16 @@ dxa_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_DXA_ENABLE
 
 vm_TOP := VX_vm_top
 vm_INC := -I$(UNITTEST_DIR)/vm
-vm_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_CORES=2 -DVX_CFG_VM_ENABLE
+# Mirrors hw/syn/xilinx/dut/catalog.mk's vm_CFG. L2_ENABLE is load-bearing, not
+# decoration: VX_vm_top instantiates the L2 as
+# `VX_cache_wrap #(.PASSTHRU(!`VX_CFG_L2_ENABLED))`, and VX_cache_wrap guards its
+# whole cache body behind `if (PASSTHRU == 0)`. Without it the L2 the DUT exists
+# to load the PTW and the L1 mem ports against degenerates to a bypass -- no
+# tags, no data arrays -- and CACHE_SIZE is handed to a module that discards it.
+vm_CFG := -DVX_CFG_VM_ENABLE -DVX_CFG_EXT_A_ENABLE -DVX_CFG_NUM_CORES=2 \
+          -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 \
+          -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 -DVX_CFG_L2_ENABLE \
+          -DVX_CFG_L2_SIZE=262144 -DVX_CFG_DCACHE_LATENCY=3
 
 tensor_TOP := VX_tensor_top
 tensor_INC := -I$(UNITTEST_DIR)/tensor

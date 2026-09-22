@@ -1030,9 +1030,7 @@ export VRT_HOME=<slash install prefix>
 SLASH is **not** provisioned by `ci/toolchain_install.sh`. Like XRT, it is a
 platform stack an administrator installs once per machine: a working board
 needs kernel modules built against the running kernel and Vivado on `PATH` for
-`slashkit`, neither of which a toolchain fetch can supply. See
-[`proposals/v80_release_setup_proposal.md`](proposals/v80_release_setup_proposal.md)
-for what the packaged path replaced and the defects fixed to make it work.
+`slashkit`, neither of which a toolchain fetch can supply.
 
 ### The kernel module
 

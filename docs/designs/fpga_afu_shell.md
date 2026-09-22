@@ -38,8 +38,7 @@ DMA-command engine have been removed.
   using the latched route alone — AXI4 permits write data to arrive before or
   with its address, and routing W by a register that only updates at the AW
   handshake sent AW and W to different slaves and deadlocked the interface.
-  Covered by `hw/unittest/afu_axil_demux`; see
-  [`../proposals/afu_reset_architecture_proposal.md`](../proposals/afu_reset_architecture_proposal.md).
+  Covered by `hw/unittest/afu_axil_demux`.
 - **Memory.** Vortex banks 1..N pass straight to platform AXI; bank 0
   shares with CP `axi_dev` via `VX_axi_arb2`
   ([`:506-558`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L506)); CP `axi_host`

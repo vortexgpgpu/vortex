@@ -5,9 +5,9 @@
     "configs": "",
     "dut": "dxa",
     "result": {
-      "build_time_s": 115,
-      "cell_area_um2": 11719.171,
-      "cell_count": 107949,
+      "build_time_s": 105,
+      "cell_area_um2": 12240.814,
+      "cell_count": 116553,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
@@ -17,12 +17,12 @@
         "xlen": 32,
         "yosys": "Yosys 0.57+157"
       },
-      "fmax_mhz": 883.314,
-      "power_mw": 36.2,
+      "fmax_mhz": 1011.839,
+      "power_mw": 33.5,
       "seq_area_um2": 5196.02,
       "sram_area_um2": 0.0,
       "tns_ns": 0.0,
-      "wns_ns": 0.118
+      "wns_ns": 0.262
     }
   }
 }

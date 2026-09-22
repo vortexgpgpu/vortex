@@ -1,0 +1,158 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Yosys install for the open-source ASIC flow (hw/syn/yosys, ci/asic_gate.py).
+#
+# Builds Yosys + its bundled ABC into $TOOLDIR/yosys. This script is the
+# *producer* of the yosys prebuilt: build here, then
+# `ci/toolchain_prebuilt.sh --yosys` packages $TOOLDIR/yosys and
+# `ci/toolchain_install.sh --yosys` fetches it. Most users install the
+# prebuilt and never run this script.
+#
+# Idempotent: re-running is a no-op once $YOSYS_PREFIX/bin/yosys exists.
+
+# exit when any command fails
+set -e
+
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+
+YOSYS_REPO=${YOSYS_REPO:=https://github.com/YosysHQ/yosys.git}
+YOSYS_REV=${YOSYS_REV:=v0.69}
+
+YOSYS_SRC=$TOOLDIR/yosys-src
+YOSYS_PREFIX=$TOOLDIR/yosys
+YOSYS_BUILD=$YOSYS_SRC/build
+
+# ----------------------------------------------------------------------
+# 1. Build dependencies
+# ----------------------------------------------------------------------
+# Yosys 0.69's CMakeLists sets cmake_minimum_required(3.28), which is NEWER
+# than the cmake Ubuntu 22.04 ships (3.22). A too-old cmake fails at configure
+# with "CMake 3.28 or higher is required", so CMAKE may point at a newer one.
+CMAKE=${CMAKE:=cmake}
+DEBIAN_FRONTEND=noninteractive sudo apt install -y \
+    build-essential git cmake bison flex libffi-dev pkg-config \
+    tcl-dev libreadline-dev zlib1g-dev
+
+cmake_ver=$($CMAKE --version | head -1 | awk '{print $3}')
+cmake_maj=${cmake_ver%%.*}; cmake_rest=${cmake_ver#*.}; cmake_min=${cmake_rest%%.*}
+if [ "$cmake_maj" -lt 3 ] || { [ "$cmake_maj" -eq 3 ] && [ "$cmake_min" -lt 28 ]; }; then
+    echo "error: yosys $YOSYS_REV needs cmake >= 3.28, found $cmake_ver ($CMAKE)."
+    echo "       set CMAKE=/path/to/newer/cmake and re-run."
+    exit 1
+fi
+
+# ----------------------------------------------------------------------
+# 2. Fetch — ABC is a submodule pinned by the yosys revision. It must be
+#    the pinned commit: yosys and ABC are versioned together.
+# ----------------------------------------------------------------------
+mkdir -p "$TOOLDIR"
+
+if [ -d "$YOSYS_SRC/.git" ]; then
+    pushd "$YOSYS_SRC" > /dev/null
+    current_rev=$(git describe --tags --always 2>/dev/null || echo "unknown")
+    if [ "$current_rev" != "$YOSYS_REV" ]; then
+        echo "checked-out rev $current_rev != pinned $YOSYS_REV; refetching"
+        git fetch --depth=1 origin "refs/tags/$YOSYS_REV:refs/tags/$YOSYS_REV"
+        git checkout "$YOSYS_REV"
+        git submodule update --init --recursive
+    fi
+    popd > /dev/null
+else
+    echo "cloning yosys $YOSYS_REV into $YOSYS_SRC"
+    git clone --depth=1 --branch "$YOSYS_REV" --recursive \
+        "$YOSYS_REPO" "$YOSYS_SRC"
+fi
+
+# ----------------------------------------------------------------------
+# 3. Build
+# ----------------------------------------------------------------------
+# READLINE OFF IS LOAD-BEARING, NOT A SIZE OPTIMIZATION.
+#
+# Yosys 0.69 drives ABC two different ways, and readline picks which:
+#
+#     // REUSE_YOSYS_ABC_PROCESSES only works when ABC is built with ENABLE_READLINE.
+#     #if defined(__linux__) && defined(YOSYS_ENABLE_SPAWN) && defined(YOSYS_ENABLE_READLINE)
+#     #define REUSE_YOSYS_ABC_PROCESSES
+#
+# With it defined, yosys posix_spawns a persistent `yosys-abc -s`, keeps it
+# alive in a pool, writes "empty\nsource <script>" to its stdin and reads until
+# a YOSYS_ABC_DONE sentinel. That path DEADLOCKS here: ABC runs the script and
+# writes output.blif, but yosys never returns from its read -- yosys blocks in
+# pipe_read, ABC in select() on a stdin yosys will not close -- and every build
+# sits until its timeout with no output. Reproduces on a three-line module.
+#
+# Turning readline off leaves YOSYS_ENABLE_READLINE undefined, so the classic
+# `abc -s -f <script>` path is used instead. Readline only provides line editing
+# in the interactive shell, which no batch or CI use touches.
+#
+# Step 4 asserts this stays fixed. Do not flip these to ON without making that
+# check pass.
+if [ -x "$YOSYS_PREFIX/bin/yosys" ]; then
+    echo "yosys already installed at $YOSYS_PREFIX"
+else
+    echo "configuring yosys $YOSYS_REV"
+    rm -rf "$YOSYS_BUILD"
+    $CMAKE -S "$YOSYS_SRC" -B "$YOSYS_BUILD" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$YOSYS_PREFIX" \
+        -DYOSYS_WITHOUT_READLINE=ON \
+        -DYOSYS_WITHOUT_EDITLINE=ON
+
+    $CMAKE --build "$YOSYS_BUILD" -j"$(nproc)"
+    $CMAKE --install "$YOSYS_BUILD"
+fi
+
+# ----------------------------------------------------------------------
+# 4. Smoke test — run the ABC pass, the thing that deadlocks.
+# ----------------------------------------------------------------------
+# A version check cannot catch this: the broken and the working build are both
+# "Yosys 0.69". Only exercising ABC distinguishes them, and the failure mode is
+# a hang rather than an error, so the timeout IS the assertion. This is the
+# check that would have stopped the bad build from being published.
+smoke=$(mktemp -d)
+trap 'rm -rf "$smoke"' EXIT
+cat > "$smoke/t.v" <<'EOF'
+module t(input clk, input [7:0] a, b, output reg [7:0] y);
+  always @(posedge clk) y <= a + b;
+endmodule
+EOF
+cat > "$smoke/t.ys" <<EOF
+read_verilog $smoke/t.v
+synth -top t
+stat
+EOF
+echo "smoke test: running the ABC pass (120s budget)"
+if TMPDIR=$smoke timeout 120 "$YOSYS_PREFIX/bin/yosys" -q -s "$smoke/t.ys" > "$smoke/out.log" 2>&1; then
+    echo "  ok -- ABC completed"
+else
+    rc=$?
+    if [ $rc -eq 124 ]; then
+        echo "error: yosys HUNG in the ABC pass (see the readline note in step 3)."
+        echo "       this is the REUSE_YOSYS_ABC_PROCESSES deadlock; the build is"
+        echo "       unusable for hw/syn/yosys and must not be packaged."
+    else
+        echo "error: yosys smoke test failed (rc=$rc)"
+        tail -20 "$smoke/out.log"
+    fi
+    exit 1
+fi
+
+echo ""
+echo "yosys $YOSYS_REV installed at $YOSYS_PREFIX"
+echo "  yosys:   $("$YOSYS_PREFIX/bin/yosys" -V)"
+echo "  abc:     $YOSYS_PREFIX/bin/yosys-abc"
+echo "  package: ci/toolchain_prebuilt.sh --yosys"
+echo "  verify:  make -C hw/syn/yosys/dut om"

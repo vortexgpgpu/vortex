@@ -11,7 +11,7 @@
 # Why its own workflow rather than a cell in ci.yml:
 #
 #   - A DUT takes 1-2 hours, so the builds must fan out to ONE STANDALONE JOB
-#     EACH. A ci.yml cell is one job running a pytest slice; eleven sequential
+#     EACH. A ci.yml cell is one job running a pytest slice; eight sequential
 #     synthesis runs in one cell would be a day.
 #   - Nightly builds are expensive even when free, so the run is SKIPPED unless
 #     master has actually moved since the last gate run. Unlike the self-hosted
@@ -124,18 +124,47 @@ jobs:
           python3 ci/testcase.py lint
 
   # ---------------------------------------------------------------------------
+  # toolchain — install the prebuilt toolchain once, on a cache miss, so the
+  # synth matrix below only ever restores it.
+  #
+  # setup-vortex with the default prepare=false RESTORES the toolchain cache and
+  # exports TOOLDIR, but installs NOTHING when the key misses -- and that key
+  # carries the commit TOOLCHAIN_REV currently resolves to, so a prebuilt refresh
+  # misses it by construction. Without this job the whole matrix would then run
+  # against an empty $TOOLDIR and every build would die in gen_sources.sh looking
+  # for verilator: a toolchain bump would read as eight simultaneous RTL errors.
+  # ci.yml warms the same cache from its own `setup` job, but ci.yml is weekly
+  # plus on-push, so a nightly cannot depend on it having run since the bump.
+  #
+  # One job rather than prepare=true inside the matrix: six parallel jobs would
+  # each download the whole toolchain on the same miss.
+  # ---------------------------------------------------------------------------
+  toolchain:
+    needs: plan
+    if: needs.plan.outputs.run == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          submodules: recursive
+      - uses: ./.github/actions/setup-vortex
+        with:
+          prepare: true
+
+  # ---------------------------------------------------------------------------
   # synth — one standalone job per DUT. Each configures its own build tree and
   # gates exactly one build, so a 2-hour DUT costs 2 hours of wall time, not 2
   # hours of everyone else's.
   # ---------------------------------------------------------------------------
   synth:
-    needs: plan
+    needs: [plan, toolchain]
     if: needs.plan.outputs.run == 'true'
     runs-on: ubuntu-22.04
     timeout-minutes: 300
     strategy:
       # Never cancel siblings: each DUT is an independent measurement, and one
-      # regression must not hide the ten other numbers this run would have
+      # regression must not hide the seven other numbers this run would have
       # produced.
       fail-fast: false
       max-parallel: 6
@@ -220,12 +249,19 @@ jobs:
           path: reports
           merge-multiple: true
 
+      # `|| rc=$?` is load-bearing, exactly as in the Gate step: GitHub runs
+      # `run:` under `bash -e`, and `set -uo pipefail` adds to that rather than
+      # replacing it. Without the guard, synth_report.py's non-zero exit (1 =
+      # regression, 2 = build error -- i.e. every case this step exists to
+      # report) kills the step on that line, so `rc` never reaches
+      # $GITHUB_OUTPUT and the marker steps below read it as "".
       - name: Summarize
         id: sum
         run: |
           set -uo pipefail
-          python3 ci/synth_report.py reports >> "$GITHUB_STEP_SUMMARY"
-          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          rc=0
+          python3 ci/synth_report.py reports >> "$GITHUB_STEP_SUMMARY" || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
       # Record the SHA once every build has reached a VERDICT (pass or

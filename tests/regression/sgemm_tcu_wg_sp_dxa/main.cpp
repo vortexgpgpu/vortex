@@ -389,7 +389,7 @@ int main(int argc, char *argv[]) {
     /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_layout(device, kDescB,
     vortex::dxa::Layout::Flat, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/wg_cfg_t::tcN));
+  RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/wg_cfg_t::tcN, /*blk_k=*/wg_cfg_t::b_blk_k));
 
   // Descriptor Meta: metadata organized as [num_tile_rows x (num_k_tiles * kWordsPerTile)] words.
   //   dim0 = k-tile word offset (tile0 = kWordsPerTile), dim1 = tile-row index (tile1 = 1)

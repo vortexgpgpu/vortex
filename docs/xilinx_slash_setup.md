@@ -1,7 +1,7 @@
 # SLASH / Alveo V80 Setup Guide
 
 Build and install the SLASH platform stack, the prerequisite for running
-Vortex on an AMD Alveo V80 through the [`aved`](proposals/aved_afu_proposal.md)
+Vortex on an AMD Alveo V80 through the [`aved`](designs/aved_driver_architecture.md)
 backend.
 
 SLASH is the V80's equivalent of XRT: a runtime (VRT), a linker (`slashkit`),
@@ -30,7 +30,7 @@ failing obscurely inside the linker.
 
 Vortex's own `sim/avedsim` (Verilator) is a *third*, distinct thing and is
 the intended day-to-day iteration loop. See
-[proposals/aved_afu_proposal.md §7](proposals/aved_afu_proposal.md).
+[designs/aved_driver_architecture.md §2](designs/aved_driver_architecture.md).
 
 ---
 
@@ -377,8 +377,6 @@ Verified working on 2025.2: HLS synthesis, IP-XACT packaging,
 
 ## 8. Related
 
-- [proposals/aved_afu_proposal.md](proposals/aved_afu_proposal.md) — the AVED
-  backend design and `TARGET` semantics
-- [proposals/slash_v80_bringup_report.md](proposals/slash_v80_bringup_report.md)
-  — hands-on bring-up log this guide distils
+- [designs/aved_driver_architecture.md](designs/aved_driver_architecture.md)
+  — the AVED backend design and `TARGET` semantics
 - [fpga_setup.md](fpga_setup.md) — the XRT/Alveo and Altera paths

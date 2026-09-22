@@ -27,10 +27,33 @@
 # block below out to ONE JOB PER BUILD so the wall times run concurrently
 # instead of in series.
 #
-# The DUTs are the same hw/unittest/*/VX_*_top.sv wrappers the Xilinx gate
+# The DUTs are the hw/unittest/*/VX_*_top.sv wrappers the Xilinx gate also
 # synthesizes (hw/syn/yosys/dut/catalog.mk holds each one's top, include path
-# and defines), so both gates measure the same modules and a divergence between
-# them is a real finding rather than an artefact of two DUT lists.
+# and defines), so where the two gates share a DUT they measure the same module
+# and a divergence between them is a real finding, not an artefact of two lists.
+#
+# THIS LIST IS BOUNDED BY MEMORY, and is deliberately a SUBSET of
+# fpga_gate.yaml's. A hosted runner has 16 GB of RAM; Yosys holds the whole
+# elaborated netlist and offers no cap to tune, so a DUT that needs more does not
+# fail -- the VM is killed under it and the job ends at exit 143 with no report,
+# which looks exactly like an infrastructure outage. `gfx` measured a 44.2 GB
+# peak RSS for a single Yosys process (3.76M cells, 100 min wall), and the
+# 16-thread/16-warp `core` and `tex` measured 20.7 GB and 28.0 GB. `gfx` and
+# `tensor` are therefore NOT gated here, and `core`/`tex` are gated at a reduced
+# width (see their entries).
+#
+# `vm` is NOT gated here either, and the reason is worth recording. It passed the
+# last hosted nightly at 1.0M cells in 11 minutes, which looked like it fit --
+# but that run was building a DUT whose L2 was a BYPASS: the Yosys catalog was
+# missing L2_ENABLE, and VX_vm_top wires the L2 as
+# `VX_cache_wrap #(.PASSTHRU(!`VX_CFG_L2_ENABLED))`, whose cache body is guarded
+# by `if (PASSTHRU == 0)`. No tags, no data arrays. With that corrected to match
+# the Xilinx catalog, `vm` carries a real 256 KB L2 and its peak RSS is
+# unmeasured -- so it is treated as over-budget rather than assumed to fit.
+#
+# Measure before adding anything back -- an over-budget DUT costs a silent job
+# kill, not a red gate. fpga_gate.yaml owns `top`, `gfx`, `tensor`, `vm` and the
+# wide `core`/`tex` on the self-hosted Vivado runner.
 #
 # See docs/designs/continuous_integration.md §3.5.
 category: asic_gate
@@ -90,15 +113,15 @@ builds:
 
 # Wide-SIMD core: issue/operand-collect/LSU/FPU at NT=NW=16, plus the RVC
 # decompressor and atomics.
+# NT/NW cut from the catalog's 16/16, which measured a 20.7 GB peak RSS against
+# a hosted runner's 16 GB: NUM_FPU_LANES tracks SIMD_WIDTH, so a 16-lane STD FPU
+# plus a 16-warp register file is what carries the cost. Halving both quarters
+# the lane x warp product. fpga_gate still gates the 16/16 configuration.
 - id: core
   group: core
   dut: core
-  clock_mhz: 500
-  configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b core --update-baseline`.
+  clock_mhz: 400
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
 # --- dxa ---------------------------------------------------------------------
 
@@ -118,22 +141,6 @@ builds:
   dut: tcu
   clock_mhz: 500
   configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b tcu --update-baseline`.
-
-# Full tensor subsystem in one wrapper: TCU (WGMMA + MX) + dxa behind a shared
-# L2, 2 cores / socket.
-- id: tensor
-  group: tensor
-  dut: tensor
-  clock_mhz: 500
-  configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b tensor --update-baseline`.
 
 # --- graphics ----------------------------------------------------------------
 
@@ -152,11 +159,12 @@ builds:
   configs: ""
 
 # Texture unit: address generation, LOD, bilinear filter, tcache port.
+# NT/NW cut from the catalog's 16/16 for the same reason as core: 28.0 GB there.
 - id: tex
   group: graphics
   dut: tex
   clock_mhz: 800
-  configs: ""
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
 # Ray-tracing unit: CW-BVH4 walker, box/triangle PEs, short stack.
 - id: rtu
@@ -164,34 +172,3 @@ builds:
   dut: rtu
   clock_mhz: 400
   configs: ""
-  known_issue: >-
-    no baseline recorded yet. An earlier run showed its RTCache inferred to
-    flip-flops (sram_area_um2 = 0 against 1.2M cells) — that was the dispatcher
-    dropping -DASIC, since fixed, but the DUT has not been re-measured since.
-    Confirm sram_area_um2 is non-zero before recording.
-
-# Full graphics subsystem in one wrapper: raster + om + tex + rtu + dxa behind a
-# shared L2, 2 cores / socket.
-- id: gfx
-  group: graphics
-  dut: gfx
-  clock_mhz: 400
-  configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b gfx --update-baseline`.
-
-# --- vm ----------------------------------------------------------------------
-
-# Standalone MMU network: dTLB + iTLB, pooled L1 TLB MSHR, L2 TLB, PTW walker
-# hierarchy, fed by a shared L2.
-- id: vm
-  group: vm
-  dut: vm
-  clock_mhz: 500
-  configs: ""
-  known_issue: >-
-    no baseline recorded yet, so its numbers are reported but not asserted. The
-    nightly job still builds it — read the run's metrics, sanity-check
-    clock_mhz, then record with `ci/asic_gate.py -b vm --update-baseline`.

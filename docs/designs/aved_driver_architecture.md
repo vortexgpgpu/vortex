@@ -8,12 +8,11 @@ contract, the three memory paths it has to support, and where it deliberately
 diverges from its sibling backends.
 
 It is the **backend deep-dive**. The device-side command protocol lives in
-[`command_processor.md`](command_processor.md), the AFU wrapper in
-[`fpga_afu_shell.md`](fpga_afu_shell.md), and the platform's address map in
-[`../aved_address_map.md`](../aved_address_map.md); none of that is repeated
-here. The SLASH stack itself (three-PF topology, `vrtd` wire protocol, VRT
-API, `vrtbin`/`system_map.xml`, buddy allocator, connectivity language) is
-documented in [`../kb/03_slash_architecture.md`](../kb/03_slash_architecture.md).
+[`command_processor.md`](command_processor.md) and the AFU wrapper in
+[`fpga_afu_shell.md`](fpga_afu_shell.md); neither is repeated here. The
+platform's address map is §9 below. The SLASH stack itself (three-PF
+topology, `vrtd` wire protocol, VRT API, `vrtbin`/`system_map.xml`, buddy
+allocator, connectivity language) is documented by the SLASH project.
 
 The V80 is **not an XDMA shell**, so XRT does not apply to it. That single fact
 is why this backend exists rather than being a variant of `xrt`.
@@ -174,8 +173,7 @@ The reset is now sequenced in hardware (`VX_afu_reset_seq`): the AFU withholds
 new `AW`/`AR`, waits for every master's outstanding-transaction count to reach
 zero, and only then asserts the internal reset. If a master will not drain it
 **refuses** and raises `ap_ctrl` bit 5, which `init()` checks as
-`CTL_RESET_ERROR` and reports rather than proceeding. See
-[`../proposals/afu_reset_architecture_proposal.md`](../proposals/afu_reset_architecture_proposal.md).
+`CTL_RESET_ERROR` and reports rather than proceeding.
 
 **Confirmed on silicon**, 2026-08-27: `CTL_AP_RESET` completes and the card
 survives it; `ap_ctrl` reads back afterwards; the reset succeeds with
@@ -403,3 +401,29 @@ threads. `xrt` and `aved` both guard it.
    windows and the ZMQ server through public API.
 4. **Gate the build on timing closure.** The V80 flow packages a bitstream
    that does not meet timing without saying so.
+
+---
+
+## 9. Device address map
+
+The compute shell maps the AFU's device-memory port at `0x40_0000_0000` in
+both build flavours (the BRAM model in simulation, HBM in hardware). Vortex's
+allocator is based at `VX_MEM_USER_BASE_ADDR` and a 32-bit core cannot emit
+the aperture base, so `PLATFORM_MEMORY_OFFSET` rebases every device access
+once, at the bank port in `VX_afu_wrap.sv`, for the cores and the CP alike.
+The CP's device addresses come from the same allocator and pass through to
+the arbiter unmodified. The define is a sized Verilog literal; a decimal
+constant of that size is silently truncated to 0 by the Vivado front-end.
+
+The port is tagged `MEM`, not `HBM0`: a single HBM channel is a 1 GB
+aperture, and Vortex's 32-bit map places the stack just below the top of a
+4 GB space, so any kernel's first stack push would read an address nothing
+answers and stall the LSU. The `MEM` tag routes through the HBM VNOC at the
+same base with 32 GB of range. The simulation BRAM model is 128 MB and cannot
+be grown to 4 GB, so `TARGET=sim` cannot run kernels that touch the stack;
+loopback (`minimal -l`) remains the sim-side check of the CP DMA path.
+
+Simulated host buffers are drawn from VRT's DDR window, not its HBM window,
+so they cannot collide with device memory. The authoritative settings and
+their rationale are in
+[`platforms.mk`](../../hw/syn/xilinx/aved/platforms.mk).

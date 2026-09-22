@@ -33,6 +33,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -711,6 +712,44 @@ def say(build, tag, msg, t0=None):
     print("  [%-5s] %-10s %s%s" % (tag, build["id"], msg, at))
 
 
+def kill_tree(proc, grace=10):
+    """Terminate a build and everything it spawned.
+
+    proc is the outer make; the expensive processes are its descendants
+    (run_synth.sh -> yosys -> yosys-abc, or Vivado). Popen starts each build in
+    its own session, so one signal to the process group reaches all of them --
+    signalling proc alone leaves the toolchain running with nothing collecting
+    its output, which is how a timed-out gfx build held a core and 38 GB for 16
+    hours after the gate had moved on.
+
+    SIGTERM first so a tool can clean up its temp dirs, then SIGKILL
+    unconditionally: proc exiting says nothing about its descendants, and yosys
+    hands work to a yosys-abc that can outlive the shell above it.
+    """
+    try:
+        pgid = os.getpgid(proc.pid)
+    except OSError:                     # already reaped
+        return
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except OSError:
+        return                          # group already gone
+    try:
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        pass
+    # Unconditional, not "only if proc survived": the group can still hold a
+    # descendant that trapped SIGTERM long after the outer make has exited.
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except OSError:
+        pass
+    try:
+        proc.wait(timeout=grace)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def watch(proc, log, build, tool, timeout, verbose, seen=0):
     """Follow a running build's log: report phases, announce elaboration, collect errors.
 
@@ -752,7 +791,7 @@ def watch(proc, log, build, tool, timeout, verbose, seen=0):
             return rc, reached, errors
         now = time.monotonic()
         if now - t0 > timeout:
-            proc.kill()
+            kill_tree(proc)
             raise BuildError("timed out after %ds (%s %s)"
                              % (timeout, tool.elab_label,
                                 "passed" if reached else "NOT reached"))
@@ -836,8 +875,15 @@ def run_build(build, build_dir, env, args, tool):
     # this one's (and its old ERROR: lines resurface as this run's failure).
     seen = os.path.getsize(log) if resume and os.path.exists(log) else 0
     with open(log, "a" if resume else "w") as fh:
+        # start_new_session puts the build in its own process group, so a
+        # timeout can take down the whole toolchain subtree. proc is only the
+        # outer make; the work happens in run_synth.sh -> yosys -> yosys-abc
+        # below it, and signalling make alone leaves those orphaned. A gfx
+        # build that blew the 8h timeout kept a core and 38 GB busy for a
+        # further 16 hours after the gate had already reported it.
         proc = subprocess.Popen(argv, env=benv, stdout=fh,
-                                stderr=subprocess.STDOUT)
+                                stderr=subprocess.STDOUT,
+                                start_new_session=True)
         rc, reached_elab, errors = watch(proc, log, build, tool, args.timeout,
                                          args.verbose, seen)
     elapsed = int(time.monotonic() - t0)
@@ -914,6 +960,14 @@ def gate(result, env, args, gated, tool):
     verdict does not fail the run. Same contract as a `known_issue:` test case
     (conftest marks those xfail strict=False), including that an unexpected pass
     is surfaced (XPASS) rather than converted into a hard failure.
+
+    A BUILD-FAIL is NOT covered by that contract. `known_issue` annotates what a
+    DUT's numbers do -- a PPA regression, a metric this RTL cannot yet hit -- and
+    a build that never produced numbers has not reached the thing being excused.
+    Treating the two alike lets an infrastructure outage read as green: when a
+    missing TOOLDIR broke every asic_gate build at once, the six DUTs carrying a
+    `known_issue` reported KNOWN-ISSUE and the run looked like five ordinary
+    regressions instead of a gate that could not build anything.
     """
     build = result["build"]
     known = build.get("known_issue")
@@ -923,8 +977,9 @@ def gate(result, env, args, gated, tool):
             return name, reasons
         return "KNOWN-ISSUE", reasons + ["known issue: " + known]
 
+    # Deliberately not routed through verdict(): see the docstring.
     if result["error"]:
-        return verdict("BUILD-FAIL", [result["error"]])
+        return "BUILD-FAIL", [result["error"]]
 
     base = build.get("baseline") or {}
     if not any(base.get(m) is not None for m in gated):
@@ -1182,11 +1237,12 @@ def main(argv=None, default_tool="xilinx"):
 
 
     if args.update_baseline:
-        # Recording IS the intent; a delta is what we just wrote down. Only a
-        # build that never produced metrics is still a failure -- unless it is a
-        # tracked known issue.
-        broken = [r for r in results
-                  if not r["metrics"] and not r["build"].get("known_issue")]
+        # Recording IS the intent; a delta is what we just wrote down. A build
+        # that never produced metrics is still a failure, `known_issue` or not:
+        # there is nothing to record, so excusing it would end the run claiming
+        # a baseline it did not write. Same reasoning as the BUILD-FAIL verdict
+        # in gate().
+        broken = [r for r in results if not r["metrics"]]
         return 2 if broken else 0
     if any(v == "BUILD-FAIL" for _, v, _ in failures):
         return 2
