@@ -1,9 +1,13 @@
 # FireSim platform backend.
 #
-# The Chisel targets and the upstream patches live here, in the Vortex tree, so a
-# fresh checkout can reproduce a build. The FireSim checkout itself is a working
-# directory, not a source of truth: `stage` copies the targets into it and applies
-# the patches, and anything left only in the checkout is expected to be lost.
+# FireSim itself is the vortexgpgpu/firesim fork, consumed through FIRESIM_PATH
+# and pinned by FIRESIM_REV in VERSION: every change Vortex needs in FireSim is a
+# commit there, and the checkout must contain the pinned one. The Chisel targets,
+# harnesses and the card's platform config live here and are staged into it.
+#
+# The card comes from its descriptor (hw/syn/xilinx/platforms/<card>.toml):
+# FIRESIM_CARD selects it, and the descriptor supplies the FireSim platform, the
+# FPGA part and device, the host-memory binding and its base address.
 
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
@@ -13,7 +17,6 @@ include $(VORTEX_HOME)/hw/syn/common.mk
 # while sources are read from VORTEX_HOME.
 
 SRC_DIR := $(VORTEX_HOME)/hw/syn/firesim
-PATCH_DIR := $(SRC_DIR)/patches
 
 # Targets are compiled as part of FireSim's midasexamples project, which is where
 # its harness and bridge helpers are resolvable from.
@@ -30,6 +33,20 @@ SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
 BUILD_DIR ?= $(ROOT_DIR)/hw/syn/firesim
 
+FIRESIM_CARD ?= u55c
+PLATFORM_GEN := python3 $(SCRIPT_DIR)/gen_platform.py --card=$(FIRESIM_CARD)
+FIRESIM_MK := $(BUILD_DIR)/firesim_platform.mk
+FIRESIM_GEN_RC := $(shell mkdir -p $(BUILD_DIR) && $(PLATFORM_GEN) --emit=firesim-mk -o $(FIRESIM_MK) 2> $(FIRESIM_MK).err; echo $$?)
+ifneq ($(FIRESIM_GEN_RC),0)
+$(error $(shell cat $(FIRESIM_MK).err))
+endif
+include $(FIRESIM_MK)
+
+# The FireSim flow's make variables for this card's build.
+FIRESIM_TARGET_ARGS := PLATFORM=$(PLATFORM) TARGET_PROJECT=midasexamples \
+                       DESIGN=VortexTarget TARGET_CONFIG=VortexConfig PLATFORM_CONFIG=$(PLATFORM_CONFIG)
+QUINTUPLET := $(PLATFORM)-midasexamples-VortexTarget-VortexConfig-$(PLATFORM_CONFIG)
+
 # Flattened Vortex sources for the BlackBox. Golden Gate takes a file list, not
 # include paths, so the tree is copied into one directory with the macros already
 # inlined (-P) and emitted in elaboration order: packages, interfaces, modules.
@@ -39,7 +56,7 @@ VIVADO_SRCS_LIST := $(BUILD_DIR)/vivado_srcs.f
 SRCS_DIR := $(BUILD_DIR)/vortex_srcs
 SRCS_LIST := $(BUILD_DIR)/vortex_srcs.f
 
-.PHONY: stage patch sources vivado-sources xilinx-ips check-firesim clean-staged
+.PHONY: stage sources vivado-sources xilinx-ips kernel-env bitstream check-firesim clean-staged
 
 stage: check-firesim
 	@mkdir -p $(TARGET_DEST) $(CC_DEST)
@@ -51,15 +68,8 @@ stage: check-firesim
 		cp -f "$$f" $(CC_DEST)/ || exit 1; \
 		echo "staged $$(basename $$f)"; \
 	done
-
-# Applies in series against a pristine checkout. Ordering matters: 0003 and 0005
-# both build on 0001. Re-running against an already-patched checkout will report
-# reversed hunks; that is the intended signal, not a failure to hide.
-patch: check-firesim
-	@cd $(FIRESIM_PATH) && for p in $(sort $(wildcard $(PATCH_DIR)/[0-9]*.patch)); do \
-		echo "applying $$(basename $$p)"; \
-		patch -p2 --no-backup-if-mismatch < "$$p" || exit 1; \
-	done
+	@$(PLATFORM_GEN) --emit=scala -o $(TARGET_DEST)/$(PLATFORM_CONFIG).scala
+	@echo "staged $(PLATFORM_CONFIG).scala ($(FIRESIM_CARD))"
 
 XLEN ?= 32
 
@@ -223,8 +233,7 @@ $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 # floating_point IP (xil_fma, xil_fdiv, ...) instead of the soft core, and the
 # flattened sources only instantiate them, so the kernel packaging must be handed
 # the generated cores or synthesis fails on the missing modules. Same script and
-# core set as the XRT flow. The part must match the FireSim kernel's part.
-FPGA_PART ?= xcu55c-fsvh2892-2L-e
+# core set as the XRT flow, for the card's part (FPGA_PART, from the descriptor).
 XILINX_IP_DIR := $(BUILD_DIR)/ip
 XILINX_IP_STAMP := $(XILINX_IP_DIR)/.part-$(FPGA_PART)
 
@@ -245,13 +254,32 @@ kernel-env:
 	@echo 'export VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl'
 	@echo 'export TOOL_DIR=$(SCRIPT_DIR)'
 
+# One command from sources to the card's image. Expects the FireSim environment
+# (its env.sh) and the Xilinx tools for the card's platform in the environment.
+bitstream: vivado-sources sources xilinx-ips stage
+	$(MAKE) -C $(FIRESIM_PATH)/sim replace-rtl $(FIRESIM_TARGET_ARGS)
+	VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST) VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR) \
+	$(MAKE) -C $(FIRESIM_PATH)/platforms/$(PLATFORM)/cl_$(QUINTUPLET) bitstream \
+		DEVICE=$(DEVICE) HOST_MEM_SP='$(HOST_MEM_SP)' FREQUENCY=$(FREQUENCY) STRATEGY=$(STRATEGY)
+
+FREQUENCY ?= 60.0
+STRATEGY ?= TIMING
+
+# The checkout must contain the pinned fork commit. Being ahead of it is normal
+# while developing the fork; being behind it, or on unrelated history, builds
+# against FireSim changes this tree does not expect.
 check-firesim:
 	@test -d $(FIRESIM_PATH)/sim || { \
 		echo "FireSim checkout not found at $(FIRESIM_PATH)"; \
-		echo "set FIRESIM_PATH to a FireSim 1.21.0 checkout"; \
+		echo "clone vortexgpgpu/firesim there (see docs/building_toolchain.md)"; \
+		exit 1; }
+	@git -C $(FIRESIM_PATH) merge-base --is-ancestor $(FIRESIM_REV) HEAD 2>/dev/null || { \
+		echo "FireSim checkout at $(FIRESIM_PATH) does not contain FIRESIM_REV=$(FIRESIM_REV)"; \
+		echo "  HEAD is $$(git -C $(FIRESIM_PATH) rev-parse --short HEAD)"; \
+		echo "  fetch the fork and check out $(FIRESIM_REV) or a descendant"; \
 		exit 1; }
 
 clean-staged:
-	@for f in $(SCALA_SRCS); do \
+	@for f in $(SCALA_SRCS) $(PLATFORM_CONFIG).scala; do \
 		rm -f $(TARGET_DEST)/$$(basename "$$f"); \
 	done
