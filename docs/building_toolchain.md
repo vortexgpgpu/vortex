@@ -899,9 +899,12 @@ it, and only an FPGA flow can use it. Install it by hand:
 
 ```bash
 git clone --branch vortex_3.x https://github.com/vortexgpgpu/firesim.git ~/dev/firesim
-cd ~/dev/firesim && ./build-setup.sh --skip-validate
+cd ~/dev/firesim && ./build-setup.sh      # needs `conda` on PATH (e.g. Miniforge)
 ln -s ~/dev/firesim $TOOLDIR/firesim
 ```
+
+The checkout must contain the fork commit pinned as `FIRESIM_REV` in `VERSION`;
+`make -C hw/syn/firesim stage` checks it.
 
 `vortex_3.x` is based on upstream tag 1.21.0. Clone it wherever you keep
 sources; `$TOOLDIR/firesim` only has to resolve to the checkout.
@@ -947,8 +950,9 @@ make -C hw/syn/firesim check-firesim
   host with `libgmp-dev` installed, building the transport works without
   activating conda at all.
 - **Vortex's changes to FireSim live on the branch, not as patches.**
-  `git diff 1.21.0..vortex_3.x` is the authoritative delta — 8 files, mostly
-  Vitis platform fixes and cycle-counter accounting, all upstreamable.
+  `git diff 1.21.0..$FIRESIM_REV` is the authoritative delta: Vitis platform
+  fixes, the host-memory base as a config field, driver build and teardown,
+  and cycle-counter accounting, all upstreamable.
 
 ## 13. SLASH / Alveo V80 (the `aved` backend)
 
