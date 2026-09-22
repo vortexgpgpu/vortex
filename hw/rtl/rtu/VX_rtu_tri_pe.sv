@@ -20,7 +20,7 @@
 //   u  = (T · P) * invDet
 //   Q  = T × e1       v = (dir · Q) * invDet
 //   t  = (e2 · Q) * invDet
-//   hit = |det| >= EPS && 0<=u<=1 && 0<=v && u+v<=1 && tmin<=t<=tmax
+//   hit = |det| >= FLT_MIN && 0<=u<=1 && 0<=v && u+v<=1 && tmin<=t<=tmax
 //   back_facing = det < 0
 //
 // The FP datapath reuses VX_fma_unit (a*b±c), VX_fdiv_unit (1/det) and
@@ -72,8 +72,11 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     localparam [31:0] FP_ZERO    = 32'h00000000;
     localparam [31:0] FP_ONE     = 32'h3F800000;
-    localparam [31:0] FP_EPS     = 32'h358637BD;   //  1e-6
-    localparam [31:0] FP_NEG_EPS = 32'hB58637BD;   // -1e-6
+    // |det| scales with the triangle's area, so the degenerate test rejects
+    // only |det| < FLT_MIN (edge-on / zero-area, where 1/det overflows): any
+    // larger fixed epsilon drops small triangles.
+    localparam [31:0] FP_EPS     = 32'h00800000;   //  FLT_MIN
+    localparam [31:0] FP_NEG_EPS = 32'h80800000;   // -FLT_MIN
 
     // ── stage e (@F): edge vectors and ray-origin offset ──────────────
     wire [2:0][31:0] e1, e2, tvec;

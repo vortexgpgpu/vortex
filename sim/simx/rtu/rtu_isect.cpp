@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "rtu_isect.h"
+#include <cfloat>
 #include <cmath>
 
 namespace vortex { namespace rtu {
@@ -31,8 +32,10 @@ bool ray_triangle(const float ro[3], const float rd[3],
   Vec3  e2  = V2 - V0;
   Vec3  P   = cross(D, e2);
   float det = dot(e1, P);
-  constexpr float EPS = 1e-6f;
-  if (det > -EPS && det < EPS) return false;
+  // Reject only a degenerate (edge-on or zero-area) triangle: |det| scales
+  // with the triangle's area, so any fixed epsilon above the float range would
+  // drop small triangles. Below FLT_MIN the reciprocal overflows.
+  if (!(std::fabs(det) >= FLT_MIN)) return false;
   float invDet = 1.0f / det;
   Vec3  T = O - V0;
   float u = dot(T, P) * invDet;
