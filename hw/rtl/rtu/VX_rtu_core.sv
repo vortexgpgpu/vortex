@@ -126,6 +126,15 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     `STATIC_ASSERT((`VX_CFG_RTU_MERGE_DEPTH == 0),
         ("VX_CFG_RTU_MERGE_DEPTH > 0 is not implemented: this core does not merge node fetches"))
 
+    // A trace's warp-uniform config (scene, payload, flags|cull) arrives in
+    // lanes 1-3 of a WGATHER'd register, which must be written even when the
+    // warp's low lanes are masked. The ALU guarantees that only when it runs
+    // the whole warp in one packet: a narrower ALU skips all-masked packets and
+    // resolves its fallback source lane per packet, so the RTU would read a
+    // stale config. Fail the build instead of tracing the wrong scene.
+    `STATIC_ASSERT((`VX_CFG_NUM_ALU_LANES == `VX_CFG_NUM_THREADS),
+        ("the RTU needs a full-warp ALU (VX_CFG_NUM_ALU_LANES == VX_CFG_NUM_THREADS) for its WGATHER'd config"))
+
     // ── ray staging: one entry per {src, wid} ─────────────────────────
     localparam NUM_STG   = NUM_SRCS * NUM_WARPS;
     localparam STG_IDX_W = `LOG2UP(NUM_STG);
