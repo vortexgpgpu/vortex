@@ -145,9 +145,8 @@ public:
       auto& buf = bufs_.at(s);
       if (buf.pending_q_.empty()) continue;
       uint64_t addr = buf.pending_q_.front();
-      // Mask at generation: pack_tag() masks to kSubTagMask on the wire, so an
-      // unmasked key here stops matching the returned tag once next_tag_ passes
-      // 0xFFFF -- the response is then dropped and the inflight entry never clears.
+      // inflight_ is keyed by the tag as it appears on the wire, so the
+      // counter must be masked here and not only inside pack_tag().
       uint32_t sub_tag = (buf.next_tag_++) & kSubTagMask;
       uint32_t tag = pack_tag(s, sub_tag);
       MemReq m(MemOp::LD, addr, /*data*/nullptr, /*byteen*/0, tag, /*hart_id*/0, /*uuid*/0);
