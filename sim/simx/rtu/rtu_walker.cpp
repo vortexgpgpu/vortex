@@ -105,7 +105,29 @@ struct WalkCtx {
   // at the top level (no instance).
   float best_obj_o[3],  best_obj_d[3];
   float yield_obj_o[3], yield_obj_d[3];
+  // Candidates are offered one at a time in ascending (t, key) order, key =
+  // (instance_id << 32) | record offset -- unique per primitive per instance. A
+  // resumed walk skips everything at or below the last decided candidate's key.
+  uint64_t yield_key;
+  bool     has_floor;
+  float    floor_t;
+  uint64_t floor_key;
 };
+
+inline uint64_t cand_key(uint32_t instance_id, uint32_t record_off) {
+  return (uint64_t(instance_id) << 32) | record_off;
+}
+
+// Whether a candidate at (t, key) replaces the pending one: nearer than the
+// committed hit, above the resume floor, and first in (t, key) order.
+inline bool cand_takes(const WalkCtx& ctx, float t, uint64_t key) {
+  if (!(t < ctx.best_t)) return false;
+  if (ctx.has_floor
+   && (t < ctx.floor_t || (t == ctx.floor_t && key <= ctx.floor_key)))
+    return false;
+  if (!ctx.yield_pending) return true;
+  return t < ctx.yield_t || (t == ctx.yield_t && key < ctx.yield_key);
+}
 
 // Depth-first walker for one BVH sub-tree under the supplied (object-space)
 // ray. Recurses on LeafInst so each instance's BLAS gets walked with its
@@ -175,8 +197,10 @@ void walk_bvh4_subtree(SceneView& sv,
           }
         }
       } else {  // TriAction::Yield
-        if (t_hit < ctx.best_t && t_hit < ctx.yield_t) {
+        uint64_t key = cand_key(instance_id, tris_off + i * kVxBvhTriStride);
+        if (cand_takes(ctx, t_hit, key)) {
           ctx.yield_pending = true;
+          ctx.yield_key = key;
           ctx.yield_t = t_hit; ctx.yield_u = u; ctx.yield_v = v;
           ctx.yield_prim = leaf_prim_base + i;
           ctx.yield_instance = instance_id;
@@ -220,10 +244,13 @@ void walk_bvh4_subtree(SceneView& sv,
       }
       // Procedural primitives are inherently non-opaque (the IS decides the
       // hit), so always stage an IS yield for the closest candidate.
-      if (t_near < ctx.best_t && t_near < ctx.yield_t) {
+      uint64_t key = cand_key(instance_id,
+                              aabbs_off + i * uint32_t(sizeof(VxBvhProcAabb)));
+      if (cand_takes(ctx, t_near, key)) {
         ctx.yield_pending = true;
+        ctx.yield_key = key;
         ctx.yield_t = t_near; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
-        ctx.yield_prim = i;
+        ctx.yield_prim = hdr->prim_base + i;   // gl_PrimitiveID, as for LEAF_TRI
         ctx.yield_instance = instance_id;
         ctx.yield_custom = custom_id;
         ctx.yield_geom = hdr->geometry_index;
@@ -418,6 +445,7 @@ bool emit_lane_result(const RtuReq& req, LaneState& l, uint32_t t,
     l.cand_prim  = ctx.yield_prim;
     l.cand_instance = ctx.yield_instance;
     l.cand_custom   = ctx.yield_custom;
+    l.cand_key      = ctx.yield_key;
     return true;
   case LaneAction::YieldChs:
     l.cb_pending = true;
@@ -448,9 +476,10 @@ bool emit_lane_result(const RtuReq& req, LaneState& l, uint32_t t,
   return false;  // unreachable
 }
 
-// Common init of the traversal accumulator from the ray.
+// Common init of the traversal accumulator from the ray, and -- for a walk
+// resumed after a callback verdict -- from the lane's committed hit and floor.
 WalkCtx init_ctx(const RtuReq& req, uint32_t t,
-                 const float ro[3], const float rd[3]) {
+                 const float ro[3], const float rd[3], const LaneState& l) {
   WalkCtx ctx;
   ctx.tmin = req.tmin[t];
   ctx.tmax = req.tmax[t];
@@ -471,6 +500,20 @@ WalkCtx init_ctx(const RtuReq& req, uint32_t t,
   // under an instance).
   vcopy3(ctx.best_obj_o, ro);  vcopy3(ctx.best_obj_d, rd);
   vcopy3(ctx.yield_obj_o, ro); vcopy3(ctx.yield_obj_d, rd);
+  ctx.yield_key = 0;
+  ctx.has_floor = l.has_floor;
+  ctx.floor_t   = l.floor_t;
+  ctx.floor_key = l.floor_key;
+  if (l.has_floor && l.hit) {
+    ctx.any_hit = true;
+    ctx.best_t = l.hit_t; ctx.best_u = l.hit_u; ctx.best_v = l.hit_v;
+    ctx.best_prim = l.hit_prim;
+    ctx.best_instance = l.hit_instance_id;
+    ctx.best_custom = l.hit_instance_custom;
+    ctx.best_geom = l.hit_geometry;
+    vcopy3(ctx.best_obj_o, l.hit_obj_o);
+    vcopy3(ctx.best_obj_d, l.hit_obj_d);
+  }
   return ctx;
 }
 
@@ -492,7 +535,7 @@ WalkResult FlatWalker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
 
   const float ro[3] = { req.origin_x[t], req.origin_y[t], req.origin_z[t] };
   const float rd[3] = { req.dir_x[t],    req.dir_y[t],    req.dir_z[t]   };
-  WalkCtx ctx = init_ctx(req, t, ro, rd);
+  WalkCtx ctx = init_ctx(req, t, ro, rd, l);
 
   // TLAS scenes walk one or more instances; each instance points at a BLAS (a
   // triangle list) and (optionally) applies an object→world affine transform.
@@ -626,8 +669,10 @@ WalkResult FlatWalker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
           }
         }
       } else {  // TriAction::Yield
-        if (t_hit < ctx.best_t && t_hit < ctx.yield_t) {
+        uint64_t key = cand_key(inst_idx, blas_tri_off + i * kPhase2TriStride);
+        if (cand_takes(ctx, t_hit, key)) {
           ctx.yield_pending = true;
+          ctx.yield_key = key;
           ctx.yield_t = t_hit; ctx.yield_u = u; ctx.yield_v = v;
           ctx.yield_prim = i;
           ctx.yield_sbt = cls.yield_sbt_idx;
@@ -661,7 +706,7 @@ WalkResult Bvh4Walker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
 
   const float ro[3] = { req.origin_x[t], req.origin_y[t], req.origin_z[t] };
   const float rd[3] = { req.dir_x[t],    req.dir_y[t],    req.dir_z[t]   };
-  WalkCtx ctx = init_ctx(req, t, ro, rd);
+  WalkCtx ctx = init_ctx(req, t, ro, rd, l);
 
   // Top-level (non-instanced) triangles carry no instance flags.
   walk_bvh4_subtree(sv, ro, rd, root_off, 0, 0, 0, ctx, perf);

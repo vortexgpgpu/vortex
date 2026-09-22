@@ -436,6 +436,14 @@ struct LaneState {
   float  cand_obj_d[3]   = {0.f, 0.f, 0.f};
   uint32_t hit_instance_id = 0;
   uint32_t hit_instance_custom = 0;
+  // Multi-candidate traversal. A verdict that does not end the ray resumes its
+  // walk above the decided candidate's (t, key); `walk_needed` marks the lanes
+  // the next promote binds contexts to.
+  uint64_t cand_key   = 0;
+  bool     has_floor  = false;
+  float    floor_t    = 0.f;
+  uint64_t floor_key  = 0;
+  bool     walk_needed = false;
 };
 
 struct Slot {
