@@ -41,4 +41,5 @@ kernel_mhz = 300
 
 [firesim]
 platform = "aved"
+device = "xcv80-lsva4737-2MHP-e-S"
 host_mem_sp = "MEM"

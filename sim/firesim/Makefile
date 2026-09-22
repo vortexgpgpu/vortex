@@ -38,10 +38,16 @@ SIM_CXXFLAGS := -O2 -fPIC -std=c++20 -I$(SRC_DIR) \
                 -idirafter $(CONDA_PREFIX)/include -idirafter /usr/include
 SIM_LDFLAGS := -shared -L$(CONDA_PREFIX)/lib -ldl -lz
 
-# The platform layer's own library: XRT for vitis cards.
+# The platform layer's own library: XRT for vitis cards, VRT for the V80. VRT
+# is built against the host glibc and libstdc++, so its platform layer is
+# compiled by the host toolchain, and its headers need jsoncpp's and libxml2's.
 ifeq ($(PLATFORM), vitis)
 SIM_CXXFLAGS += -idirafter $(XILINX_XRT)/include
 SIM_LDFLAGS += -L$(XILINX_XRT)/lib -luuid -lxrt_coreutil
+else ifeq ($(PLATFORM), aved)
+SIM_CXX := /usr/bin/g++
+SIM_CXXFLAGS += $(shell pkg-config --cflags jsoncpp libxml-2.0)
+SIM_LDFLAGS += -L/usr/lib/x86_64-linux-gnu -lvrt
 endif
 
 .PHONY: all lib clean check-gen
@@ -76,7 +82,8 @@ lib: check-gen $(PIC_DIR)/FireSim-generated.const.h
 		OUT_DIR=$(DESTDIR) \
 		DRIVER="$(DRIVER_SRCS)" \
 		CXXFLAGS="$(SIM_CXXFLAGS)" \
-		LDFLAGS="$(SIM_LDFLAGS)"
+		LDFLAGS="$(SIM_LDFLAGS)" \
+		$(if $(SIM_CXX),CXX=$(SIM_CXX))
 	mv -f $(DESTDIR)/lib$(PROJECT).so.tmp-$(PLATFORM) $(DESTDIR)/lib$(PROJECT).so
 
 clean:

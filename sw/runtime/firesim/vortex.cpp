@@ -30,11 +30,14 @@
 #include <cmd_processor.h>
 #include <firesim_sim.h>
 #include <util.h>
+#include <v80_pcie.h>
 
 #include <stdint.h>
 #include <stdlib.h>
 #include <cstring>
 #include <map>
+#include <string>
+#include <vector>
 #include <mutex>
 
 using namespace vortex;
@@ -52,18 +55,41 @@ public:
   }
 
   int init() {
-    // The bitstream is selected by the environment so that the same runtime
-    // serves a metasimulation and an FPGA without a rebuild. XCLBIN_PATH is
-    // the same variable the xrt driver reads: both consume a Vitis image, and
-    // a caller switching between them should not have to switch variable names
-    // as well.
-    //
-    // Unset falls through as empty rather than to a default filename, unlike
-    // the xrt driver. An empty path tells the simulator to omit +binary_file,
-    // which is what metasimulation needs -- it has no image to load, and naming
-    // one it cannot open would turn a working configuration into a failure.
-    const char* bitstream = getenv("XCLBIN_PATH");
-    return sim_.init(bitstream != nullptr ? bitstream : "");
+    // The image and card are named by the same variables the card's native
+    // driver reads, so switching between a native and a FireSim run does not
+    // mean switching variable names as well.
+    std::vector<std::string> plusargs;
+#ifdef FIRESIM_PLATFORM_AVED
+    // As the aved driver: VRT_VBIN_PATH and VRT_DEVICE_BDF, with the card
+    // discovered on the bus when the BDF is unset. There is no metasimulation
+    // on this platform, so an image is required.
+    const char* vbin = getenv("VRT_VBIN_PATH");
+    if (vbin == nullptr || vbin[0] == '\0') {
+      fprintf(stderr, "[VXDRV] VRT_VBIN_PATH must name the FireSim .vbin\n");
+      return -1;
+    }
+    const char* bdf_env = getenv("VRT_DEVICE_BDF");
+    std::string bdf = (bdf_env != nullptr) ? bdf_env : "";
+    if (bdf.empty()) {
+      bdf = discover_v80_bdf();
+      if (bdf.empty()) {
+        fprintf(stderr, "[VXDRV] no V80 found on the bus; set VRT_DEVICE_BDF\n");
+        return -1;
+      }
+    }
+    plusargs.push_back(std::string("+binary_file=") + vbin);
+    plusargs.push_back("+bdf=" + bdf);
+#else
+    // As the xrt driver: XCLBIN_PATH. Unset falls through as no image rather
+    // than a default filename: an empty path is what metasimulation needs --
+    // it has no image to load, and naming one it cannot open would turn a
+    // working configuration into a failure.
+    const char* xclbin = getenv("XCLBIN_PATH");
+    if (xclbin != nullptr && xclbin[0] != '\0') {
+      plusargs.push_back(std::string("+binary_file=") + xclbin);
+    }
+#endif
+    return sim_.init(plusargs);
   }
 
   // ----- CP register channel -----
@@ -106,6 +132,16 @@ public:
       host_regions_.erase(it);
     }
     free(reinterpret_cast<void*>(cp_addr));
+    return 0;
+  }
+
+  // Host regions are this process's memory, which the CP model reads and
+  // writes directly: coherent, so there is nothing to sync.
+  int host_mem_pull(uint64_t /*cp_addr*/) {
+    return 0;
+  }
+
+  int host_mem_push(uint64_t /*cp_addr*/) {
     return 0;
   }
 

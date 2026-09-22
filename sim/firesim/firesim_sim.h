@@ -14,6 +14,8 @@
 #pragma once
 
 #include <stdint.h>
+#include <string>
+#include <vector>
 
 namespace vortex {
 
@@ -32,9 +34,10 @@ public:
   virtual ~firesim_sim();
 
   // Starts the simulator thread and holds the target in reset until it is
-  // ready to accept requests. `bitstream` selects the FPGA image and is
-  // ignored by a metasimulation.
-  int init(const char* bitstream);
+  // ready to accept requests. `plusargs` go to the platform layer as given:
+  // the image (+binary_file=...) and whatever else the platform needs to find
+  // its card; a metasimulation takes none.
+  int init(const std::vector<std::string>& plusargs);
 
   int mem_write(uint64_t addr, uint64_t size, const void* value);
 
