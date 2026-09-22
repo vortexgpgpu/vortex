@@ -1,4 +1,6 @@
 # AMD Alveo U280: 8 GB HBM2, 32 pseudo-channels of 256 MB (plus DDR4, unused).
+# One merged port fanned across the HBM, as on the U55C and U50: 32 separate
+# ports would each need a binding and a per-bank base.
 [card]
 name = "u280"
 flow = "xrt"
@@ -9,7 +11,7 @@ match_xsa = ["xilinx_u280_*"]
 [memory]
 banks = 32
 addr_width = 33
-merged = false
+merged = true
 tags = ["HBM[0:31]"]
 
 [host]

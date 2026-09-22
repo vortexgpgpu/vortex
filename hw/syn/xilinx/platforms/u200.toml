@@ -1,4 +1,10 @@
 # AMD Alveo U200: 64 GB DDR4 in four banks of 16 GB.
+#
+# KNOWN INCOMPLETE: four memory ports with no connectivity binding and no device
+# base, while the AFU applies one PLATFORM_MEMORY_OFFSET to every bank, so no
+# single value is correct. The fix is one merged port bound to DDR[0] with that
+# bank's base (as on the U250), which needs the U200 platform's memory map
+# (platforminfo / xclbinutil) to confirm the base. Kept as it was until then.
 [card]
 name = "u200"
 flow = "xrt"
