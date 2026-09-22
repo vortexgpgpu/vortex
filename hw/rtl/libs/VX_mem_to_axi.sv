@@ -23,20 +23,20 @@
 
 `TRACING_OFF
 module VX_mem_to_axi #(
-    parameter DATA_WIDTH     = 512,
-    parameter ADDR_WIDTH_IN  = 26, // word-addressable
-    parameter ADDR_WIDTH_OUT = 32, // byte-addressable
-    parameter TAG_WIDTH_IN   = 8,
-    parameter TAG_WIDTH_OUT  = 8,
-    parameter NUM_PORTS_IN   = 1,
-    parameter NUM_BANKS_OUT  = 1,
-    parameter INTERLEAVE     = 0,
-    parameter TAG_BUFFER_SIZE= 16,
-    parameter WRITE_TRACK_DEPTH = 8, // max unacknowledged writes per bank
-    parameter ARBITER        = "R",
-    parameter REQ_OUT_BUF    = 0,
-    parameter RSP_OUT_BUF    = 0,
-    parameter DATA_SIZE      = DATA_WIDTH/8
+    parameter DATA_WIDTH        = 512,
+    parameter ADDR_WIDTH_IN     = 26, // word-addressable
+    parameter ADDR_WIDTH_OUT    = 32, // byte-addressable
+    parameter TAG_WIDTH_IN      = 8,
+    parameter TAG_WIDTH_OUT     = 8,
+    parameter NUM_PORTS_IN      = 1,
+    parameter NUM_BANKS_OUT     = 1,
+    parameter INTERLEAVE        = 0,
+    parameter TAG_BUFFER_SIZE   = 16,
+    parameter WRITE_TRACK_DEPTH = 8, // outstanding writes tracked per bank
+    parameter ARBITER           = "R",
+    parameter REQ_OUT_BUF       = 0,
+    parameter RSP_OUT_BUF       = 0,
+    parameter DATA_SIZE         = DATA_WIDTH/8
  ) (
     input  wire                     clk,
     input  wire                     reset,
@@ -256,29 +256,26 @@ module VX_mem_to_axi #(
             `UNUSED_PIN (tx_ack)
         );
 
-        // Store->fill ordering at the memory boundary.
-        // AXI orders neither reads after writes nor writes with different IDs,
-        // and Vortex issues stores with no completion tracking anywhere above
-        // this module (the B channel used to be discarded). A read-miss fill
-        // could therefore legally overtake an in-flight same-line store and
-        // return the pre-store data, which the cache then serves until
-        // eviction - observed on a Xilinx U50 as silent lost stores.
-        // The contract is restored here, where it is lost:
-        //  1. all writes on a bank share AWID 0, so the slave must keep them
-        //     in order and their B responses return in issue order;
-        //  2. issued-but-unacknowledged write addresses are held in a small
-        //     FIFO; a read whose address matches one of them is not issued
-        //     until the matching B response retires it, and a write may only
-        //     start when a FIFO slot is free (a write that already fired one
-        //     of its two channels is never stalled - its slot was reserved).
+        // Write tracker: AXI orders neither a read against an outstanding
+        // write nor two writes carrying different IDs, so a same-address read
+        // issued here may legally return pre-write data. This master must
+        // therefore enforce read-after-write ordering itself:
+        //  1. every write on a bank carries AWID 0, the only case AXI requires
+        //     the slave to keep in order, which also makes the B responses
+        //     return in issue order so the tracker retires FIFO-style;
+        //  2. issued-but-unacknowledged write addresses are held below; a read
+        //     matching one of them is held until that write's B retires it,
+        //     and a write only starts when a tracker slot is free.
+        // A write that has already fired one of its two channels is never
+        // held, since its slot was reserved when it started.
         localparam WT_PTRW = `CLOG2(WRITE_TRACK_DEPTH);
         reg [WRITE_TRACK_DEPTH-1:0][BANK_ADDR_WIDTH-1:0] wtrack_addr;
         reg [WRITE_TRACK_DEPTH-1:0] wtrack_valid;
         reg [WT_PTRW-1:0] wtrack_head, wtrack_tail;
 
-        wire wtrack_full = & wtrack_valid;
+        wire wtrack_full = (& wtrack_valid);
         wire wtrack_push = req_xbar_valid_out[i] && xbar_rw_out && req_xbar_ready_out[i];
-        wire wtrack_pop  = m_axi_bvalid[i]; // bready is tied high below
+        wire wtrack_pop  = m_axi_bvalid[i];   // bready is tied high below
 
         always @(posedge clk) begin
             if (reset) begin
@@ -309,9 +306,10 @@ module VX_mem_to_axi #(
         wire wr_in_progress   = m_axi_aw_ack || m_axi_w_ack;
         wire wr_start_allowed = wr_in_progress || ~wtrack_full;
 
-        // note: axi_write_ready tracks the READY pins only, so the pop below
-        // must carry the same gating as the valids or a stalled write would
-        // be dropped from the xbar without ever reaching AXI.
+        // axi_write_ready reflects the READY pins alone, so it can be high
+        // while the valids are held off. The xbar handshake must carry the
+        // same gating as the valids, or a held write is consumed from the
+        // xbar without ever reaching AXI.
         assign req_xbar_ready_out[i] = xbar_rw_out ? (axi_write_ready && wr_start_allowed)
                                                    : (m_axi_arready[i] && ~rd_hazard);
 
@@ -325,9 +323,7 @@ module VX_mem_to_axi #(
         assign m_axi_awaddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE) | (ADDR_WIDTH_OUT'(i) << (BANK_ADDR_WIDTH + LOG2_DATA_SIZE));
     end
 
-        // constant write ID: same-ID writes are the only writes AXI orders,
-        // and in-order B responses let the tracker retire FIFO-style.
-        assign m_axi_awid[i]    = '0;
+        assign m_axi_awid[i]    = '0;   // see the write tracker above
         assign m_axi_awlen[i]   = 8'b00000000;
         assign m_axi_awsize[i]  = 3'(LOG2_DATA_SIZE);
         assign m_axi_awburst[i] = 2'b01;
@@ -373,7 +369,7 @@ module VX_mem_to_axi #(
         assign m_axi_arregion[i]= 4'b0000;
     end
 
-    // AXI write response channel (consumed by the per-bank write tracker)
+    // AXI write response channel (retires the per-bank write tracker)
 
     for (genvar i = 0; i < NUM_BANKS_OUT; ++i) begin : g_axi_write_rsp
         `UNUSED_VAR (m_axi_bid[i])
