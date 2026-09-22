@@ -16,8 +16,8 @@ FireSim itself is an external dependency, developed in a clone of
 `vortex_3.x`, based on upstream 1.21.0) at `~/dev/firesim`, and consumed by
 the Vortex build through `$(FIRESIM_PATH)`, which `config.mk` defaults to
 `$(TOOLDIR)/firesim` — the same source/tool split POCL, Mesa and LLVM use.
-Vortex's own changes to FireSim are small — 8 files, ~324 lines — and are bug
-fixes and U55C platform plumbing rather than divergence; see §6.
+Vortex's own changes to FireSim are small bug fixes and platform plumbing
+rather than divergence, pinned by `FIRESIM_REV` in `VERSION`; see §6.
 
 For running kernels on hardware generally, see
 [`fpga_setup.md`](../fpga_setup.md); for the other simulation vehicles, see
@@ -226,16 +226,34 @@ driver says so explicitly rather than leaving it to be inferred.
 
 ## 4. Build flow
 
+One command builds a card's image, for the card named by `FIRESIM_CARD`
+(default `u55c`), from a configured build tree:
+
+```bash
+source $FIRESIM_PATH/env.sh                    # FireSim's conda environment
+source /opt/xilinx/2024.2/Vitis/settings64.sh  # plus XRT's setup.sh
+make -C hw/syn/firesim bitstream FIRESIM_CARD=u55c \
+    CONFIGS="-DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_TEX_ENABLE" FREQUENCY=60.0
 ```
-make -C hw/syn/firesim stage      copy Chisel/C++ targets into $(FIRESIM_PATH)
-make -C hw/syn/firesim sources    Verilator source list (packages + wrapper)
-make -C hw/syn/firesim vivado-sources
-                                  flatten Vortex with macros inlined (-P)
-cd $(FIRESIM_PATH)/sim && make replace-rtl PLATFORM=vitis DESIGN=VortexTarget
-                                  Golden Gate elaboration
-cd platforms/vitis/… && make bitstream DEVICE=… FREQUENCY=60.0 STRATEGY=TIMING
-                                  synthesis + place-and-route
+
+`bitstream` runs, in order:
+
 ```
+vivado-sources   flatten Vortex with macros inlined (-P)
+sources          Verilator source list (packages + wrapper)
+xilinx-ips       generate the Xilinx floating-point cores for the card's part
+stage            copy the Chisel/C++ targets and the card's platform config
+                 class into $(FIRESIM_PATH)
+replace-rtl      Golden Gate elaboration (in $(FIRESIM_PATH)/sim)
+bitstream        synthesis + place-and-route (in the platform's cl_<target> dir)
+```
+
+The card's FireSim platform, part, device, host-memory binding and base address
+come from its descriptor in `hw/syn/xilinx/platforms/`; the platform config
+class (`U55CPlatformConfig`) is generated from it. `CONFIGS` takes architecture
+overrides as the other synthesis flows do; extensions pull in their sources
+through `hw/syn/extensions.mk`, and a changed `CONFIGS` invalidates the
+flattened tree.
 
 ### 4.1 Two source lists, and why
 
@@ -322,20 +340,24 @@ For scale: `sgemm -n32` takes 1228 ms on rtlsim and 8 ms on the card, ~153×.
 
 ## 6. Relationship to upstream FireSim
 
-The FireSim checkout is a **git clone, not a vendored copy**. Vortex's changes
-live on branch `vortex_3.x` of `vortexgpgpu/firesim`, based on upstream tag
-1.21.0, and amount to 8 files:
+The FireSim checkout is a **git clone of the fork**, `vortexgpgpu/firesim`
+branch `vortex_3.x`, based on upstream tag 1.21.0. Every change Vortex needs in
+FireSim is a commit there, and `VERSION` pins the one this tree is built and
+tested against (`FIRESIM_REV`). `make stage` refuses a checkout that does not
+contain the pinned commit; being ahead of it is normal while developing the
+fork.
 
-| area | files | why |
-|---|---|---|
-| Vitis platform | `simif_vitis.cc`, `VitisShim.scala` | DRAM aperture across HBM[0:7] with a 4 GiB window; host-memory base address |
-| driver lifetime | `entry.cc` | tear the platform down at the end of `entry()`; a global `unique_ptr` is destroyed during static destruction, after XRT's own statics, and segfaults in the device registry |
-| cycle accounting | `simulation.{cc,h}` | `end_tcycle` is read absolute and never rebased, so it accumulates across runs and FMR divides a per-run quantity by a cumulative one |
-| build | `cl_firesim/Makefile`, `gen_xo.tcl`, `package_kernel.tcl` | U55C build fixes; package the flattened Vortex sources into the kernel |
+The fork's changes are bug fixes and platform plumbing rather than divergence:
 
-All are candidates for upstreaming: only the `HOST_MEM_SP` default is
-U55C-specific, and it is parameterized rather than hardcoded. The branch should
-shrink over time as changes are accepted upstream.
+| area | why |
+|---|---|
+| Vitis platform | host-memory base as a config field (`HostMemBaseAddressKey`), checked by the driver against the memory the binding resolved to; 4 GiB DRAM aperture; part read from the platform; vendor IP cores packaged with the kernel |
+| driver lifetime | tear the platform down at the end of `entry()`; a global `unique_ptr` is destroyed during static destruction, after XRT's own statics, and segfaults in the device registry |
+| driver build | the Vitis driver is compiled by the host toolchain: XRT needs the host glibc, and conda's start files do not link against glibc 2.34+ |
+| cycle accounting | `end_tcycle` is read absolute and never rebased, so it accumulates across runs and FMR divides a per-run quantity by a cumulative one |
+| build | Vitis 2024.2 fixes; package the flattened Vortex sources into the kernel |
+
+All are candidates for upstreaming.
 
 ---
 

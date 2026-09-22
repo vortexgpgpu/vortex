@@ -8,10 +8,18 @@ PROJECT := firesim
 
 SIMIF_DIR := $(FIRESIM_PATH)/sim/midas/src/main/cc
 
-PLATFORM ?= vitis
 DESIGN ?= VortexTarget
 TARGET_CONFIG ?= VortexConfig
-PLATFORM_CONFIG ?= Default$(shell echo $(PLATFORM) | sed 's/^./\U&/')Config
+
+# The card's FireSim platform and platform config come from its descriptor, the
+# same ones hw/syn/firesim elaborated the target with.
+FIRESIM_CARD ?= u55c
+FIRESIM_MK := $(DESTDIR)/firesim_platform.mk
+FIRESIM_GEN_RC := $(shell mkdir -p $(DESTDIR) && python3 $(VORTEX_HOME)/hw/scripts/gen_platform.py --card=$(FIRESIM_CARD) --emit=firesim-mk -o $(FIRESIM_MK) 2> $(FIRESIM_MK).err; echo $$?)
+ifneq ($(FIRESIM_GEN_RC),0)
+$(error $(shell cat $(FIRESIM_MK).err))
+endif
+include $(FIRESIM_MK)
 
 # Golden Gate writes the generated header here; the driver objects are built
 # alongside it so a rebuild of the target invalidates them.
@@ -27,10 +35,14 @@ DRIVER_SRCS := $(SRC_DIR)/firesim_sim.cpp
 # -fPIC is required for every object that lands in the shared library, so it
 # has to reach the bridge and platform objects too, not just ours.
 SIM_CXXFLAGS := -O2 -fPIC -std=c++20 -I$(SRC_DIR) \
-                -idirafter $(CONDA_PREFIX)/include -idirafter /usr/include \
-                -idirafter $(XILINX_XRT)/include
-SIM_LDFLAGS := -shared -L$(CONDA_PREFIX)/lib -L$(XILINX_XRT)/lib \
-               -luuid -lxrt_coreutil -ldl -lz
+                -idirafter $(CONDA_PREFIX)/include -idirafter /usr/include
+SIM_LDFLAGS := -shared -L$(CONDA_PREFIX)/lib -ldl -lz
+
+# The platform layer's own library: XRT for vitis cards.
+ifeq ($(PLATFORM), vitis)
+SIM_CXXFLAGS += -idirafter $(XILINX_XRT)/include
+SIM_LDFLAGS += -L$(XILINX_XRT)/lib -luuid -lxrt_coreutil
+endif
 
 .PHONY: all lib clean check-gen
 

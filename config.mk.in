@@ -42,6 +42,8 @@ RISCV_TOOLCHAIN_PATH ?= $(TOOLDIR)/riscv$(XLEN)-gnu-toolchain
 # and a path derived from VORTEX_HOME would make the dependency's location a
 # function of which tree is being built.
 FIRESIM_PATH ?= $(TOOLDIR)/firesim
+# vortexgpgpu/firesim commit this tree is built and tested against (VERSION).
+FIRESIM_REV := @FIRESIM_REV@
 
 RISCV_PREFIX  ?= riscv$(XLEN)-unknown-elf
 RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)

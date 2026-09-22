@@ -77,7 +77,7 @@ copy_files() {
                         continue
                     fi
                     mkdir -p "$dest_dir"
-                    sed "s|@VORTEX_HOME@|$SOURCE_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@BUILDDIR@|$CURRENT_DIR|g; s|@TOOLCHAIN_REV@|$TOOLCHAIN_REV|g; s|@VORTEX_VERSION@|$VORTEX_VERSION|g; s|@GEM5_REV@|$GEM5_REV|g; s|@PROFILE@|$PROFILE|g" "$file" > "$dest_file"
+                    sed "s|@VORTEX_HOME@|$SOURCE_DIR|g; s|@XLEN@|$XLEN|g; s|@TOOLDIR@|$TOOLDIR|g; s|@OSVERSION@|$OSVERSION|g; s|@INSTALLDIR@|$PREFIX|g; s|@BUILDDIR@|$CURRENT_DIR|g; s|@TOOLCHAIN_REV@|$TOOLCHAIN_REV|g; s|@VORTEX_VERSION@|$VORTEX_VERSION|g; s|@GEM5_REV@|$GEM5_REV|g; s|@PROFILE@|$PROFILE|g; s|@FIRESIM_REV@|$FIRESIM_REV|g" "$file" > "$dest_file"
                     # apply permissions to bash scripts
                     read -r firstline < "$dest_file"
                     if [[ "$firstline" =~ ^#!.*bash ]]; then
@@ -208,7 +208,7 @@ SOURCE_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 THIRD_PARTY_DIR=$SOURCE_DIR/third_party
 
-# load version pins (VORTEX_VERSION, TOOLCHAIN_REV)
+# load version pins (VORTEX_VERSION, TOOLCHAIN_REV, GEM5_REV, FIRESIM_REV)
 source "$SOURCE_DIR/VERSION"
 
 # stamp file tracks config parameter changes; touched only when params change
