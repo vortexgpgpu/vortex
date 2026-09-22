@@ -310,7 +310,7 @@ private:
       groups.push_back(std::move(b));
     }
 
-    NodeRef ch[6];
+    NodeRef ch[6] = {};
     uint32_t n = 0;
     for (auto& g : groups)
       if (!g.empty()) ch[n++] = build_node(g);
