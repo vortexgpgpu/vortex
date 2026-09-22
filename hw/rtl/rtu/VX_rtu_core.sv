@@ -143,7 +143,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                      T_CBWAIT = 3'd4,  // candidate returned; await the CONTINUE's t
                      T_CBATTR = 3'd5,  // ... and its hitAttribute (CONT beat 1)
                      T_RESUME = 3'd6,  // release this slot's yield barrier
-                     T_RWAIT  = 3'd7;  // await the resume commit -> terminal record
+                     T_RWAIT  = 3'd7;  // await the resume commit -> next batch | terminal record
     reg [NUM_SLOTS-1:0][2:0]           tstate;
 
     reg [NUM_SLOTS-1:0][NUM_LANES-1:0] req_mask;
@@ -692,7 +692,12 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                     tstate[s] <= T_RWAIT;
                 end
                 T_RWAIT: begin
-                    if (sch_done[s]) begin
+                    // a verdict that did not end a lane's ray re-walks it:
+                    // the next candidate batch yields like the first
+                    if (sch_yield[s]) begin
+                        is_cand[s] <= 1'b1;
+                        tstate[s]  <= T_WRITE;
+                    end else if (sch_done[s]) begin
                         is_cand[s] <= 1'b0;
                         tstate[s]  <= T_WRITE;
                     end
