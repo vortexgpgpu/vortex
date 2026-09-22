@@ -1,0 +1,44 @@
+# AMD Alveo V80 through the SLASH compute shell. The authoritative rationale for
+# each value is in docs/designs/aved_driver_architecture.md (§4, §9).
+[card]
+name = "v80"
+flow = "aved"
+family = "versal"
+part = "xcv80-lsva4737-2MHP-e-S"
+match_device = ["xcv80-*"]
+
+[memory]
+# One wide master fanned across the HBM: the linker assigns each memory range
+# independently, and per-bank bases are not known at synthesis time.
+banks = 1
+addr_width = 34
+merged = true
+# The shell maps m_axi_mem_0 at 0x40_0000_0000 in hardware and simulation, and a
+# 32-bit core cannot emit that base, so the AFU rebases every device access.
+base = 0x4000000000
+# MEM, not HBM0: HBM0 is a 1 GB aperture and the stack sits just under 4 GB. MEM
+# routes through the HBM VNOC at the same base with 32 GB of range.
+tags = ["MEM"]
+
+[host]
+# HBM8 with runtime staging. HOST is the QDMA slave bridge, whose reads never
+# complete on the compute shell: the CP hangs on its first ring fetch silently.
+# The aperture must lie outside the device-memory window: HBM<k> sits at
+# 0x40_0000_0000 + k*512 MB and MEM exposes the whole 32-bit space from that
+# base, so HBM0..HBM7 are device memory. With HBM1 the CP's staging buffers
+# landed inside the heap and uploads past 512 MB overwrote it; HBM8 starts at
+# +4 GB, past the last device byte.
+tag = "HBM8"
+refuse = ["HOST"]
+refuse_why = "m_axi_host through the QDMA slave bridge never completes reads on the compute shell; the CP would hang on its first ring fetch"
+
+[control]
+# A 16-byte AXI-Lite block answers only if all four of its words decode.
+axil_block_bytes = 16
+
+[clock]
+kernel_mhz = 300
+
+[firesim]
+platform = "aved"
+host_mem_tag = "MEM"

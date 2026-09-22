@@ -1,0 +1,13 @@
+# Any other Versal XRT platform.
+[card]
+name = "versal"
+flow = "xrt"
+family = "versal"
+match_family = ["versal"]
+
+[memory]
+banks = 1
+addr_width = 32
+
+[clock]
+kernel_mhz = 300

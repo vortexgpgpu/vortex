@@ -1,0 +1,17 @@
+# AMD Alveo U200: 64 GB DDR4 in four banks of 16 GB.
+[card]
+name = "u200"
+flow = "xrt"
+family = "virtexuplus"
+part = "xcu200-fsgd2104-2-e"
+match_xsa = ["xilinx_u200_*"]
+
+[memory]
+banks = 4
+addr_width = 36
+
+[host]
+tag = "HOST[0]"
+
+[clock]
+kernel_mhz = 300

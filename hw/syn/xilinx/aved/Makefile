@@ -85,7 +85,7 @@ CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16
 override CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 endif
 
-# `override`, as in platforms.mk: a command-line `make CONFIGS=...` otherwise
+# `override`, as in the generated card settings: a command-line `make CONFIGS=...` otherwise
 # discards these appends, and a build silently missing -DSYNTHESIS elaborates
 # the simulation-only paths.
 override CONFIGS += -DSYNTHESIS -DVIVADO
@@ -115,33 +115,21 @@ RTL_INCLUDE += -I$(RTL_DIR)/cp
 # the resolved XCONFIGS.
 include $(VORTEX_HOME)/hw/syn/extensions.mk
 
-# load platform settings
-include $(SRC_DIR)/platforms.mk
-
-# Memory connectivity tags resolved into the linker config.
-MEM_TAG ?= HBM0
-HOST_TAG ?= HOST
-
-# HOST routes m_axi_host to the QDMA slave bridge, whose reads never complete
-# on the compute shell: the CP hangs on its first ring fetch and reports
-# nothing -- the queue reads back armed and correct while head stays at 0. That
-# is a full synthesis run to discover, and it has already cost one, so refuse
-# the tag at parse time rather than emitting the config. See platforms.mk.
-ifeq ($(HOST_TAG),HOST)
-$(error HOST_TAG=HOST routes m_axi_host to the QDMA slave bridge, whose reads never complete on the compute shell; the CP would hang on its first ring fetch. Use HOST_TAG=HBM8 (the platforms.mk default))
-endif
+# Card settings (memory geometry, connectivity tags, kernel clock), resolved
+# from the device part. A tag the card refuses -- on the V80, HOST, whose reads
+# never complete on the compute shell -- stops the build at parse time rather
+# than after a full synthesis run.
+PLATFORM_GEN_ARGS := --flow=aved --device=$(DEVICE)
+include $(VORTEX_HOME)/hw/syn/xilinx/platform.mk
 
 # MEM covers the 32-bit device space from the HBM base, i.e. HBM0..HBM7; a CP
 # staging aperture there aliases device memory and large uploads overwrite the
-# heap. See platforms.mk.
+# heap. See hw/syn/xilinx/platforms/v80.toml.
 ifneq ($(filter HBM0 HBM1 HBM2 HBM3 HBM4 HBM5 HBM6 HBM7,$(HOST_TAG)),)
 ifneq ($(filter MEM HBM0,$(MEM_TAG)),)
 $(error HOST_TAG=$(HOST_TAG) lies inside the device-memory window of MEM_TAG=$(MEM_TAG) (HBM0..HBM7); CP staging would alias the Vortex heap. Use HBM8 or above)
 endif
 endif
-
-# platforms.mk states the kernel clock in MHz; the linker config wants Hz.
-KERNEL_FREQ_HZ := $(shell echo $$(( $(KERNEL_FREQ) * 1000000 )))
 
 # Debugging
 ifdef DEBUG
@@ -172,7 +160,7 @@ CFLAGS += $(RTL_INCLUDE)
 # ast dump flags
 XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_DIR) -DSV_DPI
 
-.PHONY: all clean gen-sources gen-ast scope-json package-ip gen-bin check-axil-blocks
+.PHONY: all clean gen-sources gen-ast scope-json package-ip gen-bin check-axil-blocks FORCE
 
 # Fail before synthesis if any 16-byte block in the CP AXI-Lite regfile is only
 # partially decoded. Measured on V80 silicon: such a block DECERRs on EVERY
@@ -199,11 +187,13 @@ scope-json: $(BIN_DIR)/scope.json
 $(BIN_DIR)/scope.json: $(BUILD_DIR)/vortex.xml
 	mkdir -p $(BIN_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/scope.py vortex.xml -o bin/scope.json
 
-$(BUILD_DIR)/config.cfg: $(SRC_DIR)/config.cfg.tmpl
-	mkdir -p $(BUILD_DIR)
-	sed -e 's|@MEM_TAG@|$(MEM_TAG)|g' -e 's|@HOST_TAG@|$(HOST_TAG)|g' \
-	    -e 's|@KERNEL_FREQ_HZ@|$(KERNEL_FREQ_HZ)|g' $< > $@
-	@grep -q '@[A-Z_]*@' $@ && { echo "ERROR: unsubstituted placeholder in $@"; grep -n '@[A-Z_]*@' $@; rm -f $@; exit 1; } || true
+# Regenerated on every run and rewritten only when its content changes, so a
+# command-line tag or clock override reaches the linker without invalidating an
+# unchanged build.
+$(BUILD_DIR)/config.cfg: FORCE
+	$(PLATFORM_GEN) --emit=cfg --mem-tag='$(MEM_TAG)' --host-tag='$(HOST_TAG)' --kernel-mhz=$(KERNEL_FREQ) -o $@
+
+FORCE:
 
 package-ip: $(IP_DIR)/component.xml
 $(IP_DIR)/component.xml: $(BUILD_DIR)/sources.txt

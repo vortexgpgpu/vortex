@@ -1,0 +1,19 @@
+# AMD Alveo U50: 8 GB HBM2, 32 pseudo-channels of 256 MB.
+[card]
+name = "u50"
+flow = "xrt"
+family = "virtexuplusHBM"
+part = "xcu50-fsvh2104-2-e"
+match_xsa = ["xilinx_u50_*"]
+
+[memory]
+banks = 32
+addr_width = 33
+merged = true
+tags = ["HBM[0:31]"]
+
+[host]
+tag = "HOST[0]"
+
+[clock]
+kernel_mhz = 300

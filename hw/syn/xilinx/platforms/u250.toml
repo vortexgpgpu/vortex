@@ -1,0 +1,20 @@
+# AMD Alveo U250: 64 GB DDR4 in four banks. Only bank 0 is bound: multi-bank
+# needs per-bank device-address offsets that are not known at synthesis time.
+[card]
+name = "u250"
+flow = "xrt"
+family = "virtexuplus"
+part = "xcu250-figd2104-2L-e"
+match_xsa = ["xilinx_u250_*"]
+
+[memory]
+banks = 1
+addr_width = 34
+tags = ["DDR[0]"]
+base = 0x4000000000
+
+[host]
+tag = "HOST[0]"
+
+[clock]
+kernel_mhz = 300

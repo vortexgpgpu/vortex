@@ -1,0 +1,26 @@
+# AMD Alveo U55C: 16 GB HBM2, 32 pseudo-channels of 512 MB.
+[card]
+name = "u55c"
+flow = "xrt"
+family = "virtexuplusHBM"
+part = "xcu55c-fsvh2892-2L-e"
+match_xsa = ["xilinx_u55c_*"]
+
+[memory]
+banks = 32
+addr_width = 34
+merged = true
+tags = ["HBM[0:31]"]
+
+[host]
+# The CP's m_axi_host reaches host DRAM through the XDMA slave bridge.
+tag = "HOST[0]"
+
+[clock]
+kernel_mhz = 300
+
+[firesim]
+platform = "vitis"
+device = "xilinx_u55c_gen3x16_xdma_3_202210_1"
+# 32-bit target spans 4 GiB: eight 512 MB pseudo-channels.
+host_mem_sp = "HBM[0:7]"
