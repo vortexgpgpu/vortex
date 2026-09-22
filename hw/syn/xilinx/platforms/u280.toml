@@ -1,0 +1,19 @@
+# AMD Alveo U280: 8 GB HBM2, 32 pseudo-channels of 256 MB (plus DDR4, unused).
+[card]
+name = "u280"
+flow = "xrt"
+family = "virtexuplusHBM"
+part = "xcu280-fsvh2892-2L-e"
+match_xsa = ["xilinx_u280_*"]
+
+[memory]
+banks = 32
+addr_width = 33
+merged = false
+tags = ["HBM[0:31]"]
+
+[host]
+tag = "HOST[0]"
+
+[clock]
+kernel_mhz = 300

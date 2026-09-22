@@ -117,10 +117,9 @@ RTL_INCLUDE += -I$(RTL_DIR)/cp
 # single source of truth, appended based on the resolved XCONFIGS.
 include $(VORTEX_HOME)/hw/syn/extensions.mk
 
-# Kernel clock target frequency (MHz). Defaults to the U55C platform native
-# 300 MHz. Override on the command line (e.g. KERNEL_FREQ=250) for extra
+# Kernel clock target frequency (MHz). The card descriptor supplies the
+# default; override on the command line (e.g. KERNEL_FREQ=250) for extra
 # timing-closure margin.
-KERNEL_FREQ ?= 300
 
 # Timing-miss policy. Default (1): a design that misses KERNEL_FREQ is
 # auto-scaled down to the achieved frequency and the build succeeds with
@@ -146,8 +145,11 @@ ifdef IMPL_STRATEGY
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STRATEGY=$(IMPL_STRATEGY)"
 endif
 
-# load platform settings
-include $(SRC_DIR)/platforms.mk
+# Card settings, resolved from the platform's XSA and FPGA family.
+ifneq ($(PLATFORM),)
+PLATFORM_GEN_ARGS := --flow=xrt --xsa=$(XSA) --family='$(DEV_ARCH)'
+include $(VORTEX_HOME)/hw/syn/xilinx/platform.mk
+endif
 
 VPP_FLAGS += --report_level 2
 VPP_FLAGS += --config $(SRC_DIR)/vitis.ini
