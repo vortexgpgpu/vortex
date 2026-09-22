@@ -7,6 +7,7 @@
 
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
+include $(VORTEX_HOME)/hw/syn/common.mk
 
 # configure copies this Makefile into the build tree, so ROOT_DIR resolves there
 # while sources are read from VORTEX_HOME.
@@ -38,7 +39,7 @@ VIVADO_SRCS_LIST := $(BUILD_DIR)/vivado_srcs.f
 SRCS_DIR := $(BUILD_DIR)/vortex_srcs
 SRCS_LIST := $(BUILD_DIR)/vortex_srcs.f
 
-.PHONY: stage patch sources check-firesim clean-staged
+.PHONY: stage patch sources vivado-sources xilinx-ips check-firesim clean-staged
 
 stage: check-firesim
 	@mkdir -p $(TARGET_DEST) $(CC_DEST)
@@ -61,19 +62,28 @@ patch: check-firesim
 	done
 
 XLEN ?= 32
-CONFIGS ?= $(shell python3 $(VORTEX_HOME)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='-DVX_CFG_XLEN=$(XLEN)')
+
+# Architecture overrides, as the other synthesis flows take them, e.g.
+# CONFIGS="-DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_TEX_ENABLE". XCONFIGS is the fully
+# resolved set, used only to select extension sources and type selectors.
+CONFIGS ?=
+XCONFIGS := $(shell python3 $(VORTEX_HOME)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 # VX_config.vh and VX_types.vh are generated into the build tree, so those come
 # from ROOT_DIR while the RTL itself comes from VORTEX_HOME.
 RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs \
                -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm \
-               -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/xrt -I$(RTL_DIR)/afu/firesim
+               -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/common -I$(RTL_DIR)/afu/firesim
 
-# Only XLEN and the TCU/FPU selectors are passed. Every other scalar is computed
-# by the generated VX_config.vh behind an ifndef, so defining them here replaces
-# those computations with the generator's report values -- which sets the memory
-# port counts to zero and yields a design with no memory interface at all.
-TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(CONFIGS))
+RTL_PKGS :=
+include $(VORTEX_HOME)/hw/syn/extensions.mk
+
+# Only the overrides and the TCU/FPU selectors are passed. Every other scalar is
+# computed by the generated VX_config.vh behind an ifndef, so passing the whole
+# resolved XCONFIGS here replaces those computations with the generator's report
+# values -- which sets the memory port counts to zero and yields a design with no
+# memory interface at all.
+TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 
 # The same defines every other synthesis flow passes (hw/syn/xilinx, hw/syn/altera).
 # VX_dp_ram and VX_sp_ram gate all block-RAM inference behind SYNTHESIS, and
@@ -130,7 +140,14 @@ PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=4
 PERF_DEFINES ?=
 PLATFORM_DEFINES += $(PERF_DEFINES)
 
-GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(SYNTH_DEFINES) $(RTL_INCLUDE)
+GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(SYNTH_DEFINES) $(RTL_INCLUDE)
+
+# Defines arrive on the command line, which no file timestamp reflects, so a
+# changed CONFIGS would otherwise reuse the previous flattened tree. The stamp is
+# rewritten only when the flags differ, which keeps an unchanged build current.
+CONFIG_STAMP := $(BUILD_DIR)/gen_cflags.stamp
+$(shell mkdir -p $(BUILD_DIR) && echo '$(GEN_CFLAGS)' > $(CONFIG_STAMP).tmp && \
+        (cmp -s $(CONFIG_STAMP).tmp $(CONFIG_STAMP) && rm -f $(CONFIG_STAMP).tmp || mv -f $(CONFIG_STAMP).tmp $(CONFIG_STAMP)))
 
 # Only the packages and the wrapper are named; every other Vortex module is
 # resolved by library search over RTL_INCLUDE. Handing the whole tree over as a
@@ -139,8 +156,13 @@ GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(PLAT
 # Packages have to be parsed before the modules that import them, so they are
 # listed rather than left to library search, in dependency order. Vortex.sv
 # imports gpu, trace and tlb; fpu is pulled in below the core.
+# Extension packages follow in dependency order, which is not extensions.mk's
+# append order: raster imports om.
+EXT_PKG_ORDER := VX_tcu_pkg.sv VX_dxa_pkg.sv VX_rtu_pkg.sv VX_om_pkg.sv \
+                 VX_raster_pkg.sv VX_tex_pkg.sv
+EXT_PKG_NAMES := $(filter $(notdir $(RTL_PKGS)),$(EXT_PKG_ORDER))
 EXPLICIT_NAMES := VX_gpu_pkg.sv VX_fpu_pkg.sv VX_tlb_pkg.sv VX_trace_pkg.sv \
-                  VX_firesim_wrap.sv
+                  $(EXT_PKG_NAMES) VX_firesim_wrap.sv
 EXPLICIT_SRCS := $(addprefix $(VIVADO_SRCS_DIR)/,$(EXPLICIT_NAMES))
 
 sources: $(SRCS_LIST)
@@ -161,12 +183,12 @@ incdirs:
 # the constant-parameter failure that ruled flattening out for Verilator is an
 # elaboration behaviour, not a synthesis one.
 
-# The XRT AFU is a second kernel top with its own control shell. It arrives here
-# only because its directory is on the include path for the shared port macros,
-# and leaving it in gives Vivado two candidate tops, which makes it elaborate
-# modules standalone and reject their interface ports. The header stays; the
-# modules go.
-XRT_AFU_MODULES := vortex_afu.v VX_afu_ctrl.sv VX_afu_wrap.sv
+# The shared AFU shell (VX_afu_wrap and its control, demux, drain and reset
+# modules) is a second kernel top. It arrives here only because its directory is
+# on the include path for the shared port macros in vortex_afu.vh, and leaving it
+# in gives Vivado two candidate tops, which makes it elaborate modules standalone
+# and reject their interface ports. The header stays; the modules go.
+AFU_SHELL_MODULES := $(notdir $(wildcard $(RTL_DIR)/afu/common/*.sv))
 
 # Every input the flattener reads. Without these the rule below has no
 # prerequisites at all, so make runs it exactly once and then reports "nothing to
@@ -175,14 +197,14 @@ XRT_AFU_MODULES := vortex_afu.v VX_afu_ctrl.sv VX_afu_wrap.sv
 # listed too because GEN_CFLAGS resolves widths out of them.
 RTL_SRCS := $(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh') \
             $(wildcard $(ROOT_DIR)/hw/VX_config.vh) $(wildcard $(ROOT_DIR)/hw/VX_types.vh) \
-            $(firstword $(MAKEFILE_LIST))
+            $(firstword $(MAKEFILE_LIST)) $(CONFIG_STAMP)
 
 vivado-sources: $(VIVADO_SRCS_LIST)
 $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 	@mkdir -p $(BUILD_DIR)
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) \
 		-TVX_firesim_wrap -Cvivado_srcs -Ovivado_srcs.f
-	@for f in $(XRT_AFU_MODULES); do \
+	@for f in $(AFU_SHELL_MODULES); do \
 		rm -f $(VIVADO_SRCS_DIR)/$$f; \
 		grep -v "/$$f$$" $(VIVADO_SRCS_LIST) > $(VIVADO_SRCS_LIST).tmp && \
 			mv $(VIVADO_SRCS_LIST).tmp $(VIVADO_SRCS_LIST); \
@@ -196,6 +218,28 @@ $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 		exit 1; \
 	fi
 	@echo "wrote $(VIVADO_SRCS_LIST) ($$(grep -cv '^+' $(VIVADO_SRCS_LIST)) files)"
+
+# Vendor floating-point cores. On Vivado the FPU and RTU select Xilinx's
+# floating_point IP (xil_fma, xil_fdiv, ...) instead of the soft core, and the
+# flattened sources only instantiate them, so the kernel packaging must be handed
+# the generated cores or synthesis fails on the missing modules. Same script and
+# core set as the XRT flow. The part must match the FireSim kernel's part.
+FPGA_PART ?= xcu55c-fsvh2892-2L-e
+XILINX_IP_DIR := $(BUILD_DIR)/ip
+XILINX_IP_STAMP := $(XILINX_IP_DIR)/.part-$(FPGA_PART)
+
+xilinx-ips: $(XILINX_IP_STAMP)
+$(XILINX_IP_STAMP): $(SCRIPT_DIR)/xilinx_ip_gen.tcl
+	rm -rf $(XILINX_IP_DIR)
+	cd $(BUILD_DIR) && vivado -mode batch -nojournal -nolog -source $(SCRIPT_DIR)/xilinx_ip_gen.tcl \
+		-tclargs $(XILINX_IP_DIR) $(FPGA_PART)
+	@test -n "$$(find $(XILINX_IP_DIR) -name '*.xci')" || { echo "ERROR: no .xci generated under $(XILINX_IP_DIR)"; exit 1; }
+	touch $@
+
+# The environment the FireSim Vitis kernel packaging reads (package_kernel.tcl).
+kernel-env:
+	@echo 'export VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST)'
+	@echo 'export VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR)'
 
 check-firesim:
 	@test -d $(FIRESIM_PATH)/sim || { \
