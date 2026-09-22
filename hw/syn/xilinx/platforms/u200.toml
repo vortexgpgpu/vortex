@@ -1,4 +1,8 @@
 # AMD Alveo U200: 64 GB DDR4 in four banks of 16 GB.
+#
+# KNOWN INCOMPLETE: the DDR banks' device base (PLATFORM_MEMORY_OFFSET) is not
+# set; confirming it needs the U200 platform's memory map (platforminfo /
+# xclbinutil).
 [card]
 name = "u200"
 flow = "xrt"
