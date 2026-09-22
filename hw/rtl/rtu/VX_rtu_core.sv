@@ -174,7 +174,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     wire [RTU_RAY_BEATS*32-1:0] rw_data;
 
     wire [NUM_SLOTS-1:0]       sch_busy, sch_done, sch_yield;
-    wire [NUM_CTX-1:0]         sch_hit, sch_yld, sch_attrv;
+    wire [NUM_CTX-1:0]         sch_hit, sch_yld, sch_attrv, sch_objv;
     wire [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0] sch_cbtype;
     wire [NUM_SLOTS-1:0]       sch_resume;
     wire [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0] sch_action;
@@ -218,6 +218,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         .hit_bits         (sch_hit),
         .yld_bits         (sch_yld),
         .cb_types         (sch_cbtype),
+        .obj_vld          (sch_objv),
         .attr_vld         (sch_attrv),
         .resume           (sch_resume),
         .action           (sch_action),
@@ -511,10 +512,15 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     wire wr_objray  = is_cand[ws] && !wr_hitspan && (wr_idx < RTU_IDX_BITS'(13));
     wire wr_cbtype  = is_cand[ws] && (wr_idx == RTU_IDX_BITS'(13));
     wire wr_sbt     = is_cand[ws] && (wr_idx == RTU_IDX_BITS'(14));
+    // Object ray: a candidate from inside a BLAS staged its transformed ray in
+    // the window store; any other lane's object ray is its world ray (staging).
+    wire [NUM_LANES-1:0] ws_objv = sch_objv[32'(ws)*NUM_LANES +: NUM_LANES]
+                                 & sch_yld[32'(ws)*NUM_LANES +: NUM_LANES];
+    wire wr_objrow  = wr_objray && (ws_objv != '0);
 
     // reads this word needs
     wire wb_need_w1 = (wb_state == WB_RD1)
-                   && (wr_hitspan || wr_sbt || wr_attr) && !wr_status && !wr_payload;
+                   && (wr_hitspan || wr_sbt || wr_attr || wr_objrow) && !wr_status && !wr_payload;
     wire wb_need_w2 = is_cand[ws] && wr_hitspan;                    // the hit row
     wire wb_need_st = (wr_hitspan && (wr_idx == '0)) || wr_objray;  // t_max / object ray
 
@@ -527,6 +533,8 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                                             : RTU_WS_WORD_BITS'(RTU_WS_HIT_BASE))
                                + RTU_WS_WORD_BITS'(wr_idx)}
                     : wr_sbt  ? {ws, RTU_WS_WORD_BITS'(RTU_WS_YLD_SBT)}
+                    : wr_objray ? {ws, RTU_WS_WORD_BITS'(RTU_WS_YLD_OBJ)
+                                       + RTU_WS_WORD_BITS'(wr_idx - RTU_IDX_BITS'(RTU_RES_HIT))}
                               : {ws, RTU_WS_WORD_BITS'(RTU_WS_RES_ATTR)};
 
     assign wb_stg_req  = (wb_state == WB_RD1) && wb_need_st;
@@ -576,7 +584,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
                     win_word[i] = (wr_idx == '0) ? wb_ds[i] : 32'd0;
                 end
             end else if (wr_objray) begin
-                win_word[i] = wb_ds[i];
+                win_word[i] = ws_objv[i] ? wb_d1[i*32 +: 32] : wb_ds[i];
             end else if (wr_cbtype) begin
                 win_word[i] = {{(32-RTU_CB_TYPE_BITS){1'b0}}, sch_cbtype[wctx[i]]};
             end else if (wr_sbt) begin

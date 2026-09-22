@@ -299,6 +299,7 @@ package VX_rtu_pkg;
     localparam RTU_WS_CONT_T    = 16;  // CONTINUE beat 0: the shader's own t
     localparam RTU_WS_CONT_ATTR = 17;  // CONTINUE beat 1: the shader's hitAttribute
     localparam RTU_WS_RES_ATTR  = 18;  // accepted candidate's bound hitAttribute
+    localparam RTU_WS_YLD_OBJ   = 19;  // instanced candidate's object ray: o.xyz, d.xyz (19..24)
     localparam RTU_WS_WORDS     = 32;  // rows per slot (power of two for addressing)
     localparam RTU_WS_WORD_BITS = `CLOG2(RTU_WS_WORDS);
 

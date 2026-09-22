@@ -85,6 +85,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     output wire [NUM_CTX-1:0]                       hit_bits,
     output wire [NUM_CTX-1:0]                       yld_bits,
     output wire [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0] cb_types,
+    output wire [NUM_CTX-1:0]                       obj_vld,   // candidate staged an object ray
     output wire [NUM_CTX-1:0]                       attr_vld,
 
     // callback resume: the warp's per-lane actions, held stable by the core
@@ -245,6 +246,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_CTX-1:0]                       hit_q;
     reg [NUM_CTX-1:0]                       yld_q;
     reg [NUM_CTX-1:0][RTU_CB_TYPE_BITS-1:0] cbtype_q;
+    reg [NUM_CTX-1:0]                       objv_q;    // candidate came from inside a BLAS
     reg [NUM_CTX-1:0]                       attr_q;
     reg [NUM_CTX-1:0][RTU_STACK_BITS-1:0]   sp_q_arr;
     reg [NUM_CTX-1:0][LB-1:0]               f_slot_q;
@@ -848,13 +850,15 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // one field-row per cycle, per-lane write enable.
     localparam [1:0] CK_HIT  = 2'd0,  // committed opaque hit: the 7 hit rows
                      CK_YLDA = 2'd1,  // any-hit candidate: 7 yld rows + sbt
-                     CK_YLDP = 2'd2;  // IS candidate: t/u/v/prim/geom + sbt
+                     CK_YLDP = 2'd2;  // IS candidate: t/u/v/prim/inst/geom/cust + sbt (+ obj ray)
 
     typedef struct packed {
         logic [1:0]                 kind;
         logic [CTX_TAG_W-1:0]       ctx;
         logic [RTU_CB_SBT_BITS-1:0] sbt;
         logic [31:0]                t, u, v, prim, inst, geom, cust;
+        logic                       objv;   // candidate inside a BLAS: stage obj
+        logic [5:0][31:0]           obj;    // its object ray: o.xyz, d.xyz
     } commit_t;
 
     wire     cf_push, cf_pop, cf_empty, cf_full;
@@ -908,7 +912,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     assign win_rd_data = ws_rdata;
 
     // commit engine sequencing (one row per granted cycle)
-    reg  [2:0] ce_step;
+    reg  [3:0] ce_step;
     wire       ce_active = ~cf_empty;
     wire [SLOT_W-1:0]    ce_slot = SLOT_W'(32'(cf_dout.ctx) / NUM_LANES);
     wire [NUM_LANES-1:0] ce_lane = NUM_LANES'(1) << (32'(cf_dout.ctx) % NUM_LANES);
@@ -917,8 +921,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [31:0]                 ce_data;
     reg                        ce_last;
     always @(*) begin
-        // per-kind (row, field) walk; CK_YLDP skips inst/custom — an IS
-        // candidate leaves those rows holding whatever was last staged
+        // per-kind (row, field) walk. Both candidate kinds stage the full
+        // attribute record (an IS shader reads gl_InstanceID and
+        // gl_InstanceCustomIndexEXT too) plus the SBT row; a committed hit
+        // stops after custom. A candidate from inside a BLAS then stages its
+        // object-space ray (gl_ObjectRay*): outside one it IS the world ray,
+        // which the core already holds, so those candidates skip the rows.
         logic [RTU_WS_WORD_BITS-1:0] base;
         base    = (cf_dout.kind == CK_HIT) ? RTU_WS_WORD_BITS'(RTU_WS_HIT_BASE)
                                            : RTU_WS_WORD_BITS'(RTU_WS_YLD_BASE);
@@ -926,37 +934,25 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         ce_data = 32'd0;
         ce_last = 1'b0;
         case (ce_step)
-            3'd0: ce_data = cf_dout.t;
-            3'd1: ce_data = cf_dout.u;
-            3'd2: ce_data = cf_dout.v;
-            3'd3: ce_data = cf_dout.prim;
-            3'd4: begin
-                if (cf_dout.kind == CK_YLDP) begin
-                    ce_word = base + RTU_WS_WORD_BITS'(RTU_WS_F_GEOM);
-                    ce_data = cf_dout.geom;
-                end else begin
-                    ce_data = cf_dout.inst;
-                end
-            end
-            3'd5: begin
-                if (cf_dout.kind == CK_YLDP) begin
-                    ce_word = RTU_WS_WORD_BITS'(RTU_WS_YLD_SBT);
-                    ce_data = 32'(cf_dout.sbt);
-                    ce_last = 1'b1;
-                end else begin
-                    ce_word = base + RTU_WS_WORD_BITS'(RTU_WS_F_GEOM);
-                    ce_data = cf_dout.geom;
-                end
-            end
-            3'd6: begin
-                ce_word = base + RTU_WS_WORD_BITS'(RTU_WS_F_CUST);
+            4'd0: ce_data = cf_dout.t;
+            4'd1: ce_data = cf_dout.u;
+            4'd2: ce_data = cf_dout.v;
+            4'd3: ce_data = cf_dout.prim;
+            4'd4: ce_data = cf_dout.inst;
+            4'd5: ce_data = cf_dout.geom;
+            4'd6: begin
                 ce_data = cf_dout.cust;
                 ce_last = (cf_dout.kind == CK_HIT);
             end
-            default: begin
+            4'd7: begin
                 ce_word = RTU_WS_WORD_BITS'(RTU_WS_YLD_SBT);
                 ce_data = 32'(cf_dout.sbt);
-                ce_last = 1'b1;
+                ce_last = ~cf_dout.objv;
+            end
+            default: begin // 8..13: object ray
+                ce_word = RTU_WS_WORD_BITS'(RTU_WS_YLD_OBJ) + RTU_WS_WORD_BITS'(32'(ce_step) - 8);
+                ce_data = cf_dout.obj[3'(32'(ce_step) - 8)];
+                ce_last = (ce_step == 4'd13);
             end
         endcase
     end
@@ -1175,7 +1171,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         if (reset) begin
             ce_step <= '0;
         end else if (ce_wr_gnt) begin
-            ce_step <= ce_last ? 3'd0 : (ce_step + 3'd1);
+            ce_step <= ce_last ? 4'd0 : (ce_step + 4'd1);
         end
     end
 
@@ -1228,6 +1224,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg         exec_yld_set;
     reg         exec_yld_clr;
     reg [RTU_CB_TYPE_BITS-1:0] exec_cbtype;
+    reg         exec_objv;
     reg         mem_issue;
     reg [LB-1:0] mem_fslot;
     reg         box_feed_r, box_raw_r, tri_feed_r, xform_feed_r;
@@ -1252,6 +1249,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         exec_yld_set  = 1'b0;
         exec_yld_clr  = 1'b0;
         exec_cbtype   = '0;
+        exec_objv     = 1'b0;
         mem_issue     = 1'b0;
         mem_fslot     = '0;
         box_feed_r    = 1'b0;
@@ -1481,12 +1479,17 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 cf_din_r.kind = CK_YLDP;
                 cf_din_r.t    = coll_t0_q;
                 cf_din_r.prim = word_x.prim_base;
+                cf_din_r.inst = word_x.in_blas ? word_x.inst_id   : 32'd0;
+                cf_din_r.cust = word_x.in_blas ? word_x.inst_cust : 32'd0;
                 cf_din_r.geom = word_x.geom_r;
                 cf_din_r.sbt  = word_x.proc_sbt;
+                cf_din_r.objv = word_x.in_blas;
+                cf_din_r.obj  = {word_x.obj_d, word_x.obj_o};
                 if (!cf_full) begin
                     cf_push_r     = 1'b1;
                     exec_yld_set  = 1'b1;
                     exec_cbtype   = RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_PROC);
+                    exec_objv     = word_x.in_blas;
                     word_n.yld_t  = coll_t0_q;
                     word_n.yld_ki = cand_ki;
                     word_n.yld_ko = word_x.cur_off;
@@ -1587,12 +1590,15 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 cf_din_r.cust = word_x.in_blas ? word_x.inst_cust : 32'd0;
                 cf_din_r.geom = word_x.geom_r;
                 cf_din_r.sbt  = cls_sbt;
+                cf_din_r.objv = word_x.in_blas;
+                cf_din_r.obj  = {word_x.obj_d, word_x.obj_o};
                 if (cf_full) begin
                     wake_self = 1'b1;
                 end else begin
                     cf_push_r    = 1'b1;
                     exec_yld_set = 1'b1;
                     exec_cbtype  = cls_cbtype;
+                    exec_objv    = word_x.in_blas;
                     word_n.yld_t  = trit_q;
                     word_n.yld_ki = cand_ki;
                     word_n.yld_ko = word_x.cur_off;
@@ -1848,6 +1854,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             mask_q      <= '0;
             hit_q       <= '0;
             yld_q       <= '0;
+            objv_q      <= '0;
             attr_q      <= '0;
             running     <= '0;
             finalised   <= '0;
@@ -1898,6 +1905,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 if (exec_yld_set) begin
                     yld_q[sel_q]    <= 1'b1;
                     cbtype_q[sel_q] <= exec_cbtype;
+                    objv_q[sel_q]   <= exec_objv;
                 end
                 if (exec_yld_clr) begin
                     yld_q[sel_q] <= 1'b0;
@@ -1954,10 +1962,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         if (bw_copy_mask[k]) begin
                             yld_q[32'(bw_slot)*NUM_LANES + k]    <= 1'b1;
                             cbtype_q[32'(bw_slot)*NUM_LANES + k] <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_CHS);
+                            objv_q[32'(bw_slot)*NUM_LANES + k]   <= 1'b0;
                         end
                         if (bw_miss_mask[k]) begin
                             yld_q[32'(bw_slot)*NUM_LANES + k]    <= 1'b1;
                             cbtype_q[32'(bw_slot)*NUM_LANES + k] <= RTU_CB_TYPE_BITS'(`VX_RT_CB_TYPE_MISS);
+                            objv_q[32'(bw_slot)*NUM_LANES + k]   <= 1'b0;
                         end
                     end
                     finalised[bw_slot] <= 1'b1;
@@ -2159,6 +2169,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     assign hit_bits = hit_q;
     assign yld_bits = yld_q;
     assign cb_types = cbtype_q;
+    assign obj_vld  = objv_q;
     assign attr_vld = attr_q;
 
     `UNUSED_VAR ({f_aligned, s1_fresh, ray_q, ins_le, ins_here, ins_shift})
