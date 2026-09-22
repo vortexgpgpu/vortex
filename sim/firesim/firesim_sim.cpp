@@ -365,12 +365,12 @@ public:
     g_channel = nullptr;
   }
 
-  int init(const char *bitstream) {
+  int init(const std::vector<std::string> &plusargs) {
     g_channel = &channel_;
 
     argv_storage_.emplace_back("firesim");
-    if (bitstream != nullptr && *bitstream != '\0') {
-      argv_storage_.emplace_back(std::string("+binary_file=") + bitstream);
+    for (const auto &arg : plusargs) {
+      argv_storage_.push_back(arg);
     }
     for (auto &s : argv_storage_) {
       argv_.push_back(const_cast<char *>(s.c_str()));
@@ -562,7 +562,9 @@ void firesim_sim::report_core_counters() {
 
 firesim_sim::~firesim_sim() { delete impl_; }
 
-int firesim_sim::init(const char *bitstream) { return impl_->init(bitstream); }
+int firesim_sim::init(const std::vector<std::string> &plusargs) {
+  return impl_->init(plusargs);
+}
 
 int firesim_sim::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->submit(label("dcr_write addr=0x%x data=0x%x", addr, value), [addr, value] {

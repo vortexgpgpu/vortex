@@ -58,6 +58,7 @@
 #include <stdio.h>
 #include <string>
 #include <util.h>
+#include <v80_pcie.h>
 
 using namespace vortex;
 
@@ -196,46 +197,13 @@ public:
   #endif
   }
 
-  // Auto-discover the card the way XRT enumerates by index: scan sysfs for
-  // the SLASH control function (10ee:50c1) and derive its BDF. Makes
-  // VRT_DEVICE_BDF optional -- the hardcoded default below is only the last
-  // resort when no card is on the bus (e.g. a sim run with no env set).
-  static std::string discover_bdf() {
-    DIR* d = opendir("/sys/bus/pci/devices");
-    if (d == nullptr) {
-      return "";
-    }
-    std::string found;
-    while (struct dirent* e = readdir(d)) {
-      const std::string name = e->d_name;              // "0000:01:00.1"
-      if (name.size() < 12 || name[0] == '.') {
-        continue;
-      }
-      auto read_hex = [&](const char* leaf) -> unsigned {
-        std::ifstream f("/sys/bus/pci/devices/" + name + "/" + leaf);
-        unsigned v = 0;
-        f >> std::hex >> v;
-        return v;
-      };
-      if (read_hex("vendor") == 0x10ee && read_hex("device") == 0x50c1) {
-        found = name.substr(0, name.rfind('.'));       // drop the function
-        if (found.rfind("0000:", 0) == 0) {
-          found = found.substr(5);                     // "01:00" form
-        }
-        break;
-      }
-    }
-    closedir(d);
-    return found;
-  }
-
   int init() {
     // An empty value is treated as unset: the test harness exports these
     // unconditionally, so they arrive empty rather than absent.
     const char* bdf = getenv("VRT_DEVICE_BDF");
     std::string bdf_storage;
     if (bdf == nullptr || bdf[0] == '\0') {
-      bdf_storage = discover_bdf();
+      bdf_storage = discover_v80_bdf();
       if (!bdf_storage.empty()) {
         fprintf(stderr, "[VXDRV] auto-discovered V80 at %s (set "
                 "VRT_DEVICE_BDF to override)\n", bdf_storage.c_str());
