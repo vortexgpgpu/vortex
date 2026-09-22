@@ -236,10 +236,14 @@ $(XILINX_IP_STAMP): $(SCRIPT_DIR)/xilinx_ip_gen.tcl
 	@test -n "$$(find $(XILINX_IP_DIR) -name '*.xci')" || { echo "ERROR: no .xci generated under $(XILINX_IP_DIR)"; exit 1; }
 	touch $@
 
-# The environment the FireSim Vitis kernel packaging reads (package_kernel.tcl).
+# The environment the FireSim Vitis kernel build reads: the sources and vendor
+# cores package_kernel.tcl attaches, and the pre-opt hook the link runs to
+# resolve the async-BRAM placeholders (it locates hw/scripts through TOOL_DIR).
 kernel-env:
 	@echo 'export VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST)'
 	@echo 'export VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR)'
+	@echo 'export VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl'
+	@echo 'export TOOL_DIR=$(SCRIPT_DIR)'
 
 check-firesim:
 	@test -d $(FIRESIM_PATH)/sim || { \
