@@ -255,6 +255,32 @@ overrides as the other synthesis flows do; extensions pull in their sources
 through `hw/syn/extensions.mk`, and a changed `CONFIGS` invalidates the
 flattened tree.
 
+### 4.0 Cards and platforms
+
+| card | FireSim platform | image | run with |
+|---|---|---|---|
+| `u55c` | `vitis` (XRT, `v++`) | `platforms/vitis/cl_<target>/bitstream/build_dir.<xsa>/firesim.xclbin` | `XCLBIN_PATH` |
+| `v80` | `aved` (VRT, `slashkit`) | `platforms/aved/cl_<target>/bitstream/build_dir.hw/firesim.vbin` | `VRT_VBIN_PATH`, `VRT_DEVICE_BDF` (discovered when unset) |
+
+A FireSim run names its image and card with the variables of the card's native
+driver. On the V80 the Xilinx tools are the ones `slashkit` links with
+(`/opt/xilinx/2025.2`), so the floating-point cores must be generated in that
+environment too; and the static shell must be in flash, as for the native
+`aved` backend.
+
+The `aved` platform (`AvedShim`) differs from `vitis` in three ways that matter
+to anyone reading its traces:
+
+- **No MMCM.** The shell programs the kernel clock to the frequency the link
+  records (`FREQUENCY`), and the simulator runs on it directly.
+- **Control registers at a 16-byte stride.** The compute shell resolves AXI-Lite
+  in 16-byte blocks, and FireSim's registers have read side effects (LoadMem
+  `R_DATA` dequeues), so the shim gives each register its own block and answers
+  the padding words itself. The driver scales addresses by 4.
+- **A transport gate at open.** The driver reads SimulationMaster's fingerprint,
+  writes and reads back a probe, and checks the memory port is bound to the HBM
+  VNOC at the elaborated base, before any widget touches the device.
+
 ### 4.1 Two source lists, and why
 
 Verilator resolves Vortex by **library search**, so `sources` names only the

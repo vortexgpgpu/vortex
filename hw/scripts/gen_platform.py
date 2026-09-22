@@ -32,12 +32,17 @@ import argparse
 import fnmatch
 import os
 import sys
-import tomllib
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-PLATFORM_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "syn", "xilinx", "platforms"))
+_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+PLATFORM_DIR = os.path.join(_ROOT, "hw", "syn", "xilinx", "platforms")
+
+# The configuration generator's TOML reader: these builds run under whatever
+# python3 the tool environment provides (FireSim's conda env is 3.10, before
+# tomllib), and descriptors stay within the subset it reads.
+sys.path.insert(0, os.path.join(_ROOT, "ci"))
+from gen_config import TinyTOML  # noqa: E402
 
 FLOWS = ("xrt", "aved")
 
@@ -98,8 +103,8 @@ def _require(d: dict, key: str, path: str, ctx: str):
 
 
 def load_card(path: str) -> Card:
-    with open(path, "rb") as f:
-        t = tomllib.load(f)
+    with open(path, "r", encoding="utf-8") as f:
+        t = TinyTOML().parse(f.read())
     card = _require(t, "card", path, "card")
     mem = _require(t, "memory", path, "memory")
     host = t.get("host", {})

@@ -15,6 +15,17 @@ CXXFLAGS += -fPIC
 # Add external configuration
 CXXFLAGS += $(CONFIGS)
 
+# The card's FireSim platform, from its descriptor: it decides which variables
+# name the image and the card (those of the card's native driver).
+FIRESIM_CARD ?= u55c
+FIRESIM_PLATFORM := $(shell python3 $(VORTEX_HOME)/hw/scripts/gen_platform.py --card=$(FIRESIM_CARD) --emit=firesim-mk | sed -n 's/^PLATFORM := //p')
+ifeq ($(FIRESIM_PLATFORM),)
+$(error cannot resolve the FireSim platform of card '$(FIRESIM_CARD)')
+endif
+ifeq ($(FIRESIM_PLATFORM), aved)
+CXXFLAGS += -DFIRESIM_PLATFORM_AVED
+endif
+
 LDFLAGS += -shared -pthread
 # Find libfiresim.so siblings at runtime in the same dir libvortex-firesim.so lives in.
 LDFLAGS += -Wl,-rpath,'$$ORIGIN'
@@ -39,7 +50,7 @@ all: $(DESTDIR)/$(PROJECT)
 driver: $(DESTDIR)/libfiresim.so
 
 $(DESTDIR)/libfiresim.so: force
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim lib
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim lib FIRESIM_CARD=$(FIRESIM_CARD)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libfiresim.so $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
