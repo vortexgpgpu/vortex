@@ -1,9 +1,12 @@
-# AFU Shell (XRT / OPAE) — Design
+# AFU Shell (XRT / AVED / OPAE) — Design
 
 **Scope:** the FPGA acceleration-function-unit (AFU) shells that adapt
-Vortex to a host platform — the Xilinx/XRT shell
-([`hw/rtl/afu/xrt/`](../../hw/rtl/afu/xrt/)) and the Intel/OPAE shell
-([`hw/rtl/afu/opae/`](../../hw/rtl/afu/opae/)). This document covers the
+Vortex to a host platform. The shell proper is shared
+([`hw/rtl/afu/common/`](../../hw/rtl/afu/common/)); what differs per platform
+is the kernel top that wraps it — Xilinx/XRT
+([`hw/rtl/afu/xrt/`](../../hw/rtl/afu/xrt/)), AMD/AVED for the Alveo V80
+([`hw/rtl/afu/aved/`](../../hw/rtl/afu/aved/)) — plus the Intel/OPAE shell
+([`hw/rtl/afu/opae/`](../../hw/rtl/afu/opae/)), which is separate. This document covers the
 **shell structure** (platform glue, memory adaptation, control/reset/
 discovery contracts, and the XRT↔OPAE asymmetries). The Command Processor
 integration these shells host is documented in
@@ -17,14 +20,17 @@ DMA-command engine have been removed.
 
 ---
 
-## 1. XRT shell
+## 1. XRT and AVED shells
+
+The two share every file below except the kernel top: `afu/xrt/vortex_afu.v`
+is the Vitis RTL-kernel top and `afu/aved/vortex_afu.v` the SLASH one.
 
 | File | Role |
 |---|---|
 | [`vortex_afu.v`](../../hw/rtl/afu/xrt/vortex_afu.v) | Vitis RTL-kernel top — thin wrapper instantiating `VX_afu_wrap`. |
-| [`vortex_afu.vh`](../../hw/rtl/afu/xrt/vortex_afu.vh) | Defines/macros (`GEN_AXI_MEM`, `GEN_AXI_HOST`, the bit-12 window). |
+| [`vortex_afu.vh`](../../hw/rtl/afu/common/vortex_afu.vh) | Defines/macros (`GEN_AXI_MEM`, `GEN_AXI_HOST`, the bit-12 window). |
 | [`VX_afu_wrap.sv`](../../hw/rtl/afu/common/VX_afu_wrap.sv) | The real shell (~1,200 LOC): AXI-Lite bit-12 demux, `VX_cp_core`, `m_axi_host`, the Vortex instance and the device-memory path shared with the CP. |
-| [`VX_afu_ctrl.sv`](../../hw/rtl/afu/xrt/VX_afu_ctrl.sv) | Slimmed AXI-Lite slave (~322 LOC): `ap_ctrl` stub at 0x00 + a SCOPE serial register pair + SCOPE watchdog. |
+| [`VX_afu_ctrl.sv`](../../hw/rtl/afu/common/VX_afu_ctrl.sv) | Slimmed AXI-Lite slave (~322 LOC): `ap_ctrl` stub at 0x00 + a SCOPE serial register pair + SCOPE watchdog. |
 | [`VX_afu_axil_demux.sv`](../../hw/rtl/afu/common/VX_afu_axil_demux.sv) | AXI-Lite demux splitting the control space on `addr[12]`, one outstanding transaction per direction. |
 | [`VX_afu_axi_drain.sv`](../../hw/rtl/afu/common/VX_afu_axi_drain.sv) | Outstanding-transaction tracker per AXI master; reports when a port owes the interconnect nothing. |
 | [`VX_afu_axi_limit.sv`](../../hw/rtl/afu/common/VX_afu_axi_limit.sv) | Holds an AXI master to one read and one write in flight; applied to port 0 of the multi-port shell. |
@@ -51,7 +57,7 @@ DMA-command engine have been removed.
   **dedicated `m_axi_host` AXI master** for the command ring + host DMA.
   `PLATFORM_MEMORY_OFFSET` is applied per bank, at the port.
 - **Interrupt.** The AFU `interrupt` pin is driven from `cp_interrupt`
-  ([`:335`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L335)).
+  ([`:335`](../../hw/rtl/afu/common/VX_afu_wrap.sv#L335)).
 
 ---
 

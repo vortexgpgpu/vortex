@@ -674,7 +674,8 @@ host-side instead. They become usable once queues get independent rings.
 
 ### 9.1 FPGA backends
 
-- **XRT** ([`hw/rtl/afu/xrt/VX_afu_wrap.sv`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv)) —
+- **XRT and AVED** ([`hw/rtl/afu/common/VX_afu_wrap.sv`](../../hw/rtl/afu/common/VX_afu_wrap.sv),
+  wrapped by `afu/xrt/vortex_afu.v` and `afu/aved/vortex_afu.v`) —
   AXI-Lite is split on bit 12: `0x000–0x0FFF` → a minimal `VX_afu_ctrl`
   ap_ctrl stub + SCOPE; `0x1000–0x1FFF` → the CP regfile. The legacy
   launch FSM, DCR path, and dev-caps were **removed**; CP is the sole

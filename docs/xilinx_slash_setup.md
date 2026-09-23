@@ -97,12 +97,15 @@ Artifacts land in `deb/`.
 
 ```bash
 cd deb
-sudo apt install --no-install-recommends \
-  $(ls -1 *.deb | grep -v '^ami_' | sed 's|^|./|')
+sudo apt install --no-install-recommends $(ls -1 *.deb | sed 's|^|./|')
 ```
 
-`ami` is built but deliberately left out: nothing in the `slash` dependency
-chain needs it, and it is the component that heartbeats the AMC over GCQ.
+**Install `ami` too.** Nothing in the `slash` dependency chain pulls it in, but
+the card is not fully usable without it: `ami.ko` binds PF0, and the AMC behind
+PF0 is how the static shell is written to flash (§5) and how the board is
+recovered. Skipping it leaves PF0 unbound at every boot and the board reporting
+`NOT READY`. Its package registers the module with DKMS, so — like `slash` — it
+rebuilds on kernel updates and loads automatically.
 
 If a previous **source** install exists, remove its leftovers first or they
 win: files under `/etc/systemd/system/` override the packaged units, and
@@ -146,8 +149,18 @@ systemctl is-active vrtd
 v80-smi list
 ```
 
-`v80-smi list` reports **PF0 NOT READY** when `ami` is absent. That is a
-readiness *report*, not a requirement: PF1, PF2 and VRTD are what matter.
+All three functions should bind: PF0 to `ami`, PF1 to `slash_qdma`, PF2 to
+`slash_ctl`.
+
+```bash
+lsmod | grep -E '^ami|^slash'
+for f in 0 1 2; do basename "$(readlink /sys/bus/pci/devices/0000:01:00.$f/driver)"; done
+```
+
+`v80-smi list` reporting **PF0 NOT READY** means `ami` is missing. Running
+kernels does work in that state — PF1, PF2 and VRTD carry the data and control
+paths — but flashing the shell and recovering the board do not, so treat it as
+an incomplete install rather than a cosmetic warning.
 
 ---
 
@@ -289,6 +302,26 @@ like XRT's `load_xclbin()`; there is no never-program switch.
 from the static shell in flash. On a board that has never had it programmed,
 PF0-only is expected — complete §5 first. `slash.ko` binds *only* PF1/PF2, so
 until they appear the driver has nothing to attach to.
+
+**No V80 on the bus at all, and no root port.** `lspci -d 10ee:` prints
+nothing and `ls /sys/bus/pci/devices/0000:00:01.1` does not exist. AMD firmware
+only instantiates a root port whose link is up at POST, so a card that was
+wedged — mid-program, or by a host crash — disappears entirely and the bus
+numbers shift down. **No rescan can bring it back**: there is no parent bridge
+to scan behind, and `v80-smi --jtag` cannot help either, because it resolves the
+device through VRTD, which only knows cards that are on PCIe.
+
+Recover over JTAG, which needs no root and reads no flash:
+
+```bash
+bash hw/syn/xilinx/aved/tools/jtag_load_shell.sh   # loads the _nofpt PDI
+sudo reboot                                        # POST now sees a trained link
+```
+
+Check `0000:00:01.1` before attempting anything rescan-based. Unload `slash`
+and `ami` first if they are loaded — a link transition under a live driver is
+what turns this into a host reset. A card whose **both** flash partitions hold
+a good shell (§5) boots on its own and does not need this.
 
 **BARs unassigned / `enable=0` / config space reads `0xff`.** The Versal can
 finish booting from OSPI *after* the host has enumerated PCIe, leaving the
