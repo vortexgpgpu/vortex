@@ -280,6 +280,39 @@ to anyone reading its traces:
 - **A transport gate at open.** The driver reads SimulationMaster's fingerprint,
   writes and reads back a probe, and checks the memory port is bound to the HBM
   VNOC at the elaborated base, before any widget touches the device.
+- **Clock gates built from fabric.** FireSim gates the target clock with a
+  `BUFGCE` per clock domain, and the compute shell's reconfigurable partition
+  contains no `BUFGCE` site — only `BUFG_FABRIC`. Implementation fails at
+  `opt_design` with `DRC HDPR-18` ("requires resource type 'BUFGCE_HDIO' which
+  is not ranged by 'pblock_slash'"), and the partition is fixed by the static
+  shell, so no link option can widen it. `FabricClockGates` (set by
+  `AvedConfig`) makes Golden Gate emit `FireSimFabricClockGate` instead: the
+  enable passes through a latch that is transparent only while the clock is low
+  — so it can change the output only while the clock is low — and the gated
+  clock is put back on a global net by a `BUFG_FABRIC`. It synthesizes to
+  `LDCE` + `LUT2` + `BUFG_FABRIC`. Simulation keeps the `BUFGCE` model, and
+  other platforms keep `BUFGCE` itself.
+
+### 4.0.1 What the platform build must do for Vortex
+
+Both cards share two requirements that FireSim's own targets do not have, so
+they are passed in from `hw/syn/firesim`:
+
+- **`VORTEX_PRE_OPT_TCL` — the async-BRAM patch.** `VX_async_ram_patch` leaves
+  `VX_placeholder` black boxes wherever an asynchronous-read RAM has to live in
+  block RAM, and a post-synthesis script fills them from the netlist. Without it
+  `opt_design` aborts with `DRC INBB-3`, but only once a configuration is large
+  enough to push those RAMs out of LUTRAM — so small builds pass and large ones
+  do not. `vitis` attaches the hook with `--xp vivado_prop:...OPT_DESIGN.TCL.PRE`;
+  `aved` attaches it from a pre-synthesis hook, the only place slashkit lets a
+  step property be set.
+- **`VORTEX_XILINX_IP_DIR` — the vendor cores.** The FPU and RTU instantiate
+  Xilinx floating-point IP (`xil_fma`, `xil_fdiv`, …), which must be generated
+  for the card's part and attached to the packaged kernel's file groups; read
+  into the packaging project they are dropped as unreferenced (`IP_Flow
+  19-3833`). They are copied into the kernel, each into a fresh directory —
+  Tcl's `file copy` onto an existing directory nests the source inside it, which
+  silently leaves a repackaged kernel pointing at the previous run's cores.
 
 ### 4.1 Two source lists, and why
 
