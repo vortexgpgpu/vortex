@@ -23,6 +23,8 @@ obj/
 *.pc
 .depend
 *.stamp
+__pycache__/
+*.pyc
 ramulator.stats.log
 trace/
 *.sif
@@ -43,6 +45,8 @@ trace/
 /tests/regression/dtcu_basic/dtcu_basic
 /tests/regression/dtcu_compare/dtcu_compare
 /tests/regression/cgo27_motivation/cgo27_motivation
+/tests/regression/llama/llama
+/tests/regression/llama_dtcu/llama_dtcu
 /tests/regression/sgemm_tcu/sgemm_tcu
 
 # environment setup / tooling byproducts (not part of v3.0 tree)
