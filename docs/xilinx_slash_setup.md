@@ -303,6 +303,49 @@ from the static shell in flash. On a board that has never had it programmed,
 PF0-only is expected — complete §5 first. `slash.ko` binds *only* PF1/PF2, so
 until they appear the driver has nothing to attach to.
 
+**The whole host resets when the card is touched.** The machine reboots with
+no panic and no log; the next boot prints a fatal ACPI **BERT** record naming a
+processor cache error (`Check Information 0x602001f`), often on a different
+core each time. It is not a CPU fault.
+
+```
+x86/amd: Previous system reset reason [0x80000800]: a software sync flood event occurred
+GHES: APEI firmware first mode is enabled by APEI bit
+```
+
+The chain is: a driver reads the card's BAR while the link is down -> that read
+is an unsupported request or completion timeout, an uncorrectable PCIe error ->
+firmware owns error handling (APEI firmware-first) and answers with a **sync
+flood**, resetting the host before Linux can log anything. Firmware then
+records it in the only vocabulary BERT gives it, which is why it masquerades as
+a CPU defect.
+
+The reader is usually AMI's logging thread: `dump_amc_log()` reads every 500 ms
+and, before the fix, did so unconditionally -- so it covered every bus reset,
+every reconfiguration and every wedged card. Symptoms line up with a card event
+0-80 s earlier, and the giveaway in the log is:
+
+```
+ami 0000:01:00.0: ERROR : Logging thread error - invalid PCI data read!
+eqdma_cpm5_hw_error_process: Global Err Reg(0x248) = 0xffffffff
+```
+
+Three things fix it, and all three are worth doing:
+
+1. **Patched drivers.** `dump_amc_log()` must return when the service is halted
+   or `pci_device_is_present()` is false, and `ami` must implement
+   `reset_prepare`/`reset_done` so a reset quiesces its threads. The reset path
+   must use `pci_reset_bus()`, not a bare `pci_bridge_secondary_bus_reset()`,
+   or those callbacks are never delivered.
+2. **BIOS: `NBIO SyncFlood Generation` = Disabled** (Advanced -> AMD CBS ->
+   NBIO Common Options), with `Enable AER Cap` and EDPC/DPC enabled. This stops
+   *any* unanswered access from resetting the host, and is the only way to see
+   the real PCIe error -- with firmware-first the evidence is destroyed by the
+   reset.
+3. **Both flash partitions written (§5).** `Shell: unknown` makes the daemon
+   reset the board on every image load: one boot logged 115 of them. Each is a
+   window for the failure above.
+
 **No V80 on the bus at all, and no root port.** `lspci -d 10ee:` prints
 nothing and `ls /sys/bus/pci/devices/0000:00:01.1` does not exist. AMD firmware
 only instantiates a root port whose link is up at POST, so a card that was
