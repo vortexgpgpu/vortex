@@ -53,10 +53,14 @@ QUINTUPLET := $(PLATFORM)-midasexamples-VortexTarget-VortexConfig-$(PLATFORM_CON
 VIVADO_SRCS_DIR := $(BUILD_DIR)/vivado_srcs
 VIVADO_SRCS_LIST := $(BUILD_DIR)/vivado_srcs.f
 
+# The same tree flattened for simulation instead. gen_sources.sh writes a
+# directory, not a stamp, so the rule records one to hang the dependency on.
 SRCS_DIR := $(BUILD_DIR)/vortex_srcs
 SRCS_LIST := $(BUILD_DIR)/vortex_srcs.f
+SIM_SRCS_STAMP := $(SRCS_DIR)/.sources.stamp
 
-.PHONY: stage sources vivado-sources xilinx-ips kernel-env bitstream check-firesim clean-staged
+.PHONY: stage sources sim-sources vivado-sources xilinx-ips kernel-env bitstream \
+        metasim run-metasim check-firesim clean-staged
 
 stage: check-firesim
 	@mkdir -p $(TARGET_DEST) $(CC_DEST)
@@ -159,6 +163,23 @@ CONFIG_STAMP := $(BUILD_DIR)/gen_cflags.stamp
 $(shell mkdir -p $(BUILD_DIR) && echo '$(GEN_CFLAGS)' > $(CONFIG_STAMP).tmp && \
         (cmp -s $(CONFIG_STAMP).tmp $(CONFIG_STAMP) && rm -f $(CONFIG_STAMP).tmp || mv -f $(CONFIG_STAMP).tmp $(CONFIG_STAMP)))
 
+# The metasimulator needs the opposite of both synthesis defines, so it gets its
+# own flattening rather than reusing the Vivado one.
+#
+# -DVIVADO selects the Xilinx floating_point cores (xil_fma, xil_fdiv) over the
+# soft FPU. Those are generated .xci IP with no Verilog to elaborate, so a
+# metasim built from Vivado-flattened sources fails on the missing modules.
+#
+# -DSYNTHESIS gates VX_dp_ram/VX_sp_ram onto their BRAM-inference branch; the
+# behavioural models are what a simulator wants, and they carry the read/write
+# collision semantics the inference branch leaves to the tool.
+SIM_DEFINES := -DNDEBUG
+SIM_GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(SIM_DEFINES) $(RTL_INCLUDE)
+
+SIM_CONFIG_STAMP := $(BUILD_DIR)/sim_cflags.stamp
+$(shell mkdir -p $(BUILD_DIR) && echo '$(SIM_GEN_CFLAGS)' > $(SIM_CONFIG_STAMP).tmp && \
+        (cmp -s $(SIM_CONFIG_STAMP).tmp $(SIM_CONFIG_STAMP) && rm -f $(SIM_CONFIG_STAMP).tmp || mv -f $(SIM_CONFIG_STAMP).tmp $(SIM_CONFIG_STAMP)))
+
 # Only the packages and the wrapper are named; every other Vortex module is
 # resolved by library search over RTL_INCLUDE. Handing the whole tree over as a
 # flat list instead makes Verilator stop treating the macro-computed width
@@ -173,10 +194,10 @@ EXT_PKG_ORDER := VX_tcu_pkg.sv VX_dxa_pkg.sv VX_rtu_pkg.sv VX_om_pkg.sv \
 EXT_PKG_NAMES := $(filter $(notdir $(RTL_PKGS)),$(EXT_PKG_ORDER))
 EXPLICIT_NAMES := VX_gpu_pkg.sv VX_fpu_pkg.sv VX_tlb_pkg.sv VX_trace_pkg.sv \
                   $(EXT_PKG_NAMES) VX_firesim_wrap.sv
-EXPLICIT_SRCS := $(addprefix $(VIVADO_SRCS_DIR)/,$(EXPLICIT_NAMES))
+EXPLICIT_SRCS := $(addprefix $(SRCS_DIR)/,$(EXPLICIT_NAMES))
 
 sources: $(SRCS_LIST)
-$(SRCS_LIST): $(VIVADO_SRCS_LIST)
+$(SRCS_LIST): $(SIM_SRCS_STAMP)
 	@mkdir -p $(BUILD_DIR)
 	@printf '%s\n' $(EXPLICIT_SRCS) > $@
 	@echo "wrote $@ ($(words $(EXPLICIT_SRCS)) explicit sources; rest via library search)"
@@ -229,6 +250,37 @@ $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 	fi
 	@echo "wrote $(VIVADO_SRCS_LIST) ($$(grep -cv '^+' $(VIVADO_SRCS_LIST)) files)"
 
+# The same flattening under the simulation defines. Verilator finds the modules
+# by library search over this directory, so only the tree has to be complete --
+# the file list the search is seeded with is $(SRCS_LIST) above.
+SIM_RTL_SRCS := $(filter-out $(CONFIG_STAMP),$(RTL_SRCS)) $(SIM_CONFIG_STAMP)
+
+sim-sources: $(SIM_SRCS_STAMP)
+$(SIM_SRCS_STAMP): $(SIM_RTL_SRCS)
+	@mkdir -p $(BUILD_DIR)
+	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(SIM_GEN_CFLAGS) \
+		-TVX_firesim_wrap -Cvortex_srcs -Ovortex_srcs_all.f
+	@# The same zero-memory-port check the Vivado flattening makes: here it would
+	@# surface as a zero-width AXI port rather than an hours-later elaboration
+	@# failure, but it is the same defect and cheaper to catch at the source.
+	@if grep -qE 'localparam +VX_MEM_PORTS *= *0 *;' $(SRCS_DIR)/VX_gpu_pkg.sv; then \
+		echo "ERROR: generated sources resolve VX_MEM_PORTS to 0 (no memory interface)"; \
+		echo "       pass only XLEN and the TCU/FPU selectors; VX_config.vh computes the rest"; \
+		exit 1; \
+	fi
+	@# The vendor FP branch is a generate-if on a localparam, not an ifdef, so the
+	@# instantiation survives preprocessing either way. What matters is that the
+	@# localparam resolves to 0 so the branch is dead -- Verilator then prunes it,
+	@# as the rtlsim flow has always relied on. Checking for the instantiation text
+	@# instead reports every build as broken.
+	@if grep -qE 'localparam +VENDOR_OK *= *1 *;' $(SRCS_DIR)/VX_fma_unit.sv; then \
+		echo "ERROR: simulation sources select the Xilinx FP IP (VENDOR_OK=1)"; \
+		echo "       SIM_DEFINES must not carry -DVIVADO or -DQUARTUS"; \
+		exit 1; \
+	fi
+	touch $@
+	@echo "wrote $(SRCS_DIR) ($$(ls $(SRCS_DIR) | wc -l) files)"
+
 # Vendor floating-point cores. On Vivado the FPU and RTU select Xilinx's
 # floating_point IP (xil_fma, xil_fdiv, ...) instead of the soft core, and the
 # flattened sources only instantiate them, so the kernel packaging must be handed
@@ -256,7 +308,10 @@ kernel-env:
 
 # One command from sources to the card's image. Expects the FireSim environment
 # (its env.sh) and the Xilinx tools for the card's platform in the environment.
-bitstream: vivado-sources sources xilinx-ips stage
+# $(SRCS_LIST) is deliberately not a prerequisite: the recipe hands synthesis the
+# Vivado-flattened list, and pulling the simulation one in would flatten the tree
+# a second time under the opposite defines for nothing.
+bitstream: vivado-sources xilinx-ips stage
 	$(MAKE) -C $(FIRESIM_PATH)/sim replace-rtl $(FIRESIM_TARGET_ARGS)
 	VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST) VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR) \
 	VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl TOOL_DIR=$(SCRIPT_DIR) \
@@ -265,6 +320,36 @@ bitstream: vivado-sources sources xilinx-ips stage
 
 FREQUENCY ?= 60.0
 STRATEGY ?= TIMING
+
+# The metasimulator: the FireSim-transformed design in Verilator, driven through
+# the DPI emul simif. No FPGA and no Vivado, so it runs the same target the card
+# runs without needing either -- which is what makes it the step before silicon.
+#
+# Vortex is supplied here rather than inlined into the generated wrapper (see
+# VortexTarget.scala): the packages and the wrapper are named and everything else
+# resolves by library search over the flattened tree. Naming the whole tree
+# instead makes Verilator stop folding the macro-computed widths into constants.
+#
+# The list is collapsed onto one line because it reaches Verilator through a
+# shell, which would otherwise split it on the newlines.
+# hw/syn/common.mk exports VERILATOR as a bare path to Vortex's own toolchain,
+# and FireSim declares `VERILATOR ?= verilator --main --timing --cc --exe`. A
+# `?=` yields to the environment, so the inherited value silently strips every
+# flag and Verilator exits asking for --cc. Drop it from the environment instead
+# of restating FireSim's flags here, which would rot against its Makefrag. The
+# metasim then builds with the Verilator on PATH, which FireSim's env.sh pins.
+metasim: sources stage
+	env -u VERILATOR $(MAKE) -C $(FIRESIM_PATH)/sim verilator $(FIRESIM_TARGET_ARGS) \
+		EXTRA_VERILATOR_FLAGS="-Wno-fatal -y $(SRCS_DIR) +libext+.sv+.v $$(tr '\n' ' ' < $(SRCS_LIST))"
+
+# Runs it. ARGS reaches the harness; the metasim needs no image, since the design
+# is the simulator.
+#
+# Deliberately not dependent on `metasim`: `stage` copies the harness sources
+# unconditionally, so every invocation would bump their mtimes and relink the
+# 460 MB model before running it. Build with `make metasim` first.
+run-metasim:
+	env -u VERILATOR $(MAKE) -C $(FIRESIM_PATH)/sim run-verilator $(FIRESIM_TARGET_ARGS) ARGS="$(ARGS)"
 
 # The checkout must contain the pinned fork commit. Being ahead of it is normal
 # while developing the fork; being behind it, or on unrelated history, builds
