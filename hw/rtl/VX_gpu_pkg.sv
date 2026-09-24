@@ -1176,6 +1176,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [PER_ISSUE_WARPS-1:0]         eop_wis; // one-hot wis, set on eop
         logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`VX_CFG_SIMD_WIDTH-1:0]             tmask;
