@@ -26,6 +26,14 @@ ifeq ($(FIRESIM_PLATFORM), aved)
 CXXFLAGS += -DFIRESIM_PLATFORM_AVED
 endif
 
+# TARGET=avedsim runs the metasimulator in-process in place of the card: the
+# same FireSim-transformed target in Verilator, reached through the emulated
+# host interface, with no image and no VRT. It is the aved counterpart of the
+# native driver's avedsim.
+ifeq ($(TARGET), avedsim)
+CXXFLAGS += -DFIRESIM_EMUL
+endif
+
 LDFLAGS += -shared -pthread
 # Find libfiresim.so siblings at runtime in the same dir libvortex-firesim.so lives in.
 LDFLAGS += -Wl,-rpath,'$$ORIGIN'
@@ -50,14 +58,23 @@ all: $(DESTDIR)/$(PROJECT)
 driver: $(DESTDIR)/libfiresim.so
 
 $(DESTDIR)/libfiresim.so: force
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim lib FIRESIM_CARD=$(FIRESIM_CARD)
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim lib FIRESIM_CARD=$(FIRESIM_CARD) TARGET=$(TARGET)
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libfiresim.so $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
 
-$(CONFIG_FILE):
-	echo "$(CXXFLAGS)" > $@.tmp
-	@if ! cmp -s $@.tmp $@; then mv $@.tmp $@; else rm $@.tmp; fi
+# Forced, as in every other runtime: without a prerequisite the stamp is written
+# once and never compared again, so a changed CONFIGS keeps linking the runtime
+# built for the previous one.
+$(CONFIG_FILE): force
+	@mkdir -p $(@D)
+	@TMP=$@.tmp.$$$$ ; \
+	 printf '%s\n' "$(CXXFLAGS)" > $$TMP ; \
+	 if ! cmp -s $$TMP $@ 2>/dev/null; then \
+	   mv -f $$TMP $@ ; \
+	 else \
+	   rm -f $$TMP ; \
+	 fi
 
 clean-driver:
 	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim clean

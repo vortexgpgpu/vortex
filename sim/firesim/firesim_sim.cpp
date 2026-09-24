@@ -40,6 +40,12 @@
 // Provided by the simulator's entry translation unit.
 extern int entry(int argc, char **argv);
 
+#ifdef FIRESIM_EMUL
+// Provided by firesim_emul_main.cpp: runs the Verilated metasimulator, whose
+// initial block reaches entry() through the DPI.
+extern int firesim_emul_run(int argc, char **argv);
+#endif
+
 namespace {
 
 bool trace_enabled() {
@@ -376,8 +382,16 @@ public:
       argv_.push_back(const_cast<char *>(s.c_str()));
     }
 
-    thread_ = std::thread(
-        [this] { entry(static_cast<int>(argv_.size()), argv_.data()); });
+    // On a card this thread is the driver. Under the metasimulator it is the
+    // simulator's own loop instead: entry() is then reached from a Verilog
+    // initial block, and the driver runs on the thread simif_emul spawns.
+    thread_ = std::thread([this] {
+#ifdef FIRESIM_EMUL
+      firesim_emul_run(static_cast<int>(argv_.size()), argv_.data());
+#else
+      entry(static_cast<int>(argv_.size()), argv_.data());
+#endif
+    });
 
     FSIM_TRACE("waiting for the simulator thread to come up");
     {
