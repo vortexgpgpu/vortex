@@ -194,6 +194,15 @@
 // (max words landing on one bank) cycles -- conflict-free = 1. Must be a power of two.
 // Sweep parameter (RTL/FPGA pins the real value); banking matters only when the
 // operand read becomes the bound (wider array / fewer banks).
+// Cross-descriptor lookahead: while the LAST tile of a descriptor computes, fetch the next
+// queued descriptor and its K0 (operands + C preload) into the free operand/accumulator
+// buffers, and hand the finished descriptor's D store off to the background so the next
+// GEMM starts as soon as its K0 lands. Without it every descriptor boundary exposes the
+// descriptor read, the whole K0 fetch and the final store drain (mode 16 at s2048: 29 % of
+// the engine timeline, result/260922_final.md §10).
+#ifndef DTCU_DESC_LOOKAHEAD
+#define DTCU_DESC_LOOKAHEAD 0
+#endif
 #ifndef DTCU_SMEM_BANKS
 #define DTCU_SMEM_BANKS 2
 #endif

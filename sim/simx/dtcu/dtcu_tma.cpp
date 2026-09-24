@@ -326,50 +326,53 @@ bool DtcuTma::issue_desc_req(uint64_t desc_addr) {
   return true;
 }
 
-void DtcuTma::read_desc(uint64_t desc_addr) {
+void DtcuTma::read_desc_into(uint64_t desc_addr, Dtcu::Desc* dst) {
   // Assemble the descriptor from the fetched line payload (no ram_ backdoor).
-  read_from_lines_(desc_data_, desc_addr, &dtcu_.desc_, sizeof(Dtcu::Desc));
+  read_from_lines_(desc_data_, desc_addr, dst, sizeof(Dtcu::Desc));
   desc_data_.clear();
 }
 
 // Helper functions to calculate current tile's base addresses for A/B/C/D based on
 // the current tile indices and descriptor (owned by the compute core).
+void DtcuTma::read_desc(uint64_t desc_addr) {
+  read_desc_into(desc_addr, &dtcu_.desc_);
+}
 uint64_t DtcuTma::calculate_base_A_(uint32_t k_idx) const {
-  uint32_t in_sz = elem_size_bytes(dtcu_.desc_.fmt_s);
+  uint32_t in_sz = elem_size_bytes(fetch_desc_.fmt_s);
   uint64_t row = uint64_t(tma_m_) * dtcu_.tile_m_; // armed fetch's tile coordinate
-  uint64_t col = uint64_t(k_idx) * dtcu_.tile_k_;
-  return dtcu_.desc_.ptrA + (row * dtcu_.desc_.ldmA + col) * in_sz;
+  uint64_t col = uint64_t(k_idx) * fetch_tile_k_;
+  return fetch_desc_.ptrA + (row * fetch_desc_.ldmA + col) * in_sz;
 }
 
 uint64_t DtcuTma::calculate_base_B_(uint32_t k_idx) const {
-  uint32_t in_sz = elem_size_bytes(dtcu_.desc_.fmt_s);
-  uint64_t row = uint64_t(k_idx) * dtcu_.tile_k_;
-  uint64_t col = uint64_t(tma_n_) * dtcu_.tile_n_;
-  return dtcu_.desc_.ptrB + (row + col * dtcu_.desc_.ldmB) * in_sz;
+  uint32_t in_sz = elem_size_bytes(fetch_desc_.fmt_s);
+  uint64_t row = uint64_t(k_idx) * fetch_tile_k_;
+  uint64_t col = uint64_t(tma_n_) * fetch_tile_n_;
+  return fetch_desc_.ptrB + (row + col * fetch_desc_.ldmB) * in_sz;
 }
 
 uint64_t DtcuTma::calculate_base_C_() const {
-  uint32_t out_sz = elem_size_bytes(dtcu_.desc_.fmt_d);
+  uint32_t out_sz = elem_size_bytes(fetch_desc_.fmt_d);
   uint64_t row = uint64_t(tma_m_) * dtcu_.tile_m_;
-  uint64_t col = uint64_t(tma_n_) * dtcu_.tile_n_;
-  return dtcu_.desc_.ptrC + (row * dtcu_.desc_.ldmC + col) * out_sz;
+  uint64_t col = uint64_t(tma_n_) * fetch_tile_n_;
+  return fetch_desc_.ptrC + (row * fetch_desc_.ldmC + col) * out_sz;
 }
 
 // D base for the FETCH coordinates (tma_m_/tma_n_), used by the pre-write touch.
 // calculate_base_D_() below is keyed to the STORE coordinates instead, which lag the
 // fetch by up to one output tile.
 uint64_t DtcuTma::calculate_base_D_out_() const {
-  uint32_t out_sz = elem_size_bytes(dtcu_.desc_.fmt_d);
+  uint32_t out_sz = elem_size_bytes(fetch_desc_.fmt_d);
   uint64_t row = uint64_t(tma_m_) * dtcu_.tile_m_;
-  uint64_t col = uint64_t(tma_n_) * dtcu_.tile_n_;
-  return dtcu_.desc_.ptrD + (row * dtcu_.desc_.ldmD + col) * out_sz;
+  uint64_t col = uint64_t(tma_n_) * fetch_tile_n_;
+  return fetch_desc_.ptrD + (row * fetch_desc_.ldmD + col) * out_sz;
 }
 
 uint64_t DtcuTma::calculate_base_D_() const {
-  uint32_t out_sz = elem_size_bytes(dtcu_.desc_.fmt_d);
+  uint32_t out_sz = elem_size_bytes(store_desc_.fmt_d);
   uint64_t row = uint64_t(tma_store_m_) * dtcu_.tile_m_; // armed store's tile coordinate
-  uint64_t col = uint64_t(tma_store_n_) * dtcu_.tile_n_;
-  return dtcu_.desc_.ptrD + (row * dtcu_.desc_.ldmD + col) * out_sz;
+  uint64_t col = uint64_t(tma_store_n_) * store_tile_n_;
+  return store_desc_.ptrD + (row * store_desc_.ldmD + col) * out_sz;
 }
 
 // ------------------------------- ragged edges -------------------------------
@@ -382,23 +385,18 @@ uint64_t DtcuTma::calculate_base_D_() const {
 // load_operands_into (which addresses get READ). read_from_lines_ asserts on a line
 // that was never requested, so the two MUST agree element for element.
 
-bool DtcuTma::row_in_bounds_(uint32_t m_idx, uint32_t m) const {
-  return uint64_t(m_idx) * dtcu_.tile_m_ + m < dtcu_.desc_.M;
+bool DtcuTma::row_in_bounds_(const Dtcu::Desc& d, uint32_t m_idx, uint32_t m) const {
+  return uint64_t(m_idx) * dtcu_.tile_m_ + m < d.M;
 }
-
-bool DtcuTma::col_in_bounds_(uint32_t n_idx, uint32_t n) const {
-  return uint64_t(n_idx) * dtcu_.tile_n_ + n < dtcu_.desc_.N;
+bool DtcuTma::col_in_bounds_(const Dtcu::Desc& d, uint32_t tile_n, uint32_t n_idx, uint32_t n) const {
+  return uint64_t(n_idx) * tile_n + n < d.N;
 }
-
-// How many of the elements packed into K word *kw* of K tile *k_idx* are inside the
-// matrix, 0..elems_per_word. A word is PARTIALLY valid when K is not a multiple of
-// elems_per_word (e.g. fp16 packs 2 elements per word, so an odd K splits a word).
 uint32_t DtcuTma::k_word_valid_elems_(uint32_t k_idx, uint32_t kw) const {
-  const uint32_t epw = 4 / elem_size_bytes(dtcu_.desc_.fmt_s);
-  const uint64_t k0  = uint64_t(k_idx) * dtcu_.tile_k_ + uint64_t(kw) * epw;
-  if (k0 >= dtcu_.desc_.K)
+  const uint32_t epw = 4 / elem_size_bytes(fetch_desc_.fmt_s);
+  const uint64_t k0  = uint64_t(k_idx) * fetch_tile_k_ + uint64_t(kw) * epw;
+  if (k0 >= fetch_desc_.K)
     return 0;
-  return uint32_t(std::min<uint64_t>(epw, dtcu_.desc_.K - k0));
+  return uint32_t(std::min<uint64_t>(epw, fetch_desc_.K - k0));
 }
 
 // Zero the element lanes of *word* that lie past K. Every supported input format uses
@@ -414,15 +412,11 @@ static inline uint32_t mask_k_word(uint32_t word, uint32_t valid_elems, uint32_t
 // Assemble one K tile's operands (A/B and, on the first K tile, the C accumulator)
 // from the fetched cache lines into the scratchpad. TLM: read words from the line
 // payloads collected during FETCH, NOT from a ram_ backdoor.
-void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
-  const Dtcu::Desc& desc = dtcu_.desc_;
+void DtcuTma::load_acc_into_() {
+  const Dtcu::Desc& desc = fetch_desc_;
   const uint32_t tile_m = dtcu_.tile_m_;
-  const uint32_t tile_n = dtcu_.tile_n_;
-  uint32_t in_sz = elem_size_bytes(desc.fmt_s);
-  uint32_t elems_per_word = 4 / in_sz;
-
-  // Initialize accumulator buffer on the first K tile (target from the kick).
-  if (k_idx == 0) {
+  const uint32_t tile_n = fetch_tile_n_;
+  {
     auto& accum = dtcu_.accum_buf_[tma_accum_];
     if (desc.flags & 0x1) {
       std::fill(accum.begin(), accum.end(), 0.0f);
@@ -432,7 +426,7 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
         for (uint32_t n = 0; n < tile_n; ++n) {
           // Past the matrix: C was never fetched, so seed 0. The result is discarded
           // by the store mask anyway; zeroing keeps the accumulator deterministic.
-          if (!row_in_bounds_(tma_m_, m) || !col_in_bounds_(tma_n_, n)) {
+          if (!row_in_bounds_(fetch_desc_, tma_m_, m) || !col_in_bounds_(fetch_desc_, fetch_tile_n_, tma_n_, n)) {
             accum[m * tile_n + n] = 0.0f;
             continue;
           }
@@ -444,12 +438,21 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
       }
     }
   }
+}
 
-  // Load A buffer (row_major), same mapping as the kernel header.
+void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
+  const Dtcu::Desc& desc = fetch_desc_;
+  const uint32_t tile_m = dtcu_.tile_m_;
+  const uint32_t tile_n = fetch_tile_n_;
+  uint32_t in_sz = elem_size_bytes(desc.fmt_s);
+  uint32_t elems_per_word = 4 / in_sz;
+  if (k_idx == 0) {
+    load_acc_into_();
+  }
   uint64_t baseA = calculate_base_A_(k_idx);
   auto& a_buf = dtcu_.shm_a_[buf_idx];
   for (uint32_t m = 0; m < tile_m; ++m) {
-    const bool row_ok = row_in_bounds_(tma_m_, m);
+    const bool row_ok = row_in_bounds_(fetch_desc_, tma_m_, m);
     for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
       const uint32_t valid = k_word_valid_elems_(k_idx, kw);
       uint32_t word = 0;
@@ -471,7 +474,7 @@ void DtcuTma::load_operands_into(uint32_t buf_idx, uint32_t k_idx) {
     const uint32_t valid = k_word_valid_elems_(k_idx, kw);
     for (uint32_t n = 0; n < tile_n; ++n) {
       uint32_t word = 0;
-      if (valid != 0 && col_in_bounds_(tma_n_, n)) {
+      if (valid != 0 && col_in_bounds_(fetch_desc_, fetch_tile_n_, tma_n_, n)) {
         uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc.ldmB) * in_sz;
         read_from_lines_(tma_line_data_, addr, &word, 4);
         word = mask_k_word(word, valid, in_sz);
@@ -493,9 +496,9 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
   out_lines.clear();
   out_dests.clear();
 
-  const Dtcu::Desc& desc = dtcu_.desc_;
+  const Dtcu::Desc& desc = fetch_desc_;
   const uint32_t tile_m = dtcu_.tile_m_;
-  const uint32_t tile_n = dtcu_.tile_n_;
+  const uint32_t tile_n = fetch_tile_n_;
   const uint32_t in_sz  = elem_size_bytes(desc.fmt_s);
   const uint32_t elems_per_word = 4 / in_sz;
 
@@ -508,7 +511,7 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
   // predicates above); load_operands_into zero-fills them instead.
   uint64_t baseA = calculate_base_A_(k_idx);
   for (uint32_t m = 0; m < tile_m; ++m) {
-    if (!row_in_bounds_(tma_m_, m))
+    if (!row_in_bounds_(fetch_desc_, tma_m_, m))
       continue;
     for (uint32_t kw = 0; kw < DTCU_TILE_K_WORDS; ++kw) {
       if (k_word_valid_elems_(k_idx, kw) == 0)
@@ -524,7 +527,7 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
     if (k_word_valid_elems_(k_idx, kw) == 0)
       continue;
     for (uint32_t n = 0; n < tile_n; ++n) {
-      if (!col_in_bounds_(tma_n_, n))
+      if (!col_in_bounds_(fetch_desc_, fetch_tile_n_, tma_n_, n))
         continue;
       uint64_t addr = baseB + (uint64_t(kw) * elems_per_word + uint64_t(n) * desc.ldmB) * in_sz;
       op_addrs.emplace_back(addr, Dest::Read);
@@ -537,10 +540,10 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
   if (k_idx == 0 && (desc.flags & 0x1) == 0) {
     uint64_t baseC = calculate_base_C_();
     for (uint32_t m = 0; m < tile_m; ++m) {
-      if (!row_in_bounds_(tma_m_, m))
+      if (!row_in_bounds_(fetch_desc_, tma_m_, m))
         continue;
       for (uint32_t n = 0; n < tile_n; ++n) {
-        if (!col_in_bounds_(tma_n_, n))
+        if (!col_in_bounds_(fetch_desc_, fetch_tile_n_, tma_n_, n))
           continue;
         uint64_t addr = baseC + (uint64_t(m) * desc.ldmC + n) * 4;
         op_addrs.emplace_back(addr, Dest::Out);
@@ -562,10 +565,10 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
   if (VX_CFG_DTCU_D_PRETOUCH && k_idx == 0 && !c_preloaded_d) {
     uint64_t baseD = calculate_base_D_out_();
     for (uint32_t m = 0; m < tile_m; ++m) {
-      if (!row_in_bounds_(tma_m_, m))
+      if (!row_in_bounds_(fetch_desc_, tma_m_, m))
         continue;
       for (uint32_t n = 0; n < tile_n; ++n) {
-        if (!col_in_bounds_(tma_n_, n))
+        if (!col_in_bounds_(fetch_desc_, fetch_tile_n_, tma_n_, n))
           continue;
         op_addrs.emplace_back(baseD + (uint64_t(m) * desc.ldmD + n) * 4, Dest::Out);
       }
@@ -578,9 +581,9 @@ void DtcuTma::build_op_req_lines_(uint32_t k_idx, std::vector<uint64_t>& out_lin
 void DtcuTma::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
   out_lines.clear();
 
-  const Dtcu::Desc& desc = dtcu_.desc_;
+  const Dtcu::Desc& desc = store_desc_;
   const uint32_t tile_m = dtcu_.tile_m_;
-  const uint32_t tile_n = dtcu_.tile_n_;
+  const uint32_t tile_n = store_tile_n_;
 
   constexpr uint32_t WORD_BYTES = 4;
 
@@ -592,10 +595,10 @@ void DtcuTma::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
   // build_store_payload_, so the store never touches memory outside D.
   uint64_t baseD = tma_store_baseD_;
   for (uint32_t m = 0; m < tile_m; ++m) {
-    if (!row_in_bounds_(tma_store_m_, m))
+    if (!row_in_bounds_(store_desc_, tma_store_m_, m))
       continue;
     for (uint32_t n = 0; n < tile_n; ++n) {
-      if (!col_in_bounds_(tma_store_n_, n))
+      if (!col_in_bounds_(store_desc_, store_tile_n_, tma_store_n_, n))
         continue;
       uint64_t addr = baseD + (uint64_t(m) * desc.ldmD + n) * 4;
       out_addrs.push_back(addr);
@@ -608,9 +611,9 @@ void DtcuTma::build_out_req_lines_(std::vector<uint64_t>& out_lines) {
 // Build the per-line ST payloads (cache-line block + byte-enable) from the snapshot
 // accumulator buffer. Each D word is scattered into the line(s) it falls in.
 void DtcuTma::build_store_payload_() {
-  const uint32_t ldmD   = dtcu_.desc_.ldmD;
+  const uint32_t ldmD   = store_desc_.ldmD;
   const uint32_t tile_m = dtcu_.tile_m_;
-  const uint32_t tile_n = dtcu_.tile_n_;
+  const uint32_t tile_n = store_tile_n_;
   const auto& accum = dtcu_.accum_buf_[tma_store_accum_idx_];
 
   // Map each output line addr to its slot in out_req_lines_/_data_/_byteen_.
@@ -625,10 +628,10 @@ void DtcuTma::build_store_payload_() {
   }
 
   for (uint32_t m = 0; m < tile_m; ++m) {
-    if (!row_in_bounds_(tma_store_m_, m))
+    if (!row_in_bounds_(store_desc_, tma_store_m_, m))
       continue; // edge tile: no address was emitted, leave those bytes disabled
     for (uint32_t n = 0; n < tile_n; ++n) {
-      if (!col_in_bounds_(tma_store_n_, n))
+      if (!col_in_bounds_(store_desc_, store_tile_n_, tma_store_n_, n))
         continue;
       uint64_t addr = tma_store_baseD_ + (uint64_t(m) * ldmD + n) * 4;
       uint32_t bits;
@@ -648,7 +651,12 @@ void DtcuTma::build_store_payload_() {
   }
 }
 
-void DtcuTma::start_prefetch(uint32_t buf_idx, uint32_t m_idx, uint32_t n_idx, uint32_t k_idx, uint32_t accum_idx) {
+void DtcuTma::start_prefetch(const Dtcu::Desc& desc, uint32_t tile_n, uint32_t tile_k,
+                             uint32_t buf_idx, uint32_t m_idx, uint32_t n_idx, uint32_t k_idx, uint32_t accum_idx) {
+  assert(tma_state_ == TmaState::IDLE && "DTCU TMA: prefetch armed on a busy load channel");
+  fetch_desc_   = desc;
+  fetch_tile_n_ = tile_n;
+  fetch_tile_k_ = tile_k;
   tma_target_buf_ = buf_idx;
   tma_m_ = m_idx;
   tma_n_ = n_idx;
@@ -668,7 +676,7 @@ void DtcuTma::start_prefetch(uint32_t buf_idx, uint32_t m_idx, uint32_t n_idx, u
 uint32_t DtcuTma::buffer_fill_cycles_(uint32_t k_idx) const {
   // Operand A+B fill into the operand scratchpad, at its bank count (fill and read hit
   // the same banked SRAM, 1 word/bank/cycle -- DTCU_SMEM_BANKS, one source of truth).
-  const uint32_t op_words = dtcu_.tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * dtcu_.tile_n_;
+  const uint32_t op_words = dtcu_.tile_m_ * DTCU_TILE_K_WORDS + DTCU_TILE_K_WORDS * fetch_tile_n_;
   uint32_t cycles = (op_words + DTCU_SMEM_BANKS - 1) / DTCU_SMEM_BANKS;
   if (k_idx == 0) {
     cycles += fill_acc_cycles_(k_idx);
@@ -685,7 +693,7 @@ uint32_t DtcuTma::fill_acc_cycles_(uint32_t k_idx) const {
   // is wider because its tile is four times the area. See dtcu_params.h.
   const uint32_t acc_banks = (dtcu_.engine() == DTCU_ENGINE_CLUSTER)
                            ? uint32_t(DTCU_CLUSTER_ACC_BANKS) : uint32_t(DTCU_SOCKET_ACC_BANKS);
-  const uint32_t acc_words = dtcu_.tile_m_ * dtcu_.tile_n_;
+  const uint32_t acc_words = dtcu_.tile_m_ * fetch_tile_n_;
   return (acc_words + acc_banks - 1) / acc_banks;
 }
 
@@ -720,6 +728,7 @@ void DtcuTma::tick() {
                  ? tma_req_dests_[tma_req_idx_] : Dest::Read;
     if (tma_req_idx_ < tma_req_lines_.size()
         && inflight < DTCU_MAX_OUTSTANDING
+        && dtcu_.done_pending_addr_ == 0 // a finished descriptor's done flag goes first
         && !req_ch_(d).full()) {
       issue_load_(tma_req_lines_[tma_req_idx_], d, tma_inflight_tags_, &tma_tag_line_);
       ++tma_req_idx_;
@@ -784,6 +793,8 @@ void DtcuTma::tick() {
 // C-preload relies on this. TODO: the acc-SRAM port conflict between this store's
 // modeled acc read and a concurrent lookahead C-preload write is not modeled.
 void DtcuTma::start_store(uint32_t accum_idx, uint32_t m_idx, uint32_t n_idx) {
+  store_desc_   = dtcu_.desc_;   // snapshot: the engine may move on to the next descriptor
+  store_tile_n_ = dtcu_.tile_n_;
   tma_store_accum_idx_ = accum_idx;
   tma_store_m_ = m_idx;
   tma_store_n_ = n_idx;
@@ -800,7 +811,7 @@ void DtcuTma::start_store(uint32_t accum_idx, uint32_t m_idx, uint32_t n_idx) {
   {
     const uint32_t acc_banks = (dtcu_.engine() == DTCU_ENGINE_CLUSTER)
                              ? uint32_t(DTCU_CLUSTER_ACC_BANKS) : uint32_t(DTCU_SOCKET_ACC_BANKS);
-    tma_store_accread_left_ = (dtcu_.tile_m_ * dtcu_.tile_n_ + acc_banks - 1) / acc_banks;
+    tma_store_accread_left_ = (dtcu_.tile_m_ * store_tile_n_ + acc_banks - 1) / acc_banks;
   }
   tma_store_active_ = true;
 }

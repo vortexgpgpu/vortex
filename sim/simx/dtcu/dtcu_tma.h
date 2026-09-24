@@ -73,10 +73,16 @@ public:
   // mutated on a refusal.
   bool issue_desc_req(uint64_t desc_addr);
   void read_desc(uint64_t desc_addr);
+  void read_desc_into(uint64_t desc_addr, Dtcu::Desc* dst); // lookahead: not into dtcu_.desc_
 
   // Operand prefetch (load channel): arm one K tile of output tile (m_idx, n_idx)
   // into buf_idx; the kick carries its coordinates (K0's C-preload -> accum_idx).
-  void start_prefetch(uint32_t buf_idx, uint32_t m_idx, uint32_t n_idx, uint32_t k_idx, uint32_t accum_idx);
+  // The fetch is armed with a SNAPSHOT of the descriptor it belongs to (and its tile_n /
+  // tile_k): with the cross-descriptor lookahead the engine's current descriptor can
+  // change while this fetch is still in flight, so nothing on the fetch path may read
+  // dtcu_.desc_ after arming.
+  void start_prefetch(const Dtcu::Desc& desc, uint32_t tile_n, uint32_t tile_k,
+                      uint32_t buf_idx, uint32_t m_idx, uint32_t n_idx, uint32_t k_idx, uint32_t accum_idx);
   void tick();
   bool load_idle() const { return tma_state_ == TmaState::IDLE; }
 
@@ -175,6 +181,11 @@ private:
   uint32_t tma_n_ = 0;
   uint32_t tma_k_ = 0;
   uint32_t tma_accum_ = 0; // accumulator buffer for the K0 C-preload
+  Dtcu::Desc fetch_desc_{};        // descriptor snapshot of the armed fetch
+  uint32_t   fetch_tile_n_ = 0;
+  uint32_t   fetch_tile_k_ = 0;
+  Dtcu::Desc store_desc_{};        // descriptor snapshot of the armed store
+  uint32_t   store_tile_n_ = 0;
   uint32_t tma_fill_left_ = 0;
   uint32_t tma_fill_acc_left_ = 0; // leading portion of FILL attributed to acc init
   uint32_t tma_addrgen_left_ = 0;
@@ -204,8 +215,8 @@ private:
 
   // Ragged-edge bounds (M/N/K need not be tile multiples). Shared by the request
   // builders and the operand fill so they cannot disagree — see dtcu_tma.cpp.
-  bool row_in_bounds_(uint32_t m_idx, uint32_t m) const;
-  bool col_in_bounds_(uint32_t n_idx, uint32_t n) const;
+  bool row_in_bounds_(const Dtcu::Desc& d, uint32_t m_idx, uint32_t m) const;
+  bool col_in_bounds_(const Dtcu::Desc& d, uint32_t tile_n, uint32_t n_idx, uint32_t n) const;
   uint32_t k_word_valid_elems_(uint32_t k_idx, uint32_t kw) const;
 
   // Emits one entry per unique cache line, in first-touch order, plus a parallel
@@ -218,6 +229,7 @@ private:
   void build_store_payload_(); // fill out_req_data_/out_req_byteen_ from the accumulator
 
   void load_operands_into(uint32_t buf_idx, uint32_t k_idx);
+  void load_acc_into_(); // K0's accumulator init (C preload or zero-fill) from fetched lines
   uint32_t buffer_fill_cycles_(uint32_t k_idx) const;
   uint32_t fill_acc_cycles_(uint32_t k_idx) const; // acc-init share of the FILL countdown
 };

@@ -86,12 +86,9 @@ void Dtcu::begin_descriptor_(uint64_t desc_addr) {
   state_ = State::DESC_REQ;
   busy_ = true;
   tma_->reset();
-  shm_a_[0].clear();
-  shm_a_[1].clear();
-  shm_b_[0].clear();
-  shm_b_[1].clear();
-  accum_buf_[0].clear();
-  accum_buf_[1].clear();
+  // Buffers are engine-fixed and sized once (init_tile_state_); every word is written
+  // before it is read, so nothing is cleared here -- and with the lookahead a fresh
+  // descriptor may already own a prefetched K0 in one of them.
   accum_compute_idx_ = 0;
   compute_buf_ = 0;
   buf_ready_[0] = false;
@@ -99,6 +96,10 @@ void Dtcu::begin_descriptor_(uint64_t desc_addr) {
   compute_done_ = false;
   next_tile_load_issued_ = false;
   next_tile_load_buf_ = 0;
+  next_desc_state_ = NextDesc::NONE;
+  next_k0_issued_ = false;
+  next_desc_addr_ = 0;
+  done_pending_addr_ = 0;
   tile_m_ = 0;
   tile_n_ = 0;
   tile_k_ = 0;
@@ -164,96 +165,83 @@ uint32_t Dtcu::poll() const {
 }
 
 
-void Dtcu::init_tile_state_() {
-  uint32_t in_sz = vt::elem_size_bytes(desc_.fmt_s);
-
+void Dtcu::geom_of_(const Desc& d, uint32_t& tile_n, uint32_t& tile_k,
+                    uint32_t& tiles_m, uint32_t& tiles_n, uint32_t& tiles_k) const {
+  uint32_t in_sz = vt::elem_size_bytes(d.fmt_s);
   // Output/accumulation: fp32 (T1 sources) or int32 (T2 integer sources). Narrow
   // outputs (fp16/bf16/...) need out_sz-aware C-load/store packing — not yet (T3).
-  if (desc_.fmt_d != vt::fp32::id && desc_.fmt_d != vt::int32::id) {
+  if (d.fmt_d != vt::fp32::id && d.fmt_d != vt::int32::id) {
     std::cout << "[DTCU] Error: Only supports fp32/int32 output/accumulation" << std::endl;
     std::abort();
   }
-
   if (0 == in_sz || (4 % in_sz) != 0) {
     std::cout << "[DTCU] Error: Unsupported input element size: " << in_sz << std::endl;
     std::abort();
   }
-
-  if (desc_.shape_n_size == 0) {
+  if (d.shape_n_size == 0) {
     std::cout << "[DTCU] Error: shape_n_size must explicitly select N-size" << std::endl;
     std::abort();
   }
-
-  // Shape policy is TBD (just set to 0 for now)
-  if (desc_.shape_policy != 0) {
-    std::cout << "[DTCU] Error: Unsupported shape policy: " << uint32_t(desc_.shape_policy) << std::endl;
+  if (d.shape_policy != 0) {
+    std::cout << "[DTCU] Error: Unsupported shape policy: " << uint32_t(d.shape_policy) << std::endl;
     std::abort();
   }
-
   // Unknown flag bits fail loudly: guards against a stale simulator silently
   // ignoring a mode bit (e.g. FLAG_NO_TMA) and mislabeling a measurement.
-  if (desc_.flags & ~uint8_t(DTENSOR_FLAG_ALL)) {
-    std::cout << "[DTCU] Error: Unknown descriptor flags: 0x" << std::hex << uint32_t(desc_.flags) << std::dec << std::endl;
+  if (d.flags & ~uint8_t(DTENSOR_FLAG_ALL)) {
+    std::cout << "[DTCU] Error: Unknown descriptor flags: 0x" << std::hex << uint32_t(d.flags) << std::dec << std::endl;
     std::abort();
   }
-
-  // Geometry comes from the shared contract (sw/common/dtcu_cfg.h), so the host
-  // traits and this path cannot disagree: M is build-time fixed PER ENGINE, N is
-  // descriptor-driven and bounded by THIS engine's capacity, K is fixed in words
-  // (shared by both engines) and widened by the input element size.
-  tile_m_ = dtcu_tile_m_of(engine_);
-  tile_n_ = dtcu_tile_n(desc_.shape_n_size);
-  tile_k_ = dtcu_tile_k(in_sz);
-
-  // Each engine validates against its OWN bound, so a cluster-sized shape_n_size
-  // handed to the socket engine is rejected here rather than silently truncated into
-  // a narrower physical buffer.
-  if (!dtcu_tile_n_valid_of(engine_, tile_n_)) {
+  // Geometry comes from the shared contract (sw/common/dtcu_cfg.h): M is build-time
+  // fixed PER ENGINE, N is descriptor-driven and bounded by THIS engine's capacity, K is
+  // fixed in words (shared by both engines) and widened by the input element size.
+  const uint32_t tile_m = dtcu_tile_m_of(engine_);
+  tile_n = dtcu_tile_n(d.shape_n_size);
+  tile_k = dtcu_tile_k(in_sz);
+  if (!dtcu_tile_n_valid_of(engine_, tile_n)) {
     std::cout << "[DTCU] Error: N-dimension must be in multiples of " << DTCU_TILE_N_GRAN
               << "; maximum " << dtcu_tile_n_max_of(engine_) << " for the "
               << (engine_ == DTCU_ENGINE_CLUSTER ? "cluster" : "socket")
-              << " engine. Received: " << tile_n_ << std::endl;
+              << " engine. Received: " << tile_n << std::endl;
     std::abort();
   }
-
-  if (desc_.M == 0 || desc_.N == 0 || desc_.K == 0) {
-    std::cout << "[DTCU] Error: empty GEMM. M=" << desc_.M << ", N=" << desc_.N
-              << ", K=" << desc_.K << std::endl;
+  if (d.M == 0 || d.N == 0 || d.K == 0) {
+    std::cout << "[DTCU] Error: empty GEMM. M=" << d.M << ", N=" << d.N
+              << ", K=" << d.K << std::endl;
     std::abort();
   }
-
-  // Fixed-size SRAM buffers, sized for the largest legal tile (Hopper-style fixed
-  // SMEM capacity); a smaller tile_n_ uses only the leading prefix. Sizing is
-  // independent of the descriptor so the physical buffer (and later its banks) is a
-  // constant, not resized per GEMM. Compute still indexes with tile_m_/tile_n_.
-  shm_a_[0].assign(smem_a_words_, 0);
-  shm_a_[1].assign(smem_a_words_, 0);
-  shm_b_[0].assign(DTCU_TILE_K_WORDS * smem_n_stride_, 0);
-  shm_b_[1].assign(DTCU_TILE_K_WORDS * smem_n_stride_, 0);
-  accum_buf_[0].assign(tile_m_ * smem_n_stride_, 0.0f);
-  accum_buf_[1].assign(tile_m_ * smem_n_stride_, 0.0f);
-
-  // The two invariants the operand SRAM depends on. Cheap, and they turn the
-  // silent-corruption failure mode above into an immediate abort.
-  assert(tile_n_ <= smem_n_stride_);
-  assert(tile_m_ * DTCU_TILE_K_WORDS <= smem_a_words_);
-
+  assert(tile_n <= smem_n_stride_);
+  assert(tile_m * DTCU_TILE_K_WORDS <= smem_a_words_);
   // Tiles needed to COVER the GEMM: round up, so M/N/K need not be tile multiples.
   // The trailing tile of each axis is partial and its out-of-matrix coordinates are
   // clamped out of the operand fetch and masked out of the D store by the TMA engine
   // (dtcu_tma.cpp, "ragged edges"). Padding is not the caller's job.
-  tiles_m_ = (desc_.M + tile_m_ - 1) / tile_m_;
-  tiles_n_ = (desc_.N + tile_n_ - 1) / tile_n_;
-  tiles_k_ = (desc_.K + tile_k_ - 1) / tile_k_;
+  tiles_m = (d.M + tile_m - 1) / tile_m;
+  tiles_n = (d.N + tile_n - 1) / tile_n;
+  tiles_k = (d.K + tile_k - 1) / tile_k;
+}
 
-  // Initialize tile indices to start from the first tile. total_op_reqs_/total_out_reqs_
-  // are NOT cleared here: they are perf counters and accumulate across every descriptor
-  // in the launch, like the cycle counters.
+void Dtcu::init_tile_state_() {
+  tile_m_ = dtcu_tile_m_of(engine_);
+  geom_of_(desc_, tile_n_, tile_k_, tiles_m_, tiles_n_, tiles_k_);
+  // Fixed-size SRAM buffers, sized for the largest legal tile (Hopper-style fixed
+  // SMEM capacity); a smaller tile_n_ uses only the leading prefix. Sized ONCE: the
+  // physical buffer is a constant, and with the lookahead a buffer may already hold the
+  // next descriptor's K0 when this runs, so it must not be reassigned per GEMM.
+  if (shm_a_[0].size() != smem_a_words_) {
+    shm_a_[0].assign(smem_a_words_, 0);
+    shm_a_[1].assign(smem_a_words_, 0);
+    shm_b_[0].assign(DTCU_TILE_K_WORDS * smem_n_stride_, 0);
+    shm_b_[1].assign(DTCU_TILE_K_WORDS * smem_n_stride_, 0);
+    accum_buf_[0].assign(tile_m_ * smem_n_stride_, 0.0f);
+    accum_buf_[1].assign(tile_m_ * smem_n_stride_, 0.0f);
+  }
+  // total_op_reqs_/total_out_reqs_ are NOT cleared here: they are perf counters and
+  // accumulate across every descriptor in the launch, like the cycle counters.
   tile_m_idx_ = 0;
   tile_n_idx_ = 0;
   tile_k_idx_ = 0;
 }
-
 bool Dtcu::advance_output_tile_() {
   tile_k_idx_ = 0;
   return next_tile_coord_(tile_m_idx_, tile_n_idx_, tiles_m_, tiles_n_);
@@ -274,7 +262,7 @@ void Dtcu::start_next_tile_or_drain_() {
       buf_ready_[0] = false;
       buf_ready_[1] = false;
       // tile_k_idx_ already reset (and m/n advanced) by advance_output_tile_
-      tma_->start_prefetch(compute_buf_, tile_m_idx_, tile_n_idx_, 0, accum_compute_idx_);
+      tma_->start_prefetch(desc_, tile_n_, tile_k_, compute_buf_, tile_m_idx_, tile_n_idx_, 0, accum_compute_idx_);
     }
     state_ = State::NEXT_TILE_LOAD;
   } else {
@@ -498,11 +486,92 @@ void Dtcu::execute_mma(uint32_t buf_idx) {
   }
 }
 
+// Progress of the cross-descriptor prefetch, called every tick of the current
+// descriptor's last tile (COMPUTE) and while finishing (FINAL_TILE_STORE):
+//   NONE -> pop the next queued descriptor, issue its read     (DESC_REQ/DESC_WAIT)
+//   DESC_WAIT -> read it, derive its geometry                   (READY)
+//   READY, K0 not yet kicked, load channel idle -> fetch its tile (0,0) K0 into the free
+//   operand buffer and the other accumulator buffer, exactly like the intra-descriptor
+//   lookahead does for the next tile of the same GEMM.
+void Dtcu::lookahead_step_() {
+#if DTCU_DESC_LOOKAHEAD
+  if (!tma_enabled_())
+    return;
+  switch (next_desc_state_) {
+  case NextDesc::NONE:
+    if (desc_queue_.empty())
+      return;
+    next_desc_addr_ = desc_queue_.front();
+    desc_queue_.pop_front();
+    next_desc_state_ = NextDesc::DESC_REQ;
+    [[fallthrough]];
+  case NextDesc::DESC_REQ:
+    if (tma_->issue_desc_req(next_desc_addr_))
+      next_desc_state_ = NextDesc::DESC_WAIT;
+    return;
+  case NextDesc::DESC_WAIT:
+    if (!tma_->main_done())
+      return;
+    std::memset(&next_desc_, 0, sizeof(next_desc_));
+    tma_->read_desc_into(next_desc_addr_, &next_desc_);
+    geom_of_(next_desc_, next_tile_n_, next_tile_k_, next_tiles_m_, next_tiles_n_, next_tiles_k_);
+    next_desc_state_ = NextDesc::READY;
+    return;
+  case NextDesc::READY:
+    return; // the COMPUTE state kicks its C preload / K0 (same path as the next tile)
+  }
+#endif
+}
+
+// Switch to the looked-ahead descriptor. The TMA engine is NOT reset: the K0 fetch may
+// still be in flight (buf_ready_ tells NEXT_TILE_LOAD when it lands) and the previous
+// descriptor's final store keeps draining on the store side.
+void Dtcu::adopt_next_descriptor_() {
+  DP(2, "[DTCU] L2 lines: mem_reqs=" << (total_op_reqs_ + total_out_reqs_)
+            << " (op=" << total_op_reqs_ << ", out=" << total_out_reqs_
+            << "), +1 desc line excluded");
+  desc_addr_ = next_desc_addr_;
+  desc_ = next_desc_;
+  tile_n_ = next_tile_n_;
+  tile_k_ = next_tile_k_;
+  tiles_m_ = next_tiles_m_;
+  tiles_n_ = next_tiles_n_;
+  tiles_k_ = next_tiles_k_;
+  tile_m_idx_ = 0;
+  tile_n_idx_ = 0;
+  tile_k_idx_ = 0;
+  accum_compute_idx_ ^= 1;
+  next_tile_load_issued_ = false;
+  compute_done_ = false;
+  exec_cycles_left_ = 0;
+  if (next_k0_issued_) {
+    compute_buf_ = next_tile_load_buf_;
+    buf_ready_[next_tile_load_buf_ ^ 1] = false;
+  } else {
+    buf_ready_[0] = false;
+    buf_ready_[1] = false;
+    tma_->start_prefetch(desc_, tile_n_, tile_k_, compute_buf_, 0, 0, 0, accum_compute_idx_);
+  }
+  next_desc_state_ = NextDesc::NONE;
+  next_k0_issued_ = false;
+  next_desc_addr_ = 0;
+  busy_ = true;
+  state_ = State::NEXT_TILE_LOAD;
+}
+
 void Dtcu::on_tick() {
   if (busy_) ++dtcu_busy_cycles_; // accounting anchor: MCYCLE - busy = kernel-side
 
   // The TMA engine owns the L2 port: let it retire all responses this cycle.
   tma_->drain_responses();
+  if (done_pending_addr_ != 0 && tma_->store_idle()) {
+    // Lookahead: the previous descriptor's final store has drained in the background;
+    // publish its done flag now (after every D line was acknowledged, as before).
+    if (tma_->issue_done_flag(done_pending_addr_)) {
+      done_pending_addr_ = 0;
+      ++completed_;
+    }
+  }
 
   switch (state_) {
   case State::IDLE:
@@ -538,7 +607,7 @@ void Dtcu::on_tick() {
 
       // Begin streaming: prefetch K0 of the first output tile into the compute buffer.
       tile_k_idx_ = 0;
-      tma_->start_prefetch(compute_buf_, tile_m_idx_, tile_n_idx_, 0, accum_compute_idx_);
+      tma_->start_prefetch(desc_, tile_n_, tile_k_, compute_buf_, tile_m_idx_, tile_n_idx_, 0, accum_compute_idx_);
       state_ = State::NEXT_TILE_LOAD;
     }
     break;
@@ -552,7 +621,7 @@ void Dtcu::on_tick() {
       // Start prefetching the next K tile into the other buffer (overlap).
       // NO_TMA: no early kick; the fetch is deferred to consume time in COMPUTE.
       if (tma_enabled_() && tile_k_idx_ + 1 < tiles_k_) {
-        tma_->start_prefetch(compute_buf_ ^ 1, tile_m_idx_, tile_n_idx_, tile_k_idx_ + 1, accum_compute_idx_);
+        tma_->start_prefetch(desc_, tile_n_, tile_k_, compute_buf_ ^ 1, tile_m_idx_, tile_n_idx_, tile_k_idx_ + 1, accum_compute_idx_);
       }
       state_ = State::COMPUTE;
     } else {
@@ -565,16 +634,31 @@ void Dtcu::on_tick() {
     tma_->tick();
 
     // Cross-tile lookahead (overlap mode only): the load channel idles during the
-    // last K tile's compute -- issue the next tile's K0 so it hides under compute.
-    if (tma_enabled_() && !next_tile_load_issued_
-        && tile_k_idx_ + 1 == tiles_k_ && tma_->load_idle()) {
+    // last K tile's compute -- issue the next tile's K0 so it hides under compute. The
+    // next tile is either the next tile of this descriptor or, on the last tile, the
+    // next queued descriptor's first tile (DTCU_DESC_LOOKAHEAD: read in lookahead_step_
+    // from the start of the last tile, K0 kicked here). A split that fetched the next
+    // tile's C preload earlier, during the middle K tiles, was built and measured
+    // (2026-09-22): the serial load channel then delayed the K-tile prefetches by as
+    // much as it hid, and it deadlocked on the 4-PE build -- removed.
+    if (tma_enabled_()) {
       uint32_t nm = tile_m_idx_, nn = tile_n_idx_; // peek via the shared walk
-      if (next_tile_coord_(nm, nn, tiles_m_, tiles_n_)) {
+      const bool have_next_tile = next_tile_coord_(nm, nn, tiles_m_, tiles_n_);
+      if (!have_next_tile)
+        lookahead_step_(); // last tile of this descriptor: read the next one
+      const bool next_is_desc = !have_next_tile && next_desc_state_ == NextDesc::READY;
+      if ((have_next_tile || next_is_desc) && !next_tile_load_issued_ && !next_k0_issued_
+          && tile_k_idx_ + 1 == tiles_k_ && tma_->load_idle()) {
         next_tile_load_buf_ = compute_buf_ ^ 1; // freed at the swap into the last K
         // C-preload into accum_buf_[^idx] is safe: start_store() snapshots its
         // payload synchronously (breaks if the store ever goes zero-copy).
-        tma_->start_prefetch(next_tile_load_buf_, nm, nn, 0, accum_compute_idx_ ^ 1);
-        next_tile_load_issued_ = true;
+        if (have_next_tile) {
+          tma_->start_prefetch(desc_, tile_n_, tile_k_, next_tile_load_buf_, nm, nn, 0, accum_compute_idx_ ^ 1);
+          next_tile_load_issued_ = true;
+        } else {
+          tma_->start_prefetch(next_desc_, next_tile_n_, next_tile_k_, next_tile_load_buf_, 0, 0, 0, accum_compute_idx_ ^ 1);
+          next_k0_issued_ = true;
+        }
       }
     }
 
@@ -611,12 +695,12 @@ void Dtcu::on_tick() {
         compute_done_ = false;
         // Kick prefetch of the following K tile (overlap mode only).
         if (tma_enabled_() && tile_k_idx_ + 1 < tiles_k_) {
-          tma_->start_prefetch(compute_buf_ ^ 1, tile_m_idx_, tile_n_idx_, tile_k_idx_ + 1, accum_compute_idx_);
+          tma_->start_prefetch(desc_, tile_n_, tile_k_, compute_buf_ ^ 1, tile_m_idx_, tile_n_idx_, tile_k_idx_ + 1, accum_compute_idx_);
         }
       } else {
         // NO_TMA: fetch at consume time; load_idle() makes the kick fire once.
         if (!tma_enabled_() && tma_->load_idle()) {
-          tma_->start_prefetch(next_buf, tile_m_idx_, tile_n_idx_, tile_k_idx_ + 1, accum_compute_idx_);
+          tma_->start_prefetch(desc_, tile_n_, tile_k_, next_buf, tile_m_idx_, tile_n_idx_, tile_k_idx_ + 1, accum_compute_idx_);
         }
         // Compute finished but the next operand tile is not ready yet.
         ++dtcu_next_k_load_stall_cycles_;
@@ -663,8 +747,29 @@ void Dtcu::on_tick() {
   case State::FINAL_TILE_STORE:
     // Final output tile: drain its background store before reporting done.
     tma_->tick();
+    if (DTCU_DESC_LOOKAHEAD && next_desc_state_ == NextDesc::READY
+        && done_pending_addr_ == 0) {
+      // The next descriptor is read (its K0 possibly in flight): leave this one's final
+      // store to drain in the background, publish its done flag when that is over, and
+      // go straight into the next GEMM. The next tile store waits for the drain anyway.
+      done_pending_addr_ = desc_addr_;
+      adopt_next_descriptor_();
+      break;
+    }
     if (tma_->store_active()) {
       ++dtcu_store_drain_cycles_; // store not fully hidden under compute
+      break;
+    }
+    if (DTCU_DESC_LOOKAHEAD && next_desc_state_ != NextDesc::NONE) {
+      // Descriptor read still in flight (or an older done flag pending): finish the
+      // read, then adopt.
+      lookahead_step_();
+      if (next_desc_state_ == NextDesc::READY && done_pending_addr_ == 0) {
+        done_pending_addr_ = desc_addr_;
+        adopt_next_descriptor_();
+      } else {
+        ++dtcu_desc_wait_cycles_;
+      }
       break;
     }
     {

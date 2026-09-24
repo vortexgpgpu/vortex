@@ -181,6 +181,25 @@ private:
   // tile's last-K compute; adopted at the TILE_STORE tile switch.
   bool     next_tile_load_issued_ = false;
   uint32_t next_tile_load_buf_ = 0;
+  // Cross-descriptor lookahead (DTCU_DESC_LOOKAHEAD): the next queued descriptor, read
+  // while the current one's last tile computes, its geometry, and whether its K0 fetch
+  // has been kicked into next_tile_load_buf_ / accum_compute_idx_ ^ 1.
+  enum class NextDesc { NONE, DESC_REQ, DESC_WAIT, READY };
+  NextDesc next_desc_state_ = NextDesc::NONE;
+  Desc     next_desc_{};
+  uint64_t next_desc_addr_ = 0;
+  uint32_t next_tile_n_ = 0, next_tile_k_ = 0;
+  uint32_t next_tiles_m_ = 1, next_tiles_n_ = 1, next_tiles_k_ = 1;
+  bool     next_k0_issued_ = false;
+  // Done flag of a finished descriptor whose final D store is still draining in the
+  // background (lookahead only); issued, and completed_ bumped, once the store is idle.
+  uint64_t done_pending_addr_ = 0;
+  // Geometry of a descriptor (tile_n/tile_k from its format and shape, tile counts from
+  // M/N/K), validated the same way for the current and the looked-ahead descriptor.
+  void geom_of_(const Desc& d, uint32_t& tile_n, uint32_t& tile_k,
+                uint32_t& tiles_m, uint32_t& tiles_n, uint32_t& tiles_k) const;
+  void lookahead_step_();       // COMPUTE-state progress of the next-descriptor prefetch
+  void adopt_next_descriptor_(); // switch to next_desc_ keeping its prefetched K0
 
   // Perf counters. dtcu_* = FSM observers (mutually exclusive, sum to the busy
   // timeline); tma_* = engine observers (concurrent with COMPUTE, not summable).
