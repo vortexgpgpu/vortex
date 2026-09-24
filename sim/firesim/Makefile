@@ -65,12 +65,68 @@ check-gen:
 # objects current and link them into a shared library, which fails late with
 # "final link failed: bad value". The position-independent build gets its own
 # object directory, seeded with the generated headers it needs.
-PIC_DIR := $(DESTDIR)/firesim_pic
+# Per platform: the objects embed that platform's generated widths, and make
+# judges them by timestamp, so a directory shared between cards would link one
+# card's objects into the other's library.
+PIC_DIR := $(DESTDIR)/firesim_pic_$(PLATFORM)
 
 $(PIC_DIR)/FireSim-generated.const.h: $(GEN_DIR)/FireSim-generated.const.h
 	@mkdir -p $(PIC_DIR)
 	@cp -f $(GEN_DIR)/FireSim-generated.const.* $(PIC_DIR)/ 2>/dev/null || true
 	@cp -f $(GEN_DIR)/FireSim-generated.const.h $(PIC_DIR)/
+
+ifeq ($(TARGET), avedsim)
+
+# The metasimulator as the library: the FireSim-transformed target Verilated,
+# with the emulated host interface (simif_emul) in place of the card's, linked
+# into lib$(PROJECT).so so the runtime loads it exactly as it loads the card's.
+# firesim_emul_main.cpp supplies the loop that --main would otherwise generate.
+#
+# The Vortex RTL comes from hw/syn/firesim's simulation flattening, the same
+# sources the standalone metasim builds from; the generated FireSim RTL and
+# headers come from the elaborated target.
+SYN_DIR := $(ROOT_DIR)/hw/syn/firesim
+SYN_BUILD_DIR ?= $(SYN_DIR)
+SIM_SRCS_LIST := $(SYN_BUILD_DIR)/vortex_srcs.f
+SIM_SRCS_DIR := $(SYN_BUILD_DIR)/vortex_srcs
+ELAB_DIR := $(FIRESIM_PATH)/sim/generated-src/$(PLATFORM)/$(PLATFORM)-midasexamples-$(DESIGN)-$(TARGET_CONFIG)-$(PLATFORM_CONFIG)
+EMUL_DIR := $(DESTDIR)/firesim_emul
+EMUL_NAME := firesim_emul
+
+EMUL_SRCS := $(SRC_DIR)/firesim_sim.cpp $(SRC_DIR)/firesim_emul_main.cpp
+
+.PHONY: emul-sources
+emul-sources:
+	$(MAKE) -C $(SYN_DIR) sources SYN_BUILD_DIR=$(SYN_BUILD_DIR) FIRESIM_CARD=$(FIRESIM_CARD)
+
+# Host toolchain, as for the aved platform library: the runtime that loads this
+# is built with it. -fPIC reaches the Verilated objects too, through -CFLAGS.
+# hw/syn/common.mk exports VERILATOR as a bare path and FireSim's `?=` would
+# yield to it, so it is named here in full.
+#
+# The sub-make's own rule does not know the Vortex sources are inputs -- they
+# arrive as flags -- so it would call the model current after a config change.
+# This rule does know, so once it decides to rebuild, the old model goes.
+$(EMUL_DIR)/V$(EMUL_NAME): $(EMUL_SRCS) $(SIM_SRCS_LIST) $(ELAB_DIR)/FireSim-generated.sv
+	rm -f $@
+	$(MAKE) -C $(SIMIF_DIR) verilator \
+		PLATFORM=$(PLATFORM) \
+		DRIVER_NAME=$(EMUL_NAME) \
+		GEN_FILE_BASENAME=FireSim-generated \
+		GEN_DIR=$(ELAB_DIR) \
+		OUT_DIR=$(EMUL_DIR) \
+		DRIVER="$(EMUL_SRCS)" \
+		CXX=/usr/bin/g++ \
+		VERILATOR="verilator --timing --cc --exe" \
+		VERILATOR_FLAGS="-Wno-fatal -y $(SIM_SRCS_DIR) +libext+.sv+.v $$(tr '\n' ' ' < $(SIM_SRCS_LIST))" \
+		CXXFLAGS="-O2 -fPIC -std=c++20 -DFIRESIM_EMUL -I$(SRC_DIR)" \
+		LDFLAGS="-shared"
+
+lib: emul-sources
+	$(MAKE) $(EMUL_DIR)/V$(EMUL_NAME)
+	cp -f $(EMUL_DIR)/V$(EMUL_NAME) $(DESTDIR)/lib$(PROJECT).so
+
+else
 
 # DRIVER_NAME is chosen so the sub-make emits lib$(PROJECT).so directly.
 lib: check-gen $(PIC_DIR)/FireSim-generated.const.h
@@ -85,6 +141,8 @@ lib: check-gen $(PIC_DIR)/FireSim-generated.const.h
 		LDFLAGS="$(SIM_LDFLAGS)" \
 		$(if $(SIM_CXX),CXX=$(SIM_CXX))
 	mv -f $(DESTDIR)/lib$(PROJECT).so.tmp-$(PLATFORM) $(DESTDIR)/lib$(PROJECT).so
+
+endif
 
 clean:
 	rm -f $(DESTDIR)/lib$(PROJECT).so
