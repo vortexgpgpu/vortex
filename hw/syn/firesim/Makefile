@@ -59,7 +59,7 @@ SRCS_DIR := $(BUILD_DIR)/vortex_srcs
 SRCS_LIST := $(BUILD_DIR)/vortex_srcs.f
 SIM_SRCS_STAMP := $(SRCS_DIR)/.sources.stamp
 
-.PHONY: stage sources sim-sources vivado-sources xilinx-ips kernel-env bitstream \
+.PHONY: stage sources sim-sources vivado-sources xilinx-ips kernel-env bitstream sim-image \
         metasim run-metasim check-firesim clean-staged
 
 stage: check-firesim
@@ -315,17 +315,33 @@ bitstream: vivado-sources xilinx-ips stage
 	$(MAKE) -C $(FIRESIM_PATH)/sim replace-rtl $(FIRESIM_TARGET_ARGS)
 	VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST) VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR) \
 	VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl TOOL_DIR=$(SCRIPT_DIR) \
-	$(MAKE) -C $(FIRESIM_PATH)/platforms/$(PLATFORM)/cl_$(QUINTUPLET) bitstream TARGET=$(TARGET) \
+	$(MAKE) -C $(FIRESIM_PATH)/platforms/$(PLATFORM)/cl_$(QUINTUPLET) $(PLATFORM_IMAGE_GOAL) \
 		DEVICE=$(DEVICE) HOST_MEM_SP='$(HOST_MEM_SP)' FREQUENCY=$(FREQUENCY) STRATEGY=$(STRATEGY)
+
+# The same image built for the platform's own simulator instead of the fabric.
+sim-image:
+	$(MAKE) bitstream PLATFORM_IMAGE_GOAL='$(PLATFORM_SIM_GOAL)'
 
 FREQUENCY ?= 60.0
 STRATEGY ?= TIMING
 
-# Which image the card's platform builds. `hw` is the bitstream; `sim` is the
-# model its own simulator runs, which exercises the same driver and the same
-# control path without a card. The platform builds each into build_dir.$(TARGET),
-# which is what the run's FPGA_BIN_DIR has to point at.
-TARGET ?= hw
+# How each platform names its two images, kept here so the difference does not
+# leak into the caller. aved builds both from one goal and selects with TARGET,
+# putting each in build_dir.$(TARGET); vitis has a separate `sim` goal that
+# selects hw_emu.
+#
+# Passing TARGET through to vitis would be worse than useless: its Makefile sets
+# `bitstream: TARGET = hw` as a target-specific variable, and a command-line
+# TARGET beats a target-specific one, so TARGET=sim would reach v++ as
+# `--target sim`, which is not a Vitis build target at all.
+ifeq ($(PLATFORM),aved)
+PLATFORM_HW_GOAL  := bitstream TARGET=hw
+PLATFORM_SIM_GOAL := bitstream TARGET=sim
+else
+PLATFORM_HW_GOAL  := bitstream
+PLATFORM_SIM_GOAL := sim
+endif
+PLATFORM_IMAGE_GOAL ?= $(PLATFORM_HW_GOAL)
 
 # The metasimulator: the FireSim-transformed design in Verilator, driven through
 # the DPI emul simif. No FPGA and no Vivado, so it runs the same target the card
