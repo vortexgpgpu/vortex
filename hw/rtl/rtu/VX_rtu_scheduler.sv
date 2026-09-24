@@ -447,6 +447,16 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         `UNUSED_VAR ({stk_wr, stk_wdata, sp_q_arr})
     end
 
+    reg [COLL_SIZE-1:0]                     coll_busy;
+    reg [COLL_SIZE-1:0]                     coll_proc;
+    reg [COLL_SIZE-1:0][CTX_TAG_W-1:0]      coll_ctx;
+    reg [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_cnt;
+    reg [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_last;
+    reg [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_ordcnt;
+    reg [COLL_SIZE-1:0][NODE_W-1:0][31:0]   coll_ordoff;
+    reg [COLL_SIZE-1:0][NODE_W-1:0][31:0]   coll_ordt;
+    reg [COLL_SIZE-1:0]                     coll_prochit;
+
     // ═══════════════════════ stage advance ════════════════════════════
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -599,15 +609,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // The one read-modify-write an async producer performs: box results stream
     // back one child per cycle and are insertion-sorted (t-ascending) into a
     // small tagged entry pool instead of a per-context array.
-    reg [COLL_SIZE-1:0]                     coll_busy;
-    reg [COLL_SIZE-1:0]                     coll_proc;
-    reg [COLL_SIZE-1:0][CTX_TAG_W-1:0]      coll_ctx;
-    reg [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_cnt;
-    reg [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_last;
-    reg [COLL_SIZE-1:0][RTU_CHILD_BITS-1:0] coll_ordcnt;
-    reg [COLL_SIZE-1:0][NODE_W-1:0][31:0]   coll_ordoff;
-    reg [COLL_SIZE-1:0][NODE_W-1:0][31:0]   coll_ordt;
-    reg [COLL_SIZE-1:0]                     coll_prochit;
 
     wire [COLL_IDW-1:0] coll_alloc_idx;
     wire                coll_alloc_ok;

@@ -158,6 +158,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // Shared signals
     // ------------------------------------------------------------------------
     wire crsp_queue_stall, mshr_alm_full;
+    wire mshr_allocate_st0, fill_inflight;
+    (* max_fanout = 64 *) wire pipe_stall;
     // Authoritative "no entry held", straight off the MSHR's valid mask. The
     // pending-size counter below is a proxy: it is fed by separate increment and
     // decrement events and, as the finalize_is_pending comment above records,
@@ -315,7 +317,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire wb_hold;
     // amo_chain_stall paces a same-line AMO behind an in-flight commit by one
     // cycle; it is 0 for non-AMO traffic, so the baseline pipe is unaffected.
-    (* max_fanout = 64 *) wire pipe_stall = crsp_queue_stall || amo_chain_stall || wb_hold;
+    assign pipe_stall = crsp_queue_stall || amo_chain_stall || wb_hold;
 
     // ========================================================================
     // Input arbitration
@@ -388,7 +390,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // must be held off while one is in flight. At PIPE_EX=0 the array write
     // samples the buffer on the same edge a new fill re-stages it (old value
     // read), so no interlock is needed.
-    wire fill_inflight;
     if (PIPE_EX > 0) begin : g_fill_inflight
         reg [PIPE_EX-1:0] fill_busy;
         always @(posedge clk) begin
@@ -781,7 +782,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // ========================================================================
     // MSHR (allocate at S0, finalize at S1)
     // ========================================================================
-    wire mshr_allocate_st0 = st0.req.valid && st0.req.is_creq && ~st0.req.is_replay;
+    assign mshr_allocate_st0 = st0.req.valid && st0.req.is_creq && ~st0.req.is_replay;
     wire mshr_finalize_st1 = st1.req.valid && st1.req.is_creq && ~st1.req.is_replay;
 
     // A forwarded (non-LLC passthru) AMO keeps its entry until its downstream
