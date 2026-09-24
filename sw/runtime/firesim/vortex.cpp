@@ -59,10 +59,13 @@ public:
     // driver reads, so switching between a native and a FireSim run does not
     // mean switching variable names as well.
     std::vector<std::string> plusargs;
-#ifdef FIRESIM_PLATFORM_AVED
+#if defined(FIRESIM_EMUL)
+    // The metasimulator is the design itself: there is no image to load and no
+    // card to find.
+#elif defined(FIRESIM_PLATFORM_AVED)
     // As the aved driver: VRT_VBIN_PATH and VRT_DEVICE_BDF, with the card
-    // discovered on the bus when the BDF is unset. There is no metasimulation
-    // on this platform, so an image is required.
+    // discovered on the bus when the BDF is unset. An image is required: the
+    // card and the platform's simulator both run one.
     const char* vbin = getenv("VRT_VBIN_PATH");
     if (vbin == nullptr || vbin[0] == '\0') {
       fprintf(stderr, "[VXDRV] VRT_VBIN_PATH must name the FireSim .vbin\n");

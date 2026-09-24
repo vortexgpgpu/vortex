@@ -243,14 +243,21 @@ ifneq ($(filter run-firesim,$(MAKECMDGOALS)),)
 FIRESIM_PLATFORM := $(shell python3 $(VORTEX_HOME)/hw/scripts/gen_platform.py --card=$(FIRESIM_CARD) --emit=firesim-mk | sed -n 's/^PLATFORM := //p')
 endif
 
+# On aved, TARGET=avedsim runs the metasimulator in-process and needs no image;
+# hw and sim both run a .vbin, the card's or the platform simulator's, named by
+# FPGA_BIN_DIR.
 run-firesim: $(PROJECT) kernel.vxbin
-	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/firesim DESTDIR=$(VORTEX_RT_LIB) FIRESIM_CARD=$(FIRESIM_CARD)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/firesim DESTDIR=$(VORTEX_RT_LIB) FIRESIM_CARD=$(FIRESIM_CARD) TARGET=$(TARGET)
 ifeq ($(FIRESIM_PLATFORM), aved)
+ifeq ($(TARGET), avedsim)
+	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else
 	VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/firesim.vbin LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+endif
 else ifeq ($(TARGET), hw)
 	XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
 else
-	XCL_EMULATION_MODE=$(TARGET) EMCONFIG_PATH=$(FPGA_BIN_DIR) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/firesim/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
 endif
 
 run-opae: $(PROJECT) kernel.vxbin
