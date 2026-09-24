@@ -21,6 +21,9 @@
 #ifndef VX_CFG_L2_WRITE_NOFETCH
 #define VX_CFG_L2_WRITE_NOFETCH 0
 #endif
+#ifndef VX_CFG_L2_SET_HASH
+#define VX_CFG_L2_SET_HASH 0
+#endif
 #include "debug.h"
 #include "types.h"
 #if VX_CFG_EXT_A_ENABLED
@@ -59,11 +62,20 @@ struct params_t {
   int32_t tag_select_addr_start;
   int32_t tag_select_addr_end;
 
+  // Set-index hashing (VX_CFG_L2_SET_HASH, LLC only): the set is the raw index XORed
+  // with the low tag bits, so lines whose addresses differ by a multiple of the set
+  // period (sets x line size, 64 KB per bank here) no longer share a set. Every real GPU
+  // L2 does some form of this; without it the harness's C, residual and D matrices --
+  // each a multiple of 64 KB -- put the same row of all three into one set and the DXA
+  // epilogue variants thrash (cgo27 RFC 260917 §7). XOR is its own inverse, so
+  // mem_addr() recovers the raw index from (hashed set, tag).
   params_t(const Cache::Config &config) {
     int32_t offset_bits = config.L - config.W;
     int32_t index_bits = config.C - (config.L + config.A + config.B);
     assert(offset_bits >= 0);
     assert(index_bits >= 0);
+    this->set_hash = (VX_CFG_L2_SET_HASH != 0) && config.is_llc && index_bits > 0;
+    this->index_bits = index_bits;
 
     this->log2_num_inputs = log2ceil(config.num_inputs);
 
@@ -103,11 +115,24 @@ struct params_t {
       return 0;
   }
 
+  bool    set_hash = false;
+  int32_t index_bits = 0;
+
+  // Hash term folded into the set index: the two lowest index_bits-wide groups of the
+  // tag, i.e. the address bits just above the set field.
+  uint32_t set_hash_of_tag(uint64_t tag) const {
+    if (!set_hash) return 0;
+    const uint64_t mask = (uint64_t(1) << index_bits) - 1;
+    return (uint32_t)((tag ^ (tag >> index_bits)) & mask);
+  }
+
   uint32_t addr_set_id(uint64_t addr) const {
-    if (set_select_addr_end >= set_select_addr_start)
-      return (uint32_t)bit_getw(addr, set_select_addr_start, set_select_addr_end);
-    else
+    if (set_select_addr_end >= set_select_addr_start) {
+      const uint32_t raw = (uint32_t)bit_getw(addr, set_select_addr_start, set_select_addr_end);
+      return set_hash ? (raw ^ set_hash_of_tag(addr_tag(addr))) : raw;
+    } else {
       return 0;
+    }
   }
 
   uint64_t addr_tag(uint64_t addr) const {
@@ -129,7 +154,8 @@ struct params_t {
     if (bank_select_addr_end >= bank_select_addr_start)
       addr = bit_setw(addr, bank_select_addr_start, bank_select_addr_end, bank_id);
     if (set_select_addr_end >= set_select_addr_start)
-      addr = bit_setw(addr, set_select_addr_start, set_select_addr_end, set_id);
+      addr = bit_setw(addr, set_select_addr_start, set_select_addr_end,
+                      set_hash ? (set_id ^ set_hash_of_tag(tag)) : set_id);
     if (tag_select_addr_end >= tag_select_addr_start)
       addr = bit_setw(addr, tag_select_addr_start, tag_select_addr_end, tag);
     return addr;
