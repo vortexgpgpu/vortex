@@ -31,7 +31,12 @@ CC_DEST := $(FIRESIM_PATH)/sim/src/main/cc/midasexamples
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
-BUILD_DIR ?= $(ROOT_DIR)/hw/syn/firesim
+# Overridden as SYN_BUILD_DIR, never as BUILD_DIR. A command-line variable
+# reaches every sub-make, and FireSim's own Makefile uses BUILD_DIR to find its
+# elaborator jar: overriding it here pointed FireSim at this directory and the
+# elaboration died on "Could not find or load main class".
+SYN_BUILD_DIR ?= $(ROOT_DIR)/hw/syn/firesim
+BUILD_DIR := $(SYN_BUILD_DIR)
 
 FIRESIM_CARD ?= u55c
 PLATFORM_GEN := python3 $(SCRIPT_DIR)/gen_platform.py --card=$(FIRESIM_CARD)
@@ -50,8 +55,21 @@ QUINTUPLET := $(PLATFORM)-midasexamples-VortexTarget-VortexConfig-$(PLATFORM_CON
 # Flattened Vortex sources for the BlackBox. Golden Gate takes a file list, not
 # include paths, so the tree is copied into one directory with the macros already
 # inlined (-P) and emitted in elaboration order: packages, interfaces, modules.
-VIVADO_SRCS_DIR := $(BUILD_DIR)/vivado_srcs
-VIVADO_SRCS_LIST := $(BUILD_DIR)/vivado_srcs.f
+#
+# The platform's simulation image (sim-image) gets its own flattening, under
+# -DSIMULATION. Under VIVADO, VX_platform.vh enables ASYNC_BRAM_PATCH unless
+# SIMULATION is defined, and that patch leaves every async RAM's read address
+# behind an empty VX_placeholder black box which only the opt_design hook
+# rewires. A behavioural simulation never runs opt_design, so without the
+# define those RAMs never latch an address and read back X -- the same reason
+# the native xrt flow adds -DSIMULATION for hw_emu.
+IMAGE_KIND ?= hw
+ifeq ($(IMAGE_KIND), sim)
+IMAGE_SUFFIX := _sim
+endif
+VIVADO_SRCS_NAME := vivado_srcs$(IMAGE_SUFFIX)
+VIVADO_SRCS_DIR := $(BUILD_DIR)/$(VIVADO_SRCS_NAME)
+VIVADO_SRCS_LIST := $(BUILD_DIR)/$(VIVADO_SRCS_NAME).f
 
 # The same tree flattened for simulation instead. gen_sources.sh writes a
 # directory, not a stamp, so the rule records one to hang the dependency on.
@@ -106,6 +124,9 @@ TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
 # design lands in distributed RAM. A U55C has 600960 LUTs usable as memory and
 # this design asks for 753744 of them without it.
 SYNTH_DEFINES := -DSYNTHESIS -DVIVADO -DNDEBUG
+ifeq ($(IMAGE_KIND), sim)
+SYNTH_DEFINES += -DSIMULATION
+endif
 
 # This wrapper exposes a single AXI memory port, so give Vortex a single
 # platform memory bank to match. Left at the default of 2, Vortex builds two
@@ -159,7 +180,7 @@ GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(TYPE_DEFI
 # Defines arrive on the command line, which no file timestamp reflects, so a
 # changed CONFIGS would otherwise reuse the previous flattened tree. The stamp is
 # rewritten only when the flags differ, which keeps an unchanged build current.
-CONFIG_STAMP := $(BUILD_DIR)/gen_cflags.stamp
+CONFIG_STAMP := $(BUILD_DIR)/gen_cflags$(IMAGE_SUFFIX).stamp
 $(shell mkdir -p $(BUILD_DIR) && echo '$(GEN_CFLAGS)' > $(CONFIG_STAMP).tmp && \
         (cmp -s $(CONFIG_STAMP).tmp $(CONFIG_STAMP) && rm -f $(CONFIG_STAMP).tmp || mv -f $(CONFIG_STAMP).tmp $(CONFIG_STAMP)))
 
@@ -192,9 +213,11 @@ $(shell mkdir -p $(BUILD_DIR) && echo '$(SIM_GEN_CFLAGS)' > $(SIM_CONFIG_STAMP).
 EXT_PKG_ORDER := VX_tcu_pkg.sv VX_dxa_pkg.sv VX_rtu_pkg.sv VX_om_pkg.sv \
                  VX_raster_pkg.sv VX_tex_pkg.sv
 EXT_PKG_NAMES := $(filter $(notdir $(RTL_PKGS)),$(EXT_PKG_ORDER))
-EXPLICIT_NAMES := VX_gpu_pkg.sv VX_fpu_pkg.sv VX_tlb_pkg.sv VX_trace_pkg.sv \
-                  $(EXT_PKG_NAMES) VX_firesim_wrap.sv
+PKG_ORDER := VX_gpu_pkg.sv VX_fpu_pkg.sv VX_tlb_pkg.sv VX_trace_pkg.sv $(EXT_PKG_NAMES)
+EXPLICIT_NAMES := $(PKG_ORDER) VX_firesim_wrap.sv
 EXPLICIT_SRCS := $(addprefix $(SRCS_DIR)/,$(EXPLICIT_NAMES))
+empty :=
+space := $(empty) $(empty)
 
 sources: $(SRCS_LIST)
 $(SRCS_LIST): $(SIM_SRCS_STAMP)
@@ -234,12 +257,21 @@ vivado-sources: $(VIVADO_SRCS_LIST)
 $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 	@mkdir -p $(BUILD_DIR)
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) \
-		-TVX_firesim_wrap -Cvivado_srcs -Ovivado_srcs.f
+		-TVX_firesim_wrap -C$(VIVADO_SRCS_NAME) -O$(VIVADO_SRCS_NAME).f
 	@for f in $(AFU_SHELL_MODULES); do \
 		rm -f $(VIVADO_SRCS_DIR)/$$f; \
 		grep -v "/$$f$$" $(VIVADO_SRCS_LIST) > $(VIVADO_SRCS_LIST).tmp && \
 			mv $(VIVADO_SRCS_LIST).tmp $(VIVADO_SRCS_LIST); \
 	done
+	@# gen_sources.sh lists packages in find(1) order, which is directory order,
+	@# not dependency order. Synthesis reorders on its own; a simulator compiles
+	@# the list as given. Under -DSIMULATION VX_trace_pkg imports VX_gpu_pkg, and
+	@# with trace first xsim failed on "'VX_gpu_pkg' is not declared". Put the
+	@# packages in the dependency order the metasim list already uses.
+	@{ grep '^+' $(VIVADO_SRCS_LIST); \
+	   for p in $(PKG_ORDER); do grep "/$$p$$" $(VIVADO_SRCS_LIST); done; \
+	   grep -v '^+' $(VIVADO_SRCS_LIST) | grep -vE '/($(subst $(space),|,$(PKG_ORDER)))$$'; \
+	 } > $(VIVADO_SRCS_LIST).tmp && mv $(VIVADO_SRCS_LIST).tmp $(VIVADO_SRCS_LIST)
 	@# A design with no memory ports elaborates as zero-sized arrays deep inside
 	@# Vivado, hours from here. Defining the config scalars instead of letting
 	@# VX_config.vh compute them is enough to cause it, so check the result.
@@ -320,7 +352,7 @@ bitstream: vivado-sources xilinx-ips stage
 
 # The same image built for the platform's own simulator instead of the fabric.
 sim-image:
-	$(MAKE) bitstream PLATFORM_IMAGE_GOAL='$(PLATFORM_SIM_GOAL)'
+	$(MAKE) bitstream PLATFORM_IMAGE_GOAL='$(PLATFORM_SIM_GOAL)' IMAGE_KIND=sim
 
 FREQUENCY ?= 60.0
 STRATEGY ?= TIMING
@@ -339,7 +371,9 @@ PLATFORM_HW_GOAL  := bitstream TARGET=hw
 PLATFORM_SIM_GOAL := bitstream TARGET=sim
 else
 PLATFORM_HW_GOAL  := bitstream
-PLATFORM_SIM_GOAL := sim
+# Without debug: a debug hw_emu kernel logs a waveform of the whole shell on
+# every run (~800 MB for demo, tens of GB for raycast) and runs far slower.
+PLATFORM_SIM_GOAL := sim VPP_DEBUG=
 endif
 PLATFORM_IMAGE_GOAL ?= $(PLATFORM_HW_GOAL)
 
