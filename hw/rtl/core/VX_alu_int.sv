@@ -157,6 +157,8 @@ module VX_alu_int import VX_gpu_pkg::*; #(
         end
     end
 
+    wire [LANE_WIDTH-1:0] last_tid, last_tid_r;
+
     // WGATHER — each group of 4 lanes operates independently. Source lane =
     // nominal (group_base | wg_src_offset), falling back to the last active lane
     // (branch's last_tid) when the nominal lane is masked — partial-warp safe.
@@ -254,7 +256,6 @@ module VX_alu_int import VX_gpu_pkg::*; #(
 
     wire [INST_BR_BITS-1:0] br_op_r;
     wire [PC_BITS-1:0] cbr_dest, cbr_dest_r;
-    wire [LANE_WIDTH-1:0] last_tid, last_tid_r;
     wire is_br_op_r;
 
     assign cbr_dest = from_fullPC(add_result[0]);

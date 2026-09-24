@@ -125,6 +125,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [TLB_VPN_WIDTH-1:0]   park_vpn;
     tlb_access_e               park_access;
     wire                       park_amo;
+    reg [LANE_W-1:0]           park_lane;
     wire [PAYLOAD_W-1:0]       park_payload;
     wire                       park_ready;
 
@@ -206,7 +207,6 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     // Park arbitration: at most one lane parks a miss per cycle (lowest lane).
     wire [NUM_REQS-1:0] park_sel;
-    reg [LANE_W-1:0] park_lane;
     always @(*) begin
         park_lane = '0;
         for (int l = NUM_REQS-1; l >= 0; --l) begin

@@ -20,16 +20,6 @@
 
 package VX_gpu_pkg;
 
-    // These 6 localparams mirror their VX_CFG_* macros, which expand to
-    // VX_CFG_{DCACHE,L2,L3}_NUM_REQS — localparams declared later in this package.
-    localparam DCACHE_NUM_BANKS                 = `VX_CFG_DCACHE_NUM_BANKS;
-    localparam L1_MEM_PORTS                     = `VX_CFG_L1_MEM_PORTS;
-    localparam L2_MEM_PORTS                     = `VX_CFG_L2_MEM_PORTS;
-    localparam L2_NUM_BANKS                     = `VX_CFG_L2_NUM_BANKS;
-    localparam L3_MEM_PORTS                     = `VX_CFG_L3_MEM_PORTS;
-    localparam L3_NUM_BANKS                     = `VX_CFG_L3_NUM_BANKS;
-
-
     localparam NC_BITS = `CLOG2(`VX_CFG_NUM_CORES);
     localparam NW_BITS = `CLOG2(`VX_CFG_NUM_WARPS);
     localparam NT_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
@@ -1486,6 +1476,8 @@ package VX_gpu_pkg;
     // Input request size (using coalesced memory blocks)
     localparam DCACHE_CHANNELS	    = `UP((`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE);
     localparam DCACHE_NUM_REQS	    = `VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS;
+    localparam DCACHE_NUM_BANKS     = `VX_CFG_DCACHE_NUM_BANKS;
+    localparam L1_MEM_PORTS         = `VX_CFG_L1_MEM_PORTS;
 
     // Core request tag Id bits
     localparam DCACHE_MERGED_REQS   = (`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
@@ -1715,6 +1707,8 @@ package VX_gpu_pkg;
     localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
+    localparam L2_NUM_BANKS         = `VX_CFG_L2_NUM_BANKS;
+    localparam L2_MEM_PORTS         = `VX_CFG_L2_MEM_PORTS;
 
     // Core request tag bits (socket arb output width)
     localparam L2_TAG_WIDTH         = SOCKET_MEM_ARB_TAG_WIDTH;
@@ -1751,6 +1745,8 @@ package VX_gpu_pkg;
 
     // Input request size
     localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
+    localparam L3_NUM_BANKS         = `VX_CFG_L3_NUM_BANKS;
+    localparam L3_MEM_PORTS         = `VX_CFG_L3_MEM_PORTS;
 
     // Core request tag bits
     localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;

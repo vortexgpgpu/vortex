@@ -115,6 +115,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     wire                       core_rden;
     wire [RTUW_SLOT_BITS-1:0]  core_slot;
+    wire [NW_WIDTH-1:0]        core_wid;
     wire [NUM_LANES-1:0][31:0] core_rdata;
 
     VX_dp_ram #(
@@ -330,7 +331,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // read reads the slot its op names.
     assign core_rden = read_fire || wake_fire;
     assign core_slot = wake_fire ? RTUW_SLOT_BITS'(`VX_RT_STATUS) : slot;
-    wire [NW_WIDTH-1:0] core_wid = wake_fire ? wake_wid : wid;
+    assign core_wid = wake_fire ? wake_wid : wid;
 
     // ── sequential state ───────────────────────────────────────────────────
     always @(posedge clk) begin
