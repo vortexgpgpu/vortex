@@ -14,6 +14,7 @@
 #include "firesim_sim.h"
 
 #include "bridges/clock.h"
+#include "bridges/fased_memory_timing_model.h"
 
 #include <algorithm>
 #include <chrono>
@@ -127,9 +128,10 @@ vortex_simulation_t *g_sim = nullptr;
 // not thread-safe and must never be touched by the caller.
 class vortex_simulation_t final : public simulation_t {
 public:
-  vortex_simulation_t(widget_registry_t &registry,
+  vortex_simulation_t(simif_t &simif, widget_registry_t &registry,
                       const std::vector<std::string> &args)
-      : simulation_t(registry, args),
+      : simulation_t(registry, args), simif(simif),
+        fased(registry.get_bridges<FASEDMemoryTimingModel>()),
         peek_poke(registry.get_widget<peek_poke_t>()),
         loadmem(registry.get_widget<loadmem_t>()),
         clock(registry.get_widget<clockmodule_t>()) {}
@@ -175,6 +177,11 @@ public:
     peek_poke.step(n, true);
   }
 
+  // The DRAM timing models sit between the target's memory port and the
+  // card's memory. Their request and error counters say whether a request the
+  // core is waiting on ever left the target, came back, or came back an error.
+  simif_t &simif;
+  std::vector<FASEDMemoryTimingModel *> fased;
   peek_poke_t &peek_poke;
   loadmem_t &loadmem;
   // True target cycles elapsed. step() requests cycles; this reports how many
@@ -191,8 +198,7 @@ std::unique_ptr<simulation_t>
 create_simulation(simif_t &simif,
                   widget_registry_t &registry,
                   const std::vector<std::string> &args) {
-  (void)simif;
-  return std::make_unique<vortex_simulation_t>(registry, args);
+  return std::make_unique<vortex_simulation_t>(simif, registry, args);
 }
 
 namespace {
@@ -455,7 +461,31 @@ private:
 
 firesim_sim::firesim_sim()
     : impl_(new Impl()), step_batch_(kStepBatchFloor), busy_cycles_(0),
-      stall_reported_(false) {}
+      stall_reported_(false), awaiting_busy_(false), idle_cycles_(0),
+      abort_phase_(0), launch_started_s_(0) {}
+
+// Wall-clock seconds a launch may take before the runtime gives up on it; 0
+// (the default) never does. Meant for a card run under an outer timeout: this
+// fires first, so the run ends with a report and a normal exit instead of a
+// kill.
+static double launch_timeout_s() {
+  static const double value = [] {
+    if (const char *env = getenv("VORTEX_FIRESIM_TIMEOUT_S")) {
+      const double v = atof(env);
+      if (v > 0) {
+        return v;
+      }
+    }
+    return 0.0;
+  }();
+  return value;
+}
+
+static double wall_now_s() {
+  return std::chrono::duration<double>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
 
 // Target cycles of continuous busy after which the target is assumed wedged and
 // its bus activity is reported. Well above any kernel this platform runs today
@@ -486,6 +516,23 @@ void firesim_sim::report_progress(const char *why) {
   // than anything the design did.
   fprintf(stderr, "[firesim] %s: requested=%llu tcycle=%llu\n", why,
           (unsigned long long)busy_cycles_, (unsigned long long)tcycle);
+  std::string mem;
+  impl_->submit("read memory model counters", [&mem] {
+    static const char *const kRegs[] = {
+        "totalReads", "totalReadBeats", "totalWrites", "totalWriteBeats",
+        "rrespError", "brespError",     "readMaxReqs", "writeMaxReqs"};
+    for (size_t i = 0; i < g_sim->fased.size(); ++i) {
+      const AddressMap &map = g_sim->fased[i]->get_addr_map();
+      mem += " [" + std::to_string(i) + "]";
+      for (const char *reg : kRegs) {
+        if (map.r_reg_exists(reg)) {
+          mem += std::string(" ") + reg + "=" +
+                 std::to_string(g_sim->simif.read(map.r_addr(reg)));
+        }
+      }
+    }
+  });
+  fprintf(stderr, "[firesim] memory model:%s\n", mem.c_str());
   report_core_counters();
 }
 
@@ -532,10 +579,11 @@ void firesim_sim::report_core_counters() {
         (kClassCore << 22) | ((c.csr - kMpmBase) << 16) | 0 /* core 0 */;
     uint32_t value = 0;
     if (this->dcr_read(kDcrMpmValue, tag, &value) != 0) {
-      line += " ";
-      line += c.name;
-      line += "=?";
-      continue;
+      // A target that ignores one DCR read ignores them all, and each costs
+      // the full poll budget; the rest would only delay the report.
+      fprintf(stderr, "[firesim] core counters:%s %s=? (DCR path not "
+              "answering; remaining counters skipped)\n", line.c_str(), c.name);
+      return;
     }
     all_zero = all_zero && (value == 0);
     line += " ";
@@ -581,6 +629,9 @@ int firesim_sim::init(const std::vector<std::string> &plusargs) {
 }
 
 int firesim_sim::dcr_write(uint32_t addr, uint32_t value) {
+  if (abort_phase_ != 0) {
+    return 0;
+  }
   return impl_->submit(label("dcr_write addr=0x%x data=0x%x", addr, value), [addr, value] {
     auto &pp = g_sim->peek_poke;
     pp.poke("ctrl_dcr_req_valid", 1, true);
@@ -594,6 +645,10 @@ int firesim_sim::dcr_write(uint32_t addr, uint32_t value) {
 }
 
 int firesim_sim::dcr_read(uint32_t addr, uint32_t tag, uint32_t *value) {
+  if (abort_phase_ != 0) {
+    *value = 0;
+    return -1;
+  }
   uint32_t sampled = 0;
   bool answered = false;
   int ret = impl_->submit(label("dcr_read addr=0x%x", addr), [addr, tag, &sampled, &answered] {
@@ -672,6 +727,10 @@ static void prefill_region() {
 
 int firesim_sim::start() {
   impl_->submit("prefill", [] { prefill_region(); });
+  awaiting_busy_ = true;
+  idle_cycles_ = 0;
+  abort_phase_ = 0;
+  launch_started_s_ = wall_now_s();
   return impl_->submit("start", [] {
     auto &pp = g_sim->peek_poke;
     pp.poke("ctrl_start", 1, true);
@@ -682,6 +741,29 @@ int firesim_sim::start() {
 }
 
 int firesim_sim::is_busy(bool *busy) {
+  // After the watchdog has given up the target is no longer advanced at all:
+  // report busy once, which is what a launch still waiting for its rising edge
+  // needs, then idle, so every launch state reaches its end.
+  if (abort_phase_ != 0) {
+    *busy = (abort_phase_ == 1);
+    abort_phase_ = 2;
+    return 0;
+  }
+  if (launch_timeout_s() > 0 && launch_started_s_ > 0 &&
+      wall_now_s() - launch_started_s_ > launch_timeout_s()) {
+    fprintf(stderr,
+            "[firesim] launch exceeded VORTEX_FIRESIM_TIMEOUT_S=%.0f s "
+            "(busy %s); giving up on it\n",
+            launch_timeout_s(), awaiting_busy_ ? "never rose" : "never fell");
+    report_progress("launch watchdog");
+    launch_started_s_ = 0;
+    abort_phase_ = awaiting_busy_ ? 1 : 2;
+    awaiting_busy_ = false;
+    *busy = (abort_phase_ == 1);
+    abort_phase_ = 2;
+    return 0;
+  }
+
   uint32_t sampled = 0;
   // Advance before sampling: the target only moves while it is being asked to,
   // so a caller that merely polls without stepping would spin forever.
@@ -699,6 +781,10 @@ int firesim_sim::is_busy(bool *busy) {
   // grow towards the ceiling and give a long kernel the throughput it needs.
   // Going idle drops back to the floor, ready for the next launch.
   if (*busy) {
+    if (awaiting_busy_) {
+      awaiting_busy_ = false;
+      stall_reported_ = false;
+    }
     const uint32_t ceiling = step_batch_ceiling();
     step_batch_ = (batch >= ceiling / 4) ? ceiling : batch * 4;
     busy_cycles_ += batch;
@@ -710,6 +796,15 @@ int firesim_sim::is_busy(bool *busy) {
     if (!stall_reported_ && busy_cycles_ >= stall_report_cycles()) {
       stall_reported_ = true;
       report_progress("target still busy");
+    }
+  } else if (awaiting_busy_) {
+    // Still waiting for the launch to take. A kernel is busy from its first
+    // fetch, so a start that has not raised busy within the stall budget never
+    // reached the core; say so once, with the counters, rather than poll on.
+    idle_cycles_ += batch;
+    if (!stall_reported_ && idle_cycles_ >= stall_report_cycles()) {
+      stall_reported_ = true;
+      report_progress("target never went busy after start");
     }
   } else {
     // Report on a healthy completion too, not only on a stall. Without this the
@@ -724,6 +819,7 @@ int firesim_sim::is_busy(bool *busy) {
     step_batch_ = std::min(kStepBatchFloor, step_batch_ceiling());
     busy_cycles_ = 0;
     stall_reported_ = false;
+    launch_started_s_ = 0;
   }
   return 0;
 }
@@ -746,7 +842,14 @@ int firesim_sim::ready_wait(int64_t timeout_ms) {
   }
 }
 
+// Once a launch has been abandoned the target is left where it stopped, and
+// its memory path may be the very thing that is stuck. Nothing more is sent to
+// it, so the application runs to its own exit -- and reports its failure --
+// instead of blocking on a transfer that will never complete.
 int firesim_sim::mem_write(uint64_t addr, uint64_t size, const void *value) {
+  if (abort_phase_ != 0) {
+    return 0;
+  }
   dump_upload(addr, size, value);
   return impl_->submit(
       label("mem_write addr=0x%lx size=%lu", (unsigned long)addr, (unsigned long)size),
@@ -754,6 +857,10 @@ int firesim_sim::mem_write(uint64_t addr, uint64_t size, const void *value) {
 }
 
 int firesim_sim::mem_read(uint64_t addr, uint64_t size, void *value) {
+  if (abort_phase_ != 0) {
+    memset(value, 0, size);
+    return 0;
+  }
   return impl_->submit(
       label("mem_read addr=0x%lx size=%lu", (unsigned long)addr, (unsigned long)size),
       [addr, size, value] { access_mem(addr, size, value, false); });
