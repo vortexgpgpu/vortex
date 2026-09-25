@@ -162,6 +162,18 @@ PLATFORM_DEFINES := -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1
 # checked, not just the overflow avoided.
 PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=4
 
+# On aved the simulator's clock gates are turned into clock enables by
+# synthesis (the V80's reconfigurable partition has no BUFGCE, and a fabric gate
+# is not safe; see FireSimFabricClockGate). That conversion cannot enter a
+# vendor core: each is synthesized out of context behind a kept hierarchy, so
+# it would stay on a logic-driven clock and the platform build rejects it. The
+# RTU is the only unit that reaches for them by default, so it uses the soft
+# FMA and divider here -- the same RTL the metasimulator runs -- with the soft
+# divider's latency in place of xil_fdiv's.
+ifeq ($(PLATFORM), aved)
+PLATFORM_DEFINES += -DVX_CFG_RTU_USE_DSP=0 -DVX_CFG_RTU_FDIV_LATENCY=17
+endif
+
 # Vortex's performance counters are the only view inside the core that does not
 # require re-elaborating the design: at a stall they say whether warps are still
 # resident, whether they are waiting at a barrier, and which pipeline is holding
