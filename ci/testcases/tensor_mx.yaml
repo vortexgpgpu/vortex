@@ -314,5 +314,16 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_IF4_ENABLE -DVX_CFG_TCU_TYPE_DPI -DITYPE=if4 -DOTYPE=fp32 -DTCU_MX_TLS
   args: "-k32"
 
+# lnsf4: NVFP4 with an LNS8 (Q4.3) block scale instead of e4m3 -- see
+# VX_CFG_TCU_LNSF4_ENABLE. TFR-only for now: no SimX/DPI model exists yet
+# (sim/simx/tcu/tcu_unit.cpp and hw/rtl/tcu/dpi/VX_tcu_fedp_dpi.sv), so there
+# is no simx or model_parity variant here the way NVFP4/RZR4/IF4 have.
+- id: sgemm_tcu_mx-rtlsim-lnsf4-tfr
+  via: blackbox
+  drivers: [rtlsim]
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_LNSF4_ENABLE -DVX_CFG_TCU_TYPE_TFR -DITYPE=lnsf4 -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-m32 -n32 -k32"
+
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.

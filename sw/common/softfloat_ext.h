@@ -41,8 +41,10 @@ typedef struct { uint8_t v, sf; } mxfloat4_t;  // e2m1 with e8m0 scale
 typedef struct { uint8_t v, sf; } nvfloat4_t;  // e2m1 with e4m3 scale
 typedef struct { uint8_t v, sf; } ifloat4_t;
 typedef struct { uint8_t v, sf; } rzrfloat4_t; // RaZeR e2m1 with signed metadata
+typedef struct { uint8_t v, sf; } lnsfloat4_t; // e2m1 with LNS8 (Q4.3) scale
 typedef struct { uint8_t sf; }    sfexp8_t;    // e8m0 scale factor
 typedef struct { uint8_t sf; }    sffloat8_t;  // e4m3 scale factor
+typedef struct { uint8_t sf; }    sflns8_t;    // LNS8 (Q4.3 two's complement) scale
 typedef struct { uint8_t v; }     float4_t;    // e2m1
 
 uint_fast16_t f16_classify(float16_t);
@@ -77,6 +79,9 @@ float32_t  mxfp4_to_f32(mxfloat4_t);
 
 nvfloat4_t f32_to_nvfp4(float32_t, sffloat8_t);
 float32_t  nvfp4_to_f32(nvfloat4_t);
+
+lnsfloat4_t f32_to_lnsf4(float32_t, sflns8_t);
+float32_t   lnsf4_to_f32(lnsfloat4_t);
 
 float32_t rzr4_to_f32(rzrfloat4_t);
 float32_t if4_to_f32(ifloat4_t);

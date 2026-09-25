@@ -88,6 +88,9 @@ struct data_accessor_t<if4> : data_accessor_t<nvfp4> {};
 template <>
 struct data_accessor_t<rzr4> : data_accessor_t<nvfp4> {};
 
+template <>
+struct data_accessor_t<lnsf4> : data_accessor_t<nvfp4> {};
+
 enum class mx_block_layout_t {
   row_major,
   col_major
@@ -169,6 +172,35 @@ struct mx_format_t<nvfp4> {
 
   static storage_type convert(float v, uint8_t sf) {
     return rv_ftonvfp4_s(bit_cast<uint32_t>(v), sf, 0, nullptr) & 0x0f;
+  }
+};
+
+// LNS8 scale: sf's low 7 bits hold a signed two's complement Q4.3
+// log2(scale) (bit 7 unused, mirroring e4m3's redundant sign for a scale
+// that is always positive). Anchoring and clamp-to-representable-range
+// mirror select_e8m0_scale above -- the only difference is the fixed-point
+// (not floating-point) target encoding.
+inline uint8_t select_lnsf4_scale(float max_abs) {
+  if (!(max_abs > 0.0f) || !std::isfinite(max_abs)) {
+    return 0;  // e = 0 -> scale = 1.0
+  }
+  float target = max_abs / 6.0f;
+  int32_t raw = static_cast<int32_t>(std::lround(std::log2(target) * 8.0f));
+  raw = std::max(-64, std::min(63, raw));
+  return static_cast<uint8_t>(raw & 0x7f);
+}
+
+template <>
+struct mx_format_t<lnsf4> {
+  using storage_type = uint8_t;
+  static constexpr bool needs_tensor_scale = true;
+
+  static uint8_t select_scale(float max_abs) {
+    return select_lnsf4_scale(max_abs);
+  }
+
+  static storage_type convert(float v, uint8_t sf) {
+    return rv_ftolnsf4_s(bit_cast<uint32_t>(v), sf, 0, nullptr) & 0x0f;
   }
 };
 
