@@ -1053,6 +1053,40 @@ nvfloat4_t f32_to_nvfp4(float32_t a, sffloat8_t scale_factor) {
   return res;
 }
 
+// sf holds a signed two's complement Q4.3 fixed-point log2(scale) in its low
+// 7 bits (LSB weight 1/8); bit 7 is unused, mirroring e4m3's redundant sign
+// bit for a scale that is always positive.
+static float lnsf4_decode_scale(uint8_t sf) {
+  uint8_t v7 = sf & 0x7f;
+  int8_t shifted = static_cast<int8_t>(static_cast<uint8_t>(v7 << 1));
+  int32_t raw = shifted >> 1;
+  return std::exp2(static_cast<float>(raw) / 8.0f);
+}
+
+float32_t lnsf4_to_f32(lnsfloat4_t a) {
+  float4_t base = {static_cast<uint8_t>(a.v & 0x0f)};
+  auto base_value = vortex::bit_cast<float>(f4e2m1_to_f32(base).v);
+  float scale_factor = lnsf4_decode_scale(a.sf);
+  float out = base_value * scale_factor;
+  float32_t res;
+  res.v = vortex::bit_cast<uint32_t>(out);
+  return res;
+}
+
+lnsfloat4_t f32_to_lnsf4(float32_t a, sflns8_t scale_factor) {
+  float scale = lnsf4_decode_scale(scale_factor.sf);
+  if (!std::isfinite(scale) || scale == 0.0f) {
+    scale = 1.0f;
+  }
+  float scaled_value = vortex::bit_cast<float>(a.v) / scale;
+  float32_t scaled_f32 = {vortex::bit_cast<uint32_t>(scaled_value)};
+  auto out = f32_to_f4e2m1(scaled_f32).v;
+  lnsfloat4_t res;
+  res.v = out & 0x0f;
+  res.sf = scale_factor.sf;
+  return res;
+}
+
 float32_t f4e2m1_to_f32(float4_t a) {
   static constexpr float values[8] = {
     0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f

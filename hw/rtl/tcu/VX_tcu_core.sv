@@ -354,8 +354,43 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     endfunction
 
-    wire [TCU_TC_M-1:0][FEDP_SF-1:0][7:0] mx_sf_a;
-    wire [TCU_TC_N-1:0][FEDP_SF-1:0][7:0] mx_sf_b;
+    // `(s * mx_fedp_k_elems) / FEDP_SF` inlined directly at its use site (nested
+    // two generate-block levels deep: g_blocks[].tcu_core here, plus this
+    // module's own g_mx_sf_a_i[]/g_s[]) makes sv2v re-expand FEDP_SF's defining
+    // expression instead of substituting its already-folded value, emitting a
+    // hierarchically-qualified call to VX_tcu_pkg's mx_fedp_sf_count() that
+    // Yosys's reader rejects with "unexpected '('". Wrapping the same
+    // computation in an argument-taking function avoids it, mirroring
+    // VX_tcu_pkg.sv's TCU_MX_MAX_SF fix: sv2v folds a function's arguments
+    // (mx_fedp_k_elems is a real signal here) but not this same expression
+    // written inline. This is a workaround, not a fix (AGENTS.md S3): the
+    // defect is sv2v's parameter substitution, which should behave the same
+    // regardless of syntactic context.
+    function automatic int unsigned mx_fedp_sf_k_offset(
+        input int unsigned s,
+        input int unsigned k_elems,
+        input int unsigned sf_count
+    );
+        return (s * k_elems) / sf_count;
+    endfunction
+
+    // FEDP_SF-sized flat vectors instead of [M][FEDP_SF][8] packed arrays: the
+    // multi-dim declaration itself folds fine (same as a generate-loop bound),
+    // but sv2v re-expands FEDP_SF's defining expression -- the same failure
+    // mode mx_fedp_sf_k_offset works around above -- once it has to flatten a
+    // genvar-indexed `mx_sf_a[i][s]` write into the equivalent bit offset.
+    // Flattening explicitly and indexing through an argument-taking function
+    // sidesteps it the same way.
+    function automatic int unsigned mx_sf_flat_offset(
+        input int unsigned idx,
+        input int unsigned s,
+        input int unsigned sf_count
+    );
+        return (idx * sf_count + s) * 8;
+    endfunction
+
+    wire [(TCU_TC_M*FEDP_SF*8)-1:0] mx_sf_a_flat;
+    wire [(TCU_TC_N*FEDP_SF*8)-1:0] mx_sf_b_flat;
     wire [3:0] mx_elems_per_word = 4'(32 / tcu_fmt_width(fmt_s));
     wire [MX_SCALE_IDX_W-1:0] mx_scale_blocks_k_eff =
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -381,16 +416,16 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     for (genvar i = 0; i < TCU_TC_M; ++i) begin : g_mx_sf_a_i
         wire [MX_IDX_W-1:0] mx_a_idx = MX_IDX_W'(step_m) * MX_IDX_W'(TCU_TC_M) + MX_IDX_W'(i);
         for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
-            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_k_elems) / FEDP_SF);
-            assign mx_sf_a[i][s] = mx_scale_at(mx_meta_a, fmt_s, mx_scale_blocks_k_eff, mx_a_idx, mx_k_idx);
+            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'(mx_fedp_sf_k_offset(s, mx_fedp_k_elems, FEDP_SF));
+            assign mx_sf_a_flat[mx_sf_flat_offset(i, s, FEDP_SF) +: 8] = mx_scale_at(mx_meta_a, fmt_s, mx_scale_blocks_k_eff, mx_a_idx, mx_k_idx);
         end
     end
 
     for (genvar j = 0; j < TCU_TC_N; ++j) begin : g_mx_sf_b_j
         wire [MX_IDX_W-1:0] mx_b_idx = MX_IDX_W'(step_n) * MX_IDX_W'(TCU_TC_N) + MX_IDX_W'(j);
         for (genvar s = 0; s < FEDP_SF; ++s) begin : g_s
-            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'((s * mx_fedp_k_elems) / FEDP_SF);
-            assign mx_sf_b[j][s] = mx_scale_at(mx_meta_b, fmt_s, mx_scale_blocks_k_eff, mx_b_idx, mx_k_idx);
+            wire [MX_K_IDX_W-1:0] mx_k_idx = mx_k_base_idx + MX_K_IDX_W'(mx_fedp_sf_k_offset(s, mx_fedp_k_elems, FEDP_SF));
+            assign mx_sf_b_flat[mx_sf_flat_offset(j, s, FEDP_SF) +: 8] = mx_scale_at(mx_meta_b, fmt_s, mx_scale_blocks_k_eff, mx_b_idx, mx_k_idx);
         end
     end
 `endif
@@ -410,8 +445,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             wire [FEDP_K-1:0][31:0] a_row, b_col;
         `endif
         `ifdef VX_CFG_TCU_MX_ENABLE
-            wire [FEDP_SF-1:0][7:0] sf_a = mx_sf_a[i];
-            wire [FEDP_SF-1:0][7:0] sf_b = mx_sf_b[j];
+            wire [FEDP_SF-1:0][7:0] sf_a = mx_sf_a_flat[mx_sf_flat_offset(i, 0, FEDP_SF) +: FEDP_SF*8];
+            wire [FEDP_SF-1:0][7:0] sf_b = mx_sf_b_flat[mx_sf_flat_offset(j, 0, FEDP_SF) +: FEDP_SF*8];
         `endif
             for (genvar k_idx = 0; k_idx < FEDP_K; ++k_idx) begin : g_slice_assign
             `ifdef VX_CFG_TCU_WGMMA_ENABLE

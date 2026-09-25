@@ -692,6 +692,27 @@ uint8_t rv_ftonvfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   return nvfp4.v;
 }
 
+uint32_t rv_lnsf4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  lnsfloat4_t lnsf4;
+  lnsf4.v = a;
+  lnsf4.sf = sf;
+  float32_t f32 = lnsf4_to_f32(lnsf4);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
+uint8_t rv_ftolnsf4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32;
+  f32.v = a;
+  sflns8_t scale_factor;
+  scale_factor.sf = sf;
+  lnsfloat4_t lnsf4 = f32_to_lnsf4(f32, scale_factor);
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return lnsf4.v;
+}
+
 uint32_t rv_if4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   rv_init(frm);
   float32_t f32 = if4_to_f32({a, sf});

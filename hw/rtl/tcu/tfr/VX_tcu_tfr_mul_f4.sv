@@ -809,6 +809,203 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     end
 `endif  // VX_CFG_TCU_IF4_ENABLE
 
+`ifdef VX_CFG_TCU_LNSF4_ENABLE
+    // NVFP4 with the e4m3 block scale replaced by an LNS8 (Q4.3 two's
+    // complement) scale: element format, dot-product tree and special-value
+    // handling are bit-identical to NVFP4 (see VX_CFG_TCU_NVFP4_ENABLE above).
+    // Only the scale-factor combine changes: log2(scale_a)+log2(scale_b) is a
+    // plain fixed-point add instead of an e4m3 mantissa multiply, so the two
+    // VX_tcu_tfr_wmul sf_wtmul instances NVFP4 needs to fold sf_man_a*sf_man_b
+    // collapse into one adder plus an 8-entry antilog lookup for the summed
+    // fractional octave (the integer octave feeds the exponent directly).
+    wire [TCK-1:0][24:0]      result_sig_lnsf4;
+    wire [TCK-1:0][EXP_W-1:0] result_exp_lnsf4;
+    fedp_excep_t [TCK-1:0]    exceptions_lnsf4;
+    wire [TCK-1:0]            sig_zero_lnsf4;
+
+    localparam F32_BIAS_LNSF4  = 127;
+    localparam S_FP32_LNSF4    = 23;
+    localparam S_SUPER_LNSF4   = 22;
+    localparam BIAS_BASE_LNSF4 = F32_BIAS_LNSF4 + 2*(S_FP32_LNSF4 - S_SUPER_LNSF4) - W + WA - 1 + 128;
+    // e_int below is already a TRUE (unbiased) combined exponent -- unlike
+    // NVFP4, which sums two e4m3-biased raw codes and folds the 2*SF_EXP_BIAS
+    // un-bias into its residual. NVFP4's own true-exponent-space residual is
+    // +6 (BIAS_BASE + 6 + ea_true + eb_true; matches its implicit 2^13
+    // pre/post-scale from sf_man_prod (2^6) and SIG_SHIFT (2^7), which the
+    // antilog LUT below and SIG_SHIFT_LNSF4 mirror bit-for-bit), so that is
+    // the constant to reuse here directly against e_int.
+    localparam [EXP_W-1:0] EXP_BASE_BIASED_LNSF4 = EXP_W'(BIAS_BASE_LNSF4 + 6);
+    localparam SIG_SHIFT_LNSF4 = 7;
+
+    // round(2**(k/8) * 64), k = 0..7 -- linear mantissa for the summed
+    // fractional octave, in the same UQ2.6-style convention as NVFP4's
+    // sf_man_prod so scale_mul needs no width changes.
+    function automatic [7:0] lnsf4_antilog(input logic [2:0] frac);
+        case (frac)
+            3'h0: return 8'd64;
+            3'h1: return 8'd70;
+            3'h2: return 8'd76;
+            3'h3: return 8'd83;
+            3'h4: return 8'd91;
+            3'h5: return 8'd99;
+            3'h6: return 8'd108;
+            default: return 8'd117;
+        endcase
+    endfunction
+
+    for (genvar i = 0; i < TCK; ++i) begin : g_lane_lnsf4
+        localparam K_WORD = i / 2;
+        `UNUSED_VAR ({sf_a[7], sf_b[7]})
+
+        // sf_a/sf_b[6:0]: signed two's complement log2(scale), Q4.3 (LSB = 1/8).
+        // Manual sign-extension (replicate bit 6) instead of $signed()/N'(...):
+        // avoids sv2v having to synthesize a cast-helper function for the
+        // nested width-cast-of-a-signed-cast pattern (a construct that, in
+        // hw/rtl/tcu/tfr/VX_tcu_tfr_align.sv, was seen tripping a pre-existing
+        // OpenSTA Verilog-reader incompatibility with a Yosys-flattened
+        // escaped identifier -- unrelated to lnsf4 and not fully root-caused;
+        // see the yosys+OpenSTA synthesis note in the commit history).
+        wire signed [7:0] e_a = {sf_a[6], sf_a[6:0]};
+        wire signed [7:0] e_b = {sf_b[6], sf_b[6:0]};
+        wire signed [7:0] e_sum = e_a + e_b;
+        wire signed [4:0] e_int = e_sum >>> 3;   // floor(e_sum / 8): integer octaves
+        wire [2:0] e_frac = e_sum[2:0];          // fractional remainder, always >= 0
+        wire [7:0] sf_scale = lnsf4_antilog(e_frac);
+
+        wire [3:0][3:0] elem_mag_a, elem_mag_b;
+        wire [3:0][7:0] elem_mag_prod;
+        wire [3:0] elem_sign;
+        wire [3:0] elem_valid;
+        wire [3:0][10:0] elem_signed;
+
+        for (genvar j = 0; j < 4; ++j) begin : g_term
+            localparam OFF = (i % 2) * 16 + j * 4;
+
+            wire lane_valid = vld_mask[i * 4 + j];
+            wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
+            wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
+
+            assign elem_mag_a[j] = e2m1_mag_x2(raw_a);
+            assign elem_mag_b[j] = e2m1_mag_x2(raw_b);
+            assign elem_sign[j] = raw_a[3] ^ raw_b[3];
+            assign elem_valid[j] = lane_valid && (raw_a[2:0] != 3'd0)
+                                         && (raw_b[2:0] != 3'd0);
+
+            wire [10:0] elem_mag_ext = elem_valid[j] ? {3'b0, elem_mag_prod[j]} : 11'd0;
+            wire [10:0] elem_neg;
+            VX_ks_adder #(
+                .N(11),
+                .BYPASS(`FORCE_BUILTIN_ADDER(11))
+            ) elem_neg_ksa (
+                .dataa(~elem_mag_ext),
+                .datab(11'd0),
+                .cin(1'b1),
+                .sum(elem_neg),
+                `UNUSED_PIN(cout)
+            );
+            assign elem_signed[j] = elem_sign[j] ? elem_neg : elem_mag_ext;
+        end
+
+        VX_tcu_tfr_wmul #(
+            .N(4),
+            .LANES(2),
+            .USE_DSP(USE_DSP)
+        ) elem_m01 (
+            .clk    (clk),
+            .enable (enable),
+            .a(elem_mag_a[1:0]),
+            .b(elem_mag_b[1:0]),
+            .p(elem_mag_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N(4),
+            .LANES(2),
+            .USE_DSP(USE_DSP)
+        ) elem_m23 (
+            .clk    (clk),
+            .enable (enable),
+            .a(elem_mag_a[3:2]),
+            .b(elem_mag_b[3:2]),
+            .p(elem_mag_prod[3:2])
+        );
+
+        wire [10:0] dot_sum_vec, dot_carry_vec;
+        VX_csa_tree #(
+            .N(4),
+            .W(11),
+            .S(11)
+        ) dot_csa (
+            .operands(elem_signed),
+            .sum(dot_sum_vec),
+            .carry(dot_carry_vec)
+        );
+
+        wire [10:0] signed_dot;
+        VX_ks_adder #(
+            .N(11),
+            .BYPASS(`FORCE_BUILTIN_ADDER(11))
+        ) dot_ksa (
+            .dataa(dot_sum_vec),
+            .datab(dot_carry_vec),
+            .cin(1'b0),
+            .sum(signed_dot),
+            `UNUSED_PIN(cout)
+        );
+
+        wire dot_sign = signed_dot[10];
+        wire [9:0] neg_dot;
+        VX_ks_adder #(
+            .N(10),
+            .BYPASS(`FORCE_BUILTIN_ADDER(10))
+        ) dot_neg_ksa (
+            .dataa(~signed_dot[9:0]),
+            .datab(10'd0),
+            .cin(1'b1),
+            .sum(neg_dot),
+            `UNUSED_PIN(cout)
+        );
+
+        wire [9:0] abs_dot = dot_sign ? neg_dot : signed_dot[9:0];
+        wire [17:0] scaled_mag;
+        VX_tcu_tfr_wmul #(
+            .N(10),
+            .M(8),
+            .P(18),
+            .OUT_REG(PROD_REG),
+            .USE_DSP(USE_DSP)
+        ) scale_mul (
+            .clk    (clk),
+            .enable (enable),
+            .a(abs_dot),
+            .b(sf_scale),
+            .p(scaled_mag)
+        );
+
+        wire is_zero_out = ~|scaled_mag;
+        wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_LNSF4;
+
+        wire dot_sign_r;
+        VX_pipe_register #(
+            .DATAW (1),
+            .DEPTH (PROD_REG)
+        ) pipe_sign (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  (dot_sign),
+            .data_out (dot_sign_r)
+        );
+        assign result_sig_lnsf4[i] = {dot_sign_r & ~is_zero_out, result_mag};
+        assign sig_zero_lnsf4[i] = is_zero_out;
+        assign result_exp_lnsf4[i] = EXP_W'(e_int) + EXP_BASE_BIASED_LNSF4;
+
+        // The sign field is only consumed for infinity lanes downstream.
+        assign exceptions_lnsf4[i].is_nan = 1'b0;
+        assign exceptions_lnsf4[i].is_inf = 1'b0;
+        assign exceptions_lnsf4[i].sign   = 1'b0;
+    end
+`endif  // VX_CFG_TCU_LNSF4_ENABLE
+
     // Exponent/exception outputs join at pre-seam timing; significand and
     // sig_zero outputs join at post-seam timing.
     always_comb begin
@@ -837,6 +1034,12 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             4'(TCU_IF4_ID): begin
                 result_exp = result_exp_if4;
                 exceptions = exceptions_if4;
+            end
+        `endif
+        `ifdef VX_CFG_TCU_LNSF4_ENABLE
+            4'(TCU_LNSF4_ID): begin
+                result_exp = result_exp_lnsf4;
+                exceptions = exceptions_lnsf4;
             end
         `endif
             default: begin
@@ -872,6 +1075,12 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             4'(TCU_IF4_ID): begin
                 result_sig = result_sig_if4;
                 sig_zero   = sig_zero_if4;
+            end
+        `endif
+        `ifdef VX_CFG_TCU_LNSF4_ENABLE
+            4'(TCU_LNSF4_ID): begin
+                result_sig = result_sig_lnsf4;
+                sig_zero   = sig_zero_lnsf4;
             end
         `endif
             default: begin

@@ -127,6 +127,10 @@ uint8_t rv_ftomxfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 uint32_t rv_nvfp4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 uint8_t rv_ftonvfp4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 
+// lnsf4 <--> fp32 conversions (NVFP4 with an LNS8/Q4.3 block scale)
+uint32_t rv_lnsf4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
+uint8_t rv_ftolnsf4_s(uint32_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
+
 // RaZeR FP4 --> fp32 conversion. Encoding is selected per block, so there is
 // intentionally no scalar fp32 --> RaZeR conversion.
 uint32_t rv_if4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
