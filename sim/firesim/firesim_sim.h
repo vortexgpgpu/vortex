@@ -84,6 +84,18 @@ private:
   // been reported. Both reset when the target goes idle.
   uint64_t busy_cycles_;
   bool stall_reported_;
+
+  // A launch waits for `busy` to rise and then to fall, and nothing bounds
+  // either wait. These track the launch in flight so a target that never
+  // starts is reported instead of polled forever in silence.
+  bool awaiting_busy_;
+  uint64_t idle_cycles_;
+
+  // Set when the launch watchdog (VORTEX_FIRESIM_TIMEOUT_S) gives up. The
+  // launch is then completed -- busy once, then idle -- so the application
+  // finishes through its own teardown rather than being killed mid-run.
+  int abort_phase_;
+  double launch_started_s_;
 };
 
 }
