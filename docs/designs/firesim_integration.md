@@ -217,8 +217,8 @@ new bitstream; it is a known follow-up rather than a driver-side workaround.
 
 Vortex's own performance counters are the only view inside the core that does
 not require re-elaborating the design, and they are read over the DCR path.
-They are gated behind `PERF_ENABLE` (see `PERF_DEFINES` in
-`hw/syn/firesim/Makefile`); **without it every counter reads zero, which is
+They are gated behind `PERF_ENABLE` (build the image with `PERF=1`, as in the
+other synthesis flows); **without it every counter reads zero, which is
 indistinguishable from an idle core rather than an absent instrument.** The
 driver says so explicitly rather than leaving it to be inferred.
 
@@ -226,27 +226,38 @@ driver says so explicitly rather than leaving it to be inferred.
 
 ## 4. Build flow
 
-One command builds a card's image, for the card named by `FIRESIM_CARD`
-(default `u55c`), from a configured build tree:
+The image build takes the same tokens as the card's native flow
+(`hw/syn/xilinx/xrt` or `hw/syn/xilinx/aved`), from a configured build tree:
 
 ```bash
-source $FIRESIM_PATH/env.sh                    # FireSim's conda environment
-source /opt/xilinx/2024.2/Vitis/settings64.sh  # plus XRT's setup.sh
-make -C hw/syn/firesim bitstream FIRESIM_CARD=u55c \
-    CONFIGS="-DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_TEX_ENABLE" FREQUENCY=60.0
+source ci/firesim_env.sh    # after the card's Xilinx tools (Vitis+XRT, or Vivado+VRT)
+make -C hw/syn/firesim PLATFORM=xilinx_u55c_gen3x16_xdma_3_202210_1 TARGET=hw_emu   # XRT card
+make -C hw/syn/firesim TARGET=hw PERF=1 CONFIGS="-DVX_CFG_NUM_WARPS=4"               # aved card
 ```
 
-`bitstream` runs, in order:
+`PLATFORM=<xsa>` selects an XRT card and `TARGET` is `hw` or `hw_emu`; without
+`PLATFORM` the card is the aved one for `DEVICE` (default the V80) and `TARGET`
+is `hw` or `sim`. The image is copied to `<PREFIX>_<xsa|aved>_<TARGET>/bin`
+(`firesim.xclbin` or `firesim.vbin`, plus `emconfig.json` for `hw_emu`) beside
+`firesim.card`, which names the card for `run-firesim`; everything the build
+generates lives under that directory. Nothing given on the command line
+reaches FireSim's own makes, which use `PLATFORM`, `TARGET` and `BUILD_DIR` for
+their own purposes.
+
+The default goal runs, in order:
 
 ```
-vivado-sources   flatten Vortex with macros inlined (-P)
-sources          Verilator source list (packages + wrapper)
+vivado-sources   flatten Vortex with macros inlined (-P); -DSIMULATION for sim/hw_emu
 xilinx-ips       generate the Xilinx floating-point cores for the card's part
 stage            copy the Chisel/C++ targets and the card's platform config
-                 class into $(FIRESIM_PATH)
+                 class into $(FIRESIM_PATH) (only what changed)
 replace-rtl      Golden Gate elaboration (in $(FIRESIM_PATH)/sim)
-bitstream        synthesis + place-and-route (in the platform's cl_<target> dir)
+image            the platform's own build in its cl_<target> dir: bitstream,
+                 or the hw_emu/sim image
 ```
+
+`sources`, `elaborate`, `metasim` and `run-metasim` are developer goals; the
+runtime uses the first two to build the `xrtsim`/`avedsim` metasimulator.
 
 The card's FireSim platform, part, device, host-memory binding and base address
 come from its descriptor in `hw/syn/xilinx/platforms/`; the platform config
@@ -257,10 +268,18 @@ flattened tree.
 
 ### 4.0 Cards and platforms
 
-| card | FireSim platform | image | run with |
+| card | FireSim platform | run targets | run with |
 |---|---|---|---|
-| `u55c` | `vitis` (XRT, `v++`) | `platforms/vitis/cl_<target>/bitstream/build_dir.<xsa>/firesim.xclbin` | `XCLBIN_PATH` |
-| `v80` | `aved` (VRT, `slashkit`) | `platforms/aved/cl_<target>/bitstream/build_dir.hw/firesim.vbin` | `VRT_VBIN_PATH`, `VRT_DEVICE_BDF` (discovered when unset) |
+| `u55c` | `vitis` (XRT, `v++`) | `xrtsim`, `hw_emu`, `hw` | `XCLBIN_PATH` |
+| `v80` | `aved` (VRT, `slashkit`) | `avedsim`, `sim`, `hw` | `VRT_VBIN_PATH`, `VRT_DEVICE_BDF` (discovered when unset) |
+
+`run-firesim` (and `blackbox.sh --driver=firesim`) takes the card from
+`$(FPGA_BIN_DIR)/firesim.card` for an image target; `xrtsim` and `avedsim` need
+no image and default to the U55C and the V80 (`FIRESIM_CARD` overrides). With
+no `TARGET` it runs `xrtsim`, as the xrt driver defaults to its simulator. On
+the V80, `TARGET=hw` runs `ci/v80_preflight.sh` first, and a first `SIGINT` or
+`SIGTERM` stops any FireSim run cleanly instead of killing it mid-launch; the
+run is then reported `FAILED` and exits 130 or 143 (124 for the launch watchdog).
 
 A FireSim run names its image and card with the variables of the card's native
 driver. On the V80 the Xilinx tools are the ones `slashkit` links with
@@ -286,12 +305,17 @@ to anyone reading its traces:
   `opt_design` with `DRC HDPR-18` ("requires resource type 'BUFGCE_HDIO' which
   is not ranged by 'pblock_slash'"), and the partition is fixed by the static
   shell, so no link option can widen it. `FabricClockGates` (set by
-  `AvedConfig`) makes Golden Gate emit `FireSimFabricClockGate` instead: the
-  enable passes through a latch that is transparent only while the clock is low
-  — so it can change the output only while the clock is low — and the gated
-  clock is put back on a global net by a `BUFG_FABRIC`. It synthesizes to
-  `LDCE` + `LUT2` + `BUFG_FABRIC`. Simulation keeps the `BUFGCE` model, and
-  other platforms keep `BUFGCE` itself.
+  `AvedConfig`) makes Golden Gate emit `FireSimFabricClockGate` instead, which
+  in hardware is not a gate at all: a plain AND marked `gated_clock`, which
+  synthesis's gated-clock conversion (turned on for the kernel's run by the
+  platform build) moves onto the clock-enable pin of every register, RAM and
+  DSP it drives, all clocked from the ungated clock — `BUFGCE`'s semantics
+  with no derived clock left. A pre-opt check fails the build if any kernel
+  clock is still driven by logic. An earlier latch + `BUFG_FABRIC` gate put the
+  target on a clock ~5 ns behind the host's, with its latch-to-AND step
+  untimed, and on the card the target started but its memory model never
+  completed a read. Simulation keeps the `BUFGCE` model, and other platforms
+  keep `BUFGCE` itself.
 
 ### 4.0.1 What the platform build must do for Vortex
 
@@ -313,6 +337,9 @@ they are passed in from `hw/syn/firesim`:
   19-3833`). They are copied into the kernel, each into a fresh directory —
   Tcl's `file copy` onto an existing directory nests the source inside it, which
   silently leaves a repackaged kernel pointing at the previous run's cores.
+  On `aved` the conversion above cannot enter these out-of-context cores, so
+  there the RTU uses the soft FMA and divider (`VX_CFG_RTU_USE_DSP=0`) and no
+  vendor core is instantiated.
 
 ### 4.1 Two source lists, and why
 
