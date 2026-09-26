@@ -15,22 +15,18 @@ CXXFLAGS += -fPIC
 # Add external configuration
 CXXFLAGS += $(CONFIGS)
 
-# The card's FireSim platform, from its descriptor: it decides which variables
-# name the image and the card (those of the card's native driver).
-FIRESIM_CARD ?= u55c
-FIRESIM_PLATFORM := $(shell python3 $(VORTEX_HOME)/hw/scripts/gen_platform.py --card=$(FIRESIM_CARD) --emit=firesim-mk | sed -n 's/^PLATFORM := //p')
-ifeq ($(FIRESIM_PLATFORM),)
-$(error cannot resolve the FireSim platform of card '$(FIRESIM_CARD)')
-endif
+# The card, and its FireSim platform, which decides the variables that name
+# the image and the card (those of the card's native driver).
+include $(SRC_DIR)/card.mk
 ifeq ($(FIRESIM_PLATFORM), aved)
 CXXFLAGS += -DFIRESIM_PLATFORM_AVED
 endif
 
-# TARGET=avedsim runs the metasimulator in-process in place of the card: the
-# same FireSim-transformed target in Verilator, reached through the emulated
-# host interface, with no image and no VRT. It is the aved counterpart of the
-# native driver's avedsim.
-ifeq ($(TARGET), avedsim)
+# TARGET=xrtsim or avedsim runs the metasimulator in-process in place of the
+# card: the same FireSim-transformed target in Verilator, reached through the
+# emulated host interface, with no image, no XRT and no VRT -- the counterpart
+# of the native drivers' xrtsim and avedsim.
+ifneq ($(filter $(TARGET),xrtsim avedsim),)
 CXXFLAGS += -DFIRESIM_EMUL
 endif
 
@@ -58,7 +54,8 @@ all: $(DESTDIR)/$(PROJECT)
 driver: $(DESTDIR)/libfiresim.so
 
 $(DESTDIR)/libfiresim.so: force
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim lib FIRESIM_CARD=$(FIRESIM_CARD) TARGET=$(TARGET)
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/firesim lib FIRESIM_CARD=$(FIRESIM_CARD) TARGET=$(TARGET) \
+		CONFIGS='$(CONFIGS)' $(if $(PERF),PERF=$(PERF))
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(DESTDIR)/libfiresim.so $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
