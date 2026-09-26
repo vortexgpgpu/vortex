@@ -292,6 +292,9 @@ VX_CFG_TCU_NVFP4_ENABLE = false
 VX_CFG_TCU_RZR4_ENABLE = false
 VX_CFG_TCU_IF4_ENABLE = false
 VX_CFG_TCU_LNSF4_ENABLE = false
+# Fractional bits of the lnsf4 antilog LUT (2^(k/8) stored as [1.AL] fixed
+# point); sets the scale-multiply operand width. Valid range 2..8.
+VX_CFG_TCU_LNSF4_ANTILOG_BITS = 4
 VX_CFG_TCU_SPARSE_ENABLE = false
 VX_CFG_TCU_DSM_ENABLE = false
 VX_CFG_TCU_WGMMA_ENABLE = false

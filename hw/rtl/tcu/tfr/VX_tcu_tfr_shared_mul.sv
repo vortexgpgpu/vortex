@@ -165,7 +165,8 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
             .WA(WA),
             .EXP_W(EXP_W),
             .USE_DSP(USE_DSP),
-            .PROD_REG(PROD_REG)
+            .PROD_REG(PROD_REG),
+            .SF(SF)
         ) mul_f4 (
             .clk        (clk),
             .enable     (enable),

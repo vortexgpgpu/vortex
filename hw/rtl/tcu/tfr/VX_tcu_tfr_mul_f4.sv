@@ -22,7 +22,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     parameter WA    = 28,
     parameter EXP_W = 10,
     parameter USE_DSP = 0,  // map mantissa multipliers onto DSP48 slices
-    parameter PROD_REG = 0  // product/flag register stages (multiply-stage seam)
+    parameter PROD_REG = 0, // product/flag register stages (multiply-stage seam)
+    parameter SF    = 1     // scale slots; lanes [s*TCK/SF, (s+1)*TCK/SF) share sf_a/sf_b
 ) (
     input wire                      clk,
     input wire                      enable,
@@ -50,6 +51,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_SPARAM (W)
+    `UNUSED_PARAM (SF)
     `UNUSED_VAR ({clk, enable, req_id, valid_in, fmt_f})
 
 `ifdef VX_CFG_TCU_MX_ENABLE
@@ -278,33 +280,48 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     localparam [EXP_W-1:0] EXP_BASE_BIASED = EXP_W'(BIAS_BASE + EXP_COMP_NVFP4);
     localparam SIG_SHIFT_NVFP4 = 7;
 
+    // Lanes of one scale slot are reduced in the integer domain and scaled
+    // once; see the matching LNSF4 block below for the lane/slot mapping.
+    `STATIC_ASSERT ((TCK % SF) == 0, ("VX_tcu_tfr_mul_f4: TCK must be a multiple of SF"))
+    localparam NV_LPG   = TCK / SF;
+    localparam NV_LPG_W = $clog2(NV_LPG);
+    localparam NV_DOT_W = 11 + NV_LPG_W;
+    localparam SIG_SHIFT_NVFP4_GRP = SIG_SHIFT_NVFP4 - NV_LPG_W;
+
+    `UNUSED_VAR ({sf_a[7], sf_b[7]})
+
+    // e4m3 scale factor mantissa mul
+    wire [3:0] sf_man_a = {1'b1, sf_a[2:0]};
+    wire [3:0] sf_man_b = {1'b1, sf_b[2:0]};
+    wire [3:0] sf_exp_a = sf_a[6:3];
+    wire [3:0] sf_exp_b = sf_b[6:3];
+
+    wire [7:0] sf_man_prod;
+    VX_tcu_tfr_wmul #(
+        .N(4),
+        .USE_DSP(USE_DSP)
+    ) sf_wtmul (
+        .clk    (clk),
+        .enable (enable),
+        .a(sf_man_a),
+        .b(sf_man_b),
+        .p(sf_man_prod)
+    );
+
+    wire [EXP_TERM_W-1:0] nv_exp_biased =
+        EXP_ADJ_NVFP4 + EXP_TERM_W'(sf_exp_a) + EXP_TERM_W'(sf_exp_b);
+    wire [EXP_W-1:0] nv_result_exp =
+        EXP_W'(nv_exp_biased) + EXP_W'(EXP_BASE_BIASED) + EXP_W'(NV_LPG_W);
+
+    wire [TCK-1:0][3:0][NV_DOT_W-1:0] nv_elem_signed;
+
     for (genvar i = 0; i < TCK; ++i) begin : g_lane_nvfp4
         localparam K_WORD = i / 2;
-        `UNUSED_VAR ({sf_a[7], sf_b[7]})
-
-        // e4m3 scale factor mantissa mul
-        wire [3:0] sf_man_a = {1'b1, sf_a[2:0]};
-        wire [3:0] sf_man_b = {1'b1, sf_b[2:0]};
-        wire [3:0] sf_exp_a = sf_a[6:3];
-        wire [3:0] sf_exp_b = sf_b[6:3];
-
-        wire [7:0] sf_man_prod;
-        VX_tcu_tfr_wmul #(
-            .N(4),
-            .USE_DSP(USE_DSP)
-        ) sf_wtmul (
-            .clk    (clk),
-            .enable (enable),
-            .a(sf_man_a),
-            .b(sf_man_b),
-            .p(sf_man_prod)
-        );
 
         wire [3:0][3:0] elem_mag_a, elem_mag_b;
         wire [3:0][7:0] elem_mag_prod;
         wire [3:0] elem_sign;
         wire [3:0] elem_valid;
-        wire [3:0][10:0] elem_signed;
 
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
@@ -331,7 +348,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                 .sum(elem_neg),
                 `UNUSED_PIN(cout)
             );
-            assign elem_signed[j] = elem_sign[j] ? elem_neg : elem_mag_ext;
+            wire [10:0] elem_signed = elem_sign[j] ? elem_neg : elem_mag_ext;
+            assign nv_elem_signed[i][j] = {{NV_LPG_W{elem_signed[10]}}, elem_signed};
         end
 
         VX_tcu_tfr_wmul #(
@@ -356,22 +374,31 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .b(elem_mag_b[3:2]),
             .p(elem_mag_prod[3:2])
         );
+    end
 
-        wire [10:0] dot_sum_vec, dot_carry_vec;
+    for (genvar g = 0; g < SF; ++g) begin : g_grp_nvfp4
+        wire [NV_LPG*4-1:0][NV_DOT_W-1:0] grp_terms;
+        for (genvar l = 0; l < NV_LPG; ++l) begin : g_terms
+            for (genvar j = 0; j < 4; ++j) begin : g_term
+                assign grp_terms[l * 4 + j] = nv_elem_signed[g * NV_LPG + l][j];
+            end
+        end
+
+        wire [NV_DOT_W-1:0] dot_sum_vec, dot_carry_vec;
         VX_csa_tree #(
-            .N(4),
-            .W(11),
-            .S(11)
+            .N(NV_LPG * 4),
+            .W(NV_DOT_W),
+            .S(NV_DOT_W)
         ) dot_csa (
-            .operands(elem_signed),
+            .operands(grp_terms),
             .sum(dot_sum_vec),
             .carry(dot_carry_vec)
         );
 
-        wire [10:0] signed_dot;
+        wire [NV_DOT_W-1:0] signed_dot;
         VX_ks_adder #(
-            .N(11),
-            .BYPASS(`FORCE_BUILTIN_ADDER(11))
+            .N(NV_DOT_W),
+            .BYPASS(`FORCE_BUILTIN_ADDER(NV_DOT_W))
         ) dot_ksa (
             .dataa(dot_sum_vec),
             .datab(dot_carry_vec),
@@ -380,25 +407,25 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             `UNUSED_PIN(cout)
         );
 
-        wire dot_sign = signed_dot[10];
-        wire [9:0] neg_dot;
+        wire dot_sign = signed_dot[NV_DOT_W-1];
+        wire [NV_DOT_W-2:0] neg_dot;
         VX_ks_adder #(
-            .N(10),
-            .BYPASS(`FORCE_BUILTIN_ADDER(10))
+            .N(NV_DOT_W-1),
+            .BYPASS(`FORCE_BUILTIN_ADDER(NV_DOT_W-1))
         ) dot_neg_ksa (
-            .dataa(~signed_dot[9:0]),
-            .datab(10'd0),
+            .dataa(~signed_dot[NV_DOT_W-2:0]),
+            .datab((NV_DOT_W-1)'(0)),
             .cin(1'b1),
             .sum(neg_dot),
             `UNUSED_PIN(cout)
         );
 
-        wire [9:0] abs_dot = dot_sign ? neg_dot : signed_dot[9:0];
-        wire [17:0] scaled_mag;
+        wire [NV_DOT_W-2:0] abs_dot = dot_sign ? neg_dot : signed_dot[NV_DOT_W-2:0];
+        wire [NV_DOT_W+6:0] scaled_mag;
         VX_tcu_tfr_wmul #(
-            .N(10),
+            .N(NV_DOT_W-1),
             .M(8),
-            .P(18),
+            .P(NV_DOT_W+7),
             .OUT_REG(PROD_REG),
             .USE_DSP(USE_DSP)
         ) scale_mul (
@@ -410,9 +437,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         );
 
         wire is_zero_out = ~|scaled_mag;
-        wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_NVFP4;
-        wire [EXP_TERM_W-1:0] exp_biased =
-            EXP_ADJ_NVFP4 + EXP_TERM_W'(sf_exp_a) + EXP_TERM_W'(sf_exp_b);
+        wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_NVFP4_GRP;
 
         wire dot_sign_r;
         VX_pipe_register #(
@@ -425,14 +450,23 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .data_in  (dot_sign),
             .data_out (dot_sign_r)
         );
-        assign result_sig_nvfp4[i] = {dot_sign_r & ~is_zero_out, result_mag};
-        assign sig_zero_nvfp4[i] = is_zero_out;
-        assign result_exp_nvfp4[i] = EXP_W'(exp_biased) + EXP_W'(EXP_BASE_BIASED);
 
-        // The sign field is only consumed for infinity lanes downstream.
-        assign exceptions_nvfp4[i].is_nan = 1'b0;
-        assign exceptions_nvfp4[i].is_inf = 1'b0;
-        assign exceptions_nvfp4[i].sign   = 1'b0;
+        for (genvar l = 0; l < NV_LPG; ++l) begin : g_out
+            localparam I = g * NV_LPG + l;
+            if (l == 0) begin : g_lead
+                assign result_sig_nvfp4[I] = {dot_sign_r & ~is_zero_out, result_mag};
+                assign sig_zero_nvfp4[I]   = is_zero_out;
+            end else begin : g_idle
+                assign result_sig_nvfp4[I] = '0;
+                assign sig_zero_nvfp4[I]   = 1'b1;
+            end
+            assign result_exp_nvfp4[I] = nv_result_exp;
+
+            // The sign field is only consumed for infinity lanes downstream.
+            assign exceptions_nvfp4[I].is_nan = 1'b0;
+            assign exceptions_nvfp4[I].is_inf = 1'b0;
+            assign exceptions_nvfp4[I].sign   = 1'b0;
+        end
     end
 `endif  // VX_CFG_TCU_NVFP4_ENABLE
 
@@ -810,14 +844,11 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 `endif  // VX_CFG_TCU_IF4_ENABLE
 
 `ifdef VX_CFG_TCU_LNSF4_ENABLE
-    // NVFP4 with the e4m3 block scale replaced by an LNS8 (Q4.3 two's
-    // complement) scale: element format, dot-product tree and special-value
-    // handling are bit-identical to NVFP4 (see VX_CFG_TCU_NVFP4_ENABLE above).
-    // Only the scale-factor combine changes: log2(scale_a)+log2(scale_b) is a
-    // plain fixed-point add instead of an e4m3 mantissa multiply, so the two
-    // VX_tcu_tfr_wmul sf_wtmul instances NVFP4 needs to fold sf_man_a*sf_man_b
-    // collapse into one adder plus an 8-entry antilog lookup for the summed
-    // fractional octave (the integer octave feeds the exponent directly).
+    // NVFP4 elements with the e4m3 block scale replaced by an LNS8 (Q4.3 two's
+    // complement) scale: log2(scale_a)+log2(scale_b) is a plain fixed-point
+    // add instead of an e4m3 mantissa multiply, followed by an 8-entry antilog
+    // lookup for the summed fractional octave (the integer octave feeds the
+    // exponent directly).
     wire [TCK-1:0][24:0]      result_sig_lnsf4;
     wire [TCK-1:0][EXP_W-1:0] result_exp_lnsf4;
     fedp_excep_t [TCK-1:0]    exceptions_lnsf4;
@@ -835,48 +866,83 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     // antilog LUT below and SIG_SHIFT_LNSF4 mirror bit-for-bit), so that is
     // the constant to reuse here directly against e_int.
     localparam [EXP_W-1:0] EXP_BASE_BIASED_LNSF4 = EXP_W'(BIAS_BASE_LNSF4 + 6);
-    localparam SIG_SHIFT_LNSF4 = 7;
 
-    // round(2**(k/8) * 64), k = 0..7 -- linear mantissa for the summed
-    // fractional octave, in the same UQ2.6-style convention as NVFP4's
-    // sf_man_prod so scale_mul needs no width changes.
-    function automatic [7:0] lnsf4_antilog(input logic [2:0] frac);
-        case (frac)
-            3'h0: return 8'd64;
-            3'h1: return 8'd70;
-            3'h2: return 8'd76;
-            3'h3: return 8'd83;
-            3'h4: return 8'd91;
-            3'h5: return 8'd99;
-            3'h6: return 8'd108;
-            default: return 8'd117;
+    // Every lane of a scale slot (lanes [g*LPG, (g+1)*LPG), matching
+    // VX_tcu_tfr_shared_mul's SF_SLOT map) shares one block scale, so the
+    // slot's element products are reduced exactly in the integer domain and
+    // scaled once. The slot's sum is emitted on its first lane; the others
+    // report sig_zero so the downstream max-exponent search skips them.
+    `STATIC_ASSERT ((TCK % SF) == 0, ("VX_tcu_tfr_mul_f4: TCK must be a multiple of SF"))
+    localparam LNS_LPG   = TCK / SF;
+    localparam LNS_LPG_W = $clog2(LNS_LPG);
+    localparam LNS_DOT_W = 11 + LNS_LPG_W;
+    // The antilog 2^(k/8) is stored as [1.AL] fixed point, so scale_mul's
+    // operand is AL+1 bits. SIG_SHIFT_LNSF4 restores NVFP4's 2^13 pre-scale
+    // for any AL and group width, keeping the exponent residual fixed.
+    localparam AL = `VX_CFG_TCU_LNSF4_ANTILOG_BITS;
+    `STATIC_ASSERT ((AL >= 2) && (AL <= 8), ("VX_tcu_tfr_mul_f4: VX_CFG_TCU_LNSF4_ANTILOG_BITS must be 2..8"))
+    localparam SIG_SHIFT_LNSF4 = 13 - AL - LNS_LPG_W;
+    localparam [EXP_W-1:0] EXP_GRP_BIASED_LNSF4 = EXP_BASE_BIASED_LNSF4 + EXP_W'(LNS_LPG_W);
+
+    // round(2**(k/8) * 2**AL), k = 0..7; every entry is < 2**(AL+1).
+    function automatic [8:0] lnsf4_antilog(input logic [2:0] k);
+        case (AL)
+        2: case (k)
+            3'h0: return 9'd4;  3'h1: return 9'd4;  3'h2: return 9'd5;  3'h3: return 9'd5;
+            3'h4: return 9'd6;  3'h5: return 9'd6;  3'h6: return 9'd7;  default: return 9'd7;
+        endcase
+        3: case (k)
+            3'h0: return 9'd8;  3'h1: return 9'd9;  3'h2: return 9'd10;  3'h3: return 9'd10;
+            3'h4: return 9'd11;  3'h5: return 9'd12;  3'h6: return 9'd13;  default: return 9'd15;
+        endcase
+        4: case (k)
+            3'h0: return 9'd16;  3'h1: return 9'd17;  3'h2: return 9'd19;  3'h3: return 9'd21;
+            3'h4: return 9'd23;  3'h5: return 9'd25;  3'h6: return 9'd27;  default: return 9'd29;
+        endcase
+        5: case (k)
+            3'h0: return 9'd32;  3'h1: return 9'd35;  3'h2: return 9'd38;  3'h3: return 9'd41;
+            3'h4: return 9'd45;  3'h5: return 9'd49;  3'h6: return 9'd54;  default: return 9'd59;
+        endcase
+        6: case (k)
+            3'h0: return 9'd64;  3'h1: return 9'd70;  3'h2: return 9'd76;  3'h3: return 9'd83;
+            3'h4: return 9'd91;  3'h5: return 9'd99;  3'h6: return 9'd108;  default: return 9'd117;
+        endcase
+        7: case (k)
+            3'h0: return 9'd128;  3'h1: return 9'd140;  3'h2: return 9'd152;  3'h3: return 9'd166;
+            3'h4: return 9'd181;  3'h5: return 9'd197;  3'h6: return 9'd215;  default: return 9'd235;
+        endcase
+        default: case (k)
+            3'h0: return 9'd256;  3'h1: return 9'd279;  3'h2: return 9'd304;  3'h3: return 9'd332;
+            3'h4: return 9'd362;  3'h5: return 9'd395;  3'h6: return 9'd431;  default: return 9'd470;
+        endcase
         endcase
     endfunction
 
+    `UNUSED_VAR ({sf_a[7], sf_b[7]})
+
+    // sf_a/sf_b[6:0]: signed two's complement log2(scale), Q4.3 (LSB = 1/8).
+    // Manual sign-extension instead of $signed()/N'(...) keeps sv2v from
+    // emitting a cast-helper function for the nested cast.
+    wire signed [7:0] lns_e_a = {sf_a[6], sf_a[6:0]};
+    wire signed [7:0] lns_e_b = {sf_b[6], sf_b[6:0]};
+    wire signed [7:0] lns_e_sum = lns_e_a + lns_e_b;
+    wire signed [4:0] lns_e_int = lns_e_sum >>> 3;
+    wire [8:0] lns_scale_full = lnsf4_antilog(lns_e_sum[2:0]);
+    wire [AL:0] lns_scale = lns_scale_full[AL:0];
+    if (AL < 8) begin : g_lns_scale_unused
+        `UNUSED_VAR (lns_scale_full[8:AL+1])
+    end
+    wire [EXP_W-1:0] lns_result_exp = EXP_W'(lns_e_int) + EXP_GRP_BIASED_LNSF4;
+
+    wire [TCK-1:0][3:0][LNS_DOT_W-1:0] lns_elem_signed;
+
     for (genvar i = 0; i < TCK; ++i) begin : g_lane_lnsf4
         localparam K_WORD = i / 2;
-        `UNUSED_VAR ({sf_a[7], sf_b[7]})
-
-        // sf_a/sf_b[6:0]: signed two's complement log2(scale), Q4.3 (LSB = 1/8).
-        // Manual sign-extension (replicate bit 6) instead of $signed()/N'(...):
-        // avoids sv2v having to synthesize a cast-helper function for the
-        // nested width-cast-of-a-signed-cast pattern (a construct that, in
-        // hw/rtl/tcu/tfr/VX_tcu_tfr_align.sv, was seen tripping a pre-existing
-        // OpenSTA Verilog-reader incompatibility with a Yosys-flattened
-        // escaped identifier -- unrelated to lnsf4 and not fully root-caused;
-        // see the yosys+OpenSTA synthesis note in the commit history).
-        wire signed [7:0] e_a = {sf_a[6], sf_a[6:0]};
-        wire signed [7:0] e_b = {sf_b[6], sf_b[6:0]};
-        wire signed [7:0] e_sum = e_a + e_b;
-        wire signed [4:0] e_int = e_sum >>> 3;   // floor(e_sum / 8): integer octaves
-        wire [2:0] e_frac = e_sum[2:0];          // fractional remainder, always >= 0
-        wire [7:0] sf_scale = lnsf4_antilog(e_frac);
 
         wire [3:0][3:0] elem_mag_a, elem_mag_b;
         wire [3:0][7:0] elem_mag_prod;
         wire [3:0] elem_sign;
         wire [3:0] elem_valid;
-        wire [3:0][10:0] elem_signed;
 
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
@@ -903,7 +969,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                 .sum(elem_neg),
                 `UNUSED_PIN(cout)
             );
-            assign elem_signed[j] = elem_sign[j] ? elem_neg : elem_mag_ext;
+            wire [10:0] elem_signed = elem_sign[j] ? elem_neg : elem_mag_ext;
+            assign lns_elem_signed[i][j] = {{LNS_LPG_W{elem_signed[10]}}, elem_signed};
         end
 
         VX_tcu_tfr_wmul #(
@@ -928,22 +995,31 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .b(elem_mag_b[3:2]),
             .p(elem_mag_prod[3:2])
         );
+    end
 
-        wire [10:0] dot_sum_vec, dot_carry_vec;
+    for (genvar g = 0; g < SF; ++g) begin : g_grp_lnsf4
+        wire [LNS_LPG*4-1:0][LNS_DOT_W-1:0] grp_terms;
+        for (genvar l = 0; l < LNS_LPG; ++l) begin : g_terms
+            for (genvar j = 0; j < 4; ++j) begin : g_term
+                assign grp_terms[l * 4 + j] = lns_elem_signed[g * LNS_LPG + l][j];
+            end
+        end
+
+        wire [LNS_DOT_W-1:0] dot_sum_vec, dot_carry_vec;
         VX_csa_tree #(
-            .N(4),
-            .W(11),
-            .S(11)
+            .N(LNS_LPG * 4),
+            .W(LNS_DOT_W),
+            .S(LNS_DOT_W)
         ) dot_csa (
-            .operands(elem_signed),
+            .operands(grp_terms),
             .sum(dot_sum_vec),
             .carry(dot_carry_vec)
         );
 
-        wire [10:0] signed_dot;
+        wire [LNS_DOT_W-1:0] signed_dot;
         VX_ks_adder #(
-            .N(11),
-            .BYPASS(`FORCE_BUILTIN_ADDER(11))
+            .N(LNS_DOT_W),
+            .BYPASS(`FORCE_BUILTIN_ADDER(LNS_DOT_W))
         ) dot_ksa (
             .dataa(dot_sum_vec),
             .datab(dot_carry_vec),
@@ -952,32 +1028,32 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             `UNUSED_PIN(cout)
         );
 
-        wire dot_sign = signed_dot[10];
-        wire [9:0] neg_dot;
+        wire dot_sign = signed_dot[LNS_DOT_W-1];
+        wire [LNS_DOT_W-2:0] neg_dot;
         VX_ks_adder #(
-            .N(10),
-            .BYPASS(`FORCE_BUILTIN_ADDER(10))
+            .N(LNS_DOT_W-1),
+            .BYPASS(`FORCE_BUILTIN_ADDER(LNS_DOT_W-1))
         ) dot_neg_ksa (
-            .dataa(~signed_dot[9:0]),
-            .datab(10'd0),
+            .dataa(~signed_dot[LNS_DOT_W-2:0]),
+            .datab((LNS_DOT_W-1)'(0)),
             .cin(1'b1),
             .sum(neg_dot),
             `UNUSED_PIN(cout)
         );
 
-        wire [9:0] abs_dot = dot_sign ? neg_dot : signed_dot[9:0];
-        wire [17:0] scaled_mag;
+        wire [LNS_DOT_W-2:0] abs_dot = dot_sign ? neg_dot : signed_dot[LNS_DOT_W-2:0];
+        wire [LNS_DOT_W+AL-1:0] scaled_mag;
         VX_tcu_tfr_wmul #(
-            .N(10),
-            .M(8),
-            .P(18),
+            .N(LNS_DOT_W-1),
+            .M(AL+1),
+            .P(LNS_DOT_W+AL),
             .OUT_REG(PROD_REG),
             .USE_DSP(USE_DSP)
         ) scale_mul (
             .clk    (clk),
             .enable (enable),
             .a(abs_dot),
-            .b(sf_scale),
+            .b(lns_scale),
             .p(scaled_mag)
         );
 
@@ -995,14 +1071,23 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .data_in  (dot_sign),
             .data_out (dot_sign_r)
         );
-        assign result_sig_lnsf4[i] = {dot_sign_r & ~is_zero_out, result_mag};
-        assign sig_zero_lnsf4[i] = is_zero_out;
-        assign result_exp_lnsf4[i] = EXP_W'(e_int) + EXP_BASE_BIASED_LNSF4;
 
-        // The sign field is only consumed for infinity lanes downstream.
-        assign exceptions_lnsf4[i].is_nan = 1'b0;
-        assign exceptions_lnsf4[i].is_inf = 1'b0;
-        assign exceptions_lnsf4[i].sign   = 1'b0;
+        for (genvar l = 0; l < LNS_LPG; ++l) begin : g_out
+            localparam I = g * LNS_LPG + l;
+            if (l == 0) begin : g_lead
+                assign result_sig_lnsf4[I] = {dot_sign_r & ~is_zero_out, result_mag};
+                assign sig_zero_lnsf4[I]   = is_zero_out;
+            end else begin : g_idle
+                assign result_sig_lnsf4[I] = '0;
+                assign sig_zero_lnsf4[I]   = 1'b1;
+            end
+            assign result_exp_lnsf4[I] = lns_result_exp;
+
+            // The sign field is only consumed for infinity lanes downstream.
+            assign exceptions_lnsf4[I].is_nan = 1'b0;
+            assign exceptions_lnsf4[I].is_inf = 1'b0;
+            assign exceptions_lnsf4[I].sign   = 1'b0;
+        end
     end
 `endif  // VX_CFG_TCU_LNSF4_ENABLE
 
