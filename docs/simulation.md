@@ -28,11 +28,50 @@ running orders of magnitude faster than Verilator.
 For scale, `sgemm -n32` takes ~1228 ms on rtlsim and ~8 ms on an Alveo U55C,
 and `sgemm -n1024` — over a billion instructions — completes in ~85 s.
 
+FireSim is driven exactly like the card's native flow; only the driver name
+differs. It takes the same targets as the card's native driver:
+
+| card | targets | image built by |
+|---|---|---|
+| XRT (e.g. U55C) | `xrtsim` (default), `hw_emu`, `hw` | `make -C hw/syn/firesim PLATFORM=<xsa> TARGET=hw_emu\|hw` |
+| aved (V80) | `avedsim` (default), `sim`, `hw` | `make -C hw/syn/firesim TARGET=sim\|hw` |
+
+`xrtsim` and `avedsim` run the FireSim-transformed design in Verilator inside
+the runtime and need no image or Vivado. The image builds take `PREFIX`,
+`XLEN`, `CONFIGS` and `PERF=1` as `hw/syn/xilinx/{xrt,aved}` do, and leave the
+image in `<PREFIX>_<xsa|aved>_<TARGET>/bin` together with `firesim.card`, which
+tells the run which card it is for. From the build directory:
+
 ```bash
-export TARGET=hw
-export FPGA_BIN_DIR=<directory containing firesim.xclbin>
-./ci/blackbox.sh --driver=firesim --app=sgemm --args="-n1024"
+source ci/firesim_env.sh    # after the card's Xilinx tools; see the script
+
+# no image needed
+./ci/blackbox.sh --driver=firesim --target=avedsim --app=demo
+
+# build an image, then run on it
+CONFIGS="-DVX_CFG_NUM_WARPS=4 -DVX_CFG_NUM_THREADS=4" make -C hw/syn/firesim TARGET=hw PERF=1
+FPGA_BIN_DIR=$PWD/hw/syn/firesim/build32_aved_hw/bin \
+  ./ci/blackbox.sh --driver=firesim --target=hw --warps=4 --threads=4 --app=demo
 ```
+
+On the V80, `TARGET=hw` runs `ci/v80_preflight.sh` first: it refuses to
+program a card that is off the bus, unhealthy or still in use, and waits out a
+cool-down since the last programming. A first `Ctrl-C` (or `SIGTERM`) stops a
+FireSim run cleanly — the launch in flight is reported and completed, and the
+application tears down normally — and a second one kills it. A stopped run
+never reads as a pass: FireSim reports it `FAILED` and the process exits 130
+(143 for `SIGTERM`, 124 when `VORTEX_FIRESIM_TIMEOUT_S` gave up).
+
+Debugging knobs, all read from the environment by the runtime:
+
+| variable | effect |
+|---|---|
+| `VORTEX_FIRESIM_TIMEOUT_S` | give up on a launch after this many seconds, with a report |
+| `VORTEX_FIRESIM_STALL_CYCLES` | report (once) after this many busy target cycles; default 500000 |
+| `VORTEX_FIRESIM_REPORT_ON_IDLE` | also report the counters when a launch completes |
+| `VORTEX_FIRESIM_TRACE` | time-stamp every request to the simulator thread |
+| `VORTEX_FIRESIM_EMUL_ARGS` | extra Verilator arguments for `xrtsim`/`avedsim`, e.g. `+verilator+rand+reset+2` |
+| `FIRESIM_MM_REORDER`, `FIRESIM_MM_LATENCY` | `xrtsim`/`avedsim` host memory: reorder (1), also interleave (2) and delay reads |
 
 The architecture, build flow and design invariants are documented in
 [designs/firesim_integration.md](designs/firesim_integration.md); the
