@@ -436,7 +436,6 @@ int main(int argc, char *argv[]) {
   float rel_tol = std::is_same<vt::ITYPE, vt::if4>::value ? 1.0e-4f : (std::is_same<vt::ITYPE, vt::nvfp4>::value
                 || std::is_same<vt::ITYPE, vt::rzr4>::value
                 || std::is_same<vt::ITYPE, vt::if4>::value
-                || std::is_same<vt::ITYPE, vt::lnsf4>::value
                 || std::is_same<vt::ITYPE, vt::mxfp4>::value) ? 0.25f : 0.05f;
   for (uint32_t i = 0; i < h_ref.size(); ++i) {
     float actual = static_cast<float>(h_C[i]);

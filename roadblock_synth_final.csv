@@ -23,30 +23,32 @@ mxfp8,2,1500,1337.137,-0.0812,-8.0144,720.762,121.014,0.0,8033,5.28,0.00416
 mxfp8,4,1500,1187.554,-0.1754,-19.4999,736.217,121.306,0.0,8482,5.52,0.00423
 mxfp8,8,1500,1229.76,-0.1465,-15.9275,746.656,121.597,0.0,9020,5.93,0.00425
 mxfp8,16,1500,1294.89,-0.1056,-13.6089,756.746,121.889,0.0,9951,6.09,0.00433
-# --- rows below: feature_mx rebased onto master's tip (post yosys/OpenSTA "signed"-strip fix + other master RTL changes) ---
-# --- nvfp4/lnsf4 pair below is self-consistent (same tree, same run); NOT directly comparable to the nvfp4 row above (different baseline) ---
-nvfp4_postrebase,2,1500,856.262,-0.5012,-40.6391,992.883,111.683,0.0,10467,15.5,0.00605
-nvfp4_postrebase,4,1500,865.301,-0.489,-38.0117,1013.427,115.182,0.0,10632,15.6,0.00619
-nvfp4_postrebase,8,1500,857.952,-0.4989,-59.0931,1026.388,117.515,0.0,10840,15.6,0.00623
-nvfp4_postrebase,16,1500,861.945,-0.4935,-71.6335,1052.341,122.18,0.0,11128,15.6,0.00643
-lnsf4_postrebase,2,1500,854.798,-0.5032,-39.8193,981.584,111.683,0.0,10424,13.0,0.0059
-lnsf4_postrebase,4,1500,852.466,-0.5064,-39.0032,1001.004,115.182,0.0,10586,13.1,0.00606
-lnsf4_postrebase,8,1500,860.018,-0.4961,-59.7214,1018.092,117.515,0.0,10806,13.1,0.00613
-lnsf4_postrebase,16,1500,859.648,-0.4966,-74.001,1042.528,122.18,0.0,11122,13.1,0.00632
-# --- lnsf4_nofrac: experiment, discards the LNS fractional octave entirely (no antilog LUT) ---
-# --- collapses scale_mul into a synthesis-time constant shift; NOT functionally correct (precision loss), hardware-cost probe only ---
-lnsf4_nofrac,2,1500,1234.924,-0.1431,-8.1025,769.372,102.352,0.0,8144,3.42,0.00473
-lnsf4_nofrac,4,1500,1236.909,-0.1418,-10.8018,789.303,105.851,0.0,8283,3.55,0.00487
-lnsf4_nofrac,8,1500,1227.647,-0.1479,-12.5615,806.653,108.184,0.0,8504,3.46,0.00497
-lnsf4_nofrac,16,1500,1198.945,-0.1674,-23.1616,835.696,112.849,0.0,8863,3.6,0.00517
-# --- fedp32_*: real (not extrapolated) synthesis of 32x independent VX_tcu_fedp_tfr(N=4) instances ---
-# --- via a throwaway wrapper module (VX_fedp32_wrapper, not checked in) since VX_tcu_unit_top hits a ---
-# --- pre-existing sv2v/Yosys parameter-folding bug in VX_tcu_core.sv's MX metadata indexing (confirmed ---
-# --- on pristine origin/master too, unrelated to this branch's work) whenever any MX TCU format is enabled ---
-nvfp4_fedp32,32x4,1500,843.834,-0.5184,-1384.8563,32131.71,3695.155,0.0,340331,493.0,0.00194
-lnsf4_fedp32,32x4,1500,842.555,-0.5202,-1337.353,31984.831,3695.155,0.0,339385,417.0,0.00193
-# --- lnsf4_fedp32_shared: same 32x FEDP(N=4) wrapper, but GROUP_SIZE FEDPs tied to one shared sf_a/sf_b ---
-# --- pair each (one antilog-LUT-and-adder computation per group), relying on Yosys's own opt_merge to ---
-# --- collapse the resulting identical redundant per-instance logic -- no VX_tcu_fedp_tfr interface change ---
-lnsf4_fedp32_shared_g4,32x4,1500,837.965,-0.5267,-1345.1614,31953.805,3695.155,0.0,338639,418.0,0.00193
-lnsf4_fedp32_shared_g8,32x4,1500,840.996,-0.5224,-1351.7761,31833.841,3695.155,0.0,338276,417.0,0.00192
+# --- lnsf4_al<b>: lane-grouped lnsf4 FEDP N=4 SF=2 (32-thread config) sweeping VX_CFG_TCU_LNSF4_ANTILOG_BITS ---
+# --- (antilog stored as [1.b] fixed point). e2e sgemm_tcu_mx rtlsim NT=4 m=n=k=32, fails@5%/fails@10% rel tol, ---
+# --- and max |err|/sum|a*b| (%): b=8: 2/1/0.1351%; b=7: 4/1/0.0807%; b=6: 4/2/0.2712%; b=5: 32/19/0.6202%; b=4: 37/19/0.8873%; b=3: 49/23/2.6834%; b=2: 279/>=36/3.7289% ---
+lnsf4_al8,4,1500,726.181,-0.7104,-20.3888,638.735,69.692,0.0,6783,23.6,0.00368
+lnsf4_al7,4,1500,719.701,-0.7228,-20.1136,632.772,69.401,0.0,6703,22.7,0.00366
+lnsf4_al6,4,1500,737.209,-0.6898,-19.7418,621.443,69.109,0.0,6618,19.6,0.00357
+lnsf4_al5,4,1500,734.178,-0.6954,-18.5817,610.202,68.818,0.0,6516,17.1,0.00350
+lnsf4_al4,4,1500,754.337,-0.659,-17.8849,602.591,68.526,0.0,6439,14.4,0.00345
+lnsf4_al3,4,1500,798.935,-0.585,-15.8449,599.034,68.234,0.0,6347,14.2,0.00347
+lnsf4_al2,4,1500,805.304,-0.5751,-14.3162,584.848,67.943,0.0,6230,12.3,0.00337
+# --- FINAL: lane-grouped scale reduction in both nvfp4 and lnsf4 (committed RTL), lnsf4 antilog = 4 fractional bits. ---
+# --- tc32_*: full tensor core (VX_tcu_unit_top) at NUM_THREADS=32 (32 FEDPs, N=4, 2 scale slots/FEDP), NUM_WARPS=16, ---
+# --- EXT_F disabled, only the named format enabled (bf16 = default FP16 path, fp16+bf16 share one datapath). Fmax/WNS ---
+# --- are NOT meaningful: an unbuffered high-fanout control net gives one flop ~41ns clk->Q (no buffer insertion in ---
+# --- this flow). Power is vectorless (no SAIF); trust fp4-vs-fp4 deltas, not fp4-vs-bf16 absolutes. N=8 full TC ---
+# --- (FEDP2K+WGMMA) could not be synthesized: yosys OOM-killed even for bf16 alone on this machine. ---
+bf16_tc32,32x4,1500,43.332,-22.411,-266757.125,58303.043,12319.225,0.0,577107,186.0,0.39600
+nvfp4_tc32,32x4,1500,18.398,-53.6866,-150254.9062,60086.105,17606.808,0.0,599547,1550.0,0.36600
+lnsf4_tc32,32x4,1500,18.401,-53.6782,-149235.9844,58463.73,17569.483,0.0,583831,1350.0,0.35500
+# --- fin_*: FEDP-only (VX_tcu_fedp_tfr) at N=2/4/8 with realistic scale slots SF=N/2 (16-element blocks) for fp4. ---
+bf16_fedp_final,2,1500,1312.566,-0.0952,-9.2535,889.045,120.431,0.0,9116,2.47,0.00592
+bf16_fedp_final,4,1500,1318.102,-0.092,-8.5308,911.571,120.722,0.0,9289,2.51,0.00615
+bf16_fedp_final,8,1500,1209.677,-0.16,-10.0546,918.365,121.014,0.0,9402,2.49,0.00614
+nvfp4_fedp_final,2,1500,741.913,-0.6812,-19.8382,623.922,65.61,0.0,6635,20.8,0.00361
+nvfp4_fedp_final,4,1500,733.586,-0.6965,-18.4895,629.214,69.109,0.0,6712,20.8,0.00362
+nvfp4_fedp_final,8,1500,737.536,-0.6892,-23.3735,644.072,76.691,0.0,6871,20.4,0.00369
+lnsf4_fedp_final,2,1500,765.13,-0.6403,-18.5596,596.162,65.027,0.0,6370,15.4,0.00343
+lnsf4_fedp_final,4,1500,754.337,-0.659,-17.8849,602.591,68.526,0.0,6439,14.4,0.00345
+lnsf4_fedp_final,8,1500,755.82,-0.6564,-22.8154,619.46,76.108,0.0,6593,14.6,0.00357
