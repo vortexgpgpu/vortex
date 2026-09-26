@@ -242,4 +242,53 @@ void Ptw::on_tick() {
   }
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
+PtwMux::PtwMux(const SimContext& ctx, const char* name, uint32_t num_inputs)
+  : SimObject(ctx, name)
+  , ReqIn(num_inputs, this)
+  , RspOut(num_inputs, this)
+  , ReqOut(this)
+  , RspIn(this)
+  , num_inputs_(num_inputs)
+{}
+
+PtwMux::~PtwMux() {}
+
+void PtwMux::on_reset() {
+  grant_rr_ = 0;
+}
+
+void PtwMux::on_tick() {
+  // Fills route back by the input index carried in the slot's high bits.
+  if (!RspIn.empty()) {
+    TlbRsp rsp = RspIn.peek();
+    uint32_t input = rsp.slot >> SLOT_BITS;
+    __assert(input < num_inputs_, "PtwMux fill routes to a missing input");
+    if (!RspOut.at(input).full()) {
+      rsp.slot &= (1u << SLOT_BITS) - 1;
+      RspOut.at(input).send(rsp, 1);
+      RspIn.pop();
+    }
+  }
+
+  // One request per tick, round-robin over the clusters.
+  if (ReqOut.full()) {
+    return;
+  }
+  for (uint32_t i = 0; i < num_inputs_; ++i) {
+    uint32_t g = (grant_rr_ + i) % num_inputs_;
+    if (ReqIn.at(g).empty()) {
+      continue;
+    }
+    TlbReq req = ReqIn.at(g).peek();
+    __assert(req.slot < (1u << SLOT_BITS), "L2-TLB slot overflows the mux id space");
+    req.slot |= g << SLOT_BITS;   // report_only fills nothing; encoding is harmless
+    ReqOut.send(req, 1);
+    ReqIn.at(g).pop();
+    grant_rr_ = g + 1;
+    break;
+  }
+}
+
 #endif // VX_CFG_VM_ENABLE
