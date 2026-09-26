@@ -26,6 +26,11 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // Clock
     input wire              clk,
     input wire              reset,
+`ifdef VX_CFG_FAME5
+    // FAME-5 threads identical sockets only, so the socket's index arrives
+    // here instead of in SOCKET_ID (see VX_socket_top).
+    input wire [31:0]       socket_id,
+`endif
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t     sysmem_perf,
@@ -849,6 +854,9 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
             .clk            (clk),
             .reset          (reset),
+        `ifdef VX_CFG_FAME5
+            .core_id        ((socket_id * `VX_CFG_SOCKET_SIZE) + core_id),
+        `endif
 
         `ifdef PERF_ENABLE
             .sysmem_perf    (sysmem_perf_tmp),

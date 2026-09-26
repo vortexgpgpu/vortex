@@ -23,6 +23,9 @@ import VX_raster_pkg::*;
 ) (
     input wire              clk,
     input wire              reset,
+`ifdef VX_CFG_FAME5
+    input wire [31:0]       core_id,
+`endif
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t     sysmem_perf,
@@ -185,6 +188,9 @@ import VX_raster_pkg::*;
     ) csr_unit (
         .clk            (clk),
         .reset          (reset),
+        `ifdef VX_CFG_FAME5
+            .core_id        (core_id),
+        `endif
 
         .execute_if     (pe_execute_if[PE_IDX_CSRS]),
 

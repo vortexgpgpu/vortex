@@ -226,6 +226,11 @@ class VortexConfig
       NastiParameters(dataBits = 512, addrBits = 32, idBits = 4)
     })
 
+/** VortexConfig under another name, for FAME5=1 builds: FireSim keys its generated RTL by design and configs, and the
+  * threaded design must not share a directory with the unthreaded one.
+  */
+class VortexFame5Config extends Config(new VortexConfig)
+
 class VortexTarget(implicit val p: Parameters) extends RawModule {
   val clock = RationalClockBridge().io.clocks.head
   val reset = WireInit(false.B)

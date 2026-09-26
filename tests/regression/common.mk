@@ -183,7 +183,7 @@ kernel.vxbin: kernel.elf
 $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a:
 	$(MAKE) -C $(VORTEX_KN_PATH)
 
-RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF)) $(if $(SCOPE),SCOPE=$(SCOPE)) $(if $(SAIF),SAIF=$(SAIF))
+RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF)) $(if $(FAME5),FAME5=$(FAME5)) $(if $(FAME5_THREADS),FAME5_THREADS=$(FAME5_THREADS)) $(if $(SCOPE),SCOPE=$(SCOPE)) $(if $(SAIF),SAIF=$(SAIF))
 
 # FORCE, not a bare rule: a rule with no prerequisites runs only when its target
 # is missing, so once this library exists make never re-enters the sub-make that
