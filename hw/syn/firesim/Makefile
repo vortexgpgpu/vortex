@@ -1,13 +1,19 @@
-# FireSim platform backend.
+# FireSim image build for the Xilinx cards, driven exactly as the native flows:
+#
+#   make PLATFORM=<xsa> [TARGET=hw|hw_emu]   an XRT card, as hw/syn/xilinx/xrt
+#   make [DEVICE=<part>] [TARGET=hw|sim]     an aved card, as hw/syn/xilinx/aved
+#
+# with PREFIX, XLEN, CONFIGS and PERF=1 as there too. The image lands in
+# $(BUILD_DIR)/bin as firesim.xclbin or firesim.vbin, beside firesim.card, which
+# names the card for run-firesim; the runtime's xrtsim/avedsim targets need no
+# image at all.
 #
 # FireSim itself is the vortexgpgpu/firesim fork, consumed through FIRESIM_PATH
 # and pinned by FIRESIM_REV in VERSION: every change Vortex needs in FireSim is a
 # commit there, and the checkout must contain the pinned one. The Chisel targets,
-# harnesses and the card's platform config live here and are staged into it.
-#
-# The card comes from its descriptor (hw/syn/xilinx/platforms/<card>.toml):
-# FIRESIM_CARD selects it, and the descriptor supplies the FireSim platform, the
-# FPGA part and device, the host-memory binding and its base address.
+# harnesses and the card's platform config live here and are staged into it. The
+# card's descriptor (hw/syn/xilinx/platforms/<card>.toml) supplies the FireSim
+# platform, the FPGA part and device, the host-memory binding and its base.
 
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
@@ -31,40 +37,97 @@ CC_DEST := $(FIRESIM_PATH)/sim/src/main/cc/midasexamples
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 
-# Overridden as SYN_BUILD_DIR, never as BUILD_DIR. A command-line variable
-# reaches every sub-make, and FireSim's own Makefile uses BUILD_DIR to find its
-# elaborator jar: overriding it here pointed FireSim at this directory and the
-# elaboration died on "Could not find or load main class".
-SYN_BUILD_DIR ?= $(ROOT_DIR)/hw/syn/firesim
-BUILD_DIR := $(SYN_BUILD_DIR)
+XLEN ?= 32
+PREFIX ?= build$(XLEN)
 
-FIRESIM_CARD ?= u55c
-PLATFORM_GEN := python3 $(SCRIPT_DIR)/gen_platform.py --card=$(FIRESIM_CARD)
-FIRESIM_MK := $(BUILD_DIR)/firesim_platform.mk
-FIRESIM_GEN_RC := $(shell mkdir -p $(BUILD_DIR) && $(PLATFORM_GEN) --emit=firesim-mk -o $(FIRESIM_MK) 2> $(FIRESIM_MK).err; echo $$?)
-ifneq ($(FIRESIM_GEN_RC),0)
-$(error $(shell cat $(FIRESIM_MK).err))
+# Nothing given here on the command line reaches FireSim's own makes. A
+# command-line variable propagates to every sub-make, and FireSim uses several
+# of these names for its own purposes: PLATFORM is its platform (vitis/aved),
+# not an XSA; TARGET reached v++ as `--target sim`; BUILD_DIR locates its
+# elaborator jar. Each sub-make below is handed exactly what it needs instead.
+MAKEOVERRIDES :=
+
+# The card, named as the native flow for its kind names it. The runtime has an
+# internal need to point the flattening elsewhere (FIRESIM_CARD, FIRESIM_WORK_DIR);
+# those are not user knobs.
+ifneq ($(FIRESIM_CARD),)
+PLATFORM_GEN_ARGS := --card=$(FIRESIM_CARD)
+else ifneq ($(PLATFORM),)
+XSA := $(strip $(patsubst %.xpfm,%,$(notdir $(PLATFORM))))
+DEV_ARCH := $(shell platforminfo -p $(PLATFORM) 2>/dev/null | grep 'FPGA Family' | sed 's/.*://' | sed '/ai_engine/d' | sed 's/^[[:space:]]*//')
+PLATFORM_GEN_ARGS := --flow=xrt --xsa=$(XSA) --family='$(DEV_ARCH)'
+else
+DEVICE ?= xcv80-lsva4737-2MHP-e-S
+PLATFORM_GEN_ARGS := --flow=aved --device=$(DEVICE)
 endif
+PLATFORM_GEN := python3 $(SCRIPT_DIR)/gen_platform.py $(PLATFORM_GEN_ARGS)
+
+# The card is resolved before BUILD_DIR exists, because BUILD_DIR is named after
+# it. $(shell) discards exit codes, so an empty answer means the generator
+# failed, and it is asked again for its message.
+FIRESIM_CARD := $(shell $(PLATFORM_GEN) --emit=card 2>/dev/null)
+ifeq ($(FIRESIM_CARD),)
+$(error $(shell $(PLATFORM_GEN) --emit=card 2>&1 >/dev/null))
+endif
+FIRESIM_PLATFORM := $(shell python3 $(SCRIPT_DIR)/gen_platform.py --card=$(FIRESIM_CARD) --emit=firesim-mk 2>&1 | sed -n 's/^FIRESIM_PLATFORM := //p')
+ifeq ($(FIRESIM_PLATFORM),)
+$(error $(shell python3 $(SCRIPT_DIR)/gen_platform.py --card=$(FIRESIM_CARD) --emit=firesim-mk 2>&1 >/dev/null))
+endif
+
+# The image each card can take, as its native flow names it.
+TARGET ?= hw
+ifeq ($(FIRESIM_PLATFORM), aved)
+VALID_TARGETS := hw sim
+else
+VALID_TARGETS := hw hw_emu
+endif
+ifeq ($(FIRESIM_WORK_DIR),)
+ifeq ($(filter $(TARGET),$(VALID_TARGETS)),)
+$(error TARGET=$(TARGET) is not an image target for card $(FIRESIM_CARD): use one of $(VALID_TARGETS) \
+        (xrtsim and avedsim are run targets and need no image))
+endif
+endif
+
+# Named as the native flows name theirs, so FPGA_BIN_DIR means the same thing.
+ifeq ($(FIRESIM_PLATFORM), aved)
+BUILD_DIR := $(abspath $(PREFIX)_aved_$(TARGET))
+else
+BUILD_DIR := $(abspath $(PREFIX)_$(if $(XSA),$(XSA),$(FIRESIM_CARD))_$(TARGET))
+endif
+# The runtime's metasimulator reuses the simulation flattening from here, in a
+# directory of its own.
+ifneq ($(FIRESIM_WORK_DIR),)
+BUILD_DIR := $(abspath $(FIRESIM_WORK_DIR))
+endif
+BIN_DIR := $(BUILD_DIR)/bin
+
+FIRESIM_MK := $(BUILD_DIR)/firesim_platform.mk
+$(shell mkdir -p $(BUILD_DIR) && $(PLATFORM_GEN) --emit=firesim-mk -o $(FIRESIM_MK))
 include $(FIRESIM_MK)
 
+# A user-named XSA is the one to build for; the descriptor's is the default.
+ifneq ($(XSA),)
+DEVICE := $(XSA)
+endif
+
 # The FireSim flow's make variables for this card's build.
-FIRESIM_TARGET_ARGS := PLATFORM=$(PLATFORM) TARGET_PROJECT=midasexamples \
+FIRESIM_TARGET_ARGS := PLATFORM=$(FIRESIM_PLATFORM) TARGET_PROJECT=midasexamples \
                        DESIGN=VortexTarget TARGET_CONFIG=VortexConfig PLATFORM_CONFIG=$(PLATFORM_CONFIG)
-QUINTUPLET := $(PLATFORM)-midasexamples-VortexTarget-VortexConfig-$(PLATFORM_CONFIG)
+QUINTUPLET := $(FIRESIM_PLATFORM)-midasexamples-VortexTarget-VortexConfig-$(PLATFORM_CONFIG)
 
 # Flattened Vortex sources for the BlackBox. Golden Gate takes a file list, not
 # include paths, so the tree is copied into one directory with the macros already
 # inlined (-P) and emitted in elaboration order: packages, interfaces, modules.
 #
-# The platform's simulation image (sim-image) gets its own flattening, under
+# A simulation image (TARGET=sim or hw_emu) gets its own flattening, under
 # -DSIMULATION. Under VIVADO, VX_platform.vh enables ASYNC_BRAM_PATCH unless
 # SIMULATION is defined, and that patch leaves every async RAM's read address
 # behind an empty VX_placeholder black box which only the opt_design hook
 # rewires. A behavioural simulation never runs opt_design, so without the
 # define those RAMs never latch an address and read back X -- the same reason
 # the native xrt flow adds -DSIMULATION for hw_emu.
-IMAGE_KIND ?= hw
-ifeq ($(IMAGE_KIND), sim)
+ifneq ($(filter $(TARGET),sim hw_emu),)
+IMAGE_KIND := sim
 IMAGE_SUFFIX := _sim
 endif
 VIVADO_SRCS_NAME := vivado_srcs$(IMAGE_SUFFIX)
@@ -77,23 +140,36 @@ SRCS_DIR := $(BUILD_DIR)/vortex_srcs
 SRCS_LIST := $(BUILD_DIR)/vortex_srcs.f
 SIM_SRCS_STAMP := $(SRCS_DIR)/.sources.stamp
 
-.PHONY: stage sources sim-sources vivado-sources xilinx-ips kernel-env bitstream sim-image \
+.PHONY: all help clean elaborate stage sources sim-sources vivado-sources xilinx-ips kernel-env image \
         metasim run-metasim check-firesim clean-staged
 
+.DEFAULT_GOAL := all
+
+help:
+	@echo "FireSim image build (same tokens as hw/syn/xilinx/xrt and hw/syn/xilinx/aved):"
+	@echo "  make PLATFORM=<xsa> [TARGET=hw|hw_emu]   XRT card"
+	@echo "  make [DEVICE=<part>] [TARGET=hw|sim]     aved card (default: the V80)"
+	@echo "  options: PREFIX=<dir prefix> XLEN=32|64 CONFIGS=\"-DVX_CFG_...\" PERF=1"
+	@echo "  image:   <PREFIX>_<xsa|aved>_<TARGET>/bin/firesim.{xclbin,vbin}"
+	@echo "  run:     make -C tests/regression/<app> run-firesim TARGET=<target> FPGA_BIN_DIR=<that bin>"
+	@echo "           (TARGET=xrtsim|avedsim need no image)"
+	@echo "  developer goals: metasim run-metasim sources clean"
+
+# Copies only what changed: FireSim's make judges its elaboration by these
+# files' timestamps, so rewriting identical files would redo Golden Gate (and
+# relink the metasimulator) on every run.
 stage: check-firesim
 	@mkdir -p $(TARGET_DEST) $(CC_DEST)
 	@for f in $(SCALA_SRCS); do \
-		cp -f "$$f" $(TARGET_DEST)/ || exit 1; \
-		echo "staged $$(basename $$f)"; \
+		cmp -s "$$f" $(TARGET_DEST)/$$(basename $$f) || { cp -f "$$f" $(TARGET_DEST)/ && echo "staged $$(basename $$f)"; } || exit 1; \
 	done
 	@for f in $(CC_SRCS); do \
-		cp -f "$$f" $(CC_DEST)/ || exit 1; \
-		echo "staged $$(basename $$f)"; \
+		cmp -s "$$f" $(CC_DEST)/$$(basename $$f) || { cp -f "$$f" $(CC_DEST)/ && echo "staged $$(basename $$f)"; } || exit 1; \
 	done
-	@$(PLATFORM_GEN) --emit=scala -o $(TARGET_DEST)/$(PLATFORM_CONFIG).scala
-	@echo "staged $(PLATFORM_CONFIG).scala ($(FIRESIM_CARD))"
-
-XLEN ?= 32
+	@$(PLATFORM_GEN) --emit=scala -o $(BUILD_DIR)/$(PLATFORM_CONFIG).scala
+	@cmp -s $(BUILD_DIR)/$(PLATFORM_CONFIG).scala $(TARGET_DEST)/$(PLATFORM_CONFIG).scala || { \
+		cp -f $(BUILD_DIR)/$(PLATFORM_CONFIG).scala $(TARGET_DEST)/ && \
+		echo "staged $(PLATFORM_CONFIG).scala ($(FIRESIM_CARD))"; }
 
 # Architecture overrides, as the other synthesis flows take them, e.g.
 # CONFIGS="-DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_TEX_ENABLE". XCONFIGS is the fully
@@ -170,7 +246,7 @@ PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=4
 # RTU is the only unit that reaches for them by default, so it uses the soft
 # FMA and divider here -- the same RTL the metasimulator runs -- with the soft
 # divider's latency in place of xil_fdiv's.
-ifeq ($(PLATFORM), aved)
+ifeq ($(FIRESIM_PLATFORM), aved)
 PLATFORM_DEFINES += -DVX_CFG_RTU_USE_DSP=0 -DVX_CFG_RTU_FDIV_LATENCY=17
 endif
 
@@ -181,11 +257,12 @@ endif
 # it never retired looks exactly like a core with nothing left to do. They are
 # read over the DCR response path, which both the harness and the driver already
 # drive, but VX_csr_data.sv gates them behind PERF_ENABLE. Off by default because
-# they cost area; build with PERF_DEFINES=-DPERF_ENABLE to read them, and note
-# that without it every counter reads zero, which is indistinguishable from an
-# idle core rather than an absent instrument.
-PERF_DEFINES ?=
-PLATFORM_DEFINES += $(PERF_DEFINES)
+# they cost area; build with PERF=1 to read them, as in the other synthesis
+# flows, and note that without it every counter reads zero, which is
+# indistinguishable from an idle core rather than an absent instrument.
+ifdef PERF
+PLATFORM_DEFINES += -DPERF_ENABLE
+endif
 
 GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(SYNTH_DEFINES) $(RTL_INCLUDE)
 
@@ -350,44 +427,63 @@ kernel-env:
 	@echo 'export VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl'
 	@echo 'export TOOL_DIR=$(SCRIPT_DIR)'
 
-# One command from sources to the card's image. Expects the FireSim environment
-# (its env.sh) and the Xilinx tools for the card's platform in the environment.
-# $(SRCS_LIST) is deliberately not a prerequisite: the recipe hands synthesis the
-# Vivado-flattened list, and pulling the simulation one in would flatten the tree
-# a second time under the opposite defines for nothing.
-bitstream: vivado-sources xilinx-ips stage
-	$(MAKE) -C $(FIRESIM_PATH)/sim replace-rtl $(FIRESIM_TARGET_ARGS)
-	VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST) VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR) \
-	VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl TOOL_DIR=$(SCRIPT_DIR) \
-	$(MAKE) -C $(FIRESIM_PATH)/platforms/$(PLATFORM)/cl_$(QUINTUPLET) $(PLATFORM_IMAGE_GOAL) \
-		DEVICE=$(DEVICE) HOST_MEM_SP='$(HOST_MEM_SP)' FREQUENCY=$(FREQUENCY) STRATEGY=$(STRATEGY)
-
-# The same image built for the platform's own simulator instead of the fabric.
-sim-image:
-	$(MAKE) bitstream PLATFORM_IMAGE_GOAL='$(PLATFORM_SIM_GOAL)' IMAGE_KIND=sim
-
 FREQUENCY ?= 60.0
 STRATEGY ?= TIMING
 
-# How each platform names its two images, kept here so the difference does not
-# leak into the caller. aved builds both from one goal and selects with TARGET,
-# putting each in build_dir.$(TARGET); vitis has a separate `sim` goal that
-# selects hw_emu.
-#
-# Passing TARGET through to vitis would be worse than useless: its Makefile sets
-# `bitstream: TARGET = hw` as a target-specific variable, and a command-line
-# TARGET beats a target-specific one, so TARGET=sim would reach v++ as
-# `--target sim`, which is not a Vitis build target at all.
-ifeq ($(PLATFORM),aved)
-PLATFORM_HW_GOAL  := bitstream TARGET=hw
-PLATFORM_SIM_GOAL := bitstream TARGET=sim
-else
-PLATFORM_HW_GOAL  := bitstream
+# How the card's FireSim platform spells this TARGET, and where it leaves the
+# image. aved builds both images from one goal and selects with its own TARGET,
+# putting each in build_dir.$(TARGET); vitis has a separate `sim` goal for
+# hw_emu, and must never see TARGET at all -- its Makefile sets
+# `bitstream: TARGET = hw` as a target-specific variable, which a passed-in
+# TARGET would beat, sending `--target sim` to v++.
+PLATFORM_BUILD_DIR := $(FIRESIM_PATH)/platforms/$(FIRESIM_PLATFORM)/cl_$(QUINTUPLET)
+ifeq ($(FIRESIM_PLATFORM), aved)
+PLATFORM_IMAGE_GOAL := bitstream TARGET=$(TARGET)
+PLATFORM_IMAGE := $(PLATFORM_BUILD_DIR)/bitstream/build_dir.$(TARGET)/firesim.vbin
+IMAGE_NAME := firesim.vbin
+else ifeq ($(TARGET), hw_emu)
 # Without debug: a debug hw_emu kernel logs a waveform of the whole shell on
 # every run (~800 MB for demo, tens of GB for raycast) and runs far slower.
-PLATFORM_SIM_GOAL := sim VPP_DEBUG=
+PLATFORM_IMAGE_GOAL := sim VPP_DEBUG=
+PLATFORM_IMAGE := $(PLATFORM_BUILD_DIR)/simulation/build_dir.$(DEVICE)/firesim.xclbin
+IMAGE_NAME := firesim.xclbin
+else
+PLATFORM_IMAGE_GOAL := bitstream
+PLATFORM_IMAGE := $(PLATFORM_BUILD_DIR)/bitstream/build_dir.$(DEVICE)/firesim.xclbin
+IMAGE_NAME := firesim.xclbin
 endif
-PLATFORM_IMAGE_GOAL ?= $(PLATFORM_HW_GOAL)
+
+# One command from sources to the card's image, collected into $(BIN_DIR) with
+# what running it needs beside it. Expects the FireSim environment
+# (ci/firesim_env.sh) and the Xilinx tools for the card's platform.
+all: image
+	@mkdir -p $(BIN_DIR)
+	cp -f $(PLATFORM_IMAGE) $(BIN_DIR)/$(IMAGE_NAME)
+	@echo $(FIRESIM_CARD) > $(BIN_DIR)/firesim.card
+ifeq ($(TARGET), hw_emu)
+	emconfigutil --platform $(DEVICE) --od $(BIN_DIR)
+endif
+	@echo "image: $(abspath $(BIN_DIR))/$(IMAGE_NAME) (card $(FIRESIM_CARD), TARGET=$(TARGET))"
+
+# The FireSim platform's own build. $(SRCS_LIST) is deliberately not a
+# prerequisite: the recipe hands synthesis the Vivado-flattened list, and pulling
+# the simulation one in would flatten the tree a second time under the opposite
+# defines for nothing.
+image: vivado-sources xilinx-ips stage
+	$(MAKE) -C $(FIRESIM_PATH)/sim replace-rtl $(FIRESIM_TARGET_ARGS)
+	VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST) VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR) \
+	VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl TOOL_DIR=$(SCRIPT_DIR) \
+	$(MAKE) -C $(PLATFORM_BUILD_DIR) $(PLATFORM_IMAGE_GOAL) \
+		DEVICE=$(DEVICE) HOST_MEM_SP='$(HOST_MEM_SP)' FREQUENCY=$(FREQUENCY) STRATEGY=$(STRATEGY)
+
+# Golden Gate's elaboration of the card's target on its own, for the runtime's
+# metasimulator (xrtsim/avedsim), which needs the generated RTL and headers but
+# no image. An image build elaborates as part of replace-rtl.
+elaborate: stage
+	$(MAKE) -C $(FIRESIM_PATH)/sim verilog $(FIRESIM_TARGET_ARGS)
+
+clean:
+	rm -rf $(BUILD_DIR)
 
 # The metasimulator: the FireSim-transformed design in Verilator, driven through
 # the DPI emul simif. No FPGA and no Vivado, so it runs the same target the card
@@ -413,9 +509,8 @@ metasim: sources stage
 # Runs it. ARGS reaches the harness; the metasim needs no image, since the design
 # is the simulator.
 #
-# Deliberately not dependent on `metasim`: `stage` copies the harness sources
-# unconditionally, so every invocation would bump their mtimes and relink the
-# 460 MB model before running it. Build with `make metasim` first.
+# Not dependent on `metasim`, so running never rebuilds the 460 MB model behind
+# the caller's back. Build with `make metasim` first.
 run-metasim:
 	env -u VERILATOR $(MAKE) -C $(FIRESIM_PATH)/sim run-verilator $(FIRESIM_TARGET_ARGS) ARGS="$(ARGS)"
 
