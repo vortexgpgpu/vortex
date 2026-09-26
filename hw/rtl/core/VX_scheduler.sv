@@ -19,6 +19,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 ) (
     input wire              clk,
     input wire              reset,
+`ifdef VX_CFG_FAME5
+    input wire [31:0]       core_id,
+`endif
 
 `ifdef PERF_ENABLE
     output sched_perf_t     sched_perf,
@@ -384,6 +387,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     ) bar_unit (
         .clk        (clk),
         .reset      (reset),
+        `ifdef VX_CFG_FAME5
+            .core_id        (core_id),
+        `endif
         .req_valid  (warp_ctl_if.bar_valid),
         .req_wid    (warp_ctl_if.wid),
         .req_data   (warp_ctl_if.bar),
@@ -487,6 +493,9 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     ) uuid_gen (
         .clk   (clk),
         .reset (reset),
+        `ifdef VX_CFG_FAME5
+            .core_id        (core_id),
+        `endif
         .incr  (schedule_fire),
         .wid   (schedule_wid),
         .uuid  (instr_uuid)
