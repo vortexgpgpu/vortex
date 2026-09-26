@@ -17,6 +17,8 @@
 #include "bridges/fased_memory_timing_model.h"
 
 #include <algorithm>
+#include <atomic>
+#include <csignal>
 #include <chrono>
 #include <condition_variable>
 #include <cstdarg>
@@ -28,6 +30,7 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 #include <gmp.h>
@@ -123,6 +126,12 @@ class vortex_simulation_t;
 channel_t *g_channel = nullptr;
 vortex_simulation_t *g_sim = nullptr;
 
+// The exit status a stopped run ends with (128+signal, or 124 for the launch
+// watchdog), 0 while it has not been stopped. Once set, the simulation reports
+// failure and the process exits with it, whatever the application prints: a
+// run cut short must never read as a pass.
+std::atomic<int> g_stop_status{0};
+
 // A simulation whose run loop services requests instead of executing a fixed
 // script. Everything the target does happens on this thread: the bridges are
 // not thread-safe and must never be touched by the caller.
@@ -154,7 +163,7 @@ public:
             lock, [] { return g_channel->shutdown || !g_channel->pending.empty(); });
         if (g_channel->shutdown && g_channel->pending.empty()) {
           g_sim = nullptr;
-          return 0;
+          return g_stop_status.load() != 0 ? 1 : 0;
         }
         req = std::move(g_channel->pending.front().fn);
         req_label = std::move(g_channel->pending.front().label);
@@ -462,7 +471,9 @@ private:
 firesim_sim::firesim_sim()
     : impl_(new Impl()), step_batch_(kStepBatchFloor), busy_cycles_(0),
       stall_reported_(false), awaiting_busy_(false), idle_cycles_(0),
-      abort_phase_(0), launch_started_s_(0) {}
+      abort_phase_(0), launch_started_s_(0), stopped_(false), reporting_(false) {
+  install_stop_handlers();
+}
 
 // Wall-clock seconds a launch may take before the runtime gives up on it; 0
 // (the default) never does. Meant for a card run under an outer timeout: this
@@ -479,6 +490,63 @@ static double launch_timeout_s() {
     return 0.0;
   }();
   return value;
+}
+
+// A first SIGINT or SIGTERM asks the run to stop instead of killing it: the
+// launch in flight is reported and completed, nothing more is sent to the
+// target, and the application finishes through its own teardown. Killing a
+// FireSim run mid-launch is what preceded every host reset on the V80, so
+// Ctrl-C and `timeout -s INT` take this path. A second signal kills as usual.
+namespace {
+std::atomic<int> g_stop_signal{0};
+
+extern "C" void on_stop_signal(int sig) {
+  if (g_stop_signal.exchange(sig) != 0) {
+    signal(sig, SIG_DFL);
+    raise(sig);
+  }
+}
+} // namespace
+
+// After the application's own teardown, a stopped run exits with its status.
+// Output is flushed first; _exit skips any later atexit handlers.
+extern "C" void exit_with_stop_status() {
+  const int status = g_stop_status.load();
+  if (status != 0) {
+    fflush(nullptr);
+    fprintf(stderr, "[firesim] the run was stopped; its results are not valid (exit %d)\n",
+            status);
+    _exit(status);
+  }
+}
+
+// Only where the application has not installed its own handler.
+void firesim_sim::install_stop_handlers() {
+  static bool registered = false;
+  if (!registered) {
+    atexit(exit_with_stop_status);
+    registered = true;
+  }
+  for (int sig : {SIGINT, SIGTERM}) {
+    struct sigaction old_action;
+    if (sigaction(sig, nullptr, &old_action) == 0 && old_action.sa_handler == SIG_DFL) {
+      struct sigaction action = {};
+      action.sa_handler = on_stop_signal;
+      sigemptyset(&action.sa_mask);
+      sigaction(sig, &action, nullptr);
+    }
+  }
+}
+
+bool firesim_sim::stopped() {
+  if (!stopped_ && g_stop_signal.load() != 0) {
+    fprintf(stderr, "[firesim] %s received: stopping the run (send it again to kill)\n",
+            g_stop_signal.load() == SIGINT ? "SIGINT" : "SIGTERM");
+    stopped_ = true;
+    int expected = 0;
+    g_stop_status.compare_exchange_strong(expected, 128 + g_stop_signal.load());
+  }
+  return stopped_;
 }
 
 static double wall_now_s() {
@@ -504,6 +572,13 @@ static uint64_t stall_report_cycles() {
 }
 
 void firesim_sim::report_progress(const char *why) {
+  // The report's own reads must reach the target even when it is written
+  // because the run is stopping.
+  struct reporting_scope {
+    bool &flag;
+    explicit reporting_scope(bool &f) : flag(f) { flag = true; }
+    ~reporting_scope() { flag = false; }
+  } scope(reporting_);
   uint64_t tcycle = 0;
   const int ret = impl_->submit("read target clock",
                                 [&tcycle] { tcycle = g_sim->clock.tcycle(); });
@@ -629,7 +704,7 @@ int firesim_sim::init(const std::vector<std::string> &plusargs) {
 }
 
 int firesim_sim::dcr_write(uint32_t addr, uint32_t value) {
-  if (abort_phase_ != 0) {
+  if (!reporting_ && stopped()) {
     return 0;
   }
   return impl_->submit(label("dcr_write addr=0x%x data=0x%x", addr, value), [addr, value] {
@@ -645,7 +720,7 @@ int firesim_sim::dcr_write(uint32_t addr, uint32_t value) {
 }
 
 int firesim_sim::dcr_read(uint32_t addr, uint32_t tag, uint32_t *value) {
-  if (abort_phase_ != 0) {
+  if (!reporting_ && stopped()) {
     *value = 0;
     return -1;
   }
@@ -726,6 +801,12 @@ static void prefill_region() {
 }
 
 int firesim_sim::start() {
+  if (stopped()) {
+    // Complete the launch without touching the target: busy once, then idle.
+    abort_phase_ = 1;
+    launch_started_s_ = 0;
+    return 0;
+  }
   impl_->submit("prefill", [] { prefill_region(); });
   awaiting_busy_ = true;
   idle_cycles_ = 0;
@@ -749,13 +830,19 @@ int firesim_sim::is_busy(bool *busy) {
     abort_phase_ = 2;
     return 0;
   }
-  if (launch_timeout_s() > 0 && launch_started_s_ > 0 &&
-      wall_now_s() - launch_started_s_ > launch_timeout_s()) {
-    fprintf(stderr,
-            "[firesim] launch exceeded VORTEX_FIRESIM_TIMEOUT_S=%.0f s "
-            "(busy %s); giving up on it\n",
-            launch_timeout_s(), awaiting_busy_ ? "never rose" : "never fell");
-    report_progress("launch watchdog");
+  const bool timed_out = launch_timeout_s() > 0 && launch_started_s_ > 0 &&
+                         wall_now_s() - launch_started_s_ > launch_timeout_s();
+  if (launch_started_s_ > 0 && (timed_out || stopped())) {
+    if (timed_out) {
+      fprintf(stderr,
+              "[firesim] launch exceeded VORTEX_FIRESIM_TIMEOUT_S=%.0f s "
+              "(busy %s); giving up on it\n",
+              launch_timeout_s(), awaiting_busy_ ? "never rose" : "never fell");
+    }
+    report_progress(timed_out ? "launch watchdog" : "stopped");
+    stopped_ = true;
+    int expected = 0;
+    g_stop_status.compare_exchange_strong(expected, timed_out ? 124 : 128 + SIGINT);
     launch_started_s_ = 0;
     abort_phase_ = awaiting_busy_ ? 1 : 2;
     awaiting_busy_ = false;
@@ -847,7 +934,7 @@ int firesim_sim::ready_wait(int64_t timeout_ms) {
 // it, so the application runs to its own exit -- and reports its failure --
 // instead of blocking on a transfer that will never complete.
 int firesim_sim::mem_write(uint64_t addr, uint64_t size, const void *value) {
-  if (abort_phase_ != 0) {
+  if (!reporting_ && stopped()) {
     return 0;
   }
   dump_upload(addr, size, value);
@@ -857,7 +944,7 @@ int firesim_sim::mem_write(uint64_t addr, uint64_t size, const void *value) {
 }
 
 int firesim_sim::mem_read(uint64_t addr, uint64_t size, void *value) {
-  if (abort_phase_ != 0) {
+  if (!reporting_ && stopped()) {
     memset(value, 0, size);
     return 0;
   }

@@ -91,11 +91,22 @@ private:
   bool awaiting_busy_;
   uint64_t idle_cycles_;
 
-  // Set when the launch watchdog (VORTEX_FIRESIM_TIMEOUT_S) gives up. The
-  // launch is then completed -- busy once, then idle -- so the application
-  // finishes through its own teardown rather than being killed mid-run.
+  // Set when the launch watchdog (VORTEX_FIRESIM_TIMEOUT_S) or a stop signal
+  // gives up on a launch. The launch is then completed -- busy once, then idle
+  // -- so the application finishes through its own teardown rather than being
+  // killed mid-run.
   int abort_phase_;
   double launch_started_s_;
+
+  // Set once the run is being stopped -- by a signal or by the watchdog -- and
+  // never cleared: from then on nothing more is sent to the target.
+  bool stopped_;
+  bool stopped();
+
+  // True while a report reads counters, which must reach the target even as
+  // the run stops.
+  bool reporting_;
+  static void install_stop_handlers();
 };
 
 }
