@@ -342,8 +342,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .empty     (l2_empty)
     );
 
-    // The walker lives at the device: export the L2 TLB's miss bus. The
-    // L2 cache carries no PTE-fetch client; its bandwidth is all sockets'.
+    // The walker lives at the device: export the L2 TLB's miss bus.
     assign dev_ptw_if.req_valid = l2_ptw_if.req_valid;
     assign dev_ptw_if.req_data  = l2_ptw_if.req_data;
     assign l2_ptw_if.req_ready  = dev_ptw_if.req_ready;

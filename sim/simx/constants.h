@@ -71,8 +71,7 @@ inline constexpr uint32_t VX_CFG_L2_DEMAND_REQS  = NUM_SOCKETS * VX_CFG_L1_MEM_P
 #ifdef VX_CFG_VM_ENABLE
 // With one cluster, an L2 and no L3, the cluster L2 is the LLC and carries
 // the device walker's PTE fetches on one extra client slot; in every other
-// topology the walker is one more LLC client on the last requestor slot
-// (mirrors PTW_ON_L2 / L2_PTW_IDX / L3_NUM_REQS in VX_gpu_pkg.sv).
+// topology the walker is one more LLC client on the last requestor slot.
 inline constexpr uint32_t PTW_ON_L2              = ((VX_CFG_NUM_CLUSTERS == 1)
                                                  && (VX_CFG_L2_ENABLED != 0)
                                                  && (VX_CFG_L3_ENABLED == 0)) ? 1 : 0;

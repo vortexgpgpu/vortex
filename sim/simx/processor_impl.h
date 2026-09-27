@@ -89,7 +89,7 @@ private:
 #ifdef VX_CFG_VM_ENABLE
   uint64_t    mmu_satp_ = 0;    // assembled from the two DCR halves
   // Device-level walker: one Ptw serves every cluster's L2 TLB, its PTE
-  // fetches on the LLC's last input slot (mirrors hw/rtl/Vortex.sv).
+  // fetches riding the LLC.
   Ptw::Ptr    dev_ptw_;
   PtwMux::Ptr dev_ptw_mux_;
 #endif

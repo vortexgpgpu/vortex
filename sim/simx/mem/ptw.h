@@ -110,11 +110,10 @@ private:
   friend class SimObject<Ptw>;
 };
 
-// Folds the clusters' L2-TLB walker links into the one device-level Ptw,
-// mirroring the RTL's VX_tlb_bus_arb: the input (cluster) index rides the
-// high bits of `slot` on the way in and is stripped off the fill on the way
-// out, exactly the bus-ID growth of the hardware arb. Pure routing — the
-// walker itself neither knows nor cares how many clusters feed it.
+// Folds the clusters' L2-TLB walker links into the one device-level Ptw:
+// the input (cluster) index rides the high bits of `slot` on the way in and
+// is stripped off the fill on the way out. Pure routing — the walker itself
+// neither knows nor cares how many clusters feed it.
 class PtwMux : public SimObject<PtwMux> {
 public:
   using Ptr = std::shared_ptr<PtwMux>;

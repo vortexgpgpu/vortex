@@ -136,7 +136,7 @@ ProcessorImpl::ProcessorImpl()
 
 #ifdef VX_CFG_VM_ENABLE
   // Device-level walker: every cluster's L2-TLB miss link folds through the
-  // mux into one shared Ptw whose PTE fetches ride the LLC's last input slot.
+  // mux into one shared Ptw whose PTE fetches ride the LLC.
   dev_ptw_ = Ptw::Create("dev-ptw");
   dev_ptw_mux_ = PtwMux::Create("dev-ptwmux", VX_CFG_NUM_CLUSTERS);
   for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {

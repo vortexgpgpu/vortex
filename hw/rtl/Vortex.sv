@@ -213,14 +213,14 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
 `ifdef VX_CFG_VM_ENABLE
     wire [`VX_CFG_XLEN-1:0] mmu_satp;
     wire                    mmu_flush_req;
-    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_flush_done;
+    wire [`VX_CFG_NUM_CLUSTERS-1:0] cl_mmu_flush_done;
 
     // Per-cluster L2-TLB miss export buses (used by the device-level walker).
     VX_tlb_bus_if #(.ID_WIDTH (L2_TLB_SLOT_WIDTH)) per_cluster_dev_ptw_if [`VX_CFG_NUM_CLUSTERS] ();
 
     // One shared walker at the device: the clusters' L2-TLB miss buses arb
-    // into it, PTE fetches ride a dedicated LLC client port, and the flush
-    // done-tree gains the walker's leg. Structural faults surface here.
+    // into it, and the flush done-tree gains the walker's leg. Structural
+    // faults surface here.
     VX_tlb_bus_if #(.ID_WIDTH (TLB_DEV_ID_WIDTH)) dev_ptw_bus_if ();
 
     VX_tlb_bus_arb #(

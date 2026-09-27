@@ -1714,7 +1714,7 @@ package VX_gpu_pkg;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
 
     // With one cluster, an L2 and no L3, that L2 is the LLC: the device
-    // walker's PTE fetches ride it through one restored client slot, so a
+    // walker's PTE fetches ride it through a dedicated client slot, so a
     // leaf-PTE miss is a cache lookup rather than a DRAM round trip. In
     // every other topology the walker attaches at the device (see L3_PTW_IDX).
     localparam PTW_ON_L2            = ((`VX_CFG_VM_ENABLED != 0)

@@ -116,43 +116,22 @@ public:
     }
     // L2 arb outputs → l2cache (after all rows are bound).
     for (uint32_t i = 0; i < VX_CFG_L2_DEMAND_REQS; ++i) {
-  #ifdef VX_CFG_VM_ENABLE
-      if (i == 0) {
-        // Port 0 is shared with the walker's PTE-fetch client (below).
-        continue;
-      }
-  #endif
       l2arb->ReqOut.at(i).bind(&l2cache_->core_req_in.at(i));
       l2cache_->core_rsp_out.at(i).bind(&l2arb->RspIn.at(i));
     }
-  #ifdef VX_CFG_VM_ENABLE
-    SimChannel<MemReq>* l2_port0_req = &l2arb->ReqOut.at(0);
-    SimChannel<MemRsp>* l2_port0_rsp = &l2arb->RspIn.at(0);
-  #endif
 #else
     // No cluster-resident gfx caches: direct sockets → L2.
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
-  #ifdef VX_CFG_VM_ENABLE
-        if (i == 0 && j == 0) {
-          // Port 0 is shared with the walker's PTE-fetch client (below).
-          continue;
-        }
-  #endif
         sockets_.at(i)->mem_req_out.at(j).bind(&l2cache_->core_req_in.at(i * VX_CFG_L1_MEM_PORTS + j));
         l2cache_->core_rsp_out.at(i * VX_CFG_L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
-  #ifdef VX_CFG_VM_ENABLE
-    SimChannel<MemReq>* l2_port0_req = &sockets_.at(0)->mem_req_out.at(0);
-    SimChannel<MemRsp>* l2_port0_rsp = &sockets_.at(0)->mem_rsp_in.at(0);
-  #endif
 #endif // cluster-resident gfx caches
 
 #ifdef VX_CFG_VM_ENABLE
-    // Shared cluster TLB + walker complex. Every core's two L1 TLBs are
-    // clients; the walker's PTE fetches share l2cache port 0 through a
-    // small priority arbiter.
+    // Shared cluster L2 TLB. Every core's two L1 TLBs are clients; its
+    // misses export on the walker link the processor binds at the device.
     uint32_t num_tlb_clients = sockets_per_cluster * VX_CFG_SOCKET_SIZE * 2;
     snprintf(sname, 100, "%s-l2tlb", name.c_str());
     l2tlb_ = L2Tlb::Create(sname, num_tlb_clients);
@@ -168,11 +147,6 @@ public:
       }
     }
 
-    // The walker lives at the device (bound by the processor through the
-    // PtwMux); PTE fetches no longer touch this cluster's L2 cache, so
-    // port 0 goes back to its demand client undivided.
-    l2_port0_req->bind(&l2cache_->core_req_in.at(0));
-    l2cache_->core_rsp_out.at(0).bind(l2_port0_rsp);
 #endif
 
 #ifdef VX_CFG_EXT_OM_ENABLE
