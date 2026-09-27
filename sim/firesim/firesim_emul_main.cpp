@@ -34,6 +34,9 @@ int firesim_emul_run(int argc, char **argv) {
   }
 
   const std::unique_ptr<VerilatedContext> contextp{new VerilatedContext};
+  // Required before time 0 for an EMUL_DEBUG build's $dumpvars to arm; a
+  // no-op in a build without tracing. (Verilator's own --main emits it.)
+  contextp->traceEverOn(true);
   contextp->commandArgs(static_cast<int>(args.size()), args.data());
   if (!extra.empty()) {
     fprintf(stderr, "[emul] extra args:%s -> randReset=%d seed=%d\n",

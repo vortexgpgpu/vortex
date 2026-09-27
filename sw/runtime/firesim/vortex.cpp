@@ -36,6 +36,7 @@
 #include <stdlib.h>
 #include <cstring>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <mutex>
@@ -92,6 +93,16 @@ public:
       plusargs.push_back(std::string("+binary_file=") + xclbin);
     }
 #endif
+    // Extra plusargs for FireSim's bridges, card and metasimulator alike --
+    // chiefly FASED's runtime settings (+mm_readLatency_0=... with
+    // +mm_useHardwareDefaultRuntimeSettings_0 covering the rest), which are
+    // the only way to change the memory timing without a rebuild.
+    if (const char* extra = getenv("VORTEX_FIRESIM_ARGS")) {
+      std::istringstream in(extra);
+      for (std::string tok; in >> tok;) {
+        plusargs.push_back(tok);
+      }
+    }
     return sim_.init(plusargs);
   }
 
