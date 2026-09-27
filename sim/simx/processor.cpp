@@ -145,8 +145,15 @@ ProcessorImpl::ProcessorImpl()
   }
   dev_ptw_mux_->ReqOut.bind(&dev_ptw_->ReqIn);
   dev_ptw_->RspOut.bind(&dev_ptw_mux_->RspIn);
-  dev_ptw_->MemReqOut.bind(&l3cache_->core_req_in.at(VX_CFG_L3_PTW_IDX));
-  l3cache_->core_rsp_out.at(VX_CFG_L3_PTW_IDX).bind(&dev_ptw_->MemRspIn);
+  // PTE fetches ride the LLC: the single cluster's L2 when that L2 is the
+  // LLC (PTW_ON_L2), the L3's dedicated client slot otherwise.
+  if constexpr (PTW_ON_L2 != 0) {
+    dev_ptw_->MemReqOut.bind(&clusters_.at(0)->ptw_mem_req_in());
+    clusters_.at(0)->ptw_mem_rsp_out().bind(&dev_ptw_->MemRspIn);
+  } else {
+    dev_ptw_->MemReqOut.bind(&l3cache_->core_req_in.at(VX_CFG_L3_PTW_IDX));
+    l3cache_->core_rsp_out.at(VX_CFG_L3_PTW_IDX).bind(&dev_ptw_->MemRspIn);
+  }
 #endif
 
   // connect L3 memory interfaces

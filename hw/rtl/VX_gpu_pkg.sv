@@ -1713,9 +1713,16 @@ package VX_gpu_pkg;
     localparam L2_GFX_RASTER_IDX    = L2_SOCKET_REQS;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
 
-    // The shared page-table walker attaches one PTE-fetch port under VM, right
-    // after the socket and graphics ports (like ocache/rcache).
-    localparam L2_PTW_REQS          = 0; // walker is device-level (LLC client)
+    // With one cluster, an L2 and no L3, that L2 is the LLC: the device
+    // walker's PTE fetches ride it through one restored client slot, so a
+    // leaf-PTE miss is a cache lookup rather than a DRAM round trip. In
+    // every other topology the walker attaches at the device (see L3_PTW_IDX).
+    localparam PTW_ON_L2            = ((`VX_CFG_VM_ENABLED != 0)
+                                    && (`VX_CFG_NUM_CLUSTERS == 1)
+                                    && (`VX_CFG_L2_ENABLED != 0)
+                                    && (`VX_CFG_L3_ENABLED == 0)) ? 1 : 0;
+    localparam L2_PTW_REQS          = PTW_ON_L2;
+    localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
 
@@ -1756,10 +1763,11 @@ package VX_gpu_pkg;
 
     // Input request size
     // The device-level walker attaches its PTE fetches as one more LLC
-    // client on the last requestor slot.
+    // client on the last requestor slot, unless a single cluster's L2 is
+    // the LLC (PTW_ON_L2) and carries them instead.
     localparam L3_PTW_IDX           = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
     localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS
-                                    + `VX_CFG_VM_ENABLED;
+                                    + ((`VX_CFG_VM_ENABLED != 0) && (PTW_ON_L2 == 0) ? 1 : 0);
 
     // Core request tag bits
     localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;

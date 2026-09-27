@@ -47,6 +47,9 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     input  wire [`VX_CFG_XLEN-1:0] mmu_satp,
     // Device-level walker: the L2 TLB's miss bus, exported to the device.
     VX_tlb_bus_if.master           dev_ptw_if,
+    // Walker PTE fetches, entering as an L2 client when this cluster's L2
+    // is the LLC (PTW_ON_L2); tied off otherwise.
+    VX_mem_bus_if.slave            dev_ptw_mem_if,
     input  wire                    mmu_flush_req,
     output wire                    mmu_flush_done,
 `endif
@@ -347,6 +350,12 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     assign l2_ptw_if.rsp_valid  = dev_ptw_if.rsp_valid;
     assign l2_ptw_if.rsp_data   = dev_ptw_if.rsp_data;
     assign dev_ptw_if.rsp_ready = l2_ptw_if.rsp_ready;
+
+    if (PTW_ON_L2 != 0) begin : g_ptw_l2_client
+        `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_PTW_IDX], dev_ptw_mem_if);
+    end else begin : g_no_ptw_l2_client
+        `UNUSED_VX_MEM_BUS_IF (dev_ptw_mem_if)
+    end
 
     // Flush root fans to the cluster L2; each socket self-times its own L1
     // TLB flush off the SATP DCR write, and the device walker reports its

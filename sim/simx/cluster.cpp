@@ -105,7 +105,7 @@ public:
         + VX_CFG_EXT_OM_ENABLED + VX_CFG_EXT_RASTER_ENABLED;
     snprintf(sname, 100, "%s-l2arb", name.c_str());
     auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority,
-                                    kL2Rows * VX_CFG_L2_NUM_REQS, VX_CFG_L2_NUM_REQS);
+                                    kL2Rows * VX_CFG_L2_DEMAND_REQS, VX_CFG_L2_DEMAND_REQS);
     // sockets → row 0
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
       for (uint32_t j = 0; j < VX_CFG_L1_MEM_PORTS; ++j) {
@@ -115,7 +115,7 @@ public:
       }
     }
     // L2 arb outputs → l2cache (after all rows are bound).
-    for (uint32_t i = 0; i < VX_CFG_L2_NUM_REQS; ++i) {
+    for (uint32_t i = 0; i < VX_CFG_L2_DEMAND_REQS; ++i) {
   #ifdef VX_CFG_VM_ENABLE
       if (i == 0) {
         // Port 0 is shared with the walker's PTE-fetch client (below).
@@ -435,6 +435,14 @@ public:
   SimChannel<TlbRsp>& ptw_rsp_in() {
     return l2tlb_->PtwRspIn;
   }
+
+  SimChannel<MemReq>& ptw_mem_req_in() {
+    return l2cache_->core_req_in.at(VX_CFG_L2_PTW_IDX);
+  }
+
+  SimChannel<MemRsp>& ptw_mem_rsp_out() {
+    return l2cache_->core_rsp_out.at(VX_CFG_L2_PTW_IDX);
+  }
 #endif
 
   int dcr_write(uint32_t addr, uint32_t value) {
@@ -653,6 +661,14 @@ SimChannel<TlbReq>& Cluster::ptw_req_out() {
 
 SimChannel<TlbRsp>& Cluster::ptw_rsp_in() {
   return impl_->ptw_rsp_in();
+}
+
+SimChannel<MemReq>& Cluster::ptw_mem_req_in() {
+  return impl_->ptw_mem_req_in();
+}
+
+SimChannel<MemRsp>& Cluster::ptw_mem_rsp_out() {
+  return impl_->ptw_mem_rsp_out();
 }
 #endif
 

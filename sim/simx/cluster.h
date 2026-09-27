@@ -103,6 +103,10 @@ public:
   // to the device-level walker (through the PtwMux).
   SimChannel<TlbReq>& ptw_req_out();
   SimChannel<TlbRsp>& ptw_rsp_in();
+  // The walker's PTE-fetch client slot on this cluster's L2, valid only
+  // under PTW_ON_L2 (the L2 is the LLC).
+  SimChannel<MemReq>& ptw_mem_req_in();
+  SimChannel<MemRsp>& ptw_mem_rsp_out();
 #endif
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
