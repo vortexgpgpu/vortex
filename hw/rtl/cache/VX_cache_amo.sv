@@ -60,6 +60,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     input  wire                          is_replay_st1,
     input  wire                          do_write_st1,
     input  wire [WORD_WIDTH-1:0]         read_word_st1,
+    input  wire [WORD_WIDTH-1:0]         read_word_fwd_st1, // read_word_st1 under rd_fwd_mask/data
     input  wire [WORD_SIZE-1:0]          byteen_st1,
     input  wire [WORD_WIDTH-1:0]         write_word_st1,
     input  wire [WORD_SEL_WIDTH-1:0]     word_idx_st0,
@@ -67,6 +68,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     input  wire [LINE_ADDR_BITS-1:0]     addr_st1,
     input  wire [LINE_ADDR_BITS-1:0]     res_addr_n,   // line entering the commit stage next cycle
     input  wire [WORD_SIZE-1:0]          byteen_n,     // byteen entering the commit stage next cycle
+    input  wire [WORD_SEL_WIDTH-1:0]     word_idx_n,   // word index entering the commit stage next cycle
     input  wire [TAG_WIDTH-1:0]          tag_st1,
     input  wire [REQ_SEL_WIDTH-1:0]      req_idx_st1,
     input  wire [ATTR_WIDTH-1:0]         attr_st1,
@@ -285,55 +287,157 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // queued writer; the forwards below reduce with a balanced OR-tree
         // instead of a newest-wins priority scan, off the response/old-operand
         // path.
-        reg [WBQ_SIZE-1:0] wbq_word_hit;
-        always @(*) begin
-            for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                wbq_word_hit[i] = (WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == addr_st1)
-                               && (wbq_wsel[i] == word_idx_st1);
+
+        wire                wb_push;
+        wire                wb_coalesce;
+        wire [WBQ_IDXW-1:0] wb_slot;
+
+        // Next occupancy of the queue, as the state update below applies it.
+        wire wb_enq = wb_push && ~wb_coalesce;
+        wire [WBQ_CNTW-1:0] wbq_count_n = (wb_enq && ~wb_fire) ? (wbq_count + WBQ_CNTW'(1))
+                                        : (~wb_enq && wb_fire) ? (wbq_count - WBQ_CNTW'(1))
+                                                               : wbq_count;
+
+        wire [WBQ_SIZE-1:0] wbq_key_st1;
+        for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_wbq_key_st1
+            assign wbq_key_st1[i] = (wbq_addr[i] == addr_st1) && (wbq_wsel[i] == word_idx_st1);
+        end
+        wire post_key_st1 = (post_wb_addr == addr_st1) && (post_wb_wsel == word_idx_st1);
+
+        // Per-lane hit of each entry and of the settling entry: the word
+        // matches and the lane is the entry's lane.
+        wire [WBQ_SIZE-1:0][NUM_LANES-1:0] wbq_lane_hit;
+        wire [NUM_LANES-1:0]               post_lane_hit;
+
+        if ((PIPE_EX != 0) && (NUM_LANES > 1)) begin : g_hit_reg
+            // A deferred-commit bank has the next commit-stage key a cycle
+            // early. Where the word spans several lanes the forward merge is
+            // wide enough for the {line, word} compare to set the response
+            // path, so the lane hits are registered and the forward network
+            // and the response start from flops: each is taken between the
+            // queue's next contents and the request entering the commit stage
+            // next cycle, with the slot's occupancy folded in. The queue moves
+            // during a stall while the commit request holds, so both keys are
+            // compared and the stall selects. A single-lane word keeps the
+            // live compare, which is cheaper there.
+            wire [WBQ_SIZE-1:0] wbq_key_n;
+            for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_wbq_key_n
+                assign wbq_key_n[i] = (wbq_addr[i] == res_addr_n) && (wbq_wsel[i] == word_idx_n);
+            end
+            wire cmp_key_st1 = (cmp_addr == addr_st1) && (cmp_wsel == word_idx_st1);
+            wire cmp_key_n   = (cmp_addr == res_addr_n) && (cmp_wsel == word_idx_n);
+            wire post_key_n  = (post_wb_addr == res_addr_n) && (post_wb_wsel == word_idx_n);
+
+            wire [WBQ_SIZE-1:0] wbq_key  = pipe_stall ? wbq_key_st1 : wbq_key_n;
+            wire                cmp_key  = pipe_stall ? cmp_key_st1 : cmp_key_n;
+            wire                post_key = pipe_stall ? post_key_st1 : post_key_n;
+
+            wire post_wb_valid_n = wb_fire || (post_wb_age == 2'd2);
+
+            // Mirrors the queue update below: the push lands after the drain shift.
+            reg [WBQ_SIZE-1:0]      hit_n;
+            reg [LANE_IDXW-1:0]     lane_n [WBQ_SIZE];
+            always @(*) begin
+                for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                    if (wb_push && (wb_slot == WBQ_IDXW'(i))) begin
+                        hit_n[i]  = cmp_key;
+                        lane_n[i] = cmp_lane;
+                    end else if (wb_fire && (i < WBQ_SIZE-1)) begin
+                        hit_n[i]  = (WBQ_CNTW'(i) < wbq_count_n) && wbq_key[(i < WBQ_SIZE-1) ? (i + 1) : i];
+                        lane_n[i] = wbq_lane[(i < WBQ_SIZE-1) ? (i + 1) : i];
+                    end else begin
+                        hit_n[i]  = (WBQ_CNTW'(i) < wbq_count_n) && wbq_key[i];
+                        lane_n[i] = wbq_lane[i];
+                    end
+                end
+            end
+            wire                 post_hit_n  = post_wb_valid_n && (wb_fire ? wbq_key[0] : post_key);
+            wire [LANE_IDXW-1:0] post_lane_n = wb_fire ? wbq_lane[0] : post_wb_lane;
+
+            reg [WBQ_SIZE-1:0][NUM_LANES-1:0] wbq_lane_hit_r;
+            reg [NUM_LANES-1:0]               post_lane_hit_r;
+            always @(posedge clk) begin
+                if (reset) begin
+                    wbq_lane_hit_r  <= '0;
+                    post_lane_hit_r <= '0;
+                end else begin
+                    for (integer i = 0; i < WBQ_SIZE; ++i) begin
+                        for (integer l = 0; l < NUM_LANES; ++l) begin
+                            wbq_lane_hit_r[i][l] <= hit_n[i] && (lane_n[i] == LANE_IDXW'(l));
+                        end
+                    end
+                    for (integer l = 0; l < NUM_LANES; ++l) begin
+                        post_lane_hit_r[l] <= post_hit_n && (post_lane_n == LANE_IDXW'(l));
+                    end
+                end
+            end
+            assign wbq_lane_hit  = wbq_lane_hit_r;
+            assign post_lane_hit = post_lane_hit_r;
+        end else begin : g_hit_live
+            for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_wbq
+                for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane
+                    assign wbq_lane_hit[i][l] = (WBQ_CNTW'(i) < wbq_count) && wbq_key_st1[i]
+                                             && (wbq_lane[i] == LANE_IDXW'(l));
+                end
+            end
+            for (genvar l = 0; l < NUM_LANES; ++l) begin : g_post_lane
+                assign post_lane_hit[l] = post_wb_valid && post_key_st1 && (post_wb_lane == LANE_IDXW'(l));
+            end
+            `UNUSED_VAR (word_idx_n)
+        end
+
+        wire [WBQ_SIZE-1:0] wbq_word_hit;
+        for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_word_hit
+            assign wbq_word_hit[i] = (| wbq_lane_hit[i]);
+        end
+
+        for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_key_check
+            for (genvar l = 0; l < NUM_LANES; ++l) begin : g_lane
+                `RUNTIME_ASSERT (wbq_lane_hit[i][l] == ((WBQ_CNTW'(i) < wbq_count) && wbq_key_st1[i]
+                                                     && (wbq_lane[i] == LANE_IDXW'(l))),
+                    ("%t: AMO writeback-queue key match out of sync (slot=%0d)", $time, i))
             end
         end
-        wire post_wb_word_hit = post_wb_valid && (post_wb_addr == addr_st1)
-                             && (post_wb_wsel == word_idx_st1);
+        for (genvar l = 0; l < NUM_LANES; ++l) begin : g_post_check
+            `RUNTIME_ASSERT (post_lane_hit[l] == (post_wb_valid && post_key_st1 && (post_wb_lane == LANE_IDXW'(l))),
+                ("%t: AMO settling-entry key match out of sync", $time))
+        end
 
         // Read-forward network: the queued writer of each byte of
-        // {addr_st1, word_idx_st1} wins over the settling entry, which wins over
-        // the array (mask bit stays 0). One-hot over the WBQ per byte.
-        // A byte of {addr_st1, word_idx_st1} is covered by entry i iff the
-        // word matches, the byte's lane is the entry's lane, and the entry's
-        // lane byteen has it. Data is the entry's lane byte -- wiring, since
-        // an entry stores exactly one lane.
-        reg [WORD_SIZE-1:0]  wbq_byte_hit;
-        reg [WORD_WIDTH-1:0] wbq_byte_data;
+        // {addr_st1, word_idx_st1}, else the settling entry, else the array
+        // (mask bit stays 0). A byte of {addr_st1, word_idx_st1} is covered by
+        // entry i iff the word matches, the byte's lane is the entry's lane,
+        // and the entry's lane byteen has it. Data is the entry's lane byte --
+        // wiring, since an entry stores exactly one lane. A queued write drops
+        // its bytes from the settling entry (see the enqueue), so every byte
+        // has at most one writer and the merge is a plain OR-tree.
+        reg [WORD_SIZE-1:0]  rd_fwd_mask_w;
+        reg [WORD_WIDTH-1:0] rd_fwd_data_w;
         always @(*) begin
-            wbq_byte_hit  = '0;
-            wbq_byte_data = '0;
+            rd_fwd_mask_w = '0;
+            rd_fwd_data_w = '0;
             for (integer i = 0; i < WBQ_SIZE; ++i) begin
                 for (integer b = 0; b < WORD_SIZE; ++b) begin
-                    if (wbq_word_hit[i] && (wbq_lane[i] == LANE_IDXW'(b / LANE_SIZE))
-                     && wbq_byteen[i][b % LANE_SIZE]) begin
-                        wbq_byte_hit[b]         = 1'b1;
-                        wbq_byte_data[b*8 +: 8] = wbq_byte_data[b*8 +: 8]
+                    if (wbq_lane_hit[i][b / LANE_SIZE] && wbq_byteen[i][b % LANE_SIZE]) begin
+                        rd_fwd_mask_w[b]        = 1'b1;
+                        rd_fwd_data_w[b*8 +: 8] = rd_fwd_data_w[b*8 +: 8]
                                                 | wbq_data[i][(b % LANE_SIZE)*8 +: 8];
                     end
                 end
             end
-        end
-        reg [WORD_SIZE-1:0]  rd_fwd_mask_w;
-        reg [WORD_WIDTH-1:0] rd_fwd_data_w;
-        always @(*) begin
             for (integer b = 0; b < WORD_SIZE; ++b) begin
-                if (wbq_byte_hit[b]) begin
+                if (post_lane_hit[b / LANE_SIZE] && post_wb_byteen[b % LANE_SIZE]) begin
                     rd_fwd_mask_w[b]        = 1'b1;
-                    rd_fwd_data_w[b*8 +: 8] = wbq_byte_data[b*8 +: 8];
-                end else if (post_wb_word_hit && (post_wb_lane == LANE_IDXW'(b / LANE_SIZE))
-                          && post_wb_byteen[b % LANE_SIZE]) begin
-                    rd_fwd_mask_w[b]        = 1'b1;
-                    rd_fwd_data_w[b*8 +: 8] = post_wb_data[(b % LANE_SIZE)*8 +: 8];
-                end else begin
-                    rd_fwd_mask_w[b]        = 1'b0;
-                    rd_fwd_data_w[b*8 +: 8] = 8'b0;
+                    rd_fwd_data_w[b*8 +: 8] = rd_fwd_data_w[b*8 +: 8]
+                                            | post_wb_data[(b % LANE_SIZE)*8 +: 8];
                 end
             end
+        end
+        for (genvar i = 0; i < WBQ_SIZE; ++i) begin : g_post_disjoint
+            `RUNTIME_ASSERT (~(post_wb_valid && (WBQ_CNTW'(i) < wbq_count)
+                            && (wbq_addr[i] == post_wb_addr) && (wbq_wsel[i] == post_wb_wsel)
+                            && (wbq_lane[i] == post_wb_lane) && (| (wbq_byteen[i] & post_wb_byteen))),
+                ("%t: AMO settling entry overlaps queued slot %0d", $time, i))
         end
         assign rd_fwd_mask = rd_fwd_mask_w;
         assign rd_fwd_data = rd_fwd_data_w;
@@ -376,12 +480,10 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         reg [WBQ_SIZE-1:0] wbq_clr_hit;
         always @(*) begin
             for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                wbq_clr_hit[i] = store_supersede && (WBQ_CNTW'(i) < wbq_count)
-                              && (wbq_addr[i] == addr_st1) && (wbq_wsel[i] == word_idx_st1);
+                wbq_clr_hit[i] = store_supersede && wbq_word_hit[i];
             end
         end
-        wire post_wb_clr = store_supersede && post_wb_valid
-                        && (post_wb_addr == addr_st1) && (post_wb_wsel == word_idx_st1);
+        wire post_wb_clr = store_supersede && (| post_lane_hit);
 
         // A superseding store's byteen, sliced at each queued entry's lane.
         wire [LANE_SIZE-1:0] clr_byteen [WBQ_SIZE];
@@ -461,33 +563,47 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
 
         // Compute finished this cycle (result ready to enqueue): the compute
         // stage is occupied and not being reloaded by a fresh latch.
-        wire wb_push = cmp_valid && ~(do_store_st1 && ~pipe_stall);
+        assign wb_push = cmp_valid && ~(do_store_st1 && ~pipe_stall);
         // A same-WORD result coalesces into that word's existing entry, byte-
         // merging its bytes (see the enqueue) so repeated or adjacent sub-word
         // AMOs to one word collapse to a single writeback. Different words of the
         // same line stay in separate entries (each is an independent write). The
-        // head cannot be coalesced the cycle it drains.
-        reg                 wb_coalesce;
+        // head cannot be coalesced the cycle it drains. The target search is
+        // independent of the drain: the highest match is the target either way
+        // unless it is the draining head, so wb_fire, which arrives late with
+        // the bank's stall, only picks between the two precomputed outcomes.
+        reg [WBQ_SIZE-1:0]  wb_coal_hit;
         reg [WBQ_IDXW-1:0]  wb_coal_idx;    // pre-shift index of the coalesce target
         always @(*) begin
-            wb_coalesce = 1'b0;
             wb_coal_idx = '0;
             for (integer i = 0; i < WBQ_SIZE; ++i) begin
-                if ((WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == cmp_addr)
-                 && (wbq_wsel[i] == cmp_wsel) && (wbq_lane[i] == cmp_lane)
-                 && ~(wb_fire && (i == 0))) begin
-                    wb_coalesce = 1'b1;
+                wb_coal_hit[i] = (WBQ_CNTW'(i) < wbq_count) && (wbq_addr[i] == cmp_addr)
+                              && (wbq_wsel[i] == cmp_wsel) && (wbq_lane[i] == cmp_lane);
+                if (wb_coal_hit[i]) begin
                     wb_coal_idx = WBQ_IDXW'(i);
                 end
             end
         end
+        wire wb_coalesce_hold  = (| wb_coal_hit);
+        wire wb_coalesce_drain = (| wb_coal_hit[WBQ_SIZE-1:1]);
+        assign wb_coalesce = wb_fire ? wb_coalesce_drain : wb_coalesce_hold;
         // Merge source: the pre-shift coalesce-target entry (old value).
         wire [LANE_WIDTH-1:0] coal_src_data   = wbq_data[wb_coal_idx];
         wire [LANE_SIZE-1:0]  coal_src_byteen = wbq_byteen[wb_coal_idx];
         // New entry lands at the post-pop tail; a coalesce slot shifts down on a pop.
-        wire [WBQ_IDXW-1:0] wb_new_idx  = WBQ_IDXW'(wb_fire ? (wbq_count - WBQ_CNTW'(1)) : wbq_count);
-        wire [WBQ_IDXW-1:0] wb_slot     = wb_coalesce ? WBQ_IDXW'(wb_fire ? (wb_coal_idx - WBQ_IDXW'(1)) : wb_coal_idx)
-                                                      : wb_new_idx;
+        wire [WBQ_IDXW-1:0] wb_slot_hold  = wb_coalesce_hold ? wb_coal_idx : WBQ_IDXW'(wbq_count);
+        wire [WBQ_IDXW-1:0] wb_slot_drain = wb_coalesce_drain ? (wb_coal_idx - WBQ_IDXW'(1))
+                                                              : WBQ_IDXW'(wbq_count - WBQ_CNTW'(1));
+        assign wb_slot = wb_fire ? wb_slot_drain : wb_slot_hold;
+
+        // A result queued for the settling entry's {line, word, lane} is newer
+        // than it: drop those bytes from the settling entry, so the forward
+        // never has two writers for one byte. On a drain the settling entry
+        // is reloaded from the head, which a same-key push never coalesces into.
+        wire post_push_post = wb_push && (post_wb_addr == cmp_addr) && (post_wb_wsel == cmp_wsel)
+                           && (post_wb_lane == cmp_lane);
+        wire post_push_head = wb_push && (wbq_addr[0] == cmp_addr) && (wbq_wsel[0] == cmp_wsel)
+                           && (wbq_lane[0] == cmp_lane);
 
         always @(posedge clk) begin
             if (reset) begin
@@ -500,15 +616,15 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                     post_wb_addr   <= wbq_addr[0];
                     post_wb_wsel   <= wbq_wsel[0];
                     post_wb_lane   <= wbq_lane[0];
-                    post_wb_byteen <= wbq_byteen[0] & ~(wbq_clr_hit[0] ? clr_byteen[0] : {LANE_SIZE{1'b0}});
+                    post_wb_byteen <= wbq_byteen[0] & ~(wbq_clr_hit[0] ? clr_byteen[0] : {LANE_SIZE{1'b0}})
+                                                    & ~(post_push_head ? cmp_byteen : {LANE_SIZE{1'b0}});
                     post_wb_data   <= wbq_data[0];
                 end else begin
                     if (post_wb_valid) begin
                         post_wb_age <= post_wb_age - 2'd1;
                     end
-                    if (post_wb_clr) begin
-                        post_wb_byteen <= post_wb_byteen & ~post_wb_clr_byteen;
-                    end
+                    post_wb_byteen <= post_wb_byteen & ~(post_wb_clr ? post_wb_clr_byteen : {LANE_SIZE{1'b0}})
+                                                     & ~(post_push_post ? cmp_byteen : {LANE_SIZE{1'b0}});
                 end
 
                 // Compute stage (single): latch a new AMO, else retire the result.
@@ -575,10 +691,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                 end
                 // Count grows only on a new (non-coalescing) enqueue; a coalesce
                 // updates in place. Pop removes the head.
-                if (wb_push && ~wb_coalesce && ~wb_fire)
-                    wbq_count <= wbq_count + WBQ_CNTW'(1);
-                else if (~(wb_push && ~wb_coalesce) && wb_fire)
-                    wbq_count <= wbq_count - WBQ_CNTW'(1);
+                wbq_count <= wbq_count_n;
             end
         end
 
@@ -594,13 +707,16 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         for (genvar b = 0; b < WORD_SIZE; ++b) begin : g_rsp_mask
             assign rsp_byte_mask[b*8 +: 8] = {8{byteen_st1[b]}};
         end
-        // The mask zeroes every byte outside the AMO's byteen, and those all
-        // sit in its lane, so replicating the lane across the word is
-        // bit-identical to the full-word in-place value.
+        // The AMO's bytes all sit in its lane, and each already reads its
+        // newest value through the forward merge, so the in-place old value is
+        // the bank's merged word under the byte mask.
         wire [BIT_OFF_BITS-1:0] full_bit_off_st1 = (NUM_LANES > 1)
                                                  ? BIT_OFF_BITS'({lane_st1, bit_off_st1})
                                                  : BIT_OFF_BITS'(bit_off_st1);
-        wire [WORD_WIDTH-1:0] amo_old_inplace = {NUM_LANES{line_lane_st1}} & rsp_byte_mask;
+        wire [WORD_WIDTH-1:0] amo_old_inplace = read_word_fwd_st1 & rsp_byte_mask;
+        `RUNTIME_ASSERT (~(amo_st1.amo_valid && valid_st1 && is_creq_st1)
+                      || (amo_old_inplace == ({NUM_LANES{line_lane_st1}} & rsp_byte_mask)),
+            ("%t: AMO in-place old value differs from its lane", $time))
         wire [WORD_WIDTH-1:0] sc_rsp_inplace  = WORD_WIDTH'(sc_fail_st1) << full_bit_off_st1;
 
         assign amo_hit_st1 = amo_hit_w;
@@ -778,12 +894,14 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         `UNUSED_VAR (is_hit_st1)
         `UNUSED_VAR (do_write_st1)
         `UNUSED_VAR (read_word_st1)
+        `UNUSED_VAR (read_word_fwd_st1)
         `UNUSED_VAR (byteen_st1)
         `UNUSED_VAR (write_word_st1)
         `UNUSED_VAR (word_idx_st1)
         `UNUSED_VAR (addr_st1)
         `UNUSED_VAR (res_addr_n)
         `UNUSED_VAR (byteen_n)
+        `UNUSED_VAR (word_idx_n)
         `UNUSED_VAR (tag_st1)
         `UNUSED_VAR (req_idx_st1)
         `UNUSED_VAR (attr_st1)

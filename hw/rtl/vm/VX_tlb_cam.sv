@@ -29,6 +29,11 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     output wire [NUM_REQS-1:0]                     lookup_hit,
     output wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn,
     output wire [NUM_REQS-1:0][TLB_FLAGS_WIDTH-1:0] lookup_flags,
+    // Permission of the matched entry for each lane's access, checked per
+    // entry in parallel with the tag compare.
+    input  wire [NUM_REQS-1:0][$bits(tlb_access_e)-1:0] lookup_acc,
+    input  wire [NUM_REQS-1:0]                      lookup_amo,
+    output wire [NUM_REQS-1:0]                      lookup_perm,
     // Raw (unspliced) page number and level of the matched entry: consumers
     // that re-install the translation elsewhere splice it themselves.
     output wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn_raw,
@@ -100,6 +105,12 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
             .sel_in   (hit_onehot),
             .data_out (sel)
         );
+        wire [TLB_SIZE-1:0] perm_vec;
+        for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_perm
+            assign perm_vec[i] = tlb_perm_ok(entries_r[i].flags, tlb_access_e'(lookup_acc[l]), lookup_amo[l]);
+        end
+        assign lookup_perm[l] = (| (hit_onehot & perm_vec));
+
         wire [TLB_PPN_WIDTH-1:0]   sel_ppn   = sel[TLB_LEVEL_WIDTH+TLB_FLAGS_WIDTH +: TLB_PPN_WIDTH];
         wire [TLB_FLAGS_WIDTH-1:0] sel_flags = sel[TLB_LEVEL_WIDTH +: TLB_FLAGS_WIDTH];
         wire [TLB_LEVEL_WIDTH-1:0] sel_level = sel[0 +: TLB_LEVEL_WIDTH];
