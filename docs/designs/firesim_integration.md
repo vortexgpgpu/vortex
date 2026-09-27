@@ -1,23 +1,23 @@
 # FireSim integration — host-decoupled FPGA simulation of Vortex
 
-This document describes how Vortex runs as a [FireSim](https://fires.im/)
-target: a multi-core GPU simulated on an FPGA at cycle exactness, on the
-Alveo U55C (Vitis/XRT) and the Alveo V80 (AVED/VRT). It answers, in order:
+This document specifies how Vortex runs as a [FireSim](https://fires.im/)
+target: a multi-core GPU simulated on an FPGA with cycle exactness, on the
+Alveo U55C (Vitis/XRT) and the Alveo V80 (AVED/VRT).
 
-| § | question |
+| § | contents |
 |---|---|
-| [1](#1-system-architecture) | What is on the FPGA, what is on the host, and how do they meet? |
-| [2](#2-how-vortex-rtl-is-synthesized) | How is the Vortex RTL synthesized — with and without FAME-5? |
-| [3](#3-fame-5-many-sockets-one-physical-copy) | Which modules are time-multiplexed ("replicated") and how does that work? |
-| [4](#4-how-simulation-timing-is-modelled) | How is simulation timing modelled? |
-| [5](#5-the-memory-system) | How is memory modelled and configured, and how is the shell configured? |
-| [6](#6-observability) | How do you get wave traces, `$display`, `$error`, asserts, counters? |
-| [7](#7-the-transport-layer) | What does the driver actually do, and why? |
-| [8](#8-running) | How do you run it? |
-| [9](#9-measured-results) | What has been measured? |
-| [10](#10-relationship-to-upstream-firesim) | How does the FireSim fork relate to upstream? |
-| [11](#11-design-invariants) | What must never be broken? |
-| [12](#12-known-limitations) | What doesn't work (yet)? |
+| [1](#1-system-architecture) | System architecture: host stack, FPGA payload, execution model |
+| [2](#2-synthesis-of-the-vortex-rtl) | Synthesis of the Vortex RTL, with and without FAME-5 |
+| [3](#3-fame-5-many-sockets-one-physical-copy) | FAME-5 socket time-multiplexing |
+| [4](#4-the-simulation-timing-model) | The simulation timing model |
+| [5](#5-the-memory-system) | The memory system and its configuration; shell configuration |
+| [6](#6-observability) | Observability: wave traces, RTL messages and assertions, counters |
+| [7](#7-the-transport-layer) | The transport layer |
+| [8](#8-running) | Run targets and commands |
+| [9](#9-measured-results) | Measured results |
+| [10](#10-relationship-to-upstream-firesim) | Relationship to upstream FireSim |
+| [11](#11-design-invariants) | Design invariants |
+| [12](#12-known-limitations) | Known limitations |
 
 FireSim itself is an external dependency: the
 [`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) fork, consumed
@@ -62,7 +62,7 @@ through `simif_emul` over DPI, and needs no card, image, XRT or VRT. It runs
 the same tokens on the same generated design, which is why it agrees with
 silicon cycle for cycle and is the step before every bitstream.
 
-### 1.2 What is on the FPGA
+### 1.2 The FPGA payload
 
 ![A Vortex instance + FireSim shell on the FPGA](../assets/img/firesim_fpga_architecture.svg)
 
@@ -83,7 +83,7 @@ containing:
   bridge (`tcycle`/`hcycle`), and FASED (the memory model,
   [§5](#5-the-memory-system)).
 - **The FAME hub** (`FAMETop`): token channels between the bridges and the
-  target; the mechanism of host decoupling ([§4](#4-how-simulation-timing-is-modelled)).
+  target; the mechanism of host decoupling ([§4](#4-the-simulation-timing-model)).
 - **The target**: `VortexDUT` ▸ `VX_firesim_wrap` ▸ Vortex.
 
 Clocking on the V80 has one platform quirk worth knowing: FireSim gates the
@@ -123,7 +123,7 @@ what every measurement in this repository uses.
 
 ---
 
-## 2. How Vortex RTL is synthesized
+## 2. Synthesis of the Vortex RTL
 
 ![Build flow](../assets/img/firesim_build_flow.svg)
 
@@ -264,7 +264,7 @@ parser's recursion, `-Xss`), generated Verilog 229 MB.
 
 ![FAME-5 threading](../assets/img/firesim_fame5_threading.svg)
 
-The 64-core question is an area question. One NW=NT=16 core synthesizes to
+The obstacle to a 64-core build is area. One NW=NT=16 core synthesizes to
 ~221K LUTs; 64 of them need ~14.1M against the V80's 2.57M. FAME-5 ("model
 multithreading") removes the duplication instead of shrinking the core: all
 64 sockets **take turns using one physical copy of the socket logic**, one
@@ -312,7 +312,7 @@ Verilog baseline, unthreaded FIRRTL, threaded — agree exactly (4-core demo:
 
 ---
 
-## 4. How simulation timing is modelled
+## 4. The simulation timing model
 
 ![Timing model](../assets/img/firesim_timing_model.svg)
 
