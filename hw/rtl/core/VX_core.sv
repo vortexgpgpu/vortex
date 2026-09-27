@@ -175,6 +175,10 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     VX_dcr_flush_if dcr_flush_dcache_if();
     VX_dcr_flush_if dcr_flush_icache_if();
 
+    // High when the in-core global-store path is empty (no store still in
+    // flight toward the dcache). Gates `busy` so the flush waits for the tail.
+    wire mem_unit_empty;
+
     // Hold the dcache flush request until this core's stores have all reached L1.
     // Stores are ack-less and lag warp-exit by many cycles, and the flush arbiter
     // sits at the adapter output with no upstream visibility, so without this gate a
@@ -424,10 +428,6 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             .lsu_mem_if (lsu_mem_if[block_idx])
         );
     end
-
-    // High when the in-core global-store path is empty (no store still in
-    // flight toward the dcache). Gates `busy` so the flush waits for the tail.
-    wire mem_unit_empty;
 
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)

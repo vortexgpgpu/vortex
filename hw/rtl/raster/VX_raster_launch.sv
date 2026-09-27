@@ -119,6 +119,8 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
     // active-lane count (active lanes = count * FRAG_QUAD_LANES), so an unfilled quad's
     // four lanes are thread-INACTIVE (they have no covered neighbour to help and would
     // only run the shader and decline to export).
+    wire [NUM_LANES-1:0][FRAG_LANE_BITS-1:0] lane_slice;
+
     kmu_req_t frag_req;
     always @(*) begin
         frag_req                   = '0;
@@ -142,7 +144,6 @@ module VX_raster_launch import VX_gpu_pkg::*, VX_raster_pkg::*; #(
         assign wave_bits[q] = wave_r[q];
     end
 
-    wire [NUM_LANES-1:0][FRAG_LANE_BITS-1:0] lane_slice;
     for (genvar l = 0; l < NUM_LANES; ++l) begin : g_slice
         localparam QUAD = l / FRAG_QUAD_LANES;
         localparam SUB  = l % FRAG_QUAD_LANES;

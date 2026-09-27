@@ -126,6 +126,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     wire [TLB_VPN_WIDTH-1:0]   park_vpn;
     tlb_access_e               park_access;
     wire                       park_amo;
+    wire [LANE_W-1:0]          park_lane;
     wire [PAYLOAD_W-1:0]       park_payload;
     wire                       park_ready;
 
@@ -212,7 +213,6 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     localparam PARK_W = TLB_VPN_WIDTH + $bits(tlb_access_e) + 1 + FIELDS_W;
 
     wire [NUM_REQS-1:0] park_sel;
-    wire [LANE_W-1:0]   park_lane;
     VX_priority_encoder #(
         .N (NUM_REQS)
     ) park_enc (

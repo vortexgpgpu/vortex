@@ -184,6 +184,8 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     om_color_t [NUM_LANES-1:0]  blend_dst_color;
     om_color_t [NUM_LANES-1:0]  blend_color_out;
 
+    wire [OM_RT_IDX_BITS-1:0] mem_rsp_rt;
+
     VX_om_blend #(
         .INSTANCE_ID ($sformatf("%s-blend", INSTANCE_ID)),
         .NUM_LANES   (NUM_LANES),
@@ -269,7 +271,6 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] mem_rsp_pos_x, mem_rsp_pos_y;
     wire [UUID_WIDTH-1:0] mem_rsp_uuid;
-    wire [OM_RT_IDX_BITS-1:0] mem_rsp_rt;
     `UNUSED_VAR (mem_rsp_uuid)
 
     wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] ds_write_pos_x, ds_write_pos_y;
