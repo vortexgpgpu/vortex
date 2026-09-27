@@ -137,6 +137,9 @@ uint32_t rv_if4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 
 uint32_t rv_rzr4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
 
+// RaZeR FP4 with an LNS8/Q4.3 block scale --> fp32 conversion.
+uint32_t rv_rzr4lnstof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags);
+
 // e2m1 <--> fp32 conversions
 uint32_t rv_e2m1tof_s(uint8_t a, uint32_t frm, uint32_t* fflags);
 uint8_t rv_ftoe2m1_s(uint32_t a, uint32_t frm, uint32_t* fflags);

@@ -384,6 +384,12 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
                 sig_zero = mul_f4_zero;
             end
         `endif
+        `ifdef VX_CFG_TCU_RZR4_LNS_ENABLE
+            TCU_RZR4_LNS_ID: begin
+                sig_sel  = mul_f4_sig;
+                sig_zero = mul_f4_zero;
+            end
+        `endif
         `endif
         `endif
 

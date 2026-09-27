@@ -728,6 +728,13 @@ uint32_t rv_rzr4tof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
   return f32.v;
 }
 
+uint32_t rv_rzr4lnstof_s(uint8_t a, uint8_t sf, uint32_t frm, uint32_t* fflags) {
+  rv_init(frm);
+  float32_t f32 = rzr4lns_to_f32({a, sf});
+  if (fflags) { *fflags = softfloat_exceptionFlags; }
+  return f32.v;
+}
+
 uint32_t rv_e2m1tof_s(uint8_t a, uint32_t frm, uint32_t* fflags) {
   rv_init(frm);
   float4_t f4;

@@ -128,6 +128,13 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
                     end
                 end
             `endif
+            `ifdef VX_CFG_TCU_RZR4_LNS_ENABLE
+                TCU_RZR4_LNS_ID: begin
+                    for (int e = 0; e < 8; ++e) begin
+                        vld_mask_per_k[k][e] = a_rzr4_nz[e] && b_rzr4_nz[e];
+                    end
+                end
+            `endif
             `endif
             `endif
             `ifdef VX_CFG_TCU_INT8_ENABLE

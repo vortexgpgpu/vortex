@@ -127,6 +127,15 @@ struct lnsf4 {
   static constexpr const char* name = "lnsf4";
 };
 
+struct rzr4_lns {
+  using dtype = uint8_t;
+  static constexpr uint32_t id = 15;
+  static constexpr uint32_t bits = 4;
+  static constexpr uint32_t scale_bits = 8;
+  static constexpr uint32_t ele_block = 16;
+  static constexpr const char* name = "rzr4_lns";
+};
+
 struct int32 {
   using dtype = int32_t;
   static constexpr uint32_t id = 16;
@@ -177,6 +186,7 @@ inline const char* fmt_string(uint32_t fmt) {
   case rzr4::id:   return rzr4::name;
   case if4::id:    return if4::name;
   case lnsf4::id:  return lnsf4::name;
+  case rzr4_lns::id: return rzr4_lns::name;
   case int32::id:  return int32::name;
   case int8::id:   return int8::name;
   case uint8::id:  return uint8::name;
@@ -195,6 +205,7 @@ inline constexpr bool mx_scale_format(uint32_t fmt) {
   case rzr4::id:
   case if4::id:
   case lnsf4::id:
+  case rzr4_lns::id:
     return true;
   default:
     return false;
@@ -211,6 +222,7 @@ inline constexpr uint32_t mx_scale_block_size(uint32_t fmt) {
   case rzr4::id:
   case if4::id:
   case lnsf4::id:
+  case rzr4_lns::id:
     return 16;
   default:
     return 1;
@@ -235,6 +247,7 @@ inline constexpr bool sparse_format_supported(uint32_t fmt) {
   case rzr4::id:
   case if4::id:
   case lnsf4::id:
+  case rzr4_lns::id:
     return true;
   default:
     return false;
@@ -262,6 +275,7 @@ inline constexpr uint32_t sparse_meta_num_cols(uint32_t fmt, uint32_t nt) {
   case rzr4::id:
   case if4::id:
   case lnsf4::id:
+  case rzr4_lns::id:
     return (nt + 1) / 2;
   default:
     return 0;

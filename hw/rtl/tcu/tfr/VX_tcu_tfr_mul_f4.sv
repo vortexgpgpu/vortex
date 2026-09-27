@@ -281,7 +281,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     localparam SIG_SHIFT_NVFP4 = 7;
 
     // Lanes of one scale slot are reduced in the integer domain and scaled
-    // once; see the matching LNSF4 block below for the lane/slot mapping.
+    // once; see the LNS8 scale section below for the lane/slot mapping.
     `STATIC_ASSERT ((TCK % SF) == 0, ("VX_tcu_tfr_mul_f4: TCK must be a multiple of SF"))
     localparam NV_LPG   = TCK / SF;
     localparam NV_LPG_W = $clog2(NV_LPG);
@@ -491,34 +491,49 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         EXP_W'(BIAS_BASE_RZR4 + EXP_COMP_RZR4);
     localparam SIG_SHIFT_RZR4 = 7;
 
+    // Lanes of one scale slot are reduced in the integer domain and scaled
+    // once; see the LNS8 scale section below for the lane/slot mapping.
+    `STATIC_ASSERT ((TCK % SF) == 0, ("VX_tcu_tfr_mul_f4: TCK must be a multiple of SF"))
+    localparam RZR4_LPG   = TCK / SF;
+    localparam RZR4_LPG_W = $clog2(RZR4_LPG);
+    localparam RZR4_DOT_W = 11 + RZR4_LPG_W;
+    localparam SIG_SHIFT_RZR4_GRP = SIG_SHIFT_RZR4 - RZR4_LPG_W;
+
+    wire [3:0] rzr4_sf_exp_raw_a = sf_a[6:3];
+    wire [3:0] rzr4_sf_exp_raw_b = sf_b[6:3];
+    wire [3:0] rzr4_sf_exp_a = (rzr4_sf_exp_raw_a == 0) ? 4'd1 : rzr4_sf_exp_raw_a;
+    wire [3:0] rzr4_sf_exp_b = (rzr4_sf_exp_raw_b == 0) ? 4'd1 : rzr4_sf_exp_raw_b;
+    wire [3:0] rzr4_sf_man_a = (rzr4_sf_exp_raw_a == 0) ? {1'b0, sf_a[2:0]} : {1'b1, sf_a[2:0]};
+    wire [3:0] rzr4_sf_man_b = (rzr4_sf_exp_raw_b == 0) ? {1'b0, sf_b[2:0]} : {1'b1, sf_b[2:0]};
+    wire rzr4_scale_valid = (|rzr4_sf_man_a) && (|rzr4_sf_man_b);
+
+    wire [7:0] rzr4_sf_man_prod;
+    VX_tcu_tfr_wmul #(
+        .N(4),
+        .USE_DSP(USE_DSP)
+    ) rzr4_sf_wtmul (
+        .clk(clk),
+        .enable(enable),
+        .a(rzr4_sf_man_a),
+        .b(rzr4_sf_man_b),
+        .p(rzr4_sf_man_prod)
+    );
+
+    wire [EXP_TERM_W_RZR4-1:0] rzr4_exp_biased =
+        EXP_ADJ_RZR4 + EXP_TERM_W_RZR4'(rzr4_sf_exp_a)
+                      + EXP_TERM_W_RZR4'(rzr4_sf_exp_b);
+    wire [EXP_W-1:0] rzr4_result_exp = EXP_W'(rzr4_exp_biased)
+        + EXP_W'(EXP_BASE_BIASED_RZR4) + EXP_W'(RZR4_LPG_W);
+
+    wire [TCK-1:0][3:0][RZR4_DOT_W-1:0] rzr4_elem_signed;
+
     for (genvar i = 0; i < TCK; ++i) begin : g_lane_rzr4
         localparam K_WORD = i / 2;
-
-        wire [3:0] sf_exp_raw_a = sf_a[6:3];
-        wire [3:0] sf_exp_raw_b = sf_b[6:3];
-        wire [3:0] sf_exp_a = (sf_exp_raw_a == 0) ? 4'd1 : sf_exp_raw_a;
-        wire [3:0] sf_exp_b = (sf_exp_raw_b == 0) ? 4'd1 : sf_exp_raw_b;
-        wire [3:0] sf_man_a = (sf_exp_raw_a == 0) ? {1'b0, sf_a[2:0]} : {1'b1, sf_a[2:0]};
-        wire [3:0] sf_man_b = (sf_exp_raw_b == 0) ? {1'b0, sf_b[2:0]} : {1'b1, sf_b[2:0]};
-        wire scale_valid = (|sf_man_a) && (|sf_man_b);
-
-        wire [7:0] sf_man_prod;
-        VX_tcu_tfr_wmul #(
-            .N(4),
-            .USE_DSP(USE_DSP)
-        ) sf_wtmul (
-            .clk(clk),
-            .enable(enable),
-            .a(sf_man_a),
-            .b(sf_man_b),
-            .p(sf_man_prod)
-        );
 
         wire [3:0][3:0] elem_mag_a, elem_mag_b;
         wire [3:0][7:0] elem_mag_prod;
         wire [3:0] elem_sign;
         wire [3:0] elem_valid;
-        wire [3:0][10:0] elem_signed;
 
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
@@ -531,7 +546,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                                 ^ ((raw_b == 4'h0) ? sf_b[7] : raw_b[3]);
             assign elem_valid[j] = vld_mask[i * 4 + j]
                                 && (raw_a != 4'h8) && (raw_b != 4'h8)
-                                && scale_valid;
+                                && rzr4_scale_valid;
 
             wire [10:0] elem_mag_ext = elem_valid[j] ? {3'b0, elem_mag_prod[j]} : 11'd0;
             wire [10:0] elem_neg;
@@ -545,7 +560,8 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                 .sum(elem_neg),
                 `UNUSED_PIN(cout)
             );
-            assign elem_signed[j] = elem_sign[j] ? elem_neg : elem_mag_ext;
+            wire [10:0] elem_signed = elem_sign[j] ? elem_neg : elem_mag_ext;
+            assign rzr4_elem_signed[i][j] = {{RZR4_LPG_W{elem_signed[10]}}, elem_signed};
         end
 
         VX_tcu_tfr_wmul #(
@@ -570,22 +586,31 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .b(elem_mag_b[3:2]),
             .p(elem_mag_prod[3:2])
         );
+    end
 
-        wire [10:0] dot_sum_vec, dot_carry_vec;
+    for (genvar g = 0; g < SF; ++g) begin : g_grp_rzr4
+        wire [RZR4_LPG*4-1:0][RZR4_DOT_W-1:0] grp_terms;
+        for (genvar l = 0; l < RZR4_LPG; ++l) begin : g_terms
+            for (genvar j = 0; j < 4; ++j) begin : g_term
+                assign grp_terms[l * 4 + j] = rzr4_elem_signed[g * RZR4_LPG + l][j];
+            end
+        end
+
+        wire [RZR4_DOT_W-1:0] dot_sum_vec, dot_carry_vec;
         VX_csa_tree #(
-            .N(4),
-            .W(11),
-            .S(11)
+            .N(RZR4_LPG * 4),
+            .W(RZR4_DOT_W),
+            .S(RZR4_DOT_W)
         ) dot_csa (
-            .operands(elem_signed),
+            .operands(grp_terms),
             .sum(dot_sum_vec),
             .carry(dot_carry_vec)
         );
 
-        wire [10:0] signed_dot;
+        wire [RZR4_DOT_W-1:0] signed_dot;
         VX_ks_adder #(
-            .N(11),
-            .BYPASS(`FORCE_BUILTIN_ADDER(11))
+            .N(RZR4_DOT_W),
+            .BYPASS(`FORCE_BUILTIN_ADDER(RZR4_DOT_W))
         ) dot_ksa (
             .dataa(dot_sum_vec),
             .datab(dot_carry_vec),
@@ -594,55 +619,61 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             `UNUSED_PIN(cout)
         );
 
-        wire dot_sign = signed_dot[10];
-        wire [9:0] neg_dot;
+        wire dot_sign = signed_dot[RZR4_DOT_W-1];
+        wire [RZR4_DOT_W-2:0] neg_dot;
         VX_ks_adder #(
-            .N(10),
-            .BYPASS(`FORCE_BUILTIN_ADDER(10))
+            .N(RZR4_DOT_W-1),
+            .BYPASS(`FORCE_BUILTIN_ADDER(RZR4_DOT_W-1))
         ) dot_neg_ksa (
-            .dataa(~signed_dot[9:0]),
-            .datab(10'd0),
+            .dataa(~signed_dot[RZR4_DOT_W-2:0]),
+            .datab((RZR4_DOT_W-1)'(0)),
             .cin(1'b1),
             .sum(neg_dot),
             `UNUSED_PIN(cout)
         );
-        wire [9:0] abs_dot = dot_sign ? neg_dot : signed_dot[9:0];
+        wire [RZR4_DOT_W-2:0] abs_dot = dot_sign ? neg_dot : signed_dot[RZR4_DOT_W-2:0];
 
-        wire [17:0] scaled_mag;
+        wire [RZR4_DOT_W+6:0] scaled_mag;
         VX_tcu_tfr_wmul #(
-            .N(10),
+            .N(RZR4_DOT_W-1),
             .M(8),
-            .P(18),
+            .P(RZR4_DOT_W+7),
             .USE_DSP(USE_DSP)
         ) scale_mul (
             .clk(clk),
             .enable(enable),
             .a(abs_dot),
-            .b(sf_man_prod),
+            .b(rzr4_sf_man_prod),
             .p(scaled_mag)
         );
 
         wire is_zero_out = ~|scaled_mag;
-        wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_RZR4;
-        wire [EXP_TERM_W_RZR4-1:0] exp_biased =
-            EXP_ADJ_RZR4 + EXP_TERM_W_RZR4'(sf_exp_a)
-                          + EXP_TERM_W_RZR4'(sf_exp_b);
+        wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_RZR4_GRP;
 
-        VX_pipe_register #(
-            .DATAW (26),
-            .DEPTH (PROD_REG)
-        ) pipe_result (
-            .clk      (clk),
-            .reset    (1'b0),
-            .enable   (enable),
-            .data_in  ({dot_sign & ~is_zero_out, result_mag, is_zero_out}),
-            .data_out ({result_sig_rzr4[i], sig_zero_rzr4[i]})
-        );
-        assign result_exp_rzr4[i] = is_zero_out ? '0
-            : (EXP_W'(exp_biased) + EXP_W'(EXP_BASE_BIASED_RZR4));
-        assign exceptions_rzr4[i].is_nan = 1'b0;
-        assign exceptions_rzr4[i].is_inf = 1'b0;
-        assign exceptions_rzr4[i].sign = dot_sign & ~is_zero_out;
+        for (genvar l = 0; l < RZR4_LPG; ++l) begin : g_out
+            localparam I = g * RZR4_LPG + l;
+            if (l == 0) begin : g_lead
+                VX_pipe_register #(
+                    .DATAW (26),
+                    .DEPTH (PROD_REG)
+                ) pipe_result (
+                    .clk      (clk),
+                    .reset    (1'b0),
+                    .enable   (enable),
+                    .data_in  ({dot_sign & ~is_zero_out, result_mag, is_zero_out}),
+                    .data_out ({result_sig_rzr4[I], sig_zero_rzr4[I]})
+                );
+                assign result_exp_rzr4[I] = is_zero_out ? '0 : rzr4_result_exp;
+                assign exceptions_rzr4[I].sign = dot_sign & ~is_zero_out;
+            end else begin : g_idle
+                assign result_sig_rzr4[I] = '0;
+                assign sig_zero_rzr4[I]   = 1'b1;
+                assign result_exp_rzr4[I] = '0;
+                assign exceptions_rzr4[I].sign = 1'b0;
+            end
+            assign exceptions_rzr4[I].is_nan = 1'b0;
+            assign exceptions_rzr4[I].is_inf = 1'b0;
+        end
     end
 `endif  // VX_CFG_TCU_RZR4_ENABLE
 
@@ -844,28 +875,29 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 `endif  // VX_CFG_TCU_IF4_ENABLE
 
 `ifdef VX_CFG_TCU_LNSF4_ENABLE
-    // NVFP4 elements with the e4m3 block scale replaced by an LNS8 (Q4.3 two's
-    // complement) scale: log2(scale_a)+log2(scale_b) is a plain fixed-point
-    // add instead of an e4m3 mantissa multiply, followed by an 8-entry antilog
-    // lookup for the summed fractional octave (the integer octave feeds the
-    // exponent directly).
-    wire [TCK-1:0][24:0]      result_sig_lnsf4;
-    wire [TCK-1:0][EXP_W-1:0] result_exp_lnsf4;
-    fedp_excep_t [TCK-1:0]    exceptions_lnsf4;
-    wire [TCK-1:0]            sig_zero_lnsf4;
+`define VX_TCU_TFR_MUL_F4_LNS
+`endif
+`ifdef VX_CFG_TCU_RZR4_LNS_ENABLE
+`define VX_TCU_TFR_MUL_F4_LNS
+`endif
 
-    localparam F32_BIAS_LNSF4  = 127;
-    localparam S_FP32_LNSF4    = 23;
-    localparam S_SUPER_LNSF4   = 22;
-    localparam BIAS_BASE_LNSF4 = F32_BIAS_LNSF4 + 2*(S_FP32_LNSF4 - S_SUPER_LNSF4) - W + WA - 1 + 128;
+`ifdef VX_TCU_TFR_MUL_F4_LNS
+    // LNS8 (Q4.3 two's complement) block scale shared by LNSF4 and RZR4_LNS:
+    // log2(scale_a)+log2(scale_b) is a plain fixed-point add instead of an
+    // e4m3 mantissa multiply, followed by an 8-entry antilog lookup for the
+    // summed fractional octave (the integer octave feeds the exponent).
+    localparam F32_BIAS_LNS  = 127;
+    localparam S_FP32_LNS    = 23;
+    localparam S_SUPER_LNS   = 22;
+    localparam BIAS_BASE_LNS = F32_BIAS_LNS + 2*(S_FP32_LNS - S_SUPER_LNS) - W + WA - 1 + 128;
     // e_int below is already a TRUE (unbiased) combined exponent -- unlike
     // NVFP4, which sums two e4m3-biased raw codes and folds the 2*SF_EXP_BIAS
     // un-bias into its residual. NVFP4's own true-exponent-space residual is
     // +6 (BIAS_BASE + 6 + ea_true + eb_true; matches its implicit 2^13
     // pre/post-scale from sf_man_prod (2^6) and SIG_SHIFT (2^7), which the
-    // antilog LUT below and SIG_SHIFT_LNSF4 mirror bit-for-bit), so that is
+    // antilog LUT below and SIG_SHIFT_LNS mirror bit-for-bit), so that is
     // the constant to reuse here directly against e_int.
-    localparam [EXP_W-1:0] EXP_BASE_BIASED_LNSF4 = EXP_W'(BIAS_BASE_LNSF4 + 6);
+    localparam [EXP_W-1:0] EXP_BASE_BIASED_LNS = EXP_W'(BIAS_BASE_LNS + 6);
 
     // Every lane of a scale slot (lanes [g*LPG, (g+1)*LPG), matching
     // VX_tcu_tfr_shared_mul's SF_SLOT map) shares one block scale, so the
@@ -877,15 +909,15 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     localparam LNS_LPG_W = $clog2(LNS_LPG);
     localparam LNS_DOT_W = 11 + LNS_LPG_W;
     // The antilog 2^(k/8) is stored as [1.AL] fixed point, so scale_mul's
-    // operand is AL+1 bits. SIG_SHIFT_LNSF4 restores NVFP4's 2^13 pre-scale
+    // operand is AL+1 bits. SIG_SHIFT_LNS restores NVFP4's 2^13 pre-scale
     // for any AL and group width, keeping the exponent residual fixed.
     localparam AL = `VX_CFG_TCU_LNSF4_ANTILOG_BITS;
     `STATIC_ASSERT ((AL >= 2) && (AL <= 8), ("VX_tcu_tfr_mul_f4: VX_CFG_TCU_LNSF4_ANTILOG_BITS must be 2..8"))
-    localparam SIG_SHIFT_LNSF4 = 13 - AL - LNS_LPG_W;
-    localparam [EXP_W-1:0] EXP_GRP_BIASED_LNSF4 = EXP_BASE_BIASED_LNSF4 + EXP_W'(LNS_LPG_W);
+    localparam SIG_SHIFT_LNS = 13 - AL - LNS_LPG_W;
+    localparam [EXP_W-1:0] EXP_GRP_BIASED_LNS = EXP_BASE_BIASED_LNS + EXP_W'(LNS_LPG_W);
 
     // round(2**(k/8) * 2**AL), k = 0..7; every entry is < 2**(AL+1).
-    function automatic [8:0] lnsf4_antilog(input logic [2:0] k);
+    function automatic [8:0] lns8_antilog(input logic [2:0] k);
         case (AL)
         2: case (k)
             3'h0: return 9'd4;  3'h1: return 9'd4;  3'h2: return 9'd5;  3'h3: return 9'd5;
@@ -918,21 +950,30 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         endcase
     endfunction
 
-    `UNUSED_VAR ({sf_a[7], sf_b[7]})
-
-    // sf_a/sf_b[6:0]: signed two's complement log2(scale), Q4.3 (LSB = 1/8).
+    // sf_a/sf_b[6:0]: signed two's complement log2(scale), Q4.3 (LSB = 1/8);
+    // sf[7] is not part of the scale (unused by LNSF4, RaZeR sign in RZR4_LNS).
     // Manual sign-extension instead of $signed()/N'(...) keeps sv2v from
     // emitting a cast-helper function for the nested cast.
     wire signed [7:0] lns_e_a = {sf_a[6], sf_a[6:0]};
     wire signed [7:0] lns_e_b = {sf_b[6], sf_b[6:0]};
     wire signed [7:0] lns_e_sum = lns_e_a + lns_e_b;
     wire signed [4:0] lns_e_int = lns_e_sum >>> 3;
-    wire [8:0] lns_scale_full = lnsf4_antilog(lns_e_sum[2:0]);
+    wire [8:0] lns_scale_full = lns8_antilog(lns_e_sum[2:0]);
     wire [AL:0] lns_scale = lns_scale_full[AL:0];
     if (AL < 8) begin : g_lns_scale_unused
         `UNUSED_VAR (lns_scale_full[8:AL+1])
     end
-    wire [EXP_W-1:0] lns_result_exp = EXP_W'(lns_e_int) + EXP_GRP_BIASED_LNSF4;
+    wire [EXP_W-1:0] lns_result_exp = EXP_W'(lns_e_int) + EXP_GRP_BIASED_LNS;
+`endif  // VX_TCU_TFR_MUL_F4_LNS
+
+`ifdef VX_CFG_TCU_LNSF4_ENABLE
+    // NVFP4 elements with the LNS8 block scale above.
+    wire [TCK-1:0][24:0]      result_sig_lnsf4;
+    wire [TCK-1:0][EXP_W-1:0] result_exp_lnsf4;
+    fedp_excep_t [TCK-1:0]    exceptions_lnsf4;
+    wire [TCK-1:0]            sig_zero_lnsf4;
+
+    `UNUSED_VAR ({sf_a[7], sf_b[7]})
 
     wire [TCK-1:0][3:0][LNS_DOT_W-1:0] lns_elem_signed;
 
@@ -1058,7 +1099,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         );
 
         wire is_zero_out = ~|scaled_mag;
-        wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_LNSF4;
+        wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_LNS;
 
         wire dot_sign_r;
         VX_pipe_register #(
@@ -1090,6 +1131,165 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         end
     end
 `endif  // VX_CFG_TCU_LNSF4_ENABLE
+
+`ifdef VX_CFG_TCU_RZR4_LNS_ENABLE
+    // RZR4 (RaZeR) elements with the LNS8 block scale above; sf[7] still
+    // selects the sign of the special +/-5 code, and an LNS scale is never zero.
+    wire [TCK-1:0][24:0]      result_sig_rzr4_lns;
+    wire [TCK-1:0]            sig_zero_rzr4_lns;
+    wire [TCK-1:0][EXP_W-1:0] result_exp_rzr4_lns;
+    fedp_excep_t [TCK-1:0]    exceptions_rzr4_lns;
+
+    wire [TCK-1:0][3:0][LNS_DOT_W-1:0] rzl_elem_signed;
+
+    for (genvar i = 0; i < TCK; ++i) begin : g_lane_rzr4_lns
+        localparam K_WORD = i / 2;
+
+        wire [3:0][3:0] elem_mag_a, elem_mag_b;
+        wire [3:0][7:0] elem_mag_prod;
+        wire [3:0] elem_sign;
+        wire [3:0] elem_valid;
+
+        for (genvar j = 0; j < 4; ++j) begin : g_term
+            localparam OFF = (i % 2) * 16 + j * 4;
+            wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
+            wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
+
+            assign elem_mag_a[j] = rzr4_mag_x2(raw_a);
+            assign elem_mag_b[j] = rzr4_mag_x2(raw_b);
+            assign elem_sign[j] = ((raw_a == 4'h0) ? sf_a[7] : raw_a[3])
+                                ^ ((raw_b == 4'h0) ? sf_b[7] : raw_b[3]);
+            assign elem_valid[j] = vld_mask[i * 4 + j]
+                                && (raw_a != 4'h8) && (raw_b != 4'h8);
+
+            wire [10:0] elem_mag_ext = elem_valid[j] ? {3'b0, elem_mag_prod[j]} : 11'd0;
+            wire [10:0] elem_neg;
+            VX_ks_adder #(
+                .N(11),
+                .BYPASS(`FORCE_BUILTIN_ADDER(11))
+            ) elem_neg_ksa (
+                .dataa(~elem_mag_ext),
+                .datab(11'd0),
+                .cin(1'b1),
+                .sum(elem_neg),
+                `UNUSED_PIN(cout)
+            );
+            wire [10:0] elem_signed = elem_sign[j] ? elem_neg : elem_mag_ext;
+            assign rzl_elem_signed[i][j] = {{LNS_LPG_W{elem_signed[10]}}, elem_signed};
+        end
+
+        VX_tcu_tfr_wmul #(
+            .N(4),
+            .LANES(2),
+            .USE_DSP(USE_DSP)
+        ) elem_m01 (
+            .clk(clk),
+            .enable(enable),
+            .a(elem_mag_a[1:0]),
+            .b(elem_mag_b[1:0]),
+            .p(elem_mag_prod[1:0])
+        );
+        VX_tcu_tfr_wmul #(
+            .N(4),
+            .LANES(2),
+            .USE_DSP(USE_DSP)
+        ) elem_m23 (
+            .clk(clk),
+            .enable(enable),
+            .a(elem_mag_a[3:2]),
+            .b(elem_mag_b[3:2]),
+            .p(elem_mag_prod[3:2])
+        );
+    end
+
+    for (genvar g = 0; g < SF; ++g) begin : g_grp_rzr4_lns
+        wire [LNS_LPG*4-1:0][LNS_DOT_W-1:0] grp_terms;
+        for (genvar l = 0; l < LNS_LPG; ++l) begin : g_terms
+            for (genvar j = 0; j < 4; ++j) begin : g_term
+                assign grp_terms[l * 4 + j] = rzl_elem_signed[g * LNS_LPG + l][j];
+            end
+        end
+
+        wire [LNS_DOT_W-1:0] dot_sum_vec, dot_carry_vec;
+        VX_csa_tree #(
+            .N(LNS_LPG * 4),
+            .W(LNS_DOT_W),
+            .S(LNS_DOT_W)
+        ) dot_csa (
+            .operands(grp_terms),
+            .sum(dot_sum_vec),
+            .carry(dot_carry_vec)
+        );
+
+        wire [LNS_DOT_W-1:0] signed_dot;
+        VX_ks_adder #(
+            .N(LNS_DOT_W),
+            .BYPASS(`FORCE_BUILTIN_ADDER(LNS_DOT_W))
+        ) dot_ksa (
+            .dataa(dot_sum_vec),
+            .datab(dot_carry_vec),
+            .cin(1'b0),
+            .sum(signed_dot),
+            `UNUSED_PIN(cout)
+        );
+
+        wire dot_sign = signed_dot[LNS_DOT_W-1];
+        wire [LNS_DOT_W-2:0] neg_dot;
+        VX_ks_adder #(
+            .N(LNS_DOT_W-1),
+            .BYPASS(`FORCE_BUILTIN_ADDER(LNS_DOT_W-1))
+        ) dot_neg_ksa (
+            .dataa(~signed_dot[LNS_DOT_W-2:0]),
+            .datab((LNS_DOT_W-1)'(0)),
+            .cin(1'b1),
+            .sum(neg_dot),
+            `UNUSED_PIN(cout)
+        );
+        wire [LNS_DOT_W-2:0] abs_dot = dot_sign ? neg_dot : signed_dot[LNS_DOT_W-2:0];
+
+        wire [LNS_DOT_W+AL-1:0] scaled_mag;
+        VX_tcu_tfr_wmul #(
+            .N(LNS_DOT_W-1),
+            .M(AL+1),
+            .P(LNS_DOT_W+AL),
+            .USE_DSP(USE_DSP)
+        ) scale_mul (
+            .clk(clk),
+            .enable(enable),
+            .a(abs_dot),
+            .b(lns_scale),
+            .p(scaled_mag)
+        );
+
+        wire is_zero_out = ~|scaled_mag;
+        wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_LNS;
+
+        for (genvar l = 0; l < LNS_LPG; ++l) begin : g_out
+            localparam I = g * LNS_LPG + l;
+            if (l == 0) begin : g_lead
+                VX_pipe_register #(
+                    .DATAW (26),
+                    .DEPTH (PROD_REG)
+                ) pipe_result (
+                    .clk      (clk),
+                    .reset    (1'b0),
+                    .enable   (enable),
+                    .data_in  ({dot_sign & ~is_zero_out, result_mag, is_zero_out}),
+                    .data_out ({result_sig_rzr4_lns[I], sig_zero_rzr4_lns[I]})
+                );
+                assign result_exp_rzr4_lns[I] = is_zero_out ? '0 : lns_result_exp;
+                assign exceptions_rzr4_lns[I].sign = dot_sign & ~is_zero_out;
+            end else begin : g_idle
+                assign result_sig_rzr4_lns[I] = '0;
+                assign sig_zero_rzr4_lns[I]   = 1'b1;
+                assign result_exp_rzr4_lns[I] = '0;
+                assign exceptions_rzr4_lns[I].sign = 1'b0;
+            end
+            assign exceptions_rzr4_lns[I].is_nan = 1'b0;
+            assign exceptions_rzr4_lns[I].is_inf = 1'b0;
+        end
+    end
+`endif  // VX_CFG_TCU_RZR4_LNS_ENABLE
 
     // Exponent/exception outputs join at pre-seam timing; significand and
     // sig_zero outputs join at post-seam timing.
@@ -1125,6 +1325,12 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             4'(TCU_LNSF4_ID): begin
                 result_exp = result_exp_lnsf4;
                 exceptions = exceptions_lnsf4;
+            end
+        `endif
+        `ifdef VX_CFG_TCU_RZR4_LNS_ENABLE
+            4'(TCU_RZR4_LNS_ID): begin
+                result_exp = result_exp_rzr4_lns;
+                exceptions = exceptions_rzr4_lns;
             end
         `endif
             default: begin
@@ -1168,6 +1374,12 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                 sig_zero   = sig_zero_lnsf4;
             end
         `endif
+        `ifdef VX_CFG_TCU_RZR4_LNS_ENABLE
+            4'(TCU_RZR4_LNS_ID): begin
+                result_sig = result_sig_rzr4_lns;
+                sig_zero   = sig_zero_rzr4_lns;
+            end
+        `endif
             default: begin
                 result_sig = '0;
                 sig_zero   = '0;
@@ -1178,3 +1390,5 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 `endif  // VX_CFG_TCU_FP4_ENABLE
 `endif  // VX_CFG_TCU_MX_ENABLE
 endmodule
+
+`undef VX_TCU_TFR_MUL_F4_LNS
