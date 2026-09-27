@@ -1,49 +1,111 @@
 # FireSim integration — host-decoupled FPGA simulation of Vortex
 
 This document describes how Vortex runs as a [FireSim](https://fires.im/)
-target on a Xilinx Alveo U55C. It covers three things:
+target: a multi-core GPU simulated on an FPGA at cycle exactness, on the
+Alveo U55C (Vitis/XRT) and the Alveo V80 (AVED/VRT). It answers, in order:
 
-1. The **execution model** — what host-decoupled simulation means for a
-   driver, and why the runtime *steps* the target rather than waiting on it.
-2. The **integration architecture** — the Chisel target, the RTL wrapper, the
-   transport layer, and how a kernel launch reaches the card.
-3. The **build flow** — elaboration through place-and-route, and the
-   invariants that make the difference between a design that fits and one
-   that silently does not.
+| § | question |
+|---|---|
+| [1](#1-system-architecture) | What is on the FPGA, what is on the host, and how do they meet? |
+| [2](#2-how-vortex-rtl-is-synthesized) | How is the Vortex RTL synthesized — with and without FAME-5? |
+| [3](#3-fame-5-many-sockets-one-physical-copy) | Which modules are time-multiplexed ("replicated") and how does that work? |
+| [4](#4-how-simulation-timing-is-modelled) | How is simulation timing modelled? |
+| [5](#5-the-memory-system) | How is memory modelled and configured, and how is the shell configured? |
+| [6](#6-observability) | How do you get wave traces, `$display`, `$error`, asserts, counters? |
+| [7](#7-the-transport-layer) | What does the driver actually do, and why? |
+| [8](#8-running) | How do you run it? |
+| [9](#9-measured-results) | What has been measured? |
+| [10](#10-relationship-to-upstream-firesim) | How does the FireSim fork relate to upstream? |
+| [11](#11-design-invariants) | What must never be broken? |
+| [12](#12-known-limitations) | What doesn't work (yet)? |
 
-FireSim itself is an external dependency, developed in a clone of
-[`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) (branch
-`vortex_3.x`, based on upstream 1.21.0) at `~/dev/firesim`, and consumed by
-the Vortex build through `$(FIRESIM_PATH)`, which `config.mk` defaults to
-`$(TOOLDIR)/firesim` — the same source/tool split POCL, Mesa and LLVM use.
-Vortex's own changes to FireSim are small bug fixes and platform plumbing
-rather than divergence, pinned by `FIRESIM_REV` in `VERSION`; see §6.
-
+FireSim itself is an external dependency: the
+[`vortexgpgpu/firesim`](https://github.com/vortexgpgpu/firesim) fork, consumed
+through `$(FIRESIM_PATH)` (default `$(TOOLDIR)/firesim`) and pinned by
+`FIRESIM_REV` in `VERSION` — see [§10](#10-relationship-to-upstream-firesim).
 For running kernels on hardware generally, see
-[`fpga_setup.md`](../fpga_setup.md); for the other simulation vehicles, see
+[`fpga_setup.md`](../fpga_setup.md); for the other simulation vehicles,
 [`simulation.md`](../simulation.md).
 
 ---
 
-## 1. Execution model
+## 1. System architecture
 
-### 1.1 What "host-decoupled" means
+![FireSim + Vortex system stack](../assets/img/firesim_system_stack.svg)
 
-FireSim does not emulate Vortex at wall-clock speed and then let the host
-observe it. It compiles the design through **Golden Gate** (MIDAS) into a
-FAME-1 transformed model in which *every* target clock edge is explicitly
-scheduled by the host. The FPGA holds the transformed design; the host driver
-decides how many target cycles to advance and when.
+### 1.1 The layering
 
-The practical consequence, and the thing that shapes the entire driver: **the
-target does not run unless the host tells it to.** There is no free-running
-clock to poll. A driver that issues an MMIO read and waits will wait forever,
-because nothing advanced the design between the request and the read.
+Everything above the PCIe boundary except the FireSim driver core lives in
+this repository — deliberately, so the FireSim checkout stays close to
+upstream. From the application down:
 
-This is the single most important difference from the XRT flow, where the
-kernel clock free-runs and the host merely observes.
+- **Application** (`tests/regression/<app>`): the ordinary `vx_*` API; it
+  cannot tell FireSim from any other backend.
+- **Runtime HAL** (`sw/runtime/firesim/vortex.cpp` →
+  `libvortex-firesim.so`): the driver ABI plus the software command
+  processor; kernel upload, DCR configuration, launch, flush.
+- **Transport** (`sim/firesim/firesim_sim.cpp`, in `libfiresim.so`): owns the
+  simulator thread and marshals every operation onto it; stepping policy,
+  watchdogs, diagnostics ([§7](#7-the-transport-layer)).
+- **FireSim driver core** (`$(FIRESIM_PATH)/sim/midas/src/main/cc`): the
+  widgets generated alongside the hardware — `peek_poke_t`, `loadmem_t`,
+  `clockmodule_t`, FASED's driver half — over a `simif_t` that is
+  `simif_aved` (VRT) on the V80, `simif_vitis` (XRT) on the U55C, and
+  `simif_emul` in the metasimulator.
+- **FPGA payload** (`FireSim-generated.sv`): the shell shim, FireSim's
+  bridges, the FAME hub, and the target — Vortex behind
+  `hw/rtl/afu/firesim/VX_firesim_wrap.sv`.
 
-### 1.2 Target cycles vs. host cycles
+The **metasimulator** (`TARGET=xrtsim`/`avedsim`) is the same stack with the
+bottom swapped: `libfiresim.so` *is* the Verilated FPGA payload, reached
+through `simif_emul` over DPI, and needs no card, image, XRT or VRT. It runs
+the same tokens on the same generated design, which is why it agrees with
+silicon cycle for cycle and is the step before every bitstream.
+
+### 1.2 What is on the FPGA
+
+![A Vortex instance + FireSim shell on the FPGA](../assets/img/firesim_fpga_architecture.svg)
+
+On the V80, the AVED static region (permanently in flash) carries the PCIe
+endpoint, the AXI-Lite control network, the clock/reset logic and the HBM
+NoC. The reconfigurable partition holds one module — `FireSim-generated.sv` —
+containing:
+
+- **`AvedShim` / SimulationMaster**: the control-plane adapter. The compute
+  shell resolves AXI-Lite in 16-byte blocks and FireSim registers have read
+  side effects (LoadMem's `R_DATA` dequeues), so every register gets its own
+  block and the shim answers the padding words itself; the driver scales
+  addresses by 4. At open, the driver checks the `0x46697265` ("Fire")
+  fingerprint, writes and reads back a probe, and verifies the memory port is
+  bound at the elaborated base before any widget is touched.
+- **Bridges** (the host-visible half of the simulation): PeekPoke (the
+  target's DCR/start/busy surface), LoadMem (bulk target memory), the clock
+  bridge (`tcycle`/`hcycle`), and FASED (the memory model,
+  [§5](#5-the-memory-system)).
+- **The FAME hub** (`FAMETop`): token channels between the bridges and the
+  target; the mechanism of host decoupling ([§4](#4-how-simulation-timing-is-modelled)).
+- **The target**: `VortexDUT` ▸ `VX_firesim_wrap` ▸ Vortex.
+
+Clocking on the V80 has one platform quirk worth knowing: FireSim gates the
+target clock, the partition has no `BUFGCE` site, and a fabric clock gate is
+not safe. `AvedConfig` therefore selects `FireSimFabricClockGate` — a plain
+AND marked `gated_clock` that synthesis's gated-clock conversion moves onto
+the clock-enable pin of every register, RAM and DSP it drives. `BUFGCE`
+semantics, no derived clock; a pre-opt check fails the build if any kernel
+clock is still driven by logic. (This is also why vendor OOC IP cannot sit
+inside the kernel on aved: the conversion cannot enter it, so the RTU uses
+the soft FMA/divider there — `VX_CFG_RTU_USE_DSP=0`.)
+
+### 1.3 Host-decoupled execution
+
+FireSim does not emulate Vortex at wall-clock speed and let the host observe
+it. Golden Gate (MIDAS) compiles the design into a FAME-1 transformed model
+in which *every* target clock edge is explicitly scheduled. The practical
+consequence, and the thing that shapes the entire driver: **the target does
+not run unless the host tells it to.** There is no free-running clock to
+poll; a driver that issues an MMIO read and waits, waits forever. This is the
+single most important difference from the XRT flow, where the kernel clock
+free-runs and the host merely observes.
 
 Two clocks matter and must not be conflated:
 
@@ -52,432 +114,617 @@ Two clocks matter and must not be conflated:
 | **target cycles** | cycles the Vortex design advanced | `clockmodule_t::tcycle()`, and Vortex's own `PERF: cycles=` |
 | **host cycles** | cycles the FPGA spent simulating them | `clockmodule_t::hcycle()` |
 
-Their ratio is **FMR** (FPGA-to-Model Ratio) — how many host cycles it costs
-to simulate one target cycle. FMR is the honest measure of simulation
-efficiency; the effective target frequency is `host_freq / FMR`.
-
-**Do not quote FireSim's `Target Cycles Emulated` as a kernel cycle count.**
-It reports cycles the *driver stepped*, not cycles the kernel took, and the
-driver steps in growing batches (§3.3). A kernel is only observed to have
-finished at the first poll *after* it does, so the figure is quantized to the
-batch schedule and can overstate a short kernel by up to 4×. Two workloads
-that finish inside the same inter-poll interval report the identical number.
-Vortex's `PERF: cycles=` counter is exact and is what every measurement in
-this repository uses.
+Their ratio is **FMR** (FPGA-to-Model Ratio); the effective target frequency
+is `host_freq / FMR`. **Do not quote FireSim's `Target Cycles Emulated` as a
+kernel cycle count** — it reports cycles the *driver stepped*, quantized by
+the batching schedule ([§4.3](#43-the-drivers-schedule)), and can overstate a
+short kernel by up to 4×. Vortex's `PERF: cycles=` counter is exact and is
+what every measurement in this repository uses.
 
 ---
 
-## 2. Integration architecture
+## 2. How Vortex RTL is synthesized
 
-### 2.1 Layering
+![Build flow](../assets/img/firesim_build_flow.svg)
 
-```
-  tests/regression/<app>            application
-      │  vx_* API
-  sw/runtime/firesim/vortex.cpp     runtime HAL       (driver ABI, XCLBIN_PATH)
-      │  firesim_sim class
-  sim/firesim/firesim_sim.cpp       transport         (request queue, stepping)
-      │  peek_poke / loadmem bridges
-  $(FIRESIM_PATH)/sim/…             FireSim driver    (simif_vitis, widgets)
-      │  XRT
-  ─────────────────────────────── PCIe ───────────────────────────────
-  FireSim-generated.sv              FAME-1 model      (Golden Gate)
-      │  ctrl_* / AXI
-  hw/rtl/afu/firesim/VX_firesim_wrap.sv               AFU wrapper
-      │
-  Vortex                                              the design under test
-```
-
-Everything above the PCIe line except the FireSim driver lives in this
-repository; that is deliberate, so the FireSim checkout stays close to
-upstream.
-
-### 2.2 The Chisel target — `hw/syn/firesim/src/main/scala/VortexTarget.scala`
-
-`VortexDUT` instantiates Vortex as an opaque Verilog **BlackBox**. Golden Gate
-cannot see inside it, which is the point: the FAME transform channelizes the
-BlackBox's boundary signals and leaves its internals alone.
-
-`VortexConfig` sets the memory interface the target presents:
-
-```scala
-NastiParameters(dataBits = 512, addrBits = 32, idBits = 4)
-```
-
-`idBits` is **paired with `PLATFORM_MEMORY_ID_WIDTH` in
-`hw/syn/firesim/Makefile`** and neither may be changed alone — one shapes the
-IO the BlackBox is instantiated with, the other shapes the module's own ports,
-and Verilog pads or truncates a disagreement with no diagnostic.
-
-It is also bounded from both sides, which is not obvious:
-
-- **Too large and it overflows.** FASED sizes its read-response egress with
-  `1 << idBits` in Scala `Int` arithmetic. At 32 that shift wraps to 1, which
-  both selects the untranslated egress branch and gives it a single queue for
-  every AXI id. Responses then leave carrying the requesting transaction's id
-  and another transaction's data. Elaboration succeeds and nothing warns — the
-  generated design is simply smaller and wrong.
-- **Too large and it does not fit.** The response deinterleaver and the id-yank
-  queues carry per-id state, so model area scales with the id space. At 8 that
-  is 750,955 LUTs as memory against the 600,960 a U55C has. At 4 it is 51,678.
-
-4 is what Vortex actually drives: `VX_mem_to_axi`'s tag buffer is engaged
-because `UUID_WIDTH` puts the upstream tag past any AXI id width, so reads
-carry `CLOG2(TAG_BUFFER_SIZE) = 4` bits. It also matches FASED's `maxReads`
-of 16.
-
-### 2.3 The RTL wrapper — `hw/rtl/afu/firesim/VX_firesim_wrap.sv`
-
-A thin AFU presenting Vortex as:
-
-- one AXI4 memory port (`m_axi_mem_0_*`),
-- a DCR request/response pair for configuration,
-- `start` / `busy` for launch and completion.
-
-`VX_CFG_PLATFORM_MEMORY_NUM_BANKS=1` is set for this wrapper. Left at the
-default of 2, Vortex builds two internal memory ports and `VX_mem_to_axi`
-arbitrates them onto the one bank, recovering the originating port from the
-*returned* AXI id (`rsp_xbar_sel_in = m_axi_rid[0 +: NUM_PORTS_IN_BITS]`).
-That makes correctness depend on the memory model echoing `rid` bit-exact — an
-assumption real AXI satisfies but a timing model need not. One port removes the
-dependency entirely and matches what the wrapper presents.
-
-### 2.4 Memory model
-
-Target DRAM is served by **FASED**, FireSim's parameterized memory timing
-model, backed by host DRAM through the LoadMem widget. The Vitis platform
-binds `host_mem_0` across HBM[0:7] with a 4 GiB window — a 32-bit target spans
-4 GB, with its program image at `0x80000000` and its stack just under 4 GB, so
-a narrower binding puts kernel uploads outside the served window and the target
-fetches memory nothing ever wrote, with no error anywhere.
-
----
-
-## 3. The transport layer — `sim/firesim/firesim_sim.cpp`
-
-The largest single piece of the integration, and where host-decoupling shows
-up as real complexity.
-
-### 3.1 Threading
-
-FireSim's bridges are **not thread-safe** and must only be touched by the
-thread running the simulation loop. The transport therefore owns a simulator
-thread and marshals every operation onto it as a closure:
-
-```
-caller ──push labelled_request_t──> queue ──> simulator thread ──> bridges
-       <──────── condition variable ────────
-```
-
-Each request carries a label so a trace attributes a stall to an operation
-rather than showing a column of identical entries.
-
-### 3.2 Memory access — the chunk-unit invariant
-
-`access_mem` moves data through LoadMem one host beat at a time, with
-read-modify-write on unaligned edges.
-
-**LoadMem's chunk is counted in 32-bit words, not bytes.** `read_mem` and
-`write_mem` push exactly that many *words* through the data register. Treating
-it as a byte count uploads a quarter of each beat and advances the address by a
-quarter of a beat — storing two live bytes per eight and dropping every write
-that does not land on a beat boundary. A kernel image uploaded that way is
-fetched as a mixture of written and stale memory, and nothing reports an error.
-
-Whole-beat writes bypass the read-modify-write path.
-
-### 3.3 Advancing the target — adaptive step batching
-
-`is_busy()` must both catch the launch edge and give a long kernel throughput.
-These pull in opposite directions: a small step never misses `busy` asserting
-but costs an MMIO round trip per few cycles; a large step is efficient but can
-step past a short kernel entirely.
-
-The driver grows the batch: floor of 16 target cycles, ×4 per poll up to a
-ceiling, dropping back to the floor when the target goes idle. Cumulative poll
-boundaries therefore land at 16, 80, 336, 1360, 5456, 21840, …
-
-This is also the origin of the `Target Cycles Emulated` quantization in §1.2 —
-the counter is sampled at the poll that *observes* completion, not at the
-busy→idle transition itself.
-
-### 3.4 DCR reads must single-step
-
-`dcr_rsp_valid` is a one-cycle pulse passed straight out of the core, so a
-batched step lands past it and the read reports unanswered on a target that
-replied. `dcr_read` therefore advances one target cycle per iteration, and its
-bound is expressed in cycles rather than polls.
-
-The cost is one MMIO round trip per target cycle — tenths of a second for a
-cache flush on the card, minutes under emulation. Batched polling would need
-the response **latched at the wrapper**, which is a target-side change and a
-new bitstream; it is a known follow-up rather than a driver-side workaround.
-
-### 3.5 Diagnostics
-
-Vortex's own performance counters are the only view inside the core that does
-not require re-elaborating the design, and they are read over the DCR path.
-They are gated behind `PERF_ENABLE` (build the image with `PERF=1`, as in the
-other synthesis flows); **without it every counter reads zero, which is
-indistinguishable from an idle core rather than an absent instrument.** The
-driver says so explicitly rather than leaving it to be inferred.
-
----
-
-## 4. Build flow
-
-The image build takes the same tokens as the card's native flow
-(`hw/syn/xilinx/xrt` or `hw/syn/xilinx/aved`), from a configured build tree:
+There are two build lanes. In the **default (FAME-1) lane** Vortex stays
+Verilog: Golden Gate sees it as an opaque BlackBox, transforms only its
+boundary, and the card's platform flow synthesizes the Verilog directly. In
+the **FAME-5 lane** (`FAME5=1`) Vortex is converted to FIRRTL so Golden Gate
+can transform *inside* it — that is what enables the socket
+time-multiplexing of [§3](#3-fame-5-many-sockets-one-physical-copy). Both
+are driven from `hw/syn/firesim/Makefile` with the same tokens as the native
+flows:
 
 ```bash
-source ci/firesim_env.sh    # after the card's Xilinx tools (Vitis+XRT, or Vivado+VRT)
-make -C hw/syn/firesim PLATFORM=xilinx_u55c_gen3x16_xdma_3_202210_1 TARGET=hw_emu   # XRT card
-make -C hw/syn/firesim TARGET=hw PERF=1 CONFIGS="-DVX_CFG_NUM_WARPS=4"               # aved card
+source ci/firesim_env.sh          # after the card's Xilinx environment
+# U55C (XRT): TARGET=hw | hw_emu
+make -C hw/syn/firesim PLATFORM=xilinx_u55c_gen3x16_xdma_3_202210_1 TARGET=hw
+# V80 (AVED): TARGET=hw | sim
+make -C hw/syn/firesim TARGET=hw PERF=1 CONFIGS="-DVX_CFG_NUM_WARPS=16"
+# V80, 64 cores through one physical socket:
+make -C hw/syn/firesim FAME5=1 TARGET=hw CONFIGS="-DVX_CFG_NUM_CORES=64 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_NUM_THREADS=16"
 ```
 
-`PLATFORM=<xsa>` selects an XRT card and `TARGET` is `hw` or `hw_emu`; without
-`PLATFORM` the card is the aved one for `DEVICE` (default the V80) and `TARGET`
-is `hw` or `sim`. The image is copied to `<PREFIX>_<xsa|aved>_<TARGET>/bin`
-(`firesim.xclbin` or `firesim.vbin`, plus `emconfig.json` for `hw_emu`) beside
-`firesim.card`, which names the card for `run-firesim`; everything the build
-generates lives under that directory. Nothing given on the command line
-reaches FireSim's own makes, which use `PLATFORM`, `TARGET` and `BUILD_DIR` for
-their own purposes.
+The image lands in `<PREFIX>_<aved|xsa>_<TARGET>[_fame5]/bin` as
+`firesim.vbin` or `firesim.xclbin`, beside `firesim.card`, which names the
+card for `run-firesim`. `PREFIX`, `XLEN`, `CONFIGS`, `PERF=1` work as in the
+other synthesis flows; extensions pull their sources in through
+`hw/syn/extensions.mk`. Nothing given on this command line reaches FireSim's
+own makes (`MAKEOVERRIDES` is cleared): FireSim uses `PLATFORM`, `TARGET` and
+`BUILD_DIR` for its own purposes, and each sub-make is handed exactly what it
+needs.
 
-The default goal runs, in order:
+### 2.1 The flattened trees
 
-```
-vivado-sources   flatten Vortex with macros inlined (-P); -DSIMULATION for sim/hw_emu
-xilinx-ips       generate the Xilinx floating-point cores for the card's part
-stage            copy the Chisel/C++ targets and the card's platform config
-                 class into $(FIRESIM_PATH) (only what changed)
-replace-rtl      Golden Gate elaboration (in $(FIRESIM_PATH)/sim)
-image            the platform's own build in its cl_<target> dir: bitstream,
-                 or the hw_emu/sim image
-```
+Golden Gate and Vivado take a file list, not include paths, so
+`gen_sources.sh -P` preprocesses `hw/rtl` into one self-contained directory
+with the macros already inlined, top `VX_firesim_wrap`. Two flattenings
+exist because simulation and synthesis need opposite defines:
 
-`sources`, `elaborate`, `metasim` and `run-metasim` are developer goals; the
-runtime uses the first two to build the `xrtsim`/`avedsim` metasimulator.
+| flattening | defines | consumed by |
+|---|---|---|
+| `vivado_srcs/` | `-DSYNTHESIS -DVIVADO -DNDEBUG` (+ `-DSIMULATION` for `TARGET=sim`/`hw_emu`; never under FAME5) | platform synthesis; sv2v under FAME5 |
+| `vortex_srcs/` | `-DNDEBUG` only | the Verilator metasimulator |
 
-The card's FireSim platform, part, device, host-memory binding and base address
-come from its descriptor in `hw/syn/xilinx/platforms/`; the platform config
-class (`U55CPlatformConfig`) is generated from it. `CONFIGS` takes architecture
-overrides as the other synthesis flows do; extensions pull in their sources
-through `hw/syn/extensions.mk`, and a changed `CONFIGS` invalidates the
-flattened tree.
+The invariants here have each cost hours when broken:
 
-### 4.0 Cards and platforms
+- **`-DSYNTHESIS` is not optional.** `VX_dp_ram`/`VX_sp_ram` gate all
+  block-RAM inference behind it, and because the tree is *preprocessed*, the
+  BRAM branch is not inactive without it — it is deleted. Every memory then
+  lands in distributed RAM and place-and-route fails hours later at ~750K
+  LUTs-as-memory with nothing pointing at the cause.
+- **Verilator gets a library search, not a flat list.** Handing it every
+  file makes it stop treating the macro-computed width parameters as
+  constants; only the packages (in dependency order) and the wrapper are
+  named, the rest resolves via `-y`.
+- **A changed `CONFIGS` must invalidate the flatten.** Defines arrive on the
+  command line, which no file timestamp reflects; a stamp file rewritten only
+  when the flags differ hangs the dependency.
+- **Only overrides and type selectors are passed, never the resolved
+  config.** Passing the whole resolved `XCONFIGS` replaces `VX_config.vh`'s
+  computations with report values, which sets the memory port count to zero;
+  both flatten rules grep the result for `VX_MEM_PORTS = 0` and fail fast.
 
-| card | FireSim platform | run targets | run with |
-|---|---|---|---|
-| `u55c` | `vitis` (XRT, `v++`) | `xrtsim`, `hw_emu`, `hw` | `XCLBIN_PATH` |
-| `v80` | `aved` (VRT, `slashkit`) | `avedsim`, `sim`, `hw` | `VRT_VBIN_PATH`, `VRT_DEVICE_BDF` (discovered when unset) |
+### 2.2 The default lane: Vortex as a BlackBox
 
-`run-firesim` (and `blackbox.sh --driver=firesim`) takes the card from
-`$(FPGA_BIN_DIR)/firesim.card` for an image target; `xrtsim` and `avedsim` need
-no image and default to the U55C and the V80 (`FIRESIM_CARD` overrides). With
-no `TARGET` it runs `xrtsim`, as the xrt driver defaults to its simulator. On
-the V80, `TARGET=hw` runs `ci/v80_preflight.sh` first, and a first `SIGINT` or
-`SIGTERM` stops any FireSim run cleanly instead of killing it mid-launch; the
-run is then reported `FAILED` and exits 130 or 143 (124 for the launch watchdog).
+`hw/syn/firesim/src/main/scala/VortexTarget.scala` instantiates Vortex as a
+Chisel BlackBox. Golden Gate cannot see inside it, which is the point: the
+FAME-1 transform channelizes the boundary signals — the AXI memory port, the
+DCR/start/busy control surface — and leaves the internals alone. `image`
+then runs, in order: `vivado-sources`, `xilinx-ips` (the `xil_fma`/`xil_fdiv`
+floating-point cores for the card's part), `stage` (copy the Scala targets,
+harnesses and the generated platform config into the fork — only what
+changed, since FireSim's make judges elaboration by these timestamps),
+`replace-rtl` (Golden Gate), and the platform's own build (`v++` on vitis,
+slashkit on aved), handed:
 
-A FireSim run names its image and card with the variables of the card's native
-driver. On the V80 the Xilinx tools are the ones `slashkit` links with
-(`/opt/xilinx/2025.2`), so the floating-point cores must be generated in that
-environment too; and the static shell must be in flash, as for the native
-`aved` backend.
+- `VORTEX_VIVADO_SRCS` — the flattened tree, packaged into the kernel;
+- `VORTEX_XILINX_IP_DIR` — the vendor cores, copied in fresh directories
+  (Tcl's `file copy` onto an existing directory nests instead of replacing,
+  which silently reuses the previous run's cores);
+- `VORTEX_PRE_OPT_TCL` — the async-BRAM patch hook. `VX_async_ram_patch`
+  leaves `VX_placeholder` black boxes wherever an asynchronous-read RAM must
+  live in block RAM; without the hook, `opt_design` aborts with `DRC INBB-3`
+  — but only once a configuration is large enough to push those RAMs out of
+  LUTRAM, so small builds pass and large ones do not;
+- `FREQUENCY` (default 60 MHz) and `STRATEGY` (default `TIMING`).
 
-The `aved` platform (`AvedShim`) differs from `vitis` in three ways that matter
-to anyone reading its traces:
+### 2.3 The FAME-5 lane: Vortex as FIRRTL
 
-- **No MMCM.** The shell programs the kernel clock to the frequency the link
-  records (`FREQUENCY`), and the simulator runs on it directly.
-- **Control registers at a 16-byte stride.** The compute shell resolves AXI-Lite
-  in 16-byte blocks, and FireSim's registers have read side effects (LoadMem
-  `R_DATA` dequeues), so the shim gives each register its own block and answers
-  the padding words itself. The driver scales addresses by 4.
-- **A transport gate at open.** The driver reads SimulationMaster's fingerprint,
-  writes and reads back a probe, and checks the memory port is bound to the HBM
-  VNOC at the elaborated base, before any widget touches the device.
-- **Clock gates built from fabric.** FireSim gates the target clock with a
-  `BUFGCE` per clock domain, and the compute shell's reconfigurable partition
-  contains no `BUFGCE` site — only `BUFG_FABRIC`. Implementation fails at
-  `opt_design` with `DRC HDPR-18` ("requires resource type 'BUFGCE_HDIO' which
-  is not ranged by 'pblock_slash'"), and the partition is fixed by the static
-  shell, so no link option can widen it. `FabricClockGates` (set by
-  `AvedConfig`) makes Golden Gate emit `FireSimFabricClockGate` instead, which
-  in hardware is not a gate at all: a plain AND marked `gated_clock`, which
-  synthesis's gated-clock conversion (turned on for the kernel's run by the
-  platform build) moves onto the clock-enable pin of every register, RAM and
-  DSP it drives, all clocked from the ungated clock — `BUFGCE`'s semantics
-  with no derived clock left. A pre-opt check fails the build if any kernel
-  clock is still driven by logic. An earlier latch + `BUFG_FABRIC` gate put the
-  target on a clock ~5 ns behind the host's, with its latch-to-AND step
-  untimed, and on the card the target started but its memory model never
-  completed a read. Simulation keeps the `BUFGCE` model, and other platforms
-  keep `BUFGCE` itself.
+Golden Gate's threading transform works on FIRRTL, so `FAME5=1` converts the
+whole flattened tree (`hw/syn/firesim/fame5/`):
 
-### 4.0.1 What the platform build must do for Vortex
+1. **sv2v** lowers the SystemVerilog to Verilog-2005. sv2v inlines every
+   module with interface ports into its parent — which would erase the
+   boundary of the unit to be threaded. `VX_socket_top`
+   (`hw/rtl/VX_socket_top.sv`) exists for exactly this reason: a
+   parameterless wrapper around `VX_socket` whose ports are plain wires, so
+   it survives conversion as one module.
+2. **`to_firrtl.sh` (Yosys)** flattens everything except `VX_socket_top` and
+   writes FIRRTL. `VX_dp_ram`/`VX_sp_ram` are kept as black boxes that
+   `gen_rams.py` regenerates as native FIRRTL memories — Yosys cannot express
+   clocked read ports or byte enables, and a real BlackBox inside the
+   threaded module would be silently shared across threads
+   ([§3](#3-fame-5-many-sockets-one-physical-copy)). The script also carries
+   the Yosys workarounds this conversion needed: `proc -norom`,
+   `memory_nordff` for small clocked-read arrays, `opt -nosdff -nodffe` plus
+   `dffunmap`, and `splitnets` against word-level false loops.
+3. **`fix_firrtl.py`** repairs what Yosys emits that the FIRRTL compiler or
+   Verilator reject: signed-shift lowering, 2¹⁹-bit `dshl` intermediates,
+   `cat()` on the left-hand side, signed zero tests, and expression nesting
+   thousands of levels deep (hoisted into nodes — the FIRRTL parser recurses
+   per level). It runs in one linear pass; a 64-core conversion has lines
+   over a million characters long.
+4. **`splice.py`** replaces the `VX_firesim_wrap` extmodule in Golden Gate's
+   own elaborated circuit with the converted Vortex, and
+   **`annotate_threads.py`** appends one
+   `FirrtlEnableModelMultiThreadingAnnotation` per socket instance
+   (`FAME5_THREADS=0` skips this: the identical design, unthreaded — the
+   cycle-exactness anchor).
+5. **Golden Gate** then applies FAME-1 and FAME-5 together and emits a
+   `FireSim-generated.sv` that *contains* Vortex. The platform build is
+   handed no Vortex sources, no vendor IP and no pre-opt hook — there is
+   nothing left outside the generated file for them to apply to.
 
-Both cards share two requirements that FireSim's own targets do not have, so
-they are passed in from `hw/syn/firesim`:
+The RTL preconditions, all under `` `ifdef VX_CFG_FAME5 ``: per-core
+`CORE_ID` parameters become `core_id`/`socket_id` *ports* (a parameter would
+make 64 different modules; threading needs one), `ASYNC_BRAM_PATCH` is
+disabled (its placeholders only a Vivado hook resolves), and `VX_socket_top`
+statically rejects VM and graphics configurations it does not carry ports
+for.
 
-- **`VORTEX_PRE_OPT_TCL` — the async-BRAM patch.** `VX_async_ram_patch` leaves
-  `VX_placeholder` black boxes wherever an asynchronous-read RAM has to live in
-  block RAM, and a post-synthesis script fills them from the netlist. Without it
-  `opt_design` aborts with `DRC INBB-3`, but only once a configuration is large
-  enough to push those RAMs out of LUTRAM — so small builds pass and large ones
-  do not. `vitis` attaches the hook with `--xp vivado_prop:...OPT_DESIGN.TCL.PRE`;
-  `aved` attaches it from a pre-synthesis hook, the only place slashkit lets a
-  step property be set.
-- **`VORTEX_XILINX_IP_DIR` — the vendor cores.** The FPU and RTU instantiate
-  Xilinx floating-point IP (`xil_fma`, `xil_fdiv`, …), which must be generated
-  for the card's part and attached to the packaged kernel's file groups; read
-  into the packaging project they are dropped as unreferenced (`IP_Flow
-  19-3833`). They are copied into the kernel, each into a fresh directory —
-  Tcl's `file copy` onto an existing directory nests the source inside it, which
-  silently leaves a repackaged kernel pointing at the previous run's cores.
-  On `aved` the conversion above cannot enter these out-of-context cores, so
-  there the RTU uses the soft FMA and divider (`VX_CFG_RTU_USE_DSP=0`) and no
-  vendor core is instantiated.
-
-### 4.1 Two source lists, and why
-
-Verilator resolves Vortex by **library search**, so `sources` names only the
-packages and the wrapper — handing it the whole tree as a flat list makes it
-stop treating the macro-computed width parameters as constants. Vivado has no
-such search and must be handed every file, so `vivado-sources` flattens the
-tree into one directory with macros already inlined. The constant-parameter
-failure that rules flattening out for Verilator is an elaboration behaviour,
-not a synthesis one.
-
-### 4.2 Synthesis invariants
-
-**`SYNTH_DEFINES := -DSYNTHESIS -DVIVADO -DNDEBUG` is not optional.**
-`VX_dp_ram` and `VX_sp_ram` gate all block-RAM inference behind `` `ifdef
-SYNTHESIS ``, and `gen_sources.sh -P` *preprocesses* into the flattened tree —
-so without it the BRAM branch is not merely inactive, it is deleted before
-Vivado sees it and every memory in the design lands in distributed RAM. The
-symptom is a place-and-route failure hours later at ~750k LUTs-as-memory, with
-nothing pointing at the cause.
-
-**The Makefile is a prerequisite of the flatten rule.** Without it, changing
-any define does not invalidate the flattened tree and the next build silently
-reuses the previous elaboration. Note it must be `$(firstword $(MAKEFILE_LIST))`
-— `lastword` resolves to `build/config.mk`.
-
-**Guard the elaboration, not just the build.** `v++` runs synthesis into
-place-and-route without stopping, so an over-utilized design surfaces only
-after the placer has been tried. Two cheap checks catch the failure modes
-above before hours are spent: that FASED elaborated a per-id response path
-(`ReorderBuffer` present, multi-bit `MultiQueue` selectors), and that the
-post-synthesis utilization report fits. Any such watchdog **must be
-freshness-qualified** against the current run's timestamp — an unqualified
-lookup reads the previous build's report and kills a healthy build.
+At 64 cores NW=NT=16: conversion ≈ 4 min (384 MB of FIRRTL), Golden Gate
+≈ 12 min at ≈ 36 GB heap (`JAVA_TOOL_OPTIONS` raises `-Xmx` and, for the
+parser's recursion, `-Xss`), generated Verilog 229 MB.
 
 ---
 
-## 5. Measured results
+## 3. FAME-5: many sockets, one physical copy
 
-U55C, kernel clock constrained at 60 MHz, `STRATEGY=TIMING`. Configuration:
-1 cluster / 1 core / 4 warps / 4 threads, SIMD 4, L1 only, no A or C
-extension, no TCU/DXA/RTU/TEX/RASTER/OM, `FPU_USE_DSP=0`.
+![FAME-5 threading](../assets/img/firesim_fame5_threading.svg)
 
-### 5.1 Utilization (kernel only)
+The 64-core question is an area question. One NW=NT=16 core synthesizes to
+~221K LUTs; 64 of them need ~14.1M against the V80's 2.57M. FAME-5 ("model
+multithreading") removes the duplication instead of shrinking the core: all
+64 sockets **take turns using one physical copy of the socket logic**, one
+socket per host cycle, round-robin.
+
+**What is threaded.** Exactly one module type per design (a Golden Gate
+restriction), chosen by annotation — there is no automatic detection, with
+or without Chisel. Vortex threads `VX_socket_top`: one core plus its I$, D$
+and local memory. Everything outside it — the cluster's socket↔memory
+arbiter, KMU, DCR, global barrier, `VX_mem_to_axi`, all bridges and FASED —
+is built once and does not know the sockets share silicon.
+
+**What the transform does.** The target-visible design is unchanged: 64
+instances, each with its own token channels. Golden Gate replaces them with
+one `VX_socket_top_threaded` plus a static mux/demux driven by a free-running
+thread counter, and transforms the state:
+
+- **every register becomes an N-deep, combinationally-read memory** (read
+  thread *t*'s state, compute, write back — same host cycle), which Vivado
+  maps to LUTRAM at ~1 LUT per state bit;
+- **every SRAM becomes N× deeper**, the thread index forming the top address
+  bits; read latency 0 or 1 only, and latency-1 keeps BRAM/URAM mapping.
+
+**The requirements that shaped the RTL work:**
+
+- instances must be *identical* — same module, same parameters. Hence
+  `core_id`/`socket_id` as ports and the parameterless wrapper;
+- **no BlackBox inside the threaded module.** It would be instantiated once
+  and silently shared by all threads: wrong results, no diagnostic (proven
+  on a prototype). Hence the FIRRTL regeneration of the RAM leaves;
+- a module with a single instance is skipped, and only one module type can
+  be threaded.
+
+**The cost.** One target cycle takes at least N host cycles (the rotation),
+up to ~2N when a cross-thread combinational dependency forces a second pass,
+plus bridge stalls: the 64-core V80 build measures FMR 130–190, i.e.
+320–460 kHz of target time at the 60 MHz host clock. Per-thread state is
+initialized during host reset, so target reset behaves identically in every
+thread.
+
+**The correctness anchor.** `FAME5_THREADS=0` builds the same
+FIRRTL-converted design with no threading. The three builds — native
+Verilog baseline, unthreaded FIRRTL, threaded — agree exactly (4-core demo:
+`instrs=9776, cycles=15541` in all three).
+
+---
+
+## 4. How simulation timing is modelled
+
+![Timing model](../assets/img/firesim_timing_model.svg)
+
+Three layers, strictly separated:
+
+### 4.1 Token exchange decides *when a cycle may happen*
+
+Every wire between a bridge and the target is a token channel. The FAME hub
+fires one target cycle exactly when every input channel holds a token and
+every output channel has space; otherwise the target clock stays gated and
+the design is frozen mid-state, not observing time. However slow the host
+is — PCIe latency, a paused driver, Verilator instead of silicon — the target
+sees the identical cycle sequence. This is why metasim and FPGA agree cycle
+for cycle, and why wall-clock speed never contaminates a measurement.
+
+### 4.2 Timing models decide *what latency the target observes*
+
+Latency the GPU experiences is not the card's memory latency — it is whatever
+the FASED timing model schedules, in target cycles ([§5](#5-the-memory-system)).
+A memory response that takes 400 host cycles to fetch from HBM still arrives,
+in target time, exactly `readLatency` cycles after its request; the missing
+host cycles simply never existed for the target.
+
+### 4.3 The driver's schedule
+
+The driver decides *how many cycles to ask for*. `is_busy()` must both catch
+the launch edge (busy is a level; a batch stepped past a short kernel would
+wait forever on a rise that already happened) and give long kernels
+throughput (each poll costs a thread handoff plus an MMIO round trip). The
+batch therefore grows ×4 from a floor of 16 target cycles to a ceiling
+(default 100,000, `VORTEX_FIRESIM_STEP_BATCH`), dropping back to the floor
+when the target goes idle. This schedule is what quantizes
+`Target Cycles Emulated` (§1.3). DCR reads are the exception: `dcr_rsp_valid`
+is a one-cycle pulse, so the poll advances one target cycle at a time,
+bounded by `VORTEX_FIRESIM_DCR_POLL_ROUNDS` ([§7](#7-the-transport-layer)).
+
+---
+
+## 5. The memory system
+
+![Memory system](../assets/img/firesim_memory_system.svg)
+
+### 5.1 The path
+
+Vortex presents **one AXI4 memory port** (512-bit data, 32-bit address,
+4-bit id, INCR bursts at full width). `VX_firesim_wrap` is built with
+`VX_CFG_PLATFORM_MEMORY_NUM_BANKS=1` so Vortex builds exactly one internal
+port: at the default of two, `VX_mem_to_axi` recovers the originating port
+from the *returned* AXI id, which makes correctness depend on the memory
+model echoing `rid` bit-exact — an assumption real AXI satisfies but a timing
+model need not.
+
+That port terminates in **FASED**, FireSim's memory timing model, which is
+two halves:
+
+- **Functional**: data lives in the card's real memory, reached over the
+  shell's host-memory port. Reads and writes are performed when accepted;
+  responses are held in egress queues (with a per-id reorder buffer) until
+  released.
+- **Timing**: a latency-bandwidth pipe decides the release cycle. Runtime
+  registers, defaults: `readLatency=30`, `writeLatency=30` target cycles,
+  ≤16 reads and ≤16 writes in flight.
+
+The **LoadMem widget** is the host's side door onto the same functional
+memory — kernel upload, buffer copies, readback — consuming no target time.
+
+### 5.2 Configuring the timing model per run
+
+FASED's registers are set by plusargs, which the runtime forwards from
+`VORTEX_FIRESIM_ARGS` (card and metasim alike). Any register set explicitly
+requires the rest to be covered by the hardware-defaults plusarg:
+
+```bash
+VORTEX_FIRESIM_ARGS="+mm_readLatency_0=100 +mm_writeLatency_0=100 +mm_useHardwareDefaultRuntimeSettings_0" \
+  ./ci/blackbox.sh --driver=firesim --target=avedsim --app=demo ...
+```
+
+Validated: the 4-core FAME-5 demo runs 15,541 cycles at the default 30-cycle
+latency and 47,371 at 100/100 — same 9,776 instructions, `PASSED` both ways.
+This is the only memory knob that needs no rebuild.
+
+The model's ceiling is worth computing before trusting a bandwidth-bound
+number: `maxReads × 64 B / readLatency` ≈ 34 B per target cycle for the
+whole GPU at the defaults. The 64-core `sgemm` sits exactly on it. Raising
+the ceiling means `maxReads` (compile-time, and the egress area scales with
+it) or lower modelled latency (runtime). There is no DRAM structure — banks,
+rows, refresh — in the default pipe; FASED has DDR3 FIFO/FR-FCFS models and a
+tags-only LLC model as compile-time alternatives (`WithDDR3FIFOMAS`,
+`WithLLCModel`), none enabled for Vortex today, and no HBM timing model at
+all.
+
+FASED's counters (`totalReads`, `totalWrites`, beat counts, `readMaxReqs`,
+response errors) are read over MMIO and printed by the driver on every stall
+report and watchdog — the first place to look when a kernel starves.
+
+### 5.3 Configuring the shell
+
+Everything card-specific comes from the platform descriptor
+(`hw/syn/xilinx/platforms/<card>.toml`), whose `[firesim]` section names the
+FireSim platform, the part, and the host-memory binding; `gen_platform.py`
+generates from it both the make fragment and the platform config class
+(`V80PlatformConfig` = `WithHostMemBase(0x40_0000_0000)` + `DefaultAvedConfig`),
+so one file governs elaboration and link alike.
+
+| | V80 (aved) | U55C (vitis) |
+|---|---|---|
+| binding | `host_mem_sp = "MEM"`: the HBM VNOC, **32 GB at 0x40_0000_0000** | `HOST_MEM_SP = HBM[0:7]`: 8 × 512 MB = 4 GiB at 0 |
+| why | the whole 32-bit target map in one window; HBM0 (1 GB) would truncate it — the stack sits just under 4 GB; `HOST` (QDMA slave bridge) never completes reads and is refused by the descriptor | the card has no DDR bank; a narrower binding silently serves part of the map and kernel uploads land outside it |
+| host channel | one, 64-bit, at the host clock | one, 64-bit |
+| image-build knobs | `FREQUENCY` (60), `STRATEGY` (`TIMING`), `DEVICE` | + `PLATFORM=<xsa>` |
+
+The host channel's width bounds *simulation speed* under memory traffic,
+never target timing: a starved FASED gates the target clock, FMR rises, and
+the kernel's cycle count is unchanged.
+
+Two width couplings must move together or nothing warns:
+
+- **`idBits` (VortexTarget.scala) ↔ `PLATFORM_MEMORY_ID_WIDTH`
+  (hw/syn/firesim/Makefile).** One shapes the IO the BlackBox is instantiated
+  with, the other the module's ports; Verilog pads or truncates a
+  disagreement silently. The value is bounded both ways: at 32,
+  `1 << idBits` wraps Scala's `Int` and every AXI id shares one response
+  queue (silently wrong data); at 8, per-id egress state cost 750,955 LUTs
+  against a U55C's 600,960. 4 matches what Vortex drives
+  (`CLOG2(TAG_BUFFER_SIZE)`) and FASED's `maxReads` of 16.
+- **`addrBits` ↔ `VX_CFG_MEM_ADDR_WIDTH`.** The Scala side pins 32 while the
+  wrapper follows XLEN (48 at XLEN=64): XLEN=64 on FireSim needs both changed
+  together or addresses truncate silently.
+
+---
+
+## 6. Observability
+
+### 6.1 Wave traces
+
+**Metasimulator (the primary path).** Build the metasim library with tracing
+and pass the dump plusargs at run time:
+
+```bash
+EMUL_DEBUG=1 FAME5=1 \
+VORTEX_FIRESIM_EMUL_ARGS="+waveformfile=$PWD/demo.vcd +max-cycles=60000" \
+  ./ci/blackbox.sh --driver=firesim --target=avedsim --cores=4 --warps=4 --threads=4 --app=demo
+```
+
+`EMUL_DEBUG=1` (sim/firesim/Makefile) Verilates with `--trace
+--trace-structs +define+DEBUG` into its own build directory (`…_dbg`) — the
+model rule does not depend on flags, so debug and normal builds must not
+share one. The plusargs are FireSim's emul-top contract (`top.sv`):
+`+waveformfile=<path>` opens the VCD, and `+max-cycles=<n>` is **required** —
+dumping runs from `+dump-start` (default 0) for `max-cycles` host clocks and
+`$dumpoff`s at the end, so without it the window is empty. The run itself
+continues to completion after the window closes. `VORTEX_FIRESIM_EMUL_ARGS`
+also takes ordinary Verilator runtime args (e.g. `+verilator+rand+reset+2`
+to randomize uninitialized state).
+
+**Size the window before running.** The dump covers every signal of the
+FPGA payload: the 4-core FAME-5 demo above writes ~23 GB for a 60,000
+host-cycle window (~380 KB per host cycle). Place `+dump-start` just before
+the region of interest and keep `+max-cycles` in the low tens of thousands;
+the simulation itself runs to completion after the window closes, unperturbed
+(same 15,541 cycles traced and untraced).
+
+**Reading the waves.** The hierarchy is
+`TOP.emul.FPGATop.sim.target.…` — `emul` is the DPI testbench, `FPGATop`
+the FPGA payload, `sim.target` the FAME hub's interior. Orientation:
+
+- everything toggles on the **host clock**; one target cycle is one firing
+  of the hub, so anchor on the clock channel or `ctrl_busy` rather than
+  counting clock edges;
+- the target lives under `FPGATop.sim.target…`; under FAME-5 the interesting
+  state is in `VX_socket_top_threaded`, where a former register is an
+  N-entry array indexed by the thread counter, and `_fx_*` signals are
+  expression nodes hoisted by the FIRRTL conversion;
+- the bridges' AXI (FASED) and MMIO surfaces are at the top level — the
+  fastest way to see whether a hang is the target or the transport.
+
+**U55C `hw_emu`** uses XSIM, not Verilator: waveform capture is governed by
+`sw/runtime/firesim/xrt.ini` (`debug_mode=batch` writes the `.wdb`; it is
+~800 MB for a demo run and the dominant cost, so it is off by default).
+
+**On the card: none.** There is no ILA in these images (AutoILA is off on
+the V80 — Versal has no `ila` core — and not wired on the U55C flow). On-card
+visibility is the counters and driver diagnostics below; anything deeper
+moves to the metasimulator with the same image configuration.
+
+### 6.2 `$display`, `$error`, assertions
+
+All of Vortex's messages and assertions live behind `SIMULATION`
+(`hw/rtl/VX_platform.vh`: `STATIC_ASSERT`, `ASSERT`/`RUNTIME_ASSERT`,
+`ERROR`, and the `DBG_TRACE_*` machinery). Where that define exists in this
+flow:
+
+| vehicle | `SIMULATION`? | consequence |
+|---|---|---|
+| `TARGET=sim` (V80 XSIM image), `TARGET=hw_emu` (U55C) | **yes** | `$display`/`$error`/asserts fire in the platform simulator's log |
+| metasim `xrtsim`/`avedsim`, unthreaded | no (`-DNDEBUG` only) | compiled out — the metasim flattening carries neither synthesis nor simulation defines, and adding `-DSIMULATION` there is untested (a few library modules would also want the `dpi_trace` objects the metasim does not link) |
+| any `FAME5=1` build | **structurally impossible** | sv2v/Yosys have no FIRRTL form for `$fflush`/`$write`; the conversion is always made from the synthesis flattening |
+| `TARGET=hw` | no (`SYNTHESIS`) | compiled out, as in every synthesis flow |
+
+Golden Gate's own synthesized printf/assert machinery (`SynthPrints`,
+`SynthAsserts` — both enabled in the platform config) applies only to
+printf/stop nodes authored in Chisel or present in the FIRRTL; Vortex arrives
+either as a BlackBox or as Yosys-converted FIRRTL containing neither, so it
+contributes nothing here. In short: **for RTL-level messages and asserts,
+use `TARGET=sim`/`hw_emu`, or rtlsim outside FireSim entirely; on `hw` and
+under FAME-5, instrument via counters and the driver.**
+
+### 6.3 Performance counters and driver diagnostics
+
+Vortex's performance counters are the only view inside the core that needs no
+re-elaboration. They are read over the DCR path and gated behind
+`PERF_ENABLE`: build the image with `PERF=1`, and note that **without it
+every counter reads zero, which is indistinguishable from an idle core**.
+The driver prints, on every stall report, watchdog expiry and (optionally)
+completion: FASED's request/beat/error counters, the core's scheduler and
+pipeline-stall counters, and the D-cache counters — enough to separate "a
+stalled pipeline" from "a memory request that never returned".
+
+The transport's own knobs and reports:
+
+| env var | effect |
+|---|---|
+| `VORTEX_FIRESIM_TRACE=1` | timestamped log of every request the transport services |
+| `VORTEX_FIRESIM_ARGS` | extra plusargs to the FireSim driver (`+mm_*`, §5.2) |
+| `VORTEX_FIRESIM_EMUL_ARGS` | Verilator runtime args, metasim only (waves, rand-reset) |
+| `VORTEX_FIRESIM_TIMEOUT_S` | launch watchdog, wall seconds; expiry prints the full counter report and exits 124 |
+| `VORTEX_FIRESIM_STALL_CYCLES` | target-cycles-busy threshold for the wedge report |
+| `VORTEX_FIRESIM_STEP_BATCH` | batching ceiling (§4.3) |
+| `VORTEX_FIRESIM_DCR_POLL_ROUNDS` | DCR read poll bound, in target cycles |
+| `VORTEX_FIRESIM_PREFILL`, `VORTEX_FIRESIM_DUMP_UPLOADS`, `VORTEX_FIRESIM_VERIFY_WRITES`, `VORTEX_FIRESIM_REPORT_ON_IDLE` | debugging aids: pattern-stamp a region before launch; dump every upload to files; read back every write; counter dump on healthy completion |
+
+### 6.4 Choosing a vehicle
+
+| need | vehicle |
+|---|---|
+| waves of the exact FPGA payload | metasim + `EMUL_DEBUG=1` |
+| Vortex `$display`/asserts | `TARGET=sim` / `hw_emu` (or rtlsim) |
+| speed with full fidelity | the card |
+| memory-timing experiments without rebuilds | any vehicle + `VORTEX_FIRESIM_ARGS` |
+
+---
+
+## 7. The transport layer
+
+`sim/firesim/firesim_sim.cpp` is the largest single piece of the
+integration, and where host-decoupling shows up as real complexity.
+
+- **Threading.** FireSim's bridges are not thread-safe and are only touched
+  by the simulator thread; every operation is a labelled closure marshalled
+  through a queue (the label is what makes a trace attribute a stall to an
+  operation). In the metasimulator the same thread runs Verilator's event
+  loop, and `entry()` is reached from the emul top's initial block.
+- **Memory access.** `access_mem` moves data through LoadMem one host beat
+  at a time with read–modify–write on unaligned edges. **LoadMem's chunk is
+  counted in 32-bit words, not bytes**; treating it as bytes stores two live
+  bytes per eight and drops every unaligned write — a kernel image uploaded
+  that way is fetched as a mixture of written and stale memory with no error
+  anywhere. Whole-beat writes bypass the RMW path.
+- **Stepping** is §4.3's adaptive batching; **DCR reads** single-step
+  because the response valid is a one-cycle pulse. Batched DCR polling would
+  need the response latched in the wrapper — a target-side change and a new
+  bitstream, noted as a follow-up.
+- **Peeks after a blocking step are non-blocking.** A blocking peek waits up
+  to 0.1 s for the `PRECISE_PEEKABLE` flag, which a FAME-5 design never
+  raises, then returns the same value; after a blocking step the wait adds
+  nothing but time. Left blocking, every DCR poll cost 0.1 s and a 64-core
+  readback took 20 s per register. (Why FAME-5 outputs never assert
+  precise-peekable is an open follow-up.)
+- **Watchdogs.** A launch that exceeds `VORTEX_FIRESIM_TIMEOUT_S` or a
+  busy-level that exceeds `VORTEX_FIRESIM_STALL_CYCLES` produces the full
+  counter report (§6.3) and a clean abort — on this vehicle, "hung" must be
+  distinguishable from "slow" without a reboot.
+
+---
+
+## 8. Running
+
+```bash
+# metasimulator (no image, no card):
+FAME5=1 ./ci/blackbox.sh --driver=firesim --target=avedsim --cores=64 --warps=16 --threads=16 --app=demo
+# the card:
+FAME5=1 FPGA_BIN_DIR=$PWD/build32_aved_hw_fame5/bin \
+  ./ci/blackbox.sh --driver=firesim --target=hw --cores=64 --warps=16 --threads=16 --app=demo
+```
+
+| card | FireSim platform | run targets | image / card named by |
+|---|---|---|---|
+| `u55c` | `vitis` (XRT) | `xrtsim`, `hw_emu`, `hw` | `XCLBIN_PATH` |
+| `v80` | `aved` (VRT) | `avedsim`, `sim`, `hw` | `VRT_VBIN_PATH`, `VRT_DEVICE_BDF` (discovered when unset) |
+
+`run-firesim` takes the card from `$(FPGA_BIN_DIR)/firesim.card`; the
+metasim targets need no image and default to the card of their platform
+(`FIRESIM_CARD` overrides). The architecture flags (`--cores`, `--warps`,
+`--threads`, `CONFIGS=`) must match the image's — they configure the runtime
+and, in the metasim, the model build. On the V80, `TARGET=hw` runs
+`ci/v80_preflight.sh` first (link state, cooldown between PDI loads), and a
+first `SIGINT`/`SIGTERM` stops the run cleanly (`FAILED`, exit 130/143; 124
+is the launch watchdog). A FireSim run uses the card's native driver
+environment — on the V80 that means the slashkit-linked Xilinx tools and the
+static shell in flash, as for the native `aved` backend.
+
+---
+
+## 9. Measured results
+
+### 9.1 U55C, default lane (FAME-1)
+
+1 cluster / 1 core / 4 warps / 4 threads, L1 only, `FPU_USE_DSP=0`, kernel
+clock 60 MHz. Kernel-only utilization: 131,578 LUTs (10.1%), 62,004 FFs,
+109 BRAM tiles, 8 URAM, 24 DSP. The kernel clock closes at WNS +5.283 ns
+(Fmax ≈ 87.8 MHz); the design-level WNS of +0.003 ns belongs to the Vitis
+shell's 450 MHz `hbm_aclk`, not to Vortex. `sgemm -n1024`:
+instrs=1,187,250,192, cycles=3,229,839,120, 84.6 s of kernel time (~153×
+faster than rtlsim on `sgemm -n32`). Instruction counts match rtlsim
+exactly; cycle counts differ −1.3%…+7.1% — the FASED timing model, not the
+core: FPGA and hw_emu agree exactly.
+
+### 9.2 V80, FAME-5, 64 cores NW=NT=16
+
+Image: 6 h 33 m end to end (synthesis ≈ 87 min, routing ≈ 2.5 h — ~300K
+routing overlaps at the first iteration, from the SLR2 concentration below),
+**timing met at 60 MHz**: WNS +0.329 ns, WHS +0.010 ns, zero failing
+endpoints.
 
 | resource | used | available | % |
 |---|---|---|---|
-| CLB LUTs | 131,578 | 1,303,680 | 10.09 |
-| — as logic | 79,900 | 1,303,680 | 6.13 |
-| — as memory | 51,678 | 600,960 | 8.60 |
-| CLB registers | 62,004 | 2,607,360 | 2.38 |
-| Block RAM tiles | 109 | 2,016 | 5.41 |
-| URAM | 8 | 960 | 0.83 |
-| DSP | 24 | 9,024 | 0.27 |
+| CLB LUTs | 974,424 | 2,574,208 | 37.9 |
+| — as logic | 662,530 | 2,574,208 | 25.7 |
+| — as memory (LUTRAM) | 311,894 | 1,287,104 | 24.2 |
+| Registers | 564,836 | 5,148,416 | 11.0 |
+| Block RAM tiles | 1,682.5 | 3,741 | 45.0 |
+| URAM | 105 | 1,925 | 5.5 |
+| DSP | 64 | 10,848 | 0.6 |
 
-DSP usage is near zero because this configuration builds the FPU from LUTs by
-choice (`FPU_USE_DSP=0`), not for want of DSPs.
+The threaded socket is 719K LUTs / 258K LUTRAM / 1,679 BRAM — one copy in
+place of an unthreadable ~14.1M LUTs. FireSim's own token infrastructure
+carries 224K FFs (more than the socket's 183K), and placement concentrates:
+SLR2 holds 91% of the FFs at 79% slice occupancy, SLR1 71% of its BRAM — the
+route-time driver, and the first place to look before raising `FREQUENCY`.
 
-### 5.2 Timing
+On the card:
 
-Kernel clock `clk_out1_firesim_clocking` closes at **WNS +5.283 ns** over
-548,101 endpoints with zero failing, implying Fmax ≈ 87.8 MHz against the
-60 MHz constraint. The design-level WNS of +0.003 ns belongs to the Vitis
-shell's 450 MHz `hbm_aclk`, **not** to Vortex — reading the global number as
-the kernel's inverts the conclusion.
+| app | instrs | cycles | IPC | target kHz | FMR | wall |
+|---|---|---|---|---|---|---|
+| demo `-n1` (16K pts) | 45,012 | 7,884 | 5.71 | 316 | 190 | 7 s |
+| demo (1M pts) | 625,664 | 3,460,483 | 0.18 | 378 | 159 | 16 s |
+| sgemm `-n1024` (1024³) | 296,816,640 | 145,714,145 | 2.04 | 462 | 130 | 323 s |
 
-### 5.3 Kernels
-
-| app | args | instrs | cycles | IPC |
-|---|---|---|---|---|
-| demo | -n64 | 2,444 | 6,429 | 0.380 |
-| vecadd | -n1024 | 6,160 | 18,837 | 0.327 |
-| sgemm | -n32 | 48,400 | 115,490 | 0.419 |
-| sgemm | -n1024 | 1,187,250,192 | 3,229,839,120 | 0.368 |
-
-`sgemm -n1024` completes in **84.6 s** of kernel time. Instruction counts match
-rtlsim exactly; cycle counts differ by −1.3% to +7.1%, which is the FASED
-memory timing model rather than the core — FPGA and hw_emu cycle counts agree
-exactly.
-
-For scale: `sgemm -n32` takes 1228 ms on rtlsim and 8 ms on the card, ~153×.
+Both memory-bound results sit on the timing model's ~34 B/cycle ceiling
+(§5.2). Cycle-exactness across builds: 4-core demo identical
+(`instrs=9776, cycles=15541`) on the native baseline, the unthreaded-FIRRTL
+build (`FAME5_THREADS=0`) and the threaded build.
 
 ---
 
-## 6. Relationship to upstream FireSim
+## 10. Relationship to upstream FireSim
 
-The FireSim checkout is a **git clone of the fork**, `vortexgpgpu/firesim`
-branch `vortex_3.x`, based on upstream tag 1.21.0. Every change Vortex needs in
-FireSim is a commit there, and `VERSION` pins the one this tree is built and
-tested against (`FIRESIM_REV`). `make stage` refuses a checkout that does not
-contain the pinned commit; being ahead of it is normal while developing the
-fork.
-
-The fork's changes are bug fixes and platform plumbing rather than divergence:
-
-| area | why |
-|---|---|
-| Vitis platform | host-memory base as a config field (`HostMemBaseAddressKey`), checked by the driver against the memory the binding resolved to; 4 GiB DRAM aperture; part read from the platform; vendor IP cores packaged with the kernel |
-| driver lifetime | tear the platform down at the end of `entry()`; a global `unique_ptr` is destroyed during static destruction, after XRT's own statics, and segfaults in the device registry |
-| driver build | the Vitis driver is compiled by the host toolchain: XRT needs the host glibc, and conda's start files do not link against glibc 2.34+ |
-| cycle accounting | `end_tcycle` is read absolute and never rebased, so it accumulates across runs and FMR divides a per-run quantity by a cumulative one |
-| build | Vitis 2024.2 fixes; package the flattened Vortex sources into the kernel |
-
-All are candidates for upstreaming.
+The FireSim checkout is a clone of the `vortexgpgpu/firesim` fork (branch
+`vortex_3.x`, based on upstream 1.21.0), consumed through `FIRESIM_PATH` and
+pinned by `FIRESIM_REV` in `VERSION`. `make stage` refuses a checkout that
+does not contain the pinned commit; being ahead of it is normal while
+developing the fork. The fork's changes are platform plumbing and bug fixes
+rather than divergence — the AVED platform (shim, register blocks, fabric
+clock gates, host-memory base as a config field), driver lifetime and
+toolchain fixes, cycle-accounting fixes, and kernel packaging — all
+candidates for upstreaming. Everything Vortex-specific (targets, wrapper,
+transport, FAME-5 conversion) lives in this repository and is staged in at
+build time.
 
 ---
 
-## 7. Design invariants
+## 11. Design invariants
 
-1. **`idBits` and `PLATFORM_MEMORY_ID_WIDTH` move together.** A disagreement is
-   padded or truncated silently. Raising either requires re-checking
-   utilization, not merely avoiding the `1 << idBits` overflow.
-2. **`SYNTHESIS` must reach the flattened tree.** Its absence is invisible
-   until place-and-route and costs hours.
-3. **Vortex's `PERF:` counters are the cycle authority.** FireSim's
-   `Target Cycles Emulated` is quantized by the step schedule.
-4. **The target only advances when stepped.** Any new driver operation that
-   waits on target state must step, and must know whether the signal it waits
-   on is a pulse or a level.
-5. **All-zero performance counters mean the instrument is absent**
-   (`PERF_ENABLE` off), not that the core is idle.
+1. **The target only advances when stepped.** Any new driver operation that
+   waits on target state must step, and must know whether the signal it
+   waits on is a pulse or a level.
+2. **`idBits` ↔ `PLATFORM_MEMORY_ID_WIDTH` move together**, and `addrBits` ↔
+   `VX_CFG_MEM_ADDR_WIDTH`; disagreements pad or truncate silently.
+3. **`SYNTHESIS` must reach the flattened tree** — its absence surfaces
+   hours later in place-and-route.
+4. **Vortex's `PERF:` counters are the cycle authority**, never
+   `Target Cycles Emulated`.
+5. **FAME-5 threads one module type, and its instances must be identical** —
+   IDs travel as ports, never parameters.
+6. **No BlackBox inside the threaded module** — it would be shared across
+   threads silently.
+7. **All-zero performance counters mean `PERF_ENABLE` is off**, not that the
+   core is idle.
+8. **LoadMem's chunk unit is 32-bit words**, not bytes.
+9. **`FAME5_THREADS=0` must stay cycle-identical to the threaded build** —
+   it is the anchor that separates conversion bugs from threading bugs.
 
 ---
 
-## 8. Known limitations
+## 12. Known limitations
 
-- **Metasimulation is dead.** FireSim's Verilator metasim builds and starts,
-  then deadlocks before target cycle 0 (65 threads in `futex_wait`, 0% CPU, no
-  output past `entering simif.run`). It is deliberately not fixed: the card
-  supersedes every purpose it served. Anyone reaching for it should expect this
-  rather than read the silence as a slow build.
-- **DCR reads are slow** by one MMIO round trip per target cycle (§3.4).
-- **Regression coverage is partial.** The kernels in §5.3 plus `conv3`,
-  `dogfood`, `dotproduct` and `mstress` pass on the card; the suite has not
-  been swept exhaustively, and a large share of it requires extensions this
-  configuration disables.
-- **The conda environment is not relocatable** as built. It records its own
-  prefix in every script shebang and in package metadata, so the tree must
-  stay where `build-setup.sh` created it, or be re-packaged with `conda-pack`
-  and unpacked with `conda-unpack` at the new location. See
-  [`../building_toolchain.md`](../building_toolchain.md) (section: FireSim).
+- **No RTL `$display`/asserts on `hw` or under FAME-5** (§6.2); the metasim
+  compiles them out too (no DPI linked). RTL-message debugging belongs to
+  `TARGET=sim`/`hw_emu` or rtlsim.
+- **DCR reads single-step** — one MMIO round trip per target cycle; batched
+  polling needs a latched response in the wrapper (target-side follow-up).
+- **FAME-5 excludes VM and graphics**: `VX_socket_top` does not carry their
+  ports and statically rejects those configurations.
+- **XLEN=64 is not wired through FireSim**: `addrBits` is pinned at 32
+  (§5.3).
+- **Metasim speed falls with thread count**: the 64-thread FAME-5 model runs
+  at a few tens of target cycles per second under Verilator — use it for
+  correctness and waves, the card for anything long.
+- **One host memory channel** bounds simulation speed under heavy memory
+  traffic (never target timing).
+- **The default memory model is a flat latency-bandwidth pipe** — no banks,
+  rows, refresh or HBM timing (§5.2).
+- **The conda environment is not relocatable** as built; re-package with
+  `conda-pack` to move it (see
+  [`../building_toolchain.md`](../building_toolchain.md)).

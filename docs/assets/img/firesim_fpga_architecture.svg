@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 1000" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+  </defs>
+  <style>
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .gt   { fill:#33404c; font-size:14px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .mono { font-family:"DejaVu Sans Mono", monospace; font-size:10.5px; fill:#1b2733; }
+    .monos{ font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#44525f; }
+    .dev  { fill:#fbfcfd; stroke:#33404c; stroke-width:2; }
+    .stat { fill:#f0f2f4; stroke:#9aa7b2; stroke-width:1.4; }
+    .rm   { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.8; }
+    .shim { fill:#e7f3e7; stroke:#3a7d44; stroke-width:1.4; }
+    .fst  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .fst2 { fill:#dde9f3; stroke:#2e5e82; stroke-width:1.4; }
+    .vx   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .vx2  { fill:#f2e2ee; stroke:#8e4a7e; stroke-width:1.4; }
+    .mem  { fill:#fdf6e9; stroke:#a8781f; stroke-width:1.4; }
+    .w    { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); }
+    .w2   { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); marker-start:url(#arr); }
+    .wm   { stroke:#a8781f; stroke-width:2.2; fill:none; marker-end:url(#arr); }
+    .wm2  { stroke:#a8781f; stroke-width:2.2; fill:none; marker-end:url(#arr); marker-start:url(#arr); }
+    .wc   { stroke:#3a7d44; stroke-width:1.4; fill:none; marker-end:url(#arrg); stroke-dasharray:5 3; }
+  </style>
+
+  <rect x="0" y="0" width="1480" height="1000" fill="#ffffff"/>
+  <text x="24" y="34" class="t">A Vortex instance on the FPGA — V80 (AVED shell), FAME-5 build</text>
+  <text x="24" y="56" class="tt">Everything inside pblock_slash is FireSim-generated.sv, one reconfigurable module. Solid orange = memory data; solid grey = control (MMIO); dashed green = clocks. The U55C build is the same picture with the Vitis shell around it and HBM[0:7] as the memory binding.</text>
+
+  <!-- ============== device ============== -->
+  <rect x="24" y="76" width="1432" height="820" class="dev"/>
+  <text x="40" y="100" class="gt">xcv80-lsva4737-2MHP-e-S</text>
+
+  <!-- ============== static region ============== -->
+  <rect x="44" y="116" width="300" height="700" class="stat"/>
+  <text x="60" y="140" class="th">AVED static region (in flash)</text>
+
+  <rect x="64" y="156" width="260" height="76" class="stat"/>
+  <text x="80" y="177" class="th">PCIe Gen5 ×8 + QDMA</text>
+  <text x="80" y="194" class="ts">BAR0 → AXI-Lite control network</text>
+  <text x="80" y="210" class="ts">(the HOST slave bridge is unused:</text>
+  <text x="80" y="225" class="ts">its reads never complete)</text>
+
+  <rect x="64" y="248" width="260" height="96" class="stat"/>
+  <text x="80" y="269" class="th">Base logic</text>
+  <text x="80" y="286" class="ts">uuid_rom · SMBus RPU · firewall ·</text>
+  <text x="80" y="302" class="ts">clock/reset: programs the kernel clock</text>
+  <text x="80" y="318" class="ts">to the linked frequency — no MMCM,</text>
+  <text x="80" y="334" class="mono">FREQUENCY=60 → 60.000 MHz</text>
+
+  <rect x="64" y="360" width="260" height="56" class="stat"/>
+  <text x="80" y="381" class="th">dfx_decoupler</text>
+  <text x="80" y="398" class="ts">isolates the RM during reprogramming</text>
+
+  <rect x="64" y="440" width="260" height="120" class="stat"/>
+  <text x="80" y="461" class="th">HBM VNOC (NoC)</text>
+  <text x="80" y="478" class="ts">Routes the RM's one wide master to the</text>
+  <text x="80" y="494" class="ts">HBM stacks. The MEM segment maps</text>
+  <text x="80" y="510" class="ts">32 GB at</text>
+  <text x="80" y="526" class="mono">0x40_0000_0000  (HOST_MEM_SP=MEM)</text>
+  <text x="80" y="543" class="ts">covering the target's whole 32-bit map</text>
+
+  <rect x="64" y="584" width="260" height="72" class="mem"/>
+  <text x="80" y="605" class="th">HBM2e — 32 GB</text>
+  <text x="80" y="622" class="ts">Functional target memory: every byte the</text>
+  <text x="80" y="638" class="ts">GPU reads or writes lives here; FASED</text>
+  <text x="80" y="653" class="ts">only decides *when* answers return</text>
+
+  <!-- ============== reconfigurable partition ============== -->
+  <rect x="372" y="116" width="1056" height="760" class="rm"/>
+  <text x="388" y="140" class="gt">Reconfigurable partition pblock_slash — RM “slash_firesim” = FireSim-generated.sv</text>
+
+  <!-- shim -->
+  <rect x="392" y="156" width="1016" height="80" class="shim"/>
+  <text x="408" y="177" class="th">AvedShim / SimulationMaster</text>
+  <text x="408" y="194" class="ts">Fingerprint 0x46697265 (“Fire”), transport gate at open; every FireSim MMIO register gets its own 16-byte AXI-Lite block</text>
+  <text x="408" y="210" class="ts">(the shell resolves AXI-Lite in 16 B units and LoadMem's R_DATA has read side effects), driver scales addresses ×4;</text>
+  <text x="408" y="226" class="ts">host-memory base check: the memory port must be bound at the elaborated base before any widget is touched</text>
+
+  <!-- widgets row -->
+  <rect x="392" y="252" width="230" height="120" class="fst"/>
+  <text x="408" y="273" class="th">PeekPoke bridge</text>
+  <text x="408" y="290" class="ts">The driver's hands: pokes</text>
+  <text x="408" y="305" class="mono">ctrl_dcr_req_*, ctrl_start</text>
+  <text x="408" y="321" class="ts">peeks</text>
+  <text x="408" y="336" class="mono">ctrl_busy, ctrl_dcr_rsp_*</text>
+  <text x="408" y="353" class="ts">step(n) = advance n target cycles</text>
+
+  <rect x="638" y="252" width="230" height="120" class="fst"/>
+  <text x="654" y="273" class="th">LoadMem widget</text>
+  <text x="654" y="290" class="ts">Bulk target-memory access from</text>
+  <text x="654" y="305" class="ts">the host, beside the timing model:</text>
+  <text x="654" y="321" class="ts">kernel images, buffers, readback.</text>
+  <text x="654" y="337" class="ts">Chunk unit = 32-bit words</text>
+
+  <rect x="884" y="252" width="230" height="120" class="fst"/>
+  <text x="900" y="273" class="th">Clock bridge</text>
+  <text x="900" y="290" class="ts">Generates the target clock token</text>
+  <text x="900" y="305" class="ts">stream; clockmodule counts</text>
+  <text x="900" y="321" class="mono">tcycle (target) / hcycle (host)</text>
+  <text x="900" y="338" class="ts">their ratio is FMR</text>
+
+  <rect x="1130" y="252" width="278" height="120" class="fst"/>
+  <text x="1146" y="273" class="th">FASED memory timing model</text>
+  <text x="1146" y="290" class="ts">Latency-bandwidth pipe, per-run settings</text>
+  <text x="1146" y="305" class="mono">readLatency=30 writeLatency=30</text>
+  <text x="1146" y="320" class="mono">maxReads=16 maxWrites=16</text>
+  <text x="1146" y="337" class="ts">functional half: ingress/egress queues,</text>
+  <text x="1146" y="352" class="ts">reorder buffer, host-memory master</text>
+
+  <!-- FAMETop -->
+  <rect x="392" y="396" width="1016" height="130" class="fst2"/>
+  <text x="408" y="417" class="th">FAMETop — the FAME-1 hub (SimWrapper)</text>
+  <text x="408" y="434" class="ts">Every wire between a bridge and the target is a token channel (ready/valid + payload). One target cycle fires exactly when every input</text>
+  <text x="408" y="450" class="ts">channel holds a token and every output channel has space; otherwise the target clock is gated and the design waits, cycle-accurately.</text>
+  <text x="408" y="466" class="ts">This is what host-decoupling means: the target cannot outrun the host, and the host cannot observe a half-advanced cycle.</text>
+  <text x="408" y="492" class="tt">Under FAME-5 the hub also carries one channel set per socket, multiplexed round-robin into the single threaded copy (next figure).</text>
+  <text x="408" y="508" class="tt">Clock gating on the V80 is a clock-enable conversion (FireSimFabricClockGate): the partition has no BUFGCE site.</text>
+
+  <!-- target -->
+  <rect x="392" y="550" width="1016" height="300" class="vx"/>
+  <text x="408" y="571" class="th">Target — VortexDUT ▸ VX_firesim_wrap ▸ Vortex</text>
+  <text x="408" y="588" class="ts">Control surface: DCR request/response + start/busy (poked by PeekPoke). Memory: one AXI4 port, 512-bit data, 32-bit address, 4-bit id.</text>
+
+  <rect x="412" y="604" width="420" height="130" class="vx2"/>
+  <text x="428" y="625" class="th">Single-copy logic (built once)</text>
+  <text x="428" y="642" class="ts">KMU (CTA dispatch) · DCR bus · global barrier unit ·</text>
+  <text x="428" y="658" class="ts">cluster: 64-way socket↔memory arbiter · VX_mem_to_axi</text>
+  <text x="428" y="675" class="ts">(tag buffer: 16 outstanding reads, 4-bit AXI id)</text>
+  <text x="428" y="700" class="tt">Everything here sees 64 sockets and does not know</text>
+  <text x="428" y="716" class="tt">they share one physical copy.</text>
+
+  <rect x="852" y="604" width="536" height="130" class="vx2"/>
+  <text x="868" y="625" class="th">g_sockets — 64 × VX_socket_top (NW=NT=16 shown)</text>
+  <text x="868" y="642" class="ts">Each socket: 1 core + I$/D$/LMEM, socket_id as a port.</text>
+  <text x="868" y="658" class="ts">FAME5=1 → one physical copy, VX_socket_top_threaded:</text>
+  <text x="868" y="674" class="ts">registers become 64-deep LUTRAM, SRAMs 64× deeper,</text>
+  <text x="868" y="690" class="ts">one socket advances per host cycle, round-robin.</text>
+  <text x="868" y="715" class="monos">unthreaded: ~14.1M LUTs (5.5× the V80) — threaded: 719K LUTs, routed at 60 MHz</text>
+
+  <text x="408" y="762" class="ts">Routed 64-core NW=NT=16 image, whole device: 974K LUTs (37.9%) · 565K FFs (11%) · 311K LUTRAM (24%) · 1,683 BRAM36 (45%) ·</text>
+  <text x="408" y="778" class="ts">105 URAM (5.5%) · 64 DSP · WNS +0.33 ns at 60 MHz</text>
+
+  <!-- annotations under device -->
+  <text x="40" y="922" class="tt">Control path: PCIe BAR0 → AXI-Lite → shim register blocks → widget MMIO. Memory data path: FASED / LoadMem host-memory master → HBM VNOC → HBM.</text>
+  <text x="40" y="940" class="tt">Host clock: free-running 60 MHz from the shell. Target clock: the host clock, enabled only on token-complete cycles — the target has no clock of its own.</text>
+
+  <!-- ============== wires ============== -->
+  <!-- control: PCIe -> shim -->
+  <path d="M 324 194 L 392 194" class="w2"/>
+  <!-- shim -> widgets -->
+  <line x1="507" y1="236" x2="507" y2="252" class="w"/>
+  <line x1="753" y1="236" x2="753" y2="252" class="w"/>
+  <line x1="999" y1="236" x2="999" y2="252" class="w"/>
+  <line x1="1269" y1="236" x2="1269" y2="252" class="w"/>
+  <!-- widgets <-> hub -->
+  <line x1="507" y1="372" x2="507" y2="396" class="w2"/>
+  <line x1="753" y1="372" x2="753" y2="396" class="w2"/>
+  <line x1="999" y1="372" x2="999" y2="396" class="w2"/>
+  <line x1="1269" y1="372" x2="1269" y2="396" class="w2"/>
+  <!-- hub <-> target -->
+  <line x1="900" y1="526" x2="900" y2="550" class="w2"/>
+  <!-- memory: FASED -> (gap between widgets and hub) -> vnoc -> hbm -->
+  <path d="M 1130 356 C 1112 356, 1112 384, 1094 384 L 420 384 C 386 384, 380 420, 344 470" class="wm2"/>
+  <line x1="194" y1="560" x2="194" y2="584" class="wm2"/>
+  <!-- loadmem joins the memory path in the gap -->
+  <path d="M 753 372 L 753 384" class="wm"/>
+  <!-- clock: base logic -> (gap between shim and widgets) -> clock bridge -->
+  <path d="M 324 300 C 356 300, 356 244, 420 244 L 940 244 L 940 252" class="wc" opacity="0.7"/>
+  <!-- sockets to arbiter -->
+  <line x1="852" y1="669" x2="832" y2="669" class="w2"/>
+</svg>
