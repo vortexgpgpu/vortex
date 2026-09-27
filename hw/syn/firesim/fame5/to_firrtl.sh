@@ -10,8 +10,10 @@
 set -euo pipefail
 IN=$1 TOP=$2 OUT=$3 KEEP=$4 NEWTOP=${5:-$2} PRE=${6:-}
 Y=${YOSYS:-yosys}
-W=$(mktemp -d)
-trap 'rm -rf "$W"' EXIT
+# Intermediate files live beside the output (kept: the Yosys log and the
+# unrepaired FIRRTL are what one reads when a later step rejects the result).
+W=$(dirname "$(realpath -m "$OUT")")/$(basename "$OUT" .fir).work
+rm -rf "$W" && mkdir -p "$W"
 REN=""
 [ "$NEWTOP" != "$TOP" ] && REN="rename $TOP $NEWTOP"
 $Y -q -l "$W/y.log" -p "

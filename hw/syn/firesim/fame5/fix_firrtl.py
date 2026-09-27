@@ -1,224 +1,181 @@
 #!/usr/bin/env python3
-"""Repair Yosys write_firrtl's output.
+"""Repair Yosys write_firrtl's output so the FIRRTL compiler and Verilator take it.
 
 usage: fix_firrtl.py <in.fir> <out.fir>
 
+Each rewrite keeps the circuit's meaning; they work on expression trees parsed
+in one linear pass (a converted Vortex has lines of over a million characters,
+nested thousands deep).
+
 1. Instance outputs driving split wires. Yosys emits
      cat(a, cat(b, c)) <= inst.port
-   which FIRRTL does not allow; each piece gets its slice instead:
-     c <= bits(inst.port, wc-1, 0); b <= bits(..., wc+wb-1, wc); ...
+   which FIRRTL does not allow; each piece gets its slice instead.
 
-2. $shift cells with a signed amount, below.
+2. Shifts by a signed amount ($shift, B signed). Yosys emits
+     mux(B < 0, bits(dshl(A, <clamped B>), 0, W), dshr(A, B))
+   which is not FIRRTL (`<`), has bits() bounds reversed, and shifts left by B
+   rather than -B. $shift is Y = A >> B, and Y = A << -B for B < 0, so it becomes
+     mux(lt(asSInt(B), SInt<1>(0)),
+         bits(dshl(pad(A, W), min(-B, W)), W-1, 0),
+         bits(pad(dshr(A, B), W), W-1, 0))
 
-5. Zero tests of signed values. Yosys's logic ops test each operand with
-   neq(x, UInt<1>("h0")), even when x is asSInt(...), which FIRRTL rejects as
-   a signed/unsigned comparison. x != 0 does not depend on the sign, so the
-   asSInt is dropped (likewise for eq).
+3. Left shifts. Yosys writes bits(dshl(a, min(b, 2^19-1)), hi, lo): correct,
+   but the intermediate is ~2^19 bits wide, beyond Verilator's constant limit.
+   Only bits hi..lo are kept, so the clamp becomes the first 2^k-1 > hi.
 
-4. Deep expressions. The FIRRTL parser recurses once per nesting level, and
-   Yosys writes long cat()/mux() chains (thousands deep for wide arbiters);
-   any subexpression deeper than MAX_DEPTH is hoisted into a node.
+4. Zero tests of signed values: neq(asSInt(x), 0) is rejected as a
+   signed/unsigned comparison; x != 0 does not depend on the sign, so the
+   asSInt goes (likewise for eq).
 
-3. Left shifts. Yosys writes bits(dshl(a, min(b, 2^19-1)), hi, 0): correct, but
-   the intermediate is ~2^19 bits wide, beyond Verilator's constant limit. Only
-   bits hi..0 are kept, so the clamp is lowered to the first 2^k-1 > hi.
-
-Yosys emits  mux(B < 0, bits(dshl(A, <clamped B>), 0, W), dshr(A, B))
-which is not FIRRTL (`<`), has bits() bounds reversed, and shifts left by B
-rather than -B. $shift semantics are: Y = A >> B, and for B < 0, Y = A << -B.
-This rewrites each occurrence to
-
-  mux(lt(asSInt(B), SInt<1>(0)),
-      bits(dshl(pad(A, W), <min(-B, W)>), W-1, 0),
-      bits(pad(dshr(A, B), W), W-1, 0))
-
-which needs no width but W, taken from the original bits(..., 0, W).
+5. Deep expressions. The FIRRTL parser recurses once per nesting level, and
+   Yosys writes cat()/mux() chains thousands deep for wide arbiters; any
+   subexpression deeper than MAX_DEPTH is hoisted into a node.
 """
+import re
 import sys
 
-sys.setrecursionlimit(100000)  # expressions nest thousands deep
+sys.setrecursionlimit(100000)  # transforms recurse over trees thousands deep
 
-
-def match_paren(s, i):
-    """s[i] == '('; return the index of its matching ')'."""
-    depth = 0
-    for j in range(i, len(s)):
-        if s[j] == "(":
-            depth += 1
-        elif s[j] == ")":
-            depth -= 1
-            if depth == 0:
-                return j
-    raise ValueError("unbalanced")
-
-
-def split_args(s):
-    """Split a comma-separated argument list at top level."""
-    out, depth, cur = [], 0, ""
-    for ch in s:
-        if ch == "(":
-            depth += 1
-        elif ch == ")":
-            depth -= 1
-        if ch == "," and depth == 0:
-            out.append(cur.strip())
-            cur = ""
-        else:
-            cur += ch
-    out.append(cur.strip())
-    return out
-
-
-def fix_line(line):
-    count = 0
-    start = 0
-    while True:
-        i = line.find("mux(", start)
-        if i < 0:
-            return line, count
-        j = match_paren(line, i + 3)
-        args = split_args(line[i + 4:j])
-        if len(args) == 3 and args[0].endswith(" < 0"):
-            b = args[0][: -len(" < 0")]
-            left, right = args[1], args[2]
-            # left: bits(dshl(A, S), 0, W)
-            inner = split_args(left[len("bits("):-1])
-            dshl = inner[0]
-            w = int(inner[2])
-            a = split_args(dshl[len("dshl("):-1])[0]
-            assert right.startswith("dshr(")
-            c = w.bit_length()
-            mag = f"asUInt(neg(asSInt({b})))"
-            amt = f"bits(mux(gt({mag}, UInt<{c}>({w})), UInt<{c}>({w}), {mag}), {c - 1}, 0)"
-            new = (f"mux(lt(asSInt({b}), SInt<1>(0)), "
-                   f"bits(dshl(pad({a}, {w}), {amt}), {w - 1}, 0), "
-                   f"bits(pad(dshr({a}, {b}), {w}), {w - 1}, 0))")
-            line = line[:i] + new + line[j + 1:]
-            count += 1
-            start = i + len(new)
-        else:
-            start = i + 4
-
-
-import re
-
-BIG = "UInt<19>(524287)"
 MAX_DEPTH = 48
-LITERAL = re.compile(r"^[US]Int<\d+>\(")
+BIG = "UInt<19>(524287)"
+
+TOKEN = re.compile(r"\s*(?:(?P<lit>[US]Int(?:<\d+>)?\([^()]*\))"
+                   r"|(?P<call>[A-Za-z_]\w*)\("
+                   r"|(?P<close>\))|(?P<comma>,)|(?P<lt><)"
+                   r"|(?P<leaf>[^\s(),<]+))")
+ZERO = re.compile(r'^UInt(<\d+>)?\(("h0+"|0)\)$')
+DECL = re.compile(r"\s+(?:input|output|wire|reg) (\S+?)\s*: UInt<(\d+)>")
+STMT = re.compile(r"(\s+)(node \S+ = |\S+ <= )(.*?)(\s*@\[.*)?$")
 
 
-def parse(e):
-    """Expression -> (text, children) tree; literals and references are leaves."""
-    e = e.strip()
-    m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\(", e)
-    if m and not LITERAL.match(e) and match_paren(e, len(m.group(1))) == len(e) - 1:
-        return (m.group(1), [parse(a) for a in split_args(e[len(m.group(1)) + 1:-1])])
-    return (e, None)
+class Node:
+    """An operation: op(args...). Leaves (references, literals, integers) are str."""
+    __slots__ = ("op", "args")
+
+    def __init__(self, op, args):
+        self.op, self.args = op, args
+
+
+def parse(text):
+    """One linear pass over text; `B < 0` (only in rewrite 2) parses as Node('<')."""
+    stack = [Node("", [])]
+    items = [[]]  # tokens of the argument being read, per open call
+    pos = 0
+    while pos < len(text):
+        m = TOKEN.match(text, pos)
+        if not m or m.end() == pos:
+            if text[pos:].strip() == "":
+                break
+            raise ValueError(f"cannot tokenize at: {text[pos:pos + 60]}")
+        pos = m.end()
+        kind = m.lastgroup
+        if kind == "call":
+            node = Node(m.group("call"), [])
+            items[-1].append(node)
+            stack.append(node)
+            items.append([])
+        elif kind in ("comma", "close"):
+            arg = items[-1]
+            if arg:
+                stack[-1].args.append(arg[0] if len(arg) == 1 else Node("<", [arg[0], arg[2]]))
+            items[-1] = []
+            if kind == "close":
+                stack.pop()
+                items.pop()
+        elif kind == "lt":
+            items[-1].append("<")
+        else:
+            items[-1].append(m.group(kind))
+    arg = items[0]
+    return arg[0] if len(arg) == 1 else Node("<", [arg[0], arg[2]])
 
 
 def emit(t):
-    op, kids = t
-    return op if kids is None else f"{op}({', '.join(emit(k) for k in kids)})"
-
-
-def hoist(t, nodes, ns, indent):
-    """Rewrite t so no expression exceeds MAX_DEPTH; returns (tree, depth)."""
-    op, kids = t
-    if kids is None:
-        return t, 0
-    new, depth = [], 0
-    for k in kids:
-        k2, d = hoist(k, nodes, ns, indent)
-        if d >= MAX_DEPTH:
-            name = f"_fx_{ns[0]}"
-            ns[0] += 1
-            nodes.append(f"{indent}node {name} = {emit(k2)}\n")
-            k2, d = (name, None), 0
-        new.append(k2)
-        depth = max(depth, d)
-    return (op, new), depth + 1
-
-
-ZERO = re.compile(r'^UInt(<\d+>)?\(("h0+"|0)\)$')
-
-
-def fix_zero_tests(line):
-    count, start = 0, 0
-    while True:
-        m = re.compile(r"\b(n?eq)\(asSInt\(").search(line, start)
-        if not m:
-            return line, count
-        i = m.start()
-        j = match_paren(line, m.end(1))
-        args = split_args(line[m.end(1) + 1:j])
-        if len(args) == 2 and ZERO.match(args[1]) and args[0].startswith("asSInt("):
-            inner = args[0][len("asSInt("):-1]
-            new = f"{m.group(1)}({inner}, {args[1]})"
-            line = line[:i] + new + line[j + 1:]
-            count += 1
-            start = i + len(new)
-        else:
-            start = m.end()
-
-
-def fix_deep(line, ns):
-    m = re.match(r"(\s+)(node \S+ = |\S+ <= )(.*?)(\s*@\[.*)?$", line.rstrip("\n"))
-    if not m:
-        return None
-    indent, head, rhs, info = m.group(1), m.group(2), m.group(3), m.group(4) or ""
-    d = cur = 0
-    for c in rhs:
-        if c == "(":
-            cur += 1
-            d = max(d, cur)
-        elif c == ")":
-            cur -= 1
-    if d <= MAX_DEPTH:
-        return None
-    nodes = []
-    t, _ = hoist(parse(rhs), nodes, ns, indent)
-    return nodes + [f"{indent}{head}{emit(t)}{info}\n"]
-
-
-def fix_dshl(line):
-    count, start = 0, 0
-    while True:
-        i = line.find("bits(dshl(", start)
-        if i < 0:
-            return line, count
-        j = match_paren(line, i + 4)
-        args = split_args(line[i + 5:j])
-        if len(args) == 3 and BIG in args[0]:
-            hi = int(args[1])
-            d = args[0]
-            dargs = split_args(d[len("dshl("):-1])
-            amt = dargs[1]
-            m = re.fullmatch(r"asUInt\(mux\(gt\((.*), UInt<19>\(524287\)\), UInt<19>\(524287\), bits\((.*), 18, 0\)\)\)", amt)
-            if m and m.group(1) == m.group(2):
-                b = m.group(1)
-                k = (hi + 1).bit_length()
-                mx = (1 << k) - 1
-                amt = f"asUInt(mux(gt({b}, UInt<{k}>({mx})), UInt<{k}>({mx}), bits(pad({b}, {k}), {k - 1}, 0)))"
-                new = f"bits(dshl({dargs[0]}, {amt}), {args[1]}, {args[2]})"
-                line = line[:i] + new + line[j + 1:]
-                count += 1
-                start = i + len(new)
+    """Iterative, so an unhoisted tree of any depth can be printed."""
+    out, work = [], [t]
+    while work:
+        x = work.pop()
+        if isinstance(x, str):
+            out.append(x)
+        elif isinstance(x, Node):
+            if x.op == "<":
+                work += [x.args[1], " < ", x.args[0]]
                 continue
-        start = i + 5
+            work.append(")")
+            for i, a in enumerate(reversed(x.args)):
+                work.append(a)
+                if i < len(x.args) - 1:
+                    work.append(", ")
+            work.append(f"{x.op}(")
+    return "".join(out)
 
 
-DECL = re.compile(r"\s+(?:input|output|wire|reg) (\S+?)\s*: UInt<(\d+)>")
+def lit(w, v):
+    return f"UInt<{w}>({v})"
 
 
-def cat_leaves(expr):
+counts = dict(shift=0, shl=0, zero=0, hoist=0, cat=0)
+
+
+def rewrite(t):
+    """Rewrites 2-4, bottom-up."""
+    if isinstance(t, str):
+        return t
+    t.args = [rewrite(a) for a in t.args]
+    a = t.args
+    # 2. mux(B < 0, bits(dshl(A, S), 0, W), dshr(A, B))
+    if t.op == "mux" and len(a) == 3 and isinstance(a[0], Node) and a[0].op == "<":
+        b, w = a[0].args[0], int(a[1].args[2])
+        A = a[1].args[0].args[0]
+        c = w.bit_length()
+        mag = Node("asUInt", [Node("neg", [Node("asSInt", [b])])])
+        amt = Node("bits", [Node("mux", [Node("gt", [mag, lit(c, w)]), lit(c, w), mag]), str(c - 1), "0"])
+        counts["shift"] += 1
+        return Node("mux", [Node("lt", [Node("asSInt", [b]), "SInt<1>(0)"]),
+                            Node("bits", [Node("dshl", [Node("pad", [A, str(w)]), amt]), str(w - 1), "0"]),
+                            Node("bits", [Node("pad", [Node("dshr", [A, b]), str(w)]), str(w - 1), "0"])])
+    # 3. bits(dshl(A, asUInt(mux(gt(b, BIG), BIG, bits(b, 18, 0)))), hi, lo)
+    if (t.op == "bits" and len(a) == 3 and isinstance(a[0], Node) and a[0].op == "dshl"
+            and isinstance(a[0].args[1], Node) and a[0].args[1].op == "asUInt"):
+        mx = a[0].args[1].args[0]
+        if (isinstance(mx, Node) and mx.op == "mux" and mx.args[1] == BIG
+                and isinstance(mx.args[0], Node) and mx.args[0].op == "gt" and mx.args[0].args[1] == BIG):
+            b = mx.args[0].args[0]
+            k = (int(a[1]) + 1).bit_length()
+            m = (1 << k) - 1
+            a[0].args[1] = Node("asUInt", [Node("mux", [Node("gt", [b, lit(k, m)]), lit(k, m),
+                                                       Node("bits", [Node("pad", [b, str(k)]), str(k - 1), "0"])])])
+            counts["shl"] += 1
+    # 4. (n)eq(asSInt(x), 0)
+    if (t.op in ("eq", "neq") and len(a) == 2 and isinstance(a[0], Node) and a[0].op == "asSInt"
+            and isinstance(a[1], str) and ZERO.match(a[1])):
+        t.args[0] = a[0].args[0]
+        counts["zero"] += 1
+    return t
+
+
+def hoist(t, nodes, indent):
+    """5. Returns (tree, depth) with every deeper subexpression moved to a node."""
+    if isinstance(t, str):
+        return t, 0
+    depth = 0
+    for i, k in enumerate(t.args):
+        k2, d = hoist(k, nodes, indent)
+        if d >= MAX_DEPTH:
+            name = f"_fx_{counts['hoist']}"
+            counts["hoist"] += 1
+            nodes.append(f"{indent}node {name} = {emit(k2)}\n")
+            k2, d = name, 0
+        t.args[i] = k2
+        depth = max(depth, d)
+    return t, depth + 1
+
+
+def cat_leaves(t):
     """cat(x, cat(y, z)) -> [x, y, z] (most significant first)."""
-    expr = expr.strip()
-    if not expr.startswith("cat("):
-        return [expr]
-    out = []
-    for a in split_args(expr[4:match_paren(expr, 3)]):
-        out += cat_leaves(a)
-    return out
+    if isinstance(t, Node) and t.op == "cat":
+        return [l for a in t.args for l in cat_leaves(a)]
+    return [emit(t)]
 
 
 def fix_cat_lhs(line, widths):
@@ -227,17 +184,21 @@ def fix_cat_lhs(line, widths):
         return None
     indent, lhs, rhs, info = m.group(1), m.group(2), m.group(3), m.group(4) or ""
     out, lo = [], 0
-    for leaf in reversed(cat_leaves(lhs)):
+    for leaf in reversed(cat_leaves(parse(lhs))):
         if leaf not in widths:
             sys.exit(f"fix_firrtl: no width for {leaf} in: {line.strip()[:120]}")
         w = widths[leaf]
         out.append(f"{indent}{leaf} <= bits({rhs}, {lo + w - 1}, {lo}){info}\n")
         lo += w
+    counts["cat"] += 1
     return out
 
 
-total = cats = shls = zeros = 0
-hoisted = [0]
+def needs_work(line):
+    return (" < 0" in line or BIG in line or "eq(asSInt(" in line
+            or line.count("(") > MAX_DEPTH)
+
+
 widths = {}
 with open(sys.argv[1]) as f, open(sys.argv[2], "w") as o:
     for line in f:
@@ -250,22 +211,17 @@ with open(sys.argv[1]) as f, open(sys.argv[2], "w") as o:
             fixed = fix_cat_lhs(line, widths)
             if fixed:
                 o.writelines(fixed)
-                cats += 1
                 continue
-        if " < 0" in line:
-            line, n = fix_line(line)
-            total += n
-        if BIG in line:
-            line, n = fix_dshl(line)
-            shls += n
-        if "asSInt(" in line and "eq(asSInt(" in line:
-            line, n = fix_zero_tests(line)
-            zeros += n
-        if line.count("(") > MAX_DEPTH:
-            deep = fix_deep(line, hoisted)
-            if deep:
-                o.writelines(deep)
+        if needs_work(line):
+            m = STMT.match(line.rstrip("\n"))
+            if m:
+                indent, head, rhs, info = m.group(1), m.group(2), m.group(3), m.group(4) or ""
+                nodes = []
+                t, _ = hoist(rewrite(parse(rhs)), nodes, indent)
+                o.writelines(nodes)
+                o.write(f"{indent}{head}{emit(t)}{info}\n")
                 continue
         o.write(line)
-print(f"fix_firrtl: rewrote {total} signed shifts, {cats} concatenated connects, {shls} left shifts, "
-      f"{zeros} signed zero tests, hoisted {hoisted[0]} deep subexpressions")
+print(f"fix_firrtl: rewrote {counts['shift']} signed shifts, {counts['cat']} concatenated connects, "
+      f"{counts['shl']} left shifts, {counts['zero']} signed zero tests, "
+      f"hoisted {counts['hoist']} deep subexpressions")
