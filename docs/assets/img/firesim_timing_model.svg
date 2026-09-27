@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 960" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+  </defs>
+  <style>
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .gt   { fill:#33404c; font-size:14px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .mono { font-family:"DejaVu Sans Mono", monospace; font-size:10.5px; fill:#1b2733; }
+    .monos{ font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#44525f; }
+    .br   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .tgt  { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .tok  { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .stal { fill:#fdf6e9; stroke:#a8781f; stroke-width:1.4; }
+    .grp  { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.5; }
+    .w    { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); }
+    .w2   { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); marker-start:url(#arr); }
+    .tick { stroke:#9aa7b2; stroke-width:1; }
+    .dot  { fill:#3a7d44; }
+    .nodot{ fill:none; stroke:#a8781f; stroke-width:1.6; }
+  </style>
+
+  <rect x="0" y="0" width="1480" height="960" fill="#ffffff"/>
+  <text x="24" y="34" class="t">How simulation timing is modelled</text>
+  <text x="24" y="56" class="tt">Three layers, strictly separated: token exchange decides *when a target cycle may happen*; timing models decide *what latency the target observes*; the driver decides *how many cycles to ask for*. Wall-clock speed never leaks into target time.</text>
+
+  <!-- ===== layer 1: tokens ===== -->
+  <rect x="50" y="80" width="1380" height="270" class="grp"/>
+  <text x="68" y="104" class="gt">1 — Host decoupling (FAME-1): the target clock is a resource, not a fact</text>
+
+  <rect x="80" y="124" width="200" height="60" class="br"/>
+  <text x="96" y="145" class="th">PeekPoke</text>
+  <text x="96" y="162" class="ts">tokens on demand (step)</text>
+  <rect x="80" y="196" width="200" height="60" class="br"/>
+  <text x="96" y="217" class="th">FASED</text>
+  <text x="96" y="234" class="ts">one token per mem beat</text>
+  <rect x="80" y="268" width="200" height="60" class="br"/>
+  <text x="96" y="289" class="th">Clock bridge</text>
+  <text x="96" y="306" class="ts">the cycle budget itself</text>
+
+  <!-- channels -->
+  <g>
+    <line x1="280" y1="154" x2="460" y2="180" class="w2"/>
+    <line x1="280" y1="226" x2="460" y2="220" class="w2"/>
+    <line x1="280" y1="298" x2="460" y2="260" class="w2"/>
+    <circle cx="360" cy="163" r="5" class="dot"/>
+    <circle cx="385" cy="167" r="5" class="dot"/>
+    <circle cx="360" cy="224" r="5" class="dot"/>
+    <circle cx="382" cy="248" r="5" class="nodot"/>
+  </g>
+  <text x="300" y="140" class="tt">token channels (ready/valid queues)</text>
+
+  <rect x="460" y="150" width="330" height="140" class="tgt"/>
+  <text x="476" y="171" class="th">FAMETop hub + target</text>
+  <text x="476" y="190" class="ts">Fires one target cycle when EVERY input</text>
+  <text x="476" y="206" class="ts">channel holds a token and every output</text>
+  <text x="476" y="222" class="ts">has space. Otherwise the clock enable</text>
+  <text x="476" y="238" class="ts">stays low: the target is frozen mid-state,</text>
+  <text x="476" y="254" class="ts">not observing time. ○ = the missing token</text>
+  <text x="476" y="270" class="ts">that is gating the cycle right now.</text>
+
+  <rect x="830" y="124" width="580" height="204" class="tok"/>
+  <text x="846" y="145" class="th">Why this is exact</text>
+  <text x="846" y="163" class="ts">The target cannot advance past a bridge that has not answered, and a bridge</text>
+  <text x="846" y="179" class="ts">cannot answer early: however slow the host is — PCIe hiccups, a paused driver,</text>
+  <text x="846" y="195" class="ts">Verilator instead of silicon — the target sees the identical cycle sequence.</text>
+  <text x="846" y="212" class="ts">Metasim and FPGA runs agree cycle-for-cycle for this reason.</text>
+  <text x="846" y="238" class="ts">Two clocks, never conflated:</text>
+  <text x="858" y="257" class="mono">tcycle — target cycles advanced (clockmodule; Vortex PERF: cycles)</text>
+  <text x="858" y="274" class="mono">hcycle — host cycles spent simulating them</text>
+  <text x="858" y="291" class="mono">FMR = hcycle/tcycle;  target freq = host_freq / FMR</text>
+  <text x="846" y="312" class="tt">64-core FAME-5 on the V80: 60 MHz / FMR 130–190 ≈ 320–460 kHz of target time</text>
+
+  <!-- ===== layer 2: memory timing ===== -->
+  <rect x="50" y="374" width="1380" height="250" class="grp"/>
+  <text x="68" y="398" class="gt">2 — Observed latency: FASED's timing model, in target cycles</text>
+
+  <text x="68" y="422" class="ts">The memory the GPU sees is split in two. The functional half reads/writes real HBM through the host memory port. The timing half is a latency-bandwidth</text>
+  <text x="68" y="438" class="ts">pipe that schedules, in target time, when each response is released. If HBM is slow, target time simply stops until the data is there — the GPU never notices.</text>
+
+  <line x1="90" y1="490" x2="1200" y2="490" class="tick"/>
+  <text x="90" y="478" class="tt">target time →</text>
+  <g>
+    <line x1="180" y1="482" x2="180" y2="498" class="tick"/>
+    <text x="150" y="516" class="mono">T: AR accepted</text>
+    <line x1="660" y1="482" x2="660" y2="498" class="tick"/>
+    <text x="590" y="516" class="mono">T+30: R data released</text>
+    <rect x="180" y="530" width="480" height="26" class="stal"/>
+    <text x="196" y="548" class="monos">readLatency = 30 target cycles (runtime register, +mm_readLatency_0=…)</text>
+    <line x1="850" y1="482" x2="850" y2="498" class="tick"/>
+    <text x="800" y="516" class="mono">≤16 reads in flight</text>
+  </g>
+  <text x="90" y="590" class="ts">Bandwidth ceiling of this model: 16 outstanding × 64 B / 30 cycles ≈ 34 B per target cycle for the whole GPU — sgemm at 64 cores runs into exactly this.</text>
+  <text x="90" y="608" class="tt">Counters (totalReads, readMaxReqs, …) are read from the model over MMIO and printed by the driver on every stall report.</text>
+
+  <!-- ===== layer 3: stepping ===== -->
+  <rect x="50" y="648" width="1380" height="272" class="grp"/>
+  <text x="68" y="672" class="gt">3 — The driver's schedule: adaptive step batching (firesim_sim.cpp)</text>
+
+  <text x="68" y="696" class="ts">The target only moves when stepped, and each poll costs a thread handoff plus an MMIO round trip. The driver grows the batch ×4 from a floor of 16 target</text>
+  <text x="68" y="712" class="ts">cycles up to a ceiling (default 100,000; VORTEX_FIRESIM_STEP_BATCH), and drops back to the floor whenever the target goes idle:</text>
+
+  <line x1="90" y1="762" x2="1390" y2="762" class="tick"/>
+  <g>
+    <rect x="90"  y="744" width="34"  height="36" class="br"/><text x="96"  y="797" class="monos">16</text>
+    <rect x="128" y="744" width="52"  height="36" class="br"/><text x="138" y="797" class="monos">64</text>
+    <rect x="184" y="744" width="86"  height="36" class="br"/><text x="204" y="797" class="monos">256</text>
+    <rect x="274" y="744" width="130" height="36" class="br"/><text x="310" y="797" class="monos">1024</text>
+    <rect x="408" y="744" width="200" height="36" class="br"/><text x="480" y="797" class="monos">4096</text>
+    <rect x="612" y="744" width="290" height="36" class="br"/><text x="720" y="797" class="monos">…×4…</text>
+    <rect x="906" y="744" width="360" height="36" class="br"/><text x="1010" y="797" class="monos">100000 (ceiling)</text>
+    <text x="1280" y="768" class="ts">busy sampled after each batch</text>
+  </g>
+
+  <text x="68" y="836" class="ts">Consequences worth knowing:</text>
+  <text x="80" y="856" class="ts">• “Target Cycles Emulated” is quantized to this schedule — Vortex's own PERF: cycles counter is the cycle authority.</text>
+  <text x="80" y="874" class="ts">• A short kernel is only *observed* to finish at the next poll; the floor of 16 exists so a launch's busy edge is never stepped over.</text>
+  <text x="80" y="892" class="ts">• DCR reads poll one cycle at a time (dcr_rsp_valid is a one-cycle pulse), bounded by VORTEX_FIRESIM_DCR_POLL_ROUNDS — slow, but exact.</text>
+</svg>

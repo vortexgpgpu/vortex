@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+  </defs>
+  <style>
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .gt   { fill:#33404c; font-size:14px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .mono { font-family:"DejaVu Sans Mono", monospace; font-size:10.5px; fill:#1b2733; }
+    .monos{ font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#44525f; }
+    .sock { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .mux  { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .core { fill:#f2e2ee; stroke:#8e4a7e; stroke-width:1.8; }
+    .st   { fill:#fdf6e9; stroke:#a8781f; stroke-width:1.4; }
+    .grp  { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.5; }
+    .w    { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); }
+    .w2   { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); marker-start:url(#arr); }
+    .tick { stroke:#9aa7b2; stroke-width:1; }
+  </style>
+
+  <rect x="0" y="0" width="1480" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t">FAME-5 model multithreading — 64 sockets through one physical copy</text>
+  <text x="24" y="56" class="tt">Golden Gate threads instances of exactly one module; the annotation names it, the pass rewrites it. Nothing about Vortex's architecture changes — the same 64 sockets exist in target time, they just take turns using the silicon.</text>
+
+  <!-- ===== left: what the target sees ===== -->
+  <rect x="50" y="86" width="400" height="430" class="grp"/>
+  <text x="68" y="110" class="gt">Target view (unchanged)</text>
+  <text x="68" y="128" class="ts">64 identical instances of VX_socket_top,</text>
+  <text x="68" y="144" class="ts">each with its own token channels:</text>
+
+  <rect x="80" y="162" width="340" height="46" class="sock"/>
+  <text x="96" y="182" class="mono">g_sockets[0] : VX_socket_top</text>
+  <text x="96" y="198" class="monos">socket_id=0 · dcr/mem/kmu/gbar/busy channels</text>
+  <rect x="80" y="216" width="340" height="46" class="sock"/>
+  <text x="96" y="236" class="mono">g_sockets[1] : VX_socket_top</text>
+  <text x="96" y="252" class="monos">socket_id=1</text>
+  <rect x="80" y="270" width="340" height="46" class="sock"/>
+  <text x="96" y="290" class="mono">g_sockets[2] : VX_socket_top</text>
+  <text x="96" y="306" class="monos">socket_id=2</text>
+  <text x="245" y="336" class="gt">⋮</text>
+  <rect x="80" y="350" width="340" height="46" class="sock"/>
+  <text x="96" y="370" class="mono">g_sockets[63] : VX_socket_top</text>
+  <text x="96" y="386" class="monos">socket_id=63</text>
+
+  <text x="68" y="426" class="ts">Identical is a hard requirement: same module,</text>
+  <text x="68" y="442" class="ts">same parameters, same ports. CORE_ID was a</text>
+  <text x="68" y="458" class="ts">parameter (64 different modules); under</text>
+  <text x="68" y="474" class="mono">VX_CFG_FAME5</text>
+  <text x="185" y="474" class="ts">it is the socket_id port, so all</text>
+  <text x="68" y="490" class="ts">64 elaborate to one module.</text>
+
+  <!-- ===== middle: mux ===== -->
+  <rect x="500" y="200" width="240" height="200" class="mux"/>
+  <text x="516" y="221" class="th">Static mux / demux</text>
+  <text x="516" y="238" class="ts">Inserted by Golden Gate at the</text>
+  <text x="516" y="254" class="ts">threaded copy's boundary.</text>
+  <text x="516" y="278" class="ts">A free-running thread counter</text>
+  <text x="516" y="294" class="ts">selects whose channels connect</text>
+  <text x="516" y="310" class="ts">this host cycle:</text>
+  <text x="516" y="330" class="mono">t = 0,1,2,…,63,0,…</text>
+  <text x="516" y="354" class="ts">one thread per host cycle,</text>
+  <text x="516" y="370" class="ts">fixed round-robin</text>
+
+  <!-- ===== right: threaded copy ===== -->
+  <rect x="790" y="86" width="640" height="430" class="grp"/>
+  <text x="808" y="110" class="gt">Physical view — VX_socket_top_threaded (built once)</text>
+
+  <rect x="820" y="130" width="580" height="130" class="core"/>
+  <text x="836" y="151" class="th">All combinational logic, shared</text>
+  <text x="836" y="168" class="ts">Decode, issue, ALU/FPU lanes, LSU, cache control, DSPs — one copy serves</text>
+  <text x="836" y="184" class="ts">every socket in turn. This is where the 5.5× area win comes from:</text>
+  <text x="836" y="208" class="mono">64 × 221K LUTs (unthreaded, would not fit)  →  719K LUTs threaded</text>
+  <text x="836" y="232" class="ts">Logic that would be per-socket state machines is unchanged — it just</text>
+  <text x="836" y="248" class="ts">computes on whichever socket's state is selected.</text>
+
+  <rect x="820" y="276" width="282" height="150" class="st"/>
+  <text x="836" y="297" class="th">Every register → 64-deep RAM</text>
+  <text x="836" y="314" class="ts">Read thread t's state, compute,</text>
+  <text x="836" y="330" class="ts">write it back — same host cycle,</text>
+  <text x="836" y="346" class="ts">so it maps to LUTRAM</text>
+  <text x="836" y="362" class="ts">(distributed, comb-read):</text>
+  <text x="836" y="382" class="mono">RAM64X1S ≈ 1 LUT / state bit</text>
+  <text x="836" y="402" class="monos">311K LUTRAM in the 64-core image</text>
+
+  <rect x="1118" y="276" width="282" height="150" class="st"/>
+  <text x="1134" y="297" class="th">Every SRAM → 64× deeper</text>
+  <text x="1134" y="314" class="ts">Thread index becomes the top</text>
+  <text x="1134" y="330" class="ts">address bits:</text>
+  <text x="1134" y="350" class="mono">addr' = {t, addr}</text>
+  <text x="1134" y="370" class="ts">Read latency 0 or 1 only; latency-1</text>
+  <text x="1134" y="386" class="ts">keeps them BRAM/URAM-mappable.</text>
+  <text x="1134" y="402" class="monos">1,679 BRAM36 + 97 URAM at 64 cores</text>
+
+  <text x="808" y="452" class="ts">Not threaded (single copy, outside the sockets): the cluster's 64-way memory arbiter, KMU, DCR, global barrier,</text>
+  <text x="808" y="468" class="ts">VX_mem_to_axi, every FireSim bridge and FASED. A BlackBox inside the threaded module would be silently shared</text>
+  <text x="808" y="484" class="ts">across threads — wrong results, no diagnostic — which is why the RAM leaves are FIRRTL memories, not black boxes.</text>
+
+  <!-- wires -->
+  <line x1="420" y1="185" x2="500" y2="240" class="w2"/>
+  <line x1="420" y1="239" x2="500" y2="270" class="w2"/>
+  <line x1="420" y1="293" x2="500" y2="300" class="w2"/>
+  <line x1="420" y1="373" x2="500" y2="360" class="w2"/>
+  <line x1="740" y1="300" x2="790" y2="300" class="w2"/>
+
+  <!-- ===== bottom: time ===== -->
+  <rect x="50" y="556" width="1380" height="290" class="grp"/>
+  <text x="68" y="580" class="gt">Cost: host cycles per target cycle</text>
+
+  <text x="68" y="604" class="ts">One target cycle needs every thread to take its turn — at least 64 host cycles. A cross-thread combinational dependency (a socket's output feeding</text>
+  <text x="68" y="620" class="ts">another's input in the same target cycle) forces a second rotation, so the observed FMR lands between N and 2N plus bridge stalls:</text>
+
+  <!-- timeline -->
+  <line x1="90" y1="668" x2="1390" y2="668" class="tick"/>
+  <g>
+    <rect x="90"  y="650" width="130" height="36" class="sock"/><text x="100" y="673" class="mono">t=0</text>
+    <rect x="220" y="650" width="130" height="36" class="sock"/><text x="230" y="673" class="mono">t=1</text>
+    <rect x="350" y="650" width="130" height="36" class="sock"/><text x="360" y="673" class="mono">t=2</text>
+    <text x="500" y="673" class="gt">…</text>
+    <rect x="540" y="650" width="130" height="36" class="sock"/><text x="550" y="673" class="mono">t=63</text>
+    <rect x="670" y="650" width="150" height="36" class="mux"/><text x="680" y="673" class="monos">arbiter/bridges</text>
+    <rect x="820" y="650" width="130" height="36" class="sock"/><text x="830" y="673" class="mono">t=0</text>
+    <text x="960" y="673" class="gt">…</text>
+  </g>
+  <text x="90" y="712" class="tt">←——————————— one target cycle ≈ 64–130 host cycles ———————————→</text>
+
+  <text x="68" y="748" class="ts">Measured, 64 cores NW=NT=16 on the V80 at 60 MHz: FMR 130–190 → 320–460 kHz of target time.</text>
+  <text x="68" y="766" class="ts">The unthreaded design would not fit at any speed; threading trades 64× the silicon for ~1/130 of the clock.</text>
+
+  <text x="68" y="800" class="ts">Sanity anchor: FAME5_THREADS=0 builds the identical FIRRTL design unthreaded. It must — and does — agree with the threaded build</text>
+  <text x="68" y="816" class="ts">cycle for cycle (4-core demo: instrs=9776, cycles=15541 on baseline, threaded, and unthreaded-FIRRTL builds alike).</text>
+</svg>
