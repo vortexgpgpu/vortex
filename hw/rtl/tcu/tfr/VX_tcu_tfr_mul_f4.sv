@@ -426,7 +426,6 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .N(NV_DOT_W-1),
             .M(8),
             .P(NV_DOT_W+7),
-            .OUT_REG(PROD_REG),
             .USE_DSP(USE_DSP)
         ) scale_mul (
             .clk    (clk),
@@ -439,28 +438,25 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire is_zero_out = ~|scaled_mag;
         wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_NVFP4_GRP;
 
-        wire dot_sign_r;
-        VX_pipe_register #(
-            .DATAW (1),
-            .DEPTH (PROD_REG)
-        ) pipe_sign (
-            .clk      (clk),
-            .reset    (1'b0),
-            .enable   (enable),
-            .data_in  (dot_sign),
-            .data_out (dot_sign_r)
-        );
-
         for (genvar l = 0; l < NV_LPG; ++l) begin : g_out
             localparam I = g * NV_LPG + l;
             if (l == 0) begin : g_lead
-                assign result_sig_nvfp4[I] = {dot_sign_r & ~is_zero_out, result_mag};
-                assign sig_zero_nvfp4[I]   = is_zero_out;
+                VX_pipe_register #(
+                    .DATAW (26),
+                    .DEPTH (PROD_REG)
+                ) pipe_result (
+                    .clk      (clk),
+                    .reset    (1'b0),
+                    .enable   (enable),
+                    .data_in  ({dot_sign & ~is_zero_out, result_mag, is_zero_out}),
+                    .data_out ({result_sig_nvfp4[I], sig_zero_nvfp4[I]})
+                );
+                assign result_exp_nvfp4[I] = is_zero_out ? '0 : nv_result_exp;
             end else begin : g_idle
                 assign result_sig_nvfp4[I] = '0;
                 assign sig_zero_nvfp4[I]   = 1'b1;
+                assign result_exp_nvfp4[I] = '0;
             end
-            assign result_exp_nvfp4[I] = nv_result_exp;
 
             // The sign field is only consumed for infinity lanes downstream.
             assign exceptions_nvfp4[I].is_nan = 1'b0;
@@ -1088,7 +1084,6 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             .N(LNS_DOT_W-1),
             .M(AL+1),
             .P(LNS_DOT_W+AL),
-            .OUT_REG(PROD_REG),
             .USE_DSP(USE_DSP)
         ) scale_mul (
             .clk    (clk),
@@ -1101,28 +1096,25 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire is_zero_out = ~|scaled_mag;
         wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_LNS;
 
-        wire dot_sign_r;
-        VX_pipe_register #(
-            .DATAW (1),
-            .DEPTH (PROD_REG)
-        ) pipe_sign (
-            .clk      (clk),
-            .reset    (1'b0),
-            .enable   (enable),
-            .data_in  (dot_sign),
-            .data_out (dot_sign_r)
-        );
-
         for (genvar l = 0; l < LNS_LPG; ++l) begin : g_out
             localparam I = g * LNS_LPG + l;
             if (l == 0) begin : g_lead
-                assign result_sig_lnsf4[I] = {dot_sign_r & ~is_zero_out, result_mag};
-                assign sig_zero_lnsf4[I]   = is_zero_out;
+                VX_pipe_register #(
+                    .DATAW (26),
+                    .DEPTH (PROD_REG)
+                ) pipe_result (
+                    .clk      (clk),
+                    .reset    (1'b0),
+                    .enable   (enable),
+                    .data_in  ({dot_sign & ~is_zero_out, result_mag, is_zero_out}),
+                    .data_out ({result_sig_lnsf4[I], sig_zero_lnsf4[I]})
+                );
+                assign result_exp_lnsf4[I] = is_zero_out ? '0 : lns_result_exp;
             end else begin : g_idle
                 assign result_sig_lnsf4[I] = '0;
                 assign sig_zero_lnsf4[I]   = 1'b1;
+                assign result_exp_lnsf4[I] = '0;
             end
-            assign result_exp_lnsf4[I] = lns_result_exp;
 
             // The sign field is only consumed for infinity lanes downstream.
             assign exceptions_lnsf4[I].is_nan = 1'b0;
