@@ -64,7 +64,6 @@ module VX_decode import
 `ifndef VX_CFG_EXT_A_ENABLE
     `UNUSED_VAR (funct5)
 `endif
-    `UNUSED_VAR (frm_is_dyn)
 
     wire is_itype_sh   = funct3[0] && ~funct3[1];
     wire is_csr_fflags = (u_12 == `VX_CSR_FFLAGS);
@@ -72,6 +71,7 @@ module VX_decode import
     wire is_csr_fcsr   = (u_12 == `VX_CSR_FCSR);
     wire frm_is_dyn    = (funct3 == 3'b111);
     wire is_rd_zero    = (rd == 0);
+    `UNUSED_VAR (frm_is_dyn)
 
     reg csr_write;
     always @(*) begin

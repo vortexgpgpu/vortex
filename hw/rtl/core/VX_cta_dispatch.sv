@@ -315,6 +315,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     wire [LMEM_LOG:0] stride = kmu_req.aligned_lmem_size;
     wire is_first_of_cluster = eff_is_first;
 
+    reg [NW_WIDTH:0] usable_slots_r;
     // Cluster member count K, capped at the slot count (a cluster larger than
     // co-residency degenerates to a clamp).
     wire [NW_WIDTH:0] cluster_k_raw = eff_cluster_size;
@@ -326,7 +327,6 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     // The product m*stride is a constant-times-variable (shift/add), so the
     // NUM_WARPS-wide comparator tree has no divider.
     localparam PROD_W = LMEM_LOG + NW_WIDTH + 2;
-    reg [NW_WIDTH:0] usable_slots_r;
     always_ff @(posedge clk) begin
         if (reset) begin
             usable_slots_r <= (NW_WIDTH+1)'(NUM_CTA_SLOTS);
