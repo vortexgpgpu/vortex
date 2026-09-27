@@ -190,6 +190,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`CS_WORD_WIDTH-1:0]     amo_rsp_data;
     wire [WORD_SIZE-1:0]          amo_rd_fwd_mask;
     wire [`CS_WORD_WIDTH-1:0]     amo_rd_fwd_data;
+    wire [`CS_WORD_WIDTH-1:0]     read_word_fwd_stc;
     wire [`CS_LINE_ADDR_WIDTH-1:0] amo_wb_addr;
     wire [WORD_SEL_WIDTH-1:0]     amo_wb_word_idx;
     wire [WORD_SIZE-1:0]          amo_wb_byteen;
@@ -898,23 +899,26 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         // entering the commit stage (stC) next cycle, so a registered consumer
         // lands at stC. stC = st1 delayed by PIPE_EX; one stage earlier is
         // st0 (PIPE_EX=0) or st1 delayed by PIPE_EX-1 (PIPE_EX>0). The address
-        // feeds the reservation cache's sync-BRAM read and the chain-stall
-        // match; the byteen feeds the byte-offset encoder.
+        // feeds the reservation cache's sync-BRAM read, the chain-stall match
+        // and the writeback-queue matches; the byteen feeds the byte-offset
+        // encoder.
         wire [`CS_LINE_ADDR_WIDTH-1:0] amo_res_addr_n;
         wire [WORD_SIZE-1:0]           amo_byteen_n;
+        wire [WORD_SEL_WIDTH-1:0]      amo_word_idx_n;
         if (PIPE_EX == 0) begin : g_resn0
             assign amo_res_addr_n = st0.req.addr;
             assign amo_byteen_n   = st0.req.byteen;
+            assign amo_word_idx_n = st0.req.word_idx;
         end else begin : g_resn
             VX_pipe_register #(
-                .DATAW (`CS_LINE_ADDR_WIDTH + WORD_SIZE),
+                .DATAW (`CS_LINE_ADDR_WIDTH + WORD_SIZE + WORD_SEL_WIDTH),
                 .DEPTH (PIPE_EX - 1)
             ) reg_resn (
                 .clk      (clk),
                 .reset    (reset),
                 .enable   (~pipe_stall),
-                .data_in  ({st1.req.addr, st1.req.byteen}),
-                .data_out ({amo_res_addr_n, amo_byteen_n})
+                .data_in  ({st1.req.addr, st1.req.byteen, st1.req.word_idx}),
+                .data_out ({amo_res_addr_n, amo_byteen_n, amo_word_idx_n})
             );
         end
 
@@ -940,7 +944,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .amo_st0                (st0.req.amo),
             .valid_st0              (st0.req.valid),
             .is_creq_st0            (st0.req.is_creq),
-            .is_hit_st0             (lk_st0.is_hit),
+            // Atomics are exempt from the hit-order hazard, so their S0 hit is
+            // the raw tag match; the MSHR probe stays off the commit_busy cone.
+            .is_hit_st0             ((| tag_matches_st0)),
             .is_replay_st0          (st0.req.is_replay),
             // Commit ports are fed from stC (the deferred data-output stage), so
             // the AMO RMW operands and the read word align at PIPE_EX>0. At
@@ -952,6 +958,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .is_replay_st1          (stC.req.is_replay),
             .do_write_st1           (do_write_stc),
             .read_word_st1          (read_word_stc),
+            .read_word_fwd_st1      (read_word_fwd_stc),
             .byteen_st1             (stC.req.byteen),
             .write_word_st1         (word_stc),
             .word_idx_st0           (st0.req.word_idx),
@@ -959,6 +966,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .addr_st1               (addr_stc),
             .res_addr_n             (amo_res_addr_n),
             .byteen_n               (amo_byteen_n),
+            .word_idx_n             (amo_word_idx_n),
             .tag_st1                (stC.req.tag),
             .req_idx_st1            (stC.req.req_idx),
             .attr_st1               (stC.req.attr),
@@ -1026,7 +1034,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire crsp_queue_ready;
     // Plain-read responses byte-merge the AMO engine's in-flight writeback
     // bytes over the array word (stale until the writeback lands).
-    wire [`CS_WORD_WIDTH-1:0] read_word_fwd_stc;
     if (AMO_ENABLE && IS_LLC) begin : g_read_word_fwd
         for (genvar b = 0; b < WORD_SIZE; ++b) begin : g_b
             assign read_word_fwd_stc[b*8 +: 8] = amo_rd_fwd_mask[b] ? amo_rd_fwd_data[b*8 +: 8]
