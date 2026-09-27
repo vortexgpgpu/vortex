@@ -214,14 +214,9 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     wire [`VX_CFG_XLEN-1:0] mmu_satp;
     wire                    mmu_flush_req;
     wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_flush_done;
-    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_fault_valid;
-    wire [`VX_CFG_NUM_CLUSTERS-1:0][`VX_CFG_XLEN-1:0] cl_mmu_fault_va;
-    wire [`VX_CFG_NUM_CLUSTERS-1:0][1:0]              cl_mmu_fault_access;
-    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_fault_amo;
 
     // Per-cluster L2-TLB miss export buses (used by the device-level walker).
     VX_tlb_bus_if #(.ID_WIDTH (L2_TLB_SLOT_WIDTH)) per_cluster_dev_ptw_if [`VX_CFG_NUM_CLUSTERS] ();
-    wire [`VX_CFG_NUM_CLUSTERS-1:0] cl_mmu_flush_done_in;
 
     // One shared walker at the device: the clusters' L2-TLB miss buses arb
     // into it, PTE fetches ride a dedicated LLC client port, and the flush
@@ -242,7 +237,6 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     VX_tlb_flush_if dev_ptw_flush_if ();
     VX_mmu_fault_if dev_ptw_fault_if ();
     wire dev_ptw_empty;
-    `UNUSED_VAR (dev_ptw_empty)
 
     VX_mem_bus_if #(
         .DATA_SIZE (L2_SECTOR_SIZE),
@@ -267,48 +261,32 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     `ASSIGN_VX_MEM_BUS_IF (per_cluster_mem_bus_if[L3_PTW_IDX], dev_ptw_mem_if);
 
     assign dev_ptw_flush_if.req = mmu_flush_req;
-    // The walker's done leg joins cluster 0's slot of the done-tree; the
-    // fault report likewise lands on cluster 0's lines (the DCR fault latch
-    // is device-global, so attribution is not lost).
-    for (genvar c = 0; c < `VX_CFG_NUM_CLUSTERS; ++c) begin : g_dev_flush_done
-        assign cl_mmu_flush_done_in[c] = (c == 0)
-            ? (cl_mmu_flush_done[c] && dev_ptw_flush_if.done)
-            : cl_mmu_flush_done[c];
-    end
-    wire                     mmu_fault_valid_in  = dev_ptw_fault_if.valid;
-    wire [`VX_CFG_XLEN-1:0]  mmu_fault_va_in     = dev_ptw_fault_if.va;
-    wire [1:0]               mmu_fault_access_in = dev_ptw_fault_if.access;
-    wire                     mmu_fault_amo_in    = dev_ptw_fault_if.amo;
 
-    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_fault_valid_in;
-    wire [`VX_CFG_NUM_CLUSTERS-1:0][`VX_CFG_XLEN-1:0] cl_mmu_fault_va_in;
-    wire [`VX_CFG_NUM_CLUSTERS-1:0][1:0]              cl_mmu_fault_access_in;
-    wire [`VX_CFG_NUM_CLUSTERS-1:0]                   cl_mmu_fault_amo_in;
-    for (genvar c = 0; c < `VX_CFG_NUM_CLUSTERS; ++c) begin : g_dev_fault_mux
-        assign cl_mmu_fault_valid_in[c]  = cl_mmu_fault_valid[c] || ((c == 0) && mmu_fault_valid_in);
-        assign cl_mmu_fault_va_in[c]     = ((c == 0) && mmu_fault_valid_in) ? mmu_fault_va_in     : cl_mmu_fault_va[c];
-        assign cl_mmu_fault_access_in[c] = ((c == 0) && mmu_fault_valid_in) ? mmu_fault_access_in : cl_mmu_fault_access[c];
-        assign cl_mmu_fault_amo_in[c]    = ((c == 0) && mmu_fault_valid_in) ? mmu_fault_amo_in    : cl_mmu_fault_amo[c];
-    end
-
+    // The walker is the only fault source and owns its own legs on the DCR
+    // surface; the clusters report translation drains only.
     VX_mmu_dcr mmu_dcr (
-        .clk                  (clk),
-        .reset                (reset),
-        .dcr_bus_if           (dcr_bus_if),
-        .dcr_bus_out_if       (dcr_cluster_src_if),
-        .satp                 (mmu_satp),
-        .flush_req            (mmu_flush_req),
-        .cluster_flush_done   (cl_mmu_flush_done_in),
-        .cluster_fault_valid  (cl_mmu_fault_valid_in),
-        .cluster_fault_va     (cl_mmu_fault_va_in),
-        .cluster_fault_access (cl_mmu_fault_access_in),
-        .cluster_fault_amo    (cl_mmu_fault_amo_in)
+        .clk                (clk),
+        .reset              (reset),
+        .dcr_bus_if         (dcr_bus_if),
+        .dcr_bus_out_if     (dcr_cluster_src_if),
+        .satp               (mmu_satp),
+        .flush_req          (mmu_flush_req),
+        .cluster_flush_done (cl_mmu_flush_done),
+        .walker_flush_done  (dev_ptw_flush_if.done),
+        .fault_valid        (dev_ptw_fault_if.valid),
+        .fault_va           (dev_ptw_fault_if.va),
+        .fault_access       (dev_ptw_fault_if.access),
+        .fault_amo          (dev_ptw_fault_if.amo)
     );
+
+    wire dev_mmu_busy = ~dev_ptw_empty;
 `else
     assign dcr_cluster_src_if.req_valid = dcr_bus_if.req_valid;
     assign dcr_cluster_src_if.req_data  = dcr_bus_if.req_data;
     assign dcr_bus_if.rsp_valid = dcr_cluster_src_if.rsp_valid;
     assign dcr_bus_if.rsp_data  = dcr_cluster_src_if.rsp_data;
+
+    wire dev_mmu_busy = 1'b0;
 `endif
 
     VX_dcr_bus_if per_cluster_dcr_bus_if[`VX_CFG_NUM_CLUSTERS]();
@@ -353,10 +331,6 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
             .dev_ptw_if         (per_cluster_dev_ptw_if[cluster_id]),
             .mmu_flush_req      (mmu_flush_req),
             .mmu_flush_done     (cl_mmu_flush_done[cluster_id]),
-            .mmu_fault_valid    (cl_mmu_fault_valid[cluster_id]),
-            .mmu_fault_va       (cl_mmu_fault_va[cluster_id]),
-            .mmu_fault_access   (cl_mmu_fault_access[cluster_id]),
-            .mmu_fault_amo      (cl_mmu_fault_amo[cluster_id]),
         `endif
 
             .busy               (per_cluster_busy[cluster_id])
@@ -371,7 +345,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         assign per_cluster_kmu_valid[c] = per_cluster_kmu_bus_if[c].valid;
     end
     wire busy_r;
-    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy), 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
+    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy) | dev_mmu_busy, 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
     assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid | (|per_cluster_kmu_valid);
 
 `ifdef PERF_ENABLE

@@ -49,10 +49,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_tlb_bus_if.master           dev_ptw_if,
     input  wire                    mmu_flush_req,
     output wire                    mmu_flush_done,
-    output wire                    mmu_fault_valid,
-    output wire [`VX_CFG_XLEN-1:0] mmu_fault_va,
-    output wire [1:0]              mmu_fault_access,
-    output wire                    mmu_fault_amo,
 `endif
 
     // Status
@@ -329,7 +325,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     );
 
     VX_tlb_flush_if l2_flush_if ();
-    VX_tlb_flush_if ptw_flush_if ();
     wire l2_empty;
 
     VX_tlb_l2 #(
@@ -358,14 +353,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // own done leg at the top.
     assign l2_flush_if.req  = mmu_flush_req;
     assign mmu_flush_done   = l2_flush_if.done;
-
-    // Structural faults surface at the device walker; L1 permission faults
-    // are not reported here — cluster_tlb_bus_if stays a pure translation
-    // fabric across the socket boundary.
-    assign mmu_fault_valid  = 1'b0;
-    assign mmu_fault_va     = '0;
-    assign mmu_fault_access = 2'b0;
-    assign mmu_fault_amo    = 1'b0;
 
     wire mmu_busy = ~l2_empty;
 `else
