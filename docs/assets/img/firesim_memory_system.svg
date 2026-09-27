@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1480 940" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+    <marker id="arro" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a8781f"/>
+    </marker>
+  </defs>
+  <style>
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .gt   { fill:#33404c; font-size:14px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .mono { font-family:"DejaVu Sans Mono", monospace; font-size:10.5px; fill:#1b2733; }
+    .monos{ font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#44525f; }
+    .vx   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .fs   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .fs2  { fill:#dde9f3; stroke:#2e5e82; stroke-width:1.4; }
+    .mem  { fill:#fdf6e9; stroke:#a8781f; stroke-width:1.4; }
+    .cfg  { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .grp  { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.5; }
+    .w    { stroke:#44525f; stroke-width:1.6; fill:none; marker-end:url(#arr); marker-start:url(#arr); }
+    .wo   { stroke:#a8781f; stroke-width:2.2; fill:none; marker-end:url(#arro); marker-start:url(#arro); }
+    .wo1  { stroke:#a8781f; stroke-width:2.2; fill:none; marker-end:url(#arro); }
+  </style>
+
+  <rect x="0" y="0" width="1480" height="940" fill="#ffffff"/>
+  <text x="24" y="34" class="t">The memory system — functional data in HBM, latency from a model</text>
+  <text x="24" y="56" class="tt">Nothing on this path is a DRAM: the “GPU memory” the kernel sees is the card's HBM behind a timing model that makes it look like whatever the +mm_ settings say. Determinism follows — congestion on the real HBM stalls target time instead of changing results.</text>
+
+  <!-- Vortex side -->
+  <rect x="50" y="86" width="330" height="330" class="vx"/>
+  <text x="66" y="110" class="gt">Vortex (target time)</text>
+
+  <rect x="70" y="126" width="290" height="70" class="vx"/>
+  <text x="86" y="147" class="th">Cores → L1 → (L2/L3 if enabled)</text>
+  <text x="86" y="164" class="ts">64-core FAME-5 build: 64 sockets' misses</text>
+  <text x="86" y="180" class="ts">meet at the cluster arbiter</text>
+
+  <rect x="70" y="212" width="290" height="90" class="vx"/>
+  <text x="86" y="233" class="th">VX_mem_to_axi</text>
+  <text x="86" y="250" class="ts">Tag buffer: UUID-wide upstream tags →</text>
+  <text x="86" y="266" class="mono">16 outstanding reads, 4-bit AXI id</text>
+  <text x="86" y="283" class="ts">(paired: PLATFORM_MEMORY_ID_WIDTH=4 ↔ idBits=4)</text>
+
+  <rect x="70" y="318" width="290" height="76" class="vx"/>
+  <text x="86" y="339" class="th">m_axi_mem_0 — one AXI4 port</text>
+  <text x="86" y="356" class="mono">512-bit data · 32-bit addr · INCR bursts</text>
+  <text x="86" y="373" class="ts">NUM_BANKS=1: the wrapper presents one port,</text>
+  <text x="86" y="389" class="ts">so Vortex builds one</text>
+
+  <!-- FASED -->
+  <rect x="440" y="86" width="480" height="440" class="grp"/>
+  <text x="456" y="110" class="gt">FASED bridge (FireSim-generated)</text>
+
+  <rect x="460" y="126" width="440" height="150" class="fs"/>
+  <text x="476" y="147" class="th">Timing model — latency-bandwidth pipe</text>
+  <text x="476" y="165" class="ts">Runtime registers, set per run, no rebuild:</text>
+  <text x="488" y="184" class="mono">readLatency = 30 · writeLatency = 30 (target cycles)</text>
+  <text x="488" y="201" class="mono">readMaxReqs / writeMaxReqs ≤ maxReads/Writes = 16</text>
+  <text x="476" y="222" class="ts">Set via VORTEX_FIRESIM_ARGS plusargs:</text>
+  <text x="488" y="240" class="monos">+mm_readLatency_0=100 +mm_writeLatency_0=100</text>
+  <text x="488" y="256" class="monos">+mm_useHardwareDefaultRuntimeSettings_0   (covers the rest)</text>
+
+  <rect x="460" y="292" width="440" height="130" class="fs2"/>
+  <text x="476" y="313" class="th">Functional model</text>
+  <text x="476" y="330" class="ts">Ingress/egress queues, per-id reorder buffer; reads and writes</text>
+  <text x="476" y="346" class="ts">go to host memory when accepted, responses are held until the</text>
+  <text x="476" y="362" class="ts">timing model's release cycle. Instrumented:</text>
+  <text x="488" y="381" class="monos">totalReads/Writes(Beats) · readMaxReqs · rrespError · …</text>
+  <text x="476" y="399" class="ts">printed by the driver on every stall report and watchdog</text>
+
+  <rect x="460" y="438" width="440" height="70" class="fs"/>
+  <text x="476" y="459" class="th">LoadMem widget — the host's side door</text>
+  <text x="476" y="476" class="ts">Kernel upload, buffer copy, readback: same host-memory master,</text>
+  <text x="476" y="492" class="ts">no target time passes. Chunk unit is 32-bit words.</text>
+
+  <!-- shell / hbm -->
+  <rect x="980" y="86" width="450" height="440" class="grp"/>
+  <text x="996" y="110" class="gt">Shell binding (per card, from its descriptor)</text>
+
+  <rect x="1000" y="126" width="410" height="150" class="mem"/>
+  <text x="1016" y="147" class="th">V80 (aved) — hw/syn/xilinx/platforms/v80.toml</text>
+  <text x="1016" y="166" class="mono">host_mem_sp = "MEM" → HBM VNOC, 32 GB window</text>
+  <text x="1016" y="184" class="mono">base = 0x40_0000_0000 (WithHostMemBase)</text>
+  <text x="1016" y="202" class="ts">The whole 32-bit target map fits the window; the AFU</text>
+  <text x="1016" y="218" class="ts">rebases every access. HBM0 (1 GB) would truncate it —</text>
+  <text x="1016" y="234" class="ts">the stack sits just under 4 GB. HOST (QDMA slave</text>
+  <text x="1016" y="250" class="ts">bridge) never completes reads: refused by the descriptor.</text>
+
+  <rect x="1000" y="292" width="410" height="100" class="mem"/>
+  <text x="1016" y="313" class="th">U55C (vitis)</text>
+  <text x="1016" y="331" class="mono">HOST_MEM_SP = HBM[0:7] → 8 × 512 MB = 4 GiB</text>
+  <text x="1016" y="349" class="mono">base = 0x0</text>
+  <text x="1016" y="366" class="ts">A narrower binding silently serves only part of the map:</text>
+  <text x="1016" y="382" class="ts">kernel uploads land outside it, reads return junk.</text>
+
+  <rect x="1000" y="408" width="410" height="100" class="cfg"/>
+  <text x="1016" y="429" class="th">One host memory channel, 64-bit</text>
+  <text x="1016" y="447" class="ts">Host-side AXI: beatBytes=8 at the host clock. This bounds</text>
+  <text x="1016" y="463" class="ts">*simulation speed* under memory traffic, never target</text>
+  <text x="1016" y="479" class="ts">timing: a starved FASED gates the target clock and FMR</text>
+  <text x="1016" y="495" class="ts">rises; the kernel's cycle count is unchanged.</text>
+
+  <!-- data path wires -->
+  <line x1="360" y1="356" x2="460" y2="356" class="wo"/>
+  <line x1="900" y1="356" x2="1000" y2="356" class="wo"/>
+  <line x1="215" y1="196" x2="215" y2="212" class="wo"/>
+  <line x1="215" y1="302" x2="215" y2="318" class="wo"/>
+  <path d="M 900 470 C 950 470, 950 440, 1000 440" class="wo1"/>
+
+  <!-- bottom notes -->
+  <rect x="50" y="560" width="1380" height="330" class="grp"/>
+  <text x="68" y="584" class="gt">What the model does — and does not — capture</text>
+
+  <text x="68" y="610" class="ts">The default pipe is a flat-latency, fixed-parallelism abstraction. Its ceiling is easy to compute and easy to hit:</text>
+  <text x="80" y="632" class="mono">peak read bandwidth ≈ maxReads × 64 B / readLatency = 16 × 64 / 30 ≈ 34 B per target cycle — for the whole GPU</text>
+  <text x="68" y="656" class="ts">demo at 64 cores (memory-bound, IPC 0.18) and sgemm 1024³ (14.7 FLOP/cycle against ~2000 available) both sit on this ceiling. Raising it means</text>
+  <text x="68" y="672" class="ts">raising maxReads (compile time, area) or the modelled latencies (runtime), not a faster card.</text>
+
+  <text x="68" y="700" class="ts">There is no DRAM structure in the default model: no banks, rows, refresh, or contention. FASED has DDR3 FIFO/FR-FCFS models with those (compile-time</text>
+  <text x="68" y="716" class="ts">choice, WithDDR3FIFOMAS), and an optional tags-only LLC model; neither is enabled for Vortex today. HBM timing does not exist in FASED at all.</text>
+
+  <text x="68" y="744" class="ts">Configuration knobs, by where they live:</text>
+  <text x="80" y="766" class="mono">image build:  FREQUENCY=60 STRATEGY=TIMING DEVICE=&lt;part&gt; HOST_MEM_SP=&lt;tag&gt;   (hw/syn/firesim → platform build)</text>
+  <text x="80" y="784" class="mono">elaboration:  NastiParameters(dataBits=512, addrBits=32, idBits=4) · BaseParams(maxReads/maxWrites=16) · platform toml [firesim]</text>
+  <text x="80" y="802" class="mono">per run:      VORTEX_FIRESIM_ARGS="+mm_…_0=…"  — the only knob that needs no rebuild</text>
+
+  <text x="68" y="830" class="ts">Address-width warning: the wrapper takes its AXI width from VX_CFG_MEM_ADDR_WIDTH (48 at XLEN=64) while the Scala side pins addrBits=32;</text>
+  <text x="68" y="846" class="ts">a disagreement is padded or truncated with no diagnostic. XLEN=64 on FireSim needs both sides changed together.</text>
+  <text x="68" y="872" class="tt">idBits is bounded both ways: 1&lt;&lt;idBits wraps Scala's Int at 32 (silently wrong responses); per-id state made idBits=8 cost 751K LUTs on a U55C. 4 matches what Vortex drives.</text>
+</svg>

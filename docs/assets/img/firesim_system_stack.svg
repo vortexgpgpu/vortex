@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#44525f"/>
+    </marker>
+  </defs>
+  <style>
+    .t    { fill:#1b2733; font-size:19px; font-weight:bold; }
+    .gt   { fill:#33404c; font-size:14px; font-weight:bold; }
+    .th   { fill:#1b2733; font-size:12.5px; font-weight:bold; }
+    .ts   { fill:#44525f; font-size:11px; }
+    .tt   { fill:#5a6772; font-size:10.5px; font-style:italic; }
+    .mono { font-family:"DejaVu Sans Mono", monospace; font-size:11px; fill:#1b2733; }
+    .monos{ font-family:"DejaVu Sans Mono", monospace; font-size:10px; fill:#44525f; }
+    .sw   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.4; }
+    .drv  { fill:#dde9f3; stroke:#2e5e82; stroke-width:1.4; }
+    .hw   { fill:#f4faf4; stroke:#3a7d44; stroke-width:1.4; }
+    .hw2  { fill:#e7f3e7; stroke:#3a7d44; stroke-width:1.4; }
+    .vx   { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.4; }
+    .emu  { fill:#fdf6e9; stroke:#a8781f; stroke-width:1.4; }
+    .grp  { fill:#fbfcfd; stroke:#5a7184; stroke-width:1.5; }
+    .w    { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); }
+    .w2   { stroke:#44525f; stroke-width:1.4; fill:none; marker-end:url(#arr); marker-start:url(#arr); }
+    .cut  { stroke:#b0413e; stroke-width:1.6; stroke-dasharray:8 5; fill:none; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="t">FireSim + Vortex — software and hardware stack</text>
+  <text x="24" y="56" class="tt">One stack, two vehicles: the card (left of the red cut: PCIe) and the in-process metasimulator (right: the same design, Verilated). Every layer above the cut is identical in both.</text>
+
+  <!-- ===================== host software column ===================== -->
+  <rect x="60" y="90" width="640" height="452" class="grp"/>
+  <text x="78" y="114" class="gt">Host process (one per run)</text>
+
+  <rect x="90" y="130" width="580" height="52" class="sw"/>
+  <text x="106" y="151" class="th">Application — tests/regression/&lt;app&gt;</text>
+  <text x="106" y="168" class="ts">vx_dev_open / vx_mem_alloc / vx_copy_to_dev / vx_start / vx_ready_wait, linked against libvortex.so</text>
+
+  <rect x="90" y="196" width="580" height="66" class="sw"/>
+  <text x="106" y="217" class="th">Runtime HAL — sw/runtime/firesim/vortex.cpp → libvortex-firesim.so</text>
+  <text x="106" y="234" class="ts">Driver ABI + software command processor (cmd_processor.cpp); kernel upload, DCR writes, launch, flush</text>
+  <text x="106" y="250" class="monos">VRT_VBIN_PATH / XCLBIN_PATH · VORTEX_FIRESIM_ARGS → extra plusargs (+mm_…)</text>
+
+  <rect x="90" y="276" width="580" height="66" class="sw"/>
+  <text x="106" y="297" class="th">Transport — sim/firesim/firesim_sim.cpp (in libfiresim.so)</text>
+  <text x="106" y="314" class="ts">Owns the simulator thread; every bridge call is a labelled request marshalled onto it.</text>
+  <text x="106" y="330" class="ts">Adaptive step batching, DCR single-step polling, launch watchdog, stall reports</text>
+
+  <rect x="90" y="356" width="580" height="88" class="drv"/>
+  <text x="106" y="377" class="th">FireSim driver core — $(FIRESIM_PATH)/sim/midas/src/main/cc</text>
+  <text x="106" y="394" class="ts">Widget registry from FireSim-generated.const.h:</text>
+  <text x="118" y="410" class="monos">peek_poke_t · loadmem_t · clockmodule_t · FASEDMemoryTimingModel (driver half)</text>
+  <text x="106" y="428" class="ts">simif_t: MMIO read/write + bulk memory, one implementation per vehicle</text>
+
+  <rect x="90" y="458" width="278" height="66" class="drv"/>
+  <text x="106" y="479" class="th">simif_aved (VRT)</text>
+  <text x="106" y="495" class="ts">V80: vrtd programs the PDI,</text>
+  <text x="106" y="510" class="ts">MMIO over PCIe BAR</text>
+
+  <rect x="392" y="458" width="278" height="66" class="drv"/>
+  <text x="408" y="479" class="th">simif_vitis (XRT)</text>
+  <text x="408" y="495" class="ts">U55C: xclbin load,</text>
+  <text x="408" y="510" class="ts">MMIO + DMA through XRT</text>
+
+  <!-- ===================== metasim column ===================== -->
+  <rect x="740" y="90" width="620" height="452" class="grp"/>
+  <text x="758" y="114" class="gt">Metasimulator (TARGET=xrtsim / avedsim) — no card, no image</text>
+
+  <rect x="770" y="130" width="560" height="56" class="emu"/>
+  <text x="786" y="151" class="th">Same application · same runtime HAL · same transport</text>
+  <text x="786" y="168" class="ts">Built with -DFIRESIM_EMUL; libfiresim.so is the Verilated model itself</text>
+
+  <rect x="770" y="200" width="560" height="82" class="emu"/>
+  <text x="786" y="221" class="th">simif_emul — the emulated host interface</text>
+  <text x="786" y="238" class="ts">MMIO and DMA become DPI calls into the Verilated top (top.sv / emul);</text>
+  <text x="786" y="254" class="ts">firesim_emul_main.cpp runs Verilator's event loop on the simulator thread.</text>
+  <text x="786" y="270" class="monos">VORTEX_FIRESIM_EMUL_ARGS → +waveformfile=… +max-cycles=… (EMUL_DEBUG=1 build)</text>
+
+  <rect x="770" y="296" width="560" height="228" class="hw"/>
+  <text x="786" y="317" class="th">Vemul — the whole FPGA payload, Verilated</text>
+  <text x="786" y="334" class="ts">FireSim-generated.sv + (unthreaded builds) the flattened Vortex tree,</text>
+  <text x="786" y="350" class="ts">bit-identical to what the card synthesizes. Same tokens, same schedule:</text>
+  <text x="786" y="366" class="ts">what passes here passes on silicon, cycle for cycle.</text>
+  <text x="786" y="392" class="tt">FAME5=1: Vortex is already inside FireSim-generated.sv (converted to</text>
+  <text x="786" y="408" class="tt">FIRRTL and threaded), so Verilator is handed no Vortex sources at all.</text>
+  <text x="786" y="440" class="ts">Build: sw/runtime/firesim → sim/firesim/Makefile (EMUL_DIR per card,</text>
+  <text x="786" y="456" class="ts">_fame5 and _dbg variants); run: blackbox.sh --driver=firesim</text>
+  <text x="786" y="472" class="monos">--target=avedsim|xrtsim [FAME5=1] [EMUL_DEBUG=1]</text>
+
+  <!-- ===================== PCIe cut ===================== -->
+  <line x1="60" y1="566" x2="700" y2="566" class="cut"/>
+  <text x="60" y="586" class="tt" fill="#b0413e">PCIe — MMIO (control) + memory writes; everything below is on the FPGA</text>
+
+  <!-- ===================== FPGA ===================== -->
+  <rect x="60" y="600" width="640" height="270" class="grp"/>
+  <text x="78" y="624" class="gt">FPGA (V80 shown; U55C differs only in the shell)</text>
+
+  <rect x="90" y="638" width="580" height="50" class="hw"/>
+  <text x="106" y="659" class="th">Shell — AVED static region + AvedShim / SimulationMaster</text>
+  <text x="106" y="675" class="ts">PCIe endpoint, AXI-Lite control (16 B blocks), host clock, HBM NoC — see the FPGA architecture figure</text>
+
+  <rect x="90" y="700" width="580" height="72" class="hw2"/>
+  <text x="106" y="721" class="th">FPGATop — FireSim's generated harness (FireSim-generated.sv)</text>
+  <text x="106" y="738" class="ts">Bridges: PeekPoke (ctrl_* ports) · LoadMem (bulk memory) · ClockBridge · FASED (memory timing)</text>
+  <text x="106" y="754" class="ts">Token channels host-decouple everything inside; the target advances only when stepped.</text>
+
+  <rect x="90" y="784" width="580" height="70" class="vx"/>
+  <text x="106" y="805" class="th">Target — VortexDUT ▸ VX_firesim_wrap ▸ Vortex</text>
+  <text x="106" y="822" class="ts">The design under test: DCR + start/busy control surface, one 512-bit AXI4 memory port.</text>
+  <text x="106" y="838" class="ts">FAME5=1: the sockets inside are time-multiplexed through one physical copy.</text>
+
+  <!-- ===================== arrows ===================== -->
+  <line x1="380" y1="182" x2="380" y2="196" class="w"/>
+  <line x1="380" y1="262" x2="380" y2="276" class="w"/>
+  <line x1="380" y1="342" x2="380" y2="356" class="w"/>
+  <line x1="229" y1="444" x2="229" y2="458" class="w"/>
+  <line x1="531" y1="444" x2="531" y2="458" class="w"/>
+  <line x1="380" y1="524" x2="380" y2="638" class="w2"/>
+  <line x1="380" y1="688" x2="380" y2="700" class="w2"/>
+  <line x1="380" y1="772" x2="380" y2="784" class="w2"/>
+
+  <line x1="1050" y1="186" x2="1050" y2="200" class="w"/>
+  <line x1="1050" y1="282" x2="1050" y2="296" class="w2"/>
+</svg>
