@@ -109,6 +109,16 @@ else
 EMUL_VERILATOR_FLAGS := -Wno-fatal -y $(SIM_SRCS_DIR) +libext+.sv+.v $$(tr '\n' ' ' < $(SIM_SRCS_LIST))
 endif
 
+# EMUL_DEBUG=1: a wave-tracing metasimulator. --trace Verilates the dump hooks
+# and +define+DEBUG arms the emul top's +waveformfile/+dump-start plusargs
+# (FireSim's top.sv), which VORTEX_FIRESIM_EMUL_ARGS passes at run time. Its own
+# build directory: the model rule does not depend on flags, so sharing one would
+# hand back whichever build ran first.
+ifdef EMUL_DEBUG
+EMUL_VERILATOR_FLAGS += --trace --trace-structs +define+DEBUG
+EMUL_DIR := $(EMUL_DIR)_dbg
+endif
+
 .PHONY: emul-sources
 # The simulation flattening of the Vortex RTL for CONFIGS, and Golden Gate's
 # elaboration of the card's target; both are no-ops when current.
