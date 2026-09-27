@@ -11,6 +11,16 @@ VORTEX_KN_PATH ?= $(ROOT_DIR)/sw/kernel
 
 KERNEL_LIB ?= vortex
 
+# WGMMA A-operand source: RS = A from registers, SS = A from shared memory
+# (B is always shared memory). Applies only to WGMMA-enabled apps, and only
+# when the caller has not already selected a mode, so -DWGMMA_SS or an
+# explicit -DWGMMA_RS both win. Defined once here rather than per app: the
+# WGMMA tests previously carried three different hand-rolled variants of
+# this default and two had lost it entirely.
+ifneq ($(findstring -DVX_CFG_TCU_WGMMA_ENABLE,$(CONFIGS)),)
+CONFIGS := $(if $(findstring -DWGMMA_RS,$(CONFIGS))$(findstring -DWGMMA_SS,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DWGMMA_RS)
+endif
+
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 
 ifneq (,$(filter -DVX_CFG_EXT_C_ENABLE, $(XCONFIGS)))

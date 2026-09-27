@@ -16,6 +16,7 @@
 #include "core.h"
 #include <VX_config.h>
 #include <cassert>
+#include <iostream>
 
 using namespace vortex;
 
@@ -28,6 +29,7 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , num_warps_(VX_CFG_NUM_WARPS)
   , lmem_base_(VX_MEM_LMEM_BASE_ADDR)
   , lmem_capacity_(1u << VX_CFG_LMEM_LOG_SIZE)
+  , lmem_overrun_reported_(false)
   , slot_rem_warps_(num_warps_, 0)
   , wid_to_slot_(num_warps_, num_warps_)  // num_warps_ = invalid/unassigned
   , tail_slot_(0)
@@ -66,11 +68,26 @@ void CtaDispatcher::on_reset() {
 }
 
 uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
-  if (stride == 0)
+  if (stride == 0) {
     return num_warps_;
+  }
   uint32_t fit = uint32_t(lmem_capacity_ / stride);
-  if (fit > num_warps_) fit = num_warps_;
-  if (fit == 0) fit = 1;  // a single CTA that barely exceeds capacity still gets one slot
+  if (fit > num_warps_) {
+    fit = num_warps_;
+  }
+  if (fit == 0) {
+    // The CTA does not fit. One slot is still granted so the launch makes
+    // forward progress, but it will write past that slot, and a silent
+    // overrun surfaces later as unattributable data corruption.
+    if (!lmem_overrun_reported_) {
+      lmem_overrun_reported_ = true;
+      std::cerr << "Warning: CTA shared-memory footprint " << stride
+                << " bytes exceeds the " << lmem_capacity_
+                << "-byte capacity; the CTA is admitted anyway and will "
+                   "overrun its slot." << std::endl;
+    }
+    fit = 1;
+  }
   return fit;
 }
 

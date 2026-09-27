@@ -96,6 +96,8 @@ private:
   uint32_t  num_warps_;
   uint64_t  lmem_base_;
   uint32_t  lmem_capacity_;
+  // One-shot latch so an over-capacity kernel reports once instead of per CTA.
+  mutable bool lmem_overrun_reported_;
 
   // Fixed-stride slot allocation. Every resident CTA gets LMEM base
   // slot × stride, where stride = align(lmem_size, MEM_BLOCK_SIZE) is uniform

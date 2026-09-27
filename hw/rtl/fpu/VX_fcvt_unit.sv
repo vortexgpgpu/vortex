@@ -173,13 +173,55 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire [LZC_RESULT_WIDTH-1:0] renorm_shamt_s1;
     wire mant_is_nonzero_s1;
 
+    wire [S_MAN_WIDTH-1:0] lzc_in_s1;
+    wire                   lzc_neg_s1;
+    wire                   lzc_lowmask_s1;
+    if (LATENCY > 5) begin : g_lzc_mag
+        assign lzc_in_s1      = unpacked_mant_s1;
+        assign lzc_neg_s1     = 1'b0;
+        assign lzc_lowmask_s1 = 1'b0;
+    end else begin : g_lzc_inv
+        // Stages 0 and 1 share a cycle, so the LZC does not wait on the
+        // integer negate: it reads the one's complement y = ~x of a negative
+        // integer. |x| = y + 1 leads where y does, except when y is all ones
+        // below its leading one (zero included), where |x| leads one place
+        // higher.
+        wire [`VX_CFG_XLEN-1:0] i_inv_raw = dataa ^ {`VX_CFG_XLEN{i_sign}};
+        wire [`VX_CFG_XLEN-1:0] i_inv     = is_int64 ? i_inv_raw : `VX_CFG_XLEN'(i_inv_raw[31:0]);
+        assign lzc_in_s1      = is_itof ? S_MAN_WIDTH'(i_inv) : fp_unpacked_mant;
+        assign lzc_neg_s1     = is_itof && i_sign;
+        assign lzc_lowmask_s1 = ~(| ((i_inv >> 1) & ~i_inv));
+    end
+
+    wire [LZC_RESULT_WIDTH-1:0] lzc_raw_s1;
+    wire                        lzc_valid_s1;
     VX_lzc #(
         .N (S_MAN_WIDTH)
     ) lzc (
-        .data_in   (unpacked_mant_s1),
-        .data_out  (renorm_shamt_s1),
-        .valid_out (mant_is_nonzero_s1)
+        .data_in   (lzc_in_s1),
+        .data_out  (lzc_raw_s1),
+        .valid_out (lzc_valid_s1)
     );
+
+    assign renorm_shamt_s1    = ~lzc_neg_s1   ? lzc_raw_s1
+                              : ~lzc_valid_s1 ? LZC_RESULT_WIDTH'(S_MAN_WIDTH - 1)
+                                              : (lzc_raw_s1 - LZC_RESULT_WIDTH'(lzc_lowmask_s1));
+    assign mant_is_nonzero_s1 = lzc_valid_s1 || lzc_neg_s1;
+
+`ifdef SIMULATION
+    wire [LZC_RESULT_WIDTH-1:0] ref_shamt_s1;
+    wire                        ref_nonzero_s1;
+    VX_lzc #(
+        .N (S_MAN_WIDTH)
+    ) lzc_ref (
+        .data_in   (unpacked_mant_s1),
+        .data_out  (ref_shamt_s1),
+        .valid_out (ref_nonzero_s1)
+    );
+    `RUNTIME_ASSERT (~(enable && mask && (LATENCY <= 5))
+                  || ((mant_is_nonzero_s1 == ref_nonzero_s1) && (~ref_nonzero_s1 || (renorm_shamt_s1 == ref_shamt_s1))),
+        ("%t: fcvt leading-zero count differs from the magnitude's", $time))
+`endif
 
     wire mant_is_zero_s1 = ~mant_is_nonzero_s1;
 

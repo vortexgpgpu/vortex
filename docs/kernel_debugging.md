@@ -78,7 +78,7 @@ cd /vortex
 
 For verbose debug logging (optional, shows detailed debug module operations):
 ```bash
-./build/sim/simx/simx -d -V 9824 build/tests/kernel/fibonacci/fibonacci.bin
+./build/sim/simx/simx -d -V build/tests/kernel/fibonacci/fibonacci.bin
 ```
 
 The simulator starts halted, waiting for a debugger connection.
@@ -86,12 +86,11 @@ The simulator starts halted, waiting for a debugger connection.
 ### Step 2: Start OpenOCD
 
 ```bash
-openocd -f vortex.cfg
+openocd -f sim/simx/dtm/vortex.cfg
 ```
 
-**Note:** `vortex.cfg` uses port 9824. If using default port 9823, either:
-- Start simulator with `-p 9824`, or
-- Update `vortex.cfg` to use port 9823
+The config connects to port 9823, the simulator's default. To use another port,
+start the simulator with `-p <port>` and set `remote_bitbang_port` to match.
 
 ### Step 3: Connect GDB
 
@@ -162,17 +161,17 @@ Options:
 
 **OpenOCD can't connect:**
 - Verify simulator is running with `-d` flag
-- Check port numbers match (default 9823, config uses 9824)
+- Check port numbers match (simulator `-p` and the config's `remote_bitbang_port`, both 9823 by default)
 - Check simulator output for "Remote bitbang server ready"
 
 ## Example Session
 
 ```bash
 # Terminal 1 (add -V for verbose debug logging)
-./build/sim/simx/simx -d -p 9824 build/tests/kernel/fibonacci/fibonacci.bin
+./build/sim/simx/simx -d build/tests/kernel/fibonacci/fibonacci.bin
 
 # Terminal 2
-openocd -f vortex.cfg
+openocd -f sim/simx/dtm/vortex.cfg
 
 # Terminal 3
 riscv64-unknown-elf-gdb

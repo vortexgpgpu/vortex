@@ -107,13 +107,16 @@ jobs:
           name: fpga-gate-report
           path: |
             fpga_gate_report.json
-            build32_fpga_gate/hw/syn/xilinx/dut/*/fpga_gate_*/build.log
-            build32_fpga_gate/hw/syn/xilinx/dut/*/fpga_gate_*/*.rpt
-            build32_fpga_gate/hw/syn/xilinx/dut/*/fpga_gate_*/synth_summary.csv
-          if-no-files-found: warn
+            build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/build.log
+            build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/*.rpt
+            build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_*/synth_summary.csv
+          # A build that dies in elaboration leaves only its build.log, so a
+          # path matching nothing turns a red gate into a red X with no evidence.
+          if-no-files-found: error
 
+      # always(), not success(): the verdict must not be masked by an upload failure.
       - name: Verdict
-        if: steps.gate.outputs.run == 'true'
+        if: always() && steps.gate.outputs.run == 'true'
         run: |
           case "${{ steps.run.outputs.rc }}" in
             0) echo "fpga_gate passed" ;;

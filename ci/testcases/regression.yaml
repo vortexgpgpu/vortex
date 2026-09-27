@@ -90,6 +90,22 @@ tests:
   app: gbar_phase
   shape:
     cores: 2
+# SimX<->rtlsim cycle parity on the multi-core global barrier. Until this case
+# existed the gate could not observe the gbar path at all: every other parity
+# case is single-core, so USE_GBAR is 0 and the request queue is not built.
+#
+# async_gbarrier, not gbar_phase: the parity vehicle has to be long enough that
+# a fixed modelling offset does not dominate it. gbar_phase is a 248-instruction
+# functional probe and a ~55-cycle offset is 7.9% of its 695-cycle run;
+# async_gbarrier exercises the same path over a 1024-iteration overlap window
+# and sits at 1.9%. Default tolerance, deliberately not widened.
+- id: model_parity-async-gbarrier
+  check: model_parity
+  via: blackbox
+  app: async_gbarrier
+  shape:
+    cores: 2
+
 - id: bar-slot-phase-1
   via: blackbox
   drivers:

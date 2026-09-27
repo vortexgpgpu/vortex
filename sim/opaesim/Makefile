@@ -8,6 +8,10 @@ AFU_DIR := $(RTL_DIR)/afu/opae
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
+# GCC 13 turns the generated per-word copy of a wide signal into a memcpy and
+# inlines it with aligned 16-byte stores, faulting on a destination that is only
+# 8-byte aligned in the root class (NUM_THREADS=16 + RTU crashes in reset).
+CXXFLAGS += -fno-tree-loop-distribute-patterns
 CXXFLAGS += -I$(SRC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR) -I$(DESTDIR)
 CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include

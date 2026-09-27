@@ -16,7 +16,6 @@ CONFIGS := $(if $(findstring -DVX_CFG_ISSUE_WIDTH=,$(CONFIGS)),$(CONFIGS),$(CONF
 CONFIGS += -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE
 CONFIGS := $(if $(findstring -DITYPE=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DITYPE=fp16)
 CONFIGS := $(if $(findstring -DOTYPE=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DOTYPE=fp32)
-CONFIGS := $(if $(findstring -DWGMMA_SS,$(CONFIGS)),$(CONFIGS),$(if $(findstring -DWGMMA_RS,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DWGMMA_RS))
 
 
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include

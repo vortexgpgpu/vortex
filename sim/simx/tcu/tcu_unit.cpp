@@ -21,6 +21,7 @@
 #include "local_mem.h"
 #include "processor_impl.h"
 #include "mem/memory.h"
+#include "stack_interleave.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -416,6 +417,13 @@ public:
     agu.selector = selector;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       agu.addrs.at(t) = base_addr + uint64_t(t) * 4;
+      // Metadata is read as a linear warp-wide tile, which an interleaved
+      // per-thread stack cannot provide.
+      if (StackInterleave::contains(agu.addrs.at(t))) {
+        std::cout << "Error: TCU metadata inside the thread stack window: addr=0x"
+                  << std::hex << agu.addrs.at(t) << std::dec << std::endl;
+        std::abort();
+      }
     }
   }
 

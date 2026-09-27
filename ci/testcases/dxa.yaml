@@ -389,6 +389,18 @@ tests:
   shape:
     threads: 32
     warps: 8
+# Doubled-K FEDP: the DXA block-major producer must follow the consumer's
+# block K extent, which the descriptor conveys explicitly.
+- id: sgemm_tcu_wg_dxa-fedp2k
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm_tcu_wg_dxa
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_FEDP2K -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8
+  shape:
+    threads: 8
+    warps: 8
 - id: sgemm_tcu_wg_sp_dxa-1
   via: blackbox
   drivers:

@@ -82,7 +82,7 @@ See [docs/testing.md](docs/testing.md) and [docs/debugging.md](docs/debugging.md
   CONFIGS="-DVX_CFG_EXT_TCU_ENABLE" ./ci/blackbox.sh --driver=simx --app=<app> --threads=8
   ```
 - **`make tests` / `make -C tests/regression` build with *default* macros.** Use `CONFIGS` + explicit per-app rebuild for non-default configurations.
-- **`--rebuild=1` forces a driver rebuild** even if the hardware configuration is unchanged. Use it when iterating on the driver itself; `--rebuild=0` suppresses rebuild regardless.
+- **There is no `--rebuild` option.** `blackbox.sh` re-makes the driver on every run, and make rebuilds it on any source or flag change.
 - **Keep smoke/regression runs lean.** Don't enable debug or perf collection unless the run is explicitly for debug or measurement.
 - **RTL coverage path is `xrt`, not `rtlsim`.** When discussing or planning RTL verification, `xrt` is the canonical path — `rtlsim` bypasses the AFU surface. `rtlsim` remains useful for fast iteration on processor RTL; `xrt` is what proves the full integration.
 - **`ci/regression.sh` is the canonical source of tested configurations.** Use it to discover supported parameter combinations before inventing ad hoc ones.

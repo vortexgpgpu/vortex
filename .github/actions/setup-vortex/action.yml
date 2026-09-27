@@ -63,6 +63,19 @@ runs:
         path: third_party
         key: ${{ runner.os }}-thirdparty-${{ hashFiles('third_party/Makefile', '.gitmodules') }}
 
+    # Publish WHERE the toolchain cache above was restored to. The `tools` cache
+    # path is relative to the workspace, but nothing downstream could know that:
+    # consumers that need it (ci.yml, apptainer-ci.yml) each re-derived
+    # `$PWD/tools` by hand, and any consumer that forgot silently fell back to
+    # configure's `$HOME/tools` default -- a path that does not exist on a
+    # hosted runner. asic_gate did forget, and every one of its builds died in
+    # gen_sources.sh looking for verilator under /home/runner/tools. Exporting it
+    # here means restoring the toolchain and knowing where it landed are the same
+    # step, so a new workflow cannot get this wrong by omission.
+    - name: Export TOOLDIR
+      shell: bash
+      run: echo "TOOLDIR=$GITHUB_WORKSPACE/tools" >> "$GITHUB_ENV"
+
     - name: Install dependencies
       shell: bash
       run: |

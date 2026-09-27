@@ -61,6 +61,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [3:0]                  out_lg_ratio,
     output wire [3:0]                  out_lg_tcN,
     output wire [3:0]                  out_lg_nsteps,
+    output wire [3:0]                  out_lg_bkK,
     output wire [15:0]                 out_k_row,    // dim1 index (K-row) of this CL
     output wire [15:0]                 out_n_base,   // N index of this CL's element 0
     output wire [DXA_SMEM_ADDR_W-1:0]  out_smem_base // tile SMEM byte base (for tiled dest)
@@ -108,6 +109,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Tiled (Flat/BlockMajor) scatter: stable geometry + per-CL token state.
     reg [1:0]                  tiled_mode_r;
     reg [3:0]                  tiled_lg_ratio_r, tiled_lg_tcN_r, tiled_lg_nsteps_r;
+    reg [3:0]                  tiled_lg_bkK_r;
     reg [3:0]                  km_esize_r;       // log2(elem_bytes)
     reg [15:0]                 n_base_r;         // N index of current CL's element 0
     reg [DXA_SMEM_ADDR_W-1:0]  tiled_base_r;     // tile SMEM byte base (stable)
@@ -123,6 +125,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign out_lg_ratio   = tiled_lg_ratio_r;
     assign out_lg_tcN     = tiled_lg_tcN_r;
     assign out_lg_nsteps  = tiled_lg_nsteps_r;
+    assign out_lg_bkK     = tiled_lg_bkK_r;
     assign out_k_row      = dim_count_r[0][15:0];
     assign out_n_base     = n_base_r;
     assign out_smem_base  = tiled_base_r;
@@ -232,6 +235,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             tiled_lg_ratio_r <= '0;
             tiled_lg_tcN_r   <= '0;
             tiled_lg_nsteps_r<= '0;
+            tiled_lg_bkK_r   <= '0;
             km_esize_r       <= '0;
             n_base_r         <= '0;
             tiled_base_r     <= '0;
@@ -258,6 +262,7 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             tiled_lg_ratio_r <= setup_params.lg_ratio;
             tiled_lg_tcN_r   <= setup_params.lg_tcN;
             tiled_lg_nsteps_r<= setup_params.lg_nsteps;
+            tiled_lg_bkK_r   <= setup_params.lg_bkK;
             km_esize_r       <= 4'(start_km_esize);
             n_base_r         <= '0;
             tiled_base_r     <= setup_params.initial_smem_base;

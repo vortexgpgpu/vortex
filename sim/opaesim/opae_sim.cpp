@@ -275,7 +275,7 @@ public:
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_address = offset / 4;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_length = 1;
     device_->vcp2af_sRxPort_c0_ReqMmioHdr_tid = 0;
-    memcpy(device_->vcp2af_sRxPort_c0_data, &value, 8);
+    memcpy(VDataCast<void*, CACHE_BLOCK_SIZE>::get(device_->vcp2af_sRxPort_c0_data), &value, 8);
     this->tick();
     device_->vcp2af_sRxPort_c0_mmioWrValid = 0;
   }
@@ -417,7 +417,7 @@ private:
      && (cci_rd_it != cci_reads_.end())) {
       device_->vcp2af_sRxPort_c0_rspValid = 1;
       device_->vcp2af_sRxPort_c0_hdr_resp_type = 0;
-      memcpy(device_->vcp2af_sRxPort_c0_data, cci_rd_it->data.data(), CACHE_BLOCK_SIZE);
+      memcpy(VDataCast<void*, CACHE_BLOCK_SIZE>::get(device_->vcp2af_sRxPort_c0_data), cci_rd_it->data.data(), CACHE_BLOCK_SIZE);
       device_->vcp2af_sRxPort_c0_hdr_mdata = cci_rd_it->mdata;
       cci_reads_.erase(cci_rd_it);
     }
@@ -443,7 +443,7 @@ private:
       cci_req.cycles_left = CCI_LATENCY + (timestamp % CCI_RAND_MOD);
       cci_req.mdata = device_->af2cp_sTxPort_c1_hdr_mdata;
       auto host_ptr = (uint64_t*)(device_->af2cp_sTxPort_c1_hdr_address * CACHE_BLOCK_SIZE);
-      memcpy(host_ptr, device_->af2cp_sTxPort_c1_data, CACHE_BLOCK_SIZE);
+      memcpy(host_ptr, VDataCast<void*, CACHE_BLOCK_SIZE>::get(device_->af2cp_sTxPort_c1_data), CACHE_BLOCK_SIZE);
       cci_writes_.emplace_back(cci_req);
     }
 
@@ -468,7 +468,7 @@ private:
         auto mem_rd_it = pending_mem_reqs_[b].begin();
         auto mem_req = *mem_rd_it;
         device_->avs_readdatavalid[b] = 1;
-        memcpy(device_->avs_readdata[b], mem_req->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+        memcpy(VDataCast<void*, VX_CFG_PLATFORM_MEMORY_DATA_SIZE>::get(device_->avs_readdata[b]), mem_req->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
         uint32_t addr = mem_req->addr;
         pending_mem_reqs_[b].erase(mem_rd_it);
         delete mem_req;

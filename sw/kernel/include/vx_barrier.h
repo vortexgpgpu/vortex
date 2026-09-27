@@ -26,13 +26,14 @@ public:
   }
 
   // Notify arrival at barrier (non-blocking)
-  // Returns: phase (current generation number)
+  // Returns: the barrier's phase bit, sampled before this arrival is applied
   uint32_t arrive() {
     return vx_barrier_arrive(bar_id_, num_warps_);
   }
 
-  // Wait for barrier phase to complete
-  // Blocks until generation > phase
+  // Wait for the generation observed by arrive() to complete.
+  // The phase is a single bit that toggles per generation, so this blocks
+  // while the barrier's phase still equals `phase`, not until it exceeds it.
   void wait(uint32_t phase) {
     vx_barrier_wait(bar_id_, phase);
   }
@@ -66,13 +67,14 @@ public:
   }
 
   // Notify arrival at barrier (non-blocking)
-  // Returns: phase (current generation number)
+  // Returns: the barrier's phase bit, sampled before this arrival is applied
   uint32_t arrive() {
     return vx_barrier_arrive(bar_id_, num_cores_);
   }
 
-  // Wait for barrier phase to complete
-  // Blocks until generation > phase
+  // Wait for the generation observed by arrive() to complete.
+  // The phase is a single bit that toggles per generation, so this blocks
+  // while the barrier's phase still equals `phase`, not until it exceeds it.
   void wait(uint32_t phase) {
     vx_barrier_wait(bar_id_, phase);
   }
@@ -108,10 +110,12 @@ public:
     num_peers_ = num_peers;
   }
 
+  // Returns: the barrier's phase bit, sampled before this arrival is applied
   uint32_t arrive() {
     return vx_barrier_arrive(bar_id_, num_peers_);
   }
 
+  // Blocks while the barrier's phase still equals `phase` (see barrier::wait).
   void wait(uint32_t phase) {
     vx_barrier_wait(bar_id_, phase);
   }

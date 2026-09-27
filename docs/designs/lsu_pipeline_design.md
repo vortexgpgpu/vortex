@@ -58,6 +58,20 @@ and packs sub-word stores into the line-width word with the appropriate
 shift (`mem_req_data` shifting + `mem_req_byteen` mask). Misalignment is a
 runtime assertion, not a hardware-handled fault.
 
+**Stack interleave** (`VX_CFG_LSU_STACK_INTERLEAVE_ENABLE`, on by default).
+The kernel ABI gives each hardware thread a contiguous stack
+(`sp = VX_MEM_STACK_BASE_ADDR - hartid << VX_MEM_STACK_LOG2_SIZE`), so the
+same frame slot across a warp's threads sits one stack apart: `NUM_THREADS`
+separate lines, all in the same dcache bank. `VX_lsu_agu` remaps every
+address inside the stack window so that, within each group of `NUM_THREADS`
+stacks, offset `{thread, word, byte}` is stored as `{word ^ group, thread, byte}`
+(word = XLEN bytes). A warp-wide spill then fills one contiguous block, the
+same layout NVIDIA local memory and AMD scratch use. A group spans a power
+of two larger than a cache way, so without the XOR skew every warp's copy of
+a frame slot would land in the same cache set. The remap is a function
+of the address alone, so a pointer into another thread's stack still
+resolves, and software, `sp` and frame offsets are unchanged.
+
 ### 2.2 Fence ordering
 
 `fence_lock` (single bit per slice) is set when a fence's last PID packet

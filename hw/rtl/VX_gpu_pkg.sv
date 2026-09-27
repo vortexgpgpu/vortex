@@ -148,6 +148,12 @@ package VX_gpu_pkg;
     localparam SRC_OPD_WIDTH = `UP(SRC_OPD_BITS);
     localparam NUM_SOCKETS = `UP(`VX_CFG_NUM_CORES / `VX_CFG_SOCKET_SIZE);
 
+    // Per-thread stack window: one stack per hardware thread below the stack base.
+    localparam NUM_STACKS = `VX_CFG_NUM_CLUSTERS * NUM_SOCKETS * `VX_CFG_SOCKET_SIZE * `VX_CFG_NUM_WARPS * `VX_CFG_NUM_THREADS;
+    localparam [`VX_CFG_XLEN-1:0] STACK_WINDOW_TOP    = `VX_CFG_XLEN'(`VX_MEM_STACK_BASE_ADDR);
+    localparam [`VX_CFG_XLEN-1:0] STACK_WINDOW_SPAN   = `VX_CFG_XLEN'(NUM_STACKS) << `VX_MEM_STACK_LOG2_SIZE;
+    localparam [`VX_CFG_XLEN-1:0] STACK_WINDOW_BOTTOM = STACK_WINDOW_TOP - STACK_WINDOW_SPAN;
+
 
     // ===== AMO (RVA) sideband =====================================
     // Fields are only meaningful when amo_valid==1; the bank's reservation
@@ -558,6 +564,9 @@ package VX_gpu_pkg;
     localparam PER_ISSUE_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_ISSUE_WIDTH;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
+
+    // Machine-mode trap CSRs stored per warp in the scheduler: mstatus, mtvec, mepc, mcause, mtval.
+    localparam NUM_TRAP_CSRS = 5;
 
     localparam DISPATCH_QSIZE = `VX_CFG_DISPATCH_QUEUE_SIZE;
 
@@ -1170,6 +1179,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [PER_ISSUE_WARPS-1:0]         eop_wis; // one-hot wis, set on eop
         logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`VX_CFG_SIMD_WIDTH-1:0]             tmask;
@@ -1261,6 +1271,7 @@ package VX_gpu_pkg;
         logic [PERF_CTR_BITS-1:0] gmem_dedup;
         logic [PERF_CTR_BITS-1:0] lmem_writes;
         logic [PERF_CTR_BITS-1:0] gmem_latency;
+        logic [PERF_CTR_BITS-1:0] noslot_stalls;
     } dxa_perf_t;
 `endif
 

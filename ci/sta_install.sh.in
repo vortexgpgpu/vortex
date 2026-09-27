@@ -1,0 +1,157 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# OpenSTA install for the open-source ASIC flow (hw/syn/yosys, ci/asic_gate.py).
+#
+# Builds OpenSTA into $TOOLDIR/sta. This script is the *producer* of the sta
+# prebuilt: build here, then `ci/toolchain_prebuilt.sh --sta` packages
+# $TOOLDIR/sta and `ci/toolchain_install.sh --sta` fetches it. Most users
+# install the prebuilt and never run this script.
+#
+# Idempotent: re-running is a no-op once $STA_PREFIX/bin/sta exists.
+
+# exit when any command fails
+set -e
+
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+
+STA_REPO=${STA_REPO:=https://github.com/parallaxsw/OpenSTA.git}
+STA_REV=${STA_REV:=v3.1.0}
+
+STA_SRC=$TOOLDIR/sta-src
+STA_PREFIX=$TOOLDIR/sta
+STA_BUILD=$STA_SRC/build
+
+CUDD_REPO=${CUDD_REPO:=https://github.com/ivmai/cudd.git}
+CUDD_REV=${CUDD_REV:=cudd-3.0.0}
+CUDD_SRC=$TOOLDIR/cudd-src
+CUDD_PREFIX=$TOOLDIR/cudd
+
+# ----------------------------------------------------------------------
+# 1. Build dependencies
+# ----------------------------------------------------------------------
+# tcl and eigen are hard requirements. libfmt-dev and tcl-tclreadline are
+# deliberately NOT listed: OpenSTA's CMake links whichever of them it finds,
+# and neither is present on the CI runners, so a build host that has them
+# produces a binary the runners cannot load. See step 3.
+CMAKE=${CMAKE:=cmake}
+if command -v apt-get >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive sudo apt-get install -y \
+        build-essential git cmake swig bison flex \
+        tcl-dev libeigen3-dev zlib1g-dev
+fi
+
+# ----------------------------------------------------------------------
+# 2. Sources
+# ----------------------------------------------------------------------
+fetch_rev() {
+    local repo="$1" rev="$2" dir="$3"
+    if [ -d "$dir/.git" ]; then
+        (cd "$dir" && git fetch --depth=1 origin "$rev" 2>/dev/null || true
+         git checkout -q "$rev")
+    else
+        git clone --depth=1 --branch "$rev" "$repo" "$dir"
+    fi
+}
+
+# CUDD is optional for OpenSTA but required for the BDD-based analyses the
+# ASIC flow reports; it is a static archive, so it adds no runtime dependency.
+if [ ! -f "$CUDD_PREFIX/lib/libcudd.a" ]; then
+    fetch_rev "$CUDD_REPO" "$CUDD_REV" "$CUDD_SRC"
+    (cd "$CUDD_SRC" && ./configure --prefix="$CUDD_PREFIX" --enable-shared=no \
+        && make -j"$(nproc)" && make install)
+fi
+
+fetch_rev "$STA_REPO" "$STA_REV" "$STA_SRC"
+
+# ----------------------------------------------------------------------
+# 3. Build — pinned OFF the two optional host packages
+# ----------------------------------------------------------------------
+# USE_TCL_READLINE defaults ON and links libtclreadline (dragging in
+# libreadline and libtinfo). The fmt fallback, taken whenever the compiler has
+# no std::format -- i.e. always on GCC 11 -- prefers an installed libfmt over
+# building its own. Neither libfmt8 nor tcl-tclreadline ships in the CI runner
+# image, and a binary that needs them dies in the dynamic loader with exit 127
+# before printing anything. Forcing find_package(fmt) to miss makes CMake build
+# fmt in-tree and link it statically. Line editing is meaningless in batch mode,
+# so turning readline off costs nothing.
+if [ ! -x "$STA_PREFIX/bin/sta" ]; then
+    echo "configuring OpenSTA $STA_REV"
+    $CMAKE -S "$STA_SRC" -B "$STA_BUILD" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$STA_PREFIX" \
+        -DUSE_TCL_READLINE=OFF \
+        -DCMAKE_DISABLE_FIND_PACKAGE_fmt=ON \
+        -DCUDD_INCLUDE="$CUDD_PREFIX/include" \
+        -DCUDD_LIB="$CUDD_PREFIX/lib/libcudd.a"
+
+    $CMAKE --build "$STA_BUILD" -j"$(nproc)"
+    $CMAKE --install "$STA_BUILD"
+fi
+
+# ----------------------------------------------------------------------
+# 4. Dependency check — the assertion that step 3 actually held
+# ----------------------------------------------------------------------
+# A version check cannot catch this: the loadable and the unloadable build are
+# both "OpenSTA 3.1.0". Only the link surface distinguishes them, and the
+# failure appears on the runner rather than here, so this is the check that
+# keeps an unloadable binary from being published. The allowlist is OpenSTA's
+# own surface, not a global policy -- other components legitimately link far
+# more.
+# libpthread/libdl/librt are glibc members and ship with libc everywhere.
+sta_allowed="linux-vdso libtcl8.6 libz libstdc++ libm libgcc_s libc libpthread libdl librt ld-linux-x86-64"
+unexpected=$(ldd "$STA_PREFIX/bin/sta" | awk '{print $1}' | xargs -r -n1 basename \
+    | sed 's/\.so.*//' \
+    | while read -r lib; do
+        [ -z "$lib" ] && continue
+        case " $sta_allowed " in
+            *" $lib "*) ;;
+            *) echo "$lib" ;;
+        esac
+      done)
+if [ -n "$unexpected" ]; then
+    echo "error: sta links libraries outside its expected surface:"
+    echo "$unexpected" | sed 's/^/         /'
+    echo "       these are optional packages CMake picked up from this build"
+    echo "       host; the CI runners do not have them and the binary will fail"
+    echo "       to load there (exit 127). Remove the -dev packages, or extend"
+    echo "       the configure flags in step 3, and rebuild."
+    exit 1
+fi
+
+# ----------------------------------------------------------------------
+# 5. Smoke test — the binary must actually start and read a liberty file
+# ----------------------------------------------------------------------
+smoke=$(mktemp -d)
+trap 'rm -rf "$smoke"' EXIT
+cat > "$smoke/t.tcl" <<'EOF'
+puts "sta-ok"
+exit 0
+EOF
+echo "smoke test: starting sta"
+if TMPDIR=$smoke timeout 60 "$STA_PREFIX/bin/sta" -no_splash -exit "$smoke/t.tcl" \
+        > "$smoke/out.log" 2>&1 && grep -q "sta-ok" "$smoke/out.log"; then
+    echo "  ok -- sta ran a script"
+else
+    echo "error: sta smoke test failed (rc=$?)"
+    tail -20 "$smoke/out.log"
+    exit 1
+fi
+
+echo ""
+echo "OpenSTA $STA_REV installed at $STA_PREFIX"
+echo "  sta:     $("$STA_PREFIX/bin/sta" -version)"
+echo "  package: ci/toolchain_prebuilt.sh --sta"
+echo "  verify:  make -C hw/syn/yosys/dut om"

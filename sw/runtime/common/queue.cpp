@@ -320,12 +320,18 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     // A CTA maps to a single core, so its block cannot exceed the core's thread
     // capacity (NUM_WARPS × NUM_THREADS). Reject an oversized block here — the
     // maxThreadsPerBlock contract — instead of letting the KMU block-size
-    // descriptor silently wrap to a bogus value.
+    // descriptor silently wrap to a bogus value. A shared-memory request larger
+    // than the core's local memory is rejected for the same reason: the
+    // dispatcher would admit the CTA into a slot too small to hold it and the
+    // kernel would read and write past it.
     if (ndim > 0) {
-        uint64_t nt = 0, nw = 0;
+        uint64_t nt = 0, nw = 0, lmem_cap = 0;
         auto r = device_->query_caps(VX_CAPS_NUM_THREADS, &nt);
         if (r == VX_SUCCESS) {
             r = device_->query_caps(VX_CAPS_NUM_WARPS, &nw);
+        }
+        if (r == VX_SUCCESS) {
+            r = device_->query_caps(VX_CAPS_LOCAL_MEM_SIZE, &lmem_cap);
         }
         if (r != VX_SUCCESS) {
             if (kernel) kernel->release();
@@ -336,6 +342,10 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
             block_size *= block_in[i];
         }
         if (block_size > (uint32_t)(nt * nw)) {
+            if (kernel) kernel->release();
+            return VX_ERR_INVALID_VALUE;
+        }
+        if (lmem_size > lmem_cap) {
             if (kernel) kernel->release();
             return VX_ERR_INVALID_VALUE;
         }

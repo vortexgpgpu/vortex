@@ -1,7 +1,7 @@
 {
   "tensor:perf_gate-fp16-isw4:rtlsim": {
     "32": {
-      "cycles": 204506,
+      "cycles": 195794,
       "instrs": 130592
     },
     "app": "sgemm_tcu",
@@ -12,7 +12,7 @@
   },
   "tensor:perf_gate-fp16-mc-nt16:rtlsim": {
     "32": {
-      "cycles": 59168,
+      "cycles": 44583,
       "instrs": 47296
     },
     "app": "sgemm_tcu",
@@ -34,7 +34,7 @@
   },
   "tensor:perf_gate-fp16:rtlsim": {
     "32": {
-      "cycles": 260319,
+      "cycles": 251208,
       "instrs": 130576
     },
     "app": "sgemm_tcu",

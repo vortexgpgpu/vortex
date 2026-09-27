@@ -43,6 +43,14 @@ endif
 ifeq ($(strip $(ABC_LOAD)),)
 ABC_LOAD := 5.0
 endif
+# ASAP7 ships a non-inverting flop only at x4 drive (DFFHQx4, 0.3645) against
+# DFFHQNx1 (0.2916) with an inverted output. dfflibmap picks one cell per FF
+# type: yosys 0.57 took the cheapest, 0.69 prefers non-inverting, which mapped
+# every flop in the tex DUT to x4 for +25% sequential area and no Fmax gain.
+# Withhold them so flop area does not ride on that preference.
+ifeq ($(strip $(DFF_DONT_USE)),)
+DFF_DONT_USE := *DFFHQx4* *DFFLQx4*
+endif
 else ifeq ($(PDK),nangate45)
 DEFAULT_LIB := $(LIB_DIR)/NangateOpenCellLibrary_typical.lib
 DEFAULT_CLOCK_FREQ := 800
@@ -115,7 +123,7 @@ CONFIGS_8c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=8  -DVX_CFG_L2_ENABLE
 CONFIGS_16c	:= -DVX_CFG_NUM_CLUSTERS=1 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
 CONFIGS_32c := -DVX_CFG_NUM_CLUSTERS=2 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
 CONFIGS_64c := -DVX_CFG_NUM_CLUSTERS=4 -DVX_CFG_NUM_CORES=16 -DVX_CFG_L2_ENABLE
-CONFIGS += $(CONFIGS_$(NUM_CORES)c)
+override CONFIGS += $(CONFIGS_$(NUM_CORES)c)
 endif
 
 # `override`, because these are facts about this flow, not preferences: without
@@ -235,6 +243,7 @@ techmap: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	SDC_FILE=$(SDC_FILE) \
 	BB_MODULES="$(BB_MODULES)" \
 	CLOCK_FREQ=$(CLOCK_FREQ) \
+	DFF_DONT_USE="$(DFF_DONT_USE)" \
 	ABC_DRIVER_CELL=$(ABC_DRIVER_CELL) \
 	ABC_LOAD=$(ABC_LOAD) \
 	YOSYS_FLATTEN=$(YOSYS_FLATTEN) \
@@ -253,6 +262,7 @@ timing: $(SYN_SRC_DEPS) $(SYN_LIB_DEPS) | $(BUILD_DIR)
 	CLOCK_FREQ=$(CLOCK_FREQ) \
 	DELAY_UNC=$(DELAY_UNC) \
 	DELAY_IO=$(DELAY_IO) \
+	DFF_DONT_USE="$(DFF_DONT_USE)" \
 	ABC_DRIVER_CELL=$(ABC_DRIVER_CELL) \
 	ABC_LOAD=$(ABC_LOAD) \
 	YOSYS_FLATTEN=$(YOSYS_FLATTEN) \

@@ -13,6 +13,7 @@
 
 #include "barrier_unit.h"
 #include <cassert>
+#include <algorithm>
 #include "core.h"
 #include "scheduler.h"
 #include "socket.h"
@@ -22,6 +23,7 @@ using namespace vortex;
 
 BarrierUnit::BarrierUnit(const SimContext& ctx, const char* name, Core* core, Scheduler* scheduler)
   : SimObject<BarrierUnit>(ctx, name)
+  , gbar_send_next_(0)
   , core_(core)
   , scheduler_(scheduler)
   , barriers_(VX_CFG_NUM_WARPS * VX_CFG_NUM_BARRIERS)
@@ -29,7 +31,18 @@ BarrierUnit::BarrierUnit(const SimContext& ctx, const char* name, Core* core, Sc
 
 BarrierUnit::~BarrierUnit() {}
 
+// One request leaves the queue per cycle, so a completion that lands while the
+// queue is still draining is delivered on the next free cycle rather than
+// immediately. Mirrors the RTL request FIFO's drain rate.
+void BarrierUnit::gbar_send(uint32_t bar_id, uint32_t count) {
+  uint64_t now = SimPlatform::instance().cycles();
+  uint64_t due = std::max(now + 1, gbar_send_next_);
+  gbar_send_next_ = due + 1;
+  core_->gbar_arrive_out.send({bar_id, count, core_->id()}, due - now);
+}
+
 void BarrierUnit::on_reset() {
+  gbar_send_next_ = 0;
   for (auto& barrier : barriers_) {
     barrier.reset();
   }
@@ -61,7 +74,7 @@ void BarrierUnit::arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_
     if (barrier.arrival_mask.count() == active_warps.count() && barrier.events == 0) {
       // wait_mask is preserved across the async hop (holds warps resumed by
       // global_resume) and cleared there. arrival_mask is local-only and reset here.
-      core_->gbar_arrive_out.send({bar_id, count, core_->id()});
+      this->gbar_send(bar_id, count);
       barrier.arrival_mask.reset();
       barrier.count  = 0;
       barrier.events = 0;
@@ -143,7 +156,7 @@ void BarrierUnit::event_release(uint32_t bar_id) {
     if (is_global) {
       if (barrier.arrival_mask.count() == active_warps.count()) {
         uint32_t num_cores = barrier.count;
-        core_->gbar_arrive_out.send({bar_id, num_cores, core_->id()});
+        this->gbar_send(bar_id, num_cores);
         barrier.arrival_mask.reset();
         barrier.count  = 0;
         barrier.events = 0;

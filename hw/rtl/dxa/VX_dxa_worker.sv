@@ -80,6 +80,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     wire [3:0]                  ag_lg_ratio;
     wire [3:0]                  ag_lg_tcN;
     wire [3:0]                  ag_lg_nsteps;
+    wire [3:0]                  ag_lg_bkK;
     wire [15:0]                 ag_k_row;
     wire [15:0]                 ag_n_base;
     wire [DXA_SMEM_ADDR_W-1:0]  ag_smem_base;
@@ -170,6 +171,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .out_lg_ratio         (ag_lg_ratio),
         .out_lg_tcN           (ag_lg_tcN),
         .out_lg_nsteps        (ag_lg_nsteps),
+        .out_lg_bkK           (ag_lg_bkK),
         .out_k_row            (ag_k_row),
         .out_n_base           (ag_n_base),
         .out_smem_base        (ag_smem_base)
@@ -195,6 +197,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .perf_gmem_span_cycles(perf_gmem_span_cycles),
     `endif
         .transfer_active    (transfer_active),
+        .transfer_start     (pipeline_start),
         .active_uuid        (active_uuid),
         .ag_valid           (ag_valid),
         .ag_ready           (ag_ready),
@@ -278,6 +281,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         .lg_ratio              (ag_lg_ratio),
         .lg_tcN                (ag_lg_tcN),
         .lg_nsteps             (ag_lg_nsteps),
+        .lg_bkK                (ag_lg_bkK),
         .smem_base             (ag_smem_base)
     );
 
@@ -309,6 +313,7 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     reg [PERF_CTR_BITS-1:0] perf_gmem_dedup_r;
     reg [PERF_CTR_BITS-1:0] perf_lmem_writes_r;
     reg [PERF_CTR_BITS-1:0] perf_gmem_lt_r;
+    reg [PERF_CTR_BITS-1:0] perf_noslot_r;
     always @(posedge clk) begin
         if (reset) begin
             perf_transfers_r   <= '0;
@@ -316,7 +321,11 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
             perf_gmem_dedup_r  <= '0;
             perf_lmem_writes_r <= '0;
             perf_gmem_lt_r     <= '0;
+            perf_noslot_r      <= '0;
         end else begin
+            if (stall_no_slot) begin
+                perf_noslot_r <= perf_noslot_r + PERF_CTR_BITS'(1);
+            end
             if (transfer_active && transfer_done) begin
                 perf_transfers_r   <= perf_transfers_r + PERF_CTR_BITS'(1);
                 perf_gmem_reads_r  <= perf_gmem_reads_r + PERF_CTR_BITS'(perf_gmem_reqs);
@@ -330,9 +339,10 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     assign dxa_perf.gmem_dedup   = perf_gmem_dedup_r;
     assign dxa_perf.lmem_writes  = perf_lmem_writes_r;
     assign dxa_perf.gmem_latency = perf_gmem_lt_r;
-`endif
-
+    assign dxa_perf.noslot_stalls = perf_noslot_r;
+`else
     `UNUSED_VAR (stall_no_slot)
+`endif
 `ifndef DBG_TRACE_DXA
     `UNUSED_VAR (wr_done_count)
 `endif
