@@ -476,6 +476,10 @@ private:
       reqs.clear();
     }
 
+    for (auto& st : m_axi_states_) {
+      st.w_staged.clear();
+    }
+
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       std::queue<mem_req_t*> empty;
       std::swap(dram_queues_[b], empty);
@@ -769,6 +773,14 @@ private:
         }
         if (mem_rsp_it != pending_mem_reqs_[b].end()) {
           auto mem_rsp = *mem_rsp_it;
+          // Commit point: the write becomes visible exactly as its B is returned.
+          for (auto& beat : mem_rsp->w_beats) {
+            for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; ++i) {
+              if ((beat.byteen >> i) & 0x1) {
+                (*ram_)[beat.addr + i] = beat.data[i];
+              }
+            }
+          }
           *m_axi_mem_[b].bvalid = 1;
           *m_axi_mem_[b].bid    = mem_rsp->tag;
           *m_axi_mem_[b].bresp  = 0;
@@ -811,13 +823,17 @@ private:
         uint64_t byte_addr = m_axi_states_[b].aw_addr
                            + uint64_t(m_axi_states_[b].aw_beat)
                              * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
-        auto byteen = *m_axi_mem_[b].wstrb;
-        auto data = (const uint8_t*)m_axi_mem_[b].wdata->data();
-        for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; ++i) {
-          if ((byteen >> i) & 0x1) {
-            (*ram_)[byte_addr + i] = data[i];
-          }
-        }
+        // The beat is accepted but NOT yet visible in memory: AXI makes a
+        // write observable only once its B response is returned, and a read to
+        // the same address issued before that may legally return either value.
+        // Holding the payload here is what lets a master's own store->fill
+        // ordering bug appear in simulation instead of only on hardware.
+        w_beat_t beat;
+        beat.addr   = byte_addr;
+        beat.byteen = uint64_t(*m_axi_mem_[b].wstrb);
+        std::memcpy(beat.data.data(), m_axi_mem_[b].wdata->data(),
+                    VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+        m_axi_states_[b].w_staged.emplace_back(beat);
         if (*m_axi_mem_[b].wlast) {
           auto mem_req = new mem_req_t();
           mem_req->tag   = m_axi_states_[b].aw_tag;
@@ -825,6 +841,8 @@ private:
           mem_req->write = true;
           mem_req->ready = false;
           mem_req->last  = true;
+          mem_req->w_beats = std::move(m_axi_states_[b].w_staged);
+          m_axi_states_[b].w_staged.clear();
           pending_mem_reqs_[b].emplace_back(mem_req);
           dram_queues_[b].push(mem_req);
           m_axi_states_[b].aw_active = false;
@@ -835,6 +853,13 @@ private:
     }
   }
 
+  // One accepted write beat, held until the burst's B response retires it.
+  typedef struct {
+    std::array<uint8_t, VX_CFG_PLATFORM_MEMORY_DATA_SIZE> data;
+    uint64_t addr;
+    uint64_t byteen;
+  } w_beat_t;
+
   typedef struct {
     bool     read_rsp_ready;
     bool     write_rsp_ready;
@@ -843,6 +868,7 @@ private:
     uint64_t aw_addr;
     uint32_t aw_beat;
     uint32_t aw_tag;
+    std::vector<w_beat_t> w_staged;  // beats accepted so far in this burst
   } m_axi_state_t;
 
   typedef struct {
@@ -852,6 +878,7 @@ private:
     bool write;
     bool ready;
     bool last;     // last beat of its burst — drives rlast
+    std::vector<w_beat_t> w_beats;  // writes: payload, applied when B retires
   } mem_req_t;
 
   // Whether read/write responses may complete out of request order, and the
