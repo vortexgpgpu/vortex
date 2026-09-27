@@ -186,6 +186,14 @@ public:
     peek_poke.step(n, true);
   }
 
+  // Only ever called after a blocking step, which has already waited for the
+  // step to finish. A blocking peek would additionally wait up to 0.1 s for
+  // PRECISE_PEEKABLE, which a FAME-5 design never raises, and then return the
+  // same value: 0.1 s lost per peek, and dcr_read peeks once per target cycle.
+  uint32_t peek(const char *name) {
+    return peek_poke.peek(name, false);
+  }
+
   // The DRAM timing models sit between the target's memory port and the
   // card's memory. Their request and error counters say whether a request the
   // core is waiting on ever left the target, came back, or came back an error.
@@ -752,8 +760,8 @@ int firesim_sim::dcr_read(uint32_t addr, uint32_t tag, uint32_t *value) {
     const uint32_t kPollRounds = dcr_poll_rounds();
     for (uint32_t i = 0; i < kPollRounds; ++i) {
       g_sim->step(1);
-      if (pp.peek("ctrl_dcr_rsp_valid", true) != 0) {
-        sampled = pp.peek("ctrl_dcr_rsp_data", true);
+      if (g_sim->peek("ctrl_dcr_rsp_valid") != 0) {
+        sampled = g_sim->peek("ctrl_dcr_rsp_data");
         answered = true;
         break;
       }
@@ -857,7 +865,7 @@ int firesim_sim::is_busy(bool *busy) {
   const uint32_t batch = step_batch_;
   int ret = impl_->submit(label("step %u + busy", batch), [&sampled, batch] {
     g_sim->step(batch);
-    sampled = g_sim->peek_poke.peek("ctrl_busy", true);
+    sampled = g_sim->peek("ctrl_busy");
   });
   if (ret != 0) {
     return ret;
