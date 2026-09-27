@@ -325,5 +325,14 @@ tests:
   configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_LNSF4_ENABLE -DVX_CFG_TCU_TYPE_TFR -DITYPE=lnsf4 -DOTYPE=fp32 -DTCU_MX_TLS
   args: "-m32 -n32 -k32"
 
+# rzr4_lns: RZR4 (RaZeR) with LNSF4's LNS8 (Q4.3) block scale instead of
+# e4m3 -- see VX_CFG_TCU_RZR4_LNS_ENABLE. TFR-only, same reason as lnsf4.
+- id: sgemm_tcu_mx-rtlsim-rzr4_lns-tfr
+  via: blackbox
+  drivers: [rtlsim]
+  app: sgemm_tcu_mx
+  configs: -DVX_CFG_NUM_THREADS=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_MX_ENABLE -DVX_CFG_TCU_FP4_ENABLE -DVX_CFG_TCU_RZR4_LNS_ENABLE -DVX_CFG_TCU_TYPE_TFR -DITYPE=rzr4_lns -DOTYPE=fp32 -DTCU_MX_TLS
+  args: "-m32 -n32 -k32"
+
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.

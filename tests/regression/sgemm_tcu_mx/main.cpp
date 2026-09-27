@@ -148,6 +148,11 @@ static float dequantize_mx_value(const itype_t *data,
       uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
       return bit_cast<float>(rv_lnsf4tof_s(q, sf, 0, nullptr)) * tensor_scale;
     }
+  case vt::rzr4_lns::id:
+    {
+      uint8_t q = read_nibble(reinterpret_cast<const uint8_t*>(data), offset);
+      return bit_cast<float>(rv_rzr4lnstof_s(q, sf, 0, nullptr)) * tensor_scale;
+    }
   default:
     std::abort();
   }

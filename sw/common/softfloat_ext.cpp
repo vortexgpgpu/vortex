@@ -1087,6 +1087,22 @@ lnsfloat4_t f32_to_lnsf4(float32_t a, sflns8_t scale_factor) {
   return res;
 }
 
+float32_t rzr4lns_to_f32(rzrlnsfloat4_t a) {
+  uint8_t code = a.v & 0x0f;
+  float base_value;
+  if (code == 0x0) {
+    base_value = (a.sf & 0x80) ? -5.0f : 5.0f;
+  } else if (code == 0x8) {
+    base_value = 0.0f;
+  } else {
+    float4_t base = {code};
+    base_value = vortex::bit_cast<float>(f4e2m1_to_f32(base).v);
+  }
+  float32_t res;
+  res.v = vortex::bit_cast<uint32_t>(base_value * lnsf4_decode_scale(a.sf));
+  return res;
+}
+
 float32_t f4e2m1_to_f32(float4_t a) {
   static constexpr float values[8] = {
     0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f
