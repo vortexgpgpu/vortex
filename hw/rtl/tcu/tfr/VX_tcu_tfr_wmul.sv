@@ -57,19 +57,19 @@ module VX_tcu_tfr_wmul #(
         wire [LANES-1:0][P-1:0] p_w;
         for (genvar i = 0; i < LANES; ++i) begin : g_mul
             localparam BI = (SHARED_B != 0) ? 0 : i;
-            if (N == M) begin : g_wal
-                VX_wallace_mul #(
-                    .N (N),
-                    .P (P),
-                    .CPA_KS (!`FORCE_BUILTIN_ADDER(N+M))
-                ) u_mul (
-                    .a (a[i]),
-                    .b (b[BI]),
-                    .p (p_w[i])
-                );
-            end else begin : g_inf
-                assign p_w[i] = a[i] * b[BI];
-            end
+            // Non-square operands are zero-extended to a square Wallace tree
+            // (the constant rows prune away) rather than written as `*`,
+            // which FPGA synthesis would infer onto DSP slices.
+            localparam K = (N > M) ? N : M;
+            VX_wallace_mul #(
+                .N (K),
+                .P (P),
+                .CPA_KS (!`FORCE_BUILTIN_ADDER(N+M))
+            ) u_mul (
+                .a (K'(a[i])),
+                .b (K'(b[BI])),
+                .p (p_w[i])
+            );
         end
         if (SHARED_B != 0 && LANES > 1) begin : g_unused
             `UNUSED_VAR (b[1])
