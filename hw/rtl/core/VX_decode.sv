@@ -601,6 +601,9 @@ module VX_decode import
                             end
                             3'h3: begin // JOIN
                                 op_type = INST_OP_BITS'(INST_SFU_JOIN);
+                                // an 'x here cancels algebraically in 2-state but
+                                // poisons the warp mask in 4-state simulators
+                                op_args.wctl.is_cond_neg = 1'b0;
                                 `USED_IREG (rs1);
                             end
                             3'h4: begin // BAR
