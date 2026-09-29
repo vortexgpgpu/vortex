@@ -462,6 +462,22 @@ regression — so a red master is not re-synthesized every night (the failed run
 is the record); an infra/build error does not record, so the next nightly
 retries it.
 
+A run is **diagnosed from its GitHub page**, not from the runner. The workflow
+summary is `ci/synth_report.py`'s rendering of the `--report` JSON: every
+build's metrics against its baseline, the reason behind each verdict that is
+not a pass, and each design's critical paths and high-fanout nets. Each reason
+is also a workflow annotation naming the build and the metric, and a build that
+never produced metrics has the end of its tool log in the job log. The
+artifacts carry the rest: the summary and the report JSON as unzipped files a
+browser opens directly, and every build's `build.log` and reports as one
+archive. The report is a superset of the baseline entries — spec, config hash,
+metrics, critical paths, fan-out nets and tool environment, for the measured
+build and for the baseline it was judged against. The report
+and the run's URL are saved next to the gated SHA, so a **skipped night
+republishes the gated commit's results** with a link to the run that produced
+them, its findings as warnings — an unchanged red master does not read as an
+empty run.
+
 ### 4.5 `asic_gate.yml` — nightly synthesis, fanned out on hosted runners
 
 The ASIC gate needs no licence and no dedicated machine, so it runs on stock
@@ -480,8 +496,8 @@ So it is its own workflow, and its builds **fan out to one standalone job each**
   numbers the run would have produced. The job's command comes from the
   catalog's single `run:` case, narrowed with `-b <id>`, so what CI runs and what
   the catalog declares cannot drift apart.
-- `report` joins the per-job `--report` JSONs into one table
-  (`ci/synth_report.py`) in the workflow summary, and records the SHA marker.
+- `report` joins the per-job `--report` JSONs into one summary
+  (`ci/synth_report.py`, as in §4.4) and records the SHA marker.
 
 Like `fpga_gate.yml` it **hard-pins master** and **skips itself when master has
 not moved** — but a hosted runner keeps no state between runs, so the "already
@@ -489,7 +505,8 @@ gated this commit" marker is an actions-cache entry keyed by SHA (plus the spec'
 hash, so editing the build list re-gates) rather than a file in `~/.cache`. The
 marker is written once every build has reached a *verdict*, on the same reasoning
 as §4.4: a red master is not re-synthesized every night, and a build error does
-not record so the next nightly retries it.
+not record so the next nightly retries it. The marker holds the run's reports and
+URL, which is what a skipped night republishes.
 
 The prebuilt toolchain already carries yosys, sv2v and OpenSTA, so `setup-vortex`
 needs no change — but a `toolchain` job runs it with `prepare: true` ahead of the

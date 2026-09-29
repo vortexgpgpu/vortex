@@ -82,26 +82,29 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "key=asic-gate-$SHA-$SPEC" >> "$GITHUB_OUTPUT"
 
-      # Probe (lookup-only, no download) for this commit's marker. A HIT means a
-      # previous run already reached a verdict on this SHA, so master has not
-      # moved and there is nothing new to gate. The `report` job writes the
-      # marker at the end.
+      # Restore this commit's marker. A match means a previous run already
+      # reached a verdict on this SHA, so master has not moved and there is
+      # nothing new to gate. The `report` job writes the marker at the end, with
+      # that run's reports inside it for a skipped night to republish. A cache
+      # entry cannot be overwritten, so each run saves under its own key and the
+      # newest one for the commit is what restores.
       - name: Read gate marker
         id: marker
         uses: actions/cache/restore@v4
         with:
-          path: .asic_gate_sha
+          path: .asic_gate
           key: ${{ steps.key.outputs.key }}
-          lookup-only: true
+          restore-keys: ${{ steps.key.outputs.key }}-
 
       - name: Plan builds
         id: q
         env:
           IN_BUILDS: ${{ github.event.inputs.builds }}
           FORCE: ${{ github.event.inputs.force }}
-          HIT: ${{ steps.marker.outputs.cache-hit }}
+          HIT: ${{ steps.marker.outputs.cache-matched-key != '' }}
           SHA: ${{ steps.key.outputs.sha }}
           KEY: ${{ steps.key.outputs.key }}
+          RUNS: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/asic_gate.yml
         run: |
           set -euo pipefail
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
@@ -110,6 +113,12 @@ jobs:
             echo "master unchanged since the last gate run ($SHA) — skipping"
             echo "run=false" >> "$GITHUB_OUTPUT"
             echo "builds=[]" >> "$GITHUB_OUTPUT"
+            # A skipped night has no verdict of its own, so it republishes the
+            # one the gated commit got: an unchanged red master must not read
+            # as an empty run.
+            NOTE="master is unchanged since the last gate run (\`$SHA\`), so nothing was synthesized. These are the results of [that run]($(cat .asic_gate/url 2>/dev/null || echo "$RUNS"))."
+            python3 ci/synth_report.py --annotate warning --note "$NOTE" .asic_gate \
+              >> "$GITHUB_STEP_SUMMARY" || true
             exit 0
           fi
           echo "gating $SHA"
@@ -260,7 +269,10 @@ jobs:
         run: |
           set -uo pipefail
           rc=0
-          python3 ci/synth_report.py reports >> "$GITHUB_STEP_SUMMARY" || rc=$?
+          python3 ci/synth_report.py --annotate error \
+            --json asic_gate_report.json reports \
+            > asic_gate_report.md || rc=$?
+          cat asic_gate_report.md >> "$GITHUB_STEP_SUMMARY"
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
@@ -270,10 +282,32 @@ jobs:
       # next nightly retries it.
       - name: Record gated SHA
         if: steps.sum.outputs.rc != '2'
-        run: echo "${{ needs.plan.outputs.sha }}" > .asic_gate_sha
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p .asic_gate
+          echo "${{ needs.plan.outputs.sha }}" > .asic_gate/sha
+          echo "$RUN_URL" > .asic_gate/url
+          cp reports/asic_gate_*.json .asic_gate/
       - name: Save gate marker
         if: steps.sum.outputs.rc != '2'
         uses: actions/cache/save@v4
         with:
-          path: .asic_gate_sha
-          key: ${{ needs.plan.outputs.key }}
+          path: .asic_gate
+          key: ${{ needs.plan.outputs.key }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # Unzipped, so the summary opens in the browser straight from the run
+      # page, and the joined report it was rendered from downloads as itself.
+      # The report holds everything a baseline records.
+      - uses: actions/upload-artifact@v7
+        with:
+          path: asic_gate_report.md
+          archive: false
+          overwrite: true
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
+        with:
+          path: asic_gate_report.json
+          archive: false
+          overwrite: true
+          if-no-files-found: warn

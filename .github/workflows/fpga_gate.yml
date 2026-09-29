@@ -60,12 +60,35 @@ jobs:
           LAST=$(cat "$STATE" 2>/dev/null || echo "")
           echo "sha=$SHA"    >> "$GITHUB_OUTPUT"
           echo "state=$STATE" >> "$GITHUB_OUTPUT"
+          echo "report=${STATE%.sha}.report.json" >> "$GITHUB_OUTPUT"
+          echo "url=${STATE%.sha}.url" >> "$GITHUB_OUTPUT"
           if [ "$SHA" = "$LAST" ] && [ "$FORCE" != "true" ]; then
             echo "master unchanged since the last gate run ($SHA) — skipping"
             echo "run=false" >> "$GITHUB_OUTPUT"
           else
             echo "gating $SHA (last run: ${LAST:-none})"
             echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A skipped night has no verdict of its own, so it republishes the one the
+      # gated commit got: an unchanged red master must not read as an empty run.
+      - name: Republish the gated verdict
+        if: steps.gate.outputs.run != 'true'
+        env:
+          SHA: ${{ steps.gate.outputs.sha }}
+          REPORT: ${{ steps.gate.outputs.report }}
+          URL: ${{ steps.gate.outputs.url }}
+          RUNS: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/fpga_gate.yml
+        run: |
+          set -uo pipefail
+          NOTE="master is unchanged since the last gate run (\`$SHA\`), so nothing was synthesized."
+          if [ -f "$REPORT" ]; then
+            NOTE="$NOTE These are the results of [that run]($(cat "$URL" 2>/dev/null || echo "$RUNS"))."
+            python3 ci/synth_report.py --annotate warning --note "$NOTE" "$REPORT" \
+              >> "$GITHUB_STEP_SUMMARY" || true
+          else
+            printf '## xilinx gate\n\n%s This runner holds no saved results for it; see the [earlier runs](%s).\n' \
+              "$NOTE" "$RUNS" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # The command is the one the catalog declares (ci/testcases/fpga_gate.yaml's
@@ -91,15 +114,56 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
+      # Every build's metrics against its baseline, and why each build that did
+      # not pass did not, on the run's own page. The same document is uploaded
+      # below as a file a browser opens directly.
+      - name: Summarize
+        if: always() && steps.gate.outputs.run == 'true'
+        run: |
+          set -uo pipefail
+          python3 ci/synth_report.py --annotate error fpga_gate_report.json \
+            > fpga_gate_report.md || true
+          cat fpga_gate_report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # A build that never produced metrics has its cause in the tool's log, not
+      # in the gate's output. The whole log is in the artifact; its end is here.
+      # The log is printed with workflow commands stopped, so nothing in it can
+      # be read as one.
+      - name: Failed build logs
+        if: always() && steps.gate.outputs.run == 'true'
+        run: |
+          set -uo pipefail
+          TOKEN="log-$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          python3 ci/synth_report.py --build-failed fpga_gate_report.json |
+          while read -r id dut; do
+            log="build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_${id}_${dut}/build.log"
+            [ -f "$log" ] || continue
+            echo "::group::$id: last 200 lines of build.log"
+            echo "::stop-commands::$TOKEN"
+            tail -n 200 "$log"
+            echo "::$TOKEN::"
+            echo "::endgroup::"
+          done
+
       # Record the SHA once the gate has actually reached a verdict (pass=0 or
       # regression=1), so a red master is not re-synthesized every night — the
       # failed run is the record. An infra/build failure (2) does NOT record, so
-      # the next nightly retries it.
+      # the next nightly retries it. The report and the run's URL are kept next
+      # to it, for the skipped nights to republish.
       - name: Record gated SHA
         if: steps.gate.outputs.run == 'true' && steps.run.outputs.rc != '2'
+        env:
+          REPORT: ${{ steps.gate.outputs.report }}
+          URL: ${{ steps.gate.outputs.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           mkdir -p "$(dirname '${{ steps.gate.outputs.state }}')"
           echo "${{ steps.gate.outputs.sha }}" > "${{ steps.gate.outputs.state }}"
+          rm -f "$REPORT" "$URL"
+          if [ -f fpga_gate_report.json ]; then
+            cp fpga_gate_report.json "$REPORT"
+            echo "$RUN_URL" > "$URL"
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always() && steps.gate.outputs.run == 'true'
@@ -113,6 +177,24 @@ jobs:
           # A build that dies in elaboration leaves only its build.log, so a
           # path matching nothing turns a red gate into a red X with no evidence.
           if-no-files-found: error
+
+      # Unzipped, so the summary opens in the browser straight from the run
+      # page, and the report it was rendered from downloads as itself. The
+      # report holds everything a baseline records.
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.gate.outputs.run == 'true'
+        with:
+          path: fpga_gate_report.md
+          archive: false
+          overwrite: true
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.gate.outputs.run == 'true'
+        with:
+          path: fpga_gate_report.json
+          archive: false
+          overwrite: true
+          if-no-files-found: warn
 
       # always(), not success(): the verdict must not be masked by an upload failure.
       - name: Verdict
