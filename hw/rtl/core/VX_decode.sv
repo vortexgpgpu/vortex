@@ -601,6 +601,13 @@ module VX_decode import
                             end
                             3'h3: begin // JOIN
                                 op_type = INST_OP_BITS'(INST_SFU_JOIN);
+								// While the value of is_cond_neg has no impact on join result
+                                // it enters into the logic equation for the then_mask.
+                                // If it is left at x, in 4-state simulation, the then_mask
+                                // is assigned x which creates problems.
+                                // Assigning is_cond_neg to 0 adds no logic and ensures
+                                // the then_mask is not x.
+                                op_args.wctl.is_cond_neg = 1'b0;
                                 `USED_IREG (rs1);
                             end
                             3'h4: begin // BAR
