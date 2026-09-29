@@ -209,7 +209,7 @@ if [ "$output_file" != "" ]; then
 
             # extern *_pkg.sv and .v/.sv files
             for dir in ${externs[@]}; do
-                find "$(realpath $dir)" -maxdepth 1 -type f -name "*_pkg.sv" -print
+                find "$(realpath $dir)" -maxdepth 1 -type f \( -name "*_pkg.sv" -o -name "defs_div_sqrt_mvp.sv" \) -print
             done
             for dir in ${externs[@]}; do
                 find "$(realpath $dir)" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" -print
@@ -219,7 +219,7 @@ if [ "$output_file" != "" ]; then
         if [ "$copy_folder" != "" ]; then
             # All files have been copied; just point to the copy folder
             echo "+incdir+$(realpath "$copy_folder")"
-            find "$(realpath "$copy_folder")" -maxdepth 1 -type f -name "*_pkg.sv" -print
+            find "$(realpath "$copy_folder")" -maxdepth 1 -type f \( -name "*_pkg.sv" -o -name "defs_div_sqrt_mvp.sv" \) -print
             find "$(realpath "$copy_folder")" -maxdepth 1 -type f -name "*_if.sv" -print
             find "$(realpath "$copy_folder")" -maxdepth 1 -type f \( -name "*.v" -o -name "*.sv" \) ! -name "*_pkg.sv" ! -name "*_if.sv" -print
         else
@@ -230,7 +230,7 @@ if [ "$output_file" != "" ]; then
 
             # *_pkg.sv, then *_if.sv (interfaces), then remaining .v/.sv from include dirs
             for dir in ${includes[@]}; do
-                find "$(realpath "$dir")" -maxdepth 1 -type f -name "*_pkg.sv" -print
+                find "$(realpath "$dir")" -maxdepth 1 -type f \( -name "*_pkg.sv" -o -name "defs_div_sqrt_mvp.sv" \) -print
             done
             for dir in ${includes[@]}; do
                 find "$(realpath "$dir")" -maxdepth 1 -type f -name "*_if.sv" -print
