@@ -1,0 +1,38 @@
+# Vivado 2024.2.2, xcu55c-fsvh2892-2L-e (U55C), out-of-context post-route, 300 MHz, top=VX_tcu_fedp_tfr N=4.
+# 4-stage FEDP (VX_CFG_TCU_LATENCY=4), VX_CFG_TCU_USE_DSP=0 (no DSP wallace-tree mapping; Vivado may still infer DSPs).
+# fp4 formats: SF=2 scale slots (16-element blocks), lnsf4/rzr4_lns antilog = 4 fractional bits. bf16 = default FP16 datapath (fp16+bf16).
+# Power: vectorless (toggle 0.125, static prob 0.5). device_static is whole-chip leakage, identical for every design -- compare dynamic_power_mw.
+format,N,target_clock_mhz,fmax_mhz,wns_ns,lut,lutram,ff,carry8,dsp,bram,uram,dynamic_power_mw,clocks_mw,clb_logic_mw,signals_mw,dsp_mw,device_static_mw,total_onchip_mw
+bf16,4,300,312.3,0.131,2844,0,843,52,0,0,0,54.0,14.0,22.0,18.0,0.0,3274.0,3327.0
+nvfp4,4,300,316.6,0.174,1528,0,373,26,2,0,0,47.0,6.0,20.0,16.0,4.0,3273.0,3321.0
+lnsf4,4,300,332.8,0.328,1512,0,362,26,2,0,0,49.0,6.0,22.0,16.0,4.0,3273.0,3322.0
+rzr4,4,300,331.9,0.320,1886,0,364,26,2,0,0,66.0,6.0,32.0,22.0,5.0,3274.0,3340.0
+rzr4_lns,4,300,317.9,0.187,1846,0,353,26,2,0,0,63.0,6.0,31.0,22.0,4.0,3274.0,3337.0
+# --- rerun after VX_tcu_tfr_wmul fix: non-square USE_DSP=0 multiplies (fp4 per-slot scale_mul) now use a ---
+# --- zero-extended Wallace tree instead of `*`, so Vivado no longer infers DSPs for them. Same settings as above. ---
+bf16_wallace,4,300,312.3,0.131,2844,0,843,52,0,0,0,54.0,14.0,22.0,18.0,0.0,3274.0,3327.0
+nvfp4_wallace,4,300,338.8,0.381,1609,0,321,25,0,0,0,54.0,5.0,29.0,20.0,0.0,3274.0,3328.0
+lnsf4_wallace,4,300,333.3,0.333,1544,0,289,25,0,0,0,52.0,5.0,28.0,19.0,0.0,3274.0,3326.0
+rzr4_wallace,4,300,346.6,0.448,1792,0,265,25,0,0,0,70.0,4.0,40.0,26.0,0.0,3274.0,3344.0
+rzr4_lns_wallace,4,300,332.3,0.324,1722,0,249,25,0,0,0,65.0,4.0,38.0,22.0,0.0,3274.0,3339.0
+# --- lnsf4 antilog precision sweep (VX_CFG_TCU_LNSF4_ANTILOG_BITS=2..8), same settings as above ---
+lnsf4_al2,4,300,328.5,0.289,1500,0,297,24,0,0,0,51.0,5.0,26.0,20.0,0.0,3273.0,3324.0
+lnsf4_al3,4,300,340.1,0.393,1525,0,330,24,0,0,0,52.0,6.0,27.0,19.0,0.0,3274.0,3326.0
+lnsf4_al4,4,300,333.3,0.333,1544,0,289,25,0,0,0,52.0,5.0,28.0,19.0,0.0,3274.0,3326.0
+lnsf4_al5,4,300,335.9,0.356,1544,0,303,25,0,0,0,55.0,5.0,29.0,20.0,0.0,3274.0,3328.0
+lnsf4_al6,4,300,345.4,0.438,1548,0,324,25,0,0,0,56.0,5.0,30.0,20.0,0.0,3274.0,3329.0
+lnsf4_al7,4,300,331.7,0.318,1614,0,329,25,0,0,0,58.0,6.0,32.0,21.0,0.0,3274.0,3331.0
+lnsf4_al8,4,300,343.6,0.423,1650,0,318,25,0,0,0,67.0,5.0,36.0,25.0,0.0,3274.0,3340.0
+# --- scale-factor format variants (scratch RTL, not committed; synthesis only, no e2e): baseline is ---
+# --- nvfp4_wallace (e4m3) / lnsf4_wallace (Q4.3). nvfp4_e5m3 = 5b exp (bias 15) + 3b man; nvfp4_e4m4 = ---
+# --- 4b exp + 4b man (5x5 sf mantissa mul, 10b scale operand). lnsf4_q53 = signed Q5.3 (8-entry LUT); ---
+# --- lnsf4_q44 = signed Q4.4 (16-entry antilog LUT). All use the full 8-bit sf; antilog 4 frac bits. ---
+nvfp4_e5m3,4,300,339.6,0.388,1589,0,324,25,0,0,0,56.0,5.0,31.0,20.0,0.0,3274.0,3330.0
+nvfp4_e4m4,4,300,338.8,0.381,1683,0,341,27,0,0,0,61.0,6.0,33.0,22.0,0.0,3274.0,3335.0
+lnsf4_q53,4,300,327.8,0.282,1545,0,289,25,0,0,0,50.0,5.0,27.0,18.0,0.0,3273.0,3324.0
+lnsf4_q44,4,300,347.7,0.457,1535,0,289,25,0,0,0,54.0,5.0,30.0,20.0,0.0,3274.0,3328.0
+# --- RaZeR W3.3-A4.3 (scratch RTL, synthesis only): weights (B) use an e3m3 scale (rzr4) / signed Q3.3 ---
+# --- log scale (rzr4_lns) in sf[5:0]; freed sf[7:6] pick the weight special value +-5/+-8 (sign, mag); ---
+# --- activations (A) keep e4m3 / Q4.3 with SV +-5. Baselines: rzr4_wallace / rzr4_lns_wallace (W4.3-A4.3, SV +-5). ---
+rzr4_w33,4,300,335.7,0.354,1954,0,269,25,0,0,0,71.0,5.0,41.0,26.0,0.0,3274.0,3345.0
+rzr4_lns_w33,4,300,335.9,0.356,1857,0,249,25,0,0,0,63.0,4.0,37.0,22.0,0.0,3274.0,3337.0
