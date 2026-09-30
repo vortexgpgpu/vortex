@@ -94,3 +94,35 @@ nr_dsm_on_g1_tf32,37,4,1543,330,24,2
 nr_dsm_on_g2_fp16,78,8,1566,333,47,5
 nr_dsm_on_g3_fp8,117,16,1565,333,46,5
 nr_dsm_on_g4_mxfp4,195,32,1560,333,41,5
+# --- DSM gating overhead at N=2 (NUM_THREADS=8, SF=1) and N=8 (NUM_THREADS=128, SF=2), retiming off (OPT_LEVEL=2); ---
+# --- same wrapper and configs as the nr_dsm_* (N=4) rows above: every datatype group enabled, gating added per group. ---
+# ---   N=2 nr_n2_dsm_on_g1_tf32: LUT -1.0% / FF +7.2% / dyn -17.3% ---
+# ---   N=2 nr_n2_dsm_on_g2_fp16: LUT -0.3% / FF +7.6% / dyn -17.9% ---
+# ---   N=2 nr_n2_dsm_on_g3_fp8: LUT +2.6% / FF +7.9% / dyn -16.7% ---
+# ---   N=2 nr_n2_dsm_on_g4_mxfp4: LUT +2.1% / FF +10.7% / dyn -17.9% ---
+nr_n2_dsm_off,2,300,268.9,-0.386,4723,3,607,90,0,0,0,168.0,10.0,84.0,73.0,0.0,3276.0,3444.0
+nr_n2_dsm_on_g1_tf32,2,300,266.6,-0.418,4675,3,651,90,0,0,0,139.0,10.0,68.0,61.0,0.0,3275.0,3415.0
+nr_n2_dsm_on_g2_fp16,2,300,273.4,-0.324,4711,3,653,90,0,0,0,138.0,11.0,68.0,60.0,0.0,3275.0,3413.0
+nr_n2_dsm_on_g3_fp8,2,300,264.2,-0.452,4847,3,655,90,0,0,0,140.0,11.0,69.0,61.0,0.0,3275.0,3416.0
+nr_n2_dsm_on_g4_mxfp4,2,300,275.2,-0.301,4823,3,672,90,0,0,0,138.0,11.0,68.0,59.0,0.0,3275.0,3413.0
+# ---   N=8 nr_n8_dsm_on_g1_tf32: LUT +3.2% / FF +1.4% / dyn -29.8% ---
+# ---   N=8 nr_n8_dsm_on_g2_fp16: LUT +3.1% / FF +3.1% / dyn -33.5% ---
+# ---   N=8 nr_n8_dsm_on_g3_fp8: LUT +3.9% / FF +3.2% / dyn -31.8% ---
+# ---   N=8 nr_n8_dsm_on_g4_mxfp4: LUT +6.4% / FF +4.9% / dyn -29.0% ---
+nr_n8_dsm_off,8,300,235.5,-0.913,18206,3,1882,422,0,0,0,831.0,32.0,415.0,383.0,0.0,3290.0,4121.0
+nr_n8_dsm_on_g1_tf32,8,300,230.9,-0.998,18780,3,1909,422,0,0,0,583.0,30.0,284.0,268.0,0.0,3285.0,3867.0
+nr_n8_dsm_on_g2_fp16,8,300,233.2,-0.955,18774,3,1940,422,0,0,0,553.0,30.0,272.0,251.0,0.0,3284.0,3838.0
+nr_n8_dsm_on_g3_fp8,8,300,228.8,-1.038,18923,3,1943,422,0,0,0,567.0,31.0,280.0,257.0,0.0,3284.0,3852.0
+nr_n8_dsm_on_g4_mxfp4,8,300,228.3,-1.048,19368,3,1974,422,0,0,0,590.0,32.0,285.0,273.0,0.0,3285.0,3875.0
+# --- Direct gating-logic attribution at N=2 and N=8 (same columns as the N=4 table above; mask FFs = 1/2/4/8 bits per k-word x N). ---
+config,dsm_mask_lut,dsm_mask_ff,pipe_mul_lut,pipe_mul_ff,lane_enable_lut_delta,lane_enable_ff_delta
+nr_n2_dsm_off,0,0,874,182,0,0
+nr_n2_dsm_on_g1_tf32,19,2,848,183,-26,1
+nr_n2_dsm_on_g2_fp16,41,4,891,184,17,2
+nr_n2_dsm_on_g3_fp8,71,8,890,184,16,2
+nr_n2_dsm_on_g4_mxfp4,100,18,889,184,15,2
+nr_n8_dsm_off,0,0,2797,623,0,0
+nr_n8_dsm_on_g1_tf32,73,8,2909,626,112,3
+nr_n8_dsm_on_g2_fp16,191,16,2871,631,74,8
+nr_n8_dsm_on_g3_fp8,254,32,2871,631,74,8
+nr_n8_dsm_on_g4_mxfp4,405,64,2871,631,74,8
