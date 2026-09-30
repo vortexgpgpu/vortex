@@ -36,3 +36,36 @@ lnsf4_q44,4,300,347.7,0.457,1535,0,289,25,0,0,0,54.0,5.0,30.0,20.0,0.0,3274.0,33
 # --- activations (A) keep e4m3 / Q4.3 with SV +-5. Baselines: rzr4_wallace / rzr4_lns_wallace (W4.3-A4.3, SV +-5). ---
 rzr4_w33,4,300,335.7,0.354,1954,0,269,25,0,0,0,71.0,5.0,41.0,26.0,0.0,3274.0,3345.0
 rzr4_lns_w33,4,300,335.9,0.356,1857,0,249,25,0,0,0,63.0,4.0,37.0,22.0,0.0,3274.0,3337.0
+# --- CORRECTION: every FEDP-top row above ran N=4 at the default VX_CFG_NUM_THREADS=4, where TCU_TC_K=2 sizes ---
+# --- vld_mask to 16 bits for a 32-element FEDP; Vivado flagged index 16..31 out of range ([Synth 8-324]) and ---
+# --- pruned lanes 4-7, so those rows under-report the datapath. Rows below rerun with VX_CFG_NUM_THREADS=32 ---
+# --- (TCU_TC_K = N = 4, 32-bit vld_mask, no range warnings); otherwise identical settings to the _wallace rows. ---
+bf16_nt32,4,300,302.8,0.031,4907,0,675,102,0,0,0,80.0,11.0,37.0,32.0,0.0,3274.0,3354.0
+nvfp4_nt32,4,300,341.8,0.407,2561,0,298,36,0,0,0,93.0,5.0,53.0,35.0,0.0,3274.0,3367.0
+lnsf4_nt32,4,300,331.3,0.315,2416,0,289,36,0,0,0,88.0,5.0,48.0,36.0,0.0,3274.0,3362.0
+# --- DSM sparse-gating overhead: top = VX_tcu_dsm_fedp_top (branch feature_dsm): VX_tcu_dsm zero-detect + registered ---
+# --- mask + VX_tcu_fedp_tfr LANE_MASK=1 (per-lane stage-1 register enables + element gating), operands registered ---
+# --- as in VX_tcu_core. NUM_THREADS=32, N=4, SF=1. EVERY row has all four datatype groups enabled in the datapath ---
+# --- (tf32 + fp16/bf16 + fp8/bf8 + mxfp4; MX also brings mxfp8/mxbf8). dsm_off = gating removed completely (baseline). ---
+# --- dsm_on_gK = sparse gating enabled progressively per group: g1 tf32 only, g2 +fp16/bf16, g3 +fp8/bf8, g4 +fp4. ---
+dsm_off,4,300,283.8,-0.191,9495,0,2496,175,0,0,0,365.0,43.0,161.0,161.0,0.0,3280.0,3645.0
+dsm_on_g4_mxfp4,4,300,280.3,-0.235,10073,0,2946,175,0,0,0,316.0,41.0,132.0,142.0,0.0,3279.0,3595.0
+# --- GPU-generation format sets, top = VX_tcu_fedp_tfr, N=4, NUM_THREADS=32 (TCU_TC_K = N), 4-stage, USE_DSP=0 (Wallace), ---
+# --- 300 MHz U55C. volta = fp16; turing = fp16 + int8 + int4; ampere = fp16 + bf16 + tf32 + int8 + int4; hopper = ampere ---
+# --- + fp8/bf8; blackwell = fp16 + bf16 + tf32 + fp8/bf8 + mxfp8/mxbf8 + mxfp4 + nvfp4 + int8 (SF=2). fp64 and int1 are ---
+# --- disregarded (not implemented in the TFR FEDP). volta/turing drop the bf16 decode via a scratch TFR_NO_BF16 macro ---
+# --- (the RTL has one fp16/bf16 enable); every other row uses committed RTL. ---
+arch_volta,4,300,291.0,-0.103,4680,0,665,86,0,0,0,64.0,11.0,30.0,22.0,0.0,3274.0,3338.0
+arch_turing,4,300,302.8,0.031,7879,0,705,258,0,0,0,124.0,12.0,68.0,45.0,0.0,3275.0,3400.0
+arch_ampere,4,300,302.7,0.029,8504,0,715,258,0,0,0,144.0,12.0,77.0,55.0,0.0,3275.0,3420.0
+arch_hopper,4,300,305.6,0.061,10434,0,696,330,0,0,0,246.0,12.0,136.0,98.0,0.0,3278.0,3523.0
+arch_blackwell,4,300,308.0,0.086,10902,0,715,342,0,0,0,332.0,12.0,181.0,139.0,0.0,3279.0,3611.0
+# --- Fanout of the arch_* rows (logical, post_synth.dcp, before implementation replication; load = leaf input pin). ---
+# --- operand = a_row/b_col port bits; fmt = fmt_s port bits; s1 = stage 1 (MULTIPLY) = combinational fan-out cone of ---
+# --- the operand/format/scale ports up to the first register; all = whole design. fo_gtK = nets with fanout > K. ---
+arch,s1_cells,all_cells,operand_nets,operand_loads,operand_avg_fanout,operand_max_fanout,operand_nets_fo_gt16,operand_nets_fo_gt64,fmt_nets,fmt_loads,fmt_avg_fanout,fmt_max_fanout,fmt_nets_fo_gt16,fmt_nets_fo_gt64,s1_nets,s1_loads,s1_avg_fanout,s1_max_fanout,s1_nets_fo_gt16,s1_nets_fo_gt64,all_nets,all_loads,all_avg_fanout,all_max_fanout,all_nets_fo_gt16,all_nets_fo_gt64,s1_loads_vs_volta_pct,operand_avg_fanout_vs_volta_pct
+volta,3014,6195,256,4181,16.332,33,144,0,5,135,27.000,42,4,0,3182,9699,3.048,192,99,21,6465,24318,3.761,293,240,45,0.0,0.0
+turing,7041,10342,256,14652,57.234,79,256,96,5,1079,215.800,419,5,4,8105,18331,2.262,160,99,30,11538,34355,2.978,437,252,62,89.0,250.4
+ampere,7205,10599,256,12339,48.199,76,256,10,5,2209,441.800,963,5,4,8269,21656,2.619,150,192,23,11795,38199,3.239,512,346,55,123.3,195.1
+hopper,9988,13410,256,14389,56.207,89,256,71,5,3205,641.000,1829,5,4,11484,30462,2.653,206,310,23,15038,47483,3.158,516,478,55,214.1,244.2
+blackwell,10570,14007,256,12459,48.668,74,256,20,5,2429,485.800,1237,5,5,12146,35413,2.916,298,356,23,15715,52678,3.352,636,513,58,265.1,198.0
