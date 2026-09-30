@@ -3,21 +3,28 @@
 # [Synth 8-324] out-of-range warnings). Vivado 2024.2.2, xcu55c-fsvh2892-2L-e (U55C), out-of-context post-route,
 # 300 MHz, OPT_LEVEL=3, top=VX_tcu_fedp_tfr N=4, 4-stage (VX_CFG_TCU_LATENCY=4), USE_DSP=0 (Wallace-tree multipliers,
 # 0 DSPs). fp4 formats SF=2; lnsf4 antilog 4 fractional bits unless swept. Sources: branch feature_mx2
-# (variant macros TFR_SFV_53 / TFR_SFV_44). Power: vectorless; compare dynamic_power_mw (device_static is whole-chip).
+# (variant macros TFR_SFV_53 / TFR_SFV_44 / TFR_W33). Power: vectorless; compare dynamic_power_mw (device_static is whole-chip).
 format,N,target_clock_mhz,fmax_mhz,wns_ns,lut,lutram,ff,carry8,dsp,bram,uram,dynamic_power_mw,clocks_mw,clb_logic_mw,signals_mw,dsp_mw,device_static_mw,total_onchip_mw
 # --- formats ---
 bf16,4,300,302.8,0.031,4907,0,675,102,0,0,0,80.0,11.0,37.0,32.0,0.0,3274.0,3354.0
 nvfp4,4,300,341.8,0.407,2561,0,298,36,0,0,0,93.0,5.0,53.0,35.0,0.0,3274.0,3367.0
-lnsf4,4,300,331.3,0.315,2416,0,289,36,0,0,0,88.0,5.0,48.0,36.0,0.0,3274.0,3362.0
+lnsf4,4,300,328.2,0.286,2409,0,289,36,0,0,0,89.0,5.0,50.0,34.0,0.0,3274.0,3363.0
+rzr4,4,300,312.7,0.135,3045,0,314,36,0,0,0,132.0,5.0,75.0,52.0,0.0,3275.0,3408.0
+rzr4_lns,4,300,319.3,0.201,2878,0,313,36,0,0,0,117.0,5.0,70.0,41.0,0.0,3275.0,3392.0
 # --- scale-factor format variants (synthesis only; baselines nvfp4 = e4m3, lnsf4 = Q4.3 above) ---
 nvfp4_e5m3,4,300,322.6,0.233,2550,0,304,36,0,0,0,94.0,5.0,53.0,36.0,0.0,3274.0,3369.0
 nvfp4_e4m4,4,300,332.3,0.324,2643,0,292,40,0,0,0,112.0,5.0,64.0,43.0,0.0,3275.0,3387.0
 lnsf4_q53,4,300,330.9,0.311,2405,0,289,36,0,0,0,83.0,5.0,47.0,32.0,0.0,3274.0,3358.0
 lnsf4_q44,4,300,313.0,0.138,2409,0,289,36,0,0,0,91.0,5.0,50.0,36.0,0.0,3274.0,3365.0
+# --- RaZeR W3.3-A4.3 (synthesis only): weights (B) e3m3 scale (rzr4) / signed Q3.3 log scale (rzr4_lns) in sf[5:0]; ---
+# --- freed sf[7:6] select the weight special value +-5/+-8; activations keep e4m3 / Q4.3 with SV +-5 (macro TFR_W33). ---
+# --- Baselines: rzr4 / rzr4_lns above (W4.3-A4.3, SV +-5). ---
+rzr4_w33,4,300,311.6,0.124,3403,0,319,36,0,0,0,130.0,5.0,74.0,50.0,0.0,3275.0,3405.0
+rzr4_lns_w33,4,300,330.8,0.310,3145,0,309,36,0,0,0,118.0,5.0,69.0,44.0,0.0,3275.0,3393.0
 # --- lnsf4 antilog precision sweep (VX_CFG_TCU_LNSF4_ANTILOG_BITS = 2..8) ---
 lnsf4_al2,4,300,321.9,0.226,2323,0,289,34,0,0,0,76.0,5.0,43.0,28.0,0.0,3274.0,3350.0
 lnsf4_al3,4,300,329.5,0.298,2364,0,289,34,0,0,0,80.0,5.0,45.0,29.0,0.0,3274.0,3354.0
-lnsf4_al4,4,300,331.3,0.315,2416,0,289,36,0,0,0,88.0,5.0,48.0,36.0,0.0,3274.0,3362.0
+lnsf4_al4,4,300,331.3,0.315,2398,0,289,36,0,0,0,88.0,5.0,48.0,36.0,0.0,3274.0,3362.0
 lnsf4_al5,4,300,328.2,0.286,2409,0,289,36,0,0,0,89.0,5.0,50.0,34.0,0.0,3274.0,3363.0
 lnsf4_al6,4,300,325.2,0.258,2465,0,304,36,0,0,0,90.0,5.0,50.0,35.0,0.0,3274.0,3365.0
 lnsf4_al7,4,300,322.0,0.227,2564,0,305,36,0,0,0,99.0,5.0,56.0,38.0,0.0,3274.0,3373.0
