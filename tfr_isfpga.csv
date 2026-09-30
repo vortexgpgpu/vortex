@@ -49,6 +49,9 @@ lnsf4_nt32,4,300,331.3,0.315,2416,0,289,36,0,0,0,88.0,5.0,48.0,36.0,0.0,3274.0,3
 # --- (tf32 + fp16/bf16 + fp8/bf8 + mxfp4; MX also brings mxfp8/mxbf8). dsm_off = gating removed completely (baseline). ---
 # --- dsm_on_gK = sparse gating enabled progressively per group: g1 tf32 only, g2 +fp16/bf16, g3 +fp8/bf8, g4 +fp4. ---
 dsm_off,4,300,283.8,-0.191,9495,0,2496,175,0,0,0,365.0,43.0,161.0,161.0,0.0,3280.0,3645.0
+dsm_on_g1_tf32,4,300,292.1,-0.091,9843,0,2840,175,0,0,0,306.0,39.0,131.0,136.0,0.0,3279.0,3585.0
+dsm_on_g2_fp16,4,300,283.8,-0.191,9815,0,2643,175,0,0,0,302.0,36.0,132.0,134.0,0.0,3279.0,3581.0
+dsm_on_g3_fp8,4,300,267.7,-0.403,9415,0,2627,175,0,0,0,325.0,38.0,143.0,144.0,0.0,3279.0,3605.0
 dsm_on_g4_mxfp4,4,300,280.3,-0.235,10073,0,2946,175,0,0,0,316.0,41.0,132.0,142.0,0.0,3279.0,3595.0
 # --- GPU-generation format sets, top = VX_tcu_fedp_tfr, N=4, NUM_THREADS=32 (TCU_TC_K = N), 4-stage, USE_DSP=0 (Wallace), ---
 # --- 300 MHz U55C. volta = fp16; turing = fp16 + int8 + int4; ampere = fp16 + bf16 + tf32 + int8 + int4; hopper = ampere ---
