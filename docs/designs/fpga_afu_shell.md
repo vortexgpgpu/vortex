@@ -23,10 +23,11 @@ DMA-command engine have been removed.
 |---|---|
 | [`vortex_afu.v`](../../hw/rtl/afu/xrt/vortex_afu.v) | Vitis RTL-kernel top — thin wrapper instantiating `VX_afu_wrap`. |
 | [`vortex_afu.vh`](../../hw/rtl/afu/xrt/vortex_afu.vh) | Defines/macros (`GEN_AXI_MEM`, `GEN_AXI_HOST`, the bit-12 window). |
-| [`VX_afu_wrap.sv`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv) | The real shell (~696 LOC): AXI-Lite bit-12 demux, `VX_cp_core`, `m_axi_host`, bank-0 `VX_axi_arb2`, the `Vortex_axi` instance. |
+| [`VX_afu_wrap.sv`](../../hw/rtl/afu/common/VX_afu_wrap.sv) | The real shell (~1,200 LOC): AXI-Lite bit-12 demux, `VX_cp_core`, `m_axi_host`, the Vortex instance and the device-memory path shared with the CP. |
 | [`VX_afu_ctrl.sv`](../../hw/rtl/afu/xrt/VX_afu_ctrl.sv) | Slimmed AXI-Lite slave (~322 LOC): `ap_ctrl` stub at 0x00 + a SCOPE serial register pair + SCOPE watchdog. |
 | [`VX_afu_axil_demux.sv`](../../hw/rtl/afu/common/VX_afu_axil_demux.sv) | AXI-Lite demux splitting the control space on `addr[12]`, one outstanding transaction per direction. |
 | [`VX_afu_axi_drain.sv`](../../hw/rtl/afu/common/VX_afu_axi_drain.sv) | Outstanding-transaction tracker per AXI master; reports when a port owes the interconnect nothing. |
+| [`VX_afu_axi_limit.sv`](../../hw/rtl/afu/common/VX_afu_axi_limit.sv) | Holds an AXI master to one read and one write in flight; applied to port 0 of the multi-port shell. |
 | [`VX_afu_reset_seq.sv`](../../hw/rtl/afu/common/VX_afu_reset_seq.sv) | Quiesce-before-reset sequencer for the soft reset; refuses rather than resetting a master that will not drain. |
 
 - **Control.** Host AXI-Lite `addr[12]` splits the slave: `addr[12]=0` →
@@ -39,12 +40,16 @@ DMA-command engine have been removed.
   with its address, and routing W by a register that only updates at the AW
   handshake sent AW and W to different slaves and deadlocked the interface.
   Covered by `hw/unittest/afu_axil_demux`.
-- **Memory.** Vortex banks 1..N pass straight to platform AXI; bank 0
-  shares with CP `axi_dev` via `VX_axi_arb2`
-  ([`:506-558`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L506)); CP `axi_host`
-  drives a **dedicated `m_axi_host` AXI master** for the command ring +
-  host DMA ([`:302-326`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L302)).
-  `PLATFORM_MEMORY_OFFSET` is applied per bank.
+- **Memory.** Two structures, selected by the number of memory ports.
+  *One port* (the merged platforms): `Vortex_axi` and the CP's `axi_dev`
+  share the port through a 2:1 `VX_mm_axi_arb`, and CP bursts reach the
+  platform as bursts. *Several ports*: Vortex's memory ports and `axi_dev`
+  (bridged by `VX_membus_from_axi`) are the inputs of one bank adapter,
+  `VX_mem_to_axi`, so the CP is merged **upstream** of bank selection and
+  reaches every bank. In both, port 0 carries one read and one write in
+  flight (`VX_afu_axi_limit` in the second case). CP `axi_host` drives a
+  **dedicated `m_axi_host` AXI master** for the command ring + host DMA.
+  `PLATFORM_MEMORY_OFFSET` is applied per bank, at the port.
 - **Interrupt.** The AFU `interrupt` pin is driven from `cp_interrupt`
   ([`:335`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L335)).
 
@@ -78,20 +83,22 @@ DMA-command engine have been removed.
 ## 3. Shared components and asymmetries
 
 Reused from the common libraries (not under `afu/`):
-[`VX_axi_arb2.sv`](../../hw/rtl/libs/VX_axi_arb2.sv) (XRT bank-0 arbiter),
-[`VX_mem_arb.sv`](../../hw/rtl/mem/VX_mem_arb.sv) (OPAE bank-0 arbiter),
+[`VX_mm_axi_arb.sv`](../../hw/rtl/libs/VX_mm_axi_arb.sv) (XRT single-port arbiter),
+[`VX_mem_to_axi.sv`](../../hw/rtl/libs/VX_mem_to_axi.sv) (XRT multi-port bank adapter),
+[`VX_mem_bus_arb.sv`](../../hw/rtl/mem/VX_mem_bus_arb.sv) (OPAE port-0 arbiter),
 [`VX_avs_adapter.sv`](../../hw/rtl/libs/VX_avs_adapter.sv) /
 `VX_mem_data_adapter.sv` (OPAE Avalon), and
-[`VX_cp_axi_to_membus.sv`](../../hw/rtl/cp/VX_cp_axi_to_membus.sv) (AXI→
-membus bridge, both OPAE bridges). The top-level cores are
-[`Vortex.sv`](../../hw/rtl/Vortex.sv) (OPAE, membus ports) and
-[`Vortex_axi.sv`](../../hw/rtl/Vortex_axi.sv) (XRT, AXI ports), each
-keeping direct `start`/`busy`/`dcr_*` ports.
+[`VX_membus_from_axi.sv`](../../hw/rtl/mem/VX_membus_from_axi.sv) (AXI→
+membus bridge: both OPAE bridges and the XRT multi-port device bridge). The
+top-level cores are [`Vortex.sv`](../../hw/rtl/Vortex.sv) (OPAE and XRT
+multi-port, membus ports) and [`Vortex_axi.sv`](../../hw/rtl/Vortex_axi.sv)
+(XRT single-port, AXI ports), each keeping direct `start`/`busy`/`dcr_*` ports.
 
 **Key XRT↔OPAE asymmetries:** dedicated host-AXI master (`m_axi_host`) vs.
-a CCI-P host-DMA state machine; an interrupt pin vs. none; `VX_axi_arb2`
-vs. `VX_mem_arb` for bank-0 sharing; AXI-Lite `addr[12]` vs. CCI-P MMIO
-word-address bit 10 for the control demux. Both expose SCOPE over a serial
+a CCI-P host-DMA state machine; an interrupt pin vs. none; with several
+memory ports, the CP as its own bank-adapter input vs. a `VX_mem_bus_arb` on
+Vortex's port 0 (both upstream of bank selection); AXI-Lite `addr[12]` vs.
+CCI-P MMIO word-address bit 10 for the control demux. Both expose SCOPE over a serial
 sideband.
 
 The XRT shell's reset-delay shift register is reloaded either by the platform
