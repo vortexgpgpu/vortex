@@ -25,7 +25,7 @@ module VX_tcu_tfr_mul_i4 import VX_tcu_pkg::*; #(
     input wire                      valid_in,
     input wire [31:0]               req_id,
 
-    input wire [TCU_MAX_INPUTS-1:0] vld_mask,
+    input wire [N * TCU_MAX_ELT_RATIO-1:0] vld_mask,
     input wire [3:0]                fmt_i,
 
     input wire [N-1:0][31:0]        a_row,

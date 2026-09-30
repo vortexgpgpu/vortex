@@ -573,11 +573,13 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
         // Dual-side sparse lane mask
         `ifdef VX_CFG_TCU_TYPE_TFR
-            wire [TCU_MAX_INPUTS-1:0] vld_mask_r;
+            // One mask bit per 4-bit element slot of every word the FEDP consumes
+            // (FEDP_K words, which is 2*TCU_TC_K under FEDP2K).
+            wire [FEDP_K * TCU_MAX_ELT_RATIO-1:0] vld_mask_r;
         `ifdef VX_CFG_TCU_DSM_ENABLE
-            wire [TCU_MAX_INPUTS-1:0] vld_mask;
+            wire [FEDP_K * TCU_MAX_ELT_RATIO-1:0] vld_mask;
             VX_tcu_dsm #(
-                .N (TCU_TC_K)
+                .N (FEDP_K)
             ) dual_sparse_mask (
                 .clk      (clk),
                 .reset    (reset),
@@ -588,7 +590,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 .vld_mask (vld_mask)
             );
             VX_pipe_register #(
-                .DATAW (TCU_MAX_INPUTS)
+                .DATAW (FEDP_K * TCU_MAX_ELT_RATIO)
             ) pipe_vld_mask (
                 .clk      (clk),
                 .reset    (reset),

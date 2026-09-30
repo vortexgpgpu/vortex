@@ -25,7 +25,7 @@ module VX_tcu_tfr_mul_i8 import VX_tcu_pkg::*; #(
     input wire                      valid_in,
     input wire [31:0]               req_id,
 
-    input wire [TCU_MAX_INPUTS-1:0] vld_mask,
+    input wire [N * TCU_MAX_ELT_RATIO-1:0] vld_mask,
     input wire [3:0]                fmt_i,
 
     input wire [N-1:0][31:0]        a_row,
@@ -35,7 +35,7 @@ module VX_tcu_tfr_mul_i8 import VX_tcu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR ({clk, req_id, valid_in})
-    for (genvar i = 1; i < TCU_MAX_INPUTS; i += 2) begin : g_unused_vld
+    for (genvar i = 1; i < N * TCU_MAX_ELT_RATIO; i += 2) begin : g_unused_vld
         `UNUSED_VAR (vld_mask[i])
     end
 

@@ -23,11 +23,11 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
     input  wire [4:0]         fmt_s,
     input  wire [N-1:0][31:0] a_row,
     input  wire [N-1:0][31:0] b_col,
-    output wire [TCU_MAX_INPUTS-1:0] vld_mask
+    output wire [N * TCU_MAX_ELT_RATIO-1:0] vld_mask
 );
 
     logic [N-1:0][7:0] vld_mask_per_k;
-    wire [TCU_MAX_INPUTS-1:0] vld_mask_w = vld_mask_per_k;
+    wire [N * TCU_MAX_ELT_RATIO-1:0] vld_mask_w = vld_mask_per_k;
 
     for (genvar k = 0; k < N; ++k) begin : g_k
 
@@ -163,7 +163,7 @@ module VX_tcu_dsm import VX_tcu_pkg::*; #(
     // Optional output register (aligns vld_mask with the FEDP operand pipe).
     if (OUT_REG != 0) begin : g_out_reg
         VX_pipe_register #(
-            .DATAW (TCU_MAX_INPUTS)
+            .DATAW (N * TCU_MAX_ELT_RATIO)
         ) pipe_vld_mask (
             .clk      (clk),
             .reset    (reset),

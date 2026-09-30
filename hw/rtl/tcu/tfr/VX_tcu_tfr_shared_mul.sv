@@ -34,7 +34,7 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     input wire              valid_in,
     input wire [31:0]       req_id,
 
-    input wire [TCU_MAX_INPUTS-1:0] vld_mask,
+    input wire [N * TCU_MAX_ELT_RATIO-1:0] vld_mask,
 
     input wire [4:0]        fmt_s,
 
