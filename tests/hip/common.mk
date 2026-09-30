@@ -142,6 +142,11 @@ $(VORTEX_RT_LIB)/libvortex.so: FORCE
 $(PROJECT): $(SRCS) common.h $(VORTEX_KN_PATH)/libvortex2.a $(VORTEX_RT_LIB)/libvortex.so
 	HIP_CLANG_PATH=$(HIP_CLANG_PATH) LD_LIBRARY_PATH=$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(HIPCC) $(HIPCC_FLAGS) -I. $< -o $@
 
+# The runtime for one driver, built with the CONFIGS this app resolved, so a
+# caller that builds ahead of the run builds the model the run will use.
+runtime-%:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/$* DESTDIR=$(VORTEX_RT_LIB)
+
 run-simx: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)
 	$(HIP_OCL_ENV) LD_LIBRARY_PATH=$(OCL_ICD_LIB_DIR):$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)

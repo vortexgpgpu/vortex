@@ -41,6 +41,16 @@ void Dispatcher::on_reset() {
 }
 
 void Dispatcher::on_tick() {
+  // Batches holding an instruction this cycle, sampled before any is popped.
+  uint32_t valid_batches = 0;
+  if (num_blocks_ != 1) {
+    for (uint32_t i = 0; i < VX_CFG_ISSUE_WIDTH; ++i) {
+      if (!Inputs.at(i).empty()) {
+        valid_batches |= 1u << (i / block_size_);
+      }
+    }
+  }
+
   // process inputs
   uint32_t block_sent = 0;
   for (uint32_t b = 0; b < block_size_; ++b) {
@@ -126,8 +136,9 @@ void Dispatcher::on_tick() {
 
   // advance to next batch once all blocks in the current batch have been processed
   if (block_sent == block_size_) {
-    // round-robin batch selection
-    batch_idx_ = (batch_idx_ + 1) % num_blocks_;
+    // Priority grant to the lowest batch with an instruction: an empty issue
+    // slot costs no dispatch cycle. With none, the grant rests on the last.
+    batch_idx_ = valid_batches ? __builtin_ctz(valid_batches) : (num_blocks_ - 1);
     for (auto& bp : block_pids_) {
       bp = 0;
     }

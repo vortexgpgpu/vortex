@@ -507,15 +507,17 @@ tests:
     threads: [4, 16]
 - id: model_parity-wgmma-dxa
   check: model_parity
-  # Instructions match exactly; cycles diverge ~6% (RTL faster). The gap is
-  # insensitive to every issue/commit/execution-window mechanism the SimX
-  # timing model carries, which points at the DXA producer path's own
-  # timing. Tracked with its wgmma siblings as DXA-path follow-up.
-  known_issue: "SimX over-serializes the DXA-fed warp-group pipeline (instrs match; cycles ~6%)"
+  # Instructions and DXA transfer timing match; cycles diverge ~5% (SimX
+  # slower), all of it at CTA turnover: SimX drains the C-tile stores later
+  # than the RTL (store commit point, dispatch queue placement and bank-0
+  # store-miss admission).
+  known_issue: "SimX drains the C-tile stores at CTA turnover slower than the RTL (instrs match; cycles ~5%)"
   via: blackbox
   app: sgemm_tcu_wg_dxa
   args: -m 128 -n 128 -k 64
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   # Not warp-width swept: a warp-group MMA is defined over a 32-lane warp.
   shape: {threads: 32, warps: 8}
 - id: perf_gate-wgmma-dxa
@@ -523,51 +525,50 @@ tests:
   via: blackbox
   app: sgemm_tcu_wg_dxa
   args: -m 128 -n 128 -k 64
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   # Not warp-width swept: a warp-group MMA is defined over a 32-lane warp.
   shape: {threads: 32, warps: 8}
 # Sparse WGMMA consumer fed by a DXA producer pipeline.
 - id: model_parity-wgmma-sp-dxa
   check: model_parity
-  # Instructions match exactly; cycles diverge ~15% (RTL slower). The
-  # contended issue-path serializers that closed core:parity-sgemm-mc shave
-  # only ~2 points here, and the residual is insensitive to every
-  # issue/commit/execution-window mechanism, which points at the DXA
-  # producer path's own timing under the 32-thread ISSUE_WIDTH=4 shape.
-  # Tracked with its wgmma siblings as DXA-path follow-up.
-  known_issue: "SimX under-models the DXA producer path for 32-thread warp groups (instrs match; cycles ~15%)"
-  tolerance: 0.10
+  # Instructions match; cycles diverge ~5% (SimX faster). Not yet localized.
+  known_issue: "SimX runs the sparse DXA-fed warp-group kernel faster than the RTL (instrs match; cycles ~5%)"
   via: blackbox
   app: sgemm_tcu_wg_sp_dxa
   args: -m 128 -n 128 -k 128
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   shape: {threads: 32, warps: 8}
 - id: perf_gate-wgmma-sp-dxa
   check: perf_gate
   via: blackbox
   app: sgemm_tcu_wg_sp_dxa
   args: -m 128 -n 128 -k 128
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   shape: {threads: 32, warps: 8}
 # WGMMA + multicast DXA: the large shared operand is broadcast once. K=64 for
 # the same reference-tolerance reason as perf_gate-wgmma-dxa.
 - id: model_parity-wgmma-dxa-mcast
   check: model_parity
-  # Same family as model_parity-wgmma-sp-dxa: instrs match, cycles diverge
-  # (~12%, RTL slower), insensitive to the issue/commit/execution-window
-  # mechanisms. Tracked as DXA-path follow-up.
-  known_issue: "SimX under-models the multicast DXA producer path (instrs match; cycles ~12%)"
-  tolerance: 0.10
   via: blackbox
   app: sgemm_tcu_wg_dxa_mcast
   args: -m 128 -n 128 -k 64
-  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 - id: perf_gate-wgmma-dxa-mcast
   check: perf_gate
   via: blackbox
   app: sgemm_tcu_wg_dxa_mcast
   args: -m 128 -n 128 -k 64
-  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 
   shape:
     threads: [4, 16]

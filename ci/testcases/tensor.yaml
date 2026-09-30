@@ -187,7 +187,9 @@ tests:
   via: blackbox
   app: sgemm_tcu
   args: -m 128 -n 128 -k 128
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 
 # TCU fp16 multi-core: NT=NW=8 across 2 cores (shared L2).
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
@@ -216,13 +218,17 @@ tests:
   via: blackbox
   app: sgemm2_tcu
   args: -m 128 -n 128 -k 64
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 - id: perf_gate-sgemm2-fp16
   check: perf_gate
   via: blackbox
   app: sgemm2_tcu
   args: -m 128 -n 128 -k 64
-  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
+  # One execution block per unit: the four-block model ISSUE_WIDTH=4 implies is
+  # several times the size, and a hosted CI runner cannot build it in a job.
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
 
   # Not warp-width swept: the tensor-core fragment layout is defined over a fixed
   # lane count, which the configs pin.

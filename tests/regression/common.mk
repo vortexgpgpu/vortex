@@ -223,6 +223,11 @@ $(RT_LIB_DIR)/libvortex.so:
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub HOST_ARCH=$(HOST_ARCH) DESTDIR=$(VORTEX_RT_LIB)
 endif
 
+# The runtime for one driver, built with the CONFIGS this app resolved, so a
+# caller that builds ahead of the run builds the model the run will use.
+runtime-%:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/$* DESTDIR=$(VORTEX_RT_LIB)
+
 run-simx: $(PROJECT) kernel.vxbin
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)
 	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)

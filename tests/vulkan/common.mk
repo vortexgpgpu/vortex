@@ -149,6 +149,11 @@ $(PROJECT): $(SRCS)
 $(VORTEX_RT_LIB)/libvortex.so: FORCE
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub DESTDIR=$(VORTEX_RT_LIB)
 
+# The runtime for one driver, built with the CONFIGS this app resolved, so a
+# caller that builds ahead of the run builds the model the run will use.
+runtime-%:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/$* DESTDIR=$(VORTEX_RT_LIB)
+
 # `run` defaults to the SimX backend; explicit recipes select simx / rtlsim
 # / opae / xrt. vortexpipe is backend-agnostic — same .vxbin, the stub
 # libvortex.so dlopens libvortex-<VORTEX_DRIVER>.so at runtime.

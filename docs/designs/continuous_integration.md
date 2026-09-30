@@ -202,12 +202,11 @@ A check is an assertion across runs rather than a clean exit.
 | tier | `full` | `full` |
 | pinned to | the rtlsim driver, which elaborates the RTL | the rtlsim driver |
 
-**A check is a marker, never a file or a category.** Each check gets its own
-cells — one per suite it has cases in — and every category cell excludes the
-check markers, so a check case runs exactly once. One cell per suite rather
-than one for the whole catalog, because every case is a simulator build of
-its own and a single cell outgrew a hosted runner's job limit. The workflow
-reads the check list from `testcase.py checks` rather than holding a copy.
+**A check is a marker, never a file or a category.** Each check gets one cell
+of its own — `-m "<check> and rtlsim"` sweeps every such case catalog-wide —
+and every category cell excludes the check markers, so a check case runs
+exactly once. The workflow reads the check list from `testcase.py checks`
+rather than holding a copy.
 
 #### `model_parity`
 
