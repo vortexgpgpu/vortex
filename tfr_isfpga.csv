@@ -84,3 +84,13 @@ nr_dsm_on_g1_tf32,4,300,240.8,-0.819,9832,3,1095,167,0,0,0,282.0,17.0,136.0,129.
 nr_dsm_on_g2_fp16,4,300,250.5,-0.659,9606,3,1039,167,0,0,0,274.0,17.0,134.0,124.0,0.0,3278.0,3553.0
 nr_dsm_on_g3_fp8,4,300,256.9,-0.560,9326,3,1084,167,0,0,0,290.0,18.0,144.0,128.0,0.0,3279.0,3569.0
 nr_dsm_on_g4_mxfp4,4,300,264.1,-0.454,9711,3,1093,167,0,0,0,272.0,18.0,134.0,120.0,0.0,3278.0,3550.0
+# --- Direct attribution of the gating control logic (retiming-off runs, post_impl hierarchical utilization). ---
+# --- dsm_mask = VX_tcu_dsm zero-detect + registered vld_mask (absorbed into pipe_vld_mask): its FFs are exactly the ---
+# --- mask bits (1/2/4/8 per 32-bit k-word x 4 words for tf32/+16b/+8b/+4b). lane_enable = pipe_mul LUT/FF delta vs ---
+# --- nr_dsm_off (per-lane stage-1 register enables). Whole-design LUT/FF deltas above are within +-3% run-to-run noise. ---
+config,dsm_mask_lut,dsm_mask_ff,pipe_mul_lut,pipe_mul_ff,lane_enable_lut_delta,lane_enable_ff_delta
+nr_dsm_off,0,0,1519,328,0,0
+nr_dsm_on_g1_tf32,37,4,1543,330,24,2
+nr_dsm_on_g2_fp16,78,8,1566,333,47,5
+nr_dsm_on_g3_fp8,117,16,1565,333,46,5
+nr_dsm_on_g4_mxfp4,195,32,1560,333,41,5
