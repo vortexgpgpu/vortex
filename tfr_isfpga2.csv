@@ -29,3 +29,21 @@ lnsf4_al5,4,300,328.2,0.286,2409,0,289,36,0,0,0,89.0,5.0,50.0,34.0,0.0,3274.0,33
 lnsf4_al6,4,300,325.2,0.258,2465,0,304,36,0,0,0,90.0,5.0,50.0,35.0,0.0,3274.0,3365.0
 lnsf4_al7,4,300,322.0,0.227,2564,0,305,36,0,0,0,99.0,5.0,56.0,38.0,0.0,3274.0,3373.0
 lnsf4_al8,4,300,309.8,0.105,2615,0,298,36,0,0,0,108.0,5.0,59.0,44.0,0.0,3275.0,3382.0
+# --- GPU-generation format sets with VX_CFG_TCU_FEDP2K at NUM_THREADS=32: FEDP N = 2*TCU_TC_K = 8 (requires the ---
+# --- vld_mask width fix, commit "tcu: size vld_mask from each FEDP's own N"). top = VX_tcu_fedp_tfr, 4-stage, USE_DSP=0 ---
+# --- (Wallace), 300 MHz U55C, OPT_LEVEL=3. volta = fp16; turing = fp16 + int8 + int4; ampere = fp16 + bf16 + tf32 + ---
+# --- int8 + int4; hopper = ampere + fp8/bf8; blackwell = fp16 + bf16 + tf32 + fp8/bf8 + mxfp8/mxbf8 + mxfp4 + nvfp4 + ---
+# --- int8 (SF=4). fp64 and int1 disregarded. volta/turing drop bf16 via the scratch TFR_NO_BF16 macro (uncommitted). ---
+f2k_volta,8,300,277.0,-0.277,9533,0,1209,226,0,0,0,77.0,21.0,34.0,22.0,0.0,3274.0,3351.0
+f2k_turing,8,300,265.3,-0.437,15609,0,1313,566,0,0,0,260.0,22.0,144.0,94.0,0.0,3278.0,3538.0
+f2k_ampere,8,300,264.1,-0.454,15802,0,1352,598,0,0,0,342.0,23.0,176.0,143.0,0.0,3280.0,3622.0
+f2k_hopper,8,300,256.0,-0.573,20918,0,1353,742,0,0,0,595.0,23.0,311.0,261.0,0.0,3285.0,3880.0
+f2k_blackwell,8,300,259.1,-0.526,21777,0,1338,770,0,0,0,731.0,23.0,375.0,332.0,0.0,3288.0,4018.0
+# --- Fanout of the f2k_* rows (logical, post_synth.dcp; load = leaf input pin). operand = a_row/b_col bits; fmt = fmt_s ---
+# --- bits; s1 = stage 1 (MULTIPLY) = combinational fan-out cone of the input ports up to the first register. ---
+arch,s1_cells,all_cells,operand_nets,operand_loads,operand_avg_fanout,operand_max_fanout,operand_nets_fo_gt16,operand_nets_fo_gt64,fmt_nets,fmt_loads,fmt_avg_fanout,fmt_max_fanout,fmt_nets_fo_gt16,fmt_nets_fo_gt64,s1_nets,s1_loads,s1_avg_fanout,s1_max_fanout,s1_nets_fo_gt16,s1_nets_fo_gt64,all_nets,all_loads,all_avg_fanout,all_max_fanout,all_nets_fo_gt16,all_nets_fo_gt64,s1_loads_vs_volta_pct,operand_avg_fanout_vs_volta_pct
+f2k_volta,6742,12441,512,8197,16.010,30,288,0,5,209,41.800,48,5,0,7078,24250,3.426,138,207,78,12952,51625,3.986,952,472,124,0.0,0.0
+f2k_turing,14220,20228,512,24192,47.250,66,512,4,5,458,91.600,206,5,4,16348,43898,2.685,175,243,113,22562,74366,3.296,959,545,175,81.0,195.1
+f2k_ampere,14617,20618,512,20488,40.016,59,512,0,5,617,123.400,249,5,4,16889,49630,2.939,1122,517,67,23096,80313,3.477,1215,820,129,104.7,149.9
+f2k_hopper,20952,26958,512,25453,49.713,79,512,51,5,4067,813.400,2221,5,5,24088,69511,2.886,165,621,59,30300,101656,3.355,1743,930,126,186.6,210.5
+f2k_blackwell,21954,28041,512,25432,49.672,78,512,40,5,3015,603.000,1866,5,5,25254,75643,2.995,170,749,73,31547,107944,3.422,1455,1072,143,211.9,210.3
