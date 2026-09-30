@@ -23,7 +23,7 @@
 // parameters and its index arrives on socket_id, so every instance elaborates
 // to the same module.
 //
-// Covers the compute configuration: no VM, graphics, or scope.
+// Covers the compute and graphics configurations: no VM or scope.
 
 module VX_socket_top import VX_gpu_pkg::*; #(
     parameter MREQ_W = 1 + (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(`VX_CFG_L1_LINE_SIZE)) + `VX_CFG_L1_LINE_SIZE * 8
@@ -64,13 +64,15 @@ module VX_socket_top import VX_gpu_pkg::*; #(
     input  gbar_rsp_t                          gbar_rsp_data,
     output wire                                gbar_rsp_ready,
 
+`ifdef EXT_GFX_ANY_ENABLE
+    output wire                                cluster_flush_req,
+    input  wire                                cluster_flush_done,
+`endif
+
     output wire                                busy
 );
 `ifdef VX_CFG_VM_ENABLE
     `STATIC_ASSERT(0, ("VX_socket_top does not carry the VM ports yet"))
-`endif
-`ifdef EXT_GFX_ANY_ENABLE
-    `STATIC_ASSERT(0, ("VX_socket_top does not carry the graphics ports yet"))
 `endif
 
     VX_dcr_bus_if dcr_bus_if();
@@ -101,6 +103,12 @@ module VX_socket_top import VX_gpu_pkg::*; #(
     assign kmu_bus_if[0].data  = kmu_data;
     assign kmu_ready = kmu_bus_if[0].ready;
 
+`ifdef EXT_GFX_ANY_ENABLE
+    VX_dcr_flush_if cluster_flush_if();
+    assign cluster_flush_req = cluster_flush_if.req;
+    assign cluster_flush_if.done = cluster_flush_done;
+`endif
+
     VX_gbar_bus_if gbar_bus_if();
     assign gbar_req_valid = gbar_bus_if.req_valid;
     assign gbar_req_data  = gbar_bus_if.req_data;
@@ -118,6 +126,9 @@ module VX_socket_top import VX_gpu_pkg::*; #(
     `endif
         .dcr_bus_if (dcr_bus_if),
         .mem_bus_if (mem_bus_if),
+    `ifdef EXT_GFX_ANY_ENABLE
+        .cluster_flush_if (cluster_flush_if),
+    `endif
         .kmu_bus_if (kmu_bus_if),
         .gbar_bus_if(gbar_bus_if),
         .busy       (busy)
