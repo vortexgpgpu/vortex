@@ -373,6 +373,11 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         wire [L1_MEM_PORTS-1:0][$bits(socket_mem_bus_if[0].req_data)-1:0] mem_req_data;
         wire [L1_MEM_PORTS-1:0][$bits(socket_mem_bus_if[0].rsp_data)-1:0] mem_rsp_data;
 
+`ifdef EXT_GFX_ANY_ENABLE
+        wire cluster_flush_req;
+        assign per_socket_cluster_flush_if[socket_id].req = cluster_flush_req;
+`endif
+
         for (genvar i = 0; i < L1_MEM_PORTS; ++i) begin : g_mem
             assign socket_mem_bus_if[socket_id * L1_MEM_PORTS + i].req_valid = mem_req_valid[i];
             assign socket_mem_bus_if[socket_id * L1_MEM_PORTS + i].req_data  = mem_req_data[i];
@@ -411,6 +416,10 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
             .gbar_rsp_valid (per_socket_gbar_bus_if[socket_id].rsp_valid),
             .gbar_rsp_data  (per_socket_gbar_bus_if[socket_id].rsp_data),
             .gbar_rsp_ready (per_socket_gbar_bus_if[socket_id].rsp_ready),
+        `ifdef EXT_GFX_ANY_ENABLE
+            .cluster_flush_req  (cluster_flush_req),
+            .cluster_flush_done (per_socket_cluster_flush_if[socket_id].done),
+        `endif
             .busy           (per_socket_busy[socket_id])
         );
 `else
