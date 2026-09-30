@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 950" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1560" height="950" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Vortex LSU — from an instruction to the data cache and back</text>
+
+  <rect x="24" y="56" width="1512" height="282" class="grp"/>
+  <text x="40" y="86" class="tb">VX_lsu_unit</text>
+  <text x="40" y="110" class="ts">execute stage</text>
+  <text x="40" y="142" class="ts">one VX_lsu_slice per</text>
+  <text x="40" y="158" class="ts">LSU block (the issue</text>
+  <text x="40" y="174" class="ts">width)</text>
+  <rect x="270" y="72" width="180" height="250" rx="6" class="core"/>
+  <text x="282" y="94" class="tb">VX_lane_dispatch</text>
+  <text x="282" y="116" class="ts">issue slots → blocks</text>
+  <text x="282" y="132" class="ts">SIMD width → lanes</text>
+  <text x="282" y="156" class="ts">an instruction wider</text>
+  <text x="282" y="172" class="ts">than the lane count</text>
+  <text x="282" y="188" class="ts">becomes packets:</text>
+  <text x="282" y="204" class="ts">pid, sop, eop</text>
+  <rect x="470" y="72" width="560" height="250" rx="6" class="unit"/>
+  <text x="482" y="94" class="tb">VX_lsu_slice — request side</text>
+  <rect x="482" y="106" width="172" height="92" rx="4" class="box"/>
+  <text x="494" y="128" class="t">VX_lsu_agu</text>
+  <text x="494" y="150" class="ts">base + offset, or</text>
+  <text x="494" y="166" class="ts">base + idx × stride;</text>
+  <text x="494" y="182" class="ts">stack interleave</text>
+  <rect x="666" y="106" width="172" height="92" rx="4" class="box"/>
+  <text x="678" y="128" class="t">classify</text>
+  <text x="678" y="150" class="ts">per-lane attribute:</text>
+  <text x="678" y="166" class="ts">io, local, om, flush,</text>
+  <text x="678" y="182" class="ts">atomic sideband</text>
+  <rect x="850" y="106" width="168" height="92" rx="4" class="box"/>
+  <text x="862" y="128" class="t">format</text>
+  <text x="862" y="150" class="ts">byte-enable from</text>
+  <text x="862" y="166" class="ts">size and alignment;</text>
+  <text x="862" y="182" class="ts">store data shifted</text>
+  <rect x="482" y="210" width="264" height="96" rx="4" class="box"/>
+  <text x="494" y="232" class="t">fence gate</text>
+  <text x="494" y="254" class="ts">a fence closes the slice until its</text>
+  <text x="494" y="270" class="ts">own response returns</text>
+  <rect x="758" y="210" width="260" height="96" rx="4" class="box"/>
+  <text x="770" y="232" class="t">packet tracker + tag</text>
+  <text x="770" y="254" class="ts">one slot per multi-packet load;</text>
+  <text x="770" y="270" class="ts">tag = header, operation,</text>
+  <text x="770" y="286" class="ts">alignment, slot, fence</text>
+  <rect x="1050" y="72" width="320" height="250" rx="6" class="unit"/>
+  <text x="1062" y="94" class="tb">VX_lsu_slice — response side</text>
+  <rect x="1062" y="106" width="296" height="92" rx="4" class="box"/>
+  <text x="1074" y="128" class="t">load formatter</text>
+  <text x="1074" y="150" class="ts">sub-word extract by the saved</text>
+  <text x="1074" y="166" class="ts">alignment; sign- or zero-extend;</text>
+  <text x="1074" y="182" class="ts">NaN-box a float load</text>
+  <rect x="1062" y="210" width="296" height="96" rx="4" class="box"/>
+  <text x="1074" y="232" class="t">result arbiter</text>
+  <text x="1074" y="254" class="ts">load results first, then the queue of</text>
+  <text x="1074" y="270" class="ts">instructions that expect no response</text>
+  <text x="1074" y="286" class="ts">(stores) fed from the request side</text>
+  <rect x="1390" y="72" width="146" height="250" rx="6" class="core"/>
+  <text x="1402" y="94" class="tb">VX_lane_gather</text>
+  <text x="1402" y="116" class="ts">blocks → commit</text>
+  <text x="1402" y="132" class="ts">slots</text>
+  <path d="M 450 152 L 470 152" class="flow"/>
+  <path d="M 1370 152 L 1390 152" class="flow"/>
+  <path d="M 1030 258 L 1062 258" class="flow"/>
+  <rect x="24" y="386" width="1512" height="220" class="grp"/>
+  <text x="40" y="416" class="tb">VX_lsu_scheduler</text>
+  <text x="40" y="440" class="ts">core level</text>
+  <text x="40" y="472" class="ts">one per LSU block;</text>
+  <text x="40" y="488" class="ts">owns the block's</text>
+  <text x="40" y="504" class="ts">memory port</text>
+  <rect x="270" y="402" width="230" height="188" rx="6" class="unit"/>
+  <text x="282" y="424" class="tb">client arbiter</text>
+  <text x="282" y="446" class="ts">client 0: the LSU slice</text>
+  <text x="282" y="462" class="ts">client 1: the tensor unit's</text>
+  <text x="282" y="478" class="ts">warp-level AGU (block 0)</text>
+  <text x="282" y="502" class="ts">round-robin; the client id is</text>
+  <text x="282" y="518" class="ts">prepended to the tag</text>
+  <text x="282" y="578" class="tt">one client: pass-through</text>
+  <rect x="520" y="402" width="240" height="188" rx="6" class="unit"/>
+  <text x="532" y="424" class="tb">staging queue</text>
+  <text x="532" y="446" class="ts">LSU_QUEUE_IN_SIZE entries</text>
+  <text x="532" y="462" class="ts">each holds a whole request:</text>
+  <text x="532" y="478" class="ts">every lane's mask, byte-enable,</text>
+  <text x="532" y="494" class="ts">address, attribute and data</text>
+  <text x="532" y="518" class="ts">absorbs back-pressure from</text>
+  <text x="532" y="534" class="ts">the memory side</text>
+  <rect x="780" y="402" width="260" height="188" rx="6" class="mem"/>
+  <text x="792" y="424" class="tb">outstanding pool</text>
+  <text x="792" y="446" class="ts">LSU_PENDING_SIZE slots</text>
+  <text x="792" y="462" class="ts">a request that expects a response</text>
+  <text x="792" y="478" class="ts">parks its tag in a free slot; the slot</text>
+  <text x="792" y="494" class="ts">index travels to memory instead</text>
+  <text x="792" y="518" class="ts">a store takes no slot</text>
+  <text x="792" y="578" class="tt">bounds the loads in flight</text>
+  <rect x="1060" y="402" width="220" height="188" rx="6" class="unit"/>
+  <text x="1072" y="424" class="tb">dispatch</text>
+  <text x="1072" y="446" class="ts">lanes → memory channels,</text>
+  <text x="1072" y="462" class="ts">in batches when the lanes</text>
+  <text x="1072" y="478" class="ts">outnumber the channels</text>
+  <text x="1072" y="502" class="ts">memory tag = uuid,</text>
+  <text x="1072" y="518" class="ts">slot, batch index</text>
+  <rect x="1300" y="402" width="236" height="188" rx="6" class="unit"/>
+  <text x="1312" y="424" class="tb">response</text>
+  <text x="1312" y="446" class="ts">slot index → parked tag</text>
+  <text x="1312" y="462" class="ts">per-slot remaining-lane mask</text>
+  <text x="1312" y="486" class="ts">partial: each memory beat is</text>
+  <text x="1312" y="502" class="ts">forwarded at once with sop /</text>
+  <text x="1312" y="518" class="ts">eop; the slot frees on eop</text>
+  <path d="M 500 496 L 520 496" class="flow"/>
+  <path d="M 760 496 L 780 496" class="flow"/>
+  <path d="M 1040 496 L 1060 496" class="flow"/>
+  <path d="M 750 322 L 750 352 L 385 352 L 385 402" class="flow"/>
+  <text x="375" y="366" class="lbk" text-anchor="end">request — VX_lsu_sched_if</text>
+  <path d="M 1418 402 L 1418 370 L 1210 370 L 1210 322" class="flowb"/>
+  <text x="1226" y="364" class="lbl">response</text>
+  <rect x="24" y="654" width="1512" height="236" class="grp"/>
+  <text x="40" y="684" class="tb">VX_mem_unit</text>
+  <text x="40" y="708" class="ts">core level</text>
+  <text x="40" y="740" class="ts">steers by address</text>
+  <text x="40" y="756" class="ts">class to the two</text>
+  <text x="40" y="772" class="ts">memories</text>
+  <rect x="270" y="670" width="230" height="204" rx="6" class="unit"/>
+  <text x="282" y="692" class="tb">VX_lmem_switch</text>
+  <text x="282" y="714" class="ts">splits the lanes of one request</text>
+  <text x="282" y="730" class="ts">by is_addr_local; both subsets</text>
+  <text x="282" y="746" class="ts">may be non-empty</text>
+  <text x="282" y="770" class="ts">merges the two response</text>
+  <text x="282" y="786" class="ts">streams</text>
+  <rect x="520" y="670" width="400" height="204" rx="6" class="mem"/>
+  <text x="532" y="692" class="tb">local path</text>
+  <text x="532" y="714" class="ts">VX_lsu_adapter, one per block → VX_local_mem</text>
+  <text x="532" y="738" class="ts">banked SRAM: lanes to different banks are served</text>
+  <text x="532" y="754" class="ts">in the same cycle</text>
+  <text x="532" y="778" class="ts">a second port serves the DXA and tensor</text>
+  <text x="532" y="794" class="ts">direct-memory clients</text>
+  <text x="532" y="862" class="tt">per-core shared memory</text>
+  <rect x="940" y="670" width="596" height="204" rx="6" class="unit"/>
+  <text x="952" y="692" class="tb">global path</text>
+  <rect x="952" y="704" width="184" height="110" rx="4" class="box"/>
+  <text x="964" y="726" class="t">VX_mem_coalescer</text>
+  <text x="964" y="748" class="ts">word lanes → cache-</text>
+  <text x="964" y="764" class="ts">word channels;</text>
+  <text x="964" y="780" class="ts">same-word lanes</text>
+  <text x="964" y="796" class="ts">merge</text>
+  <rect x="1146" y="704" width="184" height="110" rx="4" class="box"/>
+  <text x="1158" y="726" class="t">VX_lsu_adapter</text>
+  <text x="1158" y="748" class="ts">lane bundle → one bus</text>
+  <text x="1158" y="764" class="ts">per channel; request</text>
+  <text x="1158" y="780" class="ts">boundary registered</text>
+  <rect x="1340" y="704" width="184" height="110" rx="4" class="box"/>
+  <text x="1352" y="726" class="t">VX_dcr_flush</text>
+  <text x="1352" y="748" class="ts">injects the host's</text>
+  <text x="1352" y="764" class="ts">cache flush on</text>
+  <text x="1352" y="780" class="ts">channel 0 of block 0</text>
+  <text x="952" y="862" class="tt">→ MMU → data cache, DCACHE_NUM_REQS ports</text>
+  <path d="M 500 730 L 520 730" class="flow"/>
+  <path d="M 500 820 L 510 820 L 510 882 L 930 882 L 930 760 L 952 760" class="flow"/>
+  <path d="M 1136 760 L 1146 760" class="flow"/>
+  <path d="M 1330 760 L 1340 760" class="flow"/>
+  <path d="M 1170 590 L 1170 622 L 385 622 L 385 670" class="flow"/>
+  <text x="375" y="636" class="lbk" text-anchor="end">request — VX_lsu_mem_if</text>
+  <path d="M 450 670 L 450 640 L 1418 640 L 1418 590" class="flowb"/>
+  <text x="1226" y="634" class="lbl">response, in any order</text>
+  <text x="24" y="928" class="tt">Purple = pipeline glue · blue = LSU and memory-fabric logic · gold = storage · solid = request · dashed = response.</text>
+</svg>

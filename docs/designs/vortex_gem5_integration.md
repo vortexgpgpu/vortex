@@ -1,306 +1,311 @@
-# gem5 Integration
+# gem5 Integration — Design
 
-Vortex runs inside the [gem5](https://www.gem5.org/) simulator as a
-`DmaDevice` SimObject, exposing the Vortex GPGPU to a simulated host
-CPU (x86 or ARM) through a Command Processor regfile + BAR-mapped
-VRAM. Use this when you want to model heterogeneous host-CPU +
-accelerator workloads with realistic cross-ISA cache and DMA timing,
-or to validate the v2 Command Processor architecture against a real
-host/device split.
+**Scope:** how Vortex runs inside the [gem5](https://www.gem5.org/) simulator
+— the two-domain model, the device library and its C ABI, the gem5
+SimObject and its event chains, the host runtime transport, the address map,
+the kernel-launch path, and the build, install and run mechanics. Covers the
+device side ([`sim/simx/gem5/`](../../sim/simx/gem5/)), the host runtime
+([`sw/runtime/gem5/`](../../sw/runtime/gem5/)), and the scripts
+([`ci/gem5_install.sh.in`](../../ci/gem5_install.sh.in),
+[`ci/gem5_run_app.py`](../../ci/gem5_run_app.py),
+[`ci/gem5_run_hostless_app.py`](../../ci/gem5_run_hostless_app.py)).
 
-This document covers both the **architecture** of the integration and
-the **build / install / run** mechanics for the current (v2 CP-first)
-design. The CP architecture itself is in
-[`command_processor.md`](command_processor.md).
+The command processor itself — its register file, command format and
+engine — is in [`command_processor.md`](command_processor.md). The SimX
+model of the device is in
+[`simx_simulator_architecture.md`](simx_simulator_architecture.md). This
+document is the gem5 deep-dive.
 
-## At a glance
+![gem5 architecture](../assets/img/gem5_architecture.svg)
 
-Three parts live in this repo:
+---
 
-| Part | Source | Built artifact | Loaded by |
+## 1. Overview
+
+Vortex appears to gem5 as one device, `VortexGPGPU`, exposing a register
+window and a memory window to a simulated host CPU.
+
+1. The **application** runs as ordinary code on a gem5 CPU model, x86-64 or
+   AArch64, in syscall-emulation mode.
+2. It links the ordinary Vortex runtime. The **dispatcher** builds command
+   lines and rings exactly as on every other backend; a thin **transport**
+   library turns register accesses and memory allocation into real
+   memory-mapped I/O.
+3. The **SimObject** receives those accesses as gem5 packets and forwards
+   them to a **device library** it loads at startup.
+4. The device library holds the **command processor** and the **SimX
+   processor model**, and the SimObject advances each on its own
+   self-scheduling event.
+
+Use it to model a host CPU and the accelerator together, with the host's
+instruction set and the cost of its driver loop in the simulation, or to
+exercise the command processor across a real host/device split.
+
+| part | source | built artifact | loaded by |
 |---|---|---|---|
-| Device library | `sim/simx/gem5/vortex_gpgpu.{cpp,h}` + `dev_mem.{cpp,h}` | `build/sim/simx/libvortex-gem5.so` | gem5 SimObject via `dlopen` |
-| gem5 SimObject | `sim/simx/gem5/vortex_gpgpu_dev.{cc,hh}` + `VortexGPGPU.py` + `SConscript` | Linked into `gem5.opt` after install | gem5 itself |
-| Host runtime | `sw/runtime/gem5/{vortex.cpp,driver.{cpp,h},Makefile}` | `build/sw/runtime/libvortex-gem5-{x86_64,aarch64}.so` | The simulated process inside gem5 |
-
-Plus `ci/gem5_install.sh` which fetches gem5 v25.0.0.1, drops the
-SimObject sources into `$GEM5_HOME/src/dev/vortex/`, and builds
-`build/{X86,ARM}/gem5.opt`.
-
-## Architecture in one paragraph
-
-The simulated host process loads the upstream dispatcher
-(`libvortex.so`) which dlopens the gem5 backend
-(`libvortex-gem5-x86_64.so`). The backend's only platform primitives
-are `mem_upload/download/copy` (regular memcpy through a host-visible
-BAR mapped to device VRAM) and `cp_mmio_{read,write}` (32-bit PIO to
-the device's CP regfile). All kernel launches, DCR programming, and
-fences flow through the dispatcher's Command Processor submission
-path: it writes `CMD_*` descriptors into a ring buffer in device VRAM
-(via mem_upload), commits via `cp_mmio_write(Q_TAIL_HI, ...)`, and
-polls completion via `cp_mmio_read(Q_SEQNUM, ...)`. The CP itself is
-the upstream `vortex::CommandProcessor` C++ class embedded in the
-device library; the SimObject ticks it on its own gem5 event chain
-and ticks the Vortex Processor on a parallel chain. Both event chains
-self-schedule only while they have work — the device is genuinely
-idle between commands.
+| device library | [`vortex_gpgpu.{h,cpp}`](../../sim/simx/gem5/vortex_gpgpu.cpp), [`dev_mem.{h,cpp}`](../../sim/simx/gem5/dev_mem.cpp) | `<build>/sim/simx/libvortex-gem5.so` | the SimObject, with `dlopen` |
+| SimObject | [`vortex_gpgpu_dev.{cc,hh}`](../../sim/simx/gem5/vortex_gpgpu_dev.cc), [`VortexGPGPU.py`](../../sim/simx/gem5/VortexGPGPU.py), `SConscript` | linked into `gem5.opt` | gem5 |
+| host runtime | [`sw/runtime/gem5/`](../../sw/runtime/gem5/) | `<build>/sw/runtime/libvortex-gem5-<arch>.so` | the simulated process |
 
 ---
 
-## 1. The two-domain model
+## 2. The two-domain model
 
-Under gem5 there are two domains:
+| domain | runs | contains |
+|---|---|---|
+| simulated host | on a gem5 CPU model, in simulated time | the application, the dispatcher, the transport |
+| device | natively, inside the gem5 process | the command processor, the processor model, device memory |
 
-- **Simulated host** — the runtime runs as ordinary code on a gem5 CPU
-  model (`AtomicSimpleCPU`, x86_64 or aarch64).
-- **Device** — the CP and the Vortex `Processor` run **natively** inside
-  the `VortexGPGPU` gem5 SimObject (a dlopened device library).
+**The only state both domains can reach is device memory.** The command
+processor addresses it directly; the host reaches it through an
+identity-mapped window. Anything the two must share — the command ring, the
+completion slots, staging buffers — therefore has to be allocated in device
+memory.
 
-The only shared state is device VRAM, reached by the host through an
-identity-mapped BAR window and by the CP/Vortex through in-process
-`simx::RAM`.
+**This is the one backend where the command processor sits across the bus
+from the runtime.**
 
-```
-   simulated host (gem5 CPU, x86/arm)            VortexGPGPU SimObject (native)
-   ───────────────────────────────              ──────────────────────────────
-   libvortex.so (dispatcher)                     libvortex-gem5.so:
-     │  callbacks_t HAL                            Gem5Device {
-     ├─ cp_reg_write ── PIO 32b ──► [pio_addr] ──►   vortex::CommandProcessor cp_
-     ├─ cp_reg_read  ◄─ PIO 32b ──  [pio_addr] ◄─    Processor proc_
-     └─ host_mem_alloc ─► VRAM ◄── [pin_addr] ──►    RAM ram_ / InProcessDevMem
-                                                   }
-                                            cpTickEvent_ / vortexTickEvent_ (gem5 events)
-```
+| backend | where the command processor runs | how the runtime reaches it |
+|---|---|---|
+| simx, rtlsim | inside the host runtime | a function call, plus a bounded tick burst |
+| gem5 | inside the device library | real memory-mapped I/O |
 
-This is the only backend where the CP lives **across the bus** from the
-runtime (see §4).
-
----
-
-## 2. Device library (`sim/simx/gem5/`)
-
-Builds `libvortex-gem5.so` (`USE_GEM5=1`), dlopened by the gem5 SimObject.
-
-- [`vortex_gpgpu.{h,cpp}`](../../sim/simx/gem5/vortex_gpgpu.cpp) — the C
-  ABI contract (`vortex_gem5_create/destroy`, `load_kernel`,
-  `cp_mmio_{write,read}`, `cp_tick/cp_has_work`, `vortex_tick/vortex_busy`,
-  `vram_{read,write}`). `Gem5Device` owns `RAM ram_`, `Processor proc_`,
-  `InProcessDevMem dev_mem_`, and an embedded
-  `vortex::CommandProcessor cp_`
-  ([`vortex_gpgpu.cpp:46-54`](../../sim/simx/gem5/vortex_gpgpu.cpp#L46)).
-  CP hooks (`dram_read/write`, `vortex_dcr_write/read`, `vortex_start`,
-  `vortex_busy`) are bound in `make_cp_hooks()`
-  ([`:165-189`](../../sim/simx/gem5/vortex_gpgpu.cpp#L165)).
-- [`dev_mem.{h,cpp}`](../../sim/simx/gem5/dev_mem.cpp) — the
-  `DevMemAccessor` seam; `InProcessDevMem` wraps `simx::RAM` (the only
-  implementation today; `DmaPortDevMem` is the unbuilt v2 seam, §6).
-- [`vortex_gpgpu_dev.{cc,hh}`](../../sim/simx/gem5/vortex_gpgpu_dev.cc) —
-  the gem5 `VortexGPGPU : public DmaDevice`. dlopens the library and
-  resolves a 13-symbol ABI struct up front; routes PIO packets in
-  `[pio_addr, +pio_size)` to `cp_mmio_{read,write}` (32-bit) and packets
-  in the PIN range to `vram_{read,write}`. Two self-scheduling events
-  `cpTickEvent_`/`vortexTickEvent_` (§3).
-- [`VortexGPGPU.py`](../../sim/simx/gem5/VortexGPGPU.py) — SimObject
-  params (`pio_addr=0x20000000`, `pio_size=0x0200`,
-  `pin_addr=0x100000000`, `max_queues=4`).
-- `SConscript`, `install.sh` — gem5 source registration + install.
-
-The device exposes Vortex as: **one 32-bit PIO range that *is* the CP
-regfile** (no OPAE window, no AFU `+0x1000` split) and **one BAR-mapped
-VRAM range**. Despite the `DmaDevice` base class, host↔VRAM today is plain
-in-process `simx::RAM` access, not gem5 `DmaPort` traffic — the
-`DmaDevice` base is kept only as the v2 seam.
-
----
-
-## 3. Event-driven control
-
-The SimObject drives two independent gem5 event chains:
-
-- `cpTickEvent_` self-schedules only while `cp_has_work()` (CP enabled and
-  busy). A host doorbell PIO write (`Q_TAIL_HI`) triggers `maybeWakeCp()`
-  ([`vortex_gpgpu_dev.cc:192-198`](../../sim/simx/gem5/vortex_gpgpu_dev.cc#L192)).
-- `vortexTickEvent_` self-schedules only while `vortex_busy()`. A
-  `CMD_LAUNCH` retirement fires the `vortex_start` hook → trampoline →
-  schedules the Vortex chain
-  ([`:200-212`](../../sim/simx/gem5/vortex_gpgpu_dev.cc#L200)).
-
-Idle is observable as both events unscheduled — no polled-every-cycle, no
-bounded tick burst. Standalone vs. hosted mode is chosen in `startup()` by
-whether a `kernel=` param is set.
-
----
-
-## 4. Runtime backend (`sw/runtime/gem5/`)
-
-Builds `libvortex-gem5-<arch>.so`, loaded by the simulated host process.
-
-- [`vortex.cpp`](../../sw/runtime/gem5/vortex.cpp) implements the
-  **pure-v2 `callbacks_t` transport HAL** via `#include <callbacks.inc>`:
-  `dev_open/close`, `cp_reg_read/write` (32-bit PIO + fence),
-  `host_mem_alloc/free` (carves a 64 MB aperture at the top of the PIN
-  window onto VRAM). No CP, no kernel logic — pure transport.
-- [`driver.{h,cpp}`](../../sw/runtime/gem5/driver.cpp) — fixed VAs
-  (`PIN_BASE_ADDR=0x100000000`, `PIO_BASE_ADDR=0x20000000`); `mmio_*32`
-  are raw volatile derefs; `mmio_fence()` emits `mfence`/`dmb sy` per arch.
-- `Makefile` — `HOST_ARCH ∈ {x86_64, aarch64, armhf}` selects the
-  compiler and emits `libvortex-gem5-<arch>.so`.
-
-**CP side-of-boundary asymmetry (key architectural point).** In
-simx/rtlsim the CP model lives in the **host runtime** (`cp_reg_write`
-does `cp_.mmio_write` plus a bounded tick burst). In gem5 the CP lives in
-the **device library** and the host runtime does **real MMIO** to it
-(`cp_reg_write` → `mmio_write32` at `PIO_BASE`). Same `callbacks_t`
-surface, same `vortex::CommandProcessor` class
+The class is the same one
 ([`sim/common/cmd_processor.{h,cpp}`](../../sim/common/cmd_processor.cpp)),
-opposite side of the host/device boundary. The CP command-building
-(rings, `CMD_LAUNCH`, doorbell, `Q_SEQNUM` poll) lives in the shared
-common-core dispatcher
-([`sw/runtime/common/device.cpp`](../../sw/runtime/common/device.cpp)),
-identical to every other backend. See
-[`command_processor.md`](command_processor.md).
-
-**ISA portability.** The device side is always an x86 gem5 binary
-regardless of simulated ISA. Only the host runtime changes ISA: x86_64
-native, aarch64 cross-compiled (opt-in via `VORTEX_GEM5_ARM=1`), armhf
-supported but 32-bit-limited (BAR above 4 GiB unreachable). CI runs gem5
-through the catalog's `gem5` category (hostless `hello`, e2e
-`vecadd`/`sgemm`), whose `via: script` calls `ci/regression.sh --run gem5`.
+and so is the command-building code in the dispatcher
+([`sw/runtime/common/device.cpp`](../../sw/runtime/common/device.cpp)). Only
+the side of the boundary differs.
 
 ---
 
-## 5. Kernel-run path (hosted)
+## 3. The device library
 
-`vx_device_open` → dispatcher dlopens the host backend → `dev_open`. Queue
-create → `host_mem_alloc` rings/head/cmpl in VRAM, `cp_reg_write` programs
-Q0 and enables. Launch → the dispatcher writes `CMD_DCR_WRITE` +
-`CMD_LAUNCH` descriptors into the ring (host stores through the PIN
-window), then rings the `Q_TAIL_HI` doorbell. The SimObject's
-`maybeWakeCp()` → `cp_.tick()` fetches the ring cache line, routes DCRs via
-`vortex_dcr_write`, and `vortex_start` schedules the Vortex chain; the CP
-launch FSM waits on `vortex_busy()`, then retires and writes the seqnum.
-The host polls `cp_reg_read(Q_SEQNUM)`. Ring, staging, and VRAM are all the
-same in-process `simx::RAM` bytes, so memory is single-source-of-truth.
+Built by `make -C sim/simx USE_GEM5=1`. `Gem5Device` owns the device memory,
+the processor model, a memory accessor, and an embedded command processor,
+and binds the command processor's hooks — memory read and write, DCR read
+and write, start, busy — to them.
+
+### 3.1 C ABI
+
+The SimObject resolves all thirteen symbols at construction and fails
+immediately if one is missing.
+
+| symbol | purpose |
+|---|---|
+| `vortex_gem5_build_info` | identifies the library |
+| `vortex_gem5_create`, `_destroy` | device lifetime |
+| `vortex_gem5_set_start_handler` | registers the callback a launch invokes |
+| `vortex_gem5_load_kernel` | preloads an image, for a hostless run |
+| `vortex_gem5_cp_mmio_read`, `_write` | a 32-bit register access |
+| `vortex_gem5_cp_tick`, `_cp_has_work` | advance the command processor; is there more |
+| `vortex_gem5_vortex_tick`, `_vortex_busy` | advance the processor one cycle; is it running |
+| `vortex_gem5_vram_read`, `_write` | a device-memory access |
+
+A plain C ABI keeps the device library independent of gem5's headers and
+compiler flags: it is an ordinary SimX build product.
+
+### 3.2 The memory accessor
+
+[`dev_mem.h`](../../sim/simx/gem5/dev_mem.h) defines `DevMemAccessor`, the
+seam between the device and whatever holds its memory. `InProcessDevMem`,
+which wraps the SimX RAM, is the only implementation.
+
+Despite the `DmaDevice` base class, no memory traffic goes through gem5's
+DMA port: host and device both touch the in-process RAM. The base class and
+the accessor interface are kept so that a port-backed implementation is a
+new accessor, not a redesign (§11).
 
 ---
 
-## One-time setup
+## 4. The SimObject
 
-Vortex install / build as usual ([docs/install_vortex.md](../install_vortex.md)),
-then add gem5:
+[`vortex_gpgpu_dev.cc`](../../sim/simx/gem5/vortex_gpgpu_dev.cc).
 
-```bash
-cd build/   # standard Vortex out-of-tree build directory
-./ci/gem5_install.sh
-```
+| parameter | default | meaning |
+|---|---|---|
+| `library` | required | absolute path of the **device** library |
+| `kernel` | empty | an image to preload; selects a hostless run |
+| `pio_addr`, `pio_size` | `0x20000000`, `0x200` | the register window |
+| `pio_latency` | 1 ns | latency of a register access |
+| `pin_addr`, `pin_size` | `0x100000000`, **0** | the memory window; a size of zero disables it |
+| `max_queues` | 4 | queues the register window can address |
 
-This runs `sudo apt install` for gem5's build dependencies (scons,
-libprotobuf, m4, libboost, **gcc-aarch64-linux-gnu**, …), clones gem5
-v25.0.0.1 into `$TOOLDIR/gem5`, copies the Vortex SimObject sources
-into `$GEM5_HOME/src/dev/vortex/`, and builds `gem5.opt` for both X86
-and ARM (~15 min on a 64-core machine, ~30-45 min on a typical CI
-runner). The script is idempotent — re-running with the same
-`GEM5_REV` is a no-op.
+The register window **is** the command processor's register file: the
+globals occupy `0x40` bytes and each queue a further `0x40`. There is no
+second window and no base offset inside it.
 
-To install only one ISA:
+### 4.1 Packet routing
 
-```bash
-GEM5_TARGETS="X86" ./ci/gem5_install.sh   # default
-GEM5_TARGETS="ARM" ./ci/gem5_install.sh
-GEM5_TARGETS="X86 ARM" ./ci/gem5_install.sh   # both (default)
-```
+| packet address | forwarded to |
+|---|---|
+| inside the PIO range | `cp_mmio_read` / `cp_mmio_write`, 32 bits |
+| inside the PIN range | `vram_read` / `vram_write` |
 
-The pinned gem5 revision lives in `VERSION` (`GEM5_REV=v25.0.0.1`);
-bumping it requires re-running `ci/gem5_install.sh` and verifying
-both `gem5.opt` builds still load `VortexGPGPU` cleanly.
+### 4.2 Event chains
 
-## Building Vortex with gem5 support
+| event | runs while | started by |
+|---|---|---|
+| `cpTickEvent_` | the command processor has work | a register write that leaves it with work — in practice the doorbell |
+| `vortexTickEvent_` | the processor is busy | a launch, through the start handler; or `startup()` in a hostless run |
 
-The device library is gated behind `USE_GEM5=1`. The default
-`make -C sim/simx` is **unchanged** — no gem5 dep, no `libvortex-gem5.so`
-produced.
+Each event reschedules itself one clock edge later only while its condition
+holds. **Between commands nothing on the device is scheduled**: idle is both
+events unscheduled, not a loop polling a flag.
 
-```bash
-make -C sim/simx                     # default; no gem5 artifacts
-make -C sim/simx USE_GEM5=1          # produces libvortex-gem5.so + gem5_smoke
-```
+The two chains are deliberately separate. A single tick that advanced both
+would serialize the host, the command processor and the processor, and
+their concurrent progress is what the model exists to show.
 
-`USE_SST=1` and `USE_GEM5=1` are mutually exclusive (the Makefile
-errors out if both are set).
+---
 
-### Host runtime + tests (cross-compile)
+## 5. The host runtime
 
-The simulated process inside gem5 loads the **host runtime**
-`libvortex-gem5-$HOST_ARCH.so`, which exposes the pure-v2 `callbacks_t`
-to the dispatcher. The `HOST_ARCH` knob is consistent across three
-Makefiles — runtime backend, stub, and regression tests:
+[`vortex.cpp`](../../sw/runtime/gem5/vortex.cpp) implements the transport
+interface the dispatcher expects and nothing else.
 
-```bash
-# Native x86 (default)
-make -C sw/runtime/stub                          # → build/sw/runtime/libvortex.so
-make -C sw/runtime/gem5                          # → build/sw/runtime/libvortex-gem5-x86_64.so
-make -C tests/regression/vecadd                  # → build/tests/regression/vecadd/vecadd
+| callback | implementation |
+|---|---|
+| `dev_open`, `dev_close` | initialize and release the driver |
+| `cp_reg_read`, `cp_reg_write` | a 32-bit access at `PIO_BASE_ADDR + offset` |
+| `host_mem_alloc`, `host_mem_free` | allocate from the aperture; `host pointer = PIN_BASE_ADDR + device address` |
+| `host_mem_pull`, `host_mem_push` | nothing to do — host and device share the bytes |
 
-# Cross-compiled aarch64 — outputs land in $arch/ subdirs so x86
-# and ARM artifacts coexist:
-make -C sw/runtime/stub HOST_ARCH=aarch64        # → build/sw/runtime/aarch64/libvortex.so
-make -C sw/runtime/gem5 HOST_ARCH=aarch64        # → build/sw/runtime/aarch64/libvortex-gem5-aarch64.so
-make -C tests/regression/vecadd HOST_ARCH=aarch64 # → build/tests/regression/vecadd/vecadd-aarch64
+[`driver.{h,cpp}`](../../sw/runtime/gem5/driver.cpp) holds the fixed
+addresses and the raw accesses. `mmio_fence()` emits the architecture's
+barrier — `mfence`, or `dmb sy` — and the runtime issues it between storing
+command lines through the memory window and writing the doorbell, so that
+the device sees the new lines before the tail advances.
 
-# armhf works the same way (note: armhf is 32-bit so the BAR
-# mapping above 4 GiB is out of reach — only standalone tests work):
-make -C sw/runtime/stub HOST_ARCH=armhf
-make -C sw/runtime/gem5 HOST_ARCH=armhf
-```
+### 5.1 Instruction-set portability
 
-The ARM targets require `gcc-aarch64-linux-gnu` /
-`gcc-arm-linux-gnueabihf` respectively — `ci/gem5_install.sh`
-installs these.
+The device library and gem5 are always native binaries. Only the host side
+changes:
 
-## Running tests
+| `HOST_ARCH` | status | artifacts |
+|---|---|---|
+| `x86_64` | default | `<build>/sw/runtime/libvortex-gem5-x86_64.so` |
+| `aarch64` | cross-compiled, opt-in in the regression flow | `<build>/sw/runtime/aarch64/…` |
+| `armhf` | hostless runs only | a 32-bit process cannot reach a window above 4 GB |
 
-### From the regression harness
+Cross-architecture runs rely on two gem5 mechanisms, both set up by the
+runner script: `setInterpDir`, which prefixes the dynamic linker path
+embedded in the cross-compiled binary with the cross sysroot, and
+`redirect_paths`, which redirects the guest's library lookups to it.
+
+---
+
+## 6. Address map
+
+![gem5 address map](../assets/img/gem5_address_map.svg)
+
+| range | size | backed by |
+|---|---|---|
+| `0x0000_0000` – `0x2000_0000` | 512 MB | the gem5 memory model — the process's own memory |
+| `0x2000_0000` – `0x2000_0200` | `0x200` | the PIO window — the register file |
+| `0x1_0000_0000` – `0x2_0000_0000` | 4 GB | the PIN window — device memory |
+| `0x1_FC00_0000` – `0x2_0000_0000` | 64 MB | within it, the host-memory aperture |
+
+The memory window covers the whole 32-bit device address space, so any
+address the device allocator hands out is reachable, and it sits above 4 GB
+so that it cannot collide with the process's own low addresses.
+
+The aperture is carved from the **top** of the window; the device allocator
+grows from the bottom. The two never meet.
+
+**The addresses exist in two places** —
+[`driver.h`](../../sw/runtime/gem5/driver.h) and the runner scripts. They
+are not generated from a common source; change one and change the other.
+
+---
+
+## 7. A kernel launch
+
+![Kernel launch under gem5](../assets/img/gem5_launch_sequence.svg)
+
+| step | host | device |
+|---|---|---|
+| open | loads the dispatcher, which loads the transport | — |
+| create a queue | allocates the ring and completion slots in the aperture; programs queue 0 and enables the command processor | register writes land in the register file |
+| submit | stores `CMD_DCR_WRITE` and `CMD_LAUNCH` lines into the ring; fences; writes the doorbell | the doorbell schedules `cpTickEvent_` |
+| execute | — | the command processor fetches each line, programs the DCRs, and calls the start hook; the hook schedules `vortexTickEvent_` |
+| run | polls the sequence-number register | the launch waits on the processor's busy flag |
+| retire | sees the expected sequence number | the command processor writes it to the completion slot and the register |
+
+Ring, staging and device memory are the same in-process bytes, so there is
+a single source of truth and nothing to synchronize.
+
+### 7.1 Hostless runs
+
+With `kernel=` set, `startup()` preloads the image and schedules the
+processor chain directly. There is no host CPU and no register traffic; the
+simulation exits when the processor goes idle. It is the fastest way to run
+a kernel under gem5 and the only mode a 32-bit host supports.
+
+---
+
+## 8. Install, build and run
+
+### 8.1 Installing gem5
 
 ```bash
 cd build/
-./ci/regression.sh --gem5
+./ci/gem5_install.sh
 ```
 
-Runs both the standalone Phase-3 smoke test (kernel preloaded on the
-SimObject, no host CPU) and the Phase-5 end-to-end test (real SE-mode
-host program drives the device through CP submissions).
+The script installs gem5's build dependencies, including the AArch64 cross
+compiler; fetches gem5 at the revision pinned as `GEM5_REV` in
+[`VERSION`](../../VERSION); copies the SimObject sources into the gem5
+source tree; and builds `gem5.opt`.
 
-To also run the ARM matrix entry (needs `gcc-aarch64-linux-gnu`):
+| location | holds |
+|---|---|
+| `$TOOLDIR/gem5-src/` | the source and build tree |
+| `$TOOLDIR/gem5/` — `GEM5_HOME` | the slim runtime install: stripped binaries and `configs/` |
 
 ```bash
-VORTEX_GEM5_ARM=1 ./ci/regression.sh --gem5
+GEM5_TARGETS="X86" ./ci/gem5_install.sh        # one instruction set
+GEM5_TARGETS="X86 ARM" ./ci/gem5_install.sh    # both — the default
 ```
 
-Runs 6 tests:
-- X86 standalone hello (no host CPU; SimObject preloads kernel)
-- X86 e2e vecadd `-n16` (host CPU drives device via CP regfile)
-- X86 e2e sgemm `-n4`
-- ARM standalone hello
-- ARM e2e vecadd `-n16`
-- ARM e2e sgemm `-n4`
+The script is idempotent for a given revision. Changing `GEM5_REV` requires
+re-running it and confirming that both binaries still load `VortexGPGPU`.
 
-Cross-arch e2e relies on two gem5 mechanisms working together:
+### 8.2 Building Vortex for gem5
 
-1. **`setInterpDir(prefix)`** prepends a sysroot to the dynamic
-   linker path embedded in the cross-compiled ELF
-   (`/lib/ld-linux-aarch64.so.1` → `/usr/aarch64-linux-gnu/lib/...`).
-   The Python config calls this when `VORTEX_DRIVER=gem5-aarch64`.
-2. **`system.redirect_paths`** redirects the *guest process's*
-   open()/stat() syscalls for `/lib/aarch64-linux-gnu/*` →
-   `/usr/aarch64-linux-gnu/lib/*` so the dynamic linker can resolve
-   libc, libstdc++, etc.
+```bash
+make -C sim/simx USE_GEM5=1                      # device library
+make -C sw/runtime/stub                          # dispatcher
+make -C sw/runtime/gem5                          # transport, x86-64
+make -C tests/regression/vecadd                  # a test
 
-Both paths point at the Ubuntu `gcc-aarch64-linux-gnu` package's
-install location — no extra setup needed.
+make -C sw/runtime/stub HOST_ARCH=aarch64        # cross-compiled
+make -C sw/runtime/gem5 HOST_ARCH=aarch64
+make -C tests/regression/vecadd HOST_ARCH=aarch64
+```
 
-### By hand
+The default `make -C sim/simx` is unchanged: it has no gem5 dependency and
+produces no gem5 artifact. `USE_GEM5=1` and `USE_SST=1` are mutually
+exclusive — different external simulators, different link flags — and the
+Makefile rejects both together. Cross-compiled outputs land in a
+per-architecture subdirectory, so they coexist with the native ones.
 
-**Hostless** (no host CPU; kernel preloaded via SimObject parameter):
+### 8.3 Running
+
+Through the catalog:
+
+```bash
+cd build/
+./ci/regression.sh --test gem5
+VORTEX_GEM5_ARM=1 ./ci/regression.sh --test gem5     # adds the AArch64 runs
+```
+
+| run | instruction set | mode |
+|---|---|---|
+| `hello` | x86-64, AArch64 | hostless |
+| `vecadd -n16` | x86-64, AArch64 | hosted |
+| `sgemm -n4` | x86-64, AArch64 | hosted |
+
+By hand, hostless:
 
 ```bash
 VORTEX_GEM5_DEV_LIB=$(pwd)/sim/simx/libvortex-gem5.so \
@@ -309,72 +314,29 @@ VORTEX_TEST_KERNEL=hello.vxbin \
     $GEM5_HOME/build/X86/gem5.opt ci/gem5_run_hostless_app.py
 ```
 
-`VORTEX_TEST_KERNEL` defaults to `kernel.vxbin`, so any standard
-regression test's kernel can be driven hostless without the host
-binary — e.g. `VORTEX_TEST_DIR=$(pwd)/tests/regression/vecadd
-ci/gem5_run_hostless_app.py`.
-
-**End-to-end** — any standard Vortex regression test (host binary +
-kernel.vxbin) runs through the generic
-[`ci/gem5_run_app.py`](../../ci/gem5_run_app.py) runner.
+By hand, hosted:
 
 ```bash
-# vecadd
 VORTEX_GEM5_DEV_LIB=$(pwd)/sim/simx/libvortex-gem5.so \
 VORTEX_GEM5_HOST_RT_DIR=$(pwd)/sw/runtime \
 VORTEX_TEST_DIR=$(pwd)/tests/regression/vecadd \
 VORTEX_TEST_BIN=vecadd \
 VORTEX_TEST_ARGS="-n16" \
     $GEM5_HOME/build/X86/gem5.opt ci/gem5_run_app.py
-
-# sgemm
-VORTEX_GEM5_DEV_LIB=$(pwd)/sim/simx/libvortex-gem5.so \
-VORTEX_GEM5_HOST_RT_DIR=$(pwd)/sw/runtime \
-VORTEX_TEST_DIR=$(pwd)/tests/regression/sgemm \
-VORTEX_TEST_BIN=sgemm \
-VORTEX_TEST_ARGS="-n4" \
-    $GEM5_HOME/build/X86/gem5.opt ci/gem5_run_app.py
 ```
 
-Expected output ends with:
-```
-PASSED!
-```
+The environment variables must precede the binary; gem5 would otherwise
+read them as positional arguments.
 
-### Sizing tests for the 120 s budget
+**Sizing.** The host's poll loop executes in simulated time, so kernel
+runtime translates directly into gem5 wall time. The catalog's sizes fit a
+120-second budget per run.
 
-Tests are bounded by the project's 120 s per-test budget. gem5 SE-mode
-runs the host CPU's CP poll loop in simulated time too, so **kernel
-runtime + dispatcher poll budget translate directly into gem5 wall
-time**. The regression script's default sizes fit; larger sizes are
-fine when run by hand outside the budget cap.
+---
 
-## Address space layout
+## 9. Writing a configuration script
 
-```
-Host process VA (simulated, gem5 SE-mode) | Simulated PA | Backed by
-------------------------------------------+--------------+----------------------
-[0x0000_0000_0000, 0x0000_1000_0000)      | same         | gem5 DDR3 (process
-                                          |              |   heap/stack/code)
-[0x0000_2000_0000, 0x0000_2000_0200)      | same         | VortexGPGPU CP regfile
-                                          |              |   (32-bit PIO)
-[0x0001_0000_0000, 0x0002_0000_0000)      | same         | VortexGPGPU VRAM
-                                          |              |   (BAR-mapped to
-                                          |              |    in-process simx::RAM)
-```
-
-PIN_BASE_ADDR = `0x100000000` is identity-mapped via `Process.map()`
-so host stores at PIN_BASE+dev_addr land in the same in-process
-simx::RAM bytes the CP and Vortex read. PIO_BASE_ADDR = `0x20000000`
-is identity-mapped (cacheable=False) so the dispatcher's PIO MMIO
-reaches the SimObject's regfile decoder.
-
-These constants are duplicated in two places — `sw/runtime/gem5/driver.h`
-and `ci/gem5_run_app.py`. If you change one, change the other.
-
-## Writing your own gem5 Python script
-
-The minimal recipe for hosting Vortex inside a custom gem5 system:
+The minimal recipe for hosting Vortex in a custom gem5 system:
 
 ```python
 from m5.objects import (
@@ -383,10 +345,10 @@ from m5.objects import (
     VoltageDomain, VortexGPGPU,
 )
 
-# Mappings expected by sw/runtime/gem5/driver.h.
-PIO_BASE, PIO_SIZE = 0x20000000, 0x0200          # CP regfile (32-bit)
-PIN_BASE, PIN_SIZE = 0x100000000, 0x100000000    # BAR-mapped VRAM
-NUM_CPUS = 4   # >=2 required for the dispatcher's per-Queue worker thread
+# Must match sw/runtime/gem5/driver.h.
+PIO_BASE, PIO_SIZE = 0x20000000, 0x0200          # register window
+PIN_BASE, PIN_SIZE = 0x100000000, 0x100000000    # memory window
+NUM_CPUS = 4                                     # >= 2, see 10.3
 
 system = System()
 system.clk_domain = SrcClockDomain(clock="3GHz",
@@ -396,8 +358,6 @@ system.mem_ranges = [AddrRange("1GiB")]
 system.membus = SystemXBar()
 system.system_port = system.membus.cpu_side_ports
 
-# Multiple CPU contexts — the upstream dispatcher spawns a per-Queue
-# worker thread; clone() in SE-mode needs a free HW context to land on.
 system.cpu = [AtomicSimpleCPU(cpu_id=i) for i in range(NUM_CPUS)]
 system.multi_thread = True
 for cpu in system.cpu:
@@ -409,17 +369,15 @@ for cpu in system.cpu:
     cpu.interrupts[0].int_requestor = system.membus.cpu_side_ports
     cpu.interrupts[0].int_responder = system.membus.mem_side_ports
 
-# DRAM serves the process's address space below PIO_BASE.
+# DRAM serves the process below the register window.
 system.mem_ctrl = MemCtrl()
 system.mem_ctrl.dram = DDR3_1600_8x8()
 system.mem_ctrl.dram.range = AddrRange(0, PIO_BASE)
 system.mem_ctrl.port = system.membus.mem_side_ports
 
-# The Vortex device — claims both the CP regfile PIO range and the
-# BAR-mapped VRAM range.
 system.vortex = VortexGPGPU(
     library = "/path/to/build/sim/simx/libvortex-gem5.so",
-    kernel  = "",   # NO preload — the host binary uploads via CP
+    kernel  = "",                                # hosted: the host uploads
 )
 system.vortex.pio_addr = PIO_BASE
 system.vortex.pio_size = PIO_SIZE
@@ -428,7 +386,6 @@ system.vortex.pin_size = PIN_SIZE
 system.vortex.pio = system.membus.mem_side_ports
 system.vortex.dma = system.membus.cpu_side_ports
 
-# Workload — the host binary loads libvortex.so + libvortex-gem5-x86_64.so.
 process = Process(
     pid=100,
     cwd="/path/to/your/test",
@@ -442,144 +399,102 @@ process = Process(
 
 system.workload = SEWorkload.init_compatible(process.executable)
 for cpu in system.cpu:
-    cpu.workload = process       # required: workload size must equal numThreads
+    cpu.workload = process
     cpu.createThreads()
 
 import m5
 root = Root(full_system=False, system=system)
 m5.instantiate()
 
-# CRITICAL: Process.map() must come AFTER m5.instantiate().
-# Identity-mapping PIO + PIN gives the runtime direct CPU access to
-# the device's CP regfile and to BAR-mapped VRAM.
+# After instantiate, never before (10.1).
 system.cpu[0].workload[0].map(PIO_BASE, PIO_BASE, PIO_SIZE, cacheable=False)
 system.cpu[0].workload[0].map(PIN_BASE, PIN_BASE, PIN_SIZE, cacheable=False)
 
 m5.simulate()
 ```
 
-Reference implementations:
-- [ci/gem5_run_hostless_app.py](../../ci/gem5_run_hostless_app.py) — hostless variant (preload via `kernel=` param; no host CPU)
-- [ci/gem5_run_app.py](../../ci/gem5_run_app.py) — e2e variant (any regression test via `VORTEX_TEST_BIN`)
-
-## Load-bearing invariants — do not violate
-
-### 1. Process.map() goes AFTER m5.instantiate()
-
-`Process.map(vaddr, paddr, size)` is a C++ method on the underlying
-`gem5::Process` object; that object only exists after
-`m5.instantiate()` builds the SimObject tree. Calling `.map()`
-before instantiate raises `RuntimeError: Attempt to instantiate
-orphan node <orphan Process>`. Confirmed by gem5's own AMD GPU
-integration at `$GEM5_HOME/configs/example/apu_se.py:1055`.
-
-### 2. PIO and PIN regions must be identity-mapped — and PIN must be cacheable=False
-
-`sw/runtime/gem5/driver.h` hard-codes:
-- `PIO_BASE_ADDR = 0x20000000` (CP regfile; 0x200 bytes)
-- `PIN_BASE_ADDR = 0x100000000` (BAR-mapped VRAM; 4 GB)
-
-The Python config must `process.map()` both at the same physical
-addresses, with `cacheable=False` on PIN. With caching enabled the
-host CPU's L1 could hold the new ring entry while `Q_TAIL_HI` is
-observed by the CP — the CP fetches a stale CL and the dispatcher
-hangs polling `Q_SEQNUM`.
-
-Changing either constant requires updating both the Python config
-**and** `sw/runtime/gem5/driver.h` (they are not auto-synced).
-
-### 3. CPU thread context count must be >= 2
-
-The upstream dispatcher (commit `157e7a1`) spawns a per-Queue worker
-thread at `vx_queue_create`. SE-mode `clone()` returns EAGAIN if
-there is no free HW context, which surfaces as
-`std::system_error: Resource temporarily unavailable` at the
-dispatcher constructor.
-
-Use multiple CPU instances (one per thread) and
-`system.multi_thread = True`. Assigning the same Process to every
-CPU is required because gem5 fatals if
-`workload.size() != numThreads`.
-
-### 4. PIO accesses to the CP regfile are 32-bit
-
-The CP regfile is 32-bit-wide; `cp_mmio_write/read` in the host
-runtime are explicitly 32-bit (`mmio_write32` / `mmio_read32` in
-`driver.cpp`). Don't issue 64-bit accesses — gem5 will deliver a
-single packet of the wrong width and the SimObject will route the
-extra bytes into the next regfile slot.
-
-### 5. The Vortex `Processor` and `CommandProcessor` are independent gem5 event chains
-
-`cpTickEvent_` advances the CP one functional cycle; `vortexTickEvent_`
-advances the Vortex `Processor::cycle()`. Both self-schedule only
-while their respective busy flag is true. When the CP fires
-`CMD_LAUNCH`, the `vortex_start` hook schedules `vortexTickEvent_`
-via the registered start handler (set at `VortexGPGPU` construction).
-Don't try to combine them into a single tick — that breaks
-"concurrent host + CP + GPU progress" which is the whole point of
-the simulation model.
-
-### 6. USE_SST=1 and USE_GEM5=1 are mutually exclusive
-
-The Makefile rejects both at once. Different external simulators,
-different LDFLAGS, different `libvortex.so` shapes. Pick one per
-build.
-
-## CI
-
-`./ci/regression.sh --gem5` (built into `--all` is intentionally
-**out**: gem5 install is heavy and gated like SST). The
-`.github/workflows/ci.yml` matrix includes a `gem5` entry that runs
-on hosted runners; ARM matrix gated on `VORTEX_GEM5_ARM=1`.
-
-Apptainer integration (the `apptainer-ci.yml` pipeline) does **not**
-include gem5 — adding it to `miscs/apptainer/vortex.def` is out of
-scope. Use the hosted CI for gem5.
-
-## Troubleshooting
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `dlopen('libvortex-gem5.so') failed: cannot open shared object file` | gem5 SimObject can't find the device library | Set `VortexGPGPU(library="/abs/path/to/libvortex-gem5.so", ...)` to absolute path |
-| `Cannot open library: libvortex-gem5-x86_64.so: cannot open shared object file` | Stub can't find the host runtime backend | Set `LD_LIBRARY_PATH=/path/to/sw/runtime` in the `env=[...]` list passed to `Process()` |
-| `terminate called after throwing an instance of 'std::system_error': Resource temporarily unavailable` | Dispatcher's per-Queue worker `std::thread` can't `clone()` into a free HW context | Use multiple CPU instances + `system.multi_thread = True`; assign the same Process to every CPU (invariant §3) |
-| `system.membus has two ports responding within range [...]` | DRAM `mem_ctrl.dram.range` overlaps with VortexGPGPU's PIO or PIN range | Shrink `dram.range = AddrRange(0, PIO_BASE)` so the device-owned ranges have exclusive routing |
-| `Tried to write unmapped address 0xXXX` | Host runtime is using stale PIN_BASE_ADDR (mismatch with Python config), or `Process.map()` was skipped | Confirm both `sw/runtime/gem5/driver.h` and the Python config use the same `PIN_BASE_ADDR`; ensure `Process.map(PIN_BASE, PIN_BASE, PIN_SIZE)` runs after `m5.instantiate()` |
-| `Attempt to instantiate orphan node <orphan Process>` | `Process.map()` called before `m5.instantiate()` | Move all `.map()` calls AFTER `m5.instantiate()` — see invariant §1 above |
-| `fatal: VortexGPGPU: dlsym(vortex_gem5_cp_mmio_write) failed` | Device library is missing the C ABI symbol — usually means the `library=` parameter points at the wrong .so | `library=` is the **device** library `build/sim/simx/libvortex-gem5.so` (no arch suffix), NOT the host runtime `libvortex-gem5-x86_64.so` |
-| `fatal: system.membus has two ports responding within range [0x10000000:0x20000000]` (standalone hello) | `pin_size` defaulted to non-zero in an old gem5.opt; standalone test doesn't need the BAR | Re-install + rebuild gem5.opt OR explicitly set `pin_size = 0` on the VortexGPGPU instance |
-| Test hangs polling `Q_SEQNUM` after first launch | Cacheable PIN region — host's L1 holds the ring entry; CP sees stale bytes | Set `cacheable=False` on the PIN `Process.map()` call (invariant §2) |
-| `ccache g++ ... undefined reference to fmt::v8::detail::error_handler::on_error` | ccache served a stale object compiled against a different `fmt` version | `CCACHE_DISABLE=1 make -C sim/simx clean && CCACHE_DISABLE=1 make ...` |
+The two runner scripts are the reference implementations.
 
 ---
 
-## 6. Not implemented
+## 10. Invariants
 
-1. **v2 DMA-port memory seam.** The `DevMemAccessor` interface exists, but
-   `DmaPortDevMem` backing VRAM through gem5's `SimpleMemory` over the
-   SimObject DMA port is not built — VRAM is in-process `simx::RAM` despite
-   the `DmaDevice` base class. The seam is the design's whole point;
-   preserve the intent.
-2. **Multi-queue host runtime.** The PIO map reserves 4 queues
-   (`max_queues=4`) but the CP model is single-queue (`q0_`) and the host
-   exercises Q0 only — the growth path for vortex2.h multi-queue.
-3. **PCIe `PciDevice` / BAR upgrade.** The C ABI is shape-compatible; only
-   the gem5 wrapper class changes. Doorbell-ring realism (vs. today's
-   `Q_SEQNUM` polling) is the matching upgrade — let the CP raise an
-   interrupt and let the dispatcher sleep until it fires, instead of
-   spinning on `Q_SEQNUM` PIO reads.
-4. **FS-mode Linux + a kernel driver** (out of scope) — SE-mode only today.
-5. **Multi-device** (one `VortexGPGPU` per system today) and a **separate
-   ClockDomain** for CP vs. Vortex (single-domain today; real silicon has
-   separate clocks, so v2 would add a second `ClockDomain` and rate-match
-   the tick events).
-6. **Profiling timestamp writeback** — arrives "for free" once the CP
-   `F_PROFILE` path lands (see `command_processor.md` §10).
+### 10.1 Map after instantiate
 
-**Known discrepancies to fix** (not future work): the gem5 entry in
-`.github/workflows/ci.yml` lists both `xlen: [32, 64]` with **no
-`exclude:`** for xlen=64, contradicting the project's 32-bit-only gem5
-policy; and `ci/gem5_run_app.py` carries **stale comments** describing the
-superseded `cp_mmio_write`/`mem_upload` HAL rather than the landed
-`cp_reg_*` + `host_mem_alloc` transport.
+`Process.map()` is a method of the C++ process object, which exists only
+after `m5.instantiate()` has built the object tree. Calling it earlier
+raises `Attempt to instantiate orphan node`.
+
+### 10.2 Identity-mapped, uncached windows
+
+Both windows must be mapped at the addresses the runtime hard-codes, and
+the memory window must be mapped `cacheable=False`. With caching, the host
+CPU model can hold a new ring entry while the doorbell has already reached
+the device. The command processor fetches a stale line and the host polls
+forever.
+
+### 10.3 At least two CPU contexts
+
+The dispatcher starts a worker thread per queue. In syscall-emulation mode
+`clone()` needs a free hardware context to land on and returns `EAGAIN`
+without one, which surfaces as a `std::system_error` in the dispatcher.
+Create several CPUs, set `multi_thread`, and assign the same process to
+every one — gem5 requires the workload count to equal the thread count.
+
+### 10.4 32-bit register accesses
+
+The register file is 32 bits wide and gem5 delivers a packet at the width it
+was issued. A 64-bit access arrives as one packet, and its upper half lands
+in the next register.
+
+### 10.5 The DRAM range excludes the windows
+
+Two responders on one address range is fatal. The memory controller's range
+must end below the register window.
+
+---
+
+## 11. Verification and troubleshooting
+
+The `gem5` category in
+[`ci/testcases/gem5.yaml`](../../ci/testcases/gem5.yaml) runs the flow of
+§8.3 at the `nightly` tier, on a runner provisioned with the `full` profile.
+The container workflow does not include gem5.
+
+| symptom | cause | fix |
+|---|---|---|
+| `dlopen('libvortex-gem5.so') failed` | the SimObject cannot find the device library | give `library=` an absolute path |
+| `dlsym(vortex_gem5_…) failed` | `library=` points at the host transport, not the device library | the device library has no architecture suffix |
+| `Cannot open library: libvortex-gem5-x86_64.so` | the dispatcher cannot find the transport | set `LD_LIBRARY_PATH` in the process's `env` |
+| `std::system_error: Resource temporarily unavailable` | no free hardware context for the worker thread | §10.3 |
+| `two ports responding within range` | the DRAM range overlaps a device window; or a hostless run with a non-zero `pin_size` | §10.5; set `pin_size = 0` |
+| `Tried to write unmapped address` | the runtime and the script disagree on an address, or a window was not mapped | §6, §10.1 |
+| `Attempt to instantiate orphan node` | a window was mapped before `m5.instantiate()` | §10.1 |
+| the host hangs polling the sequence number | the memory window is cached | §10.2 |
+| `undefined reference to fmt::v8::…` | a stale object served by the compiler cache | rebuild with `CCACHE_DISABLE=1` |
+
+---
+
+## 12. Not implemented
+
+- **Memory through gem5's DMA port.** The accessor interface exists; a
+  port-backed implementation that carried device-memory traffic as gem5
+  packets, with their timing, does not.
+- **Multiple queues.** The register window addresses four; the command
+  processor model has one, and the host uses queue 0.
+- **Interrupt-driven completion.** The host polls the sequence-number
+  register. Raising an interrupt would let the dispatcher sleep, and would
+  remove the poll loop's cost from the simulation.
+- **A PCI device.** The C ABI is compatible; the SimObject's base class
+  would change.
+- **Full-system mode.** Syscall emulation only; there is no kernel driver.
+- **Several devices, or separate clocks** for the command processor and the
+  processor. One device and one clock domain today.
+
+**Known discrepancies:**
+
+- [`gem5.yaml`](../../ci/testcases/gem5.yaml) declares both `xlen` values,
+  while the memory window is sized for a 32-bit device address space.
+- The header comments of [`gem5_run_app.py`](../../ci/gem5_run_app.py)
+  describe an earlier transport interface (`mem_upload`, `cp_mmio_write`)
+  rather than `host_mem_alloc` and `cp_reg_write`.

@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 700" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:14px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.6; fill:none; marker-end:url(#arr); }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+  </style>
+
+  <rect x="0" y="0" width="1360" height="700" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">One TOML key, its override, and the macros it becomes</text>
+
+  <!-- column heads -->
+  <text x="24"  y="76" class="th">kind of key</text>
+  <text x="196" y="76" class="th">authored in the TOML</text>
+  <text x="612" y="76" class="th">override (CONFIGS)</text>
+  <text x="944" y="76" class="th">emitted macros</text>
+  <line x1="24" y1="86" x2="1336" y2="86" class="rule"/>
+
+  <!-- row 1: scalar -->
+  <text x="24" y="122" class="t">scalar knob</text>
+  <text x="24" y="140" class="tt">a number or string</text>
+  <rect x="196" y="100" width="380" height="58" rx="6" class="mem"/>
+  <text x="208" y="134" class="mono">VX_CFG_NUM_THREADS = 4</text>
+  <rect x="612" y="100" width="296" height="58" rx="6" class="sw"/>
+  <text x="624" y="134" class="mono">-DVX_CFG_NUM_THREADS=8</text>
+  <rect x="944" y="100" width="392" height="58" rx="6" class="unit"/>
+  <text x="956" y="134" class="mono">VX_CFG_NUM_THREADS  8</text>
+  <path d="M 576 129 L 612 129" class="flow"/>
+  <path d="M 908 129 L 944 129" class="flow"/>
+
+  <!-- row 2: boolean -->
+  <text x="24" y="196" class="t">boolean knob</text>
+  <text x="24" y="214" class="tt">name ends _ENABLE</text>
+  <rect x="196" y="172" width="380" height="72" rx="6" class="mem"/>
+  <text x="208" y="202" class="mono">VX_CFG_L2_ENABLE = false</text>
+  <text x="208" y="228" class="tt">author the boolean only, never the mirror</text>
+  <rect x="612" y="172" width="296" height="72" rx="6" class="sw"/>
+  <text x="624" y="200" class="mono">-DVX_CFG_L2_ENABLE</text>
+  <text x="624" y="218" class="mono">-DVX_CFG_L2_DISABLE</text>
+  <text x="624" y="236" class="tt">_DISABLE clears a default-true knob</text>
+  <rect x="944" y="172" width="392" height="72" rx="6" class="unit"/>
+  <text x="956" y="200" class="mono">VX_CFG_L2_ENABLE</text>
+  <text x="1130" y="200" class="ts">presence gate, only when true</text>
+  <text x="956" y="220" class="mono">VX_CFG_L2_ENABLED  1</text>
+  <text x="1130" y="220" class="ts">integer mirror, always 0 or 1</text>
+  <path d="M 576 208 L 612 208" class="flow"/>
+  <path d="M 908 208 L 944 208" class="flow"/>
+
+  <!-- row 3: enum -->
+  <text x="24" y="282" class="t">enum knob</text>
+  <text x="24" y="300" class="tt">listed under [[enum]]</text>
+  <rect x="196" y="258" width="380" height="72" rx="6" class="mem"/>
+  <text x="208" y="284" class="mono">VX_CFG_FPU_TYPE = "expr: … 'DSP' …"</text>
+  <text x="208" y="304" class="mono">[[enum]] VX_CFG_FPU_TYPE =</text>
+  <text x="208" y="320" class="mono">    ["DPI", "DSP", "FPNEW", "STD"]</text>
+  <rect x="612" y="258" width="296" height="72" rx="6" class="sw"/>
+  <text x="624" y="286" class="mono">-DVX_CFG_FPU_TYPE=DSP</text>
+  <text x="624" y="304" class="mono">-DVX_CFG_FPU_TYPE_DSP</text>
+  <text x="624" y="322" class="tt">either spelling; bad values are rejected</text>
+  <rect x="944" y="258" width="392" height="72" rx="6" class="unit"/>
+  <text x="956" y="286" class="mono">VX_CFG_FPU_TYPE  DSP</text>
+  <text x="1130" y="286" class="ts">the value</text>
+  <text x="956" y="306" class="mono">VX_CFG_FPU_TYPE_DSP</text>
+  <text x="1130" y="306" class="ts">companion, the `ifdef selector</text>
+  <path d="M 576 294 L 612 294" class="flow"/>
+  <path d="M 908 294 L 944 294" class="flow"/>
+
+  <!-- row 4: derived -->
+  <text x="24" y="368" class="t">derived knob</text>
+  <text x="24" y="386" class="tt">value is "expr: …"</text>
+  <rect x="196" y="344" width="380" height="72" rx="6" class="mem"/>
+  <text x="208" y="370" class="mono">VX_CFG_FMA_LATENCY = "expr:</text>
+  <text x="208" y="386" class="mono">  16 if $fpu_dsp_vivado else</text>
+  <text x="208" y="402" class="mono">  (4 if $fpu_dsp_quartus else …)"</text>
+  <rect x="612" y="344" width="296" height="72" rx="6" class="sw"/>
+  <text x="624" y="372" class="mono">-DVX_CFG_FMA_LATENCY=4</text>
+  <text x="624" y="398" class="tt">an explicit value replaces the expression</text>
+  <rect x="944" y="344" width="392" height="72" rx="6" class="unit"/>
+  <text x="956" y="370" class="mono">VX_CFG_FMA_LATENCY  12</text>
+  <text x="956" y="392" class="ts">cflags / resolved: the evaluated number</text>
+  <text x="956" y="408" class="ts">unresolved header: a nested `ifdef tree</text>
+  <path d="M 576 380 L 612 380" class="flow"/>
+  <path d="M 908 380 L 944 380" class="flow"/>
+
+  <!-- row 5: private local -->
+  <text x="24" y="454" class="t">private local</text>
+  <text x="24" y="472" class="tt">lowercase name</text>
+  <rect x="196" y="430" width="380" height="58" rx="6" class="mem"/>
+  <text x="208" y="456" class="mono">fpu_dsp_vivado = "expr:</text>
+  <text x="208" y="472" class="mono">  $VX_CFG_FPU_TYPE_DSP and $VIVADO"</text>
+  <rect x="612" y="430" width="296" height="58" rx="6" class="none"/>
+  <text x="624" y="464" class="tt">none — change the knobs it reads</text>
+  <rect x="944" y="430" width="392" height="58" rx="6" class="none"/>
+  <text x="956" y="456" class="tt">never emitted</text>
+  <text x="956" y="474" class="ts">inlined into the expressions that use it</text>
+
+  <!-- row 6: toolchain predicate -->
+  <text x="24" y="526" class="t">tool predicate</text>
+  <text x="24" y="544" class="tt">[toolchain], bare name</text>
+  <rect x="196" y="502" width="380" height="58" rx="6" class="mem"/>
+  <text x="208" y="528" class="mono">SYNTHESIS = false</text>
+  <text x="208" y="544" class="mono">VIVADO    = false</text>
+  <rect x="612" y="502" width="296" height="58" rx="6" class="sw"/>
+  <text x="624" y="528" class="mono">-DSYNTHESIS -DVIVADO</text>
+  <text x="624" y="546" class="tt">set by the flow's Makefile, not by hand</text>
+  <rect x="944" y="502" width="392" height="58" rx="6" class="unit"/>
+  <text x="956" y="528" class="mono">-DSYNTHESIS -DVIVADO</text>
+  <text x="1130" y="528" class="ts">passed through in the -D list</text>
+  <text x="956" y="546" class="ts">headers test these names but never define them</text>
+  <path d="M 576 531 L 612 531" class="flow"/>
+  <path d="M 908 531 L 944 531" class="flow"/>
+
+  <!-- row 7: read-only symbols -->
+  <text x="24" y="598" class="t">read-only symbol</text>
+  <text x="24" y="616" class="tt">[[builtin]] or [[param]]</text>
+  <rect x="196" y="574" width="380" height="72" rx="6" class="mem"/>
+  <text x="208" y="600" class="mono">[[builtin]] XLEN = "int"</text>
+  <text x="208" y="618" class="mono">[[param]]   VX_CFG_DCACHE_NUM_REQS = "int"</text>
+  <text x="208" y="636" class="tt">a type declaration, not a value</text>
+  <rect x="612" y="574" width="296" height="72" rx="6" class="none"/>
+  <text x="624" y="602" class="tt">rejected — a -D on one of these</text>
+  <text x="624" y="620" class="tt">is a generator error</text>
+  <rect x="944" y="574" width="392" height="72" rx="6" class="none"/>
+  <text x="956" y="600" class="tt">never emitted</text>
+  <text x="956" y="618" class="ts">builtin: read from the environment</text>
+  <text x="956" y="634" class="ts">param: a name the consumer defines in its own scope</text>
+
+  <text x="24" y="682" class="tt">Gold = TOML source · green = command-line override · blue = emitted macro · dashed = nothing crosses this column.</text>
+</svg>

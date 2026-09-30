@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 760" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a8324a"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3a7d44"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .hdr     { fill:#fbf0d0; stroke:#b58900; stroke-width:1.2; }
+    .word    { fill:#ffffff; stroke:#b58900; stroke-width:1; }
+    .flop    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1; }
+    .free    { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.8; }
+    .held    { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.8; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#3a7d44; stroke-width:2; fill:none; marker-end:url(#arrg); }
+    .flowr   { stroke:#a8324a; stroke-width:2; fill:none; marker-end:url(#arrr); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#2f6a39; font-size:12.5px; }
+    .lbr     { fill:#a8324a; font-size:12.5px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="760" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">VX_amo_unit — LR/SC reservation stations</text>
+
+  <!-- ══════════ storage ══════════ -->
+  <rect x="24" y="56" width="600" height="680" class="grp"/>
+  <text x="36" y="80" class="tb">Station storage — direct-mapped by line</text>
+
+  <text x="40" y="112" class="ts">reserved line address (LINE_ADDR_BITS)</text>
+  <rect x="40" y="120" width="400" height="30" class="hdr"/>
+  <text x="52" y="140" class="mono">tag</text>
+  <rect x="440" y="120" width="120" height="30" class="word"/>
+  <text x="452" y="140" class="mono">index</text>
+  <text x="572" y="140" class="tt">low bits</text>
+
+  <path d="M 500 150 L 500 190" class="flow"/>
+  <text x="510" y="176" class="ts">selects one station</text>
+
+  <!-- array header -->
+  <text x="52"  y="212" class="ts">valid</text>
+  <text x="122" y="212" class="ts">hold credit</text>
+  <text x="252" y="212" class="ts">hart_id</text>
+  <text x="392" y="212" class="ts">tag</text>
+
+  <rect x="40"  y="220" width="60"  height="30" class="flop"/>
+  <rect x="110" y="220" width="120" height="30" class="flop"/>
+  <rect x="240" y="220" width="130" height="30" class="word"/>
+  <rect x="380" y="220" width="180" height="30" class="word"/>
+  <text x="572" y="240" class="tt">0</text>
+
+  <rect x="40"  y="256" width="60"  height="30" class="flop"/>
+  <rect x="110" y="256" width="120" height="30" class="flop"/>
+  <rect x="240" y="256" width="130" height="30" class="word"/>
+  <rect x="380" y="256" width="180" height="30" class="word"/>
+  <text x="572" y="276" class="tt">1</text>
+
+  <text x="290" y="308" class="tt">…</text>
+
+  <rect x="40"  y="320" width="60"  height="30" class="flop"/>
+  <rect x="110" y="320" width="120" height="30" class="flop"/>
+  <rect x="240" y="320" width="130" height="30" class="word"/>
+  <rect x="380" y="320" width="180" height="30" class="word"/>
+  <text x="572" y="340" class="tt">N−1</text>
+
+  <path d="M 40 366 L 40 374 L 230 374 L 230 366" stroke="#2e5e82" stroke-width="1.4" fill="none"/>
+  <text x="46" y="392" class="ts">flops — reset to empty</text>
+  <path d="M 240 366 L 240 374 L 560 374 L 560 366" stroke="#b58900" stroke-width="1.4" fill="none"/>
+  <text x="246" y="392" class="ts">block RAM payload — never reset,</text>
+  <text x="246" y="408" class="ts">qualified by the valid flop</text>
+
+  <rect x="40" y="432" width="568" height="130" rx="6" class="unit"/>
+  <text x="52" y="454" class="tb">Look-ahead read</text>
+  <text x="52" y="476" class="ts">The RAM is read at the index of the line entering the commit stage next</text>
+  <text x="52" y="492" class="ts">cycle, so the registered output is the entry for the request now committing.</text>
+  <text x="52" y="514" class="ts">An LR that installs at the index the next request reads is forwarded for</text>
+  <text x="52" y="530" class="ts">one cycle (read-during-write).</text>
+  <text x="52" y="552" class="tt">same pattern as the cache tag store</text>
+
+  <rect x="40" y="580" width="568" height="140" rx="6" class="box"/>
+  <text x="52" y="602" class="tb">Match</text>
+  <text x="52" y="626" class="mono">line_match = valid ∧ (entry.tag == request.tag)</text>
+  <text x="52" y="646" class="mono">own_match  = line_match ∧ (entry.hart_id == request.hart_id)</text>
+  <text x="52" y="670" class="mono">res_check  = own_match            // the SC outcome</text>
+  <text x="52" y="702" class="tt">N = next power of two ≥ the configured station count, at least 2</text>
+
+  <!-- ══════════ state machine ══════════ -->
+  <rect x="664" y="56" width="712" height="680" class="grp"/>
+  <text x="676" y="80" class="tb">One station — what each event does</text>
+
+  <ellipse cx="800" cy="250" rx="84" ry="46" class="free"/>
+  <text x="800" y="246" class="tb" text-anchor="middle">FREE</text>
+  <text x="800" y="266" class="ts" text-anchor="middle">valid = 0</text>
+
+  <rect x="1060" y="196" width="280" height="108" rx="14" class="held"/>
+  <text x="1200" y="224" class="tb" text-anchor="middle">HELD</text>
+  <text x="1200" y="246" class="ts" text-anchor="middle">{hart, line}</text>
+  <text x="1200" y="264" class="ts" text-anchor="middle">hold credit = budget left</text>
+  <text x="1200" y="288" class="tt" text-anchor="middle">valid = 1</text>
+
+  <!-- claim -->
+  <path d="M 860 216 C 920 150, 1010 150, 1068 200" class="flowg"/>
+  <text x="964" y="138" class="lbg" text-anchor="middle">LR: claim {hart, line}</text>
+  <text x="964" y="156" class="lbg" text-anchor="middle">credit ← full budget</text>
+
+  <!-- release -->
+  <path d="M 1068 300 C 1010 356, 920 356, 862 286" class="flowr"/>
+  <text x="964" y="378" class="lbr" text-anchor="middle">own SC: succeeds, station cleared</text>
+  <text x="964" y="396" class="lbr" text-anchor="middle">any committed store to the line: cleared</text>
+
+  <!-- self loop -->
+  <path d="M 1300 196 C 1330 130, 1240 110, 1230 190" class="flow"/>
+  <text x="1346" y="126" class="ts" text-anchor="end">LR while held</text>
+
+  <!-- event table -->
+  <rect x="680" y="430" width="680" height="290" rx="6" class="box"/>
+  <text x="692" y="452" class="tb">An LR arriving at a HELD station</text>
+
+  <text x="692" y="480" class="t">same hart</text>
+  <text x="900" y="480" class="ts">re-reserves: payload rewritten, credit refilled</text>
+  <line x1="692" y1="492" x2="1348" y2="492" stroke="#d5dce3"/>
+
+  <text x="692" y="516" class="t">other line, same index</text>
+  <text x="900" y="516" class="ts">displaces the holder — ordinary capacity conflict</text>
+  <line x1="692" y1="528" x2="1348" y2="528" stroke="#d5dce3"/>
+
+  <text x="692" y="552" class="t">other hart, same line,</text>
+  <text x="692" y="570" class="t">credit &gt; 0</text>
+  <text x="900" y="552" class="ts">refused: nothing is written, credit − 1</text>
+  <text x="900" y="570" class="ts">the refused hart holds no reservation, so its SC returns 1</text>
+  <line x1="692" y1="582" x2="1348" y2="582" stroke="#d5dce3"/>
+
+  <text x="692" y="606" class="t">other hart, same line,</text>
+  <text x="692" y="624" class="t">credit = 0</text>
+  <text x="900" y="606" class="ts">taken: the holder abandoned its attempt or ran out of</text>
+  <text x="900" y="624" class="ts">budget; the new hart claims with a full budget</text>
+  <line x1="692" y1="636" x2="1348" y2="636" stroke="#d5dce3"/>
+
+  <text x="692" y="662" class="tt">The holder keeps the station until its own SC resolves it, so one hart wins every round of a contended</text>
+  <text x="692" y="680" class="tt">retry loop. The budget is 2^HOLD_CREDIT_BITS − 1 refusals: 63 at a cache LLC, where LR→SC spans an</text>
+  <text x="692" y="698" class="tt">L1-miss round trip; 7 at a local-memory bank, where it is a few cycles.</text>
+</svg>

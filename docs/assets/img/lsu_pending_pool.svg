@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 820" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .hdr     { fill:#fbf0d0; stroke:#b58900; stroke-width:1.2; }
+    .word    { fill:#ffffff; stroke:#b58900; stroke-width:1; }
+    .free    { fill:#ffffff; stroke:#b9c2ca; stroke-width:1; stroke-dasharray:4 3; }
+    .tagf    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.2; }
+    .tagg    { fill:#fbf0d0; stroke:#b58900; stroke-width:1.2; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="820" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">The outstanding pool — how a load's identity survives an out-of-order memory</text>
+
+  <!-- ══════════ request tag ══════════ -->
+  <text x="24" y="78" class="tb">1 · the slice's tag is wide</text>
+  <rect x="24"  y="92" width="330" height="34" class="tagf"/>
+  <text x="189" y="114" class="mono" text-anchor="middle">header: uuid wid pid sop eop PC rd …</text>
+  <rect x="354" y="92" width="110" height="34" class="tagf"/>
+  <text x="409" y="114" class="mono" text-anchor="middle">op_type</text>
+  <rect x="464" y="92" width="170" height="34" class="tagf"/>
+  <text x="549" y="114" class="mono" text-anchor="middle">alignment × lanes</text>
+  <rect x="634" y="92" width="120" height="34" class="tagf"/>
+  <text x="694" y="114" class="mono" text-anchor="middle">packet slot</text>
+  <rect x="754" y="92" width="70" height="34" class="tagf"/>
+  <text x="789" y="114" class="mono" text-anchor="middle">fence</text>
+  <text x="844" y="106" class="ts">everything the response side needs to finish the instruction —</text>
+  <text x="844" y="122" class="ts">too wide to send through the cache hierarchy and back</text>
+
+  <!-- ══════════ pool ══════════ -->
+  <text x="24" y="176" class="tb">2 · it parks in a pool slot</text>
+
+  <rect x="24" y="192" width="560" height="300" class="grp"/>
+  <text x="36" y="214" class="t">outstanding pool — LSU_PENDING_SIZE slots</text>
+  <text x="46"  y="240" class="ts">slot</text>
+  <text x="100" y="240" class="ts">parked tag (index buffer)</text>
+  <text x="380" y="240" class="ts">lanes still owed</text>
+
+  <rect x="40" y="250" width="44" height="30" class="hdr"/><text x="62" y="270" class="mono" text-anchor="middle">0</text>
+  <rect x="94" y="250" width="270" height="30" class="word"/><text x="104" y="270" class="mono">load A — rd = x5</text>
+  <rect x="374" y="250" width="194" height="30" class="word"/><text x="384" y="270" class="mono">1 1 0 0   (2 of 4 back)</text>
+
+  <rect x="40" y="286" width="44" height="30" class="hdr"/><text x="62" y="306" class="mono" text-anchor="middle">1</text>
+  <rect x="94" y="286" width="270" height="30" class="word"/><text x="104" y="306" class="mono">load B — rd = f2</text>
+  <rect x="374" y="286" width="194" height="30" class="word"/><text x="384" y="306" class="mono">1 1 1 1   (none back)</text>
+
+  <rect x="40" y="322" width="44" height="30" class="hdr"/><text x="62" y="342" class="mono" text-anchor="middle">2</text>
+  <rect x="94" y="322" width="270" height="30" class="free"/><text x="104" y="342" class="tt">free</text>
+  <rect x="374" y="322" width="194" height="30" class="free"/>
+
+  <rect x="40" y="358" width="44" height="30" class="hdr"/><text x="62" y="378" class="mono" text-anchor="middle">3</text>
+  <rect x="94" y="358" width="270" height="30" class="word"/><text x="104" y="378" class="mono">amoadd C — rd = x9</text>
+  <rect x="374" y="358" width="194" height="30" class="word"/><text x="384" y="378" class="mono">0 0 0 1   (1 lane issued)</text>
+
+  <text x="302" y="412" class="tt" text-anchor="middle">…</text>
+  <text x="40" y="440" class="ts">acquire: a request that expects a response takes a free slot on acceptance</text>
+  <text x="40" y="456" class="ts">release: the response that clears the last owed lane frees it</text>
+  <text x="40" y="478" class="tt">free list + RAM: constant-time acquire and release, no associative search</text>
+
+  <!-- ══════════ memory tag ══════════ -->
+  <text x="640" y="176" class="tb">3 · only the slot index goes to memory</text>
+  <rect x="640" y="192" width="150" height="34" class="tagg"/>
+  <text x="715" y="214" class="mono" text-anchor="middle">uuid</text>
+  <rect x="790" y="192" width="150" height="34" class="tagg"/>
+  <text x="865" y="214" class="mono" text-anchor="middle">slot index</text>
+  <rect x="940" y="192" width="150" height="34" class="tagg"/>
+  <text x="1015" y="214" class="mono" text-anchor="middle">batch index</text>
+  <text x="1110" y="206" class="ts">log2(pool) bits instead of the</text>
+  <text x="1110" y="222" class="ts">whole tag, at every cache level</text>
+
+  <rect x="640" y="256" width="736" height="236" class="grp"/>
+  <text x="652" y="278" class="t">memory side — responses return in any order</text>
+
+  <text x="660" y="312" class="ts">time →</text>
+  <rect x="720"  y="294" width="150" height="30" rx="4" class="unit"/>
+  <text x="795"  y="314" class="mono" text-anchor="middle">slot 0, lanes 0–1</text>
+  <rect x="884"  y="294" width="150" height="30" rx="4" class="unit"/>
+  <text x="959"  y="314" class="mono" text-anchor="middle">slot 3, lane 0</text>
+  <rect x="1048" y="294" width="150" height="30" rx="4" class="unit"/>
+  <text x="1123" y="314" class="mono" text-anchor="middle">slot 1, lanes 0–3</text>
+  <rect x="1212" y="294" width="150" height="30" rx="4" class="unit"/>
+  <text x="1287" y="314" class="mono" text-anchor="middle">slot 0, lanes 2–3</text>
+
+  <text x="720"  y="346" class="ts">hit</text>
+  <text x="884"  y="346" class="ts">atomic, committed</text>
+  <text x="1048" y="346" class="ts">hit, issued later</text>
+  <text x="1212" y="346" class="ts">miss, filled</text>
+
+  <text x="652" y="384" class="ts">Each beat indexes the pool with its slot, clears the lanes it carries from the owed mask,</text>
+  <text x="652" y="400" class="ts">and is forwarded upstream immediately with the parked tag.</text>
+  <text x="652" y="424" class="ts">sop marks a slot's first beat; eop is the beat that leaves the owed mask empty.</text>
+  <text x="652" y="448" class="ts">Load B overtakes load A: a miss holds up its own instruction and nothing else.</text>
+  <text x="652" y="478" class="tt">partial-response mode (RSP_PARTIAL = 1); the cache-side clients of the same scheduler wait for the whole request</text>
+
+  <!-- ══════════ what bounds what ══════════ -->
+  <text x="24" y="540" class="tb">4 · three independent depths</text>
+
+  <rect x="24" y="556" width="440" height="200" rx="6" class="box"/>
+  <text x="36" y="580" class="t">staging queue — LSU_QUEUE_IN_SIZE</text>
+  <text x="36" y="604" class="ts">requests accepted but not yet sent to memory</text>
+  <text x="36" y="628" class="ts">each entry is a full request, lanes × (address +</text>
+  <text x="36" y="644" class="ts">data + byte-enable + attribute): wide, so shallow</text>
+  <text x="36" y="676" class="ts">default max(4, 2 × SIMD width ÷ lanes)</text>
+  <text x="36" y="738" class="tt">sized for back-pressure, not for latency</text>
+
+  <rect x="480" y="556" width="440" height="200" rx="6" class="mem"/>
+  <text x="492" y="580" class="t">outstanding pool — LSU_PENDING_SIZE</text>
+  <text x="492" y="604" class="ts">response-bearing requests accepted and not yet fully answered</text>
+  <text x="492" y="628" class="ts">each entry is a tag and a lane mask: narrow, so it</text>
+  <text x="492" y="644" class="ts">can be deep</text>
+  <text x="492" y="676" class="ts">default min(32, max(8, 2 × warps × SIMD ÷ lanes))</text>
+  <text x="492" y="700" class="ts">about two loads in flight per warp</text>
+  <text x="492" y="738" class="tt">sized for miss latency: this is the MLP depth</text>
+
+  <rect x="936" y="556" width="440" height="200" rx="6" class="box"/>
+  <text x="948" y="580" class="t">packet slots — LSU_PENDING_SIZE</text>
+  <text x="948" y="604" class="ts">multi-packet loads whose packets are still returning</text>
+  <text x="948" y="628" class="ts">one slot per instruction, not per packet; counts the</text>
+  <text x="948" y="644" class="ts">packets outstanding and marks the instruction's</text>
+  <text x="948" y="660" class="ts">first and last response</text>
+  <text x="948" y="692" class="ts">exists only when an instruction can span packets</text>
+  <text x="948" y="738" class="tt">in the slice, not in the scheduler</text>
+
+  <text x="24" y="796" class="tt">Blue = the slice's tag · gold = pool storage and the memory-side tag · a store never enters the pool: it completes when the staging queue accepts it.</text>
+</svg>

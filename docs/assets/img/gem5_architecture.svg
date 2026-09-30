@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 880" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+  </style>
+
+  <rect x="0" y="0" width="1560" height="880" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Vortex in gem5 — a simulated host, a native device, and the two windows between them</text>
+
+  <rect x="24" y="56" width="560" height="700" class="grp"/>
+  <text x="36" y="80" class="tb">Simulated host</text>
+  <text x="36" y="100" class="tt">code executed by a gem5 CPU model, x86-64 or AArch64, SE mode</text>
+  <rect x="40" y="120" width="528" height="96" rx="6" class="sw"/>
+  <text x="52" y="142" class="t">application</text>
+  <text x="52" y="164" class="ts">an ordinary Vortex test: vecadd, sgemm, …</text>
+  <text x="52" y="180" class="ts">calls the public runtime API</text>
+  <rect x="40" y="240" width="528" height="130" rx="6" class="sw"/>
+  <text x="52" y="262" class="t">libvortex.so — dispatcher</text>
+  <text x="52" y="284" class="ts">common core: queues, command rings, launch,</text>
+  <text x="52" y="300" class="ts">device-memory allocation, capability decode</text>
+  <text x="52" y="324" class="ts">identical for every backend</text>
+  <rect x="40" y="394" width="528" height="170" rx="6" class="sw"/>
+  <text x="52" y="416" class="t">libvortex-gem5-&lt;arch&gt;.so — transport</text>
+  <text x="52" y="438" class="ts">cp_reg_read / cp_reg_write</text>
+  <text x="52" y="454" class="ts">    a 32-bit access at PIO_BASE + offset</text>
+  <text x="52" y="470" class="ts">host_mem_alloc / host_mem_free</text>
+  <text x="52" y="486" class="ts">    a 64 MB aperture at the top of the PIN window</text>
+  <text x="52" y="502" class="ts">mmio_fence</text>
+  <text x="52" y="518" class="ts">    mfence, or dmb sy</text>
+  <text x="52" y="542" class="ts">no command processor, no kernel logic</text>
+  <path d="M 304 216 L 304 240" class="flow"/>
+  <path d="M 304 370 L 304 394" class="flow"/>
+  <rect x="40" y="600" width="528" height="140" rx="6" class="box"/>
+  <text x="52" y="622" class="t">gem5 system</text>
+  <text x="52" y="644" class="ts">several CPU contexts: the dispatcher starts a</text>
+  <text x="52" y="660" class="ts">worker thread per queue</text>
+  <text x="52" y="676" class="ts">DRAM below the PIO range</text>
+  <text x="52" y="692" class="ts">both windows identity-mapped, uncached</text>
+  <rect x="620" y="300" width="170" height="120" rx="6" class="mem"/>
+  <text x="632" y="322" class="tb">PIO window</text>
+  <text x="632" y="344" class="ts">0x2000_0000</text>
+  <text x="632" y="360" class="ts">0x200 bytes</text>
+  <text x="632" y="376" class="ts">the CP register file</text>
+  <rect x="620" y="470" width="170" height="140" rx="6" class="mem"/>
+  <text x="632" y="492" class="tb">PIN window</text>
+  <text x="632" y="514" class="ts">0x1_0000_0000</text>
+  <text x="632" y="530" class="ts">4 GB</text>
+  <text x="632" y="546" class="ts">the device RAM,</text>
+  <text x="632" y="562" class="ts">seen by the host</text>
+  <path d="M 568 440 L 596 440 L 596 360 L 620 360" class="flow"/>
+  <path d="M 568 500 L 596 500 L 596 540 L 620 540" class="flow"/>
+  <text x="705" y="286" class="tt" text-anchor="middle">32-bit</text>
+  <rect x="826" y="56" width="710" height="700" class="grp"/>
+  <text x="838" y="80" class="tb">Device</text>
+  <text x="838" y="100" class="tt">native code inside the gem5 process</text>
+  <rect x="842" y="120" width="678" height="150" rx="6" class="unit"/>
+  <text x="854" y="142" class="t">VortexGPGPU — gem5 SimObject (DmaDevice)</text>
+  <text x="854" y="164" class="ts">linked into gem5.opt</text>
+  <text x="854" y="180" class="ts">loads the device library with dlopen and resolves its 13-symbol C ABI</text>
+  <text x="854" y="196" class="ts">routes PIO packets to cp_mmio_read / write, PIN packets to vram_read / write</text>
+  <text x="854" y="212" class="ts">owns two self-scheduling events</text>
+  <rect x="842" y="300" width="678" height="440" rx="6" class="unit"/>
+  <text x="854" y="322" class="tb">libvortex-gem5.so — device library (Gem5Device)</text>
+  <rect x="858" y="340" width="310" height="150" rx="4" class="box"/>
+  <text x="870" y="362" class="t">CommandProcessor</text>
+  <text x="870" y="384" class="ts">the same C++ class every simulator uses</text>
+  <text x="870" y="408" class="ts">fetches command lines from the ring,</text>
+  <text x="870" y="424" class="ts">programs DCRs, launches, retires</text>
+  <text x="870" y="448" class="ts">advanced by cpTickEvent</text>
+  <rect x="1194" y="340" width="310" height="150" rx="4" class="box"/>
+  <text x="1206" y="362" class="t">Processor</text>
+  <text x="1206" y="384" class="ts">the SimX model of the device</text>
+  <text x="1206" y="408" class="ts">advanced one cycle per</text>
+  <text x="1206" y="424" class="ts">vortexTickEvent</text>
+  <rect x="858" y="510" width="646" height="100" rx="4" class="mem"/>
+  <text x="870" y="532" class="t">RAM — device memory</text>
+  <text x="870" y="554" class="ts">InProcessDevMem wraps it behind the DevMemAccessor interface</text>
+  <text x="870" y="570" class="ts">rings, staging buffers, kernel images and data are all the same bytes</text>
+  <rect x="858" y="630" width="646" height="94" rx="4" class="box"/>
+  <text x="870" y="652" class="t">event chains</text>
+  <text x="870" y="674" class="ts">cpTickEvent runs only while the CP has work; a doorbell write wakes it</text>
+  <text x="870" y="690" class="ts">vortexTickEvent runs only while the processor is busy; a launch starts it</text>
+  <path d="M 1013 490 L 1013 510" class="flowg"/>
+  <path d="M 1349 490 L 1349 510" class="flowg"/>
+  <path d="M 1168 415 L 1194 415" class="flow"/>
+  <path d="M 1181 270 L 1181 300" class="flow"/>
+  <path d="M 790 360 L 842 200" class="flow"/>
+  <path d="M 790 540 L 842 560" class="flowg"/>
+  <text x="24" y="790" class="tt">The command processor lives across the bus from the runtime: the host does real memory-mapped I/O to reach it. In every other simulator backend the same class runs inside the host runtime.</text>
+  <text x="24" y="812" class="tt">Only the host side changes instruction set. The device library and gem5 itself are always native binaries.</text>
+  <text x="24" y="858" class="tt">Green = software running on the simulated CPU · gold = the two address windows and device memory · blue = native device code.</text>
+</svg>

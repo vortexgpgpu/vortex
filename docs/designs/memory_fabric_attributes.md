@@ -78,4 +78,4 @@ separate `MEM_REQ_FLAG_FLUSH`.
 
 The attribute-passthrough mechanism is what keeps the library IP
 AMO-clean — see
-[`atomic_memory_operations.md`](atomic_memory_operations.md) §6.
+[`atomic_memory_operations.md`](atomic_memory_operations.md) §3.

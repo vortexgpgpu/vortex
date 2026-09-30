@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+    .fld     { fill:#ffffff; stroke:#5a7184; stroke-width:1.2; }
+    .fldh    { fill:#fbf0d0; stroke:#b58900; stroke-width:1.2; }
+    .slabA   { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.2; }
+    .slabB   { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.2; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">WGMMA operand sourcing — a warpgroup reading its tiles from shared memory</text>
+
+  <rect x="24" y="56" width="820" height="500" class="grp"/>
+  <text x="36" y="80" class="tb">One tensor unit, Q blocks in lock-step</text>
+  <rect x="40" y="100" width="230" height="430" rx="6" class="mem"/>
+  <text x="52" y="122" class="tb">shared (local) memory</text>
+  <rect x="56" y="140" width="198" height="54" rx="3" class="slabA"/>
+  <text x="66" y="162" class="ts">A slab, warp 0</text>
+  <text x="66" y="180" class="tt">M × K</text>
+  <rect x="56" y="200" width="198" height="54" rx="3" class="slabA"/>
+  <text x="66" y="222" class="ts">A slab, warp 1</text>
+  <text x="155" y="278" class="tt" text-anchor="middle">…</text>
+  <rect x="56" y="296" width="198" height="54" rx="3" class="slabA"/>
+  <text x="66" y="318" class="ts">A slab, warp Q−1</text>
+  <rect x="56" y="380" width="198" height="90" rx="3" class="slabB"/>
+  <text x="66" y="402" class="ts">B slab</text>
+  <text x="66" y="420" class="tt">K × N, one for the</text>
+  <text x="66" y="436" class="tt">whole warpgroup</text>
+  <text x="52" y="500" class="tt">filled by the kernel or by</text>
+  <text x="52" y="516" class="tt">a DXA copy</text>
+  <rect x="330" y="140" width="200" height="54" rx="4" class="unit"/>
+  <text x="342" y="162" class="ts">VX_tcu_abuf — block 0</text>
+  <text x="342" y="180" class="tt">one k-stripe of A</text>
+  <path d="M 254 167 L 330 167" class="flowg"/>
+  <rect x="330" y="200" width="200" height="54" rx="4" class="unit"/>
+  <text x="342" y="222" class="ts">VX_tcu_abuf — block 1</text>
+  <text x="342" y="240" class="tt">one k-stripe of A</text>
+  <path d="M 254 227 L 330 227" class="flowg"/>
+  <rect x="330" y="296" width="200" height="54" rx="4" class="unit"/>
+  <text x="342" y="318" class="ts">VX_tcu_abuf — block Q−1</text>
+  <text x="342" y="336" class="tt">one k-stripe of A</text>
+  <path d="M 254 323 L 330 323" class="flowg"/>
+  <text x="430" y="278" class="tt" text-anchor="middle">…</text>
+  <rect x="330" y="380" width="200" height="90" rx="4" class="unit"/>
+  <text x="342" y="402" class="ts">VX_tcu_bbuf</text>
+  <text x="342" y="420" class="tt">the row of B holding</text>
+  <text x="342" y="436" class="tt">block (k, n)</text>
+  <path d="M 254 425 L 330 425" class="flowg"/>
+  <rect x="600" y="140" width="220" height="54" rx="4" class="pe"/>
+  <text x="612" y="162" class="ts">VX_tcu_core 0</text>
+  <text x="612" y="180" class="tt">C[m,n] += A[m,k] · B[k,n]</text>
+  <path d="M 530 167 L 600 167" class="flowb"/>
+  <rect x="600" y="200" width="220" height="54" rx="4" class="pe"/>
+  <text x="612" y="222" class="ts">VX_tcu_core 1</text>
+  <text x="612" y="240" class="tt">C[m,n] += A[m,k] · B[k,n]</text>
+  <path d="M 530 227 L 600 227" class="flowb"/>
+  <rect x="600" y="296" width="220" height="54" rx="4" class="pe"/>
+  <text x="612" y="318" class="ts">VX_tcu_core Q−1</text>
+  <text x="612" y="336" class="tt">C[m,n] += A[m,k] · B[k,n]</text>
+  <path d="M 530 323 L 600 323" class="flowb"/>
+  <text x="710" y="278" class="tt" text-anchor="middle">…</text>
+  <path d="M 530 425 L 566 425 L 566 182 L 600 182" class="flowb"/>
+  <path d="M 566 242 L 600 242" class="flowb"/>
+  <path d="M 566 338 L 600 338" class="flowb"/>
+  <text x="576" y="446" class="lbl">B is broadcast: structural</text>
+  <text x="576" y="462" class="lbl">fan-out, not arbitrated</text>
+  <text x="330" y="500" class="tt">Q + 1 readers share one bank-parallel memory port</text>
+  <text x="330" y="516" class="tt">through an arbiter</text>
+  <text x="330" y="538" class="tt">every block issues the same micro-op in the same cycle</text>
+  <rect x="868" y="56" width="508" height="500" class="grp"/>
+  <text x="880" y="80" class="tb">The descriptor selects the layout</text>
+  <text x="880" y="112" class="ts">shared-memory descriptor, 32 bits</text>
+  <rect x="880" y="122" width="230" height="32" rx="0" class="fldh"/>
+  <text x="995" y="143" class="mono" text-anchor="middle">row stride, bytes [31:16]</text>
+  <rect x="1110" y="122" width="250" height="32" rx="0" class="fld"/>
+  <text x="1235" y="143" class="mono" text-anchor="middle">offset in shared memory [15:0]</text>
+  <text x="880" y="176" class="tt">x10 carries the A descriptor, x11 the B descriptor</text>
+  <rect x="880" y="196" width="480" height="150" rx="6" class="box"/>
+  <text x="892" y="218" class="t">stride = 0 — block-major</text>
+  <text x="892" y="240" class="ts">the slab is a sequence of blocks in micro-op order;</text>
+  <text x="892" y="256" class="ts">each block is contiguous</text>
+  <text x="892" y="280" class="ts">one fetch of adjacent bank rows loads a whole stripe</text>
+  <text x="892" y="304" class="ts">written by a producer that knows the tile geometry</text>
+  <rect x="880" y="360" width="480" height="180" rx="6" class="box"/>
+  <text x="892" y="382" class="t">stride ≠ 0 — row-major</text>
+  <text x="892" y="404" class="ts">an ordinary matrix: row r starts at r × stride;</text>
+  <text x="892" y="420" class="ts">K runs along contiguous bytes</text>
+  <text x="892" y="444" class="ts">one memory read per row, extracting the words the</text>
+  <text x="892" y="460" class="ts">current step needs</text>
+  <text x="892" y="484" class="ts">the layout of a WGMMA shared-memory descriptor</text>
+  <text x="892" y="500" class="ts">and of a DXA-loaded slab</text>
+  <text x="24" y="596" class="tb">Operand source and the first micro-op</text>
+  <text x="24" y="628" class="th">mode</text>
+  <text x="250" y="628" class="th">A comes from</text>
+  <text x="560" y="628" class="th">B comes from</text>
+  <text x="830" y="628" class="th">first micro-op</text>
+  <text x="1110" y="628" class="th">rs1 / rs2 of a compute micro-op</text>
+  <line x1="24" y1="638" x2="1376" y2="638" class="rule"/>
+  <text x="24" y="662" class="ts">RS, dense</text>
+  <text x="250" y="662" class="ts">registers f24–f27</text>
+  <text x="560" y="662" class="ts">shared memory, x11</text>
+  <text x="830" y="662" class="ts">the first compute; x11 rides in rs2</text>
+  <text x="1110" y="662" class="ts">A / B descriptor on the first only</text>
+  <text x="24" y="688" class="ts">RS, dense, FEDP2K</text>
+  <text x="250" y="688" class="ts">registers f24–f27, two per block</text>
+  <text x="560" y="688" class="ts">shared memory, x11</text>
+  <text x="830" y="688" class="ts">a setup micro-op that carries x11</text>
+  <text x="1110" y="688" class="ts">lower A / upper A</text>
+  <text x="24" y="714" class="ts">RS, sparse</text>
+  <text x="250" y="714" class="ts">registers f24, f25 (compressed)</text>
+  <text x="560" y="714" class="ts">shared memory, x11</text>
+  <text x="830" y="714" class="ts">the first compute; x11 rides in rs2</text>
+  <text x="1110" y="714" class="ts">A / B descriptor on the first only</text>
+  <text x="24" y="740" class="ts">SS</text>
+  <text x="250" y="740" class="ts">shared memory, x10</text>
+  <text x="560" y="740" class="ts">shared memory, x11</text>
+  <text x="830" y="740" class="ts">the first compute; x10, x11 ride along</text>
+  <text x="1110" y="740" class="ts">descriptors on the first only</text>
+  <text x="24" y="780" class="ts">A setup micro-op exists only where the B descriptor and the upper half of A compete for rs2: dense register-sourced WGMMA with FEDP2K.</text>
+  <text x="24" y="796" class="ts">It has no FEDP result; it latches the descriptor and resets the tile-buffer transaction. Every later micro-op reuses the latched descriptors.</text>
+  <text x="24" y="820" class="ts">The A buffer refetches on the first compute micro-op of every WGMMA, even with an unchanged descriptor: a K-tile loop rewrites the slab in place</text>
+  <text x="24" y="836" class="ts">and reissues the same instruction, so residency cannot be keyed on the descriptor alone.</text>
+  <text x="24" y="884" class="tt">Gold = storage and memory reads · blue = tile buffers and operands into the cores · white = the arithmetic array.</text>
+</svg>

@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 880" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+    .lane    { fill:#ffffff; stroke:#8e4a7e; stroke-width:1.2; }
+    .laneh   { fill:#f0d9ea; stroke:#8e4a7e; stroke-width:1.4; }
+    .reg     { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .regg    { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.2; }
+    .slot    { fill:#ffffff; stroke:#b58900; stroke-width:1.2; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="880" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Operand delivery — lane packing and the register window</text>
+
+  <rect x="24" y="56" width="1352" height="300" class="grp"/>
+  <text x="36" y="80" class="tb">Lane packing — four warp-level scalars in one register</text>
+  <text x="36" y="100" class="mono">desc = vx_wgather(arg0, arg1, arg2, arg3)</text>
+  <text x="40" y="148" class="mono">arg0</text>
+  <rect x="100" y="124" width="80" height="36" rx="3" class="laneh"/>
+  <text x="140" y="147" class="mono" text-anchor="middle">arg0</text>
+  <rect x="186" y="124" width="80" height="36" rx="3" class="lane"/>
+  <text x="226" y="147" class="mono" text-anchor="middle">—</text>
+  <rect x="272" y="124" width="80" height="36" rx="3" class="lane"/>
+  <text x="312" y="147" class="mono" text-anchor="middle">—</text>
+  <rect x="358" y="124" width="80" height="36" rx="3" class="lane"/>
+  <text x="398" y="147" class="mono" text-anchor="middle">—</text>
+  <text x="40" y="198" class="mono">arg1</text>
+  <rect x="100" y="174" width="80" height="36" rx="3" class="laneh"/>
+  <text x="140" y="197" class="mono" text-anchor="middle">arg1</text>
+  <rect x="186" y="174" width="80" height="36" rx="3" class="lane"/>
+  <text x="226" y="197" class="mono" text-anchor="middle">—</text>
+  <rect x="272" y="174" width="80" height="36" rx="3" class="lane"/>
+  <text x="312" y="197" class="mono" text-anchor="middle">—</text>
+  <rect x="358" y="174" width="80" height="36" rx="3" class="lane"/>
+  <text x="398" y="197" class="mono" text-anchor="middle">—</text>
+  <text x="40" y="248" class="mono">arg2</text>
+  <rect x="100" y="224" width="80" height="36" rx="3" class="laneh"/>
+  <text x="140" y="247" class="mono" text-anchor="middle">arg2</text>
+  <rect x="186" y="224" width="80" height="36" rx="3" class="lane"/>
+  <text x="226" y="247" class="mono" text-anchor="middle">—</text>
+  <rect x="272" y="224" width="80" height="36" rx="3" class="lane"/>
+  <text x="312" y="247" class="mono" text-anchor="middle">—</text>
+  <rect x="358" y="224" width="80" height="36" rx="3" class="lane"/>
+  <text x="398" y="247" class="mono" text-anchor="middle">—</text>
+  <text x="40" y="298" class="mono">arg3</text>
+  <rect x="100" y="274" width="80" height="36" rx="3" class="laneh"/>
+  <text x="140" y="297" class="mono" text-anchor="middle">arg3</text>
+  <rect x="186" y="274" width="80" height="36" rx="3" class="lane"/>
+  <text x="226" y="297" class="mono" text-anchor="middle">—</text>
+  <rect x="272" y="274" width="80" height="36" rx="3" class="lane"/>
+  <text x="312" y="297" class="mono" text-anchor="middle">—</text>
+  <rect x="358" y="274" width="80" height="36" rx="3" class="lane"/>
+  <text x="398" y="297" class="mono" text-anchor="middle">—</text>
+  <text x="140" y="340" class="tt" text-anchor="middle">lane 0</text>
+  <text x="226" y="340" class="tt" text-anchor="middle">lane 1</text>
+  <text x="312" y="340" class="tt" text-anchor="middle">lane 2</text>
+  <text x="398" y="340" class="tt" text-anchor="middle">lane 3</text>
+  <text x="470" y="150" class="ts">each scalar is warp-uniform;</text>
+  <text x="470" y="166" class="ts">only lane 0 is read</text>
+  <path d="M 470 230 L 620 230" class="flow"/>
+  <text x="545" y="222" class="lbk" text-anchor="middle">vx_wgather</text>
+  <text x="640" y="196" class="mono">desc</text>
+  <rect x="700" y="206" width="104" height="48" rx="3" class="laneh"/>
+  <text x="752" y="236" class="mono" text-anchor="middle">arg0</text>
+  <text x="752" y="278" class="tt" text-anchor="middle">lane 0</text>
+  <rect x="810" y="206" width="104" height="48" rx="3" class="laneh"/>
+  <text x="862" y="236" class="mono" text-anchor="middle">arg1</text>
+  <text x="862" y="278" class="tt" text-anchor="middle">lane 1</text>
+  <rect x="920" y="206" width="104" height="48" rx="3" class="laneh"/>
+  <text x="972" y="236" class="mono" text-anchor="middle">arg2</text>
+  <text x="972" y="278" class="tt" text-anchor="middle">lane 2</text>
+  <rect x="1030" y="206" width="104" height="48" rx="3" class="laneh"/>
+  <text x="1082" y="236" class="mono" text-anchor="middle">arg3</text>
+  <text x="1082" y="278" class="tt" text-anchor="middle">lane 3</text>
+  <text x="1160" y="150" class="ts">one register read hands the</text>
+  <text x="1160" y="166" class="ts">unit all four arguments</text>
+  <text x="1160" y="190" class="ts">the lane index is now the</text>
+  <text x="1160" y="206" class="ts">argument index</text>
+  <text x="1160" y="230" class="ts">needs SIMD_WIDTH ≥ the</text>
+  <text x="1160" y="246" class="ts">number of packed scalars</text>
+  <rect x="24" y="384" width="1352" height="440" class="grp"/>
+  <text x="36" y="408" class="tb">Register window — a per-thread work item read over several micro-ops</text>
+  <text x="36" y="428" class="mono">handle = my_accel_launch(desc, work_item)      // work_item lives in f0 … f7</text>
+  <text x="40" y="468" class="th">register file</text>
+  <rect x="40" y="478" width="120" height="30" rx="3" class="regg"/>
+  <text x="100" y="498" class="mono" text-anchor="middle">x: desc</text>
+  <rect x="40" y="520" width="120" height="28" rx="3" class="reg"/>
+  <text x="100" y="539" class="mono" text-anchor="middle">f0: w0</text>
+  <rect x="40" y="554" width="120" height="28" rx="3" class="reg"/>
+  <text x="100" y="573" class="mono" text-anchor="middle">f1: w1</text>
+  <rect x="40" y="588" width="120" height="28" rx="3" class="reg"/>
+  <text x="100" y="607" class="mono" text-anchor="middle">f2: w2</text>
+  <rect x="40" y="622" width="120" height="28" rx="3" class="reg"/>
+  <text x="100" y="641" class="mono" text-anchor="middle">f3: w3</text>
+  <rect x="40" y="656" width="120" height="28" rx="3" class="reg"/>
+  <text x="100" y="675" class="mono" text-anchor="middle">f4: w4</text>
+  <rect x="40" y="690" width="120" height="28" rx="3" class="reg"/>
+  <text x="100" y="709" class="mono" text-anchor="middle">f5: w5</text>
+  <rect x="40" y="724" width="120" height="28" rx="3" class="reg"/>
+  <text x="100" y="743" class="mono" text-anchor="middle">f6: w6</text>
+  <rect x="40" y="758" width="120" height="28" rx="3" class="reg"/>
+  <text x="100" y="777" class="mono" text-anchor="middle">f7: w7</text>
+  <text x="300" y="468" class="th">micro-ops, one per cycle</text>
+  <rect x="300" y="478" width="560" height="62" rx="5" class="unit"/>
+  <text x="312" y="502" class="t">uop 0</text>
+  <text x="370" y="502" class="th">GP</text>
+  <text x="410" y="502" class="mono">reads desc</text>
+  <text x="312" y="524" class="ts">allocates a slot, returns the handle in rd, latches the slot pointer</text>
+  <rect x="300" y="560" width="560" height="62" rx="5" class="unit"/>
+  <text x="312" y="584" class="t">uop 1</text>
+  <text x="370" y="584" class="th">FP</text>
+  <text x="410" y="584" class="mono">reads w0 w1 w2</text>
+  <text x="312" y="606" class="ts">streams into the slot</text>
+  <rect x="300" y="640" width="560" height="62" rx="5" class="unit"/>
+  <text x="312" y="664" class="t">uop 2</text>
+  <text x="370" y="664" class="th">FP</text>
+  <text x="410" y="664" class="mono">reads w3 w4 w5</text>
+  <text x="312" y="686" class="ts">streams into the slot</text>
+  <rect x="300" y="720" width="560" height="62" rx="5" class="unit"/>
+  <text x="312" y="744" class="t">uop 3</text>
+  <text x="370" y="744" class="th">FP</text>
+  <text x="410" y="744" class="mono">reads w6 w7</text>
+  <text x="312" y="766" class="ts">streams into the slot and arms the operation</text>
+  <path d="M 160 493 L 300 505" class="flow"/>
+  <path d="M 160 568 L 300 590" class="flow"/>
+  <path d="M 160 670 L 300 671" class="flow"/>
+  <path d="M 160 772 L 300 752" class="flow"/>
+  <text x="960" y="468" class="th">accelerator in-flight slot</text>
+  <rect x="960" y="478" width="400" height="62" rx="5" class="mem"/>
+  <text x="972" y="502" class="ts">slot allocated; handle = slot index</text>
+  <text x="972" y="522" class="ts">descriptor latched</text>
+  <rect x="960" y="560" width="400" height="62" rx="5" class="slot"/>
+  <text x="972" y="596" class="mono">w0 w1 w2</text>
+  <rect x="960" y="640" width="400" height="62" rx="5" class="slot"/>
+  <text x="972" y="676" class="mono">w3 w4 w5</text>
+  <rect x="960" y="720" width="400" height="62" rx="5" class="slot"/>
+  <text x="972" y="756" class="mono">w6 w7 — armed</text>
+  <path d="M 860 509 L 960 509" class="flowg"/>
+  <path d="M 860 591 L 960 591" class="flowg"/>
+  <path d="M 860 671 L 960 671" class="flowg"/>
+  <path d="M 860 751 L 960 751" class="flowg"/>
+  <text x="36" y="810" class="tt">4 micro-ops: 1 for the GP operand + ⌈8 ÷ 3⌉ for the FP window. No staging buffer: each micro-op writes the slot directly, and the registers are free once the launch has issued.</text>
+  <text x="24" y="858" class="tt">Purple = register lanes · blue = micro-ops · gold = the accelerator's own storage, the only copy that outlives the launch.</text>
+</svg>
