@@ -135,6 +135,10 @@ private:
 		// Sized by the outstanding pool (MLP depth), decoupled from the
 		// input staging queue above.
 		HashTable<pending_req_t>  pending_reqs{VX_CFG_LSU_PENDING_SIZE};
+		// Reads waiting in req_queue hold a pending_reqs slot from the moment
+		// they enter it, so staged and outstanding reads share the pool.
+		uint32_t                  staged_reads = 0;
+		bool                      head_staged = false;
 		FenceController           fence;
 		std::vector<mem_addr_size_t> addr_list;
 		uint32_t                  remain_addrs = 0;
@@ -142,6 +146,8 @@ private:
 		void reset() {
 			this->req_queue.clear();
 			this->pending_reqs.clear();
+			this->staged_reads = 0;
+			this->head_staged = false;
 			this->fence.reset();
 			this->addr_list.clear();
 			this->remain_addrs = 0;

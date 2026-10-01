@@ -146,9 +146,6 @@ tests:
 # SGEMV: FPU + streaming matrix-vector.
 - id: parity-sgemv
   check: model_parity
-  # Instrs match exactly; cycles diverge ~9.6% (SimX slower). Not yet
-  # localized.
-  tolerance: 0.10   # instrs match; cycles ~9.6%
   via: blackbox
   app: sgemv
   args: -m512 -n512
