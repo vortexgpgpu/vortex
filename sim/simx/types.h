@@ -914,11 +914,6 @@ public:
   IArbiterImpl() {}
   virtual ~IArbiterImpl() {}
   virtual uint32_t grant(const BitVector<>& requests) = 0;
-  virtual uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) {
-    // Default: ignore suppress mask, subclasses may override.
-    __unused (suppress);
-    return this->grant(requests);
-  }
   virtual void reset() = 0;
 };
 
@@ -1032,23 +1027,17 @@ public:
   }
 
   uint32_t grant(const BitVector<>& requests) override {
-    BitVector<> no_suppress(size_);
-    return this->grant(requests, no_suppress);
-  }
-
-  uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) override {
     assert(requests.size() == size_);
-    assert(suppress.size() == size_);
-    // greedy: keep granting same requester if still active and unsuppressed
-    if (last_grant_ < size_ && requests.test(last_grant_) && !suppress.test(last_grant_)) {
+    // greedy: keep granting same requester if still active
+    if (last_grant_ < size_ && requests.test(last_grant_)) {
       this->update_ages(requests, last_grant_);
       return last_grant_;
     }
-    // Then-Oldest: find the unsuppressed requester with the highest age
+    // Then-Oldest: find the requester with the highest age
     uint32_t best = -1u;
     uint32_t best_age = 0;
     for (uint32_t i = 0; i < size_; ++i) {
-      if (requests.test(i) && !suppress.test(i) && (best == -1u || age_[i] > best_age)) {
+      if (requests.test(i) && (best == -1u || age_[i] > best_age)) {
         best = i;
         best_age = age_[i];
       }
@@ -1106,10 +1095,6 @@ public:
 
   uint32_t grant(const BitVector<>& requests) {
     return impl_->grant(requests);
-  }
-
-  uint32_t grant(const BitVector<>& requests, const BitVector<>& suppress) {
-    return impl_->grant(requests, suppress);
   }
 
   void reset() {
@@ -1589,6 +1574,7 @@ public:
   TxCrossBar(
     const SimContext& ctx,
     const char* name,
+    ArbiterType type,
     uint32_t num_inputs,
     uint32_t num_outputs,
     std::function<uint32_t(const Type& req)> output_sel,
@@ -1597,6 +1583,8 @@ public:
     : SimObject<TxCrossBar<Type>>(ctx, name)
     , Inputs(num_inputs, this)
     , Outputs(num_outputs, this)
+    , type_(type)
+    , last_grant_(num_outputs, num_inputs - 1)
     , delay_(delay)
     , lg2_inputs_(log2ceil(num_inputs))
     , lg2_outputs_(log2ceil(num_outputs))
@@ -1606,6 +1594,7 @@ public:
     assert(num_outputs <= 64);
     assert(ispow2(num_outputs));
     assert(output_sel != nullptr);
+    assert(type == ArbiterType::Priority || type == ArbiterType::RoundRobin);
 
     // bypass mode
     if (num_inputs == 1 && num_outputs == 1) {
@@ -1616,10 +1605,11 @@ public:
   TxCrossBar(
     const SimContext& ctx,
     const char* name,
+    ArbiterType type,
     uint32_t num_inputs,
     uint32_t num_outputs,
     std::function<uint32_t(const Type& req)> output_sel
-  ) : TxCrossBar<Type>(ctx, name, num_inputs, num_outputs,
+  ) : TxCrossBar<Type>(ctx, name, type, num_inputs, num_outputs,
       output_sel, ((num_inputs > 2) || (num_outputs > 2)) ? 1 : 0)
   {}
 
@@ -1629,10 +1619,12 @@ public:
 
 protected:
   void on_reset() {
-    //--
+    std::fill(last_grant_.begin(), last_grant_.end(), Inputs.size() - 1);
   }
   void on_tick();
 
+  ArbiterType type_;
+  std::vector<uint32_t> last_grant_; // per output
   uint32_t delay_;
   uint32_t lg2_inputs_;
   uint32_t lg2_outputs_;
@@ -1651,11 +1643,14 @@ void TxCrossBar<Type>::on_tick() {
     return;
   }
 
-  // process incoming requests
+  // process incoming requests: each output arbitrates on its own, and a
+  // round-robin grant advances only when the request is accepted.
   for (uint32_t o = 0; o < O; ++o) {
+    uint32_t start = (type_ == ArbiterType::RoundRobin) ? (last_grant_.at(o) + 1) : 0;
     int32_t input_idx = -1;
     bool has_collision = false;
-    for (uint32_t i = 0; i < I; ++i) {
+    for (uint32_t k = 0; k < I; ++k) {
+      uint32_t i = (start + k) % I;
       auto& req_in = Inputs.at(i);
       if (req_in.empty())
         continue;
@@ -1680,6 +1675,7 @@ void TxCrossBar<Type>::on_tick() {
       if (Outputs.at(o).try_send(RspType(req, input_idx), delay_)) {
         DT(4, this->name() << " req" << input_idx << "_" << o << ": " << req);
         req_in.pop();
+        last_grant_.at(o) = input_idx;
       }
       collisions_ += has_collision;
     }
@@ -1850,7 +1846,7 @@ public:
     , lg2_inputs_(log2ceil(num_inputs)) {
 
     if (num_inputs != 1 || num_outputs != 1) {
-      crossbar_ = ReqXbar::Create(name, num_inputs, num_outputs, output_sel, req_delay);
+      crossbar_ = ReqXbar::Create(name, type, num_inputs, num_outputs, output_sel, req_delay);
       for (uint32_t i = 0; i < num_inputs; ++i) {
         ReqIn.at(i).bind(&crossbar_->Inputs.at(i));
       }

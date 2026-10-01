@@ -539,7 +539,6 @@ public:
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       bool any_scrb_blocked = false;
       BitVector<> ready_set(PER_ISSUE_WARPS);
-      BitVector<> suppress_set(PER_ISSUE_WARPS);
       for (uint32_t w = 0; w < PER_ISSUE_WARPS; ++w) {
         uint32_t wid = w * VX_CFG_ISSUE_WIDTH + iw;
         auto& ibuffer = ibuffers_.at(wid);
@@ -575,6 +574,12 @@ public:
           if (fu_locked_.at(iw).test(fu) && uop_fu_lock) {
             continue; // blocked by FU lock
           }
+          // FU dispatch queue going-full: the warp does not request. Credits also
+          // count ops still in operand collection; the one-slot guard band keeps
+          // an issued op from blocking the shared operand path.
+          if (fu_credits_.at(iw).at(fu) >= VX_CFG_DISPATCH_QUEUE_SIZE - 1) {
+            continue;
+          }
         #ifdef VX_CFG_EXT_RTU_ENABLE
           // A TRACE macro must hold a ray-pool slot before its head uop enters
           // the SFU, or it stalls at the head of that unit's queue and starves
@@ -586,26 +591,12 @@ public:
           }
         #endif
           ready_set.set(w); // mark instruction as ready
-          // suppress warps whose target FU dispatch queue is going-full. Credit
-          // based: spent at issue, returned at FU accept, so it counts in-flight
-          // ops still in operand collection (like the hardware scoreboard), not just
-          // what has already reached the queue.
-          if (fu_credits_.at(iw).at(fu) >= VX_CFG_DISPATCH_QUEUE_SIZE - 1) {
-            suppress_set.set(w);
-          }
         }
       }
 
       if (ready_set.any()) {
-        // Only suppress when at least one warp can issue to a free FU;
-        // otherwise let all warps through so the pipeline absorbs transient stalls.
-        BitVector<> eff_suppress(PER_ISSUE_WARPS);
-        auto unsuppressed = ready_set & ~suppress_set;
-        if (unsuppressed.any()) {
-          eff_suppress = suppress_set;
-        }
         // select one instruction from ready set
-        auto w = ibuffer_arbs_.at(iw).grant(ready_set, eff_suppress);
+        auto w = ibuffer_arbs_.at(iw).grant(ready_set);
         uint32_t wid = w * VX_CFG_ISSUE_WIDTH + iw;
         auto& ibuffer = ibuffers_.at(wid);
         auto trace = ibuffer->peek();
@@ -723,6 +714,8 @@ public:
     // dispatcher aggregation, so we recover it from the warp id and try_send
     // into the matching commit queue.
     for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
+      if (fu == (uint32_t)FUType::FPU && !FpuUnit::kGather)
+        continue; // commit reads the FPU response ports directly
       auto& func_unit = func_units_.at(fu);
       uint32_t nb = func_unit->num_blocks();
       for (uint32_t b = 0; b < nb; ++b) {
@@ -756,16 +749,27 @@ public:
     };
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       SimChannel<instr_trace_t*>* granted = nullptr;
+      FUType granted_fu = FUType::ALU;
       for (auto fu : kCommitPrio) {
-        auto& queue = *commit_queues_.at(iw).at((uint32_t)fu);
+        // Without a lane-gather stage the FPU response port, one block per
+        // issue slot, feeds the arbiter: a result holds its FPU tag until
+        // granted.
+        auto& queue = (fu == FUType::FPU && !FpuUnit::kGather)
+                    ? func_units_.at((uint32_t)fu)->output(iw)
+                    : *commit_queues_.at(iw).at((uint32_t)fu);
         if (!queue.empty()) {
           granted = &queue;
+          granted_fu = fu;
           break;
         }
       }
       if (!granted)
         continue;
       auto trace = granted->peek();
+      if (granted_fu == FUType::FPU && !FpuUnit::kGather
+       && trace->eop && trace->resume_warp) {
+        scheduler_->resume(trace->wid);
+      }
 
       // advance to commit stage
       DT(3, simobject_->name() << "-pipeline commit: " << *trace);

@@ -459,8 +459,8 @@ tests:
     threads: [4, 16]
 - id: model_parity-copy-mcast
   check: model_parity
-  # Same cause as model_parity-copy: instrs match, cycles diverge (~9%).
-  tolerance: 0.10   # SimX does not model the decoupled LSU pending pool (instrs match; cycles ~9%)
+  # Instrs match; cycles diverge ~6.8% (SimX slower). Not yet localized.
+  tolerance: 0.10   # instrs match; cycles ~6.8%
   via: blackbox
   app: dxa_copy_mcast
   configs: -DVX_CFG_EXT_DXA_ENABLE
@@ -507,11 +507,11 @@ tests:
     threads: [4, 16]
 - id: model_parity-wgmma-dxa
   check: model_parity
-  # Instructions and DXA transfer timing match; cycles diverge ~5% (SimX
-  # slower), all of it at CTA turnover: SimX drains the C-tile stores later
-  # than the RTL (store commit point, dispatch queue placement and bank-0
-  # store-miss admission).
-  known_issue: "SimX drains the C-tile stores at CTA turnover slower than the RTL (instrs match; cycles ~5%)"
+  # Instructions and DXA transfer timing match; cycles diverge ~8.5% (SimX
+  # slower), at CTA turnover: SimX drains the C-tile stores later than the RTL
+  # (store commit point, dispatch queue placement and bank-0 store-miss
+  # admission).
+  known_issue: "SimX drains the C-tile stores at CTA turnover slower than the RTL (instrs match; cycles ~8.5%)"
   via: blackbox
   app: sgemm_tcu_wg_dxa
   args: -m 128 -n 128 -k 64
@@ -533,8 +533,6 @@ tests:
 # Sparse WGMMA consumer fed by a DXA producer pipeline.
 - id: model_parity-wgmma-sp-dxa
   check: model_parity
-  # Instructions match; cycles diverge ~5% (SimX faster). Not yet localized.
-  known_issue: "SimX runs the sparse DXA-fed warp-group kernel faster than the RTL (instrs match; cycles ~5%)"
   via: blackbox
   app: sgemm_tcu_wg_sp_dxa
   args: -m 128 -n 128 -k 128
