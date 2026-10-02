@@ -122,18 +122,16 @@ public:
     }
 
     // create local memory.
-    // The DXA drains one full LMEM row per cycle; a row wider than the 64B
-    // mem_block byteen scope arrives as multiple same-cycle block writes on
-    // adjacent input ports (see DxaCore::LMEM_PORTS_PER_CORE).
+    // The DXA writes and the TCU tile-buffer reads share the row-wide DMA
+    // port, DXA first.
     snprintf(sname, 100, "%s-lmem", name.c_str());
-    uint32_t lmem_num_reqs = LSU_NUM_REQS + VX_CFG_EXT_TCU_ENABLED
-        + VX_CFG_EXT_DXA_ENABLED * DxaCore::LMEM_PORTS_PER_CORE;
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << VX_CFG_LMEM_LOG_SIZE),
       LSU_WORD_SIZE,
-      lmem_num_reqs,
+      LSU_NUM_REQS,
       log2ceil(VX_CFG_LMEM_NUM_BANKS),
-      false
+      false,
+      VX_CFG_EXT_DXA_ENABLED + VX_CFG_TCU_WGMMA_ENABLED
     });
 
     // create lmem switch
@@ -254,14 +252,18 @@ public:
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
     func_units_.at((int)FUType::TCU) = tcu_unit_;
 
-    // Bind the TCU tile-buffer subsystem (TcuTbuf) to its dedicated LMEM
-    // port pair, appended after the LSU ports.
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
+    // Bind the TCU tile-buffer subsystem (TcuTbuf) to the LMEM DMA port,
+    // after the DXA.
     {
       auto& tbuf = tcu_unit_->tbuf();
-      uint32_t port = LSU_NUM_REQS;
-      tbuf->lmem_req_out.bind(&local_mem_->Inputs.at(port));
-      local_mem_->Outputs.at(port).bind(&tbuf->lmem_rsp_in);
+      uint32_t base = VX_CFG_EXT_DXA_ENABLED * LocalMem::DMA_PORTS;
+      for (uint32_t p = 0; p < LocalMem::DMA_PORTS; ++p) {
+        tbuf->lmem_req_out.at(p).bind(&local_mem_->DmaInputs.at(base + p));
+        local_mem_->DmaOutputs.at(base + p).bind(&tbuf->lmem_rsp_in.at(p));
+      }
     }
+  #endif
   #ifdef TCU_META_ENABLE
     // Bind the TCU metadata AGU to the LSU block-0 client port.
     {

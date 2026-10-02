@@ -634,7 +634,7 @@ private:
     // (DxaCore::LMEM_ROW_SIZE bytes — the full banked row the RTL writes in
     // a single cycle). A row wider than the 64B mem_block byteen scope is
     // emitted as LMEM_PORTS_PER_CORE same-cycle block writes, one per row
-    // half on its own LocalMem input port. A row narrower than a block
+    // half on its own LMEM DMA channel. A row narrower than a block
     // (small NT) bounds the per-beat gather instead.
 
     // A banked-row write is committed atomically, byte enables aside, so a row is
@@ -705,7 +705,7 @@ private:
         break; // next block lands in a different row — next cycle's beat
       }
 
-      // Route this row half to its own LocalMem input port.
+      // Route this row half to its own LMEM DMA channel.
       uint32_t half = (DxaCore::LMEM_PORTS_PER_CORE > 1)
           ? uint32_t((dword / kLmemWordSize) & (DxaCore::LMEM_PORTS_PER_CORE - 1))
           : 0u;
