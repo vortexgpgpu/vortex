@@ -1967,6 +1967,13 @@ struct GbarResume {
   uint32_t bar_id;
 };
 
+// A resolved warp-control op, registered from the SFU to the scheduler: the
+// warp is released, or deactivated when it disabled all its threads.
+struct WarpCtl {
+  uint32_t wid;
+  bool     exit;
+};
+
 // Fragment-work-distributor control messages, carried on raster-core <-> core
 // event links.
 struct FwdArm {

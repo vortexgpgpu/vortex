@@ -21,6 +21,9 @@ class AluUnit : public FuncUnit<VX_CFG_NUM_ALU_BLOCKS> {
 public:
   AluUnit(const SimContext& ctx, const char* name, Core*);
 
+  // Resolved branch of a stalled warp, registered toward the scheduler.
+  SimChannel<uint32_t> branch_ctl_out;
+
 protected:
   void on_tick() override;
 

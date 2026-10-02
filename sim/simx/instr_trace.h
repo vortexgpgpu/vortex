@@ -67,6 +67,8 @@ public:
 
   // Set by a func-unit when a fetch_stall instruction has resolved; the warp
   // is released when the trace drains from the FU output (commit fan-in).
+  // Branches and warp-control ops release their warp as they resolve instead
+  // and leave this clear.
   bool resume_warp;
 
   uint64_t issue_time ;

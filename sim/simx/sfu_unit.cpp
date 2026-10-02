@@ -32,6 +32,7 @@ using namespace vortex;
 
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core, 6)
+	, warp_ctl_out(this, VX_CFG_NUM_WARPS)
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	, dxa_req_out(this)
 #endif
@@ -67,8 +68,10 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 {
 }
 
+// Cycles from processing to the output: the result buffer and the PE
+// switch's response stage.
 uint32_t SfuUnit::latency_of(const instr_trace_t* /*trace*/) const {
-	return 4;
+	return 2;
 }
 
 #ifdef VX_CFG_EXT_RTU_ENABLE
@@ -406,8 +409,9 @@ void SfuUnit::on_tick() {
 		}
 
 		bool release_warp = trace->fetch_stall;
+		bool warp_exit = false;
 		if (std::get_if<WctlType>(&trace->op_type)) {
-			release_warp = wctl_unit_->process(trace);
+			release_warp = wctl_unit_->process(trace, &warp_exit);
 		} else if (std::get_if<CsrType>(&trace->op_type)) {
 			csr_unit_->process(trace);
 #ifdef VX_CFG_EXT_DXA_ENABLE
@@ -426,6 +430,13 @@ void SfuUnit::on_tick() {
 		// sync-barrier, a not-yet-last barrier arrival, a deferred wspawn, or a
 		// warp that disabled itself (tmask=0) keeps the warp parked — it is
 		// released by the barrier/spawn machinery rather than at this commit.
+		// A warp-control op that does release its warp does so as it resolves;
+		// a join first pops the divergence stack, which takes one more cycle.
+		if (auto wctl_p = std::get_if<WctlType>(&trace->op_type); wctl_p && trace->eop
+		 && (release_warp || warp_exit)) {
+			warp_ctl_out.send(WarpCtl{trace->wid, warp_exit}, (*wctl_p == WctlType::JOIN) ? 2 : 1);
+			release_warp = false;
+		}
 		trace->resume_warp = release_warp;
 
 		input.pop();

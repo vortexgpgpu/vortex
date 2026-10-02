@@ -15,6 +15,7 @@
 
 #include "types.h"
 #include "instr_trace.h"
+#include <deque>
 #include <unordered_map>
 #include <vector>
 
@@ -40,6 +41,9 @@ public:
 
   void reserve(instr_trace_t* trace);
 
+  // The destination is written to the register file the cycle after
+  // commit and clears in the scoreboard the cycle after that; a dependent
+  // instruction sees it free from then on.
   void release(instr_trace_t* trace);
 
   // Per-packet commit notifier. Returns true when every SIMD-split packet
@@ -52,13 +56,23 @@ public:
 
 protected:
   void on_reset();
+  void on_tick();
 
 private:
   static uint32_t get_reg_id(const RegOpd& reg, uint32_t wid) {
     return (wid << RegOpd::ID_BITS) | reg.id();
   }
 
+  static constexpr uint32_t kReleaseDelay = 2;
+
+  struct pending_release_t {
+    uint32_t wid;
+    RegOpd   reg;
+    uint64_t due;
+  };
+
   std::vector<std::vector<RegMask>> in_use_regs_;
+  std::deque<pending_release_t> pending_releases_;
   std::unordered_map<uint32_t, instr_trace_t*> owners_;
   std::unordered_map<uint32_t, uint32_t> commit_counts_;
 

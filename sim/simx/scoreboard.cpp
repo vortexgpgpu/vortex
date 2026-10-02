@@ -35,6 +35,20 @@ void Scoreboard::on_reset() {
   }
   owners_.clear();
   commit_counts_.clear();
+  pending_releases_.clear();
+}
+
+void Scoreboard::on_tick() {
+  uint64_t now = SimPlatform::instance().cycles();
+  while (!pending_releases_.empty() && pending_releases_.front().due <= now) {
+    auto& r = pending_releases_.front();
+    owners_.erase(get_reg_id(r.reg, r.wid));
+    in_use_regs_.at(r.wid).at((int)r.reg.type).reset(r.reg.idx);
+    pending_releases_.pop_front();
+  }
+  if (pending_releases_.empty()) {
+    this->tick_sleep();
+  }
 }
 
 bool Scoreboard::in_use(instr_trace_t* trace) const {
@@ -89,9 +103,10 @@ void Scoreboard::release(instr_trace_t* trace) {
   assert(trace->wb);
   assert(in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).test(trace->dst_reg.idx));
   assert(owners_.count(reg_id) != 0);
-  owners_.erase(reg_id);
   commit_counts_.erase(reg_id);
-  in_use_regs_.at(trace->wid).at((int)trace->dst_reg.type).reset(trace->dst_reg.idx);
+  pending_releases_.push_back({trace->wid, trace->dst_reg,
+                               SimPlatform::instance().cycles() + kReleaseDelay});
+  this->tick_wake();
 }
 
 bool Scoreboard::commit_packet(instr_trace_t* trace) {

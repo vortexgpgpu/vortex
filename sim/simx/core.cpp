@@ -247,6 +247,8 @@ public:
     func_units_.at((int)FUType::LSU) = SimPlatform::instance().create_object<LsuUnit>(sname, simobject_);
     snprintf(sname, 100, "%s-sfu", name.c_str());
     func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(sname, simobject_);
+    std::static_pointer_cast<AluUnit>(func_units_.at((int)FUType::ALU))->branch_ctl_out.bind(&simobject_->branch_ctl_in);
+    std::static_pointer_cast<SfuUnit>(func_units_.at((int)FUType::SFU))->warp_ctl_out.bind(&simobject_->warp_ctl_in);
   #ifdef VX_CFG_EXT_TCU_ENABLE
     snprintf(sname, 100, "%s-tcu", name.c_str());
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
@@ -711,6 +713,25 @@ public:
   }
 
   void commit() {
+    // A resolved branch or warp-control op releases its warp, or retires it
+    // when it disabled all its threads, a cycle after it resolves; the
+    // scheduler observes the change the cycle after that.
+    auto& branch_ctl = simobject_->branch_ctl_in;
+    while (!branch_ctl.empty()) {
+      scheduler_->resume(branch_ctl.peek());
+      branch_ctl.pop();
+    }
+    auto& warp_ctl = simobject_->warp_ctl_in;
+    while (!warp_ctl.empty()) {
+      auto& ctl = warp_ctl.peek();
+      if (ctl.exit) {
+        scheduler_->setTmask(ctl.wid, ThreadMask(VX_CFG_NUM_THREADS));
+      } else {
+        scheduler_->resume(ctl.wid);
+      }
+      warp_ctl.pop();
+    }
+
     // Fan-in: route per-block FU outputs to per-iw commit queues by trace->wid.
     // Each FU has NUM_*_BLOCKS outputs; the original iw was lost during
     // dispatcher aggregation, so we recover it from the warp id and try_send
@@ -1069,6 +1090,8 @@ Core::Core(const SimContext& ctx,
   , icache_rsp_in(1, this)
   , dcache_req_out(VX_CFG_DCACHE_NUM_REQS, this)
   , dcache_rsp_in(VX_CFG_DCACHE_NUM_REQS, this)
+  , branch_ctl_in(this, VX_CFG_NUM_WARPS)
+  , warp_ctl_in(this, VX_CFG_NUM_WARPS)
   , gbar_arrive_out(this)
   , gbar_resume_in(this)
 #ifdef VX_CFG_EXT_RASTER_ENABLE
