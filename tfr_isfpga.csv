@@ -126,3 +126,11 @@ nr_n8_dsm_on_g1_tf32,73,8,2909,626,112,3
 nr_n8_dsm_on_g2_fp16,191,16,2871,631,74,8
 nr_n8_dsm_on_g3_fp8,254,32,2871,631,74,8
 nr_n8_dsm_on_g4_mxfp4,405,64,2871,631,74,8
+# --- Full tensor core (VX_tcu_unit_top) at NUM_THREADS=4 (2x2 FEDP array, N=2), NUM_WARPS=16, ASIC "all" formats ---
+# --- (tf32, fp16, bf16, fp8, bf8, mxfp8, mxbf8, mxfp4, nvfp4, int8, int4), U55C, 300 MHz target. N column = M x N x K. ---
+# --- _wallace_l4: USE_DSP=0, 4-stage. _dsp_l4: USE_DSP=1, 4-stage (PROD_REG=0). _dsp_l5: USE_DSP=1, 5-stage (PROD_REG=1). ---
+# --- Critical paths are in the FEDP multiply stage; with DSPs both runs chain two DSPs combinationally (l5: nvfp4 element ---
+# --- product DSP -> block reduction -> per-slot scale DSP, all before the first register). ---
+tcu4_asic_wallace_l4,2x2x2,300,170.3,-2.540,28815,364,5313,760,0,0,0,991.0,90.0,482.0,419.0,0.0,3293.0,4285.0
+tcu4_asic_dsp_l4,2x2x2,300,125.1,-4.662,20483,364,5109,444,136,0,0,955.0,86.0,383.0,340.0,145.0,3293.0,4247.0
+tcu4_asic_dsp_l5,2x2x2,300,148.7,-3.391,20002,364,6187,444,136,0,0,899.0,104.0,346.0,305.0,143.0,3291.0,4190.0
