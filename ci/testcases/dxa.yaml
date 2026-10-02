@@ -459,8 +459,6 @@ tests:
     threads: [4, 16]
 - id: model_parity-copy-mcast
   check: model_parity
-  # Instrs match; cycles diverge ~6.8% (SimX slower). Not yet localized.
-  tolerance: 0.10   # instrs match; cycles ~6.8%
   via: blackbox
   app: dxa_copy_mcast
   configs: -DVX_CFG_EXT_DXA_ENABLE
@@ -507,11 +505,6 @@ tests:
     threads: [4, 16]
 - id: model_parity-wgmma-dxa
   check: model_parity
-  # Instructions and DXA transfer timing match; cycles diverge ~8.5% (SimX
-  # slower), at CTA turnover: SimX drains the C-tile stores later than the RTL
-  # (store commit point, dispatch queue placement and bank-0 store-miss
-  # admission).
-  known_issue: "SimX drains the C-tile stores at CTA turnover slower than the RTL (instrs match; cycles ~8.5%)"
   via: blackbox
   app: sgemm_tcu_wg_dxa
   args: -m 128 -n 128 -k 64

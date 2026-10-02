@@ -223,8 +223,6 @@ tests:
 
 - id: model_parity-wgmma-fedp2k-rs
   check: model_parity
-  # Retired instructions match exactly and the cycle gap is now within tolerance
-  # (~3.5%): the SimX WGMMA setup/tile-buffer timing closed the former ~8% gap.
   via: blackbox
   app: sgemm_tcu_wg
   args: -m64 -n64 -k64

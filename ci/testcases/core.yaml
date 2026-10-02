@@ -155,7 +155,6 @@ tests:
   # Tracks to ~3% since SimX models the contended issue-path serializers
   # (per-fragment load writeback beats, fixed-priority commit arbitration,
   # and the execution units' bounded in-flight windows).
-  tolerance: 0.05
   via: blackbox
   app: sgemm
   args: -n128
