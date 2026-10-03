@@ -12,30 +12,19 @@
 // limitations under the License.
 
 // VX_rtu_xform — world→object ray transform for a TLAS instance. Streams one
-// instance's 3x4 affine transform + world ray and emits the object-space ray
+// instance's world→object 3x4 matrix + world ray and emits the object-space ray
 // after a fixed latency.
 //
-//   obj_ro = R^T * (ro - t)        obj_rd = R^T * rd
+// The instance record carries the world→object matrix the source driver
+// (lavapipe) builds, and the ray is transformed in the order it does: F32,
+// every product rounded, then
 //
-// The instance transform is object→world; its inverse brings the world ray into
-// object space. For the orthonormal rotation+translation transforms a TLAS
-// carries (every instance in a valid scene), R is orthonormal so R^(-1) = R^T,
-// which needs no determinant or division — a pure FMA pipeline. This is bit-
-// equivalent to the SimX oracle's explicit cofactor inverse for any orthonormal
-// R (the only kind the tests and a valid Vulkan TLAS produce); SimX's singular-
-// matrix passthrough is moot here as there is no divide to guard.
+//   obj_ro[i] = ((m[i][3] + ro.x*m[i][0]) + ro.y*m[i][1]) + ro.z*m[i][2]
+//   obj_rd[i] =  (rd.x*m[i][0] + rd.y*m[i][1]) + rd.z*m[i][2]
 //
-// Layout of the 3x4 row-major transform (matches the shared host/SimX format):
-//   xform[0..2]  = R row 0   xform[3]  = t.x
-//   xform[4..6]  = R row 1   xform[7]  = t.y
-//   xform[8..10] = R row 2   xform[11] = t.z
-// obj_ro[i] = (column i of R) . (ro - t); column i of R = row i of R^T:
-//   col0 = {xform[0], xform[4], xform[8]}, etc.
-//
-// The (ro - t) subtract reuses VX_fma_unit (a*1 - c); the matrix-vector products
-// reuse VX_rtu_fdot3. Side-band operands are delayed through shift registers so
-// every stage consumes time-aligned inputs at a fixed latency the scheduler
-// tracks via valid_out — same structure as VX_rtu_tri_pe / VX_rtu_box_pe.
+// so the object ray matches it bit for bit for any affine instance (scale,
+// shear included), with no inverse taken anywhere. Layout: m[i][j] = xform[4*i
+// + j], row-major, translation in column 3.
 
 `include "VX_define.vh"
 
@@ -49,7 +38,7 @@ module VX_rtu_xform import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     input  wire             valid_in,
     input  wire [TAG_WIDTH-1:0] tag_in,    // caller side-band (e.g. context id)
 
-    input  wire [11:0][31:0] xform,        // 3x4 row-major affine (object→world)
+    input  wire [11:0][31:0] xform,        // 3x4 row-major affine (world→object)
     input  wire [2:0][31:0]  ro,           // world ray origin
     input  wire [2:0][31:0]  rd,           // world ray direction
 
@@ -59,96 +48,135 @@ module VX_rtu_xform import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     output wire [2:0][31:0] obj_rd         // object-space ray direction
 );
     localparam F       = LATENCY_FMA;
-    localparam LATENCY = 4 * F;            // (ro-t) subtract @F, then dot @3F
+    localparam LATENCY = 4 * F;            // products, then three dependent adds
 
-    localparam [INST_FMT_BITS-1:0] FMT_SUB = 2'b10;   // F32, a*b - c
-    localparam [31:0] FP_ONE = 32'h3F800000;
+    localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;
 
-    // translation vector t = {xform[3], xform[7], xform[11]}.
-    wire [2:0][31:0] tvec;
-    assign tvec[0] = xform[3];
-    assign tvec[1] = xform[7];
-    assign tvec[2] = xform[11];
-
-    // R columns (rows of R^T): col_i[j] = xform[4*j + i].
-    wire [2:0][2:0][31:0] col;
-    for (genvar i = 0; i < 3; ++i) begin : g_col
-        for (genvar j = 0; j < 3; ++j) begin : g_col_e
-            assign col[i][j] = xform[4*j + i];
+    // ── @0 → @F: every product, rounded ───────────────────────────────
+    wire [2:0][2:0][31:0] po, pd;          // [row][column]
+    for (genvar i = 0; i < 3; ++i) begin : g_row
+        for (genvar j = 0; j < 3; ++j) begin : g_col
+            VX_fma_unit #(
+                .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+                .LATENCY        (F),
+                .SUBNORM_ENABLE (0),
+                .EXCEPT_ENABLE  (1)
+            ) fmul_o (
+                .clk     (clk),
+                .reset   (reset),
+                .enable  (enable),
+                .mask    (1'b1),
+                .op_type (INST_FPU_MUL),
+                .fmt     (FMT_ADD),
+                .frm     (INST_FRM_RNE),
+                .dataa   (ro[j]),
+                .datab   (xform[4*i + j]),
+                .datac   ('0),
+                .result  (po[i][j]),
+                `UNUSED_PIN (fflags)
+            );
+            VX_fma_unit #(
+                .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+                .LATENCY        (F),
+                .SUBNORM_ENABLE (0),
+                .EXCEPT_ENABLE  (1)
+            ) fmul_d (
+                .clk     (clk),
+                .reset   (reset),
+                .enable  (enable),
+                .mask    (1'b1),
+                .op_type (INST_FPU_MUL),
+                .fmt     (FMT_ADD),
+                .frm     (INST_FRM_RNE),
+                .dataa   (rd[j]),
+                .datab   (xform[4*i + j]),
+                .datac   ('0),
+                .result  (pd[i][j]),
+                `UNUSED_PIN (fflags)
+            );
         end
     end
 
-    // ── stage 1 (@F): d = ro - t (per axis), reusing the FMA as a*1 - c ──
-    wire [2:0][31:0] d;
-    for (genvar a = 0; a < 3; ++a) begin : g_sub
-        VX_fma_unit #(
-            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
-            .SUBNORM_ENABLE (0),
-            .LATENCY        (F)
-        ) fma_d (
-            .clk     (clk),
-            .reset   (reset),
-            .enable  (enable),
-            .mask    (1'b1),
-            .op_type (INST_FPU_MADD),
-            .fmt     (FMT_SUB),
-            .frm     (INST_FRM_RNE),
-            .dataa   (ro[a]),
-            .datab   (FP_ONE),
-            .datac   (tvec[a]),
-            .result  (d[a]),
-            `UNUSED_PIN (fflags)
-        );
-    end
-
-    // R columns aligned from @0 to @F to feed the dot products.
-    wire [2:0][2:0][31:0] col_d;
+    wire [2:0][31:0] tr_d;                 // translation column @F
     VX_shift_register #(
-        .DATAW (9*32),
+        .DATAW (3*32),
         .DEPTH (F)
-    ) sr_col (
+    ) sr_tr (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  (col),
-        .data_out (col_d)
+        .data_in  ({xform[11], xform[7], xform[3]}),
+        .data_out (tr_d)
     );
-    // rd aligned from @0 to @F so the direction dot starts in lock-step with d.
-    wire [2:0][31:0] rd_d;
+
+    // later addends held until their add issues
+    wire [2:0][31:0] po1_d, po2_d, pd2_d;  // po[.][1] @2F, po[.][2] @3F, pd[.][2] @2F
     VX_shift_register #(
-        .DATAW (96),
+        .DATAW (2*3*32),
         .DEPTH (F)
-    ) sr_rd (
+    ) sr_p1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  (rd),
-        .data_out (rd_d)
+        .data_in  ({po[2][1], po[1][1], po[0][1], pd[2][2], pd[1][2], pd[0][2]}),
+        .data_out ({po1_d, pd2_d})
+    );
+    VX_shift_register #(
+        .DATAW (3*32),
+        .DEPTH (2 * F)
+    ) sr_p2 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({po[2][2], po[1][2], po[0][2]}),
+        .data_out (po2_d)
     );
 
-    // ── stage 2 (@F+3F = @4F): obj_ro[i] = col_i . d, obj_rd[i] = col_i . rd ──
-    for (genvar i = 0; i < 3; ++i) begin : g_dot
-        VX_rtu_fdot3 #(
-            .LATENCY_FMA (F)
-        ) dot_ro (
-            .clk    (clk),
-            .reset  (reset),
-            .enable (enable),
-            .a      (col_d[i]),
-            .b      (d),
-            .result (obj_ro[i])
+    // ── the dependent adds, one per F ─────────────────────────────────
+    wire [2:0][31:0] o1, o2, d1, d2;
+    for (genvar i = 0; i < 3; ++i) begin : g_sum
+        VX_fma_unit #(.USE_DSP (`VX_CFG_RTU_USE_DSP), .LATENCY (F), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_o1 (
+            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+            .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (tr_d[i]), .datab (po[i][0]), .datac ('0),
+            .result (o1[i]), `UNUSED_PIN (fflags)
         );
-        VX_rtu_fdot3 #(
-            .LATENCY_FMA (F)
-        ) dot_rd (
-            .clk    (clk),
-            .reset  (reset),
-            .enable (enable),
-            .a      (col_d[i]),
-            .b      (rd_d),
-            .result (obj_rd[i])
+        VX_fma_unit #(.USE_DSP (`VX_CFG_RTU_USE_DSP), .LATENCY (F), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_o2 (
+            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+            .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (o1[i]), .datab (po1_d[i]), .datac ('0),
+            .result (o2[i]), `UNUSED_PIN (fflags)
+        );
+        VX_fma_unit #(.USE_DSP (`VX_CFG_RTU_USE_DSP), .LATENCY (F), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_o3 (
+            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+            .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (o2[i]), .datab (po2_d[i]), .datac ('0),
+            .result (obj_ro[i]), `UNUSED_PIN (fflags)
+        );
+        VX_fma_unit #(.USE_DSP (`VX_CFG_RTU_USE_DSP), .LATENCY (F), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_d1 (
+            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+            .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (pd[i][0]), .datab (pd[i][1]), .datac ('0),
+            .result (d1[i]), `UNUSED_PIN (fflags)
+        );
+        VX_fma_unit #(.USE_DSP (`VX_CFG_RTU_USE_DSP), .LATENCY (F), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_d2 (
+            .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+            .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+            .dataa (d1[i]), .datab (pd2_d[i]), .datac ('0),
+            .result (d2[i]), `UNUSED_PIN (fflags)
         );
     end
+
+    VX_shift_register #(
+        .DATAW (3*32),
+        .DEPTH (F)
+    ) sr_d (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (d2),
+        .data_out (obj_rd)
+    );
 
     // ── valid + tag pipe, sized to the whole datapath latency ─────────
     reg [LATENCY-1:0] valid_pipe_r;

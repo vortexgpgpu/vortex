@@ -506,7 +506,7 @@ Built build(uint64_t scene_addr, uint64_t tab_addr, bool with_tables) {
       img.u32(off + 12, tlas_tab);
     }
     const uint32_t rec = off + RTU_BVH_LEAF_HDR_BYTES;
-    for (int k = 0; k < 12; ++k) img.f32(rec + 4 * k, in.otw[k]);
+    for (int k = 0; k < 12; ++k) img.f32(rec + 4 * k, in.wto[k]);
     img.u32(rec + RTU_BVH_INSTANCE_BLAS_OFF, blas_root[in.blas]);
     img.u32(rec + RTU_BVH_INSTANCE_CUSTOM_OFF, in.custom);
     img.u32(rec + RTU_BVH_INSTANCE_ID_OFF, in.id);

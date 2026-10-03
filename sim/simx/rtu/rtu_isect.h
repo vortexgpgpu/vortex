@@ -57,23 +57,19 @@ bool ray_aabb_intersect(const float ro[3], const float rd[3],
                         float tmin, float tmax, float& t_near);
 
 // ────────────────────────────────────────────────────────────────────
-// Apply the inverse of a 3x4 row-major affine to a ray, producing the
-// object-space ray. Used by the BVH4 walker on LeafInst descent to
-// convert world→object space. Mirrors the hardware XFORM unit
-// (latency = 3 cycles).
+// Bring a world ray into an instance's object space with the instance
+// record's world→object 3x4 row-major matrix m, in the Vulkan reference's
+// (lavapipe) op order, every product rounded:
 //
-//   xform = [r00 r01 r02 tx | r10 r11 r12 ty | r20 r21 r22 tz]
-//   ro_obj = R^(-1) * (ro_world - t)
-//   rd_obj = R^(-1) * rd_world
+//   ro_obj[i] = ((m[i][3] + ro.x*m[i][0]) + ro.y*m[i][1]) + ro.z*m[i][2]
+//   rd_obj[i] =  (rd.x*m[i][0] + rd.y*m[i][1]) + rd.z*m[i][2]
 //
-// For pure rotation+translation (det(R) == ±1) the t parameter is
-// preserved across spaces, so the BLAS-reported hit_t is also the
-// world hit_t. Non-uniform scale would require renormalising hit_t;
-// out of scope.
+// The direction is not renormalised, so t is the same in both spaces.
+// Mirrors VX_rtu_xform bit for bit.
 // ────────────────────────────────────────────────────────────────────
-void affine_inverse_transform_ray(const float xform[12],
-                                  const float ro[3], const float rd[3],
-                                  float ro_out[3], float rd_out[3]);
+void world_to_object_ray(const float wto[12],
+                         const float ro[3], const float rd[3],
+                         float ro_out[3], float rd_out[3]);
 
 // ════════════════════════════════════════════════════════════════════
 // The intersection coprocessors — pipelined BoxPe / TriPe.

@@ -192,10 +192,9 @@ package VX_rtu_pkg;
     localparam RTU_FLAT_LINES_BITS = `CLOG2(RTU_FLAT_LINES + 1);
 
     // ─────────────────────────────────────────────────────────────────
-    // TLAS instance record (64 B). The 3x4 row-major affine transform
-    // (object→world) occupies floats 0..11;
-    // the walker applies its inverse (VX_rtu_xform) to bring the world ray into
-    // object space. The two TLAS variants share xform/blas/custom but differ in
+    // TLAS instance record (64 B). The 3x4 row-major world→object affine
+    // occupies floats 0..11; the walker applies it (VX_rtu_xform) to bring the
+    // world ray into object space. The two TLAS variants share xform/blas/custom but differ in
     // where instance_id and cull_mask sit:
     //   flat TLAS : blas_off@48, custom_id@52, cull_mask@56; instance_id = loop idx
     //   BVH inst  : blas_root@48, custom_id@52, instance_id@56, cull_mask@60

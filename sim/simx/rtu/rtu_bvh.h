@@ -31,7 +31,7 @@
 //   from one decode point.
 // - Triangle stride (40 B) and TLAS instance stride (64 B) match the
 //   flat-list constants in rtu_core.cpp so the existing intersection
-//   helpers (`ray_triangle`, `affine_inverse_transform_ray`) drop in
+//   helpers (`ray_triangle`, `world_to_object_ray`) drop in
 //   unchanged.
 
 #ifndef _VX_RTU_BVH_H_
@@ -263,7 +263,8 @@ constexpr uint32_t kVxBvhTriStride = 40;
 // from the SCENE root, not from a private BLAS base — gives us a
 // single base address for the whole TLAS+BLAS bundle).
 //
-//   floats 0..11           : 48 B object→world affine (3x4, row-major)
+//   floats 0..11           : 48 B world→object affine (3x4, row-major),
+//                            the inverse of the instance transform
 //   uint32 blas_root_off   : 4 B byte offset to this instance's BLAS
 //                            root node from the scene-buffer base
 //   uint32 custom_id       : 4 B VK_INSTANCE_CUSTOM_INDEX_KHR

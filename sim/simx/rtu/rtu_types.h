@@ -300,14 +300,14 @@ constexpr uint32_t kRtuFdivLat      = 17;   // reciprocal pipe depth
 constexpr uint32_t kRtuLatencyFma   = 9;    // FMA pipe depth
 constexpr uint32_t kRtuLatencyFma64 = 12;   // F64 FMA pipe depth (tri PE)
 constexpr uint32_t kRtuFdiv64Lat    = 32;   // F64 divide pipe depth (tri PE)
-// Per-instance transform latency = 4 * FMA pipe depth = 36: an (ro-t) subtract
-// at FMA depth, then a 3-deep dot product. Charged per TLAS instance descent
-// in the SimX cost model.
+// Per-instance transform latency = 4 * FMA pipe depth = 36: the products, then
+// three dependent adds (VX_rtu_xform). Charged per TLAS instance descent in the
+// SimX cost model.
 constexpr uint32_t kRtuXformLatency = 36;   // 4 * FMA pipe depth
 
 // TLAS instance record (64 B). Lives inline after the scene header for
 // "TLAS + inline BLAS" layout.
-//   floats 0..11   = 3x4 affine transform (rows r0|r1|r2), object→world
+//   floats 0..11   = 3x4 affine transform (rows r0|r1|r2), world→object
 //   uint32 [48..52) = blas_byte_offset
 //   uint32 [52..56) = custom_id (Vulkan VK_INSTANCE_CUSTOM_INDEX_KHR)
 //   uint32 [56..60) = cull_mask (low byte = Vulkan instance mask;

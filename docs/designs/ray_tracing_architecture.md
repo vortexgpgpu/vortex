@@ -327,20 +327,15 @@ subnormals flushed either way), and `VX_CFG_FMA_LATENCY` /
 whatever depth results:
 
 - **`VX_rtu_box_pe`** — pipelined ray/AABB slab test, one child box per cycle,
-  emitting `{hit, t_near}`. Dequantizes the node's int8 child corners
-  (`origin + q·2^exp`), does the slab test with `VX_fma_unit` + `VX_fncp_unit`,
-  and subtracts the ray origin *before* multiplying by `inv_d` so axis-aligned
-  rays (`inv_d = ±inf`) stay NaN-free. Also handles raw/procedural boxes.
-- **`VX_rtu_tri_pe`** — pipelined Möller–Trumbore triangle test, one triangle per
-  cycle, emitting `{hit, t, u, v, back_facing}`; reuses `VX_fma_unit`,
-  `VX_fdiv_unit` (1/det), `VX_fncp_unit`, and `VX_rtu_fdot3`/`fcross3`. The
-  dot/cross helpers pipeline their 24×24 mantissa products into DSP multipliers
-  (`LATENCY_IMUL` deep) fed the **raw** mantissas: a flushed (subnormal/zero)
-  term is discarded downstream in the `VX_rtu_fmac3` accumulator by its zero
-  product-exponent, so no subnormal-flush select sits in front of the multiplier
-  inputs and the DSPs launch straight from the source flops.
-- **`VX_rtu_xform`** — TLAS world→object transform, `obj = Rᵀ·(ro−t)` — FMA-only
-  (an orthonormal TLAS rotation needs no determinant or divide). Always built:
+  emitting `{hit, t_near}`. Mirrors SimX `ray_aabb_intersect` bit for bit:
+  corners `origin + q·2^exp`, slabs `(corner − ro)·inv_d`, culled against
+  `[0, t_max]`. Also handles raw/procedural boxes.
+- **`VX_rtu_tri_pe`** — pipelined watertight triangle test (F32 shear, F64 edge
+  functions and t, in the Vulkan reference's op order), one triangle per cycle,
+  emitting `{hit, t, u, v, back_facing}`; bit-exact against SimX `ray_triangle`.
+- **`VX_rtu_xform`** — TLAS world→object transform. The instance record holds
+  the world→object matrix and the ray is transformed in the reference's op
+  order (rounded products, then `t + x + y + z`), so no inverse is taken. Always built:
   the CW-BVH walker descends `LEAF_INST` natively; only the flat walker's
   (`WIDTH = 0`) instancing loop is gated by `VX_CFG_RTU_TLAS_ENABLE`.
 - **`VX_rtu_recip`** — F32 reciprocal for `inv_d`, either a portable LUT+Newton

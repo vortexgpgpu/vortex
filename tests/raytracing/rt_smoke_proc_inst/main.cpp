@@ -75,11 +75,12 @@ static const uint32_t kInstId[NUM_RAYS]   = { 5, 9 };
 static const uint32_t kInstCust[NUM_RAYS] = { 0xa5, 0xa9 };
 static const float    kInstTx[NUM_RAYS]   = { -3.f, 3.f };
 
-// Identity rotation + translation (tx,0,0).
+// Identity rotation + translation (tx,0,0); the record holds its inverse
+// (world->object).
 static void emit_instance(uint8_t* out, float tx, uint32_t blas_off,
                           uint32_t custom_id, uint32_t instance_id) {
   float* x = reinterpret_cast<float*>(out);
-  x[0] = 1.f; x[1] = 0.f; x[2]  = 0.f; x[3]  = tx;
+  x[0] = 1.f; x[1] = 0.f; x[2]  = 0.f; x[3]  = -tx;
   x[4] = 0.f; x[5] = 1.f; x[6]  = 0.f; x[7]  = 0.f;
   x[8] = 0.f; x[9] = 0.f; x[10] = 1.f; x[11] = 0.f;
   *reinterpret_cast<uint32_t*>(out + VX_BVH_INSTANCE_BLAS_OFF)  = blas_off;

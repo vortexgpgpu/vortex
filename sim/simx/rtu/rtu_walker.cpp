@@ -25,7 +25,7 @@
                              // scene-format constants
 #include "rtu_bvh.h"         // CW-BVH node/leaf/instance layouts
 #include "rtu_isect.h"       // ray_triangle, ray_aabb_intersect,
-                             // affine_inverse_transform_ray
+                             // world_to_object_ray
 #include "rtu_classifier.h"  // classify_tri_hit, finalise_lane
 
 namespace vortex { namespace rtu {
@@ -297,8 +297,8 @@ bool src_blas_path_culled(const SrcTab& t, uint32_t ps, const float box[6],
   return c.culled;
 }
 
-// The reference's object-space ray for TLAS leaf `inst`: its world->object
-// matrix applied as translation + x + y + z, in that order, in F32.
+// The reference's object-space ray for TLAS leaf `inst`, from its
+// world->object matrix in the table.
 SrcRay src_object_ray(SceneView& sv, uint32_t tlas_tab, uint32_t inst,
                       const float wo[3], const float wd[3]) {
   const uint32_t leaf_stride = scene_u32(sv, tlas_tab + 12);
@@ -306,14 +306,7 @@ SrcRay src_object_ray(SceneView& sv, uint32_t tlas_tab, uint32_t inst,
   read_scene_bytes(sv, tlas_tab + kSrcTabHdr + inst * leaf_stride + kSrcLeafWto,
                    sizeof(m), reinterpret_cast<uint8_t*>(m));
   float o[3], d[3];
-  for (int i = 0; i < 3; ++i) {
-    float ro = m[i * 4 + 3], rd = 0.f;
-    for (int j = 0; j < 3; ++j) {
-      ro = ro + wo[j] * m[i * 4 + j];
-      rd = j ? rd + wd[j] * m[i * 4 + j] : wd[j] * m[i * 4 + j];
-    }
-    o[i] = ro; d[i] = rd;
-  }
+  world_to_object_ray(m, wo, wd, o, d);
   return src_ray(o, d);
 }
 
@@ -592,7 +585,7 @@ void walk_bvh4_subtree(SceneView& sv,
       uint32_t inst_flags2 =
           (inst->cull_mask >> kRtuInstanceFlagsShift) & kRtuInstanceFlagsMask;
       float obj_ro[3], obj_rd[3];
-      affine_inverse_transform_ray(inst->xform, ro, rd, obj_ro, obj_rd);
+      world_to_object_ray(inst->xform, ro, rd, obj_ro, obj_rd);
       ++perf.bvh_instance_descents;
       walk_bvh4_subtree(sv, obj_ro, obj_rd,
                         inst->blas_root_byte_offset,
@@ -857,7 +850,7 @@ WalkResult FlatWalker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
   WalkCtx ctx = init_ctx(req, t, ro, rd, l);
 
   // TLAS scenes walk one or more instances; each instance points at a BLAS (a
-  // triangle list) and (optionally) applies an object→world affine transform.
+  // triangle list) through its world→object affine transform.
   uint32_t num_instances  = 1;
   uint32_t triangle_count = 0;
 #ifdef VX_CFG_RTU_TLAS_ENABLE
@@ -918,10 +911,9 @@ WalkResult FlatWalker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
       std::memcpy(&cur_custom,
                   inst_buf + kRtuInstanceCustomIdOff,
                   sizeof(uint32_t));
-      // World→object ray transform. For pure rotation + translation the t
-      // parameter is preserved, so the BLAS-reported hit_t is also the world
-      // hit_t.
-      affine_inverse_transform_ray(xform, ro, rd, ray_o, ray_d);
+      // World→object ray transform; the direction is not renormalised, so
+      // the BLAS-reported hit_t is also the world hit_t.
+      world_to_object_ray(xform, ro, rd, ray_o, ray_d);
       ++perf.bvh_instance_descents;
       uint8_t blas_hdr[4];
       read_scene_bytes(sv, blas_byte_off, sizeof(blas_hdr), blas_hdr);
