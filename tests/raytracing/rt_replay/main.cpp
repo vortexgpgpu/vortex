@@ -98,7 +98,10 @@ void show_usage() {
          "  -l file    replay only the ray indices listed (one per line, '#' comments;\n"
          "             a mismatch file from -o is accepted as is)\n"
          "  -s n       replay every n-th selected ray\n"
-         "  -a         also replay rays a shader decided (any-hit / intersection)\n");
+         "  -a         also replay rays a shader decided (any-hit / intersection)\n"
+         "Build with the CONFIGS that recorded the log. For rtlsim also pass\n"
+         "-DVX_DBG_STALL_TIMEOUT=2000000000: one hard ray can hold every warp in\n"
+         "vx_rt_wait past the scheduler's default all-warps-stalled watchdog.\n");
 }
 
 void parse_args(int argc, char** argv) {
@@ -374,6 +377,10 @@ int main(int argc, char** argv) {
     RT_CHECK(vx_enqueue_write(queue, rays_buf, 0, dev_rays.data(), count * sizeof(replay_ray_t), 0, nullptr, nullptr));
     RT_CHECK(vx_queue_finish(queue, VX_TIMEOUT_INFINITE));
 
+    if (verbose) {
+      printf("launch [%zu, %zu): %u threads\n", pos, end, count);
+      fflush(stdout);
+    }
     auto t0 = std::chrono::steady_clock::now();
     vx_event_h lev = nullptr, rev = nullptr;
     vx_launch_info_t li = {};
@@ -406,6 +413,7 @@ int main(int argc, char** argv) {
       if (printed < max_print) { print_ray(stdout, owner[k], r, res[k], cat); ++printed; }
     }
     mismatched += bad;
+    if (of) fflush(of);   // a model that hangs or aborts later keeps what it reported
     if (verbose || sel.size() > batch) {
       printf("batch [%zu, %zu) epoch %u: %llu rays, %llu mismatches, %.1fs\n",
              pos, end, epoch, (unsigned long long)(end - pos), (unsigned long long)bad, dt);
