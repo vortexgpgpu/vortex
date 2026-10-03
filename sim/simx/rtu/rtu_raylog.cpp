@@ -18,6 +18,8 @@
 #include <cstring>
 #include <map>
 #include <mutex>
+#include <unordered_set>
+#include "mem.h"
 
 namespace vortex { namespace rtu { namespace raylog {
 
@@ -64,9 +66,17 @@ public:
 
   bool on() const { return fp_ != nullptr; }
 
-  void accept(const void* owner, uint32_t slot) {
+  void set_ram(const RAM* ram) {
+    std::lock_guard<std::mutex> g(mu_);
+    ram_ = ram;
+  }
+
+  void accept(const void* owner, uint32_t slot, const RtuReq& req) {
     std::lock_guard<std::mutex> g(mu_);
     cb_[{owner, slot}].fill(0);
+    for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
+      if (req.tmask_bits & (1u << t)) snapshot_scene(req.scene_root[t]);
+    }
   }
 
   void callback(const void* owner, uint32_t slot, uint32_t lane, uint32_t cb_type) {
@@ -143,7 +153,43 @@ public:
 private:
   bool full() const { return logged_ >= max_rays_; }
 
+  // Instance records sit below the scene root, one stride per instance id.
+  static constexpr uint64_t kInstTableSpan = 64 * 1024;
+  static constexpr uint64_t kMaxSceneBytes = 1ull << 30;
+
+  void snapshot_scene(uint32_t root) {
+    if (ram_ == nullptr || full() || !snapped_.insert(root).second) return;
+    const RAM& ram = *ram_;
+    uint32_t scene_bytes = 0;
+    for (int i = 0; i < 4; ++i) scene_bytes |= uint32_t(ram[root + 8 + i]) << (8 * i);
+    const uint64_t lo = (root > kInstTableSpan ? root - kInstTableSpan : 0) & kRtuLineMask;
+    const uint64_t hi = uint64_t(root) + std::min<uint64_t>(scene_bytes, kMaxSceneBytes);
+    uint64_t added = 0;
+    for (uint64_t a = lo; a < hi; a += VX_CFG_MEM_BLOCK_SIZE) {
+      if (image_.count(a)) continue;
+      LineBuf line;
+      bool nonzero = false;
+      for (uint32_t i = 0; i < VX_CFG_MEM_BLOCK_SIZE; ++i) {
+        line[i] = ram[a + i];
+        nonzero |= line[i] != 0;
+      }
+      if (!nonzero) continue;
+      image_.emplace(a, line);
+      RaylogLine r{};
+      r.type  = REC_LINE;
+      r.epoch = epoch_;
+      r.addr  = a;
+      std::memcpy(r.data, line.data(), sizeof(r.data));
+      std::fwrite(&r, sizeof(r), 1, fp_);
+      ++added;
+    }
+    std::fprintf(stderr, "[rtu-raylog] scene 0x%x: %u bytes, snapshot %llu lines\n",
+                 root, scene_bytes, (unsigned long long)added);
+  }
+
   std::mutex mu_;
+  const RAM* ram_ = nullptr;
+  std::unordered_set<uint32_t> snapped_;
   FILE*      fp_ = nullptr;
   unsigned long long max_rays_ = 4ull << 20;
   unsigned long long every_    = 1;
@@ -167,8 +213,12 @@ bool enabled() {
   return on;
 }
 
-void on_accept(const void* owner, uint32_t slot) {
-  logger().accept(owner, slot);
+void attach_ram(const RAM* ram) {
+  if (enabled()) logger().set_ram(ram);
+}
+
+void on_accept(const void* owner, uint32_t slot, const RtuReq& req) {
+  logger().accept(owner, slot, req);
 }
 
 void on_callback(const void* owner, uint32_t slot, uint32_t lane, uint32_t cb_type) {

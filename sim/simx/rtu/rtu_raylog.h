@@ -25,6 +25,11 @@
 // Optional knobs:
 //   VX_RTU_RAYLOG_MAX=<n>   stop after n RAY records (default 4M)
 //   VX_RTU_RAYLOG_EVERY=<n> keep one terminal ray in n (default 1)
+//
+// The lines a SimX walk reads are not all another model may read: one that
+// culls differently descends into nodes SimX never fetched. So the first trace
+// against a scene also snapshots its whole image from device memory — the
+// header's scene_bytes after the root, and the instance table packed below it.
 
 #ifndef _VX_RTU_RAYLOG_H_
 #define _VX_RTU_RAYLOG_H_
@@ -34,7 +39,9 @@
 #include <unordered_map>
 #include "rtu_types.h"
 
-namespace vortex { namespace rtu { namespace raylog {
+namespace vortex {
+class RAM;
+namespace rtu { namespace raylog {
 
 constexpr uint32_t kMagic   = 0x4C525856;   // "VXRL"
 constexpr uint32_t kVersion = 1;
@@ -93,9 +100,12 @@ static_assert(sizeof(RaylogRay) == 112, "RaylogRay layout");
 
 bool enabled();
 
+// The device memory the scene snapshots read from.
+void attach_ram(const RAM* ram);
+
 // A trace landed in `slot` of the RTU at `owner`: forget the callbacks the
-// slot's previous trace raised.
-void on_accept(const void* owner, uint32_t slot);
+// slot's previous trace raised, and snapshot any scene it is the first to name.
+void on_accept(const void* owner, uint32_t slot, const RtuReq& req);
 
 // A lane of `slot` yielded a callback of `cb_type`.
 void on_callback(const void* owner, uint32_t slot, uint32_t lane, uint32_t cb_type);

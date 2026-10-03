@@ -357,7 +357,7 @@ public:
         if (s.req.dir_z[first_active] < 0.f) sig |= 0x4;
         s.coh_signature = sig;
       }
-      if (raylog::enabled()) raylog::on_accept(this, idx);
+      if (raylog::enabled()) raylog::on_accept(this, idx, s.req);
       ch.pop();
       ++perf_stats_.rays_issued;
       DT(3, "rtu-core accept: tag=" << s.req.tag << ", slot=" << idx);

@@ -16,6 +16,9 @@
 #include "core.h"
 #include "scheduler.h"
 #include <VX_types.h>
+#ifdef VX_CFG_EXT_RTU_ENABLE
+#include "rtu_raylog.h"
+#endif
 
 #include <cstdlib>
 #include <execinfo.h>
@@ -199,6 +202,9 @@ ProcessorImpl::~ProcessorImpl() {
 void ProcessorImpl::attach_ram(RAM* ram) {
   ram_ = ram;
   memsim_->attach_ram(ram);
+#ifdef VX_CFG_EXT_RTU_ENABLE
+  rtu::raylog::attach_ram(ram);
+#endif
 }
 
 void ProcessorImpl::flush_caches() {
