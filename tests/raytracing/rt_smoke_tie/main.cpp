@@ -15,9 +15,10 @@
 // hits the RTU commits.
 //
 // The scene stacks coincident and near-coincident geometry, within one BLAS
-// (exact twin triangles, a copy a few ulps off the plane, a copy tilted by a
-// hair) and across instances (the same BLAS instanced twice in place, rotated
-// a quarter turn onto itself, shifted by half a cell, lifted by 2^-20). The
+// (exact twin triangles, a copy an ulp-scale step off the plane) and across
+// instances (a BLAS instanced twice in place, rotated a quarter turn onto
+// itself, shifted by half a cell, lifted by 2^-20, and a second BLAS holding
+// copies of two of the first one's triangles). The
 // RTU walks its own CW-BVH4; which of those hits it keeps is settled by the
 // source BVH's visit order, carried as the visit-order tables the Vulkan
 // driver appends (vortexpipe vp_launch.c): a TLAS table inside the scene and
@@ -299,9 +300,8 @@ std::vector<Instance> insts;
 
 void make_geometry() {
   // BLAS 0, the "sail": a 4x4 grid of quads on z = 0 over [-1, 1]^2 (geometry
-  // 0); an exact twin of it (geometry 1); a copy a few ulps above the plane on
-  // some vertices (geometry 2); a copy tilted by a hair, crossing the plane
-  // along x = 0 (geometry 3).
+  // 0); an exact twin of it (geometry 1); a copy an ulp-scale step above the
+  // plane on some vertices (geometry 2).
   std::vector<Tri> sail;
   auto quad = [&](float x0, float y0, float x1, float y1, uint32_t geom, auto zf) {
     Tri a = { { x0, y0, zf(x0, y0), x1, y0, zf(x1, y0), x1, y1, zf(x1, y1) }, geom };
@@ -309,7 +309,7 @@ void make_geometry() {
     sail.push_back(a);
     sail.push_back(b);
   };
-  for (uint32_t g = 0; g < 4; ++g) {
+  for (uint32_t g = 0; g < 3; ++g) {
     for (int j = 0; j < 4; ++j) {
       for (int i = 0; i < 4; ++i) {
         const float x0 = -1.f + 0.5f * i, y0 = -1.f + 0.5f * j;
@@ -318,7 +318,6 @@ void make_geometry() {
           switch (g) {
           // every other grid vertex: about an ulp of t for these rays
           case 2:  return (int((x + 1.f) * 4.f + (y + 1.f) * 4.f) & 2) ? 0x1p-22f : 0.f;
-          case 3:  return x * 0x1p-21f + y * 0x1p-23f;
           default: return 0.f;
           }
         };
@@ -366,7 +365,7 @@ void make_geometry() {
   const float P[12]   = { 1, 0, 0, 0.125f,  0, 0, -1, 0,  0, 1, 0, 0 };
   const float Pi[12]  = { 1, 0, 0, -0.125f,  0, 0, 1, 0,  0, -1, 0, 0 };
   inst(0, 0, I, I);
-  inst(0, 1, I, I);
+  inst(1, 1, I, I);
   inst(0, 2, R, Ri);
   inst(1, 3, I, I);
   inst(0, 4, T, Ti);

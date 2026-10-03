@@ -53,6 +53,9 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 ) (
     input  wire                  clk,
     input  wire                  reset,
+    // the scene may change: forget the ray set up last (asserted while the
+    // RTU is idle, which it always is between dependent launches)
+    input  wire                  flush,
 
     // request: hit a (the new one) against hit b (the committed one)
     input  wire                  req_valid,
@@ -119,7 +122,7 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // ── sequencer states ──────────────────────────────────────────────
     localparam [6:0]
         S_IDLE  = 7'd0,  S_CAP   = 7'd1,  S_BOX1  = 7'd2,  S_BOX2  = 7'd3,
-        S_DISP  = 7'd5,  S_DONE  = 7'd6,
+        S_BOX3  = 7'd4,  S_DISP  = 7'd5,  S_DONE  = 7'd6,
         // same instance
         T_S1    = 7'd8,  T_S2    = 7'd9,  T_S3    = 7'd10, T_S4    = 7'd11,
         T_S5    = 7'd12, T_S6    = 7'd13, T_S7    = 7'd14,
@@ -135,16 +138,18 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         // one climb step
         U_0     = 7'd44, U_1     = 7'd45, U_2     = 7'd46, U_3     = 7'd47,
         // box test
-        B_SUB   = 7'd48, B_MUL   = 7'd49, B_RED   = 7'd50, B_FIN   = 7'd51,
+        B_SUB   = 7'd48, B_MUL   = 7'd49, B_RED   = 7'd50, B_FIN0  = 7'd51,
+        B_FIN   = 7'd52,
         // object ray
         O_0     = 7'd56, O_1     = 7'd57, O_2     = 7'd58, O_3     = 7'd59,
         O_4     = 7'd60, O_5     = 7'd61, O_6     = 7'd62, O_7     = 7'd63,
         O_8     = 7'd64,
         // reciprocals
-        R_LD0   = 7'd68, R_LD1   = 7'd69, R_IT    = 7'd70, R_WR    = 7'd71,
-        // fetch wait / move / copy / multiply / drain
-        F_WAIT  = 7'd72, M_MV    = 7'd76, C_CP    = 7'd77, X_MUL   = 7'd78,
-        W_DRAIN = 7'd79;
+        R_LD0   = 7'd68, R_LD1   = 7'd69, R_LD2   = 7'd67, R_IT    = 7'd70,
+        R_WR    = 7'd71,
+        // fetch wait / fetched-word capture / move / copy / multiply / drain
+        F_WAIT  = 7'd72, F_CAP   = 7'd73, M_MV    = 7'd76, C_CP    = 7'd77,
+        X_MUL   = 7'd78, W_DRAIN = 7'd79;
 
     // ── F32 helpers (C fmin/fmax, IEEE ordered compares) ──────────────
     function automatic logic f_nan(input logic [30:0] a);
@@ -197,6 +202,15 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [31:0]           upt;          // ... and the t its boxes are culled against
     reg                  a_first, keep, ph;
     reg [31:0]           key0;
+
+    // The current ray (RO/RD/RI) as last set up: the world ray, or a TLAS
+    // leaf's object ray. Verdicts for one walk come in runs on the same ray,
+    // so a request whose ray is the one already set up skips the setup.
+    reg [2:0][31:0]      cw_o, cw_d;   // this request's world ray
+    reg                  rk_valid, rk_world;
+    reg [31:0]           rk_inst, rk_tlas;
+    reg [2:0][31:0]      rk_o, rk_d;
+    reg                  ray_same;     // rk was set up for this request's world ray
     reg [CLIMBW-1:0]     climbs;
 
     // box test
@@ -207,6 +221,8 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg                  bt_pass;
     reg [2:0]            bt_wbc;       // slab differences written back so far
     reg [4:0]            k;            // the running routine counter
+    reg [31:0]           red_a, red_b, red_mn, red_mx, bt_lo0;
+    reg [31:0]           tmn, tmx;     // vertex box min/max partials
 
     // object ray / multiply
     reg [31:0]           o_inst;
@@ -268,6 +284,23 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [5:0]  fma_dst;
     reg [5:0]  fma_pend;
 
+    // operands are registered off the register file's asynchronous read
+    reg        fx_issue;
+    reg [1:0]  fx_kind;
+    reg [5:0]  fx_dst;
+    reg [31:0] fx_a, fx_b;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            fx_issue <= 1'b0;
+        end else begin
+            fx_issue <= fma_issue;
+        end
+        fx_kind <= fma_kind;
+        fx_dst  <= fma_dst;
+        fx_a    <= rda;
+        fx_b    <= rdb;
+    end
+
     VX_fma_unit #(
         .LATENCY        (FMA_LAT),
         .USE_DSP        (`VX_CFG_RTU_USE_DSP),
@@ -277,12 +310,12 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .clk     (clk),
         .reset   (reset),
         .enable  (1'b1),
-        .mask    (fma_issue),
-        .op_type ((fma_kind == 2'd2) ? INST_FPU_MUL : INST_FPU_ADD),
-        .fmt     ((fma_kind == 2'd1) ? INST_FMT_BITS'(2'b10) : INST_FMT_BITS'(2'b00)),
+        .mask    (fx_issue),
+        .op_type ((fx_kind == 2'd2) ? INST_FPU_MUL : INST_FPU_ADD),
+        .fmt     ((fx_kind == 2'd1) ? INST_FMT_BITS'(2'b10) : INST_FMT_BITS'(2'b00)),
         .frm     (INST_FRM_RNE),
-        .dataa   (rda),
-        .datab   (rdb),
+        .dataa   (fx_a),
+        .datab   (fx_b),
         .datac   (32'd0),
         .result  (fma_res),
         `UNUSED_PIN (fflags)
@@ -296,7 +329,7 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (1'b1),
-        .data_in  ({fma_issue, fma_dst}),
+        .data_in  ({fx_issue, fx_dst}),
         .data_out ({wb_v, wb_dst})
     );
 
@@ -354,6 +387,8 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     // fetched words: one read port over the two lines
     reg  [4:0]   fw_k;
+    reg  [4:0]   f_k0;        // the word F_CAP captures into fw_q
+    reg  [31:0]  fw_q;
     wire [2*LINE_BITS-1:0] lbs = {lb1, lb0};
     wire [WIDXW-1:0] fw_idx = WIDXW'(f_w0) + WIDXW'(fw_k);
     wire [31:0]  fw = lbs[32'(fw_idx) * 32 +: 32];
@@ -396,18 +431,33 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
         rc_decode = {spec, sval, x[31], m, ex};
     endfunction
-    wire [68:0] rc_dec_a = rc_decode(rda);
-    wire [68:0] rc_dec_b = rc_decode(rdb);
+    reg  [2:0][31:0] rx;
+    wire [68:0] rc_dec0 = rc_decode(rx[0]);
+    wire [68:0] rc_dec1 = rc_decode(rx[1]);
+    wire [68:0] rc_dec2 = rc_decode(rx[2]);
 
-    wire [1:0]  rc_w   = 2'(k);
+    // R_WR registers lane k at k < 3 and writes lane k - 5 five cycles later
+    wire [1:0]  rc_w   = (k < 5'd3) ? 2'(k) : 2'd0;
+    wire [1:0]  rc_o   = (k >= 5'd5) ? 2'(k - 5'd5) : 2'd0;
+    reg  [27:0] rc_in_q;
+    reg  [10:0] rc_in_e;
+    reg         rc_in_st;
+    always_ff @(posedge clk) begin
+        rc_in_q  <= dv_q[rc_w];
+        rc_in_e  <= 11'(-11'sd50 - $signed(dv_e[rc_w]));
+        rc_in_st <= (dv_rem[rc_w] != 25'd0);
+    end
     wire [30:0] rc_mag;
     VX_rtu_f32_round #(
-        .WB (28),
-        .EW (11)
+        .WB      (28),
+        .EW      (11),
+        .LATENCY (4)
     ) rc_round (
-        .mag    (dv_q[rc_w]),
-        .exp    (-11'sd50 - $signed(dv_e[rc_w])),
-        .sticky (dv_rem[rc_w] != 25'd0),
+        .clk    (clk),
+        .enable (1'b1),
+        .mag    (rc_in_q),
+        .exp    ($signed(rc_in_e)),
+        .sticky (rc_in_st),
         .result (rc_mag)
     );
 
@@ -441,15 +491,15 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             fsm_wa = RA_WO + 6'(k);
             fsm_wd = cap[0];
         end
-        S_BOX1: begin
-            fsm_we = 1'b1;
-            fsm_wa = ((k >= 5'd3) ? RA_BB : RA_BA) + 6'(bx_a);
-            fsm_wd = f_min(bx_v0, f_min(bx_v1, bx_v2));
-        end
         S_BOX2: begin
             fsm_we = 1'b1;
+            fsm_wa = ((k >= 5'd3) ? RA_BB : RA_BA) + 6'(bx_a);
+            fsm_wd = f_min(bx_v0, tmn);
+        end
+        S_BOX3: begin
+            fsm_we = 1'b1;
             fsm_wa = ((k >= 5'd3) ? RA_BB : RA_BA) + 6'd3 + 6'(bx_a);
-            fsm_wd = f_max(bx_v0, f_max(bx_v1, bx_v2));
+            fsm_wd = f_max(bx_v0, tmx);
         end
         B_SUB: begin
             ra        = bt_base + 6'(k);
@@ -467,8 +517,8 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             fma_dst   = RA_S + 6'(k);
         end
         B_RED: begin
-            ra = RA_S + 6'(k);
-            rb = RA_S + 6'd3 + 6'(k);
+            ra = RA_S + ((k < 5'd3) ? 6'(k) : 6'd0);
+            rb = RA_S + 6'd3 + ((k < 5'd3) ? 6'(k) : 6'd0);
         end
         O_4: begin
             // products: X[i*3+j] = wo[j] * m[i][j], X[9+i*3+j] = wd[j] * m[i][j]
@@ -519,9 +569,9 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             ra = RA_RD + 6'd2;
         end
         R_WR: begin
-            fsm_we = 1'b1;
-            fsm_wa = RA_RI + 6'(k);
-            fsm_wd = rc_spec[rc_w] ? rc_sval[rc_w] : {dv_s[rc_w], rc_mag};
+            fsm_we = (k >= 5'd5);
+            fsm_wa = RA_RI + 6'(rc_o);
+            fsm_wd = rc_spec[rc_o] ? rc_sval[rc_o] : {dv_s[rc_o], rc_mag};
         end
         M_MV: begin
             fw_k   = mv_k0 + k;
@@ -535,9 +585,7 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             fsm_wa = mv_dst + 6'(k);
             fsm_wd = rda;
         end
-        T_D3B: fw_k = 5'd1;
-        U_2:   fw_k = is_tlas ? 5'd12 : 5'd6;
-        T_D6, T_D10: fw_k = 5'd13;
+        F_CAP: fw_k = f_k0;
         default:;
         endcase
     end
@@ -551,8 +599,12 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         if (reset) begin
             state    <= S_IDLE;
             fma_pend <= '0;
+            rk_valid <= 1'b0;
         end else begin
             fma_pend <= fma_pend + 6'(fma_issue) - 6'(wb_v);
+            if (flush) begin
+                rk_valid <= 1'b0;
+            end
             if ((state == B_SUB) || (state == B_MUL)) begin
                 bt_wbc <= bt_wbc + 3'(wb_v);
             end else begin
@@ -570,6 +622,8 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     psa     <= req_a_ps;  psb  <= req_b_ps;
                     taba    <= req_a_tab; tabb <= req_b_tab;
                     cap     <= {req_b_v, req_a_v, req_wd, req_wo};
+                    cw_o    <= req_wo;
+                    cw_d    <= req_wd;
                     k       <= '0;
                     climbs  <= '0;
                     state   <= S_CAP;
@@ -585,9 +639,14 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
             S_BOX1: begin
+                tmn   <= f_min(bx_v1, bx_v2);
+                tmx   <= f_max(bx_v1, bx_v2);
                 state <= S_BOX2;
             end
             S_BOX2: begin
+                state <= S_BOX3;
+            end
+            S_BOX3: begin
                 k     <= k + 5'd1;
                 state <= S_BOX1;
                 if (k == 5'd5) begin
@@ -596,7 +655,8 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
             S_DISP: begin
-                state <= (ia == ib) ? T_S1 : T_D0;
+                ray_same <= rk_valid && (rk_o == cw_o) && (rk_d == cw_d) && (rk_tlas == tlas_r);
+                state    <= (ia == ib) ? T_S1 : T_D0;
             end
 
             // ── same instance: climb its BLAS table ──────────────────
@@ -616,27 +676,30 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 f_off    <= taba + 32'd8;
                 f_n      <= 5'd1;
                 fs_start <= 1'b1;
+                f_k0     <= '0;
                 f_ret    <= T_S3;
                 state    <= F_WAIT;
             end
             T_S3: begin
-                noff_r   <= fw;
+                noff_r   <= fw_q;
                 ps0      <= psa;
-                f_off    <= node_off(tab_r, fw, 1'b0, psa) + 32'd28;
+                f_off    <= node_off(tab_r, fw_q, 1'b0, psa) + 32'd28;
                 fs_start <= 1'b1;
+                f_k0     <= '0;
                 f_ret    <= T_S4;
                 state    <= F_WAIT;
             end
             T_S4: begin
-                dep0     <= fw + 32'd1;
+                dep0     <= fw_q + 32'd1;
                 ps1      <= psb;
                 f_off    <= node_off(tab_r, noff_r, 1'b0, psb) + 32'd28;
                 fs_start <= 1'b1;
+                f_k0     <= '0;
                 f_ret    <= T_S5;
                 state    <= F_WAIT;
             end
             T_S5: begin
-                dep1   <= fw + 32'd1;
+                dep1   <= fw_q + 32'd1;
                 cul0   <= 1'b0;
                 cul1   <= 1'b0;
                 mv_dst <= RA_CB0;
@@ -658,11 +721,22 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
             // ── different instances: climb the TLAS table ────────────
             T_D0: begin
-                mv_dst <= RA_RO;        // world ray o, d -> current ray
-                cp_src <= RA_WO;
-                mv_n   <= 5'd6;
-                c_ret  <= T_D1;
-                state  <= C_CP;
+                if (ray_same && rk_world) begin
+                    // the world ray is set up already
+                    is_tlas  <= 1'b1;
+                    tab_r    <= tlas_r;
+                    f_off    <= tlas_r + 32'd8;
+                    f_n      <= 5'd2;
+                    fs_start <= 1'b1;
+                    f_k0     <= '0;
+                    state    <= T_D2;
+                end else begin
+                    mv_dst <= RA_RO;    // world ray o, d -> current ray
+                    cp_src <= RA_WO;
+                    mv_n   <= 5'd6;
+                    c_ret  <= T_D1;
+                    state  <= C_CP;
+                end
             end
             T_D1: begin
                 // the TLAS header fetch runs beside the reciprocals
@@ -671,6 +745,13 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 f_off    <= tlas_r + 32'd8;
                 f_n      <= 5'd2;
                 fs_start <= 1'b1;
+                f_k0     <= '0;
+                rk_valid <= 1'b1;
+                rk_world <= 1'b1;
+                rk_o     <= cw_o;
+                rk_d     <= cw_d;
+                rk_tlas  <= tlas_r;
+                ray_same <= 1'b1;
                 r_ret    <= T_D2;
                 state    <= R_LD0;
             end
@@ -679,13 +760,15 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 state <= F_WAIT;
             end
             T_D3: begin
-                noff_r <= fw;
-                state  <= T_D3B;
+                noff_r <= fw_q;
+                f_k0   <= 5'd1;
+                f_ret  <= T_D3B;
+                state  <= F_CAP;
             end
             T_D3B: begin
-                stride_r <= fw;
+                stride_r <= fw_q;
                 mul_a    <= ia;
-                mul_b    <= fw;
+                mul_b    <= fw_q;
                 mul_p    <= '0;
                 x_ret    <= T_D4;
                 state    <= X_MUL;
@@ -694,24 +777,26 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 f_off    <= tlas_r + 32'd16 + mul_p;
                 f_n      <= 5'd1;
                 fs_start <= 1'b1;
+                f_k0     <= '0;
                 f_ret    <= T_D5;
                 state    <= F_WAIT;
             end
             T_D5: begin
-                ps0 <= fw;
-                if (fw == ROOT) begin
+                ps0 <= fw_q;
+                if (fw_q == ROOT) begin
                     dep0  <= '0;
                     state <= T_D7;
                 end else begin
-                    f_off    <= node_off(tab_r, noff_r, 1'b1, fw);
+                    f_off    <= node_off(tab_r, noff_r, 1'b1, fw_q);
                     f_n      <= 5'd14;
                     fs_start <= 1'b1;
+                    f_k0     <= 5'd13;
                     f_ret    <= T_D6;
                     state    <= F_WAIT;
                 end
             end
             T_D6: begin
-                dep0   <= fw + 32'd1;
+                dep0   <= fw_q + 32'd1;
                 mv_dst <= RA_CB0;
                 mv_k0  <= ps0[0] ? 5'd6 : 5'd0;
                 mv_n   <= 5'd6;
@@ -729,24 +814,26 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 f_off    <= tlas_r + 32'd16 + mul_p;
                 f_n      <= 5'd1;
                 fs_start <= 1'b1;
+                f_k0     <= '0;
                 f_ret    <= T_D9;
                 state    <= F_WAIT;
             end
             T_D9: begin
-                ps1 <= fw;
-                if (fw == ROOT) begin
+                ps1 <= fw_q;
+                if (fw_q == ROOT) begin
                     dep1  <= '0;
                     state <= T_D11;
                 end else begin
-                    f_off    <= node_off(tab_r, noff_r, 1'b1, fw);
+                    f_off    <= node_off(tab_r, noff_r, 1'b1, fw_q);
                     f_n      <= 5'd14;
                     fs_start <= 1'b1;
+                    f_k0     <= 5'd13;
                     f_ret    <= T_D10;
                     state    <= F_WAIT;
                 end
             end
             T_D10: begin
-                dep1   <= fw + 32'd1;
+                dep1   <= fw_q + 32'd1;
                 mv_dst <= RA_CB1;
                 mv_k0  <= ps1[0] ? 5'd6 : 5'd0;
                 mv_n   <= 5'd6;
@@ -796,11 +883,12 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 f_off    <= (ph ? tabb : taba) + 32'd8;
                 f_n      <= 5'd1;
                 fs_start <= 1'b1;
+                f_k0     <= '0;
                 f_ret    <= P_2;
                 state    <= F_WAIT;
             end
             P_2: begin
-                noff_r <= fw;
+                noff_r <= fw_q;
                 ps0    <= ph ? psb : psa;
                 cul0   <= 1'b0;
                 cur    <= 1'b0;
@@ -867,6 +955,7 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 f_off    <= node_off(tab_r, noff_r, is_tlas, cur ? ps1 : ps0);
                 f_n      <= is_tlas ? 5'd14 : 5'd8;
                 fs_start <= (climbs != CLIMBW'(MAX_CLIMBS));
+                f_k0     <= is_tlas ? 5'd12 : 5'd6;
                 b_ret    <= U_1;
                 state    <= (climbs == CLIMBW'(MAX_CLIMBS)) ? S_DONE : B_SUB;
             end
@@ -879,10 +968,10 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             end
             U_2: begin
                 if (cur) begin
-                    ps1  <= fw;
+                    ps1  <= fw_q;
                     dep1 <= dep1 - 32'd1;
                 end else begin
-                    ps0  <= fw;
+                    ps0  <= fw_q;
                     dep0 <= dep0 - 32'd1;
                 end
                 mv_dst <= cur ? RA_CB1 : RA_CB0;
@@ -892,13 +981,14 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     // a BLAS node holds its own box, read with its parent link
                     mv_k0 <= 5'd0;
                     state <= M_MV;
-                end else if (fw == ROOT) begin
+                end else if (fw_q == ROOT) begin
                     state <= u_ret;
                 end else begin
-                    mv_k0    <= fw[0] ? 5'd6 : 5'd0;
-                    f_off    <= node_off(tab_r, noff_r, 1'b1, fw);
+                    mv_k0    <= fw_q[0] ? 5'd6 : 5'd0;
+                    f_off    <= node_off(tab_r, noff_r, 1'b1, fw_q);
                     f_n      <= 5'd12;
                     fs_start <= 1'b1;
+                f_k0     <= '0;
                     f_ret    <= U_3;
                     state    <= F_WAIT;
                 end
@@ -929,20 +1019,32 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
             B_RED: begin
-                bt_lo <= (k == 5'd0) ? f_min(rda, rdb) : f_max(bt_lo, f_min(rda, rdb));
-                bt_hi <= (k == 5'd0) ? f_max(rda, rdb) : f_min(bt_hi, f_max(rda, rdb));
-                k     <= k + 5'd1;
+                // read axis k, min/max it at k + 1, fold it at k + 2
+                red_a  <= rda;
+                red_b  <= rdb;
+                red_mn <= f_min(red_a, red_b);
+                red_mx <= f_max(red_a, red_b);
                 if (k == 5'd2) begin
-                    k     <= '0;
-                    state <= B_FIN;
+                    bt_lo <= red_mn;
+                    bt_hi <= red_mx;
+                end else if (k > 5'd2) begin
+                    bt_lo <= f_max(bt_lo, red_mn);
+                    bt_hi <= f_min(bt_hi, red_mx);
                 end
+                k <= k + 5'd1;
+                if (k == 5'd4) begin
+                    k     <= '0;
+                    state <= B_FIN0;
+                end
+            end
+            B_FIN0: begin
+                bt_lo0 <= f_max(32'd0, bt_lo);
+                state  <= B_FIN;
             end
             B_FIN: begin
                 // hi >= fmax(0, lo); an empty (NaN) box is never entered
                 logic hit;
-                logic [31:0] lo0;
-                lo0 = f_max(32'd0, bt_lo);
-                hit = !bt_nan && (f_lt(lo0, bt_hi) || f_eq(lo0, bt_hi));
+                hit = !bt_nan && (f_lt(bt_lo0, bt_hi) || f_eq(bt_lo0, bt_hi));
                 bt_key  <= hit ? bt_lo : F_INF;
                 bt_pass <= hit && f_lt(bt_lo, bt_tmax);
                 state   <= b_ret;
@@ -950,16 +1052,22 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
             // ── the reference's object-space ray for TLAS leaf o_inst ─
             O_0: begin
-                f_off    <= tlas_r + 32'd12;
-                f_n      <= 5'd1;
-                fs_start <= 1'b1;
-                f_ret    <= O_1;
-                state    <= F_WAIT;
+                if (ray_same && !rk_world && (rk_inst == o_inst)) begin
+                    state <= o_ret;     // this object ray is set up already
+                end else begin
+                    f_off    <= tlas_r + 32'd12;
+                    f_n      <= 5'd1;
+                    fs_start <= 1'b1;
+                    f_k0     <= '0;
+                    rk_valid <= 1'b0;
+                    f_ret    <= O_1;
+                    state    <= F_WAIT;
+                end
             end
             O_1: begin
-                stride_r <= fw;
+                stride_r <= fw_q;
                 mul_a    <= o_inst;
-                mul_b    <= fw;
+                mul_b    <= fw_q;
                 mul_p    <= '0;
                 x_ret    <= O_2;
                 state    <= X_MUL;
@@ -968,6 +1076,7 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 f_off    <= tlas_r + 32'd32 + mul_p;
                 f_n      <= 5'd12;
                 fs_start <= 1'b1;
+                f_k0     <= '0;
                 f_ret    <= O_3;
                 state    <= F_WAIT;
             end
@@ -1011,18 +1120,31 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end
             O_8: begin
-                r_ret <= o_ret;
-                state <= R_LD0;
+                rk_valid <= 1'b1;
+                rk_world <= 1'b0;
+                rk_inst  <= o_inst;
+                rk_o     <= cw_o;
+                rk_d     <= cw_d;
+                rk_tlas  <= tlas_r;
+                ray_same <= 1'b1;
+                r_ret    <= o_ret;
+                state    <= R_LD0;
             end
 
             // ── 1/d per axis, correctly rounded ──────────────────────
             R_LD0: begin
-                {rc_spec[0], rc_sval[0], dv_s[0], dv_m[0], dv_e[0]} <= rc_dec_a;
-                {rc_spec[1], rc_sval[1], dv_s[1], dv_m[1], dv_e[1]} <= rc_dec_b;
+                rx[0] <= rda;
+                rx[1] <= rdb;
                 state <= R_LD1;
             end
             R_LD1: begin
-                {rc_spec[2], rc_sval[2], dv_s[2], dv_m[2], dv_e[2]} <= rc_dec_a;
+                rx[2] <= rda;
+                state <= R_LD2;
+            end
+            R_LD2: begin
+                {rc_spec[0], rc_sval[0], dv_s[0], dv_m[0], dv_e[0]} <= rc_dec0;
+                {rc_spec[1], rc_sval[1], dv_s[1], dv_m[1], dv_e[1]} <= rc_dec1;
+                {rc_spec[2], rc_sval[2], dv_s[2], dv_m[2], dv_e[2]} <= rc_dec2;
                 for (integer i = 0; i < 3; ++i) begin
                     dv_rem[i] <= 25'h400000;   // 2^22: the dividend's leading bits
                     dv_q[i]   <= '0;
@@ -1048,7 +1170,7 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             end
             R_WR: begin
                 k <= k + 5'd1;
-                if (k == 5'd2) begin
+                if (k == 5'd7) begin
                     k     <= '0;
                     state <= r_ret;
                 end
@@ -1057,8 +1179,12 @@ module VX_rtu_oracle import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             // ── leaf routines ────────────────────────────────────────
             F_WAIT: begin
                 if (fs_done) begin
-                    state <= f_ret;
+                    state <= F_CAP;
                 end
+            end
+            F_CAP: begin
+                fw_q  <= fw;
+                state <= f_ret;
             end
             M_MV, C_CP: begin
                 k <= k + 5'd1;

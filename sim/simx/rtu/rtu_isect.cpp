@@ -172,9 +172,10 @@ uint32_t BoxPe::pipe_depth() {
 
 uint32_t TriPe::pipe_depth() {
   // input select + 1/dir + 3 F32 stages + 5 F64 stages + F64 divide + narrow
-  // + verdict (VX_rtu_tri_pe).
+  // + verdict (VX_rtu_tri_pe), then the 6 stages that form the result's near-
+  // tie window bound before the scheduler sees it (VX_rtu_near_t).
   return 3 + kRtuFdivLat + 3 * kRtuLatencyFma + 5 * kRtuLatencyFma64
-       + kRtuFdiv64Lat;
+       + kRtuFdiv64Lat + 6;
 }
 
 }}  // namespace vortex::rtu

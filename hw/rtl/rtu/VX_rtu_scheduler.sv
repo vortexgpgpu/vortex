@@ -423,11 +423,32 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire                 tri_valid_out, tri_hit, tri_back;
     wire [CTX_TAG_W-1:0] tri_tag_out;
     wire [31:0]          tri_t, tri_u, tri_v;
-    // the near window's bound rides with the result, off the EXEC path
+    // the near window's bound rides with the result: it is pipelined after
+    // the tri PE, and the result event (RAM write and wake) is delayed to
+    // match, so neither lands on the EXEC path
+    localparam NEAR_LAT = 6;
     wire [31:0]          tri_tn;
-    VX_rtu_near_t tri_near (
+    VX_rtu_near_t #(
+        .LATENCY (NEAR_LAT)
+    ) tri_near (
+        .clk    (clk),
+        .enable (1'b1),
         .t      (tri_t),
         .result (tri_tn)
+    );
+    wire                 trd_valid, trd_hit, trd_back;
+    wire [CTX_TAG_W-1:0] trd_tag;
+    wire [31:0]          trd_t, trd_u, trd_v;
+    VX_shift_register #(
+        .DATAW  (1 + CTX_TAG_W + 2 + 3 * 32),
+        .RESETW (1),
+        .DEPTH  (NEAR_LAT)
+    ) tri_delay (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (1'b1),
+        .data_in  ({tri_valid_out, tri_tag_out, tri_hit, tri_back, tri_t, tri_u, tri_v}),
+        .data_out ({trd_valid, trd_tag, trd_hit, trd_back, trd_t, trd_u, trd_v})
     );
     wire [129:0]         trires_rdata;
     VX_dp_ram #(
@@ -439,10 +460,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (g1_valid),
-        .write (tri_valid_out),
+        .write (trd_valid),
         .wren  (1'b1),
-        .waddr (tri_tag_out),
-        .wdata ({tri_hit, tri_back, tri_t, tri_u, tri_v, tri_tn}),
+        .waddr (trd_tag),
+        .wdata ({trd_hit, trd_back, trd_t, trd_u, trd_v, tri_tn}),
         .raddr (g1_idx),
         .rdata (trires_rdata)
     );
@@ -904,6 +925,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         ) oracle (
             .clk           (clk),
             .reset         (reset),
+            .flush         (running == '0),
             .req_valid     (orc_start),
             .req_ready     (orc_req_ready),
             .req_ctx       (sel_q),
@@ -2026,7 +2048,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         (ray_wr_valid                       ? NUM_CTX'(1) << ray_wr_ctx     : NUM_CTX'(0))
       | ((mem_rsp_valid && !orc_q[mem_rsp_tag]) ? NUM_CTX'(1) << mem_rsp_tag : NUM_CTX'(0))
       | (orc_done_valid                     ? NUM_CTX'(1) << orc_done_ctx   : NUM_CTX'(0))
-      | (tri_valid_out                      ? NUM_CTX'(1) << tri_tag_out    : NUM_CTX'(0))
+      | (trd_valid                          ? NUM_CTX'(1) << trd_tag        : NUM_CTX'(0))
       | (xform_valid_out                    ? NUM_CTX'(1) << xform_tag_out  : NUM_CTX'(0))
       | ((recip_valid_out && recip_last_out) ? NUM_CTX'(1) << recip_tag_out : NUM_CTX'(0))
       | (box_wake_r                         ? NUM_CTX'(1) << box_wake_ctx_r : NUM_CTX'(0))
@@ -2382,9 +2404,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             `TRACE(2, ("%t: %s rtu-node: ctx=%0d, addr=0x%0h, kind=%0d\n",
                 $time, INSTANCE_ID, sel_q, structaddr_q, node_kind))
         end
-        if (tri_valid_out) begin
+        if (trd_valid) begin
             `TRACE(2, ("%t: %s rtu-tri: ctx=%0d, hit=%0d, t=0x%0h\n",
-                $time, INSTANCE_ID, tri_tag_out, tri_hit, tri_t))
+                $time, INSTANCE_ID, trd_tag, trd_hit, trd_t))
         end
         if (| done_r) begin
             `TRACE(1, ("%t: %s rtu-done: slots=%b\n", $time, INSTANCE_ID, done_r))
