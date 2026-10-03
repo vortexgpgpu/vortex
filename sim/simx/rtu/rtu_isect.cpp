@@ -14,6 +14,7 @@
 #include "rtu_isect.h"
 #include <cfloat>
 #include <cmath>
+#include <utility>
 
 namespace vortex { namespace rtu {
 
@@ -22,50 +23,98 @@ bool ray_triangle(const float ro[3], const float rd[3],
                   float tmin, float tmax,
                   float& out_t, float& out_u, float& out_v,
                   bool& out_back_facing) {
-  Vec3 O  = { ro[0], ro[1], ro[2] };
-  Vec3 D  = { rd[0], rd[1], rd[2] };
-  Vec3 V0 = { v0[0], v0[1], v0[2] };
-  Vec3 V1 = { v1[0], v1[1], v1[2] };
-  Vec3 V2 = { v2[0], v2[1], v2[2] };
+  const float* vin[3] = { v0, v1, v2 };
 
-  Vec3  e1  = V1 - V0;
-  Vec3  e2  = V2 - V0;
-  Vec3  P   = cross(D, e2);
-  float det = dot(e1, P);
-  // Reject only a degenerate (edge-on or zero-area) triangle: |det| scales
-  // with the triangle's area, so any fixed epsilon above the float range would
-  // drop small triangles. Below FLT_MIN the reciprocal overflows.
-  if (!(std::fabs(det) >= FLT_MIN)) return false;
-  float invDet = 1.0f / det;
-  Vec3  T = O - V0;
-  float u = dot(T, P) * invDet;
-  if (u < 0.f || u > 1.f) return false;
-  Vec3  Q = cross(T, e1);
-  float v = dot(D, Q) * invDet;
-  if (v < 0.f || u + v > 1.f) return false;
-  float t = dot(e2, Q) * invDet;
-  if (t < tmin || t > tmax) return false;
+  // Watertight ray/triangle test (Woop, Benthin, Wald, JCGT 2013): shear the
+  // triangle into the ray's frame so the ray runs along +z, then test the 2D
+  // edge functions. A shared edge evaluates to exactly negated values in its
+  // two triangles, so no ray slips between them; F64 edge functions and t keep
+  // t within half an ulp of the exact intersection. The op order is the one
+  // the Vulkan reference (lavapipe) evaluates, so t matches it bit for bit,
+  // coincident triangles included.
+  const float ad[3] = { std::fabs(rd[0]), std::fabs(rd[1]), std::fabs(rd[2]) };
+  int kz = (ad[0] >= ad[1]) ? ((ad[0] >= ad[2]) ? 0 : 2)
+                            : ((ad[1] >= ad[2]) ? 1 : 2);
+  int kx = (kz + 1) % 3;
+  int ky = (kx + 1) % 3;
+  if (rd[kz] < 0.f) std::swap(kx, ky);  // keep the winding
+
+  const float sz = 1.0f / rd[kz];
+  const float sx = rd[kx] * sz;
+  const float sy = rd[ky] * sz;
+
+  // F32 shear, as each op rounds in the pipeline; F64 from here on, where the
+  // products of two F32 values are exact.
+  float px[3], py[3];
+  double pz[3];
+  for (int i = 0; i < 3; ++i) {
+    const float* q = vin[i];
+    const float rx = q[kx] - ro[kx];
+    const float ry = q[ky] - ro[ky];
+    const float rz = q[kz] - ro[kz];
+    const float mx = sx * rz;
+    const float my = sy * rz;
+    px[i] = rx - mx;
+    py[i] = ry - my;
+    pz[i] = double(sz) * double(rz);
+  }
+
+  // Edge functions: w[i] is the weight of vertex i.
+  double w[3];
+  w[0] = double(px[2]) * py[1] - double(py[2]) * px[1];
+  w[1] = double(px[0]) * py[2] - double(py[0]) * px[2];
+  w[2] = double(px[1]) * py[0] - double(py[1]) * px[0];
+  if ((w[0] < 0.0 || w[1] < 0.0 || w[2] < 0.0)
+   && (w[0] > 0.0 || w[1] > 0.0 || w[2] > 0.0))
+    return false;
+
+  const double det = w[0] + (w[1] + w[2]);
+  // Reject only an edge-on or zero-area triangle: |det| scales with the
+  // triangle's area, so any epsilon would drop small triangles.
+  if (!(det != 0.0)) return false;
+
+  const double tp0 = w[0] * pz[0];
+  const double tp1 = w[1] * pz[1];
+  const double tp2 = w[2] * pz[2];
+  const float t = float(((tp0 + tp1) + tp2) / det);
+  // Open interval, as the reference commits (lvp_build_triangle_case:
+  // tmin < t and t < tmax). Callers pass the RAY's tmax, never the committed
+  // t, so an equal-t twin still reaches the walker's tie-break.
+  if (!(tmin < t && t < tmax)) return false;
+
+  const float det32 = float(det);
   out_t = t;
-  out_u = u;
-  out_v = v;
-  out_back_facing = (det < 0.f);
+  out_u = float(w[1]) / det32;
+  out_v = float(w[2]) / det32;
+  // det > 0: (v0, v1, v2) winds counter-clockwise as seen by the ray.
+  out_back_facing = (det < 0.0);
   return true;
 }
 
 bool ray_aabb_intersect(const float ro[3], const float rd[3],
                         const float mn[3], const float mx[3],
                         float tmin, float tmax, float& t_near) {
-  float tn = tmin, tf = tmax;
+  // Slab test in the Vulkan reference's (lavapipe) form: a zero direction
+  // component uses FLT_MAX as its reciprocal, and the box is culled against
+  // [0, tmax], NOT [tmin, tmax]. The tmin floor belongs to the primitive test
+  // alone: a primitive's t carries rounding the slab distances do not (the
+  // watertight triangle t of a large triangle is off by far more than the
+  // slabs of its flat box), so a box whose exact exit lies below tmin can
+  // still hold a hit the primitive test reports past tmin. Culling at tmin
+  // would drop that hit, which the reference keeps.
+  float lo = -INFINITY, hi = INFINITY;
   for (int i = 0; i < 3; ++i) {
-    float inv = 1.0f / rd[i];
-    float t0 = (mn[i] - ro[i]) * inv;
-    float t1 = (mx[i] - ro[i]) * inv;
-    if (t0 > t1) { float tmp = t0; t0 = t1; t1 = tmp; }
-    if (t0 > tn) tn = t0;
-    if (t1 < tf) tf = t1;
-    if (tn > tf) return false;
+    const float inv = (rd[i] == 0.0f) ? FLT_MAX : 1.0f / rd[i];
+    const float t0 = (mn[i] - ro[i]) * inv;
+    const float t1 = (mx[i] - ro[i]) * inv;
+    lo = std::fmax(lo, std::fmin(t0, t1));
+    hi = std::fmin(hi, std::fmax(t0, t1));
   }
-  t_near = tn;
+  // The upper bound stays inclusive (the reference's is strict): a box
+  // entered exactly at the committed t can hold an equal-t twin that the
+  // lowest-(instance, geometry, prim) tie-break must still see.
+  if (!(hi >= std::fmax(0.0f, lo) && lo <= tmax)) return false;
+  t_near = std::fmax(tmin, lo);   // descent order only
   return true;
 }
 
@@ -122,8 +171,10 @@ uint32_t BoxPe::pipe_depth() {
 }
 
 uint32_t TriPe::pipe_depth() {
-  // 8 FMA stages + 1 reciprocal + 2 = 91.
-  return 8 * kRtuLatencyFma + kRtuFdivLat + 2;
+  // input select + 1/dir + 3 F32 stages + 5 F64 stages + F64 divide + narrow
+  // + verdict (VX_rtu_tri_pe).
+  return 3 + kRtuFdivLat + 3 * kRtuLatencyFma + 5 * kRtuLatencyFma64
+       + kRtuFdiv64Lat;
 }
 
 }}  // namespace vortex::rtu

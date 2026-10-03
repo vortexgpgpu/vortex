@@ -36,6 +36,8 @@ namespace vortex { namespace rtu {
 // triangle's geometric normal (ray-flag face culling). Convention:
 // triangle front face is the side from which (v0, v1, v2) appear CCW.
 // Equivalently, det > 0 ↔ ray hits the front face.
+// A hit needs tmin < t < tmax (open, as the Vulkan reference); tmax is
+// the ray's, not the committed hit's.
 // ────────────────────────────────────────────────────────────────────
 bool ray_triangle(const float ro[3], const float rd[3],
                   const float v0[3], const float v1[3], const float v2[3],
@@ -44,13 +46,11 @@ bool ray_triangle(const float ro[3], const float rd[3],
                   bool& out_back_facing);
 
 // ────────────────────────────────────────────────────────────────────
-// Ray-vs-AABB slab test. Returns true if the ray's [tmin, tmax]
-// interval overlaps the AABB; t_near is the entry parameter (clamped
-// to tmin) used by the BVH4 walker to prune descent order.
-//
-// Assumes well-conditioned rays (no axis-aligned ray with zero
-// direction component). A robust branchless ±inf variant is a later
-// refinement.
+// Ray-vs-AABB slab test. Returns true if the ray's [0, tmax] interval
+// overlaps the AABB (the reference's box test: tmin is applied by the
+// primitive test only, see rtu_isect.cpp); t_near is the entry
+// parameter (clamped to tmin) used by the BVH4 walker to order descent.
+// A zero direction component uses FLT_MAX as its reciprocal.
 // ────────────────────────────────────────────────────────────────────
 bool ray_aabb_intersect(const float ro[3], const float rd[3],
                         const float mn[3], const float mx[3],
