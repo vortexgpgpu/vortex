@@ -26,6 +26,7 @@
 #include "rtu_isect.h"       // BoxPe / TriPe pipeline depths
 #include "rtu_walker.h"      // FlatWalker / Bvh4Walker
 #include "rtu_memory.h"      // MemoryEngine
+#include "rtu_raylog.h"
 #include "socket.h"
 #include "constants.h"
 #include "debug.h"
@@ -356,6 +357,7 @@ public:
         if (s.req.dir_z[first_active] < 0.f) sig |= 0x4;
         s.coh_signature = sig;
       }
+      if (raylog::enabled()) raylog::on_accept(this, idx);
       ch.pop();
       ++perf_stats_.rays_issued;
       DT(3, "rtu-core accept: tag=" << s.req.tag << ", slot=" << idx);
@@ -583,6 +585,7 @@ public:
       cx.next_state = CtxState::REQ;
     } else {
       s.lanes[cx.lane] = result;   // carries cb_pending if the ray yielded
+      if (raylog::enabled()) raylog::on_walk_done(cx.lines);
       cx.next_state = CtxState::DONE;
     }
     cx.state = (cx.fsm_states || lat) ? CtxState::PE : cx.next_state;
@@ -655,6 +658,7 @@ public:
         const LaneState& l = s.lanes[t];
         if (!l.active || !l.cb_pending) continue;
         any_cb = true;
+        if (raylog::enabled()) raylog::on_callback(this, i, t, l.cb_type);
         QueueEntry e{i, s.req.warp_id, uint8_t(t),
                      l.sbt_idx, l.cb_type,
                      l.cand_t, l.cand_u, l.cand_v, l.cand_prim,
@@ -710,6 +714,7 @@ public:
       // so it stays live until the WAIT that consumes the record calls
       // free_slot(). Until then it sits in EMITTED and is not re-sent.
       rsp.slot_idx = i;
+      if (raylog::enabled()) raylog::on_terminal(this, i, s.req, s.lanes);
       port.send(rsp);
       DT(3, "rtu-core complete: tag=" << s.req.tag << ", slot=" << i);
       s.state = SlotState::EMITTED;
