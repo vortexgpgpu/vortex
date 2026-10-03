@@ -198,8 +198,17 @@ inline void decode_bvh6_node(const VxBvh6InternalNode* n, uint32_t count,
 //   uint32 kind             : bits 0..7  = kVxBvhKindLeafTri/Inst/Proc
 //                             bits 8..15 = prim_count
 //   uint32 geometry_index   : Vulkan gl_GeometryIndexEXT for this leaf
-//   uint32 flags            : bit 0 = OPAQUE (all prims), bit 1 = forced
-//                             non-opaque, bits 8..15 = SBT_IDX
+//   uint32 flags            : LeafProc: bit 0 = OPAQUE (all prims), bit 1 =
+//                             forced non-opaque, bits 8..15 = SBT_IDX.
+//                             LeafTri / LeafInst: the leaf's place in the
+//                             source BVH's visit-order table, which settles
+//                             an exact-t tie between opaque hits the way a
+//                             first-visited-wins traversal of the source BVH
+//                             does (rtu_walker.cpp). LeafTri: parent << 1 |
+//                             side in its BLAS's table. LeafInst: the
+//                             instance's visit rank in the TLAS's table, with
+//                             geometry_index = the BLAS's table and prim_base
+//                             = the TLAS's table (scene offsets; 0 = none).
 //   uint32 prim_base        : gl_PrimitiveID of this leaf's first
 //                             primitive; the walker reports
 //                             prim_base + within-leaf index so a

@@ -184,6 +184,12 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         logic [1:0]                 setup_axis;
         logic [2:0][31:0]           inv_d;
         logic [31:0]                best_t;
+        // identity of an opaque hit committed in this walk: an exact t tie
+        // goes to the lower (instance, geometry, primitive)
+        logic                       best_kv;
+        logic [31:0]                best_ki;
+        logic [27:0]                best_kg;
+        logic [31:0]                best_kp;
         logic [31:0]                yld_t;       // staged candidate's t (compare copy)
         logic [31:0]                yld_ki;      // staged candidate's key: instance id
         logic [31:0]                yld_ko;      // ... and record offset
@@ -626,6 +632,16 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                   && (inst_culldis || !(!eff_back && cull_front))
                   && !cls_cull;
     wire tri_committable = tri_pass && (trit_q < word_q.best_t);
+    wire [31:0] tri_ki   = word_q.in_blas ? word_q.inst_id : 32'd0;
+    wire [27:0] tri_kg   = 28'(word_q.geom_r & `VX_RT_HIT_GEOMETRY_MASK);
+    wire [31:0] tri_kp   = word_q.prim_base + word_q.tri_i;
+    wire tri_t_eq = (trit_q == word_q.best_t)
+                 || ((trit_q[30:0] == 31'd0) && (word_q.best_t[30:0] == 31'd0));
+    wire tri_tie  = tri_pass && word_q.best_kv && tri_t_eq
+                 && ({tri_ki, tri_kg, tri_kp} < {word_q.best_ki, word_q.best_kg, word_q.best_kp});
+    // the reported geometry word: the leaf's index plus the hit's facing
+    wire [31:0] tri_geom = (word_q.geom_r & `VX_RT_HIT_GEOMETRY_MASK)
+                         | (eff_back ? `VX_RT_HIT_BACK_FACING : 32'd0);
 
     // BLAS traversal runs the object-space ray
     wire [2:0][31:0] walk_ro    = word_q.in_blas ? word_q.obj_o     : ray_q.origin;
@@ -1481,7 +1497,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 cf_din_r.prim = word_x.prim_base;
                 cf_din_r.inst = word_x.in_blas ? word_x.inst_id   : 32'd0;
                 cf_din_r.cust = word_x.in_blas ? word_x.inst_cust : 32'd0;
-                cf_din_r.geom = word_x.geom_r;
+                cf_din_r.geom = word_x.geom_r & `VX_RT_HIT_GEOMETRY_MASK;
                 cf_din_r.sbt  = word_x.proc_sbt;
                 cf_din_r.objv = word_x.in_blas;
                 cf_din_r.obj  = {word_x.obj_d, word_x.obj_o};
@@ -1546,7 +1562,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         CS_TRI_WAIT: begin
             // woken by the tri PE result (held in its result RAM, so a retry
             // on a full commit queue re-reads the same result)
-            if (tri_committable && tri_opaque) begin
+            if ((tri_committable || tri_tie) && tri_opaque) begin
                 cf_din_r.kind = CK_HIT;
                 cf_din_r.t    = trit_q;
                 cf_din_r.u    = triu_q;
@@ -1554,13 +1570,17 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 cf_din_r.prim = word_x.prim_base + word_x.tri_i;
                 cf_din_r.inst = word_x.in_blas ? word_x.inst_id   : 32'd0;
                 cf_din_r.cust = word_x.in_blas ? word_x.inst_cust : 32'd0;
-                cf_din_r.geom = word_x.geom_r;
+                cf_din_r.geom = tri_geom;
                 if (cf_full) begin
                     wake_self = 1'b1;
                 end else begin
                     cf_push_r     = 1'b1;
                     exec_hit_set  = 1'b1;
-                    word_n.best_t = trit_q;
+                    word_n.best_t  = trit_q;
+                    word_n.best_kv = 1'b1;
+                    word_n.best_ki = tri_ki;
+                    word_n.best_kg = tri_kg;
+                    word_n.best_kp = tri_kp;
                     // a closer opaque hit occludes a farther candidate
                     if (yld_q[sel_q] && (word_x.yld_t >= trit_q)) begin
                         exec_yld_clr = 1'b1;
@@ -1588,7 +1608,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 cf_din_r.prim = word_x.prim_base + word_x.tri_i;
                 cf_din_r.inst = word_x.in_blas ? word_x.inst_id   : 32'd0;
                 cf_din_r.cust = word_x.in_blas ? word_x.inst_cust : 32'd0;
-                cf_din_r.geom = word_x.geom_r;
+                cf_din_r.geom = tri_geom;
                 cf_din_r.sbt  = cls_sbt;
                 cf_din_r.objv = word_x.in_blas;
                 cf_din_r.obj  = {word_x.obj_d, word_x.obj_o};

@@ -119,6 +119,7 @@ typedef struct {
   uint32_t geometry_index;
   uint32_t instance_id;
   uint32_t instance_custom;   // gl_InstanceCustomIndexEXT (VK_INSTANCE_CUSTOM_INDEX)
+  uint32_t back_facing;       // gl_HitKindEXT == BACK_FACING
 } vx_hit_t;
 
 // The struct field order (memory layout) is intentionally NOT the RTU register-
@@ -225,8 +226,9 @@ uint32_t vx_rt_wait(uint32_t handle, vx_hit_t* hit) {
   hit->v = hv;
   hit->primitive_id    = hp;
   hit->instance_id     = hi;
-  hit->geometry_index  = hg;
+  hit->geometry_index  = hg & VX_RT_HIT_GEOMETRY_MASK;
   hit->instance_custom = hc;
+  hit->back_facing     = (hg & VX_RT_HIT_BACK_FACING) != 0;
   return status;
 }
 

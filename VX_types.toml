@@ -429,7 +429,7 @@ VX_RT_HIT_BARY_U            = 11
 VX_RT_HIT_BARY_V            = 12
 VX_RT_HIT_PRIMITIVE_ID      = 13
 VX_RT_HIT_INSTANCE_ID       = 14
-VX_RT_HIT_GEOMETRY_INDEX    = 15
+VX_RT_HIT_GEOMETRY_INDEX    = 15      # VX_RT_HIT_GEOMETRY_MASK bits: gl_GeometryIndexEXT; bit 31: VX_RT_HIT_BACK_FACING
 VX_RT_HIT_INSTANCE_CUSTOM   = 16
 VX_RT_OBJECT_RAY_ORIGIN     = 17      # object_ray.origin.{x,y,z}    (17..19)
 VX_RT_OBJECT_RAY_DIRECTION  = 20      # object_ray.direction.{x,y,z} (20..22)
@@ -476,6 +476,14 @@ VX_RT_FLAG_SKIP_TRIANGLES          = 0x100
 VX_RT_FLAG_SKIP_AABBS              = 0x200
 VX_RT_FLAG_ENABLE_CHS              = 0x400
 VX_RT_FLAG_ENABLE_MISS             = 0x800
+
+[rtu_hit_bits]
+# The HIT_GEOMETRY_INDEX word: the leaf's geometry index in the low 28 bits (the
+# Vulkan BVH layout keeps flags above them, which the RTU drops), and
+# BACK_FACING set when a triangle hit lies on its back face after the instance's
+# FLIP_FACING, i.e. gl_HitKindEXT is BACK_FACING.
+VX_RT_HIT_GEOMETRY_MASK            = 0x0fffffff
+VX_RT_HIT_BACK_FACING              = 0x80000000
 
 [rtu_cb_actions]
 # vx_rt_cb_ret action codes
