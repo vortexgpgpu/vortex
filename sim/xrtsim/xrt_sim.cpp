@@ -141,7 +141,7 @@ class xrt_sim::Impl {
 public:
   Impl()
   : device_(nullptr)
-  , ram_(nullptr)
+  , ram_{}
   , host_ram_(nullptr)
   , host_alloc_(nullptr)
   , dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO)
@@ -167,8 +167,8 @@ public:
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       delete mem_alloc_[b];
     }
-    if (ram_) {
-      delete ram_;
+    for (auto ram : ram_) {
+      delete ram;
     }
     if (host_alloc_) {
       delete host_alloc_;
@@ -223,8 +223,12 @@ public:
     // calculate memory bank size
     mem_bank_size_ = (1ull << VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH) / VX_CFG_PLATFORM_MEMORY_NUM_BANKS;
 
-    // allocate RAM
-    ram_ = new RAM(0, RAM_PAGE_SIZE);
+    // One memory per AXI port, as on the platform, where each kernel master
+    // is wired to its own memory resource. A request issued on the wrong port
+    // then misses its data instead of finding it in a shared image.
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      ram_[b] = new RAM(0, RAM_PAGE_SIZE);
+    }
 
     // initialize AXI memory interfaces
     MP_M_AXI_MEM(VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
@@ -311,7 +315,7 @@ public:
     if (bank_id >= VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
       return -1;
     uint64_t base_addr = bank_id * mem_bank_size_ + addr;
-    ram_->write(data, base_addr, size);
+    ram_[bank_id]->write(data, base_addr, size);
     return 0;
   }
 
@@ -321,7 +325,7 @@ public:
     if (bank_id >= VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
       return -1;
     uint64_t base_addr = bank_id * mem_bank_size_ + addr;
-    ram_->read(data, base_addr, size);
+    ram_[bank_id]->read(data, base_addr, size);
     return 0;
   }
 
@@ -331,7 +335,9 @@ public:
       return -1;
     uint64_t dest_base_addr = bank_id_dest * mem_bank_size_ + dest_addr;
     uint64_t src_base_addr = bank_id_src * mem_bank_size_ + src_addr;
-    ram_->copy(dest_base_addr, src_base_addr, size);
+    std::vector<uint8_t> data(size);
+    ram_[bank_id_src]->read(data.data(), src_base_addr, size);
+    ram_[bank_id_dest]->write(data.data(), dest_base_addr, size);
     return 0;
   }
 
@@ -777,7 +783,7 @@ private:
           for (auto& beat : mem_rsp->w_beats) {
             for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; ++i) {
               if ((beat.byteen >> i) & 0x1) {
-                (*ram_)[beat.addr + i] = beat.data[i];
+                (*ram_[b])[beat.addr + i] = beat.data[i];
               }
             }
           }
@@ -798,7 +804,7 @@ private:
           auto mem_req = new mem_req_t();
           mem_req->tag   = *m_axi_mem_[b].arid;
           mem_req->addr  = base + uint64_t(beat) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
-          ram_->read(mem_req->data.data(), mem_req->addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+          ram_[b]->read(mem_req->data.data(), mem_req->addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
           mem_req->write = false;
           mem_req->ready = false;
           mem_req->last  = (beat == len);
@@ -983,7 +989,7 @@ private:
   } m_axi_mem_t;
 
   Vvortex_afu_shim* device_;
-  RAM* ram_;
+  RAM* ram_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
   RAM* host_ram_;
   MemoryAllocator* host_alloc_;
   DramSim dram_sim_;

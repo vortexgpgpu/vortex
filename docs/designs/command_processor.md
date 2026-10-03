@@ -672,13 +672,14 @@ host-side instead. They become usable once queues get independent rings.
   ap_ctrl stub + SCOPE; `0x1000–0x1FFF` → the CP regfile. The legacy
   launch FSM, DCR path, and dev-caps were **removed**; CP is the sole
   launch/DCR path (`vx_start = cp_gpu_if.start`). A dedicated
-  `m_axi_host` port carries the ring
-  ([`:299-320`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L299)); `axi_dev`
-  shares Vortex's memory bank 0 through a 2-master `VX_mm_axi_arb`
-  ([`:533`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L533)), which holds a
-  sticky owner per channel. The CP's narrower TID is zero-padded up to the
-  platform ID width, and `PLATFORM_MEMORY_OFFSET` is subtracted from its
-  addresses before the arbiter.
+  `m_axi_host` port carries the ring. With one memory port, `axi_dev`
+  shares it with Vortex through a 2-master `VX_mm_axi_arb`, which holds a
+  sticky owner per channel. With several, `axi_dev` is bridged to the
+  memory bus by `VX_membus_from_axi` and enters the bank adapter
+  (`VX_mem_to_axi`) as its own input port, upstream of bank selection, so
+  the CP reaches every memory bank. The CP's device addresses are
+  offset-relative like Vortex's own, and `PLATFORM_MEMORY_OFFSET` is added
+  once, at the bank port, for both masters.
 - **OPAE** ([`hw/rtl/afu/opae/vortex_afu.sv`](../../hw/rtl/afu/opae/vortex_afu.sv)) —
   `VX_cp_core` instantiated at [`:325`](../../hw/rtl/afu/opae/vortex_afu.sv#L325).
   MMIO uses a word-address bit-10 demux (the 0x1000 byte boundary) to the
