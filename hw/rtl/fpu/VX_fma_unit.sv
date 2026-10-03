@@ -71,7 +71,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
 
     if (USE_VENDOR_IP) begin : g_vendor
         // xil_fma / acl_fmadd compute a*b+c, so the FMA-core opcodes are remapped:
-        //   MUL        : a*b + 0
+        //   MUL        : a*b + -0  (-0 is the additive identity: a -0 product stays -0)
         //   ADD/SUB    : a*1.0 (+/-) b
         //   MADD/NMADD : (+/-)a*b (+/-) c
         // The vendor IP rounds round-to-nearest-even only (frm is ignored).
@@ -89,7 +89,7 @@ module VX_fma_unit import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
                 if (is_neg) begin // MUL
                     a32 = dataa[31:0];
                     b32 = datab[31:0];
-                    c32 = '0;
+                    c32 = 32'h80000000;
                 end else begin // ADD/SUB
                     a32 = dataa[31:0];
                     b32 = 32'h3f800000; // 1.0f
