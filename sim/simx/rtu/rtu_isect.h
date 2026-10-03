@@ -65,11 +65,10 @@ bool  ray_box(const float rel_mn[3], const float rel_mx[3], const float inv[3],
 
 // ────────────────────────────────────────────────────────────────────
 // Bring a world ray into an instance's object space with the instance
-// record's world→object 3x4 row-major matrix m, in the Vulkan reference's
-// (lavapipe) op order, every product rounded:
+// record's world→object 3x4 row-major matrix m, as FMA chains:
 //
-//   ro_obj[i] = ((m[i][3] + ro.x*m[i][0]) + ro.y*m[i][1]) + ro.z*m[i][2]
-//   rd_obj[i] =  (rd.x*m[i][0] + rd.y*m[i][1]) + rd.z*m[i][2]
+//   ro_obj[i] = fma(ro.z, m[i][2], fma(ro.y, m[i][1], fma(ro.x, m[i][0], m[i][3])))
+//   rd_obj[i] = fma(rd.z, m[i][2], fma(rd.y, m[i][1], rd.x * m[i][0]))
 //
 // The direction is not renormalised, so t is the same in both spaces.
 // Mirrors VX_rtu_xform bit for bit.

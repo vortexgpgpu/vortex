@@ -341,8 +341,9 @@ whatever depth results:
   with `t_max` the committed hit, one triangle per cycle, emitting
   `{hit, t, u, v, back_facing}`; bit-exact against SimX `ray_triangle`.
 - **`VX_rtu_xform`** — TLAS world→object transform. The instance record holds
-  the world→object matrix and the ray is transformed in the reference's op
-  order (rounded products, then `t + x + y + z`), so no inverse is taken. Always built:
+  the world→object matrix, so no inverse is taken; each object-ray component is
+  three dependent FMAs (`fma(z, m2, fma(y, m1, fma(x, m0, t)))`, the direction
+  seeded with `x·m0`), 18 FMA units, `3·FMA` deep. Always built:
   the CW-BVH walker descends `LEAF_INST` natively; only the flat walker's
   (`WIDTH = 0`) instancing loop is gated by `VX_CFG_RTU_TLAS_ENABLE`.
 - **`VX_rtu_recip`** — F32 reciprocal for `inv_d`, either a portable LUT+Newton

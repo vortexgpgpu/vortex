@@ -125,15 +125,8 @@ void world_to_object_ray(const float wto[12],
                          float ro_out[3], float rd_out[3]) {
   for (int i = 0; i < 3; ++i) {
     const float* m = wto + 4 * i;
-    float o = m[3];
-    o = o + ro[0] * m[0];
-    o = o + ro[1] * m[1];
-    o = o + ro[2] * m[2];
-    float d = rd[0] * m[0];
-    d = d + rd[1] * m[1];
-    d = d + rd[2] * m[2];
-    ro_out[i] = o;
-    rd_out[i] = d;
+    ro_out[i] = std::fma(ro[2], m[2], std::fma(ro[1], m[1], std::fma(ro[0], m[0], m[3])));
+    rd_out[i] = std::fma(rd[2], m[2], std::fma(rd[1], m[1], rd[0] * m[0]));
   }
 }
 
