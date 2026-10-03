@@ -163,8 +163,14 @@ struct RtuRsp {
   uint32_t       slot_idx = 0;
 
   RtuRsp() = default;
+  // A lane without a hit reads back its own ray: t = t_max (the committed t a
+  // ray query reports with no hit, as the Vulkan reference does) and the world
+  // ray as its object ray.
   RtuRsp(const RtuReq& req)
     : uuid(req.uuid), tag(req.tag),
+      hit_t(req.tmax),
+      obj_o_x(req.origin_x), obj_o_y(req.origin_y), obj_o_z(req.origin_z),
+      obj_d_x(req.dir_x), obj_d_y(req.dir_y), obj_d_z(req.dir_z),
       trace(req.trace), block_id(req.block_id), warp_id(req.warp_id),
       slot_idx(req.slot_idx) {}
 
