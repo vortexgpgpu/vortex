@@ -12,22 +12,21 @@
 // limitations under the License.
 
 // VX_rtu_box_pe — pipelined ray-vs-AABB slab intersector for one child box.
-// Streams one box per cycle; emits {hit, t_near} after a fixed latency.
+// Streams one box per cycle; emits {hit, t_near} after a fixed latency. Mirrors
+// SimX reconstruct_child_aabb + rtu::ray_aabb_intersect op for op, so every
+// accept decision and t_near match it:
 //
-//   dequant   mn[a] = origin[a] + qmin[a] * 2^exp[a]      (qmax symmetric)
-//   slab      t0[a] = (mn[a] - ro[a]) * inv_d[a]          (t1 from mx)
-//             lo[a] = min(t0,t1)   hi[a] = max(t0,t1)
-//   reduce    t_near = max(t_min, lo[x], lo[y], lo[z])
-//             t_far  = min(t_max, hi[x], hi[y], hi[z])
-//   hit       = (t_near <= t_far)
+//   dequant   mn[a] = origin[a] + q[a]*2^exp[a]        (product exact, one add)
+//   slab      t0[a] = (mn[a] - ro[a]) * inv_d[a]       (t1 from mx)
+//   reduce    lo = max(-inf, min(t0,t1)[*])   hi = min(+inf, max(t0,t1)[*])
+//             (fmin/fmax drop a NaN operand, so lo and hi are never NaN)
+//   hit       = hi >= max(0, lo) && lo <= t_max
+//   t_near    = max(t_min, lo)                         (descent order only)
 //
-// The slab subtracts the ray origin before multiplying by inv_d (rather than
-// the algebraically-equal mn*inv_d - ro*inv_d) so axis-aligned rays — where
-// inv_d is +/-inf — stay numerically correct: (mn-ro) is finite, so (mn-ro)*inf
-// is a signed infinity that the min/max reduction treats as a non-constraining
-// slab, instead of inf-inf = NaN. The uint8->fp32 and 2^exp dequant terms are
-// combinational; the FP add/mul use VX_fma_unit (a*b±c) and the min/max/compare
-// use VX_fncp_unit, register-balanced to the configured latencies.
+// The box is culled against [0, t_max], not [t_min, t_max]: t_min belongs to
+// the primitive test alone, whose t carries rounding the slab distances do not.
+// inv_d is the ray-setup reciprocal (VX_rtu_recip), FLT_MAX for a zero
+// direction component. The FP units flush subnormals.
 
 `include "VX_define.vh"
 
@@ -48,8 +47,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     input  wire [2:0][7:0]  qmin,
     input  wire [2:0][7:0]  qmax,
     // raw (unquantized) AABB path — procedural-leaf boxes carry float min/max
-    // directly instead of node-relative quantized corners. raw=0 is bit-
-    // identical to the quantized path (BVH internal-node box tests).
+    // directly instead of node-relative quantized corners.
     input  wire             raw,
     input  wire [2:0][31:0] raw_min,
     input  wire [2:0][31:0] raw_max,
@@ -67,162 +65,191 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     output wire        hit,
     output wire [31:0] t_near
 );
-    // VX_fncp_unit result latency is 1 (one input pipe reg, OUT_REG=0); its
-    // LATENCY param only sizes the internal mask pipe, not the result path, so
-    // size it to 2 to avoid a degenerate [-1:0] mask-pipe slice while the result
-    // still lands after one cycle.
-    localparam FNCP_LAT    = 1;     // result latency for alignment
-    localparam FNCP_SIZE   = 2;     // mask-pipe sizing param
-    localparam LAT_ORIGIN  = LATENCY_FMA;             // origin - ro
-    localparam LAT_DEQUANT = LATENCY_FMA;             // q*scale + (origin - ro)
-    localparam LAT_SLAB    = LATENCY_FMA;             // (mn - ro)*inv_d
-    localparam LAT_MINMAX  = FNCP_LAT;                // lo/hi per axis
-    localparam LAT_REDUCE  = 2 * FNCP_LAT;            // 4-input min/max tree
-    localparam LAT_CMP      = FNCP_LAT;               // t_near <= t_far
-    localparam LATENCY      = LAT_ORIGIN + LAT_DEQUANT + LAT_SLAB + LAT_MINMAX + LAT_REDUCE + LAT_CMP;
+    localparam F       = LATENCY_FMA;
+    localparam LAT_FMA = 3 * F;                 // mn, mn - ro, * inv_d
+    localparam LATENCY = LAT_FMA + 4;           // + per-axis, 2 reduce, verdict
 
     localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;   // F32, a*b + c
     localparam [INST_FMT_BITS-1:0] FMT_SUB = 2'b10;   // F32, a*b - c
+    localparam [31:0] F32_ONE  = 32'h3F800000;
+    localparam [31:0] F32_NEG0 = 32'h80000000;        // x + -0 == x, signs kept
+    localparam [31:0] F32_PINF = 32'h7F800000;
+    localparam [31:0] F32_NINF = 32'hFF800000;
 
-    // ── combinational uint8 -> fp32 ───────────────────────────────────
-    function automatic logic [31:0] u8_to_f32(input logic [7:0] n);
+    // ── helpers ───────────────────────────────────────────────────────
+    // q * 2^e for an 8-bit integer q and an int8 e, as the F32 product rounds:
+    // exact, +inf past the range, 0 below it (subnormals flush).
+    function automatic logic [31:0] q_scale(input logic [7:0] q, input logic [7:0] e);
         logic [2:0]  msb;
-        logic [6:0]  shifted;
-        logic [22:0] man;
-        if (n == 8'd0) begin
-            u8_to_f32 = 32'd0;
+        logic [6:0]  frac;
+        logic signed [9:0] be;
+        if (q == 8'd0) begin
+            q_scale = 32'd0;
         end else begin
             msb = 3'd0;
             for (integer b = 0; b < 8; ++b) begin
-                if (n[b]) begin
+                if (q[b]) begin
                     msb = b[2:0];
                 end
             end
-            // normalize so the leading 1 sits at bit 7, then the 7 bits
-            // below it become the top of the fp32 mantissa.
-            shifted = 7'(n << (3'd7 - msb));
-            man = {shifted, 16'd0};
-            u8_to_f32 = {1'b0, (8'd127 + 8'(msb)), man};
+            frac = 7'(q << (3'd7 - msb));
+            be = 10'sd127 + 10'(msb) + 10'($signed(e));
+            if (be >= 10'sd255) begin
+                q_scale = F32_PINF;
+            end else if (be <= 10'sd0) begin
+                q_scale = 32'd0;
+            end else begin
+                q_scale = {1'b0, be[7:0], frac, 16'd0};
+            end
         end
     endfunction
 
-    // ── combinational 2^exp as fp32 (well-conditioned exponents) ──────
-    function automatic logic [31:0] pow2_f32(input logic [7:0] e);
-        logic [7:0] biased;
-        biased = 8'(9'sd127 + {e[7], e});   // sign-extend int8 exponent
-        pow2_f32 = {1'b0, biased, 23'd0};
+    function automatic logic f32_is_nan(input logic [30:0] a);
+        f32_is_nan = (a[30:23] == 8'hff) && (a[22:0] != 23'd0);
     endfunction
 
-    // ── stage 0: prep per-axis float operands ─────────────────────────
-    wire [2:0][31:0] qmin_f, qmax_f, scale;
+    // monotone integer key of a non-NaN F32 (+0 and -0 share one key)
+    function automatic logic [31:0] f32_key(input logic [31:0] a);
+        f32_key = (a[30:0] == 31'd0) ? 32'h80000000 : (a[31] ? ~a : {1'b1, a[30:0]});
+    endfunction
+
+    // IEEE a <= b; false on NaN
+    function automatic logic f32_le(input logic [31:0] a, input logic [31:0] b);
+        f32_le = !f32_is_nan(a[30:0]) && !f32_is_nan(b[30:0]) && (f32_key(a) <= f32_key(b));
+    endfunction
+
+    // fmin / fmax: a NaN operand yields the other one; two NaNs yield `none`
+    function automatic logic [31:0] f32_min(input logic [31:0] a, input logic [31:0] b,
+                                            input logic [31:0] none);
+        if (f32_is_nan(a[30:0])) begin
+            f32_min = f32_is_nan(b[30:0]) ? none : b;
+        end else if (f32_is_nan(b[30:0])) begin
+            f32_min = a;
+        end else begin
+            f32_min = (f32_key(b) < f32_key(a)) ? b : a;
+        end
+    endfunction
+
+    function automatic logic [31:0] f32_max(input logic [31:0] a, input logic [31:0] b,
+                                            input logic [31:0] none);
+        if (f32_is_nan(a[30:0])) begin
+            f32_max = f32_is_nan(b[30:0]) ? none : b;
+        end else if (f32_is_nan(b[30:0])) begin
+            f32_max = a;
+        end else begin
+            f32_max = (f32_key(b) > f32_key(a)) ? b : a;
+        end
+    endfunction
+
+    // ── stage 1: box corners mn = origin + q*2^exp (raw: the corner itself) ──
+    wire [2:0][31:0] mn_a, mx_a, mnx_c;
     for (genvar a = 0; a < 3; ++a) begin : g_prep
-        assign qmin_f[a] = u8_to_f32(qmin[a]);
-        assign qmax_f[a] = u8_to_f32(qmax[a]);
-        assign scale[a]  = pow2_f32(exp[a]);
+        assign mn_a[a]  = raw ? raw_min[a] : q_scale(qmin[a], exp[a]);
+        assign mx_a[a]  = raw ? raw_max[a] : q_scale(qmax[a], exp[a]);
+        assign mnx_c[a] = raw ? F32_NEG0   : origin[a];
     end
 
-    // ── stage 1: origin - ro (per axis) ───────────────────────────────
-    wire [2:0][31:0] oro;
-    for (genvar a = 0; a < 3; ++a) begin : g_origin
+    wire [2:0][31:0] mn, mx;
+    for (genvar a = 0; a < 3; ++a) begin : g_corner
         VX_fma_unit #(
-            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
-            .LATENCY        (LAT_ORIGIN),
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+            .LATENCY        (F),
             .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (0)
-        ) fma_oro (
+            .EXCEPT_ENABLE  (1)
+        ) fma_mn (
             .clk     (clk),
             .reset   (reset),
             .enable  (enable),
             .mask    (valid_in),
             .op_type (INST_FPU_MADD),
-            .fmt     (FMT_SUB),
+            .fmt     (FMT_ADD),
             .frm     (INST_FRM_RNE),
-            .dataa   (origin[a]),
-            .datab   (32'h3F800000 /*1.0*/),
-            .datac   (ro[a]),
-            .result  (oro[a]),
-            `UNUSED_PIN (fflags)
-        );
-    end
-
-    // quantized corners delayed to align with origin-ro
-    wire [2:0][31:0] qmin_f_q, qmax_f_q, scale_q;
-    VX_shift_register #(
-        .DATAW (3*32*3),
-        .DEPTH (LAT_ORIGIN)
-    ) sr_q (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  ({qmin_f,   qmax_f,   scale}),
-        .data_out ({qmin_f_q, qmax_f_q, scale_q})
-    );
-
-    // raw-path operands delayed to align with the dequant-FMA inputs.
-    wire             raw_d;
-    wire [2:0][31:0] raw_min_d, raw_max_d, ro_d;
-    VX_shift_register #(
-        .DATAW (1 + 3*32*3),
-        .DEPTH (LAT_ORIGIN)
-    ) sr_raw (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  ({raw,   raw_min,   raw_max,   ro}),
-        .data_out ({raw_d, raw_min_d, raw_max_d, ro_d})
-    );
-
-    // ── stage 2: corners relative to the ray origin (mn-ro, mx-ro). Quantized:
-    //    q*scale + (origin-ro). Raw procedural box: (min*1.0 - ro) directly,
-    //    reusing the same FMAs (FMT_SUB). ──
-    localparam [31:0] FP_ONE = 32'h3F800000;
-    wire [2:0][31:0] dmn, dmx;
-    for (genvar a = 0; a < 3; ++a) begin : g_dequant
-        VX_fma_unit #(
-            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
-            .LATENCY        (LAT_DEQUANT),
-            .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (0)
-        ) fma_mn (
-            .clk     (clk),
-            .reset   (reset),
-            .enable  (enable),
-            .mask    (1'b1),
-            .op_type (INST_FPU_MADD),
-            .fmt     (raw_d ? FMT_SUB : FMT_ADD),
-            .frm     (INST_FRM_RNE),
-            .dataa   (raw_d ? raw_min_d[a] : qmin_f_q[a]),
-            .datab   (raw_d ? FP_ONE       : scale_q[a]),
-            .datac   (raw_d ? ro_d[a]      : oro[a]),
-            .result  (dmn[a]),
+            .dataa   (mn_a[a]),
+            .datab   (F32_ONE),
+            .datac   (mnx_c[a]),
+            .result  (mn[a]),
             `UNUSED_PIN (fflags)
         );
         VX_fma_unit #(
-            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
-            .LATENCY        (LAT_DEQUANT),
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+            .LATENCY        (F),
             .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (0)
+            .EXCEPT_ENABLE  (1)
         ) fma_mx (
             .clk     (clk),
             .reset   (reset),
             .enable  (enable),
+            .mask    (valid_in),
+            .op_type (INST_FPU_MADD),
+            .fmt     (FMT_ADD),
+            .frm     (INST_FRM_RNE),
+            .dataa   (mx_a[a]),
+            .datab   (F32_ONE),
+            .datac   (mnx_c[a]),
+            .result  (mx[a]),
+            `UNUSED_PIN (fflags)
+        );
+    end
+
+    wire [2:0][31:0] ro_d;
+    VX_shift_register #(
+        .DATAW (3*32),
+        .DEPTH (F)
+    ) sr_ro (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (ro),
+        .data_out (ro_d)
+    );
+
+    // ── stage 2: corners relative to the ray origin, mn - ro / mx - ro ──
+    wire [2:0][31:0] dmn, dmx;
+    for (genvar a = 0; a < 3; ++a) begin : g_rel
+        VX_fma_unit #(
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+            .LATENCY        (F),
+            .SUBNORM_ENABLE (0),
+            .EXCEPT_ENABLE  (1)
+        ) fma_dmn (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable),
             .mask    (1'b1),
             .op_type (INST_FPU_MADD),
-            .fmt     (raw_d ? FMT_SUB : FMT_ADD),
+            .fmt     (FMT_SUB),
             .frm     (INST_FRM_RNE),
-            .dataa   (raw_d ? raw_max_d[a] : qmax_f_q[a]),
-            .datab   (raw_d ? FP_ONE       : scale_q[a]),
-            .datac   (raw_d ? ro_d[a]      : oro[a]),
+            .dataa   (mn[a]),
+            .datab   (F32_ONE),
+            .datac   (ro_d[a]),
+            .result  (dmn[a]),
+            `UNUSED_PIN (fflags)
+        );
+        VX_fma_unit #(
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+            .LATENCY        (F),
+            .SUBNORM_ENABLE (0),
+            .EXCEPT_ENABLE  (1)
+        ) fma_dmx (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable),
+            .mask    (1'b1),
+            .op_type (INST_FPU_MADD),
+            .fmt     (FMT_SUB),
+            .frm     (INST_FRM_RNE),
+            .dataa   (mx[a]),
+            .datab   (F32_ONE),
+            .datac   (ro_d[a]),
             .result  (dmx[a]),
             `UNUSED_PIN (fflags)
         );
     end
 
-    // inv_d delayed to align with the origin-relative corners
     wire [2:0][31:0] inv_d_q;
     VX_shift_register #(
         .DATAW (3*32),
-        .DEPTH (LAT_ORIGIN + LAT_DEQUANT)
+        .DEPTH (2 * F)
     ) sr_invd (
         .clk      (clk),
         .reset    (reset),
@@ -235,10 +262,10 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [2:0][31:0] t0, t1;
     for (genvar a = 0; a < 3; ++a) begin : g_slab
         VX_fma_unit #(
-            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
-            .LATENCY        (LAT_SLAB),
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+            .LATENCY        (F),
             .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (0)
+            .EXCEPT_ENABLE  (1)
         ) fma_t0 (
             .clk     (clk),
             .reset   (reset),
@@ -249,15 +276,15 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .frm     (INST_FRM_RNE),
             .dataa   (dmn[a]),
             .datab   (inv_d_q[a]),
-            .datac   (32'h0),
+            .datac   (F32_NEG0),
             .result  (t0[a]),
             `UNUSED_PIN (fflags)
         );
         VX_fma_unit #(
-            .USE_DSP        (`VX_CFG_RTU_USE_DSP),   // vendor xil_fma on Vivado (soft in sim), like the FPU
-            .LATENCY        (LAT_SLAB),
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+            .LATENCY        (F),
             .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (0)
+            .EXCEPT_ENABLE  (1)
         ) fma_t1 (
             .clk     (clk),
             .reset   (reset),
@@ -268,59 +295,17 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .frm     (INST_FRM_RNE),
             .dataa   (dmx[a]),
             .datab   (inv_d_q[a]),
-            .datac   (32'h0),
+            .datac   (F32_NEG0),
             .result  (t1[a]),
             `UNUSED_PIN (fflags)
         );
     end
 
-    // ── stage 4: per-axis lo/hi ───────────────────────────────────────
-    // VX_fncp_unit returns an XLEN-wide result (it also serves the
-    // integer-returning compare and class ops); the traversal math is fp32, so
-    // every min/max result is taken from the low word.
-    wire [2:0][`VX_CFG_XLEN-1:0] lo_res, hi_res;
-    `UNUSED_VAR ({lo_res, hi_res})
-    wire [2:0][31:0] lo, hi;
-    for (genvar a = 0; a < 3; ++a) begin : g_minmax
-        VX_fncp_unit #(
-            .LATENCY (FNCP_SIZE)
-        ) fncp_lo (
-            .clk     (clk),
-            .reset   (reset),
-            .enable  (enable),
-            .mask    (1'b1),
-            .op_type (INST_FPU_MISC),
-            .fmt     ('0),
-            .frm     (3'd6 /*FMIN*/),
-            .dataa   (t0[a]),
-            .datab   (t1[a]),
-            .result  (lo_res[a]),
-            `UNUSED_PIN (fflags)
-        );
-        VX_fncp_unit #(
-            .LATENCY (FNCP_SIZE)
-        ) fncp_hi (
-            .clk     (clk),
-            .reset   (reset),
-            .enable  (enable),
-            .mask    (1'b1),
-            .op_type (INST_FPU_MISC),
-            .fmt     ('0),
-            .frm     (3'd7 /*FMAX*/),
-            .dataa   (t0[a]),
-            .datab   (t1[a]),
-            .result  (hi_res[a]),
-            `UNUSED_PIN (fflags)
-        );
-        assign lo[a] = lo_res[a][31:0];
-        assign hi[a] = hi_res[a][31:0];
-    end
-
-    // t_min/t_max delayed to align with lo/hi
+    // t_min/t_max delayed to the verdict stage
     wire [31:0] tmin_r, tmax_r;
     VX_shift_register #(
         .DATAW (64),
-        .DEPTH (LAT_ORIGIN + LAT_DEQUANT + LAT_SLAB + LAT_MINMAX)
+        .DEPTH (LAT_FMA + 3)
     ) sr_t (
         .clk      (clk),
         .reset    (reset),
@@ -329,140 +314,45 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .data_out ({tmin_r, tmax_r})
     );
 
-    // ── stage 5: reduce — t_near = max(tmin, lo[*]), t_far = min(tmax, hi[*]) ──
-    wire [`VX_CFG_XLEN-1:0] near_a_res, near_b_res, far_a_res, far_b_res;
-    `UNUSED_VAR ({near_a_res, near_b_res, far_a_res, far_b_res})
-    wire [31:0] near_a = near_a_res[31:0];        // first reduce level
-    wire [31:0] near_b = near_b_res[31:0];
-    wire [31:0] far_a  = far_a_res[31:0];
-    wire [31:0] far_b  = far_b_res[31:0];
-    VX_fncp_unit #(
-        .LATENCY (FNCP_SIZE)
-    ) r_near_a (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .op_type (INST_FPU_MISC),
-        .fmt     ('0),
-        .frm     (3'd7),
-        .dataa   (lo[0]),
-        .datab   (lo[1]),
-        .result  (near_a_res),
-        `UNUSED_PIN (fflags)
-    );
-    VX_fncp_unit #(
-        .LATENCY (FNCP_SIZE)
-    ) r_near_b (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .op_type (INST_FPU_MISC),
-        .fmt     ('0),
-        .frm     (3'd7),
-        .dataa   (lo[2]),
-        .datab   (tmin_r),
-        .result  (near_b_res),
-        `UNUSED_PIN (fflags)
-    );
-    VX_fncp_unit #(
-        .LATENCY (FNCP_SIZE)
-    ) r_far_a (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .op_type (INST_FPU_MISC),
-        .fmt     ('0),
-        .frm     (3'd6),
-        .dataa   (hi[0]),
-        .datab   (hi[1]),
-        .result  (far_a_res),
-        `UNUSED_PIN (fflags)
-    );
-    VX_fncp_unit #(
-        .LATENCY (FNCP_SIZE)
-    ) r_far_b (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .op_type (INST_FPU_MISC),
-        .fmt     ('0),
-        .frm     (3'd6),
-        .dataa   (hi[2]),
-        .datab   (tmax_r),
-        .result  (far_b_res),
-        `UNUSED_PIN (fflags)
-    );
+    // ── stage 4: per-axis lo/hi; an axis whose slabs are both NaN drops out ──
+    reg [2:0][31:0] lo_r, hi_r;
+    always_ff @(posedge clk) begin
+        if (enable) begin
+            for (integer a = 0; a < 3; ++a) begin
+                lo_r[a] <= f32_min(t0[a], t1[a], F32_NINF);
+                hi_r[a] <= f32_max(t0[a], t1[a], F32_PINF);
+            end
+        end
+    end
 
-    wire [`VX_CFG_XLEN-1:0] t_near_res, t_far_res;
-    `UNUSED_VAR ({t_near_res, t_far_res})
-    wire [31:0] t_near_w = t_near_res[31:0];      // second reduce level
-    wire [31:0] t_far_w  = t_far_res[31:0];
-    VX_fncp_unit #(
-        .LATENCY (FNCP_SIZE)
-    ) r_near (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .op_type (INST_FPU_MISC),
-        .fmt     ('0),
-        .frm     (3'd7),
-        .dataa   (near_a),
-        .datab   (near_b),
-        .result  (t_near_res),
-        `UNUSED_PIN (fflags)
-    );
-    VX_fncp_unit #(
-        .LATENCY (FNCP_SIZE)
-    ) r_far (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .op_type (INST_FPU_MISC),
-        .fmt     ('0),
-        .frm     (3'd6),
-        .dataa   (far_a),
-        .datab   (far_b),
-        .result  (t_far_res),
-        `UNUSED_PIN (fflags)
-    );
+    // ── stage 5/6: lo = max over axes, hi = min over axes ─────────────
+    reg [31:0] near_a_r, near_b_r, far_a_r, far_b_r;
+    reg [31:0] lo_all_r, hi_all_r;
+    always_ff @(posedge clk) begin
+        if (enable) begin
+            near_a_r <= f32_max(lo_r[0], lo_r[1], F32_NINF);
+            near_b_r <= lo_r[2];
+            far_a_r  <= f32_min(hi_r[0], hi_r[1], F32_PINF);
+            far_b_r  <= hi_r[2];
+            lo_all_r <= f32_max(near_a_r, near_b_r, F32_NINF);
+            hi_all_r <= f32_min(far_a_r, far_b_r, F32_PINF);
+        end
+    end
 
-    // ── stage 6: hit = (t_near <= t_far) ──────────────────────────────
-    wire [`VX_CFG_XLEN-1:0] cmp_res;
-    `UNUSED_VAR (cmp_res)
-    VX_fncp_unit #(
-        .LATENCY (FNCP_SIZE)
-    ) fncp_cmp (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .op_type (INST_FPU_CMP),
-        .fmt     ('0),
-        .frm     (3'd0 /*LE*/),
-        .dataa   (t_near_w),
-        .datab   (t_far_w),
-        .result  (cmp_res),
-        `UNUSED_PIN (fflags)
-    );
-
-    // carry t_near alongside the compare result, plus the overall valid pipe
-    wire [31:0] t_near_cmp;
-    VX_shift_register #(
-        .DATAW (32),
-        .DEPTH (LAT_CMP)
-    ) sr_tnear (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  (t_near_w),
-        .data_out (t_near_cmp)
-    );
+    // ── stage 7: hit = hi >= max(0, lo) && lo <= t_max; t_near = max(t_min, lo)
+    // lo and hi are never NaN; t_near is non-negative for t_min >= 0 and +0 for
+    // a zero, so the consumer may order it as an unsigned integer.
+    wire        hi_ge0  = !hi_all_r[31] || (hi_all_r[30:0] == 31'd0);
+    wire        hit_w   = hi_ge0 && f32_le(lo_all_r, hi_all_r) && f32_le(lo_all_r, tmax_r);
+    wire [31:0] tnear_w = f32_max(tmin_r, lo_all_r, lo_all_r);
+    reg         hit_r;
+    reg  [31:0] t_near_r;
+    always_ff @(posedge clk) begin
+        if (enable) begin
+            hit_r    <= hit_w;
+            t_near_r <= (tnear_w[30:0] == 31'd0) ? 32'd0 : tnear_w;
+        end
+    end
 
     reg [LATENCY-1:0] valid_pipe_r;
     always_ff @(posedge clk) begin
@@ -503,7 +393,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     assign valid_out   = valid_pipe_r[LATENCY-1];
     assign tag_out     = tag_out_w;
     assign tag_out_pre = tag_out_pre_w;
-    assign hit       = cmp_res[0];
-    assign t_near    = t_near_cmp;
+    assign hit         = hit_r;
+    assign t_near      = t_near_r;
 
 endmodule

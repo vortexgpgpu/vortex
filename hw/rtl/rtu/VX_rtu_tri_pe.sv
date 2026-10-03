@@ -21,7 +21,7 @@
 //   F64: pz = sz*rz (exact), w_i = px_a*py_b - py_a*px_b (one rounding)
 //        det = w0 + (w1 + w2), T = (w0*pz0 + w1*pz1) + w2*pz2
 //        t = f32(T / det), (u, v) = f32(w1, w2) / f32(det)
-//   hit = !(any w < 0 && any w > 0) && det != 0 && tmin <= t <= tmax
+//   hit = !(any w < 0 && any w > 0) && det != 0 && tmin < t < tmax
 //   back_facing = det < 0
 //
 // A shared edge evaluates to exactly negated weights in its two triangles, so
@@ -172,6 +172,11 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
     endfunction
 
+    // strict IEEE a < b (+0 == -0); NaN compares false
+    function automatic f32_lt(input [31:0] a, input [31:0] b);
+        f32_lt = f32_le(a, b) && !f32_le(b, a);
+    endfunction
+
     // ── stage A (@0 -> @T_B): axis select ─────────────────────────────
     wire [30:0] ad0 = dir[0][30:0];
     wire [30:0] ad1 = dir[1][30:0];
@@ -215,7 +220,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .FLEN           (32),
         .USE_DSP        (`VX_CFG_RTU_USE_DSP),
         .SUBNORM_ENABLE (0),
-        .EXCEPT_ENABLE  (0)
+        .EXCEPT_ENABLE  (1)
     ) fdiv_sz (
         .clk     (clk),
         .reset   (reset),
@@ -236,7 +241,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 .LATENCY (F),
                 .USE_DSP        (`VX_CFG_RTU_USE_DSP),
                 .SUBNORM_ENABLE (0),
-                .EXCEPT_ENABLE  (0)
+                .EXCEPT_ENABLE  (1)
             ) fsub_r (
                 .clk     (clk),
                 .reset   (reset),
@@ -286,7 +291,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .LATENCY (F),
                 .USE_DSP        (`VX_CFG_RTU_USE_DSP),
                 .SUBNORM_ENABLE (0),
-                .EXCEPT_ENABLE  (0)
+                .EXCEPT_ENABLE  (1)
         ) fmul_s (
             .clk     (clk),
             .reset   (reset),
@@ -324,7 +329,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 .LATENCY (F),
                 .USE_DSP        (`VX_CFG_RTU_USE_DSP),
                 .SUBNORM_ENABLE (0),
-                .EXCEPT_ENABLE  (0)
+                .EXCEPT_ENABLE  (1)
             ) fmul_m (
                 .clk     (clk),
                 .reset   (reset),
@@ -346,7 +351,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .EXP_BITS       (11),
             .USE_DSP        (`VX_CFG_RTU_USE_DSP),
             .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (0)
+            .EXCEPT_ENABLE  (1)
         ) fmul_pz (
             .clk     (clk),
             .reset   (reset),
@@ -384,7 +389,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 .LATENCY (F),
                 .USE_DSP        (`VX_CFG_RTU_USE_DSP),
                 .SUBNORM_ENABLE (0),
-                .EXCEPT_ENABLE  (0)
+                .EXCEPT_ENABLE  (1)
             ) fsub_p (
                 .clk     (clk),
                 .reset   (reset),
@@ -433,7 +438,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .EXP_BITS       (11),
             .USE_DSP        (`VX_CFG_RTU_USE_DSP),
             .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (0)
+            .EXCEPT_ENABLE  (1)
         ) fmul_c (
             .clk     (clk),
             .reset   (reset),
@@ -454,7 +459,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .EXP_BITS       (11),
             .USE_DSP        (`VX_CFG_RTU_USE_DSP),
             .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (0)
+            .EXCEPT_ENABLE  (1)
         ) fmsub_w (
             .clk     (clk),
             .reset   (reset),
@@ -497,37 +502,37 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .data_in  (w_g[0]),
         .data_out (w0_g1)
     );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (0)) fadd_det12 (
+    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_det12 (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
         .dataa (w_g[1]), .datab (w_g[2]), .datac ('0),
         .result (det12), `UNUSED_PIN (fflags)
     );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (0)) fadd_det (
+    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_det (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
         .dataa (w0_g1), .datab (det12), .datac ('0),
         .result (det_g2), `UNUSED_PIN (fflags)
     );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (0)) fmul_tp0 (
+    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fmul_tp0 (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_MUL), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
         .dataa (w_g[0]), .datab (pz_g[0]), .datac ('0),
         .result (tp0), `UNUSED_PIN (fflags)
     );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (0)) fmul_tp1 (
+    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fmul_tp1 (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_MUL), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
         .dataa (w_g[1]), .datab (pz_g[1]), .datac ('0),
         .result (tp1), `UNUSED_PIN (fflags)
     );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (0)) fmul_tp2 (
+    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fmul_tp2 (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_MUL), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
         .dataa (w_g[2]), .datab (pz_g[2]), .datac ('0),
         .result (tp2), `UNUSED_PIN (fflags)
     );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (0)) fadd_t01 (
+    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_t01 (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
         .dataa (tp0), .datab (tp1), .datac ('0),
@@ -543,7 +548,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .data_in  (tp2),
         .data_out (tp2_g2)
     );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (0)) fadd_t (
+    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_t (
         .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
         .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
         .dataa (t01), .datab (tp2_g2), .datac ('0),
@@ -569,7 +574,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .LATENCY        (V64),
         .FLEN           (64),
         .SUBNORM_ENABLE (0),
-        .EXCEPT_ENABLE  (0)
+        .EXCEPT_ENABLE  (1)
     ) fdiv_t (
         .clk     (clk),
         .reset   (reset),
@@ -617,7 +622,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .FLEN           (32),
         .USE_DSP        (`VX_CFG_RTU_USE_DSP),
         .SUBNORM_ENABLE (0),
-        .EXCEPT_ENABLE  (0)
+        .EXCEPT_ENABLE  (1)
     ) fdiv_u (
         .clk     (clk),
         .reset   (reset),
@@ -635,7 +640,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .FLEN           (32),
         .USE_DSP        (`VX_CFG_RTU_USE_DSP),
         .SUBNORM_ENABLE (0),
-        .EXCEPT_ENABLE  (0)
+        .EXCEPT_ENABLE  (1)
     ) fdiv_v (
         .clk     (clk),
         .reset   (reset),
@@ -718,7 +723,8 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     );
 
     // ── stage I (@T_I): range test and commit ─────────────────────────
-    wire range_ok = f32_le(tmm_i[63:32], t_i) && f32_le(t_i, tmm_i[31:0]);
+    // open interval, as the Vulkan reference commits a triangle hit
+    wire range_ok = f32_lt(tmm_i[63:32], t_i) && f32_lt(t_i, tmm_i[31:0]);
 
     reg        hit_r, bf_r;
     reg [31:0] u_r, v_r, t_r;
