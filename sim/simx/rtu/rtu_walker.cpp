@@ -23,7 +23,7 @@
 #include "rtu_types.h"       // RtuReq, SceneView, LaneState, PerfStats,
                              // scene-format constants
 #include "rtu_bvh.h"         // CW-BVH node/leaf/instance layouts
-#include "rtu_isect.h"       // ray_triangle, ray_aabb_intersect,
+#include "rtu_isect.h"       // ray_triangle, ray_box,
                              // world_to_object_ray
 #include "rtu_classifier.h"  // classify_tri_hit, finalise_lane
 
@@ -59,18 +59,6 @@ void read_scene_bytes(SceneView& sv, uint32_t off, uint32_t len, uint8_t* out) {
     }
     done += n;
     pos  += n;
-  }
-}
-
-// CW-BVH: reconstruct a child AABB from quantized representation.
-//   real = origin + qaabb * 2^exp (per axis)
-inline void reconstruct_child_aabb(const float origin[3], const int8_t exp[3],
-                                   const uint8_t qmin[3], const uint8_t qmax[3],
-                                   float out_mn[3], float out_mx[3]) {
-  for (int i = 0; i < 3; ++i) {
-    float scale = std::ldexp(1.0f, exp[i]);
-    out_mn[i] = origin[i] + static_cast<float>(qmin[i]) * scale;
-    out_mx[i] = origin[i] + static_cast<float>(qmax[i]) * scale;
   }
 }
 
@@ -151,6 +139,9 @@ void walk_bvh4_subtree(SceneView& sv,
                        uint32_t root_off, uint32_t instance_id,
                        uint32_t custom_id, uint32_t inst_flags,
                        WalkCtx& ctx, PerfStats& perf) {
+  // The ray setup's reciprocals, once per (object-space) ray.
+  const float inv[3] = { ray_recip(rd[0]), ray_recip(rd[1]), ray_recip(rd[2]) };
+
   auto visit_leaf_tri = [&](uint32_t leaf_off, uint32_t count) {
     uint8_t hdr_buf[kVxBvhLeafHeaderBytes];
     read_scene_bytes(sv, leaf_off, sizeof(hdr_buf), hdr_buf);
@@ -245,10 +236,11 @@ void walk_bvh4_subtree(SceneView& sv,
       if (sv.miss) return;
       const VxBvhProcAabb* rec =
           reinterpret_cast<const VxBvhProcAabb*>(rec_buf);
-      float t_near = 0.f;
+      static const float kRawBase[3] = { 0.f, 0.f, 0.f };
+      float rel_mn[3], rel_mx[3], t_near = 0.f;
+      box_rel(kRawBase, rec->aabb_min, rec->aabb_max, ro, rel_mn, rel_mx);
       ++perf.bvh_box_tests;
-      if (!ray_aabb_intersect(ro, rd, rec->aabb_min, rec->aabb_max,
-                              ctx.tmin, ctx.best_t, t_near)) {
+      if (!ray_box(rel_mn, rel_mx, inv, ctx.tmin, ctx.best_t, t_near)) {
         continue;
       }
       // Procedural primitives are inherently non-opaque (the IS decides the
@@ -374,14 +366,15 @@ void walk_bvh4_subtree(SceneView& sv,
         uint32_t off_word  = nv.child_offsets[i];
         uint32_t child_off = off_word & kVxBvhChildOffsetMask;
         if (off_word == kVxBvhChildEmpty) continue;
-        float mn[3], mx[3];
-        reconstruct_child_aabb(nv.origin, nv.exp,
-                                nv.qaabb_min[i], nv.qaabb_max[i],
-                                mn, mx);
+        float mn[3], mx[3], rel_mn[3], rel_mx[3];
+        for (int a = 0; a < 3; ++a) {
+          mn[a] = quant_corner(nv.qaabb_min[i][a], nv.exp[a]);
+          mx[a] = quant_corner(nv.qaabb_max[i][a], nv.exp[a]);
+        }
+        box_rel(nv.origin, mn, mx, ro, rel_mn, rel_mx);
         float t_near = 0.f;
         ++perf.bvh_box_tests;
-        if (!ray_aabb_intersect(ro, rd, mn, mx,
-                                ctx.tmin, ctx.best_t, t_near)) {
+        if (!ray_box(rel_mn, rel_mx, inv, ctx.tmin, ctx.best_t, t_near)) {
           continue;
         }
         hits[hit_count++] = { child_off, t_near };

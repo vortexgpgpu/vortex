@@ -21,9 +21,9 @@
 //              map to DSP48. Trades ~2K LUT/unit onto the idle BRAM + DSP blocks.
 //              ~9e-8 max relative error (well inside the RTU's 1e-4 tolerance).
 //
-// A zero (or, flushed, subnormal) operand returns +FLT_MAX rather than inf, as
-// the box test's reference does: a slab along a zero direction component then
-// stays finite, (b - o) * FLT_MAX, instead of 0 * inf = NaN.
+// A zero (or, flushed, subnormal) operand returns +FLT_MAX rather than inf
+// (SimX rtu::ray_recip): a slab along a zero direction component then stays
+// finite, (b - o) * FLT_MAX, instead of 0 * inf = NaN.
 //
 // The input is presented combinationally and held stable for the whole setup
 // span by the scheduler; the result is a fixed-latency pipeline output, valid

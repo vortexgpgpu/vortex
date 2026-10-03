@@ -327,9 +327,12 @@ subnormals flushed either way), and `VX_CFG_FMA_LATENCY` /
 whatever depth results:
 
 - **`VX_rtu_box_pe`** — pipelined ray/AABB slab test, one child box per cycle,
-  emitting `{hit, t_near}`. Mirrors SimX `ray_aabb_intersect` bit for bit:
-  corners `origin + q·2^exp`, slabs `(corner − ro)·inv_d`, culled against
-  `[0, t_max]`. Also handles raw/procedural boxes.
+  emitting `{hit, t_near}`. Mirrors SimX `box_rel` + `ray_box` bit for bit:
+  corners relative to the ray, `q·2^exp + (origin − ro)` (the product exact),
+  slabs `rel·inv_d`, culled against the ray interval `[t_min, t_max]` with
+  `t_max` the committed hit. `inv_d` is `FLT_MAX` for a zero direction
+  component, so no slab is ever `0·inf`. Also handles raw/procedural boxes
+  (`origin = +0`).
 - **`VX_rtu_tri_pe`** — pipelined watertight triangle test (Woop, Benthin, Wald,
   JCGT 2013), all F32: shear, edge functions as rounded products and a rounded
   difference (so a shared edge evaluates to exactly negated weights in its two

@@ -13,20 +13,19 @@
 
 // VX_rtu_box_pe — pipelined ray-vs-AABB slab intersector for one child box.
 // Streams one box per cycle; emits {hit, t_near} after a fixed latency. Mirrors
-// SimX reconstruct_child_aabb + rtu::ray_aabb_intersect op for op, so every
-// accept decision and t_near match it:
+// SimX rtu::box_rel + rtu::ray_box op for op:
 //
-//   dequant   mn[a] = origin[a] + q[a]*2^exp[a]        (product exact, one add)
-//   slab      t0[a] = (mn[a] - ro[a]) * inv_d[a]       (t1 from mx)
-//   reduce    lo = max(-inf, min(t0,t1)[*])   hi = min(+inf, max(t0,t1)[*])
-//             (fmin/fmax drop a NaN operand, so lo and hi are never NaN)
-//   hit       = hi >= max(0, lo) && lo <= t_max
-//   t_near    = max(t_min, lo)                         (descent order only)
+//   base      c[a]  = origin[a] - ro[a]                (raw box: +0 - ro[a])
+//   corner    d[a]  = q[a]*2^exp[a] + c[a]             (product exact; raw: corner + c)
+//   slab      t0[a] = dmn[a] * inv_d[a]                (t1 from dmx)
+//   reduce    lo = max(t_min, min(t0,t1)[*])   hi = min(t_max, max(t0,t1)[*])
+//             (fmin/fmax drop a NaN operand)
+//   hit       = lo <= hi,  t_near = lo
 //
-// The box is culled against [0, t_max], not [t_min, t_max]: t_min belongs to
-// the primitive test alone, whose t carries rounding the slab distances do not.
-// inv_d is the ray-setup reciprocal (VX_rtu_recip), FLT_MAX for a zero
-// direction component. The FP units flush subnormals.
+// The box is culled against the ray interval [t_min, t_max] (t_max is the
+// committed hit). inv_d is the ray-setup reciprocal (VX_rtu_recip), FLT_MAX for
+// a zero direction component, so no slab is ever 0 * inf. The FP units flush
+// subnormals.
 
 `include "VX_define.vh"
 
@@ -66,12 +65,11 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     output wire [31:0] t_near
 );
     localparam F       = LATENCY_FMA;
-    localparam LAT_FMA = 3 * F;                 // mn, mn - ro, * inv_d
+    localparam LAT_FMA = 3 * F;                 // origin - ro, + corner, * inv_d
     localparam LATENCY = LAT_FMA + 4;           // + per-axis, 2 reduce, verdict
 
     localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;   // F32, a*b + c
     localparam [INST_FMT_BITS-1:0] FMT_SUB = 2'b10;   // F32, a*b - c
-    localparam [31:0] F32_ONE  = 32'h3F800000;
     localparam [31:0] F32_NEG0 = 32'h80000000;        // x + -0 == x, signs kept
     localparam [31:0] F32_PINF = 32'h7F800000;
     localparam [31:0] F32_NINF = 32'hFF800000;
@@ -141,69 +139,46 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
     endfunction
 
-    // ── stage 1: box corners mn = origin + q*2^exp (raw: the corner itself) ──
-    wire [2:0][31:0] mn_a, mx_a, mnx_c;
-    for (genvar a = 0; a < 3; ++a) begin : g_prep
-        assign mn_a[a]  = raw ? raw_min[a] : q_scale(qmin[a], exp[a]);
-        assign mx_a[a]  = raw ? raw_max[a] : q_scale(qmax[a], exp[a]);
-        assign mnx_c[a] = raw ? F32_NEG0   : origin[a];
-    end
-
-    wire [2:0][31:0] mn, mx;
-    for (genvar a = 0; a < 3; ++a) begin : g_corner
+    // ── stage 1: the box base relative to the ray origin ─────────────
+    wire [2:0][31:0] mn_a, mx_a, base_a, c_b;
+    for (genvar a = 0; a < 3; ++a) begin : g_base
+        assign mn_a[a]   = raw ? raw_min[a] : q_scale(qmin[a], exp[a]);
+        assign mx_a[a]   = raw ? raw_max[a] : q_scale(qmax[a], exp[a]);
+        assign base_a[a] = raw ? 32'd0      : origin[a];
         VX_fma_unit #(
             .USE_DSP        (`VX_CFG_RTU_USE_DSP),
             .LATENCY        (F),
             .SUBNORM_ENABLE (0),
             .EXCEPT_ENABLE  (1)
-        ) fma_mn (
+        ) fsub_c (
             .clk     (clk),
             .reset   (reset),
             .enable  (enable),
-            .mask    (valid_in),
-            .op_type (INST_FPU_MADD),
-            .fmt     (FMT_ADD),
+            .mask    (1'b1),
+            .op_type (INST_FPU_ADD),
+            .fmt     (FMT_SUB),
             .frm     (INST_FRM_RNE),
-            .dataa   (mn_a[a]),
-            .datab   (F32_ONE),
-            .datac   (mnx_c[a]),
-            .result  (mn[a]),
-            `UNUSED_PIN (fflags)
-        );
-        VX_fma_unit #(
-            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
-            .LATENCY        (F),
-            .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (1)
-        ) fma_mx (
-            .clk     (clk),
-            .reset   (reset),
-            .enable  (enable),
-            .mask    (valid_in),
-            .op_type (INST_FPU_MADD),
-            .fmt     (FMT_ADD),
-            .frm     (INST_FRM_RNE),
-            .dataa   (mx_a[a]),
-            .datab   (F32_ONE),
-            .datac   (mnx_c[a]),
-            .result  (mx[a]),
+            .dataa   (base_a[a]),
+            .datab   (ro[a]),
+            .datac   ('0),
+            .result  (c_b[a]),
             `UNUSED_PIN (fflags)
         );
     end
 
-    wire [2:0][31:0] ro_d;
+    wire [2:0][31:0] mn_b, mx_b;
     VX_shift_register #(
-        .DATAW (3*32),
+        .DATAW (6*32),
         .DEPTH (F)
-    ) sr_ro (
+    ) sr_corner (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  (ro),
-        .data_out (ro_d)
+        .data_in  ({mn_a, mx_a}),
+        .data_out ({mn_b, mx_b})
     );
 
-    // ── stage 2: corners relative to the ray origin, mn - ro / mx - ro ──
+    // ── stage 2: corners relative to the ray origin, corner + c ──────
     wire [2:0][31:0] dmn, dmx;
     for (genvar a = 0; a < 3; ++a) begin : g_rel
         VX_fma_unit #(
@@ -211,17 +186,17 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .LATENCY        (F),
             .SUBNORM_ENABLE (0),
             .EXCEPT_ENABLE  (1)
-        ) fma_dmn (
+        ) fadd_dmn (
             .clk     (clk),
             .reset   (reset),
             .enable  (enable),
             .mask    (1'b1),
-            .op_type (INST_FPU_MADD),
-            .fmt     (FMT_SUB),
+            .op_type (INST_FPU_ADD),
+            .fmt     (FMT_ADD),
             .frm     (INST_FRM_RNE),
-            .dataa   (mn[a]),
-            .datab   (F32_ONE),
-            .datac   (ro_d[a]),
+            .dataa   (mn_b[a]),
+            .datab   (c_b[a]),
+            .datac   ('0),
             .result  (dmn[a]),
             `UNUSED_PIN (fflags)
         );
@@ -230,17 +205,17 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .LATENCY        (F),
             .SUBNORM_ENABLE (0),
             .EXCEPT_ENABLE  (1)
-        ) fma_dmx (
+        ) fadd_dmx (
             .clk     (clk),
             .reset   (reset),
             .enable  (enable),
             .mask    (1'b1),
-            .op_type (INST_FPU_MADD),
-            .fmt     (FMT_SUB),
+            .op_type (INST_FPU_ADD),
+            .fmt     (FMT_ADD),
             .frm     (INST_FRM_RNE),
-            .dataa   (mx[a]),
-            .datab   (F32_ONE),
-            .datac   (ro_d[a]),
+            .dataa   (mx_b[a]),
+            .datab   (c_b[a]),
+            .datac   ('0),
             .result  (dmx[a]),
             `UNUSED_PIN (fflags)
         );
@@ -259,6 +234,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     );
 
     // ── stage 3: slab entry/exit per axis = (corner - ro) * inv_d ─────
+    // a*b + -0 is the exact product, its zero sign included
     wire [2:0][31:0] t0, t1;
     for (genvar a = 0; a < 3; ++a) begin : g_slab
         VX_fma_unit #(
@@ -305,7 +281,7 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [31:0] tmin_r, tmax_r;
     VX_shift_register #(
         .DATAW (64),
-        .DEPTH (LAT_FMA + 3)
+        .DEPTH (LAT_FMA + 1)
     ) sr_t (
         .clk      (clk),
         .reset    (reset),
@@ -325,32 +301,29 @@ module VX_rtu_box_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
     end
 
-    // ── stage 5/6: lo = max over axes, hi = min over axes ─────────────
+    // ── stage 5/6: lo = max(t_min, axes), hi = min(t_max, axes) ──────
     reg [31:0] near_a_r, near_b_r, far_a_r, far_b_r;
     reg [31:0] lo_all_r, hi_all_r;
     always_ff @(posedge clk) begin
         if (enable) begin
             near_a_r <= f32_max(lo_r[0], lo_r[1], F32_NINF);
-            near_b_r <= lo_r[2];
+            near_b_r <= f32_max(lo_r[2], tmin_r, F32_NINF);
             far_a_r  <= f32_min(hi_r[0], hi_r[1], F32_PINF);
-            far_b_r  <= hi_r[2];
+            far_b_r  <= f32_min(hi_r[2], tmax_r, F32_PINF);
             lo_all_r <= f32_max(near_a_r, near_b_r, F32_NINF);
             hi_all_r <= f32_min(far_a_r, far_b_r, F32_PINF);
         end
     end
 
-    // ── stage 7: hit = hi >= max(0, lo) && lo <= t_max; t_near = max(t_min, lo)
+    // ── stage 7: hit = lo <= hi; t_near = lo ─────────────────────────
     // lo and hi are never NaN; t_near is non-negative for t_min >= 0 and +0 for
     // a zero, so the consumer may order it as an unsigned integer.
-    wire        hi_ge0  = !hi_all_r[31] || (hi_all_r[30:0] == 31'd0);
-    wire        hit_w   = hi_ge0 && f32_le(lo_all_r, hi_all_r) && f32_le(lo_all_r, tmax_r);
-    wire [31:0] tnear_w = f32_max(tmin_r, lo_all_r, lo_all_r);
     reg         hit_r;
     reg  [31:0] t_near_r;
     always_ff @(posedge clk) begin
         if (enable) begin
-            hit_r    <= hit_w;
-            t_near_r <= (tnear_w[30:0] == 31'd0) ? 32'd0 : tnear_w;
+            hit_r    <= f32_le(lo_all_r, hi_all_r);
+            t_near_r <= (lo_all_r[30:0] == 31'd0) ? 32'd0 : lo_all_r;
         end
     end
 

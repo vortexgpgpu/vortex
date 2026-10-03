@@ -46,15 +46,22 @@ bool ray_triangle(const float ro[3], const float rd[3],
                   bool& out_back_facing);
 
 // ────────────────────────────────────────────────────────────────────
-// Ray-vs-AABB slab test. Returns true if the ray's [0, tmax] interval
-// overlaps the AABB (the reference's box test: tmin is applied by the
-// primitive test only, see rtu_isect.cpp); t_near is the entry
-// parameter (clamped to tmin) used by the BVH4 walker to order descent.
-// A zero direction component uses FLT_MAX as its reciprocal.
+// Ray-vs-AABB slab test, as VX_rtu_recip + VX_rtu_box_pe compute it.
+//
+//   ray_recip     1/d per direction component, FLT_MAX for a zero one
+//   quant_corner  a quantized child corner q * 2^e (exact; FTZ)
+//   box_rel       box corners relative to the ray origin: m + (base - ro),
+//                 base = the node origin (+0 for a raw procedural box)
+//   ray_box       slabs rel * inv, culled against [tmin, tmax]: hit iff
+//                 max(tmin, entry) <= min(tmax, exit); t_near = that max,
+//                 the entry distance the walker orders children by
 // ────────────────────────────────────────────────────────────────────
-bool ray_aabb_intersect(const float ro[3], const float rd[3],
-                        const float mn[3], const float mx[3],
-                        float tmin, float tmax, float& t_near);
+float ray_recip(float d);
+float quant_corner(uint8_t q, int8_t e);
+void  box_rel(const float base[3], const float mn[3], const float mx[3],
+              const float ro[3], float rel_mn[3], float rel_mx[3]);
+bool  ray_box(const float rel_mn[3], const float rel_mx[3], const float inv[3],
+              float tmin, float tmax, float& t_near);
 
 // ────────────────────────────────────────────────────────────────────
 // Bring a world ray into an instance's object space with the instance
@@ -81,7 +88,7 @@ void world_to_object_ray(const float wto[12],
 // Both are shared across the whole context array, so the issue slots are handed
 // out by the orchestrator one per cycle and the contention is modelled, not
 // assumed away. The math itself is done synchronously by the scalar
-// ray_triangle / ray_aabb_intersect helpers above; these classes contribute only
+// ray_triangle / ray_box helpers above; these classes contribute only
 // the drain behind the last test entered.
 class BoxPe {
 public:

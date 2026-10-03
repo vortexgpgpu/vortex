@@ -81,30 +81,42 @@ bool ray_triangle(const float ro[3], const float rd[3],
   return true;
 }
 
-bool ray_aabb_intersect(const float ro[3], const float rd[3],
-                        const float mn[3], const float mx[3],
-                        float tmin, float tmax, float& t_near) {
-  // Slab test in the Vulkan reference's (lavapipe) form: a zero direction
-  // component uses FLT_MAX as its reciprocal, and the box is culled against
-  // [0, tmax], NOT [tmin, tmax]. The tmin floor belongs to the primitive test
-  // alone: a primitive's t carries rounding the slab distances do not (the
-  // watertight triangle t of a large triangle is off by far more than the
-  // slabs of its flat box), so a box whose exact exit lies below tmin can
-  // still hold a hit the primitive test reports past tmin. Culling at tmin
-  // would drop that hit, which the reference keeps.
-  float lo = -INFINITY, hi = INFINITY;
+float ray_recip(float d) {
+  // A zero (or subnormal, which the PEs flush) component has no reciprocal;
+  // FLT_MAX keeps every slab product finite, so no slab is 0 * inf = NaN.
+  if (std::fabs(d) < FLT_MIN) return FLT_MAX;
+  return 1.0f / d;
+}
+
+float quant_corner(uint8_t q, int8_t e) {
+  // Exact product; the PE flushes a subnormal result, inf past the range.
+  const float c = std::ldexp(float(q), e);
+  return (c < FLT_MIN) ? 0.f : c;
+}
+
+void box_rel(const float base[3], const float mn[3], const float mx[3],
+             const float ro[3], float rel_mn[3], float rel_mx[3]) {
   for (int i = 0; i < 3; ++i) {
-    const float inv = (rd[i] == 0.0f) ? FLT_MAX : 1.0f / rd[i];
-    const float t0 = (mn[i] - ro[i]) * inv;
-    const float t1 = (mx[i] - ro[i]) * inv;
+    const float c = base[i] - ro[i];
+    rel_mn[i] = mn[i] + c;
+    rel_mx[i] = mx[i] + c;
+  }
+}
+
+bool ray_box(const float rel_mn[3], const float rel_mx[3], const float inv[3],
+             float tmin, float tmax, float& t_near) {
+  // fmin/fmax drop a NaN operand, so a NaN slab (a NaN box or ray) drops out
+  // of the fold rather than poisoning it.
+  float lo = std::fmax(-INFINITY, tmin);
+  float hi = std::fmin(INFINITY, tmax);
+  for (int i = 0; i < 3; ++i) {
+    const float t0 = rel_mn[i] * inv[i];
+    const float t1 = rel_mx[i] * inv[i];
     lo = std::fmax(lo, std::fmin(t0, t1));
     hi = std::fmin(hi, std::fmax(t0, t1));
   }
-  // The upper bound stays inclusive (the reference's is strict): a box
-  // entered exactly at the committed t can hold an equal-t twin that the
-  // lowest-(instance, geometry, prim) tie-break must still see.
-  if (!(hi >= std::fmax(0.0f, lo) && lo <= tmax)) return false;
-  t_near = std::fmax(tmin, lo);   // descent order only
+  if (!(lo <= hi)) return false;
+  t_near = (lo == 0.f) ? 0.f : lo;
   return true;
 }
 

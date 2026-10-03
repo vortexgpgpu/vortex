@@ -1,7 +1,7 @@
-// VX_rtu_recip + VX_rtu_box_pe against SimX's box test (reconstruct_child_aabb
-// + rtu::ray_aabb_intersect): inv_d bit for bit, every accept decision, t_near
-// by value, and the order the scheduler's insertion collector gives a node's
-// accepted children against SimX's nearest-first sort.
+// VX_rtu_recip + VX_rtu_box_pe against SimX's box test (rtu::ray_recip,
+// quant_corner, box_rel, ray_box): inv_d bit for bit, every accept decision,
+// t_near by value, and the order the scheduler's insertion collector gives a
+// node's accepted children against SimX's nearest-first sort.
 //
 // The PE's FP units flush subnormals (FTZ/DAZ) while SimX runs IEEE. A case
 // whose RTL result differs from SimX but equals SimX evaluated under the host's
@@ -66,7 +66,7 @@ bool same_value(uint32_t rtl, float ref) {
   return std::isnan(ref) ? is_nan_bits(rtl) : fbits(rtl) == ref;
 }
 
-// SimX rtu_walker.cpp reconstruct_child_aabb
+// the child box in world space, to aim rays at
 void reconstruct_child_aabb(const float origin[3], const int8_t exp[3],
                             const uint8_t qmin[3], const uint8_t qmax[3],
                             float out_mn[3], float out_mx[3]) {
@@ -90,18 +90,23 @@ struct Ref {
 Ref reference(const Node& nd, int c, bool ftz) {
   const unsigned csr = _mm_getcsr();
   if (ftz) _mm_setcsr(csr | 0x8040);   // FTZ | DAZ
+  namespace rtu = vortex::rtu;
   Ref r;
   for (int i = 0; i < 3; ++i)
-    r.inv[i] = (nd.ray.d[i] == 0.0f) ? FLT_MAX : 1.0f / nd.ray.d[i];
-  float mn[3], mx[3];
+    r.inv[i] = rtu::ray_recip(nd.ray.d[i]);
+  static const float kRawBase[3] = { 0.f, 0.f, 0.f };
+  float mn[3], mx[3], rel_mn[3], rel_mx[3];
   if (nd.raw) {
     std::memcpy(mn, nd.ch[c].rmin, sizeof mn);
     std::memcpy(mx, nd.ch[c].rmax, sizeof mx);
   } else {
-    reconstruct_child_aabb(nd.origin, nd.exp, nd.ch[c].qmin, nd.ch[c].qmax, mn, mx);
+    for (int i = 0; i < 3; ++i) {
+      mn[i] = rtu::quant_corner(nd.ch[c].qmin[i], nd.exp[i]);
+      mx[i] = rtu::quant_corner(nd.ch[c].qmax[i], nd.exp[i]);
+    }
   }
-  r.box.hit = vortex::rtu::ray_aabb_intersect(nd.ray.o, nd.ray.d, mn, mx,
-                                              nd.ray.tmin, nd.ray.tmax, r.box.t_near);
+  rtu::box_rel(nd.raw ? kRawBase : nd.origin, mn, mx, nd.ray.o, rel_mn, rel_mx);
+  r.box.hit = rtu::ray_box(rel_mn, rel_mx, r.inv, nd.ray.tmin, nd.ray.tmax, r.box.t_near);
   _mm_setcsr(csr);
   return r;
 }
