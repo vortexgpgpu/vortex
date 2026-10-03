@@ -13,10 +13,13 @@
 #   - A DUT takes 1-2 hours, so the builds must fan out to ONE STANDALONE JOB
 #     EACH. A ci.yml cell is one job running a pytest slice; eight sequential
 #     synthesis runs in one cell would be a day.
-#   - Nightly builds are expensive even when free, so the run is SKIPPED unless
-#     master has actually moved since the last gate run. Unlike the self-hosted
-#     fpga_gate, a hosted runner keeps no state between runs, so the "already
-#     gated this commit" marker lives in the actions cache, keyed by SHA.
+#   - Nightly builds are expensive even when free, so the nightly runs only
+#     after a push changed what it synthesizes. GitHub cannot condition a
+#     schedule on the repository, so the workflow stays DISABLED between those
+#     pushes: ci.yml's plan job enables it on a push to master that touches the
+#     synthesis inputs, and the scheduled run disables it again as it starts.
+#     A quiet night therefore creates no run at all. A manual run needs the
+#     workflow enabled first (`gh workflow enable asic_gate.yml`).
 #
 # It always gates master, whatever branch the schedule happens to fire on. No
 # licence and no dedicated machine: yosys/sv2v/OpenSTA ship in the prebuilt
@@ -34,13 +37,9 @@ on:
       builds:
         description: "build ids/groups, space separated (blank = all)"
         default: ""
-      force:
-        description: "run even if master has not moved since the last gate"
-        type: boolean
-        default: false
 
-# One sweep at a time, so two nights' runs cannot both claim the SHA marker.
-# Never cancel a run in flight -- hours of synthesis are already spent.
+# One sweep at a time. Never cancel a run in flight -- hours of synthesis are
+# already spent.
 concurrency:
   group: asic-gate
   cancel-in-progress: false
@@ -50,77 +49,43 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # plan — decide whether to run at all, and emit one matrix entry per build.
+  # plan — disarm the nightly, and emit one matrix entry per build.
   # No build env; just PyYAML.
   # ---------------------------------------------------------------------------
   plan:
     runs-on: ubuntu-22.04
+    permissions:
+      actions: write
+      contents: read
     outputs:
       run: ${{ steps.q.outputs.run }}
       builds: ${{ steps.q.outputs.builds }}
       sha: ${{ steps.q.outputs.sha }}
-      key: ${{ steps.q.outputs.key }}
     steps:
+      # First, so a push that lands while this run synthesizes re-arms the next
+      # night instead of being cleared when this one ends. A failure here only
+      # costs an extra night, so it warns rather than blocking the gate.
+      - name: Disarm until the next push
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/asic_gate.yml/disable" \
+            || echo "::warning::could not disable asic_gate.yml; it will run again tomorrow"
+
       - uses: actions/checkout@v4
         with:
           ref: master               # hard-pinned: the gate always tracks master
-          fetch-depth: 0
       - run: pip install --quiet pyyaml
-
-      # The marker key is master's head AS CHECKED OUT, not github.sha: on a
-      # schedule those are normally the same, but the thing being gated is what
-      # the checkout produced. Computed here rather than with hashFiles() in the
-      # step below, which cannot see a runtime value.
-      - name: Compute gate key
-        id: key
-        run: |
-          set -euo pipefail
-          SHA=$(git rev-parse HEAD)
-          # The spec is in the key too, so editing the build list re-gates a
-          # commit that was already gated under the old list.
-          SPEC=$(sha256sum ci/testcases/asic_gate.yaml | cut -c1-16)
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "key=asic-gate-$SHA-$SPEC" >> "$GITHUB_OUTPUT"
-
-      # Restore this commit's marker. A match means a previous run already
-      # reached a verdict on this SHA, so master has not moved and there is
-      # nothing new to gate. The `report` job writes the marker at the end, with
-      # that run's reports inside it for a skipped night to republish. A cache
-      # entry cannot be overwritten, so each run saves under its own key and the
-      # newest one for the commit is what restores.
-      - name: Read gate marker
-        id: marker
-        uses: actions/cache/restore@v4
-        with:
-          path: .asic_gate
-          key: ${{ steps.key.outputs.key }}
-          restore-keys: ${{ steps.key.outputs.key }}-
 
       - name: Plan builds
         id: q
         env:
           IN_BUILDS: ${{ github.event.inputs.builds }}
-          FORCE: ${{ github.event.inputs.force }}
-          HIT: ${{ steps.marker.outputs.cache-matched-key != '' }}
-          SHA: ${{ steps.key.outputs.sha }}
-          KEY: ${{ steps.key.outputs.key }}
-          RUNS: ${{ github.server_url }}/${{ github.repository }}/actions/workflows/asic_gate.yml
         run: |
           set -euo pipefail
+          SHA=$(git rev-parse HEAD)
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "key=$KEY" >> "$GITHUB_OUTPUT"
-          if [ "$HIT" = "true" ] && [ "${FORCE:-}" != "true" ]; then
-            echo "master unchanged since the last gate run ($SHA) — skipping"
-            echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "builds=[]" >> "$GITHUB_OUTPUT"
-            # A skipped night has no verdict of its own, so it republishes the
-            # one the gated commit got: an unchanged red master must not read
-            # as an empty run.
-            NOTE="master is unchanged since the last gate run (\`$SHA\`), so nothing was synthesized. These are the results of [that run]($(cat .asic_gate/url 2>/dev/null || echo "$RUNS"))."
-            python3 ci/synth_report.py --annotate warning --note "$NOTE" .asic_gate \
-              >> "$GITHUB_STEP_SUMMARY" || true
-            exit 0
-          fi
           echo "gating $SHA"
           # Dispatch inputs only narrow the catalog, and reach the shell through
           # an env var: interpolating one into the script would let a dispatch
@@ -241,13 +206,16 @@ jobs:
           esac
 
   # ---------------------------------------------------------------------------
-  # report — collect every build's verdict into one summary, and record the SHA
-  # so tomorrow's run skips an unchanged master.
+  # report — collect every build's verdict into one summary, and re-arm the
+  # nightly when a build could not reach one.
   # ---------------------------------------------------------------------------
   report:
     needs: [plan, synth]
     if: always() && needs.plan.outputs.run == 'true'
     runs-on: ubuntu-22.04
+    permissions:
+      actions: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -263,7 +231,7 @@ jobs:
       # replacing it. Without the guard, synth_report.py's non-zero exit (1 =
       # regression, 2 = build error -- i.e. every case this step exists to
       # report) kills the step on that line, so `rc` never reaches
-      # $GITHUB_OUTPUT and the marker steps below read it as "".
+      # $GITHUB_OUTPUT and the re-arm step below reads it as "".
       - name: Summarize
         id: sum
         run: |
@@ -276,25 +244,16 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
-      # Record the SHA once every build has reached a VERDICT (pass or
-      # regression), so a red master is not re-synthesized every night — the
-      # failed run is the record. A build error (rc=2) does NOT record, so the
-      # next nightly retries it.
-      - name: Record gated SHA
-        if: steps.sum.outputs.rc != '2'
+      # A pass or a regression is a verdict, and the run is its record: a red
+      # master is not re-synthesized every night. A build error (rc=2) is not,
+      # so it re-arms the nightly to retry without waiting for another push.
+      - name: Re-arm after a build error
+        if: steps.sum.outputs.rc == '2'
         env:
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p .asic_gate
-          echo "${{ needs.plan.outputs.sha }}" > .asic_gate/sha
-          echo "$RUN_URL" > .asic_gate/url
-          cp reports/asic_gate_*.json .asic_gate/
-      - name: Save gate marker
-        if: steps.sum.outputs.rc != '2'
-        uses: actions/cache/save@v4
-        with:
-          path: .asic_gate
-          key: ${{ needs.plan.outputs.key }}-${{ github.run_id }}-${{ github.run_attempt }}
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/asic_gate.yml/enable" \
+            || echo "::warning::could not re-enable asic_gate.yml; the next push re-arms it"
 
       # Unzipped, so the summary opens in the browser straight from the run
       # page, and the joined report it was rendered from downloads as itself.

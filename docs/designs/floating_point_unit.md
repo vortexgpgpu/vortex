@@ -402,18 +402,28 @@ The Vivado and Quartus rows are the vendor operators' fixed latencies.
 ## 11. SimX model
 
 [`FpuUnit`](../../sim/simx/fpu_unit.cpp) computes results with the
-`rvfloats` soft-float library and models timing as the operation's latency
-plus a fixed 2 cycles for the front end:
+`rvfloats` soft-float library and models timing with the configured unit
+latencies:
 
 | operation class | modeled latency |
 |---|---|
-| FMA | `VX_CFG_FMA_LATENCY` + 2 |
-| DIV, SQRT | `VX_CFG_FDIV_LATENCY` + 2, `VX_CFG_FSQRT_LATENCY` + 2 |
-| CVT | `VX_CFG_FCVT_LATENCY` + 2 |
-| NCP | 2 + 2 |
+| FMA | `VX_CFG_FMA_LATENCY` |
+| DIV, SQRT | `VX_CFG_FDIV_LATENCY`, `VX_CFG_FSQRT_LATENCY` |
+| CVT | `VX_CFG_FCVT_LATENCY` |
+| NCP | `VX_CFG_FNCP_LATENCY` |
 
-Its output capacity is the tag-store depth plus one result-skid entry, which
-bounds the operations in flight the same way the RTL's tag store does.
+Its response port has one slot per tag (`VX_CFG_FPU_QUEUE_SIZE`). As in the
+RTL, an operation holds its tag from acceptance until its result is taken off
+that port, so the tags, not the pipeline depth, bound the operations in
+flight, and a result waiting on the commit arbiter keeps its tag:
+
+- At full bandwidth (`NUM_FPU_BLOCKS == ISSUE_WIDTH` and
+  `NUM_FPU_LANES == SIMD_WIDTH`) the commit arbiter reads the response port
+  directly and frees the tag when it grants the result. The result also takes
+  the one registered stage the other units cross into commit, so an FMA
+  commits `VX_CFG_FMA_LATENCY + 1` cycles after it enters.
+- At partial bandwidth the lane-gather stage takes the result off the port and
+  frees the tag.
 
 ---
 

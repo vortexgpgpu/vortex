@@ -122,6 +122,11 @@ $(PROJECT).host: $(OBJS)
 run-gpu: $(PROJECT).host $(KERNEL_SRCS)
 	./$(PROJECT).host $(OPTS)
 
+# The runtime for one driver, built with the CONFIGS this app resolved, so a
+# caller that builds ahead of the run builds the model the run will use.
+runtime-%:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/$* DESTDIR=$(VORTEX_RT_LIB)
+
 run-simx: $(PROJECT) $(KERNEL_SRCS)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)
 	LD_LIBRARY_PATH=$(OCL_ICD_LIB_DIR):$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=simx ./$(PROJECT) $(OPTS)

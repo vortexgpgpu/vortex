@@ -19,7 +19,17 @@ namespace vortex {
 
 class AluUnit : public FuncUnit<VX_CFG_NUM_ALU_BLOCKS> {
 public:
+  // Cycles the multiply/divide pipeline adds over the integer result stage.
+  static constexpr uint32_t kMulDivLatency = 3;
+
+  // Partial bandwidth: a lane-gather stage registers the results once more.
+  static constexpr bool kGather = (VX_CFG_NUM_ALU_BLOCKS != VX_CFG_ISSUE_WIDTH)
+                               || (VX_CFG_NUM_ALU_LANES != VX_CFG_SIMD_WIDTH);
+
   AluUnit(const SimContext& ctx, const char* name, Core*);
+
+  // Resolved branch of a stalled warp, registered toward the scheduler.
+  SimChannel<uint32_t> branch_ctl_out;
 
 protected:
   void on_tick() override;

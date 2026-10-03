@@ -46,6 +46,27 @@ static constexpr uint32_t kFedpLatency = VX_CFG_TCU_LATENCY;
 // unblocked result bypasses the landing queue).
 static constexpr uint32_t kMmaLatency = 1 + kFedpLatency;
 
+static constexpr uint64_t kLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+
+// WGMMA tile-buffer geometry in 32-bit words.
+static constexpr uint32_t kLmemBanks     = VX_CFG_LMEM_NUM_BANKS;
+static constexpr uint32_t kBankRowWords  = kLmemBanks * (VX_CFG_XLEN / 32);
+static constexpr uint32_t kBBlockWords   = kFedpWords * cfg::tcN;
+static constexpr uint32_t kBBlockWordsSp = cfg::tcK * cfg::tcN * 2;
+// One bank row holds kBSubBlocks consecutive dense B blocks.
+static constexpr uint32_t kBSubBlocks =
+    (VX_CFG_NUM_THREADS > kBBlockWords) ? (VX_CFG_NUM_THREADS / kBBlockWords) : 1;
+// A sparse B block spanning two 32-bit bank rows takes two reads.
+static constexpr bool kBSparseTwoFetch =
+    (kBBlockWordsSp == 2 * kLmemBanks) && (VX_CFG_XLEN == 32);
+// A block-major A stripe is m_steps blocks, each padded to whole bank rows.
+static constexpr uint32_t a_stripe_reads(uint32_t block_words) {
+  return (wg_cfg::m_steps * ((block_words + kLmemBanks - 1) / kLmemBanks) * kLmemBanks
+          + kBankRowWords - 1) / kBankRowWords;
+}
+static constexpr uint32_t kAStripeReads   = a_stripe_reads(cfg::tcM * kFedpWords);
+static constexpr uint32_t kAStripeReadsSp = a_stripe_reads(cfg::tcM * cfg::tcK);
+
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
 }
@@ -352,7 +373,6 @@ public:
     , perf_stats_()
   {
     exec_done_.fill(false);
-    wgmma_planned_warps_.fill(0);
     in_wgmma_.fill(false);
     wgmma_desc_.fill({0, 0});
   }
@@ -373,12 +393,17 @@ public:
     }
   #endif
     exec_done_.fill(false);
-    wgmma_planned_warps_.fill(0);
+    for (auto& due : result_due_) {
+      due.clear();
+    }
     in_wgmma_.fill(false);
     lmem_desc_.clear();
     wgmma_desc_.fill({0, 0});
     cta_owner_a_.fill(-1);
-    cta_owner_b_ = -1;
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
+    abuf_.fill(abuf_slot_t{});
+    bbuf_ = bbuf_slot_t{};
+  #endif
     cur_block_ = 0;
   #ifdef TCU_META_ENABLE
     agu_.fill(agu_state_t{});
@@ -534,131 +559,34 @@ public:
     this->agu_step();
   #endif
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
-    // Q-warp lock-step probe.
-    // Pass 1 — identify active WGMMA blocks and prime each one's plan() on
-    // first uop. WMMA and TCU_LD blocks are unaffected (no Q-coupling).
-    uint32_t wgmma_active = 0;
-    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
-      auto& input = simobject_->Inputs.at(b);
-      if (input.empty()) continue;
-      auto trace = input.peek();
-      if (!tcu_is_wgmma(std::get<TcuType>(trace->op_type))) continue;
-
-      uint32_t wid = trace->wid;
-      uint64_t wid_bit = (uint64_t(1) << wid);
-      int32_t new_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
-      auto& instr = *trace->instr_ptr;
-      auto tpuArgs = std::get<IntrTcuArgs>(instr.get_args());
-
-      if (tpuArgs.is_setup_uop)
-        continue;
-
-      wgmma_active |= (1u << b);
-
-      // CTA-overlap fence — defer this block's WGMMA if any other block
-      // is mid-flight with a different CTA. The shared B buffer assumes
-      // single-CTA occupancy across all blocks.
-      bool block_other_cta_inflight = false;
-      for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
-        if (k == b) continue;
-        if (in_wgmma_.at(k) && cta_owner_a_.at(k) != new_cta) {
-          block_other_cta_inflight = true;
-          break;
-        }
-      }
-      if (block_other_cta_inflight) {
-        wgmma_active &= ~(1u << b);
-        continue;
-      }
-
-      if (wgmma_planned_warps_.at(b) & wid_bit) continue;
-      if (!(tpuArgs.step_m == 0 && tpuArgs.step_n == 0 && tpuArgs.step_k == 0)) {
-        // Non-first uop arrived without a prior plan: first uop already drained.
-        // Mark planned and continue (descriptors persist in lmem_desc_[wid]).
-        wgmma_planned_warps_.at(b) |= wid_bit;
-        continue;
-      }
-      uint32_t a_desc = wgmma_desc_[wid][0];
-      uint32_t b_desc = wgmma_desc_[wid][1];
-      bool needs_setup = kFedp2K && !tpuArgs.is_a_smem
-                      && (std::get<TcuType>(trace->op_type) != TcuType::WGMMA_SP);
-      if (tpuArgs.is_first_uop && !needs_setup) {
-        if (tpuArgs.is_a_smem)
-          a_desc = trace->src_data.at(0).at(0).u32;
-        b_desc = trace->src_data.at(1).at(0).u32;
-        wgmma_desc_[wid][0] = a_desc;
-        wgmma_desc_[wid][1] = b_desc;
-      }
-
-      // Drop the shared B buffer only when no other block is mid-WGMMA —
-      // otherwise we'd evict their resident bytes mid-flight.
-      bool any_in_wgmma = false;
-      for (auto v : in_wgmma_) any_in_wgmma = any_in_wgmma || v;
-      auto& tbuf = simobject_->tbuf();
-      if (!any_in_wgmma) {
-        tbuf->invalidate_b();
-        cta_owner_b_ = -1;
-      }
-      // Only drop the per-block A buffer when no warp is currently in flight.
-      if (!in_wgmma_.at(b)) {
-        tbuf->invalidate_a(b);
-      }
-      this->plan_wgmma_lines(b, wid, a_desc, b_desc, tpuArgs,
-                             std::get<TcuType>(trace->op_type) == TcuType::WGMMA_SP);
-      if (tbuf->ready_a(b) && tbuf->ready_b()) {
-        ++perf_stats_.tbuf_cache_hits;
-      }
-      in_wgmma_.at(b) = true;
-      wgmma_planned_warps_.at(b) |= wid_bit;
-      cta_owner_a_.at(b) = new_cta;
-      if (cta_owner_b_ == -1) cta_owner_b_ = new_cta;
-    }
-
-    // Pass 2 — all active WGMMA blocks must have A/B operands resident
-    // before any of them advances.
-    if (wgmma_active != 0) {
-      uint32_t ready_mask = 0;
-      auto& tbuf = simobject_->tbuf();
-      for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
-        if (!((wgmma_active >> b) & 1u)) continue;
-        auto trace = simobject_->Inputs.at(b).peek();
-        auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
-        bool a_ok = !tpuArgs.is_a_smem || tbuf->ready_a(b);
-        bool b_ok = tbuf->ready_b();
-        if (a_ok && b_ok) ready_mask |= (1u << b);
-      }
-      if (ready_mask != wgmma_active) {
-        ++perf_stats_.tbuf_stalls;
-        return; // hold all blocks; per-block dispatch deferred to next tick
-      }
-    }
+    uint32_t wgmma_ready = this->tbuf_step();
+    uint32_t setup_fired = 0;
   #endif
 
+    uint64_t now = SimPlatform::instance().cycles();
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      // A result completing while an earlier one still waits for the commit
+      // side holds admission for the cycle. Results already visible but not
+      // taken are the output occupancy beyond those still in flight.
+      auto& due = result_due_.at(b);
+      due.erase(std::remove_if(due.begin(), due.end(), [now](uint64_t t) { return t < now; }), due.end());
+      bool completing = std::any_of(due.begin(), due.end(), [now](uint64_t t) { return t == now; });
+      bool backed_up = simobject_->Outputs.at(b).size() > due.size();
       auto& input = simobject_->Inputs.at(b);
       if (input.empty())
         continue;
+      if (completing && backed_up) {
+        continue;
+      }
       auto trace = input.peek();
       auto tcu_type = std::get<TcuType>(trace->op_type);
       auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
 
-      #ifdef VX_CFG_TCU_WGMMA_ENABLE
-      // CTA-overlap fence deferred this block — skip until pass 1 plans it.
-      if (tcu_is_wgmma(tcu_type) && !tpuArgs.is_setup_uop &&
-          !(wgmma_planned_warps_.at(b) & (uint64_t(1) << trace->wid)))
+    #ifdef VX_CFG_TCU_WGMMA_ENABLE
+      // A WGMMA compute uop fires once its tile-buffer operands are ready.
+      if (tcu_is_wgmma(tcu_type) && !tpuArgs.is_setup_uop
+       && !exec_done_.at(b) && !((wgmma_ready >> b) & 1u)) {
         continue;
-      if (tcu_is_wgmma(tcu_type) && !tpuArgs.is_setup_uop) {
-        int32_t this_cta = (int32_t)core_->scheduler().warp(trace->wid).cta_csrs.cta_id;
-        bool block_other_cta_inflight = false;
-        for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
-          if (k == b) continue;
-          if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {
-            block_other_cta_inflight = true;
-            break;
-          }
-        }
-        if (block_other_cta_inflight)
-          continue;
       }
     #endif
 
@@ -687,10 +615,10 @@ public:
           uint32_t a_desc = rs1_data.empty() ? 0 : rs1_data.at(0).u32;
           uint32_t b_desc = rs2_data.empty() ? 0 : rs2_data.at(0).u32;
           cur_block_ = b;
+          int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
           // CTA lockstep invariant: no block may execute a WGMMA uop for a
           // different cta_id while another block is mid-WGMMA.
           if (!tpuArgs.is_setup_uop) {
-            int32_t this_cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
             for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
               if (k == b) continue;
               if (in_wgmma_.at(k) && cta_owner_a_.at(k) != this_cta) {
@@ -707,6 +635,19 @@ public:
                       a_desc, b_desc, rs1_data, rs2_data, rs3_data, rd_data,
                       tcu_is_sparse(tcu_type),
                       tpuArgs.cd_nregs, tpuArgs.is_a_smem, tpuArgs.is_setup_uop);
+          if (tpuArgs.is_setup_uop) {
+            setup_fired |= (1u << b);
+          } else {
+            // The block owns its CTA from its first compute uop to its last.
+            if (tpuArgs.is_first_uop) {
+              in_wgmma_.at(b) = true;
+              cta_owner_a_.at(b) = this_cta;
+            }
+            if (tpuArgs.is_last_uop) {
+              in_wgmma_.at(b) = false;
+              cta_owner_a_.at(b) = -1;
+            }
+          }
         } break;
       #endif
       #ifdef TCU_META_ENABLE
@@ -755,19 +696,8 @@ public:
       }
     #endif
       if (simobject_->Outputs.at(b).try_send(trace, delay)) {
+        due.push_back(now + delay);
         exec_done_.at(b) = false;
-      #ifdef VX_CFG_TCU_WGMMA_ENABLE
-        // Clear this warp's plan bit on its last uop so the next WGMMA
-        // re-decodes descriptors. Block stays in_wgmma_ until all warps drain.
-        if (tcu_is_wgmma(tcu_type) && trace->instr_ptr->get_fu_unlock()) {
-          uint64_t wid_bit = (uint64_t(1) << trace->wid);
-          wgmma_planned_warps_.at(b) &= ~wid_bit;
-          if (wgmma_planned_warps_.at(b) == 0) {
-            in_wgmma_.at(b) = false;
-            cta_owner_a_.at(b) = -1;
-          }
-        }
-      #endif
       #ifdef TCU_META_ENABLE
         // TCU_LD retired: free the AGU for the next metadata load.
         if (tcu_type == TcuType::TCU_LD) {
@@ -778,96 +708,365 @@ public:
         input.pop();
       }
     }
+
+  #ifdef VX_CFG_TCU_WGMMA_ENABLE
+    // A setup uop drops its block's A stripe and the shared B row at the end
+    // of the cycle; uops firing alongside it still read the old contents.
+    if (setup_fired != 0) {
+      auto& tbuf = simobject_->tbuf();
+      for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+        if ((setup_fired >> b) & 1u) {
+          abuf_.at(b) = abuf_slot_t{};
+          tbuf->invalidate_a(b);
+        }
+      }
+      bbuf_ = bbuf_slot_t{};
+      tbuf->invalidate_b();
+    }
+  #endif
   }
 
-  // Plan all line addresses required for the current WGMMA's A, B and
-  // sparse-metadata tiles into the per-role caches inside TcuTbuf.
-  // Lines already resident or in-flight are skipped (additive plan).
-  void plan_wgmma_lines(uint32_t b, uint32_t wid,
-                        uint32_t a_desc, uint32_t b_desc,
-                        const IntrTcuArgs& args, bool is_sparse) {
-    uint32_t fmt_s = args.fmt_s;
-    bool is_a_smem = args.is_a_smem;
-    uint32_t e_bits = elem_bits(fmt_s);
-    // NRC: cd_nregs 0/1/2 → 8/16/32; xtileN = NRC * NT / xtileM.
-    uint32_t nrc      = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
-    uint32_t xtile_n  = (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
+#ifdef VX_CFG_TCU_WGMMA_ENABLE
+  // A block's A buffer: one k-stripe.
+  struct abuf_slot_t {
+    bool     valid = false;
+    bool     fetching = false;
+    bool     first_refetched = false;
+    uint32_t step_k = 0;
+  };
 
-    lmem_desc_t sd_a{}, sd_b{};
-    if (is_a_smem) {
-      sd_a = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) * 8 / e_bits, false};
-      lmem_desc_[wid][0] = sd_a;
+  // The shared B buffer and its refill key.
+  struct bbuf_slot_t {
+    bool     valid = false;
+    bool     fetching = false;
+    bool     first_refetched = false;
+    bool     kmajor = false;
+    bool     sparse = false;
+    uint64_t row = 0;       // block-major: LMEM address of the bank row
+    int32_t  cta = -1;      // K-major: the (cta, step_k, step_n) block
+    uint32_t step_k = 0;
+    uint32_t step_n = 0;
+
+    bool same_row(const bbuf_slot_t& key) const {
+      if (kmajor != key.kmajor || sparse != key.sparse) {
+        return false;
+      }
+      if (kmajor) {
+        return cta == key.cta && step_k == key.step_k && step_n == key.step_n;
+      }
+      return row == key.row;
     }
-    sd_b = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) * 8 / e_bits, false};
-    lmem_desc_[wid][1] = sd_b;
+  };
 
-    // tileK = xtileK × ratio (ratio = 32/e_bits); sparse compresses K on A only.
-    uint32_t ratio  = 32 / e_bits;
-    uint32_t tile_k = uint32_t(wg_cfg::xtileK) * ratio;
-    uint32_t a_k    = is_sparse ? (tile_k / 2) : tile_k;
+  // One block's WGMMA compute uop as the tile buffers see it.
+  struct tbuf_req_t {
+    bool     valid = false;
+    uint32_t wid = 0;
+    int32_t  cta = -1;
+    bool     is_first_uop = false;
+    bool     is_sparse = false;
+    bool     a_is_smem = false;
+    uint32_t step_m = 0;
+    uint32_t step_n = 0;
+    uint32_t step_k = 0;
+    uint32_t cd_nregs = 0;
+    uint32_t fmt_s = 0;
+    uint32_t desc_b = 0;
 
-    // ldm==0 → block-major layout; ldm!=0 → row-major (stride in elements).
-    uint32_t fedp_words  = kFedpWords;
-    uint32_t b_k_blk_dim = fedp_words * ratio;
-    uint32_t a_k_blk_dim = is_sparse ? (cfg::tcK * ratio) : b_k_blk_dim;
-    uint32_t a_blk_elems = cfg::tcM * a_k_blk_dim;
-    uint32_t b_blk_elems = b_k_blk_dim * cfg::tcN;
-    uint32_t n_steps     = xtile_n / cfg::tcN;
+    // The A buffer forces a refetch on a WGMMA's first compute uop.
+    bool first_compute() const {
+      return step_m == 0 && step_n == 0 && step_k == 0;
+    }
+  };
 
+  // Evaluate the A/B tile buffers for the uops at the head of each block
+  // and return the blocks whose WGMMA compute uop may fire.
+  //
+  // The B buffer holds one bank row and refills when the key of the lowest
+  // block with a uop changes; a block whose (desc_b, step_k, step_n) differs
+  // from that block's waits. Each A buffer holds its block's k-stripe.
+  // Refills start from the buffer state at the beginning of the cycle, and a
+  // refill that completes this cycle serves from the next.
+  uint32_t tbuf_step() {
     auto& tbuf = simobject_->tbuf();
 
-    // Plan A lines (SS mode only): xtileM rows × a_k columns.
-    if (is_a_smem) {
-      bool a_block_major = (sd_a.ldm == 0);
-      std::vector<uint64_t> a_lines;
-      a_lines.reserve(uint32_t(wg_cfg::xtileM) * a_k);
-      for (uint32_t r = 0; r < wg_cfg::xtileM; ++r) {
-        for (uint32_t c = 0; c < a_k; ++c) {
-          uint64_t elem_off;
-          if (a_block_major) {
-            uint32_t m_blk = r / cfg::tcM;
-            uint32_t i_in  = r % cfg::tcM;
-            uint32_t k_blk = c / a_k_blk_dim;
-            uint32_t k_in  = c % a_k_blk_dim;
-            elem_off = (k_blk * wg_cfg::m_steps + m_blk) * a_blk_elems
-                     + i_in * a_k_blk_dim + k_in;
-          } else {
-            elem_off = uint64_t(r) * sd_a.ldm + c;
-          }
-          uint64_t addr = sd_a.base + elem_off * e_bits / 8;
-          a_lines.push_back(addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1));
+    std::array<tbuf_req_t, VX_CFG_NUM_TCU_BLOCKS> reqs;
+    int32_t rep = -1;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& input = simobject_->Inputs.at(b);
+      if (input.empty() || exec_done_.at(b)) {
+        continue;
+      }
+      auto trace = input.peek();
+      auto tcu_type = std::get<TcuType>(trace->op_type);
+      if (!tcu_is_wgmma(tcu_type)) {
+        continue;
+      }
+      auto tpuArgs = std::get<IntrTcuArgs>(trace->instr_ptr->get_args());
+      if (tpuArgs.is_setup_uop) {
+        continue;
+      }
+      uint32_t wid = trace->wid;
+      int32_t cta = (int32_t)core_->scheduler().warp(wid).cta_csrs.cta_id;
+      // CTA lockstep: wait while another block is mid-WGMMA for another CTA.
+      bool cta_conflict = false;
+      for (uint32_t k = 0; k < VX_CFG_NUM_TCU_BLOCKS; ++k) {
+        if (k != b && in_wgmma_.at(k) && cta_owner_a_.at(k) != cta) {
+          cta_conflict = true;
+          break;
         }
       }
-      tbuf->plan_a(b, a_lines);
-      // Sparse metadata is preloaded into sparse_meta_ via TCU_LD;
-      // no metadata lines are planned through tbuf here.
+      if (cta_conflict) {
+        continue;
+      }
+
+      bool is_sparse = (tcu_type == TcuType::WGMMA_SP);
+      bool needs_setup = kFedp2K && !tpuArgs.is_a_smem && !is_sparse;
+      if (tpuArgs.is_first_uop && !needs_setup) {
+        // The first compute uop carries the live descriptors.
+        if (tpuArgs.is_a_smem) {
+          wgmma_desc_[wid][0] = trace->src_data.at(0).at(0).u32;
+        }
+        wgmma_desc_[wid][1] = trace->src_data.at(1).at(0).u32;
+        this->decode_descs(wid, tpuArgs.fmt_s, tpuArgs.is_a_smem);
+      }
+
+      auto& req = reqs.at(b);
+      req.valid        = true;
+      req.wid          = wid;
+      req.cta          = cta;
+      req.is_first_uop = tpuArgs.is_first_uop;
+      req.is_sparse    = is_sparse;
+      req.a_is_smem    = tpuArgs.is_a_smem;
+      req.step_m       = tpuArgs.step_m;
+      req.step_n       = tpuArgs.step_n;
+      req.step_k       = tpuArgs.step_k;
+      req.cd_nregs     = tpuArgs.cd_nregs;
+      req.fmt_s        = tpuArgs.fmt_s;
+      req.desc_b       = wgmma_desc_[wid][1];
+      if (rep < 0) {
+        rep = b;
+      }
     }
 
-    // Plan B lines: always dense in K, tileK rows × xtileN columns.
-    //   ldm == 0 → block-major; ldm != 0 → K-major (smem[n*ldm + k]).
-    bool b_block_major = (sd_b.ldm == 0);
-    std::vector<uint64_t> b_lines;
-    b_lines.reserve(tile_k * xtile_n);
-    for (uint32_t r = 0; r < tile_k; ++r) {
-      for (uint32_t c = 0; c < xtile_n; ++c) {
-        uint64_t elem_off;
-        if (b_block_major) {
-          uint32_t k_blk = r / b_k_blk_dim;
-          uint32_t r_in  = r % b_k_blk_dim;
-          uint32_t n_blk = c / cfg::tcN;
-          uint32_t n_in  = c % cfg::tcN;
-          // Within-block layout: N outer, K inner.
-          elem_off = (k_blk * n_steps + n_blk) * b_blk_elems
-                   + n_in * b_k_blk_dim + r_in;
-        } else {
-          elem_off = uint64_t(c) * sd_b.ldm + r;
+    // Shared B buffer, keyed by the lowest block with a uop.
+    bool bbuf_ready = true;
+    if (rep >= 0) {
+      auto& r = reqs.at(rep);
+      bbuf_slot_t key = this->bbuf_key(r);
+      bool resident = bbuf_.valid && bbuf_.same_row(key)
+                   && (!key.kmajor || !r.is_first_uop || bbuf_.first_refetched);
+      if (resident) {
+        ++perf_stats_.tbuf_cache_hits;
+      } else {
+        bbuf_ready = false;
+        ++perf_stats_.tbuf_stalls;
+        if (!bbuf_.fetching) {
+          bool first_refetched = bbuf_.first_refetched;
+          bbuf_ = key;
+          bbuf_.fetching = true;
+          bbuf_.first_refetched = first_refetched;
+          DT(3, simobject_->name() << " bbuf: alloc desc_b=0x" << std::hex << r.desc_b
+                << std::dec << ", sparse=" << r.is_sparse << ", step_k=" << r.step_k
+                << ", step_n=" << r.step_n << ", row=0x" << std::hex << key.row
+                << std::dec << ", wid=" << r.wid);
+          tbuf->fill_b(this->b_refill(r));
         }
-        uint64_t addr = sd_b.base + elem_off * e_bits / 8;
-        b_lines.push_back(addr & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1));
       }
     }
-    tbuf->plan_b(b_lines);
+
+    // Per-block A buffers.
+    std::array<bool, VX_CFG_NUM_TCU_BLOCKS> abuf_ready;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& r = reqs.at(b);
+      auto& slot = abuf_.at(b);
+      abuf_ready.at(b) = true;
+      if (!r.valid || !r.a_is_smem) {
+        continue;
+      }
+      bool resident = slot.valid && slot.step_k == r.step_k
+                   && (!r.first_compute() || slot.first_refetched);
+      if (resident) {
+        continue;
+      }
+      abuf_ready.at(b) = false;
+      ++perf_stats_.tbuf_stalls;
+      if (!slot.fetching) {
+        slot.valid    = false;
+        slot.fetching = true;
+        slot.step_k   = r.step_k;
+        tbuf->fill_a(b, this->a_refill(r));
+      }
+    }
+
+    uint32_t ready_mask = 0;
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& r = reqs.at(b);
+      if (!r.valid) {
+        continue;
+      }
+      auto& p = reqs.at(rep);
+      bool key_match = ((r.desc_b & 0xffff) == (p.desc_b & 0xffff))
+                    && r.step_k == p.step_k
+                    && r.step_n == p.step_n
+                    && r.cd_nregs == p.cd_nregs;
+      if (abuf_ready.at(b) && bbuf_ready && key_match) {
+        ready_mask |= (1u << b);
+      }
+    }
+
+    // Buffer state for the next cycle.
+    if (bbuf_.fetching && !tbuf->filling_b()) {
+      bbuf_.fetching = false;
+      bbuf_.valid = true;
+      if (rep >= 0 && reqs.at(rep).is_first_uop) {
+        bbuf_.first_refetched = true;
+      }
+    } else if (rep >= 0 && bbuf_ready && !reqs.at(rep).is_first_uop) {
+      bbuf_.first_refetched = false;
+    }
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& r = reqs.at(b);
+      auto& slot = abuf_.at(b);
+      if (slot.fetching && !tbuf->filling_a(b)) {
+        slot.fetching = false;
+        slot.valid = true;
+        if (r.valid && r.first_compute()) {
+          slot.first_refetched = true;
+        }
+      } else if (r.valid && abuf_ready.at(b) && !r.first_compute()) {
+        slot.first_refetched = false;
+      }
+    }
+
+    return ready_mask;
   }
+
+  // Decode a warp's WGMMA descriptors into LMEM base and row stride.
+  void decode_descs(uint32_t wid, uint32_t fmt_s, bool is_a_smem) {
+    uint32_t e_bits = elem_bits(fmt_s);
+    uint32_t a_desc = wgmma_desc_[wid][0];
+    uint32_t b_desc = wgmma_desc_[wid][1];
+    if (is_a_smem) {
+      lmem_desc_[wid][0] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (a_desc & 0xFFFF), (a_desc >> 16) * 8 / e_bits, false};
+    }
+    lmem_desc_[wid][1] = {uint64_t(VX_MEM_LMEM_BASE_ADDR) + (b_desc & 0xFFFF), (b_desc >> 16) * 8 / e_bits, false};
+  }
+
+  static uint32_t xtile_n_of(uint32_t cd_nregs) {
+    // NRC: cd_nregs 0/1/2 → 8/16/32; xtileN = NRC * NT / xtileM.
+    uint32_t nrc = (cd_nregs == 0) ? 8 : (cd_nregs == 1) ? 16 : 32;
+    return (nrc * VX_CFG_NUM_THREADS) / wg_cfg::xtileM;
+  }
+
+  // Refill key of the B row serving `req`. Block-major B is keyed by the
+  // bank row holding the (step_k, step_n) block; K-major B by the block.
+  bbuf_slot_t bbuf_key(const tbuf_req_t& req) {
+    const auto& sd_b = lmem_desc_[req.wid][1];
+    bbuf_slot_t key;
+    key.kmajor = (sd_b.ldm != 0);
+    key.sparse = req.is_sparse;
+    if (key.kmajor) {
+      key.cta    = req.cta;
+      key.step_k = req.step_k;
+      key.step_n = req.step_n;
+    } else {
+      uint32_t n_steps = xtile_n_of(req.cd_nregs) / cfg::tcN;
+      uint32_t blk = req.step_k * n_steps + req.step_n;
+      uint32_t blk_bytes = req.is_sparse ? (kBBlockWordsSp * 4) : (kBBlockWords * 4);
+      uint32_t blks_per_row = req.is_sparse ? 1 : kBSubBlocks;
+      key.row = sd_b.base + uint64_t(blk / blks_per_row) * blks_per_row * blk_bytes;
+    }
+    return key;
+  }
+
+  // LMEM reads that refill the B buffer for `req`: one bank row for a
+  // block-major row (two when a sparse block spans two rows) and one per
+  // N-row of the block in K-major layout.
+  std::vector<TcuTbuf::LmemRead> b_refill(const tbuf_req_t& req) {
+    const auto& sd_b = lmem_desc_[req.wid][1];
+    uint32_t e_bits  = elem_bits(req.fmt_s);
+    uint32_t ratio   = 32 / e_bits;
+    uint32_t xtile_n = xtile_n_of(req.cd_nregs);
+    uint32_t n_steps = xtile_n / cfg::tcN;
+    uint32_t k_words = req.is_sparse ? cfg::tcK : kFedpWords;
+    bool kmajor = (sd_b.ldm != 0);
+
+    // (step_k, step_n) blocks this refill brings in.
+    uint32_t blk = req.step_k * n_steps + req.step_n;
+    uint32_t blks = (kmajor || req.is_sparse) ? 1 : kBSubBlocks;
+    uint32_t first_blk = blk - (blk % blks);
+
+    std::vector<uint64_t> lines;
+    for (uint32_t bi = first_blk; bi < first_blk + blks; ++bi) {
+      uint32_t step_k = bi / n_steps;
+      uint32_t step_n = bi % n_steps;
+      for (uint32_t j = 0; j < cfg::tcN; ++j) {
+        uint32_t col = step_n * cfg::tcN + j;
+        for (uint32_t z = 0; z < k_words; ++z) {
+          uint32_t k_elem = (step_k * k_words + z) * ratio * (req.is_sparse ? 2 : 1);
+          uint32_t k_elems = req.is_sparse ? (2 * ratio) : ratio;
+          for (uint32_t e = 0; e < k_elems; ++e) {
+            uint64_t off = elem_offset(sd_b, k_elem + e, col, e_bits, xtile_n,
+                                       true, req.is_sparse, false);
+            lines.push_back((sd_b.base + off * e_bits / 8) & kLineMask);
+          }
+        }
+      }
+    }
+
+    uint32_t num_reads = kmajor ? cfg::tcN
+                       : (req.is_sparse && kBSparseTwoFetch) ? 2 : 1;
+    return split_reads(std::move(lines), num_reads);
+  }
+
+  // LMEM reads that refill a block's A buffer with the k-stripe of `req`:
+  // one per bank row of a block-major stripe, one per row in row-major.
+  std::vector<TcuTbuf::LmemRead> a_refill(const tbuf_req_t& req) {
+    const auto& sd_a = lmem_desc_[req.wid][0];
+    uint32_t e_bits  = elem_bits(req.fmt_s);
+    uint32_t ratio   = 32 / e_bits;
+    uint32_t xtile_n = xtile_n_of(req.cd_nregs);
+    uint32_t k_words = req.is_sparse ? cfg::tcK : kFedpWords;
+
+    std::vector<uint64_t> lines;
+    for (uint32_t row = 0; row < wg_cfg::m_steps * cfg::tcM; ++row) {
+      for (uint32_t z = 0; z < k_words; ++z) {
+        uint32_t k_elem = (req.step_k * k_words + z) * ratio;
+        for (uint32_t e = 0; e < ratio; ++e) {
+          uint64_t off = elem_offset(sd_a, row, k_elem + e, e_bits, xtile_n,
+                                     false, false, req.is_sparse);
+          lines.push_back((sd_a.base + off * e_bits / 8) & kLineMask);
+        }
+      }
+    }
+
+    uint32_t num_reads = (sd_a.ldm != 0) ? (wg_cfg::m_steps * cfg::tcM)
+                       : req.is_sparse ? kAStripeReadsSp : kAStripeReads;
+    return split_reads(std::move(lines), num_reads);
+  }
+
+  // Spread a refill's distinct lines over the hardware's read count.
+  static std::vector<TcuTbuf::LmemRead> split_reads(std::vector<uint64_t> lines,
+                                                    uint32_t num_reads) {
+    std::sort(lines.begin(), lines.end());
+    lines.erase(std::unique(lines.begin(), lines.end()), lines.end());
+    uint32_t n = lines.size();
+    if (n == 0) {
+      return {};
+    }
+    std::vector<TcuTbuf::LmemRead> reads(num_reads);
+    for (uint32_t i = 0; i < num_reads; ++i) {
+      if (n >= num_reads) {
+        reads.at(i).assign(lines.begin() + (uint64_t(i) * n) / num_reads,
+                           lines.begin() + (uint64_t(i + 1) * n) / num_reads);
+      } else {
+        reads.at(i).push_back(lines.at(i % n));
+      }
+    }
+    return reads;
+  }
+#endif // VX_CFG_TCU_WGMMA_ENABLE
 
 
   void wmma(uint32_t wid,
@@ -1185,6 +1384,68 @@ private:
 #endif
   }
 
+  // Element offset of one operand element from its descriptor base. A is
+  // (row=M, col=K) and B is (row=K, col=N); `pack_along_row` selects B.
+  static uint64_t elem_offset(const lmem_desc_t& desc, uint32_t row, uint32_t col,
+                              uint32_t e_bits, uint32_t xtile_n,
+                              bool pack_along_row, bool sparse_b,
+                              bool sparse_a_layout) {
+    uint32_t ratio = (e_bits >= 32) ? 1 : (32 / e_bits);
+    uint64_t elem_off;
+    if (desc.ldm == 0) {
+      // Block-major SMEM. K dimension is along col for A (pack_along_row
+      // false) and along row for B (pack_along_row true).
+      uint32_t k_blk_dim = (sparse_a_layout && !pack_along_row)
+                         ? (cfg::tcK * ratio)
+                         : (kFedpWords * ratio);
+      if (pack_along_row && sparse_b) {
+        // Sparse B in flat (candidate-pair) layout: block-contiguous
+        // K-word-major / N-inner order [kw_in*tcN + n_in].
+        uint32_t b_tcK_words = cfg::tcK * 2;
+        uint32_t k_word = row / ratio;
+        uint32_t elem   = row % ratio;
+        uint32_t k_blk  = k_word / b_tcK_words;
+        uint32_t kw_in  = k_word % b_tcK_words;
+        uint32_t n_blk  = col / cfg::tcN;
+        uint32_t n_in   = col % cfg::tcN;
+        uint32_t blk_words = cfg::tcN * b_tcK_words;
+        uint32_t n_steps   = xtile_n / cfg::tcN;
+        uint64_t word_off  = (k_blk * n_steps + n_blk) * blk_words
+                           + (kw_in * cfg::tcN + n_in);
+        elem_off = word_off * ratio + elem;
+      } else if (pack_along_row) {
+        // Dense B (block-major): r is K coord, c is N coord; N outer, K inner.
+        uint32_t k_blk = row / k_blk_dim;
+        uint32_t r_in  = row % k_blk_dim;
+        uint32_t n_blk = col / cfg::tcN;
+        uint32_t n_in  = col % cfg::tcN;
+        uint32_t b_blk_elems = k_blk_dim * cfg::tcN;
+        uint32_t n_steps     = xtile_n / cfg::tcN;
+        elem_off = (k_blk * n_steps + n_blk) * b_blk_elems
+                 + n_in * k_blk_dim + r_in;
+      } else {
+        // A: r is M coord, c is K coord.
+        uint32_t m_blk = row / cfg::tcM;
+        uint32_t i_in  = row % cfg::tcM;
+        uint32_t k_blk = col / k_blk_dim;
+        uint32_t k_in  = col % k_blk_dim;
+        uint32_t a_blk_elems = cfg::tcM * k_blk_dim;
+        elem_off = (k_blk * wg_cfg::m_steps + m_blk) * a_blk_elems
+                 + i_in * k_blk_dim + k_in;
+      }
+    } else if (desc.col_major) {
+      elem_off = uint64_t(col) * desc.ldm + row;
+    } else if (pack_along_row) {
+      // B: K-major (N-outer K-inner). row=K, col=N;
+      // ldm = stride in elements between N rows.
+      elem_off = uint64_t(col) * desc.ldm + row;
+    } else {
+      // A: row-major (M-outer K-inner). row=M, col=K.
+      elem_off = uint64_t(row) * desc.ldm + col;
+    }
+    return elem_off;
+  }
+
   // Gather one 32-bit operand word from a TCU line cache.
   // `read_line` is supplied by the caller and routes to the right per-role
   // buffer inside TcuTbuf (A → read_a, B → read_b). For sub-32-bit formats,
@@ -1201,60 +1462,8 @@ private:
     for (uint32_t r = 0; r < ratio; ++r) {
       uint32_t cur_row = pack_along_row ? (row + r) : row;
       uint32_t cur_col = pack_along_row ? col       : (col + r);
-      uint64_t elem_off;
-      if (desc.ldm == 0) {
-        // Block-major SMEM. K dimension is along col for A (pack_along_row
-        // false) and along row for B (pack_along_row true).
-        uint32_t k_blk_dim = (sparse_a_layout && !pack_along_row)
-                           ? (cfg::tcK * ratio)
-                           : (kFedpWords * ratio);
-        if (pack_along_row && sparse_b) {
-          // Sparse B in flat (candidate-pair) layout: block-contiguous
-          // K-word-major / N-inner order [kw_in*tcN + n_in] (mirrors
-          // vx_tensor.h b_sp_flat_idx). The bbuf applies the candidate-pair
-          // read-perm; here we just read logically.
-          uint32_t b_tcK_words = cfg::tcK * 2;
-          uint32_t k_word = cur_row / ratio;
-          uint32_t elem   = cur_row % ratio;
-          uint32_t k_blk  = k_word / b_tcK_words;
-          uint32_t kw_in  = k_word % b_tcK_words;
-          uint32_t n_blk  = cur_col / cfg::tcN;
-          uint32_t n_in   = cur_col % cfg::tcN;
-          uint32_t blk_words = cfg::tcN * b_tcK_words;
-          uint32_t n_steps   = cur_xtile_n_ / cfg::tcN;
-          uint64_t word_off  = (k_blk * n_steps + n_blk) * blk_words
-                             + (kw_in * cfg::tcN + n_in);
-          elem_off = word_off * ratio + elem;
-        } else if (pack_along_row) {
-          // Dense B (block-major): r is K coord, c is N coord; N outer, K inner.
-          uint32_t k_blk = cur_row / k_blk_dim;
-          uint32_t r_in  = cur_row % k_blk_dim;
-          uint32_t n_blk = cur_col / cfg::tcN;
-          uint32_t n_in  = cur_col % cfg::tcN;
-          uint32_t b_blk_elems = k_blk_dim * cfg::tcN;
-          uint32_t n_steps     = cur_xtile_n_ / cfg::tcN;
-          elem_off = (k_blk * n_steps + n_blk) * b_blk_elems
-                   + n_in * k_blk_dim + r_in;
-        } else {
-          // A: r is M coord, c is K coord.
-          uint32_t m_blk = cur_row / cfg::tcM;
-          uint32_t i_in  = cur_row % cfg::tcM;
-          uint32_t k_blk = cur_col / k_blk_dim;
-          uint32_t k_in  = cur_col % k_blk_dim;
-          uint32_t a_blk_elems = cfg::tcM * k_blk_dim;
-          elem_off = (k_blk * wg_cfg::m_steps + m_blk) * a_blk_elems
-                   + i_in * k_blk_dim + k_in;
-        }
-      } else if (desc.col_major) {
-        elem_off = uint64_t(cur_col) * desc.ldm + cur_row;
-      } else if (pack_along_row) {
-        // B: K-major (N-outer K-inner). cur_row=K, cur_col=N;
-        // ldm = stride in elements between N rows.
-        elem_off = uint64_t(cur_col) * desc.ldm + cur_row;
-      } else {
-        // A: row-major (M-outer K-inner). cur_row=M, cur_col=K.
-        elem_off = uint64_t(cur_row) * desc.ldm + cur_col;
-      }
+      uint64_t elem_off = elem_offset(desc, cur_row, cur_col, e_bits, cur_xtile_n_,
+                                      pack_along_row, sparse_b, sparse_a_layout);
       uint64_t byte_addr = desc.base + elem_off * e_bits / 8;
       auto line = read_line(byte_addr);
       if (!line) {
@@ -1355,8 +1564,8 @@ private:
   mutable PerfStats perf_stats_;
   // Per-block guard: execute already happened for this trace; reset on pop().
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> exec_done_;
-  // Per-block bitmask of warp IDs with planned WGMMA lines; cleared on fu_unlock.
-  std::array<uint64_t, VX_CFG_NUM_TCU_BLOCKS> wgmma_planned_warps_;
+  // Cycles at which each block's results sent so far become visible.
+  std::array<std::vector<uint64_t>, VX_CFG_NUM_TCU_BLOCKS> result_due_;
   // True while a block is between its first and last WGMMA uop.
   std::array<bool, VX_CFG_NUM_TCU_BLOCKS> in_wgmma_;
   // Current block index, set before delegating to wgmma().
@@ -1366,9 +1575,12 @@ private:
   bool cur_is_sparse_ = false;
   // xtileN for the active WGMMA (derived from NRC).
   uint32_t cur_xtile_n_ = 8;
-  // CTA owner per block's A buffer and the shared B buffer (-1 = unowned).
+  // CTA each block holds while mid-WGMMA (-1 = none).
   std::array<int32_t, VX_CFG_NUM_TCU_BLOCKS> cta_owner_a_{};
-  int32_t cta_owner_b_ = -1;
+#ifdef VX_CFG_TCU_WGMMA_ENABLE
+  std::array<abuf_slot_t, VX_CFG_NUM_TCU_BLOCKS> abuf_;
+  bbuf_slot_t bbuf_;
+#endif
 };
 
 ///////////////////////////////////////////////////////////////////////////////

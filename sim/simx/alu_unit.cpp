@@ -25,9 +25,16 @@
 using namespace vortex;
 
 AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core)
+	// The output channel also counts results still in flight: it covers the
+	// deepest path plus the result waiting for the commit side, so the
+	// multiplier keeps one result per cycle.
+	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core, kMulDivLatency + (kGather ? 1 : 0) + 2)
+	, branch_ctl_out(this, VX_CFG_NUM_WARPS)
 {}
 
+// Cycles from this unit's execute to its output, beyond the commit-queue hop.
+// Execute stands for the integer ALU's registered result (the branch_ctl
+// stage), so a plain op leaves at once.
 uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 	if (std::get_if<AluType>(&trace->op_type)) {
 		auto alu_type = std::get<AluType>(trace->op_type);
@@ -45,16 +52,16 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 		case AluType::AND:
 		case AluType::OR:
 		case AluType::CZERO:
-			return 2;
+			return 0;
 		default:
 			std::abort();
 		}
 	} else if (std::get_if<VoteType>(&trace->op_type)) {
-		return 2;
+		return 0;
 	} else if (std::get_if<ShflType>(&trace->op_type)) {
-		return 2;
+		return 0;
 	} else if (std::get_if<WgatherType>(&trace->op_type)) {
-		return 2;
+		return 0;
 	} else if (std::get_if<BrType>(&trace->op_type)) {
 		auto br_type = std::get<BrType>(trace->op_type);
 		switch (br_type) {
@@ -62,25 +69,25 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 		case BrType::JAL:
 		case BrType::JALR:
 		case BrType::SYS:
-			return 2;
+			return 0;
 		default:
 			std::abort();
 		}
 	} else if (std::get_if<MdvType>(&trace->op_type)) {
 		auto mdv_type = std::get<MdvType>(trace->op_type);
 		switch (mdv_type) {
+		// Three multiplier stages plus the multiply/divide response register,
+		// against the integer ALU's single response stage; simulation divides
+		// run in that same pipeline rather than iteratively.
 		case MdvType::MUL:
 		case MdvType::MULHU:
 		case MdvType::MULH:
 		case MdvType::MULHSU:
-			return 2;
 		case MdvType::DIV:
 		case MdvType::DIVU:
 		case MdvType::REM:
 		case MdvType::REMU:
-			// Simulation divides are fully pipelined at the multiplier's
-			// depth, not iterative.
-			return 2;
+			return kMulDivLatency;
 		default:
 			std::abort();
 		}
@@ -562,8 +569,13 @@ void AluUnit::on_tick() {
       if (!output.full()) {
         auto trace = input.peek();
         this->execute(trace);
-        uint32_t delay = this->latency_of(trace);
-        output.send(trace, delay);
+        // A branch releases its warp as it resolves, not when its result
+        // retires.
+        if (std::get_if<BrType>(&trace->op_type) && trace->eop && trace->resume_warp) {
+          branch_ctl_out.send(trace->wid, 1);
+          trace->resume_warp = false;
+        }
+        output.send(trace, this->latency_of(trace) + (kGather ? 1 : 0));
         input.pop();
       }
     }

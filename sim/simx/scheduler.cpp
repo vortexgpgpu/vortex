@@ -90,6 +90,8 @@ void Scheduler::on_reset() {
   stalled_warps_.reset();
   stalled_warps_next_.reset();
   active_warps_.reset();
+  cta_active_view_.reset();
+  cta_fire_ = false;
   // Sequencers live on Core now; Core::on_reset() resets them.
   wspawn_.valid = false;
 
@@ -158,12 +160,21 @@ void Scheduler::activate_warp(uint32_t wid, const cta_warp_record_t& rec) {
 instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   int scheduled_warp = -1;
 
-  // Dispatch one CTA warp
+  // Dispatch one CTA warp. The dispatcher picks from the registered active
+  // set and its pick lands the next cycle; the warp it activates becomes
+  // schedulable the cycle after that.
+  if (cta_fire_) {
+    activate_warp(cta_fire_wid_, cta_fire_rec_);
+    stalled_warps_.set(cta_fire_wid_);
+    cta_fire_ = false;
+  }
   {
     uint32_t wid;
     cta_warp_record_t rec;
-    if (cta_dispatcher_->step(active_warps_, &wid, &rec)) {
-      activate_warp(wid, rec);
+    if (cta_dispatcher_->step(cta_active_view_, &wid, &rec)) {
+      cta_fire_     = true;
+      cta_fire_wid_ = wid;
+      cta_fire_rec_ = rec;
     }
   }
 
@@ -240,11 +251,15 @@ instr_trace_t* Scheduler::schedule(const WarpMask& warp_mask) {
   // becomes visible to the pick loop next cycle — so a warp released as its
   // instruction resolves is never re-scheduled the same cycle.
   stalled_warps_ = stalled_warps_next_;
+  cta_active_view_ = active_warps_;
+  if (cta_fire_) {
+    cta_active_view_.set(cta_fire_wid_);
+  }
   return trace;
 }
 
 bool Scheduler::running() const {
-  return active_warps_.any() || cta_dispatcher_->running()
+  return active_warps_.any() || cta_fire_ || cta_dispatcher_->running()
 #ifdef VX_CFG_EXT_RASTER_ENABLE
     || fwd_armed_
 #endif
@@ -404,7 +419,7 @@ void Scheduler::fwd_try_inject() {
     // Find any free warp slot — there is no driver warp to skip in the push model.
     int wid = -1;
     for (uint32_t w = 0; w < VX_CFG_NUM_WARPS; ++w) {
-      if (!active_warps_.test(w)) { wid = int(w); break; }
+      if (!active_warps_.test(w) && !(cta_fire_ && w == cta_fire_wid_)) { wid = int(w); break; }
     }
     if (wid < 0) break;  // no free slot this cycle
 

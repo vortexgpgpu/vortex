@@ -121,8 +121,14 @@ fpu_dsp_vivado  = "expr: $VX_CFG_FPU_TYPE_DSP and $VIVADO"
 
 # STD: FDIV_LATENCY must equal FSQRT_LATENCY (shared serializer in VX_fpu_std)
 VX_CFG_FMA_LATENCY  = "expr: 16 if $fpu_dsp_vivado else (4 if $fpu_dsp_quartus else (12 if $VX_CFG_EXT_D_ENABLE else 8))"
-VX_CFG_FDIV_LATENCY = "expr: 15 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
-VX_CFG_FSQRT_LATENCY= "expr: 10 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
+# STD timing; DPI is a fast STD and takes the same values.
+fdiv_latency_std  = "expr: 32 if $VX_CFG_EXT_D_ENABLE else 17"
+fsqrt_latency_std = "expr: $fdiv_latency_std"
+fdiv_latency_dsp  = "expr: 15 if $QUARTUS else (28 if $VIVADO else (32 if $VX_CFG_EXT_D_ENABLE else 17))"
+fsqrt_latency_dsp = "expr: 10 if $QUARTUS else (28 if $VIVADO else (32 if $VX_CFG_EXT_D_ENABLE else 17))"
+
+VX_CFG_FDIV_LATENCY = "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ($fdiv_latency_dsp if $VX_CFG_FPU_TYPE_DSP else $fdiv_latency_std)"
+VX_CFG_FSQRT_LATENCY= "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ($fsqrt_latency_dsp if $VX_CFG_FPU_TYPE_DSP else $fsqrt_latency_std)"
 VX_CFG_FNCP_LATENCY = 2
 VX_CFG_FCVT_LATENCY = 5
 

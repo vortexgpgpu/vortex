@@ -16,18 +16,21 @@
 
 using namespace vortex;
 
-Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t buf_size, uint32_t block_size, uint32_t num_lanes)
+Dispatcher::Dispatcher(const SimContext& ctx, const char* name, Core* core, uint32_t queue_size, uint32_t block_size, uint32_t num_lanes, uint32_t out_delay)
   : SimObject<Dispatcher>(ctx, name)
-  , Inputs(VX_CFG_ISSUE_WIDTH, this)
-  // physical block count, matches downstream FU; each output is the per-FU
-  // dispatch queue, depth = VX_CFG_DISPATCH_QUEUE_SIZE.
-  , Outputs(block_size, SimChannel<instr_trace_t*>(this, buf_size))
+  // One dispatch queue per issue slot. The extra entry holds the op still in
+  // the collector's output register, which the channel counts as occupancy.
+  , Inputs(VX_CFG_ISSUE_WIDTH, SimChannel<instr_trace_t*>(this, queue_size + 1))
+  // Bound to the unit's per-block inputs.
+  , Outputs(block_size, this)
+  , ReleaseOut(this, VX_CFG_ISSUE_WIDTH)
   , core_(core)
   , block_size_(block_size)
   , num_lanes_(num_lanes)
   , num_blocks_(VX_CFG_ISSUE_WIDTH / block_size)
   , num_packets_(VX_CFG_NUM_THREADS / num_lanes)
   , batch_idx_(0)
+  , out_delay_(out_delay)
   , block_pids_(block_size, 0)
 {}
 
@@ -41,6 +44,16 @@ void Dispatcher::on_reset() {
 }
 
 void Dispatcher::on_tick() {
+  // Batches holding an instruction this cycle, sampled before any is popped.
+  uint32_t valid_batches = 0;
+  if (num_blocks_ != 1) {
+    for (uint32_t i = 0; i < VX_CFG_ISSUE_WIDTH; ++i) {
+      if (!Inputs.at(i).empty()) {
+        valid_batches |= 1u << (i / block_size_);
+      }
+    }
+  }
+
   // process inputs
   uint32_t block_sent = 0;
   for (uint32_t b = 0; b < block_size_; ++b) {
@@ -51,8 +64,8 @@ void Dispatcher::on_tick() {
       continue;
     }
 
-    // check output buffer capacity — outputs are sized NUM_BLOCKS;
-    // input[batch_idx*block_size + b] aggregates onto output[b].
+    // input[batch_idx*block_size + b] aggregates onto output[b]; the op
+    // leaves its slot queue only when the unit's input has room.
     auto& output = Outputs.at(b);
     if (output.full())
       continue;
@@ -105,6 +118,7 @@ void Dispatcher::on_tick() {
       } else {
         block_pids_.at(b) = -1; // mark block as processed
         input.pop();
+        ReleaseOut.send(trace, 0);
         ++block_sent;
       }
       ThreadMask tmask(VX_CFG_NUM_THREADS);
@@ -118,16 +132,18 @@ void Dispatcher::on_tick() {
     } else {
       // issue the trace
       input.pop();
+      ReleaseOut.send(trace, 0);
       ++block_sent;
     }
     DT(3, this->name() << "-pipeline dispatch: " << *new_trace);
-    output.send(new_trace, 1);
+    output.send(new_trace, out_delay_);
   }
 
   // advance to next batch once all blocks in the current batch have been processed
   if (block_sent == block_size_) {
-    // round-robin batch selection
-    batch_idx_ = (batch_idx_ + 1) % num_blocks_;
+    // Priority grant to the lowest batch with an instruction: an empty issue
+    // slot costs no dispatch cycle. With none, the grant rests on the last.
+    batch_idx_ = valid_batches ? __builtin_ctz(valid_batches) : (num_blocks_ - 1);
     for (auto& bp : block_pids_) {
       bp = 0;
     }

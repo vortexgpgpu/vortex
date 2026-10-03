@@ -202,12 +202,11 @@ A check is an assertion across runs rather than a clean exit.
 | tier | `full` | `full` |
 | pinned to | the rtlsim driver, which elaborates the RTL | the rtlsim driver |
 
-**A check is a marker, never a file or a category.** Each check gets its own
-cells — one per suite it has cases in — and every category cell excludes the
-check markers, so a check case runs exactly once. One cell per suite rather
-than one for the whole catalog, because every case is a simulator build of
-its own and a single cell outgrew a hosted runner's job limit. The workflow
-reads the check list from `testcase.py checks` rather than holding a copy.
+**A check is a marker, never a file or a category.** Each check gets one cell
+of its own — `-m "<check> and rtlsim"` sweeps every such case catalog-wide —
+and every category cell excludes the check markers, so a check case runs
+exactly once. The workflow reads the check list from `testcase.py checks`
+rather than holding a copy.
 
 #### `model_parity`
 
@@ -370,7 +369,7 @@ number into a location. They are never gated.
 
 | job | does |
 |---|---|
-| `plan` | applies the event policy and the escalations, runs `testcase.py matrix` and `lint`, emits the cells |
+| `plan` | applies the event policy and the escalations, runs `testcase.py matrix` and `lint`, emits the cells; on a push to master that touches a synthesis input, arms the ASIC gate (§4.5) |
 | `setup` | warms the toolchain and third-party caches once; a no-op on a cache hit |
 | `build` | one build tree per XLEN, uploaded as an artifact |
 | `tests` | one job per cell: `pytest ci -m "<expression>"`, JUnit out |
@@ -422,18 +421,25 @@ container.
 
 ### 4.4 `fpga_gate.yml`
 
-Nightly, on the self-hosted runner with Vivado. It **hard-pins
-`origin/master`**: whatever branch the schedule fires on, what is gated is
-master's head.
+On the self-hosted runner with Vivado. It **hard-pins `origin/master`**:
+what is gated is master's head.
+
+GitHub cannot condition a schedule on the repository: a cron workflow that
+checks for changes leaves an empty run behind on every quiet night. So the
+workflow has **no schedule**. A nightly cron on the runner's host runs
+[`ci/fpga_gate_dispatch.sh`](../../ci/fpga_gate_dispatch.sh), which
+dispatches the workflow only when a synthesis input changed since the last
+gated commit, and only when the runner is up and no gate run is queued or in
+progress.
 
 | behavior | detail |
 |---|---|
-| skip when unchanged | the runner keeps the last gated SHA; a run whose master matches is a no-op unless forced |
-| when the SHA is recorded | once the gate reaches a verdict, pass or regression. A red master is not re-synthesized every night — the failed run is the record. A build error does not record, so the next night retries |
+| when it runs | the dispatcher found a change under `hw/`, the configuration TOMLs, `VERSION`, the gate's scripts, catalog or baselines, or the workflow itself; or a manual dispatch |
+| when the SHA is recorded | once the gate reaches a verdict, pass or regression. A red master is not re-synthesized every night — the failed run is the record. A build error does not record, so the next night's dispatcher retries |
+| host setup | the crontab line in the script's header, and `gh` authenticated with a token that can dispatch workflows |
 | diagnosis | the workflow summary is [`synth_report.py`](../../ci/synth_report.py)'s rendering of the report: every build's metrics against its baseline, the reason behind each verdict that is not a pass, and the critical paths and high-fanout nets |
 | annotations | one per finding, naming the build and the metric |
 | artifacts | the summary and the report JSON as files a browser opens directly; every build's log and reports as one archive |
-| a skipped night | republishes the gated commit's results with a link to the run that produced them, so an unchanged red master does not read as an empty run |
 
 ### 4.5 `asic_gate.yml`
 
@@ -443,14 +449,23 @@ out to one job each**.
 
 | job | does |
 |---|---|
-| `plan` | reads the spec and emits one matrix entry per build, longest first |
+| `plan` | disarms the nightly, reads the spec and emits one matrix entry per build, longest first |
 | `toolchain` | warms the toolchain cache ahead of the matrix |
 | `synth` | one build per job, `fail-fast: false` — each design is an independent measurement |
-| `report` | joins the per-job reports into one summary and records the SHA marker |
+| `report` | joins the per-job reports into one summary; re-arms the nightly after a build error |
 
-It pins master and skips an unchanged commit like `fpga_gate.yml`, but a
-hosted runner keeps no state, so the marker is a cache entry keyed by the
-SHA and the spec's hash.
+It pins master. A hosted runner has no host to run a dispatcher from, so the
+nightly **arms and disarms itself**. The workflow stays disabled between
+qualifying pushes, and a disabled workflow's schedule never fires:
+
+| step | where |
+|---|---|
+| arm | `ci.yml`'s `plan` job enables it on a push to master that touches `hw/`, the configuration TOMLs, `VERSION`, the gate's scripts, catalog or baselines, or the workflow; an indeterminate diff arms it too |
+| disarm | the scheduled run disables it as its first step, so a push that lands while it synthesizes re-arms the next night |
+| retry | a build error re-enables it; a pass or a regression is a verdict, and its run is the record |
+
+A quiet night creates no run. A manual run needs the workflow enabled first
+(`gh workflow enable asic_gate.yml`).
 
 The `toolchain` job exists because the cache key carries the commit the
 toolchain pin resolves to: refreshing the prebuilt toolchain misses it by

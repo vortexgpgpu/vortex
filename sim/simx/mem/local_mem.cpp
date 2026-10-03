@@ -108,7 +108,74 @@ public:
 #endif
 	}
 
+	// Serve one DMA client's row access this cycle and return the banks it
+	// occupies. Clients are served at fixed priority, and DMA wins every bank
+	// it touches over the LSU: a read touches all banks, a write those its
+	// byte enables cover.
+	uint64_t dma_tick() {
+		uint32_t num_banks = (1 << config_.B);
+		uint32_t lg2_line_size = log2ceil(config_.line_size);
+		for (uint32_t c = 0; c < config_.dma_clients; ++c) {
+			bool pending = false;
+			bool rsp_ready = true;
+			for (uint32_t p = 0; p < DMA_PORTS; ++p) {
+				auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
+				if (in.empty()) {
+					continue;
+				}
+				pending = true;
+				if (!in.peek().is_write() && simobject_->DmaOutputs.at(c * DMA_PORTS + p).full()) {
+					rsp_ready = false;
+				}
+			}
+			if (!pending) {
+				continue;
+			}
+			if (!rsp_ready) {
+				return 0;
+			}
+			uint64_t banks = 0;
+			for (uint32_t p = 0; p < DMA_PORTS; ++p) {
+				auto& in = simobject_->DmaInputs.at(c * DMA_PORTS + p);
+				if (in.empty()) {
+					continue;
+				}
+				auto& req = in.peek();
+				uint64_t line_addr = to_local_addr(req.addr) & ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
+				if (req.is_write()) {
+					for (uint32_t b = 0; req.data && b < VX_CFG_MEM_BLOCK_SIZE; ++b) {
+						if (req.byteen & (1ull << b)) {
+							uint8_t value = (*req.data)[b];
+							ram_.write(&value, line_addr + b, 1);
+							banks |= 1ull << (((line_addr + b) >> lg2_line_size) & (num_banks - 1));
+						}
+					}
+#if VX_CFG_EXT_A_ENABLED
+					amo_unit_.invalidate(to_local_addr(req.addr), req.hart_id);
+#endif
+					++perf_stats_.writes;
+				} else {
+					MemRsp rsp{req.tag, req.hart_id, req.uuid};
+					auto rsp_data = make_mem_block();
+					ram_.read(rsp_data->data(), line_addr, VX_CFG_MEM_BLOCK_SIZE);
+					rsp.data = rsp_data;
+					// The request arrived over a registered channel; the read
+					// data returns the cycle after it was issued.
+					simobject_->DmaOutputs.at(c * DMA_PORTS + p).send(rsp, 0);
+					banks = (num_banks >= 64) ? ~uint64_t(0) : ((uint64_t(1) << num_banks) - 1);
+					++perf_stats_.reads;
+				}
+				DT(4, simobject_->name() << "-dma" << c << " req : " << req);
+				in.pop();
+			}
+			return banks;
+		}
+		return 0;
+	}
+
 	void tick() {
+		uint64_t dma_banks = this->dma_tick();
+
 		// process bank requets from xbar
 		uint32_t num_banks = (1 << config_.B);
 		for (uint32_t i = 0; i < num_banks; ++i) {
@@ -126,6 +193,9 @@ public:
 			const uint64_t rdw_addr   = amo_rdw_addr_[i];
 			amo_rdw_valid_[i] = false;
 #endif
+			if ((dma_banks >> i) & 1) {
+				continue;
+			}
 			auto& xbar_req_out = mem_xbar_->ReqOut.at(i);
 			if (xbar_req_out.empty())
 				continue;
@@ -266,6 +336,8 @@ LocalMem::LocalMem(const SimContext& ctx, const char* name, const Config& config
 	: SimObject<LocalMem>(ctx, name)
 	, Inputs(config.num_reqs, this)
 	, Outputs(config.num_reqs, this)
+	, DmaInputs(config.dma_clients * DMA_PORTS, this)
+	, DmaOutputs(config.dma_clients * DMA_PORTS, this)
 	, impl_(new Impl(this, config))
 {}
 

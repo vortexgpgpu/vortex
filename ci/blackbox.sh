@@ -130,14 +130,17 @@ build_driver() {
     [ $VCD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VCD=1")
     [ $SAIF -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "SAIF=1")
     [ -n "$TARGET" ] && cmd_opts=$(add_option "$cmd_opts" "TARGET=$TARGET")
-    [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "DESTDIR=\"$TEMPDIR\"")
+    [ $TEMPBUILD -eq 1 ] && cmd_opts=$(add_option "$cmd_opts" "VORTEX_RT_LIB=\"$TEMPDIR\"")
     [ -n "$CONFIGS" ] && cmd_opts=$(add_option "$cmd_opts" "CONFIGS=\"$CONFIGS\"")
-    cmd_opts=$(add_option "$cmd_opts" "make -C $DRIVER_PATH > /dev/null")
+    # Through the app's Makefile, not the driver's: an app resolves its own
+    # CONFIGS defaults, and a driver built from the caller's CONFIGS alone is a
+    # different model that the run then discards and rebuilds.
+    cmd_opts=$(add_option "$cmd_opts" "make -C \"$APP_PATH\" runtime-$DRIVER > /dev/null")
     echo "Running: $cmd_opts"
     eval "$cmd_opts"
     status=$?
     if [ $status -ne 0 ]; then
-        echo "Error building driver: $DRIVER_PATH"
+        echo "Error building driver: $DRIVER (via $APP_PATH)"
         exit $status
     fi
 }

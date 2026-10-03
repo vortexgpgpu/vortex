@@ -53,6 +53,9 @@ Instr::Ptr OmUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
   IntrOmArgs uopArgs{};
   uopArgs.export_mask = (uop_index + 1 == total) ? (args.export_mask & 0x3) : 0;
   uop_instr->set_args(uopArgs);
+  // No other warp of the issue slot issues between the two beats of a record.
+  uop_instr->set_fu_lock(uop_index == 0);
+  uop_instr->set_fu_unlock(uop_index + 1 == total);
   return uop_instr;
 }
 

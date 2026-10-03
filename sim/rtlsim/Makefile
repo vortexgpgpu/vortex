@@ -169,7 +169,12 @@ ifdef DEBUG
 	CXXFLAGS += -g -O0 $(DBG_FLAGS)
 else
 	VL_FLAGS += -DNDEBUG
-	CXXFLAGS += -O2 -DNDEBUG
+	CXXFLAGS += -DNDEBUG
+	# The level goes through Verilator's per-class knobs, not CXXFLAGS: a level
+	# in CXXFLAGS lands after them and so also optimizes the slow-path files
+	# (constructors, reset, initialization), which run once and are most of the
+	# compile time of a large model.
+	VL_FLAGS += -MAKEFLAGS OPT_FAST=-O2 -MAKEFLAGS OPT_GLOBAL=-O2
 endif
 
 # Enable perf counters

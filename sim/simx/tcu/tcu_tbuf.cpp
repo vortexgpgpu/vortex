@@ -15,7 +15,6 @@
 #include "constants.h"
 #include "debug.h"
 #include <unordered_map>
-#include <unordered_set>
 #include <deque>
 #include <array>
 
@@ -25,58 +24,58 @@ namespace {
 
 constexpr uint64_t kLineMask = ~uint64_t(VX_CFG_MEM_BLOCK_SIZE - 1);
 
-// Q+1 sources fan into one external LMEM port. Source IDs:
+// Q+1 buffers share one LMEM port. Buffer IDs, in priority order:
 //   0 .. VX_CFG_NUM_TCU_BLOCKS-1   → abuf[b]
 //   VX_CFG_NUM_TCU_BLOCKS          → bbuf
-constexpr uint32_t kNumSources = VX_CFG_NUM_TCU_BLOCKS + 1;
+constexpr uint32_t kNumBuffers = VX_CFG_NUM_TCU_BLOCKS + 1;
 constexpr uint32_t kAOffset    = 0;
 constexpr uint32_t kBOffset    = VX_CFG_NUM_TCU_BLOCKS;
 
-// Per-source line cache. Resident, in-flight and pending state are tracked
-// independently per source; the wrapper arbitrates the shared LMEM port.
-struct LineBuf {
-  std::deque<uint64_t> pending_q_;
-  std::unordered_map<uint32_t, uint64_t> inflight_;   // per-source tag → addr
-  std::unordered_map<uint64_t, std::shared_ptr<mem_block_t>> resident_;
+struct Buffer {
+  std::deque<TcuTbuf::LmemRead> pending_;
+  std::unordered_map<uint32_t, uint64_t> inflight_;   // tag → line
+  std::unordered_map<uint64_t, std::shared_ptr<mem_block_t>> lines_;
+  uint64_t fill_cycle_ = 0;
+  bool     rsp_seen_ = false;   // a response arrived this cycle
   uint32_t next_tag_ = 0;
   uint64_t reads_ = 0;
 
-  void plan(const std::vector<uint64_t>& line_addrs) {
-    std::unordered_set<uint64_t> inflight_set;
-    for (auto& kv : inflight_) inflight_set.insert(kv.second);
-    for (auto a : line_addrs) {
-      uint64_t line = a & kLineMask;
-      if (resident_.count(line)) continue;
-      if (inflight_set.count(line)) continue;
-      pending_q_.push_back(line);
-      inflight_set.insert(line);
-    }
+  bool filling() const {
+    return !pending_.empty() || !inflight_.empty();
   }
 
-  bool ready() const {
-    return pending_q_.empty() && inflight_.empty();
+  void fill(std::vector<TcuTbuf::LmemRead>&& reads) {
+    this->invalidate();
+    for (auto& r : reads) {
+      pending_.push_back(std::move(r));
+    }
+    fill_cycle_ = SimPlatform::instance().cycles();
   }
 
   std::shared_ptr<mem_block_t> read(uint64_t line_addr) const {
-    auto it = resident_.find(line_addr & kLineMask);
-    if (it == resident_.end()) return nullptr;
+    auto it = lines_.find(line_addr & kLineMask);
+    if (it == lines_.end()) {
+      return nullptr;
+    }
     return it->second;
   }
 
+  // A response still in flight for an abandoned fill finds no tag and is dropped.
   void invalidate() {
-    resident_.clear();
+    pending_.clear();
+    inflight_.clear();
+    lines_.clear();
   }
 
   void reset() {
-    pending_q_.clear();
-    inflight_.clear();
-    resident_.clear();
+    this->invalidate();
+    rsp_seen_ = false;
     next_tag_ = 0;
     reads_ = 0;
   }
 };
 
-// Pack/unpack the source ID alongside the per-source tag in MemReq::tag.
+// Pack the buffer ID alongside the per-buffer tag in MemReq::tag.
 constexpr uint32_t kSrcShift = 16;
 constexpr uint32_t kSubTagMask = (1u << kSrcShift) - 1;
 
@@ -93,83 +92,119 @@ public:
   Impl(TcuTbuf* simobject) : simobject_(simobject) {}
 
   void reset() {
-    for (auto& b : bufs_) b.reset();
-    rr_next_ = 0;
+    for (auto& b : bufs_) {
+      b.reset();
+    }
   }
 
-  void plan(uint32_t source, const std::vector<uint64_t>& line_addrs) {
-    bufs_.at(source).plan(line_addrs);
+  Buffer& buf(uint32_t source) {
+    return bufs_.at(source);
   }
 
-  bool ready(uint32_t source) const {
-    return bufs_.at(source).ready();
-  }
-
-  std::shared_ptr<mem_block_t> read(uint32_t source, uint64_t line_addr) const {
-    return bufs_.at(source).read(line_addr);
-  }
-
-  void invalidate(uint32_t source) {
-    bufs_.at(source).invalidate();
+  const Buffer& buf(uint32_t source) const {
+    return bufs_.at(source);
   }
 
   uint64_t reads() const {
     uint64_t total = 0;
-    for (auto& b : bufs_) total += b.reads_;
+    for (auto& b : bufs_) {
+      total += b.reads_;
+    }
     return total;
   }
 
   void tick() {
-    // 1) drain one response and route it to the source that issued it.
-    auto& rsp = simobject_->lmem_rsp_in;
-    if (!rsp.empty()) {
+    for (auto& b : bufs_) {
+      b.rsp_seen_ = false;
+    }
+
+    for (auto& rsp : simobject_->lmem_rsp_in) {
+      if (rsp.empty()) {
+        continue;
+      }
       auto& r = rsp.peek();
       uint32_t source = unpack_source(r.tag);
-      uint32_t sub_tag = unpack_sub_tag(r.tag);
-      if (source < kNumSources) {
-        auto& buf = bufs_.at(source);
-        auto it = buf.inflight_.find(sub_tag);
-        if (it != buf.inflight_.end()) {
-          if (r.data) buf.resident_[it->second] = r.data;
-          buf.inflight_.erase(it);
+      if (source < kNumBuffers) {
+        auto& b = bufs_.at(source);
+        auto it = b.inflight_.find(unpack_sub_tag(r.tag));
+        if (it != b.inflight_.end()) {
+          if (r.data) {
+            b.lines_[it->second] = r.data;
+          }
+          b.inflight_.erase(it);
+          b.rsp_seen_ = true;
+          if (!b.filling()) {
+            DT(3, simobject_->name() << " " << this->buf_name(source) << ": READY");
+          }
         }
       }
       rsp.pop();
     }
 
-    // 2) round-robin pick one source with pending work and submit one req.
-    auto& req = simobject_->lmem_req_out;
-    if (req.full()) return;
-    for (uint32_t i = 0; i < kNumSources; ++i) {
-      uint32_t s = (rr_next_ + i) % kNumSources;
-      auto& buf = bufs_.at(s);
-      if (buf.pending_q_.empty()) continue;
-      uint64_t addr = buf.pending_q_.front();
-      // inflight_ is keyed by the tag as it appears on the wire, so the
-      // counter must be masked here and not only inside pack_tag().
-      uint32_t sub_tag = (buf.next_tag_++) & kSubTagMask;
-      uint32_t tag = pack_tag(s, sub_tag);
-      MemReq m(MemOp::LD, addr, /*data*/nullptr, /*byteen*/0, tag, /*hart_id*/0, /*uuid*/0);
-      m.flags.local = 1;   // TCU TBUF reads from LMEM
-      req.send(m, 1);
-      buf.inflight_[sub_tag] = addr;
-      buf.pending_q_.pop_front();
-      ++buf.reads_;
-      rr_next_ = (s + 1) % kNumSources;
+    // An abuf issues its next read in the cycle its previous one returns;
+    // the bbuf issues it the cycle after.
+    uint64_t cycle = SimPlatform::instance().cycles();
+    for (uint32_t s = 0; s < kNumBuffers; ++s) {
+      auto& b = bufs_.at(s);
+      if (b.pending_.empty() || !b.inflight_.empty()) {
+        continue;
+      }
+      if (cycle <= b.fill_cycle_) {
+        continue;
+      }
+      if (s == kBOffset && b.rsp_seen_) {
+        continue;
+      }
+      this->issue(s, b);
       break;
     }
   }
 
 private:
+  void issue(uint32_t source, Buffer& b) {
+    auto& lines = b.pending_.front();
+    uint32_t n = std::min<uint32_t>(lines.size(), LMEM_PORTS);
+    for (uint32_t p = 0; p < n; ++p) {
+      if (simobject_->lmem_req_out.at(p).full()) {
+        return;
+      }
+    }
+    for (uint32_t p = 0; p < n; ++p) {
+      uint64_t addr = lines.at(p);
+      // inflight_ is keyed by the tag as it appears on the wire, so the
+      // counter must be masked here and not only inside pack_tag().
+      uint32_t sub_tag = (b.next_tag_++) & kSubTagMask;
+      MemReq m(MemOp::LD, addr, /*data*/nullptr, /*byteen*/0,
+               pack_tag(source, sub_tag), /*hart_id*/0, /*uuid*/0);
+      m.flags.local = 1;
+      simobject_->lmem_req_out.at(p).send(m, 1);
+      b.inflight_[sub_tag] = addr;
+    }
+    DT(3, simobject_->name() << " " << this->buf_name(source)
+          << ": rd_req addr=0x" << std::hex << lines.front() << std::dec
+          << ", lines=" << n);
+    // A read wider than the port set finishes as a further read.
+    if (n < lines.size()) {
+      lines.erase(lines.begin(), lines.begin() + n);
+    } else {
+      b.pending_.pop_front();
+    }
+    ++b.reads_;
+  }
+
+  std::string buf_name(uint32_t source) const {
+    return (source == kBOffset) ? std::string("bbuf")
+                                : ("abuf" + std::to_string(source - kAOffset));
+  }
+
   TcuTbuf* simobject_;
-  std::array<LineBuf, kNumSources> bufs_;
-  uint32_t rr_next_ = 0;
+  std::array<Buffer, kNumBuffers> bufs_;
 };
 
 TcuTbuf::TcuTbuf(const SimContext& ctx, const char* name)
   : SimObject<TcuTbuf>(ctx, name)
-  , lmem_req_out(this)
-  , lmem_rsp_in(this)
+  , lmem_req_out(LMEM_PORTS, this)
+  , lmem_rsp_in(LMEM_PORTS, this)
   , impl_(new Impl(this))
 {}
 
@@ -178,24 +213,24 @@ TcuTbuf::~TcuTbuf() { delete impl_; }
 void TcuTbuf::on_reset() { impl_->reset(); }
 void TcuTbuf::on_tick()  { impl_->tick(); }
 
-void TcuTbuf::plan_a(uint32_t b, const std::vector<uint64_t>& line_addrs) {
-  impl_->plan(kAOffset + b, line_addrs);
+void TcuTbuf::fill_a(uint32_t b, std::vector<LmemRead> reads) {
+  impl_->buf(kAOffset + b).fill(std::move(reads));
 }
-void TcuTbuf::plan_b(const std::vector<uint64_t>& line_addrs) {
-  impl_->plan(kBOffset, line_addrs);
+void TcuTbuf::fill_b(std::vector<LmemRead> reads) {
+  impl_->buf(kBOffset).fill(std::move(reads));
 }
 
-bool TcuTbuf::ready_a(uint32_t b) const { return impl_->ready(kAOffset + b); }
-bool TcuTbuf::ready_b() const           { return impl_->ready(kBOffset); }
+bool TcuTbuf::filling_a(uint32_t b) const { return impl_->buf(kAOffset + b).filling(); }
+bool TcuTbuf::filling_b() const           { return impl_->buf(kBOffset).filling(); }
 
 std::shared_ptr<mem_block_t> TcuTbuf::read_a(uint32_t b, uint64_t line_addr) const {
-  return impl_->read(kAOffset + b, line_addr);
+  return impl_->buf(kAOffset + b).read(line_addr);
 }
 std::shared_ptr<mem_block_t> TcuTbuf::read_b(uint64_t line_addr) const {
-  return impl_->read(kBOffset, line_addr);
+  return impl_->buf(kBOffset).read(line_addr);
 }
 
-void TcuTbuf::invalidate_a(uint32_t b) { impl_->invalidate(kAOffset + b); }
-void TcuTbuf::invalidate_b()           { impl_->invalidate(kBOffset); }
+void TcuTbuf::invalidate_a(uint32_t b) { impl_->buf(kAOffset + b).invalidate(); }
+void TcuTbuf::invalidate_b()           { impl_->buf(kBOffset).invalidate(); }
 
 uint64_t TcuTbuf::reads() const { return impl_->reads(); }
