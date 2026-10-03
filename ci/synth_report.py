@@ -13,8 +13,7 @@ the commit was actually gated:
   1  at least one build regressed
   2  at least one build never produced metrics -- the commit is NOT gated
 
-  usage: synth_report.py [--note TEXT] [--annotate LEVEL] [--json FILE]
-                         [--build-failed]
+  usage: synth_report.py [--annotate LEVEL] [--json FILE] [--build-failed]
                          <report.json | dir-of-report-json> [...]
 """
 
@@ -201,9 +200,6 @@ def main(argv=None):
         description="Render synthesis-gate reports as one Markdown summary")
     ap.add_argument("reports", nargs="+", metavar="PATH",
                     help="report JSON, or a directory searched for them")
-    ap.add_argument("--note", metavar="TEXT",
-                    help="a line printed under the heading, e.g. which run "
-                         "these results came from")
     ap.add_argument("--annotate", choices=("error", "warning", "notice"),
                     metavar="LEVEL",
                     help="emit a workflow annotation (error, warning or notice) "
@@ -235,8 +231,6 @@ def main(argv=None):
         return 0
 
     print("## %s gate\n" % (tool or "synthesis"))
-    if args.note:
-        print("%s\n" % args.note)
     if not builds:
         print("No reports found — every build errored before it could write "
               "one.")
