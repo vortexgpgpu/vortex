@@ -330,9 +330,13 @@ whatever depth results:
   emitting `{hit, t_near}`. Mirrors SimX `ray_aabb_intersect` bit for bit:
   corners `origin + q·2^exp`, slabs `(corner − ro)·inv_d`, culled against
   `[0, t_max]`. Also handles raw/procedural boxes.
-- **`VX_rtu_tri_pe`** — pipelined watertight triangle test (F32 shear, F64 edge
-  functions and t, in the Vulkan reference's op order), one triangle per cycle,
-  emitting `{hit, t, u, v, back_facing}`; bit-exact against SimX `ray_triangle`.
+- **`VX_rtu_tri_pe`** — pipelined watertight triangle test (Woop, Benthin, Wald,
+  JCGT 2013), all F32: shear, edge functions as rounded products and a rounded
+  difference (so a shared edge evaluates to exactly negated weights in its two
+  triangles), `det = (w0 + w1) + w2`, `T` as an FMA chain, one `1/det` scaling
+  `t`, `u`, `v`. Accepts `t_min < t < t_max` (Vulkan's open triangle interval),
+  with `t_max` the committed hit, one triangle per cycle, emitting
+  `{hit, t, u, v, back_facing}`; bit-exact against SimX `ray_triangle`.
 - **`VX_rtu_xform`** — TLAS world→object transform. The instance record holds
   the world→object matrix and the ray is transformed in the reference's op
   order (rounded products, then `t + x + y + z`), so no inverse is taken. Always built:

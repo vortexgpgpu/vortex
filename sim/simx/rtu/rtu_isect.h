@@ -30,13 +30,13 @@
 namespace vortex { namespace rtu {
 
 // ────────────────────────────────────────────────────────────────────
-// Möller-Trumbore ray-triangle intersection.
+// Watertight ray-triangle intersection (Woop, Benthin, Wald, JCGT 2013), F32.
 //
 // out_back_facing reports whether the ray hit the back side of the
 // triangle's geometric normal (ray-flag face culling). Convention:
 // triangle front face is the side from which (v0, v1, v2) appear CCW.
 // Equivalently, det > 0 ↔ ray hits the front face.
-// A hit needs tmin < t < tmax (open, as the Vulkan reference); the walker
+// A hit needs tmin < t < tmax (Vulkan's open triangle interval); the walker
 // passes the committed hit's t as tmax.
 // ────────────────────────────────────────────────────────────────────
 bool ray_triangle(const float ro[3], const float rd[3],
@@ -76,7 +76,7 @@ void world_to_object_ray(const float wto[12],
 // ════════════════════════════════════════════════════════════════════
 //
 //   BoxPe (ray-vs-AABB):  ONE PE, 1 box/cycle, 31-cycle pipeline depth.
-//   TriPe (ray-vs-tri):   ONE PE, 1 tri/cycle, 91-cycle pipeline depth.
+//   TriPe (ray-vs-tri):   ONE PE, 1 tri/cycle, 99-cycle pipeline depth.
 //
 // Both are shared across the whole context array, so the issue slots are handed
 // out by the orchestrator one per cycle and the contention is modelled, not

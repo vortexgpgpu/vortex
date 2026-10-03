@@ -98,12 +98,6 @@ package VX_rtu_pkg;
     // 15). PE delay lines + the scheduler setup window scale with this.
     localparam RTU_FDIV_LAT    = `VX_CFG_RTU_FDIV_LATENCY;
 
-    // The tri PE's edge functions and t run in F64 on the soft core, whose
-    // 53-bit multiply wants a deeper pipe than F32; the F64 divider's depth is
-    // fixed by its radix-2 recurrence.
-    localparam RTU_LATENCY_FMA64 = (RTU_LATENCY_FMA > 12) ? RTU_LATENCY_FMA : 12;
-    localparam RTU_FDIV64_LAT    = 32;
-
     // ─────────────────────────────────────────────────────────────────
     // CW-BVH node-kind tag (low byte of word0) and count field (bits 8..15)
     // ─────────────────────────────────────────────────────────────────

@@ -25,13 +25,12 @@ bool ray_triangle(const float ro[3], const float rd[3],
                   bool& out_back_facing) {
   const float* vin[3] = { v0, v1, v2 };
 
-  // Watertight ray/triangle test (Woop, Benthin, Wald, JCGT 2013): shear the
-  // triangle into the ray's frame so the ray runs along +z, then test the 2D
-  // edge functions. A shared edge evaluates to exactly negated values in its
-  // two triangles, so no ray slips between them; F64 edge functions and t keep
-  // t within half an ulp of the exact intersection. The op order is the one
-  // the Vulkan reference (lavapipe) evaluates, so t matches it bit for bit,
-  // coincident triangles included.
+  // Watertight ray/triangle test (Woop, Benthin, Wald, JCGT 2013), F32 only:
+  // shear the triangle into the ray's frame so the ray runs along +z, then
+  // test the 2D edge functions. Each edge function is two rounded products and
+  // a rounded difference of the sheared vertices alone, so an edge shared by
+  // two triangles evaluates to exactly negated weights in both and no ray
+  // slips between them. Mirrors VX_rtu_tri_pe op for op.
   const float ad[3] = { std::fabs(rd[0]), std::fabs(rd[1]), std::fabs(rd[2]) };
   int kz = (ad[0] >= ad[1]) ? ((ad[0] >= ad[2]) ? 0 : 2)
                             : ((ad[1] >= ad[2]) ? 1 : 2);
@@ -43,50 +42,42 @@ bool ray_triangle(const float ro[3], const float rd[3],
   const float sx = rd[kx] * sz;
   const float sy = rd[ky] * sz;
 
-  // F32 shear, as each op rounds in the pipeline; F64 from here on, where the
-  // products of two F32 values are exact.
-  float px[3], py[3];
-  double pz[3];
+  float px[3], py[3], pz[3];
   for (int i = 0; i < 3; ++i) {
     const float* q = vin[i];
     const float rx = q[kx] - ro[kx];
     const float ry = q[ky] - ro[ky];
     const float rz = q[kz] - ro[kz];
-    const float mx = sx * rz;
-    const float my = sy * rz;
-    px[i] = rx - mx;
-    py[i] = ry - my;
-    pz[i] = double(sz) * double(rz);
+    px[i] = std::fma(-sx, rz, rx);
+    py[i] = std::fma(-sy, rz, ry);
+    pz[i] = sz * rz;
   }
 
   // Edge functions: w[i] is the weight of vertex i.
-  double w[3];
-  w[0] = double(px[2]) * py[1] - double(py[2]) * px[1];
-  w[1] = double(px[0]) * py[2] - double(py[0]) * px[2];
-  w[2] = double(px[1]) * py[0] - double(py[1]) * px[0];
-  if ((w[0] < 0.0 || w[1] < 0.0 || w[2] < 0.0)
-   && (w[0] > 0.0 || w[1] > 0.0 || w[2] > 0.0))
+  const float w0 = px[2] * py[1] - py[2] * px[1];
+  const float w1 = px[0] * py[2] - py[0] * px[2];
+  const float w2 = px[1] * py[0] - py[1] * px[0];
+  if ((w0 < 0.f || w1 < 0.f || w2 < 0.f) && (w0 > 0.f || w1 > 0.f || w2 > 0.f))
     return false;
 
-  const double det = w[0] + (w[1] + w[2]);
+  const float det = (w0 + w1) + w2;
   // Reject only an edge-on or zero-area triangle: |det| scales with the
   // triangle's area, so any epsilon would drop small triangles.
-  if (!(det != 0.0)) return false;
+  if (!(det != 0.f)) return false;
 
-  const double tp0 = w[0] * pz[0];
-  const double tp1 = w[1] * pz[1];
-  const double tp2 = w[2] * pz[2];
-  const float t = float(((tp0 + tp1) + tp2) / det);
-  // Open interval, as the reference commits (lvp_build_triangle_case:
-  // tmin < t and t < tmax).
+  const float T   = std::fma(w2, pz[2], std::fma(w1, pz[1], w0 * pz[0]));
+  const float rcp = 1.0f / det;
+  const float t   = T * rcp;
+  // Vulkan's ray interval for a triangle is open at both ends: an intersection
+  // candidate needs t_min < t < t_max (Ray Intersection Candidate
+  // Determination).
   if (!(tmin < t && t < tmax)) return false;
 
-  const float det32 = float(det);
   out_t = t;
-  out_u = float(w[1]) / det32;
-  out_v = float(w[2]) / det32;
+  out_u = w1 * rcp;
+  out_v = w2 * rcp;
   // det > 0: (v0, v1, v2) winds counter-clockwise as seen by the ray.
-  out_back_facing = (det < 0.0);
+  out_back_facing = (det < 0.f);
   return true;
 }
 
@@ -146,10 +137,9 @@ uint32_t BoxPe::pipe_depth() {
 }
 
 uint32_t TriPe::pipe_depth() {
-  // input select + 1/dir + 3 F32 stages + 5 F64 stages + F64 divide + narrow
-  // + verdict (VX_rtu_tri_pe).
-  return 3 + kRtuFdivLat + 3 * kRtuLatencyFma + 5 * kRtuLatencyFma64
-       + kRtuFdiv64Lat;
+  // input select + 1/dir[kz] + shear scale + shear + 2 edge stages + det +
+  // 1/det + t/u/v scale + verdict (VX_rtu_tri_pe).
+  return 2 + 2 * kRtuFdivLat + 7 * kRtuLatencyFma;
 }
 
 }}  // namespace vortex::rtu

@@ -28,6 +28,7 @@ const char* const kCatNames[] = {
   "random", "t==tmin", "t==tmax", "t==tmin==tmax", "t in (t-,t+)",
   "tmin=t+", "tmax=t-", "origin on triangle", "zero dir",
   "special origin", "special dir", "special vertex", "special tmin", "special tmax",
+  "shared edge",
 };
 constexpr int kNumCats = int(sizeof(kCatNames) / sizeof(kCatNames[0]));
 
@@ -105,6 +106,36 @@ Case make_case(uint32_t i, const Case* twin_of) {
   return c;
 }
 
+// Quad (p0, p1, p2, p3) split along p0-p2 into (p0, p1, p2) and (p0, p2, p3),
+// both wound alike; the ray aims at a point on the shared edge p0-p2.
+float quad_pts[20000][4][3];
+
+Case shared_edge_case(uint32_t i) {
+  std::mt19937 g(1000 + i);
+  auto u = [&](float lo, float hi) { return std::uniform_real_distribution<float>(lo, hi)(g); };
+  float (&p)[4][3] = quad_pts[i];
+  const float s = (i % 3 == 0) ? 1e3f : ((i % 3 == 1) ? 1.f : 1e-2f);
+  for (int k = 0; k < 3; ++k) { p[0][k] = u(-s, s); p[2][k] = u(-s, s); }
+  float m[3], n[3];
+  for (int k = 0; k < 3; ++k) { m[k] = 0.5f * (p[0][k] + p[2][k]); n[k] = u(-s, s); }
+  for (int k = 0; k < 3; ++k) { p[1][k] = m[k] + n[k]; p[3][k] = m[k] - n[k]; }
+  Case c;
+  c.cat = 14;
+  std::memcpy(c.v[0], p[0], 12);
+  std::memcpy(c.v[1], p[1], 12);
+  std::memcpy(c.v[2], p[2], 12);
+  const float a = u(0.f, 1.f);
+  float e[3];
+  for (int k = 0; k < 3; ++k) e[k] = p[0][k] + a * (p[2][k] - p[0][k]);
+  for (int k = 0; k < 3; ++k) c.o[k] = u(-3 * s, 3 * s);
+  for (int k = 0; k < 3; ++k) c.d[k] = e[k] - c.o[k];
+  c.tmin = 0.f;
+  c.tmax = INFINITY;
+  return c;
+}
+
+const float* shared_edge_far(uint32_t i) { return quad_pts[i][3]; }
+
 // Directed cases: t landing exactly on tmin / tmax, a zero t from an origin on
 // the triangle, and NaN / inf / -0 / subnormal operands.
 std::vector<Case> directed_cases() {
@@ -163,7 +194,34 @@ std::vector<Case> directed_cases() {
     z.d[0] = z.d[1] = z.d[2] = (i & 1) ? -0.f : 0.f;
     out.push_back(z);
   }
+  // rays at the shared edge of two triangles (a quad split along its diagonal),
+  // both triangles traced
+  for (uint32_t i = 0; i < 20000; ++i) {
+    Case c = shared_edge_case(i);
+    out.push_back(c);
+    std::memcpy(c.v[1], c.v[2], 12);
+    std::memcpy(c.v[2], shared_edge_far(i), 12);
+    out.push_back(c);
+  }
   return out;
+}
+
+// Watertightness: a ray through a shared edge hits at least one of the two
+// triangles (SimX alone; the RTL then matches it case by case).
+uint32_t shared_edge_leaks() {
+  uint32_t leaks = 0;
+  for (uint32_t i = 0; i < 20000; ++i) {
+    Case a = shared_edge_case(i), b = a;
+    std::memcpy(b.v[1], b.v[2], 12);
+    std::memcpy(b.v[2], shared_edge_far(i), 12);
+    float t, u, v; bool bf;
+    const bool ha = vortex::rtu::ray_triangle(a.o, a.d, a.v[0], a.v[1], a.v[2],
+                                              a.tmin, a.tmax, t, u, v, bf);
+    const bool hb = vortex::rtu::ray_triangle(b.o, b.d, b.v[0], b.v[1], b.v[2],
+                                              b.tmin, b.tmax, t, u, v, bf);
+    leaks += !(ha || hb);
+  }
+  return leaks;
 }
 
 }  // namespace
@@ -184,6 +242,7 @@ int main(int argc, char** argv) {
   std::deque<Case> sent_cases;
   Case prev{};
   const std::vector<Case> directed = directed_cases();
+  const uint32_t leaks = shared_edge_leaks();
   const uint32_t ND = uint32_t(directed.size());
   const uint32_t total = N + ND;
   while (checked < total) {
@@ -247,6 +306,8 @@ int main(int argc, char** argv) {
   for (int k = 0; k < kNumCats; ++k)
     std::printf("  %-20s %8u cases %6u mismatches %6u subnormal flushes\n",
                 kCatNames[k], cat_cases[k], cat_errors[k], cat_ftz[k]);
-  std::printf(errors ? "FAILED!\n" : "PASSED!\n");
-  return errors ? 1 : 0;
+  std::printf("  shared-edge rays through neither triangle: %u of 20000\n", leaks);
+  const bool fail = errors || leaks;
+  std::printf(fail ? "FAILED!\n" : "PASSED!\n");
+  return fail ? 1 : 0;
 }

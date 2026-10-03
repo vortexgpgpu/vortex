@@ -12,22 +12,24 @@
 // limitations under the License.
 
 // VX_rtu_tri_pe — pipelined watertight ray-triangle intersector (Woop, Benthin,
-// Wald, JCGT 2013). Streams one triangle per cycle and emits {hit, t, u, v,
-// back_facing} after a fixed latency. Mirrors SimX rtu::ray_triangle op for op:
+// Wald, "Watertight Ray/Triangle Intersection", JCGT 2013), all F32. Streams one
+// triangle per cycle and emits {hit, t, u, v, back_facing} after a fixed
+// latency. Mirrors SimX rtu::ray_triangle op for op:
 //
 //   kz = argmax|dir|, kx/ky follow (swapped when dir[kz] < 0)
-//   F32: sz = 1/dir[kz], sx = dir[kx]*sz, sy = dir[ky]*sz
-//        r = vertex - origin, px = rx - sx*rz, py = ry - sy*rz
-//   F64: pz = sz*rz (exact), w_i = px_a*py_b - py_a*px_b (one rounding)
-//        det = w0 + (w1 + w2), T = (w0*pz0 + w1*pz1) + w2*pz2
-//        t = f32(T / det), (u, v) = f32(w1, w2) / f32(det)
-//   hit = !(any w < 0 && any w > 0) && det != 0 && tmin < t < tmax
+//   sz = 1/dir[kz], sx = dir[kx]*sz, sy = dir[ky]*sz
+//   r = vertex - origin, px = fma(-sx, rz, rx), py = fma(-sy, rz, ry), pz = sz*rz
+//   w0 = px2*py1 - py2*px1, w1 = px0*py2 - py0*px2, w2 = px1*py0 - py1*px0
+//   det = (w0 + w1) + w2, T = fma(w2, pz2, fma(w1, pz1, w0*pz0))
+//   rcp = 1/det, t = T*rcp, (u, v) = (w1*rcp, w2*rcp)
+//   hit = !(any w < 0 && any w > 0) && det != 0 && t_min < t < t_max
 //   back_facing = det < 0
 //
-// A shared edge evaluates to exactly negated weights in its two triangles, so
-// the test is watertight; the F64 edge functions and t keep t within half an
-// ulp of the exact intersection, in the op order the Vulkan reference
-// (lavapipe) uses, so coincident triangles resolve the same way.
+// Each edge function is two rounded products and a rounded difference of the
+// sheared vertices alone, so an edge shared by two triangles evaluates to
+// exactly negated weights in both: no ray slips between them. t_min < t < t_max
+// is the Vulkan ray interval for triangles (open at both ends). The FP units
+// flush subnormals.
 
 `include "VX_define.vh"
 
@@ -58,123 +60,33 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     output wire [31:0]      v,
     output wire             back_facing
 );
-    localparam F   = LATENCY_FMA;
-    localparam V   = LATENCY_FDIV;
-    localparam D   = RTU_LATENCY_FMA64;
-    localparam V64 = RTU_FDIV64_LAT;
+    localparam F = LATENCY_FMA;
+    localparam V = LATENCY_FDIV;
 
     // stage start times (cycles after valid_in)
-    localparam T_B = 1;                 // canonical/axis select registered
+    localparam T_B = 1;                 // axis select registered
     localparam T_C = T_B + V;           // sz ready
     localparam T_D = T_C + F;           // sx, sy ready
-    localparam T_E = T_D + F;           // sx*rz, sy*rz ready
-    localparam T_F = T_E + F;           // px, py ready
-    localparam T_G = T_F + 2 * D;       // w ready
-    localparam T_H = T_G + 3 * D;       // T ready (det at T_G + 2D)
-    localparam T_I = T_H + V64 + 1;     // t narrowed and registered
-    localparam LATENCY = T_I + 1;       // verdict registered
+    localparam T_E = T_D + F;           // px, py, pz ready
+    localparam T_F = T_E + 2 * F;       // w ready
+    localparam T_G = T_F + 2 * F + V;   // 1/det ready (T at T_F + 3F)
+    localparam T_H = T_G + F;           // t, u, v ready
+    localparam LATENCY = T_H + 1;       // verdict registered
 
-    `STATIC_ASSERT(V >= F, ("tri PE: FDIV latency must cover the r subtract"))
-    `STATIC_ASSERT(T_G + 2 * D + 1 + V <= T_I, ("tri PE: bary divide must land before t"))
+    `STATIC_ASSERT(V >= F, ("tri PE: FDIV latency must cover the r subtract and T"))
 
     localparam [INST_FMT_BITS-1:0] FMT_ADD = 2'b00;
     localparam [INST_FMT_BITS-1:0] FMT_SUB = 2'b10;
     localparam [31:0] F32_ONE = 32'h3F800000;
 
-    // ── helpers ───────────────────────────────────────────────────────
-    // exact F32 -> F64 widening (subnormals normalized)
-    function automatic [63:0] f32_to_f64(input [31:0] a);
-        reg [7:0]  e;
-        reg [22:0] m;
-        reg [4:0]  lz;
-        reg [22:0] mn;
-        begin
-            e = a[30:23];
-            m = a[22:0];
-            if (e == 8'hff) begin
-                f32_to_f64 = {a[31], 11'h7ff, m, 29'd0};
-            end else if (e == 8'd0) begin
-                if (m == 23'd0) begin
-                    f32_to_f64 = {a[31], 63'd0};
-                end else begin
-                    lz = 5'd0;
-                    for (integer i = 22; i >= 0; --i) begin
-                        if (m[i]) begin
-                            lz = 5'(22 - i);
-                            break;
-                        end
-                    end
-                    mn = m << (lz + 5'd1);
-                    f32_to_f64 = {a[31], 11'(11'd896 - 11'(lz)), mn, 29'd0};
-                end
-            end else begin
-                f32_to_f64 = {a[31], 11'(e) + 11'd896, m, 29'd0};
-            end
-        end
-    endfunction
-
-    // F64 -> F32, round to nearest even
-    function automatic [31:0] f64_to_f32(input [63:0] a);
-        reg        s;
-        reg [10:0] e;
-        reg [51:0] m;
-        reg signed [12:0] ue;
-        reg [52:0] sig;
-        reg [6:0]  sh;
-        reg [22:0] keep;
-        reg        guard, sticky;
-        reg [31:0] base;
-        begin
-            s  = a[63];
-            e  = a[62:52];
-            m  = a[51:0];
-            ue = 13'(e) - 13'sd896;
-            if (e == 11'h7ff) begin
-                f64_to_f32 = {s, 8'hff, (m != 52'd0) ? {1'b1, m[50:29]} : 23'd0};
-            end else if (e == 11'd0) begin
-                f64_to_f32 = {s, 31'd0};
-            end else if (ue >= 13'sd255) begin
-                f64_to_f32 = {s, 8'hff, 23'd0};
-            end else if (ue >= 13'sd1) begin
-                guard  = m[28];
-                sticky = (m[27:0] != 28'd0);
-                base   = {s, ue[7:0], m[51:29]};
-                f64_to_f32 = base + 32'((guard && (sticky || m[29])) ? 1 : 0);
-            end else begin
-                // subnormal: mantissa = sig >> (30 - ue), ue <= 0
-                sig = {1'b1, m};
-                sh  = (ue < -13'sd30) ? 7'd61 : 7'(13'sd30 - ue);
-                if (sh > 7'd54) begin
-                    keep   = 23'd0;
-                    guard  = 1'b0;
-                    sticky = 1'b1;
-                end else begin
-                    keep   = 23'(sig >> sh);
-                    guard  = sig[6'(sh - 7'd1)];
-                    sticky = (64'(sig) & ((64'd1 << (sh - 7'd1)) - 64'd1)) != 64'd0;
-                end
-                base = {s, 8'd0, keep};
-                f64_to_f32 = base + 32'((guard && (sticky || keep[0])) ? 1 : 0);
-            end
-        end
-    endfunction
-
     // IEEE ordering on F32 (+0 == -0); NaN compares false
-    function automatic f32_le(input [31:0] a, input [31:0] b);
-        reg a_nan, b_nan;
-        reg [31:0] ka, kb;
-        begin
-            a_nan = (a[30:23] == 8'hff) && (a[22:0] != 23'd0);
-            b_nan = (b[30:23] == 8'hff) && (b[22:0] != 23'd0);
-            ka = (a[30:0] == 31'd0) ? 32'h80000000 : (a[31] ? ~a : {1'b1, a[30:0]});
-            kb = (b[30:0] == 31'd0) ? 32'h80000000 : (b[31] ? ~b : {1'b1, b[30:0]});
-            f32_le = !a_nan && !b_nan && (ka <= kb);
-        end
-    endfunction
-
-    // strict IEEE a < b (+0 == -0); NaN compares false
-    function automatic f32_lt(input [31:0] a, input [31:0] b);
-        f32_lt = f32_le(a, b) && !f32_le(b, a);
+    function automatic logic f32_lt(input logic [31:0] a, input logic [31:0] b);
+        logic [31:0] ka, kb;
+        ka = (a[30:0] == 31'd0) ? 32'h80000000 : (a[31] ? ~a : {1'b1, a[30:0]});
+        kb = (b[30:0] == 31'd0) ? 32'h80000000 : (b[31] ? ~b : {1'b1, b[30:0]});
+        f32_lt = !((a[30:23] == 8'hff) && (a[22:0] != 23'd0))
+              && !((b[30:23] == 8'hff) && (b[22:0] != 23'd0))
+              && (ka < kb);
     endfunction
 
     // ── stage A (@0 -> @T_B): axis select ─────────────────────────────
@@ -189,7 +101,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [1:0] kx_w = dz_neg ? ky0 : kx0;
     wire [1:0] ky_w = dz_neg ? kx0 : ky0;
 
-    // per canonical vertex: (x, y, z) components in the sheared frame's axes
+    // per vertex: (x, y, z) components in the sheared frame's axes
     wire [2:0][2:0][31:0] q_w;     // [vertex][axis x/y/z]
     wire [2:0][2:0][31:0] cvs = {v2, v1, v0};
     for (genvar i = 0; i < 3; ++i) begin : g_q
@@ -238,7 +150,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     for (genvar i = 0; i < 3; ++i) begin : g_r
         for (genvar a = 0; a < 3; ++a) begin : g_ax
             VX_fma_unit #(
-                .LATENCY (F),
+                .LATENCY        (F),
                 .USE_DSP        (`VX_CFG_RTU_USE_DSP),
                 .SUBNORM_ENABLE (0),
                 .EXCEPT_ENABLE  (1)
@@ -259,7 +171,7 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
     end
 
-    // r from @T_B+F to @T_D (consumed by the sx*rz stage)
+    // r from @T_B+F to @T_D (consumed by the shear stage)
     wire [2:0][2:0][31:0] r_d;
     VX_shift_register #(
         .DATAW (9 * 32),
@@ -288,10 +200,10 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [1:0][31:0] sxy_d;
     for (genvar a = 0; a < 2; ++a) begin : g_sxy
         VX_fma_unit #(
-            .LATENCY (F),
-                .USE_DSP        (`VX_CFG_RTU_USE_DSP),
-                .SUBNORM_ENABLE (0),
-                .EXCEPT_ENABLE  (1)
+            .LATENCY        (F),
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+            .SUBNORM_ENABLE (0),
+            .EXCEPT_ENABLE  (1)
         ) fmul_s (
             .clk     (clk),
             .reset   (reset),
@@ -320,35 +232,33 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .data_out (sz_d)
     );
 
-    // ── stage D (@T_D): sx*rz, sy*rz (F32); pz = sz*rz (F64, exact) ────
-    wire [2:0][1:0][31:0] m_e;
-    wire [2:0][63:0]      pz_x;   // @T_D + D
+    // ── stage D (@T_D): px/py = fma(-s, rz, r), pz = sz*rz ────────────
+    wire [2:0][1:0][31:0] p_e;   // [vertex][x/y]
+    wire [2:0][31:0]      pz_e;
     for (genvar i = 0; i < 3; ++i) begin : g_shear
         for (genvar a = 0; a < 2; ++a) begin : g_ax
             VX_fma_unit #(
-                .LATENCY (F),
+                .LATENCY        (F),
                 .USE_DSP        (`VX_CFG_RTU_USE_DSP),
                 .SUBNORM_ENABLE (0),
                 .EXCEPT_ENABLE  (1)
-            ) fmul_m (
+            ) fma_p (
                 .clk     (clk),
                 .reset   (reset),
                 .enable  (enable),
                 .mask    (1'b1),
-                .op_type (INST_FPU_MUL),
+                .op_type (INST_FPU_MADD),
                 .fmt     (FMT_ADD),
                 .frm     (INST_FRM_RNE),
-                .dataa   (sxy_d[a]),
+                .dataa   ({~sxy_d[a][31], sxy_d[a][30:0]}),
                 .datab   (r_d[i][2]),
-                .datac   ('0),
-                .result  (m_e[i][a]),
+                .datac   (r_d[i][a]),
+                .result  (p_e[i][a]),
                 `UNUSED_PIN (fflags)
             );
         end
         VX_fma_unit #(
-            .LATENCY        (D),
-            .MAN_BITS       (52),
-            .EXP_BITS       (11),
+            .LATENCY        (F),
             .USE_DSP        (`VX_CFG_RTU_USE_DSP),
             .SUBNORM_ENABLE (0),
             .EXCEPT_ENABLE  (1)
@@ -360,86 +270,188 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .op_type (INST_FPU_MUL),
             .fmt     (FMT_ADD),
             .frm     (INST_FRM_RNE),
-            .dataa   (f32_to_f64(sz_d)),
-            .datab   (f32_to_f64(r_d[i][2])),
+            .dataa   (sz_d),
+            .datab   (r_d[i][2]),
             .datac   ('0),
-            .result  (pz_x[i]),
+            .result  (pz_e[i]),
             `UNUSED_PIN (fflags)
         );
     end
 
-    // rx, ry from @T_D to @T_E
-    wire [2:0][1:0][31:0] rxy_e;
-    VX_shift_register #(
-        .DATAW (6 * 32),
-        .DEPTH (T_E - T_D)
-    ) sr_rxy (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  ({r_d[2][1], r_d[2][0], r_d[1][1], r_d[1][0], r_d[0][1], r_d[0][0]}),
-        .data_out (rxy_e)
-    );
-
-    // ── stage E (@T_E): px = rx - sx*rz, py = ry - sy*rz ──────────────
-    wire [2:0][1:0][31:0] p_f;   // [vertex][x/y]
-    for (genvar i = 0; i < 3; ++i) begin : g_p
-        for (genvar a = 0; a < 2; ++a) begin : g_ax
+    // ── stage E (@T_E): w_i = px_a*py_b - py_a*px_b ───────────────────
+    // (a, b) per weight: w0 <- (2, 1), w1 <- (0, 2), w2 <- (1, 0)
+    wire [2:0][1:0][31:0] cp_e;   // [weight][px_a*py_b, py_a*px_b]
+    wire [2:0][31:0]      w_f;
+    for (genvar i = 0; i < 3; ++i) begin : g_w
+        localparam IA = (i == 0) ? 2 : ((i == 1) ? 0 : 1);
+        localparam IB = (i == 0) ? 1 : ((i == 1) ? 2 : 0);
+        for (genvar k = 0; k < 2; ++k) begin : g_prod
             VX_fma_unit #(
-                .LATENCY (F),
+                .LATENCY        (F),
                 .USE_DSP        (`VX_CFG_RTU_USE_DSP),
                 .SUBNORM_ENABLE (0),
                 .EXCEPT_ENABLE  (1)
-            ) fsub_p (
+            ) fmul_c (
                 .clk     (clk),
                 .reset   (reset),
                 .enable  (enable),
                 .mask    (1'b1),
-                .op_type (INST_FPU_ADD),
-                .fmt     (FMT_SUB),
+                .op_type (INST_FPU_MUL),
+                .fmt     (FMT_ADD),
                 .frm     (INST_FRM_RNE),
-                .dataa   (rxy_e[i][a]),
-                .datab   (m_e[i][a]),
+                .dataa   (p_e[IA][k]),
+                .datab   (p_e[IB][1-k]),
                 .datac   ('0),
-                .result  (p_f[i][a]),
+                .result  (cp_e[i][k]),
                 `UNUSED_PIN (fflags)
             );
         end
-    end
-
-    // ── stage F (@T_F): w_i = px_a*py_b - py_a*px_b in F64 ────────────
-    // (a, b) per weight: w0 <- (2, 1), w1 <- (0, 2), w2 <- (1, 0)
-    wire [2:0][1:0][63:0] p64_f;
-    for (genvar i = 0; i < 3; ++i) begin : g_p64
-        assign p64_f[i][0] = f32_to_f64(p_f[i][0]);
-        assign p64_f[i][1] = f32_to_f64(p_f[i][1]);
-    end
-
-    wire [2:0][1:0][63:0] p64_g1;   // operands delayed D for the fused stage
-    VX_shift_register #(
-        .DATAW (6 * 64),
-        .DEPTH (D)
-    ) sr_p64 (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  (p64_f),
-        .data_out (p64_g1)
-    );
-
-    wire [2:0][63:0] w_g;
-    for (genvar i = 0; i < 3; ++i) begin : g_w
-        localparam IA = (i == 0) ? 2 : ((i == 1) ? 0 : 1);
-        localparam IB = (i == 0) ? 1 : ((i == 1) ? 2 : 0);
-        wire [63:0] cross_q;   // py_a * px_b, exact
         VX_fma_unit #(
-            .LATENCY        (D),
-            .MAN_BITS       (52),
-            .EXP_BITS       (11),
+            .LATENCY        (F),
             .USE_DSP        (`VX_CFG_RTU_USE_DSP),
             .SUBNORM_ENABLE (0),
             .EXCEPT_ENABLE  (1)
-        ) fmul_c (
+        ) fsub_w (
+            .clk     (clk),
+            .reset   (reset),
+            .enable  (enable),
+            .mask    (1'b1),
+            .op_type (INST_FPU_ADD),
+            .fmt     (FMT_SUB),
+            .frm     (INST_FRM_RNE),
+            .dataa   (cp_e[i][0]),
+            .datab   (cp_e[i][1]),
+            .datac   ('0),
+            .result  (w_f[i]),
+            `UNUSED_PIN (fflags)
+        );
+    end
+
+    // pz from @T_E to @T_F
+    wire [2:0][31:0] pz_f;
+    VX_shift_register #(
+        .DATAW (3 * 32),
+        .DEPTH (T_F - T_E)
+    ) sr_pz (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (pz_e),
+        .data_out (pz_f)
+    );
+
+    // ── stage F (@T_F): det = (w0 + w1) + w2; T = fma chain over w*pz ──
+    // w, pz delayed one and two FMA stages for the later chain links
+    wire [2:0][31:0] w_f1, pz_f1;
+    wire [31:0]      w1_f2, w2_f2, pz2_f2;
+    VX_shift_register #(
+        .DATAW (6 * 32),
+        .DEPTH (F)
+    ) sr_wpz1 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({w_f, pz_f}),
+        .data_out ({w_f1, pz_f1})
+    );
+    VX_shift_register #(
+        .DATAW (3 * 32),
+        .DEPTH (F)
+    ) sr_wpz2 (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({w_f1[2], pz_f1[2], w_f1[1]}),
+        .data_out ({w2_f2, pz2_f2, w1_f2})
+    );
+
+    wire [31:0] det01, det_g, tp0, tp01, t_num;
+    VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_det01 (
+        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+        .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .dataa (w_f[0]), .datab (w_f[1]), .datac ('0),
+        .result (det01), `UNUSED_PIN (fflags)
+    );
+    VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_det (
+        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+        .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .dataa (det01), .datab (w_f1[2]), .datac ('0),
+        .result (det_g), `UNUSED_PIN (fflags)
+    );
+    VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fmul_tp0 (
+        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+        .op_type (INST_FPU_MUL), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .dataa (w_f[0]), .datab (pz_f[0]), .datac ('0),
+        .result (tp0), `UNUSED_PIN (fflags)
+    );
+    VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fma_tp01 (
+        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+        .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .dataa (w_f1[1]), .datab (pz_f1[1]), .datac (tp0),
+        .result (tp01), `UNUSED_PIN (fflags)
+    );
+    VX_fma_unit #(.LATENCY (F), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fma_t (
+        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
+        .op_type (INST_FPU_MADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
+        .dataa (w2_f2), .datab (pz2_f2), .datac (tp01),
+        .result (t_num), `UNUSED_PIN (fflags)
+    );
+
+    // ── 1/det (@T_F+2F -> @T_G) ───────────────────────────────────────
+    wire [31:0] rcp_g;
+    VX_fdiv_unit #(
+        .LATENCY        (V),
+        .FLEN           (32),
+        .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+        .SUBNORM_ENABLE (0),
+        .EXCEPT_ENABLE  (1)
+    ) fdiv_rcp (
+        .clk     (clk),
+        .reset   (reset),
+        .enable  (enable),
+        .mask    (1'b1),
+        .fmt     ('0),
+        .frm     (INST_FRM_RNE),
+        .dataa   (F32_ONE),
+        .datab   (det_g),
+        .result  (rcp_g),
+        `UNUSED_PIN (fflags)
+    );
+
+    // T from @T_F+3F, w1/w2 from @T_F+2F, to @T_G
+    wire [31:0] t_num_g, w1_g, w2_g;
+    VX_shift_register #(
+        .DATAW (32),
+        .DEPTH (T_G - (T_F + 3 * F))
+    ) sr_tnum (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  (t_num),
+        .data_out (t_num_g)
+    );
+    VX_shift_register #(
+        .DATAW (2 * 32),
+        .DEPTH (V)
+    ) sr_wuv (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (enable),
+        .data_in  ({w2_f2, w1_f2}),
+        .data_out ({w2_g, w1_g})
+    );
+    `UNUSED_VAR ({w_f1[0], pz_f1[0]})
+
+    // ── stage G (@T_G): t = T*rcp, u = w1*rcp, v = w2*rcp ─────────────
+    wire [2:0][31:0] tuv_h;
+    wire [2:0][31:0] tuv_num = {w2_g, w1_g, t_num_g};
+    for (genvar k = 0; k < 3; ++k) begin : g_scale
+        VX_fma_unit #(
+            .LATENCY        (F),
+            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
+            .SUBNORM_ENABLE (0),
+            .EXCEPT_ENABLE  (1)
+        ) fmul_tuv (
             .clk     (clk),
             .reset   (reset),
             .enable  (enable),
@@ -447,294 +459,82 @@ module VX_rtu_tri_pe import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .op_type (INST_FPU_MUL),
             .fmt     (FMT_ADD),
             .frm     (INST_FRM_RNE),
-            .dataa   (p64_f[IA][1]),
-            .datab   (p64_f[IB][0]),
+            .dataa   (tuv_num[k]),
+            .datab   (rcp_g),
             .datac   ('0),
-            .result  (cross_q),
-            `UNUSED_PIN (fflags)
-        );
-        VX_fma_unit #(
-            .LATENCY        (D),
-            .MAN_BITS       (52),
-            .EXP_BITS       (11),
-            .USE_DSP        (`VX_CFG_RTU_USE_DSP),
-            .SUBNORM_ENABLE (0),
-            .EXCEPT_ENABLE  (1)
-        ) fmsub_w (
-            .clk     (clk),
-            .reset   (reset),
-            .enable  (enable),
-            .mask    (1'b1),
-            .op_type (INST_FPU_MADD),
-            .fmt     (FMT_SUB),
-            .frm     (INST_FRM_RNE),
-            .dataa   (p64_g1[IA][0]),
-            .datab   (p64_g1[IB][1]),
-            .datac   (cross_q),
-            .result  (w_g[i]),
+            .result  (tuv_h[k]),
             `UNUSED_PIN (fflags)
         );
     end
 
-    // pz from @T_D+D to @T_G
-    wire [2:0][63:0] pz_g;
-    VX_shift_register #(
-        .DATAW (3 * 64),
-        .DEPTH (T_G - (T_D + D))
-    ) sr_pz (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  (pz_x),
-        .data_out (pz_g)
-    );
-
-    // ── stage G (@T_G): det = w0 + (w1 + w2); T = (w0 pz0 + w1 pz1) + w2 pz2
-    wire [63:0] det12, det_g2, tp0, tp1, tp2, t01, t_num;
-    wire [63:0] w0_g1, tp2_g2;
-    VX_shift_register #(
-        .DATAW (64),
-        .DEPTH (D)
-    ) sr_w0 (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  (w_g[0]),
-        .data_out (w0_g1)
-    );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_det12 (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (w_g[1]), .datab (w_g[2]), .datac ('0),
-        .result (det12), `UNUSED_PIN (fflags)
-    );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_det (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (w0_g1), .datab (det12), .datac ('0),
-        .result (det_g2), `UNUSED_PIN (fflags)
-    );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fmul_tp0 (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_MUL), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (w_g[0]), .datab (pz_g[0]), .datac ('0),
-        .result (tp0), `UNUSED_PIN (fflags)
-    );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fmul_tp1 (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_MUL), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (w_g[1]), .datab (pz_g[1]), .datac ('0),
-        .result (tp1), `UNUSED_PIN (fflags)
-    );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fmul_tp2 (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_MUL), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (w_g[2]), .datab (pz_g[2]), .datac ('0),
-        .result (tp2), `UNUSED_PIN (fflags)
-    );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_t01 (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (tp0), .datab (tp1), .datac ('0),
-        .result (t01), `UNUSED_PIN (fflags)
-    );
-    VX_shift_register #(
-        .DATAW (64),
-        .DEPTH (D)
-    ) sr_tp2 (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  (tp2),
-        .data_out (tp2_g2)
-    );
-    VX_fma_unit #(.LATENCY (D), .MAN_BITS (52), .EXP_BITS (11), .USE_DSP (`VX_CFG_RTU_USE_DSP), .SUBNORM_ENABLE (0), .EXCEPT_ENABLE (1)) fadd_t (
-        .clk (clk), .reset (reset), .enable (enable), .mask (1'b1),
-        .op_type (INST_FPU_ADD), .fmt (FMT_ADD), .frm (INST_FRM_RNE),
-        .dataa (t01), .datab (tp2_g2), .datac ('0),
-        .result (t_num), `UNUSED_PIN (fflags)
-    );
-
-    // det from @T_G+2D to @T_H
-    wire [63:0] det_h;
-    VX_shift_register #(
-        .DATAW (64),
-        .DEPTH (T_H - (T_G + 2 * D))
-    ) sr_det (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  (det_g2),
-        .data_out (det_h)
-    );
-
-    // ── stage H (@T_H): t = f32(T / det) ──────────────────────────────
-    wire [63:0] t64;
-    VX_fdiv_unit #(
-        .LATENCY        (V64),
-        .FLEN           (64),
-        .SUBNORM_ENABLE (0),
-        .EXCEPT_ENABLE  (1)
-    ) fdiv_t (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .fmt     (2'b01),
-        .frm     (INST_FRM_RNE),
-        .dataa   (t_num),
-        .datab   (det_h),
-        .result  (t64),
-        `UNUSED_PIN (fflags)
-    );
-
-    reg [31:0] t_i;
-    always_ff @(posedge clk) begin
-        if (enable) begin
-            t_i <= f64_to_f32(t64);
-        end
-    end
-
-    // ── barycentrics (@T_G+2D): f32(w1) / f32(det), f32(w2) / f32(det)
-    wire [1:0][63:0] w_b;   // w1, w2
-    VX_shift_register #(
-        .DATAW (2 * 64),
-        .DEPTH (2 * D)
-    ) sr_wb (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  ({w_g[2], w_g[1]}),
-        .data_out (w_b)
-    );
-    reg [31:0] wu_r, wv_r, det32_r;
-    always_ff @(posedge clk) begin
-        if (enable) begin
-            wu_r    <= f64_to_f32(w_b[0]);
-            wv_r    <= f64_to_f32(w_b[1]);
-            det32_r <= f64_to_f32(det_g2);
-        end
-    end
-
-    wire [31:0] u_q, v_q;
-    VX_fdiv_unit #(
-        .LATENCY        (V),
-        .FLEN           (32),
-        .USE_DSP        (`VX_CFG_RTU_USE_DSP),
-        .SUBNORM_ENABLE (0),
-        .EXCEPT_ENABLE  (1)
-    ) fdiv_u (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .fmt     ('0),
-        .frm     (INST_FRM_RNE),
-        .dataa   (wu_r),
-        .datab   (det32_r),
-        .result  (u_q),
-        `UNUSED_PIN (fflags)
-    );
-    VX_fdiv_unit #(
-        .LATENCY        (V),
-        .FLEN           (32),
-        .USE_DSP        (`VX_CFG_RTU_USE_DSP),
-        .SUBNORM_ENABLE (0),
-        .EXCEPT_ENABLE  (1)
-    ) fdiv_v (
-        .clk     (clk),
-        .reset   (reset),
-        .enable  (enable),
-        .mask    (1'b1),
-        .fmt     ('0),
-        .frm     (INST_FRM_RNE),
-        .dataa   (wv_r),
-        .datab   (det32_r),
-        .result  (v_q),
-        `UNUSED_PIN (fflags)
-    );
-
-    wire [31:0] u_i, v_i;
-    VX_shift_register #(
-        .DATAW (64),
-        .DEPTH (T_I - (T_G + 2 * D + 1 + V))
-    ) sr_uv (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (enable),
-        .data_in  ({u_q, v_q}),
-        .data_out ({u_i, v_i})
-    );
-
-    // ── verdict flags: edge signs (@T_G), det tests (@T_G+2D) ─────────
-    reg edge_ok_g;
+    // ── verdict flags: edge signs (@T_F), det tests (@T_F+2F) ─────────
+    reg edge_ok_f;
     always @(*) begin
-        reg any_neg, any_pos;
+        logic any_neg, any_pos;
         any_neg = 1'b0;
         any_pos = 1'b0;
         for (integer i = 0; i < 3; ++i) begin
-            if (w_g[i][62:0] != 63'd0
-             && !((w_g[i][62:52] == 11'h7ff) && (w_g[i][51:0] != 52'd0))) begin
-                any_neg = any_neg |  w_g[i][63];
-                any_pos = any_pos | ~w_g[i][63];
+            if (w_f[i][30:0] != 31'd0
+             && !((w_f[i][30:23] == 8'hff) && (w_f[i][22:0] != 23'd0))) begin
+                any_neg = any_neg |  w_f[i][31];
+                any_pos = any_pos | ~w_f[i][31];
             end
         end
-        edge_ok_g = !(any_neg && any_pos);
+        edge_ok_f = !(any_neg && any_pos);
     end
 
     wire edge_ok_d;
     VX_shift_register #(
         .DATAW (1),
-        .DEPTH (2 * D)
+        .DEPTH (2 * F)
     ) sr_edge (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
-        .data_in  (edge_ok_g),
+        .data_in  (edge_ok_f),
         .data_out (edge_ok_d)
     );
 
-    wire det_nan  = (det_g2[62:52] == 11'h7ff) && (det_g2[51:0] != 52'd0);
-    wire det_ok_d = (det_g2[62:0] != 63'd0) && !det_nan;
-    wire back_d   = det_g2[63];
+    wire det_nan  = (det_g[30:23] == 8'hff) && (det_g[22:0] != 23'd0);
+    wire det_ok_d = (det_g[30:0] != 31'd0) && !det_nan;
+    wire back_d   = det_g[31];
 
-    wire [2:0] flags_i;
+    wire [2:0] flags_h;
     VX_shift_register #(
         .DATAW (3),
-        .DEPTH (T_I - (T_G + 2 * D))
+        .DEPTH (T_H - (T_F + 2 * F))
     ) sr_flags (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
         .data_in  ({edge_ok_d, det_ok_d, back_d}),
-        .data_out (flags_i)
+        .data_out (flags_h)
     );
 
-    wire [63:0] tmm_i;
+    wire [63:0] tmm_h;
     VX_shift_register #(
         .DATAW (64),
-        .DEPTH (T_I - T_B)
+        .DEPTH (T_H - T_B)
     ) sr_tmm (
         .clk      (clk),
         .reset    (reset),
         .enable   (enable),
         .data_in  ({tmin_a, tmax_a}),
-        .data_out (tmm_i)
+        .data_out (tmm_h)
     );
 
-    // ── stage I (@T_I): range test and commit ─────────────────────────
-    // open interval, as the Vulkan reference commits a triangle hit
-    wire range_ok = f32_lt(tmm_i[63:32], t_i) && f32_lt(t_i, tmm_i[31:0]);
+    // ── stage H (@T_H): t_min < t < t_max ─────────────────────────────
+    wire range_ok = f32_lt(tmm_h[63:32], tuv_h[0]) && f32_lt(tuv_h[0], tmm_h[31:0]);
 
     reg        hit_r, bf_r;
     reg [31:0] u_r, v_r, t_r;
     always_ff @(posedge clk) begin
         if (enable) begin
-            hit_r <= flags_i[2] && flags_i[1] && range_ok;
-            bf_r  <= flags_i[0];
-            u_r   <= u_i;
-            v_r   <= v_i;
-            t_r   <= t_i;
+            hit_r <= flags_h[2] && flags_h[1] && range_ok;
+            bf_r  <= flags_h[0];
+            t_r   <= tuv_h[0];
+            u_r   <= tuv_h[1];
+            v_r   <= tuv_h[2];
         end
     end
 

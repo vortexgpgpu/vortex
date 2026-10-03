@@ -304,8 +304,6 @@ constexpr uint32_t kRtuImageStatesPerRay  = 1;   // scene header
 constexpr uint32_t kRtuSetupLatency = 17;   // reciprocal pipe depth
 constexpr uint32_t kRtuFdivLat      = 17;   // reciprocal pipe depth
 constexpr uint32_t kRtuLatencyFma   = 9;    // FMA pipe depth
-constexpr uint32_t kRtuLatencyFma64 = 12;   // F64 FMA pipe depth (tri PE)
-constexpr uint32_t kRtuFdiv64Lat    = 32;   // F64 divide pipe depth (tri PE)
 // Per-instance transform latency = 4 * FMA pipe depth = 36: the products, then
 // three dependent adds (VX_rtu_xform). Charged per TLAS instance descent in the
 // SimX cost model.
