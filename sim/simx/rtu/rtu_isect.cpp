@@ -78,8 +78,7 @@ bool ray_triangle(const float ro[3], const float rd[3],
   const double tp2 = w[2] * pz[2];
   const float t = float(((tp0 + tp1) + tp2) / det);
   // Open interval, as the reference commits (lvp_build_triangle_case:
-  // tmin < t and t < tmax). Callers pass the RAY's tmax, never the committed
-  // t, so an equal-t twin still reaches the walker's tie-break.
+  // tmin < t and t < tmax).
   if (!(tmin < t && t < tmax)) return false;
 
   const float det32 = float(det);

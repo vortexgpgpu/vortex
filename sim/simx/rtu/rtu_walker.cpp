@@ -91,7 +91,6 @@ struct WalkCtx {
   uint32_t best_instance;
   uint32_t best_custom;    // VK_INSTANCE_CUSTOM_INDEX of the committed instance
   uint32_t best_geom;      // gl_GeometryIndexEXT of the committed leaf
-  bool     best_kv;        // an opaque hit committed in this walk
   bool any_hit;
   bool yield_pending;
   float yield_t, yield_u, yield_v;
@@ -137,19 +136,6 @@ inline uint32_t hit_facing_bit(bool back_facing, uint32_t inst_flags) {
   return back_facing ? VX_RT_HIT_BACK_FACING : 0u;
 }
 
-// Whether an opaque hit at t replaces the committed one: the nearer hit wins,
-// and an exact tie goes to the lowest (instance, geometry, primitive).
-bool commit_takes(const WalkCtx& ctx, float t, uint32_t instance_id,
-                  uint32_t geom, uint32_t prim) {
-  if (t < ctx.best_t) return true;
-  if (!(ctx.best_kv && t == ctx.best_t)) return false;
-  const uint32_t best_geom = ctx.best_geom & VX_RT_HIT_GEOMETRY_MASK;
-  geom &= VX_RT_HIT_GEOMETRY_MASK;
-  if (instance_id != ctx.best_instance) return instance_id < ctx.best_instance;
-  if (geom != best_geom) return geom < best_geom;
-  return prim < ctx.best_prim;
-}
-
 // Depth-first walker for one BVH sub-tree under the supplied (object-space)
 // ray. Recurses on LeafInst so each instance's BLAS gets walked with its
 // transformed ray. ctx accumulates hits/yields across the whole call tree.
@@ -188,10 +174,13 @@ void walk_bvh4_subtree(SceneView& sv,
       float t_hit = 0.f, u = 0.f, v = 0.f;
       bool back_facing = false;
       ++perf.bvh_tri_tests;
-      const bool tri_hit = ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
-                        ctx.tmin, ctx.tmax,
-                        t_hit, u, v, back_facing);
-      if (!tri_hit) continue;
+      // The interval shrinks to the committed hit: a hit is only reported
+      // strictly nearer than it, so on equal t the first one found stays.
+      if (!ray_triangle(ro, rd, &tri[0], &tri[3], &tri[6],
+                        ctx.tmin, ctx.best_t,
+                        t_hit, u, v, back_facing)) {
+        continue;
+      }
 
       TriClassify cls = classify_tri_hit(ctx.ray_flags, tri_flags,
                                           inst_flags, back_facing);
@@ -200,25 +189,21 @@ void walk_bvh4_subtree(SceneView& sv,
       if (cls.action == TriAction::Ignore) continue;
 
       if (cls.action == TriAction::Commit) {
-        if (commit_takes(ctx, t_hit, instance_id, leaf_geom,
-                         leaf_prim_base + i)) {
-          ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
-          ctx.best_prim = leaf_prim_base + i;
-          ctx.best_instance = instance_id;
-          ctx.best_custom = custom_id;
-          ctx.best_geom = hit_geom;
-          ctx.any_hit = true;
-          ctx.best_kv = true;
-          vcopy3(ctx.best_obj_o, ro);   // object-space ray of this BLAS
-          vcopy3(ctx.best_obj_d, rd);
-          if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
-            ctx.yield_pending = false;
-            ctx.yield_t = ctx.tmax;
-          }
-          if (cls.terminate_on_first_hit) {
-            ctx.terminated = true;
-            return;
-          }
+        ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
+        ctx.best_prim = leaf_prim_base + i;
+        ctx.best_instance = instance_id;
+        ctx.best_custom = custom_id;
+        ctx.best_geom = hit_geom;
+        ctx.any_hit = true;
+        vcopy3(ctx.best_obj_o, ro);   // object-space ray of this BLAS
+        vcopy3(ctx.best_obj_d, rd);
+        if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
+          ctx.yield_pending = false;
+          ctx.yield_t = ctx.tmax;
+        }
+        if (cls.terminate_on_first_hit) {
+          ctx.terminated = true;
+          return;
         }
       } else {  // TriAction::Yield
         uint64_t key = cand_key(instance_id, tris_off + i * kVxBvhTriStride);
@@ -518,7 +503,6 @@ WalkCtx init_ctx(const RtuReq& req, uint32_t t,
   ctx.best_prim = 0; ctx.best_instance = 0; ctx.best_custom = 0;
   ctx.best_geom = 0;
   ctx.any_hit = false;
-  ctx.best_kv = false;
   ctx.yield_pending = false;
   ctx.yield_t = ctx.tmax; ctx.yield_u = 0.f; ctx.yield_v = 0.f;
   ctx.yield_prim = 0; ctx.yield_sbt = 0;
@@ -662,11 +646,8 @@ WalkResult FlatWalker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
       float t_hit = 0.f, u = 0.f, v = 0.f;
       bool back_facing = false;
       ++perf.bvh_tri_tests;
-      // Test against ray.tmax (not best_t) so an opaque hit committed earlier in
-      // this walk doesn't pre-cull a non-opaque candidate that might survive an
-      // ACCEPT.
       if (!ray_triangle(ray_o, ray_d, &tri[0], &tri[3], &tri[6],
-                        ctx.tmin, ctx.tmax,
+                        ctx.tmin, ctx.best_t,
                         t_hit, u, v, back_facing)) {
         continue;
       }
@@ -677,26 +658,23 @@ WalkResult FlatWalker::walk_lane(const RtuReq& req, uint32_t t, SceneView& sv,
       if (cls.action == TriAction::Ignore) continue;
 
       if (cls.action == TriAction::Commit) {
-        if (commit_takes(ctx, t_hit, inst_idx, 0, i)) {
-          ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
-          ctx.best_prim = i;
-          ctx.best_instance = inst_idx;
-          ctx.best_custom = cur_custom;
-          ctx.best_geom = hit_geom;
-          ctx.any_hit = true;
-          ctx.best_kv = true;
-          vcopy3(ctx.best_obj_o, ray_o);   // this instance's object ray
-          vcopy3(ctx.best_obj_d, ray_d);
-          if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
-            ctx.yield_pending = false;
-            ctx.yield_t = ctx.tmax;
-          }
-          if (cls.terminate_on_first_hit) {
-            // Halt the whole walk: this hit is committed as the result and no
-            // later triangle or instance may replace it.
-            ctx.terminated = true;
-            break;
-          }
+        ctx.best_t = t_hit; ctx.best_u = u; ctx.best_v = v;
+        ctx.best_prim = i;
+        ctx.best_instance = inst_idx;
+        ctx.best_custom = cur_custom;
+        ctx.best_geom = hit_geom;
+        ctx.any_hit = true;
+        vcopy3(ctx.best_obj_o, ray_o);   // this instance's object ray
+        vcopy3(ctx.best_obj_d, ray_d);
+        if (ctx.yield_pending && ctx.yield_t >= ctx.best_t) {
+          ctx.yield_pending = false;
+          ctx.yield_t = ctx.tmax;
+        }
+        if (cls.terminate_on_first_hit) {
+          // Halt the whole walk: this hit is committed as the result and no
+          // later triangle or instance may replace it.
+          ctx.terminated = true;
+          break;
         }
       } else {  // TriAction::Yield
         uint64_t key = cand_key(inst_idx, blas_tri_off + i * kPhase2TriStride);

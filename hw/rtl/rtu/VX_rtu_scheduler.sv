@@ -197,12 +197,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         logic [1:0]                 setup_axis;
         logic [2:0][31:0]           inv_d;
         logic [31:0]                best_t;
-        // identity of an opaque hit committed in this walk: an exact t tie
-        // goes to the lower (instance, geometry, primitive)
-        logic                       best_kv;
-        logic [31:0]                best_ki;
-        logic [27:0]                best_kg;
-        logic [31:0]                best_kp;
         logic [31:0]                yld_t;       // staged candidate's t (compare copy)
         logic [31:0]                yld_ki;      // staged candidate's key: instance id
         logic [31:0]                yld_ko;      // ... and record offset
@@ -677,14 +671,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                   && (inst_culldis || !(eff_back  && cull_back))
                   && (inst_culldis || !(!eff_back && cull_front))
                   && !cls_cull;
-    wire tri_committable = tri_pass && (trit_q < word_q.best_t);
-    wire [31:0] tri_ki   = word_q.in_blas ? word_q.inst_id : 32'd0;
-    wire [27:0] tri_kg   = 28'(word_q.geom_r & `VX_RT_HIT_GEOMETRY_MASK);
-    wire [31:0] tri_kp   = word_q.prim_base + word_q.tri_i;
-    wire tri_t_eq = (trit_q == word_q.best_t)
-                 || ((trit_q[30:0] == 31'd0) && (word_q.best_t[30:0] == 31'd0));
-    wire tri_tie  = tri_pass && word_q.best_kv && tri_t_eq
-                 && ({tri_ki, tri_kg, tri_kp} < {word_q.best_ki, word_q.best_kg, word_q.best_kp});
     // the reported geometry word: the leaf's index plus the hit's facing
     wire [31:0] tri_geom = (word_q.geom_r & `VX_RT_HIT_GEOMETRY_MASK)
                          | (eff_back ? `VX_RT_HIT_BACK_FACING : 32'd0);
@@ -826,8 +812,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .v1          (ltri_v1),
         .v2          (ltri_v2),
         .t_min       (ray_q.t_min),
-        // the ray's own interval: an equal-t hit still reaches the tie-break
-        .t_max       (ray_q.t_max),
+        // the interval shrinks to the committed hit: only a strictly nearer
+        // hit is reported, so on equal t the first one found stays
+        .t_max       (word_q.best_t),
         .valid_out   (tri_valid_out),
         .tag_out     (tri_tag_out),
         .hit         (tri_hit),
@@ -1652,7 +1639,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         CS_TRI_WAIT: begin
             // woken by the tri PE result (held in its result RAM, so a retry
             // on a full commit queue re-reads the same result)
-            if ((tri_committable || tri_tie) && tri_opaque) begin
+            if (tri_pass && tri_opaque) begin
                 cf_din_r.kind = CK_HIT;
                 cf_din_r.t    = trit_q;
                 cf_din_r.u    = triu_q;
@@ -1667,10 +1654,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     cf_push_r     = 1'b1;
                     exec_hit_set  = 1'b1;
                     word_n.best_t  = trit_q;
-                    word_n.best_kv = 1'b1;
-                    word_n.best_ki = tri_ki;
-                    word_n.best_kg = tri_kg;
-                    word_n.best_kp = tri_kp;
                     // a closer opaque hit occludes a farther candidate
                     if (yld_q[sel_q] && (word_x.yld_t >= trit_q)) begin
                         exec_yld_clr = 1'b1;
@@ -1688,7 +1671,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         wake_self     = 1'b1;
                     end
                 end
-            end else if (tri_committable
+            end else if (tri_pass
                       && above_floor(trit_q)
                       && before_yld(trit_q)) begin
                 cf_din_r.kind = CK_YLDA;

@@ -36,8 +36,8 @@ namespace vortex { namespace rtu {
 // triangle's geometric normal (ray-flag face culling). Convention:
 // triangle front face is the side from which (v0, v1, v2) appear CCW.
 // Equivalently, det > 0 ↔ ray hits the front face.
-// A hit needs tmin < t < tmax (open, as the Vulkan reference); tmax is
-// the ray's, not the committed hit's.
+// A hit needs tmin < t < tmax (open, as the Vulkan reference); the walker
+// passes the committed hit's t as tmax.
 // ────────────────────────────────────────────────────────────────────
 bool ray_triangle(const float ro[3], const float rd[3],
                   const float v0[3], const float v1[3], const float v2[3],
