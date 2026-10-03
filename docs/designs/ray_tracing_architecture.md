@@ -299,9 +299,15 @@ Two work products leave the scheduler:
   returned `hitAttribute`).
 
 Robustness details worth naming: a short-stack of depth `RTU_STACK_DEPTH` bounds
-per-context node stack RAM; on overflow the walker sets an `ovf` flag and, at
-pop-time, **re-descends** the subtree pruned by the tightened `best_t` (bounded by
-`RTU_RESTART_CAP = 8` restarts) — a full traversal on a finite stack. A 16-entry
+per-context node stack RAM, and an overflow never loses a hit. The walk visits
+nodes in rank-path order (each level's child rank in the t-sorted list, an
+instance's index in its leaf); a child that does not fit is dropped and the walk
+records it, then only descends until it would pop, and instead **restarts** from
+the root along the dropped child's rank path, held in a small per-context path
+RAM. Everything before that child has been visited, a tightened `best_t` only
+culls a suffix of a node's sorted children (so ranks stay valid), and each
+restart starts strictly further along, so the walk is exact and terminates on
+any tree up to 63 levels deep. A deep tree costs restarts, not hits. A 16-entry
 box collector insertion-sorts a node's child hits t-ascending so descent is
 nearest-first. The insertion slot is decoded from the **admit thermometer**: the
 collected list is sorted and its count mask is a prefix, so the "entries at or
