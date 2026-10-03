@@ -71,7 +71,8 @@ public:
   // and leave this clear.
   bool resume_warp;
 
-  uint64_t issue_time ;
+  // Cycle the instruction entered its warp's instruction buffer.
+  uint64_t ibuf_time;
 
   instr_trace_t(uint64_t uuid)
     : uuid(uuid)
@@ -95,7 +96,7 @@ public:
     , num_pkts(1)
     , fetch_stall(false)
     , resume_warp(false)
-    , issue_time(SimPlatform::instance().cycles())
+    , ibuf_time(0)
     , log_once_(false)
   {}
 
@@ -122,7 +123,7 @@ public:
     , num_pkts(rhs.num_pkts)
     , fetch_stall(rhs.fetch_stall)
     , resume_warp(rhs.resume_warp)
-    , issue_time(rhs.issue_time)
+    , ibuf_time(rhs.ibuf_time)
     , log_once_(false)
   {}
 

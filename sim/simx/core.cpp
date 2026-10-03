@@ -70,10 +70,13 @@ public:
     , decode_latch_(ctx, "decode_latch", 1, 2)
     , pending_icache_(VX_CFG_NUM_WARPS)
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
-    , fu_locked_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
-    , fu_unlock_pending_(VX_CFG_ISSUE_WIDTH, std::vector<const instr_trace_t*>((uint32_t)FUType::Count, nullptr))
+    , issue_lock_owner_(VX_CFG_ISSUE_WIDTH, kLockOpen)
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
+    , fu_full_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
+    , fu_full_seen_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
+    , last_issue_(VX_CFG_NUM_WARPS, 0)
+    , staged_since_(VX_CFG_NUM_WARPS, 0)
   {
     const std::string& name = simobject_->name();
     char sname[100];
@@ -165,6 +168,8 @@ public:
     std::vector<SimChannel<MemReq>*> dc_req_out(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
     std::vector<SimChannel<MemRsp>*> dc_rsp_in(VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS);
 
+    // The first data-cache port also carries the cache-flush injection, which
+    // registers its requests once more.
     if ((VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) {
       // connect memory coalescer; its memory side drives the dcache
       // channels directly (combinational lane fan-out/fan-in).
@@ -176,6 +181,7 @@ public:
           dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &mem_coalescers_.at(b)->RspIn.at(c);
         }
       }
+      mem_coalescers_.at(0)->set_port_delay(0, 1);
     } else {
       // bypass memory coalescer: per-block lane adapter (channel-fused
       // pass-through when DCACHE_CHANNELS == 1)
@@ -190,6 +196,7 @@ public:
           dc_rsp_in.at(b * DCACHE_CHANNELS + c) = &lsu_dcache_adapter.at(b)->RspIn.at(c);
         }
       }
+      lsu_dcache_adapter.at(0)->set_port_delay(0, 1);
     }
 
   #ifdef VX_CFG_VM_ENABLE
@@ -227,15 +234,6 @@ public:
       dc_req_out.at(p)->bind(&simobject_->dcache_req_out.at(p));
       simobject_->dcache_rsp_in.at(p).bind(dc_rsp_in.at(p));
     }
-  #endif
-
-    // initialize dispatchers
-    dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_ALU_BLOCKS, VX_CFG_NUM_ALU_LANES);
-    dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_FPU_BLOCKS, VX_CFG_NUM_FPU_LANES);
-    dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES);
-    dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_SFU_BLOCKS, VX_CFG_NUM_SFU_LANES);
-  #ifdef VX_CFG_EXT_TCU_ENABLE
-    dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES);
   #endif
 
     // initialize execute units
@@ -276,6 +274,28 @@ public:
   #endif
   #endif
 
+    // initialize dispatchers after the units they feed, so a unit takes its
+    // input before the dispatcher fills it in the same cycle.
+    {
+      // A reduced-width ALU or FPU registers the op once more on its way in.
+      uint32_t alu_dly = AluUnit::kGather ? 2 : 1;
+      uint32_t fpu_dly = FpuUnit::kGather ? 2 : 1;
+      dispatchers_.at((int)FUType::ALU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_ALU_BLOCKS, VX_CFG_NUM_ALU_LANES, alu_dly);
+      dispatchers_.at((int)FUType::FPU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_FPU_BLOCKS, VX_CFG_NUM_FPU_LANES, fpu_dly);
+      dispatchers_.at((int)FUType::LSU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_LSU_BLOCKS, VX_CFG_NUM_LSU_LANES, 1);
+      dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_SFU_BLOCKS, VX_CFG_NUM_SFU_LANES, 1);
+    #ifdef VX_CFG_EXT_TCU_ENABLE
+      dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES, 1);
+    #endif
+      for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
+        auto& dispatch = dispatchers_.at(fu);
+        auto& func_unit = func_units_.at(fu);
+        for (uint32_t b = 0; b < func_unit->num_blocks(); ++b) {
+          dispatch->Outputs.at(b).bind(&func_unit->input(b));
+        }
+      }
+    }
+
     // commit queues — per-iw, per-FU staging fed at runtime in commit() by
     // routing per-block FU outputs on trace->wid (no static binding because
     // the iw is not knowable at setup time when NUM_*_BLOCKS <
@@ -284,7 +304,9 @@ public:
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
       auto& queues = commit_queues_.emplace_back();
       for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
-        queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, 2));
+        // Covers the results still crossing into the queue, so a unit can
+        // retire one result per cycle.
+        queues.emplace_back(std::make_unique<SimChannel<instr_trace_t*>>(simobject_, 3));
       }
     }
 
@@ -298,12 +320,13 @@ public:
     for (auto& fc : fu_credits_) {
       std::fill(fc.begin(), fc.end(), 0);
     }
-    for (auto& fl : fu_locked_) {
-      fl.reset();
+    for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
+      fu_full_.at(iw).reset();
+      fu_full_seen_.at(iw).reset();
     }
-    for (auto& fp : fu_unlock_pending_) {
-      std::fill(fp.begin(), fp.end(), nullptr);
-    }
+    std::fill(issue_lock_owner_.begin(), issue_lock_owner_.end(), kLockOpen);
+    std::fill(last_issue_.begin(), last_issue_.end(), 0);
+    std::fill(staged_since_.begin(), staged_since_.end(), 0);
 
     pending_instrs_.clear();
     pending_ifetches_ = 0;
@@ -319,8 +342,9 @@ public:
 
   void tick() {
     this->commit();
-    this->execute();
+    this->return_dispatch_credits();
     this->issue();
+    this->update_queue_full();
     this->decode();
     this->fetch();
     this->schedule();
@@ -522,6 +546,7 @@ public:
     DT(3, simobject_->name() << "-pipeline decode: " << *trace);
 
     // insert to ibuffer
+    trace->ibuf_time = SimPlatform::instance().cycles();
     ibuffer->push(trace);
 
     decode_latch_.pop();
@@ -534,8 +559,20 @@ public:
       if (operand->Output.empty())
         continue;
       auto trace = operand->Output.peek();
-      if (dispatchers_.at((int)trace->fu_type)->Inputs.at(iw).try_send(trace)) {
+      // The collector's output register adds a cycle before the slot queue.
+      if (dispatchers_.at((int)trace->fu_type)->Inputs.at(iw).try_send(trace, 2)) {
         operand->Output.pop();
+      } else {
+        switch (trace->fu_type) {
+        case FUType::ALU: ++perf_stats_.alu_stalls; break;
+        case FUType::FPU: ++perf_stats_.fpu_stalls; break;
+        case FUType::LSU: ++perf_stats_.lsu_stalls; break;
+        case FUType::SFU: ++perf_stats_.sfu_stalls; break;
+      #ifdef VX_CFG_EXT_TCU_ENABLE
+        case FUType::TCU: ++perf_stats_.tcu_stalls; break;
+      #endif
+        default: assert(false);
+        }
       }
     }
 
@@ -554,6 +591,16 @@ public:
         auto seq = sequencers_.at(wid);
         auto uop_trace = seq->get(trace);  // returns cached uop or generates next
 
+        // The uop sequencer starts a macro-op once it reaches the front of the
+        // buffer behind the staged instruction, and offers its first uop the
+        // cycle after. A macro that arrives in an empty buffer, or behind an
+        // instruction that issues at once, waits that extra cycle.
+        bool seq_starting = false;
+        if (seq->starting()) {
+          uint64_t ready = std::max(staged_since_.at(wid), trace->ibuf_time) + 2;
+          seq_starting = (SimPlatform::instance().cycles() < ready);
+        }
+
         if (scoreboard_->in_use(uop_trace)) {
           auto uses = scoreboard_->get_uses(uop_trace);
           if (!uop_trace->log_once(true)) {
@@ -571,17 +618,20 @@ public:
           any_scrb_blocked = true;
         } else {
           uop_trace->log_once(false);
-          // FU lock: block warps whose target FU is locked by another warp.
-          // fu_lock=1 means acquire request; blocked when FU already locked.
-          auto fu = (int)uop_trace->fu_type;
-          bool uop_fu_lock = uop_trace->instr_ptr->get_fu_lock();
-          if (fu_locked_.at(iw).test(fu) && uop_fu_lock) {
-            continue; // blocked by FU lock
+          if (seq_starting) {
+            continue;
           }
-          // FU dispatch queue going-full: the warp does not request. Credits also
-          // count ops still in operand collection; the one-slot guard band keeps
-          // an issued op from blocking the shared operand path.
-          if (fu_credits_.at(iw).at(fu) >= VX_CFG_DISPATCH_QUEUE_SIZE - 1) {
+          // While a warp holds the issue lock, no other warp of the slot issues,
+          // whatever its unit.
+          auto lock_owner = issue_lock_owner_.at(iw);
+          if (lock_owner != kLockOpen && lock_owner != w) {
+            continue;
+          }
+          auto fu = (int)uop_trace->fu_type;
+          // FU dispatch queue near full: the warp does not request. Credits also
+          // count ops still in operand collection. The flag reaches issue through
+          // two registers, so a warp sees the count as of two cycles back.
+          if (fu_full_seen_.at(iw).test(fu)) {
             continue;
           }
         #ifdef VX_CFG_EXT_RTU_ENABLE
@@ -615,31 +665,37 @@ public:
           operands_.at(iw)->fetch_operands(uop_trace);
           // spend a dispatch credit for the target FU
           ++fu_credits_.at(iw).at((int)uop_trace->fu_type);
+          // An issue candidate is staged from the cycle after both the warp's
+          // previous issue and its own arrival in the buffer.
+          staged_since_.at(wid) = std::max(last_issue_.at(wid), trace->ibuf_time) + 1;
+          last_issue_.at(wid) = SimPlatform::instance().cycles();
           DT(3, simobject_->name() << "-pipeline issue: " << *uop_trace);
           if (uop_trace->wb) {
             // update scoreboard
             scoreboard_->reserve(uop_trace);
           }
-          // Update FU lock state: 10=acquire, 01=release. The lock keeps a
-          // uop sequence contiguous at its functional unit, but the operand
-          // collectors and their arbiter can reorder warps between issue
-          // and the unit's input, so the release is deferred until the unit
-          // accepts the sequence's last uop (see execute()).
+          if (uop_trace->instr_ptr->fcsr_writes()) {
+            scoreboard_->reserve_fcsr(uop_trace);
+          }
+          // Issue lock: a sequence's first uop (lock without unlock) takes it
+          // for its warp, the last (unlock) reopens the slot from the next cycle.
           {
-            auto fui = (int)uop_trace->fu_type;
             bool fl = uop_trace->instr_ptr->get_fu_lock();
             bool ful = uop_trace->instr_ptr->get_fu_unlock();
             if (fl && !ful) {
-              fu_locked_.at(iw).set(fui);
-            } else if (!fl && ful) {
-              fu_unlock_pending_.at(iw).at(fui) = uop_trace;
+              issue_lock_owner_.at(iw) = w;
+            } else if (ful) {
+              issue_lock_owner_.at(iw) = kLockOpen;
             }
           }
           // Advance sequencer; pop ibuffer only when all micro-ops issued
           if (seq->advance()) {
-            // Resume warp for macro instructions that stalled fetch at decode
             if (trace->instr_ptr->is_macro_op()) {
-              scheduler_->resume(trace->wid);
+              // A macro that stalled fetch at decode releases its warp once
+              // its last micro-op issues.
+              if (trace->instr_ptr->is_wstall()) {
+                scheduler_->resume(trace->wid);
+              }
               // Macro trace never reaches commit (only micro-ops do),
               // so remove it from pending tracking and deallocate here.
               pending_instrs_.remove(trace);
@@ -671,43 +727,28 @@ public:
     }
   }
 
-  void execute() {
-    // Dispatcher.Outputs are sized per FU's NUM_*_BLOCKS; FU.Inputs match.
-    // Per-block 1:1 forward (the dispatcher already handled IW→NB aggregation).
-    for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
-      auto& dispatch = dispatchers_.at(fu);
-      auto& func_unit = func_units_.at(fu);
-      uint32_t nb = func_unit->num_blocks();
-      for (uint32_t b = 0; b < nb; ++b) {
-        if (dispatch->Outputs.at(b).empty())
-          continue;
-        auto trace = dispatch->Outputs.at(b).peek();
-        if (func_unit->input(b).try_send(trace)) {
-          dispatch->Outputs.at(b).pop();
-          // return the dispatch credit on FU accept
-          uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
-          if (fu_credits_.at(iw).at(fu) > 0)
-            --fu_credits_.at(iw).at(fu);
-          // The sequence's last uop reached the unit: release its FU lock.
-          // A pid-split sequence hands the original trace over last.
-          auto& pending_unlock = fu_unlock_pending_.at(iw).at(fu);
-          if (pending_unlock == trace) {
-            fu_locked_.at(iw).reset(fu);
-            pending_unlock = nullptr;
-          }
+  void update_queue_full() {
+    for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
+      fu_full_seen_.at(iw) = fu_full_.at(iw);
+      for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
+        bool full = (fu_credits_.at(iw).at(fu) >= VX_CFG_DISPATCH_QUEUE_SIZE - 1);
+        if (full) {
+          fu_full_.at(iw).set(fu);
         } else {
-          // track functional unit stalls
-          switch ((FUType)fu) {
-          case FUType::ALU: ++perf_stats_.alu_stalls; break;
-          case FUType::FPU: ++perf_stats_.fpu_stalls; break;
-          case FUType::LSU: ++perf_stats_.lsu_stalls; break;
-          case FUType::SFU: ++perf_stats_.sfu_stalls; break;
-        #ifdef VX_CFG_EXT_TCU_ENABLE
-          case FUType::TCU: ++perf_stats_.tcu_stalls; break;
-        #endif
-          default: assert(false);
-          }
+          fu_full_.at(iw).reset(fu);
         }
+      }
+    }
+  }
+
+  void return_dispatch_credits() {
+    for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
+      auto& release = dispatchers_.at(fu)->ReleaseOut;
+      while (!release.empty()) {
+        uint32_t iw = release.peek()->wid % VX_CFG_ISSUE_WIDTH;
+        assert(fu_credits_.at(iw).at(fu) > 0);
+        --fu_credits_.at(iw).at(fu);
+        release.pop();
       }
     }
   }
@@ -748,7 +789,8 @@ public:
         auto trace = fu_out.peek();
         uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
         auto& arb_in = *commit_queues_.at(iw).at(fu);
-        if (arb_in.try_send(trace)) {
+        // A unit registers its result once more before the commit arbiter.
+        if (arb_in.try_send(trace, 2)) {
           // Release the warp as soon as its stalling instruction's result leaves
           // the functional unit — the branch target / fence / warp-control is
           // resolved at that point. The release lands in stalled_warps so the
@@ -811,6 +853,9 @@ public:
         if (scoreboard_->commit_packet(trace)) {
           scoreboard_->release(trace);
         }
+      }
+      if (trace->eop && trace->instr_ptr->fcsr_writes()) {
+        scoreboard_->release_fcsr(trace);
       }
 
       if (trace->eop) {
@@ -886,9 +931,13 @@ public:
       ibuffer->pop();
     }
     ibuf_inflight_.at(wid) = 0;
+    uint32_t iw = wid % VX_CFG_ISSUE_WIDTH;
+    if (issue_lock_owner_.at(iw) == wid / VX_CFG_ISSUE_WIDTH) {
+      issue_lock_owner_.at(iw) = kLockOpen;
+    }
     // The sequencer may cache the just-flushed trace in state_.current_uop
     // (set by seq->get() during a prior issue tick where the trace stalled
-    // on scoreboard or FU lock). That cached pointer is now dangling —
+    // on scoreboard or the issue lock). That cached pointer is now dangling —
     // drop it so the post-trap issue cycle re-derives state from the
     // post-mret ibuffer.
     sequencers_.at(wid)->flush();
@@ -1059,11 +1108,15 @@ private:
 
   std::vector<Arbiter> ibuffer_arbs_;
 
-  std::vector<BitVector<>> fu_locked_;
-  std::vector<std::vector<const instr_trace_t*>> fu_unlock_pending_; // [iw][fu] last uop of a locked sequence, released on FU accept
+  static constexpr uint32_t kLockOpen = ~0u;
+  std::vector<uint32_t> issue_lock_owner_; // [iw] slot-local warp holding the issue lock
   std::vector<std::vector<uint32_t>> fu_credits_; // [iw][fu] in-flight dispatch credits
+  std::vector<BitVector<>> fu_full_;      // [iw] credits at or past the near-full mark
+  std::vector<BitVector<>> fu_full_seen_; // [iw] that flag one cycle later, as issue sees it
 
   std::vector<uint32_t> ibuf_inflight_;
+  std::vector<uint64_t> last_issue_;   // [wid] cycle of the warp's last issue
+  std::vector<uint64_t> staged_since_; // [wid] cycle the last issued candidate was staged
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 

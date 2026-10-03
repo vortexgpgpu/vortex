@@ -394,6 +394,10 @@ Instr::Ptr RtuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     default:
       std::abort();
     }
+    // The RTU takes one ray at a time: no other warp of the issue slot issues
+    // between its beats.
+    uop->set_fu_lock(uop_index == 0);
+    uop->set_fu_unlock(uop_index == total - 1);
   } else {
     std::abort();  // only TRACE / GETWF / GETW are SFU macro-ops
   }

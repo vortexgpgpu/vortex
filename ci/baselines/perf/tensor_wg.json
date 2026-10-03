@@ -1,13 +1,13 @@
 {
   "tensor_wg:perf_gate-wgmma-fedp2k-rs:rtlsim": {
     "32": {
-      "cycles": 159683,
+      "cycles": 157272,
       "instrs": 108512
     },
     "app": "sgemm_tcu_wg",
     "args": "-m64 -n64 -k64",
-    "config_hash": "84f3ab0ee89d1c7e",
-    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS",
+    "config_hash": "5098d4c8b863f240",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_TCU_FEDP2K -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=8 -DWGMMA_RS",
     "driver": "rtlsim"
   },
   "tensor_wg:perf_gate-wgmma-fp16-ss:rtlsim": {
@@ -17,19 +17,19 @@
     },
     "app": "sgemm_tcu_wg",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "51c5e22e5cab34a8",
-    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DWGMMA_SS",
+    "config_hash": "2b1479f2108a57cc",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DITYPE=fp16 -DOTYPE=fp32 -DWGMMA_NRC=32 -DWGMMA_SS -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1",
     "driver": "rtlsim"
   },
   "tensor_wg:perf_gate-wgmma-sparse:rtlsim": {
     "32": {
-      "cycles": 408016,
+      "cycles": 401322,
       "instrs": 258976
     },
     "app": "sgemm_tcu_wg_sp",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "b94d94645f0461c8",
-    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32",
+    "config_hash": "f96b004699e182e0",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1",
     "driver": "rtlsim"
   }
 }

@@ -677,6 +677,17 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
       auto imm12 = code >> shift_rs2;
+      {
+        bool csr_write = (funct3 == 1) || (funct3 == 5) || (rs1 != 0);
+        uint8_t fcsr_regs = 0;
+        if (imm12 == VX_CSR_FFLAGS || imm12 == VX_CSR_FCSR) {
+          fcsr_regs |= Instr::FCSR_FFLAGS;
+        }
+        if (imm12 == VX_CSR_FRM || imm12 == VX_CSR_FCSR) {
+          fcsr_regs |= Instr::FCSR_FRM;
+        }
+        instr->set_fcsr_use(fcsr_regs, csr_write ? fcsr_regs : 0);
+      }
       if (funct3 < 5) {
         instr->set_src_reg(0, rs1, RegType::Integer);
         instr->set_args(IntrCsrArgs{0, 0, imm12});
@@ -693,6 +704,8 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   case Opcode::FCI: {
     instr->set_fu_type(FUType::FPU);
     instr->set_args(IntrFpuArgs{funct3, rs2, (funct7 & 0x1)});
+    // Most FP ops raise exception flags; a dynamic rounding mode reads frm.
+    uint8_t frm_rd = (funct3 == 0x7) ? Instr::FCSR_FRM : 0;
     switch (funct7) {
     case 0x00: // RV32F: FADD.S
     case 0x01: // RV32D: FADD.D
@@ -700,6 +713,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Float);
       instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x04: // RV32F: FSUB.S
     case 0x05: // RV32D: FSUB.D
@@ -707,6 +721,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Float);
       instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x08: // RV32F: FMUL.S
     case 0x09: // RV32D: FMUL.D
@@ -714,6 +729,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Float);
       instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x10: // RV32F: FSGNJ.S, FSGNJN.S, FSGNJX.S
     case 0x11: // RV32D: FSGNJ.D, FSGNJN.D, FSGNJX.D
@@ -728,6 +744,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Float);
       instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_fcsr_use(0, Instr::FCSR_FFLAGS);
       break;
     case 0x0c: // RV32F: FDIV.S
     case 0x0d: // RV32D: FDIV.D
@@ -735,18 +752,21 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Float);
       instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x20: // FCVT.S.D
     case 0x21: // FCVT.D.S
       instr->set_op_type(FpuType::F2F);
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x2c: // FSQRT.S
     case 0x2d: // FSQRT.D
       instr->set_op_type(FpuType::FSQRT);
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x50: // FLE.S, FLT.S, FEQ.S
     case 0x51: // FLE.D, FLT.D, FEQ.D
@@ -754,6 +774,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Integer);
       instr->set_src_reg(0, rs1, RegType::Float);
       instr->set_src_reg(1, rs2, RegType::Float);
+      instr->set_fcsr_use(0, Instr::FCSR_FFLAGS);
       break;
     case 0x60: // FCVT.W.D, FCVT.WU.D, FCVT.L.D, FCVT.LU.D
     case 0x61: // FCVT.W.S, FCVT.WU.S, FCVT.L.S, FCVT.LU.S
@@ -761,6 +782,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Integer);
       instr->set_src_reg(0, rs1, RegType::Float);
       instr->set_src_reg(1, rs2, RegType::None);
+      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x68: // FCVT.S.W, FCVT.S.WU, FCVT.S.L, FCVT.S.LU
     case 0x69: // FCVT.D.W, FCVT.D.WU, FCVT.D.L, FCVT.D.LU
@@ -768,6 +790,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_dest_reg(rd, RegType::Float);
       instr->set_src_reg(0, rs1, RegType::Integer);
       instr->set_src_reg(1, rs2, RegType::None);
+      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
       break;
     case 0x70: // FCLASS.S, FMV.X.S
     case 0x71: // FCLASS.D, FMV.X.D
@@ -798,6 +821,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     instr->set_src_reg(0, rs1, RegType::Float);
     instr->set_src_reg(1, rs2, RegType::Float);
     instr->set_src_reg(2, rs3, RegType::Float);
+    instr->set_fcsr_use((funct3 == 0x7) ? Instr::FCSR_FRM : 0, Instr::FCSR_FFLAGS);
   } break;
   case Opcode::EXT1: {
     switch (funct7) {
@@ -909,7 +933,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_op_type(is_sparse ? TcuType::WMMA_SP : TcuType::WMMA);
         instr->set_args(IntrTcuArgs{0, 0, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
         instr->set_macro_op();
-        instr->set_wstall(true);
       } break;
     #ifdef VX_CFG_TCU_WGMMA_ENABLE
       case 1: { // WGMMA_SYNC — single macro Instr, sequencer expands to micro-ops
@@ -920,7 +943,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         instr->set_op_type(is_sparse ? TcuType::WGMMA_SP : TcuType::WGMMA);
         instr->set_args(IntrTcuArgs{is_a_smem ? 1u : 0u, cd_nregs, fmt_s, fmt_d, 0, 0, 0, 0, 0, 0});
         instr->set_macro_op();
-        instr->set_wstall(true);
       } break;
     #endif // VX_CFG_TCU_WGMMA_ENABLE
     #ifdef TCU_META_ENABLE
@@ -955,7 +977,6 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         std::abort();
       }
       instr->set_macro_op();
-      instr->set_wstall(true);   // pause fetch while sequencer expands the N uops
     } break;
     default:
       std::abort();

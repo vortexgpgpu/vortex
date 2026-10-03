@@ -25,7 +25,10 @@
 using namespace vortex;
 
 AluUnit::AluUnit(const SimContext& ctx, const char* name, Core* core)
-	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core)
+	// The output channel also counts results still in flight: it covers the
+	// deepest path plus the result waiting for the commit side, so the
+	// multiplier keeps one result per cycle.
+	: FuncUnit<VX_CFG_NUM_ALU_BLOCKS>(ctx, name, core, kMulDivLatency + (kGather ? 1 : 0) + 2)
 	, branch_ctl_out(this, VX_CFG_NUM_WARPS)
 {}
 
@@ -73,9 +76,9 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 	} else if (std::get_if<MdvType>(&trace->op_type)) {
 		auto mdv_type = std::get<MdvType>(trace->op_type);
 		switch (mdv_type) {
-		// The multiplier pipeline is three stages deep against the integer
-		// ALU's single response stage; simulation divides run in that same
-		// pipeline rather than iteratively.
+		// Three multiplier stages plus the multiply/divide response register,
+		// against the integer ALU's single response stage; simulation divides
+		// run in that same pipeline rather than iteratively.
 		case MdvType::MUL:
 		case MdvType::MULHU:
 		case MdvType::MULH:
@@ -84,7 +87,7 @@ uint32_t AluUnit::latency_of(const instr_trace_t* trace) const {
 		case MdvType::DIVU:
 		case MdvType::REM:
 		case MdvType::REMU:
-			return 2;
+			return kMulDivLatency;
 		default:
 			std::abort();
 		}
@@ -572,8 +575,7 @@ void AluUnit::on_tick() {
           branch_ctl_out.send(trace->wid, 1);
           trace->resume_warp = false;
         }
-        uint32_t delay = this->latency_of(trace);
-        output.send(trace, delay);
+        output.send(trace, this->latency_of(trace) + (kGather ? 1 : 0));
         input.pop();
       }
     }
