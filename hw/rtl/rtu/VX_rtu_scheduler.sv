@@ -186,9 +186,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                      CS_OBJ_SETUP_WT = 5'd26,
                      CS_INST_NEXT    = 5'd27,
                      CS_BHDR_REQ     = 5'd28,  // flat TLAS: BLAS header fetch
-                     CS_BHDR_WAIT    = 5'd29,
-                     CS_ORC_REQ      = 5'd30,  // hand a near tie to the oracle
-                     CS_ORC_WAIT     = 5'd31;  // park: the oracle's verdict
+                     CS_BHDR_WAIT    = 5'd29;
 
     // ── the context word: everything only the walker's EXEC touches ───
     // One row of the context store. State an async producer writes (fetched
@@ -205,20 +203,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         logic [31:0]                best_ki;
         logic [27:0]                best_kg;
         logic [31:0]                best_kp;
-        // ... and its place in the source BVH's visit-order tables, which
-        // settle a near tie with it (VX_rtu_oracle): near_t(best_t), its
-        // instance rank, parent/side, BLAS table and vertices
-        logic [31:0]                best_tn;
-        logic [31:0]                best_iord;
-        logic [31:0]                best_tord;
-        logic [31:0]                best_btab;
-        logic [8:0][31:0]           best_v;
-        // the walk's position in those tables: the TLAS table, the current
-        // instance's BLAS table and rank, the current triangle's parent/side
-        logic [31:0]                tlas_tab;
-        logic [31:0]                blas_tab;
-        logic [31:0]                iord;
-        logic [31:0]                tord;
         logic [31:0]                yld_t;       // staged candidate's t (compare copy)
         logic [31:0]                yld_ki;      // staged candidate's key: instance id
         logic [31:0]                yld_ko;      // ... and record offset
@@ -295,8 +279,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_CTX-1:0][LVLW-1:0]             lvl_q_arr;
     reg [NUM_CTX-1:0][LB-1:0]               f_slot_q;
     reg [NUM_CTX-1:0][RTU_CB_ACTION_BITS-1:0] act_q;
-    reg [NUM_CTX-1:0]                       orc_q;     // the oracle holds the context's memory tag
-    reg [NUM_CTX-1:0]                       orc_res_q; // its verdict: the new hit replaces the committed one
 
     // ── per-slot state ────────────────────────────────────────────────
     reg [NUM_SLOTS-1:0]            running;
@@ -347,11 +329,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // the staged candidate, so EXEC only adds the t compares
     reg                      key_gt_floor_q;
     reg                      key_lt_yld_q;
-    // near-tie classification of the tri result against the committed hit,
-    // also precomputed at ALIGN: within the near window, and the oracle has
-    // tables for both hits and they are different triangles
-    reg                      near_q;
-    reg                      orc_ok_q;
     ctx_state_t              word_q;
     lane_ray_t               ray_q;
     reg [BUF_BITS-1:0]       fbuf_q;
@@ -362,7 +339,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [15:0]               flags_q;
     reg [15:0]               cull_q;
     reg                      trihit_q, triback_q;
-    reg [31:0]               trit_q, triu_q, triv_q, trin_q;
+    reg [31:0]               trit_q, triu_q, triv_q;
     reg [2:0][31:0]          xfo_q, xfd_q;
     reg [2:0][31:0]          recip_q;
     // collector head sampled at ALIGN: EXEC reads these registers instead of
@@ -431,7 +408,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .clk   (clk),
             .reset (reset),
             .read  (g1_valid),
-            .write (mem_rsp_valid && !orc_q[mem_rsp_tag] && (f_slot_q[mem_rsp_tag] == LB'(s))),
+            .write (mem_rsp_valid && (f_slot_q[mem_rsp_tag] == LB'(s))),
             .wren  (1'b1),
             .waddr (mem_rsp_tag),
             .wdata (mem_rsp_data),
@@ -446,36 +423,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire                 tri_valid_out, tri_hit, tri_back;
     wire [CTX_TAG_W-1:0] tri_tag_out;
     wire [31:0]          tri_t, tri_u, tri_v;
-    // the near window's bound rides with the result: it is pipelined after
-    // the tri PE, and the result event (RAM write and wake) is delayed to
-    // match, so neither lands on the EXEC path
-    localparam NEAR_LAT = 6;
-    wire [31:0]          tri_tn;
-    VX_rtu_near_t #(
-        .LATENCY (NEAR_LAT)
-    ) tri_near (
-        .clk    (clk),
-        .enable (1'b1),
-        .t      (tri_t),
-        .result (tri_tn)
-    );
-    wire                 trd_valid, trd_hit, trd_back;
-    wire [CTX_TAG_W-1:0] trd_tag;
-    wire [31:0]          trd_t, trd_u, trd_v;
-    VX_shift_register #(
-        .DATAW  (1 + CTX_TAG_W + 2 + 3 * 32),
-        .RESETW (1),
-        .DEPTH  (NEAR_LAT)
-    ) tri_delay (
-        .clk      (clk),
-        .reset    (reset),
-        .enable   (1'b1),
-        .data_in  ({tri_valid_out, tri_tag_out, tri_hit, tri_back, tri_t, tri_u, tri_v}),
-        .data_out ({trd_valid, trd_tag, trd_hit, trd_back, trd_t, trd_u, trd_v})
-    );
-    wire [129:0]         trires_rdata;
+    wire [97:0]          trires_rdata;
     VX_dp_ram #(
-        .DATAW    (130),
+        .DATAW    (98),
         .SIZE     (NUM_CTX),
         .OUT_REG  (1),
         .RDW_MODE ("W")
@@ -483,10 +433,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .clk   (clk),
         .reset (reset),
         .read  (g1_valid),
-        .write (trd_valid),
+        .write (tri_valid_out),
         .wren  (1'b1),
-        .waddr (trd_tag),
-        .wdata ({trd_hit, trd_back, trd_t, trd_u, trd_v, tri_tn}),
+        .waddr (tri_tag_out),
+        .wdata ({tri_hit, tri_back, tri_t, tri_u, tri_v}),
         .raddr (g1_idx),
         .rdata (trires_rdata)
     );
@@ -581,42 +531,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     wire [31:0] cand_ki_al = cs_word.in_blas ? cs_word.inst_id : 32'd0;
 
-    // IEEE F32 ordered compares (NaN false, +0 == -0)
-    function automatic logic f_nan(input logic [30:0] a);
-        f_nan = (a[30:23] == 8'hff) && (a[22:0] != 23'd0);
-    endfunction
-    function automatic logic f_eq(input logic [31:0] a, input logic [31:0] b);
-        f_eq = !f_nan(a[30:0]) && !f_nan(b[30:0])
-            && ((a == b) || ((a[30:0] == 31'd0) && (b[30:0] == 31'd0)));
-    endfunction
-    function automatic logic f_lt(input logic [31:0] a, input logic [31:0] b);
-        if (f_nan(a[30:0]) || f_nan(b[30:0]) || ((a[30:0] == 31'd0) && (b[30:0] == 31'd0))) begin
-            f_lt = 1'b0;
-        end else if (a[31] != b[31]) begin
-            f_lt = a[31];
-        end else if (!a[31]) begin
-            f_lt = (a[30:0] < b[30:0]);
-        end else begin
-            f_lt = (a[30:0] > b[30:0]);
-        end
-    endfunction
-
-    // near window: t == best, or nearer with near_t(t) >= best, or farther
-    // with t <= near_t(best)
-    wire [31:0] al_t  = trires_rdata[127:96];
-    wire [31:0] al_tn = trires_rdata[31:0];
-    wire al_near = cs_word.best_kv
-                && (f_eq(al_t, cs_word.best_t)
-                 || (f_lt(al_t, cs_word.best_t)
-                     && (f_lt(cs_word.best_t, al_tn) || f_eq(cs_word.best_t, al_tn)))
-                 || (f_lt(cs_word.best_t, al_t)
-                     && (f_lt(al_t, cs_word.best_tn) || f_eq(al_t, cs_word.best_tn))));
-    wire [31:0] al_iord = cs_word.in_blas ? cs_word.iord : 32'd0;
-    wire [31:0] al_btab = cs_word.in_blas ? cs_word.blas_tab : 32'd0;
-    wire al_orc_ok = (FLAT == 0)
-                  && (cs_word.tlas_tab != 32'd0) && (al_btab != 32'd0) && (cs_word.best_btab != 32'd0)
-                  && ({al_iord, cs_word.tord} != {cs_word.best_iord, cs_word.best_tord});
-
     // ═══════════════════════ stage advance ════════════════════════════
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -639,8 +553,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 rewalk_q     <= s1_rewalk;
                 key_gt_floor_q <= {cand_ki_al, cs_word.cur_off} > {cs_word.floor_ki, cs_word.floor_ko};
                 key_lt_yld_q   <= {cand_ki_al, cs_word.cur_off} < {cs_word.yld_ki, cs_word.yld_ko};
-                near_q         <= al_near;
-                orc_ok_q       <= al_orc_ok;
                 word_q       <= cs_word;
                 ray_q        <= lane_ray_t'(ray_rdata);
                 fbuf_q       <= fbuf;
@@ -653,7 +565,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 sp_q         <= sp_q_arr[s1_sel];
                 flags_q      <= slot_flags[s1_slot];
                 cull_q       <= slot_cull[s1_slot];
-                {trihit_q, triback_q, trit_q, triu_q, triv_q, trin_q} <= trires_rdata;
+                {trihit_q, triback_q, trit_q, triu_q, triv_q} <= trires_rdata;
                 {xfo_q, xfd_q} <= xfres_rdata;
                 recip_q      <= recip_rdata;
                 coll_hit_q   <= coll_prochit[cs_word.coll_id];
@@ -828,11 +740,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             .ro        (walk_ro),
             .inv_d     (walk_inv_d),
             .t_min     (ray_q.t_min),
-            // a node's children are culled with slack past an opaque hit
-            // committed in this walk, so every hit the near-tie oracle may
-            // prefer is still reached; a procedural AABB's entry is a
-            // candidate t, culled at the committed hit itself
-            .t_max     ((box_feed_raw || !word_q.best_kv) ? word_q.best_t : word_q.best_tn),
+            .t_max     (word_q.best_t),
             .valid_out (box_valid_out),
             .tag_out   (box_tag_out),
             .tag_out_pre (box_tag_pre),
@@ -855,6 +763,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     // here rather than repeated on the result cycle -- where it fans out across
     // every row and lands on the path that ends at the ordering registers.
     wire [COLL_IDW-1:0] box_coll_pre = box_tag_pre[COLL_IDW+32-1 : 32];
+    `UNUSED_VAR (box_tag_pre[31:0])
     reg [COLL_SIZE-1:0] box_coll_hot;
     always @(posedge clk) begin
         if (reset) begin
@@ -917,8 +826,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .v1          (ltri_v1),
         .v2          (ltri_v2),
         .t_min       (ray_q.t_min),
-        // the ray's own interval: a hit at or past the committed t still
-        // reaches the tie-break and the near-tie oracle
+        // the ray's own interval: an equal-t hit still reaches the tie-break
         .t_max       (ray_q.t_max),
         .valid_out   (tri_valid_out),
         .tag_out     (tri_tag_out),
@@ -947,66 +855,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         .obj_ro    (xform_obj_o),
         .obj_rd    (xform_obj_d)
     );
-
-    // ── near-tie oracle (BVH only) ────────────────────────────────────
-    // A context whose opaque hit lands within the near window of the one it
-    // committed hands both to the oracle and parks. The oracle fetches table
-    // lines under the context's tag; their responses are its own, never the
-    // context's fetched-line buffer (which still holds the triangle record).
-    wire                 orc_start;
-    wire                 orc_req_ready;
-    wire                 orc_done_valid, orc_done_keep;
-    wire [CTX_TAG_W-1:0] orc_done_ctx;
-    wire                 orc_mreq_valid;
-    wire [ADDRW-1:0]     orc_mreq_addr;
-    wire [SLOT_W-1:0]    x_slot   = SLOT_W'(32'(sel_q) / NUM_LANES);
-    wire [31:0]          cur_iord = word_q.in_blas ? word_q.iord : 32'd0;
-    wire [31:0]          cur_btab = word_q.in_blas ? word_q.blas_tab : 32'd0;
-    wire [8:0][31:0]     ltri_v   = {ltri_v2, ltri_v1, ltri_v0};
-    if (!FLAT) begin : g_oracle
-        VX_rtu_oracle #(
-            .CTX_TAG_W (CTX_TAG_W),
-            .ADDRW     (ADDRW),
-            .LINE_BITS (LINE_BITS)
-        ) oracle (
-            .clk           (clk),
-            .reset         (reset),
-            .flush         (running == '0),
-            .req_valid     (orc_start),
-            .req_ready     (orc_req_ready),
-            .req_ctx       (sel_q),
-            .req_scene     (slot_scene[x_slot]),
-            .req_wo        (ray_q.origin),
-            .req_wd        (ray_q.dir),
-            .req_tlas      (word_q.tlas_tab),
-            .req_a_t       (trit_q),
-            .req_a_inst    (cur_iord),
-            .req_a_ps      (word_q.tord),
-            .req_a_tab     (cur_btab),
-            .req_a_v       (ltri_v),
-            .req_b_t       (word_q.best_t),
-            .req_b_inst    (word_q.best_iord),
-            .req_b_ps      (word_q.best_tord),
-            .req_b_tab     (word_q.best_btab),
-            .req_b_v       (word_q.best_v),
-            .done_valid    (orc_done_valid),
-            .done_ctx      (orc_done_ctx),
-            .done_keep     (orc_done_keep),
-            .mem_req_valid (orc_mreq_valid),
-            .mem_req_addr  (orc_mreq_addr),
-            .mem_req_ready (mem_req_ready),
-            .mem_rsp_valid (mem_rsp_valid && orc_q[mem_rsp_tag]),
-            .mem_rsp_data  (mem_rsp_data)
-        );
-    end else begin : g_no_oracle
-        assign orc_req_ready  = 1'b0;
-        assign orc_done_valid = 1'b0;
-        assign orc_done_keep  = 1'b0;
-        assign orc_done_ctx   = '0;
-        assign orc_mreq_valid = 1'b0;
-        assign orc_mreq_addr  = '0;
-        `UNUSED_VAR ({orc_start, x_slot, cur_iord, cur_btab, ltri_v})
-    end
 
     // ── reciprocal datapath: pipelined, one axis per issue ────────────
     wire [1:0]  recip_axis;
@@ -1448,7 +1296,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg         coll_alloc_r;
     reg         coll_free_r;
     reg         cf_push_r;
-    reg         orc_start_r;
     commit_t    cf_din_r;
     reg         sp_inc, sp_dec;
     reg         sp_clr;
@@ -1458,14 +1305,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [LVLW-1:0]  path_wlvl_r;
     reg [PATHW-1:0] path_wdata_r;
 
-    // the oracle's table fetches go first; a context's fetch retries
-    wire mem_fire = x_valid && mem_issue && mem_req_ready && !orc_mreq_valid;
-
-    // the TRI_WAIT / ORC_WAIT verdict on an opaque hit
-    wire in_orc_wait = (word_x.cstate == CS_ORC_WAIT);
-    wire to_oracle   = !in_orc_wait && tri_pass && tri_opaque && near_q && orc_ok_q;
-    wire opq_take    = in_orc_wait ? orc_res_q[sel_q]
-                                   : ((tri_committable || tri_tie) && tri_opaque);
+    wire mem_fire = x_valid && mem_issue && mem_req_ready;
 
     wire [RTU_CHILD_BITS-1:0] last_child = node.n_children - RTU_CHILD_BITS'(1);
 
@@ -1499,7 +1339,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         coll_alloc_r  = 1'b0;
         coll_free_r   = 1'b0;
         cf_push_r     = 1'b0;
-        orc_start_r   = 1'b0;
         cf_din_r      = '0;
         sp_inc        = 1'b0;
         sp_dec        = 1'b0;
@@ -1636,7 +1475,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             end else if (node_kind == RTU_KIND_LEAF_TRI) begin
                 word_n.prim_base = leaf_prim;
                 word_n.geom_r    = leaf_geom;
-                word_n.tord      = leaf_flags;   // parent/side in its BLAS table
                 word_n.tri_n     = 32'(leaf_count);
                 word_n.tri_i     = '0;
                 if (leaf_count == 8'd0) begin
@@ -1660,12 +1498,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     wake_self = 1'b1;
                 end
             end else if (node_kind == RTU_KIND_LEAF_INST && leaf_count != 8'd0) begin
-                // header: the BLAS table, the first instance's TLAS rank,
-                // the TLAS table
                 // a restart following its path resumes at the recorded instance
-                word_n.blas_tab   = leaf_geom;
-                word_n.iord       = leaf_flags + inst_start;
-                word_n.tlas_tab   = leaf_prim;
                 word_n.inst_cnt   = {24'd0, leaf_count};
                 word_n.inst_idx   = inst_start;
                 word_n.inst_base  = word_x.cur_off + 32'(RTU_LEAF_HDR_BYTES);
@@ -1816,14 +1649,10 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 wake_self     = 1'b1;
             end
         end
-        CS_TRI_WAIT, CS_ORC_WAIT: begin
+        CS_TRI_WAIT: begin
             // woken by the tri PE result (held in its result RAM, so a retry
-            // on a full commit queue re-reads the same result), or by the
-            // oracle's verdict on it
-            if (to_oracle) begin
-                word_n.cstate = CS_ORC_REQ;
-                wake_self     = 1'b1;
-            end else if (opq_take) begin
+            // on a full commit queue re-reads the same result)
+            if ((tri_committable || tri_tie) && tri_opaque) begin
                 cf_din_r.kind = CK_HIT;
                 cf_din_r.t    = trit_q;
                 cf_din_r.u    = triu_q;
@@ -1842,11 +1671,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     word_n.best_ki = tri_ki;
                     word_n.best_kg = tri_kg;
                     word_n.best_kp = tri_kp;
-                    word_n.best_tn   = trin_q;
-                    word_n.best_iord = cur_iord;
-                    word_n.best_tord = word_x.tord;
-                    word_n.best_btab = cur_btab;
-                    word_n.best_v    = ltri_v;
                     // a closer opaque hit occludes a farther candidate
                     if (yld_q[sel_q] && (word_x.yld_t >= trit_q)) begin
                         exec_yld_clr = 1'b1;
@@ -1856,7 +1680,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         exec_done     = 1'b1;
                     end else if ((word_x.tri_i + 32'd1) < word_x.tri_n) begin
                         word_n.tri_i   = word_x.tri_i + 32'd1;
-                        word_n.tord    = word_x.tord + 32'd1;
                         word_n.cur_off = word_x.cur_off + 32'(RTU_TRI_STRIDE);
                         word_n.cstate  = CS_LTRI_REQ0;
                         wake_self      = 1'b1;
@@ -1865,8 +1688,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                         wake_self     = 1'b1;
                     end
                 end
-            end else if (!in_orc_wait
-                      && tri_committable
+            end else if (tri_committable
                       && above_floor(trit_q)
                       && before_yld(trit_q)) begin
                 cf_din_r.kind = CK_YLDA;
@@ -1892,7 +1714,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                     word_n.yld_ko = word_x.cur_off;
                     if ((word_x.tri_i + 32'd1) < word_x.tri_n) begin
                         word_n.tri_i   = word_x.tri_i + 32'd1;
-                        word_n.tord    = word_x.tord + 32'd1;
                         word_n.cur_off = word_x.cur_off + 32'(RTU_TRI_STRIDE);
                         word_n.cstate  = CS_LTRI_REQ0;
                     end else begin
@@ -1903,21 +1724,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             end else begin
                 if ((word_x.tri_i + 32'd1) < word_x.tri_n) begin
                     word_n.tri_i   = word_x.tri_i + 32'd1;
-                    word_n.tord    = word_x.tord + 32'd1;
                     word_n.cur_off = word_x.cur_off + 32'(RTU_TRI_STRIDE);
                     word_n.cstate  = CS_LTRI_REQ0;
                 end else begin
                     word_n.cstate = CS_POP;
                 end
-                wake_self = 1'b1;
-            end
-        end
-        CS_ORC_REQ: begin
-            // the triangle record stays in the line buffer while parked
-            if (orc_req_ready) begin
-                orc_start_r   = 1'b1;
-                word_n.cstate = CS_ORC_WAIT;
-            end else begin
                 wake_self = 1'b1;
             end
         end
@@ -2060,7 +1871,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 end
             end else begin
                 word_n.inst_idx = word_x.inst_idx + 32'd1;
-                word_n.iord     = word_x.iord + 32'd1;
                 word_n.cur_off  = word_x.inst_base
                                 + ((word_x.inst_idx + 32'd1) * 32'(RTU_INST_STRIDE));
                 word_n.cstate   = CS_INST_REQ;
@@ -2112,11 +1922,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         ("%t: rtu walk deeper than %0d levels", $time, (1 << LVLW) - 1))
     assign path_wlvl     = path_wlvl_r;
     assign path_wdata    = path_wdata_r;
-    assign orc_start     = x_valid && orc_start_r;
-    assign mem_req_valid = orc_mreq_valid || (x_valid && mem_issue);
-    assign mem_req_addr  = orc_mreq_valid ? orc_mreq_addr
-                                          : (structaddr_q + (ADDRW'(mem_fslot) << RTU_LINE_SEL_BITS));
-    assign mem_req_tag   = orc_mreq_valid ? orc_done_ctx : sel_q;
+    assign mem_req_valid = x_valid && mem_issue;
+    assign mem_req_addr  = structaddr_q + (ADDRW'(mem_fslot) << RTU_LINE_SEL_BITS);
+    assign mem_req_tag   = sel_q;
 
     // ═══════════════════════ hot-state update ═════════════════════════
     // The wake vector's next state, fed to the SELECT arbiter. Wake events
@@ -2146,9 +1954,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
 
     wire [NUM_CTX-1:0] rdy_wake_mask =
         (ray_wr_valid                       ? NUM_CTX'(1) << ray_wr_ctx     : NUM_CTX'(0))
-      | ((mem_rsp_valid && !orc_q[mem_rsp_tag]) ? NUM_CTX'(1) << mem_rsp_tag : NUM_CTX'(0))
-      | (orc_done_valid                     ? NUM_CTX'(1) << orc_done_ctx   : NUM_CTX'(0))
-      | (trd_valid                          ? NUM_CTX'(1) << trd_tag        : NUM_CTX'(0))
+      | (mem_rsp_valid                      ? NUM_CTX'(1) << mem_rsp_tag    : NUM_CTX'(0))
+      | (tri_valid_out                      ? NUM_CTX'(1) << tri_tag_out    : NUM_CTX'(0))
       | (xform_valid_out                    ? NUM_CTX'(1) << xform_tag_out  : NUM_CTX'(0))
       | ((recip_valid_out && recip_last_out) ? NUM_CTX'(1) << recip_tag_out : NUM_CTX'(0))
       | (box_wake_r                         ? NUM_CTX'(1) << box_wake_ctx_r : NUM_CTX'(0))
@@ -2171,7 +1978,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             yld_q       <= '0;
             objv_q      <= '0;
             attr_q      <= '0;
-            orc_q       <= '0;
             running     <= '0;
             finalised   <= '0;
             done_r      <= '0;
@@ -2237,14 +2043,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
                 if (mem_fire) begin
                     f_slot_q[sel_q] <= mem_fslot;
                 end
-                if (orc_start_r) begin
-                    orc_q[sel_q] <= 1'b1;
-                end
-            end
-
-            if (orc_done_valid) begin
-                orc_q[orc_done_ctx]     <= 1'b0;
-                orc_res_q[orc_done_ctx] <= orc_done_keep;
             end
 
             // resume: capture the actions, queue the walker job
@@ -2505,9 +2303,9 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             `TRACE(2, ("%t: %s rtu-node: ctx=%0d, addr=0x%0h, kind=%0d\n",
                 $time, INSTANCE_ID, sel_q, structaddr_q, node_kind))
         end
-        if (trd_valid) begin
+        if (tri_valid_out) begin
             `TRACE(2, ("%t: %s rtu-tri: ctx=%0d, hit=%0d, t=0x%0h\n",
-                $time, INSTANCE_ID, trd_tag, trd_hit, trd_t))
+                $time, INSTANCE_ID, tri_tag_out, tri_hit, tri_t))
         end
         if (| done_r) begin
             `TRACE(1, ("%t: %s rtu-done: slots=%b\n", $time, INSTANCE_ID, done_r))
