@@ -1,6 +1,5 @@
 set tool_dir $::env(TOOL_DIR)
 source ${tool_dir}/xilinx_async_bram_patch.tcl
-source ${tool_dir}/xilinx_slr_pblocks.tcl
 
 report_utilization -file hier_utilization.rpt -hierarchical -hierarchical_percentages
 
@@ -11,30 +10,6 @@ report_utilization -file hier_utilization.rpt -hierarchical -hierarchical_percen
 if { [info exists ::env(IMPL_MAX_THREADS)] } {
   set_param general.maxThreads $::env(IMPL_MAX_THREADS)
   puts "INFO: \[VORTEX\] implementation threads capped at $::env(IMPL_MAX_THREADS)"
-}
-
-# Single-SLR kernel confinement. Unset by default: the SSI partitioner places
-# the kernel. On a device this large the kernel occupies a few percent of one
-# die, but the partitioner still spreads it across SLRs, so kernel-internal
-# paths pay SLL crossing delay and inter-die clock skew -- both of which show up
-# as routing delay on paths that carry almost no logic. Confining the kernel to
-# one SLR removes that from every internal path; the platform's own regslices
-# absorb the crossing to the shell and HBM.
-if { [info exists ::env(VORTEX_SLR)] } {
-  set vx_slr $::env(VORTEX_SLR)
-  set vx_top [get_cells -quiet -hierarchical -filter {NAME =~ "*vortex_afu_1/inst" && IS_PRIMITIVE == 0}]
-  if { [llength $vx_top] == 0 } {
-    puts "CRITICAL WARNING: \[VORTEX\] kernel cell not found; cannot confine to ${vx_slr}"
-  } else {
-    set vx_top [lindex $vx_top 0]
-    set vx_pb pblock_vortex_kernel
-    if { [llength [get_pblocks -quiet $vx_pb]] == 0 } {
-      create_pblock $vx_pb
-    }
-    add_cells_to_pblock $vx_pb $vx_top
-    resize_pblock $vx_pb -add $vx_slr
-    puts "INFO: \[VORTEX\] kernel [get_property NAME $vx_top] confined to ${vx_slr}"
-  }
 }
 
 # Kernel clock constraint verification/repair.
@@ -76,5 +51,33 @@ if { [info exists ::env(KERNEL_FREQ)] } {
       error "\[VORTEX\] kernel clock constraint is ${vx_period} ns but the target is ${vx_target_period} ns (${vx_target_freq} MHz); refusing to implement against a wrong kernel clock"
     }
     puts "INFO: \[VORTEX\] kernel clock constraint verified: ${vx_period} ns (${vx_target_freq} MHz)"
+  }
+}
+
+# Floorplans are applied after the kernel clock repair: re-creating the kernel
+# clock on a pblock-constrained netlist segfaults Vivado 2024.2's timing update.
+source ${tool_dir}/xilinx_slr_pblocks.tcl
+
+# Single-SLR kernel confinement. Unset by default: the SSI partitioner places
+# the kernel. On a device this large the kernel occupies a few percent of one
+# die, but the partitioner still spreads it across SLRs, so kernel-internal
+# paths pay SLL crossing delay and inter-die clock skew -- both of which show up
+# as routing delay on paths that carry almost no logic. Confining the kernel to
+# one SLR removes that from every internal path; the platform's own regslices
+# absorb the crossing to the shell and HBM.
+if { [info exists ::env(VORTEX_SLR)] } {
+  set vx_slr $::env(VORTEX_SLR)
+  set vx_top [get_cells -quiet -hierarchical -filter {NAME =~ "*vortex_afu_1/inst" && IS_PRIMITIVE == 0}]
+  if { [llength $vx_top] == 0 } {
+    puts "CRITICAL WARNING: \[VORTEX\] kernel cell not found; cannot confine to ${vx_slr}"
+  } else {
+    set vx_top [lindex $vx_top 0]
+    set vx_pb pblock_vortex_kernel
+    if { [llength [get_pblocks -quiet $vx_pb]] == 0 } {
+      create_pblock $vx_pb
+    }
+    add_cells_to_pblock $vx_pb $vx_top
+    resize_pblock $vx_pb -add $vx_slr
+    puts "INFO: \[VORTEX\] kernel [get_property NAME $vx_top] confined to ${vx_slr}"
   }
 }

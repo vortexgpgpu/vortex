@@ -52,6 +52,7 @@
 #                                 shell / platform IP that also lands in the SLR)
 #   SLR_PBLOCKS_HARD_CEILING=f   per-SLR BRAM/DSP/URAM fill cap, 0..1 (default 0.95)
 #   SLR_PBLOCKS_ANCHOR=i         index of the anchor SLR (default: the middle one)
+#   SLR_PBLOCKS_SLRS=SLR0,SLR1   restrict the floorplan to these SLRs (default: all)
 #   SLR_PBLOCKS_FORCE=1          apply even if the guardrail rejects (debug only)
 #
 # Binning model:
@@ -65,8 +66,11 @@
 #                                 never crosses an SLR); and each cluster
 #                                 extension core BUNDLED WITH ITS PRIVATE CACHE
 #                                 (tex+tcache, raster+rcache, om+ocache,
-#                                 rtu+rtcache, dxa) so a wide core<->cache bus is
-#                                 never split across a boundary.
+#                                 rtu+rtcache) so a wide core<->cache bus is
+#                                 never split across a boundary. A DXA engine
+#                                 inside a socket (it writes that socket's LMEM)
+#                                 rides with its socket; only one outside any
+#                                 socket is its own atom.
 # Atoms are packed worst-resource-first, best-fit: each goes to the legal SLR
 # whose worst resource ends up lowest. "Worst resource" is the largest fraction
 # an atom would consume of the tightest SLR's supply of any ONE resource —
@@ -133,6 +137,10 @@ proc slr_pblocks_run {} {
     set force [expr {[info exists ::env(SLR_PBLOCKS_FORCE)] && $::env(SLR_PBLOCKS_FORCE) eq "1"}]
 
     set slrs [lsort [get_slrs]]
+    if {[info exists ::env(SLR_PBLOCKS_SLRS)]} {
+        set want [split $::env(SLR_PBLOCKS_SLRS) ","]
+        set slrs [lsort [lmap x $slrs {expr {[get_property NAME $x] in $want ? $x : [continue]}}]]
+    }
     set nslr [llength $slrs]
     if {$nslr < 2} {
         puts "SLR-PBLOCKS: device has $nslr SLR(s); floorplan skipped"
@@ -200,11 +208,11 @@ proc slr_pblocks_run {} {
         set cl_total [lindex [slr_foot $cl] 0]
         set acc 0
 
-        # sockets (cores + private L1s), whole.
+        # sockets (cores + private L1s + the socket's DXA engine), whole.
         foreach s [cells_re "[slr_re_escape $clp]/g_sockets\\\[\[0-9\]+\\\]\\.socket"] {
             set g {}
             foreach c [cells_re "[slr_re_escape [get_property NAME $s]]/g_cores\\\[\[0-9\]+\\\]\\.core"] { lappend g $c }
-            foreach c [cells_re "[slr_re_escape [get_property NAME $s]]/(icache|dcache)"]                { lappend g $c }
+            foreach c [cells_re "[slr_re_escape [get_property NAME $s]]/(icache|dcache|dxa_core)"]       { lappend g $c }
             if {[llength $g] == 0} { set g [list $s] }
             set f {0 0 0 0}
             foreach c $g { set f [slr_foot_add $f [slr_foot $c]] }
@@ -224,6 +232,7 @@ proc slr_pblocks_run {} {
                 # Literal prefix match (not a glob -filter: hierarchical names
                 # contain [0] which a glob treats as a char class, not literal).
                 if {[string first "${clp}/" [get_property NAME $core]] != 0} { continue }
+                if {[string match "*.socket/*" [get_property NAME $core]]} { continue }
                 set g [list $core]
                 set f [slr_foot $core]
                 if {$cachere ne ""} {
