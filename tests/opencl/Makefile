@@ -5,7 +5,7 @@ include $(ROOT_DIR)/config.mk
 TESTS := \
     vecadd sgemm conv3 psort saxpy sfilter sgemm2 sgemm3 psum oclprintf \
     dotproduct transpose spmv stencil lbm nearn guassian kmeans         \
-    blackscholes bfs copybuf histogram atomicreduce                     \
+    blackscholes bfs copybuf codegen histogram atomicreduce             \
     pathfinder nw lud hotspot hotspot3D srad backprop streamcluster     \
     lavaMD btree cfd dwt2d myocyte heartwall hybridsort                  \
     image_copy image_linear image_int image_get \
