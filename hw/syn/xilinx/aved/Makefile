@@ -128,7 +128,16 @@ HOST_TAG ?= HOST
 # is a full synthesis run to discover, and it has already cost one, so refuse
 # the tag at parse time rather than emitting the config. See platforms.mk.
 ifeq ($(HOST_TAG),HOST)
-$(error HOST_TAG=HOST routes m_axi_host to the QDMA slave bridge, whose reads never complete on the compute shell; the CP would hang on its first ring fetch. Use HOST_TAG=HBM1 (the platforms.mk default))
+$(error HOST_TAG=HOST routes m_axi_host to the QDMA slave bridge, whose reads never complete on the compute shell; the CP would hang on its first ring fetch. Use HOST_TAG=HBM8 (the platforms.mk default))
+endif
+
+# MEM covers the 32-bit device space from the HBM base, i.e. HBM0..HBM7; a CP
+# staging aperture there aliases device memory and large uploads overwrite the
+# heap. See platforms.mk.
+ifneq ($(filter HBM0 HBM1 HBM2 HBM3 HBM4 HBM5 HBM6 HBM7,$(HOST_TAG)),)
+ifneq ($(filter MEM HBM0,$(MEM_TAG)),)
+$(error HOST_TAG=$(HOST_TAG) lies inside the device-memory window of MEM_TAG=$(MEM_TAG) (HBM0..HBM7); CP staging would alias the Vortex heap. Use HBM8 or above)
+endif
 endif
 
 # platforms.mk states the kernel clock in MHz; the linker config wants Hz.
