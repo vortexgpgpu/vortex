@@ -12,7 +12,9 @@
 // limitations under the License.
 
 #include "rtu_isect.h"
+#include <cfloat>
 #include <cmath>
+#include <utility>
 
 namespace vortex { namespace rtu {
 
@@ -21,90 +23,111 @@ bool ray_triangle(const float ro[3], const float rd[3],
                   float tmin, float tmax,
                   float& out_t, float& out_u, float& out_v,
                   bool& out_back_facing) {
-  Vec3 O  = { ro[0], ro[1], ro[2] };
-  Vec3 D  = { rd[0], rd[1], rd[2] };
-  Vec3 V0 = { v0[0], v0[1], v0[2] };
-  Vec3 V1 = { v1[0], v1[1], v1[2] };
-  Vec3 V2 = { v2[0], v2[1], v2[2] };
+  const float* vin[3] = { v0, v1, v2 };
 
-  Vec3  e1  = V1 - V0;
-  Vec3  e2  = V2 - V0;
-  Vec3  P   = cross(D, e2);
-  float det = dot(e1, P);
-  constexpr float EPS = 1e-6f;
-  if (det > -EPS && det < EPS) return false;
-  float invDet = 1.0f / det;
-  Vec3  T = O - V0;
-  float u = dot(T, P) * invDet;
-  if (u < 0.f || u > 1.f) return false;
-  Vec3  Q = cross(T, e1);
-  float v = dot(D, Q) * invDet;
-  if (v < 0.f || u + v > 1.f) return false;
-  float t = dot(e2, Q) * invDet;
-  if (t < tmin || t > tmax) return false;
+  // Watertight ray/triangle test (Woop, Benthin, Wald, JCGT 2013), F32 only:
+  // shear the triangle into the ray's frame so the ray runs along +z, then
+  // test the 2D edge functions. Each edge function is two rounded products and
+  // a rounded difference of the sheared vertices alone, so an edge shared by
+  // two triangles evaluates to exactly negated weights in both and no ray
+  // slips between them. Mirrors VX_rtu_tri_pe op for op.
+  const float ad[3] = { std::fabs(rd[0]), std::fabs(rd[1]), std::fabs(rd[2]) };
+  int kz = (ad[0] >= ad[1]) ? ((ad[0] >= ad[2]) ? 0 : 2)
+                            : ((ad[1] >= ad[2]) ? 1 : 2);
+  int kx = (kz + 1) % 3;
+  int ky = (kx + 1) % 3;
+  if (rd[kz] < 0.f) std::swap(kx, ky);  // keep the winding
+
+  const float sz = 1.0f / rd[kz];
+  const float sx = rd[kx] * sz;
+  const float sy = rd[ky] * sz;
+
+  float px[3], py[3], pz[3];
+  for (int i = 0; i < 3; ++i) {
+    const float* q = vin[i];
+    const float rx = q[kx] - ro[kx];
+    const float ry = q[ky] - ro[ky];
+    const float rz = q[kz] - ro[kz];
+    px[i] = std::fma(-sx, rz, rx);
+    py[i] = std::fma(-sy, rz, ry);
+    pz[i] = sz * rz;
+  }
+
+  // Edge functions: w[i] is the weight of vertex i.
+  const float w0 = px[2] * py[1] - py[2] * px[1];
+  const float w1 = px[0] * py[2] - py[0] * px[2];
+  const float w2 = px[1] * py[0] - py[1] * px[0];
+  if ((w0 < 0.f || w1 < 0.f || w2 < 0.f) && (w0 > 0.f || w1 > 0.f || w2 > 0.f))
+    return false;
+
+  const float det = (w0 + w1) + w2;
+  // Reject only an edge-on or zero-area triangle: |det| scales with the
+  // triangle's area, so any epsilon would drop small triangles.
+  if (!(det != 0.f)) return false;
+
+  const float T   = std::fma(w2, pz[2], std::fma(w1, pz[1], w0 * pz[0]));
+  const float rcp = 1.0f / det;
+  const float t   = T * rcp;
+  // Vulkan's ray interval for a triangle is open at both ends: an intersection
+  // candidate needs t_min < t < t_max (Ray Intersection Candidate
+  // Determination).
+  if (!(tmin < t && t < tmax)) return false;
+
   out_t = t;
-  out_u = u;
-  out_v = v;
+  out_u = w1 * rcp;
+  out_v = w2 * rcp;
+  // det > 0: (v0, v1, v2) winds counter-clockwise as seen by the ray.
   out_back_facing = (det < 0.f);
   return true;
 }
 
-bool ray_aabb_intersect(const float ro[3], const float rd[3],
-                        const float mn[3], const float mx[3],
-                        float tmin, float tmax, float& t_near) {
-  float tn = tmin, tf = tmax;
+float ray_recip(float d) {
+  // A zero (or subnormal, which the PEs flush) component has no reciprocal;
+  // FLT_MAX keeps every slab product finite, so no slab is 0 * inf = NaN.
+  if (std::fabs(d) < FLT_MIN) return FLT_MAX;
+  return 1.0f / d;
+}
+
+float quant_corner(uint8_t q, int8_t e) {
+  // Exact product; the PE flushes a subnormal result, inf past the range.
+  const float c = std::ldexp(float(q), e);
+  return (c < FLT_MIN) ? 0.f : c;
+}
+
+void box_rel(const float base[3], const float mn[3], const float mx[3],
+             const float ro[3], float rel_mn[3], float rel_mx[3]) {
   for (int i = 0; i < 3; ++i) {
-    float inv = 1.0f / rd[i];
-    float t0 = (mn[i] - ro[i]) * inv;
-    float t1 = (mx[i] - ro[i]) * inv;
-    if (t0 > t1) { float tmp = t0; t0 = t1; t1 = tmp; }
-    if (t0 > tn) tn = t0;
-    if (t1 < tf) tf = t1;
-    if (tn > tf) return false;
+    const float c = base[i] - ro[i];
+    rel_mn[i] = mn[i] + c;
+    rel_mx[i] = mx[i] + c;
   }
-  t_near = tn;
+}
+
+bool ray_box(const float rel_mn[3], const float rel_mx[3], const float inv[3],
+             float tmin, float tmax, float& t_near) {
+  // fmin/fmax drop a NaN operand, so a NaN slab (a NaN box or ray) drops out
+  // of the fold rather than poisoning it.
+  float lo = std::fmax(-INFINITY, tmin);
+  float hi = std::fmin(INFINITY, tmax);
+  for (int i = 0; i < 3; ++i) {
+    const float t0 = rel_mn[i] * inv[i];
+    const float t1 = rel_mx[i] * inv[i];
+    lo = std::fmax(lo, std::fmin(t0, t1));
+    hi = std::fmin(hi, std::fmax(t0, t1));
+  }
+  if (!(lo <= hi)) return false;
+  t_near = (lo == 0.f) ? 0.f : lo;
   return true;
 }
 
-void affine_inverse_transform_ray(const float xform[12],
-                                  const float ro[3], const float rd[3],
-                                  float ro_out[3], float rd_out[3]) {
-  const float r00 = xform[0],  r01 = xform[1],  r02 = xform[2],  tx = xform[3];
-  const float r10 = xform[4],  r11 = xform[5],  r12 = xform[6],  ty = xform[7];
-  const float r20 = xform[8],  r21 = xform[9],  r22 = xform[10], tz = xform[11];
-
-  // det(R) by cofactor expansion along row 0.
-  float det = r00 * (r11 * r22 - r12 * r21)
-            - r01 * (r10 * r22 - r12 * r20)
-            + r02 * (r10 * r21 - r11 * r20);
-  if (det > -1e-9f && det < 1e-9f) {
-    // Singular — pass through (treat as identity).
-    for (int i = 0; i < 3; ++i) { ro_out[i] = ro[i]; rd_out[i] = rd[i]; }
-    return;
+void world_to_object_ray(const float wto[12],
+                         const float ro[3], const float rd[3],
+                         float ro_out[3], float rd_out[3]) {
+  for (int i = 0; i < 3; ++i) {
+    const float* m = wto + 4 * i;
+    ro_out[i] = std::fma(ro[2], m[2], std::fma(ro[1], m[1], std::fma(ro[0], m[0], m[3])));
+    rd_out[i] = std::fma(rd[2], m[2], std::fma(rd[1], m[1], rd[0] * m[0]));
   }
-  float inv_det = 1.f / det;
-
-  // R^(-1) = (1/det) * adj(R).
-  float i00 =  (r11 * r22 - r12 * r21) * inv_det;
-  float i01 = -(r01 * r22 - r02 * r21) * inv_det;
-  float i02 =  (r01 * r12 - r02 * r11) * inv_det;
-  float i10 = -(r10 * r22 - r12 * r20) * inv_det;
-  float i11 =  (r00 * r22 - r02 * r20) * inv_det;
-  float i12 = -(r00 * r12 - r02 * r10) * inv_det;
-  float i20 =  (r10 * r21 - r11 * r20) * inv_det;
-  float i21 = -(r00 * r21 - r01 * r20) * inv_det;
-  float i22 =  (r00 * r11 - r01 * r10) * inv_det;
-
-  // ro_obj = R^(-1) * (ro - t).
-  float dx = ro[0] - tx, dy = ro[1] - ty, dz = ro[2] - tz;
-  ro_out[0] = i00 * dx + i01 * dy + i02 * dz;
-  ro_out[1] = i10 * dx + i11 * dy + i12 * dz;
-  ro_out[2] = i20 * dx + i21 * dy + i22 * dz;
-
-  // rd_obj = R^(-1) * rd.
-  rd_out[0] = i00 * rd[0] + i01 * rd[1] + i02 * rd[2];
-  rd_out[1] = i10 * rd[0] + i11 * rd[1] + i12 * rd[2];
-  rd_out[2] = i20 * rd[0] + i21 * rd[1] + i22 * rd[2];
 }
 
 // PE cost model. There is ONE box PE and ONE tri PE per RtuCore, each streaming
@@ -119,8 +142,9 @@ uint32_t BoxPe::pipe_depth() {
 }
 
 uint32_t TriPe::pipe_depth() {
-  // 8 FMA stages + 1 reciprocal + 2 = 91.
-  return 8 * kRtuLatencyFma + kRtuFdivLat + 2;
+  // input select + 1/dir[kz] + shear scale + shear + 2 edge stages + det +
+  // 1/det + t/u/v scale + verdict (VX_rtu_tri_pe).
+  return 2 + 2 * kRtuFdivLat + 7 * kRtuLatencyFma;
 }
 
 }}  // namespace vortex::rtu

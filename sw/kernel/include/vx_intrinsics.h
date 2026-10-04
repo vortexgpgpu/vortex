@@ -507,8 +507,17 @@ inline __attribute__((const)) float vx_quad_ddy_f32(float value) {
 // Each lane gathers a value from the source lane's register file.
 // S = source lane (compile-time constant, 0-3).
 // The source lane retains its own rd value; lane (S+1) gets v1[S], (S+2) gets v2[S], (S+3) gets v3[S].
-#define __VX_WGATHER(src_lane, self_val, v1, v2, v3) ({ \
-    size_t __ret = (self_val);                          \
+//
+// WGATHER writes every non-source lane of rd, active or not, so a unit reading
+// the packed operand across the warp (the RTU trace config, a DXA descriptor)
+// sees all of it whatever the thread mask. In an allocatable register that
+// would clobber an inactive lane's live value, so rd is pinned to a dedicated
+// warp-gather register -- x31, or x30 for a second packed operand live at the
+// same time -- which the compiler reserves in any function naming one. A
+// consumer of the packed lanes must read that register directly (bind it with
+// a register variable); a copy elsewhere is written on active lanes only.
+#define __VX_WGATHER_IN(reg, src_lane, self_val, v1, v2, v3) ({ \
+    register size_t __ret __asm__(reg) = (self_val);    \
     __asm__ volatile (                                  \
         ".insn r4 %1, 0, %2, %0, %3, %4, %5"            \
         : "+r"(__ret)                                   \
@@ -517,6 +526,9 @@ inline __attribute__((const)) float vx_quad_ddy_f32(float value) {
     );                                                  \
     __ret;                                              \
 })
+
+#define __VX_WGATHER(src_lane, self_val, v1, v2, v3) \
+    __VX_WGATHER_IN("x31", src_lane, self_val, v1, v2, v3)
 
 // Warp-level gather with source lane 0.
 inline __attribute__((const)) size_t

@@ -186,10 +186,9 @@ package VX_rtu_pkg;
     localparam RTU_FLAT_LINES_BITS = `CLOG2(RTU_FLAT_LINES + 1);
 
     // ─────────────────────────────────────────────────────────────────
-    // TLAS instance record (64 B). The 3x4 row-major affine transform
-    // (object→world) occupies floats 0..11;
-    // the walker applies its inverse (VX_rtu_xform) to bring the world ray into
-    // object space. The two TLAS variants share xform/blas/custom but differ in
+    // TLAS instance record (64 B). The 3x4 row-major world→object affine
+    // occupies floats 0..11; the walker applies it (VX_rtu_xform) to bring the
+    // world ray into object space. The two TLAS variants share xform/blas/custom but differ in
     // where instance_id and cull_mask sit:
     //   flat TLAS : blas_off@48, custom_id@52, cull_mask@56; instance_id = loop idx
     //   BVH inst  : blas_root@48, custom_id@52, instance_id@56, cull_mask@60
@@ -299,6 +298,7 @@ package VX_rtu_pkg;
     localparam RTU_WS_CONT_T    = 16;  // CONTINUE beat 0: the shader's own t
     localparam RTU_WS_CONT_ATTR = 17;  // CONTINUE beat 1: the shader's hitAttribute
     localparam RTU_WS_RES_ATTR  = 18;  // accepted candidate's bound hitAttribute
+    localparam RTU_WS_YLD_OBJ   = 19;  // instanced candidate's object ray: o.xyz, d.xyz (19..24)
     localparam RTU_WS_WORDS     = 32;  // rows per slot (power of two for addressing)
     localparam RTU_WS_WORD_BITS = `CLOG2(RTU_WS_WORDS);
 

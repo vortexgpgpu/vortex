@@ -15,9 +15,10 @@
 //
 // Builds a CW-BVH4 over N triangles stacked in depth along the ray, so the
 // tree is several levels deep — deeper than the modest short stack the Makefile
-// configures (VX_CFG_RTU_STACK_DEPTH). A +z ray hits every triangle; the walker
-// must overflow, drop far subtrees, and re-descend (restart) to still
-// return the CLOSEST hit (nearest triangle, prim 0, t=5).
+// configures (VX_CFG_RTU_STACK_DEPTH), so the walker overflows its stack, drops
+// subtrees and restarts. Two scenes: every triangle hit (the closest is on the
+// first path walked), and decoys whose boxes the ray enters first while only a
+// far triangle is hit (reachable only through restarts).
 
 #include <iostream>
 #include <unistd.h>
@@ -68,58 +69,46 @@ int main(int /*argc*/, char* /*argv*/[]) {
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
 
-  // N opaque triangles all covering the ray's (x,y) footprint, stacked at
-  // z = 5, 6, ... The SAH builder splits them into a deep tree. The ray hits
-  // all of them; triangle 0 (z=5) is the closest.
-  constexpr uint32_t N = 64;
-  std::vector<host_tri_t> tris(N);
-  for (uint32_t i = 0; i < N; ++i) {
-    float z = 5.0f + (float)i;
-    tris[i].v0[0] = 0.f; tris[i].v0[1] = 0.f; tris[i].v0[2] = z;
-    tris[i].v1[0] = 1.f; tris[i].v1[1] = 0.f; tris[i].v1[2] = z;
-    tris[i].v2[0] = 0.f; tris[i].v2[1] = 1.f; tris[i].v2[2] = z;
-    tris[i].flags = RTU_BVH_FLAG_OPAQUE;
-  }
+  int errors = 0;
 
-  host_bvh_t src = { tris.data(), N, /*geometry_index*/ 0 };
-  std::vector<uint8_t> scene;
-  uint64_t root_offset = 0;
-  if (!build_bvh_scene<4>(src, scene, root_offset)) {
-    std::cout << "build_bvh_scene failed" << std::endl;
-    cleanup();
-    return 1;
-  }
-  std::cout << "scene: " << scene.size() << " B, " << N
-            << " tris (deep CW-BVH4)" << std::endl;
+  // One trace of the +z ray at (0.25, 0.25) against a CW-BVH4 over `tris`;
+  // the walk must return the closest hit (t, prim).
+  auto run_case = [&](const char* name, const std::vector<host_tri_t>& tris,
+                      float exp_t, uint32_t exp_prim) {
+    host_bvh_t src = { tris.data(), (uint32_t)tris.size(), /*geometry_index*/ 0 };
+    std::vector<uint8_t> scene;
+    uint64_t root_offset = 0;
+    if (!build_bvh_scene<4>(src, scene, root_offset)) {
+      std::cout << name << ": build_bvh_scene failed" << std::endl;
+      ++errors;
+      return;
+    }
+    std::cout << name << ": scene " << scene.size() << " B, " << tris.size()
+              << " tris (deep CW-BVH4)" << std::endl;
 
-  RT_CHECK(vx_buffer_create(device, (uint32_t)scene.size(), VX_MEM_READ, &scene_buffer));
-  RT_CHECK(vx_buffer_address(scene_buffer, &kernel_arg.scene_addr));
+    RT_CHECK(vx_buffer_create(device, (uint32_t)scene.size(), VX_MEM_READ, &scene_buffer));
+    RT_CHECK(vx_buffer_address(scene_buffer, &kernel_arg.scene_addr));
+    uint32_t res_size = sizeof(rtu_result_t);
+    RT_CHECK(vx_buffer_create(device, res_size, VX_MEM_WRITE, &res_buffer));
+    RT_CHECK(vx_buffer_address(res_buffer, &kernel_arg.results_addr));
 
-  uint32_t res_size = sizeof(rtu_result_t);
-  RT_CHECK(vx_buffer_create(device, res_size, VX_MEM_WRITE, &res_buffer));
-  RT_CHECK(vx_buffer_address(res_buffer, &kernel_arg.results_addr));
+    kernel_arg.ray_origin[0]    = 0.25f;
+    kernel_arg.ray_origin[1]    = 0.25f;
+    kernel_arg.ray_origin[2]    = 0.0f;
+    kernel_arg.ray_direction[0] = 0.0f;
+    kernel_arg.ray_direction[1] = 0.0f;
+    kernel_arg.ray_direction[2] = 1.0f;
+    kernel_arg.tmin             = 0.001f;
+    kernel_arg.tmax             = 1e30f;
 
-  kernel_arg.ray_origin[0]    = 0.25f;
-  kernel_arg.ray_origin[1]    = 0.25f;
-  kernel_arg.ray_origin[2]    = 0.0f;
-  kernel_arg.ray_direction[0] = 0.0f;
-  kernel_arg.ray_direction[1] = 0.0f;
-  kernel_arg.ray_direction[2] = 1.0f;
-  kernel_arg.tmin             = 0.001f;
-  kernel_arg.tmax             = 1e30f;
+    RT_CHECK(vx_enqueue_write(queue, scene_buffer, 0, scene.data(),
+                              (uint32_t)scene.size(), 0, nullptr, nullptr));
+    if (!kernel) {
+      RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
+      RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
+    }
 
-  std::cout << "scene_addr=0x" << std::hex << kernel_arg.scene_addr << std::dec
-            << " deep CW-BVH4 (closest hit must survive short-stack overflow)"
-            << std::endl;
-
-  RT_CHECK(vx_enqueue_write(queue, scene_buffer, 0, scene.data(),
-                            (uint32_t)scene.size(), 0, nullptr, nullptr));
-  RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
-  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
-
-  std::cout << "launch kernel" << std::endl;
-  vx_event_h launch_ev = nullptr, read_ev = nullptr;
-  {
+    vx_event_h launch_ev = nullptr, read_ev = nullptr;
     vx_launch_info_t li = {};
     li.struct_size  = sizeof(li);
     li.kernel       = kernel;
@@ -129,30 +118,52 @@ int main(int /*argc*/, char* /*argv*/[]) {
     li.grid_dim[0]  = 1;
     li.block_dim[0] = 1;
     RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
-  }
 
-  rtu_result_t result = {};
-  RT_CHECK(vx_enqueue_read(queue, &result, res_buffer, 0, res_size,
-                           1, &launch_ev, &read_ev));
-  RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
-  vx_event_release(read_ev);
-  vx_event_release(launch_ev);
+    rtu_result_t result = {};
+    RT_CHECK(vx_enqueue_read(queue, &result, res_buffer, 0, res_size,
+                             1, &launch_ev, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    vx_event_release(launch_ev);
+    vx_buffer_release(scene_buffer); scene_buffer = nullptr;
+    vx_buffer_release(res_buffer);   res_buffer = nullptr;
 
-  const uint32_t exp_status = VX_RT_STS_DONE_HIT;
-  const float    exp_t      = 5.f;   // nearest triangle
-  const uint32_t exp_prim   = 0;     // source index of the z=5 triangle
-  std::cout << "oracle: HIT t=" << exp_t << " prim=" << exp_prim << std::endl;
+    std::cout << name << ": oracle HIT t=" << exp_t << " prim=" << exp_prim << std::endl;
+    if (result.status != VX_RT_STS_DONE_HIT || std::fabs(result.hit_t - exp_t) >= 1e-4f
+     || result.primitive_id != exp_prim) {
+      std::cout << name << ": result status=" << result.status
+                << " hit_t=" << result.hit_t
+                << " prim=" << result.primitive_id << std::endl;
+      ++errors;
+    }
+  };
 
-  int errors = 0;
-  bool sts_ok  = (result.status == exp_status);
-  bool t_ok    = std::fabs(result.hit_t - exp_t) < 1e-4f;
-  bool prim_ok = (result.primitive_id == exp_prim);
-  if (!sts_ok || !t_ok || !prim_ok) {
-    std::cout << "result: status=" << result.status
-              << " hit_t=" << result.hit_t
-              << " prim=" << result.primitive_id << std::endl;
-    ++errors;
-  }
+  auto tri_at = [](float z, float x0) {
+    host_tri_t t = {};
+    t.v0[0] = x0;  t.v0[1] = 0.f; t.v0[2] = z;
+    t.v1[0] = 1.f; t.v1[1] = 0.f; t.v1[2] = z;
+    t.v2[0] = 0.f; t.v2[1] = 1.f; t.v2[2] = z;
+    t.flags = RTU_BVH_FLAG_OPAQUE;
+    return t;
+  };
+
+  // N opaque triangles all covering the ray's (x,y) footprint, stacked at
+  // z = 5, 6, ... The SAH builder splits them into a deep tree. The ray hits
+  // all of them; triangle 0 (z=5) is the closest, on the walk's first path.
+  constexpr uint32_t N = 64;
+  std::vector<host_tri_t> tris;
+  for (uint32_t i = 0; i < N; ++i) tris.push_back(tri_at(5.0f + (float)i, 0.f));
+  run_case("stacked", tris, 5.f, 0);
+
+  // The same stack, but only one triangle, deep in the far half, covers the
+  // ray: the others' boxes do (so they are walked first) while the triangles
+  // miss it. The hit sits in subtrees the short stack drops, so the walk has
+  // to restart, repeatedly, to reach it.
+  constexpr uint32_t kHit = 41;
+  tris.clear();
+  for (uint32_t i = 0; i < N; ++i)
+    tris.push_back(tri_at(5.0f + (float)i, (i == kHit) ? 0.f : 0.6f));
+  run_case("decoys", tris, 5.f + (float)kHit, kHit);
 
   cleanup();
 

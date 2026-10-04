@@ -44,7 +44,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
     // Read the candidate geometry/instance attributes and the capture buffer
     // pointer (staged as the trace payload) from the register window, stash.
     uint32_t cand_ptr  = vx_rt_get_attr(VX_RT_PAYLOAD_PTR_LO, sts);
-    uint32_t cand_geom = vx_rt_get_attr(VX_RT_HIT_GEOMETRY_INDEX, sts);
+    uint32_t cand_geom = vx_rt_get_attr(VX_RT_HIT_GEOMETRY_INDEX, sts)
+                       & VX_RT_HIT_GEOMETRY_MASK;
     uint32_t cand_inst = vx_rt_get_attr(VX_RT_HIT_INSTANCE_ID, sts);
     uint32_t* cand = (uint32_t*)(uintptr_t)cand_ptr;
     cand[0] = cand_geom;   // cand->cand_geometry

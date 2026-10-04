@@ -31,7 +31,7 @@
 //   from one decode point.
 // - Triangle stride (40 B) and TLAS instance stride (64 B) match the
 //   flat-list constants in rtu_core.cpp so the existing intersection
-//   helpers (`ray_triangle`, `affine_inverse_transform_ray`) drop in
+//   helpers (`ray_triangle`, `world_to_object_ray`) drop in
 //   unchanged.
 
 #ifndef _VX_RTU_BVH_H_
@@ -198,8 +198,11 @@ inline void decode_bvh6_node(const VxBvh6InternalNode* n, uint32_t count,
 //   uint32 kind             : bits 0..7  = kVxBvhKindLeafTri/Inst/Proc
 //                             bits 8..15 = prim_count
 //   uint32 geometry_index   : Vulkan gl_GeometryIndexEXT for this leaf
-//   uint32 flags            : bit 0 = OPAQUE (all prims), bit 1 = forced
-//                             non-opaque, bits 8..15 = SBT_IDX
+//   uint32 flags            : LeafProc: bit 0 = OPAQUE (all prims), bit 1 =
+//                             forced non-opaque, bits 8..15 = SBT_IDX.
+//                             LeafTri / LeafInst: reserved, ignored (a
+//                             triangle carries its own flag word). LeafInst
+//                             also ignores geometry_index and prim_base.
 //   uint32 prim_base        : gl_PrimitiveID of this leaf's first
 //                             primitive; the walker reports
 //                             prim_base + within-leaf index so a
@@ -254,7 +257,8 @@ constexpr uint32_t kVxBvhTriStride = 40;
 // from the SCENE root, not from a private BLAS base — gives us a
 // single base address for the whole TLAS+BLAS bundle).
 //
-//   floats 0..11           : 48 B object→world affine (3x4, row-major)
+//   floats 0..11           : 48 B world→object affine (3x4, row-major),
+//                            the inverse of the instance transform
 //   uint32 blas_root_off   : 4 B byte offset to this instance's BLAS
 //                            root node from the scene-buffer base
 //   uint32 custom_id       : 4 B VK_INSTANCE_CUSTOM_INDEX_KHR

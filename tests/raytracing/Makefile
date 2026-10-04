@@ -11,7 +11,8 @@ TESTS := \
     rt_smoke_miss rt_smoke_is rt_smoke_sbt rt_smoke_tlas          \
     rt_smoke_ahs_mixed rt_smoke_recursive                           \
     rt_smoke_bvh_basic rt_smoke_bvh_multilevel                      \
-    rt_smoke_bvh_instanced rt_smoke_ahs_bvh                         \
+    rt_smoke_bvh_instanced rt_smoke_ahs_bvh rt_smoke_ahs_multi      \
+    rt_smoke_partial_mask rt_smoke_proc_inst                        \
     rt_smoke_shadow rt_smoke_cull_back                              \
     rt_smoke_async_batch rt_smoke_cull_mask                         \
     rt_smoke_proc rt_smoke_bvh6 rt_bvh_multinode rt_smoke_numctx   \

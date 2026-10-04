@@ -45,6 +45,25 @@ extern "C" {
 // 1D and 2D: all rs2 lanes are zero, so rs2 = x0 (no second vx_wgather).
 // 3D–5D: rs2 carries coord2..coord4, requiring a second vx_wgather.
 
+// The DXA reads its packed operands across the warp regardless of the thread
+// mask, so it reads them from the warp-gather registers the gathers wrote
+// (x31, and x30 for rs2; see __VX_WGATHER_IN).
+#define __VX_DXA_ISSUE1(a0v) do {                                         \
+    register uint32_t __rs1 __asm__("x31") = (a0v);                       \
+    __asm__ volatile (".insn r %0, 0, %1, x0, %2, x0\n\t"                \
+        : : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(__rs1)        \
+        : "memory");                                                      \
+  } while (0)
+
+#define __VX_DXA_ISSUE2(a0v, a1v) do {                                    \
+    register uint32_t __rs1 __asm__("x31") = (a0v);                       \
+    register uint32_t __rs2 __asm__("x30") = (a1v);                       \
+    __asm__ volatile (".insn r %0, 0, %1, x0, %2, %3\n\t"                \
+        : : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(__rs1),       \
+            "r"(__rs2)                                                    \
+        : "memory");                                                      \
+  } while (0)
+
 inline uint32_t vx_dxa_pack_meta(uint32_t desc_slot, uint32_t barrier_id) {
   return (barrier_id << 4) | desc_slot;
 }
@@ -59,11 +78,7 @@ inline void vx_dxa_issue_1d_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)0u);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, x0\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0)
-      : "memory");
+  __VX_DXA_ISSUE1(a0);
 }
 
 // 2D: rs1 = wgather(smem_addr, meta, coord0, coord1), rs2 = x0
@@ -77,11 +92,7 @@ inline void vx_dxa_issue_2d_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)coord1);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, x0\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0)
-      : "memory");
+  __VX_DXA_ISSUE1(a0);
 }
 
 // 3D–5D: rs2 = wgather(coord2, coord3, coord4, 0)
@@ -96,15 +107,11 @@ inline void vx_dxa_issue_3d_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)coord1);
-  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
                                             (size_t)0u,
                                             (size_t)0u,
                                             (size_t)0u);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, %3\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
-      : "memory");
+  __VX_DXA_ISSUE2(a0, a1);
 }
 
 inline void vx_dxa_issue_4d_wg(uint32_t desc_slot,
@@ -119,15 +126,11 @@ inline void vx_dxa_issue_4d_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)coord1);
-  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
                                             (size_t)coord3,
                                             (size_t)0u,
                                             (size_t)0u);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, %3\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
-      : "memory");
+  __VX_DXA_ISSUE2(a0, a1);
 }
 
 inline void vx_dxa_issue_5d_wg(uint32_t desc_slot,
@@ -143,15 +146,11 @@ inline void vx_dxa_issue_5d_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)coord1);
-  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
                                             (size_t)coord3,
                                             (size_t)coord4,
                                             (size_t)0u);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, %3\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
-      : "memory");
+  __VX_DXA_ISSUE2(a0, a1);
 }
 
 // Multicast DXA issues read GMEM once and replay SMEM writes to multiple
@@ -168,15 +167,11 @@ inline void vx_dxa_issue_1d_multicast_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)0u);
-  const uint32_t a1 = (uint32_t)vx_wgather((size_t)0,
+  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)0,
                                             (size_t)0,
                                             (size_t)0,
                                             (size_t)cta_mask);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, %3\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
-      : "memory");
+  __VX_DXA_ISSUE2(a0, a1);
 }
 
 // 2D multicast: rs2 = wgather(0, 0, 0, cta_mask)
@@ -191,15 +186,11 @@ inline void vx_dxa_issue_2d_multicast_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)coord1);
-  const uint32_t a1 = (uint32_t)vx_wgather((size_t)0,
+  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)0,
                                             (size_t)0,
                                             (size_t)0,
                                             (size_t)cta_mask);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, %3\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
-      : "memory");
+  __VX_DXA_ISSUE2(a0, a1);
 }
 
 // 3D multicast: rs2 = wgather(coord2, 0, 0, cta_mask)
@@ -215,15 +206,11 @@ inline void vx_dxa_issue_3d_multicast_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)coord1);
-  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
                                             (size_t)0,
                                             (size_t)0,
                                             (size_t)cta_mask);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, %3\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
-      : "memory");
+  __VX_DXA_ISSUE2(a0, a1);
 }
 
 // 4D multicast: rs2 = wgather(coord2, coord3, 0, cta_mask)
@@ -240,15 +227,11 @@ inline void vx_dxa_issue_4d_multicast_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)coord1);
-  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
                                             (size_t)coord3,
                                             (size_t)0,
                                             (size_t)cta_mask);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, %3\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
-      : "memory");
+  __VX_DXA_ISSUE2(a0, a1);
 }
 
 // 5D multicast: rs2 = wgather(coord2, coord3, coord4, cta_mask)
@@ -266,15 +249,11 @@ inline void vx_dxa_issue_5d_multicast_wg(uint32_t desc_slot,
                                             (size_t)meta,
                                             (size_t)coord0,
                                             (size_t)coord1);
-  const uint32_t a1 = (uint32_t)vx_wgather((size_t)coord2,
+  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
                                             (size_t)coord3,
                                             (size_t)coord4,
                                             (size_t)cta_mask);
-  __asm__ volatile (
-      ".insn r %0, 0, %1, x0, %2, %3\n\t"
-      :
-      : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(a0), "r"(a1)
-      : "memory");
+  __VX_DXA_ISSUE2(a0, a1);
 }
 
 #ifdef __cplusplus

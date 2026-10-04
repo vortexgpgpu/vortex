@@ -119,6 +119,7 @@ typedef struct {
   uint32_t geometry_index;
   uint32_t instance_id;
   uint32_t instance_custom;   // gl_InstanceCustomIndexEXT (VK_INSTANCE_CUSTOM_INDEX)
+  uint32_t back_facing;       // gl_HitKindEXT == BACK_FACING
 } vx_hit_t;
 
 // The struct field order (memory layout) is intentionally NOT the RTU register-
@@ -170,9 +171,12 @@ uint32_t vx_rt_wtrace(uint32_t scene_ptr, uint32_t payload_ptr,
   // list (read by HW convention, like the tensor unit's fragment window);
   // the encoding itself only names rd/rs1. Named operands (not %0/%1) keep
   // the field references stable across the long register-binding list.
+  // The RTU reads the packed config lanes regardless of the thread mask, so it
+  // reads them from the warp-gather register itself (see __VX_WGATHER_IN).
+  register uint32_t cfg_reg __asm__("x31") = cfg;
   __asm__ volatile (".insn r %[op], 7, 0, %[hnd], %[cfg], x0"
     : [hnd]"=r"(handle)
-    : [op]"i"(RISCV_CUSTOM1), [cfg]"r"(cfg),
+    : [op]"i"(RISCV_CUSTOM1), [cfg]"r"(cfg_reg),
       "f"(r0), "f"(r1), "f"(r2), "f"(r3),
       "f"(r4), "f"(r5), "f"(r6), "f"(r7));
   return handle;
@@ -222,8 +226,9 @@ uint32_t vx_rt_wait(uint32_t handle, vx_hit_t* hit) {
   hit->v = hv;
   hit->primitive_id    = hp;
   hit->instance_id     = hi;
-  hit->geometry_index  = hg;
+  hit->geometry_index  = hg & VX_RT_HIT_GEOMETRY_MASK;
   hit->instance_custom = hc;
+  hit->back_facing     = (hg & VX_RT_HIT_BACK_FACING) != 0;
   return status;
 }
 

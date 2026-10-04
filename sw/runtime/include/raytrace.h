@@ -310,7 +310,7 @@ private:
       groups.push_back(std::move(b));
     }
 
-    NodeRef ch[6];
+    NodeRef ch[6] = {};
     uint32_t n = 0;
     for (auto& g : groups)
       if (!g.empty()) ch[n++] = build_node(g);
@@ -324,6 +324,27 @@ private:
   std::vector<TriBox>  boxes_;
   bool                 overflow_ = false;
 };
+
+// The world->object matrix an instance record carries: the inverse of the
+// host's object->world 3x4 affine, in double, rounded once.
+inline void world_to_object(const float otw[12], float wto[12]) {
+  const double a = otw[0], b = otw[1], c = otw[2];
+  const double d = otw[4], e = otw[5], f = otw[6];
+  const double g = otw[8], h = otw[9], k = otw[10];
+  const double det = a * (e * k - f * h) - b * (d * k - f * g) + c * (d * h - e * g);
+  const double inv = (det != 0.0) ? 1.0 / det : 0.0;
+  const double r[9] = { (e * k - f * h) * inv, (c * h - b * k) * inv, (b * f - c * e) * inv,
+                        (f * g - d * k) * inv, (a * k - c * g) * inv, (c * d - a * f) * inv,
+                        (d * h - e * g) * inv, (b * g - a * h) * inv, (a * e - b * d) * inv };
+  for (int i = 0; i < 3; ++i) {
+    double t = 0.0;
+    for (int j = 0; j < 3; ++j) {
+      wto[i * 4 + j] = float(r[i * 3 + j]);
+      t -= r[i * 3 + j] * double(otw[j * 4 + 3]);
+    }
+    wto[i * 4 + 3] = float(t);
+  }
+}
 
 } // namespace detail
 
@@ -425,7 +446,9 @@ inline bool build_tlas_scene(const host_tlas_t& src,
     const host_instance_t& in = src.instances[i];
     if (in.blas_index >= src.blas_count) { out_scene.clear(); return false; }
     uint8_t* rec = out_scene.data() + insts_off + i * RTU_BVH_INSTANCE_STRIDE;
-    std::memcpy(rec, in.xform, sizeof(in.xform));
+    float wto[12];
+    detail::world_to_object(in.xform, wto);
+    std::memcpy(rec, wto, sizeof(wto));
     uint32_t broot = blas_root[in.blas_index];
     uint32_t cid   = in.custom_id;
     uint32_t iid   = in.instance_id;
