@@ -1,23 +1,23 @@
 {
   "dxa:perf_gate-copy-mcast:rtlsim": {
     "32": {
-      "cycles": 3424,
-      "instrs": 960
+      "cycles": 3411,
+      "instrs": 961
     },
     "app": "dxa_copy_mcast",
     "args": "",
-    "config_hash": "039e26d60791f884",
+    "config_hash": "d8dc71acb72624de",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-copy-nt16:rtlsim": {
     "32": {
-      "cycles": 2098,
+      "cycles": 2096,
       "instrs": 592
     },
     "app": "dxa_copy",
     "args": "-d1",
-    "config_hash": "ab44b87188699391",
+    "config_hash": "84239768cfc34b0d",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -28,95 +28,95 @@
     },
     "app": "dxa_copy",
     "args": "-d1",
-    "config_hash": "40c3e5367ee82910",
+    "config_hash": "e315513bdc6942fb",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-sgemm2-dxa-mcast-nt16:rtlsim": {
     "32": {
-      "cycles": 14332387,
-      "instrs": 4961296
+      "cycles": 14333410,
+      "instrs": 4962320
     },
     "app": "sgemm2_dxa_mcast",
     "args": "-n128",
-    "config_hash": "7556f3195acb39b1",
+    "config_hash": "d6edd97b6570efdd",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-sgemm2-dxa-mcast-nt4:rtlsim": {
     "32": {
-      "cycles": 14344887,
-      "instrs": 4961296
+      "cycles": 14345910,
+      "instrs": 4962320
     },
     "app": "sgemm2_dxa_mcast",
     "args": "-n128",
-    "config_hash": "684af59553c0dd7b",
+    "config_hash": "f638e7687fcfdf72",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-sgemm2-dxa-nt16:rtlsim": {
     "32": {
-      "cycles": 3975334,
+      "cycles": 3978026,
       "instrs": 1263632
     },
     "app": "sgemm2_dxa",
     "args": "-n128 -t4 -m1",
-    "config_hash": "1b903f48fc402adf",
+    "config_hash": "538516a52b3616f9",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-sgemm2-dxa-nt4:rtlsim": {
     "32": {
-      "cycles": 14746531,
+      "cycles": 14632454,
       "instrs": 5017616
     },
     "app": "sgemm2_dxa",
     "args": "-n128 -t4 -m1",
-    "config_hash": "dbdacf51150051f7",
+    "config_hash": "b68ce24c030ee769",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-wgmma-dxa-mcast-nt16:rtlsim": {
     "32": {
-      "cycles": 99299,
+      "cycles": 98435,
       "instrs": 32384
     },
     "app": "sgemm_tcu_wg_dxa_mcast",
     "args": "-m 128 -n 128 -k 64",
-    "config_hash": "d0cb73c9d6f7ffaa",
+    "config_hash": "f2390772053e2d69",
     "configs": "-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-wgmma-dxa-mcast-nt4:rtlsim": {
     "32": {
-      "cycles": 408190,
+      "cycles": 400679,
       "instrs": 234560
     },
     "app": "sgemm_tcu_wg_dxa_mcast",
     "args": "-m 128 -n 128 -k 64",
-    "config_hash": "e767bf6bcc2b1d4a",
+    "config_hash": "66b8301aa43d2744",
     "configs": "-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-wgmma-dxa:rtlsim": {
     "32": {
-      "cycles": 39805,
+      "cycles": 39761,
       "instrs": 9160
     },
     "app": "sgemm_tcu_wg_dxa",
     "args": "-m 128 -n 128 -k 64",
-    "config_hash": "271a7cf569c588e4",
+    "config_hash": "ba8978d35dc6e582",
     "configs": "-DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_THREADS=32",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-wgmma-sp-dxa:rtlsim": {
     "32": {
-      "cycles": 68517,
+      "cycles": 68208,
       "instrs": 9328
     },
     "app": "sgemm_tcu_wg_sp_dxa",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "1db9ac61c1e7ec5d",
+    "config_hash": "9480be10a4650239",
     "configs": "-DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_THREADS=32",
     "driver": "rtlsim"
   }

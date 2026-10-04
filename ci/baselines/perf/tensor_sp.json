@@ -6,7 +6,7 @@
     },
     "app": "sgemm_tcu_sp",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "e270a1261dd01a09",
+    "config_hash": "4f2460323b85e99a",
     "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE",
     "driver": "rtlsim"
   }
