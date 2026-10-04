@@ -371,12 +371,15 @@ tests:
   shape:
     cores: 2
     clusters: 2
+# WGMMA cases pin one execution block per unit: the default (one block per
+# issue slot) multiplies the model size, and a hosted CI runner cannot build it
+# in a job. simx and rtlsim legs carry the same pin so both model one machine.
 - id: sgemm_tcu_wg_dxa-1
   via: blackbox
   drivers:
   - simx
   app: sgemm_tcu_wg_dxa
-  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32
+  configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   shape:
     threads: 32
     warps: 8
@@ -385,7 +388,7 @@ tests:
   drivers:
   - rtlsim
   app: sgemm_tcu_wg_dxa
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_TCU_TYPE=DPI
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_TCU_TYPE=DPI -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   shape:
     threads: 32
     warps: 8
@@ -397,7 +400,7 @@ tests:
   - simx
   - rtlsim
   app: sgemm_tcu_wg_dxa
-  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_FEDP2K -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8
+  configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_FEDP2K -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=8 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   shape:
     threads: 8
     warps: 8
@@ -407,7 +410,7 @@ tests:
   - simx
   app: sgemm_tcu_wg_sp_dxa
   configs: -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE
-    -DWGMMA_NRC=8
+    -DWGMMA_NRC=8 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   shape:
     threads: 32
     warps: 8
@@ -417,7 +420,7 @@ tests:
   - rtlsim
   app: sgemm_tcu_wg_sp_dxa
   configs: -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_TYPE=DPI
-    -DWGMMA_NRC=32
+    -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1
   shape:
     threads: 32
     warps: 8
