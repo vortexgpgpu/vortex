@@ -17,9 +17,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
-#include <mutex>
 #include <unordered_set>
 #include "mem.h"
+#include "types.h"
 
 namespace vortex { namespace rtu { namespace raylog {
 
@@ -37,6 +37,12 @@ public:
   Logger() {
     const char* path = std::getenv("VX_RTU_RAYLOG");
     if (path == nullptr || path[0] == '\0') return;
+    if (SIMX_NUM_WORKERS > 1) {
+      // One log is shared by every RTU core; like debug tracing, it needs a
+      // serial build.
+      std::fprintf(stderr, "[rtu-raylog] disabled: requires a serial SimX build (SIMX_MT unset)\n");
+      return;
+    }
     fp_ = std::fopen(path, "wb");
     if (fp_ == nullptr) {
       std::fprintf(stderr, "[rtu-raylog] cannot open %s\n", path);
@@ -67,12 +73,10 @@ public:
   bool on() const { return fp_ != nullptr; }
 
   void set_ram(const RAM* ram) {
-    std::lock_guard<std::mutex> g(mu_);
     ram_ = ram;
   }
 
   void accept(const void* owner, uint32_t slot, const RtuReq& req) {
-    std::lock_guard<std::mutex> g(mu_);
     cb_[{owner, slot}].fill(0);
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (req.tmask_bits & (1u << t)) snapshot_scene(req.scene_root[t]);
@@ -80,12 +84,10 @@ public:
   }
 
   void callback(const void* owner, uint32_t slot, uint32_t lane, uint32_t cb_type) {
-    std::lock_guard<std::mutex> g(mu_);
     cb_[{owner, slot}].at(lane) |= 1u << (cb_type & 7);
   }
 
   void walk_done(const std::unordered_map<uint64_t, LineBuf>& lines) {
-    std::lock_guard<std::mutex> g(mu_);
     if (full()) return;
     for (const auto& kv : lines) {
       auto it = image_.find(kv.first);
@@ -109,7 +111,6 @@ public:
 
   void terminal(const void* owner, uint32_t slot, const RtuReq& req,
                 const std::array<LaneState, VX_CFG_NUM_THREADS>& lanes) {
-    std::lock_guard<std::mutex> g(mu_);
     auto& cbm = cb_[{owner, slot}];
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       const LaneState& l = lanes[t];
@@ -187,7 +188,6 @@ private:
                  root, scene_bytes, (unsigned long long)added);
   }
 
-  std::mutex mu_;
   const RAM* ram_ = nullptr;
   std::unordered_set<uint32_t> snapped_;
   FILE*      fp_ = nullptr;

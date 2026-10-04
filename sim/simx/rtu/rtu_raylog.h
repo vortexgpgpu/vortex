@@ -26,6 +26,9 @@
 //   VX_RTU_RAYLOG_MAX=<n>   stop after n RAY records (default 4M)
 //   VX_RTU_RAYLOG_EVERY=<n> keep one terminal ray in n (default 1)
 //
+// Like debug tracing, the log needs a serial build (SIMX_MT unset): it is one
+// stream shared by every RTU core, and is disabled with a notice otherwise.
+//
 // The lines a SimX walk reads are not all another model may read: one that
 // culls differently descends into nodes SimX never fetched. So the first trace
 // against a scene also snapshots its whole image from device memory — the
