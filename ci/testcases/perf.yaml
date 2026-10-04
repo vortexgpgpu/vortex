@@ -1,0 +1,34 @@
+# Wide-issue suite: the core pipeline at ISSUE_WIDTH 2/4 with the DEFAULT
+# execution-block count (one ALU/FPU/LSU block per issue slot). Suites that must
+# keep the rtlsim model small pin one block per unit, so this is where the
+# multi-block dispatch, commit arbitration and per-block LSU paths stay covered.
+#
+# NW=16 gives every issue slot at least two warps; NT=4 keeps the replicated
+# blocks narrow enough for a hosted runner to build the rtlsim model.
+category: perf
+defaults:
+  xlen:
+  - 32
+  tier: smoke
+  touches:
+  - sim/simx/
+  - hw/rtl/
+tests:
+- id: sgemm-iw2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  args: -n128
+  configs: -DVX_CFG_ISSUE_WIDTH=2
+  shape: {warps: 16, threads: 4}
+- id: sgemm-iw4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  args: -n128
+  configs: -DVX_CFG_ISSUE_WIDTH=4
+  shape: {warps: 16, threads: 4}
