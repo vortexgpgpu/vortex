@@ -158,7 +158,9 @@ proc slr_pblocks_run {} {
     # ---- hard-block inventory, gathered once ----
     set ::SLR_B36  [get_cells -quiet -hierarchical -filter {REF_NAME =~ RAMB36* || REF_NAME =~ FIFO36*}]
     set ::SLR_B18  [get_cells -quiet -hierarchical -filter {REF_NAME =~ RAMB18* || REF_NAME =~ FIFO18*}]
-    set ::SLR_DSP  [get_cells -quiet -hierarchical -filter {REF_NAME =~ DSP*}]
+    # Pre-opt, each DSP48E2/DSP58 is a macro whose eight DSP_* sub-primitives
+    # would also match DSP*; count the macro only, one per DSP site.
+    set ::SLR_DSP  [get_cells -quiet -hierarchical -filter {REF_NAME =~ DSP48* || REF_NAME =~ DSP58*}]
     set ::SLR_URAM [get_cells -quiet -hierarchical -filter {REF_NAME =~ URAM*}]
 
     proc cells_re {re} { return [get_cells -quiet -hierarchical -regexp $re] }
@@ -417,7 +419,7 @@ proc slr_pblocks_run {} {
 
     # ---- apply ----
     create_pblock pb_slr_anchor
-    resize_pblock pb_slr_anchor -add [lindex $slrs 0]
+    resize_pblock pb_slr_anchor -add [lindex $slrs $aidx]
     if {[llength $anchor_cells]} {
         add_cells_to_pblock pb_slr_anchor $anchor_cells
         puts "SLR-PBLOCKS: anchor $anchor_nm <- [llength $anchor_cells] shared cache/control cell(s)"
