@@ -65,24 +65,28 @@ jobs:
             && echo "ASIC gate armed for tonight" \
             || echo "::warning::could not enable asic_gate.yml; the next qualifying push retries"
       - run: pip install --quiet pyyaml
-      # Read the toolchain pin so we can probe its cache below. TOOLCHAIN_REV is
-      # the toolchain cache key; the build job's setup-vortex caches `tools` under
-      # `${{ runner.os }}-toolchain-<rev>-<profile>` (profile=lite for push/PR).
+      # Resolve the toolchain identity so we can probe its cache below. The build
+      # job's setup-vortex caches `tools` under
+      # `${{ runner.os }}-toolchain-<rev>-<sha>-<profile>`, from the same script.
       - name: Read toolchain rev
         id: vers
         run: |
-          source VERSION
-          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
-      # Probe (lookup-only, no download) whether the toolchain cache exists. A
-      # MISS — deleted, expired (GitHub's 7-day eviction), key changed via a
-      # VERSION bump, or first run — means the build job will REBUILD the
+          rev=$(bash ci/toolchain_rev.sh)
+          echo "toolchain=$rev" >> "$GITHUB_OUTPUT"
+      # Probe (lookup-only, no download) whether this toolchain has a cache. A
+      # MISS — deleted, expired (GitHub's 7-day eviction), the pinned tag moved to
+      # new prebuilts, or first run — means the build job will REBUILD the
       # toolchain, which affects every driver. We force full coverage on that.
+      # Either profile counts as a hit: the toolchain is the same prebuilt commit,
+      # and a run forced to full coverage only ever saves the `full` cache, so
+      # requiring `lite` would force full coverage again on every later push.
       - name: Probe toolchain cache
         id: tc
         uses: actions/cache/restore@v4
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-${{ steps.vers.outputs.toolchain }}-lite
+          restore-keys: ${{ runner.os }}-toolchain-${{ steps.vers.outputs.toolchain }}-
           lookup-only: true
       - name: Plan matrix
         id: q
@@ -90,7 +94,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           IN_DRIVERS: ${{ github.event.inputs.drivers }}
           IN_TIER: ${{ github.event.inputs.tier }}
-          TOOLCHAIN_CACHE_HIT: ${{ steps.tc.outputs.cache-hit }}
+          TOOLCHAIN_CACHE_HIT: ${{ steps.tc.outputs.cache-matched-key != '' }}
           PUSH_BEFORE: ${{ github.event.before }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
