@@ -33,14 +33,15 @@
 # and a divergence between them is a real finding, not an artefact of two lists.
 #
 # THIS LIST IS BOUNDED BY MEMORY. It gates the same DUTs as fpga_gate.yaml, but
-# the wide ones at NT=NW=8 instead of 16. A hosted runner has 16 GB of RAM;
-# Yosys holds the whole elaborated netlist and offers no cap to tune, so a DUT
-# that needs more does not fail -- the VM is killed under it and the job ends at
+# the wide ones at a reduced NT=NW. A hosted runner has 16 GB of RAM; Yosys
+# holds the whole elaborated netlist and offers no cap to tune, so a DUT that
+# needs more does not fail -- the VM is killed under it and the job ends at
 # exit 143 with no report, which looks exactly like an infrastructure outage. At
 # 16/16, `gfx` measured a 44.2 GB peak RSS for a single Yosys process (3.76M
-# cells, 100 min wall), and `core` and `tex` measured 20.7 GB and 28.0 GB.
-# Halving NT and NW quarters the lane x warp product that carries that cost.
-# fpga_gate.yaml still gates the full-width configurations.
+# cells, 100 min wall), and `core` and `tex` measured 20.7 GB and 28.0 GB;
+# NT and NW size the lane x warp product that carries that cost, so the wide
+# DUTs are gated at NT=NW=8, and `top` and `gfx` at NT=NW=4: at 8/8 they peak
+# at 18.6 and 19.5 GB. fpga_gate.yaml gates the full-width configurations.
 #
 # `vm` once passed a hosted nightly at 1.0M cells in 11 minutes only because its
 # L2 was a BYPASS: VX_vm_top wires the L2 as
@@ -122,7 +123,8 @@ builds:
   group: core
   dut: top
   clock_mhz: 400
-  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+  # 11.2 GB Yosys peak at NT=NW=4 (8/8: 18.6 GB).
+  configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
 
 # --- dxa ---------------------------------------------------------------------
 
@@ -188,7 +190,8 @@ builds:
   group: graphics
   dut: gfx
   clock_mhz: 400
-  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+  # 14.6 GB Yosys peak at NT=NW=4 (8/8: 19.5 GB).
+  configs: "-DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4"
 
 # --- vm ----------------------------------------------------------------------
 
