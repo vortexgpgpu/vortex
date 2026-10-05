@@ -1,6 +1,7 @@
-# ASIC synthesis-regression gate: post-synthesis Fmax/cell area must not regress
-# past a threshold vs. a checked-in golden result
-# (ci/baselines/synthesis/yosys/<group>.json).
+# ASIC synthesis-regression gate: post-synthesis cell area must not regress past
+# a threshold vs. a checked-in golden result
+# (ci/baselines/synthesis/yosys/<group>.json), and Fmax must meet the build's
+# target clock.
 #
 # Sibling of the fpga_gate (fpga_gate.yaml): same discipline — golden baseline,
 # hard threshold, ratcheted improvements, results only ever re-recorded by a
