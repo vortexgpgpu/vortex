@@ -83,9 +83,9 @@
     "configs": "",
     "dut": "rtu",
     "result": {
-      "build_time_s": 880,
-      "cell_area_um2": 91600.089,
-      "cell_count": 842051,
+      "build_time_s": 1001,
+      "cell_area_um2": 98964.783,
+      "cell_count": 928942,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
@@ -95,12 +95,12 @@
         "xlen": 32,
         "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 956.755,
-      "power_mw": 349.0,
-      "seq_area_um2": 36179.978,
-      "sram_area_um2": 10949.6,
+      "fmax_mhz": 903.424,
+      "power_mw": 361.0,
+      "seq_area_um2": 37464.185,
+      "sram_area_um2": 12099.2,
       "tns_ns": 0.0,
-      "wns_ns": 1.455
+      "wns_ns": 1.393
     }
   },
   "tex": {
