@@ -9,9 +9,10 @@
 # synthesizes, so both gates measure the same modules and a divergence between
 # them is meaningful rather than an artefact of two DUT lists.
 
-DUTS := cache core tcu gfx tex raster om rtu dxa vm tensor vortex
+DUTS := cache core tcu gfx tex raster om rtu dxa vm tensor top vortex
 
 UNITTEST_DIR ?= $(VORTEX_HOME)/hw/unittest
+AFU_RTL_DIR  ?= $(VORTEX_HOME)/hw/rtl/afu
 
 cache_TOP := VX_cache_top
 cache_INC := -I$(UNITTEST_DIR)/cache
@@ -78,6 +79,13 @@ tensor_CFG := -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_EXT_TCU_ENA
               -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_MX_ENABLE \
               -DVX_CFG_EXT_A_ENABLE -DVX_CFG_NUM_CORES=2 -DVX_CFG_SOCKET_SIZE=2 \
               -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 -DVX_CFG_L2_ENABLE -DVX_CFG_L2_SIZE=262144
+
+# Multi-core system top behind the AFU control/memory wrapper, as in the Xilinx
+# catalog: 2 cores with atomics and virtual memory.
+top_TOP := VX_afu_wrap
+top_INC := -I$(VORTEX_HOME)/hw/rtl/cp -I$(AFU_RTL_DIR)/xrt -I$(AFU_RTL_DIR)/common
+top_CFG := -DVX_CFG_NUM_THREADS=4 -DVX_CFG_NUM_WARPS=4 -DVX_CFG_NUM_CORES=2 \
+           -DVX_CFG_EXT_A_ENABLE -DVX_CFG_VM_ENABLE -DVX_CFG_DCACHE_LATENCY=3
 
 # The whole GPU. Hours-long; nightly only, never a PR gate.
 vortex_TOP := Vortex

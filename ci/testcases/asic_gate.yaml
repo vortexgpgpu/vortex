@@ -32,28 +32,20 @@
 # and defines), so where the two gates share a DUT they measure the same module
 # and a divergence between them is a real finding, not an artefact of two lists.
 #
-# THIS LIST IS BOUNDED BY MEMORY, and is deliberately a SUBSET of
-# fpga_gate.yaml's. A hosted runner has 16 GB of RAM; Yosys holds the whole
-# elaborated netlist and offers no cap to tune, so a DUT that needs more does not
-# fail -- the VM is killed under it and the job ends at exit 143 with no report,
-# which looks exactly like an infrastructure outage. `gfx` measured a 44.2 GB
-# peak RSS for a single Yosys process (3.76M cells, 100 min wall), and the
-# 16-thread/16-warp `core` and `tex` measured 20.7 GB and 28.0 GB. `gfx` and
-# `tensor` are therefore NOT gated here, and `core`/`tex` are gated at a reduced
-# width (see their entries).
+# THIS LIST IS BOUNDED BY MEMORY. It gates the same DUTs as fpga_gate.yaml, but
+# the wide ones at NT=NW=8 instead of 16. A hosted runner has 16 GB of RAM;
+# Yosys holds the whole elaborated netlist and offers no cap to tune, so a DUT
+# that needs more does not fail -- the VM is killed under it and the job ends at
+# exit 143 with no report, which looks exactly like an infrastructure outage. At
+# 16/16, `gfx` measured a 44.2 GB peak RSS for a single Yosys process (3.76M
+# cells, 100 min wall), and `core` and `tex` measured 20.7 GB and 28.0 GB.
+# Halving NT and NW quarters the lane x warp product that carries that cost.
+# fpga_gate.yaml still gates the full-width configurations.
 #
-# `vm` is NOT gated here either, and the reason is worth recording. It passed the
-# last hosted nightly at 1.0M cells in 11 minutes, which looked like it fit --
-# but that run was building a DUT whose L2 was a BYPASS: the Yosys catalog was
-# missing L2_ENABLE, and VX_vm_top wires the L2 as
-# `VX_cache_wrap #(.PASSTHRU(!`VX_CFG_L2_ENABLED))`, whose cache body is guarded
-# by `if (PASSTHRU == 0)`. No tags, no data arrays. With that corrected to match
-# the Xilinx catalog, `vm` carries a real 256 KB L2 and its peak RSS is
-# unmeasured -- so it is treated as over-budget rather than assumed to fit.
-#
-# Measure before adding anything back -- an over-budget DUT costs a silent job
-# kill, not a red gate. fpga_gate.yaml owns `top`, `gfx`, `tensor`, `vm` and the
-# wide `core`/`tex` on the self-hosted Vivado runner.
+# `vm` once passed a hosted nightly at 1.0M cells in 11 minutes only because its
+# L2 was a BYPASS: VX_vm_top wires the L2 as
+# `VX_cache_wrap #(.PASSTHRU(!`VX_CFG_L2_ENABLED))`, and the Yosys catalog was
+# missing L2_ENABLE. It now carries the real 256 KB L2, as `gfx` and `tensor` do.
 #
 # See docs/designs/continuous_integration.md §3.5.
 category: asic_gate
@@ -123,6 +115,15 @@ builds:
   clock_mhz: 400
   configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
+# Multi-core system top: 2 cores with atomics and virtual memory behind the AFU
+# wrapper. Closes the cross-module boundaries (socket arbiters, socket MMU,
+# cluster mem network) that the per-unit DUTs do not.
+- id: top
+  group: core
+  dut: top
+  clock_mhz: 400
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+
 # --- dxa ---------------------------------------------------------------------
 
 # DXA engine: descriptor queue, address generation, multicast distribution.
@@ -141,6 +142,14 @@ builds:
   dut: tcu
   clock_mhz: 500
   configs: ""
+
+# Full tensor subsystem: TCU (WGMMA + MX) + dxa behind a shared L2, 2 cores per
+# socket.
+- id: tensor
+  group: tensor
+  dut: tensor
+  clock_mhz: 400
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
 
 # --- graphics ----------------------------------------------------------------
 
@@ -172,3 +181,21 @@ builds:
   dut: rtu
   clock_mhz: 400
   configs: ""
+
+# Full graphics subsystem: raster + om + tex + rtu + dxa behind a shared L2,
+# 2 cores per socket.
+- id: gfx
+  group: graphics
+  dut: gfx
+  clock_mhz: 400
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
+
+# --- vm ----------------------------------------------------------------------
+
+# Standalone MMU network: dTLB + iTLB, pooled L1 TLB MSHR, L2 TLB, PTW walker
+# hierarchy, fed by a 256 KB shared L2.
+- id: vm
+  group: vm
+  dut: vm
+  clock_mhz: 400
+  configs: "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8"
