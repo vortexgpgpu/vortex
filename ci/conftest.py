@@ -37,6 +37,58 @@ def pytest_addoption(parser):
     parser.addoption("--update-baselines", action="store_true", default=False,
                      help="perf_gate: record measured cycles into "
                           "ci/baselines/perf/ instead of comparing")
+    parser.addoption("--shard", default=None, metavar="K/N",
+                     help="run only shard K of N of the selected cases, split "
+                          "on their recorded runtimes (ci/runtimes.json)")
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config, items):
+    """Keep this --shard's slice of the selection, then run cases that compile
+    the same sim back to back. trylast: both act on what -m selected, which is
+    the set the planner sized the cell from."""
+    _select_shard(config, items)
+    _group_by_sim(items)
+
+
+def _group_by_sim(items):
+    """Order cases so those with one sim build signature run consecutively.
+
+    A sim is rebuilt whenever a case's flags differ from the previous case's, so
+    a selection that alternates configs A, B, A compiles A twice. Each group
+    keeps the position of its first case, and cases keep their order within it.
+    """
+    xlen = ambient_xlen()
+    first, keys = {}, []
+    for pos, item in enumerate(items):
+        case = item.callspec.params.get("case") if hasattr(item, "callspec") else None
+        sig = case.sim_signature(xlen) if case is not None else None
+        key = sig if sig is not None else ("#", pos)   # no sim: stays in place
+        first.setdefault(key, pos)
+        keys.append((first[key], pos))
+    order = sorted(range(len(items)), key=lambda i: keys[i])
+    items[:] = [items[i] for i in order]
+
+
+def _select_shard(config, items):
+    spec = config.getoption("--shard")
+    if not spec:
+        return
+    try:
+        k, n = (int(x) for x in spec.split("/"))
+    except ValueError:
+        raise pytest.UsageError("--shard expects K/N, got {!r}".format(spec))
+    if not 1 <= k <= n:
+        raise pytest.UsageError("--shard {}: K must be in 1..N".format(spec))
+    ids = [item.callspec.id for item in items if hasattr(item, "callspec")]
+    _, plan = tc.shard_plan(ids, ambient_xlen(), n)
+    keep, drop = [], []
+    for item in items:
+        cid = item.callspec.id if hasattr(item, "callspec") else None
+        (keep if plan.get(cid, 0) == k - 1 else drop).append(item)
+    if drop:
+        config.hook.pytest_deselected(items=drop)
+        items[:] = keep
 
 
 def pytest_sessionfinish(session):

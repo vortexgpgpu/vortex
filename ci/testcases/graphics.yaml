@@ -472,50 +472,51 @@ tests:
     threads: 4
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
 
-# ── Early-Z (occlusion cull) — VX_CFG_RASTER_EARLYZ knob ON ───────────────────
-# The raster unit reads committed depth (coherent ocache) and culls occluded
-# fragments before shading; requires the OM + RASTER fixed-function units. The
-# fixed-point depth-plane contract makes the cull bit-identical to the
-# no-early-Z golden (the per-draw VX_DCR_OM_EARLYZ_SAFE runtime gate is set by
-# the driver). Knob-off leaves the raster core byte-identical (covered above).
-- id: gfx_earlyz-box-simx
+# ── Early-Z (occlusion cull) knob OFF ─────────────────────────────────────────
+# Early-Z is on by default wherever RASTER + OM are both enabled, so every
+# RASTER+OM case above runs with it: the raster unit reads committed depth
+# (coherent ocache) and culls occluded fragments before shading, gated per draw
+# by VX_DCR_OM_EARLYZ_SAFE, which the driver sets. The fixed-point depth-plane
+# contract makes the cull bit-identical to the ROP-only path, so both share one
+# golden. These cases keep the knob-off build covered.
+- id: gfx_no_earlyz-box-simx
   via: blackbox
   drivers: [simx]
   app: gfx_draw3d
-  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ_DISABLE
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
   touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
-- id: gfx_earlyz-box-rtlsim
+- id: gfx_no_earlyz-box-rtlsim
   via: blackbox
   drivers: [rtlsim]
   app: gfx_draw3d
-  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ_DISABLE
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
   touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
-- id: gfx_earlyz-evilskull32-simx
+- id: gfx_no_earlyz-evilskull32-simx
   via: blackbox
   drivers: [simx]
   app: gfx_draw3d
-  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ_DISABLE -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
   shape: {threads: 4}
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
   touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
-- id: gfx_earlyz-evilskull32-rtlsim
+- id: gfx_no_earlyz-evilskull32-rtlsim
   via: blackbox
   drivers: [rtlsim]
   app: gfx_draw3d
-  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ_DISABLE -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
   shape: {threads: 4}
   args: -w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png
   touches: [hw/rtl/raster/, sim/simx/raster/, sw/common/gfx_setup.h, sw/kernel/include/vx_graphics.h]
-# evilskull@128 with early-Z on rtlsim: the early-Z cull uses the reflexive
-# relaxation of the depth func (drop only strictly-behind fragments), so it is
-# image-identical to the ROP-only path (the OM late-Z stays authoritative).
-- id: gfx_earlyz-evilskull128-rtlsim
+# evilskull@128 without early-Z on rtlsim: the early-Z cull uses the reflexive
+# relaxation of the depth func (drop only strictly-behind fragments), so the
+# ROP-only path must match the same golden (the OM late-Z stays authoritative).
+- id: gfx_no_earlyz-evilskull128-rtlsim
   via: blackbox
   drivers: [rtlsim]
   app: gfx_draw3d
-  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_RASTER_EARLYZ_DISABLE
   args: -w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png
   tier: full
   touches: [hw/rtl/raster/, sw/common/gfx_setup.h]

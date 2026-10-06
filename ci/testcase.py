@@ -17,12 +17,15 @@ never expanded here (build32/ and build64/ are separate trees).
       JSON (category x driver x xlen) cells for the GitHub matrix
   testcase.py select --changed-from=REF
       categories whose touches[] intersect the diff (path-scaling)
+  testcase.py expr --cell=CATEGORY --driver=DRIVER
+      the pytest -m expression a matrix cell runs
 """
 
 import argparse
 import copy
 import glob
 import json
+import math
 import os
 import subprocess
 import sys
@@ -37,6 +40,7 @@ _DRIVER_TO_MARKER = {"xrt": "xrtsim", "opae": "opaesim"}
 # Execution driver name -> its sim source directory under sim/.
 _DRIVER_TO_SIMDIR = {"simx": "simx", "rtlsim": "rtlsim", "xrt": "xrtsim", "opae": "opaesim"}
 VALID_DRIVERS = set(_DRIVER_TO_SIMDIR)
+DRIVER_MARKERS = sorted({_DRIVER_TO_MARKER.get(d, d) for d in VALID_DRIVERS})
 VALID_VIA = {"blackbox", "make-run", "script"}
 VALID_CHECK = {"model_parity", "perf_gate"}
 
@@ -50,6 +54,15 @@ OPT_IN_TIERS = {"fpga", "asic"}
 
 # simx<->rtlsim cycle-parity default: both timing models must agree within 5%.
 DEFAULT_PARITY_TOLERANCE = 0.05
+
+# Per-case wall times (seconds, per xlen) measured by a CI run, recorded by
+# ci/record_runtimes.py from the run's junit reports. A cell whose recorded total
+# exceeds SHARD_BUDGET_S is split into shards balanced on them, so no cell runs
+# into the tests job's timeout.
+RUNTIMES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "runtimes.json")
+SHARD_BUDGET_S = 150 * 60
+# Weight of a case with no recorded time (new, or not yet run on that xlen).
+DEFAULT_CASE_S = 120
 
 
 def driver_marker(driver):
@@ -127,6 +140,19 @@ class Spec:
         one sim build. xlen is implicit in the ambient tree.
         """
         return (self.driver, self.configs)
+
+    def sim_signature(self, xlen):
+        """What a run of this case compiles its sim with, or None if it builds
+        none. Wider than build_key(): a blackbox run rebuilds the sim from its
+        full flag set (configs plus the shape and extra flags), so two cases with
+        equal configs but different shapes still rebuild between them.
+        """
+        if not self.needs_sim:
+            return None
+        configs = _subst(self.configs, xlen)
+        if self.via == "blackbox":
+            return (self.driver, configs, tuple(_shape_flags(self.shape)), self.flags)
+        return (self.driver, configs)
 
     def markers(self):
         """pytest marker names for `-m` selection (one per value)."""
@@ -370,6 +396,61 @@ def _filter(cases, args):
     return out
 
 
+def load_runtimes(xlen):
+    try:
+        with open(RUNTIMES_FILE) as fh:
+            return json.load(fh).get(str(xlen), {})
+    except OSError:
+        return {}
+
+
+def cell_name(case):
+    """The matrix cell a case runs in: its check's cell for a check case (see
+    cmd_matrix), its category's otherwise."""
+    return case.check or case.category
+
+
+def shard_plan(case_ids, xlen, shards=None):
+    """Split a cell's cases into shards balanced on their recorded runtimes.
+
+    Longest case first onto the least-loaded shard, with ties broken on case id
+    and shard index, so the planner and every shard derive the same split from
+    the same ids. Unless `shards` is given, the count is the fewest that keep
+    the cell's recorded total within SHARD_BUDGET_S per shard.
+    Returns (shards, {case id: 0-based shard}).
+    """
+    runtimes = load_runtimes(xlen)
+    weight = {i: runtimes.get(i, DEFAULT_CASE_S) for i in case_ids}
+    if shards is None:
+        shards = max(1, math.ceil(sum(weight.values()) / SHARD_BUDGET_S))
+    load = [0.0] * shards
+    plan = {}
+    for i in sorted(weight, key=lambda i: (-weight[i], i)):
+        k = min(range(shards), key=lambda s: (load[s], s))
+        plan[i] = k
+        load[k] += weight[i]
+    return shards, plan
+
+
+def cell_expr(name, driver):
+    """The pytest -m expression a matrix cell runs.
+
+    A host cell holds a category's driverless cases only: its driver cases run in
+    their own driver's cell, and without the exclusion a host cell re-ran all of
+    them. A check's cases run once, in the check's cell, so every other cell
+    excludes them.
+    """
+    expr = name
+    if driver == "host":
+        expr += " and not ({})".format(" or ".join(DRIVER_MARKERS))
+    else:
+        expr += " and " + driver
+    for check in sorted(VALID_CHECK):
+        if check != name:
+            expr += " and not " + check
+    return expr
+
+
 def cmd_matrix(args):
     # One GitHub matrix cell per (category, driver, xlen): the build tree is
     # per-xlen, so xlen is flattened out (not a per-cell list).
@@ -379,25 +460,47 @@ def cmd_matrix(args):
     # from its own category's cell so it does not run twice. That cell is keyed on
     # the CHECK, not on a category that happens to share its name -- a check is a
     # marker across suites, and no category name may control whether it runs.
+    #
+    # A cell whose recorded runtime exceeds SHARD_BUDGET_S is emitted as `shards`
+    # cells, each running shard `shard` of the split (shard_plan). The split is
+    # over every case the cell's -m expression selects, not only those this
+    # event's filters planned the cell for, because that is what the cell runs.
     xfilter = {int(x) for x in args.xlen.split(",")} if getattr(args, "xlen", None) else None
+    cases = load_all()
     cells = {}
-    for c in _filter(load_all(), args):
+    for c in _filter(cases, args):
         drv = c.marker_driver or "host"
         for xlen in c.xlens:
             if xfilter and xlen not in xfilter:
                 continue
-            name = c.check or c.category
+            name = cell_name(c)
             key = (name, drv, xlen)
             cell = cells.setdefault(key, {
                 "category": name, "driver": drv, "xlen": xlen, "needs": set(),
             })
             cell["needs"].update(c.needs)
+    members = {}
+    for c in cases:
+        if c.tier in OPT_IN_TIERS:
+            continue
+        for xlen in c.xlens:
+            members.setdefault((cell_name(c), c.marker_driver or "host", xlen), []).append(c.id)
     out = []
-    for cell in cells.values():
+    for key, cell in cells.items():
         cell["needs"] = sorted(cell["needs"])
-        out.append(cell)
-    out.sort(key=lambda c: (c["category"], c["driver"], c["xlen"]))
+        shards, _ = shard_plan(members.get(key, []), key[2])
+        if shards == 1:
+            out.append(cell)
+            continue
+        for k in range(shards):
+            out.append(dict(cell, shard=k + 1, shards=shards))
+    out.sort(key=lambda c: (c["category"], c["driver"], c["xlen"], c.get("shard", 0)))
     print(json.dumps(out))
+    return 0
+
+
+def cmd_expr(args):
+    print(cell_expr(args.cell, args.driver))
     return 0
 
 
@@ -514,6 +617,11 @@ def main(argv=None):
 
     sub.add_parser("checks", help="cross-cutting check names (one cell each)"
                    ).set_defaults(func=cmd_checks)
+
+    e = sub.add_parser("expr", help="the pytest -m expression a matrix cell runs")
+    e.add_argument("--cell", required=True, help="category or check name")
+    e.add_argument("--driver", required=True, help="driver marker, or host")
+    e.set_defaults(func=cmd_expr)
 
     sub.add_parser("lint", help="validate the test cases").set_defaults(func=cmd_lint)
 
