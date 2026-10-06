@@ -19,7 +19,7 @@ ROOT_DIR=$SCRIPT_DIR/..
 show_usage()
 {
     echo "Vortex BlackBox Test Driver v1.0"
-    echo "Usage: $0 [[--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--target=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--vcd] [--saif] [--perf=#class] [--vcd_file=#file] [--saif_file=#file] [--log=logfile] [--nohup] [--help]]"
+    echo "Usage: $0 [[--profile=#name] [--clusters=#n] [--cores=#n] [--warps=#n] [--threads=#n] [--l2cache] [--l3cache] [[--driver=#name] [--target=#name] [--app=#app] [--args=#args] [--debug=#level] [--scope] [--vcd] [--saif] [--perf=#class] [--vcd_file=#file] [--saif_file=#file] [--log=logfile] [--nohup] [--help]]"
 }
 
 show_help()
@@ -66,6 +66,7 @@ parse_args() {
     for i in "$@"; do
         case $i in
             --driver=*) DRIVER=${i#*=} ;;
+            --profile=*) export PROFILE=${i#*=} ;;
             --target=*) TARGET=${i#*=} ;;
             --app=*)    APP=${i#*=} ;;
             --clusters=*) CONFIGS=$(add_option "$CONFIGS" "-DVX_CFG_NUM_CLUSTERS=${i#*=}") ;;
