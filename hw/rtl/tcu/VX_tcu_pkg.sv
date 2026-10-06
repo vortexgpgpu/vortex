@@ -347,6 +347,15 @@ package VX_tcu_pkg;
         endcase
     endfunction
 
+    // log2 of mx_scale_block_size(): block sizes are powers of two, so scale-block indexing is a shift, not a divide.
+    function automatic logic [2:0] mx_scale_block_log2(input logic [TCU_FMT_WIDTH-1:0] fmt);
+        case (fmt)
+            TCU_MXFP8_ID, TCU_MXBF8_ID, TCU_MXFP4_ID: return 3'd5;
+            TCU_NVFP4_ID, TCU_RZR4_ID, TCU_IF4_ID, TCU_LNSF4_ID, TCU_RZR4_LNS_ID: return 3'd4;
+            default:                                               return 3'd0;
+        endcase
+    endfunction
+
     function automatic int unsigned mx_scale_blocks_k_words(
         input logic [TCU_FMT_WIDTH-1:0] fmt,
         input int unsigned tile_k_words

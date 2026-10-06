@@ -346,7 +346,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         logic [`LOG2UP(TCU_BLOCK_CAP)-1:0] word_idx;
         logic [1:0] byte_idx;
         begin
-            scale_k = MX_SCALE_IDX_W'(k_base_idx / mx_scale_block_size(fmt));
+            scale_k = MX_SCALE_IDX_W'(k_base_idx >> mx_scale_block_log2(fmt));
             scale_idx = MX_SCALE_IDX_W'(mn_idx) * scale_blocks_k + scale_k;
             word_idx = `LOG2UP(TCU_BLOCK_CAP)'(scale_idx >> 2);
             byte_idx = scale_idx[1:0];

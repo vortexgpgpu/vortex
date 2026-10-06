@@ -299,6 +299,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     wire [7:0] sf_man_prod;
     VX_tcu_tfr_wmul #(
         .N(4),
+        .OUT_REG(PROD_REG),
         .USE_DSP(USE_DSP)
     ) sf_wtmul (
         .clk    (clk),
@@ -322,6 +323,17 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         wire [3:0][7:0] elem_mag_prod;
         wire [3:0] elem_sign;
         wire [3:0] elem_valid;
+        wire [3:0] elem_sign_r, elem_valid_r;
+        VX_pipe_register #(
+            .DATAW (8),
+            .DEPTH (PROD_REG)
+        ) pipe_ctrl (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  ({elem_sign, elem_valid}),
+            .data_out ({elem_sign_r, elem_valid_r})
+        );
 
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
@@ -336,7 +348,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             assign elem_valid[j] = lane_valid && (raw_a[2:0] != 3'd0)
                                          && (raw_b[2:0] != 3'd0);
 
-            wire [10:0] elem_mag_ext = elem_valid[j] ? {3'b0, elem_mag_prod[j]} : 11'd0;
+            wire [10:0] elem_mag_ext = elem_valid_r[j] ? {3'b0, elem_mag_prod[j]} : 11'd0;
             wire [10:0] elem_neg;
             VX_ks_adder #(
                 .N(11),
@@ -348,13 +360,14 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
                 .sum(elem_neg),
                 `UNUSED_PIN(cout)
             );
-            wire [10:0] elem_signed = elem_sign[j] ? elem_neg : elem_mag_ext;
+            wire [10:0] elem_signed = elem_sign_r[j] ? elem_neg : elem_mag_ext;
             assign nv_elem_signed[i][j] = {{NV_LPG_W{elem_signed[10]}}, elem_signed};
         end
 
         VX_tcu_tfr_wmul #(
             .N(4),
             .LANES(2),
+            .OUT_REG(PROD_REG),
             .USE_DSP(USE_DSP)
         ) elem_m01 (
             .clk    (clk),
@@ -366,6 +379,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         VX_tcu_tfr_wmul #(
             .N(4),
             .LANES(2),
+            .OUT_REG(PROD_REG),
             .USE_DSP(USE_DSP)
         ) elem_m23 (
             .clk    (clk),
@@ -376,6 +390,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         );
     end
 
+    // Post-seam: the group reduction and the scale multiply consume the registered products.
     for (genvar g = 0; g < SF; ++g) begin : g_grp_nvfp4
         wire [NV_LPG*4-1:0][NV_DOT_W-1:0] grp_terms;
         for (genvar l = 0; l < NV_LPG; ++l) begin : g_terms
@@ -441,17 +456,9 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         for (genvar l = 0; l < NV_LPG; ++l) begin : g_out
             localparam I = g * NV_LPG + l;
             if (l == 0) begin : g_lead
-                VX_pipe_register #(
-                    .DATAW (26),
-                    .DEPTH (PROD_REG)
-                ) pipe_result (
-                    .clk      (clk),
-                    .reset    (1'b0),
-                    .enable   (enable),
-                    .data_in  ({dot_sign & ~is_zero_out, result_mag, is_zero_out}),
-                    .data_out ({result_sig_nvfp4[I], sig_zero_nvfp4[I]})
-                );
-                assign result_exp_nvfp4[I] = is_zero_out ? '0 : nv_result_exp;
+                assign result_sig_nvfp4[I] = {dot_sign & ~is_zero_out, result_mag};
+                assign sig_zero_nvfp4[I]   = is_zero_out;
+                assign result_exp_nvfp4[I] = nv_result_exp;
             end else begin : g_idle
                 assign result_sig_nvfp4[I] = '0;
                 assign sig_zero_nvfp4[I]   = 1'b1;
