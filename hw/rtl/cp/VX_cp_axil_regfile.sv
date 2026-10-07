@@ -184,6 +184,7 @@ module VX_cp_axil_regfile
 
   // The global window: 0x000..0x03F, every word of it decoded.
   function automatic logic in_global(input logic [ADDR_W-1:0] addr);
+    `UNUSED_VAR (addr[5:0])
     return (addr[ADDR_W-1:6] == '0);
   endfunction
 
