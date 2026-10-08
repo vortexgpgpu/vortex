@@ -94,6 +94,42 @@ public:
 };
 
 template <>
+class Comparator<vt::fp8> {
+public:
+  static uint8_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
+  }
+  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
+class Comparator<vt::bf8> {
+public:
+  static uint8_t generate() {
+    auto fvalue = float(rand()) / RAND_MAX;
+    return rv_ftoe5m2_s(bit_cast<uint32_t>(fvalue), 0, nullptr);
+  }
+  static bool compare(uint8_t a, uint8_t b, int index, int errors) {
+    if (a != b) {
+      if (errors < MAX_ERRORS) {
+        printf("*** error: [%d] expected=0x%x, actual=0x%x\n", index, b, a);
+      }
+      return false;
+    }
+    return true;
+  }
+};
+
+template <>
 class Comparator<vt::int8> {
 public:
   static int8_t generate() {
@@ -162,6 +198,46 @@ struct muladd_t<vt::fp16, vt::fp32> {
     auto fa = bit_cast<float>(rv_htof_s(a, 0, nullptr));
     auto fb = bit_cast<float>(rv_htof_s(b, 0, nullptr));
     return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::fp8, vt::fp32> {
+  static float eval(uint8_t a, uint8_t b, float c) {
+    auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::fp8, vt::fp8> {
+  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+    auto fa = bit_cast<float>(rv_e4m3tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e4m3tof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_e4m3tof_s(c, 0, nullptr));
+    auto fd = fa * fb + fc;
+    return rv_ftoe4m3_s(bit_cast<uint32_t>(fd), 0, nullptr);
+  }
+};
+
+template <>
+struct muladd_t<vt::bf8, vt::fp32> {
+  static float eval(uint8_t a, uint8_t b, float c) {
+    auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
+    return fa * fb + c;
+  }
+};
+
+template <>
+struct muladd_t<vt::bf8, vt::bf8> {
+  static uint8_t eval(uint8_t a, uint8_t b, uint8_t c) {
+    auto fa = bit_cast<float>(rv_e5m2tof_s(a, 0, nullptr));
+    auto fb = bit_cast<float>(rv_e5m2tof_s(b, 0, nullptr));
+    auto fc = bit_cast<float>(rv_e5m2tof_s(c, 0, nullptr));
+    auto fd = fa * fb + fc;
+    return rv_ftoe5m2_s(bit_cast<uint32_t>(fd), 0, nullptr);
   }
 };
 
@@ -331,7 +407,17 @@ int main(int argc, char *argv[]) {
 
   g_float_ulp = float_ulp(K);
 
+#ifdef WARP_SPEC
+  // One of the `warps` launched warps is a dedicated DXA producer (never
+  // computes), so only (warps-1) warps contribute an M-row band.
+  if (warps < 2) {
+    std::cout << "Error: WARP_SPEC needs at least 2 warps (1 producer + >=1 consumer)" << std::endl;
+    return -1;
+  }
+  uint32_t cta_M = (warps - 1) * cfg::xtileM;
+#else
   uint32_t cta_M = warps * cfg::xtileM;
+#endif
 
   if ((M % cta_M) != 0) {
     std::cout << "Error: M (" << M << ") must be a multiple of cta_M=" << cta_M << std::endl;
@@ -345,6 +431,16 @@ int main(int argc, char *argv[]) {
     std::cout << "Error: K (" << K << ") must be a multiple of tileK=" << cfg::tileK << std::endl;
     return -1;
   }
+  // DEEP_BUF stages hold KB K-tiles (kernel.cpp: kBK); other paths use one.
+#if defined(DEEP_BUF)
+  const uint32_t stage_k = KB * cfg::tileK;
+#else
+  const uint32_t stage_k = cfg::tileK;
+#endif
+  if ((K % stage_k) != 0) {
+    std::cout << "Error: K (" << K << ") must be a multiple of KB*tileK=" << stage_k << std::endl;
+    return -1;
+  }
 
   size_t sizeA = M * K;
   size_t sizeB = K * N;
@@ -354,14 +450,12 @@ int main(int argc, char *argv[]) {
   uint32_t grid_dim[2]  = {N / cfg::xtileN, M / cta_M};
   uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
-  // SMEM: A tile [cta_M x tileK] + B tile [tileK x tileN]. Doubled only under
-  // DXA_DOUBLE_BUFFER: a second staging buffer halves the number of CTAs the
-  // dispatcher can keep resident in a 16KB LMEM, and the DXA worker runs one
-  // transfer at a time, so the extra prefetch depth does not pay for it.
-#ifdef DXA_DOUBLE_BUFFER
-  uint32_t smem_size = 2 * (cta_M * cfg::tileK + cfg::tileK * cfg::xtileN) * sizeof(itype_t);
-#else
-  uint32_t smem_size = (cta_M * cfg::tileK + cfg::tileK * cfg::xtileN) * sizeof(itype_t);
+  // SMEM: A tile [cta_M x tileK] + B tile [tileK x tileN]
+  uint32_t smem_size = (cta_M * stage_k + stage_k * cfg::xtileN) * sizeof(itype_t);
+#if defined(DOUBLE_BUF) || defined(WARP_SPEC)
+  smem_size *= 2;  // ping-pong double buffer
+#elif defined(DEEP_BUF)
+  smem_size *= PIPE_N;  // N-stage pipeline (common.h)
 #endif
 
   std::cout << "input type: " << vt::ITYPE::name << ", output type: " << vt::OTYPE::name << std::endl;
@@ -399,9 +493,24 @@ int main(int argc, char *argv[]) {
     h_B[i] = Comparator<vt::ITYPE>::generate();
   }
 
+  // B_KMAJOR: the device holds B^T ([N][K], K contiguous). h_B stays the
+  // logical [K][N] operand the CPU reference uses. h_BT must outlive the
+  // async write below.
+#ifdef B_KMAJOR
+  std::vector<itype_t> h_BT(sizeB);
+  for (uint32_t k = 0; k < K; ++k) {
+    for (uint32_t n = 0; n < N; ++n) {
+      h_BT[(size_t)n * K + k] = h_B[(size_t)k * N + n];
+    }
+  }
+  const itype_t* b_upload = h_BT.data();
+#else
+  const itype_t* b_upload = h_B.data();
+#endif
+
   std::cout << "upload source data" << std::endl;
   RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A.data(), sizeA * sizeof(itype_t), 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, h_B.data(), sizeB * sizeof(itype_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, b_upload, sizeB * sizeof(itype_t), 0, nullptr, nullptr));
 
   // Program DXA descriptors.
   // Descriptor A: fetches tileK columns x cta_M rows from A[row, k].
@@ -410,7 +519,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vortex::dxa::program_2d(queue, kDescA, kernel_arg.A_addr,
     /*size0=*/K, /*size1=*/M,
     /*stride0_bytes=*/K * sizeof(itype_t),
-    /*tile0=*/cfg::tileK, /*tile1=*/cta_M,
+    /*tile0=*/stage_k, /*tile1=*/cta_M,
     /*elem_bytes=*/sizeof(itype_t)));
 
   // Descriptor B: fetches tileN columns x tileK rows from B[k, col].
@@ -420,6 +529,17 @@ int main(int argc, char *argv[]) {
   //            element to the bbuf-native dense block-major destination
   //            (vx_tensor.h::b_blockmajor_idx); set_tile_geometry conveys tcN
   //            and the dense block K extent.
+#ifdef B_KMAJOR
+  // B_KMAJOR: B^T[N][K] in memory; plain row-major copy of a
+  // [tileN][tileK] tile (dim0 = K, dim1 = N). No scatter.
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
+    /*size0=*/K, /*size1=*/N,
+    /*stride0_bytes=*/K * sizeof(itype_t),
+    /*tile0=*/stage_k, /*tile1=*/cfg::xtileN,
+    /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
+    vortex::dxa::Layout::RowMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+#else
   RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
@@ -428,6 +548,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
     vortex::dxa::Layout::BlockMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN, /*blk_k=*/cfg::b_blk_k));
+#endif
 
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));

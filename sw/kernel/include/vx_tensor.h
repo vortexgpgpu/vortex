@@ -738,7 +738,14 @@ public:
   static constexpr uint32_t a_reg_k_steps = 2;
   static constexpr uint32_t xtileM  = m_steps * tcM;
   static constexpr uint32_t xtileN  = (NRC_ * NT) / xtileM;
-  static constexpr uint32_t tileK   = k_steps * fedpK * i_ratio;
+  // Sparse FULLK: one sparse uop covers fedpK compressed A words, i.e. twice
+  // the dense logical K (see tensor_cfg.h wgmma_config_t::sp_k_mult).
+#ifdef VX_CFG_TCU_SPARSE_FULLK
+  static constexpr uint32_t sp_k_mult = is_sparse ? (fedpK / tcK) : 1;
+#else
+  static constexpr uint32_t sp_k_mult = 1;
+#endif
+  static constexpr uint32_t tileK   = k_steps * fedpK * i_ratio * sp_k_mult;
   static constexpr uint32_t n_steps = xtileN / tcN;
 
   // Block-major SMEM constants.
@@ -786,6 +793,7 @@ public:
   // r = K element [0, tileK), c = N [0, xtileN). A sparse block spans tcK*2
   // candidate words along K.
   static __attribute__((always_inline)) uint32_t b_sp_flat_idx(uint32_t r, uint32_t c) {
+    static_assert(sp_k_mult == 1, "sparse FULLK WGMMA requires K-major B, not the Flat layout");
     // The DXA Flat producer conveys only tcN (via set_tile_geometry) and
     // derives the K-word block span as tcN*2; that matches this formula only
     // when tcK == tcN. Guard so a future tcK!=tcN config fails loudly here
@@ -988,6 +996,7 @@ public:
     if constexpr (!a_is_smem) {
       static_assert((OpA::Use == frag_use_t::matrix_a), "A operand must be matrix_a fragment");
       static_assert(NRC_ <= 16, "A-from-reg requires NRC <= 16");
+      static_assert(sp_k_mult == 1, "sparse FULLK WGMMA requires A from smem");
     }
     static_assert(b_is_smem, "B must be smem_matrix_desc (SR mode is not supported)");
 

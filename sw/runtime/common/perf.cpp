@@ -29,6 +29,7 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <sstream>
 #include <string>
 #include <tuple>
@@ -38,12 +39,23 @@
 // Helpers
 // -----------------------------------------------------------------------------
 
+// VORTEX_PROFILING=all is a sentinel (-1) meaning "dump every stall-relevant
+// class in one run" -- see vx_device_dump_perf. The underlying MPM counters
+// are independent physical registers per class (VX_csr_data.sv muxes them at
+// CSR-read time, it does not gate what gets counted during simulation), so
+// reading several classes after one completed run is safe and needs no rerun.
+static constexpr int kProfilingClassAll = -1;
+
 class ProfilingMode {
 public:
   ProfilingMode() : mpm_class_(0) {
     auto profiling_s = getenv("VORTEX_PROFILING");
     if (profiling_s) {
-      mpm_class_ = std::atoi(profiling_s);
+      if (0 == strcmp(profiling_s, "all")) {
+        mpm_class_ = kProfilingClassAll;
+      } else {
+        mpm_class_ = std::atoi(profiling_s);
+      }
     }
   }
 
@@ -249,7 +261,10 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
   uint64_t peak_mem_bw_MBps = 0;
   uint64_t vm_support = 0;
 
-  const auto mpm_class = get_profiling_mode();
+  const auto requested_class = get_profiling_mode();
+  // MCYCLE/MINSTRET are classless (always-on) counters; CORE is a safe
+  // stand-in class value to pass through the query API in "all" mode.
+  const auto mpm_class = (requested_class == kProfilingClassAll) ? VX_DCR_MPM_CLASS_CORE : requested_class;
 
   CHECK_ERR(vx_device_query(hdevice, VX_CAPS_NUM_CORES, &num_cores), { return err; });
   CHECK_ERR(vx_device_query(hdevice, VX_CAPS_NUM_CLUSTERS, &num_clusters), { return err; });
@@ -291,6 +306,22 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
     max_cycles = std::max<uint64_t>(max_cycles, c.cycles);
   }
 
+  // Normally dump just the one requested class. In "all" mode, walk the
+  // stall-relevant classes (CORE's dispatch/scoreboard/unit stalls, DXA's
+  // GMEM latency/dedup, TCU's tile-buffer stalls) in one pass over the
+  // already-completed run -- see the kProfilingClassAll comment above for
+  // why this doesn't require separate reruns.
+  std::vector<int> classes_to_dump;
+  if (requested_class == kProfilingClassAll) {
+    classes_to_dump = { VX_DCR_MPM_CLASS_CORE, VX_DCR_MPM_CLASS_DXA, VX_DCR_MPM_CLASS_TCU };
+  } else {
+    classes_to_dump = { mpm_class };
+  }
+
+  for (int mpm_class : classes_to_dump) {
+  if (requested_class == kProfilingClassAll) {
+    perf_print(stream, "---- class %d ----", mpm_class);
+  }
   switch (mpm_class) {
   case VX_DCR_MPM_CLASS_BASE:
     break;
@@ -774,6 +805,7 @@ extern "C" vx_result_t vx_device_dump_perf(vx_device_h hdevice, FILE *stream) {
     fprintf(stream, "Error: invalid profiling class: %d)", mpm_class);
     return VX_ERR_INVALID_VALUE;
   }
+  } // for (mpm_class : classes_to_dump)
 
   double global_ipc = safe_div((double)total_instrs, (double)max_cycles);
   perf_print(stream, "instrs=%" PRIu64 ", cycles=%" PRIu64 ", IPC=%.3f", total_instrs, max_cycles, global_ipc);

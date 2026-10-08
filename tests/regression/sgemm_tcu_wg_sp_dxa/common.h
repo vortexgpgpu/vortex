@@ -7,6 +7,19 @@
   #define WGMMA_NRC 8
 #endif
 
+// Stage count for the DEEP_BUF N-stage software-pipelined DXA kernel
+// (kernel.cpp). Unused unless DEEP_BUF is defined. Matches
+// sgemm_tcu_wg_dxa_deepbuf/common.h's default.
+#ifndef PIPE_N
+  #define PIPE_N 4
+#endif
+
+// K-tiles per DEEP_BUF pipeline stage (kernel.cpp: KB). 1 = one K-tile per
+// stage (original behavior).
+#ifndef KB
+  #define KB 1
+#endif
+
 #ifndef ITYPE
 #define ITYPE fp16
 #endif

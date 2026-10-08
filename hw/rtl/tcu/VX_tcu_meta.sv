@@ -48,6 +48,7 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     , input wire [3:0]             step_m
     , input wire [3:0]             step_k
     , output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_block
+    , output wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_block_hi
 `endif
 `ifdef VX_CFG_TCU_MX_ENABLE
     , output wire [TCU_BLOCK_CAP-1:0][31:0] meta_a
@@ -174,6 +175,12 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign bank_rdata[b] = merged_rdata[b * META_BLOCK_WIDTH +: META_BLOCK_WIDTH];
     end
     assign vld_block = bank_rdata[bank_sel];
+    if (TCU_WG_SP_FULLK != 0) begin : g_vld_hi
+        `STATIC_ASSERT (K_STEP_BITS > 0, ("sparse FULLK needs two half-K metadata banks per m-step"))
+        assign vld_block_hi = bank_rdata[bank_sel | ADDRW_PW'(1)];
+    end else begin : g_vld_hi_off
+        assign vld_block_hi = '0;
+    end
 `endif
 
     // -----------------------------------------------------------------------

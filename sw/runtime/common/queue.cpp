@@ -193,6 +193,9 @@ vx_result_t Queue::enqueue_write(Buffer* dst, uint64_t off, const void* host,
             *s = now_ns();
             std::lock_guard<std::mutex> g(enqueue_mu_);
             // Host->device through the CP's DMA engine (CMD_MEM_WRITE).
+            // (FireSim replay capture happens inside cp_submit_mem_write
+            // itself now, so it also covers dev_write's callers -- the
+            // args blob and the module image.)
             r = device_->cp_submit_mem_write(dst->dev_address() + off,
                                              host, sz);
             *e = now_ns();

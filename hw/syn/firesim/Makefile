@@ -67,7 +67,9 @@ CONFIGS ?= $(shell python3 $(VORTEX_HOME)/ci/gen_config.py --config=$(VORTEX_HOM
 # from ROOT_DIR while the RTL itself comes from VORTEX_HOME.
 RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs \
                -I$(RTL_DIR)/interfaces -I$(RTL_DIR)/core -I$(RTL_DIR)/mem -I$(RTL_DIR)/vm \
-               -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/xrt -I$(RTL_DIR)/afu/firesim
+               -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/xrt -I$(RTL_DIR)/afu/firesim \
+               -I$(RTL_DIR)/afu/common -I$(RTL_DIR)/dxa -I$(RTL_DIR)/tcu \
+               -I$(RTL_DIR)/tcu/tfr
 
 # Only XLEN and the TCU/FPU selectors are passed. Every other scalar is computed
 # by the generated VX_config.vh behind an ifndef, so defining them here replaces
@@ -130,7 +132,12 @@ PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=4
 PERF_DEFINES ?=
 PLATFORM_DEFINES += $(PERF_DEFINES)
 
-GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(SYNTH_DEFINES) $(RTL_INCLUDE)
+# Passthrough for the scalars TYPE_DEFINES deliberately excludes (NUM_THREADS,
+# NUM_WARPS, WGMMA/DXA/FEDP2K enables, ...) -- set this to match a specific
+# hw/syn/xilinx CONFIGS build when the FireSim RTL needs to mirror it exactly.
+EXTRA_DEFINES ?=
+
+GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(SYNTH_DEFINES) $(RTL_INCLUDE) $(EXTRA_DEFINES)
 
 # Only the packages and the wrapper are named; every other Vortex module is
 # resolved by library search over RTL_INCLUDE. Handing the whole tree over as a
@@ -138,9 +145,11 @@ GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(TYPE_DEFINES) $(PLAT
 # parameters as constants.
 # Packages have to be parsed before the modules that import them, so they are
 # listed rather than left to library search, in dependency order. Vortex.sv
-# imports gpu, trace and tlb; fpu is pulled in below the core.
+# imports gpu, trace and tlb; fpu is pulled in below the core. dxa is only
+# pulled in when VX_CFG_EXT_DXA_ENABLE is set (VX_socket.sv imports it), but
+# it costs nothing to always list it.
 EXPLICIT_NAMES := VX_gpu_pkg.sv VX_fpu_pkg.sv VX_tlb_pkg.sv VX_trace_pkg.sv \
-                  VX_firesim_wrap.sv
+                  VX_dxa_pkg.sv VX_firesim_wrap.sv
 EXPLICIT_SRCS := $(addprefix $(VIVADO_SRCS_DIR)/,$(EXPLICIT_NAMES))
 
 sources: $(SRCS_LIST)

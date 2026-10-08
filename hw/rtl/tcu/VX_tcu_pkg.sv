@@ -125,10 +125,20 @@ package VX_tcu_pkg;
     localparam TCU_B_SUB_BLOCKS_SP    = TCU_BLOCK_CAP / TCU_B_BLOCK_SIZE_SP;
     // WGMMA_SP always needs the full candidate lane set, regardless of SYM_SPARSE.
     localparam TCU_WG_B_BLOCK_SIZE_SP = TCU_TC_K * TCU_TC_N * 2;
+`ifdef VX_CFG_TCU_SPARSE_FULLK
+    localparam TCU_WG_SP_FULLK   = 1;
+    localparam TCU_WG_SP_K_WORDS = TCU_WG_FEDP_K;
+`else
+    localparam TCU_WG_SP_FULLK   = 0;
+    localparam TCU_WG_SP_K_WORDS = TCU_TC_K;
+`endif
+    localparam TCU_WG_B_KMAJ_SIZE_SP = TCU_WG_SP_K_WORDS * TCU_TC_N * 2;
     localparam TCU_WG_RS2_WIDTH_DENSE =
         (TCU_WG_B_BLOCK_SIZE > TCU_BLOCK_CAP) ? TCU_WG_B_BLOCK_SIZE : TCU_BLOCK_CAP;
+    localparam TCU_WG_RS2_WIDTH_SP =
+        (TCU_WG_B_KMAJ_SIZE_SP > TCU_WG_B_BLOCK_SIZE_SP) ? TCU_WG_B_KMAJ_SIZE_SP : TCU_WG_B_BLOCK_SIZE_SP;
     localparam TCU_WG_RS2_WIDTH = `VX_CFG_TCU_SPARSE_ENABLED
-        ? ((TCU_WG_B_BLOCK_SIZE_SP > TCU_WG_RS2_WIDTH_DENSE) ? TCU_WG_B_BLOCK_SIZE_SP : TCU_WG_RS2_WIDTH_DENSE)
+        ? ((TCU_WG_RS2_WIDTH_SP > TCU_WG_RS2_WIDTH_DENSE) ? TCU_WG_RS2_WIDTH_SP : TCU_WG_RS2_WIDTH_DENSE)
         : TCU_WG_RS2_WIDTH_DENSE;
 
     localparam TCU_MIN_FMT_WIDTH = 4; //int4

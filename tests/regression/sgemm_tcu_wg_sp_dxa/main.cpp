@@ -29,7 +29,9 @@ static uint32_t g_max_ulp = 0;
 static uint32_t float_ulp(uint32_t K) {
   return std::max<uint32_t>(8, K / 5);
 }
+#ifndef MAX_ERRORS
 #define MAX_ERRORS 100
+#endif
 
 #define RT_CHECK(_expr)                                       \
   do {                                                        \
@@ -52,11 +54,8 @@ static constexpr uint32_t kRtlIRatio     = 32 / vt::ITYPE::bits;
 static constexpr uint32_t kTcK           = wg_cfg_t::tcK;
 static constexpr uint32_t kTcM           = wg_cfg_t::tcM;
 static constexpr uint32_t kMSteps        = wg_cfg_t::m_steps;
-static constexpr uint32_t kKSteps        = wg_cfg_t::k_steps;
-static constexpr uint32_t kHalfKSteps    = kKSteps / 2;
 static constexpr uint32_t kMetaRowBits   = kTcK * 2 * kRtlIRatio;
 static constexpr uint32_t kMetaStrWords  = (kTcM * kMetaRowBits + 31) / 32;
-static constexpr uint32_t kWgMetaBanks   = kMSteps * kHalfKSteps;
 // Per-thread metadata layout: lane T loads h_meta[slot*NT + T], lands in
 // SRAM cell (bank = T % PWD_wmma, col = T / PWD_wmma).
 static constexpr uint32_t kWordsPerTile  = VX_CFG_NUM_THREADS;
@@ -93,14 +92,18 @@ static void matmul_cpu(otype_t *C, const itype_t *A_pruned, const itype_t *B,
 
 // Pack sparse masks into WGMMA smem bank layout.
 // For each (tile_row, k_tile): kWordsPerTile words, organized as
-//   [bank0: kMetaStrWords words][bank1: ...]...[bank(kWgMetaBanks-1)]
-// bank = step_m * kHalfKSteps + step_k
+//   one bank per (step_m, sk), kMetaStrWords words each
+// bank = step_m * kRtlHalfKWmma + sk, sk = TCU_TC_K-word sub-step within the
+// sparse tile (one sub-step normally; two under sparse FULLK, where a uop's
+// upper FEDP half reads the {step_m, 1} bank).
 // Within a bank: bit block_bit = row_i * kMetaRowBits + meta_bit
 static void pack_metadata_wg(std::vector<uint32_t> &h_meta,
                               const std::vector<uint8_t> &masks,
                               uint32_t M, uint32_t K) {
   constexpr uint32_t tileM      = wg_cfg_t::xtileM;
-  constexpr uint32_t tileK_elem = wg_cfg_t::tileK;
+  constexpr uint32_t tileK_elem = wg_cfg_t::tileK_sp;
+  constexpr uint32_t kSpSubSteps = tileK_elem / kDensePerSpStep;
+  static_assert(kSpSubSteps >= 1 && kSpSubSteps <= kRtlHalfKWmma, "sparse sub-steps exceed metadata banks");
   uint32_t num_tile_rows = M / tileM;
   uint32_t num_k_tiles   = K / tileK_elem;
   uint32_t num_groups_per_row = K / 4; // groups of 4 fp16 elements per row
@@ -112,7 +115,7 @@ static void pack_metadata_wg(std::vector<uint32_t> &h_meta,
       uint32_t tile_base = (tr * num_k_tiles + kt) * kWordsPerTile;
 
       for (uint32_t sm = 0; sm < kMSteps; ++sm) {
-        for (uint32_t sk = 0; sk < kHalfKSteps; ++sk) {
+        for (uint32_t sk = 0; sk < kSpSubSteps; ++sk) {
           // SRAM bank for this (sm, sk_wg) in the WMMA-cfg-sized meta SRAM.
           uint32_t sram_bank = sm * kRtlHalfKWmma + sk;
           // dense element start for this (kt, sk)
@@ -270,13 +273,16 @@ int main(int argc, char *argv[]) {
   // Tile dimension constants
   constexpr uint32_t tileM      = wg_cfg_t::xtileM;
   constexpr uint32_t tileN      = wg_cfg_t::xtileN;
-  constexpr uint32_t tileK_elem = wg_cfg_t::tileK;
+  constexpr uint32_t tileK_elem = wg_cfg_t::tileK_sp;
 
   uint32_t cta_M = warps * tileM;
 
   if ((M % cta_M) != 0) { std::cout << "M must be multiple of cta_M=" << cta_M << std::endl; return -1; }
   if ((N % tileN) != 0) { std::cout << "N must be multiple of " << tileN << std::endl; return -1; }
   if ((K % tileK_elem) != 0) { std::cout << "K must be multiple of " << tileK_elem << std::endl; return -1; }
+#if defined(DEEP_BUF)
+  if ((K % (KB * tileK_elem)) != 0) { std::cout << "K must be multiple of KB*tileK=" << KB * tileK_elem << std::endl; return -1; }
+#endif
 
   size_t sizeA_full = M * K;
   size_t sizeA_sp   = M * (K / 2);  // compressed
@@ -290,15 +296,34 @@ int main(int argc, char *argv[]) {
   uint32_t grid_dim[2]  = {N / tileN, M / cta_M};
   uint32_t block_dim[2] = {warps * (uint32_t)NT, 1};
 
-  // smem: per-warp [A_compressed][metadata] sections, then shared B
-  uint32_t smem_a_bytes      = tileM * (tileK_elem / 2) * sizeof(itype_t);
-  uint32_t smem_meta_bytes   = kWordsPerTile * 4;
   // SMEM bank-row = NUM_THREADS × LSU_WORD_SIZE (= XLEN/8). Must match the kernel.
   uint32_t smem_bank_bytes   = VX_CFG_NUM_THREADS * (VX_CFG_XLEN / 8);
-  uint32_t per_warp_section  = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
   uint32_t smem_b_bytes      = tileK_elem * tileN * sizeof(itype_t);
+#if defined(DEEP_BUF)
+  // DEEP_BUF: A is one combined [cta_M x tileK/2] DXA transfer per stage
+  // (matching sgemm_tcu_wg_dxa_deepbuf's dense pattern), not per-warp
+  // sections. kPipeN stages, each independently bank-rounded.
+  // Each stage holds KB K-tiles (kernel.cpp: kBK = KB * tileK).
+  uint32_t stage_a_bytes     = cta_M * (KB * tileK_elem / 2) * sizeof(itype_t);
+  uint32_t stage_b_off       = ((stage_a_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
+  uint32_t smem_b_bytes_r    = ((KB * smem_b_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
+#ifdef META_DXA
+  // Per-stage metadata tile [warps][KB * kWordsPerTile] words, after B.
+  // Must match kernel.cpp's stage_meta_bytes.
+  uint32_t stage_meta_bytes  = ((warps * KB * kWordsPerTile * 4 + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
+  uint32_t stage_bytes       = stage_b_off + smem_b_bytes_r + stage_meta_bytes;
+#else
+  uint32_t stage_bytes       = stage_b_off + smem_b_bytes_r;
+#endif
+  uint32_t smem_size         = stage_bytes * PIPE_N;
+#else
+  // Single-buffer: per-warp [A_compressed][metadata] sections, then shared B.
+  uint32_t smem_a_bytes      = tileM * (tileK_elem / 2) * sizeof(itype_t);
+  uint32_t smem_meta_bytes   = kWordsPerTile * 4;
+  uint32_t per_warp_section  = ((smem_a_bytes + smem_meta_bytes + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
   uint32_t smem_b_off        = ((warps * per_warp_section + smem_bank_bytes - 1) / smem_bank_bytes) * smem_bank_bytes;
   uint32_t smem_size         = smem_b_off + smem_b_bytes;
+#endif
 
   std::cout << "ITYPE=fp16, OTYPE=fp32 (sparse 2:4 + DXA)" << std::endl;
   std::cout << "tile M=" << tileM << " N=" << tileN << " K=" << tileK_elem << std::endl;
@@ -361,19 +386,44 @@ int main(int argc, char *argv[]) {
   // Upload to device
   std::cout << "upload matrix A (compressed)" << std::endl;
   RT_CHECK(vx_enqueue_write(queue, A_buffer, 0, h_A_sp.data(), sizeA_sp * sizeof(itype_t), 0, nullptr, nullptr));
+  // B_KMAJOR: the device holds B^T ([N][K], K contiguous). h_B stays the
+  // logical [K][N] operand the CPU reference uses. h_BT must outlive the
+  // async write below.
+#ifdef B_KMAJOR
+  std::vector<itype_t> h_BT(sizeB);
+  for (uint32_t k = 0; k < K; ++k) {
+    for (uint32_t n = 0; n < N; ++n) {
+      h_BT[(size_t)n * K + k] = h_B[(size_t)k * N + n];
+    }
+  }
+  const itype_t* b_upload = h_BT.data();
+#else
+  const itype_t* b_upload = h_B.data();
+#endif
   std::cout << "upload matrix B" << std::endl;
-  RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, h_B.data(), sizeB * sizeof(itype_t), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(queue, B_buffer, 0, b_upload, sizeB * sizeof(itype_t), 0, nullptr, nullptr));
   std::cout << "upload metadata" << std::endl;
   RT_CHECK(vx_enqueue_write(queue, meta_buffer, 0, h_meta.data(), meta_words * sizeof(uint32_t), 0, nullptr, nullptr));
 
   // Program DXA descriptors.
-  // Descriptor A: fetches compressed A (M x K/2), tileK/2 cols x tileM rows per tile.
-  //   dim0 = compressed K-axis (tile0 = tileK/2), dim1 = M-axis (tile1 = tileM)
+  // Descriptor A: fetches compressed A (M x K/2).
+  //   dim0 = compressed K-axis (tile0 = tileK/2)
+  //   dim1 = M-axis (tile1 = cta_M under DEEP_BUF -- one combined transfer
+  //          per K-tile covering every warp's rows at once, matching
+  //          sgemm_tcu_wg_dxa_deepbuf's dense pattern; tile1 = tileM in the
+  //          legacy single-buffer path, which still fetches per-warp).
   //   stride0_bytes = row stride of compressed A = (K/2) * sizeof(itype_t)
-  RT_CHECK(vortex::dxa::program_2d(device, kDescA, kernel_arg.A_addr,
+#if defined(DEEP_BUF)
+  const uint32_t descA_tile1 = cta_M;
+  const uint32_t descA_tile0 = KB * tileK_elem / 2;  // one stage = KB K-tiles
+#else
+  const uint32_t descA_tile1 = tileM;
+  const uint32_t descA_tile0 = tileK_elem / 2;
+#endif
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescA, kernel_arg.A_addr,
     /*size0=*/K / 2, /*size1=*/M,
     /*stride0_bytes=*/(K / 2) * sizeof(itype_t),
-    /*tile0=*/tileK_elem / 2, /*tile1=*/tileM,
+    /*tile0=*/descA_tile0, /*tile1=*/descA_tile1,
     /*elem_bytes=*/sizeof(itype_t)));
 
   // Descriptor B: fetches dense B (K x N), tileN cols x tileK rows per tile.
@@ -382,22 +432,45 @@ int main(int argc, char *argv[]) {
   //   layout = FLAT → DXA reads B[K][N] row-major and scatters each element to
   //            the bbuf-native sparse candidate-pair destination
   //            (vx_tensor.h::b_sp_flat_idx); set_tile_geometry conveys tcN.
-  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
+#ifdef B_KMAJOR
+  // B_KMAJOR: B^T[N][K] in memory; plain row-major copy of a
+  // [tileN][tileK] tile (dim0 = K, dim1 = N). No scatter -- the bbuf's
+  // K-major sparse path permutes each N-row into candidate-pair order.
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
+    /*size0=*/K, /*size1=*/N,
+    /*stride0_bytes=*/K * sizeof(itype_t),
+    /*tile0=*/KB * tileK_elem, /*tile1=*/tileN,
+    /*elem_bytes=*/sizeof(itype_t)));
+  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
+    vortex::dxa::Layout::RowMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
+#else
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/tileN, /*tile1=*/tileK_elem,
     /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vortex::dxa::set_layout(device, kDescB,
+  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
     vortex::dxa::Layout::Flat, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/wg_cfg_t::tcN, /*blk_k=*/wg_cfg_t::b_blk_k));
+#endif
 
   // Descriptor Meta: metadata organized as [num_tile_rows x (num_k_tiles * kWordsPerTile)] words.
   //   dim0 = k-tile word offset (tile0 = kWordsPerTile), dim1 = tile-row index (tile1 = 1)
   //   stride0_bytes = row stride = num_k_tiles * kWordsPerTile * sizeof(uint32_t)
-  RT_CHECK(vortex::dxa::program_2d(device, kDescMeta, kernel_arg.meta_sp_addr,
+  // Used by the DEEP_BUF kernel under META_DXA (see kernel.cpp kDescMeta);
+  // otherwise both paths read metadata directly from GMEM via TCU_LD.
+#ifdef META_DXA
+  // One tile per pipeline stage: this CTA's warps x the stage's KB K-tiles.
+  const uint32_t descMeta_tile0 = KB * kWordsPerTile;
+  const uint32_t descMeta_tile1 = warps;
+#else
+  const uint32_t descMeta_tile0 = kWordsPerTile;
+  const uint32_t descMeta_tile1 = 1;
+#endif
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescMeta, kernel_arg.meta_sp_addr,
     /*size0=*/num_k_tiles * kWordsPerTile, /*size1=*/num_tile_rows,
     /*stride0_bytes=*/num_k_tiles * kWordsPerTile * sizeof(uint32_t),
-    /*tile0=*/kWordsPerTile, /*tile1=*/1,
+    /*tile0=*/descMeta_tile0, /*tile1=*/descMeta_tile1,
     /*elem_bytes=*/sizeof(uint32_t)));
 
   // Load kernel module

@@ -4,7 +4,7 @@ include $(ROOT_DIR)/config.mk
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_TCU_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_TCU_ENABLE)
 CONFIGS := $(if $(findstring -DVX_CFG_EXT_DXA_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_EXT_DXA_ENABLE)
 
-PROJECT := sgemm_tcu_wg_sp_dxa
+PROJECT := sgemm_tcu_wg_dxa_deepbuf
 
 SRC_DIR := $(VORTEX_HOME)/tests/regression/$(PROJECT)
 
@@ -12,15 +12,14 @@ SRCS := $(SRC_DIR)/main.cpp $(SW_COMMON_DIR)/rvfloats.cpp $(SW_COMMON_DIR)/softf
 
 VX_SRCS := $(SRC_DIR)/kernel.cpp
 
-CONFIGS := $(if $(findstring -DVX_CFG_TCU_WGMMA_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_TCU_WGMMA_ENABLE)
-CONFIGS := $(if $(findstring -DVX_CFG_TCU_SPARSE_ENABLE,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_TCU_SPARSE_ENABLE)
-CONFIGS := $(if $(findstring -DITYPE=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DITYPE=fp16)
-CONFIGS := $(if $(findstring -DOTYPE=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DOTYPE=fp32)
-CONFIGS := $(if $(findstring -DWGMMA_NRC=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DWGMMA_NRC=8)
 CONFIGS := $(if $(findstring -DVX_CFG_NUM_WARPS=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_NUM_WARPS=4)
 CONFIGS := $(if $(findstring -DVX_CFG_ISSUE_WIDTH=,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DVX_CFG_ISSUE_WIDTH=4)
+CONFIGS += -DVX_CFG_TCU_WGMMA_ENABLE
 CONFIGS := $(if $(findstring -DWGMMA_RS,$(CONFIGS))$(findstring -DWGMMA_SS,$(CONFIGS)),$(CONFIGS),$(CONFIGS) -DWGMMA_RS)
 CONFIGS += $(if $(DOUBLE_BUF),-DDOUBLE_BUF)
+CONFIGS += $(if $(WARP_SPEC),-DWARP_SPEC)
+CONFIGS += $(if $(DEEP_BUF),-DDEEP_BUF)
+CONFIGS += $(if $(PIPE_N),-DPIPE_N=$(PIPE_N))
 
 
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include

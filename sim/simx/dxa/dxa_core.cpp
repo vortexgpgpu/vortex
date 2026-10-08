@@ -298,6 +298,10 @@ private:
                                   uint32_t ratio, uint32_t tcN, uint32_t n_steps,
                                   uint32_t bkK) {
     if (lay == DestLayout::Flat) {
+      // NOTE: sparse Flat under FEDP2K is unresolved — the candidate-block
+      // layout is not a simple K-block scale of tcK*2 (x1 gives wrong values,
+      // x2 overshoots the tile). Left at base; must co-change with the read in
+      // tcu_unit.cpp gather_word sparse_b path + vx_tensor.h b_sp_flat_idx.
       uint32_t b_tcK_words = tcN * 2;
       uint32_t blk_words   = tcN * b_tcK_words;
       uint32_t k_word = k / ratio;

@@ -14,12 +14,14 @@
 #include "scope.h"   // vx_scope_drain — lossless SCOPE tap-ring drainer
 #endif
 
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -111,6 +113,47 @@ constexpr uint8_t  CP_WAIT_OP_NE = 3;
 // the batch owner does the same. Per-thread state makes the append-only mode
 // visible only to the thread that actually owns the lock.
 thread_local const Device* tls_batch_owner = nullptr;
+
+// FireSim bring-up replay support (TestVortexTarget.cc): when
+// VORTEX_FIRESIM_DUMP_UPLOADS=<dir> is set, every host->device write that
+// passes through cp_submit_mem_write (buffer uploads via Queue::enqueue_write,
+// the kernel-args blob, and the module image via dev_write -- this is the
+// single chokepoint all three funnel through) is dumped to
+// <dir>/upload_<seq>_0x<addr>_<size>.bin so a later FireSim run can replay
+// the exact uploads a real launch made without a live XRT device. The
+// harness sorts filenames lexically, so seq is zero-padded wide enough that
+// the numeric and lexical orders agree.
+void dump_upload_for_firesim(uint64_t addr, const void* host, uint64_t sz) {
+    static const char* dir = std::getenv("VORTEX_FIRESIM_DUMP_UPLOADS");
+    if (dir == nullptr || sz == 0) return;
+    static std::atomic<uint32_t> seq{0};
+    uint32_t n = seq.fetch_add(1, std::memory_order_relaxed);
+    char path[1024];
+    std::snprintf(path, sizeof(path), "%s/upload_%06u_0x%llx_%llu.bin",
+                  dir, n, (unsigned long long)addr, (unsigned long long)sz);
+    FILE* f = std::fopen(path, "wb");
+    if (f == nullptr) return;
+    std::fwrite(host, 1, sz, f);
+    std::fclose(f);
+}
+
+// Paired with dump_upload_for_firesim above: the DCR-write side of the same
+// capture mechanism. Every DCR write submitted through the CP is appended,
+// in order, to <dir>/dcr_sequence.txt as "0x<addr> 0x<value>" lines -- a
+// real launch's DCR sequence, which TestVortexTarget.cc can replay instead
+// of its hardcoded demo capture.
+void dump_dcr_for_firesim(uint32_t addr, uint32_t value) {
+    static const char* dir = std::getenv("VORTEX_FIRESIM_DUMP_UPLOADS");
+    if (dir == nullptr) return;
+    static std::mutex dcr_dump_mu;
+    std::lock_guard<std::mutex> g(dcr_dump_mu);
+    char path[1024];
+    std::snprintf(path, sizeof(path), "%s/dcr_sequence.txt", dir);
+    FILE* f = std::fopen(path, "ab");
+    if (f == nullptr) return;
+    std::fprintf(f, "0x%x 0x%x\n", addr, value);
+    std::fclose(f);
+}
 
 } // namespace
 
@@ -753,6 +796,7 @@ vx_result_t Device::cp_submit_dcr_write(uint32_t addr, uint32_t value) {
             break;
         }
     }
+    dump_dcr_for_firesim(addr, value);
     // CMD_DCR_WRITE on-wire layout (cmd_size=20):
     //   bytes 0..3   header  { opcode=0x04, flags=0, reserved=0 }
     //   bytes 4..11  arg0    DCR addr
@@ -974,6 +1018,7 @@ vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
                                         uint64_t size, bool physical) {
     if (size == 0)  return VX_SUCCESS;
     if (!host_src)  return VX_ERR_INVALID_VALUE;
+    dump_upload_for_firesim(dev_dst, host_src, size);
     // Stage the payload into CP-visible host memory (a plain memcpy through
     // the host pointer), then have the CP DMA it to device memory. `physical`
     // (set for page-table writes) tells the CP DMA to skip VM translation.

@@ -196,13 +196,15 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                  && ((per_lane_stride_q & (per_lane_stride_q - DXA_SMEM_ADDR_W'(1))) == '0);
     wire is_bm_w  = (dest_mode_q == DXA_DEST_BLOCKMAJOR);
     reg       gather_q;
+    reg       flat_gather_q;
     reg [4:0] lg_stride_q;
     always @(posedge clk) begin
         tcn_mask_q   <= tcn_mask_w;
         tiled_step_q <= DXA_SMEM_ADDR_W'(1) << step_sh_w;
         tiled_wrap_q <= wrap_elems_w << step_sh_w;
-        gather_q     <= is_bm_w || (dest_kmajor_q && pls_pow2);
-        lg_stride_q  <= is_bm_w ? step_sh_w : lg2_addr(per_lane_stride_q);
+        gather_q     <= is_bm_w || is_flat_w || (dest_kmajor_q && pls_pow2);
+        flat_gather_q <= is_flat_w;
+        lg_stride_q  <= (is_bm_w || is_flat_w) ? step_sh_w : lg2_addr(per_lane_stride_q);
         // block-index shift of the per-CL dest calc (stage 2 below):
         //   FLAT: 2*lg_tcN+1+lg_ratio+esize   BM: lg_tcN+lg_bkK+esize
         calc_sh2_q   <= is_flat_w
@@ -289,15 +291,25 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     // Elements drained this beat: with a uniform stride, every element that
     // still fits in the current word from the first element's offset, bounded
     // by what the fill buffer holds; otherwise one.
-    wire [GCNT_W-1:0] fit_elems = gather_q
+    wire [GCNT_W-1:0] word_fit_elems = gather_q
         ? (GCNT_W'((SMEM_OFF_W'(SMEM_WORD_SIZE - 1) - km_in_word_off) >> lg_stride_q) + GCNT_W'(1))
         : GCNT_W'(1);
+    wire [16:0] flat_blk_rem = {1'b0, tcn_mask_q} + 17'd1 - {1'b0, fb_n_in_r};
+    wire [GCNT_W-1:0] fit_elems = (flat_gather_q && (17'(word_fit_elems) > flat_blk_rem))
+        ? GCNT_W'(flat_blk_rem)
+        : word_fit_elems;
     wire [FILL_W-1:0] avail_elems = fb_level_r >> esize;
     wire [GCNT_W-1:0] beat_elems  = (FILL_W'(fit_elems) < avail_elems) ? fit_elems : GCNT_W'(avail_elems);
     // Drain quantum (in bytes): the gathered elements in scatter mode,
     // SMEM_WORD_SIZE bytes per beat in row-major streaming mode.
     wire [FILL_W-1:0] drain_q_bytes = scatter ? (FILL_W'(beat_elems) << esize) : FILL_W'(SMEM_WORD_SIZE);
-    wire [DXA_SMEM_ADDR_W-1:0] beat_addr_step = gather_q
+    wire [16:0] flat_n_next  = {1'b0, fb_n_in_r} + 17'(beat_elems);
+    wire        flat_blk_end = (flat_n_next > {1'b0, tcn_mask_q});
+    wire [DXA_SMEM_ADDR_W-1:0] beat_addr_step = flat_gather_q
+        ? (flat_blk_end
+            ? ((DXA_SMEM_ADDR_W'(beat_elems - GCNT_W'(1)) << lg_stride_q) + tiled_wrap_q)
+            : (DXA_SMEM_ADDR_W'(beat_elems) << lg_stride_q))
+        : gather_q
         ? (DXA_SMEM_ADDR_W'(beat_elems) << lg_stride_q)
         : (dest_tiled ? (fb_n_wrap_r ? tiled_wrap_q : tiled_step_q) : per_lane_stride_q);
     wire [SMEM_ADDR_WIDTH-1:0] km_word_addr = SMEM_ADDR_WIDTH'(fb_byte_addr_r >> SMEM_OFF_W);
@@ -558,8 +570,13 @@ module VX_dxa_smem_wr import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
                     km_rd_off_r    <= km_rd_off_r + CL_OFF_BITS'(drain_q_bytes);
                     fb_level_r     <= fb_level_r - drain_q_bytes;
                     fb_byte_addr_r <= fb_byte_addr_r + beat_addr_step;
-                    fb_n_in_r      <= fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1);
-                    fb_n_wrap_r    <= ((fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1)) == tcn_mask_q);
+                    if (flat_gather_q) begin
+                        fb_n_in_r   <= flat_blk_end ? 16'd0 : flat_n_next[15:0];
+                        fb_n_wrap_r <= 1'b0;
+                    end else begin
+                        fb_n_in_r   <= fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1);
+                        fb_n_wrap_r <= ((fb_n_wrap_r ? 16'd0 : (fb_n_in_r + 16'd1)) == tcn_mask_q);
+                    end
                 end else begin
                     // Row-major: fixed whole-word shift (free), per-beat slice
                     // is the low SMEM_DATAW bits.

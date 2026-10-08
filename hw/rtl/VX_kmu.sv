@@ -110,6 +110,14 @@ module VX_kmu import VX_gpu_pkg::*; import VX_trace_pkg::*; #(
             // Defaults to (1,1,1): the cluster shape sizes the launch message, so
             // a launch that never programs it would otherwise stall the stream.
             dcr_cluster_dim <= {3{(NW_WIDTH+1)'(1)}};
+            dcr_PC          <= '0;
+            dcr_entry       <= '0;
+            dcr_grid_dim    <= '0;
+            dcr_block_dim   <= '0;
+            dcr_param       <= '0;
+            dcr_block_size  <= '0;
+            dcr_lmem_size   <= '0;
+            dcr_warp_step   <= '0;
         end else if (dcr_req_valid && dcr_req_rw) begin
             case(dcr_req_addr)
                 // Program startup PC

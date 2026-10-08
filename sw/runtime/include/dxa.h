@@ -31,10 +31,22 @@ struct reg_write {
   uint32_t val;
 };
 
-inline int write_regs(vx_device_h dev, uint32_t dcr,
+// Emits through the CALLER'S queue (vx_enqueue_dcr_write), not the implicit
+// legacy default queue vx_dcr_write(vx_device_h,...) uses. Routing DXA
+// descriptor writes through a queue separate from the one kernel launches
+// go through gives the host no ordering guarantee that a prior kernel's DXA
+// activity has drained before this write lands -- for a single-shot
+// descriptor program that is often fine, but callers like llama2's
+// launch_gemm() reprogram slots 0/1 from the host on EVERY matmul call,
+// interleaved with kernel launches on the caller's own queue; on the
+// legacy-queue path that races the descriptor rewrite against the previous
+// launch's in-flight DXA fetches and can wedge the DXA engine. Using the
+// same queue as the kernel launches makes the in-queue FIFO ordering do the
+// synchronization for free.
+inline int write_regs(vx_queue_h q, uint32_t dcr,
                       std::initializer_list<reg_write> writes) {
   for (const auto& w : writes) {
-    if (int ret = vx_dcr_write(dev, dcr + w.off, w.val)) {
+    if (int ret = (int)vx_enqueue_dcr_write(q, dcr + w.off, w.val, 0, nullptr, nullptr)) {
       return ret;
     }
   }
@@ -102,14 +114,14 @@ enum class Layout : uint32_t {
 //   tile0: tile size (elements per transfer)
 //   elem_bytes: element size in bytes (must be power of 2: 1, 2, 4, or 8)
 inline int program_1d(
-    vx_device_h dev, uint32_t slot,
+    vx_queue_h q, uint32_t slot,
     uint64_t base_addr,
     uint32_t size0,
     uint32_t tile0,
     uint32_t elem_bytes) {
   uint32_t dcr  = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
   uint32_t meta = detail::pack_meta(1, detail::elem_size_enc(elem_bytes));
-  return detail::write_regs(dev, dcr, {
+  return detail::write_regs(q, dcr, {
     {VX_DCR_DXA_DESC_BASE_LO_OFF,   (uint32_t)(base_addr & 0xffffffffu)},
     {VX_DCR_DXA_DESC_BASE_HI_OFF,   (uint32_t)(base_addr >> 32)},
     {VX_DCR_DXA_DESC_SIZE0_OFF,     size0},
@@ -126,7 +138,7 @@ inline int program_1d(
 //   tile0, tile1: tile sizes (elements per transfer dimension)
 //   elem_bytes: element size in bytes (must be power of 2: 1, 2, 4, or 8)
 inline int program_2d(
-    vx_device_h dev, uint32_t slot,
+    vx_queue_h q, uint32_t slot,
     uint64_t base_addr,
     uint32_t size0, uint32_t size1,
     uint32_t stride0_bytes,
@@ -134,7 +146,7 @@ inline int program_2d(
     uint32_t elem_bytes) {
   uint32_t dcr  = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
   uint32_t meta = detail::pack_meta(2, detail::elem_size_enc(elem_bytes));
-  return detail::write_regs(dev, dcr, {
+  return detail::write_regs(q, dcr, {
     {VX_DCR_DXA_DESC_BASE_LO_OFF,   (uint32_t)(base_addr & 0xffffffffu)},
     {VX_DCR_DXA_DESC_BASE_HI_OFF,   (uint32_t)(base_addr >> 32)},
     {VX_DCR_DXA_DESC_SIZE0_OFF,     size0},
@@ -154,7 +166,7 @@ inline int program_2d(
 //   tile0, tile1, tile2: tile sizes
 //   elem_bytes: element size in bytes (must be power of 2: 1, 2, 4, or 8)
 inline int program_3d(
-    vx_device_h dev, uint32_t slot,
+    vx_queue_h q, uint32_t slot,
     uint64_t base_addr,
     uint32_t size0, uint32_t size1, uint32_t size2,
     uint32_t stride0_bytes, uint32_t stride1_bytes,
@@ -162,7 +174,7 @@ inline int program_3d(
     uint32_t elem_bytes) {
   uint32_t dcr  = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
   uint32_t meta = detail::pack_meta(3, detail::elem_size_enc(elem_bytes));
-  return detail::write_regs(dev, dcr, {
+  return detail::write_regs(q, dcr, {
     {VX_DCR_DXA_DESC_BASE_LO_OFF,   (uint32_t)(base_addr & 0xffffffffu)},
     {VX_DCR_DXA_DESC_BASE_HI_OFF,   (uint32_t)(base_addr >> 32)},
     {VX_DCR_DXA_DESC_SIZE0_OFF,     size0},
@@ -186,7 +198,7 @@ inline int program_3d(
 //   tile0..tile3: tile sizes
 //   elem_bytes: element size in bytes (must be power of 2: 1, 2, 4, or 8)
 inline int program_4d(
-    vx_device_h dev, uint32_t slot,
+    vx_queue_h q, uint32_t slot,
     uint64_t base_addr,
     uint32_t size0, uint32_t size1, uint32_t size2, uint32_t size3,
     uint32_t stride0_bytes, uint32_t stride1_bytes, uint32_t stride2_bytes,
@@ -194,7 +206,7 @@ inline int program_4d(
     uint32_t elem_bytes) {
   uint32_t dcr  = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
   uint32_t meta = detail::pack_meta(4, detail::elem_size_enc(elem_bytes));
-  return detail::write_regs(dev, dcr, {
+  return detail::write_regs(q, dcr, {
     {VX_DCR_DXA_DESC_BASE_LO_OFF,   (uint32_t)(base_addr & 0xffffffffu)},
     {VX_DCR_DXA_DESC_BASE_HI_OFF,   (uint32_t)(base_addr >> 32)},
     {VX_DCR_DXA_DESC_SIZE0_OFF,     size0},
@@ -221,7 +233,7 @@ inline int program_4d(
 //   tile0..tile4: tile sizes
 //   elem_bytes: element size in bytes (must be power of 2: 1, 2, 4, or 8)
 inline int program_5d(
-    vx_device_h dev, uint32_t slot,
+    vx_queue_h q, uint32_t slot,
     uint64_t base_addr,
     uint32_t size0, uint32_t size1, uint32_t size2, uint32_t size3, uint32_t size4,
     uint32_t stride0_bytes, uint32_t stride1_bytes, uint32_t stride2_bytes, uint32_t stride3_bytes,
@@ -229,7 +241,7 @@ inline int program_5d(
     uint32_t elem_bytes) {
   uint32_t dcr  = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
   uint32_t meta = detail::pack_meta(5, detail::elem_size_enc(elem_bytes));
-  return detail::write_regs(dev, dcr, {
+  return detail::write_regs(q, dcr, {
     {VX_DCR_DXA_DESC_BASE_LO_OFF,   (uint32_t)(base_addr & 0xffffffffu)},
     {VX_DCR_DXA_DESC_BASE_HI_OFF,   (uint32_t)(base_addr >> 32)},
     {VX_DCR_DXA_DESC_SIZE0_OFF,     size0},
@@ -259,10 +271,10 @@ inline int program_5d(
 // Bar stride is always 1 (hardcoded in hardware).
 // Multicast is active when cta_mask has more than one bit set.
 inline int set_multicast(
-    vx_device_h dev, uint32_t slot,
+    vx_queue_h q, uint32_t slot,
     uint32_t smem_stride_bytes) {
   uint32_t dcr = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
-  return vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_SMEM_STRIDE_OFF, smem_stride_bytes);
+  return (int)vx_enqueue_dcr_write(q, dcr + VX_DCR_DXA_DESC_SMEM_STRIDE_OFF, smem_stride_bytes, 0, nullptr, nullptr);
 }
 
 // Override the destination SMEM layout for an already-programmed descriptor.
@@ -271,14 +283,14 @@ inline int set_multicast(
 // write-only on most paths — we don't read-modify-write META; we re-pack
 // it locally.)
 inline int set_layout(
-    vx_device_h dev, uint32_t slot,
+    vx_queue_h q, uint32_t slot,
     Layout layout,
     uint32_t rank, uint32_t elem_bytes) {
   uint32_t dcr  = VX_DCR_DXA_DESC_BASE + slot * VX_DCR_DXA_DESC_STRIDE;
   uint32_t meta = detail::pack_meta(rank, detail::elem_size_enc(elem_bytes))
                 | ((static_cast<uint32_t>(layout) & ((1u << DXA_DESC_META_LAYOUT_BITS) - 1u))
                    << DXA_DESC_META_LAYOUT_LSB);
-  return vx_dcr_write(dev, dcr + VX_DCR_DXA_DESC_META_OFF, meta);
+  return (int)vx_enqueue_dcr_write(q, dcr + VX_DCR_DXA_DESC_META_OFF, meta, 0, nullptr, nullptr);
 }
 
 // Convey the WGMMA tile geometry the Flat/BlockMajor destination formula

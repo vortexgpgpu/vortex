@@ -803,13 +803,15 @@ public:
 
     // tileK = xtileK × ratio (ratio = 32/e_bits); sparse compresses K on A only.
     uint32_t ratio  = 32 / e_bits;
-    uint32_t tile_k = uint32_t(wg_cfg::xtileK) * ratio;
+    uint32_t tile_k = uint32_t(wg_cfg::xtileK) * ratio * (is_sparse ? wg_cfg::sp_k_mult : 1);
     uint32_t a_k    = is_sparse ? (tile_k / 2) : tile_k;
 
     // ldm==0 → block-major layout; ldm!=0 → row-major (stride in elements).
     uint32_t fedp_words  = kFedpWords;
     uint32_t b_k_blk_dim = fedp_words * ratio;
-    uint32_t a_k_blk_dim = is_sparse ? (cfg::tcK * ratio) : b_k_blk_dim;
+    // Sparse FULLK compressed A has the dense per-uop shape (fedpK words).
+    bool sparse_a_layout = is_sparse && (wg_cfg::sp_k_mult == 1);
+    uint32_t a_k_blk_dim = sparse_a_layout ? (cfg::tcK * ratio) : b_k_blk_dim;
     uint32_t a_blk_elems = cfg::tcM * a_k_blk_dim;
     uint32_t b_blk_elems = b_k_blk_dim * cfg::tcN;
     uint32_t n_steps     = xtile_n / cfg::tcN;
@@ -971,7 +973,7 @@ public:
     }
 
     uint32_t ratio   = elem_ratio(fmt_s);
-    uint32_t k_words = is_sparse ? cfg::tcK : kFedpWords;
+    uint32_t k_words = is_sparse ? wg_cfg::sp_k_words : kFedpWords;
     uint32_t e_bits = elem_bits(fmt_s);
 
     // Decode smem descriptors (B always from smem, A optionally).
@@ -1020,9 +1022,11 @@ public:
     if (is_sparse) {
       uint32_t ebits       = elem_bits(fmt_s);
       uint32_t rtl_i_ratio = 32 / ebits;
-      uint32_t meta_row_w  = k_words * 2 * rtl_i_ratio;
-      // Bank encoding {step_m, step_k_half}: m=1 → bank (cfg::k_steps/2).
-      uint32_t wg_bank = step_m * (cfg::k_steps / 2) + step_k;
+      // One metadata bank per TCU_TC_K compressed words: bank {step_m,
+      // step_k_half}, m=1 -> bank (cfg::k_steps/2). A sparse FULLK uop spans
+      // two banks (its upper FEDP half reads {step_m, 1}).
+      uint32_t meta_row_w  = cfg::tcK * 2 * rtl_i_ratio;
+      uint32_t wg_bank = 0;
       // Metadata is preloaded into sparse_meta_ via TCU_LD before dispatch.
       auto meta_bit_wg = [&](uint32_t bit_idx) -> uint32_t {
         uint32_t word_idx = wg_bank * kMaxMetaCols + bit_idx / 32;
@@ -1041,10 +1045,12 @@ public:
         for (uint32_t j = 0; j < cfg::tcN; ++j) {
           uint32_t b_col_idx = step_n * cfg::tcN + j;
           for (uint32_t z = 0; z < k_words; ++z) {
+            uint32_t zz = z % cfg::tcK;
+            wg_bank = step_m * (cfg::k_steps / 2) + step_k + z / cfg::tcK;
             uint32_t lo = 0, hi = 0;
             for (uint32_t b = 0; b < rtl_i_ratio; ++b) {
-              lo |= meta_bit_wg(row_base + rtl_i_ratio * z              + b) << b;
-              hi |= meta_bit_wg(row_base + rtl_i_ratio * (k_words + z) + b) << b;
+              lo |= meta_bit_wg(row_base + rtl_i_ratio * zz              + b) << b;
+              hi |= meta_bit_wg(row_base + rtl_i_ratio * (cfg::tcK + zz) + b) << b;
             }
             constexpr uint32_t kCompression = 2;
             uint32_t k_elem_b0 = (step_k * k_words + z) * ratio * kCompression;
@@ -1292,7 +1298,8 @@ private:
     if (desc.base == cur_a_desc_base_) {
       uint32_t b = cur_block_;
       return gather_word([&](uint64_t addr) { return tbuf->read_a(b, addr); },
-                         desc, row, col, fmt_s, pack_along_row, false, cur_is_sparse_);
+                         desc, row, col, fmt_s, pack_along_row, false,
+                         cur_is_sparse_ && (wg_cfg::sp_k_mult == 1));
     }
     return gather_word([&](uint64_t addr) { return tbuf->read_b(addr); },
                        desc, row, col, fmt_s, pack_along_row, sparse_b, false);

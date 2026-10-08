@@ -45,6 +45,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // FEDP dot-product width in 32-bit words (doubles under FEDP2K).
     localparam FEDP_K = TCU_WG_FEDP_K;
+    `STATIC_ASSERT (TCU_WG_SP_FULLK == 0 || TCU_WG_FEDP_K == 2 * TCU_TC_K,
+                    ("VX_CFG_TCU_SPARSE_FULLK requires VX_CFG_TCU_FEDP2K"))
 
     // Total FEDP latency of the configured TCU type; each FEDP variant
     // asserts it against its internal stage structure.
@@ -296,6 +298,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta;
+    wire [TCU_MAX_META_BLOCK_WIDTH-1:0] wmma_sp_meta_hi;
 `endif
 `ifdef VX_CFG_TCU_MX_ENABLE
     wire [TCU_BLOCK_CAP-1:0][31:0] mx_meta_a;
@@ -317,6 +320,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         , .step_m   (step_m)
         , .step_k   (step_k)
         , .vld_block(wmma_sp_meta)
+        , .vld_block_hi(wmma_sp_meta_hi)
     `endif
     `ifdef VX_CFG_TCU_MX_ENABLE
         , .meta_a   (mx_meta_a)
@@ -406,6 +410,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
             wire [FEDP_K-1:0][31:0] a_row, b_col, b_col_dense;
             wire [TCU_TC_K-1:0][31:0] b_col_sparse, b_col_1, b_col_2;
+            wire [TCU_TC_K-1:0][31:0] b_col_sparse_hi;
         `else
             wire [FEDP_K-1:0][31:0] a_row, b_col;
         `endif
@@ -454,7 +459,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     `endif
                     assign a_row[k_idx] = (is_wgmma
                         `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                            && !is_sparse
+                            && (!is_sparse || (TCU_WG_SP_FULLK != 0))
                         `endif
                         ) ? (wg_a_smem ? a_wgmma_smem : a_wgmma_reg) : 32'b0;
                 `else
@@ -516,8 +521,34 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 if (k_idx < TCU_TC_K) begin : g_lo
                     assign b_col[k_idx] = is_sparse ? b_col_sparse[k_idx] : b_col_dense[k_idx];
                 end else begin : g_hi
-                    assign b_col[k_idx] = is_sparse ? 32'b0 : b_col_dense[k_idx];
+                    assign b_col[k_idx] = is_sparse ? b_col_sparse_hi[k_idx - TCU_TC_K]
+                                                    : b_col_dense[k_idx];
                 end
+            end
+
+        `ifdef VX_CFG_TCU_WGMMA_ENABLE
+            if (TCU_WG_SP_FULLK != 0) begin : g_sp_hi
+                wire [TCU_TC_K-1:0][31:0] b_col_1_hi, b_col_2_hi, b_col_sel_hi;
+                for (genvar k_idx = 0; k_idx < TCU_TC_K; ++k_idx) begin : g_hi_slice
+                    assign b_col_1_hi[k_idx] = 32'(rs2_data[(TCU_TC_K + k_idx) * TCU_TC_N * 2 + j * 2]);
+                    assign b_col_2_hi[k_idx] = 32'(rs2_data[(TCU_TC_K + k_idx) * TCU_TC_N * 2 + j * 2 + 1]);
+                end
+                VX_tcu_sp_mux #(
+                    .INSTANCE_ID (INSTANCE_ID),
+                    .ROW_IDX     (i)
+                ) tcu_sp_mux_hi (
+                    .fmt_s     (fmt_s),
+                    .b_col_in1 (b_col_1_hi),
+                    .b_col_in2 (b_col_2_hi),
+                    .vld_mask  (wmma_sp_meta_hi),
+                    .b_col_out (b_col_sel_hi)
+                );
+                assign b_col_sparse_hi = is_wgmma ? b_col_sel_hi : '0;
+            end else
+        `endif
+            begin : g_sp_hi_off
+                assign b_col_sparse_hi = '0;
+                `UNUSED_VAR (wmma_sp_meta_hi)
             end
 
         `ifdef VX_TCU_LD_TRACE
