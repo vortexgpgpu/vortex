@@ -254,12 +254,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         // Pack all bank SRAM outputs into the read response.
         //
         // Same back-pressure hazard as the LSU side: dma_rsp_buf buffers only
-        // the tag/valid; the data (all banks) is the live SRAM OUT_REG. While a
-        // DMA read response is back-pressured, an interleaving LSU read
-        // (~dma_active) re-drives a bank's OUT_REG and corrupts the held DMA
-        // line. Latch the whole line on the first response-valid cycle (rdata
-        // is still valid then) and serve the latched copy while stalled. One
-        // DMA response spans all banks, so this is a single full-line hold.
         reg  [NUM_BANKS-1:0][WORD_WIDTH-1:0] dma_rsp_hold_data_r;
         reg                                  dma_rsp_hold_valid_r;
         wire dma_rsp_consumed = dma_bus_if.rsp_valid && dma_bus_if.rsp_ready;
@@ -301,8 +295,6 @@ module VX_local_mem import VX_gpu_pkg::*; #(
                      && dma_bus_if.req_valid
                      && ~dma_bus_if.req_data.rw
                      && dma_rsp_buf_ready;
-
-        wire dma_active = dma_wr_b | dma_rd_b;
 
         wire lsu_active = per_bank_req_valid[i] && per_bank_req_ready[i];
 
@@ -539,13 +531,15 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         `endif
         end
 
-        // SRAM address / write-data / write-enable mux: DMA first, then an owed
-        // atomic write-back, then the incoming request
-        wire [BANK_ADDR_WIDTH-1:0] bank_sram_addr;
+        wire [BANK_ADDR_WIDTH-1:0] bank_sram_waddr;
         wire [WORD_WIDTH-1:0]      bank_sram_wdata;
         wire [WORD_SIZE-1:0]       bank_sram_wren;
+        wire [BANK_ADDR_WIDTH-1:0] bank_sram_raddr;
 
-        assign bank_sram_addr  = dma_active   ? BANK_ADDR_WIDTH'(dma_bus_if.req_data.addr)
+        wire bank_write = dma_wr_b || amo_wb_store || (lsu_active && per_bank_req_rw[i]);
+        wire bank_read  = dma_rd_b || (lsu_active && ~per_bank_req_rw[i]);
+
+        assign bank_sram_waddr = dma_wr_b     ? BANK_ADDR_WIDTH'(dma_bus_if.req_data.addr)
                                : amo_wb_store ? amo_wb_addr
                                               : per_bank_req_addr[i];
         assign bank_sram_wdata = dma_wr_b     ? dma_bus_if.req_data.data[i*WORD_WIDTH +: WORD_WIDTH]
@@ -554,8 +548,10 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         assign bank_sram_wren  = dma_wr_b     ? dma_bus_if.req_data.byteen[i*WORD_SIZE +: WORD_SIZE]
                                : amo_wb_store ? amo_wb_byteen
                                               : per_bank_req_byteen[i];
+        assign bank_sram_raddr = dma_rd_b ? BANK_ADDR_WIDTH'(dma_bus_if.req_data.addr)
+                                           : per_bank_req_addr[i];
 
-        VX_sp_ram #(
+        VX_dp_ram #(
             .DATAW (WORD_WIDTH),
             .SIZE  (WORDS_PER_BANK),
             .WRENW (WORD_SIZE),
@@ -564,17 +560,16 @@ module VX_local_mem import VX_gpu_pkg::*; #(
         ) lmem_store (
             .clk   (clk),
             .reset (reset),
-            .read  (dma_rd_b || (lsu_active && ~per_bank_req_rw[i])),
-            .write (dma_wr_b || amo_wb_store || (lsu_active && per_bank_req_rw[i])),
+            .read  (bank_read),
+            .write (bank_write),
             .wren  (bank_sram_wren),
-            .addr  (bank_sram_addr),
+            .waddr (bank_sram_waddr),
             .wdata (bank_sram_wdata),
+            .raddr (bank_sram_raddr),
             .rdata (per_bank_rsp_data[i])
         );
 
         // Read-during-write hazard: stalls LSU reads to an address written last cycle
-        // (SRAM OUT_REG + RDW_MODE="R" returns stale data on same-cycle read-after-write).
-        // DMA reads bypass this check.
 
         reg [BANK_ADDR_WIDTH-1:0] last_wr_addr;
         reg last_wr_valid;
@@ -582,22 +577,21 @@ module VX_local_mem import VX_gpu_pkg::*; #(
             if (reset) begin
                 last_wr_valid <= 0;
             end else begin
-                last_wr_valid <= dma_wr_b || amo_wb_store || (lsu_active && per_bank_req_rw[i]);
+                last_wr_valid <= bank_write;
             end
-            last_wr_addr <= bank_sram_addr;
+            last_wr_addr <= bank_sram_waddr;
         end
         wire is_rdw_hazard = last_wr_valid && ~per_bank_req_rw[i] && (per_bank_req_addr[i] == last_wr_addr);
 
-        // LSU response valid / request ready — blocked by DMA and RDW hazards
 
         assign bank_rsp_valid = per_bank_req_valid[i]
-                             && ~dma_active
+                             && ~dma_rd_b
                              && ~amo_busy
                              && ~per_bank_req_rw[i]
                              && ~is_rdw_hazard;
 
-        assign per_bank_req_ready[i] = ~dma_active
-                                    && ~amo_busy
+        assign per_bank_req_ready[i] = ~amo_busy
+                                    && (per_bank_req_rw[i] ? ~dma_wr_b : ~dma_rd_b)
                                     && (bank_rsp_ready || per_bank_req_rw[i])
                                     && ~is_rdw_hazard;
 

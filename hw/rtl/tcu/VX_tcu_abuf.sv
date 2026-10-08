@@ -68,7 +68,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [3:0]               req_step_k,
     input  wire [`VX_CFG_XLEN-1:0]  req_desc_a,
     input  wire                     req_a_is_smem,
-    input  wire                     req_is_sparse,
+    input  wire                     req_is_sparse_in,
     input  wire [UUID_WIDTH-1:0]    req_uuid,
 
     // LMEM bank-parallel read port
@@ -79,6 +79,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire [TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] abuf_rs1_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+
+    wire req_is_sparse = req_is_sparse_in && (TCU_WG_SP_FULLK == 0);
     `UNUSED_VAR (req_wid)
 
     // -----------------------------------------------------------------------
@@ -123,6 +125,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     logic                       slot_valid_r;
     logic [BANK_ADDR_WIDTH-1:0] slot_desc_a_row_base_r;
+    logic [BANK_ROW_WORDS_LOG2-1:0] slot_desc_a_inrow_r;
     logic [`UP(K_STEPS_W)-1:0]  slot_step_k_r;
     logic                       slot_fetching_r;
     // Row-major mode: latched per-row stride. ldm_words=0 means block-major;
@@ -178,6 +181,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // per-row byte stride (matches WGMMA SS descriptor). Stride=0 keeps
     // the canonical block-major layout; non-zero selects the row-major path.
     wire [LDM_W-1:0] desc_a_ldm_words = LDM_W'(req_desc_a[31:16] >> 2);
+    wire [BANK_ROW_WORDS_LOG2-1:0] desc_a_inrow = BANK_ROW_WORDS_LOG2'(req_desc_a[15:0] >> 2);
     if (`VX_CFG_XLEN > 32) begin : g_desc_a_upper_unused
         `UNUSED_VAR (req_desc_a[`VX_CFG_XLEN-1:32])
     end
@@ -191,6 +195,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [LDM_W-1:0]            effective_ldm_words =
         is_first_compute_uop ? desc_a_ldm_words : slot_ldm_words_r;
     wire                        effective_row_major = (effective_ldm_words != '0);
+    wire [BANK_ROW_WORDS_LOG2-1:0] effective_inrow =
+        is_first_compute_uop ? desc_a_inrow : slot_desc_a_inrow_r;
 
     // Block-major stripe base (unchanged): one fetch covers M_STEPS A-blocks.
     wire [BANK_ADDR_WIDTH-1:0]  stripe_base =
@@ -242,7 +248,8 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [3:0] row_k_words_alloc = req_is_sparse ? 4'(TCU_TC_K) : 4'(TCU_WG_FEDP_K);
 
     wire [ROW_OFF_W-1:0] row_word_off_init =
-        ROW_OFF_W'(req_step_k_trunc) * ROW_OFF_W'(row_k_words_alloc);
+        ROW_OFF_W'(req_step_k_trunc) * ROW_OFF_W'(row_k_words_alloc)
+      + ROW_OFF_W'(effective_inrow);
 
     logic [ROW_OFF_W-1:0] row_word_off_req_r;
     logic [ROW_OFF_W-1:0] row_word_off_rsp_r;
@@ -275,6 +282,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             slot_valid_r           <= 1'b0;
             slot_fetching_r        <= 1'b0;
             slot_desc_a_row_base_r <= '0;
+            slot_desc_a_inrow_r    <= '0;
             slot_step_k_r          <= '0;
             fetch_base_r           <= '0;
             slot_row_major_r       <= 1'b0;
@@ -300,6 +308,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 // Latch descriptor fields on the first compute uop.
                 if (req_valid && is_first_compute_uop) begin
                     slot_desc_a_row_base_r <= desc_a_row_base;
+                    slot_desc_a_inrow_r    <= desc_a_inrow;
                     slot_ldm_words_r       <= desc_a_ldm_words;
                     slot_row_major_r       <= (desc_a_ldm_words != '0);
                 end

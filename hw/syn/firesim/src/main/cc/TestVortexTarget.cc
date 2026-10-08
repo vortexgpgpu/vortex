@@ -435,7 +435,33 @@ private:
             verify_bytes, image_ok ? "OK" : "MISMATCH");
     mpz_clear(word);
 
-    for (const auto &d : kLaunchDCRs) {
+    // VORTEX_KERNEL_DCR_FILE overrides the hardcoded demo-capture DCRs with a
+    // real launch's sequence, captured by sw/runtime/common/device.cpp's
+    // dump_dcr_for_firesim() (VORTEX_FIRESIM_DUMP_UPLOADS=<dir> on a normal
+    // XRT run writes <dir>/dcr_sequence.txt in this exact "0x<addr>
+    // 0x<value>" per-line format) -- so any test's actual grid/block/entry/
+    // arg-address DCRs replay here, not just the one demo run this file was
+    // captured from.
+    std::vector<dcr_write_t> launch_dcrs(kLaunchDCRs,
+                                          kLaunchDCRs + (sizeof(kLaunchDCRs) / sizeof(kLaunchDCRs[0])));
+    if (const char *dcr_file = getenv("VORTEX_KERNEL_DCR_FILE")) {
+      FILE *df = fopen(dcr_file, "r");
+      if (df == nullptr) {
+        fprintf(stderr, "[kernel] cannot open VORTEX_KERNEL_DCR_FILE=%s\n", dcr_file);
+        pass = false;
+        return;
+      }
+      launch_dcrs.clear();
+      unsigned int a = 0, v = 0;
+      while (fscanf(df, "%x %x", &a, &v) == 2) {
+        launch_dcrs.push_back({a, v});
+      }
+      fclose(df);
+      fprintf(stderr, "[kernel] loaded %zu DCR writes from %s\n",
+              launch_dcrs.size(), dcr_file);
+    }
+
+    for (const auto &d : launch_dcrs) {
       poke("ctrl_dcr_req_valid", 1);
       poke("ctrl_dcr_req_rw", 1);
       poke("ctrl_dcr_req_addr", d.addr);

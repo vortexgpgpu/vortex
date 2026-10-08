@@ -190,8 +190,17 @@
 `define PRESERVE_NET    (* keep = "true" *)
 `define BLACKBOX_CELL   (* black_box *)
 `define STRING
+// Vitis kernel packaging (v++/vpl, used by the FireSim platform) runs a DRC
+// that rejects any true black-box cell before linking -- VX_placeholder's
+// intentional empty black box (the anchor VX_async_ram_patch.sv relies on to
+// keep Vivado from optimizing the async-BRAM workaround away) fails that
+// check even though a plain Vivado project-mode implementation tolerates it.
+// Define VITIS_NO_BRAM_PATCH to fall back to the un-patched async-RAM path
+// for that flow specifically; every other flow keeps today's behavior.
 `ifndef SIMULATION
+`ifndef VITIS_NO_BRAM_PATCH
     `define ASYNC_BRAM_PATCH
+`endif
 `endif
 `elsif ASIC
 `define MAX_FANOUT      8

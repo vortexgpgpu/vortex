@@ -407,7 +407,7 @@ int main(int argc, char *argv[]) {
   // Descriptor A: fetches tileK columns x cta_M rows from A[row, k].
   //   dim0 = K-axis (tile0 = tileK), dim1 = M-axis (tile1 = cta_M)
   //   stride0_bytes = row stride of A = K * sizeof(itype_t)
-  RT_CHECK(vortex::dxa::program_2d(device, kDescA, kernel_arg.A_addr,
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescA, kernel_arg.A_addr,
     /*size0=*/K, /*size1=*/M,
     /*stride0_bytes=*/K * sizeof(itype_t),
     /*tile0=*/cfg::tileK, /*tile1=*/cta_M,
@@ -420,12 +420,12 @@ int main(int argc, char *argv[]) {
   //            element to the bbuf-native dense block-major destination
   //            (vx_tensor.h::b_blockmajor_idx); set_tile_geometry conveys tcN
   //            and the dense block K extent.
-  RT_CHECK(vortex::dxa::program_2d(device, kDescB, kernel_arg.B_addr,
+  RT_CHECK(vortex::dxa::program_2d(queue, kDescB, kernel_arg.B_addr,
     /*size0=*/N, /*size1=*/K,
     /*stride0_bytes=*/N * sizeof(itype_t),
     /*tile0=*/cfg::xtileN, /*tile1=*/cfg::tileK,
     /*elem_bytes=*/sizeof(itype_t)));
-  RT_CHECK(vortex::dxa::set_layout(device, kDescB,
+  RT_CHECK(vortex::dxa::set_layout(queue, kDescB,
     vortex::dxa::Layout::BlockMajor, /*rank=*/2, /*elem_bytes=*/sizeof(itype_t)));
   RT_CHECK(vortex::dxa::set_tile_geometry(device, kDescB, /*tcN=*/cfg::tcN, /*blk_k=*/cfg::b_blk_k));
 

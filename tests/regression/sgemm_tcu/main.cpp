@@ -11,7 +11,9 @@
 #include <vector>
 #include <vortex2.h>
 
+#ifndef FLOAT_ULP
 #define FLOAT_ULP 10
+#endif
 #define MAX_ERRORS 100
 
 #define RT_CHECK(_expr)                                      \
