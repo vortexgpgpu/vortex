@@ -99,10 +99,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     #ifdef SW_LOAD_A
       // Cooperative load A row-major (matches DXA row-major layout).
       uint32_t a_size = cta_M * ctx::tileK;
-      for (uint32_t i = 0; i < a_size; i += num_threads) {
-        uint32_t idx = i + tid;
-        uint32_t r = idx / ctx::tileK;
-        uint32_t c = idx % ctx::tileK;
+      for (size_t i = 0; i < a_size; i += num_threads) {
+        size_t idx = i + tid;
+        size_t r = idx / ctx::tileK;
+        size_t c = idx % ctx::tileK;
         A_smem[r * ctx::tileK + c] = pA[(tile_row + r) * K + (k + c)];
       }
     #endif

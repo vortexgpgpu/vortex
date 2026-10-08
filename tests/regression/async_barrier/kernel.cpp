@@ -24,11 +24,11 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto local_B0  = local_A0 + blockDim.x * blockDim.y;
   auto local_u32 = reinterpret_cast<uint32_t*>(local_B0 + blockDim.x * blockDim.y);
 
-  auto size      = arg->size;
-  auto tile_size = arg->tile_size;
+  size_t size      = arg->size;
+  size_t tile_size = arg->tile_size;
 
-  auto g_row = blockIdx.x * blockDim.x + threadIdx.x;
-  auto g_col = blockIdx.y * blockDim.y + threadIdx.y;
+  size_t g_row = blockIdx.x * blockDim.x + threadIdx.x;
+  size_t g_col = blockIdx.y * blockDim.y + threadIdx.y;
 
   auto l_row = threadIdx.x;
   auto l_col = threadIdx.y;
@@ -40,7 +40,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
   uint32_t token_compute;
 
-  for (uint32_t k = 0; k < size; k += tile_size) {
+  for (size_t k = 0; k < size; k += tile_size) {
     if (k > 0) {
       bar1.wait(token_compute);
     }
@@ -52,7 +52,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     TYPE my_val   = local_A0[l_row * tile_size + l_col];
     TYPE my_val_b = local_B0[l_row * tile_size + l_col];
 
-    for (uint32_t iter = 0; iter < tile_size; ++iter) {
+    for (size_t iter = 0; iter < tile_size; ++iter) {
       my_val   = sqrt(my_val   * my_val   + 0.01f);
       my_val_b = sqrt(my_val_b * my_val_b + 0.01f);
     }
@@ -60,7 +60,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 
     bar1.wait(token_load);
 
-    for (uint32_t j = 0; j < tile_size; ++j) {
+    for (size_t j = 0; j < tile_size; ++j) {
       sum += local_A0[l_row * tile_size + j] * local_B0[j * tile_size + l_col];
     }
     token_compute = bar1.arrive();

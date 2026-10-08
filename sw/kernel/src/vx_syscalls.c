@@ -17,6 +17,7 @@
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <string.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,21 +29,21 @@ int _fstat(int file, struct stat *st) { return -1; }
 
 int _isatty(int file) { return 0; }
 
-int _lseek(int file, int ptr, int dir) { return 0; }
+off_t _lseek(int file, off_t ptr, int dir) { return 0; }
 
 int _open(const char *name, int flags, int mode) { return -1; }
 
-int _read(int file, char *ptr, int len) { return -1; }
+ssize_t _read(int file, void *ptr, size_t len) { return -1; }
 
-caddr_t _sbrk(int incr) {
+void *_sbrk(ptrdiff_t incr) {
   __asm__ __volatile__("ebreak");
   return 0;
 }
 
-int _write(int file, char *ptr, int len) {
-  int i;
-  for (i = 0; i < len; ++i) {
-    vx_putchar(*ptr++);
+ssize_t _write(int file, const void *ptr, size_t len) {
+  const char *p = (const char *)ptr;
+  for (size_t i = 0; i < len; ++i) {
+    vx_putchar(*p++);
   }
   return len;
 }

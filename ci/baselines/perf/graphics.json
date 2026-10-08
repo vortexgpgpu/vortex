@@ -1,8 +1,8 @@
 {
   "graphics:perf_gate-draw3d-mc:rtlsim": {
     "32": {
-      "cycles": 531658,
-      "instrs": 204102
+      "cycles": 529553,
+      "instrs": 203136
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
@@ -12,8 +12,8 @@
   },
   "graphics:perf_gate-draw3d-nt16:rtlsim": {
     "32": {
-      "cycles": 148046,
-      "instrs": 51475
+      "cycles": 147521,
+      "instrs": 51232
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
@@ -23,8 +23,8 @@
   },
   "graphics:perf_gate-draw3d-nt4:rtlsim": {
     "32": {
-      "cycles": 531210,
-      "instrs": 204102
+      "cycles": 529126,
+      "instrs": 203136
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
@@ -34,8 +34,8 @@
   },
   "graphics:perf_gate-om-nt16:rtlsim": {
     "32": {
-      "cycles": 192077,
-      "instrs": 69648
+      "cycles": 189486,
+      "instrs": 68624
     },
     "app": "gfx_om",
     "args": "-w 128 -h 128 -r whitebox_128.png",
@@ -45,8 +45,8 @@
   },
   "graphics:perf_gate-om-nt4:rtlsim": {
     "32": {
-      "cycles": 755028,
-      "instrs": 278544
+      "cycles": 740760,
+      "instrs": 274448
     },
     "app": "gfx_om",
     "args": "-w 128 -h 128 -r whitebox_128.png",

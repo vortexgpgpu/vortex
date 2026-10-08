@@ -18,8 +18,8 @@
 .type vx_serial, @function
 .global vx_serial
 vx_serial:
-#if (VX_CFG_XLEN == 64)
-    addi sp, sp, -56
+#if __riscv_xlen == 64
+    addi sp, sp, -64
     sd   ra, 48(sp)
     sd   s5, 40(sp)
     sd   s4, 32(sp)
@@ -28,7 +28,7 @@ vx_serial:
     sd   s1, 8(sp)
     sd   s0, 0(sp)
 #else
-    addi sp, sp, -28
+    addi sp, sp, -32
     sw   ra, 24(sp)
     sw   s5, 20(sp)
     sw   s4, 16(sp)
@@ -53,7 +53,7 @@ label_join:
     .insn r RISCV_CUSTOM0, 3, 0, x0, s5, x0  # join s5
     addi s0, s0, 1              # index++
     blt	 s0, s2, label_loop     # loop back
-#if (VX_CFG_XLEN == 64)
+#if __riscv_xlen == 64
     ld   ra, 48(sp)
     ld   s5, 40(sp)
     ld   s4, 32(sp)
@@ -61,7 +61,7 @@ label_join:
     ld   s2, 16(sp)
     ld   s1, 8(sp)
     ld   s0, 0(sp)
-    addi sp, sp, 56
+    addi sp, sp, 64
 #else
     lw   ra, 24(sp)
     lw   s5, 20(sp)
@@ -70,6 +70,6 @@ label_join:
     lw   s2, 8(sp)
     lw   s1, 4(sp)
     lw   s0, 0(sp)
-    addi sp, sp, 28
+    addi sp, sp, 32
 #endif
     ret

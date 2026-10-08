@@ -26,16 +26,16 @@ constexpr uint32_t kDescB = 1;
 __kernel void kernel_main(kernel_arg_t* arg) {
   auto C = reinterpret_cast<TYPE*>(arg->C_addr);
 
-  const uint32_t size           = arg->size;
-  const uint32_t tile_size      = arg->tile_size;
-  const uint32_t chunk_k        = arg->chunk_k;
+  const size_t   size           = arg->size;
+  const size_t   tile_size      = arg->tile_size;
+  const size_t   chunk_k        = arg->chunk_k;
   const uint32_t mc_group_size  = arg->mc_group_size;
 
   // CTA position. blockIdx.x walks rows; blockIdx.y walks column-blocks.
   // 4 CTAs (mc_group_size) in adjacent blockIdx.x values are co-resident
   // (= one local group) and share one B column-block via multicast.
-  const uint32_t row      = blockIdx.x;
-  const uint32_t col_blk  = blockIdx.y;
+  const size_t   row      = blockIdx.x;
+  const size_t   col_blk  = blockIdx.y;
 
   // SMEM tile layout: A row [chunk_k] then B column-block [chunk_k × tile_size].
   auto shmem = reinterpret_cast<TYPE*>(__local_mem());
@@ -68,9 +68,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   local_B.arrive_and_wait();
 
   // ── Compute: 1 row × tile_size cols ───────────────────────────────────────
-  const uint32_t l_col = threadIdx.x;  // 0..tile_size-1 (single warp)
+  const size_t l_col = threadIdx.x;  // 0..tile_size-1 (single warp)
   TYPE sum(0);
-  for (uint32_t k = 0; k < chunk_k; ++k) {
+  for (size_t k = 0; k < chunk_k; ++k) {
     sum += shA[k] * shB[k * tile_size + l_col];
   }
 

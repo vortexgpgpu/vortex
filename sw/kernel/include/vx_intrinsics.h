@@ -602,7 +602,7 @@ inline void vx_barrier_expect_tx(int barrier_id, int count) {
 //                   | (MEM8[base + 2 * stride] << 16)
 //                   | (MEM8[base + 3 * stride] << 24));
 __attribute__((always_inline))
-inline float vx_packlb_f(const void* base, uint32_t stride) {
+inline float vx_packlb_f(const void* base, size_t stride) {
     float out;
     __asm__ volatile (
         ".insn r %1, 1, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
@@ -616,7 +616,7 @@ inline float vx_packlb_f(const void* base, uint32_t stride) {
 // fd = bitcast<float>((MEM16[base + 0 * stride] << 0)
 //                   | (MEM16[base + 1 * stride] << 16));
 __attribute__((always_inline))
-inline float vx_packlh_f(const void* base, uint32_t stride) {
+inline float vx_packlh_f(const void* base, size_t stride) {
     float out;
     __asm__ volatile (
         ".insn r %1, 2, 4, %0, %2, %3" : "=f"(out) : "i"(RISCV_CUSTOM0), "r"(base), "r"(stride) : "memory"
