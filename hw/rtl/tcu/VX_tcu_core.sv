@@ -573,7 +573,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         `ifdef VX_CFG_TCU_DSM_ENABLE
             wire [TCU_MAX_INPUTS-1:0] vld_mask;
             VX_tcu_dsm #(
-                .N (TCU_TC_K)
+                .N (FEDP_K)
             ) dual_sparse_mask (
                 .clk      (clk),
                 .reset    (reset),
