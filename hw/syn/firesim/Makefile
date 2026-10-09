@@ -529,13 +529,48 @@ FAME5_FIR := $(FAME5_DIR)/vortex.fir
 FAME5_SCRIPTS := $(wildcard $(SRC_DIR)/fame5/*)
 SV2V ?= sv2v
 
-$(FAME5_V): $(VIVADO_SRCS_LIST)
-	@mkdir -p $(FAME5_DIR)
-	$(SV2V) $$(grep '^+define+' $(VIVADO_SRCS_LIST) | sed 's/^+define+/-D/') --top=VX_firesim_wrap \
-		$$(grep -v '^+' $(VIVADO_SRCS_LIST)) -w $@
+# FAME5_LIFT: units given plain-port boundaries before sv2v (fame5/lift_boundaries.py,
+# which needs pyslang: LIFT_PYTHON), so that interface-port units such as
+# VX_issue_slice survive conversion and can be FAME5_CLASSES (as <unit>__lift).
+# The RTL is not changed: the pass rewrites a copy of the staged sources.
+# Each entry is <unit>[:drop=<param>,...] (parameters that only label instances).
+FAME5_LIFT ?=
+LIFT_PYTHON ?= python3
+FAME5_LIFT_STAMP := $(FAME5_DIR)/lift.txt
+FAME5_SRCS_LIST := $(if $(strip $(FAME5_LIFT)),$(FAME5_DIR)/lift/srcs.f,$(VIVADO_SRCS_LIST))
 
-$(FAME5_FIR): $(FAME5_V) $(FAME5_SCRIPTS)
-	bash $(SRC_DIR)/fame5/to_firrtl.sh $(FAME5_V) VX_firesim_wrap $@ VX_socket_top VX_firesim_wrap \
+$(FAME5_LIFT_STAMP): FORCE
+	@mkdir -p $(FAME5_DIR)
+	@echo "$(FAME5_LIFT)" | cmp -s - $@ || echo "$(FAME5_LIFT)" > $@
+
+$(FAME5_DIR)/lift/srcs.f: $(VIVADO_SRCS_LIST) $(SRC_DIR)/fame5/lift_boundaries.py $(FAME5_LIFT_STAMP)
+	rm -rf $(FAME5_DIR)/lift
+	$(LIFT_PYTHON) $(SRC_DIR)/fame5/lift_boundaries.py --srcs $(VIVADO_SRCS_LIST) --top VX_firesim_wrap \
+		--out $(FAME5_DIR)/lift $(foreach u,$(FAME5_LIFT),--unit '$(u)')
+
+$(FAME5_V): $(FAME5_SRCS_LIST)
+	@mkdir -p $(FAME5_DIR)
+	$(SV2V) $$(grep '^+define+' $(FAME5_SRCS_LIST) | sed 's/^+define+/-D/') --top=VX_firesim_wrap \
+		$$(grep -v '^+' $(FAME5_SRCS_LIST)) -w $@
+
+# FAME5_CLASSES: the modules threaded as classes, each kept as hierarchy by the
+# conversion together with every parameterization of it. Units inside a socket
+# (e.g. VX_fma_unit, the FPU lanes) become nested classes, extracted from every
+# socket and threaded on their own; FAME5_FOLD (Golden Gate) sets how many
+# physical copies each class gets.
+FAME5_CLASSES ?= VX_socket_top
+FAME5_KEEP := $(foreach c,$(FAME5_CLASSES),$(c) $$paramod*\$(c) $$paramod*\$(c)\*)
+FAME5_CLASSES_STAMP := $(FAME5_DIR)/classes.txt
+
+# Rewritten only when the class list changes, so the conversion reruns then.
+.PHONY: FORCE
+FORCE:
+$(FAME5_CLASSES_STAMP): FORCE
+	@mkdir -p $(FAME5_DIR)
+	@echo "$(FAME5_CLASSES)" | cmp -s - $@ || echo "$(FAME5_CLASSES)" > $@
+
+$(FAME5_FIR): $(FAME5_V) $(FAME5_SCRIPTS) $(FAME5_CLASSES_STAMP)
+	bash $(SRC_DIR)/fame5/to_firrtl.sh $(FAME5_V) VX_firesim_wrap $@ '$(FAME5_KEEP)' VX_firesim_wrap \
 		"blackbox VX_dp_ram VX_sp_ram"
 
 # The generator's circuit names VX_firesim_wrap as an extmodule; it is replaced
@@ -554,8 +589,9 @@ elaborate: stage $(FAME5_FIR)
 	rm -f $(GEN_FIR)
 	$(MAKE) -C $(FIRESIM_PATH)/sim $(GEN_FIR) $(FIRESIM_TARGET_ARGS)
 	python3 $(SRC_DIR)/fame5/splice.py $(GEN_FIR) $(FAME5_FIR)
+	python3 $(SRC_DIR)/fame5/annotate_blackboxes.py $(GEN_FIR) $(GEN_ANNO)
 ifneq ($(FAME5_THREADS),0)
-	python3 $(SRC_DIR)/fame5/annotate_threads.py $(GEN_FIR) $(GEN_ANNO) VX_socket_top
+	for c in $(FAME5_CLASSES); do python3 $(SRC_DIR)/fame5/annotate_threads.py $(GEN_FIR) $(GEN_ANNO) $$c || exit 1; done
 endif
 	$(MAKE) -C $(FIRESIM_PATH)/sim verilog $(FIRESIM_TARGET_ARGS)
 endif
