@@ -38,6 +38,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
 `else
     wire [31:0] core_id_v = 32'(CORE_ID);
 `endif
+    `UNUSED_VAR (core_id_v)
     `UNUSED_SPARAM (INSTANCE_ID)
 
     // MPM perf-counter readback via DCR interface ////////////////////////////
