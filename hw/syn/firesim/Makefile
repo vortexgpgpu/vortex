@@ -369,6 +369,9 @@ RTL_SRCS := $(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh')
 vivado-sources: $(VIVADO_SRCS_LIST)
 $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 	@mkdir -p $(BUILD_DIR)
+	@# gen_sources.sh adds to its directory without clearing it, so a source the
+	@# previous configuration needed (a TEX file, say) would stay and be listed.
+	rm -rf $(VIVADO_SRCS_DIR)
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) \
 		-TVX_firesim_wrap -C$(VIVADO_SRCS_NAME) -O$(VIVADO_SRCS_NAME).f
 	@for f in $(AFU_SHELL_MODULES); do \
@@ -403,6 +406,8 @@ SIM_RTL_SRCS := $(filter-out $(CONFIG_STAMP),$(RTL_SRCS)) $(SIM_CONFIG_STAMP)
 sim-sources: $(SIM_SRCS_STAMP)
 $(SIM_SRCS_STAMP): $(SIM_RTL_SRCS)
 	@mkdir -p $(BUILD_DIR)
+	@# Cleared for the same reason as the Vivado flattening above.
+	rm -rf $(SRCS_DIR)
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(SIM_GEN_CFLAGS) \
 		-TVX_firesim_wrap -Cvortex_srcs -Ovortex_srcs_all.f
 	@# The same zero-memory-port check the Vivado flattening makes: here it would
