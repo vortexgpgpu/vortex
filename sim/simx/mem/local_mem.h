@@ -25,6 +25,7 @@ public:
     uint32_t num_reqs;
     uint32_t B; // log2 number of banks
     bool write_reponse;
+    uint32_t num_lsu_reqs; // leading inputs owned by the LSU; the rest are DMA
   };
 
   struct PerfStats {

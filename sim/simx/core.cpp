@@ -133,7 +133,8 @@ public:
       LSU_WORD_SIZE,
       lmem_num_reqs,
       log2ceil(VX_CFG_LMEM_NUM_BANKS),
-      false
+      false,
+      LSU_NUM_REQS
     });
 
     // create lmem switch
