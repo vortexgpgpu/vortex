@@ -52,7 +52,7 @@
 #                                 shell / platform IP that also lands in the SLR)
 #   SLR_PBLOCKS_HARD_CEILING=f   per-SLR BRAM/DSP/URAM fill cap, 0..1 (default 0.95)
 #   SLR_PBLOCKS_ANCHOR=i         index of the anchor SLR (default: the middle one)
-#   SLR_PBLOCKS_SLRS=SLR0,SLR1   restrict the floorplan to these SLRs (default: all)
+#   SLR_PBLOCKS_SLRS=SLR0,SLR1   restrict the floorplan to these SLRs (default: all); one SLR pins the whole design there
 #   SLR_PBLOCKS_FORCE=1          apply even if the guardrail rejects (debug only)
 #
 # Binning model:
@@ -137,15 +137,22 @@ proc slr_pblocks_run {} {
     set force [expr {[info exists ::env(SLR_PBLOCKS_FORCE)] && $::env(SLR_PBLOCKS_FORCE) eq "1"}]
 
     set slrs [lsort [get_slrs]]
-    if {[info exists ::env(SLR_PBLOCKS_SLRS)]} {
-        set want [split $::env(SLR_PBLOCKS_SLRS) ","]
-        set slrs [lsort [lmap x $slrs {expr {[get_property NAME $x] in $want ? $x : [continue]}}]]
-    }
-    set nslr [llength $slrs]
-    if {$nslr < 2} {
-        puts "SLR-PBLOCKS: device has $nslr SLR(s); floorplan skipped"
+    if {[llength $slrs] < 2} {
+        puts "SLR-PBLOCKS: device has [llength $slrs] SLR(s); floorplan skipped"
         return
     }
+    if {[info exists ::env(SLR_PBLOCKS_SLRS)]} {
+        # Look the SLRs up by name: filtering the object list through expr would
+        # hand back plain strings that get_property no longer accepts as objects.
+        set slrs [lsort [get_slrs -quiet [split $::env(SLR_PBLOCKS_SLRS) ","]]]
+    }
+    set nslr [llength $slrs]
+    if {$nslr == 0} {
+        puts "SLR-PBLOCKS: SLR_PBLOCKS_SLRS=$::env(SLR_PBLOCKS_SLRS) names no SLR of this device; floorplan skipped"
+        return
+    }
+    # A single listed SLR pins every atom (and the anchor) into it, e.g. to keep a
+    # one-core design next to the HBM in SLR0 with no SLR crossing in the core.
 
     # ---- capacity model: real RM-usable sites per SLR, per resource ----
     # Use the platform's own dynamic-region pblock, not raw SLR site counts. The
