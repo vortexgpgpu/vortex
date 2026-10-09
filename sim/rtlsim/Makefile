@@ -128,7 +128,14 @@ SRCS = $(SW_COMMON_DIR)/util.cpp $(SIM_COMMON_DIR)/mem.cpp $(SW_COMMON_DIR)/soft
 SRCS += $(DPI_DIR)/dpi_util.cpp $(DPI_DIR)/dpi_float.cpp
 SRCS += $(SRC_DIR)/processor.cpp
 
+# AXI_BUS=1 simulates Vortex behind its AXI4 adapter, as the FPGA platforms
+# instantiate it, against a latency-bandwidth-pipe memory model.
+ifdef AXI_BUS
+TOP = rtlsim_axi_shim
+CXXFLAGS += -DAXI_BUS
+else
 TOP = rtlsim_shim
+endif
 
 VL_FLAGS = --exe
 VL_FLAGS += --language 1800-2012 --assert -Wall -Wpedantic
