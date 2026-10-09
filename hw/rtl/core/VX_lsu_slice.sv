@@ -41,6 +41,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 `else
     wire [31:0] core_id_v = 32'(CORE_ID);
 `endif
+    `UNUSED_VAR (core_id_v)
     localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam LSUQ_SIZEW   = `LOG2UP(`VX_CFG_LSU_PENDING_SIZE);
