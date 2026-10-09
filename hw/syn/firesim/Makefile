@@ -456,7 +456,12 @@ kernel-env:
 	@echo 'export VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl'
 	@echo 'export TOOL_DIR=$(SCRIPT_DIR)'
 
+# Simulator clock (MHz): the image is timed at it and the shell programs it.
+ifeq ($(FIRESIM_PLATFORM), aved)
+FREQUENCY ?= 250.0
+else
 FREQUENCY ?= 60.0
+endif
 STRATEGY ?= TIMING
 
 # How the card's FireSim platform spells this TARGET, and where it leaves the
