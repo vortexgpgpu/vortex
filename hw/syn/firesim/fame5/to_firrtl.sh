@@ -16,6 +16,12 @@ W=$(dirname "$(realpath -m "$OUT")")/$(basename "$OUT" .fir).work
 rm -rf "$W" && mkdir -p "$W"
 REN=""
 [ "$NEWTOP" != "$TOP" ] && REN="rename $TOP $NEWTOP"
+SPLITKEPT="splitnets -ports -driver A:keep_hierarchy; opt_clean -purge"
+[ "${FAME5_SPLIT_KEPT_PORTS:-1}" = 0 ] && SPLITKEPT=""
+# Kept modules' ports are split at driver boundaries, as the top's are: a unit
+# that computes some bits of a wide output from other bits of it (an LSU
+# request built from its own address field) would otherwise read its own
+# output port, which FIRRTL's word-level loop check rejects.
 $Y -q -l "$W/y.log" -p "
   read_verilog -sv $IN
   $PRE
@@ -26,9 +32,11 @@ $Y -q -l "$W/y.log" -p "
   memory -nomap; memory_nordff; opt -full; opt -nosdff -nodffe
   dffunmap; opt_clean -purge
   splitnets -driver; opt_clean -purge
+  $SPLITKEPT
   splitnets $TOP; opt_clean -purge
   $REN
   write_rtlil $W/design.il" || { tail -5 "$W/y.log"; exit 1; }
+python3 "$(dirname "$0")/name_kept.py" "$W/design.il"
 # FIRRTL memories carry one enable and one uniform mask per write port, so a
 # handful of RTL arrays - read-modify-write DCR files, shift queues, per-field
 # struct writes - collect into \$mem cells write_firrtl rejects ('Complex
