@@ -152,6 +152,31 @@ else
 	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(OCL_ICD_LIB_DIR):$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 endif
 
+# FireSim takes the same targets as the card's native driver; the card and its
+# variables are decided in sw/runtime/firesim/card.mk (convention established
+# in tests/regression/common.mk).
+ifneq ($(filter run-firesim,$(MAKECMDGOALS)),)
+ifeq ($(origin TARGET),file)
+override TARGET :=
+endif
+include $(VORTEX_HOME)/sw/runtime/firesim/card.mk
+endif
+
+run-firesim: $(PROJECT) $(KERNEL_SRCS)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/firesim DESTDIR=$(VORTEX_RT_LIB) FIRESIM_CARD=$(FIRESIM_CARD) TARGET=$(TARGET)
+ifneq ($(filter $(TARGET),xrtsim avedsim),)
+	LD_LIBRARY_PATH=$(OCL_ICD_LIB_DIR):$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else ifeq ($(FIRESIM_PLATFORM), aved)
+ifeq ($(TARGET), hw)
+	$(VORTEX_HOME)/ci/v80_preflight.sh
+endif
+	VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/firesim.vbin LD_LIBRARY_PATH=$(OCL_ICD_LIB_DIR):$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else ifeq ($(TARGET), hw)
+	XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(OCL_ICD_LIB_DIR):$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else
+	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/firesim/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(OCL_ICD_LIB_DIR):$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+endif
+
 .depend: $(SRCS)
 	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
 
