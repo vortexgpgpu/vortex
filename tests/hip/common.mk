@@ -169,9 +169,34 @@ else
 	$(HIP_OCL_ENV) SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 endif
 
+# FireSim takes the same targets as the card's native driver; the card and its
+# variables are decided in sw/runtime/firesim/card.mk (convention established
+# in tests/regression/common.mk).
+ifneq ($(filter run-firesim,$(MAKECMDGOALS)),)
+ifeq ($(origin TARGET),file)
+override TARGET :=
+endif
+include $(VORTEX_HOME)/sw/runtime/firesim/card.mk
+endif
+
+run-firesim: $(PROJECT)
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/firesim DESTDIR=$(VORTEX_RT_LIB) FIRESIM_CARD=$(FIRESIM_CARD) TARGET=$(TARGET)
+ifneq ($(filter $(TARGET),xrtsim avedsim),)
+	$(HIP_OCL_ENV) LD_LIBRARY_PATH=$(OCL_ICD_LIB_DIR):$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else ifeq ($(FIRESIM_PLATFORM), aved)
+ifeq ($(TARGET), hw)
+	$(VORTEX_HOME)/ci/v80_preflight.sh
+endif
+	$(HIP_OCL_ENV) VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/firesim.vbin LD_LIBRARY_PATH=$(OCL_ICD_LIB_DIR):$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else ifeq ($(TARGET), hw)
+	$(HIP_OCL_ENV) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(OCL_ICD_LIB_DIR):$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+else
+	$(HIP_OCL_ENV) XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/firesim/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(OCL_ICD_LIB_DIR):$(CHIPSTAR_PATH)/lib:$(POCL_PATH)/lib:$(VORTEX_RT_LIB):$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(POCL_CC_FLAGS) OCL_ICD_VENDORS=$(OCL_ICD_VENDORS) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
+endif
+
 clean:
 	rm -f $(PROJECT) *.o *.vxbin *.dump *.ll *.log *.spv common.h
 
-.PHONY: all run-simx run-rtlsim run-opae run-xrt clean
+.PHONY: all run-simx run-rtlsim run-opae run-xrt run-firesim clean
 
 FORCE:
