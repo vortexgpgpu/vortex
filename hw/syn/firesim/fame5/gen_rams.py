@@ -23,6 +23,7 @@ The bypasses make the result independent of the memory's read-under-write
 behaviour, which FAME-5's threaded memories do not preserve. Every OUT_REG=1
 memory has read latency 1, so it stays block-RAM-mappable after threading.
 """
+import os
 import re
 import sys
 
@@ -71,10 +72,52 @@ def gen(name, prm, sp):
         if mode == "N":
             assert oreg, f"{name}: RDW_MODE N needs OUT_REG"
             mode = "N"
+    orig_mode = mode
     rden = "and(read, not(write))" if mode == "N" else "read"
     if mode == "N":
         mode = "R"
     readers = ["r", "r2"] if (oreg == 0 and mode == "R") else ["r"]
+    # FAME5_NATIVE_RAMS=1: a registered read-first RAM is a plain latency-1
+    # memory with read-under-write = old, read enable = rden, and output hold
+    # left to the memory -- no write buffer, forwarding or hold registers.
+    # Requires a Golden Gate whose threaded memories hold per-thread read data
+    # while the read port is disabled.
+    # (No-change mode is excluded: its exclusive read/write enables would let
+    # InferReadWrite merge the ports into one read-write port.)
+    native_r = oreg and orig_mode == "R" and os.environ.get("FAME5_NATIVE_RAMS") == "1"
+    # FAME5_FAMERAM=1: the same RAM as one FameRam black box (FameRam.v), which
+    # Golden Gate threads as a single memory -- byte lanes kept together, so it
+    # stays BRAM/URAM-mappable instead of becoming one LUTRAM per lane.
+    if oreg and orig_mode == "R" and os.environ.get("FAME5_FAMERAM") == "1":
+        style = "block" if dw * size >= 4096 else "auto"
+        a(f"    inst ram of FameRam_{name}")
+        a("    ram.clk <= clk")
+        a("    ram.reset <= reset")
+        a("    ram.read <= read")
+        a("    ram.write <= write")
+        a("    ram.wren <= wren")
+        a("    ram.waddr <= waddr")
+        a("    ram.raddr <= raddr")
+        a("    ram.wdata <= wdata")
+        a("    rdata <= ram.rdata")
+        # Host-side ports, tied off here; Golden Gate reconnects them when it
+        # threads the RAM. Every FameRam extmodule has the same port list.
+        a("    ram.hostClock <= clk")
+        a("    ram.hostReset <= UInt<1>(0)")
+        a("    ram.threadIdx <= UInt<16>(0)")
+        a("")
+        a(f"  extmodule FameRam_{name}:")
+        for d, n, w in (("input", "clk", None), ("input", "reset", 1), ("input", "read", 1), ("input", "write", 1),
+                        ("input", "wren", nw), ("input", "waddr", aw), ("input", "raddr", aw),
+                        ("input", "wdata", dw), ("output", "rdata", dw),
+                        ("input", "hostClock", None), ("input", "hostReset", 1), ("input", "threadIdx", 16)):
+            a(f"    {d} {n}: {'Clock' if w is None else f'UInt<{w}>'}")
+        a("    defname = FameRam")
+        for k, v in (("DATAW", dw), ("SIZE", size), ("WRENW", nw), ("ADDRW", aw), ("NTHREADS", 1), ("TIDXW", 1)):
+            a(f"    parameter {k} = {v}")
+        a(f'    parameter RAM_STYLE = "{style}"')
+        a("")
+        return L
     a("    mem ram:")
     a(f"      data-type => UInt<{lw}>[{nw}]")
     a(f"      depth => {size}")
@@ -83,11 +126,11 @@ def gen(name, prm, sp):
     for r in readers:
         a(f"      reader => {r}")
     a("      writer => w")
-    a("      read-under-write => undefined")
+    a(f"      read-under-write => {'old' if native_r else 'undefined'}")
     a("")
     for r in readers:
         a(f"    ram.{r}.clk <= clk")
-        a(f"    ram.{r}.en <= UInt<1>(1)")
+        a(f"    ram.{r}.en <= {rden if native_r else 'UInt<1>(1)'}")
     a("    ram.w.clk <= clk")
     mask = (lambda src: [f"bits({src}, {i}, {i})" for i in range(nw)]) if nw > 1 else (lambda src: ["UInt<1>(1)"])
 
@@ -121,6 +164,10 @@ def gen(name, prm, sp):
         a(f"    reg wren_r: UInt<{nw}>, clk")
         a("    wren_r <= wren")
         a(f"    rdata <= {merge(mem_out('r'), 'wdata_r', 'hit_r', 'wren_r')}")
+    elif native_r:
+        a("    ram.r.addr <= raddr")
+        write_port("write", "waddr", "wdata", "wren")
+        a(f"    rdata <= {mem_out('r')}")
     elif oreg and mode == "R":
         a("    reg wb_v: UInt<1>, clk")
         a(f"    reg wb_addr: UInt<{aw}>, clk")
