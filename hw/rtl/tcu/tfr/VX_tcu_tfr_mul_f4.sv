@@ -112,6 +112,27 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         endcase
     endfunction
 
+`ifdef VX_CFG_TCU_NVFP4_ENABLE
+`define VX_TCU_TFR_MUL_F4_TERM_ROM
+`endif
+`ifdef VX_CFG_TCU_LNSF4_ENABLE
+`define VX_TCU_TFR_MUL_F4_TERM_ROM
+`endif
+
+`ifdef VX_TCU_TFR_MUL_F4_TERM_ROM
+    // Signed e2m1 x e2m1 element product in units of 1/4, indexed by
+    // {sign, code_a, code_b}: a 7-input lookup per bit replaces the DSP
+    // multiply and the negate carry chain ahead of the group reduction.
+    function automatic [127:0][8:0] e2m1_term_rom();
+        logic [7:0] p;
+        for (int i = 0; i < 128; ++i) begin
+            p = 8'(e2m1_mag_x2({1'b0, 3'(i >> 3)}) * e2m1_mag_x2({1'b0, 3'(i)}));
+            e2m1_term_rom[i] = (i >= 64) ? (9'd0 - 9'(p)) : 9'(p);
+        end
+    endfunction
+    localparam [127:0][8:0] E2M1_TERM = e2m1_term_rom();
+`endif
+
 `ifdef VX_CFG_TCU_MXFP4_ENABLE
     wire [TCK-1:0][24:0]      result_sig_mxfp4;
     wire [TCK-1:0][EXP_W-1:0] result_exp_mxfp4;
@@ -318,79 +339,19 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 
     for (genvar i = 0; i < TCK; ++i) begin : g_lane_nvfp4
         localparam K_WORD = i / 2;
-
-        wire [3:0][3:0] elem_mag_a, elem_mag_b;
-        wire [3:0][7:0] elem_mag_prod;
-        wire [3:0] elem_sign;
-        wire [3:0] elem_valid;
-        wire [3:0] elem_sign_r, elem_valid_r;
-        VX_pipe_register #(
-            .DATAW (8),
-            .DEPTH (PROD_REG)
-        ) pipe_ctrl (
-            .clk      (clk),
-            .reset    (1'b0),
-            .enable   (enable),
-            .data_in  ({elem_sign, elem_valid}),
-            .data_out ({elem_sign_r, elem_valid_r})
-        );
-
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
-
-            wire lane_valid = vld_mask[i * 4 + j];
             wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
             wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
-
-            assign elem_mag_a[j] = e2m1_mag_x2(raw_a);
-            assign elem_mag_b[j] = e2m1_mag_x2(raw_b);
-            assign elem_sign[j] = raw_a[3] ^ raw_b[3];
-            assign elem_valid[j] = lane_valid && (raw_a[2:0] != 3'd0)
-                                         && (raw_b[2:0] != 3'd0);
-
-            wire [10:0] elem_mag_ext = elem_valid_r[j] ? {3'b0, elem_mag_prod[j]} : 11'd0;
-            wire [10:0] elem_neg;
-            VX_ks_adder #(
-                .N(11),
-                .BYPASS(`FORCE_BUILTIN_ADDER(11))
-            ) elem_neg_ksa (
-                .dataa(~elem_mag_ext),
-                .datab(11'd0),
-                .cin(1'b1),
-                .sum(elem_neg),
-                `UNUSED_PIN(cout)
-            );
-            wire [10:0] elem_signed = elem_sign_r[j] ? elem_neg : elem_mag_ext;
-            assign nv_elem_signed[i][j] = {{NV_LPG_W{elem_signed[10]}}, elem_signed};
+            wire [8:0] term = vld_mask[i * 4 + j] ? E2M1_TERM[{raw_a[3] ^ raw_b[3], raw_a[2:0], raw_b[2:0]}] : 9'd0;
+            assign nv_elem_signed[i][j] = {{(NV_DOT_W-9){term[8]}}, term};
         end
-
-        VX_tcu_tfr_wmul #(
-            .N(4),
-            .LANES(2),
-            .OUT_REG(PROD_REG),
-            .USE_DSP(USE_DSP)
-        ) elem_m01 (
-            .clk    (clk),
-            .enable (enable),
-            .a(elem_mag_a[1:0]),
-            .b(elem_mag_b[1:0]),
-            .p(elem_mag_prod[1:0])
-        );
-        VX_tcu_tfr_wmul #(
-            .N(4),
-            .LANES(2),
-            .OUT_REG(PROD_REG),
-            .USE_DSP(USE_DSP)
-        ) elem_m23 (
-            .clk    (clk),
-            .enable (enable),
-            .a(elem_mag_a[3:2]),
-            .b(elem_mag_b[3:2]),
-            .p(elem_mag_prod[3:2])
-        );
     end
 
-    // Post-seam: the group reduction and the scale multiply consume the registered products.
+    // The group reduction runs pre-seam; past it only the scale multiply is
+    // left. |dot| * k is formed as (dot ^ s) * k + (s ? k : 0), so the
+    // seam register feeds the DSP's A input and the sign fold rides its
+    // post-adder instead of a negate carry chain.
     for (genvar g = 0; g < SF; ++g) begin : g_grp_nvfp4
         wire [NV_LPG*4-1:0][NV_DOT_W-1:0] grp_terms;
         for (genvar l = 0; l < NV_LPG; ++l) begin : g_terms
@@ -422,21 +383,24 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             `UNUSED_PIN(cout)
         );
 
-        wire dot_sign = signed_dot[NV_DOT_W-1];
-        wire [NV_DOT_W-2:0] neg_dot;
-        VX_ks_adder #(
-            .N(NV_DOT_W-1),
-            .BYPASS(`FORCE_BUILTIN_ADDER(NV_DOT_W-1))
-        ) dot_neg_ksa (
-            .dataa(~signed_dot[NV_DOT_W-2:0]),
-            .datab((NV_DOT_W-1)'(0)),
-            .cin(1'b1),
-            .sum(neg_dot),
-            `UNUSED_PIN(cout)
+        wire dot_sign_w = signed_dot[NV_DOT_W-1];
+        wire [NV_DOT_W-2:0] dot_ones_w = signed_dot[NV_DOT_W-2:0] ^ {(NV_DOT_W-1){dot_sign_w}};
+        wire dot_zero_w = ~|signed_dot;
+
+        wire dot_sign, dot_zero;
+        wire [NV_DOT_W-2:0] dot_ones;
+        VX_pipe_register #(
+            .DATAW (NV_DOT_W + 1),
+            .DEPTH (PROD_REG)
+        ) pipe_dot (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  ({dot_sign_w, dot_ones_w, dot_zero_w}),
+            .data_out ({dot_sign,   dot_ones,   dot_zero})
         );
 
-        wire [NV_DOT_W-2:0] abs_dot = dot_sign ? neg_dot : signed_dot[NV_DOT_W-2:0];
-        wire [NV_DOT_W+6:0] scaled_mag;
+        wire [NV_DOT_W+6:0] ones_prod;
         VX_tcu_tfr_wmul #(
             .N(NV_DOT_W-1),
             .M(8),
@@ -445,19 +409,19 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         ) scale_mul (
             .clk    (clk),
             .enable (enable),
-            .a(abs_dot),
+            .a(dot_ones),
             .b(sf_man_prod),
-            .p(scaled_mag)
+            .p(ones_prod)
         );
+        wire [NV_DOT_W+6:0] scaled_mag = ones_prod + (dot_sign ? (NV_DOT_W+7)'(sf_man_prod) : '0);
 
-        wire is_zero_out = ~|scaled_mag;
         wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_NVFP4_GRP;
 
         for (genvar l = 0; l < NV_LPG; ++l) begin : g_out
             localparam I = g * NV_LPG + l;
             if (l == 0) begin : g_lead
-                assign result_sig_nvfp4[I] = {dot_sign & ~is_zero_out, result_mag};
-                assign sig_zero_nvfp4[I]   = is_zero_out;
+                assign result_sig_nvfp4[I] = {dot_sign & ~dot_zero, result_mag};
+                assign sig_zero_nvfp4[I]   = dot_zero;
                 assign result_exp_nvfp4[I] = nv_result_exp;
             end else begin : g_idle
                 assign result_sig_nvfp4[I] = '0;
@@ -960,7 +924,7 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
     wire signed [7:0] lns_e_a = {sf_a[6], sf_a[6:0]};
     wire signed [7:0] lns_e_b = {sf_b[6], sf_b[6:0]};
     wire signed [7:0] lns_e_sum = lns_e_a + lns_e_b;
-    wire signed [4:0] lns_e_int = lns_e_sum >>> 3;
+    wire signed [4:0] lns_e_int = lns_e_sum[7:3];
     wire [8:0] lns_scale_full = lns8_antilog(lns_e_sum[2:0]);
     wire [AL:0] lns_scale = lns_scale_full[AL:0];
     if (AL < 8) begin : g_lns_scale_unused
@@ -982,64 +946,27 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 
     for (genvar i = 0; i < TCK; ++i) begin : g_lane_lnsf4
         localparam K_WORD = i / 2;
-
-        wire [3:0][3:0] elem_mag_a, elem_mag_b;
-        wire [3:0][7:0] elem_mag_prod;
-        wire [3:0] elem_sign;
-        wire [3:0] elem_valid;
-
         for (genvar j = 0; j < 4; ++j) begin : g_term
             localparam OFF = (i % 2) * 16 + j * 4;
-
-            wire lane_valid = vld_mask[i * 4 + j];
             wire [3:0] raw_a = a_row[K_WORD][OFF +: 4];
             wire [3:0] raw_b = b_col[K_WORD][OFF +: 4];
-
-            assign elem_mag_a[j] = e2m1_mag_x2(raw_a);
-            assign elem_mag_b[j] = e2m1_mag_x2(raw_b);
-            assign elem_sign[j] = raw_a[3] ^ raw_b[3];
-            assign elem_valid[j] = lane_valid && (raw_a[2:0] != 3'd0)
-                                         && (raw_b[2:0] != 3'd0);
-
-            wire [10:0] elem_mag_ext = elem_valid[j] ? {3'b0, elem_mag_prod[j]} : 11'd0;
-            wire [10:0] elem_neg;
-            VX_ks_adder #(
-                .N(11),
-                .BYPASS(`FORCE_BUILTIN_ADDER(11))
-            ) elem_neg_ksa (
-                .dataa(~elem_mag_ext),
-                .datab(11'd0),
-                .cin(1'b1),
-                .sum(elem_neg),
-                `UNUSED_PIN(cout)
-            );
-            wire [10:0] elem_signed = elem_sign[j] ? elem_neg : elem_mag_ext;
-            assign lns_elem_signed[i][j] = {{LNS_LPG_W{elem_signed[10]}}, elem_signed};
+            wire [8:0] term = vld_mask[i * 4 + j] ? E2M1_TERM[{raw_a[3] ^ raw_b[3], raw_a[2:0], raw_b[2:0]}] : 9'd0;
+            assign lns_elem_signed[i][j] = {{(LNS_DOT_W-9){term[8]}}, term};
         end
-
-        VX_tcu_tfr_wmul #(
-            .N(4),
-            .LANES(2),
-            .USE_DSP(USE_DSP)
-        ) elem_m01 (
-            .clk    (clk),
-            .enable (enable),
-            .a(elem_mag_a[1:0]),
-            .b(elem_mag_b[1:0]),
-            .p(elem_mag_prod[1:0])
-        );
-        VX_tcu_tfr_wmul #(
-            .N(4),
-            .LANES(2),
-            .USE_DSP(USE_DSP)
-        ) elem_m23 (
-            .clk    (clk),
-            .enable (enable),
-            .a(elem_mag_a[3:2]),
-            .b(elem_mag_b[3:2]),
-            .p(elem_mag_prod[3:2])
-        );
     end
+
+    // Same seam split as NVFP4: reduction pre-seam, scale multiply post-seam.
+    wire [AL:0] lns_scale_r;
+    VX_pipe_register #(
+        .DATAW (AL + 1),
+        .DEPTH (PROD_REG)
+    ) pipe_lns_scale (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  (lns_scale),
+        .data_out (lns_scale_r)
+    );
 
     for (genvar g = 0; g < SF; ++g) begin : g_grp_lnsf4
         wire [LNS_LPG*4-1:0][LNS_DOT_W-1:0] grp_terms;
@@ -1072,21 +999,24 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
             `UNUSED_PIN(cout)
         );
 
-        wire dot_sign = signed_dot[LNS_DOT_W-1];
-        wire [LNS_DOT_W-2:0] neg_dot;
-        VX_ks_adder #(
-            .N(LNS_DOT_W-1),
-            .BYPASS(`FORCE_BUILTIN_ADDER(LNS_DOT_W-1))
-        ) dot_neg_ksa (
-            .dataa(~signed_dot[LNS_DOT_W-2:0]),
-            .datab((LNS_DOT_W-1)'(0)),
-            .cin(1'b1),
-            .sum(neg_dot),
-            `UNUSED_PIN(cout)
+        wire dot_sign_w = signed_dot[LNS_DOT_W-1];
+        wire [LNS_DOT_W-2:0] dot_ones_w = signed_dot[LNS_DOT_W-2:0] ^ {(LNS_DOT_W-1){dot_sign_w}};
+        wire dot_zero_w = ~|signed_dot;
+
+        wire dot_sign, dot_zero;
+        wire [LNS_DOT_W-2:0] dot_ones;
+        VX_pipe_register #(
+            .DATAW (LNS_DOT_W + 1),
+            .DEPTH (PROD_REG)
+        ) pipe_dot (
+            .clk      (clk),
+            .reset    (1'b0),
+            .enable   (enable),
+            .data_in  ({dot_sign_w, dot_ones_w, dot_zero_w}),
+            .data_out ({dot_sign,   dot_ones,   dot_zero})
         );
 
-        wire [LNS_DOT_W-2:0] abs_dot = dot_sign ? neg_dot : signed_dot[LNS_DOT_W-2:0];
-        wire [LNS_DOT_W+AL-1:0] scaled_mag;
+        wire [LNS_DOT_W+AL-1:0] ones_prod;
         VX_tcu_tfr_wmul #(
             .N(LNS_DOT_W-1),
             .M(AL+1),
@@ -1095,28 +1025,19 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
         ) scale_mul (
             .clk    (clk),
             .enable (enable),
-            .a(abs_dot),
-            .b(lns_scale),
-            .p(scaled_mag)
+            .a(dot_ones),
+            .b(lns_scale_r),
+            .p(ones_prod)
         );
-
-        wire is_zero_out = ~|scaled_mag;
+        wire [LNS_DOT_W+AL-1:0] scaled_mag = ones_prod + (dot_sign ? (LNS_DOT_W+AL)'(lns_scale_r) : '0);
         wire [23:0] result_mag = 24'(scaled_mag) << SIG_SHIFT_LNS;
 
         for (genvar l = 0; l < LNS_LPG; ++l) begin : g_out
             localparam I = g * LNS_LPG + l;
             if (l == 0) begin : g_lead
-                VX_pipe_register #(
-                    .DATAW (26),
-                    .DEPTH (PROD_REG)
-                ) pipe_result (
-                    .clk      (clk),
-                    .reset    (1'b0),
-                    .enable   (enable),
-                    .data_in  ({dot_sign & ~is_zero_out, result_mag, is_zero_out}),
-                    .data_out ({result_sig_lnsf4[I], sig_zero_lnsf4[I]})
-                );
-                assign result_exp_lnsf4[I] = is_zero_out ? '0 : lns_result_exp;
+                assign result_sig_lnsf4[I] = {dot_sign & ~dot_zero, result_mag};
+                assign sig_zero_lnsf4[I]   = dot_zero;
+                assign result_exp_lnsf4[I] = lns_result_exp;
             end else begin : g_idle
                 assign result_sig_lnsf4[I] = '0;
                 assign sig_zero_lnsf4[I]   = 1'b1;
@@ -1391,3 +1312,4 @@ module VX_tcu_tfr_mul_f4 import VX_tcu_pkg::*;
 endmodule
 
 `undef VX_TCU_TFR_MUL_F4_LNS
+`undef VX_TCU_TFR_MUL_F4_TERM_ROM
