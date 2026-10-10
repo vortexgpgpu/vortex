@@ -54,6 +54,12 @@
 #   SLR_PBLOCKS_ANCHOR=i         index of the anchor SLR (default: the middle one)
 #   SLR_PBLOCKS_SLRS=SLR0,SLR1   restrict the floorplan to these SLRs (default: all); one SLR pins the whole design there
 #   SLR_PBLOCKS_FORCE=1          apply even if the guardrail rejects (debug only)
+#   SLR_PIN_CELLS=re@SLRn[,...]  independently of USE_SLR_PBLOCKS, pin every cell
+#                                 matching the hierarchical-name regex into one SLR
+#                                 (e.g. ".*/tcu_unit@SLR1"): keeps a block whose
+#                                 single-cycle handshake spans its sub-units from
+#                                 being split across a die boundary. Same capacity
+#                                 guardrail and ceilings as above.
 #
 # Binning model:
 #   anchor SLR (the middle one) : globally-shared blocks — l2cache, l3cache, and
@@ -464,4 +470,69 @@ proc slr_fmt {foot} {
     return [join $out ", "]
 }
 
+proc slr_pin_run {} {
+    if {![info exists ::env(SLR_PIN_CELLS)] || $::env(SLR_PIN_CELLS) eq ""} {
+        return
+    }
+    set ceil 0.85
+    if {[info exists ::env(SLR_PBLOCKS_FILL_CEILING)]} {
+        set ceil $::env(SLR_PBLOCKS_FILL_CEILING)
+    }
+    set hceil 0.95
+    if {[info exists ::env(SLR_PBLOCKS_HARD_CEILING)]} {
+        set hceil $::env(SLR_PBLOCKS_HARD_CEILING)
+    }
+    set force [expr {[info exists ::env(SLR_PBLOCKS_FORCE)] && $::env(SLR_PBLOCKS_FORCE) eq "1"}]
+    if {![info exists ::SLR_B36]} {
+        set ::SLR_B36  [get_cells -quiet -hierarchical -filter {REF_NAME =~ RAMB36* || REF_NAME =~ FIFO36*}]
+        set ::SLR_B18  [get_cells -quiet -hierarchical -filter {REF_NAME =~ RAMB18* || REF_NAME =~ FIFO18*}]
+        set ::SLR_DSP  [get_cells -quiet -hierarchical -filter {REF_NAME =~ DSP48* || REF_NAME =~ DSP58*}]
+        set ::SLR_URAM [get_cells -quiet -hierarchical -filter {REF_NAME =~ URAM*}]
+    }
+    set idx 0
+    foreach spec [split $::env(SLR_PIN_CELLS) ","] {
+        set at [string last "@" $spec]
+        set re [string range $spec 0 [expr {$at - 1}]]
+        set slr [get_slrs -quiet [string range $spec [expr {$at + 1}] end]]
+        if {$at < 1 || $slr eq ""} {
+            puts "SLR-PIN: '$spec' is not <regex>@<SLR> naming an SLR of this device; skipped"
+            continue
+        }
+        set nm [get_property NAME $slr]
+        set cells [get_cells -quiet -hierarchical -regexp $re]
+        if {[llength $cells] == 0} {
+            puts "SLR-PIN: '$re' matches no cell; skipped"
+            continue
+        }
+        set src [get_pblocks -quiet "pblock_dynamic_${nm}"]
+        if {$src eq "" || [llength [get_sites -quiet -of_objects $src -filter {SITE_TYPE =~ SLICE*}]] == 0} {
+            set src $slr
+        }
+        set cap [list [expr {[llength [get_sites -quiet -of_objects $src -filter {SITE_TYPE =~ SLICE*}]] * 8}] \
+                      [llength [get_sites -quiet -of_objects $src -filter {SITE_TYPE =~ RAMB18*}]] \
+                      [llength [get_sites -quiet -of_objects $src -filter {SITE_TYPE =~ DSP*}]] \
+                      [llength [get_sites -quiet -of_objects $src -filter {SITE_TYPE =~ URAM*}]]]
+        set foot {0 0 0 0}
+        foreach c $cells {
+            set foot [slr_foot_add $foot [slr_foot $c]]
+        }
+        set fits 1
+        foreach r $::SLR_RES f $foot c $cap {
+            set lim [expr {$r eq "LUT" ? $ceil : $hceil}]
+            if {$c > 0 && $f > $lim * $c} { set fits 0 }
+        }
+        puts "SLR-PIN: [llength $cells] cell(s) matching '$re' -> $nm: [slr_fmt $foot] of [slr_fmt $cap]"
+        if {!$fits && !$force} {
+            puts "SLR-PIN: REJECT — exceeds the $nm ceiling; not pinned"
+            continue
+        }
+        set pb "pb_pin${idx}"
+        create_pblock $pb
+        resize_pblock $pb -add $slr
+        add_cells_to_pblock $pb $cells
+        incr idx
+    }
+}
+
 slr_pblocks_run
+slr_pin_run
