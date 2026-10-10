@@ -75,7 +75,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   ctx::fill_fragment(fragC, 0);
 
   // Only the first warp in the CTA issues DXA commands.
-  const bool is_dxa_warp = (get_sub_group_id() == 0);
+  [[maybe_unused]] const bool is_dxa_warp = (get_sub_group_id() == 0);
 
   // Stage the tile at K-offset k into the {A_smem, B_smem} buffer guarded
   // by barrier id `bar`. All state is passed by value in registers.
@@ -109,10 +109,10 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     #ifdef SW_LOAD_B
       // Cooperative load B block-major (matches DXA BlockMajor LAYOUT / bbuf).
       uint32_t b_size = ctx::tileK * ctx::xtileN;
-      for (uint32_t i = 0; i < b_size; i += num_threads) {
-        uint32_t idx = i + tid;
-        uint32_t r = idx / ctx::xtileN;
-        uint32_t c = idx % ctx::xtileN;
+      for (size_t i = 0; i < b_size; i += num_threads) {
+        size_t idx = i + tid;
+        size_t r = idx / ctx::xtileN;
+        size_t c = idx % ctx::xtileN;
         B_smem[ctx::b_blockmajor_idx(r, c)] = pB[(k + r) * N + (tile_col + c)];
       }
     #endif
