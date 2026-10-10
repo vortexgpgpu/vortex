@@ -457,8 +457,10 @@ kernel-env:
 	@echo 'export TOOL_DIR=$(SCRIPT_DIR)'
 
 # Simulator clock (MHz): the image is timed at it and the shell programs it.
+# V80: the Fmax a 250 MHz-targeted build reached (4 cores, NW=NT=4, IW=4, seven
+# threaded classes: routed WNS -2.974 ns at 4 ns, i.e. 143.4 MHz).
 ifeq ($(FIRESIM_PLATFORM), aved)
-FREQUENCY ?= 250.0
+FREQUENCY ?= 143.0
 else
 FREQUENCY ?= 60.0
 endif
