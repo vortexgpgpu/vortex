@@ -260,7 +260,7 @@ and assert the results against golden baselines.
 |---|---|---|
 | flow | Vivado synthesis, place and route | sv2v → Yosys → ABC → OpenSTA, on ASAP7 |
 | design tree | `hw/syn/xilinx/dut` | `hw/syn/yosys/dut` |
-| gated | `fmax_mhz`, `lut` | `fmax_mhz`, `cell_area_um2` |
+| gated against the baseline | `fmax_mhz`, `lut` | `cell_area_um2` (Fmax only against the target clock) |
 | also recorded | `wns_ns`, `lutram`, `ff`, `bram`, `uram`, `dsp`, critical paths, high-fanout nets | `wns_ns`, `tns_ns`, `seq_area_um2`, `sram_area_um2`, `cell_count`, `power_mw` |
 | comparable when | same device, optimization level, xlen | same PDK, VT, corner, xlen |
 | runner | self-hosted, licensed Vivado | hosted, one job per design |
@@ -318,9 +318,11 @@ what the implemented design achieved. ABC maps to the target period and
 stops, so a Yosys design that closes does so with picoseconds of margin and
 its Fmax sits just above its clock by construction. On the ASIC side
 **cell area is the sensitive metric** and Fmax is mostly met-or-missed —
-which is what the target-clock assertion checks. It also makes the slack
-source matter: worst *negative* slack clamps at zero, so the flow reports the
-signed worst slack instead.
+which is what the target-clock assertion checks. Above the target, ABC spends
+the slack recovering area, so where Fmax lands moves with everything else in the
+design; the ASIC gate therefore holds Fmax to the target and not to a baseline.
+It also makes the slack source matter: worst *negative* slack clamps at zero,
+so the flow reports the signed worst slack instead.
 
 | verdict | meaning | fails the run |
 |---|---|---|

@@ -250,10 +250,12 @@ static inline uint32_t Pack8888(uint32_t lo, uint32_t hi) {
   return (hi << 8) | lo;
 }
 
+// Texel blend by an 8-bit subtexel fraction: the weight is f/256 (Vulkan
+// subTexelPrecisionBits = 8), rounded to nearest. A lane peaks at
+// 255*256 + 128 < 2^16, so the two packed lanes never carry into each other.
 static inline uint32_t Lerp8888(uint32_t a, uint32_t b, uint32_t f) {
-  uint32_t p = a * (0xff - f) + b * f + 0x00800080;
-  uint32_t q = (p >> 8) & 0x00ff00ff;
-  return ((p + q) >> 8) & 0x00ff00ff;
+  uint32_t p = a * (0x100 - f) + b * f + 0x00800080;
+  return (p >> 8) & 0x00ff00ff;
 }
 
 } // namespace graphics

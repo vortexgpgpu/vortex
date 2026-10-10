@@ -49,18 +49,26 @@ def get_vma_size(elf_file):
         print("Failed to calculate vma size due to an error: {}".format(str(e)))
         sys.exit(-1)
 
+def read_symbols(elf_file):
+    # (value, name) for each `readelf -s -W` row. Split columns rather than
+    # pattern-match them: readelf prints a Size of 100000 or more in hex.
+    cmd = ['readelf', '-s', '-W', elf_file]
+    output = subprocess.check_output(cmd, universal_newlines=True)
+    symbols = []
+    for line in output.splitlines():
+        cols = line.split()
+        if len(cols) == 8 and cols[0][:-1].isdigit() and cols[0].endswith(':'):
+            symbols.append((int(cols[1], 16), cols[7]))
+    return symbols
+
 def get_symbol(elf_file, name):
     # Read a symbol value from the ELF. We use _edata as the start of BSS and
     # _end as the end of BSS so runtime_size covers the full RW region (the
     # linker's DATA_SEGMENT_ALIGN can push _edata/_end past the end of the last
     # LOAD segment when the kernel has little/no data or BSS).
-    cmd = ['readelf', '-s', '-W', elf_file]
-    output = subprocess.check_output(cmd, universal_newlines=True)
-    regex = re.compile(r'\s*\d+:\s+([0-9a-fA-F]+)\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+' + re.escape(name) + r'$')
-    for line in output.splitlines():
-        match = regex.match(line)
-        if match:
-            return int(match.group(1), 16)
+    for value, sym in read_symbols(elf_file):
+        if sym == name:
+            return value
     print("Error: {} symbol not found in {}".format(name, elf_file))
     sys.exit(-1)
 
@@ -69,23 +77,18 @@ def get_kernel_entries(elf_file):
     # "__vx_kentry_<kernel>" alias per vortex.kernel function; the runtime's
     # vx_module_get_kernel(<kernel>) resolves to its address. The conventional
     # single-kernel entry "kernel_main" is exposed under the public name "main".
-    cmd = ['readelf', '-s', '-W', elf_file]
-    output = subprocess.check_output(cmd, universal_newlines=True)
-    regex = re.compile(
-        r'\s*\d+:\s+([0-9a-fA-F]+)\s+\d+\s+\S+\s+\S+\s+\S+\s+\S+\s+'
-        r'__vx_kentry_(\S+)$')
     entries = []
     seen = set()
-    for line in output.splitlines():
-        match = regex.match(line)
-        if match:
-            name = match.group(2)
-            if name == 'kernel_main':
-                name = 'main'
-            if name in seen:
-                continue
-            seen.add(name)
-            entries.append((name, int(match.group(1), 16)))
+    for value, sym in read_symbols(elf_file):
+        if not sym.startswith('__vx_kentry_'):
+            continue
+        name = sym[len('__vx_kentry_'):]
+        if name == 'kernel_main':
+            name = 'main'
+        if name in seen:
+            continue
+        seen.add(name)
+        entries.append((name, value))
     return entries
 
 def build_symtab_footer(entries):

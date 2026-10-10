@@ -27,28 +27,28 @@
   },
   "tensor": {
     "clock_mhz": 400,
-    "config_hash": "d28e96697d5810ba",
-    "configs": "",
+    "config_hash": "7a067e4ffbc02de1",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "tensor",
     "result": {
-      "build_time_s": 2880,
-      "cell_area_um2": 224202.142,
-      "cell_count": 2351511,
+      "build_time_s": 1086,
+      "cell_area_um2": 104438.042,
+      "cell_count": 1014527,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
-        "sta": "2.7.0",
-        "sv2v": "sv2v v0.0.13-3-g80a2f0c",
+        "sta": "3.1.0",
+        "sv2v": "sv2v v0.0.13-13-g493a88f",
         "vt": "rvt",
         "xlen": 32,
-        "yosys": "Yosys 0.57+157"
+        "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 926.012,
-      "power_mw": 237.0,
-      "seq_area_um2": 70778.318,
-      "sram_area_um2": 257618.4,
+      "fmax_mhz": 976.944,
+      "power_mw": 122.0,
+      "seq_area_um2": 40998.085,
+      "sram_area_um2": 255218.4,
       "tns_ns": 0.0,
-      "wns_ns": 1.42
+      "wns_ns": 1.476
     }
   }
 }

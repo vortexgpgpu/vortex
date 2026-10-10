@@ -303,7 +303,12 @@ class Yosys(Tool):
 
     metrics = ("fmax_mhz", "wns_ns", "tns_ns", "cell_area_um2", "seq_area_um2",
                "sram_area_um2", "cell_count", "power_mw", "build_time_s")
-    gated = ("fmax_mhz", "cell_area_um2")
+    # Fmax is held to the build's clock target (gate()'s BELOW TARGET check),
+    # not to its baseline. ABC maps against that target (-D) and spends any
+    # slack beyond it recovering area, so above the target Fmax moves with
+    # whatever else the design contains: #424 left the RTU's worst path in an
+    # unchanged FMA stage yet moved it 957 -> 903 MHz.
+    gated = ("cell_area_um2",)
     integral = ("cell_count", "build_time_s")
     columns = (("fmax", "fmax_mhz", "%.0f", 9),
                ("area_um2", "cell_area_um2", "%.0f", 11),

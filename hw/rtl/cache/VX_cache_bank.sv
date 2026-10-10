@@ -653,10 +653,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     // data path: carry the request + fill line + tag compare, resolving the way
     // for the data array (victim way for fill/flush, hit way otherwise).
+    // A tags-hit demoted to a chained miss must not touch the array: its store
+    // would land ahead of the older chained requests it is ordered behind, and
+    // it writes on its in-order replay instead.
     always @(*) begin
         dat_in = st0;
         dat_in.req.way_idx = evict_way_st0;
-        dat_in.tag_matches = tag_matches_st0;
+        dat_in.tag_matches = tag_matches_st0 & {NUM_WAYS{~creq_hit_order_hazard_st0}};
     end
 
     // commit path: the request (with the resolved hit/victim way and MSHR id)

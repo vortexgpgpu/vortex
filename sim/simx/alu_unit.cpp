@@ -345,14 +345,16 @@ void AluUnit::execute(instr_trace_t* trace) {
 		// (which `tmask` aliases) to suppress source lanes, so source-lane liveness
 		// must be judged against the pre-suppression mask, not the live one.
 		auto active = tmask;
-		uint32_t last_tid = thread_start;
-		for (uint32_t t = thread_start; t < num_threads; ++t)
-			if (active.test(t)) last_tid = t;
+		uint32_t last_tid = (thread_last >= 0) ? uint32_t(thread_last) : 0;
 		// WGATHER writes the FULL nibble (every non-source lane) regardless of
 		// the active mask, so the gathered value is materialised even in masked
 		// lanes; source lanes stay suppressed (keep their self value). Reads fall
-		// back to the last active lane when the nominal source is masked.
-		for (uint32_t t = thread_start; t < num_threads; ++t) {
+		// back to the last active lane when the nominal source is masked. Every
+		// lane of the warp is visited -- not just those from the first active
+		// one on: a warp whose low lanes are masked still gets its nibbles, which
+		// is what a consumer reading fixed lanes (the RTU's config in lanes 1-3)
+		// relies on.
+		for (uint32_t t = 0; t < num_threads; ++t) {
 			if ((t & 0x3u) == src_offset) {
 				trace->tmask.reset(t); // suppress writeback for source lane
 				continue;

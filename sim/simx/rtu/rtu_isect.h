@@ -30,12 +30,14 @@
 namespace vortex { namespace rtu {
 
 // ────────────────────────────────────────────────────────────────────
-// Möller-Trumbore ray-triangle intersection.
+// Watertight ray-triangle intersection (Woop, Benthin, Wald, JCGT 2013), F32.
 //
 // out_back_facing reports whether the ray hit the back side of the
 // triangle's geometric normal (ray-flag face culling). Convention:
 // triangle front face is the side from which (v0, v1, v2) appear CCW.
 // Equivalently, det > 0 ↔ ray hits the front face.
+// A hit needs tmin < t < tmax (Vulkan's open triangle interval); the walker
+// passes the committed hit's t as tmax.
 // ────────────────────────────────────────────────────────────────────
 bool ray_triangle(const float ro[3], const float rd[3],
                   const float v0[3], const float v1[3], const float v2[3],
@@ -44,48 +46,48 @@ bool ray_triangle(const float ro[3], const float rd[3],
                   bool& out_back_facing);
 
 // ────────────────────────────────────────────────────────────────────
-// Ray-vs-AABB slab test. Returns true if the ray's [tmin, tmax]
-// interval overlaps the AABB; t_near is the entry parameter (clamped
-// to tmin) used by the BVH4 walker to prune descent order.
+// Ray-vs-AABB slab test, as VX_rtu_recip + VX_rtu_box_pe compute it.
 //
-// Assumes well-conditioned rays (no axis-aligned ray with zero
-// direction component). A robust branchless ±inf variant is a later
-// refinement.
+//   ray_recip     1/d per direction component, FLT_MAX for a zero one
+//   quant_corner  a quantized child corner q * 2^e (exact; FTZ)
+//   box_rel       box corners relative to the ray origin: m + (base - ro),
+//                 base = the node origin (+0 for a raw procedural box)
+//   ray_box       slabs rel * inv, culled against [tmin, tmax]: hit iff
+//                 max(tmin, entry) <= min(tmax, exit); t_near = that max,
+//                 the entry distance the walker orders children by
 // ────────────────────────────────────────────────────────────────────
-bool ray_aabb_intersect(const float ro[3], const float rd[3],
-                        const float mn[3], const float mx[3],
-                        float tmin, float tmax, float& t_near);
+float ray_recip(float d);
+float quant_corner(uint8_t q, int8_t e);
+void  box_rel(const float base[3], const float mn[3], const float mx[3],
+              const float ro[3], float rel_mn[3], float rel_mx[3]);
+bool  ray_box(const float rel_mn[3], const float rel_mx[3], const float inv[3],
+              float tmin, float tmax, float& t_near);
 
 // ────────────────────────────────────────────────────────────────────
-// Apply the inverse of a 3x4 row-major affine to a ray, producing the
-// object-space ray. Used by the BVH4 walker on LeafInst descent to
-// convert world→object space. Mirrors the hardware XFORM unit
-// (latency = 3 cycles).
+// Bring a world ray into an instance's object space with the instance
+// record's world→object 3x4 row-major matrix m, as FMA chains:
 //
-//   xform = [r00 r01 r02 tx | r10 r11 r12 ty | r20 r21 r22 tz]
-//   ro_obj = R^(-1) * (ro_world - t)
-//   rd_obj = R^(-1) * rd_world
+//   ro_obj[i] = fma(ro.z, m[i][2], fma(ro.y, m[i][1], fma(ro.x, m[i][0], m[i][3])))
+//   rd_obj[i] = fma(rd.z, m[i][2], fma(rd.y, m[i][1], rd.x * m[i][0]))
 //
-// For pure rotation+translation (det(R) == ±1) the t parameter is
-// preserved across spaces, so the BLAS-reported hit_t is also the
-// world hit_t. Non-uniform scale would require renormalising hit_t;
-// out of scope.
+// The direction is not renormalised, so t is the same in both spaces.
+// Mirrors VX_rtu_xform bit for bit.
 // ────────────────────────────────────────────────────────────────────
-void affine_inverse_transform_ray(const float xform[12],
-                                  const float ro[3], const float rd[3],
-                                  float ro_out[3], float rd_out[3]);
+void world_to_object_ray(const float wto[12],
+                         const float ro[3], const float rd[3],
+                         float ro_out[3], float rd_out[3]);
 
 // ════════════════════════════════════════════════════════════════════
 // The intersection coprocessors — pipelined BoxPe / TriPe.
 // ════════════════════════════════════════════════════════════════════
 //
 //   BoxPe (ray-vs-AABB):  ONE PE, 1 box/cycle, 31-cycle pipeline depth.
-//   TriPe (ray-vs-tri):   ONE PE, 1 tri/cycle, 91-cycle pipeline depth.
+//   TriPe (ray-vs-tri):   ONE PE, 1 tri/cycle, 99-cycle pipeline depth.
 //
 // Both are shared across the whole context array, so the issue slots are handed
 // out by the orchestrator one per cycle and the contention is modelled, not
 // assumed away. The math itself is done synchronously by the scalar
-// ray_triangle / ray_aabb_intersect helpers above; these classes contribute only
+// ray_triangle / ray_box helpers above; these classes contribute only
 // the drain behind the last test entered.
 class BoxPe {
 public:

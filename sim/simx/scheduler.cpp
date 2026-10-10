@@ -65,8 +65,6 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
     , warps_(VX_CFG_NUM_WARPS, VX_CFG_NUM_THREADS)
     , ipdom_size_(VX_CFG_NUM_THREADS - 1)
 {
-  std::srand(50);
-
   // create child SimObjects (CTA dispatcher + barrier unit). Both are
   // registered with SimPlatform and get their own do_reset()/do_tick() calls.
   char sname[128];

@@ -26,6 +26,7 @@
 #include "rtu_isect.h"       // BoxPe / TriPe pipeline depths
 #include "rtu_walker.h"      // FlatWalker / Bvh4Walker
 #include "rtu_memory.h"      // MemoryEngine
+#include "rtu_raylog.h"
 #include "socket.h"
 #include "constants.h"
 #include "debug.h"
@@ -340,9 +341,11 @@ public:
       s.req   = req;
       s.state = SlotState::READY;
       uint32_t first_active = uint32_t(-1);
+      s.lanes = {};
       for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
         if (s.req.tmask_bits & (1u << t)) {
           s.lanes[t].active = true;
+          s.lanes[t].walk_needed = true;
           if (first_active == uint32_t(-1)) first_active = t;
         }
       }
@@ -354,6 +357,7 @@ public:
         if (s.req.dir_z[first_active] < 0.f) sig |= 0x4;
         s.coh_signature = sig;
       }
+      if (raylog::enabled()) raylog::on_accept(this, idx, s.req);
       ch.pop();
       ++perf_stats_.rays_issued;
       DT(3, "rtu-core accept: tag=" << s.req.tag << ", slot=" << idx);
@@ -375,7 +379,16 @@ public:
       LaneState& l = s.lanes[t];
       if (!l.cb_pending) continue;
       uint32_t action = req.cb_action[t];
-      if (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE) {
+      const bool decides = (l.cb_type == VX_RT_CB_TYPE_ANYHIT
+                         || l.cb_type == VX_RT_CB_TYPE_PROC);
+      const bool accept  = (action == VX_RT_CB_ACCEPT || action == VX_RT_CB_TERMINATE);
+      // An intersection shader reports its own t, which need not be nearer than
+      // what the walk already committed: only a nearer hit inside the ray's
+      // interval replaces it.
+      const float new_t  = (l.cb_type == VX_RT_CB_TYPE_PROC) ? req.cb_hit_t[t] : l.cand_t;
+      const bool commits = accept && (!decides
+          || (new_t >= s.req.tmin[t] && new_t < (l.hit ? l.hit_t : s.req.tmax[t])));
+      if (commits) {
         l.hit = true;
         // A procedural (IS) accept commits the shader's own hit_t; a triangle
         // AHS keeps the geometric candidate t. Either way the hitAttribute the
@@ -398,15 +411,25 @@ public:
         }
       }
       // IGNORE leaves the committed hit alone; DONE means the CHS dispatcher has
-      // finished shading an already-committed hit. Traversal is
-      // single-yield-per-lane, so either way the lane is resolved and the slot
-      // drops to its terminal record once every yielding lane has answered.
+      // finished shading an already-committed hit. An any-hit / intersection
+      // verdict that does not end the ray resumes its walk above the decided
+      // candidate, so every candidate along the ray is offered in (t, key)
+      // order; TERMINATE, or an accept under TERMINATE_ON_FIRST_HIT, ends it.
       l.cb_pending = false;
-      bool any_pending = false;
-      for (auto const& ll : s.lanes) {
-        if (ll.cb_pending) { any_pending = true; break; }
+      const bool ends = action == VX_RT_CB_TERMINATE
+          || (commits && (s.req.flags[t] & VX_RT_FLAG_TERMINATE_ON_FIRST_HIT));
+      if (decides && !ends) {
+        l.has_floor   = true;
+        l.floor_t     = l.cand_t;
+        l.floor_key   = l.cand_key;
+        l.walk_needed = true;
       }
-      if (!any_pending) s.state = SlotState::RESP;
+      bool any_pending = false, any_walk = false;
+      for (auto const& ll : s.lanes) {
+        any_pending |= ll.cb_pending;
+        any_walk    |= ll.walk_needed;
+      }
+      if (!any_pending) s.state = any_walk ? SlotState::READY : SlotState::RESP;
     }
     // Clear this warp's callback-in-flight gate so the next queued CB_YIELD for
     // the same warp (e.g. the second SBT group) can be emitted.
@@ -436,7 +459,7 @@ public:
     Slot& s = pool_.at(best);
     uint32_t need = 0;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      if (s.lanes[t].active) ++need;
+      if (s.lanes[t].active && s.lanes[t].walk_needed) ++need;
     }
     uint32_t avail = 0;
     for (const auto& cx : contexts_) {
@@ -452,7 +475,8 @@ public:
 
     uint32_t next_free = 0;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
-      if (!s.lanes[t].active) continue;
+      if (!s.lanes[t].active || !s.lanes[t].walk_needed) continue;
+      s.lanes[t].walk_needed = false;
       while (contexts_[next_free].valid) ++next_free;
       bind_context(next_free, best, t, s.req.scene_root[t]);
       ++next_free;
@@ -561,6 +585,7 @@ public:
       cx.next_state = CtxState::REQ;
     } else {
       s.lanes[cx.lane] = result;   // carries cb_pending if the ray yielded
+      if (raylog::enabled()) raylog::on_walk_done(cx.lines);
       cx.next_state = CtxState::DONE;
     }
     cx.state = (cx.fsm_states || lat) ? CtxState::PE : cx.next_state;
@@ -633,6 +658,7 @@ public:
         const LaneState& l = s.lanes[t];
         if (!l.active || !l.cb_pending) continue;
         any_cb = true;
+        if (raylog::enabled()) raylog::on_callback(this, i, t, l.cb_type);
         QueueEntry e{i, s.req.warp_id, uint8_t(t),
                      l.sbt_idx, l.cb_type,
                      l.cand_t, l.cand_u, l.cand_v, l.cand_prim,
@@ -688,6 +714,7 @@ public:
       // so it stays live until the WAIT that consumes the record calls
       // free_slot(). Until then it sits in EMITTED and is not re-sent.
       rsp.slot_idx = i;
+      if (raylog::enabled()) raylog::on_terminal(this, i, s.req, s.lanes);
       port.send(rsp);
       DT(3, "rtu-core complete: tag=" << s.req.tag << ", slot=" << i);
       s.state = SlotState::EMITTED;

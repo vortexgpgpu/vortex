@@ -360,107 +360,107 @@
     "dut": "top",
     "result": {
       "bram": 80,
-      "build_time_s": 3513,
+      "build_time_s": 3788,
       "critical_paths": [
         {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/pe_switch/rsp_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[24]/D",
-          "group": "core_clock",
-          "levels": 1,
-          "logic_ns": 0.115,
-          "route_ns": 3.825,
-          "route_pct": 97.081,
-          "slack_ns": 0.041,
-          "startpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/csr_unit/rsp_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
-        },
-        {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/dmmu/g_pipe[1].out_pipe/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[119]/D",
-          "group": "core_clock",
-          "levels": 9,
-          "logic_ns": 0.965,
-          "route_ns": 2.929,
-          "route_pct": 75.22,
-          "slack_ns": 0.085,
-          "startpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[101]/C"
-        },
-        {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/dcache/g_cache_wrap[0].cache_wrap/g_cache.cache/g_banks[1].bank/core_rsp_queue/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[43]/D",
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/dcache/g_cache_wrap[0].cache_wrap/g_cache.cache/g_banks[0].bank/core_rsp_queue/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[28]/D",
           "group": "core_clock",
           "levels": 10,
-          "logic_ns": 0.923,
-          "route_ns": 2.971,
-          "route_pct": 76.295,
-          "slack_ns": 0.087,
-          "startpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/dcache/g_cache_wrap[0].cache_wrap/g_cache.cache/g_banks[1].bank/reg_cmt/g_pipe.g_partial_reset.pipe_free_reg[0][73]/C"
+          "logic_ns": 0.912,
+          "route_ns": 3.054,
+          "route_pct": 77.006,
+          "slack_ns": 0.014,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/dcache/g_cache_wrap[0].cache_wrap/g_cache.cache/g_banks[0].bank/g_amo.amo/g_commit.wbq_addr_reg[3][21]/C"
         },
         {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/pe_switch/rsp_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.buffer_r_reg[55]/D",
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[35]/CE",
           "group": "core_clock",
-          "levels": 1,
-          "logic_ns": 0.167,
-          "route_ns": 3.726,
-          "route_pct": 95.71,
-          "slack_ns": 0.09,
-          "startpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/csr_unit/rsp_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+          "levels": 10,
+          "logic_ns": 1.145,
+          "route_ns": 2.714,
+          "route_pct": 70.332,
+          "slack_ns": 0.037,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[104]/C"
         },
         {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/pe_switch/rsp_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[103]/D",
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[88]/CE",
           "group": "core_clock",
-          "levels": 1,
-          "logic_ns": 0.231,
-          "route_ns": 3.658,
-          "route_pct": 94.06,
-          "slack_ns": 0.093,
-          "startpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/csr_unit/rsp_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+          "levels": 10,
+          "logic_ns": 1.145,
+          "route_ns": 2.714,
+          "route_pct": 70.332,
+          "slack_ns": 0.037,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[104]/C"
         },
         {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/pe_switch/rsp_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[28]/D",
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[35]/CE",
           "group": "core_clock",
-          "levels": 1,
-          "logic_ns": 0.114,
-          "route_ns": 3.772,
-          "route_pct": 97.067,
-          "slack_ns": 0.095,
-          "startpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/csr_unit/rsp_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+          "levels": 10,
+          "logic_ns": 1.202,
+          "route_ns": 2.651,
+          "route_pct": 68.802,
+          "slack_ns": 0.042,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[105]/C"
         },
         {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/pe_switch/rsp_arb/g_input_select.g_arbiter.g_out_buf[0].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[87]/D",
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[88]/CE",
           "group": "core_clock",
-          "levels": 1,
-          "logic_ns": 0.179,
-          "route_ns": 3.705,
-          "route_pct": 95.391,
-          "slack_ns": 0.099,
-          "startpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/sfu_unit/csr_unit/rsp_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+          "levels": 10,
+          "logic_ns": 1.202,
+          "route_ns": 2.651,
+          "route_pct": 68.802,
+          "slack_ns": 0.042,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[105]/C"
         },
         {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/dmmu/g_pipe[1].out_pipe/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[113]/D",
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[1]/CE",
           "group": "core_clock",
-          "levels": 9,
-          "logic_ns": 1.008,
-          "route_ns": 2.869,
-          "route_pct": 74.0,
-          "slack_ns": 0.104,
-          "startpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[107]/C"
+          "levels": 10,
+          "logic_ns": 1.145,
+          "route_ns": 2.709,
+          "route_pct": 70.293,
+          "slack_ns": 0.042,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[104]/C"
         },
         {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/icache/g_cache_wrap[0].cache_wrap/g_cache.cache/mem_req_xbar/g_fallback.xbar_switch/g_passthru.out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/S",
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[2]/CE",
           "group": "core_clock",
-          "levels": 0,
-          "logic_ns": 0.077,
-          "route_ns": 3.699,
-          "route_pct": 97.961,
-          "slack_ns": 0.106,
-          "startpoint": "vx_reset_shift_r_reg[7]_replica_15/C"
+          "levels": 10,
+          "logic_ns": 1.145,
+          "route_ns": 2.709,
+          "route_pct": 70.293,
+          "slack_ns": 0.042,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[104]/C"
         },
         {
-          "endpoint": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/icache/g_cache_wrap[0].cache_wrap/g_cache.cache/mem_req_xbar/g_fallback.xbar_switch/g_passthru.out_buf/g_eb2.stream_buffer/g_buffer.valid_out_r_reg/R",
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[54]/CE",
           "group": "core_clock",
-          "levels": 0,
-          "logic_ns": 0.077,
-          "route_ns": 3.696,
-          "route_pct": 97.959,
-          "slack_ns": 0.109,
-          "startpoint": "vx_reset_shift_r_reg[7]_replica_15/C"
+          "levels": 10,
+          "logic_ns": 1.145,
+          "route_ns": 2.709,
+          "route_pct": 70.293,
+          "slack_ns": 0.042,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[104]/C"
+        },
+        {
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]/CE",
+          "group": "core_clock",
+          "levels": 10,
+          "logic_ns": 1.145,
+          "route_ns": 2.709,
+          "route_pct": 70.293,
+          "slack_ns": 0.042,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[104]/C"
+        },
+        {
+          "endpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[1]/CE",
+          "group": "core_clock",
+          "levels": 10,
+          "logic_ns": 1.202,
+          "route_ns": 2.646,
+          "route_pct": 68.761,
+          "slack_ns": 0.047,
+          "startpoint": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/mem_unit/g_dcache_adapters[0].dcache_adapter/stream_unpack/g_unpack.g_outbuf[1].out_buf/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[105]/C"
         }
       ],
       "dsp": 48,
@@ -470,64 +470,64 @@
         "vivado": "2024.2",
         "xlen": 32
       },
-      "ff": 143375,
-      "fmax_mhz": 252.6,
+      "ff": 145017,
+      "fmax_mhz": 250.9,
       "high_fanout_nets": [
         {
           "driver": "LUT2",
           "fanout": 5638,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fdivsqrt.div_pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
+          "net": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fdivsqrt.div_pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
         },
         {
           "driver": "BUFGCE",
           "fanout": 5633,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fdivsqrt.div_pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
+          "net": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fdivsqrt.div_pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
         },
         {
           "driver": "LUT2",
           "fanout": 4717,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fma.pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
+          "net": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fma.pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
         },
         {
           "driver": "BUFGCE",
           "fanout": 4669,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fma.pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
+          "net": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fma.pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
         },
         {
           "driver": "LUT2",
           "fanout": 3318,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fdivsqrt.sqrt_pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
+          "net": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[1].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fdivsqrt.sqrt_pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
         },
         {
           "driver": "BUFGCE",
           "fanout": 3301,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fdivsqrt.sqrt_pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
+          "net": "g_multi_port.vortex/g_clusters[0].cluster/g_sockets[0].socket/g_cores[0].core/execute/fpu_unit/g_blocks[0].fpu_dsp/g_fdivsqrt.sqrt_pe_ser/out_buf/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_1"
+        },
+        {
+          "driver": "BUFGCE",
+          "fanout": 2003,
+          "net": "cp_core/u_regfile/reset_0[0]"
         },
         {
           "driver": "MUXF7",
           "fanout": 1705,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/l2tlb/mshr/g_buffer.g_no_out_reg.data_out_r_reg[32]_2"
+          "net": "g_multi_port.vortex/g_clusters[0].cluster/l2tlb/mshr/g_buffer.g_no_out_reg.data_out_r_reg[32]_2"
         },
         {
           "driver": "MUXF7",
           "fanout": 1682,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/l2tlb/mshr/g_buffer.g_no_out_reg.data_out_r_reg[32]_5"
+          "net": "g_multi_port.vortex/g_clusters[0].cluster/l2tlb/mshr/g_buffer.g_no_out_reg.data_out_r_reg[32]_5"
         },
         {
           "driver": "MUXF7",
           "fanout": 1537,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/l2tlb/mshr/g_buffer.g_no_out_reg.data_out_r_reg[32]_3"
-        },
-        {
-          "driver": "MUXF7",
-          "fanout": 1476,
-          "net": "vortex_axi/vortex/g_clusters[0].cluster/l2tlb/mshr/g_buffer.g_no_out_reg.data_out_r_reg[32]_4"
+          "net": "g_multi_port.vortex/g_clusters[0].cluster/l2tlb/mshr/g_buffer.g_no_out_reg.data_out_r_reg[32]_3"
         }
       ],
-      "lut": 136066,
+      "lut": 136762,
       "lutram": 9536,
       "uram": 0,
-      "wns_ns": 0.041
+      "wns_ns": 0.014
     }
   }
 }

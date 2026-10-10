@@ -66,7 +66,8 @@
 #define RTU_BVH_COUNT_SHIFT      8
 
 // CW-BVH TLAS instance record (64 B). Emitted under a LEAF_INST leaf.
-//   float  xform[12]     @0   3x4 row-major object->world affine
+//   float  xform[12]     @0   3x4 row-major world->object affine (the inverse of
+//                             the instance transform; the walker applies it)
 //   uint32 blas_root     @48  byte offset (from scene base) of this instance's BLAS root
 //   uint32 custom_id     @52  VK_INSTANCE_CUSTOM_INDEX_KHR
 //   uint32 instance_id   @56  HW-assigned instance ID

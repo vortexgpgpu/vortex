@@ -256,15 +256,15 @@ stays a plain 4-byte-word interface.
    colour here instead (§3.1).
 2. **U lerps**: per lane and level, 8 `VX_tex_lerp` instances (4 channels ×
    {low, high} texel pairs), each a 3-cycle fixed-point datapath computing
-   `(s + (s >> 8)) >> 8` with `s = a·(255−f) + b·f + 0x80` — the exact
-   divide-by-255 rounding, not a plain shift.
+   `(a·(256−f) + b·f + 0x80) >> 8` — the weight is `f/256`, the 8-bit
+   subtexel fraction Vulkan's texel filtering defines
+   (`subTexelPrecisionBits = 8`), rounded to nearest.
 3. **V lerp**: 4 more lerps per level blend the two U results, another 3
    cycles.
 4. **Level lerp**: 4 final lerps blend the two levels' texels by the
-   request's lod fraction — a fraction of **256** that truncates, the form
-   the software sampler blends levels in, where a tap weight is a fraction
-   of 255 (§2.3). A single-level sample carries weight 0 and passes level 0
-   through.
+   request's lod fraction — also a fraction of 256, but truncated rather
+   than rounded, the form the software sampler blends levels in (§2.3). A
+   single-level sample carries weight 0 and passes level 0 through.
 
 The whole sampler is ~10 cycles fixed latency, one request per cycle
 throughput, per-channel 8-bit arithmetic — no floating-point anywhere (the

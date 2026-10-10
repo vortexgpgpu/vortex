@@ -299,9 +299,15 @@ Two work products leave the scheduler:
   returned `hitAttribute`).
 
 Robustness details worth naming: a short-stack of depth `RTU_STACK_DEPTH` bounds
-per-context node stack RAM; on overflow the walker sets an `ovf` flag and, at
-pop-time, **re-descends** the subtree pruned by the tightened `best_t` (bounded by
-`RTU_RESTART_CAP = 8` restarts) — a full traversal on a finite stack. A 16-entry
+per-context node stack RAM, and an overflow never loses a hit. The walk visits
+nodes in rank-path order (each level's child rank in the t-sorted list, an
+instance's index in its leaf); a child that does not fit is dropped and the walk
+records it, then only descends until it would pop, and instead **restarts** from
+the root along the dropped child's rank path, held in a small per-context path
+RAM. Everything before that child has been visited, a tightened `best_t` only
+culls a suffix of a node's sorted children (so ranks stay valid), and each
+restart starts strictly further along, so the walk is exact and terminates on
+any tree up to 63 levels deep. A deep tree costs restarts, not hits. A 16-entry
 box collector insertion-sorts a node's child hits t-ascending so descent is
 nearest-first. The insertion slot is decoded from the **admit thermometer**: the
 collected list is sorted and its count mask is a prefix, so the "entries at or
@@ -321,20 +327,23 @@ subnormals flushed either way), and `VX_CFG_FMA_LATENCY` /
 whatever depth results:
 
 - **`VX_rtu_box_pe`** — pipelined ray/AABB slab test, one child box per cycle,
-  emitting `{hit, t_near}`. Dequantizes the node's int8 child corners
-  (`origin + q·2^exp`), does the slab test with `VX_fma_unit` + `VX_fncp_unit`,
-  and subtracts the ray origin *before* multiplying by `inv_d` so axis-aligned
-  rays (`inv_d = ±inf`) stay NaN-free. Also handles raw/procedural boxes.
-- **`VX_rtu_tri_pe`** — pipelined Möller–Trumbore triangle test, one triangle per
-  cycle, emitting `{hit, t, u, v, back_facing}`; reuses `VX_fma_unit`,
-  `VX_fdiv_unit` (1/det), `VX_fncp_unit`, and `VX_rtu_fdot3`/`fcross3`. The
-  dot/cross helpers pipeline their 24×24 mantissa products into DSP multipliers
-  (`LATENCY_IMUL` deep) fed the **raw** mantissas: a flushed (subnormal/zero)
-  term is discarded downstream in the `VX_rtu_fmac3` accumulator by its zero
-  product-exponent, so no subnormal-flush select sits in front of the multiplier
-  inputs and the DSPs launch straight from the source flops.
-- **`VX_rtu_xform`** — TLAS world→object transform, `obj = Rᵀ·(ro−t)` — FMA-only
-  (an orthonormal TLAS rotation needs no determinant or divide). Always built:
+  emitting `{hit, t_near}`. Mirrors SimX `box_rel` + `ray_box` bit for bit:
+  corners relative to the ray, `q·2^exp + (origin − ro)` (the product exact),
+  slabs `rel·inv_d`, culled against the ray interval `[t_min, t_max]` with
+  `t_max` the committed hit. `inv_d` is `FLT_MAX` for a zero direction
+  component, so no slab is ever `0·inf`. Also handles raw/procedural boxes
+  (`origin = +0`).
+- **`VX_rtu_tri_pe`** — pipelined watertight triangle test (Woop, Benthin, Wald,
+  JCGT 2013), all F32: shear, edge functions as rounded products and a rounded
+  difference (so a shared edge evaluates to exactly negated weights in its two
+  triangles), `det = (w0 + w1) + w2`, `T` as an FMA chain, one `1/det` scaling
+  `t`, `u`, `v`. Accepts `t_min < t < t_max` (Vulkan's open triangle interval),
+  with `t_max` the committed hit, one triangle per cycle, emitting
+  `{hit, t, u, v, back_facing}`; bit-exact against SimX `ray_triangle`.
+- **`VX_rtu_xform`** — TLAS world→object transform. The instance record holds
+  the world→object matrix, so no inverse is taken; each object-ray component is
+  three dependent FMAs (`fma(z, m2, fma(y, m1, fma(x, m0, t)))`, the direction
+  seeded with `x·m0`), 18 FMA units, `3·FMA` deep. Always built:
   the CW-BVH walker descends `LEAF_INST` natively; only the flat walker's
   (`WIDTH = 0`) instancing loop is gated by `VX_CFG_RTU_TLAS_ENABLE`.
 - **`VX_rtu_recip`** — F32 reciprocal for `inv_d`, either a portable LUT+Newton

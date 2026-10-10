@@ -375,7 +375,9 @@ VX_CFG_RASTER_BLOCK_LOG_SIZE   = 2
 VX_CFG_RASTER_MEM_FIFO_DEPTH  = 8
 VX_CFG_RASTER_QUAD_FIFO_DEPTH = 32
 VX_CFG_RASTER_MEM_QUEUE_SIZE  = 4
-VX_CFG_RASTER_EARLYZ_ENABLE          = false
+# Early-Z occlusion cull: on wherever it is legal. It reads committed depth
+# through the OM's ocache, so it needs both units (VX_define.vh enforces it).
+VX_CFG_RASTER_EARLYZ_ENABLE   = "expr: $VX_CFG_EXT_RASTER_ENABLE and $VX_CFG_EXT_OM_ENABLE"
 
 [om]
 VX_CFG_NUM_OM_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
