@@ -184,7 +184,7 @@ uint32_t vx_rt_wtrace(uintptr_t scene_ptr, uintptr_t payload_ptr,
   // the field references stable across the long register-binding list.
   // The RTU reads the packed config lanes regardless of the thread mask, so it
   // reads them from the warp-gather register itself (see __VX_WGATHER_IN).
-  register uint32_t cfg_reg __asm__("x31") = cfg;
+  register size_t cfg_reg __asm__("x31") = cfg;
   __asm__ volatile (".insn r %[op], 7, 0, %[hnd], %[cfg], x0"
     : [hnd]"=r"(handle)
     : [op]"i"(RISCV_CUSTOM1), [cfg]"r"(cfg_reg),

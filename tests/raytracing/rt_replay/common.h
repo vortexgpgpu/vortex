@@ -23,10 +23,9 @@
 // One ray as the kernel consumes it. Each warp's rays share scene / flags /
 // cull: those ride the warp-uniform half of vx_rt_wtrace.
 typedef struct {
-  uint32_t scene;
+  uint64_t scene;
   uint32_t flags;
   uint32_t cull;
-  uint32_t pad;
   float    origin[3];
   float    dir[3];
   float    tmin;
@@ -57,7 +56,7 @@ typedef struct {
 #ifdef __cplusplus
 // Ray-log stream layout (mirror of sim/simx/rtu/rtu_raylog.h).
 #define RAYLOG_MAGIC   0x4C525856u
-#define RAYLOG_VERSION 1u
+#define RAYLOG_VERSION 2u
 #define RAYLOG_REC_LINE 1u
 #define RAYLOG_REC_RAY  2u
 #define RAYLOG_INFO_REPLAYABLE (1u << 8)
@@ -69,11 +68,12 @@ struct RaylogHeader {
 
 struct RaylogRay {
   uint32_t type, info, seq, epoch;
-  uint32_t scene_root, ray_flags, cull_mask, warp_lane;
+  uint64_t scene_root;
+  uint32_t ray_flags, cull_mask, warp_lane;
   uint32_t origin[3], dir[3];
   uint32_t tmin, tmax;
   uint32_t status, hit_t, hit_u, hit_v, prim, geom, inst_id, inst_custom, hit_attr;
-  uint32_t reserved[3];
+  uint32_t reserved[2];
 };
 static_assert(sizeof(RaylogRay) == 112, "RaylogRay layout");
 #endif

@@ -47,7 +47,7 @@ class RAM;
 namespace rtu { namespace raylog {
 
 constexpr uint32_t kMagic   = 0x4C525856;   // "VXRL"
-constexpr uint32_t kVersion = 1;
+constexpr uint32_t kVersion = 2;
 
 enum RecType : uint32_t {
   REC_LINE = 1,
@@ -80,7 +80,7 @@ struct RaylogRay {
   uint32_t info;
   uint32_t seq;
   uint32_t epoch;
-  uint32_t scene_root;
+  uint64_t scene_root;
   uint32_t ray_flags;
   uint32_t cull_mask;
   uint32_t warp_lane;  // lane | warp << 8 | slot << 16
@@ -97,7 +97,7 @@ struct RaylogRay {
   uint32_t inst_id;
   uint32_t inst_custom;
   uint32_t hit_attr;
-  uint32_t reserved[3];
+  uint32_t reserved[2];
 };
 static_assert(sizeof(RaylogRay) == 112, "RaylogRay layout");
 
