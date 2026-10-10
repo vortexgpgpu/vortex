@@ -391,8 +391,21 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // write back zero.
     sfu_result_t rsp_data_out;
     assign rsp_data_out.header = s1_header;
+`ifdef VX_CFG_XLEN_64
+`ifdef VX_CFG_EXT_F_ENABLE
+    // A single-precision slot read into a 64-bit FP register must be NaN-boxed.
+    wire rsp_is_float = (get_reg_type(s1_header.rd) == REG_TYPE_F);
+`else
+    wire rsp_is_float = 1'b0;
+`endif
+`endif
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rsp_data
-        assign rsp_data_out.data[i] = `VX_CFG_XLEN'(s1_from_ram ? core_rdata[i] : 32'd0);
+        wire [31:0] rsp_word = s1_from_ram ? core_rdata[i] : 32'd0;
+    `ifdef VX_CFG_XLEN_64
+        assign rsp_data_out.data[i] = rsp_is_float ? {32'hffffffff, rsp_word} : 64'(rsp_word);
+    `else
+        assign rsp_data_out.data[i] = rsp_word;
+    `endif
     end
 
     assign result_if.valid  = s1_valid;
