@@ -1,0 +1,16 @@
+# Vivado 2024.2, xcu55c-fsvh2892-2L-e (U55C), out-of-context post-route, 300 MHz target. top=VX_tcu_unit_top:
+# the full tensor core unit (FEDP array, operand/accumulator buffers, uop sequencing, WGMMA where enabled), one
+# per GPU generation: formats as that generation supports them, NUM_THREADS 16 (Volta) / 32 (others),
+# Hopper/Blackwell with WGMMA + FEDP2K. TFR FEDP, VX_CFG_TCU_USE_DSP=1 (DSP48 multipliers), 5-stage FEDP
+# (VX_CFG_TCU_LATENCY=5), NUM_WARPS=16. Volta/Turing: fp16 only for 16-bit (bf16 removed via TFR_NO_BF16).
+# bram = RAMB36 tiles (RAMB18 = 0.5). Power: vectorless (toggle 0.125, static prob 0.5); static_power is
+# whole-device leakage (same for every design) -- compare dynamic_power_mw.
+# All rows: Flow_PerfOptimized_High + retiming, Performance_ExtraTimingOpt (DUT OPT_LEVEL=3). Blackwell is on the
+# fixed RTL: MX scale-block indexing as a shift (was a run-time divide that crashed Vivado synthesis) and the
+# NVFP4 multiply pipelined like the other formats; neither change affects the other four rows (no MX/NVFP4).
+generation,num_threads,formats,fedp2k,wgmma,target_clock_mhz,fmax_mhz,wns_ns,lut,lutram,ff,carry8,dsp,bram,uram,dynamic_power_mw,static_power_mw,total_onchip_power_mw,status
+volta,16,fp16,0,0,300,302.6,0.028,53885,336,21750,992,128,0,0,1366.0,3301.0,4667.0,DONE
+turing,32,fp16 int8 int4,0,0,300,300.7,0.007,142267,636,69186,3392,1280,0,0,5880.0,3401.0,9281.0,DONE
+ampere,32,fp16 bf16 tf32 int8 int4,0,0,300,297.4,-0.030,154067,636,69447,3392,1280,0,0,5853.0,3400.0,9253.0,DONE
+hopper,32,fp16 bf16 tf32 fp8 bf8 int8 int4,1,1,300,242.4,-0.793,393965,636,82246,12608,3072,0,0,7633.0,3441.0,11074.0,DONE
+blackwell,32,fp16 bf16 tf32 fp8 bf8 mxfp8 mxbf8 mxfp4 nvfp4 int8,1,1,300,127.0,-4.539,447739,2684,88185,13379,2816,0,0,13740.0,3589.0,17329.0,DONE

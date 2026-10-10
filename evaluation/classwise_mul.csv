@@ -1,0 +1,34 @@
+# Vivado 2024.2, xcu55c-fsvh2892-2L-e (U55C), out-of-context post-route, 300 MHz target. top=VX_tcu_fedp_tfr
+# (one TFR FEDP), 4-stage FEDP (VX_CFG_TCU_LATENCY=4), formats: fp16, bf16, tf32, fp8, bf8, mxfp8, mxbf8, mxfp4,
+# nvfp4, int8, int4. num_threads=32 rows: N=4, SF=2; num_threads=4 rows: N=2, SF=1.
+# sharing: discrete = an independent multiplier set per format (-DTFR_MULSHARE_DISCRETE); classwise = one set
+# per datatype class, shared by the formats in it (the committed TFR design). Bit-identical on a 13-format x
+# 400-vector Verilator sim. mult_backend: wallace = Wallace trees in LUTs (VX_CFG_TCU_USE_DSP=0), dsp = DSP48E2
+# (VX_CFG_TCU_USE_DSP=1). RTL: branch feature_cwsmul @ 6cf7bf42. Power is Vivado vectorless.
+# scope: fedp = measured single-FEDP runs (rows above). tcu = one full 32-thread tensor core, DSP backend:
+#   classwise = the measured Hopper full tensor core (tfr_isfpga3.csv: VX_tcu_unit_top, NUM_THREADS=32, fp16 bf16
+#   tf32 fp8 bf8 int8 int4, FEDP2K (N=8) + WGMMA, 5-stage, VX_CFG_TCU_USE_DSP=1, 300 MHz target).
+#   discrete  = estimate: the Hopper numbers scaled per resource by the num_threads=32 FEDP-level discrete/classwise
+#   ratio (dsp x2.00, lut x1.173, ff/carry8 x1.00). Fmax and power not estimated (vectorless deltas unreliable).
+#   tcu wallace rows = estimate: the Hopper numbers scaled per resource by the num_threads=32 FEDP-level ratio
+#   wallace/<dsp classwise> (dsp = 0). Fmax and power not estimated.
+scope,mult_backend,sharing,num_threads,n,sf,fmax_mhz,wns_ns,lut,lutram,ff,carry8,dsp,bram,dynamic_mw,static_mw,total_mw
+fedp,wallace,discrete,32,4,2,304.8,0.052,21578,0,719,322,0,0,263,3278,3541
+fedp,wallace,classwise,32,4,2,298.6,-0.016,13053,0,715,262,0,0,446,3282,3728
+fedp,wallace,discrete,4,2,1,301.2,0.013,10560,0,415,169,0,0,127,3275,3402
+fedp,wallace,classwise,4,2,1,302.3,0.025,6452,0,474,139,0,0,216,3277,3493
+fedp,dsp,discrete,32,4,2,302.6,0.028,9723,0,715,200,168,0,249,3278,3527
+fedp,dsp,classwise,32,4,2,301.7,0.018,8286,0,715,200,84,0,373,3280,3653
+fedp,dsp,discrete,4,2,1,308.0,0.086,5106,0,404,108,84,0,131,3275,3406
+fedp,dsp,classwise,4,2,1,305.0,0.054,4391,0,404,108,42,0,197,3277,3474
+# --- full 32-thread tensor core (DSP): classwise measured (Hopper), discrete estimated ---
+tcu,dsp,classwise,32,8,,242.4,-0.793,393965,636,82246,12608,3072,0,7633,3441,11074
+tcu,dsp,discrete,32,8,,,,462288,636,82246,12608,6144,0,,,
+tcu,wallace,classwise,32,8,,,,620616,636,82246,16516,0,0,,,
+tcu,wallace,discrete,32,8,,,,1025945,636,82706,20299,0,0,,,
+# --- full 4-thread tensor core: dsp classwise measured (tfr_isfpga.csv tcu4_asic_dsp_l4: VX_tcu_unit_top, NUM_THREADS=4,
+# --- same 11 formats, 4-stage), other rows = that run scaled per resource by the num_threads=4 FEDP-level ratios ---
+tcu,dsp,classwise,4,2,,125.1,-4.662,20483,364,5109,444,136,0,955,3293,4247
+tcu,dsp,discrete,4,2,,,,23818,364,5109,444,272,0,,,
+tcu,wallace,classwise,4,2,,,,30097,364,5994,571,0,0,,,
+tcu,wallace,discrete,4,2,,,,49260,364,5248,695,0,0,,,
