@@ -547,6 +547,11 @@ tests:
 - {id: gfx_pipeline_tex,   via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_tex,   target: "run-{driver}"}
 - {id: gfx_pipeline_om,    via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_om,    target: "run-{driver}"}
 - {id: gfx_pipeline_raster,via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_raster,target: "run-{driver}"}
+# The front-end setup, bin-sort and full pipeline kernels, each checked byte for
+# byte against the host reference built from the same sw/gfx and sw/common headers.
+- {id: gfx_setup_kernel,    via: make-run, drivers: [simx], dir: tests/regression/gfx_setup_kernel,    target: "run-{driver}"}
+- {id: gfx_binsort_kernel,  via: make-run, drivers: [simx], dir: tests/regression/gfx_binsort_kernel,  target: "run-{driver}"}
+- {id: gfx_pipeline_kernel, via: make-run, drivers: [simx], dir: tests/regression/gfx_pipeline_kernel, target: "run-{driver}"}
 
 # ── FF/SW routing matrix ─────────────────────────────────────────────────────
 # Each fixed-function unit dropped from the build (NO_TEX / NO_OM / NO_RASTER);
