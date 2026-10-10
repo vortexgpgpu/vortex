@@ -22,6 +22,14 @@
 // Observation-only on the dispatch path: this module does not drive
 // .ready. The wrapper (VX_tcu_unit) feeds tbuf_ready_eff into tcu_core,
 // which produces the actual handshake .ready going back to dispatch.
+//
+// tbuf_ready_eff is registered. The tile buffers and the CTA lockstep are
+// evaluated for the uop each block presents NEXT cycle (the entry behind the
+// head when the head fires, else the head), against the state this cycle's
+// fires and LMEM responses leave behind. A same-cycle ready would otherwise
+// close a loop across every block (shared-bbuf representative + key match ->
+// ready -> fire -> operand-buffer enables) on the WGMMA critical path. A uop
+// not yet visible in its block queue waits one cycle.
 
 module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID     = "",
@@ -41,6 +49,9 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [BLOCK_SIZE-1:0]                                         exec_valid,
     input  wire [BLOCK_SIZE-1:0]                                         exec_ready,
     input  tcu_execute_t                                                 exec_data [BLOCK_SIZE],
+    // The entry queued behind each head.
+    input  wire [BLOCK_SIZE-1:0]                                         exec_next_valid,
+    input  tcu_execute_t                                                 exec_next_data [BLOCK_SIZE],
 
     // Bank-parallel LMEM read port.
     VX_mem_bus_if.master                                                 tcu_lmem_if,
@@ -109,6 +120,40 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
+    // -----------------------------------------------------------------------
+    // Next cycle's head per block.
+    // -----------------------------------------------------------------------
+    wire [BLOCK_SIZE-1:0] nh_valid;
+    tcu_execute_t         nh_data [BLOCK_SIZE];
+    wire [BLOCK_SIZE-1:0] nh_is_wgmma_op, nh_is_setup, nh_compute, nh_needs_setup, nh_is_first;
+    wire [BLOCK_SIZE-1:0][NCTA_WIDTH-1:0] nh_cta;
+    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_next_head
+        assign nh_valid[bi] = exec_fire_b_w[bi] ? exec_next_valid[bi] : exec_valid[bi];
+        assign nh_data[bi]  = exec_fire_b_w[bi] ? exec_next_data[bi]  : exec_data[bi];
+        assign nh_is_wgmma_op[bi] = (nh_data[bi].op_type == INST_TCU_WGMMA)
+                            `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                               || (nh_data[bi].op_type == INST_TCU_WGMMA_SP)
+                            `endif
+                               ;
+        assign nh_is_setup[bi] = nh_is_wgmma_op[bi] && !nh_data[bi].header.wb;
+        assign nh_compute[bi]  = nh_valid[bi] && nh_is_wgmma_op[bi] && !nh_is_setup[bi];
+        assign nh_needs_setup[bi] =
+            `ifdef VX_CFG_TCU_FEDP2K
+                nh_is_wgmma_op[bi] && !nh_data[bi].op_args.tcu.a_from_smem
+            `ifdef VX_CFG_TCU_SPARSE_ENABLE
+                && (nh_data[bi].op_type != INST_TCU_WGMMA_SP)
+            `endif
+            `else
+                1'b0
+            `endif
+                ;
+        assign nh_is_first[bi] = nh_is_wgmma_op[bi] && nh_data[bi].op_args.tcu.is_first_uop;
+        assign nh_cta[bi]      = nh_data[bi].header.cta_id;
+    end
+
+    wire [BLOCK_SIZE-1:0] cta_conflict_nh;
+    `UNUSED_VAR (cta_conflict)
+
     VX_tcu_lockstep #(
         .INSTANCE_ID (`SFORMATF(("%s-lockstep", INSTANCE_ID))),
         .BLOCK_SIZE  (BLOCK_SIZE)
@@ -120,46 +165,55 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .exec_fire_b    (exec_fire_b_w),
         .is_first_uop_b (is_first_uop_b_w),
         .is_last_uop_b  (is_last_uop_b_w),
-        .cta_conflict   (cta_conflict)
+        .is_wgmma_nh_b  (nh_compute),
+        .new_cta_nh_b   (nh_cta),
+        .cta_conflict   (cta_conflict),
+        .cta_conflict_nh(cta_conflict_nh)
     );
 
     // -----------------------------------------------------------------------
-    // Per-block uop observation → VX_tcu_tbuf request.
-    // req[b].valid is masked by cta_conflict so the shared bbuf doesn't
-    // refill its bank-row for a CTA whose fire is currently gated by
-    // lockstep.
+    // Next cycle's heads → VX_tcu_tbuf request.
+    // req[b].valid is masked by the next-cycle CTA conflict so the shared bbuf
+    // doesn't refill its bank-row for a CTA whose fire will be gated by
+    // lockstep. setup_fire is this cycle's: a setup uop firing now drops the
+    // buffers at the end of the cycle.
     // -----------------------------------------------------------------------
     tcu_tbuf_req_t [BLOCK_SIZE-1:0] req;
+    wire [BLOCK_SIZE-1:0][3:0]      out_step_m;
+    wire [BLOCK_SIZE-1:0]           out_is_sparse;
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_tbuf_inputs
-        wire is_wgmma_b = (exec_data[bi].op_type == INST_TCU_WGMMA)
-                    `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                       || (exec_data[bi].op_type == INST_TCU_WGMMA_SP)
-                    `endif
-                       ;
-        wire is_setup_uop = is_wgmma_b && !exec_data[bi].header.wb;
-        assign req[bi].valid        = exec_valid[bi] && is_wgmma_b && !is_setup_uop
-                                    && !cta_conflict[bi];
-        assign req[bi].uuid         = exec_data[bi].header.uuid;
-        assign req[bi].wid          = exec_data[bi].header.wid;
-        assign req[bi].cta_id       = exec_data[bi].header.cta_id;
-        assign req[bi].step_m       = exec_data[bi].op_args.tcu.step_m;
-        assign req[bi].step_k       = exec_data[bi].op_args.tcu.step_k;
-        assign req[bi].step_n       = exec_data[bi].op_args.tcu.step_n;
-        assign req[bi].cd_nregs     = exec_data[bi].op_args.tcu.cd_nregs;
-        wire use_live_desc = is_first_uop_b_w[bi]
-                          && !needs_setup_b_w[bi];
-        assign req[bi].desc_a       = use_live_desc ? exec_data[bi].rs1_data[0] : desc_a_r[bi];
-        assign req[bi].desc_b       = use_live_desc ? exec_data[bi].rs2_data[0] : desc_b_r[bi];
-        assign req[bi].a_is_smem    = exec_data[bi].op_args.tcu.a_from_smem;
-        assign req[bi].is_first_uop = exec_data[bi].op_args.tcu.is_first_uop;
-        assign req[bi].is_last_uop  = exec_data[bi].op_args.tcu.is_last_uop;
-        assign req[bi].setup_fire   = exec_valid[bi] && exec_ready[bi] && is_setup_uop;
+        // Descriptors as the setup/first-uop latch above leaves them.
+        wire latch_now = exec_fire_b_w[bi]
+                      && (is_setup_uop_b_w[bi] || (is_first_uop_b_w[bi] && !needs_setup_b_w[bi]));
+        wire [`VX_CFG_XLEN-1:0] desc_a_next = (latch_now && exec_data[bi].op_args.tcu.a_from_smem)
+                                            ? exec_data[bi].rs1_data[0] : desc_a_r[bi];
+        wire [`VX_CFG_XLEN-1:0] desc_b_next = latch_now ? exec_data[bi].rs2_data[0] : desc_b_r[bi];
+        wire use_live_desc = nh_is_first[bi] && !nh_needs_setup[bi];
+        assign req[bi].valid        = nh_compute[bi] && !cta_conflict_nh[bi];
+        assign req[bi].uuid         = nh_data[bi].header.uuid;
+        assign req[bi].wid          = nh_data[bi].header.wid;
+        assign req[bi].cta_id       = nh_data[bi].header.cta_id;
+        assign req[bi].step_m       = nh_data[bi].op_args.tcu.step_m;
+        assign req[bi].step_k       = nh_data[bi].op_args.tcu.step_k;
+        assign req[bi].step_n       = nh_data[bi].op_args.tcu.step_n;
+        assign req[bi].cd_nregs     = nh_data[bi].op_args.tcu.cd_nregs;
+        assign req[bi].desc_a       = use_live_desc ? nh_data[bi].rs1_data[0] : desc_a_next;
+        assign req[bi].desc_b       = use_live_desc ? nh_data[bi].rs2_data[0] : desc_b_next;
+        assign req[bi].a_is_smem    = nh_data[bi].op_args.tcu.a_from_smem;
+        assign req[bi].is_first_uop = nh_data[bi].op_args.tcu.is_first_uop;
+        assign req[bi].is_last_uop  = nh_data[bi].op_args.tcu.is_last_uop;
+        assign req[bi].setup_fire   = exec_fire_b_w[bi] && is_setup_uop_b_w[bi];
     `ifdef VX_CFG_TCU_SPARSE_ENABLE
-        assign req[bi].is_sparse = (exec_data[bi].op_type == INST_TCU_WGMMA_SP);
+        assign req[bi].is_sparse = (nh_data[bi].op_type == INST_TCU_WGMMA_SP);
+        assign out_is_sparse[bi] = (exec_data[bi].op_type == INST_TCU_WGMMA_SP);
+    `else
+        assign out_is_sparse[bi] = 1'b0;
     `endif
+        assign out_step_m[bi] = exec_data[bi].op_args.tcu.step_m;
     end
 
     wire [BLOCK_SIZE-1:0] tbuf_ready;
+    wire [BLOCK_SIZE-1:0] tbuf_ready_next;
 
 `ifdef PERF_ENABLE
     wire [PERF_CTR_BITS-1:0] tbuf_stalls_w;
@@ -181,16 +235,27 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .lmem_reads     (lmem_reads_w),
     `endif
         .req            (req),
+        .out_step_m     (out_step_m),
+        .out_is_sparse  (out_is_sparse),
         .tcu_lmem_if    (tcu_lmem_if),
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),
-        .tbuf_ready     (tbuf_ready)
+        .tbuf_ready     (tbuf_ready),
+        .tbuf_ready_next(tbuf_ready_next)
     );
+    `UNUSED_VAR (tbuf_ready)
 
-    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_tbuf_eff
-        assign tbuf_ready_eff[bi] = is_setup_uop_b_w[bi] ? 1'b1
-                                  : (tbuf_ready[bi] && !cta_conflict[bi]);
+    // Registered compute-uop ready for next cycle's head. Setup uops never
+    // wait on the buffers; tcu_core passes them through on its own.
+    reg [BLOCK_SIZE-1:0] tbuf_ready_r;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            tbuf_ready_r <= '0;
+        end else begin
+            tbuf_ready_r <= nh_compute & tbuf_ready_next & ~cta_conflict_nh;
+        end
     end
+    assign tbuf_ready_eff = tbuf_ready_r;
 
     // -----------------------------------------------------------------------
     // WGMMA perf counters (instrs / stalls).

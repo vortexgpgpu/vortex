@@ -52,6 +52,43 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .data_t (tcu_execute_t)
     ) per_block_execute_if[BLOCK_SIZE]();
 
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    // WGMMA reads the entry behind each head to register its operand ready,
+    // so the 2-entry dispatch output buffer lives here instead, exposed.
+    VX_execute_if #(
+        .data_t (tcu_execute_t)
+    ) lane_execute_if[BLOCK_SIZE]();
+
+    VX_lane_dispatch #(
+        .BLOCK_SIZE (BLOCK_SIZE),
+        .NUM_LANES  (NUM_LANES),
+        .OUT_BUF    (0)
+    ) lane_dispatch (
+        .clk        (clk),
+        .reset      (reset),
+        .dispatch_if(dispatch_if),
+        .execute_if (lane_execute_if)
+    );
+
+    wire [BLOCK_SIZE-1:0] exec_next_valid_w;
+    tcu_execute_t         exec_next_data_w [BLOCK_SIZE];
+    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_wg_queue
+        VX_tcu_wg_queue #(
+            .DATAW ($bits(tcu_execute_t))
+        ) wg_queue (
+            .clk        (clk),
+            .reset      (reset),
+            .valid_in   (lane_execute_if[bi].valid),
+            .ready_in   (lane_execute_if[bi].ready),
+            .data_in    (lane_execute_if[bi].data),
+            .valid_out  (per_block_execute_if[bi].valid),
+            .data_out   (per_block_execute_if[bi].data),
+            .ready_out  (per_block_execute_if[bi].ready),
+            .next_valid (exec_next_valid_w[bi]),
+            .next_data  (exec_next_data_w[bi])
+        );
+    end
+`else
     VX_lane_dispatch #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
@@ -62,6 +99,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .dispatch_if(dispatch_if),
         .execute_if (per_block_execute_if)
     );
+`endif
 
     VX_result_if #(
         .data_t (tcu_result_t)
@@ -145,10 +183,12 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [BLOCK_SIZE-1:0]                                          exec_valid_w;
     wire [BLOCK_SIZE-1:0]                                          exec_ready_w;
     tcu_execute_t                                                  exec_data_w [BLOCK_SIZE];
+    // The block head as dispatched (before the AGU/core split), so the next
+    // head is known whichever consumer takes the current one.
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_obs
-        assign exec_valid_w[bi]    = core_execute_if[bi].valid;
-        assign exec_ready_w[bi]    = core_execute_if[bi].ready;
-        assign exec_data_w[bi]     = core_execute_if[bi].data;
+        assign exec_valid_w[bi]    = per_block_execute_if[bi].valid;
+        assign exec_ready_w[bi]    = per_block_execute_if[bi].ready;
+        assign exec_data_w[bi]     = per_block_execute_if[bi].data;
     end
 
     wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data;
@@ -167,6 +207,8 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .exec_valid     (exec_valid_w),
         .exec_ready     (exec_ready_w),
         .exec_data      (exec_data_w),
+        .exec_next_valid(exec_next_valid_w),
+        .exec_next_data (exec_next_data_w),
         .tcu_lmem_if    (tcu_lmem_if),
         .tbuf_rs1_data  (tbuf_rs1_data),
         .tbuf_rs2_data  (tbuf_rs2_data),

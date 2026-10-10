@@ -46,8 +46,14 @@ module VX_tcu_lockstep import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [BLOCK_SIZE-1:0]                 is_first_uop_b,
     input  wire [BLOCK_SIZE-1:0]                 is_last_uop_b,
 
-    // gating output
-    output wire [BLOCK_SIZE-1:0]                 cta_conflict
+    // The uop each block will present next cycle (see VX_tcu_wgmma).
+    input  wire [BLOCK_SIZE-1:0]                 is_wgmma_nh_b,
+    input  wire [BLOCK_SIZE-1:0][NCTA_WIDTH-1:0] new_cta_nh_b,
+
+    // gating output: this cycle's uop, and next cycle's against the
+    // ownership this cycle's fires leave behind
+    output wire [BLOCK_SIZE-1:0]                 cta_conflict,
+    output wire [BLOCK_SIZE-1:0]                 cta_conflict_nh
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -108,6 +114,23 @@ module VX_tcu_lockstep import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             end
         end
         assign cta_conflict[bi] = is_wgmma_b[bi] && cta_conflict_r;
+    end
+
+    wire [BLOCK_SIZE-1:0][NCTA_WIDTH-1:0] cta_owner_next;
+    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_owner_next
+        assign cta_owner_next[bi] = leader_fire_b[bi] ? new_cta_b[bi] : cta_owner_r[bi];
+    end
+    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_conflict_nh
+        logic cta_conflict_nh_r;
+        always_comb begin
+            cta_conflict_nh_r = 1'b0;
+            for (int k = 0; k < BLOCK_SIZE; ++k) begin
+                if (k != bi && in_expansion_next[k] && (cta_owner_next[k] != new_cta_nh_b[bi])) begin
+                    cta_conflict_nh_r = 1'b1;
+                end
+            end
+        end
+        assign cta_conflict_nh[bi] = is_wgmma_nh_b[bi] && cta_conflict_nh_r;
     end
 
     // -----------------------------------------------------------------------

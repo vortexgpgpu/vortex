@@ -374,6 +374,10 @@ public:
   {
     exec_done_.fill(false);
     in_wgmma_.fill(false);
+    prev_head_.fill(nullptr);
+    prev_size_.fill(0);
+    prev_fired_.fill(false);
+    fired_.fill(false);
     wgmma_desc_.fill({0, 0});
   }
 
@@ -397,6 +401,10 @@ public:
       due.clear();
     }
     in_wgmma_.fill(false);
+    prev_head_.fill(nullptr);
+    prev_size_.fill(0);
+    prev_fired_.fill(false);
+    fired_.fill(false);
     lmem_desc_.clear();
     wgmma_desc_.fill({0, 0});
     cta_owner_a_.fill(-1);
@@ -588,6 +596,10 @@ public:
        && !exec_done_.at(b) && !((wgmma_ready >> b) & 1u)) {
         continue;
       }
+      if (tcu_is_wgmma(tcu_type) && !tpuArgs.is_setup_uop && !exec_done_.at(b)
+       && prev_head_.at(b) != trace && !(prev_fired_.at(b) && prev_size_.at(b) >= 2)) {
+        continue;
+      }
     #endif
 
       // Execute once per trace; results persist across backpressure retries
@@ -706,6 +718,7 @@ public:
       #endif
         DT(3, simobject_->name() << " execute: op=" << tcu_type << ", " << *trace);
         input.pop();
+        fired_.at(b) = true;
       }
     }
 
@@ -722,6 +735,13 @@ public:
       }
       bbuf_ = bbuf_slot_t{};
       tbuf->invalidate_b();
+    }
+    for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
+      auto& input = simobject_->Inputs.at(b);
+      prev_head_.at(b)  = input.empty() ? nullptr : input.peek();
+      prev_size_.at(b)  = input.size();
+      prev_fired_.at(b) = fired_.at(b);
+      fired_.at(b) = false;
     }
   #endif
   }
@@ -1585,6 +1605,14 @@ private:
   uint32_t cur_xtile_n_ = 8;
   // CTA each block holds while mid-WGMMA (-1 = none).
   std::array<int32_t, VX_CFG_NUM_TCU_BLOCKS> cta_owner_a_{};
+  // The RTL registers the WGMMA operand ready, evaluated a cycle ahead for the
+  // uop each block will present: the head, or the entry queued behind it when
+  // the head fires. A compute uop not visible in its block queue a cycle
+  // earlier therefore waits one cycle.
+  std::array<instr_trace_t*, VX_CFG_NUM_TCU_BLOCKS> prev_head_{};
+  std::array<uint32_t, VX_CFG_NUM_TCU_BLOCKS> prev_size_{};
+  std::array<bool, VX_CFG_NUM_TCU_BLOCKS> prev_fired_{};
+  std::array<bool, VX_CFG_NUM_TCU_BLOCKS> fired_{};
 #ifdef VX_CFG_TCU_WGMMA_ENABLE
   std::array<abuf_slot_t, VX_CFG_NUM_TCU_BLOCKS> abuf_;
   bbuf_slot_t bbuf_;

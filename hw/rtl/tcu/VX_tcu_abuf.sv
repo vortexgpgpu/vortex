@@ -76,11 +76,17 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Outputs
     output wire                     abuf_ready,
+    // Readiness of the presented request against next cycle's buffer state.
+    output wire                     abuf_ready_next,
+    // The uop reading the stripe this cycle (the request is next cycle's).
+    input  wire [3:0]               out_step_m,
+    input  wire                     out_is_sparse_in,
     output wire [TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] abuf_rs1_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
     wire req_is_sparse = req_is_sparse_in && (TCU_WG_SP_FULLK == 0);
+    wire out_is_sparse = out_is_sparse_in && (TCU_WG_SP_FULLK == 0);
     `UNUSED_VAR (req_wid)
 
     // -----------------------------------------------------------------------
@@ -155,6 +161,11 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire stripe_resident = slot_valid_r
                         && (slot_step_k_r == req_step_k_trunc)
                         && (!is_first_compute_uop || refetched_for_first_compute_r);
+    // slot_step_k_r only changes on allocation, which also clears the slot.
+    wire slot_valid_n, refetched_n;
+    wire stripe_resident_next = slot_valid_n
+                             && (slot_step_k_r == req_step_k_trunc)
+                             && (!is_first_compute_uop || refetched_n);
 
     // RS mode (a_from_smem=0): A from registers, abuf bypassed → always ready.
     wire need_smem  = req_valid && req_a_is_smem;
@@ -162,6 +173,7 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire alloc_en   = need_fetch && !slot_fetching_r;
 
     assign abuf_ready = !req_valid || !req_a_is_smem || stripe_resident;
+    assign abuf_ready_next = !req_valid || !req_a_is_smem || stripe_resident_next;
 
     wire fire = req_valid && abuf_ready;
 
@@ -271,6 +283,17 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_lmem_if.rsp_ready       = 1'b1;
     `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)
 
+    // Next-state of the residency flags; the registers below load these, so
+    // abuf_ready_next sees exactly the state the next cycle starts from.
+    assign slot_valid_n = req_setup ? 1'b0
+                        : ((fsm_state_r == S_IDLE) && alloc_en) ? 1'b0
+                        : ((fsm_state_r == S_FETCH) && last_rsp) ? 1'b1
+                        : slot_valid_r;
+    assign refetched_n  = req_setup ? 1'b0
+                        : (last_rsp && is_first_compute_uop) ? 1'b1
+                        : (fire && !is_first_compute_uop) ? 1'b0
+                        : refetched_for_first_compute_r;
+
     always_ff @(posedge clk) begin
         if (reset) begin
             fsm_state_r            <= S_IDLE;
@@ -290,14 +313,14 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             slot_is_sparse_r       <= 1'b0;
             refetched_for_first_compute_r <= 1'b0;
         end else begin
+            slot_valid_r                  <= slot_valid_n;
+            refetched_for_first_compute_r <= refetched_n;
             if (req_setup) begin
                 fsm_state_r      <= S_IDLE;
                 req_ctr_r        <= '0;
                 rsp_ctr_r        <= '0;
                 req_inflight_r   <= 1'b0;
-                slot_valid_r     <= 1'b0;
                 slot_fetching_r  <= 1'b0;
-                refetched_for_first_compute_r <= 1'b0;
             end else begin
                 // Inflight tracker (single outstanding request at a time)
                 if (tcu_lmem_if.rsp_valid)
@@ -313,17 +336,11 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     slot_row_major_r       <= (desc_a_ldm_words != '0);
                 end
 
-                if (last_rsp && is_first_compute_uop)
-                    refetched_for_first_compute_r <= 1'b1;
-                else if (fire && !is_first_compute_uop)
-                    refetched_for_first_compute_r <= 1'b0;
-
                 case (fsm_state_r)
                     S_IDLE: begin
                         if (alloc_en) begin
                             fsm_state_r      <= S_FETCH;
                             slot_fetching_r  <= 1'b1;
-                            slot_valid_r     <= 1'b0;
                             slot_step_k_r    <= req_step_k_trunc;
                             slot_is_sparse_r  <= req_is_sparse;
                             // Row-major base is the A_warp start bank-row (no
@@ -348,7 +365,6 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         if (last_rsp) begin
                             fsm_state_r     <= S_IDLE;
                             slot_fetching_r <= 1'b0;
-                            slot_valid_r    <= 1'b1;
                             req_inflight_r  <= 1'b0;
                         end else if (tcu_lmem_if.rsp_valid) begin
                             rsp_ctr_r <= rsp_ctr_r + FETCH_CTR_W'(1);
@@ -438,18 +454,18 @@ module VX_tcu_abuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         rs1_mux = '0;
         for (int lane = 0; lane < TCU_WG_A_DATA_SIZE; ++lane) begin
             int src_idx;
-            if (req_is_sparse) begin
+            if (out_is_sparse) begin
                 automatic int row = lane / int'(TCU_WG_FEDP_K);
                 automatic int k   = lane % int'(TCU_WG_FEDP_K);
                 if (row < int'(TCU_TC_M) && k < int'(TCU_TC_K)) begin
-                    src_idx = int'(req_step_m) * int'(BLOCK_WORDS_PADDED_SP)
+                    src_idx = int'(out_step_m) * int'(BLOCK_WORDS_PADDED_SP)
                             + row * int'(TCU_TC_K)
                             + k;
                     if (src_idx < int'(A_STRIPE_WORDS))
                         rs1_mux[lane] = `VX_CFG_XLEN'(storage_rdata[src_idx]);
                 end
             end else if (lane < int'(A_BLOCK_WORDS)) begin
-                src_idx = int'(req_step_m) * int'(BLOCK_WORDS_PADDED) + lane;
+                src_idx = int'(out_step_m) * int'(BLOCK_WORDS_PADDED) + lane;
                 if (src_idx < int'(A_STRIPE_WORDS))
                     rs1_mux[lane] = `VX_CFG_XLEN'(storage_rdata[src_idx]);
             end

@@ -123,7 +123,8 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [TCU_MAX_META_BLOCK_WIDTH-1:0] vld_meta_block = wmma_sp_meta;
   `endif
 
-    assign exe_ready_extra = ~is_wgmma || tbuf_ready;
+    // tbuf_ready is registered for compute uops; a setup uop needs no buffer.
+    assign exe_ready_extra = ~is_wgmma || ~execute_if.data.header.wb || tbuf_ready;
 `else
     // FEDP2K widens rs1_data past the RF operand; the upper half stays zero.
     assign rs1_data = $bits(rs1_data)'(execute_if.data.rs1_data);

@@ -69,6 +69,8 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Outputs (broadcast to all Q tcu_cores)
     output wire                     bbuf_ready,
+    // Readiness of the presented request against next cycle's buffer state.
+    output wire                     bbuf_ready_next,
     output wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] bbuf_rs2_data
 );
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -268,10 +270,39 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire bank_row_resident = req_wants_kmajor
         ? bank_row_resident_kmajor
         : (req_is_sparse ? bank_row_resident_sparse : bank_row_resident_dense);
+
+    // The same residency against the flags the next cycle starts from (the
+    // slot key registers only change on allocation, which clears both slots).
+    wire slot_a_valid_n, slot_b_valid_n, refetched_n;
+    wire bank_row_resident_dense_n =
+        slot_a_valid_n && !slot_is_sparse_r
+        && (slot_a_addr_r == fetch_addr_dense)
+        && (slot_a_sub_half_r == dense_sub_half);
+    wire bank_row_resident_sparse_n =
+        slot_a_valid_n && slot_is_sparse_r
+        && (slot_a_addr_r == fetch_addr_a_sparse)
+        && (slot_a_sub_half_r == sp_sub_a)
+        && (!SPARSE_TWO_SLOT || (slot_b_valid_n
+                                 && (slot_b_addr_r == fetch_addr_b_sparse)
+                                 && (slot_b_sub_half_r == sp_sub_b)));
+    wire bank_row_resident_kmajor_n =
+        slot_a_valid_n && slot_row_major_r
+        && (!slot_is_sparse_r || slot_b_valid_n)
+        && (!req_is_first_uop || refetched_n)
+        && (slot_cta_id_r == req_cta_id)
+        && (slot_step_k_r == req_step_k)
+        && (slot_step_n_r == req_step_n)
+        && (slot_desc_b_row_base_r == desc_b_row_base)
+        && (slot_desc_b_inrow_r    == desc_b_inrow)
+        && (slot_ldm_words_r       == desc_b_ldm_words);
+    wire bank_row_resident_n = req_wants_kmajor
+        ? bank_row_resident_kmajor_n
+        : (req_is_sparse ? bank_row_resident_sparse_n : bank_row_resident_dense_n);
     wire need_fetch        = req_valid && !bank_row_resident;
     wire alloc_en          = need_fetch && !slot_fetching_r;
 
     assign bbuf_ready = !req_valid || bank_row_resident;
+    assign bbuf_ready_next = !req_valid || bank_row_resident_n;
     wire fire = req_valid && bbuf_ready;
 
     // -----------------------------------------------------------------------
@@ -394,6 +425,20 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     assign tcu_lmem_if.rsp_ready       = 1'b1;
     `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)
 
+    // Next-state of the residency flags; the registers below load these, so
+    // bbuf_ready_next sees exactly the state the next cycle starts from.
+    wire alloc_now = (fsm_state_r == S_IDLE) && alloc_en;
+    wire a_done    = in_fetch_a && last_rsp;
+    wire b_with_a  = a_done && slot_is_sparse_r
+                  && (slot_row_major_r || (!SPARSE_TWO_FETCH && SPARSE_TWO_SLOT));
+    assign slot_a_valid_n = req_setup ? 1'b0 : alloc_now ? 1'b0 : a_done ? 1'b1 : slot_a_valid_r;
+    assign slot_b_valid_n = req_setup ? 1'b0 : alloc_now ? 1'b0
+                          : (b_with_a || (in_fetch_b && last_rsp)) ? 1'b1 : slot_b_valid_r;
+    assign refetched_n    = req_setup ? 1'b0
+                          : (last_rsp && req_is_first_uop) ? 1'b1
+                          : (fire && !req_is_first_uop) ? 1'b0
+                          : refetched_for_first_uop_r;
+
     always_ff @(posedge clk) begin
         if (reset) begin
             fsm_state_r            <= S_IDLE;
@@ -420,15 +465,15 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             km_word_off_rsp_r      <= '0;
             km_word_off_row0_r     <= '0;
         end else begin
+            slot_a_valid_r            <= slot_a_valid_n;
+            slot_b_valid_r            <= slot_b_valid_n;
+            refetched_for_first_uop_r <= refetched_n;
             if (req_setup) begin
-                slot_a_valid_r  <= 1'b0;
-                slot_b_valid_r  <= 1'b0;
                 slot_fetching_r <= 1'b0;
                 fsm_state_r     <= S_IDLE;
                 req_inflight_r  <= 1'b0;
                 km_req_ctr_r    <= '0;
                 km_rsp_ctr_r    <= '0;
-                refetched_for_first_uop_r <= 1'b0;
             end else begin
                 if (tcu_lmem_if.rsp_valid)
                     req_inflight_r <= 1'b0;
@@ -436,10 +481,6 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     req_inflight_r <= 1'b1;
 
 
-                if (last_rsp && req_is_first_uop)
-                    refetched_for_first_uop_r <= 1'b1;
-                else if (fire && !req_is_first_uop)
-                    refetched_for_first_uop_r <= 1'b0;
 
                 // K-major req/rsp counters advance independently of FSM state
                 // (single-outstanding still enforced via req_inflight_r).
@@ -457,8 +498,6 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         if (alloc_en) begin
                             fsm_state_r         <= S_FETCH_A;
                             slot_fetching_r     <= 1'b1;
-                            slot_a_valid_r      <= 1'b0;
-                            slot_b_valid_r      <= 1'b0;
                             slot_a_addr_r       <= fetch_addr_a;
                             slot_a_sub_half_r   <= req_is_sparse ? sp_sub_a : dense_sub_half;
                             slot_b_addr_r       <= fetch_addr_b_sparse;
@@ -483,17 +522,13 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     end
                     S_FETCH_A: begin
                         if (last_rsp) begin
-                            slot_a_valid_r <= 1'b1;
                             req_inflight_r <= 1'b0;
                             if (slot_is_sparse_r && slot_row_major_r) begin
-                                slot_b_valid_r  <= 1'b1;
                                 fsm_state_r     <= S_IDLE;
                                 slot_fetching_r <= 1'b0;
                             end else if (slot_is_sparse_r && SPARSE_TWO_FETCH) begin
                                 fsm_state_r <= S_FETCH_B;
                             end else begin
-                                if (slot_is_sparse_r && SPARSE_TWO_SLOT)
-                                    slot_b_valid_r <= 1'b1;
                                 fsm_state_r     <= S_IDLE;
                                 slot_fetching_r <= 1'b0;
                             end
@@ -503,7 +538,6 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                         if (last_rsp) begin
                             fsm_state_r     <= S_IDLE;
                             slot_fetching_r <= 1'b0;
-                            slot_b_valid_r  <= 1'b1;
                             req_inflight_r  <= 1'b0;
                         end
                     end

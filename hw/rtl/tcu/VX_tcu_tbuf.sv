@@ -53,8 +53,12 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     output wire [PERF_CTR_BITS-1:0] lmem_reads,
 `endif
 
-    // Per-block uop observation (sized BLOCK_SIZE; req.valid pre-gated to WGMMA)
+    // Per-block uop observation (sized BLOCK_SIZE; req.valid pre-gated to WGMMA).
+    // req is the uop each block presents next cycle; out_* select this
+    // cycle's A operand for the uop reading it now.
     input  tcu_tbuf_req_t [BLOCK_SIZE-1:0]                              req,
+    input  wire [BLOCK_SIZE-1:0][3:0]                                   out_step_m,
+    input  wire [BLOCK_SIZE-1:0]                                        out_is_sparse,
 
     // Single LMEM master out (post-arb)
     VX_mem_bus_if.master                                                tcu_lmem_if,
@@ -62,7 +66,8 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Per-block operand outputs (rs2 is broadcast — bbuf is shared)
     output wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
     output wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]tbuf_rs2_data,
-    output wire [BLOCK_SIZE-1:0]                                        tbuf_ready
+    output wire [BLOCK_SIZE-1:0]                                        tbuf_ready,
+    output wire [BLOCK_SIZE-1:0]                                        tbuf_ready_next
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -86,6 +91,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] abuf_rs1_data_w;
     wire [BLOCK_SIZE-1:0]                                      abuf_ready_w;
+    wire [BLOCK_SIZE-1:0]                                      abuf_ready_next_w;
 
 `ifdef PERF_ENABLE
     wire [BLOCK_SIZE-1:0][PERF_CTR_BITS-1:0] abuf_stalls_w;
@@ -120,6 +126,9 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .req_uuid       (req[b].uuid),
             .tcu_lmem_if    (lmem_masters[b]),
             .abuf_ready     (abuf_ready_w[b]),
+            .abuf_ready_next(abuf_ready_next_w[b]),
+            .out_step_m     (out_step_m[b]),
+            .out_is_sparse_in (out_is_sparse[b]),
             .abuf_rs1_data  (abuf_rs1_data_w[b])
         );
     end
@@ -133,6 +142,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // -----------------------------------------------------------------------
 
     wire                                              bbuf_ready_w;
+    wire                                              bbuf_ready_next_w;
     wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]     bbuf_rs2_data_w;
 
 `ifdef PERF_ENABLE
@@ -264,6 +274,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .req_uuid         (bbuf_req_uuid),
         .tcu_lmem_if      (lmem_masters[BBUF_IDX]),
         .bbuf_ready       (bbuf_ready_w),
+        .bbuf_ready_next  (bbuf_ready_next_w),
         .bbuf_rs2_data    (bbuf_rs2_data_w)
     );
 
@@ -327,6 +338,7 @@ module VX_tcu_tbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign tbuf_rs1_data[b] = abuf_rs1_data_w[b];
         assign tbuf_rs2_data[b] = bbuf_rs2_data_w;
         assign tbuf_ready[b]    = abuf_ready_w[b] && bbuf_ready_w && block_key_match[b];
+        assign tbuf_ready_next[b] = abuf_ready_next_w[b] && bbuf_ready_next_w && block_key_match[b];
     end
 
     // -----------------------------------------------------------------------
