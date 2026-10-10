@@ -37,6 +37,14 @@ $Y -q -l "$W/y.log" -p "
   $REN
   write_rtlil $W/design.il" || { tail -5 "$W/y.log"; exit 1; }
 python3 "$(dirname "$0")/name_kept.py" "$W/design.il"
+# Inside kept modules (only the top is split wholesale) the same bit reuse
+# shows up as a wire feeding its own bits; split just those wires.
+if [ "$(python3 "$(dirname "$0")/selfref_wires.py" "$W/design.il")" != 0 ]; then
+  $Y -q -l "$W/y_selfref.log" -p "
+    read_rtlil $W/design.il
+    splitnets a:fame5_selfref; opt_clean -purge
+    write_rtlil $W/design.il" || { tail -5 "$W/y_selfref.log"; exit 1; }
+fi
 # FIRRTL memories carry one enable and one uniform mask per write port, so a
 # handful of RTL arrays - read-modify-write DCR files, shift queues, per-field
 # struct writes - collect into \$mem cells write_firrtl rejects ('Complex
