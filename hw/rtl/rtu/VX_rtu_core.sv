@@ -147,11 +147,11 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     reg [NUM_SLOTS-1:0][2:0]           tstate;
 
     reg [NUM_SLOTS-1:0][NUM_LANES-1:0] req_mask;
-    reg [NUM_SLOTS-1:0][TAG_WIDTH-1:0] req_tag;
-    reg [NUM_SLOTS-1:0][STG_IDX_W-1:0] req_stg;      // the staging entry it launched from
-    reg [NUM_SLOTS-1:0][NW_WIDTH-1:0]  req_wid;      // its warp, for the window write
-    reg [NUM_SLOTS-1:0][31:0]          req_payload;  // warp-uniform; staged for the callbacks
-    reg [NUM_SLOTS-1:0]                is_cand;
+    reg [NUM_SLOTS-1:0][TAG_WIDTH-1:0]    req_tag;
+    reg [NUM_SLOTS-1:0][STG_IDX_W-1:0]    req_stg;      // the staging entry it launched from
+    reg [NUM_SLOTS-1:0][NW_WIDTH-1:0]     req_wid;      // its warp, for the window write
+    reg [NUM_SLOTS-1:0][`VX_CFG_XLEN-1:0] req_payload;  // warp-uniform; staged for the callbacks
+    reg [NUM_SLOTS-1:0]                   is_cand;
     reg [NUM_SLOTS-1:0][NUM_LANES-1:0][RTU_CB_ACTION_BITS-1:0] cont_action;
 
     // ── the scheduler ─────────────────────────────────────────────────
@@ -306,7 +306,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     );
 
     // warp-uniform scalars of a staged trace (read once, at the claim)
-    localparam SCLW = NUM_LANES + TAG_WIDTH + 32 + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16;
+    localparam SCLW = NUM_LANES + TAG_WIDTH + `VX_CFG_XLEN + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16;
     wire [SCLW-1:0] stg_scl_rdata;
     wire [SLOT_W-1:0]    fill_slot_pick;
     wire [STG_IDX_W-1:0] fill_stg_pick;
@@ -332,11 +332,11 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         .raddr (fill_stg_pick),
         .rdata (stg_scl_rdata)
     );
-    wire [NUM_LANES-1:0] scl_mask;
-    wire [TAG_WIDTH-1:0] scl_tag;
-    wire [31:0]          scl_payload;
+    wire [NUM_LANES-1:0]              scl_mask;
+    wire [TAG_WIDTH-1:0]              scl_tag;
+    wire [`VX_CFG_XLEN-1:0]           scl_payload;
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] scl_scene;
-    wire [15:0]          scl_flags, scl_cull;
+    wire [15:0]                       scl_flags, scl_cull;
     assign {scl_mask, scl_tag, scl_payload, scl_scene, scl_flags, scl_cull} = stg_scl_rdata;
 
     // ── the fill engine ───────────────────────────────────────────────
@@ -481,7 +481,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     //   7..12  object ray (candidate only) — the staging RAM's beat rows
     //   13,14  cb_type (flag flops), sbt (window row)
     //   15     cb_handle (0)
-    //   then   payload (descriptor), hitAttribute (window row), status LAST
+    //   then   payload (descriptor, XLEN/32 words), hitAttribute (window row), status LAST
     localparam [2:0] WB_IDLE = 3'd0,
                      WB_RD1  = 3'd1,
                      WB_CAP1 = 3'd2,
@@ -495,9 +495,10 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     wire [RTU_IDX_BITS-1:0] n_attrs = is_cand[ws] ? RTU_IDX_BITS'(RTU_RES_CAND)
                                                   : RTU_IDX_BITS'(RTU_RES_HIT);
-    wire wr_payload = (wr_idx == n_attrs);
-    wire wr_attr    = (wr_idx == (n_attrs + RTU_IDX_BITS'(1)));
-    wire wr_status  = (wr_idx == (n_attrs + RTU_IDX_BITS'(2)));
+    wire wr_pl_hi   = (RTU_PAYLOAD_WORDS > 1) && (wr_idx == (n_attrs + RTU_IDX_BITS'(1)));
+    wire wr_payload = (wr_idx == n_attrs) || wr_pl_hi;
+    wire wr_attr    = (wr_idx == (n_attrs + RTU_IDX_BITS'(RTU_PAYLOAD_WORDS)));
+    wire wr_status  = (wr_idx == (n_attrs + RTU_IDX_BITS'(RTU_PAYLOAD_WORDS + 1)));
     wire wr_hitspan = (wr_idx < RTU_IDX_BITS'(RTU_RES_HIT));
     wire wr_objray  = is_cand[ws] && !wr_hitspan && (wr_idx < RTU_IDX_BITS'(13));
     wire wr_cbtype  = is_cand[ws] && (wr_idx == RTU_IDX_BITS'(13));
@@ -553,7 +554,8 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
             if (wr_status) begin
                 win_word[i] = status_word[i];
             end else if (wr_payload) begin
-                win_word[i] = req_payload[ws];
+                win_word[i] = wr_pl_hi ? req_payload[ws][`VX_CFG_XLEN-1 -: 32]
+                                       : req_payload[ws][31:0];
             end else if (wr_attr) begin
                 win_word[i] = sch_attrv[wctx[i]] ? wb_d1[i*32 +: 32] : 32'd0;
             end else if (wr_hitspan) begin
@@ -591,7 +593,7 @@ module VX_rtu_core import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_w.win_data.mask    = (is_cand[ws] && !wr_uniform) ? wr_cb_mask : req_mask[ws];
     assign rtu_bus_w.win_data.slot    =
           wr_status  ? RTU_SLOT_BITS'(RTU_STATUS_SLOT)
-        : wr_payload ? RTU_SLOT_BITS'(RTU_PAYLOAD_SLOT)
+        : wr_payload ? RTU_SLOT_BITS'(RTU_PAYLOAD_SLOT) + RTU_SLOT_BITS'(wr_pl_hi)
         : wr_attr    ? RTU_SLOT_BITS'(RTU_ATTR_SLOT)
                      : RTU_SLOT_BITS'(RTU_RES_BASE) + RTU_SLOT_BITS'(wr_idx);
 

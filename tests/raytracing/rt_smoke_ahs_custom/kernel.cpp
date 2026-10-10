@@ -33,20 +33,20 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // Ray flags = 0: the non-opaque triangle drives the opacity classifier so
   // the walker yields an AHS candidate callback. The candidate-capture buffer
-  // rides the trace as the payload pointer (VX_RT_PAYLOAD_PTR_LO), so the
+  // rides the trace as the payload pointer (vx_rt_get_payload), so the
   // loop can locate it from the window.
-  uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t cand_lo  = (uint32_t)(arg->cand_addr  & 0xffffffffu);
-  uint32_t h   = vx_rt_wtrace(scene_lo, cand_lo, 0u, 0xffu, &ray);
+  uintptr_t scene_ptr = arg->scene_addr;
+  uintptr_t capture_ptr = arg->cand_addr;
+  uint32_t h   = vx_rt_wtrace(scene_ptr, capture_ptr, 0u, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
   while (vx_rt_sts_is_yield(sts)) {
     // Read the candidate instance attributes and the capture buffer pointer
     // (staged as the trace payload) from the register window, then stash.
-    uint32_t cand_ptr    = vx_rt_get_attr(VX_RT_PAYLOAD_PTR_LO, sts);
+    uintptr_t cand_ptr    = vx_rt_get_payload(sts);
     uint32_t cand_custom = vx_rt_get_attr(VX_RT_HIT_INSTANCE_CUSTOM, sts);
     uint32_t cand_inst   = vx_rt_get_attr(VX_RT_HIT_INSTANCE_ID, sts);
-    uint32_t* cand = (uint32_t*)(uintptr_t)cand_ptr;
+    uint32_t* cand = (uint32_t*)cand_ptr;
     cand[0] = cand_custom;   // cand->cand_instance_custom
     cand[1] = cand_inst;     // cand->cand_instance_id
     sts = vx_rt_continue(h, VX_RT_CB_ACCEPT, hit.t, 0u, &hit);

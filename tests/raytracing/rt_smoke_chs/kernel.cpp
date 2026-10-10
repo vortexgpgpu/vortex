@@ -37,17 +37,17 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // The trace stages the payload pointer the CHS loop body reads via
   // vx_gfx_get. Opt into CHS dispatch.
-  uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t payload  = (uint32_t)(arg->payload_addr & 0xffffffffu);
-  uint32_t h = vx_rt_wtrace(scene_lo, payload, VX_RT_FLAG_ENABLE_CHS, 0xffu, &ray);
+  uintptr_t scene_ptr = arg->scene_addr;
+  uintptr_t payload = arg->payload_addr;
+  uint32_t h = vx_rt_wtrace(scene_ptr, payload, VX_RT_FLAG_ENABLE_CHS, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
   while (vx_rt_sts_is_yield(sts)) {
     // Read the committed hit_t bits and the payload pointer from the window,
     // write MAGIC ^ hit_t, then resume: DONE drains the CHS-shaded hit.
     uint32_t hit_t_bits  = vx_rt_get_attr(VX_RT_HIT_T, sts);
-    uint32_t payload_ptr = vx_rt_get_attr(VX_RT_PAYLOAD_PTR_LO, sts);
-    *(uint32_t*)(uintptr_t)payload_ptr = RTU_CHS_MAGIC ^ hit_t_bits;
+    uintptr_t payload_ptr = vx_rt_get_payload(sts);
+    *(uint32_t*)payload_ptr = RTU_CHS_MAGIC ^ hit_t_bits;
     sts = vx_rt_continue(h, VX_RT_CB_DONE, hit.t, 0u, &hit);
   }
 

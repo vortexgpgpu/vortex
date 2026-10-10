@@ -54,7 +54,7 @@ module VX_rtu_bus_slice import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // parameter cannot read $bits of a hierarchical interface member, so size
     // the elastic buffers from the field formula instead.
     localparam ARM_DATAW = SRC_WIDTH + NW_WIDTH + NUM_LANES
-                         + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + 32 + TAG_WIDTH;
+                         + `VX_CFG_MEM_ADDR_WIDTH + 16 + 16 + `VX_CFG_XLEN + TAG_WIDTH;
     localparam REQ_DATAW = 1 + SRC_WIDTH + NW_WIDTH
                          + NUM_LANES * 32 + NUM_LANES * RTU_CB_ACTION_BITS;
     localparam WIN_DATAW = 1 + NW_WIDTH + RTU_SLOT_BITS

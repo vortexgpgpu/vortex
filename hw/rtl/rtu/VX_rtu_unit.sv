@@ -204,7 +204,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_w.arm_data.wid         = wid;
     assign rtu_bus_w.arm_data.mask        = execute_if.data.header.tmask;
     assign rtu_bus_w.arm_data.scene_base  = execute_if.data.rs1_data[CFG_L1][`VX_CFG_MEM_ADDR_WIDTH-1:0];
-    assign rtu_bus_w.arm_data.payload_ptr = execute_if.data.rs1_data[CFG_L2][31:0];
+    assign rtu_bus_w.arm_data.payload_ptr = execute_if.data.rs1_data[CFG_L2];
     assign rtu_bus_w.arm_data.flags       = execute_if.data.rs1_data[CFG_L3][15:0];
     assign rtu_bus_w.arm_data.cull_mask   = execute_if.data.rs1_data[CFG_L3][31:16];
     assign rtu_bus_w.arm_data.tag         = ($bits(rtu_bus_w.arm_data.tag))'(execute_if.data.header.uuid);

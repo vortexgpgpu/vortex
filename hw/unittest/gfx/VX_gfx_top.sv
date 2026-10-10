@@ -99,7 +99,7 @@ module VX_gfx_top import VX_gpu_pkg::*
     input  wire [NC-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0]        rtu_arm_scene_base,
     input  wire [NC-1:0][15:0]                              rtu_arm_flags,
     input  wire [NC-1:0][15:0]                              rtu_arm_cull_mask,
-    input  wire [NC-1:0][31:0]                              rtu_arm_payload_ptr,
+    input  wire [NC-1:0][`VX_CFG_XLEN-1:0]                  rtu_arm_payload_ptr,
     input  wire [NC-1:0][RTU_REQ_TAG_WIDTH-1:0]             rtu_arm_tag,
     output wire [NC-1:0]                                    rtu_arm_ready,
 
