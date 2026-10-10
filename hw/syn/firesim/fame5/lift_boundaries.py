@@ -64,7 +64,10 @@ def q(a):
 def elaborate(defines, incdirs, files, top):
     d = pyslang.driver.Driver()
     d.addStandardArgs()
-    args = ["slang", "--top", top, "--allow-hierarchical-const", "--ignore-unknown-modules"]
+    # The Vortex RTL references some nets before their declaration (VX_tcu_core),
+    # which Vivado and Verilator accept; slang makes it an error unless allowed.
+    args = ["slang", "--top", top, "--allow-hierarchical-const", "--allow-use-before-declare",
+            "--ignore-unknown-modules"]
     args += [f"-D{x}" for x in defines] + [f"-I{x}" for x in incdirs] + files
     if not (d.parseCommandLine(" ".join(q(a) for a in args), pyslang.driver.CommandLineOptions())
             and d.processOptions() and d.parseAllSources()):
