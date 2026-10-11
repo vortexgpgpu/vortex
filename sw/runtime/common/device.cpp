@@ -30,6 +30,10 @@ namespace vx {
 
 // Upper bound on one CP-visible host staging buffer for a device transfer.
 static constexpr uint64_t CP_STAGING_CHUNK = uint64_t(64) << 20;
+// The CP DMA moves whole 64 B lines: it drops the low address bits and rounds
+// the size up (VX_cp_dma). Sub-line transfers are widened to lines here, with
+// the bytes around the span merged on the host so they survive.
+static constexpr uint64_t CP_DMA_LINE = 64;
 
 // Resolve the pinned-region size: compile-time default
 // VX_CFG_VM_PINNED_REGION_SIZE, optionally overridden by the
@@ -1015,13 +1019,32 @@ vx_result_t Device::cp_submit_mem_(uint8_t opcode, uint64_t arg0,
 vx_result_t Device::cp_submit_mem_copy(uint64_t dst, uint64_t src,
                                        uint64_t size) {
     if (size == 0 || dst == src) return VX_SUCCESS;
-    return cp_submit_mem_(CP_OPCODE_MEM_COPY, dst, src, size);
+    if (((dst | src | size) & (CP_DMA_LINE - 1)) == 0)
+        return cp_submit_mem_(CP_OPCODE_MEM_COPY, dst, src, size);
+    std::vector<uint8_t> bounce(size);
+    auto r = cp_submit_mem_read(bounce.data(), src, size);
+    if (r != VX_SUCCESS) return r;
+    return cp_submit_mem_write(dst, bounce.data(), size);
 }
 
 vx_result_t Device::cp_submit_mem_write(uint64_t dev_dst, const void* host_src,
                                         uint64_t size, bool physical) {
     if (size == 0)  return VX_SUCCESS;
     if (!host_src)  return VX_ERR_INVALID_VALUE;
+    if (((dev_dst | size) & (CP_DMA_LINE - 1)) != 0) {
+        const uint64_t a0 = dev_dst & ~(CP_DMA_LINE - 1);
+        const uint64_t a1 = (dev_dst + size + CP_DMA_LINE - 1) & ~(CP_DMA_LINE - 1);
+        std::vector<uint8_t> lines(a1 - a0);
+        vx_result_t r = VX_SUCCESS;
+        if (a0 != dev_dst)
+            r = cp_submit_mem_read(lines.data(), a0, CP_DMA_LINE, physical);
+        if (r == VX_SUCCESS && a1 != dev_dst + size && (a1 - a0 > CP_DMA_LINE || a0 == dev_dst))
+            r = cp_submit_mem_read(lines.data() + (a1 - a0) - CP_DMA_LINE, a1 - CP_DMA_LINE,
+                                   CP_DMA_LINE, physical);
+        if (r != VX_SUCCESS) return r;
+        std::memcpy(lines.data() + (dev_dst - a0), host_src, size);
+        return cp_submit_mem_write(a0, lines.data(), lines.size(), physical);
+    }
     dump_upload_for_firesim(dev_dst, host_src, size);
     // Stage through a bounded CP-visible host buffer, one chunk at a time:
     // a backend can cap a single host allocation well below a large upload
@@ -1053,6 +1076,15 @@ vx_result_t Device::cp_submit_mem_read(void* host_dst, uint64_t dev_src,
                                        uint64_t size, bool physical) {
     if (size == 0)  return VX_SUCCESS;
     if (!host_dst)  return VX_ERR_INVALID_VALUE;
+    if (((dev_src | size) & (CP_DMA_LINE - 1)) != 0) {
+        const uint64_t a0 = dev_src & ~(CP_DMA_LINE - 1);
+        const uint64_t a1 = (dev_src + size + CP_DMA_LINE - 1) & ~(CP_DMA_LINE - 1);
+        std::vector<uint8_t> lines(a1 - a0);
+        auto r = cp_submit_mem_read(lines.data(), a0, lines.size(), physical);
+        if (r == VX_SUCCESS)
+            std::memcpy(host_dst, lines.data() + (dev_src - a0), size);
+        return r;
+    }
     // Have the CP DMA device->host into a bounded CP-visible host staging
     // buffer chunk by chunk (see cp_submit_mem_write), copying each back.
     HostMem staging;
