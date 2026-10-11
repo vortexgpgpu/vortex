@@ -67,9 +67,6 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     localparam FIELDS_W    = F_RW_LO + 1;
     localparam PAYLOAD_W   = LANE_W + FIELDS_W;
 
-    function automatic [TLB_VPN_WIDTH-1:0] vpn_mask (input [TLB_LEVEL_WIDTH-1:0] level);
-        vpn_mask = {TLB_VPN_WIDTH{1'b1}} << (level * TLB_LEVEL_BITS);
-    endfunction
 
     function automatic tlb_access_e access_of (input logic rw);
         access_of = (EXEC_SIDE != 0) ? TLB_ACC_EX : (rw ? TLB_ACC_WR : TLB_ACC_RD);
@@ -255,7 +252,7 @@ module VX_mmu import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     if (ADDR_WIDTH > PAGE_OFFSET_W + TLB_VPN_WIDTH) begin : g_replay_va_hi
         `UNUSED_VAR (replay_raddr[ADDR_WIDTH-1 : PAGE_OFFSET_W + TLB_VPN_WIDTH])
     end
-    wire [TLB_VPN_WIDTH-1:0] replay_low = replay_vpn & ~vpn_mask(replay_level);
+    wire [TLB_VPN_WIDTH-1:0] replay_low = replay_vpn & ~tlb_vpn_mask(replay_level);
     wire [TLB_PPN_WIDTH-1:0] replay_ppn_sp = replay_ppn | TLB_PPN_WIDTH'(replay_low);
     wire [ADDR_WIDTH-1:0]    replay_taddr = {replay_ppn_sp, replay_raddr[PAGE_OFFSET_W-1:0]};
 

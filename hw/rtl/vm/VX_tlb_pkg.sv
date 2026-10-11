@@ -72,6 +72,11 @@ package VX_tlb_pkg;
                    && ( want_w || want_x || flags[TLB_FLAG_R]);
     endfunction
 
+    // Mask that drops the low level*TLB_LEVEL_BITS VPN bits (superpages).
+    function automatic logic [TLB_VPN_WIDTH-1:0] tlb_vpn_mask (input logic [TLB_LEVEL_WIDTH-1:0] level);
+        tlb_vpn_mask = {TLB_VPN_WIDTH{1'b1}} << (level * TLB_LEVEL_BITS);
+    endfunction
+
 endpackage
 
 `endif // VX_TLB_PKG_VH
