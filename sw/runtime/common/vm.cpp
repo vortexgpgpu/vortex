@@ -14,6 +14,7 @@
 #include <vortex.h>
 #include <common.h>
 #include <util.h>
+#include <algorithm>
 #include <cassert>
 #include <cstdlib>
 #include <cstring>
@@ -58,6 +59,12 @@ VMManager::VMManager(DeviceMemIO* dev_io)
   if (randomize_va_) {
     std::cout << "[VM] Virtual address randomization ENABLED (seed=0x"
               << std::hex << seed << std::dec << ")" << std::endl;
+  }
+
+  const char* megapage_env = std::getenv("VORTEX_VM_MEGAPAGE_HEAP");
+  megapage_heap_ = (megapage_env != nullptr && std::atoi(megapage_env) != 0);
+  if (megapage_heap_) {
+    std::cout << "[VM] Heap mapped with superpages" << std::endl;
   }
 }
 
@@ -114,6 +121,22 @@ int VMManager::init() {
                                    GLOBAL_MEM_SIZE - VX_MEM_PAGE_TABLE_BASE_ADDR), {
       return err;
     });
+    if (megapage_heap_) {
+      // Superpages over the whole heap, as GPU drivers back allocations with
+      // 2 MB pages: a buffer keeps its identity VA and no longer costs a TLB
+      // entry per 4 KB. Per-buffer access flags are not enforced in this mode.
+      if (randomize_va_) {
+        std::cerr << "[VM] VORTEX_VM_MEGAPAGE_HEAP and VORTEX_RANDOMIZE_VA are mutually exclusive" << std::endl;
+        return -1;
+      }
+      uint64_t heap_end = VX_MEM_PAGE_TABLE_BASE_ADDR;
+#if VX_VM_ADDR_MODE == SV32
+      heap_end = std::min<uint64_t>(heap_end, 0x100000000ULL);
+#endif
+      CHECK_ERR(install_identity_map(ALLOC_BASE_ADDR, heap_end - ALLOC_BASE_ADDR), {
+        return err;
+      });
+    }
   }
   // install_identity_map() already flushed; an extra flush here is a
   // cheap no-op if nothing else dirtied the shadow.
@@ -183,6 +206,9 @@ uint64_t VMManager::map_p2v(uint64_t ppn, uint32_t flags) {
 int VMManager::phy_to_virt_map(uint64_t size, uint64_t* dev_pAddr, uint32_t flags) {
   if (!need_trans(*dev_pAddr))
     return 0;
+  if (megapage_heap_ && *dev_pAddr >= ALLOC_BASE_ADDR && *dev_pAddr < VX_MEM_PAGE_TABLE_BASE_ADDR) {
+    return 0;  // identity-mapped by init()
+  }
 
   uint64_t init_pAddr = *dev_pAddr;
   // Round up: a sub-page allocation still needs one PTE. A plain
