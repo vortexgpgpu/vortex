@@ -225,7 +225,7 @@ read_platform_param(char *str)
 
   /* The platform name is either the entire string, or all characters before
    * the separator */
-  int name_length = separator_index == -1 ? strlen(str) : separator_index;
+  int name_length = separator_index == -1 ? (int)strlen(str) : separator_index;
   char *name_str = (char *)malloc(name_length + 1);
   memcpy(name_str, str, name_length);
   name_str[name_length] = 0;
@@ -410,6 +410,8 @@ parse_input_files(struct argparse *ap, struct pb_Parameters *params)
 static result
 parse_end_options(struct argparse *ap, struct pb_Parameters *params)
 {
+  (void)ap;
+  (void)params;
   return ARGPARSE_DONE;
 }
 
@@ -500,7 +502,6 @@ is_last_option(struct option *op)
 static int
 pb_ParseParameters (struct pb_Parameters *ret, int *_argc, char **argv)
 {
-  char *err_message;
   struct argparse ap;
 
   /* Each argument */

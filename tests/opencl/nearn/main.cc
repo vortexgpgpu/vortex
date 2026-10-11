@@ -209,8 +209,6 @@ int loadData(char *filename, std::vector<Record> &records,
 
   /**Main processing **/
 
-  int q = 0;
-
   flist = fopen(filename, "r");
   while (!feof(flist)) {
     /**
@@ -232,7 +230,13 @@ int loadData(char *filename, std::vector<Record> &records,
     while (!feof(fp)) {
       Record record;
       LatLong latLong;
-      fgets(record.recString, 49, fp);
+      if (fgets(record.recString, 49, fp) == NULL) {
+        if (ferror(fp)) {
+          printf("error reading a db\n");
+          exit(1);
+        }
+        break;
+      }
       fgetc(fp); // newline
       if (feof(fp))
         break;

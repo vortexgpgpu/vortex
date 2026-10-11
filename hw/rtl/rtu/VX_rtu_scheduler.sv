@@ -119,8 +119,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     localparam LINES     = FLAT ? RTU_FLAT_LINES : RTU_NODE_LINES;
     localparam LB        = `CLOG2(LINES + 1);
     localparam BUF_BITS  = LINES * LINE_BITS;
-    localparam IDXW      = `CLOG2(`UP(RTU_BVH_WIDTH));
     localparam NODE_W    = `UP(RTU_BVH_WIDTH);
+    localparam IDXW      = `LOG2UP(NODE_W);
     localparam ADDRW     = `VX_CFG_MEM_ADDR_WIDTH;
 
     `STATIC_ASSERT(((NUM_LANES * NUM_SLOTS) == NUM_CTX),
@@ -461,8 +461,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire                 recip_obj;
     wire                 recip_valid_out, recip_last_out;
     wire [CTX_TAG_W-1:0] recip_tag_out;
-    wire [1:0]           recip_axis_out;
-    wire [31:0]          recip_result;
     wire [95:0]          recip_rdata;
 
     // ── short stack (BVH only) ────────────────────────────────────────
@@ -792,6 +790,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
             assign ins_shift[oc] = ~ins_le[oc-1];
         end
     end else begin : g_no_ins_slots
+        `UNUSED_VAR ({coll_ordt_sel, coll_ordcnt_sel})
         assign {ins_le, ins_here, ins_shift} = '0;
     end
     wire coll_pushable = box_hit && (box_childoff != 32'd0);
@@ -847,6 +846,8 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     wire [1:0]  recip_axis;
     wire [31:0] recip_din = recip_obj ? word_q.obj_d[recip_axis] : ray_q.dir[recip_axis];
     if (!FLAT) begin : g_recip_pe
+        wire [1:0]  recip_axis_out;
+        wire [31:0] recip_result;
         VX_rtu_recip #(
             .LATENCY  (RTU_FDIV_LAT),
             .DSP_SEED (`VX_CFG_RTU_RECIP_DSP_SEED)
@@ -890,8 +891,6 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         assign recip_valid_out = 1'b0;
         assign recip_last_out  = 1'b0;
         assign recip_tag_out   = '0;
-        assign recip_axis_out  = '0;
-        assign recip_result    = '0;
         assign recip_rdata     = '0;
         `UNUSED_VAR ({recip_issue, recip_obj, recip_din, recip_q})
     end
@@ -1292,7 +1291,11 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
     reg [LVLW-1:0]  path_wlvl_r;
     reg [PATHW-1:0] path_wdata_r;
 
-    wire mem_fire = x_valid && mem_issue && mem_req_ready;
+    // The issue block below reads the grant only where it has just set
+    // mem_issue, so it uses mem_grant: reading mem_fire would feed its own
+    // output back into itself (a combinational loop to Verilator).
+    wire mem_grant = x_valid && mem_req_ready;
+    wire mem_fire  = mem_grant && mem_issue;
 
     wire [RTU_CHILD_BITS-1:0] last_child = node.n_children - RTU_CHILD_BITS'(1);
 
@@ -1355,7 +1358,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
         CS_HDR_REQ: begin
             mem_issue = 1'b1;
-            if (mem_fire) begin
+            if (mem_grant) begin
                 word_n.cstate = CS_HDR_WAIT;
             end else begin
                 wake_self = 1'b1;
@@ -1400,7 +1403,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
         CS_REQ0: begin
             mem_issue = 1'b1;
-            if (mem_fire) begin
+            if (mem_grant) begin
                 word_n.cstate = CS_RSP0;
             end else begin
                 wake_self = 1'b1;
@@ -1435,7 +1438,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         CS_REQN: begin
             mem_issue = 1'b1;
             mem_fslot = word_x.f_idx;
-            if (mem_fire) begin
+            if (mem_grant) begin
                 word_n.cstate = CS_RSPN;
             end else begin
                 wake_self = 1'b1;
@@ -1598,7 +1601,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
         CS_LTRI_REQ0: begin
             mem_issue = 1'b1;
-            if (mem_fire) begin
+            if (mem_grant) begin
                 word_n.f_total = tri_rec_lines;
                 word_n.cstate  = CS_LTRI_RSP0;
             end else begin
@@ -1619,7 +1622,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         CS_LTRI_REQN: begin
             mem_issue = 1'b1;
             mem_fslot = word_x.f_idx;
-            if (mem_fire) begin
+            if (mem_grant) begin
                 word_n.cstate = CS_LTRI_RSPN;
             end else begin
                 wake_self = 1'b1;
@@ -1758,7 +1761,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
         CS_INST_REQ: begin
             mem_issue = 1'b1;
-            if (mem_fire) begin
+            if (mem_grant) begin
                 word_n.f_total = inst_lines;
                 word_n.cstate  = CS_INST_RSP0;
             end else begin
@@ -1777,7 +1780,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         CS_INST_REQN: begin
             mem_issue = 1'b1;
             mem_fslot = word_x.f_idx;
-            if (mem_fire) begin
+            if (mem_grant) begin
                 word_n.cstate = CS_INST_RSPN;
             end else begin
                 wake_self = 1'b1;
@@ -1862,7 +1865,7 @@ module VX_rtu_scheduler import VX_gpu_pkg::*, VX_fpu_pkg::*, VX_rtu_pkg::*; #(
         end
         CS_BHDR_REQ: begin
             mem_issue = 1'b1;
-            if (mem_fire) begin
+            if (mem_grant) begin
                 word_n.cstate = CS_BHDR_WAIT;
             end else begin
                 wake_self = 1'b1;

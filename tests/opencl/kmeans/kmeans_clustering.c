@@ -101,8 +101,9 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
     /* allocate space for and initialize returning variable clusters[] */
     clusters    = (float**) malloc(nclusters *             sizeof(float*));
     clusters[0] = (float*)  malloc(nclusters * nfeatures * sizeof(float));
-    for (i=1; i<nclusters; i++)
+    for (i=1; i<nclusters; i++) {
         clusters[i] = clusters[i-1] + nfeatures;
+    }
 
 	/* initialize the random clusters */
 	initial = (int *) malloc (npoints * sizeof(int));
@@ -137,8 +138,9 @@ float** kmeans_clustering(float **feature,    /* in: [npoints][nfeatures] */
 
     new_centers    = (float**) malloc(nclusters *            sizeof(float*));
     new_centers[0] = (float*)  calloc(nclusters * nfeatures, sizeof(float));
-    for (i=1; i<nclusters; i++)
+    for (i=1; i<nclusters; i++) {
         new_centers[i] = new_centers[i-1] + nfeatures;
+    }
 
 	/* iterate until convergence */
 	do {

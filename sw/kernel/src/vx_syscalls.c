@@ -23,24 +23,51 @@
 extern "C" {
 #endif
 
-int _close(int file) { return -1; }
+int _close(int file) {
+  (void)file;
+  return -1;
+}
 
-int _fstat(int file, struct stat *st) { return -1; }
+int _fstat(int file, struct stat *st) {
+  (void)file;
+  (void)st;
+  return -1;
+}
 
-int _isatty(int file) { return 0; }
+int _isatty(int file) {
+  (void)file;
+  return 0;
+}
 
-off_t _lseek(int file, off_t ptr, int dir) { return 0; }
+off_t _lseek(int file, off_t ptr, int dir) {
+  (void)file;
+  (void)ptr;
+  (void)dir;
+  return 0;
+}
 
-int _open(const char *name, int flags, int mode) { return -1; }
+int _open(const char *name, int flags, int mode) {
+  (void)name;
+  (void)flags;
+  (void)mode;
+  return -1;
+}
 
-ssize_t _read(int file, void *ptr, size_t len) { return -1; }
+ssize_t _read(int file, void *ptr, size_t len) {
+  (void)file;
+  (void)ptr;
+  (void)len;
+  return -1;
+}
 
 void *_sbrk(ptrdiff_t incr) {
+  (void)incr;
   __asm__ __volatile__("ebreak");
   return 0;
 }
 
 ssize_t _write(int file, const void *ptr, size_t len) {
+  (void)file;
   const char *p = (const char *)ptr;
   for (size_t i = 0; i < len; ++i) {
     vx_putchar(*p++);
@@ -48,7 +75,11 @@ ssize_t _write(int file, const void *ptr, size_t len) {
   return len;
 }
 
-int _kill(int pid, int sig) { return -1; }
+int _kill(int pid, int sig) {
+  (void)pid;
+  (void)sig;
+  return -1;
+}
 
 int _getpid() {
   return vx_hart_id();

@@ -120,7 +120,7 @@ index 2a2a8f3..e967138 100644
 -  syscall(SYS_write, HTIF_DEV_CONSOLE, (uintptr_t)&c, HTIF_CONSOLE_CMD_PUTC);
 -
 +  unsigned tid = read_csr(mhartid) & (VX_MEM_IO_COUT_SLOTS - 1);
-+  *(volatile char*)(VX_MEM_IO_COUT_ADDR + tid) = (char)ch;
++  *(volatile char*)(uintptr_t)(VX_MEM_IO_COUT_ADDR + tid) = (char)ch;
    return 0;
  }
  

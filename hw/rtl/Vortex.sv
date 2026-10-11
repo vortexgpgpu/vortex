@@ -346,7 +346,6 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         `endif
 
         `ifdef VX_CFG_VM_ENABLE
-            .mmu_satp           (mmu_satp),
             .dev_ptw_if         (per_cluster_dev_ptw_if[cluster_id]),
             .dev_ptw_mem_if     (per_cluster_ptw_mem_if[cluster_id]),
             .mmu_flush_req      (mmu_flush_req),

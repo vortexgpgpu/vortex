@@ -254,7 +254,6 @@ free(allPlatforms);*/
   // read kernel binary from file
   uint8_t *kernel_bin = NULL;
   size_t kernel_size;
-  cl_int binary_status = 0;
 
   if (0 != read_kernel_file("kernel.cl", &kernel_bin, &kernel_size))
     std::abort();
@@ -374,7 +373,7 @@ free(allPlatforms);*/
 void _clRelease() {
   char errorFlag = false;
 
-  for (int nKernel = 0; nKernel < oclHandles.kernel.size(); nKernel++) {
+  for (size_t nKernel = 0; nKernel < oclHandles.kernel.size(); nKernel++) {
     if (oclHandles.kernel[nKernel] != NULL) {
       cl_int resultCL = clReleaseKernel(oclHandles.kernel[nKernel]);
       if (resultCL != CL_SUCCESS) {
@@ -511,7 +510,9 @@ cl_mem _clCreateAndCpyPinnedMem(int size, float *h_mem_source) {
     throw(string("excpetion in _clCreateAndCpyMem() -> clEnqueueMapBuffer"));
 #endif
   int element_number = size / sizeof(float);
+#ifdef _OPENMP
 #pragma omp parallel for
+#endif
   for (int i = 0; i < element_number; i++) {
     h_mem_pinned[i] = h_mem_source[i];
   }
@@ -690,8 +691,8 @@ void _clInvokeKernel(int kernel_id, int work_items,
                                          // cannot be divided by work_group_size
     work_items =
         work_items + (work_group_size - (work_items % work_group_size));
-  size_t local_work_size[] = {work_group_size, 1};
-  size_t global_work_size[] = {work_items, 1};
+  size_t local_work_size[] = {static_cast<size_t>(work_group_size), 1};
+  size_t global_work_size[] = {static_cast<size_t>(work_items), 1};
   oclHandles.cl_status = clEnqueueNDRangeKernel(
       oclHandles.queue, oclHandles.kernel[kernel_id], work_dim, 0,
       global_work_size, local_work_size, 0, 0, NULL);
@@ -757,8 +758,10 @@ void _clInvokeKernel(int kernel_id, int work_items,
 void _clInvokeKernel2D(int kernel_id, int range_x, int range_y, int group_x,
                        int group_y) {
   cl_uint work_dim = WORK_DIM;
-  size_t local_work_size[] = {group_x, group_y};
-  size_t global_work_size[] = {range_x, range_y};
+  size_t local_work_size[] = {static_cast<size_t>(group_x),
+                              static_cast<size_t>(group_y)};
+  size_t global_work_size[] = {static_cast<size_t>(range_x),
+                               static_cast<size_t>(range_y)};
   //cl_event e[1];
   /*if(work_items%work_group_size != 0)	//process situations that work_items
     cannot be divided by work_group_size

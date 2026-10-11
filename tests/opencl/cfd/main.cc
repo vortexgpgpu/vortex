@@ -158,9 +158,8 @@ static inline float compute_pressure(float density, float density_energy, float 
 static inline float compute_speed_of_sound(float density, float pressure) {
   return sqrtf(GAMMA * pressure / density);
 }
-static inline void compute_flux_contribution(float density, FLOAT3 momentum, float density_energy,
-                                             float pressure, FLOAT3 velocity,
-                                             FLOAT3* fc_momentum_x, FLOAT3* fc_momentum_y,
+static inline void compute_flux_contribution(FLOAT3 momentum, float density_energy, float pressure,
+                                             FLOAT3 velocity, FLOAT3* fc_momentum_x, FLOAT3* fc_momentum_y,
                                              FLOAT3* fc_momentum_z, FLOAT3* fc_density_energy) {
   fc_momentum_x->x = velocity.x * momentum.x + pressure;
   fc_momentum_x->y = velocity.x * momentum.y;
@@ -216,7 +215,7 @@ static void cpu_compute_flux(int nelr, const int* esse, const float* normals,
     float pressure_i       = compute_pressure(density_i, density_energy_i, speed_sqd_i);
     float speed_of_sound_i = compute_speed_of_sound(density_i, pressure_i);
     FLOAT3 fc_i_momentum_x, fc_i_momentum_y, fc_i_momentum_z, fc_i_density_energy;
-    compute_flux_contribution(density_i, momentum_i, density_energy_i, pressure_i, velocity_i,
+    compute_flux_contribution(momentum_i, density_energy_i, pressure_i, velocity_i,
                               &fc_i_momentum_x, &fc_i_momentum_y, &fc_i_momentum_z, &fc_i_density_energy);
 
     float flux_i_density = 0.0f;
@@ -244,7 +243,7 @@ static void cpu_compute_flux(int nelr, const int* esse, const float* normals,
         speed_sqd_nb      = compute_speed_sqd(velocity_nb);
         pressure_nb       = compute_pressure(density_nb, density_energy_nb, speed_sqd_nb);
         speed_of_sound_nb = compute_speed_of_sound(density_nb, pressure_nb);
-        compute_flux_contribution(density_nb, momentum_nb, density_energy_nb, pressure_nb, velocity_nb,
+        compute_flux_contribution(momentum_nb, density_energy_nb, pressure_nb, velocity_nb,
                                   &fc_nb_momentum_x, &fc_nb_momentum_y, &fc_nb_momentum_z, &fc_nb_density_energy);
 
         factor = -normal_len * smoothing_coefficient * 0.5f *
@@ -352,8 +351,7 @@ int main(int argc, char** argv) {
     ff_momentum.x = h_ff_variable[VAR_MOMENTUM + 0];
     ff_momentum.y = h_ff_variable[VAR_MOMENTUM + 1];
     ff_momentum.z = h_ff_variable[VAR_MOMENTUM + 2];
-    compute_flux_contribution(h_ff_variable[VAR_DENSITY], ff_momentum,
-                              h_ff_variable[VAR_DENSITY_ENERGY], ff_pressure, ff_velocity,
+    compute_flux_contribution(ff_momentum, h_ff_variable[VAR_DENSITY_ENERGY], ff_pressure, ff_velocity,
                               &h_ff_fc_momentum_x, &h_ff_fc_momentum_y, &h_ff_fc_momentum_z,
                               &h_ff_fc_density_energy);
   }

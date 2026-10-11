@@ -28,32 +28,30 @@ module VX_find_first #(
     localparam TL   = (1 << LOGN) - 1;
     localparam TN   = (1 << (LOGN+1)) - 1;
 
-    wire s_n [TN];
-    wire [DATAW-1:0] d_n [TN];
+    reg             valid_r;
+    reg [DATAW-1:0] data_r;
 
-    for (genvar i = 0; i < N; ++i) begin : g_fill
-        assign s_n[TL+i] = REVERSE ? valid_in[N-1-i] : valid_in[i];
-        assign d_n[TL+i] = REVERSE ? data_in[N-1-i] : data_in[i];
-    end
-
-    if (TL < (TN-N)) begin : g_padding
-        for (genvar i = TL+N; i < TN; ++i) begin : g_i
-            assign s_n[i] = 0;
-            assign d_n[i] = '0;
+    // Binary tree: node k reduces children 2k+1 (first) and 2k+2; leaves start at TL.
+    // The tree is local to one block so no node variable feeds itself.
+    always @(*) begin : g_scan
+        reg [TN-1:0]       s_n;
+        reg [TN*DATAW-1:0] d_n;
+        s_n = '0;
+        d_n = '0;
+        for (integer i = 0; i < N; ++i) begin
+            s_n[TL+i] = REVERSE ? valid_in[N-1-i] : valid_in[i];
+            d_n[(TL+i)*DATAW +: DATAW] = REVERSE ? data_in[N-1-i] : data_in[i];
         end
-    end
-
-    for (genvar j = 0; j < LOGN; ++j) begin : g_scan
-        localparam I = 1 << j;
-        for (genvar i = 0; i < I; ++i) begin : g_i
-            localparam K = I+i-1;
-            assign s_n[K] = s_n[2*K+2] | s_n[2*K+1];
-            assign d_n[K] = s_n[2*K+1] ? d_n[2*K+1] : d_n[2*K+2];
+        for (integer k = TL-1; k >= 0; --k) begin
+            s_n[k] = s_n[2*k+2] | s_n[2*k+1];
+            d_n[k*DATAW +: DATAW] = s_n[2*k+1] ? d_n[(2*k+1)*DATAW +: DATAW] : d_n[(2*k+2)*DATAW +: DATAW];
         end
+        valid_r = s_n[0];
+        data_r  = d_n[0 +: DATAW];
     end
 
-    assign valid_out = s_n[0];
-    assign data_out  = d_n[0];
+    assign valid_out = valid_r;
+    assign data_out  = data_r;
 
 endmodule
 `TRACING_ON

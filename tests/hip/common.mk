@@ -83,7 +83,7 @@ POCL_CC_FLAGS += POCL_VORTEX_BINTOOL="$(VX_BINTOOL)"
 POCL_CC_FLAGS += POCL_VORTEX_CFLAGS="$(VX_CFLAGS)"
 POCL_CC_FLAGS += POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)"
 
-HIPCC_FLAGS += -std=c++17
+HIPCC_FLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 HIPCC_FLAGS += $(CONFIGS)
 # The embedded .hipInfo OFFLOAD_TRIPLE selects the primary SPIR-V pointer
 # width. hipcc rewrites it to match XLEN so the emitted SPIR-V is

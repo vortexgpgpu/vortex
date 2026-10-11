@@ -268,7 +268,7 @@ static void storeValue( FILE* file, OUTPUT_PRECISION* v ) {
 	if( (*((unsigned char*) &litteBigEndianTest)) == 0 ) {         /* big endian */
 		const char* vPtr = (char*) v;
 		char buffer[sizeof( OUTPUT_PRECISION )];
-		int i;
+		size_t i;
 
 		for (i = 0; i < sizeof( OUTPUT_PRECISION ); i++)
 			buffer[i] = vPtr[sizeof( OUTPUT_PRECISION ) - i - 1];
@@ -277,25 +277,6 @@ static void storeValue( FILE* file, OUTPUT_PRECISION* v ) {
 	}
 	else {                                                     /* little endian */
 		fwrite( v, sizeof( OUTPUT_PRECISION ), 1, file );
-	}
-}
-
-/*############################################################################*/
-
-static void loadValue( FILE* file, OUTPUT_PRECISION* v ) {
-	const int litteBigEndianTest = 1;
-	if( (*((unsigned char*) &litteBigEndianTest)) == 0 ) {         /* big endian */
-		char* vPtr = (char*) v;
-		char buffer[sizeof( OUTPUT_PRECISION )];
-		int i;
-
-		fread( buffer, sizeof( OUTPUT_PRECISION ), 1, file );
-
-		for (i = 0; i < sizeof( OUTPUT_PRECISION ); i++)
-			vPtr[i] = buffer[sizeof( OUTPUT_PRECISION ) - i - 1];
-	}
-	else {                                                     /* little endian */
-		fread( v, sizeof( OUTPUT_PRECISION ), 1, file );
 	}
 }
 

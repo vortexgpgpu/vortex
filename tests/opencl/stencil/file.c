@@ -26,9 +26,13 @@ void inputData(char* fName, int* nx, int* ny, int* nz)
       exit(-1);
     }
 	
-  fread(nx, sizeof(int ),1,fid);
-  fread(ny, sizeof(int ),1,fid);
-  fread(nz, sizeof(int ),1,fid);
+  if (fread(nx, sizeof(int ),1,fid) != 1 ||
+      fread(ny, sizeof(int ),1,fid) != 1 ||
+      fread(nz, sizeof(int ),1,fid) != 1)
+    {
+      fprintf(stderr, "Error reading input file\n");
+      exit(-1);
+    }
   fclose (fid); 
 }
 

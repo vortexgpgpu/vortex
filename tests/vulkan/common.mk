@@ -70,7 +70,7 @@ CONFIGS += -DVX_CFG_EXT_A_ENABLE
 GLSLC ?= glslc
 CC    ?= cc
 
-CFLAGS += -O2 -Wall
+CFLAGS += -O2 -Wall -Wextra -Wfatal-errors -Werror
 LDLIBS += -lvulkan
 
 # One SPIR-V module per shader source, stage kept in the name so a

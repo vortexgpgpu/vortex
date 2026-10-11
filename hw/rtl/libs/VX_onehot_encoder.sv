@@ -39,31 +39,38 @@ module VX_onehot_encoder #(
 
     end else if (MODEL == 1) begin : g_model1
         localparam M = 1 << LN;
-        wire [M-1:0] addr [LN];
-        wire [M-1:0] v [LN+1];
 
-        // base case, also handle padding for non-power of two inputs
-        assign v[0] = REVERSE ? (M'(data_in) << (M - N)) : M'(data_in);
+        reg [LN-1:0] addr_r;
+        reg          valid_r;
 
-        for (genvar lvl = 1; lvl < (LN+1); ++lvl) begin : g_scan_l
-            localparam SN = 1 << (LN - lvl);
-            localparam SI = M / SN;
-            for (genvar s = 0; s < SN; ++s) begin : g_scan_s
-                wire [1:0] vs = {v[lvl-1][s*SI+(SI>>1)], v[lvl-1][s*SI]};
-                assign v[lvl][s*SI] = (| vs);
-                if (lvl == 1) begin : g_lvl_1
-                    assign addr[lvl-1][s*SI +: lvl] = vs[!REVERSE];
-                end else begin : g_lvl_n
-                    assign addr[lvl-1][s*SI +: lvl] = {
-                        vs[!REVERSE],
-                        addr[lvl-2][s*SI +: lvl-1] | addr[lvl-2][s*SI+(SI>>1) +: lvl-1]
-                    };
+        // Level lvl merges pairs of level lvl-1 groups of size 2^(lvl-1); each
+        // level has its own slice of v/addr, local to one block, so no
+        // variable feeds itself.
+        always @(*) begin : g_scan
+            reg [(LN+1)*M-1:0] v;
+            reg [LN*M-1:0]     addr;
+            reg [1:0]          vs;
+            v    = '0;
+            addr = '0;
+            // base case, also handle padding for non-power of two inputs
+            v[0 +: M] = REVERSE ? (M'(data_in) << (M - N)) : M'(data_in);
+            for (integer lvl = 1; lvl <= LN; ++lvl) begin
+                for (integer s = 0; s < (1 << (LN - lvl)); ++s) begin
+                    vs = {v[(lvl-1)*M + s*(1 << lvl) + (1 << (lvl-1))], v[(lvl-1)*M + s*(1 << lvl)]};
+                    v[lvl*M + s*(1 << lvl)] = (| vs);
+                    addr[(lvl-1)*M + s*(1 << lvl) + (lvl-1)] = vs[!REVERSE];
+                    for (integer b = 0; b < lvl-1; ++b) begin
+                        addr[(lvl-1)*M + s*(1 << lvl) + b] = addr[(lvl-2)*M + s*(1 << lvl) + b]
+                                                           | addr[(lvl-2)*M + s*(1 << lvl) + (1 << (lvl-1)) + b];
+                    end
                 end
             end
+            addr_r  = addr[(LN-1)*M +: LN];
+            valid_r = v[LN*M];
         end
 
-        assign data_out = addr[LN-1][LN-1:0];
-        assign valid_out = v[LN][0];
+        assign data_out  = addr_r;
+        assign valid_out = valid_r;
 
     end else if (MODEL == 2 && REVERSE == 0) begin : g_model2
 
