@@ -45,13 +45,20 @@
 #define PIPE_PRIM_BITS 20
 #define PIPE_PRIM_MASK ((1u << PIPE_PRIM_BITS) - 1)
 
-// Face-cull mode (applied in triangle setup on the signed-area sign). NONE
-// keeps both windings (two-sided — the gfx-v1 default); BACK culls the
-// negative-area winding, FRONT the positive. Kept triangles still have their
-// edge equations normalised so the RASTER interior test stays positive.
+// Face-cull mode (applied in triangle setup). NONE keeps both windings
+// (two-sided — the gfx-v1 default); BACK culls the back-facing winding, FRONT the
+// front-facing one, as SETUP_FRONT_* defines them. Kept triangles still have
+// their edge equations normalised so the RASTER interior test stays positive.
 #define SETUP_CULL_NONE  0
 #define SETUP_CULL_BACK  1
 #define SETUP_CULL_FRONT 2
+
+// Which winding is front-facing, by the sign of the triangle's area in y-down
+// screen space. Facing drives the cull, gl_FrontFacing and the two-sided stencil
+// state alike. Vulkan's area carries a leading minus sign, so its counter-
+// clockwise front face is SETUP_FRONT_NEGATIVE.
+#define SETUP_FRONT_POSITIVE 0
+#define SETUP_FRONT_NEGATIVE 1
 
 // Viewport transform (screen = ndc*scale + bias), captured from the app's bound
 // VkViewport and applied by triangle setup (ClipToScreen / ClipToHDC). The
@@ -113,23 +120,20 @@ typedef struct {
   setup_vertex_t v[3];
 } clip_tri_t;
 
-// On-device vertex assembly: expand_k turns the resident VS-output records
-// into the setup_vertex_t[] the front end consumes, so the VS output never
-// round-trips to the host. Record slot 0 is the clip-space POS; slots 1.. are
-// generic varyings (16 bytes each). expand_k packs the varyings into the 6
-// scalar interpolation planes [u,v,r,g,b,a] in declaration order — each varying
-// claims the next nc lanes — and the FS translator reads them back the same way,
-// so a draw may carry any mix of varyings without two colliding on one plane.
-// One thread/vertex.
-#define EXPAND_MAX_VARYINGS 16   // >= VP_VS_MAX_VARYINGS (vortexpipe layout)
+// Varying source of one emitted primitive. Varyings are not set up per plane:
+// the fragment stage interpolates them straight out of the VS output records
+// with perspective-correct barycentrics, beta_i = F_i / (F_0 + F_1 + F_2), where
+// F_i = bary[i][0]*x + bary[i][1]*y + bary[i][2] at integer pixel (x,y) (the
+// half-pixel centre offset is folded into bary[i][2]). The planes are the 2DH
+// edge functions of the SOURCE triangle, so the barycentrics stay exact for
+// every visible pixel of a near-clipped triangle's subtriangles, and clipping
+// never touches a varying. vbase indexes the source triangle's first VS record;
+// its three vertices are records vbase..vbase+2, the first being provoking.
 typedef struct {
-  uint64_t vsrec_addr;    // VS output records[num_verts], vstride bytes each (in)
-  uint64_t verts_addr;    // setup_vertex_t[num_verts]                       (out)
-  uint32_t num_verts;
-  uint32_t vstride;       // bytes per VS output record
-  uint32_t num_varyings;  // generic varyings after POS
-  uint32_t varying_comps[EXPAND_MAX_VARYINGS];  // component count per varying
-} expand_arg_t;
+  float    bary[3][3];
+  uint32_t vbase;
+  uint32_t pad[3];
+} rast_vary_t;
 
 // Per-launch front-end argument block. Addresses are device byte addresses;
 // counts/config are runtime values the kernels read (so launch dims and pool
@@ -151,8 +155,14 @@ typedef struct {
   float vp_sy, vp_ty;     // screen_y = ndc_y*vp_sy + vp_ty
   float vp_minz, vp_maxz; // depth range; both zero => SETUP_NEAR..SETUP_FAR
   uint32_t vp_halfz;      // clip-z convention, see setup_viewport_t
-  uint32_t vp_pad_;       // keep the uint64 block below 8-byte aligned
-  uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in)
+  uint32_t front_face;    // SETUP_FRONT_* (0 = positive-area winding is front)
+  uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in, when vsrec_addr is 0)
+  // VS output records (in): when set, triangle t's vertices are records 3t..3t+2,
+  // vstride bytes apart, each starting with the clip-space position; setup reads
+  // positions from them, carries no varying planes, and EMIT writes vary_addr.
+  uint64_t vsrec_addr;
+  uint32_t vstride;
+  uint32_t pad0_;
   uint64_t slot_prim_addr; // rast_prim_t[num_tris*MAX_SUB]   (scratch)
   uint64_t slot_bbox_addr; // setup_bbox_t[num_tris*MAX_SUB]  (scratch)
   uint64_t keep_addr;      // uint32[num_tris]                (scratch)
@@ -169,12 +179,7 @@ typedef struct {
   uint64_t binbase_addr;   // uint32[num_bins]                (scratch)
   uint64_t tilebuf_addr;   // rast_tile_header_t[num_bins] then uint32 pids[keys]  (out, pinned)
   uint64_t meta_addr;      // uint32[3] = { P, keys, nb }     (out)
-  // Flat varyings: the provoking vertex's varying words per emitted primitive,
-  // GFX_FS_FLAT_WORDS of them, copied verbatim with no interpolation applied.
-  // Zero when no bound shader declares a flat input, and the EMIT stage then
-  // skips the copy entirely. See gfx_fs_desc_abi.h for why these travel beside
-  // the interpolation planes rather than through them.
-  uint64_t flat_addr;      // uint32[GFX_FS_FLAT_WORDS * P]   (out)
+  uint64_t vary_addr;      // rast_vary_t[P]                  (out, with vsrec_addr)
 } pipe_arg_t;
 
 // Pass-end multisample colour resolve. A multisample pass renders into a
@@ -194,3 +199,22 @@ typedef struct {
   uint32_t samples;       // samples per pixel
   uint32_t color_format;  // VX_OM_COLOR_FORMAT_*
 } resolve_arg_t;
+
+// Image blit (vkCmdBlitImage): every destination pixel of the box samples the
+// source level through the software sampler at its centre's mapped position and
+// is encoded into the destination format. The destination is a dense staging
+// plane of the box; the host moves it to and from the resource. One thread per
+// pixel, grid-strided.
+typedef struct {
+  uint64_t texstate_addr; // gfx_sw_texstate_t of the source level        (in)
+  uint64_t dst_addr;      // dst_w x dst_h staging plane, dst_pitch bytes (in/out)
+  uint32_t dst_w, dst_h, dst_pitch;
+  uint32_t dst_format;    // VX_OM_COLOR_FORMAT_*
+  uint32_t dst_bgra;      // 8-bit formats: blue in the low byte
+  uint32_t dst_mask;      // per-channel write mask, RGBA in bits 0..3
+  uint32_t filter;        // VX_TEX_FILTER_POINT / _BILINEAR
+  uint32_t layer;         // source array layer
+  float src_x0, src_y0;   // source texel position of the box's top-left corner
+  float scale_x, scale_y; // source texels per destination pixel (negative: flip)
+  float inv_src_w, inv_src_h;
+} blit_arg_t;

@@ -114,17 +114,18 @@ static inline vec4f ClipToScreen(const vec4f& in, float left, float right,
 
 // Edge functions (a,b,c) per edge in HDC; winding flipped so interior is
 // positive. Returns false for the degenerate (det==0) triangle, and — under a
-// face-cull mode (SETUP_CULL_*) — for the culled winding (BACK = negative
-// area, FRONT = positive). cull_mode defaults to two-sided (no cull).
+// face-cull mode (SETUP_CULL_*) — for the culled facing. front_face (SETUP_FRONT_*)
+// says which area sign is front-facing; cull_mode defaults to two-sided.
 //
-// out_back receives the winding the flip is about to erase (true = back-facing),
+// out_back receives the facing the flip is about to erase (true = back-facing),
 // which is the only place gl_FrontFacing can come from: after the flip both
 // windings look identical to every downstream consumer. Optional — pass nullptr
 // when the caller only wants coverage.
 static inline bool EdgeEquation(vec3f edges[3], const vec4f& v0,
                                 const vec4f& v1, const vec4f& v2,
                                 uint32_t cull_mode = SETUP_CULL_NONE,
-                                bool* out_back = nullptr) {
+                                bool* out_back = nullptr,
+                                uint32_t front_face = SETUP_FRONT_POSITIVE) {
   float a0 = (v1.y * v2.w) - (v2.y * v1.w);
   float a1 = (v2.y * v0.w) - (v0.y * v2.w);
   float a2 = (v0.y * v1.w) - (v1.y * v0.w);
@@ -140,14 +141,15 @@ static inline bool EdgeEquation(vec3f edges[3], const vec4f& v0,
   float det = c0 * v0.w + c1 * v1.w + c2 * v2.w;
   if (det == 0.0f)
     return false;                          // degenerate (zero area)
-  const bool back = (det < 0.0f);          // winding that needs a flip
+  const bool neg  = (det < 0.0f);          // winding that needs a flip
+  const bool back = (front_face == SETUP_FRONT_NEGATIVE) ? !neg : neg;
   if ((cull_mode == SETUP_CULL_BACK  &&  back) ||
       (cull_mode == SETUP_CULL_FRONT && !back))
     return false;                          // face-culled
   if (out_back != nullptr) {
     *out_back = back;
   }
-  if (back) {
+  if (neg) {
     for (int i = 0; i < 3; ++i) {
       edges[i].x *= -1.0f; edges[i].y *= -1.0f; edges[i].z *= -1.0f;
     }
@@ -155,8 +157,24 @@ static inline bool EdgeEquation(vec3f edges[3], const vec4f& v0,
   return true;
 }
 
-// Normalize the edge matrix by 1/maxVal and convert to Q15.16.
-static inline void EdgeToFixed(vec3e_t out[3], const vec3f in[3]) {
+// Normalize the edge matrix by 1/maxVal and convert to Q15.16. A shared scale
+// keeps the three edge values proportional to the barycentrics, which a consumer
+// reading barycentrics off the edges needs. Coverage alone does not: scaling each
+// edge by its own 1/max(|a|,|b|) instead makes an edge shared by two triangles
+// convert to exactly negated fixed-point coefficients in both (they see the same
+// |a|,|b|, and the conversion truncates symmetrically), so the top-left rule
+// assigns every sample on it to exactly one of them.
+static inline void EdgeToFixed(vec3e_t out[3], const vec3f in[3], bool per_edge = false) {
+  if (per_edge) {
+    for (int i = 0; i < 3; ++i) {
+      float m = fmax2(__builtin_fabsf(in[i].x), __builtin_fabsf(in[i].y));
+      float scale = (m != 0.0f) ? (1.0f / m) : 1.0f;
+      out[i].x = FloatE(in[i].x * scale);
+      out[i].y = FloatE(in[i].y * scale);
+      out[i].z = FloatE(in[i].z * scale);
+    }
+    return;
+  }
   float maxVal = __builtin_fabsf(in[0].x);
   maxVal = fmax2(maxVal, __builtin_fabsf(in[1].x));
   maxVal = fmax2(maxVal, __builtin_fabsf(in[2].x));
@@ -171,6 +189,59 @@ static inline void EdgeToFixed(vec3e_t out[3], const vec3f in[3]) {
   }
 }
 
+// Viewport rect in screen pixels (left,right,top,bottom) and depth mapping. From
+// the app transform (screen = ndc*scale + bias => bounds = bias +- scale) when
+// bound; else the default full-framebuffer y-down mapping. A y-flip (sy<0) yields
+// top>bottom, which flips screen-space Y -- and hence the signed-area sign the
+// face cull reads -- exactly as the app's negative-height viewport intends.
+// Without a viewport the near/far arguments apply under the GL convention; a
+// viewport whose depth range is all zero never had one set, so it falls back to
+// them too rather than collapsing every fragment onto one plane.
+struct setup_rect_t {
+  float L, R, T, B, zn, zf;
+  bool  halfz;
+};
+
+static inline setup_rect_t setup_rect(const setup_viewport_t* vp, int width, int height,
+                                      float near, float far) {
+  setup_rect_t r;
+  r.L = vp ? (vp->tx - vp->sx) : 0.0f;
+  r.R = vp ? (vp->tx + vp->sx) : (float)width;
+  r.T = vp ? (vp->ty - vp->sy) : 0.0f;
+  r.B = vp ? (vp->ty + vp->sy) : (float)height;
+  r.halfz = vp && vp->halfz;
+  const bool vp_has_z = vp && (vp->minz != 0.0f || vp->maxz != 0.0f);
+  r.zn = vp_has_z ? vp->minz : near;
+  r.zf = vp_has_z ? vp->maxz : far;
+  return r;
+}
+
+// Barycentric planes of a source triangle (rast_vary_t). The 2DH edge functions
+// evaluated at a pixel are proportional to its perspective-correct barycentrics,
+// whatever their common scale and sign, so no winding flip or normalization is
+// needed -- only the half-pixel centre offset, folded in like the coverage edges.
+static inline void setup_vary_planes(const setup_vertex_t& v0, const setup_vertex_t& v1,
+                                     const setup_vertex_t& v2, const setup_rect_t& r,
+                                     float bary[3][3]) {
+  const vec4f p0 = ClipToHDC({ v0.pos[0], v0.pos[1], v0.pos[2], v0.pos[3] },
+                             r.L, r.R, r.T, r.B, r.zn, r.zf, r.halfz);
+  const vec4f p1 = ClipToHDC({ v1.pos[0], v1.pos[1], v1.pos[2], v1.pos[3] },
+                             r.L, r.R, r.T, r.B, r.zn, r.zf, r.halfz);
+  const vec4f p2 = ClipToHDC({ v2.pos[0], v2.pos[1], v2.pos[2], v2.pos[3] },
+                             r.L, r.R, r.T, r.B, r.zn, r.zf, r.halfz);
+  const vec4f* p[3] = { &p0, &p1, &p2 };
+  for (int i = 0; i < 3; ++i) {
+    const vec4f& a = *p[(i + 1) % 3];
+    const vec4f& b = *p[(i + 2) % 3];
+    const float ex = (a.y * b.w) - (b.y * a.w);
+    const float ey = (b.x * a.w) - (a.x * b.w);
+    const float ez = (a.x * b.y) - (b.x * a.y);
+    bary[i][0] = ex;
+    bary[i][1] = ey;
+    bary[i][2] = ez + 0.5f * (ex + ey);
+  }
+}
+
 // Full per-triangle setup. Fills out_prim (edges + attrib deltas) and out_bbox
 // (screen bbox clamped to the render target). Returns false when the triangle
 // is culled (degenerate or empty bbox) — matching Binning()'s two `continue`s.
@@ -182,30 +253,17 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
                                   int width, int height, float near, float far,
                                   rast_prim_t& out_prim, setup_bbox_t& out_bbox,
                                   uint32_t cull_mode = SETUP_CULL_NONE,
-                                  const setup_viewport_t* vp = nullptr) {
+                                  const setup_viewport_t* vp = nullptr,
+                                  uint32_t front_face = SETUP_FRONT_POSITIVE,
+                                  bool coverage_only = false) {
   vec4f p0 = { v0.pos[0], v0.pos[1], v0.pos[2], v0.pos[3] };
   vec4f p1 = { v1.pos[0], v1.pos[1], v1.pos[2], v1.pos[3] };
   vec4f p2 = { v2.pos[0], v2.pos[1], v2.pos[2], v2.pos[3] };
 
-  // Viewport rect in screen pixels (left,right,top,bottom). From the app
-  // transform (screen = ndc*scale + bias => bounds = bias ± scale) when bound;
-  // else the default full-framebuffer y-down mapping. A y-flip (sy<0) yields
-  // top>bottom, which flips screen-space Y — and hence the signed-area sign the
-  // face cull reads — exactly as the app's negative-height viewport intends.
-  float L = vp ? (vp->tx - vp->sx) : 0.0f;
-  float R = vp ? (vp->tx + vp->sx) : (float)width;
-  float T = vp ? (vp->ty - vp->sy) : 0.0f;
-  float B = vp ? (vp->ty + vp->sy) : (float)height;
-
-  // The app viewport also carries the depth range and the clip-z convention.
-  // Without one bound, the near/far arguments apply under the GL convention —
-  // the standalone setup tests and the native runtime both rely on that.
-  const bool  halfz = vp && vp->halfz;
-  // A viewport whose depth range is all zero never had one set, so fall back to
-  // the near/far arguments rather than collapsing every fragment onto one plane.
-  const bool  vp_has_z = vp && (vp->minz != 0.0f || vp->maxz != 0.0f);
-  const float zn = vp_has_z ? vp->minz : near;
-  const float zf = vp_has_z ? vp->maxz : far;
+  const setup_rect_t rc = setup_rect(vp, width, height, near, far);
+  const float L = rc.L, R = rc.R, T = rc.T, B = rc.B;
+  const bool  halfz = rc.halfz;
+  const float zn = rc.zn, zf = rc.zf;
 
   // Edge equations in HDC.
   vec3f edges[3];
@@ -214,8 +272,9 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     vec4f ph0 = ClipToHDC(p0, L, R, T, B, zn, zf, halfz);
     vec4f ph1 = ClipToHDC(p1, L, R, T, B, zn, zf, halfz);
     vec4f ph2 = ClipToHDC(p2, L, R, T, B, zn, zf, halfz);
-    if (!EdgeEquation(edges, ph0, ph1, ph2, cull_mode, &back))
+    if (!EdgeEquation(edges, ph0, ph1, ph2, cull_mode, &back, front_face)) {
       return false;  // degenerate or face-culled
+    }
   }
   out_prim.facing = back ? 1u : 0u;
 
@@ -245,7 +304,7 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
   edges[0].z += edges[0].x * 0.5f + edges[0].y * 0.5f;
   edges[1].z += edges[1].x * 0.5f + edges[1].y * 0.5f;
   edges[2].z += edges[2].x * 0.5f + edges[2].y * 0.5f;
-  EdgeToFixed(out_prim.edges, edges);
+  EdgeToFixed(out_prim.edges, edges, coverage_only);
 
   // Affine attribute deltas (a0-a2, a1-a2, a2) in Q7.24.
   auto delta = [](rast_attrib_t& d, float a0, float a1, float a2) {
@@ -274,6 +333,9 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     out_prim.attribs.z.x = FloatA(za);
     out_prim.attribs.z.y = FloatA(zb);
     out_prim.attribs.z.z = FloatA(zc);
+  }
+  if (coverage_only) {
+    return true;
   }
   // Perspective-correct varyings: premultiply each colour/texcoord by the
   // vertex's 1/w and carry a separate 1/w plane; the FS interpolates every plane

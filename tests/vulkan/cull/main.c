@@ -4,9 +4,9 @@
  *
  * Face-cull Vulkan test for the vortexpipe driver.
  *
- * Renders the same front-facing triangle (the hello-triangle winding,
- * CCW in NDC) twice into a 64x64 RGBA8 image with VK_FRONT_FACE_
- * COUNTER_CLOCKWISE and different cull modes:
+ * Renders the same front-facing triangle (the hello-triangle winding, which
+ * is clockwise in Vulkan's y-down framebuffer space) twice into a 64x64 RGBA8
+ * image with VK_FRONT_FACE_CLOCKWISE and different cull modes:
  *
  *   cullMode = VK_CULL_MODE_BACK_BIT   -> the triangle is FRONT-facing,
  *                                         so it survives the cull (drawn).
@@ -191,12 +191,12 @@ render_cull(VkDevice dev, VkQueue queue, uint32_t qf,
       .viewportCount = 1, .pViewports = &vp,
       .scissorCount = 1, .pScissors = &sc,
    };
-   /* front face = CCW; the app triangle is CCW in NDC, so it is
-    * front-facing. cullMode selects whether it survives. */
+   /* front face = CW; the app triangle is clockwise in framebuffer space, so
+    * it is front-facing. cullMode selects whether it survives. */
    VkPipelineRasterizationStateCreateInfo rs = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
       .polygonMode = VK_POLYGON_MODE_FILL, .cullMode = cull,
-      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE, .lineWidth = 1.0f,
+      .frontFace = VK_FRONT_FACE_CLOCKWISE, .lineWidth = 1.0f,
    };
    VkPipelineMultisampleStateCreateInfo ms = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
@@ -367,7 +367,7 @@ main(int argc, char **argv)
    VkShaderModule fs = load_module(dev, fs_path);
    if (!vs || !fs) return 1;
 
-   /* Default full-fb y-down viewport. Pass A: cull BACK — the CCW
+   /* Default full-fb y-down viewport. Pass A: cull BACK — the clockwise
     * (front-facing) triangle must be drawn. Pass B: cull FRONT — it must
     * be culled. This pins the default-viewport anchor. */
    long back  = render_cull(dev, queue, qf, &mp, vs, fs, VK_CULL_MODE_BACK_BIT,  false);

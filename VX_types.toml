@@ -208,9 +208,9 @@ VX_TEX_FORMAT_L8       = 5
 VX_TEX_FORMAT_A8       = 6
 # W5 extended sampled formats — SOFTWARE sampler only. FF vx_tex4 handles only
 # formats 0..VX_TEX_FORMAT_FF_MAX; anything above routes to gfx_tex_sample_sw
-# (routing law). sRGB is linearised on sample and depth reads as luminance, both
-# into the sampler's 8-bit ARGB working colour; the float formats hold values
-# outside [0,1] and are decoded and filtered in float instead.
+# (routing law). Depth reads as luminance into the sampler's 8-bit ARGB working
+# colour. The float formats hold values outside [0,1] and sRGB must reach linear
+# before filtering at more than 8 bits, so both are decoded and filtered in float.
 VX_TEX_FORMAT_FF_MAX   = 6
 VX_TEX_FORMAT_SRGB8     = 7    # R8G8B8(X8) sRGB, alpha forced 1.0
 VX_TEX_FORMAT_SRGB8A8   = 8    # R8G8B8A8 sRGB (RGB gamma-decoded, alpha linear)
@@ -224,6 +224,52 @@ VX_TEX_FORMAT_RG32F     = 15   # 2x float        -> (r,g,0,1)
 VX_TEX_FORMAT_RGBA32F   = 16   # 4x float
 VX_TEX_FORMAT_D16       = 17   # depth-as-texture, 16-bit unorm -> luminance
 VX_TEX_FORMAT_D32F      = 18   # depth-as-texture, float        -> luminance
+VX_TEX_FORMAT_R11G11B10F = 19  # packed unsigned float R11 G11 B10 -> (r,g,b,1)
+VX_TEX_FORMAT_RGB9E5    = 20   # shared-exponent unsigned float    -> (r,g,b,1)
+# Formats decoded field by field by the software sampler (TexFieldGeom):
+# integers keep their value, normalized formats reach float before filtering.
+VX_TEX_FORMAT_R8UI       = 21
+VX_TEX_FORMAT_R8I        = 22
+VX_TEX_FORMAT_RG8UI      = 23
+VX_TEX_FORMAT_RG8I       = 24
+VX_TEX_FORMAT_RGBA8UI    = 25
+VX_TEX_FORMAT_RGBA8I     = 26
+VX_TEX_FORMAT_R16UI      = 27
+VX_TEX_FORMAT_R16I       = 28
+VX_TEX_FORMAT_RG16UI     = 29
+VX_TEX_FORMAT_RG16I      = 30
+VX_TEX_FORMAT_RGBA16UI   = 31
+VX_TEX_FORMAT_RGBA16I    = 32
+VX_TEX_FORMAT_R32UI      = 33
+VX_TEX_FORMAT_R32I       = 34
+VX_TEX_FORMAT_RG32UI     = 35
+VX_TEX_FORMAT_RG32I      = 36
+VX_TEX_FORMAT_RGBA32UI   = 37
+VX_TEX_FORMAT_RGBA32I    = 38
+VX_TEX_FORMAT_RGB10A2UI  = 39
+VX_TEX_FORMAT_R8SN       = 40
+VX_TEX_FORMAT_RG8SN      = 41
+VX_TEX_FORMAT_RGBA8SN    = 42
+VX_TEX_FORMAT_RGB10A2    = 43
+VX_TEX_FORMAT_R16        = 44
+VX_TEX_FORMAT_RG16       = 45
+VX_TEX_FORMAT_RGBA16     = 46
+VX_TEX_FORMAT_R16SN      = 47
+VX_TEX_FORMAT_RG16SN     = 48
+VX_TEX_FORMAT_RGBA16SN   = 49
+# Native colour/depth layouts an image or input-attachment descriptor points at
+# (stored verbatim, unlike the sampled path, which converts on upload).
+VX_TEX_FORMAT_R8         = 50
+VX_TEX_FORMAT_RG8        = 51
+VX_TEX_FORMAT_RGBA8      = 52
+VX_TEX_FORMAT_BGRA8      = 53
+VX_TEX_FORMAT_SRGBA8     = 54
+VX_TEX_FORMAT_SBGRA8     = 55
+VX_TEX_FORMAT_D24        = 56
+VX_TEX_FORMAT_X24S8      = 57
+VX_TEX_FORMAT_S8X24      = 58
+VX_TEX_FORMAT_D32S8      = 59
+VX_TEX_FORMAT_X32S8      = 60
 
 [raster_const]
 VX_RASTER_DIM_BITS    = 15
@@ -263,6 +309,38 @@ VX_OM_COLOR_FORMAT_A8R8G8B8 = 0    # packed ARGB8888 (FF default)
 VX_OM_COLOR_FORMAT_SRGB8A8  = 1    # linear->sRGB encode on write
 VX_OM_COLOR_FORMAT_R8       = 2    # red channel only
 VX_OM_COLOR_FORMAT_RG8      = 3    # red+green only
+# Wide attachments, merged through gfx_om_fragment_wide_sw / _mrt_wide_sw from
+# the shader's raw output lanes (RGBA order). Float and unorm formats blend in
+# float; integer formats never blend.
+VX_OM_COLOR_FORMAT_R16F      = 4
+VX_OM_COLOR_FORMAT_RG16F     = 5
+VX_OM_COLOR_FORMAT_RGBA16F   = 6
+VX_OM_COLOR_FORMAT_R32F      = 7
+VX_OM_COLOR_FORMAT_RG32F     = 8
+VX_OM_COLOR_FORMAT_RGBA32F   = 9
+VX_OM_COLOR_FORMAT_R11G11B10F = 10 # R bits 0-10, G 11-21, B 22-31
+VX_OM_COLOR_FORMAT_RGB10A2   = 11  # unorm; R bits 0-9 .. A bits 30-31
+VX_OM_COLOR_FORMAT_R5G6B5    = 12  # unorm; B bits 0-4, G 5-10, R 11-15
+VX_OM_COLOR_FORMAT_A1R5G5B5  = 13  # unorm; B bits 0-4, G 5-9, R 10-14, A 15
+VX_OM_COLOR_FORMAT_R8UI      = 14
+VX_OM_COLOR_FORMAT_R8I       = 15
+VX_OM_COLOR_FORMAT_RG8UI     = 16
+VX_OM_COLOR_FORMAT_RG8I      = 17
+VX_OM_COLOR_FORMAT_RGBA8UI   = 18
+VX_OM_COLOR_FORMAT_RGBA8I    = 19
+VX_OM_COLOR_FORMAT_R16UI     = 20
+VX_OM_COLOR_FORMAT_R16I      = 21
+VX_OM_COLOR_FORMAT_RG16UI    = 22
+VX_OM_COLOR_FORMAT_RG16I     = 23
+VX_OM_COLOR_FORMAT_RGBA16UI  = 24
+VX_OM_COLOR_FORMAT_RGBA16I   = 25
+VX_OM_COLOR_FORMAT_R32UI     = 26
+VX_OM_COLOR_FORMAT_R32I      = 27
+VX_OM_COLOR_FORMAT_RG32UI    = 28
+VX_OM_COLOR_FORMAT_RG32I     = 29
+VX_OM_COLOR_FORMAT_RGBA32UI  = 30
+VX_OM_COLOR_FORMAT_RGBA32I   = 31
+VX_OM_COLOR_FORMAT_RGB10A2UI = 32  # R bits 0-9 .. A bits 30-31
 VX_OM_DEPTH_FORMAT_D24S8 = 0       # packed 24-bit depth + 8-bit stencil (FF default)
 VX_OM_DEPTH_FORMAT_D16   = 1       # 16-bit unorm depth, no stencil
 VX_OM_DEPTH_FORMAT_D32F  = 2       # 32-bit float depth, no stencil

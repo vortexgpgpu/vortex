@@ -226,11 +226,67 @@ static inline __attribute__((always_inline)) uint32_t Linear8ToSrgb(uint32_t c) 
   return kLinToSrgb[c & 0xff];
 }
 
+// ── Wide colour attachments ──────────────────────────────────────────────────
+// Formats past RG8 are described field by field: each present channel is a bit
+// field of the texel (packed formats included) with a numeric kind. The merger
+// carries a channel as a 32-bit lane: float bits for the float and unorm kinds,
+// the integer itself (sign-extended) for the integer kinds.
+enum : uint32_t { OM_KIND_FLOAT = 0, OM_KIND_UNORM = 1, OM_KIND_UINT = 2, OM_KIND_SINT = 3 };
+
+struct om_wide_fmt {
+  uint32_t bpp;
+  uint32_t nch;
+  uint32_t kind;
+  uint8_t  off[4];   // bit offset of each channel (RGBA order) within the texel
+  uint8_t  width[4];
+};
+
+static inline __attribute__((always_inline)) bool om_is_wide(uint32_t fmt) {
+  return fmt >= (uint32_t)VX_OM_COLOR_FORMAT_R16F;
+}
+
+static inline __attribute__((always_inline)) om_wide_fmt om_wide_geom(uint32_t fmt) {
+  switch (fmt) {
+  case VX_OM_COLOR_FORMAT_R16F:       return { 2, 1, OM_KIND_FLOAT, {0}, {16} };
+  case VX_OM_COLOR_FORMAT_RG16F:      return { 4, 2, OM_KIND_FLOAT, {0, 16}, {16, 16} };
+  case VX_OM_COLOR_FORMAT_RGBA16F:    return { 8, 4, OM_KIND_FLOAT, {0, 16, 32, 48}, {16, 16, 16, 16} };
+  case VX_OM_COLOR_FORMAT_R32F:       return { 4, 1, OM_KIND_FLOAT, {0}, {32} };
+  case VX_OM_COLOR_FORMAT_RG32F:      return { 8, 2, OM_KIND_FLOAT, {0, 32}, {32, 32} };
+  case VX_OM_COLOR_FORMAT_RGBA32F:    return { 16, 4, OM_KIND_FLOAT, {0, 32, 64, 96}, {32, 32, 32, 32} };
+  case VX_OM_COLOR_FORMAT_R11G11B10F: return { 4, 3, OM_KIND_FLOAT, {0, 11, 22}, {11, 11, 10} };
+  case VX_OM_COLOR_FORMAT_RGB10A2:    return { 4, 4, OM_KIND_UNORM, {0, 10, 20, 30}, {10, 10, 10, 2} };
+  case VX_OM_COLOR_FORMAT_R5G6B5:     return { 2, 3, OM_KIND_UNORM, {11, 5, 0}, {5, 6, 5} };
+  case VX_OM_COLOR_FORMAT_A1R5G5B5:   return { 2, 4, OM_KIND_UNORM, {10, 5, 0, 15}, {5, 5, 5, 1} };
+  case VX_OM_COLOR_FORMAT_R8UI:       return { 1, 1, OM_KIND_UINT, {0}, {8} };
+  case VX_OM_COLOR_FORMAT_R8I:        return { 1, 1, OM_KIND_SINT, {0}, {8} };
+  case VX_OM_COLOR_FORMAT_RG8UI:      return { 2, 2, OM_KIND_UINT, {0, 8}, {8, 8} };
+  case VX_OM_COLOR_FORMAT_RG8I:       return { 2, 2, OM_KIND_SINT, {0, 8}, {8, 8} };
+  case VX_OM_COLOR_FORMAT_RGBA8UI:    return { 4, 4, OM_KIND_UINT, {0, 8, 16, 24}, {8, 8, 8, 8} };
+  case VX_OM_COLOR_FORMAT_RGBA8I:     return { 4, 4, OM_KIND_SINT, {0, 8, 16, 24}, {8, 8, 8, 8} };
+  case VX_OM_COLOR_FORMAT_R16UI:      return { 2, 1, OM_KIND_UINT, {0}, {16} };
+  case VX_OM_COLOR_FORMAT_R16I:       return { 2, 1, OM_KIND_SINT, {0}, {16} };
+  case VX_OM_COLOR_FORMAT_RG16UI:     return { 4, 2, OM_KIND_UINT, {0, 16}, {16, 16} };
+  case VX_OM_COLOR_FORMAT_RG16I:      return { 4, 2, OM_KIND_SINT, {0, 16}, {16, 16} };
+  case VX_OM_COLOR_FORMAT_RGBA16UI:   return { 8, 4, OM_KIND_UINT, {0, 16, 32, 48}, {16, 16, 16, 16} };
+  case VX_OM_COLOR_FORMAT_RGBA16I:    return { 8, 4, OM_KIND_SINT, {0, 16, 32, 48}, {16, 16, 16, 16} };
+  case VX_OM_COLOR_FORMAT_R32UI:      return { 4, 1, OM_KIND_UINT, {0}, {32} };
+  case VX_OM_COLOR_FORMAT_R32I:       return { 4, 1, OM_KIND_SINT, {0}, {32} };
+  case VX_OM_COLOR_FORMAT_RG32UI:     return { 8, 2, OM_KIND_UINT, {0, 32}, {32, 32} };
+  case VX_OM_COLOR_FORMAT_RG32I:      return { 8, 2, OM_KIND_SINT, {0, 32}, {32, 32} };
+  case VX_OM_COLOR_FORMAT_RGBA32UI:   return { 16, 4, OM_KIND_UINT, {0, 32, 64, 96}, {32, 32, 32, 32} };
+  case VX_OM_COLOR_FORMAT_RGBA32I:    return { 16, 4, OM_KIND_SINT, {0, 32, 64, 96}, {32, 32, 32, 32} };
+  case VX_OM_COLOR_FORMAT_RGB10A2UI:  return { 4, 4, OM_KIND_UINT, {0, 10, 20, 30}, {10, 10, 10, 2} };
+  default:                            return { 4, 4, OM_KIND_UNORM, {0, 8, 16, 24}, {8, 8, 8, 8} };
+  }
+}
+
 static inline __attribute__((always_inline)) uint32_t om_color_bpp(uint32_t fmt) {
   switch (fmt) {
-  case VX_OM_COLOR_FORMAT_R8:  return 1;
-  case VX_OM_COLOR_FORMAT_RG8: return 2;
-  default:                     return 4;   // A8R8G8B8 / SRGB8A8
+  case VX_OM_COLOR_FORMAT_A8R8G8B8:
+  case VX_OM_COLOR_FORMAT_SRGB8A8: return 4;
+  case VX_OM_COLOR_FORMAT_R8:      return 1;
+  case VX_OM_COLOR_FORMAT_RG8:     return 2;
+  default:                         return om_wide_geom(fmt).bpp;
   }
 }
 static inline __attribute__((always_inline)) uint32_t om_depth_bpp(uint32_t fmt) {
@@ -595,16 +651,15 @@ static inline __attribute__((always_inline)) void tex_sample_f32_lod(
 // Full sample returning four float channels -- the float twin of
 // tex_sample_sw_layer, including the mip blend.
 //
-// A float format decodes and filters natively (tex_sample_f32_lod). EVERY OTHER
-// format delegates to tex_sample_sw_layer and expands the packed word, so its
+// A TexFiltersInFloat format decodes and filters natively (tex_sample_f32_lod). EVERY
+// OTHER format delegates to tex_sample_sw_layer and expands the packed word, so its
 // result stays bit-identical to the 8-bit path: same byte positions, same
 // multiply-by-reciprocal the shader's own unpack uses (a divide by 255.0f differs
-// in the last bit for 126 of the 256 byte values). Only float formats run new
-// arithmetic.
+// in the last bit for 126 of the 256 byte values).
 static inline __attribute__((always_inline)) void tex_sample_f32_layer(
     const TexState& s, int32_t u, int32_t v, uint32_t lod, uint32_t layer,
     uint32_t filter, float out[4]) {
-  if (!gfx_tex::TexIsFloatFormat(s.format)) {
+  if (!gfx_tex::TexFiltersInFloat(s.format)) {
     uint32_t argb = tex_sample_sw_layer(s, u, v, lod, layer, filter);
     const float inv255 = 1.0f / 255.0f;
     out[0] = (float)((argb >> 16) & 0xff) * inv255;
@@ -849,12 +904,12 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_sw_3d(
 }
 
 // Float twin of tex_sample_sw_3d: the same slice-then-level blend order, in float.
-// A non-float format delegates to the packed sampler and expands the result, so it
-// stays bit-identical (see tex_sample_f32_layer).
+// A format outside TexFiltersInFloat delegates to the packed sampler and expands the
+// result, so it stays bit-identical (see tex_sample_f32_layer).
 static inline __attribute__((always_inline)) void tex_sample_f32_3d(
     const TexState& s, int32_t u, int32_t v, int32_t w, uint32_t lod, uint32_t filter,
     float out[4]) {
-  if (!gfx_tex::TexIsFloatFormat(s.format)) {
+  if (!gfx_tex::TexFiltersInFloat(s.format)) {
     uint32_t argb = tex_sample_sw_3d(s, u, v, w, lod, filter);
     const float inv255 = 1.0f / 255.0f;
     out[0] = (float)((argb >> 16) & 0xff) * inv255;
@@ -909,20 +964,16 @@ static inline __attribute__((always_inline)) void tex_fetch_f32(
 }
 
 // texelFetch for an integer sampler: the four channels of the texel at (x,y) of
-// integer `lod` as raw 0..255 values. An isampler/usampler must yield the stored
-// integer, not a normalised colour, so no scaling happens here; the shader knows
-// the sampler's signedness statically and sign- or zero-extends. Exact because the
-// integer formats reach the sampler as A8R8G8B8, whose decode preserves each byte.
+// integer `lod`, as the stored integers (sign-extended for a signed format); an
+// absent alpha reads 1.
 static inline __attribute__((always_inline)) void tex_fetch_i32(
     const TexState& s, int32_t x, int32_t y, uint32_t lod, uint32_t layer,
     int32_t out[4]) {
   uint32_t stride;
   uint64_t addr = tex_fetch_addr(s, x, y, layer, lod, &stride);
-  uint32_t argb = gfx_tex::TexDecodeArgb8(s.format, (const void*)(uintptr_t)addr, stride);
-  out[0] = (int32_t)((argb >> 16) & 0xff);
-  out[1] = (int32_t)((argb >> 8) & 0xff);
-  out[2] = (int32_t)(argb & 0xff);
-  out[3] = (int32_t)(argb >> 24);
+  float lanes[4];
+  gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)addr, stride, lanes);
+  __builtin_memcpy(out, lanes, sizeof(lanes));
 }
 
 // texelFetch on a 2D array: the texel at (x,y) of integer `layer` (slice at
@@ -1268,6 +1319,349 @@ static inline __attribute__((always_inline)) void om_fragment_mrt(
     uint32_t out_argb = (dst_color & ~c.cbuf_writemask) | (blended & c.cbuf_writemask);
     om_store(c_addr, cbpp, om_encode_color(c.color_format, out_argb));
   }
+}
+
+// ── Wide-format merge ────────────────────────────────────────────────────────
+
+static inline __attribute__((always_inline)) float om_bits_f(uint32_t v) {
+  float f;
+  __builtin_memcpy(&f, &v, 4);
+  return f;
+}
+static inline __attribute__((always_inline)) uint32_t om_f_bits(float f) {
+  uint32_t v;
+  __builtin_memcpy(&v, &f, 4);
+  return v;
+}
+static inline __attribute__((always_inline)) float om_clamp01(float f) {
+  return (f > 0.0f) ? ((f < 1.0f) ? f : 1.0f) : 0.0f;   // NaN -> 0
+}
+
+// float -> IEEE half, round to nearest even.
+static inline __attribute__((always_inline)) uint32_t om_float_to_half(float f) {
+  uint32_t x = om_f_bits(f);
+  uint32_t sign = (x >> 16) & 0x8000u;
+  uint32_t exp  = (x >> 23) & 0xffu;
+  uint32_t man  = x & 0x7fffffu;
+  if (exp == 0xffu) {
+    return sign | 0x7c00u | (man ? 0x200u : 0u);
+  }
+  int32_t e = (int32_t)exp - 127 + 15;
+  if (e >= 0x1f) {
+    return sign | 0x7c00u;
+  }
+  if (e <= 0) {
+    if (e < -10) {
+      return sign;
+    }
+    man |= 0x800000u;
+    uint32_t shift = (uint32_t)(14 - e);
+    uint32_t h = man >> shift;
+    uint32_t rem = man & ((1u << shift) - 1u);
+    uint32_t half = 1u << (shift - 1u);
+    if (rem > half || (rem == half && (h & 1u))) {
+      h++;
+    }
+    return sign | h;
+  }
+  uint32_t h = ((uint32_t)e << 10) | (man >> 13);
+  uint32_t rem = man & 0x1fffu;
+  if (rem > 0x1000u || (rem == 0x1000u && (h & 1u))) {
+    h++;
+  }
+  return sign | h;
+}
+
+// float -> unsigned small float (5-bit exponent, `mbits` mantissa), round to
+// nearest even; negatives go to zero and overflow saturates to the largest
+// finite value.
+static inline __attribute__((always_inline)) uint32_t om_float_to_ufloat(float f, uint32_t mbits) {
+  uint32_t x = om_f_bits(f);
+  uint32_t exp = (x >> 23) & 0xffu;
+  uint32_t man = x & 0x7fffffu;
+  if (exp == 0xffu && man) {
+    return (0x1fu << mbits) | 1u;
+  }
+  if (x & 0x80000000u) {
+    return 0;
+  }
+  if (exp == 0xffu) {
+    return 0x1fu << mbits;
+  }
+  const uint32_t mshift = 23u - mbits;
+  const uint32_t maxv = (0x1eu << mbits) | ((1u << mbits) - 1u);
+  int32_t e = (int32_t)exp - 127 + 15;
+  uint32_t v, rem, half;
+  if (e <= 0) {
+    uint32_t shift = mshift + 1u - (uint32_t)e;
+    if (shift > 31u) {
+      return 0;
+    }
+    man |= 0x800000u;
+    v = man >> shift;
+    rem = man & ((1u << shift) - 1u);
+    half = 1u << (shift - 1u);
+  } else {
+    v = ((uint32_t)e << mbits) | (man >> mshift);
+    rem = man & ((1u << mshift) - 1u);
+    half = 1u << (mshift - 1u);
+  }
+  if (rem > half || (rem == half && (v & 1u))) {
+    v++;
+  }
+  return (v > maxv) ? maxv : v;
+}
+
+static inline __attribute__((always_inline)) uint32_t om_field_get(const uint32_t w[4], uint32_t off, uint32_t width) {
+  uint32_t v = w[off >> 5] >> (off & 31u);
+  return (width >= 32u) ? v : (v & ((1u << width) - 1u));
+}
+static inline __attribute__((always_inline)) void om_field_set(uint32_t w[4], uint32_t off, uint32_t width, uint32_t v) {
+  uint32_t m = (width >= 32u) ? 0xffffffffu : ((1u << width) - 1u);
+  uint32_t sh = off & 31u;
+  w[off >> 5] = (w[off >> 5] & ~(m << sh)) | ((v & m) << sh);
+}
+
+// Stored field -> lane.
+static inline __attribute__((always_inline)) uint32_t om_field_decode(uint32_t kind, uint32_t width, uint32_t v) {
+  switch (kind) {
+  case OM_KIND_FLOAT:
+    if (width == 32u) {
+      return v;
+    }
+    if (width == 16u) {
+      return om_f_bits(gfx_tex::HalfToFloat((uint16_t)v));
+    }
+    return om_f_bits(gfx_tex::UFloatToFloat(v, width - 5u));
+  case OM_KIND_UNORM:
+    return om_f_bits((float)v / (float)((1u << width) - 1u));
+  case OM_KIND_SINT:
+    return (width >= 32u) ? v : (uint32_t)(((int32_t)(v << (32u - width))) >> (32u - width));
+  default:
+    return v;
+  }
+}
+
+// Lane -> stored field.
+static inline __attribute__((always_inline)) uint32_t om_field_encode(uint32_t kind, uint32_t width, uint32_t lane) {
+  switch (kind) {
+  case OM_KIND_FLOAT:
+    if (width == 32u) {
+      return lane;
+    }
+    if (width == 16u) {
+      return om_float_to_half(om_bits_f(lane));
+    }
+    return om_float_to_ufloat(om_bits_f(lane), width - 5u);
+  case OM_KIND_UNORM:
+    return (uint32_t)(om_clamp01(om_bits_f(lane)) * (float)((1u << width) - 1u) + 0.5f);
+  default:
+    return lane;   // integer kinds keep the low `width` bits
+  }
+}
+
+static inline __attribute__((always_inline)) void om_wide_load_raw(uintptr_t a, uint32_t bpp, uint32_t w[4]) {
+  w[0] = w[1] = w[2] = w[3] = 0;
+  if (bpp >= 4u) {
+    for (uint32_t i = 0; i < bpp / 4u; ++i) {
+      w[i] = reinterpret_cast<volatile uint32_t*>(a)[i];
+    }
+  } else {
+    w[0] = om_load(a, bpp);
+  }
+}
+static inline __attribute__((always_inline)) void om_wide_store_raw(uintptr_t a, uint32_t bpp, const uint32_t w[4]) {
+  if (bpp >= 4u) {
+    for (uint32_t i = 0; i < bpp / 4u; ++i) {
+      reinterpret_cast<volatile uint32_t*>(a)[i] = w[i];
+    }
+  } else {
+    om_store(a, bpp, w[0]);
+  }
+}
+
+// One blend factor, per channel, in float (Vulkan VkBlendFactor semantics).
+static inline __attribute__((always_inline)) float om_blend_factor_f(
+    uint32_t func, uint32_t ch, const float src[4], const float dst[4], const float cst[4]) {
+  switch (func) {
+  case VX_OM_BLEND_FUNC_ZERO:                return 0.0f;
+  case VX_OM_BLEND_FUNC_ONE:                 return 1.0f;
+  case VX_OM_BLEND_FUNC_SRC_RGB:             return src[ch];
+  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC_RGB:   return 1.0f - src[ch];
+  case VX_OM_BLEND_FUNC_DST_RGB:             return dst[ch];
+  case VX_OM_BLEND_FUNC_ONE_MINUS_DST_RGB:   return 1.0f - dst[ch];
+  case VX_OM_BLEND_FUNC_SRC_A:               return src[3];
+  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A:     return 1.0f - src[3];
+  case VX_OM_BLEND_FUNC_DST_A:               return dst[3];
+  case VX_OM_BLEND_FUNC_ONE_MINUS_DST_A:     return 1.0f - dst[3];
+  case VX_OM_BLEND_FUNC_CONST_RGB:           return cst[ch];
+  case VX_OM_BLEND_FUNC_ONE_MINUS_CONST_RGB: return 1.0f - cst[ch];
+  case VX_OM_BLEND_FUNC_CONST_A:             return cst[3];
+  case VX_OM_BLEND_FUNC_ONE_MINUS_CONST_A:   return 1.0f - cst[3];
+  case VX_OM_BLEND_FUNC_ALPHA_SAT: {
+    if (ch == 3u) {
+      return 1.0f;
+    }
+    float b = 1.0f - dst[3];
+    return (src[3] < b) ? src[3] : b;
+  }
+  default:                                   return 0.0f;
+  }
+}
+
+static inline __attribute__((always_inline)) float om_blend_op_f(uint32_t mode, float s, float d, float sf, float df) {
+  switch (mode) {
+  case VX_OM_BLEND_MODE_SUB:     return s * sf - d * df;
+  case VX_OM_BLEND_MODE_REV_SUB: return d * df - s * sf;
+  case VX_OM_BLEND_MODE_MIN:     return (s < d) ? s : d;
+  case VX_OM_BLEND_MODE_MAX:     return (s > d) ? s : d;
+  default:                       return s * sf + d * df;
+  }
+}
+
+// Read-modify-write of one wide colour texel. `src` is the shader's output, one
+// lane per RGBA channel. The blend constant is the attachment's packed RGBA8
+// (red in the low byte).
+static inline __attribute__((always_inline)) void om_wide_color_rmw(const om_color_t& c, uintptr_t c_addr,
+                                                                    const uint32_t src[4]) {
+  const om_wide_fmt g = om_wide_geom(c.color_format);
+  const bool is_int = (g.kind == OM_KIND_UINT || g.kind == OM_KIND_SINT);
+  const bool logic = (c.blend_mode_rgb == VX_OM_BLEND_MODE_LOGICOP) && g.kind != OM_KIND_FLOAT;
+  const bool blending = c.blend_enabled && !is_int && !logic;
+  uint32_t m4 = c.cbuf_writemask4 & ((1u << g.nch) - 1u);
+  if (m4 == 0) {
+    return;
+  }
+  uint32_t raw[4];
+  const bool full = (m4 == ((1u << g.nch) - 1u));
+  if (!full || blending || logic) {
+    om_wide_load_raw(c_addr, g.bpp, raw);
+  } else {
+    raw[0] = raw[1] = raw[2] = raw[3] = 0;
+  }
+
+  float sf[4], df[4], cf[4];
+  if (blending) {
+    for (uint32_t ch = 0; ch < 4; ++ch) {
+      cf[ch] = (float)((c.blend_const >> (ch * 8u)) & 0xffu) * (1.0f / 255.0f);
+      sf[ch] = om_bits_f(src[ch]);
+      if (ch < g.nch) {
+        df[ch] = om_bits_f(om_field_decode(g.kind, g.width[ch], om_field_get(raw, g.off[ch], g.width[ch])));
+      } else {
+        df[ch] = (ch == 3u) ? 1.0f : 0.0f;
+      }
+      if (g.kind == OM_KIND_UNORM) {
+        sf[ch] = om_clamp01(sf[ch]);
+      }
+    }
+  }
+
+  for (uint32_t ch = 0; ch < g.nch; ++ch) {
+    if (!((m4 >> ch) & 1u)) {
+      continue;
+    }
+    uint32_t lane = src[ch];
+    if (blending) {
+      const bool alpha = (ch == 3u);
+      float fs = om_blend_factor_f(alpha ? c.blend_src_a : c.blend_src_rgb, ch, sf, df, cf);
+      float fd = om_blend_factor_f(alpha ? c.blend_dst_a : c.blend_dst_rgb, ch, sf, df, cf);
+      float r = om_blend_op_f(alpha ? c.blend_mode_a : c.blend_mode_rgb, sf[ch], df[ch], fs, fd);
+      if (g.kind == OM_KIND_UNORM) {
+        r = om_clamp01(r);
+      }
+      lane = om_f_bits(r);
+    }
+    uint32_t v = om_field_encode(g.kind, g.width[ch], lane);
+    if (logic) {
+      v = DoLogicOp(c.logic_op, v, om_field_get(raw, g.off[ch], g.width[ch]));
+    }
+    om_field_set(raw, g.off[ch], g.width[ch], v);
+  }
+  om_wide_store_raw(c_addr, g.bpp, raw);
+}
+
+// The single-attachment descriptor of an om_state_t, so the one-target merge
+// shares the per-attachment code.
+static inline __attribute__((always_inline)) om_color_t om_state_color(const om_state_t& s) {
+  om_color_t c;
+  c.cbuf_base = s.cbuf_base;
+  c.cbuf_pitch = s.cbuf_pitch;
+  c.blend_mode_rgb = s.blend_mode_rgb;
+  c.blend_mode_a = s.blend_mode_a;
+  c.blend_src_rgb = s.blend_src_rgb;
+  c.blend_src_a = s.blend_src_a;
+  c.blend_dst_rgb = s.blend_dst_rgb;
+  c.blend_dst_a = s.blend_dst_a;
+  c.blend_const = s.blend_const;
+  c.logic_op = s.logic_op;
+  c.cbuf_writemask4 = s.cbuf_writemask4;
+  c.color_format = s.color_format;
+  c.blend_enabled = s.blend_enabled;
+  c.cbuf_writemask = s.cbuf_writemask;
+  c.color_read = s.color_read;
+  c.color_write = s.color_write;
+  return c;
+}
+
+// MRT merge where the shader hands four lanes per attachment: a wide attachment
+// takes them as its RGBA channels, any other attachment takes lane 0 as the
+// packed ARGB8 word the 8-bit merge expects, so those stay bit-identical to
+// om_fragment_mrt.
+static inline __attribute__((always_inline)) void om_fragment_mrt_wide(
+    const om_state_t& s, const om_color_t* colors, uint32_t num_color,
+    uint32_t x, uint32_t y, uint32_t face,
+    const uint32_t* src_lanes, uint32_t src_depth) {
+  const int f = face ? 1 : 0;
+  if (num_color > VX_OM_MAX_RT) {
+    num_color = VX_OM_MAX_RT;
+  }
+  bool ds_active = s.depth_enabled || s.stencil_enabled[f];
+  om_depth_desc dd = om_depth_geom(s.depth_format);
+  uint32_t dbpp = om_depth_bpp(s.depth_format);
+  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)x * dbpp);
+
+  uint32_t dst_ds = ds_active ? om_load(z_addr, dbpp) : 0;
+  uint32_t merged = 0;
+  bool ds_pass = !ds_active || ds_test(s, face, src_depth, dst_ds, &merged);
+
+  uint32_t stencil_wm = s.stencil_writemask[f];
+  uint32_t ds_wm = ((s.depth_enabled && ds_pass && s.depth_writemask && dd.has_depth) ? dd.dmask : 0u)
+                 | ((s.stencil_enabled[f] && dd.has_stencil) ? (stencil_wm << dd.sshift) : 0u);
+  if (ds_wm) {
+    om_store(z_addr, dbpp, (dst_ds & ~ds_wm) | (merged & ds_wm));
+  }
+
+  if (!ds_pass) {
+    return;
+  }
+
+  for (uint32_t k = 0; k < num_color; ++k) {
+    const om_color_t& c = colors[k];
+    if (!c.color_write) {
+      continue;
+    }
+    uint32_t cbpp = om_color_bpp(c.color_format);
+    uintptr_t c_addr = (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch + (uint64_t)x * cbpp);
+    const uint32_t* lanes = src_lanes + 4u * k;
+    if (om_is_wide(c.color_format)) {
+      om_wide_color_rmw(c, c_addr, lanes);
+      continue;
+    }
+    bool need_c_read = c.color_read || c.blend_enabled;
+    uint32_t dst_raw = need_c_read ? om_load(c_addr, cbpp) : 0;
+    uint32_t dst_color = om_decode_color(c.color_format, dst_raw);
+    uint32_t blended = c.blend_enabled ? blend_rt(c, lanes[0], dst_color) : lanes[0];
+    uint32_t out_argb = (dst_color & ~c.cbuf_writemask) | (blended & c.cbuf_writemask);
+    om_store(c_addr, cbpp, om_encode_color(c.color_format, out_argb));
+  }
+}
+
+// Single-attachment wide merge: the om_state_t colour fields as one attachment.
+static inline __attribute__((always_inline)) void om_fragment_wide(
+    const om_state_t& s, uint32_t x, uint32_t y, uint32_t face,
+    const uint32_t src_lanes[4], uint32_t src_depth) {
+  const om_color_t c = om_state_color(s);
+  om_fragment_mrt_wide(s, &c, 1, x, y, face, src_lanes, src_depth);
 }
 
 } // namespace gfx_sw

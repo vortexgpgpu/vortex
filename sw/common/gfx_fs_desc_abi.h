@@ -33,11 +33,11 @@
 
 #include <stdint.h>
 
-// i64 constant-buffer base slots in the resident FS descriptor table.
-// Ceiling = 8 = push constants (slot 0) + up to 7 descriptor sets (slots 1..7,
-// lavapipe binds descriptor set N at constant-buffer index N+1). Raising this
-// requires widening the table + the fragment kernel's per-slot reads in lockstep.
-#define GFX_FS_DESC_SLOTS   8u
+// i64 constant-buffer base slots in a stage's resident descriptor table: push
+// constants (slot 0) and 8 descriptor sets (slots 1..8 -- lavapipe binds set N at
+// constant-buffer index N+1 and exposes 8 bound sets). Kernels index the table by
+// constant-buffer index, so only the host side sizes it.
+#define GFX_FS_DESC_SLOTS   9u
 
 // FS kernel arg-block slot carrying the descriptor-table device address.
 // The HW frag wrapper uses arg slots 0..2 and the SW-raster wrapper 0..8, so
@@ -61,29 +61,20 @@
 // OM ingress decodes the same address.
 #define GFX_FS_ARG_APERTURE 11u
 
-// FS kernel arg-block slot carrying the per-primitive flat-varying array: the
-// provoking vertex's varying words, copied verbatim, GFX_FS_FLAT_WORDS of them
-// per primitive and indexed by the same primitive id the wrapper uses to reach
-// the primitive record.
-//
-// A flat varying cannot travel through the interpolation planes at all. Setup
-// premultiplies every plane by 1/w and quantises it to Q7.24, which is defined
-// on numbers; a flat varying's bit pattern is not necessarily a number -- every
-// integer varying is flat, and a small integer read as a float is a denormal
-// that quantises to zero. So the words ride beside the planes rather than
-// through them, and the wrapper reads them without arithmetic.
-//
-// A side array rather than a field in the primitive record: the record is a
-// fixed-function layout that RASTER also fetches, and widening it would move
-// every draw's stride for a feature most draws do not use.
-#define GFX_FS_ARG_FLAT     12u
+// FS kernel arg-block slots locating a draw's varyings: the rast_vary_t array
+// (gfx_frontend_abi.h), indexed by the same primitive id as the primitive record,
+// and the VS output records it points into with their byte stride. The wrapper
+// interpolates each fragment input out of the three source records with the
+// record's perspective-correct barycentrics; a flat input reads the provoking
+// record's word verbatim, so an integer varying keeps its bits.
+#define GFX_FS_ARG_VARY     12u
+#define GFX_FS_ARG_VSREC    14u
+#define GFX_FS_ARG_VSTRIDE  15u
 
-// Scalar words carried per primitive -- the same twelve the interpolation
-// planes hold, in the same order [u,v,r,g,b,a,w0..w5], so a varying's flat word
-// is at the lane index it would have interpolated at. Copying all twelve keeps
-// the device kernel free of any per-shader mask: which lanes are flat is a
-// fact the fragment kernel is compiled with, not one setup has to be told.
-#define GFX_FS_FLAT_WORDS   12u
+// FS kernel arg-block slot carrying the view index (gl_ViewIndex) of the draw:
+// the view a multiview pass is replaying, 0 otherwise. Input-attachment reads
+// address their layer with it even outside multiview.
+#define GFX_FS_ARG_VIEW     13u
 
 // The sample count deliberately has NO arg slot. It is a fragment-shader variant
 // key, so the value is fixed when the kernel is translated and the emitter bakes

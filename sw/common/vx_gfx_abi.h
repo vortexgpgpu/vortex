@@ -179,11 +179,9 @@ struct rast_attrib_t {
 // varying would exceed FloatA's Q7.24 range (large tiling/wrap UV), which
 // likewise cancels in the FS divide — so tiled UV well beyond 1.0 stays exact.
 //
-// The front end packs a draw's user varyings into these planes in declaration
-// order [u,v,r,g,b,a,w0..w5] (gfx_frontend_k.h expand_k); the FS reads them back
-// the same way. Twelve scalar planes let a fragment carry up to three vec4
-// varyings (e.g. samplerCube textureGrad's coord + dPdx + dPdy), past the six a
-// single colour+texcoord allowed. `z`/`rhw` stay fixed-function.
+// These planes carry the native (setup_vertex_t) path's varyings. A draw fed from
+// VS output records leaves them unset: its fragment stage interpolates the
+// records directly through rast_vary_t (gfx_frontend_abi.h). `z` is always set.
 struct rast_attribs_t {
   rast_attrib_t z, r, g, b, a, u, v, rhw, w0, w1, w2, w3, w4, w5;
 };

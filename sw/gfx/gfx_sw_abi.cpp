@@ -96,6 +96,17 @@ extern "C" void gfx_tex_fetch_i32(const gfx_sw_texstate_t* st,
                         layer, out);
 }
 
+extern "C" void gfx_image_load_sw(const void* base, uint32_t row_stride, uint32_t img_stride,
+                                  int32_t x, int32_t y, uint32_t layer, uint32_t format,
+                                  uint32_t* out) {
+  const uint32_t bpp = gfx_tex::FormatStride(format);
+  const uint8_t* p = static_cast<const uint8_t*>(base) + (size_t)layer * img_stride
+                   + (size_t)(uint32_t)y * row_stride + (size_t)(uint32_t)x * bpp;
+  float lanes[4];
+  gfx_tex::TexDecodeFloat4(format, p, bpp, lanes);
+  memcpy(out, lanes, sizeof(lanes));
+}
+
 extern "C" uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
                                       int32_t x, int32_t y, uint32_t comp) {
   return gfx_sw::tex_gather_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, comp);
@@ -206,6 +217,29 @@ extern "C" void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st,
   gfx_sw::om_fragment_mrt(*reinterpret_cast<const gfx_sw::om_state_t*>(st),
                           reinterpret_cast<const gfx_sw::om_color_t*>(rt), num_color,
                           x, y, face, colors, depth);
+}
+
+extern "C" void gfx_om_fragment_wide_sw(const gfx_sw_omstate_t* st, uint32_t covered,
+                                        uint32_t x, uint32_t y, uint32_t face,
+                                        const uint32_t* lanes, uint32_t depth) {
+  if (!covered) {
+    return;
+  }
+  gfx_sw::om_fragment_wide(*reinterpret_cast<const gfx_sw::om_state_t*>(st), x, y, face,
+                           lanes, depth);
+}
+
+extern "C" void gfx_om_fragment_mrt_wide_sw(const gfx_sw_omstate_t* st,
+                                            const gfx_sw_omcolor_t* rt, uint32_t num_color,
+                                            uint32_t covered, uint32_t x, uint32_t y,
+                                            uint32_t face, const uint32_t* lanes,
+                                            uint32_t depth) {
+  if (!covered) {
+    return;
+  }
+  gfx_sw::om_fragment_mrt_wide(*reinterpret_cast<const gfx_sw::om_state_t*>(st),
+                               reinterpret_cast<const gfx_sw::om_color_t*>(rt), num_color,
+                               x, y, face, lanes, depth);
 }
 
 extern "C" uint32_t gfx_rast_walk_tile_msaa_sw(const void* prim, uint32_t pid,

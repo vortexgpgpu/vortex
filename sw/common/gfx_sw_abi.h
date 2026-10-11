@@ -170,11 +170,19 @@ void gfx_tex_fetch_f32(const gfx_sw_texstate_t* st,
                        int32_t x, int32_t y, uint32_t lod, float* out);
 
 // texelFetch for an integer sampler: the four channels of the texel at (x,y) of
-// `layer` and `lod` as raw 0..255 values, unscaled. The shader knows the sampler's
-// signedness statically and sign- or zero-extends.
+// `layer` and `lod` as the stored integers, sign-extended for a signed format.
 void gfx_tex_fetch_i32(const gfx_sw_texstate_t* st,
                        int32_t x, int32_t y, uint32_t lod, uint32_t layer,
                        int32_t* out);
+
+// Typeless image read (an input attachment, or a storage image read without a
+// format): the texel at `base + layer*img_stride + y*row_stride + x*texel size`,
+// sized and decoded by `format` (VX_TEX_FORMAT_*, taken from the image's
+// descriptor), as four lanes in RGBA order -- floats for a normalized or float
+// format, the stored integers for an integer one.
+void gfx_image_load_sw(const void* base, uint32_t row_stride, uint32_t img_stride,
+                       int32_t x, int32_t y, uint32_t layer, uint32_t format,
+                       uint32_t* out);
 
 // texelFetch on a 2D array: the texel at (x,y) of integer `layer` and `lod`
 // (see gfx_tex_fetch_f32).
@@ -282,6 +290,19 @@ void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolor_t* 
                             uint32_t num_color, uint32_t covered,
                             uint32_t x, uint32_t y, uint32_t face,
                             const uint32_t* colors, uint32_t depth);
+
+// Merge for a pass with a wide colour attachment (VX_OM_COLOR_FORMAT_R16F and
+// above). `lanes` holds four 32-bit lanes per attachment: a wide attachment takes
+// them as its RGBA channels (float bits, or integers for an integer format); any
+// other attachment takes lane 0 as the packed ARGB8 word gfx_om_fragment_mrt_sw
+// would receive. The single-attachment form merges with `st`'s own colour state.
+void gfx_om_fragment_wide_sw(const gfx_sw_omstate_t* st, uint32_t covered,
+                             uint32_t x, uint32_t y, uint32_t face,
+                             const uint32_t* lanes, uint32_t depth);
+void gfx_om_fragment_mrt_wide_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolor_t* rt,
+                                 uint32_t num_color, uint32_t covered,
+                                 uint32_t x, uint32_t y, uint32_t face,
+                                 const uint32_t* lanes, uint32_t depth);
 
 // One covered 2x2 quad produced by the SW fine-rasterizer (fallback for the FF
 // RASTER producer). Layout matches the FF frag payload the FS wrapper reads:
