@@ -101,8 +101,9 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     // commit outputs (tied off when IS_LLC=0)
     output wire                          amo_hit_st1,    // AMO commits locally at S1
     output wire                          commit_busy,    // commit in flight
-    output wire                          chain_stall,    // pace same-line chained AMO
+    output wire                          chain_stall,    // pace a request behind the compute stage
     output wire                          wb_pending,     // writeback request live
+    output wire                          wbq_full,       // no queue room for another chain's AMO
     output wire [WORD_WIDTH-1:0]         rsp_data,       // response word on amo_hit_st1
     // Read forward: a request reading the AMO'd word while the result is still
     // queued/settling must observe those bytes (replays are admitted during
@@ -152,6 +153,18 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
     end
     wire st0_ld_alloc_any  = mshr_allocate_st0 && ~pipe_stall && ~amo_st0.amo_valid && ~rw_st0;
     wire st0_amo_alloc_any = mshr_allocate_st0 && ~pipe_stall &&  amo_st0.amo_valid;
+    // The allocation one stage on: at S1 it finalizes, and the MSHR probe
+    // only sees it the cycle after, so this covers the cycle in between.
+    reg st1_ld_alloc_r, st1_amo_alloc_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            st1_ld_alloc_r  <= 1'b0;
+            st1_amo_alloc_r <= 1'b0;
+        end else if (~pipe_stall) begin
+            st1_ld_alloc_r  <= mshr_allocate_st0 && ~amo_st0.amo_valid && ~rw_st0;
+            st1_amo_alloc_r <= mshr_allocate_st0 &&  amo_st0.amo_valid;
+        end
+    end
 
     if (IS_LLC != 0) begin : g_commit
         // ----------------------------------------------------------------
@@ -184,8 +197,8 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // bounded by the core-port fan-in (<= 4 for this cache family), not the
         // full line. Sizing to that bound (min 2, cap 4) halves the coalesce/
         // forward/enqueue fanout vs a full-line queue; the cap is a constant
-        // here because the engine has no NUM_REQS parameter, and the overflow
-        // assertion guards it if a wider core-port config ever exceeds 4.
+        // here because the engine has no NUM_REQS parameter. Replays bypass
+        // commit_busy, so fills are admitted against queue room (wbq_full).
         localparam WBQ_TARGETS = WORDS_PER_LINE * NUM_LANES;
         localparam WBQ_SIZE = (WBQ_TARGETS < 4) ? ((WBQ_TARGETS < 2) ? 2 : WBQ_TARGETS) : 4;
         localparam WBQ_CNTW = `CLOG2(WBQ_SIZE+1);
@@ -228,9 +241,9 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         wire                         post_wb_valid = (post_wb_age != 2'd0);
 
         // Compute stage: S1 latches the aligned operands, the RMW ALU + the
-        // re-align shift run the next cycle, off the S1 critical path. AMO
-        // commits are serialized by commit_busy (the bank holds off core
-        // requests), so the stage holds at most one operation; the old operand
+        // re-align shift run the next cycle, off the S1 critical path. The
+        // stage holds at most one operation (commit_busy serializes core AMOs,
+        // chain_stall paces any AMO behind a busy stage); the old operand
         // is byte-forwarded from the writeback queue when a prior AMO to the same
         // bytes has not yet reached the array (see line_lane_st1).
         reg                          cmp_valid;
@@ -750,7 +763,8 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // line AMOs back to back); those are paced instead by chain_stall.
         assign commit_busy = do_store_st0 || amo_inflight || do_store_st1 || cmp_valid || wb_pending_r;
         // Pace any same-line request sitting behind an in-flight compute by one
-        // cycle, so the result lands in wb_data_r and forwards cleanly. Gated on
+        // cycle, so the result lands in wb_data_r and forwards cleanly, and any
+        // AMO, which needs the compute stage free. Gated on
         // cmp_valid (an AMO is computing), so it never fires for baseline traffic.
         // The address match is registered from the look-ahead operands: both only
         // move on ~pipe_stall, so a held match stays valid across a stall. The
@@ -765,7 +779,34 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
                 chain_match_r <= (cmp_addr_n == res_addr_n);
             end
         end
-        assign chain_stall = cmp_valid && valid_st1 && is_creq_st1 && chain_match_r;
+        assign chain_stall = cmp_valid && valid_st1 && is_creq_st1 && (chain_match_r || amo_st1.amo_valid);
+
+        // AMOs that may reach the queue: at S0, between S0 and stC, and in the
+        // compute stage. A fill is admitted only while one more fits. The sum
+        // grows by at most one a cycle (one AMO enters S0), so the registered
+        // flag tests one entry early and stays exact a cycle later.
+        localparam AMO_CNTW = `CLOG2(PIPE_EX + 2);
+        wire st0_amo = amo_st0.amo_valid && valid_st0 && is_creq_st0;
+        wire st1_amo = amo_st1.amo_valid && valid_st1 && is_creq_st1;
+        wire amo_cnt_inc = st0_amo && ~pipe_stall;
+        wire amo_cnt_dec = st1_amo && ~pipe_stall;
+        reg [AMO_CNTW-1:0] amo_pipe_cnt;
+        reg wbq_full_r;
+        always @(posedge clk) begin
+            if (reset) begin
+                amo_pipe_cnt <= '0;
+                wbq_full_r   <= 1'b0;
+            end else begin
+                if (amo_cnt_inc != amo_cnt_dec) begin
+                    amo_pipe_cnt <= amo_cnt_inc ? (amo_pipe_cnt + AMO_CNTW'(1))
+                                                : (amo_pipe_cnt - AMO_CNTW'(1));
+                end
+                wbq_full_r <= (32'(wbq_count) + 32'(amo_pipe_cnt) + 32'(cmp_valid) + 32'(st0_amo) + 1) >= WBQ_SIZE;
+            end
+        end
+        assign wbq_full = wbq_full_r;
+        `RUNTIME_ASSERT (~(amo_cnt_dec && ~amo_cnt_inc && (amo_pipe_cnt == '0)),
+            ("%t: AMO pipe count underflow", $time))
 
         // Invariants: a store-bearing AMO is only ever accepted into a free
         // compute stage (the queue absorbs different-line writebacks behind it),
@@ -808,8 +849,9 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         // covers it from S0 onward. Consumes only the registered probe (see
         // the header block) so the CAM stays out of core_req_ready.
         assign req_input_defer = core_req_valid
-                              && (st0_amo_alloc_any || persist_amo_r
+                              && (st0_amo_alloc_any || st1_amo_alloc_r || persist_amo_r
                                || (fresh_r ? mshr_any_amo : probe_amo_hit_r));
+        `UNUSED_VAR (st1_ld_alloc_r)
 
         `UNUSED_VAR (amo_st0) // only amo_valid/amo_op are consumed at S0
         `UNUSED_VAR (is_replay_st0)
@@ -860,13 +902,13 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
 
         // Age-ordering guards, off the registered probe (see the header
         // block): an incoming AMO holds behind pending line-filling requests,
-        // an incoming load holds behind pending AMO passthroughs. The S0
-        // alloc pulses catch the window between admit and allocate.
+        // an incoming load holds behind pending AMO passthroughs. The S0/S1
+        // alloc terms catch the window between admit and the probe.
         wire amo_input_defer  = core_req_valid && core_req_is_amo
-                             && (st0_ld_alloc_any || persist_ld_r
+                             && (st0_ld_alloc_any || st1_ld_alloc_r || persist_ld_r
                               || (fresh_r ? mshr_any_ld : probe_ld_hit_r));
         wire load_input_defer = core_req_valid && ~core_req_is_amo && ~core_req_rw
-                             && (st0_amo_alloc_any || persist_amo_r
+                             && (st0_amo_alloc_any || st1_amo_alloc_r || persist_amo_r
                               || (fresh_r ? mshr_any_amo : probe_amo_hit_r));
         assign req_input_defer = amo_input_defer || load_input_defer;
 
@@ -875,6 +917,7 @@ module VX_cache_amo import VX_gpu_pkg::*; #(
         assign commit_busy = 1'b0;
         assign chain_stall = 1'b0;
         assign wb_pending  = 1'b0;
+        assign wbq_full    = 1'b0;
         assign rsp_data    = '0;
         // no local commit window: loads are held at the input while a
         // forwarded AMO is pending on the line, so no read forward exists.

@@ -188,7 +188,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     amo_req_t                      replay_amo;
 
     // AMO engine interconnect (tied to 0 when the bank carries no AMO logic).
-    wire                          amo_hit_st1, amo_commit_busy, amo_chain_stall, amo_wb_pending;
+    wire                          amo_hit_st1, amo_commit_busy, amo_chain_stall, amo_wb_pending, amo_wbq_full;
     wire [`CS_WORD_WIDTH-1:0]     amo_rsp_data;
     wire [WORD_SIZE-1:0]          amo_rd_fwd_mask;
     wire [`CS_WORD_WIDTH-1:0]     amo_rd_fwd_data;
@@ -282,7 +282,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         end
         assign pipe_inflight = st0.req.valid || st1.req.valid || (| commit_valid);
     end
-    wire no_pending_req = ~pipe_inflight && mreq_queue_empty;
+    // Queued AMO results are still writes to land in the array.
+    wire no_pending_req = ~pipe_inflight && mreq_queue_empty && ~amo_commit_busy;
 
     VX_cache_flush #(
         .BANK_ID    (BANK_ID),
@@ -350,8 +351,11 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                          && (replay_rw || st0.req.rw)
                          && (replay_wsel == st0.req.word_idx);
 
+    // A fill starts a replay chain, and a chain carries at most one AMO (no
+    // request enters behind a pending AMO), so a fill waits until the AMO
+    // writeback queue has room for it; the queue drains meanwhile.
     wire replay_mux    = replay_valid && ~fwd_head && ~replay_link_hold;
-    wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~fill_inflight && ~replay_link_hold;
+    wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~fill_inflight && ~replay_link_hold && ~amo_wbq_full;
 
     wire replay_grant  = ~init_valid;
     wire replay_enable = replay_grant && replay_mux;
@@ -369,7 +373,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire creq_enable   = creq_grant && (amo_creq_path || amo_wb_path);
 
     assign replay_ready   = replay_grant && ~fwd_head && ~replay_link_hold && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
-    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~fill_inflight && ~replay_link_hold && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
+    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~fill_inflight && ~replay_link_hold && ~amo_wbq_full && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign flush_ready    = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign core_req_ready = creq_grant && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall
                          && ~amo_commit_busy && ~req_input_defer;
@@ -997,6 +1001,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .commit_busy            (amo_commit_busy),
             .chain_stall            (amo_chain_stall),
             .wb_pending             (amo_wb_pending),
+            .wbq_full               (amo_wbq_full),
             .rsp_data               (amo_rsp_data),
             .rd_fwd_mask            (amo_rd_fwd_mask),
             .rd_fwd_data            (amo_rd_fwd_data),
@@ -1015,7 +1020,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             .req_input_defer        (req_input_defer)
         );
     end else begin : g_no_amo
-        assign {amo_hit_st1, amo_commit_busy, amo_wb_pending, amo_chain_stall} = '0;
+        assign {amo_hit_st1, amo_commit_busy, amo_wb_pending, amo_chain_stall, amo_wbq_full} = '0;
         assign {amo_rd_fwd_mask, amo_rd_fwd_data} = '0;
         assign {amo_rsp_data, amo_wb_addr, amo_wb_word_idx, amo_wb_byteen} = '0;
         assign {amo_wb_data, amo_wb_tag, amo_wb_idx, amo_wb_attr} = '0;
