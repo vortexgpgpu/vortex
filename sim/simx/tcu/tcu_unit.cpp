@@ -919,18 +919,18 @@ public:
       }
     }
 
+    // A block may fire once its A stripe and its own B row are resident: a B
+    // refill for another block's row only lands after this cycle.
     uint32_t ready_mask = 0;
     for (uint32_t b = 0; b < VX_CFG_NUM_TCU_BLOCKS; ++b) {
       auto& r = reqs.at(b);
       if (!r.valid) {
         continue;
       }
-      auto& p = reqs.at(rep);
-      bool key_match = ((r.desc_b & 0xffff) == (p.desc_b & 0xffff))
-                    && r.step_k == p.step_k
-                    && r.step_n == p.step_n
-                    && r.cd_nregs == p.cd_nregs;
-      if (abuf_ready.at(b) && bbuf_ready && key_match) {
+      bbuf_slot_t key = this->bbuf_key(r);
+      bool own_resident = bbuf_.valid && bbuf_.same_row(key)
+                       && (!key.kmajor || !r.is_first_uop || bbuf_.first_refetched);
+      if (abuf_ready.at(b) && own_resident) {
         ready_mask |= (1u << b);
       }
     }

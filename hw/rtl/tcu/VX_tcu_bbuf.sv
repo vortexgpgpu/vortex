@@ -40,7 +40,8 @@
 module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID     = "",
     parameter         NUM_BANKS       = 4,
-    parameter         BANK_ADDR_WIDTH = 12
+    parameter         BANK_ADDR_WIDTH = 12,
+    parameter         NUM_CANDS       = 1
 ) (
     input  wire clk,
     input  wire reset,
@@ -69,9 +70,12 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 
     // Outputs (broadcast to all Q tcu_cores)
     output wire                     bbuf_ready,
-    // Readiness of the presented request against next cycle's buffer state.
-    output wire                     bbuf_ready_next,
-    output wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] bbuf_rs2_data
+    output wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0] bbuf_rs2_data,
+
+    // Next-cycle head candidates of every block: is each one's own B row
+    // resident in the state this cycle leaves behind?
+    input  tcu_tbuf_req_t [NUM_CANDS-1:0] cand,
+    output wire [NUM_CANDS-1:0]      cand_resident_next
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -270,39 +274,76 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire bank_row_resident = req_wants_kmajor
         ? bank_row_resident_kmajor
         : (req_is_sparse ? bank_row_resident_sparse : bank_row_resident_dense);
+    // Residency of an arbitrary request against slot flags va/vb/rf: the same
+    // derivation as above, for the candidates of the registered ready.
+    function automatic logic cand_resident_fn(input logic [NCTA_WIDTH-1:0] cta, input logic [3:0] step_k,
+                                              input logic [3:0] step_n, input logic [1:0] cd_nregs,
+                                              input logic is_first, input logic sparse,
+                                              input logic [31:0] desc_b,
+                                              input logic va, input logic vb, input logic rf);
+        logic [4:0] bi;
+        logic [4:0] d_off;
+        logic [SUB_HALF_W-1:0] d_sub, s_sub_a, s_sub_b;
+        logic [SP_LOGROW_W-1:0] s_row_a, s_row_b;
+        logic [BANK_ADDR_WIDTH-1:0] rbase;
+        logic [LDM_W-1:0] ldm;
+        logic [BANK_ROW_WORDS_LOG2-1:0] inrow;
+        logic r_dense, r_sparse, r_kmaj;
+        case (cd_nregs)
+            2'd0:    bi = {2'b0, step_k[0], step_n[1:0]};
+            2'd1:    bi = {1'b0, step_k[0], step_n[2:0]};
+            default: bi = {step_k[0], step_n[3:0]};
+        endcase
+        d_off   = (TOTAL_SHIFT == 0) ? bi : 5'(bi >> TOTAL_SHIFT);
+        d_sub   = (LG_XLEN_RATIO == 0) ? '0
+                : SUB_HALF_W'(({27'b0, bi} >> LG_B_SUB_BLOCKS) & ((1 << LG_XLEN_RATIO) - 1));
+        s_row_a = SP_LOGROW_W'(bi) * SP_LOGROW_W'(LOGICAL_ROWS_PER_BLK);
+        s_row_b = s_row_a + SP_LOGROW_W'(1);
+        s_sub_a = (LG_XLEN_RATIO == 0) ? '0 : SUB_HALF_W'(s_row_a & SP_LOGROW_W'((1 << LG_XLEN_RATIO) - 1));
+        s_sub_b = (LG_XLEN_RATIO == 0) ? '0 : SUB_HALF_W'(s_row_b & SP_LOGROW_W'((1 << LG_XLEN_RATIO) - 1));
+        rbase   = BANK_ADDR_WIDTH'(desc_b[15:0] >> (WORD_SIZE_LOG2 + BANK_SEL_BITS));
+        ldm     = LDM_W'(desc_b[31:16] >> 2);
+        inrow   = BANK_ROW_WORDS_LOG2'(desc_b[15:0] >> 2);
+        r_dense = va && !slot_is_sparse_r
+               && (slot_a_addr_r == rbase + BANK_ADDR_WIDTH'(d_off))
+               && (slot_a_sub_half_r == d_sub);
+        r_sparse = va && slot_is_sparse_r
+                && (slot_a_addr_r == rbase + BANK_ADDR_WIDTH'(s_row_a >> LG_XLEN_RATIO))
+                && (slot_a_sub_half_r == s_sub_a)
+                && (!SPARSE_TWO_SLOT || (vb
+                                         && (slot_b_addr_r == rbase + BANK_ADDR_WIDTH'(s_row_b >> LG_XLEN_RATIO))
+                                         && (slot_b_sub_half_r == s_sub_b)));
+        r_kmaj  = va && slot_row_major_r
+               && (!slot_is_sparse_r || vb)
+               && (!is_first || rf)
+               && (slot_cta_id_r == cta)
+               && (slot_step_k_r == step_k)
+               && (slot_step_n_r == step_n)
+               && (slot_desc_b_row_base_r == rbase)
+               && (slot_desc_b_inrow_r    == inrow)
+               && (slot_ldm_words_r       == ldm);
+        return (ldm != '0) ? r_kmaj : (sparse ? r_sparse : r_dense);
+    endfunction
 
-    // The same residency against the flags the next cycle starts from (the
-    // slot key registers only change on allocation, which clears both slots).
+    // The slot key registers only change on allocation, which clears both slots.
     wire slot_a_valid_n, slot_b_valid_n, refetched_n;
-    wire bank_row_resident_dense_n =
-        slot_a_valid_n && !slot_is_sparse_r
-        && (slot_a_addr_r == fetch_addr_dense)
-        && (slot_a_sub_half_r == dense_sub_half);
-    wire bank_row_resident_sparse_n =
-        slot_a_valid_n && slot_is_sparse_r
-        && (slot_a_addr_r == fetch_addr_a_sparse)
-        && (slot_a_sub_half_r == sp_sub_a)
-        && (!SPARSE_TWO_SLOT || (slot_b_valid_n
-                                 && (slot_b_addr_r == fetch_addr_b_sparse)
-                                 && (slot_b_sub_half_r == sp_sub_b)));
-    wire bank_row_resident_kmajor_n =
-        slot_a_valid_n && slot_row_major_r
-        && (!slot_is_sparse_r || slot_b_valid_n)
-        && (!req_is_first_uop || refetched_n)
-        && (slot_cta_id_r == req_cta_id)
-        && (slot_step_k_r == req_step_k)
-        && (slot_step_n_r == req_step_n)
-        && (slot_desc_b_row_base_r == desc_b_row_base)
-        && (slot_desc_b_inrow_r    == desc_b_inrow)
-        && (slot_ldm_words_r       == desc_b_ldm_words);
-    wire bank_row_resident_n = req_wants_kmajor
-        ? bank_row_resident_kmajor_n
-        : (req_is_sparse ? bank_row_resident_sparse_n : bank_row_resident_dense_n);
+    for (genvar ci = 0; ci < NUM_CANDS; ++ci) begin : g_cand
+    `ifdef VX_CFG_TCU_SPARSE_ENABLE
+        wire sparse_c = cand[ci].is_sparse;
+    `else
+        wire sparse_c = 1'b0;
+    `endif
+        assign cand_resident_next[ci] = cand[ci].valid
+            && cand_resident_fn(cand[ci].cta_id, cand[ci].step_k, cand[ci].step_n, cand[ci].cd_nregs,
+                                cand[ci].is_first_uop, sparse_c, 32'(cand[ci].desc_b),
+                                slot_a_valid_n, slot_b_valid_n, refetched_n);
+        `UNUSED_VAR (cand[ci])
+    end
+
     wire need_fetch        = req_valid && !bank_row_resident;
     wire alloc_en          = need_fetch && !slot_fetching_r;
 
     assign bbuf_ready = !req_valid || bank_row_resident;
-    assign bbuf_ready_next = !req_valid || bank_row_resident_n;
     wire fire = req_valid && bbuf_ready;
 
     // -----------------------------------------------------------------------
@@ -426,7 +467,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     `UNUSED_VAR (tcu_lmem_if.rsp_data.tag)
 
     // Next-state of the residency flags; the registers below load these, so
-    // bbuf_ready_next sees exactly the state the next cycle starts from.
+    // cand_resident_next sees exactly the state the next cycle starts from.
     wire alloc_now = (fsm_state_r == S_IDLE) && alloc_en;
     wire a_done    = in_fetch_a && last_rsp;
     wire b_with_a  = a_done && slot_is_sparse_r

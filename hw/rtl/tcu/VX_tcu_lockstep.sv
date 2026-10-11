@@ -46,14 +46,15 @@ module VX_tcu_lockstep import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [BLOCK_SIZE-1:0]                 is_first_uop_b,
     input  wire [BLOCK_SIZE-1:0]                 is_last_uop_b,
 
-    // The uop each block will present next cycle (see VX_tcu_wgmma).
-    input  wire [BLOCK_SIZE-1:0]                 is_wgmma_nh_b,
-    input  wire [BLOCK_SIZE-1:0][NCTA_WIDTH-1:0] new_cta_nh_b,
+    // Candidates for each block's head next cycle: [0] the current head (if it
+    // does not fire), [1] the entry behind it (if it does).
+    input  wire [BLOCK_SIZE-1:0][1:0]                 is_wgmma_c,
+    input  wire [BLOCK_SIZE-1:0][1:0][NCTA_WIDTH-1:0] new_cta_c,
 
-    // gating output: this cycle's uop, and next cycle's against the
+    // gating output: this cycle's uop, and each candidate against the
     // ownership this cycle's fires leave behind
     output wire [BLOCK_SIZE-1:0]                 cta_conflict,
-    output wire [BLOCK_SIZE-1:0]                 cta_conflict_nh
+    output wire [BLOCK_SIZE-1:0][1:0]            cta_conflict_c
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -120,17 +121,19 @@ module VX_tcu_lockstep import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_owner_next
         assign cta_owner_next[bi] = leader_fire_b[bi] ? new_cta_b[bi] : cta_owner_r[bi];
     end
-    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_conflict_nh
-        logic cta_conflict_nh_r;
-        always_comb begin
-            cta_conflict_nh_r = 1'b0;
-            for (int k = 0; k < BLOCK_SIZE; ++k) begin
-                if (k != bi && in_expansion_next[k] && (cta_owner_next[k] != new_cta_nh_b[bi])) begin
-                    cta_conflict_nh_r = 1'b1;
+    for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_conflict_c
+        for (genvar ci = 0; ci < 2; ++ci) begin : g_cand
+            logic conflict_r;
+            always_comb begin
+                conflict_r = 1'b0;
+                for (int k = 0; k < BLOCK_SIZE; ++k) begin
+                    if (k != bi && in_expansion_next[k] && (cta_owner_next[k] != new_cta_c[bi][ci])) begin
+                        conflict_r = 1'b1;
+                    end
                 end
             end
+            assign cta_conflict_c[bi][ci] = is_wgmma_c[bi][ci] && conflict_r;
         end
-        assign cta_conflict_nh[bi] = is_wgmma_nh_b[bi] && cta_conflict_nh_r;
     end
 
     // -----------------------------------------------------------------------
