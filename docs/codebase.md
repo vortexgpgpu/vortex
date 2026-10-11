@@ -74,6 +74,7 @@ The directory/file layout of the Vortex codebase is as follows:
   - `runtime`: driver API tests
   - `mpi`: multi-process tests
 - `third_party`: external library submodules (cvfpu, softfloat, hardfloat,
-  ramulator, cocogfx)
+  ramulator, cocogfx), plus `ramulator_ext` (Vortex's Ramulator extensions:
+  per-channel refresh and the GDDR6 device)
 - `perf`: performance analysis resources
 - `miscs`: miscellaneous resources

@@ -11,27 +11,53 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <stdint.h>
+#pragma once
+
+#include <cstdint>
 
 namespace vortex {
 
+// Device memory behind the platform's memory banks: one DRAM channel (an
+// independent controller) per bank, timed by Ramulator.
 class DramSim {
 public:
   typedef bool (*ResponseCallback)(void *arg);
 
-  DramSim(uint32_t num_channels, uint32_t channel_size, float clock_ratio);
+  enum class Type {
+    HBM2,       // HBM2 at the 2 Gbps JEDEC preset, 64 B bursts
+    HBM2_A100,  // HBM2 with the A100 timing of GPGPU-Sim's SM80 configuration
+    GDDR6,      // GDDR6 x16 channels, 32 B bursts, 2 KB pages
+  };
+
+  struct Config {
+    Type     type;
+    uint32_t num_channels;  // need not be a power of two
+    uint32_t block_size;    // bytes per request
+    uint32_t core_clock;    // MHz
+    uint32_t dram_clock;    // MHz (GDDR6: the data clock, half the transfer rate)
+    uint32_t latency;       // fixed read latency added in core cycles (PHY, controller, NoC)
+    uint32_t window;        // requests a channel holds in flight; 0 = unbounded
+  };
+
+  // The memory configured in VX_config.toml.
+  static Config platform_config();
+
+  DramSim(const Config& config);
   ~DramSim();
 
   void reset();
 
   void tick();
 
-  // addr: per-channel block address
-  void send_request(uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg);
+  // False while the channel holds its window of requests.
+  bool can_accept(uint32_t channel) const;
+
+  // addr: byte address within the channel.
+  void send_request(uint32_t channel, uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg);
 
 private:
-	class Impl;
-	Impl* impl_;
+  class Impl;
+  Impl* impl_;
 };
 
 }

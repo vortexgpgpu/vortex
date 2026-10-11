@@ -20,10 +20,6 @@
 #define RAM_PAGE_SIZE     4096
 #endif
 
-#ifndef MEM_CLOCK_RATIO
-#define MEM_CLOCK_RATIO   1
-#endif
-
 #ifndef __MAX
 #define __MAX(a,b) (((a) > (b)) ? (a) : (b))
 #endif

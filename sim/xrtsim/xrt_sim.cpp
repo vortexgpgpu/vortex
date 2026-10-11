@@ -50,9 +50,6 @@
 
 #include <iostream>
 
-#ifndef MEM_CLOCK_RATIO
-#define MEM_CLOCK_RATIO 1
-#endif
 
 #define CACHE_BLOCK_SIZE  64
 
@@ -144,7 +141,7 @@ public:
   , ram_{}
   , host_ram_(nullptr)
   , host_alloc_(nullptr)
-  , dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO)
+  , dram_sim_(DramSim::platform_config())
   , stop_(false)
 #ifdef VCD_OUTPUT
   , tfp_(nullptr)
@@ -536,9 +533,9 @@ private:
     dram_sim_.tick();
 
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
-      if (!dram_queues_[b].empty()) {
+      if (!dram_queues_[b].empty() && dram_sim_.can_accept(b)) {
         auto mem_req = dram_queues_[b].front();
-        dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg)->bool {
+        dram_sim_.send_request(b, bank_local_addr(mem_req->addr), mem_req->write, [](void* arg)->bool {
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
           if (orig_req->ready) {
             delete orig_req;
@@ -553,6 +550,19 @@ private:
 
   #ifndef NDEBUG
     fflush(stdout);
+  #endif
+  }
+
+  // Byte address within its bank (DRAM channel) of an AXI bank address:
+  // VX_mem_to_axi places the bank select above the data-size bits when the
+  // banks are interleaved.
+  static uint64_t bank_local_addr(uint64_t axi_addr) {
+  #if VX_CFG_PLATFORM_MEMORY_INTERLEAVE == 1
+    constexpr uint32_t lg2_data_size = log2ceil(VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+    constexpr uint32_t bank_sel_bits = log2ceil(VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
+    return (axi_addr >> (bank_sel_bits + lg2_data_size)) << lg2_data_size;
+  #else
+    return axi_addr;
   #endif
   }
 

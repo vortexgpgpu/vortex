@@ -138,6 +138,27 @@ PERF: instrs=363180, cycles=53108, IPC=6.838518
 > to compare configurations relative to one another, not as fixed targets to
 > reproduce.
 
+### Configuring the DRAM Model
+
+The simulators (simx, rtlsim, opaesim, xrtsim) all model the device memory
+the same way: one independent DRAM channel per platform memory bank, timed by
+[Ramulator](https://github.com/CMU-SAFARI/ramulator2), with its refresh. These
+`VX_config.toml` keys select it, overridable through `CONFIGS` or a profile:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `VX_CFG_PLATFORM_MEMORY_TYPE` | `HBM2` | `HBM2` (JEDEC 2 Gbps), `HBM2_A100` (GPGPU-Sim's A100 timing) or `GDDR6` (x16 channels, 32 B bursts) |
+| `VX_CFG_PLATFORM_MEMORY_NUM_BANKS` | 2 | memory banks, and so DRAM channels |
+| `VX_CFG_PLATFORM_MEMORY_CLOCK_RATE` | 1000 | DRAM clock in MHz (GDDR6: the data clock, half the transfer rate) |
+| `VX_CFG_PLATFORM_CLOCK_RATE` | 400 | core clock in MHz; with the DRAM clock it sets how many DRAM cycles a core cycle spans |
+| `VX_CFG_PLATFORM_MEMORY_LATENCY` | 0 | fixed read latency added for the PHY, controller and interconnect, in core cycles |
+| `VX_CFG_PLATFORM_MEMORY_WINDOW` | 0 | requests a channel holds in flight (0 = unbounded) |
+
+```bash
+$ CONFIGS="-DVX_CFG_PLATFORM_MEMORY_TYPE=GDDR6 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=16 -DVX_CFG_PLATFORM_MEMORY_CLOCK_RATE=8000" \
+  ./ci/blackbox.sh --driver=simx --app=vecadd
+```
+
 ## Additional Quick Start Scenarios
 
 Running Vortex simulators with different configurations and drivers is supported. For example:

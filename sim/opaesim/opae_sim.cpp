@@ -40,14 +40,11 @@
 #include <future>
 #include <thread>
 #include <atomic>
+#include <array>
 #include <list>
 #include <queue>
 #include <unordered_map>
 #include <util.h>
-
-#ifndef MEM_CLOCK_RATIO
-#define MEM_CLOCK_RATIO 1
-#endif
 
 #define CACHE_BLOCK_SIZE  64
 
@@ -100,7 +97,7 @@ public:
   Impl()
   : device_(nullptr)
   , ram_(nullptr)
-  , dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO)
+  , dram_sim_(DramSim::platform_config())
   , stop_(false)
   , host_buffer_ids_(0)
 #ifdef VCD_OUTPUT
@@ -297,9 +294,8 @@ private:
       reqs.clear();
     }
 
-    {
-      std::queue<mem_req_t*> empty;
-      std::swap(dram_queue_, empty);
+    for (auto& queue : dram_queues_) {
+      queue = std::queue<mem_req_t*>();
     }
 
     device_->reset = 1;
@@ -318,9 +314,15 @@ private:
     this->cci_bus_eval();
     this->avs_bus_eval();
 
-    if (!dram_queue_.empty()) {
-      auto mem_req = dram_queue_.front();
-      dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg)->bool {
+    dram_sim_.tick();
+
+    for (uint32_t b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      auto& queue = dram_queues_[b];
+      if (queue.empty() || !dram_sim_.can_accept(b)) {
+        continue;
+      }
+      auto mem_req = queue.front();
+      dram_sim_.send_request(b, uint64_t(mem_req->addr) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE, mem_req->write, [](void* arg)->bool {
         auto orig_req = reinterpret_cast<mem_req_t*>(arg);
         if (orig_req->ready) {
           delete orig_req;
@@ -329,10 +331,8 @@ private:
         }
         return true;
       }, mem_req);
-      dram_queue_.pop();
+      queue.pop();
     }
-
-    dram_sim_.tick();
 
     device_->clk = 0;
     this->eval();
@@ -499,7 +499,7 @@ private:
         mem_req->write = true;
         mem_req->ready = true;
 
-        dram_queue_.push(mem_req);
+        dram_queues_[b].push(mem_req);
       } else
       if (device_->avs_read[b]) {
         // process read request
@@ -512,7 +512,7 @@ private:
         pending_mem_reqs_[b].emplace_back(mem_req);
 
         // send dram request
-        dram_queue_.push(mem_req);
+        dram_queues_[b].push(mem_req);
       }
 
       device_->avs_waitrequest[b] = false;
@@ -580,7 +580,7 @@ private:
     }
   };
 
-  std::queue<mem_req_t*> dram_queue_;
+  std::array<std::queue<mem_req_t*>, VX_CFG_PLATFORM_MEMORY_NUM_BANKS> dram_queues_;
 
 #ifdef VCD_OUTPUT
   VerilatedVcdC *tfp_;

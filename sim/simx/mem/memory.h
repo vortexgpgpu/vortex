@@ -15,6 +15,7 @@
 
 #include "types.h"
 #include <mem.h>
+#include <dram_sim.h>
 #include <functional>
 
 namespace vortex {
@@ -22,10 +23,8 @@ namespace vortex {
 class Memory : public SimObject<Memory>{
 public:
 	struct Config {
-		uint32_t num_banks;
 		uint32_t num_ports;
-		uint32_t block_size;
-		float clock_ratio;
+		DramSim::Config dram;  // one DRAM channel per memory bank
 	};
 
 	struct PerfStats {
