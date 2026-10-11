@@ -313,6 +313,13 @@ class EnumSpec:
   values: List[Any]
 
 
+def _enum_of_flag(name: str, enums: Dict[str, EnumSpec]) -> Optional[str]:
+  # The enum a bare -D<ENUM>_<value> flag selects. A value may itself contain
+  # '_', so the enum name is matched as a prefix instead of splitting the flag.
+  owners = [e for e in enums if name.startswith(e + "_")]
+  return max(owners, key=len) if owners else None
+
+
 def _load_enums(toml_data: Dict[str, Any]) -> Dict[str, EnumSpec]:
   enums = toml_data.get("enum", None)
   if enums is None:
@@ -454,10 +461,10 @@ def _apply_overrides(defs: List[Define], enums: Dict[str, EnumSpec]) -> Tuple[Di
       set_enum(d.name, _scalar(d.value))
       continue
 
-    if "_" in d.name and d.value is None:
-      base, suffix = d.name.rsplit("_", 1)
-      if base in enums:
-        set_enum(base, _scalar(suffix))
+    if d.value is None:
+      base = _enum_of_flag(d.name, enums)
+      if base is not None:
+        set_enum(base, _scalar(d.name[len(base) + 1:]))
         overrides[d.name] = True
         explicit.add(d.name)
         continue
@@ -574,9 +581,9 @@ def _canonical_define(tok: str, enums: Dict[str, EnumSpec]) -> Optional[str]:
     return d.name[:-len("_DISABLE")] + "_ENABLE"
   if d.name in enums:
     return d.name
-  if d.value is None and "_" in d.name:
-    base, _ = d.name.rsplit("_", 1)
-    if base in enums:
+  if d.value is None:
+    base = _enum_of_flag(d.name, enums)
+    if base is not None:
       return base
   return d.name
 
