@@ -5,6 +5,8 @@ The directory/file layout of the Vortex codebase is as follows:
 - `VX_config.toml` / `VX_types.toml`: hardware configuration system — the single
   source of truth for all build-time parameters (see the
   [build configuration system](designs/build_configuration_system.md)).
+- `profiles`: hardware profiles — named machines (`a100`, `rtx5080`, `tinygpu`, ...)
+  layered over `VX_config.toml` (see [Hardware Profiles](simulation.md#hardware-profiles))
 - `ci`: continuous integration scripts
   - `testcases`: declarative test catalog (YAML), executed by the pytest harness
   - `baselines/perf`: golden performance baselines for the perf-regression gate

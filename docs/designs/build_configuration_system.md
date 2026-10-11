@@ -241,6 +241,26 @@ Two details are load-bearing:
   against a driver built with another disagrees about the hardware shape with
   no diagnostic; rebuild the application with the same `CONFIGS` first.
 
+### 6.1 Hardware profiles
+
+A hardware profile (`profiles/<name>.json`) is a named machine layered between
+the TOML defaults and the caller's flags. `PROFILE` — set by
+`configure --profile=<name>` or `blackbox.sh --profile=<name>` — makes
+`config.mk` fold the profile into `CONFIGS` once, so every consumer in the
+table above sees one `CONFIGS`:
+
+```make
+override CONFIGS := $(shell python3 $(VORTEX_HOME)/ci/gen_config.py --config=... \
+                      --profile=$(PROFILE) --merge-configs --cflags='$(CONFIGS)')
+```
+
+`--merge-configs` drops every profile entry for a knob the caller already sets
+(recognising `X_DISABLE`/`X_ENABLE` and `X_<v>`/`X=<v>` as one knob), so
+explicit flags win, then appends the caller's `CONFIGS` verbatim. The
+generator validates a profile against the TOML: every key must be a public
+knob, enum values must be declared, values are literals (expressions belong in
+the TOML), and `sources` is required.
+
 ---
 
 ## 7. The hardware/software boundary
