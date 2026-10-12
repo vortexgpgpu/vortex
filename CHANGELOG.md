@@ -34,6 +34,9 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   of at least half the LLC write around it. A launch behind DMA writes waits for an L1-only flush token sent on the slot. The runtime
   sees the new `DMA_LLC_CLIENT` CP capability. *Why:* rtlsim at 2 clusters + L2 + L3: dogfood -30%, multikernel -42.7%; dogfood
   -64% with an 8 MB L3.
+- **maxsim: threaded FPGA simulation of Vortex on the Alveo V80, compiled by CIRCT.** Every class of identical units (sockets, issue slices, ALUs, FPUs, load-store units) is time-multiplexed through one physical copy, cycle-exact against the RTL, with no Chisel, Golden Gate, Yosys or sv2v: `circt-verilog` imports Vortex, CIRCT's `maxsim-extract-models` / `maxsim-compose` cut it into threaded models joined by one token fabric ([hw/syn/maxsim/maxsim.py](hw/syn/maxsim/maxsim.py)), and the V80's native flow packages it with a latency-bandwidth memory endpoint and a command-queue control block ([hw/rtl/afu/maxsim/](hw/rtl/afu/maxsim/)). `--driver=maxsim` runs it on the card (`TARGET=hw`, VRT + QDMA) or in-process in Verilator (`avedsim`, the default). Vortex's RTL is unchanged: units get plain-port boundaries and instance IDs as ports from a source-to-source pass on the flow's copy ([hw/syn/maxsim/lift_boundaries.py](hw/syn/maxsim/lift_boundaries.py)). See [docs/designs/maxsim.md](docs/designs/maxsim.md).
+  *Why:* the simulated GPU is no longer bounded by the card's size, and the shell around it is ~8k LUTs instead of FireSim's ~93k — s2w4i2 (2 cores, NW=NT=4, IW=2) routes in 138k LUTs vs 219k and runs sgemm n=128 in 196 ms on V80: 50× SimX on the same host, 1.7× the FireSim image, cycle counts identical to Verilator.
+  *Limits:* V80 only; one memory port, single-beat transactions; classes are named (`MAXSIM_CLASSES`), not found; kernel register offsets 0x40–0xBF are unusable on the V80 shell (its PCIe MSI-X table answers them).
 
 ### Changed
 
