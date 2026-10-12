@@ -18,19 +18,10 @@ module VX_uuid_gen import VX_gpu_pkg::*; #(
 ) (
     input wire clk,
     input wire reset,
-`ifdef VX_CFG_FAME5
-    input wire [31:0]       core_id,
-`endif
     input wire incr,
     input wire [NW_WIDTH-1:0] wid,
     output wire [UUID_WIDTH-1:0] uuid
 );
-
-`ifdef VX_CFG_FAME5
-    wire [31:0] core_id_v = core_id;
-`else
-    wire [31:0] core_id_v = 32'(CORE_ID);
-`endif
     localparam GNW_WIDTH = UUID_WIDTH - 32;
     reg [31:0] uuid_cntrs [0:`VX_CFG_NUM_WARPS-1];
     reg [`VX_CFG_NUM_WARPS-1:0] has_uuid_cntrs;
@@ -46,7 +37,7 @@ module VX_uuid_gen import VX_gpu_pkg::*; #(
         end
     end
 
-    wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(core_id_v) << NW_BITS) + GNW_WIDTH'(wid);
+    wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(CORE_ID) << NW_BITS) + GNW_WIDTH'(wid);
     assign uuid = {g_wid, (has_uuid_cntrs[wid] ? uuid_cntrs[wid] : 0)};
 
 endmodule

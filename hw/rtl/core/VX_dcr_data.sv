@@ -19,9 +19,6 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
 ) (
     input wire              clk,
     input wire              reset,
-`ifdef VX_CFG_FAME5
-    input wire [31:0]       core_id,
-`endif
 
     // Inputs
     VX_dcr_bus_if.slave     dcr_bus_if,
@@ -32,13 +29,6 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     // DCR-triggered cache flush
     VX_dcr_flush_if.master  dcr_flush_if
 );
-
-`ifdef VX_CFG_FAME5
-    wire [31:0] core_id_v = core_id;
-`else
-    wire [31:0] core_id_v = 32'(CORE_ID);
-`endif
-    `UNUSED_VAR (core_id_v)
     `UNUSED_SPARAM (INSTANCE_ID)
 
     // MPM perf-counter readback via DCR interface ////////////////////////////
@@ -59,7 +49,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     wire is_mpm_read = dcr_bus_if.req_valid
                     && ~dcr_bus_if.req_data.rw
                     && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_MPM_VALUE)
-                    && (mpm_target_cid == 16'(core_id_v))
+                    && (mpm_target_cid == 16'(CORE_ID))
                     && ~dcr_csr_pending_r;
 
     always @(posedge clk) begin
@@ -89,7 +79,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     wire is_flush_read = dcr_bus_if.req_valid
                       && ~dcr_bus_if.req_data.rw
                       && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH)
-                      && (mpm_target_cid == 16'(core_id_v))
+                      && (mpm_target_cid == 16'(CORE_ID))
                       && ~flush_pending_r;
 
     always @(posedge clk) begin

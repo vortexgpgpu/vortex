@@ -21,9 +21,6 @@ module VX_execute import VX_gpu_pkg::*; #(
 
     input wire              clk,
     input wire              reset,
-`ifdef VX_CFG_FAME5
-    input wire [31:0]       core_id,
-`endif
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t     sysmem_perf,
@@ -108,9 +105,6 @@ module VX_execute import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (0)
         .clk             (clk),
         .reset           (reset),
-        `ifdef VX_CFG_FAME5
-            .core_id        (core_id),
-        `endif
         .dispatch_if         (dispatch_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .commit_if           (commit_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .per_block_client_if (lsu_client_if)
@@ -154,9 +148,6 @@ module VX_execute import VX_gpu_pkg::*; #(
     ) sfu_unit (
         .clk            (clk),
         .reset          (reset),
-        `ifdef VX_CFG_FAME5
-            .core_id        (core_id),
-        `endif
     `ifdef PERF_ENABLE
         .sysmem_perf    (sysmem_perf),
         .pipeline_perf  (pipeline_perf),

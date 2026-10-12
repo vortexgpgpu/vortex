@@ -26,9 +26,6 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // Clock
     input wire              clk,
     input wire              reset,
-`ifdef VX_CFG_FAME5
-    input wire [31:0]       core_id,
-`endif
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t     sysmem_perf,
@@ -213,9 +210,6 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     ) dcr_data (
         .clk        (clk),
         .reset      (reset),
-        `ifdef VX_CFG_FAME5
-            .core_id        (core_id),
-        `endif
         .dcr_bus_if (dcr_bus_if),
         .dcr_csr_if (dcr_csr_if),
         .dcr_flush_if(dcr_flush_if)
@@ -231,9 +225,6 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     ) scheduler (
         .clk            (clk),
         .reset          (reset),
-        `ifdef VX_CFG_FAME5
-            .core_id        (core_id),
-        `endif
 
     `ifdef PERF_ENABLE
         .sched_perf     (pipeline_perf.sched),
@@ -323,9 +314,6 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
         .clk            (clk),
         .reset          (reset),
-        `ifdef VX_CFG_FAME5
-            .core_id        (core_id),
-        `endif
 
     `ifdef PERF_ENABLE
         .sysmem_perf    (sysmem_perf_tmp),
