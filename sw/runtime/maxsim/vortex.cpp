@@ -71,6 +71,8 @@ constexpr uint64_t kMemBase = 0x4000000000ull;
 
 class transport_t {
 public:
+  // The kernel advances while it is accessed.
+  static constexpr bool kRunsOnItsOwn = false;
   int init() { return sim_.init(); }
   int reg_write(uint32_t off, uint32_t v) { return sim_.reg_write(off, v); }
   int reg_read(uint32_t off, uint32_t* v) { return sim_.reg_read(off, v); }
@@ -100,6 +102,8 @@ private:
 
 class transport_t {
 public:
+  // The kernel runs on the card whether or not the host looks.
+  static constexpr bool kRunsOnItsOwn = true;
   int init() {
     const char* vbin = getenv("VRT_VBIN_PATH");
     if (vbin == nullptr || vbin[0] == '\0') {
@@ -176,24 +180,16 @@ public:
     return 0;
   }
 
-  // QDMA moves whole 4 KB pages; a partial one is read, merged and written.
+  // QDMA moves any byte range: only the offset into the staging buffer must
+  // be page aligned, not the device address or the length. A write is the
+  // bytes it writes, with no read of the pages around them.
   int mem_write(uint64_t addr, const void* src, uint64_t n) {
     std::lock_guard<std::mutex> lock(mutex_);
     auto* bytes = static_cast<const uint8_t*>(src);
     while (n != 0) {
-      const uint64_t page = addr & ~(kPage - 1);
-      const uint64_t off = addr - page;
-      const uint64_t span = std::min<uint64_t>(kDmaChunk - off, n);
-      const uint64_t len = (off + span + kPage - 1) & ~(kPage - 1);
-      if (off != 0 || (span % kPage) != 0) {
-        // Only the first and last pages can be partial.
-        if (dma(page, staging_, kPage, false) != 0 ||
-            (len > kPage &&
-             dma(page + len - kPage, staging_ + len - kPage, kPage, false) != 0))
-          return -1;
-      }
-      std::memcpy(staging_ + off, bytes, span);
-      if (dma(page, staging_, len, true) != 0)
+      const uint64_t span = std::min<uint64_t>(kDmaChunk, n);
+      std::memcpy(staging_, bytes, span);
+      if (dma(addr, staging_, span, true) != 0)
         return -1;
       addr += span;
       bytes += span;
@@ -206,13 +202,10 @@ public:
     std::lock_guard<std::mutex> lock(mutex_);
     auto* bytes = static_cast<uint8_t*>(dst);
     while (n != 0) {
-      const uint64_t page = addr & ~(kPage - 1);
-      const uint64_t off = addr - page;
-      const uint64_t span = std::min<uint64_t>(kDmaChunk - off, n);
-      const uint64_t len = (off + span + kPage - 1) & ~(kPage - 1);
-      if (dma(page, staging_, len, false) != 0)
+      const uint64_t span = std::min<uint64_t>(kDmaChunk, n);
+      if (dma(addr, staging_, span, false) != 0)
         return -1;
-      std::memcpy(bytes, staging_ + off, span);
+      std::memcpy(bytes, staging_, span);
       addr += span;
       bytes += span;
       n -= span;
@@ -221,12 +214,11 @@ public:
   }
 
 private:
-  static constexpr uint64_t kPage = 4096;
   static constexpr uint64_t kDmaChunk = 64ull << 20;
-  static constexpr uint64_t kStaging = kDmaChunk + kPage;
+  static constexpr uint64_t kStaging = kDmaChunk;
 
   // `len` bytes at target address `addr`, from or to `host` in the staging
-  // buffer, both page aligned.
+  // buffer, page aligned.
   int dma(uint64_t addr, uint8_t* host, uint64_t len, bool to_device) {
     struct slash_qdma_transfer xfer = {};
     xfer.size = sizeof(xfer);
@@ -465,10 +457,40 @@ private:
   int wait_idle() {
     uint32_t s = 0;
     do {
-      if (status(&s) != 0)
+      if (status(&s) != 0 || mem_error(s))
         return -1;
     } while (s & MAXSIM_STATUS_BUSY);
     return 0;
+  }
+
+  // The memory endpoint takes single-beat transactions; a target that makes a
+  // burst stops the simulation there, busy for good.
+  bool mem_error(uint32_t s) {
+    if (!(s & MAXSIM_STATUS_MEM_ERR))
+      return false;
+    if (!mem_error_reported_) {
+      fprintf(stderr, "[VXDRV] the target made a memory burst, which the memory "
+                      "model does not take; the simulation is stopped\n");
+      mem_error_reported_ = true;
+    }
+    return true;
+  }
+
+  // The target runs on its own: once it has been busy for a while, polling it
+  // back to back only spins a core, so the poll sleeps, longer the longer the
+  // target stays busy (up to kMaxPollSleepUs).
+  void poll_backoff(bool busy) {
+    if (!transport_t::kRunsOnItsOwn)
+      return;
+    if (!busy) {
+      busy_polls_ = 0;
+      return;
+    }
+    if (++busy_polls_ <= kSpinPolls)
+      return;
+    const uint64_t us = std::min<uint64_t>(1ull << std::min<uint64_t>(busy_polls_ - kSpinPolls, 7),
+                                           kMaxPollSleepUs);
+    std::this_thread::sleep_for(std::chrono::microseconds(us));
   }
 
   void* host_region_ptr(uint64_t addr) {
@@ -517,9 +539,11 @@ private:
     h.vortex_start = [this]() { command(MAXSIM_CMD_START, 0, 0); };
     h.vortex_busy = [this]() -> bool {
       uint32_t s = 0;
-      if (status(&s) != 0)
+      if (status(&s) != 0 || mem_error(s))
         return false;
-      return (s & MAXSIM_STATUS_BUSY) != 0;
+      const bool busy = (s & MAXSIM_STATUS_BUSY) != 0;
+      poll_backoff(busy);
+      return busy;
     };
 #ifdef VX_CFG_VM_ENABLE
     h.mmu_fault_report = true;
@@ -527,7 +551,14 @@ private:
     return h;
   }
 
+  // Polls back to back before the first sleep: about a millisecond at a PCIe
+  // round trip each.
+  static constexpr uint64_t kSpinPolls = 1024;
+  static constexpr uint64_t kMaxPollSleepUs = 100;
+
   counted_transport_t transport_;
+  uint64_t busy_polls_ = 0;
+  bool mem_error_reported_ = false;
   bool open_ = false;
   vortex::CommandProcessor cp_;
   std::mutex host_mu_;
