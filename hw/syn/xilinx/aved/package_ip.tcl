@@ -14,9 +14,9 @@
 # Package the AFU as an IP-XACT component. The V80 linker consumes the
 # component.xml directly, so there is no intermediate object container.
 
-if { $::argc != 4 } {
-    puts "ERROR: Program \"$::argv0\" requires 4 arguments!\n"
-    puts "Usage: $::argv0 <krnl_name> <vcs_file> <build_dir> <part>\n"
+if { $::argc != 4 && $::argc != 5 } {
+    puts "ERROR: Program \"$::argv0\" requires 4 or 5 arguments!\n"
+    puts "Usage: $::argv0 <krnl_name> <vcs_file> <build_dir> <part> \[no-vendor-ip\]\n"
     exit 1
 }
 
@@ -24,6 +24,9 @@ set krnl_name [lindex $::argv 0]
 set vcs_file  [lindex $::argv 1]
 set build_dir [lindex $::argv 2]
 set part      [lindex $::argv 3]
+# A kernel whose RTL instantiates no vendor floating-point core (a maxsim
+# simulator, whose FPU is soft logic) is packaged without them.
+set vendor_ip [expr {$::argc != 5 || [lindex $::argv 4] ne "no-vendor-ip"}]
 
 set tool_dir $::env(TOOL_DIR)
 
@@ -36,9 +39,11 @@ set path_to_packaged     "${build_dir}/${krnl_name}_ip"
 # and RTL elaboration fails at link time, after the IP looks fine.
 # xilinx_ip_gen.tcl opens and closes its own in-memory project, so it has to
 # run before the packaging project below.
-set argv [list ${build_dir}/ip $part]
-set argc 2
-source ${tool_dir}/xilinx_ip_gen.tcl
+if {$vendor_ip} {
+    set argv [list ${build_dir}/ip $part]
+    set argc 2
+    source ${tool_dir}/xilinx_ip_gen.tcl
+}
 
 create_project -force kernel_pack $path_to_tmp_project -part $part
 
@@ -65,11 +70,13 @@ foreach line [split $data "\n"] {
 
 # Pull in the floating-point cores generated above so they are packaged
 # alongside the RTL. The set matches the XRT flow's package_kernel.tcl.
-set ip_files [list]
-foreach ip {xil_fdiv xil_fma xil_fsqrt xil_fmul xil_fadd} {
-    lappend ip_files [file normalize "${build_dir}/ip/${ip}/${ip}.xci"]
+if {$vendor_ip} {
+    set ip_files [list]
+    foreach ip {xil_fdiv xil_fma xil_fsqrt xil_fmul xil_fadd} {
+        lappend ip_files [file normalize "${build_dir}/ip/${ip}/${ip}.xci"]
+    }
+    add_files -verbose -norecurse -fileset [get_filesets sources_1] $ip_files
 }
-add_files -verbose -norecurse -fileset [get_filesets sources_1] $ip_files
 
 set_property top $krnl_name [current_fileset]
 update_compile_order -fileset sources_1
