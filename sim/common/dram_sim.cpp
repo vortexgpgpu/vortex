@@ -36,17 +36,64 @@ using namespace vortex;
 
 namespace {
 
-// IPOLY(5) bank hash over 16 banks (Rau, "Pseudo-randomly interleaved memory",
-// ISCA 1991), GPGPU-Sim's -dram_bnk_indexing_policy 2: the bank XORed with a
-// function of the row, so streams whose bases differ by a power of two land in
-// different banks instead of closing each other's rows.
-uint32_t ipoly16(uint64_t row, uint32_t bank) {
-  auto bit = [row](int i) { return uint32_t(row >> i) & 1u; };
-  uint32_t i0 = bit(11) ^ bit(10) ^ bit(9) ^ bit(8) ^ bit(6) ^ bit(4) ^ bit(3) ^ bit(0);
-  uint32_t i1 = bit(12) ^ bit(8) ^ bit(7) ^ bit(6) ^ bit(5) ^ bit(3) ^ bit(1) ^ bit(0);
-  uint32_t i2 = bit(9) ^ bit(8) ^ bit(7) ^ bit(6) ^ bit(4) ^ bit(2) ^ bit(1);
-  uint32_t i3 = bit(10) ^ bit(9) ^ bit(8) ^ bit(7) ^ bit(5) ^ bit(3) ^ bit(2);
-  return bank ^ (i0 | (i1 << 1) | (i2 << 2) | (i3 << 3));
+// Bus timings are DRAM clocks, fixed by the burst; array timings are
+// nanoseconds, which Ramulator converts at the configured data rate.
+struct clock_timing_t {
+  const char* name;
+  int clocks;
+};
+
+struct ns_timing_t {
+  const char* name;
+  float ns;
+};
+
+// A 32 B burst is BL4 on a 64-bit pseudo-channel: two clocks, and the same
+// spacing between column commands to another bank group (four within one).
+// nRTW only completes the set Ramulator requires.
+const clock_timing_t hbm_bus_timing[] = {
+  {"nBL", 2}, {"nCCDS", 2}, {"nCCDL", 4}, {"nRTW", 3},
+};
+
+// JEDEC HBM2 array timing as GPGPU-Sim's SM7_QV100 configuration lists it (its
+// JEDEC line, at 1 GHz: RCD=RP=CL=14, RAS=33, RC=47, WR=12, RRD=4, RTPL=4);
+// the rest from Ramulator's HBM2_2Gbps preset, whose 1 ns clock makes its
+// cycles nanoseconds. The array does not speed up with the interface: HBM2E
+// and HBM3 parts keep these timings (GPGPU-Sim's SM80_A100 and SM90_H100 HBM
+// lines are the same 14/33/47 ns at their own clocks). Refresh timings complete
+// the set Ramulator requires.
+const ns_timing_t hbm_array_timing[] = {
+  {"tCL", 14}, {"tRCDRD", 14}, {"tRCDWR", 14}, {"tRP", 14}, {"tRAS", 33}, {"tRC", 47},
+  {"tCWL", 2}, {"tWR", 12}, {"tRTPS", 2}, {"tRTPL", 4}, {"tRRDS", 4}, {"tRRDL", 4},
+  {"tWTRS", 3}, {"tWTRL", 4}, {"tFAW", 15}, {"tRFCSB", 160}, {"tREFI", 3900}, {"tRREFD", 8},
+};
+
+// Ramulator's GDDR6 clock is half the data rate: a 32 B burst, 16 beats on a
+// x16 channel, is eight clocks, and column commands are two (three within a
+// bank group) command clocks apart, a command clock being eight data beats.
+const clock_timing_t gddr6_bus_timing[] = {
+  {"nBL", 8}, {"nCCDS", 8}, {"nCCDL", 12},
+};
+
+// Ramulator's x16 GDDR6 timing at 2000 (its GDDR6_2000_1350mV_double preset
+// and secondary tables) at its 570 ps command clock, in nanoseconds; refresh
+// timings complete the set Ramulator requires.
+const ns_timing_t gddr6_array_timing[] = {
+  {"tCL", 13.7f}, {"tRCDRD", 14.8f}, {"tRCDWD", 9.1f}, {"tRP", 14.8f}, {"tRAS", 30.2f}, {"tRC", 45.0f},
+  {"tWR", 14.8f}, {"tRTP", 2.3f}, {"tCWL", 3.4f}, {"tRRDS", 2.9f}, {"tRRDL", 3.4f},
+  {"tWTRS", 5.1f}, {"tWTRL", 6.3f}, {"tFAW", 16.0f},
+  {"tRFC", 120.0f}, {"tRFCpb", 60.0f}, {"tREFI", 1900.0f}, {"tRREFD", 8.0f},
+};
+
+template <size_t B, size_t A>
+void set_timing(YAML::Node timing, uint32_t data_rate, const clock_timing_t (&bus)[B], const ns_timing_t (&array)[A]) {
+  timing["rate"] = data_rate;
+  for (auto& t : bus) {
+    timing[t.name] = t.clocks;
+  }
+  for (auto& t : array) {
+    timing[t.name] = t.ns;
+  }
 }
 
 }
@@ -71,139 +118,126 @@ private:
     uint64_t ready_cycle;
   };
 
-  // GDDR6 holds a fixed 16 Gb per device, so its row count shrinks as the
-  // channel count grows (Ramulator only knows the refresh timing of 4/8/16 Gb
-  // devices); rows alias above that capacity, which only affects row hits.
-  static constexpr uint32_t gddr6_density_mb_ = 16384;
+  // An independent controller and its device. It accepts one transaction per
+  // DRAM cycle and returns its responses independently of the other channels;
+  // write acknowledgements do not wait behind read data.
+  struct channel_t {
+    Ramulator::IFrontEnd* frontend;
+    Ramulator::IMemorySystem* memory_system;
+    std::queue<mem_tx_t> pending_txs;
+    std::deque<mem_rsp_t> read_rsps;
+    std::deque<mem_rsp_t> write_rsps;
+    uint32_t inflight;
+  };
+
+  // Each standard moves 32 B per column command (prefetch x channel width).
+  static constexpr uint32_t tx_size_ = 32;
+
+  // Every device here holds 8 Gb per channel; addresses above alias, which
+  // only affects row hits.
+  static constexpr uint64_t channel_size_ = uint64_t(1) << 30;
+
+  // Bursts per row visit (minimalist open page, 128 B).
+  static constexpr uint32_t row_visit_bits_ = 2;
 
   Config config_;
-  uint32_t tx_size_;
-  uint32_t row_mask_;
-  Ramulator::IFrontEnd* ramulator_frontend_;
-  Ramulator::IMemorySystem* ramulator_memorysystem_;
-  uint32_t ch_bits_;
+  uint32_t bank_bits_;    // pseudo-channel, bank group and bank
+  uint32_t column_bits_;  // bursts per row
+  std::vector<channel_t> channels_;
   uint64_t cycle_;
-  // DRAM ticks owed, in units of 1/core_clock: each core cycle adds
-  // dram_clock, each DRAM tick takes core_clock.
+  // DRAM ticks owed, in units of 1/(2 x core_clock): each core cycle adds the
+  // data rate, each DRAM tick (half the data rate) takes 2 x core_clock.
   uint64_t clock_credit_;
-  // A channel accepts one transaction per DRAM cycle and returns its
-  // responses independently of the others; write acknowledgements do not wait
-  // behind read data.
-  std::vector<std::queue<mem_tx_t>> pending_txs_;
-  std::vector<std::deque<mem_rsp_t>> read_rsps_;
-  std::vector<std::deque<mem_rsp_t>> write_rsps_;
-  std::vector<uint32_t> inflight_;
 
-  // Ramulator address of a transaction: the channel in the low bits, then the
-  // fields in the order the RoBaRaCoCh mapper slices them.
-  uint64_t dram_addr(uint32_t channel, uint64_t addr) const {
-    uint64_t t;
-    if (config_.type == Type::GDDR6) {
-      // GPGPU-Sim's RTX 3070 layout (-gpgpu_mem_addr_mapping): 32 B bursts,
-      // two column bits, one bank bit, four column bits, three bank bits,
-      // row; the low bank bit selects the bank group.
-      uint64_t col  = ((addr >> 5) & 0x3) | (((addr >> 8) & 0xf) << 2);
-      uint64_t row  = (addr >> 15) & row_mask_;
-      uint32_t bank = ipoly16(row, uint32_t(((addr >> 7) & 0x1) | (((addr >> 12) & 0x7) << 1)));
-      t = row;
-      t = (t << 2) | (bank >> 2);
-      t = (t << 2) | (bank & 0x3);
-      t = (t << 6) | col;
-    } else {
-      // The A100 HBM interleave: a stream alternates column, pseudo-channel
-      // and column again at 64 B granules, then changes bank group every 4 KB
-      // and bank every 16 KB, with 2 KB rows. HBM2_A100 uses 2 of the 4 banks
-      // of a group (16 per channel), as GPGPU-Sim models the A100; HBM2 all 4.
-      uint32_t bank_bits = (config_.type == Type::HBM2_A100) ? 1 : 2;
-      uint64_t col  = (((addr >> 8) & 0xf) << 1) | ((addr >> 6) & 0x1);
-      uint64_t pc   = (addr >> 7) & 0x1;
-      uint64_t bg   = (addr >> 12) & 0x3;
-      uint64_t bank = (addr >> 14) & ((1u << bank_bits) - 1);
-      uint64_t row  = (addr >> (14 + bank_bits)) & row_mask_;
-      t = row;
-      t = (t << 2) | bank;
-      t = (t << 2) | bg;
-      t = (t << 1) | pc;
-      t = (t << 5) | col;
-    }
-    t = (t << ch_bits_) | channel;
-    return t * tx_size_;
-  }
-
-  static void set_hbm2_device(YAML::Node& dram, const Config& config, uint32_t pow2_channels) {
-    dram["impl"] = "HBM2";
-    dram["org"]["preset"] = "HBM2_8Gb";
+  static void set_hbm_device(YAML::Node dram, const Config& config) {
+    // Ramulator's 8 Gb organization: 2 pseudo-channels x 4 bank groups x 4
+    // banks, 1 KB rows; a 128-bit channel width with the 2n prefetch makes a
+    // transaction one 32 B pseudo-channel burst.
+    dram["impl"] = (config.type == Type::HBM3) ? "HBM3" : "HBM2";
+    dram["org"]["preset"] = (config.type == Type::HBM3) ? "HBM3_8Gb" : "HBM2_8Gb";
     dram["org"]["density"] = 8192;
-    dram["org"]["channel"] = pow2_channels;
-    // A transaction is one burst: 2 x 256-bit prefetch = 64 B.
-    dram["org"]["channel_width"] = 256;
-    dram["timing"]["preset"] = "HBM2_2Gbps";
-    if (config.type == Type::HBM2_A100) {
-      // GPGPU-Sim SM80_A100 HBM timing in DRAM cycles. One 64 B transaction
-      // is two of its 32 B atoms, so the same-bank-group spacing is twice its
-      // tCCDL.
-      auto timing = dram["timing"];
-      timing["nCL"]    = 22;
-      timing["nRCDRD"] = 22;
-      timing["nRCDWR"] = 22;
-      timing["nRP"]    = 22;
-      timing["nRAS"]   = 50;
-      timing["nRC"]    = 72;
-      timing["nWR"]    = 19;
-      timing["nRTPS"]  = 7;
-      timing["nRTPL"]  = 7;
-      timing["nCWL"]   = 4;
-      timing["nCCDS"]  = 2;
-      timing["nCCDL"]  = 8;
-      timing["nRRDS"]  = 7;
-      timing["nRRDL"]  = 7;
-    }
+    dram["org"]["channel"] = 1;
+    dram["org"]["channel_width"] = 128;
+    set_timing(dram["timing"], config.data_rate, hbm_bus_timing, hbm_array_timing);
   }
 
-  static void set_gddr6_device(YAML::Node& dram, const Config& config, uint32_t pow2_channels) {
-    // x16 channels with 2 KB pages: 512 columns of 16 bits, 4 bank groups of 4
-    // banks; a 32 B transaction is a 16-beat burst (8 prefetched columns over a
-    // 32-bit internal channel width).
+  static void set_gddr6_device(YAML::Node dram, const Config& config) {
+    // One x16 channel of a 16 Gb device (8 Gb), 4 bank groups of 4 banks,
+    // 2 KB pages. A 32 B burst is 16n prefetch on 16 pins; Ramulator's GDDR6
+    // prefetches 8 columns, so its columns are 32 bits.
     dram["impl"] = "GDDR6";
-    dram["org"]["dq"] = 16;
-    dram["org"]["channel"] = pow2_channels;
+    dram["org"]["dq"] = 32;
+    dram["org"]["channel"] = 1;
     dram["org"]["bankgroup"] = 4;
     dram["org"]["bank"] = 4;
+    dram["org"]["row"] = 1 << 15;
     dram["org"]["column"] = 512;
-    dram["org"]["row"] = uint32_t((uint64_t(gddr6_density_mb_) << 20) / (uint64_t(pow2_channels) * 4 * 4 * 512 * 16));
-    dram["org"]["density"] = gddr6_density_mb_;
+    dram["org"]["density"] = 8192;
     dram["org"]["channel_width"] = 32;
-    // The transfer rate is twice the data clock. Bus timings are in clocks of
-    // the 32 B burst; array timings are GPGPU-Sim's RTX 3070 values
-    // (-gpgpu_dram_timing_opt) held in nanoseconds; refresh is JEDEC GDDR6.
-    auto timing = dram["timing"];
-    timing["rate"]   = 2 * config.dram_clock;
-    timing["nBL"]    = 8;
-    timing["nCCDS"]  = 8;
-    timing["nCCDL"]  = 12;
-    timing["tCL"]    = 6.8f;
-    timing["tRCDRD"] = 6.8f;
-    timing["tRCDWD"] = 6.8f;
-    timing["tRP"]    = 6.8f;
-    timing["tRAS"]   = 15.7f;
-    timing["tRC"]    = 22.3f;
-    timing["tWR"]    = 6.8f;
-    timing["tRTP"]   = 1.2f;
-    timing["tCWL"]   = 2.3f;
-    timing["tRRDS"]  = 3.5f;
-    timing["tRRDL"]  = 3.5f;
-    timing["tWTRS"]  = 2.8f;
-    timing["tWTRL"]  = 2.8f;
-    timing["tFAW"]   = 16.0f;
-    timing["tRFC"]   = 120.0f;
-    timing["tRFCpb"] = 60.0f;
-    timing["tREFI"]  = 1900.0f;
-    timing["tRREFD"] = 8.0f;
+    set_timing(dram["timing"], config.data_rate, gddr6_bus_timing, gddr6_array_timing);
+  }
+
+  YAML::Node channel_config(uint32_t ch) const {
+    YAML::Node config;
+    config["Frontend"]["impl"] = "GEM5";
+    auto memory_system = config["MemorySystem"];
+    memory_system["impl"] = "GenericDRAM";
+    memory_system["clock_ratio"] = 1;
+    if (config_.type == Type::GDDR6) {
+      set_gddr6_device(memory_system["DRAM"], config_);
+    } else {
+      set_hbm_device(memory_system["DRAM"], config_);
+    }
+    auto controller = memory_system["Controller"];
+    controller["impl"] = "Generic";
+    controller["Scheduler"]["impl"] = "FRFCFS";
+    // No refresh is modelled: Ramulator's refresh manager refreshes per rank
+    // and these devices have no rank level. GPU controllers hide refresh with
+    // per-bank refresh, for which Ramulator has no manager (and its HBM REFsb
+    // lacks the bank's tRFCsb busy time); all-bank refresh would cost every
+    // channel ~9% of its time instead.
+    controller["RefreshManager"]["impl"] = "AllBank";
+    controller["RowPolicy"]["impl"] = "OpenRowPolicy";
+    // Per-command DRAM trace recording is a debugging aid only: it writes an
+    // entry for every DRAM command and dominates simulation time (100s of MB
+    // of I/O for even tiny workloads). Keep it opt-in via the DRAM_TRACE env
+    // var so default simx/rtlsim runs stay fast.
+    if (const char* trace_path = getenv("DRAM_TRACE")) {
+      std::string path = trace_path[0] ? trace_path : "./trace/ramulator.log";
+      YAML::Node trace_plugin;
+      trace_plugin["ControllerPlugin"]["impl"] = "TraceRecorder";
+      trace_plugin["ControllerPlugin"]["path"] = path + "." + std::to_string(ch);
+      controller["plugins"].push_back(trace_plugin);
+    }
+    // Fields in the order dram_addr lays them out.
+    memory_system["AddrMapper"]["impl"] = "RoBaRaCoCh";
+    return config;
+  }
+
+  // Ramulator address of a transaction. A row visit is four bursts, then the
+  // next pseudo-channel, bank group and bank (minimalist open page), and the
+  // bank is XORed with the row folded to the bank's width (permutation-based
+  // interleaving), so streams a power of two apart open rows in different
+  // banks.
+  uint64_t dram_addr(uint64_t addr) const {
+    uint64_t tx = (addr & (channel_size_ - 1)) / tx_size_;
+    uint64_t visit = tx & ((1u << row_visit_bits_) - 1);
+    tx >>= row_visit_bits_;
+    uint64_t bank = tx & ((1u << bank_bits_) - 1);
+    tx >>= bank_bits_;
+    uint64_t column = tx & ((1u << (column_bits_ - row_visit_bits_)) - 1);
+    uint64_t row = tx >> (column_bits_ - row_visit_bits_);
+    for (uint64_t r = row; r != 0; r >>= bank_bits_) {
+      bank ^= r & ((1u << bank_bits_) - 1);
+    }
+    uint64_t t = (row << bank_bits_) | bank;
+    t = (t << column_bits_) | (column << row_visit_bits_) | visit;
+    return t * tx_size_;
   }
 
   // Retires the ready head responses of `rsps`; a request completes with its
   // last transaction.
-  void drain(std::deque<mem_rsp_t>& rsps, uint32_t ch) {
+  void drain(std::deque<mem_rsp_t>& rsps, channel_t& channel) {
     while (!rsps.empty()) {
       auto& rsp = rsps.front();
       if (rsp.ready_cycle > cycle_) {
@@ -214,94 +248,49 @@ private:
         break;
       }
       if (--request.pending == 0) {
-        --inflight_[ch];
+        --channel.inflight;
       }
       rsps.pop_front();
     }
   }
 
-  void handle_pending_responses() {
-    for (uint32_t ch = 0; ch < config_.num_channels; ++ch) {
-      this->drain(read_rsps_[ch], ch);
-      this->drain(write_rsps_[ch], ch);
+  void issue(channel_t& channel) {
+    if (channel.pending_txs.empty()) {
+      return;
     }
-  }
-
-  void handle_pending_requests() {
-    for (uint32_t ch = 0; ch < config_.num_channels; ++ch) {
-      auto& txs = pending_txs_[ch];
-      if (txs.empty()) {
-        continue;
+    auto& tx = channel.pending_txs.front();
+    auto req_type = tx.is_write ? Ramulator::Request::Type::Write : Ramulator::Request::Type::Read;
+    std::function<void(Ramulator::Request&)> callback = nullptr;
+    if (!tx.is_write) {
+      callback = [this, &channel, request = tx.request](Ramulator::Request& /*dram_req*/) {
+        channel.read_rsps.push_back({request, this->cycle_ + 1 + this->config_.latency});
+      };
+    }
+    if (channel.frontend->receive_external_requests(req_type, tx.addr, 0, callback)) {
+      // Ramulator does not handle write responses, so we handle the callback ourselves.
+      if (tx.is_write) {
+        channel.write_rsps.push_back({tx.request, cycle_});
       }
-      auto& tx = txs.front();
-      auto req_type = tx.is_write ? Ramulator::Request::Type::Write : Ramulator::Request::Type::Read;
-      std::function<void(Ramulator::Request&)> callback = nullptr;
-      if (!tx.is_write) {
-        callback = [this, ch, request = tx.request](Ramulator::Request& /*dram_req*/) {
-          this->read_rsps_[ch].push_back({request, this->cycle_ + 1 + this->config_.latency});
-        };
-      }
-      if (ramulator_frontend_->receive_external_requests(req_type, tx.addr, 0, callback)) {
-        // Ramulator does not handle write responses, so we handle the callback ourselves.
-        if (tx.is_write) {
-          write_rsps_[ch].push_back({tx.request, cycle_});
-        }
-        txs.pop();
-      }
+      channel.pending_txs.pop();
     }
   }
 
 public:
-  Impl(const Config& config) : config_(config) {
-    uint32_t pow2_channels = 1;
-    ch_bits_ = 0;
-    while (pow2_channels < config.num_channels) {
-      pow2_channels <<= 1;
-      ++ch_bits_;
+  Impl(const Config& config)
+    : config_(config)
+    // HBM: 2 pseudo-channels x 4 bank groups x 4 banks, 32 bursts per 1 KB
+    // row; GDDR6: 4 x 4 banks, 64 bursts per 2 KB row.
+    , bank_bits_((config.type == Type::GDDR6) ? 4 : 5)
+    , column_bits_((config.type == Type::GDDR6) ? 6 : 5)
+    , channels_(config.num_channels) {
+    for (uint32_t ch = 0; ch < config.num_channels; ++ch) {
+      auto ramulator_config = this->channel_config(ch);
+      auto& channel = channels_[ch];
+      channel.frontend = Ramulator::Factory::create_frontend(ramulator_config);
+      channel.memory_system = Ramulator::Factory::create_memory_system(ramulator_config);
+      channel.frontend->connect_memory_system(channel.memory_system);
+      channel.memory_system->connect_frontend(channel.frontend);
     }
-
-    YAML::Node dram;
-    if (config.type == Type::GDDR6) {
-      set_gddr6_device(dram, config, pow2_channels);
-      tx_size_ = 32;
-      row_mask_ = dram["org"]["row"].as<uint32_t>() - 1;
-    } else {
-      set_hbm2_device(dram, config, pow2_channels);
-      tx_size_ = 64;
-      row_mask_ = 0x7fff;
-    }
-
-    YAML::Node dram_config;
-    dram_config["Frontend"]["impl"] = "GEM5";
-    dram_config["MemorySystem"]["impl"] = "GenericDRAM";
-    dram_config["MemorySystem"]["clock_ratio"] = 1;
-    dram_config["MemorySystem"]["DRAM"] = dram;
-    dram_config["MemorySystem"]["Controller"]["impl"] = "Generic";
-    dram_config["MemorySystem"]["Controller"]["Scheduler"]["impl"] = "FRFCFS";
-    // libramulator-vortex: Ramulator's AllBank refresh never fires on rank-less HBM2/GDDR6.
-    dram_config["MemorySystem"]["Controller"]["RefreshManager"]["impl"] = "ChannelRefresh";
-    dram_config["MemorySystem"]["Controller"]["RowPolicy"]["impl"] = "OpenRowPolicy";
-    // Per-command DRAM trace recording is a debugging aid only: it writes an
-    // entry for every DRAM command and dominates simulation time (100s of MB
-    // of I/O for even tiny workloads). Keep it opt-in via the DRAM_TRACE env
-    // var so default simx/rtlsim runs stay fast.
-    if (const char* trace_path = getenv("DRAM_TRACE")) {
-      YAML::Node draw_plugin;
-      draw_plugin["ControllerPlugin"]["impl"] = "TraceRecorder";
-      draw_plugin["ControllerPlugin"]["path"] = trace_path[0] ? trace_path : "./trace/ramulator.log";
-      dram_config["MemorySystem"]["Controller"]["plugins"].push_back(draw_plugin);
-    }
-    dram_config["MemorySystem"]["AddrMapper"]["impl"] = "RoBaRaCoCh";
-
-    ramulator_frontend_ = Ramulator::Factory::create_frontend(dram_config);
-    ramulator_memorysystem_ = Ramulator::Factory::create_memory_system(dram_config);
-    ramulator_frontend_->connect_memory_system(ramulator_memorysystem_);
-    ramulator_memorysystem_->connect_frontend(ramulator_frontend_);
-
-    pending_txs_.resize(config.num_channels);
-    read_rsps_.resize(config.num_channels);
-    write_rsps_.resize(config.num_channels);
-    inflight_.resize(config.num_channels, 0);
     this->reset();
   }
 
@@ -309,39 +298,42 @@ public:
     std::ofstream nullstream("ramulator.stats.log");
     auto original_buf = std::cout.rdbuf();
     std::cout.rdbuf(nullstream.rdbuf());
-    ramulator_frontend_->finalize();
-    ramulator_memorysystem_->finalize();
+    for (auto& channel : channels_) {
+      channel.frontend->finalize();
+      channel.memory_system->finalize();
+    }
     std::cout.rdbuf(original_buf);
   }
 
   void reset() {
     cycle_ = 0;
     clock_credit_ = 0;
-    for (auto& q : pending_txs_) {
-      q = std::queue<mem_tx_t>();
+    for (auto& channel : channels_) {
+      channel.pending_txs = std::queue<mem_tx_t>();
+      channel.read_rsps.clear();
+      channel.write_rsps.clear();
+      channel.inflight = 0;
     }
-    for (auto& q : read_rsps_) {
-      q.clear();
-    }
-    for (auto& q : write_rsps_) {
-      q.clear();
-    }
-    std::fill(inflight_.begin(), inflight_.end(), 0);
   }
 
   void tick() {
     ++cycle_;
-    clock_credit_ += config_.dram_clock;
-    this->handle_pending_responses();
-    while (clock_credit_ >= config_.core_clock) {
-      this->handle_pending_requests();
-      ramulator_memorysystem_->tick();
-      clock_credit_ -= config_.core_clock;
+    clock_credit_ += config_.data_rate;
+    for (auto& channel : channels_) {
+      this->drain(channel.read_rsps, channel);
+      this->drain(channel.write_rsps, channel);
+    }
+    while (clock_credit_ >= 2 * config_.core_clock) {
+      for (auto& channel : channels_) {
+        this->issue(channel);
+        channel.memory_system->tick();
+      }
+      clock_credit_ -= 2 * config_.core_clock;
     }
   }
 
   bool can_accept(uint32_t channel) const {
-    return (config_.window == 0) || (inflight_.at(channel) < config_.window);
+    return (config_.queue_size == 0) || (channels_.at(channel).inflight < config_.queue_size);
   }
 
   void send_request(uint32_t channel, uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg) {
@@ -349,11 +341,11 @@ public:
     uint32_t n = (config_.block_size > tx_size_) ? (config_.block_size / tx_size_) : 1;
     uint64_t base = addr & ~uint64_t(config_.block_size - 1);
     auto request = std::make_shared<request_t>(request_t{response_cb, arg, n});
-    auto& txs = pending_txs_.at(channel);
+    auto& ch = channels_.at(channel);
     for (uint32_t i = 0; i < n; ++i) {
-      txs.push({dram_addr(channel, base + i * tx_size_), is_write, request});
+      ch.pending_txs.push({dram_addr(base + i * tx_size_), is_write, request});
     }
-    ++inflight_[channel];
+    ++ch.inflight;
   }
 };
 
@@ -370,8 +362,8 @@ DramSim::Config DramSim::platform_config() {
   Config config;
   if (type == "HBM2") {
     config.type = Type::HBM2;
-  } else if (type == "HBM2_A100") {
-    config.type = Type::HBM2_A100;
+  } else if (type == "HBM3") {
+    config.type = Type::HBM3;
   } else if (type == "GDDR6") {
     config.type = Type::GDDR6;
   } else {
@@ -380,9 +372,9 @@ DramSim::Config DramSim::platform_config() {
   config.num_channels = VX_CFG_PLATFORM_MEMORY_NUM_BANKS;
   config.block_size   = VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
   config.core_clock   = VX_CFG_PLATFORM_CLOCK_RATE;
-  config.dram_clock   = VX_CFG_PLATFORM_MEMORY_CLOCK_RATE;
+  config.data_rate    = VX_CFG_PLATFORM_MEMORY_DATA_RATE;
   config.latency      = VX_CFG_PLATFORM_MEMORY_LATENCY;
-  config.window       = VX_CFG_PLATFORM_MEMORY_WINDOW;
+  config.queue_size   = VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE;
   return config;
 }
 

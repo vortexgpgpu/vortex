@@ -22,8 +22,8 @@
     "VX_CFG_PLATFORM_CLOCK_RATE": 2295,
     "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 960000,
     "VX_CFG_PLATFORM_MEMORY_TYPE": "GDDR6",
-    "VX_CFG_PLATFORM_MEMORY_CLOCK_RATE": 7500,
-    "VX_CFG_PLATFORM_MEMORY_LATENCY": 407
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 15000,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 339
   },
   "reference": {
     "clock_mhz": 2295,
@@ -57,7 +57,7 @@
     "PLATFORM_MEMORY_NUM_BANKS": "8 x 32-bit GDDR7 devices = 32 independent channels (whitepaper App. B)",
     "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "2295 MHz base clock, 960 GB/s (whitepaper App. B)",
     "reference": "Nsight Compute on an RTX 5080 at its 2295 MHz base clock with a cold L2, 2026-10-05",
-    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_CLOCK_RATE": "GDDR7 modelled as GDDR6 x16 channels: 32 channels x 2 B x 15 GT/s (7500 MHz data clock) = 960 GB/s, the card's bandwidth",
-    "PLATFORM_MEMORY_LATENCY": "407 core cycles of PHY/NoC latency, calibrated in SimX against the 802-cycle pointer-chase DRAM latency in 'reference' (recalibrate when the memory model changes)"
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_DATA_RATE": "30 Gbps GDDR7 x8 channels modelled as GDDR6 x16 channels at 15000 MT/s: the same channel count, 32 B burst time and 960 GB/s (32 x 2 B x 15 GT/s)",
+    "PLATFORM_MEMORY_LATENCY": "339 core cycles of PHY/NoC latency: the 407 calibrated in SimX against the 802-cycle pointer-chase DRAM latency in 'reference', less the 68 cycles JEDEC GDDR6 timing adds to the device's row-conflict latency (derived, not re-run; recalibrate with a pointer chase when the memory model changes)"
   }
 }

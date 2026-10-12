@@ -8,20 +8,17 @@ softfloat:
 ramulator/libramulator.so:
 	cd ramulator && mkdir -p build && cd build && cmake .. && make -j4
 
-# Vortex's Ramulator extensions: a per-channel refresh manager, and the GDDR6
-# device model Ramulator ships but does not build. Both register with
+# The GDDR6 device model Ramulator ships but does not build. It registers with
 # Ramulator's factory when the library loads, built as Ramulator builds itself.
 RAMULATOR_EXT_DIR := ramulator_ext
 RAMULATOR_EXT_INCS := -isystem ramulator/src -isystem ramulator/ext/spdlog/include -isystem ramulator/ext/yaml-cpp/include
 RAMULATOR_EXT_CXXFLAGS := -std=c++20 -O3 -DNDEBUG -fPIC $(RAMULATOR_EXT_INCS)
 
-$(RAMULATOR_EXT_DIR)/channel_refresh.o: $(RAMULATOR_EXT_DIR)/channel_refresh.cpp
-	$(CXX) $(RAMULATOR_EXT_CXXFLAGS) -Wall -Wextra -Werror -c $< -o $@
-
 $(RAMULATOR_EXT_DIR)/gddr6.o: ramulator/src/dram/impl/GDDR6.cpp
+	mkdir -p $(RAMULATOR_EXT_DIR)
 	$(CXX) $(RAMULATOR_EXT_CXXFLAGS) -c $< -o $@
 
-$(RAMULATOR_EXT_DIR)/libramulator-vortex.so: $(RAMULATOR_EXT_DIR)/channel_refresh.o $(RAMULATOR_EXT_DIR)/gddr6.o ramulator/libramulator.so
+$(RAMULATOR_EXT_DIR)/libramulator-vortex.so: $(RAMULATOR_EXT_DIR)/gddr6.o ramulator/libramulator.so
 	$(CXX) -shared $(filter %.o,$^) -Lramulator -lramulator -o $@
 
 ramulator: ramulator/libramulator.so $(RAMULATOR_EXT_DIR)/libramulator-vortex.so

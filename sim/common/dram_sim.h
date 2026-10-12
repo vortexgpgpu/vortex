@@ -23,10 +23,12 @@ class DramSim {
 public:
   typedef bool (*ResponseCallback)(void *arg);
 
+  // The JEDEC standards Ramulator models, each at its own organization and
+  // timing; the data rate picks the speed.
   enum class Type {
-    HBM2,       // HBM2 at the 2 Gbps JEDEC preset, 64 B bursts
-    HBM2_A100,  // HBM2 with the A100 timing of GPGPU-Sim's SM80 configuration
-    GDDR6,      // GDDR6 x16 channels, 32 B bursts, 2 KB pages
+    HBM2,   // HBM2/HBM2E: 128-bit channels of two 64-bit pseudo-channels, 32 B bursts
+    HBM3,   // HBM3, a 128-bit channel per pair of 64-bit channels, 32 B bursts
+    GDDR6,  // GDDR6 x16 channels, 32 B bursts, 2 KB pages
   };
 
   struct Config {
@@ -34,9 +36,9 @@ public:
     uint32_t num_channels;  // need not be a power of two
     uint32_t block_size;    // bytes per request
     uint32_t core_clock;    // MHz
-    uint32_t dram_clock;    // MHz (GDDR6: the data clock, half the transfer rate)
+    uint32_t data_rate;     // MT/s per pin
     uint32_t latency;       // fixed read latency added in core cycles (PHY, controller, NoC)
-    uint32_t window;        // requests a channel holds in flight; 0 = unbounded
+    uint32_t queue_size;    // requests a channel holds in flight; 0 = unbounded
   };
 
   // The memory configured in VX_config.toml.
@@ -49,7 +51,7 @@ public:
 
   void tick();
 
-  // False while the channel holds its window of requests.
+  // False while the channel holds queue_size requests.
   bool can_accept(uint32_t channel) const;
 
   // addr: byte address within the channel.

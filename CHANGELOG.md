@@ -19,8 +19,10 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   width on RV64 (`size_t`/`uintptr_t`, identical RV32 code); RTU slot reads into FP registers are NaN-boxed.
 - **Zero warnings restored.** Every C/C++ build (simulators, runtime, kernel library, tests, OpenCL/HIP/Vulkan apps) is `-Werror` and
   Verilator warnings are fatal again, with the RTL and host code fixed to build clean.
-- **DRAM model redesign.** simx, rtlsim, opaesim and xrtsim model one independent Ramulator channel per memory bank (one burst per
-  transaction, per-channel responses, refresh); `VX_CFG_PLATFORM_MEMORY_{TYPE,CLOCK_RATE,LATENCY,WINDOW}` select HBM2, HBM2_A100 or GDDR6.
+- **DRAM model redesign.** simx, rtlsim, opaesim and xrtsim model one independent Ramulator controller and device per memory bank
+  (JEDEC HBM2/HBM3/GDDR6 organization and nanosecond timing, 32 B bursts, permuted open-page bank interleave, per-channel
+  responses), configured from data-sheet values: `VX_CFG_PLATFORM_MEMORY_{TYPE,DATA_RATE,LATENCY,QUEUE_SIZE}`. The default machine
+  keeps its idle read latency (14/26 cycles open-row/conflict, was 13/27) and one-block-per-cycle peak.
 
 ## [3.0] — 2026-10-07
 
