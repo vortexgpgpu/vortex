@@ -70,6 +70,16 @@ static inline FloatE ShiftLeft(const FloatE& value, uint32_t dist) {
   return value << static_cast<int>(dist);
 }
 
+// Edge values at a pixel's top-left corner from those at its centre. Multisample
+// positions lie up to half a pixel either side of the centre, so an MSAA reject
+// test bounds the footprint from the corner. Halving rounds down, which only
+// loosens the test.
+static inline vec3e_t rast_msaa_corner(const vec3e_t& centre, const delta_t& delta) {
+  return { centre.x - ((delta.dx.x + delta.dy.x) >> 1),
+           centre.y - ((delta.dx.y + delta.dy.y) >> 1),
+           centre.z - ((delta.dx.z + delta.dy.z) >> 1) };
+}
+
 // Emit one covered 2x2 quad. mask = per-fragment coverage (frag p = j*2+i);
 // bcoords[p] = edge values at that fragment. quad origin in pixels = (x, y).
 template <typename Emit>
@@ -121,29 +131,29 @@ static inline void rast_emit_quad(const RastConfig& cfg, uint32_t x, uint32_t y,
 
 // ── MSAA: 4x multisample coverage ────────────────────────────────────────────
 // 4x rotated-grid sample pattern (the D3D/GL-standard 4X positions), expressed
-// as pixel-relative sub-sample offsets in fixed_t<16> (1/16-pixel grid). The
-// offsets are added to the integer sample point the single-sample path uses, so
-// sample evaluation reuses the per-pixel edge values from the walk.
-//   s0 (6,2) s1 (14,6) s2 (2,10) s3 (10,14)  [in 1/16 of a pixel]
+// as sub-sample offsets in fixed_t<16> (1/16-pixel grid) from the pixel centre:
+// setup folds the half-pixel offset into the edge constants, so the per-pixel
+// edge values from the walk are already evaluated at the centre.
+//   s0 (6,2) s1 (14,6) s2 (2,10) s3 (10,14)  [from the pixel corner, 1/16 px]
 static constexpr int RAST_MSAA_SAMPLES = 4;
 
 struct SampleOff { FloatE dx, dy; };
 
 static inline const SampleOff* rast_msaa_offsets() {
-  // n/16 in fixed_t<16> is raw n<<12.
+  // n/16 in fixed_t<16> is raw n<<12; each is the corner position minus 8/16.
   static const SampleOff k[RAST_MSAA_SAMPLES] = {
-    { FloatE::make( 6 << 12), FloatE::make( 2 << 12) },
-    { FloatE::make(14 << 12), FloatE::make( 6 << 12) },
-    { FloatE::make( 2 << 12), FloatE::make(10 << 12) },
-    { FloatE::make(10 << 12), FloatE::make(14 << 12) },
+    { FloatE::make(-2 * (1 << 12)), FloatE::make(-6 * (1 << 12)) },
+    { FloatE::make( 6 * (1 << 12)), FloatE::make(-2 * (1 << 12)) },
+    { FloatE::make(-6 * (1 << 12)), FloatE::make( 2 * (1 << 12)) },
+    { FloatE::make( 2 * (1 << 12)), FloatE::make( 6 * (1 << 12)) },
   };
   return k;
 }
 
 // Per-pixel MSAA coverage mask: bit k set iff sample k is inside all three
 // edges. `edges` are the primitive's edge coefficients ({a,b,c} each); `base`
-// is the edge-function values at the pixel's integer sample point (i.e. the
-// bcoords entry the walk emits). The sub-sample value is
+// is the edge-function values at the pixel centre (i.e. the bcoords entry the
+// walk emits). The sub-sample value is
 // base_i + a_i*dx + b_i*dy = f_i(x+dx, y+dy).
 static inline uint32_t rast_sample_mask(const vec3e_t edges[3], const vec3e_t& base) {
   FloatE z = fx_zero();
@@ -181,10 +191,12 @@ static inline void rast_emit_quad_msaa(const RastConfig& cfg, uint32_t x, uint32
                                        uint32_t pid, const vec3e_t& edges,
                                        const delta_t& delta, Emit&& emit) {
   FloatE z = fx_zero();
-  // Conservative trivial-reject (footprint [x,x+2) covers all sample positions).
-  if ((edges.x + ShiftLeft(delta.extents.x, 1)) < z
-   || (edges.y + ShiftLeft(delta.extents.y, 1)) < z
-   || (edges.z + ShiftLeft(delta.extents.z, 1)) < z)
+  // Conservative trivial-reject over the quad's footprint [x,x+2), which holds
+  // every sample position.
+  const vec3e_t corner = rast_msaa_corner(edges, delta);
+  if ((corner.x + ShiftLeft(delta.extents.x, 1)) < z
+   || (corner.y + ShiftLeft(delta.extents.y, 1)) < z
+   || (corner.z + ShiftLeft(delta.extents.z, 1)) < z)
     return;
 
   // Reconstruct the edge coefficients ({a,b}) from the deltas for sampling.
@@ -221,43 +233,45 @@ static inline void rast_emit_quad_msaa(const RastConfig& cfg, uint32_t x, uint32
 // Recursive Morton-DFS tile subdivision: reject tiles outside the primitive,
 // recurse to four sub-tiles, and run `leaf(cfg, x, y, pid, edges, delta)` at each
 // 2x2-quad leaf. The leaf decides per-quad coverage (single-sample or MSAA).
+// `msaa` bounds each tile from its corner instead of its first pixel centre.
 template <typename Leaf>
 static inline void rast_walk_tile(const RastConfig& cfg, uint32_t tileLogSize,
                                   uint32_t x, uint32_t y, uint32_t pid,
                                   const vec3e_t& edges, const delta_t& delta,
-                                  Leaf&& leaf) {
+                                  Leaf&& leaf, bool msaa = false) {
   FloatE z = fx_zero();
   // Trivial-reject the whole tile.
-  if ((edges.x + ShiftLeft(delta.extents.x, tileLogSize)) < z
-   || (edges.y + ShiftLeft(delta.extents.y, tileLogSize)) < z
-   || (edges.z + ShiftLeft(delta.extents.z, tileLogSize)) < z)
+  const vec3e_t lo = msaa ? rast_msaa_corner(edges, delta) : edges;
+  if ((lo.x + ShiftLeft(delta.extents.x, tileLogSize)) < z
+   || (lo.y + ShiftLeft(delta.extents.y, tileLogSize)) < z
+   || (lo.z + ShiftLeft(delta.extents.z, tileLogSize)) < z)
     return;
 
   if (tileLogSize > 1) {
     --tileLogSize;
     uint32_t subTileSize = 1u << tileLogSize;
     // top-left
-    rast_walk_tile(cfg, tileLogSize, x, y, pid, edges, delta, leaf);
+    rast_walk_tile(cfg, tileLogSize, x, y, pid, edges, delta, leaf, msaa);
     // top-right
     {
       vec3e_t s{ edges.x + ShiftLeft(delta.dx.x, tileLogSize),
                  edges.y + ShiftLeft(delta.dx.y, tileLogSize),
                  edges.z + ShiftLeft(delta.dx.z, tileLogSize) };
-      rast_walk_tile(cfg, tileLogSize, x + subTileSize, y, pid, s, delta, leaf);
+      rast_walk_tile(cfg, tileLogSize, x + subTileSize, y, pid, s, delta, leaf, msaa);
     }
     // bottom-left
     {
       vec3e_t s{ edges.x + ShiftLeft(delta.dy.x, tileLogSize),
                  edges.y + ShiftLeft(delta.dy.y, tileLogSize),
                  edges.z + ShiftLeft(delta.dy.z, tileLogSize) };
-      rast_walk_tile(cfg, tileLogSize, x, y + subTileSize, pid, s, delta, leaf);
+      rast_walk_tile(cfg, tileLogSize, x, y + subTileSize, pid, s, delta, leaf, msaa);
     }
     // bottom-right
     {
       vec3e_t s{ edges.x + ShiftLeft(delta.dx.x, tileLogSize) + ShiftLeft(delta.dy.x, tileLogSize),
                  edges.y + ShiftLeft(delta.dx.y, tileLogSize) + ShiftLeft(delta.dy.y, tileLogSize),
                  edges.z + ShiftLeft(delta.dx.z, tileLogSize) + ShiftLeft(delta.dy.z, tileLogSize) };
-      rast_walk_tile(cfg, tileLogSize, x + subTileSize, y + subTileSize, pid, s, delta, leaf);
+      rast_walk_tile(cfg, tileLogSize, x + subTileSize, y + subTileSize, pid, s, delta, leaf, msaa);
     }
   } else {
     leaf(cfg, x, y, pid, edges, delta);
@@ -307,7 +321,7 @@ static inline void rast_walk_primitive_msaa(const RastConfig& cfg, uint32_t x, u
     [&](const RastConfig& c, uint32_t qx, uint32_t qy, uint32_t qpid,
         const vec3e_t& e, const delta_t& d) {
       rast_emit_quad_msaa(c, qx, qy, qpid, e, d, emit);
-    });
+    }, true);
 }
 
 } // namespace gfx_rast

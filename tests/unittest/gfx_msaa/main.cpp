@@ -13,7 +13,10 @@
 // that pixel's covered-sample count (recomputed straight from rast_sample_mask).
 // Interior pixels must equal fg, exterior bg, edge pixels a proportional blend —
 // i.e. anti-aliased edges. A second pass proves per-sample depth testing: an
-// occluded redraw must not change any covered sample.
+// occluded redraw must not change any covered sample. A third pass checks the
+// walk's tile and quad rejects against the per-sample test on edges that carry
+// setup's half-pixel fold, over the two halves of a thin steep quad: every
+// sample is covered by exactly one half, and the walk drops none.
 //
 // Self-contained: depends only on gfx_frag_rast.h + gfx_sw.h. No GFX_SW_DIVERGENCE_OK
 // needed (that guards the *device* divergence-pass build; the host has no such
@@ -51,6 +54,66 @@ bool make_edges(const Tri& t, vec3e_t edges[3]) {
     edges[i].z = FloatE(X[i] * Y[j] - X[j] * Y[i]);
   }
   return true;
+}
+
+// Edges as setup emits them: the half-pixel offset folded into the constant, so
+// an edge evaluated at an integer pixel gives its value at the pixel centre.
+bool make_edges_centred(const Tri& t, vec3e_t edges[3]) {
+  if (!make_edges(t, edges)) return false;
+  for (int i = 0; i < 3; ++i) {
+    edges[i].z = edges[i].z + ((edges[i].x + edges[i].y) >> 1);
+  }
+  return true;
+}
+
+// Per-pixel sample masks of one triangle as the MSAA walk emits them.
+void walk_masks(const vec3e_t edges[3], uint8_t masks[H][W]) {
+  gfx_rast::RastConfig cfg{ 4, 0, 0, W, H };
+  gfx_rast::rast_walk_primitive_msaa(cfg, 0, 0, 1, edges,
+    [&](uint32_t pos_mask, const vec3e_t*, const uint32_t* sample_masks, uint32_t) {
+      uint32_t quad_x = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
+      uint32_t quad_y =  pos_mask >> (4 + VX_RASTER_DIM_BITS - 1);
+      for (uint32_t p = 0; p < 4; ++p) {
+        uint32_t px = quad_x * 2 + (p & 1), py = quad_y * 2 + (p >> 1);
+        if (px < W && py < H) masks[py][px] |= (uint8_t)sample_masks[p];
+      }
+    });
+}
+
+// The walk must emit exactly the per-sample test's coverage for both halves of
+// quad (x0,y0)-(x1,y1) split along the diagonal (x0,y1)-(x1,y0), and the halves
+// must cover each sample inside the quad once.
+void check_split_quad(int x0, int y0, int x1, int y1) {
+  Tri half[2] = { { x1, y1, x0, y1, x1, y0 }, { x1, y0, x0, y1, x0, y0 } };
+  uint8_t walked[2][H][W] = {};
+  vec3e_t edges[2][3];
+  for (int h = 0; h < 2; ++h) {
+    make_edges_centred(half[h], edges[h]);
+    walk_masks(edges[h], walked[h]);
+  }
+  for (uint32_t y = 0; y < H; ++y) {
+    for (uint32_t x = 0; x < W; ++x) {
+      uint32_t direct[2];
+      for (int h = 0; h < 2; ++h) {
+        vec3e_t base{ gfx_rast::EvalEdgeFunction(edges[h][0], (int)x, (int)y),
+                      gfx_rast::EvalEdgeFunction(edges[h][1], (int)x, (int)y),
+                      gfx_rast::EvalEdgeFunction(edges[h][2], (int)x, (int)y) };
+        direct[h] = gfx_rast::rast_sample_mask(edges[h], base);
+        if (walked[h][y][x] != direct[h]) {
+          if (g_fail < 8)
+            printf("  [split] (%u,%u) half %d: walk=%x direct=%x\n", x, y, h,
+                   walked[h][y][x], direct[h]);
+          ++g_fail;
+        }
+      }
+      bool inside = (int)x >= x0 && (int)x < x1 && (int)y >= y0 && (int)y < y1;
+      if ((direct[0] & direct[1]) || (direct[0] | direct[1]) != (inside ? 0xfu : 0u)) {
+        if (g_fail < 8)
+          printf("  [split] (%u,%u): halves %x %x\n", x, y, direct[0], direct[1]);
+        ++g_fail;
+      }
+    }
+  }
 }
 
 // Independent per-pixel covered-sample count from the same sample pattern.
@@ -159,6 +222,10 @@ int main() {
   uint32_t i2 = 0, e2 = 0;
   check_resolved(sd, edges, FG, BG, "depth", i2, e2);   // must still be FG, not OTHER
 
+  // ── Test 3: walk rejects vs per-sample coverage on a split thin quad ─────
+  check_split_quad(6, 0, 9, 16);
+  check_split_quad(2, 3, 14, 6);
+
   if (g_fail) {
     printf("\nGFX-MSAA: FAILED (%u pixel mismatches)\n", g_fail);
     return 1;
@@ -168,6 +235,7 @@ int main() {
     return 1;
   }
   printf("GFX-MSAA: PASSED (4x; %u interior + %u AA-edge px match box-avg oracle; "
-         "per-sample depth test occludes correctly)\n", interior, edge);
+         "per-sample depth test occludes correctly; walk matches per-sample "
+         "coverage on a split quad)\n", interior, edge);
   return 0;
 }
