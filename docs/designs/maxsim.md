@@ -30,7 +30,7 @@ packaging, `slashkit link`) builds the image. There is no Chisel, Golden
 Gate, Yosys or sv2v anywhere in it, and no FireSim checkout.
 
 ```bash
-export MAXSIM_CLASSES="VX_socket__lift VX_issue_slice__lift VX_alu_int__lift VX_alu_muldiv__lift VX_lsu_slice__lift VX_lsu_scheduler__lift VX_fpu_std"
+export MAXSIM_CLASSES="VX_socket__lift VX_issue_slice__lift VX_alu_int__lift VX_alu_muldiv__lift VX_lsu_slice__lift+VX_lsu_scheduler__lift VX_fpu_std"
 export MAXSIM_LIFT="VX_socket:drop=INSTANCE_ID;port=SOCKET_ID VX_issue_slice:drop=ISSUE_ID VX_alu_int:port=BLOCK_IDX VX_alu_muldiv VX_lsu_slice:port=CORE_ID VX_lsu_scheduler"
 CONFIGS="-DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_WARPS=4 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_ISSUE_WIDTH=2"
 CONFIGS="$CONFIGS" ./ci/blackbox.sh --driver=maxsim --app=sgemm                 # Verilator
@@ -46,7 +46,17 @@ interface-port units a plain-port boundary first, so they can be classes
 RTL is not changed). `port=P` turns an instance-ID parameter into an input
 port, and every parameter derived from it below, so that all instances of the
 class elaborate to one module: the socket's `SOCKET_ID` carries every core's
-`CORE_ID` with it. The tools are found through `CIRCT_BIN`.
+`CORE_ID` with it. The tools are found through `CIRCT_BIN` (by default
+`hw/syn/common.mk`'s CIRCT).
+
+A class `A+B` fuses two modules of the same parent (`maxsim-fuse-models`):
+each `A` is paired with the one `B` it exchanges bits with, and each pair is
+simulated as one model, so a path from one through the other and back takes
+a thread one host cycle instead of a round trip through their channels. The
+LSU slice and its scheduler are such a pair (the slice's request, the
+scheduler's `ready` on it, the slice's `ready` on that): fused, tinygpu runs
+at 3.00 host cycles per target cycle instead of 4.00 (V80), with the same
+threads and copies and fewer LUTs.
 
 The flow reads Vortex as source, so it builds the configuration whose units
 are source: the STD FPU (`-DVX_CFG_FPU_TYPE_STD`) and the RTU without vendor
