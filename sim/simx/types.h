@@ -895,7 +895,7 @@ enum class ArbiterType {
   Priority,
   RoundRobin,
   Matrix,
-  GTO
+  GreedyRR
 };
 
 inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
@@ -903,7 +903,7 @@ inline std::ostream &operator<<(std::ostream &os, const ArbiterType& type) {
   case ArbiterType::Priority:   os << "Priority"; break;
   case ArbiterType::RoundRobin: os << "RoundRobin"; break;
   case ArbiterType::Matrix:     os << "Matrix"; break;
-  case ArbiterType::GTO:        os << "GTO"; break;
+  case ArbiterType::GreedyRR:   os << "GreedyRR"; break;
   default: assert(false);
   }
   return os;
@@ -1017,56 +1017,36 @@ private:
   std::vector<std::vector<bool>> priority_matrix_;
 };
 
-class GTOArbiter : public IArbiterImpl {
+// Greedy round-robin: keeps granting the current owner while it requests,
+// then hands over to the next requester after it in index order.
+class GreedyRRArbiter : public IArbiterImpl {
 public:
-  GTOArbiter(uint32_t size)
-    : size_(size)
-    , age_(size, 0)
-    , last_grant_(-1u) {
+  GreedyRRArbiter(uint32_t size) : size_(size) {
     this->reset();
   }
 
   uint32_t grant(const BitVector<>& requests) override {
     assert(requests.size() == size_);
-    // greedy: keep granting same requester if still active
     if (last_grant_ < size_ && requests.test(last_grant_)) {
-      this->update_ages(requests, last_grant_);
       return last_grant_;
     }
-    // Then-Oldest: find the requester with the highest age
-    uint32_t best = -1u;
-    uint32_t best_age = 0;
+    uint32_t start = (last_grant_ < size_) ? (last_grant_ + 1) % size_ : 0;
     for (uint32_t i = 0; i < size_; ++i) {
-      if (requests.test(i) && (best == -1u || age_[i] > best_age)) {
-        best = i;
-        best_age = age_[i];
+      uint32_t idx = (start + i) % size_;
+      if (requests.test(idx)) {
+        last_grant_ = idx;
+        return idx;
       }
     }
-    if (best != -1u) {
-      last_grant_ = best;
-      this->update_ages(requests, best);
-    }
-    return best;
+    return -1u;
   }
 
   void reset() override {
-    std::fill(age_.begin(), age_.end(), 0);
     last_grant_ = -1u;
   }
 
 private:
-  void update_ages(const BitVector<>& requests, uint32_t granted) {
-    for (uint32_t i = 0; i < size_; ++i) {
-      if (i == granted || !requests.test(i)) {
-        age_[i] = 0;
-      } else {
-        ++age_[i];
-      }
-    }
-  }
-
   uint32_t size_;
-  std::vector<uint32_t> age_;
   uint32_t last_grant_;
 };
 
@@ -1083,8 +1063,8 @@ public:
     case ArbiterType::Matrix:
       impl_ = std::make_shared<MatrixArbiter>(size);
       break;
-    case ArbiterType::GTO:
-      impl_ = std::make_shared<GTOArbiter>(size);
+    case ArbiterType::GreedyRR:
+      impl_ = std::make_shared<GreedyRRArbiter>(size);
       break;
     default:
       assert(false);
