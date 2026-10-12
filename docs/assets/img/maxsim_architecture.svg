@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 520" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+    <style>
+      .t { font-weight: bold; font-size: 15px; fill: #222; }
+      .box { stroke: #555; stroke-width: 1.2; }
+      .flow { fill: #e3f0fb; }
+      .model { fill: #eaf6e6; }
+      .fabric { fill: #fff4d6; }
+      .ep { fill: #f3e8fb; }
+      .host { fill: #f2f2f2; }
+      .lbl { fill: #222; }
+      .note { fill: #555; font-size: 11px; }
+      .ln { stroke: #555; stroke-width: 1.3; fill: none; marker-end: url(#a); }
+      .bi { stroke: #555; stroke-width: 1.3; fill: none; marker-end: url(#a); marker-start: url(#a); }
+    </style>
+  </defs>
+  <rect width="960" height="520" fill="#ffffff"/>
+
+  <text x="20" y="28" class="t">Compile: one IR from SystemVerilog to the kernel (hw/syn/maxsim/maxsim.py)</text>
+  <rect x="20"  y="42" width="140" height="58" rx="6" class="box flow"/>
+  <text x="90" y="64" text-anchor="middle" class="lbl">circt-verilog</text>
+  <text x="90" y="82" text-anchor="middle" class="note">Vortex, flat but for</text>
+  <text x="90" y="94" text-anchor="middle" class="note">the classes</text>
+  <rect x="185" y="42" width="190" height="58" rx="6" class="box flow"/>
+  <text x="280" y="64" text-anchor="middle" class="lbl">maxsim-extract-models</text>
+  <text x="280" y="82" text-anchor="middle" class="note">each level a netlist of its own</text>
+  <text x="280" y="94" text-anchor="middle" class="note">logic and the class instances</text>
+  <rect x="400" y="42" width="150" height="58" rx="6" class="box flow"/>
+  <text x="475" y="64" text-anchor="middle" class="lbl">model cleanups</text>
+  <text x="475" y="82" text-anchor="middle" class="note">share-adders, low-bits</text>
+  <text x="475" y="94" text-anchor="middle" class="note">narrowing, const-prop</text>
+  <rect x="575" y="42" width="190" height="58" rx="6" class="box flow"/>
+  <text x="670" y="64" text-anchor="middle" class="lbl">maxsim-compose</text>
+  <text x="670" y="82" text-anchor="middle" class="note">classes threaded (FAME-5),</text>
+  <text x="670" y="94" text-anchor="middle" class="note">channels in one token fabric</text>
+  <rect x="790" y="42" width="150" height="58" rx="6" class="box flow"/>
+  <text x="865" y="64" text-anchor="middle" class="lbl">firtool, Vivado</text>
+  <text x="865" y="82" text-anchor="middle" class="note">maxsim_sim.sv, packaged</text>
+  <text x="865" y="94" text-anchor="middle" class="note">and linked as on the V80</text>
+  <path d="M160,71 L183,71" class="ln"/>
+  <path d="M375,71 L398,71" class="ln"/>
+  <path d="M550,71 L573,71" class="ln"/>
+  <path d="M765,71 L788,71" class="ln"/>
+
+  <text x="20" y="140" class="t">Run: the kernel (hw/rtl/afu/maxsim) and its host</text>
+  <rect x="20" y="152" width="700" height="350" rx="8" class="box" fill="#fbfbfb"/>
+  <text x="34" y="172" class="lbl" font-weight="bold">maxsim_afu</text>
+
+  <rect x="40" y="185" width="490" height="230" rx="6" class="box fabric"/>
+  <text x="54" y="204" class="lbl" font-weight="bold">maxsim_sim (generated)</text>
+  <text x="54" y="220" class="note">every channel: two slots per producer thread, a count per reader</text>
+  <rect x="60" y="235" width="130" height="62" rx="6" class="box model"/>
+  <text x="125" y="258" text-anchor="middle" class="lbl">rest of Vortex</text>
+  <text x="125" y="276" text-anchor="middle" class="note">1 thread</text>
+  <rect x="210" y="235" width="130" height="62" rx="6" class="box model"/>
+  <text x="275" y="258" text-anchor="middle" class="lbl">socket</text>
+  <text x="275" y="276" text-anchor="middle" class="note">1 copy, N threads</text>
+  <rect x="360" y="235" width="150" height="62" rx="6" class="box model"/>
+  <text x="435" y="258" text-anchor="middle" class="lbl">issue, ALU, LSU, FPU</text>
+  <text x="435" y="276" text-anchor="middle" class="note">1 copy each, N x M threads</text>
+  <path d="M190,266 L208,266" class="bi"/>
+  <path d="M340,266 L358,266" class="bi"/>
+  <rect x="60" y="320" width="450" height="40" rx="6" class="box fabric"/>
+  <text x="285" y="345" text-anchor="middle" class="lbl">token fabric: registers, or memories read at the reader's thread</text>
+  <text x="54" y="385" class="note">a thread finishes its target cycle once each input has a token and each output was taken;</text>
+  <text x="54" y="400" class="note">state in LUTRAM per thread, written with the clock enable of that finish</text>
+
+  <rect x="560" y="185" width="140" height="100" rx="6" class="box ep"/>
+  <text x="630" y="207" text-anchor="middle" class="lbl">maxsim_ctrl</text>
+  <text x="630" y="225" text-anchor="middle" class="note">AXI4-Lite registers</text>
+  <text x="630" y="240" text-anchor="middle" class="note">command queue: DCR,</text>
+  <text x="630" y="255" text-anchor="middle" class="note">start, reset; busy,</text>
+  <text x="630" y="270" text-anchor="middle" class="note">cycle counters</text>
+  <rect x="560" y="305" width="140" height="110" rx="6" class="box ep"/>
+  <text x="630" y="327" text-anchor="middle" class="lbl">maxsim_mem</text>
+  <text x="630" y="345" text-anchor="middle" class="note">latency-bandwidth pipe</text>
+  <text x="630" y="360" text-anchor="middle" class="note">in target cycles;</text>
+  <text x="630" y="375" text-anchor="middle" class="note">requests to HBM at once,</text>
+  <text x="630" y="390" text-anchor="middle" class="note">a cycle waits for data</text>
+  <path d="M530,235 L558,235" class="bi"/>
+  <path d="M530,360 L558,360" class="bi"/>
+  <text x="40" y="440" class="note">Endpoints offer and take tokens with valid and ready from their own state, so they connect to the</text>
+  <text x="40" y="455" class="note">simulator's channels directly. The target runs free: one token per channel per target cycle.</text>
+  <text x="40" y="480" class="note">Shown for one memory port and Vortex's DCR, start and busy (the target VX_firesim_wrap).</text>
+
+  <rect x="760" y="185" width="180" height="100" rx="6" class="box host"/>
+  <text x="850" y="207" text-anchor="middle" class="lbl">host: --driver=maxsim</text>
+  <text x="850" y="225" text-anchor="middle" class="note">the runtime's command</text>
+  <text x="850" y="240" text-anchor="middle" class="note">processor model, in software;</text>
+  <text x="850" y="255" text-anchor="middle" class="note">VRT on the V80, or the kernel</text>
+  <text x="850" y="270" text-anchor="middle" class="note">in Verilator (avedsim)</text>
+  <rect x="760" y="320" width="180" height="70" rx="6" class="box host"/>
+  <text x="850" y="345" text-anchor="middle" class="lbl">HBM</text>
+  <text x="850" y="363" text-anchor="middle" class="note">target address + base;</text>
+  <text x="850" y="378" text-anchor="middle" class="note">host DMA by QDMA</text>
+  <path d="M700,235 L758,235" class="bi"/>
+  <text x="729" y="228" text-anchor="middle" class="note">AXI-Lite</text>
+  <path d="M700,355 L758,355" class="bi"/>
+  <text x="729" y="348" text-anchor="middle" class="note">AXI4</text>
+  <path d="M850,285 L850,318" class="ln"/>
+  <text x="858" y="305" class="note">QDMA</text>
+</svg>

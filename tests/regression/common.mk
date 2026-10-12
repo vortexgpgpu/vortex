@@ -263,6 +263,17 @@ else
 	XCL_EMULATION_MODE=$(TARGET) XRT_INI_PATH=$(VORTEX_RT_SRC)/firesim/xrt.ini EMCONFIG_PATH=$(FPGA_BIN_DIR) XCLBIN_PATH=$(FPGA_BIN_DIR)/firesim.xclbin LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=firesim ./$(PROJECT) $(OPTS)
 endif
 
+# maxsim: TARGET=hw runs FPGA_BIN_DIR's maxsim.vbin (hw/syn/maxsim) on the V80;
+# TARGET=avedsim, the default, simulates the same kernel in-process.
+run-maxsim: $(PROJECT) kernel.vxbin
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/maxsim DESTDIR=$(VORTEX_RT_LIB) TARGET=$(if $(filter hw,$(TARGET)),hw,avedsim)
+ifeq ($(TARGET), hw)
+	$(VORTEX_HOME)/ci/v80_preflight.sh
+	VRT_DEVICE_BDF=$(VRT_DEVICE_BDF) VRT_VBIN_PATH=$(FPGA_BIN_DIR)/maxsim.vbin LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=maxsim ./$(PROJECT) $(OPTS)
+else
+	LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=maxsim ./$(PROJECT) $(OPTS)
+endif
+
 run-opae: $(PROJECT) kernel.vxbin
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/opae DESTDIR=$(VORTEX_RT_LIB)
 	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json OPAE_DRV_PATHS=$(OPAE_DRV_PATHS) LD_LIBRARY_PATH=$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=opae ./$(PROJECT) $(OPTS)
