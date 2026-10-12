@@ -11,6 +11,9 @@ instances, innermost first, is cut into a netlist of its own logic and the
 models (maxsim-extract-models); the target's netlist is then composed into the
 simulator (maxsim-compose): one threaded module per class, the rest of the
 target as a model of one thread, and a fabric of token channels between them.
+A class `A+B` is two modules of the same parent whose instances are paired and
+simulated as one model (maxsim-fuse-models): what they exchange combinationally
+both ways then takes a thread one host cycle, not a round trip through channels.
 
 Writes <out>/maxsim_sim.sv, the module `maxsim_sim` with a channel per target
 port (`<port>_valid`, `_ready`, `_bits`) and a `profile_finish` bit per class;
@@ -88,18 +91,23 @@ def main():
          '--allow-hierarchical-const', '--ignore-uninstantiated-modules', '--detect-memories',
          '--preserve-unpacked-ports', *defines, *incdirs, *files, '-o', design])
 
+    groups = [c.split('+') for c in a.classes if '+' in c]
+    if any(len(g) != 2 for g in groups):
+        sys.exit('a fused class is two modules, A+B')
+    modules = [m for c in a.classes for m in c.split('+')]
+
     # Flat but for the classes.
     flat = out('flat.mlir')
     with open(flat + '.in', 'w') as f:
-        f.write(publish(open(design).read(), [a.top] + a.classes))
+        f.write(publish(open(design).read(), [a.top] + modules))
     run([tool('circt-opt'), flat + '.in', '--symbol-dce', '--hw-flatten-modules', '--symbol-dce',
          '--canonicalize', '--cse', '-o', flat])
     os.remove(flat + '.in')
     text = open(flat).read()
 
     # Each module with class instances, innermost first, becomes a netlist.
-    classes = set(a.classes)
-    children = {m: instantiated(text, m, classes) for m in [a.top] + a.classes}
+    classes = set(modules)
+    children = {m: instantiated(text, m, classes) for m in [a.top] + modules}
     order, seen = [], set()
 
     def visit(m):
@@ -114,8 +122,15 @@ def main():
     unused = classes - seen
     if unused:
         sys.exit(f'classes not in {a.top}: {" ".join(sorted(unused))}')
-    passes = [f'maxsim-extract-models{{module={m} models={",".join(sorted(children[m]))} netlist}}'
-              for m in order]
+    passes = []
+    for m in order:
+        passes.append(f'maxsim-extract-models{{module={m} models={",".join(sorted(children[m]))} netlist}}')
+        fused = [g for g in groups if set(g) <= children[m]]
+        if fused:
+            passes.append(f'maxsim-fuse-models{{module={m} groups={",".join("+".join(g) for g in fused)}}}')
+    for g in groups:
+        if not any(set(g) <= children[m] for m in order):
+            sys.exit(f'{"+".join(g)}: not instantiated by the same module')
     pipeline = passes + OPTIMIZE + [f'maxsim-compose{{module={a.top} sim=maxsim_sim}}',
                                     'canonicalize', 'cse']
     sim = out('maxsim_sim.mlir')
