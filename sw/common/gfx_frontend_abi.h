@@ -217,4 +217,50 @@ typedef struct {
   float src_x0, src_y0;   // source texel position of the box's top-left corner
   float scale_x, scale_y; // source texels per destination pixel (negative: flip)
   float inv_src_w, inv_src_h;
+  uint32_t src_3d;        // 1: a 3D source, sampled at depth coordinate src_r
+  int32_t src_r;          // normalized depth of the slice, TEX_FXD_FRAC fixed point
 } blit_arg_t;
+
+// Raw nearest blit (blit_raw_k, gfx_blit_k.h): each texel of a dst_w x dst_h
+// destination staging plane copies the bytes of its nearest source texel, under
+// `mask`, without decoding them. It serves the blits whose formats match and
+// must not be filtered -- integer and depth/stencil -- one source slice and
+// destination slice per launch. One thread per pixel, grid-strided.
+typedef struct {
+  uint64_t src_addr;      // source slice, texel (0,0) at its start          (in)
+  uint64_t dst_addr;      // dst_w x dst_h staging plane, dst_pitch bytes (in/out)
+  uint32_t texel_bytes;   // 1..16
+  uint32_t src_w, src_h, src_pitch; // source slice extent (clamped to) and pitch
+  uint32_t dst_w, dst_h, dst_pitch;
+  float src_x0, src_y0;   // source texel position of the box's top-left corner
+  float scale_x, scale_y; // source texels per destination pixel (negative: flip)
+  uint32_t mask[4];       // the texel bits to write
+} blit_raw_arg_t;
+
+// Texel copy (texel_copy_k, gfx_copy_k.h): for every texel of a w x h x d box,
+// `bytes` bytes starting at byte src_byte of the source texel go to byte
+// dst_byte of the destination texel, under `mask`. The two boxes have their own
+// texel sizes and pitches, so one aspect of a depth/stencil texel can move to or
+// from a buffer holding only that aspect. One thread per texel, grid-strided.
+typedef struct {
+  uint64_t src_addr;      // source span, texel (0,0,0) at its start       (in)
+  uint64_t dst_addr;      // destination span, texel (0,0,0) at its start (in/out)
+  uint32_t w, h, d;
+  uint32_t src_texel, src_row, src_slice;
+  uint32_t dst_texel, dst_row, dst_slice;
+  uint32_t src_byte, dst_byte, bytes;  // bytes <= 16
+  uint32_t mask[4];       // per copied byte: the bits to write
+} texel_copy_arg_t;
+
+// Masked texel fill (clear_k, gfx_clear_k.h). Every texel of a w x h x d box of
+// the staging span takes `value` where `mask` is set and keeps its other bits,
+// so one kernel serves colour clears, depth- or stencil-only clears of a
+// combined format, and buffer fills. One thread per texel, grid-strided.
+typedef struct {
+  uint64_t dst_addr;      // staging span, texel (0,0,0) at its start      (in/out)
+  uint32_t texel_bytes;   // 1..16
+  uint32_t w, h, d;
+  uint32_t row_pitch, slice_pitch;
+  uint32_t value[4];      // the texel, packed in the destination format
+  uint32_t mask[4];       // the texel bits to write
+} clear_arg_t;
