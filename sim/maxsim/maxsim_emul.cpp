@@ -16,6 +16,9 @@
 #include "Vmaxsim_afu.h"
 #include "Vmaxsim_afu___024root.h"
 #include "verilated.h"
+#ifdef VM_TRACE
+#include "verilated_vcd_c.h"
+#endif
 
 #include <array>
 #include <cstdio>
@@ -73,10 +76,18 @@ public:
         mmio_cycles_(env_or("MAXSIM_EMUL_MMIO_CYCLES", 250)) {}
 
   ~Impl() {
+#ifdef VM_TRACE
+    if (vcd_)
+      vcd_->close();
+#endif
     if (top_)
       top_->final();
     if (trace_ != nullptr)
       fclose(trace_);
+    if (axi_trace_ != nullptr)
+      fclose(axi_trace_);
+    if (reg_trace_ != nullptr)
+      fclose(reg_trace_);
   }
 
   int init() {
@@ -84,8 +95,27 @@ public:
     // cycle, one byte per cycle of up to 8 classes.
     if (const char* path = getenv("MAXSIM_EMUL_TRACE"))
       trace_ = fopen(path, "wb");
+    // MAXSIM_EMUL_AXI_TRACE=<file>: the kernel's memory port, one line per
+    // request and response.
+    if (const char* path = getenv("MAXSIM_EMUL_AXI_TRACE"))
+      axi_trace_ = fopen(path, "w");
+    // MAXSIM_EMUL_REG_TRACE=<file>: every register access of the host.
+    if (const char* path = getenv("MAXSIM_EMUL_REG_TRACE"))
+      reg_trace_ = fopen(path, "w");
     context_ = std::make_unique<VerilatedContext>();
     top_ = std::make_unique<Vmaxsim_afu>(context_.get());
+#ifdef VM_TRACE
+    // MAXSIM_EMUL_VCD=<file>: a waveform of the kernel, in a build with --trace,
+    // from kernel cycle MAXSIM_EMUL_VCD_FROM on, MAXSIM_EMUL_VCD_DEPTH levels
+    // of hierarchy deep (2: the kernel's channels).
+    vcd_from_ = env_or("MAXSIM_EMUL_VCD_FROM", 0);
+    if (const char* path = getenv("MAXSIM_EMUL_VCD")) {
+      context_->traceEverOn(true);
+      vcd_ = std::make_unique<VerilatedVcdC>();
+      top_->trace(vcd_.get(), int(env_or("MAXSIM_EMUL_VCD_DEPTH", 99)));
+      vcd_->open(path);
+    }
+#endif
     top_->ap_rst_n = 0;
     idle_master();
     for (int i = 0; i < 16; ++i)
@@ -118,6 +148,8 @@ public:
       top_->s_axi_control_wvalid = !w;
     }
     top_->s_axi_control_bready = 0;
+    if (reg_trace_ != nullptr)
+      fprintf(reg_trace_, "%lu W %03x %08x\n", (unsigned long)cycle_, offset, value);
     return b ? 0 : -1;
   }
 
@@ -140,6 +172,8 @@ public:
         top_->s_axi_control_arvalid = 0;
     }
     top_->s_axi_control_rready = 0;
+    if (reg_trace_ != nullptr)
+      fprintf(reg_trace_, "%lu R %03x %08x\n", (unsigned long)cycle_, offset, *value);
     return r ? 0 : -1;
   }
 
@@ -156,9 +190,11 @@ public:
   }
 
 private:
+  // A read, with the data memory held when it took the request: a write
+  // that comes after it is not in its response.
   struct request_t {
-    uint64_t addr;
     uint64_t at;
+    std::array<uint8_t, kBeat> data;
   };
 
   void idle_master() {
@@ -188,11 +224,8 @@ private:
     top_->m_axi_mem_0_arready = 1;
     bool r = !reads_.empty() && reads_.front().at <= cycle_;
     top_->m_axi_mem_0_rvalid = r;
-    if (r) {
-      uint8_t beat[kBeat];
-      memory_.read(reads_.front().addr, beat, kBeat);
-      std::memcpy(top_->m_axi_mem_0_rdata.data(), beat, kBeat);
-    }
+    if (r)
+      std::memcpy(top_->m_axi_mem_0_rdata.data(), reads_.front().data.data(), kBeat);
     top_->m_axi_mem_0_rlast = 1;
     top_->m_axi_mem_0_rid = 0;
     top_->m_axi_mem_0_rresp = 0;
@@ -225,10 +258,30 @@ private:
       fputc(top_->rootp->maxsim_afu__DOT__profile_finish & 0xff, trace_);
     top_->ap_clk = 1;
     top_->eval();
+#ifdef VM_TRACE
+    if (vcd_ && cycle_ >= vcd_from_)
+      vcd_->dump(cycle_);
+#endif
     ++cycle_;
 
-    if (ar)
-      reads_.push_back({araddr, cycle_ + mem_latency_});
+    if (axi_trace_ != nullptr) {
+      if (ar)
+        fprintf(axi_trace_, "%lu AR %lx\n", (unsigned long)cycle_, (unsigned long)araddr);
+      if (aw)
+        fprintf(axi_trace_, "%lu AW %lx\n", (unsigned long)cycle_, (unsigned long)awaddr);
+      if (w)
+        fprintf(axi_trace_, "%lu W\n", (unsigned long)cycle_);
+      if (r_fire)
+        fprintf(axi_trace_, "%lu R\n", (unsigned long)cycle_);
+      if (b_fire)
+        fprintf(axi_trace_, "%lu B\n", (unsigned long)cycle_);
+    }
+    if (ar) {
+      request_t req;
+      req.at = cycle_ + mem_latency_;
+      memory_.read(araddr, req.data.data(), kBeat);
+      reads_.push_back(req);
+    }
     if (r_fire)
       reads_.pop_front();
     if (aw)
@@ -251,11 +304,17 @@ private:
 
   std::unique_ptr<VerilatedContext> context_;
   std::unique_ptr<Vmaxsim_afu> top_;
+#ifdef VM_TRACE
+  std::unique_ptr<VerilatedVcdC> vcd_;
+  uint64_t vcd_from_ = 0;
+#endif
   std::mutex mutex_;
   memory_t memory_;
   uint64_t cycle_ = 0;
   uint64_t mem_latency_, mmio_cycles_;
   FILE* trace_ = nullptr;
+  FILE* axi_trace_ = nullptr;
+  FILE* reg_trace_ = nullptr;
   std::deque<request_t> reads_;
   std::deque<uint64_t> aw_;
   std::deque<std::array<uint8_t, 2 * kBeat>> w_;
