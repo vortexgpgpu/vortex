@@ -173,8 +173,17 @@ foreach bif [ipx::get_bus_interfaces -of $core] {
     }
 }
 set axi_masters [lsort $axi_masters]
+# Without NUM_*_OUTSTANDING the linker sizes the platform side of each port
+# (e.g. the U55C HBM subsystem slave) for 2 outstanding transactions, which
+# caps a port at two cache lines per memory round trip.
+set axi_outstanding [expr {[info exists ::env(AXI_OUTSTANDING)] ? $::env(AXI_OUTSTANDING) : 32}]
 foreach m $axi_masters {
     ipx::associate_bus_interfaces -busif $m -clock ap_clk $core
+    set bif [ipx::get_bus_interfaces $m -of_objects $core]
+    foreach p {NUM_READ_OUTSTANDING NUM_WRITE_OUTSTANDING} {
+        set bp [ipx::add_bus_parameter $p $bif]
+        set_property value $axi_outstanding $bp
+    }
 }
 
 set mem_map [::ipx::add_memory_map -quiet "s_axi_ctrl" $core]
