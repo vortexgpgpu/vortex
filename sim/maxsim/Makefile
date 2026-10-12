@@ -18,6 +18,9 @@ LDFLAGS += -shared -pthread
 
 VL_FLAGS += -O3 -Wno-fatal -Wno-lint -Wno-style -Wno-MULTIDRIVEN --x-initial 0 --x-assign 0
 VL_FLAGS += -I$(MAXSIM_RTL_DIR) -I$(WORK_DIR)/gen
+ifdef VCD
+VL_FLAGS += --trace --trace-structs
+endif
 THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(min(32, mp.cpu_count()))')
 VL_FLAGS += -j $(THREADS)
 
