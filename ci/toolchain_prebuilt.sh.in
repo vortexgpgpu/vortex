@@ -124,12 +124,14 @@ verilator()
     rm verilator.tar.bz2
 }
 
-sv2v()
+circt()
 {
-    echo "prebuilt sv2v..."
-    tar -C $TOOLDIR -cvjf sv2v.tar.bz2 sv2v
-    mkdir -p ./sv2v/$OSVERSION
-    mv sv2v.tar.bz2 ./sv2v/$OSVERSION
+    echo "prebuilt circt..."
+    tar -C $TOOLDIR -cvjf circt.tar.bz2 circt/bin/circt-verilog circt/bin/circt-opt circt/bin/firtool
+    split -b 50M circt.tar.bz2 "circt.tar.bz2.part"
+    mkdir -p ./circt/$OSVERSION
+    mv circt.tar.bz2.part* ./circt/$OSVERSION
+    rm circt.tar.bz2
 }
 
 yosys()
@@ -172,7 +174,7 @@ gem5()
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--sv2v] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--circt] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -199,7 +201,7 @@ while [ "$1" != "" ]; do
                 ;;
         --libc64 ) libc64
                 ;;
-        --sv2v ) sv2v
+        --circt ) circt
                 ;;
         --yosys ) yosys
                 ;;
@@ -217,7 +219,7 @@ while [ "$1" != "" ]; do
                 libcrt64
                 libc32
                 libc64
-                sv2v
+                circt
                 yosys
                 sta
                 mesa

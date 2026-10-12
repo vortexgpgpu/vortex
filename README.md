@@ -81,7 +81,7 @@ The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
 - [SoftFloat](https://github.com/ucb-bar/berkeley-softfloat-3.git)
 - [Ramulator](https://github.com/CMU-SAFARI/ramulator.git)
 - [Yosys](https://github.com/YosysHQ/yosys)
-- [Sv2v](https://github.com/zachjs/sv2v)
+- [CIRCT](https://github.com/llvm/circt)
 - [Mesa](https://www.mesa3d.org/)
 - [chipStar](https://github.com/CHIP-Star/chipStar)
 ### Install Vortex codebase

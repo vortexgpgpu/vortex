@@ -1,6 +1,6 @@
 ROOT_DIR := $(realpath ../../../..)
 include $(ROOT_DIR)/config.mk
-# exports VERILATOR/VERILATOR_PATH, which gen_sources.sh resolves from the
+# exports CIRCT_VERILOG, the preprocessor gen_sources.sh resolves from the
 # environment rather than PATH
 include $(VORTEX_HOME)/hw/syn/common.mk
 
