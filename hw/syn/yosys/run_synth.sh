@@ -231,7 +231,9 @@ log "Writing $YS"
 
   for l in "${LIB_LIST[@]}"; do printf "read_liberty -lib %q\n" "$l"; done
   echo "# read sources"
-  for s in "${SRC_FILES[@]}"; do printf "read_verilog -defer %q\n" "$s"; done
+  # SystemVerilog mode: the design is Verilog-2005, which it includes, and
+  # the black-box stubs are SystemVerilog.
+  for s in "${SRC_FILES[@]}"; do printf "read_verilog -sv -defer %q\n" "$s"; done
 
   if [[ -n "$BB_MODULES" ]]; then
     IFS=',' read -r -a bbmods <<< "$BB_MODULES"
@@ -303,7 +305,7 @@ log "Writing $YS"
     fi
     # Drop what mapping left behind before anything measures or reads the
     # netlist. Without it the gate reports dead cells as area, and the written
-    # netlist carries ~129 undriven `assign w = 'hx` wires -- sv2v function
+    # netlist carries undriven `assign w = 'hx` wires -- frontend function
     # scopes that survive as debris. OpenSTA's Verilog reader rejects those
     # outright once Yosys marks them `signed` (0.69 does, 0.57 did not), which
     # is how a missing clean read as a Yosys incompatibility.

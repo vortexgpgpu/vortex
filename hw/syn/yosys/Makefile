@@ -1,6 +1,6 @@
 ROOT_DIR := $(realpath ../../..)
 include $(ROOT_DIR)/config.mk
-include $(ROOT_DIR)/hw/syn/common.mk    # SV2V_PATH/YOSYS_PATH/STA_PATH + exported SV2V/YOSYS/STA
+include $(ROOT_DIR)/hw/syn/common.mk    # CIRCT/YOSYS/STA paths + exported tools
 
 DELAY_UNC 	?= 0.02
 DELAY_IO  	?= 0.05
@@ -90,6 +90,7 @@ else
 BB_MODULES ?= VX_dp_ram_asic,VX_sp_ram_asic
 endif
 
+comma := ,
 SCRIPT_DIR := $(VORTEX_HOME)/hw/scripts
 RTL_DIR := $(VORTEX_HOME)/hw/rtl
 
@@ -203,9 +204,13 @@ $(BUILD_DIR):
 $(BUILD_DIR)/src: | $(BUILD_DIR)
 	$(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -C$(BUILD_DIR)/src
 
-sv2v: $(BUILD_DIR)/project.v
+# CIRCT elaborates the design into one Verilog-2005 file; the black-box
+# modules (SRAM macros) stay instances with their parameter values, bound to
+# their stubs in the sources.
+verilog: $(BUILD_DIR)/project.v
 $(BUILD_DIR)/project.v: $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/sv2v.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -o$(BUILD_DIR)/project.v
+	$(SCRIPT_DIR)/sv_to_v.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
+		-o$(BUILD_DIR)/project.v
 	# Remove severity/control system-task lines yosys can't synthesize
 	# ($fatal/$error/$warning/$info/$stop are used by the cvfpu sources).
 	sed -ri '/^[[:space:]]*[$$](finish|display|fatal|error|warning|info|stop)/d' $(BUILD_DIR)/project.v
@@ -213,6 +218,9 @@ $(BUILD_DIR)/project.v: $(BUILD_DIR)/src
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt: $(BUILD_DIR)/project.v
 	echo $(realpath $(BUILD_DIR)/project.v) > $(BUILD_DIR)/sources.txt
+	for m in $(subst $(comma), ,$(BB_MODULES)); do \
+		grep -lE "^[[:space:]]*module[[:space:]]+$$m\b" $(BUILD_DIR)/src/*.v $(BUILD_DIR)/src/*.sv 2>/dev/null; \
+	done | xargs -r realpath | sort -u >> $(BUILD_DIR)/sources.txt
 
 ifneq ($(strip $(DUT_FILELIST)),)
 SYN_SRC_FILE := $(abspath $(DUT_FILELIST))

@@ -434,7 +434,7 @@ Output reports are written to `build/hw/syn/yosys/tfr_fedp_VX_tcu_fedp_tfr/repor
 
 Build directory: `<PREFIX>_<TOP_LEVEL_ENTITY>/` (e.g., `test_Vortex/`).
 
-The flow uses `sv2v` to convert SystemVerilog sources to Verilog before feeding them to Yosys.
+The flow elaborates the SystemVerilog sources with CIRCT ([hw/scripts/sv_to_v.sh](../hw/scripts/sv_to_v.sh)) into one Verilog-2005 file for Yosys: packed arrays and structs become plain vectors, and the SRAM macros (`BB_MODULES`) stay instances with their parameter values, bound to their stubs.
 
 #### Per-DUT synthesis
 

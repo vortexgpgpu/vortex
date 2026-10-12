@@ -13,7 +13,7 @@ lives in ci/synth_gate.py; this entry point only pins the tool.
               from the reports/ set the flow already produces
 
 Unlike the FPGA gate this one runs on a hosted runner as a normal pytest cell
-(`check: asic_gate`, tier `full`), because yosys/sv2v/OpenSTA ship in the
+(`check: asic_gate`, tier `full`), because yosys/CIRCT/OpenSTA ship in the
 prebuilt toolchain and ASAP7 is a 59 MB fetch.
 
 Usage (from a source checkout):

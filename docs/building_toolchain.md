@@ -1171,7 +1171,7 @@ Both accept the same per-component flags:
 
 ```
 --pocl  --chipstar  --verilator  --riscv32  --riscv64  --llvm --mesa
---libcrt32  --libcrt64  --libc32  --libc64  --sv2v  --yosys  --sta
+--libcrt32  --libcrt64  --libc32  --libc64  --circt  --yosys  --sta
 --gem5     (slim runtime — see §10)
 --all      (every component above; SST is NOT included — see §11)
 ```

@@ -322,14 +322,14 @@ mix of knobs and computed results.
 RTL reads `` `VX_CFG_* `` and `` `VX_MEM_* `` macros directly; there is no
 typed-`localparam` configuration package. One was built and reverted:
 
-- **sv2v drops wildcard re-exports.** The Yosys ASIC flow converts through
-  sv2v, which discards `export pkg::*` symbols — the flow failed on
-  `L3_CACHE_SIZE` and its siblings.
+- **sv2v drops wildcard re-exports.** The Yosys ASIC flow converted through
+  sv2v at the time, which discards `export pkg::*` symbols — the flow failed
+  on `L3_CACHE_SIZE` and its siblings. (The flow now elaborates with CIRCT.)
 - **Package compile order is tool-divergent.** Verilator is strict, Vivado
   auto-sorts, VCS is order-sensitive.
 
 Backtick macros are the one representation every tool handles identically.
-Do not re-attempt a package without first solving sv2v re-export.
+Do not re-attempt a package without first checking re-exports in every flow.
 
 ### 9.2 Superseded directions
 

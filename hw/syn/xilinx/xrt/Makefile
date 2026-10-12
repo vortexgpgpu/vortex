@@ -1,8 +1,8 @@
 ROOT_DIR := $(realpath ../../../..)
 include $(ROOT_DIR)/config.mk
-# Exports VERILATOR/VERILATOR_PATH as absolute paths. gen_sources.sh resolves
-# verilator from the environment, so without this the flow silently depends on
-# verilator being on PATH and fails with "verilator: command not found".
+# Exports CIRCT_VERILOG as an absolute path. gen_sources.sh resolves its
+# preprocessor from the environment, so without this the flow silently depends
+# on circt-verilog being on PATH.
 include $(VORTEX_HOME)/hw/syn/common.mk
 
 ifneq ($(findstring Makefile, $(MAKEFILE_LIST)), Makefile)
