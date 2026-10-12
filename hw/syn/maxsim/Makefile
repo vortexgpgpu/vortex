@@ -47,8 +47,8 @@ GEN_DIR := $(BUILD_DIR)/gen
 # first so they can be classes (lift_boundaries.py; <unit>[:drop=P,...][;port=P,...]).
 MAXSIM_CLASSES ?= VX_socket__lift
 MAXSIM_LIFT ?= VX_socket:drop=INSTANCE_ID;port=SOCKET_ID
-# Where circt-verilog, circt-opt and firtool are (PATH by default).
-CIRCT_BIN ?=
+# Where circt-verilog, circt-opt and firtool are (hw/syn/common.mk's CIRCT).
+CIRCT_BIN ?= $(CIRCT_PATH)/bin
 LIFT_PYTHON ?= python3
 # The kernel clock (MHz): the image is timed at it and the shell programs it.
 MAXSIM_FREQ ?= 143

@@ -26,6 +26,7 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
   (JEDEC HBM2/HBM3/GDDR6 organization and nanosecond timing, 32 B bursts, permuted open-page bank interleave, per-channel
   responses), configured from data-sheet values: `VX_CFG_PLATFORM_MEMORY_{TYPE,DATA_RATE,LATENCY,QUEUE_SIZE}`. The default machine
   keeps its idle read latency (14/26 cycles open-row/conflict, was 13/27) and one-block-per-cycle peak.
+- **CIRCT is the SystemVerilog frontend of every synthesis flow; sv2v and Verilator's preprocessor are gone.** `gen_sources.sh -P` preprocesses with `circt-verilog -E` (identical code to `verilator -E` over the whole RTL tree; only comments differ), and the Yosys flow elaborates with CIRCT into one Verilog-2005 file ([hw/scripts/sv_to_v.sh](hw/scripts/sv_to_v.sh)) instead of sv2v: packed arrays and structs become vectors, and the SRAM macros (`BB_MODULES`) stay instances with their parameter values, read in SystemVerilog mode beside their stubs. CIRCT installs under `$TOOLDIR/circt` (`toolchain_install.sh --circt`; `hw/syn/common.mk` exports `CIRCT_VERILOG`, `CIRCT_OPT`, `FIRTOOL`), and the `asic_gate` fingerprints its baselines on the CIRCT version. Verilator remains the simulator (and `--xml-only` scope metadata). On the cache DUT (ASAP7), SRAM area is identical and logic area is 5.6% higher than through sv2v: CIRCT folds synchronous resets into the next-value logic and lowers array reads to mux trees, both open items.
 
 ## [3.0] — 2026-10-07
 

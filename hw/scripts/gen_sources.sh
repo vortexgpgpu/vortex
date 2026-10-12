@@ -19,8 +19,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # every stage of a pipeline.
 set -eo pipefail
 
-# Resolve verilator path at runtime, allowing it to be overridden by environment variable.
-VERILATOR="${VERILATOR:-verilator}"
+# The preprocessor is CIRCT's SystemVerilog frontend; hw/syn/common.mk exports
+# its absolute path.
+CIRCT_VERILOG="${CIRCT_VERILOG:-circt-verilog}"
 
 defines=()
 includes=()
@@ -121,17 +122,16 @@ copy_one_file() {
       "$SCRIPT_DIR"/repl_params.py $params_str -T"$top_module" "$file" > "$temp_file"
       input="$temp_file"
     fi
-    # Trust verilator's exit status, not the output size: a missing tool,
-    # unresolved include, or preprocessor error returns non-zero and is caught
-    # here (this is the failure that otherwise resurfaced far downstream as
-    # sv2v "Could not find top module"). An *empty but successful* output is
-    # legitimate — config-gated modules (e.g. VX_decompressor.sv when RVC is
+    # Trust the preprocessor's exit status, not the output size: a missing
+    # tool, unresolved include, or preprocessor error returns non-zero and is
+    # caught here rather than far downstream. An *empty but successful* output
+    # is legitimate — config-gated modules (e.g. VX_decompressor.sv when RVC is
     # disabled) preprocess to nothing — so emptiness alone must not fail.
-    if ! "$VERILATOR" $defines_str $includes_str -E -P "$input" > "$dest"; then
+    if ! "$CIRCT_VERILOG" -E $defines_str $includes_str "$input" -o "$dest"; then
       if [ -n "$temp_file" ]; then rm -f "$temp_file"; fi
-      echo "gen_sources.sh: error: verilator failed to preprocess '$file'" >&2
-      echo "  using VERILATOR='$VERILATOR' — ensure it is reachable" \
-           "(set VERILATOR / VERILATOR_PATH, see hw/syn/common.mk) and that" \
+      echo "gen_sources.sh: error: circt-verilog failed to preprocess '$file'" >&2
+      echo "  using CIRCT_VERILOG='$CIRCT_VERILOG' — ensure it is reachable" \
+           "(set CIRCT_VERILOG / CIRCT_PATH, see hw/syn/common.mk) and that" \
            "the include paths and defines resolve." >&2
       exit 1
     fi

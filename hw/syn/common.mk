@@ -21,17 +21,21 @@ ifndef TOOLDIR
 $(error TOOLDIR not set — include $$(ROOT_DIR)/config.mk before hw/syn/common.mk)
 endif
 
-# Tool install prefixes (overridable; default under $(TOOLDIR)).
-SV2V_PATH  ?= $(TOOLDIR)/sv2v
+# Tool install prefixes (overridable; default under $(TOOLDIR)). CIRCT is the
+# SystemVerilog frontend of every flow: its preprocessor (gen_sources.sh -P)
+# and, for yosys, its Verilog-2005 export (sv_to_v.sh).
+CIRCT_PATH ?= $(TOOLDIR)/circt
 YOSYS_PATH ?= $(TOOLDIR)/yosys
 STA_PATH   ?= $(TOOLDIR)/sta
 VERILATOR_PATH ?= $(TOOLDIR)/verilator
 
 # Absolute tool binaries exported via env var so builds are self-contained
 # and multiple trees can coexist without a sourced env polluting PATH.
-SV2V  ?= $(SV2V_PATH)/bin/sv2v
+CIRCT_VERILOG ?= $(CIRCT_PATH)/bin/circt-verilog
+CIRCT_OPT     ?= $(CIRCT_PATH)/bin/circt-opt
+FIRTOOL       ?= $(CIRCT_PATH)/bin/firtool
 YOSYS ?= $(YOSYS_PATH)/bin/yosys
 STA   ?= $(STA_PATH)/bin/sta
 VERILATOR ?= $(VERILATOR_PATH)/bin/verilator
 
-export SV2V_PATH YOSYS_PATH STA_PATH VERILATOR_PATH SV2V YOSYS STA VERILATOR
+export CIRCT_PATH YOSYS_PATH STA_PATH VERILATOR_PATH CIRCT_VERILOG CIRCT_OPT FIRTOOL YOSYS STA VERILATOR

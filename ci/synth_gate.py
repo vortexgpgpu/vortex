@@ -322,15 +322,15 @@ class Yosys(Tool):
     fallback_weight = 900
     job_label = "make"
 
-    # sv2v is the parser: a bad define, a missing include or a hierarchy error
-    # dies there, before Yosys ever reads a line. run_synth.sh stamps `gen-ys`
-    # immediately after source generation and conversion have both succeeded, so
-    # that stamp is this flow's "past the typo risk" marker.
+    # CIRCT is the parser: a bad define, a missing include or a hierarchy error
+    # dies in sv_to_v.sh, before Yosys ever reads a line. run_synth.sh stamps
+    # `gen-ys` immediately after source generation and conversion have both
+    # succeeded, so that stamp is this flow's "past the typo risk" marker.
     elab_done = "TIME gen-ys"
     elab_label = "source conversion"
     phases = (
         ("gen_sources.sh", "sources"),
-        ("sv2v.sh", "sv2v"),
+        ("sv_to_v.sh", "verilog"),
         (elab_done, "synthesis"),
         ("TIME yosys", "sram"),
         ("run_sta.tcl", "timing"),
@@ -344,7 +344,8 @@ class Yosys(Tool):
                 "corner": os.environ.get("CORNER", "tt"),
                 "yosys": tool_version("yosys", "-V"),
                 "sta": tool_version("sta", "-version"),
-                "sv2v": tool_version("sv2v", "--version"),
+                "circt": tool_version("circt-verilog", "--version",
+                                      package="circt", line_prefix="CIRCT"),
                 "xlen": args.xlen}
 
     def hash_key(self, env):
@@ -359,13 +360,13 @@ class Yosys(Tool):
         # tool change. All three ship in one tarball pinned by TOOLCHAIN_REV, so
         # this makes that pin part of the baseline contract.
         return [env["pdk"], env["vt"], env["corner"], str(env["xlen"]),
-                env["yosys"], env["sta"], env["sv2v"]]
+                env["yosys"], env["sta"], env["circt"]]
 
     def env_warning(self, build, env):
         # Area and Fmax move with the Yosys/ABC version far more than Vivado's
         # do, so a version change is worth saying out loud on every build.
         for key, label in (("yosys", "Yosys"), ("sta", "OpenSTA"),
-                           ("sv2v", "sv2v")):
+                           ("circt", "CIRCT")):
             ref = build.get("baseline_env", {}).get(key)
             if ref and env.get(key) and ref != env[key]:
                 # The version is in config_hash, so this build is already going
@@ -430,7 +431,7 @@ class Yosys(Tool):
 TOOLS = {t.name: t for t in (Xilinx(), Yosys())}
 
 
-def tool_version(name, flag):
+def tool_version(name, flag, package=None, line_prefix=None):
     """First line of `<tool> <flag>`, or "" if it cannot be asked.
 
     Resolved out of $TOOLDIR the way hw/syn/common.mk does, with a PATH fallback:
@@ -438,7 +439,7 @@ def tool_version(name, flag):
     copy of yosys would make the baseline's tool env a lie.
     """
     tooldir = os.environ.get("TOOLDIR") or os.path.expanduser("~/tools")
-    binary = os.path.join(tooldir, name, "bin", name)
+    binary = os.path.join(tooldir, package or name, "bin", name)
     if not os.path.exists(binary):
         binary = name
     try:
@@ -449,6 +450,12 @@ def tool_version(name, flag):
     text = out.stdout.decode(errors="replace").strip()
     if not text:
         return ""
+    # A tool that prints several components' versions names the one that
+    # matters on a line of its own (circt-verilog: "CIRCT <sha>").
+    if line_prefix:
+        lines = [l.strip() for l in text.splitlines()
+                 if l.strip().startswith(line_prefix)]
+        return lines[0] if lines else ""
     # Up to the build details: yosys reports its git sha AND the g++ that built
     # it ("Yosys 0.57+157 (git sha1 ..., g++ 11.4 ...)"). Those identify the
     # binary, not the tool, and this string is part of the baseline fingerprint
