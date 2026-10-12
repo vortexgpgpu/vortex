@@ -19,7 +19,7 @@
 // The target runs free: the endpoint gives it a token every cycle. The host
 // queues commands -- a DCR write or read, a start, a reset -- and each is
 // applied to the target for one cycle (a reset for its count of cycles), in
-// order, at the first cycle the queue reaches it. A DCR read's response is
+// order, from the cycle after the queue reaches it. A DCR read's response is
 // kept for the host; `busy` covers everything queued or in flight, so a host
 // that sees the target idle has every effect of what it asked for.
 //
@@ -86,6 +86,13 @@ module maxsim_ctrl #(
     reg [QC-1:0]         q_count;
     reg [DCR_ADDR_W-1:0] cmd_addr;
     reg [DCR_DATA_W-1:0] cmd_data;
+    // The command applied this target cycle, taken from the queue when the
+    // previous cycle finished: the target's control tokens are functions of it
+    // alone, so they do not change between the target taking one and the
+    // endpoint finishing the cycle.
+    reg [2:0]            cur_op;
+    reg [DCR_ADDR_W-1:0] cur_addr;
+    reg [DCR_DATA_W-1:0] cur_data;
 
     reg                  run;
     reg [31:0]           reset_count;
@@ -98,13 +105,17 @@ module maxsim_ctrl #(
     reg [47:0]           finishes [NUM_CLASSES];
 
     wire       q_empty = (q_count == 0);
-    wire [2:0] op      = q_empty ? `MAXSIM_CMD_NONE : q_op[q_head];
 
     // ---- The target's control inputs this cycle ----
-    wire in_reset  = (reset_count != 0) | (op == `MAXSIM_CMD_RESET);
-    wire dcr_valid = ~in_reset & ((op == `MAXSIM_CMD_DCR_WRITE) | (op == `MAXSIM_CMD_DCR_READ));
-    wire dcr_rw    = (op == `MAXSIM_CMD_DCR_WRITE);
-    wire do_start  = ~in_reset & (op == `MAXSIM_CMD_START);
+    wire in_reset  = (reset_count != 0) | (cur_op == `MAXSIM_CMD_RESET);
+    wire dcr_valid = ~in_reset & ((cur_op == `MAXSIM_CMD_DCR_WRITE) | (cur_op == `MAXSIM_CMD_DCR_READ));
+    wire dcr_rw    = (cur_op == `MAXSIM_CMD_DCR_WRITE);
+    wire do_start  = ~in_reset & (cur_op == `MAXSIM_CMD_START);
+    // Reset cycles left after this one; a reset command lasts its count of
+    // cycles, at least one.
+    wire [31:0] reset_next = (reset_count != 0) ? reset_count - 32'd1
+                           : ((cur_op == `MAXSIM_CMD_RESET) && (cur_data > 1)) ? 32'(cur_data) - 32'd1
+                           : 32'd0;
 
     wire finish;
     wire [5:0] done;
@@ -118,8 +129,8 @@ module maxsim_ctrl #(
     assign reset_bits         = in_reset;
     assign dcr_req_valid_bits = dcr_valid;
     assign dcr_req_rw_bits    = dcr_rw;
-    assign dcr_req_addr_bits  = q_addr[q_head];
-    assign dcr_req_data_bits  = q_data[q_head];
+    assign dcr_req_addr_bits  = cur_addr;
+    assign dcr_req_data_bits  = cur_data;
     assign start_bits         = do_start;
 
     wire                  rsp_v, busy;
@@ -141,9 +152,10 @@ module maxsim_ctrl #(
     wire wr      = aw_got & w_got & ~s_bvalid;
     wire [11:0] wa = {aw_addr[11:2], 2'b00};
     wire push    = wr & (wa == `MAXSIM_REG_CMD) & (q_count != QC'(QUEUE));
-    wire pop     = finish & ~q_empty & (reset_count == 0);
+    wire pop     = finish & ~q_empty & (reset_next == 0);
 
-    wire status_busy = ~q_empty | start_pending | target_busy | ~mem_idle | (reset_count != 0);
+    wire status_busy = ~q_empty | (cur_op != `MAXSIM_CMD_NONE) | start_pending | target_busy
+                     | ~mem_idle | (reset_count != 0);
 
     always @(posedge clk) begin
         if (reset) begin
@@ -152,6 +164,7 @@ module maxsim_ctrl #(
             q_count           <= 0;
             run               <= 1'b1;
             reset_count       <= RESET_CYCLES;
+            cur_op            <= `MAXSIM_CMD_NONE;
             start_pending     <= 1'b0;
             target_busy       <= 1'b0;
             rsp_valid         <= 1'b0;
@@ -181,10 +194,10 @@ module maxsim_ctrl #(
             // One target cycle of the endpoint.
             if (finish) begin
                 target_cycles <= target_cycles + 64'd1;
-                if (reset_count != 0)
-                    reset_count <= reset_count - 32'd1;
-                else if (op == `MAXSIM_CMD_RESET)
-                    reset_count <= q_data[q_head] - 32'd1;
+                reset_count   <= reset_next;
+                cur_op        <= pop ? q_op[q_head] : `MAXSIM_CMD_NONE;
+                cur_addr      <= q_addr[q_head];
+                cur_data      <= q_data[q_head];
                 if (rsp_v) begin
                     rsp_valid <= 1'b1;
                     rsp_data  <= rsp_d;
