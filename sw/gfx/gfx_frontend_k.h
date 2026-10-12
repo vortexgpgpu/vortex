@@ -37,19 +37,20 @@ static inline void pipe_bin_range(const setup_bbox_t& p, int& bL, int& bR, int& 
 // Clip + setup for one triangle, kept out-of-line so the FP math does not bloat
 // the entry (the merged 9-stage function otherwise overruns the uniform pass).
 static uint32_t __attribute__((noinline))
-pipe_clip_and_setup(const setup_vertex_t* v, int W, int H, uint32_t cull_mode,
-                    uint32_t front_face, const setup_viewport_t* vp, bool coverage_only,
+pipe_clip_and_setup(const setup_vertex_t* v, int W, int H, const pipe_arg_t* arg,
+                    const setup_viewport_t* vp, bool coverage_only,
                     rast_prim_t* prim_out, setup_bbox_t* bbox_out) {
   clip_tri_t sub[SETUP_MAX_SUB];
   // The near plane the clip uses and the depth range setup maps onto have to
   // come from the same convention, so both read it off the bound viewport.
-  int ns = clip_near(v[0], v[1], v[2], sub, vp && vp->halfz);
+  int ns = clip_near(v[0], v[1], v[2], sub, vp && vp->halfz, arg->near_clip_off != 0);
   uint32_t kept = 0;
   for (int s = 0; s < ns; ++s) {
     rast_prim_t prim{};
     setup_bbox_t bb{};
     if (setup_triangle(sub[s].v[0], sub[s].v[1], sub[s].v[2], W, H,
-                       SETUP_NEAR, SETUP_FAR, prim, bb, cull_mode, vp, front_face, coverage_only)) {
+                       SETUP_NEAR, SETUP_FAR, prim, bb, arg->cull_mode, vp, arg->front_face,
+                       coverage_only, &arg->depth_bias)) {
       prim_out[kept] = prim;
       bbox_out[kept] = bb;
       ++kept;
@@ -75,6 +76,25 @@ static inline void pipe_load_tri(const pipe_arg_t* arg, uint32_t t, setup_vertex
     auto verts = reinterpret_cast<const setup_vertex_t*>(arg->verts_addr);
     v[0] = verts[3 * t]; v[1] = verts[3 * t + 1]; v[2] = verts[3 * t + 2];
   }
+}
+
+// Whether triangle t's three VS records all have one cull distance negative.
+static inline bool pipe_cull_distance(const pipe_arg_t* arg, uint32_t t) {
+  const uint32_t n = SETUP_CULL_DIST_COUNT(arg->cull_dist);
+  if (n == 0 || !arg->vsrec_addr) {
+    return false;
+  }
+  auto recs = reinterpret_cast<const uint8_t*>(arg->vsrec_addr) + SETUP_CULL_DIST_OFF(arg->cull_dist);
+  const float* d[3];
+  for (uint32_t k = 0; k < 3; ++k) {
+    d[k] = reinterpret_cast<const float*>(recs + (size_t)(3 * t + k) * arg->vstride);
+  }
+  for (uint32_t i = 0; i < n; ++i) {
+    if (d[0][i] < 0.0f && d[1][i] < 0.0f && d[2][i] < 0.0f) {
+      return true;
+    }
+  }
+  return false;
 }
 
 } // namespace gfx_pipe
@@ -128,8 +148,8 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
       pipe_load_tri(arg, t, v);
-      keep[t] = pipe_clip_and_setup(v, W, H, arg->cull_mode, arg->front_face,
-                                    vpp, coverage_only, pr, bb);
+      keep[t] = pipe_cull_distance(arg, t) ? 0
+              : pipe_clip_and_setup(v, W, H, arg, vpp, coverage_only, pr, bb);
     }
   } break;
 
@@ -158,8 +178,8 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
       pipe_load_tri(arg, t, v);
-      uint32_t kept = pipe_clip_and_setup(v, W, H, arg->cull_mode, arg->front_face,
-                                          vpp, coverage_only, pr, bb);
+      uint32_t kept = pipe_cull_distance(arg, t) ? 0
+                    : pipe_clip_and_setup(v, W, H, arg, vpp, coverage_only, pr, bb);
       // Every subtriangle of a clipped triangle shares the source triangle's
       // varying record: its barycentrics are those of the source triangle.
       rast_vary_t vr{};

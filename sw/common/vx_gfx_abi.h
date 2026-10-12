@@ -180,8 +180,9 @@ struct rast_attrib_t {
 // likewise cancels in the FS divide — so tiled UV well beyond 1.0 stays exact.
 //
 // These planes carry the native (setup_vertex_t) path's varyings. A draw fed from
-// VS output records leaves them unset: its fragment stage interpolates the
-// records directly through rast_vary_t (gfx_frontend_abi.h). `z` is always set.
+// VS output records leaves them unset, except r.x, which holds the depth bias
+// (SETUP_PRIM_DEPTH_BIAS): its fragment stage interpolates the records directly
+// through rast_vary_t (gfx_frontend_abi.h). `z` is always set.
 struct rast_attribs_t {
   rast_attrib_t z, r, g, b, a, u, v, rhw, w0, w1, w2, w3, w4, w5;
 };

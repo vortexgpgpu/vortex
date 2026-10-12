@@ -172,7 +172,7 @@ $(VORTEX_RT_LIB)/libvortex.so: FORCE
 
 ifneq ($(filter %.S,$(VX_SRCS)),)
 kernel.elf: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
-	$(VX_CXX) $(VX_CFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(VX_LDFLAGS) -o $@
+	$(VX_CXX) $(VX_CFLAGS) $(filter-out $(CONFIG_STAMP) %.h %.hpp,$^) $(VX_LDFLAGS) -o $@
 else
 vx_start.o: $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_STAMP)
 	$(VX_CXX) $(VX_CFLAGS) -c $(VX_SRCS)
@@ -185,7 +185,7 @@ kernel.elf: vx_start.o $(VX_SRCS) $(VORTEX_KN_PATH)/lib$(KERNEL_LIB).a $(CONFIG_
 endif
 
 $(APP): $(SRCS) $(RT_LIB_DIR)/libvortex.so $(CONFIG_STAMP)
-	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP),$^) $(LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(filter-out $(CONFIG_STAMP) %.h %.hpp,$^) $(LDFLAGS) -o $@
 
 # Cross-compiled stub for non-native HOST_ARCH.
 ifneq ($(HOST_ARCH),x86_64)
@@ -220,8 +220,13 @@ else
 	SCOPE_JSON_PATH=$(VORTEX_RT_LIB)/scope.json LD_LIBRARY_PATH=$(XILINX_XRT)/lib:$(VORTEX_RT_LIB):$(LD_LIBRARY_PATH) VORTEX_DRIVER=xrt ./$(PROJECT) $(OPTS)
 endif
 
-.depend: $(SRCS)
-	$(CXX) $(CXXFLAGS) -MM $^ > .depend;
+# The host binary and the kernel are built straight from their sources, so their
+# header dependencies have to name those targets: an edit to a header the two
+# share (an argument-block ABI) must rebuild both, or a fresh host runs against a
+# kernel built for the old layout.
+.depend: $(SRCS) $(VX_SRCS) $(lastword $(MAKEFILE_LIST))
+	$(CXX) $(CXXFLAGS) -MM -MP -MT $(APP) $(filter %.c %.cpp,$(SRCS)) > $@
+	$(VX_CXX) $(VX_CFLAGS) -MM -MP -MT vx_start.o -MT kernel.elf $(filter %.c %.cpp,$(VX_SRCS)) >> $@
 
 clean-kernel:
 	rm -rf *.elf *.vxbin *.dump

@@ -52,6 +52,7 @@
 #define SETUP_CULL_NONE  0
 #define SETUP_CULL_BACK  1
 #define SETUP_CULL_FRONT 2
+#define SETUP_CULL_ALL   3   // drops every primitive (cull both faces, rasterizer discard)
 
 // Which winding is front-facing, by the sign of the triangle's area in y-down
 // screen space. Facing drives the cull, gl_FrontFacing and the two-sided stencil
@@ -80,6 +81,32 @@ typedef struct {
   float minz, maxz;   // screen_z range (depth range)
   uint32_t halfz;     // 0 = GL [-w,w] clip z, 1 = Vulkan [0,w]
 } setup_viewport_t;
+
+// Depth bias (VkPipelineRasterizationStateCreateInfo::depthBias*), added to the
+// depth plane of every filled triangle in window-z units:
+//   o = constant * r + slope * max(|dz/dx|, |dz/dy|), then clamped by `clamp`
+// (a positive clamp bounds o above, a negative one below, 0 does not clamp).
+// For a UNORM depth the host folds r into `constant`; for a float depth
+// (float_depth = 1) r is 2^(e - 23), e being the largest exponent of the
+// primitive's three depths, so setup computes it.
+typedef struct {
+  uint32_t enable;
+  uint32_t float_depth;
+  float    constant, slope, clamp;
+} setup_depth_bias_t;
+
+// Without a near plane, setup clips at w >= SETUP_W_EPS instead.
+#define SETUP_W_EPS 1e-6f
+
+// A coverage-only primitive record (one fed from VS records) carries no varying
+// planes, so the first unused one holds the depth bias its depth plane already
+// includes (FloatA, window-z units): depth clipping tests the depth before bias.
+#define SETUP_PRIM_DEPTH_BIAS(prim) ((prim).attribs.r.x)
+
+#define SETUP_CULL_DIST_PACK(off, count) \
+  (((uint32_t)(off) & 0xffffu) | (((uint32_t)(count) & 0xffu) << 16))
+#define SETUP_CULL_DIST_OFF(w)   ((w) & 0xffffu)
+#define SETUP_CULL_DIST_COUNT(w) (((w) >> 16) & 0xffu)
 
 // The nine front-end stages, in CP-launch order. Stages 0-2 run on setup_k,
 // stages 3-8 on binning_k (the split point is PIPE_STAGE_BCOUNT).
@@ -156,6 +183,16 @@ typedef struct {
   float vp_minz, vp_maxz; // depth range; both zero => SETUP_NEAR..SETUP_FAR
   uint32_t vp_halfz;      // clip-z convention, see setup_viewport_t
   uint32_t front_face;    // SETUP_FRONT_* (0 = positive-area winding is front)
+  setup_depth_bias_t depth_bias;
+  // 1: the near plane does not clip (depth clamp, or depth clip disabled);
+  // setup still clips at w = SETUP_W_EPS, since nothing behind the eye can be
+  // rasterized.
+  uint32_t near_clip_off;
+  // Cull distances in the VS records (vsrec_addr): SETUP_CULL_DIST_PACK(byte
+  // offset, count). A primitive whose vertices all have one distance negative
+  // is dropped. 0 = none.
+  uint32_t cull_dist;
+  uint32_t pad1_;
   uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in, when vsrec_addr is 0)
   // VS output records (in): when set, triangle t's vertices are records 3t..3t+2,
   // vstride bytes apart, each starting with the clip-space position; setup reads

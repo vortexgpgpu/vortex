@@ -27,9 +27,15 @@ struct vec3f { float x, y, z; };
 
 // Near-plane clip distance. GL's near plane is z_clip + w_clip >= 0; Vulkan's,
 // whose clip z already starts at 0, is z_clip >= 0. A kept vertex projects to
-// screen-z = near with finite x/y for w > 0 — unlike a w>=eps cut, which sits at
-// the projection singularity.
-static inline float near_dist(const setup_vertex_t& v, bool halfz = false) {
+// screen-z = near with finite x/y for w > 0. When the near plane does not clip
+// (depth clamp), only w must stay positive, and the cut moves to w >= eps; the
+// depth such a vertex projects to can be huge, which the saturated depth plane
+// and the clamp absorb.
+static inline float near_dist(const setup_vertex_t& v, bool halfz = false,
+                              bool near_clip_off = false) {
+  if (near_clip_off) {
+    return v.pos[3] - SETUP_W_EPS;
+  }
   return halfz ? v.pos[2] : (v.pos[2] + v.pos[3]);
 }
 
@@ -50,14 +56,14 @@ static inline setup_vertex_t vertex_lerp(const setup_vertex_t& a,
 // preserved so winding is consistent (setup_triangle normalizes it anyway).
 static inline int clip_near(const setup_vertex_t& a, const setup_vertex_t& b,
                             const setup_vertex_t& c, clip_tri_t out[SETUP_MAX_SUB],
-                            bool halfz = false) {
+                            bool halfz = false, bool near_clip_off = false) {
   const setup_vertex_t in[3] = { a, b, c };
   setup_vertex_t poly[4];
   int pn = 0;
   for (int i = 0; i < 3; ++i) {
     const setup_vertex_t& cur = in[i];
     const setup_vertex_t& nxt = in[(i + 1) % 3];
-    float fc = near_dist(cur, halfz), fn = near_dist(nxt, halfz);
+    float fc = near_dist(cur, halfz, near_clip_off), fn = near_dist(nxt, halfz, near_clip_off);
     bool cur_in = fc >= 0.0f, nxt_in = fn >= 0.0f;
     if (cur_in) poly[pn++] = cur;
     if (cur_in != nxt_in)
@@ -74,6 +80,8 @@ static inline int clip_near(const setup_vertex_t& a, const setup_vertex_t& b,
 static inline float fmin2(float a, float b) { return a < b ? a : b; }
 static inline float fmax2(float a, float b) { return a > b ? a : b; }
 static inline int   imin2(int a, int b)     { return a < b ? a : b; }
+// Clamp to what FloatA (Q7.24) represents.
+static inline float fsat_a(float v)         { return fmax2(fmin2(v, 127.99999f), -127.99999f); }
 static inline int   imax2(int a, int b)     { return a > b ? a : b; }
 
 // Clip-space (x,y,z,w) -> homogeneous-device-coordinate; W preserved so edge
@@ -144,7 +152,8 @@ static inline bool EdgeEquation(vec3f edges[3], const vec4f& v0,
   const bool neg  = (det < 0.0f);          // winding that needs a flip
   const bool back = (front_face == SETUP_FRONT_NEGATIVE) ? !neg : neg;
   if ((cull_mode == SETUP_CULL_BACK  &&  back) ||
-      (cull_mode == SETUP_CULL_FRONT && !back))
+      (cull_mode == SETUP_CULL_FRONT && !back) ||
+      cull_mode == SETUP_CULL_ALL)
     return false;                          // face-culled
   if (out_back != nullptr) {
     *out_back = back;
@@ -242,6 +251,54 @@ static inline void setup_vary_planes(const setup_vertex_t& v0, const setup_verte
   }
 }
 
+// The bias setup_depth_bias_t describes, for a depth plane of gradients za, zb
+// over a primitive whose window depths are z0..z2.
+static inline float depth_bias_offset(const setup_depth_bias_t& b, float za, float zb,
+                                      float z0, float z1, float z2) {
+  float r = 1.0f;
+  if (b.float_depth) {
+    // 2^(e - 23), e the unbiased exponent of the largest magnitude depth; at
+    // least the smallest normal, so a tiny depth still gets a non-zero bias.
+    const float zm = fmax2(__builtin_fabsf(z0), fmax2(__builtin_fabsf(z1), __builtin_fabsf(z2)));
+    const int32_t e = (int32_t)((__builtin_bit_cast(uint32_t, zm) >> 23) & 0xff) - 127;
+    const int32_t be = e - 23 + 127;
+    r = __builtin_bit_cast(float, (uint32_t)(be > 1 ? be : 1) << 23);
+  }
+  float o = b.constant * r + b.slope * fmax2(__builtin_fabsf(za), __builtin_fabsf(zb));
+  if (b.clamp > 0.0f) {
+    o = fmin2(o, b.clamp);
+  } else if (b.clamp < 0.0f) {
+    o = fmax2(o, b.clamp);
+  }
+  return o;
+}
+
+// An edge whose line misses the render target is the same sign over every
+// point the rasterizer can sample, so it is replaced by a constant: kept (inside)
+// or the whole primitive dropped (outside). The region has to be the render
+// target, not the primitive's bbox: the rasterizer walks whole bins, so an edge
+// outside the bbox can still be the one that bounds the primitive in its bin.
+// It spans the pixels' corners, not their centres, since multisample positions
+// lie anywhere inside a pixel. What is left of the edges crosses the render
+// target, which keeps their constant term within the fixed-point range however
+// far the vertices lie outside it. Coverage-only: the edges no longer carry
+// barycentrics.
+static inline bool trivialize_edges(vec3f edges[3], int width, int height) {
+  const float x0 = 0.0f, x1 = (float)width;
+  const float y0 = 0.0f, y1 = (float)height;
+  for (int i = 0; i < 3; ++i) {
+    const vec3f& e = edges[i];
+    const float c00 = e.x * x0 + e.y * y0 + e.z, c10 = e.x * x1 + e.y * y0 + e.z;
+    const float c01 = e.x * x0 + e.y * y1 + e.z, c11 = e.x * x1 + e.y * y1 + e.z;
+    if (c00 > 0.0f && c10 > 0.0f && c01 > 0.0f && c11 > 0.0f) {
+      edges[i] = { 0.0f, 0.0f, 1.0f };
+    } else if (c00 < 0.0f && c10 < 0.0f && c01 < 0.0f && c11 < 0.0f) {
+      return false;   // no point of the render target is inside it
+    }
+  }
+  return true;
+}
+
 // Full per-triangle setup. Fills out_prim (edges + attrib deltas) and out_bbox
 // (screen bbox clamped to the render target). Returns false when the triangle
 // is culled (degenerate or empty bbox) — matching Binning()'s two `continue`s.
@@ -255,7 +312,8 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
                                   uint32_t cull_mode = SETUP_CULL_NONE,
                                   const setup_viewport_t* vp = nullptr,
                                   uint32_t front_face = SETUP_FRONT_POSITIVE,
-                                  bool coverage_only = false) {
+                                  bool coverage_only = false,
+                                  const setup_depth_bias_t* bias = nullptr) {
   vec4f p0 = { v0.pos[0], v0.pos[1], v0.pos[2], v0.pos[3] };
   vec4f p1 = { v1.pos[0], v1.pos[1], v1.pos[2], v1.pos[3] };
   vec4f p2 = { v2.pos[0], v2.pos[1], v2.pos[2], v2.pos[3] };
@@ -300,6 +358,10 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
       return false;  // empty
   }
 
+  if (coverage_only && !trivialize_edges(edges, width, height)) {
+    return false;
+  }
+
   // Half-pixel sampling offset, then Q15.16 edges.
   edges[0].z += edges[0].x * 0.5f + edges[0].y * 0.5f;
   edges[1].z += edges[1].x * 0.5f + edges[1].y * 0.5f;
@@ -330,9 +392,19 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     // C' evaluated so an integer-pixel MAC samples Z at the pixel center
     // (X+0.5, Y+0.5) — matching the +0.5 half-pixel offset the coverage edges use.
     float zc = ps0.z - za * ps0.x - zb * ps0.y + 0.5f * (za + zb);
-    out_prim.attribs.z.x = FloatA(za);
-    out_prim.attribs.z.y = FloatA(zb);
-    out_prim.attribs.z.z = FloatA(zc);
+    float zo = 0.0f;
+    if (bias && bias->enable) {
+      zo = depth_bias_offset(*bias, za, zb, ps0.z, ps1.z, ps2.z);
+      zc += zo;
+    }
+    // A vertex just past w = 0 (no near clip) projects to an enormous depth;
+    // the coefficients saturate rather than wrap the fixed-point range.
+    out_prim.attribs.z.x = FloatA(fsat_a(za));
+    out_prim.attribs.z.y = FloatA(fsat_a(zb));
+    out_prim.attribs.z.z = FloatA(fsat_a(zc));
+    if (coverage_only) {
+      SETUP_PRIM_DEPTH_BIAS(out_prim) = FloatA(fsat_a(zo));
+    }
   }
   if (coverage_only) {
     return true;

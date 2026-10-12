@@ -79,6 +79,25 @@
 // address their layer with it even outside multiview.
 #define GFX_FS_ARG_VIEW     13u
 
+// FS kernel arg-block slots bounding the fragment depth, as raw depth-plane
+// values (window z in Q7.24), each GFX_FS_ZPAIR(lo, hi): a fragment whose plane
+// depth is outside ZKILL is dropped (depth clipping against the viewport's depth
+// range), and the depth it merges is clamped into ZCLAMP (depth clamp), then to
+// the attachment's [0, 1].
+#define GFX_FS_ARG_ZKILL    16u
+#define GFX_FS_ARG_ZCLAMP   17u
+// User clip distances in the VS records: GFX_FS_CLIP_PACK(byte offset, count).
+// A fragment where any interpolated distance is negative is dropped. 0 = none.
+#define GFX_FS_ARG_CLIP     18u
+// Which of a primitive's three records a flat input reads (0 or 2).
+#define GFX_FS_ARG_PROVOKE  19u
+#define GFX_FS_ARG_COUNT    20u
+
+#define GFX_FS_ZPAIR(lo, hi) \
+   ((uint64_t)(uint32_t)(int32_t)(lo) | ((uint64_t)(uint32_t)(int32_t)(hi) << 32))
+#define GFX_FS_CLIP_PACK(off, count) \
+   (((uint32_t)(off) & 0xffffu) | (((uint32_t)(count) & 0xffu) << 16))
+
 // The sample count deliberately has NO arg slot. It is a fragment-shader variant
 // key, so the value is fixed when the kernel is translated and the emitter bakes
 // it in as a constant; a slot would be a second source of truth for a fact the

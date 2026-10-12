@@ -233,14 +233,22 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire [NUM_SLICES-1:0][PRIM_DATA_WIDTH-1:0] slice_arb_data_out;
     wire [NUM_SLICES-1:0] slice_arb_ready_out;
 
-    VX_stream_arb #(
+    // Every primitive of a tile goes to the same slice, so a pixel's fragments
+    // leave the rasterizer in primitive order whatever the slice count; the
+    // slices share the screen tile by tile instead of primitive by primitive.
+    localparam SLICE_SEL_W = `UP(`CLOG2(NUM_SLICES));
+    wire [`VX_RASTER_DIM_BITS-1:0] slice_tile_sum = (slice_arb_xloc >> TILE_LOGSIZE)
+                                                  + (slice_arb_yloc >> TILE_LOGSIZE);
+    wire [SLICE_SEL_W-1:0] slice_sel = SLICE_SEL_W'(slice_tile_sum % NUM_SLICES);
+
+    VX_stream_switch #(
         .NUM_OUTPUTS (NUM_SLICES),
         .DATAW       (PRIM_DATA_WIDTH),
-        .ARBITER     ("R"),
         .OUT_BUF     (2)
     ) slice_req_arb (
         .clk        (clk),
         .reset      (reset),
+        .sel_in     (slice_sel),
         .valid_in   (slice_arb_valid_in),
         .ready_in   (slice_arb_ready_in),
     `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
@@ -250,8 +258,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     `endif
         .data_out   (slice_arb_data_out),
         .valid_out  (slice_arb_valid_out),
-        .ready_out  (slice_arb_ready_out),
-        `UNUSED_PIN (sel_out)
+        .ready_out  (slice_arb_ready_out)
     );
 
     // Track in-flight tile data to detect rasterization completion.
