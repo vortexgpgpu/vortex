@@ -266,7 +266,12 @@ ifdef PERF
 PLATFORM_DEFINES += -DPERF_ENABLE
 endif
 
-GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(TYPE_DEFINES) $(PLATFORM_DEFINES) $(SYNTH_DEFINES) $(RTL_INCLUDE)
+# Synthesis resolves the unit types as a synthesis build: TYPE_DEFINES comes from
+# a resolution without SYNTHESIS, which picks the simulation FPU (STD) over the
+# FPGA one (DSP) and would hand synthesis a different design than Vortex's.
+SYNTH_TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(shell python3 $(VORTEX_HOME)/ci/gen_config.py \
+	--config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) $(SYNTH_DEFINES) $(PLATFORM_DEFINES)'))
+GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(SYNTH_TYPE_DEFINES) $(PLATFORM_DEFINES) $(SYNTH_DEFINES) $(RTL_INCLUDE)
 
 # Defines arrive on the command line, which no file timestamp reflects, so a
 # changed CONFIGS would otherwise reuse the previous flattened tree. The stamp is
