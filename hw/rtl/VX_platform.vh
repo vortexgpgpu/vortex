@@ -191,9 +191,7 @@
 `define BLACKBOX_CELL   (* black_box *)
 `define STRING
 `ifndef SIMULATION
-`ifndef VX_CFG_FAME5 // FireSim FAME-5 regenerates every RAM leaf as FIRRTL
     `define ASYNC_BRAM_PATCH
-`endif
 `endif
 `elsif ASIC
 `define MAX_FANOUT      8

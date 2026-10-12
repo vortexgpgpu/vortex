@@ -20,9 +20,6 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 ) (
     input wire                  clk,
     input wire                  reset,
-`ifdef VX_CFG_FAME5
-    input wire [31:0]       core_id,
-`endif
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t         sysmem_perf,
@@ -38,12 +35,6 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_execute_if.slave         execute_if,
     VX_result_if.master         result_if
 );
-
-`ifdef VX_CFG_FAME5
-    wire [31:0] core_id_v = core_id;
-`else
-    wire [31:0] core_id_v = 32'(CORE_ID);
-`endif
     `UNUSED_SPARAM (INSTANCE_ID)
     localparam PID_BITS = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam LANE_BITS = `CLOG2(NUM_LANES);
@@ -98,9 +89,6 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     ) csr_data (
         .clk            (clk),
         .reset          (reset),
-        `ifdef VX_CFG_FAME5
-            .core_id        (core_id),
-        `endif
 
     `ifdef PERF_ENABLE
         .sysmem_perf    (sysmem_perf),
@@ -131,7 +119,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 
     // Thread ids are the lane index on top of a per-request base.
     wire [`VX_CFG_XLEN-1:0] wtid_base = (PID_BITS != 0) ? `VX_CFG_XLEN'(execute_if.data.header.pid * NUM_LANES) : '0;
-    wire [`VX_CFG_XLEN-1:0] gtid_base = (`VX_CFG_XLEN'(core_id_v) << (NW_BITS + NT_BITS))
+    wire [`VX_CFG_XLEN-1:0] gtid_base = (`VX_CFG_XLEN'(CORE_ID) << (NW_BITS + NT_BITS))
                                       + (`VX_CFG_XLEN'(execute_if.data.header.wid) << NT_BITS)
                                       + wtid_base;
 

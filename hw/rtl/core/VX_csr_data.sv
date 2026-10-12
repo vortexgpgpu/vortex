@@ -37,9 +37,6 @@ import VX_fpu_pkg::*;
 ) (
     input wire                          clk,
     input wire                          reset,
-`ifdef VX_CFG_FAME5
-    input wire [31:0]       core_id,
-`endif
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t                 sysmem_perf,
@@ -68,12 +65,6 @@ import VX_fpu_pkg::*;
     input wire [`VX_CSR_ADDR_BITS-1:0]  dcr_addr,
     output wire [`VX_CFG_XLEN-1:0]      dcr_data
 );
-
-`ifdef VX_CFG_FAME5
-    wire [31:0] core_id_v = core_id;
-`else
-    wire [31:0] core_id_v = 32'(CORE_ID);
-`endif
 
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
@@ -170,7 +161,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_CTA_ENTRY       : live_sel_w[LIVE_ENTRY] = 1;
 
             `VX_CSR_WARP_ID    : stable_w = `VX_CFG_XLEN'(req_wid);
-            `VX_CSR_CORE_ID    : stable_w = `VX_CFG_XLEN'(core_id_v);
+            `VX_CSR_CORE_ID    : stable_w = `VX_CFG_XLEN'(CORE_ID);
             `VX_CSR_ACTIVE_THREADS: live_sel_w[LIVE_THREADS] = 1;
             `VX_CSR_ACTIVE_WARPS: live_sel_w[LIVE_WARPS] = 1;
             `VX_CSR_NUM_THREADS: stable_w = `VX_CFG_XLEN'(`VX_CFG_NUM_THREADS);

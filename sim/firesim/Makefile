@@ -9,7 +9,7 @@ PROJECT := firesim
 SIMIF_DIR := $(FIRESIM_PATH)/sim/midas/src/main/cc
 
 DESIGN ?= VortexTarget
-TARGET_CONFIG ?= $(if $(FAME5),VortexFame5Config,VortexConfig)
+TARGET_CONFIG ?= VortexConfig
 
 # Nothing given on this make's command line reaches FireSim's makes: FireSim
 # uses PLATFORM and TARGET for its own purposes. Each sub-make is handed what it
@@ -92,7 +92,7 @@ ifneq ($(filter $(TARGET),xrtsim avedsim),)
 # sources the standalone metasim builds from; the generated FireSim RTL and
 # headers come from the elaborated target.
 SYN_DIR := $(ROOT_DIR)/hw/syn/firesim
-EMUL_DIR := $(DESTDIR)/firesim_emul_$(FIRESIM_CARD)$(if $(FAME5),_fame5)
+EMUL_DIR := $(DESTDIR)/firesim_emul_$(FIRESIM_CARD)
 WORK_DIR := $(EMUL_DIR)/work
 SIM_SRCS_LIST := $(WORK_DIR)/vortex_srcs.f
 SIM_SRCS_DIR := $(WORK_DIR)/vortex_srcs
@@ -101,13 +101,7 @@ EMUL_NAME := firesim_emul
 
 EMUL_SRCS := $(SRC_DIR)/firesim_sim.cpp $(SRC_DIR)/firesim_emul_main.cpp
 
-# Under FAME5 the generated RTL already contains Vortex (converted to FIRRTL and
-# threaded by Golden Gate), so Verilator is given no Vortex sources.
-ifdef FAME5
-EMUL_VERILATOR_FLAGS := -Wno-fatal
-else
 EMUL_VERILATOR_FLAGS := -Wno-fatal -y $(SIM_SRCS_DIR) +libext+.sv+.v $$(tr '\n' ' ' < $(SIM_SRCS_LIST))
-endif
 
 # EMUL_DEBUG=1: a wave-tracing metasimulator. --trace Verilates the dump hooks
 # and +define+DEBUG arms the emul top's +waveformfile/+dump-start plusargs
@@ -124,8 +118,7 @@ endif
 # elaboration of the card's target; both are no-ops when current.
 emul-sources:
 	$(MAKE) -C $(SYN_DIR) sources elaborate FIRESIM_CARD=$(FIRESIM_CARD) FIRESIM_WORK_DIR=$(WORK_DIR) \
-		XLEN=$(XLEN) CONFIGS='$(CONFIGS)' $(if $(PERF),PERF=$(PERF)) $(if $(FAME5),FAME5=$(FAME5)) \
-		$(if $(FAME5_THREADS),FAME5_THREADS=$(FAME5_THREADS))
+		XLEN=$(XLEN) CONFIGS='$(CONFIGS)' $(if $(PERF),PERF=$(PERF))
 
 # Host toolchain, as for the aved platform library: the runtime that loads this
 # is built with it. -fPIC reaches the Verilated objects too, through -CFLAGS.

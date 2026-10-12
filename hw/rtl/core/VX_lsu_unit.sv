@@ -21,9 +21,6 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     input wire              clk,
     input wire              reset,
-`ifdef VX_CFG_FAME5
-    input wire [31:0]       core_id,
-`endif
 
     // Inputs
     VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
@@ -66,9 +63,6 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
             `SCOPE_IO_BIND  (block_idx)
             .clk              (clk),
             .reset            (reset),
-        `ifdef VX_CFG_FAME5
-            .core_id        (core_id),
-        `endif
             .execute_if       (per_block_execute_if[block_idx]),
             .result_if        (per_block_result_if[block_idx]),
             .client_if        (per_block_client_if[block_idx])

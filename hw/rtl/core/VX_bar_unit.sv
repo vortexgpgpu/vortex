@@ -19,9 +19,6 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 ) (
     input wire                clk,
     input wire                reset,
-`ifdef VX_CFG_FAME5
-    input wire [31:0]       core_id,
-`endif
 
     // local barrier interface
     input wire                req_valid,
@@ -38,12 +35,6 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     output wire               unlock_valid, // unlock stalled warps
     output wire [`VX_CFG_NUM_WARPS-1:0] unlock_mask // warps to unlock
 );
-
-`ifdef VX_CFG_FAME5
-    wire [31:0] core_id_v = core_id;
-`else
-    wire [31:0] core_id_v = 32'(CORE_ID);
-`endif
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (CORE_ID)
 
@@ -338,7 +329,7 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 
         assign gbar_bus_if.req_valid        = gbar_req_valid_r;
         assign {gbar_bus_if.req_data.id, gbar_bus_if.req_data.size_m1} = req_queue_data;
-        assign gbar_bus_if.req_data.core_id = NC_WIDTH'(core_id_v % `VX_CFG_NUM_CORES);
+        assign gbar_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID % `VX_CFG_NUM_CORES);
         assign gbar_bus_if.rsp_ready        = gbar_rsp_ready;
 
         `RUNTIME_ASSERT(~gbar_enqueue || ~gbar_pending_r[gbar_enqueue_id], ("%s duplicate global barrier generation: id=%0d", INSTANCE_ID, gbar_enqueue_id))

@@ -366,63 +366,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `endif
 
     for (genvar socket_id = 0; socket_id < NUM_SOCKETS; ++socket_id) begin : g_sockets
-`ifdef VX_CFG_FAME5
-        // One module for every socket, its index on a port, and plain ports
-        // throughout: what FireSim model multithreading needs (VX_socket_top).
-        wire [L1_MEM_PORTS-1:0] mem_req_valid, mem_req_ready, mem_rsp_valid, mem_rsp_ready;
-        wire [L1_MEM_PORTS-1:0][$bits(socket_mem_bus_if[0].req_data)-1:0] mem_req_data;
-        wire [L1_MEM_PORTS-1:0][$bits(socket_mem_bus_if[0].rsp_data)-1:0] mem_rsp_data;
 
-`ifdef EXT_GFX_ANY_ENABLE
-        wire cluster_flush_req;
-        assign per_socket_cluster_flush_if[socket_id].req = cluster_flush_req;
-`endif
-
-        for (genvar i = 0; i < L1_MEM_PORTS; ++i) begin : g_mem
-            assign socket_mem_bus_if[socket_id * L1_MEM_PORTS + i].req_valid = mem_req_valid[i];
-            assign socket_mem_bus_if[socket_id * L1_MEM_PORTS + i].req_data  = mem_req_data[i];
-            assign mem_req_ready[i] = socket_mem_bus_if[socket_id * L1_MEM_PORTS + i].req_ready;
-            assign mem_rsp_valid[i] = socket_mem_bus_if[socket_id * L1_MEM_PORTS + i].rsp_valid;
-            assign mem_rsp_data[i]  = socket_mem_bus_if[socket_id * L1_MEM_PORTS + i].rsp_data;
-            assign socket_mem_bus_if[socket_id * L1_MEM_PORTS + i].rsp_ready = mem_rsp_ready[i];
-        end
-
-        VX_socket_top socket (
-            .clk            (clk),
-            .reset          (reset),
-            .socket_id      (32'((CLUSTER_ID * NUM_SOCKETS) + socket_id)),
-        `ifdef PERF_ENABLE
-            .sysmem_perf    (sysmem_perf_tmp),
-        `endif
-            .dcr_req_valid  (per_socket_dcr_bus_if[socket_id].req_valid),
-            .dcr_req_data   (per_socket_dcr_bus_if[socket_id].req_data),
-            .dcr_rsp_valid  (per_socket_dcr_bus_if[socket_id].rsp_valid),
-            .dcr_rsp_data   (per_socket_dcr_bus_if[socket_id].rsp_data),
-            .mem_req_valid  (mem_req_valid),
-            .mem_req_data   (mem_req_data),
-            .mem_req_ready  (mem_req_ready),
-            .mem_rsp_valid  (mem_rsp_valid),
-            .mem_rsp_data   (mem_rsp_data),
-            .mem_rsp_ready  (mem_rsp_ready),
-            .kmu_valid      (per_socket_kmu_bus_if[socket_id].valid),
-            .kmu_kind       (per_socket_kmu_bus_if[socket_id].kind),
-            .kmu_eop        (per_socket_kmu_bus_if[socket_id].eop),
-            .kmu_dest       (per_socket_kmu_bus_if[socket_id].dest),
-            .kmu_data       (per_socket_kmu_bus_if[socket_id].data),
-            .kmu_ready      (per_socket_kmu_bus_if[socket_id].ready),
-            .gbar_req_valid (per_socket_gbar_bus_if[socket_id].req_valid),
-            .gbar_req_data  (per_socket_gbar_bus_if[socket_id].req_data),
-            .gbar_req_ready (per_socket_gbar_bus_if[socket_id].req_ready),
-            .gbar_rsp_valid (per_socket_gbar_bus_if[socket_id].rsp_valid),
-            .gbar_rsp_data  (per_socket_gbar_bus_if[socket_id].rsp_data),
-            .gbar_rsp_ready (per_socket_gbar_bus_if[socket_id].rsp_ready),
-        `ifdef EXT_GFX_ANY_ENABLE
-            .cluster_flush_req  (cluster_flush_req),
-            .cluster_flush_done (per_socket_cluster_flush_if[socket_id].done),
-        `endif
-            .busy           (per_socket_busy[socket_id])
-        );
-`else
         VX_socket #(
             .SOCKET_ID ((CLUSTER_ID * NUM_SOCKETS) + socket_id),
             .INSTANCE_ID (`SFORMATF(("%s-socket%0d", INSTANCE_ID, socket_id)))
@@ -457,7 +401,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
             .busy           (per_socket_busy[socket_id])
         );
-`endif
     end
 
     ///////////////////////////////////////////////////////////////////////////

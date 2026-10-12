@@ -21,9 +21,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
     input wire              clk,
     input wire              reset,
-`ifdef VX_CFG_FAME5
-    input wire [31:0]       core_id,
-`endif
 
     // Inputs
     VX_execute_if.slave     execute_if,
@@ -35,13 +32,6 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // the parent wires it into VX_lsu_scheduler.
     VX_lsu_sched_if.master  client_if
 );
-
-`ifdef VX_CFG_FAME5
-    wire [31:0] core_id_v = core_id;
-`else
-    wire [31:0] core_id_v = 32'(CORE_ID);
-`endif
-    `UNUSED_VAR (core_id_v)
     localparam NUM_LANES    = `VX_CFG_NUM_LSU_LANES;
     localparam PID_BITS     = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam LSUQ_SIZEW   = `LOG2UP(`VX_CFG_LSU_PENDING_SIZE);
@@ -151,7 +141,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `endif
         // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
         assign lane_amo.hart_id      = HART_ID_WIDTH'(
-            (HART_ID_WIDTH'(core_id_v) << (NW_BITS + NT_BITS))
+            (HART_ID_WIDTH'(CORE_ID) << (NW_BITS + NT_BITS))
           | (HART_ID_WIDTH'(execute_if.data.header.wid) << NT_BITS)
           |  HART_ID_WIDTH'(i)
         );
