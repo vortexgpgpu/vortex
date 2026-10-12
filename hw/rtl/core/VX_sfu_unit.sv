@@ -136,11 +136,6 @@ import VX_raster_pkg::*;
             pe_select = PE_SEL_BITS'(PE_IDX_OM);
         end
     `endif
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
-        if (per_block_execute_if[0].data.op_type == INST_SFU_RASTER) begin
-            pe_select = PE_SEL_BITS'(PE_IDX_RASTER);
-        end
-    `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         if (per_block_execute_if[0].data.op_type == INST_SFU_RTUW) begin
             pe_select = PE_SEL_BITS'(PE_IDX_RTUW);
@@ -259,9 +254,9 @@ import VX_raster_pkg::*;
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // RASTER push (v2): the fragment payload reaches the warp at launch via the
-    // core-level distributor's window seed (rast_win_wr_*), so the SFU services
-    // no raster op. The PE slot is retained for index stability and tied off —
-    // no kernel issues INST_SFU_RASTER under the push model.
+    // core-level distributor's window seed (rast_win_wr_*). The only raster ops,
+    // the merge-ordering FRAG_WAIT / FRAG_RELEASE, are warp control and take the
+    // WCTL slot, so this one is retained for index stability and tied off.
     assign pe_execute_if[PE_IDX_RASTER].ready = 1'b1;
     assign pe_result_if[PE_IDX_RASTER].valid  = 1'b0;
     assign pe_result_if[PE_IDX_RASTER].data   = '0;

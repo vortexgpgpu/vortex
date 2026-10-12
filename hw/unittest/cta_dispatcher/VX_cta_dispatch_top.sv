@@ -99,6 +99,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask;
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param;
     wire                    cta_init;
+    wire                    cta_is_frag;
     wire                    busy;
 
     // CTA-CSR read-back / schedule lookup ports are unexercised by this bench
@@ -112,6 +113,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
     `UNUSED_VAR (cta_tmask)
     `UNUSED_VAR (cta_param)
     `UNUSED_VAR (cta_init)
+    `UNUSED_VAR (cta_is_frag)
     `UNUSED_VAR (busy)
     `UNUSED_VAR (cta_rd_csrs)
     `UNUSED_VAR (cta_rd_lane)
@@ -130,6 +132,7 @@ module VX_cta_dispatch_top import VX_gpu_pkg::*;
         .cta_tmask     (cta_tmask),
         .cta_param     (cta_param),
         .cta_init      (cta_init),
+        .cta_is_frag   (cta_is_frag),
         .csr_rd_wid    ('0),
         .csr_rd_cta_id ('0),
         .cta_rd_csrs   (cta_rd_csrs),

@@ -152,10 +152,14 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
 
     wire [`VX_OM_DIM_BITS-1:0] px   = rec_ext[0 +: `VX_OM_DIM_BITS] & x_mask;
     wire [`VX_OM_DIM_BITS-1:0] py   = rec_ext[xb +: `VX_OM_DIM_BITS] & y_mask;
-    wire                       face = rec_ext[xb + yb];
-    // The attachment index sits above face, so a single-attachment export
-    // decodes to attachment zero without the producer knowing the field exists.
-    wire [OM_RT_IDX_BITS-1:0]  rt   = rec_ext[(xb + yb + 1) +: OM_RT_IDX_BITS];
+    // A one-word record carries face above y and has attachment zero. A
+    // colour+depth pair addresses the pixel only: face and the attachment ride
+    // the depth word (OM_DEPTH_WORD_*), which keeps the whole window for x and y.
+    wire                       face_addr = ~is_pair && rec_ext[xb + yb];
+
+    `STATIC_ASSERT((OM_DEPTH_WORD_RT >= `VX_OM_DEPTH_BITS)
+                && (OM_DEPTH_WORD_RT + OM_RT_IDX_BITS <= OM_DEPTH_WORD_FACE)
+                && (OM_DEPTH_WORD_FACE < 32), ("depth word fields overlap"))
 
     wire [31:0] wsel_ext = 32'(wsel);
     wire [31:0] beat_word = mem_bus_if.req_data.data[wsel_ext * 32 +: 32];
@@ -176,14 +180,13 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     wire [`VX_CFG_XLEN-1:0]    s2_record_idx;
     wire [`VX_OM_DIM_BITS-1:0] s2_px;
     wire [`VX_OM_DIM_BITS-1:0] s2_py;
-    wire                       s2_face;
-    wire [OM_RT_IDX_BITS-1:0]  s2_rt;
+    wire                       s2_face_addr;
     wire                       s2_is_depth;
     wire                       s2_is_pair;
     wire                       s2_ready;
 
     VX_elastic_buffer #(
-        .DATAW   (UUID_WIDTH + 32 + `VX_CFG_XLEN + 2 * `VX_OM_DIM_BITS + OM_RT_IDX_BITS + 3),
+        .DATAW   (UUID_WIDTH + 32 + `VX_CFG_XLEN + 2 * `VX_OM_DIM_BITS + 3),
         .SIZE    (2),
         .OUT_REG (1)
     ) rec_buf (
@@ -192,9 +195,9 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
         .valid_in  (mem_bus_if.req_valid),
         .ready_in  (rec_ready),
         .data_in   ({mem_bus_if.req_data.tag.uuid, beat_word, record_idx,
-                     px, py, face, rt, beat_is_depth, is_pair}),
+                     px, py, face_addr, beat_is_depth, is_pair}),
         .data_out  ({s2_uuid, s2_word, s2_record_idx,
-                     s2_px, s2_py, s2_face, s2_rt, s2_is_depth, s2_is_pair}),
+                     s2_px, s2_py, s2_face_addr, s2_is_depth, s2_is_pair}),
         .valid_out (rec_valid),
         .ready_out (s2_ready)
     );
@@ -244,7 +247,12 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // levers are NUM_OM_CORES and OCACHE_NUM_BANKS, not the request width.
     wire [31:0] frag_colour = s2_is_depth ? open_colour[hit_idx] : s2_word;
     wire [31:0] frag_depth  = s2_is_depth ? s2_word : 32'd0;
-    `UNUSED_VAR (frag_depth)   // only the low VX_OM_DEPTH_BITS reach the om_bus
+    // A pair fires on its depth word, which carries the face and attachment.
+    wire                      s2_face = s2_is_pair ? frag_depth[OM_DEPTH_WORD_FACE]
+                                                   : s2_face_addr;
+    wire [OM_RT_IDX_BITS-1:0] s2_rt   = s2_is_pair ? frag_depth[OM_DEPTH_WORD_RT +: OM_RT_IDX_BITS]
+                                                   : '0;
+    `UNUSED_VAR (frag_depth)   // depth, face and attachment fields only
 
     wire om_ready;
     wire [NUM_LANES-1:0] frag_mask;

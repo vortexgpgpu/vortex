@@ -784,6 +784,21 @@ module VX_decode import
                     `USED_IREG (rs3);   // explicit LOD
                 end
             `endif
+            `ifdef VX_CFG_EXT_RASTER_ENABLE
+                3'h4: begin // vx_frag_order_{wait,release}: R4-type, no operands.
+                            // funct2 0 = wait, 1 = release. Warp control: the warp
+                            // stalls until the scheduler admits it to the merge, or
+                            // until its release has drained the merge before it.
+                    if (funct2[1] == 1'b0) begin
+                        ex_type = EX_SFU;
+                        op_type = INST_OP_BITS'(INST_SFU_RASTER);
+                        op_args.wctl.is_cond_neg   = funct2[0];
+                        op_args.wctl.is_sync_bar   = 1'b0;
+                        op_args.wctl.is_bar_arrive = 1'b0;
+                        is_wstall = 1;
+                    end
+                end
+            `endif
             `ifdef VX_CFG_EXT_OM_ENABLE
                 3'h3: begin // vx_om_export: R4-type, rd=x0 (posted). The fragment export.
                     // funct7[1:0] = {has_depth, has_colour}: a shader may emit colour

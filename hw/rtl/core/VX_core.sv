@@ -484,6 +484,7 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
 
     // BAR (vx_barrier / vx_barrier_arrive) drains LSU + MMU before suspending or registering arrival.
     assign warp_ctl_if.lsu_sched_drained = (&lsu_sched_empty) && mmu_empty;
+    assign warp_ctl_if.store_drained = store_drained;
 
 `ifdef PERF_ENABLE
 

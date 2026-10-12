@@ -21,6 +21,9 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     wire sjoin_valid;
     wire bar_valid;
     wire wsync_valid;
+    // Primitive-order merge: a FRAG_WAIT (forder_release=0) or FRAG_RELEASE.
+    wire forder_valid;
+    wire forder_release;
 
     wire [NW_WIDTH-1:0] wid;
 
@@ -40,6 +43,11 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
     // the CUDA __syncthreads / OpenCL barrier(CLK_LOCAL_MEM_FENCE) contract.
     wire lsu_sched_drained;
 
+    // Every store has left the LSU and the memory unit and reached the L1, past
+    // the last point where two LSU blocks' requests can reorder. Gates
+    // FRAG_RELEASE so the next fragment's merge sees this one's.
+    wire store_drained;
+
     // Return IPDOM stack address
     wire [NW_WIDTH-1:0] dvstack_wid;
     wire [DV_STACK_SIZEW-1:0] dvstack_ptr;
@@ -55,6 +63,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         output sjoin_valid,
         output bar_valid,
         output wsync_valid,
+        output forder_valid,
+        output forder_release,
 
         output wid,
 
@@ -69,6 +79,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
         input  warp_pending_alm_empty,
         input  lsu_sched_drained,
+        input  store_drained,
 
         output dvstack_wid,
         input  dvstack_ptr
@@ -81,6 +92,8 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
         input sjoin_valid,
         input bar_valid,
         input wsync_valid,
+        input forder_valid,
+        input forder_release,
 
         input wid,
 
@@ -95,6 +108,7 @@ interface VX_warp_ctl_if import VX_gpu_pkg::*; ();
 
         output warp_pending_alm_empty,
         output lsu_sched_drained,
+        output store_drained,
 
         input dvstack_wid,
         output dvstack_ptr

@@ -35,6 +35,7 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     output wire [`VX_CFG_NUM_THREADS-1:0] cta_tmask,
     output wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param,
     output wire                     cta_init,
+    output wire                     cta_is_frag,    // the fired warp is a fragment wave
 
     // CTA-CSR read-back
     input wire [NW_WIDTH-1:0]       csr_rd_wid,
@@ -746,7 +747,9 @@ module VX_cta_dispatch import VX_gpu_pkg::*; #(
     assign frag_inflight   = |tidp_frag;
     assign is_frag_warp    = tidp_frag[TID_STAGES];
     assign frag_stamps_sel = frag_stamps_r;
+    assign cta_is_frag     = tidp_frag[0];
 `else
+    assign cta_is_frag     = 1'b0;
     assign frag_inflight   = 1'b0;
     assign is_frag_warp    = 1'b0;
     assign frag_stamps_sel = '0;

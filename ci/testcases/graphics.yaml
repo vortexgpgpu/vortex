@@ -377,6 +377,14 @@ tests:
   app: gfx_draw3d
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+- id: gfx_draw3d-ordered
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gfx_draw3d
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png -p
 - id: gfx_draw3d-9
   via: blackbox
   drivers:
@@ -542,6 +550,12 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -r whitebox_128.png
+- id: model_parity-om-mrt7
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -m -n 7 -b -r whitebox_b_128.png
 
 # Tests that self-configure their required extensions and validate in their
 # default run-{driver} target.
@@ -565,6 +579,15 @@ tests:
    vars: {NO_TEX: 1, OPTS: "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"}}
 - {id: gfx_draw3d-sw_om,     via: make-run, drivers: [simx], dir: tests/graphics/gfx_draw3d, target: "run-{driver}",
    vars: {NO_OM: 1, OPTS: "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"}}
+# The hardware rasterizer's fragment warps run in any order, so the software
+# merger's read-modify-write needs the primitive-order merge: without -p this
+# scene's overlapping blended fragments race and one pixel comes out wrong.
+- {id: gfx_draw3d-sw_om-ordered, via: make-run, drivers: [simx], dir: tests/graphics/gfx_draw3d, target: "run-{driver}",
+   vars: {NO_OM: 1, OPTS: "-w 128 -h 128 -t evilskull.cgltrace -r evilskull_ref_128.png -p"}}
+# The same race on the RTL, at a size rtlsim runs quickly: without -p five
+# pixels of this scene merge out of order.
+- {id: gfx_draw3d-sw_om-ordered-32, via: make-run, drivers: [rtlsim], dir: tests/graphics/gfx_draw3d, target: "run-{driver}",
+   vars: {NO_OM: 1, OPTS: "-w 32 -h 32 -t evilskull.cgltrace -r evilskull_ref_32.png -p"}}
 - {id: gfx_draw3d-sw_raster, via: make-run, drivers: [simx], dir: tests/graphics/gfx_draw3d, target: "run-{driver}",
    vars: {NO_RASTER: 1, OPTS: "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png"}}
 # All fixed-function disabled — the whole 3D pipeline in SIMT software.
@@ -603,6 +626,14 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -m -b -r whitebox_b_128.png
+# The highest attachment: its index rides the export's depth word, so this is
+# the case that covers every bit of that field and every per-attachment slot.
+- id: gfx_om-mrt7
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -m -n 7 -b -r whitebox_b_128.png
 
 # Per-unit software emitters, against the same goldens as their FF cases.
 - id: gfx_om-sw
@@ -668,6 +699,15 @@ tests:
   via: blackbox
   app: gfx_draw3d
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+# Primitive-order merge: every fragment warp brackets its export with
+# vx_frag_order_wait/release, so the ticket, wait, wake and release-drain paths
+# are all in the timing being compared.
+- id: model_parity-draw3d-ordered
+  check: model_parity
+  via: blackbox
+  app: gfx_draw3d
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png -p
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
 - id: perf_gate-draw3d
   check: perf_gate

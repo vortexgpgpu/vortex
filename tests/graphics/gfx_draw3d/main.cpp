@@ -168,6 +168,7 @@ const char* kernel_file = "kernel.vxbin";
 const char* trace_file  = "triangle.cgltrace";
 const char* output_file = "output.png";
 const char* reference_file = nullptr;
+bool ordered_merge = false;
 
 // FF/SW routing is a build property (NO_TEX / NO_OM / NO_RASTER), not a runtime
 // flag: a stage cannot take the FF path on a device whose FF unit was not built.
@@ -221,13 +222,14 @@ uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;   // host Binning() emits coa
 
 static void show_usage() {
    std::cout << "Vortex 3D Rendering Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-s startdraw] [-e enddraw] [-o output] [-r reference] [-w width] [-h height] [-k tilelogsize]" << std::endl;
+   std::cout << "Usage: [-t trace] [-s startdraw] [-e enddraw] [-o output] [-r reference] [-w width] [-h height] [-k tilelogsize] [-p]" << std::endl;
+   std::cout << "  -p: merge in primitive order (vx_frag_order_*); needs the RASTER unit" << std::endl;
    std::cout << "  FF/SW routing is a build knob: make NO_TEX=1 / NO_OM=1 / NO_RASTER=1" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:s:e:i:o:r:w:h:t:k:?")) != -1) {
+  while ((c = getopt(argc, argv, "t:s:e:i:o:r:w:h:t:k:p?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
@@ -253,6 +255,9 @@ static void parse_args(int argc, char **argv) {
     case 'k':
       tileLogSize = std::atoi(optarg);
       break;
+    case 'p':
+      ordered_merge = true;
+      break;
     case '?': {
       show_usage();
       exit(0);
@@ -261,6 +266,10 @@ static void parse_args(int argc, char **argv) {
       show_usage();
       exit(-1);
     }
+  }
+  if (ordered_merge && !ff_raster) {
+    std::cout << "Error: -p orders the merge of rasterizer-launched fragments; this build has no RASTER unit!" << std::endl;
+    exit(1);
   }
   if (strcmp (output_file, "null") == 0 && reference_file) {
     std::cout << "Error: the output file is missing for reference validation!" << std::endl;
@@ -742,7 +751,7 @@ int main(int argc, char *argv[]) {
   // load kernel module
   std::cout << "load kernel module" << std::endl;
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
-  RT_CHECK(vx_module_get_kernel(module_, "main", &kernel));
+  RT_CHECK(vx_module_get_kernel(module_, ordered_merge ? "kernel_main_ordered" : "main", &kernel));
 
   zbuf_stride = 4;
   zbuf_pitch  = dst_width * zbuf_stride;

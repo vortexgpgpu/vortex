@@ -74,6 +74,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param;
     wire cta_dispatcher_busy;
     wire cta_init;
+    wire cta_is_frag;
 
     // CTA-CSR read-back from the dispatcher (it owns the per-CTA/per-warp tables).
     cta_csrs_t                                              cta_rd_csrs;
@@ -98,6 +99,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .cta_tmask  (cta_tmask),
         .cta_param  (cta_param),
         .cta_init   (cta_init),
+        .cta_is_frag(cta_is_frag),
         .csr_rd_wid (sched_csr_if.csr_rd_wid),
         .csr_rd_cta_id(sched_csr_if.csr_rd_cta_id),
         .cta_rd_csrs(cta_rd_csrs),
@@ -116,6 +118,29 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     assign sched_csr_if.csr_mepc    = mepc_r   [sched_csr_if.csr_rd_wid];
     assign sched_csr_if.csr_mcause  = mcause_r [sched_csr_if.csr_rd_wid];
     assign sched_csr_if.csr_mtval   = mtval_r  [sched_csr_if.csr_rd_wid];
+
+    // primitive-order merge
+    wire forder_grant_valid;
+    wire [NW_WIDTH-1:0] forder_grant_wid;
+
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    VX_frag_order frag_order (
+        .clk          (clk),
+        .reset        (reset),
+        .launch_valid (cta_is_frag),
+        .launch_wid   (cta_wid),
+        .wait_valid   (warp_ctl_if.forder_valid && ~warp_ctl_if.forder_release),
+        .release_valid(warp_ctl_if.forder_valid && warp_ctl_if.forder_release),
+        .exit_valid   (cta_warp_done),
+        .wid          (warp_ctl_if.wid),
+        .grant_valid  (forder_grant_valid),
+        .grant_wid    (forder_grant_wid)
+    );
+`else
+    assign forder_grant_valid = 1'b0;
+    assign forder_grant_wid   = '0;
+    `UNUSED_VAR (cta_is_frag)
+`endif
 
     // split/join
     wire                    join_valid;
@@ -232,6 +257,15 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         // wsync unlock: warp pipeline drained
         if (warp_ctl_if.wsync_valid) begin
             stalled_warps_n[warp_ctl_if.wid] = 0;
+        end
+
+        // primitive-order merge: a release resumes its own warp once the merge
+        // before it has drained; a grant admits a parked warp to its merge
+        if (warp_ctl_if.forder_valid && warp_ctl_if.forder_release) begin
+            stalled_warps_n[warp_ctl_if.wid] = 0;
+        end
+        if (forder_grant_valid) begin
+            stalled_warps_n[forder_grant_wid] = 0;
         end
 
         // Branch handling

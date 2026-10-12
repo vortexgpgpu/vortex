@@ -18,6 +18,12 @@
  *             plane instead keeps the other quad, so the colour says which
  *             depth was used rather than only that something was wrong.
  *
+ *   state_leak  after the cases above leave early-Z armed over a depth buffer
+ *             of zeros, a pass with no depth attachment draws a quad at 0.5 into
+ *             an RGBA16F target, which the software merger takes. Every pixel
+ *             must be drawn: early-Z state is sticky in the rasterizer, and a
+ *             draw that does not disarm it culls against the earlier buffer.
+ *
  * Full-screen quads throughout: coverage is then never the variable, so a
  * failure is a depth decision and cannot be an edge rule.
  */
@@ -33,6 +39,7 @@
 #define HEIGHT  32u
 #define FORMAT       VK_FORMAT_R8G8B8A8_UNORM
 #define DEPTH_FORMAT VK_FORMAT_D32_SFLOAT
+#define LEAK_FORMAT  VK_FORMAT_R16G16B16A16_SFLOAT
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -64,6 +71,7 @@ struct zcase {
    uint32_t           ndraws;
    struct draw        draws[4];
    uint8_t            expect[3];   /* the colour every pixel must end up */
+   bool               depth_clear_near; /* clear depth to 0.0 instead of 1.0 */
 };
 
 static uint32_t *
@@ -132,6 +140,14 @@ main(int argc, char **argv)
    /* Three depths well apart, one colour each, so the surviving colour names
     * the surviving depth. */
    struct zcase cases[] = {
+      /* The red quad's plane is nearest (0.25) but it writes 0.75, so green at
+       * 0.50 must beat it. Testing the plane instead keeps red, and red is not
+       * a colour any correct ordering can produce here. */
+      { "fsdepth", true, 2,
+        { { 0.25f, 0.75f, { 1, 0, 0, 1 } },
+          { 0.50f, 0.50f, { 0, 1, 0, 1 } } },
+        { 0, 255, 0 } },
+
       /* Far to near: every quad passes LESS as it is drawn, so all three run
        * and the nearest is left. */
       { "overdraw_far_to_near", false, 3,
@@ -148,13 +164,13 @@ main(int argc, char **argv)
           { 0.75f, 0.0f, { 1, 0, 0, 1 } } },
         { 0, 0, 255 } },
 
-      /* The red quad's plane is nearest (0.25) but it writes 0.75, so green at
-       * 0.50 must beat it. Testing the plane instead keeps red, and red is not
-       * a colour any correct ordering can produce here. */
-      { "fsdepth", true, 2,
-        { { 0.25f, 0.75f, { 1, 0, 0, 1 } },
-          { 0.50f, 0.50f, { 0, 1, 0, 1 } } },
-        { 0, 255, 0 } },
+      /* Depth cleared to the near plane: nothing passes LESS, so the black
+       * clear survives. Last on purpose: it leaves early-Z armed over a depth
+       * buffer of zeros, which any fragment fails, for state_leak. */
+      { "occluded", false, 1,
+        { { 0.50f, 0.0f, { 1, 0, 0, 1 } } },
+        { 0, 0, 0 }, true },
+
    };
    const uint32_t ncases = (uint32_t)(sizeof(cases) / sizeof(cases[0]));
 
@@ -407,6 +423,14 @@ main(int argc, char **argv)
 
    /* --- run every case -------------------------------------------- */
    unsigned failed = 0;
+   VkPipeline       leak_pipe = VK_NULL_HANDLE;
+   VkRenderPass     leak_rp   = VK_NULL_HANDLE;
+   VkFramebuffer    leak_fb   = VK_NULL_HANDLE;
+   VkImage          limg      = VK_NULL_HANDLE;
+   VkImageView      lview     = VK_NULL_HANDLE;
+   VkDeviceMemory   lmem      = VK_NULL_HANDLE;
+   VkBuffer         lrb       = VK_NULL_HANDLE;
+   VkDeviceMemory   lbmem     = VK_NULL_HANDLE;
    for (uint32_t ci = 0; ci < ncases; ci++) {
       const struct zcase *c = &cases[ci];
 
@@ -417,11 +441,11 @@ main(int argc, char **argv)
       CHECK(vkBeginCommandBuffer(cmd, &cbbi));
 
       /* Clear depth to 1.0 so every quad is in front of it, and colour to
-       * black -- a colour no case expects, so an undrawn target is a failure
-       * rather than an accidental pass. */
+       * black -- a colour only the occluded case expects, so an undrawn target
+       * is a failure rather than an accidental pass. */
       VkClearValue clears[2] = {
          { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } },
-         { .depthStencil = { 1.0f, 0 } },
+         { .depthStencil = { c->depth_clear_near ? 0.0f : 1.0f, 0 } },
       };
       VkRenderPassBeginInfo rpbi = {
          .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -482,7 +506,120 @@ main(int argc, char **argv)
       if (!ok) failed++;
    }
 
+   /* --- state_leak: a software-merged pass after early-Z was armed -- */
+   {
+      VkImageCreateInfo limci = cimci;
+      limci.format = LEAK_FORMAT;
+      CHECK(vkCreateImage(dev, &limci, NULL, &limg));
+      CHECK(alloc_image(dev, &mp, limg, &lmem));
+      VkImageViewCreateInfo livci = civci;
+      livci.image  = limg;
+      livci.format = LEAK_FORMAT;
+      CHECK(vkCreateImageView(dev, &livci, NULL, &lview));
+
+      VkAttachmentDescription latt = att[0];
+      latt.format = LEAK_FORMAT;
+      VkSubpassDescription lsub = {
+         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+         .colorAttachmentCount = 1, .pColorAttachments = &cref,
+      };
+      VkRenderPassCreateInfo lrpci = {
+         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+         .attachmentCount = 1, .pAttachments = &latt,
+         .subpassCount = 1, .pSubpasses = &lsub,
+      };
+      CHECK(vkCreateRenderPass(dev, &lrpci, NULL, &leak_rp));
+      VkFramebufferCreateInfo lfbci = {
+         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+         .renderPass = leak_rp, .attachmentCount = 1, .pAttachments = &lview,
+         .width = WIDTH, .height = HEIGHT, .layers = 1,
+      };
+      CHECK(vkCreateFramebuffer(dev, &lfbci, NULL, &leak_fb));
+
+      VkPipelineShaderStageCreateInfo stages[2] = {
+         { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+           .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vs, .pName = "main" },
+         { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+           .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fs, .pName = "main" },
+      };
+      VkGraphicsPipelineCreateInfo gpci = {
+         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+         .stageCount = 2, .pStages = stages,
+         .pVertexInputState = &vi, .pInputAssemblyState = &ia,
+         .pViewportState = &vps, .pRasterizationState = &rs,
+         .pMultisampleState = &ms, .pColorBlendState = &cb,
+         .layout = pl, .renderPass = leak_rp, .subpass = 0,
+      };
+      CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &leak_pipe));
+
+      const VkDeviceSize lrb_bytes = (VkDeviceSize)WIDTH * HEIGHT * 8;
+      VkBufferCreateInfo lbci = bci;
+      lbci.size = lrb_bytes;
+      CHECK(vkCreateBuffer(dev, &lbci, NULL, &lrb));
+      VkMemoryRequirements lbmr;
+      vkGetBufferMemoryRequirements(dev, lrb, &lbmr);
+      VkMemoryAllocateInfo lbmai = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+         .allocationSize = lbmr.size, .memoryTypeIndex = bmt,
+      };
+      CHECK(vkAllocateMemory(dev, &lbmai, NULL, &lbmem));
+      CHECK(vkBindBufferMemory(dev, lrb, lbmem, 0));
+
+      VkCommandBufferBeginInfo cbbi = {
+         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+      };
+      CHECK(vkBeginCommandBuffer(cmd, &cbbi));
+      VkClearValue lclear = { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } };
+      VkRenderPassBeginInfo rpbi = {
+         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+         .renderPass = leak_rp, .framebuffer = leak_fb,
+         .renderArea = { { 0, 0 }, { WIDTH, HEIGHT } },
+         .clearValueCount = 1, .pClearValues = &lclear,
+      };
+      vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, leak_pipe);
+      struct pc_t pc = { .z = 0.5f, .zwrite = 0.0f, .color = { 0, 1, 0, 1 } };
+      vkCmdPushConstants(cmd, pl, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                         0, sizeof(pc), &pc);
+      vkCmdDraw(cmd, 6, 1, 0, 0);
+      vkCmdEndRenderPass(cmd);
+      VkBufferImageCopy region = {
+         .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1 },
+         .imageExtent = { WIDTH, HEIGHT, 1 },
+      };
+      vkCmdCopyImageToBuffer(cmd, limg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, lrb, 1, &region);
+      CHECK(vkEndCommandBuffer(cmd));
+      VkSubmitInfo si = {
+         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+         .commandBufferCount = 1, .pCommandBuffers = &cmd,
+      };
+      CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
+      CHECK(vkQueueWaitIdle(queue));
+
+      /* Green at half precision is 0x3c00; the clear leaves 0. */
+      uint16_t *h;
+      CHECK(vkMapMemory(dev, lbmem, 0, lrb_bytes, 0, (void **)&h));
+      uint32_t bad = 0;
+      for (uint32_t i = 0; i < WIDTH * HEIGHT; i++) {
+         if (h[i * 4 + 1] != 0x3c00u || h[i * 4 + 0] != 0) {
+            bad++;
+         }
+      }
+      vkUnmapMemory(dev, lbmem);
+      printf("state_leak: %s  undrawn=%u of %u\n", bad ? "FAIL" : "pass", bad, WIDTH * HEIGHT);
+      if (bad) failed++;
+   }
+
    vkDestroyCommandPool(dev, cp, NULL);
+   vkDestroyPipeline(dev, leak_pipe, NULL);
+   vkDestroyFramebuffer(dev, leak_fb, NULL);
+   vkDestroyRenderPass(dev, leak_rp, NULL);
+   vkFreeMemory(dev, lbmem, NULL);
+   vkDestroyBuffer(dev, lrb, NULL);
+   vkDestroyImageView(dev, lview, NULL);
+   vkFreeMemory(dev, lmem, NULL);
+   vkDestroyImage(dev, limg, NULL);
    vkDestroyPipeline(dev, pipes[0], NULL);
    vkDestroyPipeline(dev, pipes[1], NULL);
    vkDestroyPipelineLayout(dev, pl, NULL);
@@ -506,6 +643,7 @@ main(int argc, char **argv)
       printf("FAILED (%u case(s))\n", failed);
       return 1;
    }
-   printf("PASSED (draw order does not change the image; a written depth wins)\n");
+   printf("PASSED (draw order does not change the image; a written depth wins; "
+          "a later depth-less pass is not culled)\n");
    return 0;
 }

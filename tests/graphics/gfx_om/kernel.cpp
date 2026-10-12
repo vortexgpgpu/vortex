@@ -44,9 +44,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     // sub-pixel index is runtime. Addressing a pixel directly makes that whole
     // contortion disappear.
     vx_om_export_both(
-        VX_OM_APERTURE_ADDR(arg->aperture_xbits, arg->aperture_ybits,
-                            arg->aperture_record_shift, x, y, arg->backface),
-        color, arg->depth);
+        VX_OM_APERTURE_ADDR_PAIR(arg->aperture_xbits, arg->aperture_record_shift, x, y),
+        color, VX_OM_DEPTH_WORD(arg->depth, 0, arg->backface));
 }
 
 // The same fragment on two colour attachments. A separate entry rather than a
@@ -63,13 +62,8 @@ __kernel void kernel_main_mrt(kernel_arg_t* __UNIFORM__ arg) {
 
     uint32_t color = frag_color(arg, x, y);
 
-    vx_om_export_both(
-        VX_OM_APERTURE_ADDR(arg->aperture_xbits, arg->aperture_ybits,
-                            arg->aperture_record_shift, x, y, arg->backface),
-        color, arg->depth);
-
-    vx_om_export_both(
-        VX_OM_APERTURE_ADDR_RT(arg->aperture_xbits, arg->aperture_ybits,
-                               arg->aperture_record_shift, x, y, arg->backface, 1),
-        color, arg->depth);
+    const uint32_t addr =
+        VX_OM_APERTURE_ADDR_PAIR(arg->aperture_xbits, arg->aperture_record_shift, x, y);
+    vx_om_export_both(addr, color, VX_OM_DEPTH_WORD(arg->depth, 0, arg->backface));
+    vx_om_export_both(addr, color, VX_OM_DEPTH_WORD(arg->depth, arg->rt2, arg->backface));
 }

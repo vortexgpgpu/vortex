@@ -32,6 +32,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <VX_types.h>
 
 // i64 constant-buffer base slots in a stage's resident descriptor table: push
 // constants (slot 0) and 8 descriptor sets (slots 1..8 -- lavapipe binds set N at
@@ -53,8 +54,10 @@
 // FS kernel arg-block slot carrying the packed OM aperture geometry:
 //   bits [7:0] = xbits, [15:8] = ybits, [23:16] = record_shift
 // A fragment export is a STORE to the OM aperture, and its address is formed by
-// bit-slicing (the pitch is padded to a power of two):
-//   offset = ((face << (xbits + ybits)) | (y << xbits) | x) << record_shift
+// bit-slicing (the pitch is padded to a power of two). The driver exports
+// colour+depth pairs, whose address names the pixel only:
+//   offset = ((y << xbits) | x) << record_shift
+// with the attachment and face in the depth word (VX_OM_DEPTH_WORD_*).
 // The shift amounts depend on the render-target size, which is a per-draw value,
 // so they cannot be baked into the shader at JIT time -- they ride the arg block.
 // The host programs the matching VX_DCR_OM_APERTURE_* registers so the cluster's
@@ -85,6 +88,5 @@
    (((uint32_t)(xbits) & 0xffu) | (((uint32_t)(ybits) & 0xffu) << 8) \
     | (((uint32_t)(shift) & 0xffu) << 16))
 
-// Maximum colour attachments the MRT output-merger fallback handles (mirror of
-// gfx_sw.h VX_OM_MAX_RT). Vulkan requires maxColorAttachments >= 4.
-#define GFX_OM_MAX_RT       4u
+// Colour attachments the output merger handles, fixed-function and software.
+#define GFX_OM_MAX_RT       ((uint32_t)VX_OM_MAX_RT)

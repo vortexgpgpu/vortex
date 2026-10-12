@@ -3,9 +3,9 @@
 #
 # Multiple-render-target (MRT) Vulkan test for the vortexpipe driver
 # (issue I4): the whole VS->raster->OM draw runs on the Vortex device
-# and the fragment shader writes THREE colour attachments, each a
-# distinct computed value. The host reads back all three and checks
-# RT0 != RT1 != RT2 (a single-RT wiring would leave RT1/RT2 at clear).
+# and the fragment shader writes EIGHT colour attachments, each a
+# distinct computed value. The host reads back all eight and checks
+# each one (a narrower wiring would leave the rest at clear).
 #
 #   make            -- build the host binary + SPIR-V
 #   make run-simx   -- render + verify via vortexpipe

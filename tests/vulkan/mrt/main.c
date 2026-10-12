@@ -2,15 +2,16 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Multiple-render-target (MRT) Vulkan test for the vortexpipe driver
- * (issue I4). Renders one triangle off-screen into THREE 64x64 RGBA8
- * colour attachments in a single subpass. The fragment shader writes a
- * distinct value to each attachment (RT0=red, RT1=green, RT2=blue,
- * each scaled by the interpolated varying), so a correct render proves
- * every attachment was shaded through the live draw path -- not just
- * RT0. Each image is copied to a host buffer and checked: the frame
- * centre of RT0/RT1/RT2 must be distinct and non-black (a driver that
- * wired only RT0 would leave RT1/RT2 at the black clear).
+ * Multiple-render-target (MRT) Vulkan test for the vortexpipe driver.
+ * Renders one triangle off-screen into EIGHT 64x64 RGBA8
+ * colour attachments in a single subpass, the most the output merger keeps
+ * state for. The fragment shader writes a distinct value to each attachment
+ * (RT0=red, RT1=green, RT2=blue, each scaled by the interpolated varying;
+ * RT3..RT7 exact constants), so a correct render proves every attachment was
+ * shaded through the live draw path -- not just RT0. Each image is copied to
+ * a host buffer and checked at the frame centre: RT0/RT1/RT2 distinct and
+ * non-black, RT3..RT7 equal to their constants (a driver that wired fewer
+ * attachments would leave the rest at the black clear).
  *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe.
  */
@@ -23,7 +24,7 @@
 
 #define WIDTH   64u
 #define HEIGHT  64u
-#define NRT     3u
+#define NRT     8u
 #define FORMAT  VK_FORMAT_R8G8B8A8_UNORM
 
 #define CHECK(x) do {                                              \
@@ -368,6 +369,19 @@ main(int argc, char **argv)
                    memcmp(c[1], c[2], 4) != 0 &&
                    memcmp(c[0], c[2], 4) != 0;
 
+   /* RT3..RT7: (k/8, 1 - k/8, 1/2, 1), allowing one step of unorm rounding. */
+   bool fixed_ok = true;
+   for (uint32_t k = 3; k < NRT; k++) {
+      const int want[4] = { (int)(255.0f * k / 8.0f + 0.5f),
+                            (int)(255.0f * (8 - k) / 8.0f + 0.5f), 128, 255 };
+      for (int ch = 0; ch < 4; ch++) {
+         if (abs((int)c[k][ch] - want[ch]) > 1) {
+            printf("RT%u channel %d = %u, want %d\n", k, ch, c[k][ch], want[ch]);
+            fixed_ok = false;
+         }
+      }
+   }
+
    /* cleanup (best-effort) */
    vkDestroyCommandPool(dev, cp, NULL);
    for (uint32_t r = 0; r < NRT; r++) {
@@ -386,11 +400,11 @@ main(int argc, char **argv)
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 
-   if (!rt0_ok || !rt1_ok || !rt2_ok || !distinct) {
-      printf("FAILED (rt0_ok=%d rt1_ok=%d rt2_ok=%d distinct=%d)\n",
-             rt0_ok, rt1_ok, rt2_ok, distinct);
+   if (!rt0_ok || !rt1_ok || !rt2_ok || !distinct || !fixed_ok) {
+      printf("FAILED (rt0_ok=%d rt1_ok=%d rt2_ok=%d distinct=%d fixed_ok=%d)\n",
+             rt0_ok, rt1_ok, rt2_ok, distinct, fixed_ok);
       return 1;
    }
-   printf("PASSED (3 render targets each shaded with a distinct colour)\n");
+   printf("PASSED (8 render targets each shaded with a distinct colour)\n");
    return 0;
 }

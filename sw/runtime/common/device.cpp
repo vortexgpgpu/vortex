@@ -370,6 +370,32 @@ vx_result_t Device::cp_init() {
         if (rc != VX_SUCCESS) return rc;
     }
 
+    // Two windows of the device address space are not memory a buffer may
+    // occupy: stores into the fragment-export aperture are taken by the output
+    // merger, and the per-thread stacks fill the space below
+    // VX_MEM_STACK_BASE_ADDR, with the local-memory window above it. Carve both
+    // out before any mem_alloc is reachable.
+    uint64_t stack_low = 0;
+    {
+        uint64_t num_warps = 0, num_threads = 0;
+        auto rc = this->query_caps(VX_CAPS_NUM_WARPS, &num_warps);
+        if (rc != VX_SUCCESS) {
+            return rc;
+        }
+        rc = this->query_caps(VX_CAPS_NUM_THREADS, &num_threads);
+        if (rc != VX_SUCCESS) {
+            return rc;
+        }
+        const uint64_t harts = cp_num_cores_ * num_warps * num_threads;
+        stack_low = VX_MEM_STACK_BASE_ADDR - (harts << VX_MEM_STACK_LOG2_SIZE);
+        std::lock_guard<std::mutex> g(mu_);
+        if (global_mem_.reserve(VX_MEM_OM_BASE_ADDR,
+                                VX_MEM_OM_END_ADDR - VX_MEM_OM_BASE_ADDR) != 0 ||
+            global_mem_.reserve(stack_low, GLOBAL_MEM_SIZE - stack_low) != 0) {
+            return VX_ERR_DEVICE_LOST;
+        }
+    }
+
     if (vm_enabled_) {
         // Virtual memory: build the page tables and program the CP DMA's MMU
         // with the page-table root. After this, mem_alloc mints VAs and the
@@ -389,6 +415,13 @@ vx_result_t Device::cp_init() {
                       new vortex::VMManager(vm_io_.get()));
         if (vm_mgr_->init() != 0)
             return VX_ERR_DEVICE_LOST;
+        // A kernel reaches the aperture by virtual address, so it may not be
+        // minted as a buffer VA either. The stacks need nothing more: VMManager
+        // keeps the high region it identity-maps out of the VA space.
+        if (vm_mgr_->virtual_mem_reserve(VX_MEM_OM_BASE_ADDR,
+                                         VX_MEM_OM_END_ADDR - VX_MEM_OM_BASE_ADDR, 0) != 0) {
+            return VX_ERR_DEVICE_LOST;
+        }
         const uint64_t satp = vm_mgr_->satp();
         CP_WR(CP_SATP_LO, uint32_t(satp & 0xFFFFFFFFu));
         CP_WR(CP_SATP_HI, uint32_t(satp >> 32));

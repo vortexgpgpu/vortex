@@ -93,6 +93,16 @@ int VMManager::init() {
   if (virtual_mem_ == nullptr)
     return 1;
 
+  // The high system region (page table, per-warp stacks) is identity-mapped
+  // below; a buffer VA minted inside it would alias that mapping.
+  const uint64_t va_end = ALLOC_BASE_ADDR + virtual_mem_size;
+  if (VX_MEM_PAGE_TABLE_BASE_ADDR < va_end) {
+    CHECK_ERR(virtual_mem_->reserve(VX_MEM_PAGE_TABLE_BASE_ADDR,
+                                    va_end - VX_MEM_PAGE_TABLE_BASE_ADDR), {
+      return err;
+    });
+  }
+
   if (VX_VM_ADDR_MODE == BARE) {
     DBGPRINT("[RT:init_VM] VA_MODE = BARE MODE(addr= 0x0)\n");
   } else {

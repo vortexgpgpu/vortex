@@ -81,6 +81,22 @@ inline Handoff classify(const OpType& op) {
     return Handoff::KnownViolation;
   }
 #endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  if (std::holds_alternative<WctlType>(op)) {
+    switch (std::get<WctlType>(op)) {
+    case WctlType::FRAG_WAIT:                                  // warp parks until its turn
+    case WctlType::FRAG_RELEASE: return Handoff::SideEffectFree; // retires after the merge it closes
+    case WctlType::TMC:
+    case WctlType::WSPAWN:
+    case WctlType::SPLIT:
+    case WctlType::JOIN:
+    case WctlType::BAR:
+    case WctlType::PRED:
+    case WctlType::WSYNC:        break;                          // not FF ops
+    }
+    return Handoff::Unclassified;
+  }
+#endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
   if (std::holds_alternative<GfxwType>(op)) {
     switch (std::get<GfxwType>(op)) {

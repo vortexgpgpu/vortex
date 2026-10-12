@@ -20,6 +20,7 @@
 //   - Queue create/release works (vortex2.h only).
 //   - Event create/release/signal works (vortex2.h only).
 //   - vx_device_query and vx_dev_caps return identical values.
+//   - The fragment-export aperture and the stack region cannot be allocated.
 //
 // Expected output: "PASSED" on success, "FAILED at <step>" on any failure.
 // Exit code: 0 on PASS, 1 on FAIL.
@@ -27,6 +28,7 @@
 
 #include <vortex.h>
 #include <vortex2.h>
+#include <VX_types.h>
 
 #include <cstdint>
 #include <cstdio>
@@ -126,6 +128,21 @@ int main() {
         return 1;
     }
     CHECK_VX(vx_buffer_release(refcount_buf));  // refs = 0 (freed)
+
+    // A buffer inside the OM's fragment-export aperture would have its stores
+    // taken as fragments, and one in the stack region would be overwritten by
+    // the kernels' stacks, so neither window may be handed out.
+    const uint64_t windows[] = { VX_MEM_OM_BASE_ADDR,
+                                 VX_MEM_STACK_BASE_ADDR - 4096 };
+    for (uint64_t addr : windows) {
+        vx_buffer_h held = nullptr;
+        if (vx_buffer_reserve(dev, addr, 4096, VX_MEM_READ_WRITE, &held) == VX_SUCCESS) {
+            fprintf(stderr, "FAILED: reserved device window at 0x%llx was allocatable\n",
+                    (unsigned long long)addr);
+            vx_buffer_release(held);
+            return 1;
+        }
+    }
 
     // Close device.
     CHECK(vx_dev_close(dev));

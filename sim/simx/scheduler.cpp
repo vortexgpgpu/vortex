@@ -75,6 +75,7 @@ Scheduler::Scheduler(const SimContext& ctx, const char* name, Core* core)
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE
   fwd_is_fragment_.assign(VX_CFG_NUM_WARPS, false);
+  frag_order_wid_.assign(VX_CFG_NUM_WARPS, 0);
 #endif
 }
 
@@ -102,6 +103,10 @@ void Scheduler::on_reset() {
   std::queue<FwdWave> empty;
   std::swap(fwd_waves_, empty);
   std::fill(fwd_is_fragment_.begin(), fwd_is_fragment_.end(), false);
+  frag_order_launch_  = 0;
+  frag_order_serving_ = 0;
+  frag_order_held_.reset();
+  frag_order_waiting_.reset();
 #endif
 
   // cta_dispatcher_ and barrier_unit_ are SimObjects — SimPlatform calls
@@ -301,6 +306,9 @@ bool Scheduler::setTmask(uint32_t wid, const ThreadMask& tmask) {
       fwd_is_fragment_[wid] = false;
       ++fwd_retired_;
     }
+    if (frag_order_held_.test(wid)) {
+      frag_order_release(wid);
+    }
 #endif
     cta_dispatcher_->warp_done(wid);
     return false;
@@ -458,6 +466,37 @@ void Scheduler::fwd_try_inject() {
     fwd_is_fragment_[wid] = true;
     ++fwd_launched_;
     fwd_waves_.pop();
+
+    assert(!frag_order_held_.test(wid)); // the slot's previous warp released at exit
+    frag_order_wid_.at(frag_order_launch_) = uint32_t(wid);
+    frag_order_launch_ = (frag_order_launch_ + 1) % VX_CFG_NUM_WARPS;
+    frag_order_held_.set(wid);
+  }
+}
+
+bool Scheduler::frag_order_wait(uint32_t wid) {
+  assert(frag_order_held_.test(wid));
+  if (frag_order_wid_.at(frag_order_serving_) == wid) {
+    return true;
+  }
+  frag_order_waiting_.set(wid);
+  return false;
+}
+
+void Scheduler::frag_order_release(uint32_t wid) {
+  // Only the warp being served is past its wait, so an explicit release is in
+  // ticket order. A release at exit is not, which is harmless only because no
+  // warp of an unordered shader ever waits: serving then counts releases, and
+  // it is back in step with the launches once the draw drains.
+  assert(frag_order_held_.test(wid));
+  assert(frag_order_wid_.at(frag_order_serving_) == wid
+      || (!active_warps_.test(wid) && frag_order_waiting_.none()));
+  frag_order_held_.reset(wid);
+  frag_order_serving_ = (frag_order_serving_ + 1) % VX_CFG_NUM_WARPS;
+  uint32_t next = frag_order_wid_.at(frag_order_serving_);
+  if (frag_order_waiting_.test(next)) {
+    frag_order_waiting_.reset(next);
+    this->resume(next);
   }
 }
 #endif // VX_CFG_EXT_RASTER_ENABLE

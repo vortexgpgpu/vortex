@@ -389,6 +389,8 @@ static op_string_t op_string(const Instr &instr) {
       }
       case WctlType::PRED:   return {wctlArgs.is_cond_neg ? "PRED.N":"PRED", ""};
       case WctlType::WSYNC:  return {"WSYNC", ""};
+      case WctlType::FRAG_WAIT:    return {"FRAG.WAIT", ""};
+      case WctlType::FRAG_RELEASE: return {"FRAG.RELEASE", ""};
       default:
         std::abort();
       }
@@ -1005,6 +1007,21 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       IntrTexArgs texArgs{};
       texArgs.stage = funct2 & 0x1;
       instr->set_args(texArgs);
+    } break;
+#endif
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+    case 4: { // vx_frag_order_{wait,release}: R4-type, no operands; funct2 selects.
+              // Brackets a fragment warp's merge so overlapping fragments merge
+              // in the order the rasterizer launched them.
+      instr->set_fu_type(FUType::SFU);
+      switch (funct2) {
+      case 0: instr->set_op_type(WctlType::FRAG_WAIT); break;
+      case 1: instr->set_op_type(WctlType::FRAG_RELEASE); break;
+      default:
+        std::abort();
+      }
+      instr->set_args(IntrWctlArgs{});
+      instr->set_wstall(true);
     } break;
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE

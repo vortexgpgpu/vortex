@@ -48,9 +48,15 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_join   = (execute_if.data.op_type == INST_SFU_JOIN);
     wire is_bar    = (execute_if.data.op_type == INST_SFU_BAR);
     wire is_wsync  = (execute_if.data.op_type == INST_SFU_WSYNC);
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    wire is_forder = (execute_if.data.op_type == INST_SFU_RASTER);
+`else
+    wire is_forder = 1'b0;
+`endif
+    wire forder_release = is_forder && execute_if.data.op_args.wctl.is_cond_neg;
 
     wire wctl_valid;
-    wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid, wsync_valid;
+    wire wspawn_valid, tmc_valid, split_valid, sjoin_valid, bar_valid, wsync_valid, forder_valid;
 
     wire [`UP(LANE_BITS)-1:0] last_tid;
 	    if (LANE_BITS != 0) begin : g_last_tid
@@ -180,8 +186,13 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
 
     // WSYNC: hold execute until this warp's pipeline is drained (alm_empty=1
     // means only WSYNC itself is pending — all prior instructions committed).
-    wire wsync_drain = execute_if.valid && is_wsync
-                    && !warp_ctl_if.warp_pending_alm_empty[execute_if.data.header.wid];
+    // FRAG_RELEASE hands the pixel to the next fragment, so the merge it closes
+    // must have retired AND its stores must have reached the L1: a committed
+    // store can still sit in its LSU block's queue while another block issues.
+    wire wsync_drain = execute_if.valid
+                    && ((is_wsync && !warp_ctl_if.warp_pending_alm_empty[execute_if.data.header.wid])
+                     || (forder_release && !(warp_ctl_if.warp_pending_alm_empty[execute_if.data.header.wid]
+                                          && warp_ctl_if.store_drained)));
 
     // BAR (vx_barrier or vx_barrier_arrive) drains LSU before continuing.
     wire bar_drain = execute_if.valid && is_bar && !warp_ctl_if.lsu_sched_drained;
@@ -190,9 +201,10 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign wctl_valid = execute_fire && execute_if.data.header.eop;
 
     assign wsync_valid = wctl_valid && is_wsync;
+    assign forder_valid = wctl_valid && is_forder;
 
     VX_pipe_register #(
-        .DATAW (6 + NW_WIDTH + WCTL_WIDTH),
+        .DATAW (8 + NW_WIDTH + WCTL_WIDTH),
         .RESETW (1)
     ) wctl_reg (
         .clk      (clk),
@@ -205,6 +217,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             sjoin_valid,
             bar_valid,
             wsync_valid,
+            forder_valid,
+            forder_release,
             execute_if.data.header.wid,
             tmc,
             wspawn,
@@ -219,6 +233,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
             warp_ctl_if.sjoin_valid,
             warp_ctl_if.bar_valid,
             warp_ctl_if.wsync_valid,
+            warp_ctl_if.forder_valid,
+            warp_ctl_if.forder_release,
             warp_ctl_if.wid,
             warp_ctl_if.tmc,
             warp_ctl_if.wspawn,

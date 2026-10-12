@@ -167,6 +167,18 @@ bool WctlUnit::process(instr_trace_t* trace, bool* exit) {
   case WctlType::WSYNC:
     release_warp = true;
     break;
+#ifdef VX_CFG_EXT_RASTER_ENABLE
+  case WctlType::FRAG_WAIT:
+    if (trace->eop) {
+      release_warp = sched.frag_order_wait(trace->wid);
+    }
+    break;
+  case WctlType::FRAG_RELEASE:
+    if (trace->eop) {
+      sched.frag_order_release(trace->wid);
+    }
+    break;
+#endif
   default:
     std::abort();
   }

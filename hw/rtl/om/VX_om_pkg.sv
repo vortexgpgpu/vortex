@@ -34,6 +34,8 @@ localparam OM_APERTURE_BITS_W = `CLOG2(`VX_OM_DIM_BITS + 1);
 localparam OM_STENCIL_MASK    = (1 << `VX_OM_STENCIL_BITS) - 1;
 // Index of the colour attachment a fragment targets.
 localparam OM_RT_IDX_BITS     = `CLOG2(`VX_OM_MAX_RT);
+localparam OM_DEPTH_WORD_RT   = `VX_OM_DEPTH_WORD_RT_SHIFT;
+localparam OM_DEPTH_WORD_FACE = `VX_OM_DEPTH_WORD_FACE_SHIFT;
 
 typedef struct packed {
     logic [31:0] argb;

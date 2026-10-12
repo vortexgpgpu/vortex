@@ -539,7 +539,11 @@ package VX_gpu_pkg;
             || (op == INST_SFU_JOIN)
             || (op == INST_SFU_BAR)
             || (op == INST_SFU_PRED)
-            || (op == INST_SFU_WSYNC);
+            || (op == INST_SFU_WSYNC)
+        `ifdef VX_CFG_EXT_RASTER_ENABLE
+            || (op == INST_SFU_RASTER)
+        `endif
+            ;
     endfunction
 
     function automatic logic inst_sfu_is_csr(input logic [INST_SFU_BITS-1:0] op);

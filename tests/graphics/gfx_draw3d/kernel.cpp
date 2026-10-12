@@ -47,9 +47,8 @@ static inline void export_frag(const kernel_arg_t* arg, uint32_t x, uint32_t y,
                                uint32_t face, uint32_t color, uint32_t depth) {
 #if VX_CFG_EXT_OM_ENABLED
     vx_om_export_both(
-        VX_OM_APERTURE_ADDR(arg->aperture_xbits, arg->aperture_ybits,
-                            arg->aperture_record_shift, x, y, face),
-        color, depth);
+        VX_OM_APERTURE_ADDR_PAIR(arg->aperture_xbits, arg->aperture_record_shift, x, y),
+        color, VX_OM_DEPTH_WORD(depth, 0, face));
 #else
     gfx_sw::om_fragment(arg->om, x, y, face, color, depth);
 #endif
@@ -162,6 +161,7 @@ inline int32_t imadd(int32_t a, int32_t b, int32_t c, int32_t s) {
 // A lane the primitive misses still runs the whole shader — it is a helper, there
 // so its covered neighbours in the quad can shuffle a value out of it for a
 // derivative — and `covered` is what withholds its export.
+template <bool Ordered>
 static void shade_fragment(const kernel_arg_t* arg, uint32_t x, uint32_t y,
                            uint32_t covered, uint32_t pid) {
     FloatA z, r, g, b, a, u, v;
@@ -225,9 +225,19 @@ static void shade_fragment(const kernel_arg_t* arg, uint32_t x, uint32_t y,
         TO_RGBA(out_color, r, g, b, a);
     }
 
+#if VX_CFG_EXT_RASTER_ENABLED
+    if (Ordered) {
+        vx_frag_order_wait();
+    }
+#endif
     if (covered) {
         export_frag(arg, x, y, 0, out_color.value, DEPTH_WORD(z));
     }
+#if VX_CFG_EXT_RASTER_ENABLED
+    if (Ordered) {
+        vx_frag_order_release();
+    }
+#endif
 }
 
 #if VX_CFG_EXT_RASTER_ENABLED
@@ -239,7 +249,16 @@ static void shade_fragment(const kernel_arg_t* arg, uint32_t x, uint32_t y,
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     frag_payload_t p;
     vx_frag_load(p);
-    shade_fragment(arg, vx_frag_x(p), vx_frag_y(p), vx_frag_covered(p), p.pid);
+    shade_fragment<false>(arg, vx_frag_x(p), vx_frag_y(p), vx_frag_covered(p), p.pid);
+}
+
+// The same shader with its merge in primitive order. A separate entry so the
+// unordered one keeps the instruction sequence its perf baseline was recorded
+// against.
+__kernel void kernel_main_ordered(kernel_arg_t* __UNIFORM__ arg) {
+    frag_payload_t p;
+    vx_frag_load(p);
+    shade_fragment<true>(arg, vx_frag_x(p), vx_frag_y(p), vx_frag_covered(p), p.pid);
 }
 
 #else
@@ -278,8 +297,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
                     uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
                     uint32_t qy = (pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1)))
                                 & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
-                    shade_fragment(arg, (qx << 1) | (sub & 1), (qy << 1) | (sub >> 1),
-                                   (pos_mask >> sub) & 1, pid);
+                    shade_fragment<false>(arg, (qx << 1) | (sub & 1), (qy << 1) | (sub >> 1),
+                                          (pos_mask >> sub) & 1, pid);
                 });
         }
     }

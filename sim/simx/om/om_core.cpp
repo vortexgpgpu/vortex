@@ -249,23 +249,35 @@ private:
   //
   // The encoding is shift-only (the pitch is padded to a power of two), so this
   // is bit-slicing, not division:
-  //     offset = ((((rt << 1) | face) << ybits | y) << xbits | x) << record_shift
+  //     one-word record:   offset = ((face << ybits | y) << xbits | x) << record_shift
+  //     colour+depth pair: offset = (y << xbits | x) << record_shift, with the
+  //                        attachment and face in the depth word
+  static_assert(VX_OM_DEPTH_WORD_RT_SHIFT >= VX_OM_DEPTH_BITS
+             && (1u << (VX_OM_DEPTH_WORD_FACE_SHIFT - VX_OM_DEPTH_WORD_RT_SHIFT)) >= VX_OM_MAX_RT
+             && VX_OM_DEPTH_WORD_FACE_SHIFT < 32, "depth word fields overlap");
   void decode_aperture(OmReq& req) const {
     uint32_t xbits = dcrs_.read(VX_DCR_OM_APERTURE_XBITS);
     uint32_t ybits = dcrs_.read(VX_DCR_OM_APERTURE_YBITS);
     uint32_t shift = dcrs_.read(VX_DCR_OM_APERTURE_RECORD_SHIFT);
+    const bool pair = (shift == 3);
     bool rt_seen = false;
+    req.rt = 0;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       if (!(req.tmask_bits & (1u << t))) continue;
       uint64_t off = req.addr[t] - uint64_t(VX_MEM_OM_BASE_ADDR);
       uint64_t rec = off >> shift;
       req.pos_x[t] = uint32_t(rec & ((1ull << xbits) - 1));
       req.pos_y[t] = uint32_t((rec >> xbits) & ((1ull << ybits) - 1));
-      req.face[t]  = uint8_t((rec >> (xbits + ybits)) & 0x1);
-      // The index is above face, so a single-attachment export decodes to zero
-      // without its producer knowing the field exists. It names the attachment
-      // of the whole record, so every lane of one export must agree.
-      uint32_t rt = uint32_t((rec >> (xbits + ybits + 1)) & (VX_OM_MAX_RT - 1));
+      if (!pair) {
+        req.face[t] = uint8_t((rec >> (xbits + ybits)) & 0x1);
+        continue;
+      }
+      const uint32_t word = req.depth[t];
+      req.face[t]  = uint8_t((word >> VX_OM_DEPTH_WORD_FACE_SHIFT) & 0x1);
+      req.depth[t] = word & ((1u << VX_OM_DEPTH_BITS) - 1);
+      // The attachment names the whole record, so every lane of one export
+      // must agree.
+      uint32_t rt = (word >> VX_OM_DEPTH_WORD_RT_SHIFT) & (VX_OM_MAX_RT - 1);
       assert((!rt_seen || rt == req.rt) && "OM: one export spans two colour attachments");
       req.rt  = rt;
       rt_seen = true;

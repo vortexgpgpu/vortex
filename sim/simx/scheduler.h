@@ -158,6 +158,16 @@ public:
   // Epoch complete: producer drained AND every launched wave retired.
   bool fwd_done() const;
   void fwd_disarm();
+
+  // ----- Primitive-order merge -----
+  // Every fragment warp takes a ticket at launch; the serving counter admits
+  // one ticket at a time into the merge between FRAG_WAIT and FRAG_RELEASE.
+  // A warp that exits without releasing releases at exit, so a shader that does
+  // not order its merge leaves the counters in step for the next one.
+  // Returns true when it is the warp's turn; otherwise the warp stays parked
+  // until the release before it resumes it.
+  bool frag_order_wait(uint32_t wid);
+  void frag_order_release(uint32_t wid);
 #endif
 
   // ----- Barriers -----
@@ -232,6 +242,15 @@ private:
   uint32_t            fwd_reqs_outstanding_ = 0;
   std::queue<FwdWave> fwd_waves_;
   std::vector<bool>   fwd_is_fragment_;     // per-wid: this warp is an injected fragment wave
+
+  // A warp that has not released yet holds a ticket, and each resident warp
+  // holds at most one, so the tickets in flight never exceed the warp count
+  // and both counters wrap at it.
+  std::vector<uint32_t> frag_order_wid_;    // ticket -> warp holding it
+  uint32_t            frag_order_launch_  = 0;
+  uint32_t            frag_order_serving_ = 0;
+  WarpMask            frag_order_held_;     // holds an unreleased ticket
+  WarpMask            frag_order_waiting_;  // parked in FRAG_WAIT
 #endif
 
   friend class SimObject<Scheduler>;

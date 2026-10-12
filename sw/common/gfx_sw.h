@@ -1226,9 +1226,6 @@ static inline __attribute__((always_inline)) void om_fragment_msaa(
 // buffer), so MRT keeps om_state_t as the depth/stencil + shared framebuffer
 // geometry and adds a per-attachment colour descriptor. Vulkan requires
 // maxColorAttachments >= 4.
-#ifndef VX_OM_MAX_RT
-#define VX_OM_MAX_RT 4
-#endif
 
 // One colour attachment's blend/write configuration (mirror of the per-RT slice
 // of the OM blend DCRs). Depth/stencil is not here — it is shared in om_state_t.
@@ -1455,8 +1452,27 @@ static inline __attribute__((always_inline)) uint32_t om_field_encode(uint32_t k
     return om_float_to_ufloat(om_bits_f(lane), width - 5u);
   case OM_KIND_UNORM:
     return (uint32_t)(om_clamp01(om_bits_f(lane)) * (float)((1u << width) - 1u) + 0.5f);
+  case OM_KIND_UINT: {
+    // Saturate to the field, as the reference rasterizer's format pack does: a
+    // value that does not fit must not wrap into its low bits.
+    if (width >= 32u) {
+      return lane;
+    }
+    const uint32_t max = (1u << width) - 1u;
+    return (lane > max) ? max : lane;
+  }
+  case OM_KIND_SINT: {
+    if (width >= 32u) {
+      return lane;
+    }
+    const int32_t max = (int32_t)((1u << (width - 1u)) - 1u);
+    const int32_t min = -max - 1;
+    int32_t v = (int32_t)lane;
+    v = (v > max) ? max : ((v < min) ? min : v);
+    return (uint32_t)v;
+  }
   default:
-    return lane;   // integer kinds keep the low `width` bits
+    return lane;
   }
 }
 

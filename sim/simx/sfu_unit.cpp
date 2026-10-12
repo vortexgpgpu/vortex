@@ -386,9 +386,10 @@ void SfuUnit::on_tick() {
 		}
 #endif // VX_CFG_EXT_RTU_ENABLE
 
-		// Fragment dispatch is push, not pull: there is no kernel-side raster op.
+		// Fragment dispatch is push, not pull: there is no kernel-side fetch op.
 		// The fragment work distributor (above + scheduler) launches fragment
-		// warps directly from the autonomously-pulled covered-quad waves.
+		// warps directly from the autonomously-pulled covered-quad waves; the
+		// merge-ordering ops are warp control.
 
 		if (output.full())
 			continue; // stall — no side effects this tick
@@ -401,6 +402,13 @@ void SfuUnit::on_tick() {
 				if (*wctl_p == WctlType::WSYNC) {
 					if (core_->has_pending_instrs(trace->wid))
 						continue; // wait for the warp's prior instrs to retire
+				} else if (*wctl_p == WctlType::FRAG_RELEASE) {
+					// A release hands the pixel to the next fragment: the merge it
+					// closes must have retired and the LSU must have drained, as the
+					// RTL's store_drained requires.
+					if (core_->has_pending_instrs(trace->wid) || !core_->lsu_drained()) {
+						continue;
+					}
 				} else if (*wctl_p == WctlType::BAR) {
 					if (!core_->lsu_drained())
 						continue; // drain LSU before the barrier

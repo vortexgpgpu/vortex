@@ -282,7 +282,12 @@ VX_OM_DEPTH_BITS  = 24
 VX_OM_STENCIL_BITS = 8
 # Colour attachments the merger keeps state for. Vulkan requires
 # maxColorAttachments >= 4. The depth/stencil attachment is shared, not counted.
-VX_OM_MAX_RT      = 4
+VX_OM_MAX_RT      = 8
+# Depth word of a colour+depth export pair: depth in the low VX_OM_DEPTH_BITS,
+# then the attachment index and the face. The export address names the pixel
+# only, so the window holds the full render-target size.
+VX_OM_DEPTH_WORD_RT_SHIFT   = 24
+VX_OM_DEPTH_WORD_FACE_SHIFT = 27
 
 VX_OM_DEPTH_FUNC_ALWAYS   = 0
 VX_OM_DEPTH_FUNC_NEVER    = 1
@@ -439,18 +444,21 @@ VX_DCR_OM_EARLYZ_SAFE       = 0x092
 # offset back.
 #
 # The encoding is SHIFT-ONLY:
-#     offset = ((((rt << 1) | face) << YBITS | y) << XBITS | x) << RECORD_SHIFT
+#     one-word record:   offset = ((face << YBITS | y) << XBITS | x) << RECORD_SHIFT
+#     colour+depth pair: offset = (y << XBITS | x) << RECORD_SHIFT
 # The framebuffer pitch is padded to a power of two (XBITS = ceil(log2(width)),
 # YBITS = ceil(log2(height))) so the ingress decodes by bit-slicing. A packed
 # y*width + x would force a DIVIDER into the ingress. The aperture is virtual --
 # nothing is stored there -- so the address space the padding wastes is free.
-# The attachment index sits above face, so a single-attachment export is the
-# same address it was before there were several.
+# A pair carries the attachment index and the face in its depth word
+# (VX_OM_DEPTH_WORD_*), so the address spends no bits on them; a one-word record
+# targets attachment zero.
 #
 # The window is bounded by VX_MEM_OM_END_ADDR and cannot grow -- the page table
 # starts immediately above it -- so the encoding must satisfy
-#     XBITS + YBITS + 1 + CLOG2(VX_OM_MAX_RT) + RECORD_SHIFT <= log2(window)
-# The runtime checks this when it programs the aperture.
+#     XBITS + YBITS + (pair ? 0 : 1) + RECORD_SHIFT <= log2(window)
+# which a pair meets up to 8192x4096. The runtime and the driver check it when
+# they program the aperture.
 VX_DCR_OM_APERTURE_XBITS    = 0x093
 VX_DCR_OM_APERTURE_YBITS    = 0x094
 # Record shape. A shader emits colour only (2 -- early-Z owns the depth test AND

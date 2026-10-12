@@ -107,8 +107,7 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
   // derivatives, and it simply does not export.
   if (vx_frag_covered(p)) {
     vx_om_export_both(
-        VX_OM_APERTURE_ADDR(arg->aperture_xbits, arg->aperture_ybits,
-                            arg->aperture_record_shift, x, y, 0),
-        out_color.value, DEPTH_WORD(z));
+        VX_OM_APERTURE_ADDR_PAIR(arg->aperture_xbits, arg->aperture_record_shift, x, y),
+        out_color.value, VX_OM_DEPTH_WORD(DEPTH_WORD(z), 0, 0));
   }
 }

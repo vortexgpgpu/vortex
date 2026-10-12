@@ -64,6 +64,7 @@ bool depth_enable = false;
 bool backface     = false;
 bool sw_path      = false;   // -S : merge via gfx_sw::om_fragment
 bool mrt_enable   = false;   // -m : also render to a second colour attachment
+uint32_t mrt_rt   = 0;       // -n : which attachment that is (default 1)
 
 // Second colour attachment, cleared to a value no fragment produces so that a
 // channel the writemask should have protected is visible if it is overwritten.
@@ -91,12 +92,12 @@ uint64_t    cbuf1_addr = 0;
 
 static void show_usage() {
    std::cout << "Vortex Render Output Test (v2 KMU)." << std::endl;
-   std::cout << "Usage: [-c color] [-d depth] [-b blend] [-m mrt] [-f face] [-k kernel] [-o image] [-r reference] [-w width] [-h height]" << std::endl;
+   std::cout << "Usage: [-c color] [-d depth] [-b blend] [-m mrt] [-n mrt attachment] [-f face] [-k kernel] [-o image] [-r reference] [-w width] [-h height]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:bdfmS?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:bdfmS?")) != -1) {
     switch (c) {
     case 'o': output_file = optarg; break;
     case 'r': reference_file = optarg; break;
@@ -108,6 +109,7 @@ static void parse_args(int argc, char **argv) {
     case 'd': depth_enable = true; break;
     case 'b': blend_enable = true; break;
     case 'm': mrt_enable = true; break;
+    case 'n': mrt_rt = std::atoi(optarg); break;
     case 'S': sw_path = true; break;
     case '?': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
@@ -124,6 +126,17 @@ static void parse_args(int argc, char **argv) {
     std::cout << "Error: -m and -d cannot be combined: several colour attachments "
                  "share the depth buffer, which the depth write would then change "
                  "between one attachment and the next" << std::endl;
+    exit(1);
+  }
+  if (mrt_rt != 0 && !mrt_enable) {
+    std::cout << "Error: -n names the attachment -m renders to" << std::endl;
+    exit(1);
+  }
+  if (mrt_rt == 0) {
+    mrt_rt = 1;
+  }
+  if (mrt_rt >= VX_OM_MAX_RT) {
+    std::cout << "Error: -n names attachment 1.." << (VX_OM_MAX_RT - 1) << std::endl;
     exit(1);
   }
   if (mrt_enable && sw_path) {
@@ -277,12 +290,12 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_BLEND_CONST, 0, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_LOGIC_OP,    VX_OM_LOGIC_OP_COPY, 0, nullptr, nullptr));
 
-  // Colour attachment 1. Everything above landed on attachment 0, which the
+  // The second colour attachment (-n). Everything above landed on attachment 0, which the
   // select register names by default. Attachment 1 differs from it in exactly
   // the two things that are per-attachment -- the buffer it writes and the
   // channels it writes there -- and, under -b, in whether it blends at all.
   if (mrt_enable) {
-    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_RT_SELECT,      1, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_RT_SELECT,      mrt_rt, 0, nullptr, nullptr));
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_ADDR,      cbuf1_addr / 64, 0, nullptr, nullptr));
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_PITCH,     cbuf_pitch, 0, nullptr, nullptr));
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_WRITEMASK, 0x2, 0, nullptr, nullptr));
@@ -306,6 +319,7 @@ int main(int argc, char *argv[]) {
   kernel_arg.color        = color;
   kernel_arg.depth        = depth;
   kernel_arg.backface     = backface ? 1 : 0;
+  kernel_arg.rt2          = mrt_rt;
   kernel_arg.blend_enable = blend_enable ? 1 : 0;
   kernel_arg.aperture_xbits        = ap_xbits;
   kernel_arg.aperture_ybits        = ap_ybits;

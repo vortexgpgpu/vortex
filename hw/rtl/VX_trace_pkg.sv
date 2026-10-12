@@ -268,7 +268,13 @@ package VX_trace_pkg;
                 INST_SFU_OM: `TRACE(level, ("OM"))
             `endif
             `ifdef VX_CFG_EXT_RASTER_ENABLE
-                INST_SFU_RASTER: `TRACE(level, ("RAST.FETCH"))
+                INST_SFU_RASTER: begin
+                    if (op_args.wctl.is_cond_neg) begin
+                        `TRACE(level, ("FRAG.RELEASE"))
+                    end else begin
+                        `TRACE(level, ("FRAG.WAIT"))
+                    end
+                end
             `endif
                 default: `TRACE(level, ("?"))
             endcase

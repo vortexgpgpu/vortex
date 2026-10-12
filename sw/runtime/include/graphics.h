@@ -304,8 +304,7 @@ struct tex_state_t {
 // non-VX_SUCCESS status, or VX_SUCCESS.
 vx_result_t program_raster(vx_queue_h q, const raster_state_t& s);
 
-// Bits the fragment-export aperture window spans, and the bits the colour
-// attachment index takes out of it.
+// Bits the fragment-export aperture window spans.
 constexpr uint32_t om_aperture_bits() {
   uint64_t span = uint64_t(VX_MEM_OM_END_ADDR) - uint64_t(VX_MEM_OM_BASE_ADDR);
   uint32_t b = 0;
@@ -313,10 +312,11 @@ constexpr uint32_t om_aperture_bits() {
   return b;
 }
 
-constexpr uint32_t om_rt_index_bits() {
-  uint32_t b = 0;
-  while ((1u << b) < VX_OM_MAX_RT) { ++b; }
-  return b;
+// Whether a width x height framebuffer fits the aperture for a record shape: a
+// colour+depth pair addresses the pixel only (its attachment and face ride the
+// depth word), a one-word record also carries the face above y.
+constexpr bool om_aperture_fits(uint32_t xbits, uint32_t ybits, bool pair) {
+  return xbits + ybits + (pair ? 0u : 1u) + (pair ? 3u : 2u) <= om_aperture_bits();
 }
 
 // Derive the aperture encoding from the framebuffer and the shader's output
@@ -337,8 +337,8 @@ inline void set_aperture(om_state_t& s, uint32_t width, uint32_t height,
   // of two, so a large enough framebuffer runs the record index off the top and
   // wraps two pixels onto one. Nothing downstream can detect that, so it is
   // caught here where the width and height are still in hand.
-  assert(s.aperture_xbits + s.aperture_ybits + 1
-       + om_rt_index_bits() + s.aperture_record_shift <= om_aperture_bits()
+  assert(om_aperture_fits(s.aperture_xbits, s.aperture_ybits,
+                          s.aperture_record_shift == 3)
        && "framebuffer too large for the fragment-export aperture");
 }
 
