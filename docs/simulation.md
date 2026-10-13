@@ -92,9 +92,9 @@ against the RTL. Its kernel carries a small control block and a
 latency-bandwidth memory model; the target runs free, and the runtime talks to
 it like the native V80 driver does (AXI4-Lite registers, QDMA for memory).
 
-| target | what runs | image built by |
+| target | what runs | built by |
 |---|---|---|
-| `avedsim` (default) | the same kernel in Verilator, in-process | nothing to build |
+| `avedsim` (default) | the same kernel in Verilator, in-process | the run itself: the foldsim compiler, then a Verilator build of the kernel, for the app's `CONFIGS` |
 | `hw` | the image on the V80 | `make -C hw/syn/foldsim` |
 
 ```bash
