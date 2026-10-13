@@ -100,7 +100,10 @@ def main():
     flat = out('flat.mlir')
     with open(flat + '.in', 'w') as f:
         f.write(publish(open(design).read(), [a.top] + modules))
+    # A RAM that asks for block RAM reads synchronously once its wrapper is
+    # flattened into the module that registers its address.
     run([tool('circt-opt'), flat + '.in', '--symbol-dce', '--hw-flatten-modules', '--symbol-dce',
+         '--canonicalize', '--cse', f'--seq-retime-firmem-reads=report={out("memories.rpt")}',
          '--canonicalize', '--cse', '-o', flat])
     os.remove(flat + '.in')
     text = open(flat).read()
