@@ -19,7 +19,9 @@
 // The target runs free: the endpoint gives it a token every cycle. The host
 // queues commands -- a DCR write or read, a start, a reset -- and each is
 // applied to the target for one cycle (a reset for its count of cycles), in
-// order, from the cycle after the queue reaches it. A DCR read's response is
+// order, from the cycle after the queue reaches it. The memory endpoint gets
+// the target's reset for each target cycle too, and resets its side of the
+// target's memory port with it (foldsim_mem). A DCR read's response is
 // kept for the host; `busy` covers everything queued or in flight, so a host
 // that sees the target idle has every effect of what it asked for.
 //
@@ -61,6 +63,8 @@ module foldsim_ctrl #(
     input  wire                  mem_stall,
     // Which classes of the simulator's models finish a thread this cycle.
     input  wire [NUM_CLASSES-1:0] profile_finish,
+    // The target's reset, a token per target cycle for the memory endpoint.
+    output wire                  mem_reset_valid,     input wire mem_reset_ready,     output wire                  mem_reset_bits,
 
     // Target inputs, as channels of the simulator: the endpoint's outputs.
     output wire                  reset_valid,         input wire reset_ready,         output wire                  reset_bits,
@@ -118,7 +122,7 @@ module foldsim_ctrl #(
                            : 32'd0;
 
     wire finish;
-    wire [5:0] done;
+    wire [6:0] done;
     wire [2:0] have;
     foldsim_token_out o_reset   (clk, reset, reset_valid,         reset_ready,         run, finish, done[0]);
     foldsim_token_out o_dvalid  (clk, reset, dcr_req_valid_valid, dcr_req_valid_ready, run, finish, done[1]);
@@ -126,12 +130,14 @@ module foldsim_ctrl #(
     foldsim_token_out o_daddr   (clk, reset, dcr_req_addr_valid,  dcr_req_addr_ready,  run, finish, done[3]);
     foldsim_token_out o_ddata   (clk, reset, dcr_req_data_valid,  dcr_req_data_ready,  run, finish, done[4]);
     foldsim_token_out o_start   (clk, reset, start_valid,         start_ready,         run, finish, done[5]);
+    foldsim_token_out o_mreset  (clk, reset, mem_reset_valid,     mem_reset_ready,     run, finish, done[6]);
     assign reset_bits         = in_reset;
     assign dcr_req_valid_bits = dcr_valid;
     assign dcr_req_rw_bits    = dcr_rw;
     assign dcr_req_addr_bits  = cur_addr;
     assign dcr_req_data_bits  = cur_data;
     assign start_bits         = do_start;
+    assign mem_reset_bits     = in_reset;
 
     wire                  rsp_v, busy;
     wire [DCR_DATA_W-1:0] rsp_d;
