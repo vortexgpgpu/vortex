@@ -1156,9 +1156,7 @@ cmake -G Ninja -S $CIRCT_SRC/llvm/llvm -B $CIRCT_SRC/build \
 `foldsim-opt`. foldsim is its own project and builds on CIRCT, as POCL builds
 on LLVM.
 
-> **Baseline:** branch `main` of `vortexgpgpu/foldsim`. Its passes
-> (`foldsim-extract-models`, `foldsim-fuse-models`, `foldsim-fame5`,
-> `foldsim-compose`) were the `maxsim-*` passes of the CIRCT fork.
+> **Baseline:** branch `vortex_3.x` of `vortexgpgpu/foldsim`.
 
 ### Build
 

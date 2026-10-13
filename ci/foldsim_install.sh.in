@@ -36,7 +36,7 @@ set -e
 TOOLDIR=${TOOLDIR:=@TOOLDIR@}
 
 FOLDSIM_REPO=${FOLDSIM_REPO:=https://github.com/vortexgpgpu/foldsim.git}
-FOLDSIM_REV=${FOLDSIM_REV:=main}
+FOLDSIM_REV=${FOLDSIM_REV:=vortex_3.x}
 
 CIRCT_PREFIX=${CIRCT_PREFIX:=$TOOLDIR/circt}
 FOLDSIM_SRC=${FOLDSIM_SRC:=$TOOLDIR/foldsim-src}

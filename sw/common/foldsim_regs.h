@@ -18,7 +18,7 @@
 
 #pragma once
 
-#define FOLDSIM_ID              0x4D58534Du
+#define FOLDSIM_ID              0x464F4C44u
 #define FOLDSIM_VERSION         2u
 
 #define FOLDSIM_REG_ID          0x000u
