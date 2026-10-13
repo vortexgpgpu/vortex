@@ -33,7 +33,7 @@
 #     colliding with a write undefined in block RAM; other tools ignore it;
 #   - -f sv (the default) writes SystemVerilog, for Vivado and Quartus; -f
 #     v2005 writes Verilog-2005 for tools with a Verilog frontend (yosys): no
-#     packed arrays or structs, no local variables.
+#     packed arrays or structs, no local variables, no size casts.
 #
 # The sources are a filelist (-l, as gen_sources.sh writes it: +define+,
 # +incdir+ and files in compile order), or include directories whose sources
@@ -148,7 +148,7 @@ passes=(--hw-expand-array-writes "--seq-retime-firmem-reads=mode=$mem_mode repor
 if [ "$format" = v2005 ]; then
     passes+=(--seq-lower-aggregate-regs --hw-aggregate-ports-to-int --hw-convert-bitcasts
              --hw-aggregate-to-comb)
-    lowering=noAlwaysComb,disallowLocalVariables,disallowPackedArrays,disallowPackedStructAssignments,svVarDeclStyle=reg,locationInfoStyle=none,omitVersionComment
+    lowering=noAlwaysComb,disallowLocalVariables,disallowPackedArrays,disallowPackedStructAssignments,disallowSizeCasts,svVarDeclStyle=reg,locationInfoStyle=none,omitVersionComment
 else
     lowering=locationInfoStyle=none,omitVersionComment
 fi
