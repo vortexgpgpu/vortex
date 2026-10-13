@@ -20,15 +20,22 @@
 // the order their requests were accepted. Every output is a function of the
 // pipe's state, so all of them are offered at the start of a target cycle.
 //
-// Data lives in device memory at `base` plus the target's address. A request
-// goes to memory the cycle the target makes it; the response is offered to
+// Data lives in device memory at `base` plus the target's address. A read
+// goes to memory the cycle the target makes it, a write the cycle it has both
+// its AW and its W; the response is offered to
 // the target when the pipe releases it, and a target cycle that would offer
 // one memory has not returned yet simply does not finish until it has. A
 // write is acknowledged to the target only once memory has acknowledged it,
 // so any later request of the target sees it.
 //
-// Single-beat transactions only, as Vortex issues them: a longer burst sets
-// `error`.
+// Single-beat transactions only, as Vortex issues them: a burst sets `error`,
+// goes nowhere, and from the next cycle on the endpoint is ready for nothing.
+//
+// The target's reset is a token of the control endpoint's. A target cycle in
+// reset takes no request; it finishes once every transaction memory has from
+// before it has completed, and drops the pipe -- requests not answered, data
+// not delivered, a write's lone half -- and `error`. A response from before a
+// reset never reaches the target after it.
 module foldsim_mem #(
     parameter ID_W   = 4,
     parameter ADDR_W = 64,
@@ -43,11 +50,14 @@ module foldsim_mem #(
     input  wire [7:0]            max_reads,
     input  wire [7:0]            max_writes,
     input  wire [63:0]           base,
-    // No transaction in flight at the target.
+    // No transaction in flight, at the target or in memory.
     output wire                  idle,
     output reg                   error,
     // A host cycle a target cycle waits for memory.
     output wire                  stall,
+
+    // The target's reset, from the control endpoint.
+    input  wire                  treset_valid,  output wire treset_ready,  input wire              treset_bits,
 
     // Target outputs, as channels of the simulator: the endpoint's inputs.
     input  wire                  awvalid_valid, output wire awvalid_ready, input wire              awvalid_bits,
@@ -104,13 +114,13 @@ module foldsim_mem #(
     wire finish;
 
     // ---- The target's request side, one token per channel per cycle ----
-    wire                awvalid, wvalid, wlast, arvalid, rready, bready;
+    wire                awvalid, wvalid, wlast, arvalid, rready, bready, treset;
     wire [ADDR_W-1:0]   awaddr, araddr;
     wire [ID_W-1:0]     awid, arid;
     wire [7:0]          awlen, arlen;
     wire [DATA_W-1:0]   wdata;
     wire [DATA_W/8-1:0] wstrb;
-    wire [13:0]         have;
+    wire [14:0]         have;
 
     foldsim_token_in #(1)        t_awvalid (clk, reset, awvalid_valid, awvalid_ready, awvalid_bits, finish, have[0],  awvalid);
     foldsim_token_in #(ADDR_W)   t_awaddr  (clk, reset, awaddr_valid,  awaddr_ready,  awaddr_bits,  finish, have[1],  awaddr);
@@ -126,6 +136,7 @@ module foldsim_mem #(
     foldsim_token_in #(8)        t_arlen   (clk, reset, arlen_valid,   arlen_ready,   arlen_bits,   finish, have[11], arlen);
     foldsim_token_in #(1)        t_rready  (clk, reset, rready_valid,  rready_ready,  rready_bits,  finish, have[12], rready);
     foldsim_token_in #(1)        t_bready  (clk, reset, bready_valid,  bready_ready,  bready_bits,  finish, have[13], bready);
+    foldsim_token_in #(1)        t_treset  (clk, reset, treset_valid,  treset_ready,  treset_bits,  finish, have[14], treset);
 
     // ---- The pipe's state ----
     reg [31:0]   cycle;
@@ -156,11 +167,14 @@ module foldsim_mem #(
     reg [PW-1:0] rd_head, rd_tail;
     reg [CW-1:0] rd_count;
     reg [7:0]    b_acked, b_given;
+    // Reads memory has not answered, and writes it has not acknowledged.
+    reg [CW-1:0] rd_out, wr_out;
+    wire         drained = (rd_out == 0) & (wr_out == 0);
 
     // ---- The pipe's outputs: functions of its state ----
-    wire ar_ready = (pending_reads < CW'(max_reads));
-    wire aw_ready = (pending_aw < CW'(max_writes));
-    wire w_ready  = (pending_w < CW'(max_writes));
+    wire ar_ready = ~error & (32'(pending_reads) < 32'(max_reads));
+    wire aw_ready = ~error & (32'(pending_aw) < 32'(max_writes));
+    wire w_ready  = ~error & (32'(pending_w) < 32'(max_writes));
     // R needs its data back from memory, and B its write acknowledged.
     wire ok = (~cur_r_valid | (rd_count != 0)) & (~cur_w_valid | (b_acked != b_given));
     wire [10:0] done;
@@ -189,17 +203,22 @@ module foldsim_mem #(
     assign bresp_bits   = 2'b00;
     assign bid_bits     = cur_w_id;
 
-    assign finish = (&have) & (&done);
-    assign stall  = ~ok;
-    assign idle   = (pending_reads == 0) & (pending_aw == 0) & (pending_w == 0);
+    // A reset cycle waits for memory to answer everything it has.
+    wire drain_wait = have[14] & treset & ~drained;
+    assign finish = (&have) & (&done) & ~drain_wait;
+    assign stall  = ~ok | drain_wait;
+    assign idle   = (pending_reads == 0) & (pending_aw == 0) & (pending_w == 0) & drained;
 
     // ---- One target cycle of the pipe, on the request side's tokens ----
-    wire ar_fire    = arvalid & ar_ready;
-    wire aw_fire    = awvalid & aw_ready;
-    wire w_fire     = wvalid & w_ready;
-    wire wlast_fire = w_fire & wlast;
-    wire r_fire     = cur_r_valid & rready;
-    wire b_fire     = cur_w_valid & bready;
+    wire ar_hs = arvalid & ar_ready;
+    wire aw_hs = awvalid & aw_ready;
+    wire w_hs  = wvalid & w_ready;
+    wire burst = (ar_hs & (arlen != 0)) | (aw_hs & (awlen != 0)) | (w_hs & ~wlast);
+    wire ar_fire = ar_hs & (arlen == 0);
+    wire aw_fire = aw_hs & (awlen == 0);
+    wire w_fire  = w_hs & wlast;
+    wire r_fire  = cur_r_valid & rready;
+    wire b_fire  = cur_w_valid & bready;
 
     // Reads: the latency pipe, into the stage driving R; a read released the
     // cycle it arrives skips the pipe.
@@ -213,11 +232,11 @@ module foldsim_mem #(
     wire          rp_push    = ar_fire & ~(r_take & rp_empty);
     wire          rp_pop     = r_take & ~rp_empty;
 
-    // Writes: an AW and its last W beat, in either order, form one write, its
-    // latency counted from the cycle both are in.
+    // Writes: an AW and its W, in either order, form one write, its latency
+    // counted from the cycle both are in.
     wire          new_write = ((pending_w > pending_aw) & aw_fire)
-                            | ((pending_w < pending_aw) & wlast_fire)
-                            | (aw_fire & wlast_fire);
+                            | ((pending_w < pending_aw) & w_fire)
+                            | (aw_fire & w_fire);
     wire          awq_empty = (awq_count == 0);
     wire [ID_W-1:0] w_form_id = awq_empty ? awid : awq_id[awq_head];
     wire          awq_pop   = new_write & ~awq_empty;
@@ -256,138 +275,172 @@ module foldsim_mem #(
             error         <= 1'b0;
         end else if (finish) begin
             cycle <= cycle + 32'd1;
-            if (rp_push) begin
-                rp_release[rp_tail] <= ar_release;
-                rp_id[rp_tail]      <= arid;
-                rp_tail             <= rp_tail + 1'b1;
-            end
-            if (rp_pop)
-                rp_head <= rp_head + 1'b1;
-            rp_count <= rp_count + CW'(rp_push) - CW'(rp_pop);
-            if (r_take) begin
-                cur_r_valid <= 1'b1;
-                cur_r_id    <= r_head_id;
-            end else if (r_fire) begin
-                cur_r_valid <= 1'b0;
-            end
+            if (treset) begin
+                pending_reads <= 0;
+                pending_aw    <= 0;
+                pending_w     <= 0;
+                rp_head       <= 0;
+                rp_tail       <= 0;
+                rp_count      <= 0;
+                cur_r_valid   <= 1'b0;
+                awq_head      <= 0;
+                awq_tail      <= 0;
+                awq_count     <= 0;
+                wp_head       <= 0;
+                wp_tail       <= 0;
+                wp_count      <= 0;
+                cur_w_valid   <= 1'b0;
+                error         <= 1'b0;
+            end else begin
+                if (rp_push) begin
+                    rp_release[rp_tail] <= ar_release;
+                    rp_id[rp_tail]      <= arid;
+                    rp_tail             <= rp_tail + 1'b1;
+                end
+                if (rp_pop)
+                    rp_head <= rp_head + 1'b1;
+                rp_count <= rp_count + CW'(rp_push) - CW'(rp_pop);
+                if (r_take) begin
+                    cur_r_valid <= 1'b1;
+                    cur_r_id    <= r_head_id;
+                end else if (r_fire) begin
+                    cur_r_valid <= 1'b0;
+                end
 
-            if (awq_push) begin
-                awq_id[awq_tail] <= awid;
-                awq_tail         <= awq_tail + 1'b1;
-            end
-            if (awq_pop)
-                awq_head <= awq_head + 1'b1;
-            awq_count <= awq_count + CW'(awq_push) - CW'(awq_pop);
-            if (wp_push) begin
-                wp_release[wp_tail] <= w_release;
-                wp_id[wp_tail]      <= w_form_id;
-                wp_tail             <= wp_tail + 1'b1;
-            end
-            if (wp_pop)
-                wp_head <= wp_head + 1'b1;
-            wp_count <= wp_count + CW'(wp_push) - CW'(wp_pop);
-            if (w_take) begin
-                cur_w_valid <= 1'b1;
-                cur_w_id    <= w_head_id;
-            end else if (b_fire) begin
-                cur_w_valid <= 1'b0;
-            end
+                if (awq_push) begin
+                    awq_id[awq_tail] <= awid;
+                    awq_tail         <= awq_tail + 1'b1;
+                end
+                if (awq_pop)
+                    awq_head <= awq_head + 1'b1;
+                awq_count <= awq_count + CW'(awq_push) - CW'(awq_pop);
+                if (wp_push) begin
+                    wp_release[wp_tail] <= w_release;
+                    wp_id[wp_tail]      <= w_form_id;
+                    wp_tail             <= wp_tail + 1'b1;
+                end
+                if (wp_pop)
+                    wp_head <= wp_head + 1'b1;
+                wp_count <= wp_count + CW'(wp_push) - CW'(wp_pop);
+                if (w_take) begin
+                    cur_w_valid <= 1'b1;
+                    cur_w_id    <= w_head_id;
+                end else if (b_fire) begin
+                    cur_w_valid <= 1'b0;
+                end
 
-            pending_reads <= count(pending_reads, ar_fire, r_fire);
-            pending_aw    <= count(pending_aw, aw_fire, b_fire);
-            pending_w     <= count(pending_w, wlast_fire, b_fire);
-            if ((ar_fire && arlen != 0) || (aw_fire && awlen != 0))
-                error <= 1'b1;
+                pending_reads <= count(pending_reads, ar_fire, r_fire);
+                pending_aw    <= count(pending_aw, aw_fire, b_fire);
+                pending_w     <= count(pending_w, w_fire, b_fire);
+                if (burst)
+                    error <= 1'b1;
+            end
         end
     end
 
     // ---- Memory: requests as the target makes them, in order ----
+    // A write goes to memory once both its halves are in: only whole writes
+    // are offered, so a lone half can be dropped without breaking AXI.
     reg [63:0] arq_addr [DEPTH];
     reg [PW-1:0] arq_head, arq_tail;
     reg [CW-1:0] arq_count;
     reg [63:0] awm_addr [DEPTH];
     reg [PW-1:0] awm_head, awm_tail;
-    reg [CW-1:0] awm_count;
     reg [DATA_W-1:0]   wm_data [DEPTH];
     reg [DATA_W/8-1:0] wm_strb [DEPTH];
     reg [PW-1:0] wm_head, wm_tail;
-    reg [CW-1:0] wm_count;
+    // Whole writes whose AW, and whose W, memory has not taken yet.
+    reg [CW-1:0] aw_formed, w_formed;
 
-    wire arq_push = finish & ar_fire;
+    wire take     = finish & ~treset;
+    wire flush    = finish & treset;
+    wire arq_push = take & ar_fire;
     wire arq_pop  = m_arvalid & m_arready;
-    wire awm_push = finish & aw_fire;
+    wire awm_push = take & aw_fire;
     wire awm_pop  = m_awvalid & m_awready;
-    wire wm_push  = finish & w_fire;
+    wire wm_push  = take & w_fire;
     wire wm_pop   = m_wvalid & m_wready;
+    wire form     = take & new_write;
     wire rd_push  = m_rvalid & m_rready;
-    wire rd_pop   = finish & r_fire;
+    wire rd_pop   = take & r_fire;
+    wire b_push   = m_bvalid & m_bready;
 
     assign m_arvalid = (arq_count != 0);
     assign m_araddr  = arq_addr[arq_head];
     assign m_arlen   = 8'd0;
     assign m_rready  = 1'b1;
-    assign m_awvalid = (awm_count != 0);
+    assign m_awvalid = (aw_formed != 0);
     assign m_awaddr  = awm_addr[awm_head];
     assign m_awlen   = 8'd0;
-    assign m_wvalid  = (wm_count != 0);
+    assign m_wvalid  = (w_formed != 0);
     assign m_wdata   = wm_data[wm_head];
     assign m_wstrb   = wm_strb[wm_head];
     assign m_wlast   = 1'b1;
     assign m_bready  = 1'b1;
 
     always @(posedge clk) begin
-        if (reset) begin
+        if (arq_push)
+            arq_addr[arq_tail] <= base + 64'(araddr);
+        if (awm_push)
+            awm_addr[awm_tail] <= base + 64'(awaddr);
+        if (wm_push) begin
+            wm_data[wm_tail] <= wdata;
+            wm_strb[wm_tail] <= wstrb;
+        end
+        if (rd_push)
+            rd_data[rd_tail] <= m_rdata;
+    end
+
+    // A flush comes once memory has answered everything: nothing is offered
+    // to it or expected from it, and what is left are lone halves of writes
+    // and data the target will no longer take.
+    always @(posedge clk) begin
+        if (reset || flush) begin
             arq_head  <= 0;
             arq_tail  <= 0;
             arq_count <= 0;
             awm_head  <= 0;
             awm_tail  <= 0;
-            awm_count <= 0;
             wm_head   <= 0;
             wm_tail   <= 0;
-            wm_count  <= 0;
+            aw_formed <= 0;
+            w_formed  <= 0;
             rd_head   <= 0;
             rd_tail   <= 0;
             rd_count  <= 0;
+            rd_out    <= 0;
+            wr_out    <= 0;
             b_acked   <= 0;
             b_given   <= 0;
         end else begin
-            if (arq_push) begin
-                arq_addr[arq_tail] <= base + 64'(araddr);
+            if (arq_push)
                 arq_tail <= arq_tail + 1'b1;
-            end
             if (arq_pop)
                 arq_head <= arq_head + 1'b1;
             arq_count <= arq_count + CW'(arq_push) - CW'(arq_pop);
 
-            if (awm_push) begin
-                awm_addr[awm_tail] <= base + 64'(awaddr);
+            if (awm_push)
                 awm_tail <= awm_tail + 1'b1;
-            end
             if (awm_pop)
                 awm_head <= awm_head + 1'b1;
-            awm_count <= awm_count + CW'(awm_push) - CW'(awm_pop);
-
-            if (wm_push) begin
-                wm_data[wm_tail] <= wdata;
-                wm_strb[wm_tail] <= wstrb;
+            if (wm_push)
                 wm_tail <= wm_tail + 1'b1;
-            end
             if (wm_pop)
                 wm_head <= wm_head + 1'b1;
-            wm_count <= wm_count + CW'(wm_push) - CW'(wm_pop);
+            aw_formed <= aw_formed + CW'(form) - CW'(awm_pop);
+            w_formed  <= w_formed + CW'(form) - CW'(wm_pop);
 
-            if (rd_push) begin
-                rd_data[rd_tail] <= m_rdata;
+            if (rd_push)
                 rd_tail <= rd_tail + 1'b1;
-            end
             if (rd_pop)
                 rd_head <= rd_head + 1'b1;
             rd_count <= rd_count + CW'(rd_push) - CW'(rd_pop);
 
-            if (m_bvalid)
+            rd_out <= rd_out + CW'(arq_push) - CW'(rd_push);
+            wr_out <= wr_out + CW'(form) - CW'(b_push);
+            if (b_push)
                 b_acked <= b_acked + 8'd1;
-            if (finish & b_fire)
+            if (take & b_fire)
                 b_given <= b_given + 8'd1;
         end
     end

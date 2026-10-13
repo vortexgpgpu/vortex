@@ -152,15 +152,30 @@ target cycle (`foldsim_token.sv`):
 - **`foldsim_mem`** is the target's AXI4 port, timed as a latency-bandwidth
   pipe — cycle for cycle `sim/common/axi_latency_pipe.h`: a fixed latency per
   transaction, bounded reads and writes in flight, one beat per cycle,
-  responses in request order. A request goes to HBM (`base` + target address)
-  the cycle the target makes it; a target cycle that should present a
-  response memory has not returned yet does not finish until it has, and a
-  write is acknowledged to the target only after HBM acknowledged it.
+  responses in request order. A read goes to HBM (`base` + target address)
+  the cycle the target makes it, a write the cycle it has both its AW and its
+  W, so HBM only ever sees whole single-beat writes; a target cycle that
+  should present a response memory has not returned yet does not finish until
+  it has, and a write is acknowledged to the target only after HBM
+  acknowledged it. A burst sets the memory error and goes nowhere; from the
+  next cycle on the endpoint is ready for nothing, and HBM sees none of it.
 - **`foldsim_ctrl`** is the AXI4-Lite register block and the endpoint of the
   target's reset, DCR, start and busy. The target runs free: the endpoint
   gives it a token every target cycle. Host commands are queued and each is
   applied for one target cycle (a reset for its count). Kernel reset holds the
   target in reset for 64 cycles.
+
+**Reset.** The control endpoint also gives the memory endpoint a token each
+target cycle: the target's reset in that cycle. A reset command thereby
+resets the target's whole memory port, not only the target. A target cycle in
+reset takes no request, and finishes only once HBM has answered every
+transaction it has from before the reset — reads returned, writes
+acknowledged, nothing left offered to it — so the AXI4 port to HBM stays in
+protocol. The cycle then drops the pipe: requests the target made and was not
+answered, data not delivered to it, the lone half of a write, and the memory
+error. No response from before a reset reaches the target after it; writes
+HBM already took stay written, as they would behind a real memory
+controller.
 
 ---
 
@@ -210,6 +225,11 @@ the target idle has every effect of what it asked for.
 - **The memory endpoint against `AxiLatencyPipe`**, in Verilator: random
   requests and device-memory latency, every target cycle's outputs and every
   read's data compared; five latency and limit settings, 0 differences.
+- **The memory endpoint's reset and bursts** (`hw/unittest/foldsim_mem`, in
+  Verilator): an AXI4 master as the target, HBM with random ready and
+  latency checking the device-side protocol, resets at random points with
+  HBM busy, and each kind of burst; every response and id checked, none from
+  before a reset delivered after it.
 - **Applications** in the in-process simulator and on the V80 (§7).
 - **CIRCT lit tests** for every pass (`test/Transforms/foldsim-*.mlir`).
 
@@ -250,7 +270,8 @@ foldsim agrees with `AxiLatencyPipe` (rtlsim) instead.
    is enabled from the first finish after reset, so token k of every channel
    is target cycle k.
 3. **The memory endpoint takes single-beat transactions**, as Vortex issues
-   them; a burst sets the status register's memory error.
+   them; a burst sets the status register's memory error, stops the
+   endpoint, and only a reset clears it.
 4. **One memory port**: the target is built with one platform memory bank.
 5. **Classes are named, not found**: `FOLDSIM_CLASSES` lists them.
 6. **No kernel register in `0x40`–`0xBF`.** The V80 shell configures the
