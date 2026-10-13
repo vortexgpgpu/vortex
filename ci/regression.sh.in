@@ -118,7 +118,7 @@ gem5()
     echo "begin gem5 tests..."
 
     if [ -z "$GEM5_HOME" ]; then
-        GEM5_HOME=$HOME/tools/gem5
+        GEM5_HOME=${TOOLDIR:-@TOOLDIR@}/gem5
     fi
     if [ ! -x "$GEM5_HOME/build/X86/gem5.opt" ]; then
         echo "error: $GEM5_HOME/build/X86/gem5.opt not found — run ci/gem5_install.sh first"

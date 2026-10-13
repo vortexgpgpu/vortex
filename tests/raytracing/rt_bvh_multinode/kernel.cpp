@@ -29,8 +29,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
                    { r[3], r[4], r[5] },
                    r[6], r[7] };
 
-  uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_wtrace(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uintptr_t scene_ptr = arg->scene_addr;
+  uint32_t h   = vx_rt_wtrace(scene_ptr, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
 

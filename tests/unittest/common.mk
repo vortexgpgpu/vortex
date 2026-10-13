@@ -1,7 +1,7 @@
 
 ROOT_DIR := $(realpath ../../..)
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
+CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors -Werror
 CXXFLAGS += -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR)
 CXXFLAGS += $(CONFIGS)
 

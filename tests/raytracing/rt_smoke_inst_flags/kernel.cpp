@@ -36,8 +36,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // Ray flags = 0: the per-instance FORCE_NO_OPAQUE flag alone drives the
   // opacity classification, so the opaque triangle yields an AHS callback.
-  uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_wtrace(scene_lo, 0u, 0u, 0xffu, &ray);
+  uintptr_t scene_ptr = arg->scene_addr;
+  uint32_t h   = vx_rt_wtrace(scene_ptr, 0u, 0u, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
   while (vx_rt_sts_is_yield(sts)) {

@@ -47,7 +47,7 @@ typedef struct {
 typedef struct {
   uint64_t scene_addr;
   uint64_t results_addr;
-  uint64_t payload_addr;    // CHS reads VX_RT_PAYLOAD_PTR_LO/HI
+  uint64_t payload_addr;    // CHS reads it back with vx_rt_get_payload
   uint32_t reserved;
   uint32_t reserved2;
   float    ray_origin[3];

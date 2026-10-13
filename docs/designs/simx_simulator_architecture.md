@@ -118,7 +118,9 @@ atomics, threads, locks, or deferred-call plumbing — enforced by
 - `cache.{cpp,h}` — `Cache`: tags + MSHRs + replacement **and line data**;
   embeds the AMO unit.
 - `cache_cluster` — shared L2/L3 wrapper.
-- `memory.{cpp,h}` — `Memory`: bottom-of-hierarchy DRAM (ramulator2);
+- `memory.{cpp,h}` — `Memory`: bottom-of-hierarchy DRAM, one channel per
+  platform memory bank timed by `sim/common/dram_sim` (ramulator2, shared with
+  rtlsim/opaesim/xrtsim; see [Configuring the DRAM Model](../simulation.md#configuring-the-dram-model));
   `attach_ram(RAM*)` owns the image; carries data in `MemRsp`; exposes
   `set_pre_send_hook` for SST mirroring.
 - `amo/amo_unit.{cpp,h}` — AMO RMW in the cache hierarchy (see

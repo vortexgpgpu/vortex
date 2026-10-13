@@ -69,7 +69,7 @@ interface VX_rtu_bus_if import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
         logic [`VX_CFG_MEM_ADDR_WIDTH-1:0]  scene_base;  // device address of the scene
         logic [15:0]                        flags;       // VX_RT_FLAG_*
         logic [15:0]                        cull_mask;
-        logic [31:0]                        payload_ptr; // the RTU stages it for the callbacks
+        logic [`VX_CFG_XLEN-1:0]            payload_ptr; // the RTU stages it for the callbacks
         logic [TAG_WIDTH-1:0]               tag;
     } arm_data_t;
 

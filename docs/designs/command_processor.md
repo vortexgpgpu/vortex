@@ -419,10 +419,17 @@ CP regfile is the only producer on every target.
 | `[33:26]` | 8 | log2 local_mem_size | `VX_CAPS_LOCAL_MEM_SIZE` |
 | `[36:34]` | 3 | log2 num_mem_banks | `VX_CAPS_NUM_MEM_BANKS` |
 | `[41:37]` | 5 | mem_bank_size, biased by 20 | `VX_CAPS_MEM_BANK_SIZE` |
-| `[63:42]` | 22 | reserved | — |
+| `[48:42]` | 7 | warps/core | `VX_CAPS_NUM_WARPS` |
+| `[56:49]` | 8 | cluster_size | (only via `NUM_CORES`) |
+| `[63:57]` | 7 | num_clusters | `VX_CAPS_NUM_CLUSTERS` |
+
+The exact counts in `[63:42]` let a machine that is not a power of two
+(e.g. 48 warps, 84 cores) report its true shape; the decoder prefers them and
+falls back to the log2 fields only when they read zero, as on devices built
+before they existed.
 
 `VX_CAPS_NUM_CORES` is derived, not a field:
-`num_clusters × cluster_size × socket_size`. `CACHE_LINE_SIZE`,
+`num_clusters × cluster_size × socket_size`, from the exact counts. `CACHE_LINE_SIZE`,
 `GLOBAL_MEM_SIZE`, `CLOCK_RATE`, `PEAK_MEM_BW` and the VM ids are not
 encoded here — `decode_caps` returns false and the backend resolves them.
 

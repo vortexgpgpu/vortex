@@ -89,8 +89,8 @@ int main(int argc, char** argv) {
 
   srand(50);
   for (uint32_t i = 0; i < size_sq; ++i) {
-    h_a[i] = static_cast<TYPE>(rand()) / RAND_MAX;
-    h_b[i] = static_cast<TYPE>(rand()) / RAND_MAX;
+    h_a[i] = static_cast<TYPE>(rand()) / static_cast<TYPE>(RAND_MAX);
+    h_b[i] = static_cast<TYPE>(rand()) / static_cast<TYPE>(RAND_MAX);
   }
 
   printf("Allocate device buffers\n");

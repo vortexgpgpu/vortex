@@ -399,11 +399,11 @@ static inline __attribute__((always_inline)) bool om_sample_rmw(
 // stride gather.
 static inline __attribute__((always_inline)) uintptr_t msaa_color_addr(
     const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t sample) {
-  return (uintptr_t)(s.cbuf_base + (uint64_t)y * s.cbuf_pitch + (uint64_t)(x * samples + sample) * om_color_bpp(s.color_format));
+  return (uintptr_t)(s.cbuf_base + (uint64_t)y * s.cbuf_pitch + (uint64_t)((uintptr_t)x * samples + sample) * om_color_bpp(s.color_format));
 }
 static inline __attribute__((always_inline)) uintptr_t msaa_depth_addr(
     const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t sample) {
-  return (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)(x * samples + sample) * om_depth_bpp(s.depth_format));
+  return (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)((uintptr_t)x * samples + sample) * om_depth_bpp(s.depth_format));
 }
 
 // Box resolve of one pixel's S color samples → a single ARGB8888 value

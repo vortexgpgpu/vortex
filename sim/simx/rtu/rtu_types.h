@@ -66,7 +66,7 @@ struct RtuReq {
   uint32_t slot_idx = 0;
 
   // Per-lane ray descriptor snapshot (TRACE_NEW only).
-  std::array<uint32_t, VX_CFG_NUM_THREADS> scene_root = {};
+  std::array<uint64_t, VX_CFG_NUM_THREADS> scene_root = {};
   std::array<float,    VX_CFG_NUM_THREADS> origin_x   = {};
   std::array<float,    VX_CFG_NUM_THREADS> origin_y   = {};
   std::array<float,    VX_CFG_NUM_THREADS> origin_z   = {};

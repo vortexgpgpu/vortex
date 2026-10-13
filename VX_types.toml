@@ -442,6 +442,7 @@ VX_RT_STATUS                = 26      # per-lane VX_RT_STS_*; WAIT completes on 
 # Every slot is written by the RTU and read by the shader; nothing else writes the
 # window. The payload pointer rides the arm doorbell (warp-uniform) and the
 # hitAttribute rides the CONTINUE, so both reach the RTU without a window write.
+# On RV64 the payload pointer's upper word follows in slot VX_RT_PAYLOAD_PTR_LO + 1.
 VX_RT_PAYLOAD_PTR_LO        = 27      # the tracing shader's payload; the callbacks read it
 VX_RT_HIT_ATTR_0            = 29      # user hitAttributeEXT (an IS shader returns it)
 

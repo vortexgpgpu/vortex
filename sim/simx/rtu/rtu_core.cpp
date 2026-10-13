@@ -487,14 +487,14 @@ public:
   }
 
   void bind_context(uint32_t ci, uint32_t slot, uint32_t lane,
-                    uint32_t scene_root) {
+                    uint64_t scene_root) {
     Context& cx = contexts_[ci];
     cx = Context{};
     cx.valid = true;
     cx.slot  = slot;
     cx.lane  = lane;
-    cx.base_line = uint64_t(scene_root) & kRtuLineMask;
-    cx.byte_off  = uint32_t(uint64_t(scene_root) - cx.base_line);
+    cx.base_line = scene_root & kRtuLineMask;
+    cx.byte_off  = uint32_t(scene_root - cx.base_line);
     // The ray opens on the reciprocal (1/dir) setup and the scene-header fetch,
     // which cost front-end states like any other step, then drain the reciprocal
     // pipeline before the first node can be tested.

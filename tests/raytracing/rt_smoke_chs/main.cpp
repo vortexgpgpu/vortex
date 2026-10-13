@@ -16,11 +16,13 @@
 // Scene: one opaque triangle at z=5. Single lane fires a ray that
 // hits it. The kernel opts in to CHS via VX_RT_FLAG_ENABLE_CHS and
 // publishes a per-ray payload buffer pointer through
-// VX_RT_PAYLOAD_PTR_LO. RtuCore commits the hit, then queues a
+// VX_RT_PAYLOAD_PTR_LO/HI. RtuCore commits the hit, then queues a
 // CHS yield through the existing reformation/CB_YIELD path. The
 // dispatcher reads hit_t + payload pointer, writes MAGIC ^ hit_t_bits
 // to the payload, and exits via vx_rt_cb_ret(VX_RT_CB_DONE) + mret.
 // Oracle: status=HIT, payload[0] = MAGIC ^ bits(5.0f).
+// On a 64-bit device the scene and the payload sit above 4 GiB, so the trace
+// and the payload read-back must carry full-width pointers.
 
 #include <iostream>
 #include <unistd.h>
@@ -52,6 +54,10 @@ vx_queue_h  queue           = nullptr;
 vx_module_h module_         = nullptr;
 vx_kernel_h kernel          = nullptr;
 kernel_arg_t kernel_arg     = {};
+bool        high_mem        = false;
+
+constexpr uint64_t HIGH_SCENE_ADDR   = 0x140000000ull;
+constexpr uint64_t HIGH_PAYLOAD_ADDR = 0x140010000ull;
 
 void cleanup() {
   if (device) {
@@ -65,10 +71,22 @@ void cleanup() {
   }
 }
 
+static vx_result_t create_buffer(uint64_t high_addr, uint64_t size,
+                                 uint32_t flags, vx_buffer_h* buf) {
+  if (high_mem) {
+    return vx_buffer_reserve(device, high_addr, size, flags, buf);
+  }
+  return vx_buffer_create(device, size, flags, buf);
+}
+
 int main(int /*argc*/, char* /*argv*/[]) {
   RT_CHECK(vx_device_open(0, &device));
   vx_queue_info_t qi = { sizeof(qi), nullptr, VX_QUEUE_PRIORITY_NORMAL, 0 };
   RT_CHECK(vx_queue_create(device, &qi, &queue));
+
+  uint64_t isa_flags = 0;
+  RT_CHECK(vx_device_query(device, VX_CAPS_ISA_FLAGS, &isa_flags));
+  high_mem = (VX_ISA_ARCH(isa_flags) == 64);
 
   // Scene: 1 opaque triangle at z=5.
   std::vector<uint8_t> scene_bytes(RTU_SCENE_HDR_BYTES + RTU_TRI_STRIDE_BYTES, 0);
@@ -83,7 +101,7 @@ int main(int /*argc*/, char* /*argv*/[]) {
   *tri_flags = RTU_TRI_FLAG_OPAQUE;
 
   uint32_t scene_bytes_sz = (uint32_t)scene_bytes.size();
-  RT_CHECK(vx_buffer_create(device, scene_bytes_sz, VX_MEM_READ, &scene_buffer));
+  RT_CHECK(create_buffer(HIGH_SCENE_ADDR, scene_bytes_sz, VX_MEM_READ, &scene_buffer));
   RT_CHECK(vx_buffer_address(scene_buffer, &kernel_arg.scene_addr));
 
   uint32_t res_size = sizeof(rtu_result_t);
@@ -93,8 +111,8 @@ int main(int /*argc*/, char* /*argv*/[]) {
   // Payload buffer: 4 bytes. Pre-init with a sentinel so we can tell
   // "CHS never ran" from "CHS ran and wrote 0".
   uint32_t payload_init = 0xdeadbeef;
-  RT_CHECK(vx_buffer_create(device, sizeof(uint32_t),
-                            VX_MEM_READ_WRITE, &payload_buffer));
+  RT_CHECK(create_buffer(HIGH_PAYLOAD_ADDR, sizeof(uint32_t),
+                         VX_MEM_READ_WRITE, &payload_buffer));
   RT_CHECK(vx_buffer_address(payload_buffer, &kernel_arg.payload_addr));
   RT_CHECK(vx_enqueue_write(queue, payload_buffer, 0, &payload_init,
                             sizeof(payload_init), 0, nullptr, nullptr));

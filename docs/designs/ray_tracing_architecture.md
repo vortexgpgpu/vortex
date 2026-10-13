@@ -176,7 +176,7 @@ state as base+count bursts, so each span's members must abut.
 | 17..22 | object-space ray `origin`/`dir` (staged on an AHS/IS yield) | RTU writes |
 | 23 / 24 / 25 | candidate `cb_type` / `sbt_idx` / `cb_handle` | RTU writes |
 | 26 | **STATUS** (`VX_RT_STS_*`) | RTU writes **last** |
-| 27 / 29 | payload pointer / user `hitAttribute` | RTU writes (payload at arm; attr on commit) |
+| 27 (+28 on RV64) / 29 | payload pointer (low / high word) / user `hitAttribute` | RTU writes (payload with every record; attr on commit) |
 
 **STATUS is deliberately last.** A parked WAIT completes on the address-match
 write to slot 26, so every other result word must already be in the window when

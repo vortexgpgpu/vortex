@@ -1,0 +1,32 @@
+{
+  "name": "h100",
+  "description": "NVIDIA H100 SXM5 (GH100, Hopper, sm_90) at its 1980 MHz boost clock: one Vortex core per SM.",
+  "core": {
+    "VX_CFG_NUM_WARPS": 64,
+    "VX_CFG_NUM_THREADS": 32,
+    "VX_CFG_ISSUE_WIDTH": 4,
+    "VX_CFG_DCACHE_SIZE": 262144
+  },
+  "chip": {
+    "VX_CFG_NUM_CLUSTERS": 1,
+    "VX_CFG_NUM_CORES": 132,
+    "VX_CFG_L2_ENABLE": true,
+    "VX_CFG_L2_SIZE": 33554432,
+    "VX_CFG_L2_NUM_WAYS": 16,
+    "VX_CFG_L2_NUM_BANKS": 32
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1980,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 3350000,
+    "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM3",
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 6545
+  },
+  "sources": {
+    "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "132 SMs (SXM5), 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA H100 Tensor Core GPU Architecture whitepaper)",
+    "DCACHE_SIZE": "256 KB combined L1/shared per SM (whitepaper)",
+    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "50 MB L2 (whitepaper), rounded down to the power of two the cache accepts; 16 ways and 32 banks as in the a100 profile",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "5 HBM3 stacks x 16 64-bit channels at 5236 MT/s = 40 128-bit channel pairs, modelled as 32 at 6545 MT/s for a power-of-two interleave: 32 x 16 B x 6545 MT/s = 3.35 TB/s, the card's bandwidth; latency not calibrated",
+    "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1980 MHz boost clock, 3.35 TB/s (H100 SXM5 datasheet)"
+  }
+}

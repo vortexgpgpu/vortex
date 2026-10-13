@@ -42,9 +42,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // window: the LMEM base is asserted aligned to the capacity, so the prefix
     // compare is exact and needs no end address -- which is not representable
     // when the window ends at the top of the address space.
+`ifdef VX_CFG_LMEM_ENABLE
     localparam LMEM_BLK_LSB = `VX_CFG_LMEM_LOG_SIZE - MEM_ASHIFT;
     localparam [MEM_ADDRW-1:0] LMEM_BLK_BASE = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
     `STATIC_ASSERT (MEM_ADDRW > LMEM_BLK_LSB, ("LMEM window wider than the block address space"))
+`endif
     `UNUSED_PARAM (CORE_ID)
     `UNUSED_SPARAM (INSTANCE_ID)
 

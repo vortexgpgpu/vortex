@@ -14,6 +14,7 @@
 #pragma once
 
 #include <assert.h>
+#include <cstddef>
 #include <cstdint>
 
 namespace vortex {
@@ -238,7 +239,7 @@ public:
   }
 
   void push_back(T *obj) {
-    insert(iterator(tail_), obj);
+    insert(end(), obj);
   }
 
   void push_front(T *obj) {

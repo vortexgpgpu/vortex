@@ -128,8 +128,13 @@ module VX_cp_axil_regfile
   localparam int GPU_BANK_ADDR_W  = `VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH
                                   - `CLOG2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
 
+  `STATIC_ASSERT(`VX_CFG_NUM_WARPS < 128 && `VX_CFG_NUM_CLUSTERS < 128 && GPU_CLUSTER_SIZE < 256,
+                 ("GPU_DEV_CAPS exact-count fields overflow"))
+
   wire [63:0] gpu_dev_caps = {
-    22'b0,
+    7'(`VX_CFG_NUM_CLUSTERS),
+    8'(GPU_CLUSTER_SIZE),
+    7'(`VX_CFG_NUM_WARPS),
     5'(GPU_BANK_ADDR_W - 20),
     3'($clog2(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS)),
     8'(`VX_CFG_LMEM_ENABLED ? `VX_CFG_LMEM_LOG_SIZE : 0),

@@ -18,3 +18,7 @@ hw/syn/libs/asap7/verilog/
 hw/syn/libs/asap7/metadata/
 hw/syn/libs/asap7/.installed_*
 hw/syn/libs/asap7/install.sh
+
+# Built by third_party/Makefile
+third_party/ramulator_ext/*.o
+third_party/ramulator_ext/*.so

@@ -1,0 +1,35 @@
+{
+  "name": "a100",
+  "description": "NVIDIA A100 SXM4 (GA100, Ampere, sm_80) at its 1410 MHz boost clock: one Vortex core per SM.",
+  "core": {
+    "VX_CFG_NUM_WARPS": 64,
+    "VX_CFG_NUM_THREADS": 32,
+    "VX_CFG_ISSUE_WIDTH": 4,
+    "VX_CFG_DCACHE_SIZE": 131072
+  },
+  "chip": {
+    "VX_CFG_NUM_CLUSTERS": 1,
+    "VX_CFG_NUM_CORES": 108,
+    "VX_CFG_L2_ENABLE": true,
+    "VX_CFG_L2_SIZE": 33554432,
+    "VX_CFG_L2_NUM_WAYS": 16,
+    "VX_CFG_L2_NUM_BANKS": 32
+  },
+  "platform": {
+    "VX_CFG_PLATFORM_MEMORY_NUM_BANKS": 32,
+    "VX_CFG_PLATFORM_CLOCK_RATE": 1410,
+    "VX_CFG_PLATFORM_MEMORY_PEAK_BW": 1555000,
+    "VX_CFG_PLATFORM_MEMORY_TYPE": "HBM2",
+    "VX_CFG_PLATFORM_MEMORY_DATA_RATE": 3038,
+    "VX_CFG_PLATFORM_MEMORY_LATENCY": 190,
+    "VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE": 257
+  },
+  "sources": {
+    "NUM_CORES, NUM_WARPS, NUM_THREADS, ISSUE_WIDTH": "108 SMs, 64 resident warps/SM, 4 schedulers x 32 lanes (NVIDIA A100 Tensor Core GPU Architecture whitepaper, Table 3)",
+    "DCACHE_SIZE": "192 KB combined L1/shared per SM (whitepaper), rounded down to the power of two the cache accepts",
+    "L2_SIZE, L2_NUM_WAYS, L2_NUM_BANKS": "40 MB L2 in 80 slices (whitepaper), rounded down to 32 MB and 32 banks; 16 ways as in GPGPU-Sim's SM80_A100 dl2",
+    "PLATFORM_MEMORY_TYPE, PLATFORM_MEMORY_NUM_BANKS, PLATFORM_MEMORY_DATA_RATE": "5 HBM2 stacks x 8 128-bit channels = 40 channels at 2430 MT/s, modelled as 32 channels at 3038 MT/s for a power-of-two interleave: 32 x 16 B x 3038 MT/s = 1555 GB/s, the card's bandwidth; the array timing is in nanoseconds, so latency is unchanged",
+    "PLATFORM_MEMORY_LATENCY, PLATFORM_MEMORY_QUEUE_SIZE": "Fixed DRAM latency and per-channel request queue of GPGPU-Sim's SM80_A100 configuration (accel-sim gpu-simulator/configs/tested-cfgs/SM80_A100/gpgpusim.config)",
+    "PLATFORM_CLOCK_RATE, PLATFORM_MEMORY_PEAK_BW": "1410 MHz boost clock, 1555 GB/s (whitepaper, Table 3)"
+  }
+}

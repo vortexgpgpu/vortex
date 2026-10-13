@@ -69,7 +69,7 @@ public:
     , fetch_latch_(ctx, "fetch_latch", 2, 2)
     , decode_latch_(ctx, "decode_latch", 1, 2)
     , pending_icache_(VX_CFG_NUM_WARPS)
-    , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GTO, PER_ISSUE_WARPS})
+    , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GreedyRR, PER_ISSUE_WARPS})
     , issue_lock_owner_(VX_CFG_ISSUE_WIDTH, kLockOpen)
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
     , fu_full_(VX_CFG_ISSUE_WIDTH, BitVector<>((uint32_t)FUType::Count, 0))

@@ -653,6 +653,10 @@ MMU moved out of the core there is no `sysmem_perf` slot to carry it, so the
 in-core view reads zero on rtlsim / FPGA (§13).
 
 Testing knobs: `VORTEX_RANDOMIZE_VA=0|1` and `VORTEX_VA_SEED=N` (§8.4);
+`VORTEX_VM_MEGAPAGE_HEAP=1` maps the whole heap once with superpages at its
+identity VA, as GPU drivers back allocations with 2 MB pages, so a buffer costs
+no TLB entry per 4 KB page (per-buffer access flags are not enforced, and it
+cannot be combined with `VORTEX_RANDOMIZE_VA`);
 `VX_CFG_VM_ADDR_MODE=BARE` in `CONFIGS` builds the VM hardware but runs
 untranslated.
 

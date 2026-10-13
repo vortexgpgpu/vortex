@@ -43,8 +43,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `endif
 
 `ifdef VX_CFG_VM_ENABLE
-    // Device MMU sideband from the top DCR surface.
-    input  wire [`VX_CFG_XLEN-1:0] mmu_satp,
     // Device-level walker: the L2 TLB's miss bus, exported to the device.
     VX_tlb_bus_if.master           dev_ptw_if,
     // Walker PTE fetches, entering as an L2 client when this cluster's L2

@@ -38,9 +38,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   switch (arg->stage) {
 
   case SETUP_STAGE_SETUP: {                            // multi-CTA, grid-stride
-    uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-    uint32_t gstride = gridDim.x * blockDim.x;
-    for (uint32_t t = gid; t < n; t += gstride) {
+    size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t gstride = gridDim.x * blockDim.x;
+    for (size_t t = gid; t < n; t += gstride) {
       clip_tri_t sub[SETUP_MAX_SUB];
       int ns = clip_near(verts[3 * t + 0], verts[3 * t + 1], verts[3 * t + 2], sub);
       uint32_t kept = 0;
@@ -49,7 +49,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         setup_bbox_t bbox{};
         if (setup_triangle(sub[s].v[0], sub[s].v[1], sub[s].v[2], W, H,
                            SETUP_NEAR, SETUP_FAR, prim, bbox, arg->cull_mode)) {
-          uint32_t slot = t * SETUP_MAX_SUB + kept;
+          size_t slot = t * SETUP_MAX_SUB + kept;
           slot_prim[slot] = prim;
           slot_bbox[slot] = bbox;
           slot_vtx[slot]  = sub[s];
@@ -75,12 +75,12 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   } break;
 
   case SETUP_STAGE_EMIT: {                             // multi-CTA, grid-stride
-    uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
-    uint32_t gstride = gridDim.x * blockDim.x;
-    for (uint32_t t = gid; t < n; t += gstride) {
-      uint32_t w = offset[t];
+    size_t gid = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t gstride = gridDim.x * blockDim.x;
+    for (size_t t = gid; t < n; t += gstride) {
+      size_t w = offset[t];
       for (uint32_t s = 0; s < keep[t]; ++s) {
-        uint32_t slot = t * SETUP_MAX_SUB + s;
+        size_t slot = t * SETUP_MAX_SUB + s;
         out_prim[w] = slot_prim[slot];
         out_bbox[w] = slot_bbox[slot];
         out_vtx[w]  = slot_vtx[slot];

@@ -17,7 +17,7 @@ CONFIG_FILE = $(DESTDIR)/simx_config.stamp
 SRC_DIR = $(VORTEX_HOME)/sim/simx
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
-CXXFLAGS += -fPIC -Wno-maybe-uninitialized
+CXXFLAGS += -fPIC
 CXXFLAGS += -I$(SRC_DIR) -I$(SRC_DIR)/dxa -I$(SRC_DIR)/tex -I$(SRC_DIR)/om -I$(SRC_DIR)/raster -I$(SRC_DIR)/rtu -I$(SRC_DIR)/kmu -I$(SRC_DIR)/mem -I$(SRC_DIR)/dtm -I$(SW_COMMON_DIR) -I$(SIM_COMMON_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(THIRD_PARTY_DIR)
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
@@ -27,7 +27,7 @@ CXXFLAGS += -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN)
 CXXFLAGS += $(CONFIGS)
 
 LDFLAGS += $(THIRD_PARTY_DIR)/softfloat/build/Linux-x86_64-GCC/softfloat.a
-LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator
+LDFLAGS += -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator -L$(THIRD_PARTY_DIR)/ramulator -lramulator -Wl,-rpath,$(THIRD_PARTY_DIR)/ramulator_ext -L$(THIRD_PARTY_DIR)/ramulator_ext -Wl,--push-state,--no-as-needed -lramulator-vortex -Wl,--pop-state
 
 XCONFIGS := $(shell python3 $(ROOT_DIR)/ci/gen_config.py --config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN)')
 

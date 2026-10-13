@@ -129,7 +129,7 @@ static void parse_args(int argc, char** argv) {
 
 // Serial CPU reference: identical single-precision SRAD math over the same
 // (extracted) image. Mirrors extract -> [stats, srad, srad2]*niter -> compress.
-static void srad_cpu(std::vector<float>& I, int Nr, int Nc, long Ne, int niter,
+static void srad_cpu(std::vector<float>& I, int Nr, long Ne, int niter,
                      float lambda, long NeROI,
                      const std::vector<int>& iN, const std::vector<int>& iS,
                      const std::vector<int>& jE, const std::vector<int>& jW) {
@@ -342,7 +342,7 @@ int main(int argc, char** argv) {
 
   // CPU golden reference over the same seeded input.
   std::vector<float> h_ref(h_image);
-  srad_cpu(h_ref, Nr, Nc, Ne, niter, lambda, NeROI, iN, iS, jE, jW);
+  srad_cpu(h_ref, Nr, Ne, niter, lambda, NeROI, iN, iS, jE, jW);
 
   // Compare with a mixed absolute/relative float tolerance (exp/log + iterated
   // accumulation across host and device libm differ by a few ULP).

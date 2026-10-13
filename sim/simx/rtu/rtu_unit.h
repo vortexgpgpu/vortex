@@ -156,6 +156,9 @@ public:
   // code reads the right payload before issuing CONTINUE.
   void apply_callback_payload(const RtuRsp& rsp);
 
+  // The payload pointer is XLEN wide; the window holds it as 32-bit words.
+  void stage_payload_ptr(RtuWindow::LaneRegs& lregs, uint32_t wid) const;
+
   // Representative slot of a candidate rsp (first active lane's cb_handle).
   static uint32_t candidate_slot(const RtuRsp& rsp);
 
@@ -225,9 +228,9 @@ private:
              VX_CFG_NUM_WARPS>           trace_ray_;
   // Warp-uniform half of the ray, staged by the config uop: it rides the arm
   // doorbell in HW, so it is not a window write either.
-  std::array<std::array<uint32_t, VX_CFG_NUM_THREADS>,
+  std::array<std::array<uint64_t, VX_CFG_NUM_THREADS>,
              VX_CFG_NUM_WARPS>           trace_scene_;
-  std::array<uint32_t, VX_CFG_NUM_WARPS> trace_payload_{};
+  std::array<uint64_t, VX_CFG_NUM_WARPS> trace_payload_{};
   std::array<uint32_t, VX_CFG_NUM_WARPS> trace_flags_{};
   std::array<uint32_t, VX_CFG_NUM_WARPS> trace_cull_{};
   // The slot handle each lane's outstanding candidate came from, mirrored here

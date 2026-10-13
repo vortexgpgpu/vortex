@@ -338,7 +338,7 @@ import VX_fpu_pkg::*;
         end
     end
 `else
-    `UNUSED_VAR (write_sel[WR_FFLAGS +: 3])
+    `UNUSED_VAR ({write_sel[WR_FCSR], write_sel[WR_FRM], write_sel[WR_FFLAGS]})
 `endif
 
 `ifdef VX_CFG_VM_ENABLE

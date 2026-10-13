@@ -1,100 +1,100 @@
 {
   "graphics:perf_gate-draw3d-mc:rtlsim": {
     "32": {
-      "cycles": 531740,
-      "instrs": 204102
+      "cycles": 530195,
+      "instrs": 203136
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
-    "config_hash": "c8c2af44277e2cb0",
+    "config_hash": "1e2937b20579ad3f",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
   "graphics:perf_gate-draw3d-nt16:rtlsim": {
     "32": {
-      "cycles": 145662,
-      "instrs": 52516
+      "cycles": 143620,
+      "instrs": 51652
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
-    "config_hash": "ee0410ff09e7ea58",
+    "config_hash": "edc924bc4f246971",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "graphics:perf_gate-draw3d-nt4:rtlsim": {
     "32": {
-      "cycles": 531359,
-      "instrs": 204102
+      "cycles": 529393,
+      "instrs": 203136
     },
     "app": "gfx_draw3d",
     "args": "-w 128 -h 128 -t box.cgltrace -r box_ref_128.png",
-    "config_hash": "00c7939a6d958e0e",
+    "config_hash": "d682cc8c6f99c06b",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "graphics:perf_gate-om-nt16:rtlsim": {
     "32": {
-      "cycles": 191808,
-      "instrs": 69648
+      "cycles": 189231,
+      "instrs": 68624
     },
     "app": "gfx_om",
     "args": "-w 128 -h 128 -r whitebox_128.png",
-    "config_hash": "60103e7b6eb2c625",
+    "config_hash": "46a66220c1d9956b",
     "configs": "-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "graphics:perf_gate-om-nt4:rtlsim": {
     "32": {
-      "cycles": 754454,
-      "instrs": 278544
+      "cycles": 740701,
+      "instrs": 274448
     },
     "app": "gfx_om",
     "args": "-w 128 -h 128 -r whitebox_128.png",
-    "config_hash": "ee88907a281d364a",
+    "config_hash": "a7554f6fa88474dc",
     "configs": "-DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "graphics:perf_gate-raster-nt16:rtlsim": {
     "32": {
-      "cycles": 14959,
+      "cycles": 14785,
       "instrs": 4708
     },
     "app": "gfx_raster",
     "args": "-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png",
-    "config_hash": "3ba867af954e5cbf",
+    "config_hash": "e2e1879d7d6f9aaf",
     "configs": "-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "graphics:perf_gate-raster-nt4:rtlsim": {
     "32": {
-      "cycles": 55633,
+      "cycles": 55565,
       "instrs": 18640
     },
     "app": "gfx_raster",
     "args": "-w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png",
-    "config_hash": "859b3c4bd2208b92",
+    "config_hash": "6e48f6b249533cc5",
     "configs": "-DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "graphics:perf_gate-tex-nt16:rtlsim": {
     "32": {
-      "cycles": 34994,
+      "cycles": 35441,
       "instrs": 12304
     },
     "app": "gfx_tex",
     "args": "-i toad.png -r toad_ref_f0.png -f 0 -g 0",
-    "config_hash": "1c38a250b6b85273",
+    "config_hash": "c8c6b30537e93e2f",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "graphics:perf_gate-tex-nt4:rtlsim": {
     "32": {
-      "cycles": 136738,
+      "cycles": 136487,
       "instrs": 49168
     },
     "app": "gfx_tex",
     "args": "-i toad.png -r toad_ref_f0.png -f 0 -g 0",
-    "config_hash": "226df03058dfb436",
+    "config_hash": "a4fc4d97e6e80586",
     "configs": "-DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   }

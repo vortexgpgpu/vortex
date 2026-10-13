@@ -42,7 +42,7 @@ int find_nearest_point(float  *pt,          /* [nfeatures] */
                        float  **pts,         /* [npts][nfeatures] */
                        int     npts)
 {
-    int index, i;
+    int index = 0, i;
     float max_dist=FLT_MAX;
 
     /* find the cluster center id with min distance to pt */
@@ -70,11 +70,13 @@ float rms_err	(float **feature,         /* [npoints][nfeatures] */
     float  ret;						/* return value */
     
     /* calculate and sum the sqaure of euclidean distance*/	
+#ifdef _OPENMP
     #pragma omp parallel for \
                 shared(feature,cluster_centres) \
                 firstprivate(npoints,nfeatures,nclusters) \
                 private(i, nearest_cluster_index) \
-                schedule (static)	
+                schedule (static)
+#endif
     for (i=0; i<npoints; i++) {
         nearest_cluster_index = find_nearest_point(feature[i], 
 													nfeatures, 

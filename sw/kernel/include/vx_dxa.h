@@ -49,15 +49,15 @@ extern "C" {
 // mask, so it reads them from the warp-gather registers the gathers wrote
 // (x31, and x30 for rs2; see __VX_WGATHER_IN).
 #define __VX_DXA_ISSUE1(a0v) do {                                         \
-    register uint32_t __rs1 __asm__("x31") = (a0v);                       \
+    register size_t __rs1 __asm__("x31") = (a0v);                         \
     __asm__ volatile (".insn r %0, 0, %1, x0, %2, x0\n\t"                \
         : : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(__rs1)        \
         : "memory");                                                      \
   } while (0)
 
 #define __VX_DXA_ISSUE2(a0v, a1v) do {                                    \
-    register uint32_t __rs1 __asm__("x31") = (a0v);                       \
-    register uint32_t __rs2 __asm__("x30") = (a1v);                       \
+    register size_t __rs1 __asm__("x31") = (a0v);                         \
+    register size_t __rs2 __asm__("x30") = (a1v);                         \
     __asm__ volatile (".insn r %0, 0, %1, x0, %2, %3\n\t"                \
         : : "i"(VX_DXA_EXT_OPCODE), "i"(VX_DXA_FUNCT7), "r"(__rs1),       \
             "r"(__rs2)                                                    \
@@ -74,10 +74,10 @@ inline void vx_dxa_issue_1d_wg(uint32_t desc_slot,
                                 const void* smem_addr,
                                 uint32_t coord0) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)0u);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)0u);
   __VX_DXA_ISSUE1(a0);
 }
 
@@ -88,10 +88,10 @@ inline void vx_dxa_issue_2d_wg(uint32_t desc_slot,
                                 uint32_t coord0,
                                 uint32_t coord1) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)coord1);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)coord1);
   __VX_DXA_ISSUE1(a0);
 }
 
@@ -103,14 +103,14 @@ inline void vx_dxa_issue_3d_wg(uint32_t desc_slot,
                                 uint32_t coord1,
                                 uint32_t coord2) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)coord1);
-  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
-                                            (size_t)0u,
-                                            (size_t)0u,
-                                            (size_t)0u);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)coord1);
+  const size_t a1 = __VX_WGATHER_IN("x30", 0, (size_t)coord2,
+                                    (size_t)0u,
+                                    (size_t)0u,
+                                    (size_t)0u);
   __VX_DXA_ISSUE2(a0, a1);
 }
 
@@ -122,14 +122,14 @@ inline void vx_dxa_issue_4d_wg(uint32_t desc_slot,
                                 uint32_t coord2,
                                 uint32_t coord3) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)coord1);
-  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
-                                            (size_t)coord3,
-                                            (size_t)0u,
-                                            (size_t)0u);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)coord1);
+  const size_t a1 = __VX_WGATHER_IN("x30", 0, (size_t)coord2,
+                                    (size_t)coord3,
+                                    (size_t)0u,
+                                    (size_t)0u);
   __VX_DXA_ISSUE2(a0, a1);
 }
 
@@ -142,14 +142,14 @@ inline void vx_dxa_issue_5d_wg(uint32_t desc_slot,
                                 uint32_t coord3,
                                 uint32_t coord4) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)coord1);
-  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
-                                            (size_t)coord3,
-                                            (size_t)coord4,
-                                            (size_t)0u);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)coord1);
+  const size_t a1 = __VX_WGATHER_IN("x30", 0, (size_t)coord2,
+                                    (size_t)coord3,
+                                    (size_t)coord4,
+                                    (size_t)0u);
   __VX_DXA_ISSUE2(a0, a1);
 }
 
@@ -163,14 +163,14 @@ inline void vx_dxa_issue_1d_multicast_wg(uint32_t desc_slot,
                                           uint32_t coord0,
                                           uint32_t cta_mask) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)0u);
-  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)0,
-                                            (size_t)0,
-                                            (size_t)0,
-                                            (size_t)cta_mask);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)0u);
+  const size_t a1 = __VX_WGATHER_IN("x30", 0, (size_t)0,
+                                    (size_t)0,
+                                    (size_t)0,
+                                    (size_t)cta_mask);
   __VX_DXA_ISSUE2(a0, a1);
 }
 
@@ -182,14 +182,14 @@ inline void vx_dxa_issue_2d_multicast_wg(uint32_t desc_slot,
                                           uint32_t coord1,
                                           uint32_t cta_mask) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)coord1);
-  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)0,
-                                            (size_t)0,
-                                            (size_t)0,
-                                            (size_t)cta_mask);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)coord1);
+  const size_t a1 = __VX_WGATHER_IN("x30", 0, (size_t)0,
+                                    (size_t)0,
+                                    (size_t)0,
+                                    (size_t)cta_mask);
   __VX_DXA_ISSUE2(a0, a1);
 }
 
@@ -202,14 +202,14 @@ inline void vx_dxa_issue_3d_multicast_wg(uint32_t desc_slot,
                                           uint32_t coord2,
                                           uint32_t cta_mask) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)coord1);
-  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
-                                            (size_t)0,
-                                            (size_t)0,
-                                            (size_t)cta_mask);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)coord1);
+  const size_t a1 = __VX_WGATHER_IN("x30", 0, (size_t)coord2,
+                                    (size_t)0,
+                                    (size_t)0,
+                                    (size_t)cta_mask);
   __VX_DXA_ISSUE2(a0, a1);
 }
 
@@ -223,14 +223,14 @@ inline void vx_dxa_issue_4d_multicast_wg(uint32_t desc_slot,
                                           uint32_t coord3,
                                           uint32_t cta_mask) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)coord1);
-  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
-                                            (size_t)coord3,
-                                            (size_t)0,
-                                            (size_t)cta_mask);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)coord1);
+  const size_t a1 = __VX_WGATHER_IN("x30", 0, (size_t)coord2,
+                                    (size_t)coord3,
+                                    (size_t)0,
+                                    (size_t)cta_mask);
   __VX_DXA_ISSUE2(a0, a1);
 }
 
@@ -245,14 +245,14 @@ inline void vx_dxa_issue_5d_multicast_wg(uint32_t desc_slot,
                                           uint32_t coord4,
                                           uint32_t cta_mask) {
   const uint32_t meta = vx_dxa_pack_meta(desc_slot, barrier_id);
-  const uint32_t a0 = (uint32_t)vx_wgather((size_t)(uintptr_t)smem_addr,
-                                            (size_t)meta,
-                                            (size_t)coord0,
-                                            (size_t)coord1);
-  const uint32_t a1 = (uint32_t)__VX_WGATHER_IN("x30", 0, (size_t)coord2,
-                                            (size_t)coord3,
-                                            (size_t)coord4,
-                                            (size_t)cta_mask);
+  const size_t a0 = vx_wgather((size_t)(uintptr_t)smem_addr,
+                                (size_t)meta,
+                                (size_t)coord0,
+                                (size_t)coord1);
+  const size_t a1 = __VX_WGATHER_IN("x30", 0, (size_t)coord2,
+                                    (size_t)coord3,
+                                    (size_t)coord4,
+                                    (size_t)cta_mask);
   __VX_DXA_ISSUE2(a0, a1);
 }
 

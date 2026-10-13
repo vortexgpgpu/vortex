@@ -62,7 +62,7 @@ static double transposeGPU(const char* kernelName, bool useLocalMem,  cl_uint ci
 {
     cl_mem d_odata[MAX_GPU_COUNT];
     cl_mem d_idata[MAX_GPU_COUNT];
-    cl_kernel ckKernel[MAX_GPU_COUNT];
+    cl_kernel ckKernel[MAX_GPU_COUNT] = {};
 
     size_t szGlobalWorkSize[2];
     size_t szLocalWorkSize[2];
@@ -317,7 +317,6 @@ int runTest( const int argc, const char** argv)
                      // (const char **)&source, &program_length, &ciErrNum);
     uint8_t *kernel_bin = NULL;
     size_t kernel_size;
-    cl_int binary_status = 0;
 
     ciErrNum = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
     if (ciErrNum != CL_SUCCESS) {
@@ -349,7 +348,7 @@ int runTest( const int argc, const char** argv)
     //double sharedCopyTime = transposeGPU("shared_copy", true, ciDeviceCount, h_idata, h_odata, size_x, size_y);
 #endif
 
-    double naiveTime = transposeGPU("transpose_naive", false, ciDeviceCount, h_idata, h_odata, size_x, size_y);
+    transposeGPU("transpose_naive", false, ciDeviceCount, h_idata, h_odata, size_x, size_y);
     //double optimizedTime = transposeGPU("transpose", true, ciDeviceCount, h_idata, h_odata, size_x, size_y);
 
 #ifdef GPU_PROFILING

@@ -32,7 +32,7 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // One shared (warp-uniform) scene; the per-lane ray aims at tri `tid`, so
   // each lane gets a distinct sbt_idx from the tri it hits — divergence rides
   // the ray, not the scene pointer.
-  uint32_t scene_addr = (uint32_t)(arg->scene_base_addr & 0xffffffffu);
+  uintptr_t scene_addr = arg->scene_base_addr;
 
   float ox = (float)tid * RTU_TRI_SPACING + RTU_RAY_XOFF;
   vx_ray_t ray = {

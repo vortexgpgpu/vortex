@@ -35,7 +35,10 @@ static int read_data(float *A0, int nx,int ny,int nz,FILE *fp)
 		{
 			for(k=0;k<nx;k++)
 			{
-        fread(A0+s,sizeof(float),1,fp);
+        if (fread(A0+s,sizeof(float),1,fp) != 1) {
+          fprintf(stderr, "Error reading input data\n");
+          return -1;
+        }
 				s++;
 			}
 		}
@@ -75,7 +78,7 @@ static float* read_output_file(const char* filename, int* out_size) {
         return NULL;
     }
     // Read the float data
-    if (fread(floats, sizeof(float), size, file) != size) {
+    if (fread(floats, sizeof(float), size, file) != (size_t)size) {
         fclose(file);
         free(floats);
         perror("Error reading floats from file");
@@ -184,7 +187,6 @@ int main(int argc, char** argv) {
   cl_int clStatus;
   cl_context clContext;
   cl_device_id clDevice;
-  cl_platform_id clPlatform;
 
   // Below is the new interface, coupled with Parboil runtime.
   pb_Context* pb_context;
@@ -195,7 +197,6 @@ int main(int argc, char** argv) {
   }
 
   // okay, let's deliver actual variables
-  clPlatform = (cl_platform_id) pb_context->clPlatformId;
   clContext = (cl_context) pb_context->clContext;
   clDevice = (cl_device_id) pb_context->clDeviceId;
 
@@ -208,7 +209,6 @@ int main(int argc, char** argv) {
 	//cl_program clProgram = clCreateProgramWithSource(clContext,1,clSource,NULL,&clStatus);
 	uint8_t *kernel_bin = NULL;
 	size_t kernel_size;
-	cl_int binary_status = 0;
   cl_program clProgram;
 
   clStatus = read_kernel_file("kernel.cl", &kernel_bin, &kernel_size);
@@ -241,7 +241,10 @@ int main(int argc, char** argv) {
 	h_Anext=(float*)malloc(sizeof(float)*size);
 	pb_SwitchToTimer(&timers, pb_TimerID_IO);
 	FILE *fp = fopen(parameters->inpFiles[0], "rb");
-	read_data(h_A0, nx,ny,nz, fp);
+	if (read_data(h_A0, nx,ny,nz, fp) != 0) {
+		fclose(fp);
+		return -1;
+	}
   fclose(fp);
  	memcpy (h_Anext,h_A0,sizeof(float)*size);
 
@@ -264,9 +267,8 @@ int main(int argc, char** argv) {
 	//only use 1D thread block
   int tx = 128;
 	size_t block[3] = {1,1,1}; // {tx,1,1}
-	size_t grid[3] = {(nx-2+tx-1)/tx*tx,ny-2,nz-2};
+	size_t grid[3] = {static_cast<size_t>((nx-2+tx-1)/tx*tx),static_cast<size_t>(ny-2),static_cast<size_t>(nz-2)};
   	//size_t grid[3] = {nx-2,ny-2,nz-2};
-  	size_t offset[3] = {1,1,1};
   	printf("grid size in x/y/z = %ld %ld %ld\n",grid[0],grid[1],grid[2]);
 	printf("block size in x/y/z = %ld %ld %ld\n",block[0],block[1],block[2]);
 

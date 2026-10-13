@@ -14,8 +14,8 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t bias = phys_ptr[task_id % arg->phys_words];
 
   for (uint32_t k = 0; k < arg->pages_per_task; ++k) {
-    uint32_t page = ((task_id * arg->pages_per_task + k) * arg->stride_pages) % arg->total_pages;
-    uint32_t word = page * WORDS_PER_PAGE + (task_id % WORDS_PER_PAGE);
+    int page = ((task_id * arg->pages_per_task + k) * arg->stride_pages) % arg->total_pages;
+    int word = page * WORDS_PER_PAGE + (task_id % WORDS_PER_PAGE);
     dst_ptr[word] = src_ptr[word] + bias;
   }
 }

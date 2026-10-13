@@ -51,12 +51,9 @@ ProcessorImpl::ProcessorImpl()
   kmu_ = Kmu::Create("kmu", total_cores);
 
   // create memory simulator
-  memsim_ = Memory::Create("dram", Memory::Config{
-    VX_CFG_PLATFORM_MEMORY_NUM_BANKS,
-    VX_CFG_L3_MEM_PORTS,
-    VX_CFG_MEM_BLOCK_SIZE,
-    MEM_CLOCK_RATIO
-  });
+  auto dram_config = DramSim::platform_config();
+  dram_config.block_size = VX_CFG_MEM_BLOCK_SIZE;
+  memsim_ = Memory::Create("dram", Memory::Config{VX_CFG_L3_MEM_PORTS, dram_config});
 
   char sname[100];
 

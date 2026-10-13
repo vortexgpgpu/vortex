@@ -51,6 +51,7 @@ VX_CFLAGS  += -Xclang -target-feature -Xclang +xvortex
 VX_CFLAGS  += -Xclang -target-feature -Xclang +zicond
 VX_LDFLAGS += -fuse-ld=lld
 VX_CFLAGS  += -mllvm -disable-loop-idiom-all	# disable memset/memcpy loop replacement
+VX_CFLAGS  += -Wall -Wextra -Wfatal-errors -Werror
 VX_LDFLAGS += -Wl,-z,norelro
 #VX_CFLAGS += -mllvm -vortex-branch-divergence=0
 #VX_CFLAGS += -mllvm -debug -mllvm -print-after-all
@@ -59,10 +60,11 @@ VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T$(VORTEX_HOME)/sw/kernel/scripts/link
 
 VX_BINTOOL += OBJCOPY=$(LLVM_PATH)/bin/llvm-objcopy $(VORTEX_HOME)/sw/kernel/scripts/vxbin.py
 
-CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors
-CXXFLAGS += -Wno-deprecated-declarations -Wno-unused-parameter -Wno-narrowing
+CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -pthread
 CXXFLAGS += -I$(POCL_PATH)/include
+# The tests are written against the OpenCL 1.2 host API.
+CXXFLAGS += -DCL_TARGET_OPENCL_VERSION=120
 CXXFLAGS += $(CONFIGS)
 
 POCL_CC_FLAGS += LLVM_PREFIX=$(LLVM_PATH) POCL_VORTEX_BINTOOL="$(VX_BINTOOL)" POCL_VORTEX_CFLAGS="$(VX_CFLAGS)" POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)"
@@ -99,8 +101,9 @@ all: $(PROJECT)
 %.cpp.o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+# Host C sources share the C++ flags except the language standard.
 %.c.o: $(SRC_DIR)/%.c
-	$(CC) $(CXXFLAGS) -c $< -o $@
+	$(CC) $(filter-out -std=c++%,$(CXXFLAGS)) -c $< -o $@
 
 $(VORTEX_KN_PATH)/libvortex.a:
 	$(MAKE) -C $(VORTEX_KN_PATH)

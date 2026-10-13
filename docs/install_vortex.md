@@ -40,8 +40,10 @@
    sourcing is required and multiple Vortex trees can coexist on one
    machine without a global `~/.bashrc` clobber.
 
-   Useful configure options: `--xlen={32,64}` selects the ISA width and
-   `--prefix=<path>` the install location. Two SimX build knobs are plain
+   Useful configure options: `--xlen={32,64}` selects the ISA width,
+   `--prefix=<path>` the install location, and `--profile=<name>` builds the
+   machine described by `profiles/<name>.json` by default (see
+   [Hardware Profiles](simulation.md#hardware-profiles)). Two SimX build knobs are plain
    config defines, passed like any `VX_CFG_*` option through `CONFIGS`:
    `-DSIMX_MT=<T>` runs the simulator on `T` host threads (default serial;
    cycle results are bit-identical for every thread count), and
