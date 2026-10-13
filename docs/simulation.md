@@ -118,8 +118,10 @@ The flow needs CIRCT (`circt-verilog`, `circt-opt`, `firtool`) and foldsim
 `FOLDSIM=<driver>` override them), and pyslang for the boundary lifting
 (`LIFT_PYTHON`). The memory model's settings are runtime
 knobs: `FOLDSIM_MEM_READ_LATENCY`, `FOLDSIM_MEM_WRITE_LATENCY` (target cycles,
-30 by default) and `FOLDSIM_MEM_MAX_READS`, `FOLDSIM_MEM_MAX_WRITES` (16). At
-exit the runtime reports the target and kernel-clock cycles the simulator ran
+30 by default) and `FOLDSIM_MEM_MAX_READS`, `FOLDSIM_MEM_MAX_WRITES` (16).
+`VORTEX_FOLDSIM_TIMEOUT_S=<s>` fails a launch that runs longer; a command,
+DCR read or reset the target leaves unanswered fails after it too, or after
+60 s when it is unset. At exit the runtime reports the target and kernel-clock cycles the simulator ran
 and how busy each threaded class was. The design is
 [designs/foldsim.md](designs/foldsim.md).
 
