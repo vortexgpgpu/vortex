@@ -147,7 +147,10 @@ def main():
     sim = out('maxsim_sim.mlir')
     run([tool('circt-opt'), flat, f'--pass-pipeline=builtin.module({",".join(pipeline)})', '-o', sim])
     sim_text = open(sim).read()
-    run([tool('firtool'), '--format=mlir', sim, '-o', out('maxsim_sim.sv')])
+    # A RAM with a registered read states its read-under-write behavior to
+    # Vivado, which otherwise leaves a read colliding with a write undefined.
+    run([tool('firtool'), '--format=mlir', sim,
+         '--add-vivado-ram-address-conflict-synthesis-bug-workaround', '-o', out('maxsim_sim.sv')])
 
     threads = re.search(r'maxsim\.threads = \[(.*?)\]', sim_text).group(1)
     info = {
