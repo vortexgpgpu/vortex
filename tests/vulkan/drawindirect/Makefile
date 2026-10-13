@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 #
 # vkCmdDrawIndirect for the vortexpipe driver: two draws whose parameters come
-# from a buffer, each compared against the direct draw of the same triangle.
+# from a buffer, each compared against the direct draw of the same triangle,
+# and two vkCmdDrawIndirectCount draws whose count comes from a buffer.
 #
 #   make            -- build the host binary + SPIR-V
 #   make run-simx   -- run the cases via vortexpipe on SimX

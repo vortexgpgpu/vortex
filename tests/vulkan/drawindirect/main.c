@@ -18,10 +18,18 @@
  *
  * Both are compared against a direct draw that is itself checked for having
  * drawn something. Two paths that agree on an empty image would otherwise pass.
+ *
+ * vkCmdDrawIndirectCount reads the draw count from a second buffer, capped by
+ * maxDrawCount. The buffer holds three commands, the third a triangle between
+ * the other two. A count of 1 must draw the left triangle alone, a count of 5
+ * under a maximum of 2 the left and right ones and not the third, and the same
+ * count under a maximum of 3 all three -- which shows the third is visible, so
+ * the second draw really tested the cap.
  */
 
 #include <vulkan/vulkan.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -103,7 +111,7 @@ main(int argc, char **argv)
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
       .pApplicationName = "vortexpipe-drawindirect",
-      .apiVersion = VK_API_VERSION_1_1,
+      .apiVersion = VK_API_VERSION_1_2,
    };
    VkInstanceCreateInfo ici = {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -131,13 +139,29 @@ main(int argc, char **argv)
    free(qfp);
    if (qf == UINT32_MAX) { fprintf(stderr, "FAILED: no graphics queue\n"); return 1; }
 
+   VkPhysicalDeviceVulkan12Features f12 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+   };
+   VkPhysicalDeviceFeatures2 f2 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &f12,
+   };
+   vkGetPhysicalDeviceFeatures2(pd, &f2);
+   if (!f12.drawIndirectCount) {
+      fprintf(stderr, "FAILED: drawIndirectCount not advertised\n");
+      return 1;
+   }
+   VkPhysicalDeviceVulkan12Features want12 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+      .drawIndirectCount = VK_TRUE,
+   };
+
    float prio = 1.0f;
    VkDeviceQueueCreateInfo qci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
       .queueFamilyIndex = qf, .queueCount = 1, .pQueuePriorities = &prio,
    };
    VkDeviceCreateInfo dci = {
-      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &want12,
       .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
    };
    VkDevice dev;
@@ -238,9 +262,18 @@ main(int argc, char **argv)
    /* --- the indirect command buffer -------------------------------- */
    /* Two commands, so the offset argument is exercised as well as the
     * contents: a driver that always reads offset zero fails the second. */
-   VkDrawIndirectCommand icmds[2] = {
-      { .vertexCount = 3, .instanceCount = 1, .firstVertex = 0, .firstInstance = 0 },
-      { .vertexCount = 3, .instanceCount = 1, .firstVertex = 3, .firstInstance = 0 },
+   /* The draw counts follow the two commands: 1, then 5 (more than the
+    * buffer holds, which maxDrawCount has to cap). */
+   struct icmd_buf {
+      VkDrawIndirectCommand cmd[3];
+      uint32_t count[2];
+   } icmds = {
+      .cmd = {
+         { .vertexCount = 3, .instanceCount = 1, .firstVertex = 0, .firstInstance = 0 },
+         { .vertexCount = 3, .instanceCount = 1, .firstVertex = 3, .firstInstance = 0 },
+         { .vertexCount = 3, .instanceCount = 1, .firstVertex = 6, .firstInstance = 0 },
+      },
+      .count = { 1, 5 },
    };
    VkBufferCreateInfo ibci = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
@@ -263,7 +296,7 @@ main(int argc, char **argv)
    CHECK(vkBindBufferMemory(dev, ibuf, imem2, 0));
    void *ip;
    CHECK(vkMapMemory(dev, imem2, 0, sizeof(icmds), 0, &ip));
-   memcpy(ip, icmds, sizeof(icmds));
+   memcpy(ip, &icmds, sizeof(icmds));
    vkUnmapMemory(dev, imem2);
 
    /* --- pipeline --------------------------------------------------- */
@@ -364,22 +397,29 @@ main(int argc, char **argv)
    };
 
    /* Four passes: direct and indirect for each of the two triangles. `which`
-    * selects the triangle, `indirect` the path that asks for it. */
-   static uint8_t shot[4][WIDTH * HEIGHT * 4];
-   for (uint32_t pass = 0; pass < 4; pass++) {
-      const uint32_t which = pass / 2;
+    * selects the triangle, `indirect` the path that asks for it. Passes 4-6
+    * are the indirect-count draws: count 1 and count 5 under a maximum of 2,
+    * then count 5 under a maximum of 3. */
+   static uint8_t shot[7][WIDTH * HEIGHT * 4];
+   for (uint32_t pass = 0; pass < 7; pass++) {
+      const uint32_t which = (pass / 2) & 1u;
       const bool indirect = (pass % 2) != 0;
 
       CHECK(vkBeginCommandBuffer(cmd, &cbbi));
       vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
-      if (indirect) {
+      if (pass >= 4) {
+         vkCmdDrawIndirectCount(cmd, ibuf, 0, ibuf,
+                                offsetof(struct icmd_buf, count) +
+                                   (pass == 4 ? 0 : 1) * sizeof(uint32_t),
+                                pass == 6 ? 3 : 2, sizeof(VkDrawIndirectCommand));
+      } else if (indirect) {
          vkCmdDrawIndirect(cmd, ibuf,
                            (VkDeviceSize)which * sizeof(VkDrawIndirectCommand),
                            1, sizeof(VkDrawIndirectCommand));
       } else {
-         vkCmdDraw(cmd, icmds[which].vertexCount, icmds[which].instanceCount,
-                   icmds[which].firstVertex, icmds[which].firstInstance);
+         vkCmdDraw(cmd, icmds.cmd[which].vertexCount, icmds.cmd[which].instanceCount,
+                   icmds.cmd[which].firstVertex, icmds.cmd[which].firstInstance);
       }
       vkCmdEndRenderPass(cmd);
       vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -404,13 +444,13 @@ main(int argc, char **argv)
        * two paths agreeing on an empty image is not agreement. */
       if (cov == 0) {
          printf("firstVertex=%u: FAIL  the direct draw covered no pixels\n",
-                icmds[which].firstVertex);
+                icmds.cmd[which].firstVertex);
          failed++;
          continue;
       }
       bool same = memcmp(direct, ind, (size_t)WIDTH * HEIGHT * 4) == 0;
       printf("firstVertex=%u: %s  direct covered %u px, indirect %u px\n",
-             icmds[which].firstVertex, same ? "pass" : "FAIL",
+             icmds.cmd[which].firstVertex, same ? "pass" : "FAIL",
              cov, count_covered(ind));
       if (!same) failed++;
    }
@@ -423,6 +463,22 @@ main(int argc, char **argv)
              "the comparison above proves nothing\n");
       failed++;
    }
+
+   /* Count 1 draws the left triangle alone; count 5 under a maximum of 2
+    * draws both, which do not overlap, so their union is the channel max. */
+   static uint8_t both[WIDTH * HEIGHT * 4];
+   for (size_t i = 0; i < sizeof(both); i++)
+      both[i] = shot[0][i] > shot[2][i] ? shot[0][i] : shot[2][i];
+   const bool count1 = memcmp(shot[4], shot[0], sizeof(both)) == 0;
+   const bool count5 = memcmp(shot[5], both, sizeof(both)) == 0;
+   const bool third  = count_covered(shot[6]) > count_covered(both);
+   printf("indirect count 1 of max 2: %s  covered %u px (left triangle %u px)\n",
+          count1 ? "pass" : "FAIL", count_covered(shot[4]), count_covered(shot[0]));
+   printf("indirect count 5 of max 2: %s  covered %u px (both triangles %u px)\n",
+          count5 ? "pass" : "FAIL", count_covered(shot[5]), count_covered(both));
+   printf("indirect count 5 of max 3: %s  covered %u px (more than %u)\n",
+          third ? "pass" : "FAIL", count_covered(shot[6]), count_covered(both));
+   failed += !count1 + !count5 + !third;
 
    /* cleanup (best-effort; a smoke test exits anyway) */
    vkDestroyCommandPool(dev, cp, NULL);
@@ -446,6 +502,7 @@ main(int argc, char **argv)
       printf("FAILED (%u check(s))\n", failed);
       return 1;
    }
-   printf("PASSED (indirect draws match their direct twins, both triangles)\n");
+   printf("PASSED (indirect draws match their direct twins, both triangles; "
+          "indirect-count draws respect the count and maxDrawCount)\n");
    return 0;
 }
