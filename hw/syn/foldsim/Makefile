@@ -149,7 +149,11 @@ $(LIFT_LIST): $(SRCS_LIST) $(SRC_DIR)/lift_boundaries.py $(CLASSES_STAMP)
 		--out $(BUILD_DIR)/lift $(foreach u,$(FOLDSIM_LIFT),--unit '$(u)')
 
 generate: $(GEN_SV)
-$(GEN_SV): $(TARGET_SRCS) $(FOLDSIM) $(CLASSES_STAMP)
+# The compiler is the driver and the tools it runs: foldsim-opt beside it and
+# CIRCT's, so a rebuilt tool regenerates the simulator.
+FOLDSIM_TOOLS := $(FOLDSIM) $(wildcard $(dir $(FOLDSIM))foldsim-opt \
+                 $(addprefix $(CIRCT_BIN)/,circt-verilog circt-opt firtool))
+$(GEN_SV): $(TARGET_SRCS) $(FOLDSIM_TOOLS) $(CLASSES_STAMP)
 	$(FOLDSIM) --srcs $(TARGET_SRCS) --top $(TARGET_TOP) --out $(GEN_DIR) \
 		$(if $(CIRCT_BIN),--circt-bin $(CIRCT_BIN)) $(FOLDSIM_CLASSES)
 
