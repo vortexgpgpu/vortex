@@ -211,8 +211,20 @@ accesses itself (§8). The runtime refuses an image whose `VERSION` differs
 from its own map.
 
 `busy` covers queued commands, a start the target has not yet answered with
-busy, and transactions the memory model has in flight, so a host that sees
-the target idle has every effect of what it asked for.
+busy, and transactions the memory model has in flight, at the target or in
+HBM, so a host that sees the target idle has every effect of what it asked
+for.
+
+The runtime resets the target on open, as a card's native driver resets its
+device; that also clears a memory error an earlier process left. The command
+processor model's hooks return no status, so the runtime latches a device
+error instead — a memory error, a failed register or memory access, or a wait
+that timed out — and from then on every register access the runtime core
+makes fails, and the launch, DCR access or copy that hit it fails with it. A
+launch longer than `VORTEX_FOLDSIM_TIMEOUT_S` seconds is such an error (no
+limit by default), as is a command the target does not take, a DCR read it
+does not answer, or a reset it does not finish within that time (60 s when
+it is unset).
 
 ---
 

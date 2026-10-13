@@ -344,8 +344,12 @@ public:
       return -1;
     // A target left running by an earlier process is reset, as a card's
     // native driver resets its device on open: Vortex counts VX_CFG_RESET_DELAY
-    // cycles of reset before it takes a request.
-    if (command(FOLDSIM_CMD_RESET, 0, 64) != 0 || wait_idle() != 0)
+    // cycles of reset before it takes a request. The reset also clears a
+    // memory error that process left, so only the state after it counts.
+    uint32_t s = 0;
+    if (command(FOLDSIM_CMD_RESET, 0, 64) != 0 || wait_idle(false) != 0 || status(&s) != 0)
+      return -1;
+    if (mem_error(s))
       return -1;
     open_ = true;
     return 0;
@@ -353,18 +357,21 @@ public:
 
   // ----- CP register channel -----
   // No hardware CP: the functional model answers, ticked around each access.
+  // The model's hooks return no status: a device error they hit fails every
+  // access from then on, so the command that hit it does not complete as a
+  // success.
   int cp_reg_write(uint32_t off, uint32_t value) {
     cp_.mmio_write(off, value);
     for (int i = 0; i < 256 && cp_.busy(); ++i)
       cp_.tick();
-    return 0;
+    return failed_ ? -1 : 0;
   }
 
   int cp_reg_read(uint32_t off, uint32_t* value) {
     for (int i = 0; i < 256 && cp_.busy(); ++i)
       cp_.tick();
     *value = cp_.mmio_read(off);
-    return 0;
+    return failed_ ? -1 : 0;
   }
 
   // ----- CP-visible host memory -----
@@ -440,28 +447,60 @@ private:
             (unsigned long)st.dma_bytes, st.dma_s);
   }
 
-  int status(uint32_t* value) { return transport_.reg_read(FOLDSIM_REG_STATUS, value); }
+  // Latches a device error: reported once, and every later access fails.
+  int fail(const char* what) {
+    if (!failed_) {
+      fprintf(stderr, "[VXDRV] %s\n", what);
+      failed_ = true;
+    }
+    return -1;
+  }
 
-  // Queues a command once the queue has room.
-  int command(uint32_t op, uint32_t addr, uint32_t data) {
-    uint32_t s = 0;
-    do {
-      if (status(&s) != 0)
-        return -1;
-    } while (s & FOLDSIM_STATUS_FULL);
-    if (reg_write(FOLDSIM_REG_CMD_ADDR, addr) != 0 || reg_write(FOLDSIM_REG_CMD_DATA, data) != 0 ||
-        reg_write(FOLDSIM_REG_CMD, op) != 0)
-      return -1;
+  int status(uint32_t* value) {
+    if (transport_.reg_read(FOLDSIM_REG_STATUS, value) != 0)
+      return fail("cannot read the simulator's status");
     return 0;
   }
 
-  int wait_idle() {
+  // Polls the status until `done` holds of it. A memory error fails the wait
+  // (unless `error_fails` is false), and so does one longer than the control
+  // timeout: the target answers a command within a few cycles, so a wait
+  // that long is a target that stopped.
+  template <typename Done>
+  int poll(Done done, bool error_fails, const char* what) {
+    const auto start = std::chrono::steady_clock::now();
     uint32_t s = 0;
-    do {
-      if (status(&s) != 0 || mem_error(s))
+    for (uint64_t n = 0;; ++n) {
+      if (failed_ || status(&s) != 0 || (error_fails && mem_error(s)))
         return -1;
-    } while (s & FOLDSIM_STATUS_BUSY);
+      if (done(s))
+        break;
+      // The clock is read only every so often: in-process, a status read is
+      // the cheap part of a poll.
+      if ((n & 0xff) == 0xff && elapsed_s(start) > control_timeout_s_) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "the target has not %s in %.0f s (status 0x%x); "
+                 "the simulation is stopped", what, control_timeout_s_, s);
+        return fail(msg);
+      }
+    }
     return 0;
+  }
+
+  // Queues a command once the queue has room.
+  int command(uint32_t op, uint32_t addr, uint32_t data) {
+    if (poll([](uint32_t s) { return !(s & FOLDSIM_STATUS_FULL); }, true,
+             "taken a command") != 0)
+      return -1;
+    if (reg_write(FOLDSIM_REG_CMD_ADDR, addr) != 0 || reg_write(FOLDSIM_REG_CMD_DATA, data) != 0 ||
+        reg_write(FOLDSIM_REG_CMD, op) != 0)
+      return fail("cannot queue a command");
+    return 0;
+  }
+
+  int wait_idle(bool error_fails) {
+    return poll([](uint32_t s) { return !(s & FOLDSIM_STATUS_BUSY); }, error_fails,
+                "gone idle");
   }
 
   // The memory endpoint takes single-beat transactions; a target that makes a
@@ -469,12 +508,13 @@ private:
   bool mem_error(uint32_t s) {
     if (!(s & FOLDSIM_STATUS_MEM_ERR))
       return false;
-    if (!mem_error_reported_) {
-      fprintf(stderr, "[VXDRV] the target made a memory burst, which the memory "
-                      "model does not take; the simulation is stopped\n");
-      mem_error_reported_ = true;
-    }
+    fail("the target made a memory burst, which the memory model does not take; "
+         "the simulation is stopped");
     return true;
+  }
+
+  static double elapsed_s(std::chrono::steady_clock::time_point since) {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - since).count();
   }
 
   // The target runs on its own: once it has been busy for a while, polling it
@@ -514,35 +554,53 @@ private:
         std::memcpy(dst, hp, bytes);
         return;
       }
-      transport_.mem_read(addr, dst, bytes);
+      if (failed_ || transport_.mem_read(addr, dst, bytes) != 0) {
+        fail("cannot read device memory");
+        std::memset(dst, 0, bytes);
+      }
     };
     h.dram_write = [this](uint64_t addr, const void* src, std::size_t bytes) {
       if (void* hp = host_region_ptr(addr)) {
         std::memcpy(hp, src, bytes);
         return;
       }
-      transport_.mem_write(addr, src, bytes);
+      if (failed_ || transport_.mem_write(addr, src, bytes) != 0)
+        fail("cannot write device memory");
     };
     h.vortex_dcr_write = [this](uint32_t addr, uint32_t value) {
-      command(FOLDSIM_CMD_DCR_WRITE, addr, value);
+      if (!failed_)
+        command(FOLDSIM_CMD_DCR_WRITE, addr, value);
     };
     h.vortex_dcr_read = [this](uint32_t addr, uint32_t tag) -> uint32_t {
-      if (command(FOLDSIM_CMD_DCR_READ, addr, tag) != 0)
+      uint32_t value = 0;
+      if (failed_ || command(FOLDSIM_CMD_DCR_READ, addr, tag) != 0 ||
+          poll([](uint32_t s) { return (s & FOLDSIM_STATUS_RSP) != 0; }, true,
+               "answered a DCR read") != 0)
         return 0;
-      uint32_t s = 0, value = 0;
-      do {
-        if (status(&s) != 0)
-          return 0;
-      } while (!(s & FOLDSIM_STATUS_RSP));
-      transport_.reg_read(FOLDSIM_REG_DCR_RSP, &value);
+      if (transport_.reg_read(FOLDSIM_REG_DCR_RSP, &value) != 0) {
+        fail("cannot read a DCR response");
+        return 0;
+      }
       return value;
     };
-    h.vortex_start = [this]() { command(FOLDSIM_CMD_START, 0, 0); };
+    h.vortex_start = [this]() {
+      if (!failed_ && command(FOLDSIM_CMD_START, 0, 0) == 0)
+        launch_start_ = std::chrono::steady_clock::now();
+    };
+    // A failed device reads idle, so the launch ends; the access after it
+    // reports the failure.
     h.vortex_busy = [this]() -> bool {
       uint32_t s = 0;
-      if (status(&s) != 0 || mem_error(s))
+      if (failed_ || status(&s) != 0 || mem_error(s))
         return false;
       const bool busy = (s & FOLDSIM_STATUS_BUSY) != 0;
+      if (busy && launch_timeout_s_ > 0 && elapsed_s(launch_start_) > launch_timeout_s_) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "launch exceeded VORTEX_FOLDSIM_TIMEOUT_S=%.0f s; "
+                 "the simulation is stopped", launch_timeout_s_);
+        fail(msg);
+        return false;
+      }
       poll_backoff(busy);
       return busy;
     };
@@ -557,9 +615,21 @@ private:
   static constexpr uint64_t kSpinPolls = 1024;
   static constexpr uint64_t kMaxPollSleepUs = 100;
 
+  // Wall-clock seconds a launch may run before the device is failed; 0, the
+  // default, never. A command, DCR read or reset the target leaves unanswered
+  // that long fails it too, after 60 s when it is unset.
+  static double timeout_env() {
+    const char* s = getenv("VORTEX_FOLDSIM_TIMEOUT_S");
+    return (s != nullptr && s[0] != '\0') ? atof(s) : 0.0;
+  }
+  static constexpr double kControlTimeoutS = 60;
+
   counted_transport_t transport_;
   uint64_t busy_polls_ = 0;
-  bool mem_error_reported_ = false;
+  const double launch_timeout_s_ = timeout_env();
+  const double control_timeout_s_ = (launch_timeout_s_ > 0) ? launch_timeout_s_ : kControlTimeoutS;
+  std::chrono::steady_clock::time_point launch_start_;
+  bool failed_ = false;
   bool open_ = false;
   vortex::CommandProcessor cp_;
   std::mutex host_mu_;
