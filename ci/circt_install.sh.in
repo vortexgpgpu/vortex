@@ -1,0 +1,82 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# CIRCT install: the SystemVerilog frontend of every synthesis flow
+# (circt-verilog, circt-opt, firtool) and the compiler foldsim builds on.
+#
+# Builds Vortex's CIRCT fork (LLVM, MLIR and CIRCT in one build) and installs
+# it into $TOOLDIR/circt: tools, libraries, headers and CMake packages, which
+# ci/foldsim_install.sh builds against. This script is the *producer* of the
+# circt prebuilt: build here (once per OSVERSION, in that OS's container),
+# then `ci/toolchain_prebuilt.sh --circt` packages the three tools and
+# `ci/toolchain_install.sh --circt` fetches them. Most users install the
+# prebuilt and never run this script.
+#
+# Release, assertions off, libstdc++ linked statically, no zlib/zstd: the
+# tools run on any machine of the OSVERSION. Needs git, cmake >= 3.20, ninja,
+# a C++17 compiler and python3; installs nothing system-wide.
+#
+# Idempotent: re-running rebuilds only what changed.
+
+# exit when any command fails
+set -e
+
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+
+CIRCT_REPO=${CIRCT_REPO:=https://github.com/vortexgpgpu/circt.git}
+CIRCT_REV=${CIRCT_REV:=vortex_3.x}
+
+CIRCT_SRC=${CIRCT_SRC:=$TOOLDIR/circt-src}
+CIRCT_PREFIX=${CIRCT_PREFIX:=$TOOLDIR/circt}
+CIRCT_BUILD=$CIRCT_SRC/build
+JOBS=${JOBS:=$(nproc)}
+
+# ----------------------------------------------------------------------
+# 1. Fetch: LLVM is a submodule pinned by the CIRCT revision.
+# ----------------------------------------------------------------------
+if [ ! -d "$CIRCT_SRC/.git" ]; then
+    git clone --branch "$CIRCT_REV" "$CIRCT_REPO" "$CIRCT_SRC"
+else
+    git -C "$CIRCT_SRC" fetch origin
+    git -C "$CIRCT_SRC" checkout "$CIRCT_REV"
+fi
+git -C "$CIRCT_SRC" submodule update --init --depth 1 llvm
+
+# ----------------------------------------------------------------------
+# 2. Configure and build
+# ----------------------------------------------------------------------
+cmake -G Ninja -S "$CIRCT_SRC/llvm/llvm" -B "$CIRCT_BUILD" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$CIRCT_PREFIX" \
+    -DLLVM_ENABLE_PROJECTS=mlir \
+    -DLLVM_EXTERNAL_PROJECTS=circt \
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR="$CIRCT_SRC" \
+    -DLLVM_TARGETS_TO_BUILD=host \
+    -DLLVM_ENABLE_ASSERTIONS=OFF \
+    -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
+    -DLLVM_ENABLE_ZLIB=OFF \
+    -DLLVM_ENABLE_ZSTD=OFF \
+    -DLLVM_ENABLE_LIBXML2=OFF \
+    -DLLVM_INSTALL_UTILS=ON \
+    -DCIRCT_SLANG_FRONTEND_ENABLED=ON \
+    -DCIRCT_SLANG_BUILD_FROM_SOURCE=ON
+ninja -C "$CIRCT_BUILD" -j "$JOBS" circt-verilog circt-opt firtool
+ninja -C "$CIRCT_BUILD" -j "$JOBS" install
+
+# ----------------------------------------------------------------------
+# 3. Check
+# ----------------------------------------------------------------------
+"$CIRCT_PREFIX/bin/circt-verilog" --version | head -1
+echo "circt installed in $CIRCT_PREFIX"

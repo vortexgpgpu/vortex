@@ -25,6 +25,8 @@ The components covered here are:
 11. [SST](#11-sst) — Structural Simulation Toolkit (sst-core + sst-elements + OpenMPI); consumed by the SST-driven regression configurations
 12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C; needed only to elaborate a target or build a bitstream (optional)
 13. [SLASH / Alveo V80](#13-slash--alveo-v80-the-aved-backend) — AMD Alveo V80 platform stack for the `aved` backend (optional)
+14. [CIRCT](#14-circt) — the SystemVerilog frontend of every synthesis flow (`circt-verilog`, `circt-opt`, `firtool`)
+15. [foldsim](#15-foldsim) — FAME-5 simulator compiler of `hw/syn/foldsim`, built on CIRCT (optional)
 
 ---
 
@@ -1100,6 +1102,96 @@ for the backend's architecture and
 
 ---
 
+## 14. CIRCT
+
+**Purpose**: the SystemVerilog frontend of every synthesis flow. Each flow
+reads the netlist CIRCT elaborates (`hw/scripts/circt_elaborate.sh`,
+`gen_sources.sh -E`; see the hardware library's "Block RAM and asynchronous
+reads"), and foldsim builds on it.
+
+> **Baseline:** Vortex's CIRCT fork, branch `vortex_3.x` of
+> `vortexgpgpu/circt`: upstream CIRCT with the import, lowering and
+> memory fixes the Vortex flows need. It pins its own LLVM (a submodule),
+> separate from `llvm-vortex`: CIRCT tracks LLVM main.
+
+### Build
+
+`ci/circt_install.sh` builds LLVM, MLIR and CIRCT in one build and installs
+the whole of it (tools, libraries, headers, CMake packages) into
+`$TOOLDIR/circt`:
+
+```bash
+./ci/circt_install.sh       # CIRCT_REPO, CIRCT_REV, JOBS override the defaults
+```
+
+It configures with:
+
+```bash
+cmake -G Ninja -S $CIRCT_SRC/llvm/llvm -B $CIRCT_SRC/build \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TOOLDIR/circt \
+    -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt \
+    -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$CIRCT_SRC -DLLVM_TARGETS_TO_BUILD=host \
+    -DLLVM_ENABLE_ASSERTIONS=OFF -DLLVM_STATIC_LINK_CXX_STDLIB=ON \
+    -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_LIBXML2=OFF \
+    -DLLVM_INSTALL_UTILS=ON -DCIRCT_SLANG_FRONTEND_ENABLED=ON
+```
+
+### Notes
+
+- For a prebuilt, build once per `OSVERSION` in that OS's container
+  (`ubuntu/focal`, `centos/7`): assertions off and libstdc++ linked
+  statically, so the tools run on any machine of that OS.
+- The prebuilt ships only `circt-verilog`, `circt-opt` and `firtool`. Building
+  foldsim needs the full installation this script leaves behind.
+- To develop CIRCT itself, build it in its own checkout with assertions on
+  and point the flows at it: `CIRCT_PATH=<build>` (the build directory has
+  the same `bin/` layout).
+
+---
+
+## 15. foldsim
+
+**Purpose**: the compiler of the FAME-5 FPGA simulators (`hw/syn/foldsim`,
+[designs/foldsim.md](designs/foldsim.md)): the `foldsim` driver and
+`foldsim-opt`. foldsim is its own project and builds on CIRCT, as POCL builds
+on LLVM.
+
+> **Baseline:** branch `main` of `vortexgpgpu/foldsim`. Its passes
+> (`foldsim-extract-models`, `foldsim-fuse-models`, `foldsim-fame5`,
+> `foldsim-compose`) were the `maxsim-*` passes of the CIRCT fork.
+
+### Build
+
+Build CIRCT first (§14), then:
+
+```bash
+./ci/foldsim_install.sh     # FOLDSIM_REPO, FOLDSIM_REV, CIRCT_PREFIX override the defaults
+```
+
+which configures foldsim against `$TOOLDIR/circt`, builds it, runs its lit
+tests (`check-foldsim`) and installs `bin/foldsim` and `bin/foldsim-opt` into
+`$TOOLDIR/foldsim`:
+
+```bash
+cmake -G Ninja -S $FOLDSIM_SRC -B $FOLDSIM_SRC/build \
+    -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$TOOLDIR/foldsim \
+    -DCIRCT_DIR=$TOOLDIR/circt/lib/cmake/circt \
+    -DMLIR_DIR=$TOOLDIR/circt/lib/cmake/mlir \
+    -DLLVM_DIR=$TOOLDIR/circt/lib/cmake/llvm \
+    -DLLVM_EXTERNAL_LIT=$TOOLDIR/circt/bin/llvm-lit \
+    -DLLVM_STATIC_LINK_CXX_STDLIB=ON
+```
+
+### Notes
+
+- `foldsim-opt` links CIRCT statically; the driver finds it next to itself
+  and the CIRCT tools through `--circt-bin`. `hw/syn/common.mk` sets
+  `FOLDSIM_PATH ?= $(TOOLDIR)/foldsim` and `FOLDSIM ?= $(FOLDSIM_PATH)/bin/foldsim`.
+- A CIRCT change foldsim's passes rely on lands in CIRCT first; both
+  prebuilts are refreshed together.
+
+---
+
 ## Verifying an installed toolchain
 
 Once components are installed under `$TOOLDIR`, confirm the
@@ -1119,6 +1211,8 @@ $TOOLDIR/
 │   ├── bin/ etc/ lib/libOpenCL.so* share/pocl/
 │   └── include/CL/*.h          (REQUIRED — see §6; absence breaks tests/opencl)
 ├── chipstar/                   (bin/hipcc, lib/libCHIP.so, include/hip/)
+├── circt/bin/                  (circt-verilog, circt-opt, firtool)
+├── foldsim/bin/                (foldsim, foldsim-opt; optional)
 ├── sta/                        (OpenSTA, optional)
 ├── mesa-vortex/                (lavapipe Vulkan ICD; share/vulkan/icd.d/, optional)
 ├── gem5/                       (slim runtime — build/{X86,ARM}/gem5.opt + configs/)
@@ -1140,6 +1234,8 @@ $LLVM_PREFIX/bin/llvm-spirv --version       # if SPIRV-LLVM-Translator installed
 $TOOLDIR/riscv32-gnu-toolchain/bin/riscv32-unknown-elf-gcc --version
 $TOOLDIR/verilator/bin/verilator --version
 $TOOLDIR/chipstar/bin/hipcc --version       # if chipStar installed
+$TOOLDIR/circt/bin/circt-verilog --version
+$TOOLDIR/foldsim/bin/foldsim-opt --version  # if foldsim installed
 test -f $TOOLDIR/pocl/include/CL/opencl.h && echo "POCL host headers OK"
 
 # if gem5 installed — both ISAs are built by default
@@ -1171,7 +1267,7 @@ Both accept the same per-component flags:
 
 ```
 --pocl  --chipstar  --verilator  --riscv32  --riscv64  --llvm --mesa
---libcrt32  --libcrt64  --libc32  --libc64  --circt  --yosys  --sta
+--libcrt32  --libcrt64  --libc32  --libc64  --circt  --foldsim  --yosys  --sta
 --gem5     (slim runtime — see §10)
 --all      (every component above; SST is NOT included — see §11)
 ```
@@ -1188,7 +1284,7 @@ Both accept the same per-component flags:
 Run this **after** building the components above (or after rebuilding
 just one — e.g. POCL). For each selected component it `tar`s the
 component directory out of `$TOOLDIR`, bzip2-compresses it, and — for
-the large ones (`riscv32`, `riscv64`, `llvm`, `verilator`, `yosys`) —
+the large ones (`riscv32`, `riscv64`, `llvm`, `verilator`, `circt`, `yosys`) —
 `split`s the archive into 50 MB parts to stay under GitHub's per-file
 limit. The bundles are written **relative to the current directory**,
 into `./<component>/$OSVERSION/` (`libc*` / `libcrt*` go straight into

@@ -140,7 +140,7 @@
   <text x="868" y="625" class="th">g_sockets — N × VX_socket_top</text>
   <text x="868" y="642" class="ts">Each socket: 1 core + I$/D$/LMEM, socket_id as a port.</text>
   <text x="868" y="658" class="ts">One physical copy per socket. Threading the sockets</text>
-  <text x="868" y="674" class="ts">through one copy (FAME-5) is the maxsim flow: maxsim.md.</text>
+  <text x="868" y="674" class="ts">through one copy (FAME-5) is the foldsim flow: foldsim.md.</text>
 
 
   <!-- annotations under device -->

@@ -11,10 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "maxsim_emul.h"
+#include "foldsim_emul.h"
 
-#include "Vmaxsim_afu.h"
-#include "Vmaxsim_afu___024root.h"
+#include "Vfoldsim_afu.h"
+#include "Vfoldsim_afu___024root.h"
 #include "verilated.h"
 #ifdef VM_TRACE
 #include "verilated_vcd_c.h"
@@ -69,11 +69,11 @@ private:
 
 } // namespace
 
-class maxsim_emul::Impl {
+class foldsim_emul::Impl {
 public:
   Impl()
-      : mem_latency_(env_or("MAXSIM_EMUL_MEM_LATENCY", 100)),
-        mmio_cycles_(env_or("MAXSIM_EMUL_MMIO_CYCLES", 250)) {}
+      : mem_latency_(env_or("FOLDSIM_EMUL_MEM_LATENCY", 100)),
+        mmio_cycles_(env_or("FOLDSIM_EMUL_MMIO_CYCLES", 250)) {}
 
   ~Impl() {
 #ifdef VM_TRACE
@@ -91,28 +91,28 @@ public:
   }
 
   int init() {
-    // MAXSIM_EMUL_TRACE=<file>: which classes finish a thread, each kernel
+    // FOLDSIM_EMUL_TRACE=<file>: which classes finish a thread, each kernel
     // cycle, one byte per cycle of up to 8 classes.
-    if (const char* path = getenv("MAXSIM_EMUL_TRACE"))
+    if (const char* path = getenv("FOLDSIM_EMUL_TRACE"))
       trace_ = fopen(path, "wb");
-    // MAXSIM_EMUL_AXI_TRACE=<file>: the kernel's memory port, one line per
+    // FOLDSIM_EMUL_AXI_TRACE=<file>: the kernel's memory port, one line per
     // request and response.
-    if (const char* path = getenv("MAXSIM_EMUL_AXI_TRACE"))
+    if (const char* path = getenv("FOLDSIM_EMUL_AXI_TRACE"))
       axi_trace_ = fopen(path, "w");
-    // MAXSIM_EMUL_REG_TRACE=<file>: every register access of the host.
-    if (const char* path = getenv("MAXSIM_EMUL_REG_TRACE"))
+    // FOLDSIM_EMUL_REG_TRACE=<file>: every register access of the host.
+    if (const char* path = getenv("FOLDSIM_EMUL_REG_TRACE"))
       reg_trace_ = fopen(path, "w");
     context_ = std::make_unique<VerilatedContext>();
-    top_ = std::make_unique<Vmaxsim_afu>(context_.get());
+    top_ = std::make_unique<Vfoldsim_afu>(context_.get());
 #ifdef VM_TRACE
-    // MAXSIM_EMUL_VCD=<file>: a waveform of the kernel, in a build with --trace,
-    // from kernel cycle MAXSIM_EMUL_VCD_FROM on, MAXSIM_EMUL_VCD_DEPTH levels
+    // FOLDSIM_EMUL_VCD=<file>: a waveform of the kernel, in a build with --trace,
+    // from kernel cycle FOLDSIM_EMUL_VCD_FROM on, FOLDSIM_EMUL_VCD_DEPTH levels
     // of hierarchy deep (2: the kernel's channels).
-    vcd_from_ = env_or("MAXSIM_EMUL_VCD_FROM", 0);
-    if (const char* path = getenv("MAXSIM_EMUL_VCD")) {
+    vcd_from_ = env_or("FOLDSIM_EMUL_VCD_FROM", 0);
+    if (const char* path = getenv("FOLDSIM_EMUL_VCD")) {
       context_->traceEverOn(true);
       vcd_ = std::make_unique<VerilatedVcdC>();
-      top_->trace(vcd_.get(), int(env_or("MAXSIM_EMUL_VCD_DEPTH", 99)));
+      top_->trace(vcd_.get(), int(env_or("FOLDSIM_EMUL_VCD_DEPTH", 99)));
       vcd_->open(path);
     }
 #endif
@@ -255,7 +255,7 @@ private:
     bool b_fire = top_->m_axi_mem_0_bvalid && top_->m_axi_mem_0_bready;
 
     if (trace_ != nullptr)
-      fputc(top_->rootp->maxsim_afu__DOT__profile_finish & 0xff, trace_);
+      fputc(top_->rootp->foldsim_afu__DOT__profile_finish & 0xff, trace_);
     top_->ap_clk = 1;
     top_->eval();
 #ifdef VM_TRACE
@@ -303,7 +303,7 @@ private:
   }
 
   std::unique_ptr<VerilatedContext> context_;
-  std::unique_ptr<Vmaxsim_afu> top_;
+  std::unique_ptr<Vfoldsim_afu> top_;
 #ifdef VM_TRACE
   std::unique_ptr<VerilatedVcdC> vcd_;
   uint64_t vcd_from_ = 0;
@@ -321,24 +321,24 @@ private:
   std::deque<uint64_t> writes_;
 };
 
-maxsim_emul::maxsim_emul() : impl_(new Impl()) {}
+foldsim_emul::foldsim_emul() : impl_(new Impl()) {}
 
-maxsim_emul::~maxsim_emul() { delete impl_; }
+foldsim_emul::~foldsim_emul() { delete impl_; }
 
-int maxsim_emul::init() { return impl_->init(); }
+int foldsim_emul::init() { return impl_->init(); }
 
-int maxsim_emul::reg_write(uint32_t offset, uint32_t value) {
+int foldsim_emul::reg_write(uint32_t offset, uint32_t value) {
   return impl_->reg_write(offset, value);
 }
 
-int maxsim_emul::reg_read(uint32_t offset, uint32_t* value) {
+int foldsim_emul::reg_read(uint32_t offset, uint32_t* value) {
   return impl_->reg_read(offset, value);
 }
 
-int maxsim_emul::mem_write(uint64_t addr, const void* data, uint64_t size) {
+int foldsim_emul::mem_write(uint64_t addr, const void* data, uint64_t size) {
   return impl_->mem_write(addr, data, size);
 }
 
-int maxsim_emul::mem_read(uint64_t addr, void* data, uint64_t size) {
+int foldsim_emul::mem_read(uint64_t addr, void* data, uint64_t size) {
   return impl_->mem_read(addr, data, size);
 }

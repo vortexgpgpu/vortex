@@ -11,13 +11,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "maxsim_sim.vh"
+`include "foldsim_sim.vh"
 
-// The maxsim kernel: the simulator CIRCT composes of Vortex (maxsim_sim, of
-// the target VX_firesim_wrap), the memory endpoint on its AXI4 port and the
+// The foldsim kernel: the simulator CIRCT composes of Vortex (foldsim_sim, of
+// the target foldsim_target), the memory endpoint on its AXI4 port and the
 // control endpoint on its DCR, start and busy signals. Its ports are the
 // native V80 kernel's, but for the host-memory master it does not need.
-module maxsim_afu #(
+module foldsim_afu #(
     parameter C_S_AXI_CONTROL_ADDR_WIDTH = 16,
     parameter C_S_AXI_CONTROL_DATA_WIDTH = 32,
     parameter C_M_AXI_MEM_ID_WIDTH       = 1,
@@ -84,92 +84,92 @@ module maxsim_afu #(
         reset <= ~ap_rst_n;
 
     // ---- The simulator's channels, named after the target's ports ----
-`define MAXSIM_CH(name, w) \
+`define FOLDSIM_CH(name, w) \
     wire name``_valid, name``_ready; \
     wire [w-1:0] name``_bits;
 
-    `MAXSIM_CH(reset, 1)
-    `MAXSIM_CH(m_axi_mem_0_awready, 1)
-    `MAXSIM_CH(m_axi_mem_0_wready, 1)
-    `MAXSIM_CH(m_axi_mem_0_arready, 1)
-    `MAXSIM_CH(m_axi_mem_0_rvalid, 1)
-    `MAXSIM_CH(m_axi_mem_0_rdata, DATA_W)
-    `MAXSIM_CH(m_axi_mem_0_rlast, 1)
-    `MAXSIM_CH(m_axi_mem_0_rid, TARGET_ID_W)
-    `MAXSIM_CH(m_axi_mem_0_rresp, 2)
-    `MAXSIM_CH(m_axi_mem_0_bvalid, 1)
-    `MAXSIM_CH(m_axi_mem_0_bresp, 2)
-    `MAXSIM_CH(m_axi_mem_0_bid, TARGET_ID_W)
-    `MAXSIM_CH(dcr_req_valid, 1)
-    `MAXSIM_CH(dcr_req_rw, 1)
-    `MAXSIM_CH(dcr_req_addr, DCR_ADDR_W)
-    `MAXSIM_CH(dcr_req_data, DCR_DATA_W)
-    `MAXSIM_CH(start, 1)
-    `MAXSIM_CH(m_axi_mem_0_awvalid, 1)
-    `MAXSIM_CH(m_axi_mem_0_awaddr, TARGET_ADDR_W)
-    `MAXSIM_CH(m_axi_mem_0_awid, TARGET_ID_W)
-    `MAXSIM_CH(m_axi_mem_0_awlen, 8)
-    `MAXSIM_CH(m_axi_mem_0_wvalid, 1)
-    `MAXSIM_CH(m_axi_mem_0_wdata, DATA_W)
-    `MAXSIM_CH(m_axi_mem_0_wstrb, DATA_W/8)
-    `MAXSIM_CH(m_axi_mem_0_wlast, 1)
-    `MAXSIM_CH(m_axi_mem_0_arvalid, 1)
-    `MAXSIM_CH(m_axi_mem_0_araddr, TARGET_ADDR_W)
-    `MAXSIM_CH(m_axi_mem_0_arid, TARGET_ID_W)
-    `MAXSIM_CH(m_axi_mem_0_arlen, 8)
-    `MAXSIM_CH(m_axi_mem_0_rready, 1)
-    `MAXSIM_CH(m_axi_mem_0_bready, 1)
-    `MAXSIM_CH(dcr_rsp_valid, 1)
-    `MAXSIM_CH(dcr_rsp_data, DCR_DATA_W)
-    `MAXSIM_CH(busy, 1)
-`undef MAXSIM_CH
+    `FOLDSIM_CH(reset, 1)
+    `FOLDSIM_CH(m_axi_mem_0_awready, 1)
+    `FOLDSIM_CH(m_axi_mem_0_wready, 1)
+    `FOLDSIM_CH(m_axi_mem_0_arready, 1)
+    `FOLDSIM_CH(m_axi_mem_0_rvalid, 1)
+    `FOLDSIM_CH(m_axi_mem_0_rdata, DATA_W)
+    `FOLDSIM_CH(m_axi_mem_0_rlast, 1)
+    `FOLDSIM_CH(m_axi_mem_0_rid, TARGET_ID_W)
+    `FOLDSIM_CH(m_axi_mem_0_rresp, 2)
+    `FOLDSIM_CH(m_axi_mem_0_bvalid, 1)
+    `FOLDSIM_CH(m_axi_mem_0_bresp, 2)
+    `FOLDSIM_CH(m_axi_mem_0_bid, TARGET_ID_W)
+    `FOLDSIM_CH(dcr_req_valid, 1)
+    `FOLDSIM_CH(dcr_req_rw, 1)
+    `FOLDSIM_CH(dcr_req_addr, DCR_ADDR_W)
+    `FOLDSIM_CH(dcr_req_data, DCR_DATA_W)
+    `FOLDSIM_CH(start, 1)
+    `FOLDSIM_CH(m_axi_mem_0_awvalid, 1)
+    `FOLDSIM_CH(m_axi_mem_0_awaddr, TARGET_ADDR_W)
+    `FOLDSIM_CH(m_axi_mem_0_awid, TARGET_ID_W)
+    `FOLDSIM_CH(m_axi_mem_0_awlen, 8)
+    `FOLDSIM_CH(m_axi_mem_0_wvalid, 1)
+    `FOLDSIM_CH(m_axi_mem_0_wdata, DATA_W)
+    `FOLDSIM_CH(m_axi_mem_0_wstrb, DATA_W/8)
+    `FOLDSIM_CH(m_axi_mem_0_wlast, 1)
+    `FOLDSIM_CH(m_axi_mem_0_arvalid, 1)
+    `FOLDSIM_CH(m_axi_mem_0_araddr, TARGET_ADDR_W)
+    `FOLDSIM_CH(m_axi_mem_0_arid, TARGET_ID_W)
+    `FOLDSIM_CH(m_axi_mem_0_arlen, 8)
+    `FOLDSIM_CH(m_axi_mem_0_rready, 1)
+    `FOLDSIM_CH(m_axi_mem_0_bready, 1)
+    `FOLDSIM_CH(dcr_rsp_valid, 1)
+    `FOLDSIM_CH(dcr_rsp_data, DCR_DATA_W)
+    `FOLDSIM_CH(busy, 1)
+`undef FOLDSIM_CH
 
-`define MAXSIM_IN(name) \
+`define FOLDSIM_IN(name) \
     .name``_valid (name``_valid), .name``_ready (name``_ready), .name``_bits (name``_bits)
 
-    wire [`MAXSIM_NUM_CLASSES-1:0] profile_finish /*verilator public_flat_rd*/;
+    wire [`FOLDSIM_NUM_CLASSES-1:0] profile_finish /*verilator public_flat_rd*/;
 
-    maxsim_sim sim (
+    foldsim_sim sim (
         .hostClock (ap_clk),
         .hostReset (reset),
         .profile_finish (profile_finish),
-        `MAXSIM_IN(reset),
-        `MAXSIM_IN(m_axi_mem_0_awready),
-        `MAXSIM_IN(m_axi_mem_0_wready),
-        `MAXSIM_IN(m_axi_mem_0_arready),
-        `MAXSIM_IN(m_axi_mem_0_rvalid),
-        `MAXSIM_IN(m_axi_mem_0_rdata),
-        `MAXSIM_IN(m_axi_mem_0_rlast),
-        `MAXSIM_IN(m_axi_mem_0_rid),
-        `MAXSIM_IN(m_axi_mem_0_rresp),
-        `MAXSIM_IN(m_axi_mem_0_bvalid),
-        `MAXSIM_IN(m_axi_mem_0_bresp),
-        `MAXSIM_IN(m_axi_mem_0_bid),
-        `MAXSIM_IN(dcr_req_valid),
-        `MAXSIM_IN(dcr_req_rw),
-        `MAXSIM_IN(dcr_req_addr),
-        `MAXSIM_IN(dcr_req_data),
-        `MAXSIM_IN(start),
-        `MAXSIM_IN(m_axi_mem_0_awvalid),
-        `MAXSIM_IN(m_axi_mem_0_awaddr),
-        `MAXSIM_IN(m_axi_mem_0_awid),
-        `MAXSIM_IN(m_axi_mem_0_awlen),
-        `MAXSIM_IN(m_axi_mem_0_wvalid),
-        `MAXSIM_IN(m_axi_mem_0_wdata),
-        `MAXSIM_IN(m_axi_mem_0_wstrb),
-        `MAXSIM_IN(m_axi_mem_0_wlast),
-        `MAXSIM_IN(m_axi_mem_0_arvalid),
-        `MAXSIM_IN(m_axi_mem_0_araddr),
-        `MAXSIM_IN(m_axi_mem_0_arid),
-        `MAXSIM_IN(m_axi_mem_0_arlen),
-        `MAXSIM_IN(m_axi_mem_0_rready),
-        `MAXSIM_IN(m_axi_mem_0_bready),
-        `MAXSIM_IN(dcr_rsp_valid),
-        `MAXSIM_IN(dcr_rsp_data),
-        `MAXSIM_IN(busy)
+        `FOLDSIM_IN(reset),
+        `FOLDSIM_IN(m_axi_mem_0_awready),
+        `FOLDSIM_IN(m_axi_mem_0_wready),
+        `FOLDSIM_IN(m_axi_mem_0_arready),
+        `FOLDSIM_IN(m_axi_mem_0_rvalid),
+        `FOLDSIM_IN(m_axi_mem_0_rdata),
+        `FOLDSIM_IN(m_axi_mem_0_rlast),
+        `FOLDSIM_IN(m_axi_mem_0_rid),
+        `FOLDSIM_IN(m_axi_mem_0_rresp),
+        `FOLDSIM_IN(m_axi_mem_0_bvalid),
+        `FOLDSIM_IN(m_axi_mem_0_bresp),
+        `FOLDSIM_IN(m_axi_mem_0_bid),
+        `FOLDSIM_IN(dcr_req_valid),
+        `FOLDSIM_IN(dcr_req_rw),
+        `FOLDSIM_IN(dcr_req_addr),
+        `FOLDSIM_IN(dcr_req_data),
+        `FOLDSIM_IN(start),
+        `FOLDSIM_IN(m_axi_mem_0_awvalid),
+        `FOLDSIM_IN(m_axi_mem_0_awaddr),
+        `FOLDSIM_IN(m_axi_mem_0_awid),
+        `FOLDSIM_IN(m_axi_mem_0_awlen),
+        `FOLDSIM_IN(m_axi_mem_0_wvalid),
+        `FOLDSIM_IN(m_axi_mem_0_wdata),
+        `FOLDSIM_IN(m_axi_mem_0_wstrb),
+        `FOLDSIM_IN(m_axi_mem_0_wlast),
+        `FOLDSIM_IN(m_axi_mem_0_arvalid),
+        `FOLDSIM_IN(m_axi_mem_0_araddr),
+        `FOLDSIM_IN(m_axi_mem_0_arid),
+        `FOLDSIM_IN(m_axi_mem_0_arlen),
+        `FOLDSIM_IN(m_axi_mem_0_rready),
+        `FOLDSIM_IN(m_axi_mem_0_bready),
+        `FOLDSIM_IN(dcr_rsp_valid),
+        `FOLDSIM_IN(dcr_rsp_data),
+        `FOLDSIM_IN(busy)
     );
 
-`define MAXSIM_MEM(name) \
+`define FOLDSIM_MEM(name) \
     .name``_valid (m_axi_mem_0_``name``_valid), .name``_ready (m_axi_mem_0_``name``_ready), \
     .name``_bits (m_axi_mem_0_``name``_bits)
 
@@ -178,7 +178,7 @@ module maxsim_afu #(
     wire [63:0] mem_base;
     wire        mem_idle, mem_error, mem_stall;
 
-    maxsim_mem #(
+    foldsim_mem #(
         .ID_W   (TARGET_ID_W),
         .ADDR_W (TARGET_ADDR_W),
         .DATA_W (DATA_W)
@@ -193,13 +193,13 @@ module maxsim_afu #(
         .idle          (mem_idle),
         .error         (mem_error),
         .stall         (mem_stall),
-        `MAXSIM_MEM(awvalid), `MAXSIM_MEM(awaddr), `MAXSIM_MEM(awid), `MAXSIM_MEM(awlen),
-        `MAXSIM_MEM(wvalid), `MAXSIM_MEM(wdata), `MAXSIM_MEM(wstrb), `MAXSIM_MEM(wlast),
-        `MAXSIM_MEM(arvalid), `MAXSIM_MEM(araddr), `MAXSIM_MEM(arid), `MAXSIM_MEM(arlen),
-        `MAXSIM_MEM(rready), `MAXSIM_MEM(bready),
-        `MAXSIM_MEM(awready), `MAXSIM_MEM(wready), `MAXSIM_MEM(arready),
-        `MAXSIM_MEM(rvalid), `MAXSIM_MEM(rdata), `MAXSIM_MEM(rlast), `MAXSIM_MEM(rid), `MAXSIM_MEM(rresp),
-        `MAXSIM_MEM(bvalid), `MAXSIM_MEM(bresp), `MAXSIM_MEM(bid),
+        `FOLDSIM_MEM(awvalid), `FOLDSIM_MEM(awaddr), `FOLDSIM_MEM(awid), `FOLDSIM_MEM(awlen),
+        `FOLDSIM_MEM(wvalid), `FOLDSIM_MEM(wdata), `FOLDSIM_MEM(wstrb), `FOLDSIM_MEM(wlast),
+        `FOLDSIM_MEM(arvalid), `FOLDSIM_MEM(araddr), `FOLDSIM_MEM(arid), `FOLDSIM_MEM(arlen),
+        `FOLDSIM_MEM(rready), `FOLDSIM_MEM(bready),
+        `FOLDSIM_MEM(awready), `FOLDSIM_MEM(wready), `FOLDSIM_MEM(arready),
+        `FOLDSIM_MEM(rvalid), `FOLDSIM_MEM(rdata), `FOLDSIM_MEM(rlast), `FOLDSIM_MEM(rid), `FOLDSIM_MEM(rresp),
+        `FOLDSIM_MEM(bvalid), `FOLDSIM_MEM(bresp), `FOLDSIM_MEM(bid),
         .m_awvalid (m_axi_mem_0_awvalid),
         .m_awready (m_axi_mem_0_awready),
         .m_awaddr  (m_axi_mem_0_awaddr),
@@ -222,10 +222,10 @@ module maxsim_afu #(
     assign m_axi_mem_0_awid = '0;
     assign m_axi_mem_0_arid = '0;
 
-    maxsim_ctrl #(
+    foldsim_ctrl #(
         .DCR_ADDR_W  (DCR_ADDR_W),
         .DCR_DATA_W  (DCR_DATA_W),
-        .NUM_CLASSES (`MAXSIM_NUM_CLASSES)
+        .NUM_CLASSES (`FOLDSIM_NUM_CLASSES)
     ) ctrl (
         .clk               (ap_clk),
         .reset             (reset),
@@ -252,20 +252,20 @@ module maxsim_afu #(
         .mem_error         (mem_error),
         .mem_stall         (mem_stall),
         .profile_finish    (profile_finish),
-        `MAXSIM_IN(reset),
-        `MAXSIM_IN(dcr_req_valid),
-        `MAXSIM_IN(dcr_req_rw),
-        `MAXSIM_IN(dcr_req_addr),
-        `MAXSIM_IN(dcr_req_data),
-        `MAXSIM_IN(start),
-        `MAXSIM_IN(dcr_rsp_valid),
-        `MAXSIM_IN(dcr_rsp_data),
-        `MAXSIM_IN(busy)
+        `FOLDSIM_IN(reset),
+        `FOLDSIM_IN(dcr_req_valid),
+        `FOLDSIM_IN(dcr_req_rw),
+        `FOLDSIM_IN(dcr_req_addr),
+        `FOLDSIM_IN(dcr_req_data),
+        `FOLDSIM_IN(start),
+        `FOLDSIM_IN(dcr_rsp_valid),
+        `FOLDSIM_IN(dcr_rsp_data),
+        `FOLDSIM_IN(busy)
     );
     assign s_axi_control_rresp = 2'b00;
     assign s_axi_control_bresp = 2'b00;
 
-`undef MAXSIM_IN
-`undef MAXSIM_MEM
+`undef FOLDSIM_IN
+`undef FOLDSIM_MEM
 
 endmodule
