@@ -21,7 +21,7 @@
 `ifndef FOLDSIM_REGS_VH
 `define FOLDSIM_REGS_VH
 
-`define FOLDSIM_ID              32'h4D58534D
+`define FOLDSIM_ID              32'h464F4C44
 `define FOLDSIM_VERSION         32'd2
 
 `define FOLDSIM_REG_ID          12'h000
