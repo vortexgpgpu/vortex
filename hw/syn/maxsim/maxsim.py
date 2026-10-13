@@ -29,9 +29,17 @@ import sys
 
 # Passes each model gets before it is threaded: register constants, shared
 # adders and narrowed low bits matter for area once every register of a model
-# is replicated per thread.
-OPTIMIZE = ['hw.module(seq-reg-const-prop)', 'hw.module(comb-share-adders)', 'canonicalize',
-            'hw.module(comb-low-bits-narrowing)', 'canonicalize', 'cse']
+# is replicated per thread. A conditional write of one array element becomes a
+# select per element, and sorting lets CSE merge duplicates whose users come
+# first in a module body.
+OPTIMIZE = ['hw.module(hw-expand-array-writes)', 'hw.module(seq-reg-const-prop)',
+            'hw.module(comb-share-adders)', 'canonicalize', 'hw.module(comb-low-bits-narrowing)',
+            'canonicalize', 'topological-sort', 'cse']
+
+# Logic of up to this many ops that drives a model's input from other models
+# is computed in the model, so the input comes from them directly rather than
+# through the parent's model.
+ABSORB_LOGIC = 64
 
 
 def run(cmd, **kw):
@@ -127,7 +135,7 @@ def main():
         sys.exit(f'classes not in {a.top}: {" ".join(sorted(unused))}')
     passes = []
     for m in order:
-        passes.append(f'maxsim-extract-models{{module={m} models={",".join(sorted(children[m]))} netlist}}')
+        passes.append(f'maxsim-extract-models{{module={m} models={",".join(sorted(children[m]))} netlist absorb-logic={ABSORB_LOGIC}}}')
         fused = [g for g in groups if set(g) <= children[m]]
         if fused:
             passes.append(f'maxsim-fuse-models{{module={m} groups={",".join("+".join(g) for g in fused)}}}')
@@ -135,7 +143,7 @@ def main():
         if not any(set(g) <= children[m] for m in order):
             sys.exit(f'{"+".join(g)}: not instantiated by the same module')
     pipeline = passes + OPTIMIZE + [f'maxsim-compose{{module={a.top} sim=maxsim_sim}}',
-                                    'canonicalize', 'cse']
+                                    'canonicalize', 'topological-sort', 'cse']
     sim = out('maxsim_sim.mlir')
     run([tool('circt-opt'), flat, f'--pass-pipeline=builtin.module({",".join(pipeline)})', '-o', sim])
     sim_text = open(sim).read()

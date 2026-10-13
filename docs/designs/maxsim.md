@@ -85,10 +85,16 @@ HW, Comb and Seq dialects:
    so the socket's netlist is cut out of the top in turn. Bits of a model
    output that are always the same constant stay in the parent, and an input
    driven only by the parent's inputs and constants, or exactly by another
-   model's output, is wired to those directly.
-3. **Clean up the models**: `seq-reg-const-prop`, `comb-share-adders`
-   (`mux(c, a+b, a-b)` → one adder), `comb-low-bits-narrowing` (adders whose
-   operands have known-zero low bits), canonicalization. These are what a
+   model's output, is wired to those directly. Small logic (up to 64 ops)
+   that drives the same input of every instance of a model from other models'
+   outputs is moved into the model (`absorb-logic`), so that input comes from
+   those models rather than through the parent's model.
+3. **Clean up the models**: `hw-expand-array-writes` (a conditional write of
+   one array element becomes a select per element), `seq-reg-const-prop`,
+   `comb-share-adders` (`mux(c, a+b, a-b)` → one adder),
+   `comb-low-bits-narrowing` (adders whose operands have known-zero low bits),
+   canonicalization, and CSE after a topological sort (in a module body, CSE
+   cannot merge a duplicate whose users come first). These are what a
    threaded model's area is sensitive to; ExportVerilog emits sign-extended
    multiplies as `$signed` so Vivado maps them to single DSPs.
 4. **Compose** (`maxsim-compose`). The top netlist's nested netlists are
