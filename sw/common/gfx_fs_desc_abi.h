@@ -91,10 +91,24 @@
 #define GFX_FS_ARG_CLIP     18u
 // Which of a primitive's three records a flat input reads (0 or 2).
 #define GFX_FS_ARG_PROVOKE  19u
-#define GFX_FS_ARG_COUNT    20u
+// Rasterization state: GFX_FS_RAST_PACK(pattern, factor, smooth) | GFX_FS_RAST_CENTRE.
+// With a non-zero factor a line is stippled: a fragment whose counter
+// (SETUP_PRIM_STIPPLE_PLANE) lands on a clear pattern bit is dropped. With smooth
+// set, the fragment's coverage (SETUP_PRIM_SMOOTH_*) scales the alpha of every
+// colour output. With CENTRE set, the draw is rasterized single-sampled into a
+// multisample target (Bresenham and smooth lines): every sample takes the pixel
+// centre's coverage.
+#define GFX_FS_ARG_RAST     20u
+#define GFX_FS_ARG_COUNT    21u
 
 #define GFX_FS_ZPAIR(lo, hi) \
    ((uint64_t)(uint32_t)(int32_t)(lo) | ((uint64_t)(uint32_t)(int32_t)(hi) << 32))
+#define GFX_FS_RAST_PACK(pattern, factor, smooth) \
+   (((uint32_t)(pattern) & 0xffffu) | (((uint32_t)(factor) & 0x1ffu) << 16) \
+    | ((smooth) ? GFX_FS_RAST_SMOOTH : 0u))
+#define GFX_FS_RAST_FACTOR_MASK 0x01ff0000u
+#define GFX_FS_RAST_SMOOTH      0x80000000u
+#define GFX_FS_RAST_CENTRE      0x40000000u
 #define GFX_FS_CLIP_PACK(off, count) \
    (((uint32_t)(off) & 0xffffu) | (((uint32_t)(count) & 0xffu) << 16))
 

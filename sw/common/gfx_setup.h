@@ -225,6 +225,164 @@ static inline setup_rect_t setup_rect(const setup_viewport_t* vp, int width, int
   return r;
 }
 
+// A clip-space vertex moved by (dx, dy) window pixels under rect r: the
+// offset scales with w, so it stays that many pixels after the divide.
+static inline setup_vertex_t clip_offset(const setup_vertex_t& v, float dx, float dy,
+                                         const setup_rect_t& r) {
+  setup_vertex_t o = v;
+  o.pos[0] += dx * v.pos[3] / ((r.R - r.L) * 0.5f);
+  o.pos[1] += dy * v.pos[3] / ((r.B - r.T) * 0.5f);
+  return o;
+}
+
+static inline vec4f clip_to_screen(const setup_vertex_t& v, const setup_rect_t& r) {
+  return ClipToScreen({ v.pos[0], v.pos[1], v.pos[2], v.pos[3] },
+                      r.L, r.R, r.T, r.B, r.zn, r.zf, r.halfz);
+}
+
+// Clip the segment (a, b) against the near plane, in place. False when none of
+// it is in front.
+static inline bool clip_line_near(setup_vertex_t& a, setup_vertex_t& b, bool halfz,
+                                  bool near_clip_off) {
+  const float da = near_dist(a, halfz, near_clip_off), db = near_dist(b, halfz, near_clip_off);
+  if (da < 0.0f && db < 0.0f) {
+    return false;
+  }
+  if (da < 0.0f) {
+    a = vertex_lerp(a, b, da / (da - db));
+  } else if (db < 0.0f) {
+    b = vertex_lerp(b, a, db / (db - da));
+  }
+  return true;
+}
+
+// Bresenham line ends by the diamond-exit rule: the
+// line becomes a parallelogram across its minor axis, its two ends moved along
+// the major axis so that it covers exactly the pixels whose diamond
+// (|x - xc| + |y - yc| < 1/2) the segment exits. a and b are the window
+// positions of the ends; the offsets come back for the end drawn first
+// (`first_is_a` says which) and the other.
+struct line_ends_t {
+  bool  xmajor, first_is_a;
+  float first_dx, first_dy, last_dx, last_dy;
+};
+
+// floor() through a round-down conversion: a float floor lowers to a branchy
+// sequence the divergent code generator does not take, and window
+// coordinates fit an int.
+static inline float floor_w(float f) { return (float)(int32_t)__builtin_floorf(f); }
+static inline float fracf_pos(float f) { return f - floor_w(f); }
+
+static inline line_ends_t bresenham_line_ends(float ax, float ay, float bx, float by) {
+  auto sgn = [](float x) { return x >= 0.0f; };
+  line_ends_t e{};
+  const float dx = ax - bx, dy = ay - by;
+  float x1diff = ax - floor_w(ax) - 0.5f, y1diff = ay - floor_w(ay) - 0.5f;
+  float x2diff = bx - floor_w(bx) - 0.5f, y2diff = by - floor_w(by) - 0.5f;
+  bool draw_start, draw_end, will_start, will_end;
+  float xo = 0.0f, yo = 0.0f, xoe = 0.0f, yoe = 0.0f;
+  e.xmajor = __builtin_fabsf(dx) >= __builtin_fabsf(dy);
+  if (e.xmajor) {
+    const float dydx = dy / dx;
+    if (y2diff == -0.5f && dy < 0.0f) {
+      y2diff = 0.5f;
+    }
+    if (__builtin_fabsf(x1diff) + __builtin_fabsf(y1diff) < 0.5f) {
+      draw_start = true;
+    } else if (sgn(x1diff) == sgn(-dx)) {
+      draw_start = false;
+    } else if (sgn(-y1diff) != sgn(dy)) {
+      draw_start = true;
+    } else {
+      const float yi = fracf_pos(ay) + x1diff * dydx;
+      draw_start = yi < 1.0f && yi > 0.0f;
+    }
+    if (__builtin_fabsf(x2diff) + __builtin_fabsf(y2diff) < 0.5f) {
+      draw_end = false;
+    } else if (sgn(x2diff) != sgn(-dx)) {
+      draw_end = false;
+    } else if (sgn(-y2diff) == sgn(dy)) {
+      draw_end = true;
+    } else {
+      const float yi = fracf_pos(by) + x2diff * dydx;
+      draw_end = yi < 1.0f && yi > 0.0f;
+    }
+    if (dx < 0.0f) {
+      e.first_is_a = false;
+      will_start = x1diff <= 0.0f;
+      if (will_start != draw_start) { xoe = -x1diff - 0.5f; yoe = xoe * dydx; }
+      will_end = x2diff > 0.0f;
+      if (will_end != draw_end) { xo = -x2diff - 0.5f; yo = xo * dydx; }
+    } else {
+      e.first_is_a = true;
+      will_start = x1diff > 0.0f;
+      if (will_start != draw_start) { xo = -x1diff + 0.5f; yo = xo * dydx; }
+      will_end = x2diff <= 0.0f;
+      if (will_end != draw_end) { xoe = -x2diff + 0.5f; yoe = xoe * dydx; }
+    }
+  } else {
+    const float dxdy = dx / dy;
+    if (x2diff == -0.5f && dx < 0.0f) {
+      x2diff = 0.5f;
+    }
+    if (__builtin_fabsf(x1diff) + __builtin_fabsf(y1diff) < 0.5f) {
+      draw_start = true;
+    } else if (sgn(-y1diff) == sgn(dy)) {
+      draw_start = false;
+    } else if (sgn(x1diff) != sgn(-dx)) {
+      draw_start = true;
+    } else {
+      const float xi = fracf_pos(ax) + y1diff * dxdy;
+      draw_start = xi < 1.0f && xi > 0.0f;
+    }
+    if (__builtin_fabsf(x2diff) + __builtin_fabsf(y2diff) < 0.5f) {
+      draw_end = false;
+    } else if (sgn(-y2diff) != sgn(dy)) {
+      draw_end = false;
+    } else if (sgn(x2diff) == sgn(-dx)) {
+      draw_end = true;
+    } else {
+      const float xi = fracf_pos(bx) + y2diff * dxdy;
+      draw_end = xi < 1.0f && xi >= 0.0f;
+    }
+    if (dy > 0.0f) {
+      e.first_is_a = false;
+      will_start = y1diff > 0.0f;
+      will_end = y2diff <= 0.0f;
+      if (will_start != draw_start) { yoe = -y1diff + 0.5f; xoe = yoe * dxdy; }
+      if (will_end != draw_end) { yo = -y2diff + 0.5f; xo = yo * dxdy; }
+    } else {
+      e.first_is_a = true;
+      will_start = y1diff <= 0.0f;
+      will_end = y2diff > 0.0f;
+      if (will_start != draw_start) { yo = -y1diff - 0.5f; xo = yo * dxdy; }
+      if (will_end != draw_end) { yoe = -y2diff - 0.5f; xoe = yoe * dxdy; }
+    }
+  }
+  e.first_dx = xo; e.first_dy = yo; e.last_dx = xoe; e.last_dy = yoe;
+  return e;
+}
+
+// The facing of triangle (v0, v1, v2) as EdgeEquation decides it: 0 front,
+// 1 back, -1 when it is culled or has no area. A polygon drawn as lines or
+// points is culled and faced as the triangle it is.
+static inline int triangle_facing(const setup_vertex_t& v0, const setup_vertex_t& v1,
+                                  const setup_vertex_t& v2, const setup_rect_t& r,
+                                  uint32_t cull_mode, uint32_t front_face) {
+  const vec4f p0 = ClipToHDC({ v0.pos[0], v0.pos[1], v0.pos[2], v0.pos[3] },
+                             r.L, r.R, r.T, r.B, r.zn, r.zf, r.halfz);
+  const vec4f p1 = ClipToHDC({ v1.pos[0], v1.pos[1], v1.pos[2], v1.pos[3] },
+                             r.L, r.R, r.T, r.B, r.zn, r.zf, r.halfz);
+  const vec4f p2 = ClipToHDC({ v2.pos[0], v2.pos[1], v2.pos[2], v2.pos[3] },
+                             r.L, r.R, r.T, r.B, r.zn, r.zf, r.halfz);
+  vec3f edges[3];
+  bool back = false;
+  if (!EdgeEquation(edges, p0, p1, p2, cull_mode, &back, front_face)) {
+    return -1;
+  }
+  return back ? 1 : 0;
+}
+
 // Barycentric planes of a source triangle (rast_vary_t). The 2DH edge functions
 // evaluated at a pixel are proportional to its perspective-correct barycentrics,
 // whatever their common scale and sign, so no winding flip or normalization is
@@ -249,6 +407,17 @@ static inline void setup_vary_planes(const setup_vertex_t& v0, const setup_verte
     bary[i][1] = ey;
     bary[i][2] = ez + 0.5f * (ex + ey);
   }
+}
+
+// The window-depth gradients (dz/dx, dz/dy) of the plane through three screen
+// vertices; zero for a degenerate triangle.
+static inline void depth_plane_slopes(const vec4f& ps0, const vec4f& ps1, const vec4f& ps2,
+                                      float& za, float& zb) {
+  const float twice_area = (ps1.x - ps0.x) * (ps2.y - ps0.y)
+                         - (ps2.x - ps0.x) * (ps1.y - ps0.y);
+  const float inv = (twice_area != 0.0f) ? (1.0f / twice_area) : 0.0f;
+  za = ((ps1.z - ps0.z) * (ps2.y - ps0.y) - (ps2.z - ps0.z) * (ps1.y - ps0.y)) * inv;
+  zb = ((ps2.z - ps0.z) * (ps1.x - ps0.x) - (ps1.z - ps0.z) * (ps2.x - ps0.x)) * inv;
 }
 
 // The bias setup_depth_bias_t describes, for a depth plane of gradients za, zb
@@ -302,6 +471,8 @@ static inline bool trivialize_edges(vec3f edges[3], int width, int height) {
 // Full per-triangle setup. Fills out_prim (edges + attrib deltas) and out_bbox
 // (screen bbox clamped to the render target). Returns false when the triangle
 // is culled (degenerate or empty bbox) — matching Binning()'s two `continue`s.
+// `zbias` is a depth bias computed elsewhere (a polygon drawn as lines or points
+// takes its source triangle's), added to the one `bias` describes.
 // vp carries the app viewport transform; nullptr => the default full-framebuffer
 // y-down viewport (screen = ndc mapped onto [0,width] x [0,height], y-down).
 static inline bool setup_triangle(const setup_vertex_t& v0,
@@ -313,7 +484,8 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
                                   const setup_viewport_t* vp = nullptr,
                                   uint32_t front_face = SETUP_FRONT_POSITIVE,
                                   bool coverage_only = false,
-                                  const setup_depth_bias_t* bias = nullptr) {
+                                  const setup_depth_bias_t* bias = nullptr,
+                                  float zbias = 0.0f) {
   vec4f p0 = { v0.pos[0], v0.pos[1], v0.pos[2], v0.pos[3] };
   vec4f p1 = { v1.pos[0], v1.pos[1], v1.pos[2], v1.pos[3] };
   vec4f p2 = { v2.pos[0], v2.pos[1], v2.pos[2], v2.pos[3] };
@@ -382,21 +554,16 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
   // fixed-point MAC, so early-Z and late-Z agree bit-for-bit. attribs.z carries
   // {x:A', y:B', z:C'} (not the {a0-a2,a1-a2,a2} deltas used by the other attrs).
   {
-    float twice_area = (ps1.x - ps0.x) * (ps2.y - ps0.y)
-                     - (ps2.x - ps0.x) * (ps1.y - ps0.y);
-    float inv = (twice_area != 0.0f) ? (1.0f / twice_area) : 0.0f;
-    float za = ((ps1.z - ps0.z) * (ps2.y - ps0.y)
-              - (ps2.z - ps0.z) * (ps1.y - ps0.y)) * inv;   // dz/dx
-    float zb = ((ps2.z - ps0.z) * (ps1.x - ps0.x)
-              - (ps1.z - ps0.z) * (ps2.x - ps0.x)) * inv;   // dz/dy
+    float za, zb;
+    depth_plane_slopes(ps0, ps1, ps2, za, zb);
     // C' evaluated so an integer-pixel MAC samples Z at the pixel center
     // (X+0.5, Y+0.5) — matching the +0.5 half-pixel offset the coverage edges use.
     float zc = ps0.z - za * ps0.x - zb * ps0.y + 0.5f * (za + zb);
-    float zo = 0.0f;
+    float zo = zbias;
     if (bias && bias->enable) {
-      zo = depth_bias_offset(*bias, za, zb, ps0.z, ps1.z, ps2.z);
-      zc += zo;
+      zo += depth_bias_offset(*bias, za, zb, ps0.z, ps1.z, ps2.z);
     }
+    zc += zo;
     // A vertex just past w = 0 (no near clip) projects to an enormous depth;
     // the coefficients saturate rather than wrap the fixed-point range.
     out_prim.attribs.z.x = FloatA(fsat_a(za));

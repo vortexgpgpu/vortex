@@ -103,6 +103,44 @@ typedef struct {
 // includes (FloatA, window-z units): depth clipping tests the depth before bias.
 #define SETUP_PRIM_DEPTH_BIAS(prim) ((prim).attribs.r.x)
 
+#define SETUP_PRIM_TRIANGLE 0
+#define SETUP_PRIM_LINE     1
+#define SETUP_PRIM_POINT    2
+#define SETUP_PRIM_POLYGON  3
+
+#define SETUP_POLY_FILL  0
+#define SETUP_POLY_LINE  1
+#define SETUP_POLY_POINT 2
+
+// A line is a rectangle along it (VkLineRasterizationModeKHR RECTANGULAR, the
+// strictLines default), a parallelogram offset along the minor axis
+// (BRESENHAM: the diamond-exit rule's coverage for one-pixel lines), or a
+// rectangle half a pixel larger on every side whose fragments take their
+// coverage into alpha (RECTANGULAR_SMOOTH).
+#define SETUP_LINE_RECT      0
+#define SETUP_LINE_BRESENHAM 1
+#define SETUP_LINE_SMOOTH    2
+
+// A point primitive's record carries its centre (window x, y) and size, for
+// gl_PointCoord, in another plane a coverage-only record leaves unused; the
+// three words are floats.
+#define SETUP_PRIM_POINT_PLANE(prim) ((prim).attribs.g)
+
+// A line primitive's record carries its stipple counter as a window-space plane
+// (x, y, constant; floats): the counter at a pixel centre is the segment's start
+// count plus its distance along the line -- Euclidean for a rectangular line,
+// along the major axis for a Bresenham one.
+#define SETUP_PRIM_STIPPLE_PLANE(prim) ((prim).attribs.b)
+
+// A smooth line's record carries what its coverage is computed from, as floats:
+// the window-space planes of the signed distance across the line and along it
+// from its midpoint, and (half width, half length, length) of the drawn
+// rectangle. A fragment's coverage is
+//   sat(half_width - |across|) * min(sat(half_length - |along|), length).
+#define SETUP_PRIM_SMOOTH_ACROSS(prim) ((prim).attribs.a)
+#define SETUP_PRIM_SMOOTH_ALONG(prim)  ((prim).attribs.u)
+#define SETUP_PRIM_SMOOTH_SIZE(prim)   ((prim).attribs.v)
+
 #define SETUP_CULL_DIST_PACK(off, count) \
   (((uint32_t)(off) & 0xffffu) | (((uint32_t)(count) & 0xffu) << 16))
 #define SETUP_CULL_DIST_OFF(w)   ((w) & 0xffffu)
@@ -151,22 +189,24 @@ typedef struct {
 // the fragment stage interpolates them straight out of the VS output records
 // with perspective-correct barycentrics, beta_i = F_i / (F_0 + F_1 + F_2), where
 // F_i = bary[i][0]*x + bary[i][1]*y + bary[i][2] at integer pixel (x,y) (the
-// half-pixel centre offset is folded into bary[i][2]). The planes are the 2DH
-// edge functions of the SOURCE triangle, so the barycentrics stay exact for
-// every visible pixel of a near-clipped triangle's subtriangles, and clipping
-// never touches a varying. vbase indexes the source triangle's first VS record;
-// its three vertices are records vbase..vbase+2, the first being provoking.
+// half-pixel centre offset is folded into bary[i][2]), and a smooth input is
+// sum(beta_i * record vrec[i]). For a triangle the planes are the 2DH edge
+// functions of the SOURCE triangle, so the barycentrics stay exact for every
+// visible pixel of a near-clipped triangle's subtriangles, and clipping never
+// touches a varying. A line keeps two planes (start, end) and a point one
+// constant plane; a plane that is zero leaves its record free to be the one a
+// flat input reads, which is vrec[0] or vrec[2] by the provoking-vertex mode.
 typedef struct {
   float    bary[3][3];
-  uint32_t vbase;
-  uint32_t pad[3];
+  uint32_t vrec[3];
+  uint32_t pad;
 } rast_vary_t;
 
 // Per-launch front-end argument block. Addresses are device byte addresses;
 // counts/config are runtime values the kernels read (so launch dims and pool
 // addresses can stay static while the work scales with the in-memory counts).
 typedef struct {
-  uint32_t num_tris;
+  uint32_t num_tris;      // primitives, of prim_type
   uint32_t stage;
   uint32_t width, height;
   uint32_t bin_stripe;    // bins per CTA (contiguous) for HIST/SCATTER
@@ -192,19 +232,42 @@ typedef struct {
   // offset, count). A primitive whose vertices all have one distance negative
   // is dropped. 0 = none.
   uint32_t cull_dist;
-  uint32_t pad1_;
+  // What one primitive is (SETUP_PRIM_*): triangle t reads records 3t..3t+2, line
+  // t records 2t, 2t+1, point t record t, and a polygon drawn in line or point
+  // mode takes three primitives per triangle, edge or vertex t%3 of triangle t/3.
+  // An instanced draw numbers primitives and records within each instance.
+  uint32_t prim_type;
+  uint32_t line_mode;     // SETUP_LINE_*
+  uint32_t poly_front, poly_back; // SETUP_POLY_* for SETUP_PRIM_POLYGON, by facing
+  uint32_t provoke_last;  // flat inputs take a primitive's last vertex
+  // gl_PointSize in the VS records (byte offset), or 0 for point_size: offset 0
+  // holds the position.
+  uint32_t psize_off;
+  float    line_width, point_size;
+  float    point_size_max;  // a point's size is clamped to [0, point_size_max]
+  // 1: the lines are the consecutive segments of one stippled strip, so the
+  // stipple counter runs on from one segment to the next instead of restarting.
+  uint32_t stipple_strip;
+  // Primitives and VS records per instance of an instanced draw; 0: one instance.
+  uint32_t inst_prims;
   uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in, when vsrec_addr is 0)
-  // VS output records (in): when set, triangle t's vertices are records 3t..3t+2,
-  // vstride bytes apart, each starting with the clip-space position; setup reads
-  // positions from them, carries no varying planes, and EMIT writes vary_addr.
+  // VS output records (in): when set, a primitive's vertices are records as
+  // prim_type says, vstride bytes apart, each starting with the clip-space
+  // position; setup reads positions from them, carries no varying planes, and
+  // EMIT writes vary_addr.
   uint64_t vsrec_addr;
   uint32_t vstride;
-  uint32_t pad0_;
+  uint32_t inst_verts;
+  // With stipple_strip: a uint32 bitmask over one instance's segments, bit t set
+  // when segment t begins a new run of the strip (primitive restart), where the
+  // counter restarts. 0 = one run.
+  uint64_t strip_head_addr;
   uint64_t slot_prim_addr; // rast_prim_t[num_tris*MAX_SUB]   (scratch)
   uint64_t slot_bbox_addr; // setup_bbox_t[num_tris*MAX_SUB]  (scratch)
   uint64_t keep_addr;      // uint32[num_tris]                (scratch)
   uint64_t offset_addr;    // uint32[num_tris + 1]            (scratch)
   uint64_t tsum_addr;      // uint32[T]                       (scratch)
+  uint64_t stipple_addr;   // uint32[num_tris]: steps, then start (scratch, with stipple_strip)
   uint64_t prim_addr;      // rast_prim_t[num_tris*MAX_SUB]   (out: dense primbuf, pinned)
   uint64_t bbox_addr;      // setup_bbox_t[num_tris*MAX_SUB]  (dense: setup out / binning in)
   uint64_t bcount_addr;    // uint32[P]                       (scratch)
