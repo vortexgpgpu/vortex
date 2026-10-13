@@ -177,6 +177,7 @@ module foldsim_afu #(
     wire [7:0]  mem_max_reads, mem_max_writes;
     wire [63:0] mem_base;
     wire        mem_idle, mem_error, mem_stall;
+    wire        mem_reset_valid, mem_reset_ready, mem_reset_bits;
 
     foldsim_mem #(
         .ID_W   (TARGET_ID_W),
@@ -193,6 +194,9 @@ module foldsim_afu #(
         .idle          (mem_idle),
         .error         (mem_error),
         .stall         (mem_stall),
+        .treset_valid  (mem_reset_valid),
+        .treset_ready  (mem_reset_ready),
+        .treset_bits   (mem_reset_bits),
         `FOLDSIM_MEM(awvalid), `FOLDSIM_MEM(awaddr), `FOLDSIM_MEM(awid), `FOLDSIM_MEM(awlen),
         `FOLDSIM_MEM(wvalid), `FOLDSIM_MEM(wdata), `FOLDSIM_MEM(wstrb), `FOLDSIM_MEM(wlast),
         `FOLDSIM_MEM(arvalid), `FOLDSIM_MEM(araddr), `FOLDSIM_MEM(arid), `FOLDSIM_MEM(arlen),
@@ -252,6 +256,9 @@ module foldsim_afu #(
         .mem_error         (mem_error),
         .mem_stall         (mem_stall),
         .profile_finish    (profile_finish),
+        .mem_reset_valid   (mem_reset_valid),
+        .mem_reset_ready   (mem_reset_ready),
+        .mem_reset_bits    (mem_reset_bits),
         `FOLDSIM_IN(reset),
         `FOLDSIM_IN(dcr_req_valid),
         `FOLDSIM_IN(dcr_req_rw),
