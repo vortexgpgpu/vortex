@@ -1285,6 +1285,15 @@ The converted read is exact on every cycle after the first clock edge. Each
 elaboration writes `<netlist>.memories.rpt`, one line per asynchronous-read
 RAM with its size, hint and decision.
 
+A converted RAM returns the data written in the same cycle, as the
+asynchronous read did (write-first). The elaborated netlist states this to
+Vivado with `rw_addr_collision = "yes"`, and the ports of every RAM share one
+clock net, so Vivado keeps each RAM's read-under-write behavior. A block RAM
+whose ports Vivado takes as independently clocked returns undefined bits when
+a read meets a write to the same address; simulation never shows it. To
+check a netlist, read the block RAM primitives' `WRITE_MODE_A/B` and
+`CLOCK_DOMAINS`, not the synthesis report's mapping table.
+
 ---
 
 ### VX_fifo_queue

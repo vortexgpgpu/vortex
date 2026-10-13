@@ -389,14 +389,14 @@ module VX_sp_ram #(
                 end
             end else begin : g_read_first
                 if (WRENW != 1) begin : g_wren
-                    `NO_RW_RAM_CHECK `USE_BLOCK_BRAM `RAM_ARRAY_WREN
+                    `RW_RAM_CHECK `USE_BLOCK_BRAM `RAM_ARRAY_WREN
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
                         `RAM_WRITE_WREN
                     end
                     assign rdata = ram[addr];
                 end else begin : g_no_wren
-                    `NO_RW_RAM_CHECK `USE_BLOCK_BRAM reg [DATAW-1:0] ram [0:SIZE-1];
+                    `RW_RAM_CHECK `USE_BLOCK_BRAM reg [DATAW-1:0] ram [0:SIZE-1];
                     `RAM_INITIALIZATION
                     always @(posedge clk) begin
                         `RAM_WRITE_ALL
