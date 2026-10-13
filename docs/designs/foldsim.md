@@ -223,8 +223,8 @@ that timed out — and from then on every register access the runtime core
 makes fails, and the launch, DCR access or copy that hit it fails with it. A
 launch longer than `VORTEX_FOLDSIM_TIMEOUT_S` seconds is such an error (no
 limit by default), as is a command the target does not take, a DCR read it
-does not answer, or a reset it does not finish within that time (60 s when
-it is unset).
+does not answer, or a reset it does not finish while its target cycles stop
+advancing for that time (60 s when it is unset).
 
 ---
 
