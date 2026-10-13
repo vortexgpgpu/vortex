@@ -1187,6 +1187,9 @@ cmake -G Ninja -S $FOLDSIM_SRC -B $FOLDSIM_SRC/build \
   `FOLDSIM_PATH ?= $(TOOLDIR)/foldsim` and `FOLDSIM ?= $(FOLDSIM_PATH)/bin/foldsim`.
 - A CIRCT change foldsim's passes rely on lands in CIRCT first; both
   prebuilts are refreshed together.
+- The prebuilt is opt-in: `./ci/toolchain_install.sh --foldsim` (or `--all`)
+  installs it; the default install leaves it out, since only the foldsim
+  flow needs it.
 
 ---
 
@@ -1270,6 +1273,9 @@ Both accept the same per-component flags:
 --all      (every component above; SST is NOT included — see §11)
 ```
 
+With no flag, `ci/toolchain_install.sh` installs every component but the
+opt-in `foldsim` and `gem5`; `--all` adds them.
+
 > **Note**: `--all` covers every component in this list except SST.
 > SST is intentionally not packaged as a prebuilt (autoconf bakes
 > absolute paths into `sstsimulator.conf` and the `sst` wrapper
@@ -1313,7 +1319,7 @@ split parts) from the `vortex-toolchain-prebuilt` repo at the
 directory:
 
 ```bash
-# install the full toolchain:
+# install the toolchain (all but the opt-in foldsim and gem5):
 ./ci/toolchain_install.sh
 
 # or refresh a single component (e.g. after a new POCL release):
