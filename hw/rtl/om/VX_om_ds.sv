@@ -131,7 +131,9 @@ module VX_om_ds import VX_om_pkg::*; #(
     wire [NUM_LANES-1:0] pass;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_stencil_write
-        assign depth_write[i] = (dpass_s[i] && dcrs.depth_writemask) ? depth_ref_s[i] : depth_val_s[i];
+        // A fragment that fails the stencil test is not depth tested: the word
+        // still goes back for the stencil op, so its depth must be the old one.
+        assign depth_write[i] = (spass_s[i] && dpass_s[i] && dcrs.depth_writemask) ? depth_ref_s[i] : depth_val_s[i];
         for (genvar j = 0; j < `VX_OM_STENCIL_BITS; ++j) begin : g_j
             assign stencil_write[i][j] = dcrs.stencil_writemask[face_s[i]][j] ? stencil_result[i][j] : stencil_val_s[i][j];
         end

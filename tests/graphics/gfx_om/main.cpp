@@ -61,6 +61,7 @@ uint32_t depth = TFixed<24>(0.5f).data();
 
 bool blend_enable = false;
 bool depth_enable = false;
+bool stencil_enable = false;   // -s : stencil test + ops on a striped stencil
 bool backface     = false;
 bool sw_path      = false;   // -S : merge via gfx_sw::om_fragment
 bool mrt_enable   = false;   // -m : also render to a second colour attachment
@@ -73,6 +74,21 @@ const uint32_t kRt1Mask  = 0x0000ff00;   // CBUF_WRITEMASK 0b0010: green only
 
 uint32_t clear_color = 0x00000000;
 uint32_t clear_depth = TFixed<24>(0.5f).data();
+
+// Stencil state under -s: EQUAL to 1, with a different op for each outcome so
+// the result names the path a fragment took. Without -s the test is off.
+struct stencil_cfg_t { uint32_t func, ref, writemask, fail, zfail, zpass; };
+static stencil_cfg_t kStencil = { VX_OM_DEPTH_FUNC_ALWAYS, 0, 0,
+                                  VX_OM_STENCIL_OP_KEEP, VX_OM_STENCIL_OP_KEEP,
+                                  VX_OM_STENCIL_OP_KEEP };
+
+// The depth/stencil word a pixel starts with: a depth checkerboard of 0.0 and
+// 0.99, and under -s stencil 1 on odd rows.
+static uint32_t initial_depthstencil(uint32_t x, uint32_t y) {
+  uint32_t z = ((x & 1) == (y & 1)) ? TFixed<24>(0.0f).data() : TFixed<24>(0.99f).data();
+  uint32_t s = stencil_enable ? (y & 1) : 0;
+  return (s << VX_OM_DEPTH_BITS) | z;
+}
 
 uint32_t dst_width  = 128;
 uint32_t dst_height = 128;
@@ -92,12 +108,12 @@ uint64_t    cbuf1_addr = 0;
 
 static void show_usage() {
    std::cout << "Vortex Render Output Test (v2 KMU)." << std::endl;
-   std::cout << "Usage: [-c color] [-d depth] [-b blend] [-m mrt] [-n mrt attachment] [-f face] [-k kernel] [-o image] [-r reference] [-w width] [-h height]" << std::endl;
+   std::cout << "Usage: [-c color] [-d depth] [-s stencil] [-b blend] [-m mrt] [-n mrt attachment] [-f face] [-k kernel] [-o image] [-r reference] [-w width] [-h height]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:bdfmS?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:bdfmsS?")) != -1) {
     switch (c) {
     case 'o': output_file = optarg; break;
     case 'r': reference_file = optarg; break;
@@ -107,6 +123,7 @@ static void parse_args(int argc, char **argv) {
     case 'f': backface = true; break;
     case 'c': color = std::atoi(optarg); break;
     case 'd': depth_enable = true; break;
+    case 's': stencil_enable = depth_enable = true; break;
     case 'b': blend_enable = true; break;
     case 'm': mrt_enable = true; break;
     case 'n': mrt_rt = std::atoi(optarg); break;
@@ -126,6 +143,11 @@ static void parse_args(int argc, char **argv) {
     std::cout << "Error: -m and -d cannot be combined: several colour attachments "
                  "share the depth buffer, which the depth write would then change "
                  "between one attachment and the next" << std::endl;
+    exit(1);
+  }
+  if (stencil_enable && (mrt_enable || blend_enable)) {
+    std::cout << "Error: -s checks every pixel against the unblended single-attachment "
+                 "colour, so it takes neither -m nor -b" << std::endl;
     exit(1);
   }
   if (mrt_rt != 0 && !mrt_enable) {
@@ -160,6 +182,10 @@ void cleanup() {
 
 int main(int argc, char *argv[]) {
   parse_args(argc, argv);
+  if (stencil_enable) {
+    kStencil = { VX_OM_DEPTH_FUNC_EQUAL, 1, OM_STENCIL_MASK, VX_OM_STENCIL_OP_INCR,
+                 VX_OM_STENCIL_OP_ZERO, VX_OM_STENCIL_OP_INVERT };
+  }
 
   RT_CHECK(vx_device_open(0, &device));
 
@@ -201,14 +227,12 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_buffer_address(color_buffer1, &cbuf1_addr));
   }
 
-  // depth checkerboard prefill.
+  // depth checkerboard prefill; under -s, stencil 1 on odd rows.
   {
     std::vector<uint32_t> staging(dst_width * dst_height);
     for (uint32_t y = 0; y < dst_height; ++y) {
       for (uint32_t x = 0; x < dst_width; ++x) {
-        staging[x + y * dst_width] = ((x & 1) == (y & 1))
-            ? TFixed<24>(0.0f).data()
-            : TFixed<24>(0.99f).data();
+        staging[x + y * dst_width] = initial_depthstencil(x, y);
       }
     }
     vx_event_h ev = nullptr;
@@ -260,17 +284,15 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_WRITEMASK, 0, 0, nullptr, nullptr));
   }
 
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_FUNC,
-                        (VX_OM_DEPTH_FUNC_ALWAYS << 16) | VX_OM_DEPTH_FUNC_ALWAYS, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_ZPASS,
-                        (VX_OM_STENCIL_OP_KEEP << 16) | VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_ZFAIL,
-                        (VX_OM_STENCIL_OP_KEEP << 16) | VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_FAIL,
-                        (VX_OM_STENCIL_OP_KEEP << 16) | VX_OM_STENCIL_OP_KEEP, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_REF,        0, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_MASK,       OM_STENCIL_MASK, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_WRITEMASK,  0, 0, nullptr, nullptr));
+  // Both faces take the same stencil state.
+  auto both = [](uint32_t v) { return (v << 16) | v; };
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_FUNC,  both(kStencil.func), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_ZPASS, both(kStencil.zpass), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_ZFAIL, both(kStencil.zfail), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_FAIL,  both(kStencil.fail), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_REF,   both(kStencil.ref), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_MASK,  both(OM_STENCIL_MASK), 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_STENCIL_WRITEMASK, both(kStencil.writemask), 0, nullptr, nullptr));
 
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_BLEND_MODE,
                         (VX_OM_BLEND_MODE_ADD << 16) | VX_OM_BLEND_MODE_ADD, 0, nullptr, nullptr));
@@ -341,13 +363,13 @@ int main(int argc, char *argv[]) {
   om.depth_func      = depth_enable ? VX_OM_DEPTH_FUNC_LESS : VX_OM_DEPTH_FUNC_ALWAYS;
   om.depth_writemask = depth_enable ? 1u : 0u;
   for (int f = 0; f < 2; ++f) {
-    om.stencil_func[f]      = VX_OM_DEPTH_FUNC_ALWAYS;
-    om.stencil_zpass[f]     = VX_OM_STENCIL_OP_KEEP;
-    om.stencil_zfail[f]     = VX_OM_STENCIL_OP_KEEP;
-    om.stencil_fail[f]      = VX_OM_STENCIL_OP_KEEP;
-    om.stencil_ref[f]       = 0;
+    om.stencil_func[f]      = kStencil.func;
+    om.stencil_zpass[f]     = kStencil.zpass;
+    om.stencil_zfail[f]     = kStencil.zfail;
+    om.stencil_fail[f]      = kStencil.fail;
+    om.stencil_ref[f]       = kStencil.ref;
     om.stencil_mask[f]      = OM_STENCIL_MASK;
-    om.stencil_writemask[f] = 0;
+    om.stencil_writemask[f] = kStencil.writemask;
   }
   om.blend_mode_rgb = VX_OM_BLEND_MODE_ADD;
   om.blend_mode_a   = VX_OM_BLEND_MODE_ADD;
@@ -441,9 +463,55 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  // -s: every depth/stencil word against the outcome of its own tests. The
+  // stencil fails on even rows, where neither depth nor colour may change even
+  // when the depth test would pass; it passes on odd rows, where the depth
+  // checkerboard decides. Each outcome takes a different stencil op.
+  int ds_errors = 0;
+  if (stencil_enable) {
+    std::vector<uint32_t> zs(zbuf_size / 4), cb(cbuf_size / 4);
+    vx_event_h read_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, zs.data(), depth_buffer, 0, zbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    RT_CHECK(vx_enqueue_read(queue, cb.data(), color_buffer, 0, cbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    for (uint32_t y = 0; y < dst_height && ds_errors < 16; ++y) {
+      for (uint32_t x = 0; x < dst_width && ds_errors < 16; ++x) {
+        const uint32_t init = initial_depthstencil(x, y);
+        const uint32_t z0 = init & OM_DEPTH_MASK, s0 = init >> VX_OM_DEPTH_BITS;
+        const bool spass = s0 == kStencil.ref;
+        const bool dpass = depth < z0;
+        uint32_t s1, z1 = z0;
+        if (!spass) {
+          s1 = s0 + 1;                // INCR
+        } else if (!dpass) {
+          s1 = 0;                     // ZERO
+        } else {
+          s1 = ~s0 & OM_STENCIL_MASK; // INVERT
+          z1 = depth;
+        }
+        const uint32_t src = 0xff000000u
+                           | (((x * kernel_arg.r_scale_q16) >> 16) << 16)
+                           | (((y * kernel_arg.g_scale_q16) >> 16) <<  8)
+                           |  (((x + y) * kernel_arg.b_scale_q16) >> 16);
+        const uint32_t want_zs = (s1 << VX_OM_DEPTH_BITS) | z1;
+        const uint32_t want_c  = (spass && dpass) ? src : clear_color;
+        const uint32_t got_zs = zs[x + y * dst_width], got_c = cb[x + y * dst_width];
+        if (got_zs != want_zs || got_c != want_c) {
+          std::cout << "FAILED: depth/stencil at (" << x << "," << y << "): got 0x"
+                    << std::hex << got_zs << "/0x" << got_c << ", expected 0x" << want_zs
+                    << "/0x" << want_c << std::dec << std::endl;
+          ++ds_errors;
+        }
+      }
+    }
+  }
+
   cleanup();
 
-  if (mrt_errors != 0) {
+  if (mrt_errors != 0 || ds_errors != 0) {
     return 1;
   }
 

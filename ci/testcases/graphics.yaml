@@ -642,6 +642,20 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -r whitebox_128.png -S
+# Stencil test and ops against every depth/stencil word, on the fixed-function
+# and the software merger: a stencil failure must leave depth untouched.
+- id: gfx_om-stencil
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -s
+- id: gfx_om-stencil-sw
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -s -S
 - id: gfx_raster-sw
   via: blackbox
   drivers: [simx]
