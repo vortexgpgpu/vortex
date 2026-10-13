@@ -242,12 +242,14 @@ PLATFORM_DEFINES += -DPLATFORM_MEMORY_ID_WIDTH=4
 # synthesis (the V80's reconfigurable partition has no BUFGCE, and a fabric gate
 # is not safe; see FireSimFabricClockGate). That conversion cannot enter a
 # vendor core: each is synthesized out of context behind a kept hierarchy, so
-# it would stay on a logic-driven clock and the platform build rejects it. The
-# RTU is the only unit that reaches for them by default, so it uses the soft
-# FMA and divider here -- the same RTL the metasimulator runs -- with the soft
-# divider's latency in place of xil_fdiv's.
+# it would stay on a logic-driven clock and the platform build rejects it. So
+# no unit may take one here: the FPU is the STD one, as in the metasimulator,
+# its units' copies in the flattened tree take their soft path (VENDOR_FP_UNITS
+# below), and the RTU uses the soft FMA and divider, with the soft divider's
+# latency in place of xil_fdiv's.
 ifeq ($(FIRESIM_PLATFORM), aved)
-PLATFORM_DEFINES += -DVX_CFG_RTU_USE_DSP=0 -DVX_CFG_RTU_FDIV_LATENCY=17
+PLATFORM_DEFINES += -DVX_CFG_FPU_TYPE_STD -DVX_CFG_RTU_USE_DSP=0 -DVX_CFG_RTU_FDIV_LATENCY=17
+VENDOR_FP_UNITS := VX_fma_unit.sv VX_fdiv_unit.sv VX_fsqrt_unit.sv
 endif
 
 # Vortex's performance counters are the only view inside the core that does not
@@ -359,6 +361,12 @@ $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 		rm -f $(VIVADO_SRCS_DIR)/$$f; \
 		grep -v "/$$f$$" $(VIVADO_SRCS_LIST) > $(VIVADO_SRCS_LIST).tmp && \
 			mv $(VIVADO_SRCS_LIST).tmp $(VIVADO_SRCS_LIST); \
+	done
+	@for f in $(VENDOR_FP_UNITS); do \
+		[ -f $(VIVADO_SRCS_DIR)/$$f ] || continue; \
+		grep -q 'localparam VENDOR_OK = 1;' $(VIVADO_SRCS_DIR)/$$f || \
+			{ echo "ERROR: $$f no longer selects its vendor core by VENDOR_OK"; exit 1; }; \
+		sed -i 's/localparam VENDOR_OK = 1;/localparam VENDOR_OK = 0;/' $(VIVADO_SRCS_DIR)/$$f; \
 	done
 	@# gen_sources.sh lists packages in find(1) order, which is directory order,
 	@# not dependency order. Synthesis reorders on its own; a simulator compiles
