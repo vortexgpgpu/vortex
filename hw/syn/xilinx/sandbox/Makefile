@@ -68,19 +68,17 @@ $(KERNEL).bin:
 kernel.bin.coe: $(KERNEL).bin
 	$(SCRIPT_DIR)/bin2coe.py --out=$@ --binfile=8192:$(KERNEL).bin --depth=16384 --wordsize=64 --little_endian
 
-pre_opt_hook.tcl: $(SRC_DIR)/pre_opt_hook.tcl
-	cp $< $@
-
 simulate.tcl: $(SRC_DIR)/simulate.tcl
 	cp $< $@
 
 gen-sources: project_1/sources.txt
 project_1/sources.txt:
 	mkdir -p project_1
-	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -Cproject_1/src -Oproject_1/sources.txt
+	$(SCRIPT_DIR)/gen_sources.sh $(CFLAGS) -P -Cproject_1/src -Oproject_1/sources.txt \
+		-TVortex_top -E -X$(SCRIPT_DIR)/xilinx_ip_stubs.sv
 
 build: done.dcp
-done.dcp: project_1/sources.txt kernel.bin.coe project.tcl pre_opt_hook.tcl
+done.dcp: project_1/sources.txt kernel.bin.coe project.tcl
 	MAX_JOBS=$(JOBS) OPT_LEVEL=$(OPT_LEVEL) TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -source project.tcl -tclargs $(DEVICE) project_1/sources.txt
 	echo done > done.dcp
 

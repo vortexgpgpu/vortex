@@ -104,9 +104,13 @@ XML_CFLAGS = $(filter-out -DSYNTHESIS -DVIVADO, $(CFLAGS)) $(RTL_PKGS) -I$(DPI_D
 check-axil-blocks:
 	$(if $(filter-out 0,$(PLATFORM_AXIL_BLOCK_BYTES)),@python3 $(SCRIPT_DIR)/check_axil_blocks.py $(RTL_DIR)/cp/VX_cp_axil_regfile.sv)
 
+# The sources are elaborated by CIRCT into the one netlist Vivado reads
+# (gen_sources.sh -E); the Xilinx floating-point cores stay instances, bound to
+# the cores xilinx_ip_gen.tcl generates.
 gen-sources: $(BUILD_DIR)/sources.txt
 $(BUILD_DIR)/sources.txt:
-	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt
+	mkdir -p $(BUILD_DIR); cd $(BUILD_DIR); $(SCRIPT_DIR)/gen_sources.sh -P $(CFLAGS) -Csrc -Osources.txt \
+		-Tvortex_afu -E -X$(SCRIPT_DIR)/xilinx_ip_stubs.sv
 
 gen-ast: $(BUILD_DIR)/vortex.xml
 $(BUILD_DIR)/vortex.xml:

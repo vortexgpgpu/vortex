@@ -59,10 +59,12 @@ at 3.00 host cycles per target cycle instead of 4.00 (V80), with the same
 threads and copies and fewer LUTs.
 
 The flow reads Vortex as source, so it builds the configuration whose units
-are source: the STD FPU (`-DVX_CFG_FPU_TYPE_STD`) and the RTU without vendor
-cores. Vivado's asynchronous-read RAM patch (placeholder cells a
-post-synthesis hook rewires) is replaced in the flow's copy of the sources by
-the RAM it stands for (`hw/syn/maxsim/VX_async_ram_patch.sv`).
+are source: the STD FPU (`-DVX_CFG_FPU_TYPE_STD`), and the RTU's soft FMAs and
+dividers, which the flow's copy of the floating-point units selects in place of
+the Xilinx cores. A RAM that asks for block RAM but reads asynchronously reads
+synchronously once the target is flattened (CIRCT `seq-retime-firmem-reads`,
+see the hardware library's "Block RAM and asynchronous reads");
+`gen/memories.rpt` lists each such RAM and the decision.
 
 ---
 

@@ -23,7 +23,8 @@ endif
 
 # Tool install prefixes (overridable; default under $(TOOLDIR)). CIRCT is the
 # SystemVerilog frontend of every flow: its preprocessor (gen_sources.sh -P)
-# and, for yosys, its Verilog-2005 export (sv_to_v.sh).
+# and its elaboration into the one netlist a synthesis tool reads
+# (circt_elaborate.sh; gen_sources.sh -E).
 CIRCT_PATH ?= $(TOOLDIR)/circt
 YOSYS_PATH ?= $(TOOLDIR)/yosys
 STA_PATH   ?= $(TOOLDIR)/sta

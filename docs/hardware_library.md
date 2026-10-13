@@ -27,7 +27,6 @@ All modules are parameterized for data width, depth, and implementation strategy
 12. [Synchronization and Timing](#12-synchronization-and-timing)
 13. [Allocators and Counters](#13-allocators-and-counters)
 14. [Debug and Tracing](#14-debug-and-tracing)
-15. [Utility and Placeholder](#15-utility-and-placeholder)
 
 ---
 
@@ -1255,35 +1254,36 @@ Parameterized memory primitives with support for FPGA (LUTRAM/BRAM) and ASIC syn
 **Features:**
 - Single address shared between read and write
 - Three read-during-write modes including "N" (no-change) which holds previous read data
-- `ASYNC_BRAM_PATCH` support for asynchronous read BRAM workarounds
+- A forced-BRAM, read-first RAM read asynchronously is tagged block RAM (`ram_style = "block"`); the synthesis elaboration makes its read synchronous (see [Block RAM and asynchronous reads](#block-ram-and-asynchronous-reads))
 - Same FPGA/ASIC implementation paths as VX_dp_ram
 
 ---
 
-### VX_async_ram_patch
+### Block RAM and asynchronous reads
 
-**File:** `VX_async_ram_patch.sv`  
-**Purpose:** Asynchronous RAM wrapper with patching support for synthesis tools.
+Block RAMs and SRAM macros only read synchronously. A `VX_dp_ram` or
+`VX_sp_ram` that must be block RAM (`FORCE_BRAM`) but reads asynchronously
+(`OUT_REG=0`, read-first) is written as a plain array with the standard
+synthesis attribute `(* ram_style = "block" *)` (`USE_BLOCK_BRAM`) and an
+asynchronous read. Every synthesis flow elaborates the design with CIRCT
+(`hw/scripts/circt_elaborate.sh`, `gen_sources.sh -E`), whose
+`seq-retime-firmem-reads` pass then reads such a RAM one edge earlier, at the
+address its address registers are about to take, so that it maps to a block
+RAM. The modules between the RAM and its registers are inlined for it, and
+only those.
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `DATAW` | 1 | Data width |
-| `SIZE` | 1 | Number of entries |
-| `WRENW` | 1 | Write enable granularity |
-| `DUAL_PORT` | 0 | Enable dual-port operation |
-| `FORCE_BRAM` | 0 | Force block RAM inference |
-| `RADDR_REG` | 0 | Read address registered |
-| `RADDR_RESET` | 0 | Read address has reset |
-| `WRITE_FIRST` | 0 | Write-first semantics |
-| `INIT_ENABLE` | 0 | Enable initialization |
-| `INIT_FILE` | "" | Initialization file |
-| `INIT_VALUE` | 0 | Default init value |
+The attribute is a contract:
 
-**Features:**
-- Wraps synchronous RAM with asynchronous read path emulation
-- Uses placeholder modules for tool-specific register/memory patching
-- Supports dual-port and single-port configurations
-- Handles vendor-specific synthesis quirks (Xilinx BRAM async read workaround)
+- `ram_style = "block"`: the RAM is converted. If it cannot be (its address
+  depends on anything but registers and logic, or a register has an
+  asynchronous reset), the elaboration stops and names the reason;
+- `ram_style = "distributed"`: the RAM stays as it is;
+- no attribute: the RAM stays as it is (`circt_elaborate.sh -m auto` converts
+  those it can).
+
+The converted read is exact on every cycle after the first clock edge. Each
+elaboration writes `<netlist>.memories.rpt`, one line per asynchronous-read
+RAM with its size, hint and decision.
 
 ---
 
@@ -1779,106 +1779,80 @@ Infrastructure for runtime debug observation and serial trace extraction.
 
 ---
 
-## 15. Utility and Placeholder
-
-### VX_placeholder
-
-**File:** `VX_placeholder.sv`  
-**Purpose:** Empty black-box module for hierarchical design placeholder.
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `I` | 1 | Input width |
-| `O` | 1 | Output width |
-
-| Port | Direction | Width | Description |
-|------|-----------|-------|-------------|
-| `data_in` | input | I | Input (unconnected) |
-| `data_out` | output | O | Output (unconnected) |
-
-**Features:**
-- Marked with `BLACKBOX_CELL` synthesis directive
-- Used as a structural placeholder for tool-specific cell replacement
-- Zero logic -- purely a synthesis anchor point
-
----
-
 ## Module Summary Table
 
 | # | Module | Category | Area | Latency |
 |---|--------|----------|------|---------|
 | 1 | VX_allocator | Allocator | Small | 0 cycles |
-| 2 | VX_async_ram_patch | Memory | Varies | 0-1 cycles |
-| 3 | VX_avs_adapter | Memory Adapter | Large | Multi-cycle |
-| 4 | VX_axi_adapter | Memory Adapter | Large | Multi-cycle |
-| 5 | VX_axi_write_ack | Memory Adapter | Small | 0-1 cycles |
-| 6 | VX_bits_concat | Bit Manip | Zero | 0 cycles |
-| 7 | VX_bits_insert | Bit Manip | Zero | 0 cycles |
-| 8 | VX_bits_remove | Bit Manip | Zero | 0 cycles |
-| 9 | VX_bypass_buffer | Buffer | Small | 0-1 cycles |
-| 10 | VX_clockgate | Sync | Minimal | 0 cycles |
-| 11 | VX_csa_32 | CSA | Small | 1 gate |
-| 12 | VX_csa_42 | CSA | Medium | 2 gates |
-| 13 | VX_csa_mod4 | CSA | Varies | O(log N) |
-| 14 | VX_csa_tree | CSA | Varies | O(log N) |
-| 15 | VX_cyclic_arbiter | Arbiter | Small | 0 cycles |
-| 16 | VX_demux | Mux/Demux | Small | 0 cycles |
-| 17 | VX_divider | Arithmetic | Large | Configurable |
-| 18 | VX_dp_ram | Memory | Varies | 0-1 cycles |
-| 19 | VX_edge_trigger | Sync | Minimal | 1 cycle |
-| 20 | VX_elastic_adapter | Buffer | Minimal | 0-1 cycles |
-| 21 | VX_elastic_buffer | Buffer | Varies | Configurable |
-| 22 | VX_fifo_queue | Memory | Varies | 0-1 cycles |
-| 23 | VX_find_first | Encoder | Small | O(log N) |
-| 24 | VX_fold_mul | Arithmetic | Medium | Configurable |
-| 25 | VX_generic_arbiter | Arbiter | Varies | 0 cycles |
-| 26 | VX_gto_arbiter | Arbiter | Medium | 0 cycles |
-| 27 | VX_index_buffer | Memory | Medium | 0-1 cycles |
-| 28 | VX_index_queue | Memory | Medium | 0-1 cycles |
-| 29 | VX_ks_adder | Arithmetic | Medium | O(log N) |
-| 30 | VX_lzc | Encoder | Small | O(log N) |
-| 31 | VX_matrix_arbiter | Arbiter | Medium | 0 cycles |
-| 32 | VX_mem_bank_adapter | Memory Adapter | Large | Multi-cycle |
-| 33 | VX_mem_coalescer | Memory Adapter | Large | Multi-cycle |
-| 34 | VX_mem_data_adapter | Memory Adapter | Medium | Multi-cycle |
-| 35 | VX_mem_scheduler | Scheduler | Large | Multi-cycle |
-| 36 | VX_multiplier | Arithmetic | Varies | Configurable |
-| 37 | VX_mux | Mux/Demux | Small | 0 cycles |
-| 38 | VX_nz_iterator | Stream Util | Small | 0-1 cycles |
-| 39 | VX_onehot_encoder | Encoder | Small | O(log N) |
-| 40 | VX_onehot_mux | Mux/Demux | Small | 0 cycles |
-| 41 | VX_onehot_shift | Bit Manip | Small | 0 cycles |
-| 42 | VX_pe_serializer | Stream Util | Medium | Multi-cycle |
-| 43 | VX_pending_size | Counter | Small | 0-1 cycles |
-| 44 | VX_pipe_buffer | Buffer | Varies | N cycles |
-| 45 | VX_pipe_register | Buffer | Varies | N cycles |
-| 46 | VX_placeholder | Utility | Zero | 0 cycles |
-| 47 | VX_popcount | Arithmetic | Small | O(log N) |
-| 48 | VX_priority_arbiter | Arbiter | Small | 0 cycles |
-| 49 | VX_priority_encoder | Encoder | Small | O(log N) |
-| 50 | VX_reduce_tree | Arithmetic | Small | O(log N) |
-| 51 | VX_reset_relay | Sync | Small | 1 cycle |
-| 52 | VX_rr_arbiter | Arbiter | Medium | 0 cycles |
-| 53 | VX_scan | Encoder | Medium | O(log N) |
-| 54 | VX_scope_switch | Debug | Small | 0 cycles |
-| 55 | VX_scope_tap | Debug | Large | Multi-cycle |
-| 56 | VX_serial_div | Arithmetic | Small | Multi-cycle |
-| 57 | VX_serial_mul | Arithmetic | Small | Multi-cycle |
-| 58 | VX_shift_register | Buffer | Varies | N cycles |
-| 59 | VX_skid_buffer | Buffer | Small | 0-1 cycles |
-| 60 | VX_sp_ram | Memory | Varies | 0-1 cycles |
-| 61 | VX_stream_arb | Interconnect | Medium | 0-1 cycles |
-| 62 | VX_stream_buffer | Buffer | Small | 0-1 cycles |
-| 63 | VX_stream_dispatch | Stream Util | Medium | 0-1 cycles |
-| 64 | VX_stream_fork | Stream Util | Small | 0 cycles |
-| 65 | VX_stream_join | Stream Util | Small | 0 cycles |
-| 66 | VX_stream_omega | Interconnect | Large | O(log N) |
-| 67 | VX_stream_pack | Stream Util | Medium | 0-1 cycles |
-| 68 | VX_stream_switch | Interconnect | Medium | 0-1 cycles |
-| 69 | VX_stream_unpack | Stream Util | Medium | Multi-cycle |
-| 70 | VX_stream_xbar | Interconnect | Large | 0-1 cycles |
-| 71 | VX_stream_xpoint | Interconnect | Medium | 0-1 cycles |
-| 72 | VX_ticket_lock | Allocator | Small | 0-1 cycles |
-| 73 | VX_toggle_buffer | Buffer | Small | 1 cycle |
-| 74 | VX_transpose | Bit Manip | Zero | 0 cycles |
-| 75 | VX_wallace_mul | Arithmetic | Large | O(log N) |
+| 2 | VX_avs_adapter | Memory Adapter | Large | Multi-cycle |
+| 3 | VX_axi_adapter | Memory Adapter | Large | Multi-cycle |
+| 4 | VX_axi_write_ack | Memory Adapter | Small | 0-1 cycles |
+| 5 | VX_bits_concat | Bit Manip | Zero | 0 cycles |
+| 6 | VX_bits_insert | Bit Manip | Zero | 0 cycles |
+| 7 | VX_bits_remove | Bit Manip | Zero | 0 cycles |
+| 8 | VX_bypass_buffer | Buffer | Small | 0-1 cycles |
+| 9 | VX_clockgate | Sync | Minimal | 0 cycles |
+| 10 | VX_csa_32 | CSA | Small | 1 gate |
+| 11 | VX_csa_42 | CSA | Medium | 2 gates |
+| 12 | VX_csa_mod4 | CSA | Varies | O(log N) |
+| 13 | VX_csa_tree | CSA | Varies | O(log N) |
+| 14 | VX_cyclic_arbiter | Arbiter | Small | 0 cycles |
+| 15 | VX_demux | Mux/Demux | Small | 0 cycles |
+| 16 | VX_divider | Arithmetic | Large | Configurable |
+| 17 | VX_dp_ram | Memory | Varies | 0-1 cycles |
+| 18 | VX_edge_trigger | Sync | Minimal | 1 cycle |
+| 19 | VX_elastic_adapter | Buffer | Minimal | 0-1 cycles |
+| 20 | VX_elastic_buffer | Buffer | Varies | Configurable |
+| 21 | VX_fifo_queue | Memory | Varies | 0-1 cycles |
+| 22 | VX_find_first | Encoder | Small | O(log N) |
+| 23 | VX_fold_mul | Arithmetic | Medium | Configurable |
+| 24 | VX_generic_arbiter | Arbiter | Varies | 0 cycles |
+| 25 | VX_gto_arbiter | Arbiter | Medium | 0 cycles |
+| 26 | VX_index_buffer | Memory | Medium | 0-1 cycles |
+| 27 | VX_index_queue | Memory | Medium | 0-1 cycles |
+| 28 | VX_ks_adder | Arithmetic | Medium | O(log N) |
+| 29 | VX_lzc | Encoder | Small | O(log N) |
+| 30 | VX_matrix_arbiter | Arbiter | Medium | 0 cycles |
+| 31 | VX_mem_bank_adapter | Memory Adapter | Large | Multi-cycle |
+| 32 | VX_mem_coalescer | Memory Adapter | Large | Multi-cycle |
+| 33 | VX_mem_data_adapter | Memory Adapter | Medium | Multi-cycle |
+| 34 | VX_mem_scheduler | Scheduler | Large | Multi-cycle |
+| 35 | VX_multiplier | Arithmetic | Varies | Configurable |
+| 36 | VX_mux | Mux/Demux | Small | 0 cycles |
+| 37 | VX_nz_iterator | Stream Util | Small | 0-1 cycles |
+| 38 | VX_onehot_encoder | Encoder | Small | O(log N) |
+| 39 | VX_onehot_mux | Mux/Demux | Small | 0 cycles |
+| 40 | VX_onehot_shift | Bit Manip | Small | 0 cycles |
+| 41 | VX_pe_serializer | Stream Util | Medium | Multi-cycle |
+| 42 | VX_pending_size | Counter | Small | 0-1 cycles |
+| 43 | VX_pipe_buffer | Buffer | Varies | N cycles |
+| 44 | VX_pipe_register | Buffer | Varies | N cycles |
+| 45 | VX_popcount | Arithmetic | Small | O(log N) |
+| 46 | VX_priority_arbiter | Arbiter | Small | 0 cycles |
+| 47 | VX_priority_encoder | Encoder | Small | O(log N) |
+| 48 | VX_reduce_tree | Arithmetic | Small | O(log N) |
+| 49 | VX_reset_relay | Sync | Small | 1 cycle |
+| 50 | VX_rr_arbiter | Arbiter | Medium | 0 cycles |
+| 51 | VX_scan | Encoder | Medium | O(log N) |
+| 52 | VX_scope_switch | Debug | Small | 0 cycles |
+| 53 | VX_scope_tap | Debug | Large | Multi-cycle |
+| 54 | VX_serial_div | Arithmetic | Small | Multi-cycle |
+| 55 | VX_serial_mul | Arithmetic | Small | Multi-cycle |
+| 56 | VX_shift_register | Buffer | Varies | N cycles |
+| 57 | VX_skid_buffer | Buffer | Small | 0-1 cycles |
+| 58 | VX_sp_ram | Memory | Varies | 0-1 cycles |
+| 59 | VX_stream_arb | Interconnect | Medium | 0-1 cycles |
+| 60 | VX_stream_buffer | Buffer | Small | 0-1 cycles |
+| 61 | VX_stream_dispatch | Stream Util | Medium | 0-1 cycles |
+| 62 | VX_stream_fork | Stream Util | Small | 0 cycles |
+| 63 | VX_stream_join | Stream Util | Small | 0 cycles |
+| 64 | VX_stream_omega | Interconnect | Large | O(log N) |
+| 65 | VX_stream_pack | Stream Util | Medium | 0-1 cycles |
+| 66 | VX_stream_switch | Interconnect | Medium | 0-1 cycles |
+| 67 | VX_stream_unpack | Stream Util | Medium | Multi-cycle |
+| 68 | VX_stream_xbar | Interconnect | Large | 0-1 cycles |
+| 69 | VX_stream_xpoint | Interconnect | Medium | 0-1 cycles |
+| 70 | VX_ticket_lock | Allocator | Small | 0-1 cycles |
+| 71 | VX_toggle_buffer | Buffer | Small | 1 cycle |
+| 72 | VX_transpose | Bit Manip | Zero | 0 cycles |
+| 73 | VX_wallace_mul | Arithmetic | Large | O(log N) |
