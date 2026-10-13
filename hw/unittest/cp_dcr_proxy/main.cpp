@@ -9,6 +9,8 @@
 //   S_REQ → write: S_DONE; read: S_WAIT_RSP
 //   S_WAIT_RSP → dcr_rsp_valid ⇒ latch rsp_data_r, S_DONE
 //   S_DONE → IDLE
+//   CMD_CACHE_FLUSH: IDLE → S_START (broadcast write) → per core
+//   S_REQ/S_WAIT_RSP (read with the core index) → S_DONE after the last.
 //
 // Coverage:
 //   1. Reset: no transitions, dcr_req_valid stays 0, done stays 0.
@@ -19,11 +21,16 @@
 //      S_WAIT_RSP until dcr_rsp_valid arrives; rsp_data is latched
 //      into last_rsp_data and visible while done pulses.
 //   4. Back-to-back write→read: FSM re-arms cleanly.
-//   5. WAIT_RSP hangs if rsp_valid never arrives (no spurious done).
+//   5. CMD_CACHE_FLUSH over 3 cores: one broadcast write to
+//      VX_DCR_BASE_CACHE_FLUSH, then one read per core in order with the
+//      core index as data, each waiting for its response; done only
+//      after the last core answers.
+//   6. CMD_CACHE_FLUSH over 0 cores retires without any DCR request.
 // ============================================================================
 
 #include "vl_simulator.h"
 #include "VVX_cp_dcr_proxy_top.h"
+#include <VX_types.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -51,6 +58,7 @@ void   sim_trace_enable(bool e) { trace_en = e; }
 enum CmdOp : uint8_t {
     OP_DCR_WRITE = 0x04,
     OP_DCR_READ  = 0x05,
+    OP_CACHE_FLUSH = 0x0A,
 };
 
 // Same packed-cmd layout as the cp_engine TB: hdr in the MSB word
@@ -192,6 +200,61 @@ int main(int argc, char** argv) {
     sim->grant = 0;
     sim->eval();
     EXPECT(sim->done == 1, "re-arm: done not asserted");
+    cycle(sim, tick);
+
+    // ----- Test 5: CMD_CACHE_FLUSH over 3 cores. arg0 = core count. -----
+    constexpr uint32_t NCORES = 3;
+    set_cmd(sim.operator->(), OP_CACHE_FLUSH, NCORES);
+    sim->grant = 1;
+    cycle(sim, tick);                          // IDLE → S_START
+    sim->grant = 0;
+
+    // S_START: one write that every core receives.
+    sim->eval();
+    EXPECT(sim->dcr_req_valid == 1, "FLUSH: start write not issued");
+    EXPECT(sim->dcr_req_rw    == 1, "FLUSH: start must be a write");
+    EXPECT(sim->dcr_req_addr  == VX_DCR_BASE_CACHE_FLUSH, "FLUSH: start addr mismatch");
+    EXPECT(sim->done          == 0, "FLUSH: done premature in S_START");
+    cycle(sim, tick);                          // S_START → S_REQ
+
+    for (uint32_t cid = 0; cid < NCORES; ++cid) {
+        // S_REQ: this core's completion read.
+        sim->eval();
+        EXPECT(sim->dcr_req_valid == 1,   "FLUSH: per-core read not issued");
+        EXPECT(sim->dcr_req_rw    == 0,   "FLUSH: per-core request must be a read");
+        EXPECT(sim->dcr_req_addr  == VX_DCR_BASE_CACHE_FLUSH, "FLUSH: read addr mismatch");
+        EXPECT((sim->dcr_req_data & 0xffff) == cid, "FLUSH: read must target the cores in order");
+        EXPECT(sim->done          == 0,   "FLUSH: done before every core answered");
+        cycle(sim, tick);                      // S_REQ → S_WAIT_RSP
+
+        // Nothing moves until this core answers.
+        for (int i = 0; i < 3; ++i) {
+            sim->eval();
+            EXPECT(sim->dcr_req_valid == 0, "FLUSH: request while waiting for a core");
+            EXPECT(sim->done          == 0, "FLUSH: spurious done while waiting for a core");
+            cycle(sim, tick);
+        }
+        sim->dcr_rsp_valid = 1;
+        sim->dcr_rsp_data  = 0;
+        cycle(sim, tick);                      // → next core's S_REQ, or S_DONE
+        sim->dcr_rsp_valid = 0;
+    }
+
+    sim->eval();
+    EXPECT(sim->done          == 1, "FLUSH: done not asserted after the last core");
+    EXPECT(sim->dcr_req_valid == 0, "FLUSH: request after the last core");
+    cycle(sim, tick);                          // S_DONE → IDLE
+    sim->eval();
+    EXPECT(sim->done == 0, "FLUSH: done should pulse only one cycle");
+
+    // ----- Test 6: CMD_CACHE_FLUSH over 0 cores retires at once. -----
+    set_cmd(sim.operator->(), OP_CACHE_FLUSH, 0);
+    sim->grant = 1;
+    cycle(sim, tick);                          // IDLE → S_DONE
+    sim->grant = 0;
+    sim->eval();
+    EXPECT(sim->dcr_req_valid == 0, "FLUSH0: no request expected");
+    EXPECT(sim->done          == 1, "FLUSH0: done not asserted");
     cycle(sim, tick);
 
     std::printf("PASSED\n");

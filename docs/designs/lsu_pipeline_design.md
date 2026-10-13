@@ -318,7 +318,7 @@ the DXA writes and the tensor unit's reads.
 |---|---|
 | `VX_mem_coalescer` | merges word-sized lanes onto data-cache-word channels; lanes addressing the same cache word become one request |
 | `VX_lsu_adapter` | turns the lane bundle into one memory bus per channel; registers the request boundary |
-| `VX_dcr_flush` | injects the host's cache-flush request, on channel 0 of block 0 |
+| `VX_dcr_flush` | injects the host's cache-flush token on lane 0 of a private dcache, and on every lane otherwise (a shared dcache's socket arbiter, or a disabled dcache's passthrough, buffers each lane on its own) |
 
 The coalescer exists when there is more than one lane and the data-cache
 word is wider than an LSU word; otherwise the path is a pass-through that

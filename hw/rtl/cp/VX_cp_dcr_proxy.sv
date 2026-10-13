@@ -15,13 +15,16 @@
 //        when valid) → DONE → IDLE.
 //
 // For CMD_CACHE_FLUSH (cmd.arg0 = number of cores):
-//   A cache flush is a per-core DCR-read to VX_DCR_BASE_CACHE_FLUSH whose
-//   response is the per-core flush-complete signal (see VX_dcr_data). One
-//   CMD_CACHE_FLUSH sweeps that read across every core — REQ/WAIT_RSP per
-//   core — and retires only once the last core's flush completes. This is
-//   the ACQUIRE_MEM model: a single command in the ring, executed by
-//   the CP across all cores, that the host posts after CMD_LAUNCH so it
-//   sees coherent results. The host fills cmd.arg0 from VX_CAPS_NUM_CORES.
+//   IDLE → START (DCR write to VX_DCR_BASE_CACHE_FLUSH, which every core
+//   receives and starts flushing on) → then REQ/WAIT_RSP once per core: a
+//   DCR read of VX_DCR_BASE_CACHE_FLUSH answered when that core's flush has
+//   completed (see VX_dcr_data). The cores flush concurrently, so their dcache
+//   flushes reach the shared caches together and share one walk; the reads
+//   are serial because the DCR response bus cannot carry two at once. The
+//   command retires once the last core reports. This is the ACQUIRE_MEM
+//   model: a single command in the ring, executed by the CP across all cores,
+//   that the host posts after CMD_LAUNCH so it sees coherent results. The
+//   host fills cmd.arg0 from VX_CAPS_NUM_CORES.
 //
 // The most-recent read response is published on `last_rsp_data` and is
 // also exposed on the AXI-Lite regfile so the host can poll it after
@@ -57,8 +60,9 @@ module VX_cp_dcr_proxy
   input  wire  [`VX_DCR_DATA_BITS-1:0] dcr_rsp_data
 );
 
-  typedef enum logic [1:0] {
+  typedef enum logic [2:0] {
     S_IDLE,
+    S_START,         // CMD_CACHE_FLUSH: broadcast write starting every core
     S_REQ,           // hold dcr_req_valid until consumed (single cycle here)
     S_WAIT_RSP,      // read commands only
     S_DONE
@@ -106,11 +110,14 @@ module VX_cp_dcr_proxy
               flush_total <= cmd_ncores;
               flush_cid   <= '0;
               // a 0-core flush (degenerate) retires immediately
-              state       <= (cmd_ncores == '0) ? S_DONE : S_REQ;
+              state       <= (cmd_ncores == '0) ? S_DONE : S_START;
             end else begin
               state <= S_REQ;
             end
           end
+        end
+        S_START: begin
+          state <= S_REQ;
         end
         S_REQ: begin
           // The Vortex DCR bus consumes the request in a single cycle
@@ -141,11 +148,11 @@ module VX_cp_dcr_proxy
   end
 
   always_comb begin
-    dcr_req_valid = (state == S_REQ);
+    dcr_req_valid = (state == S_START) || (state == S_REQ);
     if (pending_is_flush) begin
-      // a cache flush is a per-core DCR read to VX_DCR_BASE_CACHE_FLUSH;
-      // the target core index rides in the low 16 bits of dcr_req_data.
-      dcr_req_rw   = 1'b0;
+      // the START write reaches every core; each per-core read carries the
+      // target core index in the low 16 bits of dcr_req_data.
+      dcr_req_rw   = (state == S_START);
       dcr_req_addr = `VX_DCR_ADDR_BITS'(`VX_DCR_BASE_CACHE_FLUSH);
       dcr_req_data = `VX_DCR_DATA_BITS'(flush_cid);
     end else begin

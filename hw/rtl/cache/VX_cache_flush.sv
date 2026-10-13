@@ -14,7 +14,6 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_flush import VX_gpu_pkg::*; #(
-    parameter BANK_ID    = 0,
     parameter CACHE_SIZE = 1024,              // Size of cache in bytes
     parameter LINE_SIZE  = 64,                // Size of line inside a bank in bytes
     parameter NUM_BANKS  = 1,                 // Number of banks
@@ -80,13 +79,12 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
             end
             STATE_FLUSH: begin
                 if (counter == ((2 ** CTR_WIDTH)-1) && flush_ready) begin
-                    state_n = (BANK_ID == 0) ? STATE_DONE : STATE_WAIT2;
+                    state_n = STATE_WAIT2;
                 end
             end
             STATE_WAIT2: begin
-                // ensure the bank is empty before notifying the cache flush unit,
-                // because the flush request to lower caches only goes through bank0
-                // and it is important that request gets send out last.
+                // the write-backs must leave the bank before the cache sends
+                // its flush tokens behind them
                 if (bank_empty) begin
                     state_n = STATE_DONE;
                 end

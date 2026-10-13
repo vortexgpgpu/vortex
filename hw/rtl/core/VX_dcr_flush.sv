@@ -87,7 +87,7 @@ module VX_dcr_flush import VX_gpu_pkg::*; #(
     assign dcr_flush_if.done      = flush_done_r;
     assign flush_bus_if.rsp_ready = 1'b1;
 
-    // 2-to-1 arb: input 0 = flush, input 1 = real dcache port 0
+    // 2-to-1 arb: input 0 = cache traffic, input 1 = the flush token
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (TAG_WIDTH)

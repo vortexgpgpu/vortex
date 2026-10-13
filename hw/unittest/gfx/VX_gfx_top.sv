@@ -322,6 +322,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
+        .FLUSH_FORWARD  (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3)
     ) tcache (
@@ -473,6 +474,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
+        .FLUSH_FORWARD  (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3)
     ) rtcache (

@@ -1540,9 +1540,8 @@ package VX_gpu_pkg;
     localparam TCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_TEX_MEM_QUEUE_SIZE) + TCACHE_BATCH_SEL_BITS);
     // Core-side (tex_core's cache_bus_if) tag width.
     localparam TCACHE_TAG_WIDTH      = (UUID_WIDTH + TCACHE_TAG_ID_BITS);
-    // Cache-side tag width = core-side + 1 bit reserved by VX_dcr_flush so a
-    // host-issued CACHE_FLUSH DCR-read can inject a synthetic flush request
-    // onto port 0 without aliasing real requests.
+    // Cache-side tag width = core-side + 1 bit reserved by VX_dcr_flush, so
+    // a flush token can be injected without aliasing real requests.
     localparam TCACHE_BUS_TAG_WIDTH  = (TCACHE_TAG_WIDTH + 1);
     localparam TCACHE_MEM_DATA_WIDTH = (TCACHE_LINE_SIZE * 8);
     localparam TCACHE_MEM_PORTS      = 1;

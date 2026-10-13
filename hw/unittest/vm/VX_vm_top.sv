@@ -410,6 +410,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
                 .WRITE_ENABLE   (0),
                 .REPL_POLICY    (`VX_CFG_ICACHE_REPL_POLICY),
                 .NC_ENABLE      (0),
+                .FLUSH_FORWARD  (0),
                 .CORE_OUT_BUF   (3),
                 .MEM_OUT_BUF    (3)
             ) icache (

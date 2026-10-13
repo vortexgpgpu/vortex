@@ -160,6 +160,8 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .WRITE_ENABLE   (0),
         .REPL_POLICY    (`VX_CFG_ICACHE_REPL_POLICY),
         .NC_ENABLE      (0),
+        // read-only: no dirty data, and the dcache's flush walks the shared levels
+        .FLUSH_FORWARD  (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3)
     ) icache (
@@ -515,6 +517,8 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
+        // read-only: no dirty data, and the dcache's flush walks the shared levels
+        .FLUSH_FORWARD  (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3)
     ) tcache (
@@ -641,6 +645,8 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
+        // read-only: no dirty data, and the dcache's flush walks the shared levels
+        .FLUSH_FORWARD  (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3)
     ) rtcache (

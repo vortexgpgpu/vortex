@@ -237,8 +237,8 @@ public:
     device_->dcr_req_data  = tag;
     this->tick();
     device_->dcr_req_valid = 0;
-    this->tick();
-    // READ response is returned when dcr_rsp_valid is high
+    // A core whose flush already finished answers on the next cycle, and the
+    // response is a one-cycle pulse, so start polling right away.
     while (!device_->dcr_rsp_valid) {
       this->tick();
     }

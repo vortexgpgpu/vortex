@@ -242,6 +242,8 @@ private:
     // CMD_LAUNCH_QMD: read the in-memory KMU descriptor at `qmd_addr` and
     // replay its {dcr_addr,value} pairs through the DCR-write hook.
     void apply_qmd_(uint64_t qmd_addr);
+    // CMD_CACHE_FLUSH across cores [0, num_cores).
+    void flush_cores_(uint32_t num_cores);
     // Advance the launch FSM one step using cur_cmd_.
     void tick_launch();
     // Advance the engine FSM one step.

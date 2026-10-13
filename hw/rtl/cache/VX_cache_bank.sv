@@ -286,7 +286,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire no_pending_req = ~pipe_inflight && mreq_queue_empty && ~amo_commit_busy;
 
     VX_cache_flush #(
-        .BANK_ID    (BANK_ID),
         .CACHE_SIZE (CACHE_SIZE),
         .LINE_SIZE  (LINE_SIZE),
         .NUM_BANKS  (NUM_BANKS),

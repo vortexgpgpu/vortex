@@ -292,8 +292,8 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
 `ifdef EXT_GFX_ANY_ENABLE
     // OR all socket flush reqs together; broadcast .done to every socket.
-    // Sockets fire their reqs sequentially; the shared resource flushes
-    // once per req (subsequent reqs see an already-empty cache).
+    // The cores start their flushes together, so the read-only graphics caches
+    // flush once for all of them; the OR drops when the last core has finished.
     VX_dcr_flush_if cluster_flush_if();
     VX_dcr_flush_if per_socket_cluster_flush_if [NUM_SOCKETS]();
     wire [NUM_SOCKETS-1:0] per_socket_cluster_flush_req;

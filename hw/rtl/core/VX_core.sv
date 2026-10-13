@@ -185,12 +185,9 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // flush could inject ahead of a store still in the LSU/coalescer and lose it.
     wire store_drained = (&lsu_sched_empty) && mem_unit_empty;
     assign dcr_flush_dcache_if.req = dcr_flush_if.req && store_drained;
-    // Both L1s forward their flush to the shared next level, and a cache that
-    // is flushing locks out incoming core requests for its whole sweep. The
-    // icache carries no dirty data and so retires almost immediately; gate it
-    // behind the dcache to keep that forward from arriving while the dcache is
-    // still evicting, which would strand the evictions upstream of memory.
-    assign dcr_flush_icache_if.req = dcr_flush_if.req && dcr_flush_dcache_if.done;
+    // Only the dcache flush walks the shared levels (the icache does not
+    // forward its flush), so the icache flushes alongside it.
+    assign dcr_flush_icache_if.req = dcr_flush_if.req;
     // Each VX_dcr_flush holds .done level-high until its req drops, so a
     // straight AND of the two dones reports the combined completion to
     // VX_dcr_data — which then drops req, re-arming both for the next flush.

@@ -49,6 +49,8 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     parameter IS_LLC                = 0,      // last-level cache: banks own AMO commit + RVA reservation tracking
 
+    parameter FLUSH_FORWARD         = 1,      // a flush also flushes the next level
+
     parameter AMO_ENABLE            = 0       // synthesize atomic-op logic in the banks
  ) (
 `ifdef PERF_ENABLE
@@ -98,20 +100,41 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [`UP(UUID_WIDTH)-1:0] flush_uuid;
     wire [NUM_BANKS-1:0] per_bank_flush_end;
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
+    wire                     mem_req_empty;
+    wire [MEM_PORTS-1:0]     mem_flush_valid;
+    wire [MEM_PORTS-1:0]     mem_flush_ready;
+    wire                     mem_flush_rsp_phase;
+    wire [MEM_PORTS-1:0]     mem_flush_rsp_valid;
+    wire                     flush_rsp_valid;
+    wire [REQ_SEL_WIDTH-1:0] flush_rsp_idx;
+    wire [TAG_WIDTH-1:0]     flush_rsp_tag;
+    wire                     flush_rsp_ready;
     VX_cache_init #(
-        .NUM_REQS  (NUM_REQS),
-        .NUM_BANKS (NUM_BANKS),
-        .TAG_WIDTH (TAG_WIDTH),
-        .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)) // request xbar latency
+        .NUM_REQS         (NUM_REQS),
+        .NUM_BANKS        (NUM_BANKS),
+        .MEM_PORTS        (MEM_PORTS),
+        .FLUSH_FORWARD    (FLUSH_FORWARD),
+        .TAG_WIDTH        (TAG_WIDTH),
+        .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)), // request xbar latency
+        .REQ_SEL_WIDTH    (REQ_SEL_WIDTH)
     ) cache_init (
-        .clk             (clk),
-        .reset           (reset),
-        .core_bus_in_if  (core_bus_if),
-        .core_bus_out_if (core_bus2_if),
-        .bank_req_fire   (per_bank_core_req_fire),
-        .flush_begin     (per_bank_flush_begin),
-        .flush_uuid      (flush_uuid),
-        .flush_end       (per_bank_flush_end)
+        .clk                 (clk),
+        .reset               (reset),
+        .core_bus_in_if      (core_bus_if),
+        .core_bus_out_if     (core_bus2_if),
+        .bank_req_fire       (per_bank_core_req_fire),
+        .flush_begin         (per_bank_flush_begin),
+        .flush_uuid          (flush_uuid),
+        .flush_end           (per_bank_flush_end),
+        .mem_req_empty       (mem_req_empty),
+        .mem_flush_valid     (mem_flush_valid),
+        .mem_flush_ready     (mem_flush_ready),
+        .mem_flush_rsp_phase (mem_flush_rsp_phase),
+        .mem_flush_rsp_valid (mem_flush_rsp_valid),
+        .flush_rsp_valid     (flush_rsp_valid),
+        .flush_rsp_idx       (flush_rsp_idx),
+        .flush_rsp_tag       (flush_rsp_tag),
+        .flush_rsp_ready     (flush_rsp_ready)
     );
     VX_mem_bus_if #(
         .DATA_SIZE (SECTOR_SIZE),
@@ -161,6 +184,15 @@ module VX_cache import VX_gpu_pkg::*; #(
             assign mem_rsp_queue_sel[i] = 0;
         end
     end
+    // While the flush tokens are out the cache is quiescent (inputs blocked,
+    // MSHRs empty), so every memory response is a token's.
+    wire [MEM_PORTS-1:0] mem_rsp_xbar_valid;
+    wire [MEM_PORTS-1:0] mem_rsp_xbar_ready;
+    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_flush_rsp
+        assign mem_flush_rsp_valid[i]  = mem_flush_rsp_phase && mem_rsp_queue_valid[i];
+        assign mem_rsp_xbar_valid[i]   = mem_rsp_queue_valid[i] && ~mem_flush_rsp_phase;
+        assign mem_rsp_queue_ready[i]  = mem_flush_rsp_phase || mem_rsp_xbar_ready[i];
+    end
     wire [NUM_BANKS-1:0] per_bank_mem_rsp_valid;
     wire [NUM_BANKS-1:0][MEM_RSP_DATAW-MEM_ARB_SEL_BITS-1:0] per_bank_mem_rsp_pdata;
     wire [NUM_BANKS-1:0] per_bank_mem_rsp_ready;
@@ -175,10 +207,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     ) mem_rsp_xbar (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (mem_rsp_queue_valid),
+        .valid_in  (mem_rsp_xbar_valid),
         .data_in   (mem_rsp_queue_data_s),
         .sel_in    (mem_rsp_queue_sel),
-        .ready_in  (mem_rsp_queue_ready),
+        .ready_in  (mem_rsp_xbar_ready),
         .valid_out (per_bank_mem_rsp_valid),
         .data_out  (per_bank_mem_rsp_pdata),
         `UNUSED_PIN (sel_out),
@@ -379,6 +411,28 @@ module VX_cache import VX_gpu_pkg::*; #(
     for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_per_bank_core_rsp_pdata
         assign per_bank_core_rsp_pdata[i] = {per_bank_core_rsp_data[i], per_bank_core_rsp_tag[i]};
     end
+    // A flush token's answer takes bank 0's lane into the response crossbar
+    // when the bank has no response of its own, so it leaves through the same
+    // registered outputs as every other response.
+    wire [NUM_BANKS-1:0]                     core_rsp_xbar_valid;
+    wire [NUM_BANKS-1:0][CORE_RSP_DATAW-1:0] core_rsp_xbar_pdata;
+    wire [NUM_BANKS-1:0][REQ_SEL_WIDTH-1:0]  core_rsp_xbar_idx;
+    wire [NUM_BANKS-1:0]                     core_rsp_xbar_ready;
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_core_rsp_xbar_in
+        if (i == 0) begin : g_flush_rsp
+            wire flush_rsp_sel = flush_rsp_valid && ~per_bank_core_rsp_valid[0];
+            assign core_rsp_xbar_valid[0] = per_bank_core_rsp_valid[0] || flush_rsp_valid;
+            assign core_rsp_xbar_pdata[0] = flush_rsp_sel ? {`CS_WORD_WIDTH'(0), flush_rsp_tag} : per_bank_core_rsp_pdata[0];
+            assign core_rsp_xbar_idx[0]   = flush_rsp_sel ? flush_rsp_idx : per_bank_core_rsp_idx[0];
+            assign per_bank_core_rsp_ready[0] = core_rsp_xbar_ready[0];
+            assign flush_rsp_ready = core_rsp_xbar_ready[0] && ~per_bank_core_rsp_valid[0];
+        end else begin : g_bank_rsp
+            assign core_rsp_xbar_valid[i] = per_bank_core_rsp_valid[i];
+            assign core_rsp_xbar_pdata[i] = per_bank_core_rsp_pdata[i];
+            assign core_rsp_xbar_idx[i]   = per_bank_core_rsp_idx[i];
+            assign per_bank_core_rsp_ready[i] = core_rsp_xbar_ready[i];
+        end
+    end
     VX_stream_omega #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (NUM_REQS),
@@ -388,10 +442,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     ) core_rsp_xbar (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (per_bank_core_rsp_valid),
-        .data_in   (per_bank_core_rsp_pdata),
-        .sel_in    (per_bank_core_rsp_idx),
-        .ready_in  (per_bank_core_rsp_ready),
+        .valid_in  (core_rsp_xbar_valid),
+        .data_in   (core_rsp_xbar_pdata),
+        .sel_in    (core_rsp_xbar_idx),
+        .ready_in  (core_rsp_xbar_ready),
         .valid_out (core_rsp_valid),
         .data_out  (core_rsp_pdata),
         `UNUSED_PIN (sel_out),
@@ -426,6 +480,64 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [MEM_PORTS-1:0]                    mem_req_tmp_valid;
     wire [MEM_PORTS-1:0][`UP(`LOG2UP(NUM_BANKS))-1:0] mem_req_tmp_idx;
     wire [MEM_PORTS-1:0]                    mem_req_tmp_ready;
+    // The flush token for port i is a read of the port's first line with the
+    // flush attribute. It takes bank i's lane into the request crossbar (bank i
+    // maps to port i), so the crossbar forms its address and it leaves through
+    // the same registered outputs as the write-backs ahead of it.
+    wire [NUM_BANKS-1:0]                    mem_req_xbar_valid;
+    wire [NUM_BANKS-1:0][MEM_REQ_DATAW-1:0] mem_req_xbar_pdata;
+    wire [NUM_BANKS-1:0]                    mem_req_xbar_ready;
+    wire [MEM_REQ_DATAW-1:0] mem_flush_pdata = {
+        `CS_LINE_SECTOR_ADDR_WIDTH'(0),
+        1'b0,
+        SECTOR_SIZE'(0),
+        `CS_SECTOR_WIDTH'(0),
+        BANK_MEM_TAG_WIDTH'(0),
+        `UP(MEM_ATTR_WIDTH)'(1 << MEM_ATTR_FLUSH_OFFS)
+    };
+    for (genvar i = 0; i < NUM_BANKS; ++i) begin : g_mem_req_xbar_in
+        if (i < MEM_PORTS) begin : g_flush_req
+            assign mem_req_xbar_valid[i] = per_bank_mem_req_valid[i] || mem_flush_valid[i];
+            assign mem_req_xbar_pdata[i] = per_bank_mem_req_valid[i] ? per_bank_mem_req_pdata[i] : mem_flush_pdata;
+            assign mem_flush_ready[i]    = mem_req_xbar_ready[i] && ~per_bank_mem_req_valid[i];
+            `RUNTIME_ASSERT (~(mem_flush_valid[i] && per_bank_mem_req_valid[i]), ("%t: %s flush token collides with a bank %0d request", $time, INSTANCE_ID, i))
+        end else begin : g_bank_req
+            assign mem_req_xbar_valid[i] = per_bank_mem_req_valid[i];
+            assign mem_req_xbar_pdata[i] = per_bank_mem_req_pdata[i];
+        end
+        assign per_bank_mem_req_ready[i] = mem_req_xbar_ready[i];
+    end
+    // Write-backs from different banks are not ordered with each other inside
+    // the crossbar, so the tokens wait until it has drained.
+    if (FLUSH_FORWARD != 0) begin : g_mem_req_xbar_pending
+        localparam XBAR_IN_W  = `CLOG2(NUM_BANKS+1);
+        localparam XBAR_OUT_W = `CLOG2(MEM_PORTS+1);
+        // generous bound on what the crossbar can hold: buffered stages plus outputs
+        localparam XBAR_CAPACITY = 4 * NUM_BANKS * (`CLOG2(NUM_BANKS) + 1);
+        wire [NUM_BANKS-1:0] xbar_in_fire  = mem_req_xbar_valid & mem_req_xbar_ready;
+        wire [MEM_PORTS-1:0] xbar_out_fire = mem_req_tmp_valid & mem_req_tmp_ready;
+        wire [XBAR_IN_W-1:0]  xbar_in_cnt;
+        wire [XBAR_OUT_W-1:0] xbar_out_cnt;
+        `POP_COUNT(xbar_in_cnt, xbar_in_fire);
+        `POP_COUNT(xbar_out_cnt, xbar_out_fire);
+        VX_pending_size #(
+            .SIZE  (XBAR_CAPACITY),
+            .INCRW (XBAR_IN_W),
+            .DECRW (XBAR_OUT_W)
+        ) xbar_pending (
+            .clk   (clk),
+            .reset (reset),
+            .incr  (xbar_in_cnt),
+            .decr  (xbar_out_cnt),
+            .empty (mem_req_empty),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (full),
+            `UNUSED_PIN (alm_full),
+            `UNUSED_PIN (size)
+        );
+    end else begin : g_no_mem_req_xbar_pending
+        assign mem_req_empty = 1'b1;
+    end
     VX_stream_omega #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (MEM_PORTS),
@@ -435,10 +547,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     ) mem_req_xbar (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (per_bank_mem_req_valid),
-        .data_in   (per_bank_mem_req_pdata),
+        .valid_in  (mem_req_xbar_valid),
+        .data_in   (mem_req_xbar_pdata),
         .sel_in    (per_bank_mem_req_bid),
-        .ready_in  (per_bank_mem_req_ready),
+        .ready_in  (mem_req_xbar_ready),
         .valid_out (mem_req_tmp_valid),
         .data_out  (mem_req_pdata),
         .sel_out   (mem_req_tmp_idx),

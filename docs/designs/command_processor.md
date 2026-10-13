@@ -129,7 +129,7 @@ come from `cmd_size_bytes`
 | `CMD_FENCE` | 0x07 | 8 | — | yes | yes | Ordering barrier (retires as a NOP today, §10) |
 | `CMD_EVENT_SIGNAL` | 0x08 | 20 | EVENT | yes | yes | Write a counter slot |
 | `CMD_EVENT_WAIT` | 0x09 | 28 | EVENT | yes | yes | Spin until a counter satisfies a compare |
-| `CMD_CACHE_FLUSH` | 0x0A | 12 | DCR | yes | yes | Per-core cache flush sweep |
+| `CMD_CACHE_FLUSH` | 0x0A | 12 | DCR | yes | yes | Cache flush: broadcast start, per-core completion |
 | `CMD_LAUNCH_QMD` | 0x0B | 12 | KMU | **no** | yes | Atomic launch: KMU descriptor read from memory (§2.3) |
 | `CMD_DRAW` | 0x0C | 12 | KMU | **no** | yes | Device-orchestrated graphics draw (§8.1) |
 
@@ -470,10 +470,15 @@ unconditionally on every backend.
   barrier** — the property §8.1 depends on.
 - **DCR proxy** ([`VX_cp_dcr_proxy.sv`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv)) —
   `IDLE→REQ→(WAIT_RSP)→DONE`. Writes complete at `REQ`; reads wait for
-  `dcr_rsp_valid`. `CMD_CACHE_FLUSH` re-enters `REQ` once per core,
-  sweeping a DCR *read* of `VX_DCR_BASE_CACHE_FLUSH` with the target core
-  index in `dcr_req_data[15:0]`, and retires only once the last core's
-  flush completes ([`:105-134`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv#L105)).
+  `dcr_rsp_valid`. `CMD_CACHE_FLUSH` first passes through `START`: one DCR
+  *write* of `VX_DCR_BASE_CACHE_FLUSH`, which reaches every core and starts
+  all their flushes at once. It then re-enters `REQ` once per core, sweeping
+  a DCR *read* of the same address with the target core index in
+  `dcr_req_data[15:0]`; each read is answered when that core's flush has
+  completed, and the command retires after the last one. The DCR response
+  bus has no back-pressure, so the reads stay one at a time; the flushes
+  themselves overlap and share one walk of the shared caches
+  ([cache_subsystem.md §6](cache_subsystem.md#6-flush-architecture)).
 - **DMA** ([`VX_cp_dma.sv`](../../hw/rtl/cp/VX_cp_dma.sv)) — dual-port
   multi-beat bursts in ≤4 KB INCR chunks (`MAX_BURST` = 64 × 64 B beats),
   each chunk clipped so no burst crosses a 4 KB boundary on either

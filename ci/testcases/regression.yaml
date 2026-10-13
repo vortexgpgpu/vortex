@@ -155,3 +155,75 @@ tests:
   drivers:
   - simx
   app: module_reload
+# Kernel-boundary flush coherence: back-to-back launches with host rewrites,
+# rotating line ownership across cores and cross-launch read-modify-writes.
+# The shapes cover a write-back L1, a write-back L2 shared by 4 cores, and a
+# write-back L3 shared by two clusters, where every core flushes at once.
+- id: flush_coherence-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+# The xrt leg runs the RTL command processor's flush (broadcast write, then
+# per-core reads).
+- id: flush_coherence-2
+  via: blackbox
+  drivers:
+  - simx
+  - xrt
+  app: flush_coherence
+  shape:
+    cores: 4
+    l2cache: true
+- id: flush_coherence-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+# Flush ordering under random input backpressure (DBG_FLUSH_STALL): each round
+# ends on a store burst, so a core's last writes are often still queued on one
+# memory port or dcache lane while its token on another reaches the next level.
+# Without a token per path these shapes lose those writes.
+- id: flush_coherence-stress-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r8 -b16
+  configs: -DDBG_FLUSH_STALL
+  shape:
+    cores: 4
+    l2cache: true
+- id: flush_coherence-stress-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r8 -b16
+  configs: -DDBG_FLUSH_STALL
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+  tier: full
+# Cores sharing a dcache: a lost lane store is only visible when it belongs to
+# the core answered last, so this shape needs more rounds to expose it.
+- id: flush_coherence-stress-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r24 -b16
+  configs: -DDBG_FLUSH_STALL -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4
+    l2cache: true
+  tier: full

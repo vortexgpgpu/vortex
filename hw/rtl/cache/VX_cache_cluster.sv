@@ -55,6 +55,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter MEM_OUT_BUF           = 3,      // Memory request output buffer
 
     parameter IS_LLC                = 0,      // Indicates this cache cluster is the LLC (handles AMO completion).
+    parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
 
     parameter AMO_ENABLE            = 0       // Enable atomic memory operations.
  ) (
@@ -145,6 +146,7 @@ module VX_cache_cluster import VX_gpu_pkg::*; #(
             .NC_ENABLE (NC_ENABLE),
             .PASSTHRU     (PASSTHRU),
             .IS_LLC       (IS_LLC),
+            .FLUSH_FORWARD (FLUSH_FORWARD),
             .AMO_ENABLE   (AMO_ENABLE)
         ) cache_wrap (
         `ifdef PERF_ENABLE

@@ -328,6 +328,22 @@ void CommandProcessor::apply_qmd_(uint64_t qmd_addr) {
     }
 }
 
+// One DCR write to VX_DCR_BASE_CACHE_FLUSH reaches every core and starts its
+// flush, so the cores flush concurrently and share one walk of the shared
+// caches; the per-core reads, answered once that core's flush completes, are
+// serial because the DCR response bus cannot carry two responses at once.
+void CommandProcessor::flush_cores_(uint32_t num_cores) {
+    if (num_cores == 0 || !hooks_.vortex_dcr_read) {
+        return;
+    }
+    if (hooks_.vortex_dcr_write) {
+        hooks_.vortex_dcr_write(VX_DCR_BASE_CACHE_FLUSH, 0);
+    }
+    for (uint32_t cid = 0; cid < num_cores; ++cid) {
+        (void)hooks_.vortex_dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid);
+    }
+}
+
 // Execute one draw-bundle step. Inline ops (DCR_WRITE/DCR_READ/CACHE_FLUSH)
 // complete immediately and return false; a launch step (LAUNCH/LAUNCH_QMD)
 // kicks the launch sub-FSM and returns true so the caller waits for the drain
@@ -351,11 +367,7 @@ bool CommandProcessor::exec_inline_cmd_(const Cmd& c) {
                     uint32_t(c.arg0 & 0xFFF), uint32_t(c.arg1 & 0xFFFFFFFF));
             return false;
         case OP_CACHE_FLUSH:
-            if (hooks_.vortex_dcr_read) {
-                uint32_t n = uint32_t(c.arg0 & 0xFFFFFFFF);
-                for (uint32_t cid = 0; cid < n; ++cid)
-                    (void)hooks_.vortex_dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid);
-            }
+            this->flush_cores_(uint32_t(c.arg0 & 0xFFFFFFFF));
             return false;
         default:
             // NOP / FENCE / unknown step — no-op (draws don't use MEM_*/EVENT_*).
@@ -484,15 +496,8 @@ void CommandProcessor::tick_engine() {
                 }
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_CACHE_FLUSH) {
-                // Sweep a per-core DCR-read of VX_DCR_BASE_CACHE_FLUSH across
-                // [0, num_cores). arg0 carries num_cores; dcr_read routes each
-                // call to flush_caches() (drains dcache/L2/L3 to memsim).
-                if (hooks_.vortex_dcr_read) {
-                    uint32_t n = uint32_t(cur_cmd_.arg0 & 0xFFFFFFFF);
-                    for (uint32_t cid = 0; cid < n; ++cid) {
-                        (void)hooks_.vortex_dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid);
-                    }
-                }
+                // arg0 carries num_cores.
+                this->flush_cores_(uint32_t(cur_cmd_.arg0 & 0xFFFFFFFF));
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_EVENT_SIG) {
                 // CMD_EVENT_SIGNAL: write arg1 (8-byte value) to arg0

@@ -52,7 +52,8 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     VX_mem_bus_if.slave  mem_bus_if,   // aperture writes, peeled by VX_om_steer
     VX_om_bus_if.master  om_bus_if,    // fragments -> VX_om_bus_arb -> VX_om_core
 
-    output wire busy
+    output wire busy,
+    output wire frag_pending
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_PARAM (TAG_WIDTH)
@@ -306,6 +307,10 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     end
 
     assign busy = (open_valid != '0) || rec_valid || om_bus_if.req_valid;
+
+    // Work that completes without another beat. An open record waits for its
+    // depth beat, which may be queued behind a flush token held at the steer.
+    assign frag_pending = rec_valid || om_bus_if.req_valid;
 
     `RUNTIME_ASSERT(~(s2_fire && alloc && ~has_free),
         ("%t: *** %s: OM ingress hold table overflow — MAX_OPEN bound is wrong", $time, INSTANCE_ID))
