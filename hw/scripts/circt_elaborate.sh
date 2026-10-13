@@ -28,6 +28,9 @@
 #     -b names modules declared in the sources themselves;
 #   - a conditional write of one element of an array at a dynamic index
 #     becomes a select per element, as the statement means;
+#   - a RAM whose read port is registered states its read-under-write
+#     behavior to Vivado (rw_addr_collision), which otherwise leaves a read
+#     colliding with a write undefined in block RAM; other tools ignore it;
 #   - -f sv (the default) writes SystemVerilog, for Vivado and Quartus; -f
 #     v2005 writes Verilog-2005 for tools with a Verilog frontend (yosys): no
 #     packed arrays or structs, no local variables.
@@ -154,4 +157,5 @@ fi
 "$CIRCT_OPT" "$stem.mlir" "${passes[@]}" --canonicalize --topological-sort --cse \
     -o "$stem.lowered.mlir"
 "$FIRTOOL" --format=mlir "$stem.lowered.mlir" --disable-all-randomization \
+    --add-vivado-ram-address-conflict-synthesis-bug-workaround \
     --lowering-options="$lowering" -o "$output_file"
