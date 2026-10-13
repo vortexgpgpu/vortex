@@ -19,8 +19,8 @@
 // rewires; with or without RADDR_REG it reads the word at raddr. The maxsim
 // flow threads its memories itself and cannot run that hook, so it replaces the
 // staged copy of the module with this one: same parameters and ports, same
-// contents and reads. Plain SystemVerilog, as the staged sources are already
-// preprocessed.
+// contents and reads, and the block RAM request as a synthesis attribute.
+// Plain SystemVerilog, as the staged sources are already preprocessed.
 module VX_async_ram_patch #(
     parameter DATAW       = 1,
     parameter SIZE        = 1,
@@ -47,7 +47,10 @@ module VX_async_ram_patch #(
 );
     localparam WSELW = DATAW / WRENW;
 
-    reg [DATAW-1:0] ram [0:SIZE-1];
+    // VX_dp_ram and VX_sp_ram instantiate this module only for a RAM that
+    // must be block RAM; the compiler makes its read synchronous
+    // (seq-retime-firmem-reads), as the attribute asks.
+    (* ram_style = "block" *) reg [DATAW-1:0] ram [0:SIZE-1];
 
     if (INIT_ENABLE != 0) begin : g_init
         if (INIT_FILE != "") begin : g_file
