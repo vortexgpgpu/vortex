@@ -93,8 +93,11 @@ AND marked `gated_clock` that synthesis's gated-clock conversion moves onto
 the clock-enable pin of every register, RAM and DSP it drives. `BUFGCE`
 semantics, no derived clock; a pre-opt check fails the build if any kernel
 clock is still driven by logic. (This is also why vendor OOC IP cannot sit
-inside the kernel on aved: the conversion cannot enter it, so the RTU uses
-the soft FMA/divider there — `VX_CFG_RTU_USE_DSP=0`.)
+inside the kernel on aved: the conversion cannot enter it, so no unit takes
+one there. The FPU is the STD one (`VX_CFG_FPU_TYPE_STD`), its FMA, divider
+and square root take their soft path in the flow's copy of the sources, and
+the RTU uses the soft FMA/divider — `VX_CFG_RTU_USE_DSP=0`. The metasimulator
+and the image therefore run the same FPU, as the foldsim flow's do.)
 
 ### 1.3 Host-decoupled execution
 
