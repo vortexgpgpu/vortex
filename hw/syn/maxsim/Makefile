@@ -64,16 +64,21 @@ RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs 
 SYNTH_DEFINES := -DSYNTHESIS -DVIVADO -DNDEBUG
 # One memory port, as the memory endpoint models; 4 AXI id bits, what Vortex
 # drives with its tag buffer engaged. The FPU and RTU use Vortex's own
-# datapaths (the STD FPU, the RTU without vendor cores): a vendor netlist is not
-# source the flow can read, nor state it can thread.
+# datapaths (the STD FPU, the RTU's soft cores with their DSP multiplies): a
+# vendor netlist is not source the flow can read, nor state it can thread. The
+# staged sources therefore never select the floating-point cores (see
+# VENDOR_FP_UNITS), and the RTU divider has the soft one's latency.
 PLATFORM_DEFINES := -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 -DPLATFORM_MEMORY_ID_WIDTH=4 \
-                    -DVX_CFG_RTU_USE_DSP=0 -DVX_CFG_RTU_FDIV_LATENCY=17 \
-                    -DVX_CFG_FPU_TYPE_STD
+                    -DVX_CFG_RTU_FDIV_LATENCY=17 -DVX_CFG_FPU_TYPE_STD
 ifdef PERF
 PLATFORM_DEFINES += -DPERF_ENABLE
 endif
-TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(shell python3 $(VORTEX_HOME)/ci/gen_config.py \
-	--config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) $(SYNTH_DEFINES) $(PLATFORM_DEFINES)'))
+XCONFIGS := $(shell python3 $(VORTEX_HOME)/ci/gen_config.py \
+	--config=$(VORTEX_HOME)/VX_config.toml --cflags='$(CONFIGS) -DVX_CFG_XLEN=$(XLEN) $(SYNTH_DEFINES) $(PLATFORM_DEFINES)')
+TYPE_DEFINES := $(filter -DVX_CFG_TCU_TYPE_% -DVX_CFG_FPU_TYPE_%,$(XCONFIGS))
+# The extensions' packages and include paths, as every synthesis flow finds
+# them.
+include $(VORTEX_HOME)/hw/syn/extensions.mk
 GEN_CFLAGS := -DVX_CFG_XLEN=$(XLEN) -DVX_CFG_XLEN_$(XLEN) $(CONFIGS) $(TYPE_DEFINES) $(PLATFORM_DEFINES) \
               $(SYNTH_DEFINES) $(RTL_INCLUDE)
 
@@ -111,12 +116,21 @@ all: $(VBIN)
 
 # The flow threads memories itself, so an asynchronous-read RAM stays one
 # (VX_async_ram_patch.sv) instead of becoming placeholders for a Vivado hook.
+# The units that would wrap a Xilinx floating-point core take their soft path,
+# the one they take wherever no vendor core exists.
+VENDOR_FP_UNITS := VX_fma_unit.sv VX_fdiv_unit.sv VX_fsqrt_unit.sv
 sources: $(SRCS_LIST)
 $(SRCS_LIST): $(RTL_SRCS) $(SRC_DIR)/VX_async_ram_patch.sv
 	rm -rf $(SRCS_DIR)
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) -T$(TARGET_TOP) -C$(SRCS_NAME) \
-		-O$(SRCS_NAME).f
+		-O$(SRCS_NAME).f $(RTL_PKGS)
 	cp $(SRC_DIR)/VX_async_ram_patch.sv $(SRCS_DIR)/VX_async_ram_patch.sv
+	@for f in $(VENDOR_FP_UNITS); do \
+		[ -f $(SRCS_DIR)/$$f ] || continue; \
+		grep -q 'localparam VENDOR_OK = 1;' $(SRCS_DIR)/$$f || \
+			{ echo "ERROR: $$f no longer selects its vendor core by VENDOR_OK"; exit 1; }; \
+		sed -i 's/localparam VENDOR_OK = 1;/localparam VENDOR_OK = 0;/' $(SRCS_DIR)/$$f; \
+	done
 	@for f in $(SHELL_MODULES); do \
 		rm -f $(SRCS_DIR)/$$f; \
 		grep -v "/$$f$$" $@ > $@.tmp && mv $@.tmp $@; \
