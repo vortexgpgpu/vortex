@@ -23,7 +23,7 @@ The components covered here are:
 9. [Mesa for Vortex](#9-mesa-for-vortex-vulkan) — Vulkan software stack (lavapipe) the Vortex Vulkan driver builds on (optional)
 10. [gem5](#10-gem5) — cycle-level CPU simulator hosting the Vortex SimObject (X86 + ARM); consumed by `ci/regression.sh --gem5`
 11. [SST](#11-sst) — Structural Simulation Toolkit (sst-core + sst-elements + OpenMPI); consumed by the SST-driven regression configurations
-12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C; needed only to elaborate a target or build a bitstream (optional)
+12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C or V80; needed only to elaborate a target or build a bitstream (optional)
 13. [SLASH / Alveo V80](#13-slash--alveo-v80-the-aved-backend) — AMD Alveo V80 platform stack for the `aved` backend (optional)
 14. [CIRCT](#14-circt) — the SystemVerilog frontend of every synthesis flow (`circt-verilog`, `circt-opt`, `firtool`)
 15. [foldsim](#15-foldsim) — FAME-5 simulator compiler of `hw/syn/foldsim`, built on CIRCT (optional)
@@ -882,15 +882,17 @@ rm -rf "$SST_CORE_HOME/include" "$SST_ELEMENTS_HOME/include" \
 ## 12. FireSim
 
 **Purpose**: FPGA-accelerated, host-decoupled simulation of Vortex on a
-Xilinx Alveo U55C. Consumed by the `firesim` driver
+Xilinx Alveo U55C (the `vitis` platform, XRT) or an AMD Alveo V80 (the `aved`
+platform, SLASH/VRT). Consumed by the `firesim` driver
 (`./ci/blackbox.sh --driver=firesim`) and by the bitstream build under
 `hw/syn/firesim`. See
 [`designs/firesim_integration.md`](designs/firesim_integration.md) for the
 architecture.
 
-**Only needed to build.** Running an existing `.xclbin` requires XRT and the
-Vortex runtime and nothing from `$TOOLDIR/firesim` — the transport links
-against XRT directly. Install this component if you intend to elaborate a
+**Only needed to build.** Running an existing image — a `.xclbin` with XRT,
+a `.vbin` with VRT — requires the card's runtime and the Vortex runtime and
+nothing from `$TOOLDIR/firesim`: the transport links against XRT or VRT
+directly. Install this component if you intend to elaborate a
 target or build a bitstream.
 
 ### Installing
@@ -953,8 +955,9 @@ make -C hw/syn/firesim check-firesim
   activating conda at all.
 - **Vortex's changes to FireSim live on the branch, not as patches.**
   `git diff 1.21.0..$FIRESIM_REV` is the authoritative delta: Vitis platform
-  fixes, the host-memory base as a config field, driver build and teardown,
-  and cycle-counter accounting, all upstreamable.
+  fixes, the AVED platform for the V80 (shim, fabric clock gates, kernel
+  clock, partitioned synthesis of large models), the host-memory base as a
+  config field, driver build and teardown, and cycle-counter accounting.
 
 ## 13. SLASH / Alveo V80 (the `aved` backend)
 

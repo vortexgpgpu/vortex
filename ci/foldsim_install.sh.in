@@ -26,7 +26,7 @@
 # prebuilt and never run this script.
 #
 # Release, assertions off, libstdc++ linked statically. Needs git, cmake >=
-# 3.20, ninja and a C++17 compiler; installs nothing system-wide.
+# 3.20, ninja, lit (pip) and a C++17 compiler; installs nothing system-wide.
 #
 # Idempotent: re-running rebuilds only what changed.
 
@@ -68,13 +68,20 @@ fi
 # ----------------------------------------------------------------------
 # 2. Configure, build and test
 # ----------------------------------------------------------------------
+# An installed LLVM has no llvm-lit; the tests take lit from PATH (pip's
+# `lit`) unless LIT names one.
+LIT=${LIT:-$(command -v lit || command -v llvm-lit || true)}
+if [ -z "$LIT" ]; then
+    echo "error: no lit for foldsim's tests: pip install lit, or set LIT."
+    exit 1
+fi
 cmake -G Ninja -S "$FOLDSIM_SRC" -B "$FOLDSIM_BUILD" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$FOLDSIM_PREFIX" \
     -DCIRCT_DIR="$CIRCT_PREFIX/lib/cmake/circt" \
     -DMLIR_DIR="$CIRCT_PREFIX/lib/cmake/mlir" \
     -DLLVM_DIR="$CIRCT_PREFIX/lib/cmake/llvm" \
-    -DLLVM_EXTERNAL_LIT="$CIRCT_PREFIX/bin/llvm-lit" \
+    -DLLVM_EXTERNAL_LIT="$LIT" \
     -DLLVM_STATIC_LINK_CXX_STDLIB=ON
 ninja -C "$FOLDSIM_BUILD"
 ninja -C "$FOLDSIM_BUILD" check-foldsim
