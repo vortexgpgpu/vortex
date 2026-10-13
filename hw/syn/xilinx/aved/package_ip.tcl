@@ -24,7 +24,7 @@ set krnl_name [lindex $::argv 0]
 set vcs_file  [lindex $::argv 1]
 set build_dir [lindex $::argv 2]
 set part      [lindex $::argv 3]
-# A kernel whose RTL instantiates no vendor floating-point core (a maxsim
+# A kernel whose RTL instantiates no vendor floating-point core (a foldsim
 # simulator, whose FPU is soft logic) is packaged without them.
 set vendor_ip [expr {$::argc != 5 || [lindex $::argv 4] ne "no-vendor-ip"}]
 

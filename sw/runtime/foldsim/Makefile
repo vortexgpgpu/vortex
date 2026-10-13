@@ -1,15 +1,15 @@
 include ../common.mk
 
-# TARGET=hw runs a maxsim image (hw/syn/maxsim) on the V80 through VRT;
-# TARGET=avedsim simulates the same kernel in-process (sim/maxsim).
+# TARGET=hw runs a foldsim image (hw/syn/foldsim) on the V80 through VRT;
+# TARGET=avedsim simulates the same kernel in-process (sim/foldsim).
 ifeq ($(strip $(TARGET)),)
 override TARGET := avedsim
 endif
 
 DESTDIR ?= $(CURDIR)/..
 
-CONFIG_FILE := $(DESTDIR)/maxsim_rt_config.stamp
-SRC_DIR := $(VORTEX_HOME)/sw/runtime/maxsim
+CONFIG_FILE := $(DESTDIR)/foldsim_rt_config.stamp
+SRC_DIR := $(VORTEX_HOME)/sw/runtime/foldsim
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -I$(INC_DIR) -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR) -I$(RT_COMMON_DIR)
@@ -22,9 +22,9 @@ LDFLAGS += -shared -pthread -Wl,-rpath,'$$ORIGIN'
 SRCS := $(SRC_DIR)/vortex.cpp $(RT_COMMON_DIR)/utils.cpp $(SIM_COMMON_DIR)/cmd_processor.cpp
 
 ifeq ($(TARGET), avedsim)
-CXXFLAGS += -DMAXSIM_EMUL -I$(SIM_DIR)/maxsim
-LDFLAGS += -L$(DESTDIR) -lmaxsim_emul
-EMUL := $(DESTDIR)/libmaxsim_emul.so
+CXXFLAGS += -DFOLDSIM_EMUL -I$(SIM_DIR)/foldsim
+LDFLAGS += -L$(DESTDIR) -lfoldsim_emul
+EMUL := $(DESTDIR)/libfoldsim_emul.so
 else ifeq ($(TARGET), hw)
 # VRT's public headers include <json/json.h> and <libxml/parser.h> from
 # versioned subdirectories.
@@ -40,7 +40,7 @@ else
 	CXXFLAGS += -O2 -DNDEBUG
 endif
 
-PROJECT := libvortex-maxsim.so
+PROJECT := libvortex-foldsim.so
 
 .PHONY: all force driver clean-driver clean-runtime clean
 
@@ -48,8 +48,8 @@ all: $(DESTDIR)/$(PROJECT)
 
 driver: $(EMUL)
 
-$(DESTDIR)/libmaxsim_emul.so: force
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/maxsim lib CONFIGS='$(CONFIGS)' $(if $(PERF),PERF=$(PERF))
+$(DESTDIR)/libfoldsim_emul.so: force
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/foldsim lib CONFIGS='$(CONFIGS)' $(if $(PERF),PERF=$(PERF))
 
 $(DESTDIR)/$(PROJECT): $(SRCS) $(EMUL) $(CONFIG_FILE)
 	$(CXX) $(CXXFLAGS) $(SRCS) $(LDFLAGS) -o $@
@@ -61,7 +61,7 @@ $(CONFIG_FILE): force
 	 if ! cmp -s $$TMP $@ 2>/dev/null; then mv -f $$TMP $@ ; else rm -f $$TMP ; fi
 
 clean-driver:
-	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/maxsim clean
+	DESTDIR=$(DESTDIR) $(MAKE) -C $(ROOT_DIR)/sim/foldsim clean
 
 clean-runtime:
 	rm -f $(DESTDIR)/$(PROJECT)

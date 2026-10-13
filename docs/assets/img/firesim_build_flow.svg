@@ -24,7 +24,7 @@
   <rect x="0" y="0" width="760" height="960" fill="#ffffff"/>
   <text x="24" y="34" class="t">Build flow — how Vortex RTL becomes a FireSim image</text>
   <text x="24" y="56" class="tt">Vortex stays Verilog: Golden Gate never sees inside it. Runs from hw/syn/firesim/Makefile with the native flows' tokens.</text>
-  <text x="24" y="72" class="tt">Threaded images (FAME-5) are the maxsim flow, compiled by CIRCT: see maxsim.md.</text>
+  <text x="24" y="72" class="tt">Threaded images (FAME-5) are the foldsim flow, compiled by CIRCT: see foldsim.md.</text>
 
   <!-- front end -->
   <rect x="60" y="92" width="640" height="128" class="src"/>

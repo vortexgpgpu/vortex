@@ -11,10 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The target's AXI4 memory port, as a maxsim endpoint.
+// The target's AXI4 memory port, as a foldsim endpoint.
 //
 // Timing is a latency-bandwidth pipe, cycle for cycle the model of
-// sim/common/axi_latency_pipe.h (FireSim FASED's "Latency Bandwidth Pipe"): a
+// sim/common/axi_latency_pipe.h: a
 // fixed latency per transaction, at most `max_reads` reads and `max_writes`
 // writes in flight, one beat per cycle on each response channel, responses in
 // the order their requests were accepted. Every output is a function of the
@@ -29,7 +29,7 @@
 //
 // Single-beat transactions only, as Vortex issues them: a longer burst sets
 // `error`.
-module maxsim_mem #(
+module foldsim_mem #(
     parameter ID_W   = 4,
     parameter ADDR_W = 64,
     parameter DATA_W = 512,
@@ -112,20 +112,20 @@ module maxsim_mem #(
     wire [DATA_W/8-1:0] wstrb;
     wire [13:0]         have;
 
-    maxsim_token_in #(1)        t_awvalid (clk, reset, awvalid_valid, awvalid_ready, awvalid_bits, finish, have[0],  awvalid);
-    maxsim_token_in #(ADDR_W)   t_awaddr  (clk, reset, awaddr_valid,  awaddr_ready,  awaddr_bits,  finish, have[1],  awaddr);
-    maxsim_token_in #(ID_W)     t_awid    (clk, reset, awid_valid,    awid_ready,    awid_bits,    finish, have[2],  awid);
-    maxsim_token_in #(8)        t_awlen   (clk, reset, awlen_valid,   awlen_ready,   awlen_bits,   finish, have[3],  awlen);
-    maxsim_token_in #(1)        t_wvalid  (clk, reset, wvalid_valid,  wvalid_ready,  wvalid_bits,  finish, have[4],  wvalid);
-    maxsim_token_in #(DATA_W)   t_wdata   (clk, reset, wdata_valid,   wdata_ready,   wdata_bits,   finish, have[5],  wdata);
-    maxsim_token_in #(DATA_W/8) t_wstrb   (clk, reset, wstrb_valid,   wstrb_ready,   wstrb_bits,   finish, have[6],  wstrb);
-    maxsim_token_in #(1)        t_wlast   (clk, reset, wlast_valid,   wlast_ready,   wlast_bits,   finish, have[7],  wlast);
-    maxsim_token_in #(1)        t_arvalid (clk, reset, arvalid_valid, arvalid_ready, arvalid_bits, finish, have[8],  arvalid);
-    maxsim_token_in #(ADDR_W)   t_araddr  (clk, reset, araddr_valid,  araddr_ready,  araddr_bits,  finish, have[9],  araddr);
-    maxsim_token_in #(ID_W)     t_arid    (clk, reset, arid_valid,    arid_ready,    arid_bits,    finish, have[10], arid);
-    maxsim_token_in #(8)        t_arlen   (clk, reset, arlen_valid,   arlen_ready,   arlen_bits,   finish, have[11], arlen);
-    maxsim_token_in #(1)        t_rready  (clk, reset, rready_valid,  rready_ready,  rready_bits,  finish, have[12], rready);
-    maxsim_token_in #(1)        t_bready  (clk, reset, bready_valid,  bready_ready,  bready_bits,  finish, have[13], bready);
+    foldsim_token_in #(1)        t_awvalid (clk, reset, awvalid_valid, awvalid_ready, awvalid_bits, finish, have[0],  awvalid);
+    foldsim_token_in #(ADDR_W)   t_awaddr  (clk, reset, awaddr_valid,  awaddr_ready,  awaddr_bits,  finish, have[1],  awaddr);
+    foldsim_token_in #(ID_W)     t_awid    (clk, reset, awid_valid,    awid_ready,    awid_bits,    finish, have[2],  awid);
+    foldsim_token_in #(8)        t_awlen   (clk, reset, awlen_valid,   awlen_ready,   awlen_bits,   finish, have[3],  awlen);
+    foldsim_token_in #(1)        t_wvalid  (clk, reset, wvalid_valid,  wvalid_ready,  wvalid_bits,  finish, have[4],  wvalid);
+    foldsim_token_in #(DATA_W)   t_wdata   (clk, reset, wdata_valid,   wdata_ready,   wdata_bits,   finish, have[5],  wdata);
+    foldsim_token_in #(DATA_W/8) t_wstrb   (clk, reset, wstrb_valid,   wstrb_ready,   wstrb_bits,   finish, have[6],  wstrb);
+    foldsim_token_in #(1)        t_wlast   (clk, reset, wlast_valid,   wlast_ready,   wlast_bits,   finish, have[7],  wlast);
+    foldsim_token_in #(1)        t_arvalid (clk, reset, arvalid_valid, arvalid_ready, arvalid_bits, finish, have[8],  arvalid);
+    foldsim_token_in #(ADDR_W)   t_araddr  (clk, reset, araddr_valid,  araddr_ready,  araddr_bits,  finish, have[9],  araddr);
+    foldsim_token_in #(ID_W)     t_arid    (clk, reset, arid_valid,    arid_ready,    arid_bits,    finish, have[10], arid);
+    foldsim_token_in #(8)        t_arlen   (clk, reset, arlen_valid,   arlen_ready,   arlen_bits,   finish, have[11], arlen);
+    foldsim_token_in #(1)        t_rready  (clk, reset, rready_valid,  rready_ready,  rready_bits,  finish, have[12], rready);
+    foldsim_token_in #(1)        t_bready  (clk, reset, bready_valid,  bready_ready,  bready_bits,  finish, have[13], bready);
 
     // ---- The pipe's state ----
     reg [31:0]   cycle;
@@ -165,17 +165,17 @@ module maxsim_mem #(
     wire ok = (~cur_r_valid | (rd_count != 0)) & (~cur_w_valid | (b_acked != b_given));
     wire [10:0] done;
 
-    maxsim_token_out o_awready (clk, reset, awready_valid, awready_ready, ok, finish, done[0]);
-    maxsim_token_out o_wready  (clk, reset, wready_valid,  wready_ready,  ok, finish, done[1]);
-    maxsim_token_out o_arready (clk, reset, arready_valid, arready_ready, ok, finish, done[2]);
-    maxsim_token_out o_rvalid  (clk, reset, rvalid_valid,  rvalid_ready,  ok, finish, done[3]);
-    maxsim_token_out o_rdata   (clk, reset, rdata_valid,   rdata_ready,   ok, finish, done[4]);
-    maxsim_token_out o_rlast   (clk, reset, rlast_valid,   rlast_ready,   ok, finish, done[5]);
-    maxsim_token_out o_rid     (clk, reset, rid_valid,     rid_ready,     ok, finish, done[6]);
-    maxsim_token_out o_rresp   (clk, reset, rresp_valid,   rresp_ready,   ok, finish, done[7]);
-    maxsim_token_out o_bvalid  (clk, reset, bvalid_valid,  bvalid_ready,  ok, finish, done[8]);
-    maxsim_token_out o_bresp   (clk, reset, bresp_valid,   bresp_ready,   ok, finish, done[9]);
-    maxsim_token_out o_bid     (clk, reset, bid_valid,     bid_ready,     ok, finish, done[10]);
+    foldsim_token_out o_awready (clk, reset, awready_valid, awready_ready, ok, finish, done[0]);
+    foldsim_token_out o_wready  (clk, reset, wready_valid,  wready_ready,  ok, finish, done[1]);
+    foldsim_token_out o_arready (clk, reset, arready_valid, arready_ready, ok, finish, done[2]);
+    foldsim_token_out o_rvalid  (clk, reset, rvalid_valid,  rvalid_ready,  ok, finish, done[3]);
+    foldsim_token_out o_rdata   (clk, reset, rdata_valid,   rdata_ready,   ok, finish, done[4]);
+    foldsim_token_out o_rlast   (clk, reset, rlast_valid,   rlast_ready,   ok, finish, done[5]);
+    foldsim_token_out o_rid     (clk, reset, rid_valid,     rid_ready,     ok, finish, done[6]);
+    foldsim_token_out o_rresp   (clk, reset, rresp_valid,   rresp_ready,   ok, finish, done[7]);
+    foldsim_token_out o_bvalid  (clk, reset, bvalid_valid,  bvalid_ready,  ok, finish, done[8]);
+    foldsim_token_out o_bresp   (clk, reset, bresp_valid,   bresp_ready,   ok, finish, done[9]);
+    foldsim_token_out o_bid     (clk, reset, bid_valid,     bid_ready,     ok, finish, done[10]);
 
     assign awready_bits = aw_ready;
     assign wready_bits  = w_ready;

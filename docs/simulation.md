@@ -83,9 +83,9 @@ One caveat worth knowing when reading its output: FireSim's
 kernel took, and is quantized by the driver's polling schedule. Use Vortex's
 own `PERF: cycles=` line, which is exact.
 
-### Threaded FPGA Simulation (maxsim)
+### Threaded FPGA Simulation (foldsim)
 
-maxsim compiles Vortex into a simulator for the V80 with CIRCT: each class of
+foldsim compiles Vortex into a simulator for the V80 with CIRCT: each class of
 identical units (sockets, issue slices, ALUs, ...) is threaded through one
 physical copy, so a GPU far larger than the card fits on it, still cycle-exact
 against the RTL. Its kernel carries a small control block and a
@@ -95,31 +95,33 @@ it like the native V80 driver does (AXI4-Lite registers, QDMA for memory).
 | target | what runs | image built by |
 |---|---|---|
 | `avedsim` (default) | the same kernel in Verilator, in-process | nothing to build |
-| `hw` | the image on the V80 | `make -C hw/syn/maxsim` |
+| `hw` | the image on the V80 | `make -C hw/syn/foldsim` |
 
 ```bash
 # the classes to thread, and the units to give plain-port boundaries first
-export MAXSIM_CLASSES="VX_socket__lift VX_issue_slice__lift VX_alu_int__lift VX_alu_muldiv__lift VX_lsu_slice__lift VX_lsu_scheduler__lift VX_fpu_std"
-export MAXSIM_LIFT="VX_socket:drop=INSTANCE_ID;port=SOCKET_ID VX_issue_slice:drop=ISSUE_ID VX_alu_int:port=BLOCK_IDX VX_alu_muldiv VX_lsu_slice:port=CORE_ID VX_lsu_scheduler"
+export FOLDSIM_CLASSES="VX_socket__lift VX_issue_slice__lift VX_alu_int__lift VX_alu_muldiv__lift VX_lsu_slice__lift VX_lsu_scheduler__lift VX_fpu_std"
+export FOLDSIM_LIFT="VX_socket:drop=INSTANCE_ID;port=SOCKET_ID VX_issue_slice:drop=ISSUE_ID VX_alu_int:port=BLOCK_IDX VX_alu_muldiv VX_lsu_slice:port=CORE_ID VX_lsu_scheduler"
 CONFIGS="-DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_WARPS=4 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_ISSUE_WIDTH=2"
 
 # in Verilator, no image needed
-CONFIGS="$CONFIGS" ./ci/blackbox.sh --driver=maxsim --app=sgemm
+CONFIGS="$CONFIGS" ./ci/blackbox.sh --driver=foldsim --app=sgemm
 
 # build the image, then run on the V80
-make -C hw/syn/maxsim CONFIGS="$CONFIGS"
-FPGA_BIN_DIR=$PWD/hw/syn/maxsim/build32_maxsim_hw/bin \
-  CONFIGS="$CONFIGS" ./ci/blackbox.sh --driver=maxsim --target=hw --app=sgemm
+make -C hw/syn/foldsim CONFIGS="$CONFIGS"
+FPGA_BIN_DIR=$PWD/hw/syn/foldsim/build32_foldsim_hw/bin \
+  CONFIGS="$CONFIGS" ./ci/blackbox.sh --driver=foldsim --target=hw --app=sgemm
 ```
 
-The flow needs `circt-verilog`, `circt-opt` and `firtool` from a CIRCT build
-with the maxsim passes (`CIRCT_BIN=<dir>`, or `PATH`), and pyslang for the
-boundary lifting (`LIFT_PYTHON`). The memory model's settings are runtime
-knobs: `MAXSIM_MEM_READ_LATENCY`, `MAXSIM_MEM_WRITE_LATENCY` (target cycles,
-30 by default) and `MAXSIM_MEM_MAX_READS`, `MAXSIM_MEM_MAX_WRITES` (16). At
+The flow needs CIRCT (`circt-verilog`, `circt-opt`, `firtool`) and foldsim
+(the `foldsim` driver and `foldsim-opt`) from the toolchain
+(`./ci/toolchain_install.sh --circt --foldsim`; `CIRCT_BIN=<dir>` and
+`FOLDSIM=<driver>` override them), and pyslang for the boundary lifting
+(`LIFT_PYTHON`). The memory model's settings are runtime
+knobs: `FOLDSIM_MEM_READ_LATENCY`, `FOLDSIM_MEM_WRITE_LATENCY` (target cycles,
+30 by default) and `FOLDSIM_MEM_MAX_READS`, `FOLDSIM_MEM_MAX_WRITES` (16). At
 exit the runtime reports the target and kernel-clock cycles the simulator ran
 and how busy each threaded class was. The design is
-[designs/maxsim.md](designs/maxsim.md).
+[designs/foldsim.md](designs/foldsim.md).
 
 ### How to Test (using `blackbox.sh`)
 
@@ -131,7 +133,7 @@ Running tests under specific drivers (rtlsim,simx,fpga) is done using the script
 - *Threads* - used to specify the number of threads (smallest unit of computation) within a configuration.
 - *L2cache* - used to enable the shared l2cache among the Vortex cores.
 - *L3cache* - used to enable the shared l3cache among the Vortex clusters.
-- *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, opae, xrt, simx, firesim, maxsim).
+- *Driver* - used to specify which driver to run the Vortex simulation (either rtlsim, opae, xrt, simx, firesim, foldsim).
 - *Debug* - used to enable debug mode for the Vortex simulation.
 - *Perf* - used to enable the detailed performance counters within the Vortex simulation.
 - *App* - used to specify which test/benchmark to run in the Vortex simulation. The main choices are vecadd, sgemm, basic, demo, and dogfood. Other tests/benchmarks are located in the `/benchmarks/opencl` folder though not all of them work wit the current version of Vortex.

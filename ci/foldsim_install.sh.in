@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Copyright © 2019-2023
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# foldsim install: the FAME-5 simulator compiler of hw/syn/foldsim (the
+# `foldsim` driver and foldsim-opt).
+#
+# foldsim is its own project and builds on CIRCT, as POCL builds on LLVM: it
+# needs the CIRCT installation ci/circt_install.sh leaves in $TOOLDIR/circt
+# (libraries, headers and CMake packages, not only the prebuilt's tools). This
+# script is the *producer* of the foldsim prebuilt: build here (once per
+# OSVERSION, in that OS's container, after ci/circt_install.sh), then
+# `ci/toolchain_prebuilt.sh --foldsim` packages $TOOLDIR/foldsim and
+# `ci/toolchain_install.sh --foldsim` fetches it. Most users install the
+# prebuilt and never run this script.
+#
+# Release, assertions off, libstdc++ linked statically. Needs git, cmake >=
+# 3.20, ninja and a C++17 compiler; installs nothing system-wide.
+#
+# Idempotent: re-running rebuilds only what changed.
+
+# exit when any command fails
+set -e
+
+TOOLDIR=${TOOLDIR:=@TOOLDIR@}
+
+FOLDSIM_REPO=${FOLDSIM_REPO:=https://github.com/vortexgpgpu/foldsim.git}
+FOLDSIM_REV=${FOLDSIM_REV:=main}
+
+CIRCT_PREFIX=${CIRCT_PREFIX:=$TOOLDIR/circt}
+FOLDSIM_SRC=${FOLDSIM_SRC:=$TOOLDIR/foldsim-src}
+FOLDSIM_PREFIX=${FOLDSIM_PREFIX:=$TOOLDIR/foldsim}
+FOLDSIM_BUILD=$FOLDSIM_SRC/build
+
+if [ ! -f "$CIRCT_PREFIX/lib/cmake/circt/CIRCTConfig.cmake" ]; then
+    echo "error: no CIRCT installation in $CIRCT_PREFIX (CIRCTConfig.cmake)."
+    echo "       run ci/circt_install.sh first, or set CIRCT_PREFIX."
+    exit 1
+fi
+
+# ----------------------------------------------------------------------
+# 1. Fetch
+# ----------------------------------------------------------------------
+if [ ! -d "$FOLDSIM_SRC/.git" ]; then
+    git clone --branch "$FOLDSIM_REV" "$FOLDSIM_REPO" "$FOLDSIM_SRC"
+else
+    git -C "$FOLDSIM_SRC" fetch origin
+    git -C "$FOLDSIM_SRC" checkout "$FOLDSIM_REV"
+fi
+
+# ----------------------------------------------------------------------
+# 2. Configure, build and test
+# ----------------------------------------------------------------------
+cmake -G Ninja -S "$FOLDSIM_SRC" -B "$FOLDSIM_BUILD" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$FOLDSIM_PREFIX" \
+    -DCIRCT_DIR="$CIRCT_PREFIX/lib/cmake/circt" \
+    -DMLIR_DIR="$CIRCT_PREFIX/lib/cmake/mlir" \
+    -DLLVM_DIR="$CIRCT_PREFIX/lib/cmake/llvm" \
+    -DLLVM_EXTERNAL_LIT="$CIRCT_PREFIX/bin/llvm-lit" \
+    -DLLVM_STATIC_LINK_CXX_STDLIB=ON
+ninja -C "$FOLDSIM_BUILD"
+ninja -C "$FOLDSIM_BUILD" check-foldsim
+cmake --install "$FOLDSIM_BUILD"
+
+echo "foldsim installed in $FOLDSIM_PREFIX"

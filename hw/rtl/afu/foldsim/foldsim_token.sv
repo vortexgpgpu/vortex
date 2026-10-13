@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The token ends of a maxsim endpoint: a model of the target's surroundings
+// The token ends of a foldsim endpoint: a model of the target's surroundings
 // that takes one token on each input channel and gives one on each output
 // channel per target cycle, finishing the cycle once it has them all.
 //
@@ -20,7 +20,7 @@
 // combinationally.
 
 // An input channel: the token is kept until the endpoint finishes its cycle.
-module maxsim_token_in #(
+module foldsim_token_in #(
     parameter W = 1
 ) (
     input  wire         clk,
@@ -52,7 +52,7 @@ module maxsim_token_in #(
 endmodule
 
 // An output channel: the token is offered once `ok` until it is taken.
-module maxsim_token_out (
+module foldsim_token_out (
     input  wire clk,
     input  wire reset,
     output wire valid,

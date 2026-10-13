@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interface boundary lifting: make interface-port units maxsim classes.
+"""Interface boundary lifting: make interface-port units foldsim classes.
 
 A class is threaded and wired into the token fabric port by port, so it must be
 a module whose ports are plain signals; units such as VX_issue_slice or
