@@ -52,11 +52,17 @@ fi
 # ----------------------------------------------------------------------
 # 1. Fetch
 # ----------------------------------------------------------------------
+# FOLDSIM_REV is a branch, taken at its tip on origin, or a tag or a commit: the
+# checkout is detached either way, so a re-run never stays on a stale local
+# branch.
 if [ ! -d "$FOLDSIM_SRC/.git" ]; then
-    git clone --branch "$FOLDSIM_REV" "$FOLDSIM_REPO" "$FOLDSIM_SRC"
+    git clone "$FOLDSIM_REPO" "$FOLDSIM_SRC"
+fi
+git -C "$FOLDSIM_SRC" fetch --force --tags origin
+if git -C "$FOLDSIM_SRC" rev-parse -q --verify "refs/remotes/origin/$FOLDSIM_REV^{commit}" >/dev/null; then
+    git -C "$FOLDSIM_SRC" checkout --detach "origin/$FOLDSIM_REV"
 else
-    git -C "$FOLDSIM_SRC" fetch origin
-    git -C "$FOLDSIM_SRC" checkout "$FOLDSIM_REV"
+    git -C "$FOLDSIM_SRC" checkout --detach "$FOLDSIM_REV^{commit}"
 fi
 
 # ----------------------------------------------------------------------
