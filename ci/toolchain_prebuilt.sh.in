@@ -134,6 +134,15 @@ circt()
     rm circt.tar.bz2
 }
 
+# foldsim's driver and foldsim-opt (ci/foldsim_install.sh), one tarball.
+foldsim()
+{
+    echo "prebuilt foldsim..."
+    tar -C $TOOLDIR -cvjf foldsim.tar.bz2 foldsim/bin/foldsim foldsim/bin/foldsim-opt
+    mkdir -p ./foldsim/$OSVERSION
+    mv foldsim.tar.bz2 ./foldsim/$OSVERSION
+}
+
 yosys()
 {
     echo "prebuilt yosys..."
@@ -174,7 +183,7 @@ gem5()
 show_usage()
 {
     echo "Setup Pre-built Vortex Toolchain"
-    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--circt] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
+    echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--circt] [--foldsim] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
 }
 
 while [ "$1" != "" ]; do
@@ -203,6 +212,8 @@ while [ "$1" != "" ]; do
                 ;;
         --circt ) circt
                 ;;
+        --foldsim ) foldsim
+                ;;
         --yosys ) yosys
                 ;;
         --sta ) sta
@@ -220,6 +231,7 @@ while [ "$1" != "" ]; do
                 libc32
                 libc64
                 circt
+                foldsim
                 yosys
                 sta
                 mesa

@@ -81,7 +81,8 @@ The following dependencies will be fetched prebuilt by `toolchain_install.sh`.
 - [SoftFloat](https://github.com/ucb-bar/berkeley-softfloat-3.git)
 - [Ramulator](https://github.com/CMU-SAFARI/ramulator.git)
 - [Yosys](https://github.com/YosysHQ/yosys)
-- [CIRCT](https://github.com/llvm/circt)
+- [CIRCT](https://github.com/llvm/circt) (Vortex's fork)
+- foldsim: FAME-5 FPGA simulators of Vortex, built on CIRCT
 - [Mesa](https://www.mesa3d.org/)
 - [chipStar](https://github.com/CHIP-Star/chipStar)
 ### Install Vortex codebase

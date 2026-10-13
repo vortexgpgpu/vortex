@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-`include "maxsim_regs.vh"
+`include "foldsim_regs.vh"
 
-// The host's view of a maxsim simulator: an AXI4-Lite register block, and the
+// The host's view of a foldsim simulator: an AXI4-Lite register block, and the
 // endpoint that drives the target's control inputs from it.
 //
 // The target runs free: the endpoint gives it a token every cycle. The host
@@ -23,8 +23,8 @@
 // kept for the host; `busy` covers everything queued or in flight, so a host
 // that sees the target idle has every effect of what it asked for.
 //
-// See maxsim_regs.vh for the register map.
-module maxsim_ctrl #(
+// See foldsim_regs.vh for the register map.
+module foldsim_ctrl #(
     parameter DCR_ADDR_W   = 12,
     parameter DCR_DATA_W   = 32,
     parameter QUEUE        = 16,
@@ -107,25 +107,25 @@ module maxsim_ctrl #(
     wire       q_empty = (q_count == 0);
 
     // ---- The target's control inputs this cycle ----
-    wire in_reset  = (reset_count != 0) | (cur_op == `MAXSIM_CMD_RESET);
-    wire dcr_valid = ~in_reset & ((cur_op == `MAXSIM_CMD_DCR_WRITE) | (cur_op == `MAXSIM_CMD_DCR_READ));
-    wire dcr_rw    = (cur_op == `MAXSIM_CMD_DCR_WRITE);
-    wire do_start  = ~in_reset & (cur_op == `MAXSIM_CMD_START);
+    wire in_reset  = (reset_count != 0) | (cur_op == `FOLDSIM_CMD_RESET);
+    wire dcr_valid = ~in_reset & ((cur_op == `FOLDSIM_CMD_DCR_WRITE) | (cur_op == `FOLDSIM_CMD_DCR_READ));
+    wire dcr_rw    = (cur_op == `FOLDSIM_CMD_DCR_WRITE);
+    wire do_start  = ~in_reset & (cur_op == `FOLDSIM_CMD_START);
     // Reset cycles left after this one; a reset command lasts its count of
     // cycles, at least one.
     wire [31:0] reset_next = (reset_count != 0) ? reset_count - 32'd1
-                           : ((cur_op == `MAXSIM_CMD_RESET) && (cur_data > 1)) ? 32'(cur_data) - 32'd1
+                           : ((cur_op == `FOLDSIM_CMD_RESET) && (cur_data > 1)) ? 32'(cur_data) - 32'd1
                            : 32'd0;
 
     wire finish;
     wire [5:0] done;
     wire [2:0] have;
-    maxsim_token_out o_reset   (clk, reset, reset_valid,         reset_ready,         run, finish, done[0]);
-    maxsim_token_out o_dvalid  (clk, reset, dcr_req_valid_valid, dcr_req_valid_ready, run, finish, done[1]);
-    maxsim_token_out o_drw     (clk, reset, dcr_req_rw_valid,    dcr_req_rw_ready,    run, finish, done[2]);
-    maxsim_token_out o_daddr   (clk, reset, dcr_req_addr_valid,  dcr_req_addr_ready,  run, finish, done[3]);
-    maxsim_token_out o_ddata   (clk, reset, dcr_req_data_valid,  dcr_req_data_ready,  run, finish, done[4]);
-    maxsim_token_out o_start   (clk, reset, start_valid,         start_ready,         run, finish, done[5]);
+    foldsim_token_out o_reset   (clk, reset, reset_valid,         reset_ready,         run, finish, done[0]);
+    foldsim_token_out o_dvalid  (clk, reset, dcr_req_valid_valid, dcr_req_valid_ready, run, finish, done[1]);
+    foldsim_token_out o_drw     (clk, reset, dcr_req_rw_valid,    dcr_req_rw_ready,    run, finish, done[2]);
+    foldsim_token_out o_daddr   (clk, reset, dcr_req_addr_valid,  dcr_req_addr_ready,  run, finish, done[3]);
+    foldsim_token_out o_ddata   (clk, reset, dcr_req_data_valid,  dcr_req_data_ready,  run, finish, done[4]);
+    foldsim_token_out o_start   (clk, reset, start_valid,         start_ready,         run, finish, done[5]);
     assign reset_bits         = in_reset;
     assign dcr_req_valid_bits = dcr_valid;
     assign dcr_req_rw_bits    = dcr_rw;
@@ -135,9 +135,9 @@ module maxsim_ctrl #(
 
     wire                  rsp_v, busy;
     wire [DCR_DATA_W-1:0] rsp_d;
-    maxsim_token_in #(1)          t_rspv (clk, reset, dcr_rsp_valid_valid, dcr_rsp_valid_ready, dcr_rsp_valid_bits, finish, have[0], rsp_v);
-    maxsim_token_in #(DCR_DATA_W) t_rspd (clk, reset, dcr_rsp_data_valid,  dcr_rsp_data_ready,  dcr_rsp_data_bits,  finish, have[1], rsp_d);
-    maxsim_token_in #(1)          t_busy (clk, reset, busy_valid,          busy_ready,          busy_bits,          finish, have[2], busy);
+    foldsim_token_in #(1)          t_rspv (clk, reset, dcr_rsp_valid_valid, dcr_rsp_valid_ready, dcr_rsp_valid_bits, finish, have[0], rsp_v);
+    foldsim_token_in #(DCR_DATA_W) t_rspd (clk, reset, dcr_rsp_data_valid,  dcr_rsp_data_ready,  dcr_rsp_data_bits,  finish, have[1], rsp_d);
+    foldsim_token_in #(1)          t_busy (clk, reset, busy_valid,          busy_ready,          busy_bits,          finish, have[2], busy);
 
     assign finish = run & (&have) & (&done);
 
@@ -151,10 +151,10 @@ module maxsim_ctrl #(
 
     wire wr      = aw_got & w_got & ~s_bvalid;
     wire [11:0] wa = {aw_addr[11:2], 2'b00};
-    wire push    = wr & (wa == `MAXSIM_REG_CMD) & (q_count != QC'(QUEUE));
+    wire push    = wr & (wa == `FOLDSIM_REG_CMD) & (q_count != QC'(QUEUE));
     wire pop     = finish & ~q_empty & (reset_next == 0);
 
-    wire status_busy = ~q_empty | (cur_op != `MAXSIM_CMD_NONE) | start_pending | target_busy
+    wire status_busy = ~q_empty | (cur_op != `FOLDSIM_CMD_NONE) | start_pending | target_busy
                      | ~mem_idle | (reset_count != 0);
 
     always @(posedge clk) begin
@@ -164,7 +164,7 @@ module maxsim_ctrl #(
             q_count           <= 0;
             run               <= 1'b1;
             reset_count       <= RESET_CYCLES;
-            cur_op            <= `MAXSIM_CMD_NONE;
+            cur_op            <= `FOLDSIM_CMD_NONE;
             start_pending     <= 1'b0;
             target_busy       <= 1'b0;
             rsp_valid         <= 1'b0;
@@ -195,7 +195,7 @@ module maxsim_ctrl #(
             if (finish) begin
                 target_cycles <= target_cycles + 64'd1;
                 reset_count   <= reset_next;
-                cur_op        <= pop ? q_op[q_head] : `MAXSIM_CMD_NONE;
+                cur_op        <= pop ? q_op[q_head] : `FOLDSIM_CMD_NONE;
                 cur_addr      <= q_addr[q_head];
                 cur_data      <= q_data[q_head];
                 if (rsp_v) begin
@@ -222,7 +222,7 @@ module maxsim_ctrl #(
                 q_data[q_tail] <= cmd_data;
                 q_tail         <= q_tail + 1'b1;
                 // A read's response is the next one.
-                if (w_data[2:0] == `MAXSIM_CMD_DCR_READ)
+                if (w_data[2:0] == `FOLDSIM_CMD_DCR_READ)
                     rsp_valid <= 1'b0;
             end
             q_count <= q_count + QC'(push) - QC'(pop);
@@ -241,15 +241,15 @@ module maxsim_ctrl #(
                 w_got    <= 1'b0;
                 s_bvalid <= 1'b1;
                 case (wa)
-                `MAXSIM_REG_CTRL:        run <= w_data[0];
-                `MAXSIM_REG_CMD_ADDR:    cmd_addr <= DCR_ADDR_W'(w_data);
-                `MAXSIM_REG_CMD_DATA:    cmd_data <= DCR_DATA_W'(w_data);
-                `MAXSIM_REG_MEM_BASE_LO: mem_base[31:0] <= w_data;
-                `MAXSIM_REG_MEM_BASE_HI: mem_base[63:32] <= w_data;
-                `MAXSIM_REG_MEM_RLAT:    mem_read_latency <= (w_data == 0) ? 32'd1 : w_data;
-                `MAXSIM_REG_MEM_WLAT:    mem_write_latency <= (w_data == 0) ? 32'd1 : w_data;
-                `MAXSIM_REG_MEM_MAXR:    mem_max_reads <= (w_data == 0 || w_data > MEM_DEPTH) ? 8'(MEM_DEPTH) : 8'(w_data);
-                `MAXSIM_REG_MEM_MAXW:    mem_max_writes <= (w_data == 0 || w_data > MEM_DEPTH) ? 8'(MEM_DEPTH) : 8'(w_data);
+                `FOLDSIM_REG_CTRL:        run <= w_data[0];
+                `FOLDSIM_REG_CMD_ADDR:    cmd_addr <= DCR_ADDR_W'(w_data);
+                `FOLDSIM_REG_CMD_DATA:    cmd_data <= DCR_DATA_W'(w_data);
+                `FOLDSIM_REG_MEM_BASE_LO: mem_base[31:0] <= w_data;
+                `FOLDSIM_REG_MEM_BASE_HI: mem_base[63:32] <= w_data;
+                `FOLDSIM_REG_MEM_RLAT:    mem_read_latency <= (w_data == 0) ? 32'd1 : w_data;
+                `FOLDSIM_REG_MEM_WLAT:    mem_write_latency <= (w_data == 0) ? 32'd1 : w_data;
+                `FOLDSIM_REG_MEM_MAXR:    mem_max_reads <= (w_data == 0 || w_data > MEM_DEPTH) ? 8'(MEM_DEPTH) : 8'(w_data);
+                `FOLDSIM_REG_MEM_MAXW:    mem_max_writes <= (w_data == 0 || w_data > MEM_DEPTH) ? 8'(MEM_DEPTH) : 8'(w_data);
                 default:;
                 endcase
             end
@@ -264,33 +264,33 @@ module maxsim_ctrl #(
                 ar_got   <= 1'b0;
                 s_rvalid <= 1'b1;
                 case ({ar_addr[11:2], 2'b00})
-                `MAXSIM_REG_ID:          s_rdata <= `MAXSIM_ID;
-                `MAXSIM_REG_VERSION:     s_rdata <= `MAXSIM_VERSION;
-                `MAXSIM_REG_CTRL:        s_rdata <= {31'b0, run};
-                `MAXSIM_REG_STATUS:      s_rdata <= {27'b0, mem_error, rsp_valid,
+                `FOLDSIM_REG_ID:          s_rdata <= `FOLDSIM_ID;
+                `FOLDSIM_REG_VERSION:     s_rdata <= `FOLDSIM_VERSION;
+                `FOLDSIM_REG_CTRL:        s_rdata <= {31'b0, run};
+                `FOLDSIM_REG_STATUS:      s_rdata <= {27'b0, mem_error, rsp_valid,
                                                      (q_count == QC'(QUEUE)), status_busy};
-                `MAXSIM_REG_CMD_ADDR:    s_rdata <= 32'(cmd_addr);
-                `MAXSIM_REG_CMD_DATA:    s_rdata <= 32'(cmd_data);
-                `MAXSIM_REG_DCR_RSP:     s_rdata <= 32'(rsp_data);
-                `MAXSIM_REG_TCYCLES_LO:  s_rdata <= target_cycles[31:0];
-                `MAXSIM_REG_TCYCLES_HI:  s_rdata <= target_cycles[63:32];
-                `MAXSIM_REG_HCYCLES_LO:  s_rdata <= host_cycles[31:0];
-                `MAXSIM_REG_HCYCLES_HI:  s_rdata <= host_cycles[63:32];
-                `MAXSIM_REG_MEM_BASE_LO: s_rdata <= mem_base[31:0];
-                `MAXSIM_REG_MEM_BASE_HI: s_rdata <= mem_base[63:32];
-                `MAXSIM_REG_MEM_RLAT:    s_rdata <= mem_read_latency;
-                `MAXSIM_REG_MEM_WLAT:    s_rdata <= mem_write_latency;
-                `MAXSIM_REG_MEM_MAXR:    s_rdata <= 32'(mem_max_reads);
-                `MAXSIM_REG_MEM_MAXW:    s_rdata <= 32'(mem_max_writes);
-                `MAXSIM_REG_MSTALL_LO:   s_rdata <= mem_stalls[31:0];
-                `MAXSIM_REG_MSTALL_HI:   s_rdata <= mem_stalls[63:32];
-                `MAXSIM_REG_NUM_CLASSES: s_rdata <= 32'(NUM_CLASSES);
+                `FOLDSIM_REG_CMD_ADDR:    s_rdata <= 32'(cmd_addr);
+                `FOLDSIM_REG_CMD_DATA:    s_rdata <= 32'(cmd_data);
+                `FOLDSIM_REG_DCR_RSP:     s_rdata <= 32'(rsp_data);
+                `FOLDSIM_REG_TCYCLES_LO:  s_rdata <= target_cycles[31:0];
+                `FOLDSIM_REG_TCYCLES_HI:  s_rdata <= target_cycles[63:32];
+                `FOLDSIM_REG_HCYCLES_LO:  s_rdata <= host_cycles[31:0];
+                `FOLDSIM_REG_HCYCLES_HI:  s_rdata <= host_cycles[63:32];
+                `FOLDSIM_REG_MEM_BASE_LO: s_rdata <= mem_base[31:0];
+                `FOLDSIM_REG_MEM_BASE_HI: s_rdata <= mem_base[63:32];
+                `FOLDSIM_REG_MEM_RLAT:    s_rdata <= mem_read_latency;
+                `FOLDSIM_REG_MEM_WLAT:    s_rdata <= mem_write_latency;
+                `FOLDSIM_REG_MEM_MAXR:    s_rdata <= 32'(mem_max_reads);
+                `FOLDSIM_REG_MEM_MAXW:    s_rdata <= 32'(mem_max_writes);
+                `FOLDSIM_REG_MSTALL_LO:   s_rdata <= mem_stalls[31:0];
+                `FOLDSIM_REG_MSTALL_HI:   s_rdata <= mem_stalls[63:32];
+                `FOLDSIM_REG_NUM_CLASSES: s_rdata <= 32'(NUM_CLASSES);
                 default:                 s_rdata <= 32'd0;
                 endcase
-                if (ar_addr >= `MAXSIM_REG_FINISH_BASE
-                 && ar_addr < `MAXSIM_REG_FINISH_BASE + 12'(8 * NUM_CLASSES)) begin
-                    s_rdata <= ar_addr[2] ? 32'(finishes[(ar_addr - `MAXSIM_REG_FINISH_BASE) >> 3] >> 32)
-                                          : finishes[(ar_addr - `MAXSIM_REG_FINISH_BASE) >> 3][31:0];
+                if (ar_addr >= `FOLDSIM_REG_FINISH_BASE
+                 && ar_addr < `FOLDSIM_REG_FINISH_BASE + 12'(8 * NUM_CLASSES)) begin
+                    s_rdata <= ar_addr[2] ? 32'(finishes[(ar_addr - `FOLDSIM_REG_FINISH_BASE) >> 3] >> 32)
+                                          : finishes[(ar_addr - `FOLDSIM_REG_FINISH_BASE) >> 3][31:0];
                 end
             end
             if (s_rvalid & s_rready)

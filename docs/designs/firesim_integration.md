@@ -8,7 +8,7 @@ Alveo U55C (Vitis/XRT) and the Alveo V80 (AVED/VRT).
 |---|---|
 | [1](#1-system-architecture) | System architecture: host stack, FPGA payload, execution model |
 | [2](#2-synthesis-of-the-vortex-rtl) | Synthesis of the Vortex RTL |
-| [3](#3-threaded-simulation) | Threaded simulation: maxsim |
+| [3](#3-threaded-simulation) | Threaded simulation: foldsim |
 | [4](#4-the-simulation-timing-model) | The simulation timing model |
 | [5](#5-the-memory-system) | The memory system and its configuration; shell configuration |
 | [6](#6-observability) | Observability: wave traces, RTL messages and assertions, counters |
@@ -206,8 +206,8 @@ slashkit on aved), handed:
 
 This backend simulates Vortex unthreaded: one physical copy of every module.
 Threading a GPU's identical units through one physical copy each (FAME-5) is
-the maxsim flow, which compiles Vortex with CIRCT rather than Golden Gate and
-has its own kernel, driver and image: see [maxsim.md](maxsim.md).
+the foldsim flow, which compiles Vortex with CIRCT rather than Golden Gate and
+has its own kernel, driver and image: see [foldsim.md](foldsim.md).
 
 ---
 
@@ -521,8 +521,8 @@ faster than rtlsim on `sgemm -n32`). Instruction counts match rtlsim
 exactly; cycle counts differ −1.3%…+7.1% — the FASED timing model, not the
 core: FPGA and hw_emu agree exactly.
 
-Threaded images and their results are the maxsim flow's:
-[maxsim.md](maxsim.md).
+Threaded images and their results are the foldsim flow's:
+[foldsim.md](foldsim.md).
 
 ---
 

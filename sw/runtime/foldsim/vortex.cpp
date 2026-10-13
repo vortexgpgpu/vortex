@@ -12,23 +12,23 @@
 // limitations under the License.
 
 // ============================================================================
-// maxsim backend — a pure transport HAL (see callbacks.h), like the firesim
-// backend: the target carries no Command Processor, so the regfile surface
-// comes from the functional CommandProcessor model, and its hooks reach the
-// maxsim simulator. Device memory is the simulator's, in device memory at
-// MAXSIM_REG_MEM_BASE; the target's DCR, start and busy are its command queue
-// and status (sw/common/maxsim_regs.h).
+// foldsim backend — a pure transport HAL (see callbacks.h): the target
+// carries no Command Processor, so the regfile surface comes from the
+// functional CommandProcessor model, and its hooks reach the foldsim
+// simulator. Device memory is the simulator's, in device memory at
+// FOLDSIM_REG_MEM_BASE; the target's DCR, start and busy are its command queue
+// and status (sw/common/foldsim_regs.h).
 //
 // TARGET=hw runs the image on a V80 through VRT: registers over AXI4-Lite,
 // device memory over a QDMA queue. TARGET=avedsim simulates the same kernel
-// in-process (sim/maxsim).
+// in-process (sim/foldsim).
 // ============================================================================
 
 #include <VX_types.h>
 #include <common.h>
 
 #include <cmd_processor.h>
-#include <maxsim_regs.h>
+#include <foldsim_regs.h>
 #include <util.h>
 
 #include <stdint.h>
@@ -42,8 +42,8 @@
 #include <thread>
 #include <vector>
 
-#ifdef MAXSIM_EMUL
-#include <maxsim_emul.h>
+#ifdef FOLDSIM_EMUL
+#include <foldsim_emul.h>
 #else
 #include <cerrno>
 #include <fcntl.h>
@@ -67,7 +67,7 @@ namespace {
 // v80.toml). The target's 4 GB lie in HBM0..HBM7, which nothing else uses.
 constexpr uint64_t kMemBase = 0x4000000000ull;
 
-#ifdef MAXSIM_EMUL
+#ifdef FOLDSIM_EMUL
 
 class transport_t {
 public:
@@ -84,12 +84,12 @@ public:
   }
 
 private:
-  maxsim_emul sim_;
+  foldsim_emul sim_;
 };
 
 #else
 
-#define KERNEL_NAME "maxsim_afu_0"
+#define KERNEL_NAME "foldsim_afu_0"
 
 // VRT throws; nothing may cross the callbacks' C boundary.
 #define VRT_TRY() try {
@@ -107,7 +107,7 @@ public:
   int init() {
     const char* vbin = getenv("VRT_VBIN_PATH");
     if (vbin == nullptr || vbin[0] == '\0') {
-      fprintf(stderr, "[VXDRV] VRT_VBIN_PATH must name the maxsim .vbin\n");
+      fprintf(stderr, "[VXDRV] VRT_VBIN_PATH must name the foldsim .vbin\n");
       return -1;
     }
     const char* bdf_env = getenv("VRT_DEVICE_BDF");
@@ -130,7 +130,7 @@ public:
                 (unsigned long)clk_hz, (unsigned long)timed_hz);
         return -1;
       }
-      printf("[VXDRV] maxsim kernel clock %lu Hz\n", (unsigned long)clk_hz);
+      printf("[VXDRV] foldsim kernel clock %lu Hz\n", (unsigned long)clk_hz);
       kernel_ = std::make_unique<vrt::Kernel>(*device_, KERNEL_NAME);
       // A QDMA queue for device memory: the buffer's own memory is the
       // smallest allocation, outside the target's 4 GB, and only its queue is
@@ -319,32 +319,33 @@ public:
     if (transport_.init() != 0)
       return -1;
     uint32_t id = 0, version = 0;
-    if (transport_.reg_read(MAXSIM_REG_ID, &id) != 0 || id != MAXSIM_ID) {
-      fprintf(stderr, "[VXDRV] the kernel is not a maxsim simulator (id 0x%08x)\n", id);
+    if (transport_.reg_read(FOLDSIM_REG_ID, &id) != 0 || id != FOLDSIM_ID) {
+      fprintf(stderr, "[VXDRV] the kernel is not a foldsim simulator (id 0x%08x)\n", id);
       return -1;
     }
-    if (transport_.reg_read(MAXSIM_REG_VERSION, &version) != 0 || version != MAXSIM_VERSION) {
+    if (transport_.reg_read(FOLDSIM_REG_VERSION, &version) != 0 || version != FOLDSIM_VERSION) {
       fprintf(stderr, "[VXDRV] the kernel's register map is version %u, this runtime's %u\n",
-              version, MAXSIM_VERSION);
+              version, FOLDSIM_VERSION);
       return -1;
     }
-    // The memory model: a latency-bandwidth pipe, FASED's defaults unless set.
-    const uint32_t rlat = env_or("MAXSIM_MEM_READ_LATENCY", 30);
-    const uint32_t wlat = env_or("MAXSIM_MEM_WRITE_LATENCY", 30);
-    const uint32_t maxr = env_or("MAXSIM_MEM_MAX_READS", 16);
-    const uint32_t maxw = env_or("MAXSIM_MEM_MAX_WRITES", 16);
-    if (reg_write(MAXSIM_REG_MEM_BASE_LO, uint32_t(kMemBase)) != 0 ||
-        reg_write(MAXSIM_REG_MEM_BASE_HI, uint32_t(kMemBase >> 32)) != 0 ||
-        reg_write(MAXSIM_REG_MEM_RLAT, rlat) != 0 ||
-        reg_write(MAXSIM_REG_MEM_WLAT, wlat) != 0 ||
-        reg_write(MAXSIM_REG_MEM_MAXR, maxr) != 0 ||
-        reg_write(MAXSIM_REG_MEM_MAXW, maxw) != 0 ||
-        reg_write(MAXSIM_REG_CTRL, 1) != 0)
+    // The memory model: a latency-bandwidth pipe, 30-cycle latency and 16
+    // transactions in flight each way unless set.
+    const uint32_t rlat = env_or("FOLDSIM_MEM_READ_LATENCY", 30);
+    const uint32_t wlat = env_or("FOLDSIM_MEM_WRITE_LATENCY", 30);
+    const uint32_t maxr = env_or("FOLDSIM_MEM_MAX_READS", 16);
+    const uint32_t maxw = env_or("FOLDSIM_MEM_MAX_WRITES", 16);
+    if (reg_write(FOLDSIM_REG_MEM_BASE_LO, uint32_t(kMemBase)) != 0 ||
+        reg_write(FOLDSIM_REG_MEM_BASE_HI, uint32_t(kMemBase >> 32)) != 0 ||
+        reg_write(FOLDSIM_REG_MEM_RLAT, rlat) != 0 ||
+        reg_write(FOLDSIM_REG_MEM_WLAT, wlat) != 0 ||
+        reg_write(FOLDSIM_REG_MEM_MAXR, maxr) != 0 ||
+        reg_write(FOLDSIM_REG_MEM_MAXW, maxw) != 0 ||
+        reg_write(FOLDSIM_REG_CTRL, 1) != 0)
       return -1;
     // A target left running by an earlier process is reset, as a card's
     // native driver resets its device on open: Vortex counts VX_CFG_RESET_DELAY
     // cycles of reset before it takes a request.
-    if (command(MAXSIM_CMD_RESET, 0, 64) != 0 || wait_idle() != 0)
+    if (command(FOLDSIM_CMD_RESET, 0, 64) != 0 || wait_idle() != 0)
       return -1;
     open_ = true;
     return 0;
@@ -412,34 +413,34 @@ private:
   // How fast the simulator ran since the kernel's reset: target cycles, the
   // kernel clock's cycles, and those a target cycle waited for device memory.
   void report() {
-    const uint64_t target = read64(MAXSIM_REG_TCYCLES_LO);
-    const uint64_t host = read64(MAXSIM_REG_HCYCLES_LO);
-    const uint64_t stall = read64(MAXSIM_REG_MSTALL_LO);
+    const uint64_t target = read64(FOLDSIM_REG_TCYCLES_LO);
+    const uint64_t host = read64(FOLDSIM_REG_HCYCLES_LO);
+    const uint64_t stall = read64(FOLDSIM_REG_MSTALL_LO);
     fprintf(stderr,
-            "[maxsim] target cycles=%lu host cycles=%lu host/target=%.2f memory waits=%lu\n",
+            "[foldsim] target cycles=%lu host cycles=%lu host/target=%.2f memory waits=%lu\n",
             (unsigned long)target, (unsigned long)host,
             target ? double(host) / double(target) : 0.0, (unsigned long)stall);
     // Each class finishes each of its threads once a target cycle, so its
     // finishes per host cycle is how busy its one physical copy is.
     uint32_t classes = 0;
-    transport_.reg_read(MAXSIM_REG_NUM_CLASSES, &classes);
+    transport_.reg_read(FOLDSIM_REG_NUM_CLASSES, &classes);
     std::string line;
     for (uint32_t c = 0; c < classes && host != 0; ++c) {
-      const uint64_t finishes = read64(MAXSIM_REG_FINISH(c));
+      const uint64_t finishes = read64(FOLDSIM_REG_FINISH(c));
       char buf[64];
       snprintf(buf, sizeof(buf), " %u:%.1f%%", c, 100.0 * double(finishes) / double(host));
       line += buf;
     }
     if (!line.empty())
-      fprintf(stderr, "[maxsim] class busy:%s\n", line.c_str());
+      fprintf(stderr, "[foldsim] class busy:%s\n", line.c_str());
     const auto& st = transport_.stats;
     fprintf(stderr,
-            "[maxsim] host: %lu register reads, %lu writes in %.3f s; %lu bytes of device memory in %.3f s\n",
+            "[foldsim] host: %lu register reads, %lu writes in %.3f s; %lu bytes of device memory in %.3f s\n",
             (unsigned long)st.reads, (unsigned long)st.writes, st.reg_s,
             (unsigned long)st.dma_bytes, st.dma_s);
   }
 
-  int status(uint32_t* value) { return transport_.reg_read(MAXSIM_REG_STATUS, value); }
+  int status(uint32_t* value) { return transport_.reg_read(FOLDSIM_REG_STATUS, value); }
 
   // Queues a command once the queue has room.
   int command(uint32_t op, uint32_t addr, uint32_t data) {
@@ -447,9 +448,9 @@ private:
     do {
       if (status(&s) != 0)
         return -1;
-    } while (s & MAXSIM_STATUS_FULL);
-    if (reg_write(MAXSIM_REG_CMD_ADDR, addr) != 0 || reg_write(MAXSIM_REG_CMD_DATA, data) != 0 ||
-        reg_write(MAXSIM_REG_CMD, op) != 0)
+    } while (s & FOLDSIM_STATUS_FULL);
+    if (reg_write(FOLDSIM_REG_CMD_ADDR, addr) != 0 || reg_write(FOLDSIM_REG_CMD_DATA, data) != 0 ||
+        reg_write(FOLDSIM_REG_CMD, op) != 0)
       return -1;
     return 0;
   }
@@ -459,14 +460,14 @@ private:
     do {
       if (status(&s) != 0 || mem_error(s))
         return -1;
-    } while (s & MAXSIM_STATUS_BUSY);
+    } while (s & FOLDSIM_STATUS_BUSY);
     return 0;
   }
 
   // The memory endpoint takes single-beat transactions; a target that makes a
   // burst stops the simulation there, busy for good.
   bool mem_error(uint32_t s) {
-    if (!(s & MAXSIM_STATUS_MEM_ERR))
+    if (!(s & FOLDSIM_STATUS_MEM_ERR))
       return false;
     if (!mem_error_reported_) {
       fprintf(stderr, "[VXDRV] the target made a memory burst, which the memory "
@@ -523,25 +524,25 @@ private:
       transport_.mem_write(addr, src, bytes);
     };
     h.vortex_dcr_write = [this](uint32_t addr, uint32_t value) {
-      command(MAXSIM_CMD_DCR_WRITE, addr, value);
+      command(FOLDSIM_CMD_DCR_WRITE, addr, value);
     };
     h.vortex_dcr_read = [this](uint32_t addr, uint32_t tag) -> uint32_t {
-      if (command(MAXSIM_CMD_DCR_READ, addr, tag) != 0)
+      if (command(FOLDSIM_CMD_DCR_READ, addr, tag) != 0)
         return 0;
       uint32_t s = 0, value = 0;
       do {
         if (status(&s) != 0)
           return 0;
-      } while (!(s & MAXSIM_STATUS_RSP));
-      transport_.reg_read(MAXSIM_REG_DCR_RSP, &value);
+      } while (!(s & FOLDSIM_STATUS_RSP));
+      transport_.reg_read(FOLDSIM_REG_DCR_RSP, &value);
       return value;
     };
-    h.vortex_start = [this]() { command(MAXSIM_CMD_START, 0, 0); };
+    h.vortex_start = [this]() { command(FOLDSIM_CMD_START, 0, 0); };
     h.vortex_busy = [this]() -> bool {
       uint32_t s = 0;
       if (status(&s) != 0 || mem_error(s))
         return false;
-      const bool busy = (s & MAXSIM_STATUS_BUSY) != 0;
+      const bool busy = (s & FOLDSIM_STATUS_BUSY) != 0;
       poll_backoff(busy);
       return busy;
     };

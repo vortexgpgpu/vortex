@@ -26,7 +26,7 @@ show_help()
 {
     show_usage
     echo "  where"
-    echo "--driver: gpu, simx, rtlsim, opae, xrt, aved, firesim, maxsim"
+    echo "--driver: gpu, simx, rtlsim, opae, xrt, aved, firesim, foldsim"
     echo "--target: xrt: xrtsim (default), hw_emu, hw -- aved: avedsim (default), sim, hw"
     echo "          firesim: the targets of the card's native driver; xrtsim (default) or"
     echo "          avedsim need no image, the others run FPGA_BIN_DIR's (hw/syn/firesim)"
@@ -98,7 +98,7 @@ parse_args() {
 set_driver_path() {
     case $DRIVER in
         gpu) DRIVER_PATH="" ;;
-        simx|rtlsim|opae|xrt|aved|firesim|maxsim) DRIVER_PATH="$ROOT_DIR/sw/runtime/$DRIVER" ;;
+        simx|rtlsim|opae|xrt|aved|firesim|foldsim) DRIVER_PATH="$ROOT_DIR/sw/runtime/$DRIVER" ;;
         *) echo "Invalid driver: $DRIVER"; exit 1 ;;
     esac
 }

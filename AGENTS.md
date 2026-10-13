@@ -8,7 +8,7 @@ This is the canonical entry point for **both human contributors and AI coding ag
 
 ### Setup & build
 - [docs/install_vortex.md](docs/install_vortex.md) — initial install + build setup
-- [docs/building_toolchain.md](docs/building_toolchain.md) — building Verilator, RISC-V GNU, LLVM, compiler-rt, musl, POCL from source
+- [docs/building_toolchain.md](docs/building_toolchain.md) — building Verilator, RISC-V GNU, LLVM, compiler-rt, musl, POCL, CIRCT, foldsim from source
 - [docs/environment_setup.md](docs/environment_setup.md) — environment variables and toolchain layout
 - [docs/fpga_setup.md](docs/fpga_setup.md) — FPGA target setup
 

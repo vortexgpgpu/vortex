@@ -17,16 +17,16 @@
 
 namespace vortex {
 
-// The maxsim kernel (hw/rtl/afu/maxsim) simulated in-process, as the
+// The foldsim kernel (hw/rtl/afu/foldsim) simulated in-process, as the
 // runtime's avedsim target reaches it: its control registers, and the device
 // memory behind its AXI4 port. The kernel clock runs only while the host
 // touches a register, each access costing the kernel cycles a register access
-// over PCIe would (MAXSIM_EMUL_MMIO_CYCLES, 250 by default), so a host that
+// over PCIe would (FOLDSIM_EMUL_MMIO_CYCLES, 250 by default), so a host that
 // polls a register is what lets the target run.
-class maxsim_emul {
+class foldsim_emul {
 public:
-  maxsim_emul();
-  ~maxsim_emul();
+  foldsim_emul();
+  ~foldsim_emul();
 
   int init();
 
