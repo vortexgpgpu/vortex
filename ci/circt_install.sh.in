@@ -46,11 +46,17 @@ JOBS=${JOBS:=$(nproc)}
 # ----------------------------------------------------------------------
 # 1. Fetch: LLVM is a submodule pinned by the CIRCT revision.
 # ----------------------------------------------------------------------
+# CIRCT_REV is a branch, taken at its tip on origin, or a tag or a commit: the
+# checkout is detached either way, so a re-run never stays on a stale local
+# branch.
 if [ ! -d "$CIRCT_SRC/.git" ]; then
-    git clone --branch "$CIRCT_REV" "$CIRCT_REPO" "$CIRCT_SRC"
+    git clone "$CIRCT_REPO" "$CIRCT_SRC"
+fi
+git -C "$CIRCT_SRC" fetch --force --tags origin
+if git -C "$CIRCT_SRC" rev-parse -q --verify "refs/remotes/origin/$CIRCT_REV^{commit}" >/dev/null; then
+    git -C "$CIRCT_SRC" checkout --detach "origin/$CIRCT_REV"
 else
-    git -C "$CIRCT_SRC" fetch origin
-    git -C "$CIRCT_SRC" checkout "$CIRCT_REV"
+    git -C "$CIRCT_SRC" checkout --detach "$CIRCT_REV^{commit}"
 fi
 git -C "$CIRCT_SRC" submodule update --init --depth 1 llvm
 
