@@ -30,6 +30,8 @@ show_help()
     echo "--target: xrt: xrtsim (default), hw_emu, hw -- aved: avedsim (default), sim, hw"
     echo "          firesim: the targets of the card's native driver; xrtsim (default) or"
     echo "          avedsim need no image, the others run FPGA_BIN_DIR's (hw/syn/firesim)"
+    echo "          foldsim: avedsim (default) simulates the kernel in Verilator, built"
+    echo "          by the run; hw runs FPGA_BIN_DIR's foldsim.vbin (hw/syn/foldsim)"
     echo "--app: any subfolder test under regression, graphics, mpi, opencl, or hip"
     echo "--perf: 0=disable, 1=core, 3=icache, 4=dcache, 5=l2cache, 6=l3cache, 7=mem,"
     echo "        11=tcu, 12=raster, 13=tex, 14=om, 15=rtu, 16=dxa"
