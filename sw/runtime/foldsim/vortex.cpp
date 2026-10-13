@@ -463,25 +463,37 @@ private:
   }
 
   // Polls the status until `done` holds of it. A memory error fails the wait
-  // (unless `error_fails` is false), and so does one longer than the control
-  // timeout: the target answers a command within a few cycles, so a wait
-  // that long is a target that stopped.
+  // (unless `error_fails` is false), and so does a simulator whose target
+  // cycles stop advancing for the control timeout. Progress, not wall time,
+  // is the measure: in-process, a large target may legitimately take minutes
+  // of wall time to answer a DCR read that flushes its caches.
   template <typename Done>
   int poll(Done done, bool error_fails, const char* what) {
-    const auto start = std::chrono::steady_clock::now();
+    auto last_progress = std::chrono::steady_clock::now();
+    uint32_t last_tcycles = 0;
+    if (transport_.reg_read(FOLDSIM_REG_TCYCLES_LO, &last_tcycles) != 0)
+      return fail("cannot read the simulator's target cycles");
     uint32_t s = 0;
     for (uint64_t n = 0;; ++n) {
       if (failed_ || status(&s) != 0 || (error_fails && mem_error(s)))
         return -1;
       if (done(s))
         break;
-      // The clock is read only every so often: in-process, a status read is
-      // the cheap part of a poll.
-      if ((n & 0xff) == 0xff && elapsed_s(start) > control_timeout_s_) {
-        char msg[160];
-        snprintf(msg, sizeof(msg), "the target has not %s in %.0f s (status 0x%x); "
-                 "the simulation is stopped", what, control_timeout_s_, s);
-        return fail(msg);
+      // Checked only every so often: in-process, a status read is the cheap
+      // part of a poll.
+      if ((n & 0xff) == 0xff) {
+        uint32_t tcycles = 0;
+        if (transport_.reg_read(FOLDSIM_REG_TCYCLES_LO, &tcycles) != 0)
+          return fail("cannot read the simulator's target cycles");
+        if (tcycles != last_tcycles) {
+          last_tcycles = tcycles;
+          last_progress = std::chrono::steady_clock::now();
+        } else if (elapsed_s(last_progress) > control_timeout_s_) {
+          char msg[192];
+          snprintf(msg, sizeof(msg), "the target has not %s, and has not advanced a cycle in "
+                   "%.0f s (status 0x%x); the simulation is stopped", what, control_timeout_s_, s);
+          return fail(msg);
+        }
       }
     }
     return 0;
@@ -617,7 +629,8 @@ private:
 
   // Wall-clock seconds a launch may run before the device is failed; 0, the
   // default, never. A command, DCR read or reset the target leaves unanswered
-  // that long fails it too, after 60 s when it is unset.
+  // while it advances no cycle for that long fails it too, after 60 s when it
+  // is unset.
   static double timeout_env() {
     const char* s = getenv("VORTEX_FOLDSIM_TIMEOUT_S");
     return (s != nullptr && s[0] != '\0') ? atof(s) : 0.0;
