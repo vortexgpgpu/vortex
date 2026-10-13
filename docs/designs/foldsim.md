@@ -180,7 +180,7 @@ for the RTL):
 
 | offset | register |
 |---|---|
-| `0x00`, `0x04` | ID `"MXSM"`, version |
+| `0x00`, `0x04` | ID `"FOLD"`, version |
 | `0x08` | control: bit 0 the target runs |
 | `0x0C` | status: busy (anything queued, running, or in flight), queue full, DCR response ready, memory error |
 | `0x10`, `0x14`, `0x18` | command address, data, and the command: DCR write, DCR read, start, reset |
