@@ -43,6 +43,7 @@ import pyslang
 from pyslang import ast, analysis
 
 SIG_KINDS = (ast.SymbolKind.Variable, ast.SymbolKind.Net)
+SK = pyslang.syntax.SyntaxKind
 
 
 def read_srcs(path):
@@ -251,17 +252,43 @@ def elem_expr(e, k, is_array):
     sys.exit(f"lift: cannot index connection expression '{e}'")
 
 
+def site_connections(u, inst, shape):
+    """{port: expression text} of an instance's connections, by name.
+
+    `.p` is `.p (p)`, and `.*` connects each port not named otherwise to the
+    signal of its name, as SystemVerilog defines them. Connections by
+    position are refused: the rewrite reorders the ports."""
+    iname = str(inst.decl.name).strip()
+    conns, wildcard = {}, False
+    for c in inst.connections:
+        if isinstance(c, pyslang.parsing.Token):
+            continue  # separator
+        k = c.kind
+        if k == SK.NamedPortConnection:
+            nm = str(c.name).strip()
+            if c.openParen.kind != pyslang.parsing.TokenKind.OpenParenthesis:
+                conns[nm] = nm
+            else:
+                conns[nm] = str(c.expr).strip() if c.expr is not None else ""
+        elif k == SK.WildcardPortConnection:
+            wildcard = True
+        elif k in (SK.OrderedPortConnection, SK.EmptyPortConnection):
+            sys.exit(f"lift: {u.name} instance {iname}: ports connected by position; "
+                     f"connect them by name")
+        else:
+            sys.exit(f"lift: {u.name} instance {iname}: unsupported port connection {k}")
+    if wildcard:
+        for kind, *rest in shape:
+            if kind in ("plain", "iface") and rest[0] not in conns:
+                conns[rest[0]] = rest[0]
+    return conns
+
+
 def rewrite_site(u, site_syntax, shape, uid):
     """Replacement text for one instantiation statement."""
     inst = site_syntax.instances[0]
     iname = str(inst.decl.name).strip()
-    conns = {}
-    for c in inst.connections:
-        if not hasattr(c, "name"):
-            continue  # separator token
-        nm = str(c.name).strip()
-        ex = str(c.expr).strip() if c.expr is not None else ""
-        conns[nm] = ex
+    conns = site_connections(u, inst, shape)
     overrides = site_overrides(site_syntax)
     pre = f"__lift{uid}"
     decl, glue, pc = [], [], []
@@ -405,6 +432,12 @@ class Promoter:
                 else:
                     ex = default
                 inst_syn = site.instances[0]
+                if any(not isinstance(c, pyslang.parsing.Token)
+                       and c.kind in (SK.OrderedPortConnection, SK.EmptyPortConnection)
+                       for c in inst_syn.connections):
+                    sys.exit(f"lift: {defname} instance {str(inst_syn.decl.name).strip()}: ports "
+                             f"connected by position cannot take {param} as a port; "
+                             f"connect them by name")
                 op = inst_syn.openParen.location.offset + 1
                 self.edits[f].append((op, op, f"\n            .{param} ({ex}),"))
 
@@ -519,10 +552,13 @@ def main():
         else:
             shutil.copyfile(f, dst)
         out_files.append(dst)
+    if applied != len(edits):
+        sys.exit(f"lift: edits for unmatched files: {sorted(set(edits) - matched)}")
     for name, text in wrappers.items():
         p = os.path.join(a.out, "src", f"{name}__lift.sv")
         open(p, "w").write(text)
         out_files.append(p)
+    # Written last: the list is the build's mark of a finished lift.
     with open(os.path.join(a.out, "srcs.f"), "w") as o:
         for x in defines:
             o.write(f"+define+{x}\n")
@@ -532,8 +568,6 @@ def main():
         for x in out_files:
             o.write(x + "\n")
     print(f"lift: wrote {len(out_files)} files ({applied} of {len(edits)} rewritten) to {a.out}")
-    if applied != len(edits):
-        sys.exit(f"lift: edits for unmatched files: {sorted(set(edits) - matched)}")
 
 
 if __name__ == "__main__":
