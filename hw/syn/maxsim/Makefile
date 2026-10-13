@@ -114,17 +114,14 @@ SHELL_MODULES := $(notdir $(wildcard $(RTL_DIR)/afu/common/*.sv) $(wildcard $(MA
 
 all: $(VBIN)
 
-# The flow threads memories itself, so an asynchronous-read RAM stays one
-# (VX_async_ram_patch.sv) instead of becoming placeholders for a Vivado hook.
 # The units that would wrap a Xilinx floating-point core take their soft path,
 # the one they take wherever no vendor core exists.
 VENDOR_FP_UNITS := VX_fma_unit.sv VX_fdiv_unit.sv VX_fsqrt_unit.sv
 sources: $(SRCS_LIST)
-$(SRCS_LIST): $(RTL_SRCS) $(SRC_DIR)/VX_async_ram_patch.sv
+$(SRCS_LIST): $(RTL_SRCS)
 	rm -rf $(SRCS_DIR)
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) -T$(TARGET_TOP) -C$(SRCS_NAME) \
 		-O$(SRCS_NAME).f $(RTL_PKGS)
-	cp $(SRC_DIR)/VX_async_ram_patch.sv $(SRCS_DIR)/VX_async_ram_patch.sv
 	@for f in $(VENDOR_FP_UNITS); do \
 		[ -f $(SRCS_DIR)/$$f ] || continue; \
 		grep -q 'localparam VENDOR_OK = 1;' $(SRCS_DIR)/$$f || \

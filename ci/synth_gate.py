@@ -323,14 +323,14 @@ class Yosys(Tool):
     job_label = "make"
 
     # CIRCT is the parser: a bad define, a missing include or a hierarchy error
-    # dies in sv_to_v.sh, before Yosys ever reads a line. run_synth.sh stamps
+    # dies in circt_elaborate.sh, before Yosys ever reads a line. run_synth.sh stamps
     # `gen-ys` immediately after source generation and conversion have both
     # succeeded, so that stamp is this flow's "past the typo risk" marker.
     elab_done = "TIME gen-ys"
     elab_label = "source conversion"
     phases = (
         ("gen_sources.sh", "sources"),
-        ("sv_to_v.sh", "verilog"),
+        ("circt_elaborate.sh", "verilog"),
         (elab_done, "synthesis"),
         ("TIME yosys", "sram"),
         ("run_sta.tcl", "timing"),

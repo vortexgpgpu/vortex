@@ -190,9 +190,6 @@
 `define PRESERVE_NET    (* keep = "true" *)
 `define BLACKBOX_CELL   (* black_box *)
 `define STRING
-`ifndef SIMULATION
-    `define ASYNC_BRAM_PATCH
-`endif
 `elsif ASIC
 `define MAX_FANOUT      8
 `define LATENCY_IMUL    3
