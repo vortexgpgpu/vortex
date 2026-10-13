@@ -106,8 +106,7 @@ module VX_fifo_queue #(
             .OUT_REG (OUT_REG),
             .LUTRAM (LUTRAM),
             .RDW_MODE ("W"),
-            .RADDR_REG (OUT_REG == 0),
-            .RADDR_RESET (OUT_REG == 0)
+            .RADDR_REG (OUT_REG == 0)
         ) dp_ram (
             .clk   (clk),
             .reset (reset),

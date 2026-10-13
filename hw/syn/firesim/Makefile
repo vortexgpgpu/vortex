@@ -117,17 +117,15 @@ FIRESIM_TARGET_ARGS := PLATFORM=$(FIRESIM_PLATFORM) TARGET_PROJECT=midasexamples
                        DESIGN=VortexTarget TARGET_CONFIG=$(VORTEX_TARGET_CONFIG) PLATFORM_CONFIG=$(PLATFORM_CONFIG)
 QUINTUPLET := $(FIRESIM_PLATFORM)-midasexamples-VortexTarget-$(VORTEX_TARGET_CONFIG)-$(PLATFORM_CONFIG)
 
-# Flattened Vortex sources for the BlackBox. Golden Gate takes a file list, not
-# include paths, so the tree is copied into one directory with the macros already
-# inlined (-P) and emitted in elaboration order: packages, interfaces, modules.
+# Vortex for the BlackBox. Golden Gate takes a file list, not include paths, so
+# the tree is copied into one directory with the macros already inlined (-P) and
+# emitted in elaboration order: packages, interfaces, modules. CIRCT then
+# elaborates it into the one netlist the image reads, as every synthesis flow
+# does (circt_elaborate.sh); the list names that netlist, and the RTL list stays
+# next to it as $(VIVADO_SRCS_NAME).rtl.f.
 #
 # A simulation image (TARGET=sim or hw_emu) gets its own flattening, under
-# -DSIMULATION. Under VIVADO, VX_platform.vh enables ASYNC_BRAM_PATCH unless
-# SIMULATION is defined, and that patch leaves every async RAM's read address
-# behind an empty VX_placeholder black box which only the opt_design hook
-# rewires. A behavioural simulation never runs opt_design, so without the
-# define those RAMs never latch an address and read back X -- the same reason
-# the native xrt flow adds -DSIMULATION for hw_emu.
+# -DSIMULATION, as the native xrt flow does for hw_emu.
 ifneq ($(filter $(TARGET),sim hw_emu),)
 IMAGE_KIND := sim
 IMAGE_SUFFIX := _sim
@@ -379,7 +377,11 @@ $(VIVADO_SRCS_LIST): $(RTL_SRCS)
 		echo "       pass only XLEN and the TCU/FPU selectors; VX_config.vh computes the rest"; \
 		exit 1; \
 	fi
-	@echo "wrote $(VIVADO_SRCS_LIST) ($$(grep -cv '^+' $(VIVADO_SRCS_LIST)) files)"
+	mv $(VIVADO_SRCS_LIST) $(BUILD_DIR)/$(VIVADO_SRCS_NAME).rtl.f
+	$(SCRIPT_DIR)/circt_elaborate.sh -tVX_firesim_wrap -l$(BUILD_DIR)/$(VIVADO_SRCS_NAME).rtl.f \
+		-x$(SCRIPT_DIR)/xilinx_ip_stubs.sv -o$(BUILD_DIR)/$(VIVADO_SRCS_NAME).elab.sv
+	realpath $(BUILD_DIR)/$(VIVADO_SRCS_NAME).elab.sv > $(VIVADO_SRCS_LIST)
+	@echo "wrote $(VIVADO_SRCS_LIST): $(VIVADO_SRCS_NAME).elab.sv, elaborated from $$(grep -cv '^+' $(BUILD_DIR)/$(VIVADO_SRCS_NAME).rtl.f) files"
 
 # The same flattening under the simulation defines. Verilator finds the modules
 # by library search over this directory, so only the tree has to be complete --
@@ -430,14 +432,11 @@ $(XILINX_IP_STAMP): $(SCRIPT_DIR)/xilinx_ip_gen.tcl
 	@test -n "$$(find $(XILINX_IP_DIR) -name '*.xci')" || { echo "ERROR: no .xci generated under $(XILINX_IP_DIR)"; exit 1; }
 	touch $@
 
-# The environment the FireSim Vitis kernel build reads: the sources and vendor
-# cores package_kernel.tcl attaches, and the pre-opt hook the link runs to
-# resolve the async-BRAM placeholders (it locates hw/scripts through TOOL_DIR).
+# The environment the FireSim Vitis kernel build reads: the netlist and vendor
+# cores package_kernel.tcl attaches.
 kernel-env:
 	@echo 'export VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST)'
 	@echo 'export VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR)'
-	@echo 'export VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl'
-	@echo 'export TOOL_DIR=$(SCRIPT_DIR)'
 
 # Simulator clock (MHz): the image is timed at it and the shell programs it.
 # V80: the Fmax measured on a FireSim image of Vortex (143.4 MHz).
@@ -490,7 +489,6 @@ endif
 image: vivado-sources xilinx-ips stage
 	$(MAKE) -C $(FIRESIM_PATH)/sim replace-rtl $(FIRESIM_TARGET_ARGS)
 	VORTEX_VIVADO_SRCS=$(VIVADO_SRCS_LIST) VORTEX_XILINX_IP_DIR=$(XILINX_IP_DIR) \
-	VORTEX_PRE_OPT_TCL=$(SRC_DIR)/pre_opt_hook.tcl TOOL_DIR=$(SCRIPT_DIR) \
 	$(MAKE) -C $(PLATFORM_BUILD_DIR) $(PLATFORM_IMAGE_GOAL) \
 		DEVICE=$(DEVICE) HOST_MEM_SP='$(HOST_MEM_SP)' FREQUENCY=$(FREQUENCY) STRATEGY=$(STRATEGY)
 

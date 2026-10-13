@@ -76,7 +76,6 @@ module VX_dp_ram #(
     parameter LUTRAM      = 0,
     parameter `STRING RDW_MODE = "W", // W: write-first, R: read-first
     parameter RADDR_REG   = 0, // read address registered hint
-    parameter RADDR_RESET = 0, // read address has reset
     parameter RDW_ASSERT  = 0,
     parameter RESET_RAM   = 0,
     parameter INIT_ENABLE = 0,
@@ -97,7 +96,6 @@ module VX_dp_ram #(
     localparam WSELW = DATAW / WRENW;
     `UNUSED_PARAM (LUTRAM)
     `UNUSED_PARAM (RADDR_REG)
-    `UNUSED_PARAM (RADDR_RESET)
 
     `STATIC_ASSERT(!(WRENW * WSELW != DATAW), ("invalid parameter"))
     `STATIC_ASSERT((RDW_MODE == "R" || RDW_MODE == "W"), ("invalid parameter"))
@@ -105,9 +103,12 @@ module VX_dp_ram #(
 
 `ifdef SYNTHESIS
     localparam FORCE_BRAM = !LUTRAM && `FORCE_BRAM(SIZE, DATAW);
-    // Async reads have no native block-RAM form, so forcing BRAM pulls in the
-    // async-RAM patch. That only pays off for a read-first RAM; a write-first one
-    // adds a read/write collision bypass that is larger than plain distributed RAM.
+    // Async reads have no native block-RAM form: a forced-BRAM RAM read
+    // asynchronously is tagged block RAM, and the synthesis elaboration makes its
+    // read synchronous, reading at the address its registers are about to take
+    // (CIRCT seq-retime-firmem-reads). That only pays off for a read-first RAM; a
+    // write-first one adds a read/write collision bypass that is larger than
+    // plain distributed RAM.
     localparam FORCE_BRAM_ASYNC = FORCE_BRAM && (OUT_REG == 0) && (RDW_MODE == "R");
 `ifdef ASIC
     if (FORCE_BRAM && (OUT_REG != 0 || RADDR_REG != 0)) begin : g_asic
@@ -288,31 +289,6 @@ module VX_dp_ram #(
     end else begin : g_async
         `UNUSED_VAR (read)
         if (FORCE_BRAM_ASYNC) begin : g_bram
-        `ifdef ASYNC_BRAM_PATCH
-            VX_async_ram_patch #(
-                .DATAW      (DATAW),
-                .SIZE       (SIZE),
-                .WRENW      (WRENW),
-                .DUAL_PORT  (1),
-                .FORCE_BRAM (FORCE_BRAM),
-                .RADDR_REG  (RADDR_REG),
-                .RADDR_RESET(RADDR_RESET),
-                .WRITE_FIRST(RDW_MODE == "W"),
-                .INIT_ENABLE(INIT_ENABLE),
-                .INIT_FILE  (INIT_FILE),
-                .INIT_VALUE (INIT_VALUE)
-            ) async_ram_patch (
-                .clk   (clk),
-                .reset (reset),
-                .read  (read),
-                .write (write),
-                .wren  (wren),
-                .waddr (waddr),
-                .wdata (wdata),
-                .raddr (raddr),
-                .rdata (rdata)
-            );
-        `else
             if (RDW_MODE == "W") begin : g_write_first
                 if (WRENW != 1) begin : g_wren
                     `RW_RAM_CHECK `USE_BLOCK_BRAM `RAM_ARRAY_WREN
@@ -346,7 +322,6 @@ module VX_dp_ram #(
                     assign rdata = ram[raddr];
                 end
             end
-        `endif
         end else begin : g_auto
             if (RDW_MODE == "W") begin : g_write_first
                 if (WRENW != 1) begin : g_wren

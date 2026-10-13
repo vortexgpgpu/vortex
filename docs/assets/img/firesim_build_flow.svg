@@ -52,8 +52,8 @@
   <rect x="90" y="470" width="580" height="128" class="step"/>
   <text x="106" y="491" class="th">Platform build — the card's own flow</text>
   <text x="106" y="508" class="ts">vitis: v++ link · aved: slashkit. The kernel is packaged from three inputs:</text>
-  <text x="118" y="525" class="monos">VORTEX_VIVADO_SRCS = the flattened tree     VORTEX_XILINX_IP_DIR = the vendor cores</text>
-  <text x="118" y="541" class="monos">FireSim-generated.sv = the harness           VORTEX_PRE_OPT_TCL = async-BRAM patch hook</text>
+  <text x="118" y="525" class="monos">VORTEX_VIVADO_SRCS = the CIRCT netlist      VORTEX_XILINX_IP_DIR = the vendor cores</text>
+  <text x="118" y="541" class="monos">FireSim-generated.sv = the harness</text>
   <text x="106" y="559" class="ts">Vivado synthesis + place-and-route at FREQUENCY (default 60 MHz), STRATEGY=TIMING;</text>
   <text x="106" y="575" class="ts">on aved, FireSim's clock gates become clock enables (no BUFGCE in the partition).</text>
 

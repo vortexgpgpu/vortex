@@ -193,15 +193,11 @@ changed, since FireSim's make judges elaboration by these timestamps),
 `replace-rtl` (Golden Gate), and the platform's own build (`v++` on vitis,
 slashkit on aved), handed:
 
-- `VORTEX_VIVADO_SRCS` — the flattened tree, packaged into the kernel;
+- `VORTEX_VIVADO_SRCS` — the netlist CIRCT elaborates from the flattened
+  tree, packaged into the kernel;
 - `VORTEX_XILINX_IP_DIR` — the vendor cores, copied in fresh directories
   (Tcl's `file copy` onto an existing directory nests instead of replacing,
   which silently reuses the previous run's cores);
-- `VORTEX_PRE_OPT_TCL` — the async-BRAM patch hook. `VX_async_ram_patch`
-  leaves `VX_placeholder` black boxes wherever an asynchronous-read RAM must
-  live in block RAM; without the hook, `opt_design` aborts with `DRC INBB-3`
-  — but only once a configuration is large enough to push those RAMs out of
-  LUTRAM, so small builds pass and large ones do not;
 - `FREQUENCY` (default 60 MHz) and `STRATEGY` (default `TIMING`).
 
 ---

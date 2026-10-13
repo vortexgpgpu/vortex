@@ -186,7 +186,10 @@ proc slr_pblocks_run {} {
     # Per-cluster reconciliation: everything sizeable inside a cluster must be
     # captured by an atom or a cluster cache. If it is not, the atom model is
     # stale (RTL changed) and we must NOT floorplan on a partial view.
-    set clusters [cells_re {.*/g_clusters\[[0-9]+\]\.cluster}]
+    #
+    # A generate-loop instance is g_x[i].inst read from the RTL, and g_x_i_inst
+    # read from the CIRCT netlist, which names generate scopes with `_`.
+    set clusters [cells_re {.*/g_clusters(\[[0-9]+\]\.|_[0-9]+_)cluster}]
     if {[llength $clusters] == 0} {
         # Non-clustered top (single cluster inlined): treat vortex as one region.
         set clusters [cells_re {.*/(Vortex|vortex)$}]
@@ -199,9 +202,9 @@ proc slr_pblocks_run {} {
         set acc 0
 
         # sockets (cores + private L1s), whole.
-        foreach s [cells_re "[slr_re_escape $clp]/g_sockets\\\[\[0-9\]+\\\]\\.socket"] {
+        foreach s [cells_re "[slr_re_escape $clp]/g_sockets(\\\[\[0-9\]+\\\]\\.|_\[0-9\]+_)socket"] {
             set g {}
-            foreach c [cells_re "[slr_re_escape [get_property NAME $s]]/g_cores\\\[\[0-9\]+\\\]\\.core"] { lappend g $c }
+            foreach c [cells_re "[slr_re_escape [get_property NAME $s]]/g_cores(\\\[\[0-9\]+\\\]\\.|_\[0-9\]+_)core"] { lappend g $c }
             foreach c [cells_re "[slr_re_escape [get_property NAME $s]]/(icache|dcache)"]                { lappend g $c }
             if {[llength $g] == 0} { set g [list $s] }
             set f {0 0 0 0}
@@ -212,10 +215,10 @@ proc slr_pblocks_run {} {
 
         # extension core BUNDLED with its private cache.
         foreach {corere cachere} {
-            {.*\.tex_core}    {.*/tcache}
-            {.*\.raster_core} {.*/rcache}
-            {.*\.om_core}     {.*/ocache}
-            {.*\.rtu_core}    {.*/rtcache}
+            {.*[._]tex_core}    {.*/tcache}
+            {.*[._]raster_core} {.*/rcache}
+            {.*[._]om_core}     {.*/ocache}
+            {.*[._]rtu_core}    {.*/rtcache}
             {.*/dxa_core}     {}
         } {
             foreach core [get_cells -quiet -hierarchical -regexp $corere] {

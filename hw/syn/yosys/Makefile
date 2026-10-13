@@ -209,7 +209,7 @@ $(BUILD_DIR)/src: | $(BUILD_DIR)
 # their stubs in the sources.
 verilog: $(BUILD_DIR)/project.v
 $(BUILD_DIR)/project.v: $(BUILD_DIR)/src
-	$(SCRIPT_DIR)/sv_to_v.sh -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
+	$(SCRIPT_DIR)/circt_elaborate.sh -fv2005 -t$(TOP_LEVEL_ENTITY) -I$(BUILD_DIR)/src -b'$(BB_MODULES)' \
 		-o$(BUILD_DIR)/project.v
 	# Remove severity/control system-task lines yosys can't synthesize
 	# ($fatal/$error/$warning/$info/$stop are used by the cvfpu sources).
