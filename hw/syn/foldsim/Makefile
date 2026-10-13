@@ -104,7 +104,10 @@ IP_DIR := $(BUILD_DIR)/foldsim_afu_ip
 CFG := $(BUILD_DIR)/config.cfg
 VBIN := $(BIN_DIR)/foldsim.vbin
 
-RTL_SRCS := $(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh') \
+# The kernel's own sources are not the target's: they are read only when the
+# kernel is packaged or emulated.
+KERNEL_RTL := $(wildcard $(FOLDSIM_RTL_DIR)/*.sv $(FOLDSIM_RTL_DIR)/*.vh)
+RTL_SRCS := $(filter-out $(KERNEL_RTL),$(shell find $(RTL_DIR) -name '*.sv' -o -name '*.v' -o -name '*.vh')) \
             $(wildcard $(ROOT_DIR)/hw/VX_config.vh) $(wildcard $(ROOT_DIR)/hw/VX_types.vh) \
             $(firstword $(MAKEFILE_LIST)) $(CONFIG_STAMP)
 # The AFU shells of the native flows are second tops, and the foldsim kernel is
@@ -118,11 +121,13 @@ all: $(VBIN)
 # The units that would wrap a Xilinx floating-point core take their soft path,
 # the one they take wherever no vendor core exists.
 VENDOR_FP_UNITS := VX_fma_unit.sv VX_fdiv_unit.sv VX_fsqrt_unit.sv
+# The list is written to a temporary and moved into place last, so a failing
+# step leaves no list that looks current.
 sources: $(SRCS_LIST)
 $(SRCS_LIST): $(RTL_SRCS)
-	rm -rf $(SRCS_DIR)
+	rm -rf $(SRCS_DIR) $@ $@.tmp
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) -T$(TARGET_TOP) -C$(SRCS_NAME) \
-		-O$(SRCS_NAME).f $(RTL_PKGS)
+		-O$(SRCS_NAME).f.tmp $(RTL_PKGS)
 	@for f in $(VENDOR_FP_UNITS); do \
 		[ -f $(SRCS_DIR)/$$f ] || continue; \
 		grep -q 'localparam VENDOR_OK = 1;' $(SRCS_DIR)/$$f || \
@@ -131,11 +136,12 @@ $(SRCS_LIST): $(RTL_SRCS)
 	done
 	@for f in $(SHELL_MODULES); do \
 		rm -f $(SRCS_DIR)/$$f; \
-		grep -v "/$$f$$" $@ > $@.tmp && mv $@.tmp $@; \
+		grep -v "/$$f$$" $@.tmp > $@.tmp2 && mv $@.tmp2 $@.tmp; \
 	done
 	@if grep -qE 'localparam +VX_MEM_PORTS *= *0 *;' $(SRCS_DIR)/VX_gpu_pkg.sv; then \
 		echo "ERROR: generated sources resolve VX_MEM_PORTS to 0 (no memory interface)"; exit 1; \
 	fi
+	mv $@.tmp $@
 
 $(LIFT_LIST): $(SRCS_LIST) $(SRC_DIR)/lift_boundaries.py $(CLASSES_STAMP)
 	rm -rf $(BUILD_DIR)/lift
