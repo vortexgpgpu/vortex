@@ -242,8 +242,14 @@ advancing for that time (60 s when it is unset).
   latency checking the device-side protocol, resets at random points with
   HBM busy, and each kind of burst; every response and id checked, none from
   before a reset delivered after it.
-- **Applications** in the in-process simulator and on the V80 (§7).
-- **CIRCT lit tests** for every pass (`test/Transforms/foldsim-*.mlir`).
+- **Applications** in the in-process simulator and on the V80, against rtlsim
+  behind the AXI4 adapter on `AxiLatencyPipe` (`AXI_BUS=1`) with the same
+  memory settings: retired instructions and cycles identical (§7).
+- **foldsim's own tests** (`check-foldsim` in the foldsim repository): lit
+  tests of every pass and of the driver, and small threaded simulators run in
+  Verilator against their expected tokens — one and several threads,
+  registered memory reads, register initial values, eager outputs, a reset of
+  one cycle.
 
 ---
 
@@ -259,7 +265,8 @@ classes (4 threads each).
 | foldsim, ready scheduling, in-process | Verilator | 8,702 | 415,454 | | 8.00 |
 | foldsim, threads in turn | V80 | 8,702 | 415,454 | 3,497,994 | 8.00 or 12.00 |
 | foldsim, ready scheduling | V80 | 8,702 | 415,454 | 3,497,994 | 8.00 |
-| rtlsim, AXI4 with `AxiLatencyPipe` | Verilator | 8,710 | | | |
+| rtlsim, AXI4 with `AxiLatencyPipe` | Verilator | 8,710 | 415,462 | | |
+| rtlsim, same, launched after the caches' reset sweep | Verilator | 8,702 | 415,454 | | |
 
 On the V80 the kernel closes at 149.8 MHz (run at 143 MHz) in 138k routed
 LUTs, against 219k for the firesim backend's image of the same configuration.
@@ -269,7 +276,41 @@ sgemm n=128 takes 196 ms with ready scheduling: 50× SimX on the same host,
 Instruction counts equal the firesim backend's and rtlsim's. Cycle counts are
 1.5–6 % below the firesim backend's, whose memory model has the same
 latency-bandwidth settings but adds channel cycles `AxiLatencyPipe` does not;
-foldsim agrees with `AxiLatencyPipe` (rtlsim) instead.
+foldsim agrees with `AxiLatencyPipe` (rtlsim) instead: every memory
+transaction in the same target cycle. rtlsim's harness starts the kernel 8
+cycles after reset, while each L1 bank still invalidates one set per cycle
+(64 for the instruction cache), so its first fetch waits 8 cycles the
+counters see; a host's launch comes thousands of cycles later. Given that
+settle time, rtlsim's cycles are foldsim's exactly.
+
+### 7.1 tinygpu: foldsim and the firesim backend
+
+The same Vortex tree, configuration and V80 on both flows: 1 core, 2 warps,
+2 threads, no L1 caches or local memory, STD FPU, one memory bank, kernel
+clock 143 MHz. Every class has one instance, so foldsim folds nothing here:
+this compares the two simulators' fidelity and overheads, not threading.
+
+| | foldsim | firesim backend |
+|---|---:|---:|
+| kernel LUTs (synthesis) | 34,393 | 103,369 |
+| of them distributed RAM | 1,822 | 51,943 |
+| FFs / BRAM tiles / URAM / DSP | 30,198 / 4 / 0 / 8 | 34,376 / 5 / 8 / 8 |
+| WNS at 143 MHz | +0.282 ns | +0.752 ns |
+| image build (side by side, same host) | 56 min | 80 min |
+| `demo` cycles, V80 (= Verilator) | 24,402 | 25,624 |
+| `sgemm -n16` cycles, V80 (= Verilator) | 301,923 | 317,163 |
+| `sgemm -n64` cycles, V80 | 13,264,035 | 13,937,835 |
+| `sgemm -n64` kernel time, V80 | 278 ms | 178 ms |
+| host cycles per target cycle, `sgemm -n64` | 3.00 | 1.84 (FMR) |
+
+Instruction counts are identical on both flows, in Verilator and on the V80.
+foldsim's cycles equal rtlsim's behind the AXI4 adapter on `AxiLatencyPipe`
+with the same memory settings (`AXI_BUS=1`) exactly; the firesim backend's
+are 5.0–5.1 % above, from its memory model's channel mechanics. With nothing
+to fold, a foldsim target cycle costs three host cycles (the token exchange
+of each one-thread model), so the firesim backend runs tinygpu faster;
+foldsim's advantage is the GPU it fits, its area falling with every class it
+folds (s2w4i2 above).
 
 ---
 
