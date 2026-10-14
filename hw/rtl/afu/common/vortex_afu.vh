@@ -26,6 +26,12 @@
 `define PLATFORM_MEMORY_ID_WIDTH 32
 `endif
 
+// Nonzero: memory reads carry one AXI ID and return their tags through a FIFO
+// this deep, for platforms whose interconnect serializes distinct read IDs.
+`ifndef PLATFORM_MEMORY_READ_ORDER_DEPTH
+`define PLATFORM_MEMORY_READ_ORDER_DEPTH 0
+`endif
+
 `define GEN_AXI_MEM(i) \
 	output wire                                 m_axi_mem_``i``_awvalid, \
 	input  wire                                 m_axi_mem_``i``_awready, \

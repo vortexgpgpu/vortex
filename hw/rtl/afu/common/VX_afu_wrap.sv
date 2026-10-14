@@ -878,6 +878,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             .NUM_PORTS_IN   (FAB_NUM_PORTS),
             .NUM_BANKS_OUT  (C_M_AXI_MEM_NUM_BANKS),
             .INTERLEAVE     (`VX_CFG_PLATFORM_MEMORY_INTERLEAVE),
+            .READ_ORDER_DEPTH (`PLATFORM_MEMORY_READ_ORDER_DEPTH),
             .REQ_OUT_BUF    ((VX_MEM_PORTS > 1) ? 2 : 0),
             .RSP_OUT_BUF    ((VX_MEM_PORTS > 1 || C_M_AXI_MEM_NUM_BANKS > 1) ? 2 : 0)
         ) bank_adapter (

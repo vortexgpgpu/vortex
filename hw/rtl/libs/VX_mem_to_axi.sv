@@ -33,6 +33,7 @@ module VX_mem_to_axi #(
     parameter INTERLEAVE        = 0,
     parameter TAG_BUFFER_SIZE   = 16,
     parameter WRITE_TRACK_DEPTH = 8, // outstanding writes tracked per bank
+    parameter READ_ORDER_DEPTH  = 0, // >0: all reads carry ARID 0, tags return through a FIFO this deep per bank
     parameter ARBITER           = "R",
     parameter REQ_OUT_BUF       = 0,
     parameter RSP_OUT_BUF       = 0,
@@ -125,6 +126,10 @@ module VX_mem_to_axi #(
     `STATIC_ASSERT ((DST_ADDR_WDITH >= ADDR_WIDTH_IN), ("invalid address width: current=%0d, expected=%0d", DST_ADDR_WDITH, ADDR_WIDTH_IN))
     `STATIC_ASSERT ((TAG_WIDTH_OUT >= DST_TAG_WIDTH), ("invalid output tag width: current=%0d, expected=%0d", TAG_WIDTH_OUT, DST_TAG_WIDTH))
     `STATIC_ASSERT ((WRITE_TRACK_DEPTH >= 2) && `IS_POW2(WRITE_TRACK_DEPTH), ("WRITE_TRACK_DEPTH must be a power of 2 >= 2: current=%0d", WRITE_TRACK_DEPTH))
+
+    // Read tag of each bank's oldest outstanding read when READ_ORDER_DEPTH > 0.
+    wire [NUM_BANKS_OUT-1:0][READ_FULL_TAG_WIDTH-1:0] rd_order_tag;
+    wire [NUM_BANKS_OUT-1:0] rd_order_pop;
 
     // Bank selection
 
@@ -310,8 +315,10 @@ module VX_mem_to_axi #(
         // while the valids are held off. The xbar handshake must carry the
         // same gating as the valids, or a held write is consumed from the
         // xbar without ever reaching AXI.
+        wire rd_order_full;
+
         assign req_xbar_ready_out[i] = xbar_rw_out ? (axi_write_ready && wr_start_allowed)
-                                                   : (m_axi_arready[i] && ~rd_hazard);
+                                                   : (m_axi_arready[i] && ~rd_hazard && ~rd_order_full);
 
         // AXI write address channel
 
@@ -350,7 +357,36 @@ module VX_mem_to_axi #(
             assign xbar_tag_r_out = READ_TAG_WIDTH'(xbar_tag_out);
         end
 
-        assign m_axi_arvalid[i] = req_xbar_valid_out[i] && ~xbar_rw_out && ~rd_hazard;
+        assign m_axi_arvalid[i] = req_xbar_valid_out[i] && ~xbar_rw_out && ~rd_hazard && ~rd_order_full;
+
+        // An interconnect with a narrow ID space may serialize reads that carry
+        // distinct IDs (one in flight at a time). Reads sharing one ID may stay
+        // in flight together and return in issue order, so in that mode a FIFO
+        // of tags stands in for the ID.
+        if (READ_ORDER_DEPTH != 0) begin : g_rd_order
+            VX_fifo_queue #(
+                .DATAW (READ_FULL_TAG_WIDTH),
+                .DEPTH (READ_ORDER_DEPTH)
+            ) rd_order_queue (
+                .clk       (clk),
+                .reset     (reset),
+                .push      (m_axi_arvalid[i] && m_axi_arready[i]),
+                .pop       (rd_order_pop[i]),
+                .data_in   (xbar_tag_r_out),
+                .data_out  (rd_order_tag[i]),
+                .full      (rd_order_full),
+                `UNUSED_PIN (empty),
+                `UNUSED_PIN (alm_empty),
+                `UNUSED_PIN (alm_full),
+                `UNUSED_PIN (size)
+            );
+            assign m_axi_arid[i] = '0;
+        end else begin : g_rd_id
+            assign rd_order_full   = 1'b0;
+            assign rd_order_tag[i] = '0;
+            `UNUSED_VAR (rd_order_pop[i])
+            assign m_axi_arid[i]   = TAG_WIDTH_OUT'(xbar_tag_r_out);
+        end
 
         // convert address to byte-addressable space
     if (INTERLEAVE) begin : g_m_axi_araddr_i
@@ -358,7 +394,6 @@ module VX_mem_to_axi #(
     end else begin : g_m_axi_araddr_ni
         assign m_axi_araddr[i]  = (ADDR_WIDTH_OUT'(xbar_addr_out) << LOG2_DATA_SIZE) | (ADDR_WIDTH_OUT'(i) << (BANK_ADDR_WIDTH + LOG2_DATA_SIZE));
     end
-        assign m_axi_arid[i]    = TAG_WIDTH_OUT'(xbar_tag_r_out);
         assign m_axi_arlen[i]   = 8'b00000000;
         assign m_axi_arsize[i]  = 3'(LOG2_DATA_SIZE);
         assign m_axi_arburst[i] = 2'b01;
@@ -407,10 +442,19 @@ module VX_mem_to_axi #(
                 in_burst_r <= ~m_axi_rlast[i];
             end
         end
+        wire [READ_FULL_TAG_WIDTH-1:0] rsp_tag;
+        if (READ_ORDER_DEPTH != 0) begin : g_rsp_tag_order
+            `UNUSED_VAR (m_axi_rid[i])
+            assign rsp_tag = rd_order_tag[i];
+        end else begin : g_rsp_tag_id
+            `UNUSED_VAR (rd_order_tag[i])
+            assign rsp_tag = m_axi_rid[i][READ_FULL_TAG_WIDTH-1:0];
+        end
+        assign rd_order_pop[i] = rsp_xbar_valid_in[i] && rsp_xbar_ready_in[i];
         assign rsp_xbar_valid_in[i] = m_axi_rvalid[i] && ~in_burst_r;
-        assign rsp_xbar_data_in[i] = {m_axi_rdata[i], m_axi_rid[i][NUM_PORTS_IN_BITS +: READ_TAG_WIDTH]};
+        assign rsp_xbar_data_in[i] = {m_axi_rdata[i], rsp_tag[NUM_PORTS_IN_BITS +: READ_TAG_WIDTH]};
         if (NUM_PORTS_IN > 1) begin : g_input_sel
-            assign rsp_xbar_sel_in[i] = m_axi_rid[i][0 +: NUM_PORTS_IN_BITS];
+            assign rsp_xbar_sel_in[i] = rsp_tag[0 +: NUM_PORTS_IN_BITS];
         end else begin : g_no_input_sel
             assign rsp_xbar_sel_in[i] = 0;
         end

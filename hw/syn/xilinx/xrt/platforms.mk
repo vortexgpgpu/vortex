@@ -22,6 +22,9 @@ ifneq ($(findstring xilinx_u55c,$(XSA)),)
   # 16 GB of HBM2 with 32 channels (512 MB per channel)
   CONFIGS += -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=32 -DVX_CFG_PLATFORM_MEMORY_ADDR_WIDTH=34
   CONFIGS += -DPLATFORM_MERGED_MEMORY_INTERFACE
+  # The HBM subsystem's port SmartConnect has a 1-bit ID space and runs reads
+  # with distinct IDs one at a time (~0.3 GB/s); issue them in order on one ID.
+  CONFIGS += -DPLATFORM_MEMORY_READ_ORDER_DEPTH=32
   VPP_FLAGS += --connectivity.sp vortex_afu_1.m_axi_mem_0:HBM[0:31]
   #VPP_FLAGS += $(foreach i,$(shell seq 0 31), --connectivity.sp vortex_afu_1.m_axi_mem_$(i):HBM[$(i)])
 else ifneq ($(findstring xilinx_u50,$(XSA)),)
