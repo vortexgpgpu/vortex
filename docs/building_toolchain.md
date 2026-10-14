@@ -910,6 +910,29 @@ ln -s ~/dev/firesim $TOOLDIR/firesim
 The checkout must contain the fork commit pinned as `FIRESIM_REV` in `VERSION`;
 `make -C hw/syn/firesim stage` checks it.
 
+**From the prebuilt (faster).** `vortex-toolchain-prebuilt` carries the same
+tree for ubuntu/focal with its conda environment already resolved — the part
+of a setup that takes time — conda-packed, plus a shallow `.git` of the
+`FIRESIM_REV` commit so `check-firesim` passes and `git fetch` works:
+
+```bash
+REPO=https://github.com/vortexgpgpu/vortex-toolchain-prebuilt/raw/v3.0.1/firesim/ubuntu/focal
+for x in a b c d e f g h i j k l m n o p q r s t u v; do
+    wget $REPO/firesim.tar.bz2.parta$x
+done
+cat firesim.tar.bz2.parta* | tar -C ~/dev -xjf - && rm firesim.tar.bz2.parta*
+cd ~/dev/firesim/.conda-env
+tar -xf firesim-conda-env.tar && rm firesim-conda-env.tar
+python3 bin/conda-unpack                 # rewrite the packed prefixes for this location
+ln -s ~/dev/firesim $TOOLDIR/firesim
+```
+
+The v3.0.1 bundle is 22 parts (`partaa`..`partav`). `env.sh` locates its own
+directory, so the tree works wherever it is unpacked; `conda` must still be on
+`PATH` for `ci/firesim_env.sh`. The first elaboration downloads sbt's own
+compiler jars into `~/.cache/coursier` and `~/.sbt`, so it needs network
+access once.
+
 `vortex_3.x` is based on upstream tag 1.21.0. Clone it wherever you keep
 sources; `$TOOLDIR/firesim` only has to resolve to the checkout.
 
