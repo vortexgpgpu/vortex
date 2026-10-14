@@ -169,9 +169,9 @@ circt()
 {
     # The count of what ci/toolchain_prebuilt.sh's `split -b 50M` produced for
     # this release, as for verilator: re-check it whenever the circt prebuilt
-    # is refreshed.
+    # is refreshed. v3.0.1's bundle is 51.2 MB, one part.
     case $OSVERSION in
-    *)  parts=$(eval echo {a..b}) ;;
+    *)  parts=$(eval echo {a..a}) ;;
     esac
     echo $parts
     rm -f circt.tar.bz2.parta*
