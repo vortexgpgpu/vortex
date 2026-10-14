@@ -1124,8 +1124,13 @@ the whole of it (tools, libraries, headers, CMake packages) into
 `$TOOLDIR/circt`:
 
 ```bash
-./ci/circt_install.sh       # CIRCT_REPO, CIRCT_REV, JOBS override the defaults
+./ci/circt_install.sh       # CIRCT_REPO, CIRCT_REV, JOBS, CMAKE override the defaults
 ```
+
+It needs cmake >= 3.28 (slang, CIRCT's SystemVerilog frontend, requires it)
+and a C++20 compiler (GCC >= 11). Ubuntu 22.04 ships cmake 3.22: install a
+newer one (`pip install cmake`) and point `CMAKE` at it if it is not first on
+`PATH`.
 
 It configures with:
 

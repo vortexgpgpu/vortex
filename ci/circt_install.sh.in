@@ -25,8 +25,9 @@
 # prebuilt and never run this script.
 #
 # Release, assertions off, libstdc++ linked statically, no zlib/zstd: the
-# tools run on any machine of the OSVERSION. Needs git, cmake >= 3.20, ninja,
-# a C++17 compiler and python3; installs nothing system-wide.
+# tools run on any machine of the OSVERSION. Needs git, cmake >= 3.28 (for
+# slang, the SystemVerilog frontend), ninja, a C++20 compiler (GCC >= 11) and
+# python3; installs nothing system-wide.
 #
 # Idempotent: re-running rebuilds only what changed.
 
@@ -42,6 +43,18 @@ CIRCT_SRC=${CIRCT_SRC:=$TOOLDIR/circt-src}
 CIRCT_PREFIX=${CIRCT_PREFIX:=$TOOLDIR/circt}
 CIRCT_BUILD=$CIRCT_SRC/build
 JOBS=${JOBS:=$(nproc)}
+
+# slang's CMakeLists sets cmake_minimum_required(3.28), which is NEWER than
+# the cmake Ubuntu 22.04 ships (3.22); the failure would come only after the
+# LLVM checkout, so check first. CMAKE may point at a newer cmake (e.g. pip's).
+CMAKE=${CMAKE:=cmake}
+cmake_ver=$($CMAKE --version | head -1 | awk '{print $3}')
+cmake_maj=${cmake_ver%%.*}; cmake_rest=${cmake_ver#*.}; cmake_min=${cmake_rest%%.*}
+if [ "$cmake_maj" -lt 3 ] || { [ "$cmake_maj" -eq 3 ] && [ "$cmake_min" -lt 28 ]; }; then
+    echo "error: CIRCT's slang frontend needs cmake >= 3.28, found $cmake_ver ($CMAKE)."
+    echo "       set CMAKE=/path/to/newer/cmake (pip install cmake) and re-run."
+    exit 1
+fi
 
 # ----------------------------------------------------------------------
 # 1. Fetch: LLVM is a submodule pinned by the CIRCT revision.
@@ -63,7 +76,7 @@ git -C "$CIRCT_SRC" submodule update --init --depth 1 llvm
 # ----------------------------------------------------------------------
 # 2. Configure and build
 # ----------------------------------------------------------------------
-cmake -G Ninja -S "$CIRCT_SRC/llvm/llvm" -B "$CIRCT_BUILD" \
+$CMAKE -G Ninja -S "$CIRCT_SRC/llvm/llvm" -B "$CIRCT_BUILD" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$CIRCT_PREFIX" \
     -DLLVM_ENABLE_PROJECTS=mlir \
