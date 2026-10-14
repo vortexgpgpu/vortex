@@ -151,6 +151,13 @@ public:
 
   const OmCore::PerfStats& perf_stats() const { return perf_stats_; }
 
+  bool busy() const {
+    for (auto& s : slots_) {
+      if (s.in_use) return true;
+    }
+    return false;
+  }
+
   void tick() {
     ++cycle_;
 
@@ -708,4 +715,8 @@ int OmCore::dcr_write(uint32_t addr, uint32_t value) {
 
 const OmCore::PerfStats& OmCore::perf_stats() const {
   return impl_->perf_stats();
+}
+
+bool OmCore::busy() const {
+  return impl_->busy();
 }

@@ -307,6 +307,12 @@ public:
       if (socket->running())
         return true;
     }
+  #ifdef VX_CFG_EXT_OM_ENABLE
+    // Fragments the merger holds between memory accesses are no channel packet.
+    if (om_core_->busy()) {
+      return true;
+    }
+  #endif
   #ifdef VX_CFG_VM_ENABLE
     // A parked fill holds no channel packet while it waits, so completion
     // must ask the TLB directly. (The device walker is the processor's.)

@@ -59,6 +59,10 @@ public:
 
   const PerfStats& perf_stats() const;
 
+  // A fragment in a slot between memory accesses holds no channel packet, so
+  // launch completion asks the unit directly, as it folds the RTL OM's busy.
+  bool busy() const;
+
 protected:
   void on_reset();
   void on_tick();
