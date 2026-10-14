@@ -524,8 +524,26 @@ faster than rtlsim on `sgemm -n32`). Instruction counts match rtlsim
 exactly; cycle counts differ −1.3%…+7.1% — the FASED timing model, not the
 core: FPGA and hw_emu agree exactly.
 
-Threaded images and their results are the foldsim flow's:
-[foldsim.md](foldsim.md).
+### 9.2 V80
+
+tinygpu: 1 cluster / 1 core / 2 warps / 2 threads, no L1 caches or local
+memory, STD FPU, one memory bank, kernel clock 143 MHz (WNS +0.752 ns).
+Kernel-only synthesis: 103,369 LUTs (51,943 as distributed RAM), 34,376
+FFs, 5 BRAM tiles, 8 URAM, 8 DSP.
+
+| app | instrs | cycles, metasim (`avedsim`) | cycles, V80 | kernel time, V80 |
+|---|---:|---:|---:|---:|
+| `demo` | 1,222 | 25,624 | 25,624 | |
+| `sgemm -n16` | 15,240 | 317,163 | 317,163 | 5 ms |
+| `sgemm -n64` | 673,800 | | 13,937,835 | 178 ms |
+
+The metasimulator and the image agree cycle for cycle. Instruction counts
+match rtlsim's. Cycles are 5.0 % above rtlsim's on the same latency-bandwidth
+settings (`AXI_BUS=1`; `demo`, `sgemm -n16`), and 5.1 % above the foldsim
+image's on `sgemm -n64`, from the memory model's channel mechanics.
+
+Threaded images, and the same tinygpu on the foldsim flow, are in
+[foldsim.md](foldsim.md) §7.
 
 ---
 
