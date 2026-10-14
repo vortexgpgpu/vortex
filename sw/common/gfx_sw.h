@@ -92,7 +92,8 @@ static inline __attribute__((always_inline)) uint32_t DoLogicOp(uint32_t op, uin
   }
 }
 
-static inline __attribute__((always_inline)) ColorARGB DoBlendFunc(uint32_t func, ColorARGB src, ColorARGB dst, ColorARGB cst) {
+static inline __attribute__((always_inline)) ColorARGB DoBlendFunc(uint32_t func, ColorARGB src, ColorARGB dst, ColorARGB cst,
+                                                                    ColorARGB src1 = ColorARGB(0u)) {
   switch (func) {
   case VX_OM_BLEND_FUNC_ZERO:               return ColorARGB(0, 0, 0, 0);
   case VX_OM_BLEND_FUNC_ONE:                return ColorARGB(0xff, 0xff, 0xff, 0xff);
@@ -112,6 +113,10 @@ static inline __attribute__((always_inline)) ColorARGB DoBlendFunc(uint32_t func
     int factor = sw_min<int>(src.a, 0xff - dst.a);
     return ColorARGB(0xff, factor, factor, factor);
   }
+  case VX_OM_BLEND_FUNC_SRC1_RGB:           return src1;
+  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC1_RGB: return ColorARGB(0xff - src1.a, 0xff - src1.r, 0xff - src1.g, 0xff - src1.b);
+  case VX_OM_BLEND_FUNC_SRC1_A:             return ColorARGB(src1.a, src1.a, src1.a, src1.a);
+  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC1_A:   return ColorARGB(0xff - src1.a, 0xff - src1.a, 0xff - src1.a, 0xff - src1.a);
   default:                                  return ColorARGB(0, 0, 0, 0);
   }
 }
@@ -178,6 +183,9 @@ struct om_state_t {
   // the stencil reference is the fragment's own (shader stencil export),
   // passed with each merge, instead of stencil_ref
   uint32_t stencil_ref_export;
+  // the blend constant at full precision (float bits, RGBA), for the formats
+  // that blend in float
+  uint32_t blend_constf[4];
 };
 
 // Derive the enable flags + expanded color mask exactly as the FF unit does.
@@ -348,8 +356,9 @@ static inline __attribute__((always_inline)) uint32_t om_encode_color(uint32_t f
 // A float depth as the D32F plane stores it: an unsigned key in the float's
 // order, with -0 folded onto +0, so every merger compares D32F unsigned.
 static inline __attribute__((always_inline)) uint32_t om_float_depth_key(uint32_t bits) {
-  if (bits == 0x80000000u)
+  if (bits == 0x80000000u) {
     bits = 0;
+  }
   return bits ^ ((bits & 0x80000000u) ? 0xffffffffu : 0x80000000u);
 }
 
@@ -435,8 +444,9 @@ static inline __attribute__((always_inline)) bool ds_rmw(
     const om_state_t& s, uintptr_t z_addr, uint32_t face, uint32_t src_depth,
     uint32_t src_sref = 0) {
   const int f = face ? 1 : 0;
-  if (!(s.depth_enabled || s.stencil_enabled[f]))
+  if (!(s.depth_enabled || s.stencil_enabled[f])) {
     return true;
+  }
   om_depth_desc dd = om_depth_geom(s.depth_format);
   const bool depth_write = s.depth_enabled && s.depth_writemask && dd.has_depth;
   const uint32_t stencil_wm = (s.stencil_enabled[f] && dd.has_stencil) ? (s.stencil_writemask[f] & 0xffu) : 0u;
@@ -444,10 +454,12 @@ static inline __attribute__((always_inline)) bool ds_rmw(
   if (dd.split) {
     uint32_t dst_depth = om_load(z_addr, 4), dst_stencil = om_load(z_addr + 4, 1);
     bool ds_pass = ds_test(s, face, src_depth, dst_depth, dst_stencil, &stencil_result, src_sref);
-    if (depth_write && ds_pass)
+    if (depth_write && ds_pass) {
       om_store(z_addr, 4, src_depth);
-    if (stencil_wm)
+    }
+    if (stencil_wm) {
       om_store(z_addr + 4, 1, (dst_stencil & ~stencil_wm) | (stencil_result & stencil_wm));
+    }
     return ds_pass;
   }
   uint32_t dbpp = om_depth_bpp(s.depth_format);
@@ -458,8 +470,9 @@ static inline __attribute__((always_inline)) bool ds_rmw(
                          &stencil_result, src_sref);
   uint32_t merged = (stencil_result << dd.sshift) | depth_ref;
   uint32_t ds_wm = ((depth_write && ds_pass) ? dd.dmask : 0u) | (stencil_wm << dd.sshift);
-  if (ds_wm)
+  if (ds_wm) {
     om_store(z_addr, dbpp, (dst_ds & ~ds_wm) | (merged & ds_wm));
+  }
   return ds_pass;
 }
 
@@ -1265,8 +1278,9 @@ static inline __attribute__((always_inline)) uint32_t ds_early(
     uint32_t sample_mask, uint32_t src_depth) {
   uint32_t passed = 0;
   for (uint32_t k = 0; k < samples; ++k) {
-    if (((sample_mask >> k) & 1u) && ds_rmw(s, msaa_depth_addr(s, samples, x, y, k), face, src_depth))
+    if (((sample_mask >> k) & 1u) && ds_rmw(s, msaa_depth_addr(s, samples, x, y, k), face, src_depth)) {
       passed |= 1u << k;
+    }
   }
   return passed;
 }
@@ -1291,6 +1305,7 @@ struct om_color_t {
   uint32_t blend_enabled;
   uint32_t cbuf_writemask;             // expanded 32-bit byte mask
   uint32_t color_read, color_write;
+  uint32_t blend_constf[4];            // float bits, RGBA
 };
 
 // Derive a colour attachment's enable flags + expanded mask exactly as
@@ -1312,12 +1327,13 @@ static inline __attribute__((always_inline)) void resolve_om_color(om_color_t& c
 // Blend for an explicit per-attachment colour descriptor (the MRT twin of
 // blend(); both go through the same free DoBlendFunc/DoBlendMode ops so an
 // attachment's result matches the single-RT path bit-for-bit).
-static inline __attribute__((always_inline)) uint32_t blend_rt(const om_color_t& c, uint32_t src_color, uint32_t dst_color) {
-  ColorARGB src(src_color), dst(dst_color), cst(c.blend_const);
-  ColorARGB s_rgb = DoBlendFunc(c.blend_src_rgb, src, dst, cst);
-  ColorARGB s_a   = DoBlendFunc(c.blend_src_a,   src, dst, cst);
-  ColorARGB d_rgb = DoBlendFunc(c.blend_dst_rgb, src, dst, cst);
-  ColorARGB d_a   = DoBlendFunc(c.blend_dst_a,   src, dst, cst);
+static inline __attribute__((always_inline)) uint32_t blend_rt(const om_color_t& c, uint32_t src_color, uint32_t dst_color,
+                                                              uint32_t src1_color = 0) {
+  ColorARGB src(src_color), dst(dst_color), cst(c.blend_const), src1(src1_color);
+  ColorARGB s_rgb = DoBlendFunc(c.blend_src_rgb, src, dst, cst, src1);
+  ColorARGB s_a   = DoBlendFunc(c.blend_src_a,   src, dst, cst, src1);
+  ColorARGB d_rgb = DoBlendFunc(c.blend_dst_rgb, src, dst, cst, src1);
+  ColorARGB d_a   = DoBlendFunc(c.blend_dst_a,   src, dst, cst, src1);
   ColorARGB rgb = DoBlendMode(c.blend_mode_rgb, c.logic_op, src, dst, s_rgb, d_rgb);
   ColorARGB a   = DoBlendMode(c.blend_mode_a,   c.logic_op, src, dst, s_a,   d_a);
   return ColorARGB(a.a, rgb.r, rgb.g, rgb.b).value;
@@ -1337,8 +1353,9 @@ static inline __attribute__((always_inline)) void om_fragment_mrt(
   if (num_color > VX_OM_MAX_RT) num_color = VX_OM_MAX_RT;
   uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
                                + (uint64_t)x * om_depth_bpp(s.depth_format));
-  if (!ds_rmw(s, z_addr, face, src_depth, src_sref))
+  if (!ds_rmw(s, z_addr, face, src_depth, src_sref)) {
     return;
+  }
 
   for (uint32_t k = 0; k < num_color; ++k) {
     const om_color_t& c = colors[k];
@@ -1534,7 +1551,8 @@ static inline __attribute__((always_inline)) void om_wide_store_raw(uintptr_t a,
 
 // One blend factor, per channel, in float (Vulkan VkBlendFactor semantics).
 static inline __attribute__((always_inline)) float om_blend_factor_f(
-    uint32_t func, uint32_t ch, const float src[4], const float dst[4], const float cst[4]) {
+    uint32_t func, uint32_t ch, const float src[4], const float dst[4], const float cst[4],
+    const float src1[4]) {
   switch (func) {
   case VX_OM_BLEND_FUNC_ZERO:                return 0.0f;
   case VX_OM_BLEND_FUNC_ONE:                 return 1.0f;
@@ -1557,6 +1575,10 @@ static inline __attribute__((always_inline)) float om_blend_factor_f(
     float b = 1.0f - dst[3];
     return (src[3] < b) ? src[3] : b;
   }
+  case VX_OM_BLEND_FUNC_SRC1_RGB:            return src1[ch];
+  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC1_RGB:  return 1.0f - src1[ch];
+  case VX_OM_BLEND_FUNC_SRC1_A:              return src1[3];
+  case VX_OM_BLEND_FUNC_ONE_MINUS_SRC1_A:    return 1.0f - src1[3];
   default:                                   return 0.0f;
   }
 }
@@ -1572,10 +1594,11 @@ static inline __attribute__((always_inline)) float om_blend_op_f(uint32_t mode, 
 }
 
 // Read-modify-write of one wide colour texel. `src` is the shader's output, one
-// lane per RGBA channel. The blend constant is the attachment's packed RGBA8
-// (red in the low byte).
+// lane per RGBA channel, and `src1` its second output under dual-source
+// blending (null otherwise).
 static inline __attribute__((always_inline)) void om_wide_color_rmw(const om_color_t& c, uintptr_t c_addr,
-                                                                    const uint32_t src[4]) {
+                                                                    const uint32_t src[4],
+                                                                    const uint32_t* src1 = nullptr) {
   const om_wide_fmt g = om_wide_geom(c.color_format);
   const bool is_int = (g.kind == OM_KIND_UINT || g.kind == OM_KIND_SINT);
   const bool logic = (c.blend_mode_rgb == VX_OM_BLEND_MODE_LOGICOP) && g.kind != OM_KIND_FLOAT;
@@ -1592,18 +1615,22 @@ static inline __attribute__((always_inline)) void om_wide_color_rmw(const om_col
     raw[0] = raw[1] = raw[2] = raw[3] = 0;
   }
 
-  float sf[4], df[4], cf[4];
+  float sf[4], df[4], cf[4], s1f[4];
   if (blending) {
     for (uint32_t ch = 0; ch < 4; ++ch) {
-      cf[ch] = (float)((c.blend_const >> (ch * 8u)) & 0xffu) * (1.0f / 255.0f);
+      cf[ch] = om_bits_f(c.blend_constf[ch]);
+      s1f[ch] = src1 ? om_bits_f(src1[ch]) : 0.0f;
       sf[ch] = om_bits_f(src[ch]);
       if (ch < g.nch) {
         df[ch] = om_bits_f(om_field_decode(g.kind, g.width[ch], om_field_get(raw, g.off[ch], g.width[ch])));
       } else {
         df[ch] = (ch == 3u) ? 1.0f : 0.0f;
       }
+      // a fixed-point attachment clamps every blend input to [0, 1]
       if (g.kind == OM_KIND_UNORM) {
         sf[ch] = om_clamp01(sf[ch]);
+        s1f[ch] = om_clamp01(s1f[ch]);
+        cf[ch] = om_clamp01(cf[ch]);
       }
     }
   }
@@ -1615,8 +1642,8 @@ static inline __attribute__((always_inline)) void om_wide_color_rmw(const om_col
     uint32_t lane = src[ch];
     if (blending) {
       const bool alpha = (ch == 3u);
-      float fs = om_blend_factor_f(alpha ? c.blend_src_a : c.blend_src_rgb, ch, sf, df, cf);
-      float fd = om_blend_factor_f(alpha ? c.blend_dst_a : c.blend_dst_rgb, ch, sf, df, cf);
+      float fs = om_blend_factor_f(alpha ? c.blend_src_a : c.blend_src_rgb, ch, sf, df, cf, s1f);
+      float fd = om_blend_factor_f(alpha ? c.blend_dst_a : c.blend_dst_rgb, ch, sf, df, cf, s1f);
       float r = om_blend_op_f(alpha ? c.blend_mode_a : c.blend_mode_rgb, sf[ch], df[ch], fs, fd);
       if (g.kind == OM_KIND_UNORM) {
         r = om_clamp01(r);
@@ -1652,7 +1679,32 @@ static inline __attribute__((always_inline)) om_color_t om_state_color(const om_
   c.cbuf_writemask = s.cbuf_writemask;
   c.color_read = s.color_read;
   c.color_write = s.color_write;
+  for (uint32_t ch = 0; ch < 4; ++ch) {
+    c.blend_constf[ch] = s.blend_constf[ch];
+  }
   return c;
+}
+
+// Colour half of a lane-ABI merge into one attachment: a wide attachment takes
+// the four lanes as its RGBA channels, any other one lane 0 as the packed ARGB8
+// word. `src1` is the second source under dual-source blending, or null.
+static inline __attribute__((always_inline)) void om_lanes_color_rmw(
+    const om_color_t& c, uint32_t x, uint32_t y, const uint32_t* lanes, const uint32_t* src1) {
+  if (!c.color_write) {
+    return;
+  }
+  uint32_t cbpp = om_color_bpp(c.color_format);
+  uintptr_t c_addr = (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch + (uint64_t)x * cbpp);
+  if (om_is_wide(c.color_format)) {
+    om_wide_color_rmw(c, c_addr, lanes, src1);
+    return;
+  }
+  bool need_c_read = c.color_read || c.blend_enabled;
+  uint32_t dst_raw = need_c_read ? om_load(c_addr, cbpp) : 0;
+  uint32_t dst_color = om_decode_color(c.color_format, dst_raw);
+  uint32_t blended = c.blend_enabled ? blend_rt(c, lanes[0], dst_color, src1 ? src1[0] : 0u) : lanes[0];
+  uint32_t out_argb = (dst_color & ~c.cbuf_writemask) | (blended & c.cbuf_writemask);
+  om_store(c_addr, cbpp, om_encode_color(c.color_format, out_argb));
 }
 
 // MRT merge where the shader hands four lanes per attachment: a wide attachment
@@ -1673,23 +1725,7 @@ static inline __attribute__((always_inline)) void om_fragment_mrt_wide(
   }
 
   for (uint32_t k = 0; k < num_color; ++k) {
-    const om_color_t& c = colors[k];
-    if (!c.color_write) {
-      continue;
-    }
-    uint32_t cbpp = om_color_bpp(c.color_format);
-    uintptr_t c_addr = (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch + (uint64_t)x * cbpp);
-    const uint32_t* lanes = src_lanes + 4u * k;
-    if (om_is_wide(c.color_format)) {
-      om_wide_color_rmw(c, c_addr, lanes);
-      continue;
-    }
-    bool need_c_read = c.color_read || c.blend_enabled;
-    uint32_t dst_raw = need_c_read ? om_load(c_addr, cbpp) : 0;
-    uint32_t dst_color = om_decode_color(c.color_format, dst_raw);
-    uint32_t blended = c.blend_enabled ? blend_rt(c, lanes[0], dst_color) : lanes[0];
-    uint32_t out_argb = (dst_color & ~c.cbuf_writemask) | (blended & c.cbuf_writemask);
-    om_store(c_addr, cbpp, om_encode_color(c.color_format, out_argb));
+    om_lanes_color_rmw(colors[k], x, y, src_lanes + 4u * k, nullptr);
   }
 }
 
@@ -1699,6 +1735,19 @@ static inline __attribute__((always_inline)) void om_fragment_wide(
     const uint32_t src_lanes[4], uint32_t src_depth, uint32_t src_sref = 0) {
   const om_color_t c = om_state_color(s);
   om_fragment_mrt_wide(s, &c, 1, x, y, face, src_lanes, src_depth, src_sref);
+}
+
+// Dual-source merge into the single attachment: lanes 0-3 are the first source
+// and lanes 4-7 the second, which only the SRC1 blend factors read.
+static inline __attribute__((always_inline)) void om_fragment_dual(
+    const om_state_t& s, uint32_t x, uint32_t y, uint32_t face,
+    const uint32_t src_lanes[8], uint32_t src_depth, uint32_t src_sref = 0) {
+  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
+                               + (uint64_t)x * om_depth_bpp(s.depth_format));
+  if (!ds_rmw(s, z_addr, face, src_depth, src_sref)) {
+    return;
+  }
+  om_lanes_color_rmw(om_state_color(s), x, y, src_lanes, src_lanes + 4);
 }
 
 } // namespace gfx_sw

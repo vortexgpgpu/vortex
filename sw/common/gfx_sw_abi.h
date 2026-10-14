@@ -105,6 +105,7 @@ typedef struct {
   uint32_t depth_bounds_enable;
   uint32_t depth_bounds_min, depth_bounds_max;
   uint32_t stencil_ref_export;
+  uint32_t blend_constf[4];            // float bits, RGBA
 } gfx_sw_omstate_t;
 
 // Per-attachment colour descriptor for MRT (mirror of gfx_sw::om_color_t). The
@@ -121,6 +122,7 @@ typedef struct {
   uint32_t blend_enabled;
   uint32_t cbuf_writemask;
   uint32_t color_read, color_write;
+  uint32_t blend_constf[4];            // float bits, RGBA
 } gfx_sw_omcolor_t;
 
 // Sample the resident texture (software fallback for vx_tex4). `lod` is integer
@@ -313,6 +315,12 @@ void gfx_om_fragment_mrt_wide_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolo
                                  uint32_t num_color, uint32_t covered,
                                  uint32_t x, uint32_t y, uint32_t face,
                                  const uint32_t* lanes, uint32_t depth, uint32_t sref);
+
+// Dual-source merge into `st`'s single attachment, in the lane layout above:
+// lanes 0-3 are the first source and lanes 4-7 the second.
+void gfx_om_fragment_dual_sw(const gfx_sw_omstate_t* st, uint32_t covered,
+                             uint32_t x, uint32_t y, uint32_t face,
+                             const uint32_t* lanes, uint32_t depth, uint32_t sref);
 
 // One covered 2x2 quad produced by the SW fine-rasterizer (fallback for the FF
 // RASTER producer). Layout matches the FF frag payload the FS wrapper reads:

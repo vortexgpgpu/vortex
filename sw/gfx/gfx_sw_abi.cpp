@@ -241,6 +241,16 @@ extern "C" void gfx_om_fragment_wide_sw(const gfx_sw_omstate_t* st, uint32_t cov
                            lanes, depth, sref);
 }
 
+extern "C" void gfx_om_fragment_dual_sw(const gfx_sw_omstate_t* st, uint32_t covered,
+                                        uint32_t x, uint32_t y, uint32_t face,
+                                        const uint32_t* lanes, uint32_t depth, uint32_t sref) {
+  if (!covered) {
+    return;
+  }
+  gfx_sw::om_fragment_dual(*reinterpret_cast<const gfx_sw::om_state_t*>(st), x, y, face,
+                           lanes, depth, sref);
+}
+
 extern "C" void gfx_om_fragment_mrt_wide_sw(const gfx_sw_omstate_t* st,
                                             const gfx_sw_omcolor_t* rt, uint32_t num_color,
                                             uint32_t covered, uint32_t x, uint32_t y,

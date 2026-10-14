@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 #
 # Logic-op test for the vortexpipe driver: XOR against a known destination,
-# whose result is neither operand.
+# whose result is neither operand, and its pass-through on sRGB and float
+# targets.
 #
 #   make            -- build the host binary + SPIR-V
 #   make run-simx   -- run the case via vortexpipe on SimX

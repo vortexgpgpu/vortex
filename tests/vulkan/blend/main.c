@@ -2,13 +2,22 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * Blend test for the vortexpipe driver.
+ * Blend test for the vortexpipe driver: blend state no other state can
+ * produce, one full-screen quad per pass, every expected value exact.
  *
- * A white full-screen quad blended with a CONSTANT_COLOR source factor, so
- * the colour result is the blend constant itself -- a value no other piece
- * of state carries. The alpha channel takes REVERSE_SUBTRACT while RGB takes
- * ADD, so a driver that derives one equation for both leaves alpha at 255
- * instead of 0. Every operand is 0 or 255, so the merge is exact.
+ *   constant       RGBA8: a CONSTANT_COLOR source factor, so the colour result
+ *                  is the blend constant itself, and REVERSE_SUBTRACT on alpha
+ *                  only, so a driver deriving one equation for both leaves
+ *                  alpha at 255 instead of 0.
+ *   dual-unorm     RGBA8: dual-source blending. The first source is black and
+ *                  the destination factor is the second source, so the result
+ *                  is the white destination scaled by the second source; a
+ *                  merger reading the first source or ONE in its place gives
+ *                  black or white.
+ *   float-constant RGBA16F: a blend constant outside [0, 1], which only a
+ *                  full-precision constant carries through.
+ *   dual-float     RGBA16F: dual-source blending with a second source outside
+ *                  [0, 1] and a ONE_MINUS_SRC1_ALPHA alpha factor.
  */
 
 #include <vulkan/vulkan.h>
@@ -19,7 +28,6 @@
 
 #define WIDTH   64u
 #define HEIGHT  64u
-#define FORMAT  VK_FORMAT_R8G8B8A8_UNORM
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -28,6 +36,51 @@
       return 1;                                                    \
    }                                                               \
 } while (0)
+
+#define RGBA_MASK (VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | \
+                   VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT)
+
+struct pass {
+   const char *name;
+   VkFormat format;
+   const char *fs;
+   VkPipelineColorBlendAttachmentState cba;
+   float consts[4];
+   float clear[4];
+   float src1[4];
+   float expect[4];
+};
+
+static const struct pass kPasses[] = {
+   { "constant", VK_FORMAT_R8G8B8A8_UNORM, "blend_const.frag.spv",
+     { VK_TRUE, VK_BLEND_FACTOR_CONSTANT_COLOR, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD,
+       VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE, VK_BLEND_OP_REVERSE_SUBTRACT, RGBA_MASK },
+     { 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, 0.0f, 1.0f }, { 0 },
+     { 1.0f, 0.0f, 0.0f, 0.0f } },
+   { "dual-unorm", VK_FORMAT_R8G8B8A8_UNORM, "blend_dual.frag.spv",
+     { VK_TRUE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC1_COLOR, VK_BLEND_OP_ADD,
+       VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC1_ALPHA, VK_BLEND_OP_ADD, RGBA_MASK },
+     { 0 }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 1.0f, 0.0f },
+     { 1.0f, 0.0f, 1.0f, 0.0f } },
+   { "float-constant", VK_FORMAT_R16G16B16A16_SFLOAT, "blend_const.frag.spv",
+     { VK_TRUE, VK_BLEND_FACTOR_CONSTANT_COLOR, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD,
+       VK_BLEND_FACTOR_CONSTANT_ALPHA, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, RGBA_MASK },
+     { 2.0f, -1.0f, 0.5f, 4.0f }, { 0.0f, 0.0f, 0.0f, 0.0f }, { 0 },
+     { 2.0f, -1.0f, 0.5f, 4.0f } },
+   { "dual-float", VK_FORMAT_R16G16B16A16_SFLOAT, "blend_dual.frag.spv",
+     { VK_TRUE, VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_SRC1_COLOR, VK_BLEND_OP_ADD,
+       VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA, VK_BLEND_OP_ADD, RGBA_MASK },
+     { 0 }, { 1.0f, 1.0f, 1.0f, 1.0f }, { 0.5f, 2.0f, 0.0f, 0.25f },
+     { 0.5f, 2.0f, 0.0f, 0.75f } },
+};
+
+struct ctx {
+   VkDevice dev;
+   VkQueue queue;
+   VkCommandPool cp;
+   VkPhysicalDeviceMemoryProperties mp;
+   VkShaderModule vs;
+};
 
 static uint32_t *
 read_spirv(const char *path, size_t *out_size)
@@ -73,102 +126,71 @@ load_module(VkDevice dev, const char *path)
    return sm;
 }
 
-int
-main(int argc, char **argv)
+static VkDeviceMemory
+bind_memory(const struct ctx *c, VkMemoryRequirements mr, VkMemoryPropertyFlags want)
 {
-   const char *vs_path = (argc > 1) ? argv[1] : "blend.vert.spv";
-   const char *fs_path = (argc > 2) ? argv[2] : "blend_const.frag.spv";
-
-   /* --- instance --------------------------------------------------- */
-   VkApplicationInfo app = {
-      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-      .pApplicationName = "vortexpipe-blend",
-      .apiVersion = VK_API_VERSION_1_1,
+   uint32_t mt = find_mem(&c->mp, mr.memoryTypeBits, want);
+   if (mt == UINT32_MAX)
+      return VK_NULL_HANDLE;
+   VkMemoryAllocateInfo mai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = mr.size, .memoryTypeIndex = mt,
    };
-   VkInstanceCreateInfo ici = {
-      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-      .pApplicationInfo = &app,
-   };
-   VkInstance inst;
-   CHECK(vkCreateInstance(&ici, NULL, &inst));
+   VkDeviceMemory mem = VK_NULL_HANDLE;
+   if (vkAllocateMemory(c->dev, &mai, NULL, &mem) != VK_SUCCESS)
+      return VK_NULL_HANDLE;
+   return mem;
+}
 
-   /* --- physical device + graphics queue family ------------------- */
-   uint32_t npd = 1;
-   VkPhysicalDevice pd;
-   CHECK(vkEnumeratePhysicalDevices(inst, &npd, &pd));
-   if (npd == 0) { fprintf(stderr, "FAILED: no physical device\n"); return 1; }
+static float
+half_to_float(uint16_t h)
+{
+   const uint32_t e = (h >> 10) & 0x1f, m = h & 0x3ff;
+   float v;
+   if (e == 0) {
+      v = (float)m / 16777216.0f;
+   } else {
+      const uint32_t bits = (e == 31) ? (0x7f800000u | (m << 13))
+                                      : (((e + 112u) << 23) | (m << 13));
+      memcpy(&v, &bits, sizeof v);
+   }
+   return (h & 0x8000) ? -v : v;
+}
 
-   VkPhysicalDeviceProperties props;
-   vkGetPhysicalDeviceProperties(pd, &props);
-   printf("device: %s\n", props.deviceName);
+/* Renders one pass and counts the pixels holding the expected colour. */
+static int
+run_pass(const struct ctx *c, const struct pass *p, unsigned *matched, float got[4])
+{
+   const bool is_half = p->format == VK_FORMAT_R16G16B16A16_SFLOAT;
+   const uint32_t bpp = is_half ? 8u : 4u;
 
-   uint32_t nqf = 0;
-   vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, NULL);
-   VkQueueFamilyProperties *qfp = calloc(nqf, sizeof(*qfp));
-   vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, qfp);
-   uint32_t qf = UINT32_MAX;
-   for (uint32_t i = 0; i < nqf; i++)
-      if (qfp[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) { qf = i; break; }
-   free(qfp);
-   if (qf == UINT32_MAX) { fprintf(stderr, "FAILED: no graphics queue\n"); return 1; }
-
-   /* --- logical device + queue ------------------------------------ */
-   float prio = 1.0f;
-   VkDeviceQueueCreateInfo qci = {
-      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-      .queueFamilyIndex = qf, .queueCount = 1, .pQueuePriorities = &prio,
-   };
-   VkDeviceCreateInfo dci = {
-      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-      .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
-   };
-   VkDevice dev;
-   CHECK(vkCreateDevice(pd, &dci, NULL, &dev));
-   VkQueue queue;
-   vkGetDeviceQueue(dev, qf, 0, &queue);
-
-   VkPhysicalDeviceMemoryProperties mp;
-   vkGetPhysicalDeviceMemoryProperties(pd, &mp);
-
-   /* --- colour attachment image ----------------------------------- */
    VkImageCreateInfo imci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .imageType = VK_IMAGE_TYPE_2D, .format = FORMAT,
+      .imageType = VK_IMAGE_TYPE_2D, .format = p->format,
       .extent = { WIDTH, HEIGHT, 1 }, .mipLevels = 1, .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
-      .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-               VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+      .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
    };
    VkImage img;
-   CHECK(vkCreateImage(dev, &imci, NULL, &img));
-
+   CHECK(vkCreateImage(c->dev, &imci, NULL, &img));
    VkMemoryRequirements imr;
-   vkGetImageMemoryRequirements(dev, img, &imr);
-   uint32_t imt = find_mem(&mp, imr.memoryTypeBits, 0);
-   if (imt == UINT32_MAX) { fprintf(stderr, "FAILED: no image memory\n"); return 1; }
-   VkMemoryAllocateInfo imai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = imr.size, .memoryTypeIndex = imt,
-   };
-   VkDeviceMemory imem;
-   CHECK(vkAllocateMemory(dev, &imai, NULL, &imem));
-   CHECK(vkBindImageMemory(dev, img, imem, 0));
+   vkGetImageMemoryRequirements(c->dev, img, &imr);
+   VkDeviceMemory imem = bind_memory(c, imr, 0);
+   if (!imem) { fprintf(stderr, "FAILED: no image memory\n"); return 1; }
+   CHECK(vkBindImageMemory(c->dev, img, imem, 0));
 
    VkImageViewCreateInfo ivci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = img, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = FORMAT,
-      .subresourceRange = {
-         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-         .levelCount = 1, .layerCount = 1,
-      },
+      .image = img, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = p->format,
+      .subresourceRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .levelCount = 1, .layerCount = 1 },
    };
    VkImageView view;
-   CHECK(vkCreateImageView(dev, &ivci, NULL, &view));
+   CHECK(vkCreateImageView(c->dev, &ivci, NULL, &view));
 
-   /* --- render pass + framebuffer --------------------------------- */
    VkAttachmentDescription att = {
-      .format = FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+      .format = p->format, .samples = VK_SAMPLE_COUNT_1_BIT,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
       .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -189,35 +211,31 @@ main(int argc, char **argv)
       .subpassCount = 1, .pSubpasses = &sub,
    };
    VkRenderPass rp;
-   CHECK(vkCreateRenderPass(dev, &rpci, NULL, &rp));
-
+   CHECK(vkCreateRenderPass(c->dev, &rpci, NULL, &rp));
    VkFramebufferCreateInfo fbci = {
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
       .renderPass = rp, .attachmentCount = 1, .pAttachments = &view,
       .width = WIDTH, .height = HEIGHT, .layers = 1,
    };
    VkFramebuffer fb;
-   CHECK(vkCreateFramebuffer(dev, &fbci, NULL, &fb));
+   CHECK(vkCreateFramebuffer(c->dev, &fbci, NULL, &fb));
 
-   /* --- shader modules -------------------------------------------- */
-   VkShaderModule vs = load_module(dev, vs_path);
-   VkShaderModule fs = load_module(dev, fs_path);
-   if (!vs || !fs) return 1;
-
-   /* --- graphics pipeline (vertex stage -> vortexpipe) ------------ */
+   VkShaderModule fs = load_module(c->dev, p->fs);
+   if (!fs) return 1;
+   VkPushConstantRange pcr = { VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(p->src1) };
    VkPipelineLayoutCreateInfo plci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .pushConstantRangeCount = 1, .pPushConstantRanges = &pcr,
    };
    VkPipelineLayout pl;
-   CHECK(vkCreatePipelineLayout(dev, &plci, NULL, &pl));
+   CHECK(vkCreatePipelineLayout(c->dev, &plci, NULL, &pl));
 
    VkPipelineShaderStageCreateInfo stages[2] = {
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vs, .pName = "main" },
+        .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = c->vs, .pName = "main" },
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fs, .pName = "main" },
    };
-   /* gl_VertexIndex-driven: no vertex buffers, no attributes. */
    VkPipelineVertexInputStateCreateInfo vi = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
    };
@@ -229,8 +247,7 @@ main(int argc, char **argv)
    VkRect2D sc = { { 0, 0 }, { WIDTH, HEIGHT } };
    VkPipelineViewportStateCreateInfo vps = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1, .pViewports = &vp,
-      .scissorCount = 1, .pScissors = &sc,
+      .viewportCount = 1, .pViewports = &vp, .scissorCount = 1, .pScissors = &sc,
    };
    VkPipelineRasterizationStateCreateInfo rs = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -241,22 +258,11 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
       .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
    };
-   VkPipelineColorBlendAttachmentState cba = {
-      .blendEnable = VK_TRUE,
-      .srcColorBlendFactor = VK_BLEND_FACTOR_CONSTANT_COLOR,
-      .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
-      .colorBlendOp        = VK_BLEND_OP_ADD,
-      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-      .alphaBlendOp        = VK_BLEND_OP_REVERSE_SUBTRACT,
-      .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                        VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-   };
    VkPipelineColorBlendStateCreateInfo cb = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-      .attachmentCount = 1, .pAttachments = &cba,
-      .blendConstants = { 1.0f, 0.0f, 0.0f, 1.0f },
+      .attachmentCount = 1, .pAttachments = &p->cba,
    };
+   memcpy(cb.blendConstants, p->consts, sizeof cb.blendConstants);
    VkGraphicsPipelineCreateInfo gpci = {
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .stageCount = 2, .pStages = stages,
@@ -266,51 +272,36 @@ main(int argc, char **argv)
       .layout = pl, .renderPass = rp, .subpass = 0,
    };
    VkPipeline pipe;
-   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
+   CHECK(vkCreateGraphicsPipelines(c->dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
 
-   /* --- host-visible readback buffer ------------------------------ */
-   const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4;
+   const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * bpp;
    VkBufferCreateInfo bci = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .size = bytes, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
    };
    VkBuffer rb;
-   CHECK(vkCreateBuffer(dev, &bci, NULL, &rb));
+   CHECK(vkCreateBuffer(c->dev, &bci, NULL, &rb));
    VkMemoryRequirements bmr;
-   vkGetBufferMemoryRequirements(dev, rb, &bmr);
-   uint32_t bmt = find_mem(&mp, bmr.memoryTypeBits,
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-   if (bmt == UINT32_MAX) { fprintf(stderr, "FAILED: no host memory\n"); return 1; }
-   VkMemoryAllocateInfo bmai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = bmr.size, .memoryTypeIndex = bmt,
-   };
-   VkDeviceMemory bmem;
-   CHECK(vkAllocateMemory(dev, &bmai, NULL, &bmem));
-   CHECK(vkBindBufferMemory(dev, rb, bmem, 0));
+   vkGetBufferMemoryRequirements(c->dev, rb, &bmr);
+   VkDeviceMemory bmem = bind_memory(c, bmr, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+   if (!bmem) { fprintf(stderr, "FAILED: no host memory\n"); return 1; }
+   CHECK(vkBindBufferMemory(c->dev, rb, bmem, 0));
 
-   /* --- command buffer: render pass + copy-to-buffer -------------- */
-   VkCommandPoolCreateInfo cmpci = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .queueFamilyIndex = qf,
-   };
-   VkCommandPool cp;
-   CHECK(vkCreateCommandPool(dev, &cmpci, NULL, &cp));
    VkCommandBufferAllocateInfo cbai = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .commandPool = cp, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandPool = c->cp, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
       .commandBufferCount = 1,
    };
    VkCommandBuffer cmd;
-   CHECK(vkAllocateCommandBuffers(dev, &cbai, &cmd));
-
+   CHECK(vkAllocateCommandBuffers(c->dev, &cbai, &cmd));
    VkCommandBufferBeginInfo cbbi = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
    };
    CHECK(vkBeginCommandBuffer(cmd, &cbbi));
-
-   VkClearValue clear = { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } };  /* dst alpha 255 */
+   VkClearValue clear;
+   memcpy(clear.color.float32, p->clear, sizeof clear.color.float32);
    VkRenderPassBeginInfo rpbi = {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .renderPass = rp, .framebuffer = fb,
@@ -319,55 +310,139 @@ main(int argc, char **argv)
    };
    vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+   vkCmdPushConstants(cmd, pl, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(p->src1), p->src1);
    vkCmdDraw(cmd, 6, 1, 0, 0);
    vkCmdEndRenderPass(cmd);
-
-   /* render pass finalLayout left the image in TRANSFER_SRC_OPTIMAL */
    VkBufferImageCopy region = {
-      .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .layerCount = 1 },
+      .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1 },
       .imageExtent = { WIDTH, HEIGHT, 1 },
    };
-   vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                          rb, 1, &region);
+   vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rb, 1, &region);
    CHECK(vkEndCommandBuffer(cmd));
-
    VkSubmitInfo si = {
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .commandBufferCount = 1, .pCommandBuffers = &cmd,
    };
-   CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
-   CHECK(vkQueueWaitIdle(queue));
+   CHECK(vkQueueSubmit(c->queue, 1, &si, VK_NULL_HANDLE));
+   CHECK(vkQueueWaitIdle(c->queue));
 
-   /* --- read back + verify ----------------------------------------- *
-    * RGB = white * constant(255,0,0) + dst*0 = (255,0,0).
-    * Alpha = dst*1 - src*1 = 255 - 255 = 0; an ADD would leave 255. */
    uint8_t *px;
-   CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
-   unsigned rgb_ok = 0, alpha_ok = 0;
+   CHECK(vkMapMemory(c->dev, bmem, 0, bytes, 0, (void **)&px));
+   *matched = 0;
    for (uint32_t i = 0; i < WIDTH * HEIGHT; i++) {
-      const uint8_t *p = px + (size_t)i * 4;
-      if (p[0] == 255 && p[1] == 0 && p[2] == 0) rgb_ok++;
-      if (p[3] == 0) alpha_ok++;
+      float v[4];
+      for (uint32_t ch = 0; ch < 4; ch++) {
+         v[ch] = is_half ? half_to_float(((const uint16_t *)px)[i * 4 + ch])
+                         : (float)px[i * 4 + ch] / 255.0f;
+      }
+      bool ok = true;
+      for (uint32_t ch = 0; ch < 4; ch++) {
+         if (v[ch] != p->expect[ch])
+            ok = false;
+      }
+      if (ok)
+         (*matched)++;
+      if (i == (HEIGHT / 2) * WIDTH + WIDTH / 2)
+         memcpy(got, v, sizeof v);
    }
-   const uint8_t *c = px + ((size_t)(HEIGHT / 2) * WIDTH + WIDTH / 2) * 4;
-   uint8_t cr = c[0], cg = c[1], cb2 = c[2], ca = c[3];
-   vkUnmapMemory(dev, bmem);
+   vkUnmapMemory(c->dev, bmem);
+
+   vkDestroyPipeline(c->dev, pipe, NULL);
+   vkDestroyPipelineLayout(c->dev, pl, NULL);
+   vkDestroyShaderModule(c->dev, fs, NULL);
+   vkDestroyFramebuffer(c->dev, fb, NULL);
+   vkDestroyRenderPass(c->dev, rp, NULL);
+   vkDestroyImageView(c->dev, view, NULL);
+   vkDestroyImage(c->dev, img, NULL);
+   vkFreeMemory(c->dev, imem, NULL);
+   vkDestroyBuffer(c->dev, rb, NULL);
+   vkFreeMemory(c->dev, bmem, NULL);
+   return 0;
+}
+
+int
+main(void)
+{
+   VkApplicationInfo app = {
+      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+      .pApplicationName = "vortexpipe-blend",
+      .apiVersion = VK_API_VERSION_1_1,
+   };
+   VkInstanceCreateInfo ici = {
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      .pApplicationInfo = &app,
+   };
+   VkInstance inst;
+   CHECK(vkCreateInstance(&ici, NULL, &inst));
+
+   uint32_t npd = 1;
+   VkPhysicalDevice pd;
+   CHECK(vkEnumeratePhysicalDevices(inst, &npd, &pd));
+   if (npd == 0) { fprintf(stderr, "FAILED: no physical device\n"); return 1; }
+   VkPhysicalDeviceProperties props;
+   vkGetPhysicalDeviceProperties(pd, &props);
+   printf("device: %s\n", props.deviceName);
+   VkPhysicalDeviceFeatures avail;
+   vkGetPhysicalDeviceFeatures(pd, &avail);
+   if (!avail.dualSrcBlend) { printf("FAILED: dualSrcBlend is not supported\n"); return 1; }
+
+   uint32_t nqf = 0;
+   vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, NULL);
+   VkQueueFamilyProperties *qfp = calloc(nqf, sizeof(*qfp));
+   vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, qfp);
+   uint32_t qf = UINT32_MAX;
+   for (uint32_t i = 0; i < nqf; i++)
+      if (qfp[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) { qf = i; break; }
+   free(qfp);
+   if (qf == UINT32_MAX) { fprintf(stderr, "FAILED: no graphics queue\n"); return 1; }
+
+   float prio = 1.0f;
+   VkDeviceQueueCreateInfo qci = {
+      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+      .queueFamilyIndex = qf, .queueCount = 1, .pQueuePriorities = &prio,
+   };
+   VkPhysicalDeviceFeatures feats = { .dualSrcBlend = VK_TRUE };
+   VkDeviceCreateInfo dci = {
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
+      .pEnabledFeatures = &feats,
+   };
+   struct ctx c;
+   CHECK(vkCreateDevice(pd, &dci, NULL, &c.dev));
+   vkGetDeviceQueue(c.dev, qf, 0, &c.queue);
+   vkGetPhysicalDeviceMemoryProperties(pd, &c.mp);
+   VkCommandPoolCreateInfo cmpci = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .queueFamilyIndex = qf,
+   };
+   CHECK(vkCreateCommandPool(c.dev, &cmpci, NULL, &c.cp));
+   c.vs = load_module(c.dev, "blend.vert.spv");
+   if (!c.vs) return 1;
 
    const unsigned total = WIDTH * HEIGHT;
-   bool ok = rgb_ok == total && alpha_ok == total;
+   bool ok = true;
+   for (size_t k = 0; k < sizeof kPasses / sizeof kPasses[0]; k++) {
+      const struct pass *p = &kPasses[k];
+      unsigned matched = 0;
+      float got[4] = { 0 };
+      if (run_pass(&c, p, &matched, got))
+         return 1;
+      printf("%s: %u/%u pixels = (%g, %g, %g, %g); centre = (%g, %g, %g, %g)\n",
+             p->name, matched, total, p->expect[0], p->expect[1], p->expect[2],
+             p->expect[3], got[0], got[1], got[2], got[3]);
+      if (matched != total)
+         ok = false;
+   }
 
-   vkDestroyCommandPool(dev, cp, NULL);
-   vkDestroyDevice(dev, NULL);
+   vkDestroyShaderModule(c.dev, c.vs, NULL);
+   vkDestroyCommandPool(c.dev, c.cp, NULL);
+   vkDestroyDevice(c.dev, NULL);
    vkDestroyInstance(inst, NULL);
 
    if (!ok) {
-      printf("FAILED (blend: %u/%u pixels took the constant colour, %u/%u the "
-             "alpha equation; centre = %u,%u,%u,%u)\n",
-             rgb_ok, total, alpha_ok, total, cr, cg, cb2, ca);
+      printf("FAILED (blend)\n");
       return 1;
    }
-   printf("PASSED (blend: constant colour on %u pixels, separate alpha equation held)\n",
-          rgb_ok);
+   printf("PASSED (blend: constant, dual-source and float-constant passes exact)\n");
    return 0;
 }

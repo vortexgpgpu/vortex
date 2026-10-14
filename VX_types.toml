@@ -378,6 +378,12 @@ VX_OM_BLEND_FUNC_ONE_MINUS_CONST_RGB = 11
 VX_OM_BLEND_FUNC_CONST_A             = 12
 VX_OM_BLEND_FUNC_ONE_MINUS_CONST_A   = 13
 VX_OM_BLEND_FUNC_ALPHA_SAT           = 14
+# Second-source factors (dual-source blending): software merger only, past the
+# fixed-function factor range.
+VX_OM_BLEND_FUNC_SRC1_RGB            = 15
+VX_OM_BLEND_FUNC_ONE_MINUS_SRC1_RGB  = 16
+VX_OM_BLEND_FUNC_SRC1_A              = 17
+VX_OM_BLEND_FUNC_ONE_MINUS_SRC1_A    = 18
 
 VX_OM_LOGIC_OP_CLEAR        = 0
 VX_OM_LOGIC_OP_AND          = 1
