@@ -75,8 +75,9 @@ void run_bfs_gpu(int no_of_nodes, Node *h_graph_nodes, int edge_list_size,
 
   // int number_elements = height*width;
   char h_over;
-  cl_mem d_graph_nodes, d_graph_edges, d_graph_mask, d_updating_graph_mask,
-      d_graph_visited, d_cost, d_over;
+  cl_mem d_graph_nodes = NULL, d_graph_edges = NULL, d_graph_mask = NULL,
+      d_updating_graph_mask = NULL, d_graph_visited = NULL, d_cost = NULL,
+      d_over = NULL;
 
   try {
     //--1 transfer data from host to device
