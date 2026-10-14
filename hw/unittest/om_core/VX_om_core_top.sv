@@ -32,7 +32,7 @@ module VX_om_core_top import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     input  wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] om_req_pos_x,
     input  wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] om_req_pos_y,
     input  om_color_t [NUM_LANES-1:0]       om_req_color,
-    input  wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] om_req_depth,
+    input  wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0] om_req_depth,
     input  wire [NUM_LANES-1:0]             om_req_face,
     output wire                             om_req_ready,
 

@@ -37,12 +37,12 @@ module VX_om_ds import VX_om_pkg::*; #(
 
     // Input values
     input wire [NUM_LANES-1:0]                          face,
-    input wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]   depth_ref,
-    input wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]   depth_val,
+    input wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0]   depth_ref,
+    input wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0]   depth_val,
     input wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_val,
 
     // Output values
-    output wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]  depth_out,
+    output wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0]  depth_out,
     output wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_out,
     output wire [NUM_LANES-1:0]                         pass_out
 );
@@ -60,7 +60,7 @@ module VX_om_ds import VX_om_pkg::*; #(
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_compare_depth
         VX_om_compare #(
-            .DATAW (`VX_OM_DEPTH_BITS)
+            .DATAW (`VX_OM_DEPTH_BUS_BITS)
         ) compare_depth (
             .func   (dcrs.depth_func),
             .a      (depth_ref[i]),
@@ -89,12 +89,12 @@ module VX_om_ds import VX_om_pkg::*; #(
     wire valid_in_s;
     wire [NUM_LANES-1:0] face_s;
     wire [NUM_LANES-1:0] dpass_s, spass_s;
-    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] depth_ref_s, depth_val_s;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0] depth_ref_s, depth_val_s;
     wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_val_s;
     wire [TAG_WIDTH-1:0] tag_in_s;
 
     VX_pipe_register #(
-        .DATAW	(1 + NUM_LANES * (1 + 1 + 1 + 2 * `VX_OM_DEPTH_BITS + `VX_OM_STENCIL_BITS) + TAG_WIDTH),
+        .DATAW	(1 + NUM_LANES * (1 + 1 + 1 + 2 * `VX_OM_DEPTH_BUS_BITS + `VX_OM_STENCIL_BITS) + TAG_WIDTH),
         .RESETW (1),
         .DEPTH  (2)
     ) pipe_reg1 (
@@ -126,7 +126,7 @@ module VX_om_ds import VX_om_pkg::*; #(
 
     ///////////////////////////////////////////////////////////////////////////
 
-    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]   depth_write;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0]   depth_write;
     wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] stencil_write;
     wire [NUM_LANES-1:0] pass;
 
@@ -144,7 +144,7 @@ module VX_om_ds import VX_om_pkg::*; #(
     // Output /////////////////////////////////////////////////////////////////
 
     VX_pipe_register #(
-        .DATAW	(1 + TAG_WIDTH + NUM_LANES * (`VX_OM_DEPTH_BITS + `VX_OM_STENCIL_BITS + 1)),
+        .DATAW	(1 + TAG_WIDTH + NUM_LANES * (`VX_OM_DEPTH_BUS_BITS + `VX_OM_STENCIL_BITS + 1)),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),

@@ -45,6 +45,7 @@
         `VX_DCR_OM_BLEND_FUNC:          `TRACE(level, ("BLEND_FUNC")) \
         `VX_DCR_OM_BLEND_CONST:         `TRACE(level, ("BLEND_CONST")) \
         `VX_DCR_OM_LOGIC_OP:            `TRACE(level, ("LOGIC_OP")) \
+        `VX_DCR_OM_DEPTH_FORMAT:        `TRACE(level, ("DEPTH_FORMAT")) \
         default:                        `TRACE(level, ("?")) \
     endcase
 

@@ -49,6 +49,16 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*;
 
     // DCRs write
     always @(posedge clk) begin
+    `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
+        // Snooped from the OM, which resets it too: a D24S8-only driver never
+        // writes it.
+        if (reset) begin
+            dcrs.depth_float <= 1'b0;
+        end else if (write_valid && write_addr == `VX_DCR_OM_DEPTH_FORMAT) begin
+            dcrs.depth_float <= (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32F))
+                             || (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32FS8));
+        end
+    `endif
         if (write_valid) begin
             case (write_addr)
                 `VX_DCR_RASTER_TBUF_ADDR: begin

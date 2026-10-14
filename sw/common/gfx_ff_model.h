@@ -240,12 +240,29 @@ public:
             uint32_t depthstencil_val,
             uint32_t* depthstencil_result) const;
 
+  // The same test on a depth and a stencil stored apart (D32F_S8).
+  bool test_split(uint32_t is_backface,
+                  uint32_t depth_ref,
+                  uint32_t depth_val,
+                  uint32_t stencil_val,
+                  uint32_t* stencil_result) const;
+
   bool depth_enabled() const {
     return depth_enabled_;
   }
 
   bool stencil_enabled(bool is_backface) const {
     return is_backface ? stencil_back_enabled_ : stencil_front_enabled_;
+  }
+
+  // D32F: the word is a float's ordered key, compared whole, with no stencil.
+  // D32F_S8 keeps the stencil in the texel's next word.
+  bool depth_float() const {
+    return depth_float_;
+  }
+
+  bool depth_stencil_word() const {
+    return depth_stencil_word_;
   }
 
 protected:
@@ -267,6 +284,8 @@ protected:
   bool depth_enabled_;
   bool stencil_front_enabled_;
   bool stencil_back_enabled_;
+  bool depth_float_;
+  bool depth_stencil_word_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

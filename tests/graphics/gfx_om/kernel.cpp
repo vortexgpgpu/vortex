@@ -26,7 +26,9 @@ inline uint32_t frag_color(const kernel_arg_t* arg, uint32_t x, uint32_t y) {
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= arg->dst_width || y >= arg->dst_height) return;
+    if (x >= arg->dst_width || y >= arg->dst_height) {
+        return;
+    }
 
     uint32_t color = frag_color(arg, x, y);
 
@@ -58,7 +60,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 __kernel void kernel_main_mrt(kernel_arg_t* __UNIFORM__ arg) {
     uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
-    if (x >= arg->dst_width || y >= arg->dst_height) return;
+    if (x >= arg->dst_width || y >= arg->dst_height) {
+        return;
+    }
 
     uint32_t color = frag_color(arg, x, y);
 
@@ -66,4 +70,45 @@ __kernel void kernel_main_mrt(kernel_arg_t* __UNIFORM__ arg) {
         VX_OM_APERTURE_ADDR_PAIR(arg->aperture_xbits, arg->aperture_record_shift, x, y);
     vx_om_export_both(addr, color, VX_OM_DEPTH_WORD(arg->depth, 0, arg->backface));
     vx_om_export_both(addr, color, VX_OM_DEPTH_WORD(arg->depth, arg->rt2, arg->backface));
+}
+
+// A float depth target: the depth is the whole word, so the face and the
+// attachment ride the export address. Separate entries for the same reason as
+// kernel_main_mrt. Under -S the software merger reads the key as is.
+__kernel void kernel_main_float(kernel_arg_t* __UNIFORM__ arg) {
+    uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= arg->dst_width || y >= arg->dst_height) {
+        return;
+    }
+
+    uint32_t color = frag_color(arg, x, y);
+
+    if (arg->sw_path) {
+        gfx_sw::om_fragment(arg->om, x, y, arg->backface, color, arg->depth);
+        return;
+    }
+    vx_om_export_both(
+        VX_OM_APERTURE_ADDR_FLOAT_PAIR(arg->aperture_xbits, arg->aperture_ybits,
+                                       arg->aperture_record_shift, x, y, arg->backface, 0),
+        color, arg->depth);
+}
+
+__kernel void kernel_main_mrt_float(kernel_arg_t* __UNIFORM__ arg) {
+    uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= arg->dst_width || y >= arg->dst_height) {
+        return;
+    }
+
+    uint32_t color = frag_color(arg, x, y);
+
+    vx_om_export_both(
+        VX_OM_APERTURE_ADDR_FLOAT_PAIR(arg->aperture_xbits, arg->aperture_ybits,
+                                       arg->aperture_record_shift, x, y, arg->backface, 0),
+        color, arg->depth);
+    vx_om_export_both(
+        VX_OM_APERTURE_ADDR_FLOAT_PAIR(arg->aperture_xbits, arg->aperture_ybits,
+                                       arg->aperture_record_shift, x, y, arg->backface, arg->rt2),
+        color, arg->depth);
 }

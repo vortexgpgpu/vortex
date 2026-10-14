@@ -175,6 +175,9 @@ struct om_state_t {
   // value range (inclusive) so the compare stays integer on the device
   uint32_t depth_bounds_enable;
   uint32_t depth_bounds_min, depth_bounds_max;
+  // the stencil reference is the fragment's own (shader stencil export),
+  // passed with each merge, instead of stencil_ref
+  uint32_t stencil_ref_export;
 };
 
 // Derive the enable flags + expanded color mask exactly as the FF unit does.
@@ -291,9 +294,10 @@ static inline __attribute__((always_inline)) uint32_t om_color_bpp(uint32_t fmt)
 }
 static inline __attribute__((always_inline)) uint32_t om_depth_bpp(uint32_t fmt) {
   switch (fmt) {
-  case VX_OM_DEPTH_FORMAT_S8:  return 1;
-  case VX_OM_DEPTH_FORMAT_D16: return 2;
-  default:                     return 4;   // D24S8 / D32F
+  case VX_OM_DEPTH_FORMAT_S8:     return 1;
+  case VX_OM_DEPTH_FORMAT_D16:    return 2;
+  case VX_OM_DEPTH_FORMAT_D32FS8: return 8;   // the key, then the stencil word
+  default:                        return 4;   // D24S8 / D32F
   }
 }
 
@@ -341,43 +345,53 @@ static inline __attribute__((always_inline)) uint32_t om_encode_color(uint32_t f
   }
 }
 
+// A float depth as the D32F plane stores it: an unsigned key in the float's
+// order, with -0 folded onto +0, so every merger compares D32F unsigned.
+static inline __attribute__((always_inline)) uint32_t om_float_depth_key(uint32_t bits) {
+  if (bits == 0x80000000u)
+    bits = 0;
+  return bits ^ ((bits & 0x80000000u) ? 0xffffffffu : 0x80000000u);
+}
+
 // Per-format depth geometry: comparison mask, stencil presence, and the bit
-// offset of the stencil field within the packed depth/stencil word.
-struct om_depth_desc { uint32_t dmask; uint32_t sshift; bool has_depth; bool has_stencil; };
+// offset of the stencil field within the packed depth/stencil word -- or, for a
+// split texel, the stencil in the low byte of the word after the depth.
+struct om_depth_desc { uint32_t dmask; uint32_t sshift; bool has_depth; bool has_stencil; bool split; };
 static inline __attribute__((always_inline)) om_depth_desc om_depth_geom(uint32_t fmt) {
   switch (fmt) {
-  case VX_OM_DEPTH_FORMAT_D16:  return { 0xffffu,     0,  true,  false };
-  case VX_OM_DEPTH_FORMAT_D32F: return { 0xffffffffu, 0,  true,  false };  // float bits, monotonic for [0,1]
-  case VX_OM_DEPTH_FORMAT_S8:   return { 0u,          0,  false, true  };
-  default:                      return { OM_DEPTH_MASK, VX_OM_DEPTH_BITS, true, true }; // D24S8
+  case VX_OM_DEPTH_FORMAT_D16:    return { 0xffffu,     0, true,  false, false };
+  case VX_OM_DEPTH_FORMAT_D32F:   return { 0xffffffffu, 0, true,  false, false };  // om_float_depth_key
+  case VX_OM_DEPTH_FORMAT_D32FS8: return { 0xffffffffu, 0, true,  true,  true  };
+  case VX_OM_DEPTH_FORMAT_S8:     return { 0u,          0, false, true,  false };
+  default:                        return { OM_DEPTH_MASK, VX_OM_DEPTH_BITS, true, true, false }; // D24S8
   }
 }
 
 // ── Per-fragment software ops (device + host) ────────────────────────────────
 
-// Depth/stencil test. `ds_val` is the packed
-// {stencil:depth} word at the pixel in the bound depth format; writes the merged
-// word to *ds_result and returns whether the fragment passes the combined
-// stencil+depth test. D32F compares the raw float bits (monotonic over [0,1]).
-static inline __attribute__((always_inline)) bool ds_test(const om_state_t& s, uint32_t face, uint32_t depth,
-                           uint32_t ds_val, uint32_t* ds_result) {
+// Depth/stencil test of a fragment against the stored depth and stencil (zero
+// for an aspect the format lacks). Returns whether the fragment passes the
+// combined stencil+depth test, with the stencil op's result in *stencil_result.
+// D32F compares ordered keys (om_float_depth_key).
+static inline __attribute__((always_inline)) bool ds_test(const om_state_t& s, uint32_t face,
+                           uint32_t depth_ref, uint32_t depth_val, uint32_t stencil_val,
+                           uint32_t* stencil_result, uint32_t src_sref = 0) {
   const int f = face ? 1 : 0;
   om_depth_desc dd = om_depth_geom(s.depth_format);
-  uint32_t depth_val   = ds_val & dd.dmask;
-  uint32_t stencil_val = dd.has_stencil ? ((ds_val >> dd.sshift) & 0xff) : 0;
-  uint32_t depth_ref   = depth & dd.dmask;
 
   /* Depth bounds test. Vulkan orders it before the stencil test, and a fragment
-   * it rejects is discarded outright -- no stencil op runs and the packed word
-   * is left as it was found. The comparison is against the depth ALREADY in the
-   * buffer, not the incoming fragment's, and the bounds are inclusive. */
+   * it rejects is discarded outright -- no stencil op runs and the stored
+   * values are left as they were found. The comparison is against the depth
+   * ALREADY in the buffer, not the incoming fragment's, and the bounds are
+   * inclusive. */
   if (s.depth_bounds_enable && dd.has_depth &&
       (depth_val < s.depth_bounds_min || depth_val > s.depth_bounds_max)) {
-    *ds_result = ds_val;
+    *stencil_result = stencil_val;
     return false;
   }
 
-  uint32_t sref = s.stencil_ref[f], smask = s.stencil_mask[f];
+  uint32_t sref = s.stencil_ref_export ? (src_sref & 0xffu) : s.stencil_ref[f];
+  uint32_t smask = s.stencil_mask[f];
   uint32_t sref_m = sref & smask, sval_m = stencil_val & smask;
 
   uint32_t stencil_op;
@@ -388,8 +402,7 @@ static inline __attribute__((always_inline)) bool ds_test(const om_state_t& s, u
   } else {
     stencil_op = s.stencil_fail[f];
   }
-  uint32_t stencil_result = dd.has_stencil ? DoStencilOp(stencil_op, sref, stencil_val) : 0;
-  *ds_result = (stencil_result << dd.sshift) | depth_ref;
+  *stencil_result = dd.has_stencil ? DoStencilOp(stencil_op, sref, stencil_val) : stencil_val;
   return passed;
 }
 
@@ -416,29 +429,51 @@ static inline __attribute__((always_inline)) uint32_t blend(const om_state_t& s,
 // Non-atomic RMW: correct when each (pixel, sample) is touched once. Per-sample
 // ordering for overlapping fragments is the determinism open item, handled by
 // the SW path's tile serialization.
+// The depth/stencil half of one merge: test against the texel at z_addr and
+// write back the bits the write-masks allow. Returns whether the test passed.
+static inline __attribute__((always_inline)) bool ds_rmw(
+    const om_state_t& s, uintptr_t z_addr, uint32_t face, uint32_t src_depth,
+    uint32_t src_sref = 0) {
+  const int f = face ? 1 : 0;
+  if (!(s.depth_enabled || s.stencil_enabled[f]))
+    return true;
+  om_depth_desc dd = om_depth_geom(s.depth_format);
+  const bool depth_write = s.depth_enabled && s.depth_writemask && dd.has_depth;
+  const uint32_t stencil_wm = (s.stencil_enabled[f] && dd.has_stencil) ? (s.stencil_writemask[f] & 0xffu) : 0u;
+  uint32_t stencil_result = 0;
+  if (dd.split) {
+    uint32_t dst_depth = om_load(z_addr, 4), dst_stencil = om_load(z_addr + 4, 1);
+    bool ds_pass = ds_test(s, face, src_depth, dst_depth, dst_stencil, &stencil_result, src_sref);
+    if (depth_write && ds_pass)
+      om_store(z_addr, 4, src_depth);
+    if (stencil_wm)
+      om_store(z_addr + 4, 1, (dst_stencil & ~stencil_wm) | (stencil_result & stencil_wm));
+    return ds_pass;
+  }
+  uint32_t dbpp = om_depth_bpp(s.depth_format);
+  uint32_t dst_ds = om_load(z_addr, dbpp);
+  uint32_t depth_ref = src_depth & dd.dmask;
+  bool ds_pass = ds_test(s, face, depth_ref, dst_ds & dd.dmask,
+                         dd.has_stencil ? ((dst_ds >> dd.sshift) & 0xffu) : 0u,
+                         &stencil_result, src_sref);
+  uint32_t merged = (stencil_result << dd.sshift) | depth_ref;
+  uint32_t ds_wm = ((depth_write && ds_pass) ? dd.dmask : 0u) | (stencil_wm << dd.sshift);
+  if (ds_wm)
+    om_store(z_addr, dbpp, (dst_ds & ~ds_wm) | (merged & ds_wm));
+  return ds_pass;
+}
+
 static inline __attribute__((always_inline)) bool om_sample_rmw(
     const om_state_t& s, uintptr_t z_addr, uintptr_t c_addr,
-    uint32_t face, uint32_t src_color, uint32_t src_depth) {
-  const int f = face ? 1 : 0;
-  om_depth_desc dd = om_depth_geom(s.depth_format);
-  uint32_t dbpp = om_depth_bpp(s.depth_format);
+    uint32_t face, uint32_t src_color, uint32_t src_depth, uint32_t src_sref = 0) {
   uint32_t cbpp = om_color_bpp(s.color_format);
-  bool ds_active = s.depth_enabled || s.stencil_enabled[f];
   bool need_c_read = s.color_write && (s.color_read || s.blend_enabled);
 
-  uint32_t dst_ds    = ds_active   ? om_load(z_addr, dbpp) : 0;
   uint32_t dst_raw   = need_c_read ? om_load(c_addr, cbpp) : 0;
   uint32_t dst_color = om_decode_color(s.color_format, dst_raw);   // decode → blend in linear
 
-  uint32_t merged = 0;
-  bool ds_pass = !ds_active || ds_test(s, face, src_depth, dst_ds, &merged);
+  bool ds_pass = ds_rmw(s, z_addr, face, src_depth, src_sref);
   uint32_t blended = (s.blend_enabled && ds_pass) ? blend(s, src_color, dst_color) : src_color;
-
-  uint32_t stencil_wm = s.stencil_writemask[f];
-  uint32_t ds_wm = ((s.depth_enabled && ds_pass && s.depth_writemask && dd.has_depth) ? dd.dmask : 0u)
-                 | ((s.stencil_enabled[f] && dd.has_stencil) ? (stencil_wm << dd.sshift) : 0u);
-  if (ds_wm)
-    om_store(z_addr, dbpp, (dst_ds & ~ds_wm) | (merged & ds_wm));
 
   if (s.color_write && ds_pass) {
     uint32_t out_argb = (dst_color & ~s.cbuf_writemask) | (blended & s.cbuf_writemask);
@@ -1197,10 +1232,11 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_sw(
 // divergent control flow unmasked. With the guard raised the kernel is processed
 // normally and the merge is bit-exact vs the FF OM unit (validated, all configs).
 static inline __attribute__((always_inline)) void om_fragment(const om_state_t& s, uint32_t x, uint32_t y,
-                               uint32_t face, uint32_t src_color, uint32_t src_depth) {
+                               uint32_t face, uint32_t src_color, uint32_t src_depth,
+                               uint32_t src_sref = 0) {
   uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)x * om_depth_bpp(s.depth_format));
   uintptr_t c_addr = (uintptr_t)(s.cbuf_base + (uint64_t)y * s.cbuf_pitch + (uint64_t)x * om_color_bpp(s.color_format));
-  om_sample_rmw(s, z_addr, c_addr, face, src_color, src_depth);
+  om_sample_rmw(s, z_addr, c_addr, face, src_color, src_depth, src_sref);
 }
 
 // Per-sample MSAA output-merge for one fragment: run the OM merge at each
@@ -1213,12 +1249,26 @@ static inline __attribute__((always_inline)) void om_fragment(const om_state_t& 
 // src_depth per sample later — centroid shading keeps a single color).
 static inline __attribute__((always_inline)) void om_fragment_msaa(
     const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t face,
-    uint32_t sample_mask, uint32_t src_color, uint32_t src_depth) {
+    uint32_t sample_mask, uint32_t src_color, uint32_t src_depth, uint32_t src_sref = 0) {
   for (uint32_t k = 0; k < samples; ++k) {
     if (!((sample_mask >> k) & 1u)) continue;
     om_sample_rmw(s, msaa_depth_addr(s, samples, x, y, k),
-                  msaa_color_addr(s, samples, x, y, k), face, src_color, src_depth);
+                  msaa_color_addr(s, samples, x, y, k), face, src_color, src_depth, src_sref);
   }
+}
+
+// Early fragment tests: the depth/stencil test and write of the samples in
+// `sample_mask`, ahead of the shader. Returns the samples that passed, which are
+// the ones the shader then runs for and the merge after it writes.
+static inline __attribute__((always_inline)) uint32_t ds_early(
+    const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t face,
+    uint32_t sample_mask, uint32_t src_depth) {
+  uint32_t passed = 0;
+  for (uint32_t k = 0; k < samples; ++k) {
+    if (((sample_mask >> k) & 1u) && ds_rmw(s, msaa_depth_addr(s, samples, x, y, k), face, src_depth))
+      passed |= 1u << k;
+  }
+  return passed;
 }
 
 // ── Multiple render targets ──────────────────────────────────────────────────
@@ -1281,27 +1331,13 @@ static inline __attribute__((always_inline)) uint32_t blend_rt(const om_color_t&
 static inline __attribute__((always_inline)) void om_fragment_mrt(
     const om_state_t& s, const om_color_t* colors, uint32_t num_color,
     uint32_t x, uint32_t y, uint32_t face,
-    const uint32_t* src_colors, uint32_t src_depth) {
-  const int f = face ? 1 : 0;
+    const uint32_t* src_colors, uint32_t src_depth, uint32_t src_sref = 0) {
   // clamp the attachment count to the hardware bound so a stale/short
   // colors[] or an over-large num_color can never read past colors[]/src_colors[].
   if (num_color > VX_OM_MAX_RT) num_color = VX_OM_MAX_RT;
-  bool ds_active = s.depth_enabled || s.stencil_enabled[f];
-  om_depth_desc dd = om_depth_geom(s.depth_format);
-  uint32_t dbpp = om_depth_bpp(s.depth_format);
-  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)x * dbpp);
-
-  uint32_t dst_ds = ds_active ? om_load(z_addr, dbpp) : 0;
-  uint32_t merged = 0;
-  bool ds_pass = !ds_active || ds_test(s, face, src_depth, dst_ds, &merged);
-
-  uint32_t stencil_wm = s.stencil_writemask[f];
-  uint32_t ds_wm = ((s.depth_enabled && ds_pass && s.depth_writemask && dd.has_depth) ? dd.dmask : 0u)
-                 | ((s.stencil_enabled[f] && dd.has_stencil) ? (stencil_wm << dd.sshift) : 0u);
-  if (ds_wm)
-    om_store(z_addr, dbpp, (dst_ds & ~ds_wm) | (merged & ds_wm));
-
-  if (!ds_pass)
+  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
+                               + (uint64_t)x * om_depth_bpp(s.depth_format));
+  if (!ds_rmw(s, z_addr, face, src_depth, src_sref))
     return;
 
   for (uint32_t k = 0; k < num_color; ++k) {
@@ -1626,28 +1662,13 @@ static inline __attribute__((always_inline)) om_color_t om_state_color(const om_
 static inline __attribute__((always_inline)) void om_fragment_mrt_wide(
     const om_state_t& s, const om_color_t* colors, uint32_t num_color,
     uint32_t x, uint32_t y, uint32_t face,
-    const uint32_t* src_lanes, uint32_t src_depth) {
-  const int f = face ? 1 : 0;
+    const uint32_t* src_lanes, uint32_t src_depth, uint32_t src_sref = 0) {
   if (num_color > VX_OM_MAX_RT) {
     num_color = VX_OM_MAX_RT;
   }
-  bool ds_active = s.depth_enabled || s.stencil_enabled[f];
-  om_depth_desc dd = om_depth_geom(s.depth_format);
-  uint32_t dbpp = om_depth_bpp(s.depth_format);
-  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)x * dbpp);
-
-  uint32_t dst_ds = ds_active ? om_load(z_addr, dbpp) : 0;
-  uint32_t merged = 0;
-  bool ds_pass = !ds_active || ds_test(s, face, src_depth, dst_ds, &merged);
-
-  uint32_t stencil_wm = s.stencil_writemask[f];
-  uint32_t ds_wm = ((s.depth_enabled && ds_pass && s.depth_writemask && dd.has_depth) ? dd.dmask : 0u)
-                 | ((s.stencil_enabled[f] && dd.has_stencil) ? (stencil_wm << dd.sshift) : 0u);
-  if (ds_wm) {
-    om_store(z_addr, dbpp, (dst_ds & ~ds_wm) | (merged & ds_wm));
-  }
-
-  if (!ds_pass) {
+  uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
+                               + (uint64_t)x * om_depth_bpp(s.depth_format));
+  if (!ds_rmw(s, z_addr, face, src_depth, src_sref)) {
     return;
   }
 
@@ -1675,9 +1696,9 @@ static inline __attribute__((always_inline)) void om_fragment_mrt_wide(
 // Single-attachment wide merge: the om_state_t colour fields as one attachment.
 static inline __attribute__((always_inline)) void om_fragment_wide(
     const om_state_t& s, uint32_t x, uint32_t y, uint32_t face,
-    const uint32_t src_lanes[4], uint32_t src_depth) {
+    const uint32_t src_lanes[4], uint32_t src_depth, uint32_t src_sref = 0) {
   const om_color_t c = om_state_color(s);
-  om_fragment_mrt_wide(s, &c, 1, x, y, face, src_lanes, src_depth);
+  om_fragment_mrt_wide(s, &c, 1, x, y, face, src_lanes, src_depth, src_sref);
 }
 
 } // namespace gfx_sw

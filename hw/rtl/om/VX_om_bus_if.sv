@@ -24,7 +24,7 @@ interface VX_om_bus_if import VX_gpu_pkg::*, VX_om_pkg::*; #(
         logic [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] pos_x;
         logic [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] pos_y;
         om_color_t [NUM_LANES-1:0]                  color;
-        logic [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] depth;
+        logic [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0] depth;
         logic [NUM_LANES-1:0]                   face;
         // Colour attachment this fragment targets. One per request rather than
         // per lane: a request carries one export record, and a record names one

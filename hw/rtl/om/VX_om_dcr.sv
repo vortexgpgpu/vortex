@@ -77,6 +77,16 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
     end
 
     always @(posedge clk) begin
+        // The depth format resets, since a driver that only binds D24S8 never
+        // writes it.
+        if (reset) begin
+            dcrs.depth_float        <= 1'b0;
+            dcrs.depth_stencil_word <= 1'b0;
+        end else if (write_valid && write_addr == `VX_DCR_OM_DEPTH_FORMAT) begin
+            dcrs.depth_float        <= (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32F))
+                                    || (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32FS8));
+            dcrs.depth_stencil_word <= (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32FS8));
+        end
         if (write_valid) begin
             case (write_addr)
                 `VX_DCR_OM_CBUF_ADDR: begin

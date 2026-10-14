@@ -99,7 +99,14 @@
 // multisample target (Bresenham and smooth lines): every sample takes the pixel
 // centre's coverage.
 #define GFX_FS_ARG_RAST     20u
-#define GFX_FS_ARG_COUNT    21u
+// The gfx_sw_omstate_t a shader with early fragment tests is tested against by
+// its wrapper (gfx_ds_early_sw), ahead of the shader. 0 for any other shader.
+#define GFX_FS_ARG_EARLY_DS 21u
+// A float depth target's depth clamp, as the bits of two floats
+// GFX_FS_ZPAIR(lo, hi): -inf/+inf when depth clamp is off. A D32F fragment
+// evaluates SETUP_PRIM_ZFLOAT_PLANE and is clamped to this range only.
+#define GFX_FS_ARG_ZCLAMPF  22u
+#define GFX_FS_ARG_COUNT    23u
 
 #define GFX_FS_ZPAIR(lo, hi) \
    ((uint64_t)(uint32_t)(int32_t)(lo) | ((uint64_t)(uint32_t)(int32_t)(hi) << 32))

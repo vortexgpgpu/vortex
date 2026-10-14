@@ -15,6 +15,10 @@
  * test, so the centre comes out red -- the opposite of the interpolated
  * case, which is what makes a dropped export visible.
  *
+ * Both passes run on D32_SFLOAT, D16_UNORM and X8_D24_UNORM_PACK32. Pairs of
+ * full-screen quads then check precision and range (run_pairs): D16 compares at
+ * 16 bits, D32F at float precision and outside [0, 1].
+ *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe: vertex shading
  * + hardware rasterization + fragment shading + the OM unit's depth
  * test all run on the Vortex device.
@@ -25,11 +29,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <float.h>
+#include <math.h>
 
 #define WIDTH        64u
 #define HEIGHT       64u
 #define FORMAT       VK_FORMAT_R8G8B8A8_UNORM
-#define DEPTH_FORMAT VK_FORMAT_D32_SFLOAT
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -101,12 +106,10 @@ alloc_image(VkDevice dev, const VkPhysicalDeviceMemoryProperties *mp,
    return r;
 }
 
-int
-main(int argc, char **argv)
+static int
+run(const char *vs_path, const char *fs_path, const char *fs_fd_path,
+    VkFormat zfmt, const char *zname)
 {
-   const char *vs_path = (argc > 1) ? argv[1] : "depth.vert.spv";
-   const char *fs_path = (argc > 2) ? argv[2] : "depth.frag.spv";
-
    /* --- instance + device ----------------------------------------- */
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -168,7 +171,7 @@ main(int argc, char **argv)
    CHECK(alloc_image(dev, &mp, cimg, &cmem));
 
    VkImageCreateInfo dimci = cimci;
-   dimci.format = DEPTH_FORMAT;
+   dimci.format = zfmt;
    dimci.usage  = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
    VkImage dimg;
    CHECK(vkCreateImage(dev, &dimci, NULL, &dimg));
@@ -186,7 +189,7 @@ main(int argc, char **argv)
 
    VkImageViewCreateInfo divci = civci;
    divci.image  = dimg;
-   divci.format = DEPTH_FORMAT;
+   divci.format = zfmt;
    divci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
    VkImageView dview;
    CHECK(vkCreateImageView(dev, &divci, NULL, &dview));
@@ -200,7 +203,7 @@ main(int argc, char **argv)
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL },
-      { .format = DEPTH_FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+      { .format = zfmt, .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -301,8 +304,7 @@ main(int argc, char **argv)
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
 
    /* The same geometry and depth state, shaded by the gl_FragDepth variant. */
-   VkShaderModule fs_fd = load_module(dev, (argc > 3) ? argv[3]
-                                                      : "depth_frag.frag.spv");
+   VkShaderModule fs_fd = load_module(dev, fs_fd_path);
    if (!fs_fd) return 1;
    VkPipelineShaderStageCreateInfo stages_fd[2] = { stages[0], stages[1] };
    stages_fd[1].module = fs_fd;
@@ -428,16 +430,355 @@ main(int argc, char **argv)
    vkDestroyInstance(inst, NULL);
 
    if (!depth_ok) {
-      printf("FAILED (centre RGB = %u,%u,%u -- expected blue; the far "
-             "triangle won, depth test did not)\n", pr, pg, pb);
+      printf("FAILED (%s: centre RGB = %u,%u,%u -- expected blue; the far "
+             "triangle won, depth test did not)\n", zname, pr, pg, pb);
       return 1;
    }
    if (!fragdepth_ok) {
-      printf("FAILED (gl_FragDepth: centre R=%u B=%u -- expected red; the "
-             "exported depth did not decide the test)\n", fdr, fdb);
+      printf("FAILED (%s gl_FragDepth: centre R=%u B=%u -- expected red; the "
+             "exported depth did not decide the test)\n", zname, fdr, fdb);
       return 1;
    }
-   printf("PASSED (depth test: near triangle won at RGB = %u,%u,%u; "
-          "gl_FragDepth inverted it, R=%u B=%u)\n", pr, pg, pb, fdr, fdb);
+   printf("%s: near triangle won at RGB = %u,%u,%u; gl_FragDepth inverted it, "
+          "R=%u B=%u\n", zname, pr, pg, pb, fdr, fdb);
+   return 0;
+}
+
+/* Two full-screen quads drawn in one pass, the second over the first. The
+ * instance index picks a quad's depth and colour (depth_tie.vert: even
+ * instances blue, odd ones red). Each case names the two instances, the second
+ * draw's compare op, the viewport's depth range and whether the target must end
+ * red, and checks every stored depth against the value left behind. */
+struct pair_case {
+   const char *name;
+   uint32_t    first, then;      /* instance indices */
+   VkCompareOp then_op;          /* the first draw tests LESS */
+   float       min_depth, max_depth, clear_depth;
+   bool        want_red;
+   uint32_t    want_d16;         /* D16: the stored value */
+   float       want_f32;         /* D32F: the stored value, to one ulp */
+};
+
+/* D16: two depths 0.15 of a 16-bit step apart are one value under a 16-bit
+ * compare, so the second passes EQUAL and fails LESS, where a 24-bit compare
+ * would do the opposite; either way 16384 is stored.
+ * D32F: two depths a fifth of a 24-bit step apart still order (instances 2, 3),
+ * and with VK_EXT_depth_range_unrestricted a [-1, 2] viewport stores depths
+ * outside [0, 1] (instances 4, 5: -0.5, then 1.5 over it) under a 2.0 clear. */
+static const struct pair_case d16_cases[] = {
+   { "D16 EQUAL tie", 0, 1, VK_COMPARE_OP_EQUAL, 0.0f, 1.0f, 1.0f, true, 16384, 0.0f },
+   { "D16 LESS tie",  1, 0, VK_COMPARE_OP_LESS,  0.0f, 1.0f, 1.0f, true, 16384, 0.0f },
+};
+static const struct pair_case d32f_cases[] = {
+   { "D32F sub-step LESS", 3, 2, VK_COMPARE_OP_LESS,    0.0f,  1.0f, 1.0f, false, 0, 0.01f },
+   { "D32F unrestricted",  4, 5, VK_COMPARE_OP_GREATER, -1.0f, 2.0f, 2.0f, true,  0, 1.5f },
+};
+
+static int
+run_pairs(const char *vs_path, const char *fs_path, VkFormat zfmt,
+          const struct pair_case *cases, unsigned ncases)
+{
+   const bool d16 = zfmt == VK_FORMAT_D16_UNORM;
+   VkApplicationInfo app = {
+      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+      .pApplicationName = "vortexpipe-depth-pairs", .apiVersion = VK_API_VERSION_1_1,
+   };
+   VkInstanceCreateInfo ici = {
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
+   };
+   VkInstance inst;
+   CHECK(vkCreateInstance(&ici, NULL, &inst));
+   uint32_t npd = 1;
+   VkPhysicalDevice pd;
+   CHECK(vkEnumeratePhysicalDevices(inst, &npd, &pd));
+   if (npd == 0) { fprintf(stderr, "FAILED: no physical device\n"); return 1; }
+   uint32_t nqf = 0;
+   vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, NULL);
+   VkQueueFamilyProperties *qfp = calloc(nqf, sizeof(*qfp));
+   vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, qfp);
+   uint32_t qf = UINT32_MAX;
+   for (uint32_t i = 0; i < nqf; i++)
+      if (qfp[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) { qf = i; break; }
+   free(qfp);
+   if (qf == UINT32_MAX) { fprintf(stderr, "FAILED: no graphics queue\n"); return 1; }
+   float prio = 1.0f;
+   VkDeviceQueueCreateInfo qci = {
+      .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+      .queueFamilyIndex = qf, .queueCount = 1, .pQueuePriorities = &prio,
+   };
+   const char *exts[] = { VK_EXT_DEPTH_RANGE_UNRESTRICTED_EXTENSION_NAME };
+   VkDeviceCreateInfo dci = {
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
+      .enabledExtensionCount = d16 ? 0u : 1u, .ppEnabledExtensionNames = exts,
+   };
+   VkDevice dev;
+   CHECK(vkCreateDevice(pd, &dci, NULL, &dev));
+   VkQueue queue;
+   vkGetDeviceQueue(dev, qf, 0, &queue);
+   VkPhysicalDeviceMemoryProperties mp;
+   vkGetPhysicalDeviceMemoryProperties(pd, &mp);
+
+   VkImageCreateInfo cimci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D, .format = FORMAT,
+      .extent = { WIDTH, HEIGHT, 1 }, .mipLevels = 1, .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+   };
+   VkImage cimg, dimg;
+   VkDeviceMemory cmem, dmem;
+   CHECK(vkCreateImage(dev, &cimci, NULL, &cimg));
+   CHECK(alloc_image(dev, &mp, cimg, &cmem));
+   VkImageCreateInfo dimci = cimci;
+   dimci.format = zfmt;
+   dimci.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+   CHECK(vkCreateImage(dev, &dimci, NULL, &dimg));
+   CHECK(alloc_image(dev, &mp, dimg, &dmem));
+   VkImageViewCreateInfo civci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = cimg, .viewType = VK_IMAGE_VIEW_TYPE_2D, .format = FORMAT,
+      .subresourceRange = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .levelCount = 1, .layerCount = 1 },
+   };
+   VkImageView cview, dview;
+   CHECK(vkCreateImageView(dev, &civci, NULL, &cview));
+   VkImageViewCreateInfo divci = civci;
+   divci.image = dimg;
+   divci.format = zfmt;
+   divci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+   CHECK(vkCreateImageView(dev, &divci, NULL, &dview));
+
+   VkAttachmentDescription att[2] = {
+      { .format = FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL },
+      { .format = zfmt, .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR, .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL },
+   };
+   VkAttachmentReference cref = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+   VkAttachmentReference dref = { 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+   VkSubpassDescription sub = {
+      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+      .colorAttachmentCount = 1, .pColorAttachments = &cref,
+      .pDepthStencilAttachment = &dref,
+   };
+   VkRenderPassCreateInfo rpci = {
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .attachmentCount = 2, .pAttachments = att, .subpassCount = 1, .pSubpasses = &sub,
+   };
+   VkRenderPass rp;
+   CHECK(vkCreateRenderPass(dev, &rpci, NULL, &rp));
+   VkImageView fbviews[2] = { cview, dview };
+   VkFramebufferCreateInfo fbci = {
+      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+      .renderPass = rp, .attachmentCount = 2, .pAttachments = fbviews,
+      .width = WIDTH, .height = HEIGHT, .layers = 1,
+   };
+   VkFramebuffer fb;
+   CHECK(vkCreateFramebuffer(dev, &fbci, NULL, &fb));
+
+   VkShaderModule vs = load_module(dev, vs_path);
+   VkShaderModule fs = load_module(dev, fs_path);
+   if (!vs || !fs) return 1;
+   VkPipelineLayoutCreateInfo plci = { .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO };
+   VkPipelineLayout pl;
+   CHECK(vkCreatePipelineLayout(dev, &plci, NULL, &pl));
+
+   const VkDeviceSize cbytes = (VkDeviceSize)WIDTH * HEIGHT * 4;
+   const VkDeviceSize zbytes = (VkDeviceSize)WIDTH * HEIGHT * (d16 ? 2 : 4);
+   VkBufferCreateInfo bci = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = cbytes + zbytes, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+   };
+   VkBuffer rb;
+   CHECK(vkCreateBuffer(dev, &bci, NULL, &rb));
+   VkMemoryRequirements bmr;
+   vkGetBufferMemoryRequirements(dev, rb, &bmr);
+   uint32_t bmt = find_mem(&mp, bmr.memoryTypeBits,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+   if (bmt == UINT32_MAX) { fprintf(stderr, "FAILED: no host memory\n"); return 1; }
+   VkMemoryAllocateInfo bmai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = bmr.size, .memoryTypeIndex = bmt,
+   };
+   VkDeviceMemory bmem;
+   CHECK(vkAllocateMemory(dev, &bmai, NULL, &bmem));
+   CHECK(vkBindBufferMemory(dev, rb, bmem, 0));
+
+   VkCommandPoolCreateInfo cmpci = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, .queueFamilyIndex = qf,
+   };
+   VkCommandPool cp;
+   CHECK(vkCreateCommandPool(dev, &cmpci, NULL, &cp));
+   VkCommandBufferAllocateInfo cbai = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = cp, .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY, .commandBufferCount = 1,
+   };
+   VkCommandBuffer cmd;
+   CHECK(vkAllocateCommandBuffers(dev, &cbai, &cmd));
+   VkCommandBufferBeginInfo cbbi = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+   };
+
+   bool ok = true;
+   for (unsigned c = 0; c < ncases; c++) {
+      const struct pair_case *pc = &cases[c];
+      VkPipelineShaderStageCreateInfo stages[2] = {
+         { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+           .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vs, .pName = "main" },
+         { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+           .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fs, .pName = "main" },
+      };
+      VkPipelineVertexInputStateCreateInfo vi = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      };
+      VkPipelineInputAssemblyStateCreateInfo ia = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+         .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      };
+      VkViewport vp = { 0, 0, (float)WIDTH, (float)HEIGHT, pc->min_depth, pc->max_depth };
+      VkRect2D sc = { { 0, 0 }, { WIDTH, HEIGHT } };
+      VkPipelineViewportStateCreateInfo vps = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+         .viewportCount = 1, .pViewports = &vp, .scissorCount = 1, .pScissors = &sc,
+      };
+      VkPipelineRasterizationStateCreateInfo rs = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+         .polygonMode = VK_POLYGON_MODE_FILL, .cullMode = VK_CULL_MODE_NONE,
+         .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE, .lineWidth = 1.0f,
+      };
+      VkPipelineMultisampleStateCreateInfo ms = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+         .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+      };
+      VkPipelineDepthStencilStateCreateInfo ds = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+         .depthTestEnable = VK_TRUE, .depthWriteEnable = VK_TRUE,
+         .depthCompareOp = VK_COMPARE_OP_LESS,
+      };
+      VkPipelineColorBlendAttachmentState cba = {
+         .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+      };
+      VkPipelineColorBlendStateCreateInfo cb = {
+         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+         .attachmentCount = 1, .pAttachments = &cba,
+      };
+      VkGraphicsPipelineCreateInfo gpci = {
+         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+         .stageCount = 2, .pStages = stages,
+         .pVertexInputState = &vi, .pInputAssemblyState = &ia,
+         .pViewportState = &vps, .pRasterizationState = &rs,
+         .pMultisampleState = &ms, .pDepthStencilState = &ds,
+         .pColorBlendState = &cb, .layout = pl, .renderPass = rp, .subpass = 0,
+      };
+      VkPipeline pipe_first, pipe_then;
+      CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_first));
+      ds.depthCompareOp = pc->then_op;
+      CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_then));
+
+      CHECK(vkBeginCommandBuffer(cmd, &cbbi));
+      VkClearValue clears[2] = {
+         { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } },
+         { .depthStencil = { pc->clear_depth, 0 } },
+      };
+      VkRenderPassBeginInfo rpbi = {
+         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+         .renderPass = rp, .framebuffer = fb,
+         .renderArea = { { 0, 0 }, { WIDTH, HEIGHT } },
+         .clearValueCount = 2, .pClearValues = clears,
+      };
+      vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_first);
+      vkCmdDraw(cmd, 6, 1, 0, pc->first);
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe_then);
+      vkCmdDraw(cmd, 6, 1, 0, pc->then);
+      vkCmdEndRenderPass(cmd);
+      VkBufferImageCopy cregion = {
+         .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .layerCount = 1 },
+         .imageExtent = { WIDTH, HEIGHT, 1 },
+      };
+      vkCmdCopyImageToBuffer(cmd, cimg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rb, 1, &cregion);
+      VkBufferImageCopy zregion = cregion;
+      zregion.bufferOffset = cbytes;
+      zregion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+      vkCmdCopyImageToBuffer(cmd, dimg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, rb, 1, &zregion);
+      CHECK(vkEndCommandBuffer(cmd));
+      VkSubmitInfo si = {
+         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1, .pCommandBuffers = &cmd,
+      };
+      CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
+      CHECK(vkQueueWaitIdle(queue));
+
+      uint8_t *pp;
+      CHECK(vkMapMemory(dev, bmem, 0, cbytes + zbytes, 0, (void **)&pp));
+      unsigned bad_colour = 0, bad_depth = 0;
+      double z0 = 0.0;
+      for (uint32_t i = 0; i < WIDTH * HEIGHT; i++) {
+         const uint8_t *px = pp + (size_t)i * 4;
+         const bool red = px[0] > 200 && px[2] < 50, blue = px[2] > 200 && px[0] < 50;
+         if (pc->want_red ? !red : !blue)
+            bad_colour++;
+         bool zok;
+         double z;
+         if (d16) {
+            const uint16_t v = ((const uint16_t *)(pp + cbytes))[i];
+            z = v;
+            zok = v == pc->want_d16;
+         } else {
+            const float v = ((const float *)(pp + cbytes))[i];
+            z = v;
+            zok = fabsf(v - pc->want_f32) <= fabsf(pc->want_f32) * FLT_EPSILON;
+         }
+         if (!zok) {
+            if (!bad_depth) z0 = z;
+            bad_depth++;
+         }
+      }
+      vkUnmapMemory(dev, bmem);
+      if (bad_colour || bad_depth) {
+         printf("FAILED (%s: %u pixels the wrong colour, %u depths wrong (first %.9g))\n",
+                pc->name, bad_colour, bad_depth, z0);
+         ok = false;
+      } else {
+         printf("%s: target %s, depths as expected\n", pc->name,
+                pc->want_red ? "red" : "blue");
+      }
+      vkDestroyPipeline(dev, pipe_first, NULL);
+      vkDestroyPipeline(dev, pipe_then, NULL);
+   }
+
+   vkDestroyCommandPool(dev, cp, NULL);
+   vkDestroyDevice(dev, NULL);
+   vkDestroyInstance(inst, NULL);
+   return ok ? 0 : 1;
+}
+
+int
+main(int argc, char **argv)
+{
+   const char *vs_path = (argc > 1) ? argv[1] : "depth.vert.spv";
+   const char *fs_path = (argc > 2) ? argv[2] : "depth.frag.spv";
+   const char *fs_fd_path = (argc > 3) ? argv[3] : "depth_frag.frag.spv";
+   const char *vs_tie_path = (argc > 4) ? argv[4] : "depth_tie.vert.spv";
+   if (run(vs_path, fs_path, fs_fd_path, VK_FORMAT_D32_SFLOAT, "D32F") ||
+       run(vs_path, fs_path, fs_fd_path, VK_FORMAT_D16_UNORM, "D16") ||
+       run(vs_path, fs_path, fs_fd_path, VK_FORMAT_X8_D24_UNORM_PACK32, "X8D24") ||
+       run_pairs(vs_tie_path, fs_path, VK_FORMAT_D16_UNORM, d16_cases,
+                 sizeof(d16_cases) / sizeof(d16_cases[0])) ||
+       run_pairs(vs_tie_path, fs_path, VK_FORMAT_D32_SFLOAT, d32f_cases,
+                 sizeof(d32f_cases) / sizeof(d32f_cases[0])))
+      return 1;
+   printf("PASSED\n");
    return 0;
 }

@@ -120,6 +120,10 @@ DepthTencil::~DepthTencil() {}
 void DepthTencil::configure(const OMDCRS& dcrs) {
   depth_func_          = dcrs.read(VX_DCR_OM_DEPTH_FUNC);
   bool depth_writemask = dcrs.read(VX_DCR_OM_DEPTH_WRITEMASK) & 0x1;
+  const uint32_t depth_format = dcrs.read(VX_DCR_OM_DEPTH_FORMAT) & 0x7;
+  depth_float_         = depth_format == VX_OM_DEPTH_FORMAT_D32F
+                      || depth_format == VX_OM_DEPTH_FORMAT_D32FS8;
+  depth_stencil_word_  = depth_format == VX_OM_DEPTH_FORMAT_D32FS8;
 
   stencil_front_func_ = dcrs.read(VX_DCR_OM_STENCIL_FUNC) & 0xffff;
   stencil_front_zpass_= dcrs.read(VX_DCR_OM_STENCIL_ZPASS) & 0xffff;
@@ -146,18 +150,30 @@ void DepthTencil::configure(const OMDCRS& dcrs) {
                           && (stencil_back_zfail_ == VX_OM_STENCIL_OP_KEEP));
 }
 
-bool DepthTencil::test(uint32_t is_backface, 
-                       uint32_t depth, 
-                       uint32_t depthstencil_val, 
+bool DepthTencil::test(uint32_t is_backface,
+                       uint32_t depth,
+                       uint32_t depthstencil_val,
                        uint32_t* depthstencil_result) const {
-  auto depth_val   = depthstencil_val & OM_DEPTH_MASK;
-  auto stencil_val = depthstencil_val >> VX_OM_DEPTH_BITS;
-  auto depth_ref   = depth & OM_DEPTH_MASK;
-    
-  auto stencil_func = is_backface ? stencil_back_func_ : stencil_front_func_;    
-  auto stencil_ref  = is_backface ? stencil_back_ref_  : stencil_front_ref_;    
+  const uint32_t dmask = depth_float_ ? 0xffffffffu : OM_DEPTH_MASK;
+  const uint32_t depth_ref = depth & dmask;
+  uint32_t stencil_result = 0;
+  const bool passed = test_split(is_backface, depth_ref, depthstencil_val & dmask,
+                                 depth_float_ ? 0u : (depthstencil_val >> VX_OM_DEPTH_BITS),
+                                 &stencil_result);
+  *depthstencil_result = depth_float_ ? depth_ref
+                                      : ((stencil_result << VX_OM_DEPTH_BITS) | depth_ref);
+  return passed;
+}
+
+bool DepthTencil::test_split(uint32_t is_backface,
+                             uint32_t depth_ref,
+                             uint32_t depth_val,
+                             uint32_t stencil_val,
+                             uint32_t* stencil_result) const {
+  auto stencil_func = is_backface ? stencil_back_func_ : stencil_front_func_;
+  auto stencil_ref  = is_backface ? stencil_back_ref_  : stencil_front_ref_;
   auto stencil_mask = is_backface ? stencil_back_mask_ : stencil_front_mask_;
-  
+
   auto stencil_ref_m = stencil_ref & stencil_mask;
   auto stencil_val_m = stencil_val & stencil_mask;
 
@@ -167,16 +183,15 @@ bool DepthTencil::test(uint32_t is_backface,
   if (passed) {
     passed = DoCompare(depth_func_, depth_ref, depth_val);
     if (passed) {
-      stencil_op = is_backface ? stencil_back_zpass_ : stencil_front_zpass_;              
+      stencil_op = is_backface ? stencil_back_zpass_ : stencil_front_zpass_;
     } else {
       stencil_op = is_backface ? stencil_back_zfail_ : stencil_front_zfail_;
-    } 
+    }
   } else {
     stencil_op = is_backface ? stencil_back_fail_ : stencil_front_fail_;
   }
-  
-  auto stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
-  *depthstencil_result = (stencil_result << VX_OM_DEPTH_BITS) | depth_ref;
+
+  *stencil_result = DoStencilOp(stencil_op, stencil_ref, stencil_val);
   return passed;
 }
 

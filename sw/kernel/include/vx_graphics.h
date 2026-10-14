@@ -84,6 +84,13 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
   ((VX_MEM_OM_BASE_ADDR) +                                                     \
    ((((uint32_t)(y) << (xbits)) | (uint32_t)(x)) << (record_shift)))
 
+// On a float depth target the depth fills the pair's word, so the pair carries
+// the face above y and the attachment above the face:
+//     offset = (((rt << 1 | face) << YBITS | y) << XBITS | x) << RECORD_SHIFT
+#define VX_OM_APERTURE_ADDR_FLOAT_PAIR(xbits, ybits, record_shift, x, y, face, rt) \
+  VX_OM_APERTURE_ADDR(xbits, ybits, record_shift, x, y,                        \
+                      ((uint32_t)(rt) << 1) | (uint32_t)(face))
+
 #define VX_OM_DEPTH_WORD(depth, rt, face)                                      \
   (((uint32_t)(depth) & ((1u << VX_OM_DEPTH_BITS) - 1))                        \
    | ((uint32_t)(rt) << VX_OM_DEPTH_WORD_RT_SHIFT)                             \

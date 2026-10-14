@@ -571,6 +571,15 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     out_prim.attribs.z.z = FloatA(fsat_a(zc));
     if (coverage_only) {
       SETUP_PRIM_DEPTH_BIAS(out_prim) = FloatA(fsat_a(zo));
+      // The pixel at integer (x, y) is sampled at its centre (x + 0.5, y + 0.5).
+      rast_attrib_t& zf = SETUP_PRIM_ZFLOAT_PLANE(out_prim);
+      rast_attrib_t& zo0 = SETUP_PRIM_ZFLOAT_ORIGIN(out_prim);
+      zf.x  = FloatA::make(__builtin_bit_cast(int32_t, za));
+      zf.y  = FloatA::make(__builtin_bit_cast(int32_t, zb));
+      zf.z  = FloatA::make(__builtin_bit_cast(int32_t, ps0.z + zo));
+      zo0.x = FloatA::make(__builtin_bit_cast(int32_t, ps0.x - 0.5f));
+      zo0.y = FloatA::make(__builtin_bit_cast(int32_t, ps0.y - 0.5f));
+      zo0.z = FloatA::make(0);
     }
   }
   if (coverage_only) {

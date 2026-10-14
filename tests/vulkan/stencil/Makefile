@@ -17,6 +17,7 @@ SRC_DIR := $(VORTEX_HOME)/tests/vulkan/$(PROJECT)
 SRCS := $(SRC_DIR)/main.c
 
 SHADERS := $(SRC_DIR)/stencil.vert \
-           $(SRC_DIR)/stencil_pass.frag
+           $(SRC_DIR)/stencil_pass.frag \
+           $(SRC_DIR)/stencil_export.frag
 
 include ../common.mk

@@ -42,7 +42,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // decoded DCRs (broadcast; the OM ingress reads the aperture fields)
     output om_dcrs_t        om_dcrs
 );
-    localparam MEM_TAG_WIDTH   = UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BITS + 1);
+    localparam MEM_TAG_WIDTH   = UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BUS_BITS + 1);
     localparam DS_TAG_WIDTH    = UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 1 + 1 + 32);
     localparam BLEND_TAG_WIDTH = UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 1);
 
@@ -69,7 +69,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] mem_req_pos_x, mem_req_pos_x_r;
     wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] mem_req_pos_y, mem_req_pos_y_r;
     om_color_t [NUM_LANES-1:0]              mem_req_color, mem_req_color_r;
-    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] mem_req_depth, mem_req_depth_r;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0] mem_req_depth, mem_req_depth_r;
     wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] mem_req_stencil, mem_req_stencil_r;
     wire [NUM_LANES-1:0]                    mem_req_face, mem_req_face_r;
     wire [OM_RT_IDX_BITS-1:0]               mem_req_rt, mem_req_rt_r;
@@ -79,7 +79,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire                                    mem_rsp_valid;
     wire [NUM_LANES-1:0]                    mem_rsp_mask;
     om_color_t [NUM_LANES-1:0]              mem_rsp_color;
-    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] mem_rsp_depth;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0] mem_rsp_depth;
     wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] mem_rsp_stencil;
     wire [MEM_TAG_WIDTH-1:0]                mem_rsp_tag;
     wire                                    mem_rsp_ready;
@@ -135,11 +135,11 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     wire [NUM_LANES-1:0]    ds_face;
 
-    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]    ds_depth_ref;
-    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]    ds_depth_val;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0]    ds_depth_ref;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0]    ds_depth_val;
     wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0]  ds_stencil_val;
 
-    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0]    ds_depth_out;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0]    ds_depth_out;
     wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0]  ds_stencil_out;
     wire [NUM_LANES-1:0]                           ds_pass_out;
 
@@ -307,13 +307,13 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire [NUM_LANES-1:0]                        adm_mask;
     wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0]   adm_pos_x, adm_pos_y;
     om_color_t [NUM_LANES-1:0]                  adm_color;
-    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] adm_depth;
+    wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0] adm_depth;
     wire [NUM_LANES-1:0]                        adm_face;
     wire [OM_RT_IDX_BITS-1:0]                   adm_rt;
     wire                                        adm_ready;
 
     VX_elastic_buffer #(
-        .DATAW (UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BITS + 1)),
+        .DATAW (UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BUS_BITS + 1)),
         .SIZE  (2)
     ) admit_buf (
         .clk       (clk),
@@ -541,7 +541,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire mem_req_valid_unqual_r;
 
     VX_elastic_buffer #(
-        .DATAW   (1 + OM_RT_IDX_BITS + NUM_LANES * (1 + 1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BITS + `VX_OM_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
+        .DATAW   (1 + OM_RT_IDX_BITS + NUM_LANES * (1 + 1 + 2 * `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BUS_BITS + `VX_OM_STENCIL_BITS + 1) + MEM_TAG_WIDTH),
         .SIZE    (2 * `VX_CFG_OM_MEM_QUEUE_SIZE),
         .OUT_REG (1)
     ) mem_req_buf (
@@ -589,7 +589,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             OCACHE_ADDR_WIDTH + 1 + OCACHE_TAG_WIDTH +
             (OCACHE_WORD_SIZE * 8) + OCACHE_TAG_WIDTH +
             VX_DCR_ADDR_WIDTH + VX_DCR_DATA_WIDTH +
-            1 * (1 + `VX_OM_DIM_BITS + `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BITS + 1) +
+            1 * (1 + `VX_OM_DIM_BITS + `VX_OM_DIM_BITS + $bits(om_color_t) + `VX_OM_DEPTH_BUS_BITS + 1) +
             `OM_ADDR_BITS + OM_PITCH_BITS + `OM_ADDR_BITS + OM_PITCH_BITS + UUID_WIDTH
         ), {
             cache_bus_if[0].req_valid,

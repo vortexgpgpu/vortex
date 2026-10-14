@@ -248,6 +248,9 @@ struct om_state_t {
   // depth (defaults disable: ALWAYS-pass, no writes)
   uint32_t depth_func      = VX_OM_DEPTH_FUNC_ALWAYS;
   uint32_t depth_writemask = 0;
+  // D24S8, D32F or D32FS8 (the z-buffer holds each float's ordered key, and a
+  // colour+depth pair carries the face and attachment in its address)
+  uint32_t depth_format    = VX_OM_DEPTH_FORMAT_D24S8;
   // Early-Z gate: caller sets 1 only when the FS has no depth-export, the
   // depth func is monotonic (LESS/LEQUAL), stencil is off, and blending is
   // off, letting the raster unit cull occluded fragments before shading.
@@ -314,9 +317,13 @@ constexpr uint32_t om_aperture_bits() {
 
 // Whether a width x height framebuffer fits the aperture for a record shape: a
 // colour+depth pair addresses the pixel only (its attachment and face ride the
-// depth word), a one-word record also carries the face above y.
-constexpr bool om_aperture_fits(uint32_t xbits, uint32_t ybits, bool pair) {
-  return xbits + ybits + (pair ? 0u : 1u) + (pair ? 3u : 2u) <= om_aperture_bits();
+// depth word), a one-word record also carries the face above y, and a pair on a
+// float depth target, whose depth fills the word, carries the face and
+// `rt_bits` of attachment index there.
+constexpr bool om_aperture_fits(uint32_t xbits, uint32_t ybits, bool pair,
+                                bool float_depth = false, uint32_t rt_bits = 0) {
+  return xbits + ybits + ((pair && !float_depth) ? 0u : 1u + (pair ? rt_bits : 0u))
+       + (pair ? 3u : 2u) <= om_aperture_bits();
 }
 
 // Derive the aperture encoding from the framebuffer and the shader's output
@@ -338,7 +345,9 @@ inline void set_aperture(om_state_t& s, uint32_t width, uint32_t height,
   // wraps two pixels onto one. Nothing downstream can detect that, so it is
   // caught here where the width and height are still in hand.
   assert(om_aperture_fits(s.aperture_xbits, s.aperture_ybits,
-                          s.aperture_record_shift == 3)
+                          s.aperture_record_shift == 3,
+                          s.depth_format == VX_OM_DEPTH_FORMAT_D32F
+                          || s.depth_format == VX_OM_DEPTH_FORMAT_D32FS8)
        && "framebuffer too large for the fragment-export aperture");
 }
 

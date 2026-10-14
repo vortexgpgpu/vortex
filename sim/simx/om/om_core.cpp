@@ -80,6 +80,16 @@ public:
     bool      c_arrived          = false;
     uint32_t  dst_depthstencil   = 0;
     uint32_t  dst_color          = 0;
+    // A D32F_S8 texel keeps its stencil in a second word, read and written
+    // through a port of its own.
+    bool      need_s_read        = false;
+    bool      s_read_issued      = false;
+    bool      s_arrived          = false;
+    uint32_t  dst_stencil        = 0;
+    bool      need_s_write       = false;
+    uint32_t  s_write_value      = 0;
+    bool      s_write_issued     = false;
+    bool      s_write_acked      = false;
 
     bool      ds_pass            = false;
     uint32_t  merged_depthstencil = 0;
@@ -111,11 +121,12 @@ public:
 
   // Pending memory request bookkeeping. Each tag identifies a unique
   // (slot, lane, port) triple so the response can be deposited in the right
-  // lane buffer. Port: 0 = zbuf (depth+stencil), 1 = cbuf (color).
+  // lane buffer. Port: 0 = zbuf (depth+stencil), 1 = cbuf (color), 2 = the
+  // stencil word of a D32F_S8 texel.
   struct PendingFill {
     uint32_t slot;
     uint8_t  lane;
-    uint8_t  port;        // 0=zbuf, 1=cbuf
+    uint8_t  port;        // 0=zbuf, 1=cbuf, 2=zbuf stencil word
     uint32_t byte_off;    // offset within the 64-byte cache line
     bool     is_write = false;  // write ack (commit) vs read fill
   };
@@ -202,6 +213,8 @@ private:
     depth_writemask_         = dcrs_.read(VX_DCR_OM_DEPTH_WRITEMASK) & 0x1;
     stencil_front_writemask_ = dcrs_.read(VX_DCR_OM_STENCIL_WRITEMASK) & 0xffff;
     stencil_back_writemask_  = dcrs_.read(VX_DCR_OM_STENCIL_WRITEMASK) >> 16;
+    stencil_writeen_ = (depth_stencil_.stencil_enabled(false) && (stencil_front_writemask_ & 0xff))
+                    || (depth_stencil_.stencil_enabled(true) && (stencil_back_writemask_ & 0xff));
 
     for (uint32_t rt = 0; rt < VX_OM_MAX_RT; ++rt) {
       cbuf_baseaddr_[rt] = uint64_t(dcrs_.read(rt, VX_DCR_OM_CBUF_ADDR)) << 6;
@@ -259,6 +272,8 @@ private:
   //     one-word record:   offset = ((face << ybits | y) << xbits | x) << record_shift
   //     colour+depth pair: offset = (y << xbits | x) << record_shift, with the
   //                        attachment and face in the depth word
+  //     float pair:        offset = (((rt << 1 | face) << ybits | y) << xbits | x)
+  //                        << record_shift, the depth word all depth
   static_assert(VX_OM_DEPTH_WORD_RT_SHIFT >= VX_OM_DEPTH_BITS
              && (1u << (VX_OM_DEPTH_WORD_FACE_SHIFT - VX_OM_DEPTH_WORD_RT_SHIFT)) >= VX_OM_MAX_RT
              && VX_OM_DEPTH_WORD_FACE_SHIFT < 32, "depth word fields overlap");
@@ -267,6 +282,7 @@ private:
     uint32_t ybits = dcrs_.read(VX_DCR_OM_APERTURE_YBITS);
     uint32_t shift = dcrs_.read(VX_DCR_OM_APERTURE_RECORD_SHIFT);
     const bool pair = (shift == 3);
+    const bool depth_float = depth_stencil_.depth_float();
     bool rt_seen = false;
     req.rt = 0;
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
@@ -275,16 +291,26 @@ private:
       uint64_t rec = off >> shift;
       req.pos_x[t] = uint32_t(rec & ((1ull << xbits) - 1));
       req.pos_y[t] = uint32_t((rec >> xbits) & ((1ull << ybits) - 1));
-      if (!pair) {
+      if (!pair || depth_float) {
         req.face[t] = uint8_t((rec >> (xbits + ybits)) & 0x1);
+      }
+      if (!pair) {
+        if (!depth_float) {
+          req.depth[t] &= (1u << VX_OM_DEPTH_BITS) - 1;
+        }
         continue;
       }
-      const uint32_t word = req.depth[t];
-      req.face[t]  = uint8_t((word >> VX_OM_DEPTH_WORD_FACE_SHIFT) & 0x1);
-      req.depth[t] = word & ((1u << VX_OM_DEPTH_BITS) - 1);
+      uint32_t rt;
+      if (depth_float) {
+        rt = uint32_t(rec >> (xbits + ybits + 1)) & (VX_OM_MAX_RT - 1);
+      } else {
+        const uint32_t word = req.depth[t];
+        req.face[t]  = uint8_t((word >> VX_OM_DEPTH_WORD_FACE_SHIFT) & 0x1);
+        req.depth[t] = word & ((1u << VX_OM_DEPTH_BITS) - 1);
+        rt = (word >> VX_OM_DEPTH_WORD_RT_SHIFT) & (VX_OM_MAX_RT - 1);
+      }
       // The attachment names the whole record, so every lane of one export
       // must agree.
-      uint32_t rt = (word >> VX_OM_DEPTH_WORD_RT_SHIFT) & (VX_OM_MAX_RT - 1);
       assert((!rt_seen || rt == req.rt) && "OM: one export spans two colour attachments");
       req.rt  = rt;
       rt_seen = true;
@@ -375,11 +401,13 @@ private:
       l.src_color = s.req.color[t];
       l.src_depth = s.req.depth[t];
 
-      l.zbuf_addr_byte = zbuf_baseaddr_ + uint64_t(l.pos_y) * zbuf_pitch_ + l.pos_x * 4;
+      const uint32_t zbpp = depth_stencil_.depth_stencil_word() ? 8 : 4;
+      l.zbuf_addr_byte = zbuf_baseaddr_ + uint64_t(l.pos_y) * zbuf_pitch_ + l.pos_x * zbpp;
       l.cbuf_addr_byte = cbuf_baseaddr_[s.req.rt] + uint64_t(l.pos_y) * cbuf_pitch_[s.req.rt] + l.pos_x * 4;
 
       bool stencil_enabled = depth_stencil_.stencil_enabled(l.face);
       l.need_z_read = has_depth && (depth_enabled || stencil_enabled);
+      l.need_s_read = l.need_z_read && depth_stencil_.depth_stencil_word();
       l.need_c_read = has_color && color_write_[s.req.rt] && (color_read_[s.req.rt] || blend_enabled);
     }
     s.state = State::READ_ISSUE;
@@ -398,13 +426,29 @@ private:
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS && budget > 0; ++t) {
       LaneState& l = s.lanes[t];
-      if (!l.active) continue;
+      if (!l.active) {
+        continue;
+      }
 
       if (l.need_z_read && !l.z_read_issued) {
         any_read_needed = true;
         if (try_issue_read(s, t, /*port=*/0, l.zbuf_addr_byte)) {
           l.z_read_issued = true;
-          if (--budget == 0) break;
+          if (--budget == 0) {
+            break;
+          }
+        } else {
+          all_issued = false;
+          break;
+        }
+      }
+      if (l.need_s_read && !l.s_read_issued) {
+        any_read_needed = true;
+        if (try_issue_read(s, t, /*port=*/2, l.zbuf_addr_byte + 4)) {
+          l.s_read_issued = true;
+          if (--budget == 0) {
+            break;
+          }
         } else {
           all_issued = false;
           break;
@@ -414,7 +458,9 @@ private:
         any_read_needed = true;
         if (try_issue_read(s, t, /*port=*/1, l.cbuf_addr_byte)) {
           l.c_read_issued = true;
-          if (--budget == 0) break;
+          if (--budget == 0) {
+            break;
+          }
         } else {
           all_issued = false;
           break;
@@ -424,8 +470,11 @@ private:
     // Detect "is anything still un-issued?"
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
-      if (!l.active) continue;
+      if (!l.active) {
+        continue;
+      }
       if (l.need_z_read && !l.z_read_issued) { all_issued = false; }
+      if (l.need_s_read && !l.s_read_issued) { all_issued = false; }
       if (l.need_c_read && !l.c_read_issued) { all_issued = false; }
     }
 
@@ -485,8 +534,13 @@ private:
       if (pf.is_write) {
         // Write ack (commit). Releases the slot's same-pixel interlock once all
         // its writes land — see advance_write_issue.
-        if (pf.port == 0) l.z_write_acked = true;
-        else              l.c_write_acked = true;
+        if (pf.port == 0) {
+          l.z_write_acked = true;
+        } else if (pf.port == 2) {
+          l.s_write_acked = true;
+        } else {
+          l.c_write_acked = true;
+        }
         ch.pop();
         continue;
       }
@@ -498,6 +552,9 @@ private:
       if (pf.port == 0) {
         l.dst_depthstencil = v;
         l.z_arrived        = true;
+      } else if (pf.port == 2) {
+        l.dst_stencil = v & 0xff;
+        l.s_arrived   = true;
       } else {
         l.dst_color = v;
         l.c_arrived = true;
@@ -510,9 +567,18 @@ private:
   void advance_read_gather(Slot& s) {
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       const LaneState& l = s.lanes[t];
-      if (!l.active) continue;
-      if (l.need_z_read && !l.z_arrived) return;
-      if (l.need_c_read && !l.c_arrived) return;
+      if (!l.active) {
+        continue;
+      }
+      if (l.need_z_read && !l.z_arrived) {
+        return;
+      }
+      if (l.need_s_read && !l.s_arrived) {
+        return;
+      }
+      if (l.need_c_read && !l.c_arrived) {
+        return;
+      }
     }
     s.state = State::COMPUTE;
   }
@@ -524,26 +590,53 @@ private:
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
-      if (!l.active) continue;
+      if (!l.active) {
+        continue;
+      }
 
       bool stencil_enabled = l.has_depth && depth_stencil_.stencil_enabled(l.face);
       bool ds_active = l.has_depth && depth_enabled;
       ds_active = ds_active || stencil_enabled;
 
-      uint32_t merged = 0;
-      l.ds_pass = !ds_active
-                || depth_stencil_.test(l.face, l.src_depth, l.dst_depthstencil, &merged);
+      const bool stencil_word = depth_stencil_.depth_stencil_word();
+      uint32_t merged = 0, stencil_result = 0;
+      if (stencil_word) {
+        l.ds_pass = !ds_active
+                  || depth_stencil_.test_split(l.face, l.src_depth, l.dst_depthstencil,
+                                               l.dst_stencil, &stencil_result);
+        merged = l.src_depth;
+      } else {
+        l.ds_pass = !ds_active
+                  || depth_stencil_.test(l.face, l.src_depth, l.dst_depthstencil, &merged);
+      }
       l.merged_depthstencil = merged;
 
       l.blended_color = (blend_enabled && l.ds_pass)
                       ? blender_[s.req.rt].blend(l.src_color, l.dst_color)
                       : l.src_color;
 
-      // Decide writes.
+      // Decide writes. A D32F word is all depth.
+      const bool depth_float = depth_stencil_.depth_float();
       uint32_t stencil_writemask = l.face ? stencil_back_writemask_ : stencil_front_writemask_;
       uint32_t ds_writemask =
-          ((l.has_depth && depth_enabled && l.ds_pass && depth_writemask_) ? OM_DEPTH_MASK : 0u)
-        | (stencil_enabled ? (uint32_t(stencil_writemask) << VX_OM_DEPTH_BITS) : 0u);
+          ((l.has_depth && depth_enabled && l.ds_pass && depth_writemask_)
+             ? (depth_float ? 0xffffffffu : OM_DEPTH_MASK) : 0u)
+        | ((stencil_enabled && !depth_float) ? (uint32_t(stencil_writemask) << VX_OM_DEPTH_BITS) : 0u);
+      if (stencil_word) {
+        // As the RTL issues them: a texel is written back when any stencil write
+        // is on or the depth test passed with depth writes on, and then each of
+        // its two words whose aspect is written goes out.
+        const bool fire = l.has_depth
+                       && (stencil_writeen_ || (depth_enabled && depth_writemask_ && l.ds_pass));
+        const uint32_t s_writemask = stencil_writemask & 0xff;
+        l.need_s_write = fire && s_writemask != 0;
+        if (l.need_s_write) {
+          l.s_write_value = (l.dst_stencil & ~s_writemask) | (stencil_result & s_writemask);
+        }
+        ds_writemask = (fire && depth_writemask_) ? 0xffffffffu : 0u;
+        merged = (depth_enabled && depth_writemask_ && l.ds_pass) ? l.src_depth : l.dst_depthstencil;
+        l.merged_depthstencil = merged;
+      }
 
       l.need_z_write = (ds_writemask != 0);
       if (l.need_z_write) {
@@ -573,12 +666,27 @@ private:
 
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS && budget > 0; ++t) {
       LaneState& l = s.lanes[t];
-      if (!l.active) continue;
+      if (!l.active) {
+        continue;
+      }
 
       if (l.need_z_write && !l.z_write_issued) {
         if (try_issue_write(s, t, /*port=*/0, l.zbuf_addr_byte, l.z_write_value)) {
           l.z_write_issued = true;
-          if (--budget == 0) break;
+          if (--budget == 0) {
+            break;
+          }
+        } else {
+          all_done = false;
+          break;
+        }
+      }
+      if (l.need_s_write && !l.s_write_issued) {
+        if (try_issue_write(s, t, /*port=*/2, l.zbuf_addr_byte + 4, l.s_write_value)) {
+          l.s_write_issued = true;
+          if (--budget == 0) {
+            break;
+          }
         } else {
           all_done = false;
           break;
@@ -587,7 +695,9 @@ private:
       if (l.need_c_write && !l.c_write_issued) {
         if (try_issue_write(s, t, /*port=*/1, l.cbuf_addr_byte, l.c_write_value)) {
           l.c_write_issued = true;
-          if (--budget == 0) break;
+          if (--budget == 0) {
+            break;
+          }
         } else {
           all_done = false;
           break;
@@ -598,9 +708,18 @@ private:
     // Re-scan for un-issued writes.
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       const LaneState& l = s.lanes[t];
-      if (!l.active) continue;
-      if (l.need_z_write && !l.z_write_issued) all_done = false;
-      if (l.need_c_write && !l.c_write_issued) all_done = false;
+      if (!l.active) {
+        continue;
+      }
+      if (l.need_z_write && !l.z_write_issued) {
+        all_done = false;
+      }
+      if (l.need_s_write && !l.s_write_issued) {
+        all_done = false;
+      }
+      if (l.need_c_write && !l.c_write_issued) {
+        all_done = false;
+      }
     }
 
     if (!all_done)
@@ -611,9 +730,18 @@ private:
     // bypass an in-flight write. Reads bypass this wait (no writes pending).
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       const LaneState& l = s.lanes[t];
-      if (!l.active) continue;
-      if (l.need_z_write && !l.z_write_acked) return;
-      if (l.need_c_write && !l.c_write_acked) return;
+      if (!l.active) {
+        continue;
+      }
+      if (l.need_z_write && !l.z_write_acked) {
+        return;
+      }
+      if (l.need_s_write && !l.s_write_acked) {
+        return;
+      }
+      if (l.need_c_write && !l.c_write_acked) {
+        return;
+      }
     }
     s.state = State::DONE;
   }
@@ -633,7 +761,8 @@ private:
     mreq.tag    = next_mem_tag_++;
     mreq.hart_id    = s.req.tag;
     mreq.uuid   = s.req.uuid;
-    mreq.byteen = uint64_t(0xfu) << off;
+    // A D32F_S8 stencil write touches only the stencil byte of its word.
+    mreq.byteen = uint64_t(port == 2 ? 0x1u : 0xfu) << off;
 
     auto blk = make_mem_block();
     std::memcpy(blk->data() + off, &value, 4);
@@ -679,6 +808,7 @@ private:
   bool      depth_writemask_ = false;
   uint32_t  stencil_front_writemask_ = 0;
   uint32_t  stencil_back_writemask_  = 0;
+  bool      stencil_writeen_  = false;   // some face writes stencil
 
   std::vector<Slot>                         slots_;
   std::unordered_map<uint32_t, PendingFill> pending_mem_;

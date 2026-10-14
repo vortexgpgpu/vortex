@@ -12,6 +12,14 @@
  * Both passes leave the back face rejecting, so a driver that programmed the
  * back state into both halves of the packed stencil registers renders
  * nothing.
+ *
+ * The case runs on a packed D24S8 attachment, on a D32F_S8 one (whose stencil
+ * the merger keeps in a word of its own) and on a stencil-only S8_UINT one.
+ * On S8 the second pass also enables a NEVER depth test, which an attachment
+ * without depth must pass for every fragment. A last run marks
+ * with a shader that exports its own stencil reference
+ * (VK_EXT_shader_stencil_export): 1 on odd columns and 2 on even ones, so only
+ * the odd columns of the mark are admitted.
  */
 
 #include <vulkan/vulkan.h>
@@ -24,7 +32,6 @@
 #define HEIGHT       64u
 #define FORMAT       VK_FORMAT_R8G8B8A8_UNORM
 #define STENCIL_REF   1u
-#define DEPTH_FORMAT VK_FORMAT_D24_UNORM_S8_UINT
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -96,12 +103,10 @@ alloc_image(VkDevice dev, const VkPhysicalDeviceMemoryProperties *mp,
    return r;
 }
 
-int
-main(int argc, char **argv)
+static int
+run(const char *vs_path, const char *fs_path, const char *fs_export_path,
+    VkFormat zs_format, const char *zs_name)
 {
-   const char *vs_path = (argc > 1) ? argv[1] : "depth.vert.spv";
-   const char *fs_path = (argc > 2) ? argv[2] : "depth.frag.spv";
-
    /* --- instance + device ----------------------------------------- */
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -136,9 +141,11 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
       .queueFamilyIndex = qf, .queueCount = 1, .pQueuePriorities = &prio,
    };
+   const char *exts[] = { VK_EXT_SHADER_STENCIL_EXPORT_EXTENSION_NAME };
    VkDeviceCreateInfo dci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
+      .enabledExtensionCount = fs_export_path ? 1u : 0u, .ppEnabledExtensionNames = exts,
    };
    VkDevice dev;
    CHECK(vkCreateDevice(pd, &dci, NULL, &dev));
@@ -163,7 +170,7 @@ main(int argc, char **argv)
    CHECK(alloc_image(dev, &mp, cimg, &cmem));
 
    VkImageCreateInfo dimci = cimci;
-   dimci.format = DEPTH_FORMAT;
+   dimci.format = zs_format;
    dimci.usage  = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
    VkImage dimg;
    CHECK(vkCreateImage(dev, &dimci, NULL, &dimg));
@@ -181,8 +188,9 @@ main(int argc, char **argv)
 
    VkImageViewCreateInfo divci = civci;
    divci.image  = dimg;
-   divci.format = DEPTH_FORMAT;
-   divci.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+   divci.format = zs_format;
+   divci.subresourceRange.aspectMask = zs_format == VK_FORMAT_S8_UINT
+      ? VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
    VkImageView dview;
    CHECK(vkCreateImageView(dev, &divci, NULL, &dview));
 
@@ -195,7 +203,7 @@ main(int argc, char **argv)
         .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL },
-      { .format = DEPTH_FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
+      { .format = zs_format, .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
         .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -234,6 +242,11 @@ main(int argc, char **argv)
    VkShaderModule vs = load_module(dev, vs_path);
    VkShaderModule fs = load_module(dev, fs_path);
    if (!vs || !fs) return 1;
+   VkShaderModule fs_export = VK_NULL_HANDLE;
+   if (fs_export_path) {
+      fs_export = load_module(dev, fs_export_path);
+      if (!fs_export) return 1;
+   }
 
    VkPipelineLayoutCreateInfo plci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -290,10 +303,11 @@ main(int argc, char **argv)
    /* Pass 2: the front face admits where the mark matches; the back face is
     * NEVER, so front state leaking into the back half would show up as a
     * missing quad rather than a pass. */
+   const bool no_depth = zs_format == VK_FORMAT_S8_UINT;
    VkPipelineDepthStencilStateCreateInfo ds_test = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_FALSE, .depthWriteEnable = VK_FALSE,
-      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+      .depthTestEnable = no_depth, .depthWriteEnable = VK_FALSE,
+      .depthCompareOp = no_depth ? VK_COMPARE_OP_NEVER : VK_COMPARE_OP_ALWAYS,
       .stencilTestEnable = VK_TRUE,
       .front = { .failOp = VK_STENCIL_OP_KEEP, .passOp = VK_STENCIL_OP_KEEP,
                  .depthFailOp = VK_STENCIL_OP_KEEP,
@@ -327,9 +341,14 @@ main(int argc, char **argv)
    VkPipelineColorBlendStateCreateInfo cb_nowrite = cb;
    cb_nowrite.pAttachments = &cba_nowrite;
    gpci.pColorBlendState = &cb_nowrite;
+   VkPipelineShaderStageCreateInfo stages_export[2] = { stages[0], stages[1] };
+   stages_export[1].module = fs_export;
+   if (fs_export)
+      gpci.pStages = stages_export;
    VkPipeline pipe_mark;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe_mark));
 
+   gpci.pStages            = stages;
    gpci.pColorBlendState   = &cb;
    gpci.pDepthStencilState = &ds_test;
    VkPipeline pipe_test;
@@ -423,6 +442,11 @@ main(int argc, char **argv)
           * count. */
          bool inside  = (x + y) < (WIDTH - WIDTH / 4);
          bool outside = (x + y) > (WIDTH + WIDTH / 4);
+         /* The exported reference marks the even columns with 2. */
+         if (fs_export && (x & 1) == 0) {
+            outside = outside || inside;
+            inside  = false;
+         }
          if (inside)  { marked_total++; if (green) marked_green++; }
          if (outside && green) unmarked_green++;
       }
@@ -436,11 +460,25 @@ main(int argc, char **argv)
    vkDestroyInstance(inst, NULL);
 
    if (!ok) {
-      printf("FAILED (stencil: %u/%u marked pixels green, %u green outside the mark)\n",
-             marked_green, marked_total, unmarked_green);
+      printf("FAILED (stencil %s: %u/%u marked pixels green, %u green outside the mark)\n",
+             zs_name, marked_green, marked_total, unmarked_green);
       return 1;
    }
-   printf("PASSED (stencil: %u marked pixels admitted, none outside)\n",
-          marked_green);
+   printf("stencil %s: %u marked pixels admitted, none outside\n", zs_name, marked_green);
+   return 0;
+}
+
+int
+main(int argc, char **argv)
+{
+   const char *vs_path = (argc > 1) ? argv[1] : "stencil.vert.spv";
+   const char *fs_path = (argc > 2) ? argv[2] : "stencil_pass.frag.spv";
+   const char *fs_export_path = (argc > 3) ? argv[3] : "stencil_export.frag.spv";
+   if (run(vs_path, fs_path, NULL, VK_FORMAT_D24_UNORM_S8_UINT, "D24S8") ||
+       run(vs_path, fs_path, NULL, VK_FORMAT_S8_UINT, "S8") ||
+       run(vs_path, fs_path, NULL, VK_FORMAT_D32_SFLOAT_S8_UINT, "D32FS8") ||
+       run(vs_path, fs_path, fs_export_path, VK_FORMAT_D24_UNORM_S8_UINT, "D24S8 exported"))
+      return 1;
+   printf("PASSED\n");
    return 0;
 }

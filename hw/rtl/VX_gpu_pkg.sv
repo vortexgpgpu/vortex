@@ -1607,8 +1607,9 @@ package VX_gpu_pkg;
     // rate. Fill rate scales with NUM_OM_CORES x OCACHE_NUM_BANKS instead.
     localparam OM_CORE_LANES         = 1;
 
-    // Per-OM-unit memory port count (2 ports × OM_CORE_LANES: color + depth)
-    localparam OM_MEM_REQS           = (2 * OM_CORE_LANES);
+    // Per-OM-unit memory port count (3 ports × OM_CORE_LANES: depth, colour,
+    // and the stencil word of a D32F_S8 texel)
+    localparam OM_MEM_REQS           = (3 * OM_CORE_LANES);
 
     localparam OCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(OM_MEM_REQS, OCACHE_NUM_REQS);
     localparam OCACHE_TAG_ID_BITS    = (`CLOG2(`VX_CFG_OM_MEM_QUEUE_SIZE) + OCACHE_BATCH_SEL_BITS);

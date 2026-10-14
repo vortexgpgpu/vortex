@@ -556,6 +556,18 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -m -n 7 -b -r whitebox_b_128.png
+- id: model_parity-om-float
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -z -d
+- id: model_parity-om-float-stencil
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -Z -s
 
 # Tests that self-configure their required extensions and validate in their
 # default run-{driver} target.
@@ -656,6 +668,50 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -s -S
+# D32F: stored depths below, at (both zeros) and above a -1.0 fragment, and
+# outside [0, 1], compared as ordered keys and checked per pixel; then the
+# float pair's attachment field in the export address (attachment 5, whose
+# bits are not all ones, so a shifted field decodes to another attachment).
+- id: gfx_om-float
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -z -d
+- id: gfx_om-float-sw
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -z -d -S
+- id: gfx_om-float-mrt5
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -z -m -n 5 -r whitebox_128.png
+# D32F_S8: the -s stencil outcomes on the stencil word of an 8-byte texel,
+# beside the float depth.
+- id: gfx_om-float-stencil
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -Z -s
+- id: gfx_om-float-stencil-sw
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -Z -s -S
+# The back face compares against another reference, so the face bit a float
+# pair carries in its address decides every pixel.
+- id: gfx_om-float-stencil-back
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -Z -s -f
 - id: gfx_raster-sw
   via: blackbox
   drivers: [simx]

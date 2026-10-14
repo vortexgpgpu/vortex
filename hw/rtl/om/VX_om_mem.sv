@@ -37,7 +37,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     input wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] req_pos_x,
     input wire [NUM_LANES-1:0][`VX_OM_DIM_BITS-1:0] req_pos_y,
     input om_color_t [NUM_LANES-1:0]                req_color,
-    input wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] req_depth,
+    input wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0] req_depth,
     input wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] req_stencil,
     input wire [NUM_LANES-1:0]                      req_face,
     input wire [TAG_WIDTH-1:0]                      req_tag,
@@ -52,7 +52,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     output wire                                     rsp_valid,
     output wire [NUM_LANES-1:0]                     rsp_mask,
     output om_color_t [NUM_LANES-1:0]               rsp_color,
-    output wire [NUM_LANES-1:0][`VX_OM_DEPTH_BITS-1:0] rsp_depth,
+    output wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0] rsp_depth,
     output wire [NUM_LANES-1:0][`VX_OM_STENCIL_BITS-1:0] rsp_stencil,
     output wire [TAG_WIDTH-1:0]                     rsp_tag,
     input wire                                      rsp_ready
@@ -86,6 +86,14 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     `UNUSED_VAR (dcrs)
     `UNUSED_VAR (rt_dcrs)
 
+    `STATIC_ASSERT((`VX_OM_DEPTH_BUS_BITS == 32) && (`VX_OM_DEPTH_BITS + `VX_OM_STENCIL_BITS == 32),
+        ("a depth/stencil word is one 32-bit word"))
+
+    // A D24S8 word is {stencil, depth[23:0]}; a D32F word is the depth alone.
+    // A D32F_S8 texel is two words, the key then the stencil, so its stencil
+    // takes a request slot of its own: slots [0, L) are depth/stencil words,
+    // [L, 2L) colour, [2L, 3L) D32F_S8 stencil words.
+    `STATIC_ASSERT(NUM_REQS == 3 * NUM_LANES, ("one depth, colour and stencil slot per lane"))
     wire [3:0] color_byteen = rt_dcrs.cbuf_writemask;
     wire [2:0] depth_byteen = {3{dcrs.depth_writemask}};
     wire [NUM_LANES-1:0] stencil_byteen;
@@ -116,30 +124,45 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             .result (m_y_pitch)
         );
 
+        // A D32F_S8 texel is two words wide.
+        wire [W_ADDR_BITS-1:0] xoff = dcrs.depth_stencil_word ? (W_ADDR_BITS'(req_pos_x[i]) << 1)
+                                                              : W_ADDR_BITS'(req_pos_x[i]);
         wire [W_ADDR_BITS-1:0] baddr, baddr_s;
-        assign baddr = {dcrs.zbuf_addr, 4'b0} + W_ADDR_BITS'(req_pos_x[i]);
+        assign baddr = {dcrs.zbuf_addr, 4'b0} + xoff;
 
-        wire [3:0] byteen = req_rw ? {stencil_byteen[i], depth_byteen} : 4'b1111;
-        wire [31:0] data = {req_stencil[i], req_depth[i]};
-        wire mask = req_ds_mask[i];
+        wire [3:0] byteen = req_rw ? (dcrs.depth_float ? {4{dcrs.depth_writemask}}
+                                                       : {stencil_byteen[i], depth_byteen})
+                                   : 4'b1111;
+        wire [31:0] data = dcrs.depth_float ? req_depth[i]
+                                            : {req_stencil[i], req_depth[i][`VX_OM_DEPTH_BITS-1:0]};
+        // A D32F_S8 write touches only the words whose aspect is written.
+        wire mask = req_ds_mask[i] && ~(req_rw && dcrs.depth_stencil_word && ~dcrs.depth_writemask);
+
+        wire [3:0]  s_byteen = req_rw ? {3'b0, stencil_byteen[i]} : 4'b1111;
+        wire [31:0] s_data   = 32'(req_stencil[i]);
+        wire        s_mask   = req_ds_mask[i] && dcrs.depth_stencil_word && ~(req_rw && ~stencil_byteen[i]);
 
         VX_shift_register #(
-            .DATAW (1 + 4 + W_ADDR_BITS + 32),
+            .DATAW (1 + 4 + 1 + 4 + W_ADDR_BITS + 32 + 32),
             .DEPTH (`LATENCY_IMUL)
         ) shift_reg (
             .clk      (clk),
             `UNUSED_PIN (reset),
             .enable   (1'b1),
-            .data_in  ({mask,         byteen,         baddr,   data}),
-            .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s, mreq_data[i]})
+            .data_in  ({mask,         byteen,         s_mask,
+                        s_byteen,                     baddr,   data,         s_data}),
+            .data_out ({mreq_mask[i], mreq_byteen[i], mreq_mask[2 * NUM_LANES + i],
+                        mreq_byteen[2 * NUM_LANES + i], baddr_s, mreq_data[i],
+                        mreq_data[2 * NUM_LANES + i]})
         );
 
         wire [W_ADDR_BITS-1:0] addr = baddr_s + W_ADDR_BITS'(m_y_pitch[31:2]);
         assign mreq_addr[i] = OCACHE_ADDR_WIDTH'(addr);
+        assign mreq_addr[2 * NUM_LANES + i] = OCACHE_ADDR_WIDTH'(addr + W_ADDR_BITS'(1));
     end
 
     // blend color submission
-    for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin : g_color
+    for (genvar i = NUM_LANES; i < 2 * NUM_LANES; ++i) begin : g_color
         wire [31:0] m_y_pitch;
         `UNUSED_VAR (m_y_pitch)
 
@@ -339,17 +362,21 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     assign rsp_valid = mrsp_valid;
 
-    assign rsp_mask = (mrsp_mask[0 +: NUM_LANES] | mrsp_mask[NUM_LANES +: NUM_LANES]);
+    assign rsp_mask = mrsp_mask[0 +: NUM_LANES] | mrsp_mask[NUM_LANES +: NUM_LANES]
+                    | mrsp_mask[2 * NUM_LANES +: NUM_LANES];
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_depth
-        assign rsp_depth[i]   = `VX_OM_DEPTH_BITS'(mrsp_data[i] >> 0) & `VX_OM_DEPTH_BITS'(OM_DEPTH_MASK);
+        assign rsp_depth[i]   = dcrs.depth_float ? mrsp_data[i]
+                                                 : (mrsp_data[i] & 32'(OM_DEPTH_MASK));
     end
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_stencil
-        assign rsp_stencil[i] = `VX_OM_STENCIL_BITS'(mrsp_data[i] >> `VX_OM_DEPTH_BITS) & `VX_OM_STENCIL_BITS'(OM_STENCIL_MASK);
+        assign rsp_stencil[i] = dcrs.depth_stencil_word ? `VX_OM_STENCIL_BITS'(mrsp_data[2 * NUM_LANES + i])
+                              : dcrs.depth_float ? '0
+                              : `VX_OM_STENCIL_BITS'(mrsp_data[i] >> `VX_OM_DEPTH_BITS);
     end
 
-    for (genvar i = NUM_LANES; i < NUM_REQS; ++i) begin : g_rsp_color
+    for (genvar i = NUM_LANES; i < 2 * NUM_LANES; ++i) begin : g_rsp_color
         assign rsp_color[i - NUM_LANES] = mrsp_data[i];
     end
 

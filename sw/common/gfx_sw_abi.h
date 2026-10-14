@@ -104,6 +104,7 @@ typedef struct {
   // format's value range (inclusive), so the device compares integers.
   uint32_t depth_bounds_enable;
   uint32_t depth_bounds_min, depth_bounds_max;
+  uint32_t stencil_ref_export;
 } gfx_sw_omstate_t;
 
 // Per-attachment colour descriptor for MRT (mirror of gfx_sw::om_color_t). The
@@ -265,9 +266,11 @@ uint32_t gfx_tex_sample_3d_sw(const gfx_sw_texstate_t* st,
 // `covered` is the sub-pixel's coverage bit; uncovered fragments are dropped
 // here so the SIMT caller stays straight-line (the divergent branch lives in
 // this compilation unit, under the device toolchain's divergence lowering).
+// `sref` is the fragment's exported stencil reference, read only when the
+// state's stencil_ref_export is set; every merge entry point takes it.
 void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
                         uint32_t x, uint32_t y, uint32_t face,
-                        uint32_t color, uint32_t depth);
+                        uint32_t color, uint32_t depth, uint32_t sref);
 
 // Multisample merge: run the merge at each covered sample of pixel (x, y). Bit k
 // of `sample_mask` is sample k's coverage, as rast_sample_mask computes it, and
@@ -280,7 +283,14 @@ void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
 // (W*samples*4), which is what msaa_color_addr/msaa_depth_addr index against.
 void gfx_om_fragment_msaa_sw(const gfx_sw_omstate_t* st, uint32_t samples,
                              uint32_t sample_mask, uint32_t x, uint32_t y,
-                             uint32_t face, uint32_t color, uint32_t depth);
+                             uint32_t face, uint32_t color, uint32_t depth, uint32_t sref);
+
+// Early fragment tests: the depth/stencil test and write against `st` of the
+// samples in `sample_mask` of pixel (x, y), ahead of the fragment shader (bit 0
+// alone at one sample). Returns the samples that passed; the shader runs for
+// those and the merge after it has its depth/stencil stage off.
+uint32_t gfx_ds_early_sw(const gfx_sw_omstate_t* st, uint32_t samples, uint32_t sample_mask,
+                         uint32_t x, uint32_t y, uint32_t face, uint32_t depth);
 
 // MRT software fallback: one shared depth/stencil op against `st`, then a
 // per-attachment blend + colour write of colors[k] for each of the `num_color`
@@ -289,7 +299,7 @@ void gfx_om_fragment_msaa_sw(const gfx_sw_omstate_t* st, uint32_t samples,
 void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolor_t* rt,
                             uint32_t num_color, uint32_t covered,
                             uint32_t x, uint32_t y, uint32_t face,
-                            const uint32_t* colors, uint32_t depth);
+                            const uint32_t* colors, uint32_t depth, uint32_t sref);
 
 // Merge for a pass with a wide colour attachment (VX_OM_COLOR_FORMAT_R16F and
 // above). `lanes` holds four 32-bit lanes per attachment: a wide attachment takes
@@ -298,11 +308,11 @@ void gfx_om_fragment_mrt_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolor_t* 
 // would receive. The single-attachment form merges with `st`'s own colour state.
 void gfx_om_fragment_wide_sw(const gfx_sw_omstate_t* st, uint32_t covered,
                              uint32_t x, uint32_t y, uint32_t face,
-                             const uint32_t* lanes, uint32_t depth);
+                             const uint32_t* lanes, uint32_t depth, uint32_t sref);
 void gfx_om_fragment_mrt_wide_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolor_t* rt,
                                  uint32_t num_color, uint32_t covered,
                                  uint32_t x, uint32_t y, uint32_t face,
-                                 const uint32_t* lanes, uint32_t depth);
+                                 const uint32_t* lanes, uint32_t depth, uint32_t sref);
 
 // One covered 2x2 quad produced by the SW fine-rasterizer (fallback for the FF
 // RASTER producer). Layout matches the FF frag payload the FS wrapper reads:

@@ -206,6 +206,10 @@ public:
     case VX_DCR_OM_ZBUF_PITCH:   zbuf_pitch_ = value; break;
     case VX_DCR_OM_DEPTH_FUNC:   depth_func_ = value; break;
     case VX_DCR_OM_EARLYZ_SAFE:  earlyz_safe_ = value; break;
+    case VX_DCR_OM_DEPTH_FORMAT:
+      depth_float_ = (value & 0x7) == VX_OM_DEPTH_FORMAT_D32F
+                  || (value & 0x7) == VX_OM_DEPTH_FORMAT_D32FS8;
+      break;
     default: break;
     }
   #else
@@ -973,7 +977,7 @@ private:
         rsp.stamps[t] = q.front();
         q.pop();
       #if VX_CFG_RASTER_EARLYZ_ENABLED
-        if (earlyz_safe_) {
+        if (earlyz_safe_ && !depth_float_) {
           early_z_cull(rsp.stamps[t]);
         }
       #endif
@@ -995,6 +999,8 @@ private:
   // The whole stage follows the same knob the datapath does, so a configuration
   // without it does not model a cull it would never perform.
   uint32_t                   earlyz_safe_ = 0;
+  // The candidate is the 24-bit unorm plane, so a float depth target never culls.
+  bool                       depth_float_ = false;
   uint64_t                   zbuf_base_   = 0;   // byte address (ZBUF_ADDR << 6)
   uint32_t                   zbuf_pitch_  = 0;
   uint32_t                   depth_func_  = VX_OM_DEPTH_FUNC_ALWAYS;

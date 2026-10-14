@@ -71,6 +71,11 @@ typedef struct packed {
     logic                               depth_enable;
     logic [OM_DEPTH_FUNC_BITS-1:0]      depth_func;
     logic                               depth_writemask;
+    // D32F: the depth word is a float's ordered key, compared whole, with no
+    // stencil; a colour+depth pair carries face and attachment in its address.
+    // D32F_S8 adds the stencil in the next word of an 8-byte texel.
+    logic                               depth_float;
+    logic                               depth_stencil_word;
 
     logic [1:0]                         stencil_enable;
     logic [1:0][OM_DEPTH_FUNC_BITS-1:0] stencil_func;

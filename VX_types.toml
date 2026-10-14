@@ -280,12 +280,16 @@ VX_RASTER_PID_BITS    = 16
 VX_OM_DIM_BITS    = 15
 VX_OM_DEPTH_BITS  = 24
 VX_OM_STENCIL_BITS = 8
+# Width of a fragment's depth through the merger: the whole word of a float
+# depth target (VX_DCR_OM_DEPTH_FORMAT), or VX_OM_DEPTH_BITS zero-extended.
+VX_OM_DEPTH_BUS_BITS = 32
 # Colour attachments the merger keeps state for. Vulkan requires
 # maxColorAttachments >= 4. The depth/stencil attachment is shared, not counted.
 VX_OM_MAX_RT      = 8
 # Depth word of a colour+depth export pair: depth in the low VX_OM_DEPTH_BITS,
 # then the attachment index and the face. The export address names the pixel
-# only, so the window holds the full render-target size.
+# only, so the window holds the full render-target size. A float depth target
+# fills the word, and its pair carries the face and attachment in the address.
 VX_OM_DEPTH_WORD_RT_SHIFT   = 24
 VX_OM_DEPTH_WORD_FACE_SHIFT = 27
 
@@ -350,6 +354,7 @@ VX_OM_DEPTH_FORMAT_D24S8 = 0       # packed 24-bit depth + 8-bit stencil (FF def
 VX_OM_DEPTH_FORMAT_D16   = 1       # 16-bit unorm depth, no stencil
 VX_OM_DEPTH_FORMAT_D32F  = 2       # 32-bit float depth, no stencil
 VX_OM_DEPTH_FORMAT_S8    = 3       # 8-bit stencil only, no depth
+VX_OM_DEPTH_FORMAT_D32FS8 = 4      # 8-byte texel: the D32F key, then the stencil in the next word
 
 VX_OM_BLEND_MODE_ADD     = 0
 VX_OM_BLEND_MODE_SUB     = 1
@@ -452,13 +457,16 @@ VX_DCR_OM_EARLYZ_SAFE       = 0x092
 # nothing is stored there -- so the address space the padding wastes is free.
 # A pair carries the attachment index and the face in its depth word
 # (VX_OM_DEPTH_WORD_*), so the address spends no bits on them; a one-word record
-# targets attachment zero.
+# targets attachment zero. On a float depth target the depth fills the pair's
+# word, so the pair takes the face and attachment in the address instead:
+#     float pair:        offset = ((rt << 1 | face) << YBITS | y) << XBITS | x) << RECORD_SHIFT
 #
 # The window is bounded by VX_MEM_OM_END_ADDR and cannot grow -- the page table
 # starts immediately above it -- so the encoding must satisfy
 #     XBITS + YBITS + (pair ? 0 : 1) + RECORD_SHIFT <= log2(window)
-# which a pair meets up to 8192x4096. The runtime and the driver check it when
-# they program the aperture.
+# which a pair meets up to 8192x4096 (a float pair adds the face and, with more
+# than one attachment, the attachment bits). The runtime and the driver check it
+# when they program the aperture.
 VX_DCR_OM_APERTURE_XBITS    = 0x093
 VX_DCR_OM_APERTURE_YBITS    = 0x094
 # Record shape. A shader emits colour only (2 -- early-Z owns the depth test AND
@@ -471,7 +479,14 @@ VX_DCR_OM_APERTURE_DEPTH_ONLY   = 0x096
 # geometry -- is shared by every attachment, so a pass programs it once. Resets
 # to 0, so a single-attachment driver never has to write it.
 VX_DCR_OM_RT_SELECT         = 0x097
-VX_DCR_OM_STATE_END         = 0x098
+# Depth attachment storage: VX_OM_DEPTH_FORMAT_D24S8 (depth in bits 23:0,
+# stencil in 31:24), VX_OM_DEPTH_FORMAT_D32F (the word is the float's ordered
+# key, compared unsigned; no stencil) or VX_OM_DEPTH_FORMAT_D32FS8 (an 8-byte
+# texel: the D32F key, then the stencil in the low byte of the next word; the
+# z-buffer pitch covers 8 bytes a pixel). Raster early-Z tests the 24-bit plane,
+# so it stays off for both float formats. Resets to D24S8.
+VX_DCR_OM_DEPTH_FORMAT      = 0x098
+VX_DCR_OM_STATE_END         = 0x099
 
 [dcr_rtu]
 # Ray-Tracing Unit DCRs.

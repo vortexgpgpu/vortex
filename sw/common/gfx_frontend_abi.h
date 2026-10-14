@@ -103,6 +103,14 @@ typedef struct {
 // includes (FloatA, window-z units): depth clipping tests the depth before bias.
 #define SETUP_PRIM_DEPTH_BIAS(prim) ((prim).attribs.r.x)
 
+// The same depth plane as attribs.z, in float, for a float depth target to
+// evaluate in fp32 with none of the Q7.24 plane's range or precision limits:
+// gradients and the biased depth at an origin (x, y, z) the second plane holds
+// in integer pixel coordinates, so z = z0 + a*(px - x0) + b*(py - y0). Relative
+// to a vertex, the constant does not cancel against large gradient terms.
+#define SETUP_PRIM_ZFLOAT_PLANE(prim)  ((prim).attribs.w0)
+#define SETUP_PRIM_ZFLOAT_ORIGIN(prim) ((prim).attribs.w1)
+
 #define SETUP_PRIM_TRIANGLE 0
 #define SETUP_PRIM_LINE     1
 #define SETUP_PRIM_POINT    2

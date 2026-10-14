@@ -456,6 +456,7 @@ void emit_om(const om_state_t& s, W&& w) {
   }
   w(VX_DCR_OM_DEPTH_FUNC,        s.depth_func);
   w(VX_DCR_OM_DEPTH_WRITEMASK,   s.depth_writemask);
+  w(VX_DCR_OM_DEPTH_FORMAT,      s.depth_format);
   w(VX_DCR_OM_EARLYZ_SAFE,       s.earlyz_safe);
   w(VX_DCR_OM_APERTURE_XBITS,        s.aperture_xbits);
   w(VX_DCR_OM_APERTURE_YBITS,        s.aperture_ybits);
