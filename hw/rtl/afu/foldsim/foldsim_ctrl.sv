@@ -124,13 +124,13 @@ module foldsim_ctrl #(
     wire finish;
     wire [6:0] done;
     wire [2:0] have;
-    foldsim_token_out o_reset   (clk, reset, reset_valid,         reset_ready,         run, finish, done[0]);
-    foldsim_token_out o_dvalid  (clk, reset, dcr_req_valid_valid, dcr_req_valid_ready, run, finish, done[1]);
-    foldsim_token_out o_drw     (clk, reset, dcr_req_rw_valid,    dcr_req_rw_ready,    run, finish, done[2]);
-    foldsim_token_out o_daddr   (clk, reset, dcr_req_addr_valid,  dcr_req_addr_ready,  run, finish, done[3]);
-    foldsim_token_out o_ddata   (clk, reset, dcr_req_data_valid,  dcr_req_data_ready,  run, finish, done[4]);
-    foldsim_token_out o_start   (clk, reset, start_valid,         start_ready,         run, finish, done[5]);
-    foldsim_token_out o_mreset  (clk, reset, mem_reset_valid,     mem_reset_ready,     run, finish, done[6]);
+    foldsim_token_out #(1) o_reset   (clk, reset, reset_valid,         reset_ready,         run, finish, done[0]);
+    foldsim_token_out #(1) o_dvalid  (clk, reset, dcr_req_valid_valid, dcr_req_valid_ready, run, finish, done[1]);
+    foldsim_token_out #(1) o_drw     (clk, reset, dcr_req_rw_valid,    dcr_req_rw_ready,    run, finish, done[2]);
+    foldsim_token_out #(1) o_daddr   (clk, reset, dcr_req_addr_valid,  dcr_req_addr_ready,  run, finish, done[3]);
+    foldsim_token_out #(1) o_ddata   (clk, reset, dcr_req_data_valid,  dcr_req_data_ready,  run, finish, done[4]);
+    foldsim_token_out #(1) o_start   (clk, reset, start_valid,         start_ready,         run, finish, done[5]);
+    foldsim_token_out #(1) o_mreset  (clk, reset, mem_reset_valid,     mem_reset_ready,     run, finish, done[6]);
     assign reset_bits         = in_reset;
     assign dcr_req_valid_bits = dcr_valid;
     assign dcr_req_rw_bits    = dcr_rw;
@@ -141,10 +141,12 @@ module foldsim_ctrl #(
 
     wire                  rsp_v, busy;
     wire [DCR_DATA_W-1:0] rsp_d;
-    foldsim_token_in #(1)          t_rspv (clk, reset, dcr_rsp_valid_valid, dcr_rsp_valid_ready, dcr_rsp_valid_bits, finish, have[0], rsp_v);
-    foldsim_token_in #(DCR_DATA_W) t_rspd (clk, reset, dcr_rsp_data_valid,  dcr_rsp_data_ready,  dcr_rsp_data_bits,  finish, have[1], rsp_d);
-    foldsim_token_in #(1)          t_busy (clk, reset, busy_valid,          busy_ready,          busy_bits,          finish, have[2], busy);
+    foldsim_token_in #(1, 1)          t_rspv (clk, reset, dcr_rsp_valid_valid, dcr_rsp_valid_ready, dcr_rsp_valid_bits, finish, have[0], rsp_v);
+    foldsim_token_in #(DCR_DATA_W, 1) t_rspd (clk, reset, dcr_rsp_data_valid,  dcr_rsp_data_ready,  dcr_rsp_data_bits,  finish, have[1], rsp_d);
+    foldsim_token_in #(1, 1)          t_busy (clk, reset, busy_valid,          busy_ready,          busy_bits,          finish, have[2], busy);
 
+    // Staged token ends: the cycle finishes from the endpoint's registers, a
+    // host cycle after its last token.
     assign finish = run & (&have) & (&done);
 
     // ---- The host's registers ----
