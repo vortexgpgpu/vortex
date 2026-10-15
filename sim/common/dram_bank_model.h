@@ -44,8 +44,9 @@ namespace vortex {
 // Reservations reach at most `horizon` clocks ahead: a request that would
 // reach further waits.
 //
-// This is the normative model; the face below puts it behind DramSim's
-// interface.
+// This is the normative model: foldsim's memory endpoint
+// (hw/rtl/afu/foldsim/foldsim_mem_bank.sv) implements the same decisions, and
+// the faces below put it behind DramSim's interface and behind an AXI4 port.
 class DramBankModel {
 public:
   struct Config {
@@ -573,6 +574,207 @@ private:
   std::vector<uint32_t> free_;
   uint64_t cycle_;
   uint64_t credit_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
+// The bank model as one AXI4 memory port, in AxiLatencyPipe's style
+// (sim/common/axi_latency_pipe.h): every output is a function of registered
+// state, the caller samples the request side before the clock edge and calls
+// step() after it. Single-beat transactions; a burst sets the error, and from
+// the next cycle on the port is ready for nothing.
+//
+// A read takes the lowest free read slot from acceptance until R takes it; it
+// reaches the channel in the cycle after it was accepted, and is ready to
+// drive R LATENCY + 1 cycles after the cycle whose DRAM clocks its data
+// departed in. An AW and its W, in either order, form a write, which reaches
+// the channel in the same way and is acknowledged on B from the cycle after
+// the controller buffered it. Requests reach the channel in the order they
+// formed, a write before a read of the same cycle.
+// R and B take the oldest ready response. A request counts against `queue`
+// from acceptance until it is ready.
+class DramBankAxi {
+public:
+  struct Config {
+    DramBankModel::Config model;
+    uint32_t core_clock = 400;   // MHz
+    uint32_t data_rate  = 800;   // MT/s
+    uint32_t latency    = 0;     // core cycles
+    uint32_t queue      = 0;     // requests in flight; 0 = only the slots bound them
+    uint32_t read_slots = 32;
+    uint32_t write_slots = 16;   // AWs, and Ws, accepted and not acknowledged on B
+  };
+
+  struct Inputs {
+    bool     ar_valid = false;
+    uint32_t ar_id    = 0;
+    uint64_t ar_addr  = 0;
+    uint32_t ar_len   = 0;
+    bool     aw_valid = false;
+    uint32_t aw_id    = 0;
+    uint64_t aw_addr  = 0;
+    uint32_t aw_len   = 0;
+    bool     w_valid  = false;
+    bool     w_last   = true;
+    bool     r_ready  = false;
+    bool     b_ready  = false;
+  };
+
+  explicit DramBankAxi(const Config& cfg) : cfg_(cfg), model_(cfg.model) { this->reset(); }
+
+  const DramBankModel& model() const { return model_; }
+
+  void reset() {
+    model_.reset();
+    cycle_ = 0;
+    credit_ = 0;
+    error_ = false;
+    inflight_ = 0;
+    slot_busy_.assign(cfg_.read_slots, false);
+    slot_id_.assign(cfg_.read_slots, 0);
+    slots_used_ = 0;
+    pending_aw_ = 0;
+    pending_w_ = 0;
+    aw_queue_.clear();
+    ready_reads_.clear();
+    uncounted_ = 0;
+    acks_.clear();
+    cur_r_valid_ = false;
+    cur_b_valid_ = false;
+  }
+
+  bool ar_ready() const { return !error_ && this->room() && slots_used_ < cfg_.read_slots; }
+  bool aw_ready() const { return !error_ && this->room() && pending_aw_ < cfg_.write_slots; }
+  bool w_ready()  const { return !error_ && pending_w_ < cfg_.write_slots; }
+
+  bool     r_valid() const { return cur_r_valid_; }
+  uint32_t r_id()    const { return cur_r_id_; }
+  uint32_t r_slot()  const { return cur_r_slot_; }
+  bool     b_valid() const { return cur_b_valid_; }
+  uint32_t b_id()    const { return cur_b_id_; }
+  bool     error()   const { return error_; }
+  // The slot a read accepted this cycle takes: the lowest free once R has
+  // taken its read, if it does.
+  uint32_t ar_slot(bool r_ready) const {
+    for (uint32_t s = 0; s < cfg_.read_slots; ++s) {
+      if (!slot_busy_[s] || (r_ready && cur_r_valid_ && s == cur_r_slot_)) return s;
+    }
+    return cfg_.read_slots;
+  }
+  // Nothing accepted is unanswered.
+  bool idle() const {
+    return slots_used_ == 0 && pending_aw_ == 0 && pending_w_ == 0;
+  }
+
+  void step(const Inputs& in) {
+    const bool ar_hs = in.ar_valid && this->ar_ready();
+    const bool aw_hs = in.aw_valid && this->aw_ready();
+    const bool w_hs  = in.w_valid && this->w_ready();
+    const bool burst = (ar_hs && in.ar_len != 0) || (aw_hs && in.aw_len != 0) || (w_hs && !in.w_last);
+    const bool ar_fire = ar_hs && in.ar_len == 0;
+    const bool aw_fire = aw_hs && in.aw_len == 0;
+    const bool w_fire  = w_hs && in.w_last;
+    const bool r_fire  = cur_r_valid_ && in.r_ready;
+    const bool b_fire  = cur_b_valid_ && in.b_ready;
+
+    // This cycle's DRAM clocks, on what was accepted before it.
+    credit_ += cfg_.data_rate;
+    while (credit_ >= 2ull * cfg_.core_clock) {
+      model_.tick(
+        [&](uint32_t slot) { ready_reads_.push_back({slot, cycle_ + 1 + cfg_.latency}); },
+        [&](uint32_t id) { acks_.push_back(id); ++uncounted_acks_; });
+      credit_ -= 2ull * cfg_.core_clock;
+    }
+
+    // Responses: the stage driving R and B, then what is ready next cycle.
+    if (r_fire) {
+      slot_busy_[cur_r_slot_] = false;
+      --slots_used_;
+      cur_r_valid_ = false;
+    }
+    if (b_fire) {
+      cur_b_valid_ = false;
+    }
+    const uint64_t next = cycle_ + 1;
+    while (uncounted_ < ready_reads_.size() && ready_reads_[uncounted_].ready <= next) {
+      ++uncounted_;
+      --inflight_;
+    }
+    inflight_ -= uncounted_acks_;
+    uncounted_acks_ = 0;
+    if (!cur_r_valid_ && uncounted_ != 0) {
+      cur_r_valid_ = true;
+      cur_r_slot_ = ready_reads_.front().slot;
+      cur_r_id_ = slot_id_[cur_r_slot_];
+      ready_reads_.pop_front();
+      --uncounted_;
+    }
+    if (!cur_b_valid_ && !acks_.empty()) {
+      cur_b_valid_ = true;
+      cur_b_id_ = acks_.front();
+      acks_.pop_front();
+    }
+
+    // Requests: writes form from an AW and its W, then join the channel ahead
+    // of this cycle's read.
+    const bool new_write = (pending_w_ > pending_aw_ && aw_fire)
+                        || (pending_w_ < pending_aw_ && w_fire)
+                        || (aw_fire && w_fire);
+    if (aw_fire) {
+      aw_queue_.push_back({in.aw_id, in.aw_addr});
+    }
+    if (new_write) {
+      auto aw = aw_queue_.front();
+      aw_queue_.pop_front();
+      model_.push(aw.id, true, aw.addr);
+    }
+    if (ar_fire) {
+      uint32_t s = 0;
+      while (slot_busy_[s]) ++s;
+      slot_busy_[s] = true;
+      slot_id_[s] = in.ar_id;
+      ++slots_used_;
+      model_.push(s, false, in.ar_addr);
+    }
+    inflight_ += uint32_t(ar_fire) + uint32_t(aw_fire);
+    pending_aw_ = pending_aw_ + uint32_t(aw_fire) - uint32_t(b_fire && pending_aw_ != 0);
+    pending_w_  = pending_w_ + uint32_t(w_fire) - uint32_t(b_fire && pending_w_ != 0);
+    if (burst) {
+      error_ = true;
+    }
+    ++cycle_;
+  }
+
+private:
+  struct Ready {
+    uint32_t slot;
+    uint64_t ready;
+  };
+
+  struct Aw {
+    uint32_t id;
+    uint64_t addr;
+  };
+
+  bool room() const { return cfg_.queue == 0 || inflight_ < cfg_.queue; }
+
+  Config cfg_;
+  DramBankModel model_;
+  uint64_t cycle_;
+  uint64_t credit_;
+  bool error_;
+  uint32_t inflight_;
+  std::vector<bool> slot_busy_;
+  std::vector<uint32_t> slot_id_;
+  uint32_t slots_used_;
+  uint32_t pending_aw_, pending_w_;
+  std::deque<Aw> aw_queue_;
+  std::deque<Ready> ready_reads_;  // reads departed; the first `uncounted_` are ready next cycle
+  size_t uncounted_;
+  std::deque<uint32_t> acks_;
+  uint32_t uncounted_acks_ = 0;
+  bool cur_r_valid_, cur_b_valid_;
+  uint32_t cur_r_id_ = 0, cur_r_slot_ = 0, cur_b_id_ = 0;
 };
 
 } // namespace vortex
