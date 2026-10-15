@@ -462,7 +462,7 @@ module foldsim_mem_bank #(
             bm_clear      <= 1'b1;
             bm_clear_word <= end_word;
         end
-        // Times older than any constraint is long move up, so none wraps.
+        // A time too old to constrain anything is moved up before it could wrap.
         if (~bt_fresh[scrub_b]) begin
             if ($signed(bt_act[scrub_b] - (e + 16'd1)) < -16'sd16384)
                 bt_act[scrub_b] <= e + 16'd1 - 16'd16384;
