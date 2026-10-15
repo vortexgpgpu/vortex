@@ -54,8 +54,10 @@ public:
   // addr: byte address within the channel.
   void send_request(uint32_t channel, uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg);
 
-private:
+  // The backend: Ramulator, or with VORTEX_DRAM_MODEL=bank the bank model.
   class Impl;
+
+private:
   Impl* impl_;
 };
 

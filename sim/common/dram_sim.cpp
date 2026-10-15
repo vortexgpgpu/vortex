@@ -12,8 +12,11 @@
 // limitations under the License.
 
 #include "dram_sim.h"
+#include "dram_bank_model.h"
 #include "util.h"
 #include <dram_timing.h>
+#include <cstdlib>
+#include <cstring>
 #include <VX_config.h>
 #include <deque>
 #include <fstream>
@@ -51,8 +54,44 @@ void set_timing(YAML::Node timing, uint32_t data_rate, const dram_timing::clock_
 
 }
 
+// A DRAM backend: Ramulator, or the bank model (sim/common/dram_bank_model.h)
+// with VORTEX_DRAM_MODEL=bank -- a choice of simulator, not of machine.
 class DramSim::Impl {
+public:
+  virtual ~Impl() {}
+  virtual void reset() = 0;
+  virtual void tick() = 0;
+  virtual bool can_accept(uint32_t channel) const = 0;
+  virtual void send_request(uint32_t channel, uint64_t addr, bool is_write, ResponseCallback cb, void* arg) = 0;
+};
+
+namespace {
+
+class BankDram : public DramSim::Impl {
+public:
+  explicit BankDram(const DramSim::Config& c)
+    : sim_(DramBankSim::Config{c.type, c.num_channels, c.block_size, c.core_clock, c.data_rate,
+                               c.latency, c.queue_size}) {}
+  void reset() override { sim_.reset(); }
+  void tick() override { sim_.tick(); }
+  bool can_accept(uint32_t channel) const override { return sim_.can_accept(channel); }
+  void send_request(uint32_t channel, uint64_t addr, bool is_write, DramSim::ResponseCallback cb,
+                    void* arg) override {
+    sim_.send_request(channel, addr, is_write, cb, arg);
+  }
+
 private:
+  DramBankSim sim_;
+};
+
+}
+
+class RamulatorDram : public DramSim::Impl {
+private:
+  using Config = DramSim::Config;
+  using Type = DramSim::Type;
+  using ResponseCallback = DramSim::ResponseCallback;
+
   // One request (a block); it completes when all its transactions have.
   struct request_t {
     ResponseCallback callback;
@@ -225,7 +264,7 @@ private:
   }
 
 public:
-  Impl(const Config& config)
+  RamulatorDram(const Config& config)
     : config_(config)
     , channels_(config.num_channels) {
     auto geometry = dram_timing::geometry(config.type);
@@ -243,7 +282,7 @@ public:
     this->reset();
   }
 
-  ~Impl() {
+  ~RamulatorDram() override {
     std::ofstream nullstream("ramulator.stats.log");
     auto original_buf = std::cout.rdbuf();
     std::cout.rdbuf(nullstream.rdbuf());
@@ -254,7 +293,7 @@ public:
     std::cout.rdbuf(original_buf);
   }
 
-  void reset() {
+  void reset() override {
     cycle_ = 0;
     clock_credit_ = 0;
     for (auto& channel : channels_) {
@@ -265,7 +304,7 @@ public:
     }
   }
 
-  void tick() {
+  void tick() override {
     ++cycle_;
     clock_credit_ += config_.data_rate;
     for (auto& channel : channels_) {
@@ -281,11 +320,11 @@ public:
     }
   }
 
-  bool can_accept(uint32_t channel) const {
+  bool can_accept(uint32_t channel) const override {
     return (config_.queue_size == 0) || (channels_.at(channel).inflight < config_.queue_size);
   }
 
-  void send_request(uint32_t channel, uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg) {
+  void send_request(uint32_t channel, uint64_t addr, bool is_write, ResponseCallback response_cb, void* arg) override {
     // A block wider than a burst is several transactions.
     uint32_t n = (config_.block_size > tx_size_) ? (config_.block_size / tx_size_) : 1;
     uint64_t base = addr & ~uint64_t(config_.block_size - 1);
@@ -323,8 +362,19 @@ DramSim::Config DramSim::platform_config() {
   return config;
 }
 
+static DramSim::Impl* make_backend(const DramSim::Config& config) {
+  const char* model = getenv("VORTEX_DRAM_MODEL");
+  if (model == nullptr || model[0] == '\0' || !strcmp(model, "ramulator")) {
+    return new RamulatorDram(config);
+  }
+  if (!strcmp(model, "bank")) {
+    return new BankDram(config);
+  }
+  throw std::invalid_argument(std::string("dram_sim: unknown VORTEX_DRAM_MODEL ") + model);
+}
+
 DramSim::DramSim(const Config& config)
-  : impl_(new Impl(config))
+  : impl_(make_backend(config))
 {}
 
 DramSim::~DramSim() {
