@@ -564,7 +564,7 @@ static inline __attribute__((always_inline)) bool om_sample_rmw(
 // Per-sample surfaces are sample-interleaved within a pixel: a pixel's S samples
 // are contiguous, so a row is W*S texels and the per-sample column offset is
 // (x*S + sample). cbuf_pitch / zbuf_pitch in om_state_t already carry the
-// MSAA row stride (= W*S*4). Keeping samples contiguous makes resolve a unit-
+// MSAA row stride (= W*S*bpp). Keeping samples contiguous makes resolve a unit-
 // stride gather.
 static inline __attribute__((always_inline)) uintptr_t msaa_color_addr(
     const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t sample) {
@@ -732,6 +732,8 @@ struct TexState {
   // that sample at full precision; `border` is its ARGB8888 form.
   uint32_t border_t[4];
   uint32_t aniso;                         // max anisotropy; 0 or 1 => isotropic
+  uint32_t samples;                       // samples per texel of a multisample image
+  uint32_t sample_stride;                 // bytes between its sample planes
 };
 
 // The sampler's reduction mode (VX_TEX_REDUCTION_*), held in the filter word.
@@ -1752,14 +1754,14 @@ static inline __attribute__((always_inline)) void om_fragment(const om_state_t& 
   om_sample_rmw(s, z_addr, c_addr, face, src_color, src_depth, src_sref);
 }
 
-// Per-sample MSAA output-merge for one fragment: run the OM merge at each
-// covered sample's storage slot. `samples` is the sample count (1/2/4),
-// `sample_mask` is the per-pixel coverage from rast_sample_mask (bit k = sample
-// k covered). Each covered sample gets its own depth-test + blend + ROP against
-// its own per-sample depth/color slot — equivalent to S independent OM lanes for
-// this pixel. `src_color`/`src_depth` are the shaded fragment values (shared
-// across the pixel's samples; per-sample attribute interpolation can refine
-// src_depth per sample later — centroid shading keeps a single color).
+// Per-sample MSAA output-merge for one fragment into the om_state_t's packed
+// attachment, every sample at one depth: run the OM merge at each covered
+// sample's storage slot. `samples` is the sample count (1/2/4), `sample_mask` the
+// per-pixel coverage from rast_sample_mask (bit k = sample k covered). Each
+// covered sample gets its own depth-test + blend + ROP against its own
+// per-sample depth/color slot -- equivalent to S independent OM lanes for this
+// pixel. The fragment kernel merges through om_fragment_ms, which takes a depth
+// per sample and any attachment set.
 static inline __attribute__((always_inline)) void om_fragment_msaa(
     const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t face,
     uint32_t sample_mask, uint32_t src_color, uint32_t src_depth, uint32_t src_sref = 0) {
@@ -1775,10 +1777,10 @@ static inline __attribute__((always_inline)) void om_fragment_msaa(
 // the ones the shader then runs for and the merge after it writes.
 static inline __attribute__((always_inline)) uint32_t ds_early(
     const om_state_t& s, uint32_t samples, uint32_t x, uint32_t y, uint32_t face,
-    uint32_t sample_mask, uint32_t src_depth) {
+    uint32_t sample_mask, const uint32_t* src_depth) {
   uint32_t passed = 0;
   for (uint32_t k = 0; k < samples; ++k) {
-    if (((sample_mask >> k) & 1u) && ds_rmw(s, msaa_depth_addr(s, samples, x, y, k), face, src_depth)) {
+    if (((sample_mask >> k) & 1u) && ds_rmw(s, msaa_depth_addr(s, samples, x, y, k), face, src_depth[k])) {
       passed |= 1u << k;
     }
   }
@@ -2210,13 +2212,12 @@ static inline __attribute__((always_inline)) om_color_t om_state_color(const om_
 // Colour half of a lane-ABI merge into one attachment: a wide attachment takes
 // the four lanes as its RGBA channels, any other one lane 0 as the packed ARGB8
 // word. `src1` is the second source under dual-source blending, or null.
-static inline __attribute__((always_inline)) void om_lanes_color_rmw(
-    const om_color_t& c, uint32_t x, uint32_t y, const uint32_t* lanes, const uint32_t* src1) {
+static inline __attribute__((always_inline)) void om_lanes_color_rmw_at(
+    const om_color_t& c, uintptr_t c_addr, const uint32_t* lanes, const uint32_t* src1) {
   if (!c.color_write) {
     return;
   }
   uint32_t cbpp = om_color_bpp(c.color_format);
-  uintptr_t c_addr = (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch + (uint64_t)x * cbpp);
   if (om_is_wide(c.color_format)) {
     om_wide_color_rmw(c, c_addr, lanes, src1);
     return;
@@ -2227,6 +2228,13 @@ static inline __attribute__((always_inline)) void om_lanes_color_rmw(
   uint32_t blended = c.blend_enabled ? blend_rt(c, lanes[0], dst_color, src1 ? src1[0] : 0u) : lanes[0];
   uint32_t out_argb = (dst_color & ~c.cbuf_writemask) | (blended & c.cbuf_writemask);
   om_store(c_addr, cbpp, om_encode_color(c.color_format, out_argb));
+}
+
+static inline __attribute__((always_inline)) void om_lanes_color_rmw(
+    const om_color_t& c, uint32_t x, uint32_t y, const uint32_t* lanes, const uint32_t* src1) {
+  om_lanes_color_rmw_at(c, (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch
+                                       + (uint64_t)x * om_color_bpp(c.color_format)),
+                        lanes, src1);
 }
 
 // MRT merge where the shader hands four lanes per attachment: a wide attachment
@@ -2270,6 +2278,70 @@ static inline __attribute__((always_inline)) void om_fragment_dual(
     return;
   }
   om_lanes_color_rmw(om_state_color(s), x, y, src_lanes, src_lanes + 4);
+}
+
+// Resolve of one pixel of a wide attachment (om_is_wide), straight between raw
+// texels: each channel averaged in float over the S samples and re-encoded, the
+// way a box filter over the decoded values reads; an integer format has no
+// average and takes sample 0, as Vulkan requires.
+static inline __attribute__((always_inline)) void msaa_resolve_wide(
+    uint32_t color_format, uint32_t samples, uintptr_t src, uintptr_t dst) {
+  const om_wide_fmt g = om_wide_geom(color_format);
+  uint32_t raw[4];
+  om_wide_load_raw(src, g.bpp, raw);
+  if (g.kind != OM_KIND_UINT && g.kind != OM_KIND_SINT && samples > 1) {
+    float acc[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    for (uint32_t k = 0; k < samples; ++k) {
+      uint32_t r[4];
+      om_wide_load_raw(src + (uintptr_t)k * g.bpp, g.bpp, r);
+      for (uint32_t ch = 0; ch < g.nch; ++ch) {
+        acc[ch] += om_bits_f(om_field_decode(g.kind, g.width[ch], om_field_get(r, g.off[ch], g.width[ch])));
+      }
+    }
+    for (uint32_t ch = 0; ch < g.nch; ++ch) {
+      om_field_set(raw, g.off[ch], g.width[ch],
+                   om_field_encode(g.kind, g.width[ch], om_f_bits(acc[ch] / (float)samples)));
+    }
+  }
+  om_wide_store_raw(dst, g.bpp, raw);
+}
+
+// Multisample merge of one fragment, for every attachment format and count: each
+// sample in `sample_mask` runs its own depth/stencil test at its own depth
+// (`src_depth[k]`, the depth plane evaluated at sample k) against its own slot,
+// then, if it passed, the lane-ABI colour merge into slot k of every attachment.
+// Sample k of a pixel lives at column x*samples + k of each plane, whose pitch
+// already spans S samples. `src_lanes` holds four lanes per attachment, as for
+// om_fragment_mrt_wide; with `dual` the single attachment's second source is
+// lanes 4-7. A null `colors` merges into the om_state_t's own attachment.
+static inline __attribute__((always_inline)) void om_fragment_ms(
+    const om_state_t& s, const om_color_t* colors, uint32_t num_color, uint32_t samples,
+    uint32_t sample_mask, uint32_t x, uint32_t y, uint32_t face,
+    const uint32_t* src_lanes, const uint32_t* src_depth, uint32_t src_sref, bool dual) {
+  om_color_t own;
+  if (!colors) {
+    own = om_state_color(s);
+    colors = &own;
+    num_color = 1;
+  }
+  if (num_color > VX_OM_MAX_RT) {
+    num_color = VX_OM_MAX_RT;
+  }
+  for (uint32_t k = 0; k < samples; ++k) {
+    if (!((sample_mask >> k) & 1u)) {
+      continue;
+    }
+    if (!ds_rmw(s, msaa_depth_addr(s, samples, x, y, k), face, src_depth[k], src_sref)) {
+      continue;
+    }
+    for (uint32_t j = 0; j < num_color; ++j) {
+      const om_color_t& c = colors[j];
+      const uintptr_t c_addr = (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch
+                                           + (uint64_t)(x * samples + k) * om_color_bpp(c.color_format));
+      om_lanes_color_rmw_at(c, c_addr, src_lanes + 4u * j,
+                            (dual && j == 0) ? src_lanes + 4 : nullptr);
+    }
+  }
 }
 
 } // namespace gfx_sw

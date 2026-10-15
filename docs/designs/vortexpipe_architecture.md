@@ -151,8 +151,8 @@ time:
   op; the sampler capture carries filters, three wrap modes, the
   packed border colour, mip enable/linear, shadow-compare state, and
   the LOD min/max/bias in fixed point.
-- The render-pass-resident framebuffer (`rcb` / `rzb` / `rcb_extra[]`
-  / `rcb_resolved`): the device colour + depth/stencil planes a pass
+- The render-pass-resident framebuffer (`rcb` / `rzb` / `rcb_extra[]`):
+  the device colour + depth/stencil planes a pass
   renders into, allocated and seeded once per pass (§3.2) and reused
   across its draws.
 - The texture-handle side table (`txh_*[VP_MAX_TEX_HANDLES]`) that
@@ -777,29 +777,34 @@ A `samples > 1` pass renders and resolves **on the device**, on the
 software raster/merge path (the variant key forces `sw_raster` +
 `sw_om`):
 
-- The resident colour and depth planes are allocated **sample-major
-  within a pixel** — texel `(y*w + x)*S + k` — and seeded by
-  replicating the attachment's single-sample contents across samples.
-- Coverage comes from the fixed 4x rotated-grid sample table in
-  `sw/common/gfx_frag_rast.h` (positions `(6,2) (14,6) (2,10) (10,14)`
-  in 1/16 px). The tile walk (`gfx_rast_walk_tile_msaa_sw`) produces
-  per-sample masks; the wrapper shades the pixel once and merges each
-  covered sample (`gfx_om_fragment_msaa_sw` — full depth/stencil/
-  blend per sample). Only 1 and 4 samples are accepted: the coverage
-  mask is always a 4-sample mask against that fixed table, and a 2x
-  draw would silently take samples 0 and 1 of the 4x pattern, so
-  every other count goes to llvmpipe *before* a variant compiles.
-- The pass-end resolve is a device kernel (`msaa_resolve_k`, embedded
-  in the front-end module): a box filter that decodes, averages and
-  re-encodes each pixel's samples into a dense single-sample plane —
-  so R8/RG8/sRGB attachments resolve correctly — writing a separate
-  destination (an in-place compaction would race its own readers).
-  lavapipe's pass-end resolve blit is intercepted
-  (`vp_blit_is_resident_resolve`) and served from that plane. A pass
-  that ends without a resolve syncs the samples back into llvmpipe's
-  own per-sample storage instead.
-- MSAA composes with the rest of the surface except MRT: a
-  multisample multi-attachment draw is refused at translation.
+- The resident colour and depth planes of every attachment, at any texel
+  width, are allocated **sample-major within a pixel** -- texel
+  `(y*w + x)*S + k` -- and seeded from the attachment's sample planes
+  (`vp_color_rw`; llvmpipe keeps one whole image per sample). A pass
+  writes every sample back the same way.
+- Coverage comes from the standard 4x sample table
+  (`GFX_MSAA4_SAMPLE_DX16/DY16` in `sw/common/gfx_sw_abi.h`, positions
+  `(6,2) (14,6) (2,10) (10,14)` in 1/16 px). The tile walk
+  (`gfx_rast_walk_tile_msaa_sw`) produces per-sample masks. The wrapper
+  evaluates depth at each sample and folds the pipeline sample mask,
+  `gl_SampleMask`, alpha-to-coverage and depth clipping into the mask.
+  It shades the pixel once, or once per sample under sample shading
+  (`VP_FS_MS_SAMPLE_RATE`, the quad running at each sample in turn).
+  Then it merges each covered sample into every attachment
+  (`gfx_om_fragment_ms_sw`: depth/stencil, blend and the lane ABI of
+  wide and integer formats, per sample). Inputs are interpolated at
+  the pixel centre, the centroid or the sample, and `interpolateAt*`
+  re-evaluates them from the edge planes the wrapper leaves in the
+  input record. Only 1 and 4 samples are offered.
+- Resolves run on the device. A colour resolve of any box and layer
+  uses `msaa_resolve_k`, which decodes and averages packed formats,
+  averages wide float/unorm formats channel by channel, and takes
+  sample 0 of integer formats. It reads the resident plane when the
+  pass renders the source, and otherwise uploads the source's sample
+  planes. A depth/stencil resolve is a masked `texel_copy_k` from
+  sample plane 0, or with the depth field averaged over every plane.
+  `txf_ms` reads a multisample texture's mirrored sample planes,
+  `sample_stride` apart.
 
 ### 3.5 Fallback paths (also valid in the same code)
 

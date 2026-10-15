@@ -106,7 +106,11 @@
 // GFX_FS_ZPAIR(lo, hi): -inf/+inf when depth clamp is off. A D32F fragment
 // evaluates SETUP_PRIM_ZFLOAT_PLANE and is clamped to this range only.
 #define GFX_FS_ARG_ZCLAMPF  22u
-#define GFX_FS_ARG_COUNT    23u
+// The pipeline's sample mask (pSampleMask): bit k clear takes sample k out of
+// every fragment's coverage, ahead of the shader and its early tests. All ones
+// when the pipeline has none.
+#define GFX_FS_ARG_SMASK    23u
+#define GFX_FS_ARG_COUNT    24u
 
 #define GFX_FS_ZPAIR(lo, hi) \
    ((uint64_t)(uint32_t)(int32_t)(lo) | ((uint64_t)(uint32_t)(int32_t)(hi) << 32))

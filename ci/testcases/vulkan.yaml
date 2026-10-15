@@ -45,6 +45,24 @@ tests:
 - {id: gfx-rt-rtquery-id, via: make-run, drivers: [simx], dir: tests/vulkan/rtquery_id, target: "run-{driver}",
    touches: [hw/rtl/rtu/, hw/rtl/raster/, hw/rtl/om/]}
 
+# 4x multisample, read back per sample through a sampler2DMS: coverage controls
+# (alpha-to-coverage, sample masks, alpha-to-one), shading rate (sample id and
+# position, minSampleShading, centroid), per-sample depth across two colour
+# attachments, colour resolves (render pass and vkCmdResolveImage), depth/stencil
+# resolves, and interpolateAt* with the sample mask in.
+- {id: gfx-msaa-cov, via: make-run, drivers: [simx], dir: tests/vulkan/msaa_cov, target: "run-{driver}",
+   touches: [sw/common/gfx_frag_rast.h, sw/gfx/, hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/, tests/vulkan/msaa_cov]}
+- {id: gfx-msaa-rate, via: make-run, drivers: [simx], dir: tests/vulkan/msaa_rate, target: "run-{driver}",
+   touches: [sw/common/gfx_frag_rast.h, sw/gfx/, hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/, tests/vulkan/msaa_rate]}
+- {id: gfx-msaa-mrt, via: make-run, drivers: [simx], dir: tests/vulkan/msaa_mrt, target: "run-{driver}",
+   touches: [sw/common/gfx_frag_rast.h, sw/gfx/, hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/, tests/vulkan/msaa_mrt]}
+- {id: gfx-msaa-resolve, via: make-run, drivers: [simx], dir: tests/vulkan/msaa_resolve, target: "run-{driver}",
+   touches: [sw/common/gfx_frag_rast.h, sw/gfx/, hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/, tests/vulkan/msaa_resolve]}
+- {id: gfx-msaa-dsresolve, via: make-run, drivers: [simx], dir: tests/vulkan/msaa_dsresolve, target: "run-{driver}",
+   touches: [sw/common/gfx_frag_rast.h, sw/gfx/, hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/, tests/vulkan/msaa_dsresolve]}
+- {id: gfx-msaa-interp, via: make-run, drivers: [simx], dir: tests/vulkan/msaa_interp, target: "run-{driver}",
+   touches: [sw/common/gfx_frag_rast.h, sw/gfx/, hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/, tests/vulkan/msaa_interp]}
+
 # FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
 # selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER
 # routing depend on vortexpipe wiring those stages (the gfx_*_sw ABI already

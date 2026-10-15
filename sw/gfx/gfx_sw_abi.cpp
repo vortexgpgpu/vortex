@@ -96,6 +96,20 @@ extern "C" void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,
                               layer, lod, out);
 }
 
+extern "C" void gfx_tex_fetch_ms_f32(const gfx_sw_texstate_t* st, int32_t x, int32_t y,
+                                     uint32_t layer, uint32_t sample, float* out) {
+  gfx_sw::TexState s = *reinterpret_cast<const gfx_sw::TexState*>(st);
+  s.base += (uint64_t)(sample < s.samples ? sample : 0u) * s.sample_stride;
+  gfx_sw::tex_fetch_array_f32(s, x, y, layer, 0, out);
+}
+
+extern "C" void gfx_tex_fetch_ms_i32(const gfx_sw_texstate_t* st, int32_t x, int32_t y,
+                                     uint32_t layer, uint32_t sample, int32_t* out) {
+  gfx_sw::TexState s = *reinterpret_cast<const gfx_sw::TexState*>(st);
+  s.base += (uint64_t)(sample < s.samples ? sample : 0u) * s.sample_stride;
+  gfx_sw::tex_fetch_i32(s, x, y, 0, layer, out);
+}
+
 extern "C" void gfx_tex_fetch_i32(const gfx_sw_texstate_t* st,
                                   int32_t x, int32_t y, uint32_t lod,
                                   uint32_t layer, int32_t* out) {
@@ -288,20 +302,21 @@ extern "C" void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
                       sref);
 }
 
-extern "C" void gfx_om_fragment_msaa_sw(const gfx_sw_omstate_t* st, uint32_t samples,
-                                        uint32_t sample_mask, uint32_t x, uint32_t y,
-                                        uint32_t face, uint32_t color, uint32_t depth,
-                                        uint32_t sref) {
+extern "C" void gfx_om_fragment_ms_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolor_t* rt,
+                                      uint32_t num_color, uint32_t samples, uint32_t sample_mask,
+                                      uint32_t x, uint32_t y, uint32_t face, const uint32_t* lanes,
+                                      const uint32_t* depth, uint32_t sref, uint32_t dual) {
   if (!sample_mask) {
     return;
   }
-  gfx_sw::om_fragment_msaa(*reinterpret_cast<const gfx_sw::om_state_t*>(st),
-                           samples, x, y, face, sample_mask, color, depth, sref);
+  gfx_sw::om_fragment_ms(*reinterpret_cast<const gfx_sw::om_state_t*>(st),
+                         reinterpret_cast<const gfx_sw::om_color_t*>(rt), num_color, samples,
+                         sample_mask, x, y, face, lanes, depth, sref, dual != 0);
 }
 
 extern "C" uint32_t gfx_ds_early_sw(const gfx_sw_omstate_t* st, uint32_t samples,
                                     uint32_t sample_mask, uint32_t x, uint32_t y,
-                                    uint32_t face, uint32_t depth) {
+                                    uint32_t face, const uint32_t* depth) {
   if (!sample_mask) {
     return 0;
   }

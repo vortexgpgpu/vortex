@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <VX_types.h>
 #include <vx_gfx_abi.h>   // vec3e_t / FloatE (fixed_t<16>)
+#include <gfx_sw_abi.h>   // GFX_MSAA4_SAMPLE_DX16/DY16
 
 namespace gfx_rast {
 
@@ -140,12 +141,14 @@ static constexpr int RAST_MSAA_SAMPLES = 4;
 struct SampleOff { FloatE dx, dy; };
 
 static inline const SampleOff* rast_msaa_offsets() {
-  // n/16 in fixed_t<16> is raw n<<12; each is the corner position minus 8/16.
+  // n/16 in fixed_t<16> is raw n<<12.
+  static constexpr int dx16[RAST_MSAA_SAMPLES] = GFX_MSAA4_SAMPLE_DX16;
+  static constexpr int dy16[RAST_MSAA_SAMPLES] = GFX_MSAA4_SAMPLE_DY16;
   static const SampleOff k[RAST_MSAA_SAMPLES] = {
-    { FloatE::make(-2 * (1 << 12)), FloatE::make(-6 * (1 << 12)) },
-    { FloatE::make( 6 * (1 << 12)), FloatE::make(-2 * (1 << 12)) },
-    { FloatE::make(-6 * (1 << 12)), FloatE::make( 2 * (1 << 12)) },
-    { FloatE::make( 2 * (1 << 12)), FloatE::make( 6 * (1 << 12)) },
+    { FloatE::make(dx16[0] * (1 << 12)), FloatE::make(dy16[0] * (1 << 12)) },
+    { FloatE::make(dx16[1] * (1 << 12)), FloatE::make(dy16[1] * (1 << 12)) },
+    { FloatE::make(dx16[2] * (1 << 12)), FloatE::make(dy16[2] * (1 << 12)) },
+    { FloatE::make(dx16[3] * (1 << 12)), FloatE::make(dy16[3] * (1 << 12)) },
   };
   return k;
 }
@@ -155,9 +158,16 @@ static inline const SampleOff* rast_msaa_offsets() {
 // is the edge-function values at the pixel centre (i.e. the bcoords entry the
 // walk emits). The sub-sample value is
 // base_i + a_i*dx + b_i*dy = f_i(x+dx, y+dy).
+//
+// The offsets are whole sixteenths, so a*dx + b*dy is (a*DX16 + b*DY16) / 16:
+// a 32-bit multiply by a small constant and one flooring shift. The
+// fixed_t*fixed_t form widens to a 64-bit multiply, which llvm-vortex's RISC-V
+// SelectionDAG miscompiles here (it drops the -2/16 terms on rv32 at -O1 and
+// above). Setup normalizes |a|,|b| <= 1.0, so the sum stays below 2^20.
 static inline uint32_t rast_sample_mask(const vec3e_t edges[3], const vec3e_t& base) {
   FloatE z = fx_zero();
-  const SampleOff* off = rast_msaa_offsets();
+  static constexpr int dx16[RAST_MSAA_SAMPLES] = GFX_MSAA4_SAMPLE_DX16;
+  static constexpr int dy16[RAST_MSAA_SAMPLES] = GFX_MSAA4_SAMPLE_DY16;
   // top-left fill rule (mirror of rast_emit_quad's single-sample path): a
   // sample exactly on an edge is covered only if that edge is a top/left edge
   // (gradient A > 0, or A == 0 && B > 0); otherwise the boundary sample belongs
@@ -169,9 +179,9 @@ static inline uint32_t rast_sample_mask(const vec3e_t edges[3], const vec3e_t& b
   bool tl2 = (edges[2].x > z) || (edges[2].x == z && edges[2].y > z);
   uint32_t mask = 0;
   for (int k = 0; k < RAST_MSAA_SAMPLES; ++k) {
-    FloatE e0 = base.x + edges[0].x * off[k].dx + edges[0].y * off[k].dy;
-    FloatE e1 = base.y + edges[1].x * off[k].dx + edges[1].y * off[k].dy;
-    FloatE e2 = base.z + edges[2].x * off[k].dx + edges[2].y * off[k].dy;
+    FloatE e0 = base.x + ((edges[0].x * dx16[k] + edges[0].y * dy16[k]) >> 4);
+    FloatE e1 = base.y + ((edges[1].x * dx16[k] + edges[1].y * dy16[k]) >> 4);
+    FloatE e2 = base.z + ((edges[2].x * dx16[k] + edges[2].y * dy16[k]) >> 4);
     bool in0 = tl0 ? (e0 >= z) : (e0 > z);
     bool in1 = tl1 ? (e1 >= z) : (e1 > z);
     bool in2 = tl2 ? (e2 >= z) : (e2 > z);

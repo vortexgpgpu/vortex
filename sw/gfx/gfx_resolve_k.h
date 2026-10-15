@@ -14,7 +14,8 @@
 
 // Folds each pixel's `samples` colour samples into one with the box filter the
 // software merger already defines, so a resolved pixel matches what those
-// samples would have produced had the merger written the pixel once. One thread
+// samples would have produced had the merger written the pixel once; a wide
+// format averages its decoded channels in float, an integer one takes sample 0. One thread
 // per pixel, grid-strided so any launch geometry covers the target.
 //
 // The fold runs on the device rather than on the host: what the fixed-function
@@ -34,9 +35,15 @@ __kernel void msaa_resolve_k(resolve_arg_t* __UNIFORM__ arg) {
   auto dst = static_cast<uintptr_t>(arg->dst_addr);
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t gstride = gridDim.x * blockDim.x;
+  const bool wide = gfx_sw::om_is_wide(arg->color_format);
   for (uint32_t i = gid; i < n; i += gstride) {
     uint32_t x = i % w, y = i / w;
-    gfx_sw::om_store(dst + (uintptr_t)i * bpp, bpp,
-                     gfx_sw::msaa_resolve_color(src, s, x, y));
+    if (wide) {
+      gfx_sw::msaa_resolve_wide(arg->color_format, s, gfx_sw::msaa_color_addr(src, s, x, y, 0),
+                                dst + (uintptr_t)i * bpp);
+    } else {
+      gfx_sw::om_store(dst + (uintptr_t)i * bpp, bpp,
+                       gfx_sw::msaa_resolve_color(src, s, x, y));
+    }
   }
 }

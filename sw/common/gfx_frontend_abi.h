@@ -350,6 +350,11 @@ typedef struct {
 // dst_byte of the destination texel, under `mask`. The two boxes have their own
 // texel sizes and pitches, so one aspect of a depth/stencil texel can move to or
 // from a buffer holding only that aspect. One thread per texel, grid-strided.
+//
+// With samples > 1 the source is a multisample image's `samples` planes,
+// sample_stride bytes apart, and the depth field of each texel's first word --
+// depth_bits bits at depth_shift, an f32 when depth_float -- is their average
+// (a depth resolve); the other masked bytes come from sample 0.
 typedef struct {
   uint64_t src_addr;      // source span, texel (0,0,0) at its start       (in)
   uint64_t dst_addr;      // destination span, texel (0,0,0) at its start (in/out)
@@ -358,6 +363,8 @@ typedef struct {
   uint32_t dst_texel, dst_row, dst_slice;
   uint32_t src_byte, dst_byte, bytes;  // bytes <= 16
   uint32_t mask[4];       // per copied byte: the bits to write
+  uint32_t samples, sample_stride;     // 0 or 1: a plain copy
+  uint32_t depth_shift, depth_bits, depth_float;
 } texel_copy_arg_t;
 
 // Masked texel fill (clear_k, gfx_clear_k.h). Every texel of a w x h x d box of

@@ -32,6 +32,13 @@
 extern "C" {
 #endif
 
+// The standard 4x sample positions (Vulkan's standardSampleLocations), as offsets
+// from the pixel centre in 1/16 px: sample k sits at (8 + DX16[k], 8 + DY16[k])/16
+// from the pixel's top-left corner -- (0.375, 0.125), (0.875, 0.375),
+// (0.125, 0.625), (0.625, 0.875).
+#define GFX_MSAA4_SAMPLE_DX16 { -2,  6, -6,  2 }
+#define GFX_MSAA4_SAMPLE_DY16 { -6, -2,  2,  6 }
+
 // texstate.filter bit above the mip sub-field: the bound sampler has a mip
 // chain. When clear, a fragment shader forces LOD 0 — a non-mipmapped
 // NEAREST/LINEAR sampler always reads the base level, whatever the coordinate
@@ -95,6 +102,8 @@ typedef struct {
   uint64_t residency;                     // sparse page bitmap; 0 => fully resident
   uint32_t border_t[4];                   // border colour R,G,B,A as the format's channel type: float bits, or integers
   uint32_t aniso;                         // sampler's max anisotropy; 0 or 1 => isotropic
+  uint32_t samples;                       // samples per texel of a multisample image; 0 or 1 otherwise
+  uint32_t sample_stride;                 // bytes between a multisample image's sample planes
 } gfx_sw_texstate_t;
 
 // Resident output-merger descriptor (mirror of gfx_sw::om_state_t).
@@ -215,6 +224,14 @@ void gfx_image_store_sw(void* base, uint32_t row_stride, uint32_t img_stride,
                         int32_t x, int32_t y, uint32_t layer, uint32_t format,
                         const uint32_t* lanes);
 
+// texelFetch of a multisample image (texelFetch with a sample index): the texel
+// at (x,y) of `layer` in sample plane `sample`, as floats or as the stored
+// integers. Sample k's plane starts sample_stride bytes after sample k-1's.
+void gfx_tex_fetch_ms_f32(const gfx_sw_texstate_t* st, int32_t x, int32_t y,
+                          uint32_t layer, uint32_t sample, float* out);
+void gfx_tex_fetch_ms_i32(const gfx_sw_texstate_t* st, int32_t x, int32_t y,
+                          uint32_t layer, uint32_t sample, int32_t* out);
+
 // texelFetch on a 2D array: the texel at (x,y) of integer `layer` and `lod`
 // (see gfx_tex_fetch_f32).
 void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,
@@ -332,25 +349,30 @@ void gfx_om_fragment_sw(const gfx_sw_omstate_t* st, uint32_t covered,
                         uint32_t x, uint32_t y, uint32_t face,
                         uint32_t color, uint32_t depth, uint32_t sref);
 
-// Multisample merge: run the merge at each covered sample of pixel (x, y). Bit k
-// of `sample_mask` is sample k's coverage, as rast_sample_mask computes it, and
-// an all-zero mask drops the fragment here so the SIMT caller stays
-// straight-line. The caller must fold the shader's discard into the mask -- the
-// single-sample entry point takes coverage and discard already combined, and
-// this one cannot, because discard is per-fragment and coverage is per-sample.
+// Multisample merge of pixel (x, y) into every attachment. Bit k of
+// `sample_mask` is sample k's final coverage -- raster coverage with the
+// shader's discard, the sample masks and alpha-to-coverage already folded in --
+// and an all-zero mask drops the fragment here so the SIMT caller stays
+// straight-line. Each covered sample tests and writes its own depth/stencil slot
+// at depth[k], then merges `lanes` (the lane layout of gfx_om_fragment_mrt_wide_sw,
+// four per attachment) into its own slot of each of the `num_color` attachments
+// `rt` describes, or of `st`'s own attachment when `rt` is null. With `dual` the
+// single attachment's second source is lanes 4-7.
 //
-// `st`'s cbuf_pitch/zbuf_pitch must already be the multisample row stride
-// (W*samples*4), which is what msaa_color_addr/msaa_depth_addr index against.
-void gfx_om_fragment_msaa_sw(const gfx_sw_omstate_t* st, uint32_t samples,
-                             uint32_t sample_mask, uint32_t x, uint32_t y,
-                             uint32_t face, uint32_t color, uint32_t depth, uint32_t sref);
+// Every plane's pitch must already be the multisample row stride (W*samples*bpp),
+// which is what msaa_color_addr/msaa_depth_addr index against.
+void gfx_om_fragment_ms_sw(const gfx_sw_omstate_t* st, const gfx_sw_omcolor_t* rt,
+                           uint32_t num_color, uint32_t samples, uint32_t sample_mask,
+                           uint32_t x, uint32_t y, uint32_t face, const uint32_t* lanes,
+                           const uint32_t* depth, uint32_t sref, uint32_t dual);
 
 // Early fragment tests: the depth/stencil test and write against `st` of the
-// samples in `sample_mask` of pixel (x, y), ahead of the fragment shader (bit 0
-// alone at one sample). Returns the samples that passed; the shader runs for
-// those and the merge after it has its depth/stencil stage off.
+// samples in `sample_mask` of pixel (x, y), each at its own depth[k], ahead of
+// the fragment shader (bit 0 alone at one sample). Returns the samples that
+// passed; the shader runs for those and the merge after it has its depth/stencil
+// stage off.
 uint32_t gfx_ds_early_sw(const gfx_sw_omstate_t* st, uint32_t samples, uint32_t sample_mask,
-                         uint32_t x, uint32_t y, uint32_t face, uint32_t depth);
+                         uint32_t x, uint32_t y, uint32_t face, const uint32_t* depth);
 
 // MRT software fallback: one shared depth/stencil op against `st`, then a
 // per-attachment blend + colour write of colors[k] for each of the `num_color`
