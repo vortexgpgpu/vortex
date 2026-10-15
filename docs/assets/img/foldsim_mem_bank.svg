@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" font-family="Helvetica, Arial, sans-serif" font-size="12">
+  <title>foldsim memory endpoint: the bank model</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <rect width="880" height="420" fill="#ffffff"/>
+
+  <!-- target side -->
+  <text x="20" y="24" font-weight="bold">per target cycle (at finish)</text>
+  <rect x="20" y="40" width="150" height="70" rx="6" fill="#e8f0fb" stroke="#3a6ea5"/>
+  <text x="95" y="62" text-anchor="middle">AR / AW + W tokens</text>
+  <text x="95" y="80" text-anchor="middle" font-size="11">read takes a slot (32)</text>
+  <text x="95" y="96" text-anchor="middle" font-size="11">AW+W form a write</text>
+
+  <rect x="20" y="300" width="150" height="80" rx="6" fill="#e8f0fb" stroke="#3a6ea5"/>
+  <text x="95" y="322" text-anchor="middle">R / B stages</text>
+  <text x="95" y="340" text-anchor="middle" font-size="11">R: oldest ready read</text>
+  <text x="95" y="356" text-anchor="middle" font-size="11">B: oldest buffered write</text>
+  <text x="95" y="372" text-anchor="middle" font-size="11">data: slot buffer (HBM)</text>
+
+  <!-- channel -->
+  <text x="220" y="24" font-weight="bold">per DRAM clock (host cycles, before the cycle finishes)</text>
+  <rect x="220" y="40" width="120" height="70" rx="6" fill="#f4f4f4" stroke="#666"/>
+  <text x="280" y="62" text-anchor="middle">ingress</text>
+  <text x="280" y="80" text-anchor="middle" font-size="11">in order, from the</text>
+  <text x="280" y="96" text-anchor="middle" font-size="11">next target cycle</text>
+
+  <rect x="380" y="40" width="130" height="32" rx="6" fill="#f4f4f4" stroke="#666"/>
+  <text x="445" y="60" text-anchor="middle">read buffer</text>
+  <rect x="380" y="80" width="130" height="32" rx="6" fill="#f4f4f4" stroke="#666"/>
+  <text x="445" y="100" text-anchor="middle">write buffer (acked)</text>
+  <text x="445" y="130" text-anchor="middle" font-size="11">write drain: 26 / 7 bursts</text>
+
+  <rect x="220" y="160" width="290" height="110" rx="6" fill="#fff6e0" stroke="#b07d1a"/>
+  <text x="365" y="180" text-anchor="middle" font-weight="bold">reservation (one request)</text>
+  <text x="232" y="200" font-size="11">bank table (32 banks): open row, ACT, column-, PRE-ready</text>
+  <text x="232" y="218" font-size="11">PRE, ACT, column, column: each a first-free search,</text>
+  <text x="232" y="234" font-size="11">64 clocks a host cycle, from its lower bound</text>
+  <text x="232" y="252" font-size="11">horizon check, then mark what each command forbids</text>
+
+  <rect x="560" y="40" width="300" height="230" rx="6" fill="#eef7ee" stroke="#3d8b3d"/>
+  <text x="710" y="60" text-anchor="middle" font-weight="bold">ring calendars, 512 clocks (LUTRAM)</text>
+  <text x="572" y="82" font-size="11">command bus: row, column commands</text>
+  <text x="572" y="100" font-size="11">row bus (PRE, two-clock ACT)</text>
+  <text x="572" y="118" font-size="11">forbidden to a read / write column:</text>
+  <text x="586" y="134" font-size="11">per pseudo-channel (tCCD_S, turnarounds)</text>
+  <text x="586" y="150" font-size="11">per bank group (tCCD_L, tWTR_L)</text>
+  <text x="572" y="168" font-size="11">forbidden to an ACT: tRRD_S, tRRD_L</text>
+  <text x="572" y="186" font-size="11">column directions (controller queues)</text>
+  <text x="572" y="204" font-size="11">departures: read slot per clock</text>
+  <text x="572" y="226" font-size="11">a word of 64 clocks cleared as it passes;</text>
+  <text x="572" y="242" font-size="11">a reservation reaches at most 448 clocks</text>
+
+  <rect x="220" y="300" width="290" height="80" rx="6" fill="#f4f4f4" stroke="#666"/>
+  <text x="365" y="322" text-anchor="middle">departure at clock d+1</text>
+  <text x="365" y="340" text-anchor="middle" font-size="11">read ready LATENCY + 1 target cycles</text>
+  <text x="365" y="356" text-anchor="middle" font-size="11">after its clock's target cycle</text>
+  <text x="365" y="372" text-anchor="middle" font-size="11">(ready FIFO, in departure order)</text>
+
+  <!-- arrows -->
+  <line x1="170" y1="75" x2="218" y2="75" stroke="#444" marker-end="url(#a)"/>
+  <line x1="340" y1="62" x2="378" y2="56" stroke="#444" marker-end="url(#a)"/>
+  <line x1="340" y1="88" x2="378" y2="96" stroke="#444" marker-end="url(#a)"/>
+  <line x1="445" y1="136" x2="420" y2="158" stroke="#444" marker-end="url(#a)"/>
+  <line x1="510" y1="215" x2="558" y2="200" stroke="#444" marker-end="url(#a)"/>
+  <line x1="558" y1="160" x2="512" y2="175" stroke="#444" marker-end="url(#a)"/>
+  <line x1="700" y1="270" x2="512" y2="335" stroke="#444" marker-end="url(#a)"/>
+  <line x1="220" y1="340" x2="172" y2="340" stroke="#444" marker-end="url(#a)"/>
+  <path d="M445,112 C445,140 160,200 110,298" fill="none" stroke="#444" stroke-dasharray="4 3" marker-end="url(#a)"/>
+  <text x="200" y="215" font-size="11" fill="#444">write acknowledged</text>
+</svg>

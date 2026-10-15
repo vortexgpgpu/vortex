@@ -149,10 +149,11 @@ the host-memory master: `s_axi_control` and `m_axi_mem_0` (linked to the
 models of the target's surroundings that take one token per channel per
 target cycle (`foldsim_token.sv`):
 
-- **`foldsim_mem`** is the target's AXI4 port, timed as a latency-bandwidth
-  pipe — cycle for cycle `sim/common/axi_latency_pipe.h`: a fixed latency per
-  transaction, bounded reads and writes in flight, one beat per cycle,
-  responses in request order. A read goes to HBM (`base` + target address)
+- **`foldsim_mem`** is the target's AXI4 port, timed by one of two models
+  (§4.1): a latency-bandwidth pipe — cycle for cycle
+  `sim/common/axi_latency_pipe.h`: a fixed latency per transaction, bounded
+  reads and writes in flight, one beat per cycle, responses in request
+  order — or a DRAM channel's banks. A read goes to HBM (`base` + target address)
   the cycle the target makes it, a write the cycle it has both its AW and its
   W, so HBM only ever sees whole single-beat writes; a target cycle that
   should present a response memory has not returned yet does not finish until
@@ -164,6 +165,60 @@ target cycle (`foldsim_token.sv`):
   gives it a token every target cycle. Host commands are queued and each is
   applied for one target cycle (a reset for its count). Kernel reset holds the
   target in reset for 64 cycles.
+
+### 4.1 The memory models
+
+The kernel's own reset gives the pipe; a reset command chooses the model the
+target has from that reset on (§5). The pipe is the default, and with it the
+endpoint makes exactly the transactions and takes exactly the cycles it did
+before the bank model existed.
+
+**The bank model** (`foldsim_mem_bank.sv`) is cycle for cycle
+`sim/common/dram_bank_model.h` (`DramBankAxi` over `DramBankModel`), the
+reservation-based model of dram_sim's DRAM, configured with dram_sim's own
+knobs (`VX_CFG_PLATFORM_MEMORY_{TYPE,DATA_RATE,LATENCY,QUEUE_SIZE}`,
+`VX_CFG_PLATFORM_CLOCK_RATE`) and its data-sheet timings
+(`sw/common/dram_timing.h`, converted to DRAM clocks with Ramulator's
+rounding). The same model is a `DramSim` backend in the simulators
+(`VORTEX_DRAM_MODEL=bank`) and rtlsim's AXI4 memory (`AXI_BUS=1
+AXI_MEM_MODEL=bank`).
+
+![the bank model](../assets/img/foldsim_mem_bank.svg)
+
+- *Port.* A read holds one of 32 slots from acceptance until R takes it; its
+  data, from HBM, waits in the slot. An AW and its W form a write. Reads and
+  writes reach the channel in the order they formed, from the next target
+  cycle; at most `QUEUE_SIZE` requests are in flight (0: the slots only).
+- *Channel.* One request a request's bursts' worth of DRAM clocks enters the
+  controller's read or write buffer (32 bursts each); a write is acknowledged
+  there. The controller serves reads and drains writes in batches between
+  dram_sim's watermarks (26 and 7 bursts).
+- *Reservation.* The request at the head of the buffer being served is
+  scheduled once: its PRE, ACT and column commands take the first DRAM clocks
+  every JEDEC constraint allows (tRCD, tRP, tRAS, tRC, tRTP, tWR per bank;
+  tCCD, tRRD, the read/write turnarounds per pseudo-channel and bank group;
+  one command per clock; HBM's two-clock ACT), before or after commands
+  reserved earlier. Rows stay open; a bank serves its requests in order. A
+  batch of writes goes after every column reserved before it, the reads after
+  it after the batch.
+- *Completion.* A read is ready `LATENCY` + 1 target cycles after the target
+  cycle whose DRAM clocks its data departs in (tCL + tBL after its last
+  column); R and B take the oldest ready response, so reads complete out of
+  order — legal, since Vortex never has two reads of one id outstanding.
+
+In hardware the calendars are bitmaps over a ring of 512 DRAM clocks in
+distributed RAM: per clock, whether it holds a command, the row bus, and per
+pseudo-channel and bank group the clocks a read, a write or an ACT may not
+take. Every command marks, once reserved, the clocks its constraints forbid
+to later ones, so placing one is a first-free search over 64 clocks a host
+cycle; a word of the ring is cleared, by a valid bit, as the DRAM clock
+passes it, and a reservation reaches at most 448 clocks ahead (the model's
+horizon). A target cycle's DRAM clocks run in host cycles while the target
+evaluates it — each is one host cycle, a reservation about ten — and the
+cycle finishes only once they have; the `memory waits` counter includes
+the host cycles a finished cycle waits for them. tFAW is left to tRRD,
+which covers it wherever four tRRD_S span a tFAW (HBM2, HBM3); the runtime
+refuses a memory where it does not (GDDR6).
 
 **Reset.** The control endpoint also gives the memory endpoint a token each
 target cycle: the target's reset in that cycle. A reset command thereby
@@ -202,8 +257,12 @@ for the RTL):
 | `0x1C` | the last DCR read's response |
 | `0x20`–`0x2C` | target cycles, kernel-clock cycles |
 | `0x30`, `0x38` | kernel-clock cycles a target cycle waited for HBM; the number of classes |
-| `0xC0`–`0xD4` | memory model: device base, read and write latency, most reads and writes in flight |
+| `0xC0`–`0xD4` | memory model: device base, the pipe's read and write latency, most reads and writes in flight |
+| `0xD8`, `0xDC` | the memory model in effect (read only); the bank model's capacities (read only) |
+| `0xE0`–`0xF0` | bank model: data rate and core clock, fixed latency, requests in flight and controller queues, geometry, write watermarks |
 | `0x100 + 8c` | per class, threads finished |
+| `0x800`–`0x844` | bank model: DRAM timings, a word each (tBL … tWTR_L, read-to-write extra) |
+| `0xC00`–`0xC2C` | bank model: reads, writes, row hits, misses, conflicts, summed read latency (64-bit) |
 
 `0x40`–`0xBF` is empty: on the V80 the PCIe block keeps its MSI-X table at
 that offset of the BAR the first kernel is mapped at, and answers those
@@ -216,7 +275,12 @@ HBM, so a host that sees the target idle has every effect of what it asked
 for.
 
 The runtime resets the target on open, as a card's native driver resets its
-device; that also clears a memory error an earlier process left. The command
+device; that also clears a memory error an earlier process left, and the reset
+command's address chooses the memory model. With `FOLDSIM_MEM_MODEL=bank` the
+runtime first writes the bank model's registers from the platform memory it
+was built for (its `CONFIGS`), refusing what the image cannot hold, and
+`--perf`-style counters print at close; otherwise it makes exactly the
+register accesses it always has. The command
 processor model's hooks return no status, so the runtime latches a device
 error instead — a memory error, a failed register or memory access, or a wait
 that timed out — and from then on every register access the runtime core
@@ -237,11 +301,15 @@ advancing for that time (60 s when it is unset).
 - **The memory endpoint against `AxiLatencyPipe`**, in Verilator: random
   requests and device-memory latency, every target cycle's outputs and every
   read's data compared; five latency and limit settings, 0 differences.
-- **The memory endpoint's reset and bursts** (`hw/unittest/foldsim_mem`, in
-  Verilator): an AXI4 master as the target, HBM with random ready and
-  latency checking the device-side protocol, resets at random points with
-  HBM busy, and each kind of burst; every response and id checked, none from
-  before a reset delivered after it.
+- **The memory endpoint** (`hw/unittest/foldsim_mem`, in Verilator): an
+  AXI4 master as the target, HBM with random ready and latency checking the
+  device-side protocol, resets at random points with HBM busy, and each kind
+  of burst; every target cycle's outputs compared with the C++ model's
+  (`AxiLatencyPipe`, `DramBankAxi`), every response, id and read's data
+  checked, none from before a reset delivered after it. Two pipe settings and
+  twelve bank-model settings (HBM2 and HBM3 at the default, v100, a100 and
+  h100 rates; small queues; row hits, random rows, one bank to the horizon,
+  streams, read- and write-heavy): 0 differences.
 - **Applications** in the in-process simulator and on the V80, against rtlsim
   behind the AXI4 adapter on `AxiLatencyPipe` (`AXI_BUS=1`) with the same
   memory settings: retired instructions and cycles identical (§7).
@@ -283,7 +351,37 @@ cycles after reset, while each L1 bank still invalidates one set per cycle
 counters see; a host's launch comes thousands of cycles later. Given that
 settle time, rtlsim's cycles are Foldsim's exactly.
 
-### 7.1 tinygpu: Foldsim and the firesim backend
+### 7.1 The bank model
+
+s2w4i2 in the in-process simulator (Verilator) with `FOLDSIM_MEM_MODEL=bank`,
+against SimX on the same configuration (one memory bank, Ramulator behind
+dram_sim) and rtlsim behind the AXI4 adapter on the same model
+(`AXI_MEM_MODEL=bank`). Memories: the default (HBM2, 800 MT/s, 400 MHz core)
+and the a100 and h100 profiles' (`VX_CFG_PLATFORM_MEMORY_*` from
+`profiles/*.json`).
+
+| app | memory | Foldsim, bank model | rtlsim, bank model | SimX, Ramulator | SimX, bank model |
+|---|---|---:|---:|---:|---:|
+| demo | default | 10,740 | 10,748 | 10,190 | 9,148 |
+| sgemm | default | 399,337 | 399,345 | 401,434 | 401,421 |
+| sgemm | a100 | 691,372 | | 690,935 | 690,780 |
+| sgemm | h100 | 422,294 | | 425,547 | 425,541 |
+| vecadd `-n16384` | default | 194,242 | | 193,267 | 192,901 |
+| vecadd `-n16384` | a100 | 311,917 | | 312,529 | 312,587 |
+| vecadd `-n16384` | h100 | 223,875 | | 224,921 | 224,921 |
+
+Instruction counts are equal everywhere. rtlsim's cycles are Foldsim's plus
+the 8-cycle launch settle it has on the pipe too (§7). Against SimX on
+Ramulator Foldsim is within 0.8 % on sgemm and vecadd at all three memories;
+the store-dominated demo (2,048 writes to 268 reads) is 5 % slower, and
+SimX's own bank backend 10 % faster: the reservation model drains a write
+stream differently from Ramulator's per-clock scheduler (the proposal's
+mixed-traffic residual). The pipe, by contrast, has no memory to configure:
+sgemm takes 415,454 cycles at every profile. A bank-model run costs host
+cycles the pipe does not (memory waits): 7.6–8.7 host cycles per target cycle
+against the pipe's 8.0.
+
+### 7.2 tinygpu: Foldsim and the firesim backend
 
 The same Vortex tree, configuration and V80 on both flows: 1 core, 2 warps,
 2 threads, no L1 caches or local memory, STD FPU, one memory bank, kernel
@@ -324,7 +422,8 @@ folds (s2w4i2 above).
    is target cycle k.
 3. **The memory endpoint takes single-beat transactions**, as Vortex issues
    them; a burst sets the status register's memory error, stops the
-   endpoint, and only a reset clears it.
+   endpoint, and only a reset clears it. Under the bank model, no two reads
+   of one id may be outstanding (Vortex's AXI adapter never has them).
 4. **One memory port**: the target is built with one platform memory bank.
 5. **Classes are named, not found**: `FOLDSIM_CLASSES` lists them.
 6. **No kernel register in `0x40`–`0xBF`.** The V80 shell configures the
