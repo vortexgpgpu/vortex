@@ -23,7 +23,7 @@
   },
   "core:sgemm-mc-nt16:rtlsim": {
     "32": {
-      "cycles": 723234,
+      "cycles": 720350,
       "instrs": 623680
     },
     "app": "sgemm",

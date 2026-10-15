@@ -720,7 +720,6 @@ protected:
     perf_stats_ = Cache::PerfStats();
     pending_mshr_size_ = 0;
     pending_amo_probes_ = 0;
-    pipe_fill_count_ = 0;
     pipe_core_lines_.clear();
     pending_read_reqs_ = 0;
     pending_write_reqs_ = 0;
@@ -735,6 +734,7 @@ protected:
     fwd_set_    = 0;
     fwd_tag_    = 0;
     fwd_sector_ = 0;
+    fwd_data_.reset();
     crsp_sent_  = false;
     flushing_ = false;
     flush_set_idx_ = 0;
@@ -816,11 +816,16 @@ private:
     }
 
     // 2) fill only when no replay is pending and no forward drain is in
-    // progress (a new fill would re-arm the window mid-chain). A fill still
-    // riding the pipe also blocks the next one: its chain is only marked for
-    // replay at install, and the replay priority above must get a chance to
-    // drain it before another fill is accepted.
-    if (!this->mem_rsp_in.empty() && !fwd_active_ && pipe_fill_count_ == 0) {
+    // progress (a new fill would re-arm the window mid-chain). Each fill
+    // carries its own sector down the pipe, so fills may follow each other
+    // back to back. The fill wakes its chain on accept, so a same-line core
+    // request still in the pipe must reach its chain first (the hardware
+    // links it at S0): the fill waits, and so does any further request to
+    // that line, which keeps a stream of them from starving the fill.
+    bool fill_held = false;
+    uint32_t held_set_id = 0;
+    uint64_t held_addr_tag = 0;
+    if (!this->mem_rsp_in.empty() && !fwd_active_) {
       auto &mem_rsp = this->mem_rsp_in.peek();
 #if VX_CFG_EXT_A_ENABLED
       // Non-LLC AMO passthrough response: forward straight to core
@@ -848,25 +853,47 @@ private:
 #endif
       uint32_t mshr_id = mem_rsp.tag;
       const auto &root_peek = mshr_.peek(mshr_id);
-      bank_req_t bank_req;
-      bank_req.reset();
-      bank_req.type    = bank_req_t::Fill;
-      bank_req.addr    = params_.mem_addr_sector(bank_id_, root_peek.set_id, root_peek.addr_tag, root_peek.sector_id);
-      bank_req.hart_id     = root_peek.bank_req.hart_id;
-      bank_req.uuid    = root_peek.bank_req.uuid;
-      bank_req.mshr_id = mshr_id;
-      bank_req.data    = mem_rsp.data;
-      pipe_req_->push(bank_req);
-      ++pipe_fill_count_;
-      DT(3, this->name() << " fill-rsp: " << mem_rsp);
-      this->mem_rsp_in.pop();
-      --pending_fill_reqs_;
-      return;
+      const uint32_t set_id    = root_peek.set_id;
+      const uint64_t addr_tag  = root_peek.addr_tag;
+      const uint32_t sector_id = root_peek.sector_id;
+      if (this->pipeLineBusy(set_id, addr_tag)) {
+        fill_held     = true;
+        held_set_id   = set_id;
+        held_addr_tag = addr_tag;
+      } else {
+        bank_req_t bank_req;
+        bank_req.reset();
+        bank_req.type    = bank_req_t::Fill;
+        bank_req.addr    = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
+        bank_req.hart_id     = root_peek.bank_req.hart_id;
+        bank_req.uuid    = root_peek.bank_req.uuid;
+        bank_req.mshr_id = mshr_id;
+        bank_req.data    = mem_rsp.data;
+        pipe_req_->push(bank_req);
+        // The chain wakes at accept: its replays enter the pipe behind the fill,
+        // so they reach the array after the install. The forward window answers
+        // the chain's leading reads from the staged sector meanwhile.
+        mshr_.replay(mshr_id);
+        fwd_active_ = true;
+        fwd_set_    = set_id;
+        fwd_tag_    = addr_tag;
+        fwd_sector_ = sector_id;
+        fwd_data_   = mem_rsp.data;
+        DT(3, this->name() << " fill-rsp: " << mem_rsp);
+        this->mem_rsp_in.pop();
+        --pending_fill_reqs_;
+        return;
+      }
     }
 
     // 3) core request
     if (!this->core_req_in.empty()) {
       auto &core_req = this->core_req_in.peek();
+      if (fill_held
+       && params_.addr_set_id(core_req.addr) == held_set_id
+       && params_.addr_tag(core_req.addr) == held_addr_tag) {
+        return;
+      }
       // Conservative MSHR occupancy check: any request that may miss must
       // reserve a slot. Counts both currently-allocated entries and
       // in-flight pipe requests that haven't reached MSHR allocation yet.
@@ -904,11 +931,9 @@ private:
         // MSHR entry only at pipe exit; defer on those too, or the AMO
         // overtakes it and a younger same-address load can chain onto the
         // pre-AMO fill (and the fill installs a pre-AMO line).
-        for (const auto &kv : pipe_core_lines_) {
-          if (kv.first == amo_set_id && kv.second == amo_addr_tag) {
-            ++perf_stats_.mshr_stalls;
-            return;
-          }
+        if (this->pipeLineBusy(amo_set_id, amo_addr_tag)) {
+          ++perf_stats_.mshr_stalls;
+          return;
         }
       }
 #else
@@ -1107,12 +1132,6 @@ private:
     sec.dirty      = false;
     sec.dirty_mask = 0;
     sec.data       = bank_req.data;
-    mshr_.replay(bank_req.mshr_id);
-    // arm the fill-forward window for this chain
-    fwd_active_ = true;
-    fwd_set_    = set_id;
-    fwd_tag_    = addr_tag;
-    fwd_sector_ = sector_id;
     return true;
   }
 
@@ -1127,6 +1146,7 @@ private:
   bool processForward() {
     if (!mshr_.has_ready_reqs()) {
       fwd_active_ = false; // chain drained
+      fwd_data_.reset();
       return false;
     }
     const auto *head = mshr_.peek_next_replay();
@@ -1139,15 +1159,7 @@ private:
      || head->bank_req.write
      || memop_is_atomic(head->bank_req.op)) {
       fwd_active_ = false;
-      return false;
-    }
-    // The armed sector is normally resident (the fill just installed it); a
-    // concurrent invalidate falls back to the replay path, which re-fetches.
-    auto &set = sets_.at(head->set_id);
-    int present_id = set.find_resident(head->addr_tag);
-    uint32_t sector_id = head->sector_id;
-    if (present_id == -1 || !set.lines.at(present_id).sectors.at(sector_id).valid) {
-      fwd_active_ = false;
+      fwd_data_.reset();
       return false;
     }
     if (crsp_sent_ || this->core_rsp_out.full()) {
@@ -1156,7 +1168,7 @@ private:
     bank_req_t req;
     mshr_.dequeue(&req);
     MemRsp rsp{req.req_tag, req.hart_id, req.uuid};
-    rsp.data = set.lines.at(present_id).sectors.at(sector_id).data;
+    rsp.data = fwd_data_;
     this->core_rsp_out.send(rsp);
     DT(3, this->name() << " fwd-rsp: " << rsp);
     return true;
@@ -1397,8 +1409,6 @@ private:
       if (!this->processFill(bank_req)) {
         return; // stall
       }
-      assert(pipe_fill_count_ != 0);
-      --pipe_fill_count_;
       pipe_req_->pop();
     } break;
 
@@ -1736,11 +1746,19 @@ private:
   MSHR mshr_;
   uint32_t pending_mshr_size_;
   uint32_t pending_amo_probes_; // AmoProbe requests in the pipe, each holding a table reservation
-  uint32_t pipe_fill_count_;    // fills riding the pipe; gates the next fill's admission
   // (set, tag) of Core requests inside the pipe: their MSHR entries exist
   // only from pipe exit, so ordering checks against in-flight lines (the
   // AMO admission defer) must consult this mirror as well.
   std::vector<std::pair<uint32_t, uint64_t>> pipe_core_lines_;
+
+  bool pipeLineBusy(uint32_t set_id, uint64_t addr_tag) const {
+    for (const auto &kv : pipe_core_lines_) {
+      if (kv.first == set_id && kv.second == addr_tag) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   void pipeLineErase(uint32_t set_id, uint64_t addr_tag) {
     for (auto it = pipe_core_lines_.begin(); it != pipe_core_lines_.end(); ++it) {
@@ -1761,11 +1779,12 @@ private:
   uint32_t rand_ctr_;
   uint64_t adm_seq_ctr_;  // bank admission-order stamp (see bank_req_t::adm_seq)
 
-  // Fill-forward window: chain key armed by the last installed fill.
+  // Fill-forward window: chain key and sector staged by the last accepted fill.
   bool     fwd_active_;
   uint32_t fwd_set_;
   uint64_t fwd_tag_;
   uint32_t fwd_sector_;
+  std::shared_ptr<mem_block_t> fwd_data_;
   bool     crsp_sent_;  // core-response port used this tick (pipeline priority)
 
   // Flush walk state.

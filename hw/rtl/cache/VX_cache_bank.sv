@@ -160,7 +160,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // Shared signals
     // ------------------------------------------------------------------------
     wire crsp_queue_stall, mshr_alm_full;
-    wire mshr_allocate_st0, fill_inflight;
+    wire mshr_allocate_st0;
     (* max_fanout = 64 *) wire pipe_stall;
     // Authoritative "no entry held", straight off the MSHR's valid mask. The
     // pending-size counter below is a proxy: it is fed by separate increment and
@@ -217,8 +217,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire fwd_head, fwd_fire, fwd_pending;
     wire [`CS_WORD_WIDTH-1:0] fwd_word;
 
-    // Fill buffer: the sector staged at fill accept owns all in-flight fill
-    // data; it feeds the data-array fill port and the forward-response word.
+    // Fill buffer: the sector staged at fill accept; it feeds the forward-
+    // response word and enters the fill-data delay line to the array write.
     reg [`CS_SECTOR_WIDTH-1:0] fbuf_data_r;
     reg [`CS_LINE_ADDR_WIDTH-1:0] fbuf_addr_r;
 
@@ -356,7 +356,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // request enters behind a pending AMO), so a fill waits until the AMO
     // writeback queue has room for it; the queue drains meanwhile.
     wire replay_mux    = replay_valid && ~fwd_head && ~replay_link_hold;
-    wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~fill_inflight && ~replay_link_hold && ~amo_wbq_full;
+    wire fill_mux      = mem_rsp_valid && ~fwd_pending && ~replay_link_hold && ~amo_wbq_full;
 
     wire replay_grant  = ~init_valid;
     wire replay_enable = replay_grant && replay_mux;
@@ -374,7 +374,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire creq_enable   = creq_grant && (amo_creq_path || amo_wb_path);
 
     assign replay_ready   = replay_grant && ~fwd_head && ~replay_link_hold && ~(!WRITEBACK && replay_rw && mreq_queue_alm_full) && ~pipe_stall;
-    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~fill_inflight && ~replay_link_hold && ~amo_wbq_full && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
+    assign mem_rsp_ready  = fill_grant && ~fwd_pending && ~replay_link_hold && ~amo_wbq_full && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign flush_ready    = flush_grant && ~(WRITEBACK && mreq_queue_alm_full) && ~pipe_stall;
     assign core_req_ready = creq_grant && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall
                          && ~amo_commit_busy && ~req_input_defer;
@@ -390,25 +390,6 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                        && ~mreq_queue_alm_full && ~mshr_alm_full && ~pipe_stall;
 
     wire [MSHR_ADDR_WIDTH-1:0] mem_rsp_id = mem_rsp_tag[MSHR_ADDR_WIDTH-1:0];
-
-    // A fill's sector lives only in the staging buffer until its data-array
-    // write at stD, so with deferred stages (PIPE_EX>0) a back-to-back fill
-    // must be held off while one is in flight. At PIPE_EX=0 the array write
-    // samples the buffer on the same edge a new fill re-stages it (old value
-    // read), so no interlock is needed.
-    if (PIPE_EX > 0) begin : g_fill_inflight
-        reg [PIPE_EX-1:0] fill_busy;
-        always @(posedge clk) begin
-            if (reset) begin
-                fill_busy <= '0;
-            end else if (~pipe_stall) begin
-                fill_busy <= PIPE_EX'({fill_busy, (mem_rsp_fire && ~is_passthru_fill_sel)});
-            end
-        end
-        assign fill_inflight = (| fill_busy);
-    end else begin : g_no_fill_inflight
-        assign fill_inflight = 1'b0;
-    end
 
     // Fill word_idx: place the installed sector in the high (sector) bits of the
     // in-line word offset; low (word-in-sector) bits are don't-care for a fill.
@@ -442,8 +423,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign flush_tag = '0;
     end
 
-    // Word payload mux (store / AMO-writeback data). Fill data does not ride
-    // the pipeline: the staged fill buffer feeds the data array directly.
+    // Word payload mux (store / AMO-writeback data). Fill data takes its own
+    // delay line from the staged fill buffer to the data array.
     wire [`CS_WORD_WIDTH-1:0] wdata_sel;
     if (WRITE_ENABLE) begin : g_wdata_sel
         assign wdata_sel = replay_mux ? replay_data
@@ -734,10 +715,40 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign sector_idx_std = '0;
     end
 
-    // The staged fill sector, replicated across the line so each sector's
-    // slices see their words; the data array writes only the installed sector
-    // (per-slice gate). One copy == the full line when 1 sector/line.
-    wire [`CS_LINE_WIDTH-1:0] fbuf_line = {`CS_SECTORS_PER_LINE{fbuf_data_r}};
+    // A fill's sector is staged when the fill enters S0 and then rides beside
+    // it to its data-array write at stD, so the next fill may restage the
+    // buffer right behind it. Each stage has one source and holds on the
+    // pipeline enable; without a reset, deep stages map onto shift registers.
+    wire [`CS_SECTOR_WIDTH-1:0] fill_data_std;
+    VX_pipe_register #(
+        .DATAW  (`CS_SECTOR_WIDTH),
+        .DEPTH  (PIPE_EX)
+    ) reg_fill_data (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~pipe_stall),
+        .data_in  (fbuf_data_r),
+        .data_out (fill_data_std)
+    );
+`ifndef SYNTHESIS
+    wire [`CS_LINE_ADDR_WIDTH-1:0] fill_addr_std;
+    VX_pipe_register #(
+        .DATAW  (`CS_LINE_ADDR_WIDTH),
+        .DEPTH  (PIPE_EX)
+    ) reg_fill_addr (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~pipe_stall),
+        .data_in  (fbuf_addr_r),
+        .data_out (fill_addr_std)
+    );
+    `RUNTIME_ASSERT (~(do_fill_std && ~stD.req.is_passthru_fill) || (stD.req.addr == fill_addr_std), ("%t: %s fill sector misaligned with its array write: addr=0x%0h, staged=0x%0h", $time, INSTANCE_ID, `CS_BANK_TO_FULL_ADDR(stD.req.addr, BANK_ID), `CS_BANK_TO_FULL_ADDR(fill_addr_std, BANK_ID)))
+`endif
+
+    // The fill sector, replicated across the line so each sector's slices see
+    // their words; the data array writes only the installed sector (per-slice
+    // gate). One copy == the full line when 1 sector/line.
+    wire [`CS_LINE_WIDTH-1:0] fbuf_line = {`CS_SECTORS_PER_LINE{fill_data_std}};
 
     VX_cache_data #(
         .CACHE_SIZE   (CACHE_SIZE),
