@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 # CIRCT install: the SystemVerilog frontend of every synthesis flow
-# (circt-verilog, circt-opt, firtool) and the compiler foldsim builds on.
+# (circt-verilog, circt-opt, firtool) and the compiler Foldsim builds on.
 #
 # Builds Vortex's CIRCT fork (LLVM, MLIR and CIRCT in one build) and installs
 # it into $TOOLDIR/circt: tools, libraries, headers and CMake packages, which

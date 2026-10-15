@@ -184,7 +184,7 @@ circt()
     mkdir -p $TOOLDIR && rm -rf $TOOLDIR/circt && mv circt $TOOLDIR
     rm -rf circt circt.tar.bz2*
 }
-# foldsim: the FAME-5 simulator compiler of hw/syn/foldsim (the foldsim
+# Foldsim: the FAME-5 simulator compiler of hw/syn/foldsim (the Foldsim
 # driver and foldsim-opt), built on CIRCT.
 foldsim()
 {
@@ -242,7 +242,7 @@ gem5()
     rm -rf gem5 gem5.tar.bz2
 }
 
-# Every component but the optional ones, foldsim and gem5 — the default when
+# Every component but the optional ones, Foldsim and gem5 — the default when
 # the script is run with no arguments, and the shared body of --all.
 install_base()
 {
@@ -269,8 +269,8 @@ show_usage()
 {
     echo "Install Pre-built Vortex Toolchain"
     echo "Usage: $0 [--pocl] [--chipstar] [--mesa] [--verilator] [--riscv32] [--riscv64] [--llvm] [--libcrt32] [--libcrt64] [--libc32] [--libc64] [--circt] [--foldsim] [--yosys] [--sta] [--gem5] [--all] [-h|--help]"
-    echo "  (no arguments: install all components except foldsim and gem5)"
-    echo "  foldsim and gem5 are opt-in: foldsim serves only the foldsim flow, and"
+    echo "  (no arguments: install all components except Foldsim and gem5)"
+    echo "  Foldsim and gem5 are opt-in: Foldsim serves only the Foldsim flow, and"
     echo "  gem5 is a large source build. --all installs them too."
 }
 

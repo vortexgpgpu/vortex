@@ -134,7 +134,7 @@ circt()
     rm circt.tar.bz2
 }
 
-# foldsim's driver and foldsim-opt (ci/foldsim_install.sh), one tarball.
+# Foldsim's driver and foldsim-opt (ci/foldsim_install.sh), one tarball.
 foldsim()
 {
     echo "prebuilt foldsim..."

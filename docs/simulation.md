@@ -83,9 +83,9 @@ One caveat worth knowing when reading its output: FireSim's
 kernel took, and is quantized by the driver's polling schedule. Use Vortex's
 own `PERF: cycles=` line, which is exact.
 
-### Threaded FPGA Simulation (foldsim)
+### Threaded FPGA Simulation (Foldsim)
 
-foldsim compiles Vortex into a simulator for the V80 with CIRCT: each class of
+Foldsim compiles Vortex into a simulator for the V80 with CIRCT: each class of
 identical units (sockets, issue slices, ALUs, ...) is threaded through one
 physical copy, so a GPU far larger than the card fits on it, still cycle-exact
 against the RTL. Its kernel carries a small control block and a
@@ -94,7 +94,7 @@ it like the native V80 driver does (AXI4-Lite registers, QDMA for memory).
 
 | target | what runs | built by |
 |---|---|---|
-| `avedsim` (default) | the same kernel in Verilator, in-process | the run itself: the foldsim compiler, then a Verilator build of the kernel, for the app's `CONFIGS` |
+| `avedsim` (default) | the same kernel in Verilator, in-process | the run itself: the Foldsim compiler, then a Verilator build of the kernel, for the app's `CONFIGS` |
 | `hw` | the image on the V80 | `make -C hw/syn/foldsim` |
 
 ```bash
@@ -112,7 +112,7 @@ FPGA_BIN_DIR=$PWD/hw/syn/foldsim/build32_foldsim_hw/bin \
   CONFIGS="$CONFIGS" ./ci/blackbox.sh --driver=foldsim --target=hw --app=sgemm
 ```
 
-The flow needs CIRCT (`circt-verilog`, `circt-opt`, `firtool`) and foldsim
+The flow needs CIRCT (`circt-verilog`, `circt-opt`, `firtool`) and Foldsim
 (the `foldsim` driver and `foldsim-opt`) from the toolchain
 (`./ci/toolchain_install.sh --circt --foldsim`; `CIRCT_BIN=<dir>` and
 `FOLDSIM=<driver>` override them), and pyslang for the boundary lifting
