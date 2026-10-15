@@ -14,6 +14,7 @@
 #pragma once
 
 #include <cstdint>
+#include <dram_timing.h>
 
 namespace vortex {
 
@@ -24,12 +25,8 @@ public:
   typedef bool (*ResponseCallback)(void *arg);
 
   // The JEDEC standards Ramulator models, each at its own organization and
-  // timing; the data rate picks the speed.
-  enum class Type {
-    HBM2,   // HBM2/HBM2E: 128-bit channels of two 64-bit pseudo-channels, 32 B bursts
-    HBM3,   // HBM3, a 128-bit channel per pair of 64-bit channels, 32 B bursts
-    GDDR6,  // GDDR6 x16 channels, 32 B bursts, 2 KB pages
-  };
+  // timing (sw/common/dram_timing.h); the data rate picks the speed.
+  using Type = dram_timing::Standard;
 
   struct Config {
     Type     type;
