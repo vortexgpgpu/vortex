@@ -213,13 +213,15 @@ module foldsim_mem_bank #(
     // Reads departed, in order, with the target cycle they are ready in; the
     // first `rf_ready` are ready in the next cycle. A departure enters the
     // host cycle after its DRAM clock ends.
+    // Ready cycles are kept modulo 2^24: an entry not yet counted ready is at
+    // most LATENCY + 1 cycles ahead.
     reg [SW-1:0]     rf_slot [SLOTS];
-    reg [31:0]       rf_cyc  [SLOTS];
-    reg [SW-1:0]     rf_head, rf_tail;
+    reg [23:0]       rf_cyc  [SLOTS];
+    reg [SW-1:0]     rf_head, rf_tail, rf_scan;   // rf_scan = rf_head + rf_ready
     reg [SW:0]       rf_count, rf_ready;
     reg              rfp_valid;
     reg [SW-1:0]     rfp_slot;
-    reg [31:0]       rfp_cyc;
+    reg [23:0]       rfp_cyc;
     // Writes the controller has buffered, to acknowledge in order.
     localparam AQW = $clog2(WSLOTS);
     reg [ID_W-1:0]   af_id [WSLOTS];
@@ -430,6 +432,10 @@ module foldsim_mem_bank #(
     wire signed [15:0] b_rel = 16'(HLOG2'(b_pos - base));
 
     // ---- Commit: per calendar, up to two ranges of clocks to mark ----
+    // (computed from the reservation, registered as the horizon is checked)
+    reg              cx_v    [NBM][2];
+    reg signed [15:0] cx_lo  [NBM][2];
+    reg signed [15:0] cx_hi  [NBM][2];
     reg              cm_v    [NBM][2];
     reg signed [15:0] cm_lo  [NBM][2];
     reg signed [15:0] cm_hi  [NBM][2];
@@ -469,18 +475,24 @@ module foldsim_mem_bank #(
     wire               sel_any  = wmode_n ? (wb_count != 0) : (rb_count != 0);
 
     // The bank table's port: a reservation's bank, or the scrub's.
+    // The scrub reads a bank in one host cycle and writes it in the next.
+    reg              sc_pend;
+    reg [4:0]        sc_b;
+    reg [15:0]       sc_act, sc_colr, sc_prer;
+    reg [ROW_W-1:0]  sc_row;
+    reg [15:0]       cw_act, cw_colr, cw_prer;   // the reservation's, absolute
+    reg [ROW_W-1:0]  cw_row;
     wire             bt_commit = (state == S_COMMIT) & cm_start;
-    wire             bt_scrub  = (state == S_TICK) & (credit < 32'(k_twoclk)) & ~bt_fresh[scrub_b];
-    wire [4:0]       bt_wa     = bt_commit ? op_bank : scrub_b;
+    wire [4:0]       bt_wa     = bt_commit ? op_bank : sc_b;
     function automatic [15:0] scrubbed(input [15:0] t);
         scrubbed = ($signed(t - (e + 16'd1)) < -16'sd16384) ? e + 16'd1 - 16'd16384 : t;
     endfunction
     always @(posedge clk) begin
-        if (bt_commit | bt_scrub) begin
-            bt_row[bt_wa]  <= (bt_commit & ~op_hit) ? op_row : bt_row[bt_wa];
-            bt_act[bt_wa]  <= bt_commit ? (op_hit ? bt_act[bt_wa] : e + c_act) : scrubbed(bt_act[bt_wa]);
-            bt_colr[bt_wa] <= bt_commit ? e + ck_colr : scrubbed(bt_colr[bt_wa]);
-            bt_prer[bt_wa] <= bt_commit ? e + ck_prer : scrubbed(bt_prer[bt_wa]);
+        if (bt_commit | sc_pend) begin
+            bt_row[bt_wa]  <= bt_commit ? cw_row  : sc_row;
+            bt_act[bt_wa]  <= bt_commit ? cw_act  : sc_act;
+            bt_colr[bt_wa] <= bt_commit ? cw_colr : sc_colr;
+            bt_prer[bt_wa] <= bt_commit ? cw_prer : sc_prer;
         end
     end
 
@@ -489,7 +501,7 @@ module foldsim_mem_bank #(
     task automatic end_clock();
         rfp_valid <= ed_depv;
         rfp_slot  <= ed_slot;
-        rfp_cyc   <= tcyc1 + 32'(cfg_latency);
+        rfp_cyc   <= 24'(tcyc1 + 32'(cfg_latency));
         rq_cnt <= rq_cnt - (ed_kr ? 8'd1 : 8'd0);
         wq_cnt <= wq_cnt - (ed_kw ? 8'd1 : 8'd0);
         // The ring's word ends with this clock: it is all past.
@@ -510,6 +522,7 @@ module foldsim_mem_bank #(
         bm_clear_all <= 1'b0;
         cm_start     <= 1'b0;
         rfp_valid    <= 1'b0;
+        sc_pend      <= 1'b0;
 
         if (rfp_valid) begin
             rf_slot[rf_tail] <= rfp_slot;
@@ -581,6 +594,12 @@ module foldsim_mem_bank #(
             end else begin
                 // The cycle's clocks are done; a bank's times move up (the
                 // table's port is free), and the ready reads are counted.
+                sc_pend <= ~bt_fresh[scrub_b];
+                sc_b    <= scrub_b;
+                sc_row  <= bt_row[scrub_b];
+                sc_act  <= scrubbed(bt_act[scrub_b]);
+                sc_colr <= scrubbed(bt_colr[scrub_b]);
+                sc_prer <= scrubbed(bt_prer[scrub_b]);
                 scrub_b <= scrub_b + 1'b1;
                 state   <= S_WALK;
             end
@@ -698,6 +717,17 @@ module foldsim_mem_bank #(
         end
         S_CHECK2: begin
             // The reservation must reach no further than the horizon.
+            for (integer m = 0; m < NBM; ++m) begin
+                for (integer k = 0; k < 2; ++k) begin
+                    cm_v[m][k]  <= cx_v[m][k];
+                    cm_lo[m][k] <= cx_lo[m][k];
+                    cm_hi[m][k] <= cx_hi[m][k];
+                end
+            end
+            cw_row  <= op_hit ? bt_row[op_bank] : op_row;
+            cw_act  <= op_hit ? bt_act[op_bank] : e + c_act;
+            cw_colr <= e + ck_colr;
+            cw_prer <= e + ck_prer;
             begin : check2_
                 reg ok;
                 ok = (ck_tcol < 16'(HE)) & (ck_tdep < 16'(HE)) & (ck_tact < 16'(HE));
@@ -745,9 +775,9 @@ module foldsim_mem_bank #(
         end
         S_WALK: begin
             // Reads that are ready in the next target cycle.
-            if (rf_ready != rf_count
-             && $signed(rf_cyc[SW'(rf_head + SW'(rf_ready))] - tcyc1) <= 0) begin
+            if (rf_ready != rf_count && $signed(rf_cyc[rf_scan] - tcyc1[23:0]) <= 0) begin
                 rf_ready  <= rf_ready + 1'b1;
+                rf_scan   <= rf_scan + 1'b1;
                 new_ready <= new_ready + 1'b1;
             end else begin
                 state <= S_IDLE;
@@ -772,6 +802,7 @@ module foldsim_mem_bank #(
                 rf_tail     <= '0;
                 rf_count    <= '0;
                 rf_ready    <= '0;
+                rf_scan     <= '0;
                 af_head     <= '0;
                 af_tail     <= '0;
                 af_count    <= '0;
@@ -865,6 +896,7 @@ module foldsim_mem_bank #(
             lat_ar         <= 1'b0;
             lat_r          <= 1'b0;
             rfp_valid      <= 1'b0;
+            sc_pend        <= 1'b0;
         end
     end
 
@@ -878,55 +910,55 @@ module foldsim_mem_bank #(
     always @(*) begin
         for (integer m = 0; m < NBM; ++m) begin
             for (integer k = 0; k < 2; ++k) begin
-                cm_v[m][k]  = 1'b0;
-                cm_lo[m][k] = 16'sd0;
-                cm_hi[m][k] = 16'sd0;
+                cx_v[m][k]  = 1'b0;
+                cx_lo[m][k] = 16'sd0;
+                cx_hi[m][k] = 16'sd0;
             end
         end
         // Row commands: PRE, ACT; the row bus for PRE, and ACT's one or two
         // clocks. Column commands, and their directions for the controller's
         // queues.
-        cm_v[B_CMDR][0] = op_conf;  cm_lo[B_CMDR][0] = c_pre;  cm_hi[B_CMDR][0] = c_pre;
-        cm_v[B_CMDR][1] = ~op_hit;  cm_lo[B_CMDR][1] = c_act;  cm_hi[B_CMDR][1] = c_act;
-        cm_v[B_ROW][0]  = op_conf;  cm_lo[B_ROW][0]  = c_pre;  cm_hi[B_ROW][0]  = c_pre;
-        cm_v[B_ROW][1]  = ~op_hit;  cm_lo[B_ROW][1]  = c_act;
-        cm_hi[B_ROW][1] = c_act + (g_act2 ? 16'sd1 : 16'sd0);
-        cm_v[B_CMDC][0] = 1'b1;     cm_lo[B_CMDC][0] = c_col0; cm_hi[B_CMDC][0] = c_col0;
-        cm_v[B_CMDC][1] = (NB == 2); cm_lo[B_CMDC][1] = c_col1; cm_hi[B_CMDC][1] = c_col1;
-        cm_v[op_w ? B_KW : B_KR][0] = 1'b1;
-        cm_lo[op_w ? B_KW : B_KR][0] = c_col0; cm_hi[op_w ? B_KW : B_KR][0] = c_col0;
-        cm_v[op_w ? B_KW : B_KR][1] = (NB == 2);
-        cm_lo[op_w ? B_KW : B_KR][1] = c_col1; cm_hi[op_w ? B_KW : B_KR][1] = c_col1;
+        cx_v[B_CMDR][0] = op_conf;  cx_lo[B_CMDR][0] = c_pre;  cx_hi[B_CMDR][0] = c_pre;
+        cx_v[B_CMDR][1] = ~op_hit;  cx_lo[B_CMDR][1] = c_act;  cx_hi[B_CMDR][1] = c_act;
+        cx_v[B_ROW][0]  = op_conf;  cx_lo[B_ROW][0]  = c_pre;  cx_hi[B_ROW][0]  = c_pre;
+        cx_v[B_ROW][1]  = ~op_hit;  cx_lo[B_ROW][1]  = c_act;
+        cx_hi[B_ROW][1] = c_act + (g_act2 ? 16'sd1 : 16'sd0);
+        cx_v[B_CMDC][0] = 1'b1;     cx_lo[B_CMDC][0] = c_col0; cx_hi[B_CMDC][0] = c_col0;
+        cx_v[B_CMDC][1] = (NB == 2); cx_lo[B_CMDC][1] = c_col1; cx_hi[B_CMDC][1] = c_col1;
+        cx_v[op_w ? B_KW : B_KR][0] = 1'b1;
+        cx_lo[op_w ? B_KW : B_KR][0] = c_col0; cx_hi[op_w ? B_KW : B_KR][0] = c_col0;
+        cx_v[op_w ? B_KW : B_KR][1] = (NB == 2);
+        cx_lo[op_w ? B_KW : B_KR][1] = c_col1; cx_hi[op_w ? B_KW : B_KR][1] = c_col1;
         // The read's departure.
-        cm_v[B_DEPV][0] = ~op_w;
-        cm_lo[B_DEPV][0] = ck_lastcol + k_dep; cm_hi[B_DEPV][0] = ck_lastcol + k_dep;
+        cx_v[B_DEPV][0] = ~op_w;
+        cx_lo[B_DEPV][0] = ck_lastcol + k_dep; cx_hi[B_DEPV][0] = ck_lastcol + k_dep;
         // What each column forbids to later columns of its pseudo-channel and
         // bank group, by direction.
         for (integer k = 0; k < NB; ++k) begin
             reg signed [15:0] c;
             c = (k == 0) ? c_col0 : c_col1;
             if (~op_w) begin
-                cm_v[B_FRP][k] = 1'b1; cm_lo[B_FRP][k] = clamp0(c - k_ccds + 16'sd1); cm_hi[B_FRP][k] = c + k_ccds - 16'sd1;
-                cm_v[B_FWP][k] = 1'b1; cm_lo[B_FWP][k] = clamp0(c - k_wtrs + 16'sd1); cm_hi[B_FWP][k] = c + k_rtw - 16'sd1;
-                cm_v[B_FRG][k] = 1'b1; cm_lo[B_FRG][k] = clamp0(c - k_ccdl + 16'sd1); cm_hi[B_FRG][k] = c + k_ccdl - 16'sd1;
-                cm_v[B_FWG][k] = 1'b1; cm_lo[B_FWG][k] = clamp0(c - k_wtrl + 16'sd1); cm_hi[B_FWG][k] = c;
+                cx_v[B_FRP][k] = 1'b1; cx_lo[B_FRP][k] = clamp0(c - k_ccds + 16'sd1); cx_hi[B_FRP][k] = c + k_ccds - 16'sd1;
+                cx_v[B_FWP][k] = 1'b1; cx_lo[B_FWP][k] = clamp0(c - k_wtrs + 16'sd1); cx_hi[B_FWP][k] = c + k_rtw - 16'sd1;
+                cx_v[B_FRG][k] = 1'b1; cx_lo[B_FRG][k] = clamp0(c - k_ccdl + 16'sd1); cx_hi[B_FRG][k] = c + k_ccdl - 16'sd1;
+                cx_v[B_FWG][k] = 1'b1; cx_lo[B_FWG][k] = clamp0(c - k_wtrl + 16'sd1); cx_hi[B_FWG][k] = c;
             end else begin
-                cm_v[B_FWP][k] = 1'b1; cm_lo[B_FWP][k] = clamp0(c - k_ccds + 16'sd1); cm_hi[B_FWP][k] = c + k_ccds - 16'sd1;
-                cm_v[B_FRP][k] = 1'b1; cm_lo[B_FRP][k] = clamp0(c - k_rtw + 16'sd1);  cm_hi[B_FRP][k] = c + k_wtrs - 16'sd1;
-                cm_v[B_FWG][k] = 1'b1; cm_lo[B_FWG][k] = clamp0(c - k_ccdl + 16'sd1); cm_hi[B_FWG][k] = c + k_ccdl - 16'sd1;
-                cm_v[B_FRG][k] = 1'b1; cm_lo[B_FRG][k] = c;                            cm_hi[B_FRG][k] = c + k_wtrl - 16'sd1;
+                cx_v[B_FWP][k] = 1'b1; cx_lo[B_FWP][k] = clamp0(c - k_ccds + 16'sd1); cx_hi[B_FWP][k] = c + k_ccds - 16'sd1;
+                cx_v[B_FRP][k] = 1'b1; cx_lo[B_FRP][k] = clamp0(c - k_rtw + 16'sd1);  cx_hi[B_FRP][k] = c + k_wtrs - 16'sd1;
+                cx_v[B_FWG][k] = 1'b1; cx_lo[B_FWG][k] = clamp0(c - k_ccdl + 16'sd1); cx_hi[B_FWG][k] = c + k_ccdl - 16'sd1;
+                cx_v[B_FRG][k] = 1'b1; cx_lo[B_FRG][k] = c;                            cx_hi[B_FRG][k] = c + k_wtrl - 16'sd1;
             end
         end
         // What the ACT forbids to later ACTs: tRRD within the pseudo-channel,
         // tRRD_L within the bank group.
-        cm_v[B_FAP][0] = ~op_hit;
-        cm_lo[B_FAP][0] = clamp0(c_act - k_rrds + 16'sd1); cm_hi[B_FAP][0] = c_act + k_rrds - 16'sd1;
-        cm_v[B_FAG][0] = ~op_hit;
-        cm_lo[B_FAG][0] = clamp0(c_act - k_rrdl + 16'sd1); cm_hi[B_FAG][0] = c_act + k_rrdl - 16'sd1;
+        cx_v[B_FAP][0] = ~op_hit;
+        cx_lo[B_FAP][0] = clamp0(c_act - k_rrds + 16'sd1); cx_hi[B_FAP][0] = c_act + k_rrds - 16'sd1;
+        cx_v[B_FAG][0] = ~op_hit;
+        cx_lo[B_FAG][0] = clamp0(c_act - k_rrdl + 16'sd1); cx_hi[B_FAG][0] = c_act + k_rrdl - 16'sd1;
         for (integer m = 0; m < NBM; ++m)
             for (integer k = 0; k < 2; ++k)
-                if (cm_hi[m][k] < cm_lo[m][k])
-                    cm_v[m][k] = 1'b0;
+                if (cx_hi[m][k] < cx_lo[m][k])
+                    cx_v[m][k] = 1'b0;
     end
 
     // A word a cycle per calendar; a range's last word starts the next.
