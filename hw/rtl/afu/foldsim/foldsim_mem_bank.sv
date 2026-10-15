@@ -73,11 +73,11 @@ module foldsim_mem_bank #(
     // responses R and B give.
     input  wire                  ar_fire,
     input  wire [ID_W-1:0]       ar_id,
-    input  wire [29:0]           ar_addr,
+    input  wire [29:5]           ar_addr,
     input  wire                  aw_fire,
     input  wire                  new_write,
     input  wire [ID_W-1:0]       nw_id,
-    input  wire [29:0]           nw_addr,
+    input  wire [29:5]           nw_addr,
     input  wire                  r_fire,
     input  wire                  b_fire,
 
@@ -141,6 +141,8 @@ module foldsim_mem_bank #(
     reg signed [15:0] k_rrds, k_rrdl;
     reg [16:0]        k_twoclk;
     reg [2:0]         k_bb;
+    reg [4:0]         k_rowsh;
+    reg [24:0]        k_bmask;
     always @(posedge clk) begin
         k_ccds    <= 16'(T[I_CCDS]);
         k_ccdl    <= 16'(T[I_CCDL]);
@@ -164,25 +166,38 @@ module foldsim_mem_bank #(
         k_rrdl    <= 16'(T[I_RRDL]);
         k_twoclk  <= {cfg_core_clock, 1'b0};
         k_bb      <= 3'(g_lpcs) + 3'(g_lbgs) + 3'(g_lbanks);
+        k_rowsh   <= 5'(g_lpcs) + 5'(g_lbgs) + 5'(g_lbanks) + 5'(g_lrow);
+        k_bmask   <= (25'd1 << (3'(g_lpcs) + 3'(g_lbgs) + 3'(g_lbanks))) - 25'd1;
     end
 
     // The bank and row of a channel address (sim/common/dram_bank_model.h's
     // decode): a row visit, then the bank bits, the row above the column, and
     // the bank XORed with the row folded to its width.
+    // The row folded onto a bank field of each width a geometry may have, so
+    // the bank's width only selects among them.
+    function automatic [5:0] fold(input [ROW_W-1:0] r, input integer bb);
+        fold = '0;
+        for (integer k = 0; k < ROW_W; k += bb)
+            fold = fold ^ 6'((32'(r) >> k) & ((32'd1 << bb) - 32'd1));
+    endfunction
+
     function automatic [BKW+ROW_W-1:0] decode(input [29:5] a);
         reg [24:0]      tx;
         reg [24:0]      b;
         reg [ROW_W-1:0] r;
-        reg [24:0]      mask;
+        reg [5:0]       f;
         tx = a[29:5];
-        mask = (25'd1 << k_bb) - 25'd1;
-        b = (tx >> g_lvisit) & mask;
-        r = ROW_W'(tx >> (32'(k_bb) + 32'(g_lrow)));
-        for (integer k = 0; k < ROW_W; ++k) begin
-            if (k_bb != 0 && 32'(k) * 32'(k_bb) < ROW_W)
-                b = b ^ ((25'(r) >> (32'(k) * 32'(k_bb))) & mask);
-        end
-        decode = {BKW'(b), r};
+        b = (tx >> g_lvisit) & k_bmask;
+        r = ROW_W'(tx >> k_rowsh);
+        case (k_bb)
+        3'd1: f = fold(r, 1);
+        3'd2: f = fold(r, 2);
+        3'd3: f = fold(r, 3);
+        3'd4: f = fold(r, 4);
+        3'd5: f = fold(r, 5);
+        default: f = fold(r, 6);
+        endcase
+        decode = {BKW'(b ^ 25'(f)), r};
     endfunction
 
     // ---- The port: slots, responses, requests in flight ----
@@ -193,14 +208,18 @@ module foldsim_mem_bank #(
     reg              cur_r_valid, cur_b_valid;
     reg [SW-1:0]     cur_r_slot;
     reg [ID_W-1:0]   cur_r_id, cur_b_id;
-    reg [31:0]       tcyc;
+    reg [31:0]       tcyc, tcyc1;    // the target cycle, and the next
 
     // Reads departed, in order, with the target cycle they are ready in; the
-    // first `rf_ready` are ready in the next cycle.
+    // first `rf_ready` are ready in the next cycle. A departure enters the
+    // host cycle after its DRAM clock ends.
     reg [SW-1:0]     rf_slot [SLOTS];
     reg [31:0]       rf_cyc  [SLOTS];
     reg [SW-1:0]     rf_head, rf_tail;
     reg [SW:0]       rf_count, rf_ready;
+    reg              rfp_valid;
+    reg [SW-1:0]     rfp_slot;
+    reg [31:0]       rfp_cyc;
     // Writes the controller has buffered, to acknowledge in order.
     localparam AQW = $clog2(WSLOTS);
     reg [ID_W-1:0]   af_id [WSLOTS];
@@ -209,6 +228,9 @@ module foldsim_mem_bank #(
     // What this target cycle's DRAM clocks made ready by the next one.
     reg [SW:0]       new_ready;
     reg [AQW:0]      new_acks;
+    // The last cycle's reads taken by AR and by R, for the latency sum.
+    reg              lat_ar, lat_r;
+    reg [31:0]       lat_t;
 
     assign room       = (cfg_queue == 16'd0) | (inflight < cfg_queue);
     assign slot_free  = (32'(slots_used) < SLOTS);
@@ -234,14 +256,15 @@ module foldsim_mem_bank #(
     reg              st_w_valid, st_r_valid;
     reg [ID_W-1:0]   st_w_id;
     reg [SW-1:0]     st_r_slot;
-    reg [29:0]       st_w_addr, st_r_addr;
+    reg [29:5]       st_w_addr, st_r_addr;
 
     // ---- The channel ----
-    // Requests in the order they formed; the controller's read and write
-    // buffers.
+    // Requests in the order they formed, decoded; the controller's read and
+    // write buffers.
     reg              iq_w   [INQ];
     reg [TAG_W-1:0]  iq_tag [INQ];
-    reg [29:0]       iq_addr[INQ];
+    reg [BKW-1:0]    iq_bank[INQ];
+    reg [ROW_W-1:0]  iq_row [INQ];
     reg [IQW-1:0]    iq_head, iq_tail;
     reg [IQW:0]      iq_count;
     reg [TAG_W-1:0]  rb_tag [BQ], wb_tag [BQ];
@@ -257,7 +280,8 @@ module foldsim_mem_bank #(
     reg              wmode;
     reg [15:0]       frontier, batch_floor, batch_last, read_floor;
 
-    // The bank table. A fresh bank has no row open and no time that matters.
+    // The bank table, written at one port. A fresh bank has no row open and
+    // no time that matters.
     reg [31:0]       bt_open, bt_fresh;
     reg [ROW_W-1:0]  bt_row  [32];
     reg [15:0]       bt_act  [32];
@@ -290,8 +314,8 @@ module foldsim_mem_bank #(
     reg              bm_clear;
     reg  [WW-1:0]    bm_clear_word;
     // A target reset (or the port leaving the bank model) clears the
-    // calendars at the cycle's end, before the next cycle's first clock.
-    wire             bm_clear_all = finish & (treset | ~active);
+    // calendars in the host cycle after it; that cycle takes no DRAM clock.
+    reg              bm_clear_all;
     reg  [NBM-1:0]   wr_en;
     reg  [WW-1:0]    wr_word [NBM];
     reg  [63:0]      wr_mask [NBM];
@@ -355,9 +379,9 @@ module foldsim_mem_bank #(
     reg [SW-1:0]     dep_slot [H];
 
     // ---- The engine ----
-    localparam S_IDLE = 4'd0, S_PUSH = 4'd1, S_TICK = 4'd3, S_BANK = 4'd4,
-               S_SETUP = 4'd5, S_SRCH = 4'd6, S_CHECK = 4'd7, S_COMMIT = 4'd8, S_END = 4'd9,
-               S_WALK = 4'd10;
+    localparam S_IDLE = 4'd0, S_PUSH = 4'd1, S_TICK = 4'd2, S_MODE = 4'd3, S_BANK = 4'd4,
+               S_BANK2 = 4'd5, S_SETUP = 4'd6, S_SETUP2 = 4'd7, S_SRCH = 4'd8, S_CHECK = 4'd9,
+               S_CHECK2 = 4'd10, S_COMMIT = 4'd11, S_END = 4'd12, S_WALK = 4'd13;
     localparam K_PRE = 2'd0, K_ACT = 2'd1, K_C0 = 2'd2, K_C1 = 2'd3;
     reg [3:0]        state;
 
@@ -370,8 +394,10 @@ module foldsim_mem_bank #(
     reg signed [15:0] c_pre, c_act, c_col0, c_col1;
     reg [1:0]        kind;
 
-    // The search: the next word to read (as the ring position and the clocks
-    // left to the horizon) and the one read last cycle, to decide on.
+    // The search: its lower bound; the next word to read (as the ring
+    // position and the clocks left to the horizon) and the one read last
+    // cycle, to decide on.
+    reg signed [15:0] s_lb;
     reg [HLOG2-1:0]  s_pos;
     reg signed [15:0] s_left;
     reg              s_fetch;
@@ -413,7 +439,7 @@ module foldsim_mem_bank #(
     reg              cm_next [NBM];   // the second range is still to mark
     reg              cm_start;
 
-    reg signed [15:0] ck_colr, ck_prer, ck_lastcol;
+    reg signed [15:0] ck_colr, ck_prer, ck_lastcol, ck_tcol, ck_tdep, ck_tact;
     reg              cm_any;
     always @(*) begin
         cm_any = 1'b0;
@@ -421,79 +447,315 @@ module foldsim_mem_bank #(
             cm_any = cm_any | cm_busy[m];
     end
 
-    // The read data the cycle's departure completes, and the clock's columns.
-    wire        end_depv = rd_depv[base[5:0]];
-    wire        end_kr   = rd_kr[base[5:0]];
-    wire        end_kw   = rd_kw[base[5:0]];
+    // Clock d+1, read when its DRAM clock starts: the read departing in it and
+    // the columns issued in it -- and the columns the clock's own reservation
+    // places in it.
+    reg              ed_depv, ed_kr, ed_kw;
+    reg [SW-1:0]     ed_slot;
 
-    // Ingress head, decoded, and whether it enters its buffer this tick.
+    // Ingress head, and whether it enters its buffer this tick.
     wire               ih_w    = iq_w[iq_head];
-    wire [TAG_W-1:0]   ih_tag  = iq_tag[iq_head];
-    wire [BKW+ROW_W-1:0] ih_dec = decode(iq_addr[iq_head][29:5]);
     wire [8:0]         wb_after = 9'(wq_cnt) + 9'(NB) * (9'(wb_count) + 9'd1);
     wire [8:0]         rb_after = 9'(rq_cnt) + 9'(NB) * (9'(rb_count) + 9'd1);
     wire               ih_time = ($signed(d - ingress_ready) >= 0);
     wire               ih_room = ih_w ? (wb_after <= 9'(cfg_wq)) : (rb_after <= 9'(cfg_rq));
     wire               move    = (iq_count != 0) & ih_time & ih_room;
-    wire               mv_w    = move & ih_w;
-    wire               mv_r    = move & ~ih_w;
-    // The buffers' bursts after the move, and the mode they put the channel in.
-    wire [8:0]         wn = 9'(wq_cnt) + 9'(NB) * (9'(wb_count) + 9'(mv_w));
-    wire [8:0]         rn = 9'(rq_cnt) + 9'(NB) * (9'(rb_count) + 9'(mv_r));
+    // The buffers' bursts, and the mode they put the channel in.
+    wire [8:0]         wn = 9'(wq_cnt) + 9'(NB) * 9'(wb_count);
+    wire [8:0]         rn = 9'(rq_cnt) + 9'(NB) * 9'(rb_count);
     wire               to_write = ~wmode & ((wn >= 9'(cfg_wr_high)) | (rn == 0));
     wire               to_read  = wmode & (wn < 9'(cfg_wr_low)) & (rn != 0);
     wire               wmode_n  = to_write | (wmode & ~to_read);
-    wire [BQW:0]       sel_count = wmode_n ? (wb_count + (BQW+1)'(mv_w))
-                                           : (rb_count + (BQW+1)'(mv_r));
+    wire               sel_any  = wmode_n ? (wb_count != 0) : (rb_count != 0);
+
+    // The bank table's port: a reservation's bank, or the scrub's.
+    wire             bt_commit = (state == S_COMMIT) & cm_start;
+    wire             bt_scrub  = (state == S_TICK) & (credit < 32'(k_twoclk)) & ~bt_fresh[scrub_b];
+    wire [4:0]       bt_wa     = bt_commit ? op_bank : scrub_b;
+    function automatic [15:0] scrubbed(input [15:0] t);
+        scrubbed = ($signed(t - (e + 16'd1)) < -16'sd16384) ? e + 16'd1 - 16'd16384 : t;
+    endfunction
+    always @(posedge clk) begin
+        if (bt_commit | bt_scrub) begin
+            bt_row[bt_wa]  <= (bt_commit & ~op_hit) ? op_row : bt_row[bt_wa];
+            bt_act[bt_wa]  <= bt_commit ? (op_hit ? bt_act[bt_wa] : e + c_act) : scrubbed(bt_act[bt_wa]);
+            bt_colr[bt_wa] <= bt_commit ? e + ck_colr : scrubbed(bt_colr[bt_wa]);
+            bt_prer[bt_wa] <= bt_commit ? e + ck_prer : scrubbed(bt_prer[bt_wa]);
+        end
+    end
 
     // The end of DRAM clock d: clock d+1's departing read and the columns it
     // issues leave the controller; then the next clock.
     task automatic end_clock();
-        if (end_depv) begin
-            rf_slot[rf_tail] <= dep_slot[base];
-            rf_cyc[rf_tail]  <= tcyc + 32'd1 + 32'(cfg_latency);
-            rf_tail          <= rf_tail + 1'b1;
-            rf_count         <= rf_count + 1'b1;
-        end
-        rq_cnt <= rq_cnt - (end_kr ? 8'd1 : 8'd0);
-        wq_cnt <= wq_cnt - (end_kw ? 8'd1 : 8'd0);
+        rfp_valid <= ed_depv;
+        rfp_slot  <= ed_slot;
+        rfp_cyc   <= tcyc1 + 32'(cfg_latency);
+        rq_cnt <= rq_cnt - (ed_kr ? 8'd1 : 8'd0);
+        wq_cnt <= wq_cnt - (ed_kw ? 8'd1 : 8'd0);
         // The ring's word ends with this clock: it is all past.
         if (base[5:0] == 6'd63) begin
             bm_clear      <= 1'b1;
             bm_clear_word <= end_word;
         end
-        // A time too old to constrain anything is moved up before it could wrap.
-        if (~bt_fresh[scrub_b]) begin
-            if ($signed(bt_act[scrub_b] - (e + 16'd1)) < -16'sd16384)
-                bt_act[scrub_b] <= e + 16'd1 - 16'd16384;
-            if ($signed(bt_colr[scrub_b] - (e + 16'd1)) < -16'sd16384)
-                bt_colr[scrub_b] <= e + 16'd1 - 16'd16384;
-            if ($signed(bt_prer[scrub_b] - (e + 16'd1)) < -16'sd16384)
-                bt_prer[scrub_b] <= e + 16'd1 - 16'd16384;
-        end
-        scrub_b <= scrub_b + 1'b1;
         if ($signed(frontier - e) < 0)      frontier      <= e;
         if ($signed(batch_last - e) < 0)    batch_last    <= e;
         if ($signed(batch_floor - e) < 0)   batch_floor   <= e;
         if ($signed(read_floor - e) < 0)    read_floor    <= e;
         if ($signed(ingress_ready - e) < 0) ingress_ready <= e;
-        d     <= d + 16'd1;
+        d <= d + 16'd1;
     endtask
 
     always @(posedge clk) begin
         bm_clear     <= 1'b0;
+        bm_clear_all <= 1'b0;
         cm_start     <= 1'b0;
+        rfp_valid    <= 1'b0;
 
-        if (reset) begin
-            state          <= S_IDLE;
-            active         <= 1'b0;
-            stat_reads     <= '0;
-            stat_writes    <= '0;
-            stat_hits      <= '0;
-            stat_misses    <= '0;
-            stat_conflicts <= '0;
-            stat_latency   <= '0;
+        if (rfp_valid) begin
+            rf_slot[rf_tail] <= rfp_slot;
+            rf_cyc[rf_tail]  <= rfp_cyc;
+            rf_tail          <= rf_tail + 1'b1;
+            rf_count         <= rf_count + 1'b1;
         end
+        lat_ar <= 1'b0;
+        lat_r  <= 1'b0;
+        if (lat_ar | lat_r)
+            stat_latency <= stat_latency + (lat_r ? 64'(lat_t) : 64'd0) - (lat_ar ? 64'(lat_t) : 64'd0);
+
+        // The engine runs while the target evaluates its cycle; the cycle
+        // finishes only once the engine is idle.
+        case (state)
+        S_PUSH: begin
+            // A cycle's write reaches the channel before its read.
+            if (st_w_valid) begin
+                iq_w[iq_tail]    <= 1'b1;
+                iq_tag[iq_tail]  <= TAG_W'(st_w_id);
+                {iq_bank[iq_tail], iq_row[iq_tail]} <= decode(st_w_addr[29:5]);
+                iq_tail          <= iq_tail + 1'b1;
+                iq_count         <= iq_count + 1'b1;
+                st_w_valid       <= 1'b0;
+            end else begin
+                if (st_r_valid) begin
+                    iq_w[iq_tail]    <= 1'b0;
+                    iq_tag[iq_tail]  <= TAG_W'(st_r_slot);
+                    {iq_bank[iq_tail], iq_row[iq_tail]} <= decode(st_r_addr[29:5]);
+                    iq_tail          <= iq_tail + 1'b1;
+                    iq_count         <= iq_count + 1'b1;
+                    st_r_valid       <= 1'b0;
+                end
+                state <= S_TICK;
+            end
+        end
+        S_TICK: begin
+            if (credit >= 32'(k_twoclk)) begin
+                // One DRAM clock d: the ingress head enters its buffer if it
+                // may.
+                credit <= credit - 32'(k_twoclk);
+                if (move) begin
+                    iq_head  <= iq_head + 1'b1;
+                    iq_count <= iq_count - 1'b1;
+                    ingress_ready <= d + 16'(NB);
+                    if (ih_w) begin
+                        wb_tag[wb_tail]  <= iq_tag[iq_head];
+                        wb_bank[wb_tail] <= iq_bank[iq_head];
+                        wb_row[wb_tail]  <= iq_row[iq_head];
+                        wb_tail          <= wb_tail + 1'b1;
+                        wb_count         <= wb_count + 1'b1;
+                        af_id[af_tail]   <= ID_W'(iq_tag[iq_head]);
+                        af_tail          <= af_tail + 1'b1;
+                        af_count         <= af_count + 1'b1;
+                        new_acks         <= new_acks + 1'b1;
+                    end else begin
+                        rb_tag[rb_tail]  <= iq_tag[iq_head];
+                        rb_bank[rb_tail] <= iq_bank[iq_head];
+                        rb_row[rb_tail]  <= iq_row[iq_head];
+                        rb_tail          <= rb_tail + 1'b1;
+                        rb_count         <= rb_count + 1'b1;
+                    end
+                end
+                ed_depv <= rd_depv[base[5:0]];
+                ed_kr   <= rd_kr[base[5:0]];
+                ed_kw   <= rd_kw[base[5:0]];
+                ed_slot <= dep_slot[base];
+                state   <= S_MODE;
+            end else begin
+                // The cycle's clocks are done; a bank's times move up (the
+                // table's port is free), and the ready reads are counted.
+                scrub_b <= scrub_b + 1'b1;
+                state   <= S_WALK;
+            end
+        end
+        S_MODE: begin
+            // The channel picks reads or writes; the head of that buffer is
+            // reserved if it can be, and with nothing to reserve the clock
+            // ends now.
+            wmode <= wmode_n;
+            if (to_write)
+                batch_floor <= ($signed(frontier + 16'd1 - e) > 0) ? frontier + 16'd1 : e;
+            if (to_read)
+                read_floor <= batch_last + 16'd1;
+            if (sel_any) begin
+                state <= S_BANK;
+            end else begin
+                end_clock();
+                state <= S_TICK;
+            end
+        end
+        S_BANK: begin
+            // The request at the head of the buffer the channel serves.
+            op_w    <= wmode;
+            op_tag  <= wmode ? wb_tag[wb_head] : rb_tag[rb_head];
+            op_bank <= wmode ? wb_bank[wb_head] : rb_bank[rb_head];
+            op_row  <= wmode ? wb_row[wb_head] : rb_row[rb_head];
+            r_floor <= rel(wmode ? batch_floor : read_floor);
+            state   <= S_BANK2;
+        end
+        S_BANK2: begin
+            // Against its bank.
+            op_pc   <= (g_lpcs != 0) ? op_bank[0] : 1'b0;
+            op_pg   <= 3'((32'(op_bank) & ((32'd1 << (32'(g_lpcs) + 32'(g_lbgs))) - 32'd1)));
+            op_hit  <= bt_open[op_bank] & (bt_row[op_bank] == op_row);
+            op_conf <= bt_open[op_bank] & (bt_row[op_bank] != op_row);
+            r_act   <= bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act[op_bank]);
+            r_colr  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_colr[op_bank]);
+            r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer[op_bank]);
+            kind    <= (bt_open[op_bank] & (bt_row[op_bank] == op_row)) ? K_C0
+                     : (bt_open[op_bank] ? K_PRE : K_ACT);
+            state   <= S_SETUP;
+        end
+        S_SETUP: begin
+            // The search's lower bound, the first clock it may place at.
+            case (kind)
+            K_PRE: s_lb <= smax(16'sd0, r_prer);
+            K_ACT: s_lb <= smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc);
+            K_C0:  s_lb <= smax(smax(16'sd0, r_floor),
+                                op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd));
+            default: s_lb <= c_col0 + k_ccdl1;
+            endcase
+            state <= S_SETUP2;
+        end
+        S_SETUP2: begin
+            if (s_lb >= 16'(HE)) begin
+                state <= S_END;
+            end else begin
+                s_pos    <= HLOG2'(base + HLOG2'(s_lb));
+                s_left   <= 16'(HE) - s_lb;
+                s_word   <= WW'(HLOG2'(base + HLOG2'(s_lb)) >> 6);
+                s_fetch  <= 1'b1;
+                sb_valid <= 1'b0;
+                state    <= S_SRCH;
+            end
+        end
+        S_SRCH: begin
+            // A word a cycle: the word read now, masked to the clocks left;
+            // and last cycle's word, whose first free clock wins.
+            if (s_fetch) begin
+                b_cand   <= ~forb & s_mask;
+                b_word   <= s_word;
+                sb_valid <= 1'b1;
+                b_last   <= (s_left - s_take == 0);
+                s_pos    <= HLOG2'(s_pos + HLOG2'(s_take));
+                s_word   <= WW'(HLOG2'(s_pos + HLOG2'(s_take)) >> 6);
+                s_left   <= s_left - s_take;
+                s_fetch  <= (s_left - s_take != 0);
+            end
+            if (sb_valid) begin
+                if (b_cand != 0) begin
+                    case (kind)
+                    K_PRE: begin c_pre <= b_rel; kind <= K_ACT; state <= S_SETUP; end
+                    K_ACT: begin c_act <= b_rel; kind <= K_C0; state <= S_SETUP; end
+                    K_C0:  begin
+                        c_col0 <= b_rel;
+                        if (NB == 2) begin
+                            kind  <= K_C1;
+                            state <= S_SETUP;
+                        end else begin
+                            state <= S_CHECK;
+                        end
+                    end
+                    default: begin c_col1 <= b_rel; state <= S_CHECK; end
+                    endcase
+                end else if (b_last) begin
+                    state <= S_END;
+                end
+            end
+        end
+        S_CHECK: begin
+            // How far the reservation reaches, and the bank's new times.
+            begin : check_
+                reg signed [15:0] lastcol, colr, prer;
+                lastcol = (NB == 2) ? c_col1 : c_col0;
+                colr = op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd);
+                prer = op_hit ? r_prer : c_act + k_ras;
+                ck_lastcol <= lastcol;
+                ck_colr    <= smax(colr, lastcol + 16'sd1);
+                ck_prer    <= smax(prer, lastcol + (op_w ? k_wrpre : k_rtp));
+                ck_tcol    <= lastcol + (op_w ? k_reach_w : k_reach_r);
+                ck_tdep    <= op_w ? -16'sd16384 : lastcol + k_dep;
+                ck_tact    <= op_hit ? -16'sd16384 : c_act + k_reach_a;
+            end
+            state <= S_CHECK2;
+        end
+        S_CHECK2: begin
+            // The reservation must reach no further than the horizon.
+            begin : check2_
+                reg ok;
+                ok = (ck_tcol < 16'(HE)) & (ck_tdep < 16'(HE)) & (ck_tact < 16'(HE));
+                state    <= ok ? S_COMMIT : S_END;
+                cm_start <= ok;
+            end
+        end
+        S_COMMIT: begin
+            if (cm_start) begin
+                // The bank (its times through the table's port), the
+                // controller, the read's departure, and a column in clock d+1
+                // for the clock's end.
+                if (~op_hit)
+                    bt_open[op_bank] <= 1'b1;
+                bt_fresh[op_bank] <= 1'b0;
+                if (op_w) begin
+                    wq_cnt     <= wq_cnt + 8'(NB);
+                    wb_head    <= wb_head + 1'b1;
+                    wb_count   <= wb_count - 1'b1;
+                    batch_last <= ($signed(e + ck_lastcol - batch_last) > 0) ? e + ck_lastcol : batch_last;
+                    stat_writes <= stat_writes + 64'd1;
+                    if (c_col0 == 0) ed_kw <= 1'b1;
+                end else begin
+                    rq_cnt     <= rq_cnt + 8'(NB);
+                    rb_head    <= rb_head + 1'b1;
+                    rb_count   <= rb_count - 1'b1;
+                    dep_slot[HLOG2'(base + HLOG2'(ck_lastcol + k_dep))] <= SW'(op_tag);
+                    stat_reads <= stat_reads + 64'd1;
+                    if (c_col0 == 0) ed_kr <= 1'b1;
+                end
+                frontier <= ($signed(e + ck_lastcol - frontier) > 0) ? e + ck_lastcol : frontier;
+                if (op_hit)
+                    stat_hits <= stat_hits + 64'd1;
+                else if (op_conf)
+                    stat_conflicts <= stat_conflicts + 64'd1;
+                else
+                    stat_misses <= stat_misses + 64'd1;
+            end else if (!cm_any) begin
+                state <= S_END;
+            end
+        end
+        S_END: begin
+            end_clock();
+            state <= S_TICK;
+        end
+        S_WALK: begin
+            // Reads that are ready in the next target cycle.
+            if (rf_ready != rf_count
+             && $signed(rf_cyc[SW'(rf_head + SW'(rf_ready))] - tcyc1) <= 0) begin
+                rf_ready  <= rf_ready + 1'b1;
+                new_ready <= new_ready + 1'b1;
+            end else begin
+                state <= S_IDLE;
+            end
+        end
+        default:;
+        endcase
+
         if (reset || finish) begin
             // ---- The target cycle ends: the port's state for the next ----
             if (finish && treset)
@@ -505,6 +767,7 @@ module foldsim_mem_bank #(
                 cur_r_valid <= 1'b0;
                 cur_b_valid <= 1'b0;
                 tcyc        <= '0;
+                tcyc1       <= 32'd1;
                 rf_head     <= '0;
                 rf_tail     <= '0;
                 rf_count    <= '0;
@@ -536,8 +799,10 @@ module foldsim_mem_bank #(
                 bt_open     <= '0;
                 bt_fresh    <= '1;
                 scrub_b     <= '0;
+                bm_clear_all <= 1'b1;
             end else begin
-                tcyc <= tcyc + 32'd1;
+                tcyc  <= tcyc1;
+                tcyc1 <= tcyc1 + 32'd1;
                 // R and B, then what is ready next cycle.
                 begin : release_
                     reg r_load, b_load;
@@ -569,247 +834,37 @@ module foldsim_mem_bank #(
                     end
                     slots_used <= slots_used + (SW+1)'(ar_fire) - (SW+1)'(r_fire);
                     inflight <= inflight + 16'(ar_fire) + 16'(aw_fire) - 16'(new_ready) - 16'(new_acks);
-                    if (ar_fire)
-                        stat_latency <= stat_latency - 64'(tcyc);
-                    if (r_fire)
-                        stat_latency <= stat_latency + 64'(tcyc) - (ar_fire ? 64'(tcyc) : 64'd0);
+                    lat_ar <= ar_fire;
+                    lat_r  <= r_fire;
+                    lat_t  <= tcyc;
                 end
                 st_w_valid <= new_write;
                 st_w_id    <= nw_id;
-                st_w_addr  <= nw_addr;
+                st_w_addr  <= nw_addr[29:5];
                 st_r_valid <= ar_fire;
                 st_r_slot  <= alloc_slot;
-                st_r_addr  <= ar_addr;
+                st_r_addr  <= ar_addr[29:5];
                 credit     <= credit + 32'(cfg_data_rate);
             end
-            if (~reset)
-                state <= ~(treset ? enable : active) ? S_IDLE
-                       : ((~treset & active & (new_write | ar_fire)) ? S_PUSH : S_TICK);
+            // A clearing cycle's next host cycle clears the calendars, so the
+            // first DRAM clock waits a host cycle (in S_PUSH).
+            state <= ~(treset ? enable : active) ? S_IDLE
+                   : (((treset | ~active) | new_write | ar_fire) ? S_PUSH : S_TICK);
             new_ready <= '0;
             new_acks  <= '0;
-        end else begin
-            case (state)
-            S_PUSH: begin
-                // A cycle's write reaches the channel before its read.
-                if (st_w_valid) begin
-                    iq_w[iq_tail]    <= 1'b1;
-                    iq_tag[iq_tail]  <= TAG_W'(st_w_id);
-                    iq_addr[iq_tail] <= st_w_addr;
-                    iq_tail          <= iq_tail + 1'b1;
-                    iq_count         <= iq_count + 1'b1;
-                    st_w_valid       <= 1'b0;
-                end else begin
-                    if (st_r_valid) begin
-                        iq_w[iq_tail]    <= 1'b0;
-                        iq_tag[iq_tail]  <= TAG_W'(st_r_slot);
-                        iq_addr[iq_tail] <= st_r_addr;
-                        iq_tail          <= iq_tail + 1'b1;
-                        iq_count         <= iq_count + 1'b1;
-                        st_r_valid       <= 1'b0;
-                    end
-                    state <= S_TICK;
-                end
-            end
-            S_TICK: begin
-                if (credit >= 32'(k_twoclk)) begin
-                    // One DRAM clock d: the ingress head enters its buffer if
-                    // it may, the channel picks reads or writes, and the head
-                    // of that buffer is reserved if it can be.
-                    credit <= credit - 32'(k_twoclk);
-                    // With nothing to reserve the clock ends now; what the
-                    // tick sets below wins over the clock's end.
-                    if (sel_count == 0)
-                        end_clock();
-                    if (move) begin
-                        iq_head  <= iq_head + 1'b1;
-                        iq_count <= iq_count - 1'b1;
-                        ingress_ready <= d + 16'(NB);
-                        if (ih_w) begin
-                            wb_tag[wb_tail]  <= ih_tag;
-                            wb_bank[wb_tail] <= ih_dec[BKW+ROW_W-1:ROW_W];
-                            wb_row[wb_tail]  <= ih_dec[ROW_W-1:0];
-                            wb_tail          <= wb_tail + 1'b1;
-                            af_id[af_tail]   <= ID_W'(ih_tag);
-                            af_tail          <= af_tail + 1'b1;
-                            af_count         <= af_count + 1'b1;
-                            new_acks         <= new_acks + 1'b1;
-                        end else begin
-                            rb_tag[rb_tail]  <= ih_tag;
-                            rb_bank[rb_tail] <= ih_dec[BKW+ROW_W-1:ROW_W];
-                            rb_row[rb_tail]  <= ih_dec[ROW_W-1:0];
-                            rb_tail          <= rb_tail + 1'b1;
-                        end
-                    end
-                    if (move & ih_w)
-                        wb_count <= wb_count + 1'b1;
-                    if (move & ~ih_w)
-                        rb_count <= rb_count + 1'b1;
-                    wmode <= wmode_n;
-                    if (to_write)
-                        batch_floor <= ($signed(frontier + 16'd1 - e) > 0) ? frontier + 16'd1 : e;
-                    if (to_read)
-                        read_floor <= batch_last + 16'd1;
-                    state <= (sel_count != 0) ? S_BANK : S_TICK;
-                end else begin
-                    state <= S_WALK;
-                end
-            end
-            S_BANK: begin
-                // The request at the head of the buffer the channel serves,
-                // against its bank.
-                begin : bank_
-                    reg [BKW-1:0] b;
-                    reg [ROW_W-1:0] row;
-                    reg w;
-                    w   = wmode;
-                    b   = w ? wb_bank[wb_head] : rb_bank[rb_head];
-                    row = w ? wb_row[wb_head] : rb_row[rb_head];
-                    op_w    <= w;
-                    op_tag  <= w ? wb_tag[wb_head] : rb_tag[rb_head];
-                    op_bank <= b;
-                    op_row  <= row;
-                    op_pc   <= (g_lpcs != 0) ? b[0] : 1'b0;
-                    op_pg   <= 3'((32'(b) & ((32'd1 << (32'(g_lpcs) + 32'(g_lbgs))) - 32'd1)));
-                    op_hit  <= bt_open[b] & (bt_row[b] == row);
-                    op_conf <= bt_open[b] & (bt_row[b] != row);
-                    r_act   <= bt_fresh[b] ? -16'sd16384 : rel(bt_act[b]);
-                    r_colr  <= bt_fresh[b] ? -16'sd1 : rel(bt_colr[b]);
-                    r_prer  <= bt_fresh[b] ? -16'sd1 : rel(bt_prer[b]);
-                    r_floor <= rel(w ? batch_floor : read_floor);
-                    kind    <= (bt_open[b] & (bt_row[b] == row)) ? K_C0
-                             : (bt_open[b] ? K_PRE : K_ACT);
-                end
-                state <= S_SETUP;
-            end
-            S_SETUP: begin
-                // The search's lower bound, the first clock it may place at.
-                begin : setup_
-                    reg signed [15:0] lb;
-                    case (kind)
-                    K_PRE: lb = smax(16'sd0, r_prer);
-                    K_ACT: lb = smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc);
-                    K_C0:  lb = smax(smax(16'sd0, r_floor),
-                                     op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd));
-                    default: lb = c_col0 + k_ccdl1;
-                    endcase
-                    if (lb >= 16'(HE)) begin
-                        state <= S_END;
-                    end else begin
-                        s_pos   <= HLOG2'(base + HLOG2'(lb));
-                        s_left  <= 16'(HE) - lb;
-                        s_word  <= WW'(HLOG2'(base + HLOG2'(lb)) >> 6);
-                        s_fetch <= 1'b1;
-                        sb_valid <= 1'b0;
-                        state   <= S_SRCH;
-                    end
-                end
-            end
-            S_SRCH: begin
-                // A word a cycle: the word read now, masked to the clocks
-                // left; and last cycle's word, whose first free clock wins.
-                if (s_fetch) begin
-                    b_cand  <= ~forb & s_mask;
-                    b_word  <= s_word;
-                    sb_valid <= 1'b1;
-                    b_last  <= (s_left - s_take == 0);
-                    s_pos   <= HLOG2'(s_pos + HLOG2'(s_take));
-                    s_word  <= WW'(HLOG2'(s_pos + HLOG2'(s_take)) >> 6);
-                    s_left  <= s_left - s_take;
-                    s_fetch <= (s_left - s_take != 0);
-                end
-                if (sb_valid) begin
-                    if (b_cand != 0) begin
-                        case (kind)
-                        K_PRE: begin c_pre <= b_rel; kind <= K_ACT; state <= S_SETUP; end
-                        K_ACT: begin c_act <= b_rel; kind <= K_C0; state <= S_SETUP; end
-                        K_C0:  begin
-                            c_col0 <= b_rel;
-                            if (NB == 2) begin
-                                kind  <= K_C1;
-                                state <= S_SETUP;
-                            end else begin
-                                state <= S_CHECK;
-                            end
-                        end
-                        default: begin c_col1 <= b_rel; state <= S_CHECK; end
-                        endcase
-                    end else if (b_last) begin
-                        state <= S_END;
-                    end
-                end
-            end
-            S_CHECK: begin
-                // The reservation must reach no further than the horizon.
-                begin : check_
-                    reg signed [15:0] lastcol, last, colr, prer;
-                    reg act;
-                    act     = ~op_hit;
-                    lastcol = (NB == 2) ? c_col1 : c_col0;
-                    last    = lastcol + (op_w ? k_reach_w : k_reach_r);
-                    if (~op_w)
-                        last = smax(last, lastcol + k_dep);
-                    if (act)
-                        last = smax(last, c_act + k_reach_a);
-                    colr = op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd);
-                    prer = op_hit ? r_prer : c_act + k_ras;
-                    ck_lastcol <= lastcol;
-                    ck_colr    <= smax(colr, lastcol + 16'sd1);
-                    ck_prer    <= smax(prer, lastcol + (op_w ? k_wrpre : k_rtp));
-                    state      <= (last < 16'(HE)) ? S_COMMIT : S_END;
-                    cm_start   <= (last < 16'(HE));
-                end
-            end
-            S_COMMIT: begin
-                if (cm_start) begin
-                    // The bank, the controller, the read's departure.
-                    if (~op_hit) begin
-                        bt_open[op_bank] <= 1'b1;
-                        bt_row[op_bank]  <= op_row;
-                        bt_act[op_bank]  <= e + c_act;
-                    end
-                    bt_fresh[op_bank] <= 1'b0;
-                    bt_colr[op_bank]  <= e + ck_colr;
-                    bt_prer[op_bank]  <= e + ck_prer;
-                    if (op_w) begin
-                        wq_cnt     <= wq_cnt + 8'(NB);
-                        wb_head    <= wb_head + 1'b1;
-                        wb_count   <= wb_count - 1'b1;
-                        batch_last <= ($signed(e + ck_lastcol - batch_last) > 0) ? e + ck_lastcol : batch_last;
-                        stat_writes <= stat_writes + 64'd1;
-                    end else begin
-                        rq_cnt     <= rq_cnt + 8'(NB);
-                        rb_head    <= rb_head + 1'b1;
-                        rb_count   <= rb_count - 1'b1;
-                        dep_slot[HLOG2'(base + HLOG2'(ck_lastcol + k_dep))] <= SW'(op_tag);
-                        stat_reads <= stat_reads + 64'd1;
-                    end
-                    frontier <= ($signed(e + ck_lastcol - frontier) > 0) ? e + ck_lastcol : frontier;
-                    if (op_hit)
-                        stat_hits <= stat_hits + 64'd1;
-                    else if (op_conf)
-                        stat_conflicts <= stat_conflicts + 64'd1;
-                    else
-                        stat_misses <= stat_misses + 64'd1;
-                end else if (!cm_any) begin
-                    state <= S_END;
-                end
-            end
-            S_END: begin
-                end_clock();
-                state <= S_TICK;
-            end
-            S_WALK: begin
-                // Reads that are ready in the next target cycle.
-                if (rf_ready != rf_count
-                 && $signed(rf_cyc[SW'(rf_head + SW'(rf_ready))] - (tcyc + 32'd1)) <= 0) begin
-                    rf_ready  <= rf_ready + 1'b1;
-                    new_ready <= new_ready + 1'b1;
-                end else begin
-                    state <= S_IDLE;
-                end
-            end
-            default:;
-            endcase
+        end
+        if (reset) begin
+            state          <= S_IDLE;
+            active         <= 1'b0;
+            stat_reads     <= '0;
+            stat_writes    <= '0;
+            stat_hits      <= '0;
+            stat_misses    <= '0;
+            stat_conflicts <= '0;
+            stat_latency   <= '0;
+            lat_ar         <= 1'b0;
+            lat_r          <= 1'b0;
+            rfp_valid      <= 1'b0;
         end
     end
 
