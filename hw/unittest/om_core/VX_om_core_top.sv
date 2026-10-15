@@ -34,6 +34,7 @@ module VX_om_core_top import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     input  om_color_t [NUM_LANES-1:0]       om_req_color,
     input  wire [NUM_LANES-1:0][`VX_OM_DEPTH_BUS_BITS-1:0] om_req_depth,
     input  wire [NUM_LANES-1:0]             om_req_face,
+    input  wire [OM_RT_IDX_BITS-1:0]        om_req_rt,
     output wire                             om_req_ready,
 
     output wire [OCACHE_NUM_REQS-1:0]       cache_req_valid,
@@ -83,6 +84,7 @@ module VX_om_core_top import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign om_bus_if.req_data.color = om_req_color;
     assign om_bus_if.req_data.depth = om_req_depth;
     assign om_bus_if.req_data.face = om_req_face;
+    assign om_bus_if.req_data.rt = om_req_rt;
     assign om_req_ready = om_bus_if.req_ready;
 
     VX_mem_bus_if #(

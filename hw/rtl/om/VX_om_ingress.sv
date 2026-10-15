@@ -163,6 +163,9 @@ module VX_om_ingress import VX_gpu_pkg::*, VX_om_pkg::*; #(
     wire [OM_RT_IDX_BITS-1:0]  rt_addr   = (is_pair && dcrs.depth_float)
                                          ? rec_ext[xb + yb + 1 +: OM_RT_IDX_BITS] : '0;
 
+    localparam OM_DEPTH_WORD_RT   = `VX_OM_DEPTH_WORD_RT_SHIFT;
+    localparam OM_DEPTH_WORD_FACE = `VX_OM_DEPTH_WORD_FACE_SHIFT;
+
     `STATIC_ASSERT((OM_DEPTH_WORD_RT >= `VX_OM_DEPTH_BITS)
                 && (OM_DEPTH_WORD_RT + OM_RT_IDX_BITS <= OM_DEPTH_WORD_FACE)
                 && (OM_DEPTH_WORD_FACE < 32), ("depth word fields overlap"))

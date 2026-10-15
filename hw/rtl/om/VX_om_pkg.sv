@@ -27,6 +27,8 @@ localparam OM_STENCIL_OP_BITS = `CLOG2(`VX_OM_STENCIL_OP_DECR_WRAP + 1);
 localparam OM_BLEND_MODE_BITS = `CLOG2(`VX_OM_BLEND_MODE_LOGICOP + 1);
 localparam OM_BLEND_FUNC_BITS = `CLOG2(`VX_OM_BLEND_FUNC_ALPHA_SAT + 1);
 localparam OM_LOGIC_OP_BITS   = `CLOG2(`VX_OM_LOGIC_OP_SET + 1);
+// Colour formats the merger stores (the narrow ones it packs and unpacks).
+localparam OM_CFMT_BITS       = `CLOG2(`VX_OM_COLOR_FORMAT_A1R5G5B5 + 1);
 localparam OM_PITCH_BITS      = `VX_OM_DIM_BITS + `CLOG2(4) + 1;
 localparam OM_DEPTH_MASK      = (1 << `VX_OM_DEPTH_BITS) - 1;
 // Width of an aperture shift amount (xbits/ybits hold a log2 dimension).
@@ -34,8 +36,6 @@ localparam OM_APERTURE_BITS_W = `CLOG2(`VX_OM_DIM_BITS + 1);
 localparam OM_STENCIL_MASK    = (1 << `VX_OM_STENCIL_BITS) - 1;
 // Index of the colour attachment a fragment targets.
 localparam OM_RT_IDX_BITS     = `CLOG2(`VX_OM_MAX_RT);
-localparam OM_DEPTH_WORD_RT   = `VX_OM_DEPTH_WORD_RT_SHIFT;
-localparam OM_DEPTH_WORD_FACE = `VX_OM_DEPTH_WORD_FACE_SHIFT;
 
 typedef struct packed {
     logic [31:0] argb;
@@ -48,6 +48,7 @@ typedef struct packed {
     logic [`OM_ADDR_BITS-1:0]           cbuf_addr;
     logic [OM_PITCH_BITS-1:0]           cbuf_pitch;
     logic [3:0]                         cbuf_writemask;
+    logic [OM_CFMT_BITS-1:0]            cbuf_format;
 
     logic                               blend_enable;
     logic [OM_BLEND_MODE_BITS-1:0]      blend_mode_rgb;
@@ -76,6 +77,9 @@ typedef struct packed {
     // D32F_S8 adds the stencil in the next word of an 8-byte texel.
     logic                               depth_float;
     logic                               depth_stencil_word;
+    // D16: a 2-byte texel holding the key's top 16 bits, read back widened by
+    // replicating its high byte; no stencil.
+    logic                               depth_d16;
 
     logic [1:0]                         stencil_enable;
     logic [1:0][OM_DEPTH_FUNC_BITS-1:0] stencil_func;

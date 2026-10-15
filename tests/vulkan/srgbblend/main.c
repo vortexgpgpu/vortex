@@ -13,8 +13,8 @@
  * Each phase draws twice into one sRGB attachment:
  *
  *   draw 1  blending off, establishing the destination. Its stored bytes are
- *           the merger's own encode, so the linear value behind them is known
- *           exactly -- the test never has to trust how the clear was encoded.
+ *           the device's own encode, so the linear value behind them is known
+ *           -- the test never has to trust how the clear was encoded.
  *   draw 2  blending on, with the phase's factors.
  *
  *   preserve  src ZERO, dst ONE. The destination must come back unchanged.
@@ -52,32 +52,31 @@ struct phase {
    const char     *wrong_why;
 };
 
-/* The base shader writes (0.125, 0.1875, 0.25). The device quantises each
- * channel to UNORM8 by truncation -- 31, 47, 63 -- and the merger encodes them
- * to 98, 119, 136. Those three bytes decode back to exactly 31, 47, 63, so the
- * destination's linear value is known without any round-trip slack.
+/* The base shader writes (0.125, 0.1875, 0.25), which encodes to 99, 120, 137.
+ * Those bytes decode to 0.1248, 0.1878, 0.2502 -- within a third of a count of
+ * the values written, so the destination's linear value is known.
  *
- * The source shader writes (0.125, 0.25, 0.1875) -- 31, 63, 47 linear.
+ * The source shader writes (0.125, 0.25, 0.1875).
  *
- *   preserve  keeps 31, 47, 63          -> stored 98, 119, 136
- *   additive  gives 62, 110, 110        -> stored 135, 175, 175
+ *   preserve  keeps the destination     -> stored 99, 120, 137
+ *   additive  gives 0.2498, 0.4378, 0.4377 -> stored 137, 177, 177
  *
- * Skipping the decode blends 98, 119, 136 as if they were already linear, which
- * stores 167, 182, 193 and 189, 220, 220 instead. */
+ * Skipping the decode blends 99, 120, 137 as if they were already linear, which
+ * stores 167, 182, 194 and 190, 221, 221 instead. */
 static const struct phase PHASES[] = {
    { "preserve", VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ONE,
-     {  98, 119, 136 }, { 167, 182, 193 },
+     {  99, 120, 137 }, { 167, 182, 194 },
      "the destination was brightened by a blend that should not have changed "
      "it, so its stored bytes were treated as linear" },
    { "additive", VK_BLEND_FACTOR_ONE,  VK_BLEND_FACTOR_ONE,
-     { 135, 175, 175 }, { 189, 220, 220 },
+     { 137, 177, 177 }, { 190, 221, 221 },
      "the sum is too bright, so it was taken over the encoded bytes rather "
      "than in linear space" },
 };
 #define NUM_PHASES (sizeof(PHASES) / sizeof(PHASES[0]))
 
 /* The device decodes and blends in 8-bit linear where llvmpipe works in float,
- * which is worth a count or two. Every defect signature above is at least 45
+ * which is worth a count or two. Every defect signature above is at least 44
  * away, so this cannot absorb one. */
 #define TOL 5
 

@@ -126,6 +126,7 @@ private:
     switch (addr) {
     case VX_DCR_OM_CBUF_ADDR:
     case VX_DCR_OM_CBUF_PITCH:
+    case VX_DCR_OM_CBUF_FORMAT:
     case VX_DCR_OM_CBUF_WRITEMASK:
     case VX_DCR_OM_BLEND_MODE:
     case VX_DCR_OM_BLEND_FUNC:
@@ -272,6 +273,12 @@ public:
     return depth_stencil_word_;
   }
 
+  // D16: a 2-byte texel holding the key's top 16 bits; it reads back widened
+  // by replicating its high byte.
+  bool depth_d16() const {
+    return depth_d16_;
+  }
+
 protected:
 
   uint32_t depth_func_;
@@ -293,6 +300,7 @@ protected:
   bool stencil_back_enabled_;
   bool depth_float_;
   bool depth_stencil_word_;
+  bool depth_d16_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

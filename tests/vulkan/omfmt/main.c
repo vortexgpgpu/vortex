@@ -6,7 +6,7 @@
  * verbatim.
  *
  * Every other test in the suite renders to a 32-bit UNORM attachment, which the
- * merger writes through untouched. These four do not:
+ * merger writes through untouched. These do not:
  *
  *   r8, rg8    a texel is one or two bytes, so every buffer size, row pitch and
  *              readback along the path has to be measured in the attachment's
@@ -16,8 +16,14 @@
  *              not the shader's values.
  *   srgb_bgra  the same, on the other channel order, because the encode and the
  *              pack order are independent and each can be right alone.
+ *   rgb565, argb1555
+ *              16-bit texels whose channels are narrower than a byte, so the
+ *              merger rounds each 8-bit channel into its field.
+ *   srgb_dark  sRGB again, below 1/255 linear: encoding a value already
+ *              quantised to 8 bits lands every channel on 0 or 13.
  *
- * All four take the same fragment colour (1.0, 0.5, 0.25) over a zero clear.
+ * All but srgb_dark take the same fragment colour (1.0, 0.5, 0.25) over a
+ * clear of (0, 0, 0, 1).
  * Three distinct channel values make a permutation visible, and the two sRGB
  * phases expect the same three numbers in opposite orders -- so a phase that
  * passed by ignoring the attachment's channel order would fail the other.
@@ -45,20 +51,31 @@ struct phase {
    uint8_t     expect[3];
    uint8_t     wrong[3];
    const char *wrong_why;
+   /* Packed 16-bit texel: its R, G, B fields' widths (0: bytes compared). Each
+    * field is checked against the exact fragment value, as rounding a value
+    * halfway between two codes may land on either. */
+   uint8_t     field_bits[3];
+   /* Drawn with omfmt_dark.frag's colour instead of omfmt.frag's. */
+   bool        dark;
 };
 
-/* The fragment colour is (1.0, 0.5, 0.25). The device quantises each channel to
- * UNORM8 by truncation -- 255, 127, 63 -- and the merger then encodes:
+/* The fragment colour is (1.0, 0.5, 0.25), and each format stores:
  *
- *   R8    stores red only                        -> 255
- *   RG8   stores red then green                  -> 255, 127
- *   SRGB  applies the sRGB transfer function to
- *         each colour channel, leaving alpha     -> 255, 187, 136
+ *   R8    red only                               -> 255
+ *   RG8   red then green                         -> 255, 127.5
+ *   SRGB  the sRGB transfer function of each
+ *         colour channel, alpha left linear      -> 255, 187.5, 136.9
+ *   R5G6B5    fields within 0.6 of 31, 31.5, 7.75 (the device's 31, 32, 8
+ *             is 0xFC08 -> 8, 252)
+ *   A1R5G5B5  alpha 1, fields within 0.6 of 31, 15.5, 7.75 (the device's
+ *             31, 16, 8 is 0xFE08 -> 8, 254)
  *
- * The sRGB numbers are the standard encode of the already-quantised linear
- * values (127/255 -> 187.2, 63/255 -> 136.2). A merger left in its pass-through
- * format stores the linear values instead, which is 60 and 73 away -- nowhere
- * near the tolerance below. */
+ * srgb_dark's (0.002, 0.0005, 0.001) is on the sRGB curve's linear segment,
+ * 12.92 x: 6.6, 1.6, 3.3 -> 7, 2, 3. Quantising first gives linear 1, 0, 0,
+ * which encodes to 13, 0, 0 -- red is the channel more than TOL away.
+ *
+ * A merger left in its pass-through format stores the sRGB phases' linear
+ * values instead, which is 60 and 73 away -- nowhere near the tolerance below. */
 static const struct phase PHASES[] = {
    { "r8",        VK_FORMAT_R8_UNORM,       1, 1,
      { 255, 0, 0 }, { 63, 0, 0 },
@@ -69,20 +86,32 @@ static const struct phase PHASES[] = {
      "red and blue are exchanged, so the merger took its channels from the "
      "wrong lanes" },
    { "srgb",      VK_FORMAT_R8G8B8A8_SRGB,  4, 3,
-     { 255, 187, 136 }, { 255, 127, 63 },
+     { 255, 188, 137 }, { 255, 127, 63 },
      "the stored bytes are the shader's linear values, so the sRGB transfer "
      "function was never applied" },
    { "srgb_bgra", VK_FORMAT_B8G8R8A8_SRGB,  4, 3,
-     { 136, 187, 255 }, { 63, 127, 255 },
+     { 137, 188, 255 }, { 63, 127, 255 },
      "the stored bytes are the shader's linear values, so the sRGB transfer "
      "function was never applied" },
+   { "rgb565",    VK_FORMAT_R5G6B5_UNORM_PACK16,   2, 2,
+     { 8, 252, 0 }, { 255, 127, 0 },
+     "the texel holds the fragment's 8-bit red and green, so the merger stored "
+     "the colour without packing it", { 5, 6, 5 } },
+   { "argb1555",  VK_FORMAT_A1R5G5B5_UNORM_PACK16, 2, 2,
+     { 8, 254, 0 }, { 255, 127, 0 },
+     "the texel holds the fragment's 8-bit red and green, so the merger stored "
+     "the colour without packing it", { 5, 5, 5 } },
+   { "srgb_dark", VK_FORMAT_R8G8B8A8_SRGB,  4, 3,
+     { 7, 2, 3 }, { 13, 0, 0 },
+     "the stored bytes are the encode of the colour quantised to 8-bit linear "
+     "first, so the sRGB transfer function ran at too little precision",
+     { 0, 0, 0 }, true },
 };
 #define NUM_PHASES (sizeof(PHASES) / sizeof(PHASES[0]))
 
-/* The device applies the transfer function to a linear value already truncated
- * to 8 bits, where llvmpipe converts in float; on the steep part of the sRGB
- * curve that is worth a few LSBs. Every defect signature above is at least 60
- * away, so this cannot absorb one. */
+/* Rounding a value that lands near half a code may go either way, and
+ * llvmpipe's sRGB encode is an approximation good to a few LSBs. Every defect
+ * signature above is further away than this, so it cannot absorb one. */
 #define TOL 5
 
 #define CHECK(x) do {                                              \
@@ -349,6 +378,15 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    for (uint32_t y = 0; y < HEIGHT; y++) {
       for (uint32_t x = 0; x < WIDTH; x++) {
          const uint8_t *p = px + ((size_t)y * WIDTH + x) * ph->bpp;
+         if (ph->field_bits[0]) {
+            /* The colour fields only: the clear's alpha sets A1R5G5B5's top
+             * bit everywhere. */
+            const unsigned n = ph->field_bits[0] + ph->field_bits[1] + ph->field_bits[2];
+            if (((uint32_t)p[0] | ((uint32_t)p[1] << 8)) & ((1u << n) - 1)) {
+               (*out_covered)++;
+            }
+            continue;
+         }
          for (unsigned c = 0; c < ph->nbytes; c++) {
             if (p[c]) { (*out_covered)++; break; }
          }
@@ -393,12 +431,37 @@ check_phase(const struct phase *ph, const uint8_t centre[3], long covered)
    const long EXPECT_PX = 1659;
    const bool area_ok = covered >= EXPECT_PX - 200 && covered <= EXPECT_PX + 200;
    bool color_ok = true, is_wrong = true;
-   for (unsigned i = 0; i < ph->nbytes; i++) {
+   if (ph->field_bits[0]) {
+      /* The fragment's (1.0, 0.5, 0.25), field by field from the top: R, G, B
+       * below the A1 bit when there is one. */
+      const uint32_t texel = (uint32_t)centre[0] | ((uint32_t)centre[1] << 8);
+      const double value[3] = { 1.0, 0.5, 0.25 };
+      unsigned shift = ph->field_bits[1] + ph->field_bits[2];
+      for (unsigned c = 0; c < 3; c++) {
+         const unsigned n = ph->field_bits[c];
+         const double exact = value[c] * (double)((1u << n) - 1);
+         const double field = (double)((texel >> shift) & ((1u << n) - 1));
+         if (field < exact - 0.6 || field > exact + 0.6) {
+            color_ok = false;
+         }
+         shift -= (c < 2) ? ph->field_bits[c + 1] : 0;
+      }
+      if (ph->field_bits[1] == 5 && !(texel & 0x8000u)) {
+         color_ok = false;   /* A1R5G5B5's alpha bit */
+      }
+   }
+   for (unsigned i = 0; i < ph->nbytes && !ph->field_bits[0]; i++) {
       const int d = (int)centre[i] - (int)ph->expect[i];
       const int w = (int)centre[i] - (int)ph->wrong[i];
       if (d < -TOL || d > TOL) {
          color_ok = false;
       }
+      if (w < -TOL || w > TOL) {
+         is_wrong = false;
+      }
+   }
+   for (unsigned i = 0; i < ph->nbytes && ph->field_bits[0]; i++) {
+      const int w = (int)centre[i] - (int)ph->wrong[i];
       if (w < -TOL || w > TOL) {
          is_wrong = false;
       }
@@ -423,6 +486,7 @@ main(int argc, char **argv)
 {
    const char *vs_path = (argc > 1) ? argv[1] : "omfmt.vert.spv";
    const char *fs_path = (argc > 2) ? argv[2] : "omfmt.frag.spv";
+   const char *dark_path = (argc > 3) ? argv[3] : "omfmt_dark.frag.spv";
 
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -483,14 +547,15 @@ main(int argc, char **argv)
 
    VkShaderModule vs = load_module(dev, vs_path);
    VkShaderModule fs = load_module(dev, fs_path);
-   if (!vs || !fs) {
+   VkShaderModule fs_dark = load_module(dev, dark_path);
+   if (!vs || !fs || !fs_dark) {
       return 1;
    }
 
    bool ok = true;
    for (unsigned i = 0; i < NUM_PHASES; i++) {
       /* An attachment format the driver does not advertise is a failure here,
-       * not a skip: the whole point is that these four are renderable. */
+       * not a skip: the whole point is that these are renderable. */
       VkFormatProperties fp;
       vkGetPhysicalDeviceFormatProperties(pd, PHASES[i].fmt, &fp);
       if (!(fp.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)) {
@@ -501,7 +566,8 @@ main(int argc, char **argv)
       }
       uint8_t centre[3] = { 0, 0, 0 };
       long covered = 0;
-      if (render(dev, queue, qf, &mp, vs, fs, &PHASES[i], centre, &covered) < 0) {
+      if (render(dev, queue, qf, &mp, vs, PHASES[i].dark ? fs_dark : fs, &PHASES[i],
+                 centre, &covered) < 0) {
          return 1;
       }
       if (!check_phase(&PHASES[i], centre, covered)) {
@@ -511,6 +577,7 @@ main(int argc, char **argv)
 
    vkDestroyShaderModule(dev, vs, NULL);
    vkDestroyShaderModule(dev, fs, NULL);
+   vkDestroyShaderModule(dev, fs_dark, NULL);
    vkDestroyDevice(dev, NULL);
    vkDestroyInstance(inst, NULL);
 

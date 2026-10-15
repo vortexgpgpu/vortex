@@ -67,7 +67,12 @@ bool sw_path      = false;   // -S : merge via gfx_sw::om_fragment
 bool mrt_enable   = false;   // -m : also render to a second colour attachment
 bool float_depth  = false;   // -z : D32F depth target (ordered keys, face in the address)
 bool stencil_word = false;   // -Z : D32F_S8, the stencil in the next word of an 8-byte texel
+bool depth16      = false;   // -y : D16, a 2-byte texel, checked texel by texel
 uint32_t mrt_rt   = 0;       // -n : which attachment that is (default 1)
+// -F fmt: the colour attachment's VX_OM_COLOR_FORMAT_*, checked texel by texel
+// against the blend of the kernel's colour with the packed clear.
+uint32_t cbuf_format = VX_OM_COLOR_FORMAT_A8R8G8B8;
+const uint32_t kFormatClear = 0x80c04020;
 
 // Second colour attachment, cleared to a value no fragment produces so that a
 // channel the writemask should have protected is visible if it is overwritten.
@@ -113,6 +118,17 @@ static uint32_t initial_depthstencil(uint32_t x, uint32_t y) {
   return (s << VX_OM_DEPTH_BITS) | z;
 }
 
+// Under -y a D16 checkerboard of 0 and 0xfd70 (0.99), and the fragment's depth
+// as the 24-bit key the merger compares: a D16 value with its high byte
+// replicated, which is what a stored texel widens to.
+static uint16_t initial_d16(uint32_t x, uint32_t y) {
+  return ((x & 1) == (y & 1)) ? 0x0000 : 0xfd70;
+}
+const uint16_t kD16Frag = 0x8000;
+static uint32_t d16_key(uint16_t d) {
+  return ((uint32_t)d << 8) | (d >> 8);
+}
+
 static uint32_t initial_stencil(uint32_t y) {
   return stencil_enable ? (y & 1) : 0;
 }
@@ -135,12 +151,12 @@ uint64_t    cbuf1_addr = 0;
 
 static void show_usage() {
    std::cout << "Vortex Render Output Test (v2 KMU)." << std::endl;
-   std::cout << "Usage: [-c color] [-d depth] [-s stencil] [-z float depth] [-Z float depth + stencil] [-b blend] [-m mrt] [-n mrt attachment] [-f face] [-k kernel] [-o image] [-r reference] [-w width] [-h height]" << std::endl;
+   std::cout << "Usage: [-c color] [-d depth] [-s stencil] [-z float depth] [-Z float depth + stencil] [-y D16 depth] [-b blend] [-m mrt] [-n mrt attachment] [-f face] [-k kernel] [-o image] [-r reference] [-w width] [-h height] [-F colour format]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:bdfmszZS?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:F:bdfmszZyS?")) != -1) {
     switch (c) {
     case 'o': output_file = optarg; break;
     case 'r': reference_file = optarg; break;
@@ -155,8 +171,10 @@ static void parse_args(int argc, char **argv) {
     case 'm': mrt_enable = true; break;
     case 'z': float_depth = true; break;
     case 'Z': float_depth = stencil_word = true; break;
+    case 'y': depth16 = depth_enable = true; break;
     case 'n': mrt_rt = std::atoi(optarg); break;
     case 'S': sw_path = true; break;
+    case 'F': cbuf_format = (uint32_t)std::atoi(optarg); break;
     case '?': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
     }
@@ -188,6 +206,12 @@ static void parse_args(int argc, char **argv) {
     std::cout << "Error: a D32F target has no stencil; -Z is D32F_S8" << std::endl;
     exit(1);
   }
+  if (depth16 && (float_depth || stencil_enable || mrt_enable || blend_enable || sw_path ||
+                  reference_file || cbuf_format != VX_OM_COLOR_FORMAT_A8R8G8B8)) {
+    std::cout << "Error: -y checks a D16 target's every texel against the unblended colour, "
+                 "so it takes none of -z, -Z, -s, -m, -b, -S, -r or -F" << std::endl;
+    exit(1);
+  }
   if (float_depth && depth_enable && reference_file) {
     std::cout << "Error: -z -d checks the buffers itself and has no reference image" << std::endl;
     exit(1);
@@ -201,6 +225,12 @@ static void parse_args(int argc, char **argv) {
   }
   if (mrt_rt >= VX_OM_MAX_RT) {
     std::cout << "Error: -n names attachment 1.." << (VX_OM_MAX_RT - 1) << std::endl;
+    exit(1);
+  }
+  if (cbuf_format != VX_OM_COLOR_FORMAT_A8R8G8B8 &&
+      (!gfx_sw::om_ff_color_format(cbuf_format) || reference_file || mrt_enable || depth_enable)) {
+    std::cout << "Error: -F takes a format the merger stores, checks the buffer itself, and "
+                 "runs without -r, -m and depth" << std::endl;
     exit(1);
   }
   if (mrt_enable && sw_path) {
@@ -252,10 +282,15 @@ int main(int argc, char *argv[]) {
                                 &kernel));
 
   // ---- allocate cbuf + zbuf --------------------------------------------
-  zbuf_pitch = dst_width * (stencil_word ? 8 : 4);
+  // The merger addresses depth a word at a time, so a D16 row starts on one.
+  zbuf_pitch = depth16 ? ((dst_width * 2 + 3) & ~3u) : dst_width * (stencil_word ? 8 : 4);
   zbuf_size  = dst_height * zbuf_pitch;
-  cbuf_pitch = dst_width * 4;
+  const uint32_t cbuf_bpp = gfx_sw::om_color_bpp(cbuf_format);
+  cbuf_pitch = dst_width * cbuf_bpp;
   cbuf_size  = dst_height * cbuf_pitch;
+  if (cbuf_format != VX_OM_COLOR_FORMAT_A8R8G8B8) {
+    clear_color = kFormatClear;
+  }
 
   // HW path: depth_buffer / color_buffer are bound to the OM unit (via
   // VX_DCR_OM_ZBUF_ADDR / VX_DCR_OM_CBUF_ADDR), which reads/writes them through
@@ -273,7 +308,19 @@ int main(int argc, char *argv[]) {
   }
 
   // depth checkerboard prefill; under -s, stencil 1 on odd rows.
-  {
+  if (depth16) {
+    std::vector<uint8_t> staging(zbuf_size, 0);
+    for (uint32_t y = 0; y < dst_height; ++y) {
+      for (uint32_t x = 0; x < dst_width; ++x) {
+        const uint16_t d = initial_d16(x, y);
+        memcpy(&staging[y * zbuf_pitch + x * 2], &d, 2);
+      }
+    }
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_write(queue, depth_buffer, 0, staging.data(), zbuf_size, 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
+  } else {
     const uint32_t zw = stencil_word ? 2 : 1;
     std::vector<uint32_t> staging(dst_width * dst_height * zw);
     for (uint32_t y = 0; y < dst_height; ++y) {
@@ -289,9 +336,13 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
     vx_event_release(ev);
   }
-  // clear cbuf to clear_color.
+  // clear cbuf to clear_color, as the attachment stores it.
   {
-    std::vector<uint32_t> staging(cbuf_size / 4, clear_color);
+    std::vector<uint8_t> staging(cbuf_size);
+    const uint32_t texel = gfx_sw::om_encode_color(cbuf_format, clear_color);
+    for (uint32_t i = 0; i < cbuf_size; i += cbuf_bpp) {
+      memcpy(&staging[i], &texel, cbuf_bpp);
+    }
     vx_event_h ev = nullptr;
     RT_CHECK(vx_enqueue_write(queue, color_buffer, 0, staging.data(), cbuf_size, 0, nullptr, &ev));
     RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
@@ -309,6 +360,7 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_ADDR,      cbuf_addr / 64, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_PITCH,     cbuf_pitch, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_WRITEMASK, 0xf, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_FORMAT,    cbuf_format, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_ADDR,      zbuf_addr / 64, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_PITCH,     zbuf_pitch, 0, nullptr, nullptr));
 
@@ -326,7 +378,8 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_APERTURE_DEPTH_ONLY,   0, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FORMAT,
                                 stencil_word ? VX_OM_DEPTH_FORMAT_D32FS8
-                                : float_depth ? VX_OM_DEPTH_FORMAT_D32F : VX_OM_DEPTH_FORMAT_D24S8,
+                                : float_depth ? VX_OM_DEPTH_FORMAT_D32F
+                                : depth16 ? VX_OM_DEPTH_FORMAT_D16 : VX_OM_DEPTH_FORMAT_D24S8,
                                 0, nullptr, nullptr));
 
   if (depth_enable) {
@@ -403,6 +456,9 @@ int main(int argc, char *argv[]) {
   if (float_depth) {
     kernel_arg.depth = gfx_sw::om_float_depth_key(float_bits(kFloatFragDepth));
   }
+  if (depth16) {
+    kernel_arg.depth = d16_key(kD16Frag);
+  }
   uint32_t r = (color >> 16) & 0xff;
   uint32_t g = (color >>  8) & 0xff;
   uint32_t b = (color      ) & 0xff;
@@ -441,6 +497,7 @@ int main(int argc, char *argv[]) {
   om.zbuf_pitch     = zbuf_pitch;
   om.cbuf_pitch     = cbuf_pitch;
   om.cbuf_writemask4 = 0xf;
+  om.color_format    = cbuf_format;
   om.depth_format    = stencil_word ? VX_OM_DEPTH_FORMAT_D32FS8
                      : float_depth ? VX_OM_DEPTH_FORMAT_D32F : VX_OM_DEPTH_FORMAT_D24S8;
   gfx_sw::resolve_om_state(om);
@@ -486,9 +543,20 @@ int main(int argc, char *argv[]) {
       RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
       vx_event_release(read_ev);
     }
-    auto bits = dst_pixels.data() + ((dst_height - 1) * cbuf_pitch);
+    // The image is saved as ARGB8888, so a narrower texel is decoded first.
+    const uint32_t bpp = gfx_sw::om_color_bpp(cbuf_format);
+    std::vector<uint32_t> argb(dst_width * dst_height);
+    for (uint32_t y = 0; y < dst_height; ++y) {
+      for (uint32_t x = 0; x < dst_width; ++x) {
+        uint32_t raw = 0;
+        memcpy(&raw, &dst_pixels[y * cbuf_pitch + x * bpp], bpp);
+        argb[y * dst_width + x] = gfx_sw::om_decode_color(cbuf_format, raw);
+      }
+    }
+    const uint32_t argb_pitch = dst_width * 4;
+    auto bits = reinterpret_cast<const uint8_t*>(argb.data()) + ((dst_height - 1) * argb_pitch);
     RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height,
-                       -(int)cbuf_pitch));
+                       -(int)argb_pitch));
   }
 
   // Colour attachment 1, checked against the colour the kernel computes rather
@@ -580,9 +648,88 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  // -y: every D16 texel and its colour against the LESS test of the fragment's
+  // 0x8000 with the stored value, compared as the 16-bit values themselves.
+  if (depth16) {
+    std::vector<uint8_t> zs(zbuf_size);
+    std::vector<uint32_t> cb(cbuf_size / 4);
+    vx_event_h read_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, zs.data(), depth_buffer, 0, zbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    RT_CHECK(vx_enqueue_read(queue, cb.data(), color_buffer, 0, cbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    for (uint32_t y = 0; y < dst_height && ds_errors < 16; ++y) {
+      for (uint32_t x = 0; x < dst_width && ds_errors < 16; ++x) {
+        const uint16_t d0 = initial_d16(x, y);
+        const bool pass = kD16Frag < d0;
+        const uint32_t src = 0xff000000u
+                           | (((x * kernel_arg.r_scale_q16) >> 16) << 16)
+                           | (((y * kernel_arg.g_scale_q16) >> 16) <<  8)
+                           |  (((x + y) * kernel_arg.b_scale_q16) >> 16);
+        uint16_t got_z;
+        memcpy(&got_z, &zs[y * zbuf_pitch + x * 2], 2);
+        const uint16_t want_z = pass ? kD16Frag : d0;
+        const uint32_t want_c = pass ? src : clear_color;
+        if (got_z != want_z || cb[x + y * dst_width] != want_c) {
+          std::cout << "FAILED: D16 at (" << x << "," << y << "): got 0x" << std::hex << got_z
+                    << "/0x" << cb[x + y * dst_width] << ", expected 0x" << want_z << "/0x"
+                    << want_c << std::dec << std::endl;
+          ++ds_errors;
+        }
+      }
+    }
+    if (ds_errors == 0) {
+      std::cout << "D16: " << dst_width * dst_height << " texels match" << std::endl;
+    }
+  }
+
+  // -F: each texel against the kernel's colour, blended (-b) with the clear as
+  // the attachment stores it, and packed.
+  int fmt_errors = 0;
+  if (cbuf_format != VX_OM_COLOR_FORMAT_A8R8G8B8) {
+    std::vector<uint8_t> cb(cbuf_size);
+    vx_event_h read_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, cb.data(), color_buffer, 0, cbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    const uint32_t dst = gfx_sw::om_decode_color(cbuf_format, gfx_sw::om_encode_color(cbuf_format, clear_color));
+    for (uint32_t y = 0; y < dst_height && fmt_errors < 16; ++y) {
+      for (uint32_t x = 0; x < dst_width && fmt_errors < 16; ++x) {
+        const uint32_t alpha = blend_enable ? ((y * kernel_arg.a_scale_q16) >> 16) : 0xff;
+        const uint32_t src = (alpha << 24)
+                           | (((x * kernel_arg.r_scale_q16) >> 16) << 16)
+                           | (((y * kernel_arg.g_scale_q16) >> 16) <<  8)
+                           |  (((x + y) * kernel_arg.b_scale_q16) >> 16);
+        uint32_t c = src;
+        if (blend_enable) {
+          const cocogfx::ColorARGB s(src), d(dst), k(0);
+          const auto f = gfx_sw::DoBlendFunc(VX_OM_BLEND_FUNC_ONE, s, d, k);
+          const auto g = gfx_sw::DoBlendFunc(VX_OM_BLEND_FUNC_ONE_MINUS_SRC_A, s, d, k);
+          const auto rgb = gfx_sw::DoBlendMode(VX_OM_BLEND_MODE_ADD, VX_OM_LOGIC_OP_COPY, s, d, f, g);
+          c = cocogfx::ColorARGB(rgb.a, rgb.r, rgb.g, rgb.b).value;
+        }
+        const uint32_t want = gfx_sw::om_encode_color(cbuf_format, c);
+        uint32_t got = 0;
+        memcpy(&got, &cb[y * cbuf_pitch + x * cbuf_bpp], cbuf_bpp);
+        if (got != want) {
+          std::cout << "FAILED: format " << cbuf_format << " texel at (" << x << "," << y
+                    << "): got 0x" << std::hex << got << ", expected 0x" << want << std::dec
+                    << std::endl;
+          ++fmt_errors;
+        }
+      }
+    }
+    if (fmt_errors == 0) {
+      std::cout << "format " << cbuf_format << ": " << dst_width * dst_height
+                << " texels match" << std::endl;
+    }
+  }
+
   cleanup();
 
-  if (mrt_errors != 0 || ds_errors != 0) {
+  if (mrt_errors != 0 || ds_errors != 0 || fmt_errors != 0) {
     return 1;
   }
 

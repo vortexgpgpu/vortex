@@ -189,6 +189,65 @@ int main() {
     else printf("  blend-const OK (r=%02x from const 0x40 * src 0xff)\n", rr);
   }
 
+  // (5) Field-described attachments: snorm rounding, the BGRA and 2-10-10-10
+  // bit layouts, 12-byte texels, an alpha-only texel that leaves its neighbour
+  // alone, a packed 16-bit order, and an snorm blend reading the destination.
+  {
+    auto lanes = [](float r, float g, float b, float a, uint32_t out[4]) {
+      const float f[4] = { r, g, b, a };
+      memcpy(out, f, sizeof f);
+    };
+    auto store = [&](uint32_t fmt, void* dst, const uint32_t src[4], bool add) {
+      om_color_t c{};
+      c.cbuf_base = (uint64_t)(uintptr_t)dst;
+      c.color_format = fmt;
+      c.cbuf_writemask4 = 0xf;
+      c.blend_mode_rgb = c.blend_mode_a = VX_OM_BLEND_MODE_ADD;
+      c.blend_src_rgb = c.blend_src_a = VX_OM_BLEND_FUNC_ONE;
+      c.blend_dst_rgb = c.blend_dst_a = add ? VX_OM_BLEND_FUNC_ONE : VX_OM_BLEND_FUNC_ZERO;
+      resolve_om_color(c);
+      om_wide_color_rmw(c, (uintptr_t)dst, src);
+    };
+    uint32_t l[4];
+    uint8_t b4[4] = { 0 };
+    lanes(1.0f, -1.0f, 0.5f, -0.25f, l);
+    store(VX_OM_COLOR_FORMAT_RGBA8SN, b4, l, false);
+    uint32_t w; memcpy(&w, b4, 4);
+    expect_eq("RGBA8SN 1,-1,.5,-.25", w, 0xe040817fu);
+    store(VX_OM_COLOR_FORMAT_BGRA8SN, b4, l, false);
+    memcpy(&w, b4, 4);
+    expect_eq("BGRA8SN 1,-1,.5,-.25", w, 0xe07f8140u);
+    lanes(1.0f, 0.0f, 0.0f, 1.0f, l);
+    uint32_t w10 = 0;
+    store(VX_OM_COLOR_FORMAT_A2R10G10B10, &w10, l, false);
+    expect_eq("A2R10G10B10 red", w10, 0xfff00000u);
+    lanes(1.5f, -2.0f, 3.0f, 0.0f, l);
+    float f3[4] = { 0, 0, 0, 7.0f };
+    store(VX_OM_COLOR_FORMAT_RGB32F, f3, l, false);
+    uint32_t w3[4];
+    memcpy(w3, f3, sizeof w3);
+    expect_eq("RGB32F r", w3[0], l[0]);
+    expect_eq("RGB32F b", w3[2], l[2]);
+    expect_eq("RGB32F past texel", w3[3], 0x40e00000u);
+    uint8_t a8[2] = { 0, 0x5a };
+    lanes(0.2f, 0.4f, 0.6f, 1.0f, l);
+    store(VX_OM_COLOR_FORMAT_A8, a8, l, false);
+    expect_eq("A8 alpha", a8[0], 0xffu);
+    expect_eq("A8 neighbour", a8[1], 0x5au);
+    uint16_t p16 = 0;
+    lanes(1.0f, 0.0f, 0.0f, 0.0f, l);
+    store(VX_OM_COLOR_FORMAT_B4G4R4A4_PACK16, &p16, l, false);
+    expect_eq("B4G4R4A4 red", p16, 0x00f0u);
+    // dst 0x40 = 64/127, plus 0.25 = 0.7539 -> round(95.75) = 96
+    uint8_t sn = 0x40;
+    lanes(0.25f, 0.0f, 0.0f, 0.0f, l);
+    store(VX_OM_COLOR_FORMAT_R8SN, &sn, l, true);
+    expect_eq("R8SN additive blend", sn, 0x60u);
+    if (!g_fail) {
+      printf("  field attachments OK (snorm, BGRA8, 2-10-10-10, RGB32F, A8, 4444)\n");
+    }
+  }
+
   if (g_fail) {
     printf("\nOM-MRT: FAILED (%u checks)\n", g_fail);
     return 1;

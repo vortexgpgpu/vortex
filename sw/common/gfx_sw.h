@@ -243,7 +243,8 @@ static inline __attribute__((always_inline)) uint32_t Linear8ToSrgb(uint32_t c) 
 // field of the texel (packed formats included) with a numeric kind. The merger
 // carries a channel as a 32-bit lane: float bits for the float and unorm kinds,
 // the integer itself (sign-extended) for the integer kinds.
-enum : uint32_t { OM_KIND_FLOAT = 0, OM_KIND_UNORM = 1, OM_KIND_UINT = 2, OM_KIND_SINT = 3 };
+enum : uint32_t { OM_KIND_FLOAT = 0, OM_KIND_UNORM = 1, OM_KIND_UINT = 2, OM_KIND_SINT = 3,
+                  OM_KIND_SNORM = 4 };
 
 struct om_wide_fmt {
   uint32_t bpp;
@@ -254,7 +255,8 @@ struct om_wide_fmt {
 };
 
 static inline __attribute__((always_inline)) bool om_is_wide(uint32_t fmt) {
-  return fmt >= (uint32_t)VX_OM_COLOR_FORMAT_R16F;
+  return fmt >= (uint32_t)VX_OM_COLOR_FORMAT_R16F && fmt != (uint32_t)VX_OM_COLOR_FORMAT_R5G6B5 &&
+         fmt != (uint32_t)VX_OM_COLOR_FORMAT_A1R5G5B5;
 }
 
 static inline __attribute__((always_inline)) om_wide_fmt om_wide_geom(uint32_t fmt) {
@@ -267,8 +269,6 @@ static inline __attribute__((always_inline)) om_wide_fmt om_wide_geom(uint32_t f
   case VX_OM_COLOR_FORMAT_RGBA32F:    return { 16, 4, OM_KIND_FLOAT, {0, 32, 64, 96}, {32, 32, 32, 32} };
   case VX_OM_COLOR_FORMAT_R11G11B10F: return { 4, 3, OM_KIND_FLOAT, {0, 11, 22}, {11, 11, 10} };
   case VX_OM_COLOR_FORMAT_RGB10A2:    return { 4, 4, OM_KIND_UNORM, {0, 10, 20, 30}, {10, 10, 10, 2} };
-  case VX_OM_COLOR_FORMAT_R5G6B5:     return { 2, 3, OM_KIND_UNORM, {11, 5, 0}, {5, 6, 5} };
-  case VX_OM_COLOR_FORMAT_A1R5G5B5:   return { 2, 4, OM_KIND_UNORM, {10, 5, 0, 15}, {5, 5, 5, 1} };
   case VX_OM_COLOR_FORMAT_R8UI:       return { 1, 1, OM_KIND_UINT, {0}, {8} };
   case VX_OM_COLOR_FORMAT_R8I:        return { 1, 1, OM_KIND_SINT, {0}, {8} };
   case VX_OM_COLOR_FORMAT_RG8UI:      return { 2, 2, OM_KIND_UINT, {0, 8}, {8, 8} };
@@ -288,6 +288,37 @@ static inline __attribute__((always_inline)) om_wide_fmt om_wide_geom(uint32_t f
   case VX_OM_COLOR_FORMAT_RGBA32UI:   return { 16, 4, OM_KIND_UINT, {0, 32, 64, 96}, {32, 32, 32, 32} };
   case VX_OM_COLOR_FORMAT_RGBA32I:    return { 16, 4, OM_KIND_SINT, {0, 32, 64, 96}, {32, 32, 32, 32} };
   case VX_OM_COLOR_FORMAT_RGB10A2UI:  return { 4, 4, OM_KIND_UINT, {0, 10, 20, 30}, {10, 10, 10, 2} };
+  case VX_OM_COLOR_FORMAT_R8SN:       return { 1, 1, OM_KIND_SNORM, {0}, {8} };
+  case VX_OM_COLOR_FORMAT_RG8SN:      return { 2, 2, OM_KIND_SNORM, {0, 8}, {8, 8} };
+  case VX_OM_COLOR_FORMAT_RGBA8SN:    return { 4, 4, OM_KIND_SNORM, {0, 8, 16, 24}, {8, 8, 8, 8} };
+  case VX_OM_COLOR_FORMAT_BGRA8SN:    return { 4, 4, OM_KIND_SNORM, {16, 8, 0, 24}, {8, 8, 8, 8} };
+  case VX_OM_COLOR_FORMAT_BGRA8UI:    return { 4, 4, OM_KIND_UINT, {16, 8, 0, 24}, {8, 8, 8, 8} };
+  case VX_OM_COLOR_FORMAT_BGRA8I:     return { 4, 4, OM_KIND_SINT, {16, 8, 0, 24}, {8, 8, 8, 8} };
+  case VX_OM_COLOR_FORMAT_A2R10G10B10:   return { 4, 4, OM_KIND_UNORM, {20, 10, 0, 30}, {10, 10, 10, 2} };
+  case VX_OM_COLOR_FORMAT_A2R10G10B10SN: return { 4, 4, OM_KIND_SNORM, {20, 10, 0, 30}, {10, 10, 10, 2} };
+  case VX_OM_COLOR_FORMAT_A2R10G10B10UI: return { 4, 4, OM_KIND_UINT, {20, 10, 0, 30}, {10, 10, 10, 2} };
+  case VX_OM_COLOR_FORMAT_A2B10G10R10SN: return { 4, 4, OM_KIND_SNORM, {0, 10, 20, 30}, {10, 10, 10, 2} };
+  case VX_OM_COLOR_FORMAT_R16:        return { 2, 1, OM_KIND_UNORM, {0}, {16} };
+  case VX_OM_COLOR_FORMAT_R16SN:      return { 2, 1, OM_KIND_SNORM, {0}, {16} };
+  case VX_OM_COLOR_FORMAT_RG16:       return { 4, 2, OM_KIND_UNORM, {0, 16}, {16, 16} };
+  case VX_OM_COLOR_FORMAT_RG16SN:     return { 4, 2, OM_KIND_SNORM, {0, 16}, {16, 16} };
+  case VX_OM_COLOR_FORMAT_RGBA16:     return { 8, 4, OM_KIND_UNORM, {0, 16, 32, 48}, {16, 16, 16, 16} };
+  case VX_OM_COLOR_FORMAT_RGBA16SN:   return { 8, 4, OM_KIND_SNORM, {0, 16, 32, 48}, {16, 16, 16, 16} };
+  case VX_OM_COLOR_FORMAT_RGB32F:     return { 12, 3, OM_KIND_FLOAT, {0, 32, 64}, {32, 32, 32} };
+  case VX_OM_COLOR_FORMAT_RGB32UI:    return { 12, 3, OM_KIND_UINT, {0, 32, 64}, {32, 32, 32} };
+  case VX_OM_COLOR_FORMAT_RGB32I:     return { 12, 3, OM_KIND_SINT, {0, 32, 64}, {32, 32, 32} };
+  case VX_OM_COLOR_FORMAT_B4G4R4A4_PACK16: return { 2, 4, OM_KIND_UNORM, {4, 8, 12, 0}, {4, 4, 4, 4} };
+  case VX_OM_COLOR_FORMAT_B5G6R5_PACK16:   return { 2, 3, OM_KIND_UNORM, {0, 5, 11}, {5, 6, 5} };
+  case VX_OM_COLOR_FORMAT_R5G5B5A1_PACK16: return { 2, 4, OM_KIND_UNORM, {11, 6, 1, 0}, {5, 5, 5, 1} };
+  case VX_OM_COLOR_FORMAT_B5G5R5A1_PACK16: return { 2, 4, OM_KIND_UNORM, {1, 6, 11, 0}, {5, 5, 5, 1} };
+  case VX_OM_COLOR_FORMAT_A4R4G4B4_PACK16: return { 2, 4, OM_KIND_UNORM, {8, 4, 0, 12}, {4, 4, 4, 4} };
+  case VX_OM_COLOR_FORMAT_A4B4G4R4_PACK16: return { 2, 4, OM_KIND_UNORM, {0, 4, 8, 12}, {4, 4, 4, 4} };
+  case VX_OM_COLOR_FORMAT_A1B5G5R5_PACK16: return { 2, 4, OM_KIND_UNORM, {0, 5, 10, 15}, {5, 5, 5, 1} };
+  case VX_OM_COLOR_FORMAT_A8:         return { 1, 4, OM_KIND_UNORM, {0, 0, 0, 0}, {0, 0, 0, 8} };
+  case VX_OM_COLOR_FORMAT_R10X6:      return { 2, 1, OM_KIND_UNORM, {6}, {10} };
+  case VX_OM_COLOR_FORMAT_R10X6G10X6: return { 4, 2, OM_KIND_UNORM, {6, 22}, {10, 10} };
+  case VX_OM_COLOR_FORMAT_R12X4:      return { 2, 1, OM_KIND_UNORM, {4}, {12} };
+  case VX_OM_COLOR_FORMAT_R12X4G12X4: return { 4, 2, OM_KIND_UNORM, {4, 20}, {12, 12} };
   default:                            return { 4, 4, OM_KIND_UNORM, {0, 8, 16, 24}, {8, 8, 8, 8} };
   }
 }
@@ -297,7 +328,9 @@ static inline __attribute__((always_inline)) uint32_t om_color_bpp(uint32_t fmt)
   case VX_OM_COLOR_FORMAT_A8R8G8B8:
   case VX_OM_COLOR_FORMAT_SRGB8A8: return 4;
   case VX_OM_COLOR_FORMAT_R8:      return 1;
-  case VX_OM_COLOR_FORMAT_RG8:     return 2;
+  case VX_OM_COLOR_FORMAT_RG8:
+  case VX_OM_COLOR_FORMAT_R5G6B5:
+  case VX_OM_COLOR_FORMAT_A1R5G5B5: return 2;
   default:                         return om_wide_geom(fmt).bpp;
   }
 }
@@ -323,6 +356,16 @@ static inline __attribute__((always_inline)) void om_store(uintptr_t a, uint32_t
   else               *reinterpret_cast<volatile uint8_t*>(a)  = (uint8_t)v;
 }
 
+// An n-bit unorm channel widened to 8 bits by replicating its high bits.
+static inline __attribute__((always_inline)) uint32_t om_widen8(uint32_t v, uint32_t n) {
+  return (v << (8 - n)) | (v >> (2 * n - 8));
+}
+
+// An 8-bit unorm channel rounded to n bits.
+static inline __attribute__((always_inline)) uint32_t om_narrow8(uint32_t v, uint32_t n) {
+  return (v * ((1u << n) - 1) + 127) / 255;
+}
+
 // Decode a stored colour texel → ARGB8888 working colour (sRGB → linear so the
 // blend runs in linear space).
 static inline __attribute__((always_inline)) uint32_t om_decode_color(uint32_t fmt, uint32_t raw) {
@@ -335,6 +378,12 @@ static inline __attribute__((always_inline)) uint32_t om_decode_color(uint32_t f
   }
   case VX_OM_COLOR_FORMAT_R8:  return 0xff000000u | ((raw & 0xff) << 16);
   case VX_OM_COLOR_FORMAT_RG8: return 0xff000000u | ((raw & 0xff) << 16) | (((raw >> 8) & 0xff) << 8);
+  case VX_OM_COLOR_FORMAT_R5G6B5:
+    return 0xff000000u | (om_widen8((raw >> 11) & 0x1f, 5) << 16)
+         | (om_widen8((raw >> 5) & 0x3f, 6) << 8) | om_widen8(raw & 0x1f, 5);
+  case VX_OM_COLOR_FORMAT_A1R5G5B5:
+    return ((raw & 0x8000u) ? 0xff000000u : 0u) | (om_widen8((raw >> 10) & 0x1f, 5) << 16)
+         | (om_widen8((raw >> 5) & 0x1f, 5) << 8) | om_widen8(raw & 0x1f, 5);
   default:                     return raw;    // A8R8G8B8
   }
 }
@@ -350,8 +399,23 @@ static inline __attribute__((always_inline)) uint32_t om_encode_color(uint32_t f
   }
   case VX_OM_COLOR_FORMAT_R8:  return (argb >> 16) & 0xff;
   case VX_OM_COLOR_FORMAT_RG8: return ((argb >> 16) & 0xff) | (((argb >> 8) & 0xff) << 8);
+  case VX_OM_COLOR_FORMAT_R5G6B5:
+    return (om_narrow8((argb >> 16) & 0xff, 5) << 11) | (om_narrow8((argb >> 8) & 0xff, 6) << 5)
+         | om_narrow8(argb & 0xff, 5);
+  case VX_OM_COLOR_FORMAT_A1R5G5B5:
+    return (((argb >> 24) >= 128) ? 0x8000u : 0u) | (om_narrow8((argb >> 16) & 0xff, 5) << 10)
+         | (om_narrow8((argb >> 8) & 0xff, 5) << 5) | om_narrow8(argb & 0xff, 5);
   default:                     return argb;
   }
+}
+
+// The colour attachment formats the fixed-function merger stores. It blends in
+// ARGB8888; om_decode_color and om_encode_color convert at the read and the
+// write, for it and for the software merger alike.
+static inline __attribute__((always_inline)) bool om_ff_color_format(uint32_t fmt) {
+  return fmt == VX_OM_COLOR_FORMAT_A8R8G8B8 || fmt == VX_OM_COLOR_FORMAT_R8 ||
+         fmt == VX_OM_COLOR_FORMAT_RG8 || fmt == VX_OM_COLOR_FORMAT_R5G6B5 ||
+         fmt == VX_OM_COLOR_FORMAT_A1R5G5B5;
 }
 
 // A float depth as the D32F plane stores it: an unsigned key in the float's
@@ -568,7 +632,8 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_ext_lod(
     uint32_t argb[4];
     for (uint32_t i = 0; i < 4; ++i)
       argb[i] = ((bmask >> i) & 1u) ? border
-              : gfx_tex::TexDecodeArgb8(format, (const void*)(uintptr_t)(base_addr + req.addr[i]), stride);
+              : gfx_tex::TexDecodeArgb8At(format, (const void*)(uintptr_t)(base_addr + req.addr[i]),
+                                          req.sub[i], stride);
     if (reduce) {
       uint32_t out = argb[0];
       for (uint32_t i = 1; i < 4; ++i) {
@@ -583,7 +648,8 @@ static inline __attribute__((always_inline)) uint32_t tex_sample_ext_lod(
                                     req.alpha, req.beta);
   }
   if (bmask & 1u) return border;
-  return gfx_tex::TexDecodeArgb8(format, (const void*)(uintptr_t)(base_addr + req.addr[0]), stride);
+  return gfx_tex::TexDecodeArgb8At(format, (const void*)(uintptr_t)(base_addr + req.addr[0]),
+                                   req.sub[0], stride);
 }
 
 // One LOD's sample (POINT or BILINEAR). `base_addr` is the mip's base for `lod`
@@ -752,8 +818,8 @@ static inline __attribute__((always_inline)) void tex_sample_f32_lod(
     if ((bmask >> i) & 1u) {
       for (uint32_t c = 0; c < 4; ++c) t[i][c] = bf[c];
     } else {
-      gfx_tex::TexDecodeFloat4(format, (const void*)(uintptr_t)(base_addr + req.addr[i]),
-                               req.stride, t[i]);
+      gfx_tex::TexDecodeFloat4At(format, (const void*)(uintptr_t)(base_addr + req.addr[i]),
+                                 req.sub[i], req.stride, t[i]);
     }
   }
   if (req.filter == VX_TEX_FILTER_BILINEAR && reduce) {
@@ -932,9 +998,10 @@ static inline __attribute__((always_inline)) void tex_cube_texel(
   auto read = [&](uint32_t f, int32_t x, int32_t y, float t[4]) {
     x = x < 0 ? 0 : (x >= n ? n - 1 : x);
     y = y < 0 ? 0 : (y >= n ? n - 1 : y);
+    uint32_t sub;
     const uint64_t a = s.base + (uint64_t)(layer0 + f) * s.layer_stride + s.mip_off[level]
-                     + (uint64_t)(y * n + x) * stride;
-    decode((const void*)(uintptr_t)a, stride, t);
+                     + gfx_tex::TexTexelOffset(s.format, (uint32_t)n, (uint32_t)x, (uint32_t)y, &sub);
+    decode((const void*)(uintptr_t)a, sub, stride, t);
   };
   auto across = [&](int32_t x, int32_t y, float t[4]) {
     float d[3];
@@ -990,10 +1057,10 @@ static inline __attribute__((always_inline)) CubeFootprint tex_cube_footprint(
 // The colour decode of a cube texel: four float channels, (0,0,0,1) where the
 // format has none.
 static inline __attribute__((always_inline)) void tex_cube_decode(
-    const TexState& s, const void* p, uint32_t stride, float t[4]) {
+    const TexState& s, const void* p, uint32_t sub, uint32_t stride, float t[4]) {
   t[0] = t[1] = t[2] = 0.0f;
   t[3] = 1.0f;
-  gfx_tex::TexDecodeFloat4(s.format, p, stride, t);
+  gfx_tex::TexDecodeFloat4At(s.format, p, sub, stride, t);
 }
 
 // One level of a seamless bilinear cube sample, in float: the footprint is taken
@@ -1008,7 +1075,9 @@ static inline __attribute__((always_inline)) void tex_cube_seamless_level(
   float t[4][4];
   for (uint32_t k = 0; k < 4; ++k) {
     tex_cube_texel(s, layer0, face, i0 + (int32_t)(k & 1u), j0 + (int32_t)(k >> 1), level,
-                   [&](const void* a, uint32_t st, float* c) { tex_cube_decode(s, a, st, c); },
+                   [&](const void* a, uint32_t sub, uint32_t st, float* c) {
+                     tex_cube_decode(s, a, sub, st, c);
+                   },
                    t[k]);
   }
   const uint32_t reduce = tex_reduction(s);
@@ -1148,7 +1217,6 @@ struct Tex3DSlices {
 
 static inline __attribute__((always_inline)) Tex3DSlices tex_3d_slices(
     const TexState& s, int32_t w, uint32_t lod, uint32_t tap) {
-  uint32_t stride = gfx_tex::FormatStride(s.format);
   uint32_t log_w = s.logdim & 0xffff, log_h = s.logdim >> 16;
   uint32_t w_l = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1)
                           : (1u << (uint32_t)gfx_tex::tex_imax((int32_t)log_w - (int32_t)lod, 0));
@@ -1158,7 +1226,7 @@ static inline __attribute__((always_inline)) Tex3DSlices tex_3d_slices(
   uint32_t d_l = (uint32_t)gfx_tex::tex_imax((int32_t)(depth >> lod), 1);
 
   Tex3DSlices sl{};
-  sl.slice_sz = (uint64_t)w_l * h_l * stride;
+  sl.slice_sz = gfx_tex::TexImageBytes(s.format, w_l, h_l);
   sl.lvl_base = s.base + s.mip_off[lod];
   sl.z = gfx_tex::tex_axis_taps(w, d_l, s.wrap_w, tap == VX_TEX_FILTER_BILINEAR);
   return sl;
@@ -1272,7 +1340,7 @@ static inline __attribute__((always_inline)) void tex_sample_f32_3d(
 // so the texel index is x + y*w; `layer` steps whole mip chains.
 static inline __attribute__((always_inline)) uint64_t tex_fetch_addr(
     const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod,
-    uint32_t* stride) {
+    uint32_t* stride, uint32_t* sub) {
   uint32_t log_width  = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim & 0xffff) - (int32_t)lod, 0);
   uint32_t log_height = (uint32_t)gfx_tex::tex_imax((int32_t)(s.logdim >> 16) - (int32_t)lod, 0);
   uint32_t w = s.width  ? (uint32_t)gfx_tex::tex_imax((int32_t)(s.width  >> lod), 1) : (1u << log_width);
@@ -1281,7 +1349,7 @@ static inline __attribute__((always_inline)) uint64_t tex_fetch_addr(
   uint32_t yi = (y < 0) ? 0u : ((uint32_t)y >= h ? h - 1u : (uint32_t)y);
   *stride = gfx_tex::FormatStride(s.format);
   return s.base + (uint64_t)layer * s.layer_stride + s.mip_off[lod]
-       + (uint64_t)(xi + yi * w) * (*stride);
+       + gfx_tex::TexTexelOffset(s.format, w, xi, yi, sub);
 }
 
 // texelFetch: the four channels of the exact texel at (x,y) of integer `lod`, as
@@ -1291,9 +1359,9 @@ static inline __attribute__((always_inline)) uint64_t tex_fetch_addr(
 // produce.
 static inline __attribute__((always_inline)) void tex_fetch_f32(
     const TexState& s, int32_t x, int32_t y, uint32_t lod, float out[4]) {
-  uint32_t stride;
-  uint64_t addr = tex_fetch_addr(s, x, y, 0, lod, &stride);
-  gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)addr, stride, out);
+  uint32_t stride, sub;
+  uint64_t addr = tex_fetch_addr(s, x, y, 0, lod, &stride, &sub);
+  gfx_tex::TexDecodeFloat4At(s.format, (const void*)(uintptr_t)addr, sub, stride, out);
 }
 
 // texelFetch for an integer sampler: the four channels of the texel at (x,y) of
@@ -1302,10 +1370,10 @@ static inline __attribute__((always_inline)) void tex_fetch_f32(
 static inline __attribute__((always_inline)) void tex_fetch_i32(
     const TexState& s, int32_t x, int32_t y, uint32_t lod, uint32_t layer,
     int32_t out[4]) {
-  uint32_t stride;
-  uint64_t addr = tex_fetch_addr(s, x, y, layer, lod, &stride);
+  uint32_t stride, sub;
+  uint64_t addr = tex_fetch_addr(s, x, y, layer, lod, &stride, &sub);
   float lanes[4];
-  gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)addr, stride, lanes);
+  gfx_tex::TexDecodeFloat4At(s.format, (const void*)(uintptr_t)addr, sub, stride, lanes);
   __builtin_memcpy(out, lanes, sizeof(lanes));
 }
 
@@ -1314,9 +1382,9 @@ static inline __attribute__((always_inline)) void tex_fetch_i32(
 static inline __attribute__((always_inline)) void tex_fetch_array_f32(
     const TexState& s, int32_t x, int32_t y, uint32_t layer, uint32_t lod,
     float out[4]) {
-  uint32_t stride;
-  uint64_t addr = tex_fetch_addr(s, x, y, layer, lod, &stride);
-  gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)addr, stride, out);
+  uint32_t stride, sub;
+  uint64_t addr = tex_fetch_addr(s, x, y, layer, lod, &stride, &sub);
+  gfx_tex::TexDecodeFloat4At(s.format, (const void*)(uintptr_t)addr, sub, stride, out);
 }
 
 // textureGather: channel `comp` of the 2x2 texel footprint at (u,v) of the base
@@ -1349,8 +1417,8 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
   for (uint32_t i = 0; i < 4; ++i) {
     uint32_t argb = ((req.border_mask >> order[i]) & 1u)
                   ? s.border
-                  : gfx_tex::TexDecodeArgb8(s.format, (const void*)(uintptr_t)req.addr[order[i]],
-                                            req.stride);
+                  : gfx_tex::TexDecodeArgb8At(s.format, (const void*)(uintptr_t)req.addr[order[i]],
+                                              req.sub[order[i]], req.stride);
     packed |= ((argb >> sh) & 0xffu) << (i * 8);
   }
   return packed;
@@ -1381,8 +1449,8 @@ static inline __attribute__((always_inline)) void tex_gather_f32(
       continue;
     }
     float lanes[4];
-    gfx_tex::TexDecodeFloat4(s.format, (const void*)(uintptr_t)req.addr[order[i]],
-                             req.stride, lanes);
+    gfx_tex::TexDecodeFloat4At(s.format, (const void*)(uintptr_t)req.addr[order[i]],
+                               req.sub[order[i]], req.stride, lanes);
     __builtin_memcpy(&out[i], &lanes[map], 4);
   }
 }
@@ -1415,7 +1483,9 @@ static inline __attribute__((always_inline)) void tex_gather_cube_f32(
   for (uint32_t k = 0; k < 4; ++k) {
     float t[4];
     tex_cube_texel(s, layer0, fp.face, fp.i0 + di[k], fp.j0 + dj[k], 0,
-                   [&](const void* a, uint32_t st, float* c) { tex_cube_decode(s, a, st, c); },
+                   [&](const void* a, uint32_t sub, uint32_t st, float* c) {
+                     tex_cube_decode(s, a, sub, st, c);
+                   },
                    t);
     __builtin_memcpy(&out[k], &t[map], 4);
   }
@@ -1665,7 +1735,7 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_cube_sw(
   for (uint32_t k = 0; k < 4; ++k) {
     float t[4];
     tex_cube_texel(s, layer0, fp.face, fp.i0 + di[k], fp.j0 + dj[k], 0,
-                   [&](const void* a, uint32_t st, float* c) {
+                   [&](const void* a, uint32_t, uint32_t st, float* c) {
                      c[0] = decode_depth_f(s.format, a, st);
                    },
                    t);
@@ -1850,6 +1920,9 @@ static inline __attribute__((always_inline)) uint32_t om_f_bits(float f) {
 static inline __attribute__((always_inline)) float om_clamp01(float f) {
   return (f > 0.0f) ? ((f < 1.0f) ? f : 1.0f) : 0.0f;   // NaN -> 0
 }
+static inline __attribute__((always_inline)) float om_clamp_snorm(float f) {
+  return f < -1.0f ? -1.0f : (f > 1.0f ? 1.0f : f);
+}
 
 // float -> IEEE half, round to nearest even.
 static inline __attribute__((always_inline)) uint32_t om_float_to_half(float f) {
@@ -1936,8 +2009,11 @@ static inline __attribute__((always_inline)) void om_field_set(uint32_t w[4], ui
   w[off >> 5] = (w[off >> 5] & ~(m << sh)) | ((v & m) << sh);
 }
 
-// Stored field -> lane.
+// Stored field -> lane. A zero-width field is a channel the format lacks.
 static inline __attribute__((always_inline)) uint32_t om_field_decode(uint32_t kind, uint32_t width, uint32_t v) {
+  if (width == 0) {
+    return 0;
+  }
   switch (kind) {
   case OM_KIND_FLOAT:
     if (width == 32u) {
@@ -1949,6 +2025,11 @@ static inline __attribute__((always_inline)) uint32_t om_field_decode(uint32_t k
     return om_f_bits(gfx_tex::UFloatToFloat(v, width - 5u));
   case OM_KIND_UNORM:
     return om_f_bits((float)v / (float)((1u << width) - 1u));
+  case OM_KIND_SNORM: {
+    const float f = (float)((int32_t)(v << (32u - width)) >> (32u - width))
+                  / (float)((1u << (width - 1u)) - 1u);
+    return om_f_bits(f < -1.0f ? -1.0f : f);
+  }
   case OM_KIND_SINT:
     return (width >= 32u) ? v : (uint32_t)(((int32_t)(v << (32u - width))) >> (32u - width));
   default:
@@ -1969,6 +2050,11 @@ static inline __attribute__((always_inline)) uint32_t om_field_encode(uint32_t k
     return om_float_to_ufloat(om_bits_f(lane), width - 5u);
   case OM_KIND_UNORM:
     return (uint32_t)(om_clamp01(om_bits_f(lane)) * (float)((1u << width) - 1u) + 0.5f);
+  case OM_KIND_SNORM: {
+    // Round to nearest, away from zero at the half.
+    const float s = om_clamp_snorm(om_bits_f(lane)) * (float)((1u << (width - 1u)) - 1u);
+    return (uint32_t)(int32_t)(s + (s < 0.0f ? -0.5f : 0.5f));
+  }
   case OM_KIND_UINT: {
     // Saturate to the field, as the reference rasterizer's format pack does: a
     // value that does not fit must not wrap into its low bits.
@@ -2090,11 +2176,15 @@ static inline __attribute__((always_inline)) void om_wide_color_rmw(const om_col
       } else {
         df[ch] = (ch == 3u) ? 1.0f : 0.0f;
       }
-      // a fixed-point attachment clamps every blend input to [0, 1]
+      // a fixed-point attachment clamps every blend input to its range
       if (g.kind == OM_KIND_UNORM) {
         sf[ch] = om_clamp01(sf[ch]);
         s1f[ch] = om_clamp01(s1f[ch]);
         cf[ch] = om_clamp01(cf[ch]);
+      } else if (g.kind == OM_KIND_SNORM) {
+        sf[ch] = om_clamp_snorm(sf[ch]);
+        s1f[ch] = om_clamp_snorm(s1f[ch]);
+        cf[ch] = om_clamp_snorm(cf[ch]);
       }
     }
   }
@@ -2111,6 +2201,8 @@ static inline __attribute__((always_inline)) void om_wide_color_rmw(const om_col
       float r = om_blend_op_f(alpha ? c.blend_mode_a : c.blend_mode_rgb, sf[ch], df[ch], fs, fd);
       if (g.kind == OM_KIND_UNORM) {
         r = om_clamp01(r);
+      } else if (g.kind == OM_KIND_SNORM) {
+        r = om_clamp_snorm(r);
       }
       lane = om_f_bits(r);
     }

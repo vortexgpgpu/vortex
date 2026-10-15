@@ -65,8 +65,8 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; import VX
     // ── Pass-through when early-Z is disabled ──────────────────────────────
     // A monotonic-depth / no-stencil frame enables early-Z; otherwise the wave
     // is forwarded verbatim (the ROP still does the authoritative late-Z). The
-    // candidate is the 24-bit unorm plane, so a float depth target never culls.
-    wire enabled = dcrs.earlyz_safe && ~dcrs.depth_float;
+    // candidate is the 24-bit unorm plane, so any other depth target never culls.
+    wire enabled = dcrs.earlyz_safe && dcrs.depth_d24;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Candidate depth: bit-identical to the FS late-Z (kernel PLANE_Z Q7.24 plane

@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <vector>
 #include "gfx_ff_model.h"
+#include "gfx_sw.h"
 #include "cluster.h"
 #include "mem_block_pool.h"
 #include "constants.h"
@@ -219,6 +220,8 @@ private:
     for (uint32_t rt = 0; rt < VX_OM_MAX_RT; ++rt) {
       cbuf_baseaddr_[rt] = uint64_t(dcrs_.read(rt, VX_DCR_OM_CBUF_ADDR)) << 6;
       cbuf_pitch_[rt]    = dcrs_.read(rt, VX_DCR_OM_CBUF_PITCH);
+      cbuf_format_[rt]   = dcrs_.read(rt, VX_DCR_OM_CBUF_FORMAT);
+      cbuf_bpp_[rt]      = gfx_sw::om_color_bpp(cbuf_format_[rt]);
       uint32_t cbuf_writemask = dcrs_.read(rt, VX_DCR_OM_CBUF_WRITEMASK) & 0xf;
       cbuf_writemask_[rt] = (((cbuf_writemask >> 0) & 0x1) * 0x000000ff)
                           | (((cbuf_writemask >> 1) & 0x1) * 0x0000ff00)
@@ -226,6 +229,13 @@ private:
                           | (((cbuf_writemask >> 3) & 0x1) * 0xff000000);
       color_read_[rt]  = (cbuf_writemask != 0xf);
       color_write_[rt] = (cbuf_writemask != 0x0);
+      // The merger stores only its own formats, and writes a packed 16-bit
+      // texel whole, so it takes one only with every stored channel or none.
+      const uint32_t fmt = cbuf_format_[rt];
+      const uint32_t stored = (fmt == VX_OM_COLOR_FORMAT_R5G6B5) ? 0x7u : 0xfu;
+      const bool packed = (fmt == VX_OM_COLOR_FORMAT_R5G6B5 || fmt == VX_OM_COLOR_FORMAT_A1R5G5B5);
+      const uint32_t m = cbuf_writemask & stored;
+      cbuf_ff_ok_[rt] = gfx_sw::om_ff_color_format(fmt) && (!packed || m == 0 || m == stored);
     }
   }
 
@@ -401,9 +411,16 @@ private:
       l.src_color = s.req.color[t];
       l.src_depth = s.req.depth[t];
 
-      const uint32_t zbpp = depth_stencil_.depth_stencil_word() ? 8 : 4;
+      const uint32_t zbpp = depth_stencil_.depth_stencil_word() ? 8
+                          : depth_stencil_.depth_d16() ? 2 : 4;
+      // The unit addresses depth a word at a time: a D16 row starts on one.
+      assert((!depth_stencil_.depth_d16() || (zbuf_pitch_ & 3u) == 0)
+             && "OM: a D16 depth pitch is a multiple of 4 bytes");
       l.zbuf_addr_byte = zbuf_baseaddr_ + uint64_t(l.pos_y) * zbuf_pitch_ + l.pos_x * zbpp;
-      l.cbuf_addr_byte = cbuf_baseaddr_[s.req.rt] + uint64_t(l.pos_y) * cbuf_pitch_[s.req.rt] + l.pos_x * 4;
+      assert((!has_color || cbuf_ff_ok_[s.req.rt])
+             && "OM: a colour format and writemask the merger stores");
+      l.cbuf_addr_byte = cbuf_baseaddr_[s.req.rt] + uint64_t(l.pos_y) * cbuf_pitch_[s.req.rt]
+                       + l.pos_x * cbuf_bpp_[s.req.rt];
 
       bool stencil_enabled = depth_stencil_.stencil_enabled(l.face);
       l.need_z_read = has_depth && (depth_enabled || stencil_enabled);
@@ -547,16 +564,19 @@ private:
 
       uint32_t v = 0;
       if (rsp.data) {
-        std::memcpy(&v, rsp.data->data() + pf.byte_off, 4);
+        std::memcpy(&v, rsp.data->data() + pf.byte_off, pf.port == 1 ? cbuf_bpp_[s.req.rt]
+                                                       : (pf.port == 0 ? zbuf_bytes() : 4));
       }
       if (pf.port == 0) {
-        l.dst_depthstencil = v;
+        // A D16 texel widens to the 24-bit key, high byte replicated; it has no
+        // stencil.
+        l.dst_depthstencil = depth_stencil_.depth_d16() ? ((v << 8) | (v >> 8)) : v;
         l.z_arrived        = true;
       } else if (pf.port == 2) {
         l.dst_stencil = v & 0xff;
         l.s_arrived   = true;
       } else {
-        l.dst_color = v;
+        l.dst_color = gfx_sw::om_decode_color(cbuf_format_[s.req.rt], v);
         l.c_arrived = true;
       }
       ch.pop();
@@ -647,9 +667,10 @@ private:
       l.need_c_write = l.has_color && color_write_[s.req.rt] && l.ds_pass;
       if (l.need_c_write) {
         // If color_read_ is false (writemask == 0xf), dst_color is unread —
-        // we'll still write the full word; the merge is a no-op.
-        l.c_write_value = (l.dst_color & ~cbuf_writemask_[s.req.rt])
-                        | (l.blended_color & cbuf_writemask_[s.req.rt]);
+        // the whole texel is written and the merge is a no-op.
+        l.c_write_value = gfx_sw::om_encode_color(cbuf_format_[s.req.rt],
+                                             (l.dst_color & ~cbuf_writemask_[s.req.rt])
+                                           | (l.blended_color & cbuf_writemask_[s.req.rt]));
       }
     }
     s.state = State::WRITE_ISSUE;
@@ -761,11 +782,16 @@ private:
     mreq.tag    = next_mem_tag_++;
     mreq.hart_id    = s.req.tag;
     mreq.uuid   = s.req.uuid;
-    // A D32F_S8 stencil write touches only the stencil byte of its word.
-    mreq.byteen = uint64_t(port == 2 ? 0x1u : 0xfu) << off;
+    // A D32F_S8 stencil write touches only the stencil byte of its word, and a
+    // colour write the attachment's texel.
+    const uint32_t bytes = (port == 2) ? 1u : (port == 1 ? cbuf_bpp_[s.req.rt] : zbuf_bytes());
+    mreq.byteen = uint64_t((1u << bytes) - 1u) << off;
+    if (port == 0 && depth_stencil_.depth_d16()) {
+      value = (value & OM_DEPTH_MASK) >> 8;   // the key's top 16 bits
+    }
 
     auto blk = make_mem_block();
-    std::memcpy(blk->data() + off, &value, 4);
+    std::memcpy(blk->data() + off, &value, bytes);
     mreq.data   = blk;
 
     // Track the write so its ocache commit ack releases the same-pixel interlock.
@@ -780,6 +806,11 @@ private:
     req_ch.send(mreq);
     ++perf_stats_.mem_writes;
     return true;
+  }
+
+  // Bytes of the depth/stencil word a port-0 access moves.
+  uint32_t zbuf_bytes() const {
+    return depth_stencil_.depth_d16() ? 2u : 4u;
   }
 
   void free_slot(Slot& s) {
@@ -800,6 +831,9 @@ private:
   // DCR-derived cache (recomputed on every dcr_write).
   uint64_t  cbuf_baseaddr_[VX_OM_MAX_RT]  = {};
   uint32_t  cbuf_pitch_[VX_OM_MAX_RT]     = {};
+  uint32_t  cbuf_format_[VX_OM_MAX_RT]    = {};
+  uint32_t  cbuf_bpp_[VX_OM_MAX_RT]       = {};
+  bool      cbuf_ff_ok_[VX_OM_MAX_RT]     = {};
   uint32_t  cbuf_writemask_[VX_OM_MAX_RT] = {};
   bool      color_read_[VX_OM_MAX_RT]     = {};
   bool      color_write_[VX_OM_MAX_RT]    = {};

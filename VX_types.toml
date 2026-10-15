@@ -298,6 +298,45 @@ VX_TEX_FORMAT_X24S8      = 57
 VX_TEX_FORMAT_S8X24      = 58
 VX_TEX_FORMAT_D32S8      = 59
 VX_TEX_FORMAT_X32S8      = 60
+# Block-compressed: 4x4 texels per 8- or 16-byte block, stored compressed and
+# decoded texel by texel by the software sampler, in float.
+VX_TEX_FORMAT_BC1        = 61   # RGB, opaque
+VX_TEX_FORMAT_BC1A       = 62   # RGB with one-bit alpha
+VX_TEX_FORMAT_BC2        = 63
+VX_TEX_FORMAT_BC3        = 64
+VX_TEX_FORMAT_BC4        = 65   # unorm -> (r,0,0,1)
+VX_TEX_FORMAT_BC4SN      = 66
+VX_TEX_FORMAT_BC5        = 67   # unorm -> (r,g,0,1)
+VX_TEX_FORMAT_BC5SN      = 68
+VX_TEX_FORMAT_BC6UF      = 69   # unsigned half float -> (r,g,b,1)
+VX_TEX_FORMAT_BC6SF      = 70
+VX_TEX_FORMAT_BC7        = 71
+VX_TEX_FORMAT_BC1_SRGB   = 72
+VX_TEX_FORMAT_BC1A_SRGB  = 73
+VX_TEX_FORMAT_BC2_SRGB   = 74
+VX_TEX_FORMAT_BC3_SRGB   = 75
+VX_TEX_FORMAT_BC7_SRGB   = 76
+# More field formats, named as Vulkan names them (most significant field
+# first for the packed ones).
+VX_TEX_FORMAT_B5G6R5_PACK16   = 77
+VX_TEX_FORMAT_R5G5B5A1_PACK16 = 78
+VX_TEX_FORMAT_B5G5R5A1_PACK16 = 79
+VX_TEX_FORMAT_A1B5G5R5_PACK16 = 80
+VX_TEX_FORMAT_A4R4G4B4_PACK16 = 81
+VX_TEX_FORMAT_A4B4G4R4_PACK16 = 82
+VX_TEX_FORMAT_A8_UNORM        = 83   # -> (0,0,0,a)
+VX_TEX_FORMAT_BGRA8UI         = 84
+VX_TEX_FORMAT_BGRA8I          = 85
+VX_TEX_FORMAT_BGRA8SN         = 86
+VX_TEX_FORMAT_A2R10G10B10     = 87
+VX_TEX_FORMAT_A2R10G10B10SN   = 88
+VX_TEX_FORMAT_A2R10G10B10UI   = 89
+VX_TEX_FORMAT_A2B10G10R10SN   = 90
+VX_TEX_FORMAT_RGB32UI         = 91   # 12-byte texels -> (r,g,b,1)
+VX_TEX_FORMAT_RGB32I          = 92
+VX_TEX_FORMAT_RGB32F          = 93
+VX_TEX_FORMAT_R5G6B5_PACK16   = 94   # as an attachment stores it (input attachments)
+VX_TEX_FORMAT_A1R5G5B5_PACK16 = 95
 
 [raster_const]
 VX_RASTER_DIM_BITS    = 15
@@ -378,6 +417,39 @@ VX_OM_COLOR_FORMAT_RG32I     = 29
 VX_OM_COLOR_FORMAT_RGBA32UI  = 30
 VX_OM_COLOR_FORMAT_RGBA32I   = 31
 VX_OM_COLOR_FORMAT_RGB10A2UI = 32  # R bits 0-9 .. A bits 30-31
+# Further software-merged attachments, named as Vulkan names them (most
+# significant field first for the packed ones).
+VX_OM_COLOR_FORMAT_R8SN        = 33
+VX_OM_COLOR_FORMAT_RG8SN       = 34
+VX_OM_COLOR_FORMAT_RGBA8SN     = 35
+VX_OM_COLOR_FORMAT_BGRA8SN     = 36
+VX_OM_COLOR_FORMAT_BGRA8UI     = 37
+VX_OM_COLOR_FORMAT_BGRA8I      = 38
+VX_OM_COLOR_FORMAT_A2R10G10B10   = 39
+VX_OM_COLOR_FORMAT_A2R10G10B10SN = 40
+VX_OM_COLOR_FORMAT_A2R10G10B10UI = 41
+VX_OM_COLOR_FORMAT_A2B10G10R10SN = 42
+VX_OM_COLOR_FORMAT_R16         = 43
+VX_OM_COLOR_FORMAT_R16SN       = 44
+VX_OM_COLOR_FORMAT_RG16        = 45
+VX_OM_COLOR_FORMAT_RG16SN      = 46
+VX_OM_COLOR_FORMAT_RGBA16      = 47
+VX_OM_COLOR_FORMAT_RGBA16SN    = 48
+VX_OM_COLOR_FORMAT_RGB32F      = 49
+VX_OM_COLOR_FORMAT_RGB32UI     = 50
+VX_OM_COLOR_FORMAT_RGB32I      = 51
+VX_OM_COLOR_FORMAT_B4G4R4A4_PACK16 = 52
+VX_OM_COLOR_FORMAT_B5G6R5_PACK16   = 53
+VX_OM_COLOR_FORMAT_R5G5B5A1_PACK16 = 54
+VX_OM_COLOR_FORMAT_B5G5R5A1_PACK16 = 55
+VX_OM_COLOR_FORMAT_A4R4G4B4_PACK16 = 56
+VX_OM_COLOR_FORMAT_A4B4G4R4_PACK16 = 57
+VX_OM_COLOR_FORMAT_A1B5G5R5_PACK16 = 58
+VX_OM_COLOR_FORMAT_A8          = 59
+VX_OM_COLOR_FORMAT_R10X6       = 60  # 10 bits in the top of 16
+VX_OM_COLOR_FORMAT_R10X6G10X6  = 61
+VX_OM_COLOR_FORMAT_R12X4       = 62
+VX_OM_COLOR_FORMAT_R12X4G12X4  = 63
 VX_OM_DEPTH_FORMAT_D24S8 = 0       # packed 24-bit depth + 8-bit stencil (FF default)
 VX_OM_DEPTH_FORMAT_D16   = 1       # 16-bit unorm depth, no stencil
 VX_OM_DEPTH_FORMAT_D32F  = 2       # 32-bit float depth, no stencil
@@ -508,19 +580,29 @@ VX_DCR_OM_APERTURE_YBITS    = 0x094
 # both (3 -- gl_FragDepth). DEPTH_ONLY disambiguates the two one-word modes.
 VX_DCR_OM_APERTURE_RECORD_SHIFT = 0x095
 VX_DCR_OM_APERTURE_DEPTH_ONLY   = 0x096
-# Colour attachment the CBUF_*, BLEND_* and LOGIC_OP registers above apply to.
+# Colour attachment the per-attachment registers apply to: CBUF_* (CBUF_FORMAT
+# included), BLEND_* and LOGIC_OP.
 # Everything else in this block -- depth, stencil, the z-buffer and the aperture
 # geometry -- is shared by every attachment, so a pass programs it once. Resets
 # to 0, so a single-attachment driver never has to write it.
 VX_DCR_OM_RT_SELECT         = 0x097
 # Depth attachment storage: VX_OM_DEPTH_FORMAT_D24S8 (depth in bits 23:0,
-# stencil in 31:24), VX_OM_DEPTH_FORMAT_D32F (the word is the float's ordered
-# key, compared unsigned; no stencil) or VX_OM_DEPTH_FORMAT_D32FS8 (an 8-byte
-# texel: the D32F key, then the stencil in the low byte of the next word; the
-# z-buffer pitch covers 8 bytes a pixel). Raster early-Z tests the 24-bit plane,
-# so it stays off for both float formats. Resets to D24S8.
+# stencil in 31:24), VX_OM_DEPTH_FORMAT_D16 (a 2-byte texel holding the top 16
+# bits of the 24-bit key; rows start on a 4-byte boundary), VX_OM_DEPTH_FORMAT_S8
+# (stencil only), VX_OM_DEPTH_FORMAT_D32F (the word is the float's ordered key,
+# compared unsigned; no stencil) or VX_OM_DEPTH_FORMAT_D32FS8 (an 8-byte texel:
+# the D32F key, then the stencil in the low byte of the next word; the z-buffer
+# pitch covers 8 bytes a pixel). Raster early-Z tests the 24-bit plane, so it
+# applies to D24S8 only. Resets to D24S8.
 VX_DCR_OM_DEPTH_FORMAT      = 0x098
-VX_DCR_OM_STATE_END         = 0x099
+# Colour attachment texel layout, per attachment (RT_SELECT): A8R8G8B8 (4 bytes),
+# R8 and RG8 (the working colour's R, then G, in 1 or 2 bytes), R5G6B5 and
+# A1R5G5B5 (2 bytes, rounded from the 8-bit channels). The merger blends in
+# ARGB8888 between the unpack of the read and the pack of the write, and writes
+# a packed 16-bit texel whole, so a writemask opening only some of its channels
+# is unsupported. Resets to A8R8G8B8.
+VX_DCR_OM_CBUF_FORMAT       = 0x099
+VX_DCR_OM_STATE_END         = 0x09A
 
 [dcr_rtu]
 # Ray-Tracing Unit DCRs.

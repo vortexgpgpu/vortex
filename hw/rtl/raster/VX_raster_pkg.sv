@@ -42,7 +42,7 @@ typedef struct packed {
     logic [OM_PITCH_BITS-1:0]   zbuf_pitch;    // Depth buffer row pitch (bytes)
     logic [OM_DEPTH_FUNC_BITS-1:0] depth_func; // Depth compare function
     logic                           earlyz_safe;   // 1 = early-Z cull permitted
-    logic                           depth_float;   // D32F target: the 24-bit plane does not apply
+    logic                           depth_d24;     // D24S8 target: the only plane early-Z tests
 `endif
 } raster_dcrs_t;
 

@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <VX_types.h>
 #include "gfx_tex_const.h"
+#include "gfx_tex_bc.h"
 #include <vx_gfx_abi.h>                 // Pack8888 / Lerp8888
 #include <cocogfx/include/fixed.hpp>    // cocogfx::TFixed
 
@@ -45,7 +46,8 @@ static inline __attribute__((always_inline)) int32_t tex_imax(int32_t a, int32_t
 // stride, blend fractions, and format/filter selectors.
 struct TexelRequest {
   uint64_t addr[4];   // [0] always populated; [1..3] only for BILINEAR
-  uint32_t stride;    // bytes per texel (1, 2, or 4)
+  uint8_t  sub[4];    // a block-compressed tap's texel within the block at addr
+  uint32_t stride;    // bytes per texel (1, 2, or 4), or per block
   uint32_t format;    // VX_TEX_FORMAT_*
   uint32_t filter;    // VX_TEX_FILTER_POINT or _BILINEAR
   uint32_t alpha;     // u-fraction (BILINEAR only)
@@ -129,8 +131,27 @@ struct TexFieldFmt {
   uint8_t  width[4];
 };
 
+// The block-compressed formats: a texel is one of the 16 of a 4x4 block.
+static inline bool TexIsBlockFormat(uint32_t format) {
+  return format >= (uint32_t)VX_TEX_FORMAT_BC1 && format <= (uint32_t)VX_TEX_FORMAT_BC7_SRGB;
+}
+
+static inline uint32_t TexBlockBytes(uint32_t format) {
+  switch (format) {
+  case VX_TEX_FORMAT_BC1:
+  case VX_TEX_FORMAT_BC1A:
+  case VX_TEX_FORMAT_BC4:
+  case VX_TEX_FORMAT_BC4SN:
+  case VX_TEX_FORMAT_BC1_SRGB:
+  case VX_TEX_FORMAT_BC1A_SRGB:
+    return 8;
+  default:
+    return 16;
+  }
+}
+
 static inline bool TexIsFieldFormat(uint32_t format) {
-  return format >= (uint32_t)VX_TEX_FORMAT_R8UI;
+  return format >= (uint32_t)VX_TEX_FORMAT_R8UI && !TexIsBlockFormat(format);
 }
 
 static inline TexFieldFmt TexFieldGeom(uint32_t format) {
@@ -175,6 +196,25 @@ static inline TexFieldFmt TexFieldGeom(uint32_t format) {
   case VX_TEX_FORMAT_S8X24: return { 4, 1, TEX_KIND_UINT, {0}, {8} };
   case VX_TEX_FORMAT_D32S8: return { 8, 1, TEX_KIND_FLOAT, {0}, {32} };
   case VX_TEX_FORMAT_X32S8: return { 8, 1, TEX_KIND_UINT, {32}, {8} };
+  case VX_TEX_FORMAT_B5G6R5_PACK16: return { 2, 3, TEX_KIND_UNORM, {0, 5, 11}, {5, 6, 5} };
+  case VX_TEX_FORMAT_R5G5B5A1_PACK16: return { 2, 4, TEX_KIND_UNORM, {11, 6, 1, 0}, {5, 5, 5, 1} };
+  case VX_TEX_FORMAT_B5G5R5A1_PACK16: return { 2, 4, TEX_KIND_UNORM, {1, 6, 11, 0}, {5, 5, 5, 1} };
+  case VX_TEX_FORMAT_A1B5G5R5_PACK16: return { 2, 4, TEX_KIND_UNORM, {0, 5, 10, 15}, {5, 5, 5, 1} };
+  case VX_TEX_FORMAT_A4R4G4B4_PACK16: return { 2, 4, TEX_KIND_UNORM, {8, 4, 0, 12}, {4, 4, 4, 4} };
+  case VX_TEX_FORMAT_A4B4G4R4_PACK16: return { 2, 4, TEX_KIND_UNORM, {0, 4, 8, 12}, {4, 4, 4, 4} };
+  case VX_TEX_FORMAT_A8_UNORM: return { 1, 4, TEX_KIND_UNORM, {0, 0, 0, 0}, {0, 0, 0, 8} };
+  case VX_TEX_FORMAT_BGRA8UI: return { 4, 4, TEX_KIND_UINT, {16, 8, 0, 24}, {8, 8, 8, 8} };
+  case VX_TEX_FORMAT_BGRA8I: return { 4, 4, TEX_KIND_SINT, {16, 8, 0, 24}, {8, 8, 8, 8} };
+  case VX_TEX_FORMAT_BGRA8SN: return { 4, 4, TEX_KIND_SNORM, {16, 8, 0, 24}, {8, 8, 8, 8} };
+  case VX_TEX_FORMAT_A2R10G10B10: return { 4, 4, TEX_KIND_UNORM, {20, 10, 0, 30}, {10, 10, 10, 2} };
+  case VX_TEX_FORMAT_A2R10G10B10SN: return { 4, 4, TEX_KIND_SNORM, {20, 10, 0, 30}, {10, 10, 10, 2} };
+  case VX_TEX_FORMAT_A2R10G10B10UI: return { 4, 4, TEX_KIND_UINT, {20, 10, 0, 30}, {10, 10, 10, 2} };
+  case VX_TEX_FORMAT_A2B10G10R10SN: return { 4, 4, TEX_KIND_SNORM, {0, 10, 20, 30}, {10, 10, 10, 2} };
+  case VX_TEX_FORMAT_RGB32UI: return { 12, 3, TEX_KIND_UINT, {0, 32, 64}, {32, 32, 32} };
+  case VX_TEX_FORMAT_RGB32I: return { 12, 3, TEX_KIND_SINT, {0, 32, 64}, {32, 32, 32} };
+  case VX_TEX_FORMAT_RGB32F: return { 12, 3, TEX_KIND_FLOAT, {0, 32, 64}, {32, 32, 32} };
+  case VX_TEX_FORMAT_R5G6B5_PACK16: return { 2, 3, TEX_KIND_UNORM, {11, 5, 0}, {5, 6, 5} };
+  case VX_TEX_FORMAT_A1R5G5B5_PACK16: return { 2, 4, TEX_KIND_UNORM, {10, 5, 0, 15}, {5, 5, 5, 1} };
   default: return { 4, 4, TEX_KIND_UNORM, {0, 8, 16, 24}, {8, 8, 8, 8} };
   }
 }
@@ -207,6 +247,10 @@ static inline void TexDecodeField4(uint32_t format, const void* p, float out[4])
       }
     } else {
       const uint32_t width = g.width[c];
+      if (width == 0) {
+        __builtin_memset(&out[c], 0, 4);   // a channel the format lacks
+        continue;
+      }
       const uint32_t v = TexFieldGet(w, g.off[c], width);
       const uint32_t sh = 32u - width;
       float f;
@@ -236,7 +280,11 @@ static inline void TexDecodeField4(uint32_t format, const void* p, float out[4])
   }
 }
 
+// Bytes per texel, or per block of a block-compressed format.
 static inline uint32_t FormatStride(uint32_t format) {
+  if (TexIsBlockFormat(format)) {
+    return TexBlockBytes(format);
+  }
   if (TexIsFieldFormat(format)) {
     return TexFieldGeom(format).bpp;
   }
@@ -536,6 +584,7 @@ static inline bool TexIsSrgbFormat(uint32_t format) {
 // whose 16 and 32 bits an 8-bit working space would truncate.
 static inline bool TexFiltersInFloat(uint32_t format) {
   return TexIsFloatFormat(format) || TexIsSrgbFormat(format) || TexIsFieldFormat(format)
+      || TexIsBlockFormat(format)
       || format == VX_TEX_FORMAT_D16 || format == VX_TEX_FORMAT_D32F;
 }
 
@@ -676,6 +725,185 @@ static inline void TexDecodeFloat4(uint32_t format, const void* p, uint32_t stri
   out[3] = (float)(argb >> 24) * inv255;
 }
 
+// Linear -> the nearest 8-bit sRGB code, by search of the decode table (the
+// device has no powf): the code whose linear value is closest.
+static inline uint32_t LinearToSrgb8(float v) {
+  if (!(v > 0.0f)) {
+    return 0;
+  }
+  if (v >= 1.0f) {
+    return 255;
+  }
+  uint32_t lo = 0, hi = 255;
+  while (hi - lo > 1) {
+    const uint32_t mid = (lo + hi) >> 1;
+    if (SrgbToLinearF(mid) <= v) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return (v - SrgbToLinearF(lo) <= SrgbToLinearF(hi) - v) ? lo : hi;
+}
+
+// Encode four lanes (floats for a normalized or float format, the integers for
+// an integer one) into the field-format texel at `p`, leaving its other bits
+// alone. An integer out of its field's range saturates, as a typed store does.
+static inline void TexEncodeField4(uint32_t format, void* p, const uint32_t lanes[4]) {
+  const TexFieldFmt g = TexFieldGeom(format);
+  uint32_t w[4] = {0, 0, 0, 0};
+  __builtin_memcpy(w, p, g.bpp);
+  for (uint32_t c = 0; c < g.nch; ++c) {
+    const uint32_t width = g.width[c];
+    if (width == 0) {
+      continue;
+    }
+    float f;
+    __builtin_memcpy(&f, &lanes[c], 4);
+    uint32_t v;
+    switch (g.kind) {
+    case TEX_KIND_UNORM: {
+      const float cf = f > 0.0f ? (f < 1.0f ? f : 1.0f) : 0.0f;
+      v = (uint32_t)(cf * (float)((1u << width) - 1u) + 0.5f);
+      break;
+    }
+    case TEX_KIND_SNORM: {
+      const float cf = f > -1.0f ? (f < 1.0f ? f : 1.0f) : -1.0f;
+      const float s = cf * (float)((1u << (width - 1u)) - 1u);
+      v = (uint32_t)(int32_t)(s + (s < 0.0f ? -0.5f : 0.5f));
+      break;
+    }
+    case TEX_KIND_SRGB: {
+      const float cf = f > 0.0f ? (f < 1.0f ? f : 1.0f) : 0.0f;
+      v = (c < 3u) ? LinearToSrgb8(cf) : (uint32_t)(cf * 255.0f + 0.5f);
+      break;
+    }
+    case TEX_KIND_UINT:
+      v = (width < 32u && lanes[c] > (1u << width) - 1u) ? (1u << width) - 1u : lanes[c];
+      break;
+    case TEX_KIND_SINT: {
+      int32_t iv = (int32_t)lanes[c];
+      if (width < 32u) {
+        const int32_t hi = (int32_t)((1u << (width - 1u)) - 1u), lo = -hi - 1;
+        iv = iv > hi ? hi : (iv < lo ? lo : iv);
+      }
+      v = (uint32_t)iv;
+      break;
+    }
+    default:
+      v = lanes[c];
+      break;
+    }
+    const uint32_t m = (width >= 32u) ? 0xffffffffu : ((1u << width) - 1u);
+    const uint32_t sh = g.off[c] & 31u;
+    w[g.off[c] >> 5] = (w[g.off[c] >> 5] & ~(m << sh)) | ((v & m) << sh);
+  }
+  __builtin_memcpy(p, w, g.bpp);
+}
+
+// The linear twin of an sRGB block format (the format itself otherwise).
+static inline uint32_t TexBlockLinear(uint32_t format) {
+  switch (format) {
+  case VX_TEX_FORMAT_BC1_SRGB:  return VX_TEX_FORMAT_BC1;
+  case VX_TEX_FORMAT_BC1A_SRGB: return VX_TEX_FORMAT_BC1A;
+  case VX_TEX_FORMAT_BC2_SRGB:  return VX_TEX_FORMAT_BC2;
+  case VX_TEX_FORMAT_BC3_SRGB:  return VX_TEX_FORMAT_BC3;
+  case VX_TEX_FORMAT_BC7_SRGB:  return VX_TEX_FORMAT_BC7;
+  default:                      return format;
+  }
+}
+
+// Texel `t` (0..15, row-major) of the block at `p` of a block-compressed format,
+// as four float channels in RGBA order.
+static inline void TexDecodeBlockF4(uint32_t format, const void* p, uint32_t t, float out[4]) {
+  out[0] = 0.0f; out[1] = 0.0f; out[2] = 0.0f; out[3] = 1.0f;
+  switch (format) {
+  case VX_TEX_FORMAT_BC4:
+  case VX_TEX_FORMAT_BC4SN:
+    out[0] = BcRedBlock((const uint8_t*)p, t, format == VX_TEX_FORMAT_BC4SN);
+    return;
+  case VX_TEX_FORMAT_BC5:
+  case VX_TEX_FORMAT_BC5SN:
+    out[0] = BcRedBlock((const uint8_t*)p, t, format == VX_TEX_FORMAT_BC5SN);
+    out[1] = BcRedBlock((const uint8_t*)p + 8, t, format == VX_TEX_FORMAT_BC5SN);
+    return;
+  case VX_TEX_FORMAT_BC6UF:
+  case VX_TEX_FORMAT_BC6SF: {
+    uint16_t h[3];
+    BcDecodeBc6(p, t, format == VX_TEX_FORMAT_BC6SF, h);
+    for (uint32_t c = 0; c < 3; ++c) {
+      out[c] = HalfToFloat(h[c]);
+    }
+    return;
+  }
+  default:
+    break;
+  }
+  const uint32_t linear = TexBlockLinear(format);
+  uint32_t rgba;
+  switch (linear) {
+  case VX_TEX_FORMAT_BC1:  rgba = BcDecodeBc1(p, t, false); break;
+  case VX_TEX_FORMAT_BC1A: rgba = BcDecodeBc1(p, t, true); break;
+  case VX_TEX_FORMAT_BC2:  rgba = BcDecodeBc2(p, t); break;
+  case VX_TEX_FORMAT_BC3:  rgba = BcDecodeBc3(p, t); break;
+  default:                 rgba = BcDecodeBc7(p, t); break;
+  }
+  const bool srgb = linear != format;
+  const float inv255 = 1.0f / 255.0f;
+  for (uint32_t c = 0; c < 3; ++c) {
+    const uint32_t v = (rgba >> (8 * c)) & 0xff;
+    out[c] = srgb ? SrgbToLinearF(v) : (float)v * inv255;
+  }
+  out[3] = (float)(rgba >> 24) * inv255;
+}
+
+// A texel's byte offset within its level `width` texels wide, and its index in
+// its block (0 for a format that is not block-compressed).
+static inline uint64_t TexTexelOffset(uint32_t format, uint32_t width, uint32_t x, uint32_t y,
+                                      uint32_t* sub) {
+  if (TexIsBlockFormat(format)) {
+    *sub = ((y & 3u) << 2) | (x & 3u);
+    return ((uint64_t)(y >> 2) * ((width + 3u) >> 2) + (x >> 2)) * TexBlockBytes(format);
+  }
+  *sub = 0;
+  return ((uint64_t)y * width + x) * FormatStride(format);
+}
+
+// Bytes of one w x h image of the format (a 2D level, or a 3D level's slice).
+static inline uint64_t TexImageBytes(uint32_t format, uint32_t w, uint32_t h) {
+  if (TexIsBlockFormat(format)) {
+    return (uint64_t)((w + 3u) >> 2) * ((h + 3u) >> 2) * TexBlockBytes(format);
+  }
+  return (uint64_t)w * h * FormatStride(format);
+}
+
+// TexDecodeFloat4 for a texel located by TexTexelOffset: `sub` picks it from its
+// block when the format is block-compressed.
+static inline void TexDecodeFloat4At(uint32_t format, const void* p, uint32_t sub,
+                                     uint32_t stride, float out[4]) {
+  if (TexIsBlockFormat(format)) {
+    TexDecodeBlockF4(format, p, sub, out);
+    return;
+  }
+  TexDecodeFloat4(format, p, stride, out);
+}
+
+// TexDecodeArgb8 likewise, a block texel rounded to eight bits a channel.
+static inline uint32_t TexDecodeArgb8At(uint32_t format, const void* p, uint32_t sub,
+                                        uint32_t stride) {
+  if (!TexIsBlockFormat(format)) {
+    return TexDecodeArgb8(format, p, stride);
+  }
+  float f[4];
+  TexDecodeBlockF4(format, p, sub, f);
+  uint32_t b[4];
+  for (uint32_t c = 0; c < 4; ++c) {
+    const float v = f[c] < 0.0f ? 0.0f : (f[c] > 1.0f ? 1.0f : f[c]);
+    b[c] = (uint32_t)(v * 255.0f + 0.5f);
+  }
+  return (b[3] << 24) | (b[0] << 16) | (b[1] << 8) | b[2];
+}
+
 static inline uint32_t TexFilterLinear(uint32_t format,
                                        uint32_t texel00,
                                        uint32_t texel01,
@@ -754,7 +982,9 @@ static inline TexelRequest tex_compute_request(uint64_t base_addr,
   const uint32_t taps = linear ? 4u : 1u;
   for (uint32_t i = 0; i < taps; ++i) {
     const uint32_t x = i & 1u, y = i >> 1;
-    req.addr[i] = base_addr + (uint64_t)(xs[x] + ys[y] * width) * req.stride;
+    uint32_t sub;
+    req.addr[i] = base_addr + TexTexelOffset(format, width, xs[x], ys[y], &sub);
+    req.sub[i] = (uint8_t)sub;
     if (bx[x] || by[y]) {
       req.border_mask |= 1u << i;
     }

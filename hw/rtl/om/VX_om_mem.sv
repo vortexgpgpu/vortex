@@ -60,6 +60,58 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
 
     localparam NUM_REQS    = OM_MEM_REQS;
     localparam W_ADDR_BITS = (`OM_ADDR_BITS + 6) - 2;
+    localparam B_ADDR_BITS = `OM_ADDR_BITS + 6;
+    // A colour read returns words; the format and each lane's byte offset ride
+    // with the request so the response can be shifted down and unpacked.
+    // A D16 read likewise carries which half of its word each lane's texel is.
+    localparam MTAG_WIDTH  = TAG_WIDTH + OM_CFMT_BITS + NUM_LANES + 2 * NUM_LANES;
+
+    // The merger blends in ARGB8888. R8 and RG8 hold its R (then G) byte;
+    // R5G6B5 and A1R5G5B5 round its channels, x/255 taken as (x+1+(x>>8))>>8,
+    // which is exact over the range.
+    function automatic [7:0] widen5(input [4:0] v);
+        widen5 = {v, v[4:2]};
+    endfunction
+    function automatic [7:0] widen6(input [5:0] v);
+        widen6 = {v, v[5:4]};
+    endfunction
+    function automatic [5:0] narrow(input [7:0] v, input [5:0] max);
+        reg [13:0] x;
+        begin
+            x = 14'(v) * 14'(max) + 14'd127;
+            narrow = 6'((x + 14'd1 + (x >> 8)) >> 8);
+        end
+    endfunction
+    function automatic [31:0] cfmt_unpack(input [OM_CFMT_BITS-1:0] fmt, input [31:0] raw);
+        case (fmt)
+            OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_R8):
+                cfmt_unpack = {8'hff, raw[7:0], 16'h0};
+            OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_RG8):
+                cfmt_unpack = {8'hff, raw[7:0], raw[15:8], 8'h0};
+            OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_R5G6B5):
+                cfmt_unpack = {8'hff, widen5(raw[15:11]), widen6(raw[10:5]), widen5(raw[4:0])};
+            OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_A1R5G5B5):
+                cfmt_unpack = {{8{raw[15]}}, widen5(raw[14:10]), widen5(raw[9:5]), widen5(raw[4:0])};
+            default:
+                cfmt_unpack = raw;
+        endcase
+    endfunction
+    function automatic [31:0] cfmt_pack(input [OM_CFMT_BITS-1:0] fmt, input [31:0] argb);
+        case (fmt)
+            OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_R8):
+                cfmt_pack = {24'h0, argb[23:16]};
+            OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_RG8):
+                cfmt_pack = {16'h0, argb[15:8], argb[23:16]};
+            OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_R5G6B5):
+                cfmt_pack = {16'h0, 5'(narrow(argb[23:16], 6'd31)), narrow(argb[15:8], 6'd63),
+                             5'(narrow(argb[7:0], 6'd31))};
+            OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_A1R5G5B5):
+                cfmt_pack = {16'h0, argb[31], 5'(narrow(argb[23:16], 6'd31)),
+                             5'(narrow(argb[15:8], 6'd31)), 5'(narrow(argb[7:0], 6'd31))};
+            default:
+                cfmt_pack = argb;
+        endcase
+    endfunction
 
     // The memory scheduler cannot fill more memory channels than it has core
     // requests, so a build with more ocache banks than OM memory ports clamps
@@ -73,14 +125,15 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire [NUM_REQS-1:0][OCACHE_ADDR_WIDTH-1:0] mreq_addr, mreq_addr_r;
     wire [NUM_REQS-1:0][31:0]   mreq_data, mreq_data_r;
     wire [NUM_REQS-1:0][3:0]    mreq_byteen, mreq_byteen_r;
-    wire [TAG_WIDTH-1:0]        mreq_tag, mreq_tag_r;
+    wire [TAG_WIDTH-1:0]        mreq_tag;
+    wire [MTAG_WIDTH-1:0]       mreq_mtag, mreq_mtag_r;
     wire                        mreq_ready_r;
 
     wire                        req_queue_empty_w;
     wire                        mrsp_valid;
     wire [NUM_REQS-1:0]         mrsp_mask;
     wire [NUM_REQS-1:0][31:0]   mrsp_data;
-    wire [TAG_WIDTH-1:0]        mrsp_tag;
+    wire [MTAG_WIDTH-1:0]       mrsp_mtag;
     wire                        mrsp_ready;
 
     `UNUSED_VAR (dcrs)
@@ -106,7 +159,9 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // no enable network spans it: multipliers and shift registers free-run.
     wire req_fire = req_valid && req_ready;
 
-    // depth/stencil values submission
+    // depth/stencil values submission. A D16 texel is half a word; its row
+    // pitch is a multiple of 4 bytes, so the half is the x position's low bit.
+    wire [NUM_LANES-1:0] z_half;
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_DS
         wire [31:0] m_y_pitch;
         `UNUSED_VAR (m_y_pitch)
@@ -124,17 +179,23 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             .result (m_y_pitch)
         );
 
-        // A D32F_S8 texel is two words wide.
+        // A D32F_S8 texel is two words wide, a D16 one half a word.
         wire [W_ADDR_BITS-1:0] xoff = dcrs.depth_stencil_word ? (W_ADDR_BITS'(req_pos_x[i]) << 1)
-                                                              : W_ADDR_BITS'(req_pos_x[i]);
+                                    : dcrs.depth_d16 ? (W_ADDR_BITS'(req_pos_x[i]) >> 1)
+                                    : W_ADDR_BITS'(req_pos_x[i]);
         wire [W_ADDR_BITS-1:0] baddr, baddr_s;
         assign baddr = {dcrs.zbuf_addr, 4'b0} + xoff;
 
+        wire half = dcrs.depth_d16 && req_pos_x[i][0];
+        wire [3:0] d16_byteen = half ? {{2{dcrs.depth_writemask}}, 2'b00}
+                                     : {2'b00, {2{dcrs.depth_writemask}}};
         wire [3:0] byteen = req_rw ? (dcrs.depth_float ? {4{dcrs.depth_writemask}}
-                                                       : {stencil_byteen[i], depth_byteen})
+                                    : dcrs.depth_d16 ? d16_byteen
+                                    : {stencil_byteen[i], depth_byteen})
                                    : 4'b1111;
         wire [31:0] data = dcrs.depth_float ? req_depth[i]
-                                            : {req_stencil[i], req_depth[i][`VX_OM_DEPTH_BITS-1:0]};
+                         : dcrs.depth_d16 ? {2{req_depth[i][`VX_OM_DEPTH_BITS-1 -: 16]}}
+                         : {req_stencil[i], req_depth[i][`VX_OM_DEPTH_BITS-1:0]};
         // A D32F_S8 write touches only the words whose aspect is written.
         wire mask = req_ds_mask[i] && ~(req_rw && dcrs.depth_stencil_word && ~dcrs.depth_writemask);
 
@@ -143,17 +204,18 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         wire        s_mask   = req_ds_mask[i] && dcrs.depth_stencil_word && ~(req_rw && ~stencil_byteen[i]);
 
         VX_shift_register #(
-            .DATAW (1 + 4 + 1 + 4 + W_ADDR_BITS + 32 + 32),
+            .DATAW (1 + 4 + 1 + 4 + W_ADDR_BITS + 32 + 32 + 1),
             .DEPTH (`LATENCY_IMUL)
         ) shift_reg (
             .clk      (clk),
             `UNUSED_PIN (reset),
             .enable   (1'b1),
             .data_in  ({mask,         byteen,         s_mask,
-                        s_byteen,                     baddr,   data,         s_data}),
+                        s_byteen,                     baddr,   data,         s_data,
+                        half}),
             .data_out ({mreq_mask[i], mreq_byteen[i], mreq_mask[2 * NUM_LANES + i],
                         mreq_byteen[2 * NUM_LANES + i], baddr_s, mreq_data[i],
-                        mreq_data[2 * NUM_LANES + i]})
+                        mreq_data[2 * NUM_LANES + i], z_half[i]})
         );
 
         wire [W_ADDR_BITS-1:0] addr = baddr_s + W_ADDR_BITS'(m_y_pitch[31:2]);
@@ -162,9 +224,24 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     end
 
     // blend color submission
+    wire [OM_CFMT_BITS-1:0] cfmt = rt_dcrs.cbuf_format;
+    // log2 of the texel size: R8 1 byte; RG8, R5G6B5, A1R5G5B5 2; A8R8G8B8 4.
+    wire [1:0] c_lgbpp = (cfmt == OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_R8)) ? 2'd0
+                       : (cfmt == OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_RG8)
+                       || cfmt == OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_R5G6B5)
+                       || cfmt == OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_A1R5G5B5)) ? 2'd1 : 2'd2;
+    // The texel's bytes the writemask opens: R8 holds R (mask bit 2), RG8 R
+    // then G. A packed 16-bit texel is written whole: a channel straddles its
+    // bytes, so a mask opening only some of its channels is unsupported.
+    wire [3:0] c_texel_byteen = (c_lgbpp == 2'd0) ? {3'b0, color_byteen[2]}
+                              : (cfmt == OM_CFMT_BITS'(`VX_OM_COLOR_FORMAT_RG8)) ? {2'b0, color_byteen[1], color_byteen[2]}
+                              : (c_lgbpp == 2'd1) ? {2'b0, {2{| color_byteen}}}
+                              : color_byteen;
+    wire [OM_CFMT_BITS-1:0] cfmt_s;
+    wire [NUM_LANES-1:0][1:0] c_off;
+
     for (genvar i = NUM_LANES; i < 2 * NUM_LANES; ++i) begin : g_color
         wire [31:0] m_y_pitch;
-        `UNUSED_VAR (m_y_pitch)
 
         VX_multiplier #(
             .A_WIDTH (`VX_OM_DIM_BITS),
@@ -179,27 +256,47 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             .result (m_y_pitch)
         );
 
-        wire [W_ADDR_BITS-1:0] baddr, baddr_s;
-        assign baddr = {rt_dcrs.cbuf_addr, 4'b0} + W_ADDR_BITS'(req_pos_x[i - NUM_LANES]);
+        wire [B_ADDR_BITS-1:0] baddr, baddr_s;
+        assign baddr = {rt_dcrs.cbuf_addr, 6'b0} + (B_ADDR_BITS'(req_pos_x[i - NUM_LANES]) << c_lgbpp);
 
-        wire [3:0]  byteen = req_rw ? color_byteen : 4'b1111;
-        wire [31:0] data = req_color[i - NUM_LANES];
+        wire [3:0]  byteen = req_rw ? c_texel_byteen : 4'b1111;
+        wire [31:0] data = cfmt_pack(cfmt, req_color[i - NUM_LANES]);
         wire mask = req_c_mask[i - NUM_LANES];
+        wire [3:0]  byteen_s;
+        wire [31:0] data_s;
 
         VX_shift_register #(
-            .DATAW (1 + 4 + W_ADDR_BITS + 32),
+            .DATAW (1 + 4 + B_ADDR_BITS + 32),
             .DEPTH (`LATENCY_IMUL)
         ) shift_reg (
             .clk      (clk),
             `UNUSED_PIN (reset),
             .enable   (1'b1),
-            .data_in  ({mask,         byteen,         baddr,    data}),
-            .data_out ({mreq_mask[i], mreq_byteen[i], baddr_s,  mreq_data[i]})
+            .data_in  ({mask,         byteen,   baddr,    data}),
+            .data_out ({mreq_mask[i], byteen_s, baddr_s,  data_s})
         );
 
-        wire [W_ADDR_BITS-1:0] addr = baddr_s + W_ADDR_BITS'(m_y_pitch[31:2]);
-        assign mreq_addr[i] = OCACHE_ADDR_WIDTH'(addr);
+        wire [B_ADDR_BITS-1:0] addr = baddr_s + B_ADDR_BITS'(m_y_pitch);
+        wire [1:0] off = addr[1:0];
+        assign c_off[i - NUM_LANES] = off;
+        assign mreq_addr[i]   = OCACHE_ADDR_WIDTH'(addr[B_ADDR_BITS-1:2]);
+        assign mreq_byteen[i] = byteen_s << off;
+        assign mreq_data[i]   = data_s << {off, 3'b0};
+        `UNUSED_VAR (m_y_pitch)
     end
+
+    VX_shift_register #(
+        .DATAW (OM_CFMT_BITS),
+        .DEPTH (`LATENCY_IMUL)
+    ) cfmt_reg (
+        .clk      (clk),
+        `UNUSED_PIN (reset),
+        .enable   (1'b1),
+        .data_in  (cfmt),
+        .data_out (cfmt_s)
+    );
+
+    assign mreq_mtag = {mreq_tag, cfmt_s, z_half, c_off};
 
     VX_shift_register #(
         .DATAW  (1 + 1 + TAG_WIDTH),
@@ -240,7 +337,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     );
 
     VX_elastic_buffer #(
-        .DATAW   (1 + NUM_REQS * (1 + 4 + OCACHE_ADDR_WIDTH + 32) + TAG_WIDTH),
+        .DATAW   (1 + NUM_REQS * (1 + 4 + OCACHE_ADDR_WIDTH + 32) + MTAG_WIDTH),
         .SIZE    (LANDQ_SIZE),
         .OUT_REG (1),
         .LUTRAM  (1)
@@ -249,8 +346,8 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .reset     (reset),
         .valid_in  (mreq_valid),
         .ready_in  (landq_ready),
-        .data_in   ({mreq_rw,   mreq_mask,   mreq_byteen,   mreq_addr,   mreq_data,   mreq_tag}),
-        .data_out  ({mreq_rw_r, mreq_mask_r, mreq_byteen_r, mreq_addr_r, mreq_data_r, mreq_tag_r}),
+        .data_in   ({mreq_rw,   mreq_mask,   mreq_byteen,   mreq_addr,   mreq_data,   mreq_mtag}),
+        .data_out  ({mreq_rw_r, mreq_mask_r, mreq_byteen_r, mreq_addr_r, mreq_data_r, mreq_mtag_r}),
         .valid_out (mreq_valid_r),
         .ready_out (mreq_ready_r)
     );
@@ -274,7 +371,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .WORD_SIZE    (4),
         .ADDR_WIDTH   (OCACHE_ADDR_WIDTH),
         .USER_WIDTH   (0),
-        .TAG_WIDTH    (TAG_WIDTH),
+        .TAG_WIDTH    (MTAG_WIDTH),
         .CORE_QUEUE_SIZE(`VX_CFG_OM_MEM_QUEUE_SIZE),
         .UUID_WIDTH   (UUID_WIDTH),
         .RSP_PARTIAL  (0),
@@ -292,7 +389,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .core_req_addr  (mreq_addr_r),
         .core_req_user  ('0),
         .core_req_data  (mreq_data_r),
-        .core_req_tag   (mreq_tag_r),
+        .core_req_tag   (mreq_mtag_r),
         .core_req_ready (mreq_ready_r),
         .req_queue_rw_notify (write_notify),
         .req_queue_empty (req_queue_empty_w),
@@ -301,7 +398,7 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .core_rsp_valid (mrsp_valid),
         .core_rsp_mask  (mrsp_mask),
         .core_rsp_data  (mrsp_data),
-        .core_rsp_tag   (mrsp_tag),
+        .core_rsp_tag   (mrsp_mtag),
         `UNUSED_PIN (core_rsp_sop),
         `UNUSED_PIN (core_rsp_eop),
         .core_rsp_ready (mrsp_ready),
@@ -365,22 +462,27 @@ module VX_om_mem import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     assign rsp_mask = mrsp_mask[0 +: NUM_LANES] | mrsp_mask[NUM_LANES +: NUM_LANES]
                     | mrsp_mask[2 * NUM_LANES +: NUM_LANES];
 
+    wire [NUM_LANES-1:0] rsp_z_half = mrsp_mtag[2 * NUM_LANES +: NUM_LANES];
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_depth
+        wire [15:0] d16 = rsp_z_half[i] ? mrsp_data[i][31:16] : mrsp_data[i][15:0];
         assign rsp_depth[i]   = dcrs.depth_float ? mrsp_data[i]
-                                                 : (mrsp_data[i] & 32'(OM_DEPTH_MASK));
+                              : dcrs.depth_d16 ? 32'({d16, d16[15:8]})
+                              : (mrsp_data[i] & 32'(OM_DEPTH_MASK));
     end
 
     for (genvar i = 0;  i < NUM_LANES; ++i) begin : g_rsp_stencil
         assign rsp_stencil[i] = dcrs.depth_stencil_word ? `VX_OM_STENCIL_BITS'(mrsp_data[2 * NUM_LANES + i])
-                              : dcrs.depth_float ? '0
+                              : (dcrs.depth_float || dcrs.depth_d16) ? '0
                               : `VX_OM_STENCIL_BITS'(mrsp_data[i] >> `VX_OM_DEPTH_BITS);
     end
 
+    wire [OM_CFMT_BITS-1:0] rsp_cfmt = mrsp_mtag[3 * NUM_LANES +: OM_CFMT_BITS];
     for (genvar i = NUM_LANES; i < 2 * NUM_LANES; ++i) begin : g_rsp_color
-        assign rsp_color[i - NUM_LANES] = mrsp_data[i];
+        wire [1:0] off = mrsp_mtag[2 * (i - NUM_LANES) +: 2];
+        assign rsp_color[i - NUM_LANES] = cfmt_unpack(rsp_cfmt, mrsp_data[i] >> {off, 3'b0});
     end
 
-    assign rsp_tag = mrsp_tag;
+    assign rsp_tag = mrsp_mtag[MTAG_WIDTH-1 -: TAG_WIDTH];
 
     assign mrsp_ready = rsp_ready;
 

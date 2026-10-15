@@ -53,10 +53,9 @@ module VX_raster_dcr import VX_gpu_pkg::*, VX_raster_pkg::*;
         // Snooped from the OM, which resets it too: a D24S8-only driver never
         // writes it.
         if (reset) begin
-            dcrs.depth_float <= 1'b0;
+            dcrs.depth_d24 <= 1'b1;
         end else if (write_valid && write_addr == `VX_DCR_OM_DEPTH_FORMAT) begin
-            dcrs.depth_float <= (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32F))
-                             || (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D32FS8));
+            dcrs.depth_d24 <= (write_data[2:0] == 3'(`VX_OM_DEPTH_FORMAT_D24S8));
         end
     `endif
         if (write_valid) begin

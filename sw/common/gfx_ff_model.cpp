@@ -130,6 +130,7 @@ void DepthTencil::configure(const OMDCRS& dcrs) {
   depth_float_         = depth_format == VX_OM_DEPTH_FORMAT_D32F
                       || depth_format == VX_OM_DEPTH_FORMAT_D32FS8;
   depth_stencil_word_  = depth_format == VX_OM_DEPTH_FORMAT_D32FS8;
+  depth_d16_           = depth_format == VX_OM_DEPTH_FORMAT_D16;
 
   stencil_front_func_ = dcrs.read(VX_DCR_OM_STENCIL_FUNC) & 0xffff;
   stencil_front_zpass_= dcrs.read(VX_DCR_OM_STENCIL_ZPASS) & 0xffff;

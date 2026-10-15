@@ -254,6 +254,76 @@ tests:
     warps: 1
     threads: 4
   args: -w 128 -h 128 -r whitebox_128.png
+- id: gfx_om-r8-simx
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 2 -b
+- id: gfx_om-rg8-simx
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 3 -b
+- id: gfx_om-rgb565-simx
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 12 -b
+- id: gfx_om-argb1555-simx
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 13 -b
+- id: gfx_om-r8-rtlsim
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 2 -b
+- id: gfx_om-rg8-rtlsim
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 3 -b
+- id: gfx_om-rgb565-rtlsim
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 12 -b
+- id: gfx_om-argb1555-rtlsim
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 13 -b
+- id: gfx_om-d16-simx
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 127 -h 64 -y
+- id: gfx_om-d16-rtlsim
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 127 -h 64 -y
 - id: gfx_raster-1
   via: blackbox
   drivers:
@@ -580,6 +650,24 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -m -n 7 -b -r whitebox_b_128.png
+- id: model_parity-om-r8
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 2 -b
+- id: model_parity-om-rgb565
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -F 12 -b
+- id: model_parity-om-d16
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 127 -h 64 -y
 - id: model_parity-om-float
   check: model_parity
   via: blackbox

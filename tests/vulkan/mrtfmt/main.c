@@ -21,6 +21,9 @@
  *              an R8 texel's channel from a different lane than an RGBA8 one,
  *              so the fragment kernel has to pack the two targets differently
  *              in the same shader.
+ *   rg8_565    two 16-bit formats, one of bytes and one of packed fields. The
+ *              texel width is the same, so only a per-attachment encode tells
+ *              RT1's 5/6/5 fields from RT0's two bytes.
  *
  * The fragment shader writes the same three values to both targets in opposite
  * orders, so an attachment left at the clear and an attachment written with its
@@ -45,6 +48,10 @@ struct rtdesc {
    unsigned bpp;
    unsigned nbytes;
    uint8_t  expect[3];
+   /* Packed 16-bit texel: its R, G, B fields' widths, high field first (0: the
+    * bytes are compared). Each field is checked against the exact fragment
+    * value, as a value halfway between two codes may round to either. */
+   uint8_t  field_bits[3];
 };
 
 struct phase {
@@ -61,6 +68,8 @@ struct phase {
  *   SRGB      applies the sRGB transfer function to the colour channels, so
  *             63, 127, 255 is stored as 136, 187, 255
  *   R8, RG8   store the first one or two channels at one or two bytes a texel
+ *   R5G6B5    rounds RT1's (0.25, 0.5, 1.0) into 7.75, 31.5, 31 (the device's
+ *             8, 32, 31 is 0x441F -> 31, 68)
  */
 static const struct phase PHASES[] = {
    { "rgba_srgb",
@@ -77,6 +86,10 @@ static const struct phase PHASES[] = {
        { VK_FORMAT_R8_UNORM,       1, 1, {  63,   0,   0 } } },
      "RT1 holds the fragment's blue, so the shader packed it in RT0's "
      "channel order" },
+   { "rg8_565",
+     { { VK_FORMAT_R8G8_UNORM,          2, 2, { 255, 127,   0 } },
+       { VK_FORMAT_R5G6B5_UNORM_PACK16, 2, 2, {  31,  68,   0 }, { 5, 6, 5 } } },
+     "RT1's fields are wrong, so the merger encoded it in RT0's format" },
 };
 #define NUM_PHASES (sizeof(PHASES) / sizeof(PHASES[0]))
 
@@ -425,7 +438,24 @@ check_phase(const struct phase *ph, uint8_t centre[NUM_RT][3],
       const bool area_ok = covered[k] >= EXPECT_PX - 200 &&
                            covered[k] <= EXPECT_PX + 200;
       bool color_ok = true;
-      for (unsigned i = 0; i < r->nbytes; i++) {
+      if (r->field_bits[0]) {
+         const uint32_t texel = (uint32_t)centre[k][0] |
+                                ((uint32_t)centre[k][1] << 8);
+         /* RT0's fragment colour, or RT1's reverse of it. */
+         const double value[NUM_RT][3] = { { 1.0, 0.5, 0.25 },
+                                           { 0.25, 0.5, 1.0 } };
+         unsigned shift = r->field_bits[1] + r->field_bits[2];
+         for (unsigned c = 0; c < 3; c++) {
+            const unsigned n = r->field_bits[c];
+            const double exact = value[k][c] * (double)((1u << n) - 1);
+            const double field = (double)((texel >> shift) & ((1u << n) - 1));
+            if (field < exact - 0.6 || field > exact + 0.6) {
+               color_ok = false;
+            }
+            shift -= (c < 2) ? r->field_bits[c + 1] : 0;
+         }
+      }
+      for (unsigned i = 0; i < r->nbytes && !r->field_bits[0]; i++) {
          const int d = (int)centre[k][i] - (int)r->expect[i];
          if (d < -TOL || d > TOL) {
             color_ok = false;

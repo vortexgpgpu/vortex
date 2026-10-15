@@ -105,6 +105,14 @@ RUN_ENV := VK_ICD_FILENAMES=$(VK_ICD) \
            VORTEX_HOME=$(VORTEX_HOME) \
            VORTEX_TOOLDIR=$(TOOLDIR) \
            VORTEX_BUILD=$(ROOT_DIR)
+# A test whose subject is the fixed-function output merger sets `FF_OM := 1`
+# before including common.mk. Its result would be the same merged in software,
+# so the run logs every fragment variant vortexpipe compiles and fails if any of
+# them merges in software.
+FF_OM ?= 0
+ifeq ($(FF_OM),1)
+RUN_ENV += VORTEXPIPE_DEBUG=1
+endif
 RUN_LD_PATH := $(MESA_PATH)/lib:$(LLVM_PATH)/lib:$(ZSTD_PATH)/lib:$(VORTEX_RT_LIB)
 
 RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF)) $(if $(SCOPE),SCOPE=$(SCOPE))
@@ -127,6 +135,14 @@ define check_run
 	fi; \
 	if ! echo "$$out" | grep -qi 'device:.*vortex'; then \
 	   echo "FAIL: $(PROJECT) did not report a Vortex device (likely fell back to llvmpipe)"; \
+	   exit 1; \
+	fi; \
+	if [ "$(FF_OM)" = 1 ] && echo "$$out" | grep -q 'compiled FS variant.*sw_om=1'; then \
+	   echo "FAIL: $(PROJECT) merged a draw in software, not on the output merger"; \
+	   exit 1; \
+	fi; \
+	if [ "$(FF_OM)" = 1 ] && ! echo "$$out" | grep -q 'compiled FS variant.*sw_om=0'; then \
+	   echo "FAIL: $(PROJECT) reported no fragment variant, so the merger path is unverified"; \
 	   exit 1; \
 	fi
 endef

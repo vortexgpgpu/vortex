@@ -208,6 +208,13 @@ void gfx_image_load_sw(const void* base, uint32_t row_stride, uint32_t img_strid
                        int32_t x, int32_t y, uint32_t layer, uint32_t format,
                        uint32_t* out);
 
+// Typeless image write (a storage image written without a format): the four
+// lanes encoded by `format` into the texel gfx_image_load_sw would read. Only
+// the format's own channels are written.
+void gfx_image_store_sw(void* base, uint32_t row_stride, uint32_t img_stride,
+                        int32_t x, int32_t y, uint32_t layer, uint32_t format,
+                        const uint32_t* lanes);
+
 // texelFetch on a 2D array: the texel at (x,y) of integer `layer` and `lod`
 // (see gfx_tex_fetch_f32).
 void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,

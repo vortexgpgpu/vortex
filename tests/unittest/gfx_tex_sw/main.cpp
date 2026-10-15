@@ -633,6 +633,202 @@ void check_border(uint8_t* pool) {
   }
 }
 
+// (f) Block-compressed decode and addressing. Each format's texels over 64
+// generated blocks hash to the CTS reference decoder's (tcuCompressedTexture):
+// the BC1-BC3 and BC7 8-bit words, BC4/BC5 unsigned floats and BC6H's half
+// floats, bit for bit. BC7 cycles through its eight modes and BC6H its fourteen.
+// The signed BC4 endpoints are snorm8 (127 and -128 both reach +-1), which the
+// reference maps by /128 instead, so that ramp is checked here by hand. Last, a
+// 6x5 BC1 texture -- two block columns, one partial -- point-sampled at every
+// texel centre must read each texel from its own block.
+static uint32_t bc_lcg(uint32_t& s) {
+  s = s * 1664525u + 1013904223u;
+  return s >> 24;
+}
+
+static void bc_fnv(uint64_t& h, const void* p, size_t n) {
+  for (size_t i = 0; i < n; ++i) {
+    h ^= ((const uint8_t*)p)[i];
+    h *= 1099511628211ull;
+  }
+}
+
+static void bc_gen_block(uint32_t fmt, uint32_t k, uint8_t blk[16]) {
+  uint32_t s = 0x9e3779b9u * (k + 1) + fmt;
+  for (int i = 0; i < 16; ++i) {
+    blk[i] = (uint8_t)bc_lcg(s);
+  }
+  if (fmt == VX_TEX_FORMAT_BC7) {
+    blk[0] = (uint8_t)((blk[0] & ~((2u << (k % 8)) - 1)) | (1u << (k % 8)));
+  }
+  if (fmt == VX_TEX_FORMAT_BC6UF || fmt == VX_TEX_FORMAT_BC6SF) {
+    static const uint8_t modes[14] = { 0x00, 0x01, 0x02, 0x06, 0x0a, 0x0e, 0x12, 0x16, 0x1a,
+                                       0x1e, 0x03, 0x07, 0x0b, 0x0f };
+    const uint8_t m = modes[k % 14];
+    blk[0] = (uint8_t)((blk[0] & ((m & 3) < 2 ? 0xfc : 0xe0)) | m);
+  }
+}
+
+void check_bc_decode(uint8_t* pool) {
+  static const struct { uint32_t fmt; uint64_t hash; } kRef[] = {
+    { VX_TEX_FORMAT_BC1, 0xe8d22255cf2bc6cdull },
+    { VX_TEX_FORMAT_BC1A, 0x6f31b4a30511ff1aull },
+    { VX_TEX_FORMAT_BC2, 0x846a6c1954f626bcull },
+    { VX_TEX_FORMAT_BC3, 0xa556c7cde350d1e1ull },
+    { VX_TEX_FORMAT_BC4, 0x189d2a6cc5ef6e95ull },
+    { VX_TEX_FORMAT_BC5, 0x27b89537b9bd22b6ull },
+    { VX_TEX_FORMAT_BC6UF, 0xaf34b08c617881fbull },
+    { VX_TEX_FORMAT_BC6SF, 0xada14e5562599129ull },
+    { VX_TEX_FORMAT_BC7, 0xee780f0be0fa255aull },
+  };
+  uint32_t fails = 0;
+  for (const auto& r : kRef) {
+    uint64_t h = 1469598103934665603ull;
+    for (uint32_t k = 0; k < 64; ++k) {
+      uint8_t blk[16];
+      bc_gen_block(r.fmt, k, blk);
+      for (uint32_t t = 0; t < 16; ++t) {
+        switch (r.fmt) {
+        case VX_TEX_FORMAT_BC4: {
+          const float f = gfx_tex::BcRedBlock(blk, t, false);
+          bc_fnv(h, &f, 4);
+          break;
+        }
+        case VX_TEX_FORMAT_BC5: {
+          const float f[2] = { gfx_tex::BcRedBlock(blk, t, false),
+                               gfx_tex::BcRedBlock(blk + 8, t, false) };
+          bc_fnv(h, f, 8);
+          break;
+        }
+        case VX_TEX_FORMAT_BC6UF:
+        case VX_TEX_FORMAT_BC6SF: {
+          uint16_t hf[3];
+          gfx_tex::BcDecodeBc6(blk, t, r.fmt == VX_TEX_FORMAT_BC6SF, hf);
+          bc_fnv(h, hf, 6);
+          break;
+        }
+        default: {
+          const uint32_t w = r.fmt == VX_TEX_FORMAT_BC1  ? gfx_tex::BcDecodeBc1(blk, t, false)
+                           : r.fmt == VX_TEX_FORMAT_BC1A ? gfx_tex::BcDecodeBc1(blk, t, true)
+                           : r.fmt == VX_TEX_FORMAT_BC2  ? gfx_tex::BcDecodeBc2(blk, t)
+                           : r.fmt == VX_TEX_FORMAT_BC3  ? gfx_tex::BcDecodeBc3(blk, t)
+                                                         : gfx_tex::BcDecodeBc7(blk, t);
+          bc_fnv(h, &w, 4);
+          break;
+        }
+        }
+      }
+    }
+    if (h != r.hash) {
+      printf("  BC DECODE MISMATCH: format %u hash %016llx, reference %016llx\n", r.fmt,
+             (unsigned long long)h, (unsigned long long)r.hash);
+      ++fails;
+    }
+  }
+
+  // Signed BC4: endpoints 127 and -128 are +1 and -1; texel 2 takes index 2 of
+  // the eight-step ramp, texels 3 and 4 the six-step ramp's fixed -1 and +1.
+  const uint8_t up[8]   = { 0x7f, 0x80, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00 };   // idx 0,1,2
+  const uint8_t down[8] = { 0x80, 0x7f, 0x00, 0x7c, 0x00, 0x00, 0x00, 0x00 };   // t3 = 6, t4 = 7
+  const float f2 = (1.0f * 6.0f + -1.0f * 1.0f) / 7.0f;
+  if (gfx_tex::BcRedBlock(up, 0, true) != 1.0f || gfx_tex::BcRedBlock(up, 1, true) != -1.0f
+      || gfx_tex::BcRedBlock(up, 2, true) != f2 || gfx_tex::BcRedBlock(down, 3, true) != -1.0f
+      || gfx_tex::BcRedBlock(down, 4, true) != 1.0f) {
+    printf("  BC4 SNORM MISMATCH: %g %g %g %g %g\n", gfx_tex::BcRedBlock(up, 0, true),
+           gfx_tex::BcRedBlock(up, 1, true), gfx_tex::BcRedBlock(up, 2, true),
+           gfx_tex::BcRedBlock(down, 3, true), gfx_tex::BcRedBlock(down, 4, true));
+    ++fails;
+  }
+
+  // Addressing: 6x5 BC1 = 2x2 blocks of 8 bytes, block (bx,by) at (by*2+bx)*8.
+  const uint32_t W = 6, H = 5;
+  for (uint32_t b = 0; b < 4; ++b) {
+    bc_gen_block(VX_TEX_FORMAT_BC1, 100 + b, pool + b * 8);
+  }
+  gfx_sw::TexState st;
+  tex_point_state(st, pool, 3, 3, VX_TEX_FORMAT_BC1);
+  st.width = W;
+  st.height = H;
+  const int32_t ONE = 1 << TEX_FXD_FRAC;
+  for (uint32_t y = 0; y < H; ++y) {
+    for (uint32_t x = 0; x < W; ++x) {
+      float got[4], exp[4];
+      gfx_sw::tex_sample_f32_layer(st, (int32_t)(((2 * x + 1) * (uint32_t)ONE) / (2 * W)),
+                                   (int32_t)(((2 * y + 1) * (uint32_t)ONE) / (2 * H)), 0, 0,
+                                   VX_TEX_FILTER_POINT, got);
+      gfx_tex::TexDecodeBlockF4(VX_TEX_FORMAT_BC1, pool + ((y >> 2) * 2 + (x >> 2)) * 8,
+                                ((y & 3) << 2) | (x & 3), exp);
+      if (__builtin_memcmp(got, exp, sizeof got)) {
+        printf("  BC ADDRESSING MISMATCH at (%u,%u)\n", x, y);
+        ++fails;
+      }
+    }
+  }
+  if (fails) {
+    g_fail += fails;
+  } else {
+    printf("BC DECODE: PASSED (BC1-BC7 match the reference decoder; block addressing OK)\n");
+  }
+}
+
+// (g) The field formats named after their Vulkan layouts: one texel of each,
+// its fields written by hand, decodes to the channels the layout names.
+void check_field_formats() {
+  struct Case {
+    uint32_t fmt;
+    uint8_t  bytes[12];
+    float    expect[4];   // an integer format's channels as their integer bits
+  };
+  const Case cases[] = {
+    { VX_TEX_FORMAT_B5G6R5_PACK16,   { 0x1f, 0x00 }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+    { VX_TEX_FORMAT_R5G5B5A1_PACK16, { 0x01, 0xf8 }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+    { VX_TEX_FORMAT_B5G5R5A1_PACK16, { 0x01, 0xf8 }, { 0.0f, 0.0f, 1.0f, 1.0f } },
+    { VX_TEX_FORMAT_A1B5G5R5_PACK16, { 0x1f, 0x80 }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+    { VX_TEX_FORMAT_A4R4G4B4_PACK16, { 0x00, 0xf8 }, { 8.0f / 15.0f, 0.0f, 0.0f, 1.0f } },
+    { VX_TEX_FORMAT_A4B4G4R4_PACK16, { 0x01, 0x0f }, { 1.0f / 15.0f, 0.0f, 1.0f, 0.0f } },
+    { VX_TEX_FORMAT_A8_UNORM,        { 0x80 },       { 0.0f, 0.0f, 0.0f, 128.0f / 255.0f } },
+    { VX_TEX_FORMAT_BGRA8SN,         { 0x81, 0x7f, 0x00, 0x40 }, { 0.0f, 1.0f, -1.0f, 64.0f / 127.0f } },
+    { VX_TEX_FORMAT_A2R10G10B10,     { 0xff, 0x03, 0x00, 0xc0 }, { 0.0f, 0.0f, 1.0f, 1.0f } },
+    { VX_TEX_FORMAT_A2B10G10R10SN,   { 0xff, 0x01, 0x00, 0x40 }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+  };
+  uint32_t fails = 0;
+  for (const Case& c : cases) {
+    float got[4];
+    gfx_tex::TexDecodeFloat4(c.fmt, c.bytes, gfx_tex::FormatStride(c.fmt), got);
+    for (uint32_t ch = 0; ch < 4; ++ch) {
+      if (std::fabs(got[ch] - c.expect[ch]) > 1e-6f) {
+        printf("  FIELD MISMATCH: format %u channel %u = %g, expected %g\n", c.fmt, ch, got[ch],
+               c.expect[ch]);
+        ++fails;
+      }
+    }
+  }
+  // The integer and 12-byte layouts, checked on their bits.
+  const uint8_t ui[4] = { 0x00, 0x00, 0xf0, 0x3f };   // R = 1023 at bits 29:20
+  uint32_t lanes[4];
+  gfx_tex::TexDecodeFloat4(VX_TEX_FORMAT_A2R10G10B10UI, ui, 4, (float*)lanes);
+  if (lanes[0] != 1023u || lanes[1] || lanes[2] || lanes[3]) {
+    printf("  FIELD MISMATCH: A2R10G10B10UI = %u,%u,%u,%u\n", lanes[0], lanes[1], lanes[2], lanes[3]);
+    ++fails;
+  }
+  const float rgb[3] = { 1.5f, -2.0f, 3.0e6f };
+  float f[4];
+  gfx_tex::TexDecodeFloat4(VX_TEX_FORMAT_RGB32F, rgb, 12, f);
+  if (f[0] != rgb[0] || f[1] != rgb[1] || f[2] != rgb[2] || f[3] != 1.0f) {
+    printf("  FIELD MISMATCH: RGB32F = %g,%g,%g,%g\n", f[0], f[1], f[2], f[3]);
+    ++fails;
+  }
+  if (gfx_tex::FormatStride(VX_TEX_FORMAT_RGB32F) != 12) {
+    printf("  FIELD MISMATCH: RGB32F stride %u\n", gfx_tex::FormatStride(VX_TEX_FORMAT_RGB32F));
+    ++fails;
+  }
+  if (fails) {
+    g_fail += fails;
+  } else {
+    printf("FIELD FORMATS: PASSED (Vulkan-named packed, BGRA8, 2-10-10-10, RGB32)\n");
+  }
+}
+
 } // namespace
 
 int main() {
@@ -676,6 +872,8 @@ int main() {
   check_cube(pool);
   check_two_textures(pool);
   check_border(pool);
+  check_bc_decode(pool);
+  check_field_formats();
 
   if (g_fail) {
     printf("\nTEX-SW PARITY: FAILED (%u mismatches across %u configs)\n", g_fail, configs);
