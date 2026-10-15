@@ -48,20 +48,23 @@ void TextureSampler::configure(const TexDCRS& dcrs) {
   dcrs_ = dcrs;
 }
 
-TexelRequest TextureSampler::compute_request(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const {
+TexelRequest TextureSampler::compute_request(uint32_t stage, int32_t u, int32_t v, uint32_t lod,
+                                             uint32_t layer, uint32_t tap_filter) const {
   auto mip_off  = dcrs_.read(stage, VX_DCR_TEX_MIPOFF(lod));
-  auto mip_base = uint64_t(dcrs_.read(stage, VX_DCR_TEX_ADDR)) << 6;
-  auto logdim   = dcrs_.read(stage, VX_DCR_TEX_LOGDIM);
+  auto mip_base = (uint64_t(dcrs_.read(stage, VX_DCR_TEX_ADDR)) << 6)
+                + uint64_t(layer) * dcrs_.read(stage, VX_DCR_TEX_LAYER_STRIDE);
+  auto dim      = dcrs_.read(stage, VX_DCR_TEX_DIM);
   auto format   = dcrs_.read(stage, VX_DCR_TEX_FORMAT);
   // mag/min filter is the low bit; the mip-filter bit (trilinear) lives above
   // it and is handled by the caller, so mask it off for per-LOD tap selection.
-  auto filter   = dcrs_.read(stage, VX_DCR_TEX_FILTER) & TEX_FILTER_MAGMIN_MASK;
+  auto filter   = (tap_filter != ~0u) ? (tap_filter & TEX_FILTER_MAGMIN_MASK)
+                : (dcrs_.read(stage, VX_DCR_TEX_FILTER) & TEX_FILTER_MAGMIN_MASK);
   auto wrap     = dcrs_.read(stage, VX_DCR_TEX_WRAP);
   auto border   = dcrs_.read(stage, VX_DCR_TEX_BORDER);
 
   // The sampling math is shared with the on-device SW fallback (gfx_frag_tex.h).
-  return gfx_tex::tex_compute_request(mip_base + mip_off, logdim, format,
-                                      filter, wrap, u, v, lod, 0, 0, border);
+  return gfx_tex::tex_compute_request(mip_base + mip_off, 0, format, filter, wrap, u, v, lod,
+                                      dim & 0xffff, dim >> 16, border);
 }
 
 uint32_t TextureSampler::apply_filter(const TexelRequest& req, const uint32_t texels[4]) {

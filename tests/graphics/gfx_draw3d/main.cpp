@@ -496,7 +496,7 @@ int render(const CGLTrace& trace) {
 
       // configure texture units
       TEX_DCR_WRITE(VX_DCR_TEX_STAGE,  0);
-      TEX_DCR_WRITE(VX_DCR_TEX_LOGDIM, (tex_logheight << 16) | tex_logwidth);
+      TEX_DCR_WRITE(VX_DCR_TEX_DIM, (texture.height << 16) | texture.width);
       TEX_DCR_WRITE(VX_DCR_TEX_FORMAT, tex_format);
       TEX_DCR_WRITE(VX_DCR_TEX_WRAP,   (tex_wrapV << 16) | tex_wrapU);
       TEX_DCR_WRITE(VX_DCR_TEX_FILTER, tex_filter ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT);

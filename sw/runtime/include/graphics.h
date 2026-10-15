@@ -293,8 +293,8 @@ struct om_state_t {
 struct tex_state_t {
   uint32_t        stage       = 0;
   uint64_t        addr        = 0;    // texture byte address
-  uint32_t        logwidth    = 0;
-  uint32_t        logheight   = 0;
+  uint32_t        width       = 1;    // mip-0 texels
+  uint32_t        height      = 1;
   uint32_t        format      = 0;    // VX_TEX_FORMAT_*
   uint32_t        filter      = VX_TEX_FILTER_POINT;
   uint32_t        wrap_u      = 0;

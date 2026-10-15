@@ -29,24 +29,26 @@ import VX_gpu_pkg::TEX_NUM_LEVELS;
 // TEX field widths, derived locally from the VX_types value leaves rather than
 // exported as generated contract macros.
 localparam TEX_LOD_BITS    = `CLOG2(`VX_TEX_LOD_MAX + 1);
-// The lod operand's fixed-point form: an integer level with the blend weight
-// between it and the next in the low bits. Separate from TEX_LOD_BITS, which
-// also sizes the texture dimensions -- widening those would be wrong, not
-// merely wasteful.
-localparam TEX_LODF_BITS   = TEX_LOD_BITS + `VX_TEX_LOD_FRAC_BITS;
+// The whole lod operand: the level (an integer, or under mip-linear fixed point
+// with the blend weight in the low VX_TEX_LOD_FRAC_BITS), then the gather
+// fields, the lane's filter overrides and its array layer.
+localparam TEX_ARG_BITS    = `VX_TEX_ARG_LAYER_SHIFT + `VX_TEX_ARG_LAYER_BITS;
 localparam TEX_FILTER_BITS = `CLOG2(`VX_TEX_FILTER_MIP_LINEAR + 1);   // mag/min + mip bit
 localparam TEX_FORMAT_BITS = `CLOG2(`VX_TEX_FORMAT_FF_MAX + 1);       // FF-handled formats only
 localparam TEX_WRAP_BITS   = `CLOG2(`VX_TEX_WRAP_BORDER + 1);
+localparam TEX_DIM_W       = `VX_TEX_DIM_BITS + 1;                // mip-0 texels, up to 2^DIM_BITS
 
 typedef struct packed {
     logic [(`VX_TEX_LOD_MAX+1)-1:0][`TEX_MIPOFF_BITS-1:0] mipoff;
-    logic [1:0][TEX_LOD_BITS-1:0]  logdims;
+    logic [1:0][TEX_DIM_W-1:0]     dims;
     logic [1:0][TEX_WRAP_BITS-1:0] wraps;
     logic [`TEX_ADDR_BITS-1:0]     baseaddr;
     logic [TEX_FORMAT_BITS-1:0]    format;
     logic [TEX_FILTER_BITS-1:0]    filter;
     // Colour a tap outside [0,1) returns on an axis that wraps to a border.
     logic [31:0]                   border;
+    // Bytes between array layers; a lane's layer field steps its base by it.
+    logic [31:0]                   layer_stride;
 } tex_dcrs_t;
 
 typedef struct packed {

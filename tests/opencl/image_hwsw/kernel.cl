@@ -9,8 +9,7 @@
 // Coordinates are normalized and deliberately swept across [-0.5, 1.5) so wrap
 // modes are exercised on both sides of the image: repeat/mirror fold, and
 // clamp-to-edge saturates at BOTH the low edge (negative coords -> texel 0) and
-// the high edge. The negative-clamp case is also the regression guard for the
-// RTL TEX saturation fix (VX_tex_sat sign-gated overflow).
+// the high edge.
 __kernel void image_hwsw(read_only image2d_t a,
                          read_only image2d_t b,
                          read_only image2d_t c,

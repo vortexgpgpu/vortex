@@ -538,6 +538,24 @@ tests:
   app: gfx_tex
   configs: -DVX_CFG_EXT_TEX_ENABLE
   args: -i toad.png -r toad_ref_f0.png -f 0 -g 0
+- id: model_parity-tex-lanes
+  check: model_parity
+  via: blackbox
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -a -s 0.5 -o null
+- id: model_parity-tex-gather
+  check: model_parity
+  via: blackbox
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -G 1 -s 0.5 -o null
+- id: model_parity-tex-npot
+  check: model_parity
+  via: blackbox
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -a -w 2 -o null
 - id: model_parity-raster
   check: model_parity
   via: blackbox
@@ -622,6 +640,72 @@ tests:
   app: gfx_tex
   configs: -DVX_CFG_EXT_TEX_ENABLE
   args: -i palette64.png -B -g 1 -o null
+
+# Per-lane state in the lod operand against a point-filtered stage: an array
+# layer (the second layer is the first inverted), a bilinear or point tap and a
+# two-level blend that change from pixel to pixel, at the base level and
+# minified. Checked in-test against the software sampler at the same operand.
+- id: gfx_tex-lanes
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -a -o null
+- id: gfx_tex-lanes-minified
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -a -s 0.5 -o null
+
+# textureGather in the unit: each channel's four taps in GL gather order,
+# checked in-test against the software gather.
+- id: gfx_tex-gather-r
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -G 0 -s 0.5 -o null
+- id: gfx_tex-gather-a
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -G 3 -s 0.5 -o null
+
+# Textures of any size: a 45x27 (and 37x23) crop, sampled across [-0.5,1.5) so
+# every wrap mode folds and every edge is crossed. Checked in-test against the
+# software sampler at the same operand.
+- id: gfx_tex-npot-mirror
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -a -w 2 -o null
+- id: gfx_tex-npot-repeat-minified
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -a -w 1 -s 0.5 -o null
+- id: gfx_tex-npot-border
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -a -B -o null
+- id: gfx_tex-npot-gather
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 37x23 -G 1 -w 1 -o null
+- id: gfx_tex-gather-border
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -G 2 -B -o null
 
 # Two colour attachments from one draw. Attachment 0 still matches the
 # single-attachment golden; attachment 1 is checked in-test against the colour

@@ -28,7 +28,10 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     // inputs
     input wire                          req_valid,
     input wire [NUM_LANES-1:0]          req_mask,
-    input wire [TEX_FILTER_BITS-1:0]   req_filter,
+    input wire [NUM_LANES-1:0][TEX_FILTER_BITS-1:0] req_filter,
+    input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0] req_skip_u,
+    input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0] req_skip_v,
+    input wire [NUM_LANES-1:0]          req_skip_l1,
     input wire [`TEX_LGSTRIDE_BITS-1:0] req_lgstride,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] req_baseaddr,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] req_addr,
@@ -45,7 +48,8 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     // Taps run level-major: tap (k * 4 + j) is the bilinear corner j of level k.
     localparam NUM_TAPS  = TEX_NUM_LEVELS * 4;
     localparam TAP_SEL_BITS = `CLOG2(NUM_TAPS);
-    localparam TAG_WIDTH = REQ_TAGW + TEX_FILTER_BITS + `TEX_LGSTRIDE_BITS + (NUM_LANES * NUM_TAPS * 2) + NUM_TAPS;
+    localparam SKIP_BITS = 2 * TEX_NUM_LEVELS + 1;
+    localparam TAG_WIDTH = REQ_TAGW + NUM_LANES * (TEX_FILTER_BITS + SKIP_BITS) + `TEX_LGSTRIDE_BITS + (NUM_LANES * NUM_TAPS * 2) + NUM_TAPS;
 
     wire                           mem_req_valid;
     wire [NUM_TAPS-1:0][NUM_LANES-1:0] mem_req_mask;
@@ -61,8 +65,20 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire [TAG_WIDTH-1:0]           mem_rsp_tag;
     wire                           mem_rsp_ready;
 
-    // A sample reads the level above only when the two are to be blended.
-    wire mip_linear = req_filter[TEX_FILTER_BITS-1];
+    // The taps each lane reads. A lane reads the level above only when it blends
+    // two levels with a nonzero weight, corner 0 alone under point filtering,
+    // and no corner whose blend weight is zero: those cannot change the result.
+    wire [NUM_TAPS-1:0][NUM_LANES-1:0] tap_need;
+    for (genvar t = 0; t < NUM_TAPS; ++t) begin : g_tap_need
+        for (genvar j = 0; j < NUM_LANES; ++j) begin : g_j
+            wire level_ok  = (t < 4) || (req_filter[j][TEX_FILTER_BITS-1] && ~req_skip_l1[j]);
+            wire corner_ok = req_filter[j][0]
+                           ? ~(((t % 4) & 1) != 0 && req_skip_u[j][t / 4])
+                             && ~(((t % 4) & 2) != 0 && req_skip_v[j][t / 4])
+                           : ((t % 4) == 0);
+            assign tap_need[t][j] = req_mask[j] && level_ok && corner_ok;
+        end
+    end
 
     // full address calculation
 
@@ -98,25 +114,24 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
             for (genvar j = 0; j < (NUM_LANES-1); ++j) begin : g_j
                 assign addr_matches[j] = ((req_addr[j+1][t/4][t%4] == req_addr[0][t/4][t%4])
                                        && (req_baseaddr[j+1][t/4] == req_baseaddr[0][t/4]))
-                                       || ~req_mask[j+1];
+                                       || ~tap_need[t][j+1];
             end
-            assign mem_req_dups[t] = req_mask[0] && (& addr_matches);
+            assign mem_req_dups[t] = tap_need[t][0] && (& addr_matches);
         end else begin : g_1lane
             assign mem_req_dups[t] = 0;
         end
     end
 
     for (genvar t = 0; t < NUM_TAPS; ++t) begin : g_mem_req_mask
-        wire texel_valid = (req_filter[0] || ((t % 4) == 0)) && (mip_linear || (t < 4));
         for (genvar j = 0; j < NUM_LANES; ++j) begin : g_j
-            assign mem_req_mask[t][j] = req_mask[j] && texel_valid && (~mem_req_dups[t] || (j == 0));
+            assign mem_req_mask[t][j] = tap_need[t][j] && (~mem_req_dups[t] || (j == 0));
         end
     end
 
     // submit request to memory
 
     assign mem_req_valid = req_valid;
-    assign mem_req_tag   = {req_tag, req_filter, req_lgstride, mem_req_align, mem_req_dups};
+    assign mem_req_tag   = {req_tag, req_filter, req_skip_u, req_skip_v, req_skip_l1, req_lgstride, mem_req_align, mem_req_dups};
     assign req_ready     = mem_req_ready;
 
     // schedule memory request
@@ -210,27 +225,29 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     // handle memory response
 
     wire [REQ_TAGW-1:0]           rsp_tag_s;
-    wire [TEX_FILTER_BITS-1:0]   rsp_filter;
+    wire [NUM_LANES-1:0][TEX_FILTER_BITS-1:0] rsp_filter;
+    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0] rsp_skip_u, rsp_skip_v;
+    wire [NUM_LANES-1:0]          rsp_skip_l1;
     wire [`TEX_LGSTRIDE_BITS-1:0] rsp_lgstride;
     wire [NUM_TAPS-1:0][NUM_LANES-1:0][1:0] mem_rsp_align;
     wire [NUM_TAPS-1:0]           mem_rsp_dups;
 
-    assign {rsp_tag_s, rsp_filter, rsp_lgstride, mem_rsp_align, mem_rsp_dups} = mem_rsp_tag;
+    assign {rsp_tag_s, rsp_filter, rsp_skip_u, rsp_skip_v, rsp_skip_l1, rsp_lgstride, mem_rsp_align, mem_rsp_dups} = mem_rsp_tag;
 
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] mem_rsp_data_qual;
 
-    wire rsp_mip_linear = rsp_filter[TEX_FILTER_BITS-1];
-
-    // A tap the request masked off carries no data, so it reads the tap that is
-    // always fetched in its place: corner 0 of its level under point filtering,
-    // and level 0 when the levels are not blended. The weights that select
-    // between them downstream are zero in exactly those cases, so which tap the
-    // fallback lands on only has to be a defined value.
+    // A tap the lane did not fetch reads one it did in its place: level 0 when
+    // the levels are not blended (or the upper one weighs nothing), corner 0
+    // under point filtering, and with a zero-weight axis the corner on its low
+    // side. The weights that select between them downstream are zero in exactly
+    // those cases, so the fallback only has to be a defined value.
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mem_rsp_data_qual
         for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
             for (genvar j = 0; j < 4; ++j) begin : g_j
-                wire [TAP_SEL_BITS-1:0] src_tap = TAP_SEL_BITS'(
-                    (rsp_mip_linear ? (k * 4) : 0) + (rsp_filter[0] ? j : 0));
+                wire use_k = rsp_filter[i][TEX_FILTER_BITS-1] && ((k == 0) || ~rsp_skip_l1[i]);
+                wire [1:0] corner_mask = {~rsp_skip_v[i][use_k ? k : 0], ~rsp_skip_u[i][use_k ? k : 0]};
+                wire [1:0] corner = rsp_filter[i][0] ? (2'(j) & corner_mask) : 2'b00;
+                wire [TAP_SEL_BITS-1:0] src_tap = TAP_SEL_BITS'((use_k ? (k * 4) : 0) + 32'(corner));
                 wire use_lane0 = (i == 0) || mem_rsp_dups[src_tap];
                 wire [31:0] src_data  = use_lane0 ? mem_rsp_data[src_tap][0]  : mem_rsp_data[src_tap][i];
                 wire [1:0]  src_align = use_lane0 ? mem_rsp_align[src_tap][0] : mem_rsp_align[src_tap][i];
@@ -286,7 +303,7 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
 
     always @(posedge clk) begin
         if (req_valid && req_ready) begin
-            `TRACE(2, ("%d: %s-mem-req: valid=%b, filter=%0d, lgstride=%0d, baseaddr=", $time, INSTANCE_ID, req_mask, req_filter, req_lgstride))
+            `TRACE(2, ("%d: %s-mem-req: valid=%b, filter=0x%0h, lgstride=%0d, baseaddr=", $time, INSTANCE_ID, req_mask, req_filter, req_lgstride))
             `TRACE_ARRAY1D(2, "0x%0h", trace_baseaddr[0], NUM_LANES)
             `TRACE(2, (", baseaddr_up="))
             `TRACE_ARRAY1D(2, "0x%0h", trace_baseaddr[1], NUM_LANES)

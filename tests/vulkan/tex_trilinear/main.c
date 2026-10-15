@@ -10,12 +10,10 @@
  * LOD 0.5 says whether the two were blended or one was picked. Levels that
  * merely differ in detail would let a wrong level pass as a filtering artifact.
  *
- * WHERE THIS RUNS TODAY: on the software sampler, not the fixed-function
- * texture unit. Any mipmapped sampler is routed there at run time, and there is
- * no knob that pins one to the hardware unit -- so a green result here is not
- * hardware coverage. The test exists to fix the answer *before* the routing
- * moves: when the hardware unit learns mip-linear and the routing stops
- * diverting mipmapped samplers, these same numbers must still come back.
+ * The texture is RGBA8, a format the fixed-function texture unit decodes, so the
+ * unit takes it: the shader hands the unit each fragment's level, its blend
+ * weight and the min/mag tap in the lod operand, and the unit fetches and blends
+ * both levels.
  */
 
 #include <vulkan/vulkan.h>

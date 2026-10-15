@@ -396,9 +396,7 @@ lacks. A unit that is absent or unfit routes **that unit** to software,
 caps, the variant key (§2.3.1) forces routing per draw:
 
 - an FS using a texture op the FF sampler has no form of (shadow /
-  array / cube / 3D / `tg4` / `txf`) is compiled `sw_tex`, which also
-  keeps NPOT-textured draws on the device (the SW sampler addresses
-  NPOT natively);
+  3D / cube `tg4` / `txf`) is compiled `sw_tex`;
 - a colour attachment the FF merger cannot encode (anything but
   `A8R8G8B8`) forces `sw_om`, as does a multi-attachment draw that
   writes depth or stencil (each export would re-run the depth/stencil
@@ -707,8 +705,8 @@ lets the RASTER engine launch the fragment shader itself:
    decode the same shift-only address the FS builds from
    `GFX_FS_ARG_APERTURE`.
 3. **Program TEX DCRs** (if a sampler is bound): the resident texture's
-   `VX_DCR_TEX_{ADDR, LOGDIM, FORMAT, FILTER, WRAP, BORDER,
-   MIPOFF_BASE+j}` for the stage — the border colour is a DCR, so a
+   `VX_DCR_TEX_{ADDR, DIM, FORMAT, FILTER, WRAP, BORDER, LAYER_STRIDE,
+   MIPOFF_BASE+j}` for each stage the FS samples — the border colour is a DCR, so a
    `CLAMP_TO_BORDER` wrap samples on the unit, and the mip-offset
    table gives the unit the resident mip chain.
 4. **RASTER runs** the fixed-function walker → early-Z → packer →
@@ -826,7 +824,8 @@ The Vortex TEX block is a fixed-function 2D sampler: per-stage
 resident mip chain addressed through the `MIPOFF` DCR table (the mip
 *level* is computed in-shader — there is no hardware-LOD form), four
 wrap modes (CLAMP / REPEAT / MIRROR / BORDER, with the border colour
-a DCR), power-of-two dimensions only. Everything Vulkan's sampling
+a DCR), any dimensions, array layers, textureGather and two stages
+per draw. Everything Vulkan's sampling
 surface needs beyond that runs on the **co-compiled SW sampler**
 (`gfx_tex_*_sw` over the resident `gfx_sw_texstate_t` descriptor) —
 still on the device, never a host round-trip. The per-draw texture is
@@ -841,12 +840,13 @@ shader with several bound textures samples the right one.
 | `CLAMP_TO_BORDER`                            | FF `vx_tex`          | `VX_TEX_WRAP_BORDER` + the `VX_DCR_TEX_BORDER` colour                        | **Yes**                  |
 | Mirror-clamp wraps (`MIRROR_CLAMP*`)         | —                    | `vp_vx_wrap` `default:` → CLAMP                                              | **No** — silent collapse |
 | Anisotropic filtering                        | —                    | `max_anisotropy` never read; the min/mag tap is used                         | **No** — silent collapse |
-| NPOT dimensions                              | SW sampler           | `GFX_SW_TEX_FILTER_NPOT` routes the sample to SW, draw stays on device       | **Yes** — routed         |
-| 3D / cube / cube-array / 2D-array            | SW sampler           | `emit_tex_3d` / `_cube` / `_cube_array` / `_array`                           | **Yes** — routed         |
+| NPOT dimensions                              | FF `vx_tex`          | `VX_DCR_TEX_DIM`; the unit addresses in texel space                          | **Yes**                  |
+| 1D / 2D array, cube                          | FF `vx_tex` or SW    | the layer (cube: face) rides the operand; the descriptor picks the arm       | **Yes**                  |
+| 3D / cube-array                              | SW sampler           | `emit_tex_3d` / `_cube_array`                                                | **Yes** — routed         |
 | Shadow (compare) samplers, incl. array/cube  | SW sampler           | `emit_tex_shadow*` with the captured compare func                            | **Yes** — routed         |
 | `texelFetch` (`txf`), int and float dests    | SW sampler           | `gfx_tex_fetch_{i32,f32,array_f32}`                                          | **Yes** — routed         |
 | `textureSize` (`txs`)                        | descriptor read      | `emit_tex_size` (3rd component = layers / cube count / slices)               | **Yes**                  |
-| `textureGather` (`tg4`, + offset/compare)    | SW sampler           | `gfx_tex_gather*_sw`; refused on a cube sampler                              | **Yes** — routed (cube gated) |
+| `textureGather` (`tg4`, + offset/compare)    | FF `vx_tex` or SW    | the unit's gather for 2D/array colour; cube and compare gathers in software | **Yes**                  |
 | Integer textures (int8 RGBA)                 | SW fetch             | stored and fetched as integers, no unorm normalisation                       | **Yes**                  |
 | Float formats (R16F/RG16F/RGBA16F/R32F/RG32F/RGBA32F) | SW sample   | uploaded verbatim, sampled as floats through the f32 scratch slot            | **Yes**                  |
 | Depth formats (D32F/D16, packed Z24S8)       | SW sample            | depth aspect extracted/converted to f32 on upload                            | **Yes**                  |

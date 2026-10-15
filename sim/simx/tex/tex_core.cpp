@@ -70,10 +70,14 @@ public:
     std::array<uint32_t, kMaxTaps> texels = {}; // raw 32b words from cache
     std::array<bool,     kMaxTaps> filled = {};
     std::array<bool,     kMaxTaps> requested = {}; // issued, awaiting response
-    uint32_t                   taps     = 1;    // taps per level: 1 or 4
     uint32_t                   levels   = 1;    // 1, or 2 when mip-linear
-    uint32_t                   needed   = 0;    // taps * levels
+    // Corners (level * 4 + tap) the sample reads. A point sample reads tap 0;
+    // a tap whose blend weight is zero, or the upper level when the level weight
+    // is, is not fetched: it cannot change the result.
+    uint32_t                   need_mask = 0;
     uint32_t                   lod_frac = 0;    // weight between the two levels
+    bool                       gather   = false; // textureGather: four taps' channel
+    uint32_t                   gather_comp = 0;
     uint32_t                   filtered = 0;    // result after apply_filter
   };
 
@@ -182,8 +186,9 @@ private:
     // Under mip-linear the lod operand is fixed-point: an integer level with a
     // blend weight in its low bits. Both bracketing levels are addressed here,
     // in one pass, so a lane holds two tap sets and the sample completes when
-    // all of them have arrived.
-    const bool mip_linear = sampler_.mip_linear(s.req.stage);
+    // all of them have arrived. A lane may carry its own tap and mip mode, and
+    // its array layer, in the operand's upper fields.
+    const bool stage_mip_linear = sampler_.mip_linear(s.req.stage);
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!(s.req.tmask_bits & (1u << t))) {
@@ -191,23 +196,50 @@ private:
         continue;
       }
       l.active = true;
-      uint32_t li = s.req.lod[t] & (uint32_t)VX_TEX_LOD_MAX;
+      const uint32_t arg = s.req.lod[t];
+      // A gather reads the bilinear footprint of one level, whatever the filter.
+      l.gather = (arg >> VX_TEX_ARG_GATHER) & 1u;
+      l.gather_comp = (arg >> VX_TEX_ARG_GATHER_COMP) & 3u;
+      const bool lane_filter = (arg >> VX_TEX_ARG_LANE_FILTER) & 1u;
+      const bool mip_linear = !l.gather && (lane_filter ? ((arg >> VX_TEX_ARG_MIP_LINEAR) & 1u)
+                                                        : stage_mip_linear);
+      const uint32_t tap_filter = l.gather ? (uint32_t)VX_TEX_FILTER_BILINEAR
+                                : lane_filter ? ((arg >> VX_TEX_ARG_BILINEAR) & 1u) : ~0u;
+      const uint32_t layer = (arg >> VX_TEX_ARG_LAYER_SHIFT) & ((1u << VX_TEX_ARG_LAYER_BITS) - 1u);
+      uint32_t li = arg & (uint32_t)VX_TEX_LOD_MAX;
       if (mip_linear) {
-        li = (s.req.lod[t] >> VX_TEX_LOD_FRAC_BITS) & (uint32_t)VX_TEX_LOD_MAX;
-        l.lod_frac = s.req.lod[t] & ((1u << VX_TEX_LOD_FRAC_BITS) - 1u);
+        li = (arg >> VX_TEX_LOD_FRAC_BITS) & (uint32_t)VX_TEX_LOD_MAX;
+        l.lod_frac = arg & ((1u << VX_TEX_LOD_FRAC_BITS) - 1u);
       } else {
         l.lod_frac = 0;
       }
       // At the top of the chain there is no level above, so the second set
       // selects the same level; the weight then blends a value with itself.
       const uint32_t lj = (li < (uint32_t)VX_TEX_LOD_MAX) ? li + 1u : li;
-      l.trq[0]   = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], li);
+      l.trq[0]   = sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], li, layer,
+                                            tap_filter);
       l.trq[1]   = mip_linear
-                 ? sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lj)
+                 ? sampler_.compute_request(s.req.stage, s.req.u[t], s.req.v[t], lj, layer,
+                                            tap_filter)
                  : l.trq[0];
-      l.taps     = (l.trq[0].filter == VX_TEX_FILTER_BILINEAR) ? 4u : 1u;
       l.levels   = mip_linear ? 2u : 1u;
-      l.needed   = l.taps * l.levels;
+      l.need_mask = l.gather ? 0xfu : 0u;
+      for (uint32_t k = 0; !l.gather && k < l.levels; ++k) {
+        if (k == 1 && l.lod_frac == 0) {
+          continue;
+        }
+        const TexelRequest& r = l.trq[k];
+        if (r.filter != VX_TEX_FILTER_BILINEAR) {
+          l.need_mask |= 1u << (k * 4);
+          continue;
+        }
+        for (uint32_t j = 0; j < 4; ++j) {
+          if (((j & 1u) && r.alpha == 0) || ((j & 2u) && r.beta == 0)) {
+            continue;
+          }
+          l.need_mask |= 1u << (k * 4 + j);
+        }
+      }
       l.filled   = {};
       l.requested= {};
       l.filtered = 0;
@@ -216,10 +248,13 @@ private:
     s.state = State::MEM;
   }
 
-  // Byte address of a lane's tap `c`. Taps are numbered level-major, so the
-  // first `taps` belong to the lower level and the rest to the upper one.
+  // Byte address of a lane's corner `c` = level * 4 + tap.
   static uint64_t corner_addr(const LaneState& l, uint32_t c) {
-    return l.trq[c / l.taps].addr[c % l.taps];
+    return l.trq[c / 4].addr[c % 4];
+  }
+
+  static bool needs(const LaneState& l, uint32_t c) {
+    return (l.need_mask >> c) & 1u;
   }
 
   // Duplicate-address squash: when every active lane addresses the same
@@ -231,12 +266,15 @@ private:
     if (!l0.active) {
       return;
     }
-    for (uint32_t c = 0; c < l0.needed; ++c) {
+    for (uint32_t c = 0; c < kMaxTaps; ++c) {
+      if (!needs(l0, c)) {
+        continue;
+      }
       uint64_t a0 = corner_addr(l0, c);
       bool dup = true;
       for (uint32_t t = 1; t < VX_CFG_NUM_THREADS; ++t) {
         const LaneState& l = s.lanes[t];
-        if (!l.active) {
+        if (!l.active || !needs(l, c)) {
           continue;
         }
         if (corner_addr(l, c) != a0) {
@@ -260,8 +298,10 @@ private:
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS && budget > 0; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
-      for (uint32_t c = 0; c < l.needed; ++c) {
-        if (l.filled[c]) continue;
+      for (uint32_t c = 0; c < kMaxTaps; ++c) {
+        if (!needs(l, c) || l.filled[c]) {
+          continue;
+        }
         // Squashed duplicate: lane 0's fetch fills this corner on response.
         if (s.dups[c] && t != 0) {
           continue;
@@ -295,7 +335,7 @@ private:
         pf.corner = uint8_t(c);
         pf.dup    = s.dups[c];
         pf.byte_off = uint32_t(byte_addr - cl_addr);
-        pf.stride = uint8_t(l.trq[c / l.taps].stride);
+        pf.stride = uint8_t(l.trq[c / 4].stride);
         pending_mem_[mreq.tag] = pf;
 
         req_ch.send(mreq);
@@ -362,12 +402,16 @@ private:
     for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
       LaneState& l = s.lanes[t];
       if (!l.active) continue;
+      if (l.gather) {
+        l.filtered = gfx_tex::tex_apply_gather(l.trq[0], &l.texels[0], l.gather_comp);
+        continue;
+      }
       const uint32_t c0 = TextureSampler::apply_filter(l.trq[0], &l.texels[0]);
       if (l.levels == 1) {
         l.filtered = c0;
         continue;
       }
-      const uint32_t c1 = TextureSampler::apply_filter(l.trq[1], &l.texels[l.taps]);
+      const uint32_t c1 = TextureSampler::apply_filter(l.trq[1], &l.texels[4]);
       l.filtered = TexLodLerp(c0, c1, l.lod_frac);
     }
   }

@@ -41,6 +41,8 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     localparam BLEND_FRAC_W = (TEX_NUM_LEVELS * 2 * NUM_LANES * `TEX_BLEND_FRAC);
     localparam LODFRAC_W = (NUM_LANES * `VX_TEX_LOD_FRAC_BITS);
     localparam BORDER_W = (TEX_NUM_LEVELS * 4 * NUM_LANES);
+    // Per lane: gather enable and the component it returns.
+    localparam GATHER_W = (NUM_LANES * 3);
     localparam W_ADDR_BITS = `TEX_ADDR_BITS + 6;
 
     // DCRs
@@ -62,11 +64,12 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
 
     wire                                        req_valid;
     wire [NUM_LANES-1:0]                        req_mask;
-    wire [TEX_FILTER_BITS-1:0]                 req_filter;
+    wire [NUM_LANES-1:0][TEX_FILTER_BITS-1:0]   req_filter, sel_filter;
     wire [TEX_FORMAT_BITS-1:0]                 req_format;
     wire [1:0][TEX_WRAP_BITS-1:0]              req_wraps;
-    wire [1:0][TEX_LOD_BITS-1:0]            req_logdims;
-    wire [`TEX_ADDR_BITS-1:0]                   req_baseaddr;
+    wire [1:0][TEX_DIM_W-1:0]               req_dims;
+    wire [NUM_LANES-1:0][W_ADDR_BITS-1:0]       req_baseaddr, sel_baseaddr;
+    wire [NUM_LANES-1:0][2:0]                   req_gather, sel_gather;
     wire [31:0]                                 req_bordercolor;
     wire [1:0][NUM_LANES-1:0][31:0]             req_coords;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][TEX_LOD_BITS-1:0] req_miplevel, sel_miplevel;
@@ -76,17 +79,32 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire                                        req_ready;
 
     // Both levels a sample can read are selected here and fetched by one
-    // request, so nothing downstream has to pair two responses.
-    wire mip_linear = tex_dcrs.filter[TEX_FILTER_BITS-1];
-
+    // request, so nothing downstream has to pair two responses. A lane may carry
+    // its own filter -- the shader's min/mag decision and whether it blends
+    // levels -- and its array layer in the operand's upper fields; otherwise the
+    // stage's FILTER applies and the layer is 0.
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_mip_sel
+        wire [TEX_ARG_BITS-1:0] arg = tex_bus_if.req_data.lod[i];
+        // A gather reads the bilinear footprint of one level, whatever the filter.
+        wire gather = arg[`VX_TEX_ARG_GATHER];
+        assign sel_gather[i] = {gather, arg[`VX_TEX_ARG_GATHER_COMP +: 2]};
+        assign sel_filter[i] = gather ? TEX_FILTER_BITS'(`VX_TEX_FILTER_BILINEAR)
+                             : arg[`VX_TEX_ARG_LANE_FILTER]
+                             ? {arg[`VX_TEX_ARG_MIP_LINEAR], arg[`VX_TEX_ARG_BILINEAR]}
+                             : tex_dcrs.filter;
+        wire mip_linear = sel_filter[i][TEX_FILTER_BITS-1];
+        wire [`VX_TEX_ARG_LAYER_BITS-1:0] layer = arg[`VX_TEX_ARG_LAYER_SHIFT +: `VX_TEX_ARG_LAYER_BITS];
+        assign sel_baseaddr[i] = {tex_dcrs.baseaddr, 6'b0}
+                               + W_ADDR_BITS'(layer * W_ADDR_BITS'(tex_dcrs.layer_stride));
+        `UNUSED_VAR (arg[`VX_TEX_ARG_LANE_FILTER-1:`VX_TEX_ARG_GATHER+1])
+        `UNUSED_VAR (arg[`VX_TEX_ARG_LAYER_SHIFT-1:`VX_TEX_ARG_MIP_LINEAR+1])
         // The lod operand names an integer level, except under mip-linear where
         // it is fixed-point: the level in the high bits and the weight between
         // it and the next above in the low ones. A caller that never asks for a
         // blend therefore never has to know about the fractional form.
         wire [TEX_LOD_BITS-1:0] level_lo = mip_linear
-            ? tex_bus_if.req_data.lod[i][`VX_TEX_LOD_FRAC_BITS +: TEX_LOD_BITS]
-            : tex_bus_if.req_data.lod[i][TEX_LOD_BITS-1:0];
+            ? arg[`VX_TEX_LOD_FRAC_BITS +: TEX_LOD_BITS]
+            : arg[TEX_LOD_BITS-1:0];
         // The top of the chain has no level above it, so the upper set repeats
         // the lower one and the weight then blends a value with itself. The
         // increment is as wide as the table index, so left alone it would wrap
@@ -96,20 +114,20 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         assign sel_miplevel[i][1] = at_top ? level_lo : (level_lo + TEX_LOD_BITS'(1));
         assign sel_mipoff[i][0] = tex_dcrs.mipoff[sel_miplevel[i][0]];
         assign sel_mipoff[i][1] = tex_dcrs.mipoff[sel_miplevel[i][1]];
-        assign sel_lodfrac[i] = mip_linear ? tex_bus_if.req_data.lod[i][0 +: `VX_TEX_LOD_FRAC_BITS]
+        assign sel_lodfrac[i] = mip_linear ? arg[0 +: `VX_TEX_LOD_FRAC_BITS]
                                            : `VX_TEX_LOD_FRAC_BITS'(0);
     end
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_LANES  + TEX_FILTER_BITS + TEX_FORMAT_BITS + 2 * TEX_WRAP_BITS + 2 * TEX_LOD_BITS + `TEX_ADDR_BITS + 32 + NUM_LANES * (2 * 32 + `VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (TEX_LOD_BITS + `TEX_MIPOFF_BITS)) + TAG_WIDTH),
+        .DATAW   (NUM_LANES  + TEX_FORMAT_BITS + 2 * TEX_WRAP_BITS + 2 * TEX_DIM_W + 32 + GATHER_W + NUM_LANES * (TEX_FILTER_BITS + W_ADDR_BITS + 2 * 32 + `VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (TEX_LOD_BITS + `TEX_MIPOFF_BITS)) + TAG_WIDTH),
         .OUT_REG (1)
     ) pipe_reg (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (tex_bus_if.req_valid),
         .ready_in  (tex_bus_if.req_ready),
-        .data_in   ({tex_bus_if.req_data.mask, tex_dcrs.filter, tex_dcrs.format, tex_dcrs.wraps, tex_dcrs.logdims, tex_dcrs.baseaddr, tex_dcrs.border, tex_bus_if.req_data.coords, sel_miplevel, sel_mipoff, sel_lodfrac, tex_bus_if.req_data.tag}),
-        .data_out  ({req_mask, req_filter, req_format, req_wraps, req_logdims, req_baseaddr, req_bordercolor, req_coords, req_miplevel, req_mipoff, req_lodfrac, req_tag}),
+        .data_in   ({tex_bus_if.req_data.mask, sel_filter, sel_gather, tex_dcrs.format, tex_dcrs.wraps, tex_dcrs.dims, sel_baseaddr, tex_dcrs.border, tex_bus_if.req_data.coords, sel_miplevel, sel_mipoff, sel_lodfrac, tex_bus_if.req_data.tag}),
+        .data_out  ({req_mask, req_filter, req_gather, req_format, req_wraps, req_dims, req_baseaddr, req_bordercolor, req_coords, req_miplevel, req_mipoff, req_lodfrac, req_tag}),
         .valid_out (req_valid),
         .ready_out (req_ready)
     );
@@ -118,14 +136,14 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
 
     wire mem_req_valid;
     wire [NUM_LANES-1:0] mem_req_mask;
-    wire [TEX_FILTER_BITS-1:0] mem_req_filter;
+    wire [NUM_LANES-1:0][TEX_FILTER_BITS-1:0] mem_req_filter;
     wire [`TEX_LGSTRIDE_BITS-1:0] mem_req_lgstride;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] mem_req_blends;
     wire [NUM_LANES-1:0][`VX_TEX_LOD_FRAC_BITS-1:0] mem_req_lodfrac;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] mem_req_border;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] mem_req_addr;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] mem_req_baseaddr;
-    wire [(TAG_WIDTH + TEX_FORMAT_BITS + 32)-1:0] mem_req_info;
+    wire [(TAG_WIDTH + GATHER_W + TEX_FORMAT_BITS + 32)-1:0] mem_req_info;
     wire mem_req_ready;
 
     // The border colour rides the request rather than being read at the
@@ -133,7 +151,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     // under is the state it was issued under.
     VX_tex_addr #(
         .INSTANCE_ID ($sformatf("%s-addr", INSTANCE_ID)),
-        .REQ_TAGW    (TAG_WIDTH + TEX_FORMAT_BITS + 32),
+        .REQ_TAGW    (TAG_WIDTH + GATHER_W + TEX_FORMAT_BITS + 32),
         .NUM_LANES   (NUM_LANES)
     ) tex_addr (
         .clk        (clk),
@@ -150,8 +168,8 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .req_miplevel(req_miplevel),
         .req_mipoff (req_mipoff),
         .req_lodfrac(req_lodfrac),
-        .req_logdims(req_logdims),
-        .req_tag    ({req_tag, req_format, req_bordercolor}),
+        .req_dims   (req_dims),
+        .req_tag    ({req_tag, req_gather, req_format, req_bordercolor}),
         .req_ready  (req_ready),
 
         // outputs
@@ -168,16 +186,31 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .rsp_ready  (mem_req_ready)
     );
 
+    // A tap whose blend weight is zero cannot change the result, so it is not
+    // fetched: the high-u taps when alpha is 0, the high-v taps when beta is 0,
+    // and the upper level when the level weight is 0.
+    // A gather returns all four taps, so none of its taps is skipped.
+    wire [NUM_LANES-1:0][2:0] mem_req_gather = mem_req_info[(TEX_FORMAT_BITS + 32) +: GATHER_W];
+    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0] mem_req_skip_u, mem_req_skip_v;
+    wire [NUM_LANES-1:0] mem_req_skip_l1;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_skip
+        for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
+            assign mem_req_skip_u[i][k] = (mem_req_blends[i][k][0] == '0) && ~mem_req_gather[i][2];
+            assign mem_req_skip_v[i][k] = (mem_req_blends[i][k][1] == '0) && ~mem_req_gather[i][2];
+        end
+        assign mem_req_skip_l1[i] = (mem_req_lodfrac[i] == '0);
+    end
+
     // retrieve texel values from memory
 
     wire mem_rsp_valid;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] mem_rsp_data;
-    wire [(TAG_WIDTH + TEX_FORMAT_BITS + 32 + BLEND_FRAC_W + BORDER_W + LODFRAC_W)-1:0] mem_rsp_info;
+    wire [(TAG_WIDTH + GATHER_W + TEX_FORMAT_BITS + 32 + BLEND_FRAC_W + BORDER_W + LODFRAC_W)-1:0] mem_rsp_info;
     wire mem_rsp_ready;
 
     VX_tex_mem #(
         .INSTANCE_ID ($sformatf("%s-mem", INSTANCE_ID)),
-        .REQ_TAGW    (TAG_WIDTH + TEX_FORMAT_BITS + 32 + BLEND_FRAC_W + BORDER_W + LODFRAC_W),
+        .REQ_TAGW    (TAG_WIDTH + GATHER_W + TEX_FORMAT_BITS + 32 + BLEND_FRAC_W + BORDER_W + LODFRAC_W),
         .NUM_LANES   (NUM_LANES)
     ) tex_mem (
         .clk       (clk),
@@ -190,6 +223,9 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .req_valid (mem_req_valid),
         .req_mask  (mem_req_mask),
         .req_filter(mem_req_filter),
+        .req_skip_u(mem_req_skip_u),
+        .req_skip_v(mem_req_skip_v),
+        .req_skip_l1(mem_req_skip_l1),
         .req_lgstride(mem_req_lgstride),
         .req_baseaddr(mem_req_baseaddr),
         .req_addr  (mem_req_addr),
@@ -215,7 +251,8 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire [BLEND_FRAC_W-1:0] mem_rsp_blends = mem_rsp_info[(LODFRAC_W + BORDER_W) +: BLEND_FRAC_W];
     wire [31:0] mem_rsp_bordercolor = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W) +: 32];
     wire [TEX_FORMAT_BITS-1:0] mem_rsp_format = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32) +: TEX_FORMAT_BITS];
-    wire [TAG_WIDTH-1:0] mem_rsp_tag = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS) +: TAG_WIDTH];
+    wire [GATHER_W-1:0] mem_rsp_gather = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS) +: GATHER_W];
+    wire [TAG_WIDTH-1:0] mem_rsp_tag = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS + GATHER_W) +: TAG_WIDTH];
 
     VX_tex_sampler #(
         .INSTANCE_ID ($sformatf("%s-sampler", INSTANCE_ID)),
@@ -233,6 +270,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .req_bordercolor (mem_rsp_bordercolor),
         .req_lodfrac(mem_rsp_lodfrac),
         .req_format (mem_rsp_format),
+        .req_gather (mem_rsp_gather),
         .req_tag    (mem_rsp_tag),
         .req_ready  (mem_rsp_ready),
 
@@ -278,9 +316,9 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
             TCACHE_ADDR_WIDTH + 1 + TCACHE_TAG_WIDTH +
             (TCACHE_WORD_SIZE * 8) + TCACHE_TAG_WIDTH +
             VX_DCR_ADDR_WIDTH + VX_DCR_DATA_WIDTH +
-            1 * (1 + 2 * 32 + TEX_LODF_BITS) + TEX_STAGE_BITS + TAG_WIDTH +
+            1 * (1 + 2 * 32 + TEX_ARG_BITS) + TEX_STAGE_BITS + TAG_WIDTH +
             1 * 32 + TAG_WIDTH +
-            `TEX_ADDR_BITS + `TEX_MIPOFF_BITS + 2 * TEX_LOD_BITS
+            `TEX_ADDR_BITS + `TEX_MIPOFF_BITS + 2 * TEX_DIM_W
         ), {
             cache_bus_if[0].req_valid,
             cache_bus_if[0].req_ready,
@@ -318,8 +356,8 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
             tex_bus_rsp_uuid,
             tex_dcrs.baseaddr,
             tex_dcrs.mipoff[0],
-            tex_dcrs.logdims[0],
-            tex_dcrs.logdims[1]
+            tex_dcrs.dims[0],
+            tex_dcrs.dims[1]
         },
         reset_negedge, 1'b0, 4096
     );

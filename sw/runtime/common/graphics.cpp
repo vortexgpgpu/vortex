@@ -478,7 +478,7 @@ void emit_om(const om_state_t& s, W&& w) {
 template <class W>
 void emit_tex(const tex_state_t& s, W&& w) {
   w(VX_DCR_TEX_STAGE,  s.stage);
-  w(VX_DCR_TEX_LOGDIM, (s.logheight << 16) | s.logwidth);
+  w(VX_DCR_TEX_DIM,    (s.height << 16) | s.width);
   w(VX_DCR_TEX_FORMAT, s.format);
   w(VX_DCR_TEX_FILTER, s.filter);
   w(VX_DCR_TEX_WRAP,   (s.wrap_v << 16) | s.wrap_u);

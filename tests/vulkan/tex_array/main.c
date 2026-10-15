@@ -11,6 +11,8 @@
  *   array_layer0  -- selects layer 0
  *   array_layer2  -- selects the last layer
  *   array_clamp   -- a layer coordinate past the last, which Vulkan clamps
+ *   array_offset  -- textureOffset on a second, two-layer array whose texels
+ *                    carry their column and row
  *
  * A case passes when every rendered pixel is green.
  */
@@ -91,6 +93,8 @@ struct texcase {
 
 /* Three solid layers, mirrored by the fragment shaders. */
 static uint8_t layer_texels[3][4 * 4][4];
+/* Two layers whose texels carry their column and row (array_offset). */
+static uint8_t offset_texels[2][4 * 4][4];
 
 static void
 fill_patterns(void)
@@ -101,6 +105,14 @@ fill_patterns(void)
          p[0] = (uint8_t)(40 * l + 40);
          p[1] = (uint8_t)(20 * l + 10);
          p[2] = (uint8_t)(200 - 60 * l);
+         p[3] = 255;
+      }
+   for (uint32_t l = 0; l < 2; l++)
+      for (uint32_t i = 0; i < 16; i++) {
+         uint8_t *p = offset_texels[l][i];
+         p[0] = (uint8_t)(30 + 50 * (i % 4));
+         p[1] = (uint8_t)(40 * (i / 4) + 20 * l);
+         p[2] = 0;
          p[3] = 255;
       }
 }
@@ -117,6 +129,8 @@ main(int argc, char **argv)
         4, 4, 3, VK_IMAGE_VIEW_TYPE_2D_ARRAY, layer_texels, sizeof(layer_texels) },
       { "array_clamp", "array_clamp.frag.spv", VK_FORMAT_R8G8B8A8_UNORM,
         4, 4, 3, VK_IMAGE_VIEW_TYPE_2D_ARRAY, layer_texels, sizeof(layer_texels) },
+      { "array_offset", "array_offset.frag.spv", VK_FORMAT_R8G8B8A8_UNORM,
+        4, 4, 2, VK_IMAGE_VIEW_TYPE_2D_ARRAY, offset_texels, sizeof(offset_texels) },
    };
    const uint32_t ncases = (uint32_t)(sizeof(cases) / sizeof(cases[0]));
 

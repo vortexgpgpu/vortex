@@ -119,19 +119,15 @@ bits carry wrap repetitions; the 8 sub-texel bits (`TEX_BLEND_FRAC`) become
 the bilinear blend weights. Addressing modes per axis: `CLAMP`, `REPEAT`
 (default), `MIRROR` and `BORDER`.
 
-Under `BORDER` a tap whose coordinate leaves `[0, 1)` returns `TEX_BORDER`
-instead of a texel. The out-of-range test costs no comparator — a coordinate is
-outside exactly when anything above its fractional field is set, an integer part
-or the sign bits of a negative one, so `VX_tex_wrap` OR-reduces those bits on the
-coordinate it receives *before* wrapping. The address itself still clamps: the
-tap is fetched and then discarded, so it only has to be one the texture owns.
-`VX_tex_addr` already forms the low and high coordinate of each axis per mip
-level, so the four per-tap flags fall out of those — per level too, since the
-half-texel offset scales with the level and a trilinear sample can be inside the
-texture at one level and outside at the next. The substitution happens in
-`VX_tex_sampler` after the format decode and before the blend, because the
-border colour is already in the sampler's working format while a fetched texel
-is still in the texture's.
+Under `BORDER` a tap whose texel index leaves `[0, dim)` returns `TEX_BORDER`
+instead of a texel. The flag comes out of the integer tap wrap (§4.2): a tap
+below 0 or at or past the level's dimension, on an axis that wraps to a border.
+The address itself still clamps: the tap is fetched and then discarded, so it
+only has to be one the texture owns. The flags are per level, since a trilinear
+sample can be inside the texture at one level and outside at the next. The
+substitution happens in `VX_tex_sampler` after the format decode and before the
+blend, because the border colour is already in the sampler's working format
+while a fetched texel is still in the texture's.
 
 ### 3.2 Texel formats
 
@@ -146,13 +142,13 @@ stage (low-bit replication for the narrow channels):
 
 ### 3.3 Texture memory layout
 
-Row-major, power-of-two dimensions (`LOGDIM` holds `log2(w)`, `log2(h)`;
-`VX_TEX_DIM_BITS = 15` caps a dimension at 32K). The mip chain is a table of
-byte offsets: texel address =
-`(baseaddr << 6) + mipoff[lod] + (y << (log2(w) − lod) + log2stride) + (x << log2stride)`
-— `baseaddr` is a 64-byte-block address, and all scaling is shifts (the
-power-of-two constraint is what keeps the address path multiplier-free). Up
-to `VX_TEX_LOD_MAX = 15` mip levels per stage.
+Row-major, any dimensions (`TEX_DIM` holds the mip-0 width and height;
+`VX_TEX_DIM_BITS = 15` caps a dimension at 32K). Level `lod` is
+`w_lod = max(1, w >> lod)` wide, and the mip chain is a table of byte offsets:
+texel address =
+`(baseaddr << 6) + layer · layer_stride + mipoff[lod] + y · (w_lod << log2stride) + (x << log2stride)`
+— `baseaddr` is a 64-byte-block address. Up to `VX_TEX_LOD_MAX = 15` mip levels
+per stage.
 
 ### 3.4 DCR state (0x040–0x05F)
 
@@ -164,7 +160,7 @@ unit keeps `VX_TEX_STAGE_COUNT = 2` independent register banks
 |---|---|---|
 | 0x040 | `TEX_STAGE` | selects which stage bank subsequent DCR writes program |
 | 0x041 | `TEX_ADDR` | texture base, 64-byte-block address |
-| 0x042 | `TEX_LOGDIM` | `{log2(h)[16+], log2(w)[0+]}` |
+| 0x042 | `TEX_DIM` | `{h[16+], w[0+]}`, mip-0 texels |
 | 0x043 | `TEX_FORMAT` | one of the 7 formats (§3.2) |
 | 0x044 | `TEX_FILTER` | point / bilinear (bit 0); mip-linear above it (§2) |
 | 0x045 | `TEX_WRAP` | `{v_wrap[16+], u_wrap[0+]}` |
@@ -193,28 +189,30 @@ blends a value with itself rather than wrapping to entry zero); the
 operand's low `VX_TEX_LOD_FRAC_BITS` become the level weight (0 otherwise).
 A registered elastic buffer decouples the socket bus.
 
-### 4.2 Address generation — `VX_tex_addr` (2 pipeline stages)
+### 4.2 Address generation — `VX_tex_addr` (3 pipeline stages)
 
-[`VX_tex_addr.sv`](../../hw/rtl/tex/VX_tex_addr.sv), shift/add only. Every
-quantity that depends on the mip level is computed once per level
-(`TEX_NUM_LEVELS = 2`), so one request carries both levels' tap sets — the
-levels differ only in that dependence (same coordinates, same wrap, same
-format):
+[`VX_tex_addr.sv`](../../hw/rtl/tex/VX_tex_addr.sv) addresses in texel space,
+for any texture size. The software sampler and the SimX model run the same
+computation (`gfx_tex::tex_axis_taps`). Every quantity that depends on the mip
+level is computed once per level (`TEX_NUM_LEVELS = 2`), so one request carries
+both levels' tap sets:
 
-- **Stage 0**: for bilinear, offset the coordinate by ±half-texel of the
-  level (`half >> (logdim − miplevel)` in normalized space, floored so a
-  level past the end of the chain keeps the 1×1 level's half-texel);
-  apply the wrap mode per axis (`VX_tex_wrap`: clamp-saturate / mirror-XOR /
-  repeat-truncate; `BORDER` clamps like `CLAMP` and additionally flags the
-  coordinate — §3.1); derive the per-format `log2(stride)`
-  (`VX_tex_stride`), the mip-adjusted row pitch, and the mip base
-  `(baseaddr ≪ 6) + mipoff[lod]`. The four per-tap border flags per level
-  fall out of the per-axis low/high coordinate flags.
-- **Stage 1**: scale the wrapped coordinates to texel space
-  (`coord >> (FRAC − BLEND − (logdim − lod))`), split integer/fraction —
-  the low 8 fraction bits become the **blend weights** — and form each
-  level's four tap byte-offsets `{v_lo, v_hi} × {u_lo, u_hi}` with shifts
-  and adds. Point sampling emits one tap and zero blends.
+- **Stage 0**: fold each axis's coordinate by its wrap in normalized space —
+  repeat keeps the fraction, mirror XOR-folds it into `[0, 1)`, clamp and border
+  clamp it to `[-1, 2)`, which keeps every out-of-range tap out of range — and
+  form each level's dimension `max(1, dim >> lod)`, the per-format
+  `log2(stride)` (`VX_tex_stride`) and the mip base.
+- **Stage 1**: multiply the folded coordinate by the level's dimension (one
+  multiplier per lane, level and axis) into texel space with 8 fraction bits,
+  less half a texel under bilinear. The taps are `floor(x)` and `floor(x) + 1`,
+  each wrapped back into `[0, dim)` as an integer — repeat adds or subtracts
+  the dimension, the other modes clamp, and border flags the tap (§3.1). The
+  fraction is the second tap's **blend weight**; point sampling emits one tap
+  and zero blends.
+- **Stage 2**: the first row's byte offset is `y0 · pitch` (one multiplier per
+  lane and level); the second row is that plus a pitch, the same row (an edge
+  clamped both taps onto it) or row 0 (repeat wrapped it), so it needs no
+  multiplier. The four taps' offsets add the column `x << log2stride`.
 
 ### 4.3 Texel fetch — `VX_tex_mem`
 

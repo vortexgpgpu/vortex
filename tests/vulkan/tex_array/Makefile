@@ -19,6 +19,7 @@ SRCS := $(SRC_DIR)/main.c
 SHADERS := $(SRC_DIR)/tex_array.vert \
            $(SRC_DIR)/array_layer0.frag \
            $(SRC_DIR)/array_layer2.frag \
-           $(SRC_DIR)/array_clamp.frag
+           $(SRC_DIR)/array_clamp.frag \
+           $(SRC_DIR)/array_offset.frag
 
 include ../common.mk

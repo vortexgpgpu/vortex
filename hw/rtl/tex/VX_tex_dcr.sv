@@ -65,12 +65,15 @@ module VX_tex_dcr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                     dcrs_n.wraps[0] = write_data[0  +: TEX_WRAP_BITS];
                     dcrs_n.wraps[1] = write_data[16 +: TEX_WRAP_BITS];
                 end
-                `VX_DCR_TEX_LOGDIM: begin
-                    dcrs_n.logdims[0] = write_data[0  +: TEX_LOD_BITS];
-                    dcrs_n.logdims[1] = write_data[16 +: TEX_LOD_BITS];
+                `VX_DCR_TEX_DIM: begin
+                    dcrs_n.dims[0] = write_data[0  +: TEX_DIM_W];
+                    dcrs_n.dims[1] = write_data[16 +: TEX_DIM_W];
                 end
                 `VX_DCR_TEX_BORDER: begin
                     dcrs_n.border = write_data;
+                end
+                `VX_DCR_TEX_LAYER_STRIDE: begin
+                    dcrs_n.layer_stride = write_data;
                 end
                 default: begin
                     for (integer j = 0; j <= `VX_TEX_LOD_MAX; ++j) begin

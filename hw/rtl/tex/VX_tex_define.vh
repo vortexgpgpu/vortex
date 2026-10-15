@@ -44,10 +44,12 @@
     case (addr) \
         `VX_DCR_TEX_STAGE:  `TRACE(level, ("STAGE")) \
         `VX_DCR_TEX_ADDR:   `TRACE(level, ("ADDR")) \
-        `VX_DCR_TEX_LOGDIM: `TRACE(level, ("LOGDIM")) \
+        `VX_DCR_TEX_DIM: `TRACE(level, ("DIM")) \
         `VX_DCR_TEX_FORMAT: `TRACE(level, ("FORMAT")) \
         `VX_DCR_TEX_FILTER: `TRACE(level, ("FILTER")) \
         `VX_DCR_TEX_WRAP:   `TRACE(level, ("WRAP")) \
+        `VX_DCR_TEX_BORDER: `TRACE(level, ("BORDER")) \
+        `VX_DCR_TEX_LAYER_STRIDE: `TRACE(level, ("LAYER_STRIDE")) \
         //`VX_DCR_TEX_MIPOFF \
         default:            `TRACE(level, ("MIPOFF")) \
     endcase

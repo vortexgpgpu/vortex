@@ -40,23 +40,21 @@ extern "C" {
 
 // texstate.filter bit 3: the min (minification) tap filter, 0=point 1=bilinear.
 // bit 0 is the mag (magnification) tap; a fragment shader picks between them by the
-// sign of its computed LOD (minified -> min, magnified -> mag). The HW TEX unit has
-// one per-draw filter DCR, so a mipmapped sampler routes to the SW sampler, which
-// takes the shader-resolved filter explicitly.
+// sign of its computed LOD (minified -> min, magnified -> mag), and hands the
+// resolved tap to the TEX unit in its operand or to the SW sampler explicitly.
 #define GFX_SW_TEX_FILTER_MIN_BILINEAR (1u << 3)
-
-// texstate.filter bit 4: the bound texture has non-power-of-two dimensions. The FF
-// vx_tex4 unit is POT-only, so a HW-TEX fragment shader routes an NPOT texture to
-// the SW sampler (which addresses it by width/height), the same runtime branch a
-// mipmapped sampler takes. Set per draw from the bound texture's mip-0 dims.
-#define GFX_SW_TEX_FILTER_NPOT (1u << 4)
 
 // texstate.filter bit 5: the bound texture's format is above the FF set
 // (VX_TEX_FORMAT_FF_MAX). The FF vx_tex4 unit decodes only the FF formats and its
 // stride table covers only 1/2/4-byte texels, so an extended-format texture must
-// sample in software — the same runtime branch a mipmapped or NPOT texture takes.
+// sample in software.
 // Set per draw from the bound texture's resolved VX format.
 #define GFX_SW_TEX_FILTER_EXT_FORMAT (1u << 5)
+
+// textureOffset's texel offset, carried in the caller-resolved filter word as
+// three signed 4-bit fields (x, y, z) from this bit; the sampler applies it in
+// texels of each level it reads.
+#define GFX_SW_TEX_FILTER_OFFSET_SHIFT 16
 
 // Either axis wraps with CLAMP_TO_BORDER, which the FF unit decodes as REPEAT.
 // Routing only: the software sampler keys off the wrap value itself.
@@ -68,7 +66,7 @@ typedef struct {
   uint32_t mip_off[VX_TEX_LOD_MAX + 1];   // per-LOD byte offset from base
   uint32_t logdim;                        // {log_h << 16 | log_w} of mip 0
   uint32_t format;                        // VX_TEX_FORMAT_*
-  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3) | NPOT (bit4) | ext format (bit5) | border (bit6)
+  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3) | ext format (bit5) | border (bit6) | offset (bits 16+)
   uint32_t wrap;                          // {wrap_v << 16 | wrap_u}
   uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
@@ -81,6 +79,11 @@ typedef struct {
   int32_t  lod_bias;                      // sampler LOD bias, signed Q(VX_TEX_LOD_FRAC_BITS)
   uint32_t depth;                         // sampler3D: mip-0 depth-slice count; samplerCubeArray: cube count; 0 otherwise
   uint32_t wrap_w;                        // VX_TEX_WRAP_* for the 3D depth (r) axis
+  uint32_t levels;                        // mip levels the view exposes
+  uint32_t res_page;                      // sparse page log2 dims: w | h << 8 | d << 16
+  uint32_t res_layer_bits;                // residency bits per array layer
+  uint32_t res_level[VX_TEX_LOD_MAX + 1]; // first residency bit of each level
+  uint64_t residency;                     // sparse page bitmap; 0 => fully resident
 } gfx_sw_texstate_t;
 
 // Resident output-merger descriptor (mirror of gfx_sw::om_state_t).
@@ -146,18 +149,19 @@ void gfx_tex_sample_f32(const gfx_sw_texstate_t* st,
 // for a float-format texture (see gfx_tex_sample_f32).
 void gfx_tex_sample_array_f32(const gfx_sw_texstate_t* st,
                               int32_t u, int32_t v, uint32_t layer, uint32_t lod,
-                              float* out);
+                              uint32_t filter, float* out);
 
 // Cube sample as four float channels: gfx_tex_sample_cube_sw's float twin, for a
 // float-format texture (see gfx_tex_sample_f32).
 void gfx_tex_sample_cube_f32(const gfx_sw_texstate_t* st,
-                             float sc, float tc, float rc, uint32_t lod, float* out);
+                             float sc, float tc, float rc, uint32_t lod, uint32_t filter,
+                             float* out);
 
 // Cube-array sample as four float channels: gfx_tex_sample_cube_array_sw's float
 // twin, for a float-format texture (see gfx_tex_sample_f32).
 void gfx_tex_sample_cube_array_f32(const gfx_sw_texstate_t* st,
                                    float sc, float tc, float rc, uint32_t array_index,
-                                   uint32_t lod, float* out);
+                                   uint32_t lod, uint32_t filter, float* out);
 
 // 3D sample as four float channels: gfx_tex_sample_3d_sw's float twin, for a
 // float-format texture (see gfx_tex_sample_f32).
@@ -198,6 +202,34 @@ void gfx_tex_fetch_array_f32(const gfx_sw_texstate_t* st,
 uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
                            int32_t x, int32_t y, uint32_t comp);
 
+// Sparse residency code of a sample (nonzero = resident) at the coordinates and
+// level a sample of the same op takes: S.23 (u,v[,w]) and resolved lod/filter, or
+// texel coordinates and an integer lod when GFX_SW_TEX_RES_FETCH is set; `z` is
+// the array layer of a layered view.
+#define GFX_SW_TEX_RES_3D    (1u << 0)
+#define GFX_SW_TEX_RES_FETCH (1u << 1)
+// (u, v, w) are a cube direction's float bits and `z` the cube index.
+#define GFX_SW_TEX_RES_CUBE  (1u << 2)
+uint32_t gfx_tex_residency_sw(const gfx_sw_texstate_t* st, int32_t u, int32_t v, int32_t w,
+                              uint32_t z, uint32_t lod, uint32_t filter, uint32_t flags);
+
+// textureGather at full precision: the four taps of channel `comp` at (x,y) of
+// `layer`, in GL gather order, as float bits (float and normalized formats) or the
+// stored integers (integer formats). A constant swizzle gives 0 or `one_bits`.
+void gfx_tex_gather_f32(const gfx_sw_texstate_t* st, int32_t x, int32_t y, uint32_t comp,
+                        uint32_t layer, uint32_t one_bits, uint32_t* out);
+
+// Cube (or cube-array) textureGather: the face the (sc,tc,rc) direction selects,
+// in cube `array_index`, as gfx_tex_gather_f32.
+void gfx_tex_gather_cube_f32(const gfx_sw_texstate_t* st, float sc, float tc, float rc,
+                             uint32_t array_index, uint32_t comp, uint32_t one_bits,
+                             uint32_t* out);
+
+// Cube (or cube-array) textureGatherCmp, as gfx_tex_gather_cmp_sw on the face the
+// direction selects in cube `array_index`.
+uint32_t gfx_tex_gather_cmp_cube_sw(const gfx_sw_texstate_t* st, float sc, float tc,
+                                    float rc, uint32_t array_index, uint32_t ref_bits);
+
 // sampler2DArray textureGather on the `layer` slice.
 uint32_t gfx_tex_gather_array_sw(const gfx_sw_texstate_t* st,
                                  int32_t x, int32_t y, uint32_t comp,
@@ -234,20 +266,22 @@ uint32_t gfx_tex_shadow_cube_sw(const gfx_sw_texstate_t* st,
                                 float sc, float tc, float rc,
                                 uint32_t ref_bits, uint32_t filter, uint32_t lod);
 
-// 2D-array view: sample integer `layer` of the bound array texture.
+// 2D-array view: sample integer `layer` of the bound array texture. `filter` is
+// the tap and mip mode the shader resolved, as for gfx_tex_sample_sw.
 uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
-                                 int32_t u, int32_t v, uint32_t layer, uint32_t lod);
+                                 int32_t u, int32_t v, uint32_t layer, uint32_t lod,
+                                 uint32_t filter);
 
 // Cube view: sample the face selected by the major axis of the (sc,tc,rc)
 // direction vector supplied by the FS.
 uint32_t gfx_tex_sample_cube_sw(const gfx_sw_texstate_t* st,
-                                float sc, float tc, float rc, uint32_t lod);
+                                float sc, float tc, float rc, uint32_t lod, uint32_t filter);
 
 // Cube-array view: array_index selects the cube, (sc,tc,rc) the face; the slice is
 // array_index*6 + face.
 uint32_t gfx_tex_sample_cube_array_sw(const gfx_sw_texstate_t* st,
                                       float sc, float tc, float rc,
-                                      uint32_t array_index, uint32_t lod);
+                                      uint32_t array_index, uint32_t lod, uint32_t filter);
 
 // samplerCubeArrayShadow: like gfx_tex_sample_cube_array_sw, but compare against
 // ref_bits at slice array_index*6 + face.

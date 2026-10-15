@@ -159,7 +159,8 @@ VX_DCR_DXA_STATE_END = 0x280
 VX_DCR_TEX_STATE_BEGIN = 0x040
 VX_DCR_TEX_STAGE       = 0x040
 VX_DCR_TEX_ADDR        = 0x041
-VX_DCR_TEX_LOGDIM      = 0x042
+# Mip-0 dimensions in texels, width | height << 16; any size, not only a power of two.
+VX_DCR_TEX_DIM         = 0x042
 VX_DCR_TEX_FORMAT      = 0x043
 VX_DCR_TEX_FILTER      = 0x044
 VX_DCR_TEX_WRAP        = 0x045
@@ -170,6 +171,9 @@ VX_DCR_TEX_WRAP        = 0x045
 VX_DCR_TEX_MIPOFF_BASE = 0x046
 # Colour a CLAMP_TO_BORDER tap returns, ARGB8888. Above the mip-offset table.
 VX_DCR_TEX_BORDER      = 0x056
+# Bytes between the array layers (or cube faces) of the bound texture: a lane's
+# layer reads its mip chain at base + layer * stride.
+VX_DCR_TEX_LAYER_STRIDE = 0x057
 VX_DCR_TEX_STATE_END   = 0x060
 
 [tex_const]
@@ -190,6 +194,21 @@ VX_TEX_FILTER_BILINEAR = 1
 VX_TEX_FILTER_MIP_NONE   = 0
 VX_TEX_FILTER_MIP_LINEAR = 2
 VX_TEX_LOD_FRAC_BITS     = 8
+
+# Fields of the vx_tex lod operand above the level: LANE_FILTER makes the
+# lane's BILINEAR and MIP_LINEAR bits replace the stage's FILTER (the shader
+# picks min or mag per fragment, and whether to blend levels), and the array
+# layer (a cube face is 6 * cube + face) selects the slice.
+VX_TEX_ARG_LANE_FILTER = 16
+VX_TEX_ARG_BILINEAR    = 17
+VX_TEX_ARG_MIP_LINEAR  = 18
+VX_TEX_ARG_LAYER_SHIFT = 20
+VX_TEX_ARG_LAYER_BITS  = 12
+# textureGather: GATHER returns channel GATHER_COMP (0..3 = R,G,B,A, 2 bits) of
+# the bilinear footprint's four taps at the integer level, 8 bits each in GL
+# gather order, in place of a filtered texel.
+VX_TEX_ARG_GATHER_COMP = 12
+VX_TEX_ARG_GATHER      = 14
 
 VX_TEX_WRAP_CLAMP  = 0
 VX_TEX_WRAP_REPEAT = 1
@@ -222,8 +241,8 @@ VX_TEX_FORMAT_RGBA16F   = 13   # 4x half float
 VX_TEX_FORMAT_R32F      = 14   # float           -> (r,0,0,1)
 VX_TEX_FORMAT_RG32F     = 15   # 2x float        -> (r,g,0,1)
 VX_TEX_FORMAT_RGBA32F   = 16   # 4x float
-VX_TEX_FORMAT_D16       = 17   # depth-as-texture, 16-bit unorm -> luminance
-VX_TEX_FORMAT_D32F      = 18   # depth-as-texture, float        -> luminance
+VX_TEX_FORMAT_D16       = 17   # depth-as-texture, 16-bit unorm -> (d,0,0,1), in float
+VX_TEX_FORMAT_D32F      = 18   # depth-as-texture, float        -> (d,0,0,1), in float
 VX_TEX_FORMAT_R11G11B10F = 19  # packed unsigned float R11 G11 B10 -> (r,g,b,1)
 VX_TEX_FORMAT_RGB9E5    = 20   # shared-exponent unsigned float    -> (r,g,b,1)
 # Formats decoded field by field by the software sampler (TexFieldGeom):

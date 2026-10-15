@@ -206,7 +206,10 @@ public:
   // Pure: produce the TexelRequest for a (stage, u, v, lod) without touching
   // memory. Caller fetches the texels at req.addr[0..k-1] (k=4 for BILINEAR,
   // k=1 for POINT) and feeds them to apply_filter().
-  TexelRequest compute_request(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const;
+  // `layer` selects the array slice (LAYER_STRIDE apart), and `tap_filter`, when
+  // not ~0u, replaces the stage's mag/min filter (the lane's own decision).
+  TexelRequest compute_request(uint32_t stage, int32_t u, int32_t v, uint32_t lod,
+                               uint32_t layer = 0, uint32_t tap_filter = ~0u) const;
 
   // Pure: apply the format-decode + bilinear/point filter to fetched texels.
   static uint32_t apply_filter(const TexelRequest& req, const uint32_t texels[4]);

@@ -4,19 +4,18 @@
  *
  * Non-power-of-two texture addressing for the vortexpipe driver.
  *
- * The fixed-function texture unit addresses a texture by shifting: it holds
- * log2 of each dimension and never divides. That is only correct for
- * power-of-two textures, so the driver routes an NPOT sampler to the software
- * sampler instead. Nothing in the suite sampled an NPOT texture, so neither
- * the routing decision nor the software sampler's NPOT arithmetic was covered
- * -- a regression that sent an NPOT sampler to the hardware unit would have
- * produced wrong texels with no test to notice.
+ * A 5x3 texture, each texel carrying its own flattened index. 5 and 3 share no
+ * factor with any power of two, so shift-based addressing cannot land on the
+ * right texel by accident, and a wrong row is as visible as a wrong column.
  *
- * A 5x3 texture, each texel carrying its own flattened index, probed at three
- * texel centres: one that fixes the column, one that fixes the row, and one
- * reached through REPEAT from outside [0,1). 5 and 3 share no factor with any
- * power of two, so shift-based addressing cannot land on the right texel by
- * accident, and a wrong row is as visible as a wrong column.
+ * Two cases, each a draw whose fragments report three probes:
+ *   nearest, REPEAT     texel centres fixing the column and the row, and one
+ *                       reached through REPEAT from outside [0,1);
+ *   linear, MIRRORED    a two-texel blend inside a mirrored period, a row blend
+ *                       through a negative mirrored coordinate, and a plain
+ *                       blend between two columns. In a mirrored period the
+ *                       taps come in reverse order, so a weight applied to the
+ *                       wrong one is a different colour.
  */
 
 #include <vulkan/vulkan.h>
@@ -33,9 +32,11 @@
 #define TEX_W   5u
 #define TEX_H   3u
 
-/* One count of slack for the unorm round trip; the probes sit on texel centres
- * so nothing else can move them. */
+/* One count for the unorm round trip, one for the blend weight's 1/256 step. */
 #define TOL     2
+
+#define NUM_CASES  2
+#define NUM_PROBES 3
 
 #define CHECK(x) do {                                              \
    VkResult _r = (x);                                              \
@@ -118,23 +119,36 @@ main(int argc, char **argv)
 {
    fill_texture();
 
-   /* The three probes the fragment shader takes, in the order it packs them.
-    * Derived from the sampler's definition rather than from a previous run:
+   /* The probes each case's fragment shader takes, in the order it packs them.
+    * Derived from the sampler's definition rather than from a previous run.
     *
-    *   probe                       texel     why it is here
+    * nearest, REPEAT:
     *   u = 4.5/5, v = 0.5/3        (4,0)     last column of a 5-wide texture
     *   u = 2.5/5, v = 2.5/3        (2,2)     last row of a 3-tall texture
     *   u = 1 + 1.5/5, v = 1.5/3    (1,1)     REPEAT over a period of 5
+    *
+    * linear, MIRRORED_REPEAT (x = u*5 - 0.5 after the fold):
+    *   u = 1.26, v = 0.5/3         u folds to 0.74, x = 3.2: (3,0) 0.8, (4,0) 0.2
+    *   u = 2.5/5, v = -0.25        v folds to 0.25, y = 0.25: (2,0) 0.75, (2,1) 0.25
+    *   u = 1.9/5, v = 1.5/3        x = 1.4: (1,1) 0.6, (2,1) 0.4
     */
-   const uint8_t expect[3] = {
-      texel_red(4, 0),
-      texel_red(2, 2),
-      texel_red(1, 1),
+   const double expect_f[NUM_CASES][NUM_PROBES] = {
+      { texel_red(4, 0), texel_red(2, 2), texel_red(1, 1) },
+      { 0.8 * texel_red(3, 0) + 0.2 * texel_red(4, 0),
+        0.75 * texel_red(2, 0) + 0.25 * texel_red(2, 1),
+        0.6 * texel_red(1, 1) + 0.4 * texel_red(2, 1) },
    };
-   const char *probe_name[3] = { "column", "row", "repeat" };
+   const char *probe_name[NUM_CASES][NUM_PROBES] = {
+      { "column", "row", "repeat" },
+      { "mirrored-period blend", "mirrored row blend", "column blend" },
+   };
+   const char *case_name[NUM_CASES] = { "nearest/repeat", "linear/mirrored" };
 
    const char *vs_path = (argc > 1) ? argv[1] : "texnpot.vert.spv";
-   const char *fs_path = (argc > 2) ? argv[2] : "texnpot.frag.spv";
+   const char *fs_path[NUM_CASES] = {
+      (argc > 2) ? argv[2] : "texnpot.frag.spv",
+      (argc > 3) ? argv[3] : "texnpot_lin.frag.spv",
+   };
 
    /* --- instance / device / queue --------------------------------- */
    VkApplicationInfo app = {
@@ -333,8 +347,11 @@ main(int argc, char **argv)
    /* --- pipeline --------------------------------------------------- */
    VkShaderModule vs = load_module(dev, vs_path);
    if (!vs) return 1;
-   VkShaderModule fs = load_module(dev, fs_path);
-   if (!fs) return 1;
+   VkShaderModule fs[NUM_CASES];
+   for (uint32_t c = 0; c < NUM_CASES; c++) {
+      fs[c] = load_module(dev, fs_path[c]);
+      if (!fs[c]) return 1;
+   }
 
    VkDescriptorSetLayoutBinding dslb = {
       .binding = 0,
@@ -360,7 +377,7 @@ main(int argc, char **argv)
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vs, .pName = "main" },
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fs, .pName = "main" },
+        .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = VK_NULL_HANDLE, .pName = "main" },
    };
    VkPipelineVertexInputStateCreateInfo vi = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -402,47 +419,56 @@ main(int argc, char **argv)
       .pMultisampleState = &ms, .pColorBlendState = &cb,
       .layout = pl, .renderPass = rp, .subpass = 0,
    };
-   VkPipeline pipe;
-   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
+   VkPipeline pipe[NUM_CASES];
+   for (uint32_t c = 0; c < NUM_CASES; c++) {
+      stages[1].module = fs[c];
+      CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe[c]));
+   }
 
-   VkSamplerCreateInfo sci = {
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-      .magFilter = VK_FILTER_NEAREST, .minFilter = VK_FILTER_NEAREST,
-      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-      .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-      .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-      .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+   const VkFilter filters[NUM_CASES] = { VK_FILTER_NEAREST, VK_FILTER_LINEAR };
+   const VkSamplerAddressMode modes[NUM_CASES] = {
+      VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
    };
-   VkSampler sampler;
-   CHECK(vkCreateSampler(dev, &sci, NULL, &sampler));
+   VkSampler sampler[NUM_CASES];
+   for (uint32_t c = 0; c < NUM_CASES; c++) {
+      VkSamplerCreateInfo sci = {
+         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+         .magFilter = filters[c], .minFilter = filters[c],
+         .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+         .addressModeU = modes[c], .addressModeV = modes[c], .addressModeW = modes[c],
+      };
+      CHECK(vkCreateSampler(dev, &sci, NULL, &sampler[c]));
+   }
 
    VkDescriptorPoolSize dps = {
-      .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = 1,
+      .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = NUM_CASES,
    };
    VkDescriptorPoolCreateInfo dpci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .maxSets = 1, .poolSizeCount = 1, .pPoolSizes = &dps,
+      .maxSets = NUM_CASES, .poolSizeCount = 1, .pPoolSizes = &dps,
    };
    VkDescriptorPool dpool;
    CHECK(vkCreateDescriptorPool(dev, &dpci, NULL, &dpool));
 
-   VkDescriptorSetAllocateInfo dsai = {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .descriptorPool = dpool, .descriptorSetCount = 1, .pSetLayouts = &dsl,
-   };
-   VkDescriptorSet dset;
-   CHECK(vkAllocateDescriptorSets(dev, &dsai, &dset));
-   VkDescriptorImageInfo dii = {
-      .sampler = sampler, .imageView = texview,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-   };
-   VkWriteDescriptorSet wds = {
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = dset, .dstBinding = 0, .descriptorCount = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .pImageInfo = &dii,
-   };
-   vkUpdateDescriptorSets(dev, 1, &wds, 0, NULL);
+   VkDescriptorSet dset[NUM_CASES];
+   for (uint32_t c = 0; c < NUM_CASES; c++) {
+      VkDescriptorSetAllocateInfo dsai = {
+         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+         .descriptorPool = dpool, .descriptorSetCount = 1, .pSetLayouts = &dsl,
+      };
+      CHECK(vkAllocateDescriptorSets(dev, &dsai, &dset[c]));
+      VkDescriptorImageInfo dii = {
+         .sampler = sampler[c], .imageView = texview,
+         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      };
+      VkWriteDescriptorSet wds = {
+         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+         .dstSet = dset[c], .dstBinding = 0, .descriptorCount = 1,
+         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+         .pImageInfo = &dii,
+      };
+      vkUpdateDescriptorSets(dev, 1, &wds, 0, NULL);
+   }
 
    VkCommandPoolCreateInfo cmpci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -459,110 +485,119 @@ main(int argc, char **argv)
    VkCommandBuffer cmd;
    CHECK(vkAllocateCommandBuffers(dev, &cbai, &cmd));
 
-   /* --- upload, draw, read back ------------------------------------ */
-   VkCommandBufferBeginInfo cbbi = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-   };
-   CHECK(vkBeginCommandBuffer(cmd, &cbbi));
-   VkImageMemoryBarrier to_dst = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = tex,
-      .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
-      .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-   };
-   vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                        VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-                        0, NULL, 0, NULL, 1, &to_dst);
-   VkBufferImageCopy tcopy = {
-      .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .layerCount = 1 },
-      .imageExtent = { TEX_W, TEX_H, 1 },
-   };
-   vkCmdCopyBufferToImage(cmd, sbuf, tex,
-                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &tcopy);
-   VkImageMemoryBarrier to_read = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = tex,
-      .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
-      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-   };
-   vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-                        0, NULL, 0, NULL, 1, &to_read);
-
-   VkClearValue clear = { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } };
-   VkRenderPassBeginInfo rpbi = {
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .renderPass = rp, .framebuffer = fb,
-      .renderArea = { { 0, 0 }, { WIDTH, HEIGHT } },
-      .clearValueCount = 1, .pClearValues = &clear,
-   };
-   vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
-   vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
-   vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pl,
-                           0, 1, &dset, 0, NULL);
-   vkCmdDraw(cmd, 6, 1, 0, 0);
-   vkCmdEndRenderPass(cmd);
-
-   VkBufferImageCopy region = {
-      .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                            .layerCount = 1 },
-      .imageExtent = { WIDTH, HEIGHT, 1 },
-   };
-   vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                          rb, 1, &region);
-   CHECK(vkEndCommandBuffer(cmd));
-
-   VkSubmitInfo si = {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .commandBufferCount = 1, .pCommandBuffers = &cmd,
-   };
-   CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
-   CHECK(vkQueueWaitIdle(queue));
-
-   /* Every pixel samples the same texels, so any disagreement between pixels
-    * is itself a failure -- report the worst one rather than an average, which
-    * would hide a handful of wrong lanes. */
-   uint8_t *px;
-   CHECK(vkMapMemory(dev, bmem, 0, rb_bytes, 0, (void **)&px));
-   int worst[3] = { 0, 0, 0 };
-   uint8_t got[3] = { px[0], px[1], px[2] };
-   for (uint32_t i = 0; i < WIDTH * HEIGHT; i++) {
-      const uint8_t *p = px + (size_t)i * 4;
-      for (uint32_t k = 0; k < 3; k++) {
-         int d = (int)p[k] - (int)expect[k];
-         if (d < 0) d = -d;
-         if (d > worst[k]) { worst[k] = d; got[k] = p[k]; }
-      }
-   }
-   vkUnmapMemory(dev, bmem);
-
+   /* --- per case: draw, read back, check ---------------------------- */
    unsigned failed = 0;
-   for (uint32_t k = 0; k < 3; k++) {
-      bool ok = worst[k] <= TOL;
-      printf("%s: %s  got=%u want=%u\n",
-             probe_name[k], ok ? "pass" : "FAIL", got[k], expect[k]);
-      if (!ok) failed++;
+   for (uint32_t c = 0; c < NUM_CASES; c++) {
+      VkCommandBufferBeginInfo cbbi = {
+         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+      };
+      CHECK(vkBeginCommandBuffer(cmd, &cbbi));
+      if (c == 0) {
+         VkImageMemoryBarrier to_dst = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = tex,
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
+            .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+         };
+         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                              VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                              0, NULL, 0, NULL, 1, &to_dst);
+         VkBufferImageCopy tcopy = {
+            .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                  .layerCount = 1 },
+            .imageExtent = { TEX_W, TEX_H, 1 },
+         };
+         vkCmdCopyBufferToImage(cmd, sbuf, tex,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &tcopy);
+         VkImageMemoryBarrier to_read = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            .image = tex,
+            .subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 },
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+         };
+         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                              VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                              0, NULL, 0, NULL, 1, &to_read);
+      }
+
+      VkClearValue clear = { .color = { .float32 = { 0.0f, 0.0f, 0.0f, 1.0f } } };
+      VkRenderPassBeginInfo rpbi = {
+         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+         .renderPass = rp, .framebuffer = fb,
+         .renderArea = { { 0, 0 }, { WIDTH, HEIGHT } },
+         .clearValueCount = 1, .pClearValues = &clear,
+      };
+      vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe[c]);
+      vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pl,
+                              0, 1, &dset[c], 0, NULL);
+      vkCmdDraw(cmd, 6, 1, 0, 0);
+      vkCmdEndRenderPass(cmd);
+
+      VkBufferImageCopy region = {
+         .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                               .layerCount = 1 },
+         .imageExtent = { WIDTH, HEIGHT, 1 },
+      };
+      vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             rb, 1, &region);
+      CHECK(vkEndCommandBuffer(cmd));
+
+      VkSubmitInfo si = {
+         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+         .commandBufferCount = 1, .pCommandBuffers = &cmd,
+      };
+      CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
+      CHECK(vkQueueWaitIdle(queue));
+
+      /* Every pixel samples the same texels, so any disagreement between
+       * pixels is itself a failure -- report the worst one rather than an
+       * average, which would hide a handful of wrong lanes. */
+      uint8_t expect[NUM_PROBES];
+      for (uint32_t k = 0; k < NUM_PROBES; k++)
+         expect[k] = (uint8_t)(expect_f[c][k] + 0.5);
+      uint8_t *px;
+      CHECK(vkMapMemory(dev, bmem, 0, rb_bytes, 0, (void **)&px));
+      int worst[NUM_PROBES] = { 0, 0, 0 };
+      uint8_t got[NUM_PROBES] = { px[0], px[1], px[2] };
+      for (uint32_t i = 0; i < WIDTH * HEIGHT; i++) {
+         const uint8_t *q = px + (size_t)i * 4;
+         for (uint32_t k = 0; k < NUM_PROBES; k++) {
+            int d = (int)q[k] - (int)expect[k];
+            if (d < 0) d = -d;
+            if (d > worst[k]) { worst[k] = d; got[k] = q[k]; }
+         }
+      }
+      vkUnmapMemory(dev, bmem);
+
+      for (uint32_t k = 0; k < NUM_PROBES; k++) {
+         bool ok = worst[k] <= TOL;
+         printf("%s %s: %s  got=%u want=%u\n", case_name[c],
+                probe_name[c][k], ok ? "pass" : "FAIL", got[k], expect[k]);
+         if (!ok) failed++;
+      }
    }
 
    /* cleanup (best-effort; a smoke test exits anyway) */
-   vkDestroySampler(dev, sampler, NULL);
+   for (uint32_t c = 0; c < NUM_CASES; c++) {
+      vkDestroySampler(dev, sampler[c], NULL);
+      vkDestroyPipeline(dev, pipe[c], NULL);
+      vkDestroyShaderModule(dev, fs[c], NULL);
+   }
    vkDestroyCommandPool(dev, cp, NULL);
    vkDestroyDescriptorPool(dev, dpool, NULL);
-   vkDestroyPipeline(dev, pipe, NULL);
    vkDestroyPipelineLayout(dev, pl, NULL);
    vkDestroyDescriptorSetLayout(dev, dsl, NULL);
-   vkDestroyShaderModule(dev, fs, NULL);
    vkDestroyShaderModule(dev, vs, NULL);
    vkFreeMemory(dev, smem, NULL);
    vkDestroyBuffer(dev, sbuf, NULL);
@@ -583,6 +618,6 @@ main(int argc, char **argv)
       printf("FAILED (%u probe(s))\n", failed);
       return 1;
    }
-   printf("PASSED (5x3 texture addressed correctly on both axes and through REPEAT)\n");
+   printf("PASSED (5x3 texture addressed and filtered correctly through REPEAT and MIRRORED_REPEAT)\n");
    return 0;
 }

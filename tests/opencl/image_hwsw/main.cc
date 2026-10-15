@@ -151,24 +151,17 @@ int main(int argc, char** argv) {
   CL_CHECK(clBuildProgram(program, 1, &device_id, NULL, NULL, NULL));
   kernel = CL_CHECK2(clCreateKernel(program, "image_hwsw", &_err));
 
-  // `check` gates whether hw==sw is asserted. Nearest is bit-exact across all
-  // wraps; linear/clamp and linear/repeat agree within a few LSB (FF blends in
-  // fixed point, the software fallback in float). linear/mirror is reported for
-  // information only: the FF unit wraps the two continuous bilinear taps through
-  // its fixed-point mirror bit-trick (gfx_frag_tex.h TextureWrap/TexAddressLinear),
-  // while the software fallback wraps integer taps, so at reflections they use a
-  // different (both admissible) mirror convention that exceeds an LSB tolerance.
-  // FF is authoritative here (it is the shipping graphics sampler, and both TEX
-  // stages agree); bit-exact convergence of the float fallback onto the FF math
-  // is the tracked "single source of truth" sampler item (proposal S6), not a
-  // Tier-A defect.
-  struct { const char* name; cl_addressing_mode addr; cl_filter_mode filt; int tol; int check; } modes[] = {
-    { "nearest/clamp",   CL_ADDRESS_CLAMP_TO_EDGE,   CL_FILTER_NEAREST, 0, 1 },
-    { "nearest/repeat",  CL_ADDRESS_REPEAT,          CL_FILTER_NEAREST, 0, 1 },
-    { "nearest/mirror",  CL_ADDRESS_MIRRORED_REPEAT, CL_FILTER_NEAREST, 0, 1 },
-    { "linear/clamp",    CL_ADDRESS_CLAMP_TO_EDGE,   CL_FILTER_LINEAR,  4, 1 },
-    { "linear/repeat",   CL_ADDRESS_REPEAT,          CL_FILTER_LINEAR,  4, 1 },
-    { "linear/mirror",   CL_ADDRESS_MIRRORED_REPEAT, CL_FILTER_LINEAR,  4, 0 },
+  // Nearest is bit-exact across all wraps; linear agrees within a few LSB (the
+  // FF unit blends in fixed point, the software fallback in float). Both take
+  // the taps the same way -- integer taps wrapped in texel space -- so mirrored
+  // repeat is held to the same tolerance as the other wraps.
+  struct { const char* name; cl_addressing_mode addr; cl_filter_mode filt; int tol; } modes[] = {
+    { "nearest/clamp",   CL_ADDRESS_CLAMP_TO_EDGE,   CL_FILTER_NEAREST, 0 },
+    { "nearest/repeat",  CL_ADDRESS_REPEAT,          CL_FILTER_NEAREST, 0 },
+    { "nearest/mirror",  CL_ADDRESS_MIRRORED_REPEAT, CL_FILTER_NEAREST, 0 },
+    { "linear/clamp",    CL_ADDRESS_CLAMP_TO_EDGE,   CL_FILTER_LINEAR,  4 },
+    { "linear/repeat",   CL_ADDRESS_REPEAT,          CL_FILTER_LINEAR,  4 },
+    { "linear/mirror",   CL_ADDRESS_MIRRORED_REPEAT, CL_FILTER_LINEAR,  4 },
   };
 
   int total_errors = 0;
@@ -205,14 +198,9 @@ int main(int argc, char** argv) {
         ++errs;
       }
     }
-    if (modes[m].check) {
-      printf("  %-16s tol=%d : %s (%d mismatches)\n", modes[m].name, modes[m].tol,
-             errs ? "FAIL" : "ok", errs);
-      total_errors += errs;
-    } else {
-      printf("  %-16s tol=%d : info-only, hw vs float-sw delta in %d bytes "
-             "(FF authoritative; not asserted)\n", modes[m].name, modes[m].tol, errs);
-    }
+    printf("  %-16s tol=%d : %s (%d mismatches)\n", modes[m].name, modes[m].tol,
+           errs ? "FAIL" : "ok", errs);
+    total_errors += errs;
   }
 
   cleanup();

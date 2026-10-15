@@ -129,11 +129,10 @@ static const struct advcase adv[] = {
                                              ADV_YES, ADV_YES, ADV_NO,  ADV_NO  },
    { VK_FORMAT_B8G8R8A8_SRGB,       "B8G8R8A8_SRGB",
                                              ADV_YES, ADV_YES, ADV_NO,  ADV_NO  },
-   /* refused, and must stay refused */
    { VK_FORMAT_D32_SFLOAT_S8_UINT,  "D32_SFLOAT_S8_UINT",
-                                             ADV_NO,  ADV_NO,  ADV_NO,  ADV_NO  },
+                                             ADV_YES, ADV_NO,  ADV_YES, ADV_NO  },
    { VK_FORMAT_S8_UINT,             "S8_UINT",
-                                             ADV_NO,  ADV_NO,  ADV_NO,  ADV_NO  },
+                                             ADV_YES, ADV_NO,  ADV_YES, ADV_NO  },
 };
 
 static bool

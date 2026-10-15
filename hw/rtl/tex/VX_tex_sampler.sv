@@ -26,6 +26,8 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     // inputs
     input wire                          req_valid,
     input wire [TEX_FORMAT_BITS-1:0]   req_format,
+    // Per lane: gather enable, and the component (0..3 = R,G,B,A) it returns.
+    input wire [NUM_LANES-1:0][2:0]     req_gather,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] req_blends,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] req_border,
     input wire [31:0]                   req_bordercolor,
@@ -43,6 +45,7 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
 
     localparam LODFRAC_W = `VX_TEX_LOD_FRAC_BITS;
+    localparam LERP_LAT  = 3;
 
     wire valid_s0, valid_s1, valid_s2;
     wire [REQ_TAGW-1:0] req_tag_s0, req_tag_s1, req_tag_s2;
@@ -51,6 +54,7 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][`TEX_BLEND_FRAC-1:0] blend_v_s0, blend_v_s1;
     wire [NUM_LANES-1:0][LODFRAC_W-1:0] lodfrac_s0, lodfrac_s1, lodfrac_s2;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] fmt_texels, sel_texels, fmt_texels_s0;
+    wire [NUM_LANES-1:0][31:0] filtered;
 
     wire stall_out;
 
@@ -73,6 +77,33 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         end
     end
 
+    // textureGather: the chosen channel of level 0's four decoded taps, as bytes
+    // in GL gather order -- taps (u-,v+), (u+,v+), (u+,v-), (u-,v-). It skips the
+    // blends and joins the result at the end: the input register plus the three
+    // lerp levels (u, v, level).
+    localparam GATHER_DELAY = 1 + 3 * LERP_LAT;
+    wire [NUM_LANES-1:0][31:0] gather_texel, gather_texel_s;
+    wire [NUM_LANES-1:0]       gather_en, gather_en_s;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_gather
+        wire [1:0] comp = req_gather[i][1:0];
+        wire [4:0] shift = (comp == 2'd0) ? 5'd16 : (comp == 2'd1) ? 5'd8 : (comp == 2'd2) ? 5'd0 : 5'd24;
+        assign gather_texel[i] = {8'(sel_texels[i][0][0] >> shift), 8'(sel_texels[i][0][1] >> shift),
+                                  8'(sel_texels[i][0][3] >> shift), 8'(sel_texels[i][0][2] >> shift)};
+        assign gather_en[i] = req_gather[i][2];
+    end
+
+    VX_shift_register #(
+        .DATAW  (NUM_LANES * 33),
+        .DEPTH  (GATHER_DELAY),
+        .RESETW (0)
+    ) gather_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall_out),
+        .data_in  ({gather_en, gather_texel}),
+        .data_out ({gather_en_s, gather_texel_s})
+    );
+
     VX_pipe_register #(
         .DATAW  (1 + REQ_TAGW + (NUM_LANES * (LODFRAC_W + TEX_NUM_LEVELS * (2 * `TEX_BLEND_FRAC + 4 * 32)))),
         .RESETW (1)
@@ -88,7 +119,7 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
             for (genvar j = 0; j < 4; ++j) begin : g_j
                 VX_tex_lerp #(
-                    .LATENCY (3)
+                    .LATENCY (LERP_LAT)
                 ) tex_lerp_ul (
                     .clk  (clk),
                     .reset(reset),
@@ -99,7 +130,7 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                     .out  (texel_ul[i][k][j*8 +: 8])
                 );
                 VX_tex_lerp #(
-                    .LATENCY (3)
+                    .LATENCY (LERP_LAT)
                 ) tex_lerp_uh (
                     .clk  (clk),
                     .reset(reset),
@@ -135,7 +166,7 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
             for (genvar j = 0; j < 4; ++j) begin : g_j
                 VX_tex_lerp #(
-                    .LATENCY (3)
+                    .LATENCY (LERP_LAT)
                 ) tex_lerp_v (
                     .clk  (clk),
                     .reset(reset),
@@ -167,7 +198,7 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_tex_lerp_LOD
         for (genvar j = 0; j < 4; ++j) begin : g_j
             VX_tex_lerp #(
-                .LATENCY (3),
+                .LATENCY (LERP_LAT),
                 .ROUND   (0)
             ) tex_lerp_lod (
                 .clk  (clk),
@@ -176,9 +207,10 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                 .in1  (texel_lod[i][0][j*8 +: 8]),
                 .in2  (texel_lod[i][1][j*8 +: 8]),
                 .frac (lodfrac_s2[i]),
-                .out  (rsp_data[i][j*8 +: 8])
+                .out  (filtered[i][j*8 +: 8])
             );
         end
+        assign rsp_data[i] = gather_en_s[i] ? gather_texel_s[i] : filtered[i];
     end
 
     assign stall_out = rsp_valid && ~rsp_ready;

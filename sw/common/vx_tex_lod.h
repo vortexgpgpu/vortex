@@ -81,8 +81,8 @@ static inline uint32_t vx_tex_lod_from_grads(uint64_t gux, uint64_t guy,
 
 // Integer mip LOD from a 2x2 quad of S.23 normalized coords held by ONE caller.
 // The software sampler and the host reference own four pixels at once, so this
-// form stays. logw/logh are the log2 texture dimensions (low/high halves of
-// VX_DCR_TEX_LOGDIM). dx uses frags 0,1; dy uses frags 0,2.
+// form stays. logw/logh are the log2 texture dimensions. dx uses frags 0,1; dy
+// uses frags 0,2.
 static inline uint32_t vx_tex_quad_lod(const int32_t u[4], const int32_t v[4],
                                        uint32_t logw, uint32_t logh) {
   return vx_tex_lod_from_grads(

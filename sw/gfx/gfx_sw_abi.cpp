@@ -50,24 +50,24 @@ extern "C" void gfx_tex_sample_f32(const gfx_sw_texstate_t* st,
 
 extern "C" void gfx_tex_sample_array_f32(const gfx_sw_texstate_t* st,
                                          int32_t u, int32_t v, uint32_t layer,
-                                         uint32_t lod, float* out) {
+                                         uint32_t lod, uint32_t filter, float* out) {
   gfx_sw::tex_sample_f32_array(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v,
-                               layer, lod, out);
+                               layer, lod, filter, out);
 }
 
 extern "C" void gfx_tex_sample_cube_f32(const gfx_sw_texstate_t* st,
                                         float sc, float tc, float rc, uint32_t lod,
-                                        float* out) {
+                                        uint32_t filter, float* out) {
   gfx_sw::tex_sample_f32_cube(*reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc,
-                              lod, out);
+                              lod, filter, out);
 }
 
 extern "C" void gfx_tex_sample_cube_array_f32(const gfx_sw_texstate_t* st,
                                               float sc, float tc, float rc,
                                               uint32_t array_index, uint32_t lod,
-                                              float* out) {
+                                              uint32_t filter, float* out) {
   gfx_sw::tex_sample_f32_cube_array(*reinterpret_cast<const gfx_sw::TexState*>(st),
-                                    sc, tc, rc, array_index, lod, out);
+                                    sc, tc, rc, array_index, lod, filter, out);
 }
 
 extern "C" void gfx_tex_sample_3d_f32(const gfx_sw_texstate_t* st,
@@ -105,6 +105,45 @@ extern "C" void gfx_image_load_sw(const void* base, uint32_t row_stride, uint32_
   float lanes[4];
   gfx_tex::TexDecodeFloat4(format, p, bpp, lanes);
   memcpy(out, lanes, sizeof(lanes));
+}
+
+extern "C" void gfx_tex_gather_f32(const gfx_sw_texstate_t* st, int32_t x, int32_t y,
+                                   uint32_t comp, uint32_t layer, uint32_t one_bits,
+                                   uint32_t* out) {
+  gfx_sw::tex_gather_f32(*reinterpret_cast<const gfx_sw::TexState*>(st), x, y, comp, layer,
+                         one_bits, out);
+}
+
+extern "C" void gfx_tex_gather_cube_f32(const gfx_sw_texstate_t* st, float sc, float tc,
+                                        float rc, uint32_t array_index, uint32_t comp,
+                                        uint32_t one_bits, uint32_t* out) {
+  gfx_sw::tex_gather_cube_f32(*reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc,
+                              array_index, comp, one_bits, out);
+}
+
+extern "C" uint32_t gfx_tex_gather_cmp_cube_sw(const gfx_sw_texstate_t* st, float sc,
+                                               float tc, float rc, uint32_t array_index,
+                                               uint32_t ref_bits) {
+  return gfx_sw::tex_gather_cmp_cube_sw(*reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc,
+                                        rc, array_index, ref_bits);
+}
+
+extern "C" uint32_t gfx_tex_residency_sw(const gfx_sw_texstate_t* st, int32_t u, int32_t v,
+                                         int32_t w, uint32_t z, uint32_t lod, uint32_t filter,
+                                         uint32_t flags) {
+  const gfx_sw::TexState& s = *reinterpret_cast<const gfx_sw::TexState*>(st);
+  if (flags & GFX_SW_TEX_RES_CUBE) {
+    float sc, tc, rc;
+    __builtin_memcpy(&sc, &u, 4);
+    __builtin_memcpy(&tc, &v, 4);
+    __builtin_memcpy(&rc, &w, 4);
+    int32_t fu, fv;
+    const uint32_t face = gfx_sw::cube_face_uv(sc, tc, rc, &fu, &fv);
+    return gfx_sw::tex_residency(s, fu, fv, 0, gfx_sw::cube_array_clamp(s, z) * 6u + face, lod,
+                                 filter, false, false);
+  }
+  return gfx_sw::tex_residency(s, u, v, w, z, lod, filter, (flags & GFX_SW_TEX_RES_3D) != 0,
+                               (flags & GFX_SW_TEX_RES_FETCH) != 0);
 }
 
 extern "C" uint32_t gfx_tex_gather_sw(const gfx_sw_texstate_t* st,
@@ -157,9 +196,10 @@ extern "C" uint32_t gfx_tex_gather_cmp_array_sw(const gfx_sw_texstate_t* st,
 
 extern "C" uint32_t gfx_tex_sample_cube_array_sw(const gfx_sw_texstate_t* st,
                                                  float sc, float tc, float rc,
-                                                 uint32_t array_index, uint32_t lod) {
+                                                 uint32_t array_index, uint32_t lod,
+                                                 uint32_t filter) {
   return gfx_sw::tex_sample_cube_array_sw(
-      *reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc, array_index, lod);
+      *reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc, array_index, lod, filter);
 }
 
 extern "C" uint32_t gfx_tex_shadow_cube_array_sw(const gfx_sw_texstate_t* st,
@@ -173,13 +213,17 @@ extern "C" uint32_t gfx_tex_shadow_cube_array_sw(const gfx_sw_texstate_t* st,
 }
 
 extern "C" uint32_t gfx_tex_sample_array_sw(const gfx_sw_texstate_t* st,
-                                            int32_t u, int32_t v, uint32_t layer, uint32_t lod) {
-  return gfx_sw::tex_sample_sw_array(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v, layer, lod);
+                                            int32_t u, int32_t v, uint32_t layer, uint32_t lod,
+                                            uint32_t filter) {
+  return gfx_sw::tex_sample_sw_array(*reinterpret_cast<const gfx_sw::TexState*>(st), u, v,
+                                     layer, lod, filter);
 }
 
 extern "C" uint32_t gfx_tex_sample_cube_sw(const gfx_sw_texstate_t* st,
-                                           float sc, float tc, float rc, uint32_t lod) {
-  return gfx_sw::tex_sample_sw_cube(*reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc, rc, lod);
+                                           float sc, float tc, float rc, uint32_t lod,
+                                           uint32_t filter) {
+  return gfx_sw::tex_sample_sw_cube(*reinterpret_cast<const gfx_sw::TexState*>(st), sc, tc,
+                                    rc, lod, filter);
 }
 
 extern "C" uint32_t gfx_tex_sample_3d_sw(const gfx_sw_texstate_t* st,

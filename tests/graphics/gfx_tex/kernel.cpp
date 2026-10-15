@@ -60,3 +60,36 @@ __kernel void kernel_main_border(kernel_arg_t* __UNIFORM__ arg) {
     auto dst_row = reinterpret_cast<uint32_t*>(arg->dst_addr + gy * arg->dst_pitch);
     dst_row[gx] = color;
 }
+
+// Per-lane state in the lod operand: a layer, a tap (bilinear or point) and a
+// two-level blend that differ pixel to pixel, against a stage whose FILTER is
+// point, so only the operand can produce them.
+__kernel void kernel_main_lanes(kernel_arg_t* __UNIFORM__ arg) {
+    uint32_t gx = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t gy = blockIdx.y * blockDim.y + threadIdx.y;
+    if (gx >= arg->dst_width || gy >= arg->dst_height) {
+        return;
+    }
+    uint32_t fu = (uint32_t)(arg->uv_bias + arg->uv_delta * (int32_t)gx);
+    uint32_t fv = (uint32_t)(arg->uv_bias + arg->uv_delta * (int32_t)gy);
+    uint32_t op = lanes_tex_op(gx, gy, arg->lod);
+    uint32_t color = vx_tex(0, fu, fv, op);
+    auto dst_row = reinterpret_cast<uint32_t*>(arg->dst_addr + gy * arg->dst_pitch);
+    dst_row[gx] = color;
+}
+
+// textureGather in the unit: the chosen channel of the bilinear footprint's four
+// taps at the base level, packed in GL gather order, written as the pixel.
+__kernel void kernel_main_gather(kernel_arg_t* __UNIFORM__ arg) {
+    uint32_t gx = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t gy = blockIdx.y * blockDim.y + threadIdx.y;
+    if (gx >= arg->dst_width || gy >= arg->dst_height) {
+        return;
+    }
+    uint32_t fu = (uint32_t)(arg->uv_bias + arg->uv_delta * (int32_t)gx);
+    uint32_t fv = (uint32_t)(arg->uv_bias + arg->uv_delta * (int32_t)gy);
+    uint32_t op = (1u << VX_TEX_ARG_GATHER) | (arg->gather_comp << VX_TEX_ARG_GATHER_COMP);
+    uint32_t color = vx_tex(0, fu, fv, op);
+    auto dst_row = reinterpret_cast<uint32_t*>(arg->dst_addr + gy * arg->dst_pitch);
+    dst_row[gx] = color;
+}

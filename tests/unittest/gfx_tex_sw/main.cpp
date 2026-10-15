@@ -39,18 +39,17 @@ uint32_t g_fail = 0;
 
 uint32_t format_stride(uint32_t fmt) { return gfx_tex::FormatStride(fmt); }
 
-// Full mip chain for a (1<<logw0) x (1<<logh0) base, packed contiguously from
-// `base`; returns per-LOD byte offsets and fills each texel with a deterministic
-// pattern so format-decode/filter differences would surface.
-void build_texture(uint8_t* base, uint32_t logw0, uint32_t logh0, uint32_t fmt,
+// Full mip chain for a w0 x h0 base, packed contiguously from `base`; returns
+// per-LOD byte offsets and fills each texel with a deterministic pattern so
+// format-decode/filter differences would surface.
+void build_texture(uint8_t* base, uint32_t w0, uint32_t h0, uint32_t fmt,
                    uint32_t mip_off[VX_TEX_LOD_MAX + 1], uint32_t* num_lods) {
   uint32_t stride = format_stride(fmt);
   uint32_t off = 0;
   uint32_t l = 0;
   for (; l <= (uint32_t)VX_TEX_LOD_MAX; ++l) {
-    uint32_t lw = (logw0 > l) ? (logw0 - l) : 0;
-    uint32_t lh = (logh0 > l) ? (logh0 - l) : 0;
-    uint32_t w = 1u << lw, h = 1u << lh;
+    uint32_t w = (w0 >> l) ? (w0 >> l) : 1u;
+    uint32_t h = (h0 >> l) ? (h0 >> l) : 1u;
     mip_off[l] = off;
     for (uint32_t y = 0; y < h; ++y) {
       for (uint32_t x = 0; x < w; ++x) {
@@ -62,7 +61,7 @@ void build_texture(uint8_t* base, uint32_t logw0, uint32_t logh0, uint32_t fmt,
       }
     }
     off += w * h * stride;
-    if (lw == 0 && lh == 0) break;
+    if (w == 1 && h == 1) break;
   }
   uint32_t last = l < (uint32_t)VX_TEX_LOD_MAX ? l : (uint32_t)VX_TEX_LOD_MAX;
   *num_lods = last + 1;
@@ -95,14 +94,12 @@ const char* fmt_name(uint32_t f) {
 // One configuration: drive FF read() and SW tex_sample_sw() over a grid of
 // (u, v, lod) and assert bit-equality.
 void check_config(uint8_t* pool, uint32_t fmt, uint32_t mag_filter, uint32_t mip_linear,
-                  uint32_t wrapu, uint32_t wrapv) {
-  const uint32_t logw0 = 6, logh0 = 5;       // 64 x 32 base
+                  uint32_t wrapu, uint32_t wrapv, uint32_t w0, uint32_t h0) {
   uint8_t* base = pool;
   uint32_t mip_off[VX_TEX_LOD_MAX + 1] = {0};
   uint32_t num_lods = 0;
-  build_texture(base, logw0, logh0, fmt, mip_off, &num_lods);
+  build_texture(base, w0, h0, fmt, mip_off, &num_lods);
 
-  uint32_t logdim = (logh0 << 16) | logw0;
   uint32_t wrap   = (wrapv << 16) | wrapu;
   uint32_t filter = mag_filter | (mip_linear ? VX_TEX_FILTER_MIP_LINEAR : 0u);
 
@@ -110,7 +107,7 @@ void check_config(uint8_t* pool, uint32_t fmt, uint32_t mag_filter, uint32_t mip
   TexDCRS dcrs;
   dcrs.write(VX_DCR_TEX_STAGE,  0);
   dcrs.write(VX_DCR_TEX_ADDR,   (uint32_t)((uintptr_t)base >> 6));
-  dcrs.write(VX_DCR_TEX_LOGDIM, logdim);
+  dcrs.write(VX_DCR_TEX_DIM,    (h0 << 16) | w0);
   dcrs.write(VX_DCR_TEX_FORMAT, fmt);
   dcrs.write(VX_DCR_TEX_FILTER, filter);
   dcrs.write(VX_DCR_TEX_WRAP,   wrap);
@@ -122,7 +119,8 @@ void check_config(uint8_t* pool, uint32_t fmt, uint32_t mag_filter, uint32_t mip
   // SW state mirror.
   gfx_sw::TexState st{};
   st.base   = (uintptr_t)base;
-  st.logdim = logdim;
+  st.width  = w0;
+  st.height = h0;
   st.format = fmt;
   st.filter = filter;
   st.wrap   = wrap;
@@ -144,8 +142,8 @@ void check_config(uint8_t* pool, uint32_t fmt, uint32_t mag_filter, uint32_t mip
           ++checked;
           if (a != b) {
             if (++mismatches <= 4)
-              printf("  MISMATCH fmt=%s magf=%u mipL=%u wrap=(%u,%u) u=%d v=%d lod=0x%x: ff=%08x sw=%08x\n",
-                     fmt_name(fmt), mag_filter, mip_linear, wrapu, wrapv, u, v, lod, a, b);
+              printf("  MISMATCH %ux%u fmt=%s magf=%u mipL=%u wrap=(%u,%u) u=%d v=%d lod=0x%x: ff=%08x sw=%08x\n",
+                     w0, h0, fmt_name(fmt), mag_filter, mip_linear, wrapu, wrapv, u, v, lod, a, b);
           }
         }
       }
@@ -153,14 +151,90 @@ void check_config(uint8_t* pool, uint32_t fmt, uint32_t mag_filter, uint32_t mip
   }
   if (mismatches) {
     g_fail += mismatches;
-    printf("FAIL %-8s magf=%u mipL=%u wrap=(%u,%u): %u/%u mismatches\n",
-           fmt_name(fmt), mag_filter, mip_linear, wrapu, wrapv, mismatches, checked);
+    printf("FAIL %ux%u %-8s magf=%u mipL=%u wrap=(%u,%u): %u/%u mismatches\n",
+           w0, h0, fmt_name(fmt), mag_filter, mip_linear, wrapu, wrapv, mismatches, checked);
   }
 }
 
-// NPOT addressing check: the FF TEX unit is power-of-two only, so there is
-// no FF golden for non-power-of-two textures — the multiply-addressing SW path
-// is validated against a self-describing texture instead. Each A8R8G8B8 texel is
+// One axis's taps against the Vulkan texel selection, evaluated in double: the
+// unnormalized coordinate (minus half a texel under linear), floor for the taps
+// and their weight, then the integer wrap -- repeat as mod, mirrored repeat as
+// (n-1) - mirror((i mod 2n) - n), clamp to [0,n), border when outside. Samples
+// within a hair of a tap or weight boundary are skipped: the fixed-point weight
+// truncates, and the mirror fold is one coordinate ULP short of exact. Clamp
+// folds the coordinate into [-1,2), so its weight is checked only where the two
+// taps differ.
+void check_axis_reference() {
+  const uint32_t dims[] = { 1, 2, 5, 8, 37, 64, 1000 };
+  const uint32_t wraps[] = { VX_TEX_WRAP_CLAMP, VX_TEX_WRAP_REPEAT, VX_TEX_WRAP_MIRROR,
+                             VX_TEX_WRAP_BORDER };
+  const double one = (double)(1 << TEX_FXD_FRAC);
+  uint32_t fails = 0, checked = 0;
+  uint32_t seed = 12345;
+  auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return seed; };
+  for (uint32_t n : dims) {
+    for (uint32_t wrap : wraps) {
+      for (int linear = 0; linear < 2; ++linear) {
+        for (int k = 0; k < 4000; ++k) {
+          const int32_t c = (int32_t)(rnd() % (uint32_t)(5 << TEX_FXD_FRAC)) - (2 << TEX_FXD_FRAC);
+          const double t = (double)c / one * n - (linear ? 0.5 : 0.0);
+          const double fl = std::floor(t), fr = t - fl;
+          if (fr < 1e-3 || fr > 1.0 - 1e-3) {
+            continue;
+          }
+          auto ref = [&](int64_t i, bool* b) -> uint32_t {
+            const int64_t nn = n;
+            *b = false;
+            switch (wrap) {
+            case VX_TEX_WRAP_REPEAT:
+              return (uint32_t)(((i % nn) + nn) % nn);
+            case VX_TEX_WRAP_MIRROR: {
+              const int64_t m = (((i % (2 * nn)) + 2 * nn) % (2 * nn)) - nn;
+              return (uint32_t)((nn - 1) - ((m >= 0) ? m : -(1 + m)));
+            }
+            default:
+              *b = (wrap == VX_TEX_WRAP_BORDER) && (i < 0 || i >= nn);
+              return (uint32_t)((i < 0) ? 0 : ((i >= nn) ? nn - 1 : i));
+            }
+          };
+          bool rb0, rb1;
+          const uint32_t r0 = ref((int64_t)fl, &rb0);
+          const uint32_t r1 = ref((int64_t)fl + 1, &rb1);
+          const gfx_tex::TexAxisTaps a = gfx_tex::tex_axis_taps(c, n, wrap, linear != 0);
+          bool ok = (a.i0 == r0) && (a.b0 == rb0);
+          if (linear) {
+            // Compared as a blend, not as an ordered pair: in a mirrored period
+            // the fold puts the taps in the other order with the complementary
+            // weight. Two taps naming the same texel blend to it whatever the weight.
+            const double af = a.frac / 256.0;
+            // One weight step, plus the fold's coordinate ULP in texels.
+            const double tol = 1.0 / 256.0 + n / one + 1e-9;
+            const bool distinct = (r0 != r1) || (rb0 != rb1);
+            const bool same = (a.i0 == r0) && (a.b0 == rb0) && (a.i1 == r1) && (a.b1 == rb1)
+                           && (!distinct || std::fabs(af - fr) <= tol);
+            const bool swapped = (a.i0 == r1) && (a.b0 == rb1) && (a.i1 == r0) && (a.b1 == rb0)
+                              && std::fabs(af - (1.0 - fr)) <= tol;
+            ok = same || swapped;
+          }
+          ++checked;
+          if (!ok && ++fails <= 6) {
+            printf("  AXIS MISMATCH n=%u wrap=%u linear=%d c=%d: got (%u%s,%u%s,%u) ref (%u%s,%u%s,%.3f)\n",
+                   n, wrap, linear, c, a.i0, a.b0 ? "b" : "", a.i1, a.b1 ? "b" : "", a.frac,
+                   r0, rb0 ? "b" : "", r1, rb1 ? "b" : "", fr * 256.0);
+          }
+        }
+      }
+    }
+  }
+  if (fails) {
+    g_fail += fails;
+    printf("AXIS TAPS: FAILED (%u/%u mismatches against the Vulkan selection)\n", fails, checked);
+  } else {
+    printf("AXIS TAPS: PASSED (%u samples match the Vulkan texel selection)\n", checked);
+  }
+}
+
+// NPOT addressing check against a self-describing texture. Each A8R8G8B8 texel is
 // filled with its own linear index (x + y*width); a POINT sample at the texel
 // centre must return that index, proving x = floor(u_norm*width),
 // addr = x + y*width for a genuinely NPOT surface.
@@ -382,7 +456,7 @@ void check_array(uint8_t* pool) {
   for (uint32_t L = 0; L < layers; ++L) {
     // sample texel (1,1): u=(1.5)/4, v=(1.5)/4
     int32_t u = (int32_t)((3ll * ONE) / 8), v = (int32_t)((3ll * ONE) / 8);
-    uint32_t got = gfx_sw::tex_sample_sw_array(st, u, v, L, 0);
+    uint32_t got = gfx_sw::tex_sample_sw_array(st, u, v, L, 0, st.filter);
     uint32_t exp = 0xff000000u | (0x100u * L) | (1 + 1 * texw);
     if (got != exp) { printf("  ARRAY MISMATCH L=%u: got=%08x exp=%08x\n", L, got, exp); ++fails; }
   }
@@ -405,7 +479,7 @@ void check_cube(uint8_t* pool) {
     {0.1f, -1, 0.1f}, {0.1f, 0.1f, 1}, {0.1f, 0.1f, -1}};
   uint32_t fails = 0;
   for (uint32_t f = 0; f < 6; ++f) {
-    uint32_t got = gfx_sw::tex_sample_sw_cube(st, dirs[f][0], dirs[f][1], dirs[f][2], 0);
+    uint32_t got = gfx_sw::tex_sample_sw_cube(st, dirs[f][0], dirs[f][1], dirs[f][2], 0, st.filter);
     if ((got & 0xff) != (0xA0u + f)) { printf("  CUBE MISMATCH face=%u: got=%08x\n", f, got); ++fails; }
   }
   if (fails) g_fail += fails;
@@ -472,9 +546,12 @@ int main() {
       for (uint32_t mipL : {0u, 1u})
         for (uint32_t wu : wraps)
           for (uint32_t wv : wraps) {
-            check_config(pool, fmt, magf, mipL, wu, wv);
-            ++configs;
+            check_config(pool, fmt, magf, mipL, wu, wv, 64, 32);
+            check_config(pool, fmt, magf, mipL, wu, wv, 37, 23);
+            configs += 2;
           }
+
+  check_axis_reference();
 
   check_npot(pool);
   check_persp_wrap(pool);

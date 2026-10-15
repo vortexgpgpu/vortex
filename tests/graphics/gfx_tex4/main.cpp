@@ -230,7 +230,7 @@ int main(int argc, char *argv[]) {
 
   // ---- configure TEX DCRs ----------------------------------------------
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_STAGE,  0, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_LOGDIM, (src_logheight << 16) | src_logwidth, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_DIM, (src_height << 16) | src_width, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FORMAT, format, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_WRAP,   (wrap << 16) | wrap, 0, nullptr, nullptr));
   // filter: 0=POINT, 1=BILINEAR, 2=trilinear (point base; the shader samples

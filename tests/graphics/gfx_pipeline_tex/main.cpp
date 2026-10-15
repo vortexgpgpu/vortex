@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
 
   // Configure TEX + OM once (shared by both render paths).
   vx_enqueue_dcr_write(q, VX_DCR_TEX_STAGE, 0, 0, nullptr, nullptr);
-  vx_enqueue_dcr_write(q, VX_DCR_TEX_LOGDIM, (log2ceil(th) << 16) | log2ceil(tw), 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(q, VX_DCR_TEX_DIM, (th << 16) | tw, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_TEX_FORMAT, VX_TEX_FORMAT_A8R8G8B8, 0, nullptr, nullptr);
   vx_enqueue_dcr_write(q, VX_DCR_TEX_WRAP, (1 << 16) | 1, 0, nullptr, nullptr);   // wrap U/V
   vx_enqueue_dcr_write(q, VX_DCR_TEX_FILTER, VX_TEX_FILTER_POINT, 0, nullptr, nullptr);
