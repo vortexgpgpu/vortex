@@ -177,6 +177,10 @@ module foldsim_afu #(
     // clocks (MEM_CAPS reports both).
     localparam MEM_SLOTS = 32;
     localparam MEM_HLOG2 = 9;
+    // The memory endpoint's token ends register have and done, so its finish
+    // starts at its own state, not at the simulator's handshake. A token then
+    // counts a host cycle later; s2w4i2's host cycles do not move.
+    localparam MEM_STAGED = 1;
     localparam [31:0] MEM_CAPS = {4'd0, 4'd1, 4'd1, 8'(MEM_SLOTS), 4'(MEM_HLOG2 - 4), 8'd1};
 
     wire [31:0] mem_read_latency, mem_write_latency;
@@ -196,7 +200,8 @@ module foldsim_afu #(
         .ADDR_W (TARGET_ADDR_W),
         .DATA_W (DATA_W),
         .SLOTS  (MEM_SLOTS),
-        .HLOG2  (MEM_HLOG2)
+        .HLOG2  (MEM_HLOG2),
+        .STAGED (MEM_STAGED)
     ) mem (
         .clk           (ap_clk),
         .reset         (reset),
