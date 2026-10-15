@@ -26,7 +26,7 @@ The components covered here are:
 12. [FireSim](#12-firesim) — FPGA-accelerated host-decoupled simulation on the Alveo U55C or V80; needed only to elaborate a target or build a bitstream (optional)
 13. [SLASH / Alveo V80](#13-slash--alveo-v80-the-aved-backend) — AMD Alveo V80 platform stack for the `aved` backend (optional)
 14. [CIRCT](#14-circt) — the SystemVerilog frontend of every synthesis flow (`circt-verilog`, `circt-opt`, `firtool`)
-15. [foldsim](#15-foldsim) — FAME-5 simulator compiler of `hw/syn/foldsim`, built on CIRCT (optional)
+15. [Foldsim](#15-foldsim) — FAME-5 simulator compiler of `hw/syn/foldsim`, built on CIRCT (optional)
 
 ---
 
@@ -1133,7 +1133,7 @@ for the backend's architecture and
 **Purpose**: the SystemVerilog frontend of every synthesis flow. Each flow
 reads the netlist CIRCT elaborates (`hw/scripts/circt_elaborate.sh`,
 `gen_sources.sh -E`; see the hardware library's "Block RAM and asynchronous
-reads"), and foldsim builds on it.
+reads"), and Foldsim builds on it.
 
 > **Baseline:** Vortex's CIRCT fork, branch `vortex_3.x` of
 > `vortexgpgpu/circt`: upstream CIRCT with the import, lowering and
@@ -1174,18 +1174,18 @@ cmake -G Ninja -S $CIRCT_SRC/llvm/llvm -B $CIRCT_SRC/build \
   (`ubuntu/focal`, `centos/7`): assertions off and libstdc++ linked
   statically, so the tools run on any machine of that OS.
 - The prebuilt ships only `circt-verilog`, `circt-opt` and `firtool`. Building
-  foldsim needs the full installation this script leaves behind.
+  Foldsim needs the full installation this script leaves behind.
 - To develop CIRCT itself, build it in its own checkout with assertions on
   and point the flows at it: `CIRCT_PATH=<build>` (the build directory has
   the same `bin/` layout).
 
 ---
 
-## 15. foldsim
+## 15. Foldsim
 
 **Purpose**: the compiler of the FAME-5 FPGA simulators (`hw/syn/foldsim`,
 [designs/foldsim.md](designs/foldsim.md)): the `foldsim` driver and
-`foldsim-opt`. foldsim is its own project and builds on CIRCT, as POCL builds
+`foldsim-opt`. Foldsim is its own project and builds on CIRCT, as POCL builds
 on LLVM.
 
 > **Baseline:** branch `vortex_3.x` of `vortexgpgpu/foldsim`.
@@ -1198,7 +1198,7 @@ Build CIRCT first (§14), then:
 ./ci/foldsim_install.sh     # FOLDSIM_REPO, FOLDSIM_REV, CIRCT_PREFIX override the defaults
 ```
 
-which configures foldsim against `$TOOLDIR/circt`, builds it, runs its lit
+which configures Foldsim against `$TOOLDIR/circt`, builds it, runs its lit
 tests (`check-foldsim`) and installs `bin/foldsim` and `bin/foldsim-opt` into
 `$TOOLDIR/foldsim`:
 
@@ -1217,10 +1217,10 @@ cmake -G Ninja -S $FOLDSIM_SRC -B $FOLDSIM_SRC/build \
 - `foldsim-opt` links CIRCT statically; the driver finds it next to itself
   and the CIRCT tools through `--circt-bin`. `hw/syn/common.mk` sets
   `FOLDSIM_PATH ?= $(TOOLDIR)/foldsim` and `FOLDSIM ?= $(FOLDSIM_PATH)/bin/foldsim`.
-- A CIRCT change foldsim's passes rely on lands in CIRCT first; both
+- A CIRCT change Foldsim's passes rely on lands in CIRCT first; both
   prebuilts are refreshed together.
 - The prebuilt is opt-in: `./ci/toolchain_install.sh --foldsim` (or `--all`)
-  installs it; the default install leaves it out, since only the foldsim
+  installs it; the default install leaves it out, since only the Foldsim
   flow needs it.
 
 ---

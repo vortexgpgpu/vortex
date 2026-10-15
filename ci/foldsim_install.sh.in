@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# foldsim install: the FAME-5 simulator compiler of hw/syn/foldsim (the
+# Foldsim install: the FAME-5 simulator compiler of hw/syn/foldsim (the
 # `foldsim` driver and foldsim-opt).
 #
-# foldsim is its own project and builds on CIRCT, as POCL builds on LLVM: it
+# Foldsim is its own project and builds on CIRCT, as POCL builds on LLVM: it
 # needs the CIRCT installation ci/circt_install.sh leaves in $TOOLDIR/circt
 # (libraries, headers and CMake packages, not only the prebuilt's tools). This
-# script is the *producer* of the foldsim prebuilt: build here (once per
+# script is the *producer* of the Foldsim prebuilt: build here (once per
 # OSVERSION, in that OS's container, after ci/circt_install.sh), then
 # `ci/toolchain_prebuilt.sh --foldsim` packages $TOOLDIR/foldsim and
 # `ci/toolchain_install.sh --foldsim` fetches it. Most users install the
@@ -72,7 +72,7 @@ fi
 # `lit`) unless LIT names one.
 LIT=${LIT:-$(command -v lit || command -v llvm-lit || true)}
 if [ -z "$LIT" ]; then
-    echo "error: no lit for foldsim's tests: pip install lit, or set LIT."
+    echo "error: no lit for Foldsim's tests: pip install lit, or set LIT."
     exit 1
 fi
 cmake -G Ninja -S "$FOLDSIM_SRC" -B "$FOLDSIM_BUILD" \
@@ -87,4 +87,4 @@ ninja -C "$FOLDSIM_BUILD"
 ninja -C "$FOLDSIM_BUILD" check-foldsim
 cmake --install "$FOLDSIM_BUILD"
 
-echo "foldsim installed in $FOLDSIM_PREFIX"
+echo "Foldsim installed in $FOLDSIM_PREFIX"
