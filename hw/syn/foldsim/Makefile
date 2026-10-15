@@ -52,7 +52,9 @@ FOLDSIM_LIFT ?= VX_socket:drop=INSTANCE_ID;port=SOCKET_ID
 CIRCT_BIN ?= $(CIRCT_PATH)/bin
 LIFT_PYTHON ?= python3
 # The kernel clock (MHz): the image is timed at it and the shell programs it.
-FOLDSIM_FREQ ?= 143
+FOLDSIM_FREQ ?= 250
+# Options of the foldsim driver, e.g. --region-loads=2048 --registered-state.
+FOLDSIM_FLAGS ?=
 
 # The target: Vortex with its AXI4 port, DCR, start and busy as plain ports.
 TARGET_TOP := foldsim_target
@@ -91,7 +93,7 @@ endef
 CONFIG_STAMP := $(BUILD_DIR)/cflags.stamp
 CLASSES_STAMP := $(BUILD_DIR)/classes.stamp
 $(call stamp,$(CONFIG_STAMP),$(GEN_CFLAGS))
-$(call stamp,$(CLASSES_STAMP),$(FOLDSIM_CLASSES) | $(FOLDSIM_LIFT))
+$(call stamp,$(CLASSES_STAMP),$(FOLDSIM_CLASSES) | $(FOLDSIM_LIFT)$(if $(FOLDSIM_FLAGS), | $(FOLDSIM_FLAGS)))
 
 SRCS_NAME := vortex_srcs
 SRCS_DIR := $(BUILD_DIR)/$(SRCS_NAME)
@@ -155,7 +157,7 @@ FOLDSIM_TOOLS := $(FOLDSIM) $(wildcard $(dir $(FOLDSIM))foldsim-opt \
                  $(addprefix $(CIRCT_BIN)/,circt-verilog circt-opt firtool))
 $(GEN_SV): $(TARGET_SRCS) $(FOLDSIM_TOOLS) $(CLASSES_STAMP)
 	$(FOLDSIM) --srcs $(TARGET_SRCS) --top $(TARGET_TOP) --out $(GEN_DIR) \
-		$(if $(CIRCT_BIN),--circt-bin $(CIRCT_BIN)) $(FOLDSIM_CLASSES)
+		$(if $(CIRCT_BIN),--circt-bin $(CIRCT_BIN)) $(FOLDSIM_FLAGS) $(FOLDSIM_CLASSES)
 
 $(KERNEL_SRCS): $(GEN_SV)
 	@{ echo "+incdir+$(FOLDSIM_RTL_DIR)"; echo "+incdir+$(GEN_DIR)"; \
@@ -163,11 +165,19 @@ $(KERNEL_SRCS): $(GEN_SV)
 	   for f in foldsim_token.sv foldsim_mem.sv foldsim_ctrl.sv foldsim_afu.sv; do echo "$(FOLDSIM_RTL_DIR)/$$f"; done; \
 	 } > $@
 
+# The kernel's clock at FOLDSIM_FREQ, for its out-of-context synthesis.
+OOC_XDC := $(BUILD_DIR)/foldsim_afu_ooc.xdc
+$(OOC_XDC): FORCE
+	@mkdir -p $(@D)
+	@printf 'create_clock -name ap_clk -period %s [get_ports ap_clk]\n' \
+		$$(python3 -c 'print(round(1000 / $(FOLDSIM_FREQ), 3))') > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
+
 package-ip: $(IP_DIR)/component.xml
-$(IP_DIR)/component.xml: $(KERNEL_SRCS) $(wildcard $(FOLDSIM_RTL_DIR)/*)
+$(IP_DIR)/component.xml: $(KERNEL_SRCS) $(OOC_XDC) $(wildcard $(FOLDSIM_RTL_DIR)/*)
 	cd $(BUILD_DIR) && TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -nojournal -nolog \
 		-source $(VORTEX_HOME)/hw/syn/xilinx/aved/package_ip.tcl \
-		-tclargs foldsim_afu $(KERNEL_SRCS) . $(DEVICE) no-vendor-ip
+		-tclargs foldsim_afu $(KERNEL_SRCS) . $(DEVICE) no-vendor-ip ooc-xdc=$(OOC_XDC)
 
 $(CFG): FORCE
 	@python3 $(SCRIPT_DIR)/gen_platform.py --flow=aved --device=$(DEVICE) --emit=cfg --kernel=foldsim_afu \
@@ -179,7 +189,8 @@ FORCE:
 $(VBIN): $(IP_DIR)/component.xml $(CFG)
 	mkdir -p $(BIN_DIR)
 	TOOL_DIR=$(SCRIPT_DIR) $(SLASHKIT) link -c $(CFG) -p hw -o $@ -k $(IP_DIR)/component.xml \
-		--vivado $(VIVADO) $(if $(SLASHKIT_JOBS),--jobs $(SLASHKIT_JOBS))
+		--vivado $(VIVADO) $(if $(SLASHKIT_JOBS),--jobs $(SLASHKIT_JOBS)) \
+		--pre-synth-tcls $(SRC_DIR)/pre_synth_hook.tcl
 	@echo "image: $@"
 
 clean:

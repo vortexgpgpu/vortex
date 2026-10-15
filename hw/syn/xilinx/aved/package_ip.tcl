@@ -14,9 +14,9 @@
 # Package the AFU as an IP-XACT component. The V80 linker consumes the
 # component.xml directly, so there is no intermediate object container.
 
-if { $::argc != 4 && $::argc != 5 } {
-    puts "ERROR: Program \"$::argv0\" requires 4 or 5 arguments!\n"
-    puts "Usage: $::argv0 <krnl_name> <vcs_file> <build_dir> <part> \[no-vendor-ip\]\n"
+if { $::argc < 4 || $::argc > 6 } {
+    puts "ERROR: Program \"$::argv0\" requires 4 to 6 arguments!\n"
+    puts "Usage: $::argv0 <krnl_name> <vcs_file> <build_dir> <part> \[no-vendor-ip\] \[ooc-xdc=<file>\]\n"
     exit 1
 }
 
@@ -26,7 +26,16 @@ set build_dir [lindex $::argv 2]
 set part      [lindex $::argv 3]
 # A kernel whose RTL instantiates no vendor floating-point core (a foldsim
 # simulator, whose FPU is soft logic) is packaged without them.
-set vendor_ip [expr {$::argc != 5 || [lindex $::argv 4] ne "no-vendor-ip"}]
+set options [lrange $::argv 4 end]
+set vendor_ip [expr {[lsearch -exact $options no-vendor-ip] < 0}]
+# The kernel's clock for its out-of-context synthesis, so that synthesis
+# times and retimes it: without one the IP is synthesized unconstrained.
+set ooc_xdc ""
+foreach option $options {
+    if {[string match "ooc-xdc=*" $option]} {
+        set ooc_xdc [file normalize [string range $option 8 end]]
+    }
+}
 
 set tool_dir $::env(TOOL_DIR)
 
@@ -66,6 +75,11 @@ foreach line [split $data "\n"] {
     } else {
         add_files -norecurse $line
     }
+}
+
+if {$ooc_xdc ne ""} {
+    add_files -norecurse -fileset constrs_1 $ooc_xdc
+    set_property USED_IN {synthesis out_of_context} [get_files $ooc_xdc]
 }
 
 # Pull in the floating-point cores generated above so they are packaged
