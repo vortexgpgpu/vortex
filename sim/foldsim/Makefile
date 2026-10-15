@@ -25,7 +25,8 @@ THREADS ?= $(shell python3 -c 'import multiprocessing as mp; print(min(32, mp.cp
 VL_FLAGS += -j $(THREADS)
 
 TOP := foldsim_afu
-RTL_SRCS := $(GEN_SV) $(FOLDSIM_RTL_DIR)/foldsim_token.sv $(FOLDSIM_RTL_DIR)/foldsim_mem.sv \
+RTL_SRCS := $(GEN_SV) $(FOLDSIM_RTL_DIR)/foldsim_token.sv $(FOLDSIM_RTL_DIR)/foldsim_mem_bmap.sv \
+            $(FOLDSIM_RTL_DIR)/foldsim_mem_bank.sv $(FOLDSIM_RTL_DIR)/foldsim_mem.sv \
             $(FOLDSIM_RTL_DIR)/foldsim_ctrl.sv $(FOLDSIM_RTL_DIR)/foldsim_afu.sv
 SRCS := $(SRC_DIR)/foldsim_emul.cpp
 

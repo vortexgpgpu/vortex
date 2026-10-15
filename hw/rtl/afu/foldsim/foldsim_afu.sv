@@ -173,16 +173,30 @@ module foldsim_afu #(
     .name``_valid (m_axi_mem_0_``name``_valid), .name``_ready (m_axi_mem_0_``name``_ready), \
     .name``_bits (m_axi_mem_0_``name``_bits)
 
+    // The memory endpoint's bank model: read slots, and a ring of 2^9 DRAM
+    // clocks (MEM_CAPS reports both).
+    localparam MEM_SLOTS = 32;
+    localparam MEM_HLOG2 = 9;
+    localparam [31:0] MEM_CAPS = {4'd0, 4'd1, 4'd1, 8'(MEM_SLOTS), 4'(MEM_HLOG2 - 4), 8'd1};
+
     wire [31:0] mem_read_latency, mem_write_latency;
     wire [7:0]  mem_max_reads, mem_max_writes;
     wire [63:0] mem_base;
     wire        mem_idle, mem_error, mem_stall;
     wire        mem_reset_valid, mem_reset_ready, mem_reset_bits;
+    wire        mem_model_bank;
+    wire [31:0] mem_clock, mem_queue;
+    wire [15:0] mem_latency, mem_wmark;
+    wire [12:0] mem_geom;
+    wire [18*12-1:0] mem_timing;
+    wire [6*64-1:0]  mem_stats;
 
     foldsim_mem #(
         .ID_W   (TARGET_ID_W),
         .ADDR_W (TARGET_ADDR_W),
-        .DATA_W (DATA_W)
+        .DATA_W (DATA_W),
+        .SLOTS  (MEM_SLOTS),
+        .HLOG2  (MEM_HLOG2)
     ) mem (
         .clk           (ap_clk),
         .reset         (reset),
@@ -191,6 +205,18 @@ module foldsim_afu #(
         .max_reads     (mem_max_reads),
         .max_writes    (mem_max_writes),
         .base          (mem_base),
+        .model_bank    (mem_model_bank),
+        .cfg_data_rate (mem_clock[15:0]),
+        .cfg_core_clock(mem_clock[31:16]),
+        .cfg_latency   (mem_latency),
+        .cfg_queue     (mem_queue[15:0]),
+        .cfg_rq        (mem_queue[23:16]),
+        .cfg_wq        (mem_queue[31:24]),
+        .cfg_wr_high   (mem_wmark[7:0]),
+        .cfg_wr_low    (mem_wmark[15:8]),
+        .cfg_geom      (mem_geom),
+        .cfg_t         (mem_timing),
+        .stats         (mem_stats),
         .idle          (mem_idle),
         .error         (mem_error),
         .stall         (mem_stall),
@@ -229,7 +255,8 @@ module foldsim_afu #(
     foldsim_ctrl #(
         .DCR_ADDR_W  (DCR_ADDR_W),
         .DCR_DATA_W  (DCR_DATA_W),
-        .NUM_CLASSES (`FOLDSIM_NUM_CLASSES)
+        .NUM_CLASSES (`FOLDSIM_NUM_CLASSES),
+        .MEM_CAPS    (MEM_CAPS)
     ) ctrl (
         .clk               (ap_clk),
         .reset             (reset),
@@ -252,6 +279,14 @@ module foldsim_afu #(
         .mem_max_reads     (mem_max_reads),
         .mem_max_writes    (mem_max_writes),
         .mem_base          (mem_base),
+        .mem_model_bank    (mem_model_bank),
+        .mem_clock         (mem_clock),
+        .mem_latency       (mem_latency),
+        .mem_queue         (mem_queue),
+        .mem_geom          (mem_geom),
+        .mem_wmark         (mem_wmark),
+        .mem_timing        (mem_timing),
+        .mem_stats         (mem_stats),
         .mem_idle          (mem_idle),
         .mem_error         (mem_error),
         .mem_stall         (mem_stall),

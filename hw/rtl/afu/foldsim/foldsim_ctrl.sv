@@ -32,7 +32,9 @@ module foldsim_ctrl #(
     parameter QUEUE        = 16,
     parameter RESET_CYCLES = 64,
     parameter MEM_DEPTH    = 16,
-    parameter NUM_CLASSES  = 1
+    parameter NUM_CLASSES  = 1,
+    // MEM_CAPS: what the memory endpoint's bank model was built with.
+    parameter MEM_CAPS     = 32'd0
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -58,6 +60,15 @@ module foldsim_ctrl #(
     output reg  [7:0]            mem_max_reads,
     output reg  [7:0]            mem_max_writes,
     output reg  [63:0]           mem_base,
+    // The bank model's settings and counters (foldsim_mem_bank).
+    output wire                  mem_model_bank,
+    output reg  [31:0]           mem_clock,
+    output reg  [15:0]           mem_latency,
+    output reg  [31:0]           mem_queue,
+    output reg  [12:0]           mem_geom,
+    output reg  [15:0]           mem_wmark,
+    output wire [18*12-1:0]      mem_timing,
+    input  wire [6*64-1:0]       mem_stats,
     input  wire                  mem_idle,
     input  wire                  mem_error,
     input  wire                  mem_stall,
@@ -107,6 +118,23 @@ module foldsim_ctrl #(
     reg [DCR_DATA_W-1:0] rsp_data;
     reg [63:0]           target_cycles, host_cycles, mem_stalls;
     reg [47:0]           finishes [NUM_CLASSES];
+    reg [1:0]            mem_model;
+    reg [11:0]           mem_t [18];
+
+    // The model in effect from a reset on: the memory endpoint takes it at the
+    // end of every reset cycle, so a reset command's own cycle has it already.
+    wire [1:0] mem_model_now = (cur_op == `FOLDSIM_CMD_RESET) ? cur_addr[1:0] : mem_model;
+    assign mem_model_bank = (mem_model_now == 2'd1);
+    for (genvar i = 0; i < 18; ++i) begin : g_mem_t
+        assign mem_timing[i*12 +: 12] = mem_t[i];
+    end
+    // The default machine's DRAM (HBM2 at 800 MT/s behind a 400 MHz core),
+    // until the runtime sets its own: tBL, tCCD_S, tCCD_L, tCL, tCWL,
+    // tRCD_RD, tRCD_WR, tRP, tRAS, tRC, tRTP, tWR, tRRD_S, tRRD_L, tFAW,
+    // tWTR_S, tWTR_L, read-to-write extra.
+    localparam [18*12-1:0] MEM_T_RESET = {12'd2, 12'd2, 12'd2, 12'd6, 12'd2, 12'd2, 12'd5, 12'd2,
+                                          12'd19, 12'd14, 12'd6, 12'd6, 12'd6, 12'd1, 12'd6, 12'd4,
+                                          12'd2, 12'd2};
 
     wire       q_empty = (q_count == 0);
 
@@ -186,6 +214,14 @@ module foldsim_ctrl #(
             mem_max_reads     <= 8'(MEM_DEPTH);
             mem_max_writes    <= 8'(MEM_DEPTH);
             mem_base          <= 64'h40_0000_0000;
+            mem_model         <= 2'd0;
+            mem_clock         <= {16'd400, 16'd800};
+            mem_latency       <= 16'd0;
+            mem_queue         <= {8'd32, 8'd32, 16'd0};
+            mem_geom          <= {1'b1, 2'd2, 4'd5, 2'd2, 2'd2, 2'd1};
+            mem_wmark         <= {8'd7, 8'd26};
+            for (integer i = 0; i < 18; ++i)
+                mem_t[i] <= MEM_T_RESET[i*12 +: 12];
             aw_got            <= 1'b0;
             w_got             <= 1'b0;
             ar_got            <= 1'b0;
@@ -211,6 +247,10 @@ module foldsim_ctrl #(
                     rsp_data  <= rsp_d;
                 end
                 target_busy <= busy;
+                // A reset command's address chooses the memory model the
+                // target has from the reset on.
+                if (cur_op == `FOLDSIM_CMD_RESET)
+                    mem_model <= cur_addr[1:0];
                 // A start counts as busy until the target says it is, or plainly
                 // never will.
                 if (do_start) begin
@@ -258,8 +298,15 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_MEM_WLAT:    mem_write_latency <= (w_data == 0) ? 32'd1 : w_data;
                 `FOLDSIM_REG_MEM_MAXR:    mem_max_reads <= (w_data == 0 || w_data > MEM_DEPTH) ? 8'(MEM_DEPTH) : 8'(w_data);
                 `FOLDSIM_REG_MEM_MAXW:    mem_max_writes <= (w_data == 0 || w_data > MEM_DEPTH) ? 8'(MEM_DEPTH) : 8'(w_data);
+                `FOLDSIM_REG_MEM_CLOCK:   mem_clock <= w_data;
+                `FOLDSIM_REG_MEM_LATENCY: mem_latency <= w_data[15:0];
+                `FOLDSIM_REG_MEM_QUEUE:   mem_queue <= w_data;
+                `FOLDSIM_REG_MEM_GEOM:    mem_geom <= w_data[12:0];
+                `FOLDSIM_REG_MEM_WMARK:   mem_wmark <= w_data[15:0];
                 default:;
                 endcase
+                if (wa >= `FOLDSIM_REG_MEM_TIMING && wa < `FOLDSIM_REG_MEM_TIMING + 12'(4 * 18))
+                    mem_t[5'((wa - `FOLDSIM_REG_MEM_TIMING) >> 2)] <= w_data[11:0];
             end
             if (s_bvalid & s_bready)
                 s_bvalid <= 1'b0;
@@ -293,8 +340,19 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_MSTALL_LO:   s_rdata <= mem_stalls[31:0];
                 `FOLDSIM_REG_MSTALL_HI:   s_rdata <= mem_stalls[63:32];
                 `FOLDSIM_REG_NUM_CLASSES: s_rdata <= 32'(NUM_CLASSES);
+                `FOLDSIM_REG_MEM_MODEL:   s_rdata <= 32'(mem_model);
+                `FOLDSIM_REG_MEM_CAPS:    s_rdata <= MEM_CAPS;
+                `FOLDSIM_REG_MEM_CLOCK:   s_rdata <= mem_clock;
+                `FOLDSIM_REG_MEM_LATENCY: s_rdata <= 32'(mem_latency);
+                `FOLDSIM_REG_MEM_QUEUE:   s_rdata <= mem_queue;
+                `FOLDSIM_REG_MEM_GEOM:    s_rdata <= 32'(mem_geom);
+                `FOLDSIM_REG_MEM_WMARK:   s_rdata <= 32'(mem_wmark);
                 default:                 s_rdata <= 32'd0;
                 endcase
+                if (ar_addr >= `FOLDSIM_REG_MEM_TIMING && ar_addr < `FOLDSIM_REG_MEM_TIMING + 12'(4 * 18))
+                    s_rdata <= 32'(mem_t[5'((ar_addr - `FOLDSIM_REG_MEM_TIMING) >> 2)]);
+                if (ar_addr >= `FOLDSIM_REG_MEM_STATS && ar_addr < `FOLDSIM_REG_MEM_STATS + 12'(8 * 6))
+                    s_rdata <= mem_stats[32'(ar_addr - `FOLDSIM_REG_MEM_STATS) * 8 +: 32];
                 if (ar_addr >= `FOLDSIM_REG_FINISH_BASE
                  && ar_addr < `FOLDSIM_REG_FINISH_BASE + 12'(8 * NUM_CLASSES)) begin
                     s_rdata <= ar_addr[2] ? 32'(finishes[(ar_addr - `FOLDSIM_REG_FINISH_BASE) >> 3] >> 32)

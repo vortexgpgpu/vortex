@@ -162,7 +162,8 @@ $(GEN_SV): $(TARGET_SRCS) $(FOLDSIM_TOOLS) $(CLASSES_STAMP)
 $(KERNEL_SRCS): $(GEN_SV)
 	@{ echo "+incdir+$(FOLDSIM_RTL_DIR)"; echo "+incdir+$(GEN_DIR)"; \
 	   echo "$(GEN_SV)"; \
-	   for f in foldsim_token.sv foldsim_mem.sv foldsim_ctrl.sv foldsim_afu.sv; do echo "$(FOLDSIM_RTL_DIR)/$$f"; done; \
+	   for f in foldsim_token.sv foldsim_mem_bmap.sv foldsim_mem_bank.sv foldsim_mem.sv foldsim_ctrl.sv \
+	            foldsim_afu.sv; do echo "$(FOLDSIM_RTL_DIR)/$$f"; done; \
 	 } > $@
 
 # The kernel's clock at FOLDSIM_FREQ, for its out-of-context synthesis.

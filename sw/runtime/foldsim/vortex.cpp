@@ -28,6 +28,7 @@
 #include <common.h>
 
 #include <cmd_processor.h>
+#include <dram_timing.h>
 #include <foldsim_regs.h>
 #include <util.h>
 
@@ -329,7 +330,18 @@ public:
       return -1;
     }
     // The memory model: a latency-bandwidth pipe, 30-cycle latency and 16
-    // transactions in flight each way unless set.
+    // transactions in flight each way unless set; or, with
+    // FOLDSIM_MEM_MODEL=bank, the platform memory's DRAM as the bank model
+    // times it.
+    const char* model = getenv("FOLDSIM_MEM_MODEL");
+    const std::string model_name = (model != nullptr) ? model : "";
+    if (!model_name.empty() && model_name != "pipe" && model_name != "bank") {
+      fprintf(stderr, "[VXDRV] FOLDSIM_MEM_MODEL must be pipe or bank (got '%s')\n", model);
+      return -1;
+    }
+    bank_model_ = (model_name == "bank");
+    if (bank_model_ && this->setup_bank_model() != 0)
+      return -1;
     const uint32_t rlat = env_or("FOLDSIM_MEM_READ_LATENCY", 30);
     const uint32_t wlat = env_or("FOLDSIM_MEM_WRITE_LATENCY", 30);
     const uint32_t maxr = env_or("FOLDSIM_MEM_MAX_READS", 16);
@@ -345,9 +357,11 @@ public:
     // A target left running by an earlier process is reset, as a card's
     // native driver resets its device on open: Vortex counts VX_CFG_RESET_DELAY
     // cycles of reset before it takes a request. The reset also clears a
-    // memory error that process left, so only the state after it counts.
+    // memory error that process left, so only the state after it counts, and
+    // chooses the memory model.
     uint32_t s = 0;
-    if (command(FOLDSIM_CMD_RESET, 0, 64) != 0 || wait_idle(false) != 0 || status(&s) != 0)
+    const uint32_t mem_model = bank_model_ ? FOLDSIM_MEM_MODEL_BANK : FOLDSIM_MEM_MODEL_PIPE;
+    if (command(FOLDSIM_CMD_RESET, mem_model, 64) != 0 || wait_idle(false) != 0 || status(&s) != 0)
       return -1;
     if (mem_error(s))
       return -1;
@@ -407,6 +421,75 @@ public:
 private:
   int reg_write(uint32_t off, uint32_t v) { return transport_.reg_write(off, v); }
 
+#define FOLDSIM_STR_(x) #x
+#define FOLDSIM_STR(x) FOLDSIM_STR_(x)
+
+  // The bank model's settings: the platform memory this runtime was built for
+  // (VX_CFG_PLATFORM_MEMORY_*), its data-sheet timings in DRAM clocks as
+  // dram_sim derives them, and dram_sim's controller queues and write
+  // watermarks. They take effect at the target reset that follows. The image
+  // fixes the structure: its port is one channel, whatever
+  // VX_CFG_PLATFORM_MEMORY_NUM_BANKS says.
+  int setup_bank_model() {
+    uint32_t caps = 0;
+    if (transport_.reg_read(FOLDSIM_REG_MEM_CAPS, &caps) != 0)
+      return -1;
+    if (FOLDSIM_MEM_CAPS_PORTS(caps) == 0) {
+      fprintf(stderr, "[VXDRV] this foldsim image has no bank model\n");
+      return -1;
+    }
+    dram_timing::Standard standard;
+    try {
+      standard = dram_timing::parse_standard(FOLDSIM_STR(VX_CFG_PLATFORM_MEMORY_TYPE));
+    } catch (const std::exception& e) {
+      fprintf(stderr, "[VXDRV] %s\n", e.what());
+      return -1;
+    }
+    const uint32_t rate = VX_CFG_PLATFORM_MEMORY_DATA_RATE;
+    const uint32_t clock = VX_CFG_PLATFORM_CLOCK_RATE;
+    const auto t = dram_timing::clocks(standard, rate);
+    const auto g = dram_timing::geometry(standard);
+    const uint32_t v[FOLDSIM_MEM_NUM_TIMINGS] = {
+      t.BL, t.CCDS, t.CCDL, t.CL, t.CWL, t.RCDRD, t.RCDWR, t.RP, t.RAS, t.RC,
+      t.RTP, t.WR, t.RRDS, t.RRDL, t.FAW, t.WTRS, t.WTRL, g.rtw_extra};
+    const uint32_t time_max = (1u << FOLDSIM_MEM_CAPS_TIME_W(caps)) - 1;
+    for (uint32_t x : v) {
+      if (x > time_max) {
+        fprintf(stderr, "[VXDRV] a DRAM timing of %u clocks exceeds the image's %u\n", x, time_max);
+        return -1;
+      }
+    }
+    // The image places ACTs under tRRD and the per-bank timings; tFAW it
+    // leaves to tRRD, which covers it wherever four tRRD_S span a tFAW.
+    if (4 * t.RRDS < t.FAW) {
+      fprintf(stderr, "[VXDRV] the bank model of this image does not model tFAW, which %s at "
+              "%u MT/s needs (tRRD_S %u, tFAW %u clocks)\n",
+              FOLDSIM_STR(VX_CFG_PLATFORM_MEMORY_TYPE), rate, t.RRDS, t.FAW);
+      return -1;
+    }
+    if (rate > 0xffff || clock > 0xffff || VX_CFG_PLATFORM_MEMORY_LATENCY > 0xffff
+     || VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE > 0xffff) {
+      fprintf(stderr, "[VXDRV] the platform memory's settings exceed the bank model's registers\n");
+      return -1;
+    }
+    const uint32_t geom = g.log2_pcs | (g.log2_bgs << 2) | (g.log2_banks << 4)
+                        | (g.log2_row_bursts << 6) | (g.log2_visit << 10)
+                        | (uint32_t(g.two_clock_act) << 12);
+    const uint32_t queue = VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE | (32u << 16) | (32u << 24);
+    const uint32_t wmark = 26u | (7u << 8);
+    if (reg_write(FOLDSIM_REG_MEM_CLOCK, rate | (clock << 16)) != 0 ||
+        reg_write(FOLDSIM_REG_MEM_LATENCY, VX_CFG_PLATFORM_MEMORY_LATENCY) != 0 ||
+        reg_write(FOLDSIM_REG_MEM_QUEUE, queue) != 0 ||
+        reg_write(FOLDSIM_REG_MEM_GEOM, geom) != 0 ||
+        reg_write(FOLDSIM_REG_MEM_WMARK, wmark) != 0)
+      return -1;
+    for (uint32_t i = 0; i < FOLDSIM_MEM_NUM_TIMINGS; ++i) {
+      if (reg_write(FOLDSIM_REG_MEM_TIMING(i), v[i]) != 0)
+        return -1;
+    }
+    return 0;
+  }
+
   uint64_t read64(uint32_t lo) {
     uint32_t l = 0, h = 0, h2 = 0;
     do {
@@ -440,6 +523,19 @@ private:
     }
     if (!line.empty())
       fprintf(stderr, "[foldsim] class busy:%s\n", line.c_str());
+    if (bank_model_) {
+      uint64_t st[FOLDSIM_MEM_NUM_STATS];
+      for (uint32_t i = 0; i < FOLDSIM_MEM_NUM_STATS; ++i)
+        st[i] = read64(FOLDSIM_REG_MEM_STATS(i));
+      const uint64_t reads = st[FOLDSIM_MEM_STAT_READS];
+      fprintf(stderr,
+              "[foldsim] bank model: %lu reads, %lu writes; row hits %lu, misses %lu, conflicts %lu; "
+              "mean read latency %.1f cycles\n",
+              (unsigned long)reads, (unsigned long)st[FOLDSIM_MEM_STAT_WRITES],
+              (unsigned long)st[FOLDSIM_MEM_STAT_HITS], (unsigned long)st[FOLDSIM_MEM_STAT_MISSES],
+              (unsigned long)st[FOLDSIM_MEM_STAT_CONFLICTS],
+              reads ? double(st[FOLDSIM_MEM_STAT_LATENCY]) / double(reads) : 0.0);
+    }
     const auto& st = transport_.stats;
     fprintf(stderr,
             "[foldsim] host: %lu register reads, %lu writes in %.3f s; %lu bytes of device memory in %.3f s\n",
@@ -644,6 +740,7 @@ private:
   std::chrono::steady_clock::time_point launch_start_;
   bool failed_ = false;
   bool open_ = false;
+  bool bank_model_ = false;
   vortex::CommandProcessor cp_;
   std::mutex host_mu_;
   std::map<uint64_t, uint64_t> host_regions_;
