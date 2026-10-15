@@ -8,7 +8,7 @@ FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
 
 SRC_DIR := $(VORTEX_HOME)/hw/unittest/$(PROJECT)
 
-CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common
+CXXFLAGS := -I$(SRC_DIR) -I$(VORTEX_HOME)/hw/unittest/common -I$(SIM_COMMON_DIR) -I$(SW_COMMON_DIR)
 
 SRCS := $(SRC_DIR)/main.cpp
 
