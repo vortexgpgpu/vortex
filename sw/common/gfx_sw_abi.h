@@ -44,6 +44,15 @@ extern "C" {
 // resolved tap to the TEX unit in its operand or to the SW sampler explicitly.
 #define GFX_SW_TEX_FILTER_MIN_BILINEAR (1u << 3)
 
+// texstate.filter bit 4: the sampler takes unnormalized (texel) coordinates; the
+// shader divides them by the level-0 dims before sampling.
+#define GFX_SW_TEX_FILTER_UNNORM (1u << 4)
+
+// texstate.filter bit 7: cube filtering is seamless -- a bilinear tap past a face
+// edge reads the adjacent face (Vulkan's default; VK_EXT_non_seamless_cube_map
+// clears it).
+#define GFX_SW_TEX_FILTER_SEAMLESS (1u << 7)
+
 // texstate.filter bit 5: the bound texture's format is above the FF set
 // (VX_TEX_FORMAT_FF_MAX). The FF vx_tex4 unit decodes only the FF formats and its
 // stride table covers only 1/2/4-byte texels, so an extended-format texture must
@@ -66,7 +75,7 @@ typedef struct {
   uint32_t mip_off[VX_TEX_LOD_MAX + 1];   // per-LOD byte offset from base
   uint32_t logdim;                        // {log_h << 16 | log_w} of mip 0
   uint32_t format;                        // VX_TEX_FORMAT_*
-  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3) | ext format (bit5) | border (bit6) | offset (bits 16+)
+  uint32_t filter;                        // mag tap (bit0) | mip-linear (bit1) | mip-enable (bit2) | min tap (bit3) | unnormalized (bit4) | ext format (bit5) | border (bit6) | seamless (bit7) | reduction (bits 9:8) | offset (bits 16+)
   uint32_t wrap;                          // {wrap_v << 16 | wrap_u}
   uint32_t width;                         // mip-0 integer width  (0 => POT via logdim)
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
@@ -84,6 +93,8 @@ typedef struct {
   uint32_t res_layer_bits;                // residency bits per array layer
   uint32_t res_level[VX_TEX_LOD_MAX + 1]; // first residency bit of each level
   uint64_t residency;                     // sparse page bitmap; 0 => fully resident
+  uint32_t border_t[4];                   // border colour R,G,B,A as the format's channel type: float bits, or integers
+  uint32_t aniso;                         // sampler's max anisotropy; 0 or 1 => isotropic
 } gfx_sw_texstate_t;
 
 // Resident output-merger descriptor (mirror of gfx_sw::om_state_t).
@@ -144,6 +155,12 @@ uint32_t gfx_tex_sample_sw(const gfx_sw_texstate_t* st,
 void gfx_tex_sample_f32(const gfx_sw_texstate_t* st,
                         int32_t u, int32_t v, uint32_t lod, uint32_t filter,
                         float* out);
+// An anisotropic sample: `n` probes of slice `layer` at level `lod`, spread evenly
+// along (du, dv) -- the footprint's major axis, S.23 -- around (u, v), averaged.
+// The caller picks n and the level from the footprint.
+void gfx_tex_sample_aniso_f32(const gfx_sw_texstate_t* st, int32_t u, int32_t v,
+                              int32_t du, int32_t dv, uint32_t n, uint32_t layer,
+                              uint32_t lod, uint32_t filter, float* out);
 
 // 2D-array sample as four float channels: gfx_tex_sample_array_sw's float twin,
 // for a float-format texture (see gfx_tex_sample_f32).

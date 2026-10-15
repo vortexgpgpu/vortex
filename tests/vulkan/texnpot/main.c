@@ -15,7 +15,9 @@
  *                       through a negative mirrored coordinate, and a plain
  *                       blend between two columns. In a mirrored period the
  *                       taps come in reverse order, so a weight applied to the
- *                       wrong one is a different colour.
+ *                       wrong one is a different colour;
+ *   nearest, unnormalized  texel coordinates, normalized by the 5x3 dims, the
+ *                       last probe clamping past the right edge.
  */
 
 #include <vulkan/vulkan.h>
@@ -35,7 +37,7 @@
 /* One count for the unorm round trip, one for the blend weight's 1/256 step. */
 #define TOL     2
 
-#define NUM_CASES  2
+#define NUM_CASES  3
 #define NUM_PROBES 3
 
 #define CHECK(x) do {                                              \
@@ -131,23 +133,31 @@ main(int argc, char **argv)
     *   u = 1.26, v = 0.5/3         u folds to 0.74, x = 3.2: (3,0) 0.8, (4,0) 0.2
     *   u = 2.5/5, v = -0.25        v folds to 0.25, y = 0.25: (2,0) 0.75, (2,1) 0.25
     *   u = 1.9/5, v = 1.5/3        x = 1.4: (1,1) 0.6, (2,1) 0.4
+    *
+    * nearest, unnormalized coordinates (texels), CLAMP_TO_EDGE:
+    *   (4.5, 0.5)                  (4,0)
+    *   (2.5, 2.5)                  (2,2)
+    *   (6.0, 1.5)                  (4,1)     past the right edge, clamped
     */
    const double expect_f[NUM_CASES][NUM_PROBES] = {
       { texel_red(4, 0), texel_red(2, 2), texel_red(1, 1) },
       { 0.8 * texel_red(3, 0) + 0.2 * texel_red(4, 0),
         0.75 * texel_red(2, 0) + 0.25 * texel_red(2, 1),
         0.6 * texel_red(1, 1) + 0.4 * texel_red(2, 1) },
+      { texel_red(4, 0), texel_red(2, 2), texel_red(4, 1) },
    };
    const char *probe_name[NUM_CASES][NUM_PROBES] = {
       { "column", "row", "repeat" },
       { "mirrored-period blend", "mirrored row blend", "column blend" },
+      { "column", "row", "clamped" },
    };
-   const char *case_name[NUM_CASES] = { "nearest/repeat", "linear/mirrored" };
+   const char *case_name[NUM_CASES] = { "nearest/repeat", "linear/mirrored", "unnormalized" };
 
    const char *vs_path = (argc > 1) ? argv[1] : "texnpot.vert.spv";
    const char *fs_path[NUM_CASES] = {
       (argc > 2) ? argv[2] : "texnpot.frag.spv",
       (argc > 3) ? argv[3] : "texnpot_lin.frag.spv",
+      (argc > 4) ? argv[4] : "texnpot_unnorm.frag.spv",
    };
 
    /* --- instance / device / queue --------------------------------- */
@@ -425,10 +435,12 @@ main(int argc, char **argv)
       CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe[c]));
    }
 
-   const VkFilter filters[NUM_CASES] = { VK_FILTER_NEAREST, VK_FILTER_LINEAR };
+   const VkFilter filters[NUM_CASES] = { VK_FILTER_NEAREST, VK_FILTER_LINEAR, VK_FILTER_NEAREST };
    const VkSamplerAddressMode modes[NUM_CASES] = {
       VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
+      VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
    };
+   const VkBool32 unnormalized[NUM_CASES] = { VK_FALSE, VK_FALSE, VK_TRUE };
    VkSampler sampler[NUM_CASES];
    for (uint32_t c = 0; c < NUM_CASES; c++) {
       VkSamplerCreateInfo sci = {
@@ -436,6 +448,7 @@ main(int argc, char **argv)
          .magFilter = filters[c], .minFilter = filters[c],
          .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
          .addressModeU = modes[c], .addressModeV = modes[c], .addressModeW = modes[c],
+         .unnormalizedCoordinates = unnormalized[c],
       };
       CHECK(vkCreateSampler(dev, &sci, NULL, &sampler[c]));
    }
@@ -618,6 +631,6 @@ main(int argc, char **argv)
       printf("FAILED (%u probe(s))\n", failed);
       return 1;
    }
-   printf("PASSED (5x3 texture addressed and filtered correctly through REPEAT and MIRRORED_REPEAT)\n");
+   printf("PASSED (5x3 texture addressed and filtered through REPEAT, MIRRORED_REPEAT and texel coordinates)\n");
    return 0;
 }

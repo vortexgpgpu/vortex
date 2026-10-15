@@ -556,6 +556,12 @@ tests:
   app: gfx_tex
   configs: -DVX_CFG_EXT_TEX_ENABLE
   args: -i soccer.png -c 45x27 -a -w 2 -o null
+- id: model_parity-tex-reduce
+  check: model_parity
+  via: blackbox
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -a -m 1 -w 4 -s 0.5 -o null
 - id: model_parity-raster
   check: model_parity
   via: blackbox
@@ -706,6 +712,28 @@ tests:
   app: gfx_tex
   configs: -DVX_CFG_EXT_TEX_ENABLE
   args: -i soccer.png -c 45x27 -G 2 -B -o null
+
+# Sampler reductions: the per-channel min or max of the taps with a nonzero
+# weight, over one level and over two (lanes mix both), and under
+# mirror-clamp-to-edge. Checked in-test against the software sampler.
+- id: gfx_tex-reduce-min
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -a -m 1 -s 0.5 -o null
+- id: gfx_tex-reduce-max
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -a -m 2 -w 4 -o null
+- id: gfx_tex-mirror-clamp
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -a -w 4 -o null
 
 # Two colour attachments from one draw. Attachment 0 still matches the
 # single-attachment golden; attachment 1 is checked in-test against the colour

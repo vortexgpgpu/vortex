@@ -219,6 +219,10 @@ public:
     return (dcrs_.read(stage, VX_DCR_TEX_FILTER) & VX_TEX_FILTER_MIP_LINEAR) != 0;
   }
 
+  uint32_t reduction(uint32_t stage) const {
+    return (dcrs_.read(stage, VX_DCR_TEX_FILTER) >> VX_TEX_FILTER_REDUCTION_SHIFT) & 0x3u;
+  }
+
 protected:
   TexDCRS  dcrs_;
   MemoryCB mem_cb_;

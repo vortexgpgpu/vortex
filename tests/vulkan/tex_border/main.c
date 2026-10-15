@@ -9,6 +9,15 @@
  * return the border; a driver that maps the wrap mode to clamp-to-edge
  * returns the texel and the case fails.
  *
+ *   border_clamp         -- RGBA8, opaque white
+ *   border_custom_float  -- RGBA32F, a custom float border outside [0,1] and off
+ *                           the 8-bit grid, which a quantized border cannot hold
+ *   border_int           -- RGBA8 UINT, the integer opaque white (1,1,1,1)
+ *   border_custom_unorm  -- RGBA8, a custom border with red and blue apart, so
+ *                           its channel order shows, filtered and gathered
+ *   border_custom_r8     -- R8, the same border: only its red reaches the
+ *                           sample, with the format's own 0 and 1 elsewhere
+ *
  * The case passes when every rendered pixel is green.
  */
 
@@ -84,10 +93,16 @@ struct texcase {
    VkImageViewType viewtype;
    const void *data;
    VkDeviceSize bytes;
+   VkBorderColor border;
+   float        custom[4];      /* VK_BORDER_COLOR_FLOAT_CUSTOM_EXT */
 };
 
 /* One solid colour, distinct from the border the sampler carries. */
 static uint8_t solid_texels[4 * 4][4];
+
+static float   float_texels[4 * 4][4];
+static uint8_t uint_texels[4 * 4][4];
+static uint8_t r8_texels[4 * 4];
 
 static void
 fill_patterns(void)
@@ -97,6 +112,15 @@ fill_patterns(void)
       solid_texels[i][1] = 40;
       solid_texels[i][2] = 255;
       solid_texels[i][3] = 255;
+      float_texels[i][0] = 2.0f;
+      float_texels[i][1] = -1.0f;
+      float_texels[i][2] = 0.5f;
+      float_texels[i][3] = 1.0f;
+      uint_texels[i][0] = 7;
+      uint_texels[i][1] = 9;
+      uint_texels[i][2] = 11;
+      uint_texels[i][3] = 13;
+      r8_texels[i] = 40;
    }
 }
 
@@ -107,7 +131,20 @@ main(int argc, char **argv)
 
    struct texcase cases[] = {
       { "border_clamp", "border_clamp.frag.spv", VK_FORMAT_R8G8B8A8_UNORM,
-        4, 4, 1, VK_IMAGE_VIEW_TYPE_2D, solid_texels, sizeof(solid_texels) },
+        4, 4, 1, VK_IMAGE_VIEW_TYPE_2D, solid_texels, sizeof(solid_texels),
+        VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE, { 0 } },
+      { "border_custom_float", "border_float.frag.spv", VK_FORMAT_R32G32B32A32_SFLOAT,
+        4, 4, 1, VK_IMAGE_VIEW_TYPE_2D, float_texels, sizeof(float_texels),
+        VK_BORDER_COLOR_FLOAT_CUSTOM_EXT, { 0.3f, 0.6f, 1.5f, 0.25f } },
+      { "border_int", "border_int.frag.spv", VK_FORMAT_R8G8B8A8_UINT,
+        4, 4, 1, VK_IMAGE_VIEW_TYPE_2D, uint_texels, sizeof(uint_texels),
+        VK_BORDER_COLOR_INT_OPAQUE_WHITE, { 0 } },
+      { "border_custom_unorm", "border_unorm.frag.spv", VK_FORMAT_R8G8B8A8_UNORM,
+        4, 4, 1, VK_IMAGE_VIEW_TYPE_2D, solid_texels, sizeof(solid_texels),
+        VK_BORDER_COLOR_FLOAT_CUSTOM_EXT, { 0.2f, 0.6f, 1.0f, 0.4f } },
+      { "border_custom_r8", "border_r8.frag.spv", VK_FORMAT_R8_UNORM,
+        4, 4, 1, VK_IMAGE_VIEW_TYPE_2D, r8_texels, sizeof(r8_texels),
+        VK_BORDER_COLOR_FLOAT_CUSTOM_EXT, { 0.2f, 0.6f, 1.0f, 0.4f } },
    };
    const uint32_t ncases = (uint32_t)(sizeof(cases) / sizeof(cases[0]));
 
@@ -153,9 +190,16 @@ main(int argc, char **argv)
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
       .queueFamilyIndex = qf, .queueCount = 1, .pQueuePriorities = &prio,
    };
+   VkPhysicalDeviceCustomBorderColorFeaturesEXT cbf = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT,
+      .customBorderColors = VK_TRUE,
+   };
+   const char *dev_exts[] = { VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME };
    VkDeviceCreateInfo dci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .pNext = &cbf,
       .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
+      .enabledExtensionCount = 1, .ppEnabledExtensionNames = dev_exts,
    };
    VkDevice dev;
    CHECK(vkCreateDevice(pd, &dci, NULL, &dev));
@@ -252,7 +296,7 @@ main(int argc, char **argv)
    CHECK(vkAllocateMemory(dev, &bmai, NULL, &bmem));
    CHECK(vkBindBufferMemory(dev, rb, bmem, 0));
 
-   /* --- shared vertex module, layout, sampler, command pool -------- */
+   /* --- shared vertex module, layout, command pool ------------------- */
    VkShaderModule vs = load_module(dev, vs_path);
    if (!vs) return 1;
 
@@ -276,20 +320,6 @@ main(int argc, char **argv)
    VkPipelineLayout pl;
    CHECK(vkCreatePipelineLayout(dev, &plci, NULL, &pl));
 
-   VkSamplerCreateInfo sci = {
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-      .magFilter = VK_FILTER_NEAREST, .minFilter = VK_FILTER_NEAREST,
-      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-      /* A core border colour rather than a custom one, so the case needs no
-       * device extension; opaque white is distinct from the texel either way. */
-      .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
-   };
-   VkSampler sampler;
-   CHECK(vkCreateSampler(dev, &sci, NULL, &sampler));
-
    VkCommandPoolCreateInfo cmpci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -309,6 +339,24 @@ main(int argc, char **argv)
    unsigned failed = 0;
    for (uint32_t ci = 0; ci < ncases; ci++) {
       const struct texcase *c = &cases[ci];
+
+      VkSamplerCustomBorderColorCreateInfoEXT cbci = {
+         .sType = VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT,
+         .format = c->fmt,
+      };
+      memcpy(cbci.customBorderColor.float32, c->custom, sizeof c->custom);
+      VkSamplerCreateInfo sci = {
+         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+         .pNext = (c->border == VK_BORDER_COLOR_FLOAT_CUSTOM_EXT) ? &cbci : NULL,
+         .magFilter = VK_FILTER_NEAREST, .minFilter = VK_FILTER_NEAREST,
+         .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+         .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+         .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+         .borderColor = c->border,
+      };
+      VkSampler sampler;
+      CHECK(vkCreateSampler(dev, &sci, NULL, &sampler));
 
       VkImageCreateInfo tci = {
          .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -542,11 +590,11 @@ main(int argc, char **argv)
       vkDestroyImageView(dev, texview, NULL);
       vkFreeMemory(dev, tmem, NULL);
       vkDestroyImage(dev, tex, NULL);
+      vkDestroySampler(dev, sampler, NULL);
    }
 
    /* cleanup (best-effort; a smoke test exits anyway) */
    vkDestroyCommandPool(dev, cp, NULL);
-   vkDestroySampler(dev, sampler, NULL);
    vkDestroyPipelineLayout(dev, pl, NULL);
    vkDestroyDescriptorSetLayout(dev, dsl, NULL);
    vkDestroyShaderModule(dev, vs, NULL);

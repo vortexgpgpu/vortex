@@ -35,7 +35,7 @@ localparam TEX_LOD_BITS    = `CLOG2(`VX_TEX_LOD_MAX + 1);
 localparam TEX_ARG_BITS    = `VX_TEX_ARG_LAYER_SHIFT + `VX_TEX_ARG_LAYER_BITS;
 localparam TEX_FILTER_BITS = `CLOG2(`VX_TEX_FILTER_MIP_LINEAR + 1);   // mag/min + mip bit
 localparam TEX_FORMAT_BITS = `CLOG2(`VX_TEX_FORMAT_FF_MAX + 1);       // FF-handled formats only
-localparam TEX_WRAP_BITS   = `CLOG2(`VX_TEX_WRAP_BORDER + 1);
+localparam TEX_WRAP_BITS   = `CLOG2(`VX_TEX_WRAP_MIRROR_CLAMP + 1);
 localparam TEX_DIM_W       = `VX_TEX_DIM_BITS + 1;                // mip-0 texels, up to 2^DIM_BITS
 
 typedef struct packed {
@@ -45,6 +45,8 @@ typedef struct packed {
     logic [`TEX_ADDR_BITS-1:0]     baseaddr;
     logic [TEX_FORMAT_BITS-1:0]    format;
     logic [TEX_FILTER_BITS-1:0]    filter;
+    // Weighted average, or the min/max of the nonzero-weight taps.
+    logic [1:0]                    reduction;
     // Colour a tap outside [0,1) returns on an axis that wraps to a border.
     logic [31:0]                   border;
     // Bytes between array layers; a lane's layer field steps its base by it.

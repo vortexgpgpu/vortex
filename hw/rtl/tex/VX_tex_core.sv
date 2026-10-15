@@ -43,6 +43,9 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     localparam BORDER_W = (TEX_NUM_LEVELS * 4 * NUM_LANES);
     // Per lane: gather enable and the component it returns.
     localparam GATHER_W = (NUM_LANES * 3);
+    // The stage's reduction rides with the gather fields to the sampler.
+    localparam RED_W = 2;
+    localparam INFO_W = TAG_WIDTH + RED_W + GATHER_W + TEX_FORMAT_BITS + 32;
     localparam W_ADDR_BITS = `TEX_ADDR_BITS + 6;
 
     // DCRs
@@ -66,6 +69,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire [NUM_LANES-1:0]                        req_mask;
     wire [NUM_LANES-1:0][TEX_FILTER_BITS-1:0]   req_filter, sel_filter;
     wire [TEX_FORMAT_BITS-1:0]                 req_format;
+    wire [RED_W-1:0]                            req_reduction;
     wire [1:0][TEX_WRAP_BITS-1:0]              req_wraps;
     wire [1:0][TEX_DIM_W-1:0]               req_dims;
     wire [NUM_LANES-1:0][W_ADDR_BITS-1:0]       req_baseaddr, sel_baseaddr;
@@ -119,15 +123,15 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     end
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_LANES  + TEX_FORMAT_BITS + 2 * TEX_WRAP_BITS + 2 * TEX_DIM_W + 32 + GATHER_W + NUM_LANES * (TEX_FILTER_BITS + W_ADDR_BITS + 2 * 32 + `VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (TEX_LOD_BITS + `TEX_MIPOFF_BITS)) + TAG_WIDTH),
+        .DATAW   (NUM_LANES  + RED_W + TEX_FORMAT_BITS + 2 * TEX_WRAP_BITS + 2 * TEX_DIM_W + 32 + GATHER_W + NUM_LANES * (TEX_FILTER_BITS + W_ADDR_BITS + 2 * 32 + `VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (TEX_LOD_BITS + `TEX_MIPOFF_BITS)) + TAG_WIDTH),
         .OUT_REG (1)
     ) pipe_reg (
         .clk       (clk),
         .reset     (reset),
         .valid_in  (tex_bus_if.req_valid),
         .ready_in  (tex_bus_if.req_ready),
-        .data_in   ({tex_bus_if.req_data.mask, sel_filter, sel_gather, tex_dcrs.format, tex_dcrs.wraps, tex_dcrs.dims, sel_baseaddr, tex_dcrs.border, tex_bus_if.req_data.coords, sel_miplevel, sel_mipoff, sel_lodfrac, tex_bus_if.req_data.tag}),
-        .data_out  ({req_mask, req_filter, req_gather, req_format, req_wraps, req_dims, req_baseaddr, req_bordercolor, req_coords, req_miplevel, req_mipoff, req_lodfrac, req_tag}),
+        .data_in   ({tex_bus_if.req_data.mask, sel_filter, sel_gather, tex_dcrs.reduction, tex_dcrs.format, tex_dcrs.wraps, tex_dcrs.dims, sel_baseaddr, tex_dcrs.border, tex_bus_if.req_data.coords, sel_miplevel, sel_mipoff, sel_lodfrac, tex_bus_if.req_data.tag}),
+        .data_out  ({req_mask, req_filter, req_gather, req_reduction, req_format, req_wraps, req_dims, req_baseaddr, req_bordercolor, req_coords, req_miplevel, req_mipoff, req_lodfrac, req_tag}),
         .valid_out (req_valid),
         .ready_out (req_ready)
     );
@@ -143,7 +147,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] mem_req_border;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] mem_req_addr;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] mem_req_baseaddr;
-    wire [(TAG_WIDTH + GATHER_W + TEX_FORMAT_BITS + 32)-1:0] mem_req_info;
+    wire [INFO_W-1:0] mem_req_info;
     wire mem_req_ready;
 
     // The border colour rides the request rather than being read at the
@@ -151,7 +155,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     // under is the state it was issued under.
     VX_tex_addr #(
         .INSTANCE_ID ($sformatf("%s-addr", INSTANCE_ID)),
-        .REQ_TAGW    (TAG_WIDTH + GATHER_W + TEX_FORMAT_BITS + 32),
+        .REQ_TAGW    (INFO_W),
         .NUM_LANES   (NUM_LANES)
     ) tex_addr (
         .clk        (clk),
@@ -169,7 +173,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .req_mipoff (req_mipoff),
         .req_lodfrac(req_lodfrac),
         .req_dims   (req_dims),
-        .req_tag    ({req_tag, req_gather, req_format, req_bordercolor}),
+        .req_tag    ({req_tag, req_reduction, req_gather, req_format, req_bordercolor}),
         .req_ready  (req_ready),
 
         // outputs
@@ -205,12 +209,12 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
 
     wire mem_rsp_valid;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] mem_rsp_data;
-    wire [(TAG_WIDTH + GATHER_W + TEX_FORMAT_BITS + 32 + BLEND_FRAC_W + BORDER_W + LODFRAC_W)-1:0] mem_rsp_info;
+    wire [(INFO_W + BLEND_FRAC_W + BORDER_W + LODFRAC_W)-1:0] mem_rsp_info;
     wire mem_rsp_ready;
 
     VX_tex_mem #(
         .INSTANCE_ID ($sformatf("%s-mem", INSTANCE_ID)),
-        .REQ_TAGW    (TAG_WIDTH + GATHER_W + TEX_FORMAT_BITS + 32 + BLEND_FRAC_W + BORDER_W + LODFRAC_W),
+        .REQ_TAGW    (INFO_W + BLEND_FRAC_W + BORDER_W + LODFRAC_W),
         .NUM_LANES   (NUM_LANES)
     ) tex_mem (
         .clk       (clk),
@@ -252,7 +256,8 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire [31:0] mem_rsp_bordercolor = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W) +: 32];
     wire [TEX_FORMAT_BITS-1:0] mem_rsp_format = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32) +: TEX_FORMAT_BITS];
     wire [GATHER_W-1:0] mem_rsp_gather = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS) +: GATHER_W];
-    wire [TAG_WIDTH-1:0] mem_rsp_tag = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS + GATHER_W) +: TAG_WIDTH];
+    wire [RED_W-1:0] mem_rsp_reduction = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS + GATHER_W) +: RED_W];
+    wire [TAG_WIDTH-1:0] mem_rsp_tag = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS + GATHER_W + RED_W) +: TAG_WIDTH];
 
     VX_tex_sampler #(
         .INSTANCE_ID ($sformatf("%s-sampler", INSTANCE_ID)),
@@ -263,22 +268,23 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .reset      (reset),
 
         // inputs
-        .req_valid  (mem_rsp_valid),
-        .req_data   (mem_rsp_data),
-        .req_blends (mem_rsp_blends),
-        .req_border (mem_rsp_border),
+        .req_valid       (mem_rsp_valid),
+        .req_data        (mem_rsp_data),
+        .req_blends      (mem_rsp_blends),
+        .req_border      (mem_rsp_border),
         .req_bordercolor (mem_rsp_bordercolor),
-        .req_lodfrac(mem_rsp_lodfrac),
-        .req_format (mem_rsp_format),
-        .req_gather (mem_rsp_gather),
-        .req_tag    (mem_rsp_tag),
-        .req_ready  (mem_rsp_ready),
+        .req_lodfrac     (mem_rsp_lodfrac),
+        .req_format      (mem_rsp_format),
+        .req_gather      (mem_rsp_gather),
+        .req_reduction   (mem_rsp_reduction),
+        .req_tag         (mem_rsp_tag),
+        .req_ready       (mem_rsp_ready),
 
         // outputs
-        .rsp_valid  (sampler_rsp_valid),
-        .rsp_data   (sampler_rsp_data),
-        .rsp_tag    (sampler_rsp_info),
-        .rsp_ready  (sampler_rsp_ready)
+        .rsp_valid       (sampler_rsp_valid),
+        .rsp_data        (sampler_rsp_data),
+        .rsp_tag         (sampler_rsp_info),
+        .rsp_ready       (sampler_rsp_ready)
     );
 
     VX_elastic_buffer #(

@@ -58,11 +58,11 @@ struct TexelRequest {
 
 // The two taps one axis of a sample reads, for a level `dim` texels wide (any
 // width, not only a power of two). The coordinate is folded by its wrap in
-// normalized space -- repeat and mirror into [0,1), clamp and border into
-// [-1,2), which keeps every out-of-range tap out of range -- then scaled to
-// texels, with bilinear moving it half a texel down. The taps are floor(x) and
-// floor(x)+1, each wrapped back into [0,dim) as an integer; `frac` is the weight
-// of tap 1 in 1/256ths. The TEX unit computes exactly this.
+// normalized space -- repeat and mirror into [0,1), clamp, border and
+// mirror-clamp into [-1,2), which keeps every out-of-range tap out of range --
+// then scaled to texels, with bilinear moving it half a texel down. The taps are
+// floor(x) and floor(x)+1, each wrapped back into [0,dim) as an integer; `frac`
+// is the weight of tap 1 in 1/256ths. The TEX unit computes exactly this.
 struct TexAxisTaps {
   uint32_t i0, i1;
   uint32_t frac;
@@ -96,6 +96,10 @@ static inline __attribute__((always_inline)) TexAxisTaps tex_axis_taps(
     }
     if (wrap == VX_TEX_WRAP_REPEAT) {
       return (uint32_t)((i < 0) ? i + (int32_t)dim : i - (int32_t)dim);
+    }
+    if (wrap == VX_TEX_WRAP_MIRROR_CLAMP && i < 0) {
+      i = -1 - i;
+      return (i < (int32_t)dim) ? (uint32_t)i : dim - 1u;
     }
     *border = (wrap == VX_TEX_WRAP_BORDER);
     return (i < 0) ? 0u : dim - 1u;
@@ -783,6 +787,46 @@ static inline uint32_t tex_apply_filter(const TexelRequest& req, const uint32_t 
     return TexFilterLinear(req.format, texels[0], texels[1], texels[2], texels[3],
                            req.alpha, req.beta);
   return TexFilterPoint(req.format, texels[0]);
+}
+
+// Per-channel min or max of two ARGB8888 words.
+static inline uint32_t TexReduce8888(uint32_t a, uint32_t b, uint32_t mode) {
+  uint32_t out = 0;
+  for (uint32_t s = 0; s < 32; s += 8) {
+    const uint32_t x = (a >> s) & 0xff, y = (b >> s) & 0xff;
+    const uint32_t r = (mode == VX_TEX_REDUCTION_MIN) ? (x < y ? x : y) : (x > y ? x : y);
+    out |= r << s;
+  }
+  return out;
+}
+
+// Min/max reduction of one level: the per-channel minimum (VX_TEX_REDUCTION_MIN)
+// or maximum of its decoded taps whose blend weight is not zero -- tap 0 always,
+// tap 1 when the u weight is set, tap 2 when the v weight is, tap 3 when both
+// are. A border tap takes the border colour. The levels then combine through
+// TexLodReduce.
+static inline uint32_t tex_apply_reduce(const TexelRequest& req, const uint32_t texels[4],
+                                        uint32_t mode) {
+  auto tap = [&](uint32_t i) {
+    return ((req.border_mask >> i) & 0x1) ? req.border : TexFilterPoint(req.format, texels[i]);
+  };
+  uint32_t out = tap(0);
+  if (req.filter != VX_TEX_FILTER_BILINEAR) {
+    return out;
+  }
+  for (uint32_t i = 1; i < 4; ++i) {
+    if (((i & 1u) && req.alpha == 0) || ((i & 2u) && req.beta == 0)) {
+      continue;
+    }
+    out = TexReduce8888(out, tap(i), mode);
+  }
+  return out;
+}
+
+// The level combine under a reduction: the upper level counts only when its
+// weight is not zero.
+static inline uint32_t TexLodReduce(uint32_t c0, uint32_t c1, uint32_t frac, uint32_t mode) {
+  return (frac & 0xff) ? TexReduce8888(c0, c1, mode) : c0;
 }
 
 // textureGather: channel `comp` (0..3 = R,G,B,A) of the bilinear footprint's four

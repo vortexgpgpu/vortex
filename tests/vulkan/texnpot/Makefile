@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MIT
 #
 # Non-power-of-two texture addressing and filtering for the vortexpipe driver: a
-# 5x3 texture probed on both axes through REPEAT, and blended under
-# MIRRORED_REPEAT.
+# 5x3 texture probed on both axes through REPEAT, blended under
+# MIRRORED_REPEAT, and sampled in texel coordinates.
 #
 #   make            -- build the host binary + SPIR-V
 #   make run-simx   -- run the cases via vortexpipe on SimX
@@ -19,6 +19,7 @@ SRCS := $(SRC_DIR)/main.c
 
 SHADERS := $(SRC_DIR)/texnpot.vert \
            $(SRC_DIR)/texnpot.frag \
-           $(SRC_DIR)/texnpot_lin.frag
+           $(SRC_DIR)/texnpot_lin.frag \
+           $(SRC_DIR)/texnpot_unnorm.frag
 
 include ../common.mk

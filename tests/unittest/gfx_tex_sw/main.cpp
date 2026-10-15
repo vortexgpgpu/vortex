@@ -94,14 +94,16 @@ const char* fmt_name(uint32_t f) {
 // One configuration: drive FF read() and SW tex_sample_sw() over a grid of
 // (u, v, lod) and assert bit-equality.
 void check_config(uint8_t* pool, uint32_t fmt, uint32_t mag_filter, uint32_t mip_linear,
-                  uint32_t wrapu, uint32_t wrapv, uint32_t w0, uint32_t h0) {
+                  uint32_t wrapu, uint32_t wrapv, uint32_t w0, uint32_t h0,
+                  uint32_t reduce = VX_TEX_REDUCTION_AVG) {
   uint8_t* base = pool;
   uint32_t mip_off[VX_TEX_LOD_MAX + 1] = {0};
   uint32_t num_lods = 0;
   build_texture(base, w0, h0, fmt, mip_off, &num_lods);
 
   uint32_t wrap   = (wrapv << 16) | wrapu;
-  uint32_t filter = mag_filter | (mip_linear ? VX_TEX_FILTER_MIP_LINEAR : 0u);
+  uint32_t filter = mag_filter | (mip_linear ? VX_TEX_FILTER_MIP_LINEAR : 0u)
+                  | (reduce << VX_TEX_FILTER_REDUCTION_SHIFT);
 
   // FF model state via TexDCRS.
   TexDCRS dcrs;
@@ -151,23 +153,24 @@ void check_config(uint8_t* pool, uint32_t fmt, uint32_t mag_filter, uint32_t mip
   }
   if (mismatches) {
     g_fail += mismatches;
-    printf("FAIL %ux%u %-8s magf=%u mipL=%u wrap=(%u,%u): %u/%u mismatches\n",
-           w0, h0, fmt_name(fmt), mag_filter, mip_linear, wrapu, wrapv, mismatches, checked);
+    printf("FAIL %ux%u %-8s magf=%u mipL=%u wrap=(%u,%u) reduce=%u: %u/%u mismatches\n",
+           w0, h0, fmt_name(fmt), mag_filter, mip_linear, wrapu, wrapv, reduce, mismatches,
+           checked);
   }
 }
 
 // One axis's taps against the Vulkan texel selection, evaluated in double: the
 // unnormalized coordinate (minus half a texel under linear), floor for the taps
 // and their weight, then the integer wrap -- repeat as mod, mirrored repeat as
-// (n-1) - mirror((i mod 2n) - n), clamp to [0,n), border when outside. Samples
-// within a hair of a tap or weight boundary are skipped: the fixed-point weight
-// truncates, and the mirror fold is one coordinate ULP short of exact. Clamp
-// folds the coordinate into [-1,2), so its weight is checked only where the two
-// taps differ.
+// (n-1) - mirror((i mod 2n) - n), mirror-clamp as clamp(mirror(i)), clamp to
+// [0,n), border when outside. Samples within a hair of a tap or weight boundary
+// are skipped: the fixed-point weight truncates, and the mirror fold is one
+// coordinate ULP short of exact. Clamp folds the coordinate into [-1,2), so its
+// weight is checked only where the two taps differ.
 void check_axis_reference() {
   const uint32_t dims[] = { 1, 2, 5, 8, 37, 64, 1000 };
   const uint32_t wraps[] = { VX_TEX_WRAP_CLAMP, VX_TEX_WRAP_REPEAT, VX_TEX_WRAP_MIRROR,
-                             VX_TEX_WRAP_BORDER };
+                             VX_TEX_WRAP_BORDER, VX_TEX_WRAP_MIRROR_CLAMP };
   const double one = (double)(1 << TEX_FXD_FRAC);
   uint32_t fails = 0, checked = 0;
   uint32_t seed = 12345;
@@ -191,6 +194,10 @@ void check_axis_reference() {
             case VX_TEX_WRAP_MIRROR: {
               const int64_t m = (((i % (2 * nn)) + 2 * nn) % (2 * nn)) - nn;
               return (uint32_t)((nn - 1) - ((m >= 0) ? m : -(1 + m)));
+            }
+            case VX_TEX_WRAP_MIRROR_CLAMP: {
+              const int64_t m = (i >= 0) ? i : -(1 + i);
+              return (uint32_t)((m >= nn) ? nn - 1 : m);
             }
             default:
               *b = (wrap == VX_TEX_WRAP_BORDER) && (i < 0 || i >= nn);
@@ -231,6 +238,109 @@ void check_axis_reference() {
     printf("AXIS TAPS: FAILED (%u/%u mismatches against the Vulkan selection)\n", fails, checked);
   } else {
     printf("AXIS TAPS: PASSED (%u samples match the Vulkan texel selection)\n", checked);
+  }
+}
+
+// Min/max reduction against its definition: for a bilinear sample of an
+// A8R8G8B8 texture, the per-channel min or max over the texels whose weight is
+// not zero, the taps found in double precision. Samples whose weight would round
+// to zero in the fixed-point blend are skipped.
+void check_reduce_reference(uint8_t* pool) {
+  const uint32_t w = 13, h = 7;
+  uint32_t* tex = (uint32_t*)pool;
+  uint32_t seed = 777;
+  auto rnd = [&]() { seed = seed * 1664525u + 1013904223u; return seed; };
+  for (uint32_t i = 0; i < w * h; ++i) {
+    tex[i] = rnd();
+  }
+  gfx_sw::TexState st{};
+  st.base   = (uintptr_t)pool;
+  st.width  = w;
+  st.height = h;
+  st.format = VX_TEX_FORMAT_A8R8G8B8;
+  st.wrap   = (VX_TEX_WRAP_CLAMP << 16) | VX_TEX_WRAP_CLAMP;
+  const double one = (double)(1 << TEX_FXD_FRAC);
+  uint32_t fails = 0, checked = 0;
+  for (uint32_t mode : { (uint32_t)VX_TEX_REDUCTION_MIN, (uint32_t)VX_TEX_REDUCTION_MAX }) {
+    st.filter = VX_TEX_FILTER_BILINEAR | (mode << VX_TEX_FILTER_REDUCTION_SHIFT);
+    for (int k = 0; k < 3000; ++k) {
+      const int32_t u = (int32_t)(rnd() % (uint32_t)(1 << TEX_FXD_FRAC));
+      const int32_t v = (int32_t)(rnd() % (uint32_t)(1 << TEX_FXD_FRAC));
+      const double x = u / one * w - 0.5, y = v / one * h - 0.5;
+      const double fx = x - std::floor(x), fy = y - std::floor(y);
+      if (fx < 1.0 / 256 || fy < 1.0 / 256) {
+        continue;
+      }
+      auto cl = [](int64_t i, uint32_t n) { return (uint32_t)(i < 0 ? 0 : (i >= n ? n - 1 : i)); };
+      const uint32_t x0 = cl((int64_t)std::floor(x), w), x1 = cl((int64_t)std::floor(x) + 1, w);
+      const uint32_t y0 = cl((int64_t)std::floor(y), h), y1 = cl((int64_t)std::floor(y) + 1, h);
+      const uint32_t t[4] = { tex[x0 + y0 * w], tex[x1 + y0 * w], tex[x0 + y1 * w], tex[x1 + y1 * w] };
+      uint32_t want = 0;
+      for (uint32_t c = 0; c < 32; c += 8) {
+        uint32_t r = (t[0] >> c) & 0xff;
+        for (uint32_t i = 1; i < 4; ++i) {
+          const uint32_t b = (t[i] >> c) & 0xff;
+          r = (mode == VX_TEX_REDUCTION_MIN) ? (b < r ? b : r) : (b > r ? b : r);
+        }
+        want |= r << c;
+      }
+      const uint32_t got = gfx_sw::tex_sample_sw(st, u, v, 0);
+      ++checked;
+      if (got != want && ++fails <= 4) {
+        printf("  REDUCE MISMATCH mode=%u u=%d v=%d: got=%08x want=%08x\n", mode, u, v, got, want);
+      }
+    }
+  }
+  if (fails) {
+    g_fail += fails;
+    printf("MINMAX REDUCTION: FAILED (%u/%u mismatches)\n", fails, checked);
+  } else {
+    printf("MINMAX REDUCTION: PASSED (%u samples match the per-channel min/max)\n", checked);
+  }
+}
+
+// Seamless cube filtering: six 4x4 faces, each one solid colour. A bilinear
+// sample on the edge between two faces blends them half and half, and one at a
+// cube corner gives the average of the three faces meeting there; a sample in a
+// face's middle is that face's colour.
+void check_cube_seamless(uint8_t* pool) {
+  const uint32_t n = 4;
+  const uint32_t face_red[6] = { 20, 60, 100, 140, 180, 220 };
+  uint32_t* tex = (uint32_t*)pool;
+  for (uint32_t f = 0; f < 6; ++f) {
+    for (uint32_t i = 0; i < n * n; ++i) {
+      tex[f * n * n + i] = 0xff000000u | (face_red[f] << 16);
+    }
+  }
+  gfx_sw::TexState st{};
+  st.base = (uintptr_t)pool;
+  st.width = n;
+  st.height = n;
+  st.format = VX_TEX_FORMAT_A8R8G8B8;
+  st.filter = VX_TEX_FILTER_BILINEAR | GFX_SW_TEX_FILTER_SEAMLESS;
+  st.layer_stride = n * n * 4;
+  st.wrap = (VX_TEX_WRAP_CLAMP << 16) | VX_TEX_WRAP_CLAMP;
+  struct { float d[3]; double want; const char* what; } probes[] = {
+    { { 1.0f, 0.1f, 0.2f }, 20.0, "+X middle" },
+    { { 1.0f, 0.0f, 1.0f }, (20.0 + 180.0) / 2, "+X/+Z edge" },
+    { { -1.0f, 1.0f, 0.0f }, (60.0 + 100.0) / 2, "-X/+Y edge" },
+    { { 1.0f, 1.0f, 1.0f }, (20.0 + 100.0 + 180.0) / 3, "+X+Y+Z corner" },
+    { { -1.0f, -1.0f, -1.0f }, (60.0 + 140.0 + 220.0) / 3, "-X-Y-Z corner" },
+  };
+  uint32_t fails = 0;
+  for (const auto& p : probes) {
+    const uint32_t got = (gfx_sw::tex_sample_sw_cube(st, p.d[0], p.d[1], p.d[2], 0,
+                                                     VX_TEX_FILTER_BILINEAR) >> 16) & 0xff;
+    if (std::fabs((double)got - p.want) > 1.5) {
+      ++fails;
+      printf("  CUBE MISMATCH %s: got %u want %.1f\n", p.what, got, p.want);
+    }
+  }
+  if (fails) {
+    g_fail += fails;
+    printf("CUBE SEAMLESS: FAILED (%u probes)\n", fails);
+  } else {
+    printf("CUBE SEAMLESS: PASSED (edges blend across faces, corners average three)\n");
   }
 }
 
@@ -548,10 +658,14 @@ int main() {
           for (uint32_t wv : wraps) {
             check_config(pool, fmt, magf, mipL, wu, wv, 64, 32);
             check_config(pool, fmt, magf, mipL, wu, wv, 37, 23);
-            configs += 2;
+            check_config(pool, fmt, magf, mipL, wu, wv, 37, 23, VX_TEX_REDUCTION_MIN);
+            check_config(pool, fmt, magf, mipL, wu, wv, 37, 23, VX_TEX_REDUCTION_MAX);
+            configs += 4;
           }
 
   check_axis_reference();
+  check_reduce_reference(pool);
+  check_cube_seamless(pool);
 
   check_npot(pool);
   check_persp_wrap(pool);

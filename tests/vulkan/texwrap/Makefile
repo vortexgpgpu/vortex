@@ -1,9 +1,9 @@
 # Copyright © 2026  Vortex GPGPU
 # SPDX-License-Identifier: MIT
 #
-# Sampler address-mode test for the vortexpipe driver: CLAMP, REPEAT and
-# MIRROR on the fixed-function texture unit, BORDER on the software sampler,
-# all four against one texture so two of them agreeing is a failure.
+# Sampler address-mode test for the vortexpipe driver: CLAMP, REPEAT, MIRROR,
+# BORDER and MIRROR_CLAMP on the fixed-function texture unit, all against one
+# texture so two of them agreeing is a failure.
 #
 #   make            -- build the host binary + SPIR-V
 #   make run-simx   -- run the cases via vortexpipe on SimX

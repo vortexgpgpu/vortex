@@ -76,6 +76,9 @@ public:
     // is, is not fetched: it cannot change the result.
     uint32_t                   need_mask = 0;
     uint32_t                   lod_frac = 0;    // weight between the two levels
+    // The reduction mode the request was issued under, as the unit carries it
+    // with the request rather than reading the DCR when the texels return.
+    uint32_t                   reduction = 0;
     bool                       gather   = false; // textureGather: four taps' channel
     uint32_t                   gather_comp = 0;
     uint32_t                   filtered = 0;    // result after apply_filter
@@ -223,6 +226,7 @@ private:
                                             tap_filter)
                  : l.trq[0];
       l.levels   = mip_linear ? 2u : 1u;
+      l.reduction = sampler_.reduction(s.req.stage);
       l.need_mask = l.gather ? 0xfu : 0u;
       for (uint32_t k = 0; !l.gather && k < l.levels; ++k) {
         if (k == 1 && l.lod_frac == 0) {
@@ -406,13 +410,19 @@ private:
         l.filtered = gfx_tex::tex_apply_gather(l.trq[0], &l.texels[0], l.gather_comp);
         continue;
       }
-      const uint32_t c0 = TextureSampler::apply_filter(l.trq[0], &l.texels[0]);
+      const uint32_t mode = l.reduction;
+      auto level = [&](uint32_t k) {
+        return mode ? gfx_tex::tex_apply_reduce(l.trq[k], &l.texels[k * 4], mode)
+                    : TextureSampler::apply_filter(l.trq[k], &l.texels[k * 4]);
+      };
+      const uint32_t c0 = level(0);
       if (l.levels == 1) {
         l.filtered = c0;
         continue;
       }
-      const uint32_t c1 = TextureSampler::apply_filter(l.trq[1], &l.texels[4]);
-      l.filtered = TexLodLerp(c0, c1, l.lod_frac);
+      const uint32_t c1 = level(1);
+      l.filtered = mode ? gfx_tex::TexLodReduce(c0, c1, l.lod_frac, mode)
+                        : TexLodLerp(c0, c1, l.lod_frac);
     }
   }
 

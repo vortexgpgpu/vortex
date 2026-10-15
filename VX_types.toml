@@ -194,6 +194,12 @@ VX_TEX_FILTER_BILINEAR = 1
 VX_TEX_FILTER_MIP_NONE   = 0
 VX_TEX_FILTER_MIP_LINEAR = 2
 VX_TEX_LOD_FRAC_BITS     = 8
+# Reduction, FILTER[9:8]: the sample is the weighted average of its texels, or
+# the per-channel minimum or maximum of those whose weight is not zero.
+VX_TEX_FILTER_REDUCTION_SHIFT = 8
+VX_TEX_REDUCTION_AVG = 0
+VX_TEX_REDUCTION_MIN = 1
+VX_TEX_REDUCTION_MAX = 2
 
 # Fields of the vx_tex lod operand above the level: LANE_FILTER makes the
 # lane's BILINEAR and MIP_LINEAR bits replace the stage's FILTER (the shader
@@ -217,6 +223,9 @@ VX_TEX_WRAP_MIRROR = 2
 # VX_DCR_TEX_BORDER instead of a texel. The address still clamps: the tap is
 # fetched and then discarded, so it only has to be one the texture owns.
 VX_TEX_WRAP_BORDER = 3
+# Mirror once about 0, then clamp to the edge: texel -1-i below 0, the last
+# texel past it.
+VX_TEX_WRAP_MIRROR_CLAMP = 4
 
 VX_TEX_FORMAT_A8R8G8B8 = 0
 VX_TEX_FORMAT_R5G6B5   = 1

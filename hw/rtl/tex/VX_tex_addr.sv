@@ -17,10 +17,10 @@
 
 // Texel addressing in texel space, for any texture size. Each axis's
 // coordinate is folded by its wrap in normalized space -- repeat and mirror
-// into [0,1), clamp and border into [-1,2) -- then scaled by the level's
-// dimension, with bilinear moving it half a texel down. The two taps are
-// floor(x) and floor(x)+1, each wrapped back into [0,dim) as an integer, and
-// the fraction of x is the weight of the second.
+// into [0,1), clamp, border and mirror-clamp into [-1,2) -- then scaled by the
+// level's dimension, with bilinear moving it half a texel down. The two taps
+// are floor(x) and floor(x)+1, each wrapped back into [0,dim) as an integer,
+// and the fraction of x is the weight of the second.
 module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter REQ_TAGW    = 1,
@@ -153,7 +153,7 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][1:0] texel_border;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] blends;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] border_mask;
-    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0] row1_zero, row1_same;
+    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0] row1_zero, row1_same, row1_down;
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_taps
         for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
@@ -168,12 +168,16 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                     wire signed [IDX_W-1:0] it = i0 + IDX_W'(t);
                     wire below = (it < 0);
                     wire above = (it >= dim);
+                    // Mirrored about 0 a tap below -dim lands past the edge.
+                    wire far_below = (it < -dim);
                     reg [IDX_W-1:0] wrapped;
                     always @(*) begin
                         if (~below && ~above) begin
                             wrapped = it;
                         end else if (wraps_s0[j] == `VX_TEX_WRAP_REPEAT) begin
                             wrapped = below ? (it + dim) : (it - dim);
+                        end else if (wraps_s0[j] == `VX_TEX_WRAP_MIRROR_CLAMP && below) begin
+                            wrapped = far_below ? (dim - IDX_W'(1)) : ~it;
                         end else begin
                             wrapped = below ? IDX_W'(0) : (dim - IDX_W'(1));
                         end
@@ -197,10 +201,12 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
             assign border_mask[i][k][3] = texel_border[i][k][0][1] || texel_border[i][k][1][1];
 
             // The second row is the first one plus a pitch, the first one again
-            // (an edge clamped both taps onto it), or row 0 (repeat wrapped it),
-            // so it needs no multiplier of its own.
+            // (an edge clamped both taps onto it), row 0 (repeat wrapped it), or
+            // the first one less a pitch (mirror-clamp below 0 runs the rows
+            // downward), so it needs no multiplier of its own.
             assign row1_zero[i][k] = (texel[i][k][1][1] == TEXEL_W'(0));
             assign row1_same[i][k] = (texel[i][k][1][1] == texel[i][k][1][0]);
+            assign row1_down[i][k] = (texel[i][k][1][1] + TEXEL_W'(1) == texel[i][k][1][0]);
         end
     end
 
@@ -210,7 +216,7 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [`TEX_LGSTRIDE_BITS-1:0] log_stride_s1;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][1:0][TEXEL_W-1:0] texel_s1;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][TEX_DIM_W-1:0] width_s1;
-    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0] row1_zero_s1, row1_same_s1;
+    wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0] row1_zero_s1, row1_same_s1, row1_down_s1;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] blends_s1;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] border_mask_s1;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] mip_addr_s1;
@@ -225,14 +231,14 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (TEX_FILTER_BITS + `VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (4 * TEXEL_W + TEX_DIM_W + 2 + 2 * `TEX_BLEND_FRAC + 4 + W_ADDR_BITS))),
+        .DATAW  (1 + NUM_LANES + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (TEX_FILTER_BITS + `VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (4 * TEXEL_W + TEX_DIM_W + 3 + 2 * `TEX_BLEND_FRAC + 4 + W_ADDR_BITS))),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_s0, mask_s0, filter_s0, log_stride_s0, req_tag_s0, texel,    width_s0, row1_zero,    row1_same,    blends,    border_mask,    mip_addr_s0, lodfrac_s0}),
-        .data_out ({valid_s1, mask_s1, filter_s1, log_stride_s1, req_tag_s1, texel_s1, width_s1, row1_zero_s1, row1_same_s1, blends_s1, border_mask_s1, mip_addr_s1, lodfrac_s1})
+        .data_in  ({valid_s0, mask_s0, filter_s0, log_stride_s0, req_tag_s0, texel,    width_s0, row1_zero,    row1_same,    row1_down,    blends,    border_mask,    mip_addr_s0, lodfrac_s0}),
+        .data_out ({valid_s1, mask_s1, filter_s1, log_stride_s1, req_tag_s1, texel_s1, width_s1, row1_zero_s1, row1_same_s1, row1_down_s1, blends_s1, border_mask_s1, mip_addr_s1, lodfrac_s1})
     );
 
     // stage 2: byte offsets of the four taps
@@ -244,7 +250,9 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
             wire [PITCH_W-1:0] pitch = PITCH_W'(width_s1[i][k]) << log_stride_s1;
             wire [31:0] row0 = 32'(texel_s1[i][k][1][0]) * 32'(pitch);
             wire [31:0] row1 = row1_zero_s1[i][k] ? 32'(0)
-                             : (row1_same_s1[i][k] ? row0 : (row0 + 32'(pitch)));
+                             : row1_same_s1[i][k] ? row0
+                             : row1_down_s1[i][k] ? (row0 - 32'(pitch))
+                             : (row0 + 32'(pitch));
             wire [31:0] col0 = 32'(texel_s1[i][k][0][0]) << log_stride_s1;
             wire [31:0] col1 = 32'(texel_s1[i][k][0][1]) << log_stride_s1;
             assign addr[i][k][0] = row0 + col0;

@@ -8,6 +8,11 @@
  * full-screen quad on a 32x32 target. The fragment shader samples every
  * face through a direction vector and checks all six colours in-shader,
  * writing green on match / red on mismatch.
+ *
+ *   cube_faces     -- NEAREST, each face's centre
+ *   cube_seamless  -- LINEAR on face edges and a corner: a cube filters
+ *                     seamlessly, so an edge blends its two faces half and half
+ *                     and a corner averages the three that meet there
  */
 
 #include <vulkan/vulkan.h>
@@ -83,6 +88,7 @@ struct texcase {
    const void *data;
    VkDeviceSize bytes;
    VkImageCreateFlags flags;
+   VkFilter    filter;
 };
 
 /* Six solid faces, mirrored by the fragment shader. */
@@ -109,7 +115,10 @@ main(int argc, char **argv)
    struct texcase cases[] = {
       { "cube_faces", "cube_faces.frag.spv", VK_FORMAT_R8G8B8A8_UNORM,
         4, 4, 6, VK_IMAGE_VIEW_TYPE_CUBE, face_texels, sizeof(face_texels),
-        VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT },
+        VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT, VK_FILTER_NEAREST },
+      { "cube_seamless", "cube_seamless.frag.spv", VK_FORMAT_R8G8B8A8_UNORM,
+        4, 4, 6, VK_IMAGE_VIEW_TYPE_CUBE, face_texels, sizeof(face_texels),
+        VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT, VK_FILTER_LINEAR },
    };
    const uint32_t ncases = (uint32_t)(sizeof(cases) / sizeof(cases[0]));
 
@@ -254,7 +263,7 @@ main(int argc, char **argv)
    CHECK(vkAllocateMemory(dev, &bmai, NULL, &bmem));
    CHECK(vkBindBufferMemory(dev, rb, bmem, 0));
 
-   /* --- shared vertex module, layout, sampler, command pool -------- */
+   /* --- shared vertex module, layout, command pool ------------------- */
    VkShaderModule vs = load_module(dev, vs_path);
    if (!vs) return 1;
 
@@ -278,17 +287,6 @@ main(int argc, char **argv)
    VkPipelineLayout pl;
    CHECK(vkCreatePipelineLayout(dev, &plci, NULL, &pl));
 
-   VkSamplerCreateInfo sci = {
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-      .magFilter = VK_FILTER_NEAREST, .minFilter = VK_FILTER_NEAREST,
-      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-   };
-   VkSampler sampler;
-   CHECK(vkCreateSampler(dev, &sci, NULL, &sampler));
-
    VkCommandPoolCreateInfo cmpci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -308,6 +306,17 @@ main(int argc, char **argv)
    unsigned failed = 0;
    for (uint32_t ci = 0; ci < ncases; ci++) {
       const struct texcase *c = &cases[ci];
+
+      VkSamplerCreateInfo sci = {
+         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+         .magFilter = c->filter, .minFilter = c->filter,
+         .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+         .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+         .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      };
+      VkSampler sampler;
+      CHECK(vkCreateSampler(dev, &sci, NULL, &sampler));
 
       VkImageCreateInfo tci = {
          .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -542,11 +551,11 @@ main(int argc, char **argv)
       vkDestroyImageView(dev, texview, NULL);
       vkFreeMemory(dev, tmem, NULL);
       vkDestroyImage(dev, tex, NULL);
+      vkDestroySampler(dev, sampler, NULL);
    }
 
    /* cleanup (best-effort; a smoke test exits anyway) */
    vkDestroyCommandPool(dev, cp, NULL);
-   vkDestroySampler(dev, sampler, NULL);
    vkDestroyPipelineLayout(dev, pl, NULL);
    vkDestroyDescriptorSetLayout(dev, dsl, NULL);
    vkDestroyShaderModule(dev, vs, NULL);

@@ -60,6 +60,7 @@ module VX_tex_dcr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                 end
                 `VX_DCR_TEX_FILTER: begin
                     dcrs_n.filter = write_data[TEX_FILTER_BITS-1:0];
+                    dcrs_n.reduction = write_data[`VX_TEX_FILTER_REDUCTION_SHIFT +: 2];
                 end
                 `VX_DCR_TEX_WRAP: begin
                     dcrs_n.wraps[0] = write_data[0  +: TEX_WRAP_BITS];

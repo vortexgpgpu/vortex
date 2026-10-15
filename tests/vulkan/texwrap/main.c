@@ -7,15 +7,12 @@
  * A 4x4 texture with a distinct value per column, sampled at three fixed
  * coordinates -- one below [0,1), one above it, one inside. Which texel each
  * out-of-range probe returns is decided entirely by the address mode, so the
- * three modes give three different answers and the expected triples are listed
- * here rather than judged in the shader.
+ * modes give different answers and the expected triples are listed here
+ * rather than judged in the shader.
  *
- * CLAMP, REPEAT and MIRROR run on the fixed-function texture unit: the texture
- * is power-of-two, single-level and 8-bit, so the driver's run-time routing
- * leaves them on the hardware path. BORDER is routed to the software sampler
- * (the hardware unit has no border colour), which is why it is here -- the four
- * modes sharing one texture is what makes two of them returning the same texel
- * a visible failure rather than an invisible one.
+ * All five run on the fixed-function texture unit (an 8-bit format). Sharing one
+ * texture is what makes two modes returning the same texel a visible failure
+ * rather than an invisible one.
  */
 
 #include <vulkan/vulkan.h>
@@ -111,12 +108,13 @@ fill_texture(void)
  * definition rather than from a previous run, so a wrong implementation cannot
  * become the reference:
  *
- *   probe        texel index    CLAMP   REPEAT   MIRROR   BORDER
- *   u = -0.375      -2          col 0   col 2    col 1    border
- *   u =  1.375       5          col 3   col 1    col 2    border
- *   u =  0.625       2          col 2   col 2    col 2    col 2
+ *   probe        texel index    CLAMP   REPEAT   MIRROR   BORDER   MIRROR_CLAMP
+ *   u = -0.375      -2          col 0   col 2    col 1    border   col 1
+ *   u =  1.375       5          col 3   col 1    col 2    border   col 3
+ *   u =  0.625       2          col 2   col 2    col 2    col 2    col 2
  *
  * MIRROR folds index i over the period 2N: i = -2 lands on 1 and i = 5 on 2.
+ * MIRROR_CLAMP mirrors once about 0 (-2 -> 1) and clamps past the end.
  * The border colour is opaque white, so its red channel reads 255.
  */
 struct wrapcase {
@@ -139,6 +137,8 @@ main(int argc, char **argv)
         { 64, 128, 128 } },
       { "border", VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
         { 255, 255, 128 } },
+      { "mirror_clamp", VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE,
+        { 64, 192, 128 } },
    };
    const uint32_t ncases = (uint32_t)(sizeof(cases) / sizeof(cases[0]));
 
@@ -608,6 +608,6 @@ main(int argc, char **argv)
       printf("FAILED (%u case(s))\n", failed);
       return 1;
    }
-   printf("PASSED (four address modes, four distinct answers)\n");
+   printf("PASSED (five address modes, five distinct answers)\n");
    return 0;
 }

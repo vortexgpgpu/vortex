@@ -28,6 +28,8 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     input wire [TEX_FORMAT_BITS-1:0]   req_format,
     // Per lane: gather enable, and the component (0..3 = R,G,B,A) it returns.
     input wire [NUM_LANES-1:0][2:0]     req_gather,
+    // VX_TEX_REDUCTION_*: the weighted average, or the min/max of the taps.
+    input wire [1:0]                    req_reduction,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] req_blends,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] req_border,
     input wire [31:0]                   req_bordercolor,
@@ -104,15 +106,59 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         .data_out ({gather_en_s, gather_texel_s})
     );
 
+    wire [1:0] reduction_s0;
+
     VX_pipe_register #(
-        .DATAW  (1 + REQ_TAGW + (NUM_LANES * (LODFRAC_W + TEX_NUM_LEVELS * (2 * `TEX_BLEND_FRAC + 4 * 32)))),
+        .DATAW  (1 + REQ_TAGW + 2 + (NUM_LANES * (LODFRAC_W + TEX_NUM_LEVELS * (2 * `TEX_BLEND_FRAC + 4 * 32)))),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid, req_tag,    req_blends,    req_lodfrac, sel_texels}),
-        .data_out ({valid_s0,  req_tag_s0, req_blends_s0, lodfrac_s0,  fmt_texels_s0})
+        .data_in  ({req_valid, req_tag,    req_reduction, req_blends,    req_lodfrac, sel_texels}),
+        .data_out ({valid_s0,  req_tag_s0, reduction_s0,  req_blends_s0, lodfrac_s0,  fmt_texels_s0})
+    );
+
+    // Min/max reduction: per channel, over the taps whose blend weight is not
+    // zero -- tap 0 always, tap 1 with a u weight, tap 2 with a v weight, tap 3
+    // with both -- then over the two levels when the level weight is not zero.
+    // It runs beside the blends and joins the result at the end, one register
+    // later than gather starts.
+    function automatic [31:0] reduce4x8(input [31:0] a, input [31:0] b, input is_min);
+        for (integer c = 0; c < 4; ++c) begin
+            reduce4x8[c*8 +: 8] = ((a[c*8 +: 8] < b[c*8 +: 8]) == is_min) ? a[c*8 +: 8] : b[c*8 +: 8];
+        end
+    endfunction
+
+    wire [NUM_LANES-1:0][31:0] reduced_texel, reduced_texel_s;
+    wire reduce_en = (reduction_s0 != 2'(`VX_TEX_REDUCTION_AVG));
+    wire reduce_min = (reduction_s0 == 2'(`VX_TEX_REDUCTION_MIN));
+    wire reduce_en_s;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_reduce
+        wire [TEX_NUM_LEVELS-1:0][31:0] level_texel;
+        for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
+            wire has_u = (req_blends_s0[i][k][0] != '0);
+            wire has_v = (req_blends_s0[i][k][1] != '0);
+            wire [31:0] t01 = has_u ? reduce4x8(fmt_texels_s0[i][k][0], fmt_texels_s0[i][k][1], reduce_min)
+                                    : fmt_texels_s0[i][k][0];
+            wire [31:0] t23 = has_u ? reduce4x8(fmt_texels_s0[i][k][2], fmt_texels_s0[i][k][3], reduce_min)
+                                    : fmt_texels_s0[i][k][2];
+            assign level_texel[k] = has_v ? reduce4x8(t01, t23, reduce_min) : t01;
+        end
+        assign reduced_texel[i] = (lodfrac_s0[i] != '0) ? reduce4x8(level_texel[0], level_texel[1], reduce_min)
+                                                        : level_texel[0];
+    end
+
+    VX_shift_register #(
+        .DATAW  (1 + NUM_LANES * 32),
+        .DEPTH  (GATHER_DELAY - 1),
+        .RESETW (0)
+    ) reduce_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall_out),
+        .data_in  ({reduce_en,   reduced_texel}),
+        .data_out ({reduce_en_s, reduced_texel_s})
     );
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_tex_lerp_U
@@ -210,7 +256,8 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                 .out  (filtered[i][j*8 +: 8])
             );
         end
-        assign rsp_data[i] = gather_en_s[i] ? gather_texel_s[i] : filtered[i];
+        assign rsp_data[i] = gather_en_s[i] ? gather_texel_s[i]
+                           : (reduce_en_s ? reduced_texel_s[i] : filtered[i]);
     end
 
     assign stall_out = rsp_valid && ~rsp_ready;

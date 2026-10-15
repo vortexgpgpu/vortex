@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * Reports what three probe coordinates sampled, rather than judging them: the
- * host holds the expected triple for each address mode, so all four modes are
+ * host holds the expected triple for each address mode, so all the modes are
  * compared against one another in one place and two modes returning the same
  * answer is visible as such.
  *

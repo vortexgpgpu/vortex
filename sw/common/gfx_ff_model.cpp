@@ -72,20 +72,23 @@ uint32_t TextureSampler::apply_filter(const TexelRequest& req, const uint32_t te
 }
 
 uint32_t TextureSampler::read(uint32_t stage, int32_t u, int32_t v, uint32_t lod) const {
+  const uint32_t mode = this->reduction(stage);
   auto sample_lod = [&](uint32_t l) -> uint32_t {
     auto req = this->compute_request(stage, u, v, l);
     uint32_t texels[4] = {0, 0, 0, 0};
     uint32_t count = (req.filter == VX_TEX_FILTER_BILINEAR) ? 4 : 1;
     mem_cb_(texels, req.addr, req.stride, count, cb_arg_);
-    return apply_filter(req, texels);
+    return mode ? gfx_tex::tex_apply_reduce(req, texels, mode) : apply_filter(req, texels);
   };
   // trilinear: `lod` is fixed-point — sample the two bracketing
-  // mips and blend by the fractional part (lod1 clamped to VX_TEX_LOD_MAX).
+  // mips and blend by the fractional part, or min/max them under a reduction
+  // (lod1 clamped to VX_TEX_LOD_MAX).
   if (this->mip_linear(stage)) {
     uint32_t li   = lod >> VX_TEX_LOD_FRAC_BITS;
     uint32_t lj   = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
     uint32_t frac = lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1);
-    return TexLodLerp(sample_lod(li), sample_lod(lj), frac);
+    return mode ? TexLodReduce(sample_lod(li), sample_lod(lj), frac, mode)
+                : TexLodLerp(sample_lod(li), sample_lod(lj), frac);
   }
   return sample_lod(lod);
 }

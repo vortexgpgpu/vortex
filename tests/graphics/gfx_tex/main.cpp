@@ -93,6 +93,8 @@ bool        border_mode    = false;
 bool        lanes_mode     = false;
 // -G comp: textureGather of channel comp, checked against the software gather.
 int         gather_comp    = -1;
+// -m mode: the stage's reduction (VX_TEX_REDUCTION_*), checked under -a.
+uint32_t    reduction      = VX_TEX_REDUCTION_AVG;
 // -c WxH: sample the top-left WxH texels of the image, any size.
 uint32_t    crop_width     = 0;
 uint32_t    crop_height    = 0;
@@ -107,12 +109,12 @@ vx_buffer_h src_buffer  = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test (v2 KMU)." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-r reference] [-s scale] [-l lod] [-w wrap] [-f format] [-g filter] [-B border] [-a lanes] [-G gather comp] [-c WxH crop] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-r reference] [-s scale] [-l lod] [-w wrap] [-f format] [-g filter] [-B border] [-a lanes] [-G gather comp] [-c WxH crop] [-m reduction] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "i:o:k:w:f:g:s:l:r:BaG:c:h?")) != -1) {
+  while ((c = getopt(argc, argv, "i:o:k:w:f:g:s:l:r:BaG:c:m:h?")) != -1) {
     switch (c) {
     case 'i': input_file = optarg; break;
     case 'o': output_file = optarg; break;
@@ -136,6 +138,7 @@ static void parse_args(int argc, char **argv) {
     case 'B': border_mode = true; wrap = VX_TEX_WRAP_BORDER; break;
     case 'a': lanes_mode = true; break;
     case 'G': gather_comp = atoi(optarg) & 3; break;
+    case 'm': reduction = (uint32_t)atoi(optarg) & 3u; break;
     case 'c':
       if (sscanf(optarg, "%ux%u", &crop_width, &crop_height) != 2 || !crop_width || !crop_height) {
         std::cout << "Error: -c takes WxH" << std::endl;
@@ -148,6 +151,10 @@ static void parse_args(int argc, char **argv) {
   }
   if ((lanes_mode || gather_comp >= 0) && format != VX_TEX_FORMAT_A8R8G8B8) {
     std::cout << "Error: -a and -G sample an A8R8G8B8 texture" << std::endl;
+    exit(1);
+  }
+  if (reduction != VX_TEX_REDUCTION_AVG && !lanes_mode) {
+    std::cout << "Error: -m is checked against the software sampler; it takes -a" << std::endl;
     exit(1);
   }
   if (crop_width && !(lanes_mode || gather_comp >= 0)) {
@@ -304,7 +311,8 @@ int main(int argc, char *argv[]) {
   const bool bilinear_taps = (filter == VX_TEX_FILTER_BILINEAR || filter == 4 || filter == 5);
   const bool unit_mip      = (filter == 3 || filter == 5);
   const bool shader_mip    = (filter == 2 || filter == 4);
-  uint32_t filter_dcr = bilinear_taps ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT;
+  uint32_t filter_dcr = (bilinear_taps ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT)
+                      | (reduction << VX_TEX_FILTER_REDUCTION_SHIFT);
   if (unit_mip) {
     filter_dcr |= VX_TEX_FILTER_MIP_LINEAR;
   }
@@ -468,6 +476,7 @@ int main(int argc, char *argv[]) {
     }
     st.logdim = (src_logheight << 16) | src_logwidth;
     st.format = VX_TEX_FORMAT_A8R8G8B8;
+    st.filter = reduction << VX_TEX_FILTER_REDUCTION_SHIFT;
     st.wrap = (wrap << 16) | wrap;
     st.width = src_width;
     st.height = src_height;
