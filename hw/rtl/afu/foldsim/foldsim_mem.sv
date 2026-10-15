@@ -47,7 +47,10 @@ module foldsim_mem #(
     parameter DEPTH  = 16,
     // The bank model: read slots, and a ring of 2^HLOG2 DRAM clocks.
     parameter SLOTS  = 32,
-    parameter HLOG2  = 9
+    parameter HLOG2  = 9,
+    // Token ends with registered have and done (foldsim_token): the cycle's
+    // finish starts at the endpoint's own registers, a host cycle later.
+    parameter STAGED = 0
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -150,21 +153,21 @@ module foldsim_mem #(
     wire [DATA_W/8-1:0] wstrb;
     wire [14:0]         have;
 
-    foldsim_token_in #(1)        t_awvalid (clk, reset, awvalid_valid, awvalid_ready, awvalid_bits, finish, have[0],  awvalid);
-    foldsim_token_in #(ADDR_W)   t_awaddr  (clk, reset, awaddr_valid,  awaddr_ready,  awaddr_bits,  finish, have[1],  awaddr);
-    foldsim_token_in #(ID_W)     t_awid    (clk, reset, awid_valid,    awid_ready,    awid_bits,    finish, have[2],  awid);
-    foldsim_token_in #(8)        t_awlen   (clk, reset, awlen_valid,   awlen_ready,   awlen_bits,   finish, have[3],  awlen);
-    foldsim_token_in #(1)        t_wvalid  (clk, reset, wvalid_valid,  wvalid_ready,  wvalid_bits,  finish, have[4],  wvalid);
-    foldsim_token_in #(DATA_W)   t_wdata   (clk, reset, wdata_valid,   wdata_ready,   wdata_bits,   finish, have[5],  wdata);
-    foldsim_token_in #(DATA_W/8) t_wstrb   (clk, reset, wstrb_valid,   wstrb_ready,   wstrb_bits,   finish, have[6],  wstrb);
-    foldsim_token_in #(1)        t_wlast   (clk, reset, wlast_valid,   wlast_ready,   wlast_bits,   finish, have[7],  wlast);
-    foldsim_token_in #(1)        t_arvalid (clk, reset, arvalid_valid, arvalid_ready, arvalid_bits, finish, have[8],  arvalid);
-    foldsim_token_in #(ADDR_W)   t_araddr  (clk, reset, araddr_valid,  araddr_ready,  araddr_bits,  finish, have[9],  araddr);
-    foldsim_token_in #(ID_W)     t_arid    (clk, reset, arid_valid,    arid_ready,    arid_bits,    finish, have[10], arid);
-    foldsim_token_in #(8)        t_arlen   (clk, reset, arlen_valid,   arlen_ready,   arlen_bits,   finish, have[11], arlen);
-    foldsim_token_in #(1)        t_rready  (clk, reset, rready_valid,  rready_ready,  rready_bits,  finish, have[12], rready);
-    foldsim_token_in #(1)        t_bready  (clk, reset, bready_valid,  bready_ready,  bready_bits,  finish, have[13], bready);
-    foldsim_token_in #(1)        t_treset  (clk, reset, treset_valid,  treset_ready,  treset_bits,  finish, have[14], treset);
+    foldsim_token_in #(1, STAGED)        t_awvalid (clk, reset, awvalid_valid, awvalid_ready, awvalid_bits, finish, have[0],  awvalid);
+    foldsim_token_in #(ADDR_W, STAGED)   t_awaddr  (clk, reset, awaddr_valid,  awaddr_ready,  awaddr_bits,  finish, have[1],  awaddr);
+    foldsim_token_in #(ID_W, STAGED)     t_awid    (clk, reset, awid_valid,    awid_ready,    awid_bits,    finish, have[2],  awid);
+    foldsim_token_in #(8, STAGED)        t_awlen   (clk, reset, awlen_valid,   awlen_ready,   awlen_bits,   finish, have[3],  awlen);
+    foldsim_token_in #(1, STAGED)        t_wvalid  (clk, reset, wvalid_valid,  wvalid_ready,  wvalid_bits,  finish, have[4],  wvalid);
+    foldsim_token_in #(DATA_W, STAGED)   t_wdata   (clk, reset, wdata_valid,   wdata_ready,   wdata_bits,   finish, have[5],  wdata);
+    foldsim_token_in #(DATA_W/8, STAGED) t_wstrb   (clk, reset, wstrb_valid,   wstrb_ready,   wstrb_bits,   finish, have[6],  wstrb);
+    foldsim_token_in #(1, STAGED)        t_wlast   (clk, reset, wlast_valid,   wlast_ready,   wlast_bits,   finish, have[7],  wlast);
+    foldsim_token_in #(1, STAGED)        t_arvalid (clk, reset, arvalid_valid, arvalid_ready, arvalid_bits, finish, have[8],  arvalid);
+    foldsim_token_in #(ADDR_W, STAGED)   t_araddr  (clk, reset, araddr_valid,  araddr_ready,  araddr_bits,  finish, have[9],  araddr);
+    foldsim_token_in #(ID_W, STAGED)     t_arid    (clk, reset, arid_valid,    arid_ready,    arid_bits,    finish, have[10], arid);
+    foldsim_token_in #(8, STAGED)        t_arlen   (clk, reset, arlen_valid,   arlen_ready,   arlen_bits,   finish, have[11], arlen);
+    foldsim_token_in #(1, STAGED)        t_rready  (clk, reset, rready_valid,  rready_ready,  rready_bits,  finish, have[12], rready);
+    foldsim_token_in #(1, STAGED)        t_bready  (clk, reset, bready_valid,  bready_ready,  bready_bits,  finish, have[13], bready);
+    foldsim_token_in #(1, STAGED)        t_treset  (clk, reset, treset_valid,  treset_ready,  treset_bits,  finish, have[14], treset);
 
     // ---- The pipe's state ----
     reg [31:0]   cycle;
@@ -219,17 +222,17 @@ module foldsim_mem #(
                    : ((~cur_r_valid | (rd_count != 0)) & (~cur_w_valid | (b_acked != b_given)));
     wire [10:0] done;
 
-    foldsim_token_out o_awready (clk, reset, awready_valid, awready_ready, ok, finish, done[0]);
-    foldsim_token_out o_wready  (clk, reset, wready_valid,  wready_ready,  ok, finish, done[1]);
-    foldsim_token_out o_arready (clk, reset, arready_valid, arready_ready, ok, finish, done[2]);
-    foldsim_token_out o_rvalid  (clk, reset, rvalid_valid,  rvalid_ready,  ok, finish, done[3]);
-    foldsim_token_out o_rdata   (clk, reset, rdata_valid,   rdata_ready,   ok, finish, done[4]);
-    foldsim_token_out o_rlast   (clk, reset, rlast_valid,   rlast_ready,   ok, finish, done[5]);
-    foldsim_token_out o_rid     (clk, reset, rid_valid,     rid_ready,     ok, finish, done[6]);
-    foldsim_token_out o_rresp   (clk, reset, rresp_valid,   rresp_ready,   ok, finish, done[7]);
-    foldsim_token_out o_bvalid  (clk, reset, bvalid_valid,  bvalid_ready,  ok, finish, done[8]);
-    foldsim_token_out o_bresp   (clk, reset, bresp_valid,   bresp_ready,   ok, finish, done[9]);
-    foldsim_token_out o_bid     (clk, reset, bid_valid,     bid_ready,     ok, finish, done[10]);
+    foldsim_token_out #(STAGED) o_awready (clk, reset, awready_valid, awready_ready, ok, finish, done[0]);
+    foldsim_token_out #(STAGED) o_wready  (clk, reset, wready_valid,  wready_ready,  ok, finish, done[1]);
+    foldsim_token_out #(STAGED) o_arready (clk, reset, arready_valid, arready_ready, ok, finish, done[2]);
+    foldsim_token_out #(STAGED) o_rvalid  (clk, reset, rvalid_valid,  rvalid_ready,  ok, finish, done[3]);
+    foldsim_token_out #(STAGED) o_rdata   (clk, reset, rdata_valid,   rdata_ready,   ok, finish, done[4]);
+    foldsim_token_out #(STAGED) o_rlast   (clk, reset, rlast_valid,   rlast_ready,   ok, finish, done[5]);
+    foldsim_token_out #(STAGED) o_rid     (clk, reset, rid_valid,     rid_ready,     ok, finish, done[6]);
+    foldsim_token_out #(STAGED) o_rresp   (clk, reset, rresp_valid,   rresp_ready,   ok, finish, done[7]);
+    foldsim_token_out #(STAGED) o_bvalid  (clk, reset, bvalid_valid,  bvalid_ready,  ok, finish, done[8]);
+    foldsim_token_out #(STAGED) o_bresp   (clk, reset, bresp_valid,   bresp_ready,   ok, finish, done[9]);
+    foldsim_token_out #(STAGED) o_bid     (clk, reset, bid_valid,     bid_ready,     ok, finish, done[10]);
 
     assign awready_bits = aw_ready;
     assign wready_bits  = w_ready;
