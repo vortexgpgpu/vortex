@@ -129,10 +129,16 @@ SRCS += $(DPI_DIR)/dpi_util.cpp $(DPI_DIR)/dpi_float.cpp
 SRCS += $(SRC_DIR)/processor.cpp
 
 # AXI_BUS=1 simulates Vortex behind its AXI4 adapter, as the FPGA platforms
-# instantiate it, against a latency-bandwidth-pipe memory model.
+# instantiate it, against a latency-bandwidth-pipe memory model, or with
+# AXI_MEM_MODEL=bank the DRAM bank model (sim/common/dram_bank_model.h).
 ifdef AXI_BUS
 TOP = rtlsim_axi_shim
 CXXFLAGS += -DAXI_BUS
+ifeq ($(AXI_MEM_MODEL), bank)
+CXXFLAGS += -DAXI_MEM_BANK
+else ifneq ($(filter-out pipe,$(AXI_MEM_MODEL)),)
+$(error AXI_MEM_MODEL must be pipe or bank (got '$(AXI_MEM_MODEL)'))
+endif
 else
 TOP = rtlsim_shim
 endif

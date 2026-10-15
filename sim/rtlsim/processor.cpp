@@ -17,6 +17,7 @@
 #ifdef AXI_BUS
 #include "Vrtlsim_axi_shim.h"
 #include <axi_latency_pipe.h>
+#include <dram_bank_model.h>
 typedef Vrtlsim_axi_shim Device;
 #else
 #include "Vrtlsim_shim.h"
@@ -49,6 +50,7 @@ typedef Vrtlsim_shim Device;
 #include <list>
 #include <queue>
 #include <deque>
+#include <memory>
 #include <cassert>
 #include <vector>
 #include <sstream>
@@ -58,7 +60,9 @@ typedef Vrtlsim_shim Device;
 #include <util.h>
 
 
-// AXI_BUS memory timing; the defaults are FASED's.
+// AXI_BUS memory timing: a latency-bandwidth pipe, by default with FASED's
+// settings, or (AXI_MEM_BANK) a DRAM channel per port as the bank model
+// times it, from the platform memory's configuration.
 #ifndef AXI_MEM_READ_LATENCY
 #define AXI_MEM_READ_LATENCY 30
 #endif
@@ -391,7 +395,116 @@ private:
     ++timestamp;
   }
 
-#ifdef AXI_BUS
+#if defined(AXI_BUS) && defined(AXI_MEM_BANK)
+  static constexpr uint32_t AXI_BEAT_SIZE = VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
+
+  // The read and write slots of foldsim's memory endpoint, whose timing this
+  // is cycle for cycle.
+  static DramBankAxi::Config axi_bank_config() {
+    auto dram = DramSim::platform_config();
+    DramBankAxi::Config c;
+    c.model       = DramBankModel::Config::make(dram.type, dram.data_rate, dram.block_size);
+    c.core_clock  = dram.core_clock;
+    c.data_rate   = dram.data_rate;
+    c.latency     = dram.latency;
+    c.queue       = dram.queue_size;
+    c.read_slots  = 32;
+    c.write_slots = 16;
+    return c;
+  }
+
+  // The address within the port's channel, as dram_sim's banks see it.
+  static uint64_t axi_channel_addr(uint64_t addr) {
+  #if VX_CFG_PLATFORM_MEMORY_INTERLEAVE == 1
+    return (addr / AXI_BEAT_SIZE / VX_CFG_PLATFORM_MEMORY_NUM_BANKS) * AXI_BEAT_SIZE;
+  #else
+    constexpr uint32_t bank_addr_bits = VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
+    return addr & ((uint64_t(1) << (bank_addr_bits + log2ceil(AXI_BEAT_SIZE))) - 1);
+  #endif
+  }
+
+  void mem_bus_reset() {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      axi_mem_[b] = std::make_unique<DramBankAxi>(axi_bank_config());
+      axi_wr_addr_[b].clear();
+      axi_rd_data_[b].assign(32, std::vector<uint8_t>(AXI_BEAT_SIZE));
+      axi_in_[b] = DramBankAxi::Inputs();
+    }
+    this->axi_drive();
+  }
+
+  // Samples each port's request side before the clock edge and performs the
+  // accepted transactions on memory: writes first, then reads, each read's
+  // data kept in its slot.
+  void axi_sample() {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      auto& mem = *axi_mem_[b];
+      auto& in = axi_in_[b];
+      in.ar_valid = device_->m_axi_arvalid[b];
+      in.ar_id    = device_->m_axi_arid[b];
+      in.ar_addr  = axi_channel_addr(device_->m_axi_araddr[b]);
+      in.ar_len   = device_->m_axi_arlen[b];
+      in.aw_valid = device_->m_axi_awvalid[b];
+      in.aw_id    = device_->m_axi_awid[b];
+      in.aw_addr  = axi_channel_addr(device_->m_axi_awaddr[b]);
+      in.aw_len   = device_->m_axi_awlen[b];
+      in.w_valid  = device_->m_axi_wvalid[b];
+      in.w_last   = device_->m_axi_wlast[b];
+      in.r_ready  = device_->m_axi_rready[b];
+      in.b_ready  = device_->m_axi_bready[b];
+      assert(!(in.ar_valid && in.ar_len != 0) && !(in.aw_valid && in.aw_len != 0));
+
+      if (in.aw_valid && mem.aw_ready()) {
+        axi_wr_addr_[b].push_back(uint64_t(device_->m_axi_awaddr[b]));
+      }
+      if (in.w_valid && mem.w_ready()) {
+        assert(!axi_wr_addr_[b].empty());
+        uint64_t addr = axi_wr_addr_[b].front();
+        auto data = VDataCast<uint8_t*, AXI_BEAT_SIZE>::get(device_->m_axi_wdata[b]);
+        uint64_t strb = device_->m_axi_wstrb[b];
+        for (uint32_t i = 0; i < AXI_BEAT_SIZE; ++i) {
+          if ((strb >> i) & 0x1) {
+            (*ram_)[addr + i] = data[i];
+          }
+        }
+        axi_wr_addr_[b].pop_front();
+      }
+      if (in.ar_valid && mem.ar_ready()) {
+        ram_->read(axi_rd_data_[b].at(mem.ar_slot(in.r_ready)).data(),
+                   uint64_t(device_->m_axi_araddr[b]), AXI_BEAT_SIZE);
+      }
+    }
+  }
+
+  void axi_step() {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      axi_mem_[b]->step(axi_in_[b]);
+    }
+    this->axi_drive();
+  }
+
+  void axi_drive() {
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      auto& mem = *axi_mem_[b];
+      device_->m_axi_arready[b] = mem.ar_ready();
+      device_->m_axi_awready[b] = mem.aw_ready();
+      device_->m_axi_wready[b]  = mem.w_ready();
+      device_->m_axi_rvalid[b]  = mem.r_valid();
+      device_->m_axi_rresp[b]   = 0;
+      if (mem.r_valid()) {
+        device_->m_axi_rid[b]   = mem.r_id();
+        device_->m_axi_rlast[b] = 1;
+        memcpy(VDataCast<void*, AXI_BEAT_SIZE>::get(device_->m_axi_rdata[b]),
+               axi_rd_data_[b].at(mem.r_slot()).data(), AXI_BEAT_SIZE);
+      }
+      device_->m_axi_bvalid[b] = mem.b_valid();
+      device_->m_axi_bresp[b]  = 0;
+      if (mem.b_valid()) {
+        device_->m_axi_bid[b] = mem.b_id();
+      }
+    }
+  }
+#elif defined(AXI_BUS)
   static constexpr uint32_t AXI_BEAT_SIZE = VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
 
   void mem_bus_reset() {
@@ -595,7 +708,13 @@ private:
 
   std::unordered_map<int, std::stringstream> print_bufs_;
 
-#ifdef AXI_BUS
+#if defined(AXI_BUS) && defined(AXI_MEM_BANK)
+  std::array<std::unique_ptr<DramBankAxi>, VX_CFG_PLATFORM_MEMORY_NUM_BANKS> axi_mem_;
+  std::array<DramBankAxi::Inputs, VX_CFG_PLATFORM_MEMORY_NUM_BANKS> axi_in_;
+  std::array<std::deque<uint64_t>, VX_CFG_PLATFORM_MEMORY_NUM_BANKS> axi_wr_addr_;
+  // Read data by slot.
+  std::array<std::vector<std::vector<uint8_t>>, VX_CFG_PLATFORM_MEMORY_NUM_BANKS> axi_rd_data_;
+#elif defined(AXI_BUS)
   std::array<AxiLatencyPipe, VX_CFG_PLATFORM_MEMORY_NUM_BANKS> axi_mem_;
   std::array<AxiLatencyPipe::Inputs, VX_CFG_PLATFORM_MEMORY_NUM_BANKS> axi_in_;
   std::array<bool, VX_CFG_PLATFORM_MEMORY_NUM_BANKS> axi_rlast_fire_;
