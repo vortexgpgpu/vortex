@@ -214,11 +214,17 @@ to later ones, so placing one is a first-free search over 64 clocks a host
 cycle; a word of the ring is cleared, by a valid bit, as the DRAM clock
 passes it, and a reservation reaches at most 448 clocks ahead (the model's
 horizon). A target cycle's DRAM clocks run in host cycles while the target
-evaluates it — each is one host cycle, a reservation about ten — and the
-cycle finishes only once they have; the `memory waits` counter includes
-the host cycles a finished cycle waits for them. tFAW is left to tRRD,
+evaluates it — two host cycles a clock, about fifteen more for a
+reservation — and the cycle finishes only once they have; the `memory
+waits` counter includes the host cycles a finished cycle waits for them. tFAW is left to tRRD,
 which covers it wherever four tRRD_S span a tFAW (HBM2, HBM3); the runtime
 refuses a memory where it does not (GDDR6).
+
+Both endpoints' token ends are staged (`foldsim_token`'s `STAGED`): `have`
+and `done` are registers, so an endpoint's finish starts at its own state,
+not at the simulator's valid and ready. A token counts a host cycle later,
+which s2w4i2's eight host cycles a target cycle hide (its counts are
+unchanged).
 
 **Reset.** The control endpoint also gives the memory endpoint a token each
 target cycle: the target's reset in that cycle. A reset command thereby
@@ -378,7 +384,7 @@ SimX's own bank backend 10 % faster: the reservation model drains a write
 stream differently from Ramulator's per-clock scheduler (the proposal's
 mixed-traffic residual). The pipe, by contrast, has no memory to configure:
 sgemm takes 415,454 cycles at every profile. A bank-model run costs host
-cycles the pipe does not (memory waits): 7.6–8.7 host cycles per target cycle
+cycles the pipe does not (memory waits): 7.3–9.5 host cycles per target cycle
 against the pipe's 8.0.
 
 ### 7.2 tinygpu: Foldsim and the firesim backend
