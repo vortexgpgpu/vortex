@@ -8,7 +8,7 @@ Alveo U55C (Vitis/XRT) and the Alveo V80 (AVED/VRT).
 |---|---|
 | [1](#1-system-architecture) | System architecture: host stack, FPGA payload, execution model |
 | [2](#2-synthesis-of-the-vortex-rtl) | Synthesis of the Vortex RTL |
-| [3](#3-threaded-simulation) | Threaded simulation: foldsim |
+| [3](#3-threaded-simulation) | Threaded simulation: Foldsim |
 | [4](#4-the-simulation-timing-model) | The simulation timing model |
 | [5](#5-the-memory-system) | The memory system and its configuration; shell configuration |
 | [6](#6-observability) | Observability: wave traces, RTL messages and assertions, counters |
@@ -97,7 +97,7 @@ inside the kernel on aved: the conversion cannot enter it, so no unit takes
 one there. The FPU is the STD one (`VX_CFG_FPU_TYPE_STD`), its FMA, divider
 and square root take their soft path in the flow's copy of the sources, and
 the RTU uses the soft FMA/divider — `VX_CFG_RTU_USE_DSP=0`. The metasimulator
-and the image therefore run the same FPU, as the foldsim flow's do.)
+and the image therefore run the same FPU, as the Foldsim flow's do.)
 
 ### 1.3 Host-decoupled execution
 
@@ -209,7 +209,7 @@ slashkit on aved), handed:
 
 This backend simulates Vortex unthreaded: one physical copy of every module.
 Threading a GPU's identical units through one physical copy each (FAME-5) is
-the foldsim flow, which compiles Vortex with CIRCT rather than Golden Gate and
+the Foldsim flow, which compiles Vortex with CIRCT rather than Golden Gate and
 has its own kernel, driver and image: see [foldsim.md](foldsim.md).
 
 ---
@@ -539,10 +539,10 @@ FFs, 5 BRAM tiles, 8 URAM, 8 DSP.
 
 The metasimulator and the image agree cycle for cycle. Instruction counts
 match rtlsim's. Cycles are 5.0 % above rtlsim's on the same latency-bandwidth
-settings (`AXI_BUS=1`; `demo`, `sgemm -n16`), and 5.1 % above the foldsim
+settings (`AXI_BUS=1`; `demo`, `sgemm -n16`), and 5.1 % above the Foldsim
 image's on `sgemm -n64`, from the memory model's channel mechanics.
 
-Threaded images, and the same tinygpu on the foldsim flow, are in
+Threaded images, and the same tinygpu on the Foldsim flow, are in
 [foldsim.md](foldsim.md) §7.
 
 ---
