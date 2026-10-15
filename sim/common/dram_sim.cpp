@@ -13,6 +13,7 @@
 
 #include "dram_sim.h"
 #include "util.h"
+#include <dram_timing.h>
 #include <VX_config.h>
 #include <deque>
 #include <fstream>
@@ -36,57 +37,9 @@ using namespace vortex;
 
 namespace {
 
-// Bus timings are DRAM clocks, fixed by the burst; array timings are
-// nanoseconds, which Ramulator converts at the configured data rate.
-struct clock_timing_t {
-  const char* name;
-  int clocks;
-};
-
-struct ns_timing_t {
-  const char* name;
-  float ns;
-};
-
-// A 32 B burst is BL4 on a 64-bit pseudo-channel: two clocks, and the same
-// spacing between column commands to another bank group (four within one).
-// nRTW only completes the set Ramulator requires.
-const clock_timing_t hbm_bus_timing[] = {
-  {"nBL", 2}, {"nCCDS", 2}, {"nCCDL", 4}, {"nRTW", 3},
-};
-
-// JEDEC HBM2 array timing as GPGPU-Sim's SM7_QV100 configuration lists it (its
-// JEDEC line, at 1 GHz: RCD=RP=CL=14, RAS=33, RC=47, WR=12, RRD=4, RTPL=4);
-// the rest from Ramulator's HBM2_2Gbps preset, whose 1 ns clock makes its
-// cycles nanoseconds. The array does not speed up with the interface: HBM2E
-// and HBM3 parts keep these timings (GPGPU-Sim's SM80_A100 and SM90_H100 HBM
-// lines are the same 14/33/47 ns at their own clocks). Refresh timings complete
-// the set Ramulator requires.
-const ns_timing_t hbm_array_timing[] = {
-  {"tCL", 14}, {"tRCDRD", 14}, {"tRCDWR", 14}, {"tRP", 14}, {"tRAS", 33}, {"tRC", 47},
-  {"tCWL", 2}, {"tWR", 12}, {"tRTPS", 2}, {"tRTPL", 4}, {"tRRDS", 4}, {"tRRDL", 4},
-  {"tWTRS", 3}, {"tWTRL", 4}, {"tFAW", 15}, {"tRFCSB", 160}, {"tREFI", 3900}, {"tRREFD", 8},
-};
-
-// Ramulator's GDDR6 clock is half the data rate: a 32 B burst, 16 beats on a
-// x16 channel, is eight clocks, and column commands are two (three within a
-// bank group) command clocks apart, a command clock being eight data beats.
-const clock_timing_t gddr6_bus_timing[] = {
-  {"nBL", 8}, {"nCCDS", 8}, {"nCCDL", 12},
-};
-
-// Ramulator's x16 GDDR6 timing at 2000 (its GDDR6_2000_1350mV_double preset
-// and secondary tables) at its 570 ps command clock, in nanoseconds; refresh
-// timings complete the set Ramulator requires.
-const ns_timing_t gddr6_array_timing[] = {
-  {"tCL", 13.7f}, {"tRCDRD", 14.8f}, {"tRCDWD", 9.1f}, {"tRP", 14.8f}, {"tRAS", 30.2f}, {"tRC", 45.0f},
-  {"tWR", 14.8f}, {"tRTP", 2.3f}, {"tCWL", 3.4f}, {"tRRDS", 2.9f}, {"tRRDL", 3.4f},
-  {"tWTRS", 5.1f}, {"tWTRL", 6.3f}, {"tFAW", 16.0f},
-  {"tRFC", 120.0f}, {"tRFCpb", 60.0f}, {"tREFI", 1900.0f}, {"tRREFD", 8.0f},
-};
-
 template <size_t B, size_t A>
-void set_timing(YAML::Node timing, uint32_t data_rate, const clock_timing_t (&bus)[B], const ns_timing_t (&array)[A]) {
+void set_timing(YAML::Node timing, uint32_t data_rate, const dram_timing::clock_timing_t (&bus)[B],
+                const dram_timing::ns_timing_t (&array)[A]) {
   timing["rate"] = data_rate;
   for (auto& t : bus) {
     timing[t.name] = t.clocks;
@@ -130,19 +83,15 @@ private:
     uint32_t inflight;
   };
 
-  // Each standard moves 32 B per column command (prefetch x channel width).
-  static constexpr uint32_t tx_size_ = 32;
+  static constexpr uint32_t tx_size_ = dram_timing::kBurstSize;
 
-  // Every device here holds 8 Gb per channel; addresses above alias, which
-  // only affects row hits.
-  static constexpr uint64_t channel_size_ = uint64_t(1) << 30;
-
-  // Bursts per row visit (minimalist open page, 128 B).
-  static constexpr uint32_t row_visit_bits_ = 2;
+  // Addresses above a channel's 8 Gb alias, which only affects row hits.
+  static constexpr uint64_t channel_size_ = dram_timing::kChannelSize;
 
   Config config_;
-  uint32_t bank_bits_;    // pseudo-channel, bank group and bank
-  uint32_t column_bits_;  // bursts per row
+  uint32_t row_visit_bits_;  // bursts per row visit (minimalist open page, 128 B)
+  uint32_t bank_bits_;       // pseudo-channel, bank group and bank
+  uint32_t column_bits_;     // bursts per row
   std::vector<channel_t> channels_;
   uint64_t cycle_;
   // DRAM ticks owed, in units of 1/(2 x core_clock): each core cycle adds the
@@ -158,7 +107,7 @@ private:
     dram["org"]["density"] = 8192;
     dram["org"]["channel"] = 1;
     dram["org"]["channel_width"] = 128;
-    set_timing(dram["timing"], config.data_rate, hbm_bus_timing, hbm_array_timing);
+    set_timing(dram["timing"], config.data_rate, dram_timing::hbm_bus_timing, dram_timing::hbm_array_timing);
   }
 
   static void set_gddr6_device(YAML::Node dram, const Config& config) {
@@ -174,7 +123,7 @@ private:
     dram["org"]["column"] = 512;
     dram["org"]["density"] = 8192;
     dram["org"]["channel_width"] = 32;
-    set_timing(dram["timing"], config.data_rate, gddr6_bus_timing, gddr6_array_timing);
+    set_timing(dram["timing"], config.data_rate, dram_timing::gddr6_bus_timing, dram_timing::gddr6_array_timing);
   }
 
   YAML::Node channel_config(uint32_t ch) const {
@@ -278,11 +227,11 @@ private:
 public:
   Impl(const Config& config)
     : config_(config)
-    // HBM: 2 pseudo-channels x 4 bank groups x 4 banks, 32 bursts per 1 KB
-    // row; GDDR6: 4 x 4 banks, 64 bursts per 2 KB row.
-    , bank_bits_((config.type == Type::GDDR6) ? 4 : 5)
-    , column_bits_((config.type == Type::GDDR6) ? 6 : 5)
     , channels_(config.num_channels) {
+    auto geometry = dram_timing::geometry(config.type);
+    row_visit_bits_ = geometry.log2_visit;
+    bank_bits_ = geometry.bank_bits();
+    column_bits_ = geometry.log2_row_bursts;
     for (uint32_t ch = 0; ch < config.num_channels; ++ch) {
       auto ramulator_config = this->channel_config(ch);
       auto& channel = channels_[ch];
@@ -360,13 +309,9 @@ DramSim::Config DramSim::platform_config() {
   // companion.
   const std::string type = DRAM_STR(VX_CFG_PLATFORM_MEMORY_TYPE);
   Config config;
-  if (type == "HBM2") {
-    config.type = Type::HBM2;
-  } else if (type == "HBM3") {
-    config.type = Type::HBM3;
-  } else if (type == "GDDR6") {
-    config.type = Type::GDDR6;
-  } else {
+  try {
+    config.type = dram_timing::parse_standard(type);
+  } catch (const std::invalid_argument&) {
     throw std::invalid_argument("dram_sim: unknown VX_CFG_PLATFORM_MEMORY_TYPE " + type);
   }
   config.num_channels = VX_CFG_PLATFORM_MEMORY_NUM_BANKS;
