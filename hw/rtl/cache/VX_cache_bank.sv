@@ -144,6 +144,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         req_t                          req;
         logic [`CS_WORD_WIDTH-1:0]     wdata;
         logic [NUM_WAYS-1:0]           tag_matches;
+        logic                          is_refill;   // fill into an already-resident line
     } data_t;
 
     typedef struct packed {            // response + memory request (S0 -> S1 -> stC)
@@ -664,6 +665,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         dat_in = st0;
         dat_in.req.way_idx = evict_way_st0;
         dat_in.tag_matches = tag_matches_st0 & {NUM_WAYS{~creq_hit_order_hazard_st0}};
+        dat_in.is_refill   = lk_st0.is_refill;
     end
 
     // commit path: the request (with the resolved hit/victim way and MSHR id)
@@ -752,6 +754,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .reset        (reset),
         .init         (do_init_std),
         .fill         (do_fill_std && ~stD.req.is_passthru_fill && ~pipe_stall),
+        .refill       (stD.is_refill),
         .flush        (do_flush_std && ~pipe_stall),
         .read         (do_read_std && ~pipe_stall),
         .write        (do_write_std && ~pipe_stall),
@@ -1226,6 +1229,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             if (DIRTY_BYTES) begin : g_dirty_bytes
                 wire has_dirty_bytes = (| evict_byteen_stc);
                 `RUNTIME_ASSERT (~do_fill_or_flush_stc || (stC.lk.is_dirty == has_dirty_bytes), ("missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", stC.lk.is_dirty, has_dirty_bytes, `CS_BANK_TO_FULL_ADDR(addr_stc, BANK_ID)))
+                // per-sector: a dirty sector must carry dirty bytes, or its writeback beat is dropped.
+                wire [SEC-1:0] sec_has_dirty_bytes;
+                for (genvar s = 0; s < SEC; ++s) begin : g_sec_has_dirty_bytes
+                    assign sec_has_dirty_bytes[s] = (| evict_byteen_stc[s*SECTOR_SIZE +: SECTOR_SIZE]);
+                end
+                `RUNTIME_ASSERT (~do_fill_or_flush_stc || ((stC.lk.evict_dirty_mask & ~sec_has_dirty_bytes) == '0), ("dirty sector without dirty bytes: dirty_mask=%b, dirty_bytes=%b, addr=0x%0h", stC.lk.evict_dirty_mask, sec_has_dirty_bytes, `CS_BANK_TO_FULL_ADDR(addr_stc, BANK_ID)))
             end
             // fill request on a read/write miss (one sector); multi-beat writeback
             // on a dirty eviction. The two are mutually exclusive (a writeback is a

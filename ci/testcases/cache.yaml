@@ -196,6 +196,18 @@ tests:
     clusters: 2
     l2cache: true
     l3cache: true
+# Dirty-byte write-back on a sectored L2: a sector refill keeps the other
+# sectors' dirty bytes.
+- id: mstress-6
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L2_DIRTYBYTES=1
+  shape:
+    cores: 4
+    l2cache: true
 - id: sgemm-20
   via: blackbox
   drivers:

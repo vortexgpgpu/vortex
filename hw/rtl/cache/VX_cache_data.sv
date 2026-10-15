@@ -46,6 +46,7 @@ module VX_cache_data import VX_gpu_pkg::*; #(
     // inputs
     input wire                          init,
     input wire                          fill,
+    input wire                          refill,     // fill into an already-resident line
     input wire                          flush,
     input wire                          read,
     input wire                          write,
@@ -108,10 +109,19 @@ module VX_cache_data import VX_gpu_pkg::*; #(
             assign write_mask[i] = write_byteen & {WORD_SIZE{word_en}};
         end
 
+        // A sector refill must clear only the installed sector's mask: the other
+        // resident sectors may hold dirty bytes not yet written back.
+        wire [`CS_SECTORS_PER_LINE-1:0][SECTOR_SIZE-1:0] fill_clr_mask;
+        for (genvar i = 0; i < `CS_SECTORS_PER_LINE; ++i) begin : g_fill_clr_mask
+            wire sec_en = ~refill || (`CS_SECTORS_PER_LINE == 1)
+                       || (sector_idx == `UP(`CS_SECTOR_SEL_BITS)'(i));
+            assign fill_clr_mask[i] = {SECTOR_SIZE{fill && sec_en}};
+        end
+
         wire [NUM_WAYS-1:0][LINE_SIZE-1:0] byteen_rdata;
         for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_byteen_store
             wire [LINE_SIZE-1:0] byteen_wdata = {LINE_SIZE{write}}; // only asserted on writes
-            wire [LINE_SIZE-1:0] byteen_wren  = {LINE_SIZE{init || fill || flush}} | write_mask;
+            wire [LINE_SIZE-1:0] byteen_wren  = {LINE_SIZE{init || flush}} | fill_clr_mask | write_mask;
             wire byteen_write = ((fill || flush) && ((NUM_WAYS == 1) || (evict_way == i)))
                              || (write && tag_matches[i])
                              || init;
@@ -141,6 +151,7 @@ module VX_cache_data import VX_gpu_pkg::*; #(
         assign evict_byteen = byteen_rdata[way_idx_r];
     end else begin : g_no_dirty_bytes
         `UNUSED_VAR (init)
+        `UNUSED_VAR (refill)
         `UNUSED_VAR (flush)
         `UNUSED_VAR (way_idx_r)
         assign evict_byteen = '1; // update whole line
