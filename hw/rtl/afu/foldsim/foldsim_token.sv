@@ -17,11 +17,14 @@
 //
 // Valid and ready depend on the endpoint's state alone, never on the
 // simulator's handshake, so the simulator may connect them to its models
-// combinationally.
+// combinationally. With STAGED, `have` and `done` do too: a token counts from
+// the host cycle after it is taken, so the endpoint's finish starts at its own
+// registers rather than at the simulator's valid and ready.
 
 // An input channel: the token is kept until the endpoint finishes its cycle.
 module foldsim_token_in #(
-    parameter W = 1
+    parameter W = 1,
+    parameter STAGED = 0
 ) (
     input  wire         clk,
     input  wire         reset,
@@ -36,8 +39,8 @@ module foldsim_token_in #(
     reg [W-1:0] held;
 
     assign ready = ~got;
-    assign have  = got | valid;
-    assign data  = got ? held : bits;
+    assign have  = STAGED ? got : (got | valid);
+    assign data  = (STAGED || got) ? held : bits;
 
     always @(posedge clk) begin
         if (reset || finish) begin
@@ -52,7 +55,9 @@ module foldsim_token_in #(
 endmodule
 
 // An output channel: the token is offered once `ok` until it is taken.
-module foldsim_token_out (
+module foldsim_token_out #(
+    parameter STAGED = 0
+) (
     input  wire clk,
     input  wire reset,
     output wire valid,
@@ -64,7 +69,7 @@ module foldsim_token_out (
     reg fired;
 
     assign valid = ~fired & ok;
-    assign done  = fired | (ok & ready);
+    assign done  = STAGED ? fired : (fired | (ok & ready));
 
     always @(posedge clk) begin
         if (reset || finish) begin
