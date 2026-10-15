@@ -66,6 +66,18 @@ endif
 # with "build mismatch" — which is what a build honestly reports, but only after
 # the test has already been written. Any Vulkan test touching atomics needs it.
 CONFIGS += -DVX_CFG_EXT_A_ENABLE
+# Zacas, so a compare-and-swap is one AMO (vortexpipe compiles with it when the
+# device reports it). Without it the toolchain expands a CAS into an LR/SC
+# loop after its divergence passes, which breaks whenever more than one lane
+# runs it -- a fragment quad, a vertex batch.
+CONFIGS += -DVX_CFG_EXT_ZACAS_ENABLE
+# WIDE := 1 -> 32 warps x 32 threads per core. A workgroup of up to 1024
+# invocations then fits one CTA, so the driver's own kernels -- lavapipe's
+# acceleration-structure build, whose PLOC pass is 1024 wide -- run on the
+# device instead of on llvmpipe, specialized for the warp width.
+ifeq ($(WIDE),1)
+CONFIGS += -DVX_CFG_NUM_WARPS=32 -DVX_CFG_NUM_THREADS=32
+endif
 
 GLSLC ?= glslc
 CC    ?= cc

@@ -34,11 +34,14 @@ SHADERS := $(SRC_DIR)/rtquery.comp
 # rayQueryEXT needs SPIR-V 1.4 -- compile against the Vulkan 1.2 env.
 GLSLC := glslc --target-env=vulkan1.2
 
-# The ray-query compute shader runs on the RTU; lavapipe's internal
-# acceleration-structure build shaders (subgroup/atomic ops) still run on
-# llvmpipe, so STRICT must stay 0 (a global refuse-fallback would trip on
-# those builders). The device check in common.mk validates vortexpipe is
-# the active driver.
+# The ray-query compute shader runs on the RTU. On the default core lavapipe's
+# acceleration-structure build kernels are wider than a workgroup the device
+# runs, so they fall back to llvmpipe and STRICT stays 0. WIDE=1 fits them, and
+# STRICT then makes a build that did not run on the device fail the test.
+ifeq ($(WIDE),1)
+STRICT := 1
+else
 STRICT := 0
+endif
 
 include ../common.mk

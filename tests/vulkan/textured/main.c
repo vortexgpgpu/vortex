@@ -88,13 +88,14 @@ struct advcase {
  *               integer, packed) formats it encodes in software
  *   depth    -- the formats the OM tests and writes
  *   storage  -- the formats the fragment translator emits image_load /
- *               image_store for */
+ *               image_store for, including B8G8R8A8, which is accessed
+ *               without a format through the view's own encode */
 static const struct advcase adv[] = {
    /*                                        sampled  color    depth   storage */
    { VK_FORMAT_R8G8B8A8_UNORM,      "R8G8B8A8_UNORM",
                                              ADV_YES, ADV_YES, ADV_NO,  ADV_YES },
    { VK_FORMAT_B8G8R8A8_UNORM,      "B8G8R8A8_UNORM",
-                                             ADV_YES, ADV_YES, ADV_NO,  ADV_NO  },
+                                             ADV_YES, ADV_YES, ADV_NO,  ADV_YES },
    { VK_FORMAT_R8_UNORM,            "R8_UNORM",
                                              ADV_YES, ADV_YES, ADV_NO,  ADV_YES },
    { VK_FORMAT_R8G8_UNORM,          "R8G8_UNORM",
