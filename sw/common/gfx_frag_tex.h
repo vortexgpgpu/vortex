@@ -562,6 +562,71 @@ static inline uint32_t TexDecodeArgb8(uint32_t format, const void* p, uint32_t s
   return TexDecodeExtended(format, p);
 }
 
+// A shadow sampler's depth texel as the compare takes it: a unorm code of `bits`
+// bits, or (bits == 0) a float's bits. `word` is the texel's first four bytes.
+// Any other format compares its low 24 bits as a D24 texel, as the TEX unit's
+// compare stage does; Vulkan defines a compare on depth formats only.
+struct TexDepthTexel {
+  uint32_t code;
+  uint32_t bits;
+};
+static inline TexDepthTexel TexDepthFromWord(uint32_t format, uint32_t word) {
+  switch (format) {
+  case VX_TEX_FORMAT_D16:   return { word & 0xffffu, 16 };
+  case VX_TEX_FORMAT_D24:   return { word & 0xffffffu, 24 };
+  case VX_TEX_FORMAT_D32F:
+  case VX_TEX_FORMAT_D32S8: return { word, 0 };
+  default:                  return { word & 0xffffffu, 24 };
+  }
+}
+
+// `ref <func> depth` (VX_OM_DEPTH_FUNC_*), exact over the reals. A unorm texel d
+// of n bits stands for d / (2^n - 1); the reference, clamped to [0, 1], compares
+// as ref * (2^n - 1) against d, formed exactly as its integer part and whether a
+// fraction remains, so no division or rounding enters. A float texel compares as
+// floats, -0 equal to +0 and a NaN equal to nothing.
+static inline bool TexDepthCompare(uint32_t func, uint32_t ref_bits, TexDepthTexel t) {
+  bool lt, eq, gt;
+  if (t.bits == 0) {
+    float r, d;
+    __builtin_memcpy(&r, &ref_bits, 4);
+    __builtin_memcpy(&d, &t.code, 4);
+    lt = r < d;
+    eq = r == d;
+    gt = r > d;
+  } else {
+    const uint64_t k = (1ull << t.bits) - 1u;
+    const uint32_t mag = ref_bits & 0x7fffffffu;
+    uint64_t whole = 0;
+    bool frac = false;
+    if ((ref_bits >> 31) || mag == 0 || mag > 0x7f800000u) {
+      // negative, zero or NaN: clamps to 0
+    } else if (mag >= 0x3f800000u) {
+      whole = k;   // 1 or more: clamps to 1
+    } else {
+      const uint32_t e = mag >> 23;
+      const uint64_t m = (mag & 0x7fffffu) | (e ? 0x800000u : 0u);
+      const uint32_t shift = 150u - (e ? e : 1u);   // ref = m / 2^shift, shift >= 24
+      const uint64_t prod = m * k;                   // < 2^48
+      whole = shift < 64 ? prod >> shift : 0;
+      frac = shift < 64 ? (prod & ((1ull << shift) - 1u)) != 0 : prod != 0;
+    }
+    lt = whole < t.code;
+    eq = whole == t.code && !frac;
+    gt = whole > t.code || (whole == t.code && frac);
+  }
+  switch (func) {
+  case VX_OM_DEPTH_FUNC_NEVER:    return false;
+  case VX_OM_DEPTH_FUNC_LESS:     return lt;
+  case VX_OM_DEPTH_FUNC_EQUAL:    return eq;
+  case VX_OM_DEPTH_FUNC_LEQUAL:   return lt || eq;
+  case VX_OM_DEPTH_FUNC_GREATER:  return gt;
+  case VX_OM_DEPTH_FUNC_NOTEQUAL: return !eq;
+  case VX_OM_DEPTH_FUNC_GEQUAL:   return gt || eq;
+  default:                        return true;
+  }
+}
+
 // The float sampled formats (VX_TEX_FORMAT_R16F..RGBA32F plus the packed
 // R11G11B10F and RGB9E5). Their texels are not confined to [0,1], so decoding or
 // filtering them in the 8-bit ARGB working space clamps them; a sampler must take
@@ -1017,6 +1082,39 @@ static inline uint32_t tex_apply_filter(const TexelRequest& req, const uint32_t 
     return TexFilterLinear(req.format, texels[0], texels[1], texels[2], texels[3],
                            req.alpha, req.beta);
   return TexFilterPoint(req.format, texels[0]);
+}
+
+// A shadow sample at one level: each tap the request reads compared against
+// `ref_bits` by `func` (TexDepthCompare, per tap in tex_compare_tap), and the
+// 0/1 results blended by the request's weights. A border tap's depth is
+// `req.border`, an f32 (VX_DCR_TEX_BORDER for a depth-compare stage), which a
+// unorm format still compares against the reference clamped to [0, 1], a NaN
+// taken as 0, as its texels do. Returns the result in Q16 (65536 is 1), which
+// the 8-bit weights make exact, so its float is too.
+static inline uint32_t tex_compare_tap(const TexelRequest& req, uint32_t i, uint32_t word,
+                                       uint32_t func, uint32_t ref_bits) {
+  if ((req.border_mask >> i) & 0x1) {
+    uint32_t r = ref_bits;
+    if (TexDepthFromWord(req.format, 0).bits != 0) {
+      if ((r & 0x80000000u) || (r & 0x7fffffffu) > 0x7f800000u) {
+        r = 0;
+      } else if (r >= 0x3f800000u) {
+        r = 0x3f800000u;
+      }
+    }
+    return TexDepthCompare(func, r, TexDepthTexel{ req.border, 0 }) ? 1u : 0u;
+  }
+  return TexDepthCompare(func, ref_bits, TexDepthFromWord(req.format, word)) ? 1u : 0u;
+}
+static inline uint32_t tex_apply_compare(const TexelRequest& req, const uint32_t texels[4],
+                                         uint32_t func, uint32_t ref_bits) {
+  auto pass = [&](uint32_t i) { return tex_compare_tap(req, i, texels[i], func, ref_bits); };
+  if (req.filter != VX_TEX_FILTER_BILINEAR) {
+    return pass(0) << 16;
+  }
+  const uint32_t a = req.alpha, b = req.beta;
+  return pass(0) * (256u - a) * (256u - b) + pass(1) * a * (256u - b)
+       + pass(2) * (256u - a) * b + pass(3) * a * b;
 }
 
 // Per-channel min or max of two ARGB8888 words.

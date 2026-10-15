@@ -407,8 +407,8 @@ static op_string_t op_string(const Instr &instr) {
     }
   #endif // VX_CFG_EXT_TCU_ENABLE
   #ifdef VX_CFG_EXT_TEX_ENABLE
-    ,[&](TexType /*tex_type*/)-> op_string_t {
-      return {"TEX", ""};
+    ,[&](TexType tex_type)-> op_string_t {
+      return {tex_type == TexType::SAMPLE_CMP ? "TEX_CMP" : "TEX", ""};
     }
   #endif
   #ifdef VX_CFG_EXT_OM_ENABLE
@@ -997,9 +997,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_args(wgArgs);
     } break;
 #ifdef VX_CFG_EXT_TEX_ENABLE
+    case 1:   // vx_tex_cmp: R4-type. rs1=u, rs2=v (fields above the coordinates),
+              // rs3=f32 reference, rd=f32 compare result, funct2=stage.
     case 5: { // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
       instr->set_fu_type(FUType::SFU);
-      instr->set_op_type(TexType::SAMPLE);
+      instr->set_op_type(funct3 == 1 ? TexType::SAMPLE_CMP : TexType::SAMPLE);
       instr->set_dest_reg(rd, RegType::Integer);    // texel
       instr->set_src_reg(0, rs1, RegType::Integer); // u
       instr->set_src_reg(1, rs2, RegType::Integer); // v

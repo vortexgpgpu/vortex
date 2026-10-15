@@ -53,12 +53,14 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     // ── coords + lod (all from registers) ─────────────────────────────────
     wire [1:0][NUM_LANES-1:0][31:0]        sfu_exe_coords;
     wire [NUM_LANES-1:0][TEX_ARG_BITS-1:0] sfu_exe_lod;
+    // vx_tex_cmp's f32 reference rides in the lod operand, whole.
+    `STATIC_ASSERT(TEX_ARG_BITS == 32, ("the lod operand must carry a 32-bit reference"))
     wire [TEX_STAGE_BITS-1:0]              sfu_exe_stage;
     assign sfu_exe_stage = execute_if.data.op_args.tex.stage;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_sfu_exe_coords
         assign sfu_exe_coords[0][i] = execute_if.data.rs1_data[i][31:0];              // u
         assign sfu_exe_coords[1][i] = execute_if.data.rs2_data[i][31:0];              // v
-        assign sfu_exe_lod[i]       = execute_if.data.rs3_data[i][0 +: TEX_ARG_BITS]; // lod, filter, layer
+        assign sfu_exe_lod[i]       = execute_if.data.rs3_data[i][0 +: TEX_ARG_BITS]; // lod operand, or vx_tex_cmp's reference
     end
 
     // ── tag-store echo (round-trips the header past the texel round-trip) ──
@@ -121,7 +123,7 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [TEX_REQ_TAG_WIDTH-1:0] req_tag = {execute_if.data.header.uuid, mdata_waddr};
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_LANES * (1 + 2 * 32 + TEX_ARG_BITS) + TEX_STAGE_BITS + TEX_REQ_TAG_WIDTH),
+        .DATAW   (NUM_LANES * (1 + 2 * 32 + TEX_ARG_BITS) + 1 + TEX_STAGE_BITS + TEX_REQ_TAG_WIDTH),
         .SIZE    (2),
         .OUT_REG (2) // external bus should be registered
     ) req_sbuf (
@@ -129,8 +131,8 @@ module VX_tex_unit import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         .reset     (reset),
         .valid_in  (valid_in),
         .ready_in  (ready_in),
-        .data_in   ({execute_if.data.header.tmask, sfu_exe_coords, sfu_exe_lod, sfu_exe_stage, req_tag}),
-        .data_out  ({tex_bus_if.req_data.mask, tex_bus_if.req_data.coords, tex_bus_if.req_data.lod, tex_bus_if.req_data.stage, tex_bus_if.req_data.tag}),
+        .data_in   ({execute_if.data.header.tmask, sfu_exe_coords, sfu_exe_lod, execute_if.data.op_args.tex.cmp, sfu_exe_stage, req_tag}),
+        .data_out  ({tex_bus_if.req_data.mask, tex_bus_if.req_data.coords, tex_bus_if.req_data.lod, tex_bus_if.req_data.cmp, tex_bus_if.req_data.stage, tex_bus_if.req_data.tag}),
         .valid_out (tex_bus_if.req_valid),
         .ready_out (tex_bus_if.req_ready)
     );

@@ -34,6 +34,9 @@ struct TexReq {
   std::array<int32_t,  VX_CFG_NUM_THREADS>       u          = {};    // s32 fixed-point coord (TEX_FXD_FRAC bits)
   std::array<int32_t,  VX_CFG_NUM_THREADS>       v          = {};
   std::array<uint32_t, VX_CFG_NUM_THREADS>       lod        = {};
+  // vx_tex_cmp: the f32 reference each lane compares its taps against.
+  bool                                    cmp        = false;
+  std::array<uint32_t, VX_CFG_NUM_THREADS>       ref        = {};
 
   // SimX-only: routing back to the per-core SfuUnit writeback.
   instr_trace_t* trace    = nullptr;

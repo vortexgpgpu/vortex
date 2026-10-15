@@ -25,6 +25,7 @@
 // Encodings (CUSTOM1 family):
 //   funct3=3, R4-type, funct2=mask   : vx_om_export    (fragment export -> OM aperture)
 //   funct3=4, R4-type, funct2=op     : vx_frag_order_* (primitive-order merge)
+//   funct3=1, R4-type, funct2=stage  : vx_tex_cmp      (depth-compare sample)
 //   funct3=5, R4-type, funct2=stage  : vx_tex          (texture sample, registers only)
 // RASTER launches the fragment shader on-device (push); the stamp rides inside
 // the launch (read as CSRs). Its only kernel ops order the merge.
@@ -54,6 +55,33 @@ inline unsigned vx_tex(unsigned stage, unsigned u, unsigned v, unsigned lod) {
       : "=r"(texel)
       : "i"(RISCV_CUSTOM1), "i"(stage), "r"(u), "r"(v), "r"(lod));
   return texel;
+}
+
+// Depth-compare sample (shadow lookup): every tap the stage's filter reads is
+// compared against the f32 reference `ref` with the stage's compare function
+// (FILTER[12:10]) and the 0/1 results are filtered; the result is that value as
+// an f32 bit pattern. `u`, `v` are the S.23 coordinates in [-4, 4), with the
+// array layer in u's top bits and the level and lane filter in v's
+// (VX_TEX_CMP_*); vx_tex_cmp_uv packs them. One level per sample: a mip-linear
+// shadow lookup issues two and blends them.
+// CUSTOM1 funct3=1, R4-type.
+inline unsigned vx_tex_cmp(unsigned stage, unsigned u, unsigned v, unsigned ref) {
+  unsigned result;
+  __asm__ volatile (".insn r4 %1, 1, %2, %0, %3, %4, %5"
+      : "=r"(result)
+      : "i"(RISCV_CUSTOM1), "i"(stage), "r"(u), "r"(v), "r"(ref));
+  return result;
+}
+
+// The u and v operands of vx_tex_cmp: S.23 coordinates with the layer, the
+// level and (when `lane_filter`) the lane's own BILINEAR choice above them.
+inline void vx_tex_cmp_uv(int u_fx, int v_fx, unsigned layer, unsigned level,
+                          bool lane_filter, bool bilinear, unsigned* u, unsigned* v) {
+  const unsigned lo = (1u << VX_TEX_CMP_COORD_BITS) - 1u;
+  *u = ((unsigned)u_fx & lo) | (layer << VX_TEX_CMP_U_LAYER_SHIFT);
+  *v = ((unsigned)v_fx & lo) | (level << VX_TEX_CMP_V_LEVEL_SHIFT)
+     | ((unsigned)bilinear << VX_TEX_CMP_V_BILINEAR)
+     | ((unsigned)lane_filter << VX_TEX_CMP_V_LANE_FILTER);
 }
 
 // ── fragment export: the aperture store ─────────────────────────────────────

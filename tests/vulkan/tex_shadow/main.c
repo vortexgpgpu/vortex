@@ -4,13 +4,20 @@
  *
  * Depth-compare (shadow) sampling test for the vortexpipe driver.
  *
- * Three cases, each a full-screen quad over a 32x32 target whose fragment
- * shader samples a D32F texture through a comparison sampler and checks the
- * 0/1 results in-shader, writing green on match / red on mismatch:
+ * Each case is a full-screen quad over a 32x32 target whose fragment shader
+ * samples a depth texture through a comparison sampler and checks the results
+ * in-shader, writing green on match / red on mismatch:
  *
- *   shadow_less     -- 4x4 depth ramp, compare LESS
+ *   shadow_less     -- 4x4 D32F depth ramp, compare LESS
  *   shadow_greater  -- the same texture under GREATER (every result inverts)
  *   shadow_array    -- 4x4x2 depth array, layer 0 vs layer 1
+ *   shadow_d16_pcf  -- D16 ramp through a linear filter: the 2x2 compare
+ *                      results blended (percentage-closer filtering)
+ *   shadow_cube     -- D32F cube whose faces hold distinct depths
+ *   shadow_mip      -- two levels of distinct depth under a linear mip filter,
+ *                      sampled between them
+ *   shadow_border   -- clamp-to-border with an opaque-white border: a tap
+ *                      outside the texture compares against depth 1
  *
  * A case passes when every rendered pixel is green.
  */
@@ -85,14 +92,21 @@ struct texcase {
    VkFormat    fmt;
    uint32_t    w, h, layers;
    VkImageViewType viewtype;
-   const void *data;
+   const void *data;            /* level 0's layers, then level 1's */
    VkDeviceSize bytes;
    VkCompareOp  cmp;
+   uint32_t    levels;          /* 0 means 1 */
+   VkFilter    filter;          /* NEAREST unless set */
+   VkSamplerMipmapMode mipmap;
+   VkBool32    border;          /* clamp-to-border, opaque white */
 };
 
 /* Depth patterns mirrored by the fragment shaders. */
 static float depth_texels[4 * 4];
 static float depth_array[2][4 * 4];
+static uint16_t depth_d16[4 * 4];
+static float depth_cube[6][4 * 4];
+static float depth_mip[4 * 4 + 2 * 2];
 
 static void
 fill_patterns(void)
@@ -102,7 +116,13 @@ fill_patterns(void)
          depth_texels[y * 4 + x]    = (float)(x + 1) / 8.0f;
          depth_array[0][y * 4 + x]  = (float)(x + 1) / 8.0f;
          depth_array[1][y * 4 + x]  = 0.875f;
+         depth_d16[y * 4 + x]       = (uint16_t)((x + 1) * 65535u / 8u);
+         for (uint32_t f = 0; f < 6; f++)
+            depth_cube[f][y * 4 + x] = (float)(f + 1) / 8.0f;
+         depth_mip[y * 4 + x]       = 0.25f;
       }
+   for (uint32_t i = 0; i < 2 * 2; i++)
+      depth_mip[4 * 4 + i] = 0.75f;
 }
 
 int
@@ -120,6 +140,19 @@ main(int argc, char **argv)
       { "shadow_array", "shadow_array.frag.spv", VK_FORMAT_D32_SFLOAT,
         4, 4, 2, VK_IMAGE_VIEW_TYPE_2D_ARRAY, depth_array, sizeof(depth_array),
         VK_COMPARE_OP_LESS },
+      { "shadow_d16_pcf", "shadow_pcf.frag.spv", VK_FORMAT_D16_UNORM,
+        4, 4, 1, VK_IMAGE_VIEW_TYPE_2D, depth_d16, sizeof(depth_d16),
+        VK_COMPARE_OP_LESS, 1, VK_FILTER_LINEAR },
+      { "shadow_cube", "shadow_cube.frag.spv", VK_FORMAT_D32_SFLOAT,
+        4, 4, 6, VK_IMAGE_VIEW_TYPE_CUBE, depth_cube, sizeof(depth_cube),
+        VK_COMPARE_OP_LESS },
+      { "shadow_mip", "shadow_mip.frag.spv", VK_FORMAT_D32_SFLOAT,
+        4, 4, 1, VK_IMAGE_VIEW_TYPE_2D, depth_mip, sizeof(depth_mip),
+        VK_COMPARE_OP_LESS, 2, VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_LINEAR },
+      { "shadow_border", "shadow_border.frag.spv", VK_FORMAT_D32_SFLOAT,
+        4, 4, 1, VK_IMAGE_VIEW_TYPE_2D, depth_texels, sizeof(depth_texels),
+        VK_COMPARE_OP_LESS, 1, VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST,
+        VK_TRUE },
    };
    const uint32_t ncases = (uint32_t)(sizeof(cases) / sizeof(cases[0]));
 
@@ -307,11 +340,14 @@ main(int argc, char **argv)
    unsigned failed = 0;
    for (uint32_t ci = 0; ci < ncases; ci++) {
       const struct texcase *c = &cases[ci];
+      const uint32_t levels = c->levels ? c->levels : 1u;
+      const bool cube = c->viewtype == VK_IMAGE_VIEW_TYPE_CUBE;
 
       VkImageCreateInfo tci = {
          .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+         .flags = cube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0u,
          .imageType = VK_IMAGE_TYPE_2D, .format = c->fmt,
-         .extent = { c->w, c->h, 1 }, .mipLevels = 1, .arrayLayers = c->layers,
+         .extent = { c->w, c->h, 1 }, .mipLevels = levels, .arrayLayers = c->layers,
          .samples = VK_SAMPLE_COUNT_1_BIT, .tiling = VK_IMAGE_TILING_OPTIMAL,
          .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
          .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -330,14 +366,16 @@ main(int argc, char **argv)
       CHECK(vkAllocateMemory(dev, &tmai, NULL, &tmem));
       CHECK(vkBindImageMemory(dev, tex, tmem, 0));
 
+      const VkSamplerAddressMode am = c->border ? VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER
+                                                : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
       VkSamplerCreateInfo sci = {
          .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-         .magFilter = VK_FILTER_NEAREST, .minFilter = VK_FILTER_NEAREST,
-         .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-         .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-         .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+         .magFilter = c->filter, .minFilter = c->filter,
+         .mipmapMode = c->mipmap,
+         .addressModeU = am, .addressModeV = am, .addressModeW = am,
          .compareEnable = VK_TRUE, .compareOp = c->cmp,
+         .maxLod = (float)(levels - 1),
+         .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
       };
       VkSampler sampler;
       CHECK(vkCreateSampler(dev, &sci, NULL, &sampler));
@@ -347,7 +385,7 @@ main(int argc, char **argv)
          .image = tex, .viewType = c->viewtype, .format = c->fmt,
          .subresourceRange = {
             .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-            .levelCount = 1, .layerCount = c->layers,
+            .levelCount = levels, .layerCount = c->layers,
          },
       };
       VkImageView texview;
@@ -469,20 +507,29 @@ main(int argc, char **argv)
          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
          .image = tex,
-         .subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, c->layers },
+         .subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, levels, 0, c->layers },
          .srcAccessMask = 0, .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
       };
       vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                            VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
                            0, NULL, 0, NULL, 1, &to_dst);
 
-      VkBufferImageCopy tcopy = {
-         .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                               .layerCount = c->layers },
-         .imageExtent = { c->w, c->h, 1 },
-      };
+      /* Level l's layers follow level l-1's in the staging data. */
+      const uint32_t texel = c->fmt == VK_FORMAT_D16_UNORM ? 2u : 4u;
+      VkBufferImageCopy tcopy[2];
+      VkDeviceSize at = 0;
+      for (uint32_t l = 0; l < levels; l++) {
+         const uint32_t lw = c->w >> l ? c->w >> l : 1u, lh = c->h >> l ? c->h >> l : 1u;
+         tcopy[l] = (VkBufferImageCopy){
+            .bufferOffset = at,
+            .imageSubresource = { .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                                  .mipLevel = l, .layerCount = c->layers },
+            .imageExtent = { lw, lh, 1 },
+         };
+         at += (VkDeviceSize)lw * lh * c->layers * texel;
+      }
       vkCmdCopyBufferToImage(cmd, sbuf, tex,
-                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &tcopy);
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, levels, tcopy);
 
       VkImageMemoryBarrier to_read = {
          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -491,7 +538,7 @@ main(int argc, char **argv)
          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
          .image = tex,
-         .subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, c->layers },
+         .subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, levels, 0, c->layers },
          .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
          .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
       };

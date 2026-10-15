@@ -714,7 +714,7 @@ struct TexState {
   uint32_t height;                        // mip-0 integer height (0 => POT via logdim)
   uint32_t border;                        // ARGB8888 border colour (WRAP_BORDER)
   uint32_t layer_stride;                  // bytes per array layer / cube face (0 => single 2D)
-  uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 => none
+  uint32_t compare_func;                  // shadow compare op (VX_OM_DEPTH_FUNC_*); 0 is ALWAYS
   uint32_t swizzle;                       // view component map: r|g<<3|b<<6|a<<9 (0..3=RGBA, 4=0, 5=1)
   uint32_t min_lod;                       // sampler LOD clamp lower bound, Q(VX_TEX_LOD_FRAC_BITS)
   uint32_t max_lod;                       // sampler LOD clamp upper bound, Q(VX_TEX_LOD_FRAC_BITS)
@@ -1569,39 +1569,16 @@ static inline __attribute__((always_inline)) uint32_t tex_residency(
   return 1u;
 }
 
-// Read one raw depth texel as a float in [0,1] from resident memory at `p`.
-// D32F is stored as a raw float; D16 as a 16-bit unorm (/65535). Any other
-// format falls back to the luminance of its ARGB decode (so a colour texture
-// bound to a shadow sampler still yields a deterministic value).
-static inline __attribute__((always_inline)) float decode_depth_f(
-    uint32_t format, const void* p, uint32_t stride) {
-  if (format == VX_TEX_FORMAT_D32F) {
-    float f; __builtin_memcpy(&f, p, 4); return f;
-  }
-  if (format == VX_TEX_FORMAT_D16) {
-    uint16_t d; __builtin_memcpy(&d, p, 2); return (float)d * (1.0f / 65535.0f);
-  }
-  uint32_t argb = gfx_tex::TexDecodeArgb8(format, p, stride);
-  return (float)((argb >> 16) & 0xff) * (1.0f / 255.0f);   // R as luminance
-}
-
-// Float compare for shadow: `ref <compare_func> depth`. Reuses the OM depth
-// compare enum (VkCompareOp maps to it host-side), evaluated on the raw depth
-// floats so a D32F sample keeps full precision (unlike the 8-bit ARGB decode).
-static inline __attribute__((always_inline)) float shadow_compare_f(
-    uint32_t compare_func, float ref, float depth) {
-  bool pass;
-  switch (compare_func) {
-  case VX_OM_DEPTH_FUNC_NEVER:    pass = false;           break;
-  case VX_OM_DEPTH_FUNC_LESS:     pass = (ref <  depth);  break;
-  case VX_OM_DEPTH_FUNC_EQUAL:    pass = (ref == depth);  break;
-  case VX_OM_DEPTH_FUNC_LEQUAL:   pass = (ref <= depth);  break;
-  case VX_OM_DEPTH_FUNC_GREATER:  pass = (ref >  depth);  break;
-  case VX_OM_DEPTH_FUNC_NOTEQUAL: pass = (ref != depth);  break;
-  case VX_OM_DEPTH_FUNC_GEQUAL:   pass = (ref >= depth);  break;
-  default:                        pass = true;            break;   // ALWAYS
-  }
-  return pass ? 1.0f : 0.0f;
+// One depth tap of a shadow sample at `p`: 1 when `ref <compare_func> texel`
+// holds, else 0, by the exact compare the TEX unit's compare stage makes
+// (gfx_tex::TexDepthCompare).
+static inline __attribute__((always_inline)) float shadow_tap(
+    const TexState& s, uint32_t ref_bits, const void* p) {
+  uint32_t word = 0;
+  const uint32_t n = gfx_tex::FormatStride(s.format);
+  __builtin_memcpy(&word, p, n < 4 ? n : 4);
+  return gfx_tex::TexDepthCompare(s.compare_func, ref_bits,
+                                  gfx_tex::TexDepthFromWord(s.format, word)) ? 1.0f : 0.0f;
 }
 
 // sampler2DShadow: sample the depth texture at (u,v), compare each tap against
@@ -1613,33 +1590,22 @@ static inline __attribute__((always_inline)) float shadow_compare_f(
 // Depth compare at one mip `level`: point (1 tap) or PCF (2x2 taps blended by the
 // footprint alpha/beta). `lbase` already carries the array/cube slice offset.
 static inline __attribute__((always_inline)) float tex_shadow_level(
-    const TexState& s, int32_t u, int32_t v, float ref, uint32_t filter,
+    const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter,
     uint64_t lbase, uint32_t level) {
   bool pcf = (filter & TEX_FILTER_MAGMIN_MASK) == VX_TEX_FILTER_BILINEAR;
   tex_offset_uv(s, filter, level, &u, &v);
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
       lbase + s.mip_off[level], s.logdim, s.format,
       pcf ? VX_TEX_FILTER_BILINEAR : VX_TEX_FILTER_POINT,
-      s.wrap, u, v, level, s.width, s.height);
-  if (pcf) {
-    // tap order (u-,v-),(u+,v-),(u-,v+),(u+,v+); alpha = u-frac, beta = v-frac
-    // (both 8-bit); blend in u then v to match the colour bilinear path.
-    float p0 = shadow_compare_f(s.compare_func, ref,
-                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[0], req.stride));
-    float p1 = shadow_compare_f(s.compare_func, ref,
-                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[1], req.stride));
-    float p2 = shadow_compare_f(s.compare_func, ref,
-                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[2], req.stride));
-    float p3 = shadow_compare_f(s.compare_func, ref,
-                 decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[3], req.stride));
-    float a = (float)req.alpha * (1.0f / 256.0f);
-    float b = (float)req.beta  * (1.0f / 256.0f);
-    float row0 = p0 * (1.0f - a) + p1 * a;
-    float row1 = p2 * (1.0f - a) + p3 * a;
-    return row0 * (1.0f - b) + row1 * b;
+      s.wrap, u, v, level, s.width, s.height, s.border_t[0]);
+  // The TEX unit's compare stage (vx_tex_cmp) computes the same Q16 result.
+  uint32_t texels[4] = {};
+  const uint32_t n = req.stride < 4 ? req.stride : 4;
+  for (uint32_t i = 0; i < (pcf ? 4u : 1u); ++i) {
+    __builtin_memcpy(&texels[i], (const void*)(uintptr_t)req.addr[i], n);
   }
-  return shadow_compare_f(s.compare_func, ref,
-           decode_depth_f(s.format, (const void*)(uintptr_t)req.addr[0], req.stride));
+  return (float)gfx_tex::tex_apply_compare(req, texels, s.compare_func, ref_bits)
+       * (1.0f / 65536.0f);
 }
 
 // `lod` selects the mip level (mip-nearest = integer level; mip-linear = Q(LOD_FRAC)
@@ -1648,7 +1614,6 @@ static inline __attribute__((always_inline)) float tex_shadow_level(
 static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
     const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t filter,
     uint32_t layer = 0, uint32_t lod = 0) {
-  float ref; __builtin_memcpy(&ref, &ref_bits, 4);
   uint64_t lbase = s.base + (uint64_t)layer * s.layer_stride;
   float result;
   if (filter & VX_TEX_FILTER_MIP_LINEAR) {
@@ -1656,11 +1621,11 @@ static inline __attribute__((always_inline)) uint32_t tex_shadow_sw(
     uint32_t lj = (li + 1 < (uint32_t)VX_TEX_LOD_MAX) ? li + 1 : (uint32_t)VX_TEX_LOD_MAX;
     float frac = (float)(lod & ((1u << VX_TEX_LOD_FRAC_BITS) - 1))
                * (1.0f / (float)(1u << VX_TEX_LOD_FRAC_BITS));
-    float r0 = tex_shadow_level(s, u, v, ref, filter, lbase, li);
-    float r1 = tex_shadow_level(s, u, v, ref, filter, lbase, lj);
+    float r0 = tex_shadow_level(s, u, v, ref_bits, filter, lbase, li);
+    float r1 = tex_shadow_level(s, u, v, ref_bits, filter, lbase, lj);
     result = r0 * (1.0f - frac) + r1 * frac;
   } else {
-    result = tex_shadow_level(s, u, v, ref, filter, lbase, lod);
+    result = tex_shadow_level(s, u, v, ref_bits, filter, lbase, lod);
   }
   uint32_t out; __builtin_memcpy(&out, &result, 4);
   return out;
@@ -1694,20 +1659,20 @@ static inline __attribute__((always_inline)) uint32_t tex_shadow_cube_array_sw(
 // unpacks /255 -> 0.0/1.0, the same unpack the colour gather uses.
 static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_sw(
     const TexState& s, int32_t u, int32_t v, uint32_t ref_bits, uint32_t layer = 0) {
-  float ref; __builtin_memcpy(&ref, &ref_bits, 4);
   // Array shadow gather: the layer selects the slice; s.depth bounds it.
   uint32_t ly = (s.depth && layer >= s.depth) ? s.depth - 1u : layer;
   gfx_tex::TexelRequest req = gfx_tex::tex_compute_request(
       s.base + (uint64_t)ly * s.layer_stride, s.logdim, s.format,
       VX_TEX_FILTER_BILINEAR, s.wrap, u, v, 0,
-      s.width, s.height);
+      s.width, s.height, s.border_t[0]);
   const uint32_t order[4] = { 2, 3, 1, 0 };
   uint32_t packed = 0;
   for (uint32_t i = 0; i < 4; ++i) {
-    float d = decode_depth_f(s.format,
-                (const void*)(uintptr_t)req.addr[order[i]], req.stride);
-    float p = shadow_compare_f(s.compare_func, ref, d);
-    packed |= (p != 0.0f ? 0xffu : 0x00u) << (i * 8);
+    uint32_t word = 0;
+    __builtin_memcpy(&word, (const void*)(uintptr_t)req.addr[order[i]],
+                     req.stride < 4 ? req.stride : 4);
+    const uint32_t p = gfx_tex::tex_compare_tap(req, order[i], word, s.compare_func, ref_bits);
+    packed |= (p ? 0xffu : 0x00u) << (i * 8);
   }
   return packed;
 }
@@ -1726,8 +1691,6 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_cube_sw(
     cs.depth = 0;
     return tex_gather_cmp_sw(cs, u, v, ref_bits, cube_array_clamp(s, array_index) * 6u + face);
   }
-  float ref;
-  __builtin_memcpy(&ref, &ref_bits, 4);
   const CubeFootprint fp = tex_cube_footprint(s, sc, tc, rc, 0);
   const uint32_t layer0 = cube_array_clamp(s, array_index) * 6u;
   const int32_t di[4] = { 0, 1, 1, 0 }, dj[4] = { 1, 1, 0, 0 };
@@ -1735,11 +1698,11 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_cube_sw(
   for (uint32_t k = 0; k < 4; ++k) {
     float t[4];
     tex_cube_texel(s, layer0, fp.face, fp.i0 + di[k], fp.j0 + dj[k], 0,
-                   [&](const void* a, uint32_t, uint32_t st, float* c) {
-                     c[0] = decode_depth_f(s.format, a, st);
+                   [&](const void* a, uint32_t, uint32_t, float* c) {
+                     c[0] = shadow_tap(s, ref_bits, a);
                    },
                    t);
-    packed |= (shadow_compare_f(s.compare_func, ref, t[0]) != 0.0f ? 0xffu : 0x00u) << (k * 8);
+    packed |= (t[0] != 0.0f ? 0xffu : 0x00u) << (k * 8);
   }
   return packed;
 }

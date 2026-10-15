@@ -29,6 +29,7 @@ module VX_tex_core_top import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     input  wire [NUM_LANES-1:0]             tex_req_mask,
     input  wire [1:0][NUM_LANES-1:0][31:0]  tex_req_coords,
     input  wire [NUM_LANES-1:0][TEX_ARG_BITS-1:0] tex_req_lod,
+    input  wire                             tex_req_cmp,
     input  wire [TEX_STAGE_BITS-1:0]    tex_req_stage,
     input  wire [TAG_WIDTH-1:0]             tex_req_tag,
     output wire                             tex_req_ready,
@@ -80,6 +81,7 @@ module VX_tex_core_top import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     assign tex_bus_if.req_data.mask = tex_req_mask;
     assign tex_bus_if.req_data.coords = tex_req_coords;
     assign tex_bus_if.req_data.lod = tex_req_lod;
+    assign tex_bus_if.req_data.cmp = tex_req_cmp;
     assign tex_bus_if.req_data.stage = tex_req_stage;
     assign tex_bus_if.req_data.tag = tex_req_tag;
     assign tex_req_ready = tex_bus_if.req_ready;

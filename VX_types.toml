@@ -170,6 +170,8 @@ VX_DCR_TEX_WRAP        = 0x045
 # reachable request and needs an entry like every other level.
 VX_DCR_TEX_MIPOFF_BASE = 0x046
 # Colour a CLAMP_TO_BORDER tap returns, ARGB8888. Above the mip-offset table.
+# A vx_tex_cmp of a depth format compares a border tap's depth instead, which the
+# register holds as an f32.
 VX_DCR_TEX_BORDER      = 0x056
 # Bytes between the array layers (or cube faces) of the bound texture: a lane's
 # layer reads its mip chain at base + layer * stride.
@@ -200,6 +202,10 @@ VX_TEX_FILTER_REDUCTION_SHIFT = 8
 VX_TEX_REDUCTION_AVG = 0
 VX_TEX_REDUCTION_MIN = 1
 VX_TEX_REDUCTION_MAX = 2
+# Shadow compare, FILTER[12:10]: the VX_OM_DEPTH_FUNC_* a vx_tex_cmp tests its
+# reference against each tap with (ref <func> texel).
+VX_TEX_FILTER_COMPARE_SHIFT = 10
+VX_TEX_FILTER_COMPARE_BITS  = 3
 
 # Fields of the vx_tex lod operand above the level: LANE_FILTER makes the
 # lane's BILINEAR and MIP_LINEAR bits replace the stage's FILTER (the shader
@@ -210,6 +216,18 @@ VX_TEX_ARG_BILINEAR    = 17
 VX_TEX_ARG_MIP_LINEAR  = 18
 VX_TEX_ARG_LAYER_SHIFT = 20
 VX_TEX_ARG_LAYER_BITS  = 12
+# vx_tex_cmp (depth compare): rs3 is the f32 reference, so the sample's other
+# inputs ride above the coordinates. A folded coordinate is S.23 in [-4, 4) and
+# fits bits [25:0]; the unit sign-extends it from bit 25. u[31:26] is the array
+# layer (a cube face is 6 * cube + face); v[29:26] the integer level, v[30]
+# BILINEAR and v[31] LANE_FILTER, as in the vx_tex lod operand. The result is
+# the compare's PCF value as an f32.
+VX_TEX_CMP_COORD_BITS      = 26
+VX_TEX_CMP_U_LAYER_SHIFT   = 26
+VX_TEX_CMP_LAYER_BITS      = 6
+VX_TEX_CMP_V_LEVEL_SHIFT   = 26
+VX_TEX_CMP_V_BILINEAR      = 30
+VX_TEX_CMP_V_LANE_FILTER   = 31
 # textureGather: GATHER returns channel GATHER_COMP (0..3 = R,G,B,A, 2 bits) of
 # the bilinear footprint's four taps at the integer level, 8 bits each in GL
 # gather order, in place of a filtered texel.

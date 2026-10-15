@@ -651,7 +651,7 @@ inline std::ostream &operator<<(std::ostream &os, const DxaType& type) {
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
 
-enum class TexType { SAMPLE };
+enum class TexType { SAMPLE, SAMPLE_CMP };
 
 struct IntrTexArgs {
   uint32_t stage : 2;     // texture stage (funct2)
@@ -659,7 +659,8 @@ struct IntrTexArgs {
 
 inline std::ostream &operator<<(std::ostream &os, const TexType& type) {
   switch (type) {
-  case TexType::SAMPLE: os << "TEX"; break;
+  case TexType::SAMPLE:     os << "TEX"; break;
+  case TexType::SAMPLE_CMP: os << "TEX_CMP"; break;
   default: os << "?"; break;
   }
   return os;

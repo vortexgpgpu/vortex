@@ -30,6 +30,11 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     input wire [NUM_LANES-1:0][2:0]     req_gather,
     // VX_TEX_REDUCTION_*: the weighted average, or the min/max of the taps.
     input wire [1:0]                    req_reduction,
+    // vx_tex_cmp: compare level 0's taps against each lane's f32 reference with
+    // `req_compare` and return the filtered result as an f32.
+    input wire                          req_cmp,
+    input wire [TEX_CMP_BITS-1:0]       req_compare,
+    input wire [NUM_LANES-1:0][31:0]    req_ref,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] req_blends,
     input wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] req_border,
     input wire [31:0]                   req_bordercolor,
@@ -60,6 +65,21 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 
     wire stall_out;
 
+    wire [NUM_LANES-1:0][3:0] cmp_pass;
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_compare
+        VX_tex_compare #(
+            .NUM_TAPS (4)
+        ) tex_compare (
+            .format       (req_format),
+            .func         (req_compare),
+            .ref_bits     (req_ref[i]),
+            .texels       (req_data[i][0]),
+            .border       (req_border[i][0]),
+            .border_depth (req_bordercolor),
+            .pass         (cmp_pass[i])
+        );
+    end
+
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_fmt_texels
         for (genvar k = 0; k < TEX_NUM_LEVELS; ++k) begin : g_k
             for (genvar j = 0; j < 4; ++j) begin : g_j
@@ -73,7 +93,10 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                 // what its address returned. It happens after the decode because
                 // the border colour is already in the sampler's working format
                 // while a fetched texel is still in the texture's.
-                assign sel_texels[i][k][j] = req_border[i][k][j] ? req_bordercolor
+                // A compare's level-0 taps carry their 0/1 results instead,
+                // which the blends below do not read.
+                assign sel_texels[i][k][j] = (req_cmp && k == 0) ? 32'(cmp_pass[i][j])
+                                           : req_border[i][k][j] ? req_bordercolor
                                                                  : fmt_texels[i][k][j];
             end
         end
@@ -107,23 +130,62 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     );
 
     wire [1:0] reduction_s0;
+    wire cmp_s0;
 
     VX_pipe_register #(
-        .DATAW  (1 + REQ_TAGW + 2 + (NUM_LANES * (LODFRAC_W + TEX_NUM_LEVELS * (2 * `TEX_BLEND_FRAC + 4 * 32)))),
+        .DATAW  (1 + REQ_TAGW + 2 + 1 + (NUM_LANES * (LODFRAC_W + TEX_NUM_LEVELS * (2 * `TEX_BLEND_FRAC + 4 * 32)))),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid, req_tag,    req_reduction, req_blends,    req_lodfrac, sel_texels}),
-        .data_out ({valid_s0,  req_tag_s0, reduction_s0,  req_blends_s0, lodfrac_s0,  fmt_texels_s0})
+        .data_in  ({req_valid, req_tag,    req_reduction, req_cmp, req_blends,    req_lodfrac, sel_texels}),
+        .data_out ({valid_s0,  req_tag_s0, reduction_s0,  cmp_s0,  req_blends_s0, lodfrac_s0,  fmt_texels_s0})
     );
+
+    // A compare's result: its taps' 0/1 values blended by the level-0 weights,
+    // in Q16 (65536 is 1, exact with 8-bit weights), as an f32. It joins the
+    // reduction's path to the output.
+    wire [NUM_LANES-1:0][31:0] cmp_result;
+    // The PCF sum below is in Q16 because the blend weights are 8-bit fractions.
+    `STATIC_ASSERT(`TEX_BLEND_FRAC == 8, ("the compare result assumes 8-bit blend weights"))
+
+    for (genvar i = 0; i < NUM_LANES; ++i) begin : g_cmp_result
+        wire [8:0] a = 9'(req_blends_s0[i][0][0]);
+        wire [8:0] b = 9'(req_blends_s0[i][0][1]);
+        wire [3:0] p;
+        for (genvar j = 0; j < 4; ++j) begin : g_p
+            assign p[j] = fmt_texels_s0[i][0][j][0];
+        end
+        wire [8:0]  na   = 9'd256 - a;
+        wire [8:0]  nb   = 9'd256 - b;
+        wire [8:0]  row0 = (p[0] ? na : 9'd0) + (p[1] ? a : 9'd0);
+        wire [8:0]  row1 = (p[2] ? na : 9'd0) + (p[3] ? a : 9'd0);
+        wire [17:0] qs   = (18'(row0) * 18'(nb)) + (18'(row1) * 18'(b));
+        wire [16:0] q    = qs[16:0];   // at most 65536
+        `UNUSED_VAR (qs[17])
+        reg [31:0] result_w;
+        always @(*) begin
+            result_w = '0;
+            if (q[16]) begin
+                result_w = 32'h3f800000;
+            end else begin
+                for (integer k = 0; k < 16; ++k) begin
+                    if (q[k]) begin
+                        // q / 2^16 = 1.m * 2^(k - 16)
+                        result_w = {1'b0, 8'(111 + k), 23'(24'(q[15:0]) << (23 - k))};
+                    end
+                end
+            end
+        end
+        assign cmp_result[i] = result_w;
+    end
 
     // Min/max reduction: per channel, over the taps whose blend weight is not
     // zero -- tap 0 always, tap 1 with a u weight, tap 2 with a v weight, tap 3
     // with both -- then over the two levels when the level weight is not zero.
     // It runs beside the blends and joins the result at the end, one register
-    // later than gather starts.
+    // later than gather starts; a compare's result takes the same path.
     function automatic [31:0] reduce4x8(input [31:0] a, input [31:0] b, input is_min);
         for (integer c = 0; c < 4; ++c) begin
             reduce4x8[c*8 +: 8] = ((a[c*8 +: 8] < b[c*8 +: 8]) == is_min) ? a[c*8 +: 8] : b[c*8 +: 8];
@@ -145,7 +207,8 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                                     : fmt_texels_s0[i][k][2];
             assign level_texel[k] = has_v ? reduce4x8(t01, t23, reduce_min) : t01;
         end
-        assign reduced_texel[i] = (lodfrac_s0[i] != '0) ? reduce4x8(level_texel[0], level_texel[1], reduce_min)
+        assign reduced_texel[i] = cmp_s0 ? cmp_result[i]
+                                : (lodfrac_s0[i] != '0) ? reduce4x8(level_texel[0], level_texel[1], reduce_min)
                                                         : level_texel[0];
     end
 
@@ -157,7 +220,7 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({reduce_en,   reduced_texel}),
+        .data_in  ({reduce_en || cmp_s0, reduced_texel}),
         .data_out ({reduce_en_s, reduced_texel_s})
     );
 

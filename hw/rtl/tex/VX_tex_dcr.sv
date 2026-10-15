@@ -56,11 +56,22 @@ module VX_tex_dcr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                     dcrs_n.baseaddr = write_data[`TEX_ADDR_BITS-1:0];
                 end
                 `VX_DCR_TEX_FORMAT: begin
-                    dcrs_n.format = write_data[TEX_FORMAT_BITS-1:0];
+                    case (write_data)
+                        `VX_TEX_FORMAT_D16:  dcrs_n.format = TEX_FMT_D16;
+                        `VX_TEX_FORMAT_D32F: dcrs_n.format = TEX_FMT_D32F;
+                        `VX_TEX_FORMAT_D24:  dcrs_n.format = TEX_FMT_D24;
+                        default: begin
+                            // A format the unit does not read decodes as A8R8G8B8.
+                            dcrs_n.format = (write_data <= `VX_TEX_FORMAT_FF_MAX)
+                                          ? write_data[TEX_FORMAT_BITS-1:0]
+                                          : TEX_FORMAT_BITS'(`VX_TEX_FORMAT_A8R8G8B8);
+                        end
+                    endcase
                 end
                 `VX_DCR_TEX_FILTER: begin
                     dcrs_n.filter = write_data[TEX_FILTER_BITS-1:0];
                     dcrs_n.reduction = write_data[`VX_TEX_FILTER_REDUCTION_SHIFT +: 2];
+                    dcrs_n.compare = write_data[`VX_TEX_FILTER_COMPARE_SHIFT +: TEX_CMP_BITS];
                 end
                 `VX_DCR_TEX_WRAP: begin
                     dcrs_n.wraps[0] = write_data[0  +: TEX_WRAP_BITS];

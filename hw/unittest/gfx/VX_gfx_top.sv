@@ -216,6 +216,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         assign per_core_tex_bus_if[c].req_data.mask   = tex_req_mask[c];
         assign per_core_tex_bus_if[c].req_data.coords = tex_req_coords[c];
         assign per_core_tex_bus_if[c].req_data.lod    = tex_req_lod[c];
+        assign per_core_tex_bus_if[c].req_data.cmp    = 1'b0;
         assign per_core_tex_bus_if[c].req_data.stage  = tex_req_stage[c];
         assign per_core_tex_bus_if[c].req_data.tag    = tex_req_tag[c];
         assign tex_req_ready[c]  = per_core_tex_bus_if[c].req_ready;

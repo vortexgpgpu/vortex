@@ -971,8 +971,11 @@ package VX_gpu_pkg;
     // TEX stage-select width — used here in the core op-args encoding, so it is
     // owned by the core package (not VX_tex_pkg, which the core cannot import).
     localparam TEX_STAGE_BITS = `CLOG2(`VX_TEX_STAGE_COUNT);
+    // `cmp` is vx_tex_cmp (funct3=1): rs3 carries an f32 depth reference
+    // instead of the lod operand, whose fields ride above u and v.
     typedef struct packed {
-        logic [INST_ARGS_BITS-TEX_STAGE_BITS-1:0] __padding;
+        logic [INST_ARGS_BITS-TEX_STAGE_BITS-2:0] __padding;
+        logic                                     cmp;
         logic [TEX_STAGE_BITS-1:0]                stage;
     } tex_args_t;
     `PACKAGE_ASSERT($bits(tex_args_t) == INST_ARGS_BITS)

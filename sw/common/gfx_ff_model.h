@@ -169,6 +169,13 @@ public:
     }
     uint32_t state = VX_DCR_TEX_STATE(addr-1);
     assert(state < VX_DCR_TEX_STATE_COUNT);
+    // The unit keeps the formats it decodes -- the FF colour set and the depth
+    // formats its compare stage reads -- and takes any other as A8R8G8B8, as
+    // VX_tex_dcr does.
+    if (addr == VX_DCR_TEX_FORMAT && value > VX_TEX_FORMAT_FF_MAX && value != VX_TEX_FORMAT_D16
+        && value != VX_TEX_FORMAT_D24 && value != VX_TEX_FORMAT_D32F) {
+      value = VX_TEX_FORMAT_A8R8G8B8;
+    }
     states_[stage_][state] = value;
   }
 
@@ -222,6 +229,12 @@ public:
 
   uint32_t reduction(uint32_t stage) const {
     return (dcrs_.read(stage, VX_DCR_TEX_FILTER) >> VX_TEX_FILTER_REDUCTION_SHIFT) & 0x3u;
+  }
+
+  // vx_tex_cmp's compare function for this stage (VX_OM_DEPTH_FUNC_*).
+  uint32_t compare_func(uint32_t stage) const {
+    return (dcrs_.read(stage, VX_DCR_TEX_FILTER) >> VX_TEX_FILTER_COMPARE_SHIFT)
+         & ((1u << VX_TEX_FILTER_COMPARE_BITS) - 1u);
   }
 
 protected:

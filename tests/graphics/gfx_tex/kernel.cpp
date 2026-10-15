@@ -78,6 +78,22 @@ __kernel void kernel_main_lanes(kernel_arg_t* __UNIFORM__ arg) {
     dst_row[gx] = color;
 }
 
+// Depth compare in the unit: each pixel's own layer, tap filter and reference
+// (cmp_layer/cmp_bilinear/cmp_ref_bits), its PCF result written as an f32.
+__kernel void kernel_main_cmp(kernel_arg_t* __UNIFORM__ arg) {
+    uint32_t gx = blockIdx.x * blockDim.x + threadIdx.x;
+    uint32_t gy = blockIdx.y * blockDim.y + threadIdx.y;
+    if (gx >= arg->dst_width || gy >= arg->dst_height) {
+        return;
+    }
+    int32_t fu = arg->uv_bias + arg->uv_delta * (int32_t)gx;
+    int32_t fv = arg->uv_bias + arg->uv_delta * (int32_t)gy;
+    unsigned u, v;
+    vx_tex_cmp_uv(fu, fv, cmp_layer(gx, gy), 0, true, cmp_bilinear(gx, gy), &u, &v);
+    auto dst_row = reinterpret_cast<uint32_t*>(arg->dst_addr + gy * arg->dst_pitch);
+    dst_row[gx] = vx_tex_cmp(0, u, v, cmp_ref_bits(gx, gy));
+}
+
 // textureGather in the unit: the chosen channel of the bilinear footprint's four
 // taps at the base level, packed in GL gather order, written as the pixel.
 __kernel void kernel_main_gather(kernel_arg_t* __UNIFORM__ arg) {

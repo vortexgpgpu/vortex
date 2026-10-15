@@ -37,13 +37,31 @@ instr_trace_t* TexUnit::process(instr_trace_t* trace, uint32_t block_id) {
   req.trace    = trace;
   req.block_id = block_id;
 
+  // vx_tex_cmp carries its reference in rs3, so its layer, level and lane
+  // filter ride above the coordinates; they are unpacked into the vx_tex lod
+  // operand's fields here, and the coordinates sign-extended from their top bit.
+  req.cmp = std::get<TexType>(instr.get_op_type()) == TexType::SAMPLE_CMP;
+  constexpr uint32_t kHi = 32 - VX_TEX_CMP_COORD_BITS;
   uint32_t bits = 0;
   for (uint32_t t = 0; t < VX_CFG_NUM_THREADS; ++t) {
     if (!trace->tmask.test(t)) continue;
     bits |= (1u << t);
-    req.u[t]   = static_cast<int32_t>(trace->src_data[0].at(t).u);
-    req.v[t]   = static_cast<int32_t>(trace->src_data[1].at(t).u);
-    req.lod[t] = trace->src_data[2].at(t).u;
+    const uint32_t u = trace->src_data[0].at(t).u;
+    const uint32_t v = trace->src_data[1].at(t).u;
+    if (req.cmp) {
+      req.u[t]   = static_cast<int32_t>(u << kHi) >> kHi;
+      req.v[t]   = static_cast<int32_t>(v << kHi) >> kHi;
+      req.ref[t] = trace->src_data[2].at(t).u;
+      const uint32_t layer = (u >> VX_TEX_CMP_U_LAYER_SHIFT) & ((1u << VX_TEX_CMP_LAYER_BITS) - 1u);
+      req.lod[t] = ((v >> VX_TEX_CMP_V_LEVEL_SHIFT) & (uint32_t)VX_TEX_LOD_MAX)
+                 | (((v >> VX_TEX_CMP_V_LANE_FILTER) & 1u) << VX_TEX_ARG_LANE_FILTER)
+                 | (((v >> VX_TEX_CMP_V_BILINEAR) & 1u) << VX_TEX_ARG_BILINEAR)
+                 | (layer << VX_TEX_ARG_LAYER_SHIFT);
+    } else {
+      req.u[t]   = static_cast<int32_t>(u);
+      req.v[t]   = static_cast<int32_t>(v);
+      req.lod[t] = trace->src_data[2].at(t).u;
+    }
   }
   req.tmask_bits = bits;
 

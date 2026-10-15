@@ -40,4 +40,30 @@ static inline uint32_t lanes_tex_op(uint32_t x, uint32_t y, uint32_t lod) {
        | (mip << VX_TEX_ARG_MIP_LINEAR) | (layer << VX_TEX_ARG_LAYER_SHIFT);
 }
 
+// -z mode: each pixel's array layer, tap filter and f32 reference, and the
+// depth texture's texel at (x, y) of `layer` (a unorm code, or a float's bits
+// for D32F) -- shared by the kernel and the host check.
+static inline uint32_t cmp_layer(uint32_t x, uint32_t y) {
+  return ((x >> 2) ^ (y >> 2)) & 1u;
+}
+static inline uint32_t cmp_bilinear(uint32_t x, uint32_t y) {
+  return ((x >> 1) + y) & 1u;
+}
+static inline uint32_t cmp_ref_bits(uint32_t x, uint32_t y) {
+  const float r = (float)((x * 29u + y * 17u) & 0x1ffu) * (1.0f / 256.0f) - 0.5f;
+  uint32_t b;
+  __builtin_memcpy(&b, &r, 4);
+  return b;
+}
+static inline uint32_t cmp_texel(uint32_t format, uint32_t x, uint32_t y, uint32_t layer) {
+  const uint32_t h = x * 2654435761u ^ y * 40503u ^ layer * 0x9e3779b9u;
+  if (format == VX_TEX_FORMAT_D32F) {
+    const float f = (float)((h >> 8) & 0xffu) * (1.0f / 256.0f);
+    uint32_t b;
+    __builtin_memcpy(&b, &f, 4);
+    return b;
+  }
+  return format == VX_TEX_FORMAT_D16 ? (h & 0xffffu) : (h & 0xffffffu);
+}
+
 #endif

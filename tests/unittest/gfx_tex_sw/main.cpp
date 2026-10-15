@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 using namespace vortex;
@@ -831,6 +832,69 @@ void check_field_formats() {
 
 } // namespace
 
+// TexDepthCompare against the exact rational compare, ref * (2^n - 1) against
+// d in long double (48 significant bits, exact), for D16 and D24 texels: every
+// operator, references on and around each code's value and around the clamp
+// points, and NaN and -0.
+void check_depth_compare() {
+  const uint32_t funcs[8] = { VX_OM_DEPTH_FUNC_ALWAYS, VX_OM_DEPTH_FUNC_NEVER,
+                              VX_OM_DEPTH_FUNC_LESS, VX_OM_DEPTH_FUNC_LEQUAL,
+                              VX_OM_DEPTH_FUNC_EQUAL, VX_OM_DEPTH_FUNC_GEQUAL,
+                              VX_OM_DEPTH_FUNC_GREATER, VX_OM_DEPTH_FUNC_NOTEQUAL };
+  auto bits_of = [](float f) { uint32_t b; memcpy(&b, &f, 4); return b; };
+  uint32_t fails = 0, checked = 0;
+  for (uint32_t n : { 16u, 24u }) {
+    const uint32_t k = (1u << n) - 1u;
+    const uint32_t fmt = n == 16 ? (uint32_t)VX_TEX_FORMAT_D16 : (uint32_t)VX_TEX_FORMAT_D24;
+    uint32_t seed = 12345u + n;
+    for (uint32_t it = 0; it < 4000; ++it) {
+      seed = seed * 1664525u + 1013904223u;
+      const uint32_t d = (it < 4) ? (it < 2 ? it : k - (it - 2)) : seed % (k + 1u);
+      const float v = (float)d / (float)k;
+      float refs[7] = { v, nextafterf(v, 0.0f), nextafterf(v, 2.0f), (float)(d + 1) / (float)k,
+                        -0.0f, 1.5f, nanf("") };
+      for (float r : refs) {
+        long double rr = std::isnan(r) || r <= 0.0f ? 0.0L : (r >= 1.0f ? 1.0L : (long double)r);
+        const long double lhs = rr * (long double)k, rhs = (long double)d;
+        const gfx_tex::TexDepthTexel t = gfx_tex::TexDepthFromWord(fmt, d);
+        for (uint32_t f : funcs) {
+          bool want;
+          switch (f) {
+          case VX_OM_DEPTH_FUNC_NEVER:    want = false;        break;
+          case VX_OM_DEPTH_FUNC_LESS:     want = lhs <  rhs;   break;
+          case VX_OM_DEPTH_FUNC_LEQUAL:   want = lhs <= rhs;   break;
+          case VX_OM_DEPTH_FUNC_EQUAL:    want = lhs == rhs;   break;
+          case VX_OM_DEPTH_FUNC_GEQUAL:   want = lhs >= rhs;   break;
+          case VX_OM_DEPTH_FUNC_GREATER:  want = lhs >  rhs;   break;
+          case VX_OM_DEPTH_FUNC_NOTEQUAL: want = lhs != rhs;   break;
+          default:                        want = true;         break;
+          }
+          ++checked;
+          if (gfx_tex::TexDepthCompare(f, bits_of(r), t) != want && ++fails <= 6) {
+            printf("  D%u depth compare: func %u ref %.9g d %u -> %d, want %d\n", n, f,
+                   (double)r, d, !want, want);
+          }
+        }
+      }
+    }
+  }
+  // D32F: a float compare, -0 equal to +0, NaN equal to nothing.
+  const gfx_tex::TexDepthTexel z = gfx_tex::TexDepthFromWord(VX_TEX_FORMAT_D32F, bits_of(0.0f));
+  ++checked;
+  if (!gfx_tex::TexDepthCompare(VX_OM_DEPTH_FUNC_EQUAL, bits_of(-0.0f), z) ||
+      gfx_tex::TexDepthCompare(VX_OM_DEPTH_FUNC_EQUAL, bits_of(nanf("")), z) ||
+      !gfx_tex::TexDepthCompare(VX_OM_DEPTH_FUNC_NOTEQUAL, bits_of(nanf("")), z)) {
+    ++fails;
+    printf("  D32F depth compare: signed zero or NaN wrong\n");
+  }
+  if (fails) {
+    g_fail += fails;
+    printf("DEPTH COMPARE: FAILED (%u/%u mismatches against the exact compare)\n", fails, checked);
+  } else {
+    printf("  depth compare exact (%u cases, D16/D24/D32F)\n", checked);
+  }
+}
+
 int main() {
   void* p = mmap((void*)TEX_BASE, TEX_POOL, PROT_READ | PROT_WRITE,
                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
@@ -874,6 +938,7 @@ int main() {
   check_border(pool);
   check_bc_decode(pool);
   check_field_formats();
+  check_depth_compare();
 
   if (g_fail) {
     printf("\nTEX-SW PARITY: FAILED (%u mismatches across %u configs)\n", g_fail, configs);

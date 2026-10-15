@@ -20,6 +20,10 @@ SRCS := $(SRC_DIR)/main.c
 SHADERS := $(SRC_DIR)/tex_shadow.vert \
            $(SRC_DIR)/shadow_less.frag \
            $(SRC_DIR)/shadow_greater.frag \
-           $(SRC_DIR)/shadow_array.frag
+           $(SRC_DIR)/shadow_array.frag \
+           $(SRC_DIR)/shadow_pcf.frag \
+           $(SRC_DIR)/shadow_cube.frag \
+           $(SRC_DIR)/shadow_mip.frag \
+           $(SRC_DIR)/shadow_border.frag
 
 include ../common.mk

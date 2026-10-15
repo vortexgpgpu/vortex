@@ -620,6 +620,12 @@ tests:
   app: gfx_tex
   configs: -DVX_CFG_EXT_TEX_ENABLE
   args: -i soccer.png -G 1 -s 0.5 -o null
+- id: model_parity-tex-cmp
+  check: model_parity
+  via: blackbox
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -f 17 -z 3 -o null
 - id: model_parity-tex-npot
   check: model_parity
   via: blackbox
@@ -800,6 +806,42 @@ tests:
   app: gfx_tex
   configs: -DVX_CFG_EXT_TEX_ENABLE
   args: -i soccer.png -c 45x27 -G 2 -B -o null
+
+# Depth compare (vx_tex_cmp) of a two-layer depth texture, each pixel taking its
+# own layer, tap filter and reference, checked in-test against the software
+# shadow sampler: D16 clamped, under a border wrap (whose depth is an f32 of 1.0,
+# against references the unorm compare clamps) and mirrored, D24 under a border
+# wrap, and D32F repeating, with five different compare functions.
+- id: gfx_tex-cmp-d16
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -f 17 -z 2 -o null
+- id: gfx_tex-cmp-d24-border
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -f 56 -z 5 -B -c 24x20 -o null
+- id: gfx_tex-cmp-d32f-repeat
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -f 18 -z 7 -w 1 -o null
+- id: gfx_tex-cmp-d16-border
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -f 17 -z 3 -B -c 20x24 -o null
+- id: gfx_tex-cmp-d16-mirror
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -f 17 -z 6 -w 2 -o null
 
 # Sampler reductions: the per-channel min or max of the taps with a nonzero
 # weight, over one level and over two (lanes mix both), and under

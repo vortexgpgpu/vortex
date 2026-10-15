@@ -773,11 +773,14 @@ module VX_decode import
                     op_type = INST_OP_BITS'(INST_WGATHER);
                 end
             `ifdef VX_CFG_EXT_TEX_ENABLE
+                3'h1,       // vx_tex_cmp: rs1=u, rs2=v (fields above the coordinates),
+                            // rs3=f32 depth reference, rd=f32 compare result.
                 3'h5: begin // vx_tex: R4-type. rs1=u, rs2=v, rs3=lod, rd=texel, funct2=stage.
                             // TEX takes its operands in registers.
                     ex_type = EX_SFU;
                     op_type = INST_OP_BITS'(INST_SFU_TEX);
                     op_args.tex.stage = funct2[0 +: TEX_STAGE_BITS];
+                    op_args.tex.cmp = (funct3 == 3'h1);
                     `USED_IREG (rd);    // texel
                     `USED_IREG (rs1);   // u
                     `USED_IREG (rs2);   // v

@@ -32,7 +32,7 @@ module VX_tex_bus_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 );
 
     localparam LOG_NUM_REQS = `ARB_SEL_BITS(NUM_INPUTS, NUM_OUTPUTS);
-    localparam REQ_DATAW    = TAG_WIDTH + NUM_LANES * (1 + 2 * 32 + TEX_ARG_BITS) + TEX_STAGE_BITS;
+    localparam REQ_DATAW    = TAG_WIDTH + NUM_LANES * (1 + 2 * 32 + TEX_ARG_BITS) + 1 + TEX_STAGE_BITS;
     localparam RSP_DATAW    = TAG_WIDTH + NUM_LANES * 32;
 
     ///////////////////////////////////////////////////////////////////////
@@ -48,7 +48,7 @@ module VX_tex_bus_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
 
     for (genvar i = 0; i < NUM_INPUTS; ++i) begin : g_req_data_in
         assign req_valid_in[i] = bus_in_if[i].req_valid;
-        assign req_data_in[i] = {bus_in_if[i].req_data.tag, bus_in_if[i].req_data.mask, bus_in_if[i].req_data.coords, bus_in_if[i].req_data.lod, bus_in_if[i].req_data.stage};
+        assign req_data_in[i] = {bus_in_if[i].req_data.tag, bus_in_if[i].req_data.mask, bus_in_if[i].req_data.coords, bus_in_if[i].req_data.lod, bus_in_if[i].req_data.cmp, bus_in_if[i].req_data.stage};
         assign bus_in_if[i].req_ready = req_ready_in[i];
     end
 
@@ -82,7 +82,7 @@ module VX_tex_bus_arb import VX_gpu_pkg::*, VX_tex_pkg::*; #(
             .data_out (bus_out_if[i].req_data.tag)
         );
         assign bus_out_if[i].req_valid = req_valid_out[i];
-        assign {req_tag_out, bus_out_if[i].req_data.mask, bus_out_if[i].req_data.coords, bus_out_if[i].req_data.lod, bus_out_if[i].req_data.stage} = req_data_out[i];
+        assign {req_tag_out, bus_out_if[i].req_data.mask, bus_out_if[i].req_data.coords, bus_out_if[i].req_data.lod, bus_out_if[i].req_data.cmp, bus_out_if[i].req_data.stage} = req_data_out[i];
         assign req_ready_out[i] = bus_out_if[i].req_ready;
     end
 

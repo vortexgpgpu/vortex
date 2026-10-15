@@ -79,6 +79,10 @@ public:
     // The reduction mode the request was issued under, as the unit carries it
     // with the request rather than reading the DCR when the texels return.
     uint32_t                   reduction = 0;
+    // vx_tex_cmp: compare each tap against `ref` with `compare_func`.
+    bool                       cmp      = false;
+    uint32_t                   ref      = 0;
+    uint32_t                   compare_func = 0;
     bool                       gather   = false; // textureGather: four taps' channel
     uint32_t                   gather_comp = 0;
     uint32_t                   filtered = 0;    // result after apply_filter
@@ -200,12 +204,14 @@ private:
       }
       l.active = true;
       const uint32_t arg = s.req.lod[t];
-      // A gather reads the bilinear footprint of one level, whatever the filter.
+      // A gather reads the bilinear footprint of one level, whatever the filter,
+      // and a compare one level too (the shader blends two for MIP_LINEAR).
       l.gather = (arg >> VX_TEX_ARG_GATHER) & 1u;
       l.gather_comp = (arg >> VX_TEX_ARG_GATHER_COMP) & 3u;
       const bool lane_filter = (arg >> VX_TEX_ARG_LANE_FILTER) & 1u;
-      const bool mip_linear = !l.gather && (lane_filter ? ((arg >> VX_TEX_ARG_MIP_LINEAR) & 1u)
-                                                        : stage_mip_linear);
+      const bool mip_linear = !l.gather && !s.req.cmp
+                           && (lane_filter ? ((arg >> VX_TEX_ARG_MIP_LINEAR) & 1u)
+                                           : stage_mip_linear);
       const uint32_t tap_filter = l.gather ? (uint32_t)VX_TEX_FILTER_BILINEAR
                                 : lane_filter ? ((arg >> VX_TEX_ARG_BILINEAR) & 1u) : ~0u;
       const uint32_t layer = (arg >> VX_TEX_ARG_LAYER_SHIFT) & ((1u << VX_TEX_ARG_LAYER_BITS) - 1u);
@@ -227,6 +233,9 @@ private:
                  : l.trq[0];
       l.levels   = mip_linear ? 2u : 1u;
       l.reduction = sampler_.reduction(s.req.stage);
+      l.cmp = s.req.cmp;
+      l.ref = s.req.ref[t];
+      l.compare_func = sampler_.compare_func(s.req.stage);
       l.need_mask = l.gather ? 0xfu : 0u;
       for (uint32_t k = 0; !l.gather && k < l.levels; ++k) {
         if (k == 1 && l.lod_frac == 0) {
@@ -408,6 +417,14 @@ private:
       if (!l.active) continue;
       if (l.gather) {
         l.filtered = gfx_tex::tex_apply_gather(l.trq[0], &l.texels[0], l.gather_comp);
+        continue;
+      }
+      if (l.cmp) {
+        // A compare samples one level; the shader blends two for MIP_LINEAR.
+        const float r = (float)gfx_tex::tex_apply_compare(l.trq[0], &l.texels[0],
+                                                          l.compare_func, l.ref)
+                      * (1.0f / 65536.0f);
+        std::memcpy(&l.filtered, &r, sizeof r);
         continue;
       }
       const uint32_t mode = l.reduction;

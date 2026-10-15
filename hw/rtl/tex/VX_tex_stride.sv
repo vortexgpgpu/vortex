@@ -24,11 +24,14 @@ module VX_tex_stride import VX_tex_pkg::*; (
 
     always @(*) begin
         case (format)
-            `VX_TEX_FORMAT_A8R8G8B8: log_stride_r = 2;            
+            `VX_TEX_FORMAT_A8R8G8B8,
+            TEX_FMT_D32F,
+            TEX_FMT_D24:             log_stride_r = 2;
             `VX_TEX_FORMAT_R5G6B5,
             `VX_TEX_FORMAT_A1R5G5B5,
             `VX_TEX_FORMAT_A4R4G4B4,
-            `VX_TEX_FORMAT_A8L8:     log_stride_r = 1;            
+            `VX_TEX_FORMAT_A8L8,
+            TEX_FMT_D16:             log_stride_r = 1;
             `VX_TEX_FORMAT_L8,
             `VX_TEX_FORMAT_A8:       log_stride_r = 0;
             default:                 log_stride_r = 'x;

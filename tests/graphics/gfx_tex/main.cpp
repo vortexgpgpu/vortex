@@ -95,10 +95,19 @@ bool        lanes_mode     = false;
 int         gather_comp    = -1;
 // -m mode: the stage's reduction (VX_TEX_REDUCTION_*), checked under -a.
 uint32_t    reduction      = VX_TEX_REDUCTION_AVG;
+// -z func: a depth-compare sample (vx_tex_cmp) with compare function func
+// (VX_OM_DEPTH_FUNC_*) of a two-layer depth texture of format -f (D16, D24 or
+// D32F) built in place of the image, each pixel taking its own layer, tap filter
+// and reference, checked against the software shadow sampler.
+int         cmp_func       = -1;
 // -c WxH: sample the top-left WxH texels of the image, any size.
 uint32_t    crop_width     = 0;
 uint32_t    crop_height    = 0;
 const uint32_t kBorderColor = 0xff7f00ff;
+// -z with -B: the border tap's depth, an f32 the border register holds for a
+// depth-compare stage. At 1.0 a reference above 1, which a unorm format clamps
+// before it compares, takes a different answer than unclamped.
+const uint32_t kBorderDepth = 0x3f800000u;   // 1.0
 
 vx_device_h device      = nullptr;
 vx_queue_h  queue       = nullptr;
@@ -109,12 +118,12 @@ vx_buffer_h src_buffer  = nullptr;
 
 static void show_usage() {
    std::cout << "Vortex Texture Test (v2 KMU)." << std::endl;
-   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-r reference] [-s scale] [-l lod] [-w wrap] [-f format] [-g filter] [-B border] [-a lanes] [-G gather comp] [-c WxH crop] [-m reduction] [-h: help]" << std::endl;
+   std::cout << "Usage: [-k: kernel] [-i image] [-o image] [-r reference] [-s scale] [-l lod] [-w wrap] [-f format] [-g filter] [-B border] [-a lanes] [-G gather comp] [-z compare func] [-c WxH crop] [-m reduction] [-h: help]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "i:o:k:w:f:g:s:l:r:BaG:c:m:h?")) != -1) {
+  while ((c = getopt(argc, argv, "i:o:k:w:f:g:s:l:r:BaG:z:c:m:h?")) != -1) {
     switch (c) {
     case 'i': input_file = optarg; break;
     case 'o': output_file = optarg; break;
@@ -138,6 +147,7 @@ static void parse_args(int argc, char **argv) {
     case 'B': border_mode = true; wrap = VX_TEX_WRAP_BORDER; break;
     case 'a': lanes_mode = true; break;
     case 'G': gather_comp = atoi(optarg) & 3; break;
+    case 'z': cmp_func = atoi(optarg) & 7; break;
     case 'm': reduction = (uint32_t)atoi(optarg) & 3u; break;
     case 'c':
       if (sscanf(optarg, "%ux%u", &crop_width, &crop_height) != 2 || !crop_width || !crop_height) {
@@ -157,7 +167,16 @@ static void parse_args(int argc, char **argv) {
     std::cout << "Error: -m is checked against the software sampler; it takes -a" << std::endl;
     exit(1);
   }
-  if (crop_width && !(lanes_mode || gather_comp >= 0)) {
+  if (cmp_func >= 0 && format != VX_TEX_FORMAT_D16 && format != VX_TEX_FORMAT_D24
+      && format != VX_TEX_FORMAT_D32F) {
+    std::cout << "Error: -z samples a D16, D24 or D32F texture (-f)" << std::endl;
+    exit(1);
+  }
+  if (cmp_func >= 0 && (lanes_mode || gather_comp >= 0)) {
+    std::cout << "Error: -z takes neither -a nor -G" << std::endl;
+    exit(1);
+  }
+  if (crop_width && !(lanes_mode || gather_comp >= 0 || cmp_func >= 0)) {
     std::cout << "Error: -c has no reference image; it takes -a or -G" << std::endl;
     exit(1);
   }
@@ -190,7 +209,22 @@ int main(int argc, char *argv[]) {
   parse_args(argc, argv);
 
   // ---- load PNG + generate mipmap chain --------------------------------
-  {
+  // -z builds its depth texture instead: one level, two layers.
+  if (cmp_func >= 0) {
+    src_width  = crop_width ? crop_width : 32u;
+    src_height = crop_height ? crop_height : 32u;
+    const uint32_t bpp = gfx_tex::FormatStride(format);
+    src_pixels.resize((size_t)src_width * src_height * bpp * 2);
+    for (uint32_t l = 0; l < 2; ++l) {
+      for (uint32_t y = 0; y < src_height; ++y) {
+        for (uint32_t x = 0; x < src_width; ++x) {
+          const uint32_t t = cmp_texel(format, x, y, l);
+          memcpy(&src_pixels[((size_t)(l * src_height + y) * src_width + x) * bpp], &t, bpp);
+        }
+      }
+    }
+    mip_offsets.assign(1, 0u);
+  } else {
     std::vector<uint8_t> staging;
     auto input_file_s = resolve_path(input_file, ASSETS_PATHS);
     RT_CHECK(LoadImage(input_file_s.c_str(), eformat, staging, &src_width, &src_height));
@@ -212,8 +246,9 @@ int main(int argc, char *argv[]) {
   uint32_t src_logwidth  = log2ceil(src_width);
   uint32_t src_logheight = log2ceil(src_height);
   // -a stacks a second layer, the first with its colour inverted, so a sample
-  // from the wrong layer cannot match.
-  const uint32_t layer_stride = (uint32_t)src_pixels.size();
+  // from the wrong layer cannot match. -z built both of its layers already.
+  const uint32_t layer_stride = cmp_func >= 0 ? (uint32_t)(src_pixels.size() / 2)
+                                              : (uint32_t)src_pixels.size();
   if (lanes_mode) {
     src_pixels.resize(2 * (size_t)layer_stride);
     for (uint32_t i = 0; i < layer_stride; i += 4) {
@@ -254,7 +289,8 @@ int main(int argc, char *argv[]) {
 
   // ---- load kernel module ----------------------------------------------
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
-  RT_CHECK(vx_module_get_kernel(module_, lanes_mode ? "kernel_main_lanes"
+  RT_CHECK(vx_module_get_kernel(module_, (cmp_func >= 0) ? "kernel_main_cmp"
+                                         : lanes_mode ? "kernel_main_lanes"
                                          : (gather_comp >= 0) ? "kernel_main_gather"
                                          : border_mode ? "kernel_main_border" : "main",
                                 &kernel));
@@ -316,10 +352,15 @@ int main(int argc, char *argv[]) {
   if (unit_mip) {
     filter_dcr |= VX_TEX_FILTER_MIP_LINEAR;
   }
+  if (cmp_func >= 0) {
+    filter_dcr |= (uint32_t)cmp_func << VX_TEX_FILTER_COMPARE_SHIFT;
+  }
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_FILTER, filter_dcr, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_ADDR,   src_addr / 64, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_BORDER, kBorderColor, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_LAYER_STRIDE, lanes_mode ? layer_stride : 0u,
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_BORDER,
+                                cmp_func >= 0 ? kBorderDepth : kBorderColor, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_TEX_LAYER_STRIDE,
+                                (lanes_mode || cmp_func >= 0) ? layer_stride : 0u,
                                 0, nullptr, nullptr));
   // Every entry, not only the levels the chain has: a sampler's lod clamp is
   // independent of the chain length, so the unit can be asked for a level past
@@ -409,7 +450,7 @@ int main(int argc, char *argv[]) {
   // side of the edge is skipped -- there a bilinear tap set straddles the
   // boundary and the answer is a blend, which this check does not model.
   int border_errors = 0;
-  if (border_mode && !lanes_mode && gather_comp < 0) {
+  if (border_mode && !lanes_mode && gather_comp < 0 && cmp_func < 0) {
     std::vector<uint32_t> dst(dst_bufsize / 4);
     {
       vx_event_h read_ev = nullptr;
@@ -461,7 +502,7 @@ int main(int argc, char *argv[]) {
   // Every pixel against the software sampler the unit mirrors, at the same
   // operand: its layer, tap and level blend.
   int lane_errors = 0;
-  if (lanes_mode || gather_comp >= 0) {
+  if (lanes_mode || gather_comp >= 0 || cmp_func >= 0) {
     std::vector<uint32_t> dst(dst_bufsize / 4);
     {
       vx_event_h read_ev = nullptr;
@@ -475,18 +516,35 @@ int main(int argc, char *argv[]) {
       st.mip_off[i] = mip_offsets[i <= last_lod ? i : last_lod];
     }
     st.logdim = (src_logheight << 16) | src_logwidth;
-    st.format = VX_TEX_FORMAT_A8R8G8B8;
+    st.format = cmp_func >= 0 ? (uint32_t)format : (uint32_t)VX_TEX_FORMAT_A8R8G8B8;
+    st.compare_func = cmp_func >= 0 ? (uint32_t)cmp_func : 0u;
     st.filter = reduction << VX_TEX_FILTER_REDUCTION_SHIFT;
     st.wrap = (wrap << 16) | wrap;
     st.width = src_width;
     st.height = src_height;
     st.border = kBorderColor;
+    st.border_t[0] = kBorderDepth;
     st.layer_stride = layer_stride;
     st.depth = 2;
     st.levels = last_lod + 1;
     st.swizzle = 0u | (1u << 3) | (2u << 6) | (3u << 9);
     for (uint32_t y = 0; y < dst_height && lane_errors < 16; ++y) {
       for (uint32_t x = 0; x < dst_width && lane_errors < 16; ++x) {
+        if (cmp_func >= 0) {
+          const int32_t fu = kernel_arg.uv_bias + kernel_arg.uv_delta * (int32_t)x;
+          const int32_t fv = kernel_arg.uv_bias + kernel_arg.uv_delta * (int32_t)y;
+          const uint32_t filt = cmp_bilinear(x, y) ? (uint32_t)VX_TEX_FILTER_BILINEAR
+                                                   : (uint32_t)VX_TEX_FILTER_POINT;
+          const uint32_t want = gfx_sw::tex_shadow_sw(st, fu, fv, cmp_ref_bits(x, y), filt,
+                                                      cmp_layer(x, y), 0);
+          const uint32_t got = dst[x + y * (dst_pitch / 4)];
+          if (got != want) {
+            std::cout << "FAILED: compare at (" << x << "," << y << "): got 0x" << std::hex
+                      << got << ", expected 0x" << want << std::dec << std::endl;
+            ++lane_errors;
+          }
+          continue;
+        }
         if (gather_comp >= 0) {
           const int32_t fu = kernel_arg.uv_bias + kernel_arg.uv_delta * (int32_t)x;
           const int32_t fv = kernel_arg.uv_bias + kernel_arg.uv_delta * (int32_t)y;
@@ -515,8 +573,33 @@ int main(int argc, char *argv[]) {
         }
       }
     }
+    // A compare that came back all 0 or all 1 would match vacuously: the image
+    // has to hold failed and passed pixels, and partly filtered ones too unless
+    // the function is an equality (whose footprints rarely mix). Constant
+    // functions are exempt, and so is an equality on a unorm format: its exact
+    // compare holds only where the reference is 0 or 1, so it is all but
+    // constant there.
+    const bool cmp_equality = cmp_func == VX_OM_DEPTH_FUNC_EQUAL
+                           || cmp_func == VX_OM_DEPTH_FUNC_NOTEQUAL;
+    if (cmp_func >= 0 && cmp_func != VX_OM_DEPTH_FUNC_ALWAYS && cmp_func != VX_OM_DEPTH_FUNC_NEVER
+        && !(cmp_equality && format != VX_TEX_FORMAT_D32F)) {
+      uint32_t zeros = 0, ones = 0, partial = 0;
+      for (uint32_t i = 0; i < dst_width * dst_height; ++i) {
+        const uint32_t r = dst[(i % dst_width) + (i / dst_width) * (dst_pitch / 4)];
+        zeros += r == 0u;
+        ones += r == 0x3f800000u;
+        partial += r != 0u && r != 0x3f800000u;
+      }
+      std::cout << "compare: " << zeros << " px 0, " << ones << " px 1, " << partial
+                << " px filtered between" << std::endl;
+      if (!zeros || !ones || (!partial && !cmp_equality)) {
+        std::cout << "FAILED: the compare did not produce all three outcomes" << std::endl;
+        ++lane_errors;
+      }
+    }
     if (lane_errors == 0) {
-      std::cout << (gather_comp >= 0 ? "gather: " : "lanes: ") << dst_width * dst_height
+      std::cout << (cmp_func >= 0 ? "compare: " : gather_comp >= 0 ? "gather: " : "lanes: ")
+                << dst_width * dst_height
                 << " px matched the software sampler" << std::endl;
     }
   }
@@ -526,7 +609,7 @@ int main(int argc, char *argv[]) {
   if (border_errors != 0 || lane_errors != 0) {
     return 1;
   }
-  if (lanes_mode || gather_comp >= 0) {
+  if (lanes_mode || gather_comp >= 0 || cmp_func >= 0) {
     std::cout << "PASSED!" << std::endl;
     return 0;
   }
