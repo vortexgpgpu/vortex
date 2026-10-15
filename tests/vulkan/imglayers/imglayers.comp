@@ -1,0 +1,57 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Every texel of a 2D-array, a 3D, a cube and a 1D-array storage image gets a
+ * code naming its own coordinate, then an atomic add of 1; a second cube,
+ * declared without a format, gets the code alone, and so does a texel buffer
+ * (code and increment, at layer 0). The sizes the shader sees
+ * come back through the buffer. One invocation per (x, y, layer).
+ */
+
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 1) in;
+
+layout(binding = 0, r32ui) uniform uimage2DArray arr;
+layout(binding = 1, r32ui) uniform uimage3D vol;
+layout(binding = 2, r32ui) uniform uimageCube cube;
+layout(binding = 3) buffer Sizes { ivec4 size[4]; };
+layout(binding = 4, r32ui) uniform uimage1DArray arr1;
+layout(binding = 5) uniform writeonly uimageCube cube_nf;
+layout(binding = 6, r32ui) uniform uimageBuffer tbuf;
+
+uint code(uvec3 c, uint which)
+{
+   return (which << 24) | (c.z << 16) | (c.y << 8) | c.x;
+}
+
+void main()
+{
+   uvec3 c = gl_GlobalInvocationID;
+   ivec3 ic = ivec3(c);
+   if (c.z < 3u) {
+      imageStore(arr, ic, uvec4(code(c, 1u)));
+      imageAtomicAdd(arr, ic, 1u);
+      imageStore(vol, ic, uvec4(code(c, 2u)));
+      imageAtomicAdd(vol, ic, 1u);
+   }
+   imageStore(cube, ic, uvec4(code(c, 3u)));
+   imageAtomicAdd(cube, ic, 1u);
+   imageStore(cube_nf, ic, uvec4(code(c, 5u)));
+   if (c.z == 0u) {
+      int e = int(c.y * 4u + c.x);
+      imageStore(tbuf, e, uvec4(code(c, 6u)));
+      imageAtomicAdd(tbuf, e, 1u);
+   }
+   if (c.y == 0u && c.z < 3u) {
+      ivec2 c1 = ivec2(c.x, c.z);
+      imageStore(arr1, c1, uvec4(code(c, 4u)));
+      imageAtomicAdd(arr1, c1, 1u);
+   }
+   if (c == uvec3(0)) {
+      size[0] = ivec4(imageSize(arr), 0);
+      size[1] = ivec4(imageSize(vol), 0);
+      size[2] = ivec4(imageSize(cube), 0, 0);
+      size[3] = ivec4(imageSize(arr1), imageSize(tbuf), 0);
+   }
+}

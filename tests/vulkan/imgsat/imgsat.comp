@@ -1,0 +1,30 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Integers past each format's range stored through typed storage images: each
+ * channel saturates to its field rather than wrapping into its low bits.
+ */
+
+layout(local_size_x = 1) in;
+
+layout(binding = 0, r8ui)       uniform writeonly uimage2D u8;
+layout(binding = 1, r8i)        uniform writeonly iimage2D i8;
+layout(binding = 2, r16ui)      uniform writeonly uimage2D u16;
+layout(binding = 3, r16i)       uniform writeonly iimage2D i16;
+layout(binding = 4, rgb10_a2ui) uniform writeonly uimage2D u1010102;
+
+void main()
+{
+   imageStore(u8,  ivec2(0), uvec4(300u));
+   imageStore(u8,  ivec2(1, 0), uvec4(0x100u));
+   imageStore(i8,  ivec2(0), ivec4(-300));
+   imageStore(i8,  ivec2(1, 0), ivec4(200));
+   imageStore(u16, ivec2(0), uvec4(70000u));
+   imageStore(u16, ivec2(1, 0), uvec4(0x10000u));
+   imageStore(i16, ivec2(0), ivec4(-40000));
+   imageStore(i16, ivec2(1, 0), ivec4(40000));
+   imageStore(u1010102, ivec2(0), uvec4(2000u, 5u, 1023u, 7u));
+   imageStore(u1010102, ivec2(1, 0), uvec4(0x400u, 0u, 0u, 4u));
+}
