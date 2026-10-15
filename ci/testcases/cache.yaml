@@ -264,3 +264,43 @@ tests:
   configs: -DVX_CFG_SOCKET_SIZE=3 -DVX_CFG_NUM_ICACHES=2
   shape:
     cores: 3
+# Hashed bank select, on by default for the dcache and the L2. These cover the
+# hash off at both levels, 16 threads, and a write-back L2, where every fill and
+# write-back rebuilds the address.
+- id: bank_hash-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_DCACHE_BANK_HASH=0 -DVX_CFG_L2_BANK_HASH=0
+  shape:
+    cores: 2
+    l2cache: true
+- id: bank_hash-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  shape:
+    threads: 16
+- id: bank_hash-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1
+  shape:
+    cores: 4
+    l2cache: true
+- id: bank_hash-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mstress
+  configs: -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_DIRTYBYTES=1
+  shape:
+    threads: 16

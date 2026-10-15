@@ -56,6 +56,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     parameter IS_LLC                = 0,      // Set when this cache is the LLC (enables AMO completion at this level).
     parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
+    parameter BANK_HASH             = 0,      // Hashed bank select (cache_bank_hash).
 
     parameter AMO_ENABLE            = 0       // Enable atomic operations in cache banks.
  ) (
@@ -149,6 +150,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF),
             .IS_LLC       (IS_LLC),
             .FLUSH_FORWARD (FLUSH_FORWARD),
+            .BANK_HASH    (BANK_HASH),
             .AMO_ENABLE   (AMO_ENABLE)
         ) cache (
             .clk            (clk),

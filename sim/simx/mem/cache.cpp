@@ -15,6 +15,7 @@
 #include "mem_block_pool.h"
 #include "debug.h"
 #include "types.h"
+#include "addr_hash.h"
 #if VX_CFG_EXT_A_ENABLED
 #include "amo_unit.h"
 #endif
@@ -50,7 +51,9 @@ struct params_t {
   int32_t tag_select_addr_start;
   int32_t tag_select_addr_end;
 
-  params_t(const Cache::Config &config) {
+  bool bank_hash;
+
+  params_t(const Cache::Config &config) : bank_hash(config.bank_hash) {
     int32_t offset_bits = config.L - config.W;
     int32_t index_bits = config.C - (config.L + config.A + config.B);
     assert(offset_bits >= 0);
@@ -85,13 +88,35 @@ struct params_t {
     // Tag select
     this->tag_select_addr_start = (1 + this->set_select_addr_end);
     this->tag_select_addr_end = (config.addr_width - 1);
+    assert(!bank_hash || (config.B != 0 && config.B <= 8));
+  }
+
+  // The bank is the raw bank bits XORed with a function of the bits above
+  // them, so power-of-two strides spread over the banks; applying the same
+  // XOR again restores the raw bits. IPOLY for 16/32 banks; other bank counts
+  // XOR-fold the higher bits (Frailong, Jalby, Lenfant, "XOR-schemes", ICPP 1985).
+  uint32_t bank_xor(uint64_t addr, uint32_t raw) const {
+    uint32_t bits = bank_select_addr_end - bank_select_addr_start + 1;
+    uint64_t hi = addr >> (bank_select_addr_end + 1);
+    if (bits == 4) {
+      return raw ^ ipoly16(hi);
+    }
+    if (bits == 5) {
+      return raw ^ ipoly32(hi);
+    }
+    uint32_t mask = (1u << bits) - 1, f = 0;
+    for (uint32_t i = 0; i < 15; i += bits) {
+      f ^= uint32_t(hi >> i) & mask;
+    }
+    return raw ^ f;
   }
 
   uint32_t addr_bank_id(uint64_t addr) const {
-    if (bank_select_addr_end >= bank_select_addr_start)
-      return (uint32_t)bit_getw(addr, bank_select_addr_start, bank_select_addr_end);
-    else
+    if (bank_select_addr_end < bank_select_addr_start) {
       return 0;
+    }
+    uint32_t raw = (uint32_t)bit_getw(addr, bank_select_addr_start, bank_select_addr_end);
+    return bank_hash ? bank_xor(addr, raw) : raw;
   }
 
   uint32_t addr_set_id(uint64_t addr) const {
@@ -123,6 +148,10 @@ struct params_t {
       addr = bit_setw(addr, set_select_addr_start, set_select_addr_end, set_id);
     if (tag_select_addr_end >= tag_select_addr_start)
       addr = bit_setw(addr, tag_select_addr_start, tag_select_addr_end, tag);
+    if (bank_hash && bank_select_addr_end >= bank_select_addr_start) {
+      uint32_t raw = bank_xor(addr, bank_id);
+      addr = bit_setw(addr, bank_select_addr_start, bank_select_addr_end, raw);
+    }
     return addr;
   }
 

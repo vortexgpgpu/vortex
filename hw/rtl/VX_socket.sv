@@ -220,6 +220,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .IS_LLC         (DCACHE_IS_LLC),
+        .BANK_HASH      (`VX_CFG_DCACHE_BANK_HASH),
         .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
     ) dcache (
     `ifdef PERF_ENABLE

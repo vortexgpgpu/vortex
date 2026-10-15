@@ -45,6 +45,7 @@
 module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0,
+    parameter BANK_HASH         = 0,          // hashed bank select (cache_bank_hash)
     parameter LINE_SIZE         = 16,         // Size of line inside a bank in bytes
     parameter SECTOR_SIZE       = LINE_SIZE,  // Size of a sector in bytes (coalescing/fill granule); = LINE_SIZE => 1 sector
     parameter NUM_BANKS         = 1,          // Number of banks
@@ -128,6 +129,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     output wire                         empty
 );
     `UNUSED_PARAM (BANK_ID)
+    `UNUSED_PARAM (BANK_HASH)
 
     reg [`CS_LINE_ADDR_WIDTH-1:0] addr_table [0:MSHR_SIZE-1];
     // Per-entry sector. Coalescing matches on {line, sector} so same-line

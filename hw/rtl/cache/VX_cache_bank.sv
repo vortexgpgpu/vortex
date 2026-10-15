@@ -16,6 +16,7 @@
 module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID= "",
     parameter BANK_ID           = 0,
+    parameter BANK_HASH         = 0,        // hashed bank select (cache_bank_hash)
     parameter NUM_REQS          = 1,
     parameter CACHE_SIZE        = 1024,     // cache size in bytes
     parameter LINE_SIZE         = 16,       // line size in bytes
@@ -834,6 +835,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     VX_cache_mshr #(
         .INSTANCE_ID (`SFORMATF(("%s-mshr", INSTANCE_ID))),
         .BANK_ID     (BANK_ID),
+        .BANK_HASH   (BANK_HASH),
         .LINE_SIZE   (LINE_SIZE),
         .SECTOR_SIZE (SECTOR_SIZE),
         .NUM_BANKS   (NUM_BANKS),
@@ -1316,7 +1318,9 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [`VX_CFG_XLEN-1:0] core_req_full_addr = `CS_BANK_TO_FULL_ADDR(core_req_addr, BANK_ID);
     wire [`VX_CFG_XLEN-1:0] full_addr_st0 = `CS_BANK_TO_FULL_ADDR(st0.req.addr, BANK_ID);
     wire [`VX_CFG_XLEN-1:0] full_addr_st1 = `CS_BANK_TO_FULL_ADDR(st1.req.addr, BANK_ID);
-    wire [`VX_CFG_XLEN-1:0] mreq_queue_full_addr = `CS_BANK_TO_FULL_ADDR(mreq_queue_addr, BANK_ID);
+    wire [`CS_LINE_ADDR_WIDTH-1:0] mreq_queue_line = mreq_queue_addr[`CS_LINE_SECTOR_ADDR_WIDTH-1 -: `CS_LINE_ADDR_WIDTH];
+    wire [`VX_CFG_XLEN-1:0] mreq_queue_full_addr = `CS_BANK_TO_FULL_ADDR(mreq_queue_line, BANK_ID)
+        | ((`VX_CFG_XLEN'(mreq_queue_addr) & `VX_CFG_XLEN'((1 << `CS_SECTOR_SEL_BITS) - 1)) << `CLOG2(SECTOR_SIZE));
 
     always @(posedge clk) begin
         if (input_stall || pipe_stall) begin

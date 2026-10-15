@@ -224,6 +224,34 @@ package VX_gpu_pkg;
     // wire/reg sizing for any per-cache plumbing.
     localparam MEM_ATTR_WIDTH = $bits(mem_bus_attr_t);
 
+    // Cache bank-select hash: XORed into the raw bank bits, a function of the
+    // line address above them, so XORing it again restores the raw bits. IPOLY
+    // for 16 and 32 banks (Rau, ISCA 1991: conflict-free for power-of-two
+    // strides); an XOR fold of the bits above the bank field otherwise.
+    function automatic logic [7:0] cache_bank_hash(input logic [31:0] hi, input integer bits);
+        logic [7:0] f;
+        f = '0;
+        if (bits == 4) begin
+            f[0] = hi[11] ^ hi[10] ^ hi[9] ^ hi[8] ^ hi[6] ^ hi[4] ^ hi[3] ^ hi[0];
+            f[1] = hi[12] ^ hi[8]  ^ hi[7] ^ hi[6] ^ hi[5] ^ hi[3] ^ hi[1] ^ hi[0];
+            f[2] = hi[9]  ^ hi[8]  ^ hi[7] ^ hi[6] ^ hi[4] ^ hi[2] ^ hi[1];
+            f[3] = hi[10] ^ hi[9]  ^ hi[8] ^ hi[7] ^ hi[5] ^ hi[3] ^ hi[2];
+        end else if (bits == 5) begin
+            f[0] = hi[13] ^ hi[12] ^ hi[11] ^ hi[10] ^ hi[9] ^ hi[6] ^ hi[5] ^ hi[3] ^ hi[0];
+            f[1] = hi[14] ^ hi[13] ^ hi[12] ^ hi[11] ^ hi[10] ^ hi[7] ^ hi[6] ^ hi[4] ^ hi[1];
+            f[2] = hi[14] ^ hi[10] ^ hi[9]  ^ hi[8]  ^ hi[7]  ^ hi[6] ^ hi[3] ^ hi[2] ^ hi[0];
+            f[3] = hi[11] ^ hi[10] ^ hi[9]  ^ hi[8]  ^ hi[7]  ^ hi[4] ^ hi[3] ^ hi[1];
+            f[4] = hi[12] ^ hi[11] ^ hi[10] ^ hi[9]  ^ hi[8]  ^ hi[5] ^ hi[4] ^ hi[2];
+        end else if (bits > 0 && bits <= 8) begin
+            for (integer i = 0; i < 15; ++i) begin
+                if ((i % bits) == 0) begin
+                    f = f ^ (8'(hi >> i) & 8'((1 << bits) - 1));
+                end
+            end
+        end
+        return f;
+    endfunction
+
     localparam VX_DCR_ADDR_WIDTH = `VX_DCR_ADDR_BITS;
     localparam VX_DCR_DATA_WIDTH = `VX_DCR_DATA_BITS;
 

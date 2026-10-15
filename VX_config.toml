@@ -235,6 +235,10 @@ VX_CFG_NUM_ICACHES = "expr: up($VX_CFG_SOCKET_SIZE / 4) if $VX_CFG_ICACHE_ENABLE
 VX_CFG_NUM_DCACHES = "expr: up($VX_CFG_SOCKET_SIZE / 4) if $VX_CFG_DCACHE_ENABLE else 0"
 
 VX_CFG_DCACHE_NUM_BANKS = "expr: pow(2, clog2(min($VX_CFG_DCACHE_NUM_REQS, 16)))"
+# XOR/IPOLY bank-select hash, so power-of-two strides spread over the banks.
+# With two banks it can only swap a line on parity, and the extra parallel
+# misses cost more in memory queuing than the spreading saves.
+VX_CFG_DCACHE_BANK_HASH = "expr: int($VX_CFG_DCACHE_NUM_BANKS >= 4)"
 
 VX_CFG_L1_MEM_PORTS = "expr: min($VX_CFG_DCACHE_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS) if ($VX_CFG_ICACHE_ENABLE or $VX_CFG_DCACHE_ENABLE) else min($VX_CFG_DCACHE_NUM_REQS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS)"
 
@@ -251,6 +255,9 @@ VX_CFG_L2_MREQ_SIZE = 0
 VX_CFG_L2_CRSQ_SIZE = 0
 
 VX_CFG_L2_NUM_BANKS = "expr: pow(2, clog2(min($VX_CFG_L2_NUM_REQS, 16)))"
+# On at every bank count: unlike the dcache, a 2-bank L2 measured neutral
+# (sgemm-mc-nt4 -0.6%, fp16-mc-nt4 +0.1%), and it gains from 4 banks up.
+VX_CFG_L2_BANK_HASH = 1
 VX_CFG_L2_MEM_PORTS = "expr: min($VX_CFG_L2_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS) if $VX_CFG_L2_ENABLE else min($VX_CFG_L2_NUM_REQS, $VX_CFG_PLATFORM_MEMORY_NUM_BANKS)"
 
 [l3cache]

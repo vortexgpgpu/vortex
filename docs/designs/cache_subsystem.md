@@ -224,6 +224,22 @@ rather than being a field of its own. Two consequences are worth internalizing:
    pipeline carrying only `word_idx` and still tell the tag and data stages which
    sector to mark and write.
 
+**Hashed bank select (`BANK_HASH`).** With the bank taken straight from the
+address bits, any power-of-two stride that is a multiple of `NUM_BANKS × LINE`
+lands every access in one or two banks. With `BANK_HASH=1` the bank is the raw
+bank bits XORed with `cache_bank_hash` of the line address above them
+([VX_gpu_pkg.sv](../../hw/rtl/VX_gpu_pkg.sv)): IPOLY for 16 and 32 banks, which
+spreads every power-of-two stride evenly, and an XOR fold of the higher bits for
+other bank counts. The same mask XORed again restores the raw bits, so it is
+applied once on the request side (`core_req_bid`) and once where the memory
+address is rebuilt from `{line, bank}`. The banks keep storing the line address
+without the bank field, so tags, MSHR, the flush walk and sectoring are
+unchanged. `VX_CFG_DCACHE_BANK_HASH` and `VX_CFG_L2_BANK_HASH` set it for the
+dcache and the L2; SimX uses the same functions. The L2 default is on; the dcache
+default is on from 4 banks, because with two banks the hash can only swap lines on
+parity and the extra parallel misses cost more in memory queuing than the
+spreading saves.
+
 The memory side transacts in sectors, so the memory address carries
 `CS_SECTOR_SEL_BITS` below the line address (`CS_MEM_SECTOR_ADDR_WIDTH`,
 `CS_LINE_SECTOR_ADDR_WIDTH`). With one sector per line these collapse back to the
@@ -1001,8 +1017,8 @@ identically at all three levels — the dcache is not special.
 - **Miss latency hiding** insufficient (banks idle while misses pend) → raise
   `*_MSHR_SIZE` and check the LSU pending pool upstream; verify `MEM_PORTS` is not
   serializing the drain.
-- **Bank conflicts** (hit-path stalls) → more banks via a smaller
-  `DCACHE_WORD_SIZE`; check address strides against the line-interleaved mapping.
+- **Bank conflicts** (hit-path stalls) → check that the bank hash is on for that
+  level, then more banks via a smaller `DCACHE_WORD_SIZE`.
 - **Store bandwidth** bound → enable a shared level so `WRITEBACK` derives to 1
   where legal; add `*_DIRTYBYTES` for partial-line store patterns.
 - **BRAM / timing** pressure → cut `*_NUM_WAYS` or `*_SIZE` before cutting banks;

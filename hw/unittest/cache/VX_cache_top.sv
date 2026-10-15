@@ -71,6 +71,9 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Memory request output buffer
     parameter MEM_OUT_BUF           = 3,
 
+    // Hashed bank select
+    parameter BANK_HASH             = (NUM_BANKS >= 4),
+
     parameter MEM_TAG_WIDTH         = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH)
  ) (
     input wire clk,
@@ -182,6 +185,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .DIRTY_BYTES    (DIRTY_BYTES),
         .AMO_ENABLE     (AMO_ENABLE),
         .IS_LLC         (IS_LLC),
+        .BANK_HASH      (BANK_HASH),
         .CORE_OUT_BUF   (CORE_OUT_BUF),
         .MEM_OUT_BUF    (MEM_OUT_BUF)
     ) cache (

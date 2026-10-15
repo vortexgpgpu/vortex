@@ -43,6 +43,7 @@ public:
 		uint16_t latency;       // pipeline latency
 		uint8_t repl_policy;    // replacement policy (ReplPolicy)
 		bool    is_llc;					// is last-level cache
+		bool    bank_hash = false;	// hashed bank select
 	};
 
 	struct PerfStats {
