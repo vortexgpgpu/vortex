@@ -806,6 +806,14 @@ tests:
   app: gfx_tex
   configs: -DVX_CFG_EXT_TEX_ENABLE
   args: -i soccer.png -c 45x27 -G 2 -B -o null
+# Gather under mirrored repeat: in a reflected period the fold returns an
+# axis's taps reversed, which the gather undoes so each keeps its position.
+- id: gfx_tex-gather-mirror
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_tex
+  configs: -DVX_CFG_EXT_TEX_ENABLE
+  args: -i soccer.png -c 45x27 -G 1 -w 2 -o null
 
 # Depth compare (vx_tex_cmp) of a two-layer depth texture, each pixel taking its
 # own layer, tap filter and reference, checked in-test against the software

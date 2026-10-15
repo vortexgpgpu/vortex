@@ -41,6 +41,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     localparam BLEND_FRAC_W = (TEX_NUM_LEVELS * 2 * NUM_LANES * `TEX_BLEND_FRAC);
     localparam LODFRAC_W = (NUM_LANES * `VX_TEX_LOD_FRAC_BITS);
     localparam BORDER_W = (TEX_NUM_LEVELS * 4 * NUM_LANES);
+    localparam FLIP_W   = (NUM_LANES * 2);
     // Per lane: gather enable and the component it returns.
     localparam GATHER_W = (NUM_LANES * 3);
     // The stage's reduction rides with the gather fields to the sampler.
@@ -200,6 +201,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] mem_req_blends;
     wire [NUM_LANES-1:0][`VX_TEX_LOD_FRAC_BITS-1:0] mem_req_lodfrac;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] mem_req_border;
+    wire [NUM_LANES-1:0][1:0] mem_req_flip;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] mem_req_addr;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] mem_req_baseaddr;
     wire [INFO_W-1:0] mem_req_info;
@@ -240,6 +242,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .rsp_addr   (mem_req_addr),
         .rsp_blends (mem_req_blends),
         .rsp_border (mem_req_border),
+        .rsp_flip   (mem_req_flip),
         .rsp_lodfrac(mem_req_lodfrac),
         .rsp_tag    (mem_req_info),
         .rsp_ready  (mem_req_ready)
@@ -264,12 +267,12 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
 
     wire mem_rsp_valid;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] mem_rsp_data;
-    wire [(INFO_W + BLEND_FRAC_W + BORDER_W + LODFRAC_W)-1:0] mem_rsp_info;
+    wire [(FLIP_W + INFO_W + BLEND_FRAC_W + BORDER_W + LODFRAC_W)-1:0] mem_rsp_info;
     wire mem_rsp_ready;
 
     VX_tex_mem #(
         .INSTANCE_ID ($sformatf("%s-mem", INSTANCE_ID)),
-        .REQ_TAGW    (INFO_W + BLEND_FRAC_W + BORDER_W + LODFRAC_W),
+        .REQ_TAGW    (FLIP_W + INFO_W + BLEND_FRAC_W + BORDER_W + LODFRAC_W),
         .NUM_LANES   (NUM_LANES)
     ) tex_mem (
         .clk       (clk),
@@ -288,7 +291,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .req_lgstride(mem_req_lgstride),
         .req_baseaddr(mem_req_baseaddr),
         .req_addr  (mem_req_addr),
-        .req_tag   ({mem_req_info, mem_req_blends, mem_req_border, mem_req_lodfrac}),
+        .req_tag   ({mem_req_flip, mem_req_info, mem_req_blends, mem_req_border, mem_req_lodfrac}),
         .req_ready (mem_req_ready),
 
         // outputs
@@ -314,6 +317,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire [RED_W-1:0] mem_rsp_reduction = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS + GATHER_W) +: RED_W];
     wire [CMP_W-1:0] mem_rsp_cmpinfo = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS + GATHER_W + RED_W) +: CMP_W];
     wire [TAG_WIDTH-1:0] mem_rsp_tag = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS + GATHER_W + RED_W + CMP_W) +: TAG_WIDTH];
+    wire [FLIP_W-1:0] mem_rsp_flip = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + INFO_W) +: FLIP_W];
 
     wire mem_rsp_cmp = mem_rsp_cmpinfo[CMP_W-1];
     wire [TEX_CMP_BITS-1:0] mem_rsp_compare = mem_rsp_cmpinfo[SLOT_W +: TEX_CMP_BITS];
@@ -337,6 +341,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         .req_lodfrac     (mem_rsp_lodfrac),
         .req_format      (mem_rsp_format),
         .req_gather      (mem_rsp_gather),
+        .req_flip        (mem_rsp_flip),
         .req_reduction   (mem_rsp_reduction),
         .req_cmp         (mem_rsp_cmp),
         .req_compare     (mem_rsp_compare),

@@ -28,6 +28,9 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     input wire [TEX_FORMAT_BITS-1:0]   req_format,
     // Per lane: gather enable, and the component (0..3 = R,G,B,A) it returns.
     input wire [NUM_LANES-1:0][2:0]     req_gather,
+    // Per lane and axis (bit 0 = u, bit 1 = v): the taps of that axis came back
+    // reflected by a mirrored-repeat fold (VX_tex_addr).
+    input wire [NUM_LANES-1:0][1:0]     req_flip,
     // VX_TEX_REDUCTION_*: the weighted average, or the min/max of the taps.
     input wire [1:0]                    req_reduction,
     // vx_tex_cmp: compare level 0's taps against each lane's f32 reference with
@@ -103,7 +106,9 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     end
 
     // textureGather: the chosen channel of level 0's four decoded taps, as bytes
-    // in GL gather order -- taps (u-,v+), (u+,v+), (u+,v-), (u-,v-). It skips the
+    // in GL gather order -- taps (u-,v+), (u+,v+), (u+,v-), (u-,v-), each tap
+    // index taken through the lane's mirror flip so a reflected axis still
+    // returns its lower texel first. It skips the
     // blends and joins the result at the end: the input register plus the three
     // lerp levels (u, v, level).
     localparam GATHER_DELAY = 1 + 3 * LERP_LAT;
@@ -112,8 +117,9 @@ module VX_tex_sampler import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_gather
         wire [1:0] comp = req_gather[i][1:0];
         wire [4:0] shift = (comp == 2'd0) ? 5'd16 : (comp == 2'd1) ? 5'd8 : (comp == 2'd2) ? 5'd0 : 5'd24;
-        assign gather_texel[i] = {8'(sel_texels[i][0][0] >> shift), 8'(sel_texels[i][0][1] >> shift),
-                                  8'(sel_texels[i][0][3] >> shift), 8'(sel_texels[i][0][2] >> shift)};
+        wire [1:0] f = req_flip[i];
+        assign gather_texel[i] = {8'(sel_texels[i][0][2'd0 ^ f] >> shift), 8'(sel_texels[i][0][2'd1 ^ f] >> shift),
+                                  8'(sel_texels[i][0][2'd3 ^ f] >> shift), 8'(sel_texels[i][0][2'd2 ^ f] >> shift)};
         assign gather_en[i] = req_gather[i][2];
     end
 

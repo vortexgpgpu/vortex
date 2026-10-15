@@ -211,17 +211,19 @@ void check_axis_reference() {
           const gfx_tex::TexAxisTaps a = gfx_tex::tex_axis_taps(c, n, wrap, linear != 0);
           bool ok = (a.i0 == r0) && (a.b0 == rb0);
           if (linear) {
-            // Compared as a blend, not as an ordered pair: in a mirrored period
-            // the fold puts the taps in the other order with the complementary
-            // weight. Two taps naming the same texel blend to it whatever the weight.
+            // In a mirrored period the fold puts the taps in the other order with
+            // the complementary weight, which a blend cannot tell apart -- but a
+            // gather returns taps by position, so the swap must be the one `flip`
+            // reports, and only then. Two taps naming the same texel blend to it
+            // whatever the weight or order.
             const double af = a.frac / 256.0;
             // One weight step, plus the fold's coordinate ULP in texels.
             const double tol = 1.0 / 256.0 + n / one + 1e-9;
             const bool distinct = (r0 != r1) || (rb0 != rb1);
             const bool same = (a.i0 == r0) && (a.b0 == rb0) && (a.i1 == r1) && (a.b1 == rb1)
-                           && (!distinct || std::fabs(af - fr) <= tol);
+                           && (!distinct || (std::fabs(af - fr) <= tol && !a.flip));
             const bool swapped = (a.i0 == r1) && (a.b0 == rb1) && (a.i1 == r0) && (a.b1 == rb0)
-                              && std::fabs(af - (1.0 - fr)) <= tol;
+                              && std::fabs(af - (1.0 - fr)) <= tol && (a.flip || !distinct);
             ok = same || swapped;
           }
           ++checked;

@@ -1415,10 +1415,11 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_sw(
   uint32_t sh = argb_shift[map & 3];
   uint32_t packed = 0;
   for (uint32_t i = 0; i < 4; ++i) {
-    uint32_t argb = ((req.border_mask >> order[i]) & 1u)
+    const uint32_t t = order[i] ^ req.flip;
+    uint32_t argb = ((req.border_mask >> t) & 1u)
                   ? s.border
-                  : gfx_tex::TexDecodeArgb8At(s.format, (const void*)(uintptr_t)req.addr[order[i]],
-                                              req.sub[order[i]], req.stride);
+                  : gfx_tex::TexDecodeArgb8At(s.format, (const void*)(uintptr_t)req.addr[t],
+                                              req.sub[t], req.stride);
     packed |= ((argb >> sh) & 0xffu) << (i * 8);
   }
   return packed;
@@ -1444,13 +1445,14 @@ static inline __attribute__((always_inline)) void tex_gather_f32(
       s.width, s.height);
   const uint32_t order[4] = { 2, 3, 1, 0 };
   for (uint32_t i = 0; i < 4; ++i) {
-    if ((req.border_mask >> order[i]) & 1u) {
+    const uint32_t t = order[i] ^ req.flip;
+    if ((req.border_mask >> t) & 1u) {
       out[i] = s.border_t[map];
       continue;
     }
     float lanes[4];
-    gfx_tex::TexDecodeFloat4At(s.format, (const void*)(uintptr_t)req.addr[order[i]],
-                               req.sub[order[i]], req.stride, lanes);
+    gfx_tex::TexDecodeFloat4At(s.format, (const void*)(uintptr_t)req.addr[t],
+                               req.sub[t], req.stride, lanes);
     __builtin_memcpy(&out[i], &lanes[map], 4);
   }
 }
@@ -1668,10 +1670,11 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_sw(
   const uint32_t order[4] = { 2, 3, 1, 0 };
   uint32_t packed = 0;
   for (uint32_t i = 0; i < 4; ++i) {
+    const uint32_t t = order[i] ^ req.flip;
     uint32_t word = 0;
-    __builtin_memcpy(&word, (const void*)(uintptr_t)req.addr[order[i]],
+    __builtin_memcpy(&word, (const void*)(uintptr_t)req.addr[t],
                      req.stride < 4 ? req.stride : 4);
-    const uint32_t p = gfx_tex::tex_compare_tap(req, order[i], word, s.compare_func, ref_bits);
+    const uint32_t p = gfx_tex::tex_compare_tap(req, t, word, s.compare_func, ref_bits);
     packed |= (p ? 0xffu : 0x00u) << (i * 8);
   }
   return packed;

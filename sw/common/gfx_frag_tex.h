@@ -56,6 +56,10 @@ struct TexelRequest {
   // what their address points at. Zero unless an axis wraps to a border.
   uint32_t border_mask;
   uint32_t border;    // ARGB8888
+  // Axes whose taps a mirrored-repeat fold reversed (bit 0 = u, bit 1 = v): tap
+  // i ^ flip is the one at footprint position i. A filter is blind to the order;
+  // a gather, which returns the taps by position, is not.
+  uint32_t flip;
 };
 
 // The two taps one axis of a sample reads, for a level `dim` texels wide (any
@@ -69,6 +73,7 @@ struct TexAxisTaps {
   uint32_t i0, i1;
   uint32_t frac;
   bool     b0, b1;   // the tap left the texture on a border axis
+  bool     flip;     // a mirror fold reflected the coordinate: i0 is the upper tap
 };
 
 static inline __attribute__((always_inline)) TexAxisTaps tex_axis_taps(
@@ -110,6 +115,7 @@ static inline __attribute__((always_inline)) TexAxisTaps tex_axis_taps(
   t.i0   = wrap_texel(i0, &t.b0);
   t.i1   = wrap_texel(i0 + 1, &t.b1);
   t.frac = linear ? (uint32_t)(x & ((1 << VX_TEX_SUBPIXEL_BITS) - 1)) : 0u;
+  t.flip = (wrap == VX_TEX_WRAP_MIRROR) && ((c >> TEX_FXD_FRAC) & 1);
   return t;
 }
 
@@ -1041,6 +1047,7 @@ static inline TexelRequest tex_compute_request(uint64_t base_addr,
   req.border = border;
   req.alpha  = tu.frac;
   req.beta   = tv.frac;
+  req.flip   = (uint32_t)tu.flip | ((uint32_t)tv.flip << 1);
   // tap order: 0=(u0,v0) 1=(u1,v0) 2=(u0,v1) 3=(u1,v1)
   const uint32_t xs[2] = { tu.i0, tu.i1 }, ys[2] = { tv.i0, tv.i1 };
   const bool bx[2] = { tu.b0, tu.b1 }, by[2] = { tv.b0, tv.b1 };
@@ -1166,7 +1173,7 @@ static inline uint32_t tex_apply_gather(const TexelRequest& req, const uint32_t 
   static const uint32_t kOrder[4] = { 2, 3, 1, 0 };
   uint32_t out = 0;
   for (uint32_t i = 0; i < 4; ++i) {
-    const uint32_t t = kOrder[i];
+    const uint32_t t = kOrder[i] ^ req.flip;
     const uint32_t argb = ((req.border_mask >> t) & 0x1) ? req.border
                                                          : TexFilterPoint(req.format, texels[t]);
     out |= ((argb >> kShift[comp & 3u]) & 0xffu) << (8 * i);

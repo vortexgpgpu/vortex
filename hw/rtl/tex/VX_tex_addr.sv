@@ -56,6 +56,9 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     output wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0][31:0] rsp_addr,
     output wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][`TEX_BLEND_FRAC-1:0] rsp_blends,
     output wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][3:0] rsp_border,
+    // Per lane and axis (bit 0 = u, bit 1 = v): a mirrored-repeat fold reflected
+    // the coordinate, so tap i ^ flip is the one at footprint position i.
+    output wire [NUM_LANES-1:0][1:0]    rsp_flip,
     output wire [NUM_LANES-1:0][`VX_TEX_LOD_FRAC_BITS-1:0] rsp_lodfrac,
     output wire [REQ_TAGW-1:0]          rsp_tag,
     input wire                          rsp_ready
@@ -86,6 +89,7 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     );
 
     wire [NUM_LANES-1:0][1:0][FOLD_W-1:0] folded;
+    wire [NUM_LANES-1:0][1:0] flip;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][TEX_DIM_W-1:0] level_dim;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] mip_addr;
 
@@ -110,6 +114,7 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
                 endcase
             end
             assign folded[i][j] = f;
+            assign flip[i][j] = (req_wraps[j] == `VX_TEX_WRAP_MIRROR) && c[`TEX_FXD_FRAC];
         end
     end
 
@@ -131,20 +136,21 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     wire [1:0][TEX_WRAP_BITS-1:0] wraps_s0;
     wire [`TEX_LGSTRIDE_BITS-1:0] log_stride_s0;
     wire [NUM_LANES-1:0][1:0][FOLD_W-1:0] folded_s0;
+    wire [NUM_LANES-1:0][1:0] flip_s0, flip_s1;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][1:0][TEX_DIM_W-1:0] level_dim_s0;
     wire [NUM_LANES-1:0][TEX_NUM_LEVELS-1:0][W_ADDR_BITS-1:0] mip_addr_s0;
     wire [NUM_LANES-1:0][`VX_TEX_LOD_FRAC_BITS-1:0] lodfrac_s0;
     wire [REQ_TAGW-1:0] req_tag_s0;
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + 2 * TEX_WRAP_BITS + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (TEX_FILTER_BITS + `VX_TEX_LOD_FRAC_BITS + 2 * FOLD_W + TEX_NUM_LEVELS * (2 * TEX_DIM_W + W_ADDR_BITS))),
+        .DATAW  (1 + NUM_LANES + 2 * TEX_WRAP_BITS + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (TEX_FILTER_BITS + `VX_TEX_LOD_FRAC_BITS + 2 * FOLD_W + 2 + TEX_NUM_LEVELS * (2 * TEX_DIM_W + W_ADDR_BITS))),
         .RESETW (1)
     ) pipe_reg0 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({req_valid, req_mask, req_filter, req_wraps, log_stride,    req_tag,    folded,    level_dim,    mip_addr,    req_lodfrac}),
-        .data_out ({valid_s0,  mask_s0,  filter_s0,  wraps_s0,  log_stride_s0, req_tag_s0, folded_s0, level_dim_s0, mip_addr_s0, lodfrac_s0})
+        .data_in  ({req_valid, req_mask, req_filter, req_wraps, log_stride,    req_tag,    folded,    flip,    level_dim,    mip_addr,    req_lodfrac}),
+        .data_out ({valid_s0,  mask_s0,  filter_s0,  wraps_s0,  log_stride_s0, req_tag_s0, folded_s0, flip_s0, level_dim_s0, mip_addr_s0, lodfrac_s0})
     );
 
     // stage 1: scale to texels, pick the two taps of each axis and wrap them
@@ -231,14 +237,14 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     end
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (TEX_FILTER_BITS + `VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (4 * TEXEL_W + TEX_DIM_W + 3 + 2 * `TEX_BLEND_FRAC + 4 + W_ADDR_BITS))),
+        .DATAW  (1 + NUM_LANES + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (TEX_FILTER_BITS + `VX_TEX_LOD_FRAC_BITS + 2 + TEX_NUM_LEVELS * (4 * TEXEL_W + TEX_DIM_W + 3 + 2 * `TEX_BLEND_FRAC + 4 + W_ADDR_BITS))),
         .RESETW (1)
     ) pipe_reg1 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_s0, mask_s0, filter_s0, log_stride_s0, req_tag_s0, texel,    width_s0, row1_zero,    row1_same,    row1_down,    blends,    border_mask,    mip_addr_s0, lodfrac_s0}),
-        .data_out ({valid_s1, mask_s1, filter_s1, log_stride_s1, req_tag_s1, texel_s1, width_s1, row1_zero_s1, row1_same_s1, row1_down_s1, blends_s1, border_mask_s1, mip_addr_s1, lodfrac_s1})
+        .data_in  ({valid_s0, mask_s0, filter_s0, log_stride_s0, req_tag_s0, texel,    width_s0, row1_zero,    row1_same,    row1_down,    blends,    border_mask,    flip_s0, mip_addr_s0, lodfrac_s0}),
+        .data_out ({valid_s1, mask_s1, filter_s1, log_stride_s1, req_tag_s1, texel_s1, width_s1, row1_zero_s1, row1_same_s1, row1_down_s1, blends_s1, border_mask_s1, flip_s1, mip_addr_s1, lodfrac_s1})
     );
 
     // stage 2: byte offsets of the four taps
@@ -265,14 +271,14 @@ module VX_tex_addr import VX_gpu_pkg::*, VX_tex_pkg::*; #(
     assign stall_out = rsp_valid && ~rsp_ready;
 
     VX_pipe_register #(
-        .DATAW  (1 + NUM_LANES + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (TEX_FILTER_BITS + `VX_TEX_LOD_FRAC_BITS + TEX_NUM_LEVELS * (4 + W_ADDR_BITS + 4 * 32 + 2 * `TEX_BLEND_FRAC))),
+        .DATAW  (1 + NUM_LANES + `TEX_LGSTRIDE_BITS + REQ_TAGW + NUM_LANES * (TEX_FILTER_BITS + `VX_TEX_LOD_FRAC_BITS + 2 + TEX_NUM_LEVELS * (4 + W_ADDR_BITS + 4 * 32 + 2 * `TEX_BLEND_FRAC))),
         .RESETW (1)
     ) pipe_reg2 (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall_out),
-        .data_in  ({valid_s1,  mask_s1,  filter_s1,  log_stride_s1, mip_addr_s1,  addr,     blends_s1,  border_mask_s1, lodfrac_s1,  req_tag_s1}),
-        .data_out ({rsp_valid, rsp_mask, rsp_filter, rsp_lgstride,  rsp_baseaddr, rsp_addr, rsp_blends, rsp_border,     rsp_lodfrac, rsp_tag})
+        .data_in  ({valid_s1,  mask_s1,  filter_s1,  log_stride_s1, mip_addr_s1,  addr,     blends_s1,  border_mask_s1, flip_s1,  lodfrac_s1,  req_tag_s1}),
+        .data_out ({rsp_valid, rsp_mask, rsp_filter, rsp_lgstride,  rsp_baseaddr, rsp_addr, rsp_blends, rsp_border,     rsp_flip, rsp_lodfrac, rsp_tag})
     );
 
     assign req_ready = ~stall_out;
