@@ -181,7 +181,7 @@ module foldsim_mem #(
     // AW ids (and addresses) waiting for their write data, writes formed and
     // not yet driving B, and the one that is.
     reg [ID_W-1:0] awq_id [DEPTH];
-    reg [29:0]     awq_addr [DEPTH];
+    reg [29:5]     awq_addr [DEPTH];
     reg [PW-1:0] awq_head, awq_tail;
     reg [CW-1:0] awq_count;
     reg [31:0]   wp_release [DEPTH];
@@ -264,12 +264,16 @@ module foldsim_mem #(
 
     // Reads: the latency pipe, into the stage driving R; a read released the
     // cycle it arrives skips the pipe.
+    // A read arriving at an empty pipe is due at once if its release,
+    // cycle + latency - 1, is not after the cycle: a function of the latency
+    // alone, so the release's adder is not in front of the compare.
     wire [31:0]   ar_release = cycle + read_latency - 32'd1;
     wire          rp_empty   = (rp_count == 0);
     wire          r_head     = ~rp_empty | ar_fire;
-    wire [31:0]   r_head_rel = rp_empty ? ar_release : rp_release[rp_head];
     wire [ID_W-1:0] r_head_id = rp_empty ? arid : rp_id[rp_head];
-    wire          r_release  = r_head & ($signed(cycle - r_head_rel) >= 0);
+    wire          r_due      = rp_empty ? ($signed(32'd1 - read_latency) >= 0)
+                                        : ($signed(cycle - rp_release[rp_head]) >= 0);
+    wire          r_release  = r_head & r_due;
     wire          r_take     = r_release & (~cur_r_valid | r_fire);
     wire          rp_push    = ar_fire & ~(r_take & rp_empty);
     wire          rp_pop     = r_take & ~rp_empty;
@@ -281,7 +285,7 @@ module foldsim_mem #(
                             | (aw_fire & w_fire);
     wire          awq_empty = (awq_count == 0);
     wire [ID_W-1:0] w_form_id = awq_empty ? awid : awq_id[awq_head];
-    wire [29:0]   w_form_addr = awq_empty ? awaddr[29:0] : awq_addr[awq_head];
+    wire [29:5]   w_form_addr = awq_empty ? awaddr[29:5] : awq_addr[awq_head];
     wire          awq_pop   = new_write & ~awq_empty;
     wire          awq_push  = aw_fire & ~(new_write & awq_empty);
     wire [31:0]   w_release = cycle + write_latency - 32'd1;
@@ -296,9 +300,10 @@ module foldsim_mem #(
     reg [31:0]      wp_wr_rel;
     reg [ID_W-1:0]  wp_wr_id;
     wire            wp_fwd     = wp_wr_pend & (wp_wr_idx == wp_head);
-    wire [31:0]   w_head_rel = wp_empty ? w_release : (wp_fwd ? wp_wr_rel : wp_release[wp_head]);
     wire [ID_W-1:0] w_head_id = wp_empty ? w_form_id : (wp_fwd ? wp_wr_id : wp_id[wp_head]);
-    wire          w_rel      = w_head & ($signed(cycle - w_head_rel) >= 0);
+    wire          w_due      = wp_empty ? ($signed(32'd1 - write_latency) >= 0)
+                                        : ($signed(cycle - (wp_fwd ? wp_wr_rel : wp_release[wp_head])) >= 0);
+    wire          w_rel      = w_head & w_due;
     wire          w_take     = w_rel & (~cur_w_valid | b_fire);
     wire          wp_push    = new_write & ~(w_take & wp_empty);
     wire          wp_pop     = w_take & ~wp_empty;
@@ -391,7 +396,7 @@ module foldsim_mem #(
 
                 if (awq_push) begin
                     awq_id[awq_tail]   <= awid;
-                    awq_addr[awq_tail] <= awaddr[29:0];
+                    awq_addr[awq_tail] <= awaddr[29:5];
                     awq_tail           <= awq_tail + 1'b1;
                 end
                 if (awq_pop)
@@ -561,7 +566,7 @@ module foldsim_mem #(
         .treset         (treset),
         .ar_fire        (ar_fire),
         .ar_id          (arid),
-        .ar_addr        (araddr[29:0]),
+        .ar_addr        (araddr[29:5]),
         .aw_fire        (aw_fire),
         .new_write      (new_write),
         .nw_id          (w_form_id),
