@@ -880,6 +880,18 @@ module VX_decode import
                 default:;
                 endcase
             end
+        `ifdef VX_CFG_EXT_MUFU_ENABLE
+            INST_EXT3: begin
+                if (funct7 == 7'h00 && funct3 == 3'h0 && rs2 <= 5'(INST_MUFU_TANH)) begin
+                    ex_type = EX_MUFU;
+                    op_type = INST_OP_BITS'(rs2);
+                    op_args.mufu.__padding = '0;
+                    op_args.mufu.fmt = funct3;
+                    `USED_FREG (rd);
+                    `USED_FREG (rs1);
+                end
+            end
+        `endif
             default:;
         endcase
     end

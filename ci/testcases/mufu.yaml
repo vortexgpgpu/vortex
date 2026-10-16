@@ -1,0 +1,59 @@
+# MUFU special-function unit (custom-2: rcp/rsqrt/ex2/lg2/sinpi/cospi/tanh).
+# The `mufu` app self-enables VX_CFG_EXT_MUFU_ENABLE and checks every result
+# bit-exactly against the shared golden model (sw/common/mufu.cpp) plus libm
+# accuracy bounds; the datapath itself is covered by unittest:hw-mufu.
+category: mufu
+defaults:
+  xlen:
+  - 32
+  - 64
+  tier: smoke
+  touches: [hw/rtl/mufu, sim/simx/mufu_unit.cpp, sw/common/mufu.cpp, sw/common/mufu_tables.h, sw/kernel/include/vx_mufu.h]
+tests:
+- id: mufu-1
+  via: blackbox
+  drivers:
+  - simx
+  app: mufu
+# Wide warp: 16 threads over 1 MUFU lane, so every warp serializes into 16 packets.
+- id: mufu-nt16
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mufu
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+# Full-rate lanes (non-default): no lane-gather stage on the response path.
+- id: mufu-full-lanes
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: mufu
+  configs: -DVX_CFG_NUM_MUFU_LANES=4
+- id: mufu-xrt
+  via: blackbox
+  drivers:
+  - xrt
+  app: mufu
+
+# ---------------------------------------------------------------------------
+# check: model_parity — SimX vs rtlsim (see core.yaml). Each run is sized to
+# >=~300k cycles so steady-state MUFU throughput dominates.
+# ---------------------------------------------------------------------------
+
+# Default shape: 4 threads over the 1 lane, chained ex2 (~609k cycles).
+- id: parity-mufu
+  check: model_parity
+  via: blackbox
+  app: mufu
+  args: -n1024 -r256 -tex2
+# 8 threads over 1 lane (8 packets per warp), chained sinpi (~670k cycles).
+# Not 16 threads: there SimX runs ~5% fast on saturated multi-packet MUFU
+# issue.
+- id: parity-mufu-nt8
+  check: model_parity
+  via: blackbox
+  app: mufu
+  args: -n2048 -r256 -tsinpi
+  configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8

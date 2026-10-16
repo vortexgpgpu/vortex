@@ -95,6 +95,12 @@
     `endif
 `endif
 
+`ifdef VX_CFG_EXT_MUFU_ENABLE
+    `ifndef VX_CFG_EXT_F_ENABLE
+        `error "VX_CFG_EXT_MUFU_ENABLE requires VX_CFG_EXT_F_ENABLE"
+    `endif
+`endif
+
 // Convenience flag: the TCU metadata SRAM is present when any metadata-consuming
 // mode (MX or sparse) is enabled. Internal derived macro — not a VX_CFG_* knob.
 `ifdef VX_CFG_TCU_MX_ENABLE

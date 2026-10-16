@@ -444,6 +444,14 @@ divergence from soft-float fails CI.
 exercise the FPU's arithmetic RTL. `isa-32f-dsp` is the one lane that does,
 and it is F32 only: the F64 soft cores are covered by the unit tests alone.
 
+### Special functions are not in the FPU
+
+Approximate transcendentals (`rcp`, `rsqrt`, `ex2`, `lg2`, `sinpi`, `cospi`,
+`tanh`) run on a separate execution unit, the MUFU, not on an FPU core. It has
+its own dispatch queue and commit path, so FPU and MUFU instructions from
+different warps execute concurrently; it ignores `frm` and never writes
+`fflags`. The FPU's `fsqrt`/`fdiv` remain the correctly rounded operations.
+
 ---
 
 ## 13. Known limitations

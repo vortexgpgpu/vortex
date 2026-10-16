@@ -404,6 +404,13 @@ static op_string_t op_string(const Instr &instr) {
       return TcuUnit::op_string(tcu_type, tpuArgs);
     }
   #endif // VX_CFG_EXT_TCU_ENABLE
+  #ifdef VX_CFG_EXT_MUFU_ENABLE
+    ,[&](MufuType mufu_type)-> op_string_t {
+      std::ostringstream os;
+      os << mufu_type << ".S";
+      return {os.str(), ""};
+    }
+  #endif
   #ifdef VX_CFG_EXT_TEX_ENABLE
     ,[&](TexType /*tex_type*/)-> op_string_t {
       return {"TEX", ""};
@@ -1144,6 +1151,17 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
     // known-violation handoff class, checked against its decoded destination.
     gfx_doctrine::check(*instr);
   } break;
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+  case Opcode::EXT3: {
+    if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(MufuType::TANH))
+      std::abort();
+    instr->set_fu_type(FUType::MUFU);
+    instr->set_op_type(MufuType(rs2));
+    instr->set_args(IntrMufuArgs{funct3});
+    instr->set_dest_reg(rd, RegType::Float);
+    instr->set_src_reg(0, rs1, RegType::Float);
+  } break;
+#endif
   default:
     std::abort();
   }

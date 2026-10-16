@@ -240,8 +240,9 @@ package VX_gpu_pkg;
     localparam EX_SFU = 2;
     localparam EX_FPU = (EX_SFU + `VX_CFG_EXT_F_ENABLED);
     localparam EX_TCU = (EX_FPU + `VX_CFG_EXT_TCU_ENABLED);
+    localparam EX_MUFU = (EX_TCU + `VX_CFG_EXT_MUFU_ENABLED);
 
-    localparam NUM_EX_UNITS = EX_TCU + 1;
+    localparam NUM_EX_UNITS = EX_MUFU + 1;
     localparam EX_BITS = `CLOG2(NUM_EX_UNITS);
     localparam EX_WIDTH = `UP(EX_BITS);
 
@@ -545,6 +546,18 @@ package VX_gpu_pkg;
     function automatic logic inst_sfu_is_csr(input logic [INST_SFU_BITS-1:0] op);
         return (op >= 6 && op <= 8);
     endfunction
+
+`ifdef VX_CFG_EXT_MUFU_ENABLE
+    localparam INST_MUFU_RCP =   4'h0;
+    localparam INST_MUFU_RSQRT = 4'h1;
+    localparam INST_MUFU_EX2 =   4'h2;
+    localparam INST_MUFU_LG2 =   4'h3;
+    localparam INST_MUFU_SINPI = 4'h4;
+    localparam INST_MUFU_COSPI = 4'h5;
+    localparam INST_MUFU_TANH =  4'h6;
+    localparam INST_MUFU_BITS =  4;
+    localparam INST_MUFU_FMT_BITS = 3;
+`endif
 
     /////////////////////////////// Issue parameters //////////////////////////
 
@@ -959,6 +972,14 @@ package VX_gpu_pkg;
     `PACKAGE_ASSERT($bits(tcu_args_t) == INST_ARGS_BITS)
 `endif
 
+`ifdef VX_CFG_EXT_MUFU_ENABLE
+    typedef struct packed {
+        logic [INST_ARGS_BITS-INST_MUFU_FMT_BITS-1:0] __padding;
+        logic [INST_MUFU_FMT_BITS-1:0]                fmt;
+    } mufu_args_t;
+    `PACKAGE_ASSERT($bits(mufu_args_t) == INST_ARGS_BITS)
+`endif
+
 `ifdef VX_CFG_EXT_TEX_ENABLE
     // Texture sample op args (vx_tex, CUSTOM1 funct3=5, R4-type): u/v/lod ride
     // rs1/rs2/rs3, the texel lands in rd, and `stage` (funct2) selects the
@@ -1017,6 +1038,9 @@ package VX_gpu_pkg;
     `endif
     `ifdef VX_CFG_EXT_TCU_ENABLE
         tcu_args_t  tcu;
+    `endif
+    `ifdef VX_CFG_EXT_MUFU_ENABLE
+        mufu_args_t mufu;
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         tex_args_t  tex;
@@ -1194,6 +1218,9 @@ package VX_gpu_pkg;
     `DECL_EXECUTE_T (alu, `VX_CFG_NUM_ALU_LANES);
     `DECL_EXECUTE_T (lsu, `VX_CFG_NUM_LSU_LANES);
     `DECL_EXECUTE_T (sfu, `VX_CFG_NUM_SFU_LANES);
+`ifdef VX_CFG_EXT_MUFU_ENABLE
+    `DECL_EXECUTE_T (mufu, `VX_CFG_NUM_MUFU_LANES);
+`endif
 
     //////////////////////////// Perf counter types ///////////////////////////
 

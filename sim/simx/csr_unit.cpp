@@ -248,6 +248,14 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         }
       } break;
     #endif
+    #ifdef VX_CFG_EXT_MUFU_ENABLE
+      case VX_DCR_MPM_CLASS_MUFU: {
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_MUFU_STALLS, core_perf.mufu_stalls);
+        CSR_READ_64(VX_CSR_MPM_MUFU_INSTRS, core_perf.mufu_instrs);
+        }
+      } break;
+    #endif
     #ifdef VX_CFG_EXT_DXA_ENABLE
       case VX_DCR_MPM_CLASS_DXA: {
         auto cluster_perf = core_->socket()->cluster()->perf_stats();

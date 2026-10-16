@@ -592,6 +592,7 @@ VX_DCR_MPM_CLASS_TEX     = 13
 VX_DCR_MPM_CLASS_OM      = 14
 VX_DCR_MPM_CLASS_RTU     = 15
 VX_DCR_MPM_CLASS_DXA     = 16
+VX_DCR_MPM_CLASS_MUFU    = 17
 
 [csr_mpm_base]
 VX_CSR_MCYCLE = 0xB00
@@ -784,6 +785,13 @@ VX_CSR_MPM_TCU_TBUF_CACHE_HITS= 0xB04  # B tile reuse hits from tile buffer cach
 VX_CSR_MPM_TCU_TBUF_CACHE_HITS_H = 0xB84
 VX_CSR_MPM_TCU_LMEM_READS     = 0xB05  # tile buffer local memory reads
 VX_CSR_MPM_TCU_LMEM_READS_H   = 0xB85
+
+[csr_mpm_mufu]
+# PERF: special-function unit (per-core; summed across issue slots)
+VX_CSR_MPM_MUFU_STALLS        = 0xB03  # dispatch stalled due to MUFU pipeline full
+VX_CSR_MPM_MUFU_STALLS_H      = 0xB83
+VX_CSR_MPM_MUFU_INSTRS        = 0xB04  # total MUFU instructions
+VX_CSR_MPM_MUFU_INSTRS_H      = 0xB84
 
 [csr_mpm_tex]
 # PERF: texture unit (per-core; summed across blocks)

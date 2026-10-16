@@ -1,0 +1,174 @@
+{
+  "mufu": {
+    "clock_mhz": 300,
+    "config_hash": "5d5eb85429e40b51",
+    "configs": "-DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16",
+    "dut": "mufu",
+    "result": {
+      "bram": 1,
+      "build_time_s": 885,
+      "critical_paths": [
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__33/D",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 0.924,
+          "route_ns": 1.721,
+          "route_pct": 65.069,
+          "slack_ns": 0.668,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        },
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__33/D",
+          "group": "core_clock",
+          "levels": 11,
+          "logic_ns": 0.984,
+          "route_ns": 1.652,
+          "route_pct": 62.675,
+          "slack_ns": 0.677,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        },
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__34/D",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 0.9,
+          "route_ns": 1.723,
+          "route_pct": 65.691,
+          "slack_ns": 0.69,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        },
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__32/D",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 0.894,
+          "route_ns": 1.721,
+          "route_pct": 65.815,
+          "slack_ns": 0.698,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        },
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__34/D",
+          "group": "core_clock",
+          "levels": 11,
+          "logic_ns": 0.96,
+          "route_ns": 1.654,
+          "route_pct": 63.279,
+          "slack_ns": 0.699,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        },
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__31/D",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 0.89,
+          "route_ns": 1.722,
+          "route_pct": 65.929,
+          "slack_ns": 0.701,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        },
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__32/D",
+          "group": "core_clock",
+          "levels": 11,
+          "logic_ns": 0.954,
+          "route_ns": 1.652,
+          "route_pct": 63.396,
+          "slack_ns": 0.707,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        },
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__29/D",
+          "group": "core_clock",
+          "levels": 8,
+          "logic_ns": 0.884,
+          "route_ns": 1.721,
+          "route_pct": 66.068,
+          "slack_ns": 0.708,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        },
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__42/D",
+          "group": "core_clock",
+          "levels": 7,
+          "logic_ns": 0.909,
+          "route_ns": 1.696,
+          "route_pct": 65.108,
+          "slack_ns": 0.708,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        },
+        {
+          "endpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r_reg[94]_fret__2_fret__40/D",
+          "group": "core_clock",
+          "levels": 7,
+          "logic_ns": 0.909,
+          "route_ns": 1.695,
+          "route_pct": 65.095,
+          "slack_ns": 0.709,
+          "startpoint": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg/C"
+        }
+      ],
+      "dsp": 3,
+      "env": {
+        "device": "xcu55c-fsvh2892-2L-e",
+        "opt_level": 3,
+        "vivado": "2024.2",
+        "xlen": 32
+      },
+      "ff": 1153,
+      "fmax_mhz": 375.2,
+      "high_fanout_nets": [
+        {
+          "driver": "LUT3",
+          "fanout": 608,
+          "net": "mufu_unit/g_blocks[0].pe_serializer/out_buf/g_eb1.pipe_buffer/g_register.g_pipe_regs[0].pipe_register/g_pipe.g_partial_reset.pipe_rst_reg[0][0]_1"
+        },
+        {
+          "driver": "LUT2",
+          "fanout": 233,
+          "net": "mufu_unit/g_blocks[0].pe_serializer/out_buf/g_eb1.pipe_buffer/g_register.g_pipe_regs[0].pipe_register/g_buffer.flow_out"
+        },
+        {
+          "driver": "LUT5",
+          "fanout": 149,
+          "net": "mufu_unit/lane_dispatch/g_blocks[0].g_partial_simd.packet_iter/g_iterator.pipe_reg/g_iterator.sent_mask_p_reg[7][1]"
+        },
+        {
+          "driver": "LUT5",
+          "fanout": 149,
+          "net": "mufu_unit/lane_dispatch/g_blocks[0].g_partial_simd.packet_iter/g_iterator.pipe_reg/g_iterator.sent_mask_p_reg[7][0]"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 111,
+          "net": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/per_block_execute_if[0]\\\\.data[op_type][1]"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 108,
+          "net": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r[88]_i_1_n_0"
+        },
+        {
+          "driver": "FDRE",
+          "fanout": 107,
+          "net": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/per_block_execute_if[0]\\\\.data[op_type][0]"
+        },
+        {
+          "driver": "FDSE",
+          "fanout": 106,
+          "net": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.valid_in_r_reg_0"
+        },
+        {
+          "driver": "LUT3",
+          "fanout": 104,
+          "net": "mufu_unit/lane_dispatch/g_blocks[0].buf_out/g_eb2.stream_buffer/g_buffer.g_out_reg.data_out_r[87]_i_1_n_0"
+        }
+      ],
+      "lut": 1227,
+      "lutram": 57,
+      "uram": 0,
+      "wns_ns": 0.668
+    }
+  }
+}

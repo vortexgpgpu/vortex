@@ -192,6 +192,9 @@ enum class FUType {
 #ifdef VX_CFG_EXT_TCU_ENABLE
   TCU,
 #endif
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+  MUFU,
+#endif
   Count
 };
 
@@ -203,6 +206,9 @@ inline std::ostream &operator<<(std::ostream &os, const FUType& type) {
   case FUType::SFU: os << "SFU"; break;
 #ifdef VX_CFG_EXT_TCU_ENABLE
   case FUType::TCU: os << "TCU"; break;
+#endif
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+  case FUType::MUFU: os << "MUFU"; break;
 #endif
   default:
     assert(false);
@@ -592,6 +598,40 @@ inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+// Values match the instruction's fn field and vortex::mufu::fn_t.
+enum class MufuType {
+  RCP   = 0,
+  RSQRT = 1,
+  EX2   = 2,
+  LG2   = 3,
+  SINPI = 4,
+  COSPI = 5,
+  TANH  = 6,
+};
+
+struct IntrMufuArgs {
+  uint32_t fmt : 3;
+};
+
+inline std::ostream &operator<<(std::ostream &os, const MufuType& type) {
+  switch (type) {
+  case MufuType::RCP:   os << "MUFU.RCP"; break;
+  case MufuType::RSQRT: os << "MUFU.RSQRT"; break;
+  case MufuType::EX2:   os << "MUFU.EX2"; break;
+  case MufuType::LG2:   os << "MUFU.LG2"; break;
+  case MufuType::SINPI: os << "MUFU.SINPI"; break;
+  case MufuType::COSPI: os << "MUFU.COSPI"; break;
+  case MufuType::TANH:  os << "MUFU.TANH"; break;
+  default:
+    assert(false);
+  }
+  return os;
+}
+#endif
+
+///////////////////////////////////////////////////////////////////////////////
+
 enum class WctlType {
   TMC,
   WSPAWN,
@@ -821,6 +861,9 @@ using OpType = std::variant<
 #ifdef VX_CFG_EXT_TCU_ENABLE
 , TcuType
 #endif
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+, MufuType
+#endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 , TexType
 #endif
@@ -847,6 +890,9 @@ using IntrArgs = std::variant<
 #endif
 #ifdef VX_CFG_EXT_TCU_ENABLE
 , IntrTcuArgs
+#endif
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+, IntrMufuArgs
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
 , IntrTexArgs
