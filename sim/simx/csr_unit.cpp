@@ -414,36 +414,30 @@ void CsrUnit::process(instr_trace_t* trace) {
   trace->dst_data.assign(num_threads, reg_data_t{});
   auto& rd_data = trace->dst_data;
 
+  if (thread_start == num_threads)
+    return;
+
+  // CSRs are per warp: every active lane reads the old value, and the write
+  // takes the first active lane's operand, as in the RTL.
+  for (uint32_t t = thread_start; t < num_threads; ++t) {
+    if (!tmask.test(t)) continue;
+    rd_data[t].i = this->get_csr(csr_addr, wid, t);
+  }
+  Word csr_value = rd_data[thread_start].i;
+  Word src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[thread_start].i;
+
   switch (csr_type) {
   case CsrType::CSRRW:
-    for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask.test(t)) continue;
-      Word csr_value = this->get_csr(csr_addr, wid, t);
-      auto src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-      this->set_csr(csr_addr, src_v, wid, t);
-      rd_data[t].i = csr_value;
-    }
+    this->set_csr(csr_addr, src_v, wid, thread_start);
     break;
   case CsrType::CSRRS:
-    for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask.test(t)) continue;
-      Word csr_value = this->get_csr(csr_addr, wid, t);
-      auto src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-      if (src_v != 0) {
-        this->set_csr(csr_addr, csr_value | src_v, wid, t);
-      }
-      rd_data[t].i = csr_value;
+    if (src_v != 0) {
+      this->set_csr(csr_addr, csr_value | src_v, wid, thread_start);
     }
     break;
   case CsrType::CSRRC:
-    for (uint32_t t = thread_start; t < num_threads; ++t) {
-      if (!tmask.test(t)) continue;
-      Word csr_value = this->get_csr(csr_addr, wid, t);
-      auto src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-      if (src_v != 0) {
-        this->set_csr(csr_addr, csr_value & ~src_v, wid, t);
-      }
-      rd_data[t].i = csr_value;
+    if (src_v != 0) {
+      this->set_csr(csr_addr, csr_value & ~src_v, wid, thread_start);
     }
     break;
   default:
