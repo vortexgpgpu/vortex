@@ -23,7 +23,7 @@
   },
   "core:sgemm-mc-nt16:rtlsim": {
     "32": {
-      "cycles": 779900,
+      "cycles": 787850,
       "instrs": 623680
     },
     "app": "sgemm",
@@ -34,7 +34,7 @@
   },
   "core:sgemm-mc-nt4:rtlsim": {
     "32": {
-      "cycles": 2213412,
+      "cycles": 2239426,
       "instrs": 2494528
     },
     "app": "sgemm",
@@ -45,7 +45,7 @@
   },
   "core:sgemm-nt16:rtlsim": {
     "32": {
-      "cycles": 1839049,
+      "cycles": 1838654,
       "instrs": 623632
     },
     "app": "sgemm",
@@ -56,7 +56,7 @@
   },
   "core:sgemm-nt4:rtlsim": {
     "32": {
-      "cycles": 6115870,
+      "cycles": 5939731,
       "instrs": 2494480
     },
     "app": "sgemm",
@@ -89,8 +89,8 @@
   },
   "core:sgemv-nt16:rtlsim": {
     "32": {
-      "cycles": 720632,
-      "instrs": 79120
+      "cycles": 685107,
+      "instrs": 66800
     },
     "app": "sgemv",
     "args": "-m512 -n512",
@@ -100,8 +100,8 @@
   },
   "core:sgemv-nt4:rtlsim": {
     "32": {
-      "cycles": 1175175,
-      "instrs": 316432
+      "cycles": 872926,
+      "instrs": 267152
     },
     "app": "sgemv",
     "args": "-m512 -n512",
