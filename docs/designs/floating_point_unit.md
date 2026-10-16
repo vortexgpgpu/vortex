@@ -85,11 +85,14 @@ Decode emits a 4-bit operation, a 2-bit `fmt`, and a 3-bit `frm`
 | `1000` / `1001` | `F2I` / `F2U` | CVT | `[0]` float is double, `[1]` integer is 64-bit | rounding mode |
 | `1010` / `1011` | `I2F` / `U2F` | CVT | `[0]` float is double, `[1]` integer is 64-bit | rounding mode |
 | `1100` | `CMP` | NCP | `[0]` double | `LE` = 0, `LT` = 1, `EQ` = 2 |
-| `1101` | `F2F` | **CVT** | `[0]` destination is double | rounding mode |
-| `1110` | `MISC` | NCP | `[0]` double | `SGNJ`, `SGNJN`, `SGNJX`, `CLASS`, `MVXW`, `MVWX`, `FMIN`, `FMAX` = 0–7 |
+| `1101` | `F2F` | **CVT** | `[0]` destination is double, `[1]` source is half (Zfhmin) | rounding mode |
+| `1110` | `MISC` | NCP | `[0]` double, `[1]` half for `MVXW`/`MVWX` (Zfhmin) | `SGNJ`, `SGNJN`, `SGNJX`, `CLASS`, `MVXW`, `MVWX`, `FMIN`, `FMAX` = 0–7 |
+| `1111` | `F2H` | **CVT** | `[0]` source is double | rounding mode |
 
-`F2F` is the one exception to the index rule: its top bits say NCP, and the
-request switch steers it to CVT.
+`F2F` and `F2H` are the exceptions to the index rule: their top bits say NCP,
+and the request switch steers them to CVT. `F2H` (`FCVT.H.S`, `FCVT.H.D`) and
+the half forms of `F2F` and the moves exist only with
+`VX_CFG_EXT_ZFHMIN_ENABLE`.
 
 Subtraction is not an operation. `SUB`, `MSUB` and `NMSUB` are `ADD`, `MADD`
 and `NMADD` with `fmt[1]` set, and the FMA core folds the sign into its
@@ -291,9 +294,15 @@ value sized to the widest enabled format.
 - **Unpack** selects the source format's fields, re-biases, and left-aligns.
 - **Round and pack** narrows the canonical value to the destination through
   one shared tree, reused for every format pair.
-- **Narrowing** (`FCVT.S.D`) handles a subnormal destination by
-  denormalizing and rounding with a correct guard/round/sticky split, and
-  overflow to infinity.
+- **Narrowing** (`FCVT.S.D`, and `FCVT.H.S`/`FCVT.H.D` with Zfhmin) handles a
+  subnormal destination by denormalizing and rounding with a correct
+  guard/round/sticky split; a subnormal that rounds up becomes the smallest
+  normal. Underflow uses RISC-V's after-rounding tininess. Overflow yields
+  infinity or the largest finite value according to the rounding mode, and a
+  rounding carry into the infinity exponent also raises OF.
+- **Half** (`HALF_ENABLE`, set by `VX_CFG_EXT_ZFHMIN_ENABLE`) adds an F16
+  source and destination; a half source that is not NaN-boxed reads as the
+  canonical NaN.
 - The integer side is `XLEN` wide: I32, I64, U32, U64.
 
 Latency is `VX_CFG_FCVT_LATENCY` on a 32-bit build and **one more on a
@@ -431,7 +440,8 @@ flight, and a result waiting on the commit arbiter keeps its tag:
 
 | what | where | checks |
 |---|---|---|
-| leaf units | `hw/unittest/{fma,fdiv,fsqrt,fcvt,fdivsqrt}_unit`, run by `make -C hw/unittest run-fpu` | bit-exact result and flags against soft-float, over every RISC-V rounding mode, in the default and the area-reduced configurations |
+| leaf units | `hw/unittest/{fma,fdiv,fsqrt,fcvt,fdivsqrt}_unit`, run by `make -C hw/unittest run-fpu` | bit-exact result and flags against soft-float, over every RISC-V rounding mode, in the default and the area-reduced configurations (`fcvt` includes F32↔F16) |
+| Zfhmin | `zfhmin` category: the `zfhmin` app on simx and rtlsim, with the DPI, STD and DSP backends | every half conversion bit-exact with flags across all rounding modes (widening exhaustive), `flh`/`fsh`/`fmv` NaN-boxing |
 | FPU RTL end to end | `riscv` category, `isa-32f-dsp`: `rtlsim` rebuilt with the DSP backend, running `rv32uf` | the soft cores under the full pipeline, F32 |
 | ISA conformance | `riscv` category, every other lane: `rv32uf`, `rv64uf`, `rv64ud` | decode, the front end and writeback — arithmetic comes from the DPI model |
 | STD backend on hardware | `config2` category, `dogfood` with `-DVX_CFG_FPU_TYPE_STD` on `xrt` | the soft cores on the FPGA |
@@ -468,3 +478,8 @@ different warps execute concurrently; it ignores `frm` and never writes
   models `VX_CFG_FCVT_LATENCY` on every build, one cycle short.
 - **Double precision on a 32-bit build** (§4.1) is not supported by the
   operand path.
+- **FPNEW narrowing of infinity.** The pinned cvfpu treats an infinite F2F
+  source as an overflow, so `RTZ`, and `RDN`/`RUP` toward zero, return the
+  largest finite value instead of infinity (`FCVT.S.D`, `FCVT.H.S`,
+  `FCVT.H.D`), and `FCVT.H.S` of a signaling NaN does not raise NV. The DPI,
+  STD and DSP backends are correct.

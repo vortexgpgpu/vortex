@@ -568,6 +568,7 @@ struct IntrFpuArgs {
   uint32_t frm : 3;
   uint32_t cvt : 2;
   uint32_t is_f64 : 1;
+  uint32_t is_f16 : 1;
 };
 
 inline std::ostream &operator<<(std::ostream &os, const FpuType& type) {

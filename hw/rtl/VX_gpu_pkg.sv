@@ -490,6 +490,7 @@ package VX_gpu_pkg;
     localparam INST_FPU_CMP =    4'b1100; // frm: LE=0, LT=1, EQ=2
     localparam INST_FPU_F2F =    4'b1101; // fmt[0]: F32=0, F64=1
     localparam INST_FPU_MISC =   4'b1110; // frm: SGNJ=0, SGNJN=1, SGNJX=2, CLASS=3, MVXW=4, MVWX=5, FMIN=6, FMAX=7
+    localparam INST_FPU_F2H =    4'b1111;
     localparam INST_FPU_BITS =   4;
 
     function automatic logic inst_fpu_is_class(input logic [INST_FPU_BITS-1:0] op, input logic [INST_FRM_BITS-1:0] frm);

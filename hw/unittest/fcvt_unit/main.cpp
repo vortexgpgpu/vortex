@@ -12,8 +12,9 @@
 // limitations under the License.
 
 // Functional test for VX_fcvt_unit (XLEN=32 / F32): exercises I2F and F2I in
-// both signed and unsigned forms and checks bit-exact result/fflags against the
-// softfloat (rvfloats) RISC-V golden across all rounding modes. Strict check.
+// both signed and unsigned forms, plus F32<->F16 with HALF, and checks
+// bit-exact result/fflags against the softfloat (rvfloats) RISC-V golden across
+// all rounding modes. Strict check.
 
 #include "VVX_fcvt_unit.h"
 #include "vl_simulator.h"
@@ -32,11 +33,15 @@
 
 using Device = VVX_fcvt_unit;
 
-enum { I2F_S, I2F_U, F2I_S, F2I_U, NUM_OPS };
+#ifdef HALF
+enum { I2F_S, I2F_U, F2I_S, F2I_U, F2H, H2F, NUM_OPS };
+#else
+enum { I2F_S, I2F_U, F2I_S, F2I_U, NUM_OPS, F2H, H2F };
+#endif
 
 namespace {
 
-const char* op_name[NUM_OPS] = {"i2f_s","i2f_u","f2i_s","f2i_u"};
+const char* op_name[] = {"i2f_s","i2f_u","f2i_s","f2i_u","f2h","h2f"};
 
 struct TV { uint32_t a, frm; int op; };
 struct Golden { uint32_t res, fflags, a, frm; int op; };
@@ -48,7 +53,15 @@ const uint32_t kSpecials[] = {
     0x7f800000, 0xff800000, 0x7fc00000, 0x4f000000, 0xcf000000, 0x4effffff,
     0x00000001, 0xffffffff, 0x7fffffff, 0x00000002, 0x000003e8, 0x40490fdb,
     0x5f000000, 0x5effffff, 0x3f000000, 0x4c3b0244,
+    0x477fe000, 0x477fefff, 0x477ff000, 0x477ff001, 0x47800000, 0xc77ff000,
+    0x38800000, 0x387fffff, 0x387ff000, 0x387fe000, 0x33800000, 0x33000000,
+    0x33000001, 0x32ffffff, 0x3f801000, 0x3f803000, 0x7f800001, 0x7f7fffff,
+    0xffff7c00, 0xffff7c01, 0xffff7e00, 0xffff0001, 0xffff83ff, 0xffff3c00,
+    0x00003c00, 0x7fff7bff,
 };
+
+inline uint32_t flush_sub(uint32_t x){ return (((x>>23)&0xFF)==0 && (x&0x7FFFFF)) ? (x&0x80000000u) : x; }
+inline uint16_t flush_sub16(uint16_t x){ return (((x>>10)&0x1F)==0 && (x&0x3FF)) ? (x&0x8000u) : x; }
 
 uint32_t golden(int op, uint32_t a, uint32_t frm, uint32_t* ff) {
     *ff = 0;
@@ -57,6 +70,8 @@ uint32_t golden(int op, uint32_t a, uint32_t frm, uint32_t* ff) {
     case I2F_U: return rv_utof_s(a, frm, ff);
     case F2I_S: return rv_ftoi_s(a, frm, ff);
     case F2I_U: return rv_ftou_s(a, frm, ff);
+    case F2H: return 0xffff0000u | rv_ftoh_s(a, frm, ff);
+    case H2F: return ((a >> 16) == 0xffff) ? rv_htof_s(uint16_t(a), frm, ff) : 0x7fc00000u;
     }
     return 0;
 }
@@ -65,16 +80,18 @@ void drive(Device& dut, int op, uint32_t a, uint32_t frm) {
     dut.frm      = frm;
     dut.is_itof  = (op == I2F_S || op == I2F_U);
     dut.is_ftoi  = (op == F2I_S || op == F2I_U);
-    dut.is_f2f   = 0;
+    dut.is_f2f   = (op == F2H || op == H2F);
     dut.is_signed = (op == I2F_S || op == F2I_S);
     dut.is_int64 = 0;     // XLEN=32
     dut.src_fmt  = 0;     // F32
     dut.dst_fmt  = 0;     // F32
+#ifdef HALF
+    dut.src_h    = (op == H2F);
+    dut.dst_h    = (op == F2H);
+#endif
     dut.dataa    = a;
     dut.mask     = 1;
 }
-
-inline uint32_t flush_sub(uint32_t x){ return (((x>>23)&0xFF)==0 && (x&0x7FFFFF)) ? (x&0x80000000u) : x; }
 
 } // namespace
 
@@ -93,8 +110,12 @@ int main(int argc, char** argv) {
         for (uint32_t a : kSpecials)
             for (uint32_t f = 0; f < 5; ++f)
                 tests.push_back({a, f, op});
-        for (size_t i = 0; i < num_random; ++i)
-            tests.push_back({static_cast<uint32_t>(rng()), static_cast<uint32_t>(i % 5), op});
+        for (size_t i = 0; i < num_random; ++i) {
+            uint32_t a = static_cast<uint32_t>(rng());
+            if (op == H2F && (i % 16) != 0) a |= 0xffff0000u;
+            if (op == F2H && (i % 2) == 0) a = (a & 0x807fffffu) | ((97u + (a >> 24) % 50u) << 23);
+            tests.push_back({a, static_cast<uint32_t>(i % 5), op});
+        }
     }
 
     const size_t N = tests.size();
@@ -117,7 +138,8 @@ int main(int argc, char** argv) {
             uint32_t ff = 0;
             uint32_t ga = t.a;
 #ifdef LEAN
-            if (t.op == F2I_S || t.op == F2I_U) ga = flush_sub(t.a); // DAZ float source
+            if (t.op == F2I_S || t.op == F2I_U || t.op == F2H) ga = flush_sub(t.a); // DAZ float source
+            if (t.op == H2F && (t.a >> 16) == 0xffff) ga = 0xffff0000u | flush_sub16(uint16_t(t.a));
 #endif
             uint32_t r  = golden(t.op, ga, t.frm, &ff);
 #ifdef LEAN
@@ -146,7 +168,7 @@ int main(int argc, char** argv) {
     }
 
     printf("fcvt_unit: checked=%zu errors=%zu  per-op:", checked, errors);
-    for (int op = 0; op < NUM_OPS; ++op) printf(" %s=%zu", op_name[op], per_op[op]);
+    for (int op = 0; op < (int)NUM_OPS; ++op) printf(" %s=%zu", op_name[op], per_op[op]);
     printf("\n%s\n", errors ? "FAILED" : "PASSED");
     return errors ? 1 : 0;
 }

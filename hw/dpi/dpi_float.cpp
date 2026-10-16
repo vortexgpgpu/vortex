@@ -63,7 +63,7 @@ inline uint64_t nan_box16(uint32_t value) {
 #ifdef VX_CFG_XLEN_64
   return value | 0xffffffffffff0000;
 #else
-  return value;
+  return (value & 0xffff) | 0xffff0000;
 #endif
 }
 
@@ -103,7 +103,7 @@ inline bool is_nan_boxed16(uint64_t value) {
 #ifdef VX_CFG_XLEN_64
   return (uint64_t(value >> 16) == 0xffffffffffff);
 #else
-  return true;
+  return ((uint32_t(value) >> 16) == 0xffff);
 #endif
 }
 
@@ -360,6 +360,9 @@ void dpi_f2f(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVal
     case 0: // fp32
       *result = rv_ftod(check_boxing(a), *frm, fflags);
       break;
+    case 2: // fp16
+      *result = rv_htod(check_boxing16(a, 0x7E00), *frm, fflags);
+      break;
     default:
       std::abort();
     }
@@ -368,6 +371,9 @@ void dpi_f2f(bool enable, int dst_fmt, int src_fmt, int64_t a, const svBitVecVal
     switch (src_fmt) {
     case 0: // fp32
       *result = nan_box16(rv_ftoh_s(check_boxing(a), *frm, fflags));
+      break;
+    case 1: // fp64
+      *result = nan_box16(rv_dtoh(a, *frm, fflags));
       break;
     default:
       std::abort();

@@ -266,8 +266,11 @@ void LsuUnit::process_response_step(uint32_t b) {
 			uint64_t formatted = 0;
 			switch (entry.lsu_args.width) {
 			case 0: // LB
-			case 1: // LH
 				formatted = (uint64_t)(int64_t)sext((Word)read_data, data_width);
+				break;
+			case 1: // LH (FLH: raw bits for Float dest, NaN-boxed below)
+				formatted = dst_float ? read_data
+				                       : (uint64_t)(int64_t)sext((Word)read_data, data_width);
 				break;
 			case 2: // LW (sign-ext for Integer dest; raw bits for Float dest, NaN-boxed below)
 				formatted = dst_float ? read_data
@@ -284,8 +287,10 @@ void LsuUnit::process_response_step(uint32_t b) {
 			}
 			// Place at bytesel-specified position; OR-in NaN-box for Float dest.
 			auto& dst = entry.trace->dst_data.at(lane_info.tid);
-			dst.u64 = (formatted << (8 * byte_off))
-			        | (nan_box ? 0xFFFFFFFF00000000ull : 0);
+			uint64_t box = !nan_box ? 0
+			             : (entry.lsu_args.width == 1) ? 0xFFFFFFFFFFFF0000ull
+			             : 0xFFFFFFFF00000000ull;
+			dst.u64 = (formatted << (8 * byte_off)) | box;
 		}
 	}
 	entry.count -= lsu_rsp.mask.count(); // track remaining
