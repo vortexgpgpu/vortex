@@ -564,7 +564,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         assign f2f_uf_out_s5 = f2f_uf_s5 & ~not_tiny;
         assign f2f_nx_s5     = is_fin_src & ((|round_sticky_bits_s5) | f2f_of_out_s5);
     end else begin : g_fp_pack_s
-        `UNUSED_VAR ({dst_h_s5, f2f_tiny0_s5, fine_round_s5})
+        `UNUSED_VAR ({dst_h_s5, f2f_of_s5, f2f_tiny0_s5, fine_round_s5})
         assign fp_dst_res    = f32_boxed;
         assign f2f_nv_s5     = 1'b0;
         assign f2f_nx_s5     = 1'b0;
