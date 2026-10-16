@@ -73,9 +73,10 @@ module VX_nz_iterator #(
         wire is_last_p = (start_p == end_p);
 
         wire enable = valid_in && (~valid_out || next);
+        wire eop_out = valid_out && eop;
 
         always @(posedge clk) begin
-            if (reset || (enable && (is_last_p || eop))) begin
+            if (reset || (enable && (is_last_p || eop_out))) begin
                 sent_mask_p <= '0;
                 is_first_p <= 1;
             end else if (enable) begin
@@ -90,7 +91,7 @@ module VX_nz_iterator #(
             .DEPTH  (OUT_REG)
         ) pipe_reg (
             .clk      (clk),
-            .reset    (reset || (enable && eop)),
+            .reset    (reset || (enable && eop_out)),
             .enable   (enable),
             .data_in  ({valid_in,  data_in[start_p], start_p, is_first_p, is_last_p}),
             .data_out ({valid_out, data_out,         pid,     sop,        eop})
