@@ -6,7 +6,7 @@
     },
     "app": "raycast",
     "args": "",
-    "config_hash": "396cee9df6025cdb",
+    "config_hash": "6f10773b74cb88a7",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -17,51 +17,51 @@
     },
     "app": "raycast",
     "args": "",
-    "config_hash": "262f24032ef14b58",
+    "config_hash": "21aa9ee5dda2e0e7",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "core:sgemm-mc-nt16:rtlsim": {
     "32": {
-      "cycles": 787850,
+      "cycles": 779900,
       "instrs": 623680
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "ad2b37492d761e8f",
+    "config_hash": "ccecdc6a8c1dad16",
     "configs": "-DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=16 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
   "core:sgemm-mc-nt4:rtlsim": {
     "32": {
-      "cycles": 2239426,
+      "cycles": 2213412,
       "instrs": 2494528
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "606d011dc6f612d3",
+    "config_hash": "045868d9511c94f6",
     "configs": "-DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_CORES=2 -DVX_CFG_NUM_THREADS=4 -DVX_CFG_L2_ENABLE",
     "driver": "rtlsim"
   },
   "core:sgemm-nt16:rtlsim": {
     "32": {
-      "cycles": 1838654,
+      "cycles": 1839049,
       "instrs": 623632
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "9390754d3719fca3",
+    "config_hash": "93979463ce522b02",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "core:sgemm-nt4:rtlsim": {
     "32": {
-      "cycles": 5939731,
+      "cycles": 6115870,
       "instrs": 2494480
     },
     "app": "sgemm",
     "args": "-n128",
-    "config_hash": "740fd84fa2938103",
+    "config_hash": "0f0aff075ef0f23a",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
@@ -72,7 +72,7 @@
     },
     "app": "sgemmx",
     "args": "-n128",
-    "config_hash": "2e1c44e05f9ac34d",
+    "config_hash": "6ac49e61c113fe9b",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -83,29 +83,29 @@
     },
     "app": "sgemmx",
     "args": "-n128",
-    "config_hash": "024adb49ed96bdd3",
+    "config_hash": "6ffdaf4848258f2e",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "core:sgemv-nt16:rtlsim": {
     "32": {
-      "cycles": 685107,
-      "instrs": 66800
+      "cycles": 720632,
+      "instrs": 79120
     },
     "app": "sgemv",
     "args": "-m512 -n512",
-    "config_hash": "a3d9df9695acbb95",
+    "config_hash": "a5e03f354713bcac",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
   "core:sgemv-nt4:rtlsim": {
     "32": {
-      "cycles": 872926,
-      "instrs": 267152
+      "cycles": 1175175,
+      "instrs": 316432
     },
     "app": "sgemv",
     "args": "-m512 -n512",
-    "config_hash": "0e8990b25e64ad7f",
+    "config_hash": "28cb832d7f58703d",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
@@ -116,7 +116,7 @@
     },
     "app": "softmax",
     "args": "-n64",
-    "config_hash": "9e0c1c9767c760ea",
+    "config_hash": "2d4d6acd13d3f1db",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -127,7 +127,7 @@
     },
     "app": "softmax",
     "args": "-n64",
-    "config_hash": "eb5fed4bfce19d76",
+    "config_hash": "c7f291b29cbf8558",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
@@ -138,7 +138,7 @@
     },
     "app": "stencil3d",
     "args": "-n32",
-    "config_hash": "6925a5138be930ea",
+    "config_hash": "e2766bd823ea94d6",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -149,7 +149,7 @@
     },
     "app": "stencil3d",
     "args": "-n32",
-    "config_hash": "b83a1e3735f79d39",
+    "config_hash": "c582f951f9549471",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
@@ -160,7 +160,7 @@
     },
     "app": "vecadd",
     "args": "-n16384",
-    "config_hash": "ef0c2548e7c5bf86",
+    "config_hash": "7a06e40f60aa127b",
     "configs": "-DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -171,7 +171,7 @@
     },
     "app": "vecadd",
     "args": "-n16384",
-    "config_hash": "ce1eb79984a98552",
+    "config_hash": "b7bbdff761d2138e",
     "configs": "-DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   }
