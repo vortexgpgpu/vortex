@@ -473,6 +473,14 @@ public:
   }
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
+#ifdef VX_CFG_EXT_OM_ENABLE
+    if (addr == VX_DCR_OM_OCC_COUNT) {
+      if (tag == simobject_->id()) {
+        *value = om_core_->occ_count();
+      }
+      return 0;
+    }
+#endif
     for (auto& socket : sockets_) {
       int ret = socket->dcr_read(addr, tag, value);
       if (ret != 0)

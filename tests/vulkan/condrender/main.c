@@ -2,19 +2,33 @@
  * Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * A draw inside a conditional-rendering block whose predicate is false.
+ * Draws inside VK_EXT_conditional_rendering blocks, with the predicate written
+ * by the host and by an occlusion query.
  *
  * The predicate lives in a buffer and llvmpipe tests it at the top of its draw,
  * returning before rendering anything when it fails. A draw that takes the
- * device path never reaches that test, so the predicate goes untested and the
- * geometry is drawn regardless -- with no error and no fallback, because a
- * render condition is context state that never passes through the shader
- * translator that refuses what it cannot do.
+ * device path never reaches that test, so the device path has to test it
+ * itself or the geometry is drawn regardless -- with no error and no fallback,
+ * because a render condition is context state that never passes through the
+ * shader translator that refuses what it cannot do.
  *
- * Both predicates are run. A false one must leave the target at the clear, and
- * a true one must render, so a driver that ignores the condition and one that
- * drops every conditional draw are told apart from each other and from a
- * correct one.
+ * Vulkan has no query-predicated render condition: the extension only reads a
+ * buffer. The way an application predicates a draw on visibility is to copy an
+ * occlusion query's result into that buffer with vkCmdCopyQueryPoolResults, so
+ * the query cases do exactly that, and the predicate then depends on the
+ * device's occlusion count reaching the copy before the conditional draw reads
+ * it. Their predicate buffer starts out holding the value that gives the wrong
+ * answer, so a copy that never landed is caught.
+ *
+ *   host 0 / host 1              predicate written by the host
+ *   query visible / hidden       predicate copied from an occlusion query over
+ *                                a full-screen draw / the same draw moved
+ *                                wholly outside the viewport
+ *
+ * Each runs normal and inverted. A false predicate must leave the target at
+ * the clear and a true one must render it, so a driver that ignores the
+ * condition, one that drops every conditional draw and one that ignores the
+ * inversion are each told apart from a correct one.
  *
  * Run against lavapipe with GALLIUM_DRIVER=vortexpipe.
  */
@@ -27,6 +41,7 @@
 
 #define WIDTH     64u
 #define HEIGHT    64u
+#define NPX       ((long)WIDTH * (long)HEIGHT)
 #define FORMAT    VK_FORMAT_R8G8B8A8_UNORM
 
 #define CHECK(x) do {                                              \
@@ -37,18 +52,49 @@
    }                                                               \
 } while (0)
 
+enum pred_source { PRED_HOST, PRED_QUERY };
+
+struct cond_case {
+   const char      *name;
+   enum pred_source source;
+   uint32_t         host_value;   /* PRED_HOST: the predicate word */
+   bool             visible;      /* PRED_QUERY: whether the queried draw is */
+   bool             inverted;
+   long             want_px;
+};
+
+static const struct cond_case cases[] = {
+   { "host 0",                  PRED_HOST,  0u, false, false, 0   },
+   { "host 1",                  PRED_HOST,  1u, false, false, NPX },
+   { "host 0 inverted",         PRED_HOST,  0u, false, true,  NPX },
+   { "host 1 inverted",         PRED_HOST,  1u, false, true,  0   },
+   { "query visible",           PRED_QUERY, 0u, true,  false, NPX },
+   { "query hidden",            PRED_QUERY, 0u, false, false, 0   },
+   { "query visible inverted",  PRED_QUERY, 0u, true,  true,  0   },
+   { "query hidden inverted",   PRED_QUERY, 0u, false, true,  NPX },
+};
+#define NCASES (sizeof cases / sizeof cases[0])
+
 static uint32_t *
 read_spirv(const char *path, size_t *out_size)
 {
    FILE *f = fopen(path, "rb");
-   if (!f) { fprintf(stderr, "FAILED: cannot open %s\n", path); return NULL; }
+   if (!f) {
+      fprintf(stderr, "FAILED: cannot open %s\n", path);
+      return NULL;
+   }
    fseek(f, 0, SEEK_END);
    long sz = ftell(f);
    fseek(f, 0, SEEK_SET);
    uint32_t *buf = malloc((size_t)sz);
-   if (buf && fread(buf, 1, (size_t)sz, f) != (size_t)sz) { free(buf); buf = NULL; }
+   if (buf && fread(buf, 1, (size_t)sz, f) != (size_t)sz) {
+      free(buf);
+      buf = NULL;
+   }
    fclose(f);
-   if (buf) *out_size = (size_t)sz;
+   if (buf) {
+      *out_size = (size_t)sz;
+   }
    return buf;
 }
 
@@ -56,10 +102,12 @@ static uint32_t
 find_mem(const VkPhysicalDeviceMemoryProperties *mp, uint32_t bits,
          VkMemoryPropertyFlags want)
 {
-   for (uint32_t i = 0; i < mp->memoryTypeCount; i++)
+   for (uint32_t i = 0; i < mp->memoryTypeCount; i++) {
       if ((bits & (1u << i)) &&
-          (mp->memoryTypes[i].propertyFlags & want) == want)
+          (mp->memoryTypes[i].propertyFlags & want) == want) {
          return i;
+      }
+   }
    return UINT32_MAX;
 }
 
@@ -68,26 +116,58 @@ load_module(VkDevice dev, const char *path)
 {
    size_t sz = 0;
    uint32_t *spv = read_spirv(path, &sz);
-   if (!spv) return VK_NULL_HANDLE;
+   if (!spv) {
+      return VK_NULL_HANDLE;
+   }
    VkShaderModuleCreateInfo smci = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
       .codeSize = sz, .pCode = spv,
    };
    VkShaderModule sm = VK_NULL_HANDLE;
-   if (vkCreateShaderModule(dev, &smci, NULL, &sm) != VK_SUCCESS)
+   if (vkCreateShaderModule(dev, &smci, NULL, &sm) != VK_SUCCESS) {
       sm = VK_NULL_HANDLE;
+   }
    free(spv);
    return sm;
 }
 
-/* Draw the triangle inside a conditional-rendering block whose predicate word
- * is `predicate`, reporting how many pixels it covered.
+static int
+host_buffer(VkDevice dev, const VkPhysicalDeviceMemoryProperties *mp,
+            VkDeviceSize bytes, VkBufferUsageFlags usage, VkBuffer *out_buf,
+            VkDeviceMemory *out_mem)
+{
+   VkBufferCreateInfo bci = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = bytes, .usage = usage,
+   };
+   CHECK(vkCreateBuffer(dev, &bci, NULL, out_buf));
+   VkMemoryRequirements mr;
+   vkGetBufferMemoryRequirements(dev, *out_buf, &mr);
+   uint32_t mt = find_mem(mp, mr.memoryTypeBits,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+   if (mt == UINT32_MAX) {
+      fprintf(stderr, "FAILED: no host memory\n");
+      return -1;
+   }
+   VkMemoryAllocateInfo mai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = mr.size, .memoryTypeIndex = mt,
+   };
+   CHECK(vkAllocateMemory(dev, &mai, NULL, out_mem));
+   CHECK(vkBindBufferMemory(dev, *out_buf, *out_mem, 0));
+   return 0;
+}
+
+/* Run one case: for a query case, an occlusion query over the triangle in a
+ * first render pass, copied into the predicate word; then the triangle inside a
+ * conditional-rendering block in a second, freshly cleared one. Reports how
+ * many pixels the conditional draw covered and the predicate word it read.
  * Returns 0, or -1 on a Vulkan error. */
 static int
 render(VkDevice dev, VkQueue queue, uint32_t qf,
        const VkPhysicalDeviceMemoryProperties *mp,
-       VkShaderModule vs, VkShaderModule fs, uint32_t predicate,
-       long *out_covered)
+       VkShaderModule vs, VkShaderModule fs, const struct cond_case *cc,
+       long *out_covered, uint32_t *out_predicate)
 {
    VkImageCreateInfo imci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
@@ -103,7 +183,10 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkMemoryRequirements imr;
    vkGetImageMemoryRequirements(dev, img, &imr);
    uint32_t imt = find_mem(mp, imr.memoryTypeBits, 0);
-   if (imt == UINT32_MAX) { fprintf(stderr, "FAILED: no image memory\n"); return -1; }
+   if (imt == UINT32_MAX) {
+      fprintf(stderr, "FAILED: no image memory\n");
+      return -1;
+   }
    VkMemoryAllocateInfo imai = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
       .allocationSize = imr.size, .memoryTypeIndex = imt,
@@ -123,6 +206,7 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkImageView view;
    CHECK(vkCreateImageView(dev, &ivci, NULL, &view));
 
+   /* Both passes clear, so the readback holds the conditional draw alone. */
    VkAttachmentDescription att = {
       .format = FORMAT, .samples = VK_SAMPLE_COUNT_1_BIT,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -155,8 +239,13 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkFramebuffer fb;
    CHECK(vkCreateFramebuffer(dev, &fbci, NULL, &fb));
 
+   VkPushConstantRange pcr = {
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT, .offset = 0,
+      .size = 2 * sizeof(float),
+   };
    VkPipelineLayoutCreateInfo plci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .pushConstantRangeCount = 1, .pPushConstantRanges = &pcr,
    };
    VkPipelineLayout pl;
    CHECK(vkCreatePipelineLayout(dev, &plci, NULL, &pl));
@@ -167,9 +256,8 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fs, .pName = "main" },
    };
-
-   /* No vertex input: occlusion.vert builds its positions from gl_VertexIndex,
-    * so the only thing crossing the VS/FS boundary is the varyings. */
+   /* No vertex input: condrender.vert builds its positions from
+    * gl_VertexIndex. */
    VkPipelineVertexInputStateCreateInfo vi = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
    };
@@ -213,25 +301,48 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkPipeline pipe;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
 
-   const VkDeviceSize bytes = (VkDeviceSize)WIDTH * HEIGHT * 4;
-   VkBufferCreateInfo bci = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = bytes, .usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-   };
+   const VkDeviceSize bytes = (VkDeviceSize)NPX * 4;
    VkBuffer rb;
-   CHECK(vkCreateBuffer(dev, &bci, NULL, &rb));
-   VkMemoryRequirements bmr;
-   vkGetBufferMemoryRequirements(dev, rb, &bmr);
-   uint32_t bmt = find_mem(mp, bmr.memoryTypeBits,
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-   if (bmt == UINT32_MAX) { fprintf(stderr, "FAILED: no host memory\n"); return -1; }
-   VkMemoryAllocateInfo bmai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = bmr.size, .memoryTypeIndex = bmt,
-   };
    VkDeviceMemory bmem;
-   CHECK(vkAllocateMemory(dev, &bmai, NULL, &bmem));
-   CHECK(vkBindBufferMemory(dev, rb, bmem, 0));
+   if (host_buffer(dev, mp, bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                   &rb, &bmem) < 0) {
+      return -1;
+   }
+
+   /* The predicate word the block is conditioned on. A zero means the work
+    * inside is discarded, anything else that it executes; the inverted bit
+    * swaps the two. A query case starts it at the value that would give the
+    * wrong answer, so only the copied count can make the case pass. */
+   VkBuffer pbuf;
+   VkDeviceMemory pmem;
+   if (host_buffer(dev, mp, sizeof(uint32_t),
+                   VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT |
+                   VK_BUFFER_USAGE_TRANSFER_DST_BIT, &pbuf, &pmem) < 0) {
+      return -1;
+   }
+   uint32_t *pval;
+   CHECK(vkMapMemory(dev, pmem, 0, sizeof(uint32_t), 0, (void **)&pval));
+   *pval = cc->source == PRED_HOST ? cc->host_value
+                                   : (cc->visible ? 0u : 1u);
+   vkUnmapMemory(dev, pmem);
+
+   VkQueryPoolCreateInfo qpci = {
+      .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+      .queryType = VK_QUERY_TYPE_OCCLUSION, .queryCount = 1,
+   };
+   VkQueryPool qp;
+   CHECK(vkCreateQueryPool(dev, &qpci, NULL, &qp));
+
+   PFN_vkCmdBeginConditionalRenderingEXT p_begin =
+      (PFN_vkCmdBeginConditionalRenderingEXT)
+      vkGetDeviceProcAddr(dev, "vkCmdBeginConditionalRenderingEXT");
+   PFN_vkCmdEndConditionalRenderingEXT p_end =
+      (PFN_vkCmdEndConditionalRenderingEXT)
+      vkGetDeviceProcAddr(dev, "vkCmdEndConditionalRenderingEXT");
+   if (!p_begin || !p_end) {
+      fprintf(stderr, "FAILED: conditional rendering entry points missing\n");
+      return -1;
+   }
 
    VkCommandPoolCreateInfo cmpci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -247,44 +358,6 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    VkCommandBuffer cmd;
    CHECK(vkAllocateCommandBuffers(dev, &cbai, &cmd));
 
-   /* The predicate word the block is conditioned on. A zero means the work
-    * inside is discarded; anything else means it executes. */
-   VkBufferCreateInfo pbci = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = sizeof(uint32_t),
-      .usage = VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT,
-   };
-   VkBuffer pbuf;
-   CHECK(vkCreateBuffer(dev, &pbci, NULL, &pbuf));
-   VkMemoryRequirements pmr;
-   vkGetBufferMemoryRequirements(dev, pbuf, &pmr);
-   uint32_t pmt = find_mem(mp, pmr.memoryTypeBits,
-                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                           VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-   if (pmt == UINT32_MAX) { fprintf(stderr, "FAILED: no predicate memory\n"); return -1; }
-   VkMemoryAllocateInfo pmai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = pmr.size, .memoryTypeIndex = pmt,
-   };
-   VkDeviceMemory pmem;
-   CHECK(vkAllocateMemory(dev, &pmai, NULL, &pmem));
-   CHECK(vkBindBufferMemory(dev, pbuf, pmem, 0));
-   uint32_t *pval;
-   CHECK(vkMapMemory(dev, pmem, 0, sizeof(uint32_t), 0, (void **)&pval));
-   *pval = predicate;
-   vkUnmapMemory(dev, pmem);
-
-   PFN_vkCmdBeginConditionalRenderingEXT p_begin =
-      (PFN_vkCmdBeginConditionalRenderingEXT)
-      vkGetDeviceProcAddr(dev, "vkCmdBeginConditionalRenderingEXT");
-   PFN_vkCmdEndConditionalRenderingEXT p_end =
-      (PFN_vkCmdEndConditionalRenderingEXT)
-      vkGetDeviceProcAddr(dev, "vkCmdEndConditionalRenderingEXT");
-   if (!p_begin || !p_end) {
-      fprintf(stderr, "FAILED: conditional rendering entry points missing\n");
-      return -1;
-   }
-
    VkCommandBufferBeginInfo cbbi = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -297,11 +370,42 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
       .renderArea = { { 0, 0 }, { WIDTH, HEIGHT } },
       .clearValueCount = 1, .pClearValues = &clear,
    };
+   const float inside[2] = { 0.0f, 0.0f };
+   /* x in [3, 7] clip space: every vertex is beyond the right plane. */
+   const float outside[2] = { 4.0f, 0.0f };
+
+   if (cc->source == PRED_QUERY) {
+      vkCmdResetQueryPool(cmd, qp, 0, 1);
+      vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+      vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+      vkCmdPushConstants(cmd, pl, VK_SHADER_STAGE_VERTEX_BIT, 0,
+                         sizeof inside, cc->visible ? inside : outside);
+      vkCmdBeginQuery(cmd, qp, 0, 0);
+      vkCmdDraw(cmd, 3, 1, 0, 0);
+      vkCmdEndQuery(cmd, qp, 0);
+      vkCmdEndRenderPass(cmd);
+      /* A 32-bit result is the predicate word itself: non-zero exactly when
+       * some sample passed. */
+      vkCmdCopyQueryPoolResults(cmd, qp, 0, 1, pbuf, 0, sizeof(uint32_t),
+                                VK_QUERY_RESULT_WAIT_BIT);
+      VkMemoryBarrier to_pred = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+         .dstAccessMask = VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT,
+      };
+      vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT, 0,
+                           1, &to_pred, 0, NULL, 0, NULL);
+   }
+
    vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+   vkCmdPushConstants(cmd, pl, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof inside,
+                      inside);
    VkConditionalRenderingBeginInfoEXT crbi = {
       .sType = VK_STRUCTURE_TYPE_CONDITIONAL_RENDERING_BEGIN_INFO_EXT,
       .buffer = pbuf, .offset = 0,
+      .flags = cc->inverted ? VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT : 0,
    };
    p_begin(cmd, &crbi);
    vkCmdDraw(cmd, 3, 1, 0, 0);
@@ -314,6 +418,14 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    };
    vkCmdCopyImageToBuffer(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                           rb, 1, &region);
+   VkMemoryBarrier to_host = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+   };
+   vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                        VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &to_host, 0, NULL,
+                        0, NULL);
    CHECK(vkEndCommandBuffer(cmd));
 
    VkSubmitInfo si = {
@@ -323,19 +435,27 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
    CHECK(vkQueueSubmit(queue, 1, &si, VK_NULL_HANDLE));
    CHECK(vkQueueWaitIdle(queue));
 
+   CHECK(vkMapMemory(dev, pmem, 0, sizeof(uint32_t), 0, (void **)&pval));
+   *out_predicate = *pval;
+   vkUnmapMemory(dev, pmem);
+
    uint8_t *px;
    CHECK(vkMapMemory(dev, bmem, 0, bytes, 0, (void **)&px));
    *out_covered = 0;
    for (uint32_t y = 0; y < HEIGHT; y++) {
       for (uint32_t x = 0; x < WIDTH; x++) {
          const uint8_t *p = px + ((size_t)y * WIDTH + x) * 4;
-         if (p[0] || p[1] || p[2])
+         if (p[0] || p[1] || p[2]) {
             (*out_covered)++;
+         }
       }
    }
    vkUnmapMemory(dev, bmem);
 
    vkDestroyCommandPool(dev, cp, NULL);
+   vkDestroyQueryPool(dev, qp, NULL);
+   vkFreeMemory(dev, pmem, NULL);
+   vkDestroyBuffer(dev, pbuf, NULL);
    vkFreeMemory(dev, bmem, NULL);
    vkDestroyBuffer(dev, rb, NULL);
    vkDestroyPipeline(dev, pipe, NULL);
@@ -351,43 +471,63 @@ render(VkDevice dev, VkQueue queue, uint32_t qf,
 int
 main(int argc, char **argv)
 {
-   const char *vs_path = (argc > 1) ? argv[1] : "occlusion.vert.spv";
-   const char *fs_path = (argc > 2) ? argv[2] : "occlusion.frag.spv";
+   const char *vs_path = (argc > 1) ? argv[1] : "condrender.vert.spv";
+   const char *fs_path = (argc > 2) ? argv[2] : "condrender.frag.spv";
 
    VkApplicationInfo app = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-      .pApplicationName = "vortexpipe-occlusion",
+      .pApplicationName = "vortexpipe-condrender",
       .apiVersion = VK_API_VERSION_1_1,
-   };
-   const char *inst_exts[] = {
-      VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME,
    };
    VkInstanceCreateInfo ici = {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
       .pApplicationInfo = &app,
-      .enabledExtensionCount = 1, .ppEnabledExtensionNames = inst_exts,
    };
    VkInstance inst;
-   if (vkCreateInstance(&ici, NULL, &inst) != VK_SUCCESS) return 1;
+   if (vkCreateInstance(&ici, NULL, &inst) != VK_SUCCESS) {
+      return 1;
+   }
 
    uint32_t npd = 1;
    VkPhysicalDevice pd;
    if (vkEnumeratePhysicalDevices(inst, &npd, &pd) != VK_SUCCESS || npd == 0) {
-      fprintf(stderr, "FAILED: no physical device\n"); return 1;
+      fprintf(stderr, "FAILED: no physical device\n");
+      return 1;
    }
    VkPhysicalDeviceProperties props;
    vkGetPhysicalDeviceProperties(pd, &props);
    printf("device: %s\n", props.deviceName);
+
+   VkPhysicalDeviceConditionalRenderingFeaturesEXT crf_have = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT,
+   };
+   VkPhysicalDeviceFeatures2 have = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+      .pNext = &crf_have,
+   };
+   vkGetPhysicalDeviceFeatures2(pd, &have);
+   if (!crf_have.conditionalRendering) {
+      printf("FAILED (condrender: conditionalRendering not advertised; "
+             "lavapipe always exposes it)\n");
+      return 1;
+   }
 
    uint32_t nqf = 0;
    vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, NULL);
    VkQueueFamilyProperties *qfp = calloc(nqf, sizeof(*qfp));
    vkGetPhysicalDeviceQueueFamilyProperties(pd, &nqf, qfp);
    uint32_t qf = UINT32_MAX;
-   for (uint32_t i = 0; i < nqf; i++)
-      if (qfp[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) { qf = i; break; }
+   for (uint32_t i = 0; i < nqf; i++) {
+      if (qfp[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+         qf = i;
+         break;
+      }
+   }
    free(qfp);
-   if (qf == UINT32_MAX) { fprintf(stderr, "FAILED: no graphics queue\n"); return 1; }
+   if (qf == UINT32_MAX) {
+      fprintf(stderr, "FAILED: no graphics queue\n");
+      return 1;
+   }
 
    float prio = 1.0f;
    VkDeviceQueueCreateInfo qci = {
@@ -401,9 +541,9 @@ main(int argc, char **argv)
    };
    const char *dev_exts[] = { VK_EXT_CONDITIONAL_RENDERING_EXTENSION_NAME };
    VkDeviceCreateInfo dci = {
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .pNext = &crf,
       .enabledExtensionCount = 1, .ppEnabledExtensionNames = dev_exts,
-      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
       .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
    };
    VkDevice dev;
@@ -418,25 +558,29 @@ main(int argc, char **argv)
 
    VkShaderModule vs = load_module(dev, vs_path);
    VkShaderModule fs = load_module(dev, fs_path);
-   if (!vs || !fs) return 1;
+   if (!vs || !fs) {
+      return 1;
+   }
 
-   /* A false predicate must leave the target at the clear and a true one must
-    * render it. Running both is what separates a driver that ignores the
-    * condition from one that drops every conditional draw -- either alone
-    * would pass one case. */
-   static const struct { uint32_t predicate; long want; const char *what; } CASES[] = {
-      { 0u, 0,                          "false" },
-      { 1u, (long)WIDTH * (long)HEIGHT, "true"  },
-   };
    unsigned bad = 0;
-
-   for (unsigned c = 0; c < sizeof CASES / sizeof CASES[0]; c++) {
+   for (unsigned c = 0; c < NCASES; c++) {
+      const struct cond_case *cc = &cases[c];
       long covered = -1;
-      if (render(dev, queue, qf, &mp, vs, fs, CASES[c].predicate, &covered) < 0)
+      uint32_t predicate = 0;
+      if (render(dev, queue, qf, &mp, vs, fs, cc, &covered, &predicate) < 0) {
          return 1;
-      if (covered != CASES[c].want) {
-         printf("  predicate %s: %ld px drawn, expected %ld\n",
-                CASES[c].what, covered, CASES[c].want);
+      }
+      printf("%-24s predicate=%u drew %ld px\n", cc->name, predicate, covered);
+      /* The copied word is checked on its own, so a wrong count is reported
+       * as the query's fault rather than the condition's. */
+      if (cc->source == PRED_QUERY && (predicate != 0) != cc->visible) {
+         printf("  %s: occlusion query copied %u into the predicate, want %s\n",
+                cc->name, predicate, cc->visible ? "non-zero" : "0");
+         bad++;
+      }
+      if (covered != cc->want_px) {
+         printf("  %s: %ld px drawn, want %ld\n", cc->name, covered,
+                cc->want_px);
          bad++;
       }
    }
@@ -447,13 +591,13 @@ main(int argc, char **argv)
    vkDestroyInstance(inst, NULL);
 
    if (bad) {
-      printf("FAILED (condrender: %u of 2 predicates wrong; a false predicate "
-             "that still drew means the condition was never tested, which is "
-             "what happens when the draw bypasses the path that tests it)\n",
-             bad);
+      printf("FAILED (condrender: %u checks wrong; a false predicate that "
+             "still drew means the condition was never tested, which is what "
+             "happens when the draw bypasses the path that tests it)\n", bad);
       return 1;
    }
-   printf("PASSED (condrender: a false predicate drew nothing and a true one "
-          "covered all %ld px)\n", (long)WIDTH * (long)HEIGHT);
+   printf("PASSED (condrender: %u cases -- host and query-copied predicates, "
+          "normal and inverted -- each drew all %ld px or nothing as "
+          "predicated)\n", (unsigned)NCASES, NPX);
    return 0;
 }

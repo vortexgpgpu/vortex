@@ -119,7 +119,8 @@ module VX_om_core_top import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .om_bus_if    (om_bus_if),
         .cache_bus_if  (cache_bus_if),
         `UNUSED_PIN (busy),
-        `UNUSED_PIN (om_dcrs)
+        `UNUSED_PIN (om_dcrs),
+        `UNUSED_PIN (occ_count)
     );
 
 endmodule

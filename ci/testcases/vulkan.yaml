@@ -63,6 +63,19 @@ tests:
 - {id: gfx-msaa-interp, via: make-run, drivers: [simx], dir: tests/vulkan/msaa_interp, target: "run-{driver}",
    touches: [sw/common/gfx_frag_rast.h, sw/gfx/, hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/, tests/vulkan/msaa_interp]}
 
+# Device-counted queries over draws that stay on the device: pipeline statistics
+# (input assembly, vertex, clipping, fragment, compute), VK_EXT_primitives_generated_query,
+# occlusion on the fixed-function OM counter and on the software merger, and
+# conditional rendering on a predicate copied from an occlusion query.
+- {id: gfx-query-stats, via: make-run, drivers: [simx], dir: tests/vulkan/gfxstats, target: "run-{driver}",
+   touches: [sw/common/gfx_fs_desc_abi.h, sw/gfx/, hw/rtl/raster/, sim/simx/raster/, tests/vulkan/gfxstats]}
+- {id: gfx-query-primgen, via: make-run, drivers: [simx], dir: tests/vulkan/primgen, target: "run-{driver}",
+   touches: [sw/common/gfx_fs_desc_abi.h, sw/gfx/, hw/rtl/raster/, sim/simx/raster/, tests/vulkan/primgen]}
+- {id: gfx-query-occlusion, via: make-run, drivers: [simx], dir: tests/vulkan/occlusion, target: "run-{driver}",
+   touches: [sw/common/gfx_fs_desc_abi.h, sw/common/gfx_sw.h, sw/gfx/, hw/rtl/om/, hw/rtl/VX_graphics.sv, sim/simx/om/, sim/simx/cluster.cpp, tests/vulkan/occlusion]}
+- {id: gfx-query-condrender, via: make-run, drivers: [simx], dir: tests/vulkan/condrender, target: "run-{driver}",
+   touches: [sw/common/gfx_fs_desc_abi.h, sw/gfx/, hw/rtl/om/, sim/simx/om/, tests/vulkan/condrender]}
+
 # FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
 # selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER
 # routing depend on vortexpipe wiring those stages (the gfx_*_sw ABI already

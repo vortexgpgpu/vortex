@@ -26,7 +26,8 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
 
     // Output
     output om_dcrs_t        om_dcrs,
-    output om_rt_dcrs_t     om_rt_dcrs [`VX_OM_MAX_RT]
+    output om_rt_dcrs_t     om_rt_dcrs [`VX_OM_MAX_RT],
+    output wire             occ_enable
 );
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
@@ -63,15 +64,20 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
     // Attachment the colour registers below write. Reset to 0 so a pass with a
     // single attachment never has to name one.
     reg [OM_RT_IDX_BITS-1:0] rt_sel;
+    reg occ_enable_r;
 
     // DCRs write
 
     always @(posedge clk) begin
         if (reset) begin
-            rt_sel <= '0;
+            rt_sel       <= '0;
+            occ_enable_r <= 1'b0;
         end else if (write_valid) begin
             if (write_addr == `VX_DCR_OM_RT_SELECT) begin
                 rt_sel <= write_data[0 +: OM_RT_IDX_BITS];
+            end
+            if (write_addr == `VX_DCR_OM_OCC_CTRL) begin
+                occ_enable_r <= write_data[0];
             end
         end
     end
@@ -192,7 +198,8 @@ module VX_om_dcr import VX_gpu_pkg::*, VX_om_pkg::*; #(
     end
 
     // DCRs read
-    assign om_dcrs = dcrs;
+    assign om_dcrs    = dcrs;
+    assign occ_enable = occ_enable_r;
 
     for (genvar i = 0; i < `VX_OM_MAX_RT; ++i) begin : g_rt_dcrs
         assign om_rt_dcrs[i] = rt_dcrs[i];

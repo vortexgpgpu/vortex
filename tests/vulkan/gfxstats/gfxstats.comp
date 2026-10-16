@@ -1,0 +1,19 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * One word per invocation over a two-row grid, so a dispatch that dropped a
+ * row or a workgroup is caught in the data before the query is judged. */
+#version 450
+
+/* The default Vortex config is 4 threads x 4 warps, so the workgroup size comes
+ * from the host, sized to the device's limits. */
+layout(local_size_x_id = 0) in;
+
+layout(set = 0, binding = 0, std430) buffer B { uint data[]; };
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.y * (gl_NumWorkGroups.x * gl_WorkGroupSize.x) +
+            gl_GlobalInvocationID.x;
+   data[i] = i * 3u + 1u;
+}

@@ -70,9 +70,10 @@ module VX_graphics import VX_gpu_pkg::*
     // Fan one DCR slave input out to one master per consumer unit. Each
     // unit's internal case-statement filters by DCR address range. The
     // VX_dcr_arb owns the rsp_valid/rsp_data signaling on dcr_bus_if so
-    // VX_graphics doesn't drive them itself.
+    // VX_graphics doesn't drive them itself. The OM takes one slot per core and
+    // one more for the cluster's occlusion count.
     localparam NUM_DCR_REQS = `VX_CFG_EXT_RASTER_ENABLED * `VX_CFG_NUM_RASTER_CORES
-                            + `VX_CFG_EXT_OM_ENABLED * `VX_CFG_NUM_OM_CORES;
+                            + `VX_CFG_EXT_OM_ENABLED * (`VX_CFG_NUM_OM_CORES + 1);
 
     VX_dcr_bus_if per_unit_dcr_bus_if [`UP(NUM_DCR_REQS)] ();
 
@@ -91,6 +92,7 @@ module VX_graphics import VX_gpu_pkg::*
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
     localparam DCR_OM_BASE     = `VX_CFG_EXT_RASTER_ENABLED * `VX_CFG_NUM_RASTER_CORES;
+    localparam DCR_OM_OCC_IDX  = DCR_OM_BASE + `VX_CFG_NUM_OM_CORES;
 `endif
 
     /////////////////////////////////////////////////////////////////////////////
@@ -371,6 +373,7 @@ module VX_graphics import VX_gpu_pkg::*
 `endif
 
     wire [`VX_CFG_NUM_OM_CORES-1:0] om_busy_w;
+    wire [`VX_CFG_NUM_OM_CORES-1:0][31:0] om_occ_count;
 
     for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_core
         VX_om_core #(
@@ -386,9 +389,51 @@ module VX_graphics import VX_gpu_pkg::*
             .om_bus_if    (om_bus_if[i]),
             .cache_bus_if (ocache_bus_if[i * OCACHE_NUM_REQS +: OCACHE_NUM_REQS]),
             .busy         (om_busy_w[i]),
-            .om_dcrs      (om_core_dcrs[i])
+            .om_dcrs      (om_core_dcrs[i]),
+            .occ_count    (om_occ_count[i])
         );
     end
+
+    // The cluster answers an occlusion-count read tagged with its index, with the
+    // sum of its cores' counters. The sum is registered, keeping the adder off
+    // the response path.
+    wire [31:0] occ_sum;
+
+    VX_reduce_tree #(
+        .IN_W (32),
+        .N    (`VX_CFG_NUM_OM_CORES),
+        .OP   ("+")
+    ) occ_reduce (
+        .data_in  (om_occ_count),
+        .data_out (occ_sum)
+    );
+
+    reg [31:0] occ_sum_r;
+    always @(posedge clk) begin
+        occ_sum_r <= occ_sum;
+    end
+
+    wire occ_read = per_unit_dcr_bus_if[DCR_OM_OCC_IDX].req_valid
+                 && ~per_unit_dcr_bus_if[DCR_OM_OCC_IDX].req_data.rw
+                 && (per_unit_dcr_bus_if[DCR_OM_OCC_IDX].req_data.addr == VX_DCR_ADDR_WIDTH'(`VX_DCR_OM_OCC_COUNT))
+                 && (per_unit_dcr_bus_if[DCR_OM_OCC_IDX].req_data.data == VX_DCR_DATA_WIDTH'(CLUSTER_ID));
+
+    reg       occ_rsp_valid_r;
+    dcr_rsp_t occ_rsp_data_r;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            occ_rsp_valid_r <= 1'b0;
+        end else begin
+            occ_rsp_valid_r <= occ_read;
+        end
+        if (occ_read) begin
+            occ_rsp_data_r.data <= occ_sum_r;
+        end
+    end
+
+    assign per_unit_dcr_bus_if[DCR_OM_OCC_IDX].rsp_valid = occ_rsp_valid_r;
+    assign per_unit_dcr_bus_if[DCR_OM_OCC_IDX].rsp_data  = occ_rsp_data_r;
 
 `ifdef PERF_ENABLE
     wire [`VX_CFG_NUM_OM_CORES-1:0][PERF_CTR_BITS-1:0] om_mr_w, om_mw_w, om_ml_w, om_sc_w;

@@ -1746,12 +1746,12 @@ static inline __attribute__((always_inline)) uint32_t tex_gather_cmp_cube_sw(
 // uniform OM-state reads as unselectable llvm.riscv.vx.uniform markers and its
 // divergent control flow unmasked. With the guard raised the kernel is processed
 // normally and the merge is bit-exact vs the FF OM unit (validated, all configs).
-static inline __attribute__((always_inline)) void om_fragment(const om_state_t& s, uint32_t x, uint32_t y,
-                               uint32_t face, uint32_t src_color, uint32_t src_depth,
-                               uint32_t src_sref = 0) {
+static inline __attribute__((always_inline)) uint32_t om_fragment(const om_state_t& s, uint32_t x, uint32_t y,
+                                uint32_t face, uint32_t src_color, uint32_t src_depth,
+                                uint32_t src_sref = 0) {
   uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch + (uint64_t)x * om_depth_bpp(s.depth_format));
   uintptr_t c_addr = (uintptr_t)(s.cbuf_base + (uint64_t)y * s.cbuf_pitch + (uint64_t)x * om_color_bpp(s.color_format));
-  om_sample_rmw(s, z_addr, c_addr, face, src_color, src_depth, src_sref);
+  return om_sample_rmw(s, z_addr, c_addr, face, src_color, src_depth, src_sref) ? 1u : 0u;
 }
 
 // Per-sample MSAA output-merge for one fragment into the om_state_t's packed
@@ -1846,7 +1846,7 @@ static inline __attribute__((always_inline)) uint32_t blend_rt(const om_color_t&
 // each attachment k does its own blend + colour write of src_colors[k] at its
 // own base/pitch (matching a real MRT OM: one depth op, N colour ops). Bit-
 // identical to N single-RT om_fragment calls that share one depth result.
-static inline __attribute__((always_inline)) void om_fragment_mrt(
+static inline __attribute__((always_inline)) uint32_t om_fragment_mrt(
     const om_state_t& s, const om_color_t* colors, uint32_t num_color,
     uint32_t x, uint32_t y, uint32_t face,
     const uint32_t* src_colors, uint32_t src_depth, uint32_t src_sref = 0) {
@@ -1856,7 +1856,7 @@ static inline __attribute__((always_inline)) void om_fragment_mrt(
   uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
                                + (uint64_t)x * om_depth_bpp(s.depth_format));
   if (!ds_rmw(s, z_addr, face, src_depth, src_sref)) {
-    return;
+    return 0;
   }
 
   for (uint32_t k = 0; k < num_color; ++k) {
@@ -1871,6 +1871,7 @@ static inline __attribute__((always_inline)) void om_fragment_mrt(
     uint32_t out_argb = (dst_color & ~c.cbuf_writemask) | (blended & c.cbuf_writemask);
     om_store(c_addr, cbpp, om_encode_color(c.color_format, out_argb));
   }
+  return 1;
 }
 
 // ── Wide-format merge ────────────────────────────────────────────────────────
@@ -2241,7 +2242,7 @@ static inline __attribute__((always_inline)) void om_lanes_color_rmw(
 // takes them as its RGBA channels, any other attachment takes lane 0 as the
 // packed ARGB8 word the 8-bit merge expects, so those stay bit-identical to
 // om_fragment_mrt.
-static inline __attribute__((always_inline)) void om_fragment_mrt_wide(
+static inline __attribute__((always_inline)) uint32_t om_fragment_mrt_wide(
     const om_state_t& s, const om_color_t* colors, uint32_t num_color,
     uint32_t x, uint32_t y, uint32_t face,
     const uint32_t* src_lanes, uint32_t src_depth, uint32_t src_sref = 0) {
@@ -2251,33 +2252,35 @@ static inline __attribute__((always_inline)) void om_fragment_mrt_wide(
   uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
                                + (uint64_t)x * om_depth_bpp(s.depth_format));
   if (!ds_rmw(s, z_addr, face, src_depth, src_sref)) {
-    return;
+    return 0;
   }
 
   for (uint32_t k = 0; k < num_color; ++k) {
     om_lanes_color_rmw(colors[k], x, y, src_lanes + 4u * k, nullptr);
   }
+  return 1;
 }
 
 // Single-attachment wide merge: the om_state_t colour fields as one attachment.
-static inline __attribute__((always_inline)) void om_fragment_wide(
+static inline __attribute__((always_inline)) uint32_t om_fragment_wide(
     const om_state_t& s, uint32_t x, uint32_t y, uint32_t face,
     const uint32_t src_lanes[4], uint32_t src_depth, uint32_t src_sref = 0) {
   const om_color_t c = om_state_color(s);
-  om_fragment_mrt_wide(s, &c, 1, x, y, face, src_lanes, src_depth, src_sref);
+  return om_fragment_mrt_wide(s, &c, 1, x, y, face, src_lanes, src_depth, src_sref);
 }
 
 // Dual-source merge into the single attachment: lanes 0-3 are the first source
 // and lanes 4-7 the second, which only the SRC1 blend factors read.
-static inline __attribute__((always_inline)) void om_fragment_dual(
+static inline __attribute__((always_inline)) uint32_t om_fragment_dual(
     const om_state_t& s, uint32_t x, uint32_t y, uint32_t face,
     const uint32_t src_lanes[8], uint32_t src_depth, uint32_t src_sref = 0) {
   uintptr_t z_addr = (uintptr_t)(s.zbuf_base + (uint64_t)y * s.zbuf_pitch
                                + (uint64_t)x * om_depth_bpp(s.depth_format));
   if (!ds_rmw(s, z_addr, face, src_depth, src_sref)) {
-    return;
+    return 0;
   }
   om_lanes_color_rmw(om_state_color(s), x, y, src_lanes, src_lanes + 4);
+  return 1;
 }
 
 // Resolve of one pixel of a wide attachment (om_is_wide), straight between raw
@@ -2314,7 +2317,7 @@ static inline __attribute__((always_inline)) void msaa_resolve_wide(
 // already spans S samples. `src_lanes` holds four lanes per attachment, as for
 // om_fragment_mrt_wide; with `dual` the single attachment's second source is
 // lanes 4-7. A null `colors` merges into the om_state_t's own attachment.
-static inline __attribute__((always_inline)) void om_fragment_ms(
+static inline __attribute__((always_inline)) uint32_t om_fragment_ms(
     const om_state_t& s, const om_color_t* colors, uint32_t num_color, uint32_t samples,
     uint32_t sample_mask, uint32_t x, uint32_t y, uint32_t face,
     const uint32_t* src_lanes, const uint32_t* src_depth, uint32_t src_sref, bool dual) {
@@ -2327,6 +2330,7 @@ static inline __attribute__((always_inline)) void om_fragment_ms(
   if (num_color > VX_OM_MAX_RT) {
     num_color = VX_OM_MAX_RT;
   }
+  uint32_t passed = 0;
   for (uint32_t k = 0; k < samples; ++k) {
     if (!((sample_mask >> k) & 1u)) {
       continue;
@@ -2334,6 +2338,7 @@ static inline __attribute__((always_inline)) void om_fragment_ms(
     if (!ds_rmw(s, msaa_depth_addr(s, samples, x, y, k), face, src_depth[k], src_sref)) {
       continue;
     }
+    ++passed;
     for (uint32_t j = 0; j < num_color; ++j) {
       const om_color_t& c = colors[j];
       const uintptr_t c_addr = (uintptr_t)(c.cbuf_base + (uint64_t)y * c.cbuf_pitch
@@ -2342,6 +2347,7 @@ static inline __attribute__((always_inline)) void om_fragment_ms(
                             (dual && j == 0) ? src_lanes + 4 : nullptr);
     }
   }
+  return passed;
 }
 
 } // namespace gfx_sw

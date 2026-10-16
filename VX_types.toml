@@ -620,7 +620,15 @@ VX_DCR_OM_DEPTH_FORMAT      = 0x098
 # a packed 16-bit texel whole, so a writemask opening only some of its channels
 # is unsupported. Resets to A8R8G8B8.
 VX_DCR_OM_CBUF_FORMAT       = 0x099
-VX_DCR_OM_STATE_END         = 0x09A
+# Occlusion counting. While OCC_CTRL bit 0 is set every OM core adds the fragments
+# that pass the depth/stencil test (all of them when the test is off) to a
+# free-running 32-bit counter, once per fragment however many colour attachments
+# it exports to. OCC_COUNT is read-only: a read tagged with a cluster index
+# returns the sum of that cluster's counters. The counters clear only on reset,
+# so a query is the difference of two reads modulo 2^32.
+VX_DCR_OM_OCC_CTRL          = 0x09A
+VX_DCR_OM_OCC_COUNT         = 0x09B
+VX_DCR_OM_STATE_END         = 0x09C
 
 [dcr_rtu]
 # Ray-Tracing Unit DCRs.

@@ -40,7 +40,11 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     output wire             busy,
 
     // decoded DCRs (broadcast; the OM ingress reads the aperture fields)
-    output om_dcrs_t        om_dcrs
+    output om_dcrs_t        om_dcrs,
+
+    // Free-running count of the fragments that passed the depth/stencil test
+    // while occlusion counting was enabled.
+    output wire [31:0]      occ_count
 );
     localparam MEM_TAG_WIDTH   = UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 32 + `VX_OM_DEPTH_BUS_BITS + 1);
     localparam DS_TAG_WIDTH    = UUID_WIDTH + OM_RT_IDX_BITS + NUM_LANES * (`VX_OM_DIM_BITS + `VX_OM_DIM_BITS + 1 + 1 + 32);
@@ -49,6 +53,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // DCRs
 
     om_rt_dcrs_t om_rt_dcrs [`VX_OM_MAX_RT];
+    wire occ_enable;
 
     VX_om_dcr #(
         .INSTANCE_ID ($sformatf("%s-dcr", INSTANCE_ID))
@@ -57,7 +62,8 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
         .om_dcrs    (om_dcrs),
-        .om_rt_dcrs (om_rt_dcrs)
+        .om_rt_dcrs (om_rt_dcrs),
+        .occ_enable (occ_enable)
     );
 
     ///////////////////////////////////////////////////////////////////////////
@@ -234,12 +240,14 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         assign color_writeen_w[i]    = (om_rt_dcrs[i].cbuf_writemask != 0);
         assign blend_enable_w[i]     = om_rt_dcrs[i].blend_enable;
         assign blend_writeen_w[i]    = om_rt_dcrs[i].blend_enable && color_writeen_w[i];
-        assign ds_color_writeen_w[i] = ds_writeen_w || (ds_enable_w && color_writeen_w[i]);
+        // An occlusion count needs the test result even of a draw that writes
+        // nothing, so counting keeps the depth/stencil read-back alive.
+        assign ds_color_writeen_w[i] = ds_writeen_w || (ds_enable_w && (color_writeen_w[i] || occ_enable));
         assign mem_readen_w[i]       = ds_color_writeen_w[i] || blend_writeen_w[i];
         assign write_bypass_w[i]     = ~ds_enable_w && ~blend_enable_w[i] && color_writeen_w[i];
     end
 
-    reg depth_writeen_r, stencil_writeen_r, ds_enable_r;
+    reg depth_writeen_r, stencil_writeen_r, ds_enable_r, occ_enable_r;
     reg [`VX_OM_MAX_RT-1:0] color_writeen_r, blend_enable_r, blend_writeen_r;
     reg [`VX_OM_MAX_RT-1:0] ds_color_writeen_r, mem_readen_r, write_bypass_r;
 
@@ -249,6 +257,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             depth_writeen_r    <= 1'b0;
             stencil_writeen_r  <= 1'b0;
             ds_enable_r        <= 1'b0;
+            occ_enable_r       <= 1'b0;
             blend_enable_r     <= '0;
             blend_writeen_r    <= '0;
             ds_color_writeen_r <= '0;
@@ -259,6 +268,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
             depth_writeen_r    <= depth_writeen_w;
             stencil_writeen_r  <= stencil_writeen_w;
             ds_enable_r        <= ds_enable_w;
+            occ_enable_r       <= occ_enable;
             blend_enable_r     <= blend_enable_w;
             blend_writeen_r    <= blend_writeen_w;
             ds_color_writeen_r <= ds_color_writeen_w;
@@ -342,6 +352,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     // it; with both enabled they hold the same fragment, so either index serves.
     wire [OM_RT_IDX_BITS-1:0] wb_rt = ds_valid_out ? ds_write_rt : blend_write_rt;
     wire wb_ds_color_writeen = ds_color_writeen_r[wb_rt];
+    wire wb_color_writeen    = color_writeen_r[wb_rt];
     wire wb_blend_writeen    = blend_writeen_r[wb_rt];
     wire wb_blend_enable     = blend_enable_r[wb_rt];
 
@@ -371,7 +382,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         assign ds_write_mask[i]       = ds_rsp_mask[i] && (stencil_writeen_r || (depth_writeen_r && ds_pass_out[i]));
         assign blend_write_mask[i]    = blend_rsp_mask[i] && wb_blend_writeen && (~ds_enable_r || ds_pass_out[i]);
         assign color_bypass_mask[i]   = adm_mask[i] && adm_color_writeen;
-        assign ds_color_write_mask[i] = ds_rsp_mask[i] && ds_pass_out[i];
+        assign ds_color_write_mask[i] = ds_rsp_mask[i] && ds_pass_out[i] && wb_color_writeen;
     end
 
     // A read (or bypass write) may only issue when no ds/blend write is
@@ -558,6 +569,36 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire is_degenerate_req = (mem_req_ds_mask_r | mem_req_c_mask_r) == 0;
 
     assign mem_req_valid_r = mem_req_valid_unqual_r && ~is_degenerate_req;
+
+    // ── occlusion counter ──────────────────────────────────────────────────
+    // A fragment is counted where its test resolves: leaving the depth/stencil
+    // stage, or at admission when the stage is off and every fragment passes. A
+    // fragment covering several colour attachments arrives once per attachment,
+    // each arrival with the same result, and attachment zero is always among
+    // them, so only that arrival counts.
+    wire occ_ds_fire  = ds_valid_out && ds_ready_out && (ds_write_rt == '0);
+    wire occ_adm_fire = adm_valid && adm_ready && ~ds_enable_r && (adm_rt == '0);
+
+    wire [NUM_LANES-1:0] occ_ds_lanes  = (occ_enable_r && occ_ds_fire) ? (ds_rsp_mask & ds_pass_out) : '0;
+    wire [NUM_LANES-1:0] occ_adm_lanes = (occ_enable_r && occ_adm_fire) ? adm_mask : '0;
+
+    reg [2*NUM_LANES-1:0] occ_lanes_r;
+    wire [`CLOG2(2*NUM_LANES+1)-1:0] occ_lanes_cnt;
+    reg [31:0] occ_count_r;
+
+    `POP_COUNT(occ_lanes_cnt, occ_lanes_r);
+
+    always @(posedge clk) begin
+        if (reset) begin
+            occ_lanes_r <= '0;
+            occ_count_r <= '0;
+        end else begin
+            occ_lanes_r <= {occ_ds_lanes, occ_adm_lanes};
+            occ_count_r <= occ_count_r + 32'(occ_lanes_cnt);
+        end
+    end
+
+    assign occ_count = occ_count_r;
 
     // Several colour attachments share one depth attachment, so a fragment
     // covering them arrives here once per attachment and each arrival runs the

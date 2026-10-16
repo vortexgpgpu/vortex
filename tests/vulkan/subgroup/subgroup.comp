@@ -29,7 +29,7 @@
 
 layout(local_size_x_id = 0) in;
 
-#define NUM_OPS 16u
+#define NUM_OPS 18u
 
 layout(std430, binding = 0) buffer Buf {
    uint data[];
@@ -73,4 +73,15 @@ void main()
       even_sum = subgroupAdd(v);
    }
    data[o + 15u] = even_sum;
+
+   /* --- divergent scans: every third lane ------------------------------- */
+   /* Active lanes three apart are never a power of two apart, so a scan that
+    * reaches its neighbours by lane distance would skip them. */
+   uint third_incl = 0u, third_excl = 0u;
+   if (lane % 3u == 0u) {
+      third_incl = subgroupInclusiveAdd(v);
+      third_excl = subgroupExclusiveAdd(v);
+   }
+   data[o + 16u] = third_incl;
+   data[o + 17u] = third_excl;
 }

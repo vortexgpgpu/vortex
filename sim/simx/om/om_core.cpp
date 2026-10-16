@@ -152,6 +152,10 @@ public:
   }
 
   int dcr_write(uint32_t addr, uint32_t value) {
+    if (addr == VX_DCR_OM_OCC_CTRL) {
+      occ_enable_ = (value & 0x1) != 0;
+      return 0;
+    }
     dcrs_.write(addr, value);
     depth_stencil_.configure(dcrs_);
     for (uint32_t rt = 0; rt < VX_OM_MAX_RT; ++rt) {
@@ -162,6 +166,8 @@ public:
   }
 
   const OmCore::PerfStats& perf_stats() const { return perf_stats_; }
+
+  uint32_t occ_count() const { return occ_count_; }
 
   bool busy() const {
     for (auto& s : slots_) {
@@ -664,6 +670,13 @@ private:
                         | (l.merged_depthstencil & ds_writemask);
       }
 
+      // A fragment covering several colour attachments is merged once per
+      // attachment, each time with the same test result; attachment zero is
+      // always among them, so only that merge counts.
+      if (occ_enable_ && s.req.rt == 0 && l.ds_pass) {
+        ++occ_count_;
+      }
+
       l.need_c_write = l.has_color && color_write_[s.req.rt] && l.ds_pass;
       if (l.need_c_write) {
         // If color_read_ is false (writemask == 0xf), dst_color is unread —
@@ -850,6 +863,10 @@ private:
   uint32_t                                  rr_req_ = 0;
   uint64_t                                  cycle_;
   OmCore::PerfStats                         perf_stats_;
+  // Device state rather than launch state: a launch resets the unit, these
+  // survive it.
+  bool                                      occ_enable_ = false;
+  uint32_t                                  occ_count_  = 0;
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -875,6 +892,10 @@ void OmCore::on_tick()  { impl_->tick(); }
 
 int OmCore::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
+}
+
+uint32_t OmCore::occ_count() const {
+  return impl_->occ_count();
 }
 
 const OmCore::PerfStats& OmCore::perf_stats() const {

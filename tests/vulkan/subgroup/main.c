@@ -35,7 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define NUM_OPS      16u
+#define NUM_OPS      18u
 #define NUM_EXT_OPS   6u
 #define INVOCS       64u
 #define SENTINEL     0xDEADBEEFu
@@ -60,6 +60,7 @@ static const char *const op_name[NUM_OPS] = {
    "subgroupAllEqual.uniform", "subgroupAllEqual.varying",
    "subgroupAdd",        "subgroupMax",             "subgroupInclusiveAdd",
    "subgroupExclusiveAdd", "subgroupAdd.divergent",
+   "subgroupInclusiveAdd.third", "subgroupExclusiveAdd.third",
 };
 
 static const char *const ext_op_name[NUM_EXT_OPS] = {
@@ -536,6 +537,7 @@ main(int argc, char **argv)
 
       uint32_t ballot = 0, sum = 0, mx = 0, incl = 0, excl = 0;
       uint32_t even_sum = 0, min_lane = l.size, first_v = 0;
+      uint32_t third_incl = 0, third_excl = 0;
       int has_lane0 = 0;
       for (uint32_t k = 0; k < n; k++) {
          uint32_t m = peer[k];
@@ -554,6 +556,12 @@ main(int argc, char **argv)
          }
          if ((ml & 1u) == 0u) {
             even_sum += mv;
+         }
+         if (ml % 3u == 0u && ml <= lane) {
+            third_incl += mv;
+         }
+         if (ml % 3u == 0u && ml < lane) {
+            third_excl += mv;
          }
          if (ml < min_lane) {
             min_lane = ml;
@@ -582,6 +590,8 @@ main(int argc, char **argv)
       want[13] = incl;
       want[14] = excl;
       want[15] = ((lane & 1u) == 0u) ? even_sum : 0u;
+      want[16] = (lane % 3u == 0u) ? third_incl : 0u;
+      want[17] = (lane % 3u == 0u) ? third_excl : 0u;
 
       for (uint32_t k = 3; k < NUM_OPS; k++) {
          if (got[gid * NUM_OPS + k] != want[k]) {

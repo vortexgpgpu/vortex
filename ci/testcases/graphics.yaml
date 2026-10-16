@@ -686,6 +686,18 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -Z -s
+- id: model_parity-om-occ
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -q -r whitebox_d_128.png
+- id: model_parity-om-occ-nowrite
+  check: model_parity
+  via: blackbox
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -Q
 
 # Tests that self-configure their required extensions and validate in their
 # default run-{driver} target.
@@ -962,6 +974,44 @@ tests:
   app: gfx_om
   configs: -DVX_CFG_EXT_OM_ENABLE
   args: -w 128 -h 128 -Z -s -f
+# Occlusion counter: the passing-fragment count against every pixel's depth
+# (and stencil) outcome; once per fragment on two attachments; a draw that
+# writes nothing still tests and counts; and the per-core counters summed
+# across several OM cores.
+- id: gfx_om-occ
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -d -q -r whitebox_d_128.png
+- id: gfx_om-occ-stencil
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -s -q
+- id: gfx_om-occ-mrt
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -m -q -r whitebox_128.png
+- id: gfx_om-occ-nowrite
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -Q
+- id: gfx_om-occ-cores
+  via: blackbox
+  drivers: [simx, rtlsim]
+  app: gfx_om
+  configs: -DVX_CFG_EXT_OM_ENABLE -DVX_CFG_NUM_OM_CORES=2 -DICACHE_DISABLE -DDCACHE_DISABLE -DLMEM_DISABLE
+  shape:
+    cores: 2
+    warps: 1
+    threads: 4
+  args: -w 128 -h 128 -d -q -r whitebox_d_128.png
 - id: gfx_raster-sw
   via: blackbox
   drivers: [simx]

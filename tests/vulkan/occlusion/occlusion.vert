@@ -1,14 +1,22 @@
 /* Copyright © 2026  Vortex GPGPU
  * SPDX-License-Identifier: MIT
  *
- * A single oversized triangle covering the whole target, so the draw's
- * footprint is exact and the sample count it should produce is simply every
- * pixel -- no fill rule to reason about between the draw and the query. */
+ * An axis-aligned quad at one depth. The host places its edges on pixel
+ * boundaries, so every pixel -- and every sample of a multisampled one -- is
+ * wholly inside or wholly outside it and the passing count has one answer. */
 #version 460
+
+layout(push_constant) uniform PC {
+   vec4 rect;     /* x0, y0, x1, y1 in clip space */
+   vec4 color;
+   float depth;
+} pc;
 
 void main()
 {
-   vec2 p = vec2((gl_VertexIndex == 1) ?  3.0 : -1.0,
-                 (gl_VertexIndex == 2) ?  3.0 : -1.0);
-   gl_Position = vec4(p, 0.0, 1.0);
+   int v = gl_VertexIndex;
+   bool right = v == 1 || v == 4 || v == 5;
+   bool far_y = v == 2 || v == 3 || v == 5;
+   gl_Position = vec4(right ? pc.rect.z : pc.rect.x,
+                      far_y ? pc.rect.w : pc.rect.y, pc.depth, 1.0);
 }

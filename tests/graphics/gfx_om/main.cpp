@@ -11,7 +11,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <chrono>
-#include <vortex2.h>
+#include <vortex.h>
 #include <VX_types.h>
 #include <vx_gfx_abi.h>
 #include "common.h"
@@ -69,6 +69,12 @@ bool float_depth  = false;   // -z : D32F depth target (ordered keys, face in th
 bool stencil_word = false;   // -Z : D32F_S8, the stencil in the next word of an 8-byte texel
 bool depth16      = false;   // -y : D16, a 2-byte texel, checked texel by texel
 uint32_t mrt_rt   = 0;       // -n : which attachment that is (default 1)
+// -q: count the draw's passing fragments with the OM occlusion counter and check
+// the count against the test outcome of every pixel. -Q counts a draw that
+// writes nothing, as an occlusion-culling proxy does: depth tested, neither
+// depth nor colour written.
+bool occ_query    = false;
+bool occ_proxy    = false;
 // -F fmt: the colour attachment's VX_OM_COLOR_FORMAT_*, checked texel by texel
 // against the blend of the kernel's colour with the packed clear.
 uint32_t cbuf_format = VX_OM_COLOR_FORMAT_A8R8G8B8;
@@ -151,12 +157,12 @@ uint64_t    cbuf1_addr = 0;
 
 static void show_usage() {
    std::cout << "Vortex Render Output Test (v2 KMU)." << std::endl;
-   std::cout << "Usage: [-c color] [-d depth] [-s stencil] [-z float depth] [-Z float depth + stencil] [-y D16 depth] [-b blend] [-m mrt] [-n mrt attachment] [-f face] [-k kernel] [-o image] [-r reference] [-w width] [-h height] [-F colour format]" << std::endl;
+   std::cout << "Usage: [-c color] [-d depth] [-s stencil] [-z float depth] [-Z float depth + stencil] [-y D16 depth] [-b blend] [-m mrt] [-n mrt attachment] [-f face] [-q occlusion count] [-Q occlusion count, no writes] [-k kernel] [-o image] [-r reference] [-w width] [-h height] [-F colour format]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:F:bdfmszZyS?")) != -1) {
+  while ((c = getopt(argc, argv, "o:r:k:w:h:c:n:F:bdfmszZySqQ?")) != -1) {
     switch (c) {
     case 'o': output_file = optarg; break;
     case 'r': reference_file = optarg; break;
@@ -174,6 +180,8 @@ static void parse_args(int argc, char **argv) {
     case 'y': depth16 = depth_enable = true; break;
     case 'n': mrt_rt = std::atoi(optarg); break;
     case 'S': sw_path = true; break;
+    case 'q': occ_query = true; break;
+    case 'Q': occ_query = occ_proxy = depth_enable = true; break;
     case 'F': cbuf_format = (uint32_t)std::atoi(optarg); break;
     case '?': show_usage(); exit(0);
     default:  show_usage(); exit(-1);
@@ -237,6 +245,32 @@ static void parse_args(int argc, char **argv) {
     std::cout << "Error: -m is a fixed-function path; -S merges in software" << std::endl;
     exit(1);
   }
+  if (occ_query && sw_path) {
+    std::cout << "Error: -q reads the fixed-function merger's counter; -S merges in software" << std::endl;
+    exit(1);
+  }
+  if (occ_proxy && (mrt_enable || blend_enable || stencil_enable || float_depth || depth16 ||
+                    reference_file || cbuf_format != VX_OM_COLOR_FORMAT_A8R8G8B8)) {
+    std::cout << "Error: -Q checks that a D24S8 draw writing nothing leaves both buffers as "
+                 "they were, so it takes none of -m, -b, -s, -z, -Z, -y, -r or -F" << std::endl;
+    exit(1);
+  }
+}
+
+// Whether the fragment at (x, y) passes the depth and stencil tests, from the
+// state the buffers start with.
+static bool ref_frag_passes(uint32_t x, uint32_t y, uint32_t frag_z) {
+  if (depth16) {
+    return kD16Frag < initial_d16(x, y);
+  }
+  const uint32_t init = initial_depthstencil(x, y);
+  const uint32_t s0 = stencil_word ? initial_stencil(y)
+                    : float_depth  ? 0 : (init >> VX_OM_DEPTH_BITS);
+  const bool spass = !stencil_enable || s0 == (backface ? kStencilBackRef : kStencil.ref);
+  const bool dpass = !depth_enable
+                  || (float_depth ? (kFloatFragDepth < kFloatDepths[(x + 3 * y) % 6])
+                                  : (frag_z < (init & OM_DEPTH_MASK)));
+  return spass && dpass;
 }
 
 void cleanup() {
@@ -250,6 +284,17 @@ void cleanup() {
     vx_device_dump_perf(device, stdout);
     vx_device_release(device);
   }
+}
+
+// One read per cluster, each answering with the sum of its OM cores' counters.
+static uint32_t read_occ_count(uint32_t num_clusters) {
+  uint32_t sum = 0;
+  for (uint32_t c = 0; c < num_clusters; ++c) {
+    uint32_t v = 0;
+    RT_CHECK(vx_dcr_read(device, VX_DCR_OM_OCC_COUNT, c, &v));
+    sum += v;
+  }
+  return sum;
 }
 
 int main(int argc, char *argv[]) {
@@ -271,9 +316,10 @@ int main(int argc, char *argv[]) {
     cleanup(); return -1;
   }
 
-  uint64_t num_threads, num_warps;
-  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS, &num_threads));
-  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS,   &num_warps));
+  uint64_t num_threads, num_warps, num_clusters;
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_THREADS,  &num_threads));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_WARPS,    &num_warps));
+  RT_CHECK(vx_device_query(device, VX_CAPS_NUM_CLUSTERS, &num_clusters));
 
   RT_CHECK(vx_module_load_file(device, kernel_file, &module_));
   RT_CHECK(vx_module_get_kernel(module_, float_depth ? (mrt_enable ? "kernel_main_mrt_float"
@@ -359,7 +405,7 @@ int main(int argc, char *argv[]) {
   // ---- configure OM DCRs -----------------------------------------------
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_ADDR,      cbuf_addr / 64, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_PITCH,     cbuf_pitch, 0, nullptr, nullptr));
-  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_WRITEMASK, 0xf, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_WRITEMASK, occ_proxy ? 0x0 : 0xf, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_CBUF_FORMAT,    cbuf_format, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_ADDR,      zbuf_addr / 64, 0, nullptr, nullptr));
   RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_ZBUF_PITCH,     zbuf_pitch, 0, nullptr, nullptr));
@@ -384,7 +430,7 @@ int main(int argc, char *argv[]) {
 
   if (depth_enable) {
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FUNC,      VX_OM_DEPTH_FUNC_LESS, 0, nullptr, nullptr));
-    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_WRITEMASK, 1, 0, nullptr, nullptr));
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_WRITEMASK, occ_proxy ? 0 : 1, 0, nullptr, nullptr));
   } else {
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_FUNC,      VX_OM_DEPTH_FUNC_ALWAYS, 0, nullptr, nullptr));
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_DEPTH_WRITEMASK, 0, 0, nullptr, nullptr));
@@ -439,6 +485,17 @@ int main(int argc, char *argv[]) {
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_LOGIC_OP,    VX_OM_LOGIC_OP_COPY, 0, nullptr, nullptr));
     // Leave the select where the next caller expects to find it.
     RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_RT_SELECT,   0, 0, nullptr, nullptr));
+  }
+
+  // The counter never clears, so a query is the difference of two reads. The
+  // first one waits for the enable, which the queue may still hold.
+  uint32_t occ_before = 0;
+  if (occ_query) {
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_OCC_CTRL, 1, 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
+    occ_before = read_occ_count((uint32_t)num_clusters);
   }
 
   // ---- pack kernel arg + launch ----------------------------------------
@@ -532,6 +589,54 @@ int main(int argc, char *argv[]) {
   auto t1 = std::chrono::high_resolution_clock::now();
   printf("Elapsed time: %.2f ms\n",
          std::chrono::duration<double, std::milli>(t1 - t0).count());
+
+  // -q: one count per fragment however many attachments it exports to.
+  int occ_errors = 0;
+  if (occ_query) {
+    const uint32_t occ_count = read_occ_count((uint32_t)num_clusters) - occ_before;
+    vx_event_h ev = nullptr;
+    RT_CHECK(vx_enqueue_dcr_write(queue, VX_DCR_OM_OCC_CTRL, 0, 0, nullptr, &ev));
+    RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(ev);
+    uint32_t want = 0;
+    for (uint32_t y = 0; y < dst_height; ++y) {
+      for (uint32_t x = 0; x < dst_width; ++x) {
+        want += ref_frag_passes(x, y, kernel_arg.depth) ? 1 : 0;
+      }
+    }
+    if (occ_count != want) {
+      std::cout << "FAILED: occlusion count " << occ_count << ", expected " << want << std::endl;
+      ++occ_errors;
+    } else {
+      std::cout << "occlusion: " << occ_count << " of " << dst_width * dst_height
+                << " fragments passed" << std::endl;
+    }
+  }
+
+  // -Q: the draw wrote nothing, so both buffers still hold what they started with.
+  if (occ_proxy) {
+    std::vector<uint32_t> zs(zbuf_size / 4), cb(cbuf_size / 4);
+    vx_event_h read_ev = nullptr;
+    RT_CHECK(vx_enqueue_read(queue, zs.data(), depth_buffer, 0, zbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    RT_CHECK(vx_enqueue_read(queue, cb.data(), color_buffer, 0, cbuf_size, 0, nullptr, &read_ev));
+    RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(read_ev);
+    for (uint32_t y = 0; y < dst_height && occ_errors < 16; ++y) {
+      for (uint32_t x = 0; x < dst_width && occ_errors < 16; ++x) {
+        const uint32_t want_zs = initial_depthstencil(x, y);
+        const uint32_t got_zs  = zs[x + y * dst_width];
+        const uint32_t got_c   = cb[x + y * dst_width];
+        if (got_zs != want_zs || got_c != clear_color) {
+          std::cout << "FAILED: a draw writing nothing changed (" << x << "," << y << "): got 0x"
+                    << std::hex << got_zs << "/0x" << got_c << ", expected 0x" << want_zs
+                    << "/0x" << clear_color << std::dec << std::endl;
+          ++occ_errors;
+        }
+      }
+    }
+  }
 
   // ---- save output PNG --------------------------------------------------
   // Vertical flip on save to match reference image orientation.
@@ -729,7 +834,7 @@ int main(int argc, char *argv[]) {
 
   cleanup();
 
-  if (mrt_errors != 0 || ds_errors != 0 || fmt_errors != 0) {
+  if (mrt_errors != 0 || ds_errors != 0 || fmt_errors != 0 || occ_errors != 0) {
     return 1;
   }
 

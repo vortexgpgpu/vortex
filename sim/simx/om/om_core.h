@@ -57,6 +57,10 @@ public:
 
   int dcr_write(uint32_t addr, uint32_t value);
 
+  // Fragments that passed the depth/stencil test while occlusion counting was
+  // enabled. Free-running: only a device reset clears it, not a launch.
+  uint32_t occ_count() const;
+
   const PerfStats& perf_stats() const;
 
   // A fragment in a slot between memory accesses holds no channel packet, so

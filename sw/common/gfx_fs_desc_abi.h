@@ -110,7 +110,24 @@
 // every fragment's coverage, ahead of the shader and its early tests. All ones
 // when the pipeline has none.
 #define GFX_FS_ARG_SMASK    23u
-#define GFX_FS_ARG_COUNT    24u
+// The device address of the context's query counter block (GFX_QC_*), which a
+// fragment wrapper adds its fragment-shader invocations and occlusion samples
+// to; 0 while no counting query is open.
+#define GFX_FS_ARG_QUERY    24u
+#define GFX_FS_ARG_COUNT    25u
+
+// The query counter block: one 64-bit counter per statistic, kept on the device
+// and added to with 32-bit atomics (the low word, then the high word on a carry).
+#define GFX_QC_OCCLUSION      0u   // samples that passed the depth/stencil test
+#define GFX_QC_IA_VERTICES    1u
+#define GFX_QC_IA_PRIMITIVES  2u
+#define GFX_QC_VS_INVOCATIONS 3u
+#define GFX_QC_CLIP_INVOCATIONS 4u
+#define GFX_QC_CLIP_PRIMITIVES  5u
+#define GFX_QC_FS_INVOCATIONS 6u
+#define GFX_QC_CS_INVOCATIONS 7u
+#define GFX_QC_PRIMS_GENERATED 8u
+#define GFX_QC_COUNT          9u
 
 #define GFX_FS_ZPAIR(lo, hi) \
    ((uint64_t)(uint32_t)(int32_t)(lo) | ((uint64_t)(uint32_t)(int32_t)(hi) << 32))
