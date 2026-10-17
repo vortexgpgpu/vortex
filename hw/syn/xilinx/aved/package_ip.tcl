@@ -25,7 +25,7 @@ set vcs_file  [lindex $::argv 1]
 set build_dir [lindex $::argv 2]
 set part      [lindex $::argv 3]
 # A kernel whose RTL instantiates no vendor floating-point core (a foldsim
-# simulator, whose FPU is soft logic) is packaged without them.
+# simulator of a soft FPU) is packaged without them.
 set options [lrange $::argv 4 end]
 set vendor_ip [expr {[lsearch -exact $options no-vendor-ip] < 0}]
 # The kernel's clock for its out-of-context synthesis, so that synthesis
