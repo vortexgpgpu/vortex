@@ -60,10 +60,17 @@ scheduler's `ready` on it, the slice's `ready` on that): fused, tinygpu runs
 at 3.00 host cycles per target cycle instead of 4.00 (V80), with the same
 threads and copies and fewer LUTs.
 
-The flow reads Vortex as source, so it builds the configuration whose units
-are source: the STD FPU (`-DVX_CFG_FPU_TYPE_STD`), and the RTU's soft FMAs and
-dividers, which the flow's copy of the floating-point units selects in place of
-the Xilinx cores. A RAM that asks for block RAM but reads asynchronously reads
+The flow builds the configuration's FPU, as the native Vivado flows do: of
+type DSP, the Xilinx floating-point cores. Their netlists are encrypted, so
+their state cannot be threaded; each core declares a pipeline contract
+(`hw/scripts/xilinx_ip_stubs.sv`: latency, clock enable, data ports, no other
+state), and the compiler simulates each by one unthreaded copy of the core and
+a per-thread store of its results (`foldsim --fold-pipelines`, see the
+compiler's `foldsim-find-pipelines`). `hw/scripts/check_ip_contracts.py` checks
+each contract's latency against the core's generation, the RTL and the
+configuration; the in-process simulator runs the cores' models
+(`sim/foldsim/xilinx_fp_models.sv`). `-DVX_CFG_FPU_TYPE_STD` in `CONFIGS`
+selects the soft FPU. A RAM that asks for block RAM but reads asynchronously reads
 synchronously once the target is flattened (CIRCT `seq-retime-firmem-reads`,
 see the hardware library's "Block RAM and asynchronous reads");
 `gen/memories.rpt` lists each such RAM and the decision.

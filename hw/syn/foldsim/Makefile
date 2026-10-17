@@ -54,7 +54,7 @@ LIFT_PYTHON ?= python3
 # The kernel clock (MHz): the image is timed at it and the shell programs it.
 FOLDSIM_FREQ ?= 250
 # Options of the foldsim driver, e.g. --region-loads=2048 --registered-state.
-FOLDSIM_FLAGS ?=
+FOLDSIM_FLAGS ?= --fold-pipelines
 
 # The target: Vortex with its AXI4 port, DCR, start and busy as plain ports.
 TARGET_TOP := foldsim_target
@@ -66,13 +66,14 @@ RTL_INCLUDE := -I$(ROOT_DIR)/sw -I$(ROOT_DIR)/hw -I$(RTL_DIR) -I$(RTL_DIR)/libs 
                -I$(RTL_DIR)/cache -I$(RTL_DIR)/fpu -I$(RTL_DIR)/afu/common -I$(FOLDSIM_RTL_DIR)/target
 SYNTH_DEFINES := -DSYNTHESIS -DVIVADO -DNDEBUG
 # One memory port, as the memory endpoint models; 4 AXI id bits, what Vortex
-# drives with its tag buffer engaged. The FPU and RTU use Vortex's own
-# datapaths (the STD FPU, the RTU's soft cores with their DSP multiplies): a
-# vendor netlist is not source the flow can read, nor state it can thread. The
-# staged sources therefore never select the floating-point cores (see
-# VENDOR_FP_UNITS), and the RTU divider has the soft one's latency.
-PLATFORM_DEFINES := -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 -DPLATFORM_MEMORY_ID_WIDTH=4 \
-                    -DVX_CFG_RTU_FDIV_LATENCY=17 -DVX_CFG_FPU_TYPE_STD
+# drives with its tag buffer engaged. The FPU type is the configuration's, as
+# in the native Vivado flows: DSP selects the Xilinx floating-point cores, which
+# the simulator keeps as instances: their netlists are encrypted, so their
+# state cannot be threaded, and each is simulated by one unthreaded copy of
+# itself and a per-thread store of its results (foldsim --fold-pipelines, by
+# the pipeline contract xilinx_ip_stubs.sv declares). -DVX_CFG_FPU_TYPE_STD in
+# CONFIGS selects the soft FPU instead.
+PLATFORM_DEFINES := -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1 -DPLATFORM_MEMORY_ID_WIDTH=4
 ifdef PERF
 PLATFORM_DEFINES += -DPERF_ENABLE
 endif
@@ -120,22 +121,18 @@ SHELL_MODULES := $(notdir $(wildcard $(RTL_DIR)/afu/common/*.sv) $(wildcard $(FO
 
 all: $(VBIN)
 
-# The units that would wrap a Xilinx floating-point core take their soft path,
-# the one they take wherever no vendor core exists.
-VENDOR_FP_UNITS := VX_fma_unit.sv VX_fdiv_unit.sv VX_fsqrt_unit.sv
+# The Xilinx floating-point cores, declared as black boxes with their pipeline
+# contracts; their contracts agree with the cores' generation and the RTL.
+IP_STUBS := $(SCRIPT_DIR)/xilinx_ip_stubs.sv
 # The list is written to a temporary and moved into place last, so a failing
 # step leaves no list that looks current.
 sources: $(SRCS_LIST)
-$(SRCS_LIST): $(RTL_SRCS)
+$(SRCS_LIST): $(RTL_SRCS) $(IP_STUBS) $(SCRIPT_DIR)/xilinx_ip_gen.tcl
 	rm -rf $(SRCS_DIR) $@ $@.tmp
+	python3 $(SCRIPT_DIR)/check_ip_contracts.py --cflags '$(GEN_CFLAGS)'
 	cd $(BUILD_DIR) && $(SCRIPT_DIR)/gen_sources.sh -P $(GEN_CFLAGS) -T$(TARGET_TOP) -C$(SRCS_NAME) \
 		-O$(SRCS_NAME).f.tmp $(RTL_PKGS)
-	@for f in $(VENDOR_FP_UNITS); do \
-		[ -f $(SRCS_DIR)/$$f ] || continue; \
-		grep -q 'localparam VENDOR_OK = 1;' $(SRCS_DIR)/$$f || \
-			{ echo "ERROR: $$f no longer selects its vendor core by VENDOR_OK"; exit 1; }; \
-		sed -i 's/localparam VENDOR_OK = 1;/localparam VENDOR_OK = 0;/' $(SRCS_DIR)/$$f; \
-	done
+	cp $(IP_STUBS) $(SRCS_DIR)/ && echo "$(SRCS_DIR)/$(notdir $(IP_STUBS))" >> $@.tmp
 	@for f in $(SHELL_MODULES); do \
 		rm -f $(SRCS_DIR)/$$f; \
 		grep -v "/$$f$$" $@.tmp > $@.tmp2 && mv $@.tmp2 $@.tmp; \
@@ -175,10 +172,13 @@ $(OOC_XDC): FORCE
 	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv -f $@.tmp $@
 
 package-ip: $(IP_DIR)/component.xml
-$(IP_DIR)/component.xml: $(KERNEL_SRCS) $(OOC_XDC) $(wildcard $(FOLDSIM_RTL_DIR)/*)
+# The kernel is packaged with the floating-point cores the simulator
+# instantiates, generated as the aved flow generates them.
+$(IP_DIR)/component.xml: $(KERNEL_SRCS) $(OOC_XDC) $(wildcard $(FOLDSIM_RTL_DIR)/*) $(SCRIPT_DIR)/xilinx_ip_gen.tcl
 	cd $(BUILD_DIR) && TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -nojournal -nolog \
 		-source $(VORTEX_HOME)/hw/syn/xilinx/aved/package_ip.tcl \
-		-tclargs foldsim_afu $(KERNEL_SRCS) . $(DEVICE) no-vendor-ip ooc-xdc=$(OOC_XDC)
+		-tclargs foldsim_afu $(KERNEL_SRCS) . $(DEVICE) ooc-xdc=$(OOC_XDC) \
+		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add) ' $(GEN_SV) || echo no-vendor-ip)
 
 $(CFG): FORCE
 	@python3 $(SCRIPT_DIR)/gen_platform.py --flow=aved --device=$(DEVICE) --emit=cfg --kernel=foldsim_afu \
