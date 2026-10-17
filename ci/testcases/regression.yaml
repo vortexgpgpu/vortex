@@ -187,6 +187,83 @@ tests:
     cores: 2
     l2cache: true
     l3cache: true
+# Kernel to kernel with no host transfer between (one command batch): the
+# launch flushes are L1-only, so the last-level cache alone carries each
+# round's writes to the next round, and the full flush runs before readback.
+- id: flush_coherence-chain-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+- id: flush_coherence-chain-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
+- id: flush_coherence-chain-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+# Replicated last-level caches (per-core dcaches without an L2, per-cluster L2s
+# without an L3) are not a point of coherence, so an L1-only flush must still
+# invalidate them.
+- id: flush_coherence-chain-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  shape:
+    cores: 2
+- id: flush_coherence-chain-5
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+# Each round loads its input with a DXA tile copy, which reaches memory beside
+# the single dcache, so that dcache is not a point of coherence and must still
+# be written back on an L1-only flush.
+- id: flush_coherence-chain-6
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c -x
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# The shared L2 keeps its lines across the L1-only launch flushes.
+- id: model_parity-flush-chain
+  check: model_parity
+  via: blackbox
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
 # Flush ordering under random input backpressure (DBG_FLUSH_STALL): each round
 # ends on a store burst, so a core's last writes are often still queued on one
 # memory port or dcache lane while its token on another reaches the next level.
@@ -227,3 +304,13 @@ tests:
     cores: 4
     l2cache: true
   tier: full
+- id: flush_coherence-chain-stress-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r8 -b16 -c
+  configs: -DDBG_FLUSH_STALL -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true

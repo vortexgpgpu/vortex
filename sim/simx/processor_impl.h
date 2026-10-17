@@ -72,7 +72,7 @@ public:
   // Drain dirty data from caches (write-back path) all the way to DRAM.
   // Walks L1 dcaches → L2 → L3, ticking the simulator between phases so
   // each level's evictions reach the next before that level itself flushes.
-  void flush_caches();
+  void flush_caches(bool l1_only);
 
 private:
 
@@ -103,6 +103,7 @@ private:
   // kmu_->start()). reset() clears it so a back-to-back kernel launch
   // via cycle() re-dispatches the KMU.
   bool is_cycle_initialized_;
+  bool flush_l1_only_ = false;  // kind of the flush the last start write opened
 };
 
 }

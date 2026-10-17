@@ -39,7 +39,10 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     VX_mem_bus_if.slave     core_bus_in_if [NUM_REQS],
     VX_mem_bus_if.master    core_bus_out_if [NUM_REQS],
     VX_mem_bus_if.slave     mem_bus_in_if [MEM_PORTS],
-    VX_mem_bus_if.master    mem_bus_out_if [MEM_PORTS]
+    VX_mem_bus_if.master    mem_bus_out_if [MEM_PORTS],
+
+    // no uncached or outgoing request held short of the memory side
+    output wire             req_empty
 );
     localparam DIRECT_PASSTHRU   = !CACHE_ENABLE && (`CS_WORD_SEL_BITS == 0) && (NUM_REQS == MEM_PORTS);
     localparam CORE_DATA_WIDTH   = WORD_SIZE * 8;
@@ -224,4 +227,33 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         .bus_in_if  (mem_bus_out_src_if),
         .bus_out_if (mem_bus_out_if)
     );
+
+    if (!DIRECT_PASSTHRU) begin : g_req_pending
+        localparam NUM_SRCS = NUM_REQS + (CACHE_ENABLE ? MEM_PORTS : 0);
+        wire [NUM_SRCS-1:0]  src_fire;
+        wire [MEM_PORTS-1:0] dst_fire;
+        for (genvar i = 0; i < NUM_REQS; ++i) begin : g_nc_fire
+            assign src_fire[i] = core_bus_in_nc_if[i].req_valid && core_bus_in_nc_if[i].req_ready;
+        end
+        if (CACHE_ENABLE) begin : g_cache_fire
+            for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_in_fire
+                assign src_fire[NUM_REQS + i] = mem_bus_in_if[i].req_valid && mem_bus_in_if[i].req_ready;
+            end
+        end
+        for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_dst_fire
+            assign dst_fire[i] = mem_bus_out_if[i].req_valid && mem_bus_out_if[i].req_ready;
+        end
+        VX_mem_req_pending #(
+            .NUM_INPUTS  (NUM_SRCS),
+            .NUM_OUTPUTS (MEM_PORTS)
+        ) req_pending (
+            .clk      (clk),
+            .reset    (reset),
+            .in_fire  (src_fire),
+            .out_fire (dst_fire),
+            .empty    (req_empty)
+        );
+    end else begin : g_no_req_pending
+        assign req_empty = 1'b1;
+    end
 endmodule

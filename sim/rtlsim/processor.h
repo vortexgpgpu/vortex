@@ -40,6 +40,10 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+  // Clock the device until busy drops, i.e. until memory has taken every
+  // write it issued.
+  void drain();
+
 private:
 
   class Impl;

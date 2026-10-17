@@ -332,15 +332,19 @@ void CommandProcessor::apply_qmd_(uint64_t qmd_addr) {
 // flush, so the cores flush concurrently and share one walk of the shared
 // caches; the per-core reads, answered once that core's flush completes, are
 // serial because the DCR response bus cannot carry two responses at once.
-void CommandProcessor::flush_cores_(uint32_t num_cores) {
+void CommandProcessor::flush_cores_(uint32_t num_cores, bool l1_only) {
     if (num_cores == 0 || !hooks_.vortex_dcr_read) {
         return;
     }
     if (hooks_.vortex_dcr_write) {
-        hooks_.vortex_dcr_write(VX_DCR_BASE_CACHE_FLUSH, 0);
+        hooks_.vortex_dcr_write(VX_DCR_BASE_CACHE_FLUSH,
+                                l1_only ? VX_CACHE_FLUSH_L1_ONLY : 0);
     }
     for (uint32_t cid = 0; cid < num_cores; ++cid) {
         (void)hooks_.vortex_dcr_read(VX_DCR_BASE_CACHE_FLUSH, cid);
+    }
+    if (!l1_only && hooks_.vortex_drain) {
+        hooks_.vortex_drain();
     }
 }
 
@@ -367,7 +371,8 @@ bool CommandProcessor::exec_inline_cmd_(const Cmd& c) {
                     uint32_t(c.arg0 & 0xFFF), uint32_t(c.arg1 & 0xFFFFFFFF));
             return false;
         case OP_CACHE_FLUSH:
-            this->flush_cores_(uint32_t(c.arg0 & 0xFFFFFFFF));
+            this->flush_cores_(uint32_t(c.arg0 & 0xFFFFFFFF),
+                               (c.flags & FLUSH_FLAG_L1_ONLY) != 0);
             return false;
         default:
             // NOP / FENCE / unknown step — no-op (draws don't use MEM_*/EVENT_*).
@@ -497,7 +502,8 @@ void CommandProcessor::tick_engine() {
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_CACHE_FLUSH) {
                 // arg0 carries num_cores.
-                this->flush_cores_(uint32_t(cur_cmd_.arg0 & 0xFFFFFFFF));
+                this->flush_cores_(uint32_t(cur_cmd_.arg0 & 0xFFFFFFFF),
+                                   (cur_cmd_.flags & FLUSH_FLAG_L1_ONLY) != 0);
                 eng_state_ = EngState::Retire;
             } else if (cur_cmd_.opcode == OP_EVENT_SIG) {
                 // CMD_EVENT_SIGNAL: write arg1 (8-byte value) to arg0

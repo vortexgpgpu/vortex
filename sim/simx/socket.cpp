@@ -92,6 +92,7 @@ public:
       VX_CFG_DCACHE_REPL_POLICY,     // replacement policy
       (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
       (VX_CFG_DCACHE_BANK_HASH != 0) && (VX_CFG_DCACHE_NUM_BANKS > 1), // bank_hash
+      DCACHE_SHARED_LLC,             // shared_llc
     });
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -417,7 +418,7 @@ public:
     return cores_.at(idx);
   }
 
-  void dcache_flush_begin() { dcaches_->flush_begin(); }
+  void dcache_flush_begin(bool l1_only) { dcaches_->flush_begin(l1_only); }
   bool dcache_flush_done() const { return dcaches_->flush_done(); }
   void icache_flush_begin() { icaches_->flush_begin(); }
   bool icache_flush_done() const { return icaches_->flush_done(); }
@@ -505,8 +506,8 @@ Core::Ptr& Socket::core(uint32_t idx) {
   return impl_->core(idx);
 }
 
-void Socket::dcache_flush_begin() {
-  impl_->dcache_flush_begin();
+void Socket::dcache_flush_begin(bool l1_only) {
+  impl_->dcache_flush_begin(l1_only);
 }
 
 bool Socket::dcache_flush_done() const {

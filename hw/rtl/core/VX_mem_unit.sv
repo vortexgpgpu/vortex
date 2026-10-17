@@ -38,6 +38,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     VX_lsu_mem_if.slave     lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
     VX_dcr_flush_if.slave   dcr_flush_if,
+    input wire              flush_l1_only,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
     // Per-block empty: high when the global-store path holds no in-flight
@@ -424,6 +425,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                     .clk          (clk),
                     .reset        (reset),
                     .dcr_flush_if (lane_flush_if[LANE]),
+                    .l1_only      (flush_l1_only),
                     .core_bus_if  (dcache_bus_tmp_if[j]),
                     .cache_bus_if (dcache_bus_if[LANE])
                 );

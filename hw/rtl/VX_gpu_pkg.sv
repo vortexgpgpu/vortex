@@ -1544,6 +1544,13 @@ package VX_gpu_pkg;
 
     // L1 dcache is the LLC iff neither L2 nor L3 is enabled.
     localparam DCACHE_IS_LLC        = !`VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
+    // It is the point of coherence between kernels only as the one dcache with
+    // no other memory client beside it (the texture, ray-tracing and DXA ports
+    // join below it, the raster and OM caches beside it).
+    localparam DCACHE_SHARED_LLC    = DCACHE_IS_LLC && (`VX_CFG_NUM_CORES == 1) && (`VX_CFG_NUM_CLUSTERS == 1)
+                                   && !`VX_CFG_EXT_TEX_ENABLED && !`VX_CFG_EXT_RTU_ENABLED
+                                   && !`VX_CFG_EXT_RASTER_ENABLED && !`VX_CFG_EXT_OM_ENABLED
+                                   && !`VX_CFG_EXT_DXA_ENABLED;
 
     ////////////////////////// Tex / Tcache Parameters ////////////////////////
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -1773,6 +1780,8 @@ package VX_gpu_pkg;
 
     // L2 is the LLC iff L2 is enabled and L3 is not.
     localparam L2_IS_LLC            = `VX_CFG_L2_ENABLED && !`VX_CFG_L3_ENABLED;
+    // Every memory client of a cluster reaches memory through its L2.
+    localparam L2_SHARED_LLC        = L2_IS_LLC && (`VX_CFG_NUM_CLUSTERS == 1);
 
     /////////////////////////////// L3 Parameters /////////////////////////////
 
@@ -1806,6 +1815,7 @@ package VX_gpu_pkg;
 `endif
     // L3 is the LLC whenever it is enabled.
     localparam L3_IS_LLC            = `VX_CFG_L3_ENABLED;
+    localparam L3_SHARED_LLC        = L3_IS_LLC;
 
     ///////////////////////////////////////////////////////////////////////////
 

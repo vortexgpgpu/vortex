@@ -246,6 +246,12 @@ public:
     return 0;
   }
 
+  void drain() {
+    while (device_->busy) {
+      this->tick();
+    }
+  }
+
 private:
 
   void reset() {
@@ -497,4 +503,8 @@ int Processor::dcr_write(uint32_t addr, uint32_t value) {
 
 int Processor::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   return impl_->dcr_read(addr, tag, value);
+}
+
+void Processor::drain() {
+  impl_->drain();
 }

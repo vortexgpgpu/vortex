@@ -23,11 +23,20 @@
 // the cache's own response path, and the inputs reopen.
 // A token that arrives during the walk is visible only after all of its
 // input's earlier requests were accepted, so the walk covered them.
+// An L1-only token (any byteen bit set: a next level with wider words sees
+// the bit at the token's line offset) is forwarded with its kind. A
+// last-level cache that alone serves every memory client is the point of
+// coherence for it: once the token is visible, its input's earlier requests
+// are inside the cache, ahead of anything the next kernel sends, so it answers
+// the token without a walk. Any other last-level cache still walks, since a
+// replicated instance or a client reaching memory beside it may hold or need
+// lines it has not written back.
 module VX_cache_init import VX_gpu_pkg::*; #(
     parameter NUM_REQS         = 4,              // Number of Word requests per cycle
     parameter NUM_BANKS        = 1,              // Number of banks
     parameter MEM_PORTS        = 1,              // Number of memory ports
     parameter FLUSH_FORWARD    = 1,              // Forward the flush to the next level
+    parameter SHARED_LLC       = 0,              // The LLC serving every memory client alone: answers L1-only tokens without a walk
     parameter TAG_WIDTH        = UUID_WIDTH + 1, // core request tag size
     parameter BANK_SEL_LATENCY = 1,              // Bank select latency
     parameter REQ_SEL_WIDTH    = `UP(`CLOG2(NUM_REQS))
@@ -43,6 +52,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     // flush tokens to the next level
     input wire                        mem_req_empty, // no write-back left between the banks and the ports
     output wire [MEM_PORTS-1:0]       mem_flush_valid,
+    output wire                       mem_flush_l1_only,
     input wire [MEM_PORTS-1:0]        mem_flush_ready,
     output wire                       mem_flush_rsp_phase,
     input wire [MEM_PORTS-1:0]        mem_flush_rsp_valid,
@@ -109,12 +119,20 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     end
     wire flush_req_enable = (| flush_req_mask);
 
+    wire [NUM_REQS-1:0] flush_l1_mask;
+    for (genvar i = 0; i < NUM_REQS; ++i) begin : g_flush_l1_mask
+        assign flush_l1_mask[i] = flush_req_mask[i] && (| core_bus_in_if[i].req_data.byteen);
+    end
+    // every visible token is L1-only
+    wire flush_l1_only = (flush_l1_mask == flush_req_mask);
+
     reg [NUM_BANKS-1:0] flush_done, flush_done_n;
     reg                 fwd_go, fwd_go_n;   // the crossbar drained; only tokens enter it now
     reg [MEM_PORTS-1:0] fwd_sent, fwd_sent_n;
     reg [MEM_PORTS-1:0] fwd_done, fwd_done_n;
     reg [NUM_REQS-1:0]  rsp_pending, rsp_pending_n; // token still to be answered
     reg [`UP(UUID_WIDTH)-1:0] flush_uuid_r, flush_uuid_n;
+    reg                 l1_only_r, l1_only_n;
 
     // answer the lowest pending input; its token stays at the input until then
     wire [NUM_REQS-1:0]      rsp_sel_onehot;
@@ -203,11 +221,19 @@ module VX_cache_init import VX_gpu_pkg::*; #(
         fwd_done_n    = fwd_done;
         rsp_pending_n = rsp_pending & ~(rsp_sel_onehot & {NUM_REQS{flush_rsp_fire}});
         flush_uuid_n  = flush_uuid_r;
+        l1_only_n     = l1_only_r;
         case (state)
             // STATE_IDLE:
             default: begin
                 if (flush_req_enable) begin
-                    state_n = (BANK_SEL_LATENCY != 0) ? STATE_WAIT1 : STATE_FLUSH;
+                    if (BANK_SEL_LATENCY != 0) begin
+                        state_n = STATE_WAIT1;
+                    end else if (SHARED_LLC && flush_l1_only) begin
+                        rsp_pending_n = flush_req_mask;
+                        state_n = STATE_RESPOND;
+                    end else begin
+                        state_n = STATE_FLUSH;
+                    end
                     for (integer i = NUM_REQS-1; i >= 0; --i) begin
                         if (flush_req_mask[i]) begin
                             flush_uuid_n = core_bus_in_uuid[i];
@@ -217,7 +243,12 @@ module VX_cache_init import VX_gpu_pkg::*; #(
             end
             STATE_WAIT1: begin
                 if (no_inflight_reqs) begin
-                    state_n = STATE_FLUSH;
+                    if (SHARED_LLC && flush_l1_only) begin
+                        rsp_pending_n = flush_req_mask;
+                        state_n = STATE_RESPOND;
+                    end else begin
+                        state_n = STATE_FLUSH;
+                    end
                 end
             end
             STATE_FLUSH: begin
@@ -231,6 +262,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
                     flush_done_n = '0;
                     // answer the tokens visible now; later ones start a new walk
                     rsp_pending_n = flush_req_mask;
+                    l1_only_n = flush_l1_only;
                     state_n = FLUSH_FORWARD ? STATE_FORWARD : STATE_RESPOND;
                 end
             end
@@ -270,6 +302,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
             rsp_pending <= rsp_pending_n;
         end
         flush_uuid_r <= flush_uuid_n;
+        l1_only_r    <= l1_only_n;
     end
 
     assign flush_begin = {NUM_BANKS{state == STATE_FLUSH}};
@@ -279,5 +312,6 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     // take the others' valid away.
     assign mem_flush_valid     = {MEM_PORTS{(state == STATE_FORWARD) && (fwd_go || mem_req_empty)}} & ~fwd_sent;
     assign mem_flush_rsp_phase = (state == STATE_FORWARD);
+    assign mem_flush_l1_only   = l1_only_r;
 
 endmodule

@@ -28,7 +28,8 @@ module VX_cp_dcr_proxy_top
   output wire [`VX_DCR_ADDR_BITS-1:0]  dcr_req_addr,
   output wire [`VX_DCR_DATA_BITS-1:0]  dcr_req_data,
   input  wire                          dcr_rsp_valid,
-  input  wire [`VX_DCR_DATA_BITS-1:0]  dcr_rsp_data
+  input  wire [`VX_DCR_DATA_BITS-1:0]  dcr_rsp_data,
+  input  wire                          gpu_busy
 );
 
   cmd_t cmd_typed;
@@ -46,7 +47,8 @@ module VX_cp_dcr_proxy_top
     .dcr_req_addr  (dcr_req_addr),
     .dcr_req_data  (dcr_req_data),
     .dcr_rsp_valid (dcr_rsp_valid),
-    .dcr_rsp_data  (dcr_rsp_data)
+    .dcr_rsp_data  (dcr_rsp_data),
+    .gpu_busy      (gpu_busy)
   );
 
 endmodule : VX_cp_dcr_proxy_top

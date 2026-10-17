@@ -48,6 +48,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     parameter MEM_OUT_BUF           = 3,
 
     parameter IS_LLC                = 0,      // last-level cache: banks own AMO commit + RVA reservation tracking
+    parameter SHARED_LLC            = 0,      // the LLC serves every memory client alone (point of coherence)
 
     parameter FLUSH_FORWARD         = 1,      // a flush also flushes the next level
 
@@ -105,6 +106,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
     wire                     mem_req_empty;
     wire [MEM_PORTS-1:0]     mem_flush_valid;
+    wire                     mem_flush_l1_only;
     wire [MEM_PORTS-1:0]     mem_flush_ready;
     wire                     mem_flush_rsp_phase;
     wire [MEM_PORTS-1:0]     mem_flush_rsp_valid;
@@ -117,6 +119,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .NUM_BANKS        (NUM_BANKS),
         .MEM_PORTS        (MEM_PORTS),
         .FLUSH_FORWARD    (FLUSH_FORWARD),
+        .SHARED_LLC       (SHARED_LLC),
         .TAG_WIDTH        (TAG_WIDTH),
         .BANK_SEL_LATENCY (`TO_OUT_BUF_REG(REQ_XBAR_BUF)), // request xbar latency
         .REQ_SEL_WIDTH    (REQ_SEL_WIDTH)
@@ -131,6 +134,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         .flush_end           (per_bank_flush_end),
         .mem_req_empty       (mem_req_empty),
         .mem_flush_valid     (mem_flush_valid),
+        .mem_flush_l1_only   (mem_flush_l1_only),
         .mem_flush_ready     (mem_flush_ready),
         .mem_flush_rsp_phase (mem_flush_rsp_phase),
         .mem_flush_rsp_valid (mem_flush_rsp_valid),
@@ -499,9 +503,10 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [MEM_PORTS-1:0][`UP(`LOG2UP(NUM_BANKS))-1:0] mem_req_tmp_idx;
     wire [MEM_PORTS-1:0]                    mem_req_tmp_ready;
     // The flush token for port i is a read of the port's first line with the
-    // flush attribute. It takes bank i's lane into the request crossbar (bank i
-    // maps to port i), so the crossbar forms its address and it leaves through
-    // the same registered outputs as the write-backs ahead of it.
+    // flush attribute; byteen bit 0 carries the L1-only kind. It takes bank
+    // i's lane into the request crossbar (bank i maps to port i), so the
+    // crossbar forms its address and it leaves through the same registered
+    // outputs as the write-backs ahead of it.
     wire [NUM_BANKS-1:0]                    mem_req_xbar_valid;
     wire [NUM_BANKS-1:0][MEM_REQ_DATAW-1:0] mem_req_xbar_pdata;
     wire [NUM_BANKS-1:0]                    mem_req_xbar_ready;
@@ -512,7 +517,7 @@ module VX_cache import VX_gpu_pkg::*; #(
                 `UP(BANK_SEL_BITS)'(i),
                 `CS_LINE_SECTOR_ADDR_WIDTH'(0),
                 1'b0,
-                SECTOR_SIZE'(0),
+                SECTOR_SIZE'(mem_flush_l1_only),
                 `CS_SECTOR_WIDTH'(0),
                 BANK_MEM_TAG_WIDTH'(0),
                 `UP(MEM_ATTR_WIDTH)'(1 << MEM_ATTR_FLUSH_OFFS)

@@ -8,6 +8,7 @@ typedef struct {
   uint32_t round;
   uint32_t rotate;
   uint32_t burst;
+  uint32_t dxa_slot;   // 1 + DXA descriptor slot of src, 0 to load with the LSU
   uint64_t src_addr;
   uint64_t dst_addr;
   uint64_t acc_addr;

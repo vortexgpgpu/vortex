@@ -67,6 +67,9 @@ module VX_graphics import VX_gpu_pkg::*
 );
     `UNUSED_PARAM (CLUSTER_ID)
 
+    wire rcache_req_empty;
+    wire ocache_req_empty;
+
     // Fan one DCR slave input out to one master per consumer unit. Each
     // unit's internal case-statement filters by DCR address range. The
     // VX_dcr_arb owns the rsp_valid/rsp_data signaling on dcr_bus_if so
@@ -233,6 +236,7 @@ module VX_graphics import VX_gpu_pkg::*
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (rcache_flush_if),
+        .l1_only      (1'b0),
         .core_bus_if  (rcache_bus_if[0]),
         .cache_bus_if (rcache_flushable_bus_if[0])
     );
@@ -274,7 +278,8 @@ module VX_graphics import VX_gpu_pkg::*
         .cache_perf     (rcache_perf),
     `endif
         .core_bus_if    (rcache_flushable_bus_if),
-        .mem_bus_if     (rcache_mem_bus_tmp_if)
+        .mem_bus_if     (rcache_mem_bus_tmp_if),
+        .req_empty      (rcache_req_empty)
     );
 
     `ASSIGN_VX_MEM_BUS_IF_EX (rcache_mem_bus_if, rcache_mem_bus_tmp_if[0],
@@ -326,8 +331,10 @@ module VX_graphics import VX_gpu_pkg::*
 
     // Flush tokens are held at the steers until the OM side is flushed (below).
     wire [L2_SOCKET_REQS-1:0] steer_flush_req;
+    wire [L2_SOCKET_REQS-1:0] steer_flush_l1_only;
     reg  [L2_SOCKET_REQS-1:0] steer_flush_ack_r;
     wire [L2_SOCKET_REQS-1:0] steer_om_pending;
+    wire [L2_SOCKET_REQS-1:0] steer_req_empty;
 
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_om_steer
         VX_om_steer #(
@@ -342,8 +349,23 @@ module VX_graphics import VX_gpu_pkg::*
             .l2_out_if  (l2_out_bus_if[i]),
             .om_out_if  (om_aperture_bus_if[i]),
             .flush_req  (steer_flush_req[i]),
+            .flush_l1_only (steer_flush_l1_only[i]),
             .flush_ack  (steer_flush_ack_r[i]),
             .om_pending (steer_om_pending[i])
+        );
+        wire [1:0] steer_out_fire = {
+            om_aperture_bus_if[i].req_valid && om_aperture_bus_if[i].req_ready,
+            l2_out_bus_if[i].req_valid && l2_out_bus_if[i].req_ready
+        };
+        VX_mem_req_pending #(
+            .NUM_INPUTS  (1),
+            .NUM_OUTPUTS (2)
+        ) steer_pending (
+            .clk      (clk),
+            .reset    (reset),
+            .in_fire  (socket_mem_bus_if[i].req_valid && socket_mem_bus_if[i].req_ready),
+            .out_fire (steer_out_fire),
+            .empty    (steer_req_empty[i])
         );
     end
 
@@ -454,7 +476,21 @@ module VX_graphics import VX_gpu_pkg::*
     reg [L2_SOCKET_REQS-1:0] omf_steers_r;   // steers this round answers
     reg                      omf_cluster_r;  // this round answers the cluster flush
     reg                      omf_cluster_done_r;
+    reg                      omf_l1_only_r;  // every requester of this round is L1-only
     wire omf_cluster_req = cluster_flush_if.req && ~omf_cluster_done_r;
+
+    // The cluster flush takes its kind from the broadcast write that starts it,
+    // which every core receives too. The cores raise the cluster flush request
+    // only after taking that write, so the latch is current by then.
+    reg cluster_flush_l1_only_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            cluster_flush_l1_only_r <= 1'b0;
+        end else if (dcr_bus_if.req_valid && dcr_bus_if.req_data.rw
+                  && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH)) begin
+            cluster_flush_l1_only_r <= (dcr_bus_if.req_data.data & VX_DCR_DATA_WIDTH'(`VX_CACHE_FLUSH_L1_ONLY)) != 0;
+        end
+    end
     wire omf_drained = ~(| om_busy_w) && ~(| om_ingress_pending) && ~(| steer_om_pending);
 
     always @(posedge clk) begin
@@ -463,6 +499,7 @@ module VX_graphics import VX_gpu_pkg::*
             omf_steers_r       <= '0;
             omf_cluster_r      <= 1'b0;
             omf_cluster_done_r <= 1'b0;
+            omf_l1_only_r      <= 1'b0;
             steer_flush_ack_r  <= '0;
         end else begin
             steer_flush_ack_r <= '0;
@@ -474,6 +511,8 @@ module VX_graphics import VX_gpu_pkg::*
                 if ((| steer_flush_req) || omf_cluster_req) begin
                     omf_steers_r  <= steer_flush_req;
                     omf_cluster_r <= omf_cluster_req;
+                    omf_l1_only_r <= (& (~steer_flush_req | steer_flush_l1_only))
+                                  && (~omf_cluster_req || cluster_flush_l1_only_r);
                     omf_state_r   <= OMF_DRAIN;
                 end
             end
@@ -528,6 +567,7 @@ module VX_graphics import VX_gpu_pkg::*
             .clk          (clk),
             .reset        (reset),
             .dcr_flush_if (ocache_om_flush_if[i]),
+            .l1_only      (omf_l1_only_r),
             .core_bus_if  (ocache_bus_if[i]),
             .cache_bus_if (ocache_om_flush_bus_if[i])
         );
@@ -577,7 +617,8 @@ module VX_graphics import VX_gpu_pkg::*
         .cache_perf     (ocache_perf),
     `endif
         .core_bus_if    (ocache_flushable_bus_if),
-        .mem_bus_if     (ocache_mem_bus_tmp_if)
+        .mem_bus_if     (ocache_mem_bus_tmp_if),
+        .req_empty      (ocache_req_empty)
     );
 
     `ASSIGN_VX_MEM_BUS_IF_EX (ocache_mem_bus_if, ocache_mem_bus_tmp_if[0],
@@ -615,9 +656,16 @@ module VX_graphics import VX_gpu_pkg::*
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
     wire om_busy_any = (| om_busy_w) || (| om_ingress_busy);
+    // requests held in a steer's buffers on the way to L2 or the OM
+    wire om_req_busy = ~(& steer_req_empty);
 `else
     wire om_busy_any = 1'b0;
+    wire om_req_busy = 1'b0;
+    assign ocache_req_empty = 1'b1;
 `endif
-    assign busy = raster_busy_any || om_busy_any;
+`ifndef VX_CFG_EXT_RASTER_ENABLE
+    assign rcache_req_empty = 1'b1;
+`endif
+    assign busy = raster_busy_any || om_busy_any || om_req_busy || ~rcache_req_empty || ~ocache_req_empty;
 
 endmodule

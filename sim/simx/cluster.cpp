@@ -85,6 +85,7 @@ public:
       VX_CFG_L2_REPL_POLICY,         // replacement policy
       (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
       (VX_CFG_L2_BANK_HASH != 0) && (VX_CFG_L2_NUM_BANKS > 1), // bank_hash
+      L2_SHARED_LLC,                 // shared_llc
     });
 
 
@@ -476,9 +477,9 @@ public:
     return 0;
   }
 
-  void dcache_flush_begin() {
+  void dcache_flush_begin(bool l1_only) {
     for (auto& socket : sockets_) {
-      socket->dcache_flush_begin();
+      socket->dcache_flush_begin(l1_only);
     }
   }
 
@@ -540,8 +541,8 @@ public:
   }
 #endif
 
-  void l2_flush_begin() {
-    l2cache_->flush_begin();
+  void l2_flush_begin(bool l1_only) {
+    l2cache_->flush_begin(l1_only);
   }
 
   bool l2_flush_done() const {
@@ -659,8 +660,8 @@ Core* Cluster::get_core(uint32_t idx) const {
   return impl_->get_core(idx);
 }
 
-void Cluster::dcache_flush_begin() {
-  impl_->dcache_flush_begin();
+void Cluster::dcache_flush_begin(bool l1_only) {
+  impl_->dcache_flush_begin(l1_only);
 }
 
 bool Cluster::dcache_flush_done() const {
@@ -695,8 +696,8 @@ void Cluster::rtcache_flush_begin() { impl_->rtcache_flush_begin(); }
 bool Cluster::rtcache_flush_done() const { return impl_->rtcache_flush_done(); }
 #endif
 
-void Cluster::l2_flush_begin() {
-  impl_->l2_flush_begin();
+void Cluster::l2_flush_begin(bool l1_only) {
+  impl_->l2_flush_begin(l1_only);
 }
 
 bool Cluster::l2_flush_done() const {

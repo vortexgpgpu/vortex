@@ -505,6 +505,8 @@ namespace {
 constexpr uint8_t CP_OP_DCR_WRITE    = 0x04;
 constexpr uint8_t CP_OP_CACHE_FLUSH  = 0x0A;
 constexpr uint8_t CP_OP_LAUNCH_QMD   = 0x0B;
+// CMD_CACHE_FLUSH header flag: flush only the levels above the last-level cache.
+constexpr uint8_t CP_FLUSH_FLAG_L1_ONLY = 0x04;
 // Fixed per-step stride in a draw descriptor (28-byte cmd-record prefix).
 // Must equal CommandProcessor::DRAW_STEP_BYTES.
 constexpr int     CP_DRAW_STEP_BYTES = 28;
@@ -682,7 +684,7 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
 
 // Submit one staged launch: CMD_LAUNCH_QMD when the CP decodes it, else
 // replay the descriptor pairs as CMD_DCR_WRITEs followed by a plain
-// CMD_LAUNCH (same trailing cache-flush discipline in cp_submit_launch).
+// CMD_LAUNCH.
 vx_result_t cmd_submit_launch(Device* device_, const CmdStaged& st) {
     if (device_->cp_supports_qmd()) {
         return device_->cp_submit_launch_qmd(st.qmd_addr);
@@ -820,9 +822,10 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
         if (r == VX_SUCCESS && use_op_draw) {
             std::vector<uint8_t> desc(4, 0);   // header placeholder
             uint32_t num_steps = 0;
-            auto put_step = [&](uint8_t opcode, uint64_t a0, uint64_t a1) {
+            auto put_step = [&](uint8_t opcode, uint8_t flags, uint64_t a0, uint64_t a1) {
                 uint8_t step[CP_DRAW_STEP_BYTES] = {0};
                 step[0] = opcode;
+                step[1] = flags;
                 std::memcpy(step + 4,  &a0, sizeof(a0));
                 std::memcpy(step + 12, &a1, sizeof(a1));
                 desc.insert(desc.end(), step, step + CP_DRAW_STEP_BYTES);
@@ -831,10 +834,10 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
             for (size_t i = 0; i < recs.size(); ++i) {
                 const CmdRec& rec = recs[i];
                 if (rec.is_launch) {
-                    put_step(CP_OP_LAUNCH_QMD, staged[i].qmd_addr, 0);
-                    put_step(CP_OP_CACHE_FLUSH, num_cores, 0);
+                    put_step(CP_OP_LAUNCH_QMD, 0, staged[i].qmd_addr, 0);
+                    put_step(CP_OP_CACHE_FLUSH, CP_FLUSH_FLAG_L1_ONLY, num_cores, 0);
                 } else {
-                    put_step(CP_OP_DCR_WRITE, rec.dcr_addr, rec.dcr_value);
+                    put_step(CP_OP_DCR_WRITE, 0, rec.dcr_addr, rec.dcr_value);
                 }
             }
             std::memcpy(desc.data(), &num_steps, sizeof(num_steps));

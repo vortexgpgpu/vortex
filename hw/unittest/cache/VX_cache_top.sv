@@ -195,7 +195,8 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (core_bus_if),
-        .mem_bus_if     (mem_bus_if)
+        .mem_bus_if     (mem_bus_if),
+        `UNUSED_PIN (req_empty)
     );
 
 endmodule

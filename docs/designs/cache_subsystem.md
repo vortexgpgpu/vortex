@@ -465,6 +465,35 @@ Replay is the mirror image: it gates only when **not** `WRITEBACK` and the
 replayed request is a write (`replay_rw`), because a write-through bank forwards
 every write downstream and so does need a slot for it.
 
+### 4.9 Requests in flight and device `busy`
+
+Stores are ack-less, so a core goes idle while its last requests are still
+on their way out, and the console rings (`VX_MEM_IO_COUT`) are read right
+after a launch retires, with no flush in between. Device `busy` therefore
+covers every request the cores issued until memory has completed it, the way
+a GPU's outstanding-write counters do:
+
+- the core stays busy while a request waits at its dcache port, past the flush
+  injector's buffer;
+- every place outside the banks where a request can wait reports it through
+  `req_empty`: `VX_cache_bypass` counts from its uncached inputs and the
+  cache's memory side to its memory ports, `VX_cache_cluster` adds its
+  core-side and memory-side arbiters, and the socket memory arbiter and the OM
+  steers do the same. Each counter is a `VX_mem_req_pending` over the
+  section's input and output handshakes, which holds because these sections
+  neither create nor drop requests; the socket, cluster and device fold them
+  into `busy`;
+- the platform wrapper extends `busy` past the device's memory ports to the
+  point where a write is visible to the host's DMA: acceptance by the bank in
+  `rtlsim_shim`, the AXI B response in `Vortex_axi`. The OPAE AFU needs
+  neither, since its DMA queues behind Vortex's writes on the same in-order
+  Avalon path.
+
+Cacheable requests left in the banks are covered by the next flush instead
+(§6). A request's next holding point reaches `busy` through no more registers
+than the one it leaves, so the coverage handed from one counter to the next has
+no gap.
+
 ---
 
 ## 5. Parallelism and scaling
@@ -578,8 +607,16 @@ previous launch. The host issues `CMD_CACHE_FLUSH` after every kernel launch —
 ### 6.2 VX_dcr_flush — injecting the request
 
 `VX_dcr_flush` synthesizes a degenerate `MemReq` (`rw=0, addr=0, data=0,
-byteen=0, attr = 1 << MEM_ATTR_FLUSH_OFFS`), a **flush token**, and merges it
-into one cache input stream through a 2:1 `VX_mem_bus_arb`.
+byteen=l1_only, attr = 1 << MEM_ATTR_FLUSH_OFFS`), a **flush token**, and merges it
+into one cache input stream through a 2:1 `VX_mem_bus_arb`. Byteen bit 0
+marks an **L1-only** token (§6.4; a receiving cache tests for any byteen bit,
+since a level with wider words sees the bit at the token's line offset); `VX_dcr_data` latches it from the START
+write's `VX_CACHE_FLUSH_L1_ONLY` bit, and the dcache and icache injectors carry
+it. The ocache, whose tokens reach the L2, sends an L1-only token only when
+every requester of its flush round is L1-only: the cluster flush (kind latched
+from the same broadcast write) and the dcache tokens held at the OM steers.
+The other graphics caches do not forward and send full tokens. A fence
+carries no byte enables, so a fence token is always a full one.
 
 **Core traffic sits on the priority input, not the flush.** The flush waits until
 upstream is quiescent — which it reliably is, because the host only issues
@@ -638,6 +675,33 @@ downstream and `ready=0` upstream, so upstream stalls.
   token's own tag, so upstream arbiters route it back, and takes bank 0's lane
   into the response crossbar whenever bank 0 has no response of its own; the
   token is consumed at its input as its answer is sent. Then the inputs reopen.
+
+**L1-only tokens.** Between kernels nothing outside the GPU reads memory, so
+the last-level cache, the point of coherence, need not be written back. A
+token with a byteen bit set asks only the levels above the LLC to flush:
+
+- a non-LLC level walks as usual (write-back levels write back, write-through
+  levels invalidate, so the next kernel sees other cores' and clusters'
+  updates) and forwards the token on every port **with the same kind**
+  (`mem_flush_l1_only`, byteen bit 0 of the forwarded token). Forwarding is what
+  lands a write-through level's last stores in the next level before the
+  token is answered;
+- a last-level cache that alone serves every memory client (`SHARED_LLC`:
+  the L3; the L2 of a single cluster; the dcache of a single core with no
+  texture, ray-tracing, DXA, raster or OM unit, since those reach memory below
+  or beside it) goes from IDLE (or WAIT1) straight to RESPOND, with no walk and
+  no forward: once the token is visible, its input's earlier requests are
+  inside the cache, ahead of anything the next kernel sends. Any other LLC
+  (per-core dcaches without an L2, per-cluster L2s without an L3, a dcache
+  beside fixed-function or DXA ports) walks like any other level: its lines
+  may be stale copies of another instance's writes, or dirty data a client
+  beside it must read from memory. `Vortex.sv` asserts that a write-back LLC
+  has a single instance.
+
+The kind of a walk is L1-only only if every token it answers is, so a full
+token is never answered by an L1-only walk. A token without the bit behaves
+exactly as before. The runtime issues a full flush before any transfer to or
+from device memory, because the host DMA path bypasses the LLC.
 
 **Why a token per memory port.** Each port is a separate, separately buffered
 path to the next level, and nothing orders one port's data against another

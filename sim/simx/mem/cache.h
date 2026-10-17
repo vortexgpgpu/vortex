@@ -44,6 +44,7 @@ public:
 		uint8_t repl_policy;    // replacement policy (ReplPolicy)
 		bool    is_llc;					// is last-level cache
 		bool    bank_hash = false;	// hashed bank select
+		bool    shared_llc = false;	// the LLC serves every memory client alone
 	};
 
 	struct PerfStats {
@@ -81,8 +82,10 @@ public:
 
 	// Flush API: arm a write-back walk that emits dirty lines via mem_req_out.
 	// flush_done() returns true once the walk completes; the caller is expected
-	// to tick the simulator until then. Write-through caches no-op.
-	void flush_begin();
+	// to tick the simulator until then. Write-through caches no-op. On an
+	// L1-only flush the write-back last-level cache skips the walk and keeps
+	// its lines across the next launch reset.
+	void flush_begin(bool l1_only = false);
 	bool flush_done() const;
 
 protected:

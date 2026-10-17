@@ -82,9 +82,9 @@ Cache::PerfStats CacheCluster::perf_stats() const {
 	return perf;
 }
 
-void CacheCluster::flush_begin() {
+void CacheCluster::flush_begin(bool l1_only) {
 	for (auto cache : caches_) {
-		cache->flush_begin();
+		cache->flush_begin(l1_only);
 	}
 }
 

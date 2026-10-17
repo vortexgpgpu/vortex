@@ -696,8 +696,9 @@ public:
   // a writeback request for every dirty line via mem_req_out (write-back only;
   // write-through caches have nothing to evict). flush_done() reports when the
   // walk finishes AND the cache is otherwise idle.
-  void flush_begin() {
-    if (!config_.write_back) {
+  void flush_begin(bool keep_lines) {
+    keep_lines_ = keep_lines;
+    if (!config_.write_back || keep_lines) {
       flushing_ = false;
       flush_set_idx_ = 0;
       flush_way_idx_ = 0;
@@ -726,9 +727,12 @@ protected:
     pending_fill_reqs_ = 0;
     rand_ctr_ = 0;
     adm_seq_ctr_ = 0;
-    for (auto &set : sets_) {
-      set.reset();
+    if (!keep_lines_) {
+      for (auto &set : sets_) {
+        set.reset();
+      }
     }
+    keep_lines_ = false;
     mshr_.reset();
     fwd_active_ = false;
     fwd_set_    = 0;
@@ -1789,6 +1793,7 @@ private:
 
   // Flush walk state.
   bool     flushing_;
+  bool     keep_lines_ = false; // the next launch reset keeps the lines
   uint32_t flush_set_idx_;
   uint32_t flush_way_idx_;
   uint32_t flush_sector_idx_;
@@ -1887,7 +1892,8 @@ public:
     if (config_.bypass)
       return;
     // calculate cache initialization cycles
-    init_cycles_ = params_.sets_per_bank;
+    init_cycles_ = keep_lines_ ? 0 : params_.sets_per_bank;
+    keep_lines_ = false;
   }
 
   void tick() {
@@ -1954,10 +1960,13 @@ public:
     return perf_stats;
   }
 
-  void flush_begin() {
+  void flush_begin(bool l1_only) {
     if (config_.bypass) return;
+    // The shared last-level cache stays the point of coherence across an
+    // L1-only flush and keeps its lines into the next launch.
+    keep_lines_ = l1_only && config_.shared_llc;
     for (auto &bank : banks_) {
-      bank->flush_begin();
+      bank->flush_begin(keep_lines_);
     }
   }
 
@@ -2004,6 +2013,7 @@ private:
   std::vector<MemArbiter::Ptr> nc_mem_arbs_;
   MemCrossBar::Ptr bank_core_xbar_;
   uint32_t init_cycles_;
+  bool     keep_lines_ = false;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2027,8 +2037,8 @@ Cache::PerfStats Cache::perf_stats() const {
   return impl_->perf_stats();
 }
 
-void Cache::flush_begin() {
-  impl_->flush_begin();
+void Cache::flush_begin(bool l1_only) {
+  impl_->flush_begin(l1_only);
 }
 
 bool Cache::flush_done() const {

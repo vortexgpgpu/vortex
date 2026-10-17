@@ -292,6 +292,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (tcache_flush_if),
+        .l1_only      (1'b0),
         .core_bus_if  (tcache_bus_if[0]),
         .cache_bus_if (tcache_flushable_bus_if[0])
     );
@@ -329,7 +330,8 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (tcache_flushable_bus_if),
-        .mem_bus_if     (tcache_mem_bus_tmp_if)
+        .mem_bus_if     (tcache_mem_bus_tmp_if),
+        `UNUSED_PIN (req_empty)
     );
 `else
     assign flush_done_w[0] = 1'b1;
@@ -444,6 +446,7 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (rtcache_flush_if),
+        .l1_only      (1'b0),
         .core_bus_if  (rtcache_bus_if[0]),
         .cache_bus_if (rtcache_flushable_bus_if[0])
     );
@@ -481,7 +484,8 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (rtcache_flushable_bus_if),
-        .mem_bus_if     (rtcache_mem_bus_tmp_if)
+        .mem_bus_if     (rtcache_mem_bus_tmp_if),
+        `UNUSED_PIN (req_empty)
     );
 `else
     assign flush_done_w[1] = 1'b1;
@@ -765,7 +769,8 @@ module VX_gfx_top import VX_gpu_pkg::*
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (l2_core_if),
-        .mem_bus_if     (l2_mem_if)
+        .mem_bus_if     (l2_mem_if),
+        `UNUSED_PIN (req_empty)
     );
 
 endmodule

@@ -174,6 +174,7 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     VX_dcr_flush_if dcr_flush_if();
     VX_dcr_flush_if dcr_flush_dcache_if();
     VX_dcr_flush_if dcr_flush_icache_if();
+    wire dcr_flush_l1_only;
 
     // High when the in-core global-store path is empty (no store still in
     // flight toward the dcache). Gates `busy` so the flush waits for the tail.
@@ -209,7 +210,8 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .reset      (reset),
         .dcr_bus_if (dcr_bus_if),
         .dcr_csr_if (dcr_csr_if),
-        .dcr_flush_if(dcr_flush_if)
+        .dcr_flush_if(dcr_flush_if),
+        .flush_l1_only(dcr_flush_l1_only)
     );
 
     `SCOPE_IO_SWITCH (3);
@@ -271,6 +273,7 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (dcr_flush_icache_if),
+        .l1_only      (dcr_flush_l1_only),
         .core_bus_if  (fetch_icache_if[0]),
         .cache_bus_if (mmu_icache_if[0])
     );
@@ -445,6 +448,7 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .empty         (mem_unit_empty),
         .lsu_mem_if    (lsu_mem_if),
         .dcr_flush_if  (dcr_flush_dcache_if),
+        .flush_l1_only (dcr_flush_l1_only),
         .dcache_bus_if (mmu_dcache_if)
     );
 
@@ -477,7 +481,13 @@ module VX_core import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
     // busy tracks only kernel execution: warps resident or stores not yet at L1.
     // ~mmu_empty also keeps the core busy while a translation or parked store is
     // still in flight, so kernel completion cannot race un-drained accesses.
-    assign busy = sched_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || ~mmu_empty;
+    // A request waiting at the dcache port sits past the flush injector's
+    // buffer, which mem_unit_empty does not cover.
+    wire [DCACHE_NUM_REQS-1:0] dcache_req_valid;
+    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_req_valid
+        assign dcache_req_valid[i] = mmu_dcache_if[i].req_valid;
+    end
+    assign busy = sched_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || (| dcache_req_valid) || ~mmu_empty;
 
     // BAR (vx_barrier / vx_barrier_arrive) drains LSU + MMU before suspending or registering arrival.
     assign warp_ctl_if.lsu_sched_drained = (&lsu_sched_empty) && mmu_empty;

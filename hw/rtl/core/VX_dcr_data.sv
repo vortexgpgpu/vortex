@@ -27,7 +27,8 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     VX_dcr_csr_if.master    dcr_csr_if,
 
     // DCR-triggered cache flush
-    VX_dcr_flush_if.master  dcr_flush_if
+    VX_dcr_flush_if.master  dcr_flush_if,
+    output wire             flush_l1_only
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -82,6 +83,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     reg flush_pending_r;  // flush running
     reg flush_complete_r; // flush finished, not yet reported
     reg flush_read_r;     // flush read waiting for completion
+    reg flush_l1_only_r;  // the last-level cache keeps its lines
 
     wire is_flush_req   = dcr_bus_if.req_valid
                        && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH);
@@ -98,15 +100,20 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
             flush_pending_r  <= 1'b0;
             flush_complete_r <= 1'b0;
             flush_read_r     <= 1'b0;
+            flush_l1_only_r  <= 1'b0;
         end else begin
             flush_pending_r  <= flush_start || (flush_pending_r && ~flush_done);
             // a write opens a new flush, so an older completion cannot answer it
             flush_complete_r <= ~is_flush_write && ~flush_rsp && (flush_complete_r || flush_done);
             flush_read_r     <= ~flush_rsp && (flush_read_r || is_flush_read);
+            if (flush_start) begin
+                flush_l1_only_r <= (dcr_bus_if.req_data.data & VX_DCR_DATA_WIDTH'(`VX_CACHE_FLUSH_L1_ONLY)) != 0;
+            end
         end
     end
 
     assign dcr_flush_if.req = flush_pending_r;
+    assign flush_l1_only    = flush_l1_only_r;
 
     // Return CSR data or flush-done on DCR response bus
     // Use intermediate registers — Vivado (Synth 8-453) forbids procedural

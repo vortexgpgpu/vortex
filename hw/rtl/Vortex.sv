@@ -54,6 +54,13 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     `STATIC_ASSERT(`IS_POW2(`VX_CFG_NUM_CORES), ("NUM_CORES must be a power of 2"));
     `STATIC_ASSERT(`IS_POW2(`VX_CFG_SOCKET_SIZE), ("SOCKET_SIZE must be a power of 2"));
 
+    // A write-back LLC must be the only instance: replicated ones never make
+    // their dirty lines visible to each other.
+    `STATIC_ASSERT(!(DCACHE_IS_LLC && `VX_CFG_DCACHE_WRITEBACK) || ((`VX_CFG_NUM_CORES == 1) && (`VX_CFG_NUM_CLUSTERS == 1)),
+        ("a write-back dcache that is the last-level cache must be the only dcache"));
+    `STATIC_ASSERT(!(L2_IS_LLC && `VX_CFG_L2_WRITEBACK) || (`VX_CFG_NUM_CLUSTERS == 1),
+        ("a write-back L2 that is the last-level cache must be the only L2"));
+
     // Every cache strictly above the LLC must be write-through.
     // A WB intermediate could absorb a hart-B store without the LLC
     // seeing it; a later SC from hart-A on the same line would
@@ -123,6 +130,8 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         .DATA_SIZE (L3_SECTOR_SIZE),
         .TAG_WIDTH (L3_MEM_TAG_WIDTH)
     ) mem_bus_if[L3_MEM_PORTS]();
+    // no request held in the L3 bypass path short of the memory ports
+    wire l3_req_empty;
 
     VX_cache_wrap #(
         .INSTANCE_ID    ("l3cache"),
@@ -149,6 +158,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         .NC_ENABLE      (1),
         .PASSTHRU       (!`VX_CFG_L3_ENABLED),
         .IS_LLC         (L3_IS_LLC),
+        .SHARED_LLC     (L3_SHARED_LLC),
         .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
     ) l3cache (
         .clk            (clk),
@@ -159,7 +169,8 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     `endif
 
         .core_bus_if    (per_cluster_mem_bus_if),
-        .mem_bus_if     (mem_bus_if)
+        .mem_bus_if     (mem_bus_if),
+        .req_empty      (l3_req_empty)
     );
 
     for (genvar i = 0; i < L3_MEM_PORTS; ++i) begin : g_mem_bus_if
@@ -364,7 +375,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         assign per_cluster_kmu_valid[c] = per_cluster_kmu_bus_if[c].valid;
     end
     wire busy_r;
-    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy) | dev_mmu_busy, 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
+    `BUFFER_EX(busy_r, kmu_busy | dcr_bus_if.req_valid | (|per_cluster_busy) | dev_mmu_busy | ~l3_req_empty, 1'b1, 1, (`VX_CFG_NUM_CLUSTERS > 1));
     assign busy = busy_r | kmu_busy | dcr_bus_if.req_valid | (|per_cluster_kmu_valid);
 
 `ifdef PERF_ENABLE

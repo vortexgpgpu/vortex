@@ -358,7 +358,8 @@ module VX_cp_core
     .dcr_req_addr  (gpu_if_int.dcr_req_addr),
     .dcr_req_data  (gpu_if_int.dcr_req_data),
     .dcr_rsp_valid (gpu_if_int.dcr_rsp_valid),
-    .dcr_rsp_data  (gpu_if_int.dcr_rsp_data)
+    .dcr_rsp_data  (gpu_if_int.dcr_rsp_data),
+    .gpu_busy      (gpu_if_int.busy)
   );
   `UNUSED_VAR (gpu_if_int.dcr_req_ready)
 

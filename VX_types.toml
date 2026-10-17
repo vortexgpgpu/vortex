@@ -73,6 +73,11 @@ VX_DCR_BASE_CACHE_FLUSH = 0x000
 VX_DCR_BASE_MPM_VALUE   = 0x001
 VX_DCR_BASE_STATE_END   = 0x002
 
+[cache_flush]
+# VX_DCR_BASE_CACHE_FLUSH write value: flush only the levels above the
+# last-level cache, which stays the point of coherence for the next kernel.
+VX_CACHE_FLUSH_L1_ONLY  = 0x10000
+
 [dcr_mmu]
 VX_DCR_MMU_STATE_BEGIN  = 0x004
 VX_DCR_MMU_SATP_LO      = 0x004

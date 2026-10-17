@@ -117,7 +117,7 @@ public:
   // → L2 → L3) to avoid downstream evictions racing the next-level walk.
   // L1 fanout: dcache + icache + socket-local {tcache, rtcache} (forwarded
   // to the sockets) + cluster-local {rcache, ocache}.
-  void dcache_flush_begin();
+  void dcache_flush_begin(bool l1_only);
   bool dcache_flush_done() const;
   void icache_flush_begin();
   bool icache_flush_done() const;
@@ -137,7 +137,7 @@ public:
   void rtcache_flush_begin();
   bool rtcache_flush_done() const;
 #endif
-  void l2_flush_begin();
+  void l2_flush_begin(bool l1_only);
   bool l2_flush_done() const;
 
 #ifdef VX_CFG_EXT_RASTER_ENABLE

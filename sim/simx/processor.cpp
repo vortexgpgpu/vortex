@@ -104,6 +104,8 @@ ProcessorImpl::ProcessorImpl()
     VX_CFG_L3_LATENCY,               // pipeline latency
     VX_CFG_L3_REPL_POLICY,           // replacement policy
     VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
+    false,                           // bank_hash
+    L3_SHARED_LLC,                   // shared_llc
     }
   );
 
@@ -204,7 +206,7 @@ void ProcessorImpl::attach_ram(RAM* ram) {
 #endif
 }
 
-void ProcessorImpl::flush_caches() {
+void ProcessorImpl::flush_caches(bool l1_only) {
   // Cache hierarchy is drained inside-out: issue all L1 flush_begin() calls
   // up-front so icache, dcache, and graphics caches flush in parallel, then
   // tick until all surfaces report flush_done().
@@ -212,7 +214,7 @@ void ProcessorImpl::flush_caches() {
   // L1 surfaces: dcache + icache + graphics caches.
   // Write-through surfaces early-exit in Cache::flush_begin().
   for (auto& cluster : clusters_) {
-    cluster->dcache_flush_begin();
+    cluster->dcache_flush_begin(l1_only);
     cluster->icache_flush_begin();
 #ifdef VX_CFG_EXT_TEX_ENABLE
     cluster->tcache_flush_begin();
@@ -252,7 +254,7 @@ void ProcessorImpl::flush_caches() {
 
   // L2 caches.
   for (auto& cluster : clusters_) {
-    cluster->l2_flush_begin();
+    cluster->l2_flush_begin(l1_only);
   }
   while (true) {
     bool all_done = true;
@@ -265,7 +267,7 @@ void ProcessorImpl::flush_caches() {
   }
 
   // L3 cache (single instance at processor level).
-  l3cache_->flush_begin();
+  l3cache_->flush_begin(l1_only);
   while (!l3cache_->flush_done() || !SimPlatform::instance().idle()) {
     SimPlatform::instance().tick();
   }
@@ -361,6 +363,11 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
     kmu_->dcr_write(addr, value);
     return 0;
   }
+  if (addr == VX_DCR_BASE_CACHE_FLUSH) {
+    // The flush itself runs on the per-core reads.
+    flush_l1_only_ = (value & VX_CACHE_FLUSH_L1_ONLY) != 0;
+    return 0;
+  }
 #ifdef VX_CFG_VM_ENABLE
   // Device SATP for the shared walker complex, assembled from two
   // 32-bit halves and fanned out to every cluster on the high write.
@@ -393,10 +400,10 @@ int ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
 
 int ProcessorImpl::dcr_read(uint32_t addr, uint32_t tag, uint32_t* value) {
   if (addr == VX_DCR_BASE_CACHE_FLUSH) {
-    // Drain dirty cache lines to DRAM before the host reads back results.
-    // After flush_caches() returns every dirty line has reached memsim_'s
-    // backing RAM.
-    this->flush_caches();
+    // After flush_caches() returns every dirty line of the flushed levels has
+    // reached memsim_'s backing RAM; an L1-only flush leaves the shared
+    // last-level cache in place.
+    this->flush_caches(flush_l1_only_);
     *value = 0;
     return 0;
   }

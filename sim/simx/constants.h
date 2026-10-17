@@ -39,6 +39,27 @@ namespace vortex {
 
 inline constexpr uint32_t XLENB           = (VX_CFG_XLEN / 8);
 
+// A last-level cache that alone serves every memory client is the point of
+// coherence between kernels. The texture, ray-tracing and DXA ports join below
+// the dcache and the raster and OM caches beside it, so a dcache with any of
+// them is not one.
+inline constexpr bool DCACHE_SHARED_LLC = (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0)
+                                       && (VX_CFG_NUM_CORES == 1) && (VX_CFG_NUM_CLUSTERS == 1)
+                                       && !VX_CFG_EXT_TEX_ENABLED && !VX_CFG_EXT_RTU_ENABLED
+                                       && !VX_CFG_EXT_RASTER_ENABLED && !VX_CFG_EXT_OM_ENABLED
+                                       && !VX_CFG_EXT_DXA_ENABLED;
+inline constexpr bool L2_SHARED_LLC     = (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0) && (VX_CFG_NUM_CLUSTERS == 1);
+inline constexpr bool L3_SHARED_LLC     = (VX_CFG_L3_ENABLED != 0);
+
+// A write-back LLC must be the only instance: replicated ones never make their
+// dirty lines visible to each other.
+static_assert(!((VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0) && VX_CFG_DCACHE_WRITEBACK)
+              || ((VX_CFG_NUM_CORES == 1) && (VX_CFG_NUM_CLUSTERS == 1)),
+              "a write-back dcache that is the last-level cache must be the only dcache");
+static_assert(!((VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0) && VX_CFG_L2_WRITEBACK)
+              || (VX_CFG_NUM_CLUSTERS == 1),
+              "a write-back L2 that is the last-level cache must be the only L2");
+
 inline constexpr uint32_t MAX_NUM_CORES   = 1024;
 inline constexpr uint32_t MAX_NUM_WARPS   = 64;
 inline constexpr uint32_t MAX_NUM_REGS    = 32;

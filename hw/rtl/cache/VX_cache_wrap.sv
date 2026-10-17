@@ -55,6 +55,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter MEM_OUT_BUF           = 3,      // Memory request output buffer
 
     parameter IS_LLC                = 0,      // Set when this cache is the LLC (enables AMO completion at this level).
+    parameter SHARED_LLC            = 0,      // The LLC serves every memory client alone (point of coherence).
     parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
     parameter BANK_HASH             = 0,      // Hashed bank select (cache_bank_hash).
 
@@ -68,7 +69,10 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     output cache_perf_t     cache_perf,
 `endif
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
+
+    // no uncached or outgoing request waiting in the bypass path
+    output wire             req_empty
 );
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter"))
     localparam CACHE_MEM_TAG_WIDTH = `CACHE_MEM_TAG_WIDTH(MSHR_SIZE, NUM_BANKS, MEM_PORTS, UUID_WIDTH);
@@ -108,9 +112,11 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .core_bus_in_if (core_bus_if),
             .core_bus_out_if(core_bus_cache_if),
             .mem_bus_in_if  (mem_bus_cache_if),
-            .mem_bus_out_if (mem_bus_tmp_if)
+            .mem_bus_out_if (mem_bus_tmp_if),
+            .req_empty      (req_empty)
         );
     end else begin : g_no_bypass
+        assign req_empty = 1'b1;
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if
             `ASSIGN_VX_MEM_BUS_IF (core_bus_cache_if[i], core_bus_if[i]);
         end
@@ -149,6 +155,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .CORE_OUT_BUF (BYPASS_ENABLE ? 1 : CORE_OUT_BUF),
             .MEM_OUT_BUF  (BYPASS_ENABLE ? 1 : MEM_OUT_BUF),
             .IS_LLC       (IS_LLC),
+            .SHARED_LLC   (SHARED_LLC),
             .FLUSH_FORWARD (FLUSH_FORWARD),
             .BANK_HASH    (BANK_HASH),
             .AMO_ENABLE   (AMO_ENABLE)

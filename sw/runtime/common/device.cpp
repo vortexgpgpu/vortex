@@ -84,6 +84,9 @@ constexpr uint32_t CP_STATUS_BUSY       = 0x1;
 // is physical — the MMU-aware CP DMA skips translation.
 constexpr uint8_t  CP_MEM_FLAG_PHYSICAL = 0x04;
 
+// CMD_CACHE_FLUSH header flag: flush only the levels above the last-level cache.
+constexpr uint8_t  CP_FLUSH_FLAG_L1_ONLY = 0x04;
+
 constexpr uint32_t CP_RING_SIZE_LOG2 = 16;       // 64 KiB
 constexpr uint32_t CP_RING_SIZE      = 1u << CP_RING_SIZE_LOG2;
 constexpr uint8_t  CP_OPCODE_MEM_WRITE  = 0x01;
@@ -363,7 +366,7 @@ vx_result_t Device::cp_init() {
     }
 
     // Resolve the core count now, while nothing holds cp_mu_. Deferring it to
-    // the first cp_submit_cache_flush would reach query_caps from inside an
+    // the first cache flush would reach query_caps from inside an
     // open batch, which already owns cp_mu_ -- and it is not recursive.
     {
         auto rc = this->query_caps(VX_CAPS_NUM_CORES, &cp_num_cores_);
@@ -513,7 +516,73 @@ const char* cp_opcode_name(uint8_t op) {
 }
 } // namespace
 
+namespace {
+// CMD_CACHE_FLUSH on-wire layout (cmd_size=12):
+//   bytes 0..3   header  { opcode=0x0A, flags=CP_FLUSH_FLAG_L1_ONLY?, reserved=0 }
+//   bytes 4..11  arg0    number of cores to flush
+// The CP sweeps a per-core flush DCR-read across [0, num_cores) and
+// retires the command only when the last core's flush completes.
+void build_cache_flush(uint8_t cl[CP_CL_BYTES], uint64_t num_cores, bool l1_only) {
+    std::memset(cl, 0, CP_CL_BYTES);
+    cl[0] = CP_OPCODE_CACHE_FLUSH;
+    cl[1] = l1_only ? CP_FLUSH_FLAG_L1_ONLY : 0;
+    std::memcpy(cl + 4, &num_cores, sizeof(num_cores));
+}
+
+// True when a CMD_MEM_* transfer reaches device memory outside the IO
+// aperture. IO accesses bypass the caches, so they need no flush.
+bool cp_dma_touches_device_mem(const uint8_t* cl) {
+    uint64_t dst = 0, src = 0, size = 0;
+    std::memcpy(&dst,  cl + 4,  sizeof(dst));
+    std::memcpy(&src,  cl + 12, sizeof(src));
+    std::memcpy(&size, cl + 20, sizeof(size));
+    auto outside_io = [size](uint64_t addr) {
+        return addr < VX_MEM_IO_BASE_ADDR || addr + size > VX_MEM_IO_END_ADDR;
+    };
+    switch (cl[0]) {
+    case CP_OPCODE_MEM_WRITE: return outside_io(dst);
+    case CP_OPCODE_MEM_READ:  return outside_io(src);
+    case CP_OPCODE_MEM_COPY:  return outside_io(dst) || outside_io(src);
+    default:                  return false;
+    }
+}
+} // namespace
+
 vx_result_t Device::cp_ring_append_(const void* cl) {
+    // Caller holds cp_mu_. A kernel's results are flushed lazily, by the
+    // next command that needs them: the next launch gets an L1-only flush
+    // (the last-level cache is the point of coherence between kernels), and
+    // the next transfer to or from device memory a full one, since the CP
+    // DMA reaches device memory beneath the last-level cache. Appending the
+    // flush under the same lock keeps any other command from slipping between.
+    const uint8_t* b = static_cast<const uint8_t*>(cl);
+    const bool dma = cp_dma_touches_device_mem(b);
+    const bool launch = (b[0] == CP_OPCODE_LAUNCH)
+                     || (b[0] == CP_OPCODE_LAUNCH_QMD)
+                     || (b[0] == CP_OPCODE_DRAW);
+    if ((dma && (l1_dirty_ || llc_dirty_)) || (launch && l1_dirty_)) {
+        uint8_t flush[CP_CL_BYTES];
+        build_cache_flush(flush, cp_num_cores_, /*l1_only=*/!dma);
+        auto r = cp_ring_write_(flush);
+        if (r != VX_SUCCESS) return r;
+        l1_dirty_ = false;
+        llc_dirty_ = llc_dirty_ && !dma;
+    }
+    assert(!(dma && (l1_dirty_ || llc_dirty_)));
+    auto r = cp_ring_write_(cl);
+    if (r != VX_SUCCESS) return r;
+    if (launch) {
+        // a draw descriptor ends on its own L1-only flush step
+        l1_dirty_ = (b[0] != CP_OPCODE_DRAW);
+        llc_dirty_ = true;
+    } else if (b[0] == CP_OPCODE_CACHE_FLUSH) {
+        l1_dirty_ = false;
+        llc_dirty_ = llc_dirty_ && (b[1] & CP_FLUSH_FLAG_L1_ONLY);
+    }
+    return VX_SUCCESS;
+}
+
+vx_result_t Device::cp_ring_write_(const void* cl) {
     // Caller holds cp_mu_. Write one CL into the ring at the current tail —
     // a plain memcpy through the ring's CP-visible host pointer — then bump
     // tail + reserve the seqnum slot. No doorbell, no poll.
@@ -576,9 +645,8 @@ vx_result_t Device::cp_batch_end() {
     if (r != VX_SUCCESS) {
         return r;
     }
-    // The batch's trailing CMD_CACHE_FLUSH(es) have retired, so every kernel's
-    // writes are coherent: drain the console rings once for the whole batch
-    // (deferred from each in-batch cp_submit_launch).
+    // Drain the console rings once for the whole batch (deferred from each
+    // in-batch cp_submit_launch).
     return drain_cout();
 }
 
@@ -811,15 +879,13 @@ vx_result_t Device::cp_submit_launch() {
     if (r != VX_SUCCESS) {
         return r;
     }
-    // Cache coherence: post an explicit cache flush right after the launch
-    // (ACQUIRE_MEM model) so the host observes coherent kernel results.
-    r = cp_submit_cache_flush();
-    if (r != VX_SUCCESS) return r;
-    // In a batch the flush has only been appended, not retired — defer the
-    // COUT drain to cp_batch_end (one drain for the whole sequence).
+    // The kernel-boundary cache flush (ACQUIRE_MEM model) is posted by the
+    // next command that needs it (see cp_ring_append_). In a batch the
+    // launch has only been appended, not retired — defer the COUT drain to
+    // cp_batch_end (one drain for the whole sequence).
     if (tls_batch_owner == this) return VX_SUCCESS;
-    // Final COUT drain: the flush has made the kernel's writes coherent, so
-    // the tail-end console output left in the rings is now safe to read.
+    // Final COUT drain: the console rings live in the uncached IO aperture,
+    // and a launch completes only once its stores have left the device.
     return drain_cout();
 }
 
@@ -860,7 +926,7 @@ vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
     // The CP reads the in-memory KMU descriptor (a {count,(addr,value)...}
     // list the caller staged) and replays it before pulsing start — one ring
     // command in place of the ~18 CMD_DCR_WRITEs a plain launch costs. Same
-    // trailing CMD_CACHE_FLUSH / COUT-drain discipline as cp_submit_launch.
+    // COUT-drain discipline as cp_submit_launch.
     uint8_t cl[CP_CL_BYTES] = {0};
     auto r = ensure_mmu_satp();
     if (r != VX_SUCCESS) {
@@ -874,8 +940,6 @@ vx_result_t Device::cp_submit_launch_qmd(uint64_t qmd_addr) {
     if (r != VX_SUCCESS) {
         return r;
     }
-    r = cp_submit_cache_flush();
-    if (r != VX_SUCCESS) return r;
     if (tls_batch_owner == this) return VX_SUCCESS;
     return drain_cout();
 }
@@ -903,19 +967,6 @@ vx_result_t Device::cp_submit_draw(uint64_t desc_addr) {
     }
     if (tls_batch_owner == this) return VX_SUCCESS;
     return drain_cout();
-}
-
-vx_result_t Device::cp_submit_cache_flush() {
-    // CMD_CACHE_FLUSH on-wire layout (cmd_size=12):
-    //   bytes 0..3   header  { opcode=0x0A, flags=0, reserved=0 }
-    //   bytes 4..11  arg0    number of cores to flush
-    // The CP sweeps a per-core flush DCR-read across [0, num_cores) and
-    // retires the command only when the last core's flush completes.
-    // No-op on write-through cache configs (the Vortex default).
-    uint8_t cl[CP_CL_BYTES] = {0};
-    cl[0] = CP_OPCODE_CACHE_FLUSH;
-    std::memcpy(cl + 4, &cp_num_cores_, sizeof(cp_num_cores_));
-    return cp_submit_cl_(cl);
 }
 
 vx_result_t Device::cp_submit_dcr_read(uint32_t addr, uint32_t tag,

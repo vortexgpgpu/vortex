@@ -261,7 +261,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 default : mem_req_byteen_w = {LSU_WORD_SIZE{1'b1}};
             endcase
         end
-        assign mem_req_byteen[i] = mem_req_byteen_w;
+        // a fence is a flush token: it carries no data, so no byte enables
+        assign mem_req_byteen[i] = req_is_fence ? '0 : mem_req_byteen_w;
     end
 
     // memory misalignment not supported!

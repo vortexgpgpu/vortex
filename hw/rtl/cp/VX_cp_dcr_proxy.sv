@@ -16,12 +16,15 @@
 //
 // For CMD_CACHE_FLUSH (cmd.arg0 = number of cores):
 //   IDLE → START (DCR write to VX_DCR_BASE_CACHE_FLUSH, which every core
-//   receives and starts flushing on) → then REQ/WAIT_RSP once per core: a
+//   receives and starts flushing on; F_FLUSH_L1_ONLY sets
+//   VX_CACHE_FLUSH_L1_ONLY in its value) → then REQ/WAIT_RSP once per core: a
 //   DCR read of VX_DCR_BASE_CACHE_FLUSH answered when that core's flush has
 //   completed (see VX_dcr_data). The cores flush concurrently, so their dcache
 //   flushes reach the shared caches together and share one walk; the reads
 //   are serial because the DCR response bus cannot carry two at once. The
-//   command retires once the last core reports. This is the ACQUIRE_MEM
+//   command retires once the last core reports and, for a full flush, once
+//   Vortex busy drops: busy covers every write until memory acknowledges it,
+//   so a DMA after the flush cannot overtake the write-backs. This is the ACQUIRE_MEM
 //   model: a single command in the ring, executed by the CP across all cores,
 //   that the host posts after CMD_LAUNCH so it sees coherent results. The
 //   host fills cmd.arg0 from VX_CAPS_NUM_CORES.
@@ -39,7 +42,7 @@ module VX_cp_dcr_proxy
 
   input  wire  grant,
   // verilator lint_off UNUSED
-  // Only cmd.hdr.opcode, cmd.arg0, and cmd.arg1 are read here. arg2 and
+  // Only cmd.hdr.opcode/flags, cmd.arg0, and cmd.arg1 are read here. arg2 and
   // profile_slot pass through untouched on the way to the engine; the
   // top-level instantiation hands us the full struct.
   input  cmd_t cmd,
@@ -57,7 +60,9 @@ module VX_cp_dcr_proxy
   output logic [`VX_DCR_ADDR_BITS-1:0] dcr_req_addr,
   output logic [`VX_DCR_DATA_BITS-1:0] dcr_req_data,
   input  wire                          dcr_rsp_valid,
-  input  wire  [`VX_DCR_DATA_BITS-1:0] dcr_rsp_data
+  input  wire  [`VX_DCR_DATA_BITS-1:0] dcr_rsp_data,
+
+  input  wire                          gpu_busy
 );
 
   typedef enum logic [2:0] {
@@ -75,6 +80,7 @@ module VX_cp_dcr_proxy
   state_e state;
   logic   pending_is_read;
   logic   pending_is_flush;
+  logic   pending_l1_only;
   // cmd fields are only valid for one cycle (grant pulse); capture on IDLE → REQ.
   logic [`VX_DCR_ADDR_BITS-1:0]  pending_addr;
   logic [`VX_DCR_DATA_BITS-1:0]  pending_data;
@@ -88,11 +94,17 @@ module VX_cp_dcr_proxy
   wire [`VX_DCR_DATA_BITS-1:0]  cmd_data   = cmd.arg1[`VX_DCR_DATA_BITS-1:0];
   wire [CIDW-1:0]               cmd_ncores = cmd.arg0[CIDW-1:0];
 
+  // The last-level cache forwards a full token behind its write-backs, so they
+  // are already counted in busy when the last core reports. An L1-only flush
+  // writes nothing back past the last-level cache.
+  wire flush_drain = pending_is_flush && !pending_l1_only && gpu_busy;
+
   always_ff @(posedge clk) begin
     if (reset) begin
       state            <= S_IDLE;
       pending_is_read  <= 1'b0;
       pending_is_flush <= 1'b0;
+      pending_l1_only  <= 1'b0;
       pending_addr     <= '0;
       pending_data     <= '0;
       rsp_data_r       <= '0;
@@ -104,6 +116,7 @@ module VX_cp_dcr_proxy
           if (grant) begin
             pending_is_read  <= is_read;
             pending_is_flush <= is_flush;
+            pending_l1_only  <= cmd.hdr.flags[F_FLUSH_L1_ONLY];
             pending_addr     <= cmd_addr;
             pending_data     <= cmd_data;
             if (is_flush) begin
@@ -140,7 +153,9 @@ module VX_cp_dcr_proxy
           end
         end
         S_DONE: begin
-          state <= S_IDLE;
+          if (!flush_drain) begin
+            state <= S_IDLE;
+          end
         end
         default: state <= S_IDLE;
       endcase
@@ -154,13 +169,14 @@ module VX_cp_dcr_proxy
       // target core index in the low 16 bits of dcr_req_data.
       dcr_req_rw   = (state == S_START);
       dcr_req_addr = `VX_DCR_ADDR_BITS'(`VX_DCR_BASE_CACHE_FLUSH);
-      dcr_req_data = `VX_DCR_DATA_BITS'(flush_cid);
+      dcr_req_data = (state == S_START) ? (pending_l1_only ? `VX_DCR_DATA_BITS'(`VX_CACHE_FLUSH_L1_ONLY) : '0)
+                                        : `VX_DCR_DATA_BITS'(flush_cid);
     end else begin
       dcr_req_rw   = !pending_is_read;
       dcr_req_addr = pending_addr;
       dcr_req_data = pending_data;
     end
-    done          = (state == S_DONE);
+    done          = (state == S_DONE) && !flush_drain;
     last_rsp_data = rsp_data_r;
   end
 

@@ -206,6 +206,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .DATA_SIZE (L2_SECTOR_SIZE),
         .TAG_WIDTH (L2_MEM_TAG_WIDTH)
     ) l2_mem_bus_if[L2_MEM_PORTS]();
+    wire l2_req_empty;
 
     VX_cache_wrap #(
         .INSTANCE_ID    (`SFORMATF(("%s-l2cache", INSTANCE_ID))),
@@ -232,6 +233,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .NC_ENABLE      (1),
         .PASSTHRU       (!`VX_CFG_L2_ENABLED),
         .IS_LLC         (L2_IS_LLC),
+        .SHARED_LLC     (L2_SHARED_LLC),
         .BANK_HASH      (`VX_CFG_L2_BANK_HASH),
         .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
     ) l2cache (
@@ -241,7 +243,8 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .cache_perf     (l2_perf),
     `endif
         .core_bus_if    (per_socket_mem_bus_if),
-        .mem_bus_if     (l2_mem_bus_if)
+        .mem_bus_if     (l2_mem_bus_if),
+        .req_empty      (l2_req_empty)
     );
 
     // Cluster DCR distribution — declared before its consumers (sockets/gfx).
@@ -485,9 +488,9 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     wire busy_r;
 `ifdef EXT_GFX_ANY_ENABLE
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy | mmu_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
 `else
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | mmu_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
 `endif
     assign busy = busy_r | dcr_bus_if.req_valid | launch_link_busy;
 

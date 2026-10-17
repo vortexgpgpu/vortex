@@ -278,6 +278,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             .empty           (mem_unit_empty[c]),
             .lsu_mem_if      (lsu_mem_if),
             .dcr_flush_if    (dcr_flush_dcache_if),
+            .flush_l1_only   (1'b0),
             .dcache_bus_if   (dcache_bus_if)
         );
 
@@ -394,7 +395,8 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (all_dc_core_if),
-        .mem_bus_if     (dcache_mem_bus_if)
+        .mem_bus_if     (dcache_mem_bus_if),
+        `UNUSED_PIN (req_empty)
     );
 
     // ========================================================================
@@ -513,7 +515,8 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (l2_core_if),
-        .mem_bus_if     (l2_mem_if)
+        .mem_bus_if     (l2_mem_if),
+        `UNUSED_PIN (req_empty)
     );
 
     assign empty = (& mem_unit_empty) && (& lsu_sched_empty) && !dxa_busy;
