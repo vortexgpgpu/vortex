@@ -16,8 +16,19 @@
 // The CIRCT elaboration reads them to know each core's interface and keeps
 // every instance as an instance; Vivado binds it to the generated core.
 // Synthesis never reads this file. Keep it in step with xilinx_ip_gen.tcl.
+//
+// Each declares the contract the RTL uses it under: a fixed-latency
+// pipeline. Its data_out outputs are a function of its data_in inputs of
+// exactly fixed_latency cycles of `clock` with `clock_enable` high before,
+// and of nothing else (pure_pipeline: non-blocking flow control, no reset, no other state); the `tie`
+// inputs are driven with those constants, its other outputs are unused.
+// fixed_latency is the core's C_Latency in xilinx_ip_gen.tcl and the latency
+// the RTL asserts (hw/scripts/check_ip_contracts.py checks both).
 
-(* black_box *)
+(* black_box, fixed_latency = 28, clock = "aclk", clock_enable = "aclken",
+   data_in = "s_axis_a_tdata s_axis_b_tdata",
+   data_out = "m_axis_result_tdata m_axis_result_tuser",
+   tie = "s_axis_a_tvalid=1 s_axis_b_tvalid=1", pure_pipeline *)
 module xil_fdiv (
     input  wire        aclk,
     input  wire        aclken,
@@ -31,7 +42,10 @@ module xil_fdiv (
 );
 endmodule
 
-(* black_box *)
+(* black_box, fixed_latency = 28, clock = "aclk", clock_enable = "aclken",
+   data_in = "s_axis_a_tdata",
+   data_out = "m_axis_result_tdata m_axis_result_tuser",
+   tie = "s_axis_a_tvalid=1", pure_pipeline *)
 module xil_fsqrt (
     input  wire        aclk,
     input  wire        aclken,
@@ -43,7 +57,10 @@ module xil_fsqrt (
 );
 endmodule
 
-(* black_box *)
+(* black_box, fixed_latency = 16, clock = "aclk", clock_enable = "aclken",
+   data_in = "s_axis_a_tdata s_axis_b_tdata s_axis_c_tdata",
+   data_out = "m_axis_result_tdata m_axis_result_tuser",
+   tie = "s_axis_a_tvalid=1 s_axis_b_tvalid=1 s_axis_c_tvalid=1", pure_pipeline *)
 module xil_fma (
     input  wire        aclk,
     input  wire        aclken,
@@ -59,7 +76,10 @@ module xil_fma (
 );
 endmodule
 
-(* black_box *)
+(* black_box, fixed_latency = 8, clock = "aclk", clock_enable = "aclken",
+   data_in = "s_axis_a_tdata s_axis_b_tdata",
+   data_out = "m_axis_result_tdata",
+   tie = "s_axis_a_tvalid=1 s_axis_b_tvalid=1", pure_pipeline *)
 module xil_fmul (
     input  wire        aclk,
     input  wire        aclken,
@@ -72,7 +92,10 @@ module xil_fmul (
 );
 endmodule
 
-(* black_box *)
+(* black_box, fixed_latency = 11, clock = "aclk", clock_enable = "aclken",
+   data_in = "s_axis_a_tdata s_axis_b_tdata s_axis_operation_tdata",
+   data_out = "m_axis_result_tdata",
+   tie = "s_axis_a_tvalid=1 s_axis_b_tvalid=1 s_axis_operation_tvalid=1", pure_pipeline *)
 module xil_fadd (
     input  wire        aclk,
     input  wire        aclken,
