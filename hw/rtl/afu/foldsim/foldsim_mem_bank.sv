@@ -52,9 +52,6 @@ module foldsim_mem_bank #(
     input  wire                  clk,
     input  wire                  reset,
 
-    // The bank model is the port's timing from the next target reset on.
-    input  wire                  enable,
-
     input  wire [15:0]           cfg_data_rate,
     input  wire [15:0]           cfg_core_clock,
     input  wire [15:0]           cfg_latency,
@@ -104,8 +101,6 @@ module foldsim_mem_bank #(
     output wire                  no_reads,
     // The target cycle's DRAM clocks are done.
     output wire                  done,
-    // The bank model is the port's timing, since the last target reset.
-    output reg                   active,
 
     // Reads, writes, row hits, misses, conflicts, the sum of read latencies
     // (target cycles from AR to R), refreshes, and target cycles the port
@@ -129,6 +124,10 @@ module foldsim_mem_bank #(
     localparam IQW   = $clog2(INQ);
     localparam BQ    = 32;
     localparam BQW   = $clog2(BQ);
+
+    // The model has its settings: it starts at the first target reset, after
+    // the runtime has written them.
+    reg active;
 
     // ---- Configuration and its derived constants ----
     wire [11:0] T [18];
@@ -871,7 +870,7 @@ module foldsim_mem_bank #(
         if (reset || finish) begin
             // ---- The target cycle ends: the port's state for the next ----
             if (finish && treset)
-                active <= enable;
+                active <= 1'b1;
             if (reset || treset || ~active) begin
                 slot_busy   <= '0;
                 slots_used  <= '0;
@@ -969,7 +968,7 @@ module foldsim_mem_bank #(
             end
             // A clearing cycle's next host cycle clears the calendars, so the
             // first DRAM clock waits a host cycle (in S_PUSH).
-            state <= ~(treset ? enable : active) ? S_IDLE
+            state <= ~(treset | active) ? S_IDLE
                    : (((treset | ~active) | new_write | ar_fire) ? S_PUSH : S_TICK);
             new_ready <= '0;
             new_acks  <= '0;

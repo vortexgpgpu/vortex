@@ -13,7 +13,9 @@
 
 `include "foldsim_sim.vh"
 `include "foldsim_kernel.vh"
-`include "foldsim_ports.vh"
+
+`define FOLDSIM_COMMA ,
+`define FOLDSIM_SEMI  ;
 
 // The foldsim kernel: the simulator CIRCT composes of Vortex (foldsim_sim, of
 // the target foldsim_target), a memory endpoint on each of its AXI4 ports and
@@ -64,7 +66,7 @@ module foldsim_afu #(
     input  wire [1:0]                              m_axi_mem_``i``_bresp, \
     input  wire [C_M_AXI_MEM_ID_WIDTH-1:0]         m_axi_mem_``i``_bid
 
-    `FOLDSIM_REPEAT(`FOLDSIM_MEM_PORTS, FOLDSIM_AXI_MEM, FOLDSIM_COMMA),
+    `FOLDSIM_MEM_REPEAT(FOLDSIM_AXI_MEM, FOLDSIM_COMMA),
 
     input  wire                                    s_axi_control_awvalid,
     output wire                                    s_axi_control_awready,
@@ -178,7 +180,7 @@ module foldsim_afu #(
     assign m_axi_mem_``i``_rready  = hbm_rready[i]; \
     assign hbm_rdata[i]            = m_axi_mem_``i``_rdata
 
-    `FOLDSIM_REPEAT(`FOLDSIM_MEM_PORTS, FOLDSIM_HBM, FOLDSIM_SEMI);
+    `FOLDSIM_MEM_REPEAT(FOLDSIM_HBM, FOLDSIM_SEMI);
 `undef FOLDSIM_HBM
 
 `define FOLDSIM_IN(name) \
@@ -202,7 +204,7 @@ module foldsim_afu #(
         .hostClock (ap_clk),
         .hostReset (reset),
         .profile_finish (profile_finish),
-        `FOLDSIM_REPEAT(`FOLDSIM_MEM_PORTS, FOLDSIM_SIM_MEM, FOLDSIM_COMMA),
+        `FOLDSIM_MEM_REPEAT(FOLDSIM_SIM_MEM, FOLDSIM_COMMA),
         `FOLDSIM_IN(reset),
         `FOLDSIM_IN(dcr_req_valid),
         `FOLDSIM_IN(dcr_req_rw),
@@ -227,10 +229,7 @@ module foldsim_afu #(
     // Ports, engines and device-memory masters: one of each per port.
     localparam [31:0] MEM_CAPS = {4'd0, 4'(PORTS), 4'(PORTS), 8'(MEM_SLOTS), 4'(MEM_HLOG2 - 4), 8'(PORTS)};
 
-    wire [31:0] mem_read_latency, mem_write_latency;
-    wire [7:0]  mem_max_reads, mem_max_writes;
     wire [63:0] mem_base;
-    wire        mem_model_bank;
     wire [31:0] mem_clock, mem_queue;
     wire [15:0] mem_latency, mem_wmark;
     wire [12:0] mem_geom;
@@ -257,12 +256,7 @@ module foldsim_afu #(
         ) mem (
             .clk           (ap_clk),
             .reset         (reset),
-            .read_latency  (mem_read_latency),
-            .write_latency (mem_write_latency),
-            .max_reads     (mem_max_reads),
-            .max_writes    (mem_max_writes),
             .base          (mem_base),
-            .model_bank    (mem_model_bank),
             .cfg_data_rate (mem_clock[15:0]),
             .cfg_core_clock(mem_clock[31:16]),
             .cfg_latency   (mem_latency),
@@ -335,12 +329,7 @@ module foldsim_afu #(
         .s_rvalid          (s_axi_control_rvalid),
         .s_rready          (s_axi_control_rready),
         .s_rdata           (s_axi_control_rdata),
-        .mem_read_latency  (mem_read_latency),
-        .mem_write_latency (mem_write_latency),
-        .mem_max_reads     (mem_max_reads),
-        .mem_max_writes    (mem_max_writes),
         .mem_base          (mem_base),
-        .mem_model_bank    (mem_model_bank),
         .mem_clock         (mem_clock),
         .mem_latency       (mem_latency),
         .mem_queue         (mem_queue),
@@ -374,3 +363,6 @@ module foldsim_afu #(
 `undef FOLDSIM_IN
 
 endmodule
+
+`undef FOLDSIM_COMMA
+`undef FOLDSIM_SEMI

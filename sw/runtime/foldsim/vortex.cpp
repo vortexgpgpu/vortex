@@ -252,11 +252,6 @@ private:
 
 #endif
 
-uint64_t env_or(const char* name, uint64_t value) {
-  const char* s = getenv(name);
-  return (s != nullptr && s[0] != '\0') ? strtoull(s, nullptr, 0) : value;
-}
-
 // What the host spent on the transport: register accesses, and device-memory
 // transfers, with their wall time.
 struct transport_stats_t {
@@ -329,18 +324,8 @@ public:
               version, FOLDSIM_VERSION);
       return -1;
     }
-    // The memory model: a latency-bandwidth pipe, 30-cycle latency and 16
-    // transactions in flight each way unless set; or, with
-    // FOLDSIM_MEM_MODEL=bank, the platform memory's DRAM as the bank model
-    // times it.
-    const char* model = getenv("FOLDSIM_MEM_MODEL");
-    const std::string model_name = (model != nullptr) ? model : "";
-    if (!model_name.empty() && model_name != "pipe" && model_name != "bank") {
-      fprintf(stderr, "[VXDRV] FOLDSIM_MEM_MODEL must be pipe or bank (got '%s')\n", model);
-      return -1;
-    }
-    bank_model_ = (model_name == "bank");
-    // VORTEX_DRAM_REFRESH=off|bank|all: the bank model's refresh, as the
+    // The memory model: the platform memory's DRAM, as the bank model times
+    // it. VORTEX_DRAM_REFRESH=off|bank|all: its refresh, as the
     // simulators' bank model takes it.
     const char* refresh = getenv("VORTEX_DRAM_REFRESH");
     const std::string refresh_name = (refresh != nullptr) ? refresh : "";
@@ -352,32 +337,19 @@ public:
       fprintf(stderr, "[VXDRV] VORTEX_DRAM_REFRESH must be off, bank or all (got '%s')\n", refresh);
       return -1;
     }
-    if (refresh_ != 0 && !bank_model_) {
-      fprintf(stderr, "[VXDRV] VORTEX_DRAM_REFRESH needs FOLDSIM_MEM_MODEL=bank\n");
+    if (this->setup_bank_model() != 0)
       return -1;
-    }
-    if (bank_model_ && this->setup_bank_model() != 0)
-      return -1;
-    const uint32_t rlat = env_or("FOLDSIM_MEM_READ_LATENCY", 30);
-    const uint32_t wlat = env_or("FOLDSIM_MEM_WRITE_LATENCY", 30);
-    const uint32_t maxr = env_or("FOLDSIM_MEM_MAX_READS", 16);
-    const uint32_t maxw = env_or("FOLDSIM_MEM_MAX_WRITES", 16);
     if (reg_write(FOLDSIM_REG_MEM_BASE_LO, uint32_t(kMemBase)) != 0 ||
         reg_write(FOLDSIM_REG_MEM_BASE_HI, uint32_t(kMemBase >> 32)) != 0 ||
-        reg_write(FOLDSIM_REG_MEM_RLAT, rlat) != 0 ||
-        reg_write(FOLDSIM_REG_MEM_WLAT, wlat) != 0 ||
-        reg_write(FOLDSIM_REG_MEM_MAXR, maxr) != 0 ||
-        reg_write(FOLDSIM_REG_MEM_MAXW, maxw) != 0 ||
         reg_write(FOLDSIM_REG_CTRL, 1) != 0)
       return -1;
     // A target left running by an earlier process is reset, as a card's
     // native driver resets its device on open: Vortex counts VX_CFG_RESET_DELAY
     // cycles of reset before it takes a request. The reset also clears a
     // memory error that process left, so only the state after it counts, and
-    // chooses the memory model.
+    // starts the memory model with its settings and refresh.
     uint32_t s = 0;
-    const uint32_t mem_model = (bank_model_ ? FOLDSIM_MEM_MODEL_BANK : FOLDSIM_MEM_MODEL_PIPE) | refresh_;
-    if (command(FOLDSIM_CMD_RESET, mem_model, 64) != 0 || wait_idle(false) != 0 || status(&s) != 0)
+    if (command(FOLDSIM_CMD_RESET, refresh_, 64) != 0 || wait_idle(false) != 0 || status(&s) != 0)
       return -1;
     if (mem_error(s))
       return -1;
@@ -452,7 +424,7 @@ private:
       return -1;
     mem_ports_ = FOLDSIM_MEM_CAPS_PORTS(caps);
     if (mem_ports_ == 0) {
-      fprintf(stderr, "[VXDRV] this foldsim image has no bank model\n");
+      fprintf(stderr, "[VXDRV] this foldsim image reports no memory ports\n");
       return -1;
     }
     dram_timing::Standard standard;
@@ -564,7 +536,7 @@ private:
     if (!line.empty())
       fprintf(stderr, "[foldsim] class busy:%s\n", line.c_str());
     // The bank model's counters, per channel and, with several, in all.
-    if (bank_model_) {
+    {
       uint64_t total[FOLDSIM_MEM_NUM_STATS] = {};
       for (uint32_t p = 0; p <= mem_ports_; ++p) {
         uint64_t st[FOLDSIM_MEM_NUM_STATS];
@@ -793,7 +765,6 @@ private:
   std::chrono::steady_clock::time_point launch_start_;
   bool failed_ = false;
   bool open_ = false;
-  bool bank_model_ = false;
   uint32_t refresh_ = 0;
   uint32_t mem_ports_ = 1;
   vortex::CommandProcessor cp_;

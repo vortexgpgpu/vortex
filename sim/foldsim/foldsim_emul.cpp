@@ -45,7 +45,7 @@ constexpr uint64_t kPage = 4096;
 constexpr uint32_t kBeat = 64;
 
 #ifndef FOLDSIM_MEM_PORTS
-#define FOLDSIM_MEM_PORTS 1
+#error "FOLDSIM_MEM_PORTS comes from the generated foldsim_kernel.vh"
 #endif
 static_assert(FOLDSIM_MEM_PORTS >= 1 && FOLDSIM_MEM_PORTS <= 8, "the kernel has 1 to 8 memory ports");
 
