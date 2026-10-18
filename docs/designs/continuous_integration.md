@@ -133,7 +133,10 @@ A case with `known_issue:` still builds and runs. `conftest.py` marks it
 `xfail`, so its failure does not fail the run; if it starts passing it
 surfaces as `XPASS`. Reserve it for triaged, documented breakage.
 `needs:` does not skip either — it records what a cell must provision, and a
-missing dependency is a real failure.
+missing dependency is a real failure. A cell's `needs` cover every case its
+`-m` expression selects, and the workflow provisions per-case tools (the
+foldsim prebuilt) from them rather than from the cell's name, because a
+check's cell gathers cases from every category.
 
 #### Lint rules
 
@@ -195,9 +198,9 @@ A check is an assertion across runs rather than a clean exit.
 
 | | `model_parity` | `perf_gate` |
 |---|---|---|
-| compares | SimX against rtlsim, same case | rtlsim against a checked-in baseline |
+| compares | a model against rtlsim, same case (SimX by default; Foldsim) | rtlsim against a checked-in baseline |
 | asserts | instructions equal; cycles within tolerance | cycles within tolerance; instructions equal |
-| tolerance | 5 %, overridable per case or per category | 2 %, one constant |
+| tolerance | 5 %, overridable per case or per category (0 for Foldsim) | 2 %, one constant |
 | golden data | none | `ci/baselines/perf/<category>.json` |
 | tier | `full` | `full` |
 | pinned to | the rtlsim driver, which elaborates the RTL | the rtlsim driver |
@@ -226,6 +229,13 @@ The pipeline cases live in `ci/testcases/core.yaml`. Each extension carries
 its own parity case with only that extension enabled, so a regression is
 attributable. Workloads are sized so that steady state dominates — a tiny
 kernel is all boot and dispatch skew, and its gap ratio is noise.
+
+A case's `legs:` names its two drivers, the model and then the reference;
+the default is `[simx, rtlsim]`. `ci/testcases/foldsim.yaml` runs
+`[foldsim, rtlsim]` at tolerance 0: Foldsim is compiled from the RTL and is
+cycle-exact by construction, so any cycle difference is a defect. A tiny
+configuration is enough there. Its reference is rtlsim behind the AXI4 adapter
+on the same DRAM bank model (`AXI_BUS=1 AXI_MEM_MODEL=bank`).
 
 **Never widen a tolerance to absorb a divergence.** Model the behavior, or
 mark the case `known_issue` while it is investigated.
