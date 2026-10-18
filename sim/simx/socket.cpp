@@ -62,7 +62,7 @@ public:
       log2ceil(VX_CFG_ICACHE_NUM_WAYS),// A
       log2ceil(VX_CFG_ICACHE_NUM_BANKS), // B
       VX_CFG_XLEN,                   // address bits
-      ICACHE_NUM_REQS,        // number of inputs (one per fetch slice)
+      ICACHE_NUM_REQS,        // number of inputs (one per frontend slice)
       VX_CFG_ICACHE_MEM_PORTS,       // memory ports
       false,                  // write-back
       false,                  // write response

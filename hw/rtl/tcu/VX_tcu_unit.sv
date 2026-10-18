@@ -21,18 +21,28 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
-`ifdef PERF_ENABLE
-    output tcu_perf_t       tcu_perf,
-`endif
-
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
-    // Bank-parallel LMEM read port
-    VX_mem_bus_if.master     tcu_lmem_if,
+    // per-block ports of the core-wide WGMMA tile buffers (VX_tcu_shared)
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] exec_valid,
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] exec_ready,
+    output tcu_execute_t    exec_data [`VX_CFG_NUM_TCU_BLOCKS],
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data,
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tbuf_rs2_data,
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tbuf_ready,
 `endif
 
 `ifdef TCU_META_ENABLE
-    // TCU_LD memory client connection to VX_lsu_scheduler at VX_core.
-    VX_lsu_sched_if.master  tcu_mem_if,
+    // per-block ports of the core-wide metadata AGU (VX_tcu_shared)
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] agu_ld_valid,
+    output tcu_execute_t    agu_ld_data [`VX_CFG_NUM_TCU_BLOCKS],
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] agu_ld_ready,
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] agu_result_valid,
+    input tcu_result_t      agu_result_data [`VX_CFG_NUM_TCU_BLOCKS],
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] agu_result_ready,
+    input wire              meta_wr_en,
+    input wire [NW_WIDTH-1:0] meta_wr_wid,
+    input wire [4:0]        meta_wr_idx,
+    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] meta_wr_data,
 `endif
 
     // Inputs
@@ -68,25 +78,6 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .data_t (tcu_result_t)
     ) per_block_result_if[BLOCK_SIZE]();
 
-`ifdef VX_CFG_TCU_WGMMA_ENABLE
-    wire [BLOCK_SIZE-1:0] exec_valid, exec_ready;
-    tcu_execute_t         exec_data [BLOCK_SIZE];
-    wire [BLOCK_SIZE-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tbuf_rs1_data;
-    wire [BLOCK_SIZE-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tbuf_rs2_data;
-    wire [BLOCK_SIZE-1:0] tbuf_ready_eff;
-`endif
-
-`ifdef TCU_META_ENABLE
-    wire [BLOCK_SIZE-1:0] agu_ld_valid, agu_ld_ready;
-    tcu_execute_t         agu_ld_data [BLOCK_SIZE];
-    wire [BLOCK_SIZE-1:0] agu_result_valid, agu_result_ready;
-    tcu_result_t          agu_result_data [BLOCK_SIZE];
-    wire                  meta_wr_en;
-    wire [NW_WIDTH-1:0]   meta_wr_wid;
-    wire [4:0]            meta_wr_idx;
-    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] meta_wr_data;
-`endif
-
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
     `ifdef TCU_META_ENABLE
         wire block_meta_wr_en = meta_wr_en
@@ -106,7 +97,7 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .exec_data        (exec_data[block_idx]),
             .tbuf_rs1_data    (tbuf_rs1_data[block_idx]),
             .tbuf_rs2_data    (tbuf_rs2_data[block_idx]),
-            .tbuf_ready       (tbuf_ready_eff[block_idx]),
+            .tbuf_ready       (tbuf_ready[block_idx]),
         `endif
         `ifdef TCU_META_ENABLE
             .agu_ld_valid     (agu_ld_valid[block_idx]),
@@ -124,39 +115,6 @@ module VX_tcu_unit import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             .result_if        (per_block_result_if[block_idx])
         );
     end
-
-    VX_tcu_shared #(
-        .INSTANCE_ID (INSTANCE_ID),
-        .BLOCK_SIZE  (BLOCK_SIZE)
-    ) tcu_shared (
-    `ifdef PERF_ENABLE
-        .tcu_perf         (tcu_perf),
-    `endif
-    `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .exec_valid       (exec_valid),
-        .exec_ready       (exec_ready),
-        .exec_data        (exec_data),
-        .tbuf_rs1_data    (tbuf_rs1_data),
-        .tbuf_rs2_data    (tbuf_rs2_data),
-        .tbuf_ready_eff   (tbuf_ready_eff),
-        .tcu_lmem_if      (tcu_lmem_if),
-    `endif
-    `ifdef TCU_META_ENABLE
-        .agu_ld_valid     (agu_ld_valid),
-        .agu_ld_data      (agu_ld_data),
-        .agu_ld_ready     (agu_ld_ready),
-        .agu_result_valid (agu_result_valid),
-        .agu_result_data  (agu_result_data),
-        .agu_result_ready (agu_result_ready),
-        .meta_wr_en       (meta_wr_en),
-        .meta_wr_wid      (meta_wr_wid),
-        .meta_wr_idx      (meta_wr_idx),
-        .meta_wr_data     (meta_wr_data),
-        .tcu_mem_if       (tcu_mem_if),
-    `endif
-        .clk              (clk),
-        .reset            (reset)
-    );
 
     // -----------------------------------------------------------------------
     // Lane gather

@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 // The core-level part of scheduling: CTA dispatch and the core-wide warp-control
-// resources. Each fetch slice schedules and fetches its own warps (VX_warp_sched,
+// resources. Each frontend slice schedules and fetches its own warps (VX_warp_sched,
 // VX_fetch); core-wide events are handed to it with slice-local warp ids.
 module VX_scheduler import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = ""
@@ -70,7 +70,7 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         assign pending_warp_empty[w] = slice_if[w % FW].pending_empty[w / FW];
     end
 
-    // CTA dispatcher: lane p launches fetch slice p's warps
+    // CTA dispatcher: lane p launches frontend slice p's warps
     wire [FW-1:0] cta_fire;
     wire [FW-1:0][NW_WIDTH-1:0] cta_wid;
     wire [PC_BITS-1:0] cta_PC;

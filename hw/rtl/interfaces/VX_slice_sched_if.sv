@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-// Core scheduler state exchanged with one fetch slice's warp scheduler.
+// Core scheduler state exchanged with one frontend slice's warp scheduler.
 // Core-wide events arrive already addressed to the slice: warp ids are
 // slice-local (wid = {wfs, fsw}) and per-warp masks hold only its warps.
 interface VX_slice_sched_if import VX_gpu_pkg::*; ();

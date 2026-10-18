@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 // Per-warp instruction ids. NUM_WARPS is the number of warps counted here: all
-// of the core's, or the PER_FETCH_WARPS of one fetch slice (wid = {wfs, slice}).
+// of the core's, or the PER_FETCH_WARPS of one frontend slice (wid = {wfs, slice}).
 module VX_uuid_gen import VX_gpu_pkg::*; #(
     parameter NUM_WARPS = `VX_CFG_NUM_WARPS
 ) (

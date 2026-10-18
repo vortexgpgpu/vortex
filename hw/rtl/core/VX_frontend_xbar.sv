@@ -13,12 +13,12 @@
 
 `include "VX_define.vh"
 
-// Connects the fetch slices (fetch slice f owns wid mod FETCH_WIDTH == f) to the
+// Connects the frontend slices (frontend slice f owns wid mod FETCH_WIDTH == f) to the
 // issue slices (wid mod ISSUE_WIDTH) and the ALU/SFU blocks (wid mod B). Issue
-// slice i takes its instructions from fetch slice i mod FETCH_WIDTH. A block
-// serving several fetch slices sends each its own warps' events and answers its
+// slice i takes its instructions from frontend slice i mod FETCH_WIDTH. A block
+// serving several frontend slices sends each its own warps' events and answers its
 // reads from the slice owning the read wid. Purely combinational.
-module VX_fetch_xbar import VX_gpu_pkg::*; (
+module VX_frontend_xbar import VX_gpu_pkg::*; (
     // instruction path
     VX_decode_if.slave      fs_decode_if [`VX_CFG_FETCH_WIDTH],
     VX_decode_if.master     is_decode_if [`VX_CFG_ISSUE_WIDTH],
@@ -51,7 +51,7 @@ module VX_fetch_xbar import VX_gpu_pkg::*; (
     output wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data,
 `endif
 
-    // fetch slices
+    // frontend slices
     output sched_branch_t [`VX_CFG_FETCH_WIDTH-1:0][FETCH_ALU_PORTS-1:0] fs_branch,
     output sched_wctl_t [`VX_CFG_FETCH_WIDTH-1:0][FETCH_SFU_PORTS-1:0] fs_wctl,
     output wire [`VX_CFG_FETCH_WIDTH-1:0][FETCH_SFU_PORTS-1:0][NW_WIDTH-1:0] fs_dvstack_wid,
@@ -89,7 +89,7 @@ module VX_fetch_xbar import VX_gpu_pkg::*; (
         end
     end
 
-    for (genvar f = 0; f < FW; ++f) begin : g_fetch_slices
+    for (genvar f = 0; f < FW; ++f) begin : g_frontend_slices
         assign fs_decode_if[f].ready = is_ready[wid_to_isw(fs_decode_if[f].data.wid)];
         for (genvar l = 0; l < SW; ++l) begin : g_ibuf_pop
             localparam W = l * FW + f;
@@ -111,7 +111,7 @@ module VX_fetch_xbar import VX_gpu_pkg::*; (
         assign pending_alm_empty[w]         = fs_pending_alm_empty[w % FW][w / FW];
     end
 
-    // ALU blocks: fetch slice f port q is block q * FW + f, or block f mod BA when shared
+    // ALU blocks: frontend slice f port q is block q * FW + f, or block f mod BA when shared
 
     for (genvar f = 0; f < FW; ++f) begin : g_alu_slices
         for (genvar q = 0; q < NPA; ++q) begin : g_ports

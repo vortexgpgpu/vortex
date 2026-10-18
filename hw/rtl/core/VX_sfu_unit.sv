@@ -33,15 +33,15 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
-    VX_dxa_req_bus_if.master dxa_req_bus_if,
+    VX_dxa_req_bus_if.master dxa_req_bus_if [`VX_CFG_NUM_SFU_BLOCKS],
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
-    VX_tex_bus_if.master    tex_bus_if,
+    VX_tex_bus_if.master    tex_bus_if [`VX_CFG_NUM_SFU_BLOCKS],
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_rtu_bus_if.master    rtu_bus_if,
+    VX_rtu_bus_if.master    rtu_bus_if [`VX_CFG_NUM_SFU_BLOCKS],
     VX_sched_unlock_if.master sched_unlock_if [`VX_CFG_NUM_SFU_BLOCKS],
 `endif
 
@@ -82,22 +82,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     wire [BLOCK_SIZE-1:0][INST_FRM_BITS+`FP_FLAGS_BITS-1:0] fcsr_wr_data;
 `endif
 
-`ifdef VX_CFG_EXT_DXA_ENABLE
-    VX_dxa_req_bus_if block_dxa_req_bus_if[BLOCK_SIZE]();
-`endif
-`ifdef VX_CFG_EXT_TEX_ENABLE
-    VX_tex_bus_if #(
-        .NUM_LANES (NUM_LANES),
-        .TAG_WIDTH (TEX_REQ_TAG_WIDTH)
-    ) block_tex_bus_if[BLOCK_SIZE]();
-`endif
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_rtu_bus_if #(
-        .NUM_LANES (NUM_LANES),
-        .TAG_WIDTH (RTU_REQ_TAG_WIDTH)
-    ) block_rtu_bus_if[BLOCK_SIZE]();
-`endif
-
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
         VX_sfu_block #(
             .INSTANCE_ID ((BLOCK_SIZE > 1) ? `SFORMATF(("%s%0d", INSTANCE_ID, block_idx)) : INSTANCE_ID)
@@ -115,13 +99,13 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
             .fcsr_wr_data   (fcsr_wr_data[block_idx]),
         `endif
         `ifdef VX_CFG_EXT_DXA_ENABLE
-            .dxa_req_bus_if (block_dxa_req_bus_if[block_idx]),
+            .dxa_req_bus_if (dxa_req_bus_if[block_idx]),
         `endif
         `ifdef VX_CFG_EXT_TEX_ENABLE
-            .tex_bus_if     (block_tex_bus_if[block_idx]),
+            .tex_bus_if     (tex_bus_if[block_idx]),
         `endif
         `ifdef VX_CFG_EXT_RTU_ENABLE
-            .rtu_bus_if     (block_rtu_bus_if[block_idx]),
+            .rtu_bus_if     (rtu_bus_if[block_idx]),
             .sched_unlock_if(sched_unlock_if[block_idx]),
         `endif
             .sched_csr_if   (sched_csr_if[block_idx]),
@@ -144,25 +128,6 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         .fpu_csr_if  (fpu_csr_if)
     );
 `endif
-
-    VX_sfu_shared #(
-        .INSTANCE_ID (`SFORMATF(("%s-shared", INSTANCE_ID)))
-    ) sfu_shared (
-    `ifdef VX_CFG_EXT_DXA_ENABLE
-        .block_dxa_req_bus_if (block_dxa_req_bus_if),
-        .dxa_req_bus_if       (dxa_req_bus_if),
-    `endif
-    `ifdef VX_CFG_EXT_TEX_ENABLE
-        .block_tex_bus_if     (block_tex_bus_if),
-        .tex_bus_if           (tex_bus_if),
-    `endif
-    `ifdef VX_CFG_EXT_RTU_ENABLE
-        .block_rtu_bus_if     (block_rtu_bus_if),
-        .rtu_bus_if           (rtu_bus_if),
-    `endif
-        .clk                  (clk),
-        .reset                (reset)
-    );
 
     VX_lane_gather #(
         .BLOCK_SIZE (BLOCK_SIZE),

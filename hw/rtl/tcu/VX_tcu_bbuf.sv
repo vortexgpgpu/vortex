@@ -18,7 +18,7 @@
 //
 // TB-shared B buffer (block-major SMEM, 1 bank-row storage).
 //
-// Single instance per VX_tcu_unit. Holds the bank-row of B that contains
+// Single instance per core (in VX_tcu_shared). Holds the bank-row of B that contains
 // the current (step_k, step_n) block. All Q tcu_cores read from the
 // same buffer (structural fan-out, not arbitrated).
 //

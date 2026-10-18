@@ -105,7 +105,7 @@ inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_
 inline constexpr uint32_t PER_ISSUE_WARPS = VX_CFG_NUM_WARPS / VX_CFG_ISSUE_WIDTH;
 inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);
 
-// Fetch slice f owns the warps with wid % VX_CFG_FETCH_WIDTH == f; each has its
+// Frontend slice f owns the warps with wid % VX_CFG_FETCH_WIDTH == f; each has its
 // own warp scheduler, fetch unit, decoder and icache request port.
 inline constexpr uint32_t PER_FETCH_WARPS = VX_CFG_NUM_WARPS / VX_CFG_FETCH_WIDTH;
 inline constexpr uint32_t ICACHE_NUM_REQS = VX_CFG_FETCH_WIDTH;

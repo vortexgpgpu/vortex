@@ -118,11 +118,11 @@ public:
   ~Scheduler();
 
   // ----- Warp lifecycle -----
-  // Once per cycle, before the fetch slices pick: activate the warps the CTA
+  // Once per cycle, before the frontend slices pick: activate the warps the CTA
   // dispatcher launched last cycle, launch the next ones, and apply a wspawn.
   void schedule_begin();
 
-  // One fetch slice's pick: its lowest ready warp in warp_mask.
+  // One frontend slice's pick: its lowest ready warp in warp_mask.
   instr_trace_t* schedule(const WarpMask& warp_mask);
 
   // Whether warp_mask holds a ready warp, without picking it.

@@ -94,7 +94,7 @@ import VX_tcu_pkg::*;
     VX_lsu_sched_if tcu_mem_if();
 `endif
 
-    // fetch-slice icache requests; port 0 also carries the injected flush
+    // frontend-slice icache requests; port 0 also carries the injected flush
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH)
@@ -200,7 +200,7 @@ import VX_tcu_pkg::*;
         .cache_bus_if (icache_bus_if[0])
     );
 
-    // The other ports carry their fetch slice's registered requests, with the
+    // The other ports carry their frontend slice's registered requests, with the
     // flush arbiter's select bit, the tag's LSB, clear.
     for (genvar i = 1; i < ICACHE_NUM_REQS; ++i) begin : g_icache_ports
         assign icache_bus_if[i].req_valid       = fetch_icache_if[i].req_valid;
@@ -219,25 +219,12 @@ import VX_tcu_pkg::*;
         `UNUSED_VAR (icache_bus_if[i].rsp_data.tag[0])
     end
 
-    // scheduling and the front end: the core scheduler, FETCH_WIDTH fetch slices
-    // and the crossbar to the issue slices and ALU/SFU blocks
+    // scheduling: the core scheduler and its per-frontend-slice interfaces
 
-    localparam FW  = `VX_CFG_FETCH_WIDTH;
-    localparam NPA = FETCH_ALU_PORTS;
-    localparam NPS = FETCH_SFU_PORTS;
+    localparam FW = `VX_CFG_FETCH_WIDTH;
 
     VX_slice_sched_if   slice_sched_if[FW]();
-    VX_decode_if        fs_decode_if[FW]();
-    VX_decode_if        is_decode_if[`VX_CFG_ISSUE_WIDTH]();
-    VX_branch_ctl_if    branch_ctl_if[`VX_CFG_NUM_ALU_BLOCKS]();
-    VX_warp_ctl_if      warp_ctl_if[`VX_CFG_NUM_SFU_BLOCKS]();
-    VX_sched_csr_if     sched_csr_if[`VX_CFG_NUM_SFU_BLOCKS]();
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_sched_unlock_if  sched_unlock_if[`VX_CFG_NUM_SFU_BLOCKS]();
-`endif
 
-    wire [`VX_CFG_ISSUE_WIDTH-1:0] issue_valid;
-    wire [`VX_CFG_ISSUE_WIDTH-1:0][ISSUE_WIS_W-1:0] issue_wis;
     wire [`VX_CFG_NUM_WARPS-1:0] committed_warps;
     wire [`VX_CFG_NUM_WARPS-1:0] sched_active_warps;
 `ifdef VX_CFG_VM_ENABLE
@@ -246,27 +233,8 @@ import VX_tcu_pkg::*;
     wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data;
 `endif
 
-    sched_branch_t [FW-1:0][NPA-1:0] fs_branch;
-    sched_wctl_t [FW-1:0][NPS-1:0] fs_wctl;
-    wire [FW-1:0][NPS-1:0][NW_WIDTH-1:0] fs_dvstack_wid;
-    wire [FW-1:0][NPS-1:0][DV_STACK_SIZEW-1:0] fs_dvstack_ptr;
-    wire [FW-1:0][NPS-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0] fs_dvstack_mscratch;
-    wire [FW-1:0][NPS-1:0][NW_WIDTH-1:0] fs_csr_rd_wid;
-    sched_csr_rd_t [FW-1:0][NPS-1:0] fs_csr_rd;
-    sched_csr_wr_t [FW-1:0][NPS-1:0] fs_csr_wr;
-`ifdef VX_CFG_EXT_RTU_ENABLE
-    wire [FW-1:0][NPS-1:0] fs_rtu_unlock_valid;
-    wire [FW-1:0][NPS-1:0][NW_WIDTH-1:0] fs_rtu_unlock_wid;
-`endif
-    wire [FW-1:0][PER_FETCH_WARPS-1:0] fs_issued;
-    wire [FW-1:0][PER_FETCH_WARPS-1:0] fs_committed;
-    wire [FW-1:0][PER_FETCH_WARPS-1:0] fs_pending_alm_empty;
-
     wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][NCTA_WIDTH-1:0] csr_rd_cta_id;
     cta_ctx_t [`VX_CFG_NUM_SFU_BLOCKS-1:0] csr_rd_ctx;
-    for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_csr_rd_cta_id
-        assign csr_rd_cta_id[b] = sched_csr_if[b].csr_rd_cta_id;
-    end
 
     VX_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-scheduler", INSTANCE_ID)))
@@ -298,105 +266,103 @@ import VX_tcu_pkg::*;
         .busy           (sched_busy)
     );
 
-    VX_fetch_xbar fetch_xbar (
-        .fs_decode_if         (fs_decode_if),
-        .is_decode_if         (is_decode_if),
-        .issue_valid          (issue_valid),
-        .issue_wis            (issue_wis),
-        .committed_warps      (committed_warps),
-        .fs_issued            (fs_issued),
-        .fs_committed         (fs_committed),
-        .fs_pending_alm_empty (fs_pending_alm_empty),
-        .branch_ctl_if        (branch_ctl_if),
-        .warp_ctl_if          (warp_ctl_if),
-        .sched_csr_if         (sched_csr_if),
-    `ifdef VX_CFG_EXT_RTU_ENABLE
-        .sched_unlock_if      (sched_unlock_if),
-    `endif
-        .cycles               (sched_cycles),
-        .instret              (sched_instret),
-        .active_warps         (sched_active_warps),
-        .lsu_sched_drained    (lsu_drained),
-        .csr_rd_ctx           (csr_rd_ctx),
-    `ifdef VX_CFG_VM_ENABLE
-        .satp                 (sched_satp),
-        .satp_wr_valid        (satp_wr_valid),
-        .satp_wr_data         (satp_wr_data),
-    `endif
-        .fs_branch            (fs_branch),
-        .fs_wctl              (fs_wctl),
-        .fs_dvstack_wid       (fs_dvstack_wid),
-        .fs_dvstack_ptr       (fs_dvstack_ptr),
-        .fs_dvstack_mscratch  (fs_dvstack_mscratch),
-        .fs_csr_rd_wid        (fs_csr_rd_wid),
-        .fs_csr_rd            (fs_csr_rd),
-    `ifdef VX_CFG_EXT_RTU_ENABLE
-        .fs_rtu_unlock_valid  (fs_rtu_unlock_valid),
-        .fs_rtu_unlock_wid    (fs_rtu_unlock_wid),
-    `endif
-        .fs_csr_wr            (fs_csr_wr)
-    );
-
 `ifdef PERF_ENABLE
     fetch_perf_t per_slice_fetch_perf [FW];
     `PERF_COUNTER_ADD (pipeline_perf.fetch, per_slice_fetch_perf, stalls, PERF_CTR_BITS, FW, (FW > 2))
 `endif
 
-`ifdef SCOPE
-    wire [FW-1:0] fetch_scope_bus_in, fetch_scope_bus_out;
-    VX_scope_switch #(
-        .N (FW)
-    ) fetch_scope_switch (
-        .clk     (clk),
-        .reset   (scope_reset_w[0]),
-        .req_in  (scope_bus_in_w[0]),
-        .rsp_out (scope_bus_out_w[0]),
-        .req_out (fetch_scope_bus_in),
-        .rsp_in  (fetch_scope_bus_out)
+    // core-wide services, reached through one port per SFU or TCU block
+
+`ifdef VX_CFG_EXT_DXA_ENABLE
+    VX_dxa_req_bus_if block_dxa_req_bus_if[`VX_CFG_NUM_SFU_BLOCKS]();
+`endif
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    VX_tex_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (TEX_REQ_TAG_WIDTH)
+    ) block_tex_bus_if[`VX_CFG_NUM_SFU_BLOCKS]();
+`endif
+`ifdef VX_CFG_EXT_RTU_ENABLE
+    VX_rtu_bus_if #(
+        .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
+        .TAG_WIDTH (RTU_REQ_TAG_WIDTH)
+    ) block_rtu_bus_if[`VX_CFG_NUM_SFU_BLOCKS]();
+`endif
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_valid, tcu_exec_ready;
+    tcu_execute_t                     tcu_exec_data [`VX_CFG_NUM_TCU_BLOCKS];
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data;
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready;
+`endif
+`ifdef TCU_META_ENABLE
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_ld_valid, tcu_agu_ld_ready;
+    tcu_execute_t                     tcu_agu_ld_data [`VX_CFG_NUM_TCU_BLOCKS];
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_result_valid, tcu_agu_result_ready;
+    tcu_result_t                      tcu_agu_result_data [`VX_CFG_NUM_TCU_BLOCKS];
+    wire                              tcu_meta_wr_en;
+    wire [NW_WIDTH-1:0]               tcu_meta_wr_wid;
+    wire [4:0]                        tcu_meta_wr_idx;
+    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data;
+`endif
+
+    VX_sfu_shared #(
+        .INSTANCE_ID (`SFORMATF(("%s-sfu-shared", INSTANCE_ID)))
+    ) sfu_shared (
+    `ifdef VX_CFG_EXT_DXA_ENABLE
+        .block_dxa_req_bus_if (block_dxa_req_bus_if),
+        .dxa_req_bus_if       (dxa_req_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_TEX_ENABLE
+        .block_tex_bus_if     (block_tex_bus_if),
+        .tex_bus_if           (tex_bus_if),
+    `endif
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        .block_rtu_bus_if     (block_rtu_bus_if),
+        .rtu_bus_if           (rtu_bus_if),
+    `endif
+        .clk                  (clk),
+        .reset                (reset)
+    );
+
+`ifdef VX_CFG_EXT_TCU_ENABLE
+    VX_tcu_shared #(
+        .INSTANCE_ID (`SFORMATF(("%s-tcu-shared", INSTANCE_ID))),
+        .BLOCK_SIZE  (`VX_CFG_NUM_TCU_BLOCKS)
+    ) tcu_shared (
+    `ifdef PERF_ENABLE
+        .tcu_perf         (tcu_perf),
+    `endif
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        .exec_valid       (tcu_exec_valid),
+        .exec_ready       (tcu_exec_ready),
+        .exec_data        (tcu_exec_data),
+        .tbuf_rs1_data    (tcu_tbuf_rs1_data),
+        .tbuf_rs2_data    (tcu_tbuf_rs2_data),
+        .tbuf_ready_eff   (tcu_tbuf_ready),
+        .tcu_lmem_if      (tcu_lmem_if),
+    `endif
+    `ifdef TCU_META_ENABLE
+        .agu_ld_valid     (tcu_agu_ld_valid),
+        .agu_ld_data      (tcu_agu_ld_data),
+        .agu_ld_ready     (tcu_agu_ld_ready),
+        .agu_result_valid (tcu_agu_result_valid),
+        .agu_result_data  (tcu_agu_result_data),
+        .agu_result_ready (tcu_agu_result_ready),
+        .meta_wr_en       (tcu_meta_wr_en),
+        .meta_wr_wid      (tcu_meta_wr_wid),
+        .meta_wr_idx      (tcu_meta_wr_idx),
+        .meta_wr_data     (tcu_meta_wr_data),
+        .tcu_mem_if       (tcu_mem_if),
+    `endif
+        .clk              (clk),
+        .reset            (reset)
     );
 `endif
 
-    for (genvar f = 0; f < FW; ++f) begin : g_fetch_slices
-        VX_fetch_slice #(
-            .INSTANCE_ID (INSTANCE_ID),
-            .SLICE_STR   ((FW > 1) ? `SFORMATF(("%0d", f)) : "")
-        ) fetch_slice (
-        `ifdef SCOPE
-            .scope_reset       (scope_reset_w[0]),
-            .scope_bus_in      (fetch_scope_bus_in[f]),
-            .scope_bus_out     (fetch_scope_bus_out[f]),
-        `endif
-            .clk               (clk),
-            .reset             (reset),
-            .core_id           (core_id),
-            .slice_id          (FETCH_FSW_W'(f)),
-        `ifdef PERF_ENABLE
-            .fetch_perf        (per_slice_fetch_perf[f]),
-        `endif
-            .slice_sched_if    (slice_sched_if[f]),
-            .icache_bus_if     (fetch_icache_if[f]),
-            .decode_if         (fs_decode_if[f]),
-            .branch            (fs_branch[f]),
-            .wctl              (fs_wctl[f]),
-            .dvstack_wid       (fs_dvstack_wid[f]),
-            .dvstack_ptr       (fs_dvstack_ptr[f]),
-            .dvstack_mscratch  (fs_dvstack_mscratch[f]),
-            .csr_rd_wid        (fs_csr_rd_wid[f]),
-            .csr_rd            (fs_csr_rd[f]),
-            .csr_wr            (fs_csr_wr[f]),
-        `ifdef VX_CFG_EXT_RTU_ENABLE
-            .rtu_unlock_valid  (fs_rtu_unlock_valid[f]),
-            .rtu_unlock_wid    (fs_rtu_unlock_wid[f]),
-        `endif
-            .issued            (fs_issued[f]),
-            .committed         (fs_committed[f]),
-            .pending_alm_empty (fs_pending_alm_empty[f])
-        );
-    end
+    // fetch, issue, execute and commit, structured by COMPUTE_SLICES / BACKEND_SLICES
 
-    // issue, execute and commit
-
-    if (COMPUTE_SLICES_ENABLE) begin : g_compute_slices
+    if (COMPUTE_SLICES) begin : g_compute_slices
 
     `ifdef PERF_ENABLE
         issue_perf_t per_slice_issue_perf [`VX_CFG_ISSUE_WIDTH];
@@ -407,40 +373,6 @@ import VX_tcu_pkg::*;
             `PERF_COUNTER_ADD (pipeline_perf.issue, per_slice_issue_perf, dispatch_stalls[i], PERF_CTR_BITS, `VX_CFG_ISSUE_WIDTH, (`VX_CFG_ISSUE_WIDTH > 2))
             `PERF_COUNTER_ADD (pipeline_perf.issue, per_slice_issue_perf, dispatch_instrs[i], PERF_CTR_BITS, `VX_CFG_ISSUE_WIDTH, (`VX_CFG_ISSUE_WIDTH > 2))
         end
-    `endif
-
-    `ifdef VX_CFG_EXT_DXA_ENABLE
-        VX_dxa_req_bus_if slice_dxa_req_bus_if[`VX_CFG_ISSUE_WIDTH]();
-    `endif
-    `ifdef VX_CFG_EXT_TEX_ENABLE
-        VX_tex_bus_if #(
-            .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
-            .TAG_WIDTH (TEX_REQ_TAG_WIDTH)
-        ) slice_tex_bus_if[`VX_CFG_ISSUE_WIDTH]();
-    `endif
-    `ifdef VX_CFG_EXT_RTU_ENABLE
-        VX_rtu_bus_if #(
-            .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
-            .TAG_WIDTH (RTU_REQ_TAG_WIDTH)
-        ) slice_rtu_bus_if[`VX_CFG_ISSUE_WIDTH]();
-    `endif
-
-    `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        wire [`VX_CFG_ISSUE_WIDTH-1:0] tcu_exec_valid, tcu_exec_ready;
-        tcu_execute_t                  tcu_exec_data [`VX_CFG_ISSUE_WIDTH];
-        wire [`VX_CFG_ISSUE_WIDTH-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data;
-        wire [`VX_CFG_ISSUE_WIDTH-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
-        wire [`VX_CFG_ISSUE_WIDTH-1:0] tcu_tbuf_ready;
-    `endif
-    `ifdef TCU_META_ENABLE
-        wire [`VX_CFG_ISSUE_WIDTH-1:0] tcu_agu_ld_valid, tcu_agu_ld_ready;
-        tcu_execute_t                  tcu_agu_ld_data [`VX_CFG_ISSUE_WIDTH];
-        wire [`VX_CFG_ISSUE_WIDTH-1:0] tcu_agu_result_valid, tcu_agu_result_ready;
-        tcu_result_t                   tcu_agu_result_data [`VX_CFG_ISSUE_WIDTH];
-        wire                           tcu_meta_wr_en;
-        wire [NW_WIDTH-1:0]            tcu_meta_wr_wid;
-        wire [4:0]                     tcu_meta_wr_idx;
-        wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data;
     `endif
 
     `ifdef SCOPE
@@ -456,6 +388,7 @@ import VX_tcu_pkg::*;
             .rsp_in  (slice_scope_bus_out)
         );
     `endif
+        `SCOPE_IO_UNUSED (0)
         `SCOPE_IO_UNUSED (2)
 
         for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_slices
@@ -475,27 +408,32 @@ import VX_tcu_pkg::*;
                 .core_id              (core_id),
                 .slice_id             (ISSUE_ISW_W'(i)),
             `ifdef PERF_ENABLE
+                .fetch_perf           (per_slice_fetch_perf[i]),
                 .issue_perf           (per_slice_issue_perf[i]),
             `endif
-                .decode_if            (is_decode_if[i]),
-                .warp_issued          (issue_valid[i]),
-                .warp_issued_wis      (issue_wis[i]),
+                .slice_sched_if       (slice_sched_if[i]),
+                .icache_bus_if        (fetch_icache_if[i]),
                 .committed_wis        (committed_wis),
-                .branch_ctl_if        (branch_ctl_if[i]),
-                .warp_ctl_if          (warp_ctl_if[i]),
-                .sched_csr_if         (sched_csr_if[i]),
-            `ifdef VX_CFG_EXT_RTU_ENABLE
-                .sched_unlock_if      (sched_unlock_if[i]),
+                .cycles               (sched_cycles),
+                .instret              (sched_instret),
+                .active_warps         (sched_active_warps),
+                .lsu_sched_drained    (lsu_drained),
+                .csr_rd_cta_id        (csr_rd_cta_id[i]),
+                .csr_rd_ctx           (csr_rd_ctx[i]),
+            `ifdef VX_CFG_VM_ENABLE
+                .satp                 (sched_satp[i]),
+                .satp_wr_valid        (satp_wr_valid[i]),
+                .satp_wr_data         (satp_wr_data[i]),
             `endif
                 .lsu_client_if        (lsu_client_if[i]),
             `ifdef VX_CFG_EXT_DXA_ENABLE
-                .dxa_req_bus_if       (slice_dxa_req_bus_if[i]),
+                .dxa_req_bus_if       (block_dxa_req_bus_if[i]),
             `endif
             `ifdef VX_CFG_EXT_TEX_ENABLE
-                .tex_bus_if           (slice_tex_bus_if[i]),
+                .tex_bus_if           (block_tex_bus_if[i]),
             `endif
             `ifdef VX_CFG_EXT_RTU_ENABLE
-                .rtu_bus_if           (slice_rtu_bus_if[i]),
+                .rtu_bus_if           (block_rtu_bus_if[i]),
             `endif
             `ifdef VX_CFG_TCU_WGMMA_ENABLE
                 .tcu_exec_valid       (tcu_exec_valid[i]),
@@ -526,155 +464,331 @@ import VX_tcu_pkg::*;
             end
         end
 
-        VX_sfu_shared #(
-            .INSTANCE_ID (`SFORMATF(("%s-execute-sfu-shared", INSTANCE_ID)))
-        ) sfu_shared (
-        `ifdef VX_CFG_EXT_DXA_ENABLE
-            .block_dxa_req_bus_if (slice_dxa_req_bus_if),
-            .dxa_req_bus_if       (dxa_req_bus_if),
-        `endif
-        `ifdef VX_CFG_EXT_TEX_ENABLE
-            .block_tex_bus_if     (slice_tex_bus_if),
-            .tex_bus_if           (tex_bus_if),
-        `endif
+    end else begin : g_crossbar
+
+        VX_decode_if        fs_decode_if[FW]();
+        VX_decode_if        is_decode_if[`VX_CFG_ISSUE_WIDTH]();
+        VX_branch_ctl_if    branch_ctl_if[`VX_CFG_NUM_ALU_BLOCKS]();
+        VX_warp_ctl_if      warp_ctl_if[`VX_CFG_NUM_SFU_BLOCKS]();
+        VX_sched_csr_if     sched_csr_if[`VX_CFG_NUM_SFU_BLOCKS]();
+        for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_csr_rd_cta_id
+            assign csr_rd_cta_id[b] = sched_csr_if[b].csr_rd_cta_id;
+        end
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        VX_sched_unlock_if  sched_unlock_if[`VX_CFG_NUM_SFU_BLOCKS]();
+    `endif
+        wire [`VX_CFG_ISSUE_WIDTH-1:0] issue_valid;
+        wire [`VX_CFG_ISSUE_WIDTH-1:0][ISSUE_WIS_W-1:0] issue_wis;
+
+        localparam NPA = FETCH_ALU_PORTS;
+        localparam NPS = FETCH_SFU_PORTS;
+
+        sched_branch_t [FW-1:0][NPA-1:0] fs_branch;
+        sched_wctl_t [FW-1:0][NPS-1:0] fs_wctl;
+        wire [FW-1:0][NPS-1:0][NW_WIDTH-1:0] fs_dvstack_wid;
+        wire [FW-1:0][NPS-1:0][DV_STACK_SIZEW-1:0] fs_dvstack_ptr;
+        wire [FW-1:0][NPS-1:0][`VX_CFG_MEM_ADDR_WIDTH-1:0] fs_dvstack_mscratch;
+        wire [FW-1:0][NPS-1:0][NW_WIDTH-1:0] fs_csr_rd_wid;
+        sched_csr_rd_t [FW-1:0][NPS-1:0] fs_csr_rd;
+        sched_csr_wr_t [FW-1:0][NPS-1:0] fs_csr_wr;
+    `ifdef VX_CFG_EXT_RTU_ENABLE
+        wire [FW-1:0][NPS-1:0] fs_rtu_unlock_valid;
+        wire [FW-1:0][NPS-1:0][NW_WIDTH-1:0] fs_rtu_unlock_wid;
+    `endif
+        wire [FW-1:0][PER_FETCH_WARPS-1:0] fs_issued;
+        wire [FW-1:0][PER_FETCH_WARPS-1:0] fs_committed;
+        wire [FW-1:0][PER_FETCH_WARPS-1:0] fs_pending_alm_empty;
+
+        VX_frontend_xbar frontend_xbar (
+            .fs_decode_if         (fs_decode_if),
+            .is_decode_if         (is_decode_if),
+            .issue_valid          (issue_valid),
+            .issue_wis            (issue_wis),
+            .committed_warps      (committed_warps),
+            .fs_issued            (fs_issued),
+            .fs_committed         (fs_committed),
+            .fs_pending_alm_empty (fs_pending_alm_empty),
+            .branch_ctl_if        (branch_ctl_if),
+            .warp_ctl_if          (warp_ctl_if),
+            .sched_csr_if         (sched_csr_if),
         `ifdef VX_CFG_EXT_RTU_ENABLE
-            .block_rtu_bus_if     (slice_rtu_bus_if),
-            .rtu_bus_if           (rtu_bus_if),
+            .sched_unlock_if      (sched_unlock_if),
         `endif
-            .clk                  (clk),
-            .reset                (reset)
+            .cycles               (sched_cycles),
+            .instret              (sched_instret),
+            .active_warps         (sched_active_warps),
+            .lsu_sched_drained    (lsu_drained),
+            .csr_rd_ctx           (csr_rd_ctx),
+        `ifdef VX_CFG_VM_ENABLE
+            .satp                 (sched_satp),
+            .satp_wr_valid        (satp_wr_valid),
+            .satp_wr_data         (satp_wr_data),
+        `endif
+            .fs_branch            (fs_branch),
+            .fs_wctl              (fs_wctl),
+            .fs_dvstack_wid       (fs_dvstack_wid),
+            .fs_dvstack_ptr       (fs_dvstack_ptr),
+            .fs_dvstack_mscratch  (fs_dvstack_mscratch),
+            .fs_csr_rd_wid        (fs_csr_rd_wid),
+            .fs_csr_rd            (fs_csr_rd),
+        `ifdef VX_CFG_EXT_RTU_ENABLE
+            .fs_rtu_unlock_valid  (fs_rtu_unlock_valid),
+            .fs_rtu_unlock_wid    (fs_rtu_unlock_wid),
+        `endif
+            .fs_csr_wr            (fs_csr_wr)
         );
 
-    `ifdef VX_CFG_EXT_TCU_ENABLE
-        VX_tcu_shared #(
-            .INSTANCE_ID (`SFORMATF(("%s-execute-tcu", INSTANCE_ID))),
-            .BLOCK_SIZE  (`VX_CFG_ISSUE_WIDTH)
-        ) tcu_shared (
-        `ifdef PERF_ENABLE
-            .tcu_perf         (tcu_perf),
-        `endif
-        `ifdef VX_CFG_TCU_WGMMA_ENABLE
-            .exec_valid       (tcu_exec_valid),
-            .exec_ready       (tcu_exec_ready),
-            .exec_data        (tcu_exec_data),
-            .tbuf_rs1_data    (tcu_tbuf_rs1_data),
-            .tbuf_rs2_data    (tcu_tbuf_rs2_data),
-            .tbuf_ready_eff   (tcu_tbuf_ready),
-            .tcu_lmem_if      (tcu_lmem_if),
-        `endif
-        `ifdef TCU_META_ENABLE
-            .agu_ld_valid     (tcu_agu_ld_valid),
-            .agu_ld_data      (tcu_agu_ld_data),
-            .agu_ld_ready     (tcu_agu_ld_ready),
-            .agu_result_valid (tcu_agu_result_valid),
-            .agu_result_data  (tcu_agu_result_data),
-            .agu_result_ready (tcu_agu_result_ready),
-            .meta_wr_en       (tcu_meta_wr_en),
-            .meta_wr_wid      (tcu_meta_wr_wid),
-            .meta_wr_idx      (tcu_meta_wr_idx),
-            .meta_wr_data     (tcu_meta_wr_data),
-            .tcu_mem_if       (tcu_mem_if),
-        `endif
-            .clk              (clk),
-            .reset            (reset)
+    `ifdef SCOPE
+        wire [FW-1:0] frontend_scope_bus_in, frontend_scope_bus_out;
+        VX_scope_switch #(
+            .N (FW)
+        ) frontend_scope_switch (
+            .clk     (clk),
+            .reset   (scope_reset_w[0]),
+            .req_in  (scope_bus_in_w[0]),
+            .rsp_out (scope_bus_out_w[0]),
+            .req_out (frontend_scope_bus_in),
+            .rsp_in  (frontend_scope_bus_out)
         );
     `endif
 
-    end else begin : g_stage_sliced
-
-        VX_issue_sched_if   issue_sched_if[`VX_CFG_ISSUE_WIDTH]();
-        VX_commit_sched_if  commit_sched_if();
-
-        VX_dispatch_if  dispatch_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
-        VX_commit_if    commit_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
-        VX_writeback_if writeback_if[`VX_CFG_ISSUE_WIDTH]();
-
-        VX_issue #(
-            .INSTANCE_ID (`SFORMATF(("%s-issue", INSTANCE_ID)))
-        ) issue (
-            `SCOPE_IO_BIND  (1)
-
-            .clk            (clk),
-            .reset          (reset),
-
-        `ifdef PERF_ENABLE
-            .issue_perf     (pipeline_perf.issue),
-        `endif
-
-            .decode_if      (is_decode_if),
-            .writeback_if   (writeback_if),
-            .dispatch_if    (dispatch_if),
-            .issue_sched_if (issue_sched_if)
-        );
-
-        for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_issue_sched
-            assign issue_valid[i] = issue_sched_if[i].valid;
-            assign issue_wis[i]   = issue_sched_if[i].wis;
+        for (genvar f = 0; f < FW; ++f) begin : g_frontend_slices
+            VX_frontend_slice #(
+                .INSTANCE_ID (INSTANCE_ID),
+                .SLICE_STR   ((FW > 1) ? `SFORMATF(("%0d", f)) : "")
+            ) frontend_slice (
+            `ifdef SCOPE
+                .scope_reset       (scope_reset_w[0]),
+                .scope_bus_in      (frontend_scope_bus_in[f]),
+                .scope_bus_out     (frontend_scope_bus_out[f]),
+            `endif
+                .clk               (clk),
+                .reset             (reset),
+                .core_id           (core_id),
+                .slice_id          (FETCH_FSW_W'(f)),
+            `ifdef PERF_ENABLE
+                .fetch_perf        (per_slice_fetch_perf[f]),
+            `endif
+                .slice_sched_if    (slice_sched_if[f]),
+                .icache_bus_if     (fetch_icache_if[f]),
+                .decode_if         (fs_decode_if[f]),
+                .branch            (fs_branch[f]),
+                .wctl              (fs_wctl[f]),
+                .dvstack_wid       (fs_dvstack_wid[f]),
+                .dvstack_ptr       (fs_dvstack_ptr[f]),
+                .dvstack_mscratch  (fs_dvstack_mscratch[f]),
+                .csr_rd_wid        (fs_csr_rd_wid[f]),
+                .csr_rd            (fs_csr_rd[f]),
+                .csr_wr            (fs_csr_wr[f]),
+            `ifdef VX_CFG_EXT_RTU_ENABLE
+                .rtu_unlock_valid  (fs_rtu_unlock_valid[f]),
+                .rtu_unlock_wid    (fs_rtu_unlock_wid[f]),
+            `endif
+                .issued            (fs_issued[f]),
+                .committed         (fs_committed[f]),
+                .pending_alm_empty (fs_pending_alm_empty[f])
+            );
         end
 
-        VX_execute #(
-            .INSTANCE_ID (`SFORMATF(("%s-execute", INSTANCE_ID)))
-        ) execute (
-            `SCOPE_IO_BIND  (2)
-
-            .clk            (clk),
-            .reset          (reset),
-            .core_id        (core_id),
+        if (BACKEND_SLICES) begin : g_backend_slices
 
         `ifdef PERF_ENABLE
-        `ifdef VX_CFG_EXT_TCU_ENABLE
-            .tcu_perf       (tcu_perf),
-        `endif
-        `endif
-
-            // execute exposes LSU client interfaces; lsu_scheduler sits between
-            // execute and lsu_mem_if (which connects to mem_unit).
-            .lsu_client_if  (lsu_client_if),
-
-        `ifdef TCU_META_ENABLE
-            .tcu_mem_if     (tcu_mem_if),
+            issue_perf_t per_slice_issue_perf [`VX_CFG_ISSUE_WIDTH];
+            `PERF_COUNTER_ADD (pipeline_perf.issue, per_slice_issue_perf, ibf_stalls, PERF_CTR_BITS, `VX_CFG_ISSUE_WIDTH, (`VX_CFG_ISSUE_WIDTH > 2))
+            `PERF_COUNTER_ADD (pipeline_perf.issue, per_slice_issue_perf, scb_stalls, PERF_CTR_BITS, `VX_CFG_ISSUE_WIDTH, (`VX_CFG_ISSUE_WIDTH > 2))
+            `PERF_COUNTER_ADD (pipeline_perf.issue, per_slice_issue_perf, opd_stalls, PERF_CTR_BITS, `VX_CFG_ISSUE_WIDTH, (`VX_CFG_ISSUE_WIDTH > 2))
+            for (genvar i = 0; i < NUM_EX_UNITS; ++i) begin : g_issue_perf_units_uses
+                `PERF_COUNTER_ADD (pipeline_perf.issue, per_slice_issue_perf, dispatch_stalls[i], PERF_CTR_BITS, `VX_CFG_ISSUE_WIDTH, (`VX_CFG_ISSUE_WIDTH > 2))
+                `PERF_COUNTER_ADD (pipeline_perf.issue, per_slice_issue_perf, dispatch_instrs[i], PERF_CTR_BITS, `VX_CFG_ISSUE_WIDTH, (`VX_CFG_ISSUE_WIDTH > 2))
+            end
         `endif
 
-            .dispatch_if    (dispatch_if),
-            .commit_if      (commit_if),
-
-            .sched_csr_if   (sched_csr_if),
-
-        `ifdef VX_CFG_TCU_WGMMA_ENABLE
-            .tcu_lmem_if    (tcu_lmem_if),
+        `ifdef SCOPE
+            wire [`VX_CFG_ISSUE_WIDTH-1:0] slice_scope_bus_in, slice_scope_bus_out;
+            VX_scope_switch #(
+                .N (`VX_CFG_ISSUE_WIDTH)
+            ) slice_scope_switch (
+                .clk     (clk),
+                .reset   (scope_reset_w[1]),
+                .req_in  (scope_bus_in_w[1]),
+                .rsp_out (scope_bus_out_w[1]),
+                .req_out (slice_scope_bus_in),
+                .rsp_in  (slice_scope_bus_out)
+            );
         `endif
-        `ifdef VX_CFG_EXT_DXA_ENABLE
-            .dxa_req_bus_if (dxa_req_bus_if),
-        `endif
-        `ifdef VX_CFG_EXT_TEX_ENABLE
-            .tex_bus_if     (tex_bus_if),
-        `endif
-        `ifdef VX_CFG_EXT_RTU_ENABLE
-            .rtu_bus_if     (rtu_bus_if),
-            .sched_unlock_if(sched_unlock_if),
-        `endif
+            `SCOPE_IO_UNUSED (2)
 
-            .warp_shared_if (warp_shared_if),
+            for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_slices
+                wire [PER_ISSUE_WARPS-1:0] committed_wis;
 
-            .warp_ctl_if    (warp_ctl_if),
-            .branch_ctl_if  (branch_ctl_if)
-        );
+                VX_backend_slice #(
+                    .INSTANCE_ID (INSTANCE_ID),
+                    .SLICE_STR   (`SFORMATF(("%0d", i)))
+                ) backend_slice (
+                `ifdef SCOPE
+                    .scope_reset          (scope_reset_w[1]),
+                    .scope_bus_in         (slice_scope_bus_in[i]),
+                    .scope_bus_out        (slice_scope_bus_out[i]),
+                `endif
+                    .clk                  (clk),
+                    .reset                (reset),
+                    .core_id              (core_id),
+                    .slice_id             (ISSUE_ISW_W'(i)),
+                `ifdef PERF_ENABLE
+                    .issue_perf           (per_slice_issue_perf[i]),
+                `endif
+                    .decode_if            (is_decode_if[i]),
+                    .warp_issued          (issue_valid[i]),
+                    .warp_issued_wis      (issue_wis[i]),
+                    .committed_wis        (committed_wis),
+                    .branch_ctl_if        (branch_ctl_if[i]),
+                    .warp_ctl_if          (warp_ctl_if[i]),
+                    .sched_csr_if         (sched_csr_if[i]),
+                `ifdef VX_CFG_EXT_RTU_ENABLE
+                    .sched_unlock_if      (sched_unlock_if[i]),
+                `endif
+                    .lsu_client_if        (lsu_client_if[i]),
+                `ifdef VX_CFG_EXT_DXA_ENABLE
+                    .dxa_req_bus_if       (block_dxa_req_bus_if[i]),
+                `endif
+                `ifdef VX_CFG_EXT_TEX_ENABLE
+                    .tex_bus_if           (block_tex_bus_if[i]),
+                `endif
+                `ifdef VX_CFG_EXT_RTU_ENABLE
+                    .rtu_bus_if           (block_rtu_bus_if[i]),
+                `endif
+                `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                    .tcu_exec_valid       (tcu_exec_valid[i]),
+                    .tcu_exec_ready       (tcu_exec_ready[i]),
+                    .tcu_exec_data        (tcu_exec_data[i]),
+                    .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data[i]),
+                    .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data[i]),
+                    .tcu_tbuf_ready       (tcu_tbuf_ready[i]),
+                `endif
+                `ifdef TCU_META_ENABLE
+                    .tcu_agu_ld_valid     (tcu_agu_ld_valid[i]),
+                    .tcu_agu_ld_data      (tcu_agu_ld_data[i]),
+                    .tcu_agu_ld_ready     (tcu_agu_ld_ready[i]),
+                    .tcu_agu_result_valid (tcu_agu_result_valid[i]),
+                    .tcu_agu_result_data  (tcu_agu_result_data[i]),
+                    .tcu_agu_result_ready (tcu_agu_result_ready[i]),
+                    .tcu_meta_wr_en       (tcu_meta_wr_en && (NW_WIDTH'(tcu_meta_wr_wid % `VX_CFG_NUM_TCU_BLOCKS) == NW_WIDTH'(i))),
+                    .tcu_meta_wr_wid      (tcu_meta_wr_wid),
+                    .tcu_meta_wr_idx      (tcu_meta_wr_idx),
+                    .tcu_meta_wr_data     (tcu_meta_wr_data),
+                `endif
+                    .warp_shared_if       (warp_shared_if[i])
+                );
 
-        VX_commit #(
-            .INSTANCE_ID (`SFORMATF(("%s-commit", INSTANCE_ID)))
-        ) commit (
-            .clk            (clk),
-            .reset          (reset),
+                // wid = {wis, isw}: slice i owns every ISSUE_WIDTH-th warp starting at i
+                for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_committed
+                    assign committed_warps[w * `VX_CFG_ISSUE_WIDTH + i] = committed_wis[w];
+                end
+            end
 
-            .commit_if      (commit_if),
+        end else begin : g_stage_sliced
 
-            .writeback_if   (writeback_if),
+            VX_issue_sched_if   issue_sched_if[`VX_CFG_ISSUE_WIDTH]();
+            VX_commit_sched_if  commit_sched_if();
 
-            .commit_sched_if(commit_sched_if)
-        );
+            VX_dispatch_if  dispatch_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
+            VX_commit_if    commit_if[NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH]();
+            VX_writeback_if writeback_if[`VX_CFG_ISSUE_WIDTH]();
 
-        assign committed_warps = commit_sched_if.committed_warps;
+            VX_issue #(
+                .INSTANCE_ID (`SFORMATF(("%s-issue", INSTANCE_ID)))
+            ) issue (
+                `SCOPE_IO_BIND  (1)
 
+                .clk            (clk),
+                .reset          (reset),
+
+            `ifdef PERF_ENABLE
+                .issue_perf     (pipeline_perf.issue),
+            `endif
+
+                .decode_if      (is_decode_if),
+                .writeback_if   (writeback_if),
+                .dispatch_if    (dispatch_if),
+                .issue_sched_if (issue_sched_if)
+            );
+
+            for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_issue_sched
+                assign issue_valid[i] = issue_sched_if[i].valid;
+                assign issue_wis[i]   = issue_sched_if[i].wis;
+            end
+
+            VX_execute #(
+                .INSTANCE_ID (`SFORMATF(("%s-execute", INSTANCE_ID)))
+            ) execute (
+                `SCOPE_IO_BIND  (2)
+
+                .clk                  (clk),
+                .reset                (reset),
+                .core_id              (core_id),
+
+                // execute exposes LSU client interfaces; lsu_scheduler sits between
+                // execute and lsu_mem_if (which connects to mem_unit).
+                .lsu_client_if        (lsu_client_if),
+
+                .dispatch_if          (dispatch_if),
+                .commit_if            (commit_if),
+
+                .sched_csr_if         (sched_csr_if),
+
+            `ifdef VX_CFG_TCU_WGMMA_ENABLE
+                .tcu_exec_valid       (tcu_exec_valid),
+                .tcu_exec_ready       (tcu_exec_ready),
+                .tcu_exec_data        (tcu_exec_data),
+                .tcu_tbuf_rs1_data    (tcu_tbuf_rs1_data),
+                .tcu_tbuf_rs2_data    (tcu_tbuf_rs2_data),
+                .tcu_tbuf_ready       (tcu_tbuf_ready),
+            `endif
+            `ifdef TCU_META_ENABLE
+                .tcu_agu_ld_valid     (tcu_agu_ld_valid),
+                .tcu_agu_ld_data      (tcu_agu_ld_data),
+                .tcu_agu_ld_ready     (tcu_agu_ld_ready),
+                .tcu_agu_result_valid (tcu_agu_result_valid),
+                .tcu_agu_result_data  (tcu_agu_result_data),
+                .tcu_agu_result_ready (tcu_agu_result_ready),
+                .tcu_meta_wr_en       (tcu_meta_wr_en),
+                .tcu_meta_wr_wid      (tcu_meta_wr_wid),
+                .tcu_meta_wr_idx      (tcu_meta_wr_idx),
+                .tcu_meta_wr_data     (tcu_meta_wr_data),
+            `endif
+            `ifdef VX_CFG_EXT_DXA_ENABLE
+                .dxa_req_bus_if       (block_dxa_req_bus_if),
+            `endif
+            `ifdef VX_CFG_EXT_TEX_ENABLE
+                .tex_bus_if           (block_tex_bus_if),
+            `endif
+            `ifdef VX_CFG_EXT_RTU_ENABLE
+                .rtu_bus_if           (block_rtu_bus_if),
+                .sched_unlock_if      (sched_unlock_if),
+            `endif
+
+                .warp_shared_if       (warp_shared_if),
+
+                .warp_ctl_if          (warp_ctl_if),
+                .branch_ctl_if        (branch_ctl_if)
+            );
+
+            VX_commit #(
+                .INSTANCE_ID (`SFORMATF(("%s-commit", INSTANCE_ID)))
+            ) commit (
+                .clk            (clk),
+                .reset          (reset),
+
+                .commit_if      (commit_if),
+
+                .writeback_if   (writeback_if),
+
+                .commit_sched_if(commit_sched_if)
+            );
+
+            assign committed_warps = commit_sched_if.committed_warps;
+
+        end
     end
 
     // One memory scheduler per LSU block. With the TCU metadata AGU, every block

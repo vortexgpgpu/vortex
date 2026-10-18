@@ -79,7 +79,7 @@ public:
     const std::string& name = simobject_->name();
     char sname[100];
 
-    // per fetch slice: scheduler-to-fetch and fetch-to-decode latches, and the
+    // per frontend slice: scheduler-to-fetch and fetch-to-decode latches, and the
     // icache tags of the slice's in-flight fetches
     for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
       snprintf(sname, 100, "fetch_latch%d", f);
@@ -219,7 +219,7 @@ public:
     dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS,
                               VX_CFG_DTLB_SIZE, local_core * 2 + 0, false);
 
-    // Per-core icache MMU, one port per fetch slice. Fetch reads/writes its
+    // Per-core icache MMU, one port per frontend slice. Fetch reads/writes its
     // upstream channels directly; the downstream side is bound to the Core's
     // icache ports below.
     snprintf(sname, 100, "%s-icache_mmu", name.c_str());
@@ -376,7 +376,7 @@ public:
 
     scheduler_->schedule_begin();
 
-    // Each fetch slice picks among its own warps whose ibuffer is not full; a
+    // Each frontend slice picks among its own warps whose ibuffer is not full; a
     // buffer is full at exactly IBUF_SIZE entries. With an L1, once every warp's
     // buffer is full any ready warp may fetch, its instruction waiting at decode.
     bool all_full = (VX_CFG_ICACHE_ENABLED || VX_CFG_DCACHE_ENABLED);
@@ -426,7 +426,7 @@ public:
     }
   }
 
-  // Fetch slice f: its icache response into its decode latch, then its next
+  // Frontend slice f: its icache response into its decode latch, then its next
   // fetch request out of its fetch latch, on icache port f.
   void fetch_slice(uint32_t f) {
     auto& fetch_latch    = *fetch_latch_.at(f);
@@ -541,7 +541,7 @@ public:
     }
   }
 
-  // One fetch slice's decoder: it feeds the issue slice of each decoded warp.
+  // One frontend slice's decoder: it feeds the issue slice of each decoded warp.
   void decode_slice(TFifo<instr_trace_t*>& decode_latch) {
     if (decode_latch.empty()) {
       return;
@@ -1202,7 +1202,7 @@ private:
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 
 #ifdef VX_CFG_EXT_C_ENABLE
-  // RVC fetch SimObject per fetch slice (per-warp halfword buffer + refetch
+  // RVC fetch SimObject per frontend slice (per-warp halfword buffer + refetch
   // queue + pick/commit_request helpers). See decompressor.h.
   std::vector<Decompressor::Ptr> decompressors_;
 #endif

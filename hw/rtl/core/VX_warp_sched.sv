@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-// The warp scheduler of one fetch slice: the state of the slice's warps
+// The warp scheduler of one frontend slice: the state of the slice's warps
 // (wid = {wfs, slice_id}), its warp selection and a registered fetch request to
 // the slice's fetch unit, which names warps by wfs. FU block port q carries the
 // traffic of the local warps with wfs mod PORTS == q, addressed by core-wide wid;

@@ -630,7 +630,7 @@ package VX_gpu_pkg;
         end
     endfunction
 
-    // Fetch slice f schedules and fetches the warps with wid mod FETCH_WIDTH == f,
+    // Frontend slice f schedules and fetches the warps with wid mod FETCH_WIDTH == f,
     // naming them by their local id wfs = wid / FETCH_WIDTH.
     localparam FETCH_FSW_BITS  = `CLOG2(`VX_CFG_FETCH_WIDTH);
     localparam FETCH_FSW_W     = `UP(FETCH_FSW_BITS);
@@ -661,8 +661,8 @@ package VX_gpu_pkg;
         end
     endfunction
 
-    // FU block ports per fetch slice: a unit with B blocks serves warps with
-    // wid mod B == b, so B >= FETCH_WIDTH gives each fetch slice B / FETCH_WIDTH
+    // FU block ports per frontend slice: a unit with B blocks serves warps with
+    // wid mod B == b, so B >= FETCH_WIDTH gives each frontend slice B / FETCH_WIDTH
     // blocks and B < FETCH_WIDTH shares each block among FETCH_WIDTH / B slices.
     localparam FETCH_ALU_PORTS = (`VX_CFG_NUM_ALU_BLOCKS > `VX_CFG_FETCH_WIDTH) ? (`VX_CFG_NUM_ALU_BLOCKS / `VX_CFG_FETCH_WIDTH) : 1;
     localparam FETCH_SFU_PORTS = (`VX_CFG_NUM_SFU_BLOCKS > `VX_CFG_FETCH_WIDTH) ? (`VX_CFG_NUM_SFU_BLOCKS / `VX_CFG_FETCH_WIDTH) : 1;
@@ -719,14 +719,17 @@ package VX_gpu_pkg;
         end
     endfunction
 
-    // The core is built from ISSUE_WIDTH compute slices (VX_compute_slice) when
-    // every execution unit has one block per issue slice; otherwise it keeps the
-    // stage-sliced issue / execute / commit structure.
-    localparam COMPUTE_SLICES_ENABLE = (`VX_CFG_NUM_ALU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
-                                    && (`VX_CFG_NUM_LSU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
-                                    && (`VX_CFG_NUM_SFU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
-                                    && (!`VX_CFG_EXT_F_ENABLED || (`VX_CFG_NUM_FPU_BLOCKS == `VX_CFG_ISSUE_WIDTH))
-                                    && (!`VX_CFG_EXT_TCU_ENABLED || (`VX_CFG_NUM_TCU_BLOCKS == `VX_CFG_ISSUE_WIDTH));
+    // The core structure follows from the widths. When every execution unit has
+    // one block per issue slice, the back end is ISSUE_WIDTH backend slices
+    // (VX_backend_slice: issue, execute, commit); otherwise it is stage-sliced.
+    // When the fetch width matches too, each backend slice and its frontend slice
+    // form one compute slice (VX_compute_slice), with no frontend crossbar.
+    localparam BACKEND_SLICES = (`VX_CFG_NUM_ALU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
+                             && (`VX_CFG_NUM_LSU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
+                             && (`VX_CFG_NUM_SFU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
+                             && (!`VX_CFG_EXT_F_ENABLED || (`VX_CFG_NUM_FPU_BLOCKS == `VX_CFG_ISSUE_WIDTH))
+                             && (!`VX_CFG_EXT_TCU_ENABLED || (`VX_CFG_NUM_TCU_BLOCKS == `VX_CFG_ISSUE_WIDTH));
+    localparam COMPUTE_SLICES = BACKEND_SLICES && (`VX_CFG_FETCH_WIDTH == `VX_CFG_ISSUE_WIDTH);
 
     /////////////////////////////// TENSOR UNIT ///////////////////////////////
 
@@ -1022,7 +1025,7 @@ package VX_gpu_pkg;
         logic [NCTA_WIDTH-1:0]  id_cta;
     } cta_lane_bcast_t;
 
-    // Scheduler traffic between an FU block and the fetch slice owning the warp,
+    // Scheduler traffic between an FU block and the frontend slice owning the warp,
     // addressed by core-wide wid.
 
     // ALU branch resolution
@@ -1648,11 +1651,11 @@ package VX_gpu_pkg;
     // Block size in bytes
     localparam ICACHE_LINE_SIZE	    = `VX_CFG_L1_LINE_SIZE;
 
-    // Request ports per core: one per fetch slice, each fetching its own warps
+    // Request ports per core: one per frontend slice, each fetching its own warps
     localparam ICACHE_NUM_REQS  = `VX_CFG_FETCH_WIDTH;
     localparam ICACHE_NUM_BANKS = `VX_CFG_ICACHE_NUM_BANKS;
 
-    // Core request tag Id bits: the warp id local to the requesting fetch slice
+    // Core request tag Id bits: the warp id local to the requesting frontend slice
     localparam ICACHE_TAG_ID_BITS	= FETCH_WFS_W;
 
     // Core request tag bits as VX_fetch writes them (UUID + warp id).

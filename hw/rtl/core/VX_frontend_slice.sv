@@ -13,11 +13,11 @@
 
 `include "VX_define.vh"
 
-// One fetch slice: warp scheduling, fetch and decode of the warps with
+// One frontend slice: warp scheduling, fetch and decode of the warps with
 // wid mod FETCH_WIDTH == slice_id, on the slice's own icache port. The front end
 // names the slice's warps by wfs; decoded instructions leave with their
 // core-wide wid, and ibuffer pops return indexed by wfs.
-module VX_fetch_slice import VX_gpu_pkg::*; #(
+module VX_frontend_slice import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter `STRING SLICE_STR   = ""
 ) (
