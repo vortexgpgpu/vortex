@@ -128,10 +128,18 @@ public:
       ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, VX_CFG_IBUF_SIZE);
     }
 
-    // create the memory coalescer
+    // create the memory coalescer, or the lane adapter that replaces it.
+    // Both tick ahead of the lmem switch: their response paths are
+    // combinational, and the dcache registers its output.
+    const bool dcache_coalescing = (VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE);
+    std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
       snprintf(sname, 100, "%s-coalescer%d", name.c_str(), b);
       mem_coalescers_.at(b) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSU_QUEUE_OUT_SIZE, 1);
+      if (!dcache_coalescing) {
+        snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
+        lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1, 0);
+      }
     }
 
     // create local memory.
@@ -180,7 +188,7 @@ public:
 
     // The first data-cache port also carries the cache-flush injection, which
     // registers its requests once more.
-    if ((VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) {
+    if (dcache_coalescing) {
       // connect memory coalescer; its memory side drives the dcache
       // channels directly (combinational lane fan-out/fan-in).
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
@@ -195,10 +203,7 @@ public:
     } else {
       // bypass memory coalescer: per-block lane adapter (channel-fused
       // pass-through when DCACHE_CHANNELS == 1)
-      std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-        snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
-        lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
         lmem_switch_.at(b)->ReqOutDC.bind(&lsu_dcache_adapter.at(b)->ReqIn);
         lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
         for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {

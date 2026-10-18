@@ -47,6 +47,7 @@ public:
 		bool    bank_hash = false;	// hashed bank select
 		bool    shared_llc = false;	// the LLC serves every memory client alone
 		bool    lazy_fetch = false;	// write miss allocates without a fill (write-back LLC only)
+		bool    core_out_buf = false; // registered core-response port
 	};
 
 	struct PerfStats {

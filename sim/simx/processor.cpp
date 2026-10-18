@@ -108,6 +108,7 @@ ProcessorImpl::ProcessorImpl()
     false,                           // bank_hash
     L3_SHARED_LLC,                   // shared_llc
     VX_CFG_L3_LAZY_FETCH != 0,       // lazy_fetch
+    true,                            // core-response register (behind the bypass layer)
     }
   );
 

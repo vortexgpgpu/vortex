@@ -108,8 +108,8 @@ void MemCoalescer::on_tick() {
       }
     }
 
-    // send memory response
-    RspOut.send(out_rsp, 1);
+    // the response path is combinational; the cache registers its output
+    RspOut.send(out_rsp, 0);
     DT(4, this->name() << " mem-rsp: " << out_rsp);
 
     // track remaining responses

@@ -2243,8 +2243,10 @@ public:
       if (bank_rsp.empty())
         continue;
       auto &core_rsp = bank_rsp.peek();
-      // the non-cacheable bypass layer's response arbiter registers it once more
-      if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, config_.nc_enable ? 1 : 0)) {
+      // the core-response port's register, then the non-cacheable bypass
+      // layer's response arbiter
+      uint32_t rsp_delay = (config_.core_out_buf ? 1 : 0) + (config_.nc_enable ? 1 : 0);
+      if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, rsp_delay)) {
         DT(3, simobject_->name() << " core-rsp: " << core_rsp);
         bank_rsp.pop();
       }

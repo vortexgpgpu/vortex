@@ -19,13 +19,15 @@ LsuMemAdapter::LsuMemAdapter(
   const SimContext& ctx,
   const char* name,
   uint32_t num_inputs,
-  uint32_t delay
+  uint32_t delay,
+  uint32_t rsp_delay
 ) : SimObject<LsuMemAdapter>(ctx, name)
   , ReqIn(this)
   , RspOut(this)
   , ReqOut(num_inputs, this)
   , RspIn(num_inputs, this)
   , delay_(delay)
+  , rsp_delay_(rsp_delay)
   , port_delay_(num_inputs, 0)
   , pending_mask_(num_inputs)
 {
@@ -106,7 +108,7 @@ void LsuMemAdapter::on_tick() {
     }
 
     // send memory response
-    RspOut.send(out_rsp, 1);
+    RspOut.send(out_rsp, rsp_delay_);
 
     // remove input
     DT(4, this->name() << "-rsp" << i << ": " << rsp_in);
