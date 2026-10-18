@@ -123,6 +123,9 @@ private:
   uint32_t  block_size_rem_;
   uint32_t  thread_idx_[3];
   uint64_t  lmem_addr_;
+  // Slots this CTA has launched into: a CTA never reuses one, even after the
+  // warp it launched there has exited.
+  WarpMask  cta_wids_;
 
   // Launch lanes are taken round-robin from lane_rr_. Several lanes need the
   // per-lane thread-index window rebuilt when the block shape changes, which

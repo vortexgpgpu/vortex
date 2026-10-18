@@ -61,6 +61,7 @@ CtaDispatcher::~CtaDispatcher() {}
 void CtaDispatcher::on_reset() {
   has_cta_    = false;
   cta_done_   = false;
+  cta_wids_.reset();
   tail_slot_  = 0;
   init_wait_  = 0;
   for (uint32_t i = 0; i < num_warps_; ++i) {
@@ -176,6 +177,7 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     cta_size_       = (cta_.block_size + num_threads_ - 1) / num_threads_;
     rank_           = 0;
     block_size_rem_ = cta_.block_size;
+    cta_wids_.reset();
     thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
 
     cur_slot_  = base;
@@ -216,7 +218,7 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
     uint32_t lane = (lane_rr_ + o) % VX_CFG_FETCH_WIDTH;
     int free_wid = -1;
     for (uint32_t wid = lane; wid < num_warps_; wid += VX_CFG_FETCH_WIDTH) {
-      if (!active_warps.test(wid)) {
+      if (!active_warps.test(wid) && !cta_wids_.test(wid)) {
         free_wid = int(wid);
         break;
       }
@@ -241,6 +243,7 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
       inited.set(t);
     }
     wid_to_slot_[free_wid] = cur_slot_;
+    cta_wids_.set(free_wid);
     wids[count] = uint32_t(free_wid);
     ++count;
   }
