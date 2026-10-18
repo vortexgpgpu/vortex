@@ -18,6 +18,7 @@
 #include "constants.h"
 #include "cluster.h"
 #include "kmu.h"
+#include "gbar_unit.h"
 
 namespace vortex {
 
@@ -85,6 +86,7 @@ private:
 
   Kmu::Ptr    kmu_;
   std::vector<Cluster::Ptr> clusters_;
+  GbarUnit::Ptr gbar_unit_;     // device-level global barrier (multi-cluster)
   Memory::Ptr memsim_;
 #ifdef VX_CFG_VM_ENABLE
   uint64_t    mmu_satp_ = 0;    // assembled from the two DCR halves

@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "cluster.h"
+#include <algorithm>
 #include "socket.h"
 #include "core.h"
 #include "local_mem.h"
@@ -30,6 +31,11 @@
 #endif
 
 using namespace vortex;
+
+// Output-buffer stages of the socket and cluster gbar arbiters (OUT_BUF 3, one
+// cycle each), present when the arbiter has more than one input.
+static constexpr uint32_t kSocketArbLag  = (VX_CFG_SOCKET_SIZE > 1) ? 1 : 0;
+static constexpr uint32_t kClusterArbLag = (NUM_SOCKETS > 1) ? 1 : 0;
 
 class Cluster::Impl {
 public:
@@ -304,6 +310,7 @@ public:
     for (auto& gbar : gbarriers_) {
       gbar.reset();
     }
+    gbar_fwd_next_ = 0;
     // Sockets are SimObjects; reset by SimPlatform.
   }
 
@@ -334,10 +341,7 @@ public:
     auto bar_index = bar_id % gbarriers_.size();
     auto& gbar = gbarriers_.at(bar_index);
 
-    auto sockets_per_cluster = sockets_.size();
-    auto cores_per_socket = cores_per_socket_;
-
-    uint32_t cores_per_cluster = sockets_per_cluster * cores_per_socket;
+    uint32_t cores_per_cluster = sockets_.size() * cores_per_socket_;
     uint32_t local_core_id = core_id % cores_per_cluster;
 
     // set core arrival bit
@@ -345,19 +349,37 @@ public:
 
     DT(4, "*** Global barrier arrive: cluster #" << simobject_->id() << ", core #" << core_id << " at barrier #" << bar_id << ", arrived=" << gbar.mask.count());
 
-    if (gbar.mask.count() == (size_t)count) {
-      // resume all suspended cores
-      for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
-        for (uint32_t c = 0; c < cores_per_socket; ++c) {
-          uint32_t i = s * cores_per_socket + c;
-          if (gbar.mask.test(i)) {
-            simobject_->gbar_resume_out.at(i).send({bar_id});
-          }
+    if constexpr (VX_CFG_NUM_CLUSTERS > 1) {
+      // Up to the device unit: the socket arbiter's output buffer, the cluster
+      // arbiter (one arrival per cycle) and its output buffer, then the device
+      // arbiter's output buffer.
+      uint64_t now = SimPlatform::instance().cycles();
+      uint64_t out = std::max(now + kSocketArbLag, gbar_fwd_next_);
+      gbar_fwd_next_ = out + 1;
+      simobject_->gbar_fwd_out.send({bar_id, count, core_id}, out + kClusterArbLag + 1 - now);
+    } else if (gbar.mask.count() == (size_t)count) {
+      this->global_barrier_resume(bar_id, 1);
+    }
+  }
+
+  // The device unit's release crosses the cluster's and the socket's response
+  // forks on its way down.
+  void global_barrier_fwd_resume(uint32_t bar_id) {
+    this->global_barrier_resume(bar_id, 1 + kClusterArbLag + kSocketArbLag);
+  }
+
+  // Resume the cores of this cluster that arrived, then clear the barrier.
+  void global_barrier_resume(uint32_t bar_id, uint32_t delay) {
+    auto& gbar = gbarriers_.at(bar_id % gbarriers_.size());
+    for (uint32_t s = 0; s < sockets_.size(); ++s) {
+      for (uint32_t c = 0; c < cores_per_socket_; ++c) {
+        uint32_t i = s * cores_per_socket_ + c;
+        if (gbar.mask.test(i)) {
+          simobject_->gbar_resume_out.at(i).send({bar_id}, delay);
         }
       }
-      // reset mask and advance phase
-      gbar.mask.reset();
     }
+    gbar.mask.reset();
   }
 
   Cluster::PerfStats perf_stats() const {
@@ -568,6 +590,7 @@ private:
   Cluster*                    simobject_;
   std::vector<Socket::Ptr>    sockets_;
   std::vector<core_barrier_t> gbarriers_;
+  uint64_t gbar_fwd_next_ = 0;  // next free cycle at the cluster's gbar arbiter
   Cache::Ptr                  l2cache_;
   uint32_t                    cores_per_socket_;
 #ifdef VX_CFG_VM_ENABLE
@@ -598,11 +621,14 @@ Cluster::Cluster(const SimContext& ctx,
   , mem_rsp_in(VX_CFG_L2_MEM_PORTS, this)
   , gbar_arrive_in(this)
   , gbar_resume_out(NUM_SOCKETS * VX_CFG_SOCKET_SIZE, this)
+  , gbar_fwd_out(this)
+  , gbar_fwd_resume_in(this)
   , cluster_id_(cluster_id)
   , processor_(processor)
   , impl_(new Impl(this))
 {
   gbar_arrive_in.bind(this, &Cluster::on_gbar_arrive);
+  gbar_fwd_resume_in.bind(this, &Cluster::on_gbar_fwd_resume);
 }
 
 Cluster::~Cluster() {
@@ -623,6 +649,10 @@ int Cluster::get_exitcode() const {
 
 void Cluster::on_gbar_arrive(const GbarArrive& msg) {
   impl_->global_barrier_arrive(msg.bar_id, msg.count, msg.core_id);
+}
+
+void Cluster::on_gbar_fwd_resume(const GbarResume& msg) {
+  impl_->global_barrier_fwd_resume(msg.bar_id);
 }
 
 Cluster::PerfStats Cluster::perf_stats() const {

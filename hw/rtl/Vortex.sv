@@ -331,6 +331,30 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         .bus_out_if (per_cluster_dcr_bus_if)
     );
 
+    // A global barrier's participants can span clusters, so its arrivals are
+    // counted once for the whole device.
+    VX_gbar_bus_if per_cluster_gbar_bus_if[`VX_CFG_NUM_CLUSTERS]();
+    VX_gbar_bus_if gbar_bus_if();
+
+    VX_gbar_arb #(
+        .NUM_REQS    (`VX_CFG_NUM_CLUSTERS),
+        .REQ_OUT_BUF ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0),
+        .RSP_OUT_BUF ((`VX_CFG_NUM_CLUSTERS > 1) ? 3 : 0)
+    ) gbar_arb (
+        .clk        (clk),
+        .reset      (reset),
+        .bus_in_if  (per_cluster_gbar_bus_if),
+        .bus_out_if (gbar_bus_if)
+    );
+
+    VX_gbar_unit #(
+        .INSTANCE_ID ("gbar")
+    ) gbar_unit (
+        .clk         (clk),
+        .reset       (reset),
+        .gbar_bus_if (gbar_bus_if)
+    );
+
     // Generate all clusters
     for (genvar cluster_id = 0; cluster_id < `VX_CFG_NUM_CLUSTERS; ++cluster_id) begin : g_clusters
 
@@ -352,6 +376,8 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
             .mem_bus_if         (per_cluster_mem_bus_if[cluster_id * L2_MEM_PORTS +: L2_MEM_PORTS]),
 
             .kmu_bus_if         (per_cluster_kmu_bus_if[cluster_id +: 1]),
+
+            .gbar_bus_if        (per_cluster_gbar_bus_if[cluster_id]),
 
         `ifdef VX_CFG_EXT_RASTER_ENABLE
             .raster_launch_if   (per_cluster_raster_launch_if[cluster_id +: 1]),

@@ -23,36 +23,35 @@ module VX_gbar_unit import VX_gpu_pkg::*; #(
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
-    reg [`VX_CFG_NUM_BARRIERS-1:0][`VX_CFG_NUM_CORES-1:0] barrier_masks;
-    wire [`CLOG2(`VX_CFG_NUM_CORES+1)-1:0] active_barrier_count;
+    // A core sends one request per barrier generation, so counting requests
+    // tracks the participants without a per-core mask over the whole device.
+    reg [`VX_CFG_NUM_BARRIERS-1:0][CORE_ID_WIDTH-1:0] arrive_counts;
     wire [NB_WIDTH-1:0] req_id = gbar_bus_if.req_data.id;
-    wire [`VX_CFG_NUM_CORES-1:0] curr_barrier_mask = barrier_masks[req_id];
-
-    `POP_COUNT(active_barrier_count, curr_barrier_mask);
-    `UNUSED_VAR (active_barrier_count)
+    wire [CORE_ID_WIDTH-1:0] curr_arrive_count = arrive_counts[req_id];
+    `UNUSED_VAR (gbar_bus_if.req_data.core_id)
 
     reg rsp_valid;
     reg [NB_WIDTH-1:0] rsp_bar_id;
 
-    wire req_file  = gbar_bus_if.req_valid && gbar_bus_if.req_ready;
+    wire req_fire  = gbar_bus_if.req_valid && gbar_bus_if.req_ready;
     wire rsp_fire  = gbar_bus_if.rsp_valid && gbar_bus_if.rsp_ready;
     wire rsp_stall = gbar_bus_if.rsp_valid && ~gbar_bus_if.rsp_ready;
 
     always @(posedge clk) begin
         if (reset) begin
-            barrier_masks <= '0;
+            arrive_counts <= '0;
             rsp_valid <= 0;
         end else begin
             if (rsp_fire) begin
                 rsp_valid <= 0;
             end
-            if (req_file) begin
-                if (active_barrier_count[NC_WIDTH-1:0] == gbar_bus_if.req_data.size_m1) begin
-                    barrier_masks[req_id] <= '0;
+            if (req_fire) begin
+                if (curr_arrive_count == gbar_bus_if.req_data.size_m1) begin
+                    arrive_counts[req_id] <= '0;
                     rsp_valid  <= 1;
                     rsp_bar_id <= req_id;
                 end else begin
-                    barrier_masks[req_id][gbar_bus_if.req_data.core_id] <= 1;
+                    arrive_counts[req_id] <= curr_arrive_count + CORE_ID_WIDTH'(1);
                 end
             end
         end
@@ -67,7 +66,7 @@ module VX_gbar_unit import VX_gpu_pkg::*; #(
 
 `ifdef DBG_TRACE_GBAR
     always @(posedge clk) begin
-        if (req_file) begin
+        if (req_fire) begin
             `TRACE(2, ("%t: %s arrive: bar_id=%0d, size=%0d, core_id=%0d\n",
                 $time, INSTANCE_ID, gbar_bus_if.req_data.id, gbar_bus_if.req_data.size_m1, gbar_bus_if.req_data.core_id))
         end

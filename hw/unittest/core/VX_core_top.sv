@@ -57,8 +57,8 @@ module VX_core_top import VX_gpu_pkg::*;
 
     output wire                             gbar_req_valid,
     output wire [NB_WIDTH-1:0]              gbar_req_id,
-    output wire [NC_WIDTH-1:0]              gbar_req_size_m1,
-    output wire [NC_WIDTH-1:0]              gbar_req_core_id,
+    output wire [CORE_ID_WIDTH-1:0]         gbar_req_size_m1,
+    output wire [CORE_ID_WIDTH-1:0]         gbar_req_core_id,
     input wire                              gbar_req_ready,
     input wire                              gbar_rsp_valid,
     input wire [NB_WIDTH-1:0]               gbar_rsp_id,

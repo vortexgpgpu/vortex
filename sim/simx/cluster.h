@@ -77,6 +77,11 @@ public:
   SimEventLink<GbarArrive> gbar_arrive_in;
   std::vector<SimEventLink<GbarResume>> gbar_resume_out;
 
+  // With more than one cluster the barrier spans clusters: arrivals go up to
+  // the device-level GbarUnit and its resume comes back down here.
+  SimEventLink<GbarArrive> gbar_fwd_out;
+  SimEventLink<GbarResume> gbar_fwd_resume_in;
+
   Cluster(const SimContext& ctx,
           const char* name,
           uint32_t cluster_id,
@@ -151,6 +156,7 @@ protected:
 
 private:
   void on_gbar_arrive(const GbarArrive& msg);
+  void on_gbar_fwd_resume(const GbarResume& msg);
 
   uint32_t       cluster_id_;
   ProcessorImpl* processor_;

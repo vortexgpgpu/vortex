@@ -204,7 +204,7 @@ inline __attribute__((const)) int vx_num_warps() {
     return (int)csr_read_nv(VX_CSR_NUM_WARPS);
 }
 
-// Return the number of cores per cluster
+// Return the number of cores across all clusters
 inline __attribute__((const)) int vx_num_cores() {
     return (int)csr_read_nv(VX_CSR_NUM_CORES);
 }

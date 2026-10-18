@@ -63,6 +63,14 @@ ProcessorImpl::ProcessorImpl()
     clusters_.at(i) = Cluster::Create(sname, i, this);
   }
 
+  if constexpr (VX_CFG_NUM_CLUSTERS > 1) {
+    gbar_unit_ = GbarUnit::Create("gbar", VX_CFG_NUM_CLUSTERS);
+    for (uint32_t i = 0; i < VX_CFG_NUM_CLUSTERS; ++i) {
+      clusters_.at(i)->gbar_fwd_out.bind(&gbar_unit_->arrive_in);
+      gbar_unit_->resume_out.at(i).bind(&clusters_.at(i)->gbar_fwd_resume_in);
+    }
+  }
+
   // Launch bus: a registered, credit-gated lane from the KMU to each core's
   // dispatcher; CTAs cross into the core's domain through the slice, and
   // admission credits return to the KMU through a slice of their own.

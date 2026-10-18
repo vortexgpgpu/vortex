@@ -38,6 +38,9 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // KMU bus
     VX_kmu_bus_if.slave         kmu_bus_if[1],
 
+    // Global barrier bus to the device-level barrier unit
+    VX_gbar_bus_if.master       gbar_bus_if,
+
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // Delegated draw launch (device KMU → raster engines)
     VX_raster_launch_if.slave   raster_launch_if[1],
@@ -161,7 +164,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `endif
 
     VX_gbar_bus_if per_socket_gbar_bus_if[NUM_SOCKETS]();
-    VX_gbar_bus_if gbar_bus_if();
 
     VX_gbar_arb #(
         .NUM_REQS (NUM_SOCKETS),
@@ -172,14 +174,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .reset      (reset),
         .bus_in_if  (per_socket_gbar_bus_if),
         .bus_out_if (gbar_bus_if)
-    );
-
-    VX_gbar_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-gbar", INSTANCE_ID)))
-    ) gbar_unit (
-        .clk         (clk),
-        .reset       (reset),
-        .gbar_bus_if (gbar_bus_if)
     );
 
     // L2 input buses (socket ports + cluster-resident gfx cache ports)

@@ -98,6 +98,49 @@ tests:
   app: gbar_phase
   shape:
     cores: 4
+# A global barrier spans clusters: the device-level unit counts every core, so
+# one core per cluster still meets the count and two clusters of two cores do
+# not release on a cluster's own arrivals.
+- id: gbar-phase-cl2-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gbar_phase
+  shape:
+    clusters: 2
+    cores: 1
+- id: gbar-phase-cl2-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gbar_phase
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+- id: async-gbarrier-cl2-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: async_gbarrier
+  shape:
+    clusters: 2
+    cores: 1
+- id: async-gbarrier-cl2-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: async_gbarrier
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
 # SimX<->rtlsim cycle parity on the multi-core global barrier. Until this case
 # existed the gate could not observe the gbar path at all: every other parity
 # case is single-core, so USE_GBAR is 0 and the request queue is not built.
