@@ -29,6 +29,24 @@
 
 using namespace vortex;
 
+namespace {
+
+// An arbiter over more than 1.5x the fan-out limit is split into a buffered
+// tree, one cycle deeper.
+uint32_t arb_tree_delay(uint32_t requesters) {
+  constexpr uint32_t kMaxFanout = 8;
+  return (requesters > kMaxFanout + kMaxFanout / 2) ? 1 : 0;
+}
+
+// Registered stages of a radix-2 omega network between a and b ports; up to
+// two ports on each side it is a single crossbar.
+uint32_t omega_stages(uint32_t a, uint32_t b) {
+  uint32_t n = std::max(a, b);
+  return (n <= 2) ? 1 : log2ceil(n);
+}
+
+}
+
 struct params_t {
   uint32_t sets_per_bank;
   uint32_t lines_per_set;
@@ -2066,6 +2084,7 @@ public:
     // the request crossbar registers its output when it has more than two inputs
     , delay_((num_inputs > 2) ? 1 : 0)
     , rr_(num_banks, num_inputs - 1)
+    , tree_stage_((arb_tree_delay(num_inputs) != 0) ? num_banks : 0, this)
   {
     assert(num_inputs <= 64);
   }
@@ -2086,6 +2105,14 @@ protected:
       --init_cycles_;
       return;
     }
+    // the arbiter tree's buffered level ahead of each bank
+    for (uint32_t b = 0, nb = tree_stage_.size(); b < nb; ++b) {
+      auto& stage = tree_stage_.at(b);
+      if (!stage.empty() && !ReqOut.at(b).full()) {
+        ReqOut.at(b).send(stage.peek(), delay_);
+        stage.pop();
+      }
+    }
     uint32_t n = ReqIn.size();
     // requesting ports per bank; non-cacheable requests leave on their own port
     std::vector<uint64_t> want(ReqOut.size(), 0);
@@ -2104,7 +2131,8 @@ protected:
       want.at(params_.addr_bank_id(req.addr)) |= 1ull << i;
     }
     for (uint32_t b = 0, nb = ReqOut.size(); b < nb; ++b) {
-      if (want[b] == 0 || ReqOut.at(b).full()) {
+      auto& out = tree_stage_.empty() ? ReqOut.at(b) : tree_stage_.at(b);
+      if (want[b] == 0 || out.full()) {
         continue;
       }
       uint32_t i = rr_[b];
@@ -2114,7 +2142,7 @@ protected:
       collisions_ += __builtin_popcountll(want[b]) - 1;
       auto req = ReqIn.at(i).peek();
       req.tag = (req.tag << lg2_inputs_) | i;
-      ReqOut.at(b).send(req, delay_);
+      out.send(req, tree_stage_.empty() ? delay_ : 1);
       ReqIn.at(i).pop();
       rr_[b] = i;
     }
@@ -2126,6 +2154,7 @@ private:
   uint32_t delay_;
   uint32_t init_cycles_ = 0;
   std::vector<uint32_t> rr_;
+  std::vector<SimChannel<MemReq>> tree_stage_;
   uint64_t collisions_ = 0;
 
   friend class SimObject<CachePortArb>;
@@ -2165,13 +2194,30 @@ public:
       simobject->mem_rsp_in.at(i).bind(&nc_mem_arbs_.at(i)->RspIn.at(0));
     }
 
-    // Create bank's memory arbiter
+    // Create bank's memory arbiter. Each level of the memory-side networks
+    // beyond the first is a registered stage; the request path buffers the
+    // levels the arbiter's own register does not cover in mem_req_net_, the
+    // response path in the bank's memory-response queue.
     snprintf(sname, 100, "%s-mem_arb", simobject->name().c_str());
-    auto bank_mem_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_banks, config_.mem_ports);
+    uint32_t mem_arb_delay = ((num_banks != config_.mem_ports) && (num_banks > 2 || config_.mem_ports > 2)) ? 1 : 0;
+    uint32_t mem_net_delay = omega_stages(num_banks, config_.mem_ports) - 1;
+    uint32_t mem_net_extra = (mem_net_delay > mem_arb_delay) ? (mem_net_delay - mem_arb_delay) : 0;
+    auto bank_mem_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_banks, config_.mem_ports,
+                                           mem_arb_delay + mem_net_extra, mem_arb_delay + mem_net_extra);
 
     // Connect bank's memory arbiter to non-cacheable arbiter's input port 0
+    if (mem_net_extra != 0) {
+      mem_req_net_.reserve(config_.mem_ports);
+      for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+        mem_req_net_.emplace_back(simobject, mem_arb_delay + mem_net_extra + 1);
+      }
+    }
     for (uint32_t i = 0; i < config_.mem_ports; ++i) {
-      bank_mem_arb->ReqOut.at(i).bind(&nc_mem_arbs_.at(i)->ReqIn.at(0));
+      if (mem_net_extra != 0) {
+        bank_mem_arb->ReqOut.at(i).bind(&mem_req_net_.at(i));
+      } else {
+        bank_mem_arb->ReqOut.at(i).bind(&nc_mem_arbs_.at(i)->ReqIn.at(0));
+      }
       nc_mem_arbs_.at(i)->RspOut.at(0).bind(&bank_mem_arb->RspIn.at(i));
     }
 
@@ -2183,12 +2229,21 @@ public:
     }
 
     // Create bank's core crossbar; it carries the bank responses back to the
-    // core ports
+    // core ports. A registered core-response port is a network registered at
+    // every level, applied as the response leaves the cache.
     snprintf(sname, 100, "%s-core_xbar", simobject->name().c_str());
-    bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks,
-                                          [&](const MemCrossBar::ReqType &req) {
-                                            return params_.addr_bank_id(req.addr);
-                                          });
+    auto bank_sel = [&](const MemCrossBar::ReqType &req) {
+      return params_.addr_bank_id(req.addr);
+    };
+    if (config_.core_out_buf) {
+      bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks, bank_sel, 0, 0);
+      core_rsp_delay_ = omega_stages(num_banks, config_.num_inputs);
+    } else {
+      bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks, bank_sel);
+    }
+    if (config_.nc_enable) {
+      ++core_rsp_delay_;
+    }
 
     // Create cache banks
     for (uint32_t i = 0, n = num_banks; i < n; ++i) {
@@ -2237,16 +2292,21 @@ public:
       }
     }
 
+    // bank memory requests through the memory-side network's deeper levels
+    for (uint32_t i = 0, n = mem_req_net_.size(); i < n; ++i) {
+      auto &net = mem_req_net_.at(i);
+      if (!net.empty() && nc_mem_arbs_.at(i)->ReqIn.at(0).try_send(net.peek(), 0)) {
+        net.pop();
+      }
+    }
+
     // schedule core responses
     for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
       auto &bank_rsp = bank_core_xbar_->RspOut.at(req_id);
       if (bank_rsp.empty())
         continue;
       auto &core_rsp = bank_rsp.peek();
-      // the core-response port's register, then the non-cacheable bypass
-      // layer's response arbiter
-      uint32_t rsp_delay = (config_.core_out_buf ? 1 : 0) + (config_.nc_enable ? 1 : 0);
-      if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, rsp_delay)) {
+      if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, core_rsp_delay_)) {
         DT(3, simobject_->name() << " core-rsp: " << core_rsp);
         bank_rsp.pop();
       }
@@ -2325,6 +2385,10 @@ private:
   std::vector<MemArbiter::Ptr> nc_mem_arbs_;
   CachePortArb::Ptr port_arb_;
   MemCrossBar::Ptr bank_core_xbar_;
+  // the core-response network's levels, then the non-cacheable bypass
+  // layer's response arbiter
+  uint32_t core_rsp_delay_ = 0;
+  std::vector<SimChannel<MemReq>> mem_req_net_;
   uint32_t init_cycles_;
   bool     keep_lines_ = false;
 };
