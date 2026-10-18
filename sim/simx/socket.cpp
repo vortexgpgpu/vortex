@@ -70,6 +70,11 @@ public:
       VX_CFG_ICACHE_LATENCY,         // pipeline latency (capacity-scaled, matches hardware)
       VX_CFG_ICACHE_REPL_POLICY,     // replacement policy
       false,                  // is_llc (icache never carries AMO state)
+      false,                  // non-cacheable bypass
+      false,                  // bank_hash
+      false,                  // shared_llc
+      false,                  // lazy_fetch
+      true,                   // core-response register
     });
 
     snprintf(sname, 100, "%s-dcache", name.c_str());

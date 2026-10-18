@@ -83,7 +83,7 @@ public:
     // icache tags of the slice's in-flight fetches
     for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
       snprintf(sname, 100, "fetch_latch%d", f);
-      fetch_latch_.emplace_back(std::make_unique<TFifo<instr_trace_t*>>(ctx, sname, 2, 2));
+      fetch_latch_.emplace_back(std::make_unique<TFifo<instr_trace_t*>>(ctx, sname, 1, 2));
       snprintf(sname, 100, "decode_latch%d", f);
       decode_latch_.emplace_back(std::make_unique<TFifo<instr_trace_t*>>(ctx, sname, 1, 2));
       pending_icache_.emplace_back(PER_FETCH_WARPS);
