@@ -414,7 +414,9 @@ advancing for that time (60 s when it is unset).
 - **Applications** in the in-process simulator and on the V80, against rtlsim
   behind the AXI4 adapter on the same bank model (`AXI_BUS=1
   AXI_MEM_MODEL=bank`) with the same memory settings: retired instructions and
-  cycles identical (§7).
+  cycles identical (§7). CI holds this for tinygpu demo and sgemm in the
+  in-process simulator (`ci/testcases/foldsim.yaml`, a `model_parity` check at
+  tolerance 0).
 - **Foldsim's own tests** (`check-foldsim` in the Foldsim repository): lit
   tests of every pass and of the driver, and small threaded simulators run in
   Verilator against their expected tokens — one and several threads,
