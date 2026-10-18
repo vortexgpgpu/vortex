@@ -176,6 +176,14 @@ tests:
   args: -n128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
   shape: {cores: 2, l2cache: true}
+# SGEMM on two frontend slices feeding four issue slices: per-slice fetch on a
+# two-port icache, CTAs as wide as the core, a 16-port dcache.
+- id: parity-sgemm-fw2
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n128
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity
