@@ -448,11 +448,13 @@ exactly. rtlsim must take the platform's AXI id width (4 + log2 of the
 channels): at its own default of 32 the AXI adapter needs no tag buffer and
 times reads differently (demo 6,552).
 
-**On the V80** the same configuration and options with one memory channel,
-domains and issue/LSU relays (§3.2) close **250 MHz** in the image flow and run
-demo, sgemm and eight FP tests (`dogfood`) at the instruction and cycle counts
-of Verilator, as does the bank model on that image (demo 10,740, sgemm 404,513
-cycles; one channel). The plain flow's s2w4i2 image had closed at 149.8 MHz in
+**On the V80** this configuration, with every setting the toml's and the
+flow's default options, closes **250 MHz** in the image flow (226k LUTs, 195k
+FFs and 20 DSPs in the kernel). It runs demo, sgemm and eight FP tests
+(`dogfood`) at Verilator's instruction and cycle counts: demo 6,616, sgemm
+404,896, and dogfood 21 1,657,630 cycles, at 8.1–8.2 host cycles per target
+cycle. A one-channel variant with domains and issue/LSU relays (§3.2) also
+closed 250 MHz and ran the same tests exactly. The plain flow's s2w4i2 image had closed at 149.8 MHz in
 138k routed LUTs (219k for the firesim backend's image of the same
 configuration).
 
