@@ -118,6 +118,7 @@ public:
 #endif
 
 protected:
+	void on_reset() override;
 	void on_tick() override;
 
 private:
@@ -132,6 +133,17 @@ private:
 
 	std::unique_ptr<WctlUnit> wctl_unit_;
 	std::unique_ptr<CsrUnit>  csr_unit_;
+	// Per block, the CSR op that has spent its one-cycle CTA-context read.
+	std::array<const instr_trace_t*, VX_CFG_NUM_SFU_BLOCKS> csr_read_done_{};
+	// Per block, the barrier arrive waiting for the shared barrier unit's
+	// response, which carries the phase it writes back.
+	struct BarArrive {
+		const instr_trace_t* trace = nullptr;
+		uint64_t sent = 0;
+		bool release_warp = false;
+		bool warp_exit = false;
+	};
+	std::array<BarArrive, VX_CFG_NUM_SFU_BLOCKS> bar_arrive_{};
 #ifdef VX_CFG_EXT_RTU_ENABLE
 	// Shared graphics register window (SETW/GETW/GETWF slot file) used by the RTU
 	// ray/hit stream, TEX (vx_tex4) u,v payload + texel, and OM (vx_om4) payload.

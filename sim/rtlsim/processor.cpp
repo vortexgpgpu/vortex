@@ -74,6 +74,7 @@ typedef uint64_t Word;
 
 using namespace vortex;
 
+static uint64_t g_mem_done_seq = 0;
 static uint32_t g_mem_bank_addr_width = (VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH - log2ceil(VX_CFG_PLATFORM_MEMORY_NUM_BANKS));
 
 static uint64_t timestamp = 0;
@@ -315,6 +316,7 @@ private:
           // mark completed request as ready
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
           orig_req->ready = true;
+          orig_req->done_seq = g_mem_done_seq++;
           return true;
         }, mem_req);
         dram_queue_[b].pop();
@@ -361,22 +363,29 @@ private:
       if (device_->mem_rsp_valid[b] && mem_rd_rsp_ready_[b]) {
         device_->mem_rsp_valid[b] = 0;
       }
-      if (device_->mem_rsp_valid[b] == 0) {
-        if (!pending_mem_reqs_[b].empty()) {
-          auto mem_rsp_it = pending_mem_reqs_[b].begin();
-          auto mem_rsp = *mem_rsp_it;
-          if (mem_rsp->ready) {
-            if (!mem_rsp->write) {
-              // return read responses
-              device_->mem_rsp_valid[b] = 1;
-              memcpy(VDataCast<void*, VX_CFG_PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_rsp_data[b]), mem_rsp->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
-              device_->mem_rsp_tag[b] = mem_rsp->tag;
-            }
-            // delete the request
-            pending_mem_reqs_[b].erase(mem_rsp_it);
-            delete mem_rsp;
-          }
+      // Reads carry distinct AXI IDs, so the memory returns them in the order
+      // they complete; writes are posted and never hold back a read.
+      auto& pending = pending_mem_reqs_[b];
+      auto next_rd = pending.end();
+      for (auto it = pending.begin(); it != pending.end();) {
+        auto mem_req = *it;
+        if (mem_req->ready && mem_req->write) {
+          it = pending.erase(it);
+          delete mem_req;
+          continue;
         }
+        if (mem_req->ready && (next_rd == pending.end() || mem_req->done_seq < (*next_rd)->done_seq)) {
+          next_rd = it;
+        }
+        ++it;
+      }
+      if (next_rd != pending.end() && !device_->mem_rsp_valid[b]) {
+        auto mem_rsp = *next_rd;
+        device_->mem_rsp_valid[b] = 1;
+        memcpy(VDataCast<void*, VX_CFG_PLATFORM_MEMORY_DATA_SIZE>::get(device_->mem_rsp_data[b]), mem_rsp->data.data(), VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+        device_->mem_rsp_tag[b] = mem_rsp->tag;
+        pending.erase(next_rd);
+        delete mem_rsp;
       }
 
       // process memory requests
@@ -454,6 +463,7 @@ private:
     uint64_t tag;
     bool write;
     bool ready;
+    uint64_t done_seq;
   } mem_req_t;
 
   std::unordered_map<int, std::stringstream> print_bufs_;

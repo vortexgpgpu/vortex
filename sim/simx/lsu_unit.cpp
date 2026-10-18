@@ -87,7 +87,9 @@ LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 LsuUnit::~LsuUnit()
 {}
 
-// Returns true when all blocks' input queues are empty and no reads are outstanding.
+// Returns true when no block holds an instruction with requests still to send
+// or a read awaiting its response; ops still in the dispatch buffer do not hold
+// a barrier.
 bool LsuUnit::drained() const {
 #ifdef TCU_META_ENABLE
 	// TcuRspOut forwards to the TCU's endpoint, so query via size() (empty()
@@ -97,7 +99,6 @@ bool LsuUnit::drained() const {
 	}
 #endif
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-		if (!Inputs.at(b).empty()) return false;
 		if (!states_.at(b).req_queue.empty()) return false;
 		if (!states_.at(b).pending_reqs.empty()) return false;
 	}
@@ -294,8 +295,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 		state.pending_reqs.release(lsu_rsp.tag);
 	}
 	if (is_final && entry.eop) {
-		// Load writeback crosses one more registered stage than the
-		// direct-commit path before reaching the commit arbiter.
+		// the response buffer, then the result arbiter's register
 		output.send(trace, 2);
 	} else {
 		// A non-final fragment still spends a commit-port slot: it drains
@@ -334,6 +334,18 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 			return;
 		}
 		++state.staged_reads;
+	}
+	if (lsu_type_tag && *lsu_type_tag == LsuType::STORE) {
+		// A store commits as the request queue accepts it, through the
+		// no-response path, and is sent to memory later. The commit stage
+		// retires the trace, so the queue keeps a copy of its own.
+		if (Outputs.at(b).full()) {
+			return;
+		}
+		auto copy = new (core_->trace_pool().allocate(1)) instr_trace_t(*trace);
+		// the no-response buffer, then the result arbiter's register
+		Outputs.at(b).send(trace, 2);
+		trace = copy;
 	}
 	state.req_queue.push(trace);
 	input.pop();
@@ -451,9 +463,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 		state.head_staged = !is_write || is_amo;
 	}
 
-	// AMO always returns to rd, so it is not direct-commit even though it
-	// carries a side-effect write.
-	bool direct_commit = (is_write || 0 == state.addr_list.size()) && !is_amo;
+	// A store committed when the queue accepted it. AMO always returns to rd,
+	// so it is not direct-commit even though it carries a side-effect write.
+	bool direct_commit = !is_write && 0 == state.addr_list.size() && !is_amo;
 
 	// Skip beats whose tid group is entirely inactive — nothing to issue.
 	while (state.remain_addrs != 0) {
@@ -582,6 +594,10 @@ void LsuUnit::process_request_step(uint32_t b) {
 			state.head_staged = false;
 		}
 		state.req_queue.pop();
+		if (is_write) {
+			trace->~instr_trace_t();
+			core_->trace_pool().deallocate(trace, 1);
+		}
 	}
 }
 

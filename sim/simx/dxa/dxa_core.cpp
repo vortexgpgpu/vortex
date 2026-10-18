@@ -48,6 +48,8 @@ constexpr uint64_t kGmemLineMask = ~uint64_t(VX_CFG_L1_LINE_SIZE - 1);
 
 // Cores served by one (socket-resident) DXA engine.
 constexpr uint32_t kCoresPerSocket = VX_CFG_SOCKET_SIZE;
+// A delivered line reaches its SMEM write through two pipeline registers.
+constexpr uint32_t kSmemWrLatency = 2;
 
 } // namespace
 
@@ -95,6 +97,8 @@ public:
   struct InflightSlot {
     bool      allocated = false;
     bool      rsp_arrived = false;
+    uint64_t  ready_cycle = 0;  // first cycle the line can be written to SMEM
+    uint64_t  free_cycle = 0;   // first cycle the slot can carry a new read
     LineWork  work;            // captured at allocation
     std::shared_ptr<mem_block_t> rsp_data;
   };
@@ -111,6 +115,11 @@ public:
     std::vector<uint32_t>   cta_indices;
     uint32_t                smem_stride = 0;
     uint64_t                issue_cycle = 0;
+
+    // setup engine: the next transfer is set up while this one drains
+    bool                    staged = false;
+    DxaReq                  staged_req;
+    uint64_t                staged_ready = 0;
 
     // addr_gen: pre-enumerated work list (one entry per GMEM CL +
     // multicast replays handled at smem_wr stage).
@@ -149,7 +158,8 @@ public:
       w.cta_indices.clear();
       w.issued_order.clear();
       w.drain_slot = UINT32_MAX;
-      for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
+      for (auto& s : w.inflight) { s = InflightSlot(); }
+      w.staged = false;
       w.ag_idx = 0;
       w.mc_cta_idx = 0;
       w.km_elem_idx = 0;
@@ -223,6 +233,7 @@ public:
         auto& w = workers_[worker_id];
         if (slot_id < w.inflight.size() && w.inflight[slot_id].allocated) {
           w.inflight[slot_id].rsp_arrived = true;
+          w.inflight[slot_id].ready_cycle = cycle_ + kSmemWrLatency;
           w.inflight[slot_id].rsp_data    = rsp.data;
         }
         ch.pop();
@@ -237,10 +248,18 @@ public:
       }
     }
 
-    // 3) Dispatch from queue to idle workers.
+    // 3) Start a set-up transfer on an idle worker; otherwise let the
+    //    worker's setup engine take the next request.
     for (auto& w : workers_) {
-      if (w.state == WState::IDLE && !queue_.empty())
-        start_worker(w, queue_.front()), queue_.pop_front();
+      if (w.staged && w.state == WState::IDLE && cycle_ >= w.staged_ready) {
+        w.staged = false;
+        start_worker(w, w.staged_req);
+      } else if (!w.staged && !queue_.empty()) {
+        w.staged_req   = queue_.front();
+        w.staged_ready = cycle_ + this->setup_latency(w.staged_req);
+        w.staged       = true;
+        queue_.pop_front();
+      }
     }
 
     // 4) Drain DxaUnit channels → req queue (round-robin).
@@ -321,6 +340,14 @@ private:
     uint32_t n_blk = n / tcN;
     uint32_t n_in  = n % tcN;
     return (k_blk * n_steps + n_blk) * b_blk_elems + n_in * kw + r_in;
+  }
+
+  // Parameter setup takes longer for higher-rank descriptors: each extra
+  // dimension adds a multiply phase.
+  uint32_t setup_latency(const DxaReq& req) const {
+    uint32_t rank = (req.desc_slot < VX_DCR_DXA_DESC_COUNT)
+                  ? desc_rank(descriptors_.at(req.desc_slot).meta) : 1;
+    return 2 * std::max<uint32_t>(rank, 2) + 2;
   }
 
   // ── Pull from per-core dxa_req_in[] into queue_ (round-robin) ────────
@@ -548,7 +575,7 @@ private:
     // Find a free slot.
     uint32_t slot = UINT32_MAX;
     for (uint32_t s = 0; s < w.inflight.size(); ++s) {
-      if (!w.inflight[s].allocated) {
+      if (!w.inflight[s].allocated && cycle_ >= w.inflight[s].free_cycle) {
         slot = s;
         break;
       }
@@ -570,6 +597,7 @@ private:
     if (lw.oob) {
       w.inflight[slot].allocated   = true;
       w.inflight[slot].rsp_arrived = true;
+      w.inflight[slot].ready_cycle = cycle_ + kSmemWrLatency;
       w.inflight[slot].rsp_data.reset();
       w.inflight[slot].work        = lw;
       w.issued_order.push_back(slot);
@@ -614,7 +642,8 @@ private:
     if (slot == UINT32_MAX) {
       for (uint32_t i = 0; i < w.inflight.size(); ++i) {
         const auto& candidate = w.inflight[i];
-        if (candidate.allocated && candidate.rsp_arrived && !candidate.work.last) {
+        if (candidate.allocated && candidate.rsp_arrived && !candidate.work.last
+         && cycle_ >= candidate.ready_cycle) {
           slot = i;
           break;
         }
@@ -623,7 +652,7 @@ private:
       if (slot == UINT32_MAX && w.issued_order.size() == 1) {
         uint32_t last_slot = w.issued_order.front();
         const auto& candidate = w.inflight[last_slot];
-        if (candidate.allocated && candidate.rsp_arrived)
+        if (candidate.allocated && candidate.rsp_arrived && cycle_ >= candidate.ready_cycle)
           slot = last_slot;
       }
 
@@ -787,6 +816,7 @@ private:
           // Slot done — release.
           s.allocated = false;
           s.rsp_arrived = false;
+          s.free_cycle = cycle_ + 1;
           s.rsp_data.reset();
           auto it = std::find(w.issued_order.begin(), w.issued_order.end(), slot);
           if (it != w.issued_order.end()) w.issued_order.erase(it);

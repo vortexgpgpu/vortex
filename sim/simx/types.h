@@ -1052,7 +1052,8 @@ private:
 
 class Arbiter {
 public:
-  Arbiter(ArbiterType type = ArbiterType::Priority, uint32_t size = 0) {
+  Arbiter(ArbiterType type = ArbiterType::Priority, uint32_t size = 0)
+    : type_(type), size_(size) {
     switch (type) {
     case ArbiterType::Priority:
       impl_ = std::make_shared<PriorityArbiter>(size);
@@ -1071,6 +1072,20 @@ public:
     }
   }
 
+  // A copy is a separate arbiter with its own grant state, so a vector of
+  // arbiters built from one prototype does not share a single state.
+  Arbiter(const Arbiter& other) : Arbiter(other.type_, other.size_) {}
+
+  Arbiter& operator=(const Arbiter& other) {
+    if (this != &other) {
+      *this = Arbiter(other.type_, other.size_);
+    }
+    return *this;
+  }
+
+  Arbiter(Arbiter&&) = default;
+  Arbiter& operator=(Arbiter&&) = default;
+
   virtual ~Arbiter() {}
 
   uint32_t grant(const BitVector<>& requests) {
@@ -1082,6 +1097,8 @@ public:
   }
 
 private:
+  ArbiterType type_;
+  uint32_t size_;
   std::shared_ptr<IArbiterImpl> impl_;
 };
 

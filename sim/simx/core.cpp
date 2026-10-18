@@ -74,6 +74,7 @@ public:
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
     , last_issue_(VX_CFG_NUM_WARPS, 0)
     , staged_since_(VX_CFG_NUM_WARPS, 0)
+    , head_staged_(VX_CFG_NUM_WARPS, false)
   {
     const std::string& name = simobject_->name();
     char sname[100];
@@ -258,6 +259,7 @@ public:
     func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(sname, simobject_);
     std::static_pointer_cast<AluUnit>(func_units_.at((int)FUType::ALU))->branch_ctl_out.bind(&simobject_->branch_ctl_in);
     std::static_pointer_cast<SfuUnit>(func_units_.at((int)FUType::SFU))->warp_ctl_out.bind(&simobject_->warp_ctl_in);
+    scheduler_->barrier_unit().unlock_out.bind(&simobject_->bar_unlock_in);
   #ifdef VX_CFG_EXT_TCU_ENABLE
     snprintf(sname, 100, "%s-tcu", name.c_str());
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
@@ -338,6 +340,7 @@ public:
     std::fill(issue_lock_owner_.begin(), issue_lock_owner_.end(), kLockOpen);
     std::fill(last_issue_.begin(), last_issue_.end(), 0);
     std::fill(staged_since_.begin(), staged_since_.end(), 0);
+    std::fill(head_staged_.begin(), head_staged_.end(), false);
 
     pending_instrs_.clear();
     pending_ifetches_ = 0;
@@ -373,14 +376,20 @@ public:
 
     scheduler_->schedule_begin();
 
-    // each fetch slice picks among its own warps whose ibuffer is not yet saturated
+    // Each fetch slice picks among its own warps whose ibuffer is not full; a
+    // buffer is full at exactly IBUF_SIZE entries. With an L1, once every warp's
+    // buffer is full any ready warp may fetch, its instruction waiting at decode.
+    bool all_full = (VX_CFG_ICACHE_ENABLED || VX_CFG_DCACHE_ENABLED);
+    for (uint32_t w = 0; w < VX_CFG_NUM_WARPS && all_full; ++w) {
+      all_full = (ibuf_inflight_.at(w) == VX_CFG_IBUF_SIZE);
+    }
     // the cycle is idle when no slice has a warp to fetch, its latch free or not
     bool any_cand = false;
     for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
       auto& fetch_latch = fetch_latch_.at(f);
       WarpMask warp_mask;
       for (uint32_t w = f; w < VX_CFG_NUM_WARPS; w += VX_CFG_FETCH_WIDTH) {
-        if (ibuf_inflight_.at(w) < VX_CFG_IBUF_SIZE) {
+        if (all_full || ibuf_inflight_.at(w) != VX_CFG_IBUF_SIZE) {
           warp_mask.set(w);
         }
       }
@@ -508,7 +517,9 @@ public:
     mem_req.tag   = tag;
     mem_req.hart_id   = trace->cid;
     mem_req.uuid  = trace->uuid;
-    if (icache_req.try_send(mem_req)) {
+    // The first icache port also carries the cache-flush injection, which
+    // registers its requests once more.
+    if (icache_req.try_send(mem_req, (f == 0) ? 2 : 1)) {
       DT(3, simobject_->name() << " icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
     #ifdef VX_CFG_EXT_C_ENABLE
       decompressor->commit_request(from_refetch);
@@ -634,6 +645,15 @@ public:
 
         // check scoreboard against sequencer micro-op (handles uop WAW/RAW)
         auto trace = ibuffer->peek();
+
+        // The head moves into the warp's staging register, freeing its buffer
+        // slot, once it has arrived and the warp's previous instruction has
+        // issued; the scheduler sees the freed slot the cycle after.
+        if (!head_staged_.at(wid)
+         && SimPlatform::instance().cycles() > std::max(last_issue_.at(wid), trace->ibuf_time)) {
+          head_staged_.at(wid) = true;
+          this->ibuf_release(wid);
+        }
         auto seq = sequencers_.at(wid);
         auto uop_trace = seq->get(trace);  // returns cached uop or generates next
 
@@ -694,7 +714,8 @@ public:
         }
       }
 
-      if (ready_set.any()) {
+      // The arbiter advances only on an issue that fires.
+      if (ready_set.any() && !operands_.at(iw)->Input.full()) {
         // select one instruction from ready set
         auto w = ibuffer_arbs_.at(iw).grant(ready_set);
         uint32_t wid = w * VX_CFG_ISSUE_WIDTH + iw;
@@ -749,19 +770,10 @@ public:
               trace_pool_.deallocate(trace, 1);
             }
             ibuffer->pop();
-            // Release ibuffer backpressure slot (matches ++ in schedule()).
-            // Saturating decrement: flush_warp_pipeline only drains the
-            // ibuffer + resets ibuf_inflight to 0, but fetch_latch_ /
-            // decode-stage entries scheduled pre-trap can still arrive
-            // at issue() post-flush and decrement the (now-zeroed)
-            // counter. Async-trap users (RTU CB_YIELD path: AHS, CHS,
-            // MISS) routinely hit this; a non-saturating decrement
-            // underflows to UINT32_MAX and stalls scheduling. Proper
-            // fix is to extend flush_warp_pipeline to also drain
-            // fetch_latch_ + pending icache fetches for the warp.
-            if (ibuf_inflight_.at(wid) > 0) {
-              --ibuf_inflight_.at(wid);
+            if (!head_staged_.at(wid)) {
+              this->ibuf_release(wid);
             }
+            head_staged_.at(wid) = false;
           }
         }
       }
@@ -770,6 +782,21 @@ public:
       if (any_scrb_blocked) {
         ++perf_stats_.scrb_stalls;
       }
+    }
+  }
+
+  // Release an ibuffer backpressure slot (matches ++ in schedule()).
+  // Saturating decrement: flush_warp_pipeline only drains the ibuffer and
+  // resets ibuf_inflight to 0, but fetch_latch_ / decode-stage entries
+  // scheduled pre-trap can still arrive at issue() post-flush and decrement
+  // the (now-zeroed) counter. Async-trap users (RTU CB_YIELD path: AHS, CHS,
+  // MISS) routinely hit this; a non-saturating decrement underflows to
+  // UINT32_MAX and stalls scheduling. Proper fix is to extend
+  // flush_warp_pipeline to also drain fetch_latch_ + pending icache fetches
+  // for the warp.
+  void ibuf_release(uint32_t wid) {
+    if (ibuf_inflight_.at(wid) > 0) {
+      --ibuf_inflight_.at(wid);
     }
   }
 
@@ -817,6 +844,11 @@ public:
         scheduler_->resume(ctl.wid);
       }
       warp_ctl.pop();
+    }
+    auto& bar_unlock = simobject_->bar_unlock_in;
+    while (!bar_unlock.empty()) {
+      scheduler_->resume(bar_unlock.peek());
+      bar_unlock.pop();
     }
 
     // Fan-in: route per-block FU outputs to per-iw commit queues by trace->wid.
@@ -934,7 +966,8 @@ public:
   // ----- Public-facing API (called from outer Core trampolines) -----
 
   bool running() const {
-    if (scheduler_->running() || !pending_instrs_.empty()) {
+    // committed stores wait in the LSU request queue until sent to memory
+    if (scheduler_->running() || !pending_instrs_.empty() || !this->lsu_drained()) {
       return true;
     }
   #ifdef VX_CFG_VM_ENABLE
@@ -977,6 +1010,7 @@ public:
       ibuffer->pop();
     }
     ibuf_inflight_.at(wid) = 0;
+    head_staged_.at(wid) = false;
     uint32_t iw = wid % VX_CFG_ISSUE_WIDTH;
     if (issue_lock_owner_.at(iw) == wid / VX_CFG_ISSUE_WIDTH) {
       issue_lock_owner_.at(iw) = kLockOpen;
@@ -1163,6 +1197,7 @@ private:
   std::vector<uint32_t> ibuf_inflight_;
   std::vector<uint64_t> last_issue_;   // [wid] cycle of the warp's last issue
   std::vector<uint64_t> staged_since_; // [wid] cycle the last issued candidate was staged
+  std::vector<bool>     head_staged_;  // [wid] the buffer head has left for staging
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 
@@ -1191,6 +1226,7 @@ Core::Core(const SimContext& ctx,
   , dcache_rsp_in(VX_CFG_DCACHE_NUM_REQS, this)
   , branch_ctl_in(this, VX_CFG_NUM_WARPS)
   , warp_ctl_in(this, VX_CFG_NUM_WARPS)
+  , bar_unlock_in(this, VX_CFG_NUM_WARPS)
   , gbar_arrive_out(this)
   , gbar_resume_in(this)
 #ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -1243,8 +1279,8 @@ void Core::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is
   impl_->scheduler()->barrier_unit().arrive(bar_id, count, wid, is_sync_bar);
 }
 
-bool Core::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
-  return impl_->scheduler()->barrier_unit().wait(bar_id, phase, wid);
+void Core::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
+  impl_->scheduler()->barrier_unit().wait(bar_id, phase, wid);
 }
 
 void Core::global_barrier_resume(uint32_t bar_id) {

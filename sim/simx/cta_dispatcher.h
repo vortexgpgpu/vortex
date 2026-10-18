@@ -114,6 +114,8 @@ private:
 
   // Currently-in-flight CTA (being dispatched warp-rank by warp-rank)
   bool      has_cta_;
+  // the last warp has launched; the dispatcher returns to accepting next cycle
+  bool      cta_done_;
   uint32_t  cur_slot_;    // slot index assigned to the current in-flight CTA
   kmu_req_t cta_;
   uint32_t  cta_size_;

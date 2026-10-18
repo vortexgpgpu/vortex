@@ -717,6 +717,10 @@ public:
   template <typename F>
   void tx_callback(F&& callback) { tx_cb_ = std::forward<F>(callback); }
 
+  // Ready timing is a timing-model property; accepted for API compatibility
+  // and ignored.
+  void set_registered_ready(bool /*enable*/) {}
+
   // Back-pressure is disabled: producers never stall.
   bool full() const override { return false; }
 

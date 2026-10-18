@@ -84,6 +84,7 @@ public:
       VX_CFG_L2_LATENCY,             // pipeline latency
       VX_CFG_L2_REPL_POLICY,         // replacement policy
       (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
+      true,                          // non-cacheable bypass
       (VX_CFG_L2_BANK_HASH != 0) && (VX_CFG_L2_NUM_BANKS > 1), // bank_hash
       L2_SHARED_LLC,                 // shared_llc
       VX_CFG_L2_LAZY_FETCH != 0,     // lazy_fetch

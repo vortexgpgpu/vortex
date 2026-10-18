@@ -40,6 +40,9 @@ public:
   bool is_shared(const instr_trace_t* trace) const;
 
 private:
+  // Thread mask a TMC or PRED installs.
+  ThreadMask next_tmask(const instr_trace_t* trace) const;
+
   Core* core_;
 };
 

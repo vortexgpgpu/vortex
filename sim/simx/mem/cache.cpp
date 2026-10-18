@@ -2044,6 +2044,93 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// The cache's core-port arbiter: a port's request is accepted only when its
+// bank grants it, one per bank per cycle, round-robin over the ports, and only
+// while the bank's input buffer has room; non-cacheable requests are split off
+// for the bypass path. It ticks ahead of the banks, so a grant reaches its bank
+// in the same cycle unless the crossbar registers its output.
+class CachePortArb : public SimObject<CachePortArb> {
+public:
+  std::vector<SimChannel<MemReq>> ReqIn;  // core ports
+  std::vector<SimChannel<MemReq>> ReqOut; // banks
+  std::vector<SimChannel<MemReq>> IoOut;  // non-cacheable requests, per port
+
+  CachePortArb(const SimContext& ctx, const char* name, const params_t& params,
+               uint32_t num_inputs, uint32_t num_banks)
+    : SimObject<CachePortArb>(ctx, name)
+    , ReqIn(num_inputs, this)
+    , ReqOut(num_banks, this)
+    , IoOut(num_inputs, this)
+    , params_(params)
+    , lg2_inputs_(log2ceil(num_inputs))
+    // the request crossbar registers its output when it has more than two inputs
+    , delay_((num_inputs > 2) ? 1 : 0)
+    , rr_(num_banks, num_inputs - 1)
+  {
+    assert(num_inputs <= 64);
+  }
+
+  uint64_t collisions() const { return collisions_; }
+
+  // The cache's line initialization holds the core ports for these cycles.
+  void set_init_cycles(uint32_t cycles) { init_cycles_ = cycles; }
+
+protected:
+  void on_reset() {
+    std::fill(rr_.begin(), rr_.end(), ReqIn.size() - 1);
+    collisions_ = 0;
+  }
+
+  void on_tick() {
+    if (init_cycles_ != 0) {
+      --init_cycles_;
+      return;
+    }
+    uint32_t n = ReqIn.size();
+    // requesting ports per bank; non-cacheable requests leave on their own port
+    std::vector<uint64_t> want(ReqOut.size(), 0);
+    for (uint32_t i = 0; i < n; ++i) {
+      auto& in = ReqIn.at(i);
+      if (in.empty()) {
+        continue;
+      }
+      auto& req = in.peek();
+      if (req.flags.io) {
+        if (IoOut.at(i).try_send(req, 0)) {
+          in.pop();
+        }
+        continue;
+      }
+      want.at(params_.addr_bank_id(req.addr)) |= 1ull << i;
+    }
+    for (uint32_t b = 0, nb = ReqOut.size(); b < nb; ++b) {
+      if (want[b] == 0 || ReqOut.at(b).full()) {
+        continue;
+      }
+      uint32_t i = rr_[b];
+      do {
+        i = (i + 1) % n;
+      } while (!(want[b] & (1ull << i)));
+      collisions_ += __builtin_popcountll(want[b]) - 1;
+      auto req = ReqIn.at(i).peek();
+      req.tag = (req.tag << lg2_inputs_) | i;
+      ReqOut.at(b).send(req, delay_);
+      ReqIn.at(i).pop();
+      rr_[b] = i;
+    }
+  }
+
+private:
+  params_t params_;
+  uint32_t lg2_inputs_;
+  uint32_t delay_;
+  uint32_t init_cycles_ = 0;
+  std::vector<uint32_t> rr_;
+  uint64_t collisions_ = 0;
+
+  friend class SimObject<CachePortArb>;
+};
+
 class Cache::Impl {
 public:
   Impl(Cache *simobject, const Config &config)
@@ -2088,7 +2175,15 @@ public:
       nc_mem_arbs_.at(i)->RspOut.at(0).bind(&bank_mem_arb->RspIn.at(i));
     }
 
-    // Create bank's core crossbar
+    // Create the core-port arbiter ahead of the banks it feeds
+    snprintf(sname, 100, "%s-port_arb", simobject->name().c_str());
+    port_arb_ = CachePortArb::Create(sname, params_, config_.num_inputs, num_banks);
+    for (uint32_t i = 0; i < config_.num_inputs; ++i) {
+      simobject->core_req_in.at(i).bind(&port_arb_->ReqIn.at(i));
+    }
+
+    // Create bank's core crossbar; it carries the bank responses back to the
+    // core ports
     snprintf(sname, 100, "%s-core_xbar", simobject->name().c_str());
     bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks,
                                           [&](const MemCrossBar::ReqType &req) {
@@ -2101,7 +2196,7 @@ public:
       banks_.at(i) = CacheBank::Create(sname, config, params_, i);
 
       // bind core ports
-      bank_core_xbar_->ReqOut.at(i).bind(&banks_.at(i)->core_req_in);
+      port_arb_->ReqOut.at(i).bind(&banks_.at(i)->core_req_in);
       banks_.at(i)->core_rsp_out.bind(&bank_core_xbar_->RspIn.at(i));
 
       // bind memory ports
@@ -2115,6 +2210,7 @@ public:
       return;
     // calculate cache initialization cycles
     init_cycles_ = keep_lines_ ? 0 : params_.sets_per_bank;
+    port_arb_->set_init_cycles(init_cycles_);
     keep_lines_ = false;
   }
 
@@ -2147,26 +2243,18 @@ public:
       if (bank_rsp.empty())
         continue;
       auto &core_rsp = bank_rsp.peek();
-      if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, 0)) {
+      // the non-cacheable bypass layer's response arbiter registers it once more
+      if (simobject_->core_rsp_out.at(req_id).try_send(core_rsp, config_.nc_enable ? 1 : 0)) {
         DT(3, simobject_->name() << " core-rsp: " << core_rsp);
         bank_rsp.pop();
       }
     }
 
-    // schedule core requests
+    // non-cacheable core requests split off by the port arbiter
     for (uint32_t req_id = 0, n = config_.num_inputs; req_id < n; ++req_id) {
-      auto &core_req_in = simobject_->core_req_in.at(req_id);
-      if (core_req_in.empty())
-        continue;
-      auto &core_req = core_req_in.peek();
-      if (core_req.flags.io) {
-        if (this->processBypassRequest(core_req, req_id)) {
-          core_req_in.pop();
-        }
-      } else {
-        if (bank_core_xbar_->ReqIn.at(req_id).try_send(core_req, 0)) {
-          core_req_in.pop();
-        }
+      auto &io_req = port_arb_->IoOut.at(req_id);
+      if (!io_req.empty() && this->processBypassRequest(io_req.peek(), req_id)) {
+        io_req.pop();
       }
     }
   }
@@ -2177,7 +2265,7 @@ public:
       for (const auto &bank : banks_) {
         perf_stats += bank->perf_stats();
       }
-      perf_stats.bank_stalls = bank_core_xbar_->collisions();
+      perf_stats.bank_stalls = port_arb_->collisions();
     }
     return perf_stats;
   }
@@ -2233,6 +2321,7 @@ private:
   std::vector<CacheBank::Ptr> banks_;
   MemArbiter::Ptr bank_arb_;
   std::vector<MemArbiter::Ptr> nc_mem_arbs_;
+  CachePortArb::Ptr port_arb_;
   MemCrossBar::Ptr bank_core_xbar_;
   uint32_t init_cycles_;
   bool     keep_lines_ = false;

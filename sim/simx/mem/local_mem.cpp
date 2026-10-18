@@ -85,11 +85,21 @@ public:
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
 		uint32_t lg2_line_size = log2ceil(config_.line_size);
 		uint32_t num_banks = 1 << config.B;
+		// The crossbar's registered request and response outputs are taken by
+		// the switch and bank stages around it, so its delays here are only the
+		// extra tree level: an arbiter over more than 1.5x the fan-out limit is
+		// split into a buffered tree, one cycle deeper. The request side
+		// arbitrates the lanes at each bank, the response side the banks at
+		// each lane.
+		auto tree_delay = [](uint32_t requesters) -> uint32_t {
+			constexpr uint32_t kMaxFanout = 8;
+			return (requesters > kMaxFanout + kMaxFanout / 2) ? 1 : 0;
+		};
 		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::Priority, config.num_reqs, num_banks,
 		 [lg2_line_size, num_banks](const MemCrossBar::ReqType& req) {
     	// Custom logic to calculate the output index using bank interleaving
 			return (uint32_t)((req.addr >> lg2_line_size) & (num_banks-1));
-		});
+		}, tree_delay(config.num_reqs), tree_delay(num_banks));
 		for (uint32_t i = 0; i < config.num_reqs; ++i) {
 			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
 			mem_xbar_->RspOut.at(i).bind(&simobject->Outputs.at(i));

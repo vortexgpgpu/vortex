@@ -104,6 +104,7 @@ ProcessorImpl::ProcessorImpl()
     VX_CFG_L3_LATENCY,               // pipeline latency
     VX_CFG_L3_REPL_POLICY,           // replacement policy
     VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
+    true,                            // non-cacheable bypass
     false,                           // bank_hash
     L3_SHARED_LLC,                   // shared_llc
     VX_CFG_L3_LAZY_FETCH != 0,       // lazy_fetch

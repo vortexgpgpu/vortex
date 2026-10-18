@@ -34,6 +34,7 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , wid_to_slot_(num_warps_, num_warps_)  // num_warps_ = invalid/unassigned
   , tail_slot_(0)
   , has_cta_(false)
+  , cta_done_(false)
   , cur_slot_(0)
   , cta_size_(0)
   , rank_(0)
@@ -59,6 +60,7 @@ CtaDispatcher::~CtaDispatcher() {}
 
 void CtaDispatcher::on_reset() {
   has_cta_    = false;
+  cta_done_   = false;
   tail_slot_  = 0;
   init_wait_  = 0;
   for (uint32_t i = 0; i < num_warps_; ++i) {
@@ -100,6 +102,11 @@ uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
 }
 
 uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_warp_record_t* recs) {
+  if (cta_done_) {
+    cta_done_ = false;
+    has_cta_  = false;
+    return 0;
+  }
   if (!has_cta_) {
     // The KMU pushes CTAs down a registered, credit-gated launch lane; the
     // endpoint holds the one CTA committed to this core. It is popped only on
@@ -178,6 +185,9 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
 
     has_cta_ = true;
 
+    // The accept moves the dispatcher to its launch state.
+    init_wait_ = 1;
+
     if (VX_CFG_FETCH_WIDTH > 1) {
       bool same_shape = true;
       for (uint32_t d = 0; d < 3; ++d) {
@@ -189,7 +199,7 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
           shape_step_[d] = cta_.warp_step[d];
           shape_dim_[d]  = cta_.block_dim[d];
         }
-        init_wait_ = VX_CFG_FETCH_WIDTH;
+        init_wait_ += VX_CFG_FETCH_WIDTH;
       }
     }
   }
@@ -202,7 +212,7 @@ uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_w
   // Lanes with a free slot, round-robin from lane_rr_, up to the warps left;
   // each launches its lowest free slot.
   uint32_t count = 0;
-  for (uint32_t o = 0; o < VX_CFG_FETCH_WIDTH && has_cta_; ++o) {
+  for (uint32_t o = 0; o < VX_CFG_FETCH_WIDTH && !cta_done_; ++o) {
     uint32_t lane = (lane_rr_ + o) % VX_CFG_FETCH_WIDTH;
     int free_wid = -1;
     for (uint32_t wid = lane; wid < num_warps_; wid += VX_CFG_FETCH_WIDTH) {
@@ -266,7 +276,7 @@ void CtaDispatcher::mark_slot_inited(uint32_t wid, const ThreadMask& tmask) {
 }
 
 bool CtaDispatcher::next_warp(bool do_init, cta_warp_record_t* out) {
-  if (!has_cta_) return false;
+  if (!has_cta_ || cta_done_) return false;
 
   out->do_init  = do_init;
   out->PC       = Word(cta_.PC);
@@ -320,7 +330,7 @@ bool CtaDispatcher::next_warp(bool do_init, cta_warp_record_t* out) {
 
   ++rank_;
   if (rank_ >= cta_size_) {
-    has_cta_ = false;
+    cta_done_ = true;
   }
 
   return true;
