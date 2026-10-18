@@ -25,6 +25,13 @@
 //
 //   ./dram_bank_model            the gate, on short runs
 //   ./dram_bank_model full [cfg] the full table (20,000 requests per cell)
+//   ./dram_bank_model refresh    the bandwidth refresh costs the bank model,
+//                                per bank and all banks, at 64 outstanding
+//                                (dram_sim models no refresh). The gate: one
+//                                refresh per interval, to the operation; and a
+//                                stream, which moves data every clock it may,
+//                                loses at least tRFC / tREFI to all-bank
+//                                refresh, the time no bank is open
 
 #include <dram_bank_model.h>
 #include <dram_sim.h>
@@ -146,9 +153,10 @@ double ks_distance(const std::vector<uint64_t>& a, const std::vector<uint64_t>& 
   return ks;
 }
 
-DramBankSim::Config bank_config(const DramSim::Config& c) {
+DramBankSim::Config bank_config(const DramSim::Config& c,
+                                DramBankModel::Refresh refresh = DramBankModel::Refresh::Off) {
   return DramBankSim::Config{c.type, c.num_channels, c.block_size, c.core_clock, c.data_rate,
-                             c.latency, c.queue_size};
+                             c.latency, c.queue_size, refresh};
 }
 
 std::vector<Pattern> patterns() {
@@ -170,7 +178,62 @@ std::vector<Pattern> patterns() {
 
 }  // namespace
 
+// Bandwidth with refresh off, per bank and all banks.
+int refresh_table() {
+  using R = DramBankModel::Refresh;
+  int failures = 0;
+  const uint32_t n = 60000, w = 64;
+  printf("%-9s %-9s | %7s | %7s %6s %6s | %7s %6s %6s %6s\n", "machine", "pattern", "off B/c",
+         "bank", "loss%", "refs", "all", "loss%", "refs", "tRFC/tREFI%");
+  for (const auto& mach : kMachines) {
+    if (mach.cfg.type == DramSim::Type::GDDR6) continue;
+    const auto std = (mach.cfg.type == DramSim::Type::HBM3) ? dram_timing::Standard::HBM3
+                                                             : dram_timing::Standard::HBM2;
+    const auto r = dram_timing::refresh(std, mach.cfg.data_rate);
+    const double analytic = 100.0 * double(r.RFC) / double(r.REFI);
+    for (const auto& p : patterns()) {
+      if (p.write_frac != 0 || !std::strcmp(p.name, "conflict")) continue;
+      double bw[3];
+      uint64_t refs[3];
+      const R modes[3] = {R::Off, R::PerBank, R::AllBank};
+      for (int k = 0; k < 3; ++k) {
+        DramBankSim mod(bank_config(mach.cfg, modes[k]));
+        bw[k] = run(mod, mach.cfg, p, w, n).bw;
+        refs[k] = 0;
+        for (uint32_t ch = 0; ch < mach.cfg.num_channels; ++ch) {
+          const auto& m = mod.channel(ch);
+          refs[k] += m.stats().refreshes;
+          // The refreshes due by the last clock, but one in progress.
+          const uint32_t refi = m.config().refi;
+          const uint64_t due = refi ? m.clock() / refi : 0;
+          if (m.stats().refreshes + 1 < due || m.stats().refreshes > due) {
+            printf("FAIL %s %s: %lu refreshes in %lu clocks of %u\n", mach.name, p.name,
+                   (unsigned long)m.stats().refreshes, (unsigned long)m.clock(), refi);
+            ++failures;
+          }
+        }
+      }
+      const double lb = 100.0 * (1 - bw[1] / bw[0]), la = 100.0 * (1 - bw[2] / bw[0]);
+      printf("%-9s %-9s | %7.2f | %7.2f %6.2f %6lu | %7.2f %6.2f %6lu %6.2f\n", mach.name, p.name,
+             bw[0], bw[1], lb, (unsigned long)refs[1], bw[2], la, (unsigned long)refs[2], analytic);
+      if (!std::strcmp(p.name, "seq") && la < analytic) {
+        printf("FAIL %s %s: all-bank refresh costs %.2f%%, less than tRFC/tREFI (%.2f%%)\n", mach.name,
+               p.name, la, analytic);
+        ++failures;
+      }
+    }
+  }
+  if (failures) {
+    printf("FAILED: %d\n", failures);
+    return 1;
+  }
+  printf("PASSED!\n");
+  return 0;
+}
+
 int main(int argc, char** argv) {
+  if (argc > 1 && !std::strcmp(argv[1], "refresh"))
+    return refresh_table();
   const bool full = argc > 1 && !std::strcmp(argv[1], "full");
   const char* only = (full && argc > 2) ? argv[2] : nullptr;
   const uint32_t n = full ? 20000 : 2000;

@@ -66,12 +66,14 @@ inline constexpr clock_timing_t hbm_bus_timing[] = {
 // the rest from Ramulator's HBM2_2Gbps preset, whose 1 ns clock makes its
 // cycles nanoseconds. The array does not speed up with the interface: HBM2E
 // and HBM3 parts keep these timings (GPGPU-Sim's SM80_A100 and SM90_H100 HBM
-// lines are the same 14/33/47 ns at their own clocks). Refresh timings complete
-// the set Ramulator requires.
+// lines are the same 14/33/47 ns at their own clocks). Refresh: the per-bank
+// tRFCSB and tREFI of that preset, and the all-bank tRFC of Ramulator's table
+// for the 8 Gb channel dram_sim configures.
 inline constexpr ns_timing_t hbm_array_timing[] = {
   {"tCL", 14}, {"tRCDRD", 14}, {"tRCDWR", 14}, {"tRP", 14}, {"tRAS", 33}, {"tRC", 47},
   {"tCWL", 2}, {"tWR", 12}, {"tRTPS", 2}, {"tRTPL", 4}, {"tRRDS", 4}, {"tRRDL", 4},
-  {"tWTRS", 3}, {"tWTRL", 4}, {"tFAW", 15}, {"tRFCSB", 160}, {"tREFI", 3900}, {"tRREFD", 8},
+  {"tWTRS", 3}, {"tWTRL", 4}, {"tFAW", 15}, {"tRFC", 350}, {"tRFCSB", 160}, {"tREFI", 3900},
+  {"tRREFD", 8},
 };
 
 // Ramulator's GDDR6 clock is half the data rate: a 32 B burst, 16 beats on a
@@ -209,6 +211,26 @@ inline clocks_t clocks(Standard standard, uint32_t data_rate) {
     c.WTRS = g(nullptr, "tWTRS"); c.WTRL = g(nullptr, "tWTRL");
   }
   return c;
+}
+
+// Refresh, in DRAM clocks: the interval in which every bank is refreshed once
+// (tREFI), and how long a refresh keeps its banks from activating, all of them
+// (tRFC) or one (per-bank refresh: HBM's REFsb, GDDR6's REFpb).
+struct refresh_t {
+  uint32_t REFI, RFC, RFCPB;
+};
+
+inline refresh_t refresh(Standard standard, uint32_t data_rate) {
+  const int tck = tck_ps(data_rate);
+  refresh_t r{};
+  if (standard == Standard::GDDR6) {
+    auto g = [&](const char* t) { return detail::get(gddr6_bus_timing, gddr6_array_timing, tck, nullptr, t); };
+    r.REFI = g("tREFI"); r.RFC = g("tRFC"); r.RFCPB = g("tRFCpb");
+  } else {
+    auto g = [&](const char* t) { return detail::get(hbm_bus_timing, hbm_array_timing, tck, nullptr, t); };
+    r.REFI = g("tREFI"); r.RFC = g("tRFC"); r.RFCPB = g("tRFCSB");
+  }
+  return r;
 }
 
 } // namespace dram_timing

@@ -223,8 +223,10 @@ def emit_mk(c: Card) -> str:
 
 
 def emit_cfg(c: Card, mem_tag: str, host_tag: str, kernel_mhz: int,
-             kernel: str = "vortex_afu") -> str:
-    """The linker config of `kernel`; one with no host-memory port has no host tag."""
+             kernel: str = "vortex_afu", mem_ports: int = 1) -> str:
+    """The linker config of `kernel`; one with no host-memory port has no host tag.
+    A kernel with several device-memory masters (m_axi_mem_0..mem_ports-1) binds
+    each to the memory tag: the linker gives each its own way into it."""
     if c.flow != "aved":
         raise DescriptorError(f"card '{c.name}' is an {c.flow} card; cfg is for the aved flow")
     if host_tag:
@@ -237,7 +239,7 @@ def emit_cfg(c: Card, mem_tag: str, host_tag: str, kernel_mhz: int,
         "# ethernet stack the AFU has no use for.",
         "shell=compute",
         f"nk={kernel}:1:{inst}",
-        f"sp={inst}.m_axi_mem_0:{mem_tag}",
+    ] + [f"sp={inst}.m_axi_mem_{i}:{mem_tag}" for i in range(mem_ports)
     ] + ([f"sp={inst}.m_axi_host:{host_tag}"] if host_tag else []) + [
         "",
         "# Kernel clock, in Hz rather than via the linker's --clock-hz flag, whose",
@@ -314,6 +316,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--kernel-mhz", type=int, default=0)
     ap.add_argument("--kernel", default="vortex_afu", help="kernel the cfg links (aved flow)")
     ap.add_argument("--no-host", action="store_true", help="the kernel has no host-memory port")
+    ap.add_argument("--mem-ports", type=int, default=1,
+                    help="device-memory masters of the kernel the cfg links (aved flow)")
     ap.add_argument("--platform-dir", default=PLATFORM_DIR)
     ap.add_argument("-o", "--output", default="-")
     a = ap.parse_args(argv)
@@ -328,7 +332,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif a.emit == "cfg":
             out = emit_cfg(c, a.mem_tag or c.mem_tags[0],
                            "" if a.no_host else (a.host_tag or c.host_tag),
-                           a.kernel_mhz or c.kernel_mhz, a.kernel)
+                           a.kernel_mhz or c.kernel_mhz, a.kernel, a.mem_ports)
         elif a.emit == "firesim-mk":
             out = emit_firesim_mk(c)
         elif a.emit == "scala":

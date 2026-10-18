@@ -33,6 +33,12 @@
 // 2^HLOG2 - 64 clocks ahead: the ring's last word is the one being retired.
 // Times of the bank table and the controller are 16-bit, modulo; a time too
 // old to constrain anything is moved up before it could wrap.
+//
+// Refresh, when on, takes a DRAM clock's turn to reserve every `cfg_refi`
+// clocks: a precharge and a REF, placed as a precharge is, on the next bank in
+// turn or (all-bank) on every bank. For all-bank refresh the channel keeps the
+// latest time a precharge and an activate allow it, over the banks opened
+// since the last one, instead of reading the bank table.
 module foldsim_mem_bank #(
     parameter ID_W   = 4,
     parameter SLOTS  = 32,
@@ -65,6 +71,11 @@ module foldsim_mem_bank #(
     // tWR, tRRD_S, tRRD_L, tFAW, tWTR_S, tWTR_L, read-to-write extra: DRAM
     // clocks, 12 bits each.
     input  wire [18*12-1:0]      cfg_t,
+    // Refresh: [0] on, [1] all banks at once; clocks between refreshes, and
+    // clocks a refreshed bank may not activate.
+    input  wire [1:0]            cfg_refresh,
+    input  wire [15:0]           cfg_refi,
+    input  wire [15:0]           cfg_rfc,
 
     // The target cycle finishes; a reset cycle drops everything.
     input  wire                  finish,
@@ -96,14 +107,17 @@ module foldsim_mem_bank #(
     // The bank model is the port's timing, since the last target reset.
     output reg                   active,
 
-    // Reads, writes, row hits, misses, conflicts, and the sum of read
-    // latencies (target cycles from AR to R).
+    // Reads, writes, row hits, misses, conflicts, the sum of read latencies
+    // (target cycles from AR to R), refreshes, and target cycles the port
+    // could take no read.
     output reg  [63:0]           stat_reads,
     output reg  [63:0]           stat_writes,
     output reg  [63:0]           stat_hits,
     output reg  [63:0]           stat_misses,
     output reg  [63:0]           stat_conflicts,
-    output reg  [63:0]           stat_latency
+    output reg  [63:0]           stat_latency,
+    output reg  [63:0]           stat_refreshes,
+    output reg  [63:0]           stat_full
 );
     localparam H     = 1 << HLOG2;
     localparam HE    = H - 64;
@@ -138,7 +152,7 @@ module foldsim_mem_bank #(
 
     reg signed [15:0] k_ccds, k_ccdl, k_rtw, k_wtrs, k_wtrl, k_reach_r, k_reach_w, k_reach_a;
     reg signed [15:0] k_wrpre, k_dep, k_ccdl1, k_rcdrd, k_rcdwr, k_rp, k_ras, k_rc, k_rtp;
-    reg signed [15:0] k_rrds, k_rrdl;
+    reg signed [15:0] k_rrds, k_rrdl, k_rfc;
     reg [16:0]        k_twoclk;
     reg [2:0]         k_bb;
     reg [4:0]         k_rowsh;
@@ -164,6 +178,7 @@ module foldsim_mem_bank #(
         k_rtp     <= 16'(T[I_RTP]);
         k_rrds    <= 16'(T[I_RRDS]);
         k_rrdl    <= 16'(T[I_RRDL]);
+        k_rfc     <= $signed(cfg_rfc);
         k_twoclk  <= {cfg_core_clock, 1'b0};
         k_bb      <= 3'(g_lpcs) + 3'(g_lbgs) + 3'(g_lbanks);
         k_rowsh   <= 5'(g_lpcs) + 5'(g_lbgs) + 5'(g_lbanks) + 5'(g_lrow);
@@ -281,6 +296,13 @@ module foldsim_mem_bank #(
     reg [7:0]        rq_cnt, wq_cnt; // reserved bursts whose column has not issued
     reg              wmode;
     reg [15:0]       frontier, batch_floor, batch_last, read_floor;
+    // Refresh: when the next is due, and the bank it is for. All-bank: a bank
+    // was opened since the last; the latest precharge and activate + tRC any
+    // bank allows; and no bank activates before ab_floor.
+    reg [15:0]       ref_due;
+    reg [4:0]        ref_bank;
+    reg              ab_open;
+    reg [15:0]       ab_prer, ab_actrc, ab_floor;
 
     // The bank table, written at one port. A fresh bank has no row open and
     // no time that matters.
@@ -306,6 +328,7 @@ module foldsim_mem_bank #(
     reg  [WW-1:0]    s_word;         // the word the search reads
     wire [WW-1:0]    s_word1 = s_word + WW'(1);
     reg              op_w;
+    reg              op_ref;         // the operation is a refresh
     reg [TAG_W-1:0]  op_tag;
     reg [BKW-1:0]    op_bank;
     reg [ROW_W-1:0]  op_row;
@@ -383,8 +406,9 @@ module foldsim_mem_bank #(
     // ---- The engine ----
     localparam S_IDLE = 4'd0, S_PUSH = 4'd1, S_TICK = 4'd2, S_MODE = 4'd3, S_BANK = 4'd4,
                S_BANK2 = 4'd5, S_SETUP = 4'd6, S_SETUP2 = 4'd7, S_SRCH = 4'd8, S_CHECK = 4'd9,
-               S_CHECK2 = 4'd10, S_COMMIT = 4'd11, S_END = 4'd12, S_WALK = 4'd13;
-    localparam K_PRE = 2'd0, K_ACT = 2'd1, K_C0 = 2'd2, K_C1 = 2'd3;
+               S_CHECK2 = 4'd10, S_COMMIT = 4'd11, S_END = 4'd12, S_WALK = 4'd13,
+               S_RBANK = 4'd14, S_RBANK2 = 4'd15;
+    localparam K_PRE = 3'd0, K_ACT = 3'd1, K_C0 = 3'd2, K_C1 = 3'd3, K_REF = 3'd4;
     reg [3:0]        state;
 
     assign done = (state == S_IDLE);
@@ -393,8 +417,8 @@ module foldsim_mem_bank #(
     // relative to e.
     reg              op_hit, op_conf;
     reg signed [15:0] r_act, r_colr, r_prer, r_floor;
-    reg signed [15:0] c_pre, c_act, c_col0, c_col1;
-    reg [1:0]        kind;
+    reg signed [15:0] c_pre, c_act, c_col0, c_col1, c_ref;
+    reg [2:0]        kind;
 
     // The search: its lower bound; the next word to read (as the ring
     // position and the clocks left to the horizon) and the one read last
@@ -419,7 +443,7 @@ module foldsim_mem_bank #(
     wire [63:0] f_col   = rd_cmd | (op_w ? (rd_fwp | rd_fwg) : (rd_frp | rd_frg));
     wire [63:0] f_act   = rd_cmd | rd_row | (g_act2 ? {rd_row1[0], rd_row[63:1]} : 64'd0) | rd_fap | rd_fag;
     wire [63:0] f_pre   = rd_cmd | rd_row;
-    wire [63:0] forb    = (kind == K_PRE) ? f_pre : ((kind == K_ACT) ? f_act : f_col);
+    wire [63:0] forb    = ((kind == K_PRE) | (kind == K_REF)) ? f_pre : ((kind == K_ACT) ? f_act : f_col);
 
     reg  [5:0]  b_ffs;
     always @(*) begin
@@ -473,6 +497,7 @@ module foldsim_mem_bank #(
     wire               to_read  = wmode & (wn < 9'(cfg_wr_low)) & (rn != 0);
     wire               wmode_n  = to_write | (wmode & ~to_read);
     wire               sel_any  = wmode_n ? (wb_count != 0) : (rb_count != 0);
+    wire               ref_now  = cfg_refresh[0] & (cfg_refi != 16'd0) & ($signed(e - ref_due) >= 0);
 
     // The bank table's port: a reservation's bank, or the scrub's.
     // The scrub reads a bank in one host cycle and writes it in the next.
@@ -482,7 +507,7 @@ module foldsim_mem_bank #(
     reg [ROW_W-1:0]  sc_row;
     reg [15:0]       cw_act, cw_colr, cw_prer;   // the reservation's, absolute
     reg [ROW_W-1:0]  cw_row;
-    wire             bt_commit = (state == S_COMMIT) & cm_start;
+    wire             bt_commit = (state == S_COMMIT) & cm_start & ~(op_ref & cfg_refresh[1]);
     wire [4:0]       bt_wa     = bt_commit ? op_bank : sc_b;
     function automatic [15:0] scrubbed(input [15:0] t);
         scrubbed = ($signed(t - (e + 16'd1)) < -16'sd16384) ? e + 16'd1 - 16'd16384 : t;
@@ -514,6 +539,9 @@ module foldsim_mem_bank #(
         if ($signed(batch_floor - e) < 0)   batch_floor   <= e;
         if ($signed(read_floor - e) < 0)    read_floor    <= e;
         if ($signed(ingress_ready - e) < 0) ingress_ready <= e;
+        if ($signed(ab_prer - e) < 0)       ab_prer       <= e;
+        if ($signed(ab_actrc - e) < 0)      ab_actrc      <= e;
+        if ($signed(ab_floor - e) < 0)      ab_floor      <= e;
         d <= d + 16'd1;
     endtask
 
@@ -613,7 +641,9 @@ module foldsim_mem_bank #(
                 batch_floor <= ($signed(frontier + 16'd1 - e) > 0) ? frontier + 16'd1 : e;
             if (to_read)
                 read_floor <= batch_last + 16'd1;
-            if (sel_any) begin
+            if (ref_now) begin
+                state <= S_RBANK;
+            end else if (sel_any) begin
                 state <= S_BANK;
             end else begin
                 end_clock();
@@ -622,6 +652,7 @@ module foldsim_mem_bank #(
         end
         S_BANK: begin
             // The request at the head of the buffer the channel serves.
+            op_ref  <= 1'b0;
             op_w    <= wmode;
             op_tag  <= wmode ? wb_tag[wb_head] : rb_tag[rb_head];
             op_bank <= wmode ? wb_bank[wb_head] : rb_bank[rb_head];
@@ -646,7 +677,8 @@ module foldsim_mem_bank #(
             // The search's lower bound, the first clock it may place at.
             case (kind)
             K_PRE: s_lb <= smax(16'sd0, r_prer);
-            K_ACT: s_lb <= smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc);
+            K_ACT: s_lb <= smax(smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc), rel(ab_floor));
+            K_REF: s_lb <= smax(op_conf ? c_pre + k_rp : 16'sd0, r_act + k_rc);
             K_C0:  s_lb <= smax(smax(16'sd0, r_floor),
                                 op_hit ? r_colr : c_act + (op_w ? k_rcdwr : k_rcdrd));
             default: s_lb <= c_col0 + k_ccdl1;
@@ -681,7 +713,8 @@ module foldsim_mem_bank #(
             if (sb_valid) begin
                 if (b_cand != 0) begin
                     case (kind)
-                    K_PRE: begin c_pre <= b_rel; kind <= K_ACT; state <= S_SETUP; end
+                    K_PRE: begin c_pre <= b_rel; kind <= op_ref ? K_REF : K_ACT; state <= S_SETUP; end
+                    K_REF: begin c_ref <= b_rel; state <= S_CHECK; end
                     K_ACT: begin c_act <= b_rel; kind <= K_C0; state <= S_SETUP; end
                     K_C0:  begin
                         c_col0 <= b_rel;
@@ -712,6 +745,12 @@ module foldsim_mem_bank #(
                 ck_tcol    <= lastcol + (op_w ? k_reach_w : k_reach_r);
                 ck_tdep    <= op_w ? -16'sd16384 : lastcol + k_dep;
                 ck_tact    <= op_hit ? -16'sd16384 : c_act + k_reach_a;
+                // A refresh's commands are within the horizon by its search.
+                if (op_ref) begin
+                    ck_tcol <= -16'sd16384;
+                    ck_tdep <= -16'sd16384;
+                    ck_tact <= -16'sd16384;
+                end
             end
             state <= S_CHECK2;
         end
@@ -724,10 +763,10 @@ module foldsim_mem_bank #(
                     cm_hi[m][k] <= cx_hi[m][k];
                 end
             end
-            cw_row  <= op_hit ? bt_row[op_bank] : op_row;
-            cw_act  <= op_hit ? bt_act[op_bank] : e + c_act;
-            cw_colr <= e + ck_colr;
-            cw_prer <= e + ck_prer;
+            cw_row  <= (op_hit | op_ref) ? bt_row[op_bank] : op_row;
+            cw_act  <= op_ref ? e + c_ref + k_rfc - k_rc : (op_hit ? bt_act[op_bank] : e + c_act);
+            cw_colr <= op_ref ? bt_colr[op_bank] : e + ck_colr;
+            cw_prer <= op_ref ? bt_prer[op_bank] : e + ck_prer;
             begin : check2_
                 reg ok;
                 ok = (ck_tcol < 16'(HE)) & (ck_tdep < 16'(HE)) & (ck_tact < 16'(HE));
@@ -736,13 +775,32 @@ module foldsim_mem_bank #(
             end
         end
         S_COMMIT: begin
-            if (cm_start) begin
+            if (cm_start & op_ref) begin
+                // A refresh closes its bank (every bank), and the next is due.
+                if (cfg_refresh[1]) begin
+                    bt_open  <= '0;
+                    ab_open  <= 1'b0;
+                    ab_floor <= e + c_ref + k_rfc;
+                    ab_actrc <= e + c_ref + k_rfc;
+                end else begin
+                    bt_open[op_bank]  <= 1'b0;
+                    bt_fresh[op_bank] <= 1'b0;
+                    ref_bank <= (ref_bank + 5'd1) & k_bmask[4:0];
+                end
+                ref_due        <= ref_due + cfg_refi;
+                stat_refreshes <= stat_refreshes + 64'd1;
+            end else if (cm_start) begin
                 // The bank (its times through the table's port), the
                 // controller, the read's departure, and a column in clock d+1
                 // for the clock's end.
                 if (~op_hit)
                     bt_open[op_bank] <= 1'b1;
                 bt_fresh[op_bank] <= 1'b0;
+                ab_open <= 1'b1;
+                if ($signed(cw_prer - ab_prer) > 0)
+                    ab_prer <= cw_prer;
+                if (~op_hit && $signed(e + c_act + k_rc - ab_actrc) > 0)
+                    ab_actrc <= e + c_act + k_rc;
                 if (op_w) begin
                     wq_cnt     <= wq_cnt + 8'(NB);
                     wb_head    <= wb_head + 1'b1;
@@ -772,6 +830,30 @@ module foldsim_mem_bank #(
         S_END: begin
             end_clock();
             state <= S_TICK;
+        end
+        S_RBANK: begin
+            // A refresh: the bank in turn.
+            op_ref  <= 1'b1;
+            op_w    <= 1'b0;
+            op_bank <= ref_bank;
+            state   <= S_RBANK2;
+        end
+        S_RBANK2: begin
+            // Precharged first if open, then REF: against the bank, or the
+            // channel's latest times for all banks.
+            op_hit <= 1'b0;
+            if (cfg_refresh[1]) begin
+                op_conf <= ab_open;
+                r_prer  <= rel(ab_prer);
+                r_act   <= rel(ab_actrc) - k_rc;
+                kind    <= ab_open ? K_PRE : K_REF;
+            end else begin
+                op_conf <= bt_open[op_bank];
+                r_prer  <= bt_fresh[op_bank] ? -16'sd1 : rel(bt_prer[op_bank]);
+                r_act   <= bt_fresh[op_bank] ? -16'sd16384 : rel(bt_act[op_bank]);
+                kind    <= bt_open[op_bank] ? K_PRE : K_REF;
+            end
+            state <= S_SETUP;
         end
         S_WALK: begin
             // Reads that are ready in the next target cycle.
@@ -831,9 +913,17 @@ module foldsim_mem_bank #(
                 bt_fresh    <= '1;
                 scrub_b     <= '0;
                 bm_clear_all <= 1'b1;
+                ref_due     <= cfg_refi;
+                ref_bank    <= '0;
+                ab_open     <= 1'b0;
+                ab_prer     <= '0;
+                ab_actrc    <= '0;
+                ab_floor    <= '0;
             end else begin
                 tcyc  <= tcyc1;
                 tcyc1 <= tcyc1 + 32'd1;
+                if (~(room & slot_free))
+                    stat_full <= stat_full + 64'd1;
                 // R and B, then what is ready next cycle.
                 begin : release_
                     reg r_load, b_load;
@@ -893,6 +983,8 @@ module foldsim_mem_bank #(
             stat_misses    <= '0;
             stat_conflicts <= '0;
             stat_latency   <= '0;
+            stat_refreshes <= '0;
+            stat_full      <= '0;
             lat_ar         <= 1'b0;
             lat_r          <= 1'b0;
             rfp_valid      <= 1'b0;
@@ -955,6 +1047,16 @@ module foldsim_mem_bank #(
         cx_lo[B_FAP][0] = clamp0(c_act - k_rrds + 16'sd1); cx_hi[B_FAP][0] = c_act + k_rrds - 16'sd1;
         cx_v[B_FAG][0] = ~op_hit;
         cx_lo[B_FAG][0] = clamp0(c_act - k_rrdl + 16'sd1); cx_hi[B_FAG][0] = c_act + k_rrdl - 16'sd1;
+        // A refresh: its precharge, if any, and REF, on the row-command bus.
+        if (op_ref) begin
+            for (integer m = 0; m < NBM; ++m)
+                for (integer k = 0; k < 2; ++k)
+                    cx_v[m][k] = 1'b0;
+            cx_v[B_CMDR][0] = op_conf; cx_lo[B_CMDR][0] = c_pre; cx_hi[B_CMDR][0] = c_pre;
+            cx_v[B_CMDR][1] = 1'b1;    cx_lo[B_CMDR][1] = c_ref; cx_hi[B_CMDR][1] = c_ref;
+            cx_v[B_ROW][0]  = op_conf; cx_lo[B_ROW][0]  = c_pre; cx_hi[B_ROW][0]  = c_pre;
+            cx_v[B_ROW][1]  = 1'b1;    cx_lo[B_ROW][1]  = c_ref; cx_hi[B_ROW][1]  = c_ref;
+        end
         for (integer m = 0; m < NBM; ++m)
             for (integer k = 0; k < 2; ++k)
                 if (cx_hi[m][k] < cx_lo[m][k])

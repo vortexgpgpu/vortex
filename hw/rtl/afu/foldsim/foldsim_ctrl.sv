@@ -33,7 +33,9 @@ module foldsim_ctrl #(
     parameter RESET_CYCLES = 64,
     parameter MEM_DEPTH    = 16,
     parameter NUM_CLASSES  = 1,
-    // MEM_CAPS: what the memory endpoint's bank model was built with.
+    // The memory endpoints, one per memory port of the target.
+    parameter MEM_PORTS    = 1,
+    // MEM_CAPS: what the memory endpoints' bank models were built with.
     parameter MEM_CAPS     = 32'd0
 ) (
     input  wire                  clk,
@@ -68,14 +70,20 @@ module foldsim_ctrl #(
     output reg  [12:0]           mem_geom,
     output reg  [15:0]           mem_wmark,
     output wire [18*12-1:0]      mem_timing,
-    input  wire [6*64-1:0]       mem_stats,
+    // Refresh: [0] on, [1] all banks; its interval and busy time (clocks).
+    output wire [1:0]            mem_refresh,
+    output reg  [15:0]           mem_refi,
+    output reg  [15:0]           mem_rfc,
+    // Per memory port, its counters.
+    input  wire [MEM_PORTS*8*64-1:0] mem_stats,
     input  wire                  mem_idle,
     input  wire                  mem_error,
     input  wire                  mem_stall,
     // Which classes of the simulator's models finish a thread this cycle.
     input  wire [NUM_CLASSES-1:0] profile_finish,
-    // The target's reset, a token per target cycle for the memory endpoint.
-    output wire                  mem_reset_valid,     input wire mem_reset_ready,     output wire                  mem_reset_bits,
+    // The target's reset, a token per target cycle for each memory endpoint.
+    output wire [MEM_PORTS-1:0]  mem_reset_valid,     input wire [MEM_PORTS-1:0] mem_reset_ready,
+    output wire [MEM_PORTS-1:0]  mem_reset_bits,
 
     // Target inputs, as channels of the simulator: the endpoint's outputs.
     output wire                  reset_valid,         input wire reset_ready,         output wire                  reset_bits,
@@ -118,13 +126,15 @@ module foldsim_ctrl #(
     reg [DCR_DATA_W-1:0] rsp_data;
     reg [63:0]           target_cycles, host_cycles, mem_stalls;
     reg [47:0]           finishes [NUM_CLASSES];
-    reg [1:0]            mem_model;
+    reg [5:0]            mem_model;
     reg [11:0]           mem_t [18];
 
     // The model in effect from a reset on: the memory endpoint takes it at the
     // end of every reset cycle, so a reset command's own cycle has it already.
-    wire [1:0] mem_model_now = (cur_op == `FOLDSIM_CMD_RESET) ? cur_addr[1:0] : mem_model;
-    assign mem_model_bank = (mem_model_now == 2'd1);
+    // [1:0] the model, [4] refresh, [5] all banks at once.
+    wire [5:0] mem_model_now = (cur_op == `FOLDSIM_CMD_RESET) ? cur_addr[5:0] : mem_model;
+    assign mem_model_bank = (mem_model_now[1:0] == 2'd1);
+    assign mem_refresh    = mem_model_now[5:4];
     for (genvar i = 0; i < 18; ++i) begin : g_mem_t
         assign mem_timing[i*12 +: 12] = mem_t[i];
     end
@@ -150,7 +160,7 @@ module foldsim_ctrl #(
                            : 32'd0;
 
     wire finish;
-    wire [6:0] done;
+    wire [6+MEM_PORTS-1:0] done;
     wire [2:0] have;
     foldsim_token_out #(1) o_reset   (clk, reset, reset_valid,         reset_ready,         run, finish, done[0]);
     foldsim_token_out #(1) o_dvalid  (clk, reset, dcr_req_valid_valid, dcr_req_valid_ready, run, finish, done[1]);
@@ -158,14 +168,16 @@ module foldsim_ctrl #(
     foldsim_token_out #(1) o_daddr   (clk, reset, dcr_req_addr_valid,  dcr_req_addr_ready,  run, finish, done[3]);
     foldsim_token_out #(1) o_ddata   (clk, reset, dcr_req_data_valid,  dcr_req_data_ready,  run, finish, done[4]);
     foldsim_token_out #(1) o_start   (clk, reset, start_valid,         start_ready,         run, finish, done[5]);
-    foldsim_token_out #(1) o_mreset  (clk, reset, mem_reset_valid,     mem_reset_ready,     run, finish, done[6]);
+    for (genvar p = 0; p < MEM_PORTS; ++p) begin : g_mreset
+        foldsim_token_out #(1) o_mreset (clk, reset, mem_reset_valid[p], mem_reset_ready[p], run, finish, done[6+p]);
+        assign mem_reset_bits[p] = in_reset;
+    end
     assign reset_bits         = in_reset;
     assign dcr_req_valid_bits = dcr_valid;
     assign dcr_req_rw_bits    = dcr_rw;
     assign dcr_req_addr_bits  = cur_addr;
     assign dcr_req_data_bits  = cur_data;
     assign start_bits         = do_start;
-    assign mem_reset_bits     = in_reset;
 
     wire                  rsp_v, busy;
     wire [DCR_DATA_W-1:0] rsp_d;
@@ -214,7 +226,9 @@ module foldsim_ctrl #(
             mem_max_reads     <= 8'(MEM_DEPTH);
             mem_max_writes    <= 8'(MEM_DEPTH);
             mem_base          <= 64'h40_0000_0000;
-            mem_model         <= 2'd0;
+            mem_model         <= 6'd0;
+            mem_refi          <= 16'd0;
+            mem_rfc           <= 16'd0;
             mem_clock         <= {16'd400, 16'd800};
             mem_latency       <= 16'd0;
             mem_queue         <= {8'd32, 8'd32, 16'd0};
@@ -250,7 +264,7 @@ module foldsim_ctrl #(
                 // A reset command's address chooses the memory model the
                 // target has from the reset on.
                 if (cur_op == `FOLDSIM_CMD_RESET)
-                    mem_model <= cur_addr[1:0];
+                    mem_model <= cur_addr[5:0];
                 // A start counts as busy until the target says it is, or plainly
                 // never will.
                 if (do_start) begin
@@ -303,6 +317,8 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_MEM_QUEUE:   mem_queue <= w_data;
                 `FOLDSIM_REG_MEM_GEOM:    mem_geom <= w_data[12:0];
                 `FOLDSIM_REG_MEM_WMARK:   mem_wmark <= w_data[15:0];
+                `FOLDSIM_REG_MEM_REFI:    mem_refi <= w_data[15:0];
+                `FOLDSIM_REG_MEM_RFC:     mem_rfc <= w_data[15:0];
                 default:;
                 endcase
                 if (wa >= `FOLDSIM_REG_MEM_TIMING && wa < `FOLDSIM_REG_MEM_TIMING + 12'(4 * 18))
@@ -347,12 +363,16 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_MEM_QUEUE:   s_rdata <= mem_queue;
                 `FOLDSIM_REG_MEM_GEOM:    s_rdata <= 32'(mem_geom);
                 `FOLDSIM_REG_MEM_WMARK:   s_rdata <= 32'(mem_wmark);
+                `FOLDSIM_REG_MEM_REFI:    s_rdata <= 32'(mem_refi);
+                `FOLDSIM_REG_MEM_RFC:     s_rdata <= 32'(mem_rfc);
                 default:                 s_rdata <= 32'd0;
                 endcase
                 if (ar_addr >= `FOLDSIM_REG_MEM_TIMING && ar_addr < `FOLDSIM_REG_MEM_TIMING + 12'(4 * 18))
                     s_rdata <= 32'(mem_t[5'((ar_addr - `FOLDSIM_REG_MEM_TIMING) >> 2)]);
-                if (ar_addr >= `FOLDSIM_REG_MEM_STATS && ar_addr < `FOLDSIM_REG_MEM_STATS + 12'(8 * 6))
-                    s_rdata <= mem_stats[32'(ar_addr - `FOLDSIM_REG_MEM_STATS) * 8 +: 32];
+                // A port's counters at FOLDSIM_REG_MEM_STATS + 0x40 per port.
+                if (ar_addr >= `FOLDSIM_REG_MEM_STATS && ar_addr < `FOLDSIM_REG_MEM_STATS + 12'(64 * MEM_PORTS))
+                    s_rdata <= mem_stats[32'((ar_addr - `FOLDSIM_REG_MEM_STATS) >> 6) * (8 * 64)
+                                         + 32'(ar_addr[5:0]) * 8 +: 32];
                 if (ar_addr >= `FOLDSIM_REG_FINISH_BASE
                  && ar_addr < `FOLDSIM_REG_FINISH_BASE + 12'(8 * NUM_CLASSES)) begin
                     s_rdata <= ar_addr[2] ? 32'(finishes[(ar_addr - `FOLDSIM_REG_FINISH_BASE) >> 3] >> 32)

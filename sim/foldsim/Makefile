@@ -10,6 +10,8 @@ SRC_DIR := $(VORTEX_HOME)/sim/foldsim
 FOLDSIM_RTL_DIR := $(RTL_DIR)/afu/foldsim
 WORK_DIR := $(DESTDIR)/foldsim_emul
 GEN_SV := $(WORK_DIR)/gen/foldsim_sim.sv
+# The kernel's memory ports, as the image's flow derived them.
+KERNEL_VH := $(WORK_DIR)/gen/foldsim_kernel.vh
 
 CONFIG_FILE := $(DESTDIR)/foldsim_emul_config.stamp
 
@@ -54,7 +56,8 @@ $(GEN_SV): force
 
 $(DESTDIR)/$(PROJECT): $(GEN_SV) $(SRCS) $(SRC_DIR)/xilinx_fp_models.sv $(wildcard $(FOLDSIM_RTL_DIR)/*) $(CONFIG_FILE)
 	$(VERILATOR_PATH)/bin/verilator --build --exe $(VL_FLAGS) --cc $(RTL_SRCS) --top-module $(TOP) \
-		$(SRCS) -CFLAGS '$(CXXFLAGS)' -LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
+		$(SRCS) -CFLAGS '$(CXXFLAGS) -DFOLDSIM_MEM_PORTS='$$(sed -n 's/^`define FOLDSIM_MEM_PORTS //p' $(KERNEL_VH)) \
+		-LDFLAGS '$(LDFLAGS)' --Mdir $@.obj_dir -o $@
 
 $(CONFIG_FILE): force
 	@mkdir -p $(@D)

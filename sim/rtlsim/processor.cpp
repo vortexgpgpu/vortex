@@ -403,7 +403,10 @@ private:
   static DramBankAxi::Config axi_bank_config() {
     auto dram = DramSim::platform_config();
     DramBankAxi::Config c;
-    c.model       = DramBankModel::Config::make(dram.type, dram.data_rate, dram.block_size);
+    // VORTEX_DRAM_REFRESH=off|bank|all, as the bank model's DramSim backend.
+    const char* refresh = getenv("VORTEX_DRAM_REFRESH");
+    c.model       = DramBankModel::Config::make(dram.type, dram.data_rate, dram.block_size,
+                                                DramBankModel::Config::parse_refresh(refresh ? refresh : ""));
     c.core_clock  = dram.core_clock;
     c.data_rate   = dram.data_rate;
     c.latency     = dram.latency;

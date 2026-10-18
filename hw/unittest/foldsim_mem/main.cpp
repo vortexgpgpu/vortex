@@ -58,6 +58,15 @@ constexpr uint64_t kBurstAddr = 0x3ff7e000ull;  // offered only as a burst
 
 using Line = std::array<uint32_t, kWords>;
 
+// The endpoint's CH_SHIFT: the port is one of 2^shift, and the bank model
+// sees the block within the port's channel.
+#ifndef FOLDSIM_MEM_CH_SHIFT
+#define FOLDSIM_MEM_CH_SHIFT 0
+#endif
+uint64_t channel_addr(uint64_t a) {
+  return ((a >> (6 + FOLDSIM_MEM_CH_SHIFT)) << 6) | (a & 63);
+}
+
 // The traffic a setup makes: the addresses its requests take.
 enum class Traffic {
   Small,     // 64 lines, 4 KB: row hits
@@ -79,6 +88,9 @@ struct Setup {
   Traffic traffic;
   double p_read, p_write, p_ready;
   uint64_t cycles;
+  // Refresh, and its interval and busy time if not the standard's (0).
+  DramBankModel::Refresh refresh = DramBankModel::Refresh::Off;
+  uint32_t refi = 0, rfc = 0;
 };
 
 const Setup kSetups[] = {
@@ -110,6 +122,16 @@ const Setup kSetups[] = {
    Traffic::OneBank, 0.7, 0.3, 0.8, 4000},
   {"bank_v100",    true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 1530, 1752, 0, 0, 32, 32, 26, 7,
    Traffic::Rows, 0.8, 0.2, 0.9, 4000},
+  {"ref_bank",     true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+   Traffic::Random, 0.5, 0.3, 0.8, 4000, DramBankModel::Refresh::PerBank},
+  {"ref_bank_s",   true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 1410, 3038, 190, 257, 32, 32, 26, 7,
+   Traffic::Stream, 0.8, 0.4, 0.9, 4000, DramBankModel::Refresh::PerBank},
+  {"ref_all",      true, 0, 0, 0, 0, dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+   Traffic::Rows, 0.5, 0.3, 0.8, 4000, DramBankModel::Refresh::AllBank},
+  {"ref_all_fast", true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 3, 0, 32, 32, 26, 7,
+   Traffic::Random, 0.6, 0.3, 0.9, 4000, DramBankModel::Refresh::AllBank, 600, 0},
+  {"ref_bank_fast", true, 0, 0, 0, 0, dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+   Traffic::Rows, 0.8, 0.2, 0.9, 4000, DramBankModel::Refresh::PerBank, 60, 0},
 };
 
 const Setup* setup = nullptr;
@@ -148,7 +170,9 @@ bool golden_valid = true;   // the pipe models no bursts: void until a reset
 
 DramBankAxi::Config bank_config(const Setup& s) {
   DramBankAxi::Config c;
-  c.model = DramBankModel::Config::make(s.type, s.data_rate, 64);
+  c.model = DramBankModel::Config::make(s.type, s.data_rate, 64, s.refresh);
+  if (s.refi) c.model.refi = s.refi;
+  if (s.rfc) c.model.rfc = s.rfc;
   c.model.read_queue = s.rq;
   c.model.write_queue = s.wq;
   c.model.wr_high = s.wr_high;
@@ -637,11 +661,11 @@ void golden_cycle() {
       DramBankAxi::Inputs in;
       in.ar_valid = m.ar_v;
       in.ar_id = m.ar.id;
-      in.ar_addr = m.ar.addr;
+      in.ar_addr = channel_addr(m.ar.addr);
       in.ar_len = m.ar_len;
       in.aw_valid = m.aw_v;
       in.aw_id = m.aw.id;
-      in.aw_addr = m.aw.addr;
+      in.aw_addr = channel_addr(m.aw.addr);
       in.aw_len = m.aw_len;
       in.w_valid = m.w_v;
       in.w_last = m.w_last;
@@ -781,6 +805,10 @@ void configure() {
   dut->cfg_wr_low = s.wr_low;
   dut->cfg_geom = g.log2_pcs | (g.log2_bgs << 2) | (g.log2_banks << 4) | (g.log2_row_bursts << 6)
                 | (g.log2_visit << 10) | (uint32_t(g.two_clock_act) << 12);
+  dut->cfg_refresh = (cfg.model.refresh != DramBankModel::Refresh::Off)
+                   | (uint32_t(cfg.model.refresh == DramBankModel::Refresh::AllBank) << 1);
+  dut->cfg_refi = cfg.model.refi;
+  dut->cfg_rfc = cfg.model.rfc;
   const uint32_t v[18] = {t.BL, t.CCDS, t.CCDL, t.CL, t.CWL, t.RCDRD, t.RCDWR, t.RP, t.RAS, t.RC,
                           t.RTP, t.WR, t.RRDS, t.RRDL, t.FAW, t.WTRS, t.WTRL, g.rtw_extra};
   for (int w = 0; w < 7; ++w)
@@ -854,10 +882,11 @@ int run_setup(const Setup& s) {
   std::string extra;
   if (golden_bank) {
     const auto& st = golden_bank->model().stats();
-    char buf[200];
-    snprintf(buf, sizeof(buf), "; model since last reset: %lu reads, %lu writes, %lu hits, %lu misses, %lu conflicts, %lu deferred",
+    char buf[256];
+    snprintf(buf, sizeof(buf), "; model since last reset: %lu reads, %lu writes, %lu hits, %lu misses, %lu conflicts, %lu refreshes, %lu deferred",
              (unsigned long)st.reads, (unsigned long)st.writes, (unsigned long)st.hits,
-             (unsigned long)st.misses, (unsigned long)st.conflicts, (unsigned long)st.deferred);
+             (unsigned long)st.misses, (unsigned long)st.conflicts, (unsigned long)st.refreshes,
+             (unsigned long)st.deferred);
     extra = buf;
   }
   printf("%-12s target cycles %lu, host cycles %lu, %lu compared; %lu reads, %lu writes; "
