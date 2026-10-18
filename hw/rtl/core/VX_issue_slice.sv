@@ -99,8 +99,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     assign warp_issued_wis = scoreboard_if.data.wis;
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_ISSUE
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_ISSUE
     wire decode_fire = decode_if.valid && decode_if.ready;
     wire operands_fire = operands_if.valid && operands_if.ready;
     wire reset_negedge;

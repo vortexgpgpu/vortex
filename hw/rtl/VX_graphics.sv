@@ -23,6 +23,8 @@ module VX_graphics import VX_gpu_pkg::*
 ; #(
     parameter `STRING INSTANCE_ID = ""
 ) (
+    `SCOPE_IO_DECL
+
     input wire              clk,
     input wire              reset,
 
@@ -67,6 +69,20 @@ module VX_graphics import VX_gpu_pkg::*
     // no in-band `done`); the cluster ORs this into the device busy aggregation.
     output wire             busy
 );
+
+`ifdef SCOPE
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    localparam scope_raster_cnt = `VX_CFG_NUM_RASTER_CORES;
+`else
+    localparam scope_raster_cnt = 0;
+`endif
+`ifdef VX_CFG_EXT_OM_ENABLE
+    localparam scope_om_cnt = `VX_CFG_NUM_OM_CORES;
+`else
+    localparam scope_om_cnt = 0;
+`endif
+    `SCOPE_IO_SWITCH (scope_raster_cnt + scope_om_cnt);
+`endif
     `UNUSED_SPARAM (INSTANCE_ID)
 `ifndef VX_CFG_EXT_RASTER_ENABLE
     `UNUSED_VAR (cluster_id)
@@ -156,6 +172,7 @@ module VX_graphics import VX_gpu_pkg::*
             .QUAD_FIFO_DEPTH (`VX_CFG_RASTER_QUAD_FIFO_DEPTH),
             .OUTPUT_QUADS    (`VX_CFG_NUM_THREADS)
         ) raster_core (
+            `SCOPE_IO_BIND (i)
             .clk             (clk),
             .reset           (reset),
             .instance_idx    (`LOG2UP(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES)'(cluster_id) * `LOG2UP(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES)'(`VX_CFG_NUM_RASTER_CORES)
@@ -417,6 +434,7 @@ module VX_graphics import VX_gpu_pkg::*
             .INSTANCE_ID (`SFORMATF(("%s-om%0d", INSTANCE_ID, i))),
             .NUM_LANES   (OM_CORE_LANES)
         ) om_core (
+            `SCOPE_IO_BIND (scope_raster_cnt + i)
             .clk          (clk),
             .reset        (reset),
         `ifdef PERF_ENABLE

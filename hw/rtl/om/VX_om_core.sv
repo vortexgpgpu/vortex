@@ -575,8 +575,8 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
                || ~pending_reads_empty || mem_rsp_valid || mem_unit_busy;
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_OM
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_OM
     wire cache_bus_req_fire_0 = cache_bus_if[0].req_valid && cache_bus_if[0].req_ready;
     wire cache_bus_rsp_fire_0 = cache_bus_if[0].rsp_valid && cache_bus_if[0].rsp_ready;
     wire [OCACHE_TAG_WIDTH-UUID_WIDTH-1:0] cache_bus_req_tag  = cache_bus_if[0].req_data.tag[OCACHE_TAG_WIDTH-UUID_WIDTH-1:0];
@@ -628,7 +628,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
         reset_negedge, 1'b0, 4096
     );
 `else
-    `SCOPE_IO_UNUSED()
+    `SCOPE_IO_UNUSED(0)
 `endif
 `endif
 `ifdef CHIPSCOPE

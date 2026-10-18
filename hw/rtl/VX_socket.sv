@@ -65,7 +65,12 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
 `ifdef SCOPE
     localparam scope_core = 0;
+`ifdef VX_CFG_EXT_TEX_ENABLE
+    localparam scope_tex = `VX_CFG_SOCKET_SIZE;
+    `SCOPE_IO_SWITCH (`VX_CFG_SOCKET_SIZE + `VX_CFG_NUM_TEX_CORES);
+`else
     `SCOPE_IO_SWITCH (`VX_CFG_SOCKET_SIZE);
+`endif
 `endif
 
     VX_kmu_bus_if per_core_kmu_bus_if[`VX_CFG_SOCKET_SIZE]();
@@ -442,6 +447,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
             .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
             .TAG_WIDTH   (TEX_REQ_ARB1_TAG_WIDTH)
         ) tex_core (
+            `SCOPE_IO_BIND (scope_tex + i)
             .clk          (clk),
             .reset        (reset),
         `ifdef PERF_ENABLE

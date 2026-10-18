@@ -560,8 +560,8 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     assign busy = armed_r | frame_kick;
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_RASTER
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_RASTER
     wire cache_bus_req_fire_0 = cache_bus_if[0].req_valid && cache_bus_if[0].req_ready;
     wire cache_bus_rsp_fire_0 = cache_bus_if[0].rsp_valid && cache_bus_if[0].rsp_ready;
     wire raster_bus_fire = raster_bus_tmp_if[0].req_valid && raster_bus_tmp_if[0].req_ready;
@@ -615,7 +615,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         reset_negedge, 1'b0, 4096
     );
 `else
-    `SCOPE_IO_UNUSED()
+    `SCOPE_IO_UNUSED(0)
 `endif
 `endif
 `ifdef CHIPSCOPE

@@ -92,7 +92,10 @@ module VX_execute import VX_gpu_pkg::*; #(
         .branch_ctl_if  (branch_ctl_if)
     );
 
-    `SCOPE_IO_SWITCH (1);
+`ifdef SCOPE
+    localparam SCOPE_COUNT = 1 + `VX_CFG_EXT_TCU_ENABLED;
+`endif
+    `SCOPE_IO_SWITCH (SCOPE_COUNT);
 
     VX_lsu_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-lsu", INSTANCE_ID)))
@@ -122,6 +125,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_tcu_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-tcu", INSTANCE_ID)))
     ) tcu_unit (
+        `SCOPE_IO_BIND  (1)
         .clk            (clk),
         .reset          (reset),
     `ifdef PERF_ENABLE

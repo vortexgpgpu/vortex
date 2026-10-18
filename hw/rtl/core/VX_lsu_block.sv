@@ -543,8 +543,8 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
 
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_LSU
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_LSU
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 3, 4, 2, (

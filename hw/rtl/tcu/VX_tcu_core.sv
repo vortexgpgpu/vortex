@@ -41,6 +41,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     // Outputs
     VX_result_if.master result_if
 );
+
+`ifdef SCOPE
+    `SCOPE_IO_SWITCH (1);
+    `SCOPE_IO_UNUSED (0)
+`endif
     `UNUSED_SPARAM (INSTANCE_ID);
 
     // FEDP dot-product width in 32-bit words (doubles under FEDP2K).

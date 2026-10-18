@@ -259,8 +259,8 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     );
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_TEX
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_TEX
     wire cache_bus_req_fire_0 = cache_bus_if[0].req_valid && cache_bus_if[0].req_ready;
     wire cache_bus_rsp_fire_0 = cache_bus_if[0].rsp_valid && cache_bus_if[0].rsp_ready;
     wire [TCACHE_TAG_WIDTH-UUID_WIDTH-1:0] cache_bus_req_tag  = cache_bus_if[0].req_data.tag[TCACHE_TAG_WIDTH-UUID_WIDTH-1:0];
@@ -324,7 +324,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         reset_negedge, 1'b0, 4096
     );
 `else
-    `SCOPE_IO_UNUSED()
+    `SCOPE_IO_UNUSED(0)
 `endif
 `endif
 `ifdef CHIPSCOPE

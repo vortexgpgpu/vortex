@@ -260,8 +260,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_FETCH
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_FETCH
     wire schedule_fire = schedule_if.valid && schedule_if.ready;
     wire icache_bus_req_fire = icache_bus_if.req_valid && icache_bus_if.req_ready;
     wire icache_bus_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;

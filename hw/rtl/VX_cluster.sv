@@ -59,7 +59,12 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
 `ifdef SCOPE
     localparam scope_socket = 0;
+`ifdef EXT_GFX_CLUSTER_ENABLE
+    localparam scope_gfx = NUM_SOCKETS;
+    `SCOPE_IO_SWITCH (NUM_SOCKETS + 1);
+`else
     `SCOPE_IO_SWITCH (NUM_SOCKETS);
+`endif
 `endif
 
 `ifdef PERF_ENABLE
@@ -429,6 +434,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_graphics #(
         .INSTANCE_ID (INSTANCE_ID)
     ) graphics (
+        `SCOPE_IO_BIND (scope_gfx)
         .clk        (clk),
         .reset      (reset),
         .cluster_id (cluster_id),
