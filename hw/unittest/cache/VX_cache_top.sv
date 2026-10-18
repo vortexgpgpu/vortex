@@ -52,6 +52,9 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     // Enable dirty bytes on writeback
     parameter DIRTY_BYTES           = `VX_CFG_DCACHE_DIRTYBYTES,
 
+    // Write misses allocate without a fill (write-validate)
+    parameter LAZY_FETCH            = `VX_CFG_DCACHE_LAZY_FETCH,
+
     // Bank pipeline depth (capacity-scaled)
     parameter LATENCY               = `VX_CFG_DCACHE_LATENCY,
 
@@ -183,6 +186,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .WRITE_ENABLE   (WRITE_ENABLE),
         .WRITEBACK      (WRITEBACK),
         .DIRTY_BYTES    (DIRTY_BYTES),
+        .LAZY_FETCH     (LAZY_FETCH),
         .AMO_ENABLE     (AMO_ENABLE),
         .IS_LLC         (IS_LLC),
         .BANK_HASH      (BANK_HASH),

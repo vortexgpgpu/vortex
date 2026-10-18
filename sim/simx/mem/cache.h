@@ -45,6 +45,7 @@ public:
 		bool    is_llc;					// is last-level cache
 		bool    bank_hash = false;	// hashed bank select
 		bool    shared_llc = false;	// the LLC serves every memory client alone
+		bool    lazy_fetch = false;	// write miss allocates without a fill (write-back LLC only)
 	};
 
 	struct PerfStats {

@@ -169,16 +169,23 @@ struct params_t {
 struct sector_t {
   bool valid;
   bool dirty;
+  bool partial;                        // allocated by a store: only dirty_mask bytes are known
   uint64_t dirty_mask;                 // per-byte dirty bits; the writeback byte-enable
   std::shared_ptr<mem_block_t> data;  // sector bytes (= one mem_block)
 
   void reset() {
     valid = false;
     dirty = false;
+    partial = false;
     dirty_mask = 0;
     data.reset();
   }
 };
+
+// A store may hit a partial sector; a load or AMO needs every byte.
+static inline bool sector_hit(const sector_t& sec, bool needs_data) {
+  return sec.valid && !(needs_data && sec.partial);
+}
 
 struct line_t {
   uint64_t tag;
@@ -369,7 +376,8 @@ struct bank_req_t {
     Fill = 1,
     Replay = 2,
     Core = 3,
-    AmoProbe = 4  // non-LLC AMO passthrough: probe-and-invalidate then forward
+    AmoProbe = 4, // non-LLC AMO passthrough: probe-and-invalidate then forward
+    Park = 5      // chain head parked on a partial sector: issues its refetch
   };
 
   uint64_t addr;
@@ -385,6 +393,13 @@ struct bank_req_t {
   // the core response was already sent at miss time, so Replay must not
   // emit another response — only run sector_merge.
   bool skip_core_rsp;
+
+  // Fill flavors under lazy fetch: a data-less allocation for a write-miss
+  // root, or a refetch of a resident partial sector (merges under its dirty
+  // bytes).
+  bool nodata;
+  bool refetch;
+  bool refetch_retry; // refetch re-issued after its sector was evicted
 
   // TLM data:
   //   For Core writes: incoming write data + byteen.
@@ -425,6 +440,9 @@ struct bank_req_t {
     write = false;
     op = MemOp::LD;
     skip_core_rsp = false;
+    nodata = false;
+    refetch = false;
+    refetch_retry = false;
     data.reset();
     byteen = 0;
     amo_cmp = 0;
@@ -451,6 +469,8 @@ struct mshr_entry_t {
   uint32_t line_id;
   uint64_t seq;         // enqueue order; replays drain oldest-first to preserve
                         // program order among coalesced same-line accesses.
+  bool refetch;         // root of a fill that refetches a resident partial sector
+  bool refetch_retry;   // ... re-issued after the previous refetch found it evicted
 
   mshr_entry_t() {
     this->reset();
@@ -463,6 +483,8 @@ struct mshr_entry_t {
     sector_id = 0;
     line_id = 0;
     seq = 0;
+    refetch = false;
+    refetch_retry = false;
   }
 };
 
@@ -549,7 +571,8 @@ public:
   }
 
   // Enqueue a new core request and return the allocated entry id.
-  int enqueue(const bank_req_t &bank_req, uint32_t set_id, uint64_t addr_tag, uint32_t sector_id) {
+  int enqueue(const bank_req_t &bank_req, uint32_t set_id, uint64_t addr_tag, uint32_t sector_id,
+              bool refetch = false) {
     assert(bank_req.type == bank_req_t::Core);
     for (uint32_t i = 0, n = entries_.size(); i < n; ++i) {
       auto &entry = entries_.at(i);
@@ -560,6 +583,8 @@ public:
         entry.sector_id = sector_id;
         entry.line_id = 0; // victim is selected at Fill time
         entry.seq = bank_req.adm_seq;
+        entry.refetch = refetch;
+        entry.refetch_retry = false;
         ++size_;
         return i;
       }
@@ -598,6 +623,34 @@ public:
     assert(entry.bank_req.type == bank_req_t::Core);
     entry.bank_req.type = bank_req_t::Replay;
     ++ready_reqs_;
+  }
+
+  // Park the chain at its head: the oldest ready replay and the rest of its
+  // (set,tag,sector) chain return to waiting for a fill, which the head now
+  // roots as a refetch. Returns the head's id.
+  uint32_t park_next_replay(bool retry) {
+    int head = -1;
+    for (int i = 0, n = (int)entries_.size(); i < n; ++i) {
+      const auto &entry = entries_.at(i);
+      if (entry.bank_req.type != bank_req_t::Replay) {
+        continue;
+      }
+      if (head == -1 || entry.seq < entries_.at(head).seq) {
+        head = i;
+      }
+    }
+    assert(head != -1);
+    auto &root = entries_.at(head);
+    for (auto &entry : entries_) {
+      if (entry.bank_req.type == bank_req_t::Replay && entry.set_id == root.set_id
+       && entry.addr_tag == root.addr_tag && entry.sector_id == root.sector_id) {
+        entry.bank_req.type = bank_req_t::Core;
+        --ready_reqs_;
+      }
+    }
+    root.refetch = true;
+    root.refetch_retry = retry;
+    return head;
   }
 
   // Peek the entry dequeue() would return next (oldest ready replay), or
@@ -679,11 +732,14 @@ public:
             const Cache::Config &config,
             const params_t &params,
             uint32_t bank_id)
-      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this, config.mshr_size + AMO_PASSTHRU_CAP), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency, std::max<uint32_t>(2u, config.latency))), rand_ctr_(0), adm_seq_ctr_(0)
+      : SimObject<CacheBank>(ctx, name), core_req_in(this), core_rsp_out(this), mem_req_out(this), mem_rsp_in(this, config.mshr_size + AMO_PASSTHRU_CAP), config_(config), params_(params), bank_id_(bank_id), sets_(params.sets_per_bank, set_t(params.lines_per_set, params.sectors_per_line)), mshr_(config.mshr_size), pipe_req_(TFifo<bank_req_t>::Create("", config.latency, std::max<uint32_t>(2u, config.latency))), lazy_q_(TFifo<uint32_t>::Create("", 1, lazyq_size(config))), rand_ctr_(0), adm_seq_ctr_(0)
 #if VX_CFG_EXT_A_ENABLED
       , amo_unit_(__MAX(2u, (uint32_t)VX_CFG_AMO_RS_SIZE))
 #endif
   {
+    // Lazy allocation leaves unfetched bytes in the line: only a write-back
+    // LLC can hold them until a read merges or a writeback masks them out.
+    assert(!config.lazy_fetch || (config.write_back && config.is_llc));
     this->on_reset();
   }
 
@@ -740,6 +796,12 @@ protected:
     fwd_sector_ = 0;
     fwd_data_.reset();
     crsp_sent_  = false;
+    chain_partial_ = false;
+    chain_retry_   = false;
+    chain_set_     = 0;
+    chain_tag_     = 0;
+    chain_sector_  = 0;
+    refetch_hold_  = false;
     flushing_ = false;
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
@@ -788,7 +850,7 @@ protected:
     // the mem_latency accumulation exact. flush_begin() re-arms explicitly;
     // any packet reserved toward core_req_in/mem_rsp_in re-arms on arrival.
     if (this->core_req_in.size() == 0 && this->mem_rsp_in.size() == 0
-     && pipe_req_->size() == 0 && !mshr_.has_ready_reqs()
+     && pipe_req_->size() == 0 && lazy_q_->size() == 0 && !mshr_.has_ready_reqs()
      && !fwd_active_ && !flushing_ && pending_fill_reqs_ == 0) {
       this->tick_sleep();
     }
@@ -812,6 +874,26 @@ private:
     // drain completed the head this tick, this slot goes to new core
     // requests instead
     if (mshr_.has_ready_reqs() && !fwd_consumed) {
+      // A refetch fill learns whether its sector is still resident when it
+      // installs; its chain waits for that answer.
+      if (refetch_hold_) {
+        return;
+      }
+      // A chain whose sector is partial cannot serve a load or AMO: park at
+      // that head and refetch the sector; the rest of the chain waits.
+      if (chain_partial_) {
+        const auto *head = mshr_.peek_next_replay();
+        if (head != nullptr
+         && head->set_id == chain_set_ && head->addr_tag == chain_tag_ && head->sector_id == chain_sector_
+         && !head->bank_req.write) {
+          bank_req_t park_req = head->bank_req;
+          park_req.mshr_id = mshr_.park_next_replay(chain_retry_);
+          park_req.type    = bank_req_t::Park;
+          pipe_req_->push(park_req);
+          DT(3, this->name() << " mshr-park: " << park_req);
+          return;
+        }
+      }
       bank_req_t bank_req;
       mshr_.dequeue(&bank_req);
       pipe_req_->push(bank_req);
@@ -873,19 +955,55 @@ private:
         bank_req.uuid    = root_peek.bank_req.uuid;
         bank_req.mshr_id = mshr_id;
         bank_req.data    = mem_rsp.data;
+        bank_req.refetch = root_peek.refetch;
+        bank_req.refetch_retry = root_peek.refetch_retry;
         pipe_req_->push(bank_req);
         // The chain wakes at accept: its replays enter the pipe behind the fill,
         // so they reach the array after the install. The forward window answers
-        // the chain's leading reads from the staged sector meanwhile.
+        // the chain's leading reads from the staged sector meanwhile; a refetch
+        // cannot, its staged sector lacks the dirty bytes the install merges in.
         mshr_.replay(mshr_id);
-        fwd_active_ = true;
-        fwd_set_    = set_id;
-        fwd_tag_    = addr_tag;
-        fwd_sector_ = sector_id;
-        fwd_data_   = mem_rsp.data;
+        this->setChain(set_id, addr_tag, sector_id, false);
+        if (bank_req.refetch) {
+          refetch_hold_ = true;
+        } else {
+          fwd_active_ = true;
+          fwd_set_    = set_id;
+          fwd_tag_    = addr_tag;
+          fwd_sector_ = sector_id;
+          fwd_data_   = mem_rsp.data;
+        }
         DT(3, this->name() << " fill-rsp: " << mem_rsp);
         this->mem_rsp_in.pop();
         --pending_fill_reqs_;
+        return;
+      }
+    } else if (!lazy_q_->empty() && !fwd_active_) {
+      // Lazy allocation of a write-miss root: a data-less fill through the
+      // same path, below memory fills in priority.
+      uint32_t mshr_id = lazy_q_->peek();
+      const auto &root_peek = mshr_.peek(mshr_id);
+      const uint32_t set_id    = root_peek.set_id;
+      const uint64_t addr_tag  = root_peek.addr_tag;
+      const uint32_t sector_id = root_peek.sector_id;
+      if (this->pipeLineBusy(set_id, addr_tag)) {
+        fill_held     = true;
+        held_set_id   = set_id;
+        held_addr_tag = addr_tag;
+      } else {
+        bank_req_t bank_req;
+        bank_req.reset();
+        bank_req.type    = bank_req_t::Fill;
+        bank_req.addr    = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
+        bank_req.hart_id = root_peek.bank_req.hart_id;
+        bank_req.uuid    = root_peek.bank_req.uuid;
+        bank_req.mshr_id = mshr_id;
+        bank_req.nodata  = true;
+        pipe_req_->push(bank_req);
+        mshr_.replay(mshr_id);
+        this->setChain(set_id, addr_tag, sector_id, true);
+        DT(3, this->name() << " lazy-fill: " << bank_req);
+        lazy_q_->pop();
         return;
       }
     }
@@ -952,6 +1070,11 @@ private:
       (void)is_amo;
       if (needs_mshr && (mshr_.size() + pending_mshr_size_) >= mshr_.capacity()) {
         ++perf_stats_.mshr_stalls;
+        return;
+      }
+      // Any admitted request may become a write-miss root: the lazy queue
+      // keeps room for every request already in the pipe.
+      if (config_.lazy_fetch && lazy_q_->size() >= lazyq_size(config_) - config_.latency) {
         return;
       }
 
@@ -1076,6 +1199,28 @@ private:
 
     int resident_id = set.find_resident(addr_tag);
     const bool is_refill = (resident_id != -1);
+    // Only a refetch finds its sector resident (partial): it merges. A refetch
+    // whose sector was evicted meanwhile may carry data older than that
+    // eviction's writeback, so it installs nothing and its chain parks again;
+    // the retry then fills like any miss (an absent sector cannot be dirtied).
+    const bool sector_resident = is_refill && set.lines.at(resident_id).sectors.at(sector_id).valid;
+    const bool refetch_first   = bank_req.refetch && !bank_req.refetch_retry;
+    assert(!sector_resident || refetch_first);
+    if (refetch_first) {
+      chain_partial_ = !sector_resident;
+      chain_retry_   = !sector_resident;
+      refetch_hold_  = false;
+      if (sector_resident) {
+        // Memory supplies the bytes no store wrote; the sector stays dirty
+        // in exactly the stored bytes, which are not in memory yet.
+        auto &sec   = set.lines.at(resident_id).sectors.at(sector_id);
+        auto written = sec.data;
+        sec.data    = bank_req.data;
+        sector_merge(sec, written, sec.dirty_mask);
+        sec.partial = false;
+      }
+      return true;
+    }
 
     int line_id;
     if (is_refill) {
@@ -1132,11 +1277,39 @@ private:
     line.tag     = addr_tag;
     line.lru_ctr = 0;
     auto &sec    = line.sectors.at(sector_id);
-    sec.valid      = true;
-    sec.dirty      = false;
-    sec.dirty_mask = 0;
-    sec.data       = bank_req.data;
+    if (bank_req.nodata) {
+      sec.valid      = true;
+      sec.dirty      = false;
+      sec.partial    = true;
+      sec.dirty_mask = 0;
+      sec.data.reset();
+    } else {
+      sec.valid      = true;
+      sec.dirty      = false;
+      sec.partial    = false;
+      sec.dirty_mask = 0;
+      sec.data       = bank_req.data;
+    }
+    if (bank_req.refetch) {
+      chain_partial_ = false;
+      chain_retry_   = false;
+      refetch_hold_  = false;
+    }
     return true;
+  }
+
+  // Track the partial state of the chain a fill just woke.
+  void setChain(uint32_t set_id, uint64_t addr_tag, uint32_t sector_id, bool partial) {
+    chain_partial_ = partial;
+    chain_retry_   = false;
+    chain_set_     = set_id;
+    chain_tag_     = addr_tag;
+    chain_sector_  = sector_id;
+  }
+
+  // Lazy-fetch loopback depth: room for every request in the pipe plus one.
+  static uint32_t lazyq_size(const Cache::Config &config) {
+    return 1u << log2ceil(config.latency + 1);
   }
 
   // Fill-forward drain: complete the oldest ready replay directly when it is
@@ -1416,6 +1589,24 @@ private:
       pipe_req_->pop();
     } break;
 
+    case bank_req_t::Park: {
+      if (this->mem_req_out.full()) {
+        return; // stall
+      }
+      uint32_t set_id    = params_.addr_set_id(bank_req.addr);
+      uint64_t addr_tag  = params_.addr_tag(bank_req.addr);
+      uint32_t sector_id = params_.addr_sector_id(bank_req.addr);
+      MemReq fill;
+      fill.addr    = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
+      fill.tag     = bank_req.mshr_id;
+      fill.hart_id = bank_req.hart_id;
+      fill.uuid    = bank_req.uuid;
+      this->mem_req_out.send(fill, MEM_REQ_DELAY);
+      DT(3, this->name() << " refetch-req: " << fill);
+      ++pending_fill_reqs_;
+      pipe_req_->pop();
+    } break;
+
     case bank_req_t::Replay: {
       uint32_t set_id    = params_.addr_set_id(bank_req.addr);
       uint64_t addr_tag  = params_.addr_tag(bank_req.addr);
@@ -1423,8 +1614,10 @@ private:
       auto &set          = sets_.at(set_id);
       int32_t free_id = -1, repl_id = 0;
       int present_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_id, &repl_id);
-      // Sector hit: line resident AND the requested sector valid.
-      int hit_id = (present_id != -1 && set.lines.at(present_id).sectors.at(sector_id).valid) ? present_id : -1;
+      // Sector hit: line resident AND the requested sector valid (and complete
+      // when the access reads it).
+      const bool needs_data = !bank_req.write;
+      int hit_id = (present_id != -1 && sector_hit(set.lines.at(present_id).sectors.at(sector_id), needs_data)) ? present_id : -1;
 
       // The replayed sector is normally present — the fill that woke this
       // replay just installed it. It can still be gone when a concurrent
@@ -1452,7 +1645,8 @@ private:
           return; // stall: need a slot to re-track the miss
         bank_req_t refill = bank_req;
         refill.type = bank_req_t::Core;
-        int mshr_id = mshr_.enqueue(refill, set_id, addr_tag, sector_id);
+        const bool refetch = (present_id != -1) && set.lines.at(present_id).sectors.at(sector_id).valid;
+        int mshr_id = mshr_.enqueue(refill, set_id, addr_tag, sector_id, refetch);
         if (!fill_pending) {
           MemReq fill;
           fill.addr    = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
@@ -1530,7 +1724,11 @@ private:
       int present_id = set.tag_match(addr_tag, config_.repl_policy, rand_ctr_, &free_id, &repl_id);
       // Sector hit: line resident AND the requested sector valid (a sector miss
       // on a resident line takes the miss path and refills just that sector).
-      int hit_id = (present_id != -1 && set.lines.at(present_id).sectors.at(sector_id).valid) ? present_id : -1;
+      // A load or AMO to a partial sector misses and refetches it.
+      const bool needs_data = !bank_req.write;
+      int hit_id = (present_id != -1 && sector_hit(set.lines.at(present_id).sectors.at(sector_id), needs_data)) ? present_id : -1;
+      const bool partial_resident = (present_id != -1) && (hit_id == -1)
+                                 && set.lines.at(present_id).sectors.at(sector_id).valid;
 
       if (hit_id != -1) {
         // Hit while a same-(set,tag,sector) chain still carries a write or
@@ -1560,7 +1758,12 @@ private:
           } else {
             assert(!mshr_.full());
             int id = mshr_.enqueue(bank_req, set_id, addr_tag, sector_id);
-            mshr_.defer_to_replay(id);
+            // A chain still awaiting its fill (a refetch of this partial
+            // sector) wakes this entry itself; only a draining chain needs it
+            // marked ready here.
+            if (!mshr_.has_pending_fill(set_id, addr_tag, sector_id, id)) {
+              mshr_.defer_to_replay(id);
+            }
             DT(3, this->name() << " mshr-defer: " << bank_req);
           }
           --pending_mshr_size_;
@@ -1663,13 +1866,23 @@ private:
           // entries never mark new waiters, so they must not suppress the
           // fill for this fresh miss.
           bool fill_pending = mshr_.has_pending_fill(set_id, addr_tag, sector_id, -1);
-          if (!fill_pending && this->mem_req_out.full())
+          // Lazy fetch: a write-miss root allocates through the loopback
+          // instead of fetching the sector.
+          const bool lazy_alloc = config_.lazy_fetch && bank_req.write && !fill_pending;
+          if (lazy_alloc && lazy_q_->full()) {
             return;
+          }
+          if (!fill_pending && !lazy_alloc && this->mem_req_out.full()) {
+            return;
+          }
 
           assert(!mshr_.full());
-          int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag, sector_id);
+          int mshr_id = mshr_.enqueue(bank_req, set_id, addr_tag, sector_id, partial_resident);
           DT(3, this->name() << " mshr-enqueue: " << bank_req);
-          if (!fill_pending) {
+          if (lazy_alloc) {
+            lazy_q_->push(mshr_id);
+            DT(3, this->name() << " lazy-alloc: " << bank_req);
+          } else if (!fill_pending) {
             MemReq fill;
             fill.addr  = params_.mem_addr_sector(bank_id_, set_id, addr_tag, sector_id);
             // op defaults to MemOp::LD — fill is a load.
@@ -1774,6 +1987,7 @@ private:
     assert(false && "in-pipe line mirror underflow");
   }
   TFifo<bank_req_t>::Ptr pipe_req_;
+  TFifo<uint32_t>::Ptr   lazy_q_;   // write-miss roots awaiting their data-less fill
 
   Cache::PerfStats perf_stats_;
 
@@ -1790,6 +2004,14 @@ private:
   uint32_t fwd_sector_;
   std::shared_ptr<mem_block_t> fwd_data_;
   bool     crsp_sent_;  // core-response port used this tick (pipeline priority)
+
+  // Partial state of the chain the last fill woke (lazy fetch).
+  bool     chain_partial_;
+  bool     chain_retry_;  // the partial state came from an evicted refetch
+  uint32_t chain_set_;
+  uint64_t chain_tag_;
+  uint32_t chain_sector_;
+  bool     refetch_hold_; // a refetch fill has not installed yet: its chain waits
 
   // Flush walk state.
   bool     flushing_;

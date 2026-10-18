@@ -106,6 +106,7 @@ ProcessorImpl::ProcessorImpl()
     VX_CFG_L3_ENABLED != 0,          // is_llc when L3 is the LLC
     false,                           // bank_hash
     L3_SHARED_LLC,                   // shared_llc
+    VX_CFG_L3_LAZY_FETCH != 0,       // lazy_fetch
     }
   );
 

@@ -131,6 +131,22 @@ tests:
   via: blackbox
   app: vecadd
   args: -n16384
+# Streaming stores into a lazy-fetch write-back L2: store misses allocate
+# through the bank loopback instead of a memory fill.
+- id: parity-vecadd-lazy-l2
+  check: model_parity
+  via: blackbox
+  app: vecadd
+  args: -n16384
+  configs: -DVX_CFG_L2_LAZY_FETCH=1
+  shape: {l2cache: true}
+# Lazy-fetch refetch paths on the default write-back dcache: partial-sector
+# loads park and refetch, and same-set thrash evicts lines mid-refetch.
+- id: parity-lazy-fetch
+  check: model_parity
+  via: blackbox
+  app: lazy_fetch
+  configs: -DVX_CFG_DCACHE_LAZY_FETCH=1
 # FPU + LSU locality, multi-warp reuse (~1.29M cycles on the default shape).
 - id: parity-sgemm
   check: model_parity

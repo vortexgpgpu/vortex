@@ -42,6 +42,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     parameter DIRTY_BYTES           = 0,      // Enable dirty bytes on writeback
 
+    parameter LAZY_FETCH            = 0,      // Write misses allocate without a fill (write-validate)
+
     parameter REPL_POLICY           = `CS_REPL_FIFO, // Replacement policy
 
     parameter TAG_WIDTH             = UUID_WIDTH + 1, // core request tag size
@@ -145,6 +147,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .WRITE_ENABLE (WRITE_ENABLE),
             .WRITEBACK    (WRITEBACK),
             .DIRTY_BYTES  (DIRTY_BYTES),
+            .LAZY_FETCH   (LAZY_FETCH),
             .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),

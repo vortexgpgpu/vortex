@@ -316,3 +316,24 @@ tests:
   configs: -DVX_CFG_DCACHE_WRITEBACK=1 -DVX_CFG_DCACHE_DIRTYBYTES=1
   shape:
     threads: 16
+# Lazy fetch-on-read on a write-back LLC: a store miss allocates its line
+# without a fill, and a load or AMO of a partially written line fetches it and
+# merges under the dirty bytes. The default 1-core dcache is such an LLC.
+- id: lazy_fetch-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_DCACHE_LAZY_FETCH=1
+# The same on a write-back L2 shared by 4 cores behind write-through L1s.
+- id: lazy_fetch-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: lazy_fetch
+  configs: -DVX_CFG_EXT_A_ENABLE -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_L2_WRITEBACK=1 -DVX_CFG_L2_LAZY_FETCH=1
+  shape:
+    cores: 4
+    l2cache: true

@@ -93,6 +93,7 @@ public:
       (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
       (VX_CFG_DCACHE_BANK_HASH != 0) && (VX_CFG_DCACHE_NUM_BANKS > 1), // bank_hash
       DCACHE_SHARED_LLC,             // shared_llc
+      VX_CFG_DCACHE_LAZY_FETCH != 0, // lazy_fetch
     });
 
 #ifdef VX_CFG_EXT_TEX_ENABLE

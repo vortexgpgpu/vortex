@@ -220,6 +220,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_DCACHE_WRITEBACK),
         .DIRTY_BYTES    (`VX_CFG_DCACHE_DIRTYBYTES),
+        .LAZY_FETCH     (`VX_CFG_DCACHE_LAZY_FETCH),
         .REPL_POLICY    (`VX_CFG_DCACHE_REPL_POLICY),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (3),

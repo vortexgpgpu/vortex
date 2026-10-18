@@ -152,6 +152,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_L3_WRITEBACK),
         .DIRTY_BYTES    (`VX_CFG_L3_DIRTYBYTES),
+        .LAZY_FETCH     (`VX_CFG_L3_LAZY_FETCH),
         .REPL_POLICY    (`VX_CFG_L3_REPL_POLICY),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),

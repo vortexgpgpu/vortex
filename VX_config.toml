@@ -216,7 +216,12 @@ VX_CFG_DCACHE_NUM_WAYS = 4
 # stays moderate: NT 1/2/4/8/16/32/64 -> word 4/8/8/16/16/32/32, banks 1/1/2/2/4/4/8.
 VX_CFG_DCACHE_WORD_SIZE = "expr: min($VX_CFG_L1_LINE_SIZE, min($VX_CFG_MEM_BLOCK_SIZE, ($VX_CFG_XLEN / 8) * pow(2, (clog2($VX_CFG_NUM_LSU_LANES) + 1) / 2)))"
 VX_CFG_DCACHE_WRITEBACK = "expr: int($dcache_is_llc and $single_core)"
-VX_CFG_DCACHE_DIRTYBYTES = 0
+# LAZY_FETCH (write-back LLC only): a store miss allocates its line without a
+# fill and a later read fetches and merges under the dirty bytes. It needs the
+# per-byte dirty masks, so it turns DIRTYBYTES on; DIRTYBYTES alone keeps
+# fetch-on-write. The same pair exists for L2 and L3.
+VX_CFG_DCACHE_DIRTYBYTES = "expr: $VX_CFG_DCACHE_LAZY_FETCH"
+VX_CFG_DCACHE_LAZY_FETCH = 0
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_DCACHE_MSHR_SIZE = 16
 # dcache is unsectored: line = sector = mem transaction granule = L1_LINE (which
@@ -246,7 +251,8 @@ VX_CFG_L1_MEM_PORTS = "expr: min($VX_CFG_DCACHE_NUM_BANKS, $VX_CFG_PLATFORM_MEMO
 VX_CFG_L2_SIZE = 1048576
 VX_CFG_L2_NUM_WAYS = 8
 VX_CFG_L2_WRITEBACK = "expr: int($l2_is_llc and $single_cluster)"
-VX_CFG_L2_DIRTYBYTES = 0
+VX_CFG_L2_DIRTYBYTES = "expr: $VX_CFG_L2_LAZY_FETCH"
+VX_CFG_L2_LAZY_FETCH = 0
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L2_MSHR_SIZE = 16
 VX_CFG_L2_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L2_SIZE) - clog2(1048576))"
@@ -264,7 +270,8 @@ VX_CFG_L2_MEM_PORTS = "expr: min($VX_CFG_L2_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_N
 VX_CFG_L3_SIZE = 2097152
 VX_CFG_L3_NUM_WAYS = 8
 VX_CFG_L3_WRITEBACK = "expr: int($l3_is_llc)"
-VX_CFG_L3_DIRTYBYTES = 0
+VX_CFG_L3_DIRTYBYTES = "expr: $VX_CFG_L3_LAZY_FETCH"
+VX_CFG_L3_LAZY_FETCH = 0
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L3_MSHR_SIZE = 16
 VX_CFG_L3_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L3_SIZE) - clog2(2097152))"

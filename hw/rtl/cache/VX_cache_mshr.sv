@@ -55,6 +55,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     parameter AMO_ENABLE        = 0,          // Per-entry AMO tracking (probe outputs)
     parameter AMO_PASSTHRU      = 0,          // Non-LLC passthrough: AMO entries never coalesce
     parameter WORD_SEL_WIDTH    = 1,          // word-in-line select width (order-hazard granularity)
+    parameter LAZY_FETCH        = 0,          // Chains may park and refetch a partial sector
 
     parameter MSHR_ADDR_WIDTH   = `LOG2UP(MSHR_SIZE)
 ) (
@@ -73,6 +74,10 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     output wire [`CS_LINE_ADDR_WIDTH-1:0] fill_addr,
     // sector of the entry that initiated this fill (which sector to install)
     output wire [`UP(`CS_SECTOR_SEL_BITS)-1:0] fill_sector,
+    // the entry that initiated this fill refetches a resident partial sector
+    output wire                         fill_refetch,
+    // ... after a refetch found it evicted: the sector it re-reads stayed clean
+    output wire                         fill_retry,
 
     // probe: pending requests for `probe_addr`'s line, split by type.
     //   probe_pending_ld  : a non-AMO (line-filling) request is pending —
@@ -96,9 +101,16 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     output wire                         dequeue_valid,
     output wire [`CS_LINE_ADDR_WIDTH-1:0] dequeue_addr,
     output wire                         dequeue_rw,
+    output wire                         dequeue_reads, // the head reads its sector (load or AMO)
     output wire [DATA_WIDTH-1:0]        dequeue_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   dequeue_id,
     input wire                          dequeue_ready,
+    // park the chain at its head instead of consuming it: the entry stays
+    // allocated (it becomes the root of a refetch) and the walk stops.
+    input wire                          dequeue_park,
+    input wire                          dequeue_park_retry,
+    // withhold the head this cycle (registered-only inputs)
+    input wire                          dequeue_block,
 
     // allocate
     input wire                          allocate_valid,
@@ -107,6 +119,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     input wire [WORD_SEL_WIDTH-1:0]     allocate_word_idx,
     input wire                          allocate_rw,
     input wire                          allocate_is_amo, // AMO: never coalesce
+    input wire                          allocate_refetch, // reads a resident partial sector
     input wire [DATA_WIDTH-1:0]         allocate_data,
     output wire [MSHR_ADDR_WIDTH-1:0]   allocate_id,
     output wire                         allocate_pending,
@@ -154,6 +167,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // amo_mask is the per-entry AMO flag, zero when AMO_ENABLE=0 so the
     // mask folds out of addr_matches and the probe logic disappears.
     wire [MSHR_SIZE-1:0] amo_mask;
+    wire [MSHR_SIZE-1:0] amo_entries;
 
     reg allocate_rdy, allocate_rdy_n;
     reg [MSHR_ADDR_WIDTH-1:0] allocate_id_r, allocate_id_n;
@@ -165,6 +179,8 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
 
     wire allocate_fire = allocate_valid && allocate_ready;
     wire dequeue_fire = dequeue_valid && dequeue_ready;
+    wire dequeue_park_fire = (LAZY_FETCH != 0) && dequeue_fire && dequeue_park;
+    wire dequeue_free = dequeue_fire && ~dequeue_park_fire;
 
     wire [MSHR_SIZE-1:0] addr_matches;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_addr_matches
@@ -179,7 +195,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         // and hits the line the releasing entry just installed.
         assign addr_matches[i] = valid_table[i] && (addr_table[i] == allocate_addr)
                               && (sector_table[i] == allocate_sector) && ~amo_mask[i]
-                              && ~(dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i)))
+                              && ~(dequeue_free && (dequeue_id == MSHR_ADDR_WIDTH'(i)))
                               && ~(finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i)));
     end
 
@@ -193,7 +209,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // the next id never re-selects the slot being allocated this cycle.
     wire [MSHR_SIZE-1:0] dequeue_free_oh, finalize_free_oh, allocate_set_oh;
     for (genvar i = 0; i < MSHR_SIZE; ++i) begin : g_free_delta
-        assign dequeue_free_oh[i]  = dequeue_fire && (dequeue_id == MSHR_ADDR_WIDTH'(i));
+        assign dequeue_free_oh[i]  = dequeue_free && (dequeue_id == MSHR_ADDR_WIDTH'(i));
         assign finalize_free_oh[i] = finalize_valid && finalize_is_release && (finalize_id == MSHR_ADDR_WIDTH'(i));
         assign allocate_set_oh[i]  = allocate_fire && (allocate_id == MSHR_ADDR_WIDTH'(i));
     end
@@ -229,7 +245,9 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
             dequeue_id_n = fill_id;
         end
 
-        if (dequeue_fire) begin
+        if (dequeue_park_fire) begin
+            dequeue_val_n = 0;
+        end else if (dequeue_fire) begin
             valid_table_n[dequeue_id] = 0;
             if (next_table[dequeue_id]) begin
                 dequeue_id_n = next_index[dequeue_id];
@@ -343,6 +361,34 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     assign fill_addr = addr_table[fill_id];
     assign fill_sector = sector_table[fill_id];
 
+    if (LAZY_FETCH != 0) begin : g_refetch
+        reg [MSHR_SIZE-1:0] refetch_table, retry_table;
+        always @(posedge clk) begin
+            if (allocate_fire) begin
+                refetch_table[allocate_id] <= allocate_refetch;
+                retry_table[allocate_id]   <= 1'b0;
+            end
+            if (dequeue_park_fire) begin
+                refetch_table[dequeue_id] <= 1'b1;
+                retry_table[dequeue_id]   <= dequeue_park_retry;
+            end
+        end
+        assign fill_refetch = refetch_table[fill_id];
+        assign fill_retry   = retry_table[fill_id];
+        // registered with the pointer so the park decision stays off the
+        // payload read
+        reg dequeue_reads_r;
+        always @(posedge clk) begin
+            dequeue_reads_r <= ~write_table[dequeue_id_n] || amo_entries[dequeue_id_n];
+        end
+        assign dequeue_reads = dequeue_reads_r;
+    end else begin : g_no_refetch
+        assign fill_refetch  = 1'b0;
+        assign fill_retry    = 1'b0;
+        assign dequeue_reads = 1'b0;
+        `UNUSED_VAR ({allocate_refetch, dequeue_park, dequeue_park_retry, dequeue_park_fire, amo_entries})
+    end
+
     if (AMO_ENABLE != 0) begin : g_amo
         reg [MSHR_SIZE-1:0] amo_table;
         // An entry only participates in the pending-AMO probe once it has
@@ -375,6 +421,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         // in arrival order like any request; the probe outputs alone provide
         // the same-line ordering guard.
         assign amo_mask = (AMO_PASSTHRU != 0) ? amo_table : '0;
+        assign amo_entries = amo_table;
         // At the LLC no request links behind a pending AMO: the bank defers
         // every request to a line while an AMO to it waits here.
         `RUNTIME_ASSERT (~((AMO_PASSTHRU == 0) && finalize_valid && ~finalize_is_release && finalize_is_pending
@@ -414,6 +461,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
         assign persist_amo = finalize_valid && ~finalize_is_release &&  amo_table[finalize_id];
     end else begin : g_no_amo
         assign amo_mask = '0;
+        assign amo_entries = '0;
         assign probe_pending_ld  = 1'b0;
         assign probe_pending_amo = 1'b0;
         assign {probe_any_ld, probe_any_amo, persist_ld, persist_amo} = '0;
@@ -449,7 +497,7 @@ module VX_cache_mshr import VX_gpu_pkg::*; #(
     // of an older chained read of the same word.
     assign allocate_pending_ovl = |(addr_matches & word_matches);
 
-    assign dequeue_valid = dequeue_val;
+    assign dequeue_valid = dequeue_val && ~((LAZY_FETCH != 0) && dequeue_block);
     // Sampled with dequeue_id_n, alongside the payload in mshr_store, rather
     // than read live at dequeue_id_r a cycle later. The entry's slot can be
     // freed and reallocated while the pointer still names it -- the free set
