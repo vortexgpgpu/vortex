@@ -10,7 +10,7 @@ on it, and runs orders of magnitude faster than Verilator.
 |---|---|
 | [1](#1-overview) | Overview and how to run it |
 | [2](#2-the-compiler) | The compiler: netlists, threading, composition |
-| [3](#3-the-simulator) | The simulator: threads, channels, the token fabric |
+| [3](#3-the-simulator) | The simulator: threads, channels, the token fabric; timing options; domains and relays |
 | [4](#4-the-kernel) | The kernel: memory and control endpoints |
 | [5](#5-the-runtime) | The runtime and its register contract |
 | [6](#6-validation) | Validation |
@@ -145,6 +145,62 @@ bits of it for every thread keeps its slots in a memory addressed by the
 reader's thread and slot (LUTRAM); any other, in registers. A target port
 that is exactly one port of a model of one thread is wired to the shell
 directly, since the shell's valid and ready depend on its own state alone.
+
+### 3.1 Timing: the options the image flow uses
+
+A threaded model's critical paths run from its thread index, through every
+state memory's read and the target logic, into every state memory's write.
+The image flow's default options (`FOLDSIM_FLAGS` in `hw/syn/foldsim`) cut
+those paths without changing what the target computes; each keeps the
+simulator cycle-exact (§6).
+
+| option | what it does |
+|---|---|
+| `--region-loads 2048` | splits a model's state into regions of at most 2,048 loads, each with its own copy of the thread index and of the edge, written a host cycle after the target edge |
+| `--registered-state` | reads the next thread's state a host cycle ahead into registers, forwarding the write landing in between; threads then go in turn (`--schedule`) |
+| `--commit-select` | a model of one thread commits its state by selecting a registered candidate, not by writing it in the edge's cycle |
+| `--state-stages 2` | writes the state two host cycles after its edge in models of three threads or more, so synthesis can retime into the logic before it |
+| `--pipeline-multipliers` | with two stages, a state computed by a multiplier takes its first stage at the multiplier's inputs |
+| `--staged-ram-writes` | with regions, memories with a registered read are written a host cycle late too, their reads forwarded |
+| `--staged-tokens` | a channel writes each token into its slot a host cycle after it is taken, forwarded to its readers until then |
+| `--fold-pipelines` | simulates a fixed-latency pipeline by one unthreaded copy and a per-thread store of its results (the Xilinx FP cores, §1) |
+
+`--compact-staging` (staging placed at the state it stages; for large images,
+s2w4i2's Verilog 34 → 16 MB) and `--channel-depth` are not in the default.
+
+Out-of-context results for s2w4i2 (`make -C hw/syn/foldsim ooc`, xcv80,
+4.0 ns unless noted; Vivado retiming moves a run by about ±20 MHz):
+
+| options | FPU | MHz | LUTs | FFs |
+|---|---|---:|---:|---:|
+| none | soft | 186.8 | 130.1k | 26.8k |
+| regions of 2,048 loads | soft | 214.3 | 136.9k | 83.6k |
+| the default set but folding | soft | 250.0 | 211.8k | 174.7k |
+| the default set | soft | 235.3 | 194.6k | 157.0k |
+| the default set | Xilinx cores | 250.0 (262.7 at 3.33 ns) | 182.8k | 162.4k |
+
+The soft FPU's own pipeline stages limit it: the same options with ready
+scheduling instead of threads in turn reached 250.0 MHz, the difference being
+which stages retiming balanced.
+
+Small targets pay area for these options that they do not need;
+`FOLDSIM_FLAGS=` (empty) builds the plain simulator.
+
+### 3.2 Domains and relays
+
+`--domains` emits the simulator as a tree of modules, one per class, nested as
+the classes are, with every domain boundary a set of module ports;
+`--relay <models>` gives the channels of the named models (or
+`<model>:<model>` pairs) a relay stage, so a channel crossing an SLR costs a
+host cycle of latency instead of a long wire. Both are off by default.
+Measured on s2w4i2 (out of context): with the default options, domains and
+relays reach the same 250 MHz at 4.0 ns; at 3.33 ns 273.6 against 262.7 MHz
+with the Xilinx cores (equal slack after synthesis), but 225.7 against
+238.9 MHz with the soft FPU; without the state-staging options
+(regions and folding only) 231.8 against 226.2 MHz at 4.0 ns, for 1.4 % more
+LUTs. Both differences are inside the retiming spread. A relay costs host
+cycles where a loop runs through it (up to 22 % on img6b), so relays are
+chosen per image from a Verilator run.
 
 ---
 
@@ -451,7 +507,11 @@ this compares the two simulators' fidelity and overheads, not threading.
 | `sgemm -n16` cycles, V80 (= Verilator) | 301,923 | 317,163 |
 | `sgemm -n64` cycles, V80 | 13,264,035 | 13,937,835 |
 | `sgemm -n64` kernel time, V80 | 278 ms | 178 ms |
-| host cycles per target cycle, `sgemm -n64` | 3.00 | 1.84 (FMR) |
+| host cycles per target cycle, `sgemm -n64` | 3.00 ¹ | 1.84 (FMR) |
+
+¹ With the plain flow (`FOLDSIM_FLAGS=`). The flow's default options (§3.1)
+run tinygpu at 4.00 host cycles per target cycle (Verilator), cycles
+unchanged: they buy Fmax for large targets with host cycles a small one pays.
 
 Instruction counts are identical on both flows, in Verilator and on the V80.
 Foldsim's cycles equal rtlsim's behind the AXI4 adapter on `AxiLatencyPipe`

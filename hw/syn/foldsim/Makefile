@@ -53,8 +53,14 @@ CIRCT_BIN ?= $(CIRCT_PATH)/bin
 LIFT_PYTHON ?= python3
 # The kernel clock (MHz): the image is timed at it and the shell programs it.
 FOLDSIM_FREQ ?= 250
-# Options of the foldsim driver, e.g. --region-loads=2048 --registered-state.
-FOLDSIM_FLAGS ?= --fold-pipelines
+# Options of the foldsim driver: by default the set that times s2w4i2 at
+# 250 MHz (regions of 2048 loads with their own control, registered state
+# committed by select over two host cycles, pipelined multipliers, staged
+# memory writes and tokens, folded fixed-latency pipelines); docs/designs/
+# foldsim.md lists each. Large images add --compact-staging; multi-SLR ones
+# --domains and --relay.
+FOLDSIM_FLAGS ?= --region-loads 2048 --registered-state --commit-select --state-stages 2 \
+                 --pipeline-multipliers --staged-ram-writes --staged-tokens --fold-pipelines
 
 # The target: Vortex with its AXI4 port, DCR, start and busy as plain ports.
 TARGET_TOP := foldsim_target
@@ -137,7 +143,7 @@ RTL_SRCS := $(filter-out $(KERNEL_RTL),$(shell find $(RTL_DIR) -name '*.sv' -o -
 # compiled apart from the target.
 SHELL_MODULES := $(notdir $(wildcard $(RTL_DIR)/afu/common/*.sv) $(wildcard $(FOLDSIM_RTL_DIR)/*.sv))
 
-.PHONY: all sources generate package-ip clean FORCE
+.PHONY: all sources generate package-ip ooc clean FORCE
 
 all: $(VBIN)
 
@@ -208,6 +214,19 @@ $(IP_DIR)/component.xml: $(KERNEL_SRCS) $(KERNEL_VH) $(OOC_XDC) $(wildcard $(FOL
 		-source $(VORTEX_HOME)/hw/syn/xilinx/aved/package_ip.tcl \
 		-tclargs foldsim_afu $(KERNEL_SRCS) . $(DEVICE) ooc-xdc=$(OOC_XDC) \
 		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add) ' $(GEN_SV) || echo no-vendor-ip)
+
+# The kernel alone, out of context at FOLDSIM_FREQ: synthesis with global
+# retiming, placement and routing, without the shell, its reports in
+# $(BUILD_DIR)/ooc. It answers what a change does to the kernel's Fmax in
+# about half an image build's time.
+OOC_DIR := $(BUILD_DIR)/ooc
+ooc: $(KERNEL_SRCS)
+	rm -rf $(OOC_DIR) && mkdir -p $(OOC_DIR)
+	cd $(OOC_DIR) && TOOL_DIR=$(SCRIPT_DIR) $(VIVADO) -mode batch -nojournal -log vivado.log \
+		-source $(SRC_DIR)/ooc.tcl -tclargs $(KERNEL_SRCS) $(DEVICE) \
+		$$(python3 -c 'print(round(1000 / $(FOLDSIM_FREQ), 3))') \
+		$$(grep -qE '^ *xil_f(ma|div|sqrt|mul|add) ' $(GEN_SV) || echo no-vendor-ip)
+	@grep -A2 'WNS(ns)' $(OOC_DIR)/routed_timing_summary.rpt | tail -1
 
 $(CFG): FORCE
 	@python3 $(SCRIPT_DIR)/gen_platform.py --flow=aved --device=$(DEVICE) --emit=cfg --kernel=foldsim_afu \
