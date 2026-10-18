@@ -90,6 +90,14 @@ tests:
   app: gbar_phase
   shape:
     cores: 2
+# Four cores in one cluster: every core must arrive under its own index.
+- id: gbar-phase-3
+  via: blackbox
+  drivers:
+  - xrt
+  app: gbar_phase
+  shape:
+    cores: 4
 # SimX<->rtlsim cycle parity on the multi-core global barrier. Until this case
 # existed the gate could not observe the gbar path at all: every other parity
 # case is single-core, so USE_GBAR is 0 and the request queue is not built.

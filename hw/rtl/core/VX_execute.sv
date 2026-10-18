@@ -14,17 +14,16 @@
 `include "VX_define.vh"
 
 module VX_execute import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
     input wire              clk,
     input wire              reset,
 
+    input wire [CORE_ID_WIDTH-1:0] core_id,
+
 `ifdef PERF_ENABLE
-    input sysmem_perf_t     sysmem_perf,
-    input pipeline_perf_t   pipeline_perf,
 `ifdef VX_CFG_EXT_TCU_ENABLE
     output tcu_perf_t       tcu_perf,
 `endif
@@ -49,7 +48,6 @@ module VX_execute import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_EXT_DXA_ENABLE
     VX_dxa_req_bus_if.master dxa_req_bus_if,
-    VX_txbar_bus_if.slave  dxa_txbar_bus_if,
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
@@ -65,21 +63,19 @@ module VX_execute import VX_gpu_pkg::*; #(
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
     VX_rtu_bus_if.master    rtu_bus_if,
-    VX_sched_unlock_if.master sched_unlock_if,
+    VX_sched_unlock_if.master sched_unlock_if [`VX_CFG_NUM_SFU_BLOCKS],
 `endif
-
-    // scheduler interfaces
-    VX_sched_csr_if.slave   sched_csr_if,
-    VX_branch_ctl_if.master branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
-    VX_warp_ctl_if.master   warp_ctl_if,
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
     // TCU tile-buffer local-memory read port
     VX_mem_bus_if.master    tcu_lmem_if,
 `endif
 
-    // DCR-CSR interface
-    VX_dcr_csr_if           dcr_csr_if
+    // scheduler interfaces
+    VX_sched_csr_if.slave   sched_csr_if [`VX_CFG_NUM_SFU_BLOCKS],
+    VX_branch_ctl_if.master branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
+    VX_warp_shared_if.master warp_shared_if [`VX_CFG_NUM_SFU_BLOCKS],
+    VX_warp_ctl_if.master   warp_ctl_if [`VX_CFG_NUM_SFU_BLOCKS]
 );
 
 `ifdef VX_CFG_EXT_F_ENABLE
@@ -99,12 +95,12 @@ module VX_execute import VX_gpu_pkg::*; #(
     `SCOPE_IO_SWITCH (1);
 
     VX_lsu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-lsu", INSTANCE_ID))),
-        .CORE_ID     (CORE_ID)
+        .INSTANCE_ID (`SFORMATF(("%s-lsu", INSTANCE_ID)))
     ) lsu_unit (
         `SCOPE_IO_BIND  (0)
         .clk             (clk),
         .reset           (reset),
+        .core_id         (core_id),
         .dispatch_if         (dispatch_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .commit_if           (commit_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .per_block_client_if (lsu_client_if)
@@ -143,15 +139,11 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 
     VX_sfu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-sfu", INSTANCE_ID))),
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID (`SFORMATF(("%s-sfu", INSTANCE_ID)))
     ) sfu_unit (
         .clk            (clk),
         .reset          (reset),
-    `ifdef PERF_ENABLE
-        .sysmem_perf    (sysmem_perf),
-        .pipeline_perf  (pipeline_perf),
-    `endif
+        .core_id        (core_id),
         .dispatch_if    (dispatch_if[EX_SFU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .commit_if      (commit_if[EX_SFU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
     `ifdef VX_CFG_EXT_F_ENABLE
@@ -159,22 +151,17 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
-        .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),
-    `endif
-    `ifdef VX_CFG_EXT_OM_ENABLE
-    `endif
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),
         .sched_unlock_if (sched_unlock_if),
     `endif
         .sched_csr_if   (sched_csr_if),
-        .warp_ctl_if    (warp_ctl_if),
-        .dcr_csr_if     (dcr_csr_if)
+        .warp_shared_if (warp_shared_if),
+        .warp_ctl_if    (warp_ctl_if)
     );
 
 endmodule

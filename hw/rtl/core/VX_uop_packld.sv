@@ -24,7 +24,7 @@
 //   eff_rs1[lane] = rs1[lane] + rs2[lane] * uop_idx   (shift-and-add)
 // The pack field is cleared in op_args forwarded to the LSU slice so it sees a
 // plain LBU or LHU.  The NaN-boxing of the FLW result is handled automatically
-// because is_float==1 and rd is a float register (triggers nan-box in lsu_slice).
+// because is_float==1 and rd is a float register (triggers nan-box in lsu_block).
 
 module VX_uop_packld import VX_gpu_pkg::*; (
     input clk,

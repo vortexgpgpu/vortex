@@ -176,7 +176,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			// The datapath has no misalignment support: only a naturally aligned
 			// access is guaranteed to sit inside one memory block, which is what
 			// lets a lane's payload pack into a single block downstream.
-			// VX_lsu_slice.sv enforces the same contract in hardware, so modelling
+			// The hardware LSU enforces the same contract, so modelling
 			// anything looser here would let a shader pass in simulation and fail
 			// on the device.
 			if ((e.addr % e.size) != 0) {

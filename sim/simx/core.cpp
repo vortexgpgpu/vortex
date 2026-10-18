@@ -66,9 +66,6 @@ public:
     , func_units_((uint32_t)FUType::Count)
     , lmem_switch_(VX_CFG_NUM_LSU_BLOCKS)
     , mem_coalescers_(VX_CFG_NUM_LSU_BLOCKS)
-    , fetch_latch_(ctx, "fetch_latch", 2, 2)
-    , decode_latch_(ctx, "decode_latch", 1, 2)
-    , pending_icache_(VX_CFG_NUM_WARPS)
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GreedyRR, PER_ISSUE_WARPS})
     , issue_lock_owner_(VX_CFG_ISSUE_WIDTH, kLockOpen)
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
@@ -81,6 +78,16 @@ public:
     const std::string& name = simobject_->name();
     char sname[100];
 
+    // per fetch slice: scheduler-to-fetch and fetch-to-decode latches, and the
+    // icache tags of the slice's in-flight fetches
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      snprintf(sname, 100, "fetch_latch%d", f);
+      fetch_latch_.emplace_back(std::make_unique<TFifo<instr_trace_t*>>(ctx, sname, 2, 2));
+      snprintf(sname, 100, "decode_latch%d", f);
+      decode_latch_.emplace_back(std::make_unique<TFifo<instr_trace_t*>>(ctx, sname, 1, 2));
+      pending_icache_.emplace_back(PER_FETCH_WARPS);
+    }
+
     // create scheduler (SimObject) — also creates the CTA dispatcher.
     snprintf(sname, 100, "%s-scheduler", name.c_str());
     scheduler_ = SimPlatform::instance().create_object<Scheduler>(sname, simobject_);
@@ -92,8 +99,10 @@ public:
   #ifdef VX_CFG_EXT_C_ENABLE
     // create RVC fetch decompressor (SimObject) — owns per-warp half-word
     // buffer + refetch queue. Resets via SimObject::on_reset.
-    snprintf(sname, 100, "%s-decompressor", name.c_str());
-    decompressor_ = SimPlatform::instance().create_object<Decompressor>(sname, VX_CFG_NUM_WARPS);
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      snprintf(sname, 100, "%s-decompressor%d", name.c_str(), f);
+      decompressors_.push_back(SimPlatform::instance().create_object<Decompressor>(sname, VX_CFG_NUM_WARPS));
+    }
   #endif
 
     // create scoreboard (SimObject)
@@ -209,11 +218,11 @@ public:
     dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS,
                               VX_CFG_DTLB_SIZE, local_core * 2 + 0, false);
 
-    // Per-core icache MMU (1 port). Fetch reads/writes its upstream
-    // channels (ReqIn[0]/RspOut[0]) directly; the downstream side is
-    // bound to the Core's icache port below.
+    // Per-core icache MMU, one port per fetch slice. Fetch reads/writes its
+    // upstream channels directly; the downstream side is bound to the Core's
+    // icache ports below.
     snprintf(sname, 100, "%s-icache_mmu", name.c_str());
-    icache_mmu_ = Mmu::Create(sname, 1,
+    icache_mmu_ = Mmu::Create(sname, ICACHE_NUM_REQS,
                               VX_CFG_ITLB_SIZE, local_core * 2 + 1, true);
 
     // LSU memory side -> dcache MMU -> core's dcache port
@@ -224,10 +233,12 @@ public:
       simobject_->dcache_rsp_in.at(p).bind(&dcache_mmu_->RspIn.at(p));
     }
 
-    // icache MMU downstream side -> core's icache port. Upstream side
-    // (ReqIn[0]/RspOut[0]) is consumed directly by fetch() in on_tick.
-    icache_mmu_->ReqOut.at(0).bind(&simobject_->icache_req_out.at(0));
-    simobject_->icache_rsp_in.at(0).bind(&icache_mmu_->RspIn.at(0));
+    // icache MMU downstream side -> core's icache ports. Upstream side is
+    // consumed directly by fetch() in on_tick.
+    for (uint32_t f = 0; f < ICACHE_NUM_REQS; ++f) {
+      icache_mmu_->ReqOut.at(f).bind(&simobject_->icache_req_out.at(f));
+      simobject_->icache_rsp_in.at(f).bind(&icache_mmu_->RspIn.at(f));
+    }
   #else
     // No-VM: direct passthrough.
     for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
@@ -360,61 +371,88 @@ public:
     perf_stats_.active_warps += scheduler_->active_warps().count();
     perf_stats_.stalled_warps += scheduler_->stalled_warps().count();
 
-    // stop when fetch_latch cannot accept
-    if (fetch_latch_.full())
-      return;
+    scheduler_->schedule_begin();
 
-    // eligible warps: ibuffer not yet saturated
-    WarpMask warp_mask;
-    for (uint32_t w = 0, nw = VX_CFG_NUM_WARPS; w < nw; ++w) {
-      if (ibuf_inflight_.at(w) < VX_CFG_IBUF_SIZE) {
-        warp_mask.set(w);
+    // each fetch slice picks among its own warps whose ibuffer is not yet saturated
+    // the cycle is idle when no slice has a warp to fetch, its latch free or not
+    bool any_cand = false;
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      auto& fetch_latch = fetch_latch_.at(f);
+      WarpMask warp_mask;
+      for (uint32_t w = f; w < VX_CFG_NUM_WARPS; w += VX_CFG_FETCH_WIDTH) {
+        if (ibuf_inflight_.at(w) < VX_CFG_IBUF_SIZE) {
+          warp_mask.set(w);
+        }
       }
-    }
 
-    auto trace = scheduler_->schedule(warp_mask);
-    if (trace == nullptr) {
+      if (fetch_latch->full()) {
+        any_cand |= scheduler_->has_ready(warp_mask);
+        continue;
+      }
+
+      auto trace = scheduler_->schedule(warp_mask);
+      if (trace == nullptr) {
+        continue;
+      }
+      any_cand = true;
+
+      fetch_latch->push(trace);
+      DT(3, simobject_->name() << "-pipeline schedule: " << *trace);
+      pending_instrs_.push_back(trace);
+      ++ibuf_inflight_.at(trace->wid);
+      perf_stats_.issued_warps += 1;
+      perf_stats_.issued_threads += trace->tmask.count();
+    }
+    if (!any_cand) {
       ++perf_stats_.sched_idle;
-      return;
     }
 
-    fetch_latch_.push(trace);
-    DT(3, simobject_->name() << "-pipeline schedule: " << *trace);
-    pending_instrs_.push_back(trace);
-    ++ibuf_inflight_.at(trace->wid);
-    perf_stats_.issued_warps += 1;
-    perf_stats_.issued_threads += trace->tmask.count();
+    scheduler_->schedule_end();
   }
 
   void fetch() {
     perf_stats_.ifetch_latency += pending_ifetches_;
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      this->fetch_slice(f);
+    }
+  }
+
+  // Fetch slice f: its icache response into its decode latch, then its next
+  // fetch request out of its fetch latch, on icache port f.
+  void fetch_slice(uint32_t f) {
+    auto& fetch_latch    = *fetch_latch_.at(f);
+    auto& decode_latch   = *decode_latch_.at(f);
+    auto& pending_icache = pending_icache_.at(f);
+  #ifdef VX_CFG_EXT_C_ENABLE
+    auto& decompressor   = decompressors_.at(f);
+  #endif
 
   #ifdef VX_CFG_VM_ENABLE
     // With VM, fetch reads/writes the icache MMU's upstream channels.
     // The MMU translates and forwards to simobject_->icache_req_out
     // downstream (driven by SimChannel binding in the constructor).
-    auto& icache_rsp = icache_mmu_->RspOut.at(0);
-    auto& icache_req = icache_mmu_->ReqIn.at(0);
+    auto& icache_rsp = icache_mmu_->RspOut.at(f);
+    auto& icache_req = icache_mmu_->ReqIn.at(f);
   #else
-    auto& icache_rsp = simobject_->icache_rsp_in.at(0);
-    auto& icache_req = simobject_->icache_req_out.at(0);
+    auto& icache_rsp = simobject_->icache_rsp_in.at(f);
+    auto& icache_req = simobject_->icache_req_out.at(f);
   #endif
 
     // handle icache response — extract instruction word from the TLM line payload
     if (!icache_rsp.empty()){
       auto& mem_rsp = icache_rsp.peek();
-      auto trace = pending_icache_.at(mem_rsp.tag);
+      auto trace = pending_icache.at(mem_rsp.tag);
       assert(mem_rsp.data && "icache response must carry line payload");
 
     #ifdef VX_CFG_EXT_C_ENABLE
       // Decompressor classifies the rsp: emit-ready (sets trace->code) or
       // queues a refetch internally for cross-word 32-bit completion.
-      bool emit = decompressor_->on_icache_rsp(trace, *mem_rsp.data);
-      bool progressed = !emit || decode_latch_.try_push(trace);
+      bool emit = decompressor->on_icache_rsp(trace, *mem_rsp.data);
+      bool progressed = !emit || decode_latch.try_push(trace);
     #else
       bool emit = true;
       bool progressed = false;
-      if (decode_latch_.try_push(trace)) {
+      if (decode_latch.try_push(trace)) {
         uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
         progressed = true;
@@ -427,7 +465,7 @@ public:
                  << ", PC=0x" << std::hex << trace->PC << " (#" << std::dec << trace->uuid << ")");
         }
         DT(3, simobject_->name() << " icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
-        pending_icache_.release(mem_rsp.tag);
+        pending_icache.release(mem_rsp.tag);
         icache_rsp.pop();
         --pending_ifetches_;
       }
@@ -440,15 +478,15 @@ public:
   #ifdef VX_CFG_EXT_C_ENABLE
     bool           from_refetch = false;
     {
-      auto pick = decompressor_->pick_request(fetch_latch_.empty() ? nullptr
-                                                              : fetch_latch_.peek());
+      auto pick = decompressor->pick_request(fetch_latch.empty() ? nullptr
+                                                              : fetch_latch.peek());
       trace        = pick.trace;
       req_addr     = pick.addr;
       from_refetch = pick.from_refetch;
     }
   #else
-    if (!fetch_latch_.empty()) {
-      trace    = fetch_latch_.peek();
+    if (!fetch_latch.empty()) {
+      trace    = fetch_latch.peek();
       req_addr = trace->PC;
     }
   #endif
@@ -456,7 +494,7 @@ public:
       return;
 
     // Avoid leaking icache tags when the request port back-pressures.
-    if (pending_icache_.full()) {
+    if (pending_icache.full()) {
       ++perf_stats_.fetch_stalls;
       return;
     }
@@ -466,31 +504,39 @@ public:
     // substitutes PA before forwarding; with VM off, this is just the PA.
     mem_req.addr  = req_addr;
     // op defaults to MemOp::LD — icache request is a load.
-    uint32_t tag = pending_icache_.allocate(trace);
+    uint32_t tag = pending_icache.allocate(trace);
     mem_req.tag   = tag;
     mem_req.hart_id   = trace->cid;
     mem_req.uuid  = trace->uuid;
     if (icache_req.try_send(mem_req)) {
       DT(3, simobject_->name() << " icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
     #ifdef VX_CFG_EXT_C_ENABLE
-      decompressor_->commit_request(from_refetch);
-      if (!from_refetch) fetch_latch_.pop();
+      decompressor->commit_request(from_refetch);
+      if (!from_refetch) { fetch_latch.pop(); }
     #else
-      fetch_latch_.pop();
+      fetch_latch.pop();
     #endif
       ++perf_stats_.ifetches;
       ++pending_ifetches_;
     } else {
-      pending_icache_.release(tag);
+      pending_icache.release(tag);
       ++perf_stats_.fetch_stalls;
     }
   }
 
   void decode() {
-    if (decode_latch_.empty())
-      return;
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      this->decode_slice(*decode_latch_.at(f));
+    }
+  }
 
-    auto trace = decode_latch_.peek();
+  // One fetch slice's decoder: it feeds the issue slice of each decoded warp.
+  void decode_slice(TFifo<instr_trace_t*>& decode_latch) {
+    if (decode_latch.empty()) {
+      return;
+    }
+
+    auto trace = decode_latch.peek();
 
     // check ibuffer capacity
     auto& ibuffer = ibuffers_.at(trace->wid);
@@ -549,7 +595,7 @@ public:
     trace->ibuf_time = SimPlatform::instance().cycles();
     ibuffer->push(trace);
 
-    decode_latch_.pop();
+    decode_latch.pop();
   }
 
   void issue() {
@@ -1092,10 +1138,10 @@ private:
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
 
-  TFifo<instr_trace_t*> fetch_latch_;
-  TFifo<instr_trace_t*> decode_latch_;
+  std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> fetch_latch_;
+  std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> decode_latch_;
 
-  HashTable<instr_trace_t*> pending_icache_;
+  std::vector<HashTable<instr_trace_t*>> pending_icache_;
   std::list<instr_trace_t*, PoolAllocator<instr_trace_t*, 64>> pending_instrs_;
 
   uint64_t pending_ifetches_;
@@ -1121,9 +1167,9 @@ private:
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 
 #ifdef VX_CFG_EXT_C_ENABLE
-  // Per-core RVC fetch SimObject (per-warp halfword buffer + refetch
+  // RVC fetch SimObject per fetch slice (per-warp halfword buffer + refetch
   // queue + pick/commit_request helpers). See decompressor.h.
-  Decompressor::Ptr decompressor_;
+  std::vector<Decompressor::Ptr> decompressors_;
 #endif
 #ifdef VX_CFG_VM_ENABLE
   Mmu::Ptr dcache_mmu_;
@@ -1139,8 +1185,8 @@ Core::Core(const SimContext& ctx,
            Socket* socket
            )
   : SimObject(ctx, name)
-  , icache_req_out(1, this)
-  , icache_rsp_in(1, this)
+  , icache_req_out(ICACHE_NUM_REQS, this)
+  , icache_rsp_in(ICACHE_NUM_REQS, this)
   , dcache_req_out(VX_CFG_DCACHE_NUM_REQS, this)
   , dcache_rsp_in(VX_CFG_DCACHE_NUM_REQS, this)
   , branch_ctl_in(this, VX_CFG_NUM_WARPS)

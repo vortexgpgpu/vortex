@@ -51,7 +51,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     om_rt_dcrs_t om_rt_dcrs [`VX_OM_MAX_RT];
 
     VX_om_dcr #(
-        .INSTANCE_ID ($sformatf("%s-dcr", INSTANCE_ID))
+        .INSTANCE_ID (`SFORMATF(("%s-dcr", INSTANCE_ID)))
     ) om_dcr (
         .clk        (clk),
         .reset      (reset),
@@ -88,7 +88,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     `UNUSED_VAR (mem_write_notify)
 
     VX_om_mem #(
-        .INSTANCE_ID ($sformatf("%s-mem", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-mem", INSTANCE_ID))),
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (MEM_TAG_WIDTH)
     ) om_mem (
@@ -144,7 +144,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire [NUM_LANES-1:0]                           ds_pass_out;
 
     VX_om_ds #(
-        .INSTANCE_ID ($sformatf("%s-ds", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-ds", INSTANCE_ID))),
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (DS_TAG_WIDTH)
     ) om_ds (
@@ -187,7 +187,7 @@ module VX_om_core import VX_gpu_pkg::*; import VX_om_pkg::*; #(
     wire [OM_RT_IDX_BITS-1:0] mem_rsp_rt;
 
     VX_om_blend #(
-        .INSTANCE_ID ($sformatf("%s-blend", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-blend", INSTANCE_ID))),
         .NUM_LANES   (NUM_LANES),
         .TAG_WIDTH   (BLEND_TAG_WIDTH)
     ) om_blend (

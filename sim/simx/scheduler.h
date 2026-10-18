@@ -118,7 +118,18 @@ public:
   ~Scheduler();
 
   // ----- Warp lifecycle -----
+  // Once per cycle, before the fetch slices pick: activate the warps the CTA
+  // dispatcher launched last cycle, launch the next ones, and apply a wspawn.
+  void schedule_begin();
+
+  // One fetch slice's pick: its lowest ready warp in warp_mask.
   instr_trace_t* schedule(const WarpMask& warp_mask);
+
+  // Whether warp_mask holds a ready warp, without picking it.
+  bool has_ready(const WarpMask& warp_mask) const;
+
+  // Once per cycle, after the picks: clock the registered warp state.
+  void schedule_end();
   void suspend(uint32_t wid);
   void resume(uint32_t wid);
   // Advance the warp's PC by `inc` bytes (called at decode with 2 or 4
@@ -211,12 +222,12 @@ private:
   WarpMask active_warps_;
   WarpMask stalled_warps_;       // registered (current) state read by schedule()
   WarpMask stalled_warps_next_;  // next-state written by suspend()/resume()
-  // CTA dispatch pipeline: the active set the dispatcher sees, and the warp
-  // it picked last cycle.
+  // the active set the CTA dispatcher sees
   WarpMask cta_active_view_;
-  bool cta_fire_ = false;
-  uint32_t cta_fire_wid_ = 0;
-  cta_warp_record_t cta_fire_rec_;
+  // Warps the CTA dispatcher launched this cycle, one per launch lane at most.
+  uint32_t cta_fire_cnt_ = 0;
+  std::array<uint32_t, VX_CFG_FETCH_WIDTH> cta_fire_wids_;
+  std::array<cta_warp_record_t, VX_CFG_FETCH_WIDTH> cta_fire_recs_;
   uint32_t ipdom_size_;
   wspawn_t wspawn_;
   uint32_t mpm_class_;

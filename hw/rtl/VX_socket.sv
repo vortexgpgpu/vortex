@@ -18,7 +18,6 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     import VX_dxa_pkg::*;
 `endif
 #(
-    parameter SOCKET_ID = 0,
     parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
@@ -26,6 +25,8 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // Clock
     input wire              clk,
     input wire              reset,
+
+    input wire [CORE_ID_WIDTH-1:0] socket_id,
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t     sysmem_perf,
@@ -127,12 +128,12 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) per_core_icache_bus_if[`VX_CFG_SOCKET_SIZE]();
+    ) per_core_icache_bus_if[`VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_WORD_SIZE),
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
-    ) icache_phys_bus_if[`VX_CFG_SOCKET_SIZE]();
+    ) icache_phys_bus_if[`VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_LINE_SIZE),
@@ -149,10 +150,10 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .TAG_SEL_IDX    (0),
         .CACHE_SIZE     (`VX_CFG_ICACHE_SIZE),
         .LINE_SIZE      (ICACHE_LINE_SIZE),
-        .NUM_BANKS      (1),
+        .NUM_BANKS      (ICACHE_NUM_BANKS),
         .NUM_WAYS       (`VX_CFG_ICACHE_NUM_WAYS),
         .WORD_SIZE      (ICACHE_WORD_SIZE),
-        .NUM_REQS       (1),
+        .NUM_REQS       (ICACHE_NUM_REQS),
         .MEM_PORTS      (1),
         .CRSQ_SIZE      (`VX_CFG_ICACHE_CRSQ_SIZE),
         .MSHR_SIZE      (`VX_CFG_ICACHE_MSHR_SIZE),
@@ -302,7 +303,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     VX_mmu #(
         .INSTANCE_ID ("immu"),
-        .NUM_REQS    (`VX_CFG_SOCKET_SIZE),
+        .NUM_REQS    (`VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS),
         .TLB_SIZE    (`VX_CFG_ITLB_SIZE),
         .EXEC_SIDE   (1),
         .DATA_SIZE   (ICACHE_WORD_SIZE),
@@ -362,7 +363,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * DCACHE_NUM_REQS; ++i) begin : g_dcache_phys_passthru
         `ASSIGN_VX_MEM_BUS_IF (dcache_phys_bus_if[i], per_core_dcache_bus_if[i]);
     end
-    for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE; ++i) begin : g_icache_phys_passthru
+    for (genvar i = 0; i < `VX_CFG_SOCKET_SIZE * ICACHE_NUM_REQS; ++i) begin : g_icache_phys_passthru
         `ASSIGN_VX_MEM_BUS_IF (icache_phys_bus_if[i], per_core_icache_bus_if[i]);
     end
 `endif
@@ -403,7 +404,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `ifdef VX_CFG_EXT_TEX_ENABLE
     VX_tex_bus_if #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
-        .TAG_WIDTH (TEX_REQ_TAG_WIDTH)
+        .TAG_WIDTH (TEX_CORE_TAG_WIDTH)
     ) per_core_tex_bus_if[`VX_CFG_SOCKET_SIZE]();
 
     VX_tex_bus_if #(
@@ -415,7 +416,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .NUM_INPUTS  (`VX_CFG_SOCKET_SIZE),
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (`VX_CFG_NUM_TEX_CORES),
-        .TAG_WIDTH   (TEX_REQ_TAG_WIDTH),
+        .TAG_WIDTH   (TEX_CORE_TAG_WIDTH),
         .ARBITER     ("R"),
         .OUT_BUF_REQ ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_TEX_CORES) ? 3 : 0), // register request fan-in
         .OUT_BUF_RSP ((`VX_CFG_SOCKET_SIZE != `VX_CFG_NUM_TEX_CORES) ? 3 : 0)  // register response distribution (skid registers the core-facing rsp and its backward ready)
@@ -556,7 +557,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     VX_rtu_bus_if #(
         .NUM_LANES (`VX_CFG_NUM_SFU_LANES),
-        .TAG_WIDTH (RTU_REQ_TAG_WIDTH),
+        .TAG_WIDTH (RTU_CORE_TAG_WIDTH),
         .SRC_WIDTH (1)   // a core does not know its own index; the arbiter fills it in
     ) per_core_rtu_bus_if[`VX_CFG_SOCKET_SIZE]();
 
@@ -570,7 +571,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .NUM_INPUTS  (`VX_CFG_SOCKET_SIZE),
         .NUM_LANES   (`VX_CFG_NUM_SFU_LANES),
         .NUM_OUTPUTS (`VX_CFG_NUM_RTU_CORES),
-        .TAG_WIDTH   (RTU_REQ_TAG_WIDTH),
+        .TAG_WIDTH   (RTU_CORE_TAG_WIDTH),
         .ARBITER     ("R"),
         // The arm may be buffered: it does not mean "the RTU has taken your ray"
         // (the RTU stages a ray per {src, wid}), so registering it cannot let a
@@ -878,13 +879,13 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         );*/
 
         VX_core #(
-            .CORE_ID  ((SOCKET_ID * `VX_CFG_SOCKET_SIZE) + core_id),
             .INSTANCE_ID (`SFORMATF(("%s-core%0d", INSTANCE_ID, core_id)))
         ) core (
             `SCOPE_IO_BIND  (scope_core + core_id)
 
             .clk            (clk),
             .reset          (reset),
+            .core_id        (CORE_ID_WIDTH'(socket_id * `VX_CFG_SOCKET_SIZE) + CORE_ID_WIDTH'(core_id)),
 
         `ifdef PERF_ENABLE
             .sysmem_perf    (sysmem_perf_tmp),
@@ -894,7 +895,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
             .dcache_bus_if  (per_core_dcache_bus_if[core_id * DCACHE_NUM_REQS +: DCACHE_NUM_REQS]),
 
-            .icache_bus_if  (per_core_icache_bus_if[core_id]),
+            .icache_bus_if  (per_core_icache_bus_if[core_id * ICACHE_NUM_REQS +: ICACHE_NUM_REQS]),
 
         `ifdef VX_CFG_EXT_DXA_ENABLE
             .dxa_req_bus_if (per_core_dxa_req_bus_if[core_id]),

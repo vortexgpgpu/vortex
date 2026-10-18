@@ -23,13 +23,14 @@
 
 module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter INSTANCE_IDX  = 0,
     parameter NUM_INSTANCES = 1,
     parameter TILE_LOGSIZE  = 5,
     parameter QUEUE_SIZE    = 8
 ) (
     input wire clk,
     input wire reset,
+
+    input wire [`LOG2UP(NUM_INSTANCES)-1:0] instance_idx,
 
     // Device configurations
     raster_dcrs_t                       dcrs,
@@ -144,8 +145,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     `UNUSED_VAR (th_pids_count)
 
     // calculate tile start info
-    wire [`RASTER_TILE_BITS-1:0] start_tile_count = (dcrs.tile_count + `RASTER_TILE_BITS'(NUM_INSTANCES - 1 - INSTANCE_IDX)) >> LOG2_NUM_INSTANCES;
-    wire [W_ADDR_BITS-1:0] start_tbuf_addr = {dcrs.tbuf_addr, 4'b0} + W_ADDR_BITS'(INSTANCE_IDX * TILE_HEADER_SIZEW);
+    wire [`RASTER_TILE_BITS-1:0] start_tile_count = (dcrs.tile_count + (`RASTER_TILE_BITS'(NUM_INSTANCES - 1) - `RASTER_TILE_BITS'(instance_idx))) >> LOG2_NUM_INSTANCES;
+    wire [W_ADDR_BITS-1:0] start_tbuf_addr = {dcrs.tbuf_addr, 4'b0} + (W_ADDR_BITS'(instance_idx) * W_ADDR_BITS'(TILE_HEADER_SIZEW));
 
     // The sorted-pid array is a single dense block that follows ALL bin headers
     // (num_bins == dcrs.tile_count of them, 3 words each), shared across the N
@@ -345,7 +346,7 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     `UNUSED_VAR (sched_rsp_tag)
 
     VX_mem_scheduler #(
-        .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
+        .INSTANCE_ID  (`SFORMATF(("%s-memsched", INSTANCE_ID))),
         .CORE_REQS    (NUM_REQS),
         .MEM_CHANNELS (RCACHE_NUM_REQS),
         .WORD_SIZE    (`RASTER_DATA_BITS / 8),

@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 // VX_lsu_agu: per-lane LSU address generator. Owns all LSU address forms
-// so VX_lsu_slice contains no address arithmetic:
+// so VX_lsu_block contains no address arithmetic:
 //   - plain load/store/fence: addr = base + sext(offset)
 //   - pack-load uop:          addr = base + uop_idx * stride
 //     (uop_idx = offset[1:0], stride = rs2; a 2-bit shift-and-add

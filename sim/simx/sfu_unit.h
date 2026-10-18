@@ -123,6 +123,13 @@ protected:
 private:
 	uint32_t latency_of(const instr_trace_t* trace) const;
 
+	// Core-wide resources the SFU blocks share: the warp-control resources
+	// (barrier unit, wspawn, warp retirement) and the TEX/RTU/DXA buses each
+	// accept one request per cycle, granted round-robin per resource.
+	enum SharedRes { RES_NONE = 0, RES_WCTL, RES_TEX, RES_RTU, RES_DXA, RES_COUNT };
+	SharedRes shared_res(uint32_t block);
+	uint32_t res_rr_[RES_COUNT] = {};
+
 	std::unique_ptr<WctlUnit> wctl_unit_;
 	std::unique_ptr<CsrUnit>  csr_unit_;
 #ifdef VX_CFG_EXT_RTU_ENABLE

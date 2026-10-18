@@ -21,10 +21,12 @@ module VX_graphics import VX_gpu_pkg::*
     , VX_om_pkg::*
 `endif
 ; #(
-    parameter CLUSTER_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
+
+    input wire [CLUSTER_ID_WIDTH-1:0] cluster_id,
 
 `ifdef PERF_ENABLE
 `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -65,7 +67,10 @@ module VX_graphics import VX_gpu_pkg::*
     // no in-band `done`); the cluster ORs this into the device busy aggregation.
     output wire             busy
 );
-    `UNUSED_PARAM (CLUSTER_ID)
+    `UNUSED_SPARAM (INSTANCE_ID)
+`ifndef VX_CFG_EXT_RASTER_ENABLE
+    `UNUSED_VAR (cluster_id)
+`endif
 
     wire rcache_req_empty;
     wire ocache_req_empty;
@@ -137,8 +142,7 @@ module VX_graphics import VX_gpu_pkg::*
 
     for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_raster_core
         VX_raster_core #(
-            .INSTANCE_ID     (`SFORMATF(("cluster%0d-raster%0d", CLUSTER_ID, i))),
-            .INSTANCE_IDX    (CLUSTER_ID * `VX_CFG_NUM_RASTER_CORES + i),
+            .INSTANCE_ID     (`SFORMATF(("%s-raster%0d", INSTANCE_ID, i))),
             .NUM_INSTANCES   (`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES),
             .NUM_SLICES      (`VX_CFG_RASTER_NUM_SLICES),
             // The front end's top-level walk unit is a coarse bin: bin_x/bin_y
@@ -154,6 +158,8 @@ module VX_graphics import VX_gpu_pkg::*
         ) raster_core (
             .clk             (clk),
             .reset           (reset),
+            .instance_idx    (`LOG2UP(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES)'(cluster_id) * `LOG2UP(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES)'(`VX_CFG_NUM_RASTER_CORES)
+                            + `LOG2UP(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES)'(i)),
         `ifdef PERF_ENABLE
             .perf_raster_if  (per_core_raster_perf_if[i]),
         `endif
@@ -247,7 +253,7 @@ module VX_graphics import VX_gpu_pkg::*
     end
 
     VX_cache_cluster #(
-        .INSTANCE_ID    (`SFORMATF(("cluster%0d-rcache", CLUSTER_ID))),
+        .INSTANCE_ID    (`SFORMATF(("%s-rcache", INSTANCE_ID))),
         .NUM_UNITS      (`VX_CFG_NUM_RCACHES),
         .NUM_INPUTS     (`VX_CFG_NUM_RASTER_CORES),
         .TAG_SEL_IDX    (0),
@@ -338,7 +344,7 @@ module VX_graphics import VX_gpu_pkg::*
 
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_om_steer
         VX_om_steer #(
-            .INSTANCE_ID (`SFORMATF(("cluster%0d-om-steer%0d", CLUSTER_ID, i))),
+            .INSTANCE_ID (`SFORMATF(("%s-om-steer%0d", INSTANCE_ID, i))),
             .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
             .TAG_WIDTH   (L2_TAG_WIDTH),
             .OUT_BUF     (3)
@@ -371,7 +377,7 @@ module VX_graphics import VX_gpu_pkg::*
 
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_om_ingress
         VX_om_ingress #(
-            .INSTANCE_ID (`SFORMATF(("cluster%0d-om-ingress%0d", CLUSTER_ID, i))),
+            .INSTANCE_ID (`SFORMATF(("%s-om-ingress%0d", INSTANCE_ID, i))),
             .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
             .TAG_WIDTH   (L2_TAG_WIDTH),
             .NUM_LANES   (OM_CORE_LANES),
@@ -408,7 +414,7 @@ module VX_graphics import VX_gpu_pkg::*
 
     for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_core
         VX_om_core #(
-            .INSTANCE_ID (`SFORMATF(("cluster%0d-om%0d", CLUSTER_ID, i))),
+            .INSTANCE_ID (`SFORMATF(("%s-om%0d", INSTANCE_ID, i))),
             .NUM_LANES   (OM_CORE_LANES)
         ) om_core (
             .clk          (clk),
@@ -588,7 +594,7 @@ module VX_graphics import VX_gpu_pkg::*
 `endif
 
     VX_cache_cluster #(
-        .INSTANCE_ID    (`SFORMATF(("cluster%0d-ocache", CLUSTER_ID))),
+        .INSTANCE_ID    (`SFORMATF(("%s-ocache", INSTANCE_ID))),
         .NUM_UNITS      (`VX_CFG_NUM_OCACHES),
         .NUM_INPUTS     (OCACHE_NUM_INPUTS),
         .TAG_SEL_IDX    (0),

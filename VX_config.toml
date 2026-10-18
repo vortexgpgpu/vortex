@@ -52,9 +52,11 @@ VX_CFG_MAX_BAR_EVENTS = 32
 VX_CFG_IBUF_SIZE = 4
 VX_CFG_DISPATCH_QUEUE_SIZE = 4
 VX_CFG_ISSUE_WIDTH = "expr: up($VX_CFG_NUM_WARPS / 16)"
+# Fetch slices, each scheduling and fetching its own warps on its own icache
+# port: a power of two that divides ISSUE_WIDTH.
+VX_CFG_FETCH_WIDTH = 1
 VX_CFG_SIMD_WIDTH = "expr: $VX_CFG_NUM_THREADS"
 VX_CFG_NUM_OPCS = "expr: up($VX_CFG_NUM_WARPS / (4 * $VX_CFG_ISSUE_WIDTH))"
-
 VX_CFG_NUM_GPR_BANKS = 4
 VX_CFG_NUM_VGPR_BANKS = 2
 
@@ -207,6 +209,8 @@ VX_CFG_ICACHE_MRSQ_SIZE = 0
 VX_CFG_ICACHE_MREQ_SIZE = 0
 VX_CFG_ICACHE_CRSQ_SIZE = 0
 VX_CFG_ICACHE_MEM_PORTS = 1
+# banks behind the fetch-slice request ports
+VX_CFG_ICACHE_NUM_BANKS = "expr: pow(2, clog2($VX_CFG_FETCH_WIDTH))"
 VX_CFG_ICACHE_LATENCY = "expr: 2 + max(0, clog2($VX_CFG_ICACHE_SIZE) - clog2(16384))"
 
 VX_CFG_DCACHE_SIZE = 16384

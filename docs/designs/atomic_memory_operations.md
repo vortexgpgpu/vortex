@@ -90,7 +90,7 @@ LSU as `rs3_data` with no new operand path.
 
 ## 3. The LSU sideband
 
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv) packs one `amo_req_t`
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv) packs one `amo_req_t`
 per lane into the lane's memory attribute
 ([`VX_gpu_pkg.sv`](../../hw/rtl/VX_gpu_pkg.sv)):
 

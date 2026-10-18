@@ -26,125 +26,28 @@ module VX_commit import VX_gpu_pkg::*; #(
     VX_writeback_if.master  writeback_if  [`VX_CFG_ISSUE_WIDTH],
     VX_commit_sched_if.master commit_sched_if
 );
-    `UNUSED_SPARAM (INSTANCE_ID)
-    localparam OUT_DATAW = $bits(commit_t);
-
-    // commit arbitration
-
-    VX_commit_if commit_arb_if[`VX_CFG_ISSUE_WIDTH]();
-    wire [`VX_CFG_ISSUE_WIDTH-1:0] committed_warps;
-    wire [`VX_CFG_ISSUE_WIDTH-1:0][PER_ISSUE_WARPS-1:0] commit_eop_wis;
-
-    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_commit_arbs
-
-        wire [NUM_EX_UNITS-1:0]            valid_in;
-        wire [NUM_EX_UNITS-1:0][PER_ISSUE_WARPS+OUT_DATAW-1:0] data_in;
-        wire [NUM_EX_UNITS-1:0]            ready_in;
-
-        // Decoded ahead of the output register so each warp's release reads
-        // its own flop.
-        for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_data_in
-            wire [PER_ISSUE_WARPS-1:0] eop_wis = PER_ISSUE_WARPS'(commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.eop)
-                                              << wid_to_wis(commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.wid);
-            assign valid_in[j] = commit_if[j * `VX_CFG_ISSUE_WIDTH + i].valid;
-            assign data_in[j]  = {eop_wis, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data};
-            assign commit_if[j * `VX_CFG_ISSUE_WIDTH + i].ready = ready_in[j];
+    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_slices
+        VX_commit_if slice_commit_if[NUM_EX_UNITS]();
+        for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_commit_if
+            `ASSIGN_VX_IF(slice_commit_if[j], commit_if[j * `VX_CFG_ISSUE_WIDTH + i]);
         end
 
-        VX_stream_arb #(
-            .NUM_INPUTS (NUM_EX_UNITS),
-            .DATAW      (PER_ISSUE_WARPS + OUT_DATAW),
-            .ARBITER    ("P"),
-            .OUT_BUF    (1)
-        ) commit_arb (
-            .clk        (clk),
-            .reset      (reset),
-            .valid_in   (valid_in),
-            .ready_in   (ready_in),
-            .data_in    (data_in),
-            .data_out   ({commit_eop_wis[i], commit_arb_if[i].data}),
-            .valid_out  (commit_arb_if[i].valid),
-            .ready_out  (commit_arb_if[i].ready),
-            `UNUSED_PIN (sel_out)
+        wire [PER_ISSUE_WARPS-1:0] committed_wis;
+
+        VX_commit_slice #(
+            .INSTANCE_ID (INSTANCE_ID)
+        ) commit_slice (
+            .clk           (clk),
+            .reset         (reset),
+            .commit_if     (slice_commit_if),
+            .writeback_if  (writeback_if[i]),
+            .committed_wis (committed_wis)
         );
 
-        wire commit_arb_fire = commit_arb_if[i].valid && commit_arb_if[i].ready;
-        assign committed_warps[i] = commit_arb_fire && commit_arb_if[i].data.eop;
-    end
-
-    // notify scheduler: build per-warp committed mask from per-slot signals
-    wire [`VX_CFG_ISSUE_WIDTH-1:0][NW_WIDTH-1:0] committed_slot_wid;
-    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_committed_wid
-        assign committed_slot_wid[i] = commit_arb_if[i].data.wid;
-    end
-
-    logic [`VX_CFG_NUM_WARPS-1:0] committed_warp_mask;
-    wire  [`VX_CFG_NUM_WARPS-1:0] committed_warp_mask_r;
-    always_comb begin
-        committed_warp_mask = '0;
-        for (integer i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin
-            if (committed_warps[i]) begin
-                committed_warp_mask[committed_slot_wid[i]] = 1'b1;
-            end
+        // wid = {wis, isw}: slice i owns every ISSUE_WIDTH-th warp starting at i
+        for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_committed
+            assign commit_sched_if.committed_warps[w * `VX_CFG_ISSUE_WIDTH + i] = committed_wis[w];
         end
     end
-    `BUFFER(committed_warp_mask_r, committed_warp_mask);
-    assign commit_sched_if.committed_warps = committed_warp_mask_r;
-
-    // Writeback
-
-    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_writeback
-        wire [XLENB_W-1:0] bytesel_size = commit_arb_if[i].data.bytesel[BYTESEL_BITS-1 -: XLENB_W];
-        wire [XLENB_W-1:0] bytesel_off  = commit_arb_if[i].data.bytesel[0 +: XLENB_W];
-        wire [`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] writeback_data;
-        wire [`VX_CFG_SIMD_WIDTH-1:0][XLENB-1:0] writeback_byteen;
-
-        wire [XLENB-1:0] size_mask = (bytesel_size == XLENB_W'(7)) ? XLENB'(255) :
-                                     (bytesel_size == XLENB_W'(6)) ? XLENB'(127) :
-                                     (bytesel_size == XLENB_W'(5)) ? XLENB'(63)  :
-                                     (bytesel_size == XLENB_W'(4)) ? XLENB'(31)  :
-                                     (bytesel_size == XLENB_W'(3)) ? XLENB'(15)  :
-                                     (bytesel_size == XLENB_W'(2)) ? XLENB'(7)   :
-                                     (bytesel_size == XLENB_W'(1)) ? XLENB'(3)   : XLENB'(1);
-        wire [XLENB-1:0] base_byteen = size_mask << bytesel_off;
-
-        for (genvar lane = 0; lane < `VX_CFG_SIMD_WIDTH; ++lane) begin : g_bytesel
-            assign writeback_data[lane] = commit_arb_if[i].data.data[lane] << (8 * bytesel_off);
-            assign writeback_byteen[lane] = commit_arb_if[i].data.tmask[lane] ? base_byteen : '0;
-        end
-
-        assign writeback_if[i].valid     = commit_arb_if[i].valid;
-        assign writeback_if[i].data.uuid = commit_arb_if[i].data.uuid;
-        assign writeback_if[i].data.wis  = wid_to_wis(commit_arb_if[i].data.wid);
-        assign writeback_if[i].data.eop_wis = commit_eop_wis[i];
-        assign writeback_if[i].data.cta_id = commit_arb_if[i].data.cta_id;
-        assign writeback_if[i].data.sid  = commit_arb_if[i].data.sid;
-        assign writeback_if[i].data.PC   = commit_arb_if[i].data.PC;
-        assign writeback_if[i].data.tmask= commit_arb_if[i].data.tmask;
-        assign writeback_if[i].data.wb   = commit_arb_if[i].data.wb;
-        assign writeback_if[i].data.wr_xregs = commit_arb_if[i].data.wr_xregs;
-        assign writeback_if[i].data.rd   = commit_arb_if[i].data.rd;
-        assign writeback_if[i].data.byteen = writeback_byteen;
-        assign writeback_if[i].data.data = writeback_data;
-        assign writeback_if[i].data.sop  = commit_arb_if[i].data.sop;
-        assign writeback_if[i].data.eop  = commit_arb_if[i].data.eop;
-        assign commit_arb_if[i].ready    = 1;
-    end
-
-`ifdef DBG_TRACE_PIPELINE
-    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_trace
-        for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_j
-            always @(posedge clk) begin
-                if (commit_if[j * `VX_CFG_ISSUE_WIDTH + i].valid && commit_if[j * `VX_CFG_ISSUE_WIDTH + i].ready) begin
-                    `TRACE(1, ("%t: %s commit: wid=%0d, cta_id=%0d, sid=%0d, PC=0x%0h, ex=", $time, INSTANCE_ID, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.wid, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.cta_id, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.sid, to_fullPC(commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.PC)))
-                    VX_trace_pkg::trace_ex_type(1, j);
-                    `TRACE(1, (", tmask=%b, wb=%b, wr_xregs=%b, rd=%0d, sop=%b, eop=%b, data=", commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.tmask, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.wb, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.wr_xregs, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.rd, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.sop, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.eop))
-                    `TRACE_ARRAY1D(1, "0x%0h", commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.data, `VX_CFG_SIMD_WIDTH)
-                    `TRACE(1, (" (#%0d)\n", commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.uuid))
-                end
-            end
-        end
-    end
-`endif
 
 endmodule

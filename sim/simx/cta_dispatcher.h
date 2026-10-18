@@ -40,8 +40,9 @@ struct cta_warp_record_t {
   uint32_t   cluster_size;
 };
 
-// CTA dispatcher: consumes CTAs pushed by the KMU and admits one warp rank
-// per step() into a free warp slot.
+// CTA dispatcher: consumes CTAs pushed by the KMU and, per step(), launches up
+// to one warp of the CTA on each launch lane, into a free warp slot of that
+// lane's frontend slice.
 class CtaDispatcher : public SimObject<CtaDispatcher> {
 public:
   // Launch-lane endpoint (capacity 1): the CTA the KMU has committed to this
@@ -55,9 +56,10 @@ public:
   CtaDispatcher(const SimContext& ctx, const char* name, Core* core);
   ~CtaDispatcher();
 
-  // Try to dispatch one warp rank into a free warp slot.
-  // Returns true on success and sets *wid_out / *rec_out.
-  bool step(const WarpMask& active_warps, uint32_t* wid_out, cta_warp_record_t* rec_out);
+  // Dispatch warps into free warp slots, at most one per launch lane: lane l
+  // owns the slots with wid % VX_CFG_FETCH_WIDTH == l. Fills wids[] / recs[] in
+  // launch order and returns how many warps were dispatched.
+  uint32_t step(const WarpMask& active_warps, uint32_t* wids, cta_warp_record_t* recs);
 
   // Notify that a warp has exited; frees its lmem slot when all warps of the CTA are done.
   void warp_done(uint32_t wid);
@@ -119,6 +121,14 @@ private:
   uint32_t  block_size_rem_;
   uint32_t  thread_idx_[3];
   uint64_t  lmem_addr_;
+
+  // Launch lanes are taken round-robin from lane_rr_. Several lanes need the
+  // per-lane thread-index window rebuilt when the block shape changes, which
+  // holds the launch for one cycle per lane.
+  uint32_t  lane_rr_;
+  uint32_t  init_wait_;
+  uint32_t  shape_step_[3];
+  uint32_t  shape_dim_[3];
 
   Word      cur_kernel_pc_;
   uint8_t   cur_ctx_id_;

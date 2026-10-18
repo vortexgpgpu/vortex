@@ -27,14 +27,9 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     VX_branch_ctl_if.master branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS]
 );
 
-    `UNUSED_SPARAM (INSTANCE_ID)
     localparam BLOCK_SIZE   = `VX_CFG_NUM_ALU_BLOCKS;
     localparam NUM_LANES    = `VX_CFG_NUM_ALU_LANES;
     localparam PARTIAL_BW   = (BLOCK_SIZE != `VX_CFG_ISSUE_WIDTH) || (NUM_LANES != `VX_CFG_SIMD_WIDTH);
-    localparam PE_COUNT     = 1 + `VX_CFG_EXT_M_ENABLED;
-    localparam PE_SEL_BITS  = `CLOG2(PE_COUNT);
-    localparam PE_IDX_INT   = 0;
-    localparam PE_IDX_MDV   = PE_IDX_INT + `VX_CFG_EXT_M_ENABLED;
 
     VX_execute_if #(
         .data_t (alu_execute_t)
@@ -51,66 +46,25 @@ module VX_alu_unit import VX_gpu_pkg::*; #(
     ) lane_dispatch (
         .clk        (clk),
         .reset      (reset),
+        .port_base  ('0),
         .dispatch_if(dispatch_if),
         .execute_if (per_block_execute_if)
     );
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
-
-        VX_execute_if #(
-            .data_t (alu_execute_t)
-        ) pe_execute_if[PE_COUNT]();
-
-        VX_result_if#(
-            .data_t (alu_result_t)
-        ) pe_result_if[PE_COUNT]();
-
-        reg [`UP(PE_SEL_BITS)-1:0] pe_select;
-        always @(*) begin
-            pe_select = PE_IDX_INT;
-            if (`VX_CFG_EXT_M_ENABLED && (per_block_execute_if[block_idx].data.op_args.alu.xtype == ALU_TYPE_MULDIV))
-                pe_select = PE_IDX_MDV;
-        end
-
-        VX_pe_switch #(
-            .PE_COUNT    (PE_COUNT),
+        VX_alu_block #(
+            .INSTANCE_ID (INSTANCE_ID),
+            .BLOCK_STR   (`SFORMATF(("%0d", block_idx))),
             .NUM_LANES   (NUM_LANES),
-            .ARBITER     ("R"),
-            .REQ_OUT_BUF (0),
-            .RSP_OUT_BUF (PARTIAL_BW ? 1 : 3)
-        ) pe_switch (
-            .clk            (clk),
-            .reset          (reset),
-            .pe_sel         (pe_select),
-            .execute_in_if  (per_block_execute_if[block_idx]),
-            .result_out_if  (per_block_result_if[block_idx]),
-            .execute_out_if (pe_execute_if),
-            .result_in_if   (pe_result_if)
+            .PARTIAL_BW  (PARTIAL_BW)
+        ) alu_block (
+            .clk           (clk),
+            .reset         (reset),
+            .block_idx     (`LOG2UP(BLOCK_SIZE)'(block_idx)),
+            .execute_if    (per_block_execute_if[block_idx]),
+            .result_if     (per_block_result_if[block_idx]),
+            .branch_ctl_if (branch_ctl_if[block_idx])
         );
-
-        VX_alu_int #(
-            .INSTANCE_ID (`SFORMATF(("%s-int%0d", INSTANCE_ID, block_idx))),
-            .BLOCK_IDX (block_idx),
-            .NUM_LANES (NUM_LANES)
-        ) alu_int (
-            .clk        (clk),
-            .reset      (reset),
-            .execute_if (pe_execute_if[PE_IDX_INT]),
-            .branch_ctl_if (branch_ctl_if[block_idx]),
-            .result_if  (pe_result_if[PE_IDX_INT])
-        );
-
-    `ifdef VX_CFG_EXT_M_ENABLE
-        VX_alu_muldiv #(
-            .INSTANCE_ID (`SFORMATF(("%s-muldiv%0d", INSTANCE_ID, block_idx))),
-            .NUM_LANES (NUM_LANES)
-        ) muldiv_unit (
-            .clk        (clk),
-            .reset      (reset),
-            .execute_if (pe_execute_if[PE_IDX_MDV]),
-            .result_if  (pe_result_if[PE_IDX_MDV])
-        );
-    `endif
     end
 
     VX_lane_gather #(

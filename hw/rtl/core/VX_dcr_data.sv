@@ -14,11 +14,12 @@
 `include "VX_define.vh"
 
 module VX_dcr_data import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
+
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
     // Inputs
     VX_dcr_bus_if.slave     dcr_bus_if,
@@ -50,7 +51,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
     wire is_mpm_read = dcr_bus_if.req_valid
                     && ~dcr_bus_if.req_data.rw
                     && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_MPM_VALUE)
-                    && (mpm_target_cid == 16'(CORE_ID))
+                    && (mpm_target_cid == 16'(core_id))
                     && ~dcr_csr_pending_r;
 
     always @(posedge clk) begin
@@ -89,7 +90,7 @@ module VX_dcr_data import VX_gpu_pkg::*; #(
                        && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH);
     wire is_flush_write = is_flush_req && dcr_bus_if.req_data.rw;
     wire is_flush_read  = is_flush_req && ~dcr_bus_if.req_data.rw
-                       && (mpm_target_cid == 16'(CORE_ID));
+                       && (mpm_target_cid == 16'(core_id));
 
     wire flush_done  = flush_pending_r && dcr_flush_if.done;
     wire flush_start = ~flush_pending_r && is_flush_write;

@@ -664,10 +664,11 @@ module VX_gfx_top import VX_gpu_pkg::*
 `endif
 
     VX_graphics #(
-        .CLUSTER_ID (0)
+        .INSTANCE_ID ("cluster0")
     ) graphics (
         .clk        (clk),
         .reset      (reset),
+        .cluster_id ('0),
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .raster_kmu_bus_if (raster_kmu_bus_if),
         .rcache_mem_bus_if (rcache_l2_bus_if),

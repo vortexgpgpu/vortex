@@ -6,7 +6,7 @@ interleave, per-lane classification and formatting, fence ordering,
 multi-packet tracking, the shared memory scheduler and its outstanding pool,
 address-class steering, coalescing, and the response path. Covers the RTL
 ([`VX_lsu_unit.sv`](../../hw/rtl/core/VX_lsu_unit.sv),
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv),
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv),
 [`VX_lsu_agu.sv`](../../hw/rtl/core/VX_lsu_agu.sv),
 [`VX_lsu_scheduler.sv`](../../hw/rtl/core/VX_lsu_scheduler.sv),
 [`VX_mem_scheduler.sv`](../../hw/rtl/libs/VX_mem_scheduler.sv),
@@ -104,7 +104,7 @@ that is provably equivalent.
 
 ## 3. The slice — request side
 
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv).
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv).
 
 ### 3.1 Classification
 
@@ -208,7 +208,7 @@ library block also used by the caches' other clients.
 
 | client | source | present |
 |---|---|---|
-| 0 | the block's `VX_lsu_slice` | always |
+| 0 | the block's `VX_lsu_block` | always |
 | 1 | the tensor unit's warp-level address generator | on block 0, when the tensor metadata path is enabled |
 
 Arbitration is round-robin, and the granted client's index is prepended to

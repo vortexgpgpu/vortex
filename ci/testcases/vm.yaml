@@ -235,6 +235,15 @@ tests:
 # above) are reported, via the shared walker. Re-enable when L1 permission-fault
 # reporting is added.
 
+# Two SFU blocks: every warp writes SATP at entry, from either block.
+- id: vm-sfu2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sgemm
+  configs: -DVX_CFG_VM_ENABLE -DVX_CFG_ISSUE_WIDTH=2 -DVX_CFG_NUM_SFU_BLOCKS=2
+
 # ---------------------------------------------------------------------------
 # check: model_parity — same VM-enabled app on both drivers (xlen 32); exact
 # instret + cycles within tolerance. SimX is the timing model of the RTL.

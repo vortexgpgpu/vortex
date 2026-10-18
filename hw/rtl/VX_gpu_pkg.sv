@@ -30,6 +30,11 @@ package VX_gpu_pkg;
     localparam NT_WIDTH = `UP(NT_BITS);
     localparam NB_WIDTH = `UP(NB_BITS);
 
+    // core index across all clusters
+    localparam CORE_ID_BITS  = `CLOG2(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_CORES);
+    localparam CORE_ID_WIDTH = `UP(CORE_ID_BITS);
+    localparam CLUSTER_ID_WIDTH = `LOG2UP(`VX_CFG_NUM_CLUSTERS);
+
     localparam NUM_CTA_MAX = `VX_CFG_NUM_WARPS;
     localparam NCTA_BITS  = `CLOG2(NUM_CTA_MAX);
     localparam NCTA_WIDTH = `UP(NCTA_BITS);
@@ -625,6 +630,104 @@ package VX_gpu_pkg;
         end
     endfunction
 
+    // Fetch slice f schedules and fetches the warps with wid mod FETCH_WIDTH == f,
+    // naming them by their local id wfs = wid / FETCH_WIDTH.
+    localparam FETCH_FSW_BITS  = `CLOG2(`VX_CFG_FETCH_WIDTH);
+    localparam FETCH_FSW_W     = `UP(FETCH_FSW_BITS);
+    localparam PER_FETCH_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_FETCH_WIDTH;
+    localparam FETCH_WFS_BITS  = `CLOG2(PER_FETCH_WARPS);
+    localparam FETCH_WFS_W     = `UP(FETCH_WFS_BITS);
+
+    function automatic logic [NW_WIDTH-1:0] wfs_to_wid(
+        input logic [FETCH_WFS_W-1:0] wfs,
+        input logic [FETCH_FSW_W-1:0] fsw
+    );
+        if (FETCH_WFS_BITS == 0) begin
+            wfs_to_wid = NW_WIDTH'(fsw);
+        end else if (FETCH_FSW_BITS == 0) begin
+            wfs_to_wid = NW_WIDTH'(wfs);
+        end else begin
+            wfs_to_wid = NW_WIDTH'({wfs, fsw});
+        end
+    endfunction
+
+    function automatic logic [FETCH_FSW_W-1:0] wid_to_fsw(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (FETCH_FSW_BITS != 0) begin
+            wid_to_fsw = wid[FETCH_FSW_W-1:0];
+        end else begin
+            wid_to_fsw = 0;
+        end
+    endfunction
+
+    // FU block ports per fetch slice: a unit with B blocks serves warps with
+    // wid mod B == b, so B >= FETCH_WIDTH gives each fetch slice B / FETCH_WIDTH
+    // blocks and B < FETCH_WIDTH shares each block among FETCH_WIDTH / B slices.
+    localparam FETCH_ALU_PORTS = (`VX_CFG_NUM_ALU_BLOCKS > `VX_CFG_FETCH_WIDTH) ? (`VX_CFG_NUM_ALU_BLOCKS / `VX_CFG_FETCH_WIDTH) : 1;
+    localparam FETCH_SFU_PORTS = (`VX_CFG_NUM_SFU_BLOCKS > `VX_CFG_FETCH_WIDTH) ? (`VX_CFG_NUM_SFU_BLOCKS / `VX_CFG_FETCH_WIDTH) : 1;
+
+    function automatic logic [FETCH_WFS_W-1:0] wid_to_wfs(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (FETCH_WFS_BITS != 0) begin
+            wid_to_wfs = FETCH_WFS_W'(wid >> FETCH_FSW_BITS);
+        end else begin
+            wid_to_wfs = 0;
+        end
+    endfunction
+
+    // A unit with B blocks serves, in block b, exactly the warps with wid mod B == b
+    // (lane dispatch maps issue slot {batch, block} and isw = wid mod ISSUE_WIDTH),
+    // so a block's warp state is indexed by the remaining high wid bits.
+    localparam SFU_BLOCK_BITS  = `CLOG2(`VX_CFG_NUM_SFU_BLOCKS);
+    localparam SFU_BLOCK_W     = `UP(SFU_BLOCK_BITS);
+    localparam SFU_BLOCK_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_NUM_SFU_BLOCKS;
+    localparam SFU_BLOCK_NW_BITS = `CLOG2(SFU_BLOCK_WARPS);
+    localparam SFU_BLOCK_NW_W  = `UP(SFU_BLOCK_NW_BITS);
+
+    function automatic logic [SFU_BLOCK_W-1:0] wid_to_sfu_block(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (SFU_BLOCK_BITS != 0) begin
+            wid_to_sfu_block = wid[SFU_BLOCK_W-1:0];
+        end else begin
+            wid_to_sfu_block = 0;
+        end
+    endfunction
+
+    function automatic logic [SFU_BLOCK_NW_W-1:0] wid_to_sfu_local(
+        input logic [NW_WIDTH-1:0] wid
+    );
+        if (SFU_BLOCK_NW_BITS != 0) begin
+            wid_to_sfu_local = SFU_BLOCK_NW_W'(wid >> SFU_BLOCK_BITS);
+        end else begin
+            wid_to_sfu_local = 0;
+        end
+    endfunction
+
+    function automatic logic [NW_WIDTH-1:0] sfu_local_to_wid(
+        input logic [SFU_BLOCK_NW_W-1:0] lid,
+        input logic [SFU_BLOCK_W-1:0]    block
+    );
+        if (SFU_BLOCK_NW_BITS == 0) begin
+            sfu_local_to_wid = NW_WIDTH'(block);
+        end else if (SFU_BLOCK_BITS == 0) begin
+            sfu_local_to_wid = NW_WIDTH'(lid);
+        end else begin
+            sfu_local_to_wid = NW_WIDTH'({lid, block});
+        end
+    endfunction
+
+    // The core is built from ISSUE_WIDTH compute slices (VX_compute_slice) when
+    // every execution unit has one block per issue slice; otherwise it keeps the
+    // stage-sliced issue / execute / commit structure.
+    localparam COMPUTE_SLICES_ENABLE = (`VX_CFG_NUM_ALU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
+                                    && (`VX_CFG_NUM_LSU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
+                                    && (`VX_CFG_NUM_SFU_BLOCKS == `VX_CFG_ISSUE_WIDTH)
+                                    && (!`VX_CFG_EXT_F_ENABLED || (`VX_CFG_NUM_FPU_BLOCKS == `VX_CFG_ISSUE_WIDTH))
+                                    && (!`VX_CFG_EXT_TCU_ENABLED || (`VX_CFG_NUM_TCU_BLOCKS == `VX_CFG_ISSUE_WIDTH));
+
     /////////////////////////////// TENSOR UNIT ///////////////////////////////
 
 `ifdef VX_CFG_EXT_TCU_ENABLE
@@ -677,6 +780,22 @@ package VX_gpu_pkg;
         logic                   phase;
         logic [BAR_SIZE_W-1:0]  size_m1;
     } barrier_t;
+
+    // Core-wide warp-control requests (barrier, wspawn, warp exit), one per
+    // SFU block, served by VX_warp_shared_unit.
+    localparam WSH_BAR    = 2'd0;
+    localparam WSH_WSPAWN = 2'd1;
+    localparam WSH_EXIT   = 2'd2;
+
+    typedef struct packed {
+        logic [1:0]             kind;
+        logic                   has_rsp;    // the requester waits for its completion
+        logic [NW_WIDTH-1:0]    wid;
+        barrier_t               bar;
+        logic [BAR_ADDR_W-1:0]  bar_addr;
+        wspawn_t                wspawn;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;  // spawning warp's, inherited by the spawned warps
+    } warp_shared_req_t;
 
     typedef struct packed {
         logic [NB_WIDTH-1:0] id;
@@ -884,6 +1003,72 @@ package VX_gpu_pkg;
         logic [NW_WIDTH-1:0]                     cta_rank;
         cta_lane_t [`VX_CFG_NUM_THREADS-1:0]     lane_launch;
     } cta_warp_t;
+
+    // CTA dispatcher state broadcast to the CTA-CSR stores that serve CSR reads:
+    // the per-CTA context, shared by every launch lane.
+    typedef struct packed {
+        logic                   ctx_write;
+        logic [NCTA_WIDTH-1:0]  ctx_waddr;
+        cta_ctx_t               ctx_wdata;
+    } cta_bcast_t;
+
+    // One launch lane's per-warp state: the warp's rank/lane record and CTA id.
+    typedef struct packed {
+        logic                   warp_write;
+        logic [NW_WIDTH-1:0]    warp_waddr;
+        cta_warp_t              warp_wdata;
+        logic                   id_write;
+        logic [NW_WIDTH-1:0]    id_wid;
+        logic [NCTA_WIDTH-1:0]  id_cta;
+    } cta_lane_bcast_t;
+
+    // Scheduler traffic between an FU block and the fetch slice owning the warp,
+    // addressed by core-wide wid.
+
+    // ALU branch resolution
+    typedef struct packed {
+        logic                   valid;
+        logic [NW_WIDTH-1:0]    wid;
+        logic                   taken;
+        logic [PC_BITS-1:0]     dest;
+        logic                   is_trap;
+        logic                   is_mret;
+        logic [3:0]             trap_cause;
+    } sched_branch_t;
+
+    // SFU warp control
+    typedef struct packed {
+        logic                   tmc_valid;
+        logic                   split_valid;
+        logic                   sjoin_valid;
+        logic                   wsync_valid;
+        logic [NW_WIDTH-1:0]    wid;
+        tmc_t                   tmc;
+        split_t                 split;
+        join_t                  sjoin;
+    } sched_wctl_t;
+
+    // SFU CSR writes to per-warp state
+    typedef struct packed {
+        logic                   valid;
+        logic [NW_WIDTH-1:0]    wid;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] data;
+        logic [NUM_TRAP_CSRS-1:0] trap_valid;
+        logic [`VX_CFG_XLEN-1:0] trap_data;
+    } sched_csr_wr_t;
+
+    // SFU CSR reads of per-warp state, selected by the read wid and CTA id
+    typedef struct packed {
+        logic [`VX_CFG_NUM_THREADS-1:0] thread_mask;
+        logic [`VX_CFG_MEM_ADDR_WIDTH-1:0] mscratch;
+        logic [`VX_CFG_XLEN-1:0] mstatus;
+        logic [`VX_CFG_XLEN-1:0] mtvec;
+        logic [`VX_CFG_XLEN-1:0] mepc;
+        logic [`VX_CFG_XLEN-1:0] mcause;
+        logic [`VX_CFG_XLEN-1:0] mtval;
+        logic [NW_WIDTH-1:0]    cta_rank;
+        cta_lane_t [`VX_CFG_NUM_THREADS-1:0] cta_lane;
+    } sched_csr_rd_t;
 
     //////////////////////// instruction arguments ////////////////////////////
 
@@ -1402,7 +1587,7 @@ package VX_gpu_pkg;
 
     // Width of the tag carried over VX_lsu_sched_if: lsu_header + op_type
     // + per-lane align + packet allocator addr + fence flag (matches the
-    // local TAG_WIDTH built inside VX_lsu_slice).
+    // local TAG_WIDTH built inside VX_lsu_block).
     localparam LSU_CLIENT_TAG_WIDTH = $bits(lsu_header_t) + INST_LSU_BITS
                                     + (`VX_CFG_NUM_LSU_LANES * `CLOG2(LSU_WORD_SIZE))
                                     + `LOG2UP(`VX_CFG_LSU_PENDING_SIZE) + 1;
@@ -1463,8 +1648,12 @@ package VX_gpu_pkg;
     // Block size in bytes
     localparam ICACHE_LINE_SIZE	    = `VX_CFG_L1_LINE_SIZE;
 
-    // Core request tag Id bits
-    localparam ICACHE_TAG_ID_BITS	= NW_WIDTH;
+    // Request ports per core: one per fetch slice, each fetching its own warps
+    localparam ICACHE_NUM_REQS  = `VX_CFG_FETCH_WIDTH;
+    localparam ICACHE_NUM_BANKS = `VX_CFG_ICACHE_NUM_BANKS;
+
+    // Core request tag Id bits: the warp id local to the requesting fetch slice
+    localparam ICACHE_TAG_ID_BITS	= FETCH_WFS_W;
 
     // Core request tag bits as VX_fetch writes them (UUID + warp id).
     localparam ICACHE_FETCH_TAG_WIDTH = (UUID_WIDTH + ICACHE_TAG_ID_BITS);
@@ -1485,9 +1674,9 @@ package VX_gpu_pkg;
 
     // Memory request tag bits
 `ifdef VX_CFG_ICACHE_ENABLE
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`VX_CFG_ICACHE_MSHR_SIZE, 1, 1, `VX_CFG_NUM_ICACHES, UUID_WIDTH);
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_MEM_TAG_WIDTH(`VX_CFG_ICACHE_MSHR_SIZE, ICACHE_NUM_BANKS, 1, `VX_CFG_NUM_ICACHES, UUID_WIDTH);
 `else
-    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(1, 1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_ICACHES);
+    localparam ICACHE_MEM_TAG_WIDTH = `CACHE_CLUSTER_BYPASS_MEM_TAG_WIDTH(ICACHE_NUM_REQS, 1, ICACHE_LINE_SIZE, ICACHE_WORD_SIZE, ICACHE_TAG_WIDTH, `VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_ICACHES);
 `endif
 
     ////////////////////////// Dcache Parameters //////////////////////////////
@@ -1556,8 +1745,10 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_TEX_ENABLE
     // tex unit: per-request queue + per-request tag
     localparam TEX_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(`VX_CFG_TEX_REQ_QUEUE_SIZE));
+    // core-level arb: SFU blocks -> the core's texture bus
+    localparam TEX_CORE_TAG_WIDTH     = (TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_NUM_SFU_BLOCKS, 1));
     // Single socket-level arb: socket cores -> per-socket TEX units
-    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_TEX_CORES));
+    localparam TEX_REQ_ARB1_TAG_WIDTH = (TEX_CORE_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_TEX_CORES));
 
     localparam TCACHE_WORD_SIZE     = 4;
     localparam TCACHE_ADDR_WIDTH    = (`VX_CFG_MEM_ADDR_WIDTH - `CLOG2(TCACHE_WORD_SIZE));
@@ -1679,8 +1870,10 @@ package VX_gpu_pkg;
 `ifdef VX_CFG_EXT_RTU_ENABLE
     localparam RTU_REQ_QUEUE_SIZE     = 4;
     localparam RTU_REQ_TAG_WIDTH      = (UUID_WIDTH + `CLOG2(RTU_REQ_QUEUE_SIZE));
+    // core-level arb: SFU blocks -> the core's RTU bus
+    localparam RTU_CORE_TAG_WIDTH     = (RTU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_NUM_SFU_BLOCKS, 1));
     // Single socket-level arb: socket cores -> per-socket RTU units
-    localparam RTU_REQ_ARB1_TAG_WIDTH = (RTU_REQ_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_RTU_CORES));
+    localparam RTU_REQ_ARB1_TAG_WIDTH = (RTU_CORE_TAG_WIDTH + `ARB_SEL_BITS(`VX_CFG_SOCKET_SIZE, `VX_CFG_NUM_RTU_CORES));
 
     // The RTU fetches a whole CW-BVH node (one 64 B cache line) per request,
     // so its cache is line-granular: word size == line size, one port/core.

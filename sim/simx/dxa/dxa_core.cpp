@@ -27,6 +27,10 @@
 
 using namespace vortex;
 
+// response tags index the in-flight slots by masking
+static_assert(VX_CFG_DXA_MAX_INFLIGHT >= 2 && (VX_CFG_DXA_MAX_INFLIGHT & (VX_CFG_DXA_MAX_INFLIGHT - 1)) == 0,
+              "DXA_MAX_INFLIGHT must be a power of two of at least 2");
+
 namespace {
 
 // One GMEM port: the DXA joins its socket's L2-facing arb as a single peer.

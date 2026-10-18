@@ -23,7 +23,7 @@
 //
 // The select is the is_addr_om attr bit alone. No cache level decodes it -- the
 // aperture store is presented to the caches as an ordinary IO store (they carry
-// attr through verbatim), so this bit arrives untouched. See VX_lsu_slice.
+// attr through verbatim), so this bit arrives untouched. See VX_lsu_block.
 //
 // Flush ordering: the steer is a fork, so a flush token bound for L2 is held
 // here until the OM side has been flushed. Every aperture store this trunk

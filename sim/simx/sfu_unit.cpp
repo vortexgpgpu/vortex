@@ -30,6 +30,10 @@
 
 using namespace vortex;
 
+// With several SFU blocks, their TEX/RTU/DXA requests merge onto the core's bus
+// through one registered arbiter stage.
+static constexpr uint32_t kBusMergeDelay = (VX_CFG_NUM_SFU_BLOCKS > 1) ? 1 : 0;
+
 SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	: FuncUnit<VX_CFG_NUM_SFU_BLOCKS>(ctx, name, core, 6)
 	, warp_ctl_out(this, VX_CFG_NUM_WARPS)
@@ -54,16 +58,16 @@ SfuUnit::SfuUnit(const SimContext& ctx, const char* name, Core* core)
 	, wctl_unit_(new WctlUnit(core))
 	, csr_unit_(new CsrUnit(core))
 #ifdef VX_CFG_EXT_DXA_ENABLE
-	, dxa_unit_(new DxaUnit(core, dxa_req_out))
+	, dxa_unit_(new DxaUnit(core, dxa_req_out, kBusMergeDelay))
 #endif
 #ifdef VX_CFG_EXT_TEX_ENABLE
-	, tex_unit_(new TexUnit(core, tex_req_out))
+	, tex_unit_(new TexUnit(core, tex_req_out, kBusMergeDelay))
 #endif
 #ifdef VX_CFG_EXT_OM_ENABLE
 	, om_unit_(new OmUnit(core, om_req_out))
 #endif
 #ifdef VX_CFG_EXT_RTU_ENABLE
-	, rtu_unit_(new RtuUnit(core, rtu_req_out, rtu_window_))
+	, rtu_unit_(new RtuUnit(core, rtu_req_out, rtu_window_, kBusMergeDelay))
 #endif
 {
 }
@@ -256,12 +260,36 @@ void SfuUnit::on_tick() {
 	}
 #endif
 
+	// Grant each shared resource to one requesting block this cycle.
+	SharedRes want[VX_CFG_NUM_SFU_BLOCKS];
+	int winner[RES_COUNT];
+	instr_trace_t* winner_head[RES_COUNT] = {};
+	for (uint32_t r = 0; r < RES_COUNT; ++r) {
+		winner[r] = -1;
+	}
+	for (uint32_t b = 0; b < VX_CFG_NUM_SFU_BLOCKS; ++b) {
+		want[b] = this->shared_res(b);
+	}
+	for (uint32_t r = RES_WCTL; r < RES_COUNT; ++r) {
+		for (uint32_t i = 0; i < VX_CFG_NUM_SFU_BLOCKS; ++i) {
+			uint32_t b = (res_rr_[r] + i) % VX_CFG_NUM_SFU_BLOCKS;
+			if (want[b] == r) {
+				winner[r] = b;
+				winner_head[r] = Inputs.at(b).peek();
+				break;
+			}
+		}
+	}
+
 	// PE switch: peek input, route to the matching sub-unit (WCTL / CSR /
 	// DXA / TEX / OM / RASTER) by op_type, gather to the single result port.
 	for (uint32_t b = 0; b < VX_CFG_NUM_SFU_BLOCKS; ++b) {
 		auto& input = Inputs.at(b);
 		if (input.empty())
 			continue;
+		if (want[b] != RES_NONE && winner[want[b]] != int(b)) {
+			continue; // another block holds the shared resource this cycle
+		}
 		auto& output = Outputs.at(b);
 		auto trace = input.peek();
 
@@ -441,4 +469,53 @@ void SfuUnit::on_tick() {
 
 		input.pop();
 	}
+
+	// A granted request that went through moves its resource's pointer past it.
+	for (uint32_t r = RES_WCTL; r < RES_COUNT; ++r) {
+		if (winner[r] < 0) {
+			continue;
+		}
+		auto& input = Inputs.at(winner[r]);
+		if (input.empty() || input.peek() != winner_head[r]) {
+			res_rr_[r] = (winner[r] + 1) % VX_CFG_NUM_SFU_BLOCKS;
+		}
+	}
+}
+
+SfuUnit::SharedRes SfuUnit::shared_res(uint32_t block) {
+	auto& input = Inputs.at(block);
+	if (input.empty()) {
+		return RES_NONE;
+	}
+	auto trace = input.peek();
+#ifdef VX_CFG_EXT_TEX_ENABLE
+	if (std::get_if<TexType>(&trace->op_type)) {
+		return RES_TEX;
+	}
+#endif
+#ifdef VX_CFG_EXT_RTU_ENABLE
+	if (auto rtu_p = std::get_if<GfxwType>(&trace->op_type)) {
+		if (*rtu_p == GfxwType::TRACE || *rtu_p == GfxwType::CB_RET) {
+			return RES_RTU;
+		}
+	}
+#endif
+#ifdef VX_CFG_EXT_DXA_ENABLE
+	if (std::get_if<DxaType>(&trace->op_type)) {
+		return RES_DXA;
+	}
+#endif
+	if (auto wctl_p = std::get_if<WctlType>(&trace->op_type)) {
+		// a block requests only when its op could fire this cycle
+		if (Outputs.at(block).full()) {
+			return RES_NONE;
+		}
+		if (*wctl_p == WctlType::BAR && trace->eop && !core_->lsu_drained()) {
+			return RES_NONE;
+		}
+		if (wctl_unit_->is_shared(trace)) {
+			return RES_WCTL;
+		}
+	}
+	return RES_NONE;
 }

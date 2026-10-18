@@ -20,6 +20,43 @@
 
 using namespace vortex;
 
+bool WctlUnit::is_shared(const instr_trace_t* trace) const {
+  if (!trace->eop) {
+    return false;
+  }
+  auto wctl_type = std::get<WctlType>(trace->op_type);
+  if (wctl_type == WctlType::BAR || wctl_type == WctlType::WSPAWN) {
+    return true;
+  }
+  if (wctl_type != WctlType::TMC && wctl_type != WctlType::PRED) {
+    return false;
+  }
+  auto& warp = core_->scheduler().warp(trace->wid);
+  uint32_t num_threads = VX_CFG_NUM_THREADS;
+  int32_t thread_last = num_threads - 1;
+  for (; thread_last >= 0; --thread_last) {
+    if (warp.tmask.test(thread_last)) { break; }
+  }
+  auto& rs1_data = trace->src_data[0];
+  auto& rs2_data = trace->src_data[1];
+  ThreadMask next_tmask(num_threads);
+  if (wctl_type == WctlType::TMC) {
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      next_tmask.set(t, rs1_data.at(thread_last).u & (1 << t));
+    }
+  } else {
+    auto wctlArgs = std::get<IntrWctlArgs>(trace->instr_ptr->get_args());
+    auto not_pred = wctlArgs.is_cond_neg;
+    ThreadMask pred(num_threads);
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      auto cond = (rs1_data.at(t).i & 0x1) ^ not_pred;
+      pred[t] = warp.tmask.test(t) && cond;
+    }
+    next_tmask = pred.any() ? (warp.tmask & pred) : ThreadMask(num_threads, rs2_data.at(thread_last).u);
+  }
+  return next_tmask.none();
+}
+
 bool WctlUnit::process(instr_trace_t* trace, bool* exit) {
   bool release_warp = trace->fetch_stall;
   *exit = false;

@@ -15,7 +15,6 @@
 
 module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 #(
-    parameter CLUSTER_ID = 0,
     parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
@@ -23,6 +22,8 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // Clock
     input  wire                 clk,
     input  wire                 reset,
+
+    input  wire [CLUSTER_ID_WIDTH-1:0] cluster_id,
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t         sysmem_perf,
@@ -169,7 +170,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     );
 
     VX_gbar_unit #(
-        .INSTANCE_ID (`SFORMATF(("gbar%0d", CLUSTER_ID)))
+        .INSTANCE_ID (`SFORMATF(("%s-gbar", INSTANCE_ID)))
     ) gbar_unit (
         .clk         (clk),
         .reset       (reset),
@@ -373,13 +374,13 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     for (genvar socket_id = 0; socket_id < NUM_SOCKETS; ++socket_id) begin : g_sockets
 
         VX_socket #(
-            .SOCKET_ID ((CLUSTER_ID * NUM_SOCKETS) + socket_id),
             .INSTANCE_ID (`SFORMATF(("%s-socket%0d", INSTANCE_ID, socket_id)))
         ) socket (
             `SCOPE_IO_BIND  (scope_socket+socket_id)
 
             .clk            (clk),
             .reset          (reset),
+            .socket_id      (CORE_ID_WIDTH'(cluster_id) * CORE_ID_WIDTH'(NUM_SOCKETS) + CORE_ID_WIDTH'(socket_id)),
 
         `ifdef PERF_ENABLE
             .sysmem_perf    (sysmem_perf_tmp),
@@ -426,10 +427,11 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     assign per_socket_dcr_bus_if[DCR_GFX_IDX].rsp_data  = gfx_dcr_bus_if.rsp_data;
 
     VX_graphics #(
-        .CLUSTER_ID (CLUSTER_ID)
+        .INSTANCE_ID (INSTANCE_ID)
     ) graphics (
         .clk        (clk),
         .reset      (reset),
+        .cluster_id (cluster_id),
     `ifdef PERF_ENABLE
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .raster_perf              (gfx_raster_perf),

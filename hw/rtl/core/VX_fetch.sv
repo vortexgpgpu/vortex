@@ -13,8 +13,11 @@
 
 `include "VX_define.vh"
 
+// NUM_WARPS is the number of warps this unit fetches for; their ids arrive in
+// the low bits of schedule_if.data.wid and leave the same way on fetch_if.
 module VX_fetch import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    parameter NUM_WARPS = `VX_CFG_NUM_WARPS
 ) (
     `SCOPE_IO_DECL
 
@@ -37,6 +40,14 @@ module VX_fetch import VX_gpu_pkg::*; #(
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
 
+    localparam WID_W = `LOG2UP(NUM_WARPS);
+    `STATIC_ASSERT (WID_W == ICACHE_TAG_ID_BITS, ("invalid parameter"))
+
+    wire [WID_W-1:0] sched_wid = schedule_if.data.wid[WID_W-1:0];
+    if (NW_WIDTH > WID_W) begin : g_sched_wid_unused
+        `UNUSED_VAR (schedule_if.data.wid[NW_WIDTH-1:WID_W])
+    end
+
     wire icache_req_valid;
     wire icache_req_ready;
     wire [ICACHE_ADDR_WIDTH-1:0] icache_req_addr;
@@ -44,25 +55,25 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // tag bits VX_mem_bus_arb adds downstream live in ICACHE_TAG_WIDTH but
     // are not driven by this stage.
     wire [ICACHE_FETCH_TAG_WIDTH-1:0] icache_req_tag;
-    wire [NW_WIDTH-1:0]          icache_req_wid;
+    wire [WID_W-1:0]             icache_req_wid;
     wire [UUID_WIDTH-1:0]        icache_req_uuid;
 
     wire [UUID_WIDTH-1:0]   rsp_uuid;
     wire [PC_BITS-1:0]      rsp_PC;
     wire [`VX_CFG_NUM_THREADS-1:0] rsp_tmask;
-    wire [NW_WIDTH-1:0]     req_tag;
-    wire [NW_WIDTH-1:0]     rsp_tag;
+    wire [WID_W-1:0]        req_tag;
+    wire [WID_W-1:0]        rsp_tag;
     wire [NCTA_WIDTH-1:0]   rsp_cta_id;
 
     wire icache_req_fire = icache_req_valid && icache_req_ready;
 
-    assign req_tag = schedule_if.data.wid;
+    assign req_tag = sched_wid;
 
     assign {rsp_uuid, rsp_tag} = icache_bus_if.rsp_data.tag;
 
     VX_dp_ram #(
         .DATAW (PC_BITS + `VX_CFG_NUM_THREADS + NCTA_WIDTH),
-        .SIZE  (`VX_CFG_NUM_WARPS),
+        .SIZE  (NUM_WARPS),
         .RDW_MODE ("R"),
         .LUTRAM (1)
     ) tag_store (
@@ -87,12 +98,12 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     wire [PC_BITS-1:0]      icache_req_PC;
     wire [`VX_CFG_NUM_THREADS-1:0] icache_req_tmask;
-    wire [NW_WIDTH-1:0]     rsp_wid;
+    wire [WID_W-1:0]        rsp_wid;
 
     wire                    follow_req_valid;
     wire [PC_BITS-1:0]      follow_req_PC;
     wire [`VX_CFG_NUM_THREADS-1:0] follow_req_tmask;
-    wire [NW_WIDTH-1:0]     follow_req_wid;
+    wire [WID_W-1:0]        follow_req_wid;
     wire [UUID_WIDTH-1:0]   follow_req_uuid;
 
     wire sched_buffered_match;
@@ -102,23 +113,23 @@ module VX_fetch import VX_gpu_pkg::*; #(
     // One-outstanding-per-warp (Invariant B): a warp with an icache request in
     // flight must not issue another, else its two responses alias the single
     // tag_store slot. Set on request fire, cleared on response fire.
-    reg [`VX_CFG_NUM_WARPS-1:0] inflight;
+    reg [NUM_WARPS-1:0] inflight;
     wire icache_rsp_fire = icache_bus_if.rsp_valid && icache_bus_if.rsp_ready;
     always @(posedge clk) begin
         if (reset) begin
             inflight <= '0;
         end else begin
-            for (int w = 0; w < `VX_CFG_NUM_WARPS; ++w) begin
-                if (icache_req_fire && (icache_req_wid == w[NW_WIDTH-1:0]))
+            for (int w = 0; w < NUM_WARPS; ++w) begin
+                if (icache_req_fire && (icache_req_wid == WID_W'(w)))
                     inflight[w] <= 1'b1;
-                else if (icache_rsp_fire && (rsp_wid == w[NW_WIDTH-1:0]))
+                else if (icache_rsp_fire && (rsp_wid == WID_W'(w)))
                     inflight[w] <= 1'b0;
             end
         end
     end
     `UNUSED_VAR (icache_req_tmask)
 
-    // ibuffer occupancy is already gated by VX_scheduler (schedule_warps
+    // ibuffer occupancy is already gated by VX_warp_sched (schedule_warps
     // masks out warps with full ibufs), so schedule_if.valid implies space.
     // Suppress with the UNGATED sched_buffered (not the st0-gated match): a
     // word already in the decompressor buffer must never be re-fetched, even
@@ -135,7 +146,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
     assign icache_req_valid = follow_req_valid || sched_req_valid;
     assign icache_req_PC    = follow_req_valid ? follow_req_PC    : schedule_if.data.PC;
     assign icache_req_tmask = follow_req_valid ? follow_req_tmask : schedule_if.data.tmask;
-    assign icache_req_wid   = follow_req_valid ? follow_req_wid   : schedule_if.data.wid;
+    assign icache_req_wid   = follow_req_valid ? follow_req_wid   : sched_wid;
     assign icache_req_uuid  = follow_req_valid ? follow_req_uuid  : schedule_if.data.uuid;
     // NOTE: bind the full PC to a net before part-selecting — Vivado synthesis
     // rejects a bit-select applied directly to a function-call result.
@@ -156,7 +167,8 @@ module VX_fetch import VX_gpu_pkg::*; #(
                              || sched_buffered_match;
 
     VX_decompressor #(
-        .INSTANCE_ID (INSTANCE_ID)
+        .INSTANCE_ID (INSTANCE_ID),
+        .NUM_WARPS   (NUM_WARPS)
     ) decompressor (
         .clk                  (clk),
         .reset                (reset),
@@ -164,7 +176,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
         .sched_PC             (schedule_if.data.PC),
         .sched_tmask          (schedule_if.data.tmask),
         .sched_cta_id         (schedule_if.data.cta_id),
-        .sched_wid            (schedule_if.data.wid),
+        .sched_wid            (sched_wid),
         .sched_buffered_match (sched_buffered_match),
         .sched_buffered       (sched_buffered),
         .inflight             (inflight),
@@ -191,7 +203,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     assign icache_req_valid = schedule_if.valid;
     assign icache_req_addr  = schedule_if.data.PC[2-(`VX_CFG_XLEN-PC_BITS) +: ICACHE_ADDR_WIDTH];
-    assign icache_req_wid   = schedule_if.data.wid;
+    assign icache_req_wid   = sched_wid;
     assign icache_req_uuid  = schedule_if.data.uuid;
     assign icache_req_tag   = {icache_req_uuid, icache_req_wid};
     assign schedule_if.ibuf_pop = fetch_if.ibuf_pop;
@@ -199,7 +211,7 @@ module VX_fetch import VX_gpu_pkg::*; #(
 
     assign fetch_if.valid       = icache_bus_if.rsp_valid;
     assign fetch_if.data.tmask  = rsp_tmask;
-    assign fetch_if.data.wid    = rsp_tag;
+    assign fetch_if.data.wid    = NW_WIDTH'(rsp_tag);
     assign fetch_if.data.cta_id = rsp_cta_id;
     assign fetch_if.data.PC     = rsp_PC;
     assign fetch_if.data.instr  = icache_bus_if.rsp_data.data;

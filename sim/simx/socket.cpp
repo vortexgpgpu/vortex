@@ -60,9 +60,9 @@ public:
       log2ceil(VX_CFG_L1_LINE_SIZE), // S (no sectoring)
       log2ceil(sizeof(uint32_t)), // W
       log2ceil(VX_CFG_ICACHE_NUM_WAYS),// A
-      log2ceil(1),            // B
+      log2ceil(VX_CFG_ICACHE_NUM_BANKS), // B
       VX_CFG_XLEN,                   // address bits
-      1,                      // number of inputs
+      ICACHE_NUM_REQS,        // number of inputs (one per fetch slice)
       VX_CFG_ICACHE_MEM_PORTS,       // memory ports
       false,                  // write-back
       false,                  // write response
@@ -276,8 +276,10 @@ public:
 
     // connect cores to caches
     for (uint32_t i = 0; i < cores_per_socket; ++i) {
-        cores_.at(i)->icache_req_out.at(0).bind(&icaches_->core_req_in.at(i).at(0));
-        icaches_->core_rsp_out.at(i).at(0).bind(&cores_.at(i)->icache_rsp_in.at(0));
+      for (uint32_t j = 0; j < ICACHE_NUM_REQS; ++j) {
+        cores_.at(i)->icache_req_out.at(j).bind(&icaches_->core_req_in.at(i).at(j));
+        icaches_->core_rsp_out.at(i).at(j).bind(&cores_.at(i)->icache_rsp_in.at(j));
+      }
 
       for (uint32_t j = 0; j < VX_CFG_DCACHE_NUM_REQS; ++j) {
         cores_.at(i)->dcache_req_out.at(j).bind(&dcaches_->core_req_in.at(i).at(j));

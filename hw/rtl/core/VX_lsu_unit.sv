@@ -14,13 +14,14 @@
 `include "VX_define.vh"
 
 module VX_lsu_unit import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
     input wire              clk,
     input wire              reset,
+
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
     // Inputs
     VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
@@ -47,6 +48,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     ) lane_dispatch (
         .clk        (clk),
         .reset      (reset),
+        .port_base  ('0),
         .dispatch_if(dispatch_if),
         .execute_if (per_block_execute_if)
     );
@@ -56,13 +58,13 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     ) per_block_result_if[BLOCK_SIZE]();
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin : g_blocks
-        VX_lsu_slice #(
-            .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, block_idx))),
-            .CORE_ID     (CORE_ID)
-        ) lsu_slice(
+        VX_lsu_block #(
+            .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, block_idx)))
+        ) lsu_block(
             `SCOPE_IO_BIND  (block_idx)
             .clk              (clk),
             .reset            (reset),
+            .core_id          (core_id),
             .execute_if       (per_block_execute_if[block_idx]),
             .result_if        (per_block_result_if[block_idx]),
             .client_if        (per_block_client_if[block_idx])

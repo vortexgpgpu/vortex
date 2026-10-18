@@ -18,7 +18,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
     wire [PERF_CTR_BITS-1:0]        cycles;
     wire [PERF_CTR_BITS-1:0]        instret;
     wire [`VX_CFG_NUM_WARPS-1:0]    active_warps;
-    wire [`VX_CFG_NUM_WARPS-1:0][`VX_CFG_NUM_THREADS-1:0] thread_masks;
+    wire [`VX_CFG_NUM_THREADS-1:0]  thread_mask;  // selected by csr_rd_wid
 
     // Read port: slave sends wid + cta_id, master returns selected mscratch
     // and cta_csrs. csr_rd_cta_id must carry the executing instruction's
@@ -33,6 +33,8 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
 
 `ifdef VX_CFG_VM_ENABLE
     logic [`VX_CFG_XLEN-1:0]        csr_satp;
+    logic                           satp_wr_valid;
+    logic [`VX_CFG_XLEN-1:0]        satp_wr_data;
 `endif
 
     // Write port: slave notifies scheduler of MSCRATCH CSR writes
@@ -57,7 +59,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output cycles,
         output instret,
         output active_warps,
-        output thread_masks,
+        output thread_mask,
         output mscratch,
         output cta_csrs,
         output cta_lane,
@@ -67,7 +69,9 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         output csr_mcause,
         output csr_mtval,
     `ifdef VX_CFG_VM_ENABLE
-        input csr_satp,
+        output csr_satp,
+        input  satp_wr_valid,
+        input  satp_wr_data,
     `endif
         input  csr_rd_wid,
         input  csr_rd_cta_id,
@@ -82,7 +86,7 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  cycles,
         input  instret,
         input  active_warps,
-        input  thread_masks,
+        input  thread_mask,
         input  mscratch,
         input  cta_csrs,
         input  cta_lane,
@@ -92,7 +96,9 @@ interface VX_sched_csr_if import VX_gpu_pkg::*; ();
         input  csr_mcause,
         input  csr_mtval,
     `ifdef VX_CFG_VM_ENABLE
-        output csr_satp,
+        input  csr_satp,
+        output satp_wr_valid,
+        output satp_wr_data,
     `endif
         output csr_rd_wid,
         output csr_rd_cta_id,

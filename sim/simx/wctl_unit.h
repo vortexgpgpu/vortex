@@ -34,6 +34,11 @@ public:
   // the latency.
   bool process(instr_trace_t* trace, bool* exit);
 
+  // Whether `trace` needs a core-wide warp-control resource (the barrier unit,
+  // wspawn, or warp retirement), which takes one request per cycle across all
+  // SFU blocks. No side effects.
+  bool is_shared(const instr_trace_t* trace) const;
+
 private:
   Core* core_;
 };

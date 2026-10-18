@@ -39,11 +39,17 @@ CtaDispatcher::CtaDispatcher(const SimContext& ctx, const char* name, Core* core
   , rank_(0)
   , block_size_rem_(0)
   , lmem_addr_(0)
+  , lane_rr_(0)
+  , init_wait_(0)
   , cur_kernel_pc_(0)
   , cur_ctx_id_(0)
   , warp_init_lanes_(num_warps_)
 {
   thread_idx_[0] = thread_idx_[1] = thread_idx_[2] = 0;
+  for (uint32_t i = 0; i < 3; ++i) {
+    shape_step_[i] = 0;
+    shape_dim_[i]  = 0;
+  }
   for (auto& lanes : warp_init_lanes_) {
     lanes.resize(num_threads_);
   }
@@ -54,11 +60,13 @@ CtaDispatcher::~CtaDispatcher() {}
 void CtaDispatcher::on_reset() {
   has_cta_    = false;
   tail_slot_  = 0;
+  init_wait_  = 0;
   for (uint32_t i = 0; i < num_warps_; ++i) {
     slot_rem_warps_[i] = 0;
     wid_to_slot_[i]    = num_warps_;  // invalid
   }
   cur_kernel_pc_ = 0;
+  // lane_rr_ and the cached block shape are device state, like warp_init_lanes_.
   // warp_init_lanes_ and cur_ctx_id_ are excluded: which lanes of a slot have
   // already run the startup is keyed on the context, and a launch is not a
   // device reset. Clearing them here would make the context check dead and
@@ -91,14 +99,14 @@ uint32_t CtaDispatcher::usable_slots(uint32_t stride) const {
   return fit;
 }
 
-bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_warp_record_t* rec_out) {
+uint32_t CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wids, cta_warp_record_t* recs) {
   if (!has_cta_) {
     // The KMU pushes CTAs down a registered, credit-gated launch lane; the
     // endpoint holds the one CTA committed to this core. It is popped only on
     // admission — an unadmitted CTA keeps the lane's credit, so the KMU
     // cannot over-commit work to a busy core.
     if (bus_in.empty())
-      return false;
+      return 0;
     const kmu_req_t& next = bus_in.peek();
 
     // Fixed-stride admission. Round the per-CTA LMEM size up to a
@@ -133,13 +141,13 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
         k = max_slots;  // cluster larger than co-residency: clamp (degenerate)
       for (uint32_t i = 0; i < k; ++i) {
         if (slot_rem_warps_[base + i] != 0)
-          return false;  // window not free yet — wait
+          return 0;  // window not free yet — wait
       }
     } else {
       // Standalone CTA, or a following cluster member (its slot was reserved by
       // the first-of-cluster window above and is guaranteed free).
       if (slot_rem_warps_[base] != 0)
-        return false;
+        return 0;
     }
 
     // A new launch is a new context: every slot owes the startup again. Keyed on
@@ -169,39 +177,65 @@ bool CtaDispatcher::step(const WarpMask& active_warps, uint32_t* wid_out, cta_wa
     tail_slot_ = (base + 1) % max_slots;
 
     has_cta_ = true;
-  }
 
-  // Find lowest-index free warp slot.
-  int free_wid = -1;
-  for (int wid = 0; wid < (int)num_warps_; ++wid) {
-    if (!active_warps.test(wid)) {
-      free_wid = wid;
-      break;
-    }
-  }
-  if (free_wid < 0) return false;
-
-  // Skip the startup only if every lane this launch activates has already run it.
-  uint32_t active = (block_size_rem_ >= num_threads_) ? num_threads_ : block_size_rem_;
-  auto& inited = warp_init_lanes_[free_wid];
-  bool needs_init = false;
-  for (uint32_t t = 0; t < active; ++t) {
-    if (!inited.test(t)) {
-      needs_init = true;
-      break;
+    if (VX_CFG_FETCH_WIDTH > 1) {
+      bool same_shape = true;
+      for (uint32_t d = 0; d < 3; ++d) {
+        same_shape = same_shape && (shape_step_[d] == cta_.warp_step[d])
+                                && (shape_dim_[d] == cta_.block_dim[d]);
+      }
+      if (!same_shape) {
+        for (uint32_t d = 0; d < 3; ++d) {
+          shape_step_[d] = cta_.warp_step[d];
+          shape_dim_[d]  = cta_.block_dim[d];
+        }
+        init_wait_ = VX_CFG_FETCH_WIDTH;
+      }
     }
   }
 
-  if (!next_warp(needs_init, rec_out))
-    return false;
-
-  for (uint32_t t = 0; t < active; ++t) {
-    inited.set(t);
+  if (init_wait_ != 0) {
+    --init_wait_;
+    return 0;
   }
 
-  wid_to_slot_[free_wid] = cur_slot_;
-  *wid_out = uint32_t(free_wid);
-  return true;
+  // Lanes with a free slot, round-robin from lane_rr_, up to the warps left;
+  // each launches its lowest free slot.
+  uint32_t count = 0;
+  for (uint32_t o = 0; o < VX_CFG_FETCH_WIDTH && has_cta_; ++o) {
+    uint32_t lane = (lane_rr_ + o) % VX_CFG_FETCH_WIDTH;
+    int free_wid = -1;
+    for (uint32_t wid = lane; wid < num_warps_; wid += VX_CFG_FETCH_WIDTH) {
+      if (!active_warps.test(wid)) {
+        free_wid = int(wid);
+        break;
+      }
+    }
+    if (free_wid < 0) {
+      continue;
+    }
+    // Skip the startup only if every lane this launch activates has already run it.
+    uint32_t active = (block_size_rem_ >= num_threads_) ? num_threads_ : block_size_rem_;
+    auto& inited = warp_init_lanes_[free_wid];
+    bool needs_init = false;
+    for (uint32_t t = 0; t < active; ++t) {
+      if (!inited.test(t)) {
+        needs_init = true;
+        break;
+      }
+    }
+    if (!next_warp(needs_init, &recs[count])) {
+      break;
+    }
+    for (uint32_t t = 0; t < active; ++t) {
+      inited.set(t);
+    }
+    wid_to_slot_[free_wid] = cur_slot_;
+    wids[count] = uint32_t(free_wid);
+    ++count;
+  }
+  lane_rr_ = (lane_rr_ + count) % VX_CFG_FETCH_WIDTH;
+  return count;
 }
 
 void CtaDispatcher::warp_done(uint32_t wid) {
@@ -263,7 +297,9 @@ bool CtaDispatcher::next_warp(bool do_init, cta_warp_record_t* out) {
   out->cluster_size = cta_.cluster_dim[0] * cta_.cluster_dim[1] * cta_.cluster_dim[2];
 
   // Thread mask: full warp or partial last warp.
+  // The record is reused across launches, so clear the lanes of the last one.
   out->tmask.resize(num_threads_);
+  out->tmask.reset();
   uint32_t active = (block_size_rem_ >= num_threads_) ? num_threads_ : block_size_rem_;
   for (uint32_t t = 0; t < active; ++t) {
     out->tmask.set(t);

@@ -13,31 +13,45 @@
 
 `include "VX_define.vh"
 
+// Per-warp instruction ids. NUM_WARPS is the number of warps counted here: all
+// of the core's, or the PER_FETCH_WARPS of one fetch slice (wid = {wfs, slice}).
 module VX_uuid_gen import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter NUM_WARPS = `VX_CFG_NUM_WARPS
 ) (
     input wire clk,
     input wire reset,
+
+    input wire [CORE_ID_WIDTH-1:0] core_id,
     input wire incr,
     input wire [NW_WIDTH-1:0] wid,
     output wire [UUID_WIDTH-1:0] uuid
 );
     localparam GNW_WIDTH = UUID_WIDTH - 32;
-    reg [31:0] uuid_cntrs [0:`VX_CFG_NUM_WARPS-1];
-    reg [`VX_CFG_NUM_WARPS-1:0] has_uuid_cntrs;
+    localparam LW = `LOG2UP(NUM_WARPS);
+
+    wire [LW-1:0] lid;
+    if (NUM_WARPS == `VX_CFG_NUM_WARPS) begin : g_core_warps
+        assign lid = LW'(wid);
+    end else begin : g_slice_warps
+        `STATIC_ASSERT (NUM_WARPS == PER_FETCH_WARPS, ("invalid parameter"))
+        assign lid = wid_to_wfs(wid);
+    end
+
+    reg [31:0] uuid_cntrs [0:NUM_WARPS-1];
+    reg [NUM_WARPS-1:0] has_uuid_cntrs;
 
     always @(posedge clk) begin
         if (reset) begin
             has_uuid_cntrs <= '0;
         end else if (incr) begin
-            has_uuid_cntrs[wid] <= 1;
+            has_uuid_cntrs[lid] <= 1;
         end
         if (incr) begin
-            uuid_cntrs[wid] <= has_uuid_cntrs[wid] ? (uuid_cntrs[wid] + 1) : 1;
+            uuid_cntrs[lid] <= has_uuid_cntrs[lid] ? (uuid_cntrs[lid] + 1) : 1;
         end
     end
 
-    wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(CORE_ID) << NW_BITS) + GNW_WIDTH'(wid);
-    assign uuid = {g_wid, (has_uuid_cntrs[wid] ? uuid_cntrs[wid] : 0)};
+    wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(core_id) << NW_BITS) + GNW_WIDTH'(wid);
+    assign uuid = {g_wid, (has_uuid_cntrs[lid] ? uuid_cntrs[lid] : 0)};
 
 endmodule

@@ -14,11 +14,12 @@
 `include "VX_define.vh"
 
 module VX_bar_unit import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire                clk,
     input wire                reset,
+
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
     // local barrier interface
     input wire                req_valid,
@@ -36,7 +37,6 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
     output wire [`VX_CFG_NUM_WARPS-1:0] unlock_mask // warps to unlock
 );
     `UNUSED_SPARAM (INSTANCE_ID)
-    `UNUSED_PARAM (CORE_ID)
 
     //                    warp mask + warp count + event count
     localparam EVENT_WIDTH = `CLOG2(`VX_CFG_MAX_BAR_EVENTS + 1);
@@ -329,12 +329,13 @@ module VX_bar_unit import VX_gpu_pkg::*; #(
 
         assign gbar_bus_if.req_valid        = gbar_req_valid_r;
         assign {gbar_bus_if.req_data.id, gbar_bus_if.req_data.size_m1} = req_queue_data;
-        assign gbar_bus_if.req_data.core_id = NC_WIDTH'(CORE_ID % `VX_CFG_NUM_CORES);
+        assign gbar_bus_if.req_data.core_id = NC_WIDTH'(32'(core_id) % `VX_CFG_NUM_CORES);
         assign gbar_bus_if.rsp_ready        = gbar_rsp_ready;
 
         `RUNTIME_ASSERT(~gbar_enqueue || ~gbar_pending_r[gbar_enqueue_id], ("%s duplicate global barrier generation: id=%0d", INSTANCE_ID, gbar_enqueue_id))
         `RUNTIME_ASSERT(~gbar_enqueue || (store_waddr == BAR_ADDR_W'(gbar_enqueue_id)), ("%s invalid global barrier slot: id=%0d, slot=%0d", INSTANCE_ID, gbar_enqueue_id, store_waddr))
     end else begin : g_nogbar
+        `UNUSED_VAR (core_id)
 
         assign gbar_bus_if.req_valid = 0;
         assign gbar_bus_if.req_data  = 'x;

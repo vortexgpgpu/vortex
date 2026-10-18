@@ -13,14 +13,15 @@
 
 `include "VX_define.vh"
 
-module VX_lsu_slice import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+module VX_lsu_block import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
     input wire              clk,
     input wire              reset,
+
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
     // Inputs
     VX_execute_if.slave     execute_if,
@@ -47,7 +48,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     localparam [MEM_ADDRW-1:0] LMEM_BLK_BASE = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
     `STATIC_ASSERT (MEM_ADDRW > LMEM_BLK_LSB, ("LMEM window wider than the block address space"))
 `endif
-    `UNUSED_PARAM (CORE_ID)
+`ifndef VX_CFG_EXT_A_ENABLE
+    `UNUSED_VAR (core_id)
+`endif
     `UNUSED_SPARAM (INSTANCE_ID)
 
     // tag_width = header + op_type + align + pkt_addr + fence
@@ -141,7 +144,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `endif
         // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
         assign lane_amo.hart_id      = HART_ID_WIDTH'(
-            (HART_ID_WIDTH'(CORE_ID) << (NW_BITS + NT_BITS))
+            (HART_ID_WIDTH'(core_id) << (NW_BITS + NT_BITS))
           | (HART_ID_WIDTH'(execute_if.data.header.wid) << NT_BITS)
           |  HART_ID_WIDTH'(i)
         );

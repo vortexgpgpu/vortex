@@ -8,7 +8,7 @@ and deadlock arguments, and the parallelism/scaling model. Covers the RTL
 ([`hw/rtl/om/`](../../hw/rtl/om/)), the SIMT-side plumbing
 ([`VX_decode.sv`](../../hw/rtl/core/VX_decode.sv),
 [`VX_gfx_uops.sv`](../../hw/rtl/core/VX_gfx_uops.sv),
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv)), the cluster
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv)), the cluster
 integration ([`VX_graphics.sv`](../../hw/rtl/VX_graphics.sv)), the SimX model
 ([`sim/simx/om/`](../../sim/simx/om/)), and the software contract
 ([`sw/kernel/include/vx_graphics.h`](../../sw/kernel/include/vx_graphics.h),
@@ -170,7 +170,7 @@ byte-enables splitting the write (`byteen[2:0]` = depth writemask,
 
 ### 4.1 LSU attribute tagging
 
-[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv) range-checks every
+[`VX_lsu_block.sv`](../../hw/rtl/core/VX_lsu_block.sv) range-checks every
 lane address against the aperture and sets **two** attribute bits:
 `is_addr_om` (the steer's select) and `is_addr_io` (alongside it). The
 IO bit is not a hack — *uncached, bypassed, posted* is exactly the behaviour

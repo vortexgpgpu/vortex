@@ -335,13 +335,13 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
     for (genvar cluster_id = 0; cluster_id < `VX_CFG_NUM_CLUSTERS; ++cluster_id) begin : g_clusters
 
         VX_cluster #(
-            .CLUSTER_ID (cluster_id),
             .INSTANCE_ID (`SFORMATF(("cluster%0d", cluster_id)))
         ) cluster (
             `SCOPE_IO_BIND (scope_cluster + cluster_id)
 
             .clk                (clk),
             .reset              (reset),
+            .cluster_id         (CLUSTER_ID_WIDTH'(cluster_id)),
 
         `ifdef PERF_ENABLE
             .sysmem_perf        (sysmem_perf),

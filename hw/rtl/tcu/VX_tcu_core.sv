@@ -303,8 +303,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
 `endif
 
 `ifdef TCU_META_ENABLE
+    // a TCU block only executes one residue class of warps modulo NUM_TCU_BLOCKS
     VX_tcu_meta #(
-        .INSTANCE_ID (INSTANCE_ID)
+        .INSTANCE_ID (INSTANCE_ID),
+        .WID_STRIDE  (`VX_CFG_NUM_TCU_BLOCKS)
     ) tcu_meta (
         .clk    (clk),
         .reset  (reset),

@@ -84,8 +84,10 @@ class TexCore;
 // backpressure (SfuUnit retries idempotently next cycle).
 class TexUnit {
 public:
-  TexUnit(Core* core, SimChannel<TexReq>& req_out)
-    : core_(core), req_out_(req_out) {}
+  // bus_delay: extra cycles a request spends merging with other SFU blocks'
+  // requests onto the core's texture bus.
+  TexUnit(Core* core, SimChannel<TexReq>& req_out, uint32_t bus_delay = 0)
+    : core_(core), req_out_(req_out), bus_delay_(bus_delay) {}
 
   // Submit one sample request: u/v/lod ride src_data[0..2], the texel returns in
   // rd. Returns the trace if accepted, or nullptr on full output channel.
@@ -94,6 +96,7 @@ public:
 private:
   Core*               core_;
   SimChannel<TexReq>& req_out_;
+  uint32_t            bus_delay_;
 };
 
 } // namespace vortex
