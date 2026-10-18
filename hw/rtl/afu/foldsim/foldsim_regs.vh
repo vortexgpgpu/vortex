@@ -22,7 +22,7 @@
 `define FOLDSIM_REGS_VH
 
 `define FOLDSIM_ID              32'h464F4C44
-`define FOLDSIM_VERSION         32'd4
+`define FOLDSIM_VERSION         32'd5
 
 `define FOLDSIM_REG_ID          12'h000
 `define FOLDSIM_REG_VERSION     12'h004
@@ -41,12 +41,8 @@
 `define FOLDSIM_REG_NUM_CLASSES 12'h038
 `define FOLDSIM_REG_MEM_BASE_LO 12'h0C0
 `define FOLDSIM_REG_MEM_BASE_HI 12'h0C4
-`define FOLDSIM_REG_MEM_RLAT    12'h0C8
-`define FOLDSIM_REG_MEM_WLAT    12'h0CC
-`define FOLDSIM_REG_MEM_MAXR    12'h0D0
-`define FOLDSIM_REG_MEM_MAXW    12'h0D4
 // The memory model (sw/common/foldsim_regs.h has the fields).
-`define FOLDSIM_REG_MEM_MODEL   12'h0D8
+`define FOLDSIM_REG_MEM_REFRESH 12'h0D8
 `define FOLDSIM_REG_MEM_CAPS    12'h0DC
 `define FOLDSIM_REG_MEM_CLOCK   12'h0E0
 `define FOLDSIM_REG_MEM_LATENCY 12'h0E4

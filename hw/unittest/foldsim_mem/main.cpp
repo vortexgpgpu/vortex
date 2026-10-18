@@ -15,10 +15,10 @@
 // simulator and the control endpoint drive it -- one token per channel per
 // target cycle -- by a model of an AXI4 master, against a model of HBM with
 // random ready and latency that checks the AXI4 protocol on the device side.
-// Under each timing model and a range of its settings:
+// Under a range of the bank model's settings:
 //   * every target cycle's outputs equal the C++ model's
-//     (sim/common/axi_latency_pipe.h for the pipe, sim/common/dram_bank_model.h
-//     for the bank model), the model stepped on the same requests;
+//     (sim/common/dram_bank_model.h's DramBankAxi), the model stepped on the
+//     same requests;
 //   * read data, write acknowledgements and ids are right;
 //   * a reset with HBM transactions in flight finishes only once HBM has
 //     answered them all, takes no request, and delivers nothing from before
@@ -41,7 +41,6 @@
 #include <set>
 #include <vector>
 
-#include <axi_latency_pipe.h>
 #include <dram_bank_model.h>
 
 #include "Vfoldsim_mem.h"
@@ -78,10 +77,6 @@ enum class Traffic {
 
 struct Setup {
   const char* name;
-  bool bank;
-  // The pipe.
-  uint32_t rlat, wlat, maxr, maxw;
-  // The bank model.
   dram_timing::Standard type;
   uint32_t core_clock, data_rate, latency, queue;
   uint32_t rq, wq, wr_high, wr_low;
@@ -94,43 +89,39 @@ struct Setup {
 };
 
 const Setup kSetups[] = {
-  {"pipe",         false, 10, 12, 16, 16, dram_timing::Standard::HBM2, 0, 0, 0, 0, 0, 0, 0, 0,
+  {"bank",           dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
    Traffic::Small, 0.3, 0.25, 1.0, 3000},
-  {"pipe_slow",    false, 37, 5, 6, 3, dram_timing::Standard::HBM2, 0, 0, 0, 0, 0, 0, 0, 0,
-   Traffic::Random, 0.5, 0.3, 0.7, 3000},
-  {"bank",         true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
-   Traffic::Small, 0.3, 0.25, 1.0, 3000},
-  {"bank_random",  true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+  {"bank_random",    dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
    Traffic::Random, 0.5, 0.3, 0.8, 4000},
-  {"bank_rows",    true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 3, 0, 32, 32, 26, 7,
+  {"bank_rows",      dram_timing::Standard::HBM2, 400, 800, 3, 0, 32, 32, 26, 7,
    Traffic::Rows, 0.6, 0.2, 0.9, 4000},
-  {"bank_stream",  true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+  {"bank_stream",    dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
    Traffic::Stream, 0.7, 0.4, 0.9, 4000},
-  {"bank_a100",    true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 1410, 3038, 190, 257, 32, 32, 26, 7,
+  {"bank_a100",      dram_timing::Standard::HBM2, 1410, 3038, 190, 257, 32, 32, 26, 7,
    Traffic::Random, 0.5, 0.3, 0.8, 4000},
-  {"bank_h100",    true, 0, 0, 0, 0, dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+  {"bank_h100",      dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
    Traffic::Rows, 0.5, 0.3, 0.8, 4000},
-  {"bank_h100_s",  true, 0, 0, 0, 0, dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+  {"bank_h100_s",    dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
    Traffic::Stream, 0.8, 0.5, 0.95, 4000},
-  {"bank_queues",  true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 700, 3200, 7, 5, 6, 4, 3, 2,
+  {"bank_queues",    dram_timing::Standard::HBM2, 700, 3200, 7, 5, 6, 4, 3, 2,
    Traffic::Random, 0.6, 0.5, 0.7, 4000},
-  {"bank_reads",   true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+  {"bank_reads",     dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
    Traffic::Random, 0.9, 0.05, 0.9, 4000},
-  {"bank_onebank", true, 0, 0, 0, 0, dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+  {"bank_onebank",   dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
    Traffic::OneBank, 0.9, 0.1, 0.9, 4000},
-  {"bank_onebank2", true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 11, 3, 32, 32, 26, 7,
+  {"bank_onebank2",  dram_timing::Standard::HBM2, 400, 800, 11, 3, 32, 32, 26, 7,
    Traffic::OneBank, 0.7, 0.3, 0.8, 4000},
-  {"bank_v100",    true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 1530, 1752, 0, 0, 32, 32, 26, 7,
+  {"bank_v100",      dram_timing::Standard::HBM2, 1530, 1752, 0, 0, 32, 32, 26, 7,
    Traffic::Rows, 0.8, 0.2, 0.9, 4000},
-  {"ref_bank",     true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
+  {"ref_bank",       dram_timing::Standard::HBM2, 400, 800, 0, 0, 32, 32, 26, 7,
    Traffic::Random, 0.5, 0.3, 0.8, 4000, DramBankModel::Refresh::PerBank},
-  {"ref_bank_s",   true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 1410, 3038, 190, 257, 32, 32, 26, 7,
+  {"ref_bank_s",     dram_timing::Standard::HBM2, 1410, 3038, 190, 257, 32, 32, 26, 7,
    Traffic::Stream, 0.8, 0.4, 0.9, 4000, DramBankModel::Refresh::PerBank},
-  {"ref_all",      true, 0, 0, 0, 0, dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+  {"ref_all",        dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
    Traffic::Rows, 0.5, 0.3, 0.8, 4000, DramBankModel::Refresh::AllBank},
-  {"ref_all_fast", true, 0, 0, 0, 0, dram_timing::Standard::HBM2, 400, 800, 3, 0, 32, 32, 26, 7,
+  {"ref_all_fast",   dram_timing::Standard::HBM2, 400, 800, 3, 0, 32, 32, 26, 7,
    Traffic::Random, 0.6, 0.3, 0.9, 4000, DramBankModel::Refresh::AllBank, 600, 0},
-  {"ref_bank_fast", true, 0, 0, 0, 0, dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
+  {"ref_bank_fast",  dram_timing::Standard::HBM3, 1980, 6545, 0, 0, 32, 32, 26, 7,
    Traffic::Rows, 0.8, 0.2, 0.9, 4000, DramBankModel::Refresh::PerBank, 60, 0},
 };
 
@@ -164,9 +155,7 @@ Line make_line(uint64_t addr, uint32_t version) {
 }
 
 // ---- The C++ models, stepped on what the target offered ----
-std::unique_ptr<AxiLatencyPipe> golden_pipe;
 std::unique_ptr<DramBankAxi> golden_bank;
-bool golden_valid = true;   // the pipe models no bursts: void until a reset
 
 DramBankAxi::Config bank_config(const Setup& s) {
   DramBankAxi::Config c;
@@ -473,9 +462,6 @@ struct Master {
         const ReadExp e = it->second;
         reads.erase(it);
         free_rids.insert(rid);
-        if (!setup->bank)
-          CHECK(tcycle >= e.fired + setup->rlat, "R at %lu for a read fired at %lu",
-                (unsigned long)tcycle, (unsigned long)e.fired);
         if (e.known)
           CHECK(rdata == e.op.data, "R data wrong at 0x%lx", (unsigned long)e.op.addr);
         read_done(e.op.addr);
@@ -490,9 +476,6 @@ struct Master {
         const WriteExp e = writes.front();
         writes.pop_front();
         CHECK(bid == e.op.id, "B id %d, expected %d", bid, e.op.id);
-        if (!setup->bank)
-          CHECK(tcycle >= e.formed + setup->wlat, "B at %lu for a write formed at %lu",
-                (unsigned long)tcycle, (unsigned long)e.formed);
         known[e.op.addr] = e.op.data;
         unknown.erase(e.op.addr);
         pending_writes.erase(e.op.addr);
@@ -639,69 +622,35 @@ void host_step() {
 // cycle's requests.
 void golden_cycle() {
   const Master& m = master;
+  auto& g = *golden_bank;
   if (m.reset) {
-    if (golden_pipe) golden_pipe->reset();
-    if (golden_bank) golden_bank->reset();
-    golden_valid = true;
+    g.reset();
     return;
   }
-  if (golden_valid) {
-    ++compared;
-    if (golden_bank) {
-      auto& g = *golden_bank;
-      CHECK(o_arready == g.ar_ready(), "ARREADY %d, model %d", o_arready, g.ar_ready());
-      CHECK(o_awready == g.aw_ready(), "AWREADY %d, model %d", o_awready, g.aw_ready());
-      CHECK(o_wready == g.w_ready(), "WREADY %d, model %d", o_wready, g.w_ready());
-      CHECK(o_rvalid == g.r_valid(), "RVALID %d, model %d", o_rvalid, g.r_valid());
-      if (o_rvalid && g.r_valid())
-        CHECK(uint32_t(o_rid) == g.r_id(), "RID %d, model %u", o_rid, g.r_id());
-      CHECK(o_bvalid == g.b_valid(), "BVALID %d, model %d", o_bvalid, g.b_valid());
-      if (o_bvalid && g.b_valid())
-        CHECK(uint32_t(o_bid) == g.b_id(), "BID %d, model %u", o_bid, g.b_id());
-      DramBankAxi::Inputs in;
-      in.ar_valid = m.ar_v;
-      in.ar_id = m.ar.id;
-      in.ar_addr = channel_addr(m.ar.addr);
-      in.ar_len = m.ar_len;
-      in.aw_valid = m.aw_v;
-      in.aw_id = m.aw.id;
-      in.aw_addr = channel_addr(m.aw.addr);
-      in.aw_len = m.aw_len;
-      in.w_valid = m.w_v;
-      in.w_last = m.w_last;
-      in.r_ready = m.rready;
-      in.b_ready = m.bready;
-      g.step(in);
-    } else {
-      auto& g = *golden_pipe;
-      CHECK(o_arready == g.ar_ready(), "ARREADY %d, model %d", o_arready, g.ar_ready());
-      CHECK(o_awready == g.aw_ready(), "AWREADY %d, model %d", o_awready, g.aw_ready());
-      CHECK(o_wready == g.w_ready(), "WREADY %d, model %d", o_wready, g.w_ready());
-      CHECK(o_rvalid == g.r_valid(), "RVALID %d, model %d", o_rvalid, g.r_valid());
-      if (o_rvalid && g.r_valid())
-        CHECK(uint32_t(o_rid) == g.r_id(), "RID %d, model %u", o_rid, g.r_id());
-      CHECK(o_bvalid == g.b_valid(), "BVALID %d, model %d", o_bvalid, g.b_valid());
-      if (o_bvalid && g.b_valid())
-        CHECK(uint32_t(o_bid) == g.b_id(), "BID %d, model %u", o_bid, g.b_id());
-      AxiLatencyPipe::Inputs in;
-      in.ar_valid = m.ar_v;
-      in.ar_id = m.ar.id;
-      in.ar_len = m.ar_len;
-      in.aw_valid = m.aw_v;
-      in.aw_id = m.aw.id;
-      in.w_valid = m.w_v;
-      in.w_last = m.w_last;
-      in.r_ready = m.rready;
-      in.b_ready = m.bready;
-      // The pipe has no error: a burst it takes ends the comparison until a
-      // reset.
-      if ((in.ar_valid && g.ar_ready() && in.ar_len != 0)
-       || (in.aw_valid && g.aw_ready() && m.aw_len != 0)
-       || (in.w_valid && g.w_ready() && !in.w_last))
-        golden_valid = false;
-      g.step(in);
-    }
-  }
+  ++compared;
+  CHECK(o_arready == g.ar_ready(), "ARREADY %d, model %d", o_arready, g.ar_ready());
+  CHECK(o_awready == g.aw_ready(), "AWREADY %d, model %d", o_awready, g.aw_ready());
+  CHECK(o_wready == g.w_ready(), "WREADY %d, model %d", o_wready, g.w_ready());
+  CHECK(o_rvalid == g.r_valid(), "RVALID %d, model %d", o_rvalid, g.r_valid());
+  if (o_rvalid && g.r_valid())
+    CHECK(uint32_t(o_rid) == g.r_id(), "RID %d, model %u", o_rid, g.r_id());
+  CHECK(o_bvalid == g.b_valid(), "BVALID %d, model %d", o_bvalid, g.b_valid());
+  if (o_bvalid && g.b_valid())
+    CHECK(uint32_t(o_bid) == g.b_id(), "BID %d, model %u", o_bid, g.b_id());
+  DramBankAxi::Inputs in;
+  in.ar_valid = m.ar_v;
+  in.ar_id = m.ar.id;
+  in.ar_addr = channel_addr(m.ar.addr);
+  in.ar_len = m.ar_len;
+  in.aw_valid = m.aw_v;
+  in.aw_id = m.aw.id;
+  in.aw_addr = channel_addr(m.aw.addr);
+  in.aw_len = m.aw_len;
+  in.w_valid = m.w_v;
+  in.w_last = m.w_last;
+  in.r_ready = m.rready;
+  in.b_ready = m.bready;
+  g.step(in);
 }
 
 void run(uint64_t n) {
@@ -776,22 +725,7 @@ void burst_case(int kind, const char* what) {
 
 void configure() {
   const Setup& s = *setup;
-  dut->read_latency = s.rlat ? s.rlat : 30;
-  dut->write_latency = s.wlat ? s.wlat : 30;
-  dut->max_reads = s.maxr ? s.maxr : 16;
-  dut->max_writes = s.maxw ? s.maxw : 16;
   dut->base = kBase;
-  dut->model_bank = s.bank;
-  if (!s.bank) {
-    AxiLatencyPipe::Config c;
-    c.read_latency = s.rlat;
-    c.write_latency = s.wlat;
-    c.max_reads = s.maxr;
-    c.max_writes = s.maxw;
-    golden_pipe = std::make_unique<AxiLatencyPipe>(c);
-    golden_bank.reset();
-    return;
-  }
   const auto cfg = bank_config(s);
   const auto& t = cfg.model.t;
   const auto& g = cfg.model.geom;
@@ -818,7 +752,6 @@ void configure() {
       if ((v[i] >> b) & 1)
         dut->cfg_t[(i * 12 + b) / 32] |= 1u << ((i * 12 + b) % 32);
   golden_bank = std::make_unique<DramBankAxi>(cfg);
-  golden_pipe.reset();
 }
 
 int run_setup(const Setup& s) {
@@ -828,7 +761,6 @@ int run_setup(const Setup& s) {
   reset_cycles_done = drained_at_reset = compared = 0;
   hbm = Hbm();
   master = Master();
-  golden_valid = true;
   for (int i = 0; i < NUM_IN; ++i) taken[i] = false;
   for (int j = 0; j < NUM_OUT; ++j) got[j] = false;
   after_reset = false;
@@ -879,21 +811,15 @@ int run_setup(const Setup& s) {
   if (s.traffic != Traffic::OneBank)
     CHECK(drained_at_reset >= 4, "only %lu resets found HBM busy", (unsigned long)drained_at_reset);
 
-  std::string extra;
-  if (golden_bank) {
-    const auto& st = golden_bank->model().stats();
-    char buf[256];
-    snprintf(buf, sizeof(buf), "; model since last reset: %lu reads, %lu writes, %lu hits, %lu misses, %lu conflicts, %lu refreshes, %lu deferred",
-             (unsigned long)st.reads, (unsigned long)st.writes, (unsigned long)st.hits,
-             (unsigned long)st.misses, (unsigned long)st.conflicts, (unsigned long)st.refreshes,
-             (unsigned long)st.deferred);
-    extra = buf;
-  }
+  const auto& st = golden_bank->model().stats();
   printf("%-12s target cycles %lu, host cycles %lu, %lu compared; %lu reads, %lu writes; "
-         "%lu reset cycles, %lu with HBM busy%s: %s\n",
+         "%lu reset cycles, %lu with HBM busy; model since last reset: %lu reads, %lu writes, "
+         "%lu hits, %lu misses, %lu conflicts, %lu refreshes, %lu deferred: %s\n",
          s.name, (unsigned long)tcycle, (unsigned long)host_cycle, (unsigned long)compared,
          (unsigned long)master.n_r, (unsigned long)master.n_b, (unsigned long)reset_cycles_done,
-         (unsigned long)drained_at_reset, extra.c_str(),
+         (unsigned long)drained_at_reset, (unsigned long)st.reads, (unsigned long)st.writes,
+         (unsigned long)st.hits, (unsigned long)st.misses, (unsigned long)st.conflicts,
+         (unsigned long)st.refreshes, (unsigned long)st.deferred,
          failures == failures_before ? "ok" : "FAILED");
   delete dut;
   dut = nullptr;

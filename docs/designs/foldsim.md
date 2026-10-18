@@ -211,19 +211,18 @@ the host-memory master: `s_axi_control` and one device-memory master
 `m_axi_mem_<p>` per memory port of the target, each linked to the `MEM` HBM
 aperture (the linker gives each its own way in). The target has as many
 memory ports as its configuration has platform memory banks
-(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS` in `CONFIGS`: 1, 2, 4 or 8; one when
-unset); the flow writes their number, the shift to a port's channel and their
-AXI id width into `gen/foldsim_kernel.vh`, and the kernel lists its ports with
-`FOLDSIM_REPEAT` (`foldsim_ports.vh`). It instantiates `foldsim_sim`, a
+(`VX_CFG_PLATFORM_MEMORY_NUM_BANKS`: 1, 2, 4 or 8; `VX_config.toml`'s 2 unless
+`CONFIGS` sets it); the flow writes their number, the shift to a port's
+channel, their AXI id width and `FOLDSIM_MEM_REPEAT`, which lists the ports
+whose names carry their index, into `gen/foldsim_kernel.vh` (spelled out, as
+Vivado's IP packager does not paste an expanded macro argument into a macro
+name). It instantiates `foldsim_sim`, a
 memory endpoint per port and the control endpoint, all models of the target's
 surroundings that take one token per channel per target cycle
 (`foldsim_token.sv`):
 
-- **`foldsim_mem`** is one of the target's AXI4 ports, timed by one of two models
-  (§4.1): a latency-bandwidth pipe — cycle for cycle
-  `sim/common/axi_latency_pipe.h`: a fixed latency per transaction, bounded
-  reads and writes in flight, one beat per cycle, responses in request
-  order — or a DRAM channel's banks. A read goes to HBM (`base` + target address)
+- **`foldsim_mem`** is one of the target's AXI4 ports, timed as a DRAM
+  channel's banks (§4.1). A read goes to HBM (`base` + target address)
   the cycle the target makes it, a write the cycle it has both its AW and its
   W, so HBM only ever sees whole single-beat writes; a target cycle that
   should present a response memory has not returned yet does not finish until
@@ -241,12 +240,12 @@ port a read came from above its tag buffer's 4 index bits, so the target's
 AXI ids are 4 + log2(ports) bits wide; the flow sets
 `PLATFORM_MEMORY_ID_WIDTH` and the endpoints' id width to match.
 
-### 4.1 The memory models
+### 4.1 The memory model
 
-The kernel's own reset gives the pipe; a reset command chooses the model the
-target has from that reset on (§5). The pipe is the default, and with it the
-endpoint makes exactly the transactions and takes exactly the cycles it did
-before the bank model existed.
+The memory model takes its settings at a target reset: the kernel's own reset
+gives it the default machine's DRAM (HBM2 at 800 MT/s behind a 400 MHz core),
+and the runtime writes the configuration's before the reset it makes on open
+(§5).
 
 **The bank model** (`foldsim_mem_bank.sv`) is cycle for cycle
 `sim/common/dram_bank_model.h` (`DramBankAxi` over `DramBankModel`), the
@@ -324,8 +323,8 @@ resets the target's whole memory port, not only the target. A target cycle in
 reset takes no request, and finishes only once HBM has answered every
 transaction it has from before the reset — reads returned, writes
 acknowledged, nothing left offered to it — so the AXI4 port to HBM stays in
-protocol. The cycle then drops the pipe: requests the target made and was not
-answered, data not delivered to it, the lone half of a write, and the memory
+protocol. The cycle then drops the model's state: requests the target made
+and was not answered, data not delivered to it, the lone half of a write, and the memory
 error. No response from before a reset reaches the target after it; writes
 HBM already took stay written, as they would behind a real memory
 controller.
@@ -355,8 +354,8 @@ for the RTL):
 | `0x1C` | the last DCR read's response |
 | `0x20`–`0x2C` | target cycles, kernel-clock cycles |
 | `0x30`, `0x38` | kernel-clock cycles a target cycle waited for HBM; the number of classes |
-| `0xC0`–`0xD4` | memory model: device base, the pipe's read and write latency, most reads and writes in flight |
-| `0xD8`, `0xDC` | the memory model and refresh in effect (read only); the bank model's capacities: ports, engines and masters, slots, horizon (read only) |
+| `0xC0`, `0xC4` | device base of the target's memory |
+| `0xD8`, `0xDC` | the refresh in effect (read only); the bank model's capacities: ports, engines and masters, slots, horizon (read only) |
 | `0xE0`–`0xF8` | bank model: data rate and core clock, fixed latency, requests in flight and controller queues, geometry, write watermarks, refresh interval and busy time |
 | `0x100 + 8c` | per class, threads finished |
 | `0x800`–`0x844` | bank model: DRAM timings, a word each (tBL … tWTR_L, read-to-write extra) |
@@ -374,14 +373,12 @@ for.
 
 The runtime resets the target on open, as a card's native driver resets its
 device; that also clears a memory error an earlier process left, and the reset
-command's address chooses the memory model and, with
-`VORTEX_DRAM_REFRESH=bank|all`, the bank model's refresh. With
-`FOLDSIM_MEM_MODEL=bank` the runtime first writes the bank model's registers
-from the platform memory it was built for (its `CONFIGS`), every channel
-alike, refusing what the image cannot hold and warning when a refresh keeps
-a bank past the image's horizon; the counters print at close, per channel
-and in all; otherwise it makes exactly the
-register accesses it always has. The command
+command's address chooses, with `VORTEX_DRAM_REFRESH=bank|all`, the bank
+model's refresh. Before it the runtime writes the bank model's registers from
+the platform memory it was built for (`VX_CFG_PLATFORM_MEMORY_*`), every
+channel alike, refusing what the image cannot hold and warning when a refresh
+keeps a bank past the image's horizon; the counters print at close, per
+channel and in all. The command
 processor model's hooks return no status, so the runtime latches a device
 error instead — a memory error, a failed register or memory access, or a wait
 that timed out — and from then on every register access the runtime core
@@ -399,16 +396,12 @@ advancing for that time (60 s when it is unset).
   in Verilator): random target inputs, every channel stalled at random, every
   output token compared. s2w4i2: 3,000 target cycles, 51,000 tokens, 0
   differences.
-- **The memory endpoint against `AxiLatencyPipe`**, in Verilator: random
-  requests and device-memory latency, every target cycle's outputs and every
-  read's data compared; five latency and limit settings, 0 differences.
 - **The memory endpoint** (`hw/unittest/foldsim_mem`, in Verilator): an
   AXI4 master as the target, HBM with random ready and latency checking the
   device-side protocol, resets at random points with HBM busy, and each kind
   of burst; every target cycle's outputs compared with the C++ model's
-  (`AxiLatencyPipe`, `DramBankAxi`), every response, id and read's data
-  checked, none from before a reset delivered after it. Two pipe settings,
-  twelve bank-model settings (HBM2 and HBM3 at the default, v100, a100 and
+  (`DramBankAxi`), every response, id and read's data checked, none from
+  before a reset delivered after it. Twelve bank-model settings (HBM2 and HBM3 at the default, v100, a100 and
   h100 rates; small queues; row hits, random rows, one bank to the horizon,
   streams, read- and write-heavy) and five with refresh (per bank and all
   banks, at the standard intervals and faster), on the endpoint alone, with
@@ -419,8 +412,9 @@ advancing for that time (60 s when it is unset).
   pattern; all-bank refresh costs a stream at least tRFC / tREFI of its
   bandwidth (9.3–12 %, against 9.0 %).
 - **Applications** in the in-process simulator and on the V80, against rtlsim
-  behind the AXI4 adapter on `AxiLatencyPipe` (`AXI_BUS=1`) with the same
-  memory settings: retired instructions and cycles identical (§7).
+  behind the AXI4 adapter on the same bank model (`AXI_BUS=1
+  AXI_MEM_MODEL=bank`) with the same memory settings: retired instructions and
+  cycles identical (§7).
 - **Foldsim's own tests** (`check-foldsim` in the Foldsim repository): lit
   tests of every pass and of the driver, and small threaded simulators run in
   Verilator against their expected tokens — one and several threads,
@@ -433,37 +427,38 @@ advancing for that time (60 s when it is unset).
 
 Configuration s2w4i2 (2 cores, 4 warps, 4 threads, issue width 2), seven
 classes: one rest-of-Vortex model, the socket (2 threads) and six unit
-classes (4 threads each).
+classes (4 threads each). Every setting is the configuration's
+(`VX_config.toml`): 2 memory channels on the default machine's DRAM, and the
+Xilinx floating-point cores, which Vivado synthesis selects; the flow's
+default options (§3.1).
 
-| | where | demo cycles | sgemm cycles | sgemm n=128 cycles | host / target cycle |
-|---|---|---:|---:|---:|---:|
-| Foldsim, threads in turn, in-process | Verilator | 8,702 | 415,454 | | 12.06 |
-| Foldsim, ready scheduling, in-process | Verilator | 8,702 | 415,454 | | 8.00 |
-| Foldsim, threads in turn | V80 | 8,702 | 415,454 | 3,497,994 | 8.00 or 12.00 |
-| Foldsim, ready scheduling | V80 | 8,702 | 415,454 | 3,497,994 | 8.00 |
-| rtlsim, AXI4 with `AxiLatencyPipe` | Verilator | 8,710 | 415,462 | | |
-| rtlsim, same, launched after the caches' reset sweep | Verilator | 8,702 | 415,454 | | |
+| | where | demo cycles | sgemm cycles | host / target cycle |
+|---|---|---:|---:|---:|
+| Foldsim, Xilinx cores | Verilator | 6,616 (`-n64`) | 404,896 | 12.04 / 8.18 |
+| Foldsim, soft FPU (`-DVX_CFG_FPU_TYPE_STD`) | Verilator | 6,616 | 399,646 | 12.04 / 8.17 |
+| rtlsim, soft FPU, AXI4 adapter on the bank model (`AXI_BUS=1 AXI_MEM_MODEL=bank`, `PLATFORM_MEMORY_ID_WIDTH=5`) | Verilator | 6,624 | 399,654 | |
 
-On the V80 the kernel closes at 149.8 MHz (run at 143 MHz) in 138k routed
-LUTs, against 219k for the firesim backend's image of the same configuration.
-sgemm n=128 takes 196 ms with ready scheduling: 50× SimX on the same host,
-1.7× the firesim backend's image.
+rtlsim's harness starts the kernel 8 cycles after reset, while each L1 bank
+still invalidates one set per cycle (64 for the instruction cache), so its
+first fetch waits 8 cycles the counters see; a host's launch comes thousands
+of cycles later. Given that settle time, rtlsim's cycles are Foldsim's
+exactly. rtlsim must take the platform's AXI id width (4 + log2 of the
+channels): at its own default of 32 the AXI adapter needs no tag buffer and
+times reads differently (demo 6,552).
 
-Instruction counts equal the firesim backend's and rtlsim's. Cycle counts are
-1.5–6 % below the firesim backend's, whose memory model has the same
-latency-bandwidth settings but adds channel cycles `AxiLatencyPipe` does not;
-Foldsim agrees with `AxiLatencyPipe` (rtlsim) instead: every memory
-transaction in the same target cycle. rtlsim's harness starts the kernel 8
-cycles after reset, while each L1 bank still invalidates one set per cycle
-(64 for the instruction cache), so its first fetch waits 8 cycles the
-counters see; a host's launch comes thousands of cycles later. Given that
-settle time, rtlsim's cycles are Foldsim's exactly.
+**On the V80** the same configuration and options with one memory channel,
+domains and issue/LSU relays (§3.2) close **250 MHz** in the image flow and run
+demo, sgemm and eight FP tests (`dogfood`) at the instruction and cycle counts
+of Verilator, as does the bank model on that image (demo 10,740, sgemm 404,513
+cycles; one channel). The plain flow's s2w4i2 image had closed at 149.8 MHz in
+138k routed LUTs (219k for the firesim backend's image of the same
+configuration).
 
 ### 7.1 The bank model
 
-s2w4i2 in the in-process simulator (Verilator) with `FOLDSIM_MEM_MODEL=bank`,
-against SimX on the same configuration (one memory bank, Ramulator behind
-dram_sim) and rtlsim behind the AXI4 adapter on the same model
+s2w4i2 in the in-process simulator (Verilator), against SimX on the same
+configuration (one memory bank, Ramulator behind dram_sim) and rtlsim behind
+the AXI4 adapter on the same model
 (`AXI_MEM_MODEL=bank`). Memories: the default (HBM2, 800 MT/s, 400 MHz core)
 and the a100 and h100 profiles' (`VX_CFG_PLATFORM_MEMORY_*` from
 `profiles/*.json`).
@@ -478,23 +473,27 @@ and the a100 and h100 profiles' (`VX_CFG_PLATFORM_MEMORY_*` from
 | vecadd `-n16384` | a100 | 311,917 | | 312,529 | 312,587 |
 | vecadd `-n16384` | h100 | 223,875 | | 224,921 | 224,921 |
 
+One memory channel (`-DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=1`), soft FPU.
 Instruction counts are equal everywhere. rtlsim's cycles are Foldsim's plus
-the 8-cycle launch settle it has on the pipe too (§7). Against SimX on
+the 8-cycle launch settle (§7). Against SimX on
 Ramulator Foldsim is within 0.8 % on sgemm and vecadd at all three memories;
 the store-dominated demo (2,048 writes to 268 reads) is 5 % slower, and
 SimX's own bank backend 10 % faster: the reservation model drains a write
 stream differently from Ramulator's per-clock scheduler (the proposal's
-mixed-traffic residual). The pipe, by contrast, has no memory to configure:
-sgemm takes 415,454 cycles at every profile. A bank-model run costs host
-cycles the pipe does not (memory waits): 7.3–9.5 host cycles per target cycle
-against the pipe's 8.0.
+mixed-traffic residual). A fixed-latency memory model, which Foldsim had
+before, gave sgemm 415,454 cycles at every profile. The bank model's DRAM
+clocks cost host cycles (memory waits): 7.3–12 host cycles per target cycle
+on s2w4i2.
 
 ### 7.2 tinygpu: Foldsim and the firesim backend
 
 The same Vortex tree, configuration and V80 on both flows: 1 core, 2 warps,
 2 threads, no L1 caches or local memory, STD FPU, one memory bank, kernel
-clock 143 MHz. Every class has one instance, so Foldsim folds nothing here:
-this compares the two simulators' fidelity and overheads, not threading.
+clock 143 MHz, measured 2026-10-13 with the plain flow and the fixed-latency
+memory model Foldsim had then (FASED's latency-bandwidth pipe, which rtlsim
+keeps as `AxiLatencyPipe`). Every class has one instance, so Foldsim folds
+nothing here: this compares the two simulators' fidelity and overheads, not
+threading.
 
 | | Foldsim | firesim backend |
 |---|---:|---:|
@@ -509,12 +508,15 @@ this compares the two simulators' fidelity and overheads, not threading.
 | `sgemm -n64` kernel time, V80 | 278 ms | 178 ms |
 | host cycles per target cycle, `sgemm -n64` | 3.00 ¹ | 1.84 (FMR) |
 
-¹ With the plain flow (`FOLDSIM_FLAGS=`). The flow's default options (§3.1)
-run tinygpu at 4.00 host cycles per target cycle (Verilator), cycles
-unchanged: they buy Fmax for large targets with host cycles a small one pays.
+¹ With the plain flow (`FOLDSIM_FLAGS=`) and the fixed-latency memory. The
+flow's default options (§3.1) took it to 4.00, cycles unchanged: they buy Fmax
+for large targets with host cycles a small one pays. With today's defaults (2
+channels, the bank model) tinygpu takes demo 16,375 and `sgemm -n16` 195,152
+cycles, equal to rtlsim's on the bank model, at 7.1–7.2 host cycles per target
+cycle (Verilator).
 
 Instruction counts are identical on both flows, in Verilator and on the V80.
-Foldsim's cycles equal rtlsim's behind the AXI4 adapter on `AxiLatencyPipe`
+Foldsim's cycles equalled rtlsim's behind the AXI4 adapter on `AxiLatencyPipe`
 with the same memory settings (`AXI_BUS=1`) exactly; the firesim backend's
 are 5.0–5.1 % above, from its memory model's channel mechanics. With nothing
 to fold, a Foldsim target cycle costs three host cycles (the token exchange

@@ -31,7 +31,6 @@ module foldsim_ctrl #(
     parameter DCR_DATA_W   = 32,
     parameter QUEUE        = 16,
     parameter RESET_CYCLES = 64,
-    parameter MEM_DEPTH    = 16,
     parameter NUM_CLASSES  = 1,
     // The memory endpoints, one per memory port of the target.
     parameter MEM_PORTS    = 1,
@@ -56,14 +55,9 @@ module foldsim_ctrl #(
     input  wire                  s_rready,
     output reg  [31:0]           s_rdata,
 
-    // The memory endpoint's settings and state.
-    output reg  [31:0]           mem_read_latency,
-    output reg  [31:0]           mem_write_latency,
-    output reg  [7:0]            mem_max_reads,
-    output reg  [7:0]            mem_max_writes,
+    // The memory endpoints' settings and state: where the target's memory
+    // is, and the bank model's settings and counters (foldsim_mem_bank).
     output reg  [63:0]           mem_base,
-    // The bank model's settings and counters (foldsim_mem_bank).
-    output wire                  mem_model_bank,
     output reg  [31:0]           mem_clock,
     output reg  [15:0]           mem_latency,
     output reg  [31:0]           mem_queue,
@@ -126,15 +120,13 @@ module foldsim_ctrl #(
     reg [DCR_DATA_W-1:0] rsp_data;
     reg [63:0]           target_cycles, host_cycles, mem_stalls;
     reg [47:0]           finishes [NUM_CLASSES];
-    reg [5:0]            mem_model;
+    reg [1:0]            mem_refresh_r;
     reg [11:0]           mem_t [18];
 
-    // The model in effect from a reset on: the memory endpoint takes it at the
-    // end of every reset cycle, so a reset command's own cycle has it already.
-    // [1:0] the model, [4] refresh, [5] all banks at once.
-    wire [5:0] mem_model_now = (cur_op == `FOLDSIM_CMD_RESET) ? cur_addr[5:0] : mem_model;
-    assign mem_model_bank = (mem_model_now[1:0] == 2'd1);
-    assign mem_refresh    = mem_model_now[5:4];
+    // The refresh in effect from a reset on: the memory endpoint takes it at
+    // the end of every reset cycle, so a reset command's own cycle has it
+    // already.
+    assign mem_refresh = (cur_op == `FOLDSIM_CMD_RESET) ? cur_addr[1:0] : mem_refresh_r;
     for (genvar i = 0; i < 18; ++i) begin : g_mem_t
         assign mem_timing[i*12 +: 12] = mem_t[i];
     end
@@ -221,12 +213,8 @@ module foldsim_ctrl #(
             mem_stalls        <= 0;
             for (integer c = 0; c < NUM_CLASSES; ++c)
                 finishes[c] <= 0;
-            mem_read_latency  <= 32'd30;
-            mem_write_latency <= 32'd30;
-            mem_max_reads     <= 8'(MEM_DEPTH);
-            mem_max_writes    <= 8'(MEM_DEPTH);
             mem_base          <= 64'h40_0000_0000;
-            mem_model         <= 6'd0;
+            mem_refresh_r     <= 2'd0;
             mem_refi          <= 16'd0;
             mem_rfc           <= 16'd0;
             mem_clock         <= {16'd400, 16'd800};
@@ -261,10 +249,10 @@ module foldsim_ctrl #(
                     rsp_data  <= rsp_d;
                 end
                 target_busy <= busy;
-                // A reset command's address chooses the memory model the
-                // target has from the reset on.
+                // A reset command's address chooses the refresh the target
+                // has from the reset on.
                 if (cur_op == `FOLDSIM_CMD_RESET)
-                    mem_model <= cur_addr[5:0];
+                    mem_refresh_r <= cur_addr[1:0];
                 // A start counts as busy until the target says it is, or plainly
                 // never will.
                 if (do_start) begin
@@ -308,10 +296,6 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_CMD_DATA:    cmd_data <= DCR_DATA_W'(w_data);
                 `FOLDSIM_REG_MEM_BASE_LO: mem_base[31:0] <= w_data;
                 `FOLDSIM_REG_MEM_BASE_HI: mem_base[63:32] <= w_data;
-                `FOLDSIM_REG_MEM_RLAT:    mem_read_latency <= (w_data == 0) ? 32'd1 : w_data;
-                `FOLDSIM_REG_MEM_WLAT:    mem_write_latency <= (w_data == 0) ? 32'd1 : w_data;
-                `FOLDSIM_REG_MEM_MAXR:    mem_max_reads <= (w_data == 0 || w_data > MEM_DEPTH) ? 8'(MEM_DEPTH) : 8'(w_data);
-                `FOLDSIM_REG_MEM_MAXW:    mem_max_writes <= (w_data == 0 || w_data > MEM_DEPTH) ? 8'(MEM_DEPTH) : 8'(w_data);
                 `FOLDSIM_REG_MEM_CLOCK:   mem_clock <= w_data;
                 `FOLDSIM_REG_MEM_LATENCY: mem_latency <= w_data[15:0];
                 `FOLDSIM_REG_MEM_QUEUE:   mem_queue <= w_data;
@@ -349,14 +333,10 @@ module foldsim_ctrl #(
                 `FOLDSIM_REG_HCYCLES_HI:  s_rdata <= host_cycles[63:32];
                 `FOLDSIM_REG_MEM_BASE_LO: s_rdata <= mem_base[31:0];
                 `FOLDSIM_REG_MEM_BASE_HI: s_rdata <= mem_base[63:32];
-                `FOLDSIM_REG_MEM_RLAT:    s_rdata <= mem_read_latency;
-                `FOLDSIM_REG_MEM_WLAT:    s_rdata <= mem_write_latency;
-                `FOLDSIM_REG_MEM_MAXR:    s_rdata <= 32'(mem_max_reads);
-                `FOLDSIM_REG_MEM_MAXW:    s_rdata <= 32'(mem_max_writes);
                 `FOLDSIM_REG_MSTALL_LO:   s_rdata <= mem_stalls[31:0];
                 `FOLDSIM_REG_MSTALL_HI:   s_rdata <= mem_stalls[63:32];
                 `FOLDSIM_REG_NUM_CLASSES: s_rdata <= 32'(NUM_CLASSES);
-                `FOLDSIM_REG_MEM_MODEL:   s_rdata <= 32'(mem_model);
+                `FOLDSIM_REG_MEM_REFRESH: s_rdata <= 32'(mem_refresh_r);
                 `FOLDSIM_REG_MEM_CAPS:    s_rdata <= MEM_CAPS;
                 `FOLDSIM_REG_MEM_CLOCK:   s_rdata <= mem_clock;
                 `FOLDSIM_REG_MEM_LATENCY: s_rdata <= 32'(mem_latency);

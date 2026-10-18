@@ -116,9 +116,9 @@ The flow needs CIRCT (`circt-verilog`, `circt-opt`, `firtool`) and Foldsim
 (the `foldsim` driver and `foldsim-opt`) from the toolchain
 (`./ci/toolchain_install.sh --circt --foldsim`; `CIRCT_BIN=<dir>` and
 `FOLDSIM=<driver>` override them), and pyslang for the boundary lifting
-(`LIFT_PYTHON`). The memory model's settings are runtime
-knobs: `FOLDSIM_MEM_READ_LATENCY`, `FOLDSIM_MEM_WRITE_LATENCY` (target cycles,
-30 by default) and `FOLDSIM_MEM_MAX_READS`, `FOLDSIM_MEM_MAX_WRITES` (16).
+(`LIFT_PYTHON`). The memory is timed as the configuration's DRAM
+(`VX_CFG_PLATFORM_MEMORY_*`), a channel per memory bank, as `dram_sim` times
+it; `VORTEX_DRAM_REFRESH=bank|all` adds refresh.
 `VORTEX_FOLDSIM_TIMEOUT_S=<s>` fails a launch that runs longer; a command,
 DCR read or reset the target leaves unanswered fails too once the target has
 advanced no cycle for that long, or for 60 s when it is unset. At exit the runtime reports the target and kernel-clock cycles the simulator ran
