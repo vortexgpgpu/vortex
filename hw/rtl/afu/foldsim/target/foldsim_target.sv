@@ -17,7 +17,8 @@
 // scalar ports, the boundary foldsim channelizes.
 //
 // Vortex_axi declares its AXI channels as SystemVerilog unpacked arrays indexed
-// by bank; each bank is broken out into discrete m_axi_mem_<i>_* signals. The
+// by bank; each of its VX_CFG_PLATFORM_MEMORY_NUM_BANKS banks is broken out into
+// discrete m_axi_mem_<i>_* signals. The
 // port shape and the array conversion are the same ones the XRT AFU uses, taken
 // from its macros so the two cannot drift apart.
 //
@@ -28,12 +29,12 @@ module foldsim_target import VX_gpu_pkg::*; #(
     parameter C_M_AXI_MEM_ID_WIDTH   = `PLATFORM_MEMORY_ID_WIDTH,
     parameter C_M_AXI_MEM_DATA_WIDTH = `VX_CFG_PLATFORM_MEMORY_DATA_SIZE * 8,
     parameter C_M_AXI_MEM_ADDR_WIDTH = 64,
-    parameter C_M_AXI_MEM_NUM_BANKS  = 1
+    parameter C_M_AXI_MEM_NUM_BANKS  = `VX_CFG_PLATFORM_MEMORY_NUM_BANKS
 ) (
     input  wire clk,
     input  wire reset,
 
-    `MP_REPEAT (1, GEN_AXI_MEM, MP_COMMA),
+    `MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, GEN_AXI_MEM, MP_COMMA),
 
     // DCR write request
     input  wire                          dcr_req_valid,
@@ -81,7 +82,7 @@ module foldsim_target import VX_gpu_pkg::*; #(
     wire [C_M_AXI_MEM_ID_WIDTH-1:0]      m_axi_mem_rid_a [C_M_AXI_MEM_NUM_BANKS];
     wire [1:0]                           m_axi_mem_rresp_a [C_M_AXI_MEM_NUM_BANKS];
 
-    `AXI_MEM_TO_ARRAY (0);
+    `MP_REPEAT (`VX_CFG_PLATFORM_MEMORY_NUM_BANKS, AXI_MEM_TO_ARRAY, MP_SEMI);
 
     Vortex_axi #(
         .AXI_DATA_WIDTH (C_M_AXI_MEM_DATA_WIDTH),

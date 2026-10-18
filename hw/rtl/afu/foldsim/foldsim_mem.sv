@@ -50,7 +50,11 @@ module foldsim_mem #(
     parameter HLOG2  = 9,
     // Token ends with registered have and done (foldsim_token): the cycle's
     // finish starts at the endpoint's own registers, a host cycle later.
-    parameter STAGED = 0
+    parameter STAGED = 0,
+    // The target's ports interleave its address space by block, 2^CH_SHIFT of
+    // them: the bank model sees the block within the port's channel, as
+    // dram_sim's banks do. Device memory still takes the target's address.
+    parameter CH_SHIFT = 0
 ) (
     input  wire                  clk,
     input  wire                  reset,
@@ -72,8 +76,12 @@ module foldsim_mem #(
     input  wire [7:0]            cfg_wr_low,
     input  wire [12:0]           cfg_geom,
     input  wire [18*12-1:0]      cfg_t,
-    // Reads, writes, row hits, misses, conflicts, read latency sum.
-    output wire [6*64-1:0]       stats,
+    input  wire [1:0]            cfg_refresh,
+    input  wire [15:0]           cfg_refi,
+    input  wire [15:0]           cfg_rfc,
+    // Reads, writes, row hits, misses, conflicts, read latency sum,
+    // refreshes, target cycles the port could take no read.
+    output wire [8*64-1:0]       stats,
     // No transaction in flight, at the target or in memory.
     output wire                  idle,
     output reg                   error,
@@ -139,6 +147,7 @@ module foldsim_mem #(
     localparam HCW = $clog2(HD + 1);
     localparam HPW = $clog2(HD);
     localparam SW  = $clog2(SLOTS);
+    localparam LB  = $clog2(DATA_W / 8);
 
     wire finish;
     // The bank model is the port's timing.
@@ -168,6 +177,11 @@ module foldsim_mem #(
     foldsim_token_in #(1, STAGED)        t_rready  (clk, reset, rready_valid,  rready_ready,  rready_bits,  finish, have[12], rready);
     foldsim_token_in #(1, STAGED)        t_bready  (clk, reset, bready_valid,  bready_ready,  bready_bits,  finish, have[13], bready);
     foldsim_token_in #(1, STAGED)        t_treset  (clk, reset, treset_valid,  treset_ready,  treset_bits,  finish, have[14], treset);
+
+    // The requests' addresses within the port's channel, the bits the bank
+    // model takes: the block index drops the port's.
+    wire [29:5] ar_ch = {araddr[29 + CH_SHIFT -: 30 - LB], araddr[LB-1:5]};
+    wire [29:5] aw_ch = {awaddr[29 + CH_SHIFT -: 30 - LB], awaddr[LB-1:5]};
 
     // ---- The pipe's state ----
     reg [31:0]   cycle;
@@ -288,7 +302,7 @@ module foldsim_mem #(
                             | (aw_fire & w_fire);
     wire          awq_empty = (awq_count == 0);
     wire [ID_W-1:0] w_form_id = awq_empty ? awid : awq_id[awq_head];
-    wire [29:5]   w_form_addr = awq_empty ? awaddr[29:5] : awq_addr[awq_head];
+    wire [29:5]   w_form_addr = awq_empty ? aw_ch : awq_addr[awq_head];
     wire          awq_pop   = new_write & ~awq_empty;
     wire          awq_push  = aw_fire & ~(new_write & awq_empty);
     wire [31:0]   w_release = cycle + write_latency - 32'd1;
@@ -399,7 +413,7 @@ module foldsim_mem #(
 
                 if (awq_push) begin
                     awq_id[awq_tail]   <= awid;
-                    awq_addr[awq_tail] <= awaddr[29:5];
+                    awq_addr[awq_tail] <= aw_ch;
                     awq_tail           <= awq_tail + 1'b1;
                 end
                 if (awq_pop)
@@ -565,11 +579,14 @@ module foldsim_mem #(
         .cfg_wr_low     (cfg_wr_low),
         .cfg_geom       (cfg_geom),
         .cfg_t          (cfg_t),
+        .cfg_refresh    (cfg_refresh),
+        .cfg_refi       (cfg_refi),
+        .cfg_rfc        (cfg_rfc),
         .finish         (finish),
         .treset         (treset),
         .ar_fire        (ar_fire),
         .ar_id          (arid),
-        .ar_addr        (araddr[29:5]),
+        .ar_addr        (ar_ch),
         .aw_fire        (aw_fire),
         .new_write      (new_write),
         .nw_id          (w_form_id),
@@ -592,7 +609,9 @@ module foldsim_mem #(
         .stat_hits      (stats[2*64 +: 64]),
         .stat_misses    (stats[3*64 +: 64]),
         .stat_conflicts (stats[4*64 +: 64]),
-        .stat_latency   (stats[5*64 +: 64])
+        .stat_latency   (stats[5*64 +: 64]),
+        .stat_refreshes (stats[6*64 +: 64]),
+        .stat_full      (stats[7*64 +: 64])
     );
 
 endmodule

@@ -21,6 +21,7 @@
 #include <map>
 #include <set>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace vortex {
@@ -44,14 +45,26 @@ namespace vortex {
 // Reservations reach at most `horizon` clocks ahead: a request that would
 // reach further waits.
 //
+// Refresh, when on, is an operation of its own: every `refi` clocks it takes
+// the clock's turn to reserve. A per-bank refresh closes the next bank in
+// turn -- a precharge once the bank's commands allow it, then REF -- and keeps
+// it from activating for `rfc` clocks; an all-bank refresh does the same to
+// every bank with one precharge and one REF. A refresh that would reach past
+// the horizon waits, and the requests with it.
+//
 // This is the normative model: foldsim's memory endpoint
 // (hw/rtl/afu/foldsim/foldsim_mem_bank.sv) implements the same decisions, and
 // the faces below put it behind DramSim's interface and behind an AXI4 port.
 class DramBankModel {
 public:
+  enum class Refresh { Off, PerBank, AllBank };
+
   struct Config {
     dram_timing::geometry_t geom;
     dram_timing::clocks_t   t;
+    Refresh  refresh     = Refresh::Off;  // dram_sim models none
+    uint32_t refi        = 0;    // clocks from one refresh operation to the next
+    uint32_t rfc         = 0;    // clocks a refreshed bank may not activate
     uint32_t read_queue  = 32;   // reserved read bursts whose column has not issued
     uint32_t write_queue = 32;   // the same for writes
     // Write bursts buffered or reserved and not issued at which the channel
@@ -64,7 +77,8 @@ public:
     uint32_t horizon     = 448;
     uint32_t bursts      = 2;    // 32 B bursts per request
 
-    static Config make(dram_timing::Standard standard, uint32_t data_rate, uint32_t block_size) {
+    static Config make(dram_timing::Standard standard, uint32_t data_rate, uint32_t block_size,
+                       Refresh refresh = Refresh::Off) {
       Config c;
       c.geom = dram_timing::geometry(standard);
       c.t = dram_timing::clocks(standard, data_rate);
@@ -72,7 +86,23 @@ public:
       if (c.bursts > (1u << c.geom.log2_visit)) {
         throw std::invalid_argument("dram_bank_model: a request spans more than one row visit");
       }
+      c.set_refresh(refresh, dram_timing::refresh(standard, data_rate));
       return c;
+    }
+
+    // Per bank, the banks take turns within tREFI; all-bank, the channel
+    // refreshes once per tREFI.
+    void set_refresh(Refresh mode, const dram_timing::refresh_t& r) {
+      refresh = mode;
+      refi = (mode == Refresh::Off) ? 0 : (mode == Refresh::PerBank) ? r.REFI / this->num_banks() : r.REFI;
+      rfc = (mode == Refresh::Off) ? 0 : (mode == Refresh::PerBank) ? r.RFCPB : r.RFC;
+    }
+
+    static Refresh parse_refresh(const std::string& name) {
+      if (name.empty() || name == "off") return Refresh::Off;
+      if (name == "bank") return Refresh::PerBank;
+      if (name == "all") return Refresh::AllBank;
+      throw std::invalid_argument("dram_bank_model: refresh must be off, bank or all (got '" + name + "')");
     }
 
     // Column-to-column spacing on one pseudo-channel, and within one bank
@@ -110,8 +140,8 @@ public:
   };
 
   struct Stats {
-    uint64_t reads = 0, writes = 0, hits = 0, misses = 0, conflicts = 0;
-    uint64_t deferred = 0;  // clocks a request waited: it reached past the horizon
+    uint64_t reads = 0, writes = 0, hits = 0, misses = 0, conflicts = 0, refreshes = 0;
+    uint64_t deferred = 0;  // clocks a request or refresh waited: it reached past the horizon
   };
 
   explicit DramBankModel(const Config& cfg) : cfg_(cfg) { this->reset(); }
@@ -144,6 +174,8 @@ public:
     batch_floor_ = 0;
     batch_last_ = 0;
     read_floor_ = 0;
+    ref_due_ = cfg_.refi;
+    ref_bank_ = 0;
     stats_ = Stats();
   }
 
@@ -214,7 +246,14 @@ public:
       read_floor_ = batch_last_ + 1;
     }
     auto& buf = write_mode_ ? wbuf_ : rbuf_;
-    if (!buf.empty()) {
+    if (cfg_.refresh != Refresh::Off && cfg_.refi != 0 && d + 1 >= ref_due_) {
+      if (this->refresh(d + 1, d + int64_t(cfg_.horizon))) {
+        ref_due_ += cfg_.refi;
+        ++stats_.refreshes;
+      } else {
+        ++stats_.deferred;
+      }
+    } else if (!buf.empty()) {
       if (this->reserve(buf.front(), d + 1, d + int64_t(cfg_.horizon),
                         write_mode_ ? batch_floor_ : read_floor_)) {
         buf.pop_front();
@@ -420,6 +459,50 @@ private:
     return true;
   }
 
+  // A refresh operation: the bank in turn (all banks), precharged if open --
+  // after every command reserved to it allows -- then REF, once the precharge
+  // and the last activate allow; until rfc after it the bank may not
+  // activate. Both commands take the row-command bus as a precharge does.
+  // False (and nothing changed) if they do not fit within the horizon.
+  bool refresh(int64_t e, int64_t end) {
+    const auto& T = cfg_.t;
+    const uint32_t nb = cfg_.num_banks();
+    const bool all = (cfg_.refresh == Refresh::AllBank);
+    bool open = false;
+    int64_t pre_lb = e, act_lb = e;
+    for (uint32_t b = 0; b < nb; ++b) {
+      if (!all && b != ref_bank_) continue;
+      if (open_[b]) {
+        open = true;
+        pre_lb = std::max(pre_lb, pre_ready_[b]);
+      }
+      act_lb = std::max(act_lb, act_[b] + int64_t(T.RC));
+    }
+    int64_t pre = kNone, lb = act_lb;
+    if (open) {
+      pre = this->place_pre(pre_lb, end);
+      if (pre == kNone) return false;
+      lb = std::max(lb, pre + int64_t(T.RP));
+    }
+    const int64_t ref = this->place_pre(lb, end);
+    if (ref == kNone) return false;
+
+    // Commit.
+    if (pre != kNone) {
+      cmd_.insert(pre);
+      rowbus_.insert(pre);
+    }
+    cmd_.insert(ref);
+    rowbus_.insert(ref);
+    for (uint32_t b = 0; b < nb; ++b) {
+      if (!all && b != ref_bank_) continue;
+      open_[b] = false;
+      act_[b] = ref + int64_t(cfg_.rfc) - int64_t(T.RC);
+    }
+    if (!all) ref_bank_ = (ref_bank_ + 1) % nb;
+    return true;
+  }
+
   // Drops what can no longer constrain a command at d+1 or later.
   void prune(int64_t d) {
     const int64_t keep_cols = d + 1 - this->max_col_sep();
@@ -446,6 +529,8 @@ private:
   std::deque<Request> rbuf_, wbuf_;
   bool write_mode_;
   int64_t frontier_, batch_floor_, batch_last_, read_floor_;
+  int64_t ref_due_;
+  uint32_t ref_bank_;
   Stats stats_;
 };
 
@@ -467,6 +552,7 @@ public:
     uint32_t data_rate;    // MT/s
     uint32_t latency;      // core cycles added after a read's data departs
     uint32_t queue_size;   // requests in flight per channel; 0 = unbounded
+    DramBankModel::Refresh refresh = DramBankModel::Refresh::Off;
   };
 
   explicit DramBankSim(const Config& cfg) : DramBankSim(cfg, DramBankModel::Config()) {}
@@ -474,7 +560,7 @@ public:
   // `policy` gives the controller's queues, horizon and write policy.
   DramBankSim(const Config& cfg, const DramBankModel::Config& policy)
     : cfg_(cfg)
-    , model_cfg_(DramBankModel::Config::make(cfg.type, cfg.data_rate, cfg.block_size)) {
+    , model_cfg_(DramBankModel::Config::make(cfg.type, cfg.data_rate, cfg.block_size, cfg.refresh)) {
     model_cfg_.read_queue  = policy.read_queue;
     model_cfg_.write_queue = policy.write_queue;
     model_cfg_.wr_high     = policy.wr_high;
@@ -641,6 +727,7 @@ public:
     acks_.clear();
     cur_r_valid_ = false;
     cur_b_valid_ = false;
+    full_cycles_ = 0;
   }
 
   bool ar_ready() const { return !error_ && this->room() && slots_used_ < cfg_.read_slots; }
@@ -653,6 +740,8 @@ public:
   bool     b_valid() const { return cur_b_valid_; }
   uint32_t b_id()    const { return cur_b_id_; }
   bool     error()   const { return error_; }
+  // Target cycles the port could take no read: no slot, or no room.
+  uint64_t full_cycles() const { return full_cycles_; }
   // The slot a read accepted this cycle takes: the lowest free once R has
   // taken its read, if it does.
   uint32_t ar_slot(bool r_ready) const {
@@ -676,6 +765,9 @@ public:
     const bool w_fire  = w_hs && in.w_last;
     const bool r_fire  = cur_r_valid_ && in.r_ready;
     const bool b_fire  = cur_b_valid_ && in.b_ready;
+    if (!(this->room() && slots_used_ < cfg_.read_slots)) {
+      ++full_cycles_;
+    }
 
     // This cycle's DRAM clocks, on what was accepted before it.
     credit_ += cfg_.data_rate;
@@ -775,6 +867,7 @@ private:
   uint32_t uncounted_acks_ = 0;
   bool cur_r_valid_, cur_b_valid_;
   uint32_t cur_r_id_ = 0, cur_r_slot_ = 0, cur_b_id_ = 0;
+  uint64_t full_cycles_ = 0;
 };
 
 } // namespace vortex

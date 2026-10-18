@@ -71,7 +71,7 @@ class BankDram : public DramSim::Impl {
 public:
   explicit BankDram(const DramSim::Config& c)
     : sim_(DramBankSim::Config{c.type, c.num_channels, c.block_size, c.core_clock, c.data_rate,
-                               c.latency, c.queue_size}) {}
+                               c.latency, c.queue_size, refresh_mode()}) {}
   void reset() override { sim_.reset(); }
   void tick() override { sim_.tick(); }
   bool can_accept(uint32_t channel) const override { return sim_.can_accept(channel); }
@@ -81,6 +81,13 @@ public:
   }
 
 private:
+  // VORTEX_DRAM_REFRESH=off|bank|all: refresh, which Ramulator here does not
+  // model, per bank or all banks at once.
+  static DramBankModel::Refresh refresh_mode() {
+    const char* s = getenv("VORTEX_DRAM_REFRESH");
+    return DramBankModel::Config::parse_refresh(s ? s : "");
+  }
+
   DramBankSim sim_;
 };
 
