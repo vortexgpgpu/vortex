@@ -138,7 +138,7 @@ module VX_cache_init import VX_gpu_pkg::*; #(
     // every visible token is L1-only
     wire flush_l1_only = any_l1 && ~any_full && ~any_io;
     // a walk is owed to a full token, and to an L1-only one above the point of coherence
-    wire flush_walk = any_full || (any_l1 && ~SHARED_LLC);
+    wire flush_walk = any_full || (any_l1 && (SHARED_LLC == 0));
 
     reg [NUM_BANKS-1:0] flush_done, flush_done_n;
     reg                 fwd_go, fwd_go_n;   // the crossbar drained; only tokens enter it now
