@@ -76,6 +76,8 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     // writeback); a single bit == evict_dirty when 1 sector/line.
     output wire [`CS_SECTORS_PER_LINE-1:0] evict_dirty_mask,
     output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag,
+    // the evict way holds a valid sector
+    output wire                         evict_valid,
     // the requested sector is resident but partial (a load/AMO to it refetches)
     output wire                         partial_match
 );
@@ -91,6 +93,8 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     wire [NUM_WAYS-1:0][SEC-1:0] read_dirty;
     wire [NUM_WAYS-1:0][SEC-1:0] read_partial;
     wire [NUM_WAYS-1:0]          partial_hit;
+
+    assign evict_valid = (| read_valid[evict_way]);
 
     if (WRITEBACK) begin : g_evict_tag_wb
         assign evict_dirty = (| read_dirty[evict_way]); // dirty if any sector dirty

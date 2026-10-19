@@ -557,7 +557,8 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire [NUM_WAYS-1:0] tag_matches_st0;
     wire [NUM_WAYS-1:0] line_present_st0;
     wire [`CS_WAY_SEL_WIDTH-1:0] hit_idx_st0;
-    wire evict_dirty_st0;
+    wire evict_dirty_st0, evict_valid_st0;
+    `UNUSED_VAR (evict_valid_st0)
     wire [`CS_SECTORS_PER_LINE-1:0] evict_dirty_mask_st0;
     wire [`CS_TAG_SEL_BITS-1:0] evict_tag_st0;
 
@@ -660,6 +661,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .tag_matches (tag_matches_st0),
         .line_present (line_present_st0),
         .evict_dirty (evict_dirty_st0),
+        .evict_valid (evict_valid_st0),
         .evict_dirty_mask (evict_dirty_mask_st0),
         .evict_tag   (evict_tag_st0),
         .partial_match (partial_match_st0)
@@ -1419,7 +1421,23 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
                 wire has_dirty_bytes = (| evict_byteen_stc);
                 // a refetch evicts nothing: the mask it reads is its resident way's
                 wire check_evict_bytes = do_fill_or_flush_stc && ~refetch_first_stc;
-                `RUNTIME_ASSERT (~check_evict_bytes || (stC.lk.is_dirty == has_dirty_bytes), ("missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", stC.lk.is_dirty, has_dirty_bytes, `CS_BANK_TO_FULL_ADDR(addr_stc, BANK_ID)))
+            `ifndef SYNTHESIS
+                // An invalid way's mask is undefined: the reset walk leaves the
+                // mask alone and every install clears its line's mask, so only a
+                // valid victim's bytes must agree with its dirty flag.
+                wire evict_valid_stc;
+                VX_pipe_register #(
+                    .DATAW  (1),
+                    .DEPTH  (1 + PIPE_EX)
+                ) reg_evict_valid (
+                    .clk      (clk),
+                    .reset    (reset),
+                    .enable   (~pipe_stall),
+                    .data_in  (evict_valid_st0),
+                    .data_out (evict_valid_stc)
+                );
+                `RUNTIME_ASSERT (~(check_evict_bytes && evict_valid_stc) || (stC.lk.is_dirty == has_dirty_bytes), ("missmatch dirty bytes: dirty_line=%b, dirty_bytes=%b, addr=0x%0h", stC.lk.is_dirty, has_dirty_bytes, `CS_BANK_TO_FULL_ADDR(addr_stc, BANK_ID)))
+            `endif
                 // per-sector: a dirty sector must carry dirty bytes, or its writeback beat is dropped.
                 wire [SEC-1:0] sec_has_dirty_bytes;
                 for (genvar s = 0; s < SEC; ++s) begin : g_sec_has_dirty_bytes
