@@ -102,6 +102,21 @@ inline constexpr uint32_t VX_CFG_L2_NUM_REQS     = VX_CFG_L2_DEMAND_REQS;
 inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS;
 #endif
 
+// With VX_CFG_CP_ON_LLC the command processor's DMA is one more client of the
+// shared last-level cache: the cluster L2 when it is the LLC of one cluster,
+// the L3 otherwise. The slot does not size the banks.
+inline constexpr uint32_t CP_ON_L2         = ((VX_CFG_CP_ON_LLC != 0)
+                                           && (VX_CFG_NUM_CLUSTERS == 1)
+                                           && (VX_CFG_L2_ENABLED != 0)
+                                           && (VX_CFG_L3_ENABLED == 0)) ? 1 : 0;
+inline constexpr uint32_t CP_ON_L3         = ((VX_CFG_CP_ON_LLC != 0) && (VX_CFG_L3_ENABLED != 0)) ? 1 : 0;
+inline constexpr uint32_t L2_CP_IDX        = VX_CFG_L2_NUM_REQS;
+inline constexpr uint32_t L3_CP_IDX        = VX_CFG_L3_NUM_REQS;
+inline constexpr uint32_t L2_CACHE_REQS    = VX_CFG_L2_NUM_REQS + CP_ON_L2;
+inline constexpr uint32_t L3_CACHE_REQS    = VX_CFG_L3_NUM_REQS + CP_ON_L3;
+// one last-level cache word per DMA request
+inline constexpr uint32_t CP_MEM_DATA_SIZE = (CP_ON_L2 != 0) ? VX_CFG_L1_LINE_SIZE : VX_CFG_L2_SECTOR_SIZE;
+
 inline constexpr uint32_t PER_ISSUE_WARPS = VX_CFG_NUM_WARPS / VX_CFG_ISSUE_WIDTH;
 inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);
 

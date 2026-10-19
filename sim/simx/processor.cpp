@@ -104,7 +104,7 @@ ProcessorImpl::ProcessorImpl()
     log2ceil(VX_CFG_L3_NUM_WAYS),    // A
     log2ceil(VX_CFG_L3_NUM_BANKS),   // B
     VX_CFG_XLEN,                     // address bits
-    VX_CFG_L3_NUM_REQS,              // request size
+    L3_CACHE_REQS,                   // request size
     VX_CFG_L3_MEM_PORTS,             // memory ports
     VX_CFG_L3_WRITEBACK,             // write-back
     false,                    // write response
@@ -119,6 +119,7 @@ ProcessorImpl::ProcessorImpl()
     true,                            // core-response register (behind the bypass layer)
     0,                               // read_merge
     VX_CFG_L3_MSHR_LINES,            // mshr_lines
+    CP_ON_L3 != 0,                   // write_around
     }
   );
 
@@ -170,6 +171,18 @@ ProcessorImpl::ProcessorImpl()
     l3cache_->core_rsp_out.at(VX_CFG_L3_PTW_IDX).bind(&dev_ptw_->MemRspIn);
   }
 #endif
+
+  // The CP DMA's client slot on the shared last-level cache.
+  if constexpr (CP_ON_L2 != 0 || CP_ON_L3 != 0) {
+    cp_llc_port_ = CpLlcPort::Create("cp-llc-port");
+    if constexpr (CP_ON_L2 != 0) {
+      cp_llc_port_->MemReqOut.bind(&clusters_.at(0)->cp_mem_req_in());
+      clusters_.at(0)->cp_mem_rsp_out().bind(&cp_llc_port_->MemRspIn);
+    } else {
+      cp_llc_port_->MemReqOut.bind(&l3cache_->core_req_in.at(L3_CP_IDX));
+      l3cache_->core_rsp_out.at(L3_CP_IDX).bind(&cp_llc_port_->MemRspIn);
+    }
+  }
 
   // connect L3 memory interfaces
   for (uint32_t i = 0; i < VX_CFG_L3_MEM_PORTS; ++i) {
@@ -287,6 +300,7 @@ void ProcessorImpl::flush_caches(bool l1_only) {
 }
 
 int ProcessorImpl::run() {
+  this->cp_mem_fence();
   this->reset();
   kmu_->start();
   this->forward_delegated_launch();
@@ -326,6 +340,61 @@ int ProcessorImpl::run() {
   return exitcode;
 }
 
+void ProcessorImpl::cp_mem_write(uint64_t addr, const void* src, uint64_t size, bool noalloc) {
+  this->cp_mem_transfer(addr, static_cast<const uint8_t*>(src), nullptr, size, noalloc);
+}
+
+void ProcessorImpl::cp_mem_read(uint64_t addr, void* dst, uint64_t size) {
+  this->cp_mem_transfer(addr, nullptr, static_cast<uint8_t*>(dst), size, false);
+}
+
+void ProcessorImpl::cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* dst, uint64_t size, bool noalloc) {
+  __assert(cp_llc_port_, "no CP port on the last-level cache");
+  if (!platform_reset_) {
+    this->reset();
+  }
+  while (size != 0) {
+    uint32_t offset = uint32_t(addr % CP_MEM_DATA_SIZE);
+    uint32_t n = uint32_t(std::min<uint64_t>(size, CP_MEM_DATA_SIZE - offset));
+    cp_llc_port_->push(addr - offset, src, dst, offset, n, noalloc);
+    addr += n;
+    size -= n;
+    if (src) {
+      src += n;
+    }
+    if (dst) {
+      dst += n;
+    }
+  }
+  while (!cp_llc_port_->idle()) {
+    SimPlatform::instance().tick();
+  }
+  this->llc_keep_lines();
+}
+
+void ProcessorImpl::cp_mem_fence() {
+  if (!cp_llc_port_) {
+    return;
+  }
+  if (cp_llc_port_->writes_pending()) {
+    cp_llc_port_->fence();
+  }
+  // The launch resets the model, so a transfer's fills land first: memory
+  // holds a read in flight without a channel packet.
+  while (!cp_llc_port_->idle() || !SimPlatform::instance().idle() || perf_mem_pending_reads_ != 0) {
+    SimPlatform::instance().tick();
+  }
+  this->llc_keep_lines();
+}
+
+void ProcessorImpl::llc_keep_lines() {
+  if constexpr (CP_ON_L2 != 0) {
+    clusters_.at(0)->l2_keep_lines();
+  } else {
+    l3cache_->keep_lines();
+  }
+}
+
 bool ProcessorImpl::mmu_fault_pending() const {
 #ifdef VX_CFG_VM_ENABLE
   return dev_ptw_->fault_info().valid;
@@ -346,6 +415,7 @@ void ProcessorImpl::forward_delegated_launch() {
 
 void ProcessorImpl::reset() {
   SimPlatform::instance().reset();
+  platform_reset_ = true;
   perf_mem_reads_ = 0;
   perf_mem_writes_ = 0;
   perf_mem_latency_ = 0;
@@ -491,6 +561,22 @@ void Processor::attach_ram(RAM* mem) {
 
 void Processor::reset() {
   impl_->reset();
+}
+
+void Processor::cp_mem_write(uint64_t addr, const void* src, uint64_t size, bool noalloc) {
+  impl_->cp_mem_write(addr, src, size, noalloc);
+}
+
+void Processor::cp_mem_read(uint64_t addr, void* dst, uint64_t size) {
+  impl_->cp_mem_read(addr, dst, size);
+}
+
+bool Processor::cp_llc_client() const {
+  return (CP_ON_L2 != 0) || (CP_ON_L3 != 0);
+}
+
+uint64_t Processor::cp_llc_size() const {
+  return (CP_ON_L3 != 0) ? VX_CFG_L3_SIZE : VX_CFG_L2_SIZE;
 }
 
 void Processor::start_kmu() {

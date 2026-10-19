@@ -19,6 +19,7 @@
 #include "cluster.h"
 #include "kmu.h"
 #include "gbar_unit.h"
+#include "cp_llc_port.h"
 
 namespace vortex {
 
@@ -75,11 +76,26 @@ public:
   // each level's evictions reach the next before that level itself flushes.
   void flush_caches(bool l1_only);
 
+  // Device-memory access through the command processor's port into the
+  // last-level cache (CP_ON_L2 / CP_ON_L3). A write returns once every
+  // request entered the port, a read once its data returned.
+  void cp_mem_write(uint64_t addr, const void* src, uint64_t size, bool noalloc);
+  void cp_mem_read(uint64_t addr, void* dst, uint64_t size);
+
 private:
 
   // A grid-less launch is a delegated draw launch: the KMU walks no CTAs and
   // the frame kick is forwarded to every cluster's raster engine instead.
   void forward_delegated_launch();
+
+  // Queue a transfer on the CP port and tick until it has entered, or for a
+  // read returned; the last-level cache keeps what it took into the next launch.
+  void cp_mem_transfer(uint64_t addr, const uint8_t* src, uint8_t* dst, uint64_t size, bool noalloc);
+
+  // A launch that follows DMA writes waits for the port's fence.
+  void cp_mem_fence();
+
+  void llc_keep_lines();
 
   // True once the device walker has latched a page fault.
   bool mmu_fault_pending() const;
@@ -97,6 +113,8 @@ private:
 #endif
   RAM*        ram_ = nullptr;   // functional backing store (set by attach_ram)
   Cache::Ptr l3cache_;
+  CpLlcPort::Ptr cp_llc_port_;  // CP DMA client of the last-level cache
+  bool platform_reset_ = false;
   uint64_t perf_mem_reads_;
   uint64_t perf_mem_writes_;
   uint64_t perf_mem_latency_;

@@ -59,6 +59,19 @@ public:
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);
 
+  // Device-memory access through the command processor's port into the
+  // last-level cache, when the configuration has one (VX_CFG_CP_ON_LLC). A
+  // write returns once every request entered the port; the next launch is
+  // ordered behind it. A read returns with its data.
+  void cp_mem_write(uint64_t addr, const void* src, uint64_t size, bool noalloc);
+
+  void cp_mem_read(uint64_t addr, void* dst, uint64_t size);
+
+  // The command processor's DMA is a client of the last-level cache, of
+  // this size in bytes.
+  bool cp_llc_client() const;
+  uint64_t cp_llc_size() const;
+
 private:
   ProcessorImpl* impl_;
 };

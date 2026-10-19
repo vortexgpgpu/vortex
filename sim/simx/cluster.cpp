@@ -82,7 +82,7 @@ public:
       log2ceil(VX_CFG_L2_NUM_WAYS),  // A
       log2ceil(VX_CFG_L2_NUM_BANKS), // B
       VX_CFG_XLEN,                   // address bits
-      VX_CFG_L2_NUM_REQS,            // request size
+      L2_CACHE_REQS,                 // request size
       VX_CFG_L2_MEM_PORTS,           // memory ports
       VX_CFG_L2_WRITEBACK,           // write-back
       false,                  // write response
@@ -97,6 +97,7 @@ public:
       true,                          // core-response register (behind the bypass layer)
       0,                             // read_merge
       VX_CFG_L2_MSHR_LINES,          // mshr_lines
+      CP_ON_L2 != 0,                 // write_around
     });
 
 
@@ -580,6 +581,18 @@ public:
     l2cache_->flush_begin(l1_only);
   }
 
+  void l2_keep_lines() {
+    l2cache_->keep_lines();
+  }
+
+  SimChannel<MemReq>& cp_mem_req_in() {
+    return l2cache_->core_req_in.at(L2_CP_IDX);
+  }
+
+  SimChannel<MemRsp>& cp_mem_rsp_out() {
+    return l2cache_->core_rsp_out.at(L2_CP_IDX);
+  }
+
   bool l2_flush_done() const {
     return l2cache_->flush_done();
   }
@@ -741,6 +754,18 @@ bool Cluster::rtcache_flush_done() const { return impl_->rtcache_flush_done(); }
 
 void Cluster::l2_flush_begin(bool l1_only) {
   impl_->l2_flush_begin(l1_only);
+}
+
+void Cluster::l2_keep_lines() {
+  impl_->l2_keep_lines();
+}
+
+SimChannel<MemReq>& Cluster::cp_mem_req_in() {
+  return impl_->cp_mem_req_in();
+}
+
+SimChannel<MemRsp>& Cluster::cp_mem_rsp_out() {
+  return impl_->cp_mem_rsp_out();
 }
 
 bool Cluster::l2_flush_done() const {

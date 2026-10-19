@@ -1941,7 +1941,17 @@ private:
         }
       } else {
         // Cache miss.
-        if (bank_req.write && !config_.write_back) {
+        if (config_.write_around && bank_req.write && bank_req.flags.noalloc
+         && !mshr_.lookup(set_id, addr_tag, sector_id)) {
+          // A no-allocate write miss with no fill pending on its line goes to
+          // memory as is: nothing is allocated or fetched.
+          if (!this->emitWritethrough(set_id, addr_tag, sector_id,
+                                      bank_req.addr, bank_req.hart_id, bank_req.uuid,
+                                      bank_req.data, bank_req.byteen,
+                                      need_core_rsp(bank_req), bank_req.req_tag)) {
+            return;
+          }
+        } else if (bank_req.write && !config_.write_back) {
           // Write-through write miss: forward store to memory and respond
           // immediately. No fill / no MSHR allocation (this store doesn't
           // wait for a line). If a fill for this line is already in flight
@@ -3002,6 +3012,14 @@ public:
     }
   }
 
+  void keep_lines() {
+    if (config_.bypass || !config_.shared_llc) return;
+    keep_lines_ = true;
+    for (auto &bank : banks_) {
+      bank->flush_begin(true);
+    }
+  }
+
   bool flush_done() const {
     if (config_.bypass) return true;
     for (const auto &bank : banks_) {
@@ -3099,4 +3117,8 @@ void Cache::flush_begin(bool l1_only) {
 
 bool Cache::flush_done() const {
   return impl_->flush_done();
+}
+
+void Cache::keep_lines() {
+  impl_->keep_lines();
 }

@@ -450,6 +450,7 @@ struct MemFlags {
       uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
       uint32_t flush        : 1;  // bit 4: flush token (a fence)
       uint32_t flush_l1     : 1;  // bit 5: L1-only flush token: stops at the shared LLC
+      uint32_t noalloc      : 1;  // bit 6: a write that misses a write-around cache goes to memory
     #ifdef VX_CFG_EXT_DXA_ENABLE
       // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
       // notify_bar_id carries the RAW (kernel-encoded) bar handle:
@@ -459,8 +460,8 @@ struct MemFlags {
       // be wide enough to hold (bar_no << 8) | (MAX_CTAS_per_core - 1).
       // For NUM_BARRIERS = 8 and NUM_WARPS ≤ 16, that's at most 11 bits;
       // 16 bits leaves headroom for larger configs.
-      uint32_t dxa_notify_done   : 1;   // bit 6
-      uint32_t dxa_notify_bar_id : 16;  // bits 7..22
+      uint32_t dxa_notify_done   : 1;   // bit 7
+      uint32_t dxa_notify_bar_id : 16;  // bits 8..23
     #endif
     };
   };

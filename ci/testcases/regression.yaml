@@ -355,6 +355,17 @@ tests:
   app: flush_coherence
   args: -n2048 -r16 -c -x
   configs: -DVX_CFG_EXT_DXA_ENABLE
+# The command processor's DMA as a client of the shared L2: host transfers
+# are timed through the L2, and each launch waits for the DMA's fence.
+- id: model_parity-dogfood-cp-llc
+  check: model_parity
+  via: blackbox
+  app: dogfood
+  args: -n16 -xbar -xgbar
+  configs: -DVX_CFG_CP_LLC_CLIENT=1
+  shape:
+    cores: 4
+    l2cache: true
 # The shared L2 keeps its lines across the L1-only launch flushes.
 - id: model_parity-flush-chain
   check: model_parity
