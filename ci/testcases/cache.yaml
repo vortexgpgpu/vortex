@@ -353,6 +353,7 @@ tests:
 - id: sector_merge-2
   via: blackbox
   drivers:
+  - simx
   - rtlsim
   app: sector_merge
   configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_DCACHE_MSHR_SIZE=32 -DVX_CFG_DCACHE_MSHR_LINES=8 -DVX_CFG_L2_MSHR_SIZE=32 -DVX_CFG_L2_MSHR_LINES=8

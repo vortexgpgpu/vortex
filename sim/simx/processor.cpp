@@ -117,6 +117,8 @@ ProcessorImpl::ProcessorImpl()
     L3_SHARED_LLC,                   // shared_llc
     VX_CFG_L3_LAZY_FETCH != 0,       // lazy_fetch
     true,                            // core-response register (behind the bypass layer)
+    0,                               // read_merge
+    VX_CFG_L3_MSHR_LINES,            // mshr_lines
     }
   );
 

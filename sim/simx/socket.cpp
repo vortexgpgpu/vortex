@@ -102,6 +102,7 @@ public:
       VX_CFG_DCACHE_LAZY_FETCH != 0, // lazy_fetch
       true,                          // core-response register
       (VX_CFG_DCACHE_READ_MERGE != 0) ? DCACHE_CHANNELS : 0, // read_merge
+      VX_CFG_DCACHE_MSHR_LINES,      // mshr_lines
     });
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
