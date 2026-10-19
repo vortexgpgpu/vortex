@@ -349,16 +349,24 @@ public:
 
     DT(4, "*** Global barrier arrive: cluster #" << simobject_->id() << ", core #" << core_id << " at barrier #" << bar_id << ", arrived=" << gbar.mask.count());
 
-    if constexpr (VX_CFG_NUM_CLUSTERS > 1) {
-      // Up to the device unit: the socket arbiter's output buffer, the cluster
-      // arbiter (one arrival per cycle) and its output buffer, then the device
-      // arbiter's output buffer.
+    // Up to the device unit: the socket arbiter's output buffer, then the
+    // cluster arbiter (one arrival per cycle) and its output buffer. A
+    // single-core device has no global-barrier path.
+    uint32_t lag = 0;
+    if constexpr (VX_CFG_NUM_CLUSTERS * VX_CFG_NUM_CORES > 1) {
       uint64_t now = SimPlatform::instance().cycles();
       uint64_t out = std::max(now + kSocketArbLag, gbar_fwd_next_);
       gbar_fwd_next_ = out + 1;
-      simobject_->gbar_fwd_out.send({bar_id, count, core_id}, out + kClusterArbLag + 1 - now);
+      lag = out + kClusterArbLag - now;
+    }
+    if constexpr (VX_CFG_NUM_CLUSTERS > 1) {
+      // the device arbiter's output buffer
+      simobject_->gbar_fwd_out.send({bar_id, count, core_id}, lag + 1);
     } else if (gbar.mask.count() == (size_t)count) {
-      this->global_barrier_resume(bar_id, 1);
+      // With one cluster the device arbiter is a wire. The unit registers its
+      // release, which then crosses the cluster's and the socket's response
+      // forks.
+      this->global_barrier_resume(bar_id, lag + 1 + kClusterArbLag + kSocketArbLag);
     }
   }
 
