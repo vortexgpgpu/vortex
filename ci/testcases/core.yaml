@@ -202,6 +202,13 @@ tests:
   via: blackbox
   app: printf
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
+# Same-word reads from several coalescer channels of one warp, served by one
+# dcache bank access and returned to every channel.
+- id: parity-uniform-ld
+  check: model_parity
+  via: blackbox
+  app: uniform_ld
+  configs: -DVX_CFG_NUM_THREADS=16
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity

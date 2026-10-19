@@ -48,6 +48,7 @@ public:
 		bool    shared_llc = false;	// the LLC serves every memory client alone
 		bool    lazy_fetch = false;	// write miss allocates without a fill (write-back LLC only)
 		bool    core_out_buf = false; // registered core-response port
+		uint8_t read_merge = 0;	// merge same-word reads within groups of this many adjacent ports (0: off)
 	};
 
 	struct PerfStats {
