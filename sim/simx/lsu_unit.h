@@ -100,6 +100,7 @@ private:
 	// Per-cycle handlers.
 	void process_response_step(uint32_t b);
 	void process_request_step(uint32_t b);
+	void send_fence_token(uint32_t b);
 
 	// Drain Inputs[b] into req_queue.
 	void ingest_inputs(uint32_t b);
@@ -123,6 +124,8 @@ private:
 		// TcuRspOut with client_tag restored instead of written to registers.
 		bool        is_tcu     = false;
 		uint32_t    client_tag = 0;
+		// A fence's flush token: its response only releases the fence.
+		bool        is_flush   = false;
 	};
 
 	// Per-block LSU state. Each member is a named hardware sub-block.
@@ -140,6 +143,8 @@ private:
 		uint32_t                  staged_reads = 0;
 		bool                      head_staged = false;
 		FenceController           fence;
+		// the engaged fence's flush token is still to be sent
+		bool                      fence_token = false;
 		std::vector<mem_addr_size_t> addr_list;
 		uint32_t                  remain_addrs = 0;
 
@@ -149,6 +154,7 @@ private:
 			this->staged_reads = 0;
 			this->head_staged = false;
 			this->fence.reset();
+			this->fence_token = false;
 			this->addr_list.clear();
 			this->remain_addrs = 0;
 		}

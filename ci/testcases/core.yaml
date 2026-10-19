@@ -184,6 +184,24 @@ tests:
   app: sgemm
   args: -n128
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
+# Device printf: per-character IO ring stores, each published behind a fence
+# that drains, flushes and invalidates the data cache.
+- id: parity-printf
+  check: model_parity
+  via: blackbox
+  app: printf
+# The same fences on data caches with more banks than memory ports: every
+# port's flush token must be answered on that port.
+- id: parity-printf-iw2
+  check: model_parity
+  via: blackbox
+  app: printf
+  configs: -DVX_CFG_ISSUE_WIDTH=2
+- id: parity-printf-fw2
+  check: model_parity
+  via: blackbox
+  app: printf
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity

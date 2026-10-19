@@ -260,8 +260,7 @@ A fence ordering only device accesses (`fence ow, ow`, no R or W) sends an
 until its uncached path is empty, then forwards, so the answer proves the
 earlier IO writes reached memory.
 
-SimX does not model the tokens yet: there the fence is an ordering barrier in
-the LSU only.
+SimX sends every fence as a full flush token, walking every level.
 
 Programs that share data across cores through plain memory are outside what
 is validated. Share through atomics, or through the single shared level.

@@ -236,6 +236,16 @@ void LsuUnit::process_response_step(uint32_t b) {
 	}
 #endif
 
+	if (entry.is_flush) {
+		DT(3, this->name() << " fence-token-rsp: " << lsu_rsp);
+		entry.count -= lsu_rsp.mask.count();
+		if (entry.count == 0) {
+			state.pending_reqs.release(lsu_rsp.tag);
+		}
+		lsu_rsp_in.pop();
+		return;
+	}
+
 	auto trace = entry.trace;
 	auto& output = Outputs.at(b);
 	// Every response fragment retires through its own writeback slot, one
@@ -351,6 +361,42 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 	input.pop();
 }
 
+// The fence travels to the data cache as a flush token on the lanes of its
+// last packet, behind every request the block issued before it. The cache
+// answers once it has drained, flushed and invalidated, so the fence holds
+// the block until the token's response returns.
+void LsuUnit::send_fence_token(uint32_t b) {
+	auto& state = states_.at(b);
+	if (state.pending_reqs.full() || core_->lmem_switch(b)->ReqIn.full())
+		return;
+	auto trace = state.fence.trace();
+	uint32_t base = ((VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_LSU_LANES) * VX_CFG_NUM_LSU_LANES;
+	LsuReq lsu_req(VX_CFG_NUM_LSU_LANES);
+	lsu_req.op = MemOp::LD;
+	lsu_req.flags.flush = 1;
+	std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
+	for (uint32_t t = base; t < VX_CFG_NUM_THREADS; ++t) {
+		if (trace->tmask.test(t)) {
+			lsu_req.mask.set(t - base);
+			lsu_req.tids.at(t - base) = t;
+		}
+	}
+	if (lsu_req.mask.none()) {
+		lsu_req.mask.set(0);
+		lsu_req.tids.at(0) = base;
+	}
+	uint32_t count = lsu_req.mask.count();
+	pending_req_t entry{nullptr, count, true, std::move(lane_entries), IntrLsuArgs{}, false};
+	entry.is_flush = true;
+	lsu_req.tag  = state.pending_reqs.allocate(std::move(entry));
+	lsu_req.cid  = trace->cid;
+	lsu_req.wid  = trace->wid;
+	lsu_req.uuid = trace->uuid;
+	core_->lmem_switch(b)->ReqIn.send(lsu_req);
+	DT(3, this->name() << " fence-token: " << lsu_req);
+	state.fence_token = false;
+}
+
 // Per-cycle request handler. Dispatches at most one batch (one
 // memory-side mem_req) per call. The head trace stays at the queue
 // front until all its batches are issued (req_sent_all-driven).
@@ -360,7 +406,10 @@ void LsuUnit::process_request_step(uint32_t b) {
 	// Attempt fence release first so a steady stream of TCU client forwards
 	// (which consume the dispatch slot and return) cannot starve it.
 	const bool fence_locked = state.fence.locked();
-	if (fence_locked) {
+	if (fence_locked && state.fence_token) {
+		this->send_fence_token(b);
+	}
+	if (fence_locked && !state.fence_token) {
 		bool released = state.fence.try_release(Outputs.at(b), state.pending_reqs.empty());
 		if (released) {
 			DT(3, this->name() << " fence-unlock: " << state.fence.trace());
@@ -438,6 +487,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 		// Engage fence lock; the next call will try to release it once
 		// the pending-reqs table drains.
 		state.fence.engage(trace);
+		state.fence_token = true;
 		DT(3, this->name() << " fence-lock: " << *trace);
 		state.req_queue.pop();
 		return;

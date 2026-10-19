@@ -779,6 +779,8 @@ public:
       flush_sector_idx_ = 0;
       return;
     }
+    // the two walks share the sector cursor
+    __assert(!token_flushing_, "flush walk started during a flush-token walk");
     flushing_ = true;
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
@@ -788,6 +790,20 @@ public:
 
   bool flush_done() const {
     return !flushing_;
+  }
+
+  // A flush token's walk: one entry per cycle, every set (every way of a
+  // write-back cache), writing back dirty data and invalidating the lines.
+  void token_flush_begin() {
+    __assert(!flushing_, "flush-token walk started during a flush walk");
+    token_flushing_ = true;
+    token_flush_idx_ = 0;
+    flush_sector_idx_ = 0;
+    this->tick_wake();
+  }
+
+  bool token_flush_done() const {
+    return !token_flushing_;
   }
 
 protected:
@@ -824,6 +840,8 @@ protected:
     flush_set_idx_ = 0;
     flush_way_idx_ = 0;
     flush_sector_idx_ = 0;
+    token_flushing_ = false;
+    token_flush_idx_ = 0;
 #if VX_CFG_EXT_A_ENABLED
     amo_unit_.reset();
     for (auto &e : amo_passthru_) {
@@ -859,6 +877,9 @@ protected:
     if (flushing_) {
       this->processFlush();
     }
+    if (token_flushing_) {
+      this->processTokenFlush();
+    }
 
     // calculate memory latency
     perf_stats_.mem_latency += pending_fill_reqs_;
@@ -869,7 +890,7 @@ protected:
     // any packet reserved toward core_req_in/mem_rsp_in re-arms on arrival.
     if (this->core_req_in.size() == 0 && this->mem_rsp_in.size() == 0
      && pipe_req_->size() == 0 && lazy_q_->size() == 0 && !mshr_.has_ready_reqs()
-     && !fwd_active_ && !flushing_ && pending_fill_reqs_ == 0) {
+     && !fwd_active_ && !flushing_ && !token_flushing_ && pending_fill_reqs_ == 0) {
       this->tick_sleep();
     }
   }
@@ -1973,6 +1994,47 @@ private:
     DT(3, this->name() << " flush-done");
   }
 
+  void processTokenFlush() {
+    if (pending_fill_reqs_ != 0
+     || pipe_req_->size() != 0
+     || !mshr_.empty()) {
+      return;
+    }
+    uint32_t ways = config_.write_back ? params_.lines_per_set : 1;
+    uint32_t set_id = token_flush_idx_ % params_.sets_per_bank;
+    uint32_t way_id = token_flush_idx_ / params_.sets_per_bank;
+    auto &set = sets_.at(set_id);
+    if (config_.write_back) {
+      auto &line = set.lines.at(way_id);
+      while (flush_sector_idx_ < line.sectors.size()) {
+        auto &sec = line.sectors.at(flush_sector_idx_);
+        if (sec.valid && sec.dirty) {
+          if (this->mem_req_out.full())
+            return;
+          MemReq mem_req;
+          mem_req.addr = params_.mem_addr_sector(bank_id_, set_id, line.tag, flush_sector_idx_);
+          mem_req.op   = MemOp::ST;
+          mem_req.data = sec.data;
+          mem_req.byteen = sec.dirty_mask;
+          this->mem_req_out.send(mem_req, MEM_REQ_DELAY);
+          DT(3, this->name() << " flush-wb: " << mem_req);
+          ++perf_stats_.evictions;
+        }
+        ++flush_sector_idx_;
+      }
+      flush_sector_idx_ = 0;
+      line.reset();
+    } else {
+      for (auto &line : set.lines) {
+        line.reset();
+      }
+    }
+    if (++token_flush_idx_ == params_.sets_per_bank * ways) {
+      token_flushing_ = false;
+      DT(3, this->name() << " token-flush-done");
+    }
+  }
+
   Cache::Config config_;
   params_t params_;
   uint32_t bank_id_;
@@ -2037,6 +2099,8 @@ private:
   uint32_t flush_set_idx_;
   uint32_t flush_way_idx_;
   uint32_t flush_sector_idx_;
+  bool     token_flushing_;
+  uint32_t token_flush_idx_;
 
 #if VX_CFG_EXT_A_ENABLED
   AmoUnit  amo_unit_;
@@ -2091,6 +2155,39 @@ public:
 
   uint64_t collisions() const { return collisions_; }
 
+  // Ports whose head is a flush token. While any is visible, cacheable
+  // requests are held at every port.
+  uint64_t tokens() const {
+    uint64_t mask = 0;
+    for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
+      if (!ReqIn.at(i).empty() && ReqIn.at(i).peek().flags.flush) {
+        mask |= 1ull << i;
+      }
+    }
+    return mask;
+  }
+
+  // No cacheable request is left between the ports and the banks.
+  bool drained() const {
+    for (auto &stage : tree_stage_) {
+      if (stage.size() != 0) {
+        return false;
+      }
+    }
+    for (auto &out : ReqOut) {
+      if (out.size() != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  MemReq take_token(uint32_t i) {
+    auto req = ReqIn.at(i).peek();
+    ReqIn.at(i).pop();
+    return req;
+  }
+
   // The cache's line initialization holds the core ports for these cycles.
   void set_init_cycles(uint32_t cycles) { init_cycles_ = cycles; }
 
@@ -2114,6 +2211,7 @@ protected:
       }
     }
     uint32_t n = ReqIn.size();
+    const bool hold = (this->tokens() != 0);
     // requesting ports per bank; non-cacheable requests leave on their own port
     std::vector<uint64_t> want(ReqOut.size(), 0);
     for (uint32_t i = 0; i < n; ++i) {
@@ -2122,13 +2220,18 @@ protected:
         continue;
       }
       auto& req = in.peek();
+      if (req.flags.flush) {
+        continue;
+      }
       if (req.flags.io) {
         if (IoOut.at(i).try_send(req, 0)) {
           in.pop();
         }
         continue;
       }
-      want.at(params_.addr_bank_id(req.addr)) |= 1ull << i;
+      if (!hold) {
+        want.at(params_.addr_bank_id(req.addr)) |= 1ull << i;
+      }
     }
     for (uint32_t b = 0, nb = ReqOut.size(); b < nb; ++b) {
       auto& out = tree_stage_.empty() ? ReqOut.at(b) : tree_stage_.at(b);
@@ -2160,6 +2263,64 @@ private:
   friend class SimObject<CachePortArb>;
 };
 
+// Sits on one memory port's cache-side response path, ahead of the response
+// network. While the port's flush token is out the cache is quiescent, so the
+// port's next response is the token's answer and stops here; every other
+// response passes in the same cycle.
+class FlushTap : public SimObject<FlushTap> {
+public:
+  using Ptr = std::shared_ptr<FlushTap>;
+
+  SimChannel<MemRsp> RspIn;
+  SimChannel<MemRsp> RspOut;
+
+  FlushTap(const SimContext& ctx, const char* name)
+    : SimObject<FlushTap>(ctx, name)
+    , RspIn(this)
+    , RspOut(this)
+  {}
+
+  // the port's flush token has been sent
+  void arm() {
+    armed_ = true;
+    answered_ = false;
+  }
+
+  // the token's answer has arrived; reading it disarms the tap
+  bool take_answer() {
+    bool answered = answered_;
+    answered_ = false;
+    return answered;
+  }
+
+protected:
+  void on_reset() {
+    armed_ = false;
+    answered_ = false;
+  }
+
+  void on_tick() {
+    if (RspIn.empty()) {
+      this->tick_sleep();
+      return;
+    }
+    if (armed_) {
+      DT(3, this->name() << " flush-fwd-rsp");
+      armed_ = false;
+      answered_ = true;
+      RspIn.pop();
+    } else if (RspOut.try_send(RspIn.peek(), 0)) {
+      RspIn.pop();
+    }
+  }
+
+private:
+  bool armed_ = false;
+  bool answered_ = false;
+
+  friend class SimObject<FlushTap>;
+};
+
 class Cache::Impl {
 public:
   Impl(Cache *simobject, const Config &config)
@@ -2188,6 +2349,15 @@ public:
       nc_mem_arbs_.at(i) = MemArbiter::Create(sname, ArbiterType::Priority, 2, 1);
     }
 
+    // flush-token taps, ticking after the arbiters that feed them and before
+    // the response network they feed
+    flush_taps_.resize(config_.mem_ports);
+    for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+      snprintf(sname, 100, "%s-flush_tap%d", simobject->name().c_str(), i);
+      flush_taps_.at(i) = FlushTap::Create(sname);
+      nc_mem_arbs_.at(i)->RspOut.at(0).bind(&flush_taps_.at(i)->RspIn);
+    }
+
     // Connect non-cacheable arbiter output port 0 to outgoing memory ports
     for (uint32_t i = 0; i < config_.mem_ports; ++i) {
       nc_mem_arbs_.at(i)->ReqOut.at(0).bind(&simobject->mem_req_out.at(i));
@@ -2202,6 +2372,7 @@ public:
     uint32_t mem_arb_delay = ((num_banks != config_.mem_ports) && (num_banks > 2 || config_.mem_ports > 2)) ? 1 : 0;
     uint32_t mem_net_delay = omega_stages(num_banks, config_.mem_ports) - 1;
     uint32_t mem_net_extra = (mem_net_delay > mem_arb_delay) ? (mem_net_delay - mem_arb_delay) : 0;
+    __assert(num_banks >= config_.mem_ports, "a cache needs a bank per memory port");
     auto bank_mem_arb = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_banks, config_.mem_ports,
                                            mem_arb_delay + mem_net_extra, mem_arb_delay + mem_net_extra);
 
@@ -2218,8 +2389,11 @@ public:
       } else {
         bank_mem_arb->ReqOut.at(i).bind(&nc_mem_arbs_.at(i)->ReqIn.at(0));
       }
-      nc_mem_arbs_.at(i)->RspOut.at(0).bind(&bank_mem_arb->RspIn.at(i));
     }
+    for (uint32_t i = 0; i < config_.mem_ports; ++i) {
+      flush_taps_.at(i)->RspOut.bind(&bank_mem_arb->RspIn.at(i));
+    }
+    bank_arb_ = bank_mem_arb;
 
     // Create the core-port arbiter ahead of the banks it feeds
     snprintf(sname, 100, "%s-port_arb", simobject->name().c_str());
@@ -2255,8 +2429,8 @@ public:
       banks_.at(i)->core_rsp_out.bind(&bank_core_xbar_->RspIn.at(i));
 
       // bind memory ports
-      banks_.at(i)->mem_req_out.bind(&bank_mem_arb->ReqIn.at(i));
-      bank_mem_arb->RspOut.at(i).bind(&banks_.at(i)->mem_rsp_in);
+      banks_.at(i)->mem_req_out.bind(&bank_mem_arb->ReqIn.at(this->bank_lane(i)));
+      bank_mem_arb->RspOut.at(this->bank_lane(i)).bind(&banks_.at(i)->mem_rsp_in);
     }
   }
 
@@ -2292,6 +2466,8 @@ public:
       }
     }
 
+    this->flush_step();
+
     // bank memory requests through the memory-side network's deeper levels
     for (uint32_t i = 0, n = mem_req_net_.size(); i < n; ++i) {
       auto &net = mem_req_net_.at(i);
@@ -2318,6 +2494,94 @@ public:
       if (!io_req.empty() && this->processBypassRequest(io_req.peek(), req_id)) {
         io_req.pop();
       }
+    }
+  }
+
+  // Flush tokens (fences) at any port start one walk: the ports hold their
+  // cacheable requests, in-flight ones drain, every bank writes back and
+  // invalidates its lines, a token goes down each memory port behind that
+  // port's write-backs, and once every port has answered, each token
+  // visible at the end of the walk is answered through the response path,
+  // one per cycle.
+  void flush_step() {
+    switch (flush_state_) {
+    case FlushState::Idle:
+      if (port_arb_->tokens() != 0) {
+        flush_state_ = FlushState::Drain;
+      }
+      break;
+    case FlushState::Drain: {
+      if (!port_arb_->drained())
+        break;
+      for (auto &bank : banks_) {
+        if (bank->core_req_in.size() != 0)
+          return;
+      }
+      for (auto &bank : banks_) {
+        bank->token_flush_begin();
+      }
+      flush_state_ = FlushState::Walk;
+      break;
+    }
+    case FlushState::Walk:
+      for (auto &bank : banks_) {
+        if (!bank->token_flush_done())
+          return;
+      }
+      rsp_pending_ = port_arb_->tokens();
+      fwd_sent_ = 0;
+      fwd_done_ = 0;
+      flush_state_ = FlushState::Forward;
+      break;
+    case FlushState::Forward: {
+      bool mem_req_empty = true;
+      for (auto &lane : bank_arb_->ReqIn) {
+        mem_req_empty &= (lane.size() == 0);
+      }
+      for (auto &net : mem_req_net_) {
+        mem_req_empty &= (net.size() == 0);
+      }
+      for (uint32_t i = 0, n = config_.mem_ports; i < n && mem_req_empty; ++i) {
+        if (fwd_sent_ & (1ull << i))
+          continue;
+        // the token for port i is a read of the port's first line, sent down
+        // bank i's lane (bank i maps to port i) behind its write-backs
+        MemReq token;
+        token.addr = uint64_t(i) << config_.L;
+        token.flags.flush = 1;
+        token.tag = 0;
+        if (bank_arb_->ReqIn.at(this->bank_lane(i)).try_send(token, 1)) {
+          DT(3, simobject_->name() << " flush-fwd: " << token);
+          flush_taps_.at(i)->arm();
+          fwd_sent_ |= 1ull << i;
+        }
+      }
+      for (uint32_t i = 0, n = config_.mem_ports; i < n; ++i) {
+        if (flush_taps_.at(i)->take_answer()) {
+          fwd_done_ |= 1ull << i;
+        }
+      }
+      uint64_t all = (config_.mem_ports < 64) ? ((1ull << config_.mem_ports) - 1) : ~0ull;
+      if (fwd_done_ == all) {
+        flush_state_ = FlushState::Respond;
+      }
+      break;
+    }
+    case FlushState::Respond: {
+      if (rsp_pending_ == 0) {
+        flush_state_ = FlushState::Idle;
+        break;
+      }
+      uint32_t i = __builtin_ctzll(rsp_pending_);
+      auto &token = port_arb_->ReqIn.at(i).peek();
+      MemRsp rsp{token.tag, token.hart_id, token.uuid};
+      if (simobject_->core_rsp_out.at(i).try_send(rsp, core_rsp_delay_)) {
+        DT(3, simobject_->name() << " flush-rsp: " << rsp);
+        port_arb_->take_token(i);
+        rsp_pending_ &= ~(1ull << i);
+      }
+      break;
+    }
     }
   }
 
@@ -2388,7 +2652,21 @@ private:
   // the core-response network's levels, then the non-cacheable bypass
   // layer's response arbiter
   uint32_t core_rsp_delay_ = 0;
+  enum class FlushState { Idle, Drain, Walk, Forward, Respond };
+  FlushState flush_state_ = FlushState::Idle;
+  uint64_t rsp_pending_ = 0;
+  uint64_t fwd_sent_ = 0;
+  uint64_t fwd_done_ = 0;
   std::vector<SimChannel<MemReq>> mem_req_net_;
+  std::vector<FlushTap::Ptr> flush_taps_;
+
+  // Bank i drives memory port i mod mem_ports: its lane into the bank-to-port
+  // arbiter, which serves each port from a contiguous range of lanes.
+  uint32_t bank_lane(uint32_t bank_id) const {
+    uint32_t num_banks = 1 << config_.B;
+    uint32_t banks_per_port = num_banks / config_.mem_ports;
+    return (bank_id % config_.mem_ports) * banks_per_port + bank_id / config_.mem_ports;
+  }
   uint32_t init_cycles_;
   bool     keep_lines_ = false;
 };
