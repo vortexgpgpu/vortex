@@ -31,11 +31,18 @@ using namespace vortex;
 
 namespace {
 
+constexpr uint32_t kMaxFanout = 8;
+
 // An arbiter over more than 1.5x the fan-out limit is split into a buffered
 // tree, one cycle deeper.
 uint32_t arb_tree_delay(uint32_t requesters) {
-  constexpr uint32_t kMaxFanout = 8;
   return (requesters > kMaxFanout + kMaxFanout / 2) ? 1 : 0;
+}
+
+// Slices of the tree's first level: each arbitrates up to the fan-out limit
+// into its own buffer, and a join arbiter picks among the slice buffers.
+uint32_t arb_tree_slices(uint32_t requesters) {
+  return (arb_tree_delay(requesters) != 0) ? (requesters + kMaxFanout - 1) / kMaxFanout : 1;
 }
 
 // Registered stages of a radix-2 omega network between a and b ports; up to
@@ -2246,8 +2253,10 @@ public:
     , lg2_inputs_(log2ceil(num_inputs))
     // the request crossbar registers its output when it has more than two inputs
     , delay_((num_inputs > 2) ? 1 : 0)
-    , rr_(num_banks, num_inputs - 1)
-    , tree_stage_((arb_tree_delay(num_inputs) != 0) ? num_banks : 0, this)
+    , slices_(arb_tree_slices(num_inputs))
+    , rr_(num_banks * slices_, num_inputs - 1)
+    , join_rr_(num_banks, slices_ - 1)
+    , tree_stage_((slices_ > 1) ? num_banks * slices_ : 0, this)
     , merge_group_(merge_group)
   {
     assert(num_inputs <= 64);
@@ -2315,6 +2324,7 @@ public:
 protected:
   void on_reset() {
     std::fill(rr_.begin(), rr_.end(), ReqIn.size() - 1);
+    std::fill(join_rr_.begin(), join_rr_.end(), slices_ - 1);
     collisions_ = 0;
   }
 
@@ -2323,12 +2333,20 @@ protected:
       --init_cycles_;
       return;
     }
-    // the arbiter tree's buffered level ahead of each bank
-    for (uint32_t b = 0, nb = tree_stage_.size(); b < nb; ++b) {
-      auto& stage = tree_stage_.at(b);
-      if (!stage.empty() && !ReqOut.at(b).full()) {
-        ReqOut.at(b).send(stage.peek(), delay_);
-        stage.pop();
+    // the arbiter tree's join level: one slice buffer per bank per cycle
+    for (uint32_t b = 0, nb = (slices_ > 1) ? ReqOut.size() : 0; b < nb; ++b) {
+      if (ReqOut.at(b).full()) {
+        continue;
+      }
+      for (uint32_t k = 1; k <= slices_; ++k) {
+        uint32_t sl = (join_rr_[b] + k) % slices_;
+        auto& stage = tree_stage_.at(b * slices_ + sl);
+        if (!stage.empty()) {
+          ReqOut.at(b).send(stage.peek(), delay_);
+          stage.pop();
+          join_rr_[b] = sl;
+          break;
+        }
       }
     }
     uint32_t n = ReqIn.size();
@@ -2377,32 +2395,55 @@ protected:
         want.at(params_.addr_bank_id(req.addr)) |= 1ull << i;
       }
     }
+    // each bank's arbiter, or each slice of its tree, grants one port per cycle
     for (uint32_t b = 0, nb = ReqOut.size(); b < nb; ++b) {
-      auto& out = tree_stage_.empty() ? ReqOut.at(b) : tree_stage_.at(b);
-      if (want[b] == 0 || out.full()) {
+      if (want[b] == 0) {
         continue;
       }
-      uint32_t i = rr_[b];
-      do {
-        i = (i + 1) % n;
-      } while (!(want[b] & (1ull << i)));
-      collisions_ += __builtin_popcountll(want[b]) - 1;
-      auto req = ReqIn.at(i).peek();
-      uint64_t mask = 0;
-      if (merge_group_ > 1) {
-        mask = merged.at(i) >> ((i / merge_group_) * merge_group_);
-        for (uint64_t f = merged.at(i); f != 0; f &= f - 1) {
-          DT(3, this->name() << " read-merge: port=" << __builtin_ctzll(f) << ", leader=" << i << ", " << req);
-          ReqIn.at(__builtin_ctzll(f)).pop();
+      bool granted = false;
+      for (uint32_t sl = 0; sl < slices_; ++sl) {
+        uint64_t slice_want = want[b];
+        if (slices_ > 1) {
+          uint32_t lo = sl * kMaxFanout;
+          uint32_t hi = std::min<uint32_t>(lo + kMaxFanout, n);
+          uint64_t range = ((hi < 64) ? (1ull << hi) : 0) - (1ull << lo);
+          slice_want &= range;
         }
+        auto& out = (slices_ > 1) ? tree_stage_.at(b * slices_ + sl) : ReqOut.at(b);
+        if (slice_want == 0 || out.full()) {
+          continue;
+        }
+        auto& rr = rr_[b * slices_ + sl];
+        uint32_t i = rr;
+        do {
+          i = (i + 1) % n;
+        } while (!(slice_want & (1ull << i)));
+        this->grant(i, out, merged);
+        rr = i;
+        granted = true;
       }
-      uint64_t tag = (((uint64_t(req.tag) << this->merge_bits()) | mask) << lg2_inputs_) | i;
-      __assert((tag >> 32) == 0, "cache bank tag overflow");
-      req.tag = uint32_t(tag);
-      out.send(req, tree_stage_.empty() ? delay_ : 1);
-      ReqIn.at(i).pop();
-      rr_[b] = i;
+      if (granted) {
+        collisions_ += __builtin_popcountll(want[b]) - 1;
+      }
     }
+  }
+
+  // Send port i's request to its bank, with the ports merged into it.
+  void grant(uint32_t i, SimChannel<MemReq>& out, const std::vector<uint64_t>& merged) {
+    auto req = ReqIn.at(i).peek();
+    uint64_t mask = 0;
+    if (merge_group_ > 1) {
+      mask = merged.at(i) >> ((i / merge_group_) * merge_group_);
+      for (uint64_t f = merged.at(i); f != 0; f &= f - 1) {
+        DT(3, this->name() << " read-merge: port=" << __builtin_ctzll(f) << ", leader=" << i << ", " << req);
+        ReqIn.at(__builtin_ctzll(f)).pop();
+      }
+    }
+    uint64_t tag = (((uint64_t(req.tag) << this->merge_bits()) | mask) << lg2_inputs_) | i;
+    __assert((tag >> 32) == 0, "cache bank tag overflow");
+    req.tag = uint32_t(tag);
+    out.send(req, tree_stage_.empty() ? delay_ : 1);
+    ReqIn.at(i).pop();
   }
 
   // A plain read: no write, flush, IO, local or atomic attribute.
@@ -2419,8 +2460,10 @@ private:
   uint32_t lg2_inputs_;
   uint32_t delay_;
   uint32_t init_cycles_ = 0;
-  std::vector<uint32_t> rr_;
-  std::vector<SimChannel<MemReq>> tree_stage_;
+  uint32_t slices_;
+  std::vector<uint32_t> rr_;       // [bank][slice]
+  std::vector<uint32_t> join_rr_;  // [bank]
+  std::vector<SimChannel<MemReq>> tree_stage_; // [bank][slice]
   uint32_t merge_group_;
   uint64_t collisions_ = 0;
 
@@ -2431,7 +2474,8 @@ private:
 // round-robin arbiter per core port over the bank lanes. A merged read's
 // response goes to the port that sent it and to every merged port; each port
 // takes it when its arbiter grants that lane, and the lane is released once
-// all of them have.
+// all of them have. Over many banks a port's arbiter is a tree: each slice of
+// lanes grants into its own buffer, and a join picks among the slices.
 class CacheRspMcast : public SimObject<CacheRspMcast> {
 public:
   using Ptr = std::shared_ptr<CacheRspMcast>;
@@ -2446,8 +2490,11 @@ public:
     , RspOut(num_outputs, this)
     , lg2_outputs_(log2ceil(num_outputs))
     , merge_group_(merge_group)
+    , slices_(arb_tree_slices(num_banks))
     , sent_(num_banks, 0)
-    , last_grant_(num_outputs, num_banks - 1)
+    , last_grant_(num_outputs * slices_, num_banks - 1)
+    , join_rr_(num_outputs, slices_ - 1)
+    , tree_stage_((slices_ > 1) ? num_outputs * slices_ : 0, this)
   {
     assert(num_outputs <= 64);
     assert(merge_group < 64);
@@ -2457,13 +2504,32 @@ protected:
   void on_reset() {
     std::fill(sent_.begin(), sent_.end(), 0);
     std::fill(last_grant_.begin(), last_grant_.end(), RspIn.size() - 1);
+    std::fill(join_rr_.begin(), join_rr_.end(), slices_ - 1);
   }
 
   void on_tick() {
     uint32_t nb = RspIn.size();
     uint32_t no = RspOut.size();
-    std::vector<uint64_t> pending(nb, 0);
     bool idle = true;
+    // the tree's join level: one slice buffer per port per cycle
+    for (uint32_t o = 0; o < no && slices_ > 1; ++o) {
+      for (uint32_t k = 1; k <= slices_; ++k) {
+        uint32_t sl = (join_rr_.at(o) + k) % slices_;
+        auto& stage = tree_stage_.at(o * slices_ + sl);
+        if (stage.empty()) {
+          continue;
+        }
+        if (RspOut.at(o).try_send(stage.peek(), 0)) {
+          stage.pop();
+          join_rr_.at(o) = sl;
+        }
+        break;
+      }
+    }
+    for (auto& stage : tree_stage_) {
+      idle &= (stage.size() == 0);
+    }
+    std::vector<uint64_t> pending(nb, 0);
     for (uint32_t b = 0; b < nb; ++b) {
       if (RspIn.at(b).empty()) {
         continue;
@@ -2480,19 +2546,25 @@ protected:
       return;
     }
     for (uint32_t o = 0; o < no; ++o) {
-      for (uint32_t k = 1; k <= nb; ++k) {
-        uint32_t b = (last_grant_.at(o) + k) % nb;
-        if (!(pending.at(b) & (1ull << o))) {
-          continue;
+      for (uint32_t sl = 0; sl < slices_; ++sl) {
+        uint32_t lo = (slices_ > 1) ? sl * kMaxFanout : 0;
+        uint32_t hi = (slices_ > 1) ? std::min(lo + kMaxFanout, nb) : nb;
+        auto& out = (slices_ > 1) ? tree_stage_.at(o * slices_ + sl) : RspOut.at(o);
+        auto& rr = last_grant_.at(o * slices_ + sl);
+        for (uint32_t k = 1; k <= nb; ++k) {
+          uint32_t b = (rr + k) % nb;
+          if (b < lo || b >= hi || !(pending.at(b) & (1ull << o))) {
+            continue;
+          }
+          auto rsp = RspIn.at(b).peek();
+          rsp.tag >>= (lg2_outputs_ + merge_group_);
+          if (out.try_send(rsp, (slices_ > 1) ? 1 : 0)) {
+            DT(4, this->name() << " rsp" << b << "_" << o << ": " << rsp);
+            sent_.at(b) |= 1ull << o;
+            rr = b;
+          }
+          break;
         }
-        auto rsp = RspIn.at(b).peek();
-        rsp.tag >>= (lg2_outputs_ + merge_group_);
-        if (RspOut.at(o).try_send(rsp, 0)) {
-          DT(4, this->name() << " rsp" << b << "_" << o << ": " << rsp);
-          sent_.at(b) |= 1ull << o;
-          last_grant_.at(o) = b;
-        }
-        break;
       }
     }
     for (uint32_t b = 0; b < nb; ++b) {
@@ -2506,8 +2578,11 @@ protected:
 private:
   uint32_t lg2_outputs_;
   uint32_t merge_group_;
-  std::vector<uint64_t> sent_;      // [bank] ports that took the lane's response
-  std::vector<uint32_t> last_grant_; // [port] round-robin pointer
+  uint32_t slices_;
+  std::vector<uint64_t> sent_;       // [bank] ports that took the lane's response
+  std::vector<uint32_t> last_grant_; // [port][slice] round-robin pointer
+  std::vector<uint32_t> join_rr_;    // [port]
+  std::vector<SimChannel<MemRsp>> tree_stage_; // [port][slice]
 
   friend class SimObject<CacheRspMcast>;
 };
@@ -2663,7 +2738,7 @@ public:
       // one buffered arbiter per core port over the bank lanes
       __assert(config_.core_out_buf, "read merging needs a registered core-response port");
       rsp_mcast_ = CacheRspMcast::Create(sname, num_banks, config_.num_inputs, port_arb_->merge_bits());
-      core_rsp_delay_ = 1 + arb_tree_delay(num_banks);
+      core_rsp_delay_ = 1;
     } else if (config_.core_out_buf) {
       bank_core_xbar_ = MemCrossBar::Create(sname, ArbiterType::RoundRobin, config_.num_inputs, num_banks, bank_sel, 0, 0);
       core_rsp_delay_ = omega_stages(num_banks, config_.num_inputs);
