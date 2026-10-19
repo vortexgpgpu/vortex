@@ -367,13 +367,18 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 // the block until the token's response returns.
 void LsuUnit::send_fence_token(uint32_t b) {
 	auto& state = states_.at(b);
-	if (state.pending_reqs.full() || core_->lmem_switch(b)->ReqIn.full())
+	if (state.pending_reqs.full() || core_->lmem_switch(b)->ReqIn.full()) {
 		return;
+	}
 	auto trace = state.fence.trace();
 	uint32_t base = ((VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_LSU_LANES) * VX_CFG_NUM_LSU_LANES;
 	LsuReq lsu_req(VX_CFG_NUM_LSU_LANES);
 	lsu_req.op = MemOp::LD;
 	lsu_req.flags.flush = 1;
+	// an IO fence's token walks nowhere; a memory fence's stops at the shared LLC
+	auto fence_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
+	lsu_req.flags.io       = lsu_fence_is_io(fence_args);
+	lsu_req.flags.flush_l1 = !lsu_fence_is_io(fence_args);
 	std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
 	for (uint32_t t = base; t < VX_CFG_NUM_THREADS; ++t) {
 		if (trace->tmask.test(t)) {

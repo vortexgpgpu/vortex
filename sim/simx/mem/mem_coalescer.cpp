@@ -273,7 +273,7 @@ void MemCoalescer::on_tick() {
     mr.uuid   = in_req.uuid;
     mr.flags  = in_req.flags;
     auto t = get_addr_type(mr.addr);
-    mr.flags.io    = (t == AddrType::IO);
+    mr.flags.io    = mr.flags.flush ? mr.flags.io : (t == AddrType::IO);
     mr.flags.local = (t == AddrType::Shared);
   }
 

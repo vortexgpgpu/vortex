@@ -47,7 +47,7 @@ LsuMemAdapter::LsuMemAdapter(
       mr.flags = req.flags;
       mr.amo_cmp = req.amo_cmp.at(0);
       auto t = get_addr_type(mr.addr);
-      mr.flags.io    = (t == AddrType::IO);
+      mr.flags.io    = mr.flags.flush ? mr.flags.io : (t == AddrType::IO);
       mr.flags.local = (t == AddrType::Shared);
       return mr;
     });
@@ -142,7 +142,7 @@ void LsuMemAdapter::on_tick() {
       out_req.flags   = in_req.flags;
       {
         auto t = get_addr_type(out_req.addr);
-        out_req.flags.io    = (t == AddrType::IO);
+        out_req.flags.io    = out_req.flags.flush ? out_req.flags.io : (t == AddrType::IO);
         out_req.flags.local = (t == AddrType::Shared);
       }
 

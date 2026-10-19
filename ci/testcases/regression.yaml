@@ -245,11 +245,13 @@ tests:
 - id: fence_mp-1
   via: blackbox
   drivers:
+  - simx
   - rtlsim
   app: fence_mp
 - id: fence_mp-2
   via: blackbox
   drivers:
+  - simx
   - rtlsim
   app: fence_mp
   shape:
@@ -258,6 +260,7 @@ tests:
 - id: fence_mp-3
   via: blackbox
   drivers:
+  - simx
   - rtlsim
   app: fence_mp
   shape:
@@ -267,6 +270,7 @@ tests:
 - id: fence_mp-4
   via: blackbox
   drivers:
+  - simx
   - rtlsim
   app: fence_mp
   shape:

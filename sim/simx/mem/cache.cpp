@@ -794,9 +794,10 @@ public:
 
   // A flush token's walk: one entry per cycle, every set (every way of a
   // write-back cache), writing back dirty data and invalidating the lines.
-  void token_flush_begin() {
+  void token_flush_begin(bool skip) {
     __assert(!flushing_, "flush-token walk started during a flush walk");
     token_flushing_ = true;
+    token_flush_skip_ = skip;
     token_flush_idx_ = 0;
     flush_sector_idx_ = 0;
     this->tick_wake();
@@ -2000,6 +2001,11 @@ private:
      || !mshr_.empty()) {
       return;
     }
+    if (token_flush_skip_) {
+      token_flushing_ = false;
+      DT(3, this->name() << " token-quiesce-done");
+      return;
+    }
     uint32_t ways = config_.write_back ? params_.lines_per_set : 1;
     uint32_t set_id = token_flush_idx_ % params_.sets_per_bank;
     uint32_t way_id = token_flush_idx_ / params_.sets_per_bank;
@@ -2009,8 +2015,9 @@ private:
       while (flush_sector_idx_ < line.sectors.size()) {
         auto &sec = line.sectors.at(flush_sector_idx_);
         if (sec.valid && sec.dirty) {
-          if (this->mem_req_out.full())
+          if (this->mem_req_out.full()) {
             return;
+          }
           MemReq mem_req;
           mem_req.addr = params_.mem_addr_sector(bank_id_, set_id, line.tag, flush_sector_idx_);
           mem_req.op   = MemOp::ST;
@@ -2100,6 +2107,7 @@ private:
   uint32_t flush_way_idx_;
   uint32_t flush_sector_idx_;
   bool     token_flushing_;
+  bool     token_flush_skip_ = false;
   uint32_t token_flush_idx_;
 
 #if VX_CFG_EXT_A_ENABLED
@@ -2161,6 +2169,22 @@ public:
     uint64_t mask = 0;
     for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
       if (!ReqIn.at(i).empty() && ReqIn.at(i).peek().flags.flush) {
+        mask |= 1ull << i;
+      }
+    }
+    return mask;
+  }
+
+  // Tokens owing no walk: IO tokens, and L1-only ones unless they still need
+  // a walk here.
+  uint64_t tokens(bool l1_needs_walk) const {
+    uint64_t mask = 0;
+    for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
+      if (ReqIn.at(i).empty()) {
+        continue;
+      }
+      auto &flags = ReqIn.at(i).peek().flags;
+      if (flags.flush && (flags.io || (flags.flush_l1 && !l1_needs_walk))) {
         mask |= 1ull << i;
       }
     }
@@ -2511,28 +2535,43 @@ public:
       }
       break;
     case FlushState::Drain: {
-      if (!port_arb_->drained())
+      if (!port_arb_->drained()) {
         break;
-      for (auto &bank : banks_) {
-        if (bank->core_req_in.size() != 0)
-          return;
       }
       for (auto &bank : banks_) {
-        bank->token_flush_begin();
+        if (bank->core_req_in.size() != 0) {
+          return;
+        }
+      }
+      auto kinds = this->token_kinds();
+      bool walk = kinds.walk(config_.shared_llc);
+      if (!walk && !kinds.any_io) {
+        rsp_pending_ = port_arb_->tokens();
+        flush_state_ = FlushState::Respond;
+        break;
+      }
+      // with no walk owed, an IO token still quiesces the banks and goes down
+      // to memory
+      walk_skip_ = !walk;
+      for (auto &bank : banks_) {
+        bank->token_flush_begin(walk_skip_);
       }
       flush_state_ = FlushState::Walk;
       break;
     }
-    case FlushState::Walk:
+    case FlushState::Walk: {
       for (auto &bank : banks_) {
-        if (!bank->token_flush_done())
+        if (!bank->token_flush_done()) {
           return;
+        }
       }
-      rsp_pending_ = port_arb_->tokens();
-      fwd_sent_ = 0;
-      fwd_done_ = 0;
+      auto kinds = this->token_kinds();
+      // a quiesce without a walk serves only the tokens owing none
+      rsp_pending_ = walk_skip_ ? port_arb_->tokens(!config_.shared_llc) : port_arb_->tokens();
+      this->forward_begin(walk_skip_, !walk_skip_ && kinds.any_l1 && !kinds.any_full && !kinds.any_io);
       flush_state_ = FlushState::Forward;
       break;
+    }
     case FlushState::Forward: {
       bool mem_req_empty = true;
       for (auto &lane : bank_arb_->ReqIn) {
@@ -2541,14 +2580,28 @@ public:
       for (auto &net : mem_req_net_) {
         mem_req_empty &= (net.size() == 0);
       }
-      for (uint32_t i = 0, n = config_.mem_ports; i < n && mem_req_empty; ++i) {
-        if (fwd_sent_ & (1ull << i))
+      // an IO token also waits for the non-cacheable path, which carries the
+      // IO writes it orders
+      if (fwd_io_ && mem_req_empty) {
+        for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
+          mem_req_empty &= (port_arb_->IoOut.at(i).size() == 0);
+        }
+        for (auto &arb : nc_mem_arbs_) {
+          mem_req_empty &= (arb->ReqIn.at(0).size() == 0) && (arb->ReqIn.at(1).size() == 0);
+        }
+      }
+      fwd_go_ |= mem_req_empty;
+      for (uint32_t i = 0, n = config_.mem_ports; i < n && fwd_go_; ++i) {
+        if (fwd_sent_ & (1ull << i)) {
           continue;
+        }
         // the token for port i is a read of the port's first line, sent down
         // bank i's lane (bank i maps to port i) behind its write-backs
         MemReq token;
         token.addr = uint64_t(i) << config_.L;
         token.flags.flush = 1;
+        token.flags.io = fwd_io_;
+        token.flags.flush_l1 = fwd_l1_;
         token.tag = 0;
         if (bank_arb_->ReqIn.at(this->bank_lane(i)).try_send(token, 1)) {
           DT(3, simobject_->name() << " flush-fwd: " << token);
@@ -2583,6 +2636,43 @@ public:
       break;
     }
     }
+  }
+
+  struct token_kinds_t {
+    bool any_full = false;
+    bool any_l1 = false;
+    bool any_io = false;
+    // a walk is owed to a full token, and to an L1-only one above the point of coherence
+    bool walk(bool shared_llc) const { return any_full || (any_l1 && !shared_llc); }
+  };
+
+  // Kinds of the visible tokens. Several kinds together combine to the
+  // weakest one that serves them all.
+  token_kinds_t token_kinds() const {
+    token_kinds_t kinds;
+    uint64_t tokens = port_arb_->tokens();
+    for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
+      if (!(tokens & (1ull << i))) {
+        continue;
+      }
+      auto &flags = port_arb_->ReqIn.at(i).peek().flags;
+      if (flags.io) {
+        kinds.any_io = true;
+      } else if (flags.flush_l1) {
+        kinds.any_l1 = true;
+      } else {
+        kinds.any_full = true;
+      }
+    }
+    return kinds;
+  }
+
+  void forward_begin(bool io, bool l1_only) {
+    fwd_io_ = io;
+    fwd_l1_ = l1_only;
+    fwd_go_ = false;
+    fwd_sent_ = 0;
+    fwd_done_ = 0;
   }
 
   PerfStats perf_stats() const {
@@ -2657,6 +2747,10 @@ private:
   uint64_t rsp_pending_ = 0;
   uint64_t fwd_sent_ = 0;
   uint64_t fwd_done_ = 0;
+  bool fwd_go_ = false;   // nothing is left ahead of the forwarded tokens
+  bool fwd_io_ = false;   // the forwarded tokens' kind
+  bool fwd_l1_ = false;
+  bool walk_skip_ = false;  // the banks only quiesce: no walk is owed
   std::vector<SimChannel<MemReq>> mem_req_net_;
   std::vector<FlushTap::Ptr> flush_taps_;
 
