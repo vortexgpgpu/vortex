@@ -62,6 +62,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
     parameter SHARED_LLC            = 0,      // The LLC serves every memory client alone (point of coherence).
     parameter FLUSH_FORWARD         = 1,      // A flush also flushes the next level.
     parameter BANK_HASH             = 0,      // Hashed bank select (cache_bank_hash).
+    parameter READ_MERGE            = 0,      // Merge same-word reads within groups of this many adjacent ports (0: off).
 
     parameter AMO_ENABLE            = 0       // Enable atomic operations in cache banks.
  ) (
@@ -164,6 +165,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .SHARED_LLC   (SHARED_LLC),
             .FLUSH_FORWARD (FLUSH_FORWARD),
             .BANK_HASH    (BANK_HASH),
+            .READ_MERGE   (READ_MERGE),
             .AMO_ENABLE   (AMO_ENABLE)
         ) cache (
             .clk            (clk),
