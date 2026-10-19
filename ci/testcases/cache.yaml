@@ -337,3 +337,25 @@ tests:
   shape:
     cores: 4
     l2cache: true
+# Both sectors of one sectored L2 line miss together from different warps and
+# cores: each must get its own fill, never chain behind the other sector's.
+# Run with the address held per request and with the MSHR line table.
+- id: sector_merge-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: sector_merge
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
+- id: sector_merge-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: sector_merge
+  configs: -DVX_CFG_SOCKET_SIZE=1 -DVX_CFG_DCACHE_MSHR_SIZE=32 -DVX_CFG_DCACHE_MSHR_LINES=8 -DVX_CFG_L2_MSHR_SIZE=32 -DVX_CFG_L2_MSHR_LINES=8
+  shape:
+    cores: 4
+    l2cache: true

@@ -235,6 +235,10 @@ VX_CFG_DCACHE_DIRTYBYTES = "expr: $VX_CFG_DCACHE_LAZY_FETCH"
 VX_CFG_DCACHE_LAZY_FETCH = 0
 VX_CFG_DCACHE_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_DCACHE_MSHR_SIZE = 16
+# MSHR line entries: distinct {line, sector} misses a bank tracks, each naming
+# the chain of requests merged on it; MSHR_SIZE then sizes the request pool.
+# 0 keeps the address in every request entry (lines = requests).
+VX_CFG_DCACHE_MSHR_LINES = 0
 # dcache is unsectored: line = sector = mem transaction granule = L1_LINE (which
 # defaults to MEM_BLOCK but can be configured smaller). Banking comes from the
 # reduced WORD above (>= sector is clamped), not the line. Deriving from L1_LINE
@@ -270,6 +274,7 @@ VX_CFG_L2_DIRTYBYTES = "expr: $VX_CFG_L2_LAZY_FETCH"
 VX_CFG_L2_LAZY_FETCH = 0
 VX_CFG_L2_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L2_MSHR_SIZE = 16
+VX_CFG_L2_MSHR_LINES = 0
 VX_CFG_L2_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L2_SIZE) - clog2(1048576))"
 VX_CFG_L2_MRSQ_SIZE = 4
 VX_CFG_L2_MREQ_SIZE = 0
@@ -289,6 +294,7 @@ VX_CFG_L3_DIRTYBYTES = "expr: $VX_CFG_L3_LAZY_FETCH"
 VX_CFG_L3_LAZY_FETCH = 0
 VX_CFG_L3_REPL_POLICY = "expr: $__cache_repl_fifo"
 VX_CFG_L3_MSHR_SIZE = 16
+VX_CFG_L3_MSHR_LINES = 0
 VX_CFG_L3_LATENCY = "expr: 4 + max(0, clog2($VX_CFG_L3_SIZE) - clog2(2097152))"
 VX_CFG_L3_MRSQ_SIZE = 4
 VX_CFG_L3_MREQ_SIZE = 0

@@ -163,6 +163,7 @@ module Vortex import VX_gpu_pkg::*, VX_trace_pkg::*, VX_tlb_pkg::*; (
         .MEM_PORTS      (L3_MEM_PORTS),
         .CRSQ_SIZE      (`VX_CFG_L3_CRSQ_SIZE),
         .MSHR_SIZE      (`VX_CFG_L3_MSHR_SIZE),
+        .MSHR_LINES     (`VX_CFG_L3_MSHR_LINES),
         .MRSQ_SIZE      (`VX_CFG_L3_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_L3_MREQ_SIZE),
         .LATENCY        (`VX_CFG_L3_LATENCY),

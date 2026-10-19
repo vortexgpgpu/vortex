@@ -219,6 +219,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .MEM_PORTS      (L1_MEM_PORTS),
         .CRSQ_SIZE      (`VX_CFG_DCACHE_CRSQ_SIZE),
         .MSHR_SIZE      (`VX_CFG_DCACHE_MSHR_SIZE),
+        .MSHR_LINES     (`VX_CFG_DCACHE_MSHR_LINES),
         .MRSQ_SIZE      (`VX_CFG_DCACHE_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_DCACHE_MREQ_SIZE),
         .LATENCY        (`VX_CFG_DCACHE_LATENCY),

@@ -39,6 +39,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     parameter CRSQ_SIZE             = 0,
     // Miss Reserv Queue Knob
     parameter MSHR_SIZE             = 16,
+    parameter MSHR_LINES            = 0,
     // Memory Response Queue Size
     parameter MRSQ_SIZE             = 8,
     parameter MREQ_SIZE             = 0,
@@ -179,6 +180,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
         .MEM_PORTS      (MEM_PORTS),
         .CRSQ_SIZE      (CRSQ_SIZE),
         .MSHR_SIZE      (MSHR_SIZE),
+        .MSHR_LINES     (MSHR_LINES),
         .MRSQ_SIZE      (MRSQ_SIZE),
         .MREQ_SIZE      (MREQ_SIZE),
         .LATENCY        (LATENCY),

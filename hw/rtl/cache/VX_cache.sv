@@ -29,6 +29,7 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     parameter CRSQ_SIZE             = 0,      // Core Response Queue Size
     parameter MSHR_SIZE             = 16,     // Miss Reserv Queue Knob
+    parameter MSHR_LINES            = 0,      // MSHR distinct line entries (0 = address per request)
     parameter MRSQ_SIZE             = 4,      // Memory Response Queue Size
     parameter MREQ_SIZE             = 0,      // Memory Request Queue Size (0 = derived minimum)
 
@@ -445,6 +446,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),
+            .MSHR_LINES   (MSHR_LINES),
             .MRSQ_SIZE    (MRSQ_SIZE),
             .MREQ_SIZE    (MREQ_SIZE),
             .LATENCY      (LATENCY),

@@ -26,6 +26,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter SECTOR_SIZE       = LINE_SIZE,// sector (fill/eviction granule); = LINE_SIZE => 1 sector
     parameter CRSQ_SIZE         = 0,        // extra core-response queue slots over minimum
     parameter MSHR_SIZE         = 1,        // miss reservation queue size
+    parameter MSHR_LINES        = 0,        // MSHR distinct line entries (0 = address per request)
     parameter MRSQ_SIZE         = 1,        // memory response queue size (sized at wrapper)
     parameter MREQ_SIZE         = 0,        // memory request queue size (0 = derived minimum)
     parameter WRITE_ENABLE      = 1,
@@ -173,6 +174,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // Shared signals
     // ------------------------------------------------------------------------
     wire crsp_queue_stall, mshr_alm_full;
+    wire mshr_req_full, mshr_line_ready;
     wire mshr_allocate_st0;
     (* max_fanout = 64 *) wire pipe_stall;
     // Authoritative "no entry held", straight off the MSHR's valid mask. The
@@ -1005,10 +1007,12 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .decr  (mshr_dequeue),
         `UNUSED_PIN (empty),
         `UNUSED_PIN (alm_empty),
-        .full  (mshr_alm_full),
+        .full  (mshr_req_full),
         `UNUSED_PIN (alm_full),
         `UNUSED_PIN (size)
     );
+
+    assign mshr_alm_full = mshr_req_full || ~mshr_line_ready;
 
     VX_cache_mshr #(
         .INSTANCE_ID (`SFORMATF(("%s-mshr", INSTANCE_ID))),
@@ -1018,6 +1022,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .SECTOR_SIZE (SECTOR_SIZE),
         .NUM_BANKS   (NUM_BANKS),
         .MSHR_SIZE   (MSHR_SIZE),
+        .MSHR_LINES  (MSHR_LINES),
         .WRITEBACK   (WRITEBACK),
         .AMO_ENABLE  (AMO_ENABLE != 0),
         .AMO_PASSTHRU ((AMO_ENABLE != 0) && (IS_LLC == 0)),
@@ -1069,6 +1074,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .allocate_pending_ovl (mshr_pending_ovl_raw),
         .allocate_previd     (mshr_previd),
         `UNUSED_PIN (allocate_ready),
+        .allocate_line_ready (mshr_line_ready),
         .finalize_valid      (mshr_finalize_st1 && ~pipe_stall),
         .finalize_is_release (mshr_release_st1),
         // Only link an entry into the pending chain if it is KEPT (a miss). A

@@ -224,6 +224,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .MEM_PORTS      (L2_MEM_PORTS),
         .CRSQ_SIZE      (`VX_CFG_L2_CRSQ_SIZE),
         .MSHR_SIZE      (`VX_CFG_L2_MSHR_SIZE),
+        .MSHR_LINES     (`VX_CFG_L2_MSHR_LINES),
         .MRSQ_SIZE      (`VX_CFG_L2_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_L2_MREQ_SIZE),
         .LATENCY        (`VX_CFG_L2_LATENCY),
