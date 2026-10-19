@@ -23,6 +23,7 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
     input  wire clk,
     input  wire reset,
     input  wire flush_begin,
+    input  wire flush_skip,  // the flush only quiesces the bank: an IO token
     output wire flush_end,
     output wire flush_init,
     output wire flush_valid,
@@ -48,6 +49,7 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
 
     // latch flush_begin that arrives while init is in progress
     reg flush_pending_r, flush_pending_n;
+    reg skip_r;
 
     always @(*) begin
         state_n = state;
@@ -74,7 +76,7 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
                 // Wait for the bank to fully quiesce before evicting:
                 // both MSHR must drain, and the bank pipeline as well to ensure no inflight misses.
                 if (mshr_empty && bank_empty) begin
-                    state_n = STATE_FLUSH;
+                    state_n = skip_r ? STATE_WAIT2 : STATE_FLUSH;
                 end
             end
             STATE_FLUSH: begin
@@ -104,6 +106,9 @@ module VX_cache_flush import VX_gpu_pkg::*; #(
         end else begin
             state          <= state_n;
             flush_pending_r <= flush_pending_n;
+            if (flush_begin) begin
+                skip_r <= flush_skip;
+            end
             if (state != STATE_IDLE) begin
                 if ((state == STATE_INIT)
                 || ((state == STATE_FLUSH) && flush_ready)) begin

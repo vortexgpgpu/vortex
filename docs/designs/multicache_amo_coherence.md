@@ -240,19 +240,28 @@ updates it, core 0's copy is stale. The LLC never reaches up. The weak model
 resolves this the way a GPU does: the **consumer** discards its own copies at
 an acquire point and refetches.
 
-There is no dedicated acquire-invalidate. What exists today:
+There is no dedicated acquire-invalidate. In the RTL the LSU sends a memory
+`fence` (any R or W in its predecessor or successor set) to the data cache as
+an **L1-only** flush token (`is_flush` with byte enables set). Each cache above
+the point of coherence holds its inputs, drains, walks every set (every way of
+a write-back cache), writing back dirty lines and clearing every valid bit, and
+forwards the token. The shared LLC, the point of coherence, answers it without
+a walk; a replicated LLC still walks. The fence holds its LSU block until the
+answer.
 
-| model | what a `fence` does to the issuing core's data cache |
-|---|---|
-| RTL | the LSU sends the fence as a request with `is_flush` set, which starts the **whole-cache flush**; on a write-through cache the walk clears every valid bit |
-| SimX | the fence is an ordering barrier in the LSU only; a flush of a write-through cache is a no-op and no line is invalidated |
+So a memory `fence` gives the consumer-side invalidate above the point of
+coherence, at the cost of a flush walk of each private level. `fence_mp`
+passes data between cores this way on shared and replicated last levels.
+`atomic_critical`, which runs plain loads and stores inside a lock, is still
+skipped on multi-core configurations.
 
-So an RTL `fence` happens to give the consumer-side invalidate, at the cost
-of a full flush walk that locks the cache's inputs for its duration, and
-SimX does not model it. **The two models disagree, and no regression case
-exercises fence-managed cross-core visibility** — `atomic_critical`, which
-runs plain loads and stores inside a lock, is skipped on multi-core
-configurations for exactly this reason.
+A fence ordering only device accesses (`fence ow, ow`, no R or W) sends an
+**IO** token (`is_flush` with `io`): no level walks; each quiesces and waits
+until its uncached path is empty, then forwards, so the answer proves the
+earlier IO writes reached memory.
+
+SimX does not model the tokens yet: there the fence is an ordering barrier in
+the LSU only.
 
 Programs that share data across cores through plain memory are outside what
 is validated. Share through atomics, or through the single shared level.

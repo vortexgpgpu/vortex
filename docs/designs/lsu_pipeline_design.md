@@ -148,7 +148,9 @@ A fence is a **total barrier on its slice**. The slice sets `fence_lock` when
 a fence's last packet is accepted and clears it when that fence's response
 returns. While locked, the slice accepts nothing.
 
-The fence itself travels to memory as a request with `is_flush`, behind every
+The fence itself travels to memory as a request with `is_flush` (an IO token,
+the `io` attribute set, for a fence ordering only device accesses; otherwise an
+L1-only token, byte enables set), behind every
 request the slice issued before it, so its response proves they have drained.
 Only the last packet of a multi-packet fence is sent; the earlier packets
 complete immediately.

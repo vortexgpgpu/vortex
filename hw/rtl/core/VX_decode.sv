@@ -349,7 +349,10 @@ module VX_decode import
             end
             INST_FENCE: begin
                 ex_type = EX_LSU;
-                op_type = INST_LSU_FENCE;
+                // neither the predecessor nor the successor set holds a memory
+                // read or write (pred = instr[27:24], succ = instr[23:20], IORW)
+                op_type = ((funct3 == 3'b000) && (instr[25:24] == 2'b00) && (instr[21:20] == 2'b00))
+                        ? INST_LSU_FENCE_IO : INST_LSU_FENCE;
                 op_args.lsu.is_store = 0;
                 op_args.lsu.is_float = 0;
                 op_args.lsu.pack     = 0;

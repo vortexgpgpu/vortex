@@ -64,7 +64,9 @@ module VX_cache import VX_gpu_pkg::*; #(
     input wire clk,
     input wire reset,
     VX_mem_bus_if.slave     core_bus_if [NUM_REQS],
-    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS]
+    VX_mem_bus_if.master    mem_bus_if [MEM_PORTS],
+    // nothing held between this level's inputs and its memory side, on either path
+    input wire              nc_req_empty
 );
     `STATIC_ASSERT(NUM_BANKS == (1 << `CLOG2(NUM_BANKS)), ("invalid parameter: number of banks must be power of 2"))
     `STATIC_ASSERT(WRITE_ENABLE || !WRITEBACK, ("invalid parameter: writeback requires write enable"))
@@ -104,12 +106,14 @@ module VX_cache import VX_gpu_pkg::*; #(
         .TAG_WIDTH (TAG_WIDTH)
     ) core_bus2_if[NUM_REQS]();
     wire [NUM_BANKS-1:0] per_bank_flush_begin;
+    wire                 flush_skip;
     wire [`UP(UUID_WIDTH)-1:0] flush_uuid;
     wire [NUM_BANKS-1:0] per_bank_flush_end;
     wire [NUM_BANKS-1:0] per_bank_core_req_fire;
     wire                     mem_req_empty;
     wire [MEM_PORTS-1:0]     mem_flush_valid;
     wire                     mem_flush_l1_only;
+    wire                     mem_flush_io;
     wire [MEM_PORTS-1:0]     mem_flush_ready;
     wire                     mem_flush_rsp_phase;
     wire [MEM_PORTS-1:0]     mem_flush_rsp_valid;
@@ -133,11 +137,14 @@ module VX_cache import VX_gpu_pkg::*; #(
         .core_bus_out_if     (core_bus2_if),
         .bank_req_fire       (per_bank_core_req_fire),
         .flush_begin         (per_bank_flush_begin),
+        .flush_skip          (flush_skip),
         .flush_uuid          (flush_uuid),
         .flush_end           (per_bank_flush_end),
         .mem_req_empty       (mem_req_empty),
+        .nc_req_empty        (nc_req_empty),
         .mem_flush_valid     (mem_flush_valid),
         .mem_flush_l1_only   (mem_flush_l1_only),
+        .mem_flush_io        (mem_flush_io),
         .mem_flush_ready     (mem_flush_ready),
         .mem_flush_rsp_phase (mem_flush_rsp_phase),
         .mem_flush_rsp_valid (mem_flush_rsp_valid),
@@ -417,6 +424,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .mem_rsp_tag        (per_bank_mem_rsp_tag[bank_id]),
             .mem_rsp_ready      (per_bank_mem_rsp_ready[bank_id]),
             .flush_begin        (per_bank_flush_begin[bank_id]),
+            .flush_skip         (flush_skip),
             .flush_uuid         (flush_uuid),
             .flush_end          (per_bank_flush_end[bank_id])
         );
@@ -507,7 +515,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     wire [MEM_PORTS-1:0][`UP(`LOG2UP(NUM_BANKS))-1:0] mem_req_tmp_idx;
     wire [MEM_PORTS-1:0]                    mem_req_tmp_ready;
     // The flush token for port i is a read of the port's first line with the
-    // flush attribute; byteen bit 0 carries the L1-only kind. It takes bank
+    // flush attribute; byteen bit 0 carries the L1-only kind and the io
+    // attribute the IO kind. It takes bank
     // i's lane into the request crossbar (bank i maps to port i), so the
     // crossbar forms its address and it leaves through the same registered
     // outputs as the write-backs ahead of it.
@@ -524,7 +533,7 @@ module VX_cache import VX_gpu_pkg::*; #(
                 SECTOR_SIZE'(mem_flush_l1_only),
                 `CS_SECTOR_WIDTH'(0),
                 BANK_MEM_TAG_WIDTH'(0),
-                `UP(MEM_ATTR_WIDTH)'(1 << MEM_ATTR_FLUSH_OFFS)
+                `UP(MEM_ATTR_WIDTH)'((1 << MEM_ATTR_FLUSH_OFFS) | (32'(mem_flush_io) << MEM_ATTR_IO_OFFS))
             };
             assign mem_req_xbar_valid[i] = per_bank_mem_req_valid[i] || mem_flush_valid[i];
             assign mem_req_xbar_pdata[i] = per_bank_mem_req_valid[i] ? per_bank_mem_req_pdata[i] : mem_flush_pdata;

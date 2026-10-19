@@ -169,7 +169,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .cache_perf     (cache_perf),
         `endif
             .core_bus_if    (core_bus_cache_if),
-            .mem_bus_if     (mem_bus_cache_if)
+            .mem_bus_if     (mem_bus_cache_if),
+            .nc_req_empty   (req_empty)
         );
     end else begin : g_passthru
         for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_bus_cache_if

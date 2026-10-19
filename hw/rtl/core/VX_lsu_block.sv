@@ -79,6 +79,7 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
     // VX_lsu_agu; this slice contains no address arithmetic).
 
     wire req_is_fence, rsp_is_fence;
+    wire req_fence_io = inst_lsu_is_fence_io(execute_if.data.op_type);
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
@@ -121,8 +122,11 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
         wire lane_is_om = 1'b0;
         assign mem_req_attr_struct[i].is_addr_om = 1'b0;
     `endif
-        assign mem_req_attr_struct[i].is_addr_io = ((block_addr >= io_addr_start) && (block_addr < io_addr_end))
-                                                 || lane_is_om;
+        // a fence's token carries its kind: io for a fence ordering only device
+        // accesses
+        assign mem_req_attr_struct[i].is_addr_io = req_is_fence ? req_fence_io
+                                                 : (((block_addr >= io_addr_start) && (block_addr < io_addr_end))
+                                                    || lane_is_om);
     `ifdef VX_CFG_LMEM_ENABLE
         // is local memory address
         assign mem_req_attr_struct[i].is_addr_local =
@@ -264,8 +268,9 @@ module VX_lsu_block import VX_gpu_pkg::*; #(
                 default : mem_req_byteen_w = {LSU_WORD_SIZE{1'b1}};
             endcase
         end
-        // a fence is a flush token: it carries no data, so no byte enables
-        assign mem_req_byteen[i] = req_is_fence ? '0 : mem_req_byteen_w;
+        // A fence is a flush token and carries no data. A memory fence is an
+        // L1-only token (byte enables set): it stops at the shared LLC.
+        assign mem_req_byteen[i] = req_is_fence ? (req_fence_io ? '0 : '1) : mem_req_byteen_w;
     end
 
     // memory misalignment not supported!

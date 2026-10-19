@@ -238,6 +238,42 @@ tests:
     cores: 2
     l2cache: true
     l3cache: true
+# A memory fence carries data from one core to another across the caches they
+# do not share: the producer's token reaches the point of coherence, the
+# consumer's invalidates its copies above it. Two clusters with an L2 each
+# replicate the last level, so the fence must walk both L2s there.
+- id: fence_mp-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: fence_mp
+- id: fence_mp-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: fence_mp
+  shape:
+    cores: 2
+    l2cache: true
+- id: fence_mp-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: fence_mp
+  shape:
+    clusters: 2
+    cores: 1
+    l2cache: true
+- id: fence_mp-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: fence_mp
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
 # Kernel to kernel with no host transfer between (one command batch): the
 # launch flushes are L1-only, so the last-level cache alone carries each
 # round's writes to the next round, and the full flush runs before readback.

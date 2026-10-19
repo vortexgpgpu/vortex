@@ -615,8 +615,12 @@ write's `VX_CACHE_FLUSH_L1_ONLY` bit, and the dcache and icache injectors carry
 it. The ocache, whose tokens reach the L2, sends an L1-only token only when
 every requester of its flush round is L1-only: the cluster flush (kind latched
 from the same broadcast write) and the dcache tokens held at the OM steers.
-The other graphics caches do not forward and send full tokens. A fence
-carries no byte enables, so a fence token is always a full one.
+The other graphics caches do not forward and send full tokens. A memory fence
+sends an L1-only token. A fence ordering only device accesses sends an **IO**
+token (the `io` attribute): no level walks, each quiesces its banks, waits
+until nothing is held on its uncached path either, and forwards an IO token
+down every memory port, so the answer proves the earlier IO writes reached
+memory. Kinds visible together combine to the weakest that serves them all.
 
 **Core traffic sits on the priority input, not the flush.** The flush waits until
 upstream is quiescent — which it reliably is, because the host only issues

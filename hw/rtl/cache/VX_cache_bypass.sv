@@ -61,7 +61,9 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     wire [NUM_REQS-1:0] core_req_nc_sel;
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_req_is_nc
         if (CACHE_ENABLE) begin : g_cache
-            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.attr[MEM_ATTR_IO_OFFS];
+            // a flush token always reaches the cache, whatever its io kind bit
+            assign core_req_nc_sel[i] = ~core_bus_in_if[i].req_data.attr[MEM_ATTR_IO_OFFS]
+                                      | core_bus_in_if[i].req_data.attr[MEM_ATTR_FLUSH_OFFS];
         end else begin : g_no_cache
             assign core_req_nc_sel[i] = 1'b0;
         end

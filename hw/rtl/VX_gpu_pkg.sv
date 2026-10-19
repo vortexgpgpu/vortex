@@ -488,6 +488,7 @@ package VX_gpu_pkg;
     localparam INST_LSU_SH =     4'b1001;
     localparam INST_LSU_SW =     4'b1010;
     localparam INST_LSU_SD =     4'b1011; // new for RV64I SD
+    localparam INST_LSU_FENCE_IO = 4'b1110; // a fence ordering only device (IO) accesses
     localparam INST_LSU_FENCE =  4'b1111;
     localparam INST_LSU_BITS =   4;
 
@@ -504,7 +505,11 @@ package VX_gpu_pkg;
     endfunction
 
     function automatic logic inst_lsu_is_fence(input logic [INST_LSU_BITS-1:0] op);
-        return (op == INST_LSU_FENCE);
+        return (op[3:1] == 3'b111);
+    endfunction
+
+    function automatic logic inst_lsu_is_fence_io(input logic [INST_LSU_BITS-1:0] op);
+        return (op == INST_LSU_FENCE_IO);
     endfunction
 
     ///////////////////////////////////////////////////////////////////////////

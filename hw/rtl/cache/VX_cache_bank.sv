@@ -91,6 +91,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
 
     // Flush
     input wire                          flush_begin,
+    input wire                          flush_skip,
     input wire [`UP(UUID_WIDTH)-1:0]    flush_uuid,
     output wire                         flush_end
 );
@@ -308,6 +309,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         .clk         (clk),
         .reset       (reset),
         .flush_begin (flush_begin),
+        .flush_skip  (flush_skip),
         .flush_end   (flush_end),
         .flush_init  (init_valid),
         .flush_valid (flush_valid),
