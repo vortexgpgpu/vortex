@@ -156,6 +156,16 @@ tests:
   app: async_gbarrier
   shape:
     cores: 2
+# Two cores sharing one socket's instruction and data caches: their requests
+# and responses cross each cache's input arbiter.
+- id: model_parity-async-gbarrier-ss2
+  check: model_parity
+  via: blackbox
+  app: async_gbarrier
+  configs: -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 2
+    l2cache: true
 
 - id: bar-slot-phase-1
   via: blackbox
