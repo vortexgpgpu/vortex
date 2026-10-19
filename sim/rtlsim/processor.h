@@ -44,6 +44,13 @@ public:
   // write it issued.
   void drain();
 
+  // Device-memory access through the command processor's port into the
+  // last-level cache. A write returns once every request entered the port;
+  // the device orders it ahead of the next launch. A read returns with data.
+  void cp_mem_write(uint64_t addr, const void* src, uint64_t size, bool noalloc);
+
+  void cp_mem_read(uint64_t addr, void* dst, uint64_t size);
+
 private:
 
   class Impl;

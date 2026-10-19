@@ -338,7 +338,14 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
     wire cp_interrupt;
 
-    VX_cp_core cp_core (
+    // With several memory ports the CP's device master enters the
+    // last-level cache's client slot when the configuration has one; with a
+    // single port it keeps sharing that port below the caches.
+    localparam CP_DMA_LLC = ((C_M_AXI_MEM_NUM_BANKS > 1) && ((CP_ON_L2 != 0) || (CP_ON_L3 != 0))) ? 1 : 0;
+
+    VX_cp_core #(
+        .DMA_LLC_CLIENT (CP_DMA_LLC)
+    ) cp_core (
         .clk        (clk),
         .reset      (subsys_reset),
         .axil_s     (cp_axil),
@@ -714,7 +721,7 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         localparam VX_MEM_TAG_A_WIDTH  = VX_MEM_TAG_WIDTH + `MAX(SUB_LDATAW, 0);
         localparam VX_MEM_ADDR_A_WIDTH = VX_MEM_ADDR_WIDTH - SUB_LDATAW;
 
-        localparam FAB_NUM_PORTS  = VX_MEM_PORTS + 1;
+        localparam FAB_NUM_PORTS  = VX_MEM_PORTS + (CP_DMA_LLC ? 0 : 1);
         localparam FAB_CP_PORT    = VX_MEM_PORTS;
         localparam FAB_TAG_WIDTH  = `MAX(VX_MEM_TAG_A_WIDTH, `VX_CP_AXI_TID_WIDTH);
         localparam FAB_DATA_SIZE  = C_M_AXI_MEM_DATA_WIDTH / 8;
@@ -732,6 +739,18 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         wire [VX_MEM_DATA_WIDTH-1:0]    vx_mem_rsp_data [VX_MEM_PORTS];
         wire [VX_MEM_TAG_WIDTH-1:0]     vx_mem_rsp_tag [VX_MEM_PORTS];
         wire                            vx_mem_rsp_ready [VX_MEM_PORTS];
+
+        wire                            cp_llc_req_valid;
+        wire                            cp_llc_req_rw;
+        wire [CP_MEM_ADDR_WIDTH-1:0]    cp_llc_req_addr;
+        wire [CP_MEM_DATA_SIZE*8-1:0]   cp_llc_req_data;
+        wire [CP_MEM_DATA_SIZE-1:0]     cp_llc_req_byteen;
+        wire [CP_MEM_TAG_WIDTH-1:0]     cp_llc_req_tag;
+        wire                            cp_llc_req_ready;
+        wire                            cp_llc_rsp_valid;
+        wire [CP_MEM_DATA_SIZE*8-1:0]   cp_llc_rsp_data;
+        wire [CP_MEM_TAG_WIDTH-1:0]     cp_llc_rsp_tag;
+        wire                            cp_llc_rsp_ready;
 
         Vortex vortex (
             `SCOPE_IO_BIND  (1)
@@ -759,6 +778,19 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
 
             .dcr_rsp_valid  (dcr_rsp_valid),
             .dcr_rsp_data   (dcr_rsp_data),
+
+            .cp_mem_req_valid   (cp_llc_req_valid),
+            .cp_mem_req_rw      (cp_llc_req_rw),
+            .cp_mem_req_noalloc (1'b0),
+            .cp_mem_req_addr    (cp_llc_req_addr),
+            .cp_mem_req_data    (cp_llc_req_data),
+            .cp_mem_req_byteen  (cp_llc_req_byteen),
+            .cp_mem_req_tag     (cp_llc_req_tag),
+            .cp_mem_req_ready   (cp_llc_req_ready),
+            .cp_mem_rsp_valid   (cp_llc_rsp_valid),
+            .cp_mem_rsp_data    (cp_llc_rsp_data),
+            .cp_mem_rsp_tag     (cp_llc_rsp_tag),
+            .cp_mem_rsp_ready   (cp_llc_rsp_ready),
 
             .start          (vx_start),
             .busy           (vx_busy)
@@ -822,11 +854,20 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
         // The CP's device addresses come from the same host-side allocator as the
         // pointers handed to the cores -- Device::global_mem_, based at
         // VX_MEM_USER_BASE_ADDR -- so they are offset-relative already, exactly
-        // like Vortex's own. They enter the fabric unchanged and
-        // PLATFORM_MEMORY_OFFSET is applied once, at the bank port, for both
-        // masters.
-        wire [CP_LINE_ADDRW-1:0]        cp_mem_req_addr;
-        wire [`VX_CP_AXI_TID_WIDTH-1:0] cp_mem_req_tag;
+        // like Vortex's own. They enter the fabric (or the last-level cache)
+        // unchanged and PLATFORM_MEMORY_OFFSET is applied once, at the bank
+        // port, for both masters.
+        wire                              cp_mem_req_valid;
+        wire                              cp_mem_req_rw;
+        wire [CP_LINE_ADDRW-1:0]          cp_mem_req_addr;
+        wire [C_M_AXI_MEM_DATA_WIDTH-1:0] cp_mem_req_data;
+        wire [FAB_DATA_SIZE-1:0]          cp_mem_req_byteen;
+        wire [`VX_CP_AXI_TID_WIDTH-1:0]   cp_mem_req_tag;
+        wire                              cp_mem_req_ready;
+        wire                              cp_mem_rsp_valid;
+        wire [C_M_AXI_MEM_DATA_WIDTH-1:0] cp_mem_rsp_data;
+        wire [`VX_CP_AXI_TID_WIDTH-1:0]   cp_mem_rsp_tag;
+        wire                              cp_mem_rsp_ready;
 
         VX_membus_from_axi #(
             .ADDR_W (64),
@@ -836,23 +877,59 @@ module VX_afu_wrap import VX_gpu_pkg::*; #(
             .clk            (clk),
             .reset          (subsys_reset),
             .axi_s          (cp_axi_dev),
-            .mem_req_valid  (fab_req_valid[FAB_CP_PORT]),
-            .mem_req_rw     (fab_req_rw[FAB_CP_PORT]),
+            .mem_req_valid  (cp_mem_req_valid),
+            .mem_req_rw     (cp_mem_req_rw),
             .mem_req_addr   (cp_mem_req_addr),
-            .mem_req_data   (fab_req_data[FAB_CP_PORT]),
-            .mem_req_byteen (fab_req_byteen[FAB_CP_PORT]),
+            .mem_req_data   (cp_mem_req_data),
+            .mem_req_byteen (cp_mem_req_byteen),
             .mem_req_tag    (cp_mem_req_tag),
-            .mem_req_ready  (fab_req_ready[FAB_CP_PORT]),
-            .mem_rsp_valid  (fab_rsp_valid[FAB_CP_PORT]),
-            .mem_rsp_data   (fab_rsp_data[FAB_CP_PORT]),
-            .mem_rsp_tag    (fab_rsp_tag[FAB_CP_PORT][`VX_CP_AXI_TID_WIDTH-1:0]),
-            .mem_rsp_ready  (fab_rsp_ready[FAB_CP_PORT])
+            .mem_req_ready  (cp_mem_req_ready),
+            .mem_rsp_valid  (cp_mem_rsp_valid),
+            .mem_rsp_data   (cp_mem_rsp_data),
+            .mem_rsp_tag    (cp_mem_rsp_tag),
+            .mem_rsp_ready  (cp_mem_rsp_ready)
         );
 
-        assign fab_req_addr[FAB_CP_PORT] = cp_mem_req_addr[VX_MEM_ADDR_A_WIDTH-1:0];
-        assign fab_req_tag[FAB_CP_PORT]  = FAB_TAG_WIDTH'(cp_mem_req_tag);
-        `UNUSED_VAR (cp_mem_req_addr[CP_LINE_ADDRW-1:VX_MEM_ADDR_A_WIDTH])
-        `UNUSED_VAR (fab_rsp_tag[FAB_CP_PORT])
+        if (CP_DMA_LLC != 0) begin : g_cp_llc
+            `STATIC_ASSERT(CP_MEM_DATA_SIZE == FAB_DATA_SIZE, ("CP DMA beat must match the last-level cache word"))
+            `STATIC_ASSERT(CP_MEM_TAG_WIDTH >= `VX_CP_AXI_TID_WIDTH, ("CP DMA id does not fit the last-level cache slot tag"))
+            assign cp_llc_req_valid  = cp_mem_req_valid;
+            assign cp_llc_req_rw     = cp_mem_req_rw;
+            assign cp_llc_req_addr   = cp_mem_req_addr[CP_MEM_ADDR_WIDTH-1:0];
+            assign cp_llc_req_data   = cp_mem_req_data;
+            assign cp_llc_req_byteen = cp_mem_req_byteen;
+            assign cp_llc_req_tag    = CP_MEM_TAG_WIDTH'(cp_mem_req_tag);
+            assign cp_mem_req_ready  = cp_llc_req_ready;
+            assign cp_mem_rsp_valid  = cp_llc_rsp_valid;
+            assign cp_mem_rsp_data   = cp_llc_rsp_data;
+            assign cp_mem_rsp_tag    = cp_llc_rsp_tag[`VX_CP_AXI_TID_WIDTH-1:0];
+            assign cp_llc_rsp_ready  = cp_mem_rsp_ready;
+            `UNUSED_VAR (cp_mem_req_addr[CP_LINE_ADDRW-1:CP_MEM_ADDR_WIDTH])
+            `UNUSED_VAR (cp_llc_rsp_tag)
+        end else begin : g_cp_fabric
+            assign fab_req_valid[FAB_CP_PORT]  = cp_mem_req_valid;
+            assign fab_req_rw[FAB_CP_PORT]     = cp_mem_req_rw;
+            assign fab_req_addr[FAB_CP_PORT]   = cp_mem_req_addr[VX_MEM_ADDR_A_WIDTH-1:0];
+            assign fab_req_data[FAB_CP_PORT]   = cp_mem_req_data;
+            assign fab_req_byteen[FAB_CP_PORT] = cp_mem_req_byteen;
+            assign fab_req_tag[FAB_CP_PORT]    = FAB_TAG_WIDTH'(cp_mem_req_tag);
+            assign cp_mem_req_ready            = fab_req_ready[FAB_CP_PORT];
+            assign cp_mem_rsp_valid            = fab_rsp_valid[FAB_CP_PORT];
+            assign cp_mem_rsp_data             = fab_rsp_data[FAB_CP_PORT];
+            assign cp_mem_rsp_tag              = fab_rsp_tag[FAB_CP_PORT][`VX_CP_AXI_TID_WIDTH-1:0];
+            assign fab_rsp_ready[FAB_CP_PORT]  = cp_mem_rsp_ready;
+            `UNUSED_VAR (cp_mem_req_addr[CP_LINE_ADDRW-1:VX_MEM_ADDR_A_WIDTH])
+            `UNUSED_VAR (fab_rsp_tag[FAB_CP_PORT])
+
+            assign cp_llc_req_valid  = 1'b0;
+            assign cp_llc_req_rw     = 1'b0;
+            assign cp_llc_req_addr   = '0;
+            assign cp_llc_req_data   = '0;
+            assign cp_llc_req_byteen = '0;
+            assign cp_llc_req_tag    = '0;
+            assign cp_llc_rsp_ready  = 1'b1;
+            `UNUSED_VAR ({cp_llc_req_ready, cp_llc_rsp_valid, cp_llc_rsp_data, cp_llc_rsp_tag})
+        end
 
         // The optional AXI4 sideband signals (size/burst) are unused by the
         // bridge's reduced view — pin them sink-side so lint stays clean.

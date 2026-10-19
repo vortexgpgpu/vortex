@@ -110,7 +110,8 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
         case 0x000: return cp_ctrl_;
         case 0x004: return uint32_t(busy() ? 1 : 0);    // CP_STATUS bit0
         case 0x008: {
-            // CP_DEV_CAPS: {SUPPORTS_QMD:1 @bit26 | SUPPORTS_DRAW:1 @bit25 |
+            // CP_DEV_CAPS: {DMA_LLC_CLIENT:1 @bit28 | MMU_FAULT_REPORT:1 @bit27 |
+            // SUPPORTS_QMD:1 @bit26 | SUPPORTS_DRAW:1 @bit25 |
             // VM_ENABLED:1 @bit24 | AXI_TID_W:8 | RING_LOG2:8 | NUM_QUEUES:8}.
             // Defaults: TID=6, RING_LOG2=16, NUM_QUEUES=1. VM_ENABLED reflects
             // the build-config so the config-agnostic libvortex.so can
@@ -125,7 +126,8 @@ uint32_t CommandProcessor::mmio_read(uint32_t off) const {
             const uint32_t supports_draw = 1u << 25;
             const uint32_t supports_qmd  = 1u << 26;
             const uint32_t fault_report  = hooks_.mmu_fault_report ? (1u << 27) : 0;
-            return supports_qmd | supports_draw | vm_enabled | fault_report
+            const uint32_t llc_client    = hooks_.dma_llc_client ? (1u << 28) : 0;
+            return llc_client | supports_qmd | supports_draw | vm_enabled | fault_report
                  | (uint32_t(6) << 16) | (uint32_t(16) << 8) | uint32_t(1);
         }
         case 0x010: return uint32_t(cycle_counter_ & 0xFFFFFFFF);
@@ -547,6 +549,8 @@ void CommandProcessor::tick_engine() {
                         src = cp_translate(src, physical);
                     }
                     const uint64_t total = cur_cmd_.arg2;
+                    const bool no_alloc = hooks_.dma_no_alloc_min != 0
+                                       && total >= hooks_.dma_no_alloc_min;
                     constexpr uint64_t CHUNK = 64 * 1024;
                     std::vector<uint8_t> buf(
                         std::size_t(total < CHUNK ? total : CHUNK));
@@ -554,7 +558,11 @@ void CommandProcessor::tick_engine() {
                         uint64_t n = total - done;
                         if (n > CHUNK) n = CHUNK;
                         hooks_.dram_read (src + done, buf.data(), n);
-                        hooks_.dram_write(dst + done, buf.data(), n);
+                        if (hooks_.dma_write) {
+                            hooks_.dma_write(dst + done, buf.data(), n, no_alloc);
+                        } else {
+                            hooks_.dram_write(dst + done, buf.data(), n);
+                        }
                         done += n;
                     }
                 }

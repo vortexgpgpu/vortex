@@ -50,6 +50,21 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
     output wire                             dcr_rsp_valid,
     output wire [VX_DCR_DATA_WIDTH-1:0]     dcr_rsp_data,
 
+    // Command-processor DMA into the last-level cache
+    input  wire                             cp_mem_req_valid,
+    input  wire                             cp_mem_req_rw,
+    input  wire                             cp_mem_req_noalloc,
+    input  wire [CP_MEM_ADDR_WIDTH-1:0]     cp_mem_req_addr,
+    input  wire [CP_MEM_DATA_SIZE*8-1:0]    cp_mem_req_data,
+    input  wire [CP_MEM_DATA_SIZE-1:0]      cp_mem_req_byteen,
+    input  wire [CP_MEM_TAG_WIDTH-1:0]      cp_mem_req_tag,
+    output wire                             cp_mem_req_ready,
+
+    output wire                             cp_mem_rsp_valid,
+    output wire [CP_MEM_DATA_SIZE*8-1:0]    cp_mem_rsp_data,
+    output wire [CP_MEM_TAG_WIDTH-1:0]      cp_mem_rsp_tag,
+    input  wire                             cp_mem_rsp_ready,
+
     // ctrl/status
     input  wire                             start,
     output wire                             busy
@@ -103,6 +118,19 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
 
         .dcr_rsp_valid  (dcr_rsp_valid),
         .dcr_rsp_data   (dcr_rsp_data),
+
+        .cp_mem_req_valid   (cp_mem_req_valid),
+        .cp_mem_req_rw      (cp_mem_req_rw),
+        .cp_mem_req_noalloc (cp_mem_req_noalloc),
+        .cp_mem_req_addr    (cp_mem_req_addr),
+        .cp_mem_req_data    (cp_mem_req_data),
+        .cp_mem_req_byteen  (cp_mem_req_byteen),
+        .cp_mem_req_tag     (cp_mem_req_tag),
+        .cp_mem_req_ready   (cp_mem_req_ready),
+        .cp_mem_rsp_valid   (cp_mem_rsp_valid),
+        .cp_mem_rsp_data    (cp_mem_rsp_data),
+        .cp_mem_rsp_tag     (cp_mem_rsp_tag),
+        .cp_mem_rsp_ready   (cp_mem_rsp_ready),
 
         .start          (start),
         .busy           (vx_busy)

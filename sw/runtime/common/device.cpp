@@ -363,6 +363,9 @@ vx_result_t Device::cp_init() {
         // Reading them on a target that does not decode them stalls the DCR
         // bus waiting for a response that never arrives.
         mmu_fault_report_ = (dev_caps & (1u << 27)) != 0;
+        // DMA_LLC_CLIENT (bit 28): the CP DMA is a client of the last-level
+        // cache, which is then the point of coherence for host transfers.
+        cp_dma_llc_client_ = (dev_caps & (1u << 28)) != 0;
     }
 
     // Resolve the core count now, while nothing holds cp_mu_. Deferring it to
@@ -552,9 +555,10 @@ vx_result_t Device::cp_ring_append_(const void* cl) {
     // Caller holds cp_mu_. A kernel's results are flushed lazily, by the
     // next command that needs them: the next launch gets an L1-only flush
     // (the last-level cache is the point of coherence between kernels), and
-    // the next transfer to or from device memory a full one, since the CP
-    // DMA reaches device memory beneath the last-level cache. Appending the
-    // flush under the same lock keeps any other command from slipping between.
+    // the next transfer to or from device memory a full one when the CP DMA
+    // reaches device memory beneath the last-level cache, an L1-only one when
+    // it is a client of that cache. Appending the flush under the same lock
+    // keeps any other command from slipping between.
     const uint8_t* b = static_cast<const uint8_t*>(cl);
     const bool dma = cp_dma_touches_device_mem(b);
     const bool launch = (b[0] == CP_OPCODE_LAUNCH)
@@ -562,11 +566,12 @@ vx_result_t Device::cp_ring_append_(const void* cl) {
                      || (b[0] == CP_OPCODE_DRAW);
     if ((dma && (l1_dirty_ || llc_dirty_)) || (launch && l1_dirty_)) {
         uint8_t flush[CP_CL_BYTES];
-        build_cache_flush(flush, cp_num_cores_, /*l1_only=*/!dma);
+        const bool full = dma && llc_dirty_;
+        build_cache_flush(flush, cp_num_cores_, /*l1_only=*/!full);
         auto r = cp_ring_write_(flush);
         if (r != VX_SUCCESS) return r;
         l1_dirty_ = false;
-        llc_dirty_ = llc_dirty_ && !dma;
+        llc_dirty_ = llc_dirty_ && !full;
     }
     assert(!(dma && (l1_dirty_ || llc_dirty_)));
     auto r = cp_ring_write_(cl);
@@ -574,7 +579,7 @@ vx_result_t Device::cp_ring_append_(const void* cl) {
     if (launch) {
         // a draw descriptor ends on its own L1-only flush step
         l1_dirty_ = (b[0] != CP_OPCODE_DRAW);
-        llc_dirty_ = true;
+        llc_dirty_ = !cp_dma_llc_client_;
     } else if (b[0] == CP_OPCODE_CACHE_FLUSH) {
         l1_dirty_ = false;
         llc_dirty_ = llc_dirty_ && (b[1] & CP_FLUSH_FLAG_L1_ONLY);

@@ -199,6 +199,13 @@ l3_is_llc = "expr: $VX_CFG_L3_ENABLED == 1"
 single_core = "expr: $VX_CFG_NUM_CORES == 1 and $VX_CFG_NUM_CLUSTERS == 1"
 single_cluster = "expr: $VX_CFG_NUM_CLUSTERS == 1"
 
+# The command processor's DMA becomes a client of the last-level cache, which
+# is then the point of coherence for host transfers: they need no cache flush.
+# Only a last-level cache that alone serves every core can take it (an L2 with
+# one cluster, or an L3); VX_CFG_CP_ON_LLC is set where it took effect.
+VX_CFG_CP_LLC_CLIENT = 0
+VX_CFG_CP_ON_LLC = "expr: int($VX_CFG_CP_LLC_CLIENT != 0 and (($l2_is_llc and $single_cluster) or $l3_is_llc))"
+
 [l1cache]
 VX_CFG_ICACHE_SIZE = 16384
 VX_CFG_ICACHE_NUM_WAYS = 4

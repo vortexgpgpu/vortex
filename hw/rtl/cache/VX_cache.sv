@@ -42,6 +42,8 @@ module VX_cache import VX_gpu_pkg::*; #(
 
     parameter LAZY_FETCH            = 0,      // Write misses allocate without a fill (write-validate)
 
+    parameter WRITE_AROUND          = 0,      // Write misses flagged no-allocate go to memory (write-back only)
+
     parameter REPL_POLICY           = `CS_REPL_FIFO, // Replacement policy
 
     parameter TAG_WIDTH             = UUID_WIDTH + 1, // core request tag size
@@ -72,6 +74,7 @@ module VX_cache import VX_gpu_pkg::*; #(
     `STATIC_ASSERT(WRITE_ENABLE || !WRITEBACK, ("invalid parameter: writeback requires write enable"))
     `STATIC_ASSERT(WRITEBACK || !DIRTY_BYTES, ("invalid parameter: dirty bytes require writeback"))
     `STATIC_ASSERT(!LAZY_FETCH || (WRITEBACK && DIRTY_BYTES && IS_LLC), ("invalid parameter: lazy fetch requires a write-back LLC with dirty bytes"))
+    `STATIC_ASSERT(!WRITE_AROUND || WRITEBACK, ("invalid parameter: write-around requires a write-back cache"))
     `STATIC_ASSERT(NUM_BANKS >= MEM_PORTS, ("invalid parameter: number of banks must be greater or equal to number of memory ports"))
     `STATIC_ASSERT(!BANK_HASH || NUM_BANKS <= 256, ("invalid parameter: bank hash supports up to 256 banks"))
     localparam REQ_SEL_WIDTH   = `UP(`CS_REQ_SEL_BITS);
@@ -376,6 +379,7 @@ module VX_cache import VX_gpu_pkg::*; #(
             .WRITEBACK    (WRITEBACK),
             .DIRTY_BYTES  (DIRTY_BYTES),
             .LAZY_FETCH   (LAZY_FETCH),
+            .WRITE_AROUND (WRITE_AROUND),
             .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),

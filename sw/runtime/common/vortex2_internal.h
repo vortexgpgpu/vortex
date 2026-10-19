@@ -387,8 +387,8 @@ private:
     // the non-batch path, or via cp_batch_begin). No doorbell, no poll.
     // Inserts the lazy kernel-boundary CMD_CACHE_FLUSH (AMD ACQUIRE_MEM
     // model) under the same lock: L1-only ahead of a launch while
-    // l1_dirty_, full ahead of a CMD_MEM_* touching device memory while
-    // either flag is set.
+    // l1_dirty_, and ahead of a CMD_MEM_* touching device memory while
+    // either flag is set -- full while llc_dirty_.
     vx_result_t cp_ring_append_(const void* cl);
     vx_result_t cp_ring_write_(const void* cl);
 
@@ -460,7 +460,7 @@ private:
     // stale lines.
     bool                           l1_dirty_           = false;
     // A kernel ran since the last full cache flush, so the last-level cache
-    // may hold lines the CP DMA (which reaches device memory beneath it)
+    // may hold lines the CP DMA (when it reaches device memory beneath it)
     // would miss or later overwrite. Both flags are guarded by cp_mu_.
     bool                           llc_dirty_          = false;
     std::mutex                     cp_mu_;             // serialize ring writes
@@ -492,6 +492,9 @@ private:
     // the OP_DRAW mirror). Discovered at open.
     bool                                cp_supports_draw_ = false;
     bool                                cp_supports_qmd_ = false;
+    // The CP DMA reaches device memory through the last-level cache (CP
+    // DEV_CAPS bit 28), so transfers never need that cache flushed.
+    bool                                cp_dma_llc_client_ = false;
     class CpMemIO;
     std::unique_ptr<CpMemIO>            vm_io_;
     std::unique_ptr<vortex::VMManager>  vm_mgr_;

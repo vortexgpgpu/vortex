@@ -56,6 +56,10 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     output wire                    mmu_flush_done,
 `endif
 
+    // Command-processor DMA, entering as an L2 client when this cluster's L2
+    // is the LLC (CP_ON_L2); tied off otherwise.
+    VX_mem_bus_if.slave         cp_mem_if,
+
     // Status
     output wire                 busy
 );
@@ -180,7 +184,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH (L2_TAG_WIDTH)
-    ) per_socket_mem_bus_if[L2_NUM_REQS]();
+    ) per_socket_mem_bus_if[L2_CACHE_REQS]();
 
     // Socket memory output buses (socket arb output tag width)
     VX_mem_bus_if #(
@@ -216,7 +220,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .NUM_BANKS      (L2_NUM_BANKS),
         .NUM_WAYS       (`VX_CFG_L2_NUM_WAYS),
         .WORD_SIZE      (L2_WORD_SIZE),
-        .NUM_REQS       (L2_NUM_REQS),
+        .NUM_REQS       (L2_CACHE_REQS),
         .MEM_PORTS      (L2_MEM_PORTS),
         .CRSQ_SIZE      (`VX_CFG_L2_CRSQ_SIZE),
         .MSHR_SIZE      (`VX_CFG_L2_MSHR_SIZE),
@@ -228,6 +232,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .WRITEBACK      (`VX_CFG_L2_WRITEBACK),
         .DIRTY_BYTES    (`VX_CFG_L2_DIRTYBYTES),
         .LAZY_FETCH     (`VX_CFG_L2_LAZY_FETCH),
+        .WRITE_AROUND   (CP_ON_L2),
         .REPL_POLICY    (`VX_CFG_L2_REPL_POLICY),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
@@ -289,6 +294,12 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     for (genvar i = 0; i < L2_MEM_PORTS; ++i) begin : g_l2_mem_out
         `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l2_mem_bus_if[i]);
+    end
+
+    if (CP_ON_L2 != 0) begin : g_cp_l2_client
+        `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_CP_IDX], cp_mem_if);
+    end else begin : g_no_cp_l2_client
+        `UNUSED_VX_MEM_BUS_IF (cp_mem_if)
     end
 
     ///////////////////////////////////////////////////////////////////////////

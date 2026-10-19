@@ -107,6 +107,17 @@ public:
         // so the runtime does not read them on a target that would leave
         // the DCR bus waiting for a response.
         bool mmu_fault_report = false;
+
+        // Write `bytes` bytes from `src` to `addr` for a CMD_MEM_* transfer.
+        // `no_alloc` marks a transfer of at least dma_no_alloc_min bytes,
+        // whose writes should not allocate in the device caches. Unset:
+        // dram_write.
+        std::function<void(uint64_t addr, const void* src, std::size_t bytes, bool no_alloc)> dma_write;
+        uint64_t dma_no_alloc_min = 0;
+
+        // Device-memory accesses go through the last-level cache, so host
+        // transfers need no cache flush. Published in DEV_CAPS.
+        bool dma_llc_client = false;
     };
 
     explicit CommandProcessor(const Hooks& hooks);

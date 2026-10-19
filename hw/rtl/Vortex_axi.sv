@@ -138,6 +138,19 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .dcr_rsp_valid  (dcr_rsp_valid),
         .dcr_rsp_data   (dcr_rsp_data),
 
+        .cp_mem_req_valid   (1'b0),
+        .cp_mem_req_rw      (1'b0),
+        .cp_mem_req_noalloc (1'b0),
+        .cp_mem_req_addr    ('0),
+        .cp_mem_req_data    ('0),
+        .cp_mem_req_byteen  ('0),
+        .cp_mem_req_tag     ('0),
+        `UNUSED_PIN (cp_mem_req_ready),
+        `UNUSED_PIN (cp_mem_rsp_valid),
+        `UNUSED_PIN (cp_mem_rsp_data),
+        `UNUSED_PIN (cp_mem_rsp_tag),
+        .cp_mem_rsp_ready   (1'b1),
+
         .start          (start),
         .busy           (vx_busy)
     );

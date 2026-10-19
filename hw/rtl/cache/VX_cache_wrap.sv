@@ -44,6 +44,8 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
 
     parameter LAZY_FETCH            = 0,      // Write misses allocate without a fill (write-validate)
 
+    parameter WRITE_AROUND          = 0,      // Write misses flagged no-allocate go to memory (write-back only)
+
     parameter REPL_POLICY           = `CS_REPL_FIFO, // Replacement policy
 
     parameter TAG_WIDTH             = UUID_WIDTH + 1, // core request tag size
@@ -148,6 +150,7 @@ module VX_cache_wrap import VX_gpu_pkg::*; #(
             .WRITEBACK    (WRITEBACK),
             .DIRTY_BYTES  (DIRTY_BYTES),
             .LAZY_FETCH   (LAZY_FETCH),
+            .WRITE_AROUND (WRITE_AROUND),
             .REPL_POLICY  (REPL_POLICY),
             .CRSQ_SIZE    (CRSQ_SIZE),
             .MSHR_SIZE    (MSHR_SIZE),

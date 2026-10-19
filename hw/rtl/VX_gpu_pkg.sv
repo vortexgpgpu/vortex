@@ -209,8 +209,11 @@ package VX_gpu_pkg;
     // is_flush at LSB so dcr_flush can drive it deterministically.
     // is_addr_om is appended ABOVE amo, deliberately: the amo field is cast by
     // offset (VX_cache_bank), so inserting a bit below it would silently shift
-    // MEM_ATTR_AMO_OFFS and reinterpret the AMO sideband.
+    // MEM_ATTR_AMO_OFFS and reinterpret the AMO sideband. is_noalloc sits above
+    // amo for the same reason: a write that misses a write-around cache goes to
+    // memory instead of allocating.
     typedef struct packed {
+        logic                        is_noalloc;    // MEM_ATTR_NOALLOC_OFFS
         amo_req_t                    amo;           // MEM_ATTR_AMO_OFFS   = 4
         logic                        is_addr_om;    // MEM_ATTR_OM_OFFS    = 3
         logic                        is_addr_local; // MEM_ATTR_LOCAL_OFFS = 2
@@ -223,6 +226,7 @@ package VX_gpu_pkg;
     localparam MEM_ATTR_LOCAL_OFFS  = 2;
     localparam MEM_ATTR_OM_OFFS     = 3;
     localparam MEM_ATTR_AMO_OFFS    = 4;
+    localparam MEM_ATTR_NOALLOC_OFFS = MEM_ATTR_AMO_OFFS + AMO_REQ_BITS;
 
     // Total width of the mem-bus attr field. Use this as the parameter
     // default for VX_mem_bus_if's ATTR_WIDTH parameter and as the
@@ -1952,6 +1956,19 @@ package VX_gpu_pkg;
     localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
+
+    // The command processor's DMA enters the shared LLC on one more client
+    // slot (VX_CFG_CP_ON_LLC): the cluster L2 when it is the LLC of a single
+    // cluster, the L3 otherwise. The slot does not size the banks, so
+    // L2_NUM_REQS / L3_NUM_REQS exclude it and *_CACHE_REQS count it.
+    localparam CP_ON_L2             = ((`VX_CFG_CP_ON_LLC != 0)
+                                    && (`VX_CFG_NUM_CLUSTERS == 1)
+                                    && (`VX_CFG_L2_ENABLED != 0)
+                                    && (`VX_CFG_L3_ENABLED == 0)) ? 1 : 0;
+    localparam CP_ON_L3             = ((`VX_CFG_CP_ON_LLC != 0) && (`VX_CFG_L3_ENABLED != 0)) ? 1 : 0;
+    localparam L2_CP_IDX            = L2_NUM_REQS;
+    localparam L2_CACHE_REQS        = L2_NUM_REQS + CP_ON_L2;
+
     localparam L2_NUM_BANKS         = `VX_CFG_L2_NUM_BANKS;
     localparam L2_MEM_PORTS         = `VX_CFG_L2_MEM_PORTS;
 
@@ -1974,9 +1991,9 @@ package VX_gpu_pkg;
 
     // Memory request tag bits
 `ifdef VX_CFG_L2_ENABLE
-    localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L2_MSHR_SIZE, L2_NUM_BANKS, L2_NUM_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH, UUID_WIDTH);
+    localparam L2_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L2_MSHR_SIZE, L2_NUM_BANKS, L2_CACHE_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH, UUID_WIDTH);
 `else
-    localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_NUM_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
+    localparam L2_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L2_CACHE_REQS, L2_MEM_PORTS, L2_SECTOR_SIZE, L2_WORD_SIZE, L2_TAG_WIDTH);
 `endif
 
     // L2 is the LLC iff L2 is enabled and L3 is not.
@@ -1999,6 +2016,8 @@ package VX_gpu_pkg;
     localparam L3_PTW_IDX           = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
     localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS
                                     + ((`VX_CFG_VM_ENABLED != 0) && (PTW_ON_L2 == 0) ? 1 : 0);
+    localparam L3_CP_IDX            = L3_NUM_REQS;
+    localparam L3_CACHE_REQS        = L3_NUM_REQS + CP_ON_L3;
     localparam L3_NUM_BANKS         = `VX_CFG_L3_NUM_BANKS;
     localparam L3_MEM_PORTS         = `VX_CFG_L3_MEM_PORTS;
 
@@ -2010,13 +2029,20 @@ package VX_gpu_pkg;
 
     // Memory request tag bits
 `ifdef VX_CFG_L3_ENABLE
-    localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L3_MSHR_SIZE, L3_NUM_BANKS, L3_NUM_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH, UUID_WIDTH);
+    localparam L3_MEM_TAG_WIDTH     = `CACHE_NC_MEM_TAG_WIDTH(`VX_CFG_L3_MSHR_SIZE, L3_NUM_BANKS, L3_CACHE_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH, UUID_WIDTH);
 `else
-    localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_NUM_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
+    localparam L3_MEM_TAG_WIDTH     = `CACHE_BYPASS_TAG_WIDTH(L3_CACHE_REQS, L3_MEM_PORTS, L3_SECTOR_SIZE, L3_WORD_SIZE, L3_TAG_WIDTH);
 `endif
     // L3 is the LLC whenever it is enabled.
     localparam L3_IS_LLC            = `VX_CFG_L3_ENABLED;
     localparam L3_SHARED_LLC        = L3_IS_LLC;
+
+    // CP DMA port into the LLC client slot: one LLC word per request. The
+    // slot tag carries the port's tag plus a fence marker.
+    localparam CP_MEM_DATA_SIZE     = (CP_ON_L2 != 0) ? L2_WORD_SIZE : L3_WORD_SIZE;
+    localparam CP_MEM_ADDR_WIDTH    = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(CP_MEM_DATA_SIZE);
+    localparam CP_SLOT_TAG_WIDTH    = (CP_ON_L2 != 0) ? L2_TAG_WIDTH : L3_TAG_WIDTH;
+    localparam CP_MEM_TAG_WIDTH     = CP_SLOT_TAG_WIDTH - UUID_WIDTH - 1;
 
     ///////////////////////////////////////////////////////////////////////////
 

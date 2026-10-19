@@ -740,6 +740,19 @@ module vortex_afu import ccip_if_pkg::*; import local_mem_cfg_pkg::*; import VX_
         .dcr_rsp_valid  (vx_dcr_rsp_valid),
         .dcr_rsp_data   (vx_dcr_rsp_data),
 
+        .cp_mem_req_valid   (1'b0),
+        .cp_mem_req_rw      (1'b0),
+        .cp_mem_req_noalloc (1'b0),
+        .cp_mem_req_addr    ('0),
+        .cp_mem_req_data    ('0),
+        .cp_mem_req_byteen  ('0),
+        .cp_mem_req_tag     ('0),
+        `UNUSED_PIN (cp_mem_req_ready),
+        `UNUSED_PIN (cp_mem_rsp_valid),
+        `UNUSED_PIN (cp_mem_rsp_data),
+        `UNUSED_PIN (cp_mem_rsp_tag),
+        .cp_mem_rsp_ready   (1'b1),
+
         .start          (vx_start),
         .busy           (vx_busy)
     );

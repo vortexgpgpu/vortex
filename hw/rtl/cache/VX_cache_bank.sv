@@ -32,6 +32,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     parameter WRITEBACK         = 0,
     parameter DIRTY_BYTES       = 0,
     parameter LAZY_FETCH        = 0,        // write miss allocates without a fill; a load to a partial sector refetches
+    parameter WRITE_AROUND      = 0,        // a write miss flagged no-allocate is sent to memory instead
     parameter REPL_POLICY       = `CS_REPL_FIFO,
     parameter TAG_WIDTH         = UUID_WIDTH + 1,
     parameter CORE_OUT_BUF      = 0,
@@ -105,6 +106,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     localparam CRSQ_QUEUE_SIZE = 1 << `CLOG2(2 + CRSQ_SIZE);
     `STATIC_ASSERT(LATENCY >= 2, ("invalid parameter: cache bank LATENCY must be >= 2"))
     `STATIC_ASSERT(!LAZY_FETCH || (WRITEBACK && DIRTY_BYTES && IS_LLC), ("invalid parameter: lazy fetch requires a write-back LLC with dirty bytes"))
+    `STATIC_ASSERT(!WRITE_AROUND || (WRITEBACK && WRITE_ENABLE), ("invalid parameter: write-around requires a write-back cache"))
     `UNUSED_PARAM (MRSQ_SIZE)
 
     // ========================================================================
@@ -940,10 +942,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     );
 
     // stD write word delayed to stC for its consumers there (the AMO RMW
-    // operand and the write-through memory payload); elided when no stC
-    // consumer exists (write-through banks, or writeback banks with LLC AMO).
+    // operand and the write-through or write-around memory payload); elided
+    // when no stC consumer exists.
     wire [`CS_WORD_WIDTH-1:0] word_stc;
-    if ((WRITE_ENABLE != 0) && (!WRITEBACK || (AMO_ENABLE != 0 && IS_LLC != 0))) begin : g_word_stc
+    if ((WRITE_ENABLE != 0) && (!WRITEBACK || (AMO_ENABLE != 0 && IS_LLC != 0) || (WRITE_AROUND != 0))) begin : g_word_stc
         VX_pipe_register #(
             .DATAW (`CS_WORD_WIDTH)
         ) reg_word_stc (
@@ -977,7 +979,10 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     // release the entry on a hit.
     wire mshr_release_st1;
     if (WRITEBACK) begin : g_mshr_release
-        assign mshr_release_st1 = st1.lk.is_hit && ~is_amo_fwd_rel;
+        // a write-around miss keeps nothing: it leaves for memory at stC.
+        wire write_around_st1 = (WRITE_AROUND != 0) && st1.req.rw && st1.req.attr[MEM_ATTR_NOALLOC_OFFS]
+                              && ~st1.lk.is_hit && ~st1.lk.mshr_pending;
+        assign mshr_release_st1 = (st1.lk.is_hit || write_around_st1) && ~is_amo_fwd_rel;
     end else begin : g_mshr_release_ro
         // keep missed writes in MSHR if a pending entry exists for the line, so a
         // pending fill arriving without the write content replays them locally.
@@ -1331,8 +1336,13 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
     wire mreq_queue_rw;
 
     wire is_fill_or_flush_stc = stC.req.is_fill || (stC.req.is_flush && WRITEBACK);
+    // a no-allocate write miss with no fill pending on its line is sent to
+    // memory as is: nothing is allocated or fetched.
+    wire write_around_stc = (WRITE_AROUND != 0) && do_write_stc && stC.req.attr[MEM_ATTR_NOALLOC_OFFS]
+                          && ~stC.lk.is_hit && ~stC.lk.mshr_pending;
     // a write-miss root under lazy fetch loops its fill back instead.
-    wire lazy_alloc_stc = (LAZY_FETCH != 0) && do_write_stc && ~stC.lk.is_hit && ~stC.lk.mshr_pending;
+    wire lazy_alloc_stc = (LAZY_FETCH != 0) && do_write_stc && ~stC.lk.is_hit && ~stC.lk.mshr_pending
+                       && ~write_around_stc;
     wire do_fill_or_flush_stc = stC.req.valid && is_fill_or_flush_stc;
     // a sector refill keeps the resident line (no eviction), so never writes back.
     wire do_writeback_stc = do_fill_or_flush_stc && stC.lk.is_dirty && ~stC.lk.is_refill && ~refetch_first_stc;
@@ -1421,13 +1431,30 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             // on a dirty eviction. The two are mutually exclusive (a writeback is a
             // fill/flush commit; a fill request is a creq commit).
             wire fill_req_push = (do_read_stc || do_write_stc) && ~stC.lk.is_hit && ~stC.lk.mshr_pending
-                              && ~lazy_alloc_stc && ~pipe_stall;
-            assign mreq_queue_push   = fill_req_push || wb_beat_accept;
+                              && ~lazy_alloc_stc && ~write_around_stc && ~pipe_stall;
+            wire wa_req_push = write_around_stc && ~pipe_stall;
+            assign mreq_queue_push   = fill_req_push || wa_req_push || wb_beat_accept;
             assign mreq_queue_addr   = is_wb_beat ? wb_mreq_addr : rd_mreq_addr;
-            assign mreq_queue_rw     = is_wb_beat;
-            assign mreq_queue_data   = wb_data_sec; // read fill request: data unused
-            assign mreq_queue_byteen = is_wb_beat ? wb_byteen_sec : {SECTOR_SIZE{1'b1}};
-            `UNUSED_VAR ({stC.req.byteen, stC.req.is_replay})
+            assign mreq_queue_rw     = is_wb_beat || write_around_stc;
+            if (WRITE_AROUND != 0) begin : g_wa_data
+                wire [LINE_SIZE-1:0] full_byteen;
+                VX_demux #(
+                    .DATAW (WORD_SIZE),
+                    .N     (`CS_WORDS_PER_LINE)
+                ) byteen_demux (
+                    .sel_in   (stC.req.word_idx),
+                    .data_in  (stC.req.byteen),
+                    .data_out (full_byteen)
+                );
+                wire [SECTOR_SIZE-1:0] sec_byteen = full_byteen[sector_idx_stc*SECTOR_SIZE +: SECTOR_SIZE];
+                assign mreq_queue_data   = is_wb_beat ? wb_data_sec : {`CS_WORDS_PER_SECTOR{word_stc}};
+                assign mreq_queue_byteen = is_wb_beat ? wb_byteen_sec : (write_around_stc ? sec_byteen : {SECTOR_SIZE{1'b1}});
+            end else begin : g_no_wa_data
+                assign mreq_queue_data   = wb_data_sec; // read fill request: data unused
+                assign mreq_queue_byteen = is_wb_beat ? wb_byteen_sec : {SECTOR_SIZE{1'b1}};
+                `UNUSED_VAR (stC.req.byteen)
+            end
+            `UNUSED_VAR (stC.req.is_replay)
         end else begin : g_wt
             // word byte-enable demuxed over the line, then sliced to the word's sector.
             wire [LINE_SIZE-1:0] full_byteen;
@@ -1449,7 +1476,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
             assign mreq_queue_rw = stC.req.rw;
             assign mreq_queue_data = {`CS_WORDS_PER_SECTOR{word_stc}};
             assign mreq_queue_byteen = (stC.req.rw || is_amo_fwd_st1) ? sec_byteen : {SECTOR_SIZE{1'b1}};
-            `UNUSED_VAR ({is_wb_beat, wb_beat_accept, wb_mreq_addr, wb_data_sec, wb_byteen_sec, wb_sector, evict_addr_stc, stC.lk.evict_tag, stC.lk.is_dirty, stC.lk.evict_dirty_mask})
+            `UNUSED_VAR ({is_wb_beat, wb_beat_accept, wb_mreq_addr, wb_data_sec, wb_byteen_sec, wb_sector, evict_addr_stc, stC.lk.evict_tag, stC.lk.is_dirty, stC.lk.evict_dirty_mask, write_around_stc})
         end
     end else begin : g_mreq_queue_ro
         assign mreq_queue_push = (do_read_stc && ~stC.lk.is_hit && ~stC.lk.mshr_pending) && ~pipe_stall;
@@ -1457,7 +1484,7 @@ module VX_cache_bank import VX_gpu_pkg::*; #(
         assign mreq_queue_rw = 0;
         assign mreq_queue_data = '0;
         assign mreq_queue_byteen = {SECTOR_SIZE{1'b1}};
-        `UNUSED_VAR ({is_wb_beat, wb_beat_accept, wb_mreq_addr, wb_data_sec, wb_byteen_sec, wb_sector, do_writeback_stc, evict_addr_stc, evict_byteen_stc, stC.lk.evict_tag, stC.lk.is_dirty, stC.lk.evict_dirty_mask, stC.req.byteen, stC.req.word_idx, stC.req.is_replay, do_write_stc})
+        `UNUSED_VAR ({is_wb_beat, wb_beat_accept, wb_mreq_addr, wb_data_sec, wb_byteen_sec, wb_sector, do_writeback_stc, evict_addr_stc, evict_byteen_stc, stC.lk.evict_tag, stC.lk.is_dirty, stC.lk.evict_dirty_mask, stC.req.byteen, stC.req.word_idx, stC.req.is_replay, do_write_stc, write_around_stc})
     end
 
     if (UUID_WIDTH != 0) begin : g_mreq_queue_tag_uuid
