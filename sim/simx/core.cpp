@@ -125,7 +125,9 @@ public:
     // create ibuffers
     for (uint32_t i = 0; i < ibuffers_.size(); ++i) {
       snprintf(sname, 100, "%s-ibuffer%d", name.c_str(), i);
-      ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, VX_CFG_IBUF_SIZE);
+      // IBUF_SIZE entries plus the head, which stands for the warp's staging
+      // register once it has moved there
+      ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, VX_CFG_IBUF_SIZE + 1);
     }
 
     // create the memory coalescer, or the lane adapter that replaces it.
@@ -651,16 +653,19 @@ public:
         // check scoreboard against sequencer micro-op (handles uop WAW/RAW)
         auto trace = ibuffer->peek();
 
+        auto seq = sequencers_.at(wid);
+        auto uop_trace = seq->get(trace);  // returns cached uop or generates next
+
         // The head moves into the warp's staging register, freeing its buffer
         // slot, once it has arrived and the warp's previous instruction has
-        // issued; the scheduler sees the freed slot the cycle after.
+        // issued; a macro-op leaves the buffer with its last micro-op. The
+        // scheduler sees the freed slot the cycle after.
         if (!head_staged_.at(wid)
+         && (!trace->instr_ptr->is_macro_op() || seq->last())
          && SimPlatform::instance().cycles() > std::max(last_issue_.at(wid), trace->ibuf_time)) {
           head_staged_.at(wid) = true;
           this->ibuf_release(wid);
         }
-        auto seq = sequencers_.at(wid);
-        auto uop_trace = seq->get(trace);  // returns cached uop or generates next
 
         // The uop sequencer starts a macro-op once it reaches the front of the
         // buffer behind the staged instruction, and offers its first uop the
