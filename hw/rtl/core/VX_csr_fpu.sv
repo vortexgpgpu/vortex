@@ -11,6 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+`ifdef VX_CFG_EXT_F_ENABLE
+
 `include "VX_define.vh"
 `include "VX_fpu_define.vh"
 
@@ -101,3 +103,5 @@ module VX_csr_fpu import VX_gpu_pkg::*, VX_fpu_pkg::*; #(
     end
 
 endmodule
+
+`endif
