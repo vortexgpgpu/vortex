@@ -293,7 +293,7 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     // nonzero case matters here.
     wire f2f_narrow_s3 = is_f2f_s3 & ~dst_d_s3 & ~fclass_s3.is_nan & ~fclass_s3.is_inf & ~fclass_s3.is_zero;
     wire f2f_uf_s3     = f2f_narrow_s3 & (dst_exp_s3 <= 0);                  // -> subnormal/zero
-    wire f2f_of_s3     = f2f_narrow_s3 & (dst_exp_s3 >= S_EXP_WIDTH'(255));  // -> overflow to inf
+    wire f2f_of_s3     = f2f_narrow_s3 & (dst_exp_s3 >= S_EXP_WIDTH'(255));  // F32 exponent overflow
     wire signed [S_EXP_WIDTH-1:0] denorm_sh_s3 = S_EXP_WIDTH'(1) - dst_exp_s3; // right-shift to denormalize
 
     // Alignment right-shift: F2I integer align, or F2F destination denormalization.
@@ -444,6 +444,10 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
         // Canonical specials for F2F (NaN/Inf/Zero propagation in float domain)
         wire [31:0] f2f_qnan_32 = 32'h7FC00000;
         wire [31:0] f2f_inf_32  = {rounded_sign_s5, 8'hFF, 23'd0};
+        wire ovf_to_max = (frm_s5 == INST_FRM_RTZ)
+                       | (frm_s5 == INST_FRM_RDN & ~rounded_sign_s5)
+                       | (frm_s5 == INST_FRM_RUP &  rounded_sign_s5);
+        wire [31:0] f2f_ovf_32 = ovf_to_max ? {rounded_sign_s5, 31'h7F7FFFFF} : f2f_inf_32;
 
         wire [63:0] f2f_qnan_64 = 64'h7FF8000000000000;
         wire [63:0] f2f_inf_64  = {rounded_sign_s5, 11'h7FF, 52'd0};
@@ -468,8 +472,8 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
             else if (is_zero_src)
                 dst_r = dst_d_s5 ? `VX_CFG_XLEN'(f2f_zero_64)
                                  : ((`VX_CFG_XLEN > 32) ? {{(`VX_CFG_XLEN-32){1'b1}}, input_sign_s5, 31'd0} : `VX_CFG_XLEN'({input_sign_s5, 31'd0}));
-            else if (f2f_of_s5) // FCVT.S.D overflow -> F32 inf
-                dst_r = (`VX_CFG_XLEN > 32) ? {{(`VX_CFG_XLEN-32){1'b1}}, f2f_inf_32} : `VX_CFG_XLEN'(f2f_inf_32);
+            else if (f2f_of_s5)
+                dst_r = (`VX_CFG_XLEN > 32) ? {{(`VX_CFG_XLEN-32){1'b1}}, f2f_ovf_32} : `VX_CFG_XLEN'(f2f_ovf_32);
             else
                 dst_r = normal_dst;
         end
