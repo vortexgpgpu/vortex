@@ -21,6 +21,7 @@ all:
 	$(MAKE) -C afu_reset_seq
 	$(MAKE) -C cp_axi_path
 	$(MAKE) -C cp_dma
+	$(MAKE) -C cp_llc_port
 	$(MAKE) -C cp_core
 	$(MAKE) -C fma_unit
 	$(MAKE) -C fdiv_unit
@@ -52,6 +53,7 @@ run:
 	$(MAKE) -C afu_reset_seq run
 	$(MAKE) -C cp_axi_path run
 	$(MAKE) -C cp_dma run
+	$(MAKE) -C cp_llc_port run
 	$(MAKE) -C cp_core run
 	$(MAKE) -C fma_unit run
 	$(MAKE) -C fdiv_unit run
@@ -147,6 +149,7 @@ clean:
 	$(MAKE) -C cp_axil_regfile clean
 	$(MAKE) -C cp_axi_path clean
 	$(MAKE) -C cp_dma clean
+	$(MAKE) -C cp_llc_port clean
 	$(MAKE) -C cp_core clean
 	$(MAKE) -C fma_unit clean
 	$(MAKE) -C fdiv_unit clean

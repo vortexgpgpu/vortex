@@ -31,6 +31,13 @@ tests:
     via: script
     run: "make -C hw/unittest run-tcu-dsp"
     touches: [hw/rtl/tcu, hw/unittest/tcu_fedp]
+  # The command processor's DMA port into the last-level cache: a launch behind
+  # DMA writes must wait for them to reach the cache. No runtime path launches
+  # right behind a DMA write, so no system test observes this ordering.
+  - id: hw-cp-llc-port
+    via: script
+    run: "make -C hw/unittest/cp_llc_port run"
+    touches: [hw/rtl/mem/VX_cp_llc_port.sv, hw/unittest/cp_llc_port]
   # Texel blend (VX_tex_lerp, both forms the sampler uses) against the C model
   # the SW sampler and SimX share, and the exact Vulkan f/256 blend, over every
   # input.
