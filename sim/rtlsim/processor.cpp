@@ -658,6 +658,14 @@ void Processor::cp_mem_read(uint64_t addr, void* dst, uint64_t size) {
   impl_->cp_mem_read(addr, static_cast<uint8_t*>(dst), size);
 }
 
+bool Processor::cp_llc_client() const {
+  return VX_CFG_CP_ON_LLC != 0;
+}
+
+uint64_t Processor::cp_llc_size() const {
+  return VX_CFG_L3_ENABLED ? VX_CFG_L3_SIZE : VX_CFG_L2_SIZE;
+}
+
 void Processor::drain() {
   impl_->drain();
 }

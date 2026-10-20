@@ -51,6 +51,11 @@ public:
 
   void cp_mem_read(uint64_t addr, void* dst, uint64_t size);
 
+  // The command processor's DMA is a client of the last-level cache, of
+  // this size in bytes.
+  bool cp_llc_client() const;
+  uint64_t cp_llc_size() const;
+
 private:
 
   class Impl;
