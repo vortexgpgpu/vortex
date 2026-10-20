@@ -29,9 +29,8 @@ For scale, `sgemm -n32` takes ~1228 ms on rtlsim and ~8 ms on an Alveo U55C,
 and `sgemm -n1024` — over a billion instructions — completes in ~85 s.
 
 ```bash
-export TARGET=hw
 export FPGA_BIN_DIR=<directory containing firesim.xclbin>
-./ci/blackbox.sh --driver=firesim --app=sgemm --args="-n1024"
+./ci/blackbox.sh --driver=firesim --target=hw --app=sgemm --args="-n1024"
 ```
 
 The architecture, build flow and design invariants are documented in
