@@ -877,8 +877,11 @@ public:
         auto trace = fu_out.peek();
         uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
         auto& arb_in = *commit_queues_.at(iw).at(fu);
-        // A unit registers its result once more before the commit arbiter.
-        if (arb_in.try_send(trace, 2)) {
+        // The unit's output registers ahead of the commit arbiter that its
+        // output channel does not already carry: the LSU's response buffer and
+        // result arbiter are in its channel, leaving its lane gather.
+        uint32_t commit_delay = (fu == (uint32_t)FUType::LSU) ? 1 : 2;
+        if (arb_in.try_send(trace, commit_delay)) {
           // Release the warp as soon as its stalling instruction's result leaves
           // the functional unit — the branch target / fence / warp-control is
           // resolved at that point. The release lands in stalled_warps so the
