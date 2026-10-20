@@ -223,17 +223,18 @@ public:
     // setup → req-arb) so each stage's tick reads what its upstream produced
     // earlier this cycle, mimicking forward stage flow.
 
-    // 1) Hand one line per worker to smem_wr. gmem_arb_ already routes
-    // responses back to RspOut[worker_id] (its input index) and restores the
-    // user's tag (the per-worker slot id).
+    // 1) smem_wr drain, then 2) hand it one line per worker, then 3) issue
+    // the next GMEM read. A line leaving pend for the fill buffer frees pend
+    // for a capture in the same cycle. gmem_arb_ already routes responses
+    // back to RspOut[worker_id] (its input index) and restores the user's tag
+    // (the per-worker slot id).
     for (uint32_t worker_id = 0; worker_id < workers_.size(); ++worker_id) {
-      capture_line(workers_[worker_id], gmem_arb_->RspOut.at(worker_id));
-    }
-
-    // 2) Tick workers (smem_wr drain → gmem_req issue).
-    for (auto& w : workers_) {
+      auto& w = workers_[worker_id];
       if (w.state == WState::RUNNING) {
         tick_worker_smem_wr(w);
+      }
+      capture_line(w, gmem_arb_->RspOut.at(worker_id));
+      if (w.state == WState::RUNNING) {
         tick_worker_gmem_req(w);
       }
     }

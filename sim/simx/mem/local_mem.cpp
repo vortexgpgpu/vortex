@@ -54,6 +54,7 @@ protected:
 #endif
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
+	uint32_t dma_last_grant_ = 0;
 
 	uint64_t to_local_addr(uint64_t addr) {
 		return bit_getw(addr, 0, addr_bits_-1);
@@ -110,6 +111,7 @@ public:
 
 	void reset() {
 		perf_stats_ = PerfStats();
+		dma_last_grant_ = config_.dma_clients ? (config_.dma_clients - 1) : 0;
 #if VX_CFG_EXT_A_ENABLED
 		amo_unit_.reset();
 		std::fill(amo_busy_.begin(), amo_busy_.end(), 0);
@@ -119,13 +121,14 @@ public:
 	}
 
 	// Serve one DMA client's row access this cycle and return the banks it
-	// occupies. Clients are served at fixed priority, and DMA wins every bank
-	// it touches over the LSU: a read touches all banks, a write those its
-	// byte enables cover.
+	// occupies. Clients are served round-robin, starting after the last one
+	// served, and DMA wins every bank it touches over the LSU: a read touches
+	// all banks, a write those its byte enables cover.
 	uint64_t dma_tick() {
 		uint32_t num_banks = (1 << config_.B);
 		uint32_t lg2_line_size = log2ceil(config_.line_size);
-		for (uint32_t c = 0; c < config_.dma_clients; ++c) {
+		for (uint32_t i = 0; i < config_.dma_clients; ++i) {
+			uint32_t c = (dma_last_grant_ + 1 + i) % config_.dma_clients;
 			bool pending = false;
 			bool rsp_ready = true;
 			for (uint32_t p = 0; p < DMA_PORTS; ++p) {
@@ -178,6 +181,7 @@ public:
 				DT(4, simobject_->name() << "-dma" << c << " req : " << req);
 				in.pop();
 			}
+			dma_last_grant_ = c;
 			return banks;
 		}
 		return 0;

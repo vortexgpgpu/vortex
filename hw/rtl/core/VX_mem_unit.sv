@@ -166,6 +166,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
     `endif
 
+        // Round-robin, so a DXA write stream cannot starve the TCU's operand reads.
         VX_mem_bus_arb #(
             .NUM_INPUTS  (LMEM_DMA_INPUTS),
             .NUM_OUTPUTS (1),
@@ -173,7 +174,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
             .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
             .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH),
-            .ARBITER     ("P")
+            .ARBITER     ("R")
         ) lmem_dma_arb (
             .clk         (clk),
             .reset       (reset),

@@ -146,7 +146,7 @@ public:
 
     // create local memory.
     // The DXA writes and the TCU tile-buffer reads share the row-wide DMA
-    // port, DXA first.
+    // port, round-robin.
     snprintf(sname, 100, "%s-lmem", name.c_str());
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << VX_CFG_LMEM_LOG_SIZE),
@@ -274,7 +274,7 @@ public:
 
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Bind the TCU tile-buffer subsystem (TcuTbuf) to the LMEM DMA port,
-    // after the DXA.
+    // as the client after the DXA.
     {
       auto& tbuf = tcu_unit_->tbuf();
       uint32_t base = VX_CFG_EXT_DXA_ENABLED * LocalMem::DMA_PORTS;
