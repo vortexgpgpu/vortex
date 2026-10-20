@@ -11,9 +11,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+`include "VX_define.vh"
+
 `ifdef VX_CFG_EXT_F_ENABLE
 
-`include "VX_define.vh"
 `include "VX_fpu_define.vh"
 
 // Per-warp FP CSRs (frm + fflags) for one residue class of warps modulo WID_STRIDE,
