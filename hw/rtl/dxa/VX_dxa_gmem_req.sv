@@ -15,9 +15,9 @@
 //
 // Manages a slot-table-indexed pool of MAX_OUTSTANDING in-flight tags. On
 // each accept, allocates a free slot and writes per-tag metadata. GMEM
-// responses (out-of-order from the L1) queue in a response buffer with one
-// entry per slot and drain to smem_wr via the `sw_*` channel. OOB entries
-// skip the bus and are presented to smem_wr via an oob_pending[] bitvector.
+// responses (out-of-order from the L1) are streamed directly to smem_wr
+// via the `sw_*` channel — no rsp_buf BRAM. OOB entries skip the bus and
+// are presented to smem_wr via an oob_pending[] bitvector.
 //
 // Tag reuse is per-slot via a busy[] bitvector and outstanding counter;
 // release order is independent of issue order (OOO drain in smem_wr).
@@ -242,48 +242,6 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
         end
     end
 
-    VX_mem_bus_if #(
-        .DATA_SIZE (GMEM_BYTES),
-        .TAG_WIDTH (GMEM_TAG_WIDTH)
-    ) mem_bus_raw ();
-
-    assign mem_bus_raw.req_valid = mem_bus_w.req_valid;
-    assign mem_bus_raw.req_data  = mem_bus_w.req_data;
-    assign mem_bus_w.req_ready = mem_bus_raw.req_ready;
-
-    // smem_wr takes a scattered line one element per cycle. The memory
-    // response path is shared with the L1 fills, so a response must never
-    // wait on it: one entry per slot means the buffer is never full. A
-    // response passes straight through when the buffer is empty and smem_wr
-    // is ready.
-    wire rsp_buf_empty, rsp_buf_full;
-    wire [GMEM_DATAW + GMEM_TAG_WIDTH-1:0] rsp_buf_data;
-    wire rsp_bypass = rsp_buf_empty && mem_bus_w.rsp_ready;
-
-    VX_fifo_queue #(
-        .DATAW (GMEM_DATAW + GMEM_TAG_WIDTH),
-        .DEPTH (MAX_OUTSTANDING)
-    ) rsp_buf (
-        .clk      (clk),
-        .reset    (reset),
-        .push     (mem_bus_raw.rsp_valid && ~rsp_bypass),
-        .pop      (~rsp_buf_empty && mem_bus_w.rsp_ready),
-        .data_in  (mem_bus_raw.rsp_data),
-        .data_out (rsp_buf_data),
-        .empty    (rsp_buf_empty),
-        .full     (rsp_buf_full),
-        `UNUSED_PIN (alm_empty),
-        `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
-    );
-
-    `RUNTIME_ASSERT(~(mem_bus_raw.rsp_valid && ~rsp_bypass && rsp_buf_full),
-        ("%t: GMEM response buffer overflow", $time))
-
-    assign mem_bus_raw.rsp_ready = 1'b1;
-    assign mem_bus_w.rsp_valid = mem_bus_raw.rsp_valid || ~rsp_buf_empty;
-    assign mem_bus_w.rsp_data  = rsp_buf_empty ? mem_bus_raw.rsp_data : rsp_buf_data;
-
     VX_mem_bus_slice #(
         .DATA_SIZE   (GMEM_BYTES),
         .TAG_WIDTH   (GMEM_TAG_WIDTH),
@@ -292,7 +250,7 @@ module VX_dxa_gmem_req import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     ) gmem_out_slice (
         .clk        (clk),
         .reset      (reset),
-        .bus_in_if  (mem_bus_raw),
+        .bus_in_if  (mem_bus_w),
         .bus_out_if (gmem_bus_if)
     );
 

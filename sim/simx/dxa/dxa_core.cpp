@@ -97,6 +97,8 @@ public:
   struct InflightSlot {
     bool      allocated = false;
     bool      rsp_arrived = false;
+    bool      oob_pending = false;  // OOB line waiting for its turn into smem_wr
+    bool      deferred = false;     // last line parked until the others drain
     uint64_t  ready_cycle = 0;  // first cycle the line can be written to SMEM
     uint64_t  free_cycle = 0;   // first cycle the slot can carry a new read
     LineWork  work;            // captured at allocation
@@ -126,7 +128,7 @@ public:
     std::vector<LineWork>   work_list;
     uint32_t                ag_idx = 0;          // next entry to issue (gmem_req)
 
-    // gmem_req → rsp_buf → smem_wr inflight bookkeeping.
+    // gmem_req → smem_wr inflight bookkeeping.
     std::array<InflightSlot, VX_CFG_DXA_MAX_INFLIGHT> inflight;
     std::deque<uint32_t>    issued_order;        // outstanding tags in issue order
     uint32_t                drain_slot = UINT32_MAX; // slot currently draining
@@ -217,27 +219,15 @@ public:
   void tick() {
     ++cycle_;
 
-    // Drain in reverse-pipeline order (smem_wr → rsp_buf → gmem_req →
-    // addr_gen → setup → req-arb) so each stage's tick reads what its
-    // upstream produced earlier this cycle, mimicking forward stage flow.
+    // Drain in reverse-pipeline order (smem_wr → gmem_req → addr_gen →
+    // setup → req-arb) so each stage's tick reads what its upstream produced
+    // earlier this cycle, mimicking forward stage flow.
 
-    // 1) Drain GMEM responses → mark inflight slots arrived.
-    // gmem_arb_ already routes responses back to RspOut[worker_id] (its
-    // input index) and restores the user's tag (the per-worker slot id).
+    // 1) Hand one line per worker to smem_wr. gmem_arb_ already routes
+    // responses back to RspOut[worker_id] (its input index) and restores the
+    // user's tag (the per-worker slot id).
     for (uint32_t worker_id = 0; worker_id < workers_.size(); ++worker_id) {
-      auto& ch = gmem_arb_->RspOut.at(worker_id);
-      // One response per port per cycle (each worker has its own RspOut port).
-      if (!ch.empty()) {
-        auto& rsp = ch.peek();
-        uint32_t slot_id = uint32_t(rsp.tag) & (VX_CFG_DXA_MAX_INFLIGHT - 1);
-        auto& w = workers_[worker_id];
-        if (slot_id < w.inflight.size() && w.inflight[slot_id].allocated) {
-          w.inflight[slot_id].rsp_arrived = true;
-          w.inflight[slot_id].ready_cycle = cycle_ + kSmemWrLatency;
-          w.inflight[slot_id].rsp_data    = rsp.data;
-        }
-        ch.pop();
-      }
+      capture_line(workers_[worker_id], gmem_arb_->RspOut.at(worker_id));
     }
 
     // 2) Tick workers (smem_wr drain → gmem_req issue).
@@ -564,6 +554,52 @@ private:
     }
   }
 
+  // ── smem_wr capture: one line per cycle into its line registers ───────
+  // A GMEM response has priority over a pending OOB line. smem_wr holds one
+  // line being written, one captured behind it, and the transfer's last line
+  // while others are outstanding. A response it cannot take stays on the
+  // memory response path and holds the responses queued behind it.
+  void capture_line(Worker& w, SimChannel<MemRsp>& ch) {
+    bool pend_busy  = false;
+    bool defer_busy = false;
+    uint32_t oob_slot = UINT32_MAX;
+    for (uint32_t i = 0; i < w.inflight.size(); ++i) {
+      const auto& s = w.inflight[i];
+      if (s.rsp_arrived && i != w.drain_slot) {
+        (s.deferred ? defer_busy : pend_busy) = true;
+      }
+      if (s.oob_pending && oob_slot == UINT32_MAX) {
+        oob_slot = i;
+      }
+    }
+
+    uint32_t slot = oob_slot;
+    if (!ch.empty()) {
+      slot = uint32_t(ch.peek().tag) & (VX_CFG_DXA_MAX_INFLIGHT - 1);
+      if (!w.inflight[slot].allocated) {
+        ch.pop();
+        return;
+      }
+    }
+    if (slot == UINT32_MAX) {
+      return;
+    }
+
+    auto& s = w.inflight[slot];
+    bool defer = s.work.last && (w.issued_order.size() > 1);
+    if (defer ? defer_busy : pend_busy) {
+      return;
+    }
+    if (!ch.empty()) {
+      s.rsp_data = ch.peek().data;
+      ch.pop();
+    }
+    s.oob_pending = false;
+    s.rsp_arrived = true;
+    s.deferred    = defer;
+    s.ready_cycle = cycle_ + kSmemWrLatency;
+  }
+
   // ── gmem_req: issue MemReqs with available inflight slots ────────────
   void tick_worker_gmem_req(Worker& w) {
     // One AGU step per cycle: advance ag_idx by at most one, issuing at most
@@ -592,12 +628,13 @@ private:
       return;
     }
 
-    // OOB lines skip the GMEM request entirely; we synthesize an immediate
-    // arrival (rsp data left null — smem_wr will use cfill).
+    // OOB lines skip the GMEM request entirely; smem_wr takes them in a cycle
+    // with no GMEM response (rsp data left null — smem_wr will use cfill).
     if (lw.oob) {
       w.inflight[slot].allocated   = true;
-      w.inflight[slot].rsp_arrived = true;
-      w.inflight[slot].ready_cycle = cycle_ + kSmemWrLatency;
+      w.inflight[slot].rsp_arrived = false;
+      w.inflight[slot].oob_pending = true;
+      w.inflight[slot].deferred    = false;
       w.inflight[slot].rsp_data.reset();
       w.inflight[slot].work        = lw;
       w.issued_order.push_back(slot);
@@ -619,6 +656,8 @@ private:
 
     w.inflight[slot].allocated   = true;
     w.inflight[slot].rsp_arrived = false;
+    w.inflight[slot].oob_pending = false;
+    w.inflight[slot].deferred    = false;
     w.inflight[slot].rsp_data.reset();
     w.inflight[slot].work        = lw;
     w.issued_order.push_back(slot);
@@ -816,6 +855,7 @@ private:
           // Slot done — release.
           s.allocated = false;
           s.rsp_arrived = false;
+          s.deferred = false;
           s.free_cycle = cycle_ + 1;
           s.rsp_data.reset();
           auto it = std::find(w.issued_order.begin(), w.issued_order.end(), slot);
