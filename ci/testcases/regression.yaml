@@ -366,6 +366,28 @@ tests:
   shape:
     cores: 4
     l2cache: true
+# Eight L1 ports per core and the DMA's slot give the shared L2 2^k + 1
+# ports, so each bank's port arbiter is a tree whose last slice has one port:
+# 17 ports on two cores, and 65 on eight, past a 64-bit port mask.
+- id: model_parity-sgemm-cp-llc-17
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_CP_LLC_CLIENT=1 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  shape:
+    cores: 2
+    l2cache: true
+- id: sgemm-cp-llc-65
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_CP_LLC_CLIENT=1 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  shape:
+    cores: 8
+    l2cache: true
 # The shared L2 keeps its lines across the L1-only launch flushes.
 - id: model_parity-flush-chain
   check: model_parity

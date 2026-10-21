@@ -34,15 +34,23 @@ namespace {
 constexpr uint32_t kMaxFanout = 8;
 
 // An arbiter over more than 1.5x the fan-out limit is split into a buffered
-// tree, one cycle deeper.
-uint32_t arb_tree_delay(uint32_t requesters) {
-  return (requesters > kMaxFanout + kMaxFanout / 2) ? 1 : 0;
+// tree: slices of up to the fan-out limit each grant into their own buffer,
+// and those buffers are arbitrated the same way, one level per cycle, until
+// few enough remain for a single join arbiter. Returns each buffered level's
+// slice count, none for a single arbiter.
+std::vector<uint32_t> arb_tree_levels(uint32_t requesters) {
+  std::vector<uint32_t> levels;
+  for (uint32_t n = requesters; n > kMaxFanout + kMaxFanout / 2;) {
+    n = (n + kMaxFanout - 1) / kMaxFanout;
+    levels.push_back(n);
+  }
+  return levels;
 }
 
-// Slices of the tree's first level: each arbitrates up to the fan-out limit
-// into its own buffer, and a join arbiter picks among the slice buffers.
+// Slices of the tree's first level, 1 for a single arbiter.
 uint32_t arb_tree_slices(uint32_t requesters) {
-  return (arb_tree_delay(requesters) != 0) ? (requesters + kMaxFanout - 1) / kMaxFanout : 1;
+  auto levels = arb_tree_levels(requesters);
+  return levels.empty() ? 1 : levels.front();
 }
 
 // Registered stages of a radix-2 omega network between a and b ports; up to
@@ -2263,15 +2271,19 @@ public:
     , lg2_inputs_(log2ceil(num_inputs))
     // the request crossbar registers its output when it has more than two inputs
     , delay_((num_inputs > 2) ? 1 : 0)
-    , slices_(arb_tree_slices(num_inputs))
-    , rr_(num_banks * slices_, num_inputs - 1)
-    , join_rr_(num_banks, slices_ - 1)
-    , tree_stage_((slices_ > 1) ? num_banks * slices_ : 0, this)
+    , levels_(arb_tree_levels(num_inputs))
     , merge_group_(merge_group)
   {
-    assert(num_inputs <= 64);
-    __assert(merge_group_ <= 1 || (ispow2(merge_group_) && (num_inputs % merge_group_) == 0),
-             "a read-merge group must be a power of two dividing the ports");
+    __assert(merge_group_ <= 1 || (merge_group_ <= 64 && ispow2(merge_group_) && (num_inputs % merge_group_) == 0),
+             "a read-merge group must be a power of two of at most 64 dividing the ports");
+    tree_stage_.reserve(levels_.size());
+    for (auto slices : levels_) {
+      tree_stage_.emplace_back(num_banks * slices, this);
+    }
+    rr_.resize(levels_.size() + 1);
+    for (uint32_t s = 0; s <= levels_.size(); ++s) {
+      rr_.at(s).resize(num_banks * this->arb_slices(s));
+    }
   }
 
   // Bits of the merged-port mask carried below the request tag.
@@ -2279,39 +2291,51 @@ public:
 
   uint64_t collisions() const { return collisions_; }
 
-  // Ports whose head is a flush token. While any is visible, cacheable
-  // requests are held at every port.
-  uint64_t tokens() const {
-    uint64_t mask = 0;
+  bool is_token(uint32_t i) const {
+    return !ReqIn.at(i).empty() && ReqIn.at(i).peek().flags.flush;
+  }
+
+  // While any port's head is a flush token, cacheable requests are held at
+  // every port.
+  bool any_token() const {
     for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
-      if (!ReqIn.at(i).empty() && ReqIn.at(i).peek().flags.flush) {
-        mask |= 1ull << i;
+      if (this->is_token(i)) {
+        return true;
       }
+    }
+    return false;
+  }
+
+  // Ports whose head is a flush token.
+  std::vector<bool> tokens() const {
+    std::vector<bool> mask(ReqIn.size(), false);
+    for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
+      mask.at(i) = this->is_token(i);
     }
     return mask;
   }
 
   // Tokens owing no walk: IO tokens, and L1-only ones unless they still need
   // a walk here.
-  uint64_t tokens(bool l1_needs_walk) const {
-    uint64_t mask = 0;
+  std::vector<bool> tokens(bool l1_needs_walk) const {
+    std::vector<bool> mask(ReqIn.size(), false);
     for (uint32_t i = 0, n = ReqIn.size(); i < n; ++i) {
-      if (ReqIn.at(i).empty()) {
+      if (!this->is_token(i)) {
         continue;
       }
       auto &flags = ReqIn.at(i).peek().flags;
-      if (flags.flush && (flags.io || (flags.flush_l1 && !l1_needs_walk))) {
-        mask |= 1ull << i;
-      }
+      mask.at(i) = flags.io || (flags.flush_l1 && !l1_needs_walk);
     }
     return mask;
   }
 
   // No cacheable request is left between the ports and the banks.
   bool drained() const {
-    for (auto &stage : tree_stage_) {
-      if (stage.size() != 0) {
-        return false;
+    for (auto &level : tree_stage_) {
+      for (auto &stage : level) {
+        if (stage.size() != 0) {
+          return false;
+        }
       }
     }
     for (auto &out : ReqOut) {
@@ -2333,9 +2357,25 @@ public:
 
 protected:
   void on_reset() {
-    std::fill(rr_.begin(), rr_.end(), ReqIn.size() - 1);
-    std::fill(join_rr_.begin(), join_rr_.end(), slices_ - 1);
+    for (auto &rr : rr_) {
+      std::fill(rr.begin(), rr.end(), 0);
+    }
     collisions_ = 0;
+  }
+
+  // Slices of the arbiter level s: level 0 grants the ports, each level above
+  // the buffers of the level below, and the last level is the join arbiter.
+  uint32_t arb_slices(uint32_t s) const {
+    return (s < levels_.size()) ? levels_.at(s) : 1;
+  }
+
+  // Inputs of slice sl of the arbiter level s.
+  uint32_t arb_slice_size(uint32_t s, uint32_t sl) const {
+    uint32_t inputs = (s == 0) ? ReqIn.size() : levels_.at(s - 1);
+    if (s == levels_.size()) {
+      return inputs;
+    }
+    return std::min(kMaxFanout, inputs - sl * kMaxFanout);
   }
 
   void on_tick() {
@@ -2343,26 +2383,39 @@ protected:
       --init_cycles_;
       return;
     }
-    // the arbiter tree's join level: one slice buffer per bank per cycle
-    for (uint32_t b = 0, nb = (slices_ > 1) ? ReqOut.size() : 0; b < nb; ++b) {
-      if (ReqOut.at(b).full()) {
-        continue;
-      }
-      for (uint32_t k = 1; k <= slices_; ++k) {
-        uint32_t sl = (join_rr_[b] + k) % slices_;
-        auto& stage = tree_stage_.at(b * slices_ + sl);
-        if (!stage.empty()) {
-          ReqOut.at(b).send(stage.peek(), delay_);
-          stage.pop();
-          join_rr_[b] = sl;
-          break;
+    uint32_t nb = ReqOut.size();
+    uint32_t nl = levels_.size();
+    // the tree's buffered levels, join first: each slice passes one buffer of
+    // the level below per cycle
+    for (uint32_t s = nl; s > 0; --s) {
+      uint32_t slices = this->arb_slices(s);
+      uint32_t inputs = levels_.at(s - 1);
+      for (uint32_t b = 0; b < nb; ++b) {
+        for (uint32_t sl = 0; sl < slices; ++sl) {
+          auto& out = (s < nl) ? tree_stage_.at(s).at(b * slices + sl) : ReqOut.at(b);
+          if (out.full()) {
+            continue;
+          }
+          uint32_t lo = (s < nl) ? sl * kMaxFanout : 0;
+          uint32_t size = this->arb_slice_size(s, sl);
+          auto& rr = rr_.at(s).at(b * slices + sl);
+          for (uint32_t k = 0; k < size; ++k) {
+            uint32_t j = (rr + k) % size;
+            auto& in = tree_stage_.at(s - 1).at(b * inputs + lo + j);
+            if (!in.empty()) {
+              out.send(in.peek(), (s < nl) ? 1 : delay_);
+              in.pop();
+              rr = (j + 1) % size;
+              break;
+            }
+          }
         }
       }
     }
     uint32_t n = ReqIn.size();
-    const bool hold = (this->tokens() != 0);
-    // merged ports riding each leader's bank access
-    uint64_t followers = 0;
+    const bool hold = this->any_token();
+    // merged ports riding each leader's bank access, by offset in its group
+    std::vector<bool> followers(n, false);
     std::vector<uint64_t> merged(n, 0);
     if (merge_group_ > 1 && !hold) {
       for (uint32_t i = 0; i < n; ++i) {
@@ -2370,25 +2423,30 @@ protected:
           continue;
         }
         auto& req_i = ReqIn.at(i).peek();
-        for (uint32_t j = (i / merge_group_) * merge_group_; j < i; ++j) {
-          if ((followers & (1ull << j)) || !this->is_plain_read(j)) {
+        uint32_t base = (i / merge_group_) * merge_group_;
+        for (uint32_t j = base; j < i; ++j) {
+          if (followers.at(j) || !this->is_plain_read(j)) {
             continue;
           }
           auto& req_j = ReqIn.at(j).peek();
           if ((req_j.addr >> params_.word_select_addr_start) == (req_i.addr >> params_.word_select_addr_start)
            && req_j.tag == req_i.tag) {
-            merged.at(j) |= 1ull << i;
-            followers |= 1ull << i;
+            merged.at(j) |= 1ull << (i - base);
+            followers.at(i) = true;
             break;
           }
         }
       }
     }
-    // requesting ports per bank; non-cacheable requests leave on their own port
-    std::vector<uint64_t> want(ReqOut.size(), 0);
+    // requesting ports per bank and first-level slice; non-cacheable requests
+    // leave on their own port
+    uint32_t slices = this->arb_slices(0);
+    uint32_t slice_ports = (nl != 0) ? kMaxFanout : n;
+    std::vector<uint32_t> want(nb * slices, 0);
+    std::vector<uint32_t> wants(nb, 0);
     for (uint32_t i = 0; i < n; ++i) {
       auto& in = ReqIn.at(i);
-      if (in.empty() || (followers & (1ull << i))) {
+      if (in.empty() || followers.at(i)) {
         continue;
       }
       auto& req = in.peek();
@@ -2402,38 +2460,35 @@ protected:
         continue;
       }
       if (!hold) {
-        want.at(params_.addr_bank_id(req.addr)) |= 1ull << i;
+        uint32_t b = params_.addr_bank_id(req.addr);
+        want.at(b * slices + i / slice_ports) |= 1u << (i % slice_ports);
+        ++wants.at(b);
       }
     }
     // each bank's arbiter, or each slice of its tree, grants one port per cycle
-    for (uint32_t b = 0, nb = ReqOut.size(); b < nb; ++b) {
-      if (want[b] == 0) {
+    for (uint32_t b = 0; b < nb; ++b) {
+      if (wants.at(b) == 0) {
         continue;
       }
       bool granted = false;
-      for (uint32_t sl = 0; sl < slices_; ++sl) {
-        uint64_t slice_want = want[b];
-        if (slices_ > 1) {
-          uint32_t lo = sl * kMaxFanout;
-          uint32_t hi = std::min<uint32_t>(lo + kMaxFanout, n);
-          uint64_t range = ((hi < 64) ? (1ull << hi) : 0) - (1ull << lo);
-          slice_want &= range;
-        }
-        auto& out = (slices_ > 1) ? tree_stage_.at(b * slices_ + sl) : ReqOut.at(b);
+      for (uint32_t sl = 0; sl < slices; ++sl) {
+        uint32_t slice_want = want.at(b * slices + sl);
+        auto& out = (nl != 0) ? tree_stage_.at(0).at(b * slices + sl) : ReqOut.at(b);
         if (slice_want == 0 || out.full()) {
           continue;
         }
-        auto& rr = rr_[b * slices_ + sl];
-        uint32_t i = rr;
-        do {
-          i = (i + 1) % n;
-        } while (!(slice_want & (1ull << i)));
-        this->grant(i, out, merged);
-        rr = i;
+        uint32_t size = this->arb_slice_size(0, sl);
+        auto& rr = rr_.at(0).at(b * slices + sl);
+        uint32_t j = rr;
+        while (!(slice_want & (1u << j))) {
+          j = (j + 1) % size;
+        }
+        this->grant(sl * slice_ports + j, out, merged);
+        rr = (j + 1) % size;
         granted = true;
       }
       if (granted) {
-        collisions_ += __builtin_popcountll(want[b]) - 1;
+        collisions_ += wants.at(b) - 1;
       }
     }
   }
@@ -2443,16 +2498,18 @@ protected:
     auto req = ReqIn.at(i).peek();
     uint64_t mask = 0;
     if (merge_group_ > 1) {
-      mask = merged.at(i) >> ((i / merge_group_) * merge_group_);
-      for (uint64_t f = merged.at(i); f != 0; f &= f - 1) {
-        DT(3, this->name() << " read-merge: port=" << __builtin_ctzll(f) << ", leader=" << i << ", " << req);
-        ReqIn.at(__builtin_ctzll(f)).pop();
+      uint32_t base = (i / merge_group_) * merge_group_;
+      mask = merged.at(i);
+      for (uint64_t f = mask; f != 0; f &= f - 1) {
+        uint32_t port = base + __builtin_ctzll(f);
+        DT(3, this->name() << " read-merge: port=" << port << ", leader=" << i << ", " << req);
+        ReqIn.at(port).pop();
       }
     }
     uint64_t tag = (((uint64_t(req.tag) << this->merge_bits()) | mask) << lg2_inputs_) | i;
     __assert((tag >> 32) == 0, "cache bank tag overflow");
     req.tag = uint32_t(tag);
-    out.send(req, tree_stage_.empty() ? delay_ : 1);
+    out.send(req, levels_.empty() ? delay_ : 1);
     ReqIn.at(i).pop();
   }
 
@@ -2470,10 +2527,9 @@ private:
   uint32_t lg2_inputs_;
   uint32_t delay_;
   uint32_t init_cycles_ = 0;
-  uint32_t slices_;
-  std::vector<uint32_t> rr_;       // [bank][slice]
-  std::vector<uint32_t> join_rr_;  // [bank]
-  std::vector<SimChannel<MemReq>> tree_stage_; // [bank][slice]
+  std::vector<uint32_t> levels_;                            // [level] slices per bank
+  std::vector<std::vector<SimChannel<MemReq>>> tree_stage_; // [level][bank][slice]
+  std::vector<std::vector<uint32_t>> rr_;                   // [arbiter level][bank][slice] next to grant
   uint32_t merge_group_;
   uint64_t collisions_ = 0;
 
@@ -2506,8 +2562,8 @@ public:
     , join_rr_(num_outputs, slices_ - 1)
     , tree_stage_((slices_ > 1) ? num_outputs * slices_ : 0, this)
   {
-    assert(num_outputs <= 64);
-    assert(merge_group < 64);
+    __assert(num_outputs <= 64 && merge_group < 64, "the read-merge response network takes at most 64 ports");
+    __assert(arb_tree_levels(num_banks).size() <= 1, "the read-merge response network takes one tree level");
   }
 
 protected:
@@ -2846,7 +2902,7 @@ public:
   void flush_step() {
     switch (flush_state_) {
     case FlushState::Idle:
-      if (port_arb_->tokens() != 0) {
+      if (port_arb_->any_token()) {
         flush_state_ = FlushState::Drain;
       }
       break;
@@ -2937,17 +2993,18 @@ public:
       break;
     }
     case FlushState::Respond: {
-      if (rsp_pending_ == 0) {
+      auto next = std::find(rsp_pending_.begin(), rsp_pending_.end(), true);
+      if (next == rsp_pending_.end()) {
         flush_state_ = FlushState::Idle;
         break;
       }
-      uint32_t i = __builtin_ctzll(rsp_pending_);
+      uint32_t i = std::distance(rsp_pending_.begin(), next);
       auto &token = port_arb_->ReqIn.at(i).peek();
       MemRsp rsp{token.tag, token.hart_id, token.uuid};
       if (simobject_->core_rsp_out.at(i).try_send(rsp, core_rsp_delay_)) {
         DT(3, simobject_->name() << " flush-rsp: " << rsp);
         port_arb_->take_token(i);
-        rsp_pending_ &= ~(1ull << i);
+        rsp_pending_.at(i) = false;
       }
       break;
     }
@@ -2966,9 +3023,8 @@ public:
   // weakest one that serves them all.
   token_kinds_t token_kinds() const {
     token_kinds_t kinds;
-    uint64_t tokens = port_arb_->tokens();
     for (uint32_t i = 0, n = config_.num_inputs; i < n; ++i) {
-      if (!(tokens & (1ull << i))) {
+      if (!port_arb_->is_token(i)) {
         continue;
       }
       auto &flags = port_arb_->ReqIn.at(i).peek().flags;
@@ -3069,7 +3125,7 @@ private:
   uint32_t core_rsp_delay_ = 0;
   enum class FlushState { Idle, Drain, Walk, Forward, Respond };
   FlushState flush_state_ = FlushState::Idle;
-  uint64_t rsp_pending_ = 0;
+  std::vector<bool> rsp_pending_;
   uint64_t fwd_sent_ = 0;
   uint64_t fwd_done_ = 0;
   bool fwd_go_ = false;   // nothing is left ahead of the forwarded tokens
