@@ -76,6 +76,14 @@ tests:
 - {id: gfx-query-condrender, via: make-run, drivers: [simx], dir: tests/vulkan/condrender, target: "run-{driver}",
    touches: [sw/common/gfx_fs_desc_abi.h, sw/gfx/, hw/rtl/om/, sim/simx/om/, tests/vulkan/condrender]}
 
+# Transform feedback from the vertex stage: byte-exact capture over every
+# topology and provoking-vertex mode, overflow, pause/resume through counter
+# buffers, capture under rasterizer discard, and the stream query.
+- {id: gfx-xfb, via: make-run, drivers: [simx], dir: tests/vulkan/xfb, target: "run-{driver}",
+   touches: [sw/common/gfx_fs_desc_abi.h, sw/gfx/, tests/vulkan/xfb]}
+- {id: gfx-varypack, via: make-run, drivers: [simx], dir: tests/vulkan/varypack, target: "run-{driver}",
+   touches: [sw/gfx/, hw/rtl/raster/, sim/simx/raster/, tests/vulkan/varypack]}
+
 # Viewport arrays: per-primitive viewport and scissor selection through
 # gl_ViewportIndex on the fixed-function and the software rasterizer (4x),
 # gl_Layer into a layered target, and both read back in the fragment shader.

@@ -125,6 +125,14 @@ FF_OM ?= 0
 ifeq ($(FF_OM),1)
 RUN_ENV += VORTEXPIPE_DEBUG=1
 endif
+# A test that runs some of its work on llvmpipe on purpose (STRICT := 0) can
+# still pin down which work stays on the device: EXPECT_ATTRIB lists, one word
+# per context, the vortexpipe-attrib placement it must report, with '_' for
+# the space -- e.g. launches=0/0_draws=2/3.
+EXPECT_ATTRIB ?=
+ifneq ($(EXPECT_ATTRIB),)
+RUN_ENV += VORTEXPIPE_ATTRIB=1
+endif
 RUN_LD_PATH := $(MESA_PATH)/lib:$(LLVM_PATH)/lib:$(ZSTD_PATH)/lib:$(VORTEX_RT_LIB)
 
 RUNTIME_ARGS = CONFIGS="$(CONFIGS)" $(if $(DEBUG),DEBUG=$(DEBUG)) $(if $(PERF),PERF=$(PERF)) $(if $(SCOPE),SCOPE=$(SCOPE))
@@ -156,7 +164,12 @@ define check_run
 	if [ "$(FF_OM)" = 1 ] && ! echo "$$out" | grep -q 'compiled FS variant.*sw_om=0'; then \
 	   echo "FAIL: $(PROJECT) reported no fragment variant, so the merger path is unverified"; \
 	   exit 1; \
-	fi
+	fi; \
+	for p in $(EXPECT_ATTRIB); do \
+	   if ! echo "$$out" | grep -qx "vortexpipe-attrib: `echo $$p | tr _ ' '`"; then \
+	      echo "FAIL: $(PROJECT) did not place its work as $$p"; exit 1; \
+	   fi; \
+	done
 endef
 
 .PHONY: all run run-simx run-rtlsim run-opae run-xrt clean

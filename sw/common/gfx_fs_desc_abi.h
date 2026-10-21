@@ -132,7 +132,14 @@
 #define GFX_QC_FS_INVOCATIONS 6u
 #define GFX_QC_CS_INVOCATIONS 7u
 #define GFX_QC_PRIMS_GENERATED 8u
-#define GFX_QC_COUNT          9u
+// Transform feedback on vertex stream 0: primitives written to the bound
+// buffers, and primitives that would have been written given room. Written
+// depends on the buffers' fill state, which lives on the device, so the
+// draw's vertex kernel adds it; needed is the draw's primitive count while
+// capture is active.
+#define GFX_QC_XFB_WRITTEN    9u
+#define GFX_QC_XFB_NEEDED     10u
+#define GFX_QC_COUNT          11u
 
 #define GFX_FS_ZPAIR(lo, hi) \
    ((uint64_t)(uint32_t)(int32_t)(lo) | ((uint64_t)(uint32_t)(int32_t)(hi) << 32))

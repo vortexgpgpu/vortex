@@ -25,6 +25,14 @@
  * under a maximum of 2 the left and right ones and not the third, and the same
  * count under a maximum of 3 all three -- which shows the third is visible, so
  * the second draw really tested the cap.
+ *
+ * vkCmdDrawIndirectByteCountEXT takes its vertex count from a transform
+ * feedback counter: (counter - counterOffset) / vertexStride. Six vertices are
+ * captured under rasterizer discard, 16 bytes each, and End saves the 96-byte
+ * counter at offset 4 of a counter buffer. A byte-count draw with counterOffset
+ * 41 and vertexStride 15 then draws (96 - 41) / 15 = 3 vertices -- the left
+ * triangle alone, while ignoring counterOffset would draw both. The capture
+ * itself and the counter are checked too.
  */
 
 #include <vulkan/vulkan.h>
@@ -105,7 +113,8 @@ int
 main(int argc, char **argv)
 {
    const char *vs_path = (argc > 1) ? argv[1] : "drawindirect.vert.spv";
-   const char *fs_path = (argc > 2) ? argv[2] : "drawindirect.frag.spv";
+   const char *xvs_path = (argc > 2) ? argv[2] : "drawindirect_xfb.vert.spv";
+   const char *fs_path = (argc > 3) ? argv[3] : "drawindirect.frag.spv";
 
    /* --- instance / device / queue --------------------------------- */
    VkApplicationInfo app = {
@@ -139,8 +148,11 @@ main(int argc, char **argv)
    free(qfp);
    if (qf == UINT32_MAX) { fprintf(stderr, "FAILED: no graphics queue\n"); return 1; }
 
+   VkPhysicalDeviceTransformFeedbackFeaturesEXT fxfb = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT,
+   };
    VkPhysicalDeviceVulkan12Features f12 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &fxfb,
    };
    VkPhysicalDeviceFeatures2 f2 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &f12,
@@ -150,10 +162,26 @@ main(int argc, char **argv)
       fprintf(stderr, "FAILED: drawIndirectCount not advertised\n");
       return 1;
    }
+   VkPhysicalDeviceTransformFeedbackPropertiesEXT pxfb = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT,
+   };
+   VkPhysicalDeviceProperties2 p2 = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2, .pNext = &pxfb,
+   };
+   vkGetPhysicalDeviceProperties2(pd, &p2);
+   if (!fxfb.transformFeedback || !pxfb.transformFeedbackDraw) {
+      fprintf(stderr, "FAILED: transformFeedback / transformFeedbackDraw not advertised\n");
+      return 1;
+   }
+   VkPhysicalDeviceTransformFeedbackFeaturesEXT wantxfb = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT,
+      .transformFeedback = VK_TRUE,
+   };
    VkPhysicalDeviceVulkan12Features want12 = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, .pNext = &wantxfb,
       .drawIndirectCount = VK_TRUE,
    };
+   const char *dev_ext = VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME;
 
    float prio = 1.0f;
    VkDeviceQueueCreateInfo qci = {
@@ -163,6 +191,7 @@ main(int argc, char **argv)
    VkDeviceCreateInfo dci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, .pNext = &want12,
       .queueCreateInfoCount = 1, .pQueueCreateInfos = &qci,
+      .enabledExtensionCount = 1, .ppEnabledExtensionNames = &dev_ext,
    };
    VkDevice dev;
    CHECK(vkCreateDevice(pd, &dci, NULL, &dev));
@@ -299,11 +328,59 @@ main(int argc, char **argv)
    memcpy(ip, &icmds, sizeof(icmds));
    vkUnmapMemory(dev, imem2);
 
+   /* --- capture + counter buffers ------------------------------------ */
+   const VkDeviceSize xfb_bytes = 256, ctr_bytes = 16;
+   VkBuffer xbuf, cbuf;
+   VkDeviceMemory xmem, cmem;
+   uint8_t *xmap, *cmap;
+   {
+      const VkBufferUsageFlags use[2] = {
+         VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT,
+         VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT |
+            VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+      };
+      const VkDeviceSize size[2] = { xfb_bytes, ctr_bytes };
+      VkBuffer *b[2] = { &xbuf, &cbuf };
+      VkDeviceMemory *m[2] = { &xmem, &cmem };
+      uint8_t **map[2] = { &xmap, &cmap };
+      for (unsigned k = 0; k < 2; k++) {
+         VkBufferCreateInfo xbci = {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .size = size[k], .usage = use[k],
+         };
+         CHECK(vkCreateBuffer(dev, &xbci, NULL, b[k]));
+         VkMemoryRequirements xmr;
+         vkGetBufferMemoryRequirements(dev, *b[k], &xmr);
+         VkMemoryAllocateInfo xmai = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, .allocationSize = xmr.size,
+            .memoryTypeIndex = find_mem(&mp, xmr.memoryTypeBits,
+               VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+         };
+         CHECK(vkAllocateMemory(dev, &xmai, NULL, m[k]));
+         CHECK(vkBindBufferMemory(dev, *b[k], *m[k], 0));
+         CHECK(vkMapMemory(dev, *m[k], 0, size[k], 0, (void **)map[k]));
+         memset(*map[k], 0, size[k]);
+      }
+   }
+   PFN_vkCmdBindTransformFeedbackBuffersEXT bind_xfb = (PFN_vkCmdBindTransformFeedbackBuffersEXT)
+      vkGetDeviceProcAddr(dev, "vkCmdBindTransformFeedbackBuffersEXT");
+   PFN_vkCmdBeginTransformFeedbackEXT begin_xfb = (PFN_vkCmdBeginTransformFeedbackEXT)
+      vkGetDeviceProcAddr(dev, "vkCmdBeginTransformFeedbackEXT");
+   PFN_vkCmdEndTransformFeedbackEXT end_xfb = (PFN_vkCmdEndTransformFeedbackEXT)
+      vkGetDeviceProcAddr(dev, "vkCmdEndTransformFeedbackEXT");
+   PFN_vkCmdDrawIndirectByteCountEXT draw_byte_count = (PFN_vkCmdDrawIndirectByteCountEXT)
+      vkGetDeviceProcAddr(dev, "vkCmdDrawIndirectByteCountEXT");
+   if (!bind_xfb || !begin_xfb || !end_xfb || !draw_byte_count) {
+      fprintf(stderr, "FAILED: transform-feedback entry points missing\n");
+      return 1;
+   }
+
    /* --- pipeline --------------------------------------------------- */
    VkShaderModule vs = load_module(dev, vs_path);
    if (!vs) return 1;
    VkShaderModule fs = load_module(dev, fs_path);
    if (!fs) return 1;
+   VkShaderModule xvs = load_module(dev, xvs_path);
+   if (!xvs) return 1;
 
    VkPipelineLayoutCreateInfo plci = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -359,6 +436,12 @@ main(int argc, char **argv)
    };
    VkPipeline pipe;
    CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &pipe));
+   /* The capture: the same draw state, its vertex stage capturing, nothing
+    * rasterized. */
+   stages[0].module = xvs;
+   rs.rasterizerDiscardEnable = VK_TRUE;
+   VkPipeline xpipe;
+   CHECK(vkCreateGraphicsPipelines(dev, VK_NULL_HANDLE, 1, &gpci, NULL, &xpipe));
 
    VkCommandPoolCreateInfo cmpci = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -399,16 +482,38 @@ main(int argc, char **argv)
    /* Four passes: direct and indirect for each of the two triangles. `which`
     * selects the triangle, `indirect` the path that asks for it. Passes 4-6
     * are the indirect-count draws: count 1 and count 5 under a maximum of 2,
-    * then count 5 under a maximum of 3. */
-   static uint8_t shot[7][WIDTH * HEIGHT * 4];
-   for (uint32_t pass = 0; pass < 7; pass++) {
+    * then count 5 under a maximum of 3. Pass 7 captures, then draws by byte
+    * count. */
+   static uint8_t shot[8][WIDTH * HEIGHT * 4];
+   for (uint32_t pass = 0; pass < 8; pass++) {
       const uint32_t which = (pass / 2) & 1u;
       const bool indirect = (pass % 2) != 0;
 
       CHECK(vkBeginCommandBuffer(cmd, &cbbi));
+      if (pass == 7) {
+         /* Capture vertices 0-5 and save the counter at offset 4, then make
+          * it visible to the byte-count draw's indirect read. */
+         const VkDeviceSize xoff = 0, xsize = xfb_bytes, coff = 4;
+         vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
+         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, xpipe);
+         bind_xfb(cmd, 0, 1, &xbuf, &xoff, &xsize);
+         begin_xfb(cmd, 0, 0, NULL, NULL);
+         vkCmdDraw(cmd, 6, 1, 0, 0);
+         end_xfb(cmd, 0, 1, &cbuf, &coff);
+         vkCmdEndRenderPass(cmd);
+         VkMemoryBarrier mb = {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            .srcAccessMask = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT,
+            .dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+         };
+         vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT,
+                              VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 1, &mb, 0, NULL, 0, NULL);
+      }
       vkCmdBeginRenderPass(cmd, &rpbi, VK_SUBPASS_CONTENTS_INLINE);
       vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
-      if (pass >= 4) {
+      if (pass == 7) {
+         draw_byte_count(cmd, 1, 0, cbuf, 4, 41, 15);
+      } else if (pass >= 4) {
          vkCmdDrawIndirectCount(cmd, ibuf, 0, ibuf,
                                 offsetof(struct icmd_buf, count) +
                                    (pass == 4 ? 0 : 1) * sizeof(uint32_t),
@@ -480,9 +585,38 @@ main(int argc, char **argv)
           third ? "pass" : "FAIL", count_covered(shot[6]), count_covered(both));
    failed += !count1 + !count5 + !third;
 
+   /* The capture holds vertices 0-5 as the shader positioned them, the
+    * counter their 96 bytes, and the byte-count draw the left triangle. */
+   static const float pos[6][2] = {
+      { -0.9f, -0.9f }, { -0.1f, -0.9f }, { -0.5f, 0.9f },
+      {  0.1f, -0.9f }, {  0.9f, -0.9f }, {  0.5f, 0.9f },
+   };
+   bool cap_ok = true;
+   for (unsigned v = 0; v < 6; v++) {
+      const float want[4] = { pos[v][0], pos[v][1], 0.0f, 1.0f };
+      cap_ok &= memcmp(xmap + v * 16u, want, sizeof want) == 0;
+   }
+   for (unsigned b = 96; b < xfb_bytes; b++) {
+      cap_ok &= xmap[b] == 0;
+   }
+   uint32_t ctr = 0;
+   memcpy(&ctr, cmap + 4, 4);
+   const bool byte_count = memcmp(shot[7], shot[0], sizeof(both)) == 0;
+   printf("captured 6 vertices: %s  counter %u (want 96)\n",
+          cap_ok && ctr == 96u ? "pass" : "FAIL", ctr);
+   printf("byte count (96 - 41) / 15 = 3 vertices: %s  covered %u px (left triangle %u px)\n",
+          byte_count ? "pass" : "FAIL", count_covered(shot[7]), count_covered(shot[0]));
+   failed += !(cap_ok && ctr == 96u) + !byte_count;
+
    /* cleanup (best-effort; a smoke test exits anyway) */
    vkDestroyCommandPool(dev, cp, NULL);
    vkDestroyPipeline(dev, pipe, NULL);
+   vkDestroyPipeline(dev, xpipe, NULL);
+   vkDestroyShaderModule(dev, xvs, NULL);
+   vkFreeMemory(dev, xmem, NULL);
+   vkDestroyBuffer(dev, xbuf, NULL);
+   vkFreeMemory(dev, cmem, NULL);
+   vkDestroyBuffer(dev, cbuf, NULL);
    vkDestroyPipelineLayout(dev, pl, NULL);
    vkDestroyShaderModule(dev, fs, NULL);
    vkDestroyShaderModule(dev, vs, NULL);
@@ -503,6 +637,7 @@ main(int argc, char **argv)
       return 1;
    }
    printf("PASSED (indirect draws match their direct twins, both triangles; "
-          "indirect-count draws respect the count and maxDrawCount)\n");
+          "indirect-count draws respect the count and maxDrawCount; the byte-count "
+          "draw honours counterOffset)\n");
    return 0;
 }

@@ -1,7 +1,8 @@
 # Copyright © 2026  Vortex GPGPU
 # SPDX-License-Identifier: MIT
 #
-# Device / llvmpipe / device interleave against one storage buffer. Covers the
+# Device / llvmpipe / device interleave against one storage buffer, and then
+# within one transform-feedback capture segment. Covers the
 # driver's invalidation of its device copy when work runs on the CPU fallback,
 # which writes host memory with no gallium transfer to interpose on.
 #
@@ -19,9 +20,13 @@ SRC_DIR := $(VORTEX_HOME)/tests/vulkan/$(PROJECT)
 # fallback into a no-op, and a no-op cannot write the host buffer behind the
 # driver's back, which is the exact situation under test. Set before common.mk.
 STRICT := 0
+# The compute part: dispatches 1 and 3 on the device, 2 on llvmpipe. The
+# capture part: draws 1 and 3 on the device, 2 on llvmpipe.
+EXPECT_ATTRIB := launches=2/3_draws=0/0 launches=0/0_draws=2/3
 
 SRCS := $(SRC_DIR)/main.c
 
-SHADERS := $(SRC_DIR)/add1.comp $(SRC_DIR)/add1_shared.comp
+SHADERS := $(SRC_DIR)/add1.comp $(SRC_DIR)/add1_shared.comp \
+           $(SRC_DIR)/xfbmix_a.vert $(SRC_DIR)/xfbmix_b.vert $(SRC_DIR)/xfbmix.frag
 
 include ../common.mk
