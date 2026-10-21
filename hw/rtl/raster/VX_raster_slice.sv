@@ -38,10 +38,7 @@ module VX_raster_slice import VX_raster_pkg::*; #(
     input wire                                      valid_in,
     input wire [`VX_RASTER_DIM_BITS-1:0]            xloc_in,
     input wire [`VX_RASTER_DIM_BITS-1:0]            yloc_in,
-    input wire [`VX_RASTER_DIM_BITS-1:0]            xmin_in,
-    input wire [`VX_RASTER_DIM_BITS-1:0]            xmax_in,
-    input wire [`VX_RASTER_DIM_BITS-1:0]            ymin_in,
-    input wire [`VX_RASTER_DIM_BITS-1:0]            ymax_in,
+    input raster_rect_t                             scissor_in,
     input wire [`VX_RASTER_PID_BITS-1:0]            pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0]    edges_in,
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
@@ -71,6 +68,7 @@ module VX_raster_slice import VX_raster_pkg::*; #(
     wire [`VX_RASTER_DIM_BITS-1:0] block_xloc;
     wire [`VX_RASTER_DIM_BITS-1:0] block_yloc;
     wire [`VX_RASTER_PID_BITS-1:0] block_pid;
+    raster_rect_t               block_scissor;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] block_edges;
     wire                        block_ready;
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
@@ -83,64 +81,67 @@ module VX_raster_slice import VX_raster_pkg::*; #(
         .TILE_LOGSIZE  (TILE_LOGSIZE),
         .BLOCK_LOGSIZE (BLOCK_LOGSIZE)
     ) tile_evaluator (
-        .clk        (clk),
-        .reset      (reset),
+        .clk         (clk),
+        .reset       (reset),
 
-        .valid_in   (valid_in),
-        .xloc_in    (xloc_in),
-        .yloc_in    (yloc_in),
-        .pid_in     (pid_in),
-        .edges_in   (edges_in),
+        .valid_in    (valid_in),
+        .xloc_in     (xloc_in),
+        .yloc_in     (yloc_in),
+        .pid_in      (pid_in),
+        .scissor_in  (scissor_in),
+        .edges_in    (edges_in),
     `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
-        .zplane_in  (zplane_in),
+        .zplane_in   (zplane_in),
     `endif
-        .extents_in (extents_in),
-        .ready_in   (ready_in),
+        .extents_in  (extents_in),
+        .ready_in    (ready_in),
 
-        .valid_out  (block_valid),
-        .xloc_out   (block_xloc),
-        .yloc_out   (block_yloc),
-        .pid_out    (block_pid),
-        .edges_out  (block_edges),
+        .valid_out   (block_valid),
+        .xloc_out    (block_xloc),
+        .yloc_out    (block_yloc),
+        .pid_out     (block_pid),
+        .scissor_out (block_scissor),
+        .edges_out   (block_edges),
     `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
-        .zplane_out (block_zplane),
+        .zplane_out  (block_zplane),
     `endif
-        .ready_out  (block_ready)
+        .ready_out   (block_ready)
     );
 
     wire                        block_valid_b;
     wire [`VX_RASTER_DIM_BITS-1:0] block_xloc_b;
     wire [`VX_RASTER_DIM_BITS-1:0] block_yloc_b;
     wire [`VX_RASTER_PID_BITS-1:0] block_pid_b;
+    raster_rect_t               block_scissor_b;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] block_edges_b;
     wire                        block_ready_b;
 
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Carry the depth plane through the block buffer alongside the block record.
     VX_elastic_buffer #(
-        .DATAW (2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
+        .DATAW (2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
         .SIZE  (BLOCK_BUF_SIZE)
     ) block_req_buf (
         .clk        (clk),
         .reset      (reset),
         .valid_in   (block_valid),
         .ready_in   (block_ready),
-        .data_in    ({block_xloc,   block_yloc,   block_pid,   block_edges,   block_zplane}),
-        .data_out   ({block_xloc_b, block_yloc_b, block_pid_b, block_edges_b, block_zplane_b}),
+        .data_in    ({block_xloc,   block_yloc,   block_pid,   block_scissor,   block_edges,   block_zplane}),
+        .data_out   ({block_xloc_b, block_yloc_b, block_pid_b, block_scissor_b, block_edges_b, block_zplane_b}),
         .valid_out  (block_valid_b),
         .ready_out  (block_ready_b)
     );
 `else
     VX_elastic_buffer #(
-        .DATAW (2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS),
+        .DATAW (2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + 9 * `RASTER_DATA_BITS),
         .SIZE  (BLOCK_BUF_SIZE)
     ) block_req_buf (
         .clk        (clk),
         .reset      (reset),
         .valid_in   (block_valid),
         .ready_in   (block_ready),
-        .data_in    ({block_xloc,   block_yloc,   block_pid,   block_edges}),
-        .data_out   ({block_xloc_b, block_yloc_b, block_pid_b, block_edges_b}),
+        .data_in    ({block_xloc,   block_yloc,   block_pid,   block_scissor,   block_edges}),
+        .data_out   ({block_xloc_b, block_yloc_b, block_pid_b, block_scissor_b, block_edges_b}),
         .valid_out  (block_valid_b),
         .ready_out  (block_ready_b)
     );
@@ -160,10 +161,7 @@ module VX_raster_slice import VX_raster_pkg::*; #(
         .valid_in   (block_valid_b),
         .xloc_in    (block_xloc_b),
         .yloc_in    (block_yloc_b),
-        .xmin_in    (xmin_in),
-        .xmax_in    (xmax_in),
-        .ymin_in    (ymin_in),
-        .ymax_in    (ymax_in),
+        .scissor_in (block_scissor_b),
         .pid_in     (block_pid_b),
         .edges_in   (block_edges_b),
     `ifdef VX_CFG_RASTER_EARLYZ_ENABLE

@@ -19,6 +19,7 @@
 #include <vortex2.h>
 #include <graphics.h>
 #include <gfx_ff_model.h>
+#include <gfx_frag_rast.h>
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -123,6 +124,9 @@ vx_buffer_h frag_arg_buffer = nullptr;   // FS args (RASTER frag-dispatch descri
 uint64_t    frag_arg_addr = 0;
 
 bool use_sw = false;
+bool prim_scissor = false;   // -s: a distinct scissor rectangle in every primitive record
+std::vector<uint32_t> ref_pixels;
+uint32_t scissor_errors = 0;
 uint64_t num_threads = 0;  // populated in main, read by render()
 uint64_t num_warps   = 0;  // populated in main, read by render()
 uint64_t num_cores   = 0;  // populated in main, read by render()
@@ -138,12 +142,12 @@ uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;
 
 static void show_usage() {
    std::cout << "Vortex rasterizer Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-z no_hw] [-k tilelogsize]" << std::endl;
+   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-z no_hw] [-k tilelogsize] [-s prim_scissor]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:z?")) != -1) {
+  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:zs?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
@@ -165,6 +169,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 'z':
       use_sw = true;
+      break;
+    case 's':
+      prim_scissor = true;
       break;
     case '?': {
       show_usage();
@@ -195,6 +202,60 @@ void cleanup() {
   }
 }
 
+// The draw-wide scissor the DCRs program. Under -s it is narrower than the
+// render target on every side, so the rasterizer's intersection of the DCR and
+// record rectangles is what decides the outer pixels.
+static void draw_scissor(uint32_t& left, uint32_t& right, uint32_t& top, uint32_t& bottom) {
+  left = 0; right = dst_width; top = 0; bottom = dst_height;
+  if (prim_scissor) {
+    left = 3; right = dst_width - 2; top = 1; bottom = dst_height - 5;
+  }
+}
+
+// Give primitive i its own rectangle: odd origins and extents, so the edges fall
+// mid-quad and mid-tile, and some reach past the draw rectangle.
+static void patch_prim_scissors(std::vector<uint8_t>& primbuf) {
+  auto* prims = reinterpret_cast<graphics::rast_prim_t*>(primbuf.data());
+  const uint32_t n = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
+  for (uint32_t i = 0; i < n; ++i) {
+    const uint32_t x0 = (dst_width / 4 + 5 + 13 * i) % (dst_width / 2);
+    const uint32_t y0 = (dst_height / 4 + 9 + 11 * i) % (dst_height / 2);
+    const uint32_t x1 = dst_width - (3 + 7 * i) % (dst_width / 4) + (i & 1) * 8;
+    const uint32_t y1 = dst_height - (dst_height / 4 + 1 + 3 * i) % (dst_height / 2);
+    prims[i].scissor_x = RAST_SCISSOR_PACK(x0, x1);
+    prims[i].scissor_y = RAST_SCISSOR_PACK(y0, y1);
+  }
+}
+
+// The image the device must produce: every primitive walked by the shared
+// coverage core under its record's rectangle narrowed to the draw's.
+static void reference_draw(const std::vector<uint8_t>& primbuf) {
+  uint32_t left, right, top, bottom;
+  draw_scissor(left, right, top, bottom);
+  const auto* prims = reinterpret_cast<const graphics::rast_prim_t*>(primbuf.data());
+  const uint32_t n = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
+  const uint32_t tile = 1u << tileLogSize;
+  for (uint32_t pid = 0; pid < n; ++pid) {
+    const gfx_rast::RastConfig cfg = gfx_rast::rast_prim_config(
+        { tileLogSize, left, top, right, bottom }, prims[pid].scissor_x, prims[pid].scissor_y);
+    for (uint32_t ty = 0; ty < dst_height; ty += tile) {
+      for (uint32_t tx = 0; tx < dst_width; tx += tile) {
+        gfx_rast::rast_walk_primitive(cfg, tx, ty, pid, prims[pid].edges,
+          [&](uint32_t pos_mask, const graphics::vec3e_t*, uint32_t) {
+            const uint32_t qx = (pos_mask >> 4) & ((1u << (VX_RASTER_DIM_BITS - 1)) - 1);
+            const uint32_t qy = pos_mask >> (4 + (VX_RASTER_DIM_BITS - 1));
+            for (uint32_t k = 0; k < 4; ++k) {
+              const uint32_t px = (qx << 1) + (k & 1), py = (qy << 1) + (k >> 1);
+              if (((pos_mask >> k) & 1) && px < dst_width && py < dst_height) {
+                ref_pixels[py * dst_width + px] = 0xffffffff;
+              }
+            }
+          });
+      }
+    }
+  }
+}
+
 int render(const CGLTrace& trace) {
   // render each draw call
   for (auto& drawcall : trace.drawcalls) {
@@ -208,6 +269,10 @@ int render(const CGLTrace& trace) {
     std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << primbuf.size() << " total primitives." << std::endl;
     if (0 == num_tiles)
       continue;
+    if (prim_scissor) {
+      patch_prim_scissors(primbuf);
+      reference_draw(primbuf);
+    }
 
     // allocate tile memory
     if (tile_buffer != nullptr) { vx_buffer_release(tile_buffer); tile_buffer = nullptr; }
@@ -246,6 +311,10 @@ int render(const CGLTrace& trace) {
       kernel_arg.sw_path      = use_sw ? 1u : 0u;
       kernel_arg.num_prims    = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
       kernel_arg.tile_logsize = tileLogSize;
+      uint32_t l, r, t, b;
+      draw_scissor(l, r, t, b);
+      kernel_arg.scissor_x = RAST_SCISSOR_PACK(l, r);
+      kernel_arg.scissor_y = RAST_SCISSOR_PACK(t, b);
     }
     if (use_sw)
       std::cout << "[gfx_raster] software fine-rasterizer path "
@@ -259,8 +328,10 @@ int render(const CGLTrace& trace) {
     vx_enqueue_dcr_write(queue, VX_DCR_RASTER_TILE_COUNT, num_tiles, 0, nullptr, nullptr);
     vx_enqueue_dcr_write(queue, VX_DCR_RASTER_PBUF_ADDR, primbuf_addr / 64, 0, nullptr, nullptr);  // block address
     vx_enqueue_dcr_write(queue, VX_DCR_RASTER_PBUF_STRIDE, primbuf_stride, 0, nullptr, nullptr);
-    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_X, (dst_width << 16) | 0, 0, nullptr, nullptr);
-    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_Y, (dst_height << 16) | 0, 0, nullptr, nullptr);
+    uint32_t sc_left, sc_right, sc_top, sc_bottom;
+    draw_scissor(sc_left, sc_right, sc_top, sc_bottom);
+    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_X, RAST_SCISSOR_PACK(sc_left, sc_right), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_Y, RAST_SCISSOR_PACK(sc_top, sc_bottom), 0, nullptr, nullptr);
 
     // RASTER dispatch v2 (push, HW path only): stage the FS args and program the
     // fragment-dispatch descriptor (FS entry PC + args pointer). The work
@@ -323,8 +394,7 @@ int render(const CGLTrace& trace) {
   }
 
   // save output image
-  if (strcmp(output_file, "null") != 0) {
-    std::cout << "save output image" << std::endl;
+  if (strcmp(output_file, "null") != 0 || prim_scissor) {
     std::vector<uint8_t> dst_pixels(cbuf_size);
     {
       vx_event_h read_ev = nullptr;
@@ -332,8 +402,31 @@ int render(const CGLTrace& trace) {
       RT_CHECK(vx_event_wait_value(read_ev, 1, VX_TIMEOUT_INFINITE));
       vx_event_release(read_ev);
     }
-    auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
-    RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
+    if (strcmp(output_file, "null") != 0) {
+      std::cout << "save output image" << std::endl;
+      auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
+      RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
+    }
+    if (prim_scissor) {
+      uint32_t errors = 0, covered = 0;
+      for (uint32_t y = 0; y < dst_height; ++y) {
+        for (uint32_t x = 0; x < dst_width; ++x) {
+          uint32_t got;
+          std::memcpy(&got, dst_pixels.data() + y * cbuf_pitch + x * cbuf_stride, 4);
+          const uint32_t want = ref_pixels[y * dst_width + x];
+          covered += (want != clear_color);
+          if (got != want) {
+            if (errors < 10) {
+              printf("*** error: pixel (%u, %u) = 0x%08x, expected 0x%08x\n", x, y, got, want);
+            }
+            ++errors;
+          }
+        }
+      }
+      printf("per-primitive scissor: %u of %u pixels covered, %u mismatches\n",
+             covered, dst_width * dst_height, errors);
+      scissor_errors = errors;
+    }
   }
 
   return 0;
@@ -406,11 +499,21 @@ int main(int argc, char *argv[]) {
 
   // run tests
   std::cout << "render" << std::endl;
+  ref_pixels.assign(dst_width * dst_height, clear_color);
   RT_CHECK(render(trace));
 
   // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();
+
+  if (prim_scissor) {
+    if (scissor_errors != 0) {
+      std::cout << "FAILED! " << scissor_errors << " errors." << std::endl;
+      return 1;
+    }
+    std::cout << "PASSED!" << std::endl;
+    return 0;
+  }
 
   if (strcmp (output_file, "") != 0 && reference_file) {
     auto reference_file_s = resolve_path(reference_file, ASSETS_PATHS);

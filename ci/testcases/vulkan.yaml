@@ -76,6 +76,12 @@ tests:
 - {id: gfx-query-condrender, via: make-run, drivers: [simx], dir: tests/vulkan/condrender, target: "run-{driver}",
    touches: [sw/common/gfx_fs_desc_abi.h, sw/gfx/, hw/rtl/om/, sim/simx/om/, tests/vulkan/condrender]}
 
+# Viewport arrays: per-primitive viewport and scissor selection through
+# gl_ViewportIndex on the fixed-function and the software rasterizer (4x),
+# gl_Layer into a layered target, and both read back in the fragment shader.
+- {id: gfx-multiviewport, via: make-run, drivers: [simx, rtlsim], dir: tests/vulkan/multiviewport, target: "run-{driver}",
+   touches: [sw/common/gfx_setup.h, sw/common/gfx_frag_rast.h, sw/gfx/, hw/rtl/raster/, sim/simx/raster/, tests/vulkan/multiviewport]}
+
 # FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
 # selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER
 # routing depend on vortexpipe wiring those stages (the gfx_*_sw ABI already

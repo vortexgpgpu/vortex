@@ -107,7 +107,9 @@ result reduces exactly to plain affine interpolation. The **Vulkan top-left fill
 rule** (see the hardware doc) is applied identically in the SW-raster fallback
 ([`gfx_frag_rast.h`](../../sw/common/gfx_frag_rast.h)) and the SimX model.
 
-The emitted `rast_prim_t` record is **212 bytes**: the three edge equations,
+The emitted `rast_prim_t` record is **220 bytes**: the primitive's scissor
+rectangle (its viewport slot's, selected per primitive by `gl_ViewportIndex`),
+the three edge equations,
 the 14 attribute planes, and two trailing scalars only the FS reads —
 `facing` (the source triangle's winding, `gl_FrontFacing`) and `rhw_scale`
 (the folded `rhw` premultiply factor, which cancels in the varying divide and

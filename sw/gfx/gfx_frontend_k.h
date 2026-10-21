@@ -443,6 +443,58 @@ static inline bool pipe_cull_distance(const pipe_arg_t* arg, const pipe_prim_ref
   return false;
 }
 
+// The viewport slot and layer primitive t is drawn with: the ViewportIndex and
+// Layer its provoking vertex wrote, an index past the array taking slot 0 and a
+// layer past the framebuffer its last layer.
+struct pipe_prim_view {
+  const setup_viewport_t* vp;
+  uint32_t scissor_x, scissor_y;
+  uint32_t index, layer;
+};
+
+static inline pipe_prim_view pipe_prim_viewport(const pipe_arg_t* arg, const pipe_prim_ref& ref,
+                                                const setup_viewport_t* vp) {
+  pipe_prim_view v{ vp, RAST_SCISSOR_PACK(0, 0xffff), RAST_SCISSOR_PACK(0, 0xffff), 0, 0 };
+  const uint8_t* pv = nullptr;
+  if (arg->vsrec_addr && (arg->vpi_off || arg->layer_off)) {
+    pv = reinterpret_cast<const uint8_t*>(arg->vsrec_addr)
+       + (size_t)ref.rec[arg->provoke_last ? 2 : 0] * arg->vstride;
+  }
+  if (arg->vp_table_addr) {
+    const auto* table = reinterpret_cast<const setup_vp_slot_t*>(arg->vp_table_addr);
+    if (pv && arg->vpi_off) {
+      v.index = *reinterpret_cast<const uint32_t*>(pv + arg->vpi_off);
+      v.index = v.index < arg->vp_count ? v.index : 0u;
+    }
+    v.vp = &table[v.index].vp;
+    v.scissor_x = table[v.index].scissor_x;
+    v.scissor_y = table[v.index].scissor_y;
+  }
+  if (pv && arg->layer_off) {
+    v.layer = *reinterpret_cast<const uint32_t*>(pv + arg->layer_off);
+    v.layer = v.layer < arg->layer_max ? v.layer : arg->layer_max;
+  }
+  return v;
+}
+
+// Confine the kept subprimitives to the primitive's viewport rectangle,
+// compacting out those it excludes.
+static inline uint32_t pipe_prim_scissor(rast_prim_t* pr, setup_bbox_t* bb, uint32_t kept,
+                                         const pipe_prim_view& view) {
+  uint32_t n = 0;
+  for (uint32_t s = 0; s < kept; ++s) {
+    if (!gfx_setup::setup_scissor(pr[s], bb[s], view.scissor_x, view.scissor_y)) {
+      continue;
+    }
+    if (n != s) {
+      pr[n] = pr[s];
+      bb[n] = bb[s];
+    }
+    ++n;
+  }
+  return n;
+}
+
 } // namespace gfx_pipe
 
 // ---- setup front end: clip + setup -> dense primbuf + bbox + P (meta[0]) ----
@@ -496,11 +548,16 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       setup_bbox_t bb[SETUP_MAX_SUB];
       const pipe_prim_ref ref = pipe_prim_records(arg, t);
       const float psize = pipe_load_prim(arg, t, ref, v);
-      keep[t] = pipe_cull_distance(arg, ref) ? 0
-              : pipe_prim_setup(v, ref, psize, 0.0f, W, H, arg, vpp, coverage_only, pr, bb,
-                                nullptr);
+      const pipe_prim_view view = pipe_prim_viewport(arg, ref, vpp);
+      uint32_t kept = 0;
+      if (!pipe_cull_distance(arg, ref) && (!arg->layer_off || view.layer == arg->layer_sel)) {
+        kept = pipe_prim_setup(v, ref, psize, 0.0f, W, H, arg, view.vp, coverage_only, pr, bb,
+                               nullptr);
+        kept = pipe_prim_scissor(pr, bb, kept, view);
+      }
+      keep[t] = kept;
       if (arg->stipple_strip) {
-        stipple[t] = pipe_stipple_steps(v[0], v[1], W, H, arg, vpp);
+        stipple[t] = pipe_stipple_steps(v[0], v[1], W, H, arg, view.vp);
       }
     }
   } break;
@@ -569,9 +626,14 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       const float psize = pipe_load_prim(arg, t, ref, v);
       rast_vary_t vr;
       const float start = arg->stipple_strip ? (float)stipple[t] : 0.0f;
-      uint32_t kept = pipe_cull_distance(arg, ref) ? 0
-                    : pipe_prim_setup(v, ref, psize, start, W, H, arg, vpp, coverage_only, pr, bb,
-                                      vary ? &vr : nullptr);
+      const pipe_prim_view view = pipe_prim_viewport(arg, ref, vpp);
+      uint32_t kept = 0;
+      if (!pipe_cull_distance(arg, ref) && (!arg->layer_off || view.layer == arg->layer_sel)) {
+        kept = pipe_prim_setup(v, ref, psize, start, W, H, arg, view.vp, coverage_only, pr, bb,
+                               vary ? &vr : nullptr);
+        kept = pipe_prim_scissor(pr, bb, kept, view);
+        vr.vp_layer = RAST_VARY_VP_LAYER(view.index, view.layer);
+      }
       uint32_t w = offset[t];
       for (uint32_t s = 0; s < kept; ++s) {
         prim[w] = pr[s];

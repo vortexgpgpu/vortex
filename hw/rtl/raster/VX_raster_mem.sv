@@ -47,6 +47,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     output wire [`VX_RASTER_DIM_BITS-1:0] xloc_out,
     output wire [`VX_RASTER_DIM_BITS-1:0] yloc_out,
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
+    // The primitive's scissor rectangle, intersected with the draw's.
+    output raster_rect_t                scissor_out,
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Screen-space depth plane {A',B',C'} (Q7.24), fetched alongside the edges
     // for early-Z. Constant per primitive.
@@ -79,9 +81,12 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     // 12 B = 3 words.
     localparam TILE_HEADER_SIZEW = 12 / 4;
 
-    // A primitive data contains (xloc, yloc, pid, edges[, zplane]). The fetch is
-    // 9 words (edges) without early-Z, 12 words (edges + depth plane) with it.
-    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + NUM_REQS * `RASTER_DATA_BITS + `VX_RASTER_PID_BITS;
+    // A primitive data contains (xloc, yloc, pid, scissor, edges[, zplane]). The
+    // fetch is the record's leading words: the scissor rectangle (2), the edges
+    // (9) and, with early-Z, the depth plane (3).
+    localparam PRIM_SCISSOR_WORDS = 2;
+    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + RASTER_RECT_BITS
+                               + (NUM_REQS - PRIM_SCISSOR_WORDS) * `RASTER_DATA_BITS + `VX_RASTER_PID_BITS;
 
     // Storage to cycle through all primitives and tiles
     reg [W_ADDR_BITS-1:0]       next_tbuf_addr;
@@ -436,8 +441,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .result (prim_mem_offset)
     );
 
-    // Words 0..8 = edge coefficients, 9..11 = depth plane {A',B',C'} (contiguous
-    // in the primitive record right after the edges).
+    // Words 0..1 = scissor rectangle, 2..10 = edge coefficients, 11..13 = depth
+    // plane {A',B',C'} (contiguous at the head of the primitive record).
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_prim_mem_addr
         wire [W_ADDR_BITS-1:0] offset = W_ADDR_BITS'(prim_mem_offset[31:2]) + W_ADDR_BITS'(1 * i);
         assign prim_mem_addr[i] = {dcrs.pbuf_addr, 4'b0} + offset;
@@ -455,11 +460,25 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .data_out ({prim_addr_rsp_valid, primitive_id})
     );
 
+    // The record's rectangle ({max[31:16], min[15:0]} per axis) narrowed to the
+    // draw's, once per primitive, so every quad test downstream compares against
+    // a single rectangle.
+    wire [`VX_RASTER_DIM_BITS-1:0] prim_xmin = mem_rsp_data[0][0 +: `VX_RASTER_DIM_BITS];
+    wire [`VX_RASTER_DIM_BITS-1:0] prim_xmax = mem_rsp_data[0][16 +: `VX_RASTER_DIM_BITS];
+    wire [`VX_RASTER_DIM_BITS-1:0] prim_ymin = mem_rsp_data[1][0 +: `VX_RASTER_DIM_BITS];
+    wire [`VX_RASTER_DIM_BITS-1:0] prim_ymax = mem_rsp_data[1][16 +: `VX_RASTER_DIM_BITS];
+    `UNUSED_VAR ({mem_rsp_data[0][15], mem_rsp_data[0][31], mem_rsp_data[1][15], mem_rsp_data[1][31]})
+
+    raster_rect_t rsp_scissor;
+    assign rsp_scissor.xmin = (prim_xmin > dcrs.dst_xmin) ? prim_xmin : dcrs.dst_xmin;
+    assign rsp_scissor.xmax = (prim_xmax < dcrs.dst_xmax) ? prim_xmax : dcrs.dst_xmax;
+    assign rsp_scissor.ymin = (prim_ymin > dcrs.dst_ymin) ? prim_ymin : dcrs.dst_ymin;
+    assign rsp_scissor.ymax = (prim_ymax < dcrs.dst_ymax) ? prim_ymax : dcrs.dst_ymax;
+
+    wire [8:0][`RASTER_DATA_BITS-1:0] rsp_edges = mem_rsp_data[PRIM_SCISSOR_WORDS +: 9];
+
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
-    // Split the 12-word primitive response into edges (words 0..8) and the
-    // depth plane (words 9..11) for the output buffer.
-    wire [8:0][`RASTER_DATA_BITS-1:0] rsp_edges  = mem_rsp_data[0 +: 9];
-    wire [2:0][`RASTER_DATA_BITS-1:0] rsp_zplane = mem_rsp_data[9 +: 3];
+    wire [2:0][`RASTER_DATA_BITS-1:0] rsp_zplane = mem_rsp_data[PRIM_SCISSOR_WORDS + 9 +: 3];
 
     // Output buffer
     VX_elastic_buffer #(
@@ -471,8 +490,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .reset      (reset),
         .valid_in   (buf_in_valid),
         .ready_in   (buf_in_ready),
-        .data_in    ({curr_xloc, curr_yloc, rsp_edges, rsp_zplane, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),
-        .data_out   ({xloc_out,  yloc_out,  edges_out,  zplane_out, pid_out}),
+        .data_in    ({curr_xloc, curr_yloc, rsp_scissor, rsp_edges, rsp_zplane, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),
+        .data_out   ({xloc_out,  yloc_out,  scissor_out, edges_out, zplane_out, pid_out}),
         .valid_out  (valid_out),
         .ready_out  (ready_out)
     );
@@ -487,8 +506,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .reset      (reset),
         .valid_in   (buf_in_valid),
         .ready_in   (buf_in_ready),
-        .data_in    ({curr_xloc, curr_yloc, mem_rsp_data, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),
-        .data_out   ({xloc_out,  yloc_out,  edges_out,   pid_out}),
+        .data_in    ({curr_xloc, curr_yloc, rsp_scissor, rsp_edges, mem_rsp_tag[FETCH_FLAG_BITS +: `VX_RASTER_PID_BITS]}),
+        .data_out   ({xloc_out,  yloc_out,  scissor_out, edges_out, pid_out}),
         .valid_out  (valid_out),
         .ready_out  (ready_out)
     );

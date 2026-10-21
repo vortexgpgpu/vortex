@@ -21,7 +21,7 @@
 
 `include "VX_raster_define.vh"
 
-module VX_raster_te #(
+module VX_raster_te import VX_raster_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter TILE_LOGSIZE  = 5,
     parameter BLOCK_LOGSIZE = 2
@@ -34,6 +34,7 @@ module VX_raster_te #(
     input wire [`VX_RASTER_DIM_BITS-1:0] xloc_in,
     input wire [`VX_RASTER_DIM_BITS-1:0] yloc_in,
     input wire [`VX_RASTER_PID_BITS-1:0] pid_in,
+    input raster_rect_t                 scissor_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     input wire [2:0][`RASTER_DATA_BITS-1:0] zplane_in,
@@ -46,6 +47,7 @@ module VX_raster_te #(
     output wire [`VX_RASTER_DIM_BITS-1:0] xloc_out,
     output wire [`VX_RASTER_DIM_BITS-1:0] yloc_out,
     output wire [`VX_RASTER_PID_BITS-1:0] pid_out,
+    output raster_rect_t                scissor_out,
     output wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_out,
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Depth plane is constant per primitive; held for the whole tile walk.
@@ -67,6 +69,7 @@ module VX_raster_te #(
     reg [2:0][`RASTER_DATA_BITS-1:0]    tile_zplane;
 `endif
     reg [`VX_RASTER_PID_BITS-1:0]       tile_pid;
+    raster_rect_t                       tile_scissor;
     reg [`VX_RASTER_DIM_BITS-1:0]       tile_xloc;
     reg [`VX_RASTER_DIM_BITS-1:0]       tile_yloc;
     reg [2:0][`RASTER_DATA_BITS-1:0]    tile_edge_eval;
@@ -129,6 +132,7 @@ module VX_raster_te #(
                     tile_zplane         <= zplane_in;
                 `endif
                     tile_pid            <= pid_in;
+                    tile_scissor        <= scissor_in;
                     tile_xloc           <= xloc_in;
                     tile_yloc           <= yloc_in;
                     tile_edge_eval[0]   <= edges_in[0][2];
@@ -234,6 +238,7 @@ module VX_raster_te #(
     assign xloc_out  = tile_xloc_r;
     assign yloc_out  = tile_yloc_r;
     assign pid_out   = tile_pid;
+    assign scissor_out = tile_scissor;
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     assign zplane_out = tile_zplane;
 `endif

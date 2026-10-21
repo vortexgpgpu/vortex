@@ -264,14 +264,13 @@ void Rasterizer::configure(const RasterDCRS& dcrs) {
 void Rasterizer::renderPrimitive(uint32_t x,
                                  uint32_t y,
                                  uint32_t pid,
-                                 vec3e_t edges[3]) const {
+                                 const graphics::rast_prim_t& prim) const {
   // The coverage walk is the single source of truth shared with the device SW
   // fallback (gfx_frag_rast.h); forward the FF model's ShaderCB as the emit sink.
-  gfx_rast::RastConfig cfg{
-    tile_logsize_,
-    scissor_left_, scissor_top_, scissor_right_, scissor_bottom_
-  };
-  gfx_rast::rast_walk_primitive(cfg, x, y, pid, edges,
+  const gfx_rast::RastConfig cfg = gfx_rast::rast_prim_config(
+      { tile_logsize_, scissor_left_, scissor_top_, scissor_right_, scissor_bottom_ },
+      prim.scissor_x, prim.scissor_y);
+  gfx_rast::rast_walk_primitive(cfg, x, y, pid, prim.edges,
     [&](uint32_t pos_mask, vortex::graphics::vec3e_t* bcoords, uint32_t prim_id) {
       shader_cb_(pos_mask, bcoords, prim_id, cb_arg_);
     });

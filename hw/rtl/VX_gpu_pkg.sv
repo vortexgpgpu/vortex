@@ -1566,17 +1566,18 @@ package VX_gpu_pkg;
     localparam RCACHE_LINE_SIZE      = `VX_CFG_L1_LINE_SIZE;
     localparam RCACHE_NUM_REQS       = `VX_CFG_RCACHE_NUM_BANKS;
 
-    // Per-raster-unit primitive-fetch port count. 9 = 3 vertices × 3 attributes
-    // (edge coefficients). With early-Z the record also carries the screen-space
-    // depth plane {A',B',C'} that follows the 9 edge words, so the fetch is
-    // widened to 12 words; without early-Z the fetch stays 9 words (byte-identical
-    // to the no-early-Z pipeline). The early-Z committed-depth read is coherent
-    // with the ROP and thus goes through the OM's ocache, never the rcache — so
-    // the rcache carries a single requester (the fetch unit) in either build.
+    // Per-raster-unit primitive-fetch port count: the primitive's scissor
+    // rectangle (2 words) then 9 = 3 vertices × 3 attributes (edge coefficients).
+    // With early-Z the record also carries the screen-space depth plane
+    // {A',B',C'} that follows the 9 edge words, so the fetch is widened to 14
+    // words; without early-Z it stays 11. The early-Z committed-depth read is
+    // coherent with the ROP and thus goes through the OM's ocache, never the
+    // rcache — so the rcache carries a single requester (the fetch unit) in
+    // either build.
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
-    localparam RASTER_MEM_REQS       = 12;
+    localparam RASTER_MEM_REQS       = 14;
 `else
-    localparam RASTER_MEM_REQS       = 9;
+    localparam RASTER_MEM_REQS       = 11;
 `endif
 
     localparam RCACHE_BATCH_SEL_BITS = `ARB_SEL_BITS(RASTER_MEM_REQS, RCACHE_NUM_REQS);

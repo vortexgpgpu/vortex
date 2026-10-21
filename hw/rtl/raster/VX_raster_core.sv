@@ -64,12 +64,12 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     localparam EDGE_FUNC_LATENCY = `LATENCY_IMUL;
     localparam SLICES_BITS = `CLOG2(NUM_SLICES+1);
 
-    // A primitive data contains (xloc, yloc, pid, edges, [zplane,] extents). The
-    // depth plane (3 words) is threaded only with early-Z.
+    // A primitive data contains (xloc, yloc, pid, scissor, edges, [zplane,]
+    // extents). The depth plane (3 words) is threaded only with early-Z.
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
-    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
+    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
 `else
-    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
+    localparam PRIM_DATA_WIDTH = 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS;
 `endif
 
     `STATIC_ASSERT(TILE_LOGSIZE > BLOCK_LOGSIZE, ("invalid parameter"))
@@ -93,6 +93,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire [`VX_RASTER_DIM_BITS-1:0] mem_xloc;
     wire [`VX_RASTER_DIM_BITS-1:0] mem_yloc;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] mem_edges;
+    raster_rect_t mem_scissor;
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     wire [2:0][`RASTER_DATA_BITS-1:0] mem_zplane;
 `endif
@@ -154,6 +155,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .xloc_out     (mem_xloc),
         .yloc_out     (mem_yloc),
         .edges_out    (mem_edges),
+        .scissor_out  (mem_scissor),
     `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
         .zplane_out   (mem_zplane),
     `endif
@@ -191,6 +193,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     wire [`VX_RASTER_DIM_BITS-1:0]  slice_arb_yloc;
     wire [`VX_RASTER_PID_BITS-1:0]  slice_arb_pid;
     wire [2:0][2:0][`RASTER_DATA_BITS-1:0] slice_arb_edges, slice_arb_edges_e;
+    raster_rect_t                   slice_arb_scissor;
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     wire [2:0][`RASTER_DATA_BITS-1:0] slice_arb_zplane;
 `endif
@@ -199,27 +202,27 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     VX_shift_register #(
-        .DATAW  (1 + 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
+        .DATAW  (1 + 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
         .DEPTH  (EDGE_FUNC_LATENCY),
         .RESETW (1)
     ) edge_func_shift_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~edge_func_stall),
-        .data_in  ({mem_unit_valid, mem_xloc, mem_yloc, mem_pid, mem_edges, mem_zplane, mem_extents}),
-        .data_out ({slice_arb_valid_in, slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_edges, slice_arb_zplane, slice_arb_extents})
+        .data_in  ({mem_unit_valid, mem_xloc, mem_yloc, mem_pid, mem_scissor, mem_edges, mem_zplane, mem_extents}),
+        .data_out ({slice_arb_valid_in, slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_scissor, slice_arb_edges, slice_arb_zplane, slice_arb_extents})
     );
 `else
     VX_shift_register #(
-        .DATAW  (1 + 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
+        .DATAW  (1 + 2 * `VX_RASTER_DIM_BITS + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + 9 * `RASTER_DATA_BITS + 3 * `RASTER_DATA_BITS),
         .DEPTH  (EDGE_FUNC_LATENCY),
         .RESETW (1)
     ) edge_func_shift_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~edge_func_stall),
-        .data_in  ({mem_unit_valid, mem_xloc, mem_yloc, mem_pid, mem_edges, mem_extents}),
-        .data_out ({slice_arb_valid_in, slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_edges, slice_arb_extents})
+        .data_in  ({mem_unit_valid, mem_xloc, mem_yloc, mem_pid, mem_scissor, mem_edges, mem_extents}),
+        .data_out ({slice_arb_valid_in, slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_scissor, slice_arb_edges, slice_arb_extents})
     );
 `endif
 
@@ -252,9 +255,9 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         .valid_in   (slice_arb_valid_in),
         .ready_in   (slice_arb_ready_in),
     `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
-        .data_in    ({slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_edges_e, slice_arb_zplane, slice_arb_extents}),
+        .data_in    ({slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_scissor, slice_arb_edges_e, slice_arb_zplane, slice_arb_extents}),
     `else
-        .data_in    ({slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_edges_e, slice_arb_extents}),
+        .data_in    ({slice_arb_xloc, slice_arb_yloc, slice_arb_pid, slice_arb_scissor, slice_arb_edges_e, slice_arb_extents}),
     `endif
         .data_out   (slice_arb_data_out),
         .valid_out  (slice_arb_valid_out),
@@ -317,6 +320,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
         wire [`VX_RASTER_DIM_BITS-1:0] slice_xloc_in;
         wire [`VX_RASTER_DIM_BITS-1:0] slice_yloc_in;
         wire [`VX_RASTER_PID_BITS-1:0] slice_pid_in;
+        raster_rect_t                  slice_scissor_in;
         wire [2:0][2:0][`RASTER_DATA_BITS-1:0] slice_edges_in;
         wire [2:0][`RASTER_DATA_BITS-1:0] slice_extents_in;
         wire slice_ready_in;
@@ -331,9 +335,9 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
     `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
         wire [2:0][`RASTER_DATA_BITS-1:0] slice_zplane_in;
         wire [2:0][`RASTER_DATA_BITS-1:0] slice_out_zplane;
-        assign {slice_xloc_in, slice_yloc_in, slice_pid_in, slice_edges_in, slice_zplane_in, slice_extents_in} = slice_arb_data_out[slice_id];
+        assign {slice_xloc_in, slice_yloc_in, slice_pid_in, slice_scissor_in, slice_edges_in, slice_zplane_in, slice_extents_in} = slice_arb_data_out[slice_id];
     `else
-        assign {slice_xloc_in, slice_yloc_in, slice_pid_in, slice_edges_in, slice_extents_in} = slice_arb_data_out[slice_id];
+        assign {slice_xloc_in, slice_yloc_in, slice_pid_in, slice_scissor_in, slice_edges_in, slice_extents_in} = slice_arb_data_out[slice_id];
     `endif
 
         VX_raster_slice #(
@@ -351,10 +355,7 @@ module VX_raster_core import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
             .valid_in   (slice_valid_in[slice_id]),
             .xloc_in    (slice_xloc_in),
             .yloc_in    (slice_yloc_in),
-            .xmin_in    (raster_dcrs.dst_xmin),
-            .xmax_in    (raster_dcrs.dst_xmax),
-            .ymin_in    (raster_dcrs.dst_ymin),
-            .ymax_in    (raster_dcrs.dst_ymax),
+            .scissor_in (slice_scissor_in),
             .edges_in   (slice_edges_in),
         `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
             .zplane_in  (slice_zplane_in),

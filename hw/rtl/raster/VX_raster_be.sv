@@ -34,10 +34,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
     input wire                          valid_in,
     input wire [`VX_RASTER_DIM_BITS-1:0] xloc_in,
     input wire [`VX_RASTER_DIM_BITS-1:0] yloc_in,
-    input wire [`VX_RASTER_DIM_BITS-1:0] xmin_in,
-    input wire [`VX_RASTER_DIM_BITS-1:0] xmax_in,
-    input wire [`VX_RASTER_DIM_BITS-1:0] ymin_in,
-    input wire [`VX_RASTER_DIM_BITS-1:0] ymax_in,
+    input raster_rect_t                 scissor_in,
     input wire [`VX_RASTER_PID_BITS-1:0] pid_in,
     input wire [2:0][2:0][`RASTER_DATA_BITS-1:0] edges_in,
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
@@ -66,6 +63,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
 
     wire valid_r;
     wire [`VX_RASTER_PID_BITS-1:0] pid_r;
+    raster_rect_t scissor_r;
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     wire [2:0][`RASTER_DATA_BITS-1:0] zplane_r;
 `endif
@@ -89,25 +87,25 @@ module VX_raster_be import VX_raster_pkg::*; #(
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Carry the constant depth plane through the block-eval pipe with the quads.
     VX_pipe_register #(
-        .DATAW  (1 + `VX_RASTER_PID_BITS + 3 * `RASTER_DATA_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
+        .DATAW  (1 + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + 3 * `RASTER_DATA_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in, pid_in, zplane_in, quad_xloc,   quad_yloc,   quad_edges}),
-        .data_out ({valid_r,  pid_r,  zplane_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
+        .data_in  ({valid_in, pid_in, scissor_in, zplane_in, quad_xloc,   quad_yloc,   quad_edges}),
+        .data_out ({valid_r,  pid_r,  scissor_r,  zplane_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
     );
 `else
     VX_pipe_register #(
-        .DATAW  (1 + `VX_RASTER_PID_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
+        .DATAW  (1 + `VX_RASTER_PID_BITS + RASTER_RECT_BITS + PER_BLOCK_QUADS * (2 * `VX_RASTER_DIM_BITS + 9 * `RASTER_DATA_BITS)),
         .RESETW (1)
     ) pipe_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in, pid_in, quad_xloc,   quad_yloc,   quad_edges}),
-        .data_out ({valid_r,  pid_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
+        .data_in  ({valid_in, pid_in, scissor_in, quad_xloc,   quad_yloc,   quad_edges}),
+        .data_out ({valid_r,  pid_r,  scissor_r,  quad_xloc_r, quad_yloc_r, quad_edges_r})
     );
 `endif
 
@@ -133,10 +131,10 @@ module VX_raster_be import VX_raster_pkg::*; #(
         .pid_in     (pid_r),
         .xloc_in    (quad_xloc_r),
         .yloc_in    (quad_yloc_r),
-        .xmin_in    (xmin_in),
-        .xmax_in    (xmax_in),
-        .ymin_in    (ymin_in),
-        .ymax_in    (ymax_in),
+        .xmin_in    (scissor_r.xmin),
+        .xmax_in    (scissor_r.xmax),
+        .ymin_in    (scissor_r.ymin),
+        .ymax_in    (scissor_r.ymax),
         .edges_in   (quad_edges_r),
 
         .valid_out  (qe_valid),

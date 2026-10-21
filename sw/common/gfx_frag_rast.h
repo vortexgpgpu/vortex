@@ -45,6 +45,20 @@ struct RastConfig {
   uint32_t scissor_bottom;
 };
 
+// The walk's rectangle narrowed to a primitive's own (rast_prim_t::scissor_x/y),
+// as RASTER intersects its DCR rectangle with the record's.
+static inline RastConfig rast_prim_config(const RastConfig& cfg, uint32_t scissor_x,
+                                          uint32_t scissor_y) {
+  RastConfig c = cfg;
+  const uint32_t l = RAST_SCISSOR_LO(scissor_x), r = RAST_SCISSOR_HI(scissor_x);
+  const uint32_t t = RAST_SCISSOR_LO(scissor_y), b = RAST_SCISSOR_HI(scissor_y);
+  c.scissor_left   = c.scissor_left   > l ? c.scissor_left   : l;
+  c.scissor_right  = c.scissor_right  < r ? c.scissor_right  : r;
+  c.scissor_top    = c.scissor_top    > t ? c.scissor_top    : t;
+  c.scissor_bottom = c.scissor_bottom < b ? c.scissor_bottom : b;
+  return c;
+}
+
 // Per-edge dx/dy steps and trivial-reject extents for a primitive.
 struct delta_t {
   vec3e_t dx;

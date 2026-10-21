@@ -82,6 +82,17 @@ typedef struct {
   uint32_t halfz;     // 0 = GL [-w,w] clip z, 1 = Vulkan [0,w]
 } setup_viewport_t;
 
+// One slot of a draw's viewport array (VkPipelineViewportStateCreateInfo): the
+// transform, and the window rectangle a primitive drawn through it is confined
+// to (the viewport's rect, the slot's scissor and the render target,
+// intersected), packed as rast_prim_t's scissor words. A primitive selects its
+// slot by the ViewportIndex its provoking vertex wrote.
+#define SETUP_MAX_VIEWPORTS 16
+typedef struct {
+  setup_viewport_t vp;
+  uint32_t scissor_x, scissor_y;
+} setup_vp_slot_t;
+
 // Depth bias (VkPipelineRasterizationStateCreateInfo::depthBias*), added to the
 // depth plane of every filled triangle in window-z units:
 //   o = constant * r + slope * max(|dz/dx|, |dz/dy|), then clamped by `clamp`
@@ -207,8 +218,12 @@ typedef struct {
 typedef struct {
   float    bary[3][3];
   uint32_t vrec[3];
-  uint32_t pad;
+  uint32_t vp_layer;   // RAST_VARY_VP_LAYER: the primitive's viewport and layer
 } rast_vary_t;
+
+// ViewportIndex and Layer of a primitive as the fragment stage reads them, after
+// setup's clamp: viewport in the low half, layer in the high half.
+#define RAST_VARY_VP_LAYER(vp, layer) (((uint32_t)(vp) & 0xffffu) | ((uint32_t)(layer) << 16))
 
 // Per-launch front-end argument block. Addresses are device byte addresses;
 // counts/config are runtime values the kernels read (so launch dims and pool
@@ -258,6 +273,17 @@ typedef struct {
   uint32_t stipple_strip;
   // Primitives and VS records per instance of an instanced draw; 0: one instance.
   uint32_t inst_prims;
+  // The draw's viewport array (setup_vp_slot_t[vp_count]) at vp_table_addr; a
+  // vp_table_addr of 0 selects the one viewport above, unscissored. vpi_off and layer_off are the byte offsets of
+  // ViewportIndex and Layer in the VS records (0 = not written). With layer_off,
+  // layer_max clamps a primitive's layer and only the primitives in layer_sel
+  // are drawn (a layered draw replays once per framebuffer layer).
+  uint32_t vp_count;
+  uint32_t vpi_off;
+  uint32_t layer_off;
+  uint32_t layer_max;
+  uint32_t layer_sel;
+  uint64_t vp_table_addr;
   uint64_t verts_addr;     // setup_vertex_t[3*num_tris]      (in, when vsrec_addr is 0)
   // VS output records (in): when set, a primitive's vertices are records as
   // prim_type says, vstride bytes apart, each starting with the clip-space

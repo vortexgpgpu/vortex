@@ -23,7 +23,7 @@
 # don't use:
 #
 #   install_dependencies.sh              baseline core only
-#   install_dependencies.sh --vulkan     + Vulkan loader + glslc  (tests/vulkan)
+#   install_dependencies.sh --vulkan     + Vulkan loader + glslc + spirv-tools  (tests/vulkan)
 #   install_dependencies.sh --gem5       + gem5.opt runtime libs  (gem5 tests)
 #   install_dependencies.sh --mpi        + OpenMPI                (tests/mpi)
 #   install_dependencies.sh --all        baseline + every group
@@ -36,7 +36,7 @@ set -e
 usage() {
     echo "Usage: $0 [--vulkan] [--gem5] [--mpi] [--all] [-h|--help]"
     echo "  (no flags)   install baseline packages for the Vortex core only"
-    echo "  --vulkan     also install the Vulkan loader and glslc (tests/vulkan)"
+    echo "  --vulkan     also install the Vulkan loader, glslc and spirv-tools (tests/vulkan)"
     echo "  --gem5       also install gem5.opt's runtime shared libraries"
     echo "  --mpi        also install OpenMPI (tests/mpi)"
     echo "  --all        install baseline + vulkan + gem5 + mpi"
@@ -136,6 +136,9 @@ fi
 if [ "$enable_vulkan" -eq 1 ]; then
     echo "Installing Vulkan dependencies..."
     apt-get install -y libvulkan-dev
+    # spirv-as / spirv-dis: tests whose shaders need SPIR-V that GLSL cannot
+    # express are assembled from disassembled glslc output.
+    apt-get install -y spirv-tools
     # glslc (shaderc) lives only in LunarG's repo. Best-effort so a LunarG
     # outage / signature change can't abort the whole dependency install (set -e).
     if wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | tee /etc/apt/trusted.gpg.d/lunarg.asc > /dev/null \

@@ -657,7 +657,7 @@ DCR writes, drained in order by the CP's launch-barrier:
    (`SETUP_CULL_*`, computed from the bound rasterizer state *after*
    the viewport's y-flip so the cull sign matches the app's
    framebuffer winding) + fixed-point plane-equation setup →
-   `rast_prim_t` (212 B: `edges[3]`, the 14 attribute planes
+   `rast_prim_t` (220 B: the scissor rectangle, `edges[3]`, the 14 attribute planes
    `{z,r,g,b,a,u,v,rhw,w0..w5}` carrying perspective-premultiplied
    varyings plus the normalized `1/w` plane, and the trailing
    `facing` / `rhw_scale` scalars) + the per-primitive flat-varying
@@ -684,11 +684,14 @@ table (§1.3), so an unchanged buffer is uploaded once, not per draw.
 lets the RASTER engine launch the fragment shader itself:
 
 1. **Program RASTER DCRs**: tile/prim buffer block-addresses,
-   `PBUF_STRIDE` = the whole 212-byte `rast_prim_t` record (RASTER
-   itself fetches only words 0..11 — the edges and depth plane — but
+   `PBUF_STRIDE` = the whole 220-byte `rast_prim_t` record (RASTER
+   itself fetches only words 0..13 — the scissor rectangle, the edges and
+   the depth plane — but
    the stride must cover the trailing fields or every later
-   primitive's edges alias the previous record's tail), the scissor
-   rect, and the **fragment-shader launch descriptor**
+   primitive's edges alias the previous record's tail), the
+   render-target rectangle as the draw-wide scissor (each record carries
+   its viewport slot's `viewport ∩ scissor` rectangle, which RASTER
+   intersects with it), and the **fragment-shader launch descriptor**
    (`VX_DCR_RASTER_FRAG_ENTRY_LO/HI`, `FRAG_PARAM_LO/HI`) — so the
    raster engine self-launches the FS with no host KMU grid.
 2. **Program OM DCRs**: per attachment, latched under
@@ -723,7 +726,7 @@ runs once per launched wave:
 
 ```
 pos = csr(FRAG_POS); pid = csr(FRAG_PID)              // launch-register reads
-prim         = arg[0] + pid * 212                     // VP_RAST_PRIM_STRIDE
+prim         = arg[0] + pid * 220                     // VP_RAST_PRIM_STRIDE
 flat         = arg[FLAT] + pid * 12*4                 // provoking vertex's words
 (X,Y,cov)    = decode(pos)                            // this lane's pixel
 (f0,f1,f2)   = recompute edges  e·[X,Y,1]  from prim.edge_planes

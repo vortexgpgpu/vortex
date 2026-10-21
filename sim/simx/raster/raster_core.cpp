@@ -12,6 +12,7 @@
 // limitations under the License.
 
 #include "raster_core.h"
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <deque>
@@ -558,6 +559,8 @@ private:
     uint16_t          pid;
     graphics::vec3e_t edges[3];
     graphics::vec3e_t extents;
+    // The record's rectangle intersected with the DCR one: [left, right) x [top, bottom).
+    uint32_t          scissor_left, scissor_right, scissor_top, scissor_bottom;
     std::queue<RasterStamp>* queue;
   };
 
@@ -597,8 +600,9 @@ private:
   // Per-pixel coverage + scissor test for a quad.
   void compute_quad(uint32_t qx, uint32_t qy,
                     const graphics::vec3e_t& edge_eval_corner,
-                    const graphics::vec3e_t edges[3],
+                    const PrimCtx& prim,
                     uint32_t& out_mask) {
+    const graphics::vec3e_t* edges = prim.edges;
     graphics::FloatE z(0);
     out_mask = 0;
     // Vulkan top-left fill rule: a sample exactly on an edge (value == 0) is
@@ -620,8 +624,8 @@ private:
         bool in1 = tl1 ? (ee1 >= z) : (ee1 > z);
         bool in2 = tl2 ? (ee2 >= z) : (ee2 > z);
         bool covered = in0 && in1 && in2
-                    && (px >= scissor_left_)  && (px <  scissor_right_)
-                    && (py >= scissor_top_)   && (py <  scissor_bottom_);
+                    && (px >= prim.scissor_left) && (px <  prim.scissor_right)
+                    && (py >= prim.scissor_top)  && (py <  prim.scissor_bottom);
         uint32_t p = pj * 2 + pi;
         if (covered) {
           out_mask |= (1u << p);
@@ -662,7 +666,7 @@ private:
                          + edges[1].x * int(2 * ii) + edges[1].y * int(2 * jj);
       quad_corner_eval.z = block.edge_eval.z
                          + edges[2].x * int(2 * ii) + edges[2].y * int(2 * jj);
-      compute_quad(q.qx_pix, q.qy_pix, quad_corner_eval, edges, q.mask);
+      compute_quad(q.qx_pix, q.qy_pix, quad_corner_eval, *block.prim, q.mask);
     }
 
     // Walk batches in priority order. A batch fires iff any quad has
@@ -841,7 +845,8 @@ private:
     return cycles;
   }
 
-  // Cached scissor config (refreshed in run_rasterizer from dcrs_).
+  // Draw-wide scissor (refreshed in run_rasterizer from dcrs_); every primitive
+  // narrows it to its record's own rectangle.
   uint32_t scissor_left_   = 0;
   uint32_t scissor_top_    = 0;
   uint32_t scissor_right_  = 0;
@@ -888,6 +893,10 @@ private:
           ctx.edges[k] = prim.edges[k];
         }
         ctx.extents = compute_extents(ctx.edges);
+        ctx.scissor_left   = std::max(scissor_left_,   RAST_SCISSOR_LO(prim.scissor_x));
+        ctx.scissor_right  = std::min(scissor_right_,  RAST_SCISSOR_HI(prim.scissor_x));
+        ctx.scissor_top    = std::max(scissor_top_,    RAST_SCISSOR_LO(prim.scissor_y));
+        ctx.scissor_bottom = std::min(scissor_bottom_, RAST_SCISSOR_HI(prim.scissor_y));
         ctx.queue   = &quad_queues_[owner - base_core_];
         prim_ctxs.push_back(ctx);
 

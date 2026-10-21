@@ -93,19 +93,25 @@ Load-bearing properties:
 ### 2.3 Primitive buffer (`pbuf`)
 
 A flat array of `rast_prim_t` records, indexed by `pid`, with byte stride
-`pbuf_stride` (= `sizeof(rast_prim_t)` = 212 B; any 4-byte-multiple stride is
+`pbuf_stride` (= `sizeof(rast_prim_t)` = 220 B; any 4-byte-multiple stride is
 legal — the hardware computes `pid × pbuf_stride`):
 
 | words | bytes | field | format | read by |
 |---|---|---|---|---|
-| 0–8 | 0–35 | `edges[3]` — three `{A, B, C}` edge equations | Q15.16 | RASTER |
-| 9–11 | 36–47 | `attribs.z` — screen-space depth plane `{A′, B′, C′}` | Q7.24 | RASTER (early-Z only) + FS |
-| 12–50 | 48–203 | `attribs.{r,g,b,a,u,v,rhw,w0–w5}` — barycentric-delta planes | Q7.24 | FS only |
-| 51 | 204–207 | `facing` — source winding | u32 | FS only |
-| 52 | 208–211 | `rhw_scale` — `rhw` premultiply factor | f32 | FS only |
+| 0–1 | 0–7 | `scissor_x`, `scissor_y` — the primitive's pixel rectangle, `{max[31:16], min[15:0]}` per axis (max exclusive) | u16×2 | RASTER |
+| 2–10 | 8–43 | `edges[3]` — three `{A, B, C}` edge equations | Q15.16 | RASTER |
+| 11–13 | 44–55 | `attribs.z` — screen-space depth plane `{A′, B′, C′}` | Q7.24 | RASTER (early-Z only) + FS |
+| 14–52 | 56–211 | `attribs.{r,g,b,a,u,v,rhw,w0–w5}` — barycentric-delta planes | Q7.24 | FS only |
+| 53 | 212–215 | `facing` — source winding | u32 | FS only |
+| 54 | 216–219 | `rhw_scale` — `rhw` premultiply factor | f32 | FS only |
 
-The depth plane sits **contiguously after the edges** so the entire
-hardware-visible slice is one 9-word (12-word with early-Z) burst. Everything
+The scissor rectangle, the edges and the depth plane sit **contiguously at
+the head of the record** so the entire hardware-visible slice is one 11-word
+(14-word with early-Z) burst. The rectangle is the primitive's own: setup
+writes its viewport slot's `viewport ∩ scissor` rectangle there (the render
+target when unscissored), and RASTER tests every pixel against its
+intersection with the `RASTER_SCISSOR_X/Y` DCR rectangle, which is how a
+viewport array selects its scissor per primitive with no register table. Everything
 after it is never touched by the rasterizer; the fragment shader reads it by
 `pid`. The twelve generic varying planes (`r,g,b,a,u,v,w0–w5` — enough for
 three vec4 varyings, packed in declaration order by the front end) are
@@ -258,13 +264,14 @@ Three states (`IDLE`/`TILE`/`PRIM`), issuing word-granularity reads through a
   (memory-deadlock avoidance).
 - **`PDATA`** — each returned pid enters a pipelined multiplier
   (`pid × pbuf_stride`, `LATENCY_IMUL`); the product addresses one full-mask
-  9-word (12 with early-Z) request for the record's hardware-visible slice.
+  11-word (14 with early-Z) request for the record's hardware-visible slice.
   The pid rides in the request tag's upper bits, so the response is
   self-identifying. Each response pushes
-  `{xloc, yloc, edges[, zplane], pid}` into the output elastic buffer; when
+  `{xloc, yloc, scissor, edges[, zplane], pid}` into the output elastic
+  buffer, the record's rectangle already intersected with the DCR one; when
   the bin's last response lands, the FSM returns to `TILE` (or `IDLE`).
 
-The scheduler (`CORE_REQS` = 9/12 words, `MEM_CHANNELS = RCACHE_NUM_REQS`,
+The scheduler (`CORE_REQS` = 11/14 words, `MEM_CHANNELS = RCACHE_NUM_REQS`,
 `RSP_PARTIAL = 0`) gathers each multi-word request into a single response and
 feeds the **rcache** through a `VX_lsu_adapter`. Raster reads have no
 instruction UUID; the tag is zero-padded to the scheduler's UUID field.
@@ -336,8 +343,10 @@ subdivision from bin size down to block size:
 into its 2×2-pixel quads
 (`(2^(BLOCK_LOGSIZE−1))²` per block) and drives
 [`VX_raster_qe.sv`](../../hw/rtl/raster/VX_raster_qe.sv), which evaluates
-each pixel of each quad against all three edges and the destination window
-(scissor DCRs), producing per-quad 4-bit coverage masks.
+each pixel of each quad against all three edges and the primitive's
+rectangle (its record's, intersected with the scissor DCRs; carried with the
+primitive through the tile evaluator and the block buffer), producing per-quad
+4-bit coverage masks.
 
 QE applies the **Vulkan top-left fill rule**: a sample exactly on an edge
 (`E == 0`) is covered only if that edge is top-left (`A > 0`, or

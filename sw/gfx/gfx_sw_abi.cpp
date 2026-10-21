@@ -378,7 +378,9 @@ extern "C" uint32_t gfx_rast_walk_tile_msaa_sw(const void* prim, uint32_t pid,
                                                gfx_rast_msaa_quad_t* out, uint32_t max) {
   using namespace gfx_rast;
   const auto* p = reinterpret_cast<const vortex::graphics::rast_prim_t*>(prim);
-  RastConfig cfg{ tile_logsize, scissor_left, scissor_top, scissor_right, scissor_bottom };
+  const RastConfig cfg = rast_prim_config(
+      { tile_logsize, scissor_left, scissor_top, scissor_right, scissor_bottom },
+      p->scissor_x, p->scissor_y);
   uint32_t count = 0;
   auto emit = [&](uint32_t pos_mask, const vec3e_t* bc, const uint32_t* smask, uint32_t) {
     if (count >= max) {
@@ -424,7 +426,9 @@ extern "C" uint32_t gfx_rast_walk_tile_sw(const void* prim, uint32_t pid,
                                           gfx_rast_quad_t* out, uint32_t max) {
   using namespace gfx_rast;
   const auto* p = reinterpret_cast<const vortex::graphics::rast_prim_t*>(prim);
-  RastConfig cfg{ tile_logsize, scissor_left, scissor_top, scissor_right, scissor_bottom };
+  const RastConfig cfg = rast_prim_config(
+      { tile_logsize, scissor_left, scissor_top, scissor_right, scissor_bottom },
+      p->scissor_x, p->scissor_y);
   uint32_t count = 0;
   auto emit = [&](uint32_t pos_mask, const vec3e_t* bc, uint32_t) {
     if (count >= max) return;

@@ -366,7 +366,7 @@ public:
   void renderPrimitive(uint32_t x,
                        uint32_t y,
                        uint32_t pid,
-                       vec3e_t edges[4]) const;
+                       const graphics::rast_prim_t& prim) const;
 
 protected:
 

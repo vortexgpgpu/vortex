@@ -507,6 +507,8 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     }
   }
   out_prim.facing = back ? 1u : 0u;
+  out_prim.scissor_x = RAST_SCISSOR_PACK(0, width);
+  out_prim.scissor_y = RAST_SCISSOR_PACK(0, height);
 
   // Screen-space bbox (clamped to render target).
   vec4f ps0 = ClipToScreen(p0, L, R, T, B, zn, zf, halfz);
@@ -647,6 +649,30 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
   delta(out_prim.attribs.w4,  v0.varying2[4] * rhw0, v1.varying2[4] * rhw1, v2.varying2[4] * rhw2);
   delta(out_prim.attribs.w5,  v0.varying2[5] * rhw0, v1.varying2[5] * rhw1, v2.varying2[5] * rhw2);
   delta(out_prim.attribs.rhw, rhw0, rhw1, rhw2);
+  return true;
+}
+
+// Confine a set-up primitive to the window rectangle (scissor_x, scissor_y),
+// packed as rast_prim_t's: the record keeps the intersection for the
+// rasterizer's per-pixel test, and the bbox shrinks to it so binning skips the
+// bins it excludes. False when nothing of the primitive's bbox is left.
+static inline bool setup_scissor(rast_prim_t& prim, setup_bbox_t& bbox,
+                                 uint32_t scissor_x, uint32_t scissor_y) {
+  auto umax = [](uint32_t a, uint32_t b) { return a > b ? a : b; };
+  auto umin = [](uint32_t a, uint32_t b) { return a < b ? a : b; };
+  const uint32_t l = umax(RAST_SCISSOR_LO(prim.scissor_x), RAST_SCISSOR_LO(scissor_x));
+  const uint32_t r = umin(RAST_SCISSOR_HI(prim.scissor_x), RAST_SCISSOR_HI(scissor_x));
+  const uint32_t t = umax(RAST_SCISSOR_LO(prim.scissor_y), RAST_SCISSOR_LO(scissor_y));
+  const uint32_t b = umin(RAST_SCISSOR_HI(prim.scissor_y), RAST_SCISSOR_HI(scissor_y));
+  bbox.bbL = umax(bbox.bbL, l);
+  bbox.bbR = umin(bbox.bbR, r);
+  bbox.bbT = umax(bbox.bbT, t);
+  bbox.bbB = umin(bbox.bbB, b);
+  if (bbox.bbR <= bbox.bbL || bbox.bbB <= bbox.bbT) {
+    return false;
+  }
+  prim.scissor_x = RAST_SCISSOR_PACK(l, r);
+  prim.scissor_y = RAST_SCISSOR_PACK(t, b);
   return true;
 }
 

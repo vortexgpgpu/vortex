@@ -187,10 +187,20 @@ struct rast_attribs_t {
   rast_attrib_t z, r, g, b, a, u, v, rhw, w0, w1, w2, w3, w4, w5;
 };
 
+// The rectangle the primitive's coverage is confined to, in pixels, packed as the
+// VX_DCR_RASTER_SCISSOR_X/Y registers are: {right[31:16], left[15:0]} and
+// {bottom[31:16], top[15:0]}, right and bottom exclusive. RASTER tests every pixel
+// against its intersection with the DCR rectangle, so per-primitive viewport and
+// scissor selection costs no register table.
+#define RAST_SCISSOR_PACK(lo, hi) ((((uint32_t)(hi) & 0xffffu) << 16) | ((uint32_t)(lo) & 0xffffu))
+#define RAST_SCISSOR_LO(w)        ((w) & 0xffffu)
+#define RAST_SCISSOR_HI(w)        ((w) >> 16)
+
 // Per-primitive scalars the fragment shader needs but the raster hardware does
 // not. They sit AFTER the attribute planes on purpose: RASTER fetches only words
-// 0..11 (the three edges plus the depth plane) and finds primitive N through the
-// VX_DCR_RASTER_PBUF_STRIDE DCR, so trailing fields cost stride and nothing else.
+// 0..13 (the scissor rectangle, the three edges and the depth plane) and finds
+// primitive N through the VX_DCR_RASTER_PBUF_STRIDE DCR, so trailing fields cost
+// stride and nothing else.
 //
 //   facing    1 = the source triangle wound backwards, 0 = forwards. EdgeEquation
 //             flips the edges so the interior is positive either way, which
@@ -203,6 +213,8 @@ struct rast_attribs_t {
 //             ALONE and must undo it: 1/w = interp(rhw) / rhw_scale. Zero when
 //             every vertex w was zero.
 struct rast_prim_t {
+  uint32_t       scissor_x;
+  uint32_t       scissor_y;
   vec3e_t        edges[3];
   rast_attribs_t attribs;
   uint32_t       facing;

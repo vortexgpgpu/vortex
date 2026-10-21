@@ -376,6 +376,38 @@ tests:
   app: gfx_raster
   configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RASTER_TILE_LOG_SIZE=6
   args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+# Per-primitive scissor: every record carries its own rectangle, narrower than
+# the DCR one, checked pixel-exactly against the shared coverage walk.
+- id: gfx_raster-scissor-1
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -s
+- id: gfx_raster-scissor-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -s
+# With OM the raster unit is built with early-Z, whose record fetch also takes
+# the depth plane.
+- id: gfx_raster-scissor-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -s
+- id: gfx_raster-scissor-4
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RCACHE_NUM_BANKS=4
+  args: -w 128 -h 128 -t triangle.cgltrace -s
 - id: gfx_draw3d-1
   via: blackbox
   drivers:
@@ -644,6 +676,12 @@ tests:
   app: gfx_raster
   configs: -DVX_CFG_EXT_RASTER_ENABLE
   args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png
+- id: model_parity-raster-scissor
+  check: model_parity
+  via: blackbox
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -s
 - id: model_parity-om
   check: model_parity
   via: blackbox
@@ -1018,6 +1056,12 @@ tests:
   app: gfx_raster
   configs: -DVX_CFG_EXT_RASTER_ENABLE
   args: -w 128 -h 128 -t triangle.cgltrace -r triangle_ref_128.png -z
+- id: gfx_raster-sw-scissor
+  via: blackbox
+  drivers: [simx]
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -t carnival.cgltrace -s -z
 # gfx_tex4 had no CI case at all; it owns the only software-sampler entry point.
 - id: gfx_tex4-ff
   via: blackbox

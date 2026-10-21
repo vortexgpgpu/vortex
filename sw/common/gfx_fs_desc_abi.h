@@ -114,7 +114,12 @@
 // fragment wrapper adds its fragment-shader invocations and occlusion samples
 // to; 0 while no counting query is open.
 #define GFX_FS_ARG_QUERY    24u
-#define GFX_FS_ARG_COUNT    25u
+// Per-viewport depth bounds, when a draw's viewports map different depth
+// ranges: the device address of one entry per viewport slot, each the six words
+// ZKILL lo/hi, ZCLAMP lo/hi and ZCLAMPF lo/hi, which a fragment uses in place of
+// those arguments by its primitive's viewport index. 0 = the arguments hold.
+#define GFX_FS_ARG_ZTABLE   25u
+#define GFX_FS_ARG_COUNT    26u
 
 // The query counter block: one 64-bit counter per statistic, kept on the device
 // and added to with 32-bit atomics (the low word, then the high word on a carry).

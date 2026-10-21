@@ -18,6 +18,8 @@ typedef struct {
   uint32_t sw_path;
   uint32_t num_prims;     // dense rast_prim_t count in prim_addr
   uint32_t tile_logsize;  // walk tile = 1 << tile_logsize
+  uint32_t scissor_x;     // the draw rectangle the scissor DCRs hold, packed alike
+  uint32_t scissor_y;
 } kernel_arg_t;
 
 #endif

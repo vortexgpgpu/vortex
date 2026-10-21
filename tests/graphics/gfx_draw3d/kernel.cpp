@@ -288,7 +288,9 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         (uintptr_t)(arg->prim_addr + (uint64_t)pid * sizeof(rast_prim_t)));
 
     uint32_t tile = 1u << arg->tile_logsize;
-    gfx_rast::RastConfig cfg{ arg->tile_logsize, 0, 0, arg->dst_width, arg->dst_height };
+    const gfx_rast::RastConfig cfg = gfx_rast::rast_prim_config(
+        { arg->tile_logsize, 0, 0, arg->dst_width, arg->dst_height },
+        prim->scissor_x, prim->scissor_y);
 
     for (uint32_t ty = 0; ty < arg->dst_height; ty += tile) {
         for (uint32_t tx = 0; tx < arg->dst_width; tx += tile) {

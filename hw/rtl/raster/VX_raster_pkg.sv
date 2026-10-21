@@ -46,6 +46,16 @@ typedef struct packed {
 `endif
 } raster_dcrs_t;
 
+// A primitive's pixel rectangle, [xmin, xmax) x [ymin, ymax).
+typedef struct packed {
+    logic [`VX_RASTER_DIM_BITS-1:0] xmin;
+    logic [`VX_RASTER_DIM_BITS-1:0] xmax;
+    logic [`VX_RASTER_DIM_BITS-1:0] ymin;
+    logic [`VX_RASTER_DIM_BITS-1:0] ymax;
+} raster_rect_t;
+
+localparam RASTER_RECT_BITS = $bits(raster_rect_t);
+
 typedef struct packed {
     logic [`VX_RASTER_DIM_BITS-2:0] pos_x;     // quad x position
     logic [`VX_RASTER_DIM_BITS-2:0] pos_y;     // quad y position

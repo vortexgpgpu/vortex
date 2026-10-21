@@ -47,14 +47,8 @@ public:
       while (pids_count--) {
         // read next primitive index from tile buffer
         uint32_t pid = *pid_buf++;
-        // get primitive edges
-        auto prim_buf = reinterpret_cast<graphics::FloatE*>(pbuf_baseaddr_ + pid * pbuf_stride_);
-        graphics::vec3e_t edges[3] = {
-          {prim_buf[0], prim_buf[1], prim_buf[2]},
-          {prim_buf[3], prim_buf[4], prim_buf[5]},
-          {prim_buf[6], prim_buf[7], prim_buf[8]}
-        };
-        this->renderPrimitive(x, y, pid, edges);
+        auto prim = reinterpret_cast<const graphics::rast_prim_t*>(pbuf_baseaddr_ + pid * pbuf_stride_);
+        this->renderPrimitive(x, y, pid, *prim);
       }
     }
   }
