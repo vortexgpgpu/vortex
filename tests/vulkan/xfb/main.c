@@ -33,6 +33,9 @@
  *   many      4608 vertices, more than one launch of every configuration has
  *             threads, with both faces culled: the vertex stage runs alone
  *             and its capture is still complete
+ *   huge      33000 points under rasterizer discard, more primitives than a
+ *             rasterizer pass takes: the draw runs the vertex stage alone and
+ *             captures every point
  *   unbound   buffer 1 not bound: buffer 0 is still captured
  *   resume    three segments in three command buffers, each resuming from the
  *             counter buffer the previous one saved
@@ -64,8 +67,9 @@
 /* Each case captures into its own 4 KiB range of each buffer. */
 #define SLICE     4096u
 #define NSLICES   20u
-/* The many-vertex case captures into buffers of its own. */
+/* The many-vertex and huge cases capture into buffers of their own. */
 #define NBIG      4608u
+#define NHUGE     33000u
 #define BUF_BYTES (SLICE * NSLICES)
 
 #define CHECK(x) do {                                                    \
@@ -418,7 +422,7 @@ static const struct draw topo_draws[NTOPO] = {
 };
 
 /* Slices of the capture buffers. */
-enum { S_OVF = NTOPO, S_UNBOUND, S_RESUME, S_DISCARD, S_FIRST, S_EMPTY, S_MANY };
+enum { S_OVF = NTOPO, S_UNBOUND, S_RESUME, S_DISCARD, S_FIRST, S_EMPTY, S_MANY, S_HUGE };
 
 /* Counter-buffer words: two per slice (buffer 0, buffer 1). */
 #define CTR(slice, b) (((slice) * 2u + (b)) * 4u)
@@ -437,6 +441,7 @@ static const struct draw resume_draws[3] = {
 };
 
 static const struct draw many_tris = { VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, false, NBIG, NULL, 0, 1, 0 };
+static const struct draw huge_points = { VK_PRIMITIVE_TOPOLOGY_POINT_LIST, false, NHUGE, NULL, 0, 1, 0 };
 
 static const struct draw discard_draws[3] = {
    { VK_PRIMITIVE_TOPOLOGY_POINT_LIST, false, 3, NULL, 0, 1, 0 },
@@ -657,8 +662,9 @@ main(int argc, char **argv)
    CHECK(vkCreatePipelineLayout(dev, &plci, NULL, &pl));
 
    VkPipeline topo_pipe[NTOPO], ovf_pipe[2], outside_pipe, resume_pipe[3], discard_pipe[3];
-   VkPipeline many_pipe;
+   VkPipeline many_pipe, huge_pipe;
    CHECK(make_pipeline(dev, rp, pl, vs, fs, key_of(&many_tris, false, true), &many_pipe));
+   CHECK(make_pipeline(dev, rp, pl, vs, fs, key_of(&huge_points, true, false), &huge_pipe));
    for (unsigned c = 0; c < NTOPO; c++) {
       CHECK(make_pipeline(dev, rp, pl, vs, fs, key_of(&topo_draws[c], false, false), &topo_pipe[c]));
    }
@@ -681,16 +687,24 @@ main(int argc, char **argv)
          ((uint32_t *)xmap[b])[w] = SENTINEL;
       }
    }
-   /* The many-vertex capture, with a sentinel tail past its last vertex. */
-   const uint32_t big_bytes[2] = { NBIG * STRIDE0 + 256u, NBIG * STRIDE1 + 256u };
-   VkBuffer bigbuf[2];
-   VkDeviceMemory bigmem[2];
-   uint8_t *bigmap[2];
-   for (unsigned b = 0; b < 2; b++) {
-      CHECK(host_buffer(dev, &mp, big_bytes[b], xfb_usage, &bigbuf[b], &bigmem[b],
-                        (void **)&bigmap[b]));
-      for (uint32_t w = 0; w < big_bytes[b] / 4u; w++) {
-         ((uint32_t *)bigmap[b])[w] = SENTINEL;
+   /* The many-vertex and huge captures, each with a sentinel tail past its
+    * last vertex. */
+   const struct draw *const big_draws[2] = { &many_tris, &huge_points };
+   const uint32_t big_slices[2] = { S_MANY, S_HUGE };
+   const char *const big_names[2] = { "many", "huge" };
+   uint32_t big_bytes[2][2];
+   VkBuffer bigbuf[2][2];
+   VkDeviceMemory bigmem[2][2];
+   uint8_t *bigmap[2][2];
+   for (unsigned c = 0; c < 2; c++) {
+      big_bytes[c][0] = big_draws[c]->count * STRIDE0 + 256u;
+      big_bytes[c][1] = big_draws[c]->count * STRIDE1 + 256u;
+      for (unsigned b = 0; b < 2; b++) {
+         CHECK(host_buffer(dev, &mp, big_bytes[c][b], xfb_usage, &bigbuf[c][b], &bigmem[c][b],
+                           (void **)&bigmap[c][b]));
+         for (uint32_t w = 0; w < big_bytes[c][b] / 4u; w++) {
+            ((uint32_t *)bigmap[c][b])[w] = SENTINEL;
+         }
       }
    }
    const uint32_t ctr_bytes = NSLICES * 8u;
@@ -826,14 +840,14 @@ main(int argc, char **argv)
       DRAW(cmd[0], &topo_draws[C_LIST]);
       end_xfb(cmd[0], 0, 2, ctrs, ctr_off);
    }
-   {
-      const VkDeviceSize ctr_off[2] = { CTR(S_MANY, 0), CTR(S_MANY, 1) };
+   for (unsigned c = 0; c < 2; c++) {
+      const VkDeviceSize ctr_off[2] = { CTR(big_slices[c], 0), CTR(big_slices[c], 1) };
       const VkDeviceSize zero[2] = { 0, 0 };
       const VkDeviceSize whole[2] = { VK_WHOLE_SIZE, VK_WHOLE_SIZE };
-      vkCmdBindPipeline(cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, many_pipe);
-      bind_xfb(cmd[0], 0, 2, bigbuf, zero, whole);
+      vkCmdBindPipeline(cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, c ? huge_pipe : many_pipe);
+      bind_xfb(cmd[0], 0, 2, bigbuf[c], zero, whole);
       begin_xfb(cmd[0], 0, 0, NULL, NULL);
-      DRAW(cmd[0], &many_tris);
+      DRAW(cmd[0], big_draws[c]);
       end_xfb(cmd[0], 0, 2, ctrs, ctr_off);
    }
    vkCmdEndRenderPass(cmd[0]);
@@ -990,12 +1004,14 @@ main(int argc, char **argv)
    want_ctr[S_EMPTY][1] = 0;
    want_ctr[S_MANY][0] = NBIG * STRIDE0;
    want_ctr[S_MANY][1] = NBIG * STRIDE1;
+   want_ctr[S_HUGE][0] = NHUGE * STRIDE0;
+   want_ctr[S_HUGE][1] = NHUGE * STRIDE1;
 
    /* --- compare -------------------------------------------------------- */
    static const char *const slice_names[NSLICES] = {
       [S_OVF] = "overflow", [S_UNBOUND] = "unbound", [S_RESUME] = "resume",
       [S_DISCARD] = "discard", [S_FIRST] = "first-counter", [S_EMPTY] = "empty",
-      [S_MANY] = "many",
+      [S_MANY] = "many", [S_HUGE] = "huge",
    };
    unsigned bad = 0;
    for (unsigned sl = 0; sl < NSLICES; sl++) {
@@ -1021,22 +1037,22 @@ main(int argc, char **argv)
          }
       }
    }
-   {
-      struct vtx *bx = malloc(NBIG * sizeof(*bx));
-      uint8_t *bw[2] = { malloc(big_bytes[0]), malloc(big_bytes[1]) };
+   for (unsigned c = 0; c < 2; c++) {
+      struct vtx *bx = malloc(big_draws[c]->count * sizeof(*bx));
+      uint8_t *bw[2] = { malloc(big_bytes[c][0]), malloc(big_bytes[c][1]) };
       for (unsigned b = 0; b < 2; b++) {
-         for (uint32_t w = 0; w < big_bytes[b] / 4u; w++) {
+         for (uint32_t w = 0; w < big_bytes[c][b] / 4u; w++) {
             ((uint32_t *)bw[b])[w] = SENTINEL;
          }
       }
-      const uint32_t n = expect_draw(&many_tris, bx);
+      const uint32_t n = expect_draw(big_draws[c], bx);
       expect_put(bw[0], bw[1], 0, 0, bx, n);
       for (unsigned b = 0; b < 2; b++) {
-         const uint32_t d = first_diff(bigmap[b], bw[b], big_bytes[b]);
+         const uint32_t d = first_diff(bigmap[c][b], bw[b], big_bytes[c][b]);
          if (d != UINT32_MAX) {
             const uint32_t stride = b ? STRIDE1 : STRIDE0;
-            printf("  many: buffer %u differs first at vertex %u, byte %u\n", b, d / stride,
-                   d % stride);
+            printf("  %s: buffer %u differs first at vertex %u, byte %u\n", big_names[c], b,
+                   d / stride, d % stride);
             bad++;
          }
          free(bw[b]);

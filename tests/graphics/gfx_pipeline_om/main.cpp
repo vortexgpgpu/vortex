@@ -214,7 +214,7 @@ int main(int argc, char** argv) {
     RT_CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),           VX_MEM_WRITE, &bincount_b));
     RT_CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),           VX_MEM_WRITE, &binbase_b));
     RT_CHECK(vx_buffer_create(dev, TILEBUF_SZ, VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS, &tilebuf_b));
-    RT_CHECK(vx_buffer_create(dev, 3 * sizeof(uint32_t),           VX_MEM_WRITE, &meta_b));
+    RT_CHECK(vx_buffer_create(dev, PIPE_META_WORDS * sizeof(uint32_t), VX_MEM_WRITE, &meta_b));
 
     pipe_arg_t pa = {};
     pa.num_tris = ntri; pa.width = dst_width; pa.height = dst_height;

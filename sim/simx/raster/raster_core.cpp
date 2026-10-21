@@ -14,6 +14,8 @@
 #include "raster_core.h"
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <queue>
@@ -44,6 +46,16 @@ constexpr uint32_t kNumRasterLanes = 1;
 // uint32 pids_offset, uint32 pids_count } = 12 bytes. pids_offset is an
 // absolute index into the sorted_pids array following the dense header block.
 constexpr uint32_t kTileHeaderBytes = sizeof(graphics::rast_bin_header_t);
+
+// A pass addresses at most GFX_RASTER_MAX_PRIMS primitives: the hardware carries
+// a pid, and counts a bin's pids, in VX_RASTER_PID_BITS bits. A pass beyond that
+// is one the hardware cannot render, so the model stops on it rather than
+// render it.
+[[noreturn]] void raster_pass_overflow(const char* what, uint32_t value) {
+  std::fprintf(stderr, "error: RASTER pass %s %u exceeds the %u-primitive pass limit\n",
+               what, value, GFX_RASTER_MAX_PRIMS);
+  std::abort();
+}
 
 // Stamp encoding for the staged frag_payload pos_mask word (window slot 0):
 //   bits[ 3:0]  = mask
@@ -445,14 +457,17 @@ private:
     uint64_t tbuf_addr = uint64_t(dcrs_.read(VX_DCR_RASTER_TBUF_ADDR)) << 6;
     line_fetches_.clear();
 
-    // PIDs are stored as uint32_t (4 bytes); VX_RASTER_PID_BITS=16 is the
-    // consumer-side width.
+    // PIDs are stored as uint32_t (4 bytes); a pass's pids fit in the low
+    // VX_RASTER_PID_BITS of each word.
     constexpr uint32_t kPidStride = sizeof(uint32_t);
 
     // Total PID bytes = sum across tiles of pids_count * kPidStride.
     uint32_t total_bytes = 0;
     pid_table_offset_.assign(tile_headers_.size(), 0);
     for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
+      if (tile_headers_[i].pids_count > GFX_RASTER_MAX_PRIMS) {
+        raster_pass_overflow("bin count", tile_headers_[i].pids_count);
+      }
       pid_table_offset_[i] = total_bytes;
       total_bytes += uint32_t(tile_headers_[i].pids_count) * kPidStride;
     }
@@ -489,18 +504,19 @@ private:
     uint32_t pbuf_stride = dcrs_.read(VX_DCR_RASTER_PBUF_STRIDE);
     if (pbuf_stride == 0) pbuf_stride = sizeof(graphics::rast_prim_t);
 
-    // Collect unique pids referenced by any tile; truncate 32-bit storage
-    // to the 16-bit PID width.
+    // Collect unique pids referenced by any tile.
     constexpr uint32_t kPidStride = sizeof(uint32_t);
     primary_pids_.clear();
     {
-      std::unordered_map<uint16_t, bool> seen;
+      std::unordered_map<uint32_t, bool> seen;
       for (uint32_t i = 0; i < tile_headers_.size(); ++i) {
         const auto& hdr = tile_headers_[i];
         for (uint32_t j = 0; j < hdr.pids_count; ++j) {
-          uint32_t pid_word;
-          std::memcpy(&pid_word, &pid_table_buf_[pid_table_offset_[i] + j * kPidStride], kPidStride);
-          uint16_t pid = uint16_t(pid_word);
+          uint32_t pid;
+          std::memcpy(&pid, &pid_table_buf_[pid_table_offset_[i] + j * kPidStride], kPidStride);
+          if (pid >= GFX_RASTER_MAX_PRIMS) {
+            raster_pass_overflow("pid", pid);
+          }
           if (!seen[pid]) {
             seen[pid] = true;
             primary_pids_.push_back(pid);
@@ -520,7 +536,7 @@ private:
     // Allocate one rast_prim_t per unique pid; enqueue line fetches to fill.
     prim_data_.clear();
     prim_data_.reserve(primary_pids_.size());
-    for (uint16_t pid : primary_pids_) {
+    for (uint32_t pid : primary_pids_) {
       auto [it, _ins] = prim_data_.emplace(pid, graphics::rast_prim_t{});
       uint64_t prim_addr = pbuf_addr + uint64_t(pid) * pbuf_stride;
       enqueue_byte_range(prim_addr,
@@ -556,7 +572,7 @@ private:
   // Per-primitive walk context: tiles of different primitives coexist in
   // the traversal pipeline, so each tile carries its owner's context.
   struct PrimCtx {
-    uint16_t          pid;
+    uint32_t          pid;
     graphics::vec3e_t edges[3];
     graphics::vec3e_t extents;
     // The record's rectangle intersected with the DCR one: [left, right) x [top, bottom).
@@ -636,7 +652,7 @@ private:
 
   // Emit covered quads for a single block in row-major / OUTPUT_QUADS-batched order.
   void emit_block_quads(const TileWork& block) {
-    uint16_t pid = block.prim->pid;
+    uint32_t pid = block.prim->pid;
     const graphics::vec3e_t* edges = block.prim->edges;
     constexpr uint32_t kNumQuadsDim   = 1u << (VX_CFG_RASTER_BLOCK_LOG_SIZE - 1);
     constexpr uint32_t kPerBlockQuads = kNumQuadsDim * kNumQuadsDim;
@@ -879,11 +895,10 @@ private:
       uint32_t tile_x = uint32_t(hdr.bin_x) * bin_size;
       uint32_t tile_y = uint32_t(hdr.bin_y) * bin_size;
       for (uint32_t j = 0; j < hdr.pids_count; ++j) {
-        uint32_t pid_word;
-        std::memcpy(&pid_word,
+        uint32_t pid;
+        std::memcpy(&pid,
                     &pid_table_buf_[pid_table_offset_[t] + j * sizeof(uint32_t)],
                     sizeof(uint32_t));
-        uint16_t pid = uint16_t(pid_word);
         auto pit = prim_data_.find(pid);
         if (pit == prim_data_.end()) continue;
         const auto& prim = pit->second;
@@ -934,7 +949,7 @@ private:
     uint32_t cov = s.pos_mask & 0xfu;
     if (cov == 0)
       return;
-    auto pit = prim_data_.find((uint16_t)s.pid);
+    auto pit = prim_data_.find(s.pid);
     if (pit == prim_data_.end())
       return;
     const auto& zp = pit->second.attribs.z;
@@ -1052,8 +1067,8 @@ private:
   std::vector<graphics::rast_bin_header_t>              tile_headers_;
   std::vector<uint8_t>                                  pid_table_buf_;
   std::vector<uint32_t>                                 pid_table_offset_;  // per-bin offset into pid_table_buf_
-  std::unordered_map<uint16_t, graphics::rast_prim_t>   prim_data_;
-  std::vector<uint16_t>                                 primary_pids_;
+  std::unordered_map<uint32_t, graphics::rast_prim_t>   prim_data_;
+  std::vector<uint32_t>                                 primary_pids_;
 
   // Active-phase load issuance.
   std::vector<LineFetch>                                line_fetches_;

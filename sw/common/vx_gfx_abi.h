@@ -162,6 +162,13 @@ struct rast_bin_header_t {
   uint32_t pids_count;       // prims overlapping this bin
 };
 
+// Primitives one RASTER pass can address. The unit carries a primitive's index
+// in VX_RASTER_PID_BITS bits from the bin's pid list to the fragment payload, so
+// a pass's pids lie in [0, GFX_RASTER_MAX_PRIMS) and no bin lists more than
+// GFX_RASTER_MAX_PRIMS of them. A draw with more primitives runs as consecutive
+// passes, each binned over its own primitive records.
+#define GFX_RASTER_MAX_PRIMS (1u << VX_RASTER_PID_BITS)
+
 struct rast_attrib_t {
   FloatA x, y, z;
 };

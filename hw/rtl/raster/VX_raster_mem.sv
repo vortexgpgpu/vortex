@@ -223,7 +223,8 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
                         mem_req_addr[0] <= pids_addr;
                         mem_req_mask    <= NUM_REQS'('b1);
                         mem_req_tag     <= TAG_WIDTH'(FETCH_FLAG_PID);
-                        // set primitive counters
+                        // set primitive counters; a full bin of 2^PID_BITS
+                        // primitives loads as 0 and counts down through the wrap
                         curr_pbuf_addr  <= pids_addr;
                         curr_pid_reqs   <= `VX_RASTER_PID_BITS'(th_pids_count);
                         curr_pid_rsps   <= `VX_RASTER_PID_BITS'(th_pids_count);
@@ -514,6 +515,14 @@ module VX_raster_mem import VX_gpu_pkg::*; import VX_raster_pkg::*; #(
 `endif
 
     assign busy = (state != STATE_IDLE);
+
+    // A bin lists at most 2^VX_RASTER_PID_BITS primitives and every pid fits
+    // VX_RASTER_PID_BITS.
+    `RUNTIME_ASSERT(~(state == STATE_TILE && mem_rsp_valid
+                   && th_pids_count > 32'(1 << `VX_RASTER_PID_BITS)),
+        ("%t: *** %s: a bin lists %0d primitives, more than a pass holds", $time, INSTANCE_ID, th_pids_count))
+    `RUNTIME_ASSERT(~(prim_id_rsp_valid && mem_rsp_data[0][`RASTER_DATA_BITS-1:`VX_RASTER_PID_BITS] != '0),
+        ("%t: *** %s: pid %0d is outside the pass", $time, INSTANCE_ID, mem_rsp_data[0]))
 
 `ifdef DBG_TRACE_RASTER
     always @(posedge clk) begin

@@ -21,6 +21,10 @@ typedef struct {
   uint8_t  cbuf_stride;
   uint32_t cbuf_pitch;
   uint64_t prim_addr;
+  // When set, a covered pixel takes 0xff000000 | (vrec[0] + 1) from the
+  // primitive's rast_vary_t: a draw-wide VS record index, whichever pass
+  // the primitive landed in.
+  uint64_t vary_addr;
 } frag_arg_t;
 
 #endif

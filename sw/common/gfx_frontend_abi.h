@@ -30,6 +30,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <VX_types.h>
 
 // Near-plane clip + triangle-setup depth range. The device clip stage uses
 // these directly (see pipe_clip_and_setup), so they are part of the contract.
@@ -39,6 +40,11 @@
 #ifndef SETUP_FAR
 #define SETUP_FAR      1.0f
 #endif
+
+// Front-end counters at pipe_arg_t::meta_addr: { P, keys, nb, stipple }, the
+// pass's kept-primitive count, its (bin, primitive) key count, its non-empty bin
+// count, and the counter a stippled strip carries into the next pass of the draw.
+#define PIPE_META_WORDS 4
 
 // Composite bin-sort key layout: high bits = bin index, low PIPE_PRIM_BITS =
 // primitive id. Bounds the in-flight primitive count (after clip) at 2^20.
@@ -204,6 +210,12 @@ typedef struct {
   setup_vertex_t v[3];
 } clip_tri_t;
 
+// Primitives of a draw one front-end pass takes. Each emits up to SETUP_MAX_SUB
+// records, and a pass's records must fit one RASTER pass (GFX_RASTER_MAX_PRIMS,
+// 1 << VX_RASTER_PID_BITS), so a larger draw runs as consecutive passes over
+// primitive ranges starting at pipe_arg_t::prim_base.
+#define PIPE_PASS_MAX_PRIMS ((1u << VX_RASTER_PID_BITS) / SETUP_MAX_SUB)
+
 // Varying source of one emitted primitive. Varyings are not set up per plane:
 // the fragment stage interpolates them straight out of the VS output records
 // with perspective-correct barycentrics, beta_i = F_i / (F_0 + F_1 + F_2), where
@@ -229,7 +241,11 @@ typedef struct {
 // counts/config are runtime values the kernels read (so launch dims and pool
 // addresses can stay static while the work scales with the in-memory counts).
 typedef struct {
-  uint32_t num_tris;      // primitives, of prim_type
+  uint32_t num_tris;      // primitives of this pass, of prim_type
+  // The draw's first primitive in this pass: pass-local primitive t is draw
+  // primitive prim_base + t, which selects its VS records, strip restarts and
+  // instance. The pass's records, bins and pids stay pass-local.
+  uint32_t prim_base;
   uint32_t stage;
   uint32_t width, height;
   uint32_t bin_stripe;    // bins per CTA (contiguous) for HIST/SCATTER
@@ -312,7 +328,7 @@ typedef struct {
   uint64_t bincount_addr;  // uint32[num_bins]                (scratch)
   uint64_t binbase_addr;   // uint32[num_bins]                (scratch)
   uint64_t tilebuf_addr;   // rast_tile_header_t[num_bins] then uint32 pids[keys]  (out, pinned)
-  uint64_t meta_addr;      // uint32[3] = { P, keys, nb }     (out)
+  uint64_t meta_addr;      // uint32[PIPE_META_WORDS]         (out)
   uint64_t vary_addr;      // rast_vary_t[P]                  (out, with vsrec_addr)
 } pipe_arg_t;
 

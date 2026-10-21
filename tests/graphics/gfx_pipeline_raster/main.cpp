@@ -16,6 +16,7 @@
 #include <sstream>
 #include <map>
 #include <utility>
+#include <algorithm>
 #include <unordered_map>
 #include <unistd.h>
 #include <getopt.h>
@@ -66,16 +67,18 @@ static const char* trace_file  = "triangle.cgltrace";
 static const char* output_file = "output.png";
 static const char* reference_file = nullptr;
 static uint32_t dst_width = 128, dst_height = 128;
+static uint32_t pass_prims = 0;   // -P: run the pass scenes, this many primitives per pass
 
 static void parse_args(int argc, char** argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:o:r:w:h:k:?")) != -1) {
+  while ((c = getopt(argc, argv, "t:o:r:w:h:k:P:?")) != -1) {
     switch (c) {
       case 't': trace_file = optarg; break;
       case 'o': output_file = optarg; break;
       case 'r': reference_file = optarg; break;
       case 'w': dst_width = std::atoi(optarg); break;
       case 'h': dst_height = std::atoi(optarg); break;
+      case 'P': pass_prims = std::atoi(optarg); break;
       default: break;
     }
   }
@@ -130,6 +133,302 @@ static TileMap binning_oracle(const std::vector<setup_vertex_t>& verts, uint32_t
   return m;
 }
 
+// ---- Pass scenes (-P): one draw run as one pass and as several --------------
+//
+// A draw larger than a RASTER pass runs as consecutive front-end passes over
+// primitive ranges (pipe_arg_t::prim_base), each rebinning into the same buffers
+// and followed by a fragment launch, all in one device-orchestrated draw. Each
+// scene draws once as a single pass and once in passes of pass_prims, and the
+// two must agree: the image (each pixel names its primitive's first VS record),
+// the last pass's records and varying records against the single pass's tail,
+// and the stipple counter left in meta[3]. The primitives cover disjoint pixels,
+// so the image does not depend on fragment order.
+
+struct PassScene {
+  const char* name;
+  uint32_t num_prims;
+  std::vector<float> recs;           // clip-space positions, one vec4 per VS record
+  std::vector<uint32_t> heads;       // strip-head bitmask (stipple strips)
+  pipe_arg_t pa;                     // the scene's draw state
+};
+
+static void scene_rec(std::vector<float>& recs, float sx, float sy) {
+  recs.push_back(2.0f * sx / dst_width - 1.0f);
+  recs.push_back(2.0f * sy / dst_height - 1.0f);
+  recs.push_back(0.5f);
+  recs.push_back(1.0f);
+}
+
+// Instanced triangles: 7 instances of 3, so instance boundaries fall inside
+// passes and pass boundaries inside instances.
+static PassScene scene_instanced() {
+  PassScene sc{};
+  sc.name = "instanced";
+  const uint32_t inst = 7, per = 3;
+  for (uint32_t i = 0; i < inst * per; ++i) {
+    const float x = float(2 * (i % 32)), y = float(2 * (i / 32));
+    scene_rec(sc.recs, x + 0.1f, y + 0.1f);
+    scene_rec(sc.recs, x + 0.95f, y + 0.1f);
+    scene_rec(sc.recs, x + 0.1f, y + 0.95f);
+  }
+  sc.num_prims = inst * per;
+  sc.pa.prim_type  = SETUP_PRIM_TRIANGLE;
+  sc.pa.inst_prims = per;
+  sc.pa.inst_verts = 3 * per;
+  return sc;
+}
+
+// Triangles drawn as points (polygon mode): primitive t is vertex t % 3 of
+// triangle t / 3, so pass boundaries fall inside triangles.
+static PassScene scene_polygon_points() {
+  PassScene sc{};
+  sc.name = "polygon-points";
+  const uint32_t tris = 7;
+  for (uint32_t t = 0; t < tris; ++t) {
+    const float x = float(4 * t) + 0.5f, y = 10.5f;
+    scene_rec(sc.recs, x, y);
+    scene_rec(sc.recs, x + 2.0f, y);
+    scene_rec(sc.recs, x, y + 2.0f);
+  }
+  sc.num_prims = 3 * tris;
+  sc.pa.prim_type  = SETUP_PRIM_POLYGON;
+  sc.pa.poly_front = SETUP_POLY_POINT;
+  sc.pa.poly_back  = SETUP_POLY_POINT;
+  sc.pa.point_size = 1.0f;
+  return sc;
+}
+
+// A stippled line strip of horizontal segments, one row each, with run heads
+// at segment 5 and 12: the stipple counter carries across every pass boundary
+// that is not a head, through meta[3].
+static PassScene scene_stipple_strip() {
+  PassScene sc{};
+  sc.name = "stipple-strip";
+  const uint32_t segs = 21;
+  for (uint32_t t = 0; t < segs; ++t) {
+    const float y = float(20 + t) + 0.5f, x0 = 2.5f, x1 = x0 + float(3 + t % 5);
+    scene_rec(sc.recs, x0, y);
+    scene_rec(sc.recs, x1, y);
+  }
+  sc.num_prims = segs;
+  sc.heads.assign((segs + 31) / 32, 0);
+  sc.heads[0] = (1u << 5) | (1u << 12);
+  sc.pa.prim_type     = SETUP_PRIM_LINE;
+  sc.pa.line_mode     = SETUP_LINE_RECT;
+  sc.pa.line_width    = 1.0f;
+  sc.pa.stipple_strip = 1;
+  return sc;
+}
+
+struct PassResult {
+  std::vector<uint32_t> image;
+  std::vector<rast_prim_t> prims;    // the last pass's records
+  std::vector<rast_vary_t> vary;
+  uint32_t meta[PIPE_META_WORDS];
+};
+
+static int run_scene_draw(vx_device_h dev, vx_queue_h q, vx_kernel_h k_setup,
+                          vx_kernel_h k_binning, vx_kernel_h k_frag,
+                          uint32_t frag_lanes, const PassScene& sc,
+                          uint32_t per_pass, PassResult& out) {
+  uint32_t one = 1, grid[1], block[1];
+  RT_CHECK(vx_device_max_occupancy_grid(dev, 1, &one, grid, block));
+  const uint32_t T = block[0], G = grid[0], MS = SETUP_MAX_SUB;
+  const uint32_t ts = 1u << PIPE_BIN_LOG;
+  const uint32_t bin_cols = (dst_width + ts - 1) / ts;
+  const uint32_t B = bin_cols * ((dst_height + ts - 1) / ts);
+  const uint32_t NT = sc.num_prims, P_max = NT * MS, K = P_max * B;
+  const size_t PRIM_SZ = sizeof(rast_prim_t), HDR_SZ = sizeof(rast_bin_header_t);
+  const uint32_t cbuf_size = dst_width * dst_height * 4;
+
+  // One working set for the whole draw: every pass rebins into it.
+  struct Buf { uint64_t bytes; uint32_t flags; uint64_t* addr; vx_buffer_h h; };
+  pipe_arg_t pa = sc.pa;
+  uint64_t recs_addr = 0, heads_addr = 0, cbuf_addr = 0, fa_addr = 0;
+  const uint32_t RWP = VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS;
+  std::vector<Buf> bufs = {
+    { sc.recs.size() * sizeof(float),          VX_MEM_READ,  &recs_addr,         nullptr },
+    { std::max<size_t>(sc.heads.size(), 1) * 4, VX_MEM_READ, &heads_addr,        nullptr },
+    { (uint64_t)NT * 4,                        VX_MEM_WRITE, &pa.keep_addr,      nullptr },
+    { (uint64_t)(NT + 1) * 4,                  VX_MEM_WRITE, &pa.offset_addr,    nullptr },
+    { (uint64_t)T * 4,                         VX_MEM_WRITE, &pa.tsum_addr,      nullptr },
+    { (uint64_t)NT * 4,                        VX_MEM_WRITE, &pa.stipple_addr,   nullptr },
+    { (uint64_t)P_max * PRIM_SZ,               RWP,          &pa.prim_addr,      nullptr },
+    { (uint64_t)P_max * sizeof(setup_bbox_t),  VX_MEM_WRITE, &pa.bbox_addr,      nullptr },
+    { (uint64_t)P_max * 4,                     VX_MEM_WRITE, &pa.bcount_addr,    nullptr },
+    { (uint64_t)(P_max + 1) * 4,               VX_MEM_WRITE, &pa.boffset_addr,   nullptr },
+    { (uint64_t)K * 4,                         VX_MEM_WRITE, &pa.keys_addr,      nullptr },
+    { (uint64_t)T * 4,                         VX_MEM_WRITE, &pa.btsum_addr,     nullptr },
+    { (uint64_t)T * B * 4,                     VX_MEM_WRITE, &pa.thist_addr,     nullptr },
+    { (uint64_t)B * 4,                         VX_MEM_WRITE, &pa.bincount_addr,  nullptr },
+    { (uint64_t)B * 4,                         VX_MEM_WRITE, &pa.binbase_addr,   nullptr },
+    { (uint64_t)B * HDR_SZ + (uint64_t)K * 4,  RWP,          &pa.tilebuf_addr,   nullptr },
+    { (uint64_t)PIPE_META_WORDS * 4,           VX_MEM_WRITE, &pa.meta_addr,      nullptr },
+    { (uint64_t)P_max * sizeof(rast_vary_t),   VX_MEM_WRITE, &pa.vary_addr,      nullptr },
+    { cbuf_size,                               VX_MEM_WRITE, &cbuf_addr,         nullptr },
+    { sizeof(frag_arg_t),                      VX_MEM_READ,  &fa_addr,           nullptr },
+  };
+  for (auto& b : bufs) {
+    RT_CHECK(vx_buffer_create(dev, b.bytes, b.flags, &b.h));
+    RT_CHECK(vx_buffer_address(b.h, b.addr));
+  }
+  vx_buffer_h recs_b = bufs[0].h, heads_b = bufs[1].h, prim_b = bufs[6].h, meta_b = bufs[16].h;
+  vx_buffer_h vary_b = bufs[17].h, cbuf_b = bufs[18].h, fa_b = bufs[19].h;
+
+  pa.width = dst_width; pa.height = dst_height;
+  pa.bin_cols = bin_cols; pa.num_bins = B;
+  pa.bin_stripe = (B + G - 1) / G;
+  pa.vsrec_addr = recs_addr;
+  pa.vstride = 4 * sizeof(float);
+  pa.strip_head_addr = sc.heads.empty() ? 0 : heads_addr;
+
+  frag_arg_t fa = {};
+  fa.dst_width = dst_width; fa.dst_height = dst_height;
+  fa.cbuf_addr = cbuf_addr; fa.cbuf_stride = 4; fa.cbuf_pitch = dst_width * 4;
+  fa.prim_addr = pa.prim_addr;
+  fa.vary_addr = pa.vary_addr;
+
+  std::vector<uint32_t> clear(cbuf_size / 4, 0xff000000);
+  std::vector<uint32_t> zero_meta(PIPE_META_WORDS, 0);
+  RT_CHECK(vx_enqueue_write(q, recs_b, 0, sc.recs.data(), sc.recs.size() * sizeof(float), 0, nullptr, nullptr));
+  if (!sc.heads.empty()) {
+    RT_CHECK(vx_enqueue_write(q, heads_b, 0, sc.heads.data(), sc.heads.size() * 4, 0, nullptr, nullptr));
+  }
+  RT_CHECK(vx_enqueue_write(q, cbuf_b, 0, clear.data(), cbuf_size, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(q, meta_b, 0, zero_meta.data(), PIPE_META_WORDS * 4, 0, nullptr, nullptr));
+  RT_CHECK(vx_enqueue_write(q, fa_b, 0, &fa, sizeof(fa), 0, nullptr, nullptr));
+
+  // The whole draw as one command batch, the way the driver issues it: per
+  // pass the nine front-end launches, the RASTER configuration before the first
+  // fragment launch, then the fragment launch.
+  const uint32_t NSTAGE = 9;
+  const uint32_t sgrid[NSTAGE] = { G, 1, G,  G, 1, G,  G, 1, G };
+  const uint32_t passes = (NT + per_pass - 1) / per_pass;
+  std::vector<pipe_arg_t> pargs(passes * NSTAGE);
+  std::vector<vx_launch_info_t> pli(passes * NSTAGE);
+  uint64_t frag_entry = 0;
+  RT_CHECK(vx_kernel_address(k_frag, &frag_entry));
+  vx_launch_info_t fli = {}; fli.struct_size = sizeof(fli); fli.kernel = k_frag;
+  fli.args_host = &fa; fli.args_size = sizeof(fa); fli.ndim = 1;
+  fli.grid_dim[0] = 0; fli.block_dim[0] = frag_lanes;
+  std::vector<vx_command_t> cmds;
+  auto launch = [&](const vx_launch_info_t* l) {
+    vx_command_t c{}; c.type = VX_COMMAND_LAUNCH; c.data.launch = l; cmds.push_back(c);
+  };
+  auto dcr = [&](uint32_t a, uint32_t v) {
+    vx_command_t c{}; c.type = VX_COMMAND_DCR_WRITE; c.data.dcr.addr = a; c.data.dcr.value = v;
+    cmds.push_back(c);
+  };
+  for (uint32_t p = 0; p < passes; ++p) {
+    for (uint32_t s = 0; s < NSTAGE; ++s) {
+      const uint32_t i = p * NSTAGE + s;
+      pargs[i] = pa;
+      pargs[i].stage     = s;
+      pargs[i].prim_base = p * per_pass;
+      pargs[i].num_tris  = std::min(per_pass, NT - p * per_pass);
+      pli[i] = vx_launch_info_t{}; pli[i].struct_size = sizeof(pli[i]);
+      pli[i].kernel = (s < PIPE_STAGE_BCOUNT) ? k_setup : k_binning;
+      pli[i].args_host = &pargs[i]; pli[i].args_size = sizeof(pipe_arg_t);
+      pli[i].ndim = 1; pli[i].grid_dim[0] = sgrid[s]; pli[i].block_dim[0] = T;
+      launch(&pli[i]);
+    }
+    if (p == 0) {
+      dcr(VX_DCR_RASTER_TBUF_ADDR, (uint32_t)(pa.tilebuf_addr / 64));
+      dcr(VX_DCR_RASTER_TILE_COUNT, B);
+      dcr(VX_DCR_RASTER_PBUF_ADDR, (uint32_t)(pa.prim_addr / 64));
+      dcr(VX_DCR_RASTER_PBUF_STRIDE, (uint32_t)PRIM_SZ);
+      dcr(VX_DCR_RASTER_SCISSOR_X, dst_width << 16);
+      dcr(VX_DCR_RASTER_SCISSOR_Y, dst_height << 16);
+      dcr(VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry & 0xffffffff));
+      dcr(VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry >> 32));
+      dcr(VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(fa_addr & 0xffffffff));
+      dcr(VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(fa_addr >> 32));
+    }
+    launch(&fli);
+  }
+  vx_event_h ev = nullptr;
+  RT_CHECK(vx_enqueue_draw(q, cmds.data(), (uint32_t)cmds.size(), 0, nullptr, &ev));
+  RT_CHECK(vx_event_wait_value(ev, 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(ev);
+
+  out.image.assign(cbuf_size / 4, 0);
+  vx_event_h e[3] = {};
+  RT_CHECK(vx_enqueue_read(q, out.image.data(), cbuf_b, 0, cbuf_size, 0, nullptr, &e[0]));
+  RT_CHECK(vx_enqueue_read(q, out.meta, meta_b, 0, PIPE_META_WORDS * 4, 0, nullptr, &e[1]));
+  RT_CHECK(vx_event_wait_value(e[1], 1, VX_TIMEOUT_INFINITE));
+  RT_CHECK(vx_event_wait_value(e[0], 1, VX_TIMEOUT_INFINITE));
+  vx_event_release(e[0]); vx_event_release(e[1]);
+  const uint32_t P = out.meta[0];
+  out.prims.resize(P ? P : 1);
+  out.vary.resize(P ? P : 1);
+  if (P) {
+    RT_CHECK(vx_enqueue_read(q, out.prims.data(), prim_b, 0, P * PRIM_SZ, 0, nullptr, &e[0]));
+    RT_CHECK(vx_enqueue_read(q, out.vary.data(), vary_b, 0, P * sizeof(rast_vary_t), 0, nullptr, &e[1]));
+    RT_CHECK(vx_event_wait_value(e[0], 1, VX_TIMEOUT_INFINITE));
+    RT_CHECK(vx_event_wait_value(e[1], 1, VX_TIMEOUT_INFINITE));
+    vx_event_release(e[0]); vx_event_release(e[1]);
+  }
+  out.prims.resize(P);
+  out.vary.resize(P);
+  for (auto& b : bufs) {
+    vx_buffer_release(b.h);
+  }
+  return 0;
+}
+
+static int run_pass_scenes(vx_device_h dev, vx_queue_h q, vx_kernel_h k_setup,
+                           vx_kernel_h k_binning, vx_kernel_h k_frag, uint32_t frag_lanes) {
+  int errors = 0;
+  for (const PassScene& sc : { scene_instanced(), scene_polygon_points(), scene_stipple_strip() }) {
+    PassResult one, many;
+    RT_CHECK(run_scene_draw(dev, q, k_setup, k_binning, k_frag, frag_lanes, sc, sc.num_prims, one));
+    RT_CHECK(run_scene_draw(dev, q, k_setup, k_binning, k_frag, frag_lanes, sc, pass_prims, many));
+    int scene_errors = 0;
+    uint32_t covered = 0;
+    for (size_t i = 0; i < one.image.size(); ++i) {
+      covered += (one.image[i] != 0xff000000);
+      if (one.image[i] != many.image[i]) {
+        if (scene_errors < 4) {
+          std::printf("*** %s: pixel (%zu, %zu) = 0x%08x in passes, 0x%08x in one\n", sc.name,
+                      i % dst_width, i / dst_width, many.image[i], one.image[i]);
+        }
+        ++scene_errors;
+      }
+    }
+    if (covered == 0) {
+      std::printf("*** %s: the single pass covers no pixel\n", sc.name);
+      ++scene_errors;
+    }
+    // The last pass's records are the single pass's tail.
+    const uint32_t P_one = one.meta[0], P_last = many.meta[0];
+    if (P_last == 0 || P_last > P_one) {
+      std::printf("*** %s: last pass kept %u records of %u\n", sc.name, P_last, P_one);
+      ++scene_errors;
+    } else {
+      const uint32_t tail = P_one - P_last;
+      for (uint32_t i = 0; i < P_last; ++i) {
+        if (std::memcmp(&many.prims[i], &one.prims[tail + i], sizeof(rast_prim_t)) != 0
+         || std::memcmp(&many.vary[i], &one.vary[tail + i], sizeof(rast_vary_t)) != 0) {
+          std::printf("*** %s: last-pass record %u differs from record %u of the single pass\n",
+                      sc.name, i, tail + i);
+          ++scene_errors;
+          break;
+        }
+      }
+    }
+    if (sc.pa.stipple_strip && one.meta[3] != many.meta[3]) {
+      std::printf("*** %s: stipple counter %u after the passes, %u after one\n",
+                  sc.name, many.meta[3], one.meta[3]);
+      ++scene_errors;
+    }
+    std::printf("%s: %u primitives, passes of %u, %u pixels covered, %u + %u records: %s\n",
+                sc.name, sc.num_prims, pass_prims, covered, P_one - P_last, P_last,
+                scene_errors ? "FAIL" : "PASS");
+    errors += scene_errors;
+  }
+  return errors;
+}
+
 int main(int argc, char** argv) {
   parse_args(argc, argv);
 
@@ -156,6 +455,14 @@ int main(int argc, char** argv) {
   RT_CHECK(vx_module_get_kernel(mod, "setup_k", &k_setup));
   RT_CHECK(vx_module_get_kernel(mod, "binning_k", &k_binning));
   RT_CHECK(vx_module_get_kernel(mod, "main", &k_frag));
+
+  if (pass_prims) {
+    const int errors = run_pass_scenes(dev, q, k_setup, k_binning, k_frag,
+                                       (uint32_t)(num_threads * num_warps));
+    vx_module_release(mod); vx_queue_release(q); vx_device_release(dev);
+    std::cout << (errors ? "FAILED!" : "PASSED!") << std::endl;
+    return errors ? 1 : 0;
+  }
 
   // color buffer (kernel-written via LSU; not pinned)
   uint32_t cbuf_stride = 4, cbuf_pitch = dst_width * cbuf_stride, cbuf_size = dst_height * cbuf_pitch;
@@ -215,7 +522,7 @@ int main(int argc, char** argv) {
     RT_CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),           VX_MEM_WRITE, &bincount_b));
     RT_CHECK(vx_buffer_create(dev, B * sizeof(uint32_t),           VX_MEM_WRITE, &binbase_b));
     RT_CHECK(vx_buffer_create(dev, TILEBUF_SZ, VX_MEM_READ | VX_MEM_WRITE | VX_MEM_PHYS, &tilebuf_b));
-    RT_CHECK(vx_buffer_create(dev, 3 * sizeof(uint32_t),           VX_MEM_WRITE, &meta_b));
+    RT_CHECK(vx_buffer_create(dev, PIPE_META_WORDS * sizeof(uint32_t), VX_MEM_WRITE, &meta_b));
 
     pipe_arg_t pa = {};
     pa.num_tris = ntri; pa.width = dst_width; pa.height = dst_height;

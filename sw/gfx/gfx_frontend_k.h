@@ -35,7 +35,7 @@ static inline void pipe_bin_range(const setup_bbox_t& p, int& bL, int& bR, int& 
   bT = p.bbT >> PIPE_BIN_LOG; bB = (p.bbB - 1) >> PIPE_BIN_LOG;
 }
 
-// The VS records primitive t reads, by prim_type (see pipe_arg_t): a
+// The VS records draw primitive t reads, by prim_type (see pipe_arg_t): a
 // triangle's three vertices, a line's two ends (the second repeated), a point's
 // one vertex three times, or a polygon's triangle with the edge or vertex
 // t % 3 it stands for.
@@ -148,8 +148,8 @@ static inline float pipe_stipple_length(const gfx_setup::vec4f& sa, const gfx_se
   return __builtin_sqrtf(dx * dx + dy * dy);
 }
 
-// Whether segment i of a stippled strip begins a run: each instance starts one,
-// and `heads` (may be null) marks the restarts within an instance.
+// Whether draw segment i of a stippled strip begins a run: each instance starts
+// one, and `heads` (may be null) marks the restarts within an instance.
 #define PIPE_SCAN_HEAD 0x80000000u
 static inline bool pipe_strip_head(const pipe_arg_t* arg, const uint32_t* heads, uint32_t i) {
   if (arg->inst_prims) {
@@ -393,10 +393,10 @@ pipe_prim_setup(const setup_vertex_t* v, const pipe_prim_ref& ref, float psize, 
   }
 }
 
-// Primitive t's vertices: from the VS output records when the draw supplies
-// them (positions only -- varyings stay in the records for the fragment stage),
-// else from the setup_vertex_t stream (triangles only). Returns the point size
-// a point primitive is drawn at.
+// Draw primitive t's vertices: from the VS output records when the draw
+// supplies them (positions only -- varyings stay in the records for the fragment
+// stage), else from the setup_vertex_t stream (triangles only). Returns the
+// point size a point primitive is drawn at.
 static inline float pipe_load_prim(const pipe_arg_t* arg, uint32_t t, const pipe_prim_ref& ref,
                                    setup_vertex_t v[3]) {
   float psize = arg->point_size;
@@ -546,8 +546,8 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       setup_vertex_t v[3];
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
-      const pipe_prim_ref ref = pipe_prim_records(arg, t);
-      const float psize = pipe_load_prim(arg, t, ref, v);
+      const pipe_prim_ref ref = pipe_prim_records(arg, arg->prim_base + t);
+      const float psize = pipe_load_prim(arg, arg->prim_base + t, ref, v);
       const pipe_prim_view view = pipe_prim_viewport(arg, ref, vpp);
       uint32_t kept = 0;
       if (!pipe_cull_distance(arg, ref) && (!arg->layer_off || view.layer == arg->layer_sel)) {
@@ -577,31 +577,34 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
     if (arg->stipple_strip) {
       // Each segment's steps become the counter it starts at, in place: a scan
       // segmented at the strip's run heads. A chunk's partial carries in bit 31
-      // whether it holds a head, which stops the carry from earlier chunks.
+      // whether it holds a head, which stops the carry from earlier chunks. A
+      // pass after the draw's first starts from the counter the previous pass
+      // left in meta[3], and leaves its own there for the next.
       auto heads = reinterpret_cast<const uint32_t*>(arg->strip_head_addr);
       __syncthreads();
       {
         uint32_t s = 0, h = 0;
         for (uint32_t i = lo; i < hi; ++i) {
-          if (pipe_strip_head(arg, heads, i)) { s = 0; h = PIPE_SCAN_HEAD; }
+          if (pipe_strip_head(arg, heads, arg->prim_base + i)) { s = 0; h = PIPE_SCAN_HEAD; }
           s += stipple[i];
         }
         tsum[tid] = s | h;
       }
       __syncthreads();
       if (tid == 0) {
-        uint32_t acc = 0;
+        uint32_t acc = arg->prim_base ? meta[3] : 0;
         for (uint32_t t = 0; t < T; ++t) {
           const uint32_t v = tsum[t];
           tsum[t] = acc;
           acc = (v & PIPE_SCAN_HEAD) ? (v & ~PIPE_SCAN_HEAD) : acc + v;
         }
+        meta[3] = acc;
       }
       __syncthreads();
       {
         uint32_t acc = tsum[tid];
         for (uint32_t i = lo; i < hi; ++i) {
-          if (pipe_strip_head(arg, heads, i)) {
+          if (pipe_strip_head(arg, heads, arg->prim_base + i)) {
             acc = 0;
           }
           const uint32_t v = stipple[i];
@@ -622,8 +625,8 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
       setup_vertex_t v[3];
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
-      const pipe_prim_ref ref = pipe_prim_records(arg, t);
-      const float psize = pipe_load_prim(arg, t, ref, v);
+      const pipe_prim_ref ref = pipe_prim_records(arg, arg->prim_base + t);
+      const float psize = pipe_load_prim(arg, arg->prim_base + t, ref, v);
       rast_vary_t vr;
       const float start = arg->stipple_strip ? (float)stipple[t] : 0.0f;
       const pipe_prim_view view = pipe_prim_viewport(arg, ref, vpp);

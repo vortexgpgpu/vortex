@@ -21,6 +21,11 @@ __kernel void kernel_main(frag_arg_t* __UNIFORM__ arg) {
     auto dst_ptr = reinterpret_cast<uint32_t*>(
         arg->cbuf_addr + vx_frag_x(p) * arg->cbuf_stride
                        + vx_frag_y(p) * arg->cbuf_pitch);
-    *dst_ptr = out_color;
+    uint32_t color = out_color;
+    if (arg->vary_addr) {
+      auto vary = reinterpret_cast<const rast_vary_t*>(arg->vary_addr);
+      color = 0xff000000u | (vary[p.pid].vrec[0] + 1);
+    }
+    *dst_ptr = color;
   }
 }

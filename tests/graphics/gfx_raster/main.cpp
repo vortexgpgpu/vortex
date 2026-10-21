@@ -125,8 +125,12 @@ uint64_t    frag_arg_addr = 0;
 
 bool use_sw = false;
 bool prim_scissor = false;   // -s: a distinct scissor rectangle in every primitive record
+uint32_t num_generated = 0;  // -n: draw this many generated triangles instead of the trace
+bool relaunch = false;       // -L: launch every pass twice, with no DCR write in between
+// -L: the second launch's records take colours this far past the first's.
+constexpr uint32_t kRelaunchIdOffset = 1u << 20;
 std::vector<uint32_t> ref_pixels;
-uint32_t scissor_errors = 0;
+uint32_t exact_errors = 0;
 uint64_t num_threads = 0;  // populated in main, read by render()
 uint64_t num_warps   = 0;  // populated in main, read by render()
 uint64_t num_cores   = 0;  // populated in main, read by render()
@@ -142,12 +146,12 @@ uint32_t tileLogSize = VX_CFG_RASTER_BIN_LOG_SIZE;
 
 static void show_usage() {
    std::cout << "Vortex rasterizer Test." << std::endl;
-   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-z no_hw] [-k tilelogsize] [-s prim_scissor]" << std::endl;
+   std::cout << "Usage: [-t trace] [-o output] [-r reference] [-w width] [-h height] [-z no_hw] [-k tilelogsize] [-s prim_scissor] [-n generated_triangles] [-L relaunch]" << std::endl;
 }
 
 static void parse_args(int argc, char **argv) {
   int c;
-  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:zs?")) != -1) {
+  while ((c = getopt(argc, argv, "t:i:o:r:w:h:t:k:n:zsL?")) != -1) {
     switch (c) {
     case 't':
       trace_file = optarg;
@@ -173,6 +177,12 @@ static void parse_args(int argc, char **argv) {
     case 's':
       prim_scissor = true;
       break;
+    case 'n':
+      num_generated = std::atoi(optarg);
+      break;
+    case 'L':
+      relaunch = true;
+      break;
     case '?': {
       show_usage();
       exit(0);
@@ -181,6 +191,10 @@ static void parse_args(int argc, char **argv) {
       show_usage();
       exit(-1);
     }
+  }
+  if (relaunch && num_generated == 0) {
+    std::cout << "Error: -L needs -n, whose colours tell the two launches apart!" << std::endl;
+    exit(1);
   }
   if (strcmp (output_file, "null") == 0 && reference_file) {
     std::cout << "Error: the output file is missing for reference validation!" << std::endl;
@@ -227,9 +241,20 @@ static void patch_prim_scissors(std::vector<uint8_t>& primbuf) {
   }
 }
 
+// Whether the image is checked pixel-exactly against reference_draw.
+static bool exact_check() {
+  return prim_scissor || num_generated != 0;
+}
+
+// The colour the kernel writes for the record at draw-wide index `id`.
+static uint32_t record_color(uint32_t id) {
+  return num_generated ? prim_id_color(id) : 0xffffffff;
+}
+
 // The image the device must produce: every primitive walked by the shared
-// coverage core under its record's rectangle narrowed to the draw's.
-static void reference_draw(const std::vector<uint8_t>& primbuf) {
+// coverage core under its record's rectangle narrowed to the draw's. The pass's
+// records are draw-wide indices pid_base onward.
+static void reference_draw(const std::vector<uint8_t>& primbuf, uint32_t pid_base) {
   uint32_t left, right, top, bottom;
   draw_scissor(left, right, top, bottom);
   const auto* prims = reinterpret_cast<const graphics::rast_prim_t*>(primbuf.data());
@@ -247,7 +272,7 @@ static void reference_draw(const std::vector<uint8_t>& primbuf) {
             for (uint32_t k = 0; k < 4; ++k) {
               const uint32_t px = (qx << 1) + (k & 1), py = (qy << 1) + (k >> 1);
               if (((pos_mask >> k) & 1) && px < dst_width && py < dst_height) {
-                ref_pixels[py * dst_width + px] = 0xffffffff;
+                ref_pixels[py * dst_width + px] = record_color(pid_base + pid);
               }
             }
           });
@@ -256,145 +281,237 @@ static void reference_draw(const std::vector<uint8_t>& primbuf) {
   }
 }
 
-int render(const CGLTrace& trace) {
-  // render each draw call
-  for (auto& drawcall : trace.drawcalls) {
-    std::vector<uint8_t> tilebuf;
-    std::vector<uint8_t> primbuf;
+// A draw of `count` triangles, each inside one pixel. Every 32nd covers its
+// pixel's centre, at a pixel of its own; the rest cover no sample. The draw is
+// large while its fragments stay few, and the covering ones include the last pid
+// of every full RASTER pass.
+static void generated_draw(uint32_t count,
+                           std::unordered_map<uint32_t, graphics::vertex_t>& verts,
+                           std::vector<graphics::primitive_t>& prims) {
+  constexpr uint32_t kCoverStride = 32;
+  if (count / kCoverStride > dst_width * dst_height) {
+    std::cout << "Error: " << count << " triangles need more than "
+              << dst_width << "x" << dst_height << " pixels!" << std::endl;
+    cleanup();
+    exit(1);
+  }
+  auto vertex = [&](float sx, float sy) {
+    graphics::vertex_t v{};
+    v.pos[0] = 2.0f * sx / dst_width - 1.0f;
+    v.pos[1] = 2.0f * sy / dst_height - 1.0f;
+    v.pos[2] = 0.5f;
+    v.pos[3] = 1.0f;
+    return v;
+  };
+  verts.clear();
+  prims.clear();
+  for (uint32_t i = 0; i < count; ++i) {
+    const bool covers = (i % kCoverStride) == kCoverStride - 1;
+    const uint32_t pixel = covers ? i / kCoverStride : i;
+    const float x = float(pixel % dst_width);
+    const float y = float((pixel / dst_width) % dst_height);
+    // Around the pixel centre (0.5, 0.5), or in its lower-right corner past it.
+    const float lo = covers ? 0.1f : 0.6f, hi = 0.95f;
+    verts[3 * i + 0] = vertex(x + lo, y + lo);
+    verts[3 * i + 1] = vertex(x + hi, y + lo);
+    verts[3 * i + 2] = vertex(x + lo, y + hi);
+    prims.push_back({3 * i, 3 * i + 1, 3 * i + 2});
+  }
+}
 
-    // Perform tile binning
-    auto verts = cgl_to_gfx_vertices(drawcall.vertices);
-    auto prims = cgl_to_gfx_primitives(drawcall.primitives);
-    auto num_tiles = graphics::Binning(tilebuf, primbuf, verts, prims, dst_width, dst_height, drawcall.viewport.near, drawcall.viewport.far, tileLogSize);
-    std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << primbuf.size() << " total primitives." << std::endl;
-    if (0 == num_tiles)
-      continue;
-    if (prim_scissor) {
-      patch_prim_scissors(primbuf);
-      reference_draw(primbuf);
+// One RASTER pass: bin `prims`, upload the pass's buffers and run it. Its
+// records are draw-wide indices pid_base onward; `num_records` returns how many
+// it kept.
+static int draw_pass(const std::unordered_map<uint32_t, graphics::vertex_t>& verts,
+                     const std::vector<graphics::primitive_t>& prims,
+                     float near, float far, uint32_t pid_base, uint32_t* num_records) {
+  std::vector<uint8_t> tilebuf;
+  std::vector<uint8_t> primbuf;
+
+  // Perform tile binning
+  auto num_tiles = graphics::Binning(tilebuf, primbuf, verts, prims, dst_width, dst_height, near, far, tileLogSize);
+  *num_records = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
+  std::cout << "Binning allocated " << std::dec << num_tiles << " tiles with " << *num_records << " primitives." << std::endl;
+  if (0 == num_tiles) {
+    // Every input of this test has visible primitives, so an empty bin set is
+    // Binning refusing the pass.
+    if (!prims.empty()) {
+      std::cout << "Error: Binning produced no bins for " << prims.size() << " primitives!" << std::endl;
+      return -1;
     }
+    return 0;
+  }
+  if (prim_scissor) {
+    patch_prim_scissors(primbuf);
+  }
+  if (exact_check()) {
+    reference_draw(primbuf, pid_base + (relaunch ? kRelaunchIdOffset : 0));
+  }
 
-    // allocate tile memory
-    if (tile_buffer != nullptr) { vx_buffer_release(tile_buffer); tile_buffer = nullptr; }
-    if (prim_buffer != nullptr) { vx_buffer_release(prim_buffer); prim_buffer = nullptr; }
-    // HW path: tile_buffer / prim_buffer are bound to the raster unit (via
-    // VX_DCR_RASTER_T/PBUF_ADDR), which reads them through its own AXI master
-    // bypassing the per-core MMU — both need physical (pinned) addresses. SW path
-    // (-z): the kernel reads prim_buffer through the LSU, so allocate it as a
-    // normal kernel-read buffer (tile_buffer is unused by the SW walk).
-    uint32_t prim_flags = VX_MEM_READ | (use_sw ? 0u : (uint32_t)VX_MEM_PHYS);
-    RT_CHECK(vx_buffer_create(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
-    RT_CHECK(vx_buffer_address(tile_buffer, &tilebuf_addr));
-    RT_CHECK(vx_buffer_create(device, primbuf.size(), prim_flags, &prim_buffer));
-    RT_CHECK(vx_buffer_address(prim_buffer, &primbuf_addr));
-    std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
-    std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;
+  // allocate tile memory
+  if (tile_buffer != nullptr) { vx_buffer_release(tile_buffer); tile_buffer = nullptr; }
+  if (prim_buffer != nullptr) { vx_buffer_release(prim_buffer); prim_buffer = nullptr; }
+  // HW path: tile_buffer / prim_buffer are bound to the raster unit (via
+  // VX_DCR_RASTER_T/PBUF_ADDR), which reads them through its own AXI master
+  // bypassing the per-core MMU — both need physical (pinned) addresses. SW path
+  // (-z): the kernel reads prim_buffer through the LSU, so allocate it as a
+  // normal kernel-read buffer (tile_buffer is unused by the SW walk).
+  uint32_t prim_flags = VX_MEM_READ | (use_sw ? 0u : (uint32_t)VX_MEM_PHYS);
+  RT_CHECK(vx_buffer_create(device, tilebuf.size(), VX_MEM_READ | VX_MEM_PHYS, &tile_buffer));
+  RT_CHECK(vx_buffer_address(tile_buffer, &tilebuf_addr));
+  RT_CHECK(vx_buffer_create(device, primbuf.size(), prim_flags, &prim_buffer));
+  RT_CHECK(vx_buffer_address(prim_buffer, &primbuf_addr));
+  std::cout << "tile_buffer=0x" << std::hex << tilebuf_addr << std::dec << std::endl;
+  std::cout << "prim_buffer=0x" << std::hex << primbuf_addr << std::dec << std::endl;
 
-    // upload tiles buffer
-    std::cout << "upload tile buffer" << std::endl;
-    RT_CHECK(vx_enqueue_write(queue, tile_buffer, 0, tilebuf.data(), tilebuf.size(), 0, nullptr, nullptr));
+  // upload tiles buffer
+  std::cout << "upload tile buffer" << std::endl;
+  RT_CHECK(vx_enqueue_write(queue, tile_buffer, 0, tilebuf.data(), tilebuf.size(), 0, nullptr, nullptr));
 
-    // upload primitives buffer
-    std::cout << "upload primitive buffer" << std::endl;
-    RT_CHECK(vx_enqueue_write(queue, prim_buffer, 0, primbuf.data(), primbuf.size(), 0, nullptr, nullptr));
+  // upload primitives buffer
+  std::cout << "upload primitive buffer" << std::endl;
+  RT_CHECK(vx_enqueue_write(queue, prim_buffer, 0, primbuf.data(), primbuf.size(), 0, nullptr, nullptr));
 
-    // prepare kernel argument
-    std::cout << "prepare kernel argument" << std::endl;
-    {
-      kernel_arg.prim_addr   = primbuf_addr;
-      kernel_arg.dst_width   = dst_width;
-      kernel_arg.dst_height  = dst_height;
-      kernel_arg.cbuf_addr   = cbuf_addr;
-      kernel_arg.cbuf_stride = cbuf_stride;
-      kernel_arg.cbuf_pitch  = cbuf_pitch;
-      // SW raster routing: dense visible-prim count + the walk tile size.
-      kernel_arg.sw_path      = use_sw ? 1u : 0u;
-      kernel_arg.num_prims    = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
-      kernel_arg.tile_logsize = tileLogSize;
-      uint32_t l, r, t, b;
-      draw_scissor(l, r, t, b);
-      kernel_arg.scissor_x = RAST_SCISSOR_PACK(l, r);
-      kernel_arg.scissor_y = RAST_SCISSOR_PACK(t, b);
+  // prepare kernel argument
+  std::cout << "prepare kernel argument" << std::endl;
+  {
+    kernel_arg.prim_addr   = primbuf_addr;
+    kernel_arg.dst_width   = dst_width;
+    kernel_arg.dst_height  = dst_height;
+    kernel_arg.cbuf_addr   = cbuf_addr;
+    kernel_arg.cbuf_stride = cbuf_stride;
+    kernel_arg.cbuf_pitch  = cbuf_pitch;
+    // SW raster routing: dense visible-prim count + the walk tile size.
+    kernel_arg.sw_path      = use_sw ? 1u : 0u;
+    kernel_arg.num_prims    = (uint32_t)(primbuf.size() / sizeof(graphics::rast_prim_t));
+    kernel_arg.tile_logsize = tileLogSize;
+    uint32_t l, r, t, b;
+    draw_scissor(l, r, t, b);
+    kernel_arg.scissor_x = RAST_SCISSOR_PACK(l, r);
+    kernel_arg.scissor_y = RAST_SCISSOR_PACK(t, b);
+    kernel_arg.pid_color = num_generated ? 1u : 0u;
+    kernel_arg.pid_base  = pid_base;
+  }
+  if (use_sw)
+    std::cout << "[gfx_raster] software fine-rasterizer path "
+              << "(gfx_rast::rast_walk_primitive, " << kernel_arg.num_prims
+              << " prims)" << std::endl;
+
+  uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
+
+  // configure raster units
+  vx_enqueue_dcr_write(queue, VX_DCR_RASTER_TBUF_ADDR, tilebuf_addr / 64, 0, nullptr, nullptr);  // block address
+  vx_enqueue_dcr_write(queue, VX_DCR_RASTER_TILE_COUNT, num_tiles, 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(queue, VX_DCR_RASTER_PBUF_ADDR, primbuf_addr / 64, 0, nullptr, nullptr);  // block address
+  vx_enqueue_dcr_write(queue, VX_DCR_RASTER_PBUF_STRIDE, primbuf_stride, 0, nullptr, nullptr);
+  uint32_t sc_left, sc_right, sc_top, sc_bottom;
+  draw_scissor(sc_left, sc_right, sc_top, sc_bottom);
+  vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_X, RAST_SCISSOR_PACK(sc_left, sc_right), 0, nullptr, nullptr);
+  vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_Y, RAST_SCISSOR_PACK(sc_top, sc_bottom), 0, nullptr, nullptr);
+
+  // RASTER dispatch v2 (push, HW path only): stage the FS args and program the
+  // fragment-dispatch descriptor (FS entry PC + args pointer). The work
+  // distributor launches one fragment warp per covered-quad wave on-device.
+  if (!use_sw) {
+    if (frag_arg_buffer == nullptr) {
+      RT_CHECK(vx_buffer_create(device, sizeof(kernel_arg), VX_MEM_READ, &frag_arg_buffer));
+      RT_CHECK(vx_buffer_address(frag_arg_buffer, &frag_arg_addr));
     }
-    if (use_sw)
-      std::cout << "[gfx_raster] software fine-rasterizer path "
-                << "(gfx_rast::rast_walk_primitive, " << kernel_arg.num_prims
-                << " prims)" << std::endl;
+    RT_CHECK(vx_enqueue_write(queue, frag_arg_buffer, 0, &kernel_arg, sizeof(kernel_arg), 0, nullptr, nullptr));
+    uint64_t frag_entry = 0;
+    RT_CHECK(vx_kernel_address(kernel, &frag_entry));
+    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry & 0xffffffff), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry >> 32), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(frag_arg_addr & 0xffffffff), 0, nullptr, nullptr);
+    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(frag_arg_addr >> 32), 0, nullptr, nullptr);
+  }
 
-    uint32_t primbuf_stride = sizeof(graphics::rast_prim_t);
+  auto time_start = std::chrono::high_resolution_clock::now();
 
-    // configure raster units
-    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_TBUF_ADDR, tilebuf_addr / 64, 0, nullptr, nullptr);  // block address
-    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_TILE_COUNT, num_tiles, 0, nullptr, nullptr);
-    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_PBUF_ADDR, primbuf_addr / 64, 0, nullptr, nullptr);  // block address
-    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_PBUF_STRIDE, primbuf_stride, 0, nullptr, nullptr);
-    uint32_t sc_left, sc_right, sc_top, sc_bottom;
-    draw_scissor(sc_left, sc_right, sc_top, sc_bottom);
-    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_X, RAST_SCISSOR_PACK(sc_left, sc_right), 0, nullptr, nullptr);
-    vx_enqueue_dcr_write(queue, VX_DCR_RASTER_SCISSOR_Y, RAST_SCISSOR_PACK(sc_top, sc_bottom), 0, nullptr, nullptr);
-
-    // RASTER dispatch v2 (push, HW path only): stage the FS args and program the
-    // fragment-dispatch descriptor (FS entry PC + args pointer). The work
-    // distributor launches one fragment warp per covered-quad wave on-device.
-    if (!use_sw) {
-      if (frag_arg_buffer == nullptr) {
-        RT_CHECK(vx_buffer_create(device, sizeof(kernel_arg), VX_MEM_READ, &frag_arg_buffer));
-        RT_CHECK(vx_buffer_address(frag_arg_buffer, &frag_arg_addr));
+  // HW path: grid-less kick (grid_dim=0 → no host warps; the armed raster work
+  // distributor injects the fragment warps and sustains the run). SW path: one
+  // lane is one pixel, so a quad needs four adjacent lanes — give each primitive
+  // a group of VX_FRAG_QUAD_LANES threads and launch enough CTAs to cover them.
+  auto launch = [&]() {
+    uint32_t block_sz = (uint32_t)(num_threads * num_warps);
+    uint32_t grid0;
+    if (use_sw) {
+      uint32_t sw_threads = kernel_arg.num_prims * VX_FRAG_QUAD_LANES;
+      grid0 = (sw_threads + block_sz - 1) / block_sz;
+      if (grid0 == 0) {
+        grid0 = 1;
       }
-      RT_CHECK(vx_enqueue_write(queue, frag_arg_buffer, 0, &kernel_arg, sizeof(kernel_arg), 0, nullptr, nullptr));
-      uint64_t frag_entry = 0;
-      RT_CHECK(vx_kernel_address(kernel, &frag_entry));
-      vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_ENTRY_LO, (uint32_t)(frag_entry & 0xffffffff), 0, nullptr, nullptr);
-      vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_ENTRY_HI, (uint32_t)(frag_entry >> 32), 0, nullptr, nullptr);
-      vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_PARAM_LO, (uint32_t)(frag_arg_addr & 0xffffffff), 0, nullptr, nullptr);
-      vx_enqueue_dcr_write(queue, VX_DCR_RASTER_FRAG_PARAM_HI, (uint32_t)(frag_arg_addr >> 32), 0, nullptr, nullptr);
+    } else {
+      grid0 = 0;   // grid-less kick (push dispatch)
     }
-
-    auto time_start = std::chrono::high_resolution_clock::now();
-
-    // HW path: grid-less kick (grid_dim=0 → no host warps; the armed raster work
-    // distributor injects the fragment warps and sustains the run). SW path: one
-    // lane is one pixel, so a quad needs four adjacent lanes — give each primitive
-    // a group of VX_FRAG_QUAD_LANES threads and launch enough CTAs to cover them.
+    std::cout << "start device (grid=" << grid0 << ", block=" << block_sz << ")" << std::endl;
+    vx_launch_info_t li = {};
+    li.struct_size  = sizeof(li);
+    li.kernel       = kernel;
+    li.args_host    = &kernel_arg;
+    li.args_size    = sizeof(kernel_arg);
+    li.ndim         = 1;
+    li.grid_dim[0]  = grid0;
+    li.block_dim[0] = block_sz;
     vx_event_h launch_ev = nullptr;
-    {
-      uint32_t block_sz = (uint32_t)(num_threads * num_warps);
-      uint32_t grid0;
-      if (use_sw) {
-        uint32_t sw_threads = kernel_arg.num_prims * VX_FRAG_QUAD_LANES;
-        grid0 = (sw_threads + block_sz - 1) / block_sz;
-        if (grid0 == 0) grid0 = 1;
-      } else {
-        grid0 = 0;   // grid-less kick (push dispatch)
-      }
-      uint32_t grid[1]  = { grid0 };
-      uint32_t block[1] = { block_sz };
-      std::cout << "start device (grid=" << grid[0]
-                << ", block=" << block[0] << ")" << std::endl;
-      vx_launch_info_t li = {};
-      li.struct_size  = sizeof(li);
-      li.kernel       = kernel;
-      li.args_host    = &kernel_arg;
-      li.args_size    = sizeof(kernel_arg);
-      li.ndim         = 1;
-      li.grid_dim[0]  = grid[0];
-      li.block_dim[0] = block[0];
-      RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
-    }
-
-    // wait for completion
+    RT_CHECK(vx_enqueue_launch(queue, &li, 0, nullptr, &launch_ev));
     std::cout << "wait for completion" << std::endl;
     RT_CHECK(vx_event_wait_value(launch_ev, 1, VX_TIMEOUT_INFINITE));
     vx_event_release(launch_ev);
+  };
+  launch();
 
-    auto time_end = std::chrono::high_resolution_clock::now();
-    double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
-    printf("Elapsed time: %lg ms\n", elapsed);
+  // The same bins again, with only the fragment arguments changed (a memory
+  // write, not a DCR write): the raster unit re-walks them on every launch, so
+  // the second launch repaints every covered pixel in its own colours.
+  if (relaunch) {
+    kernel_arg.pid_base += kRelaunchIdOffset;
+    if (!use_sw) {
+      RT_CHECK(vx_enqueue_write(queue, frag_arg_buffer, 0, &kernel_arg, sizeof(kernel_arg), 0, nullptr, nullptr));
+    }
+    launch();
+  }
 
+  auto time_end = std::chrono::high_resolution_clock::now();
+  double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();
+  printf("Elapsed time: %lg ms\n", elapsed);
+
+  return 0;
+}
+
+// Draw `prims` as consecutive RASTER passes of at most GFX_RASTER_MAX_PRIMS
+// primitives, each binned over its own records. Host Binning keeps at most one
+// record per triangle (it does not clip), so chunking the triangles by the pass
+// limit keeps every pass within it.
+static int draw(const std::unordered_map<uint32_t, graphics::vertex_t>& verts,
+                const std::vector<graphics::primitive_t>& prims, float near, float far) {
+  uint32_t pid_base = 0;
+  for (size_t first = 0; first < prims.size(); first += GFX_RASTER_MAX_PRIMS) {
+    const size_t last = std::min(prims.size(), first + GFX_RASTER_MAX_PRIMS);
+    const std::vector<graphics::primitive_t> pass(prims.begin() + first, prims.begin() + last);
+    uint32_t num_records = 0;
+    RT_CHECK(draw_pass(verts, pass, near, far, pid_base, &num_records));
+    pid_base += num_records;
+  }
+  return 0;
+}
+
+int render(const CGLTrace& trace) {
+  if (num_generated) {
+    std::unordered_map<uint32_t, graphics::vertex_t> verts;
+    std::vector<graphics::primitive_t> prims;
+    generated_draw(num_generated, verts, prims);
+    RT_CHECK(draw(verts, prims, 0.0f, 1.0f));
+  } else {
+    for (auto& drawcall : trace.drawcalls) {
+      RT_CHECK(draw(cgl_to_gfx_vertices(drawcall.vertices),
+                    cgl_to_gfx_primitives(drawcall.primitives),
+                    drawcall.viewport.near, drawcall.viewport.far));
+    }
   }
 
   // save output image
-  if (strcmp(output_file, "null") != 0 || prim_scissor) {
+  if (strcmp(output_file, "null") != 0 || exact_check()) {
     std::vector<uint8_t> dst_pixels(cbuf_size);
     {
       vx_event_h read_ev = nullptr;
@@ -407,7 +524,7 @@ int render(const CGLTrace& trace) {
       auto bits = dst_pixels.data() + (dst_height-1) * cbuf_pitch;
       RT_CHECK(SaveImage(output_file, FORMAT_A8R8G8B8, bits, dst_width, dst_height, -cbuf_pitch));
     }
-    if (prim_scissor) {
+    if (exact_check()) {
       uint32_t errors = 0, covered = 0;
       for (uint32_t y = 0; y < dst_height; ++y) {
         for (uint32_t x = 0; x < dst_width; ++x) {
@@ -423,9 +540,9 @@ int render(const CGLTrace& trace) {
           }
         }
       }
-      printf("per-primitive scissor: %u of %u pixels covered, %u mismatches\n",
+      printf("exact check: %u of %u pixels covered, %u mismatches\n",
              covered, dst_width * dst_height, errors);
-      scissor_errors = errors;
+      exact_errors = errors;
     }
   }
 
@@ -506,9 +623,9 @@ int main(int argc, char *argv[]) {
   std::cout << "cleanup" << std::endl;
   cleanup();
 
-  if (prim_scissor) {
-    if (scissor_errors != 0) {
-      std::cout << "FAILED! " << scissor_errors << " errors." << std::endl;
+  if (exact_check()) {
+    if (exact_errors != 0) {
+      std::cout << "FAILED! " << exact_errors << " errors." << std::endl;
       return 1;
     }
     std::cout << "PASSED!" << std::endl;

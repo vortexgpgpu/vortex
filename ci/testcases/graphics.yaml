@@ -408,6 +408,39 @@ tests:
   app: gfx_raster
   configs: -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_RCACHE_NUM_BANKS=4
   args: -w 128 -h 128 -t triangle.cgltrace -s
+# A draw over the RASTER pass limit (GFX_RASTER_MAX_PRIMS), host-binned in
+# chunks of the limit. The first pass fills one bin to the limit, and every
+# covered pixel names its primitive, so a truncated or dropped pid shows.
+- id: gfx_raster-maxprims-1
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -n 70000
+- id: gfx_raster-maxprims-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -n 70000
+# Every pass launched twice with no DCR write in between, the second launch's
+# fragment arguments changed in memory: the unit re-walks the bins on each launch.
+- id: gfx_raster-relaunch-1
+  via: blackbox
+  drivers:
+  - simx
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -n 4096 -L
+- id: gfx_raster-relaunch-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -n 4096 -L
 - id: gfx_draw3d-1
   via: blackbox
   drivers:
@@ -742,6 +775,11 @@ tests:
 - {id: gfx_pipeline_tex,   via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_tex,   target: "run-{driver}"}
 - {id: gfx_pipeline_om,    via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_om,    target: "run-{driver}"}
 - {id: gfx_pipeline_raster,via: make-run, drivers: [simx], dir: tests/graphics/gfx_pipeline_raster,target: "run-{driver}"}
+# The device front end over several passes of one draw (prim_base, the meta[3]
+# stipple carry, rebinning into one working set, a fragment launch per pass in
+# one device-orchestrated draw), checked against the same draw in one pass.
+- {id: gfx_pipeline_raster-passes, via: make-run, drivers: [simx, rtlsim], dir: tests/graphics/gfx_pipeline_raster, target: "run-{driver}",
+   vars: {OPTS: "-w128 -h128 -P 5"}}
 
 # ── FF/SW routing matrix ─────────────────────────────────────────────────────
 # Each fixed-function unit dropped from the build (NO_TEX / NO_OM / NO_RASTER);

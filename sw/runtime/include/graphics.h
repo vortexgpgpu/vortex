@@ -189,7 +189,9 @@ public:
 
   // Append the nine front-end launches for `num_tris` triangles sourced from
   // `verts_addr` (a device setup_vertex_t[3*num_tris]) into `dc`. num_tris must
-  // not exceed the max_tris the pool was sized for.
+  // not exceed the max_tris the pool was sized for, nor GFX_RASTER_MAX_PRIMS / 2
+  // (32768): one append feeds one RASTER pass of at most GFX_RASTER_MAX_PRIMS
+  // records, and setup emits up to two records per triangle.
   vx_result_t append(DrawCommands& dc, uint64_t verts_addr, uint32_t num_tris) const;
 
   uint64_t primbuf_addr() const;   // dense rast_prim_t output (pinned)

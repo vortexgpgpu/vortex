@@ -49,7 +49,8 @@ static void sw_raster_main(kernel_arg_t* arg) {
                     if (px >= arg->dst_width || py >= arg->dst_height) return;
                     *reinterpret_cast<uint32_t*>(
                         (uintptr_t)(arg->cbuf_addr + px * arg->cbuf_stride
-                                                   + py * arg->cbuf_pitch)) = out_color;
+                                                   + py * arg->cbuf_pitch)) =
+                        arg->pid_color ? prim_id_color(arg->pid_base + pid) : out_color;
                 });
         }
     }
@@ -71,6 +72,6 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
         auto dst_ptr = reinterpret_cast<uint32_t*>(
             arg->cbuf_addr + vx_frag_x(p) * arg->cbuf_stride
                            + vx_frag_y(p) * arg->cbuf_pitch);
-        *dst_ptr = out_color;
+        *dst_ptr = arg->pid_color ? prim_id_color(arg->pid_base + p.pid) : out_color;
     }
 }

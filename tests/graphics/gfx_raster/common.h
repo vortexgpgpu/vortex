@@ -20,6 +20,16 @@ typedef struct {
   uint32_t tile_logsize;  // walk tile = 1 << tile_logsize
   uint32_t scissor_x;     // the draw rectangle the scissor DCRs hold, packed alike
   uint32_t scissor_y;
+
+  // When pid_color != 0 a covered pixel takes prim_id_color(pid_base + pid), the
+  // draw-wide index of the record the stamp's pass-local pid names.
+  uint32_t pid_color;
+  uint32_t pid_base;      // draw-wide index of the pass's first record
 } kernel_arg_t;
+
+// A distinct colour per draw-wide primitive index, never the clear colour.
+static inline uint32_t prim_id_color(uint32_t id) {
+  return 0xff000000u | (id + 1);
+}
 
 #endif

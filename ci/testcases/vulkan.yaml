@@ -40,6 +40,15 @@ tests:
 - {id: gfx-multidraw, via: make-run, drivers: [simx, rtlsim], dir: tests/vulkan/multidraw, target: "run-{driver}",
    touches: [hw/rtl/raster/, hw/rtl/om/, sim/simx/raster/, sim/simx/om/]}
 
+# Draws over the RASTER pass limit (GFX_RASTER_MAX_PRIMS): the driver splits
+# them into passes. An instanced triangle draw whose every pixel names the
+# triangle that covered it, and stippled line strips whose counter carries
+# across, and restarts at, the pass boundary. Full tier, 32-bit only, outside
+# the suite list: the front end sets up ~100k primitives, ~18 min on a loaded
+# SimX host.
+- {id: gfx-manyprims, via: make-run, drivers: [simx], dir: tests/vulkan/manyprims, target: "run-{driver}", tier: full, xlen: [32],
+   touches: [sw/common/vx_gfx_abi.h, sw/common/gfx_frontend_abi.h, sw/gfx/, hw/rtl/raster/, sim/simx/raster/, tests/vulkan/manyprims]}
+
 # Hybrid gfx + RT — a rasterized fragment shader issuing inline ray queries
 # (RASTER/OM raster pipeline + RTU traversal in the same frame).
 - {id: gfx-rt-rtquery-id, via: make-run, drivers: [simx], dir: tests/vulkan/rtquery_id, target: "run-{driver}",
