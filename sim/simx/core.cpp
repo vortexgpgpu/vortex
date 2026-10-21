@@ -354,8 +354,8 @@ public:
 
     std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
 
-    // perf_stats_ deliberately survives: these are the MPM counters, which are
-    // free-running from device reset. A kernel launch re-enters reset() here but
+    // perf_stats_ deliberately survives: these are the MPM counters, which
+    // accumulate from device reset. A kernel launch re-enters reset() here but
     // does not reset the hardware, so clearing them would make each dump report
     // only the last launch -- an app that dumps between launches would then see
     // per-launch counts where the device reports a running total.
@@ -370,7 +370,13 @@ public:
     this->fetch();
     this->schedule();
 
-    ++perf_stats_.cycles;
+    // The cycle counter advances only while the core has work -- a CTA
+    // launching, a warp active, or an instruction in flight -- so cycles it
+    // spends idle before its first CTA, after its last warp, or while the host
+    // moves data are not charged to it.
+    if (scheduler_->running() || !pending_instrs_.empty()) {
+      ++perf_stats_.cycles;
+    }
     DPN(2, std::flush);
   }
 
