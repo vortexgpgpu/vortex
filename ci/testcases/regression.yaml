@@ -388,6 +388,14 @@ tests:
   shape:
     cores: 8
     l2cache: true
+# More dcache banks and memory ports than core requests: the uncached path keeps
+# each core request on its own memory port.
+- id: model_parity-sgemm-dcache-16-banks
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_DCACHE_NUM_BANKS=16 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=16
 # The shared L2 keeps its lines across the L1-only launch flushes.
 - id: model_parity-flush-chain
   check: model_parity

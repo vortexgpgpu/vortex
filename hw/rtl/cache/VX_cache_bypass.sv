@@ -53,6 +53,10 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     localparam MEM_TAG_NC1_WIDTH = UUID_WIDTH + MEM_TAG_ID_WIDTH;
     localparam MEM_TAG_NC2_WIDTH = MEM_TAG_NC1_WIDTH + WSEL_BITS;
     localparam MEM_TAG_OUT_WIDTH = CACHE_ENABLE ? `MAX(MEM_TAG_IN_WIDTH, MEM_TAG_NC2_WIDTH) : MEM_TAG_NC2_WIDTH;
+    // Beside a cache, the memory-side arbiter grants on valid, so spreading
+    // uncached requests over more memory ports by their ready would close a
+    // valid-ready loop: with fewer core ports, core port i keeps memory port i.
+    localparam NC_PORTS          = CACHE_ENABLE ? `MIN(NUM_REQS, MEM_PORTS) : MEM_PORTS;
     `STATIC_ASSERT(0 == (`VX_MEM_IO_BASE_ADDR % `VX_CFG_MEM_BLOCK_SIZE), ("invalid parameter"))
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
@@ -108,10 +112,10 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (MEM_TAG_NC1_WIDTH)
-    ) core_bus_nc_arb_if[MEM_PORTS]();
+    ) core_bus_nc_arb_if[NC_PORTS]();
     VX_mem_bus_arb #(
         .NUM_INPUTS (NUM_REQS),
-        .NUM_OUTPUTS(MEM_PORTS),
+        .NUM_OUTPUTS(NC_PORTS),
         .DATA_SIZE  (WORD_SIZE),
         .TAG_WIDTH  (CORE_TAG_WIDTH),
         .TAG_SEL_IDX(TAG_SEL_IDX),
@@ -128,7 +132,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         .DATA_SIZE (LINE_SIZE),
         .TAG_WIDTH (MEM_TAG_NC2_WIDTH)
     ) mem_bus_out_nc_if[MEM_PORTS]();
-    for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_out_nc
+    for (genvar i = 0; i < NC_PORTS; ++i) begin : g_mem_bus_out_nc
         wire                        core_req_nc_arb_rw;
         wire [WORD_SIZE-1:0]        core_req_nc_arb_byteen;
         wire [CORE_ADDR_WIDTH-1:0]  core_req_nc_arb_addr;
@@ -202,6 +206,9 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
             core_rsp_nc_arb_tag_w
         };
         assign mem_bus_out_nc_if[i].rsp_ready = core_bus_nc_arb_if[i].rsp_ready;
+    end
+    for (genvar i = NC_PORTS; i < MEM_PORTS; ++i) begin : g_mem_bus_out_nc_idle
+        `INIT_VX_MEM_BUS_IF (mem_bus_out_nc_if[i])
     end
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
