@@ -146,6 +146,9 @@ private:
 	static constexpr uint32_t FWD_PACK_QUADS = VX_CFG_NUM_THREADS / VX_FRAG_QUAD_LANES;
 	std::array<RasterStamp, FWD_PACK_QUADS> fwd_pack_buf_{};
 	uint32_t fwd_pack_count_ = 0;
+	// Cycles a partial pack has waited without input before it launches anyway.
+	static constexpr uint32_t FWD_PACK_IDLE_FLUSH = 32;
+	uint32_t fwd_pack_idle_ = 0;
 #endif
 #ifdef VX_CFG_EXT_DXA_ENABLE
 	std::unique_ptr<DxaUnit>  dxa_unit_;

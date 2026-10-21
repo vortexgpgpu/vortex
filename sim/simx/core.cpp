@@ -349,8 +349,19 @@ public:
     this->fetch();
     this->schedule();
 
-    ++perf_stats_.cycles;
+    // The cycle counter runs only while the core has work: a resident warp, an
+    // instruction in flight, or a CTA being dispatched. A core idling between
+    // fragment waves, or before its first CTA arrives, does not count.
+    if (this->busy()) {
+      ++perf_stats_.cycles;
+    }
     DPN(2, std::flush);
+  }
+
+  bool busy() const {
+    return scheduler_->active_warps().any()
+        || !pending_instrs_.empty()
+        || scheduler_->cta_dispatcher()->running();
   }
 
   // ----- Pipeline stages (private) -----

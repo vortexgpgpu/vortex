@@ -715,6 +715,14 @@ tests:
   app: gfx_raster
   configs: -DVX_CFG_EXT_RASTER_ENABLE
   args: -w 128 -h 128 -t carnival.cgltrace -s
+# Many sub-pixel primitives in one bin: the producer (pid/record fetch, tile
+# walk, block evaluation) dominates the run instead of fragment shading.
+- id: model_parity-raster-manyprims
+  check: model_parity
+  via: blackbox
+  app: gfx_raster
+  configs: -DVX_CFG_EXT_RASTER_ENABLE
+  args: -w 128 -h 128 -n 4096
 - id: model_parity-om
   check: model_parity
   via: blackbox

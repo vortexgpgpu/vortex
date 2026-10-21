@@ -21,11 +21,11 @@ namespace vortex {
 
 class Cluster;
 
-// Cluster-shared RASTER engine. On the first wave request, walks the host-built
-// tile/primitive buffers via the rcache (MemReq/MemRsp), runs
-// graphics::Rasterizer to enumerate every covered quad's pos_mask, then
-// serves per-core pop requests from the internal queue. Returns done=0
-// (encoded as 0) when drained.
+// Cluster-shared RASTER engine. On the draw's frame kick, streams the host-built
+// bin/primitive buffers through the rcache (MemReq/MemRsp) into a cycle-stepped
+// tile walker and block evaluator, and serves each core's pop requests with the
+// quad batches of the bins it owns as they are emitted. Returns done=0 (encoded
+// as 0) once the walk has fully drained.
 class RasterCore : public SimObject<RasterCore> {
 public:
   using Ptr = std::shared_ptr<RasterCore>;
@@ -34,7 +34,7 @@ public:
     uint64_t mem_reads    = 0;
     uint64_t mem_latency  = 0;
     uint64_t stall_cycles = 0;
-    uint64_t raster_cycles = 0;   // TE/BE walker pipeline cycles (quad-emission rate)
+    uint64_t raster_cycles = 0;   // cycles the tile walker is busy
     uint64_t earlyz_tested = 0;   // P3: covered pixels tested by early-Z
     uint64_t earlyz_culled = 0;   // P3: covered pixels culled before shading
 
@@ -67,9 +67,8 @@ public:
   RasterCore(const SimContext& ctx, const char* name, Cluster* cluster);
   virtual ~RasterCore();
 
-  // Writing the RASTER config re-arms the producer for the new frame (no
-  // separate begin op); the FSM kicks off the tile/prim load on the first
-  // pulled wave.
+  // Writing the RASTER config resets the producer; the next frame kick starts
+  // the walk over the new configuration (no separate begin op).
   int dcr_write(uint32_t addr, uint32_t value);
 
   // Snoop OM depth DCRs (shared depth-buffer config) for the early-Z stage.

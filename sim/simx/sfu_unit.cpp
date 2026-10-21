@@ -208,6 +208,7 @@ void SfuUnit::on_tick() {
 			sched.fwd_push_wave(wave);
 			fwd_pack_count_ = 0;
 		};
+		bool fwd_rsp_seen = !raster_rsp_in.empty();
 		while (!raster_rsp_in.empty()) {
 			auto& rsp = raster_rsp_in.peek();
 			bool drained = true;
@@ -246,6 +247,16 @@ void SfuUnit::on_tick() {
 			}
 			sched.fwd_on_response();
 			raster_rsp_in.pop();
+		}
+
+		// The waves arrive as a stream with no end marker until the producer
+		// drains, so a partial pack launches once its input has been idle for
+		// FWD_PACK_IDLE_FLUSH cycles rather than waiting for the next quad.
+		if (fwd_rsp_seen || fwd_pack_count_ == 0) {
+			fwd_pack_idle_ = 0;
+		} else if (++fwd_pack_idle_ > FWD_PACK_IDLE_FLUSH) {
+			fwd_flush_pack();
+			fwd_pack_idle_ = 0;
 		}
 
 		// 3) Epoch complete (producer drained AND every launched wave retired):
