@@ -193,6 +193,9 @@ tests:
   check: model_parity
   via: blackbox
   app: sgemm_tcu
+  # Sized like its perf_gate twin: at the default 64^3 the grid is four waves of
+  # CTAs, so one CTA running long moves the per-core split and the cycle count.
+  args: -m 128 -n 128 -k 128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_EXT_TCU_ENABLE -DITYPE=fp16 -DOTYPE=fp32
   shape: {cores: 2, l2cache: true}
 
