@@ -233,3 +233,12 @@ tests:
   via: blackbox
   app: raycast
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+# The raycaster on four cores sharing an L2: its image columns carry very
+# different work, so where the launch places each CTA sets the critical path.
+- id: parity-raycast-mc
+  check: model_parity
+  via: blackbox
+  app: raycast
+  shape:
+    cores: 4
+    l2cache: true
