@@ -99,6 +99,16 @@ tests:
 - {id: shader-atomic-float, via: make-run, drivers: [simx], dir: tests/vulkan/atomic_float, target: "run-{driver}",
    touches: [sim/simx/mem/, sim/simx/amo/, tests/vulkan/atomic_float]}
 
+# sparseImageLoadARB on ordinary storage images (2D, 2D array, cube, 3D, a packed
+# RGBA8 view and a format-less read): the seeded texel and a resident code; and
+# load/store through a layer view of a sparse array the device addresses.
+- {id: shader-imgsparse, via: make-run, drivers: [simx], dir: tests/vulkan/imgsparse, target: "run-{driver}",
+   touches: [tests/vulkan/imgsparse]}
+# A sparse image the device cannot address: a dispatch and a rasterizer-discard
+# draw that store into it are refused (sparse-image) and run on llvmpipe.
+- {id: shader-sparsefb, via: make-run, drivers: [simx], dir: tests/vulkan/sparsefb, target: "run-{driver}",
+   touches: [tests/vulkan/sparsefb, tests/vulkan/common.mk]}
+
 # FF/SW-mix matrix — the full 3D pipeline (draw3d) with fixed-function units
 # selectively dropped to SIMT software. Combos that need SW-TEX or SW-RASTER
 # routing depend on vortexpipe wiring those stages (the gfx_*_sw ABI already

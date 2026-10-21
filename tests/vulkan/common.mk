@@ -130,7 +130,11 @@ endif
 # per context, the vortexpipe-attrib placement it must report, with '_' for
 # the space -- e.g. launches=0/0_draws=2/3.
 EXPECT_ATTRIB ?=
-ifneq ($(EXPECT_ATTRIB),)
+# EXPECT_CPU lists, one word per reason, the llvmpipe executions some context
+# must report by reason, as its vortexpipe-cpu line prints them -- e.g.
+# sparse-image=2.
+EXPECT_CPU ?=
+ifneq ($(EXPECT_ATTRIB)$(EXPECT_CPU),)
 RUN_ENV += VORTEXPIPE_ATTRIB=1
 endif
 RUN_LD_PATH := $(MESA_PATH)/lib:$(LLVM_PATH)/lib:$(ZSTD_PATH)/lib:$(VORTEX_RT_LIB)
@@ -168,6 +172,11 @@ define check_run
 	for p in $(EXPECT_ATTRIB); do \
 	   if ! echo "$$out" | grep -qx "vortexpipe-attrib: `echo $$p | tr _ ' '`"; then \
 	      echo "FAIL: $(PROJECT) did not place its work as $$p"; exit 1; \
+	   fi; \
+	done; \
+	for p in $(EXPECT_CPU); do \
+	   if ! echo "$$out" | grep -q "^vortexpipe-cpu:.* $$p\( \|$$\)"; then \
+	      echo "FAIL: $(PROJECT) did not report llvmpipe work $$p"; exit 1; \
 	   fi; \
 	done
 endef

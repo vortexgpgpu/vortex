@@ -1,0 +1,24 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * imageStore of a per-texel value into rows [0, H) of a sparse image, then
+ * imageLoad of it back into res.v.
+ */
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+layout(binding = 0, r32ui) uniform uimage2D img;
+
+layout(binding = 1, std430) buffer Out { uint v[]; } res;
+
+layout(push_constant) uniform Extent { uvec2 e; } ext;
+
+void main()
+{
+   uvec2 g = gl_GlobalInvocationID.xy;
+   uint i = g.y * ext.e.x + g.x;
+   imageStore(img, ivec2(g), uvec4(0xc0000000u ^ (i * 2654435761u), 0u, 0u, 0u));
+   res.v[i] = imageLoad(img, ivec2(g)).x;
+}

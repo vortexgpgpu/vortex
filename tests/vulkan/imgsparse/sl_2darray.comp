@@ -1,0 +1,30 @@
+#version 450
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * sparseImageLoadARB of every texel of a 2D array image, z = layer: the texel
+ * goes to res.v[2i], and whether its residency code reports the texel resident
+ * to res.v[2i + 1].
+ */
+#extension GL_ARB_sparse_texture2 : require
+
+layout(local_size_x = 4, local_size_y = 4) in;
+
+layout(binding = 0, r32ui) uniform readonly uimage2DArray img;
+
+layout(binding = 1, std430) buffer Out { uint v[]; } res;
+
+layout(push_constant) uniform Extent { uvec3 e; } ext;
+
+void main()
+{
+   uvec3 g = gl_GlobalInvocationID;
+   if (g.x >= ext.e.x || g.y >= ext.e.y)
+      return;
+   uint i = (g.z * ext.e.y + g.y) * ext.e.x + g.x;
+   uvec4 t;
+   int code = sparseImageLoadARB(img, ivec3(g), t);
+   res.v[2u * i] = t.x;
+   res.v[2u * i + 1u] = sparseTexelsResidentARB(code) ? 1u : 0u;
+}
