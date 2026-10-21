@@ -186,6 +186,11 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     wire is_shared = execute_if.data.header.eop && (is_bar || is_wspawn || is_exit);
     wire sh_posted = is_shared && ~bar_rsp_valid;
 
+    // Ready is decided from the opcode: whether a tmc/pred exits depends on its
+    // operand mask, so every tmc/pred waits for room for a posted request.
+    wire may_share = execute_if.data.header.eop && (is_bar || is_wspawn || is_tmc || is_pred);
+    wire may_post  = may_share && ~bar_rsp_valid;
+
     // an exit is retired by the shared unit, which deactivates the warp itself
     assign tmc_valid = wctl_valid && (is_tmc || is_pred) && !is_shared;
 
@@ -235,10 +240,12 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     end
 
     wire sh_req_fire = sh_req_valid && sh_req_ready;
-    wire sh_ok = ~is_shared || (sh_state == SH_DONE)
-              || ((sh_state == SH_WAIT) && warp_shared_if.rsp_valid)
-              || (sh_req_fire && (sh_posted || warp_shared_if.rsp_valid));
-    wire exec_ok = rsp_buf_ready && !wsync_drain && sh_ok && (is_shared || !bar_drain);
+    wire sh_can_req  = (sh_state == SH_IDLE) && !bar_drain && sh_req_ready;
+    // a direct request is answered in the cycle it is sent, so it never waits
+    wire sh_ok = ~may_share || (sh_state == SH_DONE)
+              || (!SH_DIRECT && (sh_state == SH_WAIT) && warp_shared_if.rsp_valid)
+              || (sh_can_req && (may_post || SH_DIRECT));
+    wire exec_ok = rsp_buf_ready && !wsync_drain && sh_ok && (may_share || !bar_drain);
     assign execute_if.ready = exec_ok;
 
     wire execute_fire = execute_if.valid && execute_if.ready;
