@@ -399,6 +399,48 @@ void kernel_cas_lmem(kernel_arg_t* __UNIFORM__ arg) {
   }
   per_hart[hid] = wins + ((threadIdx.x == 0) ? CAS_LMEM_GROUP_MARK : 0);
 }
+
+// 17) Compare-and-swap increment on global memory.
+//   The classic lock-free counter: read, then swap in read+1 until no other hart
+//   intervened. Unlike the ladders, every swap after the first compares against
+//   a nonzero word the hart observed, and the counter starts from a nonzero
+//   base, so a comparand that does not reach the memory side is caught: the
+//   swap would then compare against the wrong word and the count would fall
+//   short of base + harts * iters.
+void kernel_cas_counter(kernel_arg_t* __UNIFORM__ arg) {
+  auto counter = (uint32_t*)arg->shared_addr;
+  for (uint32_t i = 0; i < arg->iters; ++i) {
+    uint32_t expected = __atomic_load_n(counter, __ATOMIC_RELAXED);
+    while (!__atomic_compare_exchange_n(counter, &expected, expected + 1, 0,
+                                        __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+    }
+  }
+}
+
+// 18) Compare-and-swap increment on local memory.
+//   Test 17 on a group's local-memory word, so the LMEM banks resolve the swap.
+//   Each group's leader publishes how far its counter moved past the base, and
+//   the published counts sum to harts * iters whatever the launch shape.
+void kernel_cas_counter_lmem(kernel_arg_t* __UNIFORM__ arg) {
+  auto counter  = (uint32_t*)__local_mem();
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  if (threadIdx.x == 0) {
+    *counter = CAS_COUNTER_BASE;
+  }
+  __syncthreads();
+
+  for (uint32_t i = 0; i < arg->iters; ++i) {
+    uint32_t expected = __atomic_load_n(counter, __ATOMIC_RELAXED);
+    while (!__atomic_compare_exchange_n(counter, &expected, expected + 1, 0,
+                                        __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) {
+    }
+  }
+  __syncthreads();
+
+  if (threadIdx.x == 0) {
+    per_hart[hart_id()] = *counter - CAS_COUNTER_BASE;
+  }
+}
 #endif
 
 static const PFN_Kernel sc_tests[] = {
@@ -420,6 +462,8 @@ static const PFN_Kernel sc_tests[] = {
 #if VX_CFG_EXT_ZACAS_ENABLED
   kernel_cas_ladder,         // 15  native compare-and-swap (Zacas amocas)
   kernel_cas_lmem,           // 16  compare-and-swap on local memory (LMEM banks)
+  kernel_cas_counter,        // 17  compare-and-swap increment, nonzero comparands
+  kernel_cas_counter_lmem,   // 18  the same on local memory (LMEM banks)
 #endif
 };
 

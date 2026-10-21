@@ -1,0 +1,120 @@
+#version 450
+#extension GL_EXT_shader_atomic_float : require
+#extension GL_EXT_shader_atomic_float2 : require
+#extension GL_EXT_buffer_reference : require
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Float atomics in every address space the device reaches: a storage buffer,
+ * workgroup shared memory, a storage image and a buffer device address. Every
+ * target is contended by many lanes of the same warp and by every workgroup,
+ * which is what a compare-and-swap retry loop has to survive.
+ *
+ * Each add contributes the same exact addend to its target, so the values the
+ * atomics return are exactly init + j * addend for j = 0..n-1, each once, in
+ * whatever order the device serialised them. Min/max operands include signed
+ * zeros, infinities, denormals and NaNs, and targets in every address space
+ * start as NaN, the case integer ordering of the bit patterns gets wrong.
+ */
+
+layout(local_size_x_id = 0) in;
+
+#define TOTAL  256u
+#define NSUM   4u
+#define NMM    4u
+#define NGRP_MAX 256u
+
+layout(std430, binding = 0) buffer Acc {
+   float sum[NSUM];
+   float mn[NMM];
+   float mx[NMM];
+   float xchg;
+   float zmin;
+   float zmax;
+   float ret_sum[TOTAL];
+   float ret_min[TOTAL];
+   float ret_max[TOTAL];
+   float ret_xchg[TOTAL];
+   float ret_ssum[TOTAL];
+   float ret_isum[TOTAL];
+   float ret_imin[TOTAL];
+   float ret_imax[TOTAL];
+   float ret_bsum[TOTAL];
+   float ret_bmin[TOTAL];
+   float ret_bmax[TOTAL];
+   float grp_sum[NGRP_MAX];
+   float grp_min[NGRP_MAX];
+   float grp_max[NGRP_MAX];
+   float grp_nmin[NGRP_MAX];
+   float grp_nmax[NGRP_MAX];
+   float mm_op[TOTAL];
+};
+
+/* row 0: add, row 1: min, row 2: max; NSUM columns */
+layout(binding = 1, r32f) uniform image2D img;
+
+layout(buffer_reference, std430, buffer_reference_align = 4) buffer Remote {
+   float v;
+   float nmin;
+   float nmax;
+};
+
+layout(push_constant) uniform Push {
+   Remote remote;
+} pc;
+
+shared float s_sum;
+shared float s_min;
+shared float s_max;
+shared float s_nmin;
+shared float s_nmax;
+
+const float addend[NSUM] = float[NSUM](1.0, 0.5, 2.0, -0.25);
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   uint k = i % NSUM;
+   uint m = i % NMM;
+   float v = mm_op[i];
+
+   if (gl_LocalInvocationIndex == 0u) {
+      s_sum = 8.0;
+      s_min = 1.0e30;
+      s_max = -1.0e30;
+      /* NaNs the integer order keeps, so every min/max takes the CAS fix-up. */
+      s_nmin = uintBitsToFloat(0xffc00000u);
+      s_nmax = uintBitsToFloat(0x7fc00000u);
+   }
+   barrier();
+
+   ret_sum[i]  = atomicAdd(sum[k], addend[k]);
+   ret_min[i]  = atomicMin(mn[m], v);
+   ret_max[i]  = atomicMax(mx[m], v);
+   ret_xchg[i] = atomicExchange(xchg, float(i) + 0.5);
+   ret_ssum[i] = atomicAdd(s_sum, 0.25);
+   atomicMin(s_min, v);
+   atomicMax(s_max, v);
+   ret_isum[i] = imageAtomicAdd(img, ivec2(int(k), 0), addend[k]);
+   ret_imin[i] = imageAtomicMin(img, ivec2(int(m), 1), v);
+   ret_imax[i] = imageAtomicMax(img, ivec2(int(m), 2), v);
+   ret_bsum[i] = atomicAdd(pc.remote.v, 0.125);
+   ret_bmin[i] = atomicMin(pc.remote.nmin, v);
+   ret_bmax[i] = atomicMax(pc.remote.nmax, v);
+   atomicMin(s_nmin, v);
+   atomicMax(s_nmax, v);
+   /* -0 < +0: a max over -0 with +0 operands ends +0, a min over +0 with -0
+    * operands ends -0. */
+   atomicMax(zmax, 0.0);
+   atomicMin(zmin, uintBitsToFloat(0x80000000u));
+
+   barrier();
+   if (gl_LocalInvocationIndex == 0u) {
+      grp_sum[gl_WorkGroupID.x] = s_sum;
+      grp_min[gl_WorkGroupID.x] = s_min;
+      grp_max[gl_WorkGroupID.x] = s_max;
+      grp_nmin[gl_WorkGroupID.x] = s_nmin;
+      grp_nmax[gl_WorkGroupID.x] = s_nmax;
+   }
+}

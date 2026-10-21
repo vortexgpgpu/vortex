@@ -23,9 +23,10 @@
  * no-op dispatch cannot be mistaken for a pass: every expected result differs
  * from its seed.
  *
- * float and 64-bit atomics are deliberately not exercised -- RV32A has neither
- * -- but the test asserts that the device does not advertise them, so the
- * disclaim cannot silently rot into a false claim.
+ * 64-bit atomics are deliberately not exercised -- RV32A has none -- but the
+ * test asserts that the device does not advertise them, so the disclaim cannot
+ * silently rot into a false claim. Float atomics, built from the 32-bit AMOs,
+ * are covered by tests/vulkan/atomic_float.
  *
  * The same op set on `shared` variables is covered by tests/vulkan/atomic_shared,
  * which is a separate test because the device implements only one of the two
@@ -192,24 +193,21 @@ main(int argc, char **argv)
    vkGetPhysicalDeviceProperties(pd, &props);
    printf("device: %s\n", props.deviceName);
 
-   /* RV32A has only 32-bit integer AMOs, so float and 64-bit atomics are
-    * disclaimed rather than implemented. Assert the disclaim instead of
-    * assuming it: if a feature ever flips back to true, this test does not
-    * cover the ops behind it, and silence would let an unbacked claim ship.
+   /* RV32A has only 32-bit AMOs, so 64-bit atomics are disclaimed rather than
+    * implemented. Assert the disclaim instead of assuming it: if a feature ever
+    * flips back to true, this test does not cover the ops behind it, and
+    * silence would let an unbacked claim ship. (Float atomics are built from
+    * the 32-bit AMOs and covered by tests/vulkan/atomic_float.)
     *
-    * The check is on the FEATURES, not on the extension strings. Advertising
-    * VK_EXT_shader_atomic_float while reporting every one of its features
-    * unsupported is exactly how a driver is meant to disclaim it, so keying
-    * this on the extension list would fail an honest device.
+    * The check is on the FEATURES, not on the extension strings: reporting
+    * every feature of an extension unsupported is how a driver is meant to
+    * disclaim it, so keying this on the extension list would fail an honest
+    * device.
     *
-    * Both structs are zero-initialized, so a driver that ignores an unknown
-    * pNext leaves them reading "unsupported" -- the safe direction. */
-   VkPhysicalDeviceShaderAtomicFloatFeaturesEXT af = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT,
-   };
+    * The struct is zero-initialized, so a driver that ignores an unknown pNext
+    * leaves it reading "unsupported" -- the safe direction. */
    VkPhysicalDeviceShaderAtomicInt64Features ai = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES,
-      .pNext = &af,
    };
    VkPhysicalDeviceFeatures2 feats2 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &ai,
@@ -219,10 +217,6 @@ main(int argc, char **argv)
    const struct { const char *name; VkBool32 got; const char *why; } disclaimed[] = {
       { "shaderBufferInt64Atomics",   ai.shaderBufferInt64Atomics,   "no 64-bit AMO" },
       { "shaderSharedInt64Atomics",   ai.shaderSharedInt64Atomics,   "no 64-bit AMO" },
-      { "shaderBufferFloat32Atomics", af.shaderBufferFloat32Atomics, "no float AMO" },
-      { "shaderBufferFloat32AtomicAdd", af.shaderBufferFloat32AtomicAdd, "no float AMO" },
-      { "shaderSharedFloat32Atomics", af.shaderSharedFloat32Atomics, "no float AMO" },
-      { "shaderSharedFloat32AtomicAdd", af.shaderSharedFloat32AtomicAdd, "no float AMO" },
    };
    int unbacked_found = 0;
    for (unsigned i = 0; i < sizeof(disclaimed) / sizeof(disclaimed[0]); i++) {

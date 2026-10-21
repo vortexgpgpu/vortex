@@ -1,0 +1,117 @@
+#version 450
+#extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
+#extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_KHR_shader_subgroup_shuffle : require
+/*
+ * Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * fp64 on the device, through the toolchain's soft-float library where the FPU
+ * is single precision only (rv32) and natively where it has D. Every result is
+ * stored as its bit pattern and checked exactly against the host's IEEE double
+ * arithmetic, so a rounding, NaN, signed-zero or denormal slip is a failure,
+ * not a tolerance.
+ *
+ * Neighbouring lanes take different special values (NaN, infinities, zeros,
+ * denormals, huge and tiny normals), so the lanes of one warp diverge inside
+ * every soft-float routine on rv32.
+ *
+ * A narrowing conversion is stored at its own width: converted back to double,
+ * the compiler may fold the pair away, as Vulkan allows, and test nothing.
+ */
+
+layout(local_size_x_id = 0) in;
+
+#define NOPS 41u
+
+layout(std430, binding = 0) readonly buffer In {
+   double a[];
+} ina;
+layout(std430, binding = 1) readonly buffer InB {
+   double b[];
+} inb;
+layout(std430, binding = 2) readonly buffer InC {
+   double c[];
+} inc;
+layout(std430, binding = 3) readonly buffer InI {
+   int ival[];
+} ini;
+layout(std430, binding = 4) buffer Out {
+   uint64_t r[];
+} outr;
+layout(std140, binding = 5) uniform U {
+   double ud;
+   dvec2 uv;
+} u;
+layout(push_constant) uniform P {
+   double pd;
+} pc;
+
+void put(uint o, uint k, double v)
+{
+   outr.r[o + k] = doubleBitsToUint64(v);
+}
+
+void main()
+{
+   uint i = gl_GlobalInvocationID.x;
+   uint o = i * NOPS;
+   double a = ina.a[i];
+   double b = inb.b[i];
+   double c = inc.c[i];
+   int iv = ini.ival[i];
+
+   put(o, 0u, a + b);
+   put(o, 1u, a - b);
+   put(o, 2u, a * b);
+   put(o, 3u, a / b);
+   put(o, 4u, fma(a, c, b));
+   put(o, 5u, sqrt(abs(a)));
+   put(o, 6u, inversesqrt(abs(c)));
+   put(o, 7u, min(b, c));
+   put(o, 8u, max(b, c));
+   put(o, 9u, floor(a));
+   put(o, 10u, ceil(a));
+   put(o, 11u, trunc(a));
+   put(o, 12u, roundEven(a));
+   put(o, 13u, fract(c));
+   put(o, 14u, abs(a));
+   put(o, 15u, -a);
+   put(o, 16u, sign(b));
+   int e;
+   double m = frexp(c, e);
+   put(o, 17u, m);
+   outr.r[o + 18u] = uint64_t(int64_t(e));
+   put(o, 19u, ldexp(c, (iv & 63) - 32));
+   outr.r[o + 20u] = uint64_t(floatBitsToUint(float(a)));
+   outr.r[o + 21u] = uint64_t(int64_t(int(c)));
+   outr.r[o + 22u] = uint64_t(uint(abs(c)));
+   outr.r[o + 23u] = uint64_t(int64_t(c * 1048576.0));
+   put(o, 24u, double(iv));
+   put(o, 25u, double(uint(iv)));
+   put(o, 26u, double(int64_t(iv) * 1099511627775l));
+   put(o, 27u, double(uint64_t(iv) * 0x8000000000000001ul));
+   outr.r[o + 28u] = uint64_t(packFloat2x16(f16vec2(float16_t(a), 0.0hf)));
+   outr.r[o + 29u] = uint64_t(packFloat2x16(f16vec2(float16_t(float(c)), 0.0hf)));
+   uint cmp = (a < b ? 1u : 0u) | (a <= b ? 2u : 0u) | (a > b ? 4u : 0u) |
+              (a >= b ? 8u : 0u) | (a == b ? 16u : 0u) | (a != b ? 32u : 0u) |
+              (isnan(a) ? 64u : 0u) | (isinf(a) ? 128u : 0u);
+   outr.r[o + 30u] = uint64_t(cmp);
+   uvec2 w = unpackDouble2x32(a);
+   put(o, 31u, packDouble2x32(uvec2(w.y, w.x)));
+   put(o, 32u, mod(c, b));
+   put(o, 33u, clamp(c, -1.0lf, 1.0lf));
+   put(o, 34u, pc.pd * c + u.ud);
+   put(o, 35u, u.uv.x / c - u.uv.y);
+   /* Integer-valued doubles keep the subgroup sums exact in any order. */
+   double n = double(iv);
+   put(o, 36u, subgroupAdd(n));
+   put(o, 37u, subgroupMax(c));
+   put(o, 38u, subgroupBroadcastFirst(a));
+   put(o, 39u, subgroupShuffleXor(a, 1u));
+   outr.r[o + 40u] = uint64_t((gl_WorkGroupID.x << 16) | (gl_SubgroupID << 8) |
+                              gl_SubgroupInvocationID);
+}

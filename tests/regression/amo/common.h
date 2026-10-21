@@ -13,6 +13,10 @@
 #define CAS_LMEM_SLOTS      16
 #define CAS_LMEM_GROUP_MARK 0x10000u
 
+// Starting value of the compare-and-swap counters: nonzero, so no comparand a
+// swap uses is ever zero.
+#define CAS_COUNTER_BASE    0x5a000000u
+
 // Args shared between host (main.cpp) and the GPU kernel (kernel.cpp).
 // Layout matches dogfood's, with `iters` added for the contention loops.
 typedef struct {

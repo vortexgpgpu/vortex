@@ -474,6 +474,57 @@ public:
   }
 };
 
+// 17) Compare-and-swap counter on global memory: each hart adds iters by
+//     read/compare-and-swap retries from a nonzero base, so the final word is
+//     base + n * iters only if every swap compared against the word it read.
+class Test_CAS_COUNTER : public ITestCase {
+public:
+  Test_CAS_COUNTER(TestSuite* s) : ITestCase(s, "cas_counter") {}
+  void setup(uint32_t, uint32_t* shared, uint32_t*) override {
+    *shared = CAS_COUNTER_BASE;
+  }
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* shared, const uint32_t*) override {
+    const uint32_t expected = CAS_COUNTER_BASE + n * iters;
+    if (*shared != expected) {
+      std::cout << "  shared=0x" << std::hex << *shared << " expected=0x"
+                << expected << std::dec << std::endl;
+      return 1;
+    }
+    return 0;
+  }
+};
+
+// 18) Compare-and-swap counter on local memory: per-group counters from the same
+//     nonzero base; the leaders' published increments sum to n * iters.
+class Test_CAS_COUNTER_LMEM : public ITestCase {
+public:
+  Test_CAS_COUNTER_LMEM(TestSuite* s) : ITestCase(s, "cas_counter_lmem") {}
+  void setup(uint32_t n, uint32_t* /*shared*/, uint32_t* per_hart) override {
+    for (uint32_t h = 0; h < n; ++h) per_hart[h] = 0;
+  }
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* /*shared*/, const uint32_t* per_hart) override {
+    uint64_t total = 0;
+    uint32_t groups = 0;
+    for (uint32_t h = 0; h < n; ++h) {
+      if (per_hart[h] != 0) { total += per_hart[h]; ++groups; }
+    }
+    const uint64_t expected = (uint64_t)n * iters;
+    if (groups == 0) {
+      std::cout << "  no group published a count -- the kernel did not run"
+                << std::endl;
+      return 1;
+    }
+    if (total != expected) {
+      std::cout << "  published total=" << total << " expected=" << expected
+                << " across " << groups << " group(s)" << std::endl;
+      return 1;
+    }
+    return 0;
+  }
+};
+
 inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   // Test_ATOMIC_CRITICAL needs to know VX_CFG_NUM_THREADS to compute the
   // expected count; query it from the device caps.
@@ -501,6 +552,8 @@ inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   // this instruction exists to replace and which does not survive contention.
   add_test(new Test_CAS_LADDER(this));
   add_test(new Test_CAS_LMEM(this));
+  add_test(new Test_CAS_COUNTER(this));
+  add_test(new Test_CAS_COUNTER_LMEM(this));
 #endif
 }
 
