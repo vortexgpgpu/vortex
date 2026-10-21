@@ -41,6 +41,14 @@ public:
   struct PerfStats {
     Cache::PerfStats icache;
     Cache::PerfStats dcache;
+    // Contention counters (RFC 261019c). Requester slots of the dcache: the cores occupy
+    // [0, SOCKET_SIZE), the socket DTCU's D port the next one (request lane 0 only).
+    struct DcacheArb {
+      ArbPortStats core;   // dcache input arbiters, core slots, summed over lanes
+      ArbPortStats dtcu;   // the DTCU slot
+    };
+    DcacheArb dcache_arb;
+    Cache::ReqStats dcache_rq;   // dcache traffic by slot (row = slot)
 #ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
     // Socket-owned DTCU engine. Read under VX_DCR_MPM_CLASS_DTCU_SOCKET; the same
     // value on every core in this socket. Dtcu::PerfStats has no default member

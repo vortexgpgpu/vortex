@@ -175,12 +175,14 @@ struct params_t {
 struct sector_t {
   bool valid;
   bool dirty;
+  uint8_t owner;                       // requester row whose fill installed it (requester stats only)
   uint64_t dirty_mask;                 // per-byte dirty bits; the writeback byte-enable
   std::shared_ptr<mem_block_t> data;  // sector bytes (= one mem_block)
 
   void reset() {
     valid = false;
     dirty = false;
+    owner = 0;
     dirty_mask = 0;
     data.reset();
   }
@@ -668,6 +670,16 @@ public:
     return perf_stats_;
   }
 
+  // Requester stats (RFC 261019c). Bank-side tag = (((tag << row_bits) | row) << lane_bits) | lane.
+  void enable_req_stats(uint32_t row_bits) {
+    rs_.reset(new Cache::ReqStats());
+    row_mask_ = (1u << row_bits) - 1;
+  }
+
+  const Cache::ReqStats *req_stats() const {
+    return rs_.get();
+  }
+
   // Flush API.
   // flush_begin() arms the bank; subsequent ticks scan all sets/ways and emit
   // a writeback request for every dirty line via mem_req_out (write-back only;
@@ -694,6 +706,9 @@ public:
 protected:
   void on_reset() {
     perf_stats_ = Cache::PerfStats();
+    if (rs_) {
+      *rs_ = Cache::ReqStats();
+    }
     pending_mshr_size_ = 0;
     nofetch_fills_.clear();
     pending_amo_probes_ = 0;
@@ -745,6 +760,9 @@ protected:
     // Accept one new input if there's room.
     if (!pipe_req_->full()) {
         this->processInputs(fwd_consumed);
+    } else if (rs_ && !this->core_req_in.empty()) {
+        // Nothing visible at the head: both slots are still inside the pipe latency.
+        if (pipe_req_->empty()) ++rs_->pipe_cap; else ++rs_->pipe_head;
     }
 
     // flush walk: emit writebacks for dirty lines.
@@ -824,6 +842,7 @@ private:
     // drain completed the head this tick, this slot goes to new core
     // requests instead
     if (mshr_.has_ready_reqs() && !fwd_consumed) {
+      if (rs_ && !this->core_req_in.empty()) ++rs_->pipe_slot;
       bank_req_t bank_req;
       mshr_.dequeue(&bank_req);
       pipe_req_->push(bank_req);
@@ -833,6 +852,7 @@ private:
 
     // 2a) synthetic no-fetch fills (RFC 260904 7.2): same gating as a real fill.
     if (!nofetch_fills_.empty() && !fwd_active_) {
+      if (rs_ && !this->core_req_in.empty()) ++rs_->pipe_slot;
       uint32_t mshr_id = nofetch_fills_.front();
       const auto &root_peek = mshr_.peek(mshr_id);
       bank_req_t bank_req;
@@ -853,6 +873,7 @@ private:
     // 2) fill only when no replay is pending and no forward drain is in
     // progress (a new fill would re-arm the window mid-chain)
     if (!this->mem_rsp_in.empty() && !fwd_active_) {
+      if (rs_ && !this->core_req_in.empty()) ++rs_->pipe_slot;
       auto &mem_rsp = this->mem_rsp_in.peek();
 #if VX_CFG_EXT_A_ENABLED
       // Non-LLC AMO passthrough response: forward straight to core
@@ -1010,6 +1031,11 @@ private:
             ++perf_stats_.reads;
             ++perf_stats_.read_misses;
           }
+          if (rs_) {
+            const uint32_t row = row_of(core_req.tag);
+            if (core_req.is_write()) { ++rs_->writes[row]; ++rs_->miss_w[row]; }
+            else                     { ++rs_->reads[row];  ++rs_->miss_r[row]; }
+          }
           this->core_req_in.pop();
           return;
         }
@@ -1048,6 +1074,10 @@ private:
 #endif
       if (core_req.is_write()) ++perf_stats_.writes;
       else                ++perf_stats_.reads;
+      if (rs_) {
+        if (core_req.is_write()) ++rs_->writes[row_of(core_req.tag)];
+        else                     ++rs_->reads[row_of(core_req.tag)];
+      }
       this->core_req_in.pop();
       return;
     }
@@ -1338,6 +1368,9 @@ private:
       uint64_t addr_tag  = params_.addr_tag(bank_req.addr);
       uint32_t sector_id = params_.addr_sector_id(bank_req.addr);
       auto &set          = sets_.at(set_id);
+      // A fill's own req_tag is 0; the requester is the MSHR root's (still Core-typed
+      // until the replay below).
+      const uint32_t frow = rs_ ? row_of(mshr_.peek(bank_req.mshr_id).bank_req.req_tag) : 0;
 
       int resident_id = set.find_resident(addr_tag);
       const bool is_refill = (resident_id != -1);
@@ -1359,6 +1392,15 @@ private:
         }
         if (wb_count > 0 && (this->mem_req_out.size() + wb_count) > this->mem_req_out.capacity())
           return; // stall
+
+        if (rs_) {
+          for (const auto &s : victim_line.sectors) {
+            if (s.valid && s.owner != frow) {
+              ++rs_->xevicts[frow];
+              ++rs_->evicted[s.owner];
+            }
+          }
+        }
 
         if (config_.repl_policy == Cache::FIFO) {
           set.fifo_ptr = (set.fifo_ptr + 1) % set.lines.size();
@@ -1396,6 +1438,7 @@ private:
       sec.dirty      = false;
       sec.dirty_mask = 0;
       sec.data       = bank_req.data;
+      if (rs_) sec.owner = uint8_t(frow);
       mshr_.replay(bank_req.mshr_id);
       // arm the fill-forward window for this chain
       fwd_active_ = true;
@@ -1675,6 +1718,10 @@ private:
         }
         if (bank_req.write) ++perf_stats_.write_misses;
         else                ++perf_stats_.read_misses;
+        if (rs_) {
+          if (bank_req.write) ++rs_->miss_w[row_of(bank_req.req_tag)];
+          else                ++rs_->miss_r[row_of(bank_req.req_tag)];
+        }
       }
 
       if (config_.repl_policy == Cache::PLRU)
@@ -1757,6 +1804,13 @@ private:
   TFifo<bank_req_t>::Ptr pipe_req_;
 
   Cache::PerfStats perf_stats_;
+
+  // Requester stats: null except in caches whose owner enabled them.
+  std::unique_ptr<Cache::ReqStats> rs_;
+  uint32_t row_mask_ = 0;
+  uint32_t row_of(uint64_t tag) const {
+    return uint32_t(tag >> params_.log2_num_inputs) & row_mask_;
+  }
 
   uint64_t pending_read_reqs_;
   uint64_t pending_write_reqs_;
@@ -1938,6 +1992,30 @@ public:
     return perf_stats;
   }
 
+  void enable_requester_stats(uint32_t row_bits, bool with_xbar) {
+    // A cache behind more requester rows than ReqStats holds simply keeps them off.
+    if (config_.bypass || (1u << row_bits) > Cache::kMaxReqRows)
+      return;
+    for (auto &bank : banks_) {
+      bank->enable_req_stats(row_bits);
+    }
+    if (with_xbar) {
+      bank_core_xbar_->enable_input_stats(); // crossbar input i = request lane i
+    }
+  }
+
+  ReqStats req_stats() const {
+    ReqStats rs;
+    if (config_.bypass)
+      return rs;
+    for (const auto &bank : banks_) {
+      if (const auto *b = bank->req_stats())
+        rs += *b;
+    }
+    rs.xbar_lanes = bank_core_xbar_->input_stats();
+    return rs;
+  }
+
   void flush_begin() {
     if (config_.bypass) return;
     for (auto &bank : banks_) {
@@ -2009,6 +2087,14 @@ void Cache::on_tick() {
 
 Cache::PerfStats Cache::perf_stats() const {
   return impl_->perf_stats();
+}
+
+void Cache::enable_requester_stats(uint32_t row_bits, bool with_xbar) {
+  impl_->enable_requester_stats(row_bits, with_xbar);
+}
+
+Cache::ReqStats Cache::req_stats() const {
+  return impl_->req_stats();
 }
 
 void Cache::flush_begin() {

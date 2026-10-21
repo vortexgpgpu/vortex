@@ -132,6 +132,7 @@ public:
     // matching the RTL `VX_mem_arb` priority ordering. The two DTCU rows sit directly
     // behind DXA so an engine outranks graphics traffic, which is the ordering 1.6c
     // rests on.
+    uint32_t l2_row_bits = 0;   // requester row bits in the L2's request tags (0: no fan-in arbiter)
 #if defined(VX_CFG_EXT_DXA_ENABLE) || defined(VX_CFG_EXT_DTCU_CLUSTER_ENABLE) || defined(VX_CFG_EXT_DTCU_SOCKET_ENABLE) || defined(VX_CFG_EXT_TEX_ENABLE) || defined(VX_CFG_EXT_OM_ENABLE) || defined(VX_CFG_EXT_RASTER_ENABLE) || defined(VX_CFG_EXT_RTU_ENABLE)
     constexpr uint32_t kL2RowsUsed = 1
         + VX_CFG_EXT_DXA_ENABLED + VX_CFG_EXT_DTCU_CLUSTER_ENABLED + VX_CFG_EXT_DTCU_SOCKET_ENABLED
@@ -156,6 +157,10 @@ public:
     snprintf(sname, 100, "%s-l2arb", name.c_str());
     auto l2arb = MemArbiter::Create(sname, ArbiterType::Priority,
                                     kL2Rows * VX_CFG_L2_NUM_REQS, VX_CFG_L2_NUM_REQS);
+    static_assert(kL2Rows <= Cache::kMaxReqRows, "Cache::ReqStats is indexed by the l2arb row");
+    l2arb->enable_input_stats();
+    l2arb_ = l2arb;
+    l2_row_bits = log2ceil(kL2Rows);
 #if VX_CFG_L2_ARB_ENGINE_BYPASS_LIMIT != 0
     constexpr uint64_t kEngineRows =
         (uint64_t(VX_CFG_EXT_DXA_ENABLED) << kDxaRow)
@@ -175,6 +180,7 @@ public:
         l2arb->RspOut.at(kL2Rows * port + 0).bind(&sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
+    l2arb_row_[Cluster::L2RQ_CORE] = 0;
 #else
     // No L2-sharing extensions: direct sockets → L2.
     for (uint32_t i = 0; i < sockets_per_cluster; ++i) {
@@ -183,7 +189,9 @@ public:
         l2cache_->core_rsp_out.at(i * VX_CFG_L1_MEM_PORTS + j).bind(&sockets_.at(i)->mem_rsp_in.at(j));
       }
     }
+    l2arb_row_[Cluster::L2RQ_CORE] = 0;
 #endif // any L2-sharing extension
+    l2cache_->enable_requester_stats(l2_row_bits, true);
 
 #ifdef VX_CFG_EXT_DXA_ENABLE
     // Create DxaCore at cluster scope
@@ -196,6 +204,7 @@ public:
       dxa_core_->gmem_req_out.at(i).bind(&l2arb->ReqIn.at(kL2Rows * i + kDxaRow));
       l2arb->RspOut.at(kL2Rows * i + kDxaRow).bind(&dxa_core_->gmem_rsp_in.at(i));
     }
+    l2arb_row_[Cluster::L2RQ_DXA] = int32_t(kDxaRow);
 
     // Per-core SFU.dxa_req_out (DxaUnit decodes onto it) → DxaCore::dxa_req_in[cid].
     for (uint32_t s = 0; s < sockets_per_cluster; ++s) {
@@ -243,6 +252,7 @@ public:
     dtcu_ = Dtcu::Create(sname, DTCU_ENGINE_CLUSTER);
     dtcu_->tma()->mem_req_out.bind(&l2arb->ReqIn.at(kL2Rows * 0 + kDtcuClusterRow));
     l2arb->RspOut.at(kL2Rows * 0 + kDtcuClusterRow).bind(&dtcu_->tma()->mem_rsp_in);
+    l2arb_row_[Cluster::L2RQ_DTCUC] = int32_t(kDtcuClusterRow);
 #endif
 
 #ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
@@ -284,6 +294,9 @@ public:
                   "completion flag would otherwise be able to overtake its own D stores");
     dtcu_sock_arb->ReqOut.at(0).bind(&l2arb->ReqIn.at(kL2Rows * 0 + kDtcuSocketRow));
     l2arb->RspOut.at(kL2Rows * 0 + kDtcuSocketRow).bind(&dtcu_sock_arb->RspIn.at(0));
+    l2arb_row_[Cluster::L2RQ_DTCUS] = int32_t(kDtcuSocketRow);
+    dtcu_sock_arb->enable_input_stats();   // no-op with one socket (bypass)
+    dtcu_sock_arb_ = dtcu_sock_arb;
 #endif
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -621,6 +634,49 @@ public:
   Cluster::PerfStats perf_stats() const {
     Cluster::PerfStats perf_stats;
     perf_stats.l2cache = l2cache_->perf_stats();
+    {
+      const Cache::ReqStats rs = l2cache_->req_stats();
+      for (uint32_t q = 0; q < Cluster::L2RQ_COUNT; ++q) {
+        const int32_t row = l2arb_row_[q];
+        if (row < 0)
+          continue;
+        auto& d = perf_stats.l2rq[q];
+        d.reads   = rs.reads[row];
+        d.writes  = rs.writes[row];
+        d.miss_r  = rs.miss_r[row];
+        d.miss_w  = rs.miss_w[row];
+        d.xevicts = rs.xevicts[row];
+        d.evicted = rs.evicted[row];
+      }
+      perf_stats.l2_pipe_cap  = rs.pipe_cap;
+      perf_stats.l2_pipe_head = rs.pipe_head;
+      perf_stats.l2_pipe_slot = rs.pipe_slot;
+      perf_stats.l2xbar_lane  = rs.xbar_lanes;
+    }
+    if (l2arb_) {
+      const auto& in = l2arb_->input_stats();   // input i = lane * rows + row
+      const auto& lt = l2arb_->lost_to_row();
+      const uint32_t R = l2arb_->rows();
+      const int32_t core_row = l2arb_row_[Cluster::L2RQ_CORE];
+      for (uint32_t q = 0; q < Cluster::L2RQ_COUNT; ++q) {
+        const int32_t row = l2arb_row_[q];
+        if (row < 0)
+          continue;
+        auto& d = perf_stats.l2rq[q];
+        for (size_t i = size_t(row); i < in.size(); i += R)
+          d.arb += in[i];
+        if (lt.size() != size_t(R) * R)
+          continue;
+        for (uint32_t g = 0; g < R; ++g) {
+          const uint64_t v = lt[size_t(row) * R + g];
+          if (int32_t(g) == core_row) d.lost_to_core += v;
+          else                        d.lost_to_engine += v;
+        }
+      }
+    }
+    if (dtcu_sock_arb_) {
+      perf_stats.dtcu_sock_arb = dtcu_sock_arb_->input_stats();   // input = socket index
+    }
 #ifdef VX_CFG_EXT_DXA_ENABLE
     perf_stats.dxa = dxa_core_->perf_stats();
 #endif
@@ -796,6 +852,10 @@ private:
   std::vector<core_barrier_t> gbarriers_;
   Cache::Ptr                  l2cache_;
   uint32_t                    cores_per_socket_;
+  // Contention counters (RFC 261019c): extra references only, no new SimObject.
+  MemArbiter::Ptr             l2arb_;
+  MemArbiter::Ptr             dtcu_sock_arb_;
+  std::array<int32_t, Cluster::L2RQ_COUNT> l2arb_row_ = {{-1, -1, -1, -1}};  // -1 = absent
 #ifdef VX_CFG_EXT_DXA_ENABLE
   DxaCore::Ptr                dxa_core_;
 #endif

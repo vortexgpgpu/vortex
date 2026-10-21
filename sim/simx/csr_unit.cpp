@@ -174,6 +174,27 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
       } break;
       case VX_DCR_MPM_CLASS_DCACHE: {
         auto socket_perf = core_->socket()->perf_stats();
+        const uint32_t local_socket = core_->socket()->id() % NUM_SOCKETS;
+        // The DTCU's dcache slot follows the core slots; without a socket DTCU it reads 0.
+#ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
+        const uint32_t dtcu_slot = VX_CFG_SOCKET_SIZE;
+#else
+        const uint32_t dtcu_slot = Cache::kMaxReqRows;
+#endif
+        const auto dtcu_rq = [&](const uint64_t (&v)[Cache::kMaxReqRows]) -> uint64_t {
+          return (dtcu_slot < Cache::kMaxReqRows) ? v[dtcu_slot] : 0;
+        };
+        const auto l2xbar_lane = [&](uint32_t port) -> ArbPortStats {
+          if (port >= VX_CFG_L1_MEM_PORTS)
+            return ArbPortStats{};
+          const auto cluster_perf = core_->socket()->cluster()->perf_stats();
+          const uint32_t lane = local_socket * VX_CFG_L1_MEM_PORTS + port;
+          return (lane < cluster_perf.l2xbar_lane.size()) ? cluster_perf.l2xbar_lane[lane] : ArbPortStats{};
+        };
+        const auto dtcu_sock_arb = [&]() -> ArbPortStats {
+          const auto cluster_perf = core_->socket()->cluster()->perf_stats();
+          return (local_socket < cluster_perf.dtcu_sock_arb.size()) ? cluster_perf.dtcu_sock_arb[local_socket] : ArbPortStats{};
+        };
         switch (addr) {
         CSR_READ_64(VX_CSR_MPM_DCACHE_READS, socket_perf.dcache.reads);
         CSR_READ_64(VX_CSR_MPM_DCACHE_WRITES, socket_perf.dcache.writes);
@@ -182,6 +203,27 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_DCACHE_EVICTS, socket_perf.dcache.evictions);
         CSR_READ_64(VX_CSR_MPM_DCACHE_BANK_ST, socket_perf.dcache.bank_stalls);
         CSR_READ_64(VX_CSR_MPM_DCACHE_MSHR_ST, socket_perf.dcache.mshr_stalls);
+        // Contention counters (RFC 261019c). The L2 crossbar lanes and the socket-engine
+        // funnel are cluster objects, exported here per socket.
+        CSR_READ_64(VX_CSR_MPM_DCACHE_ARB_GRANT_CORE, socket_perf.dcache_arb.core.grants);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_ARB_GRANT_DTCU, socket_perf.dcache_arb.dtcu.grants);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_ARB_LOST_CORE, socket_perf.dcache_arb.core.lost_sent);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_ARB_LOST_DTCU, socket_perf.dcache_arb.dtcu.lost_sent);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_ARB_BLOCK_CORE, socket_perf.dcache_arb.core.blocked());
+        CSR_READ_64(VX_CSR_MPM_DCACHE_ARB_BLOCK_DTCU, socket_perf.dcache_arb.dtcu.blocked());
+        CSR_READ_64(VX_CSR_MPM_DCACHE_L2XBAR_GRANT_P0, l2xbar_lane(0).grants);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_L2XBAR_GRANT_P1, l2xbar_lane(1).grants);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_L2XBAR_LOST_P0, l2xbar_lane(0).lost_sent);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_L2XBAR_LOST_P1, l2xbar_lane(1).lost_sent);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_L2XBAR_FULL_P0, l2xbar_lane(0).blocked());
+        CSR_READ_64(VX_CSR_MPM_DCACHE_L2XBAR_FULL_P1, l2xbar_lane(1).blocked());
+        CSR_READ_64(VX_CSR_MPM_DCACHE_DSARB_GRANT, dtcu_sock_arb().grants);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_DSARB_LOST, dtcu_sock_arb().lost_sent);
+        CSR_READ_64(VX_CSR_MPM_DCACHE_DSARB_BLOCK, dtcu_sock_arb().blocked());
+        CSR_READ_64(VX_CSR_MPM_DCACHE_DTCU_READS, dtcu_rq(socket_perf.dcache_rq.reads));
+        CSR_READ_64(VX_CSR_MPM_DCACHE_DTCU_WRITES, dtcu_rq(socket_perf.dcache_rq.writes));
+        CSR_READ_64(VX_CSR_MPM_DCACHE_DTCU_MISS_R, dtcu_rq(socket_perf.dcache_rq.miss_r));
+        CSR_READ_64(VX_CSR_MPM_DCACHE_DTCU_MISS_W, dtcu_rq(socket_perf.dcache_rq.miss_w));
         }
       } break;
       case VX_DCR_MPM_CLASS_L2CACHE: {
@@ -195,6 +237,46 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         CSR_READ_64(VX_CSR_MPM_L2CACHE_BANK_ST, cluster_perf.l2cache.bank_stalls);
         CSR_READ_64(VX_CSR_MPM_L2CACHE_MSHR_ST, cluster_perf.l2cache.mshr_stalls);
         CSR_READ_64(VX_CSR_MPM_L2CACHE_WRITE_NOFETCH, cluster_perf.l2cache.write_nofetch);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_PIPE_CAP, cluster_perf.l2_pipe_cap);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_PIPE_HEAD, cluster_perf.l2_pipe_head);
+        CSR_READ_64(VX_CSR_MPM_L2CACHE_PIPE_SLOT, cluster_perf.l2_pipe_slot);
+        }
+      } break;
+      case VX_DCR_MPM_CLASS_L2RQ: {
+        auto cluster_perf = core_->socket()->cluster()->perf_stats();
+        const auto& c  = cluster_perf.l2rq[Cluster::L2RQ_CORE];
+        const auto& x  = cluster_perf.l2rq[Cluster::L2RQ_DXA];
+        const auto& dc = cluster_perf.l2rq[Cluster::L2RQ_DTCUC];
+        const auto& ds = cluster_perf.l2rq[Cluster::L2RQ_DTCUS];
+        switch (addr) {
+        CSR_READ_64(VX_CSR_MPM_L2RQ_GRANT_CORE, c.arb.grants);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_GRANT_DXA, x.arb.grants);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_GRANT_DTCUC, dc.arb.grants);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_GRANT_DTCUS, ds.arb.grants);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_LOSTC_CORE, c.lost_to_core);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_LOSTC_DXA, x.lost_to_core);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_LOSTC_DTCUC, dc.lost_to_core);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_LOSTC_DTCUS, ds.lost_to_core);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_LOSTE_CORE, c.lost_to_engine);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_LOSTE_DXA, x.lost_to_engine);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_LOSTE_DTCUC, dc.lost_to_engine);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_LOSTE_DTCUS, ds.lost_to_engine);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_BLOCK_CORE, c.arb.blocked());
+        CSR_READ_64(VX_CSR_MPM_L2RQ_BLOCK_DXA, x.arb.blocked());
+        CSR_READ_64(VX_CSR_MPM_L2RQ_BLOCK_DTCUC, dc.arb.blocked());
+        CSR_READ_64(VX_CSR_MPM_L2RQ_BLOCK_DTCUS, ds.arb.blocked());
+        CSR_READ_64(VX_CSR_MPM_L2RQ_MISS_CORE, (c.miss_r + c.miss_w));
+        CSR_READ_64(VX_CSR_MPM_L2RQ_MISS_DXA, (x.miss_r + x.miss_w));
+        CSR_READ_64(VX_CSR_MPM_L2RQ_MISS_DTCUC, (dc.miss_r + dc.miss_w));
+        CSR_READ_64(VX_CSR_MPM_L2RQ_MISS_DTCUS, (ds.miss_r + ds.miss_w));
+        CSR_READ_64(VX_CSR_MPM_L2RQ_XEVICT_CORE, c.xevicts);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_XEVICT_DXA, x.xevicts);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_XEVICT_DTCUC, dc.xevicts);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_XEVICT_DTCUS, ds.xevicts);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_EVICTED_CORE, c.evicted);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_EVICTED_DXA, x.evicted);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_EVICTED_DTCUC, dc.evicted);
+        CSR_READ_64(VX_CSR_MPM_L2RQ_EVICTED_DTCUS, ds.evicted);
         }
       } break;
       case VX_DCR_MPM_CLASS_L3CACHE: {

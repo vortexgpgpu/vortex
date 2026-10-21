@@ -70,6 +70,39 @@ public:
 		}
 	};
 
+	// Per-requester counters (RFC 261019c), off unless the owner calls
+	// enable_requester_stats(). Index = the requester row that the arbiter in front of
+	// this cache ORed into the request tag; the owner maps rows to requester names.
+	static constexpr uint32_t kMaxReqRows = 8;
+	struct ReqStats {
+		uint64_t reads[kMaxReqRows]   = {};
+		uint64_t writes[kMaxReqRows]  = {};
+		uint64_t miss_r[kMaxReqRows]  = {};
+		uint64_t miss_w[kMaxReqRows]  = {};
+		uint64_t xevicts[kMaxReqRows] = {}; // valid sectors of another row replaced by this row's fills
+		uint64_t evicted[kMaxReqRows] = {}; // this row's valid sectors replaced by another row's fills
+		uint64_t pipe_cap  = 0; // a core request waited: bank pipe full, no request yet at its head
+		uint64_t pipe_head = 0; // a core request waited: bank pipe full, its head stalled downstream
+		uint64_t pipe_slot = 0; // a core request waited: the input slot went to a replay or a fill
+		std::vector<ArbPortStats> xbar_lanes; // bank crossbar outcome per request lane
+
+		// Bank-side fields only; xbar_lanes is filled by the cache.
+		ReqStats& operator+=(const ReqStats& rhs) {
+			for (uint32_t r = 0; r < kMaxReqRows; ++r) {
+				reads[r]   += rhs.reads[r];
+				writes[r]  += rhs.writes[r];
+				miss_r[r]  += rhs.miss_r[r];
+				miss_w[r]  += rhs.miss_w[r];
+				xevicts[r] += rhs.xevicts[r];
+				evicted[r] += rhs.evicted[r];
+			}
+			pipe_cap  += rhs.pipe_cap;
+			pipe_head += rhs.pipe_head;
+			pipe_slot += rhs.pipe_slot;
+			return *this;
+		}
+	};
+
 	std::vector<SimChannel<MemReq>> core_req_in;
 	std::vector<SimChannel<MemRsp>> core_rsp_out;
 	std::vector<SimChannel<MemReq>> mem_req_out;
@@ -79,6 +112,12 @@ public:
 	~Cache();
 
 	PerfStats perf_stats() const;
+
+	// Call once, before the first tick. row_bits = log2 of the arbiter row group in front
+	// of this cache (0: every request is row 0). with_xbar also counts the bank crossbar
+	// per request lane. No-op for a bypassed cache.
+	void enable_requester_stats(uint32_t row_bits, bool with_xbar);
+	ReqStats req_stats() const;
 
 	// Flush API: arm a write-back walk that emits dirty lines via mem_req_out.
 	// flush_done() returns true once the walk completes; the caller is expected

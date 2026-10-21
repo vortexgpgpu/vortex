@@ -42,8 +42,30 @@ class Socket;
 
 class Cluster : public SimObject<Cluster> {
 public:
+  // Requesters at the cluster L2 fan-in, by name (RFC 261019c). Row numbers are a
+  // construction detail of cluster.cpp and may be reordered.
+  enum L2Requester : uint32_t {
+    L2RQ_CORE = 0,   // socket L1 egress: dcache (incl. the socket DTCU's D stores and C preload) + icache
+    L2RQ_DXA,
+    L2RQ_DTCUC,      // cluster DTCU
+    L2RQ_DTCUS,      // every socket DTCU, after the socket-engine funnel
+    L2RQ_COUNT
+  };
+
+  struct L2RqStats {
+    ArbPortStats arb;             // L2 fan-in arbiter outcome, summed over the request lanes
+    uint64_t lost_to_core   = 0;  // arb.lost_sent whose winner was the core row
+    uint64_t lost_to_engine = 0;  // arb.lost_sent whose winner was another non-core row
+    uint64_t reads = 0, writes = 0, miss_r = 0, miss_w = 0;
+    uint64_t xevicts = 0, evicted = 0;
+  };
+
   struct PerfStats {
     Cache::PerfStats l2cache;
+    std::array<L2RqStats, L2RQ_COUNT> l2rq{};
+    uint64_t l2_pipe_cap = 0, l2_pipe_head = 0, l2_pipe_slot = 0;
+    std::vector<ArbPortStats> l2xbar_lane;     // L2 bank crossbar, per L2 request lane
+    std::vector<ArbPortStats> dtcu_sock_arb;   // socket-engine funnel, per socket index in the cluster
 #ifdef VX_CFG_EXT_DXA_ENABLE
     DxaCore::PerfStats dxa;
 #endif

@@ -592,6 +592,9 @@ VX_DCR_MPM_CLASS_DXA     = 16
 VX_DCR_MPM_CLASS_DTCU         = 17  # legacy alias of DTCU_CLUSTER; kept so existing callers build
 VX_DCR_MPM_CLASS_DTCU_CLUSTER = 17
 VX_DCR_MPM_CLASS_DTCU_SOCKET  = 18
+# Per-requester view of the cluster L2 fan-in and of the L2 itself (RFC 261019c), cluster
+# scope like L2CACHE. 19 for the same reason as 17/18.
+VX_DCR_MPM_CLASS_L2RQ         = 19
 
 [csr_mpm_base]
 VX_CSR_MCYCLE = 0xB00
@@ -698,6 +701,45 @@ VX_CSR_MPM_DCACHE_BANK_ST = 0xB08  # bank conflicts
 VX_CSR_MPM_DCACHE_BANK_ST_H = 0xB88
 VX_CSR_MPM_DCACHE_MSHR_ST = 0xB09  # MSHR stalls
 VX_CSR_MPM_DCACHE_MSHR_ST_H = 0xB89
+# Contention counters (RFC 261019c), socket scope: every core of a socket reads the same value.
+VX_CSR_MPM_DCACHE_ARB_GRANT_CORE = 0xB0A  # dcache input arbiters, summed over the dcache lanes: requests forwarded, core slots
+VX_CSR_MPM_DCACHE_ARB_GRANT_CORE_H = 0xB8A
+VX_CSR_MPM_DCACHE_ARB_GRANT_DTCU = 0xB0B  # ... the socket DTCU's slot (its D port: D stores, C preload)
+VX_CSR_MPM_DCACHE_ARB_GRANT_DTCU_H = 0xB8B
+VX_CSR_MPM_DCACHE_ARB_LOST_CORE = 0xB0C  # request-cycles in which the other slot's request was forwarded
+VX_CSR_MPM_DCACHE_ARB_LOST_CORE_H = 0xB8C
+VX_CSR_MPM_DCACHE_ARB_LOST_DTCU = 0xB0D
+VX_CSR_MPM_DCACHE_ARB_LOST_DTCU_H = 0xB8D
+VX_CSR_MPM_DCACHE_ARB_BLOCK_CORE = 0xB0E  # request-cycles in which the dcache lane accepted nothing
+VX_CSR_MPM_DCACHE_ARB_BLOCK_CORE_H = 0xB8E
+VX_CSR_MPM_DCACHE_ARB_BLOCK_DTCU = 0xB0F
+VX_CSR_MPM_DCACHE_ARB_BLOCK_DTCU_H = 0xB8F
+VX_CSR_MPM_DCACHE_L2XBAR_GRANT_P0 = 0xB10  # cluster L2 bank crossbar, this socket's L2 request lanes (socket * L1_MEM_PORTS + port): requests forwarded
+VX_CSR_MPM_DCACHE_L2XBAR_GRANT_P0_H = 0xB90
+VX_CSR_MPM_DCACHE_L2XBAR_GRANT_P1 = 0xB11
+VX_CSR_MPM_DCACHE_L2XBAR_GRANT_P1_H = 0xB91
+VX_CSR_MPM_DCACHE_L2XBAR_LOST_P0 = 0xB12  # (bank, cycle) evaluations in which a lower lane's request was forwarded instead
+VX_CSR_MPM_DCACHE_L2XBAR_LOST_P0_H = 0xB92
+VX_CSR_MPM_DCACHE_L2XBAR_LOST_P1 = 0xB13
+VX_CSR_MPM_DCACHE_L2XBAR_LOST_P1_H = 0xB93
+VX_CSR_MPM_DCACHE_L2XBAR_FULL_P0 = 0xB14  # (bank, cycle) evaluations in which the target bank's input was full
+VX_CSR_MPM_DCACHE_L2XBAR_FULL_P0_H = 0xB94
+VX_CSR_MPM_DCACHE_L2XBAR_FULL_P1 = 0xB15
+VX_CSR_MPM_DCACHE_L2XBAR_FULL_P1_H = 0xB95
+VX_CSR_MPM_DCACHE_DSARB_GRANT = 0xB16  # this socket's DTCU read port at the cluster funnel into the L2 fan-in: requests forwarded
+VX_CSR_MPM_DCACHE_DSARB_GRANT_H = 0xB96
+VX_CSR_MPM_DCACHE_DSARB_LOST = 0xB17  # request-cycles in which another socket's engine was forwarded
+VX_CSR_MPM_DCACHE_DSARB_LOST_H = 0xB97
+VX_CSR_MPM_DCACHE_DSARB_BLOCK = 0xB18  # request-cycles in which the funnel output was full
+VX_CSR_MPM_DCACHE_DSARB_BLOCK_H = 0xB98
+VX_CSR_MPM_DCACHE_DTCU_READS = 0xB19  # dcache traffic of the socket DTCU's slot: reads
+VX_CSR_MPM_DCACHE_DTCU_READS_H = 0xB99
+VX_CSR_MPM_DCACHE_DTCU_WRITES = 0xB1A  # writes (write-through: each one is also one L2 write on the socket egress)
+VX_CSR_MPM_DCACHE_DTCU_WRITES_H = 0xB9A
+VX_CSR_MPM_DCACHE_DTCU_MISS_R = 0xB1B  # read misses, incl. ones chained onto a pending fill (an upper bound on its L2 reads)
+VX_CSR_MPM_DCACHE_DTCU_MISS_R_H = 0xB9B
+VX_CSR_MPM_DCACHE_DTCU_MISS_W = 0xB1C  # write misses
+VX_CSR_MPM_DCACHE_DTCU_MISS_W_H = 0xB9C
 
 [csr_mpm_l2cache]
 VX_CSR_MPM_L2CACHE_READS = 0xB03  # total reads
@@ -716,6 +758,13 @@ VX_CSR_MPM_L2CACHE_MSHR_ST = 0xB09  # MSHR stalls
 VX_CSR_MPM_L2CACHE_MSHR_ST_H = 0xB89
 VX_CSR_MPM_L2CACHE_WRITE_NOFETCH = 0xB0A  # full-sector write misses allocated without a DRAM fetch
 VX_CSR_MPM_L2CACHE_WRITE_NOFETCH_H = 0xB8A
+# Bank admission waits (RFC 261019c).
+VX_CSR_MPM_L2CACHE_PIPE_CAP = 0xB0B  # bank-cycles a core request waited on a full bank pipe with no request yet at its head
+VX_CSR_MPM_L2CACHE_PIPE_CAP_H = 0xB8B
+VX_CSR_MPM_L2CACHE_PIPE_HEAD = 0xB0C  # bank-cycles a core request waited on a full bank pipe whose head was stalled downstream
+VX_CSR_MPM_L2CACHE_PIPE_HEAD_H = 0xB8C
+VX_CSR_MPM_L2CACHE_PIPE_SLOT = 0xB0D  # bank-cycles a core request waited because the bank's input slot went to a replay or a fill
+VX_CSR_MPM_L2CACHE_PIPE_SLOT_H = 0xB8D
 
 [csr_mpm_l3cache]
 VX_CSR_MPM_L3CACHE_READS = 0xB03  # total reads
@@ -732,6 +781,67 @@ VX_CSR_MPM_L3CACHE_BANK_ST = 0xB08  # bank conflicts
 VX_CSR_MPM_L3CACHE_BANK_ST_H = 0xB88
 VX_CSR_MPM_L3CACHE_MSHR_ST = 0xB09  # MSHR stalls
 VX_CSR_MPM_L3CACHE_MSHR_ST_H = 0xB89
+
+# Per-requester L2 counters (class L2RQ, RFC 261019c). Requesters by name, each group in this
+# order: CORE = socket L1 egress (dcache, icache, and the socket DTCU's D stores and C preload),
+# DXA, DTCUC = cluster DTCU, DTCUS = every socket DTCU (one shared fan-in row).
+[csr_mpm_l2rq]
+VX_CSR_MPM_L2RQ_GRANT_CORE = 0xB03  # requests the L2 fan-in arbiter forwarded into an L2 request lane, summed over lanes
+VX_CSR_MPM_L2RQ_GRANT_CORE_H = 0xB83
+VX_CSR_MPM_L2RQ_GRANT_DXA = 0xB04
+VX_CSR_MPM_L2RQ_GRANT_DXA_H = 0xB84
+VX_CSR_MPM_L2RQ_GRANT_DTCUC = 0xB05
+VX_CSR_MPM_L2RQ_GRANT_DTCUC_H = 0xB85
+VX_CSR_MPM_L2RQ_GRANT_DTCUS = 0xB06
+VX_CSR_MPM_L2RQ_GRANT_DTCUS_H = 0xB86
+VX_CSR_MPM_L2RQ_LOSTC_CORE = 0xB07  # request-cycles lost to a core-row request that was forwarded
+VX_CSR_MPM_L2RQ_LOSTC_CORE_H = 0xB87
+VX_CSR_MPM_L2RQ_LOSTC_DXA = 0xB08
+VX_CSR_MPM_L2RQ_LOSTC_DXA_H = 0xB88
+VX_CSR_MPM_L2RQ_LOSTC_DTCUC = 0xB09
+VX_CSR_MPM_L2RQ_LOSTC_DTCUC_H = 0xB89
+VX_CSR_MPM_L2RQ_LOSTC_DTCUS = 0xB0A
+VX_CSR_MPM_L2RQ_LOSTC_DTCUS_H = 0xB8A
+VX_CSR_MPM_L2RQ_LOSTE_CORE = 0xB0B  # request-cycles lost to another engine's request that was forwarded
+VX_CSR_MPM_L2RQ_LOSTE_CORE_H = 0xB8B
+VX_CSR_MPM_L2RQ_LOSTE_DXA = 0xB0C
+VX_CSR_MPM_L2RQ_LOSTE_DXA_H = 0xB8C
+VX_CSR_MPM_L2RQ_LOSTE_DTCUC = 0xB0D
+VX_CSR_MPM_L2RQ_LOSTE_DTCUC_H = 0xB8D
+VX_CSR_MPM_L2RQ_LOSTE_DTCUS = 0xB0E
+VX_CSR_MPM_L2RQ_LOSTE_DTCUS_H = 0xB8E
+VX_CSR_MPM_L2RQ_BLOCK_CORE = 0xB0F  # request-cycles in which the L2 request lane accepted nothing
+VX_CSR_MPM_L2RQ_BLOCK_CORE_H = 0xB8F
+VX_CSR_MPM_L2RQ_BLOCK_DXA = 0xB10
+VX_CSR_MPM_L2RQ_BLOCK_DXA_H = 0xB90
+VX_CSR_MPM_L2RQ_BLOCK_DTCUC = 0xB11
+VX_CSR_MPM_L2RQ_BLOCK_DTCUC_H = 0xB91
+VX_CSR_MPM_L2RQ_BLOCK_DTCUS = 0xB12
+VX_CSR_MPM_L2RQ_BLOCK_DTCUS_H = 0xB92
+VX_CSR_MPM_L2RQ_MISS_CORE = 0xB13  # L2 read+write misses (same sites as L2CACHE MISS_R/MISS_W)
+VX_CSR_MPM_L2RQ_MISS_CORE_H = 0xB93
+VX_CSR_MPM_L2RQ_MISS_DXA = 0xB14
+VX_CSR_MPM_L2RQ_MISS_DXA_H = 0xB94
+VX_CSR_MPM_L2RQ_MISS_DTCUC = 0xB15
+VX_CSR_MPM_L2RQ_MISS_DTCUC_H = 0xB95
+VX_CSR_MPM_L2RQ_MISS_DTCUS = 0xB16
+VX_CSR_MPM_L2RQ_MISS_DTCUS_H = 0xB96
+VX_CSR_MPM_L2RQ_XEVICT_CORE = 0xB17  # valid L2 sectors of another requester replaced by this requester's fills
+VX_CSR_MPM_L2RQ_XEVICT_CORE_H = 0xB97
+VX_CSR_MPM_L2RQ_XEVICT_DXA = 0xB18
+VX_CSR_MPM_L2RQ_XEVICT_DXA_H = 0xB98
+VX_CSR_MPM_L2RQ_XEVICT_DTCUC = 0xB19
+VX_CSR_MPM_L2RQ_XEVICT_DTCUC_H = 0xB99
+VX_CSR_MPM_L2RQ_XEVICT_DTCUS = 0xB1A
+VX_CSR_MPM_L2RQ_XEVICT_DTCUS_H = 0xB9A
+VX_CSR_MPM_L2RQ_EVICTED_CORE = 0xB1B  # this requester's valid L2 sectors replaced by another requester's fills
+VX_CSR_MPM_L2RQ_EVICTED_CORE_H = 0xB9B
+VX_CSR_MPM_L2RQ_EVICTED_DXA = 0xB1C
+VX_CSR_MPM_L2RQ_EVICTED_DXA_H = 0xB9C
+VX_CSR_MPM_L2RQ_EVICTED_DTCUC = 0xB1D
+VX_CSR_MPM_L2RQ_EVICTED_DTCUC_H = 0xB9D
+VX_CSR_MPM_L2RQ_EVICTED_DTCUS = 0xB1E
+VX_CSR_MPM_L2RQ_EVICTED_DTCUS_H = 0xB9E
 
 # Off-chip memory + local memory + coalescer + VM/MMU (one memory-subsystem class).
 [csr_mpm_mem]

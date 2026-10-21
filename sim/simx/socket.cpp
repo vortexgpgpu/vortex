@@ -122,6 +122,8 @@ public:
       (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
     });
 
+    dcaches_->enable_requester_stats();
+
     // find overlap
     uint32_t overlap = __MIN(VX_CFG_ICACHE_MEM_PORTS, VX_CFG_L1_MEM_PORTS);
 
@@ -224,6 +226,14 @@ public:
     Socket::PerfStats perf_stats;
     perf_stats.icache = icaches_->perf_stats();
     perf_stats.dcache = dcaches_->perf_stats();
+    for (uint32_t lane = 0; lane < dcaches_->num_lanes(); ++lane) {
+      const auto& in = dcaches_->input_stats(lane);   // index = requester slot
+      for (uint32_t slot = 0; slot < in.size(); ++slot) {
+        auto& dst = (slot < cores_.size()) ? perf_stats.dcache_arb.core : perf_stats.dcache_arb.dtcu;
+        dst += in[slot];
+      }
+    }
+    perf_stats.dcache_rq = dcaches_->req_stats();
 #ifdef VX_CFG_EXT_DTCU_SOCKET_ENABLE
     perf_stats.dtcu = dtcu_->perf_stats();
 #endif

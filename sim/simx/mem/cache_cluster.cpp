@@ -26,6 +26,7 @@ CacheCluster::CacheCluster(const SimContext& ctx,
 	, mem_req_out(cache_config.mem_ports, this)
 	, mem_rsp_in(cache_config.mem_ports, this)
 	, caches_(__MAX(num_units, 0x1))
+	, row_bits_(0)
 {
 	Cache::Config cache_config2(cache_config);
 	if (0 == num_units) {
@@ -44,6 +45,11 @@ CacheCluster::CacheCluster(const SimContext& ctx,
 			this->core_req_in.at(j).at(i).bind(&input_arbs.at(i)->ReqIn.at(j));
 			input_arbs.at(i)->RspOut.at(j).bind(&this->core_rsp_out.at(j).at(i));
 		}
+	}
+	input_arbs_ = input_arbs;
+	// The input arbiters OR the requester slot into the tag unless they are bypasses.
+	if (cache_config.num_inputs != 0 && num_inputs != num_units) {
+		row_bits_ = log2ceil(input_arbs.at(0)->rows());
 	}
 
 	// Arbitrate outgoing memory interfaces
@@ -80,6 +86,27 @@ Cache::PerfStats CacheCluster::perf_stats() const {
 		perf += cache->perf_stats();
 	}
 	return perf;
+}
+
+void CacheCluster::enable_requester_stats() {
+	for (auto& arb : input_arbs_) {
+		arb->enable_input_stats();
+	}
+	for (auto cache : caches_) {
+		cache->enable_requester_stats(row_bits_, false);
+	}
+}
+
+const std::vector<ArbPortStats>& CacheCluster::input_stats(uint32_t lane) const {
+	return input_arbs_.at(lane)->input_stats();
+}
+
+Cache::ReqStats CacheCluster::req_stats() const {
+	Cache::ReqStats rs;
+	for (auto cache : caches_) {
+		rs += cache->req_stats();
+	}
+	return rs;
 }
 
 void CacheCluster::flush_begin() {

@@ -1471,6 +1471,27 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// Outcome of one arbiter or crossbar input (RFC 261019c): one evaluation per (cycle,
+// output) in which the input's head request competed, counted in exactly one field.
+struct ArbPortStats {
+  uint64_t grants      = 0; // selected; the output accepted it
+  uint64_t won_blocked = 0; // selected; the output was full
+  uint64_t lost_sent   = 0; // another input was selected and the output accepted it
+  uint64_t lost_full   = 0; // another input was selected; the output was full
+
+  uint64_t blocked() const { return won_blocked + lost_full; }
+
+  ArbPortStats& operator+=(const ArbPortStats& rhs) {
+    grants      += rhs.grants;
+    won_blocked += rhs.won_blocked;
+    lost_sent   += rhs.lost_sent;
+    lost_full   += rhs.lost_full;
+    return *this;
+  }
+};
+
+///////////////////////////////////////////////////////////////////////////////
+
 template <typename Type>
 class TxArbiter : public SimObject<TxArbiter<Type>> {
 public:
@@ -1554,6 +1575,31 @@ public:
     return core_bypass_stats_;
   }
 
+  // Per-input outcome counters, off by default: TxArbiter is instantiated all over the
+  // simulator, so only instances whose owner enables them pay the per-tick accounting.
+  // They only observe (no extra grant() call, no channel access).
+  void enable_input_stats() {
+    if (Inputs.size() == Outputs.size())
+      return; // bypass mode never arbitrates
+    const uint32_t R = 1u << lg2_num_reqs_;
+    input_stats_.assign(Inputs.size(), ArbPortStats{});
+    lost_to_row_.assign(R * R, 0);
+    input_stats_on_ = true;
+  }
+
+  const std::vector<ArbPortStats>& input_stats() const {
+    return input_stats_;
+  }
+
+  // lost_sent split by the winner's row, summed over outputs: [loser_row * rows + winner_row].
+  const std::vector<uint64_t>& lost_to_row() const {
+    return lost_to_row_;
+  }
+
+  uint32_t rows() const {
+    return 1u << lg2_num_reqs_;
+  }
+
 protected:
   struct AdmissionTicket {
     uint64_t accepted_core_reqs;
@@ -1571,6 +1617,9 @@ protected:
   std::function<bool(uint32_t, const Type&)> core_bypass_request_eligible_;
   std::vector<std::deque<AdmissionTicket>> admission_tickets_;
   std::vector<CoreBypassStats> core_bypass_stats_;
+  bool input_stats_on_ = false;
+  std::vector<ArbPortStats> input_stats_;
+  std::vector<uint64_t> lost_to_row_;
 #ifndef NDEBUG
   // Low-volume, debug-build-only instrumentation for the cluster L2 fan-in.
   // The generic arbiter is used throughout SimX, so key this on the object name
@@ -1634,6 +1683,8 @@ void TxArbiter<Type>::on_reset() {
   for (auto& stats : core_bypass_stats_) {
     stats = CoreBypassStats{};
   }
+  std::fill(input_stats_.begin(), input_stats_.end(), ArbPortStats{});
+  std::fill(lost_to_row_.begin(), lost_to_row_.end(), 0);
 #ifndef NDEBUG
   std::fill(debug_req_cycles_.begin(), debug_req_cycles_.end(), 0);
   std::fill(debug_accepts_.begin(), debug_accepts_.end(), 0);
@@ -1705,7 +1756,8 @@ void TxArbiter<Type>::on_tick() {
       uint32_t i = o * R + g;
       auto& req_in = Inputs.at(i);
       auto& req = req_in.peek();
-      if (Outputs.at(o).try_send(RspType(req, i), delay_)) {
+      const bool sent = Outputs.at(o).try_send(RspType(req, i), delay_);
+      if (sent) {
         if (core_bypass_limit_ != 0) {
           if ((core_bypass_eligible_rows_ & (uint64_t(1) << g)) != 0) {
             auto& tickets = admission_tickets_.at(i);
@@ -1737,6 +1789,23 @@ void TxArbiter<Type>::on_tick() {
       } else if (debug_l2arb_) {
         ++debug_output_blocked_.at(i);
 #endif
+      }
+      // `requests` was built before any pop on this output and g is always one of its
+      // set bits, so the four outcome fields partition every input's requesting cycles.
+      if (input_stats_on_) {
+        for (uint32_t r = 0; r < R; ++r) {
+          if (!requests.test(r))
+            continue;
+          auto& st = input_stats_[o * R + r];
+          if (r == g) {
+            if (sent) ++st.grants; else ++st.won_blocked;
+          } else if (sent) {
+            ++st.lost_sent;
+            ++lost_to_row_[r * R + g];
+          } else {
+            ++st.lost_full;
+          }
+        }
       }
     }
   }
@@ -1834,9 +1903,23 @@ public:
     return collisions_;
   }
 
+  // Per-input outcome counters (see TxArbiter::enable_input_stats). With them on, the
+  // scan in on_tick continues past the second contender, so enable them only where
+  // output_sel_ is a pure function of the request.
+  void enable_input_stats() {
+    input_stats_.assign(Inputs.size(), ArbPortStats{});
+    losers_.reserve(Inputs.size());
+    input_stats_on_ = true;
+  }
+
+  const std::vector<ArbPortStats>& input_stats() const {
+    return input_stats_;
+  }
+
 protected:
   void on_reset() {
-    //--
+    // collisions_ stays cumulative, as before.
+    std::fill(input_stats_.begin(), input_stats_.end(), ArbPortStats{});
   }
   void on_tick();
 
@@ -1845,6 +1928,9 @@ protected:
   uint32_t lg2_outputs_;
   std::function<uint32_t(const Type& req)> output_sel_;
   uint64_t collisions_;
+  bool input_stats_on_ = false;
+  std::vector<ArbPortStats> input_stats_;
+  std::vector<uint32_t> losers_;
 
   friend class SimObject<TxCrossBar<Type>>;
 };
@@ -1860,6 +1946,8 @@ void TxCrossBar<Type>::on_tick() {
   for (uint32_t o = 0; o < O; ++o) {
     int32_t input_idx = -1;
     bool has_collision = false;
+    if (input_stats_on_)
+      losers_.clear();
     for (uint32_t i = 0; i < I; ++i) {
       auto& req_in = Inputs.at(i);
       if (req_in.empty())
@@ -1875,18 +1963,31 @@ void TxCrossBar<Type>::on_tick() {
       }
       if (input_idx != -1) {
         has_collision = true;
-        break;
+        if (!input_stats_on_)
+          break;
+        // stats only: keep scanning; the first match stays the winner
+        losers_.push_back(i);
+        continue;
       }
       input_idx = i;
     }
     if (input_idx != -1) {
       auto& req_in = Inputs.at(input_idx);
       auto& req = req_in.peek();
-      if (Outputs.at(o).try_send(RspType(req, input_idx), delay_)) {
+      const bool sent = Outputs.at(o).try_send(RspType(req, input_idx), delay_);
+      if (sent) {
         DT(4, this->name() << " req" << input_idx << "_" << o << ": " << req);
         req_in.pop();
       }
       collisions_ += has_collision;
+      if (input_stats_on_) {
+        auto& w = input_stats_[input_idx];
+        if (sent) ++w.grants; else ++w.won_blocked;
+        for (uint32_t l : losers_) {
+          auto& st = input_stats_[l];
+          if (sent) ++st.lost_sent; else ++st.lost_full;
+        }
+      }
     }
   }
 }
@@ -1974,6 +2075,27 @@ public:
   core_bypass_stats() const {
     assert(arbiter_ != nullptr);
     return arbiter_->core_bypass_stats();
+  }
+
+  // Bypass mode has no inner arbiter and nothing to count.
+  void enable_input_stats() {
+    if (arbiter_)
+      arbiter_->enable_input_stats();
+  }
+
+  const std::vector<ArbPortStats>& input_stats() const {
+    static const std::vector<ArbPortStats> kNone;
+    return arbiter_ ? arbiter_->input_stats() : kNone;
+  }
+
+  const std::vector<uint64_t>& lost_to_row() const {
+    static const std::vector<uint64_t> kNone;
+    return arbiter_ ? arbiter_->lost_to_row() : kNone;
+  }
+
+  // Rows per output. The arbiter ORs the row (log2(rows) bits) into a request's tag.
+  uint32_t rows() const {
+    return 1u << lg2_num_reqs_;
   }
 
 protected:
@@ -2093,6 +2215,16 @@ public:
       return crossbar_->collisions();
     }
     return 0;
+  }
+
+  void enable_input_stats() {
+    if (crossbar_)
+      crossbar_->enable_input_stats();
+  }
+
+  const std::vector<ArbPortStats>& input_stats() const {
+    static const std::vector<ArbPortStats> kNone;
+    return crossbar_ ? crossbar_->input_stats() : kNone;
   }
 
 protected:

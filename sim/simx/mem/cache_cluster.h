@@ -33,6 +33,13 @@ public:
 
 	Cache::PerfStats perf_stats() const;
 
+	// Requester stats (RFC 261019c): the per-lane input arbiters (input index = requester
+	// slot) and, inside the caches, traffic by slot.
+	void enable_requester_stats();
+	uint32_t num_lanes() const { return uint32_t(input_arbs_.size()); }
+	const std::vector<ArbPortStats>& input_stats(uint32_t lane) const;
+	Cache::ReqStats req_stats() const;
+
 	void flush_begin();
 	bool flush_done() const;
 
@@ -42,6 +49,8 @@ protected:
 
 private:
 	std::vector<Cache::Ptr> caches_;
+	std::vector<MemArbiter::Ptr> input_arbs_;
+	uint32_t row_bits_;
 
 	friend class SimObject<CacheCluster>;
 };
