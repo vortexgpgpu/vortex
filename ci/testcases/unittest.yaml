@@ -38,6 +38,14 @@ tests:
     via: script
     run: "make -C hw/unittest/cp_llc_port run"
     touches: [hw/rtl/mem/VX_cp_llc_port.sv, hw/unittest/cp_llc_port]
+  # Stream arbiters over more than 1.5x MAX_FANOUT requests become trees of
+  # slices; a last slice narrower than the arbiter's other side must keep every
+  # request on its own output and select. The system shapes reach only a few of
+  # these slice shapes.
+  - id: hw-stream-arb
+    via: script
+    run: "make -C hw/unittest/stream_arb run"
+    touches: [hw/rtl/libs/VX_stream_arb.sv, hw/unittest/stream_arb]
   # Texel blend (VX_tex_lerp, both forms the sampler uses) against the C model
   # the SW sampler and SimX share, and the exact Vulkan f/256 blend, over every
   # input.
