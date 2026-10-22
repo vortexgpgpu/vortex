@@ -11,6 +11,8 @@ RT_DIR  := $(ROOT_DIR)/sw/runtime
 # it at the `basic` regression kernel image. The runtime() target in
 # ci/regression.sh builds this before invoking run-simx.
 VXBIN := $(ROOT_DIR)/tests/regression/basic/kernel.vxbin
+# test_indirect launches the kernels of the `indirect` regression image.
+INDIRECT_VXBIN := $(ROOT_DIR)/tests/regression/indirect/kernel.vxbin
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 CXXFLAGS += -O2 -DNDEBUG
@@ -22,7 +24,8 @@ CXXFLAGS += $(XCONFIGS)
 
 LDFLAGS += -Wl,-rpath,$(RT_DIR) -L$(RT_DIR) -lvortex -pthread
 
-TESTS := test_basic test_async test_timeline_events test_module_kernel test_rect_fill
+TESTS := test_basic test_async test_timeline_events test_module_kernel test_rect_fill \
+         test_indirect
 # Imported host memory needs a backend that implements it, so it runs on its
 # own (run-import-<driver>) rather than in every driver's sweep.
 IMPORT_TESTS := test_import_host
@@ -49,6 +52,9 @@ test_rect_fill: $(VORTEX_HOME)/tests/runtime/test_rect_fill.cpp
 test_import_host: $(VORTEX_HOME)/tests/runtime/test_import_host.cpp
 	$(CXX) $(CXXFLAGS) $< $(LDFLAGS) -o $@
 
+test_indirect: $(VORTEX_HOME)/tests/runtime/test_indirect.cpp $(VORTEX_HOME)/tests/regression/indirect/common.h
+	$(CXX) $(CXXFLAGS) $< $(LDFLAGS) -o $@
+
 # Bare run — honours whatever VORTEX_DRIVER is in the environment.
 run: $(TESTS)
 	@for t in $(TESTS); do \
@@ -62,14 +68,14 @@ run-simx: $(TESTS)
 	@for t in $(TESTS); do \
 	  echo "[RUN] $$t (simx)"; \
 	  VORTEX_DRIVER=simx LD_LIBRARY_PATH=$(RT_DIR) \
-	  VX_TEST_VXBIN=$(VXBIN) ./$$t || exit 1; \
+	  VX_TEST_VXBIN=$(VXBIN) VX_TEST_INDIRECT_VXBIN=$(INDIRECT_VXBIN) ./$$t || exit 1; \
 	done
 
 run-rtlsim: $(TESTS)
 	@for t in $(TESTS); do \
 	  echo "[RUN] $$t (rtlsim)"; \
 	  VORTEX_DRIVER=rtlsim LD_LIBRARY_PATH=$(RT_DIR) \
-	  VX_TEST_VXBIN=$(VXBIN) ./$$t || exit 1; \
+	  VX_TEST_VXBIN=$(VXBIN) VX_TEST_INDIRECT_VXBIN=$(INDIRECT_VXBIN) ./$$t || exit 1; \
 	done
 
 # Imported host memory alone, per backend.
@@ -80,7 +86,7 @@ run-xrt: $(TESTS)
 	@for t in $(TESTS); do \
 	  echo "[RUN] $$t (xrt)"; \
 	  VORTEX_DRIVER=xrt LD_LIBRARY_PATH=$(RT_DIR) \
-	  VX_TEST_VXBIN=$(VXBIN) ./$$t || exit 1; \
+	  VX_TEST_VXBIN=$(VXBIN) VX_TEST_INDIRECT_VXBIN=$(INDIRECT_VXBIN) ./$$t || exit 1; \
 	done
 
 clean:

@@ -40,6 +40,7 @@ module VX_cp_dcr_proxy_top
     .grant         (grant),
     .cmd           (cmd_typed),
     .done          (done),
+    `UNUSED_PIN    (idle),
     .last_rsp_data (last_rsp_data),
     .dcr_req_valid (dcr_req_valid),
     .dcr_req_rw    (dcr_req_rw),

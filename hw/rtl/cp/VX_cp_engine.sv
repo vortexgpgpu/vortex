@@ -20,10 +20,14 @@
 //
 // Opcodes handled:
 //   - CMD_NOP / CMD_FENCE                          (retire immediately)
-//   - CMD_LAUNCH                                   (bid KMU)
+//   - CMD_LAUNCH / CMD_LAUNCH_QMD / CMD_LAUNCH_INDIRECT (bid KMU)
 //   - CMD_DCR_WRITE / CMD_DCR_READ / CMD_CACHE_FLUSH (bid DCR)
 //   - CMD_MEM_*                                    (bid DMA)
 //   - CMD_EVENT_SIGNAL / CMD_EVENT_WAIT            (bid EVENT)
+//
+// A predicated-off CMD_LAUNCH_INDIRECT finishes with `kmu_skip_i`: the next
+// `kmu_skip_n_i` commands of this queue then retire from DECODE without
+// bidding for any resource.
 // ============================================================================
 
 module VX_cp_engine
@@ -58,6 +62,8 @@ module VX_cp_engine
   // the resource finishes the current command. The engine consumes them
   // in S_WAIT_DONE to know when to retire.
   input  wire                     kmu_done_i,
+  input  wire                     kmu_skip_i,
+  input  wire [15:0]              kmu_skip_n_i,
   input  wire                     dma_done_i,
   input  wire                     dcr_done_i,
   input  wire                     event_done_i,
@@ -95,6 +101,7 @@ module VX_cp_engine
   cp_resource_e cur_res;
   logic         no_resource;        // true for opcodes that bypass arbiters (NOP, FENCE, EVENT_*)
   logic [63:0]  seqnum_r;
+  logic [15:0]  skip_cnt;
 
   // S_IDLE with no command presented means nothing is in flight and no
   // resource grant is held, so the retire counter can be cleared safely.
@@ -107,7 +114,8 @@ module VX_cp_engine
                                             output logic skip);
     skip = 1'b0;
     case (op)
-      CMD_LAUNCH:                    return RES_KMU;
+      CMD_LAUNCH, CMD_LAUNCH_QMD,
+      CMD_LAUNCH_INDIRECT:           return RES_KMU;
       CMD_DCR_WRITE, CMD_DCR_READ,
       CMD_CACHE_FLUSH:               return RES_DCR;
       CMD_MEM_WRITE,
@@ -141,6 +149,7 @@ module VX_cp_engine
       cur_res     <= RES_KMU;
       no_resource <= 1'b0;
       seqnum_r    <= '0;
+      skip_cnt    <= '0;
     end else if (clear) begin
       // Only asserted while `idle` holds — see VX_cp_core.
       fsm         <= S_IDLE;
@@ -148,6 +157,7 @@ module VX_cp_engine
       cur_res     <= RES_KMU;
       no_resource <= 1'b0;
       seqnum_r    <= '0;
+      skip_cnt    <= '0;
     end else begin
       case (fsm)
         S_IDLE: begin
@@ -160,7 +170,10 @@ module VX_cp_engine
           res         = classify(cp_opcode_e'(cur_cmd.hdr.opcode), skip_flag);
           cur_res     <= res;
           no_resource <= skip_flag;
-          if (skip_flag) begin
+          if (skip_cnt != '0) begin
+            skip_cnt <= skip_cnt - 16'd1;
+            fsm      <= S_RETIRE;
+          end else if (skip_flag) begin
             fsm <= S_RETIRE;
           end else begin
             fsm <= S_BID;
@@ -179,7 +192,14 @@ module VX_cp_engine
         S_WAIT_DONE: begin
           // Wait for the resource's actual done pulse before retiring.
           case (cur_res)
-            RES_KMU:   if (kmu_done_i)   fsm <= S_RETIRE;
+            RES_KMU: begin
+              if (kmu_done_i) begin
+                if (kmu_skip_i) begin
+                  skip_cnt <= kmu_skip_n_i;
+                end
+                fsm <= S_RETIRE;
+              end
+            end
             RES_DMA:   if (dma_done_i)   fsm <= S_RETIRE;
             RES_DCR:   if (dcr_done_i)   fsm <= S_RETIRE;
             RES_EVT: if (event_done_i) fsm <= S_RETIRE;

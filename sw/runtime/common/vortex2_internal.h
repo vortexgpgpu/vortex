@@ -253,7 +253,7 @@ public:
     vx_result_t cp_submit_launch();
 
     // Post one CMD_LAUNCH_QMD: the CP reads the KMU descriptor (a
-    // {count,(dcr_addr,value)...} list the caller staged to device memory at
+    // {count,reserved,(dcr_addr,value)...} list the caller staged to device memory at
     // `qmd_addr`) and replays it, then pulses start — one ring command in
     // place of a launch's ~18 CMD_DCR_WRITEs (NVIDIA QMD model). Followed by an
     // implicit CMD_CACHE_FLUSH, like cp_submit_launch. Batch-aware.
@@ -265,10 +265,17 @@ public:
     // trailing COUT-drain discipline as cp_submit_launch_qmd.
     vx_result_t cp_submit_draw(uint64_t desc_addr);
 
+    // Post one CMD_LAUNCH_INDIRECT: arg0 = device address of a staged indirect
+    // launch descriptor (header + QMD body). A launching descriptor is followed
+    // by CMD_CACHE_FLUSH like cp_submit_launch_qmd; a predicate-only one
+    // (`launches` false) is the single command. Batch-aware.
+    vx_result_t cp_submit_launch_indirect(uint64_t ild_addr, bool launches);
+
     // True iff the CP decodes CMD_DRAW (OP_DRAW). When false, vx_enqueue_draw
     // streams the draw as a ring batch instead (functionally identical).
     bool cp_supports_draw() const { return cp_supports_draw_; }
     bool cp_supports_qmd()  const { return cp_supports_qmd_; }
+    bool cp_supports_indirect() const { return cp_supports_indirect_; }
 
     // Post one CMD_CACHE_FLUSH to the ring (AMD ACQUIRE_MEM model): the CP
     // sweeps a per-core cache flush across all cores and retires the
@@ -508,6 +515,8 @@ private:
     // the OP_DRAW mirror). Discovered at open.
     bool                                cp_supports_draw_ = false;
     bool                                cp_supports_qmd_ = false;
+    // CP decodes CMD_LAUNCH_INDIRECT (CP DEV_CAPS bit 28).
+    bool                                cp_supports_indirect_ = false;
     class CpMemIO;
     std::unique_ptr<CpMemIO>            vm_io_;
     std::unique_ptr<vortex::VMManager>  vm_mgr_;

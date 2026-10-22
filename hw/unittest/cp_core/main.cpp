@@ -29,6 +29,13 @@
 // NOP retires without bidding for any resource, so this exercises the
 // regfile → fetch → unpack → engine → completion path without touching
 // the launch or DMA paths.
+//
+// A second ring then runs launch descriptors read over the device master:
+// an indirect launch whose grid comes from a device record, a predicated-off
+// indirect launch that skips the next two commands, a DCR write and a QMD
+// launch after the skip range, and a predicate-only command. The DCR writes
+// and start pulses seen at the GPU boundary, and the completion count, must
+// match exactly.
 // ============================================================================
 
 #include "vl_simulator.h"
@@ -38,6 +45,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <utility>
+#include <vector>
 
 #ifndef TRACE_START_TIME
 #define TRACE_START_TIME 0ull
@@ -153,11 +162,69 @@ struct AxiSlave {
 };
 
 // ============================================================================
+// Device-memory AXI4 read slave (the d_* master): one outstanding line read.
+// ============================================================================
+struct DevSlave {
+    static constexpr uint64_t MEM_BASE = 0x40000;
+    static constexpr int      MEM_SIZE = 16 * 1024;
+    uint8_t  mem[MEM_SIZE] = {0};
+    bool     r_inflight = false;
+    uint64_t r_addr     = 0;
+    uint32_t r_id       = 0;
+    int      reads      = 0;
+    bool     bad_read   = false;
+
+    void wr32(uint64_t addr, uint32_t v) {
+        std::memcpy(&mem[addr - MEM_BASE], &v, 4);
+    }
+    void wr64(uint64_t addr, uint64_t v) {
+        std::memcpy(&mem[addr - MEM_BASE], &v, 8);
+    }
+    template <typename T>
+    void comb_drive(T* top) {
+        top->d_arready = !r_inflight;
+        top->d_rvalid  = r_inflight;
+        top->d_rid     = r_id;
+        top->d_rlast   = 1;
+        top->d_rresp   = 0;
+        if (r_inflight) {
+            uint32_t* d = vortex::VDataCast<uint32_t*, sizeof(top->d_rdata)>::get(top->d_rdata);
+            for (int w = 0; w < 16; ++w) {
+                std::memcpy(&d[w], &mem[r_addr - MEM_BASE + 4 * w], 4);
+            }
+        }
+        top->d_awready = 0;
+        top->d_wready  = 0;
+        top->d_bvalid  = 0;
+        top->d_bid     = 0;
+        top->d_bresp   = 0;
+    }
+    template <typename T>
+    void posedge_update(T* top) {
+        if (top->d_arvalid && top->d_arready) {
+            const uint64_t a = top->d_araddr;
+            if ((a & 63) != 0 || a < MEM_BASE || a + 64 > MEM_BASE + MEM_SIZE) {
+                bad_read = true;
+            } else {
+                r_inflight = true;
+                r_addr = a;
+                r_id = top->d_arid;
+                ++reads;
+            }
+        } else if (r_inflight && top->d_rvalid && top->d_rready) {
+            r_inflight = false;
+        }
+    }
+};
+
+// ============================================================================
 // Synthetic gpu_if model. Pulses dcr_req_ready always; pulses busy for
-// a few cycles after start. dcr_rsp is unused in this NOP test.
+// a few cycles after start; records every DCR write and start.
 // ============================================================================
 struct GpuModel {
     int busy_cnt = 0;
+    int starts   = 0;
+    std::vector<std::pair<uint32_t, uint32_t>> writes;
     template <typename T>
     void comb_drive(T* top) {
         top->gpu_dcr_req_ready = 1;
@@ -167,10 +234,19 @@ struct GpuModel {
     }
     template <typename T>
     void posedge_update(T* top) {
-        if (top->gpu_start) busy_cnt = 4;
-        else if (busy_cnt > 0) busy_cnt--;
+        if (top->gpu_dcr_req_valid && top->gpu_dcr_req_rw) {
+            writes.push_back({uint32_t(top->gpu_dcr_req_addr), uint32_t(top->gpu_dcr_req_data)});
+        }
+        if (top->gpu_start) {
+            busy_cnt = 4;
+            ++starts;
+        } else if (busy_cnt > 0) {
+            busy_cnt--;
+        }
     }
 };
+
+DevSlave g_dev;
 
 template <typename T>
 static void cycle(vl_simulator<T>& sim, AxiSlave& slave, GpuModel& gpu,
@@ -178,15 +254,19 @@ static void cycle(vl_simulator<T>& sim, AxiSlave& slave, GpuModel& gpu,
     auto* top = sim.operator->();
     slave.comb_drive(top);
     gpu.comb_drive(top);
+    g_dev.comb_drive(top);
     top->eval();
     slave.comb_drive(top);
     gpu.comb_drive(top);
+    g_dev.comb_drive(top);
     top->eval();
     slave.posedge_update(top);
     gpu.posedge_update(top);
+    g_dev.posedge_update(top);
     tick = sim.step(tick, 2);
     slave.comb_drive(top);
     gpu.comb_drive(top);
+    g_dev.comb_drive(top);
     top->eval();
 }
 
@@ -250,6 +330,7 @@ static constexpr uint16_t Q_TAIL_LO        = 0x20;
 static constexpr uint16_t Q_TAIL_HI        = 0x24;
 static constexpr uint16_t Q_SEQNUM         = 0x28;
 static constexpr uint16_t Q_HEAD_LO        = 0x2C;
+static constexpr uint16_t Q_ERROR          = 0x2C;
 
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
@@ -267,6 +348,7 @@ int main(int argc, char** argv) {
     {
         uint32_t v = axil_read(sim, slave, gpu, tick, CP_DEV_CAPS);
         EXPECT((v & 0xff) == 1, "DEV_CAPS NUM_QUEUES");
+        EXPECT((v >> 24) == 0x14, "DEV_CAPS must advertise QMD (26) and INDIRECT (28) only");
     }
 
     // ----- Seed memory: a single NOP+F_PROFILE at ring_base -----
@@ -363,7 +445,128 @@ int main(int argc, char** argv) {
         EXPECT((ctrl_after & 1) == 0, "Q_CONTROL.reset did not clear enable");
     }
 
+    // ----- Launch descriptors over the device master -----
+    {
+        constexpr uint64_t ILD_A = DevSlave::MEM_BASE + 0x0000;
+        constexpr uint64_t ILD_B = DevSlave::MEM_BASE + 0x0400;
+        constexpr uint64_t ILD_C = DevSlave::MEM_BASE + 0x0800;
+        constexpr uint64_t QMD   = DevSlave::MEM_BASE + 0x0C00;
+        constexpr uint64_t REC   = DevSlave::MEM_BASE + 0x1038;   // crosses a line
+        constexpr uint64_t PRED  = DevSlave::MEM_BASE + 0x1104;
+        g_dev.wr32(REC + 0, 5);
+        g_dev.wr32(REC + 4, 2);
+        g_dev.wr32(REC + 8, 3);
+        g_dev.wr32(PRED, 1);
+        std::vector<std::pair<uint32_t, uint32_t>> want;
+
+        // A: grid {5, 2, 3} from the record; GRID_DIM pairs carry placeholders.
+        auto put_hdr = [](uint64_t at, uint32_t ctl, uint16_t skip, uint64_t rec,
+                          uint64_t pred, uint32_t ref, uint32_t count) {
+            g_dev.wr32(at + 0, ctl);
+            g_dev.wr32(at + 4, skip);
+            g_dev.wr64(at + 8, rec);
+            g_dev.wr64(at + 16, pred);
+            g_dev.wr32(at + 24, ref);
+            g_dev.wr32(at + 28, count);
+        };
+        constexpr uint32_t HAS_RECORD = 1u << 24, HAS_PRED = 1u << 25, NO_LAUNCH = 1u << 27;
+        put_hdr(ILD_A, HAS_RECORD | (0u << 0) | (1u << 4) | (2u << 8), 0, REC, 0, 0, 10);
+        for (uint32_t i = 0; i < 10; ++i) {
+            const uint32_t a = 0x010 + i + (i >= 9 ? 9 : 0);   // 0x10..0x18, then GRID_X..
+            const uint32_t v = 0x100 + i;
+            g_dev.wr32(ILD_A + 64 + 8 * i, a);
+            g_dev.wr32(ILD_A + 68 + 8 * i, v);
+        }
+        g_dev.wr32(ILD_A + 64 + 8 * 9, 0x019);   // GRID_DIM_X
+        for (uint32_t i = 0; i < 9; ++i) {
+            want.push_back({0x010 + i, 0x100 + i});
+        }
+        want.push_back({0x019, 5});
+        // B: predicate 1 > 1 is false: skip the next two commands.
+        put_hdr(ILD_B, HAS_PRED, 2, 0, PRED, 1, 3);
+        // QMD: three pairs.
+        g_dev.wr32(QMD + 0, 3);
+        for (uint32_t i = 0; i < 3; ++i) {
+            g_dev.wr32(QMD + 8 + 8 * i, 0x01A + i);
+            g_dev.wr32(QMD + 12 + 8 * i, 0x900 + i);
+        }
+        // C: predicate-only, 1 > 0 holds: retire without a launch.
+        put_hdr(ILD_C, HAS_PRED | NO_LAUNCH, 5, 0, PRED, 0, 0);
+
+        auto put_cmd = [&](int slot, uint8_t op, uint64_t a0, uint64_t a1) {
+            uint8_t cl[64] = {0};
+            cl[0] = op;
+            std::memcpy(cl + 4, &a0, 8);
+            std::memcpy(cl + 12, &a1, 8);
+            slave.mem_write_cl(RING_BASE + 64 * slot, cl);
+        };
+        put_cmd(0, 0x0D, ILD_A, 0);          // indirect launch
+        put_cmd(1, 0x0D, ILD_B, 0);          // predicated off, skip 2
+        put_cmd(2, 0x04, 0x0FF, 0xBAD);      // skipped DCR write
+        put_cmd(3, 0x0B, QMD, 0);            // skipped QMD launch
+        put_cmd(4, 0x04, 0x0FE, 0x77);       // runs
+        put_cmd(5, 0x0B, QMD, 0);            // runs
+        put_cmd(6, 0x0D, ILD_C, 0);          // predicate-only
+        want.push_back({0x0FE, 0x77});
+        for (uint32_t i = 0; i < 3; ++i) {
+            want.push_back({0x01A + i, 0x900 + i});
+        }
+
+        for (int i = 0; i < 8; ++i) {
+            slave.mem[CMPL_ADDR - AxiSlave::MEM_BASE + i] = 0xFF;
+        }
+        gpu.writes.clear();
+        gpu.starts = 0;
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_RING_BASE_LO, (uint32_t)RING_BASE);
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_RING_BASE_HI, 0);
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_CMPL_ADDR_LO, (uint32_t)CMPL_ADDR);
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_CMPL_ADDR_HI, 0);
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_RING_SIZE_LOG2, 12);
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_CONTROL, 1u | (2u << 2));
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_TAIL_LO, 7 * 64);
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_TAIL_HI, 0);
+
+        bool got = false;
+        for (int g = 0; g < 5000 && !got; ++g) {
+            cycle(sim, slave, gpu, tick);
+            got = (slave.mem_read64(CMPL_ADDR) == 7);
+        }
+        EXPECT(got, "launch ring did not retire 7 commands");
+        for (int g = 0; g < 50; ++g) {
+            cycle(sim, slave, gpu, tick);
+        }
+        EXPECT(!g_dev.bad_read, "device read not a line inside device memory");
+        EXPECT(gpu.starts == 2, "expected 2 starts");
+        if (gpu.writes != want) {
+            for (auto& w : gpu.writes) {
+                std::fprintf(stderr, "  dcr 0x%03x = 0x%x\n", w.first, w.second);
+            }
+        }
+        EXPECT(gpu.writes == want, "DCR writes at the GPU boundary differ");
+        // A: header, record line 0, record line 1, 2 body lines; B: header,
+        // predicate; QMD: 1 line; C: header, predicate.
+        EXPECT(g_dev.reads == 10, "unexpected device read count");
+        EXPECT(axil_read(sim, slave, gpu, tick, Q0_BASE + Q_ERROR) == 0,
+               "Q_ERROR set by well-formed descriptors");
+
+        // A descriptor off its line is refused: Q_ERROR bit 0, no read, no start.
+        put_cmd(7, 0x0D, ILD_A + 4, 0);
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_TAIL_LO, 8 * 64);
+        axil_write(sim, slave, gpu, tick, Q0_BASE + Q_TAIL_HI, 0);
+        got = false;
+        for (int g = 0; g < 2000 && !got; ++g) {
+            cycle(sim, slave, gpu, tick);
+            got = (slave.mem_read64(CMPL_ADDR) == 8);
+        }
+        EXPECT(got, "misaligned descriptor did not retire");
+        EXPECT(gpu.starts == 2, "misaligned descriptor started a kernel");
+        EXPECT(g_dev.reads == 10, "misaligned descriptor was read");
+        EXPECT(axil_read(sim, slave, gpu, tick, Q0_BASE + Q_ERROR) == 1,
+               "Q_ERROR does not report the misaligned descriptor");
+    }
+
     std::printf("PASSED — CP end-to-end: NOP retired, seqnum written to "
-                "cmpl_addr, Q_CONTROL.reset clears the queue\n");
+                "cmpl_addr, Q_CONTROL.reset clears the queue; indirect, "
+                "skip, QMD and predicate-only launches over the device master\n");
     return 0;
 }

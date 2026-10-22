@@ -8,6 +8,8 @@
 #include "vortex2_internal.h"
 
 #include <VX_types.h>
+#include <cp_launch_abi.h>
+#include "common.h"    // CACHE_BLOCK_SIZE
 
 #include <algorithm>
 #include <array>
@@ -287,6 +289,15 @@ vx_result_t Queue::enqueue_launch(const vx_launch_info_t* info,
     if (info->ndim > 3) return VX_ERR_INVALID_VALUE;
     if (info->args_size != 0 && !info->args_host) return VX_ERR_INVALID_VALUE;
 
+    // An extended launch is a one-command batch, which validates and stages
+    // the chained structs.
+    if (info->next != nullptr) {
+        vx_command_t c = {};
+        c.type = VX_COMMAND_LAUNCH;
+        c.data.launch = info;
+        return this->enqueue_commands(&c, 1, nw, w, out);
+    }
+
     // info->kernel is a vx_kernel_h (vx_module_get_kernel). NULL is the legacy
     // escape hatch — the caller pre-programmed the PC DCRs itself. Retain the
     // kernel for the worker's lifetime so the underlying module image
@@ -505,6 +516,7 @@ namespace {
 constexpr uint8_t CP_OP_DCR_WRITE    = 0x04;
 constexpr uint8_t CP_OP_CACHE_FLUSH  = 0x0A;
 constexpr uint8_t CP_OP_LAUNCH_QMD   = 0x0B;
+constexpr uint8_t CP_OP_LAUNCH_IND   = 0x0D;
 // Fixed per-step stride in a draw descriptor (28-byte cmd-record prefix).
 // Must equal CommandProcessor::DRAW_STEP_BYTES.
 constexpr int     CP_DRAW_STEP_BYTES = 28;
@@ -524,13 +536,119 @@ struct CmdRec {
     std::array<uint32_t,3> grid      = {1, 1, 1};
     std::array<uint32_t,3> block     = {1, 1, 1};
     std::array<uint32_t,3> cluster   = {1, 1, 1};
+    // Indirect launch: the descriptor header (skip_n and qmd_count are filled
+    // at staging) and the number of following API commands it guards.
+    bool                   indirect  = false;
+    vortex::cp_ild_header_t ild{};
+    uint32_t               skip_cmds = 0;
 };
+
+// Launch descriptors live in scratch slots, which the device allocator aligns to
+// its block size; the command processor reads them as whole lines.
+static_assert(CACHE_BLOCK_SIZE % vortex::CP_LAUNCH_DESC_ALIGN == 0,
+              "launch descriptors must be line aligned");
+
+// Ring commands a record expands to: a launch is its launch command plus the
+// trailing CMD_CACHE_FLUSH, a predicate-only descriptor is one command.
+uint32_t cmd_ring_count(const CmdRec& rec) {
+    if (!rec.is_launch) {
+        return 1;
+    }
+    if (rec.indirect && (rec.ild.ctl & vortex::CP_ILD_NO_LAUNCH)) {
+        return 1;
+    }
+    return 2;
+}
+
+// Parse the extension chain of a launch into `r`. Validates every field the
+// command processor would otherwise interpret as garbage.
+vx_result_t cmd_parse_launch_ext(Device* device, const vx_launch_info_t* info,
+                                 CmdRec& r) {
+    // Every extension struct starts with {struct_size, next, type}.
+    struct ext_header_t {
+        size_t           struct_size;
+        const void*      next;
+        vx_struct_type_e type;
+    };
+    for (const void* p = info->next; p != nullptr; ) {
+        const auto* hdr = static_cast<const ext_header_t*>(p);
+        if (hdr->struct_size < sizeof(ext_header_t)) {
+            return VX_ERR_INVALID_INFO;
+        }
+        switch (hdr->type) {
+        case VX_STRUCT_TYPE_LAUNCH_INDIRECT:
+            break;
+        default:
+            return VX_ERR_INVALID_INFO;
+        }
+        if (hdr->struct_size < sizeof(vx_launch_indirect_t) || r.indirect) {
+            return VX_ERR_INVALID_INFO;
+        }
+        const vx_launch_indirect_t& x = *static_cast<const vx_launch_indirect_t*>(p);
+        if (!device->cp_supports_indirect() || !device->cp_supports_qmd()) {
+            return VX_ERR_NOT_SUPPORTED;
+        }
+        const bool no_launch = (x.flags & VX_INDIRECT_NO_LAUNCH) != 0;
+        if ((x.flags & ~(VX_INDIRECT_PRED_INVERT | VX_INDIRECT_NO_LAUNCH)) != 0 ||
+            (x.record_addr & 3) != 0 || (x.pred_addr & 3) != 0) {
+            return VX_ERR_INVALID_VALUE;
+        }
+        if (no_launch && (info->kernel != nullptr || info->ndim != 0 ||
+                          info->args_size != 0)) {
+            return VX_ERR_INVALID_VALUE;
+        }
+        uint32_t ctl = 0;
+        if (x.record_addr != 0) {
+            if (!no_launch && info->ndim == 0) {
+                return VX_ERR_INVALID_VALUE;
+            }
+            for (uint32_t d = 0; d < 3; ++d) {
+                // The KMU cannot check a device-sourced grid against a cluster
+                // shape, so clustered launches keep a host-known grid.
+                if (!no_launch && d < info->ndim && info->cluster_dim[d] > 1) {
+                    return VX_ERR_INVALID_VALUE;
+                }
+                if (x.grid_word[d] > VX_INDIRECT_ONE || x.grid_shift[d] > 15) {
+                    return VX_ERR_INVALID_VALUE;
+                }
+                const bool used = no_launch || d < info->ndim;
+                const uint32_t sel = used ? x.grid_word[d] : vortex::CP_ILD_SEL_ONE;
+                const uint32_t sh  = used ? x.grid_shift[d] : 0;
+                ctl |= sel << (vortex::CP_ILD_SEL_X_SH + 4 * d);
+                ctl |= sh  << (vortex::CP_ILD_SHIFT_X_SH + 4 * d);
+            }
+            ctl |= vortex::CP_ILD_HAS_RECORD;
+            r.ild.record_addr = x.record_addr;
+            r.ild.x_bias      = x.x_bias;
+            r.ild.x_div       = x.x_div;
+        }
+        if (x.pred_addr != 0) {
+            ctl |= vortex::CP_ILD_HAS_PRED;
+            if (x.flags & VX_INDIRECT_PRED_INVERT) {
+                ctl |= vortex::CP_ILD_PRED_INV;
+            }
+            r.ild.pred_addr = x.pred_addr;
+            r.ild.pred_ref  = x.pred_ref;
+        }
+        if (no_launch) {
+            ctl |= vortex::CP_ILD_NO_LAUNCH;
+        }
+        r.ild.ctl   = ctl;
+        r.indirect  = true;
+        r.skip_cmds = x.skip_count;
+        p = x.next;
+    }
+    return VX_SUCCESS;
+}
 
 // Per-launch device-scratch staging: args blob + QMD launch descriptor.
 struct CmdStaged {
     uint64_t args_addr = 0; bool args_pooled = false; bool args_active = false;
     uint64_t qmd_addr  = 0; bool qmd_pooled  = false; bool qmd_active  = false;
-    // Host copy of the packed QMD ([count, count x (dcr_addr, value)]) for
+    // qmd_addr holds an indirect launch descriptor rather than a plain QMD.
+    bool     indirect  = false;
+    bool     launches  = true;
+    // Host copy of the packed QMD ([count, reserved, count x (dcr_addr, value)]) for
     // CPs without the CMD_LAUNCH_QMD decoder (see cmd_submit_launch).
     std::vector<uint32_t> qmd_words;
 };
@@ -538,8 +656,8 @@ struct CmdStaged {
 // Validate `commands`, copy into `recs`, retaining launched kernels (recorded
 // in `retained`). On any validation error the retained kernels are released and
 // the error is returned; on success the caller owns `retained`.
-vx_result_t cmd_build_recs(const vx_command_t* commands, uint32_t count,
-                           std::vector<CmdRec>& recs,
+vx_result_t cmd_build_recs(Device* device, const vx_command_t* commands,
+                           uint32_t count, std::vector<CmdRec>& recs,
                            std::vector<Kernel*>& retained) {
     recs.reserve(count);
     auto fail = [&](vx_result_t e) -> vx_result_t {
@@ -547,6 +665,19 @@ vx_result_t cmd_build_recs(const vx_command_t* commands, uint32_t count,
         retained.clear();
         return e;
     };
+    // A CTA runs on one core: its block fits the core's threads and its shared
+    // memory the core's local memory (the vx_enqueue_launch contract).
+    uint64_t nt = 0, nw = 0, lmem_cap = 0;
+    auto rq = device->query_caps(VX_CAPS_NUM_THREADS, &nt);
+    if (rq == VX_SUCCESS) {
+        rq = device->query_caps(VX_CAPS_NUM_WARPS, &nw);
+    }
+    if (rq == VX_SUCCESS) {
+        rq = device->query_caps(VX_CAPS_LOCAL_MEM_SIZE, &lmem_cap);
+    }
+    if (rq != VX_SUCCESS) {
+        return rq;
+    }
     for (uint32_t i = 0; i < count; ++i) {
         const vx_command_t& c = commands[i];
         CmdRec r;
@@ -570,15 +701,30 @@ vx_result_t cmd_build_recs(const vx_command_t* commands, uint32_t count,
             }
             r.ndim      = info->ndim;
             r.lmem_size = info->lmem_size;
+            uint64_t block_size = 1;
             for (uint32_t d = 0; d < info->ndim; ++d) {
                 r.grid [d] = info->grid_dim [d];
                 r.block[d] = info->block_dim[d];
+                block_size *= info->block_dim[d];
+            }
+            if (info->ndim > 0 &&
+                (block_size > nt * nw || info->lmem_size > lmem_cap)) {
+                return fail(VX_ERR_INVALID_VALUE);
             }
             for (uint32_t d = 0; d < info->ndim; ++d) {
                 uint32_t lg = info->cluster_dim[d];
                 if (lg == 0) lg = 1;
                 if (r.grid[d] % lg != 0) return fail(VX_ERR_INVALID_VALUE);
                 r.cluster[d] = lg;
+            }
+            if (info->next != nullptr) {
+                auto re = cmd_parse_launch_ext(device, info, r);
+                if (re != VX_SUCCESS) {
+                    return fail(re);
+                }
+                if (r.skip_cmds > count - 1 - i) {
+                    return fail(VX_ERR_INVALID_VALUE);
+                }
             }
         } else {
             return fail(VX_ERR_INVALID_VALUE);
@@ -591,7 +737,7 @@ vx_result_t cmd_build_recs(const vx_command_t* commands, uint32_t count,
 // Stage each launch's args AND its QMD launch descriptor into device scratch.
 // Both are CP DMAs that must complete BEFORE the ring batch / OP_DRAW is
 // submitted (the launch's CMD_LAUNCH_QMD reads the QMD from memory at drain
-// time). The QMD is the KMU descriptor as a {count,(dcr_addr,value)...} list
+// time). The QMD is the KMU descriptor as a {count,reserved,(dcr_addr,value)...} list
 // the CP replays — one launch command in place of ~18 CMD_DCR_WRITEs. Returns
 // the first error; the caller releases any active slots in `staged`. `tpw` is
 // threads-per-warp (NUM_THREADS) for the warp_step derivation.
@@ -630,9 +776,10 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
                                 (tpw / (eff_block[0] * eff_block[1]))
                                   % eff_block[2] : 0;
 
-        // 3) Pack the QMD: [count, then count × (dcr_addr, value)].
+        // 3) Pack the QMD: [count, reserved, then count × (dcr_addr, value)].
         std::vector<uint32_t> qmd;
         qmd.push_back(0);   // count placeholder
+        qmd.push_back(0);
         auto put = [&](uint32_t addr, uint32_t val) {
             qmd.push_back(addr); qmd.push_back(val);
         };
@@ -662,13 +809,44 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
             put(VX_DCR_KMU_CLUSTER_DIM_Y, rec.cluster[1]);
             put(VX_DCR_KMU_CLUSTER_DIM_Z, rec.cluster[2]);
         }
-        qmd[0] = uint32_t((qmd.size() - 1) / 2);   // pair count
+        qmd[0] = uint32_t((qmd.size() - 2) / 2);   // pair count
 
         // 4) Stage the QMD into device memory when the CP decodes
         // CMD_LAUNCH_QMD; otherwise keep only the host copy that
-        // cmd_submit_launch replays as plain ring commands.
+        // cmd_submit_launch replays as plain ring commands. An indirect launch
+        // stages its descriptor: the header line, then the same QMD body.
         st.qmd_words = std::move(qmd);
-        if (device_->cp_supports_qmd()) {
+        if (rec.indirect) {
+            // The CP starts skipping at the command after this one, which is
+            // its own trailing CMD_CACHE_FLUSH when it launches.
+            uint32_t ring_skip = cmd_ring_count(rec) - 1;
+            for (uint32_t k = 1; k <= rec.skip_cmds; ++k) {
+                ring_skip += cmd_ring_count(recs[i + k]);
+            }
+            if (ring_skip > 0xFFFF) {
+                r = VX_ERR_INVALID_VALUE;
+                break;
+            }
+            vortex::cp_ild_header_t hdr = rec.ild;
+            hdr.skip_n    = uint16_t(ring_skip);
+            hdr.qmd_count = st.qmd_words[0];
+            const size_t pair_bytes = (st.qmd_words.size() - 2) * sizeof(uint32_t);
+            std::vector<uint8_t> ild(vortex::CP_ILD_HEADER_BYTES + pair_bytes);
+            std::memcpy(ild.data(), &hdr, sizeof(hdr));
+            std::memcpy(ild.data() + vortex::CP_ILD_HEADER_BYTES,
+                        st.qmd_words.data() + 2, pair_bytes);
+            r = device_->args_slot_acquire(ild.size(), &st.qmd_addr, &st.qmd_pooled);
+            if (r != VX_SUCCESS) {
+                break;
+            }
+            st.qmd_active = true;
+            st.indirect   = true;
+            st.launches   = (rec.ild.ctl & vortex::CP_ILD_NO_LAUNCH) == 0;
+            r = device_->dev_write(st.qmd_addr, ild.data(), ild.size());
+            if (r != VX_SUCCESS) {
+                break;
+            }
+        } else if (device_->cp_supports_qmd()) {
             const uint64_t qmd_bytes = st.qmd_words.size() * sizeof(uint32_t);
             r = device_->args_slot_acquire(qmd_bytes, &st.qmd_addr, &st.qmd_pooled);
             if (r != VX_SUCCESS) break;
@@ -684,13 +862,19 @@ vx_result_t cmd_stage_qmds(Device* device_, const std::vector<CmdRec>& recs,
 // replay the descriptor pairs as CMD_DCR_WRITEs followed by a plain
 // CMD_LAUNCH (same trailing cache-flush discipline in cp_submit_launch).
 vx_result_t cmd_submit_launch(Device* device_, const CmdStaged& st) {
+    if (st.qmd_active && st.qmd_addr % vortex::CP_LAUNCH_DESC_ALIGN != 0) {
+        return VX_ERR_INTERNAL;
+    }
+    if (st.indirect) {
+        return device_->cp_submit_launch_indirect(st.qmd_addr, st.launches);
+    }
     if (device_->cp_supports_qmd()) {
         return device_->cp_submit_launch_qmd(st.qmd_addr);
     }
     const auto& qmd = st.qmd_words;
     const uint32_t count = qmd.empty() ? 0 : qmd[0];
     for (uint32_t k = 0; k < count; ++k) {
-        auto r = device_->cp_submit_dcr_write(qmd[1 + 2 * k], qmd[2 + 2 * k]);
+        auto r = device_->cp_submit_dcr_write(qmd[2 + 2 * k], qmd[3 + 2 * k]);
         if (r != VX_SUCCESS) return r;
     }
     return device_->cp_submit_launch();
@@ -705,7 +889,7 @@ vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
 
     std::vector<CmdRec>  recs;
     std::vector<Kernel*> retained;   // released if enqueue() fails (work won't run)
-    auto rb = cmd_build_recs(commands, count, recs, retained);
+    auto rb = cmd_build_recs(device_, commands, count, recs, retained);
     if (rb != VX_SUCCESS) return rb;
 
     Command cmd;
@@ -735,13 +919,15 @@ vx_result_t Queue::enqueue_commands(const vx_command_t* commands,
         if (r == VX_SUCCESS) {
             std::lock_guard<std::mutex> g(enqueue_mu_);
             *s = now_ns();
+            // Programmed ahead of the batch so it cannot land inside a range an
+            // indirect launch skips.
+            r = device_->ensure_mmu_satp();
             device_->cp_batch_begin();
-            for (size_t i = 0; i < recs.size(); ++i) {
+            for (size_t i = 0; i < recs.size() && r == VX_SUCCESS; ++i) {
                 const CmdRec& rec = recs[i];
                 r = rec.is_launch
                   ? cmd_submit_launch(device_, staged[i])
                   : device_->cp_submit_dcr_write(rec.dcr_addr, rec.dcr_value);
-                if (r != VX_SUCCESS) break;
             }
             // Always close the batch (commit + poll + drain) even on a mid-batch
             // error so the partial sequence retires and the lock releases.
@@ -776,7 +962,7 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
 
     std::vector<CmdRec>  recs;
     std::vector<Kernel*> retained;
-    auto rb = cmd_build_recs(commands, count, recs, retained);
+    auto rb = cmd_build_recs(device_, commands, count, recs, retained);
     if (rb != VX_SUCCESS) return rb;
 
     Command cmd;
@@ -830,7 +1016,12 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
             };
             for (size_t i = 0; i < recs.size(); ++i) {
                 const CmdRec& rec = recs[i];
-                if (rec.is_launch) {
+                if (rec.is_launch && staged[i].indirect) {
+                    put_step(CP_OP_LAUNCH_IND, staged[i].qmd_addr, 0);
+                    if (staged[i].launches) {
+                        put_step(CP_OP_CACHE_FLUSH, num_cores, 0);
+                    }
+                } else if (rec.is_launch) {
                     put_step(CP_OP_LAUNCH_QMD, staged[i].qmd_addr, 0);
                     put_step(CP_OP_CACHE_FLUSH, num_cores, 0);
                 } else {
@@ -854,13 +1045,13 @@ vx_result_t Queue::enqueue_draw(const vx_command_t* commands,
             if (use_op_draw) {
                 r = device_->cp_submit_draw(desc_addr);
             } else {
+                r = device_->ensure_mmu_satp();
                 device_->cp_batch_begin();
-                for (size_t i = 0; i < recs.size(); ++i) {
+                for (size_t i = 0; i < recs.size() && r == VX_SUCCESS; ++i) {
                     const CmdRec& rec = recs[i];
                     r = rec.is_launch
                       ? cmd_submit_launch(device_, staged[i])
                       : device_->cp_submit_dcr_write(rec.dcr_addr, rec.dcr_value);
-                    if (r != VX_SUCCESS) break;
                 }
                 auto re = device_->cp_batch_end();
                 if (r == VX_SUCCESS) r = re;

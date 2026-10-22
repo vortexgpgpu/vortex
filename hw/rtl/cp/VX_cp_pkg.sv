@@ -71,8 +71,42 @@ package VX_cp_pkg;
     CMD_FENCE        = 8'h07,
     CMD_EVENT_SIGNAL = 8'h08,
     CMD_EVENT_WAIT   = 8'h09,
-    CMD_CACHE_FLUSH  = 8'h0A
+    CMD_CACHE_FLUSH  = 8'h0A,
+    CMD_LAUNCH_QMD   = 8'h0B,
+    CMD_LAUNCH_INDIRECT = 8'h0D
   } cp_opcode_e;
+
+  // ------------------------------------------------------------------------
+  // Launch descriptors (CMD_LAUNCH_QMD / CMD_LAUNCH_INDIRECT): line aligned,
+  // {dcr_addr, value} pairs on 8-byte slots.
+  //   QMD: slot 0 = {reserved, count}, pairs from slot 1.
+  //   ILD: a 64-byte header line, pairs from the next line; header fields at
+  //        the byte offsets below.
+  // ------------------------------------------------------------------------
+
+  localparam int LAUNCH_DESC_ALIGN_LG = 6;
+  localparam int QMD_PAIRS_SLOT       = 1;
+
+  localparam int ILD_OFF_CTL          = 0;
+  localparam int ILD_OFF_SKIP         = 4;
+  localparam int ILD_OFF_RECORD       = 8;
+  localparam int ILD_OFF_PRED         = 16;
+  localparam int ILD_OFF_PRED_REF     = 24;
+  localparam int ILD_OFF_COUNT        = 28;
+  localparam int ILD_OFF_X_BIAS       = 32;
+  localparam int ILD_OFF_X_DIV        = 36;
+
+  localparam int ILD_CTL_W            = 28;
+  localparam int ILD_CTL_SEL_LSB      = 0;   // 3 x 4-bit word select, 0xF = 1
+  localparam int ILD_CTL_SHIFT_LSB    = 12;  // 3 x 4-bit ceil-shift
+  localparam int ILD_CTL_HAS_RECORD   = 24;
+  localparam int ILD_CTL_HAS_PRED     = 25;
+  localparam int ILD_CTL_PRED_INV     = 26;
+  localparam int ILD_CTL_NO_LAUNCH    = 27;
+  localparam logic [3:0] ILD_SEL_ONE  = 4'hF;
+
+  // Q_ERROR bits.
+  localparam int Q_ERROR_DESC_ALIGN   = 0;   // a descriptor was not line aligned
 
   // ------------------------------------------------------------------------
   // Header flag bits.
@@ -172,7 +206,9 @@ package VX_cp_pkg;
       CMD_FENCE,
       CMD_EVENT_SIGNAL,
       CMD_EVENT_WAIT,
-      CMD_CACHE_FLUSH: return 1'b1;
+      CMD_CACHE_FLUSH,
+      CMD_LAUNCH_QMD,
+      CMD_LAUNCH_INDIRECT: return 1'b1;
       default:         return 1'b0;
     endcase
   endfunction
@@ -188,6 +224,8 @@ package VX_cp_pkg;
       CMD_LAUNCH:       base = 12;
       CMD_FENCE:        base = 8;
       CMD_CACHE_FLUSH:  base = 12;
+      CMD_LAUNCH_QMD:   base = 12;
+      CMD_LAUNCH_INDIRECT: base = 12;
       CMD_DCR_WRITE:    base = 20;
       CMD_DCR_READ:     base = 20;
       CMD_EVENT_SIGNAL: base = 20;

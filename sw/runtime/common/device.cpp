@@ -97,6 +97,7 @@ constexpr uint8_t  CP_OPCODE_EVT_WAIT   = 0x09;
 constexpr uint8_t  CP_OPCODE_CACHE_FLUSH= 0x0A;
 constexpr uint8_t  CP_OPCODE_LAUNCH_QMD = 0x0B;
 constexpr uint8_t  CP_OPCODE_DRAW       = 0x0C;
+constexpr uint8_t  CP_OPCODE_LAUNCH_IND = 0x0D;
 constexpr std::size_t CP_CL_BYTES    = 64;
 
 // CMD_EVENT_WAIT comparison operations (encoded in arg2[1:0]).
@@ -331,16 +332,14 @@ vx_result_t Device::cp_init() {
         uint32_t dev_caps = 0;
         if (p->cp_reg_read(CP_DEV_CAPS, &dev_caps) != VX_SUCCESS)
             return VX_ERR_DEVICE_LOST;
-        // An all-ones read is never a valid capability word: bits [31:24] are
-        // hardwired zero by VX_cp_axil_regfile, so 0xFFFFFFFF means the read
+        // An all-ones read is never a valid capability word: bits [31:29] are
+        // reserved zero, so 0xFFFFFFFF means the read
         // did not reach the register (AXI DECERR / no response substitutes
         // all-ones on the way back). Decoding it would set every capability
         // bit -- and a spurious VM_ENABLED sends VMManager off to identity-map
         // 65,536 PTEs one CP round-trip at a time, which presents as a hang at
         // 100% CPU rather than as the bus error it actually is.
-        // Treat it as "no optional capabilities", which is also the correct
-        // answer for this CP: it has no SATP register, no OP_DRAW, and no
-        // CMD_LAUNCH_QMD (grep hw/rtl/cp -- all three are absent).
+        // Treat it as "no optional capabilities".
         if (dev_caps == 0xFFFFFFFFu) {
             printf("[VXDRV] Warning: CP_DEV_CAPS read returned all-ones; the "
                    "AXI-Lite read did not reach the register. Assuming no "
@@ -360,6 +359,11 @@ vx_result_t Device::cp_init() {
         // Reading them on a target that does not decode them stalls the DCR
         // bus waiting for a response that never arrives.
         mmu_fault_report_ = (dev_caps & (1u << 27)) != 0;
+        // SUPPORTS_INDIRECT (bit 28): the CP decodes CMD_LAUNCH_INDIRECT. There
+        // is no fallback: reading the record or predicate on the host would
+        // stall it on device progress, so launches that chain
+        // vx_launch_indirect_t are refused without it.
+        cp_supports_indirect_ = (dev_caps & (1u << 28)) != 0;
     }
 
     // Resolve the core count now, while nothing holds cp_mu_. Deferring it to
@@ -541,6 +545,7 @@ const char* cp_opcode_name(uint8_t op) {
     case CP_OPCODE_CACHE_FLUSH: return "CACHE_FLUSH";
     case CP_OPCODE_LAUNCH_QMD:  return "LAUNCH_QMD";
     case CP_OPCODE_DRAW:        return "DRAW";
+    case CP_OPCODE_LAUNCH_IND:  return "LAUNCH_IND";
     default:                    return "?";
     }
 }
@@ -603,6 +608,20 @@ vx_result_t Device::cp_batch_end() {
     // Poll Q_SEQNUM once for the last command in the batch.
     r = cp_poll_seqnum_(target);
     if (r != VX_SUCCESS) return r;
+    // A descriptor the CP refused (it sets Q_ERROR and retires it unexecuted)
+    // means the batch did not run as submitted.
+    uint32_t qerr = 0;
+    {
+        std::lock_guard<std::mutex> g(cp_mu_);
+        r = p->cp_reg_read(CP_Q_ERROR, &qerr);
+    }
+    if (r != VX_SUCCESS) {
+        return r;
+    }
+    if (qerr != 0) {
+        fprintf(stderr, "vortex: command processor refused a command (Q_ERROR=0x%x)\n", qerr);
+        return VX_ERR_DEVICE_LOST;
+    }
     // Report a page fault raised by any launch in the batch before treating
     // its results as valid (deferred from each in-batch cp_submit_launch).
     r = check_mmu_fault();
@@ -833,7 +852,7 @@ vx_result_t Device::cp_submit_launch() {
     }
     // CMD_LAUNCH on-wire layout (cmd_size=12):
     //   bytes 0..3   header  { opcode=0x06, flags=0, reserved=0 }
-    //   bytes 4..11  arg0    unused by VX_cp_launch
+    //   bytes 4..11  arg0    unused
     uint8_t cl[CP_CL_BYTES] = {0};
     cl[0] = CP_OPCODE_LAUNCH;
     auto r = cp_submit_cl_(cl);
@@ -935,6 +954,35 @@ vx_result_t Device::cp_submit_draw(uint64_t desc_addr) {
         return r;
     }
     if (tls_batch_owner == this) return VX_SUCCESS;
+    return drain_cout();
+}
+
+vx_result_t Device::cp_submit_launch_indirect(uint64_t ild_addr, bool launches) {
+    // CMD_LAUNCH_INDIRECT on-wire layout (cmd_size=12):
+    //   bytes 0..3   header  { opcode=0x0D, flags=0, reserved=0 }
+    //   bytes 4..11  arg0    indirect launch descriptor device address
+    auto r = ensure_mmu_satp();
+    if (r != VX_SUCCESS) {
+        return r;
+    }
+    uint8_t cl[CP_CL_BYTES] = {0};
+    cl[0] = CP_OPCODE_LAUNCH_IND;
+    std::memcpy(cl + 4, &ild_addr, sizeof(ild_addr));
+    r = cp_submit_cl_(cl);
+    if (r != VX_SUCCESS || !launches) {
+        return r;
+    }
+    r = check_mmu_fault();
+    if (r != VX_SUCCESS) {
+        return r;
+    }
+    r = cp_submit_cache_flush();
+    if (r != VX_SUCCESS) {
+        return r;
+    }
+    if (tls_batch_owner == this) {
+        return VX_SUCCESS;
+    }
     return drain_cout();
 }
 
@@ -1306,6 +1354,9 @@ vx_result_t Device::query_caps(uint32_t caps_id, uint64_t* out_value) {
     case VX_CAPS_CLOCK_RATE:      *out_value = VX_CFG_PLATFORM_CLOCK_RATE;   break;
     case VX_CAPS_PEAK_MEM_BW:     *out_value = VX_CFG_PLATFORM_MEMORY_PEAK_BW; break;
     case VX_CAPS_VM_SUPPORT:      *out_value = vm_enabled_ ? 1 : 0;          break;
+    case VX_CAPS_CP_INDIRECT:
+        *out_value = (cp_supports_indirect_ && cp_supports_qmd_) ? 1 : 0;
+        break;
     case VX_CAPS_VM_PINNED_SIZE:  *out_value = pinned_size_;                 break;
     case VX_CAPS_VM_PINNED_FREE: {
         std::lock_guard<std::mutex> g(mu_);

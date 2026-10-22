@@ -94,6 +94,17 @@ builds:
     -DVX_CFG_EXT_A_ENABLE -DVX_CFG_VM_ENABLE
     -DVX_CFG_DCACHE_LATENCY=3
 
+# --- command processor ---------------------------------------------------------
+
+# Command processor: ring fetch/unpack, per-queue engine, resource arbiters,
+# DMA, event unit, DCR proxy and KMU launch sequencer behind the host and
+# device AXI crossbars.
+- id: cp
+  group: core
+  dut: cp
+  clock_mhz: 300
+  configs: ""
+
 # --- dxa ---------------------------------------------------------------------
 
 # DXA engine: descriptor queue, address generation, multicast distribution.

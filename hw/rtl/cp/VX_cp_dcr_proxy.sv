@@ -42,6 +42,7 @@ module VX_cp_dcr_proxy
   input  cmd_t cmd,
   // verilator lint_on UNUSED
   output logic done,
+  output logic idle,
 
   // Most recent CMD_DCR_READ response value (valid while `done` is high
   // after a read; tied to 0 after writes). Engine snapshots this when it
@@ -154,6 +155,7 @@ module VX_cp_dcr_proxy
       dcr_req_data = pending_data;
     end
     done          = (state == S_DONE);
+    idle          = (state == S_IDLE);
     last_rsp_data = rsp_data_r;
   end
 

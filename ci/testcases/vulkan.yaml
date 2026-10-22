@@ -85,6 +85,13 @@ tests:
 - {id: gfx-query-condrender, via: make-run, drivers: [simx], dir: tests/vulkan/condrender, target: "run-{driver}",
    touches: [sw/common/gfx_fs_desc_abi.h, sw/gfx/, hw/rtl/om/, sim/simx/om/, tests/vulkan/condrender]}
 
+# Indirect dispatch with shader-written workgroup counts (zero counts, an offset
+# record, a large grid) and dispatches under conditional rendering: the command
+# processor reads the counts and the predicate, so simx runs its C++ model and
+# xrt the RTL command processor.
+- {id: cp-dispatchindirect, via: make-run, drivers: [simx, xrt], dir: tests/vulkan/dispatchindirect, target: "run-{driver}",
+   touches: [sim/common/cmd_processor, hw/rtl/cp/, sw/runtime/, sw/common/cp_launch_abi.h, tests/vulkan/dispatchindirect]}
+
 # Transform feedback from the vertex stage: byte-exact capture over every
 # topology and provoking-vertex mode, overflow, pause/resume through counter
 # buffers, capture under rasterizer discard, and the stream query.

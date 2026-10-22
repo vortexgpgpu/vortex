@@ -1,0 +1,29 @@
+/* Copyright © 2026  Vortex GPGPU
+ * SPDX-License-Identifier: MIT
+ *
+ * Writes a dispatch's workgroup counts and a predicate word on the device, so
+ * the dispatch that consumes them can only learn them from memory.
+ */
+#version 450
+
+layout(local_size_x = 1) in;
+
+layout(std430, binding = 0) buffer Args {
+   uint w[];
+};
+
+layout(push_constant) uniform PC {
+   uint off;
+   uint x;
+   uint y;
+   uint z;
+   uint pred;
+} pc;
+
+void main()
+{
+   w[pc.off + 0u] = pc.x;
+   w[pc.off + 1u] = pc.y;
+   w[pc.off + 2u] = pc.z;
+   w[pc.off + 3u] = pc.pred;
+}

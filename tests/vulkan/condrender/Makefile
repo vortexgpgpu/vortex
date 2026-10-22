@@ -20,6 +20,8 @@ PROJECT := condrender
 SRC_DIR := $(VORTEX_HOME)/tests/vulkan/$(PROJECT)
 
 STRICT := 1
+# The predicate words are read by the command processor, never by the host.
+EXPECT_NO_HOSTREAD := 1
 
 SRCS := $(SRC_DIR)/main.c
 

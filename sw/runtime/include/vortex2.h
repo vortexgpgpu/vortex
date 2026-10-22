@@ -74,6 +74,7 @@ typedef struct vx_kernel* vx_kernel_h;
 #define VX_CAPS_VM_SUPPORT          0xF   // 1 if the device has an MMU (VM), else 0
 #define VX_CAPS_VM_PINNED_SIZE      0x10  // pinned-region total size (bytes); 0 if disabled
 #define VX_CAPS_VM_PINNED_FREE      0x11  // pinned-region free  size (bytes); 0 if disabled
+#define VX_CAPS_CP_INDIRECT         0x12  // 1 if launches accept vx_launch_indirect_t, else 0
 
 // ============================================================================
 // Device ISA flags  (decode a VX_CAPS_ISA_FLAGS query result)
@@ -208,6 +209,54 @@ typedef struct {
     uint32_t     lmem_size;
     uint32_t     cluster_dim[3];
 } vx_launch_info_t;
+
+// ----- Extension structs chained on an info struct's `next` -----
+//
+// Each starts with {struct_size, next, type}; `type` names the struct.
+typedef enum {
+    VX_STRUCT_TYPE_LAUNCH_INDIRECT = 1
+} vx_struct_type_e;
+
+// Indirect launch (chained on vx_launch_info_t.next; requires
+// VX_CAPS_CP_INDIRECT). The command processor evaluates it on the device when
+// the launch reaches the head of the queue, with no host read-back:
+//
+//   1. pred_addr != 0: execute iff (*(uint32_t*)pred_addr > pred_ref), unsigned,
+//      inverted by VX_INDIRECT_PRED_INVERT.
+//   2. record_addr != 0: grid_dim[d] = ceil(w / 2^grid_shift[d]), with w the
+//      32-bit record word grid_word[d] (VX_INDIRECT_ONE: w = 1). For x, w is
+//      first replaced by max(w - x_bias, 0) / x_div (x_div 0 or 1: no divide).
+//      For a launch, dimensions at or above info->ndim are 1; the
+//      predicate-only form applies grid_word to all three. Any zero dimension
+//      skips the launch; a device-computed zero grid never starts a kernel.
+//   3. Not executed: the launch and the next `skip_count` commands of the same
+//      vx_enqueue_commands / vx_enqueue_draw call are skipped (0 for
+//      vx_enqueue_launch).
+//   4. VX_INDIRECT_NO_LAUNCH: steps 1-3 only (kernel NULL, ndim 0); a predicate
+//      that guards the commands after it, e.g. conditional rendering.
+//
+// The record and predicate are read from device memory below the caches.
+// Device-produced indirect data must be written by a launch that precedes this
+// one in queue order (each launch's results are flushed before the next
+// command), or by a host/DMA write.
+#define VX_INDIRECT_ONE             0xFu
+#define VX_INDIRECT_PRED_INVERT     (1u << 0)
+#define VX_INDIRECT_NO_LAUNCH       (1u << 1)
+
+typedef struct {
+    size_t           struct_size;
+    const void*      next;
+    vx_struct_type_e type;          // VX_STRUCT_TYPE_LAUNCH_INDIRECT
+    uint64_t         record_addr;   // device address of the grid record, 4-byte aligned; 0 = grid from info
+    uint8_t          grid_word [3]; // record word index 0..14, or VX_INDIRECT_ONE
+    uint8_t          grid_shift[3]; // 0..15
+    uint32_t         x_bias;
+    uint32_t         x_div;
+    uint64_t         pred_addr;     // device address, 4-byte aligned; 0 = unconditional
+    uint32_t         pred_ref;
+    uint32_t         flags;         // VX_INDIRECT_*
+    uint32_t         skip_count;
+} vx_launch_indirect_t;
 
 // 3D-strided DMA descriptor for the rect enqueue ops. Mirrors OpenCL 1.2's
 // clEnqueue{Read,Write,Copy}BufferRect parameter block.

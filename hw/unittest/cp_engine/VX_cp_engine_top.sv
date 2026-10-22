@@ -57,6 +57,8 @@ module VX_cp_engine_top
   // can simply tie these to the corresponding bid_*_grant inputs delayed
   // by one cycle.
   input  wire                          kmu_done_i,
+  input  wire                          kmu_skip_i,
+  input  wire [15:0]                   kmu_skip_n_i,
   input  wire                          dma_done_i,
   input  wire                          dcr_done_i,
   input  wire                          event_done_i,
@@ -128,6 +130,8 @@ module VX_cp_engine_top
     .bid_dcr       (bid_dcr_if),
     .bid_event     (bid_event_if),
     .kmu_done_i    (kmu_done_i),
+    .kmu_skip_i    (kmu_skip_i),
+    .kmu_skip_n_i  (kmu_skip_n_i),
     .dma_done_i    (dma_done_i),
     .dcr_done_i    (dcr_done_i),
     .event_done_i  (event_done_i),

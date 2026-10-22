@@ -67,6 +67,24 @@ into the KMU ARG DCRs. The caller never allocates an args buffer. A
 `kernel == NULL` (and `args_host == NULL`, `ndim == 0`) "legacy escape
 hatch" lets a caller pre-program the KMU PC/ARG DCRs directly.
 
+### 2.4 Indirect launch (extension struct)
+
+Device-sourced launch arguments are an extension struct on
+`vx_launch_info_t.next`, not a new entry point: `vx_launch_indirect_t`
+(`type = VX_STRUCT_TYPE_LAUNCH_INDIRECT`). Every extension struct begins
+`{struct_size, next, type}` so a chain can carry more than one. It names a
+grid record (word select, ceil-shift, x bias and divisor), a predicate
+(`*pred > ref`, optionally inverted), the predicate-only form, and a
+`skip_count` of following commands to skip when the launch does not run.
+It works in `vx_enqueue_launch` (skip 0), `vx_enqueue_commands` and
+`vx_enqueue_draw`; the command processor evaluates it on the device
+(`CMD_LAUNCH_INDIRECT`, [`command_processor.md`](command_processor.md) §2.4).
+`VX_CAPS_CP_INDIRECT` reports support; without it a chained launch is
+refused with `VX_ERR_NOT_SUPPORTED` — the runtime never reads the record on
+the host. Vulkan (indirect dispatch/draw, conditional rendering, byte-count
+draws, trace rays indirect), Metal (indirect threadgroups and draws) and
+OpenGL (`glDispatchComputeIndirect`, conditional render) all map onto it.
+
 ---
 
 ## 3. Proposed but not yet implemented
@@ -74,9 +92,9 @@ hatch" lets a caller pre-program the KMU PC/ARG DCRs directly.
 The API ships the locked post-removal shape directly (no deprecation-shim
 transition window was used). Deferred, out-of-scope-by-design:
 
-1. **Memory/event pools, indirect dispatch, host functions, SVM, command
-   buffers, per-arg setters** — explicitly deferred (the "additive"
-   surface for a future v2).
+1. **Memory/event pools, host functions, SVM, command buffers, per-arg
+   setters** — explicitly deferred (the "additive" surface for a future
+   v2).
 2. **Risk-register items** worth preserving as forward guidance: waiter
    wakeup-storm mitigation; buffer-pointer width marshalling (a proposed
    `vx_kernel_get_pointer_size` helper — only `get_max_block_size`

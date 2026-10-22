@@ -130,16 +130,15 @@ come from `cmd_size_bytes`
 | `CMD_EVENT_SIGNAL` | 0x08 | 20 | EVENT | yes | yes | Write a counter slot |
 | `CMD_EVENT_WAIT` | 0x09 | 28 | EVENT | yes | yes | Spin until a counter satisfies a compare |
 | `CMD_CACHE_FLUSH` | 0x0A | 12 | DCR | yes | yes | Per-core cache flush sweep |
-| `CMD_LAUNCH_QMD` | 0x0B | 12 | KMU | **no** | yes | Atomic launch: KMU descriptor read from memory (§2.3) |
+| `CMD_LAUNCH_QMD` | 0x0B | 12 | KMU | yes | yes | Atomic launch: KMU descriptor read from memory (§2.3) |
 | `CMD_DRAW` | 0x0C | 12 | KMU | **no** | yes | Device-orchestrated graphics draw (§8.1) |
+| `CMD_LAUNCH_INDIRECT` | 0x0D | 12 | KMU | yes | yes | Predicated launch with a device-sourced grid (§2.4) |
 
 `+8 B` to any size when `F_PROFILE` is set.
 
-> **The last two opcodes are Emulation-CP only.** `VX_cp_pkg`'s
-> `cp_opcode_e` enum stops at `CMD_CACHE_FLUSH`, so `cmd_opcode_valid()`
-> ([`VX_cp_pkg.sv:163-178`](../../hw/rtl/cp/VX_cp_pkg.sv#L163)) rejects
-> 0x0B and 0x0C and the RTL unpacker treats both as end-of-line. Each is
-> capability-gated (§6) so the runtime only emits it where it is decoded.
+> **`CMD_DRAW` is Emulation-CP only.** `cmd_opcode_valid()` in `VX_cp_pkg`
+> rejects 0x0C and the RTL unpacker treats it as end-of-line. The optional
+> opcodes are capability-gated (§6) so the runtime only emits what is decoded.
 
 ### 2.3 Per-opcode semantics
 
@@ -150,18 +149,17 @@ come from `cmd_size_bytes`
 - **`CMD_DCR_READ`** — `arg0` = DCR address, `arg1` = tag placed on the DCR
   data bus. The response lands in `Q_LAST_DCR_RSP` (`+0x30`), which the
   host reads after observing the seqnum advance.
-- **`CMD_LAUNCH`** — payload carries nothing the hardware reads.
-  `VX_cp_launch` only pulses `start`, and `VX_cp_core` explicitly discards
-  the granted command (`UNUSED_VAR (granted_kmu_cmd)`,
-  [`VX_cp_core.sv:309`](../../hw/rtl/cp/VX_cp_core.sv#L309)). Grid geometry
-  must already have been programmed by preceding `CMD_DCR_WRITE`s — which
-  is exactly why a launch costs 22 commands (§4.4).
-- **`CMD_LAUNCH_QMD`** — `arg0` points at an in-memory KMU descriptor,
-  `{u32 count, count × (u32 dcr_addr, u32 value)}`. The CP reads it and
-  replays the pairs through the DCR write path, then pulses start —
-  collapsing the 20-write launch dance into one command
-  ([`cmd_processor.cpp:308-322`](../../sim/common/cmd_processor.cpp#L308)).
-  This is the NVIDIA QMD model. A 64-pair backstop guards a corrupt count.
+- **`CMD_LAUNCH`** — payload carries nothing the hardware reads: the launch
+  sequencer only pulses `start` and waits for the drain. Grid geometry must
+  already have been programmed by preceding `CMD_DCR_WRITE`s — which is
+  exactly why a launch costs 22 commands (§4.4).
+- **`CMD_LAUNCH_QMD`** — `arg0` points at a 64-byte-aligned in-memory KMU
+  descriptor, `{u32 count, u32 reserved, count × (u32 dcr_addr, u32 value)}`
+  ([`cp_launch_abi.h`](../../sw/common/cp_launch_abi.h)); the reserved word
+  keeps every pair inside one 64-byte line. The CP reads it and replays the
+  pairs through the DCR write path, then pulses start — collapsing the
+  20-write launch dance into one command. This is the NVIDIA QMD model. A
+  64-pair backstop guards a corrupt count.
 - **`CMD_FENCE`** — scope masks in `arg0[1:0]` (`FENCE_DMA_BIT`,
   `FENCE_GPU_BIT`, [`VX_cp_pkg.sv:120-121`](../../hw/rtl/cp/VX_cp_pkg.sv#L120)).
 - **`CMD_EVENT_WAIT`** — compare op in `arg2[1:0]`
@@ -169,6 +167,44 @@ come from `cmd_size_bytes`
 - **`CMD_CACHE_FLUSH`** — `arg0` = number of cores. Provides AMD
   `ACQUIRE_MEM`-style cache maintenance; the host fills `arg0` from
   `VX_CAPS_NUM_CORES`.
+
+### 2.4 Indirect launch (`CMD_LAUNCH_INDIRECT`)
+
+`arg0` points at an indirect launch descriptor (ILD,
+[`cp_launch_abi.h`](../../sw/common/cp_launch_abi.h)): a 64-byte header line
+followed by an ordinary QMD body of pairs. The header carries a control word
+(per-dimension word select 0..14 or constant 1, per-dimension ceil-shift,
+`HAS_RECORD`, `HAS_PRED`, `PRED_INV`, `NO_LAUNCH`), a `skip_n`, the record
+and predicate addresses, the predicate reference, the pair count, and an
+x-only bias and divisor. Executing it:
+
+1. **Predicate** (`HAS_PRED`): `exec = (*pred_addr > pred_ref) ^ PRED_INV`,
+   unsigned 32-bit.
+2. **Grid** (`HAS_RECORD`): each dimension selects a 32-bit record word (or
+   1); x becomes `max(w - bias, 0) / div` (`div` 0 or 1 bypasses); then
+   `g = ceil(w / 2^shift)`. Any `g == 0` clears `exec`, so a device-computed
+   zero never reaches the KMU, where a zero grid means a raster kick.
+3. **Not executed**: the command retires and its queue retires the next
+   `skip_n` commands without executing them (inside an `OP_DRAW` bundle the
+   walk skips `skip_n` steps). No DCR is written.
+4. **`NO_LAUNCH`**: retire once the predicate and grid pass — a predicate
+   guarding the commands after it (AMD `COND_EXEC`).
+5. **Otherwise** the pairs replay with `GRID_DIM_X/Y/Z` replaced by `g`,
+   then the kernel starts and drains as for `CMD_LAUNCH_QMD`.
+
+This is the fixed-function core of AMD's `DISPATCH_INDIRECT` /
+`COND_EXEC` / `SET_PREDICATION` and of NVIDIA's indirect fetch: indirect
+dispatch, conditional rendering, indirect-count unrolls and byte-count
+derivation without a host read-back or a programmable CP sequencer.
+
+The CP reads the descriptor, record and predicate from DRAM below the
+caches. A record a kernel produced is visible because the runtime posts
+`CMD_CACHE_FLUSH` after every launch and the CP retires in order, so a
+producer earlier in the stream is always flushed first. The runtime counts
+`skip_count` in API commands and translates it to ring commands (a launch is
+its launch command plus the trailing flush). Commands inside a skip range are
+launches and DCR writes only, which is all `vx_command_t` can express — an
+event signal or a download skipped there would hang the host.
 
 ---
 
@@ -187,7 +223,7 @@ come from `cmd_size_bytes`
 | [`VX_cp_unpack.sv`](../../hw/rtl/cp/VX_cp_unpack.sv) | Per-offset single-command decoder (one command/cycle; refactored from a combinational whole-line walk that was a 35-level path). |
 | [`VX_cp_engine.sv`](../../hw/rtl/cp/VX_cp_engine.sv) | Per-queue FSM `IDLE→DECODE→BID→WAIT_DONE→RETIRE`; classifies opcode→resource and retires via valid/ready handshake. |
 | [`VX_cp_arbiter.sv`](../../hw/rtl/cp/VX_cp_arbiter.sv) | Thin wrapper over `VX_rr_arbiter`, instantiated 4× (one per resource). |
-| [`VX_cp_launch.sv`](../../hw/rtl/cp/VX_cp_launch.sv) | KMU start/busy wrapper: pulse start, hold grant until `busy` deasserts (drain). |
+| [`VX_cp_launch_seq.sv`](../../hw/rtl/cp/VX_cp_launch_seq.sv) | KMU launch sequencer: plain launch, QMD replay, indirect launch (predicate, grid select/divide/ceil-shift, skip); reads descriptors over the dev xbar; pulses start and holds the grant until `busy` deasserts (drain). |
 | [`VX_cp_dcr_proxy.sv`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv) | DCR req/rsp gateway; also drives the per-core `CMD_CACHE_FLUSH` sweep; publishes last read in `Q_LAST_DCR_RSP`. |
 | [`VX_cp_dma.sv`](../../hw/rtl/cp/VX_cp_dma.sv) | Dual-port burst DMA (`axi_host` + `axi_dev`); opcode routes ports; ≤4 KB INCR chunks. |
 | [`VX_cp_event_unit.sv`](../../hw/rtl/cp/VX_cp_event_unit.sv) | `EVENT_SIGNAL` write + `EVENT_WAIT` poll-spin against counter slots. |
@@ -304,15 +340,17 @@ is a single-engine CP. Three things gate raising it:
    geometry lives in *global* KMU DCR state. Two queues launching
    concurrently would interleave each other's `CMD_DCR_WRITE`s.
    `CMD_LAUNCH_QMD` is the fix — it makes a launch self-describing — and
-   it exists in the Emulation CP but not the RTL CP.
+   the launch sequencer holds the DCR arbiter for the whole replay, so
+   another queue's DCR writes cannot interleave with it. The KMU DCRs are
+   still one global state, so concurrent launches remain serialized.
 2. **Resource re-entry.** The arbiters grant for one cycle with no
    in-flight tracking, and the resource units latch their command only in
    their own `S_IDLE`. A second grant issued while a unit is busy is
    ignored by the unit, but the newly-granted CPE still advances to
    `S_WAIT_DONE` and will retire on the *first* command's `done` pulse —
    its own command never executes. Multi-queue therefore needs the
-   arbiters to hold the grant for the resource's whole occupancy (as
-   `VX_cp_launch` already assumes for KMU), or the resource units to
+   arbiters to hold the grant for the resource's whole occupancy (as the
+   launch sequencer already assumes for KMU), or the resource units to
    backpressure the arbiter.
 3. **The host serializes anyway.** All host queues funnel into one ring
    behind one mutex (§9).
@@ -321,7 +359,7 @@ The **host-side** scaling limit is the launch path, not the ring: 22
 commands per launch, unbatched, each with its own doorbell and its own
 busy-poll loop (§9). `CMD_LAUNCH_QMD` collapses the 20 DCR writes to one
 command; batching collapses 22 doorbells to one. Both are implemented in
-the Emulation CP and the runtime; the RTL CP needs the QMD mirror.
+both CPs and the runtime.
 
 ### 4.5 The submit handshake end to end
 
@@ -442,11 +480,12 @@ upper byte of the CP's own caps word is free, and the Emulation CP uses it
 | 24 | `VM_ENABLED` | The CP DMA does a page-table walk (§8) |
 | 25 | `SUPPORTS_DRAW` | The CP decodes `CMD_DRAW` / `OP_DRAW` (§8.1) |
 | 26 | `SUPPORTS_QMD` | The CP decodes `CMD_LAUNCH_QMD` (§2.3) |
+| 27 | `MMU_FAULT_REPORT` | The device answers the MMU fault-report DCRs |
+| 28 | `SUPPORTS_INDIRECT` | The CP decodes `CMD_LAUNCH_INDIRECT` (§2.4) |
 
-**The RTL CP hardwires all three to zero.** Its `CP_DEV_CAPS` read returns
-`{8'd0, AXI_TID_W, RING_SIZE_LOG2_MAX, NUM_QUEUES}`
-([`VX_cp_axil_regfile.sv:177-180`](../../hw/rtl/cp/VX_cp_axil_regfile.sv#L177)),
-so on FPGA every launch takes the 20-DCR fallback, SATP is never
+**The RTL CP sets bits 26 and 28 only**
+([`VX_cp_axil_regfile.sv`](../../hw/rtl/cp/VX_cp_axil_regfile.sv)): on FPGA
+launches replay QMDs and indirect launches run in hardware, SATP is never
 programmed, and draws stream as a ring batch. The runtime consumes the
 bits at open ([`device.cpp:274-282`](../../sw/runtime/common/device.cpp#L274))
 and branches accordingly, so the graphics driver calls `vx_enqueue_draw`
@@ -456,11 +495,20 @@ unconditionally on every backend.
 
 ## 7. Resource units
 
-- **KMU launch** ([`VX_cp_launch.sv`](../../hw/rtl/cp/VX_cp_launch.sv)) —
-  `IDLE→PULSE_START→WAIT_BUSY→WAIT_DRAIN`; holds the KMU grant until
-  `busy` falls, so a queue serializes its own launches. `done` fires on the
-  falling edge of `busy`, which makes **the kernel drain itself the
-  barrier** — the property §8.1 depends on.
+- **KMU launch sequencer** ([`VX_cp_launch_seq.sv`](../../hw/rtl/cp/VX_cp_launch_seq.sv)) —
+  reads the descriptor lines it needs over its own dev-xbar port (one
+  aligned 64-byte line per read, so no burst crosses a 4 KiB page; sub-line
+  words are selected by address), derives the grid with one shared word
+  select, a serial divider (`VX_serial_div`, x only, only when the divisor
+  exceeds 1) and a ceil-shift, then replays the pairs from the held read
+  beat (`rready` low) through a registered DCR request stage. While it
+  replays, `dcr_hold` masks the DCR arbiter's bids and the replay waits for
+  the DCR proxy to go idle, so no other DCR command interleaves with a
+  launch descriptor. It then pulses start, holds the KMU grant until `busy`
+  falls, and fires `done` on that falling edge, which makes **the kernel
+  drain itself the barrier** — the property §8.1 depends on. A
+  predicated-off launch finishes with `skip`/`skip_n` instead, which loads
+  the engine's skip counter.
 - **DCR proxy** ([`VX_cp_dcr_proxy.sv`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv)) —
   `IDLE→REQ→(WAIT_RSP)→DONE`. Writes complete at `REQ`; reads wait for
   `dcr_rsp_valid`. `CMD_CACHE_FLUSH` re-enters `REQ` once per core,
@@ -525,7 +573,9 @@ It reaches the rest of the simulator through six hooks
 `dram_read`, `dram_write`, `vortex_dcr_write`, `vortex_dcr_read`,
 `vortex_start`, `vortex_busy`. Its engine FSM mirrors the RTL's
 (`Idle/Decode/Bid/WaitDone/Retire`) plus two states for the draw walk, and
-its `LaunchState` mirrors `VX_cp_launch` exactly. Having no arbiters is not
+its `LaunchState` mirrors the RTL sequencer's start/busy/drain states. It is
+functional: descriptor reads and the replay take no simulated cycles, where
+the RTL sequencer spends a few DRAM round trips per launch (§10). Having no arbiters is not
 a divergence — with one queue the RTL's arbiters are degenerate too.
 
 The Emulation CP's MMIO map matches the RTL regfile **plus**:
@@ -538,7 +588,7 @@ The Emulation CP's MMIO map matches the RTL regfile **plus**:
   `MEM_FLAG_PHYSICAL` flag ([`:519-520`](../../sim/common/cmd_processor.cpp#L519)),
 - byte-exact `CMD_MEM_*` copies, staged through a 64 KiB bounce buffer
   ([`:531-541`](../../sim/common/cmd_processor.cpp#L531)),
-- the two extra opcodes, `CMD_LAUNCH_QMD` (§2.3) and `CMD_DRAW` (§8.1).
+- the extra opcode `CMD_DRAW` (§8.1).
 
 This means **CP DMA is MMU-aware in simulation but not on FPGA** — a
 deliberate phased rollout (runtime + emulation first, RTL walker later;
@@ -728,12 +778,11 @@ The following gaps remain **open**.
 
 **Performance / feature gaps:**
 
-6. **QMD `CMD_LAUNCH_QMD` in the RTL CP.** The atomic-launch opcode, the
-   in-memory descriptor format, the runtime encoder, and the
-   `SUPPORTS_QMD` gate all exist and are validated on the Emulation CP
-   (§2.3); the RTL CP does not decode 0x0B and advertises 0. Until it does,
-   every FPGA launch pays the 20-`CMD_DCR_WRITE` dance, and per-queue
-   launch concurrency stays blocked on item 5.
+6. **Launch-descriptor latency is not modelled.** The RTL sequencer reads
+   the header, predicate, record and body lines one at a time, and the
+   Emulation CP takes no cycles for them, so the per-launch descriptor cost
+   is visible only on xrt/opae. Per-queue launch concurrency stays blocked
+   on item 5.
 7. **`CMD_DRAW` in the RTL CP** (§8.1) — same shape: shipped in emulation,
    cap bit cleared in RTL.
 8. **Multi-queue everywhere.** RTL is parameterized on `NUM_QUEUES` but

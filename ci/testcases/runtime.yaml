@@ -4,8 +4,9 @@
 #      (libvortex-simx.so) at vx_dev_open; `make software` only builds
 #      kernel+stub, and this host case has no driver sim_build to produce it,
 #      so build it explicitly here.
-#   2. `make -C tests/regression/basic kernel.vxbin` — test_module_kernel
-#      consumes the `basic` regression .vxbin, which run-simx does NOT build.
+#   2. `make -C tests/regression/{basic,indirect} kernel.vxbin` —
+#      test_module_kernel and test_indirect consume those regression .vxbins,
+#      which run-simx does NOT build.
 #   3. `make -C tests/runtime run-simx` — build + run the test binaries.
 category: runtime
 defaults:
@@ -16,7 +17,7 @@ defaults:
 tests:
 - id: isa-1
   via: script
-  run: "make -C sw/runtime simx && make -C tests/regression/basic kernel.vxbin && make -C tests/runtime run-simx"
+  run: "make -C sw/runtime simx && make -C tests/regression/basic kernel.vxbin && make -C tests/regression/indirect kernel.vxbin && make -C tests/runtime run-simx"
 # Imported host memory (VX_MEM_IMPORT_HOST): device and host share the bytes,
 # including a host write between two launches, which must not meet a stale
 # cache line. Both backends that implement the import.
@@ -31,3 +32,15 @@ tests:
   - rtlsim
   configs: -DVX_CFG_L2_ENABLE
   run: "make -C sw/runtime rtlsim && make -C tests/regression/basic kernel.vxbin && make -C tests/runtime run-import-rtlsim"
+# Indirect launch on the cycle-level backends: rtlsim (C++ command processor
+# over the RTL Vortex) and xrt (the RTL command processor, VX_cp_core).
+- id: indirect-rtlsim
+  via: script
+  xlen: [32]
+  run: "make -C sw/runtime rtlsim && make -C tests/regression/indirect kernel.vxbin && make -C tests/runtime run-rtlsim TESTS=test_indirect"
+  touches: [sim/common/cmd_processor, sw/runtime/, sw/common/cp_launch_abi.h, tests/runtime/test_indirect.cpp, hw/rtl/]
+- id: indirect-xrt
+  via: script
+  xlen: [32]
+  run: "make -C sw/runtime xrt && make -C tests/regression/indirect kernel.vxbin && make -C tests/runtime run-xrt TESTS=test_indirect"
+  touches: [hw/rtl/cp/, hw/rtl/afu/, sw/runtime/, sw/common/cp_launch_abi.h, tests/runtime/test_indirect.cpp]

@@ -150,6 +150,14 @@ tests:
   drivers:
   - rtlsim
   app: single_cta
+# Command-processor indirect launch through the RTL command processor (the
+# xrt path runs VX_cp_core; simx/rtlsim run its C++ model, covered by isa-*).
+- id: indirect-xrt
+  via: blackbox
+  drivers:
+  - xrt
+  app: indirect
+  args: -n1024
 - id: module_reload-1
   via: blackbox
   drivers:

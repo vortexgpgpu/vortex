@@ -23,7 +23,7 @@
 //                            ▼              ▼               ▼
 //      ┌──────────────────────────────┐   ┌────────────────────────┐
 //      │  host xbar: fetch[N] + cmpl  │   │  dev xbar: DMA(dev) +   │
-//      │            + DMA(host)       │   │            event       │
+//      │            + DMA(host)       │   │   event + launch seq   │
 //      └───────────────┬──────────────┘   └───────────┬────────────┘
 //                      ▼ axi_host (AXI4)              ▼ axi_dev (AXI4)
 //
@@ -33,7 +33,8 @@
 //   axi_dev reaches device memory. The DMA engine straddles both: its
 //   opcode picks the read-source and write-destination port.
 //
-//   The shared KMU launch / DCR proxy connect to gpu_if (Vortex side).
+//   The shared KMU launch sequencer / DCR proxy connect to gpu_if (Vortex
+//   side). The sequencer reads launch descriptors through the dev xbar.
 //
 // AXI master TID layout (per xbar):
 //   bit [ID_W-1 : ID_W-SRC_W]  = source index (xbar sets/inspects this for
@@ -112,14 +113,15 @@ module VX_cp_core
 
   // Host xbar sources: fetch[NUM_QUEUES] + completion + DMA(host side).
   localparam int N_SRC_HOST = NUM_QUEUES + 2;
-  // Device xbar sources: DMA(dev side) + event unit.
-  localparam int N_SRC_DEV  = 2;
+  // Device xbar sources: DMA(dev side) + event unit + launch sequencer.
+  localparam int N_SRC_DEV  = 3;
 
   // Source-slot indices.
   localparam int SLOT_CMPL     = NUM_QUEUES;       // host xbar
   localparam int SLOT_DMA_HOST = NUM_QUEUES + 1;   // host xbar
   localparam int SLOT_DMA_DEV  = 0;                // dev xbar
   localparam int SLOT_EVENT    = 1;                // dev xbar
+  localparam int SLOT_LAUNCH   = 2;                // dev xbar
 
   // ----- Regfile-owned per-queue programmable state -----
   cpe_state_t q_state          [NUM_QUEUES];
@@ -129,6 +131,7 @@ module VX_cp_core
   logic [63:0] q_head_to_reg   [NUM_QUEUES];
   logic [63:0] q_seqnum_to_reg [NUM_QUEUES];
   logic [31:0] q_error_to_reg  [NUM_QUEUES];
+  logic [Q_ERROR_DESC_ALIGN:0] q_error_r [NUM_QUEUES];
 
   // Aggregated CP status seen by the host through CP_STATUS.
   logic cp_busy;
@@ -191,8 +194,11 @@ module VX_cp_core
   cmd_t       cpe_cmd       [NUM_QUEUES];
   logic       cpe_cmd_ready [NUM_QUEUES];
 
-  // Shared-resource done pulses.
+  // Shared-resource done pulses; a launch may also finish predicated off.
   logic launch_done, dma_done, dcr_done, event_done;
+  logic        launch_skip;
+  logic [15:0] launch_skip_n;
+  logic        launch_fault;
 
   // Per-CPE AXI sub-master ports (fetch is the only AXI user per CPE).
   VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W))
@@ -231,6 +237,8 @@ module VX_cp_core
         // every CPE; only the granted CPE is in S_WAIT_DONE when the
         // matching pulse arrives.
         .kmu_done_i    (launch_done),
+        .kmu_skip_i    (launch_skip),
+        .kmu_skip_n_i  (launch_skip_n),
         .dma_done_i    (dma_done),
         .dcr_done_i    (dcr_done),
         .event_done_i  (event_done),
@@ -247,7 +255,7 @@ module VX_cp_core
 
       // Telemetry up to the regfile.
       assign q_seqnum_to_reg[q] = seqnum_out[q];
-      assign q_error_to_reg [q] = 32'd0;   // per-queue error reporting reserved
+      assign q_error_to_reg [q] = 32'(q_error_r[q]);
     end
   endgenerate
 
@@ -263,6 +271,8 @@ module VX_cp_core
   logic       dma_grant   [NUM_QUEUES];
 
   wire        dcr_valid   [NUM_QUEUES];
+  wire        dcr_bid     [NUM_QUEUES];
+  logic       seq_dcr_hold;
   wire [1:0]  dcr_prio    [NUM_QUEUES];
   cmd_t       dcr_cmd     [NUM_QUEUES];
   logic       dcr_grant   [NUM_QUEUES];
@@ -285,6 +295,8 @@ module VX_cp_core
       assign bid_dma[q].grant = dma_grant[q];
 
       assign dcr_valid[q]     = bid_dcr[q].valid;
+      // No DCR command may interleave with a launch descriptor replay.
+      assign dcr_bid[q]       = dcr_valid[q] && !seq_dcr_hold;
       assign dcr_prio[q]      = bid_dcr[q].priority_;
       assign dcr_cmd[q]       = bid_dcr[q].cmd;
       assign bid_dcr[q].grant = dcr_grant[q];
@@ -296,21 +308,41 @@ module VX_cp_core
     end
   endgenerate
 
-  VX_cp_arbiter #(.N(NUM_QUEUES)) u_arb_kmu (
-    .clk(clk), .reset(reset),
-    .bid_valid(kmu_valid), .bid_priority(kmu_prio), .bid_grant(kmu_grant)
+  VX_cp_arbiter #(
+    .N (NUM_QUEUES)
+  ) u_arb_kmu (
+    .clk          (clk),
+    .reset        (reset),
+    .bid_valid    (kmu_valid),
+    .bid_priority (kmu_prio),
+    .bid_grant    (kmu_grant)
   );
-  VX_cp_arbiter #(.N(NUM_QUEUES)) u_arb_dma (
-    .clk(clk), .reset(reset),
-    .bid_valid(dma_valid), .bid_priority(dma_prio), .bid_grant(dma_grant)
+  VX_cp_arbiter #(
+    .N (NUM_QUEUES)
+  ) u_arb_dma (
+    .clk          (clk),
+    .reset        (reset),
+    .bid_valid    (dma_valid),
+    .bid_priority (dma_prio),
+    .bid_grant    (dma_grant)
   );
-  VX_cp_arbiter #(.N(NUM_QUEUES)) u_arb_dcr (
-    .clk(clk), .reset(reset),
-    .bid_valid(dcr_valid), .bid_priority(dcr_prio), .bid_grant(dcr_grant)
+  VX_cp_arbiter #(
+    .N (NUM_QUEUES)
+  ) u_arb_dcr (
+    .clk          (clk),
+    .reset        (reset),
+    .bid_valid    (dcr_bid),
+    .bid_priority (dcr_prio),
+    .bid_grant    (dcr_grant)
   );
-  VX_cp_arbiter #(.N(NUM_QUEUES)) u_arb_event (
-    .clk(clk), .reset(reset),
-    .bid_valid(event_valid), .bid_priority(event_prio), .bid_grant(event_grant)
+  VX_cp_arbiter #(
+    .N (NUM_QUEUES)
+  ) u_arb_event (
+    .clk          (clk),
+    .reset        (reset),
+    .bid_valid    (event_valid),
+    .bid_priority (event_prio),
+    .bid_grant    (event_grant)
   );
 
   // ----- Pick the granted bid's cmd for each shared resource -----
@@ -329,38 +361,102 @@ module VX_cp_core
     end
   end
 
-  `UNUSED_VAR (granted_kmu_cmd)
 
   // Internal CP-side bundle; the register slice isolating it from the Vortex
   // boundary (gpu_if) is instantiated at the bottom of the module.
   VX_cp_gpu_if gpu_if_int();
 
-  // ----- Shared KMU launch (consumes the kmu bid grant) -----
-  VX_cp_launch u_launch (
-    .clk      (clk),
-    .reset    (reset),
-    .grant    (any_kmu_grant),
-    .start    (gpu_if_int.start),
-    .gpu_busy (gpu_if_int.busy),
-    .done     (launch_done)
-  );
+  VX_mem_axi_if #(
+    .ADDR_W (ADDR_W),
+    .DATA_W (DATA_W),
+    .ID_W   (ID_W)
+  ) launch_axi ();
 
   // ----- Shared DCR proxy -----
+  wire                          proxy_idle;
+  wire                          proxy_req_valid;
+  wire                          proxy_req_rw;
+  wire [`VX_DCR_ADDR_BITS-1:0]  proxy_req_addr;
+  wire [`VX_DCR_DATA_BITS-1:0]  proxy_req_data;
+
   VX_cp_dcr_proxy u_dcr (
     .clk           (clk),
     .reset         (reset),
     .grant         (any_dcr_grant),
     .cmd           (granted_dcr_cmd),
     .done          (dcr_done),
+    .idle          (proxy_idle),
     .last_rsp_data (dcr_last_rsp_data),
-    .dcr_req_valid (gpu_if_int.dcr_req_valid),
-    .dcr_req_rw    (gpu_if_int.dcr_req_rw),
-    .dcr_req_addr  (gpu_if_int.dcr_req_addr),
-    .dcr_req_data  (gpu_if_int.dcr_req_data),
+    .dcr_req_valid (proxy_req_valid),
+    .dcr_req_rw    (proxy_req_rw),
+    .dcr_req_addr  (proxy_req_addr),
+    .dcr_req_data  (proxy_req_data),
     .dcr_rsp_valid (gpu_if_int.dcr_rsp_valid),
     .dcr_rsp_data  (gpu_if_int.dcr_rsp_data)
   );
-  `UNUSED_VAR (gpu_if_int.dcr_req_ready)
+
+  // ----- Shared KMU launch sequencer (consumes the kmu bid grant) -----
+  wire                          seq_req_valid;
+  wire [`VX_DCR_ADDR_BITS-1:0]  seq_req_addr;
+  wire [`VX_DCR_DATA_BITS-1:0]  seq_req_data;
+
+  VX_cp_launch_seq #(
+    .ADDR_W (ADDR_W),
+    .DATA_W (DATA_W),
+    .ID_W   (ID_W)
+  ) u_launch (
+    .clk            (clk),
+    .reset          (reset),
+    .grant          (any_kmu_grant),
+    .cmd            (granted_kmu_cmd),
+    .done           (launch_done),
+    .skip           (launch_skip),
+    .skip_n         (launch_skip_n),
+    .fault          (launch_fault),
+    .dcr_hold       (seq_dcr_hold),
+    .dcr_proxy_idle (proxy_idle),
+    .dcr_req_valid  (seq_req_valid),
+    .dcr_req_addr   (seq_req_addr),
+    .dcr_req_data   (seq_req_data),
+    .dcr_req_ready  (gpu_if_int.dcr_req_ready),
+    .start          (gpu_if_int.start),
+    .gpu_busy       (gpu_if_int.busy),
+    .axi_m          (launch_axi)
+  );
+
+  // Q_ERROR: sticky per queue until the queue is reset. A launch fault belongs
+  // to the queue that holds the KMU grant.
+  localparam int QW = `UP($clog2(NUM_QUEUES));
+  logic [QW-1:0] kmu_owner;
+  always_ff @(posedge clk) begin
+    if (reset) begin
+      kmu_owner <= '0;
+    end else begin
+      for (int i = 0; i < NUM_QUEUES; ++i) begin
+        if (kmu_grant[i]) begin
+          kmu_owner <= QW'(i);
+        end
+      end
+    end
+  end
+  generate
+    for (genvar q = 0; q < NUM_QUEUES; ++q) begin : g_q_error
+      always_ff @(posedge clk) begin
+        if (reset || q_clear[q]) begin
+          q_error_r[q] <= '0;
+        end else if (launch_fault && (kmu_owner == QW'(q))) begin
+          q_error_r[q][Q_ERROR_DESC_ALIGN] <= 1'b1;
+        end
+      end
+    end
+  endgenerate
+
+  // The sequencer drives the DCR bus only while it holds the arbiter with the
+  // proxy idle, so the two requesters are never active together.
+  assign gpu_if_int.dcr_req_valid = seq_req_valid || proxy_req_valid;
+  assign gpu_if_int.dcr_req_rw    = seq_req_valid ? 1'b1         : proxy_req_rw;
+  assign gpu_if_int.dcr_req_addr  = seq_req_valid ? seq_req_addr : proxy_req_addr;
+  assign gpu_if_int.dcr_req_data  = seq_req_valid ? seq_req_data : proxy_req_data;
 
   // ----- DMA (straddles host + dev xbars) -----
   VX_mem_axi_if #(.ADDR_W(ADDR_W), .DATA_W(DATA_W), .ID_W(ID_W)) dma_host_axi ();
@@ -467,6 +563,7 @@ module VX_cp_core
 
   `CP_AXI_LINK(xbar_dev_src[SLOT_DMA_DEV], dma_dev_axi);
   `CP_AXI_LINK(xbar_dev_src[SLOT_EVENT],   event_axi);
+  `CP_AXI_LINK(xbar_dev_src[SLOT_LAUNCH],  launch_axi);
 
   // Register slice on the path to device memory (memory subsystem).
   VX_mem_axi_if #(

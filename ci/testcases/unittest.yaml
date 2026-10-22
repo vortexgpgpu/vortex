@@ -18,6 +18,13 @@ tests:
   - id: hw-fpu
     via: script
     run: "make -C hw/unittest run-fpu"
+  # Command processor (fetch/unpack/engine/arbiters/DMA/DCR proxy/launch
+  # sequencer/full core): the `hw` lane only builds these; this lane executes
+  # them so a CP RTL change is gated against its cycle-level unit models.
+  - id: hw-cp
+    via: script
+    run: "make -C hw/unittest run-cp"
+    touches: [hw/rtl/cp, hw/unittest/cp_]
   # TCU FEDP datapath: the `hw` lane only builds it; this lane executes tcu_fedp
   # per format (native TFR + DPI). touches gates it on tcu changes.
   - id: hw-tcu

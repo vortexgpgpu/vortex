@@ -142,7 +142,11 @@ EXPECT_ATTRIB ?=
 # must report by reason, as its vortexpipe-cpu line prints them -- e.g.
 # sparse-image=2.
 EXPECT_CPU ?=
-ifneq ($(EXPECT_ATTRIB)$(EXPECT_CPU),)
+# EXPECT_NO_HOSTREAD := 1 requires every context to report, on its
+# vortexpipe-hostread line, that the host read no indirect dispatch record and
+# no render-condition word: the command processor evaluated them all.
+EXPECT_NO_HOSTREAD ?= 0
+ifneq ($(EXPECT_ATTRIB)$(EXPECT_CPU)$(filter 1,$(EXPECT_NO_HOSTREAD)),)
 RUN_ENV += VORTEXPIPE_ATTRIB=1
 endif
 RUN_LD_PATH := $(MESA_PATH)/lib:$(LLVM_PATH)/lib:$(ZSTD_PATH)/lib:$(VORTEX_RT_LIB)
@@ -182,6 +186,14 @@ define check_run
 	      echo "FAIL: $(PROJECT) did not place its work as $$p"; exit 1; \
 	   fi; \
 	done; \
+	if [ "$(EXPECT_NO_HOSTREAD)" = 1 ]; then \
+	   if ! echo "$$out" | grep -q '^vortexpipe-hostread:'; then \
+	      echo "FAIL: $(PROJECT) reported no vortexpipe-hostread line"; exit 1; \
+	   fi; \
+	   if echo "$$out" | grep '^vortexpipe-hostread:' | grep -qv ' dispatch=0 cond=0$$'; then \
+	      echo "FAIL: $(PROJECT) read launch arguments on the host"; exit 1; \
+	   fi; \
+	fi; \
 	for p in $(EXPECT_CPU); do \
 	   if ! echo "$$out" | grep -q "^vortexpipe-cpu:.* $$p\( \|$$\)"; then \
 	      echo "FAIL: $(PROJECT) did not report llvmpipe work $$p"; exit 1; \

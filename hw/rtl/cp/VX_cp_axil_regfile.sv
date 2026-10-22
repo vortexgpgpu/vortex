@@ -199,7 +199,8 @@ module VX_cp_axil_regfile
       case (addr[5:0])
         6'h00: return r_cp_ctrl;
         6'h04: return {30'd0, cp_error, cp_busy};
-        6'h08: return {8'd0,
+        // Bit 28 SUPPORTS_INDIRECT, bit 26 SUPPORTS_QMD.
+        6'h08: return {3'd0, 1'b1, 1'b0, 1'b1, 2'd0,
                        8'(AXI_TID_W),
                        8'(RING_SIZE_LOG2_MAX),
                        8'(NUM_QUEUES)};

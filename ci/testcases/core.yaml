@@ -172,6 +172,14 @@ tests:
   via: blackbox
   app: stencil3d
   args: -n32
+# Command-processor indirect launch: a kernel writes the grid record, the next
+# launch takes its grid from it, a predicated-off launch skips itself and the
+# launch behind it, and a dependent kernel consumes the result.
+- id: parity-indirect
+  check: model_parity
+  via: blackbox
+  app: indirect
+  args: -n16384
 # Software raycaster: divergent control flow + mixed ALU/FPU.
 - id: parity-raycast
   check: model_parity

@@ -29,7 +29,7 @@ EXCLUDE :=
 # Each of these pins a specific defect in the vortexpipe driver and fails when
 # it regresses; they are a separate assignment only so the master list above
 # stays one block to edit.
-TESTS += blendorder clipdepth primitives redraw realloc fallback_mix hostcoherent rtinplace xfer_inplace tex_rtt subgroup_vs bigwg manyvary image imgfmt imglayers imgsat bgra bgra_om omfmt mrtfmt intrt rtfield srgbblend flatvary subgroup_fs quadops descidx gfximg zeroshared deriv discard dispatchq imagedraw rtqdraw localarr multiview occlusion csstats condrender manydesc csmultiset ubo_lastset msaa texwrap earlyz tex_trilinear msaa2x msaa_read texnpot tex_stages tex_reduction tex_aniso tex_bc drawindirect drawcomplete earlytests viewindex msaa_cov msaa_rate msaa_mrt msaa_resolve msaa_dsresolve msaa_interp gfxstats primgen multiviewport xfb varypack imgsparse sparsefb
+TESTS += blendorder clipdepth primitives redraw realloc fallback_mix hostcoherent rtinplace xfer_inplace tex_rtt subgroup_vs bigwg manyvary image imgfmt imglayers imgsat bgra bgra_om omfmt mrtfmt intrt rtfield srgbblend flatvary subgroup_fs quadops descidx gfximg zeroshared deriv discard dispatchq imagedraw rtqdraw localarr multiview occlusion csstats condrender manydesc csmultiset ubo_lastset msaa texwrap earlyz tex_trilinear msaa2x msaa_read texnpot tex_stages tex_reduction tex_aniso tex_bc drawindirect drawcomplete earlytests viewindex msaa_cov msaa_rate msaa_mrt msaa_resolve msaa_dsresolve msaa_interp gfxstats primgen multiviewport xfb varypack imgsparse sparsefb dispatchindirect
 
 # --- per-backend exclude lists ---------------------------------------
 EXCLUDE_simx   :=

@@ -135,8 +135,8 @@
   <text x="872" y="243" class="th" fill="#2e5e82">shared resource units</text>
 
   <rect x="872" y="256" width="256" height="40" rx="4" class="unit"/>
-  <text x="884" y="273" class="th">VX_cp_launch</text>
-  <text x="884" y="289" class="tt">pulse start, hold until busy falls</text>
+  <text x="884" y="273" class="th">VX_cp_launch_seq</text>
+  <text x="884" y="289" class="tt">replay QMD/ILD, start, hold until busy falls</text>
 
   <rect x="872" y="304" width="256" height="40" rx="4" class="unit"/>
   <text x="884" y="321" class="th">VX_cp_dcr_proxy</text>

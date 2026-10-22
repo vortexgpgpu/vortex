@@ -21,6 +21,11 @@
 //   0x07 FENCE          -> no bid, retires immediately
 //   0x08 EVENT_SIGNAL   -> bid EVENT
 //   0x09 EVENT_WAIT     -> bid EVENT
+//   0x0B LAUNCH_QMD     -> bid_kmu
+//   0x0D LAUNCH_INDIRECT -> bid_kmu
+//
+// A KMU done with kmu_skip_i set makes the next kmu_skip_n_i commands retire
+// from DECODE without bidding; the command after them bids normally.
 //
 // Also asserts:
 //   - retire_seqnum monotonically increments by 1 per retired command
@@ -74,7 +79,13 @@ enum CmdOp : uint8_t {
     OP_FENCE      = 0x07,
     OP_EVT_SIG    = 0x08,
     OP_EVT_WAIT   = 0x09,
+    OP_LAUNCH_QMD = 0x0B,
+    OP_LAUNCH_IND = 0x0D,
 };
+
+// Skip report driven with the next KMU done pulse.
+static bool     g_kmu_skip   = false;
+static uint16_t g_kmu_skip_n = 0;
 
 static constexpr uint8_t F_PROFILE_BIT = 0;
 
@@ -208,12 +219,18 @@ static uint64_t run_one_cmd(vl_simulator<T>& sim, uint64_t& tick,
         // ----- Cycle 4: WAIT_DONE -> pulse done -> RETIRE -----
         // Engine waits for the resource's done pulse before retiring.
         // Simulate a one-cycle done pulse here.
-        if (expect_kmu)   sim->kmu_done_i   = 1;
+        if (expect_kmu) {
+            sim->kmu_done_i   = 1;
+            sim->kmu_skip_i   = g_kmu_skip ? 1 : 0;
+            sim->kmu_skip_n_i = g_kmu_skip_n;
+        }
         if (expect_dma)   sim->dma_done_i   = 1;
         if (expect_dcr)   sim->dcr_done_i   = 1;
         if (expect_event) sim->event_done_i = 1;
         cycle(sim, tick);
         sim->kmu_done_i   = 0;
+        sim->kmu_skip_i   = 0;
+        sim->kmu_skip_n_i = 0;
         sim->dma_done_i   = 0;
         sim->dcr_done_i   = 0;
         sim->event_done_i = 0;
@@ -258,6 +275,8 @@ int main(int argc, char** argv) {
     sim->bid_dcr_grant   = 0;
     sim->bid_event_grant = 0;
     sim->kmu_done_i   = 0;
+    sim->kmu_skip_i   = 0;
+    sim->kmu_skip_n_i = 0;
     sim->dma_done_i   = 0;
     sim->dcr_done_i   = 0;
     sim->event_done_i = 0;
@@ -288,6 +307,27 @@ int main(int argc, char** argv) {
                       /*kmu=*/false, /*dma=*/true, /*dcr=*/false, /*event=*/false, seq);
     seq = run_one_cmd(sim, tick, OP_MEM_COPY, 0,
                       /*kmu=*/false, /*dma=*/true, /*dcr=*/false, /*event=*/false, seq);
+
+    // ----- LAUNCH_QMD / LAUNCH_INDIRECT bid KMU -----
+    seq = run_one_cmd(sim, tick, OP_LAUNCH_QMD, 0, true, false, false, false, seq);
+    seq = run_one_cmd(sim, tick, OP_LAUNCH_IND, 0, true, false, false, false, seq);
+
+    // ----- A predicated-off launch skips the next 3 commands of any kind -----
+    g_kmu_skip   = true;
+    g_kmu_skip_n = 3;
+    seq = run_one_cmd(sim, tick, OP_LAUNCH_IND, 0, true, false, false, false, seq);
+    g_kmu_skip   = false;
+    g_kmu_skip_n = 0;
+    seq = run_one_cmd(sim, tick, OP_DCR_WRITE,  0, false, false, false, false, seq);
+    seq = run_one_cmd(sim, tick, OP_LAUNCH_QMD, 0, false, false, false, false, seq);
+    seq = run_one_cmd(sim, tick, OP_MEM_COPY,   0, false, false, false, false, seq);
+    seq = run_one_cmd(sim, tick, OP_DCR_WRITE,  0, false, false, true,  false, seq);
+
+    // ----- A skip count of zero skips nothing -----
+    g_kmu_skip = true;
+    seq = run_one_cmd(sim, tick, OP_LAUNCH_IND, 0, true, false, false, false, seq);
+    g_kmu_skip = false;
+    seq = run_one_cmd(sim, tick, OP_LAUNCH, 0, true, false, false, false, seq);
 
     // ----- FENCE skips (no resource); EVENT_SIGNAL / EVENT_WAIT bid EVENT -----
     seq = run_one_cmd(sim, tick, OP_FENCE,    0, false, false, false, false, seq);

@@ -15,7 +15,7 @@ TESTS := \
     sgemm2_dxa_mcast sgemm_tcu_wg_dxa_mcast                           \
     dxa_copy dxa_copy_mcast dxa_kmajor_check                          \
     async_barrier async_gbarrier gbar_phase bar_slot_phase packld wgather wsync quad_lod \
-    occupancy multikernel reopen module_reload single_cta            \
+    occupancy multikernel indirect reopen module_reload single_cta   \
     vm_test vm_fault vm_stress
 
 # --- common exclude list ---------------------------------------------

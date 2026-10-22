@@ -57,6 +57,13 @@
 //   from one host doorbell with no host round-trip — the "true GPU" draw. The
 //   descriptor is an indirect command bundle, so the executed sequence is
 //   byte-identical to streaming the same commands through the ring.
+//
+// CMD_LAUNCH_INDIRECT (OP_LAUNCH_INDIRECT, opcode 0x0D) — predicated launch.
+//   arg0 points at an indirect launch descriptor (cp_launch_abi.h): a predicate,
+//   a grid read from a device-memory record, and a QMD body. When the
+//   predicate fails or a grid dimension is zero, the command retires and the
+//   next skip_n commands of its stream (ring, or the enclosing OP_DRAW bundle)
+//   retire unexecuted, so a device-computed zero never reaches the KMU.
 // ============================================================================
 
 #ifndef VORTEX_COMMAND_PROCESSOR_H
@@ -149,7 +156,11 @@ private:
         OP_CACHE_FLUSH = 0x0A,
         OP_LAUNCH_QMD = 0x0B,  // atomic launch: KMU descriptor read from memory
         OP_DRAW       = 0x0C,  // device-orchestrated draw: arg0 = draw descriptor addr
+        OP_LAUNCH_INDIRECT = 0x0D,  // predicated launch: arg0 = indirect launch descriptor addr
     };
+
+    // Outcome of evaluating an indirect launch descriptor.
+    enum class IldAction { Skip, Retire, Launch };
 
     // Fixed per-step stride inside a draw descriptor: the 28-byte cmd-record
     // prefix (opcode/flags/reserved + arg0/arg1/arg2). A uniform stride keeps
@@ -203,6 +214,11 @@ private:
     Cmd         cur_cmd_{};
     bool        cur_is_launch_ = false;
     bool        cur_is_no_resource_ = false;
+    // Commands still to retire unexecuted after a predicated-off indirect launch.
+    uint32_t    skip_cnt_ = 0;
+    // A launch has drained with no CMD_CACHE_FLUSH behind it yet: an indirect
+    // read now could miss data that kernel left in the caches.
+    bool        unflushed_launch_ = false;
 
     // ----- Draw-bundle state (OP_DRAW walk) -----
     uint64_t    draw_phys_      = 0;   // descriptor base (translated)
@@ -240,8 +256,17 @@ private:
     // compares to cur_cmd_.arg1 under the wait_op encoded in arg2[1:0].
     bool event_wait_satisfied_();
     // CMD_LAUNCH_QMD: read the in-memory KMU descriptor at `qmd_addr` and
-    // replay its {dcr_addr,value} pairs through the DCR-write hook.
-    void apply_qmd_(uint64_t qmd_addr);
+    // replay its {dcr_addr,value} pairs through the DCR-write hook. False when
+    // the descriptor is not line aligned: nothing is replayed, Q_ERROR is set,
+    // and the launch must not start.
+    bool apply_qmd_(uint64_t qmd_addr);
+    // CMD_LAUNCH_INDIRECT: evaluate the descriptor at `ild_addr` (predicate,
+    // grid select/scale). On IldAction::Launch the QMD pairs have been
+    // replayed with the computed grid; on IldAction::Skip `*skip_n` is the
+    // number of following commands to retire unexecuted. A descriptor that is
+    // not line aligned retires (IldAction::Retire) and sets Q_ERROR.
+    IldAction apply_ild_(uint64_t ild_addr, uint32_t* skip_n);
+    uint32_t read_dev32_(uint64_t vaddr) const;
     // Advance the launch FSM one step using cur_cmd_.
     void tick_launch();
     // Advance the engine FSM one step.

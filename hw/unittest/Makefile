@@ -60,6 +60,18 @@ run:
 	$(MAKE) -C fdivsqrt_unit run
 	$(MAKE) -C tex_lerp run
 
+# Command processor blocks only — executed (not just built) so CI gates the CP.
+run-cp:
+	$(MAKE) -C cp_arbiter run
+	$(MAKE) -C cp_engine run
+	$(MAKE) -C cp_launch run
+	$(MAKE) -C cp_dcr_proxy run
+	$(MAKE) -C cp_unpack run
+	$(MAKE) -C cp_axil_regfile run
+	$(MAKE) -C cp_axi_path run
+	$(MAKE) -C cp_dma run
+	$(MAKE) -C cp_core run
+
 # FPU arithmetic units only — executed (not just built) so CI gates correctness.
 run-fpu:
 	$(MAKE) -C fma_unit run
