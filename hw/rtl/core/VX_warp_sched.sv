@@ -378,10 +378,13 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
     wire [SW-1:0] preferred_warps = ready_warps & ~ibuf_full;
 `ifndef L1_ENABLE
     // without L1, the icache must never stall: it shares the bus with dcache responses
+    wire [SW-1:0] full_warps     = preferred_warps;
     wire [SW-1:0] schedule_warps = preferred_warps;
-    `UNUSED_VAR (sched_if.all_ibuf_full)
+    `UNUSED_VAR (sched_if.slice_ibuf_full)
 `else
-    wire [SW-1:0] schedule_warps = sched_if.all_ibuf_full ? ready_warps : preferred_warps;
+    // once every ibuffer of the core is full, any ready warp may fetch
+    wire [SW-1:0] full_warps     = ready_warps;
+    wire [SW-1:0] schedule_warps = (& sched_if.slice_ibuf_full) ? full_warps : preferred_warps;
 `endif
 
     wire [`UP(FETCH_WFS_BITS)-1:0] cand_index;
@@ -477,7 +480,7 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
     // status
     assign sched_if.active        = active_warps;
     assign sched_if.stalled       = stalled_warps;
-    assign sched_if.ibuf_full_n   = ibuf_full_n;
+    assign sched_if.ibuf_full     = (& ibuf_full);
     assign sched_if.pending_empty = pending_empty;
 
     // performance events
@@ -487,7 +490,8 @@ module VX_warp_sched import VX_gpu_pkg::*; #(
     for (genvar q = 0; q < NPS; ++q) begin : g_divergence
         assign sched_if.divergence[q] = wctl[q].split_valid && wctl[q].split.is_dvg;
     end
-    assign sched_if.sched_valid   = cand_valid;
+    assign sched_if.sched_valid_room = (| preferred_warps);
+    assign sched_if.sched_valid_full = (| full_warps);
     assign sched_if.sched_fire    = schedule_if_fire;
     assign sched_if.sched_tmask   = schedule_if.data.tmask;
 

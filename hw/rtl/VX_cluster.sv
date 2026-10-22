@@ -489,10 +489,15 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // combinationally -- the beat presented at the cluster input and any beat resident
     // in a per-socket output skid -- so a launch in transit is never invisible on the
     // presented cycle. Child (per_socket_busy) stays registered.
+    // A socket's busy has no path from its inputs: the launch and DCR beats this
+    // level presents to the sockets join the registered aggregation here.
     wire [NUM_SOCKETS-1:0] per_socket_kmu_valid;
+    wire [NUM_SOCKETS-1:0] per_socket_dcr_valid;
     for (genvar i = 0; i < NUM_SOCKETS; ++i) begin : g_kmu_link_valid
         assign per_socket_kmu_valid[i] = per_socket_kmu_bus_if[i].valid;
+        assign per_socket_dcr_valid[i] = per_socket_dcr_bus_if[i].req_valid;
     end
+    wire socket_issued_busy = (| per_socket_kmu_valid) | (| per_socket_dcr_valid);
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // The merge->distribute link is a registered cluster-internal launch bus; a beat
     // resident in it is covered here just like the input and per-socket links.
@@ -503,9 +508,9 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     wire busy_r;
 `ifdef EXT_GFX_ANY_ENABLE
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | gfx_busy | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
 `else
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | socket_issued_busy | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
 `endif
     assign busy = busy_r | dcr_bus_if.req_valid | launch_link_busy;
 
