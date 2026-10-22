@@ -119,7 +119,11 @@ instr_trace_t* Sequencer::get(instr_trace_t* trace) {
     for (uint32_t i = 0; i < NUM_SRC_REGS; ++i) {
       uop_trace->src_regs[i] = uop_instr->get_src_reg(i);
     }
-    uop_trace->wb = (uop_instr->get_dest_reg().type != RegType::None);
+    // As for whole instructions (Core::issue): writes to x0 are silent, so a
+    // uop naming x0 (a pair atomic's discarded old value) reserves nothing.
+    auto uop_dst = uop_instr->get_dest_reg();
+    uop_trace->wb = (uop_dst.type != RegType::None)
+                 && !(uop_dst.type == RegType::Integer && uop_dst.idx == 0);
 
     state_.current_uop = uop_trace;
     return uop_trace;

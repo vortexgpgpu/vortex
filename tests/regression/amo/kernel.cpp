@@ -765,6 +765,28 @@ void kernel_amo64_store_amo_lmem(kernel_arg_t* __UNIFORM__ arg) {
   per_hart[hid] = bad;
 }
 
+// A pair atomic whose old value is discarded names x0 as rd, which names x0 for
+// both halves: a store as amoswap.d into the zero pair, then an add whose old
+// value is dropped. Nothing may wait on (or write) the destination, and the
+// word must read back as the sum.
+void kernel_amo64_x0(kernel_arg_t* __UNIFORM__ arg) {
+  auto shared   = (volatile uint64_t*)arg->shared_addr;
+  auto per_hart = (uint32_t*)arg->per_hart_addr;
+  const uint32_t hid = hart_id();
+  volatile uint64_t* w = &shared[hid * 8];
+  uint32_t bad = 0;
+  for (uint32_t i = 0; i < arg->iters; ++i) {
+    register uintptr_t wp asm("a4") = (uintptr_t)w;
+    register uint64_t val asm("a2") = amo64_x0_value(hid, i); // pair a2/a3
+    register uint64_t step asm("a6") = AMO64_ADD_STEP;        // pair a6/a7
+    asm volatile (".insn r 0x2f, 3, 0x04, x0, a4, a2\n" // amoswap.d x0, a2, (a4)
+                  ".insn r 0x2f, 3, 0x00, x0, a4, a6"    // amoadd.d x0, a6, (a4)
+                  :: "r"(wp), "r"(val), "r"(step) : "memory");
+    bad += (*w != amo64_x0_value(hid, i) + AMO64_ADD_STEP);
+  }
+  per_hart[hid] = bad;
+}
+
 // B2 on global memory. A warp's threads take words one bank stride apart, so
 // the warp's store request queues on one dcache bank lane by lane while the
 // thread's later atomic would have a free port if it left the thread's lane.
@@ -874,6 +896,7 @@ static const PFN_Kernel sc_tests[] = {
   kernel_amo64_war_lmem,         // the same on local memory
   kernel_amo64_store_amo,        // a thread's store orders before its atomic
   kernel_amo64_store_amo_lmem,   // the same on local memory
+  kernel_amo64_x0,               // the zero pair as a discarded destination
 #endif
 #endif
 #if VX_CFG_XLEN == 32

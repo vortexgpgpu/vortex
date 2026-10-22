@@ -44,7 +44,7 @@ tests:
     xlen: [32]
     configs+: "-DVX_CFG_EXT_ZACAS_ENABLE -DVX_CFG_EXT_AMO64_ENABLE -DVX_CFG_NUM_WARPS=32 -DVX_CFG_SIMD_WIDTH=4"
     shape: {threads: 8}
-    args: "-n8 -t cas_ladder -t cas_lmem -t cas_counter -t cas_counter_lmem -t amo64_arith -t amo64_arith_lmem -t amo64_bits -t amo64_bits_lmem -t amo64_cas_counter -t amo64_cas_counter_lmem -t amo64_cas_ladder -t amo64_illegal -t amo64_war -t amo64_war_lmem -t amo64_store_amo -t amo64_store_amo_lmem"
+    args: "-n8 -t cas_ladder -t cas_lmem -t cas_counter -t cas_counter_lmem -t amo64_arith -t amo64_arith_lmem -t amo64_bits -t amo64_bits_lmem -t amo64_cas_counter -t amo64_cas_counter_lmem -t amo64_cas_ladder -t amo64_illegal -t amo64_war -t amo64_war_lmem -t amo64_store_amo -t amo64_store_amo_lmem -t amo64_x0"
   # One LSU block for two issue slots, with the pair atomics' ordering cases.
   - id: amo64-simd-lsu1
     app: amo
@@ -52,7 +52,7 @@ tests:
     xlen: [32]
     configs+: "-DVX_CFG_EXT_ZACAS_ENABLE -DVX_CFG_EXT_AMO64_ENABLE -DVX_CFG_NUM_WARPS=32 -DVX_CFG_SIMD_WIDTH=4 -DVX_CFG_NUM_LSU_BLOCKS=1"
     shape: {threads: 8}
-    args: "-n8 -t amo64_arith -t amo64_arith_lmem -t amo64_cas_ladder -t amo64_war -t amo64_war_lmem -t amo64_store_amo -t amo64_store_amo_lmem"
+    args: "-n8 -t amo64_arith -t amo64_arith_lmem -t amo64_cas_ladder -t amo64_war -t amo64_war_lmem -t amo64_store_amo -t amo64_store_amo_lmem -t amo64_x0"
   # Four cores sharing an L2: the dcache passes the fused 8-byte atomic to the LLC.
   - id: amo64-mc-l2
     app: amo

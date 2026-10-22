@@ -52,6 +52,12 @@ static inline uint64_t amo64_swap_value(uint32_t h) {
   return ((uint64_t)(h + 1) << 32) | ((h + 1) * 0x01010101u);
 }
 
+// The word hart h stores on iteration i of amo64_x0: its low word carries into
+// the high one when AMO64_ADD_STEP is added.
+static inline uint64_t amo64_x0_value(uint32_t h, uint32_t i) {
+  return ((uint64_t)(h + 1 + i) << 32) | (0xfffffff0u + (h & 7));
+}
+
 // Compare-and-swap ladder claim; zero is the unclaimed marker.
 static inline uint64_t amo64_claim_value(uint32_t h) {
   return ((uint64_t)(h + 1) << 32) | (h + 1);

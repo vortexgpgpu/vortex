@@ -861,6 +861,28 @@ public:
     return check_no_bad_olds(n, per_hart);
   }
 };
+
+// The zero pair as a discarded destination: each hart's word holds its last
+// stored value plus the step, and every read-back matched.
+class Test_AMO64_X0 : public ITestCase {
+public:
+  Test_AMO64_X0(TestSuite* s) : ITestCase(s, "amo64_x0") {}
+  void setup(uint32_t, uint32_t*, uint32_t*) override {}
+  int verify(uint32_t n, uint32_t iters,
+             const uint32_t* shared, const uint32_t* per_hart) override {
+    int err = check_no_bad_olds(n, per_hart);
+    for (uint32_t h = 0; h < n && iters != 0; ++h) {
+      uint64_t got = (uint64_t)shared[h * 16] | ((uint64_t)shared[h * 16 + 1] << 32);
+      uint64_t expected = amo64_x0_value(h, iters - 1) + AMO64_ADD_STEP;
+      if (got != expected) {
+        std::cout << "  hart " << h << " word=0x" << std::hex << got
+                  << " expected=0x" << expected << std::dec << std::endl;
+        ++err;
+      }
+    }
+    return err;
+  }
+};
 #endif
 #endif
 
@@ -938,6 +960,7 @@ inline TestSuite::TestSuite(vx_device_h device) : device_(device) {
   add_test(new Test_AMO64_WAR_LMEM(this));
   add_test(new Test_AMO64_STORE_AMO(this));
   add_test(new Test_AMO64_STORE_AMO_LMEM(this));
+  add_test(new Test_AMO64_X0(this));
 #endif
 #endif
 #if VX_CFG_XLEN == 32
