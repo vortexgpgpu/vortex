@@ -74,6 +74,33 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
 
     wire batch_done = (& block_done);
 
+    // An instruction reaches a block as one dispatch per SIMD slice (sop..eop),
+    // and they must arrive back to back: the LSU tracks one open instruction
+    // per block. The batch may move to another issue slot only once none of
+    // its blocks is inside an instruction.
+    wire [BLOCK_SIZE-1:0] block_fire_last;
+    wire [BLOCK_SIZE-1:0] block_dispatch_eop;
+    wire batch_open;
+    if ((BATCH_COUNT != 1) && (SIMD_COUNT != 1)) begin : g_batch_lock
+        reg [BLOCK_SIZE-1:0] open_r;
+        wire [BLOCK_SIZE-1:0] open_n;
+        for (genvar i = 0; i < BLOCK_SIZE; ++i) begin : g_open_n
+            assign open_n[i] = block_fire_last[i] ? ~block_dispatch_eop[i] : open_r[i];
+        end
+        always @(posedge clk) begin
+            if (reset) begin
+                open_r <= '0;
+            end else begin
+                open_r <= open_n;
+            end
+        end
+        assign batch_open = (| open_n);
+    end else begin : g_no_batch_lock
+        assign batch_open = 1'b0;
+        `UNUSED_VAR ({block_fire_last, block_dispatch_eop})
+    end
+    wire batch_switch = batch_done && ~batch_open;
+
     // batch select logic
 
     logic [BATCH_COUNT_W-1:0] batch_idx;
@@ -95,19 +122,19 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             .grant_index  (batch_idx_n),
             `UNUSED_PIN (grant_onehot),
             `UNUSED_PIN (grant_valid),
-            .grant_ready  (batch_done)
+            .grant_ready  (batch_switch)
         );
 
         always @(posedge clk) begin
             if (reset) begin
                 batch_idx <= '0;
-            end else if (batch_done) begin
+            end else if (batch_switch) begin
                 batch_idx <= batch_idx_n;
             end
         end
     end else begin : g_batch_idx_0
         assign batch_idx = 0;
-        `UNUSED_VAR (batch_done)
+        `UNUSED_VAR (batch_switch)
     end
 
     wire [BLOCK_SIZE-1:0][ISSUE_W-1:0] issue_indices;
@@ -123,6 +150,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
         wire [SIMD_IDX_W-1:0]  dispatch_sid    = dispatch_data[issue_idx][DATA_IN_TMASK_OFF + `VX_CFG_SIMD_WIDTH +: SIMD_IDX_W];
         wire dispatch_sop = dispatch_data[issue_idx][1];
         wire dispatch_eop = dispatch_data[issue_idx][0];
+        assign block_dispatch_eop[block_idx] = dispatch_eop;
 
         wire [`VX_CFG_SIMD_WIDTH-1:0] dispatch_tmask;
         wire [2:0][`VX_CFG_SIMD_WIDTH-1:0][`VX_CFG_XLEN-1:0] dispatch_rsdata;
@@ -179,6 +207,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             assign block_eop[block_idx]   = is_last_p;
             assign block_ready[block_idx] = ready_p;
             assign block_done[block_idx]  = (fire_p && is_last_p) || ~dispatch_valid[issue_idx];
+            assign block_fire_last[block_idx] = fire_p && is_last_p;
         end else begin : g_full_simd
             assign valid_p = dispatch_valid[issue_idx];
             assign block_tmask[block_idx] = dispatch_tmask;
@@ -188,6 +217,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
             assign block_eop[block_idx]   = 1;
             assign block_ready[block_idx] = ready_p;
             assign block_done[block_idx]  = ready_p || ~valid_p;
+            assign block_fire_last[block_idx] = valid_p && ready_p;
         end
 
         wire [ISSUE_ISW_W-1:0] isw;

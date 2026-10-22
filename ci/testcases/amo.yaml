@@ -26,6 +26,26 @@ tests:
     app: amo
     drivers: [simx, rtlsim]
     configs+: "-DVX_CFG_EXT_ZACAS_ENABLE"
+  # Four operand collectors and two SIMD packets per warp (32 warps x 8 threads,
+  # SIMD 4): a three-operand compare-and-swap stalls between its packets on
+  # bank conflicts, and the operand arbiter must keep an instruction's packets
+  # together for the LSU's per-block packet tracking.
+  - id: zacas-simd
+    app: amo
+    drivers: [simx, rtlsim]
+    xlen: [32]
+    configs+: "-DVX_CFG_EXT_ZACAS_ENABLE -DVX_CFG_NUM_WARPS=32 -DVX_CFG_SIMD_WIDTH=4"
+    shape: {threads: 8}
+    args: "-n8 -t cas_ladder -t cas_lmem -t cas_counter -t cas_counter_lmem"
+  # The same with two issue slots sharing one LSU block: the lane dispatcher
+  # must not switch slots between an instruction's SIMD slices.
+  - id: zacas-simd-lsu1
+    app: amo
+    drivers: [simx, rtlsim]
+    xlen: [32]
+    configs+: "-DVX_CFG_EXT_ZACAS_ENABLE -DVX_CFG_NUM_WARPS=32 -DVX_CFG_SIMD_WIDTH=4 -DVX_CFG_NUM_LSU_BLOCKS=1"
+    shape: {threads: 8}
+    args: "-n8 -t cas_ladder -t cas_lmem -t cas_counter -t cas_counter_lmem"
   # Write-back D-cache variants (rtlsim only in the legacy suite).
   - id: wb-dirtybytes0
     app: amo

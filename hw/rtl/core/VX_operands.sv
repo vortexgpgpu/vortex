@@ -32,8 +32,8 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     localparam OUT_DATAW = $bits(operands_t);
 
-    // LSU cannot handle partial requests from multiple warps at the same time
-    // this ensure that OPCs are dispatched atomically
+    // Several collectors and multi-packet instructions: an instruction's packets
+    // must leave together (g_packet_lock).
     localparam OUT_ARB_STICKY = (`VX_CFG_NUM_OPCS != 1) && (SIMD_COUNT != 1);
 
 `ifdef PERF_ENABLE
@@ -84,6 +84,35 @@ module VX_operands import VX_gpu_pkg::*; #(
 
     `ITF_TO_AOS (per_opc_operands, per_opc_operands_if, `VX_CFG_NUM_OPCS, OUT_DATAW)
 
+    // An instruction leaves its collector as SIMD-wide packets (sop..eop), and
+    // they must reach the units back to back: the LSU tracks one open
+    // instruction per block. The arbiter's stickiness holds the grant only
+    // while the granted collector keeps its request up, and a collector can
+    // pause between two packets of one instruction (a bank conflict on the
+    // next packet's operands), which would let another collector's packets in.
+    // The lock holds the grant from an instruction's first packet to its last.
+    wire [`VX_CFG_NUM_OPCS-1:0] arb_valid_in;
+    if (OUT_ARB_STICKY) begin : g_packet_lock
+        reg [`VX_CFG_NUM_OPCS-1:0] lock_r; // owning collector, one-hot; 0 = open
+        operands_t [`VX_CFG_NUM_OPCS-1:0] opc_data;
+        assign opc_data = per_opc_operands_data;
+        always @(posedge clk) begin
+            if (reset) begin
+                lock_r <= '0;
+            end else begin
+                for (integer i = 0; i < `VX_CFG_NUM_OPCS; ++i) begin
+                    if (per_opc_operands_valid[i] && per_opc_operands_ready[i]) begin
+                        lock_r <= opc_data[i].eop ? '0
+                                : (`VX_CFG_NUM_OPCS'(1) << i);
+                    end
+                end
+            end
+        end
+        assign arb_valid_in = per_opc_operands_valid & ((lock_r == '0) ? '1 : lock_r);
+    end else begin : g_no_packet_lock
+        assign arb_valid_in = per_opc_operands_valid;
+    end
+
     // Round-robin (not fixed-priority): collectors are fed by wis % NUM_OPCS,
     // so a fixed-priority merge starves the highest-index collector once
     // NUM_OPCS > 2 (e.g. warp 3 -> OPC 3 at 16 warps), stalling its operand
@@ -98,7 +127,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     ) output_arb (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (per_opc_operands_valid),
+        .valid_in  (arb_valid_in),
         .data_in   (per_opc_operands_data),
         .ready_in  (per_opc_operands_ready),
         .valid_out (operands_if.valid),
