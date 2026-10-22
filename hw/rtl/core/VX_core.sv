@@ -102,17 +102,8 @@ import VX_tcu_pkg::*;
 `endif
 
 `ifdef TCU_META_ENABLE
-    // The TCU metadata AGU is the second client of LSU block 0's scheduler; the
-    // other blocks' second client is idle.
+    // The TCU metadata AGU is the second client of the LSU schedulers.
     VX_lsu_sched_if lsu_tcu_mem_if [`VX_CFG_NUM_LSU_BLOCKS]();
-    for (genvar b = 1; b < `VX_CFG_NUM_LSU_BLOCKS; ++b) begin : g_lsu_tcu_tieoff
-        assign lsu_tcu_mem_if[b].req_valid = 1'b0;
-        assign lsu_tcu_mem_if[b].req_data  = '0;
-        assign lsu_tcu_mem_if[b].rsp_ready = 1'b1;
-        `UNUSED_VAR (lsu_tcu_mem_if[b].req_ready)
-        `UNUSED_VAR (lsu_tcu_mem_if[b].rsp_valid)
-        `UNUSED_VAR (lsu_tcu_mem_if[b].rsp_data)
-    end
 `endif
 
     // frontend-slice icache requests; port 0 also carries the injected flush
@@ -384,7 +375,7 @@ import VX_tcu_pkg::*;
         .meta_wr_wid      (tcu_meta_wr_wid),
         .meta_wr_idx      (tcu_meta_wr_idx),
         .meta_wr_data     (tcu_meta_wr_data),
-        .tcu_mem_if       (lsu_tcu_mem_if[0]),
+        .tcu_mem_if       (lsu_tcu_mem_if),
     `endif
         .clk              (clk),
         .reset            (reset)
