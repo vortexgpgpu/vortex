@@ -739,6 +739,10 @@ package VX_gpu_pkg;
                              && (!`VX_CFG_EXT_F_ENABLED || (`VX_CFG_NUM_FPU_BLOCKS == `VX_CFG_ISSUE_WIDTH))
                              && (!`VX_CFG_EXT_TCU_ENABLED || (`VX_CFG_NUM_TCU_BLOCKS == `VX_CFG_ISSUE_WIDTH));
     localparam COMPUTE_SLICES = BACKEND_SLICES && (`VX_CFG_FETCH_WIDTH == `VX_CFG_ISSUE_WIDTH);
+    // A compute slice whose warp-control requests are arbitrated with other
+    // slices' retires its own warps when its exit request is granted. With a
+    // sole requester, the core retires them from its registered request.
+    localparam SLICE_RETIRE = COMPUTE_SLICES && (`VX_CFG_NUM_SFU_BLOCKS > 1);
 
     /////////////////////////////// TENSOR UNIT ///////////////////////////////
 

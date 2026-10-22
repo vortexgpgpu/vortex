@@ -94,10 +94,11 @@ import VX_tcu_pkg::*;
     VX_lsu_sched_if tcu_mem_if();
 `endif
 
-    // frontend-slice icache requests; port 0 also carries the injected flush
+    // frontend-slice icache ports, tagged with the flush arbiter's select bit (the
+    // LSB); port 0 also carries the injected flush
     VX_mem_bus_if #(
         .DATA_SIZE (ICACHE_WORD_SIZE),
-        .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH)
+        .TAG_WIDTH (ICACHE_TAG_WIDTH)
     ) fetch_icache_if[ICACHE_NUM_REQS]();
 
 `ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -186,7 +187,31 @@ import VX_tcu_pkg::*;
     `SCOPE_IO_SWITCH (3);
 
     // Port 0 injects the cache flush into its request stream; the cache flushes
-    // every bank. The merged request leaves the core registered.
+    // every bank. The merged request leaves the core registered. The response
+    // goes to the frontend slice as the cache returns it, and the slice drops the
+    // flush's own (select bit set), so no logic lies between the cache's response
+    // register and the slice. The injector observes the response for its done.
+    VX_mem_bus_if #(
+        .DATA_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH)
+    ) flush_core_if();
+
+    assign flush_core_if.req_valid       = fetch_icache_if[0].req_valid;
+    assign flush_core_if.req_data.rw     = fetch_icache_if[0].req_data.rw;
+    assign flush_core_if.req_data.addr   = fetch_icache_if[0].req_data.addr;
+    assign flush_core_if.req_data.data   = fetch_icache_if[0].req_data.data;
+    assign flush_core_if.req_data.byteen = fetch_icache_if[0].req_data.byteen;
+    assign flush_core_if.req_data.attr   = fetch_icache_if[0].req_data.attr;
+    assign flush_core_if.req_data.tag    = fetch_icache_if[0].req_data.tag[ICACHE_TAG_WIDTH-1:1];
+    assign fetch_icache_if[0].req_ready  = flush_core_if.req_ready;
+    `UNUSED_VAR (fetch_icache_if[0].req_data.tag[0])
+
+    assign fetch_icache_if[0].rsp_valid  = icache_bus_if[0].rsp_valid;
+    assign fetch_icache_if[0].rsp_data   = icache_bus_if[0].rsp_data;
+    assign flush_core_if.rsp_ready       = fetch_icache_if[0].rsp_ready;
+    `UNUSED_VAR (flush_core_if.rsp_valid)
+    `UNUSED_VAR (flush_core_if.rsp_data)
+
     VX_dcr_flush #(
         .WORD_SIZE   (ICACHE_WORD_SIZE),
         .TAG_WIDTH   (ICACHE_FETCH_TAG_WIDTH),
@@ -196,25 +221,21 @@ import VX_tcu_pkg::*;
         .reset        (reset),
         .dcr_flush_if (dcr_flush_icache_if),
         .l1_only      (dcr_flush_l1_only),
-        .core_bus_if  (fetch_icache_if[0]),
+        .core_bus_if  (flush_core_if),
         .cache_bus_if (icache_bus_if[0])
     );
 
-    // The other ports carry their frontend slice's registered requests, with the
-    // flush arbiter's select bit, the tag's LSB, clear.
+    // The other ports carry their frontend slice's registered requests, whose
+    // select bit is clear; a response's is cleared as a constant, so the slice's
+    // flush check folds away.
     for (genvar i = 1; i < ICACHE_NUM_REQS; ++i) begin : g_icache_ports
         assign icache_bus_if[i].req_valid       = fetch_icache_if[i].req_valid;
-        assign icache_bus_if[i].req_data.rw     = fetch_icache_if[i].req_data.rw;
-        assign icache_bus_if[i].req_data.addr   = fetch_icache_if[i].req_data.addr;
-        assign icache_bus_if[i].req_data.data   = fetch_icache_if[i].req_data.data;
-        assign icache_bus_if[i].req_data.byteen = fetch_icache_if[i].req_data.byteen;
-        assign icache_bus_if[i].req_data.attr   = fetch_icache_if[i].req_data.attr;
-        assign icache_bus_if[i].req_data.tag    = {fetch_icache_if[i].req_data.tag, 1'b0};
+        assign icache_bus_if[i].req_data        = fetch_icache_if[i].req_data;
         assign fetch_icache_if[i].req_ready     = icache_bus_if[i].req_ready;
 
         assign fetch_icache_if[i].rsp_valid     = icache_bus_if[i].rsp_valid;
         assign fetch_icache_if[i].rsp_data.data = icache_bus_if[i].rsp_data.data;
-        assign fetch_icache_if[i].rsp_data.tag  = icache_bus_if[i].rsp_data.tag[ICACHE_TAG_WIDTH-1:1];
+        assign fetch_icache_if[i].rsp_data.tag  = {icache_bus_if[i].rsp_data.tag[ICACHE_TAG_WIDTH-1:1], 1'b0};
         assign icache_bus_if[i].rsp_ready       = fetch_icache_if[i].rsp_ready;
         `UNUSED_VAR (icache_bus_if[i].rsp_data.tag[0])
     end
@@ -882,15 +903,14 @@ import VX_tcu_pkg::*;
     // Fragment work drains at the producer (VX_raster_core.busy), not here.
     // DCR reads (cache flush, MPM readback) order on their own DCR response, so
     // busy tracks only kernel execution: warps resident or stores not yet at L1.
-    // ~mmu_empty also keeps the core busy while a translation or parked store is
-    // still in flight, so kernel completion cannot race un-drained accesses.
     // A request waiting at the dcache port sits past the flush injector's
-    // buffer, which mem_unit_empty does not cover.
+    // buffer, which mem_unit_empty does not cover. busy depends on no input:
+    // the socket covers the launches it sends and its MMU's translations.
     wire [DCACHE_NUM_REQS-1:0] dcache_req_valid;
     for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_req_valid
         assign dcache_req_valid[i] = dcache_bus_if[i].req_valid;
     end
-    assign busy = sched_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || (| dcache_req_valid) || ~mmu_empty;
+    assign busy = sched_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || (| dcache_req_valid);
 
     // BAR (vx_barrier / vx_barrier_arrive) drains LSU + MMU before suspending or registering arrival.
     assign lsu_drained = (&lsu_sched_empty) && mmu_empty;

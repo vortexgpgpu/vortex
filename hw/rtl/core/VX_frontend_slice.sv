@@ -36,7 +36,7 @@ module VX_frontend_slice import VX_gpu_pkg::*; #(
     // core scheduler
     VX_slice_sched_if.slave slice_sched_if,
 
-    // instruction fetch
+    // instruction fetch, tagged with the core's flush select bit (the LSB)
     VX_mem_bus_if.master    icache_bus_if,
 
     // decoded instructions
@@ -72,6 +72,28 @@ module VX_frontend_slice import VX_gpu_pkg::*; #(
     VX_fetch_if         fetch_if();
     VX_decode_if        fe_decode_if();
     VX_decode_sched_if  decode_sched_if();
+
+    // A response with the select bit set answers the core's cache flush on this
+    // port, and the core takes it: it is dropped here, on the cache's registered
+    // response, so the core passes the response through without logic.
+    VX_mem_bus_if #(
+        .DATA_SIZE (ICACHE_WORD_SIZE),
+        .TAG_WIDTH (ICACHE_FETCH_TAG_WIDTH)
+    ) fetch_bus_if();
+
+    assign icache_bus_if.req_valid       = fetch_bus_if.req_valid;
+    assign icache_bus_if.req_data.rw     = fetch_bus_if.req_data.rw;
+    assign icache_bus_if.req_data.addr   = fetch_bus_if.req_data.addr;
+    assign icache_bus_if.req_data.data   = fetch_bus_if.req_data.data;
+    assign icache_bus_if.req_data.byteen = fetch_bus_if.req_data.byteen;
+    assign icache_bus_if.req_data.attr   = fetch_bus_if.req_data.attr;
+    assign icache_bus_if.req_data.tag    = {fetch_bus_if.req_data.tag, 1'b0};
+    assign fetch_bus_if.req_ready        = icache_bus_if.req_ready;
+
+    assign fetch_bus_if.rsp_valid        = icache_bus_if.rsp_valid && ~icache_bus_if.rsp_data.tag[0];
+    assign fetch_bus_if.rsp_data.data    = icache_bus_if.rsp_data.data;
+    assign fetch_bus_if.rsp_data.tag     = icache_bus_if.rsp_data.tag[ICACHE_TAG_WIDTH-1:1];
+    assign icache_bus_if.rsp_ready       = fetch_bus_if.rsp_ready;
 
     VX_warp_sched #(
         .INSTANCE_ID (`SFORMATF(("%s-scheduler%s", INSTANCE_ID, SLICE_STR)))
@@ -111,7 +133,7 @@ module VX_frontend_slice import VX_gpu_pkg::*; #(
     `ifdef PERF_ENABLE
         .fetch_perf     (fetch_perf),
     `endif
-        .icache_bus_if  (icache_bus_if),
+        .icache_bus_if  (fetch_bus_if),
         .schedule_if    (schedule_if),
         .fetch_if       (fetch_if)
     );

@@ -131,6 +131,59 @@ import VX_tcu_pkg::*;
     wire [SW-1:0] issued;
     wire [SW-1:0] pending_alm_empty;
 
+    // The core-wide accounting retires an exiting warp when the shared unit grants
+    // its exit request. With several requesters, the slice sees that grant on its
+    // own request (registered toward the unit) and retires the warp in the same
+    // cycle, so the retirement does not cross the core's arbiter; with a sole
+    // requester, the core's retirement is already registered.
+    VX_slice_sched_if fs_sched_if();
+
+    assign fs_sched_if.cta_fire         = slice_sched_if.cta_fire;
+    assign fs_sched_if.cta_lid          = slice_sched_if.cta_lid;
+    assign fs_sched_if.cta_PC           = slice_sched_if.cta_PC;
+    assign fs_sched_if.cta_tmask        = slice_sched_if.cta_tmask;
+    assign fs_sched_if.cta_param        = slice_sched_if.cta_param;
+    assign fs_sched_if.cta_init         = slice_sched_if.cta_init;
+    assign fs_sched_if.warp_write       = slice_sched_if.warp_write;
+    assign fs_sched_if.warp_waddr       = slice_sched_if.warp_waddr;
+    assign fs_sched_if.warp_wdata       = slice_sched_if.warp_wdata;
+    assign fs_sched_if.id_write         = slice_sched_if.id_write;
+    assign fs_sched_if.id_waddr         = slice_sched_if.id_waddr;
+    assign fs_sched_if.id_wdata         = slice_sched_if.id_wdata;
+    assign fs_sched_if.wspawn_apply     = slice_sched_if.wspawn_apply;
+    assign fs_sched_if.wspawn_wmask     = slice_sched_if.wspawn_wmask;
+    assign fs_sched_if.wspawn_pc        = slice_sched_if.wspawn_pc;
+    assign fs_sched_if.wspawn_src       = slice_sched_if.wspawn_src;
+    assign fs_sched_if.wspawn_src_lid   = slice_sched_if.wspawn_src_lid;
+    assign fs_sched_if.wspawn_mscratch  = slice_sched_if.wspawn_mscratch;
+    assign fs_sched_if.bar_unlock_valid = slice_sched_if.bar_unlock_valid;
+    assign fs_sched_if.bar_unlock_mask  = slice_sched_if.bar_unlock_mask;
+    assign fs_sched_if.slice_ibuf_full  = slice_sched_if.slice_ibuf_full;
+`ifdef EXT_SCHED_TIMEOUT_DUMP
+    assign fs_sched_if.timeout_dump     = slice_sched_if.timeout_dump;
+`endif
+
+    if (SLICE_RETIRE) begin : g_retire
+        assign fs_sched_if.retire_valid = warp_shared_if.req_valid && warp_shared_if.req_ready
+                                       && (warp_shared_if.req_data.kind == WSH_EXIT);
+        assign fs_sched_if.retire_lid   = wid_to_wfs(warp_shared_if.req_data.wid);
+        `UNUSED_VAR ({slice_sched_if.retire_valid, slice_sched_if.retire_lid})
+    end else begin : g_retire_core
+        assign fs_sched_if.retire_valid = slice_sched_if.retire_valid;
+        assign fs_sched_if.retire_lid   = slice_sched_if.retire_lid;
+    end
+
+    assign slice_sched_if.active           = fs_sched_if.active;
+    assign slice_sched_if.stalled          = fs_sched_if.stalled;
+    assign slice_sched_if.ibuf_full        = fs_sched_if.ibuf_full;
+    assign slice_sched_if.pending_empty    = fs_sched_if.pending_empty;
+    assign slice_sched_if.branch_valid     = fs_sched_if.branch_valid;
+    assign slice_sched_if.divergence       = fs_sched_if.divergence;
+    assign slice_sched_if.sched_valid_room = fs_sched_if.sched_valid_room;
+    assign slice_sched_if.sched_valid_full = fs_sched_if.sched_valid_full;
+    assign slice_sched_if.sched_fire       = fs_sched_if.sched_fire;
+    assign slice_sched_if.sched_tmask      = fs_sched_if.sched_tmask;
+
     VX_frontend_slice #(
         .INSTANCE_ID (INSTANCE_ID),
         .SLICE_STR   ((`VX_CFG_FETCH_WIDTH > 1) ? SLICE_STR : "")
@@ -143,7 +196,7 @@ import VX_tcu_pkg::*;
     `ifdef PERF_ENABLE
         .fetch_perf        (fetch_perf),
     `endif
-        .slice_sched_if    (slice_sched_if),
+        .slice_sched_if    (fs_sched_if),
         .icache_bus_if     (icache_bus_if),
         .decode_if         (decode_if),
         .branch            (branch),
