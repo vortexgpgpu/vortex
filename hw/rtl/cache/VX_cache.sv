@@ -610,8 +610,8 @@ module VX_cache import VX_gpu_pkg::*; #(
         // the raw bank bits of the memory address, formed while the bank id is a constant
         wire [`UP(BANK_SEL_BITS)-1:0] raw_bid;
         if (NUM_BANKS > 1 && BANK_HASH != 0) begin : g_hash
-            wire [`CS_LINE_ADDR_WIDTH-1:0] line_addr = per_bank_mem_req_addr[i][`CS_LINE_SECTOR_ADDR_WIDTH-1 -: `CS_LINE_ADDR_WIDTH];
-            assign raw_bid = BANK_SEL_BITS'(i) ^ BANK_SEL_BITS'(cache_bank_hash(32'(line_addr), BANK_SEL_BITS));
+            assign raw_bid = BANK_SEL_BITS'(i) ^ BANK_SEL_BITS'(cache_bank_hash(
+                32'(per_bank_mem_req_addr[i][`CS_LINE_SECTOR_ADDR_WIDTH-1 -: `CS_LINE_ADDR_WIDTH]), BANK_SEL_BITS));
         end else begin : g_raw
             assign raw_bid = `UP(BANK_SEL_BITS)'(i);
         end
@@ -656,7 +656,7 @@ module VX_cache import VX_gpu_pkg::*; #(
                 SECTOR_SIZE'(mem_flush_l1_only),
                 `CS_SECTOR_WIDTH'(0),
                 BANK_MEM_TAG_WIDTH'(0),
-                `UP(MEM_ATTR_WIDTH)'((1 << MEM_ATTR_FLUSH_OFFS) | (32'(mem_flush_io) << MEM_ATTR_IO_OFFS))
+                (`UP(MEM_ATTR_WIDTH)'(1) << MEM_ATTR_FLUSH_OFFS) | (`UP(MEM_ATTR_WIDTH)'(mem_flush_io) << MEM_ATTR_IO_OFFS)
             };
             assign mem_req_xbar_valid[i] = per_bank_mem_req_valid[i] || mem_flush_valid[i];
             assign mem_req_xbar_pdata[i] = per_bank_mem_req_valid[i] ? per_bank_mem_req_pdata[i] : mem_flush_pdata;
