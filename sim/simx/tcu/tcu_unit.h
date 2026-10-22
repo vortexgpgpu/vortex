@@ -28,6 +28,13 @@
 #define TCU_META_ENABLE
 #endif
 
+// TCU_LD memory ports: one per TCU block, through the LSU block that serves
+// the same warps, when the LSU has one block per TCU block; otherwise all
+// TCU blocks share LSU block 0. Same derivation as the RTL's AGU_PORTS.
+#ifndef TCU_AGU_PORTS
+#define TCU_AGU_PORTS (uint32_t((VX_CFG_NUM_LSU_BLOCKS == VX_CFG_NUM_TCU_BLOCKS) ? VX_CFG_NUM_TCU_BLOCKS : 1))
+#endif
+
 namespace vortex {
 
 class Core;
@@ -77,11 +84,11 @@ public:
   virtual ~TcuUnit();
 
 #ifdef TCU_META_ENABLE
-  // Metadata AGU port: TCU_LD issues load requests through the LSU block-0
-  // client port; response fragments return here and accumulate into the
-  // metadata SRAM.
-  SimChannel<LsuReq> agu_req_out;
-  SimChannel<LsuRsp> agu_rsp_in;
+  // Metadata AGU ports (TCU_AGU_PORTS): TCU_LD issues load requests through
+  // the LSU client ports; response fragments return here and accumulate into
+  // the metadata SRAM.
+  std::vector<SimChannel<LsuReq>> agu_req_out;
+  std::vector<SimChannel<LsuRsp>> agu_rsp_in;
 #endif
 
 	void wmma(uint32_t wid,

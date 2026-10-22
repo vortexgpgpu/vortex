@@ -1725,7 +1725,7 @@ package VX_gpu_pkg;
     localparam DCACHE_CORE_TAG_WIDTH = (UUID_WIDTH + DCACHE_TAG_ID_BITS);
 
     // Core request tag bits on dcache_bus_if port of VX_core (+1 for flush-arb sel bit)
-    // Pre-MMU width (what VX_mem_unit produces, including the flush sel bit).
+    // Pre-MMU width (an LSU block's D-cache port, including the flush sel bit).
     // When VM_ENABLE is on, the dMMU widens this by DCACHE_TLB_SOURCE_BITS
     // for its internal bypass/TLB/PTW arbiter, so the cache cluster sees
     // the wider DCACHE_TAG_WIDTH below.

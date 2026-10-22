@@ -175,7 +175,8 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
                     && !warp_ctl_if.warp_pending_alm_empty[wid_to_sfu_local(execute_if.data.header.wid)];
 
     // BAR (vx_barrier or vx_barrier_arrive) drains LSU before continuing.
-    wire bar_drain = execute_if.valid && is_bar && !warp_ctl_if.lsu_sched_drained;
+    wire lsu_sched_drained = (& warp_ctl_if.lsu_sched_empty) && warp_ctl_if.mmu_empty;
+    wire bar_drain = execute_if.valid && is_bar && !lsu_sched_drained;
 
     // Barriers, wspawn and warp retirement are core-wide requests to the shared
     // unit. Only a barrier arrive writes a result, the barrier phase, so it alone

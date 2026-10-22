@@ -27,10 +27,23 @@ import VX_tcu_pkg::*;
 
     input wire [CORE_ID_WIDTH-1:0] core_id,
 
-    // Per-block LSU client connections to VX_lsu_scheduler (at VX_core).
-    // The dcache port (lsu_mem_if) lives at VX_core; execute exposes
-    // only the LSU client interfaces.
-    VX_lsu_sched_if.master lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS],
+    // LSU memory paths
+`ifdef PERF_ENABLE
+    output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rd_req_fire,
+    output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_wr_req_fire,
+    output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rsp_fire,
+    output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] lsu_coalescer_misses,
+`endif
+`ifdef TCU_META_ENABLE
+    VX_lsu_sched_if.slave   lsu_tcu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
+`endif
+    output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty,
+    output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_store_empty,
+    output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_busy,
+`ifdef VX_CFG_LMEM_ENABLE
+    VX_mem_bus_if.master    lmem_bus_if [LSU_NUM_REQS],
+`endif
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
 
     // dispatch interface
     VX_dispatch_if.slave    dispatch_if [NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
@@ -84,7 +97,8 @@ import VX_tcu_pkg::*;
     VX_sched_csr_if.slave   sched_csr_if [`VX_CFG_NUM_SFU_BLOCKS],
     VX_branch_ctl_if.master branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
     VX_warp_shared_if.master warp_shared_if [`VX_CFG_NUM_SFU_BLOCKS],
-    VX_warp_ctl_if.master   warp_ctl_if [`VX_CFG_NUM_SFU_BLOCKS]
+    VX_warp_ctl_if.master   warp_ctl_if [`VX_CFG_NUM_SFU_BLOCKS],
+    input cta_bcast_t       cta_bcast
 );
 
 `ifdef VX_CFG_EXT_F_ENABLE
@@ -115,7 +129,22 @@ import VX_tcu_pkg::*;
         .core_id         (core_id),
         .dispatch_if         (dispatch_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .commit_if           (commit_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
-        .per_block_client_if (lsu_client_if)
+    `ifdef PERF_ENABLE
+        .perf_rd_req_fire    (lsu_perf_rd_req_fire),
+        .perf_wr_req_fire    (lsu_perf_wr_req_fire),
+        .perf_rsp_fire       (lsu_perf_rsp_fire),
+        .coalescer_misses    (lsu_coalescer_misses),
+    `endif
+    `ifdef TCU_META_ENABLE
+        .tcu_mem_if          (lsu_tcu_mem_if),
+    `endif
+        .sched_empty         (lsu_sched_empty),
+        .store_empty         (lsu_store_empty),
+        .busy                (lsu_busy),
+    `ifdef VX_CFG_LMEM_ENABLE
+        .lmem_bus_if         (lmem_bus_if),
+    `endif
+        .dcache_bus_if       (dcache_bus_if)
     );
 
 `ifdef VX_CFG_EXT_F_ENABLE
@@ -185,7 +214,8 @@ import VX_tcu_pkg::*;
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_shared_if (warp_shared_if),
-        .warp_ctl_if    (warp_ctl_if)
+        .warp_ctl_if    (warp_ctl_if),
+        .cta_bcast      (cta_bcast)
     );
 
 endmodule

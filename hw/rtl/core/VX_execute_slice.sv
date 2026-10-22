@@ -45,7 +45,22 @@ import VX_tcu_pkg::*;
     VX_branch_ctl_if.master branch_ctl_if,
 
     // LSU
-    VX_lsu_sched_if.master  lsu_client_if,
+`ifdef PERF_ENABLE
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rd_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_wr_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rsp_fire,
+    output wire [PERF_CTR_BITS-1:0] lsu_coalescer_misses,
+`endif
+`ifdef TCU_META_ENABLE
+    VX_lsu_sched_if.slave   lsu_tcu_mem_if,
+`endif
+    output wire             lsu_sched_empty,
+    output wire             lsu_store_empty,
+    output wire             lsu_busy,
+`ifdef VX_CFG_LMEM_ENABLE
+    VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
+`endif
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_CHANNELS],
 
     // SFU
 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -84,7 +99,8 @@ import VX_tcu_pkg::*;
     // SFU warp control and CSRs
     VX_warp_shared_if.master warp_shared_if,
     VX_warp_ctl_if.master   warp_ctl_if,
-    VX_sched_csr_if.slave   sched_csr_if
+    VX_sched_csr_if.slave   sched_csr_if,
+    input cta_bcast_t       cta_bcast
 );
     localparam ALU_PARTIAL_BW = (`VX_CFG_NUM_ALU_LANES != `VX_CFG_SIMD_WIDTH);
 `ifdef VX_CFG_EXT_F_ENABLE
@@ -172,12 +188,27 @@ import VX_tcu_pkg::*;
         .INSTANCE_ID (`SFORMATF(("%s-lsu%s", INSTANCE_ID, SLICE_STR)))
     ) lsu_block (
         `SCOPE_IO_BIND  (0)
-        .clk        (clk),
-        .reset      (reset),
-        .core_id    (core_id),
-        .execute_if (lsu_execute_if[0]),
-        .result_if  (lsu_result_if[0]),
-        .client_if  (lsu_client_if)
+        .clk              (clk),
+        .reset            (reset),
+        .core_id          (core_id),
+        .execute_if       (lsu_execute_if[0]),
+        .result_if        (lsu_result_if[0]),
+    `ifdef PERF_ENABLE
+        .perf_rd_req_fire (lsu_perf_rd_req_fire),
+        .perf_wr_req_fire (lsu_perf_wr_req_fire),
+        .perf_rsp_fire    (lsu_perf_rsp_fire),
+        .coalescer_misses (lsu_coalescer_misses),
+    `endif
+    `ifdef TCU_META_ENABLE
+        .tcu_mem_if       (lsu_tcu_mem_if),
+    `endif
+        .sched_empty      (lsu_sched_empty),
+        .store_empty      (lsu_store_empty),
+        .busy             (lsu_busy),
+    `ifdef VX_CFG_LMEM_ENABLE
+        .lmem_bus_if      (lmem_bus_if),
+    `endif
+        .dcache_bus_if    (dcache_bus_if)
     );
 
     VX_lane_gather #(
@@ -249,7 +280,8 @@ import VX_tcu_pkg::*;
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_shared_if (warp_shared_if),
-        .warp_ctl_if    (warp_ctl_if)
+        .warp_ctl_if    (warp_ctl_if),
+        .cta_bcast      (cta_bcast)
     );
 
     VX_lane_gather #(

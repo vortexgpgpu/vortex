@@ -52,7 +52,10 @@ module VX_sfu_block import VX_gpu_pkg::*; #(
 
     VX_sched_csr_if.slave   sched_csr_if,
     VX_warp_shared_if.master warp_shared_if,
-    VX_warp_ctl_if.master   warp_ctl_if
+    VX_warp_ctl_if.master   warp_ctl_if,
+
+    // CTA dispatch's context writes
+    input cta_bcast_t       cta_bcast
 );
     localparam NUM_LANES    = `VX_CFG_NUM_SFU_LANES;
 `ifndef VX_CFG_EXT_RTU_ENABLE
@@ -147,6 +150,27 @@ module VX_sfu_block import VX_gpu_pkg::*; #(
         .result_if      (pe_result_if[PE_IDX_WCTL])
     );
 
+    // The block's copy of the CTA contexts, read at the CSR request's CTA and
+    // valid a cycle later.
+    cta_ctx_t cta_ctx;
+
+    VX_dp_ram #(
+        .DATAW     ($bits(cta_ctx_t)),
+        .SIZE      (NUM_CTA_MAX),
+        .RDW_MODE  ("R"),
+        .OUT_REG   (1)
+    ) cta_ctx_ram (
+        .clk   (clk),
+        .reset (reset),
+        .read  (1'b1),
+        .write (cta_bcast.ctx_write),
+        .wren  (1'b1),
+        .waddr (cta_bcast.ctx_waddr),
+        .wdata (cta_bcast.ctx_wdata),
+        .raddr (pe_execute_if[PE_IDX_CSRS].data.header.cta_id),
+        .rdata (cta_ctx)
+    );
+
     VX_csr_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-csr", INSTANCE_ID))),
         .NUM_LANES (NUM_LANES)
@@ -162,6 +186,7 @@ module VX_sfu_block import VX_gpu_pkg::*; #(
         .fcsr_wr_data   (fcsr_wr_data),
     `endif
         .sched_csr_if   (sched_csr_if),
+        .cta_ctx        (cta_ctx),
         .result_if      (pe_result_if[PE_IDX_CSRS])
     );
 

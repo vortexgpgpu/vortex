@@ -49,9 +49,9 @@ import VX_tcu_pkg::*;
     input wire [PERF_CTR_BITS-1:0] cycles,
     input wire [PERF_CTR_BITS-1:0] instret,
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
-    input wire              lsu_sched_drained,
-    output wire [NCTA_WIDTH-1:0] csr_rd_cta_id,
-    input cta_ctx_t         csr_rd_ctx,
+    input wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] all_lsu_sched_empty,
+    input wire              mmu_empty,
+    input cta_bcast_t       cta_bcast,
 `ifdef VX_CFG_VM_ENABLE
     input wire [`VX_CFG_XLEN-1:0] satp,
     output wire             satp_wr_valid,
@@ -59,7 +59,22 @@ import VX_tcu_pkg::*;
 `endif
 
     // LSU
-    VX_lsu_sched_if.master  lsu_client_if,
+`ifdef PERF_ENABLE
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rd_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_wr_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rsp_fire,
+    output wire [PERF_CTR_BITS-1:0] lsu_coalescer_misses,
+`endif
+`ifdef TCU_META_ENABLE
+    VX_lsu_sched_if.slave   lsu_tcu_mem_if,
+`endif
+    output wire             lsu_sched_empty,
+    output wire             lsu_store_empty,
+    output wire             lsu_busy,
+`ifdef VX_CFG_LMEM_ENABLE
+    VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
+`endif
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_CHANNELS],
 
     // SFU
 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -240,10 +255,10 @@ import VX_tcu_pkg::*;
     assign warp_ctl_if.dvstack_ptr = dvstack_ptr[0];
     assign warp_ctl_if.mscratch    = dvstack_mscratch[0];
     assign warp_ctl_if.warp_pending_alm_empty = pending_alm_empty;
-    assign warp_ctl_if.lsu_sched_drained      = lsu_sched_drained;
+    assign warp_ctl_if.lsu_sched_empty        = all_lsu_sched_empty;
+    assign warp_ctl_if.mmu_empty              = mmu_empty;
 
     assign csr_rd_wid[0]        = sched_csr_if.csr_rd_wid;
-    assign csr_rd_cta_id        = sched_csr_if.csr_rd_cta_id;
     assign csr_wr[0].valid      = sched_csr_if.csr_wr_valid;
     assign csr_wr[0].wid        = sched_csr_if.csr_wr_wid;
     assign csr_wr[0].data       = sched_csr_if.csr_wr_data;
@@ -260,16 +275,7 @@ import VX_tcu_pkg::*;
     assign sched_csr_if.csr_mepc     = csr_rd[0].mepc;
     assign sched_csr_if.csr_mcause   = csr_rd[0].mcause;
     assign sched_csr_if.csr_mtval    = csr_rd[0].mtval;
-    assign sched_csr_if.cta_csrs.cta_id       = sched_csr_if.csr_rd_cta_id;
-    assign sched_csr_if.cta_csrs.cta_rank     = csr_rd[0].cta_rank;
-    assign sched_csr_if.cta_csrs.cta_size     = csr_rd_ctx.cta_size;
-    assign sched_csr_if.cta_csrs.block_idx    = csr_rd_ctx.block_idx;
-    assign sched_csr_if.cta_csrs.block_dim    = csr_rd_ctx.block_dim;
-    assign sched_csr_if.cta_csrs.grid_dim     = csr_rd_ctx.grid_dim;
-    assign sched_csr_if.cta_csrs.entry        = csr_rd_ctx.entry;
-    assign sched_csr_if.cta_csrs.param        = csr_rd_ctx.param;
-    assign sched_csr_if.cta_csrs.lmem_addr    = csr_rd_ctx.lmem_addr;
-    assign sched_csr_if.cta_csrs.cluster_size = csr_rd_ctx.cluster_size;
+    assign sched_csr_if.cta_rank     = csr_rd[0].cta_rank;
     assign sched_csr_if.cta_lane     = csr_rd[0].cta_lane;
 `ifdef VX_CFG_VM_ENABLE
     assign sched_csr_if.csr_satp     = satp;
@@ -304,7 +310,22 @@ import VX_tcu_pkg::*;
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .sched_unlock_if      (sched_unlock_if),
     `endif
-        .lsu_client_if        (lsu_client_if),
+    `ifdef PERF_ENABLE
+        .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire),
+        .lsu_perf_wr_req_fire (lsu_perf_wr_req_fire),
+        .lsu_perf_rsp_fire    (lsu_perf_rsp_fire),
+        .lsu_coalescer_misses (lsu_coalescer_misses),
+    `endif
+    `ifdef TCU_META_ENABLE
+        .lsu_tcu_mem_if       (lsu_tcu_mem_if),
+    `endif
+        .lsu_sched_empty      (lsu_sched_empty),
+        .lsu_store_empty      (lsu_store_empty),
+        .lsu_busy             (lsu_busy),
+    `ifdef VX_CFG_LMEM_ENABLE
+        .lmem_bus_if          (lmem_bus_if),
+    `endif
+        .dcache_bus_if        (dcache_bus_if),
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if       (dxa_req_bus_if),
     `endif
@@ -334,7 +355,8 @@ import VX_tcu_pkg::*;
         .tcu_meta_wr_idx      (tcu_meta_wr_idx),
         .tcu_meta_wr_data     (tcu_meta_wr_data),
     `endif
-        .warp_shared_if       (warp_shared_if)
+        .warp_shared_if       (warp_shared_if),
+        .cta_bcast            (cta_bcast)
     );
 
 endmodule
