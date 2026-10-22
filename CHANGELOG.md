@@ -12,6 +12,8 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 - **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `rtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
   builds through `configure --profile=<name>` or `blackbox.sh --profile=<name>`; explicit `CONFIGS` win over the profile.
   See [docs/simulation.md](docs/simulation.md#hardware-profiles).
+- **Branch naming convention.** Branches are named `<type>/<topic>` with a `feature/`, `fix/`, `perf/`, `ci/`, `docs/`, `release/`
+  or `archive/` prefix. See [CONTRIBUTING.md](CONTRIBUTING.md#branch-naming).
 
 ### Changed
 

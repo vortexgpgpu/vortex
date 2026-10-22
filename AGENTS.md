@@ -31,7 +31,7 @@ This is the canonical entry point for **both human contributors and AI coding ag
 - [docs/synthesis_analysis.md](docs/synthesis_analysis.md) — synthesis/PPA analysis
 
 ### Process
-- [CONTRIBUTING.md](CONTRIBUTING.md) — public fork/PR contribution flow
+- [CONTRIBUTING.md](CONTRIBUTING.md) — public fork/PR contribution flow and [branch naming](CONTRIBUTING.md#branch-naming): every branch you create is `<type>/<topic>` (e.g. `fix/nz-iterator-eop`)
 - [docs/bug_fixes.md](docs/bug_fixes.md) — bug-fix discipline (root-cause vs patch)
 - [docs/continuous_integration.md](docs/continuous_integration.md) — CI pipeline
 - [docs/proposals/](docs/proposals/) — design and migration proposals (drafts and in-progress)

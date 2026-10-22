@@ -64,6 +64,29 @@ External contributions go through GitHub pull requests against
 5. Write commit messages that explain **why**, not just what. A diff
    already shows the what.
 
+### Branch naming
+
+Name every branch `<type>/<topic>`: a type prefix from the table below,
+then a short, lowercase, hyphen-separated topic.
+
+| Prefix | Use for | Example |
+|---|---|---|
+| `feature/` | new capability: hardware units, ISA, runtime or driver features | `feature/mlp-phase1` |
+| `fix/` | bug fixes | `fix/nz-iterator-eop` |
+| `perf/` | performance or timing-closure work with no functional change | `perf/dcache-300mhz` |
+| `ci/` | CI, test infrastructure and tooling | `ci/perf-gate-hosted` |
+| `docs/` | documentation only | `docs/branch-naming` |
+| `release/` | release maintenance lines | `release/3.x` |
+| `archive/` | unmerged work kept for reference, no longer maintained | `archive/simx-vector` |
+
+- When an existing branch moves under the convention, keep its name and
+  add the prefix (`tcu_op` → `feature/tcu_op`). A type word already in
+  the name becomes the prefix (`feature_mx` → `feature/mx`).
+- Keep one topic per branch, and delete the branch once its PR is merged.
+- Leave user names, dates and PR numbers out of the name; the history
+  already records them.
+- `master` and `gh-pages` keep their names.
+
 ## Adding tests
 
 Every functional change should land with a test, ideally one that
