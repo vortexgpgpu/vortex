@@ -247,7 +247,8 @@ module VX_cache import VX_gpu_pkg::*; #(
         .data_out  (per_bank_mem_rsp_pdata),
         `UNUSED_PIN (sel_out),
         .ready_out (per_bank_mem_rsp_ready),
-        `UNUSED_PIN (collisions)
+        `UNUSED_PIN (collisions),
+        `UNUSED_PIN (empty)
     );
     wire [NUM_BANKS-1:0][`CS_SECTOR_WIDTH-1:0] per_bank_mem_rsp_data;
     wire [NUM_BANKS-1:0][BANK_MEM_TAG_WIDTH-1:0] per_bank_mem_rsp_tag;
@@ -597,7 +598,8 @@ module VX_cache import VX_gpu_pkg::*; #(
             .data_out  (core_rsp_pdata),
             `UNUSED_PIN (sel_out),
             .ready_out (core_rsp_ready),
-            `UNUSED_PIN (collisions)
+            `UNUSED_PIN (collisions),
+            `UNUSED_PIN (empty)
         );
     end
     for (genvar i = 0; i < NUM_REQS; ++i) begin : g_core_rsp
@@ -670,35 +672,8 @@ module VX_cache import VX_gpu_pkg::*; #(
     end
     // Write-backs from different banks are not ordered with each other inside
     // the crossbar, so the tokens wait until it has drained.
-    if (FLUSH_FORWARD != 0) begin : g_mem_req_xbar_pending
-        localparam XBAR_IN_W  = `CLOG2(NUM_BANKS+1);
-        localparam XBAR_OUT_W = `CLOG2(MEM_PORTS+1);
-        // generous bound on what the crossbar can hold: buffered stages plus outputs
-        localparam XBAR_CAPACITY = 4 * NUM_BANKS * (`CLOG2(NUM_BANKS) + 1);
-        wire [NUM_BANKS-1:0] xbar_in_fire  = mem_req_xbar_valid & mem_req_xbar_ready;
-        wire [MEM_PORTS-1:0] xbar_out_fire = mem_req_tmp_valid & mem_req_tmp_ready;
-        wire [XBAR_IN_W-1:0]  xbar_in_cnt;
-        wire [XBAR_OUT_W-1:0] xbar_out_cnt;
-        `POP_COUNT(xbar_in_cnt, xbar_in_fire);
-        `POP_COUNT(xbar_out_cnt, xbar_out_fire);
-        VX_pending_size #(
-            .SIZE  (XBAR_CAPACITY),
-            .INCRW (XBAR_IN_W),
-            .DECRW (XBAR_OUT_W)
-        ) xbar_pending (
-            .clk   (clk),
-            .reset (reset),
-            .incr  (xbar_in_cnt),
-            .decr  (xbar_out_cnt),
-            .empty (mem_req_empty),
-            `UNUSED_PIN (alm_empty),
-            `UNUSED_PIN (full),
-            `UNUSED_PIN (alm_full),
-            `UNUSED_PIN (size)
-        );
-    end else begin : g_no_mem_req_xbar_pending
-        assign mem_req_empty = 1'b1;
-    end
+    wire mem_req_xbar_empty;
+    assign mem_req_empty = (FLUSH_FORWARD != 0) ? mem_req_xbar_empty : 1'b1;
     VX_stream_omega #(
         .NUM_INPUTS  (NUM_BANKS),
         .NUM_OUTPUTS (MEM_PORTS),
@@ -716,7 +691,8 @@ module VX_cache import VX_gpu_pkg::*; #(
         .data_out  (mem_req_pdata),
         .sel_out   (mem_req_tmp_idx),
         .ready_out (mem_req_tmp_ready),
-        `UNUSED_PIN (collisions)
+        `UNUSED_PIN (collisions),
+        .empty     (mem_req_xbar_empty)
     );
     for (genvar i = 0; i < MEM_PORTS; ++i) begin : g_mem_bus_tmp_if
         wire [`UP(BANK_SEL_BITS)-1:0]   mem_req_raw_bid_w;
