@@ -38,6 +38,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     VX_lsu_mem_if.slave     lsu_mem_if [`VX_CFG_NUM_LSU_BLOCKS],
     VX_dcr_flush_if.slave   dcr_flush_if,
+    input wire              flush_l1_only,
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
 );
     // Per-block empty: high when the global-store path holds no in-flight
@@ -165,6 +166,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         `ASSIGN_VX_MEM_BUS_IF_EX (dma_arb_in_if[LMEM_DMA_TCU_IDX], tcu_lmem_if, LMEM_DMA_IN_TAG_W, TCU_LMEM_TAG_W, UUID_WIDTH);
     `endif
 
+        // Round-robin, so a DXA write stream cannot starve the TCU's operand reads.
         VX_mem_bus_arb #(
             .NUM_INPUTS  (LMEM_DMA_INPUTS),
             .NUM_OUTPUTS (1),
@@ -172,7 +174,7 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
             .TAG_WIDTH   (LMEM_DMA_IN_TAG_W),
             .ATTR_WIDTH  (LMEM_DMA_ATTR_W),
             .ADDR_WIDTH  (LMEM_DMA_ADDR_WIDTH),
-            .ARBITER     ("P")
+            .ARBITER     ("R")
         ) lmem_dma_arb (
             .clk         (clk),
             .reset       (reset),
@@ -366,6 +368,22 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     end
 
+    // A private dcache takes the lanes straight from the adapter, whose drain
+    // store_drained already waits for, so one token suffices. Otherwise (a
+    // shared dcache, or none) the lanes are buffered independently before the
+    // next flush point, so a store on one lane can still be queued when another
+    // lane's token arrives: every lane then carries its own token behind its
+    // stores, and the flush is done when every lane's is.
+    localparam DCACHE_PRIVATE = (`VX_CFG_SOCKET_SIZE == `VX_CFG_NUM_DCACHES);
+    localparam FLUSH_LANES = DCACHE_PRIVATE ? 1 : DCACHE_NUM_REQS;
+    VX_dcr_flush_if lane_flush_if [FLUSH_LANES] ();
+    wire [FLUSH_LANES-1:0] lane_flush_done;
+    for (genvar k = 0; k < FLUSH_LANES; ++k) begin : g_lane_flush
+        assign lane_flush_if[k].req = dcr_flush_if.req;
+        assign lane_flush_done[k] = lane_flush_if[k].done;
+    end
+    assign dcr_flush_if.done = (& lane_flush_done);
+
     for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_dcache_adapters
 
         VX_mem_bus_if #(
@@ -398,8 +416,8 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         assign per_block_adapter_empty[i] = ~(| adapter_req_valid);
 
         for (genvar j = 0; j < DCACHE_CHANNELS; ++j) begin : g_dcache_bus_if
-            if (i == 0 && j == 0) begin : g_flush_port
-                // Port 0: route through VX_dcr_flush to inject flush requests
+            localparam LANE = i * DCACHE_CHANNELS + j;
+            if (LANE < FLUSH_LANES) begin : g_flush_lane
                 VX_dcr_flush #(
                     .WORD_SIZE (DCACHE_WORD_SIZE),
                     .TAG_WIDTH (DCACHE_CORE_TAG_WIDTH),
@@ -407,15 +425,15 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
                 ) dcr_flush (
                     .clk          (clk),
                     .reset        (reset),
-                    .dcr_flush_if (dcr_flush_if),
-                    .core_bus_if  (dcache_bus_tmp_if[0]),
-                    .cache_bus_if (dcache_bus_if[0])
+                    .dcr_flush_if (lane_flush_if[LANE]),
+                    .l1_only      (flush_l1_only),
+                    .core_bus_if  (dcache_bus_tmp_if[j]),
+                    .cache_bus_if (dcache_bus_if[LANE])
                 );
-            end else begin : g_passthru_port
-                // Ports 1+: pass through; tag is zero-extended from
-                // DCACHE_CORE_TAG_WIDTH to DCACHE_TAG_WIDTH on request,
-                // and MSB-stripped on response.
-                `ASSIGN_VX_MEM_BUS_IF_EX (dcache_bus_if[i * DCACHE_CHANNELS + j], dcache_bus_tmp_if[j], DCACHE_TAG_WIDTH_BASE, DCACHE_CORE_TAG_WIDTH, 0);
+            end else begin : g_passthru_lane
+                // tag is zero-extended from DCACHE_CORE_TAG_WIDTH to
+                // DCACHE_TAG_WIDTH on request, and MSB-stripped on response
+                `ASSIGN_VX_MEM_BUS_IF_EX (dcache_bus_if[LANE], dcache_bus_tmp_if[j], DCACHE_TAG_WIDTH_BASE, DCACHE_CORE_TAG_WIDTH, 0);
             end
         end
 

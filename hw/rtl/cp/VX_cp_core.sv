@@ -81,7 +81,9 @@ module VX_cp_core
   parameter int ADDR_W     = 64,
   parameter int DATA_W     = 512,
   parameter int ID_W       = VX_CP_AXI_TID_WIDTH_C,
-  parameter int AXIL_AW    = 16
+  parameter int AXIL_AW    = 16,
+  // axi_dev enters the last-level cache's client slot instead of memory.
+  parameter int DMA_LLC_CLIENT = 0
 )(
   input  wire                       clk,
   input  wire                       reset,
@@ -148,8 +150,9 @@ module VX_cp_core
   logic       engine_idle     [NUM_QUEUES];
 
   VX_cp_axil_regfile #(
-    .NUM_QUEUES (NUM_QUEUES),
-    .ADDR_W     (AXIL_AW)
+    .NUM_QUEUES     (NUM_QUEUES),
+    .ADDR_W         (AXIL_AW),
+    .DMA_LLC_CLIENT (DMA_LLC_CLIENT)
   ) u_regfile (
     .clk            (clk),
     .reset          (reset),
@@ -358,7 +361,8 @@ module VX_cp_core
     .dcr_req_addr  (gpu_if_int.dcr_req_addr),
     .dcr_req_data  (gpu_if_int.dcr_req_data),
     .dcr_rsp_valid (gpu_if_int.dcr_rsp_valid),
-    .dcr_rsp_data  (gpu_if_int.dcr_rsp_data)
+    .dcr_rsp_data  (gpu_if_int.dcr_rsp_data),
+    .gpu_busy      (gpu_if_int.busy)
   );
   `UNUSED_VAR (gpu_if_int.dcr_req_ready)
 

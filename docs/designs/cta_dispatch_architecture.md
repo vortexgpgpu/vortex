@@ -462,10 +462,10 @@ Two preconditions make this sound, both already enforced:
 
 SimX has no bus, so its `Kmu` carries the routing itself: the destination is
 fixed **before** a message is sent — a locked cluster's remaining members go
-only to the core that took the first, and a new message goes to the core the
-round-robin already points at, stalling on a busy core rather than yielding
-its turn to a neighbour
-([`kmu.cpp:122-153`](../../sim/simx/kmu/kmu.cpp#L122)).
+only to the core that took the first, and a new message goes to the nearest
+ready core from the round-robin pointer, as the RTL fan-out picks the nearest
+ready output
+([`kmu.cpp:122-156`](../../sim/simx/kmu/kmu.cpp#L122)).
 
 **Why this is load-bearing rather than an optimisation.** The obvious
 consequence of a split cluster is that LMEM peers resolve to another CTA's
@@ -733,16 +733,20 @@ is cycle-for-cycle identical to it on `vecadd` / `sgemm` / `sgemm_tcu_wg` /
 
 The KMU→core transport is modelled as per-core **launch lanes**: each lane is
 a registered boundary stage feeding the dispatcher's endpoint, and the KMU
-additionally paces every core with explicit credits — `LAUNCH_CREDITS = 4`
-per core ([`kmu.h:59`](../../sim/simx/kmu/kmu.h#L59)) — spent when a CTA is
+additionally paces every core with explicit credits — `LAUNCH_CREDITS = 2`
+per core ([`kmu.h:58`](../../sim/simx/kmu/kmu.h#L58)) — spent when a CTA is
 sent and returned by the dispatcher one message per admission
-([`cta_dispatcher.cpp:142`](../../sim/simx/cta_dispatcher.cpp#L142)). The
-bound is the transport's occupancy made explicit — the boundary stage's
-endpoint (2) plus the dispatcher endpoint (1) plus one credit in return
-flight — so a busy core never accumulates work beyond what the RTL's skids
-would hold, and pacing rests on slot accounting rather than on peeking at
-the consumer's state. RTL needs no counter: its registered output skids
-apply the same bound as wires.
+([`cta_dispatcher.cpp:175`](../../sim/simx/cta_dispatcher.cpp#L175)). The
+bound is the two-entry output skid in front of each core made explicit, so a
+busy core never holds more unadmitted CTAs than the RTL's skid would, and
+pacing rests on slot accounting rather than on peeking at the consumer's
+state. The depth matters for placement, not only for pacing: every CTA
+committed to a busy core is one a core that frees a slot sooner cannot take.
+RTL needs no counter: its registered output skids apply the same bound as
+wires. The lanes are flat, one per core, so the model is exact while a single
+level of the tree fans out; where two levels fan out (several clusters of
+several cores, or several sockets of several cores) the upper level's shared
+skids are not modelled.
 
 The differences are deliberate, not drift:
 
@@ -754,7 +758,7 @@ The differences are deliberate, not drift:
 | Bus payload | `cluster_size` (scalar), `aligned_lmem_size` | `cluster_dim[3]`, raw `lmem_size` |
 | `cta_id` on the bus | absent | present (model-only, unused as identity) |
 | Stride rounding | in the KMU | in the dispatcher |
-| Launch pacing | elastic-skid back-pressure | explicit credits (`LAUNCH_CREDITS = 4`) |
+| Launch pacing | elastic-skid back-pressure | explicit credits (`LAUNCH_CREDITS = 2`) |
 | Fragment path | through `kmu_bus_if` → `VX_cta_dispatch` | injected at the scheduler by the FWD |
 
 The last row is the significant one: in RTL a fragment wave is a launch that

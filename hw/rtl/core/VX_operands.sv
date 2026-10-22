@@ -14,8 +14,7 @@
 `include "VX_define.vh"
 
 module VX_operands import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter ISSUE_ID  = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     input wire              clk,
     input wire              reset,
@@ -28,7 +27,6 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_scoreboard_if.slave  scoreboard_if,
     VX_operands_if.master   operands_if
 );
-    `UNUSED_SPARAM (ISSUE_ID)
 
     localparam OUT_DATAW = $bits(operands_t);
 

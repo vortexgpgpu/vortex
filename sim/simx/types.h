@@ -386,6 +386,10 @@ struct IntrLsuArgs {
   int32_t  offset;      // immediate addr offset (signed); 0 for packLD uops
 };
 
+// A fence carries no access width; its width field says it orders only
+// device (IO) accesses.
+inline bool lsu_fence_is_io(const IntrLsuArgs& args) { return args.width != 0; }
+
 inline std::ostream &operator<<(std::ostream &os, const LsuType& type) {
   switch (type) {
   case LsuType::LOAD:   os << "LOAD"; break;
@@ -444,6 +448,9 @@ struct MemFlags {
       uint32_t io           : 1;  // bit 1: uncacheable I/O
       uint32_t local        : 1;  // bit 2: LMEM port
       uint32_t amo_unsigned : 1;  // bit 3: MIN/MAX signedness (1=unsigned)
+      uint32_t flush        : 1;  // bit 4: flush token (a fence)
+      uint32_t flush_l1     : 1;  // bit 5: L1-only flush token: stops at the shared LLC
+      uint32_t noalloc      : 1;  // bit 6: a write that misses a write-around cache goes to memory
     #ifdef VX_CFG_EXT_DXA_ENABLE
       // DXA completion sideband — populated only on DXA's LMEM-DMA writes.
       // notify_bar_id carries the RAW (kernel-encoded) bar handle:
@@ -453,8 +460,8 @@ struct MemFlags {
       // be wide enough to hold (bar_no << 8) | (MAX_CTAS_per_core - 1).
       // For NUM_BARRIERS = 8 and NUM_WARPS ≤ 16, that's at most 11 bits;
       // 16 bits leaves headroom for larger configs.
-      uint32_t dxa_notify_done   : 1;   // bit 4
-      uint32_t dxa_notify_bar_id : 16;  // bits 5..20
+      uint32_t dxa_notify_done   : 1;   // bit 7
+      uint32_t dxa_notify_bar_id : 16;  // bits 8..23
     #endif
     };
   };
@@ -1052,7 +1059,8 @@ private:
 
 class Arbiter {
 public:
-  Arbiter(ArbiterType type = ArbiterType::Priority, uint32_t size = 0) {
+  Arbiter(ArbiterType type = ArbiterType::Priority, uint32_t size = 0)
+    : type_(type), size_(size) {
     switch (type) {
     case ArbiterType::Priority:
       impl_ = std::make_shared<PriorityArbiter>(size);
@@ -1071,6 +1079,20 @@ public:
     }
   }
 
+  // A copy is a separate arbiter with its own grant state, so a vector of
+  // arbiters built from one prototype does not share a single state.
+  Arbiter(const Arbiter& other) : Arbiter(other.type_, other.size_) {}
+
+  Arbiter& operator=(const Arbiter& other) {
+    if (this != &other) {
+      *this = Arbiter(other.type_, other.size_);
+    }
+    return *this;
+  }
+
+  Arbiter(Arbiter&&) = default;
+  Arbiter& operator=(Arbiter&&) = default;
+
   virtual ~Arbiter() {}
 
   uint32_t grant(const BitVector<>& requests) {
@@ -1082,6 +1104,8 @@ public:
   }
 
 private:
+  ArbiterType type_;
+  uint32_t size_;
   std::shared_ptr<IArbiterImpl> impl_;
 };
 

@@ -13,7 +13,7 @@
 
 `include "VX_define.vh"
 
-// Flat-port testbench wrapper around VX_tcu_unit.
+// Flat-port testbench wrapper around VX_tcu_unit and VX_tcu_shared.
 // All VX_dispatch_if and VX_commit_if signals are exposed as individual
 // ports so that the Verilator C++ testbench can drive them directly.
 // Only ISSUE_WIDTH == 1 is supported by this wrapper.
@@ -164,20 +164,83 @@ module VX_tcu_unit_top import VX_gpu_pkg::*, VX_tcu_pkg::*; (
     `UNUSED_VAR (commit_if[0].data.cta_id)
 
     // ---- DUT -------------------------------------------------------------
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_valid, tcu_exec_ready;
+    tcu_execute_t                     tcu_exec_data [`VX_CFG_NUM_TCU_BLOCKS];
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data;
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready;
+`endif
+`ifdef TCU_META_ENABLE
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_ld_valid, tcu_agu_ld_ready;
+    tcu_execute_t                     tcu_agu_ld_data [`VX_CFG_NUM_TCU_BLOCKS];
+    wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_result_valid, tcu_agu_result_ready;
+    tcu_result_t                      tcu_agu_result_data [`VX_CFG_NUM_TCU_BLOCKS];
+    wire                              tcu_meta_wr_en;
+    wire [NW_WIDTH-1:0]               tcu_meta_wr_wid;
+    wire [4:0]                        tcu_meta_wr_idx;
+    wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data;
+`endif
+
     VX_tcu_unit #(
         .INSTANCE_ID ("tcu_unit_top")
     ) tcu_unit (
         `SCOPE_IO_BIND (0)
-        .clk         (clk),
-        .reset       (reset),
+        .clk              (clk),
+        .reset            (reset),
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .tcu_lmem_if (tcu_lmem_if),
+        .exec_valid       (tcu_exec_valid),
+        .exec_ready       (tcu_exec_ready),
+        .exec_data        (tcu_exec_data),
+        .tbuf_rs1_data    (tcu_tbuf_rs1_data),
+        .tbuf_rs2_data    (tcu_tbuf_rs2_data),
+        .tbuf_ready       (tcu_tbuf_ready),
     `endif
     `ifdef TCU_META_ENABLE
-        .tcu_mem_if  (tcu_mem_if),
+        .agu_ld_valid     (tcu_agu_ld_valid),
+        .agu_ld_data      (tcu_agu_ld_data),
+        .agu_ld_ready     (tcu_agu_ld_ready),
+        .agu_result_valid (tcu_agu_result_valid),
+        .agu_result_data  (tcu_agu_result_data),
+        .agu_result_ready (tcu_agu_result_ready),
+        .meta_wr_en       (tcu_meta_wr_en),
+        .meta_wr_wid      (tcu_meta_wr_wid),
+        .meta_wr_idx      (tcu_meta_wr_idx),
+        .meta_wr_data     (tcu_meta_wr_data),
     `endif
-        .dispatch_if (dispatch_if),
-        .commit_if   (commit_if)
+        .dispatch_if      (dispatch_if),
+        .commit_if        (commit_if)
+    );
+
+    // the core-wide TCU state the blocks share: WGMMA tile buffers, metadata AGU
+    VX_tcu_shared #(
+        .INSTANCE_ID ("tcu_unit_top"),
+        .BLOCK_SIZE  (`VX_CFG_NUM_TCU_BLOCKS)
+    ) tcu_shared (
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        .exec_valid       (tcu_exec_valid),
+        .exec_ready       (tcu_exec_ready),
+        .exec_data        (tcu_exec_data),
+        .tbuf_rs1_data    (tcu_tbuf_rs1_data),
+        .tbuf_rs2_data    (tcu_tbuf_rs2_data),
+        .tbuf_ready_eff   (tcu_tbuf_ready),
+        .tcu_lmem_if      (tcu_lmem_if),
+    `endif
+    `ifdef TCU_META_ENABLE
+        .agu_ld_valid     (tcu_agu_ld_valid),
+        .agu_ld_data      (tcu_agu_ld_data),
+        .agu_ld_ready     (tcu_agu_ld_ready),
+        .agu_result_valid (tcu_agu_result_valid),
+        .agu_result_data  (tcu_agu_result_data),
+        .agu_result_ready (tcu_agu_result_ready),
+        .meta_wr_en       (tcu_meta_wr_en),
+        .meta_wr_wid      (tcu_meta_wr_wid),
+        .meta_wr_idx      (tcu_meta_wr_idx),
+        .meta_wr_data     (tcu_meta_wr_data),
+        .tcu_mem_if       (tcu_mem_if),
+    `endif
+        .clk              (clk),
+        .reset            (reset)
     );
 
 endmodule

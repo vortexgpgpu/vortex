@@ -39,6 +39,27 @@ namespace vortex {
 
 inline constexpr uint32_t XLENB           = (VX_CFG_XLEN / 8);
 
+// A last-level cache that alone serves every memory client is the point of
+// coherence between kernels. The texture, ray-tracing and DXA ports join below
+// the dcache and the raster and OM caches beside it, so a dcache with any of
+// them is not one.
+inline constexpr bool DCACHE_SHARED_LLC = (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0)
+                                       && (VX_CFG_NUM_CORES == 1) && (VX_CFG_NUM_CLUSTERS == 1)
+                                       && !VX_CFG_EXT_TEX_ENABLED && !VX_CFG_EXT_RTU_ENABLED
+                                       && !VX_CFG_EXT_RASTER_ENABLED && !VX_CFG_EXT_OM_ENABLED
+                                       && !VX_CFG_EXT_DXA_ENABLED;
+inline constexpr bool L2_SHARED_LLC     = (VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0) && (VX_CFG_NUM_CLUSTERS == 1);
+inline constexpr bool L3_SHARED_LLC     = (VX_CFG_L3_ENABLED != 0);
+
+// A write-back LLC must be the only instance: replicated ones never make their
+// dirty lines visible to each other.
+static_assert(!((VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0) && VX_CFG_DCACHE_WRITEBACK)
+              || ((VX_CFG_NUM_CORES == 1) && (VX_CFG_NUM_CLUSTERS == 1)),
+              "a write-back dcache that is the last-level cache must be the only dcache");
+static_assert(!((VX_CFG_L2_ENABLED != 0) && (VX_CFG_L3_ENABLED == 0) && VX_CFG_L2_WRITEBACK)
+              || (VX_CFG_NUM_CLUSTERS == 1),
+              "a write-back L2 that is the last-level cache must be the only L2");
+
 inline constexpr uint32_t MAX_NUM_CORES   = 1024;
 inline constexpr uint32_t MAX_NUM_WARPS   = 64;
 inline constexpr uint32_t MAX_NUM_REGS    = 32;
@@ -81,7 +102,31 @@ inline constexpr uint32_t VX_CFG_L2_NUM_REQS     = VX_CFG_L2_DEMAND_REQS;
 inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS;
 #endif
 
+// With VX_CFG_CP_ON_LLC the command processor's DMA is one more client of the
+// shared last-level cache: the cluster L2 when it is the LLC of one cluster,
+// the L3 otherwise. The slot does not size the banks.
+inline constexpr uint32_t CP_ON_L2         = ((VX_CFG_CP_ON_LLC != 0)
+                                           && (VX_CFG_NUM_CLUSTERS == 1)
+                                           && (VX_CFG_L2_ENABLED != 0)
+                                           && (VX_CFG_L3_ENABLED == 0)) ? 1 : 0;
+inline constexpr uint32_t CP_ON_L3         = ((VX_CFG_CP_ON_LLC != 0) && (VX_CFG_L3_ENABLED != 0)) ? 1 : 0;
+inline constexpr uint32_t L2_CP_IDX        = VX_CFG_L2_NUM_REQS;
+inline constexpr uint32_t L3_CP_IDX        = VX_CFG_L3_NUM_REQS;
+inline constexpr uint32_t L2_CACHE_REQS    = VX_CFG_L2_NUM_REQS + CP_ON_L2;
+inline constexpr uint32_t L3_CACHE_REQS    = VX_CFG_L3_NUM_REQS + CP_ON_L3;
+// one last-level cache word per DMA request
+inline constexpr uint32_t CP_MEM_DATA_SIZE = (CP_ON_L2 != 0) ? VX_CFG_L1_LINE_SIZE : VX_CFG_L2_SECTOR_SIZE;
+
 inline constexpr uint32_t PER_ISSUE_WARPS = VX_CFG_NUM_WARPS / VX_CFG_ISSUE_WIDTH;
 inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);
+
+// Frontend slice f owns the warps with wid % VX_CFG_FETCH_WIDTH == f; each has its
+// own warp scheduler, fetch unit, decoder and icache request port.
+inline constexpr uint32_t PER_FETCH_WARPS = VX_CFG_NUM_WARPS / VX_CFG_FETCH_WIDTH;
+inline constexpr uint32_t ICACHE_NUM_REQS = VX_CFG_FETCH_WIDTH;
+static_assert(VX_CFG_FETCH_WIDTH != 0 && (VX_CFG_FETCH_WIDTH & (VX_CFG_FETCH_WIDTH - 1)) == 0
+              && VX_CFG_FETCH_WIDTH <= VX_CFG_NUM_WARPS
+              && (VX_CFG_ISSUE_WIDTH % VX_CFG_FETCH_WIDTH) == 0,
+              "FETCH_WIDTH must be a power of two that divides ISSUE_WIDTH and is at most NUM_WARPS");
 
 } // namespace vortex

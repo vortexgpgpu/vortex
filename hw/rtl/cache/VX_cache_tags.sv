@@ -35,6 +35,7 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     parameter WORD_SIZE     = 1,              // Size of a word in bytes
     parameter SECTOR_SIZE   = LINE_SIZE,      // Size of a sector in bytes (fill/eviction granule); = LINE_SIZE => 1 sector
     parameter WRITEBACK     = 0,              // Enable cache writeback
+    parameter LAZY_FETCH    = 0,              // Track per-sector partial (allocated-by-store) state
     parameter AMO_ENABLE    = 0               // Enable the AMO-passthrough line invalidate (non-LLC banks only)
 ) (
     input wire                          clk,
@@ -48,6 +49,10 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     input wire                          read,
     input wire                          write,
     input wire                          invalidate, // clear valid on the hit way
+    // the fill installs no data: the sector becomes partial (cleared otherwise)
+    input wire                          fill_nodata,
+    // a refetch completes its resident partial sector: clear its partial bit
+    input wire                          refetch,
     input wire [`CS_LINE_SEL_BITS-1:0]  line_idx,
     input wire [`CS_LINE_SEL_BITS-1:0]  line_idx_n,
     input wire [`CS_TAG_SEL_BITS-1:0]   line_tag,
@@ -70,7 +75,11 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     // per-sector dirty vector of the evict way (drives the multi-beat per-sector
     // writeback); a single bit == evict_dirty when 1 sector/line.
     output wire [`CS_SECTORS_PER_LINE-1:0] evict_dirty_mask,
-    output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag
+    output wire [`CS_TAG_SEL_BITS-1:0]  evict_tag,
+    // the evict way holds a valid sector
+    output wire                         evict_valid,
+    // the requested sector is resident but partial (a load/AMO to it refetches)
+    output wire                         partial_match
 );
     //          tag store: tag only   (valid + dirty decoupled into side LUTRAMs)
     localparam SEC = `CS_SECTORS_PER_LINE;
@@ -82,6 +91,10 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     wire [NUM_WAYS-1:0][`CS_TAG_SEL_BITS-1:0] read_tag;
     wire [NUM_WAYS-1:0][SEC-1:0] read_valid;
     wire [NUM_WAYS-1:0][SEC-1:0] read_dirty;
+    wire [NUM_WAYS-1:0][SEC-1:0] read_partial;
+    wire [NUM_WAYS-1:0]          partial_hit;
+
+    assign evict_valid = (| read_valid[evict_way]);
 
     if (WRITEBACK) begin : g_evict_tag_wb
         assign evict_dirty = (| read_dirty[evict_way]); // dirty if any sector dirty
@@ -116,6 +129,13 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     wire [NUM_WAYS-1:0][SEC-1:0] dirty_wren;
     wire [NUM_WAYS-1:0][SEC-1:0] dirty_wdata;
     wire [NUM_WAYS-1:0][SEC-1:0] dirty_rdata;
+
+    // Per-sector partial store (lazy fetch only): a fill writes its sector's
+    // bit, set by a data-less fill and cleared by a data fill. The bit is only
+    // meaningful while the sector is valid, so no other operation touches it.
+    wire [NUM_WAYS-1:0][SEC-1:0] partial_wren;
+    wire [NUM_WAYS-1:0][SEC-1:0] partial_wdata;
+    wire [NUM_WAYS-1:0][SEC-1:0] partial_rdata;
 
     for (genvar i = 0; i < NUM_WAYS; ++i) begin : g_way_decode
         wire way_en   = (NUM_WAYS == 1) || (evict_way == i);
@@ -163,8 +183,12 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
 
         // hit: tag match AND the requested sector is valid. read_valid folds in
         // a same-set fill from the previous cycle (see the bypass above), so
-        // this compare is exact even on the fill's write edge.
-        wire raw_hit = read_valid[i][sector_idx] && tag_eq;
+        // this compare is exact even on the fill's write edge. Whether a partial
+        // sector serves the lookup is decided outside, off the array enables.
+        wire sector_valid = read_valid[i][sector_idx] && tag_eq;
+        wire sector_partial = (LAZY_FETCH != 0) && read_partial[i][sector_idx];
+        wire raw_hit = sector_valid;
+        assign partial_hit[i] = sector_valid && sector_partial;
         // AMO passthrough invalidate: clear the requested sector's valid.
         wire do_inval = (AMO_ENABLE != 0) && invalidate && raw_hit;
 
@@ -222,6 +246,23 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
             assign dirty_wren[i]  = '0;
             assign dirty_wdata[i] = '0;
             assign read_dirty[i]  = {SEC{1'b0}};
+        end
+
+        if (LAZY_FETCH != 0) begin : g_partial
+            // Same access pattern as the valid store, so the way_filled bypass
+            // corrects a same-set fill from the previous cycle the same way. A
+            // refetch's clear needs none: nothing is looked up right behind it.
+            wire rdw_nodata;
+            `BUFFER_EX(rdw_nodata, fill_nodata, ~stall, 1, 1);
+            wire do_refetch = refetch && sector_valid;
+            assign partial_wren[i]  = (do_fill || do_refetch) ? sec_oh : {SEC{1'b0}};
+            assign partial_wdata[i] = {SEC{do_fill && fill_nodata}};
+            assign read_partial[i]  = way_filled ? ((partial_rdata[i] & ~rdw_sec_oh) | (rdw_sec_oh & {SEC{rdw_nodata}}))
+                                                 : partial_rdata[i];
+        end else begin : g_no_partial
+            assign partial_wren[i]  = '0;
+            assign partial_wdata[i] = '0;
+            assign read_partial[i]  = {SEC{1'b0}};
         end
 
         assign tag_matches[i] = raw_hit;
@@ -302,6 +343,32 @@ module VX_cache_tags import VX_gpu_pkg::*; #(
     end else begin : g_no_dirty_store
         assign dirty_rdata = '0;
         `UNUSED_VAR ({dirty_wren, dirty_wdata, dirty_rdata})
+    end
+
+    if (LAZY_FETCH != 0) begin : g_partial_store
+        VX_dp_ram #(
+            .DATAW    (NUM_WAYS * SEC),
+            .WRENW    (NUM_WAYS * SEC),
+            .SIZE     (`CS_LINES_PER_BANK),
+            .OUT_REG  (1),
+            .LUTRAM   (1),
+            .RDW_MODE ("R")
+        ) partial_store (
+            .clk   (clk),
+            .reset (reset),
+            .read  (~stall),
+            .write (| partial_wren),
+            .wren  (partial_wren),
+            .waddr (line_idx),
+            .raddr (line_idx_n),
+            .wdata (partial_wdata),
+            .rdata (partial_rdata)
+        );
+        assign partial_match = (| partial_hit);
+    end else begin : g_no_partial_store
+        assign partial_rdata = '0;
+        assign partial_match = 1'b0;
+        `UNUSED_VAR ({partial_wren, partial_wdata, partial_rdata, partial_hit, read_partial, fill_nodata, refetch})
     end
 
 endmodule

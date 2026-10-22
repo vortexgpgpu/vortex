@@ -50,6 +50,21 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
     output wire                             dcr_rsp_valid,
     output wire [VX_DCR_DATA_WIDTH-1:0]     dcr_rsp_data,
 
+    // Command-processor DMA into the last-level cache
+    input  wire                             cp_mem_req_valid,
+    input  wire                             cp_mem_req_rw,
+    input  wire                             cp_mem_req_noalloc,
+    input  wire [CP_MEM_ADDR_WIDTH-1:0]     cp_mem_req_addr,
+    input  wire [CP_MEM_DATA_SIZE*8-1:0]    cp_mem_req_data,
+    input  wire [CP_MEM_DATA_SIZE-1:0]      cp_mem_req_byteen,
+    input  wire [CP_MEM_TAG_WIDTH-1:0]      cp_mem_req_tag,
+    output wire                             cp_mem_req_ready,
+
+    output wire                             cp_mem_rsp_valid,
+    output wire [CP_MEM_DATA_SIZE*8-1:0]    cp_mem_rsp_data,
+    output wire [CP_MEM_TAG_WIDTH-1:0]      cp_mem_rsp_tag,
+    input  wire                             cp_mem_rsp_ready,
+
     // ctrl/status
     input  wire                             start,
     output wire                             busy
@@ -72,6 +87,8 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
     wire [VX_MEM_DATA_WIDTH-1:0]    vx_mem_rsp_data [VX_MEM_PORTS];
     wire [VX_MEM_TAG_WIDTH-1:0]     vx_mem_rsp_tag [VX_MEM_PORTS];
     wire                            vx_mem_rsp_ready [VX_MEM_PORTS];
+
+    wire vx_busy;
 
     `SCOPE_IO_SWITCH (1);
 
@@ -102,8 +119,21 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
         .dcr_rsp_valid  (dcr_rsp_valid),
         .dcr_rsp_data   (dcr_rsp_data),
 
+        .cp_mem_req_valid   (cp_mem_req_valid),
+        .cp_mem_req_rw      (cp_mem_req_rw),
+        .cp_mem_req_noalloc (cp_mem_req_noalloc),
+        .cp_mem_req_addr    (cp_mem_req_addr),
+        .cp_mem_req_data    (cp_mem_req_data),
+        .cp_mem_req_byteen  (cp_mem_req_byteen),
+        .cp_mem_req_tag     (cp_mem_req_tag),
+        .cp_mem_req_ready   (cp_mem_req_ready),
+        .cp_mem_rsp_valid   (cp_mem_rsp_valid),
+        .cp_mem_rsp_data    (cp_mem_rsp_data),
+        .cp_mem_rsp_tag     (cp_mem_rsp_tag),
+        .cp_mem_rsp_ready   (cp_mem_rsp_ready),
+
         .start          (start),
-        .busy           (busy)
+        .busy           (vx_busy)
     );
 
     wire                            mem_req_valid_a [VX_MEM_PORTS];
@@ -203,5 +233,29 @@ module rtlsim_shim import VX_gpu_pkg::*; #(
         .mem_rsp_tag_out    (mem_rsp_tag),
         .mem_rsp_ready_out  (mem_rsp_ready)
     );
+
+    // Memory applies a write once it takes it, so the device stays busy until
+    // every write Vortex issued has crossed the bank adapter.
+    wire [VX_MEM_PORTS-1:0]  vx_wr_fire;
+    wire [MEM_NUM_BANKS-1:0] mem_wr_fire;
+    wire                     wr_empty;
+    for (genvar i = 0; i < VX_MEM_PORTS; ++i) begin : g_vx_wr_fire
+        assign vx_wr_fire[i] = mem_req_valid_a[i] && mem_req_ready_a[i] && mem_req_rw_a[i];
+    end
+    for (genvar i = 0; i < MEM_NUM_BANKS; ++i) begin : g_mem_wr_fire
+        assign mem_wr_fire[i] = mem_req_valid[i] && mem_req_ready[i] && mem_req_rw[i];
+    end
+    VX_mem_req_pending #(
+        .NUM_INPUTS  (VX_MEM_PORTS),
+        .NUM_OUTPUTS (MEM_NUM_BANKS)
+    ) wr_pending (
+        .clk      (clk),
+        .reset    (reset),
+        .in_fire  (vx_wr_fire),
+        .out_fire (mem_wr_fire),
+        .empty    (wr_empty)
+    );
+
+    assign busy = vx_busy || ~wr_empty;
 
 endmodule

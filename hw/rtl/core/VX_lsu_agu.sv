@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 
 // VX_lsu_agu: per-lane LSU address generator. Owns all LSU address forms
-// so VX_lsu_slice contains no address arithmetic:
+// so VX_lsu_block contains no address arithmetic:
 //   - plain load/store/fence: addr = base + sext(offset)
 //   - pack-load uop:          addr = base + uop_idx * stride
 //     (uop_idx = offset[1:0], stride = rs2; a 2-bit shift-and-add
@@ -155,9 +155,12 @@ module VX_lsu_agu import VX_gpu_pkg::*; (
             assign addr_carry = sum[CORR_BITS];
         end
 
-        // The window base cancels on the high bits; only the disagreement
-        // between the two group-field corrections survives.
-        wire [HI_BITS-1:0] addr_hi = lin_hi - HI_BITS'(off_borrow) + HI_BITS'(addr_carry);
+        // Only the two group-field corrections survive on the high bits. They
+        // settle last and differ by at most one, so they select a precomputed neighbour.
+        wire [HI_BITS-1:0] lin_hi_dec = lin_hi - HI_BITS'(1);
+        wire [HI_BITS-1:0] lin_hi_inc = lin_hi + HI_BITS'(1);
+        wire [HI_BITS-1:0] addr_hi = (off_borrow == addr_carry) ? lin_hi
+                                   : (off_borrow ? lin_hi_dec : lin_hi_inc);
 
         assign addr = in_stack ? {addr_hi, addr_lo} : lin_addr;
     end else begin : g_stack_linear

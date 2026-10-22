@@ -16,7 +16,9 @@
 module VX_lane_gather import VX_gpu_pkg::*; #(
     parameter BLOCK_SIZE = 1,
     parameter NUM_LANES  = 1,
-    parameter OUT_BUF    = 0
+    parameter OUT_BUF    = 0,
+    // commit ports served
+    parameter NUM_PORTS  = `VX_CFG_ISSUE_WIDTH
 ) (
     input  wire         clk,
     input  wire         reset,
@@ -25,9 +27,9 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
     VX_result_if.slave  result_if [BLOCK_SIZE],
 
     // outputs
-    VX_commit_if.master commit_if [`VX_CFG_ISSUE_WIDTH]
+    VX_commit_if.master commit_if [NUM_PORTS]
 );
-    `STATIC_ASSERT (`IS_DIVISBLE(`VX_CFG_ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT (`IS_DIVISBLE(NUM_PORTS, BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(`VX_CFG_SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
 
     `DECL_EXECUTE_T (pe, NUM_LANES);
@@ -38,34 +40,38 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
     localparam LPID_WIDTH   = `UP(LPID_BITS);
     localparam DATAW        = $bits(pe_result_t);
     localparam DATA_WIS_OFF = DATAW - (UUID_WIDTH + NW_WIDTH);
+    localparam PORT_W       = `LOG2UP(NUM_PORTS);
+
+    // a partial gather recovers the issue slice from the warp id
+    `STATIC_ASSERT ((BLOCK_SIZE == NUM_PORTS) || (NUM_PORTS == `VX_CFG_ISSUE_WIDTH), ("invalid parameter"))
 
     wire [BLOCK_SIZE-1:0] result_in_valid;
     wire [BLOCK_SIZE-1:0][DATAW-1:0] result_in_data;
     wire [BLOCK_SIZE-1:0] result_in_ready;
-    wire [BLOCK_SIZE-1:0][ISSUE_ISW_W-1:0] result_in_isw;
+    wire [BLOCK_SIZE-1:0][PORT_W-1:0] result_in_isw;
 
     for (genvar i = 0; i < BLOCK_SIZE; ++i) begin : g_commit_in
         assign result_in_valid[i] = result_if[i].valid;
         assign result_in_data[i]  = result_if[i].data;
         assign result_if[i].ready = result_in_ready[i];
-        if (BLOCK_SIZE != `VX_CFG_ISSUE_WIDTH) begin : g_result_in_isw_partial
+        if (BLOCK_SIZE != NUM_PORTS) begin : g_result_in_isw_partial
             if (BLOCK_SIZE != 1) begin : g_block
-                assign result_in_isw[i] = {result_in_data[i][DATA_WIS_OFF+BLOCK_SIZE_W +: (ISSUE_ISW_W-BLOCK_SIZE_W)], BLOCK_SIZE_W'(i)};
+                assign result_in_isw[i] = PORT_W'({result_in_data[i][DATA_WIS_OFF+BLOCK_SIZE_W +: (ISSUE_ISW_W-BLOCK_SIZE_W)], BLOCK_SIZE_W'(i)});
             end else begin : g_no_block
-                assign result_in_isw[i] = result_in_data[i][DATA_WIS_OFF +: ISSUE_ISW_W];
+                assign result_in_isw[i] = PORT_W'(result_in_data[i][DATA_WIS_OFF +: ISSUE_ISW_W]);
             end
         end else begin : g_result_in_isw_full
-            assign result_in_isw[i] = BLOCK_SIZE_W'(i);
+            assign result_in_isw[i] = PORT_W'(i);
         end
     end
 
-    reg [`VX_CFG_ISSUE_WIDTH-1:0] result_out_valid;
-    reg [`VX_CFG_ISSUE_WIDTH-1:0][DATAW-1:0] result_out_data;
-    wire [`VX_CFG_ISSUE_WIDTH-1:0] result_out_ready;
+    reg [NUM_PORTS-1:0] result_out_valid;
+    reg [NUM_PORTS-1:0][DATAW-1:0] result_out_data;
+    wire [NUM_PORTS-1:0] result_out_ready;
 
     always @(*) begin
         result_out_valid = '0;
-        for (integer i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin
+        for (integer i = 0; i < NUM_PORTS; ++i) begin
             result_out_data[i] = 'x;
         end
         for (integer i = 0; i < BLOCK_SIZE; ++i) begin
@@ -78,7 +84,7 @@ module VX_lane_gather import VX_gpu_pkg::*; #(
         assign result_in_ready[i] = result_out_ready[result_in_isw[i]];
     end
 
-    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin: g_out_bufs
+    for (genvar i = 0; i < NUM_PORTS; ++i) begin: g_out_bufs
         VX_result_if #(
             .data_t (pe_result_t)
         ) result_tmp_if();

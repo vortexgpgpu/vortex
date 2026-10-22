@@ -15,7 +15,6 @@
 
 module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 #(
-    parameter CLUSTER_ID = 0,
     parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
@@ -23,6 +22,8 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     // Clock
     input  wire                 clk,
     input  wire                 reset,
+
+    input  wire [CLUSTER_ID_WIDTH-1:0] cluster_id,
 
 `ifdef PERF_ENABLE
     input sysmem_perf_t         sysmem_perf,
@@ -36,6 +37,9 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     // KMU bus
     VX_kmu_bus_if.slave         kmu_bus_if[1],
+
+    // Global barrier bus to the device-level barrier unit
+    VX_gbar_bus_if.master       gbar_bus_if,
 
 `ifdef VX_CFG_EXT_RASTER_ENABLE
     // Delegated draw launch (device KMU → raster engines)
@@ -52,13 +56,22 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     output wire                    mmu_flush_done,
 `endif
 
+    // Command-processor DMA, entering as an L2 client when this cluster's L2
+    // is the LLC (CP_ON_L2); tied off otherwise.
+    VX_mem_bus_if.slave         cp_mem_if,
+
     // Status
     output wire                 busy
 );
 
 `ifdef SCOPE
     localparam scope_socket = 0;
+`ifdef EXT_GFX_CLUSTER_ENABLE
+    localparam scope_gfx = NUM_SOCKETS;
+    `SCOPE_IO_SWITCH (NUM_SOCKETS + 1);
+`else
     `SCOPE_IO_SWITCH (NUM_SOCKETS);
+`endif
 `endif
 
 `ifdef PERF_ENABLE
@@ -155,7 +168,6 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 `endif
 
     VX_gbar_bus_if per_socket_gbar_bus_if[NUM_SOCKETS]();
-    VX_gbar_bus_if gbar_bus_if();
 
     VX_gbar_arb #(
         .NUM_REQS (NUM_SOCKETS),
@@ -168,19 +180,11 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .bus_out_if (gbar_bus_if)
     );
 
-    VX_gbar_unit #(
-        .INSTANCE_ID (`SFORMATF(("gbar%0d", CLUSTER_ID)))
-    ) gbar_unit (
-        .clk         (clk),
-        .reset       (reset),
-        .gbar_bus_if (gbar_bus_if)
-    );
-
     // L2 input buses (socket ports + cluster-resident gfx cache ports)
     VX_mem_bus_if #(
         .DATA_SIZE (`VX_CFG_L1_LINE_SIZE),
         .TAG_WIDTH (L2_TAG_WIDTH)
-    ) per_socket_mem_bus_if[L2_NUM_REQS]();
+    ) per_socket_mem_bus_if[L2_CACHE_REQS]();
 
     // Socket memory output buses (socket arb output tag width)
     VX_mem_bus_if #(
@@ -206,6 +210,7 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .DATA_SIZE (L2_SECTOR_SIZE),
         .TAG_WIDTH (L2_MEM_TAG_WIDTH)
     ) l2_mem_bus_if[L2_MEM_PORTS]();
+    wire l2_req_empty;
 
     VX_cache_wrap #(
         .INSTANCE_ID    (`SFORMATF(("%s-l2cache", INSTANCE_ID))),
@@ -215,10 +220,11 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .NUM_BANKS      (L2_NUM_BANKS),
         .NUM_WAYS       (`VX_CFG_L2_NUM_WAYS),
         .WORD_SIZE      (L2_WORD_SIZE),
-        .NUM_REQS       (L2_NUM_REQS),
+        .NUM_REQS       (L2_CACHE_REQS),
         .MEM_PORTS      (L2_MEM_PORTS),
         .CRSQ_SIZE      (`VX_CFG_L2_CRSQ_SIZE),
         .MSHR_SIZE      (`VX_CFG_L2_MSHR_SIZE),
+        .MSHR_LINES     (`VX_CFG_L2_MSHR_LINES),
         .MRSQ_SIZE      (`VX_CFG_L2_MRSQ_SIZE),
         .MREQ_SIZE      (`VX_CFG_L2_MREQ_SIZE),
         .LATENCY        (`VX_CFG_L2_LATENCY),
@@ -226,12 +232,16 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_L2_WRITEBACK),
         .DIRTY_BYTES    (`VX_CFG_L2_DIRTYBYTES),
+        .LAZY_FETCH     (`VX_CFG_L2_LAZY_FETCH),
+        .WRITE_AROUND   (CP_ON_L2),
         .REPL_POLICY    (`VX_CFG_L2_REPL_POLICY),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
         .NC_ENABLE      (1),
         .PASSTHRU       (!`VX_CFG_L2_ENABLED),
         .IS_LLC         (L2_IS_LLC),
+        .SHARED_LLC     (L2_SHARED_LLC),
+        .BANK_HASH      (`VX_CFG_L2_BANK_HASH),
         .AMO_ENABLE     (`VX_CFG_EXT_A_ENABLED)
     ) l2cache (
         .clk            (clk),
@@ -240,7 +250,8 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         .cache_perf     (l2_perf),
     `endif
         .core_bus_if    (per_socket_mem_bus_if),
-        .mem_bus_if     (l2_mem_bus_if)
+        .mem_bus_if     (l2_mem_bus_if),
+        .req_empty      (l2_req_empty)
     );
 
     // Cluster DCR distribution — declared before its consumers (sockets/gfx).
@@ -286,14 +297,20 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
         `ASSIGN_VX_MEM_BUS_IF (mem_bus_if[i], l2_mem_bus_if[i]);
     end
 
+    if (CP_ON_L2 != 0) begin : g_cp_l2_client
+        `ASSIGN_VX_MEM_BUS_IF (per_socket_mem_bus_if[L2_CP_IDX], cp_mem_if);
+    end else begin : g_no_cp_l2_client
+        `UNUSED_VX_MEM_BUS_IF (cp_mem_if)
+    end
+
     ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_SOCKETS-1:0] per_socket_busy;
 
 `ifdef EXT_GFX_ANY_ENABLE
     // OR all socket flush reqs together; broadcast .done to every socket.
-    // Sockets fire their reqs sequentially; the shared resource flushes
-    // once per req (subsequent reqs see an already-empty cache).
+    // The cores start their flushes together, so the read-only graphics caches
+    // flush once for all of them; the OR drops when the last core has finished.
     VX_dcr_flush_if cluster_flush_if();
     VX_dcr_flush_if per_socket_cluster_flush_if [NUM_SOCKETS]();
     wire [NUM_SOCKETS-1:0] per_socket_cluster_flush_req;
@@ -368,13 +385,13 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     for (genvar socket_id = 0; socket_id < NUM_SOCKETS; ++socket_id) begin : g_sockets
 
         VX_socket #(
-            .SOCKET_ID ((CLUSTER_ID * NUM_SOCKETS) + socket_id),
             .INSTANCE_ID (`SFORMATF(("%s-socket%0d", INSTANCE_ID, socket_id)))
         ) socket (
             `SCOPE_IO_BIND  (scope_socket+socket_id)
 
             .clk            (clk),
             .reset          (reset),
+            .socket_id      (CORE_ID_WIDTH'(cluster_id) * CORE_ID_WIDTH'(NUM_SOCKETS) + CORE_ID_WIDTH'(socket_id)),
 
         `ifdef PERF_ENABLE
             .sysmem_perf    (sysmem_perf_tmp),
@@ -421,10 +438,12 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
     assign per_socket_dcr_bus_if[DCR_GFX_IDX].rsp_data  = gfx_dcr_bus_if.rsp_data;
 
     VX_graphics #(
-        .CLUSTER_ID (CLUSTER_ID)
+        .INSTANCE_ID (INSTANCE_ID)
     ) graphics (
+        `SCOPE_IO_BIND (scope_gfx)
         .clk        (clk),
         .reset      (reset),
+        .cluster_id (cluster_id),
     `ifdef PERF_ENABLE
     `ifdef VX_CFG_EXT_RASTER_ENABLE
         .raster_perf              (gfx_raster_perf),
@@ -484,9 +503,9 @@ module VX_cluster import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
     wire busy_r;
 `ifdef EXT_GFX_ANY_ENABLE
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy | mmu_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | gfx_busy | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
 `else
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | mmu_busy, 1'b1, 1, (NUM_SOCKETS > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_socket_busy) | mmu_busy | ~l2_req_empty, 1'b1, 1, (NUM_SOCKETS > 1));
 `endif
     assign busy = busy_r | dcr_bus_if.req_valid | launch_link_busy;
 

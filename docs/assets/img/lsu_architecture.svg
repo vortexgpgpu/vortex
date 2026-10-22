@@ -30,7 +30,7 @@
   <rect x="24" y="56" width="1512" height="282" class="grp"/>
   <text x="40" y="86" class="tb">VX_lsu_unit</text>
   <text x="40" y="110" class="ts">execute stage</text>
-  <text x="40" y="142" class="ts">one VX_lsu_slice per</text>
+  <text x="40" y="142" class="ts">one VX_lsu_block per</text>
   <text x="40" y="158" class="ts">LSU block (the issue</text>
   <text x="40" y="174" class="ts">width)</text>
   <rect x="270" y="72" width="180" height="250" rx="6" class="core"/>
@@ -42,7 +42,7 @@
   <text x="282" y="188" class="ts">becomes packets:</text>
   <text x="282" y="204" class="ts">pid, sop, eop</text>
   <rect x="470" y="72" width="560" height="250" rx="6" class="unit"/>
-  <text x="482" y="94" class="tb">VX_lsu_slice — request side</text>
+  <text x="482" y="94" class="tb">VX_lsu_block — request side</text>
   <rect x="482" y="106" width="172" height="92" rx="4" class="box"/>
   <text x="494" y="128" class="t">VX_lsu_agu</text>
   <text x="494" y="150" class="ts">base + offset, or</text>
@@ -68,7 +68,7 @@
   <text x="770" y="270" class="ts">tag = header, operation,</text>
   <text x="770" y="286" class="ts">alignment, slot, fence</text>
   <rect x="1050" y="72" width="320" height="250" rx="6" class="unit"/>
-  <text x="1062" y="94" class="tb">VX_lsu_slice — response side</text>
+  <text x="1062" y="94" class="tb">VX_lsu_block — response side</text>
   <rect x="1062" y="106" width="296" height="92" rx="4" class="box"/>
   <text x="1074" y="128" class="t">load formatter</text>
   <text x="1074" y="150" class="ts">sub-word extract by the saved</text>

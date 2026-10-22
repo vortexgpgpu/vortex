@@ -131,6 +131,22 @@ tests:
   via: blackbox
   app: vecadd
   args: -n16384
+# Streaming stores into a lazy-fetch write-back L2: store misses allocate
+# through the bank loopback instead of a memory fill.
+- id: parity-vecadd-lazy-l2
+  check: model_parity
+  via: blackbox
+  app: vecadd
+  args: -n16384
+  configs: -DVX_CFG_L2_LAZY_FETCH=1
+  shape: {l2cache: true}
+# Lazy-fetch refetch paths on the default write-back dcache: partial-sector
+# loads park and refetch, and same-set thrash evicts lines mid-refetch.
+- id: parity-lazy-fetch
+  check: model_parity
+  via: blackbox
+  app: lazy_fetch
+  configs: -DVX_CFG_DCACHE_LAZY_FETCH=1
 # FPU + LSU locality, multi-warp reuse (~1.29M cycles on the default shape).
 - id: parity-sgemm
   check: model_parity
@@ -160,6 +176,39 @@ tests:
   args: -n128
   configs: -DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8
   shape: {cores: 2, l2cache: true}
+# SGEMM on two frontend slices feeding four issue slices: per-slice fetch on a
+# two-port icache, CTAs as wide as the core, a 16-port dcache.
+- id: parity-sgemm-fw2
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n128
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
+# Device printf: per-character IO ring stores, each published behind a fence
+# that drains, flushes and invalidates the data cache.
+- id: parity-printf
+  check: model_parity
+  via: blackbox
+  app: printf
+# The same fences on data caches with more banks than memory ports: every
+# port's flush token must be answered on that port.
+- id: parity-printf-iw2
+  check: model_parity
+  via: blackbox
+  app: printf
+  configs: -DVX_CFG_ISSUE_WIDTH=2
+- id: parity-printf-fw2
+  check: model_parity
+  via: blackbox
+  app: printf
+  configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_FETCH_WIDTH=2
+# Same-word reads from several coalescer channels of one warp, served by one
+# dcache bank access and returned to every channel.
+- id: parity-uniform-ld
+  check: model_parity
+  via: blackbox
+  app: uniform_ld
+  configs: -DVX_CFG_NUM_THREADS=16
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity
@@ -184,3 +233,12 @@ tests:
   via: blackbox
   app: raycast
   configs: -DVX_CFG_NUM_THREADS=16 -DVX_CFG_NUM_WARPS=16
+# The raycaster on four cores sharing an L2: its image columns carry very
+# different work, so where the launch places each CTA sets the critical path.
+- id: parity-raycast-mc
+  check: model_parity
+  via: blackbox
+  app: raycast
+  shape:
+    cores: 4
+    l2cache: true

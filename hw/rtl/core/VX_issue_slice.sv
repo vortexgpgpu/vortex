@@ -14,13 +14,14 @@
 `include "VX_define.vh"
 
 module VX_issue_slice import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter ISSUE_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
     input wire              clk,
     input wire              reset,
+
+    input wire [ISSUE_ISW_W-1:0] slice_id,
 
 `ifdef PERF_ENABLE
     output issue_perf_t     issue_perf,
@@ -39,8 +40,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     wire [NUM_EX_UNITS-1:0] fu_release;
 
     VX_ibuffer #(
-        .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID))),
-        .ISSUE_ID (ISSUE_ID)
+        .INSTANCE_ID (`SFORMATF(("%s-ibuffer", INSTANCE_ID)))
     ) ibuffer (
         .clk            (clk),
         .reset          (reset),
@@ -52,8 +52,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_scoreboard #(
-        .INSTANCE_ID (`SFORMATF(("%s-scoreboard", INSTANCE_ID))),
-        .ISSUE_ID (ISSUE_ID)
+        .INSTANCE_ID (`SFORMATF(("%s-scoreboard", INSTANCE_ID)))
     ) scoreboard (
         .clk            (clk),
         .reset          (reset),
@@ -67,8 +66,7 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_operands #(
-        .INSTANCE_ID (`SFORMATF(("%s-operands", INSTANCE_ID))),
-        .ISSUE_ID (ISSUE_ID)
+        .INSTANCE_ID (`SFORMATF(("%s-operands", INSTANCE_ID)))
     ) operands (
         .clk            (clk),
         .reset          (reset),
@@ -81,11 +79,11 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     );
 
     VX_dispatcher #(
-        .INSTANCE_ID (`SFORMATF(("%s-dispatcher", INSTANCE_ID))),
-        .ISSUE_ID (ISSUE_ID)
+        .INSTANCE_ID (`SFORMATF(("%s-dispatcher", INSTANCE_ID)))
     ) dispatcher (
         .clk            (clk),
         .reset          (reset),
+        .slice_id       (slice_id),
     `ifdef PERF_ENABLE
         .perf_stalls    (issue_perf.dispatch_stalls),
         .perf_instrs    (issue_perf.dispatch_instrs),
@@ -101,8 +99,8 @@ module VX_issue_slice import VX_gpu_pkg::*; #(
     assign warp_issued_wis = scoreboard_if.data.wis;
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_ISSUE
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_ISSUE
     wire decode_fire = decode_if.valid && decode_if.ready;
     wire operands_fire = operands_if.valid && operands_if.ready;
     wire reset_negedge;

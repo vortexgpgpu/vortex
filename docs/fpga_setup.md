@@ -148,20 +148,22 @@ sudo bash -c 'source /opt/xilinx/xrt/setup.sh && \
 
 The [blackbox.sh](./simulation.md) script within the build directory can be used to run a test with Vortex’s xrt driver using the following command:
 
-`FPGA_BIN_DIR=<path to bitstream directory> TARGET=hw|hw_emu PLATFORM=<platform baseName> ./ci/blackbox.sh --driver=xrt --app=<test name>`
+`FPGA_BIN_DIR=<path to bitstream directory> ./ci/blackbox.sh --driver=xrt --target=hw|hw_emu --app=<test name>`
+
+The target is a `blackbox.sh` option, not an environment variable: `blackbox.sh` resets `TARGET`, so an exported `TARGET=hw` is ignored and the run falls back to the `xrtsim` simulator.
 
 For example:
 
-```FPGA_BIN_DIR=<realpath> hw/syn/xilinx/xrt/build_4c_u280_xilinx_u280_gen3x16_xdma_1_202211_1_hw/bin TARGET=hw PLATFORM=xilinx_u280_gen3x16_xdma_1_202211_1 ./ci/blackbox.sh --driver=xrt --app=demo```
+```FPGA_BIN_DIR=<realpath> hw/syn/xilinx/xrt/build_4c_u280_xilinx_u280_gen3x16_xdma_1_202211_1_hw/bin ./ci/blackbox.sh --driver=xrt --target=hw --app=demo```
 
 Run sgemm on a U55C `hw` bitstream (host memory enabled per the section above), `-n` sets the matrix size:
 
 ```bash
-FPGA_BIN_DIR=$(realpath hw/syn/xilinx/xrt/<build dir>/bin) TARGET=hw \
-  ./ci/blackbox.sh --driver=xrt --app=sgemm --args="-n128"
+FPGA_BIN_DIR=$(realpath hw/syn/xilinx/xrt/<build dir>/bin) \
+  ./ci/blackbox.sh --driver=xrt --target=hw --app=sgemm --args="-n128"
 ```
 
-The same command with `TARGET=hw_emu` against a `hw_emu` build runs it in emulation
+The same command with `--target=hw_emu` against a `hw_emu` build runs it in emulation
 (use a small `-n`, e.g. `-n16`, since emulation is slow).
 
 Synthesis for Intel (Altera) Boards

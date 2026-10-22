@@ -627,7 +627,7 @@ void firesim_sim::report_progress(const char *why) {
 // they are parked at a barrier, and which pipeline is holding them.
 //
 // Requires the RTL to be built with PERF_ENABLE (see hw/syn/firesim/Makefile);
-// without it VX_csr_data.sv ties the counters off and every read returns zero,
+// without it VX_csr_mpm.sv ties the counters off and every read returns zero,
 // so an all-zero line here means the instrument is absent, not that the core is
 // idle. That distinction is exactly the kind this project has been bitten by,
 // so it is called out rather than left to be inferred.

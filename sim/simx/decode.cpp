@@ -631,7 +631,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   case Opcode::FENCE: {
     instr->set_fu_type(FUType::LSU);
     instr->set_op_type(LsuType::FENCE);
-    instr->set_args(IntrLsuArgs{0, 0, 0});
+    // neither the predecessor nor the successor set holds a memory read or
+    // write (pred = code[27:24], succ = code[23:20], IORW)
+    uint32_t fence_io = (funct3 == 0) && ((code >> 24) & 0x3) == 0 && ((code >> 20) & 0x3) == 0;
+    instr->set_args(IntrLsuArgs{fence_io, 0, 0});
   } break;
   case Opcode::AMO: {
     instr->set_fu_type(FUType::LSU);

@@ -13,14 +13,15 @@
 
 `include "VX_define.vh"
 
-module VX_lsu_slice import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+module VX_lsu_block import VX_gpu_pkg::*; #(
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
     input wire              clk,
     input wire              reset,
+
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
     // Inputs
     VX_execute_if.slave     execute_if,
@@ -47,7 +48,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     localparam [MEM_ADDRW-1:0] LMEM_BLK_BASE = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> MEM_ASHIFT);
     `STATIC_ASSERT (MEM_ADDRW > LMEM_BLK_LSB, ("LMEM window wider than the block address space"))
 `endif
-    `UNUSED_PARAM (CORE_ID)
+`ifndef VX_CFG_EXT_A_ENABLE
+    `UNUSED_VAR (core_id)
+`endif
     `UNUSED_SPARAM (INSTANCE_ID)
 
     // tag_width = header + op_type + align + pkt_addr + fence
@@ -76,6 +79,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     // VX_lsu_agu; this slice contains no address arithmetic).
 
     wire req_is_fence, rsp_is_fence;
+    wire req_fence_io = inst_lsu_is_fence_io(execute_if.data.op_type);
 
     wire [NUM_LANES-1:0][`VX_CFG_XLEN-1:0] full_addr;
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_full_addr
@@ -100,6 +104,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire [MEM_ADDRW-1:0] io_addr_start = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_BASE_ADDR) >> MEM_ASHIFT);
         wire [MEM_ADDRW-1:0] io_addr_end = MEM_ADDRW'(`VX_CFG_XLEN'(`VX_MEM_IO_END_ADDR) >> MEM_ASHIFT);
         assign mem_req_attr_struct[i].is_flush  = req_is_fence;
+        assign mem_req_attr_struct[i].is_noalloc = 1'b0;
     `ifdef VX_CFG_EXT_OM_ENABLE
         // OM fragment-export aperture.
         //
@@ -118,8 +123,11 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
         wire lane_is_om = 1'b0;
         assign mem_req_attr_struct[i].is_addr_om = 1'b0;
     `endif
-        assign mem_req_attr_struct[i].is_addr_io = ((block_addr >= io_addr_start) && (block_addr < io_addr_end))
-                                                 || lane_is_om;
+        // a fence's token carries its kind: io for a fence ordering only device
+        // accesses
+        assign mem_req_attr_struct[i].is_addr_io = req_is_fence ? req_fence_io
+                                                 : (((block_addr >= io_addr_start) && (block_addr < io_addr_end))
+                                                    || lane_is_om);
     `ifdef VX_CFG_LMEM_ENABLE
         // is local memory address
         assign mem_req_attr_struct[i].is_addr_local =
@@ -141,7 +149,7 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
     `endif
         // make_hart_id(cid, wid, tid) — packed concatenation, low bits = tid.
         assign lane_amo.hart_id      = HART_ID_WIDTH'(
-            (HART_ID_WIDTH'(CORE_ID) << (NW_BITS + NT_BITS))
+            (HART_ID_WIDTH'(core_id) << (NW_BITS + NT_BITS))
           | (HART_ID_WIDTH'(execute_if.data.header.wid) << NT_BITS)
           |  HART_ID_WIDTH'(i)
         );
@@ -261,7 +269,9 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
                 default : mem_req_byteen_w = {LSU_WORD_SIZE{1'b1}};
             endcase
         end
-        assign mem_req_byteen[i] = mem_req_byteen_w;
+        // A fence is a flush token and carries no data. A memory fence is an
+        // L1-only token (byte enables set): it stops at the shared LLC.
+        assign mem_req_byteen[i] = req_is_fence ? (req_fence_io ? '0 : '1) : mem_req_byteen_w;
     end
 
     // memory misalignment not supported!
@@ -539,8 +549,8 @@ module VX_lsu_slice import VX_gpu_pkg::*; #(
 
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_LSU
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_LSU
     wire reset_negedge;
     `NEG_EDGE (reset_negedge, reset);
     `SCOPE_TAP_EX (0, 3, 4, 2, (

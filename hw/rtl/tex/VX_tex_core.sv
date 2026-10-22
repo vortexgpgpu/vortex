@@ -48,7 +48,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     tex_dcrs_t tex_dcrs;
 
     VX_tex_dcr #(
-        .INSTANCE_ID ($sformatf("%s-dcr", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-dcr", INSTANCE_ID))),
         .NUM_STAGES  (`VX_TEX_STAGE_COUNT)
     ) tex_dcr (
         .clk        (clk),
@@ -132,7 +132,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     // sampler, for the same reason the format does: the state a sample merges
     // under is the state it was issued under.
     VX_tex_addr #(
-        .INSTANCE_ID ($sformatf("%s-addr", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-addr", INSTANCE_ID))),
         .REQ_TAGW    (TAG_WIDTH + TEX_FORMAT_BITS + 32),
         .NUM_LANES   (NUM_LANES)
     ) tex_addr (
@@ -176,7 +176,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire mem_rsp_ready;
 
     VX_tex_mem #(
-        .INSTANCE_ID ($sformatf("%s-mem", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-mem", INSTANCE_ID))),
         .REQ_TAGW    (TAG_WIDTH + TEX_FORMAT_BITS + 32 + BLEND_FRAC_W + BORDER_W + LODFRAC_W),
         .NUM_LANES   (NUM_LANES)
     ) tex_mem (
@@ -218,7 +218,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     wire [TAG_WIDTH-1:0] mem_rsp_tag = mem_rsp_info[(LODFRAC_W + BORDER_W + BLEND_FRAC_W + 32 + TEX_FORMAT_BITS) +: TAG_WIDTH];
 
     VX_tex_sampler #(
-        .INSTANCE_ID ($sformatf("%s-sampler", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-sampler", INSTANCE_ID))),
         .REQ_TAGW    (TAG_WIDTH),
         .NUM_LANES   (NUM_LANES)
     ) tex_sampler (
@@ -259,8 +259,8 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     );
 
 `ifdef SCOPE
-`ifdef DBG_SCOPE_TEX
     `SCOPE_IO_SWITCH (1);
+`ifdef DBG_SCOPE_TEX
     wire cache_bus_req_fire_0 = cache_bus_if[0].req_valid && cache_bus_if[0].req_ready;
     wire cache_bus_rsp_fire_0 = cache_bus_if[0].rsp_valid && cache_bus_if[0].rsp_ready;
     wire [TCACHE_TAG_WIDTH-UUID_WIDTH-1:0] cache_bus_req_tag  = cache_bus_if[0].req_data.tag[TCACHE_TAG_WIDTH-UUID_WIDTH-1:0];
@@ -324,7 +324,7 @@ module VX_tex_core import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
         reset_negedge, 1'b0, 4096
     );
 `else
-    `SCOPE_IO_UNUSED()
+    `SCOPE_IO_UNUSED(0)
 `endif
 `endif
 `ifdef CHIPSCOPE

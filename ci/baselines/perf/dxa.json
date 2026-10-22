@@ -6,18 +6,18 @@
     },
     "app": "dxa_copy_mcast",
     "args": "",
-    "config_hash": "6a815f855f6e0d05",
+    "config_hash": "2be8c5960886f23f",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-copy-nt16:rtlsim": {
     "32": {
-      "cycles": 1994,
+      "cycles": 1992,
       "instrs": 592
     },
     "app": "dxa_copy",
     "args": "-d1",
-    "config_hash": "626c5f6244584b1f",
+    "config_hash": "37f76aae77fd1afd",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -28,18 +28,18 @@
     },
     "app": "dxa_copy",
     "args": "-d1",
-    "config_hash": "7c32a11d123bfb13",
+    "config_hash": "c3b3447f163ec6c3",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-sgemm2-dxa-mcast-nt16:rtlsim": {
     "32": {
-      "cycles": 14022240,
+      "cycles": 14023305,
       "instrs": 4962320
     },
     "app": "sgemm2_dxa_mcast",
     "args": "-n128",
-    "config_hash": "822d0ca194266a27",
+    "config_hash": "62067f11f3ef5af4",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -50,18 +50,18 @@
     },
     "app": "sgemm2_dxa_mcast",
     "args": "-n128",
-    "config_hash": "87ea544e77719254",
+    "config_hash": "98c58db8047bceb9",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-sgemm2-dxa-nt16:rtlsim": {
     "32": {
-      "cycles": 3941267,
+      "cycles": 3921184,
       "instrs": 1263632
     },
     "app": "sgemm2_dxa",
     "args": "-n128 -t4 -m1",
-    "config_hash": "e55b61598f5f10ea",
+    "config_hash": "845bebf9fbc108b1",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -72,18 +72,18 @@
     },
     "app": "sgemm2_dxa",
     "args": "-n128 -t4 -m1",
-    "config_hash": "21da2f2737bf03dd",
+    "config_hash": "8cf4b0e4e0c7d144",
     "configs": "-DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-wgmma-dxa-mcast-nt16:rtlsim": {
     "32": {
-      "cycles": 82160,
+      "cycles": 79131,
       "instrs": 32384
     },
     "app": "sgemm_tcu_wg_dxa_mcast",
     "args": "-m 128 -n 128 -k 64",
-    "config_hash": "20304652a1bfb94c",
+    "config_hash": "d3c9c80b16cdf2c2",
     "configs": "-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_THREADS=16",
     "driver": "rtlsim"
   },
@@ -94,29 +94,29 @@
     },
     "app": "sgemm_tcu_wg_dxa_mcast",
     "args": "-m 128 -n 128 -k 64",
-    "config_hash": "bf4520d008c07dc9",
+    "config_hash": "38993044a82f32e0",
     "configs": "-DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_THREADS=4",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-wgmma-dxa:rtlsim": {
     "32": {
-      "cycles": 36021,
+      "cycles": 31160,
       "instrs": 9160
     },
     "app": "sgemm_tcu_wg_dxa",
     "args": "-m 128 -n 128 -k 64",
-    "config_hash": "2a4e017d98740636",
+    "config_hash": "699f26ecbecc6bb2",
     "configs": "-DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=16 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_THREADS=32",
     "driver": "rtlsim"
   },
   "dxa:perf_gate-wgmma-sp-dxa:rtlsim": {
     "32": {
-      "cycles": 59789,
+      "cycles": 55512,
       "instrs": 9328
     },
     "app": "sgemm_tcu_wg_sp_dxa",
     "args": "-m 128 -n 128 -k 128",
-    "config_hash": "f05069d7cf0ee3ff",
+    "config_hash": "8e607400e57e51f5",
     "configs": "-DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_EXT_TCU_ENABLE -DVX_CFG_TCU_WGMMA_ENABLE -DVX_CFG_TCU_SPARSE_ENABLE -DVX_CFG_EXT_DXA_ENABLE -DWGMMA_NRC=32 -DVX_CFG_NUM_ALU_BLOCKS=1 -DVX_CFG_NUM_LSU_BLOCKS=1 -DVX_CFG_NUM_FPU_BLOCKS=1 -DVX_CFG_NUM_WARPS=8 -DVX_CFG_NUM_THREADS=32",
     "driver": "rtlsim"
   }

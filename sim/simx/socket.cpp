@@ -60,9 +60,9 @@ public:
       log2ceil(VX_CFG_L1_LINE_SIZE), // S (no sectoring)
       log2ceil(sizeof(uint32_t)), // W
       log2ceil(VX_CFG_ICACHE_NUM_WAYS),// A
-      log2ceil(1),            // B
+      log2ceil(VX_CFG_ICACHE_NUM_BANKS), // B
       VX_CFG_XLEN,                   // address bits
-      1,                      // number of inputs
+      ICACHE_NUM_REQS,        // number of inputs (one per frontend slice)
       VX_CFG_ICACHE_MEM_PORTS,       // memory ports
       false,                  // write-back
       false,                  // write response
@@ -70,6 +70,11 @@ public:
       VX_CFG_ICACHE_LATENCY,         // pipeline latency (capacity-scaled, matches hardware)
       VX_CFG_ICACHE_REPL_POLICY,     // replacement policy
       false,                  // is_llc (icache never carries AMO state)
+      false,                  // non-cacheable bypass
+      false,                  // bank_hash
+      false,                  // shared_llc
+      false,                  // lazy_fetch
+      true,                   // core-response register
     });
 
     snprintf(sname, 100, "%s-dcache", name.c_str());
@@ -91,6 +96,13 @@ public:
       VX_CFG_DCACHE_LATENCY,         // pipeline latency (capacity-scaled, matches hardware)
       VX_CFG_DCACHE_REPL_POLICY,     // replacement policy
       (VX_CFG_DCACHE_ENABLED != 0) && (VX_CFG_L2_ENABLED == 0) && (VX_CFG_L3_ENABLED == 0), // is_llc
+      true,                          // non-cacheable bypass
+      (VX_CFG_DCACHE_BANK_HASH != 0) && (VX_CFG_DCACHE_NUM_BANKS > 1), // bank_hash
+      DCACHE_SHARED_LLC,             // shared_llc
+      VX_CFG_DCACHE_LAZY_FETCH != 0, // lazy_fetch
+      true,                          // core-response register
+      (VX_CFG_DCACHE_READ_MERGE != 0) ? DCACHE_CHANNELS : 0, // read_merge
+      VX_CFG_DCACHE_MSHR_LINES,      // mshr_lines
     });
 
 #ifdef VX_CFG_EXT_TEX_ENABLE
@@ -273,8 +285,10 @@ public:
 
     // connect cores to caches
     for (uint32_t i = 0; i < cores_per_socket; ++i) {
-        cores_.at(i)->icache_req_out.at(0).bind(&icaches_->core_req_in.at(i).at(0));
-        icaches_->core_rsp_out.at(i).at(0).bind(&cores_.at(i)->icache_rsp_in.at(0));
+      for (uint32_t j = 0; j < ICACHE_NUM_REQS; ++j) {
+        cores_.at(i)->icache_req_out.at(j).bind(&icaches_->core_req_in.at(i).at(j));
+        icaches_->core_rsp_out.at(i).at(j).bind(&cores_.at(i)->icache_rsp_in.at(j));
+      }
 
       for (uint32_t j = 0; j < VX_CFG_DCACHE_NUM_REQS; ++j) {
         cores_.at(i)->dcache_req_out.at(j).bind(&dcaches_->core_req_in.at(i).at(j));
@@ -416,7 +430,7 @@ public:
     return cores_.at(idx);
   }
 
-  void dcache_flush_begin() { dcaches_->flush_begin(); }
+  void dcache_flush_begin(bool l1_only) { dcaches_->flush_begin(l1_only); }
   bool dcache_flush_done() const { return dcaches_->flush_done(); }
   void icache_flush_begin() { icaches_->flush_begin(); }
   bool icache_flush_done() const { return icaches_->flush_done(); }
@@ -504,8 +518,8 @@ Core::Ptr& Socket::core(uint32_t idx) {
   return impl_->core(idx);
 }
 
-void Socket::dcache_flush_begin() {
-  impl_->dcache_flush_begin();
+void Socket::dcache_flush_begin(bool l1_only) {
+  impl_->dcache_flush_begin(l1_only);
 }
 
 bool Socket::dcache_flush_done() const {

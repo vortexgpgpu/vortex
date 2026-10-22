@@ -119,7 +119,7 @@ module VX_raster_be import VX_raster_pkg::*; #(
     wire [PER_BLOCK_QUADS-1:0][`VX_RASTER_DIM_BITS-1:0] qe_yloc;
 
     VX_raster_qe #(
-        .INSTANCE_ID ($sformatf("%s-qe", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-qe", INSTANCE_ID))),
         .NUM_QUADS   (PER_BLOCK_QUADS)
     ) quad_evaluator (
         .clk        (clk),

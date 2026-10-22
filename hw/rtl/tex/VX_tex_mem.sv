@@ -128,7 +128,7 @@ module VX_tex_mem import VX_gpu_pkg::*; import VX_tex_pkg::*; #(
     ) lsu_mem_if();
 
     VX_mem_scheduler #(
-        .INSTANCE_ID ($sformatf("%s-memsched", INSTANCE_ID)),
+        .INSTANCE_ID (`SFORMATF(("%s-memsched", INSTANCE_ID))),
         .CORE_REQS   (TEX_MEM_REQS),
         .MEM_CHANNELS(TCACHE_NUM_REQS),
         .WORD_SIZE   (4),

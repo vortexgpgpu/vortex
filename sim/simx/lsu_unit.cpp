@@ -87,7 +87,9 @@ LsuUnit::LsuUnit(const SimContext& ctx, const char* name, Core* core)
 LsuUnit::~LsuUnit()
 {}
 
-// Returns true when all blocks' input queues are empty and no reads are outstanding.
+// Returns true when no block holds an instruction with requests still to send
+// or a read awaiting its response; ops still in the dispatch buffer do not hold
+// a barrier.
 bool LsuUnit::drained() const {
 #ifdef TCU_META_ENABLE
 	// TcuRspOut forwards to the TCU's endpoint, so query via size() (empty()
@@ -97,7 +99,6 @@ bool LsuUnit::drained() const {
 	}
 #endif
 	for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-		if (!Inputs.at(b).empty()) return false;
 		if (!states_.at(b).req_queue.empty()) return false;
 		if (!states_.at(b).pending_reqs.empty()) return false;
 	}
@@ -176,7 +177,7 @@ void LsuUnit::compute_addrs(uint32_t b, instr_trace_t* trace) {
 			// The datapath has no misalignment support: only a naturally aligned
 			// access is guaranteed to sit inside one memory block, which is what
 			// lets a lane's payload pack into a single block downstream.
-			// VX_lsu_slice.sv enforces the same contract in hardware, so modelling
+			// The hardware LSU enforces the same contract, so modelling
 			// anything looser here would let a shader pass in simulation and fail
 			// on the device.
 			if ((e.addr % e.size) != 0) {
@@ -234,6 +235,16 @@ void LsuUnit::process_response_step(uint32_t b) {
 		return;
 	}
 #endif
+
+	if (entry.is_flush) {
+		DT(3, this->name() << " fence-token-rsp: " << lsu_rsp);
+		entry.count -= lsu_rsp.mask.count();
+		if (entry.count == 0) {
+			state.pending_reqs.release(lsu_rsp.tag);
+		}
+		lsu_rsp_in.pop();
+		return;
+	}
 
 	auto trace = entry.trace;
 	auto& output = Outputs.at(b);
@@ -294,8 +305,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 		state.pending_reqs.release(lsu_rsp.tag);
 	}
 	if (is_final && entry.eop) {
-		// Load writeback crosses one more registered stage than the
-		// direct-commit path before reaching the commit arbiter.
+		// the response buffer, then the result arbiter's register
 		output.send(trace, 2);
 	} else {
 		// A non-final fragment still spends a commit-port slot: it drains
@@ -335,8 +345,61 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 		}
 		++state.staged_reads;
 	}
+	if (lsu_type_tag && *lsu_type_tag == LsuType::STORE) {
+		// A store commits as the request queue accepts it, through the
+		// no-response path, and is sent to memory later. The commit stage
+		// retires the trace, so the queue keeps a copy of its own.
+		if (Outputs.at(b).full()) {
+			return;
+		}
+		auto copy = new (core_->trace_pool().allocate(1)) instr_trace_t(*trace);
+		// the no-response buffer, then the result arbiter's register
+		Outputs.at(b).send(trace, 2);
+		trace = copy;
+	}
 	state.req_queue.push(trace);
 	input.pop();
+}
+
+// The fence travels to the data cache as a flush token on the lanes of its
+// last packet, behind every request the block issued before it. The cache
+// answers once it has drained, flushed and invalidated, so the fence holds
+// the block until the token's response returns.
+void LsuUnit::send_fence_token(uint32_t b) {
+	auto& state = states_.at(b);
+	if (state.pending_reqs.full() || core_->lmem_switch(b)->ReqIn.full()) {
+		return;
+	}
+	auto trace = state.fence.trace();
+	uint32_t base = ((VX_CFG_NUM_THREADS - 1) / VX_CFG_NUM_LSU_LANES) * VX_CFG_NUM_LSU_LANES;
+	LsuReq lsu_req(VX_CFG_NUM_LSU_LANES);
+	lsu_req.op = MemOp::LD;
+	lsu_req.flags.flush = 1;
+	// an IO fence's token walks nowhere; a memory fence's stops at the shared LLC
+	auto fence_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
+	lsu_req.flags.io       = lsu_fence_is_io(fence_args);
+	lsu_req.flags.flush_l1 = !lsu_fence_is_io(fence_args);
+	std::vector<mem_addr_size_t> lane_entries(VX_CFG_NUM_LSU_LANES);
+	for (uint32_t t = base; t < VX_CFG_NUM_THREADS; ++t) {
+		if (trace->tmask.test(t)) {
+			lsu_req.mask.set(t - base);
+			lsu_req.tids.at(t - base) = t;
+		}
+	}
+	if (lsu_req.mask.none()) {
+		lsu_req.mask.set(0);
+		lsu_req.tids.at(0) = base;
+	}
+	uint32_t count = lsu_req.mask.count();
+	pending_req_t entry{nullptr, count, true, std::move(lane_entries), IntrLsuArgs{}, false};
+	entry.is_flush = true;
+	lsu_req.tag  = state.pending_reqs.allocate(std::move(entry));
+	lsu_req.cid  = trace->cid;
+	lsu_req.wid  = trace->wid;
+	lsu_req.uuid = trace->uuid;
+	core_->lmem_switch(b)->ReqIn.send(lsu_req);
+	DT(3, this->name() << " fence-token: " << lsu_req);
+	state.fence_token = false;
 }
 
 // Per-cycle request handler. Dispatches at most one batch (one
@@ -348,7 +411,10 @@ void LsuUnit::process_request_step(uint32_t b) {
 	// Attempt fence release first so a steady stream of TCU client forwards
 	// (which consume the dispatch slot and return) cannot starve it.
 	const bool fence_locked = state.fence.locked();
-	if (fence_locked) {
+	if (fence_locked && state.fence_token) {
+		this->send_fence_token(b);
+	}
+	if (fence_locked && !state.fence_token) {
 		bool released = state.fence.try_release(Outputs.at(b), state.pending_reqs.empty());
 		if (released) {
 			DT(3, this->name() << " fence-unlock: " << state.fence.trace());
@@ -426,6 +492,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 		// Engage fence lock; the next call will try to release it once
 		// the pending-reqs table drains.
 		state.fence.engage(trace);
+		state.fence_token = true;
 		DT(3, this->name() << " fence-lock: " << *trace);
 		state.req_queue.pop();
 		return;
@@ -451,9 +518,9 @@ void LsuUnit::process_request_step(uint32_t b) {
 		state.head_staged = !is_write || is_amo;
 	}
 
-	// AMO always returns to rd, so it is not direct-commit even though it
-	// carries a side-effect write.
-	bool direct_commit = (is_write || 0 == state.addr_list.size()) && !is_amo;
+	// A store committed when the queue accepted it. AMO always returns to rd,
+	// so it is not direct-commit even though it carries a side-effect write.
+	bool direct_commit = !is_write && 0 == state.addr_list.size() && !is_amo;
 
 	// Skip beats whose tid group is entirely inactive — nothing to issue.
 	while (state.remain_addrs != 0) {
@@ -582,6 +649,10 @@ void LsuUnit::process_request_step(uint32_t b) {
 			state.head_staged = false;
 		}
 		state.req_queue.pop();
+		if (is_write) {
+			trace->~instr_trace_t();
+			core_->trace_pool().deallocate(trace, 1);
+		}
 	}
 }
 

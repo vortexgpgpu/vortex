@@ -20,6 +20,7 @@
 //
 //   per core (VX_CFG_SOCKET_SIZE):
 //     VX_tcu_unit      : tensor-core unit (dispatch/commit from top ports)
+//     VX_tcu_shared    : WGMMA tile buffers + metadata AGU
 //     VX_lsu_scheduler : per-LSU-block, 2 clients — the ordinary LSU stream
 //                        (top ports) and the TCU AGU metadata-load port
 //     VX_mem_unit      : LMEM + coalescer + LMEM-DMA arb (TCU WGMMA + DXA
@@ -175,20 +176,83 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         VX_lsu_sched_if tcu_mem_if();
     `endif
 
+    `ifdef VX_CFG_TCU_WGMMA_ENABLE
+        wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_valid, tcu_exec_ready;
+        tcu_execute_t                     tcu_exec_data [`VX_CFG_NUM_TCU_BLOCKS];
+        wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data;
+        wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data;
+        wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready;
+    `endif
+    `ifdef TCU_META_ENABLE
+        wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_ld_valid, tcu_agu_ld_ready;
+        tcu_execute_t                     tcu_agu_ld_data [`VX_CFG_NUM_TCU_BLOCKS];
+        wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_result_valid, tcu_agu_result_ready;
+        tcu_result_t                      tcu_agu_result_data [`VX_CFG_NUM_TCU_BLOCKS];
+        wire                              tcu_meta_wr_en;
+        wire [NW_WIDTH-1:0]               tcu_meta_wr_wid;
+        wire [4:0]                        tcu_meta_wr_idx;
+        wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data;
+    `endif
+
         VX_tcu_unit #(
             .INSTANCE_ID (`SFORMATF(("%s-tcu%0d", INSTANCE_ID, c)))
         ) tcu_unit (
             `SCOPE_IO_BIND (c)
-            .clk         (clk),
-            .reset       (reset),
+            .clk              (clk),
+            .reset            (reset),
         `ifdef VX_CFG_TCU_WGMMA_ENABLE
-            .tcu_lmem_if (tcu_lmem_if),
+            .exec_valid       (tcu_exec_valid),
+            .exec_ready       (tcu_exec_ready),
+            .exec_data        (tcu_exec_data),
+            .tbuf_rs1_data    (tcu_tbuf_rs1_data),
+            .tbuf_rs2_data    (tcu_tbuf_rs2_data),
+            .tbuf_ready       (tcu_tbuf_ready),
         `endif
         `ifdef TCU_META_ENABLE
-            .tcu_mem_if  (tcu_mem_if),
+            .agu_ld_valid     (tcu_agu_ld_valid),
+            .agu_ld_data      (tcu_agu_ld_data),
+            .agu_ld_ready     (tcu_agu_ld_ready),
+            .agu_result_valid (tcu_agu_result_valid),
+            .agu_result_data  (tcu_agu_result_data),
+            .agu_result_ready (tcu_agu_result_ready),
+            .meta_wr_en       (tcu_meta_wr_en),
+            .meta_wr_wid      (tcu_meta_wr_wid),
+            .meta_wr_idx      (tcu_meta_wr_idx),
+            .meta_wr_data     (tcu_meta_wr_data),
         `endif
-            .dispatch_if (dispatch_if),
-            .commit_if   (commit_if)
+            .dispatch_if      (dispatch_if),
+            .commit_if        (commit_if)
+        );
+
+        // the core-wide TCU state the blocks share: WGMMA tile buffers, metadata AGU
+        VX_tcu_shared #(
+            .INSTANCE_ID (`SFORMATF(("%s-tcu%0d", INSTANCE_ID, c))),
+            .BLOCK_SIZE  (`VX_CFG_NUM_TCU_BLOCKS)
+        ) tcu_shared (
+        `ifdef VX_CFG_TCU_WGMMA_ENABLE
+            .exec_valid       (tcu_exec_valid),
+            .exec_ready       (tcu_exec_ready),
+            .exec_data        (tcu_exec_data),
+            .tbuf_rs1_data    (tcu_tbuf_rs1_data),
+            .tbuf_rs2_data    (tcu_tbuf_rs2_data),
+            .tbuf_ready_eff   (tcu_tbuf_ready),
+            .tcu_lmem_if      (tcu_lmem_if),
+        `endif
+        `ifdef TCU_META_ENABLE
+            .agu_ld_valid     (tcu_agu_ld_valid),
+            .agu_ld_data      (tcu_agu_ld_data),
+            .agu_ld_ready     (tcu_agu_ld_ready),
+            .agu_result_valid (tcu_agu_result_valid),
+            .agu_result_data  (tcu_agu_result_data),
+            .agu_result_ready (tcu_agu_result_ready),
+            .meta_wr_en       (tcu_meta_wr_en),
+            .meta_wr_wid      (tcu_meta_wr_wid),
+            .meta_wr_idx      (tcu_meta_wr_idx),
+            .meta_wr_data     (tcu_meta_wr_data),
+            .tcu_mem_if       (tcu_mem_if),
+        `endif
+            .clk              (clk),
+            .reset            (reset)
         );
 
         // --- LSU schedulers: client 0 from top ports, client 1 = TCU AGU ---
@@ -278,6 +342,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             .empty           (mem_unit_empty[c]),
             .lsu_mem_if      (lsu_mem_if),
             .dcr_flush_if    (dcr_flush_dcache_if),
+            .flush_l1_only   (1'b0),
             .dcache_bus_if   (dcache_bus_if)
         );
 
@@ -384,6 +449,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_DCACHE_WRITEBACK),
         .DIRTY_BYTES    (`VX_CFG_DCACHE_DIRTYBYTES),
+        .LAZY_FETCH     (`VX_CFG_DCACHE_LAZY_FETCH),
         .REPL_POLICY    (`VX_CFG_DCACHE_REPL_POLICY),
         .NC_ENABLE      (1),
         .CORE_OUT_BUF   (3),
@@ -394,7 +460,8 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (all_dc_core_if),
-        .mem_bus_if     (dcache_mem_bus_if)
+        .mem_bus_if     (dcache_mem_bus_if),
+        `UNUSED_PIN (req_empty)
     );
 
     // ========================================================================
@@ -502,6 +569,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_L2_WRITEBACK),
         .DIRTY_BYTES    (`VX_CFG_L2_DIRTYBYTES),
+        .LAZY_FETCH     (`VX_CFG_L2_LAZY_FETCH),
         .REPL_POLICY    (`VX_CFG_L2_REPL_POLICY),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
@@ -513,7 +581,8 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (l2_core_if),
-        .mem_bus_if     (l2_mem_if)
+        .mem_bus_if     (l2_mem_if),
+        `UNUSED_PIN (req_empty)
     );
 
     assign empty = (& mem_unit_empty) && (& lsu_sched_empty) && !dxa_busy;

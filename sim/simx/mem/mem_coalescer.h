@@ -67,7 +67,6 @@ private:
     bool valid = false;
     BitVector<> lanes;        // output lanes still to send
     std::vector<MemReq> reqs; // per output lane
-    BitVector<> cur_mask;     // input lanes covered by this round
   };
 
   uint32_t input_size_;

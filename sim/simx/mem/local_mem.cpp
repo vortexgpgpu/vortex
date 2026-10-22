@@ -40,32 +40,32 @@ protected:
 	// else meanwhile.
 	static constexpr uint32_t AMO_BANK_STALL_CYCLES = 2;
 	std::vector<uint32_t> amo_busy_;
-	// A read issued the cycle after a write to the same word returns the word's
-	// pre-update value, so the bank holds such a read off for one cycle. The
-	// write-back is the third cycle of the occupancy, so this shadow covers the
-	// fourth -- the cycle the next contending atomic arrives, which is why
-	// back-to-back atomics on one word cost four cycles and not three.
-	std::vector<uint64_t> amo_rdw_addr_;
-	std::vector<bool>     amo_rdw_valid_;
-	// Whether the atomic now occupying the bank ends in a write at all. A
-	// load-reserved never writes and a failed store-conditional must not, so
-	// neither leaves a shadow behind.
+	// The word the atomic now occupying the bank writes back, and whether it
+	// writes at all: a load-reserved never writes and a failed
+	// store-conditional must not, so neither leaves a shadow behind.
+	std::vector<uint64_t> amo_wb_addr_;
 	std::vector<bool>     amo_rdw_pending_;
 #endif
+	// A read of a word written the previous cycle (by DMA, a store or an atomic's
+	// write-back) would see the old value, so the bank holds it off one cycle.
+	// rdw_* records this cycle's writes; rdw_cur_* holds last cycle's.
+	std::vector<uint64_t> rdw_addr_;
+	std::vector<bool>     rdw_valid_;
+	std::vector<uint64_t> rdw_cur_addr_;
+	std::vector<bool>     rdw_cur_valid_;
 	MemCrossBar::Ptr mem_xbar_;
 	mutable PerfStats perf_stats_;
+	uint32_t dma_last_grant_ = 0;
 
 	uint64_t to_local_addr(uint64_t addr) {
 		return bit_getw(addr, 0, addr_bits_-1);
 	}
 
-#if VX_CFG_EXT_A_ENABLED
 	// The word a bank is addressed by. Two byte addresses falling in one word
 	// are the same access as far as the bank is concerned.
 	uint64_t bank_word(uint64_t addr) {
 		return to_local_addr(addr) >> log2ceil(config_.line_size);
 	}
-#endif
 
 public:
 	Impl(LocalMem* simobject, const Config& config)
@@ -76,20 +76,33 @@ public:
 #if VX_CFG_EXT_A_ENABLED
 		, amo_unit_(VX_CFG_AMO_RS_SIZE < 2 ? 2u : (uint32_t)VX_CFG_AMO_RS_SIZE)
 		, amo_busy_(1 << config.B, 0)
-		, amo_rdw_addr_(1 << config.B, 0)
-		, amo_rdw_valid_(1 << config.B, false)
+		, amo_wb_addr_(1 << config.B, 0)
 		, amo_rdw_pending_(1 << config.B, false)
 #endif
+		, rdw_addr_(1 << config.B, 0)
+		, rdw_valid_(1 << config.B, false)
+		, rdw_cur_addr_(1 << config.B, 0)
+		, rdw_cur_valid_(1 << config.B, false)
 	{
 		char sname[100];
 		snprintf(sname, 100, "%s-xbar", simobject->name().c_str());
 		uint32_t lg2_line_size = log2ceil(config_.line_size);
 		uint32_t num_banks = 1 << config.B;
+		// The crossbar's registered request and response outputs are taken by
+		// the switch and bank stages around it, so its delays here are only the
+		// extra tree level: an arbiter over more than 1.5x the fan-out limit is
+		// split into a buffered tree, one cycle deeper. The request side
+		// arbitrates the lanes at each bank, the response side the banks at
+		// each lane.
+		auto tree_delay = [](uint32_t requesters) -> uint32_t {
+			constexpr uint32_t kMaxFanout = 8;
+			return (requesters > kMaxFanout + kMaxFanout / 2) ? 1 : 0;
+		};
 		mem_xbar_ = MemCrossBar::Create(sname, ArbiterType::Priority, config.num_reqs, num_banks,
 		 [lg2_line_size, num_banks](const MemCrossBar::ReqType& req) {
     	// Custom logic to calculate the output index using bank interleaving
 			return (uint32_t)((req.addr >> lg2_line_size) & (num_banks-1));
-		});
+		}, tree_delay(config.num_reqs), tree_delay(num_banks));
 		for (uint32_t i = 0; i < config.num_reqs; ++i) {
 			simobject->Inputs.at(i).bind(&mem_xbar_->ReqIn.at(i));
 			mem_xbar_->RspOut.at(i).bind(&simobject->Outputs.at(i));
@@ -100,22 +113,25 @@ public:
 
 	void reset() {
 		perf_stats_ = PerfStats();
+		dma_last_grant_ = config_.dma_clients ? (config_.dma_clients - 1) : 0;
 #if VX_CFG_EXT_A_ENABLED
 		amo_unit_.reset();
 		std::fill(amo_busy_.begin(), amo_busy_.end(), 0);
-		std::fill(amo_rdw_valid_.begin(), amo_rdw_valid_.end(), false);
 		std::fill(amo_rdw_pending_.begin(), amo_rdw_pending_.end(), false);
 #endif
+		std::fill(rdw_valid_.begin(), rdw_valid_.end(), false);
+		std::fill(rdw_cur_valid_.begin(), rdw_cur_valid_.end(), false);
 	}
 
 	// Serve one DMA client's row access this cycle and return the banks it
-	// occupies. Clients are served at fixed priority, and DMA wins every bank
-	// it touches over the LSU: a read touches all banks, a write those its
-	// byte enables cover.
+	// occupies. Clients are served round-robin, starting after the last one
+	// served, and DMA wins every bank it touches over the LSU: a read touches
+	// all banks, a write those its byte enables cover.
 	uint64_t dma_tick() {
 		uint32_t num_banks = (1 << config_.B);
 		uint32_t lg2_line_size = log2ceil(config_.line_size);
-		for (uint32_t c = 0; c < config_.dma_clients; ++c) {
+		for (uint32_t i = 0; i < config_.dma_clients; ++i) {
+			uint32_t c = (dma_last_grant_ + 1 + i) % config_.dma_clients;
 			bool pending = false;
 			bool rsp_ready = true;
 			for (uint32_t p = 0; p < DMA_PORTS; ++p) {
@@ -147,7 +163,10 @@ public:
 						if (req.byteen & (1ull << b)) {
 							uint8_t value = (*req.data)[b];
 							ram_.write(&value, line_addr + b, 1);
-							banks |= 1ull << (((line_addr + b) >> lg2_line_size) & (num_banks - 1));
+							uint32_t bank = ((line_addr + b) >> lg2_line_size) & (num_banks - 1);
+							banks |= 1ull << bank;
+							rdw_addr_[bank]  = this->bank_word(line_addr + b);
+							rdw_valid_[bank] = true;
 						}
 					}
 #if VX_CFG_EXT_A_ENABLED
@@ -168,12 +187,17 @@ public:
 				DT(4, simobject_->name() << "-dma" << c << " req : " << req);
 				in.pop();
 			}
+			dma_last_grant_ = c;
 			return banks;
 		}
 		return 0;
 	}
 
 	void tick() {
+		rdw_cur_addr_.swap(rdw_addr_);
+		rdw_cur_valid_.swap(rdw_valid_);
+		std::fill(rdw_valid_.begin(), rdw_valid_.end(), false);
+
 		uint64_t dma_banks = this->dma_tick();
 
 		// process bank requets from xbar
@@ -182,16 +206,13 @@ public:
 #if VX_CFG_EXT_A_ENABLED
 			// Cycles an in-flight atomic owns; the bank serves nothing else.
 			if (amo_busy_[i] != 0) {
-				if (0 == --amo_busy_[i]) {
-					amo_rdw_valid_[i] = amo_rdw_pending_[i]; // write-back just issued
+				if (0 == --amo_busy_[i] && amo_rdw_pending_[i]) {
+					// write-back just issued
+					rdw_addr_[i]  = amo_wb_addr_[i];
+					rdw_valid_[i] = true;
 				}
 				continue;
 			}
-			// The shadow is one cycle wide: consume it here whether or not
-			// anything is waiting on the bank.
-			const bool     rdw_shadow = amo_rdw_valid_[i];
-			const uint64_t rdw_addr   = amo_rdw_addr_[i];
-			amo_rdw_valid_[i] = false;
 #endif
 			if ((dma_banks >> i) & 1) {
 				continue;
@@ -202,18 +223,22 @@ public:
 
 			auto& bank_req = xbar_req_out.peek();
 
+			// A read of the word written last cycle waits a cycle. An atomic
+			// reads the bank for its old value, so it counts as a reader here
+			// even though the request carries a write flag; that is what makes
+			// contending atomics on one word cost four cycles.
 #if VX_CFG_EXT_A_ENABLED
-			// A read of the word the write-back just stored waits a cycle. An
-			// atomic reads the bank for its old value, so it counts as a reader
-			// here even though the request carries a write flag; that is what
-			// makes contending atomics on one word cost four cycles.
 			const bool reads_bank = !bank_req.is_write() || memop_is_atomic(bank_req.op);
-			if (rdw_shadow
+#else
+			const bool reads_bank = !bank_req.is_write();
+#endif
+			if (rdw_cur_valid_[i]
 			 && reads_bank
-			 && this->bank_word(bank_req.addr) == rdw_addr) {
+			 && this->bank_word(bank_req.addr) == rdw_cur_addr_[i]) {
 				continue;
 			}
 
+#if VX_CFG_EXT_A_ENABLED
 			// Shared-memory atomics: read-modify-write in place and ALWAYS
 			// return the old word. An AMO has a destination register, so the
 			// LSU reserved a response slot; a missing response hangs the warp
@@ -271,7 +296,7 @@ public:
 				perf_stats_.reads  += !do_store;
 				perf_stats_.writes += do_store;
 				DT(4, simobject_->name() << "-bank" << i << " amo : " << bank_req);
-				amo_rdw_addr_[i]    = this->bank_word(bank_req.addr);
+				amo_wb_addr_[i]     = this->bank_word(bank_req.addr);
 				amo_rdw_pending_[i] = do_store;
 				xbar_req_out.pop();
 				amo_busy_[i] = AMO_BANK_STALL_CYCLES;   // capture, then write back
@@ -288,6 +313,8 @@ public:
 						ram_.write(&value, line_addr + b, 1);
 					}
 				}
+				rdw_addr_[i]  = this->bank_word(bank_req.addr);
+				rdw_valid_[i] = true;
 #if VX_CFG_EXT_A_ENABLED
 				// A plain store breaks a reservation on the word it writes, the
 				// same as an atomic's commit does; otherwise a store between a

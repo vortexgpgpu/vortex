@@ -120,15 +120,12 @@ void Kmu::on_tick() {
     return;
   }
   // Steering: a locked cluster's remaining members stay with the owning core;
-  // otherwise the next cluster goes to the core the round-robin already points
-  // at. One CTA per cycle — the launch bus carries a single beat. A lane is
-  // ready when its transport has room and the core still owes fewer than
-  // LAUNCH_CREDITS admissions, so a busy core never accumulates work.
-  //
-  // The destination is fixed before the message is sent, so a busy core stalls
-  // the bus instead of yielding its turn to a neighbour. Scanning for any ready
-  // lane here would let a core that drains faster absorb its neighbour's share
-  // and leave the placement lopsided.
+  // otherwise the next cluster goes to the nearest ready lane from the
+  // round-robin pointer, so a core that drains its work sooner takes the next
+  // cluster instead of the launch waiting on a busy neighbour. One CTA per
+  // cycle — the launch bus carries a single beat. A lane is ready when its
+  // transport has room and the core holds fewer than LAUNCH_CREDITS CTAs it
+  // has not yet admitted.
   auto lane_ready = [&](uint32_t c) {
     return !bus_out.at(c).full() && inflight_[c] < LAUNCH_CREDITS;
   };
@@ -137,8 +134,14 @@ void Kmu::on_tick() {
     if (lane_ready(cluster_core_)) {
       target = cluster_core_;
     }
-  } else if (lane_ready(rr_ptr_)) {
-    target = rr_ptr_;
+  } else {
+    for (uint32_t k = 0; k < num_cores; ++k) {
+      uint32_t c = (rr_ptr_ + k) % num_cores;
+      if (lane_ready(c)) {
+        target = c;
+        break;
+      }
+    }
   }
   if (target == num_cores)
     return; // no ready lane this cycle

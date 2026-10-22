@@ -31,7 +31,10 @@
 // VX_tcu_core consume the result in that same cycle.
 
 module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = ""
+    parameter `STRING INSTANCE_ID = "",
+    // stores one residue class of warps modulo WID_STRIDE, by wid / WID_STRIDE;
+    // the parent only presents writes for that class
+    parameter WID_STRIDE = 1
 ) (
     input wire          clk,
     input wire          reset,
@@ -74,8 +77,11 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam MERGED_COLS  = SP_COLS + 2 * MX_COLS;
     localparam MERGED_BITS  = MERGED_COLS * 32;
 
-    localparam META_DEPTH = `VX_CFG_NUM_WARPS;
-    localparam META_ADDRW = `CLOG2(META_DEPTH);
+    localparam META_DEPTH  = `VX_CFG_NUM_WARPS / WID_STRIDE;
+    localparam META_ADDRW  = `CLOG2(META_DEPTH);
+    localparam STRIDE_BITS = `CLOG2(WID_STRIDE);
+
+    `STATIC_ASSERT (`IS_POW2(WID_STRIDE), ("invalid parameter"))
 
     // Namespace decode (mirrors the AGU / vx_tensor.h slot encoding). The
     // per-region write strobes are defined inside each region's block below so
@@ -85,8 +91,8 @@ module VX_tcu_meta import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     wire [MERGED_BITS-1:0]  merged_wdata;
     wire [MERGED_BITS-1:0]  merged_rdata;
 
-    wire [`UP(META_ADDRW)-1:0] wr_addr = `UP(META_ADDRW)'(wr_wid);
-    wire [`UP(META_ADDRW)-1:0] rd_addr = `UP(META_ADDRW)'(rd_wid);
+    wire [`UP(META_ADDRW)-1:0] wr_addr = `UP(META_ADDRW)'(wr_wid >> STRIDE_BITS);
+    wire [`UP(META_ADDRW)-1:0] rd_addr = `UP(META_ADDRW)'(rd_wid >> STRIDE_BITS);
 
     // -----------------------------------------------------------------------
     // Sparse region: per-thread metadata packed into PER_WARP_DEPTH banks of

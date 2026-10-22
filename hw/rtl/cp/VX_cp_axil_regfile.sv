@@ -15,7 +15,7 @@
 //     0x000 CP_CTRL     RW   bit0=enable_global, bit1=reset_all
 //     0x004 CP_STATUS   RO   bit0=busy, bit1=error
 //     0x008 CP_DEV_CAPS RO   [7:0]NUM_QUEUES | [15:8]RING_SIZE_LOG2_MAX
-//                            [23:16]AXI_TID_WIDTH
+//                            [23:16]AXI_TID_WIDTH | [28]DMA_LLC_CLIENT
 //     0x010 CP_CYCLE_LO RO   free-running cycle counter low 32 bits
 //     0x014 CP_CYCLE_HI RO   high 32 bits
 //     0x018 GPU_DEV_CAPS_LO RO  device-config caps, low 32 bits
@@ -51,7 +51,9 @@ module VX_cp_axil_regfile
   parameter int ADDR_W     = 16,
   // Static device-caps fields (set at synthesis time from VX_cp_pkg).
   parameter int RING_SIZE_LOG2_MAX = VX_CP_RING_SIZE_LOG2_C,
-  parameter int AXI_TID_W          = VX_CP_AXI_TID_WIDTH_C
+  parameter int AXI_TID_W          = VX_CP_AXI_TID_WIDTH_C,
+  // The device-side DMA reaches memory through the last-level cache.
+  parameter int DMA_LLC_CLIENT     = 0
 )(
   input  wire                       clk,
   input  wire                       reset,
@@ -204,7 +206,9 @@ module VX_cp_axil_regfile
       case (addr[5:0])
         6'h00: return r_cp_ctrl;
         6'h04: return {30'd0, cp_error, cp_busy};
-        6'h08: return {8'd0,
+        6'h08: return {3'd0,
+                       1'(DMA_LLC_CLIENT),
+                       4'd0,
                        8'(AXI_TID_W),
                        8'(RING_SIZE_LOG2_MAX),
                        8'(NUM_QUEUES)};

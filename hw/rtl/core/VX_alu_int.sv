@@ -15,11 +15,12 @@
 
 module VX_alu_int import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
-    parameter BLOCK_IDX = 0,
     parameter NUM_LANES = 1
 ) (
     input wire              clk,
     input wire              reset,
+
+    input wire [`LOG2UP(`VX_CFG_NUM_ALU_BLOCKS)-1:0] block_idx,
 
     // Inputs
     VX_execute_if.slave     execute_if,
@@ -339,7 +340,10 @@ module VX_alu_int import VX_gpu_pkg::*; #(
                                : is_br_static  ? from_fullPC(br_result)
                                : cbr_dest_r;
     wire [NW_WIDTH-1:0] br_wid;
-    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.header.wid, BLOCK_IDX, `VX_CFG_NUM_ALU_BLOCKS)
+    `ASSIGN_BLOCKED_WID (br_wid, result_if.data.header.wid, block_idx, `VX_CFG_NUM_ALU_BLOCKS)
+    if (`VX_CFG_NUM_ALU_BLOCKS == 1) begin : g_block_idx_unused
+        `UNUSED_VAR (block_idx)
+    end
 
     VX_pipe_register #(
         .DATAW  (1 + NW_WIDTH + 1 + PC_BITS + 1 + 1 + 4),

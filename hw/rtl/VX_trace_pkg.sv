@@ -202,6 +202,7 @@ package VX_trace_pkg;
                     INST_LSU_SW: `TRACE(level, ("SW"))
                     INST_LSU_SD: `TRACE(level, ("SD"))
                     INST_LSU_FENCE:`TRACE(level,("FENCE"))
+                    INST_LSU_FENCE_IO:`TRACE(level,("FENCE.IO"))
                     default:     `TRACE(level, ("?"))
                 endcase
             end
