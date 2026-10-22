@@ -450,18 +450,11 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     wire [31:0] a_wgmma_smem = 32'(rs1_data[i * TCU_WG_FEDP_K + k_idx]);
                     wire [31:0] a_wgmma_reg =
                     `ifdef VX_CFG_TCU_FEDP2K
-                        `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                            (is_sparse && (TCU_WG_SP_FULLK == 0)) ? 32'b0 :
-                        `endif
                         32'(execute_if.data.rs2_data[i * TCU_TC_K + (k_idx - TCU_TC_K)]);
                     `else
                         32'b0;
                     `endif
-                    assign a_row[k_idx] = (is_wgmma
-                        `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                            && (!is_sparse || (TCU_WG_SP_FULLK != 0))
-                        `endif
-                        ) ? (wg_a_smem ? a_wgmma_smem : a_wgmma_reg) : 32'b0;
+                    assign a_row[k_idx] = is_wgmma ? (wg_a_smem ? a_wgmma_smem : a_wgmma_reg) : 32'b0;
                 `else
                     assign a_row[k_idx] = 32'b0;
                 `endif

@@ -78,9 +78,6 @@ module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         assign needs_setup_b_w[bi] =
             `ifdef VX_CFG_TCU_FEDP2K
                 is_wgmma_op && !exec_data[bi].op_args.tcu.a_from_smem
-            `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                && ((exec_data[bi].op_type != INST_TCU_WGMMA_SP) || (TCU_WG_SP_FULLK != 0))
-            `endif
             `else
                 1'b0
             `endif

@@ -98,9 +98,6 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire wg_needs_setup =
         `ifdef VX_CFG_TCU_FEDP2K
             !wg_a_from_smem
-        `ifdef VX_CFG_TCU_SPARSE_ENABLE
-            && (!wg_is_sparse || (TCU_WG_SP_FULLK != 0))
-        `endif
         `else
             1'b0
         `endif
