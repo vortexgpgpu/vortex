@@ -28,12 +28,29 @@ module VX_mem_req_pending #(
 );
     localparam INCRW = `CLOG2(NUM_INPUTS+1);
     localparam DECRW = `CLOG2(NUM_OUTPUTS+1);
+    localparam SIZEW = `CLOG2(SIZE+1);
+
+    // The handshakes usually end long ready chains, so they are registered
+    // before counting; the count then lags a cycle and empty adds back the
+    // registered handshakes, the same value on every cycle.
+    reg [NUM_INPUTS-1:0]  in_fire_r;
+    reg [NUM_OUTPUTS-1:0] out_fire_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            in_fire_r  <= '0;
+            out_fire_r <= '0;
+        end else begin
+            in_fire_r  <= in_fire;
+            out_fire_r <= out_fire;
+        end
+    end
 
     wire [INCRW-1:0] in_cnt;
     wire [DECRW-1:0] out_cnt;
-    `POP_COUNT(in_cnt, in_fire);
-    `POP_COUNT(out_cnt, out_fire);
+    `POP_COUNT(in_cnt, in_fire_r);
+    `POP_COUNT(out_cnt, out_fire_r);
 
+    wire [SIZEW-1:0] size_lag;
     VX_pending_size #(
         .SIZE  (SIZE),
         .INCRW (INCRW),
@@ -43,11 +60,14 @@ module VX_mem_req_pending #(
         .reset     (reset),
         .incr      (in_cnt),
         .decr      (out_cnt),
-        .empty     (empty),
+        `UNUSED_PIN (empty),
         `UNUSED_PIN (alm_empty),
         `UNUSED_PIN (full),
         `UNUSED_PIN (alm_full),
-        `UNUSED_PIN (size)
+        .size      (size_lag)
     );
+
+    assign empty = ((SIZEW+1)'(size_lag) + (SIZEW+1)'(in_cnt)) == (SIZEW+1)'(out_cnt);
+
 
 endmodule
