@@ -56,7 +56,21 @@ import VX_tcu_pkg::*;
 `endif
 
     // LSU
-    VX_lsu_sched_if.master  lsu_client_if,
+`ifdef PERF_ENABLE
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rd_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_wr_req_fire,
+    output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rsp_fire,
+    output wire [PERF_CTR_BITS-1:0] lsu_coalescer_misses,
+`endif
+`ifdef TCU_META_ENABLE
+    VX_lsu_sched_if.slave   lsu_tcu_mem_if,
+`endif
+    output wire             lsu_sched_empty,
+    output wire             lsu_store_empty,
+`ifdef VX_CFG_LMEM_ENABLE
+    VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
+`endif
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_CHANNELS],
 
     // SFU
 `ifdef VX_CFG_EXT_DXA_ENABLE
@@ -141,7 +155,21 @@ import VX_tcu_pkg::*;
         .dispatch_if          (dispatch_if),
         .commit_if            (commit_if),
         .branch_ctl_if        (branch_ctl_if),
-        .lsu_client_if        (lsu_client_if),
+    `ifdef PERF_ENABLE
+        .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire),
+        .lsu_perf_wr_req_fire (lsu_perf_wr_req_fire),
+        .lsu_perf_rsp_fire    (lsu_perf_rsp_fire),
+        .lsu_coalescer_misses (lsu_coalescer_misses),
+    `endif
+    `ifdef TCU_META_ENABLE
+        .lsu_tcu_mem_if       (lsu_tcu_mem_if),
+    `endif
+        .lsu_sched_empty      (lsu_sched_empty),
+        .lsu_store_empty      (lsu_store_empty),
+    `ifdef VX_CFG_LMEM_ENABLE
+        .lmem_bus_if          (lmem_bus_if),
+    `endif
+        .dcache_bus_if        (dcache_bus_if),
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if       (dxa_req_bus_if),
     `endif

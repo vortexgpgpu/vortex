@@ -80,18 +80,38 @@ import VX_tcu_pkg::*;
     VX_txbar_bus_if     dxa_txbar_bus_if();
 `endif
 
-    VX_lsu_mem_if #(
-        .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
+    // the LSU blocks' memory paths
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_store_empty;
+`ifdef VX_CFG_LMEM_ENABLE
+    VX_mem_bus_if #(
         .DATA_SIZE (LSU_WORD_SIZE),
         .TAG_WIDTH (LSU_TAG_WIDTH)
-    ) lsu_mem_if[`VX_CFG_NUM_LSU_BLOCKS]();
-
-    // per-LSU-block memory scheduler clients from execute
-    VX_lsu_sched_if lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS]();
-    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_sched_empty;
+    ) lsu_lmem_bus_if[LSU_NUM_REQS]();
+`endif
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE),
+        .TAG_WIDTH (DCACHE_TAG_WIDTH)
+    ) lsu_dcache_bus_if[DCACHE_NUM_REQS]();
+`ifdef PERF_ENABLE
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rd_req_fire;
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_wr_req_fire;
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rsp_fire;
+    wire [`VX_CFG_NUM_LSU_BLOCKS-1:0][PERF_CTR_BITS-1:0] lsu_coalescer_misses;
+`endif
 
 `ifdef TCU_META_ENABLE
-    VX_lsu_sched_if tcu_mem_if();
+    // The TCU metadata AGU is the second client of LSU block 0's scheduler; the
+    // other blocks' second client is idle.
+    VX_lsu_sched_if lsu_tcu_mem_if [`VX_CFG_NUM_LSU_BLOCKS]();
+    for (genvar b = 1; b < `VX_CFG_NUM_LSU_BLOCKS; ++b) begin : g_lsu_tcu_tieoff
+        assign lsu_tcu_mem_if[b].req_valid = 1'b0;
+        assign lsu_tcu_mem_if[b].req_data  = '0;
+        assign lsu_tcu_mem_if[b].rsp_ready = 1'b1;
+        `UNUSED_VAR (lsu_tcu_mem_if[b].req_ready)
+        `UNUSED_VAR (lsu_tcu_mem_if[b].rsp_valid)
+        `UNUSED_VAR (lsu_tcu_mem_if[b].rsp_data)
+    end
 `endif
 
     // frontend-slice icache requests; port 0 also carries the injected flush
@@ -136,7 +156,7 @@ import VX_tcu_pkg::*;
     wire dcr_flush_l1_only;
 
     // the in-core global-store path is empty
-    wire mem_unit_empty;
+    wire mem_unit_empty = (& lsu_store_empty);
 
     // Stores are ack-less and lag warp exit, so the dcache flush waits until every
     // store of this core has reached L1.
@@ -353,7 +373,7 @@ import VX_tcu_pkg::*;
         .meta_wr_wid      (tcu_meta_wr_wid),
         .meta_wr_idx      (tcu_meta_wr_idx),
         .meta_wr_data     (tcu_meta_wr_data),
-        .tcu_mem_if       (tcu_mem_if),
+        .tcu_mem_if       (lsu_tcu_mem_if[0]),
     `endif
         .clk              (clk),
         .reset            (reset)
@@ -425,7 +445,21 @@ import VX_tcu_pkg::*;
                 .satp_wr_valid        (satp_wr_valid[i]),
                 .satp_wr_data         (satp_wr_data[i]),
             `endif
-                .lsu_client_if        (lsu_client_if[i]),
+            `ifdef PERF_ENABLE
+                .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire[i]),
+                .lsu_perf_wr_req_fire (lsu_perf_wr_req_fire[i]),
+                .lsu_perf_rsp_fire    (lsu_perf_rsp_fire[i]),
+                .lsu_coalescer_misses (lsu_coalescer_misses[i]),
+            `endif
+            `ifdef TCU_META_ENABLE
+                .lsu_tcu_mem_if       (lsu_tcu_mem_if[i]),
+            `endif
+                .lsu_sched_empty      (lsu_sched_empty[i]),
+                .lsu_store_empty      (lsu_store_empty[i]),
+            `ifdef VX_CFG_LMEM_ENABLE
+                .lmem_bus_if          (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
+            `endif
+                .dcache_bus_if        (lsu_dcache_bus_if[i * DCACHE_CHANNELS +: DCACHE_CHANNELS]),
             `ifdef VX_CFG_EXT_DXA_ENABLE
                 .dxa_req_bus_if       (block_dxa_req_bus_if[i]),
             `endif
@@ -647,7 +681,21 @@ import VX_tcu_pkg::*;
                 `ifdef VX_CFG_EXT_RTU_ENABLE
                     .sched_unlock_if      (sched_unlock_if[i]),
                 `endif
-                    .lsu_client_if        (lsu_client_if[i]),
+                `ifdef PERF_ENABLE
+                    .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire[i]),
+                    .lsu_perf_wr_req_fire (lsu_perf_wr_req_fire[i]),
+                    .lsu_perf_rsp_fire    (lsu_perf_rsp_fire[i]),
+                    .lsu_coalescer_misses (lsu_coalescer_misses[i]),
+                `endif
+                `ifdef TCU_META_ENABLE
+                    .lsu_tcu_mem_if       (lsu_tcu_mem_if[i]),
+                `endif
+                    .lsu_sched_empty      (lsu_sched_empty[i]),
+                    .lsu_store_empty      (lsu_store_empty[i]),
+                `ifdef VX_CFG_LMEM_ENABLE
+                    .lmem_bus_if          (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
+                `endif
+                    .dcache_bus_if        (lsu_dcache_bus_if[i * DCACHE_CHANNELS +: DCACHE_CHANNELS]),
                 `ifdef VX_CFG_EXT_DXA_ENABLE
                     .dxa_req_bus_if       (block_dxa_req_bus_if[i]),
                 `endif
@@ -727,9 +775,21 @@ import VX_tcu_pkg::*;
                 .reset                (reset),
                 .core_id              (core_id),
 
-                // execute exposes LSU client interfaces; lsu_scheduler sits between
-                // execute and lsu_mem_if (which connects to mem_unit).
-                .lsu_client_if        (lsu_client_if),
+            `ifdef PERF_ENABLE
+                .lsu_perf_rd_req_fire (lsu_perf_rd_req_fire),
+                .lsu_perf_wr_req_fire (lsu_perf_wr_req_fire),
+                .lsu_perf_rsp_fire    (lsu_perf_rsp_fire),
+                .lsu_coalescer_misses (lsu_coalescer_misses),
+            `endif
+            `ifdef TCU_META_ENABLE
+                .lsu_tcu_mem_if       (lsu_tcu_mem_if),
+            `endif
+                .lsu_sched_empty      (lsu_sched_empty),
+                .lsu_store_empty      (lsu_store_empty),
+            `ifdef VX_CFG_LMEM_ENABLE
+                .lmem_bus_if          (lsu_lmem_bus_if),
+            `endif
+                .dcache_bus_if        (lsu_dcache_bus_if),
 
                 .dispatch_if          (dispatch_if),
                 .commit_if            (commit_if),
@@ -791,60 +851,6 @@ import VX_tcu_pkg::*;
         end
     end
 
-    // One memory scheduler per LSU block. With the TCU metadata AGU, every block
-    // has a second client: block 0 serves the AGU and the others tie it off, which
-    // keeps the blocks identical at the cost of a few arbiter muxes.
-`ifdef TCU_META_ENABLE
-    localparam LSU_SCHED_NUM_CLIENTS = 2;
-`else
-    localparam LSU_SCHED_NUM_CLIENTS = 1;
-`endif
-    for (genvar block_idx = 0; block_idx < `VX_CFG_NUM_LSU_BLOCKS; ++block_idx) begin : g_lsu_scheduler
-        VX_lsu_sched_if sched_client_if [LSU_SCHED_NUM_CLIENTS]();
-
-        // client 0: the block's LSU
-        assign sched_client_if[0].req_valid       = lsu_client_if[block_idx].req_valid;
-        assign sched_client_if[0].req_data        = lsu_client_if[block_idx].req_data;
-        assign lsu_client_if[block_idx].req_ready = sched_client_if[0].req_ready;
-        assign lsu_client_if[block_idx].rsp_valid = sched_client_if[0].rsp_valid;
-        assign lsu_client_if[block_idx].rsp_data  = sched_client_if[0].rsp_data;
-        assign sched_client_if[0].rsp_ready       = lsu_client_if[block_idx].rsp_ready;
-
-    `ifdef TCU_META_ENABLE
-        // client 1: the TCU metadata AGU on block 0
-        if (block_idx == 0) begin : g_tcu_client
-            assign sched_client_if[1].req_valid = tcu_mem_if.req_valid;
-            assign sched_client_if[1].req_data  = tcu_mem_if.req_data;
-            assign tcu_mem_if.req_ready         = sched_client_if[1].req_ready;
-            assign tcu_mem_if.rsp_valid         = sched_client_if[1].rsp_valid;
-            assign tcu_mem_if.rsp_data          = sched_client_if[1].rsp_data;
-            assign sched_client_if[1].rsp_ready = tcu_mem_if.rsp_ready;
-        end else begin : g_tcu_client_tieoff
-            assign sched_client_if[1].req_valid = 1'b0;
-            assign sched_client_if[1].req_data  = '0;
-            assign sched_client_if[1].rsp_ready = 1'b1;
-            `UNUSED_VAR (sched_client_if[1].req_ready)
-            `UNUSED_VAR (sched_client_if[1].rsp_valid)
-            `UNUSED_VAR (sched_client_if[1].rsp_data)
-        end
-    `endif
-
-        VX_lsu_scheduler #(
-            .INSTANCE_ID     (`SFORMATF(("%s-lsusched%0d", INSTANCE_ID, block_idx))),
-            .NUM_CLIENTS     (LSU_SCHED_NUM_CLIENTS),
-            .NUM_LANES       (`VX_CFG_NUM_LSU_LANES),
-            .CORE_QUEUE_SIZE (`VX_CFG_LSU_QUEUE_IN_SIZE),
-            .MEM_QUEUE_SIZE  (LSU_QUEUE_OUT_SIZE),
-            .PENDING_SIZE    (`VX_CFG_LSU_PENDING_SIZE)
-        ) lsu_scheduler (
-            .clk        (clk),
-            .reset      (reset),
-            .client_if  (sched_client_if),
-            .empty      (lsu_sched_empty[block_idx]),
-            .lsu_mem_if (lsu_mem_if[block_idx])
-        );
-    end
-
     VX_mem_unit #(
         .INSTANCE_ID (INSTANCE_ID)
     ) mem_unit (
@@ -852,7 +858,6 @@ import VX_tcu_pkg::*;
         .reset           (reset),
     `ifdef PERF_ENABLE
         .lmem_perf       (lmem_perf),
-        .coalescer_perf  (coalescer_perf),
     `endif
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
         .tcu_lmem_if     (tcu_lmem_if),
@@ -861,8 +866,10 @@ import VX_tcu_pkg::*;
         .dxa_lmem_bus_if (dxa_lmem_bus_if),
         .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
-        .empty           (mem_unit_empty),
-        .lsu_mem_if      (lsu_mem_if),
+    `ifdef VX_CFG_LMEM_ENABLE
+        .lmem_bus_if     (lsu_lmem_bus_if),
+    `endif
+        .lsu_dcache_bus_if (lsu_dcache_bus_if),
         .dcr_flush_if    (dcr_flush_dcache_if),
         .flush_l1_only   (dcr_flush_l1_only),
         .dcache_bus_if   (dcache_bus_if)
@@ -926,13 +933,20 @@ import VX_tcu_pkg::*;
     wire [LSU_NUM_REQS-1:0] perf_dcache_wr_req_fire, perf_dcache_wr_req_fire_r;
     wire [LSU_NUM_REQS-1:0] perf_dcache_rsp_fire;
 
-    for (genvar i = 0; i < `VX_CFG_NUM_LSU_BLOCKS; ++i) begin : g_perf_dcache
-        for (genvar j = 0; j < `VX_CFG_NUM_LSU_LANES; ++j) begin : g_j
-            assign perf_dcache_rd_req_fire[i * `VX_CFG_NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && ~lsu_mem_if[i].req_data.rw;
-            assign perf_dcache_wr_req_fire[i * `VX_CFG_NUM_LSU_LANES + j] = lsu_mem_if[i].req_valid && lsu_mem_if[i].req_data.mask[j] && lsu_mem_if[i].req_ready && lsu_mem_if[i].req_data.rw;
-            assign perf_dcache_rsp_fire[i * `VX_CFG_NUM_LSU_LANES + j] = lsu_mem_if[i].rsp_valid && lsu_mem_if[i].rsp_data.mask[j] && lsu_mem_if[i].rsp_ready;
-        end
-    end
+    assign perf_dcache_rd_req_fire = lsu_perf_rd_req_fire;
+    assign perf_dcache_wr_req_fire = lsu_perf_wr_req_fire;
+    assign perf_dcache_rsp_fire    = lsu_perf_rsp_fire;
+
+    wire [PERF_CTR_BITS-1:0] coalescer_misses;
+    VX_reduce_tree #(
+        .IN_W (PERF_CTR_BITS),
+        .N    (`VX_CFG_NUM_LSU_BLOCKS),
+        .OP   ("+")
+    ) coalescer_reduce (
+        .data_in  (lsu_coalescer_misses),
+        .data_out (coalescer_misses)
+    );
+    `BUFFER(coalescer_perf.misses, coalescer_misses);
 
     `BUFFER(perf_dcache_rd_req_fire_r, perf_dcache_rd_req_fire);
     `BUFFER(perf_dcache_wr_req_fire_r, perf_dcache_wr_req_fire);

@@ -21,10 +21,11 @@
 //   per core (VX_CFG_SOCKET_SIZE):
 //     VX_tcu_unit      : tensor-core unit (dispatch/commit from top ports)
 //     VX_tcu_shared    : WGMMA tile buffers + metadata AGU
-//     VX_lsu_scheduler : per-LSU-block, 2 clients — the ordinary LSU stream
-//                        (top ports) and the TCU AGU metadata-load port
-//     VX_mem_unit      : LMEM + coalescer + LMEM-DMA arb (TCU WGMMA + DXA
-//                        staging converge here) + dcache adapters
+//     VX_lsu_mem_path  : per-LSU-block scheduler (2 clients — the ordinary LSU
+//                        stream from top ports and the TCU AGU metadata-load
+//                        port), lmem switch, coalescer and adapters
+//     VX_mem_unit      : LMEM + LMEM-DMA arb (TCU WGMMA + DXA staging
+//                        converge here) + dcache flush injectors
 //   per socket:
 //     VX_dxa_core       : descriptor-driven tile-transfer engine (DCR-fed)
 //     VX_mem_bus_switch : DXA staging writes back to the owning core's LMEM
@@ -36,7 +37,7 @@
 //
 // Memory hierarchy: TCU WGMMA prefetches and DXA staging writes meet at the
 // real LMEM DMA arbiter inside VX_mem_unit; TCU_LD metadata loads merge with
-// the ordinary LSU stream at block-0's VX_lsu_scheduler; global traffic
+// the ordinary LSU stream at block-0's scheduler; global traffic
 // (dcache refills, DXA tile reads) contends at the socket arbiter and the
 // shared L2, whose memory side exits to top-level ports.
 //
@@ -74,7 +75,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
 
     // -----------------------------------------------------------------------
     // Ordinary LSU client streams, flattened [core][lsu-block]
-    // (client 0 of each VX_lsu_scheduler; the TCU AGU is client 1 on block 0)
+    // (client 0 of each LSU block's scheduler; the TCU AGU is client 1 on block 0)
     // -----------------------------------------------------------------------
     input  wire [LSU_STREAMS-1:0]           lsu_req_valid,
     input  lsu_req_data_t [LSU_STREAMS-1:0] lsu_req_data,
@@ -121,12 +122,6 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
 );
     localparam TCU_LMEM_BANK_ADDR_W = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE) - `CLOG2(`VX_CFG_LMEM_NUM_BANKS);
 
-`ifdef TCU_META_ENABLE
-    localparam LSU_SCHED_NUM_CLIENTS = 2;
-`else
-    localparam LSU_SCHED_NUM_CLIENTS = 1;
-`endif
-
     // ------------------------------------------------------------------------
     // Per-core DXA staging returns + collected dcache core ports
     // ------------------------------------------------------------------------
@@ -149,7 +144,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
     wire [NC-1:0] lsu_sched_empty;
 
     // ========================================================================
-    // Per-core tensor slice: TCU + LSU schedulers + mem_unit
+    // Per-core tensor slice: TCU + LSU memory paths + mem_unit
     // ========================================================================
     for (genvar c = 0; c < NC; ++c) begin : g_cores
 
@@ -173,7 +168,15 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
         ) tcu_lmem_if();
 
     `ifdef TCU_META_ENABLE
-        VX_lsu_sched_if tcu_mem_if();
+        VX_lsu_sched_if lsu_tcu_mem_if [NUM_LSU_BLKS]();
+        for (genvar block_idx = 1; block_idx < NUM_LSU_BLKS; ++block_idx) begin : g_tcu_client_tieoff
+            assign lsu_tcu_mem_if[block_idx].req_valid = 1'b0;
+            assign lsu_tcu_mem_if[block_idx].req_data  = '0;
+            assign lsu_tcu_mem_if[block_idx].rsp_ready = 1'b1;
+            `UNUSED_VAR (lsu_tcu_mem_if[block_idx].req_ready)
+            `UNUSED_VAR (lsu_tcu_mem_if[block_idx].rsp_valid)
+            `UNUSED_VAR (lsu_tcu_mem_if[block_idx].rsp_data)
+        end
     `endif
 
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
@@ -249,70 +252,65 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             .meta_wr_wid      (tcu_meta_wr_wid),
             .meta_wr_idx      (tcu_meta_wr_idx),
             .meta_wr_data     (tcu_meta_wr_data),
-            .tcu_mem_if       (tcu_mem_if),
+            .tcu_mem_if       (lsu_tcu_mem_if[0]),
         `endif
             .clk              (clk),
             .reset            (reset)
         );
 
-        // --- LSU schedulers: client 0 from top ports, client 1 = TCU AGU ---
-        VX_lsu_mem_if #(
-            .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
+        // --- LSU memory paths: client 0 from top ports, client 1 = TCU AGU ---
+        wire [NUM_LSU_BLKS-1:0] block_sched_empty;
+        wire [NUM_LSU_BLKS-1:0] block_store_empty;
+
+        VX_mem_bus_if #(
             .DATA_SIZE (LSU_WORD_SIZE),
             .TAG_WIDTH (LSU_TAG_WIDTH)
-        ) lsu_mem_if[NUM_LSU_BLKS]();
+        ) lsu_lmem_bus_if[LSU_NUM_REQS]();
 
-        wire [NUM_LSU_BLKS-1:0] block_sched_empty;
+        VX_mem_bus_if #(
+            .DATA_SIZE (DCACHE_WORD_SIZE),
+            .TAG_WIDTH (DCACHE_TAG_WIDTH)
+        ) lsu_dcache_bus_if[DCACHE_NUM_REQS]();
 
-        for (genvar block_idx = 0; block_idx < NUM_LSU_BLKS; ++block_idx) begin : g_lsu_scheduler
+
+        for (genvar block_idx = 0; block_idx < NUM_LSU_BLKS; ++block_idx) begin : g_lsu_mem_path
             localparam s = c * NUM_LSU_BLKS + block_idx;
 
-            VX_lsu_sched_if sched_client_if [LSU_SCHED_NUM_CLIENTS]();
+            VX_lsu_sched_if client_if();
 
-            assign sched_client_if[0].req_valid = lsu_req_valid[s];
-            assign sched_client_if[0].req_data  = lsu_req_data[s];
-            assign lsu_req_ready[s]             = sched_client_if[0].req_ready;
-            assign lsu_rsp_valid[s]             = sched_client_if[0].rsp_valid;
-            assign lsu_rsp_data[s]              = sched_client_if[0].rsp_data;
-            assign sched_client_if[0].rsp_ready = lsu_rsp_ready[s];
+            assign client_if.req_valid = lsu_req_valid[s];
+            assign client_if.req_data  = lsu_req_data[s];
+            assign lsu_req_ready[s]    = client_if.req_ready;
+            assign lsu_rsp_valid[s]    = client_if.rsp_valid;
+            assign lsu_rsp_data[s]     = client_if.rsp_data;
+            assign client_if.rsp_ready = lsu_rsp_ready[s];
 
-        `ifdef TCU_META_ENABLE
-            if (block_idx == 0) begin : g_tcu_client
-                assign sched_client_if[1].req_valid = tcu_mem_if.req_valid;
-                assign sched_client_if[1].req_data  = tcu_mem_if.req_data;
-                assign tcu_mem_if.req_ready         = sched_client_if[1].req_ready;
-                assign tcu_mem_if.rsp_valid         = sched_client_if[1].rsp_valid;
-                assign tcu_mem_if.rsp_data          = sched_client_if[1].rsp_data;
-                assign sched_client_if[1].rsp_ready = tcu_mem_if.rsp_ready;
-            end else begin : g_tcu_client_tieoff
-                assign sched_client_if[1].req_valid = 1'b0;
-                assign sched_client_if[1].req_data  = '0;
-                assign sched_client_if[1].rsp_ready = 1'b1;
-                `UNUSED_VAR (sched_client_if[1].req_ready)
-                `UNUSED_VAR (sched_client_if[1].rsp_valid)
-                `UNUSED_VAR (sched_client_if[1].rsp_data)
-            end
-        `endif
-
-            VX_lsu_scheduler #(
-                .INSTANCE_ID    (`SFORMATF(("%s-lsusched%0d-%0d", INSTANCE_ID, c, block_idx))),
-                .NUM_CLIENTS    (LSU_SCHED_NUM_CLIENTS),
-                .NUM_LANES      (`VX_CFG_NUM_LSU_LANES),
-                .CORE_QUEUE_SIZE(`VX_CFG_LSU_QUEUE_IN_SIZE),
-                .MEM_QUEUE_SIZE (LSU_QUEUE_OUT_SIZE),
-                .PENDING_SIZE   (`VX_CFG_LSU_PENDING_SIZE)
-            ) lsu_scheduler (
-                .clk        (clk),
-                .reset      (reset),
-                .client_if  (sched_client_if),
-                .empty      (block_sched_empty[block_idx]),
-                .lsu_mem_if (lsu_mem_if[block_idx])
+            VX_lsu_mem_path #(
+                .INSTANCE_ID (`SFORMATF(("%s-lsu%0d-%0d", INSTANCE_ID, c, block_idx)))
+            ) mem_path (
+                .clk           (clk),
+                .reset         (reset),
+            `ifdef PERF_ENABLE
+                `UNUSED_PIN (perf_rd_req_fire),
+                `UNUSED_PIN (perf_wr_req_fire),
+                `UNUSED_PIN (perf_rsp_fire),
+                `UNUSED_PIN (coalescer_misses),
+            `endif
+                .client_if     (client_if),
+            `ifdef TCU_META_ENABLE
+                .tcu_mem_if    (lsu_tcu_mem_if[block_idx]),
+            `endif
+                .sched_empty   (block_sched_empty[block_idx]),
+                .store_empty   (block_store_empty[block_idx]),
+                .lmem_bus_if   (lsu_lmem_bus_if[block_idx * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
+                .dcache_bus_if (lsu_dcache_bus_if[block_idx * DCACHE_CHANNELS +: DCACHE_CHANNELS])
             );
         end
 
         assign lsu_sched_empty[c] = & block_sched_empty;
+        assign mem_unit_empty[c]  = & block_store_empty;
 
-        // --- mem_unit: LMEM + DMA arb + dcache adapters ---
+        // --- mem_unit: LMEM + DMA arb + dcache flush injectors ---
         VX_txbar_bus_if dxa_txbar_bus_if();
         assign txbar_valid[c]           = dxa_txbar_bus_if.valid;
         assign txbar_data[c]            = dxa_txbar_bus_if.data;
@@ -339,8 +337,8 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             .dxa_lmem_bus_if (per_core_dxa_lmem_bus_if[c]),
             .dxa_txbar_bus_if(dxa_txbar_bus_if),
         `endif
-            .empty           (mem_unit_empty[c]),
-            .lsu_mem_if      (lsu_mem_if),
+            .lmem_bus_if     (lsu_lmem_bus_if),
+            .lsu_dcache_bus_if (lsu_dcache_bus_if),
             .dcr_flush_if    (dcr_flush_dcache_if),
             .flush_l1_only   (1'b0),
             .dcache_bus_if   (dcache_bus_if)
