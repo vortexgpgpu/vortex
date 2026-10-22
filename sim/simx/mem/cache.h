@@ -35,12 +35,12 @@ public:
 		uint8_t A;              // log2 associativity
 		uint8_t B;              // log2 number of banks
 		uint8_t addr_width;     // word address bits
-		uint8_t num_inputs;     // number of inputs
+		uint16_t num_inputs;    // number of inputs
 		uint8_t mem_ports;      // memory ports
 		bool    write_back;     // is write-back
 		bool    write_reponse;  // enable write response
 		uint16_t mshr_size;     // MSHR buffer size
-		uint8_t latency;        // pipeline latency
+		uint16_t latency;       // pipeline latency
 		uint8_t repl_policy;    // replacement policy (ReplPolicy)
 		bool    is_llc;					// is last-level cache
 	};

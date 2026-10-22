@@ -66,7 +66,6 @@ public:
 #endif
 #ifdef VX_CFG_VM_ENABLE
     L2Tlb::PerfStats l2tlb;
-    Ptw::PerfStats   ptw;
 #endif
   };
 
@@ -98,12 +97,16 @@ public:
   int dcr_write(uint32_t addr, uint32_t value);
 
 #ifdef VX_CFG_VM_ENABLE
-  // Host-side VM control: device SATP for the walker complex, the
-  // device-idle TLB flush broadcast, and first-fault readback.
+  // Host-side VM control: device SATP fan-out to the cores' L1 MMUs.
   void set_mmu_satp(uint64_t value);
-  void mmu_clear_fault();
-  uint64_t mmu_fault_va() const;
-  uint32_t mmu_fault_info() const;
+  // The cluster L2 TLB's walker link, exported for the processor to bind
+  // to the device-level walker (through the PtwMux).
+  SimChannel<TlbReq>& ptw_req_out();
+  SimChannel<TlbRsp>& ptw_rsp_in();
+  // The walker's PTE-fetch client slot on this cluster's L2, valid only
+  // under PTW_ON_L2 (the L2 is the LLC).
+  SimChannel<MemReq>& ptw_mem_req_in();
+  SimChannel<MemRsp>& ptw_mem_rsp_out();
 #endif
 
   int dcr_read(uint32_t addr, uint32_t tag, uint32_t* value);

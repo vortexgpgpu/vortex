@@ -765,6 +765,9 @@ private:
     std::condition_variable  cmd_cv_;
     std::deque<Command>      commands_;
     bool                     shutdown_ = false;
+    // First failure of an in-order command; later commands fail with it
+    // instead of running on incomplete state, until finish() reports it.
+    vx_result_t              async_error_ = VX_SUCCESS;
     std::thread              worker_;
 };
 

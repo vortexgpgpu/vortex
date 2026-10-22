@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+  </style>
+
+  <rect x="0" y="0" width="1560" height="900" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">ci.yml — from an event to a matrix of cells</text>
+
+  <rect x="24" y="56" width="1512" height="300" class="grp"/>
+  <text x="40" y="86" class="tb">plan</text>
+  <text x="40" y="110" class="ts">one job, no build</text>
+  <text x="40" y="126" class="ts">environment</text>
+  <text x="40" y="150" class="ts">reads the catalog</text>
+  <text x="40" y="166" class="ts">through testcase.py</text>
+  <rect x="270" y="72" width="300" height="268" rx="6" class="core"/>
+  <text x="282" y="94" class="tb">event policy</text>
+  <text x="282" y="116" class="ts">push</text>
+  <text x="282" y="132" class="ts">→ simx · smoke</text>
+  <text x="282" y="156" class="ts">pull_request</text>
+  <text x="282" y="172" class="ts">→ simx, rtlsim · smoke, full</text>
+  <text x="282" y="196" class="ts">schedule — Mondays 06:00 UTC</text>
+  <text x="282" y="212" class="ts">→ every driver · every tier</text>
+  <text x="282" y="236" class="ts">workflow_dispatch</text>
+  <text x="282" y="252" class="ts">→ the inputs</text>
+  <rect x="600" y="72" width="300" height="268" rx="6" class="unit"/>
+  <text x="612" y="94" class="tb">escalations</text>
+  <text x="612" y="116" class="ts">toolchain cache miss</text>
+  <text x="612" y="132" class="ts">→ everything: a rebuilt toolchain</text>
+  <text x="612" y="148" class="ts">   affects every driver</text>
+  <text x="612" y="172" class="ts">a diff under hw/rtl, hw/dpi,</text>
+  <text x="612" y="188" class="ts">sim/rtlsim, the config TOMLs, …</text>
+  <text x="612" y="204" class="ts">→ add the driver that elaborates it</text>
+  <text x="612" y="228" class="ts">an indeterminate diff</text>
+  <text x="612" y="244" class="ts">→ every driver</text>
+  <rect x="930" y="72" width="300" height="268" rx="6" class="unit"/>
+  <text x="942" y="94" class="tb">testcase.py matrix</text>
+  <text x="942" y="116" class="ts">filters the catalog by driver and tier</text>
+  <text x="942" y="140" class="ts">drops the opt-in tiers — fpga, asic —</text>
+  <text x="942" y="156" class="ts">unless asked for by name</text>
+  <text x="942" y="180" class="ts">groups the survivors into cells</text>
+  <text x="942" y="204" class="ts">also runs lint: a catalog error fails</text>
+  <text x="942" y="220" class="ts">the plan</text>
+  <rect x="1260" y="72" width="276" height="268" rx="6" class="mem"/>
+  <text x="1272" y="94" class="tb">cells</text>
+  <text x="1272" y="116" class="ts">one per</text>
+  <text x="1272" y="132" class="ts">(category, driver, xlen)</text>
+  <text x="1272" y="156" class="ts">one per (check, suite, xlen)</text>
+  <text x="1272" y="172" class="ts">for model_parity and</text>
+  <text x="1272" y="188" class="ts">perf_gate</text>
+  <text x="1272" y="212" class="ts">profile: lite, or full when a</text>
+  <text x="1272" y="228" class="ts">cell needs SST or gem5</text>
+  <path d="M 570 206 L 600 206" class="flow"/>
+  <path d="M 900 206 L 930 206" class="flow"/>
+  <path d="M 1230 206 L 1260 206" class="flow"/>
+  <rect x="24" y="392" width="1512" height="330" class="grp"/>
+  <text x="40" y="422" class="tb">jobs</text>
+  <text x="40" y="446" class="ts">hosted runners</text>
+  <text x="40" y="470" class="ts">parallelism is</text>
+  <text x="40" y="486" class="ts">across cells; a cell</text>
+  <text x="40" y="502" class="ts">runs its cases</text>
+  <text x="40" y="518" class="ts">serially</text>
+  <rect x="270" y="430" width="220" height="130" rx="6" class="unit"/>
+  <text x="282" y="452" class="tb">setup</text>
+  <text x="282" y="474" class="ts">warm the toolchain and</text>
+  <text x="282" y="490" class="ts">third_party caches once</text>
+  <text x="282" y="514" class="ts">no-op on a cache hit</text>
+  <rect x="540" y="430" width="240" height="130" rx="6" class="unit"/>
+  <text x="552" y="452" class="tb">build × 2</text>
+  <text x="552" y="474" class="ts">one build tree per XLEN:</text>
+  <text x="552" y="490" class="ts">configure + make</text>
+  <text x="552" y="514" class="ts">uploaded as an artifact</text>
+  <rect x="840" y="420" width="330" height="130" rx="6" class="unit"/>
+  <rect x="850" y="430" width="330" height="130" rx="6" class="unit"/>
+  <rect x="860" y="440" width="330" height="130" rx="6" class="unit"/>
+  <text x="872" y="472" class="tb">tests × cells</text>
+  <text x="872" y="494" class="ts">download the build tree</text>
+  <text x="872" y="510" class="ts">install the category's extra</text>
+  <text x="872" y="526" class="ts">dependencies</text>
+  <text x="872" y="542" class="ts">pytest ci -m "&lt;expression&gt;"</text>
+  <rect x="1240" y="430" width="296" height="130" rx="6" class="mem"/>
+  <text x="1252" y="452" class="tb">JUnit + complete</text>
+  <text x="1252" y="474" class="ts">one XML per cell, uploaded</text>
+  <text x="1252" y="490" class="ts">even when the cell fails</text>
+  <text x="1252" y="514" class="ts">complete: the single required</text>
+  <text x="1252" y="530" class="ts">check</text>
+  <path d="M 490 495 L 540 495" class="flow"/>
+  <path d="M 780 495 L 840 495" class="flow"/>
+  <path d="M 1190 505 L 1240 495" class="flow"/>
+  <path d="M 1398 340 L 1398 376 L 1015 376 L 1015 420" class="flowb"/>
+  <text x="1030" y="370" class="lbl">matrix = cells</text>
+  <rect x="270" y="596" width="1266" height="110" rx="6" class="box"/>
+  <text x="282" y="618" class="t">the marker expression of a cell</text>
+  <text x="282" y="644" class="th">category cell</text>
+  <text x="430" y="644" class="mono">"&lt;category&gt; and &lt;driver&gt; and not model_parity and not perf_gate"</text>
+  <text x="282" y="668" class="th">check cell</text>
+  <text x="430" y="668" class="mono">"&lt;check&gt; and &lt;suite&gt; and &lt;driver&gt;"</text>
+  <text x="282" y="694" class="tt">every check case runs exactly once: the category cells exclude the checks, and the check cells own them. The check list comes from testcase.py checks.</text>
+  <rect x="24" y="750" width="1512" height="110" class="grp"/>
+  <text x="40" y="780" class="tb">other workflows</text>
+  <text x="40" y="804" class="ts">same catalog, own</text>
+  <text x="40" y="820" class="ts">triggers</text>
+  <rect x="270" y="766" width="400" height="78" rx="6" class="box"/>
+  <text x="282" y="788" class="t">apptainer-ci.yml</text>
+  <text x="282" y="810" class="ts">a simx slice inside the container;</text>
+  <text x="282" y="826" class="ts">Wednesdays 06:00 UTC</text>
+  <rect x="700" y="766" width="400" height="78" rx="6" class="box"/>
+  <text x="712" y="788" class="t">fpga_gate.yml</text>
+  <text x="712" y="810" class="ts">nightly 03:00 UTC, self-hosted runner with</text>
+  <text x="712" y="826" class="ts">Vivado; pins origin/master</text>
+  <rect x="1130" y="766" width="406" height="78" rx="6" class="box"/>
+  <text x="1142" y="788" class="t">asic_gate.yml</text>
+  <text x="1142" y="810" class="ts">nightly 04:00 UTC, hosted; one job per DUT;</text>
+  <text x="1142" y="826" class="ts">pins origin/master</text>
+  <text x="24" y="884" class="tt">Purple = policy · blue = jobs and planner logic · gold = data passed between jobs · dashed = the matrix handed to the tests job.</text>
+</svg>

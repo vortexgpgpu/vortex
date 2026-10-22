@@ -79,6 +79,17 @@ VX_CFG_PLATFORM_MEMORY_DATA_SIZE = 64
 VX_CFG_PLATFORM_MEMORY_INTERLEAVE = 1
 VX_CFG_PLATFORM_MEMORY_PEAK_BW = 460000 # 460 GB/s
 VX_CFG_PLATFORM_CLOCK_RATE = 400
+# DRAM the simulators model behind each memory bank (one channel per bank),
+# as a data sheet gives it: the JEDEC standard, its data rate (MT/s per pin),
+# the fixed read latency added for the PHY, controller and interconnect (core
+# cycles), and the requests a channel holds in flight (0 = unbounded).
+# Simulation-only: the RTL never reads them. The default clocks the DRAM with
+# the core: 14 cycles for an idle open-row read, 26 for a row conflict, one
+# 64 B block per cycle at peak; profiles set their own.
+VX_CFG_PLATFORM_MEMORY_TYPE = "HBM2"
+VX_CFG_PLATFORM_MEMORY_DATA_RATE = "expr: 2 * $VX_CFG_PLATFORM_CLOCK_RATE"
+VX_CFG_PLATFORM_MEMORY_LATENCY = 0
+VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE = 0
 
 [alu]
 VX_CFG_NUM_ALU_LANES = "expr: $VX_CFG_SIMD_WIDTH"
@@ -121,8 +132,14 @@ fpu_dsp_vivado  = "expr: $VX_CFG_FPU_TYPE_DSP and $VIVADO"
 
 # STD: FDIV_LATENCY must equal FSQRT_LATENCY (shared serializer in VX_fpu_std)
 VX_CFG_FMA_LATENCY  = "expr: 16 if $fpu_dsp_vivado else (4 if $fpu_dsp_quartus else (12 if $VX_CFG_EXT_D_ENABLE else 8))"
-VX_CFG_FDIV_LATENCY = "expr: 15 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (15 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
-VX_CFG_FSQRT_LATENCY= "expr: 10 if $VX_CFG_FPU_TYPE_DPI else (16 if $VX_CFG_FPU_TYPE_FPNEW else ((32 if $VX_CFG_EXT_D_ENABLE else 17) if $VX_CFG_FPU_TYPE_STD else (10 if $fpu_dsp_quartus else (28 if $fpu_dsp_vivado else (32 if $VX_CFG_EXT_D_ENABLE else 17)))))"
+# STD timing; DPI is a fast STD and takes the same values.
+fdiv_latency_std  = "expr: 32 if $VX_CFG_EXT_D_ENABLE else 17"
+fsqrt_latency_std = "expr: $fdiv_latency_std"
+fdiv_latency_dsp  = "expr: 15 if $QUARTUS else (28 if $VIVADO else (32 if $VX_CFG_EXT_D_ENABLE else 17))"
+fsqrt_latency_dsp = "expr: 10 if $QUARTUS else (28 if $VIVADO else (32 if $VX_CFG_EXT_D_ENABLE else 17))"
+
+VX_CFG_FDIV_LATENCY = "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ($fdiv_latency_dsp if $VX_CFG_FPU_TYPE_DSP else $fdiv_latency_std)"
+VX_CFG_FSQRT_LATENCY= "expr: 16 if $VX_CFG_FPU_TYPE_FPNEW else ($fsqrt_latency_dsp if $VX_CFG_FPU_TYPE_DSP else $fsqrt_latency_std)"
 VX_CFG_FNCP_LATENCY = 2
 VX_CFG_FCVT_LATENCY = 5
 
@@ -255,8 +272,10 @@ VX_CFG_L3_MEM_PORTS = "expr: min($VX_CFG_L3_NUM_BANKS, $VX_CFG_PLATFORM_MEMORY_N
 lmem_bytes_per_bank = 2048
 # Narrow cores must keep a usable shared-memory window: scaling capacity with
 # bank count alone drops NT=1 to 2KB, below what CTAs that fit every other
-# configuration need.
-lmem_min_bytes = 8192
+# configuration need. The floor holds a full warp-count group of co-resident
+# CTAs: kernels that rendezvous across `NUM_WARPS` CTAs -- the DXA multicast
+# pattern -- make no progress at all once fewer than the whole group fits.
+lmem_min_bytes = 16384
 VX_CFG_LMEM_NUM_BANKS = "expr: $VX_CFG_NUM_LSU_LANES"
 VX_CFG_LMEM_LOG_SIZE = "expr: clog2(max($lmem_min_bytes, $VX_CFG_LMEM_NUM_BANKS * $lmem_bytes_per_bank))"
 
@@ -368,7 +387,9 @@ VX_CFG_RASTER_BLOCK_LOG_SIZE   = 2
 VX_CFG_RASTER_MEM_FIFO_DEPTH  = 8
 VX_CFG_RASTER_QUAD_FIFO_DEPTH = 32
 VX_CFG_RASTER_MEM_QUEUE_SIZE  = 4
-VX_CFG_RASTER_EARLYZ_ENABLE          = false
+# Early-Z occlusion cull: on wherever it is legal. It reads committed depth
+# through the OM's ocache, so it needs both units (VX_define.vh enforces it).
+VX_CFG_RASTER_EARLYZ_ENABLE   = "expr: $VX_CFG_EXT_RASTER_ENABLE and $VX_CFG_EXT_OM_ENABLE"
 
 [om]
 VX_CFG_NUM_OM_CORES       = "expr: max(1, up($VX_CFG_NUM_CORES / 8))"
@@ -447,6 +468,7 @@ VX_CFG_XLEN = [32, 64]
 VX_CFG_FLEN = [32, 64]
 VX_CFG_FPU_TYPE = ["DPI", "DSP", "FPNEW", "STD"]
 VX_CFG_TCU_TYPE = ["DPI", "DSP", "BHF", "TFR", "FPNEW"]
+VX_CFG_PLATFORM_MEMORY_TYPE = ["HBM2", "HBM3", "GDDR6"]
 
 [[param]]
 VX_CFG_DCACHE_NUM_REQS = "int"

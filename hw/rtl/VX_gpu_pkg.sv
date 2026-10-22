@@ -20,16 +20,6 @@
 
 package VX_gpu_pkg;
 
-    // These 6 localparams mirror their VX_CFG_* macros, which expand to
-    // VX_CFG_{DCACHE,L2,L3}_NUM_REQS — localparams declared later in this package.
-    localparam DCACHE_NUM_BANKS                 = `VX_CFG_DCACHE_NUM_BANKS;
-    localparam L1_MEM_PORTS                     = `VX_CFG_L1_MEM_PORTS;
-    localparam L2_MEM_PORTS                     = `VX_CFG_L2_MEM_PORTS;
-    localparam L2_NUM_BANKS                     = `VX_CFG_L2_NUM_BANKS;
-    localparam L3_MEM_PORTS                     = `VX_CFG_L3_MEM_PORTS;
-    localparam L3_NUM_BANKS                     = `VX_CFG_L3_NUM_BANKS;
-
-
     localparam NC_BITS = `CLOG2(`VX_CFG_NUM_CORES);
     localparam NW_BITS = `CLOG2(`VX_CFG_NUM_WARPS);
     localparam NT_BITS = `CLOG2(`VX_CFG_NUM_THREADS);
@@ -564,6 +554,9 @@ package VX_gpu_pkg;
     localparam PER_ISSUE_WARPS = `VX_CFG_NUM_WARPS / `VX_CFG_ISSUE_WIDTH;
     localparam ISSUE_WIS_BITS = `CLOG2(PER_ISSUE_WARPS);
     localparam ISSUE_WIS_W = `UP(ISSUE_WIS_BITS);
+
+    // Machine-mode trap CSRs stored per warp in the scheduler: mstatus, mtvec, mepc, mcause, mtval.
+    localparam NUM_TRAP_CSRS = 5;
 
     localparam DISPATCH_QSIZE = `VX_CFG_DISPATCH_QUEUE_SIZE;
 
@@ -1176,6 +1169,7 @@ package VX_gpu_pkg;
     typedef struct packed {
         logic [UUID_WIDTH-1:0]              uuid;
         logic [ISSUE_WIS_W-1:0]             wis;
+        logic [PER_ISSUE_WARPS-1:0]         eop_wis; // one-hot wis, set on eop
         logic [NCTA_WIDTH-1:0]              cta_id;
         logic [SIMD_IDX_W-1:0]              sid;
         logic [`VX_CFG_SIMD_WIDTH-1:0]             tmask;
@@ -1486,6 +1480,8 @@ package VX_gpu_pkg;
     // Input request size (using coalesced memory blocks)
     localparam DCACHE_CHANNELS	    = `UP((`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE);
     localparam DCACHE_NUM_REQS	    = `VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS;
+    localparam DCACHE_NUM_BANKS     = `VX_CFG_DCACHE_NUM_BANKS;
+    localparam L1_MEM_PORTS         = `VX_CFG_L1_MEM_PORTS;
 
     // Core request tag Id bits
     localparam DCACHE_MERGED_REQS   = (`VX_CFG_NUM_LSU_LANES * LSU_WORD_SIZE) / DCACHE_WORD_SIZE;
@@ -1709,12 +1705,20 @@ package VX_gpu_pkg;
     localparam L2_GFX_RASTER_IDX    = L2_SOCKET_REQS;
     localparam L2_GFX_OM_IDX        = L2_GFX_RASTER_IDX + `VX_CFG_EXT_RASTER_ENABLED;
 
-    // The shared page-table walker attaches one PTE-fetch port under VM, right
-    // after the socket and graphics ports (like ocache/rcache).
-    localparam L2_PTW_REQS          = `VX_CFG_VM_ENABLED;
+    // With one cluster, an L2 and no L3, that L2 is the LLC: the device
+    // walker's PTE fetches ride it through a dedicated client slot, so a
+    // leaf-PTE miss is a cache lookup rather than a DRAM round trip. In
+    // every other topology the walker attaches at the device (see L3_PTW_IDX).
+    localparam PTW_ON_L2            = ((`VX_CFG_VM_ENABLED != 0)
+                                    && (`VX_CFG_NUM_CLUSTERS == 1)
+                                    && (`VX_CFG_L2_ENABLED != 0)
+                                    && (`VX_CFG_L3_ENABLED == 0)) ? 1 : 0;
+    localparam L2_PTW_REQS          = PTW_ON_L2;
     localparam L2_PTW_IDX           = L2_SOCKET_REQS + L2_GFX_REQS;
 
     localparam L2_NUM_REQS          = L2_SOCKET_REQS + L2_GFX_REQS + L2_PTW_REQS;
+    localparam L2_NUM_BANKS         = `VX_CFG_L2_NUM_BANKS;
+    localparam L2_MEM_PORTS         = `VX_CFG_L2_MEM_PORTS;
 
     // Core request tag bits (socket arb output width)
     localparam L2_TAG_WIDTH         = SOCKET_MEM_ARB_TAG_WIDTH;
@@ -1727,6 +1731,8 @@ package VX_gpu_pkg;
     localparam TLB_SOCKET_ID_WIDTH   = L1_TLB_ID_WIDTH + `ARB_SEL_BITS(2, 1);
     localparam TLB_CLUSTER_ID_WIDTH  = TLB_SOCKET_ID_WIDTH + `ARB_SEL_BITS(NUM_SOCKETS, 1);
     localparam L2_TLB_SLOT_WIDTH     = `CLOG2(`VX_CFG_L2_TLB_MSHR_SIZE);
+    // Device-level walker: cluster L2-TLB miss buses arb into one walker.
+    localparam TLB_DEV_ID_WIDTH      = L2_TLB_SLOT_WIDTH + `ARB_SEL_BITS(`VX_CFG_NUM_CLUSTERS, 1);
 
     // Memory request data bits (mem transacts in sectors)
     localparam L2_MEM_DATA_WIDTH	= (L2_SECTOR_SIZE * 8);
@@ -1750,7 +1756,14 @@ package VX_gpu_pkg;
     localparam L3_SECTOR_SIZE       = `VX_CFG_L3_SECTOR_SIZE;
 
     // Input request size
-    localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
+    // The device-level walker attaches its PTE fetches as one more LLC
+    // client on the last requestor slot, unless a single cluster's L2 is
+    // the LLC (PTW_ON_L2) and carries them instead.
+    localparam L3_PTW_IDX           = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS;
+    localparam L3_NUM_REQS	        = `VX_CFG_NUM_CLUSTERS * L2_MEM_PORTS
+                                    + ((`VX_CFG_VM_ENABLED != 0) && (PTW_ON_L2 == 0) ? 1 : 0);
+    localparam L3_NUM_BANKS         = `VX_CFG_L3_NUM_BANKS;
+    localparam L3_MEM_PORTS         = `VX_CFG_L3_MEM_PORTS;
 
     // Core request tag bits
     localparam L3_TAG_WIDTH	        = L2_MEM_TAG_WIDTH;

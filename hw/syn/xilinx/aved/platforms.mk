@@ -60,7 +60,14 @@ MEM_TAG = MEM
 # next, which cost a bitstream and several hours of hardware debugging. It
 # belongs here next to MEM_TAG, for the same reason and by the same mechanism:
 # stated before the Makefile's `HOST_TAG ?= HOST`, so plain `=` suffices.
-HOST_TAG = HBM1
+# The aperture must lie OUTSIDE the device-memory window. Each HBM_AXI port
+# addresses its own 512 MB slice of the stack, HBM<k> at 0x40_0000_0000 +
+# k*512 MB, and the MEM tag above exposes Vortex's whole 32-bit space from that
+# same base -- so HBM0..HBM7 ARE device memory. With HBM1, VRT placed the CP's
+# staging buffers at +512 MB, inside the heap: any scene whose buffers grew past
+# 512 MB was overwritten by its own upload (wrong images; corrupted BVHs that
+# traversal never finished). HBM8 starts at +4 GB, past the last device byte.
+HOST_TAG = HBM8
 
 # Kernel clock target (MHz). The linker also accepts a frequency request;
 # the runtime can retune within the platform's supported range.

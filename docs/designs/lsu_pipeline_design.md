@@ -1,306 +1,429 @@
-# Vortex LSU Design (RTL)
+# Load/Store Unit (LSU) — Design
 
-**Scope:** logical/architectural design embodied by the RTL LSU
-([VX_lsu_slice.sv](../../hw/rtl/core/VX_lsu_slice.sv) +
-[VX_mem_scheduler.sv](../../hw/rtl/libs/VX_mem_scheduler.sv)). The
-implementation is Verilog, but the design itself — pipeline structure,
-queueing discipline, response tracking — is implementation-agnostic and
-could be reproduced in C++ or any other substrate.
+**Scope:** the path a memory instruction takes from the execute stage to the
+data cache or local memory and back — address generation and the stack
+interleave, per-lane classification and formatting, fence ordering,
+multi-packet tracking, the shared memory scheduler and its outstanding pool,
+address-class steering, coalescing, and the response path. Covers the RTL
+([`VX_lsu_unit.sv`](../../hw/rtl/core/VX_lsu_unit.sv),
+[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv),
+[`VX_lsu_agu.sv`](../../hw/rtl/core/VX_lsu_agu.sv),
+[`VX_lsu_scheduler.sv`](../../hw/rtl/core/VX_lsu_scheduler.sv),
+[`VX_mem_scheduler.sv`](../../hw/rtl/libs/VX_mem_scheduler.sv),
+[`VX_mem_unit.sv`](../../hw/rtl/core/VX_mem_unit.sv)) and the SimX model
+([`sim/simx/lsu_unit.cpp`](../../sim/simx/lsu_unit.cpp)).
 
----
+What happens past the LSU's memory port is documented elsewhere: the data
+cache in [`cache_subsystem.md`](cache_subsystem.md), address translation in
+[`virtual_memory_subsystem.md`](virtual_memory_subsystem.md), and the
+atomics that ride this path in
+[`atomic_memory_operations.md`](atomic_memory_operations.md). This document
+is the LSU deep-dive.
 
-## 1. Architecture overview
-
-```
-   execute_if (per-issue-slot)             VX_lsu_slice           VX_mem_scheduler         VX_lsu_mem_if
-   ────────────────────────────►   ┌───────────────────┐  ┌─────────────────────────┐  ────────────────►
-                                   │ AGU + AddrType    │  │  Request queue (CQS)    │
-                                   │ Byte-enable fmt   │  │  Index buffer (CQS)     │
-                                   │ Store data shift  │  │  (Optional) coalescer   │
-                                   │ Fence lock        │  │  Batched dispatch       │
-                                   │ Multi-PID tracker │  │  Response demux         │
-                                   └─────────┬─────────┘  └────────┬────────────────┘
-                                             │                      │
-                                             ▼                      ▼
-                                       Tag pack/unpack      MEM_QUEUE_SIZE outstanding
-                                       Load formatter       (out-of-order responses)
-                                       (sign-extend, NaN-box)
-                                             │                      ▲
-   result_if (per-issue-slot)               ▲                      │
-   ◄────────────────────────────────────────┴───────────── core_rsp ┘
-```
-
-The LSU is a two-stage pipeline:
-
-- **Frontend (`VX_lsu_slice`)** — instruction-side adaptation: AGU, address
-  classification, byte-enable formation, store-data shifting, fence ordering,
-  multi-packet (PID) tracking, response formatting (sign-extension, NaN-boxing).
-- **Backend (`VX_mem_scheduler`)** — generic memory-side scheduler shared with
-  caches and other clients: queueing, optional coalescing, vector→channel
-  batching, out-of-order response demultiplex.
-
-Both stages parameterize over `NUM_LSU_LANES` (= `NUM_THREADS` in canonical
-configs); per-issue-slot one slice is instantiated, so the LSU as a whole is
-`ISSUE_WIDTH × VX_lsu_slice` and runs slices independently with shared
-downstream memory.
+![LSU architecture](../assets/img/lsu_architecture.svg)
 
 ---
 
-## 2. The frontend in detail
+## 1. Overview
 
-### 2.1 Address-generation and per-lane formatting
+A memory instruction crosses three modules:
 
-For each of `NUM_LSU_LANES` lanes the slice computes
-`full_addr[i] = rs1[i] + sext(offset)` ([VX_lsu_slice.sv:55-58](../../hw/rtl/core/VX_lsu_slice.sv#L55-L58)),
-classifies the resulting block address as IO / LMEM / regular (one bit each
-in `mem_req_flags` — see [§64-76](../../hw/rtl/core/VX_lsu_slice.sv#L62-L76)),
-and packs sub-word stores into the line-width word with the appropriate
-shift (`mem_req_data` shifting + `mem_req_byteen` mask). Misalignment is a
-runtime assertion, not a hardware-handled fault.
+1. **`VX_lsu_unit`**, in the execute stage, holds one **slice** per LSU
+   block. A slice turns an instruction into a memory request: it generates
+   the per-lane addresses, classifies and formats each lane, enforces fence
+   ordering, and packs everything the response will need into a tag.
+2. **`VX_lsu_scheduler`**, at core level, owns the block's memory port. It
+   stages requests, parks each load's tag in an **outstanding pool**, and
+   dispatches the lanes. It is shared: the tensor unit's warp-level address
+   generator is a second client of the same scheduler.
+3. **`VX_mem_unit`** steers each lane by address class — to local memory, or
+   through the coalescer to the data cache.
 
-**Stack interleave** (`VX_CFG_LSU_STACK_INTERLEAVE_ENABLE`, on by default).
+Responses return **in any order**. The slot index carried through memory
+recovers the parked tag, and each response beat is formatted and committed as
+it arrives.
+
+The design's purpose is **memory-level parallelism**: a load that misses
+holds up its own instruction and nothing else.
+
+---
+
+## 2. Address generation — `VX_lsu_agu`
+
+All address arithmetic lives in
+[`VX_lsu_agu.sv`](../../hw/rtl/core/VX_lsu_agu.sv), one instance per lane.
+The slice contains none.
+
+| form | address | used by |
+|---|---|---|
+| plain | `rs1 + sext(offset)` | loads, stores, fences, atomics |
+| packed load | `rs1 + idx × rs2`, `idx` = `offset[1:0]` | the packed-load micro-ops |
+
+Both forms are *base + addend*, so the form select sits ahead of a 3:2
+compressor and a single carry-propagate adder serves both. The packed form's
+two-bit multiply is a shift-and-add folded into the compressor — there is no
+multiplier.
+
+### 2.1 Stack interleave
+
+![Stack interleave](../assets/img/lsu_stack_interleave.svg)
+
 The kernel ABI gives each hardware thread a contiguous stack
-(`sp = VX_MEM_STACK_BASE_ADDR - hartid << VX_MEM_STACK_LOG2_SIZE`), so the
-same frame slot across a warp's threads sits one stack apart: `NUM_THREADS`
-separate lines, all in the same dcache bank. `VX_lsu_agu` remaps every
-address inside the stack window so that, within each group of `NUM_THREADS`
-stacks, offset `{thread, word, byte}` is stored as `{word ^ group, thread, byte}`
-(word = XLEN bytes). A warp-wide spill then fills one contiguous block, the
-same layout NVIDIA local memory and AMD scratch use. A group spans a power
-of two larger than a cache way, so without the XOR skew every warp's copy of
-a frame slot would land in the same cache set. The remap is a function
-of the address alone, so a pointer into another thread's stack still
-resolves, and software, `sp` and frame offsets are unchanged.
+(`sp = VX_MEM_STACK_BASE_ADDR − hartid << VX_MEM_STACK_LOG2_SIZE`). The same
+frame slot across a warp's threads then sits one stack apart — `NUM_THREADS`
+separate cache lines with the same set index, all in one dcache bank.
 
-### 2.2 Fence ordering
+With `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE` (on by default) the AGU remaps
+every address inside the stack window so that, within each group of
+`NUM_THREADS` stacks, offset `{thread, word, byte}` is stored as
+`{word ⊕ group, thread, byte}`. A warp-wide spill fills one contiguous
+block — the layout NVIDIA local memory and AMD scratch use.
 
-`fence_lock` (single bit per slice) is set when a fence's last PID packet
-fires and cleared when the corresponding response packet completes. While
-locked, the slice gates `mem_req_valid` and `execute_if.ready` to zero —
-new requests cannot enter, and outstanding responses drain. This is a
-**total fence per slice**: any fence on this slice serializes everything on
-this slice.
+Load-bearing properties:
 
-### 2.3 Multi-PID packet tracker (per-slice)
+- **The map is a function of the address alone.** It does not depend on the
+  issuing thread, so a pointer into another thread's stack still resolves.
+  Software, `sp`, and frame offsets are unchanged.
+- **The XOR with the group index is what spreads warps across sets.** A
+  group spans a power of two larger than a cache way; without the skew, the
+  same frame slot of every warp would share a set.
+- **It costs two narrow operations, not three wide ones.** Written naively
+  the map subtracts the window base, permutes, and adds the base back. The
+  permutation moves bits only inside the group field and the group index
+  keeps its position, so the subtract and add cancel on every bit above the
+  field; the window base has trailing zeros, so the field itself needs
+  arithmetic only on the bits above them.
+- **Window membership is a narrow compare.** Both window bounds are asserted
+  to be multiples of the stack size, so the test uses only the bits above it.
 
-A wide load (e.g., from VPU) may be expanded into multiple PID packets.
-Each packet has the same `wid` / `tag` / `rd` but consecutive `pid` values;
-SOP marks the first, EOP the last. The slice uses a small `VX_allocator`
-+ `pkt_sop`/`pkt_eop`/`pkt_ctr` table sized `LSUQ_IN_SIZE` to
-([§212-269](../../hw/rtl/core/VX_lsu_slice.sv#L212-L269)):
-
-- allocate one slot at the SOP request fire,
-- count how many sub-packets are outstanding per slot,
-- mark the **packet-level** SOP / EOP on the response stream,
-- release the slot when the last sub-packet response retires.
-
-This separates the **memory-level** SOP/EOP (per-channel response packets)
-from the **logical** SOP/EOP (per macro-load), so the writeback path sees
-exactly one SOP and one EOP per macro-load even though responses arrive
-out of order across PIDs.
+The AGU sits between the lane-dispatch registers and the scheduler's staging
+queue, which is why every operation in it is reduced to the narrowest width
+that is provably equivalent.
 
 ---
 
-## 3. The scheduler in detail
+## 3. The slice — request side
 
-The scheduler is the MLP heart of the LSU.
+[`VX_lsu_slice.sv`](../../hw/rtl/core/VX_lsu_slice.sv).
 
-### 3.1 Request queue
+### 3.1 Classification
 
-A `CORE_QUEUE_SIZE`-deep elastic buffer holds pending core requests
-([:172-185](../../hw/rtl/libs/VX_mem_scheduler.sv#L172-L185)). Each
-element holds the full vector `(mask, byteen, addr, flags, data, tag)` for
-one logical request. The queue smooths backpressure between the frontend
-and the memory bus.
+Each lane carries a `mem_bus_attr_t`
+([`VX_gpu_pkg.sv`](../../hw/rtl/VX_gpu_pkg.sv)) through the scheduler's user
+channel and on into the memory fabric:
 
-### 3.2 Index buffer (the load tracker)
+| field | set when | consumed by |
+|---|---|---|
+| `is_flush` | the instruction is a fence | the data cache: a flush request |
+| `is_addr_io` | the address is in the IO range, or in the OM aperture | the cache: bypassed, uncached |
+| `is_addr_local` | the address is in the local-memory window | `VX_lmem_switch` |
+| `is_addr_om` | the address is in the OM fragment-export aperture | the cluster's OM steer |
+| `amo` | the instruction is an atomic | the commit point |
 
-The crucial MLP structure. For every **read** that enters the request
-queue, an `ibuf_waddr` slot is acquired from a `VX_index_buffer`
-([:204-218](../../hw/rtl/libs/VX_mem_scheduler.sv#L204-L218)). The slot
-index is embedded in the memory request tag as `reqq_tag_u = {uuid,
-ibuf_waddr}`. Any response carrying that tag indexes back into the slot
-table to recover the original metadata.
+The local-memory test is an **equality on the block-address bits above the
+window**. The window base is asserted aligned to the capacity, so the prefix
+compare is exact and needs no end address — which is not representable when
+the window ends at the top of the address space.
+
+An OM aperture store is presented to the cache hierarchy as an ordinary IO
+store: `is_addr_io` is asserted alongside `is_addr_om`. Uncached, bypassed
+and posted is exactly the behavior a fragment export wants, and no cache
+level needs to know the aperture exists.
+
+### 3.2 Formatting
+
+| what | how |
+|---|---|
+| request address | the word address; the low bits are kept as the lane's **alignment** |
+| byte-enable | from the access size and the alignment |
+| store data | shifted left by the alignment, so it sits at its byte position in the word |
+| request direction | store, unless the instruction is an atomic — atomics always travel as `rw = 0` |
+
+**Misaligned access is not supported.** An address that is not a multiple of
+the access size is a runtime assertion, not a handled fault.
+
+### 3.3 Fence ordering
+
+A fence is a **total barrier on its slice**. The slice sets `fence_lock` when
+a fence's last packet is accepted and clears it when that fence's response
+returns. While locked, the slice accepts nothing.
+
+The fence itself travels to memory as a request with `is_flush`, behind every
+request the slice issued before it, so its response proves they have drained.
+Only the last packet of a multi-packet fence is sent; the earlier packets
+complete immediately.
+
+### 3.4 Multi-packet tracking
+
+When the lane count is below the SIMD width, one instruction is dispatched as
+several **packets**, each with its own `pid`. Packets are independent memory
+requests and their responses interleave. The writeback path, though, needs to
+know when the *instruction* begins and ends.
+
+The slice keeps `VX_CFG_LSU_PENDING_SIZE` packet slots, present only when an
+instruction can span packets:
+
+| event | action |
+|---|---|
+| a load's first packet is accepted | mark the slot's start flag |
+| each load packet accepted | count it |
+| a load's last packet is accepted | mark the slot's end flag; the slot is taken and the next instruction gets another |
+| a packet's final response | uncount it |
+| the final response, end flag set, count at 1 | that response is the instruction's last; release the slot |
+
+This separates the **memory-level** start and end of a response, which the
+scheduler reports per request, from the **instruction-level** start and end
+the writeback sees.
+
+### 3.5 The tag
+
+Everything the response side needs rides in the request tag:
+
+```
+{ header, op_type, per-lane alignment, packet slot, is_fence }
+```
+
+The header carries the instruction's identity — uuid, warp, thread mask,
+`pid`, destination register, writeback flag. The width is fixed in the
+package and asserted against the slice, so the two cannot drift.
+
+### 3.6 Instructions with no response
+
+A store that writes no register, and the early packets of a fence, have
+nothing to wait for. They enter a small queue on the request side and
+complete as soon as the scheduler accepts the request. The result arbiter
+merges that queue with the load results, **load results first**.
+
+---
+
+## 4. The scheduler
+
+[`VX_lsu_scheduler.sv`](../../hw/rtl/core/VX_lsu_scheduler.sv) is
+instantiated once per LSU block in
+[`VX_core.sv`](../../hw/rtl/core/VX_core.sv). It wraps one
+[`VX_mem_scheduler`](../../hw/rtl/libs/VX_mem_scheduler.sv), the generic
+library block also used by the caches' other clients.
+
+### 4.1 Clients
+
+| client | source | present |
+|---|---|---|
+| 0 | the block's `VX_lsu_slice` | always |
+| 1 | the tensor unit's warp-level address generator | on block 0, when the tensor metadata path is enabled |
+
+Arbitration is round-robin, and the granted client's index is prepended to
+the tag so the response is routed back. With a single client the arbiter is
+a pass-through with no tag extension.
+
+Sharing one scheduler is what lets a second memory client reuse the LSU's
+staging, pool, coalescer and cache port rather than owning a port of its own.
+
+### 4.2 The outstanding pool
+
+![Outstanding pool](../assets/img/lsu_pending_pool.svg)
+
+The pool is an index buffer — a free list and a RAM. A request that expects
+a response takes a free slot **when it is accepted**, writes its tag there,
+and carries only the slot index onward:
+
+```
+memory tag = { uuid, slot index, batch index }
+```
 
 Consequences:
 
-- **Up to `CORE_QUEUE_SIZE` reads can be in flight simultaneously per
-  slice.** The index buffer is the per-slice MLP cap.
-- **Responses can arrive out of order.** The tag self-routes back to the
-  right slot; the slot release happens at EOP, not in arrival order.
-- **No CAM / no associative search.** The index buffer is a free-list +
-  RAM, O(1) acquire/release, no full-tag compare anywhere.
-- **Reads and writes share the request queue but not the index buffer.**
-  Writes go straight through (no response expected); only reads consume
-  ibuf slots. This means a stream of writes does not stall behind a full
-  read pending queue.
+- **Responses can arrive in any order.** The slot index routes a response to
+  its tag; the slot is released by the response that clears the last owed
+  lane, not by arrival order.
+- **No associative search.** Acquire and release are constant-time.
+- **The tag stays narrow through the cache hierarchy.** Every level below
+  carries `log2(pool)` bits instead of the instruction header.
+- **Stores do not take a slot.** A stream of stores does not stall behind a
+  full pool; it is limited only by the staging queue.
+- **Atomics do.** They travel as `rw = 0` and return a value.
 
-### 3.3 Optional coalescer
+Each slot also holds a **remaining-lane mask**, written from the request's
+thread mask on acquire and cleared lane by lane as responses arrive.
 
-When `COALESCE_ENABLE` is true (which holds when `LINE_SIZE > WORD_SIZE`),
-adjacent lane requests targeting the same memory line are merged into one
-line request via `VX_mem_coalescer`
-([:226-277](../../hw/rtl/libs/VX_mem_scheduler.sv#L226-L277)). The
-coalescer carries its own `MEM_QUEUE_SIZE` outstanding state, so the
-effective MLP becomes `min(CORE_QUEUE_SIZE, MEM_QUEUE_SIZE)`. The LSU as
-configured today disables coalescing (`LINE_SIZE = WORD_SIZE` per
-[VX_lsu_slice.sv:307-308](../../hw/rtl/core/VX_lsu_slice.sv#L307-L308));
-the cache subsystem uses it.
+### 4.3 Three depths
 
-### 3.4 Vector → channel batching
+| structure | knob | default | holds | sized for |
+|---|---|---|---|---|
+| staging queue | `VX_CFG_LSU_QUEUE_IN_SIZE` | `max(4, 2 × SIMD / lanes)` | whole requests, every lane's address and data | back-pressure |
+| outstanding pool | `VX_CFG_LSU_PENDING_SIZE` | `min(32, max(8, 2 × warps × SIMD / lanes))` | a tag and a lane mask | miss latency |
+| memory-side queue | derived | `max(pool, LSU_LINE_SIZE / word)` | the coalescer's in-flight entries | covering the pool |
 
-When `MERGED_REQS > MEM_CHANNELS` (i.e., the vector request can't fit in
-one memory cycle), `VX_mem_scheduler` slices it into `MEM_BATCHES`
-sub-requests and dispatches them sequentially through a batch counter
-`req_batch_idx_r`, embedding the batch index into the memory tag
-([:334-387](../../hw/rtl/libs/VX_mem_scheduler.sv#L334-L387)). Degenerate
-batches (all-mask-zero) are skipped. Responses carry the batch index back,
-so the scheduler reassembles the wide vector without needing in-order
-response delivery.
+The staging queue and the pool are deliberately decoupled. A staging entry is
+`lanes ×` (address + data + byte-enable + attribute) wide and is expensive to
+deepen; a pool entry is a tag. Decoupling them lets the pool be provisioned
+for about two loads in flight per warp without widening the staging queue.
 
-### 3.5 Response handling (full vs partial)
+The memory-side depth is **not** a knob. It sets the width of the tag's
+index field facing the data cache and must cover the pool, so it is derived
+from the pool size.
 
-Two modes selected by `RSP_PARTIAL`:
+### 4.4 Dispatch and batching
 
-- **`RSP_PARTIAL = 1`** (LSU mode): each per-channel response packet is
-  emitted upstream immediately with `crsp_mask = curr_mask` and
-  `crsp_sop`/`crsp_eop` derived from the running `rsp_rem_mask` /
-  `rsp_sop_r` state. Suits the LSU because writeback can commit lanes as
-  they arrive, in any order.
-- **`RSP_PARTIAL = 0`** (cache mode): per-lane data is written into a
-  small `rsp_store` SRAM as it arrives; the upstream response only fires
-  when `rsp_complete = ~|rsp_rem_mask` so the consumer sees one
-  full-width response per logical request.
+The scheduler is instantiated with `LINE_SIZE = WORD_SIZE` and one memory
+channel per lane, so inside the LSU's scheduler nothing is merged and nothing
+is batched: a request's lanes leave together, one per channel. The library
+block can also slice a request whose lanes outnumber its channels into
+sequential batches, tagging each with a batch index; the LSU does not use
+that mode.
 
-### 3.6 In-flight stall safety
+### 4.5 Partial responses
 
-A simulation-time `STALL_TIMEOUT` watchdog
-([:559-584](../../hw/rtl/libs/VX_mem_scheduler.sv#L559-L584)) tracks each
-allocated ibuf slot's age and asserts if any pending request exceeds
-`STALL_TIMEOUT` cycles. Catches deadlocks during testing without affecting
-synthesis.
+The scheduler runs with `RSP_PARTIAL = 1`. Each memory response beat is
+forwarded upstream at once, carrying the lanes it answers, with
 
----
+- `sop` on the first beat of a slot, and
+- `eop` on the beat that leaves the slot's remaining-lane mask empty.
 
-## 4. Memory-level parallelism — what gives this design its throughput
+So a request whose lanes hit different cache banks, or partly miss, commits
+its lanes as they arrive. The alternative mode, used by clients that need the
+whole vector at once, buffers the lanes and answers once.
 
-In rough order of contribution to MLP:
-
-1. **Index-buffer-decoupled responses.** The LSU need not wait for an
-   in-order response stream from the memory subsystem. `CORE_QUEUE_SIZE`
-   loads can be outstanding; the cache or LMEM port can return them in any
-   order. This is the difference between a blocking LSU (1 outstanding) and
-   a non-blocking LSU (N outstanding); the index-buffer pattern realizes
-   non-blocking with O(1) hardware per outstanding request.
-2. **Coalescing.** When enabled, this collapses redundant traffic before
-   the memory bus, freeing channel cycles and effectively widening MLP from
-   the memory-bus perspective.
-3. **Vector-to-channel batching.** Decouples the issue width
-   (`NUM_LSU_LANES`) from the memory channel count (`MEM_CHANNELS`). The
-   LSU can issue 32-lane vectors over a 4-channel memory bus across 8
-   batches without the consumer caring.
-4. **Read/write decoupling.** Writes don't consume ibuf slots and don't
-   stall behind read backlog (unless the request queue itself is full).
-5. **Per-slice independence.** `ISSUE_WIDTH` slices issue independently
-   and share only the downstream memory subsystem. One slice stalled on a
-   long-latency miss does not block the other slices.
-6. **Partial responses (LSU mode).** The frontend and writeback path commit
-   lanes as soon as their bytes return — no all-or-nothing waiting.
-
-### Performance ceiling
-
-Per-slice peak load throughput =
-`min(CORE_QUEUE_SIZE / avg_load_latency, 1) requests/cycle`. With the
-default `CORE_QUEUE_SIZE = LSUQ_IN_SIZE = 8` (typical gen_config value) and
-50-cycle DRAM latency, that's `8/50 ≈ 0.16` requests/cycle/slice — DRAM is
-the bottleneck. With cache hits at 5 cycles, `8/5 ≈ 1.6` ⇒ slice-saturated;
-the frontend can't issue faster than 1/cycle so the cap binds.
+The one hazard is a slot acquired in the same cycle a response for it is
+consumed. Both events write the slot's mask and the retiring update lands
+last, so the new occupant would inherit its predecessor's remainder, complete
+on its first beat, and release the slot with lanes still owed. The scheduler
+asserts that the two never coincide on one slot.
 
 ---
 
-## 5. Limitations
+## 5. Steering and the two memories — `VX_mem_unit`
 
-- **`CORE_QUEUE_SIZE` is small (default 8).** For long-latency workloads
-  (DRAM-bound) this caps MLP well below what the memory system could absorb.
-- **No prefetching.** All requests are demand-driven. Strided patterns
-  (the common GEMM/SpMV cases) get no head start.
-- **No per-address fence granularity.** A fence is a total slice barrier;
-  `fence.tso`-style ordering between specific address ranges is not modeled.
-- **Coalescer is single-cycle.** Two requests issued on consecutive cycles
-  to the same line each pay their own request — no temporal coalescing
-  window. Mostly fine for SIMT (one wide issue per cycle) but limits
-  scalar-style workloads.
-- **No request reordering / no critical-word-first.** Requests issue in
-  arrival order. A long-latency cache miss queued first behind which a
-  fast LMEM hit got queued blocks the LMEM hit until the miss drains the
-  request queue.
-- **Misalignment is fatal.** No splitting of unaligned accesses; the
-  software contract requires aligned addresses (see
-  [VX_lsu_slice.sv:184](../../hw/rtl/core/VX_lsu_slice.sv#L184)).
-- **Multi-PID tracker capacity = `LSUQ_IN_SIZE`.** A pathologically
-  heavy multi-PID instruction sequence can starve the allocator before the
-  request queue fills. Usually balanced but visible at extreme widths.
-- **No request priority across lanes.** All-lane vectors are atomic units;
-  the scheduler can't issue 4 lanes now and 4 lanes later if one channel
-  is congested — it batches deterministically.
+[`VX_mem_unit.sv`](../../hw/rtl/core/VX_mem_unit.sv).
 
----
+### 5.1 `VX_lmem_switch`
 
-## 6. Proposed improvements
+Splits the lanes of **one** request by `is_addr_local`. Both subsets may be
+non-empty: a request is accepted when whichever subsets exist are accepted.
+The attribute passes through untouched on both paths.
 
-In rough order of impact-per-effort:
+### 5.2 Local path
 
-1. **Increase `CORE_QUEUE_SIZE` (deep ibuf).** Single-parameter knob; fold
-   the index buffer onto BRAM when the size grows past LUT economics.
-   Doubles MLP at high latency, ~free when the request stream isn't
-   bursty. Watch for area growth in the response demux logic
-   ([:437-525](../../hw/rtl/libs/VX_mem_scheduler.sv#L437-L525)) which
-   scales with CORE_QUEUE_SIZE.
-2. **Stride prefetcher.** Hook into the address stream pre-AGU; detect
-   stride-1 / fixed-stride patterns over a small history window and issue
-   speculative loads. Output goes into a small prefetch buffer that the
-   AGU consults first. Biggest win on dense GEMM and stencil codes.
-3. **Temporal coalescer window.** Extend the existing coalescer to look
-   back N cycles for line-matching pending requests. Implementation: a
-   small CAM over the last N memory tags. Effective on stripe-fetch
-   patterns where consecutive cycles touch the same line.
-4. **Critical-word-first / response-priority hints.** Tag requests with a
-   "fast-path" hint propagated to the memory subsystem; on the response
-   side, allow fast-path responses to overtake slow ones in the response
-   buffer. Requires memory-side support (the cache subsystem already
-   knows hit-vs-miss).
-5. **Per-address-range fences.** Add a `fence_addr_lo` /
-   `fence_addr_hi` filter to the fence-lock condition so only requests
-   inside the range stall. Enables `fence.tso` and avoids unnecessary
-   barriers.
-6. **Unaligned access splitting.** Two-cycle access for cross-line
-   unaligned loads/stores, transparent to software. Removes a sharp edge
-   in the programming model at modest hardware cost (an extra batch
-   counter and a merge buffer in the response path).
-7. **Decoupled scheduler-per-bank.** Today one scheduler dispatches to all
-   `MEM_CHANNELS` simultaneously; one congested channel stalls the whole
-   batch. Per-channel sub-schedulers with independent batching can hide
-   bank-conflict latency for SIMT codes that already shuffle threads across
-   banks.
+Each LSU block has its **own** adapter into
+[`VX_local_mem`](../../hw/rtl/mem/VX_local_mem.sv). A shared adapter would
+close a loop through its pack and unpack buffers and deadlock with more than
+one block.
 
-The first two — deeper queue and a stride prefetcher — together likely
-double DRAM-bound MLP. The other items are surgical fixes for specific
-patterns and warrant measurement before commitment.
+Local memory is a banked SRAM, so lanes addressing different banks are served
+in the same cycle. Its second port is shared by the direct-memory clients —
+the DXA writes and the tensor unit's reads.
+
+### 5.3 Global path
+
+| stage | role |
+|---|---|
+| `VX_mem_coalescer` | merges word-sized lanes onto data-cache-word channels; lanes addressing the same cache word become one request |
+| `VX_lsu_adapter` | turns the lane bundle into one memory bus per channel; registers the request boundary |
+| `VX_dcr_flush` | injects the host's cache-flush request, on channel 0 of block 0 |
+
+The coalescer exists when there is more than one lane and the data-cache
+word is wider than an LSU word; otherwise the path is a pass-through that
+asserts the cache's tag can hold the pool's slot index. An atomic lane is
+marked `no_merge`: two read-modify-writes to one word are two operations.
+
+The number of cache ports follows from the word sizes:
+
+```
+DCACHE_CHANNELS = max(1, NUM_LSU_LANES × LSU_WORD_SIZE / DCACHE_WORD_SIZE)
+DCACHE_NUM_REQS = NUM_LSU_BLOCKS × DCACHE_CHANNELS
+```
+
+### 5.4 Busy reporting
+
+The block reports **empty** only when no store is in flight anywhere on the
+global path — not in the coalescer, and not in the adapter's request buffer.
+That signal folds into the core's `busy`, so the end-of-kernel cache flush is
+ordered strictly behind the last store.
 
 ---
 
-## 7. Notes on design vs implementation
+## 6. The slice — response side
 
-This document describes the *design* — pipeline stages, queue discipline,
-the index-buffer trick for non-blocking responses, the coalescer/batcher
-roles, the read/write decoupling, the partial-response policy. None of
-those depend on Verilog. The same design can be (and is, with deliberate
-simplifications) realized in C++ in the SimX functional simulator; see the
-LSU/coalescer description in
-[simx_simulator_architecture.md](simx_simulator_architecture.md) for that
-implementation.
+The response tag is unpacked back into the header, operation, per-lane
+alignment and packet slot. Each lane is then formatted:
 
-The Verilog implementation specifics — `VX_elastic_buffer` sizing,
-`VX_index_buffer` structure, `VX_mem_arb` placement — are realization
-choices, not design choices. They optimize for FPGA/ASIC timing closure
-and don't change the architectural semantics described above.
+| format | result |
+|---|---|
+| `B`, `H`, `W` | the sub-word at the saved alignment, sign-extended |
+| `BU`, `HU`, `WU` | the same, zero-extended |
+| `D` | the full word |
+| `W`, float destination, `XLEN = 64` | NaN-boxed: upper 32 bits all ones |
+
+The formatter needs the alignment the request was issued with, which is why
+it rides in the tag rather than being recomputed.
+
+---
+
+## 7. Memory-level parallelism
+
+What each mechanism contributes, in rough order:
+
+| mechanism | effect |
+|---|---|
+| outstanding pool | up to `LSU_PENDING_SIZE` loads in flight per block, answered in any order |
+| partial responses | a request's lanes commit as they return, not all-or-nothing |
+| store decoupling | stores take no pool slot and do not wait behind loads |
+| coalescing | lanes to one cache word cost one request, freeing channels |
+| per-block independence | `ISSUE_WIDTH` slices issue independently; one stalled on a miss does not block the others |
+| stack interleave | a warp-wide stack access is one line, not `NUM_THREADS` conflicting lines |
+
+The pool depth bounds the throughput of a block at
+`min(1, LSU_PENDING_SIZE / average load latency)` requests per cycle. With
+hits the slice's own one-request-per-cycle rate binds; at long latencies the
+pool does.
+
+---
+
+## 8. Configuration
+
+[`VX_config.toml`](../../VX_config.toml) `[lsu]`:
+
+| knob | default | meaning |
+|---|---|---|
+| `VX_CFG_NUM_LSU_BLOCKS` | issue width | slices, schedulers, memory ports |
+| `VX_CFG_NUM_LSU_LANES` | SIMD width | lanes per request |
+| `VX_CFG_LSU_STACK_INTERLEAVE_ENABLE` | true | §2.1 |
+| `VX_CFG_LSU_LINE_SIZE` | `min(lanes × XLEN/8, L1_LINE_SIZE)` | the coalescer's default output granule |
+| `VX_CFG_LSU_QUEUE_IN_SIZE` | §4.3 | staging depth |
+| `VX_CFG_LSU_PENDING_SIZE` | §4.3 | outstanding-pool depth |
+
+`NUM_THREADS` must be a power of two for the stack interleave, and a stack
+access must fit a word (`FLEN ≤ XLEN`).
+
+---
+
+## 9. SimX model and performance counters
+
+[`LsuUnit`](../../sim/simx/lsu_unit.h) mirrors the structure with the same
+two depths: a staging ring of `VX_CFG_LSU_QUEUE_IN_SIZE` and a pending table
+of `VX_CFG_LSU_PENDING_SIZE` per block, a `FenceController` for the slice
+barrier, and `LsuUopGen` for the packed-load micro-ops. The memory side
+follows the RTL module for module — `local_mem_switch`, `mem_coalescer`,
+`lsu_mem_adapter` ([`sim/simx/mem/`](../../sim/simx/mem/)).
+
+Perf: MPM class `MEM` — `MEM_READS` (0xB03), `MEM_WRITES` (0xB04), `MEM_LT`
+(0xB05, accumulated latency), `MEM_BANK_ST` (0xB06, bank conflicts),
+`LMEM_READS` / `LMEM_WRITES` / `LMEM_BANK_ST` (0xB07–0xB09), and
+`COALESCER_MISS` (0xB0A).
+
+A simulation-only watchdog in the scheduler tracks each pool slot's age and
+asserts when one exceeds a fixed cycle bound, which turns a lost response
+into a failure at the slot that lost it.
+
+---
+
+## 10. Not implemented
+
+- **Misaligned access.** No splitting; the software contract requires
+  aligned addresses.
+- **Prefetching.** Every request is demand-driven.
+- **Address-ranged fences.** A fence is a total barrier on its slice; there
+  is no ordering between specific address ranges.
+- **Temporal coalescing.** Lanes of one request merge; two requests issued
+  on consecutive cycles to the same cache word each pay their own request.
+- **Request reordering.** Requests leave the staging queue in arrival order,
+  so a request behind one that is back-pressured waits with it.

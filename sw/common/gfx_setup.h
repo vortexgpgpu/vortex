@@ -155,6 +155,24 @@ static inline bool EdgeEquation(vec3f edges[3], const vec4f& v0,
   return true;
 }
 
+// A depth-plane term in Q7.24, stored modulo 2^32. The constant term is the plane
+// at the screen origin, which leaves Q7.24's +-128 range for a steep plane even
+// though the depth at every covered pixel is in range, and an out-of-range float
+// to int conversion is undefined (RISC-V saturates, x86 yields INT_MIN). Late-Z
+// and early-Z both evaluate the plane mod 2^32, so the wrapped term is exact. A
+// term past 2^39 (non-finite, or a degenerate sliver) has no usable depth.
+static inline FloatA PlaneToFixed(float f) {
+  float scaled = f * 16777216.0f;   // 2^24
+  float mag = __builtin_fabsf(f);
+  if (mag < 128.0f) {
+    return FloatA::make((int32_t)scaled);
+  }
+  if (!(mag < 549755813888.0f)) {   // 2^39: scaled would overflow int64
+    return FloatA::make(0);
+  }
+  return FloatA::make((int32_t)(uint32_t)(uint64_t)(int64_t)scaled);
+}
+
 // Normalize the edge matrix by 1/maxVal and convert to Q15.16.
 static inline void EdgeToFixed(vec3e_t out[3], const vec3f in[3]) {
   float maxVal = __builtin_fabsf(in[0].x);
@@ -271,9 +289,9 @@ static inline bool setup_triangle(const setup_vertex_t& v0,
     // C' evaluated so an integer-pixel MAC samples Z at the pixel center
     // (X+0.5, Y+0.5) — matching the +0.5 half-pixel offset the coverage edges use.
     float zc = ps0.z - za * ps0.x - zb * ps0.y + 0.5f * (za + zb);
-    out_prim.attribs.z.x = FloatA(za);
-    out_prim.attribs.z.y = FloatA(zb);
-    out_prim.attribs.z.z = FloatA(zc);
+    out_prim.attribs.z.x = PlaneToFixed(za);
+    out_prim.attribs.z.y = PlaneToFixed(zb);
+    out_prim.attribs.z.z = PlaneToFixed(zc);
   }
   // Perspective-correct varyings: premultiply each colour/texcoord by the
   // vertex's 1/w and carry a separate 1/w plane; the FS interpolates every plane

@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 786" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="786" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Four ways an argument reaches an accelerator — one per SIMT scope</text>
+
+  <text x="24" y="56" class="tt">Classify each argument by the scope it is constant over, then use the cheapest mechanism for that scope.</text>
+  <rect x="24" y="76" width="308" height="630" class="grp"/>
+  <text x="36" y="100" class="tb">DCR — per-dispatch</text>
+  <text x="36" y="120" class="tt">constant for the whole launch</text>
+  <rect x="372" y="76" width="308" height="630" class="grp"/>
+  <text x="384" y="100" class="tb">lane packing — per-warp</text>
+  <text x="384" y="120" class="tt">uniform across the warp at the call</text>
+  <rect x="720" y="76" width="308" height="630" class="grp"/>
+  <text x="732" y="100" class="tb">register window — per-thread</text>
+  <text x="732" y="120" class="tt">one value per lane, in registers</text>
+  <rect x="1068" y="76" width="308" height="630" class="grp"/>
+  <text x="1080" y="100" class="tb">custom load — a block in memory</text>
+  <text x="1080" y="120" class="tt">an array already in memory</text>
+  <rect x="40" y="140" width="276" height="110" rx="6" class="sw"/>
+  <text x="52" y="162" class="t">host runtime</text>
+  <text x="52" y="184" class="ts">vx_dcr_write(dev, addr, value)</text>
+  <text x="52" y="200" class="ts">before the kernel launches</text>
+  <text x="52" y="224" class="ts">wrapped in the unit's host header</text>
+  <rect x="388" y="140" width="276" height="110" rx="6" class="core"/>
+  <text x="400" y="162" class="t">kernel — four scalars</text>
+  <text x="400" y="184" class="ts">arg0 … arg3, valid in lane 0,</text>
+  <text x="400" y="200" class="ts">computed before any divergence</text>
+  <rect x="736" y="140" width="276" height="110" rx="6" class="core"/>
+  <text x="748" y="162" class="t">kernel — register group</text>
+  <text x="748" y="184" class="ts">the work item the compiler already</text>
+  <text x="748" y="200" class="ts">holds in consecutive registers:</text>
+  <text x="748" y="216" class="ts">floats in f, integers in x</text>
+  <rect x="1084" y="140" width="276" height="110" rx="6" class="mem"/>
+  <text x="1096" y="162" class="t">memory</text>
+  <text x="1096" y="184" class="ts">a table or descriptor array in</text>
+  <text x="1096" y="200" class="ts">shared or device memory</text>
+  <rect x="40" y="300" width="276" height="150" rx="6" class="unit"/>
+  <text x="52" y="322" class="t">device control register</text>
+  <text x="52" y="344" class="ts">broadcast on the DCR bus; each unit</text>
+  <text x="52" y="360" class="ts">latches the addresses it owns</text>
+  <text x="52" y="384" class="ts">persists across launches until</text>
+  <text x="52" y="400" class="ts">rewritten</text>
+  <rect x="388" y="300" width="276" height="150" rx="6" class="unit"/>
+  <text x="400" y="322" class="t">vx_wgather</text>
+  <text x="400" y="344" class="ts">one instruction scatters the four</text>
+  <text x="400" y="360" class="ts">scalars into the lanes of ONE register:</text>
+  <text x="400" y="376" class="ts">lane i holds argument i</text>
+  <text x="400" y="400" class="ts">the lane dimension now means</text>
+  <text x="400" y="416" class="ts">argument index, not thread</text>
+  <rect x="736" y="300" width="276" height="150" rx="6" class="unit"/>
+  <text x="748" y="322" class="t">macro-op → micro-ops</text>
+  <text x="748" y="344" class="ts">the sequencer emits one micro-op per</text>
+  <text x="748" y="360" class="ts">cycle; each reads up to 3 registers</text>
+  <text x="748" y="376" class="ts">through the operand collector</text>
+  <text x="748" y="400" class="ts">⌈window ÷ 3⌉ micro-ops</text>
+  <rect x="1084" y="300" width="276" height="150" rx="6" class="unit"/>
+  <text x="1096" y="322" class="t">warp-level load</text>
+  <text x="1096" y="344" class="ts">lane T loads word T of the block;</text>
+  <text x="1096" y="360" class="ts">no register is written</text>
+  <text x="1096" y="384" class="ts">reuses the LSU scheduler as a</text>
+  <text x="1096" y="400" class="ts">second client</text>
+  <rect x="40" y="510" width="276" height="110" rx="6" class="mem"/>
+  <text x="52" y="532" class="t">unit configuration state</text>
+  <text x="52" y="554" class="ts">mode, format, base addresses,</text>
+  <text x="52" y="570" class="ts">callback entry</text>
+  <rect x="388" y="510" width="276" height="110" rx="6" class="mem"/>
+  <text x="400" y="532" class="t">in-flight slot</text>
+  <text x="400" y="554" class="ts">the unit reads the lanes of rs1</text>
+  <text x="400" y="570" class="ts">as its descriptor</text>
+  <rect x="736" y="510" width="276" height="110" rx="6" class="mem"/>
+  <text x="748" y="532" class="t">in-flight slot</text>
+  <text x="748" y="554" class="ts">each micro-op streams its words</text>
+  <text x="748" y="570" class="ts">straight into the slot</text>
+  <rect x="1084" y="510" width="276" height="110" rx="6" class="mem"/>
+  <text x="1096" y="532" class="t">unit-local RAM</text>
+  <text x="1096" y="554" class="ts">memory → RAM in one step; the</text>
+  <text x="1096" y="570" class="ts">payload never enters a register</text>
+  <path d="M 178 250 L 178 300" class="flow"/>
+  <path d="M 178 450 L 178 510" class="flow"/>
+  <path d="M 526 250 L 526 300" class="flow"/>
+  <path d="M 526 450 L 526 510" class="flow"/>
+  <path d="M 874 250 L 874 300" class="flow"/>
+  <path d="M 874 450 L 874 510" class="flow"/>
+  <path d="M 1222 250 L 1222 300" class="flow"/>
+  <path d="M 1222 450 L 1222 510" class="flow"/>
+  <text x="40" y="654" class="ts">cost: none — programmed once per launch</text>
+  <text x="40" y="676" class="tt">in use: DXA descriptor; RTU scene and callbacks</text>
+  <text x="388" y="654" class="ts">cost: one instruction; hoists out of a loop</text>
+  <text x="388" y="676" class="tt">in use: DXA launch operand; RTU trace config</text>
+  <text x="736" y="654" class="ts">cost: ⌈n ÷ 3⌉ issue cycles, no copies</text>
+  <text x="736" y="676" class="tt">in use: RTU ray in f0–f7; tensor fragments</text>
+  <text x="1084" y="654" class="ts">cost: one instruction per block</text>
+  <text x="1084" y="676" class="tt">in use: tensor sparse and MX metadata</text>
+  <text x="24" y="740" class="tt">A real unit combines several: a copy engine takes its descriptor from DCRs and its per-call operand lane-packed; a tensor core takes fragments from a register window and metadata from a custom load.</text>
+  <text x="24" y="762" class="tt">Green = host software · purple = kernel code · blue = core mechanism · gold = where the argument lands.</text>
+</svg>

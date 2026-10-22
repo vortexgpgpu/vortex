@@ -60,9 +60,9 @@ public:
 
 	struct PerfStats {
 		uint64_t latency = 0;
-		uint64_t tbuf_stalls = 0;      // cycles stalled on TcuTbufA/TcuSharedB readiness
-		uint64_t tbuf_cache_hits = 0;  // WGMMA entries with all lines already resident (cross-WGMMA reuse)
-		uint64_t lmem_reads = 0;       // sum of TcuTbufA + TcuSharedB LmemReqs issued
+		uint64_t tbuf_stalls = 0;      // cycles a WGMMA uop waits on its A stripe or the B row, summed over buffers
+		uint64_t tbuf_cache_hits = 0;  // cycles the resident B row serves the representative block
+		uint64_t lmem_reads = 0;       // bank-row reads issued by the A and B buffers
 
 		PerfStats& operator+=(const PerfStats& rhs) {
 			this->latency          += rhs.latency;

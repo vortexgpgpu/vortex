@@ -57,8 +57,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // Fire the ray on the RTU (v2 single-issue trace).
   vx_ray_t ray = { {ro.x, ro.y, ro.z}, {rd.x, rd.y, rd.z}, 0.001f, 1e30f };
-  uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_wtrace(scene_lo, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uintptr_t scene_ptr = arg->scene_addr;
+  uint32_t h   = vx_rt_wtrace(scene_ptr, 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
   vx_hit_t hit;
   uint32_t sts = vx_rt_wait(h, &hit);
 

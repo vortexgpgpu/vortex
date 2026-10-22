@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 800" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+  </style>
+
+  <rect x="0" y="0" width="1400" height="800" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Last-level cache bank — atomic commit datapath (VX_cache_amo, IS_LLC = 1)</text>
+
+  <!-- read forward (top) -->
+  <path d="M 1216 150 L 1216 96 L 650 96 L 650 150" class="flowb"/>
+  <text x="664" y="88" class="lbl">read forward — queued and settling bytes override the array word, byte by byte</text>
+
+  <!-- ══════════ pipeline row ══════════ -->
+  <rect x="24" y="150" width="212" height="200" rx="6" class="unit"/>
+  <text x="36" y="172" class="tb">bank input</text>
+  <text x="36" y="194" class="ts">priority: init, replay, fill,</text>
+  <text x="36" y="210" class="ts">flush, core request</text>
+  <text x="36" y="234" class="ts">the core-request slot is</text>
+  <text x="36" y="250" class="ts">shared by a real request</text>
+  <text x="36" y="266" class="ts">and the synthetic writeback</text>
+  <text x="36" y="294" class="tt">a new atomic waits while</text>
+  <text x="36" y="310" class="tt">commit_busy or</text>
+  <text x="36" y="326" class="tt">req_input_defer is up</text>
+
+  <rect x="276" y="150" width="212" height="200" rx="6" class="unit"/>
+  <text x="288" y="172" class="tb">S0 — lookup</text>
+  <text x="288" y="194" class="ts">tag compare, way select</text>
+  <text x="288" y="218" class="ts">prediction:</text>
+  <text x="288" y="234" class="ts">atomic ∧ hit ∧ op ≠ LR</text>
+  <text x="288" y="250" class="ts">raises commit_busy early</text>
+  <text x="288" y="278" class="ts">miss: MSHR entry like a</text>
+  <text x="288" y="294" class="ts">load; the fill replays the</text>
+  <text x="288" y="310" class="ts">atomic through this path</text>
+  <text x="288" y="336" class="tt">+ PIPE_EX stages when deep</text>
+
+  <rect x="528" y="150" width="244" height="200" rx="6" class="unit"/>
+  <text x="540" y="172" class="tb">commit stage (stC)</text>
+  <text x="540" y="194" class="ts">amo_hit = atomic ∧ hit ∧ core req</text>
+  <text x="540" y="214" class="ts">old word = array word merged</text>
+  <text x="540" y="230" class="ts">with forwarded bytes</text>
+  <text x="540" y="250" class="ts">SC: sc_fail = ¬ reservation</text>
+  <text x="540" y="270" class="ts">do_store = hit ∧ op ≠ LR ∧ ¬ sc_fail</text>
+  <text x="540" y="298" class="ts">select the atomic's 8-byte lane,</text>
+  <text x="540" y="314" class="ts">shift operands down to bit 0</text>
+  <text x="540" y="336" class="tt">the response leaves from here</text>
+
+  <rect x="812" y="150" width="212" height="200" rx="6" class="unit"/>
+  <text x="824" y="172" class="tb">compute stage</text>
+  <text x="824" y="194" class="ts">holds one operation:</text>
+  <text x="824" y="210" class="ts">old, rhs, cmp, op, width,</text>
+  <text x="824" y="226" class="ts">lane, byte offset</text>
+  <text x="824" y="250" class="ts">VX_amo_alu</text>
+  <text x="824" y="266" class="ts">then re-align to the lane</text>
+  <text x="824" y="294" class="ts">a full cycle for the adder</text>
+  <text x="824" y="310" class="ts">and comparators, off the</text>
+  <text x="824" y="326" class="ts">response path</text>
+
+  <rect x="1064" y="150" width="312" height="200" rx="6" class="mem"/>
+  <text x="1076" y="172" class="tb">writeback queue</text>
+  <text x="1076" y="194" class="ts">2 to 4 entries, one per {line, word, lane}</text>
+  <text x="1076" y="214" class="ts">a result for a queued target byte-merges</text>
+  <text x="1076" y="230" class="ts">into that entry instead of adding one</text>
+  <text x="1076" y="254" class="ts">head drains as a synthetic store:</text>
+  <text x="1076" y="270" class="ts">rw = 1, amo_valid = 0, lane byteen</text>
+  <text x="1076" y="294" class="ts">settling entry: the drained head is kept</text>
+  <text x="1076" y="310" class="ts">2 cycles, until the array write lands</text>
+  <text x="1076" y="336" class="tt">a younger plain store clears its bytes</text>
+
+  <path d="M 236 250 L 276 250" class="flow"/>
+  <path d="M 488 250 L 528 250" class="flow"/>
+  <path d="M 772 250 L 812 250" class="flow"/>
+  <path d="M 1024 250 L 1064 250" class="flow"/>
+  <text x="776" y="242" class="lbk">store</text>
+
+  <!-- writeback loop -->
+  <path d="M 1220 350 L 1220 388 L 130 388 L 130 350" class="flowg"/>
+  <text x="724" y="380" class="lbg">synthetic writeback (wb_fire) — re-enters through the core-request slot</text>
+
+  <!-- ══════════ response + reservation ══════════ -->
+  <rect x="276" y="430" width="400" height="156" rx="6" class="core"/>
+  <text x="288" y="452" class="tb">response queue → core</text>
+  <text x="288" y="474" class="ts">LR, AMO*, CAS: the old word, left in place in the line word</text>
+  <text x="288" y="490" class="ts">and byte-masked by the request byteen — no barrel shift</text>
+  <text x="288" y="510" class="ts">SC: 0 or 1, shifted to the addressed byte offset</text>
+  <text x="288" y="534" class="ts">the requester extracts its sub-word by address</text>
+  <text x="288" y="566" class="tt">fires with the commit, one stage before the ALU result exists</text>
+
+  <rect x="716" y="430" width="400" height="156" rx="6" class="unit"/>
+  <text x="728" y="452" class="tb">VX_amo_unit — reservation stations</text>
+  <text x="728" y="474" class="ts">read one stage ahead at the line's index, so the entry</text>
+  <text x="728" y="490" class="ts">is registered and valid at the commit stage</text>
+  <text x="728" y="510" class="ts">LR → reserve · SC → check, then clear own</text>
+  <text x="728" y="526" class="ts">do_store or a plain store → invalidate the line</text>
+  <text x="728" y="550" class="ts">driven by the original request's hart_id</text>
+  <text x="728" y="566" class="tt">VX_CFG_AMO_RS_SIZE stations per bank</text>
+
+  <path d="M 600 350 L 600 410 L 476 410 L 476 430" class="flow"/>
+  <path d="M 700 350 L 700 410 L 916 410 L 916 430" class="flow"/>
+
+  <!-- ══════════ ordering controls ══════════ -->
+  <rect x="24" y="620" width="1352" height="150" class="grp"/>
+  <text x="36" y="644" class="tb">Ordering controls</text>
+
+  <rect x="40" y="658" width="430" height="96" rx="6" class="box"/>
+  <text x="52" y="680" class="t">commit_busy</text>
+  <text x="52" y="700" class="ts">up from the S0 prediction through compute and writeback;</text>
+  <text x="52" y="716" class="ts">holds off new core requests, so atomic instructions</text>
+  <text x="52" y="732" class="ts">commit one at a time. Replays are not blocked.</text>
+
+  <rect x="486" y="658" width="430" height="96" rx="6" class="box"/>
+  <text x="498" y="680" class="t">chain_stall</text>
+  <text x="498" y="700" class="ts">stalls the pipe one cycle when the request at the commit</text>
+  <text x="498" y="716" class="ts">stage targets the line being computed — a chained replay</text>
+  <text x="498" y="732" class="ts">reads the previous result from the queue, not the array</text>
+
+  <rect x="932" y="658" width="428" height="96" rx="6" class="box"/>
+  <text x="944" y="680" class="t">req_input_defer</text>
+  <text x="944" y="700" class="ts">holds a request at the input while an atomic to its line</text>
+  <text x="944" y="716" class="ts">waits in the MSHR or is allocating; consumes a registered</text>
+  <text x="944" y="732" class="ts">MSHR probe, so the CAM stays off the ready path</text>
+</svg>

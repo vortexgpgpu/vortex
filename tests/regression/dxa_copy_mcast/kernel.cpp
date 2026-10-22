@@ -14,9 +14,9 @@
 constexpr uint32_t kDescSrc = 0;
 
 __kernel void kernel_main(kernel_arg_t* arg) {
-  const uint32_t cta_id    = get_local_group_id();
-  const uint32_t tile_rows = arg->tile_rows;
-  const uint32_t tile_cols = arg->tile_cols;
+  const size_t   cta_id    = get_local_group_id();
+  const size_t   tile_rows = arg->tile_rows;
+  const size_t   tile_cols = arg->tile_cols;
   const uint32_t num_recv  = arg->num_recv;
 
   auto shmem = reinterpret_cast<TYPE*>(__local_mem());
@@ -42,9 +42,9 @@ __kernel void kernel_main(kernel_arg_t* arg) {
   // Store the received tile to dst region for host verification.
   // Layout: dst[cta_id * tile_elems + r * tile_cols + c]
   auto dst = reinterpret_cast<TYPE*>(arg->dst_addr);
-  const uint32_t tile_elems = tile_rows * tile_cols;
-  const uint32_t l_col = threadIdx.x;
-  for (uint32_t r = 0; r < tile_rows; ++r) {
+  const size_t tile_elems = tile_rows * tile_cols;
+  const size_t l_col = threadIdx.x;
+  for (size_t r = 0; r < tile_rows; ++r) {
     if (l_col < tile_cols) {
       dst[cta_id * tile_elems + r * tile_cols + l_col] =
           shmem[r * tile_cols + l_col];

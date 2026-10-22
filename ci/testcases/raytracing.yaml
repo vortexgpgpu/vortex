@@ -1,8 +1,7 @@
 # Test cases for `raytracing` (RTU), ported from regression.sh.in raytracing().
 #
-# simx is the only backend that validates the RTU end-to-end today; rtlsim /
-# opae / xrt RTU coverage lands when the RTL side comes online. xlen is pinned to
-# 32 (the RTU SimX-parity reference build); 64-bit RTU coverage is a follow-on.
+# xlen defaults to 32 (the RTU SimX-parity reference build); rt_suite-x64 runs
+# the suite on RV64.
 category: raytracing
 defaults:
   xlen:
@@ -23,6 +22,20 @@ tests:
 # runs the single-trace set and simx runs everything.
 - id: rt_suite
   via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/raytracing
+  target: run-{driver}
+  configs: -DVX_CFG_EXT_RTU_ENABLE
+
+# The same suite on RV64. There rt_smoke_chs puts its scene and payload above
+# 4 GiB, so a trace that narrows either pointer misses or loses its payload, and
+# the FP hit-window reads must come back NaN-boxed.
+- id: rt_suite-x64
+  via: make-run
+  xlen:
+  - 64
   drivers:
   - simx
   - rtlsim

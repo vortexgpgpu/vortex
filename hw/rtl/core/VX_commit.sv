@@ -33,22 +33,27 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     VX_commit_if commit_arb_if[`VX_CFG_ISSUE_WIDTH]();
     wire [`VX_CFG_ISSUE_WIDTH-1:0] committed_warps;
+    wire [`VX_CFG_ISSUE_WIDTH-1:0][PER_ISSUE_WARPS-1:0] commit_eop_wis;
 
     for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_commit_arbs
 
         wire [NUM_EX_UNITS-1:0]            valid_in;
-        wire [NUM_EX_UNITS-1:0][OUT_DATAW-1:0] data_in;
+        wire [NUM_EX_UNITS-1:0][PER_ISSUE_WARPS+OUT_DATAW-1:0] data_in;
         wire [NUM_EX_UNITS-1:0]            ready_in;
 
+        // Decoded ahead of the output register so each warp's release reads
+        // its own flop.
         for (genvar j = 0; j < NUM_EX_UNITS; ++j) begin : g_data_in
+            wire [PER_ISSUE_WARPS-1:0] eop_wis = PER_ISSUE_WARPS'(commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.eop)
+                                              << wid_to_wis(commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data.wid);
             assign valid_in[j] = commit_if[j * `VX_CFG_ISSUE_WIDTH + i].valid;
-            assign data_in[j]  = commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data;
+            assign data_in[j]  = {eop_wis, commit_if[j * `VX_CFG_ISSUE_WIDTH + i].data};
             assign commit_if[j * `VX_CFG_ISSUE_WIDTH + i].ready = ready_in[j];
         end
 
         VX_stream_arb #(
             .NUM_INPUTS (NUM_EX_UNITS),
-            .DATAW      (OUT_DATAW),
+            .DATAW      (PER_ISSUE_WARPS + OUT_DATAW),
             .ARBITER    ("P"),
             .OUT_BUF    (1)
         ) commit_arb (
@@ -57,7 +62,7 @@ module VX_commit import VX_gpu_pkg::*; #(
             .valid_in   (valid_in),
             .ready_in   (ready_in),
             .data_in    (data_in),
-            .data_out   (commit_arb_if[i].data),
+            .data_out   ({commit_eop_wis[i], commit_arb_if[i].data}),
             .valid_out  (commit_arb_if[i].valid),
             .ready_out  (commit_arb_if[i].ready),
             `UNUSED_PIN (sel_out)
@@ -111,6 +116,7 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign writeback_if[i].valid     = commit_arb_if[i].valid;
         assign writeback_if[i].data.uuid = commit_arb_if[i].data.uuid;
         assign writeback_if[i].data.wis  = wid_to_wis(commit_arb_if[i].data.wid);
+        assign writeback_if[i].data.eop_wis = commit_eop_wis[i];
         assign writeback_if[i].data.cta_id = commit_arb_if[i].data.cta_id;
         assign writeback_if[i].data.sid  = commit_arb_if[i].data.sid;
         assign writeback_if[i].data.PC   = commit_arb_if[i].data.PC;

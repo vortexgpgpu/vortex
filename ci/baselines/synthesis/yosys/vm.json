@@ -1,28 +1,28 @@
 {
   "vm": {
     "clock_mhz": 400,
-    "config_hash": "87c316a577a47ae1",
-    "configs": "",
+    "config_hash": "6437095ffd66d32f",
+    "configs": "-DVX_CFG_NUM_THREADS=8 -DVX_CFG_NUM_WARPS=8",
     "dut": "vm",
     "result": {
-      "build_time_s": 680,
-      "cell_area_um2": 103431.322,
-      "cell_count": 1007116,
+      "build_time_s": 946,
+      "cell_area_um2": 146445.005,
+      "cell_count": 1368872,
       "env": {
         "corner": "tt",
         "pdk": "asap7",
-        "sta": "2.7.0",
-        "sv2v": "sv2v v0.0.13-3-g80a2f0c",
+        "sta": "3.1.0",
+        "sv2v": "sv2v v0.0.13-13-g493a88f",
         "vt": "rvt",
         "xlen": 32,
-        "yosys": "Yosys 0.57+157"
+        "yosys": "Yosys 0.69"
       },
-      "fmax_mhz": 973.425,
-      "power_mw": 134.0,
-      "seq_area_um2": 43729.211,
-      "sram_area_um2": 60052.8,
+      "fmax_mhz": 1028.489,
+      "power_mw": 185.0,
+      "seq_area_um2": 67394.009,
+      "sram_area_um2": 272849.6,
       "tns_ns": 0.0,
-      "wns_ns": 1.473
+      "wns_ns": 1.528
     }
   }
 }

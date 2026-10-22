@@ -39,6 +39,9 @@ Key features:
     definitions that can be overridden from -D flags.
   - Resolved mode (-r/--resolved): fully evaluates expressions and emits
     resolved constants (always enabled for cflags).
+  - Hardware profiles (--profile): a named machine in profiles/<name>.json layered
+    between the TOML defaults and explicit -D flags. --merge-configs prints the
+    caller's CONFIGS with the profile folded in, one -D per macro.
 """
 
 from __future__ import annotations
@@ -46,6 +49,7 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+import json
 import os
 import re
 import shlex
@@ -309,6 +313,13 @@ class EnumSpec:
   values: List[Any]
 
 
+def _enum_of_flag(name: str, enums: Dict[str, EnumSpec]) -> Optional[str]:
+  # The enum a bare -D<ENUM>_<value> flag selects. A value may itself contain
+  # '_', so the enum name is matched as a prefix instead of splitting the flag.
+  owners = [e for e in enums if name.startswith(e + "_")]
+  return max(owners, key=len) if owners else None
+
+
 def _load_enums(toml_data: Dict[str, Any]) -> Dict[str, EnumSpec]:
   enums = toml_data.get("enum", None)
   if enums is None:
@@ -450,10 +461,10 @@ def _apply_overrides(defs: List[Define], enums: Dict[str, EnumSpec]) -> Tuple[Di
       set_enum(d.name, _scalar(d.value))
       continue
 
-    if "_" in d.name and d.value is None:
-      base, suffix = d.name.rsplit("_", 1)
-      if base in enums:
-        set_enum(base, _scalar(suffix))
+    if d.value is None:
+      base = _enum_of_flag(d.name, enums)
+      if base is not None:
+        set_enum(base, _scalar(d.name[len(base) + 1:]))
         overrides[d.name] = True
         explicit.add(d.name)
         continue
@@ -466,6 +477,124 @@ def _apply_overrides(defs: List[Define], enums: Dict[str, EnumSpec]) -> Tuple[Di
       explicit.add(d.name)
 
   return overrides, explicit
+
+
+# -----------------------------
+# Hardware profiles
+# -----------------------------
+
+PROFILE_SECTIONS = ("core", "chip", "platform")
+PROFILE_FIELDS = {"name", "extends", "description", "reference", "sources"} | set(PROFILE_SECTIONS)
+
+
+@dataclass
+class Profile:
+  name: str
+  chain: List[str]                 # base first
+  values: Dict[str, Any]           # VX_CFG_* knob -> literal value
+  sections: Dict[str, Set[str]]    # section -> knobs it sets
+  reference: Dict[str, Any]
+  sources: Any
+
+
+def _profile_path(name: str, profiles_dir: str) -> str:
+  if name.endswith(".json") and os.path.isfile(name):
+    return name
+  return os.path.join(profiles_dir, f"{name}.json")
+
+
+def load_profile(name: str, profiles_dir: str, _seen: Tuple[str, ...] = ()) -> Profile:
+  if name in _seen:
+    raise ValueError(f"Profile inheritance cycle: {' -> '.join(_seen + (name,))}")
+  path = _profile_path(name, profiles_dir)
+  if not os.path.isfile(path):
+    raise ValueError(f"Unknown profile '{name}' (no {path})")
+  with open(path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+  unknown = set(data.keys()) - PROFILE_FIELDS
+  if unknown:
+    raise ValueError(f"Profile '{name}': unknown field(s) {sorted(unknown)} (allowed: {sorted(PROFILE_FIELDS)})")
+
+  if "extends" in data:
+    base = load_profile(data["extends"], profiles_dir, _seen + (name,))
+  else:
+    base = Profile(name="", chain=[], values={}, sections={s: set() for s in PROFILE_SECTIONS},
+                   reference={}, sources=None)
+
+  values = dict(base.values)
+  sections = {s: set(base.sections[s]) for s in PROFILE_SECTIONS}
+  for sec in PROFILE_SECTIONS:
+    for k, v in data.get(sec, {}).items():
+      for other in PROFILE_SECTIONS:
+        sections[other].discard(k)
+      values[k] = v
+      sections[sec].add(k)
+  reference = dict(base.reference)
+  reference.update(data.get("reference", {}))
+  sources = data.get("sources", base.sources)
+  return Profile(name=data.get("name", name), chain=base.chain + [name], values=values,
+                 sections=sections, reference=reference, sources=sources)
+
+
+def validate_profile(prof: Profile, toml_defs: Dict[str, Any], enums: Dict[str, EnumSpec],
+                     read_only: Set[str]) -> None:
+  if not prof.sources:
+    raise ValueError(f"Profile '{prof.name}': 'sources' is required (where every value comes from)")
+  for k, v in prof.values.items():
+    if k in read_only:
+      raise ValueError(f"Profile '{prof.name}': {k} is a read-only [[param]]/[[builtin]] symbol")
+    if k not in toml_defs and k not in enums:
+      raise ValueError(f"Profile '{prof.name}': unknown knob {k} (not in VX_config.toml)")
+    if not _has_public_scope(k):
+      raise ValueError(f"Profile '{prof.name}': {k} is a private TOML local")
+    if k in enums:
+      if v not in enums[k].values:
+        raise ValueError(f"Profile '{prof.name}': invalid {k}={v!r} (allowed: {enums[k].values})")
+    elif k.endswith("_ENABLE"):
+      if not isinstance(v, bool):
+        raise ValueError(f"Profile '{prof.name}': {k} must be true or false")
+    elif isinstance(v, bool) or not isinstance(v, (int, str)):
+      raise ValueError(f"Profile '{prof.name}': {k} must be an integer or a string literal")
+    elif isinstance(v, str) and _is_expr_string(v):
+      raise ValueError(f"Profile '{prof.name}': {k} must be a literal; expressions belong in VX_config.toml")
+
+
+def profile_defines(prof: Profile) -> List[str]:
+  toks: List[str] = [f"-DVX_PROFILE={prof.name}"]
+  for k in sorted(prof.values):
+    v = prof.values[k]
+    if isinstance(v, bool):
+      toks.append(f"-D{k}" if v else f"-D{k[:-len('_ENABLE')]}_DISABLE")
+    else:
+      toks.append(f"-D{k}={v}")
+  return toks
+
+
+def _canonical_define(tok: str, enums: Dict[str, EnumSpec]) -> Optional[str]:
+  # The knob a -D token sets, so X_DISABLE and X_ENABLE, or X_<v> and X=<v>,
+  # are recognised as the same macro.
+  defs = _parse_defines([tok])
+  if not defs:
+    return None
+  d = defs[0]
+  if d.name.endswith("_DISABLE"):
+    return d.name[:-len("_DISABLE")] + "_ENABLE"
+  if d.name in enums:
+    return d.name
+  if d.value is None:
+    base = _enum_of_flag(d.name, enums)
+    if base is not None:
+      return base
+  return d.name
+
+
+def merge_configs(prof: Profile, cflags: str, enums: Dict[str, EnumSpec]) -> str:
+  explicit = shlex.split(cflags) if cflags else []
+  given = {_canonical_define(t, enums) for t in explicit}
+  given.discard(None)
+  merged = [t for t in profile_defines(prof) if _canonical_define(t, enums) not in given]
+  # The caller's flags pass through verbatim, quoting included.
+  return " ".join(merged + ([cflags.strip()] if cflags.strip() else []))
 
 
 # -----------------------------
@@ -1489,6 +1618,11 @@ def main(argv: List[str]) -> int:
   ap.add_argument("--output", "-o", default=None)
   ap.add_argument("--resolved", "-r", action="store_true",
                   help="Emit resolved constants for cpp/verilog (cflags is always resolved)")
+  ap.add_argument("--profile", default="",
+                  help="hardware profile: profiles/<name>.json next to the config, or a .json path")
+  ap.add_argument("--profiles-dir", default=None, help="profile directory (default: <config dir>/profiles)")
+  ap.add_argument("--merge-configs", action="store_true",
+                  help="print --cflags with the profile folded in (explicit -D flags win) and exit")
   args, unknown = ap.parse_known_args(argv)
 
   hex_meta = _scan_hex_literals(args.config)
@@ -1500,6 +1634,26 @@ def main(argv: List[str]) -> int:
   params_set = set(params_tbl.keys())
 
   toml_defs, layout = _flatten_with_layout(toml_data)
+
+  prof: Optional[Profile] = None
+  if args.profile and args.profile != "none":
+    profiles_dir = args.profiles_dir or os.path.join(os.path.dirname(os.path.abspath(args.config)), "profiles")
+    prof = load_profile(args.profile, profiles_dir)
+    validate_profile(prof, toml_defs, enums, params_set | set(builtins.keys()))
+
+  if args.merge_configs:
+    out = merge_configs(prof, args.cflags, enums) if prof else args.cflags
+    sys.stdout.write(out.strip() + "\n")
+    return 0
+
+  if prof is not None:
+    if args.format == "cflags" or args.resolved:
+      # Resolved outputs see the profile as the lowest-priority overrides.
+      args.cflags = merge_configs(prof, args.cflags, enums)
+    else:
+      # Unresolved headers carry the profile as their overridable defaults.
+      for k, v in prof.values.items():
+        toml_defs[k] = v
 
   defs: List[Define] = []
   defs += _parse_defines_from_cflags(args.cflags)

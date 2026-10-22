@@ -7,14 +7,24 @@ follows the version pins recorded in [VERSION](VERSION) (`VORTEX_VERSION`,
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- **Verilator 5.052 wide-signal ports broke the opaesim build.** 5.052 emits wide AFU ports as `VlWide<>` objects, which no longer decay to `void*`, so four `memcpy` sites in [sim/opaesim/opae_sim.cpp](sim/opaesim/opae_sim.cpp) failed to compile. They now go through the `VDataCast` helper in [sw/common/util.h](sw/common/util.h) that [sim/rtlsim/processor.cpp](sim/rtlsim/processor.cpp) already used; the helper resolves for both layouts, so the fix builds against 5.046 and 5.052 alike.
-- **The Yosys flow wrote an unclean netlist.** [hw/syn/yosys/run_synth.sh](hw/syn/yosys/run_synth.sh) never ran `opt_clean` after mapping, so the netlist carried ~129 undriven `assign w = 'hx` wires left over from sv2v function scopes, and `stat` counted dead cells as area. Harmless under Yosys 0.57, fatal under 0.69: it marks those wires `signed`, which OpenSTA's Verilog reader rejects outright (`Error: 171 ... syntax error`), so timing and power produced nothing at all and the DUT reported no Fmax. *Why it looked like a tool incompatibility:* the debris was in both toolchains' netlists all along — only the `signed` qualifier was new.
-- **A single `signed` net made OpenSTA reject the whole netlist.** OpenSTA's Verilog grammar carries no `signed` keyword, so one signed net declaration fails the read outright (`Error: 171 <netlist> line N, syntax error`) and the DUT reports no timing or power — the `rtu` DUT hit this on a live FMA net. Yosys preserves net signedness as of 0.69 where 0.57 dropped it, so the netlist, not the RTL, changed. [hw/syn/yosys/run_synth.sh](hw/syn/yosys/run_synth.sh) now strips the qualifier from declarations in the mapped netlist before STA reads it; signedness is information-free between library cells, so nothing STA computes can move. *This is a workaround, not a fix* (AGENTS.md §3) — the defect is in OpenSTA's reader, which should accept and ignore `signed`, and the follow-up is a patch there.
-- **Flop mapping cost 25% of sequential area under Yosys 0.69.** `dfflibmap` picks one library cell per FF type: 0.57 took the cheapest match, 0.69 prefers a non-inverting output. ASAP7 carries a non-inverting flop only at x4 drive (`DFFHQx4`, 0.3645) against `DFFHQNx1` (0.2916), so all 129,564 flops in the `tex` DUT moved to x4 — +9% total cell area, +25% sequential area, with Fmax slightly *worse* and reported power collapsing 73% as vectorless activity propagation changed with the flop output polarity. New `DFF_DONT_USE` knob (`run_synth.sh`, defaulted per PDK in [hw/syn/yosys/Makefile](hw/syn/yosys/Makefile)) withholds those cells, which is the standard dont-use-list mechanism; `tex` returns to within ±1% of its 0.57 Fmax, area, cell count and power.
+- **Hardware profiles.** `profiles/<name>.json` names a machine (`tinygpu`, `rtx1080`, `v100`, `a100`, `h100`, `rtx5080`) that every flow
+  builds through `configure --profile=<name>` or `blackbox.sh --profile=<name>`; explicit `CONFIGS` win over the profile.
+  See [docs/simulation.md](docs/simulation.md#hardware-profiles).
 
-## [3.0] — 2026-06-08
+### Changed
+
+- **RV64 portability.** Device index math, DXA/OM addresses, pack-load strides, RTU scene/payload pointers and the ray log carry full
+  width on RV64 (`size_t`/`uintptr_t`, identical RV32 code); RTU slot reads into FP registers are NaN-boxed.
+- **Zero warnings restored.** Every C/C++ build (simulators, runtime, kernel library, tests, OpenCL/HIP/Vulkan apps) is `-Werror` and
+  Verilator warnings are fatal again, with the RTL and host code fixed to build clean.
+- **DRAM model redesign.** simx, rtlsim, opaesim and xrtsim model one independent Ramulator controller and device per memory bank
+  (JEDEC HBM2/HBM3/GDDR6 organization and nanosecond timing, 32 B bursts, permuted open-page bank interleave, per-channel
+  responses), configured from data-sheet values: `VX_CFG_PLATFORM_MEMORY_{TYPE,DATA_RATE,LATENCY,QUEUE_SIZE}`. The default machine
+  keeps its idle read latency (14/26 cycles open-row/conflict, was 13/27) and one-block-per-cycle peak.
+
+## [3.0] — 2026-10-07
 
 The 3.0 release introduces a fixed-function graphics stack (rasterizer, texture units, and output mergers), tensor core structured sparsity (2:4), warpgroup-level matrix multiplication (WGMMA), global-to-local data transfer acceleration (DXA), a new hardware kernel scheduler (KMU) and Command Processor (CP) architecture, a new asynchronous runtime API (`vortex2.h`), asynchronous barriers with arrive/wait/event semantics, compressed instruction set (RVC) support, hardware atomics, an MMU/SV32 virtual memory stack, a Mesa/lavapipe Vulkan backend (`vortexpipe`), HIP via chipStar, gem5 integration, a SimX v3 TLM architecture with fixed-size handshake channels, productized Synopsys and Yosys ASIC synthesis flows, and a refreshed toolchain (LLVM 20, POCL 7.0). Build and configuration infrastructure was reworked: TOML-driven HW configuration ([VX_config.toml](VX_config.toml) + [VX_types.toml](VX_types.toml)) decoupling SimX/runtime from the RTL source tree, a `VX_CFG_` macro namespace that resolves toolchain preprocessor collisions, retirement of the global `toolchain_env.sh` to enable parallel multi-version Vortex worktrees on the same shell, consolidation of `kernel/`/`runtime/` under a shared `sw/` root, a single-source [VERSION](VERSION) file driving CI toolchain pinning, Perfetto trace export ([ci/perfetto.py](ci/perfetto.py)), and new top-level [AGENTS.md](AGENTS.md) + [CONTRIBUTING.md](CONTRIBUTING.md) for AI-agent and contributor workflows.
 

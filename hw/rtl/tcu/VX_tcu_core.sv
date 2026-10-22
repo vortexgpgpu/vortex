@@ -549,6 +549,10 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
             begin : g_sp_hi_off
                 assign b_col_sparse_hi = '0;
                 `UNUSED_VAR (wmma_sp_meta_hi)
+                // Without FEDP2K there are no upper FEDP lanes to consume it.
+                if (FEDP_K == TCU_TC_K) begin : g_sp_hi_unused
+                    `UNUSED_VAR (b_col_sparse_hi)
+                end
             end
 
         `ifdef VX_TCU_LD_TRACE

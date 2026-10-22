@@ -376,8 +376,15 @@ if [[ "$RUN_STA" == "1" ]]; then
   NETLIST="$NET_POST"; [[ -f "$NETLIST" ]] || NETLIST="$NET_PRE"
   STA_SDC="${RESOLVED_SDC:-$SDC_FILE}"
   log "TOP=$TOP NETLIST=$NETLIST LIB_TGT=$LIB_TGT LIB_ROOT=$LIB_ROOT SDC_FILE=$STA_SDC RPT_DIR=$RPT_DIR SAIF_FILE=$SAIF_FILE SAIF_INST=$SAIF_INST $STA $STA_SCRIPT"
-  TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$STA_SDC" RPT_DIR="$RPT_DIR" SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" "$STA" "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1
+  # `set -e` would abort before the log is echoed, so a failing sta -- a
+  # dynamic-loader error above all, which prints nothing on the terminal and
+  # only sets exit 127 -- would leave the build with no diagnosis at all.
+  sta_rc=0
+  TOP=$TOP NETLIST="$NETLIST" LIB_TGT="$LIB_TGT" LIB_ROOT="$LIB_ROOT" SDC_FILE="$STA_SDC" RPT_DIR="$RPT_DIR" SAIF_FILE="$SAIF_FILE" SAIF_INST="$SAIF_INST" "$STA" "$STA_SCRIPT" > "$RPT_DIR/sta.log" 2>&1 || sta_rc=$?
   cat "$RPT_DIR/sta.log"
+  if [[ $sta_rc -ne 0 ]]; then
+    die "OpenSTA ('$STA') exited $sta_rc; see $RPT_DIR/sta.log"
+  fi
   if [[ -n "$SAIF_FILE" ]]; then
     [[ -s "$RPT_DIR/saif_annotated.rpt" ]] || die "SAIF annotation report was not produced"
     grep -Eq '^saif[[:space:]]+[1-9][0-9]*$' "$RPT_DIR/saif_annotated.rpt" \

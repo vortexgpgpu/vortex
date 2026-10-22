@@ -26,6 +26,7 @@
 // ============================================================================
 
 #include "vl_simulator.h"
+#include "util.h"
 #include "VVX_cp_axi_path_top.h"
 #include <array>
 #include <cstdint>
@@ -150,14 +151,24 @@ static uint64_t read_cmd_bits(uint32_t* cmd_words, int start, int bits) {
     return v;
 }
 
+// A wide port is emitted as a VlWide object, which carries its words in a
+// member array rather than being one, so it never decays to a word pointer.
+// VDataCast resolves both layouts off the port's own size.
+template <typename T>
+static uint64_t read_cmd_out(T* top, int start, int bits) {
+    return read_cmd_bits(
+        vortex::VDataCast<uint32_t*, sizeof(top->cmd_out_packed)>::get(top->cmd_out_packed),
+        start, bits);
+}
+
 template <typename T>
 static uint8_t cmd_opcode(T* top) {
-    return (uint8_t)(read_cmd_bits(top->cmd_out_packed, 256, 32) & 0xff);
+    return (uint8_t)(read_cmd_out(top, 256, 32) & 0xff);
 }
 
 template <typename T>
 static uint8_t cmd_flags(T* top) {
-    return (uint8_t)((read_cmd_bits(top->cmd_out_packed, 256, 32) >> 8) & 0xff);
+    return (uint8_t)((read_cmd_out(top, 256, 32) >> 8) & 0xff);
 }
 
 // ============================================================================
@@ -233,7 +244,9 @@ struct AxiSlave {
         top->m_rid    = r_id;
         top->m_rlast  = 1;
         top->m_rresp  = 0;
-        if (r_inflight) mem_read_cl(r_addr, top->m_rdata);
+        if (r_inflight) {
+            mem_read_cl(r_addr, vortex::VDataCast<uint32_t*, sizeof(top->m_rdata)>::get(top->m_rdata));
+        }
 
         // AW side.
         top->m_awready = !aw_taken;

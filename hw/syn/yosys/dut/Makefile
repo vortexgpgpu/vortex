@@ -8,6 +8,7 @@
 #   make -C hw/syn/yosys/dut tcu TARGET=synthesis synthesis only
 #   make -C hw/syn/yosys/dut om CLOCK_FREQ=500    override the target clock
 #   make -C hw/syn/yosys/dut om CONFIGS=-DFOO     extra defines, on top of the DUT's
+#   make -C hw/syn/yosys/dut core CONFIGS=-DVX_CFG_NUM_THREADS=4   resize the DUT
 #   make -C hw/syn/yosys/dut list                 what is available
 #
 # The DUT's defines go down as EXTRA_CONFIGS, never as CONFIGS: ../Makefile
@@ -29,13 +30,23 @@ include catalog.mk
 TARGET ?= timing
 PREFIX ?=
 
+# CONFIGS layers ON TOP OF the DUT's own defines, so a macro the caller sets
+# REPLACES the catalog's value rather than sitting beside it. Dropping the
+# losing copy is not tidiness: verilator's preprocessor makes a redefinition
+# with a different value an error, so `CONFIGS=-DVX_CFG_NUM_THREADS=4` against a
+# catalog entry that says 16 used to fail before synthesis instead of resizing
+# the DUT.
+define_name  = $(firstword $(subst =, ,$1))
+last_defines = $(foreach n,$(sort $(foreach d,$1,$(call define_name,$d))),\
+                 $(lastword $(filter $n $n=%,$1)))
+
 .PHONY: list $(DUTS)
 
 $(DUTS):
 	$(MAKE) -C .. $(TARGET) PREFIX=$(or $(PREFIX),$@) \
 	  TOP_LEVEL_ENTITY=$($@_TOP) \
 	  EXTRA_INCLUDE="$($@_INC)" \
-	  EXTRA_CONFIGS="$($@_CFG) $(CONFIGS)"
+	  EXTRA_CONFIGS="$(call last_defines,$($@_CFG) $(CONFIGS))"
 
 list:
 	@echo $(DUTS) | tr ' ' '\n'

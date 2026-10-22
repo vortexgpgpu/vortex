@@ -85,8 +85,8 @@ __kernel void expand_k(expand_arg_t* __UNIFORM__ arg) {
   const uint32_t nv     = arg->num_varyings;
   uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
   uint32_t gstride = gridDim.x * blockDim.x;
-  for (uint32_t i = gid; i < n; i += gstride) {
-    const uint8_t* rec = recs + (size_t)i * stride;
+  for (size_t i = gid; i < n; i += gstride) {
+    const uint8_t* rec = recs + i * stride;
     const float*   pos = reinterpret_cast<const float*>(rec);
     setup_vertex_t v;
     v.pos[0] = pos[0]; v.pos[1] = pos[1]; v.pos[2] = pos[2]; v.pos[3] = pos[3];
@@ -156,7 +156,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
     // traffic and removes the slot_prim/slot_bbox scratch entirely.
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
-    for (uint32_t t = gid; t < ntri; t += gstride) {
+    for (size_t t = gid; t < ntri; t += gstride) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
       keep[t] = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, vpp, pr, bb);
@@ -183,7 +183,7 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
     // here equals keep[t] from SETUP (same pure function, same inputs).
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
-    for (uint32_t t = gid; t < ntri; t += gstride) {
+    for (size_t t = gid; t < ntri; t += gstride) {
       rast_prim_t pr[SETUP_MAX_SUB];
       setup_bbox_t bb[SETUP_MAX_SUB];
       uint32_t kept = pipe_clip_and_setup(&verts[3 * t], W, H, arg->cull_mode, vpp, pr, bb);
@@ -210,12 +210,12 @@ __kernel void setup_k(pipe_arg_t* __UNIFORM__ arg) {
         for (uint32_t c = 0; c < 4; ++c) { fw[2 + c] = pv[4 + c]; }
         for (uint32_t c = 0; c < 6; ++c) { fw[6 + c] = pv[10 + c]; }
       }
-      uint32_t w = offset[t];
+      size_t w = offset[t];
       for (uint32_t s = 0; s < kept; ++s) {
         prim[w] = pr[s];
         bbox[w] = bb[s];
         if (flat) {
-          uint32_t* dst = flat + (size_t)w * GFX_FS_FLAT_WORDS;
+          uint32_t* dst = flat + w * GFX_FS_FLAT_WORDS;
           for (uint32_t c = 0; c < GFX_FS_FLAT_WORDS; ++c) { dst[c] = fw[c]; }
         }
         ++w;
@@ -250,7 +250,7 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
     uint32_t P = meta[0];
-    for (uint32_t i = gid; i < P; i += gstride) {
+    for (size_t i = gid; i < P; i += gstride) {
       int bL, bR, bT, bB; pipe_bin_range(bbox[i], bL, bR, bT, bB);
       bcount[i] = (uint32_t)((bR - bL + 1) * (bB - bT + 1));
     }
@@ -275,9 +275,9 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
     uint32_t gid = blockIdx.x * blockDim.x + threadIdx.x;
     uint32_t gstride = gridDim.x * blockDim.x;
     uint32_t P = meta[0];
-    for (uint32_t i = gid; i < P; i += gstride) {
+    for (size_t i = gid; i < P; i += gstride) {
       int bL, bR, bT, bB; pipe_bin_range(bbox[i], bL, bR, bT, bB);
-      uint32_t w = boffset[i];
+      size_t w = boffset[i];
       for (int by = bT; by <= bB; ++by)
         for (int bx = bL; bx <= bR; ++bx)
           keys[w++] = ((uint32_t)(by * arg->bin_cols + bx) << PIPE_PRIM_BITS) | i;
@@ -289,11 +289,11 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
     uint32_t K = meta[1];
     uint32_t kchunk = (K + T - 1) / T;
     uint32_t klo = pipe_umin(tid * kchunk, K), khi = pipe_umin(klo + kchunk, K);
-    for (uint32_t b = lo; b < hi; ++b) thist[tid * B + b] = 0;
+    for (uint32_t b = lo; b < hi; ++b) thist[(size_t)tid * B + b] = 0;
     __syncthreads();
-    for (uint32_t k = klo; k < khi; ++k) { uint32_t b = keys[k] >> PIPE_PRIM_BITS; if (b >= lo && b < hi) thist[tid * B + b]++; }
+    for (uint32_t k = klo; k < khi; ++k) { uint32_t b = keys[k] >> PIPE_PRIM_BITS; if (b >= lo && b < hi) thist[(size_t)tid * B + b]++; }
     __syncthreads();
-    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t s = 0; for (uint32_t t = 0; t < T; ++t) s += thist[t * B + b]; bincount[b] = s; }
+    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t s = 0; for (uint32_t t = 0; t < T; ++t) s += thist[(size_t)t * B + b]; bincount[b] = s; }
   } break;
 
   case PIPE_STAGE_BBASE: {
@@ -341,11 +341,11 @@ __kernel void binning_k(pipe_arg_t* __UNIFORM__ arg) {
     auto pids = reinterpret_cast<uint32_t*>(tilebuf + B * sizeof(rast_bin_header_t));
     uint32_t kchunk = (K + T - 1) / T;
     uint32_t klo = pipe_umin(tid * kchunk, K), khi = pipe_umin(klo + kchunk, K);
-    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t run = binbase[b]; for (uint32_t t = 0; t < T; ++t) { uint32_t c = thist[t * B + b]; thist[t * B + b] = run; run += c; } }
+    for (uint32_t b = lo + tid; b < hi; b += T) { uint32_t run = binbase[b]; for (uint32_t t = 0; t < T; ++t) { uint32_t c = thist[(size_t)t * B + b]; thist[(size_t)t * B + b] = run; run += c; } }
     __syncthreads();
     for (uint32_t k = klo; k < khi; ++k) {
       uint32_t key = keys[k], b = key >> PIPE_PRIM_BITS;
-      if (b >= lo && b < hi) pids[thist[tid * B + b]++] = key & PIPE_PRIM_MASK;
+      if (b >= lo && b < hi) pids[thist[(size_t)tid * B + b]++] = key & PIPE_PRIM_MASK;
     }
   } break;
 

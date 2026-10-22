@@ -55,6 +55,10 @@ module VX_tcu_tfr_shared_mul import VX_tcu_pkg::*;  #(
     `UNUSED_SPARAM (INSTANCE_ID)
 `ifndef VX_CFG_TCU_MX_ENABLE
     `UNUSED_PARAM (SF)
+`else
+    if (!`VX_CFG_TCU_FP8_ENABLED && !`VX_CFG_TCU_FP4_ENABLED) begin : g_sf_unused
+        `UNUSED_VAR ({sf_a, sf_b})
+    end
 `endif
     `UNUSED_VAR ({clk, req_id, valid_in})
 

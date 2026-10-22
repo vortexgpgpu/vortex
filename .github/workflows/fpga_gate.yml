@@ -2,22 +2,21 @@
 #
 # Licensed under the Apache License, Version 2.0 (the "License").
 #
-# fpga_gate — nightly FPGA synthesis-regression gate on the self-hosted Vivado
-# runner. Synthesizes the DUT catalog (ci/testcases/fpga_gate.yaml) and asserts
-# Fmax/LUT against the golden results in ci/baselines/synthesis/xilinx/, so an
-# RTL change that costs timing closure or area cannot sit unnoticed on master.
+# fpga_gate — FPGA synthesis-regression gate on the self-hosted Vivado runner.
+# Synthesizes the DUT catalog (ci/testcases/fpga_gate.yaml) and asserts Fmax/LUT
+# against the golden results in ci/baselines/synthesis/xilinx/, so an RTL change
+# that costs timing closure or area cannot sit unnoticed on master.
 #
-# Nightly builds are hours long, so the run is SKIPPED unless origin/master has
-# actually moved since the last gate run on this runner (state file below). It
-# always gates origin/master, whatever branch the schedule happens to fire on.
+# Builds are hours long, so the workflow has no schedule of its own: a nightly
+# cron on the runner's host runs ci/fpga_gate_dispatch.sh, which dispatches it
+# only when a synthesis input changed since the last gated commit (the state
+# file below). A quiet night creates no run. It always gates origin/master.
 #
 # See docs/designs/continuous_integration.md §3.5.
 
 name: FPGA Gate
 
 on:
-  schedule:
-    - cron: '0 3 * * *'         # nightly 03:00 UTC
   workflow_dispatch:
     inputs:
       builds:
@@ -26,10 +25,6 @@ on:
       jobs:
         description: "max parallel Vivado builds"
         default: "2"
-      force:
-        description: "run even if origin/master has not moved"
-        type: boolean
-        default: false
 
 # One synthesis sweep at a time: parallel Vivado runs would oversubscribe the
 # machine and make Fmax non-comparable. Never cancel a run in flight.
@@ -48,25 +43,15 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      # Vivado builds are hours long; only pay for them when master moved.
-      - name: Check master for new commits
+      # The state file is the dispatcher's record of the last gated commit.
+      - name: Resolve the gated commit
         id: gate
-        env:
-          FORCE: ${{ github.event.inputs.force }}
         run: |
           set -euo pipefail
           SHA=$(git rev-parse HEAD)
-          STATE="$HOME/.cache/vortex/fpga_gate.$(echo '${{ github.repository }}' | tr / _).sha"
-          LAST=$(cat "$STATE" 2>/dev/null || echo "")
-          echo "sha=$SHA"    >> "$GITHUB_OUTPUT"
-          echo "state=$STATE" >> "$GITHUB_OUTPUT"
-          if [ "$SHA" = "$LAST" ] && [ "$FORCE" != "true" ]; then
-            echo "master unchanged since the last gate run ($SHA) — skipping"
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "gating $SHA (last run: ${LAST:-none})"
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "state=$HOME/.cache/vortex/fpga_gate.$(echo '${{ github.repository }}' | tr / _).sha" >> "$GITHUB_OUTPUT"
+          echo "gating $SHA"
 
       # The command is the one the catalog declares (ci/testcases/fpga_gate.yaml's
       # single `run:` case), so what CI runs and what the catalog says cannot
@@ -75,7 +60,6 @@ jobs:
       # execute arbitrary commands on the runner.
       - name: Run fpga_gate
         id: run
-        if: steps.gate.outputs.run == 'true'
         env:
           IN_BUILDS: ${{ github.event.inputs.builds }}
           IN_JOBS: ${{ github.event.inputs.jobs }}
@@ -91,18 +75,49 @@ jobs:
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit 0
 
+      # Every build's metrics against its baseline, and why each build that did
+      # not pass did not, on the run's own page. The same document is uploaded
+      # below as a file a browser opens directly.
+      - name: Summarize
+        if: always()
+        run: |
+          set -uo pipefail
+          python3 ci/synth_report.py --annotate error fpga_gate_report.json \
+            > fpga_gate_report.md || true
+          cat fpga_gate_report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # A build that never produced metrics has its cause in the tool's log, not
+      # in the gate's output. The whole log is in the artifact; its end is here.
+      # The log is printed with workflow commands stopped, so nothing in it can
+      # be read as one.
+      - name: Failed build logs
+        if: always()
+        run: |
+          set -uo pipefail
+          TOKEN="log-$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+          python3 ci/synth_report.py --build-failed fpga_gate_report.json |
+          while read -r id dut; do
+            log="build32_fpga_gate/hw/syn/xilinx/dut/fpga_gate_${id}_${dut}/build.log"
+            [ -f "$log" ] || continue
+            echo "::group::$id: last 200 lines of build.log"
+            echo "::stop-commands::$TOKEN"
+            tail -n 200 "$log"
+            echo "::$TOKEN::"
+            echo "::endgroup::"
+          done
+
       # Record the SHA once the gate has actually reached a verdict (pass=0 or
       # regression=1), so a red master is not re-synthesized every night — the
       # failed run is the record. An infra/build failure (2) does NOT record, so
-      # the next nightly retries it.
+      # the next night's dispatcher retries it.
       - name: Record gated SHA
-        if: steps.gate.outputs.run == 'true' && steps.run.outputs.rc != '2'
+        if: steps.run.outputs.rc == '0' || steps.run.outputs.rc == '1'
         run: |
           mkdir -p "$(dirname '${{ steps.gate.outputs.state }}')"
           echo "${{ steps.gate.outputs.sha }}" > "${{ steps.gate.outputs.state }}"
 
       - uses: actions/upload-artifact@v4
-        if: always() && steps.gate.outputs.run == 'true'
+        if: always()
         with:
           name: fpga-gate-report
           path: |
@@ -114,9 +129,27 @@ jobs:
           # path matching nothing turns a red gate into a red X with no evidence.
           if-no-files-found: error
 
+      # Unzipped, so the summary opens in the browser straight from the run
+      # page, and the report it was rendered from downloads as itself. The
+      # report holds everything a baseline records.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          path: fpga_gate_report.md
+          archive: false
+          overwrite: true
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          path: fpga_gate_report.json
+          archive: false
+          overwrite: true
+          if-no-files-found: warn
+
       # always(), not success(): the verdict must not be masked by an upload failure.
       - name: Verdict
-        if: always() && steps.gate.outputs.run == 'true'
+        if: always()
         run: |
           case "${{ steps.run.outputs.rc }}" in
             0) echo "fpga_gate passed" ;;

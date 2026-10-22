@@ -41,10 +41,10 @@ __kernel void kernel_main(kernel_arg_t* arg) {
 
   // Issue RTU_ASYNC_NUM_BATCH traces back-to-back. No WAIT in
   // between — each ray runs async in the cluster's RtuCore.
-  uint32_t h0 = vx_rt_wtrace((uint32_t)(arg->scene_addr[0] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
-  uint32_t h1 = vx_rt_wtrace((uint32_t)(arg->scene_addr[1] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
-  uint32_t h2 = vx_rt_wtrace((uint32_t)(arg->scene_addr[2] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
-  uint32_t h3 = vx_rt_wtrace((uint32_t)(arg->scene_addr[3] & 0xffffffffu), 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uint32_t h0 = vx_rt_wtrace(arg->scene_addr[0], 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uint32_t h1 = vx_rt_wtrace(arg->scene_addr[1], 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uint32_t h2 = vx_rt_wtrace(arg->scene_addr[2], 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
+  uint32_t h3 = vx_rt_wtrace(arg->scene_addr[3], 0u, VX_RT_FLAG_OPAQUE, 0xffu, &ray);
 
   // Drain in declared order. Each WAIT blocks until its TERMINAL
   // delivers and applies the matching hit attrs.

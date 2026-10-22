@@ -20,10 +20,6 @@
 #define RAM_PAGE_SIZE     4096
 #endif
 
-#ifndef MEM_CLOCK_RATIO
-#define MEM_CLOCK_RATIO   1
-#endif
-
 #ifndef __MAX
 #define __MAX(a,b) (((a) > (b)) ? (a) : (b))
 #endif
@@ -65,8 +61,25 @@ inline constexpr uint32_t VX_CFG_DCACHE_NUM_REQS	= (VX_CFG_NUM_LSU_BLOCKS * DCAC
 
 inline constexpr uint32_t NUM_SOCKETS     = __UP(VX_CFG_NUM_CORES / VX_CFG_SOCKET_SIZE);
 
-inline constexpr uint32_t VX_CFG_L2_NUM_REQS     = NUM_SOCKETS * VX_CFG_L1_MEM_PORTS;
+// Demand clients of the cluster L2 (sockets and gfx caches), excluding the
+// walker's PTE-fetch slot.
+inline constexpr uint32_t VX_CFG_L2_DEMAND_REQS  = NUM_SOCKETS * VX_CFG_L1_MEM_PORTS;
+#ifdef VX_CFG_VM_ENABLE
+// With one cluster, an L2 and no L3, the cluster L2 is the LLC and carries
+// the device walker's PTE fetches on one extra client slot; in every other
+// topology the walker is one more LLC client on the last requestor slot.
+inline constexpr uint32_t PTW_ON_L2              = ((VX_CFG_NUM_CLUSTERS == 1)
+                                                 && (VX_CFG_L2_ENABLED != 0)
+                                                 && (VX_CFG_L3_ENABLED == 0)) ? 1 : 0;
+inline constexpr uint32_t VX_CFG_L2_NUM_REQS     = VX_CFG_L2_DEMAND_REQS + PTW_ON_L2;
+inline constexpr uint32_t VX_CFG_L2_PTW_IDX      = VX_CFG_L2_DEMAND_REQS;
+inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS
+                                                 + ((PTW_ON_L2 == 0) ? 1u : 0u);
+inline constexpr uint32_t VX_CFG_L3_PTW_IDX      = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS;
+#else
+inline constexpr uint32_t VX_CFG_L2_NUM_REQS     = VX_CFG_L2_DEMAND_REQS;
 inline constexpr uint32_t VX_CFG_L3_NUM_REQS     = VX_CFG_NUM_CLUSTERS * VX_CFG_L2_MEM_PORTS;
+#endif
 
 inline constexpr uint32_t PER_ISSUE_WARPS = VX_CFG_NUM_WARPS / VX_CFG_ISSUE_WIDTH;
 inline constexpr uint32_t ISSUE_WIS_BITS  = log2ceil(PER_ISSUE_WARPS);

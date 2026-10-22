@@ -37,6 +37,14 @@ static constexpr uint32_t CP_REG_GPU_DEV_CAPS_HI = 0x01C;
 static constexpr uint32_t CP_REG_GPU_ISA_CAPS_LO = 0x020;
 static constexpr uint32_t CP_REG_GPU_ISA_CAPS_HI = 0x024;
 
+// Warps, sockets per cluster and clusters carry an exact count, so a machine
+// that is not a power of two reports truly; the field is zero on devices
+// built before it existed, which report only the 3-bit log2 field.
+inline uint64_t exact_or_log2(uint64_t dev_caps, uint32_t exact_lsb, uint64_t exact_mask, uint32_t log2_lsb) {
+  uint64_t exact = (dev_caps >> exact_lsb) & exact_mask;
+  return exact ? exact : (1ull << ((dev_caps >> log2_lsb) & 0x7));
+}
+
 // Decode a VX_CAPS_* id from the two CP capability words. Returns true
 // and writes *out when the id is encoded in the words; returns false
 // for ids the caller must resolve itself (CACHE_LINE_SIZE,
@@ -51,20 +59,20 @@ inline bool decode_caps(uint64_t dev_caps, uint64_t isa_caps,
     *out = 1ull << ((dev_caps >> 8) & 0x7);
     return true;
   case VX_CAPS_NUM_WARPS:
-    *out = 1ull << ((dev_caps >> 11) & 0x7);
+    *out = exact_or_log2(dev_caps, 42, 0x7F, 11);
     return true;
   case VX_CAPS_NUM_CORES: {
-    uint32_t socket_size  = 1u << ((dev_caps >> 14) & 0x7);
-    uint32_t cluster_size = 1u << ((dev_caps >> 17) & 0x7);
-    uint32_t num_clusters = 1u << ((dev_caps >> 20) & 0x7);
-    *out = uint64_t(num_clusters) * cluster_size * socket_size;
+    uint64_t socket_size  = 1ull << ((dev_caps >> 14) & 0x7);
+    uint64_t cluster_size = exact_or_log2(dev_caps, 49, 0xFF, 17);
+    uint64_t num_clusters = exact_or_log2(dev_caps, 57, 0x7F, 20);
+    *out = num_clusters * cluster_size * socket_size;
     return true;
   }
   case VX_CAPS_SOCKET_SIZE:
     *out = 1ull << ((dev_caps >> 14) & 0x7);
     return true;
   case VX_CAPS_NUM_CLUSTERS:
-    *out = 1ull << ((dev_caps >> 20) & 0x7);
+    *out = exact_or_log2(dev_caps, 57, 0x7F, 20);
     return true;
   case VX_CAPS_ISSUE_WIDTH:
     *out = 1ull << ((dev_caps >> 23) & 0x7);

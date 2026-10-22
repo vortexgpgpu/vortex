@@ -14,10 +14,11 @@
 `include "VX_define.vh"
 
 // Device MMU control surface. Assembles the page-table root from its two DCR
-// halves and fans it to every cluster walker; a root write also pulses the
-// TLB flush (a done-tree gates completion). The first translation fault from
-// any cluster latches here and reads back over the DCR bus; a fault-info
-// write drops the report. Non-MMU DCR traffic passes straight through.
+// halves and fans it to the TLB hierarchy; a root write also pulses the
+// TLB flush (a done-tree gates completion). The device walker's first
+// translation fault latches here and reads back over the DCR bus; a
+// fault-info write drops the report. Non-MMU DCR traffic passes straight
+// through.
 module VX_mmu_dcr import VX_gpu_pkg::*; #(
     parameter NUM_CLUSTERS = `VX_CFG_NUM_CLUSTERS
 ) (
@@ -29,17 +30,18 @@ module VX_mmu_dcr import VX_gpu_pkg::*; #(
 
     output wire [`VX_CFG_XLEN-1:0] satp,
 
-    // Flush broadcast + done-tree.
+    // Flush broadcast + done-tree: every cluster's TLB drain plus the
+    // device walker's own leg.
     output wire                    flush_req,
     input  wire [NUM_CLUSTERS-1:0] cluster_flush_done,
+    input  wire                    walker_flush_done,
 
-    // First-fault aggregation (index priority across clusters).
-    input  wire [NUM_CLUSTERS-1:0]                   cluster_fault_valid,
-    input  wire [NUM_CLUSTERS-1:0][`VX_CFG_XLEN-1:0] cluster_fault_va,
-    input  wire [NUM_CLUSTERS-1:0][1:0]              cluster_fault_access,
-    input  wire [NUM_CLUSTERS-1:0]                   cluster_fault_amo
+    // Fault report from the device walker, the only fault source.
+    input  wire                    fault_valid,
+    input  wire [`VX_CFG_XLEN-1:0] fault_va,
+    input  wire [1:0]              fault_access,
+    input  wire                    fault_amo
 );
-    localparam CID_W = `UP(`CLOG2(NUM_CLUSTERS));
 
     wire        dcr_wr    = dcr_bus_if.req_valid && dcr_bus_if.req_data.rw;
     wire        dcr_rd    = dcr_bus_if.req_valid && ~dcr_bus_if.req_data.rw;
@@ -76,7 +78,7 @@ module VX_mmu_dcr import VX_gpu_pkg::*; #(
     // Flush: a root write invalidates every TLB level; hold until all done
     // ---------------------------------------------------------------------
     reg flush_pending_r;
-    wire flush_done_all = (& cluster_flush_done);
+    wire flush_done_all = (& cluster_flush_done) && walker_flush_done;
     always @(posedge clk) begin
         if (reset) begin
             flush_pending_r <= 1'b0;
@@ -91,17 +93,6 @@ module VX_mmu_dcr import VX_gpu_pkg::*; #(
     // ---------------------------------------------------------------------
     // First-fault latch
     // ---------------------------------------------------------------------
-    wire any_fault = (| cluster_fault_valid);
-    reg [CID_W-1:0] fidx;
-    always @(*) begin
-        fidx = '0;
-        for (int i = NUM_CLUSTERS-1; i >= 0; --i) begin
-            if (cluster_fault_valid[i]) begin
-                fidx = CID_W'(i);
-            end
-        end
-    end
-
     reg                    fault_valid_r;
     reg [`VX_CFG_XLEN-1:0] fault_va_r;
     reg [1:0]              fault_acc_r;
@@ -113,11 +104,11 @@ module VX_mmu_dcr import VX_gpu_pkg::*; #(
             fault_valid_r <= 1'b0;
         end else if (is_fault_clr) begin
             fault_valid_r <= 1'b0;
-        end else if (any_fault && ~fault_valid_r) begin
+        end else if (fault_valid && ~fault_valid_r) begin
             fault_valid_r <= 1'b1;
-            fault_va_r    <= cluster_fault_va[fidx];
-            fault_acc_r   <= cluster_fault_access[fidx];
-            fault_amo_r   <= cluster_fault_amo[fidx];
+            fault_va_r    <= fault_va;
+            fault_acc_r   <= fault_access;
+            fault_amo_r   <= fault_amo;
         end
     end
 

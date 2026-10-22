@@ -138,6 +138,77 @@ PERF: instrs=363180, cycles=53108, IPC=6.838518
 > to compare configurations relative to one another, not as fixed targets to
 > reproduce.
 
+### Hardware Profiles
+
+A hardware profile is a named machine in `profiles/<name>.json`: a set of
+`VX_CFG_*` values, grouped into `core`, `chip` and `platform` sections, with a
+`sources` entry saying where each value comes from (optionally also a
+`reference` block of measurements from the real part, and `extends` to build
+on another profile). Every flow that includes `config.mk` builds the same
+machine from it: SimX, rtlsim, the FPGA and ASIC flows, and the kernels.
+
+| Profile | Machine |
+|---|---|
+| `tinygpu` | 1 core, 2 warps x 2 threads, shared memory |
+| `rtx1080` | GeForce GTX 1080 (Pascal): 20 cores x 64 warps x 32 threads, 2 MB L2, GDDR5X as 16 GDDR6 channels |
+| `v100` | Tesla V100 (Volta): 80 cores, 4 MB L2, 32 HBM2 channels at 1752 MT/s |
+| `a100` | A100 (Ampere): 108 cores, 32 MB L2, HBM2 at the card's 1555 GB/s |
+| `h100` | H100 SXM5 (Hopper): 132 cores, 32 MB L2, HBM3 at the card's 3.35 TB/s |
+| `rtx5080` | GeForce RTX 5080 (Blackwell): 84 cores x 48 warps, 64 MB L2, GDDR7 bandwidth on the GDDR6 model |
+
+Select one per build with `../configure --profile=<name>`, or per run:
+
+```bash
+$ ./ci/blackbox.sh --driver=simx --profile=rtx5080 --app=sgemm --args="-n256"
+```
+
+`CONFIGS` and blackbox's own `--clusters/--cores/--warps/--threads/--l2cache/--l3cache`
+flags win over the profile: the profile only supplies the knobs they leave
+unset, and everything else falls back to `VX_config.toml`.
+
+```bash
+$ CONFIGS="-DVX_CFG_L2_SIZE=8388608" ./ci/blackbox.sh --driver=simx --profile=a100 --warps=32 --app=sgemm
+```
+
+The other profiles (20 to 132 cores) are SimX-scale machines for architecture
+studies, not FPGA builds; `tinygpu` is the small one, sized for FPGA
+bring-up and fast simulation.
+
+### Configuring the DRAM Model
+
+The simulators (simx, rtlsim, opaesim, xrtsim) all model the device memory
+the same way: one independent DRAM channel (controller and device) per
+platform memory bank, timed by
+[Ramulator](https://github.com/CMU-SAFARI/ramulator2) with its JEDEC device
+models. Each channel maps addresses the way GPU memory controllers do: four
+bursts per row visit, then the next bank, with the bank permuted by the row so
+strided streams spread over the banks. Refresh is not modelled: GPU
+controllers hide it with per-bank refresh, for which Ramulator has no manager. A channel is described the way a data sheet describes it; these
+`VX_config.toml` keys select it, overridable through `CONFIGS` or a profile,
+and the RTL never reads them:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `VX_CFG_PLATFORM_MEMORY_TYPE` | `HBM2` | JEDEC standard: `HBM2` (also HBM2E), `HBM3` or `GDDR6` (x16 channels) |
+| `VX_CFG_PLATFORM_MEMORY_NUM_BANKS` | 2 | memory banks, and so DRAM channels (HBM: 128-bit channels) |
+| `VX_CFG_PLATFORM_MEMORY_DATA_RATE` | 2 x `PLATFORM_CLOCK_RATE` | transfer rate per pin in MT/s; the default clocks the DRAM with the core |
+| `VX_CFG_PLATFORM_CLOCK_RATE` | 400 | core clock in MHz; with the data rate it sets how many DRAM cycles a core cycle spans |
+| `VX_CFG_PLATFORM_MEMORY_LATENCY` | 0 | fixed read latency added for the PHY, controller and interconnect, in core cycles |
+| `VX_CFG_PLATFORM_MEMORY_QUEUE_SIZE` | 0 | requests a channel holds in flight (0 = unbounded) |
+
+The model's peak bandwidth follows from the keys: channels x channel width x
+data rate (HBM 16 B, GDDR6 2 B per transfer); `VX_CFG_PLATFORM_MEMORY_PEAK_BW`
+separately states the platform's, which the runtime reports. The device's
+array timings are held in nanoseconds, so a different data rate changes the
+bandwidth but not the latency. The default machine clocks the DRAM with the
+core: an idle read takes 14 cycles on an open row and 26 on a row conflict,
+and the memory delivers up to one 64 B block per cycle.
+
+```bash
+$ CONFIGS="-DVX_CFG_PLATFORM_MEMORY_TYPE=GDDR6 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=16 -DVX_CFG_PLATFORM_MEMORY_DATA_RATE=14000" \
+  ./ci/blackbox.sh --driver=simx --app=vecadd
+```
+
 ## Additional Quick Start Scenarios
 
 Running Vortex simulators with different configurations and drivers is supported. For example:

@@ -29,6 +29,11 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     output wire [NUM_REQS-1:0]                     lookup_hit,
     output wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn,
     output wire [NUM_REQS-1:0][TLB_FLAGS_WIDTH-1:0] lookup_flags,
+    // Permission of the matched entry for each lane's access, checked per
+    // entry in parallel with the tag compare.
+    input  wire [NUM_REQS-1:0][$bits(tlb_access_e)-1:0] lookup_acc,
+    input  wire [NUM_REQS-1:0]                      lookup_amo,
+    output wire [NUM_REQS-1:0]                      lookup_perm,
     // Raw (unspliced) page number and level of the matched entry: consumers
     // that re-install the translation elsewhere splice it themselves.
     output wire [NUM_REQS-1:0][TLB_PPN_WIDTH-1:0]  lookup_ppn_raw,
@@ -51,11 +56,6 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     reg [TLB_SIZE-1:0]      valid_r;
     reg [TLB_SIZE-1:0]      mru_r;
 
-    // Mask that drops the low level*TLB_LEVEL_BITS VPN bits (superpages).
-    function automatic [TLB_VPN_WIDTH-1:0] vpn_mask (input [TLB_LEVEL_WIDTH-1:0] level);
-        vpn_mask = {TLB_VPN_WIDTH{1'b1}} << (level * TLB_LEVEL_BITS);
-    endfunction
-
     // ---------------------------------------------------------------------
     // Per-lane lookup
     // ---------------------------------------------------------------------
@@ -72,7 +72,7 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
     for (genvar l = 0; l < NUM_REQS; ++l) begin : g_lookup
         wire [TLB_SIZE-1:0] hit_vec;
         for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_match
-            wire [TLB_VPN_WIDTH-1:0] mask = vpn_mask(entries_r[i].level);
+            wire [TLB_VPN_WIDTH-1:0] mask = tlb_vpn_mask(entries_r[i].level);
             assign hit_vec[i] = valid_r[i]
                 && ((entries_r[i].vpn & mask) == (lookup_vpn[l] & mask));
         end
@@ -100,11 +100,17 @@ module VX_tlb_cam import VX_tlb_pkg::*; #(
             .sel_in   (hit_onehot),
             .data_out (sel)
         );
+        wire [TLB_SIZE-1:0] perm_vec;
+        for (genvar i = 0; i < TLB_SIZE; ++i) begin : g_perm
+            assign perm_vec[i] = tlb_perm_ok(entries_r[i].flags, tlb_access_e'(lookup_acc[l]), lookup_amo[l]);
+        end
+        assign lookup_perm[l] = (| (hit_onehot & perm_vec));
+
         wire [TLB_PPN_WIDTH-1:0]   sel_ppn   = sel[TLB_LEVEL_WIDTH+TLB_FLAGS_WIDTH +: TLB_PPN_WIDTH];
         wire [TLB_FLAGS_WIDTH-1:0] sel_flags = sel[TLB_LEVEL_WIDTH +: TLB_FLAGS_WIDTH];
         wire [TLB_LEVEL_WIDTH-1:0] sel_level = sel[0 +: TLB_LEVEL_WIDTH];
 
-        wire [TLB_VPN_WIDTH-1:0]   low = lookup_vpn[l] & ~vpn_mask(sel_level);
+        wire [TLB_VPN_WIDTH-1:0]   low = lookup_vpn[l] & ~tlb_vpn_mask(sel_level);
         // Splice the superpage's intra-page index from the VPN into the PPN.
         assign lookup_ppn[l]     = sel_ppn | TLB_PPN_WIDTH'(low);
         assign lookup_flags[l]   = sel_flags;

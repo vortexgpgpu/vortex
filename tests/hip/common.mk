@@ -83,7 +83,7 @@ POCL_CC_FLAGS += POCL_VORTEX_BINTOOL="$(VX_BINTOOL)"
 POCL_CC_FLAGS += POCL_VORTEX_CFLAGS="$(VX_CFLAGS)"
 POCL_CC_FLAGS += POCL_VORTEX_LDFLAGS="$(VX_LDFLAGS)"
 
-HIPCC_FLAGS += -std=c++17
+HIPCC_FLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Werror
 HIPCC_FLAGS += $(CONFIGS)
 # The embedded .hipInfo OFFLOAD_TRIPLE selects the primary SPIR-V pointer
 # width. hipcc rewrites it to match XLEN so the emitted SPIR-V is
@@ -141,6 +141,11 @@ $(VORTEX_RT_LIB)/libvortex.so: FORCE
 # at build time -- POCL_CC_FLAGS env is only used at run time.
 $(PROJECT): $(SRCS) common.h $(VORTEX_KN_PATH)/libvortex2.a $(VORTEX_RT_LIB)/libvortex.so
 	HIP_CLANG_PATH=$(HIP_CLANG_PATH) LD_LIBRARY_PATH=$(LLVM_PATH)/lib:$(LD_LIBRARY_PATH) $(HIPCC) $(HIPCC_FLAGS) -I. $< -o $@
+
+# The runtime for one driver, built with the CONFIGS this app resolved, so a
+# caller that builds ahead of the run builds the model the run will use.
+runtime-%:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/$* DESTDIR=$(VORTEX_RT_LIB)
 
 run-simx: $(PROJECT)
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/simx DESTDIR=$(VORTEX_RT_LIB)

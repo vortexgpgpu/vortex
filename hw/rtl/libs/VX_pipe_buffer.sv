@@ -40,7 +40,7 @@ module VX_pipe_buffer #(
         assign data_out  = data_in;
     end else begin : g_register
         wire [DEPTH:0] valid;
-        wire ready [DEPTH+1];
+        wire [DEPTH-1:0] ready;
         wire [DEPTH:0][DATAW-1:0] data;
 
         assign valid[0] = valid_in;
@@ -48,7 +48,8 @@ module VX_pipe_buffer #(
         assign ready_in = ready[0];
 
         for (genvar i = 0; i < DEPTH; ++i) begin : g_pipe_regs
-            assign ready[i] = (ready[i+1] || ~valid[i+1]);
+            // Stage i advances when any later stage has a hole or the output drains.
+            assign ready[i] = ready_out || ~(& valid[DEPTH:i+1]);
             VX_pipe_register #(
                 .DATAW  (1 + DATAW),
                 .RESETW (1 + RESETW)
@@ -63,7 +64,6 @@ module VX_pipe_buffer #(
 
         assign valid_out = valid[DEPTH];
         assign data_out = data[DEPTH];
-        assign ready[DEPTH] = ready_out;
     end
 
 endmodule

@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1560 866" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <marker id="arrb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1c6ca8"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b58900"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box     { fill:#f4f7fa; stroke:#5a7184; stroke-width:1.5; }
+    .unit    { fill:#e8f0f7; stroke:#2e5e82; stroke-width:1.5; }
+    .mem     { fill:#fdf6e3; stroke:#b58900; stroke-width:1.5; }
+    .sw      { fill:#eef7ee; stroke:#3a7d44; stroke-width:1.5; }
+    .core    { fill:#f7eef5; stroke:#8e4a7e; stroke-width:1.5; }
+    .pe      { fill:#ffffff; stroke:#2e5e82; stroke-width:1.2; }
+    .none    { fill:#fafafa; stroke:#9aa5af; stroke-width:1.2; stroke-dasharray:5 4; }
+    .grp     { fill:none; stroke:#8899aa; stroke-width:1.2; stroke-dasharray:6 4; }
+    .t       { fill:#1b2733; font-size:15px; }
+    .tb      { fill:#1b2733; font-size:16px; font-weight:bold; }
+    .th      { fill:#1b2733; font-size:13.5px; font-weight:bold; }
+    .ts      { fill:#44525f; font-size:12.5px; }
+    .tt      { fill:#5a6772; font-size:12px; font-style:italic; }
+    .mono    { font-family:'SF Mono',Consolas,monospace; font-size:12px; fill:#1b2733; }
+    .flow    { stroke:#444; stroke-width:1.8; fill:none; marker-end:url(#arr); }
+    .flowb   { stroke:#1c6ca8; stroke-width:1.8; fill:none; marker-end:url(#arrb); stroke-dasharray:7 4; }
+    .flowg   { stroke:#b58900; stroke-width:1.8; fill:none; marker-end:url(#arrg); }
+    .lbl     { fill:#1c6ca8; font-size:12px; }
+    .lbg     { fill:#8a6d00; font-size:12px; }
+    .lbk     { fill:#44525f; font-size:12px; }
+    .rule    { stroke:#d5dce3; stroke-width:1; }
+  </style>
+
+  <rect x="0" y="0" width="1560" height="866" fill="#ffffff"/>
+  <text x="24" y="34" class="tb" font-size="20">Vortex CI engine — test cases are data, pytest is the runner, blackbox.sh is the executor</text>
+
+  <rect x="24" y="56" width="1512" height="194" class="grp"/>
+  <text x="40" y="86" class="tb">catalog</text>
+  <text x="40" y="110" class="ts">data, not code</text>
+  <text x="40" y="134" class="ts">one YAML file per</text>
+  <text x="40" y="150" class="ts">category in</text>
+  <text x="40" y="166" class="ts">ci/testcases/</text>
+  <rect x="270" y="72" width="400" height="162" rx="6" class="mem"/>
+  <text x="282" y="94" class="tb">ci/testcases/&lt;category&gt;.yaml</text>
+  <text x="282" y="116" class="ts">defaults: configs, xlen, tier, touches</text>
+  <text x="282" y="132" class="ts">tests: one entry per scenario</text>
+  <text x="282" y="156" class="ts">an entry with drivers: [simx, rtlsim]</text>
+  <text x="282" y="172" class="ts">expands to one case per driver</text>
+  <text x="282" y="222" class="tt">file name = category name</text>
+  <rect x="700" y="72" width="400" height="162" rx="6" class="box"/>
+  <text x="712" y="94" class="tb">a case is a point on eight axes</text>
+  <text x="712" y="116" class="ts">category · driver · xlen · configs</text>
+  <text x="712" y="132" class="ts">shape · tier · needs · touches</text>
+  <text x="712" y="156" class="ts">any axis can become a filter or a</text>
+  <text x="712" y="172" class="ts">matrix dimension</text>
+  <rect x="1130" y="72" width="406" height="162" rx="6" class="box"/>
+  <text x="1142" y="94" class="tb">how a case runs — via</text>
+  <text x="1142" y="116" class="ts">blackbox — ci/blackbox.sh --driver … --app …</text>
+  <text x="1142" y="132" class="ts">make-run — make -C &lt;dir&gt; run-&lt;driver&gt;</text>
+  <text x="1142" y="148" class="ts">script — any command; host flows</text>
+  <text x="1142" y="172" class="ts">check: model_parity | perf_gate (optional)</text>
+  <path d="M 670 152 L 700 152" class="flow"/>
+  <path d="M 1100 152 L 1130 152" class="flow"/>
+  <rect x="24" y="296" width="1512" height="270" class="grp"/>
+  <text x="40" y="326" class="tb">harness</text>
+  <text x="40" y="350" class="ts">three files in ci/</text>
+  <text x="40" y="374" class="ts">no pytest.ini: markers</text>
+  <text x="40" y="390" class="ts">register from the</text>
+  <text x="40" y="406" class="ts">data</text>
+  <rect x="270" y="312" width="380" height="238" rx="6" class="unit"/>
+  <text x="282" y="334" class="tb">ci/testcase.py</text>
+  <text x="282" y="356" class="ts">the Spec model and the loaders</text>
+  <text x="282" y="380" class="ts">planner CLI, no pytest or build</text>
+  <text x="282" y="396" class="ts">environment needed:</text>
+  <text x="282" y="412" class="ts">lint — validate the catalog</text>
+  <text x="282" y="428" class="ts">matrix — the cells for an event</text>
+  <text x="282" y="444" class="ts">drivers — drivers a diff forces in</text>
+  <text x="282" y="460" class="ts">select — categories a diff touches</text>
+  <text x="282" y="476" class="ts">checks — cross-cutting check names</text>
+  <rect x="680" y="312" width="420" height="238" rx="6" class="unit"/>
+  <text x="692" y="334" class="tb">ci/conftest.py</text>
+  <text x="692" y="356" class="ts">registers one marker per value found in</text>
+  <text x="692" y="372" class="ts">the data: category, driver, tier, check</text>
+  <text x="692" y="396" class="ts">parametrizes one test per case; filters by</text>
+  <text x="692" y="412" class="ts">the build tree's XLEN</text>
+  <text x="692" y="436" class="ts">sim_build fixture: build each</text>
+  <text x="692" y="452" class="ts">(driver, CONFIGS) once, run many</text>
+  <text x="692" y="476" class="ts">known_issue → xfail; --update-baselines</text>
+  <rect x="1130" y="312" width="406" height="238" rx="6" class="unit"/>
+  <text x="1142" y="334" class="tb">ci/test_runner.py</text>
+  <text x="1142" y="356" class="ts">one test function: run the case, assert a</text>
+  <text x="1142" y="372" class="ts">clean exit</text>
+  <text x="1142" y="396" class="ts">model_parity: run simx and rtlsim, compare</text>
+  <text x="1142" y="412" class="ts">instructions and cycles</text>
+  <text x="1142" y="436" class="ts">perf_gate: compare rtlsim cycles with the</text>
+  <text x="1142" y="452" class="ts">checked-in baseline</text>
+  <path d="M 650 442 L 680 442" class="flow"/>
+  <path d="M 1100 442 L 1130 442" class="flow"/>
+  <path d="M 470 234 L 470 312" class="flow"/>
+  <rect x="24" y="612" width="1512" height="194" class="grp"/>
+  <text x="40" y="642" class="tb">execution</text>
+  <text x="40" y="666" class="ts">unchanged</text>
+  <text x="40" y="682" class="ts">executors</text>
+  <text x="40" y="706" class="ts">one build tree</text>
+  <text x="40" y="722" class="ts">per XLEN</text>
+  <rect x="270" y="628" width="380" height="162" rx="6" class="core"/>
+  <text x="282" y="650" class="tb">selection</text>
+  <text x="282" y="672" class="ts">pytest ci -m "cache and simx and smoke"</text>
+  <text x="282" y="688" class="ts">pytest ci --collect-only -q -m simx</text>
+  <text x="282" y="712" class="ts">./ci/regression.sh --test "&lt;expr&gt;"</text>
+  <text x="282" y="728" class="ts">./ci/regression.sh --all</text>
+  <text x="282" y="778" class="tt">a slice is a marker expression</text>
+  <rect x="680" y="628" width="420" height="162" rx="6" class="core"/>
+  <text x="692" y="650" class="tb">executors</text>
+  <text x="692" y="672" class="ts">ci/blackbox.sh — rebuilds the driver,</text>
+  <text x="692" y="688" class="ts">runs the app</text>
+  <text x="692" y="704" class="ts">make — test-suite run targets</text>
+  <text x="692" y="720" class="ts">ci/regression.sh --run &lt;flow&gt; — the four</text>
+  <text x="692" y="736" class="ts">host flows: dtm, sst, gem5, cupbop</text>
+  <rect x="1130" y="628" width="406" height="162" rx="6" class="mem"/>
+  <text x="1142" y="650" class="tb">outputs</text>
+  <text x="1142" y="672" class="ts">JUnit XML per cell → the GitHub test report</text>
+  <text x="1142" y="688" class="ts">PARITY: and PERF: lines in the log</text>
+  <text x="1142" y="712" class="ts">ci/baselines/perf/&lt;category&gt;.json</text>
+  <text x="1142" y="728" class="ts">read by perf_gate, written only by a human</text>
+  <path d="M 650 708 L 680 708" class="flow"/>
+  <path d="M 1100 708 L 1130 708" class="flow"/>
+  <path d="M 1333 550 L 1333 590 L 890 590 L 890 628" class="flow"/>
+  <text x="900" y="584" class="lbk">shells out</text>
+  <text x="24" y="844" class="tt">Gold = data and results · blue = the harness · purple = what a developer or a CI cell invokes.</text>
+</svg>

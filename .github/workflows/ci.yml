@@ -23,8 +23,11 @@ on:
         description: "comma list: smoke,full,nightly (blank = all)"
         default: ""
 
-env:
-  CCACHE_DISABLE: 1
+# ccache stays on: a hosted runner starts every job with an empty cache, so it
+# cannot serve an object built against other headers (the stale-object class
+# seen on persistent machines), and within a job it turns a cell's repeated sim
+# builds and its config-invariant objects (Verilator runtime, host driver) into
+# cache hits.
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -33,6 +36,9 @@ jobs:
   # ---------------------------------------------------------------------------
   plan:
     runs-on: ubuntu-22.04
+    permissions:
+      actions: write
+      contents: read
     outputs:
       cells: ${{ steps.q.outputs.cells }}
       run: ${{ steps.q.outputs.run }}
@@ -41,25 +47,49 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # The ASIC gate's nightly stays disabled until a push gives it something
+      # to synthesize; it disables itself again when it starts. An
+      # indeterminate diff arms it. Arming never fails CI: a miss only delays
+      # the gate to the next qualifying push.
+      - name: Arm the ASIC gate
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.before }}
+        run: |
+          set -uo pipefail
+          INPUTS='^(hw/|VX_config\.toml$|VX_types\.toml$|VERSION$|ci/(asic_gate|synth_gate|synth_report)\.py$|ci/testcases/asic_gate\.yaml$|ci/baselines/synthesis/yosys/|\.github/workflows/asic_gate\.yml$)'
+          if git cat-file -e "${BASE}^{commit}" 2>/dev/null \
+             && ! git diff --name-only "$BASE" HEAD | grep -qE "$INPUTS"; then
+            echo "no synthesis input changed; the ASIC gate stays as it is"
+            exit 0
+          fi
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/asic_gate.yml/enable" \
+            && echo "ASIC gate armed for tonight" \
+            || echo "::warning::could not enable asic_gate.yml; the next qualifying push retries"
       - run: pip install --quiet pyyaml
-      # Read the toolchain pin so we can probe its cache below. TOOLCHAIN_REV is
-      # the toolchain cache key; the build job's setup-vortex caches `tools` under
-      # `${{ runner.os }}-toolchain-<rev>-<profile>` (profile=lite for push/PR).
+      # Resolve the toolchain identity so we can probe its cache below. The build
+      # job's setup-vortex caches `tools` under
+      # `${{ runner.os }}-toolchain-<rev>-<sha>-<profile>`, from the same script.
       - name: Read toolchain rev
         id: vers
         run: |
-          source VERSION
-          echo "toolchain=$TOOLCHAIN_REV" >> "$GITHUB_OUTPUT"
-      # Probe (lookup-only, no download) whether the toolchain cache exists. A
-      # MISS — deleted, expired (GitHub's 7-day eviction), key changed via a
-      # VERSION bump, or first run — means the build job will REBUILD the
+          rev=$(bash ci/toolchain_rev.sh)
+          echo "toolchain=$rev" >> "$GITHUB_OUTPUT"
+      # Probe (lookup-only, no download) whether this toolchain has a cache. A
+      # MISS — deleted, expired (GitHub's 7-day eviction), the pinned tag moved to
+      # new prebuilts, or first run — means the build job will REBUILD the
       # toolchain, which affects every driver. We force full coverage on that.
+      # Either profile counts as a hit: the toolchain is the same prebuilt commit,
+      # and a run forced to full coverage only ever saves the `full` cache, so
+      # requiring `lite` would force full coverage again on every later push.
       - name: Probe toolchain cache
         id: tc
         uses: actions/cache/restore@v4
         with:
           path: tools
           key: ${{ runner.os }}-toolchain-${{ steps.vers.outputs.toolchain }}-lite
+          restore-keys: ${{ runner.os }}-toolchain-${{ steps.vers.outputs.toolchain }}-
           lookup-only: true
       - name: Plan matrix
         id: q
@@ -67,7 +97,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           IN_DRIVERS: ${{ github.event.inputs.drivers }}
           IN_TIER: ${{ github.event.inputs.tier }}
-          TOOLCHAIN_CACHE_HIT: ${{ steps.tc.outputs.cache-hit }}
+          TOOLCHAIN_CACHE_HIT: ${{ steps.tc.outputs.cache-matched-key != '' }}
           PUSH_BEFORE: ${{ github.event.before }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
         run: |
@@ -169,16 +199,22 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # tests — one cell per (category, driver, xlen); pytest selects via markers.
+  # A cell whose recorded runtime exceeds ci/testcase.py's SHARD_BUDGET_S is
+  # planned as several shards (`shard` of `shards`), balanced on the per-case
+  # times in ci/runtimes.json, so every cell fits the 3 h timeout.
   # ---------------------------------------------------------------------------
   tests:
     needs: [plan, build]
     if: needs.plan.outputs.run == 'true'
+    name: tests (${{ matrix.category }}, ${{ matrix.driver }}, ${{ matrix.xlen }}${{ matrix.shards && format(', {0}/{1}', matrix.shard, matrix.shards) || '' }})
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.cells) }}
     runs-on: ubuntu-22.04
     timeout-minutes: 180
+    env:
+      CELL: ${{ matrix.category }}-${{ matrix.driver }}-${{ matrix.xlen }}${{ matrix.shards && format('-{0}of{1}', matrix.shard, matrix.shards) || '' }}
     steps:
       - uses: actions/checkout@v4
       - name: Setup Vortex
@@ -200,23 +236,18 @@ jobs:
         run: |
           cd build${{ matrix.xlen }}
           chmod -R +x .
-          EXPR="${{ matrix.category }}"
-          [ "${{ matrix.driver }}" != "host" ] && EXPR="$EXPR and ${{ matrix.driver }}"
-          # A cross-cutting check (model_parity, perf_gate) has its own dedicated
-          # cell whose `-m <check>` sweeps every such case catalog-wide; exclude
-          # those cases from every OTHER category's cell so each runs once, not
-          # twice. The check list comes from the planner, never a copy of it.
-          for c in $(python3 ci/testcase.py checks); do
-            [ "${{ matrix.category }}" = "$c" ] && continue
-            EXPR="$EXPR and not $c"
-          done
+          # The planner owns what a cell selects, so the cell runs exactly the
+          # cases it was planned (and, if sharded, split) from.
+          EXPR=$(python3 ci/testcase.py expr --cell="${{ matrix.category }}" --driver="${{ matrix.driver }}")
+          SHARD=()
+          [ -n "${{ matrix.shards }}" ] && SHARD=(--shard="${{ matrix.shard }}/${{ matrix.shards }}")
           VX_XLEN=${{ matrix.xlen }} python3 -m pytest ci -m "$EXPR" --strict-markers \
-            -v \
-            --junitxml="$GITHUB_WORKSPACE/junit-${{ matrix.category }}-${{ matrix.driver }}-${{ matrix.xlen }}.xml"
+            "${SHARD[@]}" -v \
+            --junitxml="$GITHUB_WORKSPACE/junit-$CELL.xml"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: junit-${{ matrix.category }}-${{ matrix.driver }}-${{ matrix.xlen }}
+          name: junit-${{ env.CELL }}
           path: junit-*.xml
 
   complete:

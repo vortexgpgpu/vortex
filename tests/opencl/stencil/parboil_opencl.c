@@ -56,46 +56,6 @@ get_last_async(struct pb_TimerSet* timers)
     return NULL;
 }
 
-static void insert_marker(struct pb_TimerSet* tset, enum pb_TimerID timer)
-{
-  cl_int ciErrNum = CL_SUCCESS;
-  struct pb_async_time_marker_list ** new_event = &(tset->async_markers);
-
-  while(*new_event != NULL && (*new_event)->timerID != INVALID_TIMERID) {
-    new_event = &((*new_event)->next);
-  }
-
-  if(*new_event == NULL) {
-    *new_event = (struct pb_async_time_marker_list *) 
-      			malloc(sizeof(struct pb_async_time_marker_list));
-    (*new_event)->marker = calloc(1, sizeof(cl_event));
-    /*
-    // I don't think this is needed at all. I believe clEnqueueMarker 'creates' the event
-#if ( __OPENCL_VERSION__ >= CL_VERSION_1_1 )
-fprintf(stderr, "Creating Marker [%d]\n", timer);
-    *((cl_event *)((*new_event)->marker)) = clCreateUserEvent(*clContextPtr, &ciErrNum);
-    if (ciErrNum != CL_SUCCESS) {
-      fprintf(stderr, "Error Creating User Event Object!\n");
-    }
-    ciErrNum = clSetUserEventStatus(*((cl_event *)((*new_event)->marker)), CL_QUEUED);
-    if (ciErrNum != CL_SUCCESS) {
-      fprintf(stderr, "Error Setting User Event Status!\n");
-    }
-#endif
-*/
-    (*new_event)->next = NULL;
-  }
-
-  /* valid event handle now aquired: insert the event record */
-  (*new_event)->label = NULL;
-  (*new_event)->timerID = timer;
-  ciErrNum = clEnqueueMarker(*clCommandQueuePtr, (cl_event *)(*new_event)->marker);
-  if (ciErrNum != CL_SUCCESS) {
-      fprintf(stderr, "Error Enqueueing Marker!\n");
-  }
-
-}
-
 static void insert_submarker(struct pb_TimerSet* tset, char *label, enum pb_TimerID timer)
 {
   cl_int ciErrNum = CL_SUCCESS;
@@ -128,7 +88,7 @@ fprintf(stderr, "Creating SubMarker %s[%d]\n", label, timer);
   /* valid event handle now aquired: insert the event record */
   (*new_event)->label = label;
   (*new_event)->timerID = timer;
-  ciErrNum = clEnqueueMarker(*clCommandQueuePtr, (cl_event *)(*new_event)->marker);
+  ciErrNum = clEnqueueMarkerWithWaitList(*clCommandQueuePtr, 0, NULL, (cl_event *)(*new_event)->marker);
   if (ciErrNum != CL_SUCCESS) {
       fprintf(stderr, "Error Enqueueing Marker!\n");
   }
@@ -142,7 +102,6 @@ static pb_Timestamp record_async_times(struct pb_TimerSet* tset)
   struct pb_async_time_marker_list * next_interval = NULL;
   struct pb_async_time_marker_list * last_marker = get_last_async(tset);
   pb_Timestamp total_async_time = 0;
-  enum pb_TimerID timer;
   
   for(next_interval = tset->async_markers; next_interval != last_marker; 
       next_interval = next_interval->next) {
@@ -193,18 +152,6 @@ accumulate_time(pb_Timestamp *accum,
 //#endif
 }
 
-//#if _POSIX_VERSION >= 200112L
-static pb_Timestamp get_time()
-{
-  //struct timeval tv;
-  //gettimeofday(&tv, NULL);
-  //return (pb_Timestamp) (tv.tv_sec * 1000000LL + tv.tv_usec);
-  return 0;
-}
-//#else
-//# error "no supported time libraries are available on this platform"
-//#endif
-
 void
 pb_ResetTimer(struct pb_Timer *timer)
 {
@@ -222,6 +169,7 @@ pb_ResetTimer(struct pb_Timer *timer)
 void
 pb_StartTimer(struct pb_Timer *timer)
 {
+  (void)timer;
 /*#ifndef DISABLE_PARBOIL_TIMER
   if (timer->state != pb_Timer_STOPPED) {
     fputs("Ignoring attempt to start a running timer\n", stderr);
@@ -245,6 +193,8 @@ pb_StartTimer(struct pb_Timer *timer)
 void
 pb_StartTimerAndSubTimer(struct pb_Timer *timer, struct pb_Timer *subtimer)
 {
+  (void)timer;
+  (void)subtimer;
 /*#ifndef DISABLE_PARBOIL_TIMER
 
   unsigned int numNotStopped = 0x3; // 11
@@ -287,6 +237,7 @@ pb_StartTimerAndSubTimer(struct pb_Timer *timer, struct pb_Timer *subtimer)
 void
 pb_StopTimer(struct pb_Timer *timer)
 {
+  (void)timer;
 /*#ifndef DISABLE_PARBOIL_TIMER
 
   pb_Timestamp fini;
@@ -315,6 +266,8 @@ pb_StopTimer(struct pb_Timer *timer)
 }
 
 void pb_StopTimerAndSubTimer(struct pb_Timer *timer, struct pb_Timer *subtimer) {
+  (void)timer;
+  (void)subtimer;
 /*#ifndef DISABLE_PARBOIL_TIMER
 
   pb_Timestamp fini;
@@ -364,6 +317,7 @@ void pb_StopTimerAndSubTimer(struct pb_Timer *timer, struct pb_Timer *subtimer) 
 double
 pb_GetElapsedTime(struct pb_Timer *timer)
 {
+  (void)timer;
   /*double ret;
 #ifndef DISABLE_PARBOIL_TIMER
 
@@ -384,6 +338,7 @@ pb_GetElapsedTime(struct pb_Timer *timer)
 void
 pb_InitializeTimerSet(struct pb_TimerSet *timers)
 {
+  (void)timers;
 /*#ifndef DISABLE_PARBOIL_TIMER
   int n;
 
@@ -405,7 +360,10 @@ void pb_SetOpenCL(void *p_clContextPtr, void *p_clCommandQueuePtr) {
 }
 
 void
-pb_AddSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID pb_Category) {    
+pb_AddSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID pb_Category) {
+  (void)timers;
+  (void)label;
+  (void)pb_Category;
 /*#ifndef DISABLE_PARBOIL_TIMER
   
   struct pb_SubTimer *subtimer = (struct pb_SubTimer *) malloc
@@ -440,6 +398,8 @@ pb_AddSubTimer(struct pb_TimerSet *timers, char *label, enum pb_TimerID pb_Categ
 void
 pb_SwitchToTimer(struct pb_TimerSet *timers, enum pb_TimerID timer)
 {
+  (void)timers;
+  (void)timer;
 #if 0
 #ifndef DISABLE_PARBOIL_TIMER
 
@@ -732,8 +692,9 @@ pb_PrintTimerSet(struct pb_TimerSet *timers)
         maxSubLength = 0;
         while (sub != NULL) {
           // Find longest SubTimer label
-          if (strlen(sub->label) > maxSubLength) {
-            maxSubLength = strlen(sub->label);
+          int labelLength = (int)strlen(sub->label);
+          if (labelLength > maxSubLength) {
+            maxSubLength = labelLength;
           }
           sub = sub->next;
         }
@@ -1194,6 +1155,7 @@ pb_GetPlatform(struct pb_PlatformParam *platform) {
 
 pb_Context*
 pb_InitOpenCLContext(struct pb_Parameters* parameters) {
+  (void)parameters;
 #if 0
   pb_Platform* ps = pb_GetPlatform(parameters->platform);
   if (!ps) return NULL;
@@ -1235,11 +1197,13 @@ pb_InitOpenCLContext(struct pb_Parameters* parameters) {
 
 void
 pb_ReleaseOpenCLContext(pb_Context* c) {
+  (void)c;
   pb_ReleasePlatforms();
 }
 
 void
 pb_PrintPlatformInfo(pb_Context* c) {
+  (void)c;
   /*pb_Platform** ps = pb_GetPlatforms();
   if (!ps) {
     fprintf (stderr, "No platform found");
@@ -1351,7 +1315,7 @@ pb_sig_int(char* c, int* p, int sz) {
 
 void
 pb_sig_uchar(char* c, unsigned char* p, unsigned int sz) {
-  int i;
+  unsigned int i;
   unsigned long long int s = 0;
   for (i = 0; i < sz; i++) s += p[i];
   printf ("[Signature] %s = %lld\n", c, s);

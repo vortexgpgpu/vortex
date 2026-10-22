@@ -303,7 +303,12 @@ class Yosys(Tool):
 
     metrics = ("fmax_mhz", "wns_ns", "tns_ns", "cell_area_um2", "seq_area_um2",
                "sram_area_um2", "cell_count", "power_mw", "build_time_s")
-    gated = ("fmax_mhz", "cell_area_um2")
+    # Fmax is held to the build's clock target (gate()'s BELOW TARGET check),
+    # not to its baseline. ABC maps against that target (-D) and spends any
+    # slack beyond it recovering area, so above the target Fmax moves with
+    # whatever else the design contains: #424 left the RTU's worst path in an
+    # unchanged FMA stage yet moved it 957 -> 903 MHz.
+    gated = ("cell_area_um2",)
     integral = ("cell_count", "build_time_s")
     columns = (("fmax", "fmax_mhz", "%.0f", 9),
                ("area_um2", "cell_area_um2", "%.0f", 11),
@@ -1031,6 +1036,29 @@ def gate(result, env, args, gated, tool):
                    else "FAIL", reasons)
 
 
+def report_entry(r, env, tool):
+    """One build of the `--report` JSON: a superset of its baseline entry, next
+    to the baseline the verdict was judged against."""
+    b = r["build"]
+    entry = {"id": b["id"],
+             "group": b["group"],
+             "dut": b["dut"],
+             "clock_mhz": b["clock_mhz"],
+             "configs": b["configs"],
+             "config_hash": config_hash(b, env, tool),
+             "thresholds": b.get("thresholds") or {},
+             "known_issue": b.get("known_issue", ""),
+             "metrics": r["metrics"],
+             "baseline": b.get("baseline"),
+             "baseline_config_hash": b.get("config_hash"),
+             "error": r["error"],
+             "verdict": r["verdict"],
+             "reasons": r["reasons"]}
+    if b.get("impl_strategy"):
+        entry["impl_strategy"] = b["impl_strategy"]
+    return entry
+
+
 def report(results, env, args, gated, tool, record=False):
     """Print the metric table; return the list of failing verdicts.
 
@@ -1054,6 +1082,7 @@ def report(results, env, args, gated, tool, record=False):
         else:
             verdict, reasons = gate(r, env, args, gated, tool)
         r["verdict"] = verdict
+        r["reasons"] = reasons
         if reasons:   # includes KNOWN-ISSUE/XPASS: reported, but not failing
             failures.append((b["id"], verdict, reasons))
         if r["metrics"] is None:
@@ -1223,14 +1252,7 @@ def main(argv=None, default_tool="xilinx"):
                        "tolerance": args.threshold,
                        "metric_thresholds": args.metric_threshold,
                        "gated": list(gated),
-                       "builds": [{"id": r["build"]["id"],
-                                   "group": r["build"]["group"],
-                                   "dut": r["build"]["dut"],
-                                   "clock_mhz": r["build"]["clock_mhz"],
-                                   "known_issue": r["build"].get("known_issue", ""),
-                                   "metrics": r["metrics"],
-                                   "error": r["error"],
-                                   "verdict": r["verdict"]}
+                       "builds": [report_entry(r, env, tool)
                                   for r in results]}, fh, indent=2)
             fh.write("\n")
         print("\nwrote %s" % args.report)

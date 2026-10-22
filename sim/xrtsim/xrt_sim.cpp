@@ -50,9 +50,6 @@
 
 #include <iostream>
 
-#ifndef MEM_CLOCK_RATIO
-#define MEM_CLOCK_RATIO 1
-#endif
 
 #define CACHE_BLOCK_SIZE  64
 
@@ -141,10 +138,10 @@ class xrt_sim::Impl {
 public:
   Impl()
   : device_(nullptr)
-  , ram_(nullptr)
+  , ram_{}
   , host_ram_(nullptr)
   , host_alloc_(nullptr)
-  , dram_sim_(VX_CFG_PLATFORM_MEMORY_NUM_BANKS, VX_CFG_PLATFORM_MEMORY_DATA_SIZE, MEM_CLOCK_RATIO)
+  , dram_sim_(DramSim::platform_config())
   , stop_(false)
 #ifdef VCD_OUTPUT
   , tfp_(nullptr)
@@ -167,8 +164,8 @@ public:
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       delete mem_alloc_[b];
     }
-    if (ram_) {
-      delete ram_;
+    for (auto ram : ram_) {
+      delete ram;
     }
     if (host_alloc_) {
       delete host_alloc_;
@@ -223,8 +220,12 @@ public:
     // calculate memory bank size
     mem_bank_size_ = (1ull << VX_CFG_PLATFORM_MEMORY_ADDR_WIDTH) / VX_CFG_PLATFORM_MEMORY_NUM_BANKS;
 
-    // allocate RAM
-    ram_ = new RAM(0, RAM_PAGE_SIZE);
+    // One memory per AXI port, as on the platform, where each kernel master
+    // is wired to its own memory resource. A request issued on the wrong port
+    // then misses its data instead of finding it in a shared image.
+    for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
+      ram_[b] = new RAM(0, RAM_PAGE_SIZE);
+    }
 
     // initialize AXI memory interfaces
     MP_M_AXI_MEM(VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
@@ -311,7 +312,7 @@ public:
     if (bank_id >= VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
       return -1;
     uint64_t base_addr = bank_id * mem_bank_size_ + addr;
-    ram_->write(data, base_addr, size);
+    ram_[bank_id]->write(data, base_addr, size);
     return 0;
   }
 
@@ -321,7 +322,7 @@ public:
     if (bank_id >= VX_CFG_PLATFORM_MEMORY_NUM_BANKS)
       return -1;
     uint64_t base_addr = bank_id * mem_bank_size_ + addr;
-    ram_->read(data, base_addr, size);
+    ram_[bank_id]->read(data, base_addr, size);
     return 0;
   }
 
@@ -331,7 +332,9 @@ public:
       return -1;
     uint64_t dest_base_addr = bank_id_dest * mem_bank_size_ + dest_addr;
     uint64_t src_base_addr = bank_id_src * mem_bank_size_ + src_addr;
-    ram_->copy(dest_base_addr, src_base_addr, size);
+    std::vector<uint8_t> data(size);
+    ram_[bank_id_src]->read(data.data(), src_base_addr, size);
+    ram_[bank_id_dest]->write(data.data(), dest_base_addr, size);
     return 0;
   }
 
@@ -476,6 +479,10 @@ private:
       reqs.clear();
     }
 
+    for (auto& st : m_axi_states_) {
+      st.w_staged.clear();
+    }
+
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
       std::queue<mem_req_t*> empty;
       std::swap(dram_queues_[b], empty);
@@ -526,9 +533,9 @@ private:
     dram_sim_.tick();
 
     for (int b = 0; b < VX_CFG_PLATFORM_MEMORY_NUM_BANKS; ++b) {
-      if (!dram_queues_[b].empty()) {
+      if (!dram_queues_[b].empty() && dram_sim_.can_accept(b)) {
         auto mem_req = dram_queues_[b].front();
-        dram_sim_.send_request(mem_req->addr, mem_req->write, [](void* arg)->bool {
+        dram_sim_.send_request(b, bank_local_addr(mem_req->addr), mem_req->write, [](void* arg)->bool {
           auto orig_req = reinterpret_cast<mem_req_t*>(arg);
           if (orig_req->ready) {
             delete orig_req;
@@ -543,6 +550,19 @@ private:
 
   #ifndef NDEBUG
     fflush(stdout);
+  #endif
+  }
+
+  // Byte address within its bank (DRAM channel) of an AXI bank address:
+  // VX_mem_to_axi places the bank select above the data-size bits when the
+  // banks are interleaved.
+  static uint64_t bank_local_addr(uint64_t axi_addr) {
+  #if VX_CFG_PLATFORM_MEMORY_INTERLEAVE == 1
+    constexpr uint32_t lg2_data_size = log2ceil(VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+    constexpr uint32_t bank_sel_bits = log2ceil(VX_CFG_PLATFORM_MEMORY_NUM_BANKS);
+    return (axi_addr >> (bank_sel_bits + lg2_data_size)) << lg2_data_size;
+  #else
+    return axi_addr;
   #endif
   }
 
@@ -769,6 +789,14 @@ private:
         }
         if (mem_rsp_it != pending_mem_reqs_[b].end()) {
           auto mem_rsp = *mem_rsp_it;
+          // Commit point: the write becomes visible exactly as its B is returned.
+          for (auto& beat : mem_rsp->w_beats) {
+            for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; ++i) {
+              if ((beat.byteen >> i) & 0x1) {
+                (*ram_[b])[beat.addr + i] = beat.data[i];
+              }
+            }
+          }
           *m_axi_mem_[b].bvalid = 1;
           *m_axi_mem_[b].bid    = mem_rsp->tag;
           *m_axi_mem_[b].bresp  = 0;
@@ -786,7 +814,7 @@ private:
           auto mem_req = new mem_req_t();
           mem_req->tag   = *m_axi_mem_[b].arid;
           mem_req->addr  = base + uint64_t(beat) * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
-          ram_->read(mem_req->data.data(), mem_req->addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+          ram_[b]->read(mem_req->data.data(), mem_req->addr, VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
           mem_req->write = false;
           mem_req->ready = false;
           mem_req->last  = (beat == len);
@@ -811,13 +839,17 @@ private:
         uint64_t byte_addr = m_axi_states_[b].aw_addr
                            + uint64_t(m_axi_states_[b].aw_beat)
                              * VX_CFG_PLATFORM_MEMORY_DATA_SIZE;
-        auto byteen = *m_axi_mem_[b].wstrb;
-        auto data = (const uint8_t*)m_axi_mem_[b].wdata->data();
-        for (int i = 0; i < VX_CFG_PLATFORM_MEMORY_DATA_SIZE; ++i) {
-          if ((byteen >> i) & 0x1) {
-            (*ram_)[byte_addr + i] = data[i];
-          }
-        }
+        // The beat is accepted but NOT yet visible in memory: AXI makes a
+        // write observable only once its B response is returned, and a read to
+        // the same address issued before that may legally return either value.
+        // Holding the payload here is what lets a master's own store->fill
+        // ordering bug appear in simulation instead of only on hardware.
+        w_beat_t beat;
+        beat.addr   = byte_addr;
+        beat.byteen = uint64_t(*m_axi_mem_[b].wstrb);
+        std::memcpy(beat.data.data(), m_axi_mem_[b].wdata->data(),
+                    VX_CFG_PLATFORM_MEMORY_DATA_SIZE);
+        m_axi_states_[b].w_staged.emplace_back(beat);
         if (*m_axi_mem_[b].wlast) {
           auto mem_req = new mem_req_t();
           mem_req->tag   = m_axi_states_[b].aw_tag;
@@ -825,6 +857,8 @@ private:
           mem_req->write = true;
           mem_req->ready = false;
           mem_req->last  = true;
+          mem_req->w_beats = std::move(m_axi_states_[b].w_staged);
+          m_axi_states_[b].w_staged.clear();
           pending_mem_reqs_[b].emplace_back(mem_req);
           dram_queues_[b].push(mem_req);
           m_axi_states_[b].aw_active = false;
@@ -835,6 +869,13 @@ private:
     }
   }
 
+  // One accepted write beat, held until the burst's B response retires it.
+  typedef struct {
+    std::array<uint8_t, VX_CFG_PLATFORM_MEMORY_DATA_SIZE> data;
+    uint64_t addr;
+    uint64_t byteen;
+  } w_beat_t;
+
   typedef struct {
     bool     read_rsp_ready;
     bool     write_rsp_ready;
@@ -843,6 +884,7 @@ private:
     uint64_t aw_addr;
     uint32_t aw_beat;
     uint32_t aw_tag;
+    std::vector<w_beat_t> w_staged;  // beats accepted so far in this burst
   } m_axi_state_t;
 
   typedef struct {
@@ -852,6 +894,7 @@ private:
     bool write;
     bool ready;
     bool last;     // last beat of its burst — drives rlast
+    std::vector<w_beat_t> w_beats;  // writes: payload, applied when B retires
   } mem_req_t;
 
   // Whether read/write responses may complete out of request order, and the
@@ -956,7 +999,7 @@ private:
   } m_axi_mem_t;
 
   Vvortex_afu_shim* device_;
-  RAM* ram_;
+  RAM* ram_[VX_CFG_PLATFORM_MEMORY_NUM_BANKS];
   RAM* host_ram_;
   MemoryAllocator* host_alloc_;
   DramSim dram_sim_;

@@ -32,7 +32,8 @@
 
 module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     parameter GMEM_LINE_SIZE  = `VX_CFG_L1_LINE_SIZE,
-    parameter GMEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(GMEM_LINE_SIZE)
+    parameter GMEM_ADDR_WIDTH = `VX_CFG_MEM_ADDR_WIDTH - `CLOG2(GMEM_LINE_SIZE),
+    localparam CL_OFF_BITS    = `CLOG2(GMEM_LINE_SIZE)
 ) (
     input  wire                        clk,
     input  wire                        reset,
@@ -66,7 +67,6 @@ module VX_dxa_addr_gen import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     output wire [15:0]                 out_n_base,   // N index of this CL's element 0
     output wire [DXA_SMEM_ADDR_W-1:0]  out_smem_base // tile SMEM byte base (for tiled dest)
 );
-    localparam CL_OFF_BITS = `CLOG2(GMEM_LINE_SIZE);
     localparam VLEN_W      = CL_OFF_BITS + 1;
 
     `STATIC_ASSERT(`IS_POW2(GMEM_LINE_SIZE), ("GMEM_LINE_SIZE must be power of 2"))

@@ -7,5 +7,8 @@
 __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
 	auto dst_ptr = reinterpret_cast<uint32_t*>(arg->dst_addr);
 	uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+	if (idx >= arg->num_points) {
+		return;
+	}
 	dst_ptr[idx] = MINIMAL_MAGIC | idx;
 }

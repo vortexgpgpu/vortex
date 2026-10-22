@@ -27,8 +27,8 @@ __kernel void kernel_main(kernel_arg_t* arg) {
                    arg->tmin, arg->tmax };
 
   // Shadow-ray flags: opaque-force + terminate-on-first-hit.
-  uint32_t scene_lo = (uint32_t)(arg->scene_addr & 0xffffffffu);
-  uint32_t h   = vx_rt_wtrace(scene_lo, 0u,
+  uintptr_t scene_ptr = arg->scene_addr;
+  uint32_t h   = vx_rt_wtrace(scene_ptr, 0u,
                               VX_RT_FLAG_OPAQUE | VX_RT_FLAG_TERMINATE_ON_FIRST_HIT,
                               0xffu, &ray);
   vx_hit_t hit;

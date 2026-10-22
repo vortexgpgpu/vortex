@@ -11,16 +11,16 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   auto pB = reinterpret_cast<ctx::input_t *>(arg->B_addr);
   auto pC = reinterpret_cast<ctx::output_t *>(arg->C_addr);
 
-  uint32_t N = arg->N;
-  uint32_t K = arg->K;
+  size_t N = arg->N;
+  size_t K = arg->K;
 
   ctx::fragment_a   fragA;
   ctx::fragment_b   fragB;
   ctx::fragment_acc fragC;
 
   // calculate tile row & column based on block index
-  uint32_t tile_row = blockIdx.y * ctx::tileM;
-  uint32_t tile_col = blockIdx.x * ctx::tileN;
+  size_t tile_row = blockIdx.y * ctx::tileM;
+  size_t tile_col = blockIdx.x * ctx::tileN;
 
   // Initialize accumulator tile to zero
   ctx::fill_fragment(fragC, 0);
@@ -29,7 +29,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   uint32_t cycles = 0;
 #endif
 
-  for (uint32_t i = 0; i < K; i += ctx::tileK) {
+  for (size_t i = 0; i < K; i += ctx::tileK) {
     auto pTileA = pA + tile_row * K + i;
     auto pTileB = pB + tile_col * K + i;
 

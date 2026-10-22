@@ -67,11 +67,9 @@ public:
 
   // ── Per-line work item produced by addr_gen, consumed by gmem_req ───
   // Each entry = ONE GMEM cache-line read. Row-major writes contribute it to a
-  // single contiguous LMEM word write; a K-major transposing load fans it out
-  // to `km_num_elems` strided per-element destinations, which smem_wr coalesces
-  // back into full byte-masked block writes (one read → bank-parallel scatter,
-  // never re-reading a line per element — TMA-style, matching the hardware
-  // address generator, which reads per cache line).
+  // single contiguous LMEM word write; a K-major or tiled load fans it out to
+  // `km_num_elems` per-element destinations, which smem_wr writes one element
+  // per beat (one read per cache line, never re-read per element).
   struct LineWork {
     uint64_t gmem_cl_addr;     // CL-aligned global address
     uint64_t smem_word_addr;   // word-aligned SMEM byte address (element 0)
@@ -513,8 +511,7 @@ private:
         lw.cl_byte_offset   = cl_off;
         lw.smem_byte_offset = s_off;
         // Row-major: one contiguous write of the whole span. Scatter (K-major
-        // or tiled Flat/BlockMajor): each element is its own write (elem_bytes),
-        // gathered into block writes by smem_wr.
+        // or tiled Flat/BlockMajor): each element is its own write (elem_bytes).
         lw.valid_length     = scatter ? elem_bytes : gspan;
         lw.cfill            = cfill;
         lw.oob              = elem_oob;
@@ -639,7 +636,7 @@ private:
     // (DxaCore::LMEM_ROW_SIZE bytes — the full banked row the RTL writes in
     // a single cycle). A row wider than the 64B mem_block byteen scope is
     // emitted as LMEM_PORTS_PER_CORE same-cycle block writes, one per row
-    // half on its own LocalMem input port. A row narrower than a block
+    // half on its own LMEM DMA channel. A row narrower than a block
     // (small NT) bounds the per-beat gather instead.
 
     // A banked-row write is committed atomically, byte enables aside, so a row is

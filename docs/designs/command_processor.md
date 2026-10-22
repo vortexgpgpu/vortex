@@ -419,10 +419,17 @@ CP regfile is the only producer on every target.
 | `[33:26]` | 8 | log2 local_mem_size | `VX_CAPS_LOCAL_MEM_SIZE` |
 | `[36:34]` | 3 | log2 num_mem_banks | `VX_CAPS_NUM_MEM_BANKS` |
 | `[41:37]` | 5 | mem_bank_size, biased by 20 | `VX_CAPS_MEM_BANK_SIZE` |
-| `[63:42]` | 22 | reserved | — |
+| `[48:42]` | 7 | warps/core | `VX_CAPS_NUM_WARPS` |
+| `[56:49]` | 8 | cluster_size | (only via `NUM_CORES`) |
+| `[63:57]` | 7 | num_clusters | `VX_CAPS_NUM_CLUSTERS` |
+
+The exact counts in `[63:42]` let a machine that is not a power of two
+(e.g. 48 warps, 84 cores) report its true shape; the decoder prefers them and
+falls back to the log2 fields only when they read zero, as on devices built
+before they existed.
 
 `VX_CAPS_NUM_CORES` is derived, not a field:
-`num_clusters × cluster_size × socket_size`. `CACHE_LINE_SIZE`,
+`num_clusters × cluster_size × socket_size`, from the exact counts. `CACHE_LINE_SIZE`,
 `GLOBAL_MEM_SIZE`, `CLOCK_RATE`, `PEAK_MEM_BW` and the VM ids are not
 encoded here — `decode_caps` returns false and the backend resolves them.
 
@@ -672,13 +679,14 @@ host-side instead. They become usable once queues get independent rings.
   ap_ctrl stub + SCOPE; `0x1000–0x1FFF` → the CP regfile. The legacy
   launch FSM, DCR path, and dev-caps were **removed**; CP is the sole
   launch/DCR path (`vx_start = cp_gpu_if.start`). A dedicated
-  `m_axi_host` port carries the ring
-  ([`:299-320`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L299)); `axi_dev`
-  shares Vortex's memory bank 0 through a 2-master `VX_mm_axi_arb`
-  ([`:533`](../../hw/rtl/afu/xrt/VX_afu_wrap.sv#L533)), which holds a
-  sticky owner per channel. The CP's narrower TID is zero-padded up to the
-  platform ID width, and `PLATFORM_MEMORY_OFFSET` is subtracted from its
-  addresses before the arbiter.
+  `m_axi_host` port carries the ring. With one memory port, `axi_dev`
+  shares it with Vortex through a 2-master `VX_mm_axi_arb`, which holds a
+  sticky owner per channel. With several, `axi_dev` is bridged to the
+  memory bus by `VX_membus_from_axi` and enters the bank adapter
+  (`VX_mem_to_axi`) as its own input port, upstream of bank selection, so
+  the CP reaches every memory bank. The CP's device addresses are
+  offset-relative like Vortex's own, and `PLATFORM_MEMORY_OFFSET` is added
+  once, at the bank port, for both masters.
 - **OPAE** ([`hw/rtl/afu/opae/vortex_afu.sv`](../../hw/rtl/afu/opae/vortex_afu.sv)) —
   `VX_cp_core` instantiated at [`:325`](../../hw/rtl/afu/opae/vortex_afu.sv#L325).
   MMIO uses a word-address bit-10 demux (the 0x1000 byte boundary) to the

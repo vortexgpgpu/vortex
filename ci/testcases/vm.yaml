@@ -170,6 +170,17 @@ tests:
   target: run-{driver}
   vars:
     OPTS: -t4 -n4 -p1
+# The heap mapped once with superpages (VORTEX_VM_MEGAPAGE_HEAP): every buffer
+# translates through the TLBs' megapage path at its identity VA.
+- id: vm-megapage-heap
+  via: make-run
+  drivers:
+  - simx
+  - rtlsim
+  dir: tests/regression/sgemm
+  target: run-{driver}
+  env:
+    VORTEX_VM_MEGAPAGE_HEAP: 1
 - id: tlb-concurrent
   via: make-run
   drivers:

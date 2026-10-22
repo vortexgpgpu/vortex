@@ -14,6 +14,7 @@
 #include <vx_spawn.h>
 #include <vx_intrinsics.h>
 #include <vx_print.h>
+#include <inttypes.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -144,7 +145,7 @@ static void __attribute__ ((noinline)) process_thread_groups() {
   for (uint32_t group_id = start_group; group_id < end_group; group_id += group_stride) {
     blockIdx.x = group_id % gridDim_x;
     blockIdx.y = (group_id / gridDim_x) % gridDim_y;
-    blockIdx.z = group_id / (gridDim_x * gridDim_y);
+    blockIdx.z = group_id / gridDim_xy;
     callback((void*)arg);
   }
 }
@@ -155,7 +156,7 @@ static void __attribute__ ((noinline)) process_thread_groups_stub() {
   uint32_t remaining_mask = targs->remaining_mask;
   uint32_t warp_id = vx_warp_id();
   uint32_t group_warp_id = warp_id % warps_per_group;
-  uint32_t threads_mask = (group_warp_id == warps_per_group-1) ? remaining_mask : -1;
+  uint32_t threads_mask = (group_warp_id == warps_per_group-1) ? remaining_mask : ~0u;
 
   // activate threads
   vx_tmc(threads_mask);
@@ -192,7 +193,7 @@ int vx_spawn_threads(uint32_t dimension,
   // check group size
   uint32_t threads_per_core = warps_per_core * threads_per_warp;
   if (threads_per_core < group_size) {
-    vx_printf("error: group_size > threads_per_core (%d,%d)\n", group_size, threads_per_core);
+    vx_printf("error: group_size > threads_per_core (%" PRIu32 ",%" PRIu32 ")\n", group_size, threads_per_core);
     return -1;
   }
 

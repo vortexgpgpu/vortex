@@ -115,6 +115,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
 
     wire                       core_rden;
     wire [RTUW_SLOT_BITS-1:0]  core_slot;
+    wire [NW_WIDTH-1:0]        core_wid;
     wire [NUM_LANES-1:0][31:0] core_rdata;
 
     VX_dp_ram #(
@@ -203,7 +204,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     assign rtu_bus_w.arm_data.wid         = wid;
     assign rtu_bus_w.arm_data.mask        = execute_if.data.header.tmask;
     assign rtu_bus_w.arm_data.scene_base  = execute_if.data.rs1_data[CFG_L1][`VX_CFG_MEM_ADDR_WIDTH-1:0];
-    assign rtu_bus_w.arm_data.payload_ptr = execute_if.data.rs1_data[CFG_L2][31:0];
+    assign rtu_bus_w.arm_data.payload_ptr = execute_if.data.rs1_data[CFG_L2];
     assign rtu_bus_w.arm_data.flags       = execute_if.data.rs1_data[CFG_L3][15:0];
     assign rtu_bus_w.arm_data.cull_mask   = execute_if.data.rs1_data[CFG_L3][31:16];
     assign rtu_bus_w.arm_data.tag         = ($bits(rtu_bus_w.arm_data.tag))'(execute_if.data.header.uuid);
@@ -330,7 +331,7 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // read reads the slot its op names.
     assign core_rden = read_fire || wake_fire;
     assign core_slot = wake_fire ? RTUW_SLOT_BITS'(`VX_RT_STATUS) : slot;
-    wire [NW_WIDTH-1:0] core_wid = wake_fire ? wake_wid : wid;
+    assign core_wid = wake_fire ? wake_wid : wid;
 
     // ── sequential state ───────────────────────────────────────────────────
     always @(posedge clk) begin
@@ -390,8 +391,21 @@ module VX_rtu_unit import VX_gpu_pkg::*, VX_rtu_pkg::*; #(
     // write back zero.
     sfu_result_t rsp_data_out;
     assign rsp_data_out.header = s1_header;
+`ifdef VX_CFG_XLEN_64
+`ifdef VX_CFG_EXT_F_ENABLE
+    // A single-precision slot read into a 64-bit FP register must be NaN-boxed.
+    wire rsp_is_float = (get_reg_type(s1_header.rd) == REG_TYPE_F);
+`else
+    wire rsp_is_float = 1'b0;
+`endif
+`endif
     for (genvar i = 0; i < NUM_LANES; ++i) begin : g_rsp_data
-        assign rsp_data_out.data[i] = `VX_CFG_XLEN'(s1_from_ram ? core_rdata[i] : 32'd0);
+        wire [31:0] rsp_word = s1_from_ram ? core_rdata[i] : 32'd0;
+    `ifdef VX_CFG_XLEN_64
+        assign rsp_data_out.data[i] = rsp_is_float ? {32'hffffffff, rsp_word} : 64'(rsp_word);
+    `else
+        assign rsp_data_out.data[i] = rsp_word;
+    `endif
     end
 
     assign result_if.valid  = s1_valid;

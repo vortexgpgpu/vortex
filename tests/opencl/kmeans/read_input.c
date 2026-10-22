@@ -126,7 +126,6 @@ int setup(int argc, char **argv) {
   int best_nclusters = 0;
   int nfeatures = 16;  /* small self-contained default */
   int npoints = 512;   /* small self-contained default */
-  float len;
 
   float **features;
   float **cluster_centres = NULL;
@@ -192,8 +191,11 @@ int setup(int argc, char **argv) {
         fprintf(stderr, "Error: no such file (%s)\n", filename);
         exit(1);
       }
-      fread(&npoints, 1, sizeof(int), infile);
-      fread(&nfeatures, 1, sizeof(int), infile);
+      if (fread(&npoints, 1, sizeof(int), infile) != sizeof(int) ||
+          fread(&nfeatures, 1, sizeof(int), infile) != sizeof(int)) {
+        fprintf(stderr, "Error: failed to read header of (%s)\n", filename);
+        exit(1);
+      }
 
       // allocate space for features[][] and read attributes of all objects
       buf = (float *)malloc(npoints * nfeatures * sizeof(float));
@@ -202,7 +204,11 @@ int setup(int argc, char **argv) {
       for (i = 1; i < npoints; i++) {
         features[i] = features[i - 1] + nfeatures;
       }
-      fread(buf, 1, npoints * nfeatures * sizeof(float), infile);
+      if (fread(buf, 1, npoints * nfeatures * sizeof(float), infile) !=
+          npoints * nfeatures * sizeof(float)) {
+        fprintf(stderr, "Error: failed to read features of (%s)\n", filename);
+        exit(1);
+      }
       fclose(infile);
     } else {
       FILE *infile;
@@ -319,8 +325,6 @@ int setup(int argc, char **argv) {
       printf("\n\n");
     }
   }
-
-  len = (float)((max_nclusters - min_nclusters + 1) * nloops);
 
   printf("Number of Iteration: %d\n", nloops);
   // printf("Time for I/O: %.5fsec\n", io_timing);

@@ -328,6 +328,13 @@ void LsuUnit::ingest_inputs(uint32_t b) {
 	auto lsu_type_tag = std::get_if<LsuType>(&trace->op_type);
 	if (lsu_type_tag && *lsu_type_tag == LsuType::FENCE && !state.req_queue.empty())
 		return;
+	const bool is_read = !lsu_type_tag || *lsu_type_tag == LsuType::LOAD;
+	if (is_read) {
+		if (state.pending_reqs.size() + state.staged_reads >= VX_CFG_LSU_PENDING_SIZE) {
+			return;
+		}
+		++state.staged_reads;
+	}
 	state.req_queue.push(trace);
 	input.pop();
 }
@@ -441,6 +448,7 @@ void LsuUnit::process_request_step(uint32_t b) {
 	// drained.
 	if (state.remain_addrs == 0) {
 		this->compute_addrs(b, trace);
+		state.head_staged = !is_write || is_amo;
 	}
 
 	// AMO always returns to rd, so it is not direct-commit even though it
@@ -540,6 +548,11 @@ void LsuUnit::process_request_step(uint32_t b) {
 			} else {
 				entry_args = std::get<IntrLsuArgs>(trace->instr_ptr->get_args());
 			}
+			if (state.head_staged) {
+				// the slot reserved at entry becomes this request's tag
+				--state.staged_reads;
+				state.head_staged = false;
+			}
 			tag = state.pending_reqs.allocate({trace, count, is_eop, std::move(lane_entries), entry_args, true});
 		}
 		lsu_req.tag  = tag;
@@ -562,6 +575,11 @@ void LsuUnit::process_request_step(uint32_t b) {
 	if (state.remain_addrs == 0) {
 		if (direct_commit) {
 			Outputs.at(b).send(trace);
+		}
+		if (state.head_staged) {
+			// a read with no active lane never issues: return its reservation
+			--state.staged_reads;
+			state.head_staged = false;
 		}
 		state.req_queue.pop();
 	}

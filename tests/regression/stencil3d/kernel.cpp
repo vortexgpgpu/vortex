@@ -5,7 +5,7 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg)
 {
     auto A = reinterpret_cast<TYPE*>(arg->A_addr);
     auto B = reinterpret_cast<TYPE*>(arg->B_addr);
-    auto size = arg->size;
+    size_t size = arg->size;
 
     int col = blockIdx.x * blockDim.x + threadIdx.x;
     int row = blockIdx.y * blockDim.y + threadIdx.y;

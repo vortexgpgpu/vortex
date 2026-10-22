@@ -20,8 +20,8 @@
 extern "C" {
 #endif
 
-int vx_vprintf(const char* format, va_list va);
-int vx_printf(const char * format, ...);
+int vx_vprintf(const char* format, va_list va) __attribute__((format(printf, 1, 0)));
+int vx_printf(const char * format, ...) __attribute__((format(printf, 1, 2)));
 
 void vx_putchar(int c);
 void vx_putint(int value, int base);

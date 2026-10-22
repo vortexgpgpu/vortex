@@ -28,27 +28,50 @@ void inputData(char* fName, int* len, int* depth, int* dim,int *nzcnt_len,int *p
       exit(-1);
     }
 
-  fscanf(fid, "%d %d %d %d %d\n",len,depth,nzcnt_len,dim,pad);
+  if (fscanf(fid, "%d %d %d %d %d\n",len,depth,nzcnt_len,dim,pad) != 5)
+    {
+      fprintf(stderr, "Error reading input file header\n");
+      exit(-1);
+    }
   int _len=len[0];
   int _depth=depth[0];
   int _dim=dim[0];
-  int _pad=pad[0];
   int _nzcnt_len=nzcnt_len[0];
   
   *h_data = (float *) malloc(_len * sizeof (float));
-  fread (*h_data, sizeof (float), _len, fid);
+  if (fread (*h_data, sizeof (float), _len, fid) != (size_t)_len)
+    {
+      fprintf(stderr, "Error reading input file data\n");
+      exit(-1);
+    }
   
   *h_indices = (int *) malloc(_len * sizeof (int));
-  fread (*h_indices, sizeof (int), _len, fid);
+  if (fread (*h_indices, sizeof (int), _len, fid) != (size_t)_len)
+    {
+      fprintf(stderr, "Error reading input file indices\n");
+      exit(-1);
+    }
   
   *h_ptr = (int *) malloc(_depth * sizeof (int));
-  fread (*h_ptr, sizeof (int), _depth, fid);
+  if (fread (*h_ptr, sizeof (int), _depth, fid) != (size_t)_depth)
+    {
+      fprintf(stderr, "Error reading input file row pointers\n");
+      exit(-1);
+    }
   
   *h_perm = (int *) malloc(_dim * sizeof (int));
-  fread (*h_perm, sizeof (int), _dim, fid);
+  if (fread (*h_perm, sizeof (int), _dim, fid) != (size_t)_dim)
+    {
+      fprintf(stderr, "Error reading input file permutation\n");
+      exit(-1);
+    }
   
   *h_nzcnt = (int *) malloc(_nzcnt_len * sizeof (int));
-  fread (*h_nzcnt, sizeof (int), _nzcnt_len, fid);
+  if (fread (*h_nzcnt, sizeof (int), _nzcnt_len, fid) != (size_t)_nzcnt_len)
+    {
+      fprintf(stderr, "Error reading input file nonzero counts\n");
+      exit(-1);
+    }
 
   fclose (fid); 
 }
@@ -56,7 +79,11 @@ void inputData(char* fName, int* len, int* depth, int* dim,int *nzcnt_len,int *p
 void input_vec(char *fName,float *h_vec,int dim)
 {
   FILE* fid = fopen(fName, "rb");
-  fread (h_vec, sizeof (float), dim, fid);
+  if (fread (h_vec, sizeof (float), dim, fid) != (size_t)dim)
+    {
+      fprintf(stderr, "Error reading input vector file\n");
+      exit(-1);
+    }
   fclose(fid);
   
 }

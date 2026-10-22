@@ -63,7 +63,7 @@ public:
   // full banked row (DXA_LMEM_WORD_SIZE = LMEM_NUM_BANKS * XLEN/8). The
   // LocalMem model's byteen scope is one VX_CFG_MEM_BLOCK_SIZE block, so a
   // row beat is emitted as LMEM_PORTS_PER_CORE same-cycle block writes on
-  // adjacent input ports (one per row half).
+  // adjacent LMEM DMA channels (one per row half).
   static constexpr uint32_t LMEM_ROW_SIZE =
       VX_CFG_LMEM_NUM_BANKS * (VX_CFG_XLEN / 8);
   static constexpr uint32_t LMEM_PORTS_PER_CORE =
@@ -72,7 +72,7 @@ public:
 
   // Per-core LMEM write ports (size = VX_CFG_SOCKET_SIZE *
   // LMEM_PORTS_PER_CORE, core-major). The socket binds each core's
-  // LocalMem::Inputs[port_dxa + p] here. Write-only — no rsp.
+  // LocalMem::DmaInputs[p] here. Write-only — no rsp.
   std::vector<SimChannel<MemReq>>  lmem_req_out;
 
   DxaCore(const SimContext& ctx, const char* name, Socket* socket);

@@ -343,15 +343,20 @@ module VX_scheduler import VX_gpu_pkg::*; #(
             end
 
             // Trap CSR write-back from CSR unit (csrw mstatus/mtvec/mepc/...)
-            if (sched_csr_if.trap_csr_wr_valid) begin
-                case (sched_csr_if.trap_csr_wr_addr)
-                    `VX_CSR_MSTATUS: mstatus_r[sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-                    `VX_CSR_MTVEC:   mtvec_r  [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-                    `VX_CSR_MEPC:    mepc_r   [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-                    `VX_CSR_MCAUSE:  mcause_r [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-                    `VX_CSR_MTVAL:   mtval_r  [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
-                    default:;
-                endcase
+            if (sched_csr_if.trap_csr_wr_valid[0]) begin
+                mstatus_r[sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
+            end
+            if (sched_csr_if.trap_csr_wr_valid[1]) begin
+                mtvec_r  [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
+            end
+            if (sched_csr_if.trap_csr_wr_valid[2]) begin
+                mepc_r   [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
+            end
+            if (sched_csr_if.trap_csr_wr_valid[3]) begin
+                mcause_r [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
+            end
+            if (sched_csr_if.trap_csr_wr_valid[4]) begin
+                mtval_r  [sched_csr_if.csr_wr_wid] <= sched_csr_if.trap_csr_wr_data;
             end
 
             // Hardware trap entry (ECALL/EBREAK): snapshot the faulting PC

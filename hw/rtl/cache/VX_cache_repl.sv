@@ -108,6 +108,7 @@ module VX_cache_repl #(
         if (REPL_POLICY == `CS_REPL_PLRU) begin : g_plru
             // Pseudo Least Recently Used replacement policy
             `UNUSED_VAR (repl_line) // read uses repl_line_n (look-ahead)
+            `UNUSED_VAR (repl_valid) // state advances on lookup hits only
             localparam LRU_WIDTH = `UP(NUM_WAYS-1);
 
             wire [LRU_WIDTH-1:0] plru_rdata;

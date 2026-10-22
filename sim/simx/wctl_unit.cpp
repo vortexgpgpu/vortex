@@ -20,8 +20,9 @@
 
 using namespace vortex;
 
-bool WctlUnit::process(instr_trace_t* trace) {
+bool WctlUnit::process(instr_trace_t* trace, bool* exit) {
   bool release_warp = trace->fetch_stall;
+  *exit = false;
   auto wctl_type    = std::get<WctlType>(trace->op_type);
   auto& sched       = core_->scheduler();
   auto& warp        = sched.warp(trace->wid);
@@ -47,7 +48,12 @@ bool WctlUnit::process(instr_trace_t* trace) {
       next_tmask.set(t, rs1_data.at(thread_last).u & (1 << t));
     }
     if (trace->eop) {
-      release_warp = core_->setTmask(trace->wid, next_tmask);
+      if (next_tmask.none()) {
+        *exit = true;
+        release_warp = false;
+      } else {
+        release_warp = core_->setTmask(trace->wid, next_tmask);
+      }
     }
   } break;
   case WctlType::WSPAWN: {

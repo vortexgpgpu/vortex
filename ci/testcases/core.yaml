@@ -146,10 +146,6 @@ tests:
 # SGEMV: FPU + streaming matrix-vector.
 - id: parity-sgemv
   check: model_parity
-  # Instrs match exactly; cycles diverge ~7% (RTL slower) in the high-miss
-  # streaming regime, where request-arrival timing at the cache shifts the
-  # hit/miss split between the models even though isolated round-trips match.
-  tolerance: 0.10   # residual streaming-regime divergence (instrs match; cycles ~7%)
   via: blackbox
   app: sgemv
   args: -m512 -n512
@@ -159,7 +155,6 @@ tests:
   # Tracks to ~3% since SimX models the contended issue-path serializers
   # (per-fragment load writeback beats, fixed-priority commit arbitration,
   # and the execution units' bounded in-flight windows).
-  tolerance: 0.05
   via: blackbox
   app: sgemm
   args: -n128
@@ -168,10 +163,6 @@ tests:
 # SGEMM with local-memory tiling (kernel-managed shared memory).
 - id: parity-sgemmx
   check: model_parity
-  # Instrs match exactly; cycles diverge ~10% (RTL slower): the local-memory
-  # store/writeback serialization keeps a residual the execution-window
-  # models do not fully close.
-  tolerance: 0.10
   via: blackbox
   app: sgemmx
   args: -n128

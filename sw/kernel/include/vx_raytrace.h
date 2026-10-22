@@ -50,6 +50,17 @@ extern "C" {
       : "memory"); \
   __v; })
 
+// vx_rt_get_payload — the tracing shader's payload pointer, as the RTU staged it
+// for this record (VX_RT_PAYLOAD_PTR_LO, plus the next slot on RV64).
+static inline __attribute__((always_inline))
+uintptr_t vx_rt_get_payload(uint32_t tok) {
+  uintptr_t ptr = vx_rt_get_attr(VX_RT_PAYLOAD_PTR_LO, tok);
+#if __riscv_xlen == 64
+  ptr |= (uintptr_t)vx_rt_get_attr(VX_RT_PAYLOAD_PTR_LO + 1, tok) << 32;
+#endif
+  return ptr;
+}
+
 // vx_rt_cb_ret — release the lane's parked context in the RTU with one of
 // VX_RT_CB_{ACCEPT,IGNORE,TERMINATE}, handing back the intersection shader's
 // computed hit distance and attribute in the same instruction. The callback
@@ -119,6 +130,7 @@ typedef struct {
   uint32_t geometry_index;
   uint32_t instance_id;
   uint32_t instance_custom;   // gl_InstanceCustomIndexEXT (VK_INSTANCE_CUSTOM_INDEX)
+  uint32_t back_facing;       // gl_HitKindEXT == BACK_FACING
 } vx_hit_t;
 
 // The struct field order (memory layout) is intentionally NOT the RTU register-
@@ -141,13 +153,13 @@ _Static_assert(offsetof(vx_hit_t, instance_custom) == 6 * sizeof(float), "vx_hit
 // across the warp's lanes, and the f0..f7 ray window is per-lane.
 //   scene_ptr / payload_ptr / ray_flags / cull_mask : per-trace warp-uniform
 //     config, lane-packed into one register via an IMPLICIT vx_wgather
-//     (lane0=scene, lane1=payload, lane2=flags, lane3=cull) — pure register
+//     (lane1=scene, lane2=payload, lane3=flags|cull) — pure register
 //     domain, no memory traffic; hoists out of a bounce loop when invariant.
 //   ray : the per-thread geometry, pinned into the f0..f7 caller-saved window.
 // Returns the async ray handle in rd. Non-blocking: the RTU traverses
 // while the kernel runs independent work; vx_rt_wait is the sync point.
 static inline __attribute__((always_inline))
-uint32_t vx_rt_wtrace(uint32_t scene_ptr, uint32_t payload_ptr,
+uint32_t vx_rt_wtrace(uintptr_t scene_ptr, uintptr_t payload_ptr,
                      uint32_t ray_flags, uint32_t cull_mask,
                      const vx_ray_t* ray) {
   // Pack config into the GATHERED operands (not the wgather self slot): the
@@ -156,7 +168,7 @@ uint32_t vx_rt_wtrace(uint32_t scene_ptr, uint32_t payload_ptr,
   // lane3={flags,cull}; lane0 (self) unused. Keeps scene valid even when lane 0
   // is masked (callback/recursion-narrowed traces).
   uint32_t flags_cull = (ray_flags & 0xffffu) | (cull_mask << 16);
-  uint32_t cfg = (uint32_t)vx_wgather(0u, scene_ptr, payload_ptr, flags_cull);
+  size_t cfg = vx_wgather(0u, scene_ptr, payload_ptr, flags_cull);
   register float r0 __asm__("f0") = ray->origin[0];
   register float r1 __asm__("f1") = ray->origin[1];
   register float r2 __asm__("f2") = ray->origin[2];
@@ -170,9 +182,12 @@ uint32_t vx_rt_wtrace(uint32_t scene_ptr, uint32_t payload_ptr,
   // list (read by HW convention, like the tensor unit's fragment window);
   // the encoding itself only names rd/rs1. Named operands (not %0/%1) keep
   // the field references stable across the long register-binding list.
+  // The RTU reads the packed config lanes regardless of the thread mask, so it
+  // reads them from the warp-gather register itself (see __VX_WGATHER_IN).
+  register size_t cfg_reg __asm__("x31") = cfg;
   __asm__ volatile (".insn r %[op], 7, 0, %[hnd], %[cfg], x0"
     : [hnd]"=r"(handle)
-    : [op]"i"(RISCV_CUSTOM1), [cfg]"r"(cfg),
+    : [op]"i"(RISCV_CUSTOM1), [cfg]"r"(cfg_reg),
       "f"(r0), "f"(r1), "f"(r2), "f"(r3),
       "f"(r4), "f"(r5), "f"(r6), "f"(r7));
   return handle;
@@ -222,8 +237,9 @@ uint32_t vx_rt_wait(uint32_t handle, vx_hit_t* hit) {
   hit->v = hv;
   hit->primitive_id    = hp;
   hit->instance_id     = hi;
-  hit->geometry_index  = hg;
+  hit->geometry_index  = hg & VX_RT_HIT_GEOMETRY_MASK;
   hit->instance_custom = hc;
+  hit->back_facing     = (hg & VX_RT_HIT_BACK_FACING) != 0;
   return status;
 }
 
@@ -328,7 +344,7 @@ void vx_rt_get_objray(vx_objray_t* out) {
 // have independent work, it calls trace/wait separately and the compiler
 // schedules that work into the gap.
 static inline __attribute__((always_inline))
-uint32_t vx_rt_wtrace_sync(uint32_t scene_ptr, uint32_t payload_ptr,
+uint32_t vx_rt_wtrace_sync(uintptr_t scene_ptr, uintptr_t payload_ptr,
                           uint32_t ray_flags, uint32_t cull_mask,
                           const vx_ray_t* ray, vx_hit_t* hit) {
   uint32_t h = vx_rt_wtrace(scene_ptr, payload_ptr, ray_flags, cull_mask, ray);

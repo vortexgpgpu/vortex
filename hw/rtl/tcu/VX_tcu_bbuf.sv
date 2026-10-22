@@ -80,7 +80,6 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     localparam BANK_SEL_BITS      = $clog2(NUM_BANKS);
     localparam WORD_SIZE_LOG2     = $clog2(`VX_CFG_XLEN / 8);
     localparam B_BLOCK_WORDS      = TCU_WG_FEDP_K * TCU_TC_N;
-    localparam B_BLOCK_WORDS_SP   = TCU_TC_K * TCU_TC_N;
     localparam B_KMAJ_SPLIT_SP    = TCU_WG_SP_K_WORDS * TCU_TC_N;
     localparam B_BUF_WORDS        = NUM_BANKS;             // storage per slot
                                                            // (= 1 logical 32-bit bank-row)
@@ -550,7 +549,7 @@ module VX_tcu_bbuf import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                 // two sparse candidates adjacent — word (z*2 + cand) holds the
                 // FEDP's bword{cand} for K-step z.
                 // The FEDP reads rs2[k_idx*(TC_N*2) + j*2 + cand] with k_idx=z;
-                // slot_a||slot_b splits at B_BLOCK_WORDS_SP (= TC_K*TC_N).
+                // slot_a||slot_b splits at B_KMAJ_SPLIT_SP (= SP_K_WORDS*TC_N).
                 // Drive each (z,cand) word to its exact flat target and route by slot.
                 for (int jj = 0; jj < TCU_TC_N; ++jj) begin
                     automatic int lane = int'(32'(km_row_off[jj] & KM_OFF_W'(BANK_ROW_WORDS - 1)));

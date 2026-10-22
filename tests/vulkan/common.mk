@@ -70,7 +70,7 @@ CONFIGS += -DVX_CFG_EXT_A_ENABLE
 GLSLC ?= glslc
 CC    ?= cc
 
-CFLAGS += -O2 -Wall
+CFLAGS += -O2 -Wall -Wextra -Wfatal-errors -Werror
 LDLIBS += -lvulkan
 
 # One SPIR-V module per shader source, stage kept in the name so a
@@ -148,6 +148,11 @@ $(PROJECT): $(SRCS)
 # owns it and every test goes on linking whichever build happened to land first.
 $(VORTEX_RT_LIB)/libvortex.so: FORCE
 	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/stub DESTDIR=$(VORTEX_RT_LIB)
+
+# The runtime for one driver, built with the CONFIGS this app resolved, so a
+# caller that builds ahead of the run builds the model the run will use.
+runtime-%:
+	$(RUNTIME_ARGS) $(MAKE) -C $(VORTEX_RT_SRC)/$* DESTDIR=$(VORTEX_RT_LIB)
 
 # `run` defaults to the SimX backend; explicit recipes select simx / rtlsim
 # / opae / xrt. vortexpipe is backend-agnostic — same .vxbin, the stub
