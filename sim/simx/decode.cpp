@@ -688,6 +688,10 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
         if (imm12 == VX_CSR_FRM || imm12 == VX_CSR_FCSR) {
           fcsr_regs |= Instr::FCSR_FRM;
         }
+        if (imm12 == VX_CSR_MSTATUS || imm12 == VX_CSR_MTVEC || imm12 == VX_CSR_MEPC
+         || imm12 == VX_CSR_MCAUSE || imm12 == VX_CSR_MTVAL) {
+          fcsr_regs |= Instr::FCSR_TRAP;
+        }
         instr->set_fcsr_use(fcsr_regs, csr_write ? fcsr_regs : 0);
       }
       if (funct3 < 5) {
@@ -701,6 +705,7 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       instr->set_op_type(BrType::SYS);
       instr->set_args(IntrBrArgs{0, 0, imm12});
       instr->set_wstall(true);
+      instr->set_fcsr_use(Instr::FCSR_TRAP, 0);
     }
   } break;
   case Opcode::FCI: {

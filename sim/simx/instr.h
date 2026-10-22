@@ -230,11 +230,14 @@ public:
   void set_dst_bytesel(uint8_t value) { dst_bytesel_ = value; }
   uint8_t get_dst_bytesel() const { return dst_bytesel_; }
 
-  // Floating-point CSR fields the scoreboard orders like GPRs: an instruction
-  // naming one, read or written, waits for an older writer to commit.
+  // CSR state the scoreboard orders like GPRs: an instruction naming one, read
+  // or written, waits for an older writer to commit. FCSR_TRAP is the M-mode
+  // trap state (mstatus, mtvec, mepc, mcause, mtval): a trap entry or return
+  // reads it, so it waits for a CSR write to land before redirecting.
   enum : uint8_t {
     FCSR_FFLAGS = 1u << 0,
     FCSR_FRM    = 1u << 1,
+    FCSR_TRAP   = 1u << 2,
   };
   void set_fcsr_use(uint8_t rd_mask, uint8_t wr_mask) {
     fcsr_rd_ = rd_mask;

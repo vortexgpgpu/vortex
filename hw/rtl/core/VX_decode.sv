@@ -69,6 +69,9 @@ module VX_decode import
     wire is_csr_fflags = (u_12 == `VX_CSR_FFLAGS);
     wire is_csr_frm    = (u_12 == `VX_CSR_FRM);
     wire is_csr_fcsr   = (u_12 == `VX_CSR_FCSR);
+    wire is_csr_trap   = (u_12 == `VX_CSR_MSTATUS) || (u_12 == `VX_CSR_MTVEC)
+                      || (u_12 == `VX_CSR_MEPC) || (u_12 == `VX_CSR_MCAUSE)
+                      || (u_12 == `VX_CSR_MTVAL);
     wire frm_is_dyn    = (funct3 == 3'b111);
     wire is_rd_zero    = (rd == 0);
     `UNUSED_VAR (frm_is_dyn)
@@ -401,6 +404,8 @@ module VX_decode import
                     rd_xregs[XREG_1]    = is_csr_fcsr || is_csr_frm;
                     wr_xregs[XREG_0] = csr_write && (is_csr_fcsr || is_csr_fflags);
                     wr_xregs[XREG_1]    = csr_write && (is_csr_fcsr || is_csr_frm);
+                    rd_xregs[XREG_TRAP] = is_csr_trap;
+                    wr_xregs[XREG_TRAP] = csr_write && is_csr_trap;
                     `USED_IREG (rd);
                     `USED_REG (REG_TYPE_I, rs1, ~funct3[2]);
                 end else begin
@@ -412,6 +417,7 @@ module VX_decode import
                     op_args.br.imm20  = 20'd4;
                     op_args.br.is_rvc = decode_is_rvc;
                     is_wstall = 1;
+                    rd_xregs[XREG_TRAP] = 1'b1;
                     `USED_IREG (rd);
                 end
             end

@@ -18,6 +18,17 @@ tests:
   - rtlsim
   dir: tests/regression
   target: run-{driver}
+- id: trap-simd
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: trap
+  xlen:
+  - 32
+  configs: "-DVX_CFG_NUM_WARPS=32 -DVX_CFG_SIMD_WIDTH=4"
+  shape:
+    threads: 8
 - id: occupancy-1
   via: blackbox
   drivers:

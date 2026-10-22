@@ -65,7 +65,11 @@ package VX_gpu_pkg;
     // these bits.
     localparam XREG_0      = 0;
     localparam XREG_1      = 1;
-    localparam NUM_XREGS   = 2;
+    // The M-mode trap state (mstatus, mtvec, mepc, mcause, mtval): a CSR write
+    // to it claims the slot and a trap entry or return reads it, so the
+    // redirect waits for the write to land.
+    localparam XREG_TRAP   = 2;
+    localparam NUM_XREGS   = 3;
 
     localparam DV_STACK_SIZE = `UP(`VX_CFG_NUM_THREADS-1);
     localparam DV_STACK_SIZEW = `LOG2UP(DV_STACK_SIZE);
