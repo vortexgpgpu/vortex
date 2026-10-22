@@ -94,6 +94,7 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
         `endif
             `UNUSED_PIN (sched_empty),
             `UNUSED_PIN (store_empty),
+            `UNUSED_PIN (busy),
         `ifdef VX_CFG_LMEM_ENABLE
             .lmem_bus_if   (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
         `endif
@@ -148,7 +149,8 @@ module VX_mem_unit_top import VX_gpu_pkg::*; #(
         .lsu_dcache_bus_if (lsu_dcache_bus_if),
         .dcr_flush_if  (dcr_flush_if),
         .flush_l1_only (1'b0),
-        .dcache_bus_if (mem_bus_if)
+        .dcache_bus_if (mem_bus_if),
+        `UNUSED_PIN    (busy)
     );
 
 endmodule

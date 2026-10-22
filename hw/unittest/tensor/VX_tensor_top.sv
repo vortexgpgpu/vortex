@@ -302,6 +302,7 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             `endif
                 .sched_empty   (block_sched_empty[block_idx]),
                 .store_empty   (block_store_empty[block_idx]),
+                `UNUSED_PIN    (busy),
                 .lmem_bus_if   (lsu_lmem_bus_if[block_idx * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
                 .dcache_bus_if (lsu_dcache_bus_if[block_idx * DCACHE_CHANNELS +: DCACHE_CHANNELS])
             );
@@ -341,7 +342,8 @@ module VX_tensor_top import VX_gpu_pkg::*, VX_tcu_pkg::*, VX_dxa_pkg::*; #(
             .lsu_dcache_bus_if (lsu_dcache_bus_if),
             .dcr_flush_if    (dcr_flush_dcache_if),
             .flush_l1_only   (1'b0),
-            .dcache_bus_if   (dcache_bus_if)
+            .dcache_bus_if   (dcache_bus_if),
+            `UNUSED_PIN      (busy)
         );
 
         for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_passthru

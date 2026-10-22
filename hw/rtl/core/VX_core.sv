@@ -71,7 +71,8 @@ import VX_tcu_pkg::*;
     // Global barrier
     VX_gbar_bus_if.master   gbar_bus_if,
 
-    // Status
+    // Status: the core's own busy, and each LSU block's memory path busy
+    output wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] lsu_busy,
     output wire             busy
 );
     VX_warp_shared_if   warp_shared_if[`VX_CFG_NUM_SFU_BLOCKS]();
@@ -157,6 +158,19 @@ import VX_tcu_pkg::*;
 
     // the in-core global-store path is empty
     wire mem_unit_empty = (& lsu_store_empty);
+    wire mem_unit_busy;
+
+`ifdef VX_CFG_VM_ENABLE
+`ifdef PERF_ENABLE
+    // the MMU perf counters are kept at the socket
+    assign pipeline_perf.mmu = '0;
+`endif
+    // Translation drains at the socket MMU; the socket returns its empty status.
+    wire mmu_empty = mmu_drained;
+`else
+    wire mmu_empty = 1'b1;
+`endif
+
 
     // Stores are ack-less and lag warp exit, so the dcache flush waits until every
     // store of this core has reached L1.
@@ -189,7 +203,6 @@ import VX_tcu_pkg::*;
     wire sched_busy;
     wire [PERF_CTR_BITS-1:0] sched_cycles;
     wire [PERF_CTR_BITS-1:0] sched_instret;
-    wire lsu_drained;
 
     VX_csr_mpm #(
         .INSTANCE_ID (`SFORMATF(("%s-mpm", INSTANCE_ID)))
@@ -437,7 +450,8 @@ import VX_tcu_pkg::*;
                 .cycles               (sched_cycles),
                 .instret              (sched_instret),
                 .active_warps         (sched_active_warps),
-                .lsu_sched_drained    (lsu_drained),
+                .all_lsu_sched_empty  (lsu_sched_empty),
+                .mmu_empty            (mmu_empty),
                 .csr_rd_cta_id        (csr_rd_cta_id[i]),
                 .csr_rd_ctx           (csr_rd_ctx[i]),
             `ifdef VX_CFG_VM_ENABLE
@@ -456,6 +470,7 @@ import VX_tcu_pkg::*;
             `endif
                 .lsu_sched_empty      (lsu_sched_empty[i]),
                 .lsu_store_empty      (lsu_store_empty[i]),
+                .lsu_busy             (lsu_busy[i]),
             `ifdef VX_CFG_LMEM_ENABLE
                 .lmem_bus_if          (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
             `endif
@@ -551,7 +566,8 @@ import VX_tcu_pkg::*;
             .cycles               (sched_cycles),
             .instret              (sched_instret),
             .active_warps         (sched_active_warps),
-            .lsu_sched_drained    (lsu_drained),
+            .lsu_sched_empty      (lsu_sched_empty),
+            .mmu_empty            (mmu_empty),
             .csr_rd_ctx           (csr_rd_ctx),
         `ifdef VX_CFG_VM_ENABLE
             .satp                 (sched_satp),
@@ -692,6 +708,7 @@ import VX_tcu_pkg::*;
                 `endif
                     .lsu_sched_empty      (lsu_sched_empty[i]),
                     .lsu_store_empty      (lsu_store_empty[i]),
+                    .lsu_busy             (lsu_busy[i]),
                 `ifdef VX_CFG_LMEM_ENABLE
                     .lmem_bus_if          (lsu_lmem_bus_if[i * `VX_CFG_NUM_LSU_LANES +: `VX_CFG_NUM_LSU_LANES]),
                 `endif
@@ -786,6 +803,7 @@ import VX_tcu_pkg::*;
             `endif
                 .lsu_sched_empty      (lsu_sched_empty),
                 .lsu_store_empty      (lsu_store_empty),
+                .lsu_busy             (lsu_busy),
             `ifdef VX_CFG_LMEM_ENABLE
                 .lmem_bus_if          (lsu_lmem_bus_if),
             `endif
@@ -872,35 +890,18 @@ import VX_tcu_pkg::*;
         .lsu_dcache_bus_if (lsu_dcache_bus_if),
         .dcr_flush_if    (dcr_flush_dcache_if),
         .flush_l1_only   (dcr_flush_l1_only),
-        .dcache_bus_if   (dcache_bus_if)
+        .dcache_bus_if   (dcache_bus_if),
+        .busy            (mem_unit_busy)
     );
-
-`ifdef VX_CFG_VM_ENABLE
-`ifdef PERF_ENABLE
-    // the MMU perf counters are kept at the socket
-    assign pipeline_perf.mmu = '0;
-`endif
-    // Translation drains at the socket MMU; the socket returns its empty status.
-    wire mmu_empty = mmu_drained;
-`else
-    wire mmu_empty = 1'b1;
-`endif
 
     // Fragment work drains at the producer (VX_raster_core.busy), not here.
     // DCR reads (cache flush, MPM readback) order on their own DCR response, so
     // busy tracks only kernel execution: warps resident or stores not yet at L1.
     // ~mmu_empty also keeps the core busy while a translation or parked store is
     // still in flight, so kernel completion cannot race un-drained accesses.
-    // A request waiting at the dcache port sits past the flush injector's
-    // buffer, which mem_unit_empty does not cover.
-    wire [DCACHE_NUM_REQS-1:0] dcache_req_valid;
-    for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin : g_dcache_req_valid
-        assign dcache_req_valid[i] = dcache_bus_if[i].req_valid;
-    end
-    assign busy = sched_busy || ~(&lsu_sched_empty) || ~mem_unit_empty || (| dcache_req_valid) || ~mmu_empty;
-
-    // BAR (vx_barrier / vx_barrier_arrive) drains LSU + MMU before suspending or registering arrival.
-    assign lsu_drained = (&lsu_sched_empty) && mmu_empty;
+    // A store still in an LSU block's memory path shows on lsu_busy, which the
+    // parent ORs in; one past a flush injector's buffer shows on mem_unit_busy.
+    assign busy = sched_busy || mem_unit_busy || ~mmu_empty;
 
 `ifdef PERF_ENABLE
 

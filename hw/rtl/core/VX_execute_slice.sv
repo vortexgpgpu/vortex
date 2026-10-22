@@ -56,6 +56,7 @@ import VX_tcu_pkg::*;
 `endif
     output wire             lsu_sched_empty,
     output wire             lsu_store_empty,
+    output wire             lsu_busy,
 `ifdef VX_CFG_LMEM_ENABLE
     VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
 `endif
@@ -202,6 +203,7 @@ import VX_tcu_pkg::*;
     `endif
         .sched_empty      (lsu_sched_empty),
         .store_empty      (lsu_store_empty),
+        .busy             (lsu_busy),
     `ifdef VX_CFG_LMEM_ENABLE
         .lmem_bus_if      (lmem_bus_if),
     `endif

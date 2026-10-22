@@ -41,7 +41,10 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
 
     VX_dcr_flush_if.slave   dcr_flush_if,
     input wire              flush_l1_only,
-    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS]
+    VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
+
+    // a flush lane holds a request at the D-cache port
+    output wire             busy
 );
 `ifndef VX_CFG_LMEM_ENABLE
     `UNUSED_SPARAM (INSTANCE_ID)
@@ -206,6 +209,12 @@ module VX_mem_unit import VX_gpu_pkg::*; #(
         assign lane_flush_done[k] = lane_flush_if[k].done;
     end
     assign dcr_flush_if.done = (& lane_flush_done);
+
+    wire [FLUSH_LANES-1:0] flush_req_valid;
+    for (genvar k = 0; k < FLUSH_LANES; ++k) begin : g_flush_req_valid
+        assign flush_req_valid[k] = dcache_bus_if[k].req_valid;
+    end
+    assign busy = (| flush_req_valid);
 
     // A block's D-cache request carries a clear tag LSB, the flush arbiter's
     // select bit; the block takes the cache response directly and drops the

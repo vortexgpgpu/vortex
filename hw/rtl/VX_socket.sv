@@ -842,6 +842,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     ///////////////////////////////////////////////////////////////////////////
 
     wire [`VX_CFG_SOCKET_SIZE-1:0] per_core_busy;
+    wire [`VX_CFG_SOCKET_SIZE-1:0][`VX_CFG_NUM_LSU_BLOCKS-1:0] per_core_lsu_busy;
 `ifdef EXT_GFX_ANY_ENABLE
     // Core flush requests fan out to the socket-local gfx caches (tcache,
     // rtcache) and up to the cluster (rcache, ocache); each leg's done is
@@ -936,6 +937,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
 
             .gbar_bus_if    (per_core_gbar_bus_if[core_id]),
 
+            .lsu_busy       (per_core_lsu_busy[core_id]),
             .busy           (per_core_busy[core_id])
         );
     end
@@ -960,7 +962,7 @@ module VX_socket import VX_gpu_pkg::*, VX_tlb_pkg::*;
     wire mem_req_empty = icache_req_empty && dcache_req_empty && tcache_req_empty
                       && rtcache_req_empty && mem_arb_empty;
     wire busy_r;
-    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy) | ~mem_req_empty, 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
+    `BUFFER_EX(busy_r, dcr_bus_if.req_valid | (|per_core_busy) | (|per_core_lsu_busy) | ~mem_req_empty, 1'b1, 1, (`VX_CFG_SOCKET_SIZE > 1));
     assign busy = busy_r | dcr_bus_if.req_valid | kmu_bus_if[0].valid | (|per_core_kmu_valid);
 
 endmodule

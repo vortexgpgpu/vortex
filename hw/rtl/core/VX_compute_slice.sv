@@ -49,7 +49,8 @@ import VX_tcu_pkg::*;
     input wire [PERF_CTR_BITS-1:0] cycles,
     input wire [PERF_CTR_BITS-1:0] instret,
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
-    input wire              lsu_sched_drained,
+    input wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] all_lsu_sched_empty,
+    input wire              mmu_empty,
     output wire [NCTA_WIDTH-1:0] csr_rd_cta_id,
     input cta_ctx_t         csr_rd_ctx,
 `ifdef VX_CFG_VM_ENABLE
@@ -70,6 +71,7 @@ import VX_tcu_pkg::*;
 `endif
     output wire             lsu_sched_empty,
     output wire             lsu_store_empty,
+    output wire             lsu_busy,
 `ifdef VX_CFG_LMEM_ENABLE
     VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
 `endif
@@ -201,7 +203,8 @@ import VX_tcu_pkg::*;
     assign warp_ctl_if.dvstack_ptr = dvstack_ptr[0];
     assign warp_ctl_if.mscratch    = dvstack_mscratch[0];
     assign warp_ctl_if.warp_pending_alm_empty = pending_alm_empty;
-    assign warp_ctl_if.lsu_sched_drained      = lsu_sched_drained;
+    assign warp_ctl_if.lsu_sched_empty        = all_lsu_sched_empty;
+    assign warp_ctl_if.mmu_empty              = mmu_empty;
 
     assign csr_rd_wid[0]        = sched_csr_if.csr_rd_wid;
     assign csr_rd_cta_id        = sched_csr_if.csr_rd_cta_id;
@@ -276,6 +279,7 @@ import VX_tcu_pkg::*;
     `endif
         .lsu_sched_empty      (lsu_sched_empty),
         .lsu_store_empty      (lsu_store_empty),
+        .lsu_busy             (lsu_busy),
     `ifdef VX_CFG_LMEM_ENABLE
         .lmem_bus_if          (lmem_bus_if),
     `endif

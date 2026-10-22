@@ -38,6 +38,7 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
     // the scheduler holds no request; the global-store path holds no store
     output wire             sched_empty,
     output wire             store_empty,
+    output wire             busy,
 
 `ifdef VX_CFG_LMEM_ENABLE
     VX_mem_bus_if.master    lmem_bus_if [`VX_CFG_NUM_LSU_LANES],
@@ -107,6 +108,7 @@ module VX_lsu_mem_path import VX_gpu_pkg::*; #(
     wire path_empty;
     wire adapter_empty;
     assign store_empty = path_empty && adapter_empty;
+    assign busy = ~sched_empty || ~store_empty;
 
     VX_lsu_mem_if #(
         .NUM_LANES (`VX_CFG_NUM_LSU_LANES),
