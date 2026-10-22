@@ -39,8 +39,12 @@ static constexpr bool kFedp2K = true;
 #else
 static constexpr bool kFedp2K = false;
 #endif
-// Sparse FULLK: a sparse WGMMA uop covers fedpK compressed A words.
+// RS modes whose uops read A from both rs1 and rs2 (dense FEDP2K, sparse
+// FULLK) carry the B descriptor in a leading setup uop.
 static constexpr bool kSpFullK = (wg_cfg::sp_k_mult > 1);
+static constexpr bool wgmma_needs_setup(bool is_a_smem, bool is_sparse) {
+  return kFedp2K && !is_a_smem && (!is_sparse || kSpFullK);
+}
 
 // Dot-product pipeline depth of the configured tensor-PE type.
 static constexpr uint32_t kFedpLatency = VX_CFG_TCU_LATENCY;
@@ -823,7 +827,7 @@ public:
       }
 
       bool is_sparse = (tcu_type == TcuType::WGMMA_SP);
-      bool needs_setup = kFedp2K && !tpuArgs.is_a_smem && !is_sparse;
+      bool needs_setup = wgmma_needs_setup(tpuArgs.is_a_smem, is_sparse);
       if (tpuArgs.is_first_uop && !needs_setup) {
         // The first compute uop carries the live descriptors.
         if (tpuArgs.is_a_smem) {
@@ -1643,7 +1647,7 @@ uint32_t TcuUopGen::uop_count(const Instr& instr) {
 #ifdef VX_CFG_TCU_WGMMA_ENABLE
   if (tcu_is_wgmma(tcu_type)) {
     bool is_sparse = tcu_is_sparse(tcu_type);
-    bool needs_setup = kFedp2K && !args.is_a_smem && !is_sparse;
+    bool needs_setup = wgmma_needs_setup(args.is_a_smem, is_sparse);
     uint32_t nrc = (args.cd_nregs == 0) ? 8 : (args.cd_nregs == 1) ? 16 : 32;
     uint32_t k_count = is_sparse ? std::max(1u, wg_cfg::k_steps / 2) : wg_cfg::k_steps;
     uint32_t mma_uops = k_count * nrc;
@@ -1778,7 +1782,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
     uint32_t fmt_d = args.fmt_d;
     bool is_sparse = tcu_is_sparse(tcu_type);
     bool is_a_smem = args.is_a_smem;
-    bool needs_setup = kFedp2K && !is_a_smem && !is_sparse;
+    bool needs_setup = wgmma_needs_setup(is_a_smem, is_sparse);
     uint32_t cd_nregs = args.cd_nregs;
     uint32_t k_count = is_sparse ? std::max(1u, k_steps / 2) : k_steps;
     constexpr uint32_t a0 = 10, a1 = 11;
@@ -1818,7 +1822,7 @@ Instr::Ptr TcuUopGen::get(const Instr& macro_instr, uint32_t uop_index) {
                                      fmt_s, fmt_d, m, n, k, first ? 1u : 0u, last ? 1u : 0u, 0});
       uop_instr->set_dest_reg(r, RegType::Float);
       if (!is_a_smem) {
-        uint32_t rs1_off = is_sparse ? m : (m * a_reg_k_steps + k);
+        uint32_t rs1_off = (is_sparse && !kSpFullK) ? m : (m * a_reg_k_steps + k);
         uop_instr->set_src_reg(0, ra_base + rs1_off, RegType::Float);
         if (needs_setup)
           uop_instr->set_src_reg(1, ra_base + rs1_off + 1, RegType::Float);

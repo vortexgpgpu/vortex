@@ -166,7 +166,9 @@ static void pack_metadata_wg(std::vector<uint32_t> &h_meta,
                               const std::vector<uint8_t> &masks,
                               uint32_t M, uint32_t K) {
   constexpr uint32_t tileM      = wg_cfg_t::xtileM;
-  constexpr uint32_t tileK_elem = wg_cfg_t::tileK;
+  constexpr uint32_t tileK_elem = wg_cfg_t::tileK_sp;
+  constexpr uint32_t kSpSubSteps = tileK_elem / kDensePerSpStep;
+  static_assert(kSpSubSteps >= 1 && kSpSubSteps <= kRtlHalfKWmma, "sparse sub-steps exceed metadata banks");
   uint32_t num_tile_rows = M / tileM;
   uint32_t num_k_tiles   = K / tileK_elem;
   uint32_t num_groups_per_row = K / 4; // groups of 4 fp16 elements per row
@@ -178,7 +180,7 @@ static void pack_metadata_wg(std::vector<uint32_t> &h_meta,
       uint32_t tile_base = (tr * num_k_tiles + kt) * kWordsPerTile;
 
       for (uint32_t sm = 0; sm < kMSteps; ++sm) {
-        for (uint32_t sk = 0; sk < kHalfKSteps; ++sk) {
+        for (uint32_t sk = 0; sk < kSpSubSteps; ++sk) {
           // SRAM bank for this (sm, sk_wg) in the WMMA-cfg-sized meta SRAM.
           uint32_t sram_bank = sm * kRtlHalfKWmma + sk;
           // dense element start for this (kt, sk)
@@ -323,7 +325,7 @@ int main(int argc, char *argv[]) {
 
   constexpr uint32_t tileM      = wg_cfg_t::xtileM;
   constexpr uint32_t tileN      = wg_cfg_t::xtileN;
-  constexpr uint32_t tileK_elem = wg_cfg_t::tileK;
+  constexpr uint32_t tileK_elem = wg_cfg_t::tileK_sp;
 
   uint32_t cta_M = warps * tileM;
 

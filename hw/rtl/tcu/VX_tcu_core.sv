@@ -451,7 +451,7 @@ module VX_tcu_core import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     wire [31:0] a_wgmma_reg =
                     `ifdef VX_CFG_TCU_FEDP2K
                         `ifdef VX_CFG_TCU_SPARSE_ENABLE
-                            is_sparse ? 32'b0 :
+                            (is_sparse && (TCU_WG_SP_FULLK == 0)) ? 32'b0 :
                         `endif
                         32'(execute_if.data.rs2_data[i * TCU_TC_K + (k_idx - TCU_TC_K)]);
                     `else

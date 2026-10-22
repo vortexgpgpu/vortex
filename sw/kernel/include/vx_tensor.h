@@ -857,8 +857,9 @@ public:
   //                 A_warp[(m_blk*tcM + i_in)*ldm
   //                        + (k_blk*(tcK*i_ratio) + k_in_elem)]
   // Sparse: K is compressed by 2x → only sparse_k_steps = k_steps/2 K-blocks
-  // exist; m_steps * sparse_k_steps registers carry A data, the remaining
-  // ctx_a::sparse_regs slot is reserved for the metadata word.
+  // exist; m_steps * sparse_k_steps registers carry A data. Under sparse FULLK
+  // a uop consumes sp_k_mult K-blocks per m, so register m*sp_k_mult + h holds
+  // half h of that uop's compressed A (the TCU reads it as rs1/rs2).
   template <mem_layout src_layout = row_major, typename Frag>
   static __attribute__((always_inline)) void load_matrix_sync(Frag &dst, const void *src, size_t ldm) {
     static_assert(Frag::Use == frag_use_t::matrix_a, "only matrix_a fragment can be loaded from registers in wgmma context");
@@ -889,7 +890,7 @@ public:
     };
 
     if constexpr (is_sparse) {
-      constexpr uint32_t sp_k_steps_local = sparse_k_steps;
+      constexpr uint32_t sp_k_steps_local = sparse_k_steps * sp_k_mult;
       constexpr uint32_t a_regs           = m_steps * sp_k_steps_local;
       detail::unroll_for<a_regs>([&](auto r) {
         uint32_t m_blk = r / sp_k_steps_local;
@@ -996,7 +997,6 @@ public:
     if constexpr (!a_is_smem) {
       static_assert((OpA::Use == frag_use_t::matrix_a), "A operand must be matrix_a fragment");
       static_assert(NRC_ <= 16, "A-from-reg requires NRC <= 16");
-      static_assert(sp_k_mult == 1, "sparse FULLK WGMMA requires A from smem");
     }
     static_assert(b_is_smem, "B must be smem_matrix_desc (SR mode is not supported)");
 

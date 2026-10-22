@@ -146,6 +146,12 @@ ifdef IMPL_STRATEGY
 VPP_FLAGS += --xp "vivado_prop:run.impl_1.STRATEGY=$(IMPL_STRATEGY)"
 endif
 
+# Placer directive override (e.g. SSI_BalanceSLLs). Applied after the strategy,
+# since setting STRATEGY resets every step's directive.
+ifdef IMPL_PLACE_DIRECTIVE
+VPP_FLAGS += --xp "vivado_prop:run.impl_1.STEPS.PLACE_DESIGN.ARGS.DIRECTIVE=$(IMPL_PLACE_DIRECTIVE)"
+endif
+
 # load platform settings
 include $(SRC_DIR)/platforms.mk
 

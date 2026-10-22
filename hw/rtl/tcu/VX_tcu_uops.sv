@@ -93,11 +93,13 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
     wire wg_is_sparse = (ibuf_in.op_type == INST_TCU_WGMMA_SP);
 `endif
     wire wg_a_from_smem = ibuf_in.op_args.tcu.a_from_smem;
+    // RS modes that read A from both rs1 and rs2 (dense FEDP2K, sparse FULLK)
+    // move the B descriptor into a leading setup uop.
     wire wg_needs_setup =
         `ifdef VX_CFG_TCU_FEDP2K
             !wg_a_from_smem
         `ifdef VX_CFG_TCU_SPARSE_ENABLE
-            && !wg_is_sparse
+            && (!wg_is_sparse || (TCU_WG_SP_FULLK != 0))
         `endif
         `else
             1'b0
@@ -143,7 +145,7 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                 2'd1: wg_compute_uop_cnt = UOP_CTR_W'(WG_UOPS_SP_NR16);
                 default: wg_compute_uop_cnt = UOP_CTR_W'(WG_UOPS_SP_NR32);
             endcase
-            wg_uop_cnt = wg_compute_uop_cnt;
+            wg_uop_cnt = wg_compute_uop_cnt + UOP_CTR_W'(wg_needs_setup);
         end else
     `endif
             wg_uop_cnt = wg_compute_uop_cnt + UOP_CTR_W'(wg_needs_setup);
@@ -197,10 +199,11 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
 
     // Register offsets for from-reg mode
     // Dense A: rs1_off = m * 2 + k  (NRA=4 regs at ra_base: f24..f27)
-    // Sparse A: rs1_off = m  (NRA compressed to 2 regs f24,f25; f26,f27 hold metadata)
+    // Sparse A: rs1_off = m  (compressed A in f24,f25)
+    // Sparse FULLK A: as dense, a uop's 2*TC_K compressed words span f24+2m, f24+2m+1
     wire [`UP(CTR_W)-1:0] wg_rs1_reg_off_dense = (`UP(CTR_W)'(wg_m_index) << 1) | `UP(CTR_W)'(wg_k_index);
 `ifdef VX_CFG_TCU_SPARSE_ENABLE
-    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = (wg_is_sparse && !wg_a_from_smem)
+    wire [`UP(CTR_W)-1:0] wg_rs1_reg_off = (wg_is_sparse && !wg_a_from_smem && (TCU_WG_SP_FULLK == 0))
         ? `UP(CTR_W)'(wg_m_index)
         : wg_rs1_reg_off_dense;
 `else
@@ -368,8 +371,9 @@ module VX_tcu_uops import VX_tcu_pkg::*, VX_gpu_pkg::*; (
                 ibuf_r.rs1 = make_reg_num(REG_TYPE_F, wg_ra_base + 5'(wg_rs1_reg_off));
                 ibuf_r.used_rs[0] = 1'b1;
             end
-            // Dense FEDP2K RS reserves rs2 for upper A and transports the B
-            // descriptor in its setup uop. Other modes read x11 on first compute.
+            // FEDP2K RS (dense, or sparse FULLK) reserves rs2 for upper A and
+            // transports the B descriptor in its setup uop. Other modes read
+            // x11 on first compute.
             ibuf_r.rs2 = make_reg_num(REG_TYPE_I, 5'd11);
             if (is_wg_setup_uop || (!wg_needs_setup && is_wg_first_compute_uop)) begin
                 ibuf_r.used_rs[1] = 1'b1;
