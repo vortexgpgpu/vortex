@@ -13,7 +13,6 @@
 
 #pragma once
 
-#include <simobject.h>
 #include <cstring>
 #include <deque>
 #include <vector>
