@@ -97,9 +97,10 @@ void read_aux(Buf& aux, void* out, uint64_t size) {
 }
 
 void report(const char* what, uint64_t input, uint32_t rm, uint64_t expected, uint64_t actual) {
-  if (errors < 32)
+  if (errors < 32) {
     std::printf("*** %s in=0x%llx rm=%u expected=0x%llx actual=0x%llx\n", what,
                 (unsigned long long)input, rm, (unsigned long long)expected, (unsigned long long)actual);
+  }
   ++errors;
 }
 
@@ -132,8 +133,9 @@ std::vector<uint32_t> f32_inputs(std::mt19937& rng) {
     uint32_t e = 127 - 30 + (rng() % 50);
     v.push_back((rng() & 0x807fffff) | (e << 23));
   }
-  for (uint32_t i = 0; i < num_random / 4; ++i)
+  for (uint32_t i = 0; i < num_random / 4; ++i) {
     v.push_back(rng());
+  }
   return v;
 }
 
@@ -149,8 +151,12 @@ std::vector<uint64_t> f64_inputs(std::mt19937& rng) {
   for (int e = -27; e <= 17; ++e) {
     for (int k = 0; k < 8; ++k) {
       uint64_t man = ((uint64_t(rng()) << 32) | rng()) & 0xfffffffffffffull;
-      if (k & 1) man = (man & ~0x3ffffffffffull) | 0x20000000000ull;
-      if (k & 2) man &= ~0x3ffffffffffull;
+      if (k & 1) {
+        man = (man & ~0x3ffffffffffull) | 0x20000000000ull;
+      }
+      if (k & 2) {
+        man &= ~0x3ffffffffffull;
+      }
       v.push_back((uint64_t(k & 4 ? 1 : 0) << 63) | (uint64_t(e + 1023) << 52) | man);
     }
   }
@@ -172,19 +178,22 @@ void test_narrow_s(const std::vector<uint32_t>& in) {
   read_aux(aux, mvx.data(), aux.size);
   for (uint32_t i = 0; i < n && i < verbose; ++i) {
     std::printf("in=0x%08x", in[i]);
-    for (uint32_t k = 0; k < ZF_NUM_RM; ++k)
+    for (uint32_t k = 0; k < ZF_NUM_RM; ++k) {
       std::printf(" %04x/%04x", out[i * ZF_NUM_RM + k], rv_ftoh_s(in[i], rm_of(k), nullptr));
+    }
     std::printf("\n");
   }
   for (uint32_t i = 0; i < n; ++i) {
     for (uint32_t k = 0; k < ZF_NUM_RM; ++k) {
       uint16_t ref = rv_ftoh_s(in[i], rm_of(k), nullptr);
-      if (out[i * ZF_NUM_RM + k] != ref)
+      if (out[i * ZF_NUM_RM + k] != ref) {
         report("fcvt.h.s", in[i], rm_of(k), ref, out[i * ZF_NUM_RM + k]);
+      }
     }
     int64_t ref = sext16(rv_ftoh_s(in[i], 0, nullptr));
-    if (mvx[i] != ref)
+    if (mvx[i] != ref) {
       report("fmv.x.h", in[i], 0, ref, mvx[i]);
+    }
   }
   std::printf("fcvt.h.s: %u inputs x %u rounding modes\n", n, ZF_NUM_RM);
 }
@@ -192,15 +201,18 @@ void test_narrow_s(const std::vector<uint32_t>& in) {
 void test_widen_s() {
   uint32_t n = 65536;
   std::vector<uint16_t> in(n);
-  for (uint32_t i = 0; i < n; ++i) in[i] = i;
+  for (uint32_t i = 0; i < n; ++i) {
+    in[i] = i;
+  }
   Buf src(n * 2), dst(n * 4);
   src.write(in.data());
   std::vector<uint32_t> out(n);
   run(ZF_MODE_WIDEN_S, n, src, dst, nullptr, out.data(), dst.size);
   for (uint32_t i = 0; i < n; ++i) {
     uint32_t ref = rv_htof_s(in[i], 0, nullptr);
-    if (out[i] != ref)
+    if (out[i] != ref) {
       report("fcvt.s.h", in[i], 0, ref, out[i]);
+    }
   }
   std::printf("fcvt.s.h: all %u half inputs\n", n);
 }
@@ -214,8 +226,9 @@ void test_narrow_d(const std::vector<uint64_t>& in) {
   for (uint32_t i = 0; i < n; ++i) {
     for (uint32_t k = 0; k < ZF_NUM_RM; ++k) {
       uint16_t ref = rv_dtoh(in[i], rm_of(k), nullptr);
-      if (out[i * ZF_NUM_RM + k] != ref)
+      if (out[i * ZF_NUM_RM + k] != ref) {
         report("fcvt.h.d", in[i], rm_of(k), ref, out[i * ZF_NUM_RM + k]);
+      }
     }
   }
   std::printf("fcvt.h.d: %u inputs x %u rounding modes\n", n, ZF_NUM_RM);
@@ -224,34 +237,43 @@ void test_narrow_d(const std::vector<uint64_t>& in) {
 void test_widen_d() {
   uint32_t n = 65536;
   std::vector<uint16_t> in(n);
-  for (uint32_t i = 0; i < n; ++i) in[i] = i;
+  for (uint32_t i = 0; i < n; ++i) {
+    in[i] = i;
+  }
   Buf src(n * 2), dst(n * 8);
   src.write(in.data());
   std::vector<uint64_t> out(n);
   run(ZF_MODE_WIDEN_D, n, src, dst, nullptr, out.data(), dst.size);
   for (uint32_t i = 0; i < n; ++i) {
     uint64_t ref = rv_htod(in[i], 0, nullptr);
-    if (out[i] != ref)
+    if (out[i] != ref) {
       report("fcvt.d.h", in[i], 0, ref, out[i]);
+    }
   }
   std::printf("fcvt.d.h: all %u half inputs\n", n);
 }
 
 void test_flags(const std::vector<uint32_t>& f32, const std::vector<uint64_t>& f64) {
   std::vector<zf_flag_case_t> cases;
-  for (size_t i = 0; i < num_flag_in && i < f32.size(); ++i)
-    for (uint32_t rm = 0; rm < 5; ++rm)
+  for (size_t i = 0; i < num_flag_in && i < f32.size(); ++i) {
+    for (uint32_t rm = 0; rm < 5; ++rm) {
       cases.push_back({ZF_OP_H_S, rm, f32[i]});
+    }
+  }
   const uint16_t halves[] = {0x0000, 0x8000, 0x0001, 0x03ff, 0x0400, 0x3c00, 0x7bff, 0x7c00,
                              0xfc00, 0x7e00, 0x7c01, 0x7d00, 0xfe00, 0xfd55, 0x7fff, 0x1234};
-  for (uint16_t h : halves)
+  for (uint16_t h : halves) {
     cases.push_back({ZF_OP_S_H, 0, h});
+  }
   if (xlen == 64) {
-    for (size_t i = 0; i < 64 && i < f64.size(); ++i)
-      for (uint32_t rm = 0; rm < 5; ++rm)
+    for (size_t i = 0; i < 64 && i < f64.size(); ++i) {
+      for (uint32_t rm = 0; rm < 5; ++rm) {
         cases.push_back({ZF_OP_H_D, rm, f64[i]});
-    for (uint16_t h : halves)
+      }
+    }
+    for (uint16_t h : halves) {
       cases.push_back({ZF_OP_D_H, 0, h});
+    }
   }
   uint32_t n = cases.size();
   Buf src(n * sizeof(zf_flag_case_t)), dst(n * sizeof(zf_flag_out_t));
@@ -269,8 +291,9 @@ void test_flags(const std::vector<uint32_t>& f32, const std::vector<uint64_t>& f
     case ZF_OP_H_D: ref = rv_dtoh(c.bits, c.rm, &fl); break;
     case ZF_OP_D_H: ref = rv_htod(uint16_t(c.bits), c.rm, &fl); break;
     }
-    if (out[i].result != ref)
+    if (out[i].result != ref) {
       report(names[c.op], c.bits, c.rm, ref, out[i].result);
+    }
     if (out[i].fflags != fl) {
       char what[32];
       std::snprintf(what, sizeof(what), "%s fflags", names[c.op]);
@@ -287,8 +310,12 @@ void test_box(std::mt19937& rng) {
   for (uint32_t i = 0; i < n; ++i) {
     h[i] = rng();
     g[i] = rng();
-    if (i % 4 == 0) g[i] |= 0xffff0000;
-    if (i % 8 == 1) g[i] &= 0x0000ffff;
+    if (i % 4 == 0) {
+      g[i] |= 0xffff0000;
+    }
+    if (i % 8 == 1) {
+      g[i] &= 0x0000ffff;
+    }
   }
   Buf src(n * 2), aux(n * 4), dst(n * ZF_BOX_OUTS * 8);
   src.write(h.data());
@@ -303,11 +330,21 @@ void test_box(std::mt19937& rng) {
     uint64_t r2 = (uint64_t)sext16(h[i]);
     uint64_t r3 = ((g[i] >> 16) == 0xffff) ? rv_htof_s(uint16_t(g[i]), 0, nullptr) : 0x7fc00000u;
     uint64_t r4 = (uint64_t)sext16(g[i]);
-    if (o[0] != r0) report("flh box", h[i], 0, r0, o[0]);
-    if (o[1] != r1) report("fmv.h.x box", g[i], 0, r1, o[1]);
-    if (o[2] != r2) report("flh+fmv.x.h", h[i], 0, r2, o[2]);
-    if (o[3] != r3) report("unboxed fcvt.s.h", g[i], 0, r3, o[3]);
-    if (o[4] != r4) report("fmv.x.h unboxed", g[i], 0, r4, o[4]);
+    if (o[0] != r0) {
+      report("flh box", h[i], 0, r0, o[0]);
+    }
+    if (o[1] != r1) {
+      report("fmv.h.x box", g[i], 0, r1, o[1]);
+    }
+    if (o[2] != r2) {
+      report("flh+fmv.x.h", h[i], 0, r2, o[2]);
+    }
+    if (o[3] != r3) {
+      report("unboxed fcvt.s.h", g[i], 0, r3, o[3]);
+    }
+    if (o[4] != r4) {
+      report("fmv.x.h unboxed", g[i], 0, r4, o[4]);
+    }
   }
   std::printf("boxing: %u cases\n", n);
 }
@@ -336,14 +373,26 @@ int main(int argc, char** argv) {
   std::printf("zfhmin: xlen=%u dynamic frm=%u\n", xlen, frm_dyn);
   auto f32 = f32_inputs(rng);
   auto f64 = f64_inputs(rng);
-  if (phases & 0x01) test_narrow_s(f32);
-  if (phases & 0x02) test_widen_s();
-  if (xlen == 64) {
-    if (phases & 0x04) test_narrow_d(f64);
-    if (phases & 0x08) test_widen_d();
+  if (phases & 0x01) {
+    test_narrow_s(f32);
   }
-  if (phases & 0x10) test_flags(f32, f64);
-  if (phases & 0x20) test_box(rng);
+  if (phases & 0x02) {
+    test_widen_s();
+  }
+  if (xlen == 64) {
+    if (phases & 0x04) {
+      test_narrow_d(f64);
+    }
+    if (phases & 0x08) {
+      test_widen_d();
+    }
+  }
+  if (phases & 0x10) {
+    test_flags(f32, f64);
+  }
+  if (phases & 0x20) {
+    test_box(rng);
+  }
 
   vx_kernel_release(kern);
   vx_module_release(mod);

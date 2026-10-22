@@ -47,9 +47,6 @@
 #ifdef VX_CFG_EXT_TCU_ENABLE
 #include "tcu_unit.h"
 #endif
-#ifdef VX_CFG_EXT_MUFU_ENABLE
-#include "mufu_unit.h"
-#endif
 #ifdef VX_CFG_VM_ENABLE
 #include "mem/mmu.h"
 #include <mem.h>
@@ -277,11 +274,6 @@ public:
   #endif
   #endif
 
-  #ifdef VX_CFG_EXT_MUFU_ENABLE
-    snprintf(sname, 100, "%s-mufu", name.c_str());
-    func_units_.at((int)FUType::MUFU) = SimPlatform::instance().create_object<MufuUnit>(sname, simobject_);
-  #endif
-
     // initialize dispatchers after the units they feed, so a unit takes its
     // input before the dispatcher fills it in the same cycle.
     {
@@ -294,10 +286,6 @@ public:
       dispatchers_.at((int)FUType::SFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_SFU_BLOCKS, VX_CFG_NUM_SFU_LANES, 1);
     #ifdef VX_CFG_EXT_TCU_ENABLE
       dispatchers_.at((int)FUType::TCU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_TCU_BLOCKS, VX_CFG_NUM_TCU_LANES, 1);
-    #endif
-    #ifdef VX_CFG_EXT_MUFU_ENABLE
-      uint32_t mufu_dly = MufuUnit::kGather ? 2 : 1;
-      dispatchers_.at((int)FUType::MUFU) = SimPlatform::instance().create_object<Dispatcher>(name.c_str(), simobject_, VX_CFG_DISPATCH_QUEUE_SIZE, VX_CFG_NUM_MUFU_BLOCKS, VX_CFG_NUM_MUFU_LANES, mufu_dly);
     #endif
       for (uint32_t fu = 0; fu < (uint32_t)FUType::Count; ++fu) {
         auto& dispatch = dispatchers_.at(fu);
@@ -583,9 +571,6 @@ public:
       #ifdef VX_CFG_EXT_TCU_ENABLE
         case FUType::TCU: ++perf_stats_.tcu_stalls; break;
       #endif
-      #ifdef VX_CFG_EXT_MUFU_ENABLE
-        case FUType::MUFU: ++perf_stats_.mufu_stalls; break;
-      #endif
         default: assert(false);
         }
       }
@@ -820,14 +805,11 @@ public:
 
     // process completed instructions: one beat per issue slice per cycle,
     // granted fixed-priority in EX-unit order (ALU highest, then LSU, SFU,
-    // FPU, TCU, MUFU) — a busy higher class starves lower ones' writebacks.
+    // FPU, TCU) — a busy higher class starves lower ones' writebacks.
     static constexpr FUType kCommitPrio[] = {
       FUType::ALU, FUType::LSU, FUType::SFU, FUType::FPU,
     #ifdef VX_CFG_EXT_TCU_ENABLE
       FUType::TCU,
-    #endif
-    #ifdef VX_CFG_EXT_MUFU_ENABLE
-      FUType::MUFU,
     #endif
     };
     for (uint32_t iw = 0; iw < VX_CFG_ISSUE_WIDTH; ++iw) {
@@ -886,9 +868,6 @@ public:
         case FUType::SFU: ++perf_stats_.sfu_instrs; break;
       #ifdef VX_CFG_EXT_TCU_ENABLE
         case FUType::TCU: ++perf_stats_.tcu_instrs; break;
-      #endif
-      #ifdef VX_CFG_EXT_MUFU_ENABLE
-        case FUType::MUFU: ++perf_stats_.mufu_instrs; break;
       #endif
         default: assert(false);
         }

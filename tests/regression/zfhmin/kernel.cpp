@@ -159,14 +159,16 @@ __kernel void kernel_main(kernel_arg_t* __UNIFORM__ arg) {
   if (arg->mode == ZF_MODE_FLAGS) {
     int nt = vx_num_threads();
     for (int l = 0; l < nt; ++l) {
-      if (vx_thread_id() == l && i < arg->count)
+      if (vx_thread_id() == l && i < arg->count) {
         flag_case(arg, i);
+      }
     }
     return;
   }
-  if (i >= arg->count)
+  if (i >= arg->count) {
     return;
-  __asm__ volatile("fsrm %0" :: "r"(arg->frm));
+  }
+  __asm__ volatile("fsrm %0" ::"r"(arg->frm));
   switch (arg->mode) {
   case ZF_MODE_NARROW_S: narrow_s(arg, i); break;
   case ZF_MODE_WIDEN_S:  widen_s(arg, i); break;

@@ -37,9 +37,6 @@ package VX_trace_pkg;
         `ifdef VX_CFG_EXT_TCU_ENABLE
             EX_TCU: `TRACE(level, ("TCU"))
         `endif
-        `ifdef VX_CFG_EXT_MUFU_ENABLE
-            EX_MUFU: `TRACE(level, ("MUFU"))
-        `endif
             default: `TRACE(level, ("?"))
         endcase
     endtask
@@ -273,6 +270,20 @@ package VX_trace_pkg;
             `ifdef VX_CFG_EXT_RASTER_ENABLE
                 INST_SFU_RASTER: `TRACE(level, ("RAST.FETCH"))
             `endif
+            `ifdef VX_CFG_EXT_MUFU_ENABLE
+                INST_SFU_MUFU: begin
+                    case (op_args.mufu.fn)
+                        INST_MUFU_RCP:   `TRACE(level, ("MUFU.RCP"))
+                        INST_MUFU_RSQRT: `TRACE(level, ("MUFU.RSQRT"))
+                        INST_MUFU_EX2:   `TRACE(level, ("MUFU.EX2"))
+                        INST_MUFU_LG2:   `TRACE(level, ("MUFU.LG2"))
+                        INST_MUFU_SINPI: `TRACE(level, ("MUFU.SINPI"))
+                        INST_MUFU_COSPI: `TRACE(level, ("MUFU.COSPI"))
+                        INST_MUFU_TANH:  `TRACE(level, ("MUFU.TANH"))
+                        default:         `TRACE(level, ("MUFU.?"))
+                    endcase
+                end
+            `endif
                 default: `TRACE(level, ("?"))
             endcase
         end
@@ -443,20 +454,6 @@ package VX_trace_pkg;
             VX_tcu_pkg::trace_ex_op(level, op_type, op_args);
         end
     `endif
-    `ifdef VX_CFG_EXT_MUFU_ENABLE
-        EX_MUFU: begin
-            case (INST_MUFU_BITS'(op_type))
-                INST_MUFU_RCP:   `TRACE(level, ("MUFU.RCP"))
-                INST_MUFU_RSQRT: `TRACE(level, ("MUFU.RSQRT"))
-                INST_MUFU_EX2:   `TRACE(level, ("MUFU.EX2"))
-                INST_MUFU_LG2:   `TRACE(level, ("MUFU.LG2"))
-                INST_MUFU_SINPI: `TRACE(level, ("MUFU.SINPI"))
-                INST_MUFU_COSPI: `TRACE(level, ("MUFU.COSPI"))
-                INST_MUFU_TANH:  `TRACE(level, ("MUFU.TANH"))
-                default: `TRACE(level, ("?"))
-            endcase
-        end
-    `endif
         default: `TRACE(level, ("?"))
         endcase
     endtask
@@ -481,11 +478,6 @@ package VX_trace_pkg;
     `ifdef VX_CFG_EXT_F_ENABLE
         EX_FPU: begin
             `TRACE(level, (", fmt=0x%0h, frm=0x%0h", op_args.fpu.fmt, op_args.fpu.frm))
-        end
-    `endif
-    `ifdef VX_CFG_EXT_MUFU_ENABLE
-        EX_MUFU: begin
-            `TRACE(level, (", fmt=0x%0h", op_args.mufu.fmt))
         end
     `endif
         default:;

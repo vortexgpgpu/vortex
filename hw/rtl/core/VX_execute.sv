@@ -142,17 +142,6 @@ module VX_execute import VX_gpu_pkg::*; #(
     );
 `endif
 
-`ifdef VX_CFG_EXT_MUFU_ENABLE
-    VX_mufu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-mufu", INSTANCE_ID)))
-    ) mufu_unit (
-        .clk            (clk),
-        .reset          (reset),
-        .dispatch_if    (dispatch_if[EX_MUFU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
-        .commit_if      (commit_if[EX_MUFU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH])
-    );
-`endif
-
     VX_sfu_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-sfu", INSTANCE_ID))),
         .CORE_ID (CORE_ID)

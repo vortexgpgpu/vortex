@@ -15,7 +15,7 @@
 
 #include <cstdint>
 
-// Bit-exact model of the MUFU datapath (hw/rtl/mufu).
+// Bit-exact reference for the MUFU special functions.
 namespace vortex::mufu {
 
 enum fn_t : uint32_t {

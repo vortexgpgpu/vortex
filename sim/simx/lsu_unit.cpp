@@ -17,6 +17,7 @@
 #include <string.h>
 #include <assert.h>
 #include <util.h>
+#include <nan_box.h>
 #include "debug.h"
 #include "core.h"
 #include "local_mem_switch.h"
@@ -253,6 +254,7 @@ void LsuUnit::process_response_step(uint32_t b) {
 		uint32_t byte_off   = (data_bs == 0 || data_bs == 0x0F) ? 0
 		                    : (uint32_t)__builtin_ctz(data_bs);
 		bool nan_box = dst_float && (data_bytes < 8);
+		bool half_float = VX_CFG_EXT_ZFHMIN_ENABLED && dst_float && (entry.lsu_args.width == 1);
 
 		for (uint32_t lane = 0; lane < lsu_rsp.mask.size(); ++lane) {
 			if (!lsu_rsp.mask.test(lane))
@@ -268,8 +270,8 @@ void LsuUnit::process_response_step(uint32_t b) {
 			case 0: // LB
 				formatted = (uint64_t)(int64_t)sext((Word)read_data, data_width);
 				break;
-			case 1: // LH (FLH: raw bits for Float dest, NaN-boxed below)
-				formatted = dst_float ? read_data
+			case 1: // LH (raw bits for a Zfhmin Float dest, NaN-boxed below)
+				formatted = half_float ? read_data
 				                       : (uint64_t)(int64_t)sext((Word)read_data, data_width);
 				break;
 			case 2: // LW (sign-ext for Integer dest; raw bits for Float dest, NaN-boxed below)
@@ -287,10 +289,9 @@ void LsuUnit::process_response_step(uint32_t b) {
 			}
 			// Place at bytesel-specified position; OR-in NaN-box for Float dest.
 			auto& dst = entry.trace->dst_data.at(lane_info.tid);
-			uint64_t box = !nan_box ? 0
-			             : (entry.lsu_args.width == 1) ? 0xFFFFFFFFFFFF0000ull
-			             : 0xFFFFFFFF00000000ull;
-			dst.u64 = (formatted << (8 * byte_off)) | box;
+			uint32_t box_bits = half_float ? 16 : 32;
+			dst.u64 = (formatted << (8 * byte_off))
+			        | (nan_box ? nanbox::box(0, box_bits) : 0);
 		}
 	}
 	entry.count -= lsu_rsp.mask.count(); // track remaining

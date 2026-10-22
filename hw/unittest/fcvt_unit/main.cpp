@@ -112,8 +112,12 @@ int main(int argc, char** argv) {
                 tests.push_back({a, f, op});
         for (size_t i = 0; i < num_random; ++i) {
             uint32_t a = static_cast<uint32_t>(rng());
-            if (op == H2F && (i % 16) != 0) a |= 0xffff0000u;
-            if (op == F2H && (i % 2) == 0) a = (a & 0x807fffffu) | ((97u + (a >> 24) % 50u) << 23);
+            if (op == H2F && (i % 16) != 0) {
+                a |= 0xffff0000u;
+            }
+            if (op == F2H && (i % 2) == 0) {
+                a = (a & 0x807fffffu) | ((97u + (a >> 24) % 50u) << 23);
+            }
             tests.push_back({a, static_cast<uint32_t>(i % 5), op});
         }
     }
@@ -138,8 +142,12 @@ int main(int argc, char** argv) {
             uint32_t ff = 0;
             uint32_t ga = t.a;
 #ifdef LEAN
-            if (t.op == F2I_S || t.op == F2I_U || t.op == F2H) ga = flush_sub(t.a); // DAZ float source
-            if (t.op == H2F && (t.a >> 16) == 0xffff) ga = 0xffff0000u | flush_sub16(uint16_t(t.a));
+            if (t.op == F2I_S || t.op == F2I_U || t.op == F2H) {
+                ga = flush_sub(t.a); // DAZ float source
+            }
+            if (t.op == H2F && (t.a >> 16) == 0xffff) {
+                ga = 0xffff0000u | flush_sub16(uint16_t(t.a));
+            }
 #endif
             uint32_t r  = golden(t.op, ga, t.frm, &ff);
 #ifdef LEAN
@@ -168,7 +176,9 @@ int main(int argc, char** argv) {
     }
 
     printf("fcvt_unit: checked=%zu errors=%zu  per-op:", checked, errors);
-    for (int op = 0; op < (int)NUM_OPS; ++op) printf(" %s=%zu", op_name[op], per_op[op]);
+    for (int op = 0; op < (int)NUM_OPS; ++op) {
+        printf(" %s=%zu", op_name[op], per_op[op]);
+    }
     printf("\n%s\n", errors ? "FAILED" : "PASSED");
     return errors ? 1 : 0;
 }

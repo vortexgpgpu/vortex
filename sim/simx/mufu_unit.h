@@ -13,24 +13,30 @@
 
 #pragma once
 
-#include "func_unit.h"
+#include <cstdint>
+#include <VX_types.h>
+#include "types.h"
+#include "instr_trace.h"
 
 namespace vortex {
 
-class MufuUnit : public FuncUnit<VX_CFG_NUM_MUFU_BLOCKS> {
+// MUFU sub-unit of the SFU. The SFU's lanes are serialized onto the MUFU
+// datapath lanes, one batch per cycle, and a warp is accepted on its last batch.
+class MufuUnit {
 public:
-  MufuUnit(const SimContext& ctx, const char* name, Core*);
+  // Cycles a result spends in the datapath and its registered output after the
+  // warp is accepted.
+  static constexpr uint32_t kLatency = VX_MUFU_LATENCY + 1;
 
-  // Partial bandwidth: a lane-gather stage takes results off the response
-  // port. Otherwise the commit arbiter reads the response port directly.
-  static constexpr bool kGather = (VX_CFG_NUM_MUFU_BLOCKS != VX_CFG_ISSUE_WIDTH)
-                               || (VX_CFG_NUM_MUFU_LANES != VX_CFG_SIMD_WIDTH);
-
-protected:
-  void on_tick() override;
+  // Returns false while the warp's batches are still being issued; on the
+  // accepting cycle computes the results and returns true.
+  bool process(instr_trace_t* trace);
 
 private:
-  void execute(instr_trace_t* trace);
+  static uint32_t issue_cycles(const instr_trace_t* trace);
+
+  const instr_trace_t* head_ = nullptr;
+  uint32_t remaining_ = 0;
 };
 
 }

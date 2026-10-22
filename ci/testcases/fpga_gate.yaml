@@ -105,8 +105,8 @@ builds:
 
 # --- mufu --------------------------------------------------------------------
 
-# Special-function unit at its default single lane under a 16-wide warp: lane
-# dispatch, the 7-stage table+polynomial datapath and the 512x72 table ROM.
+# Special-function datapath at its default single lane, serialized from a
+# 16-lane SFU: the 7-stage table+polynomial pipeline and the 512x72 table ROM.
 - id: mufu
   group: mufu
   dut: mufu

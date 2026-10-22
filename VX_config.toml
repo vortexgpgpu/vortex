@@ -154,11 +154,8 @@ VX_CFG_FCVT_PE_RATIO = 1
 VX_CFG_FNCP_PE_RATIO = 1
 
 [mufu]
-# Special-function unit (rcp/rsqrt/ex2/lg2/sinpi/cospi/tanh): one lane shared by
-# all issue slots; a wider unit did not speed up fused FlashAttention.
+# MUFU datapath lanes inside the SFU; the SFU's lanes are serialized onto them.
 VX_CFG_NUM_MUFU_LANES = 1
-VX_CFG_NUM_MUFU_BLOCKS = 1
-VX_CFG_MUFU_LATENCY = 7
 
 [amo]
 # LR/SC reservation stations per LLC bank; line-indexed in BRAM, eviction yields legal spurious SC failures

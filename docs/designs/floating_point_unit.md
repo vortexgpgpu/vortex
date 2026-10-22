@@ -457,10 +457,11 @@ and it is F32 only: the F64 soft cores are covered by the unit tests alone.
 ### Special functions are not in the FPU
 
 Approximate transcendentals (`rcp`, `rsqrt`, `ex2`, `lg2`, `sinpi`, `cospi`,
-`tanh`) run on a separate execution unit, the MUFU, not on an FPU core. It has
-its own dispatch queue and commit path, so FPU and MUFU instructions from
-different warps execute concurrently; it ignores `frm` and never writes
-`fflags`. The FPU's `fsqrt`/`fdiv` remain the correctly rounded operations.
+`tanh`) run on the MUFU, a processing element of the SFU, not on an FPU core.
+The SFU's lanes are serialized onto `VX_CFG_NUM_MUFU_LANES` datapath lanes
+(default 1), so FPU and MUFU instructions from different warps execute
+concurrently; it ignores `frm` and never writes `fflags`. The FPU's
+`fsqrt`/`fdiv` remain the correctly rounded operations.
 
 ---
 

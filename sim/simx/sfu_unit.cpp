@@ -390,6 +390,21 @@ void SfuUnit::on_tick() {
 		// The fragment work distributor (above + scheduler) launches fragment
 		// warps directly from the autonomously-pulled covered-quad waves.
 
+#ifdef VX_CFG_EXT_MUFU_ENABLE
+		if (std::get_if<MufuType>(&trace->op_type)) {
+			if (output.full()) {
+				continue;
+			}
+			if (!mufu_unit_.process(trace)) {
+				continue;
+			}
+			output.send(trace, this->latency_of(trace) + MufuUnit::kLatency);
+			trace->resume_warp = trace->fetch_stall;
+			input.pop();
+			continue;
+		}
+#endif
+
 		if (output.full())
 			continue; // stall — no side effects this tick
 

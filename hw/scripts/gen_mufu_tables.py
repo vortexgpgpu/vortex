@@ -25,7 +25,7 @@ Sk), so one entry is 72 bits and the 512 entries fill one 512x72 RAMB36.
 
 Outputs (checked in, regenerate after any change here):
     sw/common/mufu_tables.h
-    hw/rtl/mufu/VX_mufu_rom.sv   (no comments, by project convention for this unit)
+    hw/rtl/mufu/VX_mufu_rom.sv
 
 Usage:
     gen_mufu_tables.py            write both outputs
@@ -216,6 +216,10 @@ def emit_sv(entries, bases):
     iw = max(1, (max(n for _, _, n in bases) - 1).bit_length())
     tw = max(1, (len(bases) - 1).bit_length())
     w = W0 + W1 + W2
+    words = []
+    for i in range(ROM_DEPTH):
+        q0, q1, q2 = entries[i] if i < len(entries) else (0, 0, 0)
+        words.append((q0 << (W1 + W2)) | ((q1 & ((1 << W1) - 1)) << W2) | (q2 & ((1 << W2) - 1)))
     out = []
     out.append("`include \"VX_platform.vh\"")
     out.append("")
@@ -228,36 +232,51 @@ def emit_sv(entries, bases):
     out.append(f"    output wire signed [{A1_BITS - 1}:0] a1,")
     out.append(f"    output wire signed [{A2_BITS - 1}:0] a2")
     out.append(");")
+    out.append(f"    localparam DATAW = {w};")
+    out.append(f"    localparam SIZE  = {ROM_DEPTH};")
+    out.append("")
+    out.append("    localparam [SIZE*DATAW-1:0] ROM_DATA = {")
+    for i in range(ROM_DEPTH - 1, -1, -1):
+        sep = "," if i > 0 else ""
+        out.append(f"        {w}'h{words[i]:0{(w + 3) // 4}x}{sep}")
+    out.append("    };")
     out.append("")
     out.append(f"    reg [{aw - 1}:0] base;")
     out.append("")
     out.append("    always @(*) begin")
     out.append("        case (tbl)")
     for i, (_, base, _) in enumerate(bases):
-        out.append(f"        {tw}'d{i}: base = {aw}'d{base};")
-    out.append(f"        default: base = '0;")
+        out.append(f"            {tw}'d{i}: base = {aw}'d{base};")
+    out.append(f"            default: base = '0;")
     out.append("        endcase")
     out.append("    end")
     out.append("")
     out.append(f"    wire [{aw - 1}:0] addr = base + {aw}'(idx);")
     out.append("")
-    out.append(f"    (* rom_style = \"block\" *) reg [{w - 1}:0] mem [0:{ROM_DEPTH - 1}];")
+    out.append("    wire [DATAW-1:0] rd_data, rd_data_r;")
     out.append("")
-    out.append("    initial begin")
-    for i in range(ROM_DEPTH):
-        q0, q1, q2 = entries[i] if i < len(entries) else (0, 0, 0)
-        v = (q0 << (W1 + W2)) | ((q1 & ((1 << W1) - 1)) << W2) | (q2 & ((1 << W2) - 1))
-        out.append(f"        mem[{i}] = {w}'h{v:0{(w + 3) // 4}x};")
-    out.append("    end")
+    out.append("    VX_rom #(")
+    out.append("        .DATAW     (DATAW),")
+    out.append("        .SIZE      (SIZE),")
+    out.append("        .OUT_REG   (1),")
+    out.append("        .INIT_DATA (ROM_DATA)")
+    out.append("    ) rom (")
+    out.append("        .clk   (clk),")
+    out.append("        .read  (enable),")
+    out.append("        .addr  (addr),")
+    out.append("        .rdata (rd_data)")
+    out.append("    );")
     out.append("")
-    out.append(f"    reg [{w - 1}:0] rd_data, rd_data_r;")
-    out.append("")
-    out.append("    always @(posedge clk) begin")
-    out.append("        if (enable) begin")
-    out.append("            rd_data   <= mem[addr];")
-    out.append("            rd_data_r <= rd_data;")
-    out.append("        end")
-    out.append("    end")
+    out.append("    VX_pipe_register #(")
+    out.append("        .DATAW (DATAW),")
+    out.append("        .DEPTH (1)")
+    out.append("    ) rd_reg (")
+    out.append("        .clk      (clk),")
+    out.append("        .reset    (1'b0),")
+    out.append("        .enable   (enable),")
+    out.append("        .data_in  (rd_data),")
+    out.append("        .data_out (rd_data_r)")
+    out.append("    );")
     out.append("")
     out.append(f"    assign a0 = {A0_BITS}'({{rd_data_r[{w - 1}:{W1 + W2}], {S0}'b0}});")
     out.append(f"    assign a1 = {A1_BITS}'($signed({{rd_data_r[{W1 + W2 - 1}:{W2}], {S1}'b0}}));")

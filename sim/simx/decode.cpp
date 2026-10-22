@@ -220,8 +220,12 @@ static op_string_t op_string(const Instr &instr) {
         }
       }
       case FpuType::F2F: {
-        if (fpuArgs.is_f16) return {(fpuArgs.cvt == 1) ? "FCVT.H.D":"FCVT.H.S", ""};
-        if (fpuArgs.cvt == 2) return {fpuArgs.is_f64 ? "FCVT.D.H":"FCVT.S.H", ""};
+        if (fpuArgs.is_f16) {
+          return {(fpuArgs.cvt == 1) ? "FCVT.H.D":"FCVT.H.S", ""};
+        }
+        if (fpuArgs.cvt == 2) {
+          return {fpuArgs.is_f64 ? "FCVT.D.H":"FCVT.S.H", ""};
+        }
         return {fpuArgs.is_f64 ? "FCVT.D.S":"FCVT.S.D", ""};
       }
       case FpuType::FCMP: {
@@ -262,8 +266,12 @@ static op_string_t op_string(const Instr &instr) {
       case LsuType::LOAD: {
         auto lsuArgs = std::get<IntrLsuArgs>(instrArgs);
         bool dst_float = (instr.get_dest_reg().type == RegType::Float);
-        if (instr.is_macro_op() && dst_float && lsuArgs.width == 0) return {"PACKLB.F", ""};
-        if (instr.is_macro_op() && dst_float && lsuArgs.width == 1) return {"PACKLH.F", ""};
+        if (instr.is_macro_op() && dst_float && lsuArgs.width == 0) {
+          return {"PACKLB.F", ""};
+        }
+        if (instr.is_macro_op() && dst_float && lsuArgs.width == 1) {
+          return {"PACKLH.F", ""};
+        }
         if (dst_float) {
           switch (lsuArgs.width) {
           case 1: return {"FLH", to_hex_str(lsuArgs.offset)};
@@ -412,7 +420,7 @@ static op_string_t op_string(const Instr &instr) {
   #ifdef VX_CFG_EXT_MUFU_ENABLE
     ,[&](MufuType mufu_type)-> op_string_t {
       std::ostringstream os;
-      os << mufu_type << ".S";
+      os << mufu_type;
       return {os.str(), ""};
     }
   #endif
@@ -768,25 +776,27 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
       break;
     case 0x20: // FCVT.S.D, FCVT.S.H
     case 0x21: // FCVT.D.S, FCVT.D.H
+    case 0x22: { // FCVT.H.S, FCVT.H.D
+      // fmt codes: 0 = S, 1 = D, 2 = H
+      uint32_t dst_fmt = funct7 & 0x3;
+      uint32_t src_fmt = rs2;
+      bool supported = (src_fmt <= 2) && (src_fmt != dst_fmt);
 #ifndef VX_CFG_EXT_ZFHMIN_ENABLE
-      if ((rs2 & 0x3) == 0x2)
-        std::abort();
+      supported = supported && (dst_fmt != 2) && (src_fmt != 2);
 #endif
-      instr->set_op_type(FpuType::F2F);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
-      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
-      break;
-#ifdef VX_CFG_EXT_ZFHMIN_ENABLE
-    case 0x22: // FCVT.H.S, FCVT.H.D
-      instr->set_op_type(FpuType::F2F);
-      instr->set_dest_reg(rd, RegType::Float);
-      instr->set_src_reg(0, rs1, RegType::Float);
-      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
-      break;
-    case 0x72: // FMV.X.H
-      if (funct3 != 0)
+      if (!supported) {
         std::abort();
+      }
+      instr->set_op_type(FpuType::F2F);
+      instr->set_dest_reg(rd, RegType::Float);
+      instr->set_src_reg(0, rs1, RegType::Float);
+      instr->set_fcsr_use(frm_rd, Instr::FCSR_FFLAGS);
+    } break;
+#ifdef VX_CFG_EXT_ZFHMIN_ENABLE
+    case 0x72: // FMV.X.H
+      if (funct3 != 0) {
+        std::abort();
+      }
       instr->set_op_type(FpuType::FMVXW);
       instr->set_dest_reg(rd, RegType::Integer);
       instr->set_src_reg(0, rs1, RegType::Float);
@@ -1182,11 +1192,11 @@ Instr::Ptr Decoder::decode(uint32_t code, uint64_t uuid) {
   } break;
 #ifdef VX_CFG_EXT_MUFU_ENABLE
   case Opcode::EXT3: {
-    if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(MufuType::TANH))
+    if (funct7 != 0 || funct3 != 0 || rs2 > uint32_t(MufuType::TANH)) {
       std::abort();
-    instr->set_fu_type(FUType::MUFU);
+    }
+    instr->set_fu_type(FUType::SFU);
     instr->set_op_type(MufuType(rs2));
-    instr->set_args(IntrMufuArgs{funct3});
     instr->set_dest_reg(rd, RegType::Float);
     instr->set_src_reg(0, rs1, RegType::Float);
   } break;

@@ -1,8 +1,6 @@
 `include "VX_define.vh"
 
-module VX_mufu_pe import VX_gpu_pkg::*; #(
-    parameter LATENCY = 7
-) (
+module VX_mufu_pe import VX_gpu_pkg::*; (
     input wire          clk,
     input wire          reset,
     input wire          enable,
@@ -10,7 +8,7 @@ module VX_mufu_pe import VX_gpu_pkg::*; #(
     input wire [31:0]   dataa,
     output wire [31:0]  result
 );
-    `STATIC_ASSERT (LATENCY == 7, ("VX_mufu_pe: LATENCY must be 7, got %0d", LATENCY))
+    `STATIC_ASSERT (`VX_MUFU_LATENCY == 7, ("VX_mufu_pe: the datapath is 7 stages, VX_MUFU_LATENCY=%0d", `VX_MUFU_LATENCY))
 
     localparam TBL_RCP   = 3'd0;
     localparam TBL_RSQRT = 3'd1;

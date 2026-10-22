@@ -248,14 +248,6 @@ Word CsrUnit::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
         }
       } break;
     #endif
-    #ifdef VX_CFG_EXT_MUFU_ENABLE
-      case VX_DCR_MPM_CLASS_MUFU: {
-        switch (addr) {
-        CSR_READ_64(VX_CSR_MPM_MUFU_STALLS, core_perf.mufu_stalls);
-        CSR_READ_64(VX_CSR_MPM_MUFU_INSTRS, core_perf.mufu_instrs);
-        }
-      } break;
-    #endif
     #ifdef VX_CFG_EXT_DXA_ENABLE
       case VX_DCR_MPM_CLASS_DXA: {
         auto cluster_perf = core_->socket()->cluster()->perf_stats();
@@ -406,42 +398,47 @@ void CsrUnit::process(instr_trace_t* trace) {
   uint32_t num_threads = VX_CFG_NUM_THREADS;
   auto& rs1_data = trace->src_data[0];
 
-  uint32_t thread_start = 0;
-  for (; thread_start < num_threads; ++thread_start) {
-    if (tmask.test(thread_start)) break;
-  }
-
   trace->dst_data.assign(num_threads, reg_data_t{});
   auto& rd_data = trace->dst_data;
 
-  if (thread_start == num_threads)
-    return;
-
-  // CSRs are per warp: every active lane reads the old value, and the write
-  // takes the first active lane's operand, as in the RTL.
-  for (uint32_t t = thread_start; t < num_threads; ++t) {
-    if (!tmask.test(t)) continue;
-    rd_data[t].i = this->get_csr(csr_addr, wid, t);
-  }
-  Word csr_value = rd_data[thread_start].i;
-  Word src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[thread_start].i;
-
-  switch (csr_type) {
-  case CsrType::CSRRW:
-    this->set_csr(csr_addr, src_v, wid, thread_start);
-    break;
-  case CsrType::CSRRS:
-    if (src_v != 0) {
-      this->set_csr(csr_addr, csr_value | src_v, wid, thread_start);
+  // The warp is processed one SFU-width packet at a time: a packet's active
+  // lanes read the CSR, then its first active lane supplies the write.
+  constexpr uint32_t kPacketLanes = VX_CFG_NUM_SFU_LANES;
+  for (uint32_t base = 0; base < num_threads; base += kPacketLanes) {
+    uint32_t first = num_threads;
+    for (uint32_t t = base; t < base + kPacketLanes; ++t) {
+      if (tmask.test(t)) {
+        first = t;
+        break;
+      }
     }
-    break;
-  case CsrType::CSRRC:
-    if (src_v != 0) {
-      this->set_csr(csr_addr, csr_value & ~src_v, wid, thread_start);
+    if (first == num_threads) {
+      continue;
     }
-    break;
-  default:
-    std::abort();
+    for (uint32_t t = first; t < base + kPacketLanes; ++t) {
+      if (tmask.test(t)) {
+        rd_data[t].i = this->get_csr(csr_addr, wid, t);
+      }
+    }
+    Word csr_value = rd_data[first].i;
+    Word src_v = csrArgs.is_imm ? csrArgs.imm : rs1_data[first].i;
+    switch (csr_type) {
+    case CsrType::CSRRW:
+      this->set_csr(csr_addr, src_v, wid, first);
+      break;
+    case CsrType::CSRRS:
+      if (src_v != 0) {
+        this->set_csr(csr_addr, csr_value | src_v, wid, first);
+      }
+      break;
+    case CsrType::CSRRC:
+      if (src_v != 0) {
+        this->set_csr(csr_addr, csr_value & ~src_v, wid, first);
+      }
+      break;
+    default:
+      std::abort();
+    }
   }
   DT(3, "csr-unit process: op=" << csr_type << ", " << *trace);
 }

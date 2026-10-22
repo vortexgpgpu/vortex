@@ -529,15 +529,6 @@ import VX_fpu_pkg::*;
                         endcase
                     end
                 `endif
-                `ifdef VX_CFG_EXT_MUFU_ENABLE
-                    `VX_DCR_MPM_CLASS_MUFU: begin
-                        case (dcr_addr)
-                        `CSR_READ_64(`VX_CSR_MPM_MUFU_STALLS, dcr_data_w, pipeline_perf.issue.dispatch_stalls[EX_MUFU]);
-                        `CSR_READ_64(`VX_CSR_MPM_MUFU_INSTRS, dcr_data_w, pipeline_perf.issue.dispatch_instrs[EX_MUFU]);
-                        default:;
-                        endcase
-                    end
-                `endif
                 `ifdef VX_CFG_EXT_TEX_ENABLE
                     `VX_DCR_MPM_CLASS_TEX: begin
                         case (dcr_addr)

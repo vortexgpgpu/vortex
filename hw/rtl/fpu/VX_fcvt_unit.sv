@@ -99,20 +99,33 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
     wire [15:0] h_op = (&dataa[`VX_CFG_XLEN-1:16]) ? dataa[15:0] : 16'h7E00;
 
+    wire [31:0] s_op;
+    if (HAS_D) begin : g_s_unbox
+        assign s_op = (&dataa[`VX_CFG_XLEN-1:32]) ? dataa[31:0] : 32'h7FC00000;
+    end else begin : g_s_raw
+        assign s_op = dataa[31:0];
+    end
+
     // Float source field extraction (per source format)
-    wire               input_fp_sgn = src_is_h ? h_op[15] : src_is_d ? safe_dataa[63] : safe_dataa[31];
+    wire               input_fp_sgn = src_is_h ? h_op[15] : src_is_d ? safe_dataa[63] : s_op[31];
 
     fclass_t fclass32;
-    VX_fp_classifier #(.EXP_BITS(F32_EXP), .MAN_BITS(F32_MAN)) fp_classifier32 (
-        .exp_i  (safe_dataa[F32_MAN +: F32_EXP]),
-        .man_i  (safe_dataa[F32_MAN-1:0]),
+    VX_fp_classifier #(
+        .EXP_BITS (F32_EXP),
+        .MAN_BITS (F32_MAN)
+    ) fp_classifier32 (
+        .exp_i  (s_op[F32_MAN +: F32_EXP]),
+        .man_i  (s_op[F32_MAN-1:0]),
         .clss_o (fclass32)
     );
 
     fclass_t fclass_sd;
     if (HAS_D) begin : g_classify_d
         fclass_t fclass64;
-        VX_fp_classifier #(.EXP_BITS(F64_EXP), .MAN_BITS(F64_MAN)) fp_classifier64 (
+        VX_fp_classifier #(
+            .EXP_BITS (F64_EXP),
+            .MAN_BITS (F64_MAN)
+        ) fp_classifier64 (
             .exp_i  (safe_dataa[F64_MAN +: F64_EXP]),
             .man_i  (safe_dataa[F64_MAN-1:0]),
             .clss_o (fclass64)
@@ -125,7 +138,10 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     fclass_t fclass;
     if (HAS_H) begin : g_classify_h
         fclass_t fclass16;
-        VX_fp_classifier #(.EXP_BITS(F16_EXP), .MAN_BITS(F16_MAN)) fp_classifier16 (
+        VX_fp_classifier #(
+            .EXP_BITS (F16_EXP),
+            .MAN_BITS (F16_MAN)
+        ) fp_classifier16 (
             .exp_i  (h_op[F16_MAN +: F16_EXP]),
             .man_i  (h_op[F16_MAN-1:0]),
             .clss_o (fclass16)
@@ -144,16 +160,16 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
     wire [S_MAN_WIDTH-1:0] fp_unpacked_mant = src_daz ? '0
         : src_is_h ? S_MAN_WIDTH'({fclass.is_normal, h_op[F16_MAN-1:0]})
         : src_is_d ? S_MAN_WIDTH'({fclass.is_normal, safe_dataa[F64_MAN-1:0]})
-                   : S_MAN_WIDTH'({fclass.is_normal, safe_dataa[F32_MAN-1:0]});
+                   : S_MAN_WIDTH'({fclass.is_normal, s_op[F32_MAN-1:0]});
 
     wire signed [S_EXP_WIDTH-1:0] src_bias_s = src_is_h ? S_EXP_WIDTH'(F16_BIAS)
                                              : src_is_d ? S_EXP_WIDTH'(F64_BIAS) : S_EXP_WIDTH'(F32_BIAS);
     wire [SUPER_EXP-1:0] src_exp_sd;
     if (HAS_D) begin : g_srcexp_d
         assign src_exp_sd = src_is_d ? safe_dataa[F64_MAN +: F64_EXP]
-                                     : SUPER_EXP'(safe_dataa[F32_MAN +: F32_EXP]);
+                                     : SUPER_EXP'(s_op[F32_MAN +: F32_EXP]);
     end else begin : g_srcexp_s
-        assign src_exp_sd = safe_dataa[F32_MAN +: F32_EXP];
+        assign src_exp_sd = s_op[F32_MAN +: F32_EXP];
     end
     wire [SUPER_EXP-1:0] src_exp_raw = src_is_h ? SUPER_EXP'(h_op[F16_MAN +: F16_EXP]) : src_exp_sd;
 
@@ -546,17 +562,18 @@ module VX_fcvt_unit import VX_gpu_pkg::*, VX_fpu_pkg::*;
 
         reg [`VX_CFG_XLEN-1:0] dst_r;
         always_comb begin
-            if (is_nan_src)
+            if (is_nan_src) begin
                 dst_r = dst_d_s5 ? qnan_d : dst_h_s5 ? box_h_qnan : box_s_qnan;
-            else if (is_inf_src)
+            end else if (is_inf_src) begin
                 dst_r = dst_d_s5 ? inf_d : dst_h_s5 ? box_h_inf : box_s_inf;
-            else if (is_zero_src)
+            end else if (is_zero_src) begin
                 dst_r = dst_d_s5 ? zero_d : dst_h_s5 ? box_h_zero : box_s_zero;
-            else if (f2f_of_s5)
+            end else if (f2f_of_s5) begin
                 dst_r = dst_h_s5 ? (of_to_inf ? box_h_inf : box_h_max)
                                  : (of_to_inf ? box_s_inf : box_s_max);
-            else
+            end else begin
                 dst_r = normal_dst;
+            end
         end
         assign fp_dst_res    = dst_r;
         assign f2f_nv_s5     = is_f2f_s5 & fclass_s5.is_signaling;

@@ -27,13 +27,13 @@
 extern "C" {
 #endif
 
-#define __VX_MUFU_S(name, fn)                                                  \
-__attribute__((always_inline))                                                 \
-inline float name(float x) {                                                   \
-    float r;                                                                   \
-    __asm__ (".insn r %1, 0, 0, %0, %2, x" #fn                                 \
-             : "=f"(r) : "i"(RISCV_CUSTOM2), "f"(x));                          \
-    return r;                                                                  \
+#define __VX_MUFU_S(name, fn)                               \
+__attribute__((always_inline))                              \
+inline float name(float x) {                                \
+  float r;                                                  \
+  __asm__ (".insn r %1, 0, 0, %0, %2, x" #fn                \
+           : "=f"(r) : "i"(RISCV_CUSTOM2), "f"(x));         \
+  return r;                                                 \
 }
 
 __VX_MUFU_S(vx_rcpf,   0)  // 1/x
@@ -50,53 +50,61 @@ __VX_MUFU_S(vx_tanhf,  6)  // tanh(x)
 
 __attribute__((always_inline))
 inline float vx_expf_fast(float x) {
-    return vx_ex2f(x * 1.44269504088896341f);
+  return vx_ex2f(x * 1.44269504088896341f);
 }
 
 __attribute__((always_inline))
 inline float vx_logf_fast(float x) {
-    return vx_lg2f(x) * 0.693147180559945309f;
+  return vx_lg2f(x) * 0.693147180559945309f;
 }
 
 __attribute__((always_inline))
 inline float vx_sinf_fast(float x) {
-    return vx_sinpif(x * 0.318309886183790672f);
+  return vx_sinpif(x * 0.318309886183790672f);
 }
 
 __attribute__((always_inline))
 inline float vx_cosf_fast(float x) {
-    return vx_cospif(x * 0.318309886183790672f);
+  return vx_cospif(x * 0.318309886183790672f);
 }
 
 __attribute__((always_inline))
 inline float vx_sqrtf_fast(float x) {
-    // x * rsqrt(x) is 0 * inf = NaN at both ends.
-    float r = x * vx_rsqrtf(x);
-    return (x == 0.0f || x == __builtin_inff()) ? x : r;
+  // x * rsqrt(x) is 0 * inf at both ends, and MUFU flushes subnormal x to zero.
+  // The fixups use integer selects: a float select lowers to a branch, which
+  // is not divergence-safe.
+  float r = x * vx_rsqrtf(x);
+  uint32_t xb, rb;
+  __builtin_memcpy(&xb, &x, sizeof(xb));
+  __builtin_memcpy(&rb, &r, sizeof(rb));
+  rb = ((xb & 0x7f800000) == 0) ? (xb & 0x80000000) : rb;
+  rb = (xb == 0x7f800000) ? xb : rb;
+  __builtin_memcpy(&r, &rb, sizeof(r));
+  return r;
 }
 
 __attribute__((always_inline))
 inline float vx_divf_fast(float a, float b) {
-    return a * vx_rcpf(b);
+  return a * vx_rcpf(b);
 }
 
 // Activations.
 
 __attribute__((always_inline))
 inline float vx_sigmoidf_fast(float x) {
-    return 0.5f + 0.5f * vx_tanhf(0.5f * x);
+  return 0.5f + 0.5f * vx_tanhf(0.5f * x);
 }
 
 __attribute__((always_inline))
 inline float vx_siluf_fast(float x) {
-    return x * vx_sigmoidf_fast(x);
+  return x * vx_sigmoidf_fast(x);
 }
 
 // GELU, tanh form: 0.5x(1 + tanh(sqrt(2/pi)(x + 0.044715x^3))).
 __attribute__((always_inline))
 inline float vx_geluf_fast(float x) {
-    float u = 0.797884560802865356f * x * (1.0f + 0.044715f * x * x);
-    return 0.5f * x * (1.0f + vx_tanhf(u));
+  float u = 0.797884560802865356f * x * (1.0f + 0.044715f * x * x);
+  return 0.5f * x * (1.0f + vx_tanhf(u));
 }
 
 #ifdef __cplusplus

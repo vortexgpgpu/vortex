@@ -21,6 +21,10 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+static const uint32_t kSqrtSpecials[] = {
+  0x00000000, 0x80000000, 0x00000001, 0x807fffff, 0x7f800000,
+};
+
 static const char* kOpNames[OP_COUNT] = {
   "rcp", "rsqrt", "ex2", "lg2", "sinpi", "cospi", "tanh",
   "expf", "logf", "sinf", "cosf", "sqrtf", "sigmoid", "silu", "gelu"
@@ -50,8 +54,9 @@ static void show_usage() {
   std::cout << "Vortex MUFU Test." << std::endl;
   std::cout << "Usage: [-k: kernel] [-n points] [-r repeat] [-t op] [-h: help]" << std::endl;
   std::cout << "  ops:";
-  for (auto name : kOpNames)
+  for (auto name : kOpNames) {
     std::cout << " " << name;
+  }
   std::cout << std::endl;
 }
 
@@ -67,8 +72,9 @@ static void parse_args(int argc, char **argv) {
       break;
     case 't':
       for (int i = 0; i < OP_COUNT; ++i) {
-        if (strcmp(optarg, kOpNames[i]) == 0)
+        if (strcmp(optarg, kOpNames[i]) == 0) {
           selected_op = i;
+        }
       }
       if (selected_op < 0) {
         show_usage();
@@ -91,11 +97,21 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    if (src_buffer) vx_buffer_release(src_buffer);
-    if (dst_buffer) vx_buffer_release(dst_buffer);
-    if (kernel)  vx_kernel_release(kernel);
-    if (module_) vx_module_release(module_);
-    if (queue)   vx_queue_release(queue);
+    if (src_buffer) {
+      vx_buffer_release(src_buffer);
+    }
+    if (dst_buffer) {
+      vx_buffer_release(dst_buffer);
+    }
+    if (kernel) {
+      vx_kernel_release(kernel);
+    }
+    if (module_) {
+      vx_module_release(module_);
+    }
+    if (queue) {
+      vx_queue_release(queue);
+    }
     vx_device_dump_perf(device, stdout);
     vx_device_release(device);
   }
@@ -103,8 +119,17 @@ void cleanup() {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-static float as_float(uint32_t u) { float f; memcpy(&f, &u, 4); return f; }
-static uint32_t as_bits(float f) { uint32_t u; memcpy(&u, &f, 4); return u; }
+static float as_float(uint32_t u) {
+  float f;
+  memcpy(&f, &u, 4);
+  return f;
+}
+
+static uint32_t as_bits(float f) {
+  uint32_t u;
+  memcpy(&u, &f, 4);
+  return u;
+}
 
 static float rand_range(std::mt19937& rng, float lo, float hi) {
   return std::uniform_real_distribution<float>(lo, hi)(rng);
@@ -118,8 +143,9 @@ static float rand_log(std::mt19937& rng, float lo, float hi, bool sign) {
 
 static float gen_input(int op, std::mt19937& rng) {
   // A quarter of raw-op inputs are arbitrary bit patterns.
-  if (op <= OP_TANH && (rng() & 3) == 0)
+  if (op <= OP_TANH && (rng() & 3) == 0) {
     return as_float(uint32_t(rng()));
+  }
   switch (op) {
   case OP_RCP:     return rand_log(rng, -125, 125, true);
   case OP_RSQRT:   return rand_log(rng, -125, 125, false);
@@ -154,9 +180,9 @@ static bool raw_accurate(int op, float x, float y) {
   default:       return true;
   }
   // Out of scope for the bound: specials, and results the FTZ/overflow rules decide.
-  if (!std::isnormal(x) || std::isnan(r) || std::isinf(r)
-   || std::fabs(r) >= 3.4028234663852886e38 || std::fabs(r) < 1.1754943508222875e-38)
+  if (!std::isnormal(x) || std::isnan(r) || std::isinf(r) || std::fabs(r) >= 3.4028234663852886e38 || std::fabs(r) < 1.1754943508222875e-38) {
     return true;
+  }
   double err = std::fabs((double)y - r);
   int ex;
   std::frexp(r, &ex);
@@ -173,6 +199,11 @@ static bool raw_accurate(int op, float x, float y) {
 // Composite reference and tolerance; the composition rounds its prescale, so
 // the bound grows with |x| where the prescale is a multiply.
 static bool composite_accurate(int op, float x, float y) {
+  // Subnormal inputs flush to a zero of the same sign.
+  if (op == OP_SQRTF && !std::isnormal(x)) {
+    float ref = std::isinf(x) ? x : x * 0.0f;
+    return as_bits(y) == as_bits(ref);
+  }
   double xd = x, r, tol;
   switch (op) {
   case OP_EXPF:    r = std::exp(xd);  tol = (2e-7 + 1e-7 * std::fabs(xd)) * std::fabs(r); break;
@@ -194,9 +225,19 @@ static bool composite_accurate(int op, float x, float y) {
 static int run_op(int op, std::mt19937& rng, uint64_t src_addr, uint64_t dst_addr) {
   std::vector<float> h_src(num_points);
   std::vector<float> h_dst(num_points);
-  size_t ns = (op <= OP_TANH) ? std::min<size_t>(num_points, sizeof(kSpecials) / sizeof(kSpecials[0])) : 0;
-  for (uint32_t i = 0; i < num_points; ++i)
-    h_src[i] = (i < ns) ? as_float(kSpecials[i]) : gen_input(op, rng);
+  const uint32_t* specials = nullptr;
+  size_t ns = 0;
+  if (op <= OP_TANH) {
+    specials = kSpecials;
+    ns = sizeof(kSpecials) / sizeof(kSpecials[0]);
+  } else if (op == OP_SQRTF) {
+    specials = kSqrtSpecials;
+    ns = sizeof(kSqrtSpecials) / sizeof(kSqrtSpecials[0]);
+  }
+  ns = std::min<size_t>(num_points, ns);
+  for (uint32_t i = 0; i < num_points; ++i) {
+    h_src[i] = (i < ns) ? as_float(specials[i]) : gen_input(op, rng);
+  }
 
   kernel_arg_t arg = {};
   arg.op = op;
@@ -233,18 +274,16 @@ static int run_op(int op, std::mt19937& rng, uint64_t src_addr, uint64_t dst_add
     bool ok;
     if (op <= OP_TANH) {
       uint32_t ref = vortex::mufu::eval(op, as_bits(x));
-      for (uint32_t r = 1; r < repeat; ++r)
-        ref = vortex::mufu::eval(op, ref);
-      ok = (as_bits(y) == ref);
-      if (ok && repeat == 1)
-        ok = raw_accurate(op, x, y);
-      if (!ok && errors < 20)
+      ok = (as_bits(y) == ref) && raw_accurate(op, x, y);
+      if (!ok && errors < 20) {
         printf("*** error: %s[%u] x=%a (0x%08x): actual=0x%08x expected=0x%08x\n",
                kOpNames[op], i, x, as_bits(x), as_bits(y), ref);
+      }
     } else {
-      ok = (repeat > 1) || composite_accurate(op, x, y);
-      if (!ok && errors < 20)
-        printf("*** error: %s[%u] x=%a: actual=%a\n", kOpNames[op], i, x, y);
+      ok = composite_accurate(op, x, y);
+      if (!ok && errors < 20) {
+        printf("*** error: %s[%u] x=%a (0x%08x): actual=%a\n", kOpNames[op], i, x, as_bits(x), y);
+      }
     }
     errors += !ok;
   }
@@ -283,8 +322,9 @@ int main(int argc, char *argv[]) {
   std::mt19937 rng(0x6d756675);
   int errors = 0;
   for (int op = 0; op < OP_COUNT; ++op) {
-    if (selected_op >= 0 && op != selected_op)
+    if (selected_op >= 0 && op != selected_op) {
       continue;
+    }
     errors += run_op(op, rng, src_addr, dst_addr);
   }
 

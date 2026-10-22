@@ -136,6 +136,16 @@ builds:
   clock_mhz: 800
   configs: ""
 
+# --- mufu --------------------------------------------------------------------
+
+# Special-function datapath at its default single lane, serialized from a
+# 16-lane SFU: the 7-stage table+polynomial pipeline and the 512x72 table ROM.
+- id: mufu
+  group: mufu
+  dut: mufu
+  clock_mhz: 800
+  configs: ""
+
 # --- tensor ------------------------------------------------------------------
 
 # TFR tensor core with every datatype plus sparsity and WGMMA. The widest

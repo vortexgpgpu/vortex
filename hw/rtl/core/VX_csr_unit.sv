@@ -72,14 +72,21 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         assign rs1_data[i] = execute_if.data.rs1_data[i];
     end
 
-    reg [`VX_CFG_XLEN-1:0] rs1_first;
-    always @(*) begin
-        rs1_first = rs1_data[0];
-        for (integer i = NUM_LANES-1; i >= 0; --i) begin
-            if (execute_if.data.header.tmask[i]) begin
-                rs1_first = rs1_data[i];
-            end
-        end
+    wire [`VX_CFG_XLEN-1:0] rs1_first;
+    if (NUM_LANES > 1) begin : g_rs1_first
+        wire [`LOG2UP(NUM_LANES)-1:0] first_lane;
+        VX_priority_encoder #(
+            .N       (NUM_LANES),
+            .REVERSE (0)
+        ) first_lane_sel (
+            .data_in    (execute_if.data.header.tmask),
+            .index_out  (first_lane),
+            `UNUSED_PIN (onehot_out),
+            `UNUSED_PIN (valid_out)
+        );
+        assign rs1_first = rs1_data[first_lane];
+    end else begin : g_rs1_first_0
+        assign rs1_first = rs1_data[0];
     end
 
     wire [`VX_CFG_XLEN-1:0] csr_req_src = execute_if.data.op_args.csr.use_imm ? `VX_CFG_XLEN'(csr_imm) : rs1_first;

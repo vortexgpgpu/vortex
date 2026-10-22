@@ -1,37 +1,41 @@
 `include "VX_define.vh"
 
 module VX_mufu_unit_top import VX_gpu_pkg::*; (
-    input  wire clk,
-    input  wire reset,
+    input  wire                            clk,
+    input  wire                            reset,
 
-    input  wire [`VX_CFG_ISSUE_WIDTH-1:0]                   dispatch_valid,
-    output wire [`VX_CFG_ISSUE_WIDTH-1:0]                   dispatch_ready,
-    input  wire [`VX_CFG_ISSUE_WIDTH-1:0][$bits(dispatch_t)-1:0] dispatch_data,
+    input  wire                            execute_valid,
+    output wire                            execute_ready,
+    input  wire [$bits(sfu_execute_t)-1:0] execute_data,
 
-    output wire [`VX_CFG_ISSUE_WIDTH-1:0]                   commit_valid,
-    input  wire [`VX_CFG_ISSUE_WIDTH-1:0]                   commit_ready,
-    output wire [`VX_CFG_ISSUE_WIDTH-1:0][$bits(commit_t)-1:0]   commit_data
+    output wire                            result_valid,
+    input  wire                            result_ready,
+    output wire [$bits(sfu_result_t)-1:0]  result_data
 );
-    VX_dispatch_if dispatch_if[`VX_CFG_ISSUE_WIDTH]();
-    VX_commit_if   commit_if  [`VX_CFG_ISSUE_WIDTH]();
+    VX_execute_if #(
+        .data_t (sfu_execute_t)
+    ) execute_if();
 
-    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_ports
-        assign dispatch_if[i].valid = dispatch_valid[i];
-        assign dispatch_if[i].data  = dispatch_data[i];
-        assign dispatch_ready[i]    = dispatch_if[i].ready;
+    VX_result_if #(
+        .data_t (sfu_result_t)
+    ) result_if();
 
-        assign commit_valid[i]      = commit_if[i].valid;
-        assign commit_data[i]       = commit_if[i].data;
-        assign commit_if[i].ready   = commit_ready[i];
-    end
+    assign execute_if.valid = execute_valid;
+    assign execute_if.data  = execute_data;
+    assign execute_ready    = execute_if.ready;
+
+    assign result_valid     = result_if.valid;
+    assign result_data      = result_if.data;
+    assign result_if.ready  = result_ready;
 
     VX_mufu_unit #(
-        .INSTANCE_ID ("mufu_unit_top")
+        .INSTANCE_ID ("mufu_unit_top"),
+        .NUM_LANES   (`VX_CFG_NUM_SFU_LANES)
     ) mufu_unit (
-        .clk         (clk),
-        .reset       (reset),
-        .dispatch_if (dispatch_if),
-        .commit_if   (commit_if)
+        .clk        (clk),
+        .reset      (reset),
+        .execute_if (execute_if),
+        .result_if  (result_if)
     );
 
 endmodule

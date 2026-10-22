@@ -56,9 +56,6 @@ public:
   #ifdef VX_CFG_EXT_TCU_ENABLE
     uint64_t tcu_stalls = 0;
   #endif
-  #ifdef VX_CFG_EXT_MUFU_ENABLE
-    uint64_t mufu_stalls = 0;
-  #endif
     uint64_t branches   = 0;
     uint64_t divergence = 0;
     uint64_t alu_instrs = 0;
@@ -67,9 +64,6 @@ public:
     uint64_t sfu_instrs = 0;
   #ifdef VX_CFG_EXT_TCU_ENABLE
     uint64_t tcu_instrs = 0;
-  #endif
-  #ifdef VX_CFG_EXT_MUFU_ENABLE
-    uint64_t mufu_instrs = 0;
   #endif
     uint64_t ifetches = 0;
     uint64_t loads = 0;

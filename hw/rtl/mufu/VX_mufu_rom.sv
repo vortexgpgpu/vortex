@@ -9,548 +9,564 @@ module VX_mufu_rom (
     output wire signed [26:0] a1,
     output wire signed [19:0] a2
 );
+    localparam DATAW = 72;
+    localparam SIZE  = 512;
+
+    localparam [SIZE*DATAW-1:0] ROM_DATA = {
+        72'h01fffff0000017fffe,
+        72'h01ffffc800003ffffc,
+        72'h01ffff68000097fff4,
+        72'h01fffe68000187ffe0,
+        72'h01fffba800041fffa9,
+        72'h01fff420000b2fff13,
+        72'h01ffdfc0001e57fd7c,
+        72'h01ffa86000525ff92a,
+        72'h03fede58008e17f8e9,
+        72'h03fe229800ea17f453,
+        72'h03fced6001817fecc8,
+        72'h03faf050027a5fe06a,
+        72'h03f7ab280412afcc31,
+        72'h03f24cc006ae6fab4b,
+        72'h03e982780aecbf7643,
+        72'h03db2e7011c4d72203,
+        72'h07a1e40016e18f6344,
+        72'h0787f1c01d014f3b68,
+        72'h07671e2824a3770b06,
+        72'h073dc1082e1336d146,
+        72'h0709e5a8399e3e8de0,
+        72'h06c94c50478cb64190,
+        72'h0679767058143deeb1,
+        72'h0617c2406b453d99fc,
+        72'h0bbec2a075fefeaec1,
+        72'h0b433350811b669c9c,
+        72'h0abc48a08cb58e8cf6,
+        72'h0a29927898b26e80b0,
+        72'h098abf50a4ef9e78ba,
+        72'h08dfa408b1430e7603,
+        72'h08284348bd7b0e7982,
+        72'h0764d478c95fce83fb,
+        72'h0dfd7340cf15af4856,
+        72'h0d2b94d0d4a7774ddb,
+        72'h0c543ee0da04f75465,
+        72'h0b77a9b8df25ff5bf3,
+        72'h0a9615e8e402776485,
+        72'h09afcc00e8925f6e17,
+        72'h08c51c78eccdf778a0,
+        72'h07d65f48f0add78416,
+        72'h0ebb32e0f2723fc69f,
+        72'h0dc7e820f423dfc9ce,
+        72'h0cd2f8d8f5bb37cd17,
+        72'h0bdc7fc0f7378fd077,
+        72'h0ae49838f89827d3ee,
+        72'h09eb5e38f9dc67d77a,
+        72'h08f0ee78fb03afdb19,
+        72'h07f56640fc0d67deca,
+        72'h0eee84b0fc84e7f0cd,
+        72'h0df1c6d8fcf6f7f1bf,
+        72'h0cf49ac8fd615ff2b3,
+        72'h0bf70828fdc41ff3a8,
+        72'h0af916a8fe1f1ff4a0,
+        72'h09face00fe725ff598,
+        72'h08fc3600febdd7f692,
+        72'h07fd5680ff016ff78d,
+        72'h0efb9cb0ff1fb7fc25,
+        72'h0dfc6e90ff3c97fc64,
+        72'h0cfd2490ff577ffca3,
+        72'h0bfdc0a0ff706ffce3,
+        72'h0afe44c8ff875ffd22,
+        72'h09feb300ff9c4ffd62,
+        72'h08ff0d40ffaf47fda1,
+        72'h07ff5588ffc03ffde1,
+        72'h7ff6218013bced8867,
+        72'h7fd887882776e588c9,
+        72'h7fa736b03b2ac5898b,
+        72'h7f6236884ed58d8aaf,
+        72'h7f0991c06274258c34,
+        72'h7e9d55f07603958e1a,
+        72'h7e1d93e08980cd9060,
+        72'h7d8a5f389ce8cd9307,
+        72'h7ce3cea0b038a5960d,
+        72'h7c29fbe0c36d4d9973,
+        72'h7b5d0390d683cd9d37,
+        72'h7a7d0548e9793da159,
+        72'h798a23a0fc4aada5d9,
+        72'h788484010ef535aab6,
+        72'h776c4ec92175f5afef,
+        72'h7641af2933ca0db584,
+        72'h7504d33145eeb5bb72,
+        72'h73b5ebb157e11dc1bb,
+        72'h72552c69699e75c85b,
+        72'h70e2cba97b240dcf54,
+        72'h6f5f02918c6f2dd6a3,
+        72'h6dca0cf19d7d2dde47,
+        72'h6c242941ae4b6de63f,
+        72'h6a6d9881bed74dee8a,
+        72'h68a69e61cf1e45f727,
+        72'h66cf8101df1dd60014,
+        72'h64e88901eed3860950,
+        72'h62f20189fe3ce612da,
+        72'h60ec38020d579e1cb0,
+        72'h5ed77c621c214626d0,
+        72'h5cb420b22a97ae3139,
+        72'h5a82797238b88e3bea,
+        72'h5842dd224681be46e0,
+        72'h55f5a4a253f116521a,
+        72'h539b2ac26104865d97,
+        72'h5133cc626dba0e6954,
+        72'h4ebfe8727a0fbe7550,
+        72'h4c3fdfc286039e8188,
+        72'h49b415029193e68dfc,
+        72'h471cecb29cbec69aa9,
+        72'h447acd22a7827ea78c,
+        72'h41ce1e32b1dd76b4a5,
+        72'h3f174982bbce0ec1f1,
+        72'h3c56ba3ac552b6cf6e,
+        72'h398cdd02ce69fedd1a,
+        72'h36ba1fdad71286eaf3,
+        72'h33def252df4ae6f8f7,
+        72'h30fbc512e711e70723,
+        72'h2e110a2aee664f1576,
+        72'h2b1f34b2f5470723ec,
+        72'h2826b8f2fbb2ef3285,
+        72'h25280c2301a917413d,
+        72'h2223a48b07288f5013,
+        72'h1f19f93b0c30875f04,
+        72'h1c0b822b10c0276e0e,
+        72'h18f8b7fb14d6c77d2e,
+        72'h15e214031873bf8c62,
+        72'h12c810331b96879ba8,
+        72'h0fab26eb1e3e9faafe,
+        72'h0c8bd323206b9fba61,
+        72'h096a900b221d2fc9ce,
+        72'h0647d94323530fd944,
+        72'h03242a83240d0fe8c0,
+        72'h00000003244857f8cf,
+        72'h7e8d3859743bdfa2f1,
+        72'h7d17824177301fa177,
+        72'h7b9ed1d97a307f9ff4,
+        72'h7a231ae17d3d3f9e67,
+        72'h78a450c98056b79cd1,
+        72'h772266c1837d2f9b30,
+        72'h759d4f9186b0f79986,
+        72'h7414fdc989f26f97d1,
+        72'h728963898d41df9610,
+        72'h70fa72a1909fb79445,
+        72'h6f681c91940c3f926d,
+        72'h6dd252519787ef908a,
+        72'h6c3904b19b13178e99,
+        72'h6a9c23f19eae2f8c9c,
+        72'h68fb9fe9a2599f8a91,
+        72'h67576811a615cf8878,
+        72'h65af6b61a9e33f8651,
+        72'h64039871adc25f841b,
+        72'h6253dd49b1b3af81d5,
+        72'h60a02771b5b7af7f7f,
+        72'h5ee86401b9cee77d18,
+        72'h5d2c7f79bdf9df7a9f,
+        72'h5b6c65c9c239277815,
+        72'h59a80259c68d5f7578,
+        72'h57df3ff1caf71772c7,
+        72'h561208c1cf76f77002,
+        72'h54404641d40da76d29,
+        72'h5269e151d8bbcf6a39,
+        72'h508ec221dd822f6732,
+        72'h4eaed011e261876414,
+        72'h4cc9f1d1e75a8f60dd,
+        72'h4ae00d41ec6e1f5d8c,
+        72'h48f10779f19d075a21,
+        72'h46fcc4a1f6e82f5699,
+        72'h45032811fc507752f4,
+        72'h4304143201d6d74f31,
+        72'h40ff6a5a077c4f4b4f,
+        72'h3ef50b020d41df474b,
+        72'h3ce4d5721328a74324,
+        72'h3acea7f21931c73ed9,
+        72'h38b25f921f5e673a69,
+        72'h368fd82225afcf35d0,
+        72'h3466ec522c273f310e,
+        72'h3237755232c6172c21,
+        72'h30014b02398dc72706,
+        72'h2dc443da407fcf21bb,
+        72'h2b8034b2479dbf1c3f,
+        72'h2934f0da4ee937168d,
+        72'h26e249e25663ef10a4,
+        72'h24880f9a5e0fc70a81,
+        72'h2226100265ee970420,
+        72'h1fbc17026e0276fd80,
+        72'h1d49ee9a764d6ef69b,
+        72'h1acf5e827ed1ceef6f,
+        72'h184c2c228791e6e7f7,
+        72'h15c01a92909036e030,
+        72'h132aea4299cf5ed814,
+        72'h108c58eaa35226cfa0,
+        72'h0de42182ad1b7ec6cd,
+        72'h0b31fbe2b72e86bd97,
+        72'h08759cbac18e86b3f7,
+        72'h05aeb552cc3efea9e8,
+        72'h02dcf34ad743a69f61,
+        72'h00000002e2a27693f4,
+        72'hfd3e0c82be2110f4aa,
+        72'hfa83b352b690d8f207,
+        72'hf7d0dfeaaf1580ef6c,
+        72'hf5257d8aa7aec8ecd8,
+        72'hf28177b2a05c78ea4b,
+        72'hefe4ba12991e58e7c4,
+        72'hed4f309291f430e545,
+        72'heac0c75a8addd0e2cd,
+        72'he8396ac283daf8e05c,
+        72'he5b907527ceb70ddf1,
+        72'he33f89e2760f10db8d,
+        72'he0ccdf5a6f4598d92f,
+        72'hde60f4ea688ed8d6d9,
+        72'hdbfbb80261ea98d488,
+        72'hd99d162a5b58b0d23e,
+        72'hd744fd3254d8e0cffa,
+        72'hd4f35b124e6b00cdbd,
+        72'hd2a81df2480ed8cb85,
+        72'hd063344241c438c954,
+        72'hce248c7a3b8af0c729,
+        72'hcbec15623562d8c504,
+        72'hc9b9bdea2f4bb8c2e4,
+        72'hc78d752a294568c0cb,
+        72'hc5672a72234fb0beb7,
+        72'hc346cd3a1d6a68bca9,
+        72'hc12c4d2a179560baa1,
+        72'hbf179a1211d070b89f,
+        72'hbd08a3fa0c1b68b6a1,
+        72'hbaff5b0a067620b4aa,
+        72'hb8fbafa200e060b2b8,
+        72'hb6fd9239fb5a10b0cb,
+        72'hb504f389f5e2f8aee3,
+        72'hb311c469f07af8ad01,
+        72'hb123f5d9eb21d8ab24,
+        72'haf3b7901e5d780a94c,
+        72'had583f41e09bb8a779,
+        72'hab7a3a09db6e60a5ab,
+        72'ha9a15b09d64f50a3e2,
+        72'ha7cd9409d13e60a21e,
+        72'ha5fed6f9cc3b68a05f,
+        72'ha4351601c746409ea5,
+        72'ha2704351c25ec89cf0,
+        72'ha0b05161bd84d09b3f,
+        72'h9ef532b1b8b8409993,
+        72'h9d3ed9f1b3f8e897eb,
+        72'h9b8d3a01af46a89648,
+        72'h99e045d9aaa16094aa,
+        72'h9837f099a608e09310,
+        72'h96942d81a17d10917a,
+        72'h94f4eff19cfdc88fe9,
+        72'h935a2b79988ae88e5c,
+        72'h91c3d3b99424488cd4,
+        72'h9031dc898fc9d08b4f,
+        72'h8ea439d18b7b5889cf,
+        72'h8d1adfa18738c08853,
+        72'h8b95c2298301e886db,
+        72'h8a14d5b97ed6b08567,
+        72'h88980ec17ab6f883f8,
+        72'h871f61d976a2a0828c,
+        72'h85aac3a97299808124,
+        72'h843a29016e9b887fc0,
+        72'h82cd86d96aa8907e5f,
+        72'h8164d23166c0807d03,
+        72'h8000000162e3687b9e,
+        72'h404060a7bf3e78183c,
+        72'h40818517be78b818b8,
+        72'h40c3713fbdaf081937,
+        72'h41062927bce14019b9,
+        72'h4149b0e7bc0f481a3f,
+        72'h418e0ccfbb39001ac9,
+        72'h41d34127ba5e501b57,
+        72'h4219528fb97f081be9,
+        72'h4260458fb89b101c80,
+        72'h42a81ef7b7b2381d1b,
+        72'h42f0e3afb6c4701dba,
+        72'h433a98c7b5d1801e5e,
+        72'h43854377b4d9401f08,
+        72'h43d0e917b3db901fb6,
+        72'h441d8f3fb2d840206a,
+        72'h446b3b97b1cf282124,
+        72'h44b9f407b0c01021e4,
+        72'h4509beafafaac822a9,
+        72'h455aa1cfae8f202375,
+        72'h45aca3d7ad6ce82448,
+        72'h45ffcb7fac43e02521,
+        72'h46541fb7ab13d82602,
+        72'h46a9a797a9dc8826ea,
+        72'h47006a7fa89dc027da,
+        72'h47587017a7573028d2,
+        72'h47b1c047a608a029d3,
+        72'h480c632fa4b1b82add,
+        72'h48686147a352402bf0,
+        72'h48c5c347a1e9e02d0d,
+        72'h49249247a078502e34,
+        72'h4984d79f9efd282f65,
+        72'h49e69d179d782030a2,
+        72'h4a49ecaf9be8d831ea,
+        72'h4aaed0ef9a4ee0333f,
+        72'h4b15549f98a9e834a1,
+        72'h4b7d830f96f9703610,
+        72'h4be767ef953d10378d,
+        72'h4c530f579374503919,
+        72'h4cc085f7919eb03ab5,
+        72'h4d2fd8e78fbbb03c61,
+        72'h4da115cf8dcac83e1f,
+        72'h4e144adf8bcb603fee,
+        72'h4e8986d789bce841d1,
+        72'h4f00d937879eb043c8,
+        72'h4f7a51f785702045d4,
+        72'h4ff601cf83307847f7,
+        72'h5073fa4780def84a31,
+        72'h50f44d777e7ae84c85,
+        72'h51770e7f7c03684ef2,
+        72'h51fc512f797798517c,
+        72'h52842a4776d6905424,
+        72'h530eaf8f741f5056ea,
+        72'h539bf7b77150d059d3,
+        72'h542c1a8f6e69f05cde,
+        72'h54bf31076b6990600f,
+        72'h55555537684e706368,
+        72'h55eea2a765173066eb,
+        72'h568b360f61c2786a9b,
+        72'h572b2dbf5e4eb86e7c,
+        72'h57cea9775aba60728f,
+        72'h5875cab75703b876da,
+        72'h5920b4b75328e87b5e,
+        72'h59cf8c8f4f28088022,
+        72'h5a82796f4afef08528,
+        72'h5add84bfa46bd02246,
+        72'h5b39a4c7a3543022f5,
+        72'h5b96df47a236f023a8,
+        72'h5bf539e7a113f02461,
+        72'h5c54ba7f9feb00251e,
+        72'h5cb567179ebbf825e1,
+        72'h5d1745d79d86a826aa,
+        72'h5d7a5d179c4ae82779,
+        72'h5ddeb3779b0880284e,
+        72'h5e444faf99bf382929,
+        72'h5eab38a7986ef02a0a,
+        72'h5f1375979717582af3,
+        72'h5f7d0dd795b8502be2,
+        72'h5fe808ff9451882cd9,
+        72'h60546edf92e2d02dd8,
+        72'h60c24797916be82ede,
+        72'h61319b778fec802fed,
+        72'h61a2731f8e64603105,
+        72'h6214d75f8cd3403225,
+        72'h6288d16f8b38d0334f,
+        72'h62fe6abf8994c03482,
+        72'h6375ad0f87e6c835c0,
+        72'h63eea27f862e883709,
+        72'h6469557f846bb0385c,
+        72'h64e5d0d7829de039bb,
+        72'h65641fa780c4b03b26,
+        72'h65e44d877edfc83c9e,
+        72'h6666665f7ceeb83e23,
+        72'h66ea768f7af1183fb6,
+        72'h67708aef78e6684157,
+        72'h67f8b0b776ce404307,
+        72'h6882f5b774a81044c7,
+        72'h690f681f7273604697,
+        72'h699e16c7702fa04879,
+        72'h6a2f10f76ddc404a6d,
+        72'h6ac266a76b78a84c75,
+        72'h6b5828676904384e90,
+        72'h6bf06757667e4050c0,
+        72'h6c8b354763e6205306,
+        72'h6d28a4df613b105564,
+        72'h6dc8c95f5e7c5057da,
+        72'h6e6bb6d75ba9185a69,
+        72'h6f11823758c0885d14,
+        72'h6fba414755c1c05fdb,
+        72'h70660aaf52abd062c1,
+        72'h7114f62f4f7db065c6,
+        72'h71c71c574c366868ec,
+        72'h727c96ff48d4c86c36,
+        72'h733580ff4557b06fa6,
+        72'h73f1f66f41bde8733d,
+        72'h74b214af3e061876fe,
+        72'h7575fa873a2ed87aeb,
+        72'h763dc7ff3636c07f07,
+        72'h77099ed7321c308356,
+        72'h77d9a2472ddd9087d9,
+        72'h78adf74f2979088c95,
+        72'h7986c4b724ecd0918c,
+        72'h7a6433372036e096c4,
+        72'h7b466da71b55109c3f,
+        72'h7c2da0ef164528a203,
+        72'h7d19fc671104b8a814,
+        72'h7e0bb1e70b9128ae78,
+        72'h7f02f5df05e7c0b535,
+        72'h80000007000438bc93,
+        72'h40404047bf7f601018,
+        72'h40810207befd201049,
+        72'h40c246dfbe7948107a,
+        72'h41041047bdf3e810ad,
+        72'h41465fe7bd6ce810e0,
+        72'h41893757bce4481114,
+        72'h41cc982fbc5a081149,
+        72'h42108427bbce10117e,
+        72'h4254fce7bb407011b5,
+        72'h429a042fbab11011ec,
+        72'h42df9bb7ba1ff01224,
+        72'h4325c547b98d00125e,
+        72'h436c82a7b8f8401298,
+        72'h43b3d5b7b861b012d3,
+        72'h43fbc047b7c938130f,
+        72'h44444447b72ed8134c,
+        72'h448d63a7b69280138a,
+        72'h44d72047b5f43813c9,
+        72'h45217c3fb553e8140a,
+        72'h456c7987b4b190144b,
+        72'h45b81a27b40d28148e,
+        72'h4604604fb366a014d1,
+        72'h46514e07b2bdf01516,
+        72'h469ee587b21318155c,
+        72'h46ed2907b1660015a3,
+        72'h473c1abfb0b6a015eb,
+        72'h478bbcf7b004f81635,
+        72'h47dc11f7af51001680,
+        72'h482d1c37ae9a9816cc,
+        72'h487ede0fade1c8171a,
+        72'h48d159e7ad26881769,
+        72'h4924924fac68b817b9,
+        72'h497889c7aba860180b,
+        72'h49cd42e7aae570185f,
+        72'h4a22c04faa1fd018b4,
+        72'h4a7904afa95780190a,
+        72'h4ad012b7a88c701962,
+        72'h4b27ed37a7be9819bc,
+        72'h4b809707a6ede01a17,
+        72'h4bda12ffa61a401a74,
+        72'h4c346407a543b01ad3,
+        72'h4c8f8d2fa46a181b33,
+        72'h4ceb916fa38d701b95,
+        72'h4d4873f7a2ada01bfa,
+        72'h4da637d7a1caa81c60,
+        72'h4e04e057a0e4681cc8,
+        72'h4e6470b79ffae01d32,
+        72'h4ec4ec4f9f0df81d9e,
+        72'h4f2656979e1d981e0c,
+        72'h4f88b2f79d29b81e7c,
+        72'h4fec04ff9c32481eef,
+        72'h505050579b37281f63,
+        72'h50b5989f9a38581fda,
+        72'h511be1979935c02054,
+        72'h51832f27982f4020d0,
+        72'h51eb851f9724d8214e,
+        72'h5254e78f96166021cf,
+        72'h52bf5a879503d02252,
+        72'h532ae21f93ed1022d8,
+        72'h5397829f92d2082361,
+        72'h5405405791b2a023ed,
+        72'h54741faf908ec8247c,
+        72'h54e425278f6660250d,
+        72'h555555578e395825a2,
+        72'h55c7b4f78d07882639,
+        72'h563b48c78bd0e826d4,
+        72'h56b015af8a95582772,
+        72'h572620b78954b82814,
+        72'h579d6ee7880ef828b9,
+        72'h5816058786c3e82962,
+        72'h588fe9d78573802a0e,
+        72'h590b2167841d902abe,
+        72'h5987b1a782c2002b72,
+        72'h5a05a0578160b82c2a,
+        72'h5a84f3477ff9902ce6,
+        72'h5b05b0577e8c682da6,
+        72'h5b87ddaf7d19182e6a,
+        72'h5c0b816f7b9f802f33,
+        72'h5c90a1ff7a1f803000,
+        72'h5d1745cf7898f830d2,
+        72'h5d9f738f770bb031a9,
+        72'h5e2932077577883285,
+        72'h5eb4881f73dc603366,
+        72'h5f417d07723a00344c,
+        72'h5fd017ef7090483538,
+        72'h6060605f6edf083629,
+        72'h60f25de76d26103720,
+        72'h6186185f6b6530381c,
+        72'h621b97bf699c38391f,
+        72'h62b2e43f67caf83a28,
+        72'h634c063765f1403b38,
+        72'h63e70637640ed83c4e,
+        72'h6483ed276223803d6b,
+        72'h6522c3ef602f103e8f,
+        72'h65c393df5e31403fba,
+        72'h666666675c29e040ed,
+        72'h670b45375a18a84228,
+        72'h67b23a4f57fd58436a,
+        72'h685b4fdf55d7b844b5,
+        72'h6906906753a7784608,
+        72'h69b40697516c584765,
+        72'h6a63bd774f261048ca,
+        72'h6b15c0674cd4584a38,
+        72'h6bca1ae74a76d84bb1,
+        72'h6c80d8f7480d484d33,
+        72'h6d3a06cf4597504ebf,
+        72'h6df5b0e74314a85057,
+        72'h6eb3e4474084e851f9,
+        72'h6f74ae173de7b853a7,
+        72'h70381c073b3cc05560,
+        72'h70fe3bf73883985726,
+        72'h71c71c6735bbd858f8,
+        72'h7292cc0732e5285ad8,
+        72'h73615a172fff085cc5,
+        72'h7432d6372d09105ec0,
+        72'h750750672a02d060ca,
+        72'h75ded94726ebc862e2,
+        72'h76b981c723c380650b,
+        72'h77975b7f2089706743,
+        72'h787878671d3d18698c,
+        72'h795ceb0f19ddf06be7,
+        72'h7a44c69f166b586e54,
+        72'h7b301eb712e4d070d3,
+        72'h7c1f07af0f49a87366,
+        72'h7d1196670b9950760d,
+        72'h7e07e06707d31078c9,
+        72'h7f01fbef03f6487b9b,
+        72'h800000070001b07e9f
+    };
 
     reg [8:0] base;
 
     always @(*) begin
         case (tbl)
-        3'd0: base = 9'd0;
-        3'd1: base = 9'd128;
-        3'd2: base = 9'd256;
-        3'd3: base = 9'd320;
-        3'd4: base = 9'd384;
-        3'd5: base = 9'd448;
-        default: base = '0;
+            3'd0: base = 9'd0;
+            3'd1: base = 9'd128;
+            3'd2: base = 9'd256;
+            3'd3: base = 9'd320;
+            3'd4: base = 9'd384;
+            3'd5: base = 9'd448;
+            default: base = '0;
         endcase
     end
 
     wire [8:0] addr = base + 9'(idx);
 
-    (* rom_style = "block" *) reg [71:0] mem [0:511];
+    wire [DATAW-1:0] rd_data, rd_data_r;
 
-    initial begin
-        mem[0] = 72'h800000070001b07e9f;
-        mem[1] = 72'h7f01fbef03f6487b9b;
-        mem[2] = 72'h7e07e06707d31078c9;
-        mem[3] = 72'h7d1196670b9950760d;
-        mem[4] = 72'h7c1f07af0f49a87366;
-        mem[5] = 72'h7b301eb712e4d070d3;
-        mem[6] = 72'h7a44c69f166b586e54;
-        mem[7] = 72'h795ceb0f19ddf06be7;
-        mem[8] = 72'h787878671d3d18698c;
-        mem[9] = 72'h77975b7f2089706743;
-        mem[10] = 72'h76b981c723c380650b;
-        mem[11] = 72'h75ded94726ebc862e2;
-        mem[12] = 72'h750750672a02d060ca;
-        mem[13] = 72'h7432d6372d09105ec0;
-        mem[14] = 72'h73615a172fff085cc5;
-        mem[15] = 72'h7292cc0732e5285ad8;
-        mem[16] = 72'h71c71c6735bbd858f8;
-        mem[17] = 72'h70fe3bf73883985726;
-        mem[18] = 72'h70381c073b3cc05560;
-        mem[19] = 72'h6f74ae173de7b853a7;
-        mem[20] = 72'h6eb3e4474084e851f9;
-        mem[21] = 72'h6df5b0e74314a85057;
-        mem[22] = 72'h6d3a06cf4597504ebf;
-        mem[23] = 72'h6c80d8f7480d484d33;
-        mem[24] = 72'h6bca1ae74a76d84bb1;
-        mem[25] = 72'h6b15c0674cd4584a38;
-        mem[26] = 72'h6a63bd774f261048ca;
-        mem[27] = 72'h69b40697516c584765;
-        mem[28] = 72'h6906906753a7784608;
-        mem[29] = 72'h685b4fdf55d7b844b5;
-        mem[30] = 72'h67b23a4f57fd58436a;
-        mem[31] = 72'h670b45375a18a84228;
-        mem[32] = 72'h666666675c29e040ed;
-        mem[33] = 72'h65c393df5e31403fba;
-        mem[34] = 72'h6522c3ef602f103e8f;
-        mem[35] = 72'h6483ed276223803d6b;
-        mem[36] = 72'h63e70637640ed83c4e;
-        mem[37] = 72'h634c063765f1403b38;
-        mem[38] = 72'h62b2e43f67caf83a28;
-        mem[39] = 72'h621b97bf699c38391f;
-        mem[40] = 72'h6186185f6b6530381c;
-        mem[41] = 72'h60f25de76d26103720;
-        mem[42] = 72'h6060605f6edf083629;
-        mem[43] = 72'h5fd017ef7090483538;
-        mem[44] = 72'h5f417d07723a00344c;
-        mem[45] = 72'h5eb4881f73dc603366;
-        mem[46] = 72'h5e2932077577883285;
-        mem[47] = 72'h5d9f738f770bb031a9;
-        mem[48] = 72'h5d1745cf7898f830d2;
-        mem[49] = 72'h5c90a1ff7a1f803000;
-        mem[50] = 72'h5c0b816f7b9f802f33;
-        mem[51] = 72'h5b87ddaf7d19182e6a;
-        mem[52] = 72'h5b05b0577e8c682da6;
-        mem[53] = 72'h5a84f3477ff9902ce6;
-        mem[54] = 72'h5a05a0578160b82c2a;
-        mem[55] = 72'h5987b1a782c2002b72;
-        mem[56] = 72'h590b2167841d902abe;
-        mem[57] = 72'h588fe9d78573802a0e;
-        mem[58] = 72'h5816058786c3e82962;
-        mem[59] = 72'h579d6ee7880ef828b9;
-        mem[60] = 72'h572620b78954b82814;
-        mem[61] = 72'h56b015af8a95582772;
-        mem[62] = 72'h563b48c78bd0e826d4;
-        mem[63] = 72'h55c7b4f78d07882639;
-        mem[64] = 72'h555555578e395825a2;
-        mem[65] = 72'h54e425278f6660250d;
-        mem[66] = 72'h54741faf908ec8247c;
-        mem[67] = 72'h5405405791b2a023ed;
-        mem[68] = 72'h5397829f92d2082361;
-        mem[69] = 72'h532ae21f93ed1022d8;
-        mem[70] = 72'h52bf5a879503d02252;
-        mem[71] = 72'h5254e78f96166021cf;
-        mem[72] = 72'h51eb851f9724d8214e;
-        mem[73] = 72'h51832f27982f4020d0;
-        mem[74] = 72'h511be1979935c02054;
-        mem[75] = 72'h50b5989f9a38581fda;
-        mem[76] = 72'h505050579b37281f63;
-        mem[77] = 72'h4fec04ff9c32481eef;
-        mem[78] = 72'h4f88b2f79d29b81e7c;
-        mem[79] = 72'h4f2656979e1d981e0c;
-        mem[80] = 72'h4ec4ec4f9f0df81d9e;
-        mem[81] = 72'h4e6470b79ffae01d32;
-        mem[82] = 72'h4e04e057a0e4681cc8;
-        mem[83] = 72'h4da637d7a1caa81c60;
-        mem[84] = 72'h4d4873f7a2ada01bfa;
-        mem[85] = 72'h4ceb916fa38d701b95;
-        mem[86] = 72'h4c8f8d2fa46a181b33;
-        mem[87] = 72'h4c346407a543b01ad3;
-        mem[88] = 72'h4bda12ffa61a401a74;
-        mem[89] = 72'h4b809707a6ede01a17;
-        mem[90] = 72'h4b27ed37a7be9819bc;
-        mem[91] = 72'h4ad012b7a88c701962;
-        mem[92] = 72'h4a7904afa95780190a;
-        mem[93] = 72'h4a22c04faa1fd018b4;
-        mem[94] = 72'h49cd42e7aae570185f;
-        mem[95] = 72'h497889c7aba860180b;
-        mem[96] = 72'h4924924fac68b817b9;
-        mem[97] = 72'h48d159e7ad26881769;
-        mem[98] = 72'h487ede0fade1c8171a;
-        mem[99] = 72'h482d1c37ae9a9816cc;
-        mem[100] = 72'h47dc11f7af51001680;
-        mem[101] = 72'h478bbcf7b004f81635;
-        mem[102] = 72'h473c1abfb0b6a015eb;
-        mem[103] = 72'h46ed2907b1660015a3;
-        mem[104] = 72'h469ee587b21318155c;
-        mem[105] = 72'h46514e07b2bdf01516;
-        mem[106] = 72'h4604604fb366a014d1;
-        mem[107] = 72'h45b81a27b40d28148e;
-        mem[108] = 72'h456c7987b4b190144b;
-        mem[109] = 72'h45217c3fb553e8140a;
-        mem[110] = 72'h44d72047b5f43813c9;
-        mem[111] = 72'h448d63a7b69280138a;
-        mem[112] = 72'h44444447b72ed8134c;
-        mem[113] = 72'h43fbc047b7c938130f;
-        mem[114] = 72'h43b3d5b7b861b012d3;
-        mem[115] = 72'h436c82a7b8f8401298;
-        mem[116] = 72'h4325c547b98d00125e;
-        mem[117] = 72'h42df9bb7ba1ff01224;
-        mem[118] = 72'h429a042fbab11011ec;
-        mem[119] = 72'h4254fce7bb407011b5;
-        mem[120] = 72'h42108427bbce10117e;
-        mem[121] = 72'h41cc982fbc5a081149;
-        mem[122] = 72'h41893757bce4481114;
-        mem[123] = 72'h41465fe7bd6ce810e0;
-        mem[124] = 72'h41041047bdf3e810ad;
-        mem[125] = 72'h40c246dfbe7948107a;
-        mem[126] = 72'h40810207befd201049;
-        mem[127] = 72'h40404047bf7f601018;
-        mem[128] = 72'h80000007000438bc93;
-        mem[129] = 72'h7f02f5df05e7c0b535;
-        mem[130] = 72'h7e0bb1e70b9128ae78;
-        mem[131] = 72'h7d19fc671104b8a814;
-        mem[132] = 72'h7c2da0ef164528a203;
-        mem[133] = 72'h7b466da71b55109c3f;
-        mem[134] = 72'h7a6433372036e096c4;
-        mem[135] = 72'h7986c4b724ecd0918c;
-        mem[136] = 72'h78adf74f2979088c95;
-        mem[137] = 72'h77d9a2472ddd9087d9;
-        mem[138] = 72'h77099ed7321c308356;
-        mem[139] = 72'h763dc7ff3636c07f07;
-        mem[140] = 72'h7575fa873a2ed87aeb;
-        mem[141] = 72'h74b214af3e061876fe;
-        mem[142] = 72'h73f1f66f41bde8733d;
-        mem[143] = 72'h733580ff4557b06fa6;
-        mem[144] = 72'h727c96ff48d4c86c36;
-        mem[145] = 72'h71c71c574c366868ec;
-        mem[146] = 72'h7114f62f4f7db065c6;
-        mem[147] = 72'h70660aaf52abd062c1;
-        mem[148] = 72'h6fba414755c1c05fdb;
-        mem[149] = 72'h6f11823758c0885d14;
-        mem[150] = 72'h6e6bb6d75ba9185a69;
-        mem[151] = 72'h6dc8c95f5e7c5057da;
-        mem[152] = 72'h6d28a4df613b105564;
-        mem[153] = 72'h6c8b354763e6205306;
-        mem[154] = 72'h6bf06757667e4050c0;
-        mem[155] = 72'h6b5828676904384e90;
-        mem[156] = 72'h6ac266a76b78a84c75;
-        mem[157] = 72'h6a2f10f76ddc404a6d;
-        mem[158] = 72'h699e16c7702fa04879;
-        mem[159] = 72'h690f681f7273604697;
-        mem[160] = 72'h6882f5b774a81044c7;
-        mem[161] = 72'h67f8b0b776ce404307;
-        mem[162] = 72'h67708aef78e6684157;
-        mem[163] = 72'h66ea768f7af1183fb6;
-        mem[164] = 72'h6666665f7ceeb83e23;
-        mem[165] = 72'h65e44d877edfc83c9e;
-        mem[166] = 72'h65641fa780c4b03b26;
-        mem[167] = 72'h64e5d0d7829de039bb;
-        mem[168] = 72'h6469557f846bb0385c;
-        mem[169] = 72'h63eea27f862e883709;
-        mem[170] = 72'h6375ad0f87e6c835c0;
-        mem[171] = 72'h62fe6abf8994c03482;
-        mem[172] = 72'h6288d16f8b38d0334f;
-        mem[173] = 72'h6214d75f8cd3403225;
-        mem[174] = 72'h61a2731f8e64603105;
-        mem[175] = 72'h61319b778fec802fed;
-        mem[176] = 72'h60c24797916be82ede;
-        mem[177] = 72'h60546edf92e2d02dd8;
-        mem[178] = 72'h5fe808ff9451882cd9;
-        mem[179] = 72'h5f7d0dd795b8502be2;
-        mem[180] = 72'h5f1375979717582af3;
-        mem[181] = 72'h5eab38a7986ef02a0a;
-        mem[182] = 72'h5e444faf99bf382929;
-        mem[183] = 72'h5ddeb3779b0880284e;
-        mem[184] = 72'h5d7a5d179c4ae82779;
-        mem[185] = 72'h5d1745d79d86a826aa;
-        mem[186] = 72'h5cb567179ebbf825e1;
-        mem[187] = 72'h5c54ba7f9feb00251e;
-        mem[188] = 72'h5bf539e7a113f02461;
-        mem[189] = 72'h5b96df47a236f023a8;
-        mem[190] = 72'h5b39a4c7a3543022f5;
-        mem[191] = 72'h5add84bfa46bd02246;
-        mem[192] = 72'h5a82796f4afef08528;
-        mem[193] = 72'h59cf8c8f4f28088022;
-        mem[194] = 72'h5920b4b75328e87b5e;
-        mem[195] = 72'h5875cab75703b876da;
-        mem[196] = 72'h57cea9775aba60728f;
-        mem[197] = 72'h572b2dbf5e4eb86e7c;
-        mem[198] = 72'h568b360f61c2786a9b;
-        mem[199] = 72'h55eea2a765173066eb;
-        mem[200] = 72'h55555537684e706368;
-        mem[201] = 72'h54bf31076b6990600f;
-        mem[202] = 72'h542c1a8f6e69f05cde;
-        mem[203] = 72'h539bf7b77150d059d3;
-        mem[204] = 72'h530eaf8f741f5056ea;
-        mem[205] = 72'h52842a4776d6905424;
-        mem[206] = 72'h51fc512f797798517c;
-        mem[207] = 72'h51770e7f7c03684ef2;
-        mem[208] = 72'h50f44d777e7ae84c85;
-        mem[209] = 72'h5073fa4780def84a31;
-        mem[210] = 72'h4ff601cf83307847f7;
-        mem[211] = 72'h4f7a51f785702045d4;
-        mem[212] = 72'h4f00d937879eb043c8;
-        mem[213] = 72'h4e8986d789bce841d1;
-        mem[214] = 72'h4e144adf8bcb603fee;
-        mem[215] = 72'h4da115cf8dcac83e1f;
-        mem[216] = 72'h4d2fd8e78fbbb03c61;
-        mem[217] = 72'h4cc085f7919eb03ab5;
-        mem[218] = 72'h4c530f579374503919;
-        mem[219] = 72'h4be767ef953d10378d;
-        mem[220] = 72'h4b7d830f96f9703610;
-        mem[221] = 72'h4b15549f98a9e834a1;
-        mem[222] = 72'h4aaed0ef9a4ee0333f;
-        mem[223] = 72'h4a49ecaf9be8d831ea;
-        mem[224] = 72'h49e69d179d782030a2;
-        mem[225] = 72'h4984d79f9efd282f65;
-        mem[226] = 72'h49249247a078502e34;
-        mem[227] = 72'h48c5c347a1e9e02d0d;
-        mem[228] = 72'h48686147a352402bf0;
-        mem[229] = 72'h480c632fa4b1b82add;
-        mem[230] = 72'h47b1c047a608a029d3;
-        mem[231] = 72'h47587017a7573028d2;
-        mem[232] = 72'h47006a7fa89dc027da;
-        mem[233] = 72'h46a9a797a9dc8826ea;
-        mem[234] = 72'h46541fb7ab13d82602;
-        mem[235] = 72'h45ffcb7fac43e02521;
-        mem[236] = 72'h45aca3d7ad6ce82448;
-        mem[237] = 72'h455aa1cfae8f202375;
-        mem[238] = 72'h4509beafafaac822a9;
-        mem[239] = 72'h44b9f407b0c01021e4;
-        mem[240] = 72'h446b3b97b1cf282124;
-        mem[241] = 72'h441d8f3fb2d840206a;
-        mem[242] = 72'h43d0e917b3db901fb6;
-        mem[243] = 72'h43854377b4d9401f08;
-        mem[244] = 72'h433a98c7b5d1801e5e;
-        mem[245] = 72'h42f0e3afb6c4701dba;
-        mem[246] = 72'h42a81ef7b7b2381d1b;
-        mem[247] = 72'h4260458fb89b101c80;
-        mem[248] = 72'h4219528fb97f081be9;
-        mem[249] = 72'h41d34127ba5e501b57;
-        mem[250] = 72'h418e0ccfbb39001ac9;
-        mem[251] = 72'h4149b0e7bc0f481a3f;
-        mem[252] = 72'h41062927bce14019b9;
-        mem[253] = 72'h40c3713fbdaf081937;
-        mem[254] = 72'h40818517be78b818b8;
-        mem[255] = 72'h404060a7bf3e78183c;
-        mem[256] = 72'h8000000162e3687b9e;
-        mem[257] = 72'h8164d23166c0807d03;
-        mem[258] = 72'h82cd86d96aa8907e5f;
-        mem[259] = 72'h843a29016e9b887fc0;
-        mem[260] = 72'h85aac3a97299808124;
-        mem[261] = 72'h871f61d976a2a0828c;
-        mem[262] = 72'h88980ec17ab6f883f8;
-        mem[263] = 72'h8a14d5b97ed6b08567;
-        mem[264] = 72'h8b95c2298301e886db;
-        mem[265] = 72'h8d1adfa18738c08853;
-        mem[266] = 72'h8ea439d18b7b5889cf;
-        mem[267] = 72'h9031dc898fc9d08b4f;
-        mem[268] = 72'h91c3d3b99424488cd4;
-        mem[269] = 72'h935a2b79988ae88e5c;
-        mem[270] = 72'h94f4eff19cfdc88fe9;
-        mem[271] = 72'h96942d81a17d10917a;
-        mem[272] = 72'h9837f099a608e09310;
-        mem[273] = 72'h99e045d9aaa16094aa;
-        mem[274] = 72'h9b8d3a01af46a89648;
-        mem[275] = 72'h9d3ed9f1b3f8e897eb;
-        mem[276] = 72'h9ef532b1b8b8409993;
-        mem[277] = 72'ha0b05161bd84d09b3f;
-        mem[278] = 72'ha2704351c25ec89cf0;
-        mem[279] = 72'ha4351601c746409ea5;
-        mem[280] = 72'ha5fed6f9cc3b68a05f;
-        mem[281] = 72'ha7cd9409d13e60a21e;
-        mem[282] = 72'ha9a15b09d64f50a3e2;
-        mem[283] = 72'hab7a3a09db6e60a5ab;
-        mem[284] = 72'had583f41e09bb8a779;
-        mem[285] = 72'haf3b7901e5d780a94c;
-        mem[286] = 72'hb123f5d9eb21d8ab24;
-        mem[287] = 72'hb311c469f07af8ad01;
-        mem[288] = 72'hb504f389f5e2f8aee3;
-        mem[289] = 72'hb6fd9239fb5a10b0cb;
-        mem[290] = 72'hb8fbafa200e060b2b8;
-        mem[291] = 72'hbaff5b0a067620b4aa;
-        mem[292] = 72'hbd08a3fa0c1b68b6a1;
-        mem[293] = 72'hbf179a1211d070b89f;
-        mem[294] = 72'hc12c4d2a179560baa1;
-        mem[295] = 72'hc346cd3a1d6a68bca9;
-        mem[296] = 72'hc5672a72234fb0beb7;
-        mem[297] = 72'hc78d752a294568c0cb;
-        mem[298] = 72'hc9b9bdea2f4bb8c2e4;
-        mem[299] = 72'hcbec15623562d8c504;
-        mem[300] = 72'hce248c7a3b8af0c729;
-        mem[301] = 72'hd063344241c438c954;
-        mem[302] = 72'hd2a81df2480ed8cb85;
-        mem[303] = 72'hd4f35b124e6b00cdbd;
-        mem[304] = 72'hd744fd3254d8e0cffa;
-        mem[305] = 72'hd99d162a5b58b0d23e;
-        mem[306] = 72'hdbfbb80261ea98d488;
-        mem[307] = 72'hde60f4ea688ed8d6d9;
-        mem[308] = 72'he0ccdf5a6f4598d92f;
-        mem[309] = 72'he33f89e2760f10db8d;
-        mem[310] = 72'he5b907527ceb70ddf1;
-        mem[311] = 72'he8396ac283daf8e05c;
-        mem[312] = 72'heac0c75a8addd0e2cd;
-        mem[313] = 72'hed4f309291f430e545;
-        mem[314] = 72'hefe4ba12991e58e7c4;
-        mem[315] = 72'hf28177b2a05c78ea4b;
-        mem[316] = 72'hf5257d8aa7aec8ecd8;
-        mem[317] = 72'hf7d0dfeaaf1580ef6c;
-        mem[318] = 72'hfa83b352b690d8f207;
-        mem[319] = 72'hfd3e0c82be2110f4aa;
-        mem[320] = 72'h00000002e2a27693f4;
-        mem[321] = 72'h02dcf34ad743a69f61;
-        mem[322] = 72'h05aeb552cc3efea9e8;
-        mem[323] = 72'h08759cbac18e86b3f7;
-        mem[324] = 72'h0b31fbe2b72e86bd97;
-        mem[325] = 72'h0de42182ad1b7ec6cd;
-        mem[326] = 72'h108c58eaa35226cfa0;
-        mem[327] = 72'h132aea4299cf5ed814;
-        mem[328] = 72'h15c01a92909036e030;
-        mem[329] = 72'h184c2c228791e6e7f7;
-        mem[330] = 72'h1acf5e827ed1ceef6f;
-        mem[331] = 72'h1d49ee9a764d6ef69b;
-        mem[332] = 72'h1fbc17026e0276fd80;
-        mem[333] = 72'h2226100265ee970420;
-        mem[334] = 72'h24880f9a5e0fc70a81;
-        mem[335] = 72'h26e249e25663ef10a4;
-        mem[336] = 72'h2934f0da4ee937168d;
-        mem[337] = 72'h2b8034b2479dbf1c3f;
-        mem[338] = 72'h2dc443da407fcf21bb;
-        mem[339] = 72'h30014b02398dc72706;
-        mem[340] = 72'h3237755232c6172c21;
-        mem[341] = 72'h3466ec522c273f310e;
-        mem[342] = 72'h368fd82225afcf35d0;
-        mem[343] = 72'h38b25f921f5e673a69;
-        mem[344] = 72'h3acea7f21931c73ed9;
-        mem[345] = 72'h3ce4d5721328a74324;
-        mem[346] = 72'h3ef50b020d41df474b;
-        mem[347] = 72'h40ff6a5a077c4f4b4f;
-        mem[348] = 72'h4304143201d6d74f31;
-        mem[349] = 72'h45032811fc507752f4;
-        mem[350] = 72'h46fcc4a1f6e82f5699;
-        mem[351] = 72'h48f10779f19d075a21;
-        mem[352] = 72'h4ae00d41ec6e1f5d8c;
-        mem[353] = 72'h4cc9f1d1e75a8f60dd;
-        mem[354] = 72'h4eaed011e261876414;
-        mem[355] = 72'h508ec221dd822f6732;
-        mem[356] = 72'h5269e151d8bbcf6a39;
-        mem[357] = 72'h54404641d40da76d29;
-        mem[358] = 72'h561208c1cf76f77002;
-        mem[359] = 72'h57df3ff1caf71772c7;
-        mem[360] = 72'h59a80259c68d5f7578;
-        mem[361] = 72'h5b6c65c9c239277815;
-        mem[362] = 72'h5d2c7f79bdf9df7a9f;
-        mem[363] = 72'h5ee86401b9cee77d18;
-        mem[364] = 72'h60a02771b5b7af7f7f;
-        mem[365] = 72'h6253dd49b1b3af81d5;
-        mem[366] = 72'h64039871adc25f841b;
-        mem[367] = 72'h65af6b61a9e33f8651;
-        mem[368] = 72'h67576811a615cf8878;
-        mem[369] = 72'h68fb9fe9a2599f8a91;
-        mem[370] = 72'h6a9c23f19eae2f8c9c;
-        mem[371] = 72'h6c3904b19b13178e99;
-        mem[372] = 72'h6dd252519787ef908a;
-        mem[373] = 72'h6f681c91940c3f926d;
-        mem[374] = 72'h70fa72a1909fb79445;
-        mem[375] = 72'h728963898d41df9610;
-        mem[376] = 72'h7414fdc989f26f97d1;
-        mem[377] = 72'h759d4f9186b0f79986;
-        mem[378] = 72'h772266c1837d2f9b30;
-        mem[379] = 72'h78a450c98056b79cd1;
-        mem[380] = 72'h7a231ae17d3d3f9e67;
-        mem[381] = 72'h7b9ed1d97a307f9ff4;
-        mem[382] = 72'h7d17824177301fa177;
-        mem[383] = 72'h7e8d3859743bdfa2f1;
-        mem[384] = 72'h00000003244857f8cf;
-        mem[385] = 72'h03242a83240d0fe8c0;
-        mem[386] = 72'h0647d94323530fd944;
-        mem[387] = 72'h096a900b221d2fc9ce;
-        mem[388] = 72'h0c8bd323206b9fba61;
-        mem[389] = 72'h0fab26eb1e3e9faafe;
-        mem[390] = 72'h12c810331b96879ba8;
-        mem[391] = 72'h15e214031873bf8c62;
-        mem[392] = 72'h18f8b7fb14d6c77d2e;
-        mem[393] = 72'h1c0b822b10c0276e0e;
-        mem[394] = 72'h1f19f93b0c30875f04;
-        mem[395] = 72'h2223a48b07288f5013;
-        mem[396] = 72'h25280c2301a917413d;
-        mem[397] = 72'h2826b8f2fbb2ef3285;
-        mem[398] = 72'h2b1f34b2f5470723ec;
-        mem[399] = 72'h2e110a2aee664f1576;
-        mem[400] = 72'h30fbc512e711e70723;
-        mem[401] = 72'h33def252df4ae6f8f7;
-        mem[402] = 72'h36ba1fdad71286eaf3;
-        mem[403] = 72'h398cdd02ce69fedd1a;
-        mem[404] = 72'h3c56ba3ac552b6cf6e;
-        mem[405] = 72'h3f174982bbce0ec1f1;
-        mem[406] = 72'h41ce1e32b1dd76b4a5;
-        mem[407] = 72'h447acd22a7827ea78c;
-        mem[408] = 72'h471cecb29cbec69aa9;
-        mem[409] = 72'h49b415029193e68dfc;
-        mem[410] = 72'h4c3fdfc286039e8188;
-        mem[411] = 72'h4ebfe8727a0fbe7550;
-        mem[412] = 72'h5133cc626dba0e6954;
-        mem[413] = 72'h539b2ac26104865d97;
-        mem[414] = 72'h55f5a4a253f116521a;
-        mem[415] = 72'h5842dd224681be46e0;
-        mem[416] = 72'h5a82797238b88e3bea;
-        mem[417] = 72'h5cb420b22a97ae3139;
-        mem[418] = 72'h5ed77c621c214626d0;
-        mem[419] = 72'h60ec38020d579e1cb0;
-        mem[420] = 72'h62f20189fe3ce612da;
-        mem[421] = 72'h64e88901eed3860950;
-        mem[422] = 72'h66cf8101df1dd60014;
-        mem[423] = 72'h68a69e61cf1e45f727;
-        mem[424] = 72'h6a6d9881bed74dee8a;
-        mem[425] = 72'h6c242941ae4b6de63f;
-        mem[426] = 72'h6dca0cf19d7d2dde47;
-        mem[427] = 72'h6f5f02918c6f2dd6a3;
-        mem[428] = 72'h70e2cba97b240dcf54;
-        mem[429] = 72'h72552c69699e75c85b;
-        mem[430] = 72'h73b5ebb157e11dc1bb;
-        mem[431] = 72'h7504d33145eeb5bb72;
-        mem[432] = 72'h7641af2933ca0db584;
-        mem[433] = 72'h776c4ec92175f5afef;
-        mem[434] = 72'h788484010ef535aab6;
-        mem[435] = 72'h798a23a0fc4aada5d9;
-        mem[436] = 72'h7a7d0548e9793da159;
-        mem[437] = 72'h7b5d0390d683cd9d37;
-        mem[438] = 72'h7c29fbe0c36d4d9973;
-        mem[439] = 72'h7ce3cea0b038a5960d;
-        mem[440] = 72'h7d8a5f389ce8cd9307;
-        mem[441] = 72'h7e1d93e08980cd9060;
-        mem[442] = 72'h7e9d55f07603958e1a;
-        mem[443] = 72'h7f0991c06274258c34;
-        mem[444] = 72'h7f6236884ed58d8aaf;
-        mem[445] = 72'h7fa736b03b2ac5898b;
-        mem[446] = 72'h7fd887882776e588c9;
-        mem[447] = 72'h7ff6218013bced8867;
-        mem[448] = 72'h07ff5588ffc03ffde1;
-        mem[449] = 72'h08ff0d40ffaf47fda1;
-        mem[450] = 72'h09feb300ff9c4ffd62;
-        mem[451] = 72'h0afe44c8ff875ffd22;
-        mem[452] = 72'h0bfdc0a0ff706ffce3;
-        mem[453] = 72'h0cfd2490ff577ffca3;
-        mem[454] = 72'h0dfc6e90ff3c97fc64;
-        mem[455] = 72'h0efb9cb0ff1fb7fc25;
-        mem[456] = 72'h07fd5680ff016ff78d;
-        mem[457] = 72'h08fc3600febdd7f692;
-        mem[458] = 72'h09face00fe725ff598;
-        mem[459] = 72'h0af916a8fe1f1ff4a0;
-        mem[460] = 72'h0bf70828fdc41ff3a8;
-        mem[461] = 72'h0cf49ac8fd615ff2b3;
-        mem[462] = 72'h0df1c6d8fcf6f7f1bf;
-        mem[463] = 72'h0eee84b0fc84e7f0cd;
-        mem[464] = 72'h07f56640fc0d67deca;
-        mem[465] = 72'h08f0ee78fb03afdb19;
-        mem[466] = 72'h09eb5e38f9dc67d77a;
-        mem[467] = 72'h0ae49838f89827d3ee;
-        mem[468] = 72'h0bdc7fc0f7378fd077;
-        mem[469] = 72'h0cd2f8d8f5bb37cd17;
-        mem[470] = 72'h0dc7e820f423dfc9ce;
-        mem[471] = 72'h0ebb32e0f2723fc69f;
-        mem[472] = 72'h07d65f48f0add78416;
-        mem[473] = 72'h08c51c78eccdf778a0;
-        mem[474] = 72'h09afcc00e8925f6e17;
-        mem[475] = 72'h0a9615e8e402776485;
-        mem[476] = 72'h0b77a9b8df25ff5bf3;
-        mem[477] = 72'h0c543ee0da04f75465;
-        mem[478] = 72'h0d2b94d0d4a7774ddb;
-        mem[479] = 72'h0dfd7340cf15af4856;
-        mem[480] = 72'h0764d478c95fce83fb;
-        mem[481] = 72'h08284348bd7b0e7982;
-        mem[482] = 72'h08dfa408b1430e7603;
-        mem[483] = 72'h098abf50a4ef9e78ba;
-        mem[484] = 72'h0a29927898b26e80b0;
-        mem[485] = 72'h0abc48a08cb58e8cf6;
-        mem[486] = 72'h0b433350811b669c9c;
-        mem[487] = 72'h0bbec2a075fefeaec1;
-        mem[488] = 72'h0617c2406b453d99fc;
-        mem[489] = 72'h0679767058143deeb1;
-        mem[490] = 72'h06c94c50478cb64190;
-        mem[491] = 72'h0709e5a8399e3e8de0;
-        mem[492] = 72'h073dc1082e1336d146;
-        mem[493] = 72'h07671e2824a3770b06;
-        mem[494] = 72'h0787f1c01d014f3b68;
-        mem[495] = 72'h07a1e40016e18f6344;
-        mem[496] = 72'h03db2e7011c4d72203;
-        mem[497] = 72'h03e982780aecbf7643;
-        mem[498] = 72'h03f24cc006ae6fab4b;
-        mem[499] = 72'h03f7ab280412afcc31;
-        mem[500] = 72'h03faf050027a5fe06a;
-        mem[501] = 72'h03fced6001817fecc8;
-        mem[502] = 72'h03fe229800ea17f453;
-        mem[503] = 72'h03fede58008e17f8e9;
-        mem[504] = 72'h01ffa86000525ff92a;
-        mem[505] = 72'h01ffdfc0001e57fd7c;
-        mem[506] = 72'h01fff420000b2fff13;
-        mem[507] = 72'h01fffba800041fffa9;
-        mem[508] = 72'h01fffe68000187ffe0;
-        mem[509] = 72'h01ffff68000097fff4;
-        mem[510] = 72'h01ffffc800003ffffc;
-        mem[511] = 72'h01fffff0000017fffe;
-    end
+    VX_rom #(
+        .DATAW     (DATAW),
+        .SIZE      (SIZE),
+        .OUT_REG   (1),
+        .INIT_DATA (ROM_DATA)
+    ) rom (
+        .clk   (clk),
+        .read  (enable),
+        .addr  (addr),
+        .rdata (rd_data)
+    );
 
-    reg [71:0] rd_data, rd_data_r;
-
-    always @(posedge clk) begin
-        if (enable) begin
-            rd_data   <= mem[addr];
-            rd_data_r <= rd_data;
-        end
-    end
+    VX_pipe_register #(
+        .DATAW (DATAW),
+        .DEPTH (1)
+    ) rd_reg (
+        .clk      (clk),
+        .reset    (1'b0),
+        .enable   (enable),
+        .data_in  (rd_data),
+        .data_out (rd_data_r)
+    );
 
     assign a0 = 32'({rd_data_r[71:43], 2'b0});
     assign a1 = 27'($signed({rd_data_r[42:19], 2'b0}));
