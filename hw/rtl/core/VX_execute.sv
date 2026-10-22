@@ -97,7 +97,8 @@ import VX_tcu_pkg::*;
     VX_sched_csr_if.slave   sched_csr_if [`VX_CFG_NUM_SFU_BLOCKS],
     VX_branch_ctl_if.master branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
     VX_warp_shared_if.master warp_shared_if [`VX_CFG_NUM_SFU_BLOCKS],
-    VX_warp_ctl_if.master   warp_ctl_if [`VX_CFG_NUM_SFU_BLOCKS]
+    VX_warp_ctl_if.master   warp_ctl_if [`VX_CFG_NUM_SFU_BLOCKS],
+    input cta_bcast_t       cta_bcast
 );
 
 `ifdef VX_CFG_EXT_F_ENABLE
@@ -213,7 +214,8 @@ import VX_tcu_pkg::*;
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_shared_if (warp_shared_if),
-        .warp_ctl_if    (warp_ctl_if)
+        .warp_ctl_if    (warp_ctl_if),
+        .cta_bcast      (cta_bcast)
     );
 
 endmodule

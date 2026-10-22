@@ -35,9 +35,8 @@ module VX_scheduler import VX_gpu_pkg::*; #(
 `endif
     input wire [`VX_CFG_NUM_WARPS-1:0] committed_warps,
 
-    // CTA context read by each SFU block's CSR unit, valid a cycle after the address
-    input wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][NCTA_WIDTH-1:0] csr_rd_cta_id,
-    output cta_ctx_t [`VX_CFG_NUM_SFU_BLOCKS-1:0] csr_rd_ctx,
+    // CTA context writes, to every SFU block's copy
+    output cta_bcast_t      cta_bcast,
 
     VX_kmu_bus_if.slave     kmu_bus_if,
 
@@ -77,7 +76,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
     wire [FW-1:0][`VX_CFG_NUM_THREADS-1:0] cta_tmask;
     wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] cta_param;
     wire [FW-1:0] cta_init;
-    cta_bcast_t cta_bcast;
     cta_lane_bcast_t [FW-1:0] cta_lane_bcast;
     wire cta_dispatcher_busy;
     wire cta_warp_done;
@@ -103,26 +101,6 @@ module VX_scheduler import VX_gpu_pkg::*; #(
         .cta_lane_bcast(cta_lane_bcast),
         .busy         (cta_dispatcher_busy)
     );
-
-    // CTA contexts, one read port per SFU block
-    for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_cta_ctx
-        VX_dp_ram #(
-            .DATAW     ($bits(cta_ctx_t)),
-            .SIZE      (NUM_CTA_MAX),
-            .RDW_MODE  ("R"),
-            .OUT_REG   (1)
-        ) cta_ctx_ram (
-            .clk   (clk),
-            .reset (reset),
-            .read  (1'b1),
-            .write (cta_bcast.ctx_write),
-            .wren  (1'b1),
-            .waddr (cta_bcast.ctx_waddr),
-            .wdata (cta_bcast.ctx_wdata),
-            .raddr (csr_rd_cta_id[b]),
-            .rdata (csr_rd_ctx[b])
-        );
-    end
 
     // core-wide warp-control resources
     wire bar_unlock_valid;

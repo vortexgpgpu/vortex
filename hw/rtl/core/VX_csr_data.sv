@@ -39,6 +39,9 @@ import VX_fpu_pkg::*;
 
     VX_sched_csr_if.slave               sched_csr_if,
 
+    // context of the request's CTA, read by req_cta_id
+    input cta_ctx_t                     cta_ctx,
+
     // The request is held for at least one cycle before it fires; that cycle
     // decodes it, and the fire cycle only merges the values that can still move.
     input wire                          req_fire,
@@ -54,7 +57,7 @@ import VX_fpu_pkg::*;
     `UNUSED_SPARAM (INSTANCE_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (req_uuid)
-    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] __cta_param = sched_csr_if.cta_csrs.param;
+    wire [`VX_CFG_MEM_ADDR_WIDTH-1:0] __cta_param = cta_ctx.param;
     `UNUSED_VAR (__cta_param)
 
     // Values that can change between the decode cycle and the fire cycle are
@@ -104,7 +107,6 @@ import VX_fpu_pkg::*;
 
     // Scheduler CSRs read interface
     assign sched_csr_if.csr_rd_wid    = req_wid;
-    assign sched_csr_if.csr_rd_cta_id = req_cta_id;
 
     reg [`VX_CFG_XLEN-1:0] stable_w;
     reg [NUM_LIVE-1:0]     live_sel_w;
@@ -126,7 +128,7 @@ import VX_fpu_pkg::*;
         `endif
             `VX_CSR_MSCRATCH   : begin stable_w = `VX_CFG_XLEN'(sched_csr_if.mscratch); wr_sel_w[WR_MSCRATCH] = 1; end
 
-            `VX_CSR_CTA_ID          : stable_w = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cta_id);
+            `VX_CSR_CTA_ID          : stable_w = `VX_CFG_XLEN'(req_cta_id);
             `VX_CSR_CTA_RANK        : live_sel_w[LIVE_CTA_RANK] = 1;
             `VX_CSR_CTA_SIZE        : live_sel_w[LIVE_CTA_SIZE] = 1;
             `VX_CSR_CTA_BLOCK_ID_X  : live_sel_w[LIVE_BLOCK_ID + 0] = 1;
@@ -239,16 +241,16 @@ import VX_fpu_pkg::*;
 `endif
     // The CTA context RAMs are addressed by the held request and return in the
     // fire cycle.
-    assign live_src[LIVE_CTA_RANK]  = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cta_rank);
-    assign live_src[LIVE_CTA_SIZE]  = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cta_size);
+    assign live_src[LIVE_CTA_RANK]  = `VX_CFG_XLEN'(sched_csr_if.cta_rank);
+    assign live_src[LIVE_CTA_SIZE]  = `VX_CFG_XLEN'(cta_ctx.cta_size);
     for (genvar i = 0; i < 3; ++i) begin : g_cta_dims
-        assign live_src[LIVE_BLOCK_ID + i]  = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_idx[i]);
-        assign live_src[LIVE_BLOCK_DIM + i] = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.block_dim[i]);
-        assign live_src[LIVE_GRID_DIM + i]  = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.grid_dim[i]);
+        assign live_src[LIVE_BLOCK_ID + i]  = `VX_CFG_XLEN'(cta_ctx.block_idx[i]);
+        assign live_src[LIVE_BLOCK_DIM + i] = `VX_CFG_XLEN'(cta_ctx.block_dim[i]);
+        assign live_src[LIVE_GRID_DIM + i]  = `VX_CFG_XLEN'(cta_ctx.grid_dim[i]);
     end
-    assign live_src[LIVE_LMEM_ADDR] = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.lmem_addr);
-    assign live_src[LIVE_CLUSTER]   = `VX_CFG_XLEN'(sched_csr_if.cta_csrs.cluster_size);
-    assign live_src[LIVE_ENTRY]     = `VX_CFG_XLEN'(to_fullPC(sched_csr_if.cta_csrs.entry));
+    assign live_src[LIVE_LMEM_ADDR] = `VX_CFG_XLEN'(cta_ctx.lmem_addr);
+    assign live_src[LIVE_CLUSTER]   = `VX_CFG_XLEN'(cta_ctx.cluster_size);
+    assign live_src[LIVE_ENTRY]     = `VX_CFG_XLEN'(to_fullPC(cta_ctx.entry));
 `ifdef VX_CFG_VM_ENABLE
     assign live_src[LIVE_SATP]      = sched_csr_if.csr_satp;
 `else

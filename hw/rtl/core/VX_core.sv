@@ -266,8 +266,7 @@ import VX_tcu_pkg::*;
     wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][`VX_CFG_XLEN-1:0] satp_wr_data;
 `endif
 
-    wire [`VX_CFG_NUM_SFU_BLOCKS-1:0][NCTA_WIDTH-1:0] csr_rd_cta_id;
-    cta_ctx_t [`VX_CFG_NUM_SFU_BLOCKS-1:0] csr_rd_ctx;
+    cta_bcast_t cta_bcast;
 
     VX_scheduler #(
         .INSTANCE_ID (`SFORMATF(("%s-scheduler", INSTANCE_ID)))
@@ -284,8 +283,7 @@ import VX_tcu_pkg::*;
         .txbar_bus_if   (dxa_txbar_bus_if),
     `endif
         .committed_warps(committed_warps),
-        .csr_rd_cta_id  (csr_rd_cta_id),
-        .csr_rd_ctx     (csr_rd_ctx),
+        .cta_bcast      (cta_bcast),
         .kmu_bus_if     (kmu_bus_if),
         .gbar_bus_if    (gbar_bus_if),
         .cycles         (sched_cycles),
@@ -452,8 +450,7 @@ import VX_tcu_pkg::*;
                 .active_warps         (sched_active_warps),
                 .all_lsu_sched_empty  (lsu_sched_empty),
                 .mmu_empty            (mmu_empty),
-                .csr_rd_cta_id        (csr_rd_cta_id[i]),
-                .csr_rd_ctx           (csr_rd_ctx[i]),
+                .cta_bcast            (cta_bcast),
             `ifdef VX_CFG_VM_ENABLE
                 .satp                 (sched_satp[i]),
                 .satp_wr_valid        (satp_wr_valid[i]),
@@ -520,9 +517,6 @@ import VX_tcu_pkg::*;
         VX_branch_ctl_if    branch_ctl_if[`VX_CFG_NUM_ALU_BLOCKS]();
         VX_warp_ctl_if      warp_ctl_if[`VX_CFG_NUM_SFU_BLOCKS]();
         VX_sched_csr_if     sched_csr_if[`VX_CFG_NUM_SFU_BLOCKS]();
-        for (genvar b = 0; b < `VX_CFG_NUM_SFU_BLOCKS; ++b) begin : g_csr_rd_cta_id
-            assign csr_rd_cta_id[b] = sched_csr_if[b].csr_rd_cta_id;
-        end
     `ifdef VX_CFG_EXT_RTU_ENABLE
         VX_sched_unlock_if  sched_unlock_if[`VX_CFG_NUM_SFU_BLOCKS]();
     `endif
@@ -568,7 +562,6 @@ import VX_tcu_pkg::*;
             .active_warps         (sched_active_warps),
             .lsu_sched_empty      (lsu_sched_empty),
             .mmu_empty            (mmu_empty),
-            .csr_rd_ctx           (csr_rd_ctx),
         `ifdef VX_CFG_VM_ENABLE
             .satp                 (sched_satp),
             .satp_wr_valid        (satp_wr_valid),
@@ -742,7 +735,8 @@ import VX_tcu_pkg::*;
                     .tcu_meta_wr_idx      (tcu_meta_wr_idx),
                     .tcu_meta_wr_data     (tcu_meta_wr_data),
                 `endif
-                    .warp_shared_if       (warp_shared_if[i])
+                    .warp_shared_if       (warp_shared_if[i]),
+                    .cta_bcast            (cta_bcast)
                 );
 
                 // wid = {wis, isw}: slice i owns every ISSUE_WIDTH-th warp starting at i
@@ -848,7 +842,8 @@ import VX_tcu_pkg::*;
                 .warp_shared_if       (warp_shared_if),
 
                 .warp_ctl_if          (warp_ctl_if),
-                .branch_ctl_if        (branch_ctl_if)
+                .branch_ctl_if        (branch_ctl_if),
+                .cta_bcast            (cta_bcast)
             );
 
             VX_commit #(

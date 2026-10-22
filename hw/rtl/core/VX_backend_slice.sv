@@ -106,8 +106,9 @@ import VX_tcu_pkg::*;
     input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data,
 `endif
 
-    // core-wide warp control
-    VX_warp_shared_if.master warp_shared_if
+    // core-wide warp control and CTA contexts
+    VX_warp_shared_if.master warp_shared_if,
+    input cta_bcast_t       cta_bcast
 );
     `STATIC_ASSERT (BACKEND_SLICES, ("invalid parameter"))
 
@@ -204,7 +205,8 @@ import VX_tcu_pkg::*;
     `endif
         .warp_shared_if       (warp_shared_if),
         .warp_ctl_if          (warp_ctl_if),
-        .sched_csr_if         (sched_csr_if)
+        .sched_csr_if         (sched_csr_if),
+        .cta_bcast            (cta_bcast)
     );
 
     // commit

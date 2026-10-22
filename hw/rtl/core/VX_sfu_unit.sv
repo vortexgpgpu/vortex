@@ -50,7 +50,9 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     // Outputs
     VX_commit_if.master     commit_if [`VX_CFG_ISSUE_WIDTH],
     VX_warp_shared_if.master warp_shared_if [`VX_CFG_NUM_SFU_BLOCKS],
-    VX_warp_ctl_if.master   warp_ctl_if [`VX_CFG_NUM_SFU_BLOCKS]
+    VX_warp_ctl_if.master   warp_ctl_if [`VX_CFG_NUM_SFU_BLOCKS],
+
+    input cta_bcast_t       cta_bcast
 );
     localparam BLOCK_SIZE = `VX_CFG_NUM_SFU_BLOCKS;
     localparam NUM_LANES  = `VX_CFG_NUM_SFU_LANES;
@@ -110,7 +112,8 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
         `endif
             .sched_csr_if   (sched_csr_if[block_idx]),
             .warp_shared_if (warp_shared_if[block_idx]),
-            .warp_ctl_if    (warp_ctl_if[block_idx])
+            .warp_ctl_if    (warp_ctl_if[block_idx]),
+            .cta_bcast      (cta_bcast)
         );
     end
 

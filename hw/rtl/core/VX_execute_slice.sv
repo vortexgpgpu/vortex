@@ -99,7 +99,8 @@ import VX_tcu_pkg::*;
     // SFU warp control and CSRs
     VX_warp_shared_if.master warp_shared_if,
     VX_warp_ctl_if.master   warp_ctl_if,
-    VX_sched_csr_if.slave   sched_csr_if
+    VX_sched_csr_if.slave   sched_csr_if,
+    input cta_bcast_t       cta_bcast
 );
     localparam ALU_PARTIAL_BW = (`VX_CFG_NUM_ALU_LANES != `VX_CFG_SIMD_WIDTH);
 `ifdef VX_CFG_EXT_F_ENABLE
@@ -279,7 +280,8 @@ import VX_tcu_pkg::*;
     `endif
         .sched_csr_if   (sched_csr_if),
         .warp_shared_if (warp_shared_if),
-        .warp_ctl_if    (warp_ctl_if)
+        .warp_ctl_if    (warp_ctl_if),
+        .cta_bcast      (cta_bcast)
     );
 
     VX_lane_gather #(

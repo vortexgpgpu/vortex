@@ -51,8 +51,7 @@ import VX_tcu_pkg::*;
     input wire [`VX_CFG_NUM_WARPS-1:0] active_warps,
     input wire [`VX_CFG_NUM_LSU_BLOCKS-1:0] all_lsu_sched_empty,
     input wire              mmu_empty,
-    output wire [NCTA_WIDTH-1:0] csr_rd_cta_id,
-    input cta_ctx_t         csr_rd_ctx,
+    input cta_bcast_t       cta_bcast,
 `ifdef VX_CFG_VM_ENABLE
     input wire [`VX_CFG_XLEN-1:0] satp,
     output wire             satp_wr_valid,
@@ -207,7 +206,6 @@ import VX_tcu_pkg::*;
     assign warp_ctl_if.mmu_empty              = mmu_empty;
 
     assign csr_rd_wid[0]        = sched_csr_if.csr_rd_wid;
-    assign csr_rd_cta_id        = sched_csr_if.csr_rd_cta_id;
     assign csr_wr[0].valid      = sched_csr_if.csr_wr_valid;
     assign csr_wr[0].wid        = sched_csr_if.csr_wr_wid;
     assign csr_wr[0].data       = sched_csr_if.csr_wr_data;
@@ -224,16 +222,7 @@ import VX_tcu_pkg::*;
     assign sched_csr_if.csr_mepc     = csr_rd[0].mepc;
     assign sched_csr_if.csr_mcause   = csr_rd[0].mcause;
     assign sched_csr_if.csr_mtval    = csr_rd[0].mtval;
-    assign sched_csr_if.cta_csrs.cta_id       = sched_csr_if.csr_rd_cta_id;
-    assign sched_csr_if.cta_csrs.cta_rank     = csr_rd[0].cta_rank;
-    assign sched_csr_if.cta_csrs.cta_size     = csr_rd_ctx.cta_size;
-    assign sched_csr_if.cta_csrs.block_idx    = csr_rd_ctx.block_idx;
-    assign sched_csr_if.cta_csrs.block_dim    = csr_rd_ctx.block_dim;
-    assign sched_csr_if.cta_csrs.grid_dim     = csr_rd_ctx.grid_dim;
-    assign sched_csr_if.cta_csrs.entry        = csr_rd_ctx.entry;
-    assign sched_csr_if.cta_csrs.param        = csr_rd_ctx.param;
-    assign sched_csr_if.cta_csrs.lmem_addr    = csr_rd_ctx.lmem_addr;
-    assign sched_csr_if.cta_csrs.cluster_size = csr_rd_ctx.cluster_size;
+    assign sched_csr_if.cta_rank     = csr_rd[0].cta_rank;
     assign sched_csr_if.cta_lane     = csr_rd[0].cta_lane;
 `ifdef VX_CFG_VM_ENABLE
     assign sched_csr_if.csr_satp     = satp;
@@ -313,7 +302,8 @@ import VX_tcu_pkg::*;
         .tcu_meta_wr_idx      (tcu_meta_wr_idx),
         .tcu_meta_wr_data     (tcu_meta_wr_data),
     `endif
-        .warp_shared_if       (warp_shared_if)
+        .warp_shared_if       (warp_shared_if),
+        .cta_bcast            (cta_bcast)
     );
 
 endmodule
