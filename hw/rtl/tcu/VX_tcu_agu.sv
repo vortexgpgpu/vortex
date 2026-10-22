@@ -16,12 +16,16 @@
 `ifdef TCU_META_ENABLE
 
 // Warp-level AGU for TCU_LD instructions. Each TCU block can hold one
-// transaction, while the LSU request and metadata write ports are shared.
+// transaction. With one memory port the blocks share it; with one port per
+// block (NUM_PORTS == BLOCK_SIZE) each block loads through its own LSU
+// scheduler, so the loads of a warpgroup's warps proceed in parallel. The
+// metadata write port is shared.
 
 module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID = "",
     parameter BLOCK_SIZE          = `VX_CFG_NUM_TCU_BLOCKS,
-    parameter NUM_LANES           = `VX_CFG_NUM_TCU_LANES
+    parameter NUM_LANES           = `VX_CFG_NUM_TCU_LANES,
+    parameter NUM_PORTS           = 1
 ) (
     input wire clk,
     input wire reset,
@@ -33,8 +37,8 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  tcu_execute_t              per_block_ld_data  [BLOCK_SIZE],
     output wire [BLOCK_SIZE-1:0]      per_block_ld_ready,
 
-    // Memory client connection (to VX_lsu_scheduler at VX_core).
-    VX_lsu_sched_if.master           client_if,
+    // Memory client connections (to the LSU schedulers).
+    VX_lsu_sched_if.master           client_if [NUM_PORTS],
 
     // Meta SRAM write port (broadcast — same data lands in every
     // block's VX_tcu_meta so subsequent wmma_sp reads see it
@@ -51,6 +55,7 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     input  wire [BLOCK_SIZE-1:0]      result_ready
 );
     `UNUSED_SPARAM (INSTANCE_ID)
+    `STATIC_ASSERT ((NUM_PORTS == 1) || (NUM_PORTS == BLOCK_SIZE), ("invalid parameter: NUM_PORTS=%0d", NUM_PORTS))
     localparam BLOCK_IDX_BITS = (BLOCK_SIZE > 1) ? $clog2(BLOCK_SIZE) : 1;
 
     logic [BLOCK_SIZE-1:0]       busy_r;
@@ -64,22 +69,6 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     logic [NUM_LANES-1:0]        rsp_lane_done_r  [BLOCK_SIZE];
 
     wire [BLOCK_SIZE-1:0] req_pending = busy_r & ~issued_r;
-    wire [BLOCK_IDX_BITS-1:0] req_block;
-    wire [BLOCK_SIZE-1:0] req_grant;
-    wire req_valid;
-
-    VX_generic_arbiter #(
-        .NUM_REQS (BLOCK_SIZE),
-        .TYPE     ("R")
-    ) req_arb (
-        .clk          (clk),
-        .reset        (reset),
-        .requests     (req_pending),
-        .grant_index  (req_block),
-        .grant_onehot (req_grant),
-        .grant_valid  (req_valid),
-        .grant_ready  (client_if.req_ready)
-    );
 
     wire [BLOCK_SIZE-1:0] commit_pending = complete_r;
     wire [BLOCK_IDX_BITS-1:0] commit_block;
@@ -99,14 +88,147 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         .grant_valid  (commit_valid),
         .grant_ready  (commit_ready)
     );
-
-    wire [BLOCK_IDX_BITS-1:0] rsp_block =
-        client_if.rsp_data.tag[BLOCK_IDX_BITS-1:0];
-    wire rsp_fire = client_if.rsp_valid && client_if.rsp_ready;
-    wire req_fire = req_valid && client_if.req_ready;
     wire commit_fire = commit_valid && commit_ready;
-    `UNUSED_VAR (req_grant)
     `UNUSED_VAR (commit_grant)
+
+    // -----------------------------------------------------------------------
+    // Memory request: address from rs1 (warp-broadcast). NUM_LANES mask
+    // all-ones — we fetch the metadata tile in one warp-level request.
+    // Lane T loads the 32-bit word at base + 4*T; the host packs h_meta so
+    // that word holds the metadata destined for SRAM cell
+    // (bank = T%PWD, col = T/PWD). One formula serves WMMA-SP and WGMMA-SP.
+    // -----------------------------------------------------------------------
+    localparam PWD = TCU_META_PER_WARP_DEPTH;
+    `UNUSED_PARAM (PWD)
+
+    // LSU bus carries LSU_WORD_SIZE-byte chunks per lane (= XLEN/8 bytes).
+    // The metadata layout is contiguous 32-bit words, so when XLEN > 32
+    // each LSU response carries XLEN/32 logical 32-bit words and we need
+    // to pick the right one. LSU_W32_RATIO = bytes/4, so XLEN=64 → 2.
+    localparam LSU_W32_RATIO = LSU_WORD_SIZE / 4;
+    localparam LG_W32_RATIO  = (LSU_W32_RATIO > 1) ? $clog2(LSU_W32_RATIO) : 0;
+
+    // Per-lane sub-word selector: lane i reads 32-bit word i, so its half of
+    // the LSU word is fixed by i.
+    logic [NUM_LANES-1:0][`UP(LG_W32_RATIO)-1:0] half_sel_w;
+    always_comb begin
+        half_sel_w = '0;
+        for (int i = 0; i < NUM_LANES; i++) begin
+            if (LG_W32_RATIO > 0) begin
+                half_sel_w[i] = `UP(LG_W32_RATIO)'(i);
+            end
+        end
+    end
+    if (LG_W32_RATIO == 0) begin : g_half_sel_unused
+        `UNUSED_VAR (half_sel_w)
+    end
+
+`ifdef VX_CFG_LMEM_ENABLE
+    // Equality on the word-address bits above the window: the base is asserted
+    // aligned to the capacity, so the prefix compare is exact and needs no end
+    // address -- which is not representable when the window ends at the top of
+    // the address space.
+    localparam LMEM_WORD_LSB = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
+    localparam [LSU_ADDR_WIDTH-1:0] LMEM_WORD_BASE =
+        LSU_ADDR_WIDTH'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> `CLOG2(LSU_WORD_SIZE));
+    `STATIC_ASSERT (LSU_ADDR_WIDTH > LMEM_WORD_LSB, ("LMEM window wider than the word address space"))
+`endif
+
+    function automatic lsu_req_data_t make_req(input logic [LSU_ADDR_WIDTH-1:0] base_word_addr,
+                                               input logic [BLOCK_IDX_BITS-1:0] block);
+        lsu_req_data_t r;
+        logic base_is_local;
+    `ifdef VX_CFG_LMEM_ENABLE
+        base_is_local = (base_word_addr[LSU_ADDR_WIDTH-1:LMEM_WORD_LSB]
+                      == LMEM_WORD_BASE[LSU_ADDR_WIDTH-1:LMEM_WORD_LSB]);
+    `else
+        base_is_local = 1'b0;
+    `endif
+        r      = '0;
+        r.rw   = 1'b0; // load
+        r.mask = {NUM_LANES{1'b1}};
+        for (int i = 0; i < NUM_LANES; i++) begin
+            mem_bus_attr_t a;
+            a = '0;
+            a.is_addr_local = base_is_local;
+            // base_addr is pre-advanced per TCU_LD slot by the kernel, so lane
+            // i reads 32-bit word i relative to it, in LSU-word units.
+            r.addr[i]   = base_word_addr + (LSU_ADDR_WIDTH'(i) >> LG_W32_RATIO);
+            r.byteen[i] = {LSU_WORD_SIZE{1'b1}};
+            r.data[i]   = '0;
+            r.attr[i]   = a;
+        end
+        r.tag = '0;
+        r.tag[BLOCK_IDX_BITS-1:0] = block;
+        return r;
+    endfunction
+
+    `STATIC_ASSERT (LSU_CLIENT_TAG_WIDTH >= BLOCK_IDX_BITS, ("LSU client tag cannot encode TCU block"))
+
+    // Per-block request and response events, from either port structure.
+    wire [BLOCK_SIZE-1:0] req_fire_b;
+    wire [BLOCK_SIZE-1:0] rsp_fire_b;
+    wire [BLOCK_SIZE-1:0] rsp_eop_b;
+    wire [NUM_LANES-1:0]  rsp_mask_b [BLOCK_SIZE];
+    wire [NUM_LANES-1:0][(LSU_WORD_SIZE*8)-1:0] rsp_data_b [BLOCK_SIZE];
+    wire [`VX_CFG_XLEN-1:0] req_addr_chk [NUM_PORTS];
+    wire [NUM_PORTS-1:0] req_fire_chk;
+
+    if (NUM_PORTS == 1) begin : g_shared_port
+        wire [BLOCK_IDX_BITS-1:0] req_block;
+        wire [BLOCK_SIZE-1:0] req_grant;
+        wire req_valid;
+
+        VX_generic_arbiter #(
+            .NUM_REQS (BLOCK_SIZE),
+            .TYPE     ("R")
+        ) req_arb (
+            .clk          (clk),
+            .reset        (reset),
+            .requests     (req_pending),
+            .grant_index  (req_block),
+            .grant_onehot (req_grant),
+            .grant_valid  (req_valid),
+            .grant_ready  (client_if[0].req_ready)
+        );
+        `UNUSED_VAR (req_grant)
+
+        wire [BLOCK_IDX_BITS-1:0] rsp_block = client_if[0].rsp_data.tag[BLOCK_IDX_BITS-1:0];
+        wire req_fire = req_valid && client_if[0].req_ready;
+        wire rsp_fire = client_if[0].rsp_valid && client_if[0].rsp_ready;
+
+        for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_ev
+            assign req_fire_b[bi] = req_fire && (req_block == BLOCK_IDX_BITS'(bi));
+            assign rsp_fire_b[bi] = rsp_fire && (rsp_block == BLOCK_IDX_BITS'(bi));
+            assign rsp_eop_b[bi]  = client_if[0].rsp_data.eop;
+            assign rsp_mask_b[bi] = client_if[0].rsp_data.mask;
+            assign rsp_data_b[bi] = client_if[0].rsp_data.data;
+        end
+
+        assign client_if[0].req_valid = req_valid;
+        assign client_if[0].req_data  = make_req(LSU_ADDR_WIDTH'(addr_r[req_block] >> `CLOG2(LSU_WORD_SIZE)), req_block);
+        assign client_if[0].rsp_ready = busy_r[rsp_block] && issued_r[rsp_block]
+                                     && !complete_r[rsp_block];
+        assign req_addr_chk[0] = addr_r[req_block];
+        assign req_fire_chk[0] = req_fire;
+        `UNUSED_VAR (client_if[0].rsp_data.sop)
+    end else begin : g_port_per_block
+        for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_port
+            assign client_if[bi].req_valid = req_pending[bi];
+            assign client_if[bi].req_data  = make_req(LSU_ADDR_WIDTH'(addr_r[bi] >> `CLOG2(LSU_WORD_SIZE)), BLOCK_IDX_BITS'(0));
+            assign client_if[bi].rsp_ready = busy_r[bi] && issued_r[bi] && !complete_r[bi];
+
+            assign req_fire_b[bi] = req_pending[bi] && client_if[bi].req_ready;
+            assign rsp_fire_b[bi] = client_if[bi].rsp_valid && client_if[bi].rsp_ready;
+            assign rsp_eop_b[bi]  = client_if[bi].rsp_data.eop;
+            assign rsp_mask_b[bi] = client_if[bi].rsp_data.mask;
+            assign rsp_data_b[bi] = client_if[bi].rsp_data.data;
+            assign req_addr_chk[bi] = addr_r[bi];
+            assign req_fire_chk[bi] = req_fire_b[bi];
+            `UNUSED_VAR (client_if[bi].rsp_data.sop)
+            `UNUSED_VAR (client_if[bi].rsp_data.tag)
+        end
+    end
 
     always @(posedge clk) begin
         if (reset) begin
@@ -132,21 +254,20 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
                     rsp_data_r[bi]      <= '0;
                     rsp_lane_done_r[bi] <= '0;
                 end
-            end
-            if (req_fire) begin
-                issued_r[req_block] <= 1'b1;
-            end
-            if (rsp_fire) begin
-                for (int t = 0; t < NUM_LANES; ++t) begin
-                    if (client_if.rsp_data.mask[t]) begin
-                        rsp_data_r[rsp_block][t]      <= client_if.rsp_data.data[t];
-                        rsp_lane_done_r[rsp_block][t] <= 1'b1;
-                    end
+                if (req_fire_b[bi]) begin
+                    issued_r[bi] <= 1'b1;
                 end
-                if (client_if.rsp_data.eop
-                    && ((rsp_lane_done_r[rsp_block] | client_if.rsp_data.mask)
-                        == {NUM_LANES{1'b1}})) begin
-                    complete_r[rsp_block] <= 1'b1;
+                if (rsp_fire_b[bi]) begin
+                    for (int t = 0; t < NUM_LANES; ++t) begin
+                        if (rsp_mask_b[bi][t]) begin
+                            rsp_data_r[bi][t]      <= rsp_data_b[bi][t];
+                            rsp_lane_done_r[bi][t] <= 1'b1;
+                        end
+                    end
+                    if (rsp_eop_b[bi]
+                        && ((rsp_lane_done_r[bi] | rsp_mask_b[bi]) == {NUM_LANES{1'b1}})) begin
+                        complete_r[bi] <= 1'b1;
+                    end
                 end
             end
             if (commit_fire) begin
@@ -158,116 +279,24 @@ module VX_tcu_agu import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
         end
     end
 
-    `UNUSED_VAR (client_if.rsp_data.sop)
-
     for (genvar bi = 0; bi < BLOCK_SIZE; ++bi) begin : g_ld_ready
         assign per_block_ld_ready[bi] = ~busy_r[bi];
     end
 
-    // -----------------------------------------------------------------------
-    // Memory request: address from rs1 (warp-broadcast). NUM_LANES mask
-    // all-ones — we fetch the metadata tile in one warp-level request.
-    //
-    // Per-lane offset matches the host's pack_metadata_wg layout
-    // (sgemm_tcu_wg_sp/main.cpp): the host writes bank `b` and word `c`
-    // at index `b * stride + c`. The AGU writes wr_data[T] into
-    // VX_tcu_meta at (bank=T%PWD, col_in_group=T/PWD), so lane T must
-    // load `meta_base[(T % PWD) * stride + (T / PWD)]`.
-    // -----------------------------------------------------------------------
-    wire [`VX_CFG_XLEN-1:0] base_addr = addr_r[req_block];
-    `UNUSED_VAR (base_addr[`CLOG2(LSU_WORD_SIZE)-1:0])
-
-    wire [LSU_ADDR_WIDTH-1:0] base_word_addr =
-        LSU_ADDR_WIDTH'(base_addr[`VX_CFG_XLEN-1:`CLOG2(LSU_WORD_SIZE)]);
-
-    localparam PWD = TCU_META_PER_WARP_DEPTH;
-    // Per-thread metadata layout: lane T loads h_meta[slot*NT + T]. The
-    // host packs h_meta so the 32-bit word at offset (slot*NT + T) holds
-    // the metadata destined for SRAM cell (bank = T%PWD, col = T/PWD).
-    // One formula serves both WMMA-SP and WGMMA-SP.
-
-    // LSU bus carries LSU_WORD_SIZE-byte chunks per lane (= XLEN/8 bytes).
-    // The metadata layout is contiguous 32-bit words, so when XLEN > 32
-    // each LSU response carries XLEN/32 logical 32-bit words and we need
-    // to pick the right one. LSU_W32_RATIO = bytes/4, so XLEN=64 → 2.
-    localparam LSU_W32_RATIO = LSU_WORD_SIZE / 4;
-    localparam LG_W32_RATIO  = (LSU_W32_RATIO > 1) ? $clog2(LSU_W32_RATIO) : 0;
-
-    // is_addr_local route bit — LMEM range check. The metadata buffer is
-    // per-warp inside shared memory so LMEM detection is uniform across
-    // lanes; compute once from the base address.
-`ifdef VX_CFG_LMEM_ENABLE
-    // Equality on the word-address bits above the window: the base is asserted
-    // aligned to the capacity, so the prefix compare is exact and needs no end
-    // address -- which is not representable when the window ends at the top of
-    // the address space.
-    localparam LMEM_WORD_LSB = `VX_CFG_LMEM_LOG_SIZE - `CLOG2(LSU_WORD_SIZE);
-    localparam [LSU_ADDR_WIDTH-1:0] LMEM_WORD_BASE =
-        LSU_ADDR_WIDTH'(`VX_CFG_XLEN'(`VX_MEM_LMEM_BASE_ADDR) >> `CLOG2(LSU_WORD_SIZE));
-    `STATIC_ASSERT (LSU_ADDR_WIDTH > LMEM_WORD_LSB, ("LMEM window wider than the word address space"))
-    wire base_is_local = (base_word_addr[LSU_ADDR_WIDTH-1:LMEM_WORD_LSB]
-                       == LMEM_WORD_BASE[LSU_ADDR_WIDTH-1:LMEM_WORD_LSB]);
-`else
-    wire base_is_local = 1'b0;
-`endif
-
-    // Per-lane sub-word selector: which 32-bit slice of the LSU response
-    // carries the desired metadata word. For XLEN=32 (LSU_W32_RATIO=1)
-    // every lane reads exactly one 32-bit word, so half_sel is always 0.
-    // For XLEN=64 (LSU_W32_RATIO=2) we round the 32-bit word offset down
-    // to an 8-byte LSU address and use the LSB to select low/high half.
-    logic [NUM_LANES-1:0][`UP(LG_W32_RATIO)-1:0] half_sel_w;
-    // For XLEN=32, LG_W32_RATIO=0 and half_sel_w is never read downstream;
-    // tag it unused so Verilator's UNUSEDSIGNAL doesn't fail the build.
-    if (LG_W32_RATIO == 0) begin : g_half_sel_unused
-        `UNUSED_VAR (half_sel_w)
-    end
-
-    lsu_req_data_t req_w;
-    always_comb begin
-        req_w        = '0;
-        req_w.rw     = 1'b0; // load
-        req_w.mask   = {NUM_LANES{1'b1}};
-        half_sel_w   = '0;
-        for (int i = 0; i < NUM_LANES; i++) begin
-            automatic mem_bus_attr_t a;
-            automatic logic [LSU_ADDR_WIDTH-1:0] word_off_32;
-            a = '0;
-            a.is_addr_local = base_is_local;
-            // base_addr is pre-advanced per TCU_LD slot by the kernel
-            // (slot s passes base + s*NT*sizeof(float)), so lane i reads word i
-            // relative to base_word_addr.
-            word_off_32 = LSU_ADDR_WIDTH'(i);
-            // word_off_32 is in 32-bit-word units. The LSU bus addresses
-            // LSU_WORD_SIZE-byte chunks (= XLEN/32 × 32-bit words), so we
-            // shift down to bus stride and keep the sub-word half for the
-            // response extraction below.
-            req_w.addr[i]   = base_word_addr + (word_off_32 >> LG_W32_RATIO);
-            if (LG_W32_RATIO > 0) begin
-                half_sel_w[i] = `UP(LG_W32_RATIO)'(word_off_32[`UP(LG_W32_RATIO)-1:0]);
-            end
-            req_w.byteen[i] = {LSU_WORD_SIZE{1'b1}};
-            req_w.data[i]   = '0;
-            req_w.attr[i]   = a;
-        end
-        req_w.tag = '0;
-        req_w.tag[BLOCK_IDX_BITS-1:0] = req_block;
-    end
-    `UNUSED_PARAM (PWD)
-    `STATIC_ASSERT (LSU_CLIENT_TAG_WIDTH >= BLOCK_IDX_BITS, ("LSU client tag cannot encode TCU block"))
 `ifdef VX_CFG_LSU_STACK_INTERLEAVE_ENABLE
     // Metadata is read as a linear warp-wide tile, which an interleaved
     // per-thread stack cannot provide.
     if (`VX_CFG_NUM_THREADS > 1) begin : g_meta_stack_check
-        wire [`VX_CFG_XLEN-1:0] meta_end_addr = base_addr + `VX_CFG_XLEN'(NUM_LANES * 4 - 1);
-        `RUNTIME_ASSERT(~req_fire || (meta_end_addr < STACK_WINDOW_BOTTOM) || (base_addr >= STACK_WINDOW_TOP),
-            ("%t: *** %s TCU metadata inside the thread stack window: addr=0x%0h", $time, INSTANCE_ID, base_addr))
+        for (genvar pi = 0; pi < NUM_PORTS; ++pi) begin : g_port
+            wire [`VX_CFG_XLEN-1:0] meta_end_addr = req_addr_chk[pi] + `VX_CFG_XLEN'(NUM_LANES * 4 - 1);
+            `RUNTIME_ASSERT(~req_fire_chk[pi] || (meta_end_addr < STACK_WINDOW_BOTTOM) || (req_addr_chk[pi] >= STACK_WINDOW_TOP),
+                ("%t: *** %s TCU metadata inside the thread stack window: addr=0x%0h", $time, INSTANCE_ID, req_addr_chk[pi]))
+        end
     end
+`else
+    `UNUSED_VAR (req_addr_chk)
+    `UNUSED_VAR (req_fire_chk)
 `endif
-    assign client_if.req_valid  = req_valid;
-    assign client_if.req_data   = req_w;
-    assign client_if.rsp_ready  = busy_r[rsp_block] && issued_r[rsp_block]
-                               && !complete_r[rsp_block];
 
     // -----------------------------------------------------------------------
     // VX_tcu_meta write (broadcast to all blocks' meta instances).

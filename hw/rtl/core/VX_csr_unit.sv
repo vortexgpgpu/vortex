@@ -34,6 +34,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
 `endif
 
     VX_sched_csr_if.slave       sched_csr_if,
+    input cta_ctx_t             cta_ctx,
     VX_execute_if.slave         execute_if,
     VX_result_if.master         result_if
 );
@@ -87,6 +88,7 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .core_id        (core_id),
 
         .sched_csr_if   (sched_csr_if),
+        .cta_ctx        (cta_ctx),
 
     `ifdef VX_CFG_EXT_F_ENABLE
         .fcsr_rd_data   (fcsr_rd_data),
