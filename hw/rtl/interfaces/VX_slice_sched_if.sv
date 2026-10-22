@@ -20,6 +20,7 @@ interface VX_slice_sched_if import VX_gpu_pkg::*; ();
 
     localparam SW = PER_FETCH_WARPS;
     localparam LW = FETCH_WFS_W;
+    localparam FW = `VX_CFG_FETCH_WIDTH;
 
     // CTA launch
     logic                   cta_fire;
@@ -53,8 +54,8 @@ interface VX_slice_sched_if import VX_gpu_pkg::*; ();
     logic                   retire_valid;
     logic [LW-1:0]          retire_lid;
 
-    // every warp of the core has a full ibuffer
-    logic                   all_ibuf_full;
+    // every slice's ibuf_full; the slice ANDs them into its core-wide view
+    logic [FW-1:0]          slice_ibuf_full;
 `ifdef EXT_SCHED_TIMEOUT_DUMP
     // the core-wide stall timeout is about to fire
     logic                   timeout_dump;
@@ -64,11 +65,13 @@ interface VX_slice_sched_if import VX_gpu_pkg::*; ();
     logic [SW-1:0]          active;
     logic [SW-1:0]          stalled;
     logic [SW-1:0]          pending_empty;
-    // next-state ibuffer full, registered core-wide into all_ibuf_full
-    logic [SW-1:0]          ibuf_full_n;
+    // every warp of the slice has a full ibuffer
+    logic                   ibuf_full;
     logic [FETCH_ALU_PORTS-1:0] branch_valid;
     logic [FETCH_SFU_PORTS-1:0] divergence;
-    logic                   sched_valid;
+    // a warp is schedulable, with the core's ibuffers not all full and all full
+    logic                   sched_valid_room;
+    logic                   sched_valid_full;
     logic                   sched_fire;
     logic [`VX_CFG_NUM_THREADS-1:0] sched_tmask;
 
@@ -95,17 +98,18 @@ interface VX_slice_sched_if import VX_gpu_pkg::*; ();
         output bar_unlock_mask,
         output retire_valid,
         output retire_lid,
-        output all_ibuf_full,
+        output slice_ibuf_full,
 `ifdef EXT_SCHED_TIMEOUT_DUMP
         output timeout_dump,
 `endif
         input  active,
         input  stalled,
-        input  ibuf_full_n,
+        input  ibuf_full,
         input  pending_empty,
         input  branch_valid,
         input  divergence,
-        input  sched_valid,
+        input  sched_valid_room,
+        input  sched_valid_full,
         input  sched_fire,
         input  sched_tmask
     );
@@ -133,17 +137,18 @@ interface VX_slice_sched_if import VX_gpu_pkg::*; ();
         input  bar_unlock_mask,
         input  retire_valid,
         input  retire_lid,
-        input  all_ibuf_full,
+        input  slice_ibuf_full,
 `ifdef EXT_SCHED_TIMEOUT_DUMP
         input  timeout_dump,
 `endif
         output active,
         output stalled,
-        output ibuf_full_n,
+        output ibuf_full,
         output pending_empty,
         output branch_valid,
         output divergence,
-        output sched_valid,
+        output sched_valid_room,
+        output sched_valid_full,
         output sched_fire,
         output sched_tmask
     );
