@@ -51,9 +51,6 @@ import VX_tcu_pkg::*;
     output wire [`VX_CFG_NUM_LSU_LANES-1:0] lsu_perf_rsp_fire,
     output wire [PERF_CTR_BITS-1:0] lsu_coalescer_misses,
 `endif
-`ifdef TCU_META_ENABLE
-    VX_lsu_sched_if.slave   lsu_tcu_mem_if,
-`endif
     output wire             lsu_sched_empty,
     output wire             lsu_store_empty,
     output wire             lsu_busy,
@@ -82,18 +79,6 @@ import VX_tcu_pkg::*;
     input wire [TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data,
     input wire [TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
     input wire              tcu_tbuf_ready,
-`endif
-`ifdef TCU_META_ENABLE
-    output wire             tcu_agu_ld_valid,
-    output tcu_execute_t    tcu_agu_ld_data,
-    input wire              tcu_agu_ld_ready,
-    input wire              tcu_agu_result_valid,
-    input tcu_result_t      tcu_agu_result_data,
-    output wire             tcu_agu_result_ready,
-    input wire              tcu_meta_wr_en,
-    input wire [NW_WIDTH-1:0] tcu_meta_wr_wid,
-    input wire [4:0]        tcu_meta_wr_idx,
-    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data,
 `endif
 
     // SFU warp control and CSRs
@@ -183,6 +168,11 @@ import VX_tcu_pkg::*;
         .dispatch_if(dispatch_if[EX_LSU +: 1]),
         .execute_if (lsu_execute_if)
     );
+
+`ifdef TCU_META_ENABLE
+    // the TCU block's metadata loads go through this slice's LSU scheduler
+    VX_lsu_sched_if lsu_tcu_mem_if();
+`endif
 
     VX_lsu_block #(
         .INSTANCE_ID (`SFORMATF(("%s-lsu%s", INSTANCE_ID, SLICE_STR)))
@@ -402,16 +392,7 @@ import VX_tcu_pkg::*;
         .tbuf_ready       (tcu_tbuf_ready),
     `endif
     `ifdef TCU_META_ENABLE
-        .agu_ld_valid     (tcu_agu_ld_valid),
-        .agu_ld_data      (tcu_agu_ld_data),
-        .agu_ld_ready     (tcu_agu_ld_ready),
-        .agu_result_valid (tcu_agu_result_valid),
-        .agu_result_data  (tcu_agu_result_data),
-        .agu_result_ready (tcu_agu_result_ready),
-        .meta_wr_en       (tcu_meta_wr_en),
-        .meta_wr_wid      (tcu_meta_wr_wid),
-        .meta_wr_idx      (tcu_meta_wr_idx),
-        .meta_wr_data     (tcu_meta_wr_data),
+        .tcu_mem_if       (lsu_tcu_mem_if),
     `endif
         .execute_if       (tcu_execute_if[0]),
         .result_if        (tcu_result_if[0])
