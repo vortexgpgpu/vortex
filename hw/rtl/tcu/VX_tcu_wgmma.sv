@@ -20,8 +20,8 @@
 // CTA lockstep gate, and WGMMA-specific perf counters.
 //
 // Observation-only on the dispatch path: this module does not drive
-// .ready. The wrapper (VX_tcu_unit) feeds tbuf_ready_eff into tcu_core,
-// which produces the actual handshake .ready going back to dispatch.
+// .ready. VX_tcu_shared exports tbuf_ready_eff per block; the block's
+// tcu_core produces the actual handshake .ready going back to dispatch.
 
 module VX_tcu_wgmma import VX_gpu_pkg::*, VX_tcu_pkg::*; #(
     parameter `STRING INSTANCE_ID     = "",

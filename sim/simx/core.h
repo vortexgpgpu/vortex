@@ -82,6 +82,7 @@ public:
   // A warp has at most one release in flight, so NUM_WARPS bounds each.
   SimChannel<uint32_t> branch_ctl_in;
   SimChannel<WarpCtl>  warp_ctl_in;
+  SimChannel<uint32_t> bar_unlock_in;
 
   // Global-barrier event links, wired core <-> cluster at elaboration.
   SimEventLink<GbarArrive> gbar_arrive_out;
@@ -110,7 +111,7 @@ public:
 
   void barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is_sync_bar);
 
-  bool barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid);
+  void barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid);
 
   void global_barrier_resume(uint32_t bar_id);
 

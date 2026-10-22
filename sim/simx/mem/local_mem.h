@@ -31,7 +31,7 @@ public:
     uint32_t num_reqs;
     uint32_t B; // log2 number of banks
     bool write_reponse;
-    uint32_t dma_clients; // row-wide DMA masters, in priority order
+    uint32_t dma_clients; // row-wide DMA masters, served round-robin
   };
 
   struct PerfStats {

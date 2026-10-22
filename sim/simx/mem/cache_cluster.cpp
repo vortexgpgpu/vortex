@@ -35,11 +35,17 @@ CacheCluster::CacheCluster(const SimContext& ctx,
 
 	char sname[100];
 
-	// Arbitrate incoming core interfaces
+	// Arbitrate incoming core interfaces. Arbitrating cores onto fewer caches
+	// registers the request, and the response once more when the cache
+	// registers its core-response port.
+	const bool shared = (num_inputs != num_units);
+	const uint32_t arb_req_delay = shared ? 1 : 0;
+	const uint32_t arb_rsp_delay = (shared && cache_config.core_out_buf) ? 1 : 0;
 	std::vector<MemArbiter::Ptr> input_arbs(cache_config.num_inputs);
 	for (uint32_t i = 0; i < cache_config.num_inputs; ++i) {
 		snprintf(sname, 100, "%s-input-arb%d", name, i);
-		input_arbs.at(i) = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_inputs, num_units);
+		input_arbs.at(i) = MemArbiter::Create(sname, ArbiterType::RoundRobin, num_inputs, num_units,
+		                                      arb_req_delay, arb_rsp_delay);
 		for (uint32_t j = 0; j < num_inputs; ++j) {
 			this->core_req_in.at(j).at(i).bind(&input_arbs.at(i)->ReqIn.at(j));
 			input_arbs.at(i)->RspOut.at(j).bind(&this->core_rsp_out.at(j).at(i));
@@ -82,9 +88,9 @@ Cache::PerfStats CacheCluster::perf_stats() const {
 	return perf;
 }
 
-void CacheCluster::flush_begin() {
+void CacheCluster::flush_begin(bool l1_only) {
 	for (auto cache : caches_) {
-		cache->flush_begin();
+		cache->flush_begin(l1_only);
 	}
 }
 

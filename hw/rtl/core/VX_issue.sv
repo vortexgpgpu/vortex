@@ -25,7 +25,7 @@ module VX_issue import VX_gpu_pkg::*; #(
     output issue_perf_t     issue_perf,
 `endif
 
-    VX_decode_if.slave      decode_if,
+    VX_decode_if.slave      decode_if [`VX_CFG_ISSUE_WIDTH],
     VX_writeback_if.slave   writeback_if [`VX_CFG_ISSUE_WIDTH],
     VX_dispatch_if.master   dispatch_if [NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
     VX_issue_sched_if.master issue_sched_if [`VX_CFG_ISSUE_WIDTH]
@@ -43,11 +43,6 @@ module VX_issue import VX_gpu_pkg::*; #(
     end
 `endif
 
-    wire [ISSUE_ISW_W-1:0] decode_isw = wid_to_isw(decode_if.data.wid);
-
-    wire [`VX_CFG_ISSUE_WIDTH-1:0] decode_ready_in;
-    assign decode_if.ready = decode_ready_in[decode_isw];
-
     `SCOPE_IO_SWITCH (`VX_CFG_ISSUE_WIDTH);
 
     wire [`VX_CFG_ISSUE_WIDTH-1:0] issued_warps;
@@ -56,27 +51,18 @@ module VX_issue import VX_gpu_pkg::*; #(
     for (genvar issue_id = 0; issue_id < `VX_CFG_ISSUE_WIDTH; ++issue_id) begin : g_slices
 
         VX_dispatch_if per_issue_dispatch_if[NUM_EX_UNITS]();
-        VX_decode_if slice_decode_if();
-
-        assign slice_decode_if.valid = decode_if.valid && (decode_isw == issue_id);
-        assign slice_decode_if.data  = decode_if.data;
-        assign decode_ready_in[issue_id] = slice_decode_if.ready;
-
-        for (genvar w = 0; w < PER_ISSUE_WARPS; ++w) begin : g_ibuf_pop
-            assign decode_if.ibuf_pop[wis_to_wid(ISSUE_WIS_W'(w), ISSUE_ISW_W'(issue_id))] = slice_decode_if.ibuf_pop[w];
-        end
 
         VX_issue_slice #(
-            .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, issue_id))),
-            .ISSUE_ID (issue_id)
+            .INSTANCE_ID (`SFORMATF(("%s%0d", INSTANCE_ID, issue_id)))
         ) issue_slice (
             `SCOPE_IO_BIND(issue_id)
             .clk          (clk),
             .reset        (reset),
+            .slice_id     (ISSUE_ISW_W'(issue_id)),
         `ifdef PERF_ENABLE
             .issue_perf   (per_issue_perf[issue_id]),
         `endif
-            .decode_if    (slice_decode_if),
+            .decode_if    (decode_if[issue_id]),
             .writeback_if (writeback_if[issue_id]),
             .dispatch_if  (per_issue_dispatch_if),
             .warp_issued  (issued_warps[issue_id]),

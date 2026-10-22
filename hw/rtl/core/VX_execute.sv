@@ -13,33 +13,24 @@
 
 `include "VX_define.vh"
 
-module VX_execute import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID = "",
-    parameter CORE_ID = 0
+module VX_execute import VX_gpu_pkg::*;
+`ifdef VX_CFG_EXT_TCU_ENABLE
+import VX_tcu_pkg::*;
+`endif
+#(
+    parameter `STRING INSTANCE_ID = ""
 ) (
     `SCOPE_IO_DECL
 
     input wire              clk,
     input wire              reset,
 
-`ifdef PERF_ENABLE
-    input sysmem_perf_t     sysmem_perf,
-    input pipeline_perf_t   pipeline_perf,
-`ifdef VX_CFG_EXT_TCU_ENABLE
-    output tcu_perf_t       tcu_perf,
-`endif
-`endif
+    input wire [CORE_ID_WIDTH-1:0] core_id,
 
     // Per-block LSU client connections to VX_lsu_scheduler (at VX_core).
     // The dcache port (lsu_mem_if) lives at VX_core; execute exposes
     // only the LSU client interfaces.
     VX_lsu_sched_if.master lsu_client_if [`VX_CFG_NUM_LSU_BLOCKS],
-
-`ifdef TCU_META_ENABLE
-    // TCU AGU memory client (single warp-level AGU shared across blocks).
-    // VX_core wires this to client 1 of block 0's lsu_scheduler.
-    VX_lsu_sched_if.master tcu_mem_if,
-`endif
 
     // dispatch interface
     VX_dispatch_if.slave    dispatch_if [NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
@@ -47,13 +38,13 @@ module VX_execute import VX_gpu_pkg::*; #(
     // commit interface
     VX_commit_if.master     commit_if [NUM_EX_UNITS * `VX_CFG_ISSUE_WIDTH],
 
+    // per-block ports of the core-wide SFU and TCU services
 `ifdef VX_CFG_EXT_DXA_ENABLE
-    VX_dxa_req_bus_if.master dxa_req_bus_if,
-    VX_txbar_bus_if.slave  dxa_txbar_bus_if,
+    VX_dxa_req_bus_if.master dxa_req_bus_if [`VX_CFG_NUM_SFU_BLOCKS],
 `endif
 
 `ifdef VX_CFG_EXT_TEX_ENABLE
-    VX_tex_bus_if.master    tex_bus_if,
+    VX_tex_bus_if.master    tex_bus_if [`VX_CFG_NUM_SFU_BLOCKS],
 `endif
 
 `ifdef VX_CFG_EXT_OM_ENABLE
@@ -64,22 +55,36 @@ module VX_execute import VX_gpu_pkg::*; #(
 `endif
 
 `ifdef VX_CFG_EXT_RTU_ENABLE
-    VX_rtu_bus_if.master    rtu_bus_if,
-    VX_sched_unlock_if.master sched_unlock_if,
+    VX_rtu_bus_if.master    rtu_bus_if [`VX_CFG_NUM_SFU_BLOCKS],
+    VX_sched_unlock_if.master sched_unlock_if [`VX_CFG_NUM_SFU_BLOCKS],
+`endif
+
+`ifdef VX_CFG_TCU_WGMMA_ENABLE
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_valid,
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_exec_ready,
+    output tcu_execute_t    tcu_exec_data [`VX_CFG_NUM_TCU_BLOCKS],
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_A_DATA_SIZE-1:0][`VX_CFG_XLEN-1:0] tcu_tbuf_rs1_data,
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0][TCU_WG_RS2_WIDTH-1:0][`VX_CFG_XLEN-1:0]   tcu_tbuf_rs2_data,
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_tbuf_ready,
+`endif
+`ifdef TCU_META_ENABLE
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_ld_valid,
+    output tcu_execute_t    tcu_agu_ld_data [`VX_CFG_NUM_TCU_BLOCKS],
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_ld_ready,
+    input wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_result_valid,
+    input tcu_result_t      tcu_agu_result_data [`VX_CFG_NUM_TCU_BLOCKS],
+    output wire [`VX_CFG_NUM_TCU_BLOCKS-1:0] tcu_agu_result_ready,
+    input wire              tcu_meta_wr_en,
+    input wire [NW_WIDTH-1:0] tcu_meta_wr_wid,
+    input wire [4:0]        tcu_meta_wr_idx,
+    input wire [TCU_BLOCK_CAP-1:0][`VX_CFG_XLEN-1:0] tcu_meta_wr_data,
 `endif
 
     // scheduler interfaces
-    VX_sched_csr_if.slave   sched_csr_if,
+    VX_sched_csr_if.slave   sched_csr_if [`VX_CFG_NUM_SFU_BLOCKS],
     VX_branch_ctl_if.master branch_ctl_if [`VX_CFG_NUM_ALU_BLOCKS],
-    VX_warp_ctl_if.master   warp_ctl_if,
-
-`ifdef VX_CFG_TCU_WGMMA_ENABLE
-    // TCU tile-buffer local-memory read port
-    VX_mem_bus_if.master    tcu_lmem_if,
-`endif
-
-    // DCR-CSR interface
-    VX_dcr_csr_if           dcr_csr_if
+    VX_warp_shared_if.master warp_shared_if [`VX_CFG_NUM_SFU_BLOCKS],
+    VX_warp_ctl_if.master   warp_ctl_if [`VX_CFG_NUM_SFU_BLOCKS]
 );
 
 `ifdef VX_CFG_EXT_F_ENABLE
@@ -96,15 +101,18 @@ module VX_execute import VX_gpu_pkg::*; #(
         .branch_ctl_if  (branch_ctl_if)
     );
 
-    `SCOPE_IO_SWITCH (1);
+`ifdef SCOPE
+    localparam SCOPE_COUNT = 1 + `VX_CFG_EXT_TCU_ENABLED;
+`endif
+    `SCOPE_IO_SWITCH (SCOPE_COUNT);
 
     VX_lsu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-lsu", INSTANCE_ID))),
-        .CORE_ID     (CORE_ID)
+        .INSTANCE_ID (`SFORMATF(("%s-lsu", INSTANCE_ID)))
     ) lsu_unit (
         `SCOPE_IO_BIND  (0)
         .clk             (clk),
         .reset           (reset),
+        .core_id         (core_id),
         .dispatch_if         (dispatch_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .commit_if           (commit_if[EX_LSU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .per_block_client_if (lsu_client_if)
@@ -126,32 +134,40 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_tcu_unit #(
         .INSTANCE_ID (`SFORMATF(("%s-tcu", INSTANCE_ID)))
     ) tcu_unit (
-        .clk            (clk),
-        .reset          (reset),
-    `ifdef PERF_ENABLE
-        .tcu_perf       (tcu_perf),
-    `endif
+        `SCOPE_IO_BIND  (1)
+        .clk              (clk),
+        .reset            (reset),
     `ifdef VX_CFG_TCU_WGMMA_ENABLE
-        .tcu_lmem_if    (tcu_lmem_if),
+        .exec_valid       (tcu_exec_valid),
+        .exec_ready       (tcu_exec_ready),
+        .exec_data        (tcu_exec_data),
+        .tbuf_rs1_data    (tcu_tbuf_rs1_data),
+        .tbuf_rs2_data    (tcu_tbuf_rs2_data),
+        .tbuf_ready       (tcu_tbuf_ready),
     `endif
     `ifdef TCU_META_ENABLE
-        .tcu_mem_if        (tcu_mem_if),
+        .agu_ld_valid     (tcu_agu_ld_valid),
+        .agu_ld_data      (tcu_agu_ld_data),
+        .agu_ld_ready     (tcu_agu_ld_ready),
+        .agu_result_valid (tcu_agu_result_valid),
+        .agu_result_data  (tcu_agu_result_data),
+        .agu_result_ready (tcu_agu_result_ready),
+        .meta_wr_en       (tcu_meta_wr_en),
+        .meta_wr_wid      (tcu_meta_wr_wid),
+        .meta_wr_idx      (tcu_meta_wr_idx),
+        .meta_wr_data     (tcu_meta_wr_data),
     `endif
-        .dispatch_if    (dispatch_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
-        .commit_if      (commit_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH])
+        .dispatch_if      (dispatch_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
+        .commit_if        (commit_if[EX_TCU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH])
     );
 `endif
 
     VX_sfu_unit #(
-        .INSTANCE_ID (`SFORMATF(("%s-sfu", INSTANCE_ID))),
-        .CORE_ID (CORE_ID)
+        .INSTANCE_ID (`SFORMATF(("%s-sfu", INSTANCE_ID)))
     ) sfu_unit (
         .clk            (clk),
         .reset          (reset),
-    `ifdef PERF_ENABLE
-        .sysmem_perf    (sysmem_perf),
-        .pipeline_perf  (pipeline_perf),
-    `endif
+        .core_id        (core_id),
         .dispatch_if    (dispatch_if[EX_SFU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
         .commit_if      (commit_if[EX_SFU * `VX_CFG_ISSUE_WIDTH +: `VX_CFG_ISSUE_WIDTH]),
     `ifdef VX_CFG_EXT_F_ENABLE
@@ -159,22 +175,17 @@ module VX_execute import VX_gpu_pkg::*; #(
     `endif
     `ifdef VX_CFG_EXT_DXA_ENABLE
         .dxa_req_bus_if (dxa_req_bus_if),
-        .dxa_txbar_bus_if(dxa_txbar_bus_if),
     `endif
     `ifdef VX_CFG_EXT_TEX_ENABLE
         .tex_bus_if     (tex_bus_if),
-    `endif
-    `ifdef VX_CFG_EXT_OM_ENABLE
-    `endif
-    `ifdef VX_CFG_EXT_RASTER_ENABLE
     `endif
     `ifdef VX_CFG_EXT_RTU_ENABLE
         .rtu_bus_if     (rtu_bus_if),
         .sched_unlock_if (sched_unlock_if),
     `endif
         .sched_csr_if   (sched_csr_if),
-        .warp_ctl_if    (warp_ctl_if),
-        .dcr_csr_if     (dcr_csr_if)
+        .warp_shared_if (warp_shared_if),
+        .warp_ctl_if    (warp_ctl_if)
     );
 
 endmodule

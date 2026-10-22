@@ -297,7 +297,7 @@ module VX_raster_earlyz import VX_gpu_pkg::*; import VX_raster_pkg::*; import VX
     ) lsu_mem_if();
 
     VX_mem_scheduler #(
-        .INSTANCE_ID  ($sformatf("%s-memsched", INSTANCE_ID)),
+        .INSTANCE_ID  (`SFORMATF(("%s-memsched", INSTANCE_ID))),
         .CORE_REQS    (NUM_PIX),
         .MEM_CHANNELS (OCACHE_NUM_REQS),
         .WORD_SIZE    (OCACHE_WORD_SIZE),

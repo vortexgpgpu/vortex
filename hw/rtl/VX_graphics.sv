@@ -21,10 +21,14 @@ module VX_graphics import VX_gpu_pkg::*
     , VX_om_pkg::*
 `endif
 ; #(
-    parameter CLUSTER_ID = 0
+    parameter `STRING INSTANCE_ID = ""
 ) (
+    `SCOPE_IO_DECL
+
     input wire              clk,
     input wire              reset,
+
+    input wire [CLUSTER_ID_WIDTH-1:0] cluster_id,
 
 `ifdef PERF_ENABLE
 `ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -65,7 +69,27 @@ module VX_graphics import VX_gpu_pkg::*
     // no in-band `done`); the cluster ORs this into the device busy aggregation.
     output wire             busy
 );
-    `UNUSED_PARAM (CLUSTER_ID)
+
+`ifdef SCOPE
+`ifdef VX_CFG_EXT_RASTER_ENABLE
+    localparam scope_raster_cnt = `VX_CFG_NUM_RASTER_CORES;
+`else
+    localparam scope_raster_cnt = 0;
+`endif
+`ifdef VX_CFG_EXT_OM_ENABLE
+    localparam scope_om_cnt = `VX_CFG_NUM_OM_CORES;
+`else
+    localparam scope_om_cnt = 0;
+`endif
+    `SCOPE_IO_SWITCH (scope_raster_cnt + scope_om_cnt);
+`endif
+    `UNUSED_SPARAM (INSTANCE_ID)
+`ifndef VX_CFG_EXT_RASTER_ENABLE
+    `UNUSED_VAR (cluster_id)
+`endif
+
+    wire rcache_req_empty;
+    wire ocache_req_empty;
 
     // Fan one DCR slave input out to one master per consumer unit. Each
     // unit's internal case-statement filters by DCR address range. The
@@ -134,8 +158,7 @@ module VX_graphics import VX_gpu_pkg::*
 
     for (genvar i = 0; i < `VX_CFG_NUM_RASTER_CORES; ++i) begin : g_raster_core
         VX_raster_core #(
-            .INSTANCE_ID     (`SFORMATF(("cluster%0d-raster%0d", CLUSTER_ID, i))),
-            .INSTANCE_IDX    (CLUSTER_ID * `VX_CFG_NUM_RASTER_CORES + i),
+            .INSTANCE_ID     (`SFORMATF(("%s-raster%0d", INSTANCE_ID, i))),
             .NUM_INSTANCES   (`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES),
             .NUM_SLICES      (`VX_CFG_RASTER_NUM_SLICES),
             // The front end's top-level walk unit is a coarse bin: bin_x/bin_y
@@ -149,8 +172,11 @@ module VX_graphics import VX_gpu_pkg::*
             .QUAD_FIFO_DEPTH (`VX_CFG_RASTER_QUAD_FIFO_DEPTH),
             .OUTPUT_QUADS    (`VX_CFG_NUM_THREADS)
         ) raster_core (
+            `SCOPE_IO_BIND (i)
             .clk             (clk),
             .reset           (reset),
+            .instance_idx    (`LOG2UP(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES)'(cluster_id) * `LOG2UP(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES)'(`VX_CFG_NUM_RASTER_CORES)
+                            + `LOG2UP(`VX_CFG_NUM_CLUSTERS * `VX_CFG_NUM_RASTER_CORES)'(i)),
         `ifdef PERF_ENABLE
             .perf_raster_if  (per_core_raster_perf_if[i]),
         `endif
@@ -233,6 +259,7 @@ module VX_graphics import VX_gpu_pkg::*
         .clk          (clk),
         .reset        (reset),
         .dcr_flush_if (rcache_flush_if),
+        .l1_only      (1'b0),
         .core_bus_if  (rcache_bus_if[0]),
         .cache_bus_if (rcache_flushable_bus_if[0])
     );
@@ -243,7 +270,7 @@ module VX_graphics import VX_gpu_pkg::*
     end
 
     VX_cache_cluster #(
-        .INSTANCE_ID    (`SFORMATF(("cluster%0d-rcache", CLUSTER_ID))),
+        .INSTANCE_ID    (`SFORMATF(("%s-rcache", INSTANCE_ID))),
         .NUM_UNITS      (`VX_CFG_NUM_RCACHES),
         .NUM_INPUTS     (`VX_CFG_NUM_RASTER_CORES),
         .TAG_SEL_IDX    (0),
@@ -263,6 +290,8 @@ module VX_graphics import VX_gpu_pkg::*
         .WRITEBACK      (0),
         .DIRTY_BYTES    (0),
         .NC_ENABLE      (0),
+        // read-only: no dirty data, and the dcache's flush walks the shared levels
+        .FLUSH_FORWARD  (0),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3)
     ) rcache (
@@ -272,7 +301,8 @@ module VX_graphics import VX_gpu_pkg::*
         .cache_perf     (rcache_perf),
     `endif
         .core_bus_if    (rcache_flushable_bus_if),
-        .mem_bus_if     (rcache_mem_bus_tmp_if)
+        .mem_bus_if     (rcache_mem_bus_tmp_if),
+        .req_empty      (rcache_req_empty)
     );
 
     `ASSIGN_VX_MEM_BUS_IF_EX (rcache_mem_bus_if, rcache_mem_bus_tmp_if[0],
@@ -297,6 +327,7 @@ module VX_graphics import VX_gpu_pkg::*
 
     om_dcrs_t om_core_dcrs [`VX_CFG_NUM_OM_CORES];
     wire [L2_SOCKET_REQS-1:0] om_ingress_busy;
+    wire [L2_SOCKET_REQS-1:0] om_ingress_pending;
     // The DCRs are broadcast, so every OM core decodes identical values; the
     // ingresses read the aperture fields from core 0.
     om_dcrs_t om_dcrs;
@@ -321,35 +352,61 @@ module VX_graphics import VX_gpu_pkg::*
         .TAG_WIDTH (L2_TAG_WIDTH)
     ) om_aperture_bus_if [L2_SOCKET_REQS]();
 
+    // Flush tokens are held at the steers until the OM side is flushed (below).
+    wire [L2_SOCKET_REQS-1:0] steer_flush_req;
+    wire [L2_SOCKET_REQS-1:0] steer_flush_l1_only;
+    reg  [L2_SOCKET_REQS-1:0] steer_flush_ack_r;
+    wire [L2_SOCKET_REQS-1:0] steer_om_pending;
+    wire [L2_SOCKET_REQS-1:0] steer_req_empty;
+
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_om_steer
         VX_om_steer #(
-            .INSTANCE_ID (`SFORMATF(("cluster%0d-om-steer%0d", CLUSTER_ID, i))),
+            .INSTANCE_ID (`SFORMATF(("%s-om-steer%0d", INSTANCE_ID, i))),
             .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
             .TAG_WIDTH   (L2_TAG_WIDTH),
             .OUT_BUF     (3)
         ) om_steer (
-            .clk       (clk),
-            .reset     (reset),
-            .bus_in_if (socket_mem_bus_if[i]),
-            .l2_out_if (l2_out_bus_if[i]),
-            .om_out_if (om_aperture_bus_if[i])
+            .clk        (clk),
+            .reset      (reset),
+            .bus_in_if  (socket_mem_bus_if[i]),
+            .l2_out_if  (l2_out_bus_if[i]),
+            .om_out_if  (om_aperture_bus_if[i]),
+            .flush_req  (steer_flush_req[i]),
+            .flush_l1_only (steer_flush_l1_only[i]),
+            .flush_ack  (steer_flush_ack_r[i]),
+            .om_pending (steer_om_pending[i])
+        );
+        wire [1:0] steer_out_fire = {
+            om_aperture_bus_if[i].req_valid && om_aperture_bus_if[i].req_ready,
+            l2_out_bus_if[i].req_valid && l2_out_bus_if[i].req_ready
+        };
+        VX_mem_req_pending #(
+            .NUM_INPUTS  (1),
+            .NUM_OUTPUTS (2)
+        ) steer_pending (
+            .clk      (clk),
+            .reset    (reset),
+            .in_fire  (socket_mem_bus_if[i].req_valid && socket_mem_bus_if[i].req_ready),
+            .out_fire (steer_out_fire),
+            .empty    (steer_req_empty[i])
         );
     end
 
     for (genvar i = 0; i < L2_SOCKET_REQS; ++i) begin : g_om_ingress
         VX_om_ingress #(
-            .INSTANCE_ID (`SFORMATF(("cluster%0d-om-ingress%0d", CLUSTER_ID, i))),
+            .INSTANCE_ID (`SFORMATF(("%s-om-ingress%0d", INSTANCE_ID, i))),
             .DATA_SIZE   (`VX_CFG_L1_LINE_SIZE),
             .TAG_WIDTH   (L2_TAG_WIDTH),
             .NUM_LANES   (OM_CORE_LANES),
             .OUT_BUF     (3)
         ) om_ingress (
-            .clk        (clk),
-            .reset      (reset),
-            .dcrs       (om_dcrs),
-            .mem_bus_if (om_aperture_bus_if[i]),
-            .om_bus_if  (om_arb_in_if[i]),
-            .busy       (om_ingress_busy[i])
+            .clk          (clk),
+            .reset        (reset),
+            .dcrs         (om_dcrs),
+            .mem_bus_if   (om_aperture_bus_if[i]),
+            .om_bus_if    (om_arb_in_if[i]),
+            .busy         (om_ingress_busy[i]),
+            .frag_pending (om_ingress_pending[i])
         );
     end
 
@@ -374,9 +431,10 @@ module VX_graphics import VX_gpu_pkg::*
 
     for (genvar i = 0; i < `VX_CFG_NUM_OM_CORES; ++i) begin : g_om_core
         VX_om_core #(
-            .INSTANCE_ID (`SFORMATF(("cluster%0d-om%0d", CLUSTER_ID, i))),
+            .INSTANCE_ID (`SFORMATF(("%s-om%0d", INSTANCE_ID, i))),
             .NUM_LANES   (OM_CORE_LANES)
         ) om_core (
+            `SCOPE_IO_BIND (scope_raster_cnt + i)
             .clk          (clk),
             .reset        (reset),
         `ifdef PERF_ENABLE
@@ -424,37 +482,124 @@ module VX_graphics import VX_gpu_pkg::*
         .TAG_WIDTH (OCACHE_BUS_TAG_WIDTH)
     ) ocache_flushable_bus_if [OCACHE_NUM_INPUTS * OCACHE_NUM_REQS] ();
 
+    // OM-side flush. Each round serves the requests present when it starts: the
+    // steers holding a flush token (every aperture store their trunk carried
+    // before it is past the steer) and the cluster flush. It waits until no
+    // complete fragment is left in the OM, so the ocache's flush tokens queue
+    // behind its writes, then flushes the ocache and releases those requesters.
+    // A half-received two-word record is not waited for: its depth beat can sit
+    // behind a held token, and it belongs to a store the token does not order.
+    localparam OMF_IDLE  = 0;
+    localparam OMF_DRAIN = 1;
+    localparam OMF_FLUSH = 2;
+    localparam OMF_REARM = 3;
+
     VX_dcr_flush_if ocache_flush_if();
-    assign ocache_flush_if.req = cluster_flush_if.req;
+
+    reg [1:0]                omf_state_r;
+    reg [L2_SOCKET_REQS-1:0] omf_steers_r;   // steers this round answers
+    reg                      omf_cluster_r;  // this round answers the cluster flush
+    reg                      omf_cluster_done_r;
+    reg                      omf_l1_only_r;  // every requester of this round is L1-only
+    wire omf_cluster_req = cluster_flush_if.req && ~omf_cluster_done_r;
+
+    // The cluster flush takes its kind from the broadcast write that starts it,
+    // which every core receives too. The cores raise the cluster flush request
+    // only after taking that write, so the latch is current by then.
+    reg cluster_flush_l1_only_r;
+    always @(posedge clk) begin
+        if (reset) begin
+            cluster_flush_l1_only_r <= 1'b0;
+        end else if (dcr_bus_if.req_valid && dcr_bus_if.req_data.rw
+                  && (dcr_bus_if.req_data.addr == `VX_DCR_BASE_CACHE_FLUSH)) begin
+            cluster_flush_l1_only_r <= (dcr_bus_if.req_data.data & VX_DCR_DATA_WIDTH'(`VX_CACHE_FLUSH_L1_ONLY)) != 0;
+        end
+    end
+    wire omf_drained = ~(| om_busy_w) && ~(| om_ingress_pending) && ~(| steer_om_pending);
+
+    always @(posedge clk) begin
+        if (reset) begin
+            omf_state_r        <= OMF_IDLE;
+            omf_steers_r       <= '0;
+            omf_cluster_r      <= 1'b0;
+            omf_cluster_done_r <= 1'b0;
+            omf_l1_only_r      <= 1'b0;
+            steer_flush_ack_r  <= '0;
+        end else begin
+            steer_flush_ack_r <= '0;
+            if (~cluster_flush_if.req) begin
+                omf_cluster_done_r <= 1'b0;
+            end
+            case (omf_state_r)
+            OMF_IDLE: begin
+                if ((| steer_flush_req) || omf_cluster_req) begin
+                    omf_steers_r  <= steer_flush_req;
+                    omf_cluster_r <= omf_cluster_req;
+                    omf_l1_only_r <= (& (~steer_flush_req | steer_flush_l1_only))
+                                  && (~omf_cluster_req || cluster_flush_l1_only_r);
+                    omf_state_r   <= OMF_DRAIN;
+                end
+            end
+            OMF_DRAIN: begin
+                if (omf_drained) begin
+                    omf_state_r <= OMF_FLUSH;
+                end
+            end
+            OMF_FLUSH: begin
+                if (ocache_flush_if.done) begin
+                    steer_flush_ack_r <= omf_steers_r;
+                    if (omf_cluster_r) begin
+                        omf_cluster_done_r <= 1'b1;
+                    end
+                    omf_state_r <= OMF_REARM;
+                end
+            end
+            default: begin // OMF_REARM: the injectors re-arm once req drops
+                if (~ocache_flush_if.done) begin
+                    omf_state_r <= OMF_IDLE;
+                end
+            end
+            endcase
+        end
+    end
+    assign ocache_flush_if.req = (omf_state_r == OMF_FLUSH);
 
     // OM-core flush chain carries the OM tag + 1 flush bit. When early-Z widens
     // the shared bus tag (a wider early-Z requester), the flushed OM bus is
-    // zero-extended up to OCACHE_BUS_TAG_WIDTH below.
+    // zero-extended up to OCACHE_BUS_TAG_WIDTH below. Each OM input is a
+    // separately ordered write path into the ocache, so each carries its own
+    // flush token behind its writes.
+    localparam OCACHE_OM_INPUTS = `VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS;
     localparam OCACHE_OM_FLUSH_TAG_WIDTH = OCACHE_TAG_WIDTH + 1;
     VX_mem_bus_if #(
         .DATA_SIZE (OCACHE_WORD_SIZE),
         .TAG_WIDTH (OCACHE_OM_FLUSH_TAG_WIDTH)
-    ) ocache_om_flush_bus_if [1] ();
+    ) ocache_om_flush_bus_if [OCACHE_OM_INPUTS] ();
 
-    VX_dcr_flush #(
-        .WORD_SIZE   (OCACHE_WORD_SIZE),
-        .TAG_WIDTH   (OCACHE_TAG_WIDTH),
-        .REQ_OUT_BUF (3) // register cache-request master boundary; rsp registered by cache CORE_OUT_BUF
-    ) ocache_dcr_flush (
-        .clk          (clk),
-        .reset        (reset),
-        .dcr_flush_if (ocache_flush_if),
-        .core_bus_if  (ocache_bus_if[0]),
-        .cache_bus_if (ocache_om_flush_bus_if[0])
-    );
+    VX_dcr_flush_if ocache_om_flush_if [OCACHE_OM_INPUTS] ();
+    wire [OCACHE_OM_INPUTS-1:0] ocache_om_flush_done;
 
-    `ASSIGN_VX_MEM_BUS_IF_EX (ocache_flushable_bus_if[0], ocache_om_flush_bus_if[0],
-                              OCACHE_BUS_TAG_WIDTH, OCACHE_OM_FLUSH_TAG_WIDTH, 0);
+    for (genvar i = 0; i < OCACHE_OM_INPUTS; ++i) begin : g_ocache_om_flush
+        assign ocache_om_flush_if[i].req = ocache_flush_if.req;
+        assign ocache_om_flush_done[i] = ocache_om_flush_if[i].done;
 
-    for (genvar i = 1; i < `VX_CFG_NUM_OM_CORES * OCACHE_NUM_REQS; ++i) begin : g_ocache_passthru
-        `ASSIGN_VX_MEM_BUS_IF_EX (ocache_flushable_bus_if[i], ocache_bus_if[i],
-                                  OCACHE_BUS_TAG_WIDTH, OCACHE_TAG_WIDTH, 0);
+        VX_dcr_flush #(
+            .WORD_SIZE   (OCACHE_WORD_SIZE),
+            .TAG_WIDTH   (OCACHE_TAG_WIDTH),
+            .REQ_OUT_BUF (3) // register cache-request master boundary; rsp registered by cache CORE_OUT_BUF
+        ) ocache_dcr_flush (
+            .clk          (clk),
+            .reset        (reset),
+            .dcr_flush_if (ocache_om_flush_if[i]),
+            .l1_only      (omf_l1_only_r),
+            .core_bus_if  (ocache_bus_if[i]),
+            .cache_bus_if (ocache_om_flush_bus_if[i])
+        );
+
+        `ASSIGN_VX_MEM_BUS_IF_EX (ocache_flushable_bus_if[i], ocache_om_flush_bus_if[i],
+                                  OCACHE_BUS_TAG_WIDTH, OCACHE_OM_FLUSH_TAG_WIDTH, 0);
     end
+    assign ocache_flush_if.done = (& ocache_om_flush_done);
 
 `ifdef VX_CFG_RASTER_EARLYZ_ENABLE
     // Attach the early-Z depth readers as the trailing ocache inputs. Each reader
@@ -467,7 +612,7 @@ module VX_graphics import VX_gpu_pkg::*
 `endif
 
     VX_cache_cluster #(
-        .INSTANCE_ID    (`SFORMATF(("cluster%0d-ocache", CLUSTER_ID))),
+        .INSTANCE_ID    (`SFORMATF(("%s-ocache", INSTANCE_ID))),
         .NUM_UNITS      (`VX_CFG_NUM_OCACHES),
         .NUM_INPUTS     (OCACHE_NUM_INPUTS),
         .TAG_SEL_IDX    (0),
@@ -496,7 +641,8 @@ module VX_graphics import VX_gpu_pkg::*
         .cache_perf     (ocache_perf),
     `endif
         .core_bus_if    (ocache_flushable_bus_if),
-        .mem_bus_if     (ocache_mem_bus_tmp_if)
+        .mem_bus_if     (ocache_mem_bus_tmp_if),
+        .req_empty      (ocache_req_empty)
     );
 
     `ASSIGN_VX_MEM_BUS_IF_EX (ocache_mem_bus_if, ocache_mem_bus_tmp_if[0],
@@ -516,7 +662,7 @@ module VX_graphics import VX_gpu_pkg::*
     assign rcache_flush_done = 1'b1;
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
-    assign ocache_flush_done = ocache_flush_if.done;
+    assign ocache_flush_done = omf_cluster_done_r;
 `else
     assign ocache_flush_done = 1'b1;
 `endif
@@ -534,9 +680,16 @@ module VX_graphics import VX_gpu_pkg::*
 `endif
 `ifdef VX_CFG_EXT_OM_ENABLE
     wire om_busy_any = (| om_busy_w) || (| om_ingress_busy);
+    // requests held in a steer's buffers on the way to L2 or the OM
+    wire om_req_busy = ~(& steer_req_empty);
 `else
     wire om_busy_any = 1'b0;
+    wire om_req_busy = 1'b0;
+    assign ocache_req_empty = 1'b1;
 `endif
-    assign busy = raster_busy_any || om_busy_any;
+`ifndef VX_CFG_EXT_RASTER_ENABLE
+    assign rcache_req_empty = 1'b1;
+`endif
+    assign busy = raster_busy_any || om_busy_any || om_req_busy || ~rcache_req_empty || ~ocache_req_empty;
 
 endmodule

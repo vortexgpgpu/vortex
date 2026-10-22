@@ -76,6 +76,8 @@ private:
   uint32_t total_stalls_ = 0;
   instr_trace_t* cur_trace_ = nullptr;
   uint64_t       release_cycle_ = 0;
+  uint64_t       consume_cycle_ = 0;
+  bool           consumed_ = false;
 
   friend class SimObject<OpcUnit>;
   friend class Operands;  // Operands::get_exit_code reads regs_ directly

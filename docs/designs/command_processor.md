@@ -129,7 +129,7 @@ come from `cmd_size_bytes`
 | `CMD_FENCE` | 0x07 | 8 | — | yes | yes | Ordering barrier (retires as a NOP today, §10) |
 | `CMD_EVENT_SIGNAL` | 0x08 | 20 | EVENT | yes | yes | Write a counter slot |
 | `CMD_EVENT_WAIT` | 0x09 | 28 | EVENT | yes | yes | Spin until a counter satisfies a compare |
-| `CMD_CACHE_FLUSH` | 0x0A | 12 | DCR | yes | yes | Per-core cache flush sweep |
+| `CMD_CACHE_FLUSH` | 0x0A | 12 | DCR | yes | yes | Cache flush: broadcast start, per-core completion |
 | `CMD_LAUNCH_QMD` | 0x0B | 12 | KMU | **no** | yes | Atomic launch: KMU descriptor read from memory (§2.3) |
 | `CMD_DRAW` | 0x0C | 12 | KMU | **no** | yes | Device-orchestrated graphics draw (§8.1) |
 
@@ -168,7 +168,13 @@ come from `cmd_size_bytes`
   (`WAIT_OP_EQ/GE/GT/NE`, [`VX_cp_pkg.sv:109-114`](../../hw/rtl/cp/VX_cp_pkg.sv#L109)).
 - **`CMD_CACHE_FLUSH`** — `arg0` = number of cores. Provides AMD
   `ACQUIRE_MEM`-style cache maintenance; the host fills `arg0` from
-  `VX_CAPS_NUM_CORES`.
+  `VX_CAPS_NUM_CORES`. Header flag bit 2 (`F_FLUSH_L1_ONLY`) asks for an
+  L1-only flush: the START write carries `VX_CACHE_FLUSH_L1_ONLY`, and the
+  last-level cache answers without its walk
+  ([cache_subsystem.md §6.4](cache_subsystem.md#64-vx_cache_init--the-flush-sequencer)).
+  The runtime flushes lazily: an L1-only flush ahead of the next launch, a
+  full flush ahead of the next device-memory transfer (see the launch
+  encoding in §9).
 
 ---
 
@@ -317,10 +323,10 @@ is a single-engine CP. Three things gate raising it:
 3. **The host serializes anyway.** All host queues funnel into one ring
    behind one mutex (§9).
 
-The **host-side** scaling limit is the launch path, not the ring: 22
+The **host-side** scaling limit is the launch path, not the ring: 21
 commands per launch, unbatched, each with its own doorbell and its own
 busy-poll loop (§9). `CMD_LAUNCH_QMD` collapses the 20 DCR writes to one
-command; batching collapses 22 doorbells to one. Both are implemented in
+command; batching collapses 21 doorbells to one. Both are implemented in
 the Emulation CP and the runtime; the RTL CP needs the QMD mirror.
 
 ### 4.5 The submit handshake end to end
@@ -470,10 +476,18 @@ unconditionally on every backend.
   barrier** — the property §8.1 depends on.
 - **DCR proxy** ([`VX_cp_dcr_proxy.sv`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv)) —
   `IDLE→REQ→(WAIT_RSP)→DONE`. Writes complete at `REQ`; reads wait for
-  `dcr_rsp_valid`. `CMD_CACHE_FLUSH` re-enters `REQ` once per core,
-  sweeping a DCR *read* of `VX_DCR_BASE_CACHE_FLUSH` with the target core
-  index in `dcr_req_data[15:0]`, and retires only once the last core's
-  flush completes ([`:105-134`](../../hw/rtl/cp/VX_cp_dcr_proxy.sv#L105)).
+  `dcr_rsp_valid`. `CMD_CACHE_FLUSH` first passes through `START`: one DCR
+  *write* of `VX_DCR_BASE_CACHE_FLUSH`, which reaches every core and starts
+  all their flushes at once. It then re-enters `REQ` once per core, sweeping
+  a DCR *read* of the same address with the target core index in
+  `dcr_req_data[15:0]`; each read is answered when that core's flush has
+  completed, and the command retires after the last one; a full flush then
+  holds `DONE` until Vortex `busy` drops, which covers every write until its
+  AXI B response, so a DMA after the flush cannot overtake the last-level
+  cache's write-backs on bank 0. The DCR response
+  bus has no back-pressure, so the reads stay one at a time; the flushes
+  themselves overlap and share one walk of the shared caches
+  ([cache_subsystem.md §6](cache_subsystem.md#6-flush-architecture)).
 - **DMA** ([`VX_cp_dma.sv`](../../hw/rtl/cp/VX_cp_dma.sv)) — dual-port
   multi-beat bursts in ≤4 KB INCR chunks (`MAX_BURST` = 64 × 64 B beats),
   each chunk clipped so no burst crosses a 4 KB boundary on either
@@ -644,13 +658,24 @@ whole run costs one doorbell and one poll.
 **Launch encoding.** A kernel launch emits **20** `CMD_DCR_WRITE`s
 ([`queue.cpp:401-427`](../../sw/runtime/common/queue.cpp#L401)) — 4 for the
 startup/entry PCs, 2 for the args pointer, and 14 for block/grid/cluster
-dims, lmem size, block size and warp steps — then `CMD_LAUNCH`, then
-`CMD_CACHE_FLUSH` with `arg0 = num_cores`, then a COUT drain
+dims, lmem size, block size and warp steps — then `CMD_LAUNCH`, then a COUT drain
 ([`device.cpp:502-520`](../../sw/runtime/common/device.cpp#L502)). Each
 group is independently skippable through the legacy escape hatches (no
 kernel, empty args, `ndim == 0`), so the real count ranges from 20 down to
-0. This path does **not** batch: all 22 lines take the non-batch
-`cp_submit_cl_`, so one launch costs 22 doorbells and 22 poll loops. Only
+0. The kernel-boundary `CMD_CACHE_FLUSH` (`arg0 = num_cores`) is posted lazily
+by `cp_ring_append_`, under the same ring lock, from two flags: `l1_dirty_` (a
+kernel ran since the last flush) puts an L1-only flush ahead of the next
+launch; `l1_dirty_` or `llc_dirty_` (a kernel ran since the last full flush)
+puts a full flush ahead of the next `CMD_MEM_*` that touches device memory
+outside the IO aperture, because the CP DMA reaches device memory beneath
+the last-level cache. A launch followed by a transfer therefore costs one
+full flush, and back-to-back launches one L1-only flush each. The COUT drain
+needs no flush: the console rings are uncached, and the device `busy` the
+launch retires on stays high until memory has completed every write the cores
+issued ([cache_subsystem.md §4.9](cache_subsystem.md#49-requests-in-flight-and-device-busy)). The drain's
+own transfers stay in the IO aperture and never trigger a flush.
+This path does **not** batch: all 21 lines take the non-batch
+`cp_submit_cl_`, so one launch costs 21 doorbells and 21 poll loops. Only
 `enqueue_commands` and the `enqueue_draw` fallback batch.
 
 **Queues and serialization.** `vx_queue_create` makes an unbounded number
@@ -748,8 +773,8 @@ The following gaps remain **open**.
    defaults to 1; the Emulation CP models only `q0_`; the runtime programs
    only queue 0 and funnels every host queue through one ring lock (§9).
    Real concurrency depends on items 5 and 6.
-9. **Batch the launch path.** `enqueue_launch` submits its 22 commands
-   unbatched — 22 doorbells, 22 busy-polls — while `cp_batch_begin/end`
+9. **Batch the launch path.** `enqueue_launch` submits its 21 commands
+   unbatched — 21 doorbells, 21 busy-polls — while `cp_batch_begin/end`
    already exists and is used by `enqueue_commands`. Cheap win independent
    of item 6.
 10. **EVENT_WAIT fairness + backoff.** `EVENT_WAIT` holds its arbiter

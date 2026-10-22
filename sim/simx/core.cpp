@@ -66,9 +66,6 @@ public:
     , func_units_((uint32_t)FUType::Count)
     , lmem_switch_(VX_CFG_NUM_LSU_BLOCKS)
     , mem_coalescers_(VX_CFG_NUM_LSU_BLOCKS)
-    , fetch_latch_(ctx, "fetch_latch", 2, 2)
-    , decode_latch_(ctx, "decode_latch", 1, 2)
-    , pending_icache_(VX_CFG_NUM_WARPS)
     , ibuffer_arbs_(VX_CFG_ISSUE_WIDTH, {ArbiterType::GreedyRR, PER_ISSUE_WARPS})
     , issue_lock_owner_(VX_CFG_ISSUE_WIDTH, kLockOpen)
     , fu_credits_(VX_CFG_ISSUE_WIDTH, std::vector<uint32_t>((uint32_t)FUType::Count, 0))
@@ -77,9 +74,20 @@ public:
     , ibuf_inflight_(VX_CFG_NUM_WARPS, 0)
     , last_issue_(VX_CFG_NUM_WARPS, 0)
     , staged_since_(VX_CFG_NUM_WARPS, 0)
+    , head_staged_(VX_CFG_NUM_WARPS, false)
   {
     const std::string& name = simobject_->name();
     char sname[100];
+
+    // per frontend slice: scheduler-to-fetch and fetch-to-decode latches, and the
+    // icache tags of the slice's in-flight fetches
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      snprintf(sname, 100, "fetch_latch%d", f);
+      fetch_latch_.emplace_back(std::make_unique<TFifo<instr_trace_t*>>(ctx, sname, 1, 2));
+      snprintf(sname, 100, "decode_latch%d", f);
+      decode_latch_.emplace_back(std::make_unique<TFifo<instr_trace_t*>>(ctx, sname, 1, 2));
+      pending_icache_.emplace_back(PER_FETCH_WARPS);
+    }
 
     // create scheduler (SimObject) — also creates the CTA dispatcher.
     snprintf(sname, 100, "%s-scheduler", name.c_str());
@@ -92,8 +100,10 @@ public:
   #ifdef VX_CFG_EXT_C_ENABLE
     // create RVC fetch decompressor (SimObject) — owns per-warp half-word
     // buffer + refetch queue. Resets via SimObject::on_reset.
-    snprintf(sname, 100, "%s-decompressor", name.c_str());
-    decompressor_ = SimPlatform::instance().create_object<Decompressor>(sname, VX_CFG_NUM_WARPS);
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      snprintf(sname, 100, "%s-decompressor%d", name.c_str(), f);
+      decompressors_.push_back(SimPlatform::instance().create_object<Decompressor>(sname, VX_CFG_NUM_WARPS));
+    }
   #endif
 
     // create scoreboard (SimObject)
@@ -115,18 +125,28 @@ public:
     // create ibuffers
     for (uint32_t i = 0; i < ibuffers_.size(); ++i) {
       snprintf(sname, 100, "%s-ibuffer%d", name.c_str(), i);
-      ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, VX_CFG_IBUF_SIZE);
+      // IBUF_SIZE entries plus the head, which stands for the warp's staging
+      // register once it has moved there
+      ibuffers_.at(i) = TFifo<instr_trace_t*>::Create(sname, 1, VX_CFG_IBUF_SIZE + 1);
     }
 
-    // create the memory coalescer
+    // create the memory coalescer, or the lane adapter that replaces it.
+    // Both tick ahead of the lmem switch: their response paths are
+    // combinational, and the dcache registers its output.
+    const bool dcache_coalescing = (VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE);
+    std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
     for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
       snprintf(sname, 100, "%s-coalescer%d", name.c_str(), b);
       mem_coalescers_.at(b) = MemCoalescer::Create(sname, LSU_CHANNELS, DCACHE_CHANNELS, DCACHE_WORD_SIZE, LSU_QUEUE_OUT_SIZE, 1);
+      if (!dcache_coalescing) {
+        snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
+        lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1, 0);
+      }
     }
 
     // create local memory.
     // The DXA writes and the TCU tile-buffer reads share the row-wide DMA
-    // port, DXA first.
+    // port, round-robin.
     snprintf(sname, 100, "%s-lmem", name.c_str());
     local_mem_ = LocalMem::Create(sname, LocalMem::Config{
       (1 << VX_CFG_LMEM_LOG_SIZE),
@@ -170,7 +190,7 @@ public:
 
     // The first data-cache port also carries the cache-flush injection, which
     // registers its requests once more.
-    if ((VX_CFG_NUM_LSU_LANES > 1) && (DCACHE_WORD_SIZE > LSU_WORD_SIZE)) {
+    if (dcache_coalescing) {
       // connect memory coalescer; its memory side drives the dcache
       // channels directly (combinational lane fan-out/fan-in).
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
@@ -185,10 +205,7 @@ public:
     } else {
       // bypass memory coalescer: per-block lane adapter (channel-fused
       // pass-through when DCACHE_CHANNELS == 1)
-      std::vector<LsuMemAdapter::Ptr> lsu_dcache_adapter(VX_CFG_NUM_LSU_BLOCKS);
       for (uint32_t b = 0; b < VX_CFG_NUM_LSU_BLOCKS; ++b) {
-        snprintf(sname, 100, "%s-lsu_dcache_adapter%d", name.c_str(), b);
-        lsu_dcache_adapter.at(b) = LsuMemAdapter::Create(sname, DCACHE_CHANNELS, 1);
         lmem_switch_.at(b)->ReqOutDC.bind(&lsu_dcache_adapter.at(b)->ReqIn);
         lsu_dcache_adapter.at(b)->RspOut.bind(&lmem_switch_.at(b)->RspInDC);
         for (uint32_t c = 0; c < DCACHE_CHANNELS; ++c) {
@@ -209,11 +226,11 @@ public:
     dcache_mmu_ = Mmu::Create(sname, VX_CFG_DCACHE_NUM_REQS,
                               VX_CFG_DTLB_SIZE, local_core * 2 + 0, false);
 
-    // Per-core icache MMU (1 port). Fetch reads/writes its upstream
-    // channels (ReqIn[0]/RspOut[0]) directly; the downstream side is
-    // bound to the Core's icache port below.
+    // Per-core icache MMU, one port per frontend slice. Fetch reads/writes its
+    // upstream channels directly; the downstream side is bound to the Core's
+    // icache ports below.
     snprintf(sname, 100, "%s-icache_mmu", name.c_str());
-    icache_mmu_ = Mmu::Create(sname, 1,
+    icache_mmu_ = Mmu::Create(sname, ICACHE_NUM_REQS,
                               VX_CFG_ITLB_SIZE, local_core * 2 + 1, true);
 
     // LSU memory side -> dcache MMU -> core's dcache port
@@ -224,10 +241,12 @@ public:
       simobject_->dcache_rsp_in.at(p).bind(&dcache_mmu_->RspIn.at(p));
     }
 
-    // icache MMU downstream side -> core's icache port. Upstream side
-    // (ReqIn[0]/RspOut[0]) is consumed directly by fetch() in on_tick.
-    icache_mmu_->ReqOut.at(0).bind(&simobject_->icache_req_out.at(0));
-    simobject_->icache_rsp_in.at(0).bind(&icache_mmu_->RspIn.at(0));
+    // icache MMU downstream side -> core's icache ports. Upstream side is
+    // consumed directly by fetch() in on_tick.
+    for (uint32_t f = 0; f < ICACHE_NUM_REQS; ++f) {
+      icache_mmu_->ReqOut.at(f).bind(&simobject_->icache_req_out.at(f));
+      simobject_->icache_rsp_in.at(f).bind(&icache_mmu_->RspIn.at(f));
+    }
   #else
     // No-VM: direct passthrough.
     for (uint32_t p = 0; p < VX_CFG_NUM_LSU_BLOCKS * DCACHE_CHANNELS; ++p) {
@@ -247,6 +266,7 @@ public:
     func_units_.at((int)FUType::SFU) = SimPlatform::instance().create_object<SfuUnit>(sname, simobject_);
     std::static_pointer_cast<AluUnit>(func_units_.at((int)FUType::ALU))->branch_ctl_out.bind(&simobject_->branch_ctl_in);
     std::static_pointer_cast<SfuUnit>(func_units_.at((int)FUType::SFU))->warp_ctl_out.bind(&simobject_->warp_ctl_in);
+    scheduler_->barrier_unit().unlock_out.bind(&simobject_->bar_unlock_in);
   #ifdef VX_CFG_EXT_TCU_ENABLE
     snprintf(sname, 100, "%s-tcu", name.c_str());
     tcu_unit_ = SimPlatform::instance().create_object<TcuUnit>(sname, simobject_);
@@ -254,7 +274,7 @@ public:
 
   #ifdef VX_CFG_TCU_WGMMA_ENABLE
     // Bind the TCU tile-buffer subsystem (TcuTbuf) to the LMEM DMA port,
-    // after the DXA.
+    // as the client after the DXA.
     {
       auto& tbuf = tcu_unit_->tbuf();
       uint32_t base = VX_CFG_EXT_DXA_ENABLED * LocalMem::DMA_PORTS;
@@ -327,14 +347,15 @@ public:
     std::fill(issue_lock_owner_.begin(), issue_lock_owner_.end(), kLockOpen);
     std::fill(last_issue_.begin(), last_issue_.end(), 0);
     std::fill(staged_since_.begin(), staged_since_.end(), 0);
+    std::fill(head_staged_.begin(), head_staged_.end(), false);
 
     pending_instrs_.clear();
     pending_ifetches_ = 0;
 
     std::fill(ibuf_inflight_.begin(), ibuf_inflight_.end(), 0);
 
-    // perf_stats_ deliberately survives: these are the MPM counters, which are
-    // free-running from device reset. A kernel launch re-enters reset() here but
+    // perf_stats_ deliberately survives: these are the MPM counters, which
+    // accumulate from device reset. A kernel launch re-enters reset() here but
     // does not reset the hardware, so clearing them would make each dump report
     // only the last launch -- an app that dumps between launches would then see
     // per-launch counts where the device reports a running total.
@@ -349,7 +370,13 @@ public:
     this->fetch();
     this->schedule();
 
-    ++perf_stats_.cycles;
+    // The cycle counter advances only while the core has work -- a CTA
+    // launching, a warp active, or an instruction in flight -- so cycles it
+    // spends idle before its first CTA, after its last warp, or while the host
+    // moves data are not charged to it.
+    if (scheduler_->running() || !pending_instrs_.empty()) {
+      ++perf_stats_.cycles;
+    }
     DPN(2, std::flush);
   }
 
@@ -360,61 +387,94 @@ public:
     perf_stats_.active_warps += scheduler_->active_warps().count();
     perf_stats_.stalled_warps += scheduler_->stalled_warps().count();
 
-    // stop when fetch_latch cannot accept
-    if (fetch_latch_.full())
-      return;
+    scheduler_->schedule_begin();
 
-    // eligible warps: ibuffer not yet saturated
-    WarpMask warp_mask;
-    for (uint32_t w = 0, nw = VX_CFG_NUM_WARPS; w < nw; ++w) {
-      if (ibuf_inflight_.at(w) < VX_CFG_IBUF_SIZE) {
-        warp_mask.set(w);
+    // Each frontend slice picks among its own warps whose ibuffer is not full; a
+    // buffer is full at exactly IBUF_SIZE entries. With an L1, once every warp's
+    // buffer is full any ready warp may fetch, its instruction waiting at decode.
+    bool all_full = (VX_CFG_ICACHE_ENABLED || VX_CFG_DCACHE_ENABLED);
+    for (uint32_t w = 0; w < VX_CFG_NUM_WARPS && all_full; ++w) {
+      all_full = (ibuf_inflight_.at(w) == VX_CFG_IBUF_SIZE);
+    }
+    // the cycle is idle when no slice has a warp to fetch, its latch free or not
+    bool any_cand = false;
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      auto& fetch_latch = fetch_latch_.at(f);
+      WarpMask warp_mask;
+      for (uint32_t w = f; w < VX_CFG_NUM_WARPS; w += VX_CFG_FETCH_WIDTH) {
+        if (all_full || ibuf_inflight_.at(w) != VX_CFG_IBUF_SIZE) {
+          warp_mask.set(w);
+        }
       }
-    }
 
-    auto trace = scheduler_->schedule(warp_mask);
-    if (trace == nullptr) {
+      if (fetch_latch->full()) {
+        any_cand |= scheduler_->has_ready(warp_mask);
+        continue;
+      }
+
+      auto trace = scheduler_->schedule(warp_mask);
+      if (trace == nullptr) {
+        continue;
+      }
+      any_cand = true;
+
+      fetch_latch->push(trace);
+      DT(3, simobject_->name() << "-pipeline schedule: " << *trace);
+      pending_instrs_.push_back(trace);
+      ++ibuf_inflight_.at(trace->wid);
+      perf_stats_.issued_warps += 1;
+      perf_stats_.issued_threads += trace->tmask.count();
+    }
+    if (!any_cand) {
       ++perf_stats_.sched_idle;
-      return;
     }
 
-    fetch_latch_.push(trace);
-    DT(3, simobject_->name() << "-pipeline schedule: " << *trace);
-    pending_instrs_.push_back(trace);
-    ++ibuf_inflight_.at(trace->wid);
-    perf_stats_.issued_warps += 1;
-    perf_stats_.issued_threads += trace->tmask.count();
+    scheduler_->schedule_end();
   }
 
   void fetch() {
     perf_stats_.ifetch_latency += pending_ifetches_;
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      this->fetch_slice(f);
+    }
+  }
+
+  // Frontend slice f: its icache response into its decode latch, then its next
+  // fetch request out of its fetch latch, on icache port f.
+  void fetch_slice(uint32_t f) {
+    auto& fetch_latch    = *fetch_latch_.at(f);
+    auto& decode_latch   = *decode_latch_.at(f);
+    auto& pending_icache = pending_icache_.at(f);
+  #ifdef VX_CFG_EXT_C_ENABLE
+    auto& decompressor   = decompressors_.at(f);
+  #endif
 
   #ifdef VX_CFG_VM_ENABLE
     // With VM, fetch reads/writes the icache MMU's upstream channels.
     // The MMU translates and forwards to simobject_->icache_req_out
     // downstream (driven by SimChannel binding in the constructor).
-    auto& icache_rsp = icache_mmu_->RspOut.at(0);
-    auto& icache_req = icache_mmu_->ReqIn.at(0);
+    auto& icache_rsp = icache_mmu_->RspOut.at(f);
+    auto& icache_req = icache_mmu_->ReqIn.at(f);
   #else
-    auto& icache_rsp = simobject_->icache_rsp_in.at(0);
-    auto& icache_req = simobject_->icache_req_out.at(0);
+    auto& icache_rsp = simobject_->icache_rsp_in.at(f);
+    auto& icache_req = simobject_->icache_req_out.at(f);
   #endif
 
     // handle icache response — extract instruction word from the TLM line payload
     if (!icache_rsp.empty()){
       auto& mem_rsp = icache_rsp.peek();
-      auto trace = pending_icache_.at(mem_rsp.tag);
+      auto trace = pending_icache.at(mem_rsp.tag);
       assert(mem_rsp.data && "icache response must carry line payload");
 
     #ifdef VX_CFG_EXT_C_ENABLE
       // Decompressor classifies the rsp: emit-ready (sets trace->code) or
       // queues a refetch internally for cross-word 32-bit completion.
-      bool emit = decompressor_->on_icache_rsp(trace, *mem_rsp.data);
-      bool progressed = !emit || decode_latch_.try_push(trace);
+      bool emit = decompressor->on_icache_rsp(trace, *mem_rsp.data);
+      bool progressed = !emit || decode_latch.try_push(trace);
     #else
       bool emit = true;
       bool progressed = false;
-      if (decode_latch_.try_push(trace)) {
+      if (decode_latch.try_push(trace)) {
         uint32_t offset = trace->PC & (VX_CFG_MEM_BLOCK_SIZE - 1);
         std::memcpy(&trace->code, mem_rsp.data->data() + offset, sizeof(uint32_t));
         progressed = true;
@@ -427,7 +487,7 @@ public:
                  << ", PC=0x" << std::hex << trace->PC << " (#" << std::dec << trace->uuid << ")");
         }
         DT(3, simobject_->name() << " icache-rsp: addr=0x" << std::hex << trace->PC << ", tag=0x" << mem_rsp.tag << std::dec << ", " << *trace);
-        pending_icache_.release(mem_rsp.tag);
+        pending_icache.release(mem_rsp.tag);
         icache_rsp.pop();
         --pending_ifetches_;
       }
@@ -440,15 +500,15 @@ public:
   #ifdef VX_CFG_EXT_C_ENABLE
     bool           from_refetch = false;
     {
-      auto pick = decompressor_->pick_request(fetch_latch_.empty() ? nullptr
-                                                              : fetch_latch_.peek());
+      auto pick = decompressor->pick_request(fetch_latch.empty() ? nullptr
+                                                              : fetch_latch.peek());
       trace        = pick.trace;
       req_addr     = pick.addr;
       from_refetch = pick.from_refetch;
     }
   #else
-    if (!fetch_latch_.empty()) {
-      trace    = fetch_latch_.peek();
+    if (!fetch_latch.empty()) {
+      trace    = fetch_latch.peek();
       req_addr = trace->PC;
     }
   #endif
@@ -456,7 +516,7 @@ public:
       return;
 
     // Avoid leaking icache tags when the request port back-pressures.
-    if (pending_icache_.full()) {
+    if (pending_icache.full()) {
       ++perf_stats_.fetch_stalls;
       return;
     }
@@ -466,31 +526,41 @@ public:
     // substitutes PA before forwarding; with VM off, this is just the PA.
     mem_req.addr  = req_addr;
     // op defaults to MemOp::LD — icache request is a load.
-    uint32_t tag = pending_icache_.allocate(trace);
+    uint32_t tag = pending_icache.allocate(trace);
     mem_req.tag   = tag;
     mem_req.hart_id   = trace->cid;
     mem_req.uuid  = trace->uuid;
-    if (icache_req.try_send(mem_req)) {
+    // The first icache port also carries the cache-flush injection, which
+    // registers its requests once more.
+    if (icache_req.try_send(mem_req, (f == 0) ? 2 : 1)) {
       DT(3, simobject_->name() << " icache-req: addr=0x" << std::hex << mem_req.addr << ", tag=0x" << mem_req.tag << std::dec << ", " << *trace);
     #ifdef VX_CFG_EXT_C_ENABLE
-      decompressor_->commit_request(from_refetch);
-      if (!from_refetch) fetch_latch_.pop();
+      decompressor->commit_request(from_refetch);
+      if (!from_refetch) { fetch_latch.pop(); }
     #else
-      fetch_latch_.pop();
+      fetch_latch.pop();
     #endif
       ++perf_stats_.ifetches;
       ++pending_ifetches_;
     } else {
-      pending_icache_.release(tag);
+      pending_icache.release(tag);
       ++perf_stats_.fetch_stalls;
     }
   }
 
   void decode() {
-    if (decode_latch_.empty())
-      return;
+    for (uint32_t f = 0; f < VX_CFG_FETCH_WIDTH; ++f) {
+      this->decode_slice(*decode_latch_.at(f));
+    }
+  }
 
-    auto trace = decode_latch_.peek();
+  // One frontend slice's decoder: it feeds the issue slice of each decoded warp.
+  void decode_slice(TFifo<instr_trace_t*>& decode_latch) {
+    if (decode_latch.empty()) {
+      return;
+    }
+
+    auto trace = decode_latch.peek();
 
     // check ibuffer capacity
     auto& ibuffer = ibuffers_.at(trace->wid);
@@ -549,7 +619,7 @@ public:
     trace->ibuf_time = SimPlatform::instance().cycles();
     ibuffer->push(trace);
 
-    decode_latch_.pop();
+    decode_latch.pop();
   }
 
   void issue() {
@@ -588,8 +658,20 @@ public:
 
         // check scoreboard against sequencer micro-op (handles uop WAW/RAW)
         auto trace = ibuffer->peek();
+
         auto seq = sequencers_.at(wid);
         auto uop_trace = seq->get(trace);  // returns cached uop or generates next
+
+        // The head moves into the warp's staging register, freeing its buffer
+        // slot, once it has arrived and the warp's previous instruction has
+        // issued; a macro-op leaves the buffer with its last micro-op. The
+        // scheduler sees the freed slot the cycle after.
+        if (!head_staged_.at(wid)
+         && (!trace->instr_ptr->is_macro_op() || seq->last())
+         && SimPlatform::instance().cycles() > std::max(last_issue_.at(wid), trace->ibuf_time)) {
+          head_staged_.at(wid) = true;
+          this->ibuf_release(wid);
+        }
 
         // The uop sequencer starts a macro-op once it reaches the front of the
         // buffer behind the staged instruction, and offers its first uop the
@@ -648,7 +730,8 @@ public:
         }
       }
 
-      if (ready_set.any()) {
+      // The arbiter advances only on an issue that fires.
+      if (ready_set.any() && !operands_.at(iw)->Input.full()) {
         // select one instruction from ready set
         auto w = ibuffer_arbs_.at(iw).grant(ready_set);
         uint32_t wid = w * VX_CFG_ISSUE_WIDTH + iw;
@@ -703,19 +786,10 @@ public:
               trace_pool_.deallocate(trace, 1);
             }
             ibuffer->pop();
-            // Release ibuffer backpressure slot (matches ++ in schedule()).
-            // Saturating decrement: flush_warp_pipeline only drains the
-            // ibuffer + resets ibuf_inflight to 0, but fetch_latch_ /
-            // decode-stage entries scheduled pre-trap can still arrive
-            // at issue() post-flush and decrement the (now-zeroed)
-            // counter. Async-trap users (RTU CB_YIELD path: AHS, CHS,
-            // MISS) routinely hit this; a non-saturating decrement
-            // underflows to UINT32_MAX and stalls scheduling. Proper
-            // fix is to extend flush_warp_pipeline to also drain
-            // fetch_latch_ + pending icache fetches for the warp.
-            if (ibuf_inflight_.at(wid) > 0) {
-              --ibuf_inflight_.at(wid);
+            if (!head_staged_.at(wid)) {
+              this->ibuf_release(wid);
             }
+            head_staged_.at(wid) = false;
           }
         }
       }
@@ -724,6 +798,21 @@ public:
       if (any_scrb_blocked) {
         ++perf_stats_.scrb_stalls;
       }
+    }
+  }
+
+  // Release an ibuffer backpressure slot (matches ++ in schedule()).
+  // Saturating decrement: flush_warp_pipeline only drains the ibuffer and
+  // resets ibuf_inflight to 0, but fetch_latch_ / decode-stage entries
+  // scheduled pre-trap can still arrive at issue() post-flush and decrement
+  // the (now-zeroed) counter. Async-trap users (RTU CB_YIELD path: AHS, CHS,
+  // MISS) routinely hit this; a non-saturating decrement underflows to
+  // UINT32_MAX and stalls scheduling. Proper fix is to extend
+  // flush_warp_pipeline to also drain fetch_latch_ + pending icache fetches
+  // for the warp.
+  void ibuf_release(uint32_t wid) {
+    if (ibuf_inflight_.at(wid) > 0) {
+      --ibuf_inflight_.at(wid);
     }
   }
 
@@ -772,6 +861,11 @@ public:
       }
       warp_ctl.pop();
     }
+    auto& bar_unlock = simobject_->bar_unlock_in;
+    while (!bar_unlock.empty()) {
+      scheduler_->resume(bar_unlock.peek());
+      bar_unlock.pop();
+    }
 
     // Fan-in: route per-block FU outputs to per-iw commit queues by trace->wid.
     // Each FU has NUM_*_BLOCKS outputs; the original iw was lost during
@@ -789,8 +883,11 @@ public:
         auto trace = fu_out.peek();
         uint32_t iw = trace->wid % VX_CFG_ISSUE_WIDTH;
         auto& arb_in = *commit_queues_.at(iw).at(fu);
-        // A unit registers its result once more before the commit arbiter.
-        if (arb_in.try_send(trace, 2)) {
+        // The unit's output registers ahead of the commit arbiter that its
+        // output channel does not already carry: the LSU's response buffer and
+        // result arbiter are in its channel, leaving its lane gather.
+        uint32_t commit_delay = (fu == (uint32_t)FUType::LSU) ? 1 : 2;
+        if (arb_in.try_send(trace, commit_delay)) {
           // Release the warp as soon as its stalling instruction's result leaves
           // the functional unit — the branch target / fence / warp-control is
           // resolved at that point. The release lands in stalled_warps so the
@@ -888,7 +985,8 @@ public:
   // ----- Public-facing API (called from outer Core trampolines) -----
 
   bool running() const {
-    if (scheduler_->running() || !pending_instrs_.empty()) {
+    // committed stores wait in the LSU request queue until sent to memory
+    if (scheduler_->running() || !pending_instrs_.empty() || !this->lsu_drained()) {
       return true;
     }
   #ifdef VX_CFG_VM_ENABLE
@@ -931,6 +1029,7 @@ public:
       ibuffer->pop();
     }
     ibuf_inflight_.at(wid) = 0;
+    head_staged_.at(wid) = false;
     uint32_t iw = wid % VX_CFG_ISSUE_WIDTH;
     if (issue_lock_owner_.at(iw) == wid / VX_CFG_ISSUE_WIDTH) {
       issue_lock_owner_.at(iw) = kLockOpen;
@@ -1092,10 +1191,10 @@ private:
   std::vector<LocalMemSwitch::Ptr> lmem_switch_;
   std::vector<MemCoalescer::Ptr> mem_coalescers_;
 
-  TFifo<instr_trace_t*> fetch_latch_;
-  TFifo<instr_trace_t*> decode_latch_;
+  std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> fetch_latch_;
+  std::vector<std::unique_ptr<TFifo<instr_trace_t*>>> decode_latch_;
 
-  HashTable<instr_trace_t*> pending_icache_;
+  std::vector<HashTable<instr_trace_t*>> pending_icache_;
   std::list<instr_trace_t*, PoolAllocator<instr_trace_t*, 64>> pending_instrs_;
 
   uint64_t pending_ifetches_;
@@ -1117,13 +1216,14 @@ private:
   std::vector<uint32_t> ibuf_inflight_;
   std::vector<uint64_t> last_issue_;   // [wid] cycle of the warp's last issue
   std::vector<uint64_t> staged_since_; // [wid] cycle the last issued candidate was staged
+  std::vector<bool>     head_staged_;  // [wid] the buffer head has left for staging
 
   PoolAllocator<instr_trace_t, 64> trace_pool_;
 
 #ifdef VX_CFG_EXT_C_ENABLE
-  // Per-core RVC fetch SimObject (per-warp halfword buffer + refetch
+  // RVC fetch SimObject per frontend slice (per-warp halfword buffer + refetch
   // queue + pick/commit_request helpers). See decompressor.h.
-  Decompressor::Ptr decompressor_;
+  std::vector<Decompressor::Ptr> decompressors_;
 #endif
 #ifdef VX_CFG_VM_ENABLE
   Mmu::Ptr dcache_mmu_;
@@ -1139,12 +1239,13 @@ Core::Core(const SimContext& ctx,
            Socket* socket
            )
   : SimObject(ctx, name)
-  , icache_req_out(1, this)
-  , icache_rsp_in(1, this)
+  , icache_req_out(ICACHE_NUM_REQS, this)
+  , icache_rsp_in(ICACHE_NUM_REQS, this)
   , dcache_req_out(VX_CFG_DCACHE_NUM_REQS, this)
   , dcache_rsp_in(VX_CFG_DCACHE_NUM_REQS, this)
   , branch_ctl_in(this, VX_CFG_NUM_WARPS)
   , warp_ctl_in(this, VX_CFG_NUM_WARPS)
+  , bar_unlock_in(this, VX_CFG_NUM_WARPS)
   , gbar_arrive_out(this)
   , gbar_resume_in(this)
 #ifdef VX_CFG_EXT_RASTER_ENABLE
@@ -1197,8 +1298,8 @@ void Core::barrier_arrive(uint32_t bar_id, uint32_t count, uint32_t wid, bool is
   impl_->scheduler()->barrier_unit().arrive(bar_id, count, wid, is_sync_bar);
 }
 
-bool Core::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
-  return impl_->scheduler()->barrier_unit().wait(bar_id, phase, wid);
+void Core::barrier_wait(uint32_t bar_id, uint32_t phase, uint32_t wid) {
+  impl_->scheduler()->barrier_unit().wait(bar_id, phase, wid);
 }
 
 void Core::global_barrier_resume(uint32_t bar_id) {

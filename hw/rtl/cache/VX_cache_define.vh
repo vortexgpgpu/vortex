@@ -74,7 +74,8 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
-`define CS_BANK_TO_FULL_ADDR(x, b) {x, (`VX_CFG_XLEN-$bits(x))'(b << (`VX_CFG_XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
+// b is the bank id; with BANK_HASH the raw bank bits are b XOR the line's hash
+`define CS_BANK_TO_FULL_ADDR(x, b) {x, (`VX_CFG_XLEN-$bits(x))'(((b) ^ (BANK_HASH ? int'(cache_bank_hash(32'(x), `CS_BANK_SEL_BITS)) : 0)) << (`VX_CFG_XLEN-$bits(x)-`CS_BANK_SEL_BITS))}
 `define CS_MEM_TO_FULL_ADDR(x)     {x, (`VX_CFG_XLEN-$bits(x))'(0)}
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -208,6 +208,10 @@ private:
         return false;
       return busy;
     };
+    h.vortex_drain = [this]() {
+      bool busy = true;
+      while (busy && sim_.is_busy(&busy) == 0) {}
+    };
 #ifdef VX_CFG_VM_ENABLE
     // The device MMU control surface answers the fault-report DCRs.
     h.mmu_fault_report = true;

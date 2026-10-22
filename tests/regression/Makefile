@@ -5,16 +5,17 @@ include $(ROOT_DIR)/config.mk
 TESTS := \
     minimal                                                           \
     basic demo dogfood dropout dotproduct dotproduct2 mstress io_addr \
-    arith printf diverge diverge_large sort fence ldst_order          \
+    arith printf diverge diverge_large sort fence fence_mp ldst_order \
     vecadd vecadd_v1 sgemm sgemmx sgemm_v1 conv3 relu sgemv           \
     sgemm2 sgemm2_v1 madmax stencil3d raycast bfs jacobi pathfinder   \
-    softmax                                                           \
+    softmax uniform_ld                                                \
     sgemm_tcu sgemm_tcu_mx sgemm_tcu_sp_mx sgemm_tcu_wg sgemm_tcu_wg_mx sgemm_tcu_sp sgemm_tcu_wg_sp  \
     sgemm2_dxa sgemm2_tcu sgemm_tcu_wg_dxa sgemm_tcu_wg_sp_dxa        \
     sgemm2_dxa_mcast sgemm_tcu_wg_dxa_mcast                           \
     dxa_copy dxa_copy_mcast dxa_kmajor_check                          \
     async_barrier async_gbarrier gbar_phase bar_slot_phase packld wgather wsync quad_lod \
     occupancy multikernel reopen module_reload single_cta            \
+    flush_coherence lazy_fetch sector_merge                           \
     vm_test vm_fault vm_stress
 
 # --- common exclude list ---------------------------------------------

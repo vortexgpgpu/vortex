@@ -108,8 +108,8 @@ void MemCoalescer::on_tick() {
       }
     }
 
-    // send memory response
-    RspOut.send(out_rsp, 1);
+    // the response path is combinational; the cache registers its output
+    RspOut.send(out_rsp, 0);
     DT(4, this->name() << " mem-rsp: " << out_rsp);
 
     // track remaining responses
@@ -256,7 +256,6 @@ void MemCoalescer::on_tick() {
   // build per-channel memory requests
   out_round_.valid = true;
   out_round_.lanes = out_mask;
-  out_round_.cur_mask = cur_mask;
   out_round_.reqs.assign(output_size_, MemReq{});
   for (uint32_t o = 0; o < output_size_; ++o) {
     if (!out_mask.test(o)) {
@@ -273,7 +272,7 @@ void MemCoalescer::on_tick() {
     mr.uuid   = in_req.uuid;
     mr.flags  = in_req.flags;
     auto t = get_addr_type(mr.addr);
-    mr.flags.io    = (t == AddrType::IO);
+    mr.flags.io    = mr.flags.flush ? mr.flags.io : (t == AddrType::IO);
     mr.flags.local = (t == AddrType::Shared);
   }
 
@@ -285,7 +284,13 @@ void MemCoalescer::on_tick() {
   // The built round is presented to the downstream on the next tick, not
   // this one: the coalescer alternates a build tick with a drain tick, so a
   // batch issues at most every other cycle. Draining is handled at the top
-  // of on_tick when out_round_ is valid.
+  // of on_tick when out_round_ is valid. The input is released as its last
+  // batch is built, without waiting for that batch to be accepted.
+  sent_mask_ |= cur_mask;
+  if (sent_mask_ == in_req.mask) {
+    ReqIn.pop();
+    sent_mask_.reset();
+  }
 }
 
 // Issue the pending round's per-channel requests; commit the round once
@@ -304,12 +309,6 @@ void MemCoalescer::flush_out_round() {
   }
 
   out_round_.valid = false;
-  auto& in_req = ReqIn.peek();
-  sent_mask_ |= out_round_.cur_mask;
-  if (sent_mask_ == in_req.mask) {
-    ReqIn.pop();
-    sent_mask_.reset();
-  }
 }
 
 const MemCoalescer::PerfStats& MemCoalescer::perf_stats() const {

@@ -107,6 +107,8 @@ module Vortex_axi import VX_gpu_pkg::*; #(
     wire [VX_MEM_TAG_WIDTH-1:0]     mem_rsp_tag [VX_MEM_PORTS];
     wire                            mem_rsp_ready [VX_MEM_PORTS];
 
+    wire vx_busy;
+
     `SCOPE_IO_SWITCH (1);
 
     Vortex vortex (
@@ -136,8 +138,21 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .dcr_rsp_valid  (dcr_rsp_valid),
         .dcr_rsp_data   (dcr_rsp_data),
 
+        .cp_mem_req_valid   (1'b0),
+        .cp_mem_req_rw      (1'b0),
+        .cp_mem_req_noalloc (1'b0),
+        .cp_mem_req_addr    ('0),
+        .cp_mem_req_data    ('0),
+        .cp_mem_req_byteen  ('0),
+        .cp_mem_req_tag     ('0),
+        `UNUSED_PIN (cp_mem_req_ready),
+        `UNUSED_PIN (cp_mem_rsp_valid),
+        `UNUSED_PIN (cp_mem_rsp_data),
+        `UNUSED_PIN (cp_mem_rsp_tag),
+        .cp_mem_rsp_ready   (1'b1),
+
         .start          (start),
-        .busy           (busy)
+        .busy           (vx_busy)
     );
 
     wire                            mem_req_valid_a [VX_MEM_PORTS];
@@ -268,5 +283,30 @@ module Vortex_axi import VX_gpu_pkg::*; #(
         .m_axi_rid      (m_axi_rid),
         .m_axi_rresp    (m_axi_rresp)
     );
+
+    // AXI orders a write against another master's access only once its B
+    // response is back, so the device stays busy until every write is acked.
+    wire [VX_MEM_PORTS-1:0]  vx_wr_fire;
+    wire [AXI_NUM_BANKS-1:0] axi_b_fire;
+    wire                     wr_empty;
+    for (genvar i = 0; i < VX_MEM_PORTS; ++i) begin : g_vx_wr_fire
+        assign vx_wr_fire[i] = mem_req_valid_a[i] && mem_req_ready_a[i] && mem_req_rw_a[i];
+    end
+    for (genvar i = 0; i < AXI_NUM_BANKS; ++i) begin : g_axi_b_fire
+        assign axi_b_fire[i] = m_axi_bvalid[i] && m_axi_bready[i];
+    end
+    VX_mem_req_pending #(
+        .NUM_INPUTS  (VX_MEM_PORTS),
+        .NUM_OUTPUTS (AXI_NUM_BANKS),
+        .SIZE        (32 * AXI_NUM_BANKS)
+    ) wr_pending (
+        .clk      (clk),
+        .reset    (reset),
+        .in_fire  (vx_wr_fire),
+        .out_fire (axi_b_fire),
+        .empty    (wr_empty)
+    );
+
+    assign busy = vx_busy || ~wr_empty;
 
 endmodule

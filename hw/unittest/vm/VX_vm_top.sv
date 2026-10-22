@@ -305,6 +305,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             .WRITE_ENABLE   (1),
             .WRITEBACK      (`VX_CFG_DCACHE_WRITEBACK),
             .DIRTY_BYTES    (`VX_CFG_DCACHE_DIRTYBYTES),
+            .LAZY_FETCH     (`VX_CFG_DCACHE_LAZY_FETCH),
             .REPL_POLICY    (`VX_CFG_DCACHE_REPL_POLICY),
             .NC_ENABLE      (1),
             .CORE_OUT_BUF   (3),
@@ -315,7 +316,8 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
             .clk            (clk),
             .reset          (reset),
             .core_bus_if    (dmmu_phys_if),
-            .mem_bus_if     (all_dc_mem_if[s * L1_MEM_PORTS +: L1_MEM_PORTS])
+            .mem_bus_if     (all_dc_mem_if[s * L1_MEM_PORTS +: L1_MEM_PORTS]),
+            `UNUSED_PIN (req_empty)
         );
 
         if (INCLUDE_IMMU != 0) begin : g_immu
@@ -410,13 +412,15 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
                 .WRITE_ENABLE   (0),
                 .REPL_POLICY    (`VX_CFG_ICACHE_REPL_POLICY),
                 .NC_ENABLE      (0),
+                .FLUSH_FORWARD  (0),
                 .CORE_OUT_BUF   (3),
                 .MEM_OUT_BUF    (3)
             ) icache (
                 .clk            (clk),
                 .reset          (reset),
                 .core_bus_if    (immu_phys_if),
-                .mem_bus_if     (ic_mem_if)
+                .mem_bus_if     (ic_mem_if),
+                `UNUSED_PIN (req_empty)
             );
         end else begin : g_no_immu
             // Keep the socket arbiter 2-wide (so TLB_SOCKET_ID_WIDTH matches the
@@ -613,6 +617,7 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .WRITE_ENABLE   (1),
         .WRITEBACK      (`VX_CFG_L2_WRITEBACK),
         .DIRTY_BYTES    (`VX_CFG_L2_DIRTYBYTES),
+        .LAZY_FETCH     (`VX_CFG_L2_LAZY_FETCH),
         .REPL_POLICY    (`VX_CFG_L2_REPL_POLICY),
         .CORE_OUT_BUF   (3),
         .MEM_OUT_BUF    (3),
@@ -624,7 +629,8 @@ module VX_vm_top import VX_gpu_pkg::*, VX_tlb_pkg::*; #(
         .clk            (clk),
         .reset          (reset),
         .core_bus_if    (l2_core_if),
-        .mem_bus_if     (l2_mem_if)
+        .mem_bus_if     (l2_mem_if),
+        `UNUSED_PIN (req_empty)
     );
 
     assign empty = (& dmmu_empty) && (& immu_empty) && l2tlb_empty && ptw_empty;

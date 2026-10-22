@@ -245,6 +245,10 @@ public:
     return (tl_exec_domain_ == HOST_DOMAIN) ? cycles_ : tl_cycles_;
   }
 
+  // Counts resets: cycle numbers repeat across runs, so per-cycle state is
+  // tagged with the run it belongs to.
+  uint64_t reset_gen() const { return reset_gen_; }
+
   // Sends issued outside any object tick (driver/host calls).
   static constexpr uint32_t HOST_DOMAIN = 0xffffffffu;
 
@@ -387,6 +391,7 @@ private:
   std::vector<std::unique_ptr<Domain>> domains_;
 
   uint64_t cycles_;
+  uint64_t reset_gen_ = 0;
 
   uint32_t num_domains_ = 1;
   uint32_t build_domain_ = 0;
@@ -651,6 +656,7 @@ public:
     : SimChannelBase(other.module_)
     , storage_(other.storage_.capacity())
     , pending_count_(0)
+    , reg_ready_(other.reg_ready_)
     , convert_fn_(other.convert_fn_)
     , tx_cb_(other.tx_cb_) {
     sink_ = nullptr;
@@ -666,6 +672,9 @@ public:
       pop_cb_ = {};
       storage_ = RingQueue<Pkt>(other.storage_.capacity());
       pending_count_ = 0;
+      reg_ready_ = other.reg_ready_;
+      freed_cycle_ = ~uint64_t(0);
+      freed_count_ = 0;
       convert_fn_ = other.convert_fn_;
       tx_cb_ = other.tx_cb_;
     }
@@ -704,8 +713,13 @@ public:
       return sink_->full();
     }
     assert(!SimPlatform::instance().mt_cross_access(module_));
-    return this->occupancy() >= storage_.capacity();
+    return this->occupancy() + this->freed_now() >= storage_.capacity();
   }
+
+  // A registered ready: a slot freed by a pop is offered to producers from the
+  // next cycle, as a buffer whose full flag is a register does, whatever order
+  // the producer and the consumer tick in.
+  void set_registered_ready(bool enable) { reg_ready_ = enable; }
 
   void send(const Pkt& pkt, uint64_t delay = 1) {
     auto& platform = SimPlatform::instance();
@@ -849,7 +863,21 @@ private:
   bool queue_empty() const { return storage_.empty(); }
   uint32_t queue_size() const { return storage_.size(); }
   const Pkt& queue_front() const { return storage_.front(); }
+  uint32_t freed_now() const {
+    auto& platform = SimPlatform::instance();
+    return (reg_ready_ && freed_cycle_ == platform.cycles() && freed_gen_ == platform.reset_gen())
+         ? freed_count_ : 0;
+  }
   void queue_pop() {
+    if (reg_ready_) {
+      auto& platform = SimPlatform::instance();
+      if (freed_cycle_ != platform.cycles() || freed_gen_ != platform.reset_gen()) {
+        freed_cycle_ = platform.cycles();
+        freed_gen_ = platform.reset_gen();
+        freed_count_ = 0;
+      }
+      ++freed_count_;
+    }
     storage_.pop();
     --SimChannelBase::inflight_count();
     if (pop_cb_) {
@@ -860,6 +888,10 @@ private:
 
   RingQueue<Pkt> storage_;
   uint32_t pending_count_;
+  bool reg_ready_ = false;
+  uint64_t freed_cycle_ = ~uint64_t(0);
+  uint64_t freed_gen_ = 0;
+  uint32_t freed_count_ = 0;
   SmallFunction<void(const Pkt&), 48> convert_fn_;
   TxCallback tx_cb_;
 
@@ -1198,6 +1230,7 @@ inline void SimPlatform::reset() {
 
   // Reset timing
   cycles_ = 0;
+  ++reset_gen_;
 }
 
 inline void SimPlatform::tick() {

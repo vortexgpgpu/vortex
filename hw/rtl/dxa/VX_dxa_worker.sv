@@ -45,6 +45,8 @@ module VX_dxa_worker import VX_gpu_pkg::*, VX_dxa_pkg::*; #(
     localparam MAX_OUTSTANDING = `VX_CFG_DXA_MAX_INFLIGHT;
     localparam TAG_W = `CLOG2(MAX_OUTSTANDING);
     localparam SEQ_W = `CLOG2(MAX_OUTSTANDING + 1);
+    // the outstanding-request queue and its tags need a power of two of at least 2
+    `STATIC_ASSERT (`IS_POW2(MAX_OUTSTANDING) && (MAX_OUTSTANDING >= 2), ("invalid parameter"))
 
     // ════════════════════════════════════════════════════════════════════
     // Inter-module wires

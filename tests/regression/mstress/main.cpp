@@ -4,8 +4,6 @@
 #include <vortex2.h>
 #include "common.h"
 #include <assert.h>
-#include <limits>
-#include <math.h>
 #include <vector>
 
 #define RT_CHECK(_expr)                                         \
@@ -17,51 +15,6 @@
 	 cleanup();			                                              \
      exit(-1);                                                  \
    } while (false)
-
-///////////////////////////////////////////////////////////////////////////////
-
-union Float_t {
-    float f;
-    int   i;
-    struct {
-        uint32_t man  : 23;
-        uint32_t exp  : 8;
-        uint32_t sign : 1;
-    } parts;
-};
-
-inline float fround(float x, int32_t precision = 8) {
-  auto power_of_10 = std::pow(10, precision);
-  return std::round(x * power_of_10) / power_of_10;
-}
-
-inline bool almost_equal_eps(float a, float b, int ulp = 128) {
-  auto eps = std::numeric_limits<float>::epsilon() * (std::max(fabs(a), fabs(b)) * ulp);
-  auto d = fabs(a - b);
-  if (d > eps) {
-    std::cout << "*** almost_equal_eps: d=" << d << ", eps=" << eps << std::endl;
-    return false;
-  }
-  return true;
-}
-
-inline bool almost_equal_ulp(float a, float b, int32_t ulp = 6) {
-  Float_t fa{a}, fb{b};
-  auto d = std::abs(fa.i - fb.i);
-  if (d > ulp) {
-    std::cout << "*** almost_equal_ulp: a=" << a << ", b=" << b << ", ulp=" << d << ", ia=" << std::hex << fa.i << ", ib=" << fb.i << std::endl;
-    return false;
-  }
-  return true;
-}
-
-inline bool almost_equal(float a, float b) {
-  if (a == b)
-    return true;
-  /*if (almost_equal_eps(a, b))
-    return true;*/
-  return almost_equal_ulp(a, b);
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -116,7 +69,7 @@ void cleanup() {
   }
 }
 
-void gen_src_data(std::vector<float>& test_data,
+void gen_src_data(std::vector<uint32_t>& test_data,
                   std::vector<uint32_t>& addr_table,
                   uint32_t num_points,
                   uint32_t num_addrs) {
@@ -124,8 +77,7 @@ void gen_src_data(std::vector<float>& test_data,
   addr_table.resize(num_addrs);
 
   for (uint32_t i = 0; i < num_points; ++i) {
-    float r = static_cast<float>(std::rand()) / RAND_MAX;
-    test_data[i] = r;
+    test_data[i] = static_cast<uint32_t>(std::rand());
   }
 
   for (uint32_t i = 0; i < num_addrs; ++i) {
@@ -190,8 +142,8 @@ int main(int argc, char *argv[]) {
   // allocate host buffers
   std::cout << "allocate host buffers" << std::endl;
   std::vector<uint32_t> h_addr;
-  std::vector<float> h_src;
-  std::vector<float> h_dst(num_points);
+  std::vector<uint32_t> h_src;
+  std::vector<uint32_t> h_dst(num_points);
   gen_src_data(h_src, h_addr, num_points, num_addrs);
 
   // upload source buffer0
@@ -239,17 +191,17 @@ int main(int argc, char *argv[]) {
   std::cout << "verify result" << std::endl;
   int errors = 0;
   for (uint32_t i = 0; i < num_points; ++i) {
-    float ref = 0.0f;
+    uint32_t ref = 0;
     for (uint32_t j = 0; j < NUM_LOADS; ++j) {
       uint32_t addr = i + j;
       uint32_t index = h_addr[addr];
-      float value = h_src[index];
+      uint32_t value = h_src[index];
       //printf("*** [%d] addr=%d, index=%d, value=%f\n", i, addr, index, value);
-      ref *= value;
+      ref = ref * 31 + value;
     }
 
-    float cur = h_dst[i];
-    if (!almost_equal(cur, ref)) {
+    uint32_t cur = h_dst[i];
+    if (cur != ref) {
       std::cout << "error at result #" << std::dec << i
                 << ": actual " << cur << ", expected " << ref << std::endl;
       ++errors;

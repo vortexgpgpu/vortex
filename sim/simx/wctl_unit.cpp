@@ -20,6 +20,47 @@
 
 using namespace vortex;
 
+ThreadMask WctlUnit::next_tmask(const instr_trace_t* trace) const {
+  auto wctl_type = std::get<WctlType>(trace->op_type);
+  auto& warp = core_->scheduler().warp(trace->wid);
+  uint32_t num_threads = VX_CFG_NUM_THREADS;
+  int32_t thread_last = num_threads - 1;
+  for (; thread_last >= 0; --thread_last) {
+    if (warp.tmask.test(thread_last)) { break; }
+  }
+  auto& rs1_data = trace->src_data[0];
+  auto& rs2_data = trace->src_data[1];
+  if (wctl_type == WctlType::TMC) {
+    ThreadMask tmask(num_threads);
+    for (uint32_t t = 0; t < num_threads; ++t) {
+      tmask.set(t, rs1_data.at(thread_last).u & (1 << t));
+    }
+    return tmask;
+  }
+  auto wctlArgs = std::get<IntrWctlArgs>(trace->instr_ptr->get_args());
+  auto not_pred = wctlArgs.is_cond_neg;
+  ThreadMask pred(num_threads);
+  for (uint32_t t = 0; t < num_threads; ++t) {
+    auto cond = (rs1_data.at(t).i & 0x1) ^ not_pred;
+    pred[t] = warp.tmask.test(t) && cond;
+  }
+  return pred.any() ? (warp.tmask & pred) : ThreadMask(num_threads, rs2_data.at(thread_last).u);
+}
+
+bool WctlUnit::is_shared(const instr_trace_t* trace) const {
+  if (!trace->eop) {
+    return false;
+  }
+  auto wctl_type = std::get<WctlType>(trace->op_type);
+  if (wctl_type == WctlType::BAR || wctl_type == WctlType::WSPAWN) {
+    return true;
+  }
+  if (wctl_type != WctlType::TMC && wctl_type != WctlType::PRED) {
+    return false;
+  }
+  return this->next_tmask(trace).none();
+}
+
 bool WctlUnit::process(instr_trace_t* trace, bool* exit) {
   bool release_warp = trace->fetch_stall;
   *exit = false;
@@ -43,16 +84,13 @@ bool WctlUnit::process(instr_trace_t* trace, bool* exit) {
 
   switch (wctl_type) {
   case WctlType::TMC: {
-    ThreadMask next_tmask(num_threads);
-    for (uint32_t t = 0; t < num_threads; ++t) {
-      next_tmask.set(t, rs1_data.at(thread_last).u & (1 << t));
-    }
     if (trace->eop) {
-      if (next_tmask.none()) {
+      auto tmask = this->next_tmask(trace);
+      if (tmask.none()) {
         *exit = true;
         release_warp = false;
       } else {
-        release_warp = core_->setTmask(trace->wid, next_tmask);
+        release_warp = core_->setTmask(trace->wid, tmask);
       }
     }
   } break;
@@ -143,25 +181,15 @@ bool WctlUnit::process(instr_trace_t* trace, bool* exit) {
           release_warp = false;
         }
       } else {
-        release_warp = !core_->barrier_wait(bar_id, arg2, trace->wid);
+        // the barrier unit releases the warp once its phase has passed
+        core_->barrier_wait(bar_id, arg2, trace->wid);
+        release_warp = false;
       }
     }
   } break;
   case WctlType::PRED: {
-    ThreadMask pred(num_threads);
-    auto not_pred = wctlArgs.is_cond_neg;
-    for (uint32_t t = 0; t < num_threads; ++t) {
-      auto cond = (rs1_data.at(t).i & 0x1) ^ not_pred;
-      pred[t] = warp.tmask.test(t) && cond;
-    }
-    ThreadMask next_tmask = warp.tmask;
-    if (pred.any()) {
-      next_tmask &= pred;
-    } else {
-      next_tmask = ThreadMask(num_threads, rs2_data.at(thread_last).u);
-    }
     if (trace->eop) {
-      release_warp = core_->setTmask(trace->wid, next_tmask);
+      release_warp = core_->setTmask(trace->wid, this->next_tmask(trace));
     }
   } break;
   case WctlType::WSYNC:

@@ -98,10 +98,26 @@ public:
         // before retiring the CMD_LAUNCH.
         std::function<bool()> vortex_busy;
 
+        // Block until memory has acknowledged every write Vortex issued. A
+        // full CMD_CACHE_FLUSH retires only then. Unset for a model whose
+        // writes land as they are issued.
+        std::function<void()> vortex_drain;
+
         // Backend decodes the MMU fault-report DCRs. Published in DEV_CAPS
         // so the runtime does not read them on a target that would leave
         // the DCR bus waiting for a response.
         bool mmu_fault_report = false;
+
+        // Write `bytes` bytes from `src` to `addr` for a CMD_MEM_* transfer.
+        // `no_alloc` marks a transfer of at least dma_no_alloc_min bytes,
+        // whose writes should not allocate in the device caches. Unset:
+        // dram_write.
+        std::function<void(uint64_t addr, const void* src, std::size_t bytes, bool no_alloc)> dma_write;
+        uint64_t dma_no_alloc_min = 0;
+
+        // Device-memory accesses go through the last-level cache, so host
+        // transfers need no cache flush. Published in DEV_CAPS.
+        bool dma_llc_client = false;
     };
 
     explicit CommandProcessor(const Hooks& hooks);
@@ -163,6 +179,10 @@ private:
     // dedicated bit, distinct from flags bit0 (F_PROFILE) — the addressing
     // mode is its own descriptor field (modern-GPU convention).
     static constexpr uint8_t MEM_FLAG_PHYSICAL = 0x04;
+
+    // CMD_CACHE_FLUSH header flag: flush only the levels above the last-level
+    // cache.
+    static constexpr uint8_t FLUSH_FLAG_L1_ONLY = 0x04;
 
     // Decoded cmd record (matches cmd_t struct layout on-wire).
     struct Cmd {
@@ -242,6 +262,9 @@ private:
     // CMD_LAUNCH_QMD: read the in-memory KMU descriptor at `qmd_addr` and
     // replay its {dcr_addr,value} pairs through the DCR-write hook.
     void apply_qmd_(uint64_t qmd_addr);
+    // CMD_CACHE_FLUSH across cores [0, num_cores); l1_only leaves the
+    // last-level cache unwalked.
+    void flush_cores_(uint32_t num_cores, bool l1_only);
     // Advance the launch FSM one step using cur_cmd_.
     void tick_launch();
     // Advance the engine FSM one step.

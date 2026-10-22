@@ -258,7 +258,7 @@ endif
 # them. The AXI boundary cannot show any of that -- a core waiting on a response
 # it never retired looks exactly like a core with nothing left to do. They are
 # read over the DCR response path, which both the harness and the driver already
-# drive, but VX_csr_data.sv gates them behind PERF_ENABLE. Off by default because
+# drive, but VX_csr_mpm.sv gates them behind PERF_ENABLE. Off by default because
 # they cost area; build with PERF=1 to read them, as in the other synthesis
 # flows, and note that without it every counter reads zero, which is
 # indistinguishable from an idle core rather than an absent instrument.

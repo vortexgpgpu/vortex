@@ -52,11 +52,10 @@ public:
   // rests on explicit slot accounting, not on transport back-pressure.
   std::vector<SimChannel<uint8_t>> credit_in;
 
-  // In-flight bound per core: the boundary stage's endpoint (2) plus the
-  // dispatcher endpoint (1) plus one admission credit in return flight, so
-  // the lane's full() view stays the binding gate whenever the transport
-  // applies back-pressure.
-  static constexpr uint32_t LAUNCH_CREDITS = 4;
+  // Each core's launch buffer holds two CTAs it has not yet admitted. A
+  // deeper buffer would commit work to a busy core early and keep it from a
+  // core that frees a slot sooner.
+  static constexpr uint32_t LAUNCH_CREDITS = 2;
 
   Kmu(const SimContext& ctx, const char* name, uint32_t num_cores);
 

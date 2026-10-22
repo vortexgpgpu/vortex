@@ -23,12 +23,14 @@
 //
 // The select is the is_addr_om attr bit alone. No cache level decodes it -- the
 // aperture store is presented to the caches as an ordinary IO store (they carry
-// attr through verbatim), so this bit arrives untouched. See VX_lsu_slice.
+// attr through verbatim), so this bit arrives untouched. See VX_lsu_block.
 //
-// Buffering: only the OM leg is registered. The L2 pass-through stays
-// combinational -- it is not a new driver (the socket already registers its
-// outgoing bus), and a skid here would sit on the critical L1->L2 path and
-// double the switch's cost for nothing.
+// Flush ordering: the steer is a fork, so a flush token bound for L2 is held
+// here until the OM side has been flushed. Every aperture store this trunk
+// carried before the token is past the steer by then, so the OM flush, which
+// waits for the OM to drain, covers them; then the token goes on to L2.
+//
+// Buffering: each leg presents a registered master interface (OUT_BUF).
 
 `include "VX_define.vh"
 
@@ -43,7 +45,12 @@ module VX_om_steer import VX_gpu_pkg::*; #(
 
     VX_mem_bus_if.slave  bus_in_if,     // from the socket
     VX_mem_bus_if.master l2_out_if,     // everything else -> L2
-    VX_mem_bus_if.master om_out_if      // aperture writes -> OM ingress (posted)
+    VX_mem_bus_if.master om_out_if,     // aperture writes -> OM ingress (posted)
+
+    output wire          flush_req,     // a flush token is held until the OM side is flushed
+    output wire          flush_l1_only, // the held token is an L1-only one
+    input wire           flush_ack,     // pulse: the OM side was flushed after flush_req rose
+    output wire          om_pending     // an aperture write is still buffered on the OM leg
 );
     `UNUSED_SPARAM (INSTANCE_ID)
 
@@ -53,11 +60,38 @@ module VX_om_steer import VX_gpu_pkg::*; #(
 
     wire is_om = bus_in_if.req_data.attr[MEM_ATTR_OM_OFFS];
 
+    // ── flush tokens: held until the OM side is flushed ────────────────────
+    wire is_flush = bus_in_if.req_valid && ~is_om && bus_in_if.req_data.attr[MEM_ATTR_FLUSH_OFFS];
+    reg  flush_req_r;  // token held, waiting for the OM flush
+    reg  flush_pass_r; // OM flushed: the token may go to L2
+    wire flush_block = is_flush && ~flush_pass_r;
+
     // ── request: demux by is_addr_om ───────────────────────────────────────
     wire l2_ready;
     wire om_ready;
 
-    assign bus_in_if.req_ready = is_om ? om_ready : l2_ready;
+    assign bus_in_if.req_ready = is_om ? om_ready : (l2_ready && ~flush_block);
+
+    wire flush_fire = is_flush && flush_pass_r && l2_ready;
+    always @(posedge clk) begin
+        if (reset) begin
+            flush_req_r  <= 1'b0;
+            flush_pass_r <= 1'b0;
+        end else begin
+            if (flush_req_r && flush_ack) begin
+                flush_req_r  <= 1'b0;
+                flush_pass_r <= 1'b1;
+            end else if (flush_block) begin
+                flush_req_r  <= 1'b1;
+            end
+            if (flush_fire) begin
+                flush_pass_r <= 1'b0;
+            end
+        end
+    end
+    assign flush_req  = flush_req_r;
+    assign flush_l1_only = (| bus_in_if.req_data.byteen);
+    assign om_pending = om_out_if.req_valid;
 
     // Both legs go through an OUT_BUF elastic buffer so the socket->L2 trunk and
     // the OM aperture path each present a fully-registered master interface.
@@ -71,7 +105,7 @@ module VX_om_steer import VX_gpu_pkg::*; #(
     ) l2_req_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (bus_in_if.req_valid && ~is_om),
+        .valid_in  (bus_in_if.req_valid && ~is_om && ~flush_block),
         .ready_in  (l2_ready),
         .data_in   (l2_req_data_in),
         .data_out  (l2_req_data_out),

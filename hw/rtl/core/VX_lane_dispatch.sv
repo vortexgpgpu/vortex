@@ -17,19 +17,25 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     parameter BLOCK_SIZE = 1,
     parameter NUM_LANES  = 1,
     parameter OUT_BUF    = 0,
-    parameter MAX_FANOUT = `MAX_FANOUT
+    parameter MAX_FANOUT = `MAX_FANOUT,
+    // dispatch ports served, starting at issue slice port_base
+    parameter NUM_PORTS  = `VX_CFG_ISSUE_WIDTH
 ) (
     input  wire             clk,
     input  wire             reset,
 
+    input  wire [ISSUE_ISW_W-1:0] port_base,
+
     // inputs
-    VX_dispatch_if.slave    dispatch_if [`VX_CFG_ISSUE_WIDTH],
+    VX_dispatch_if.slave    dispatch_if [NUM_PORTS],
 
     // outputs
     VX_execute_if.master    execute_if [BLOCK_SIZE]
 );
-    `STATIC_ASSERT (`IS_DIVISBLE(`VX_CFG_ISSUE_WIDTH, BLOCK_SIZE), ("invalid parameter"))
+    `STATIC_ASSERT (`IS_DIVISBLE(NUM_PORTS, BLOCK_SIZE), ("invalid parameter"))
     `STATIC_ASSERT (`IS_DIVISBLE(`VX_CFG_SIMD_WIDTH, NUM_LANES), ("invalid parameter"))
+    // a batched dispatch derives the issue slot from the batch index alone
+    `STATIC_ASSERT ((NUM_PORTS == `VX_CFG_ISSUE_WIDTH) || (BLOCK_SIZE == NUM_PORTS), ("invalid parameter"))
 
     `DECL_EXECUTE_T (pe, NUM_LANES);
     localparam IN_DATAW     = $bits(dispatch_t);
@@ -41,9 +47,9 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     localparam LPID_WIDTH   = `UP(LPID_BITS);
     localparam GPID_BITS    = `CLOG2(`VX_CFG_NUM_THREADS / NUM_LANES);
     localparam GPID_WIDTH   = `UP(GPID_BITS);
-    localparam BATCH_COUNT  = `VX_CFG_ISSUE_WIDTH / BLOCK_SIZE;
+    localparam BATCH_COUNT  = NUM_PORTS / BLOCK_SIZE;
     localparam BATCH_COUNT_W= `LOG2UP(BATCH_COUNT);
-    localparam ISSUE_W      = `LOG2UP(`VX_CFG_ISSUE_WIDTH);
+    localparam ISSUE_W      = `LOG2UP(NUM_PORTS);
     localparam FANOUT_ENABLE= (`VX_CFG_SIMD_WIDTH > (MAX_FANOUT + MAX_FANOUT /2));
 
     localparam DATA_IN_TMASK_OFF = IN_DATAW - (UUID_WIDTH + ISSUE_WIS_W + NCTA_WIDTH + SIMD_IDX_W + `VX_CFG_SIMD_WIDTH);
@@ -54,11 +60,11 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
         logic [NUM_LANES-1:0] tmask;
     } packet_t;
 
-    wire [`VX_CFG_ISSUE_WIDTH-1:0] dispatch_valid;
-    wire [`VX_CFG_ISSUE_WIDTH-1:0][IN_DATAW-1:0] dispatch_data;
-    wire [`VX_CFG_ISSUE_WIDTH-1:0] dispatch_ready;
+    wire [NUM_PORTS-1:0] dispatch_valid;
+    wire [NUM_PORTS-1:0][IN_DATAW-1:0] dispatch_data;
+    wire [NUM_PORTS-1:0] dispatch_ready;
 
-    for (genvar i = 0; i < `VX_CFG_ISSUE_WIDTH; ++i) begin : g_dispatch_data
+    for (genvar i = 0; i < NUM_PORTS; ++i) begin : g_dispatch_data
         assign dispatch_valid[i] = dispatch_if[i].valid;
         assign dispatch_data[i] = dispatch_if[i].data;
         assign dispatch_if[i].ready = dispatch_ready[i];
@@ -108,6 +114,10 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     end else begin : g_batch_idx_0
         assign batch_idx = 0;
         `UNUSED_VAR (batch_done)
+    end
+
+    if (BATCH_COUNT != 1) begin : g_no_port_base
+        `UNUSED_VAR (port_base)
     end
 
     wire [BLOCK_SIZE-1:0][ISSUE_W-1:0] issue_indices;
@@ -198,7 +208,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
                 assign isw = batch_idx;
             end
         end else begin : g_isw
-            assign isw = block_idx;
+            assign isw = port_base + ISSUE_ISW_W'(block_idx);
         end
 
         wire [NW_WIDTH-1:0] block_wid = wis_to_wid(dispatch_wis, isw);
@@ -236,7 +246,7 @@ module VX_lane_dispatch import VX_gpu_pkg::*; #(
     end
 
     // release the dispatch interface when all packets are sent
-    reg [`VX_CFG_ISSUE_WIDTH-1:0] ready_in;
+    reg [NUM_PORTS-1:0] ready_in;
     always @(*) begin
         ready_in = 0;
         for (integer block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin

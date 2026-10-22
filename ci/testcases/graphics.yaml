@@ -694,3 +694,24 @@ tests:
   args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
   configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE
   shape: {cores: 2, l2cache: true, threads: 4}
+# Flush ordering of OM aperture stores under random input backpressure
+# (DBG_FLUSH_STALL): the last fragments' stores are often still in transit to
+# the OM ingress when the kernel-boundary flush starts, so the flush must wait
+# for them behind the dcache's flush tokens held at the OM steers.
+- id: draw3d-flush-stress-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DDBG_FLUSH_STALL
+  shape: {threads: 16}
+- id: draw3d-flush-stress-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: gfx_draw3d
+  args: -w 128 -h 128 -t box.cgltrace -r box_ref_128.png
+  configs: -DVX_CFG_EXT_TEX_ENABLE -DVX_CFG_EXT_RASTER_ENABLE -DVX_CFG_EXT_OM_ENABLE -DDBG_FLUSH_STALL
+  shape: {cores: 2, l2cache: true, threads: 4}
+  tier: full

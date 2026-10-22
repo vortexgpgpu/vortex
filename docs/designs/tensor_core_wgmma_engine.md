@@ -192,7 +192,8 @@ is muxed by `op_type`:
 `VX_tcu_wgmma` is a third party that only **observes** the dispatch path. It
 builds the tile-buffer request from each WGMMA micro-op and returns operand
 data and a ready signal, but never drives the handshake itself; the core
-does.
+does. `VX_tcu_agu` and `VX_tcu_wgmma` serve every block, so they live in
+the core-level `VX_tcu_shared` and reach each block through per-block ports.
 
 ---
 

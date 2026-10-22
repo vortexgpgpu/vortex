@@ -90,6 +90,57 @@ tests:
   app: gbar_phase
   shape:
     cores: 2
+# Four cores in one cluster: every core must arrive under its own index.
+- id: gbar-phase-3
+  via: blackbox
+  drivers:
+  - xrt
+  app: gbar_phase
+  shape:
+    cores: 4
+# A global barrier spans clusters: the device-level unit counts every core, so
+# one core per cluster still meets the count and two clusters of two cores do
+# not release on a cluster's own arrivals.
+- id: gbar-phase-cl2-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gbar_phase
+  shape:
+    clusters: 2
+    cores: 1
+- id: gbar-phase-cl2-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: gbar_phase
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+- id: async-gbarrier-cl2-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: async_gbarrier
+  shape:
+    clusters: 2
+    cores: 1
+- id: async-gbarrier-cl2-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: async_gbarrier
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
 # SimX<->rtlsim cycle parity on the multi-core global barrier. Until this case
 # existed the gate could not observe the gbar path at all: every other parity
 # case is single-core, so USE_GBAR is 0 and the request queue is not built.
@@ -105,6 +156,16 @@ tests:
   app: async_gbarrier
   shape:
     cores: 2
+# Two cores sharing one socket's instruction and data caches: their requests
+# and responses cross each cache's input arbiter.
+- id: model_parity-async-gbarrier-ss2
+  check: model_parity
+  via: blackbox
+  app: async_gbarrier
+  configs: -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 2
+    l2cache: true
 
 - id: bar-slot-phase-1
   via: blackbox
@@ -155,3 +216,243 @@ tests:
   drivers:
   - simx
   app: module_reload
+# Kernel-boundary flush coherence: back-to-back launches with host rewrites,
+# rotating line ownership across cores and cross-launch read-modify-writes.
+# The shapes cover a write-back L1, a write-back L2 shared by 4 cores, and a
+# write-back L3 shared by two clusters, where every core flushes at once.
+- id: flush_coherence-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+# The xrt leg runs the RTL command processor's flush (broadcast write, then
+# per-core reads).
+- id: flush_coherence-2
+  via: blackbox
+  drivers:
+  - simx
+  - xrt
+  app: flush_coherence
+  shape:
+    cores: 4
+    l2cache: true
+- id: flush_coherence-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+# A memory fence carries data from one core to another across the caches they
+# do not share: the producer's token reaches the point of coherence, the
+# consumer's invalidates its copies above it. Two clusters with an L2 each
+# replicate the last level, so the fence must walk both L2s there.
+- id: fence_mp-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+- id: fence_mp-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  shape:
+    cores: 2
+    l2cache: true
+- id: fence_mp-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  shape:
+    clusters: 2
+    cores: 1
+    l2cache: true
+- id: fence_mp-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: fence_mp
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+# Kernel to kernel with no host transfer between (one command batch): the
+# launch flushes are L1-only, so the last-level cache alone carries each
+# round's writes to the next round, and the full flush runs before readback.
+- id: flush_coherence-chain-1
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+- id: flush_coherence-chain-2
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
+- id: flush_coherence-chain-3
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+# Replicated last-level caches (per-core dcaches without an L2, per-cluster L2s
+# without an L3) are not a point of coherence, so an L1-only flush must still
+# invalidate them.
+- id: flush_coherence-chain-4
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  shape:
+    cores: 2
+- id: flush_coherence-chain-5
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+# Each round loads its input with a DXA tile copy, which reaches memory beside
+# the single dcache, so that dcache is not a point of coherence and must still
+# be written back on an L1-only flush.
+- id: flush_coherence-chain-6
+  via: blackbox
+  drivers:
+  - simx
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r16 -c -x
+  configs: -DVX_CFG_EXT_DXA_ENABLE
+# The command processor's DMA as a client of the shared L2: host transfers
+# are timed through the L2, and each launch waits for the DMA's fence.
+- id: model_parity-dogfood-cp-llc
+  check: model_parity
+  via: blackbox
+  app: dogfood
+  args: -n16 -xbar -xgbar
+  configs: -DVX_CFG_CP_LLC_CLIENT=1
+  shape:
+    cores: 4
+    l2cache: true
+# Eight L1 ports per core and the DMA's slot give the shared L2 2^k + 1
+# ports, so each bank's port arbiter is a tree whose last slice has one port:
+# 17 ports on two cores, and 65 on eight, past a 64-bit port mask.
+- id: model_parity-sgemm-cp-llc-17
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_CP_LLC_CLIENT=1 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  shape:
+    cores: 2
+    l2cache: true
+- id: sgemm-cp-llc-65
+  via: blackbox
+  drivers:
+  - simx
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_CP_LLC_CLIENT=1 -DVX_CFG_ISSUE_WIDTH=4 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=8
+  shape:
+    cores: 8
+    l2cache: true
+# More dcache banks and memory ports than core requests: the uncached path keeps
+# each core request on its own memory port.
+- id: model_parity-sgemm-dcache-16-banks
+  check: model_parity
+  via: blackbox
+  app: sgemm
+  args: -n32
+  configs: -DVX_CFG_DCACHE_NUM_BANKS=16 -DVX_CFG_PLATFORM_MEMORY_NUM_BANKS=16
+# The shared L2 keeps its lines across the L1-only launch flushes.
+- id: model_parity-flush-chain
+  check: model_parity
+  via: blackbox
+  app: flush_coherence
+  args: -n2048 -r16 -c
+  configs: -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true
+# Flush ordering under random input backpressure (DBG_FLUSH_STALL): each round
+# ends on a store burst, so a core's last writes are often still queued on one
+# memory port or dcache lane while its token on another reaches the next level.
+# Without a token per path these shapes lose those writes.
+- id: flush_coherence-stress-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r8 -b16
+  configs: -DDBG_FLUSH_STALL
+  shape:
+    cores: 4
+    l2cache: true
+- id: flush_coherence-stress-2
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r8 -b16
+  configs: -DDBG_FLUSH_STALL
+  shape:
+    clusters: 2
+    cores: 2
+    l2cache: true
+    l3cache: true
+  tier: full
+# Cores sharing a dcache: a lost lane store is only visible when it belongs to
+# the core answered last, so this shape needs more rounds to expose it.
+- id: flush_coherence-stress-3
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r24 -b16
+  configs: -DDBG_FLUSH_STALL -DVX_CFG_SOCKET_SIZE=2
+  shape:
+    cores: 4
+    l2cache: true
+  tier: full
+- id: flush_coherence-chain-stress-1
+  via: blackbox
+  drivers:
+  - rtlsim
+  app: flush_coherence
+  args: -n2048 -r8 -b16 -c
+  configs: -DDBG_FLUSH_STALL -DVX_CFG_SOCKET_SIZE=1
+  shape:
+    cores: 4
+    l2cache: true

@@ -233,15 +233,15 @@ public:
     vx_result_t cp_submit_dcr_write(uint32_t addr, uint32_t value);
 
     // Post one CMD_LAUNCH to the ring, commit Q_TAIL, and wait for
-    // Q_SEQNUM. Synchronous. Followed by an implicit CMD_CACHE_FLUSH so
-    // the host observes coherent results (see cp_submit_cache_flush).
+    // Q_SEQNUM. Synchronous. The kernel's results are flushed by the next
+    // command that needs them (see cp_ring_append_).
     vx_result_t cp_submit_launch();
 
     // Post one CMD_LAUNCH_QMD: the CP reads the KMU descriptor (a
     // {count,(dcr_addr,value)...} list the caller staged to device memory at
     // `qmd_addr`) and replays it, then pulses start — one ring command in
-    // place of a launch's ~18 CMD_DCR_WRITEs (NVIDIA QMD model). Followed by an
-    // implicit CMD_CACHE_FLUSH, like cp_submit_launch. Batch-aware.
+    // place of a launch's ~18 CMD_DCR_WRITEs (NVIDIA QMD model). Flushed like
+    // cp_submit_launch. Batch-aware.
     vx_result_t cp_submit_launch_qmd(uint64_t qmd_addr);
 
     // Post one CMD_DRAW (OP_DRAW): arg0 = device address of a resident draw
@@ -255,12 +255,6 @@ public:
     bool cp_supports_draw() const { return cp_supports_draw_; }
     bool cp_supports_qmd()  const { return cp_supports_qmd_; }
 
-    // Post one CMD_CACHE_FLUSH to the ring (AMD ACQUIRE_MEM model): the CP
-    // sweeps a per-core cache flush across all cores and retires the
-    // command only when the last core's flush completes. A no-op on
-    // write-through cache configs. Posted after every CMD_LAUNCH.
-    vx_result_t cp_submit_cache_flush();
-
     // Program the device MMU's SATP once, ahead of the first launch that
     // could translate. Called from every launch path.
     vx_result_t ensure_mmu_satp();
@@ -273,7 +267,7 @@ public:
     // ----- Batched CP submission (one draw = one ring batch) -----
     // cp_batch_begin holds the ring lock and switches cp_submit_* into
     // append-only mode: each subsequent cp_submit_dcr_write / cp_submit_launch
-    // / cp_submit_cache_flush writes its CL into the ring and reserves a
+    // writes its CL into the ring and reserves a
     // seqnum but does NOT ring the doorbell or poll. cp_batch_end commits
     // Q_TAIL once, polls Q_SEQNUM once for the last appended command, drains
     // COUT once, and releases the lock. The CP then retires the whole
@@ -391,7 +385,12 @@ private:
     // Append one CL at the current tail and reserve its seqnum (bump
     // cp_tail_ + cp_expected_seqnum_). Caller must hold cp_mu_ (directly in
     // the non-batch path, or via cp_batch_begin). No doorbell, no poll.
+    // Inserts the lazy kernel-boundary CMD_CACHE_FLUSH (AMD ACQUIRE_MEM
+    // model) under the same lock: L1-only ahead of a launch while
+    // l1_dirty_, and ahead of a CMD_MEM_* touching device memory while
+    // either flag is set -- full while llc_dirty_.
     vx_result_t cp_ring_append_(const void* cl);
+    vx_result_t cp_ring_write_(const void* cl);
 
     // Build + submit a CMD_MEM_* descriptor (opcode, dst, src, size).
     // `physical` sets the CMD_MEM header flag so the CP DMA skips VM
@@ -457,6 +456,13 @@ private:
     uint64_t                       cp_tail_            = 0;
     uint64_t                       cp_expected_seqnum_ = 0;
     uint64_t                       cp_num_cores_       = 0; // cached VX_CAPS_NUM_CORES, used for CMD_CACHE_FLUSH
+    // A kernel ran since the last flush, so the L1s may hold its writes or
+    // stale lines.
+    bool                           l1_dirty_           = false;
+    // A kernel ran since the last full cache flush, so the last-level cache
+    // may hold lines the CP DMA (when it reaches device memory beneath it)
+    // would miss or later overwrite. Both flags are guarded by cp_mu_.
+    bool                           llc_dirty_          = false;
     std::mutex                     cp_mu_;             // serialize ring writes
     // Seqnum the last command appended to the open batch will reach;
     // cp_batch_end polls for it once. Touched only by the batch owner, which
@@ -486,6 +492,9 @@ private:
     // the OP_DRAW mirror). Discovered at open.
     bool                                cp_supports_draw_ = false;
     bool                                cp_supports_qmd_ = false;
+    // The CP DMA reaches device memory through the last-level cache (CP
+    // DEV_CAPS bit 28), so transfers never need that cache flushed.
+    bool                                cp_dma_llc_client_ = false;
     class CpMemIO;
     std::unique_ptr<CpMemIO>            vm_io_;
     std::unique_ptr<vortex::VMManager>  vm_mgr_;

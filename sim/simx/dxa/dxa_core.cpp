@@ -27,6 +27,10 @@
 
 using namespace vortex;
 
+// response tags index the in-flight slots by masking
+static_assert(VX_CFG_DXA_MAX_INFLIGHT >= 2 && (VX_CFG_DXA_MAX_INFLIGHT & (VX_CFG_DXA_MAX_INFLIGHT - 1)) == 0,
+              "DXA_MAX_INFLIGHT must be a power of two of at least 2");
+
 namespace {
 
 // One GMEM port: the DXA joins its socket's L2-facing arb as a single peer.
@@ -44,6 +48,8 @@ constexpr uint64_t kGmemLineMask = ~uint64_t(VX_CFG_L1_LINE_SIZE - 1);
 
 // Cores served by one (socket-resident) DXA engine.
 constexpr uint32_t kCoresPerSocket = VX_CFG_SOCKET_SIZE;
+// A delivered line reaches its SMEM write through two pipeline registers.
+constexpr uint32_t kSmemWrLatency = 2;
 
 } // namespace
 
@@ -91,6 +97,10 @@ public:
   struct InflightSlot {
     bool      allocated = false;
     bool      rsp_arrived = false;
+    bool      oob_pending = false;  // OOB line waiting for its turn into smem_wr
+    bool      deferred = false;     // last line parked until the others drain
+    uint64_t  ready_cycle = 0;  // first cycle the line can be written to SMEM
+    uint64_t  free_cycle = 0;   // first cycle the slot can carry a new read
     LineWork  work;            // captured at allocation
     std::shared_ptr<mem_block_t> rsp_data;
   };
@@ -108,12 +118,17 @@ public:
     uint32_t                smem_stride = 0;
     uint64_t                issue_cycle = 0;
 
+    // setup engine: the next transfer is set up while this one drains
+    bool                    staged = false;
+    DxaReq                  staged_req;
+    uint64_t                staged_ready = 0;
+
     // addr_gen: pre-enumerated work list (one entry per GMEM CL +
     // multicast replays handled at smem_wr stage).
     std::vector<LineWork>   work_list;
     uint32_t                ag_idx = 0;          // next entry to issue (gmem_req)
 
-    // gmem_req → rsp_buf → smem_wr inflight bookkeeping.
+    // gmem_req → smem_wr inflight bookkeeping.
     std::array<InflightSlot, VX_CFG_DXA_MAX_INFLIGHT> inflight;
     std::deque<uint32_t>    issued_order;        // outstanding tags in issue order
     uint32_t                drain_slot = UINT32_MAX; // slot currently draining
@@ -145,7 +160,8 @@ public:
       w.cta_indices.clear();
       w.issued_order.clear();
       w.drain_slot = UINT32_MAX;
-      for (auto& s : w.inflight) { s.allocated = false; s.rsp_arrived = false; s.rsp_data.reset(); }
+      for (auto& s : w.inflight) { s = InflightSlot(); }
+      w.staged = false;
       w.ag_idx = 0;
       w.mc_cta_idx = 0;
       w.km_elem_idx = 0;
@@ -203,40 +219,38 @@ public:
   void tick() {
     ++cycle_;
 
-    // Drain in reverse-pipeline order (smem_wr → rsp_buf → gmem_req →
-    // addr_gen → setup → req-arb) so each stage's tick reads what its
-    // upstream produced earlier this cycle, mimicking forward stage flow.
+    // Drain in reverse-pipeline order (smem_wr → gmem_req → addr_gen →
+    // setup → req-arb) so each stage's tick reads what its upstream produced
+    // earlier this cycle, mimicking forward stage flow.
 
-    // 1) Drain GMEM responses → mark inflight slots arrived.
-    // gmem_arb_ already routes responses back to RspOut[worker_id] (its
-    // input index) and restores the user's tag (the per-worker slot id).
+    // 1) smem_wr drain, then 2) hand it one line per worker, then 3) issue
+    // the next GMEM read. A line leaving pend for the fill buffer frees pend
+    // for a capture in the same cycle. gmem_arb_ already routes responses
+    // back to RspOut[worker_id] (its input index) and restores the user's tag
+    // (the per-worker slot id).
     for (uint32_t worker_id = 0; worker_id < workers_.size(); ++worker_id) {
-      auto& ch = gmem_arb_->RspOut.at(worker_id);
-      // One response per port per cycle (each worker has its own RspOut port).
-      if (!ch.empty()) {
-        auto& rsp = ch.peek();
-        uint32_t slot_id = uint32_t(rsp.tag) & (VX_CFG_DXA_MAX_INFLIGHT - 1);
-        auto& w = workers_[worker_id];
-        if (slot_id < w.inflight.size() && w.inflight[slot_id].allocated) {
-          w.inflight[slot_id].rsp_arrived = true;
-          w.inflight[slot_id].rsp_data    = rsp.data;
-        }
-        ch.pop();
-      }
-    }
-
-    // 2) Tick workers (smem_wr drain → gmem_req issue).
-    for (auto& w : workers_) {
+      auto& w = workers_[worker_id];
       if (w.state == WState::RUNNING) {
         tick_worker_smem_wr(w);
+      }
+      capture_line(w, gmem_arb_->RspOut.at(worker_id));
+      if (w.state == WState::RUNNING) {
         tick_worker_gmem_req(w);
       }
     }
 
-    // 3) Dispatch from queue to idle workers.
+    // 3) Start a set-up transfer on an idle worker; otherwise let the
+    //    worker's setup engine take the next request.
     for (auto& w : workers_) {
-      if (w.state == WState::IDLE && !queue_.empty())
-        start_worker(w, queue_.front()), queue_.pop_front();
+      if (w.staged && w.state == WState::IDLE && cycle_ >= w.staged_ready) {
+        w.staged = false;
+        start_worker(w, w.staged_req);
+      } else if (!w.staged && !queue_.empty()) {
+        w.staged_req   = queue_.front();
+        w.staged_ready = cycle_ + this->setup_latency(w.staged_req);
+        w.staged       = true;
+        queue_.pop_front();
+      }
     }
 
     // 4) Drain DxaUnit channels → req queue (round-robin).
@@ -317,6 +331,14 @@ private:
     uint32_t n_blk = n / tcN;
     uint32_t n_in  = n % tcN;
     return (k_blk * n_steps + n_blk) * b_blk_elems + n_in * kw + r_in;
+  }
+
+  // Parameter setup takes longer for higher-rank descriptors: each extra
+  // dimension adds a multiply phase.
+  uint32_t setup_latency(const DxaReq& req) const {
+    uint32_t rank = (req.desc_slot < VX_DCR_DXA_DESC_COUNT)
+                  ? desc_rank(descriptors_.at(req.desc_slot).meta) : 1;
+    return 2 * std::max<uint32_t>(rank, 2) + 2;
   }
 
   // ── Pull from per-core dxa_req_in[] into queue_ (round-robin) ────────
@@ -533,6 +555,52 @@ private:
     }
   }
 
+  // ── smem_wr capture: one line per cycle into its line registers ───────
+  // A GMEM response has priority over a pending OOB line. smem_wr holds one
+  // line being written, one captured behind it, and the transfer's last line
+  // while others are outstanding. A response it cannot take stays on the
+  // memory response path and holds the responses queued behind it.
+  void capture_line(Worker& w, SimChannel<MemRsp>& ch) {
+    bool pend_busy  = false;
+    bool defer_busy = false;
+    uint32_t oob_slot = UINT32_MAX;
+    for (uint32_t i = 0; i < w.inflight.size(); ++i) {
+      const auto& s = w.inflight[i];
+      if (s.rsp_arrived && i != w.drain_slot) {
+        (s.deferred ? defer_busy : pend_busy) = true;
+      }
+      if (s.oob_pending && oob_slot == UINT32_MAX) {
+        oob_slot = i;
+      }
+    }
+
+    uint32_t slot = oob_slot;
+    if (!ch.empty()) {
+      slot = uint32_t(ch.peek().tag) & (VX_CFG_DXA_MAX_INFLIGHT - 1);
+      if (!w.inflight[slot].allocated) {
+        ch.pop();
+        return;
+      }
+    }
+    if (slot == UINT32_MAX) {
+      return;
+    }
+
+    auto& s = w.inflight[slot];
+    bool defer = s.work.last && (w.issued_order.size() > 1);
+    if (defer ? defer_busy : pend_busy) {
+      return;
+    }
+    if (!ch.empty()) {
+      s.rsp_data = ch.peek().data;
+      ch.pop();
+    }
+    s.oob_pending = false;
+    s.rsp_arrived = true;
+    s.deferred    = defer;
+    s.ready_cycle = cycle_ + kSmemWrLatency;
+  }
+
   // ── gmem_req: issue MemReqs with available inflight slots ────────────
   void tick_worker_gmem_req(Worker& w) {
     // One AGU step per cycle: advance ag_idx by at most one, issuing at most
@@ -544,7 +612,7 @@ private:
     // Find a free slot.
     uint32_t slot = UINT32_MAX;
     for (uint32_t s = 0; s < w.inflight.size(); ++s) {
-      if (!w.inflight[s].allocated) {
+      if (!w.inflight[s].allocated && cycle_ >= w.inflight[s].free_cycle) {
         slot = s;
         break;
       }
@@ -561,11 +629,13 @@ private:
       return;
     }
 
-    // OOB lines skip the GMEM request entirely; we synthesize an immediate
-    // arrival (rsp data left null — smem_wr will use cfill).
+    // OOB lines skip the GMEM request entirely; smem_wr takes them in a cycle
+    // with no GMEM response (rsp data left null — smem_wr will use cfill).
     if (lw.oob) {
       w.inflight[slot].allocated   = true;
-      w.inflight[slot].rsp_arrived = true;
+      w.inflight[slot].rsp_arrived = false;
+      w.inflight[slot].oob_pending = true;
+      w.inflight[slot].deferred    = false;
       w.inflight[slot].rsp_data.reset();
       w.inflight[slot].work        = lw;
       w.issued_order.push_back(slot);
@@ -587,6 +657,8 @@ private:
 
     w.inflight[slot].allocated   = true;
     w.inflight[slot].rsp_arrived = false;
+    w.inflight[slot].oob_pending = false;
+    w.inflight[slot].deferred    = false;
     w.inflight[slot].rsp_data.reset();
     w.inflight[slot].work        = lw;
     w.issued_order.push_back(slot);
@@ -610,7 +682,8 @@ private:
     if (slot == UINT32_MAX) {
       for (uint32_t i = 0; i < w.inflight.size(); ++i) {
         const auto& candidate = w.inflight[i];
-        if (candidate.allocated && candidate.rsp_arrived && !candidate.work.last) {
+        if (candidate.allocated && candidate.rsp_arrived && !candidate.work.last
+         && cycle_ >= candidate.ready_cycle) {
           slot = i;
           break;
         }
@@ -619,7 +692,7 @@ private:
       if (slot == UINT32_MAX && w.issued_order.size() == 1) {
         uint32_t last_slot = w.issued_order.front();
         const auto& candidate = w.inflight[last_slot];
-        if (candidate.allocated && candidate.rsp_arrived)
+        if (candidate.allocated && candidate.rsp_arrived && cycle_ >= candidate.ready_cycle)
           slot = last_slot;
       }
 
@@ -783,6 +856,8 @@ private:
           // Slot done — release.
           s.allocated = false;
           s.rsp_arrived = false;
+          s.deferred = false;
+          s.free_cycle = cycle_ + 1;
           s.rsp_data.reset();
           auto it = std::find(w.issued_order.begin(), w.issued_order.end(), slot);
           if (it != w.issued_order.end()) w.issued_order.erase(it);
